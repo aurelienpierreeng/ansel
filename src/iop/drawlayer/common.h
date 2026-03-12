@@ -38,12 +38,10 @@ gboolean dt_drawlayer_build_worker_input_dab(dt_iop_module_t *self, dt_drawlayer
                                              dt_drawlayer_brush_dab_t *dab);
 gboolean dt_drawlayer_prime_live_process_patch_before_stroke(dt_iop_module_t *self);
 gboolean dt_drawlayer_ensure_layer_cache(dt_iop_module_t *self);
-float dt_drawlayer_current_live_padding(dt_iop_module_t *self);
 gboolean dt_drawlayer_build_process_patch_from_base(dt_iop_module_t *self, dt_iop_drawlayer_gui_data_t *g,
                                                     const dt_dev_pixelpipe_iop_t *piece,
                                                     const dt_iop_roi_t *roi_in,
                                                     const dt_iop_roi_t *roi_out);
-gboolean dt_drawlayer_layer_to_widget_coords(dt_iop_module_t *self, float x, float y, float *wx, float *wy);
 void dt_drawlayer_release_all_base_patch_extra_refs(dt_iop_drawlayer_gui_data_t *g);
 void dt_drawlayer_touch_stroke_commit_hash(dt_iop_drawlayer_params_t *params, int dab_count,
                                            gboolean have_last_dab, float last_dab_x, float last_dab_y,

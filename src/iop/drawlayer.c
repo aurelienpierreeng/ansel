@@ -47,6 +47,7 @@
 #include "iop/drawlayer/brush.h"
 #include "iop/drawlayer/cache.h"
 #include "iop/drawlayer/common.h"
+#include "iop/drawlayer/coordinates.h"
 #include "iop/drawlayer/io.h"
 #include "iop/drawlayer/paint.h"
 #include "iop/drawlayer/runtime.h"
@@ -175,15 +176,6 @@ typedef struct dt_iop_drawlayer_global_data_t
 } dt_iop_drawlayer_global_data_t;
 #endif
 
-typedef struct drawlayer_view_patch_info_t
-{
-  drawlayer_view_patch_t patch;
-  float layer_x0;
-  float layer_y0;
-  float layer_x1;
-  float layer_y1;
-} drawlayer_view_patch_info_t;
-
 typedef struct drawlayer_preview_background_t
 {
   gboolean enabled;
@@ -221,11 +213,6 @@ typedef dt_drawlayer_runtime_context_t drawlayer_runtime_host_context_t;
 
 gboolean dt_drawlayer_commit_dabs(dt_iop_module_t *self, gboolean record_history);
 gboolean dt_drawlayer_flush_layer_cache(dt_iop_module_t *self);
-static gboolean _compute_view_patch(dt_iop_module_t *self, float padding, drawlayer_view_patch_info_t *view);
-static gboolean _widget_to_layer_coords(dt_iop_module_t *self, const double wx, const double wy, float *lx,
-                                        float *ly);
-static gboolean _widget_points_to_layer_coords(dt_iop_module_t *self, float *pts, int count);
-static gboolean _layer_points_to_widget_coords(dt_iop_module_t *self, float *pts, int count);
 void dt_drawlayer_flush_process_patch_to_base(dt_iop_module_t *self, dt_iop_drawlayer_gui_data_t *g);
 static void _flush_process_patch_to_base_locked(dt_iop_module_t *self, dt_iop_drawlayer_gui_data_t *g);
 static void _sync_mode_sensitive_widgets(dt_iop_module_t *self);
@@ -234,7 +221,6 @@ void dt_drawlayer_set_pipeline_realtime_mode(dt_iop_module_t *self, gboolean sta
 static int _offer_missing_layer_recreation(dt_iop_module_t *self, const char *missing_name);
 static gboolean _background_layer_job_done_idle(gpointer user_data);
 gboolean dt_drawlayer_prime_live_process_patch_before_stroke(dt_iop_module_t *self);
-float dt_drawlayer_current_live_padding(dt_iop_module_t *self);
 static dt_drawlayer_runtime_result_t _update_gui_runtime_manager(dt_iop_module_t *self,
                                                                  dt_iop_drawlayer_gui_data_t *g,
                                                                  dt_drawlayer_runtime_event_t event,
@@ -261,6 +247,7 @@ static inline float _clamp01(const float value)
 }
 
 #include "drawlayer/conf.c"
+#include "drawlayer/coordinates.c"
 
 static void _get_brush_colors(dt_iop_module_t *self, float display_rgb[3], float pipeline_rgb[3])
 {
@@ -375,43 +362,12 @@ static void _fill_input_layer_coords(dt_iop_module_t *self, dt_drawlayer_paint_r
 
   float lx = 0.0f;
   float ly = 0.0f;
-  if(_widget_to_layer_coords(self, input->wx, input->wy, &lx, &ly))
+  if(dt_drawlayer_widget_to_layer_coords(self, input->wx, input->wy, &lx, &ly))
   {
     input->lx = lx;
     input->ly = ly;
     input->have_layer_coords = TRUE;
   }
-}
-
-static gboolean _layer_bounds_to_widget_bounds(dt_iop_module_t *self, const float x0, const float y0,
-                                               const float x1, const float y1, float *left, float *top,
-                                               float *right, float *bottom)
-{
-  if(!self || !self->dev || !self->dev->virtual_pipe) return FALSE;
-
-  float pts[8] = {
-    x0, y0, x1, y0, x0, y1, x1, y1,
-  };
-
-  if(!_layer_points_to_widget_coords(self, pts, 4)) return FALSE;
-
-  float min_x = pts[0];
-  float max_x = pts[0];
-  float min_y = pts[1];
-  float max_y = pts[1];
-  for(int i = 1; i < 4; i++)
-  {
-    min_x = fminf(min_x, pts[2 * i]);
-    max_x = fmaxf(max_x, pts[2 * i]);
-    min_y = fminf(min_y, pts[2 * i + 1]);
-    max_y = fmaxf(max_y, pts[2 * i + 1]);
-  }
-
-  if(left) *left = min_x;
-  if(top) *top = min_y;
-  if(right) *right = max_x;
-  if(bottom) *bottom = max_y;
-  return TRUE;
 }
 
 static void _default_layer_name(dt_iop_module_t *self, char *name, const size_t name_size)
@@ -756,39 +712,21 @@ gboolean dt_drawlayer_build_process_patch_from_base(dt_iop_module_t *self, dt_io
    * blend path during live drawing: backend dabs update this tile in place and
    * pipeline blending no longer has to resample the full raw patch every run.
    *
-   * When geometry changes invalidate this tile, `_flush_process_patch_to_base()`
+  * When geometry changes invalidate this tile, `_flush_process_patch_to_base()`
    * upsamples it back into `base_patch` first so no in-flight stroke edit is
    * lost before rebuilding the tile for the new ROI. */
   if(!self || !g || !piece || !roi_out || !g->process.base_patch.pixels) return FALSE;
-  const int current_full_w = piece->pipe->iwidth;
-  const int current_full_h = piece->pipe->iheight;
-  if(current_full_w <= 0 || current_full_h <= 0) return FALSE;
 
-  const dt_iop_roi_t process_roi = roi_in ? *roi_in : *roi_out;
-  dt_iop_roi_t combined_roi = { 0 };
-  dt_drawlayer_cache_build_combined_process_roi_for_piece(piece, &process_roi, current_full_w, current_full_h,
-                                                          g->process.base_patch.width, g->process.base_patch.height,
-                                                          &combined_roi);
+  dt_drawlayer_process_patch_geometry_t geometry = { 0 };
+  if(!dt_drawlayer_compute_process_patch_geometry(piece, roi_in, roi_out, g->process.base_patch.width,
+                                                  g->process.base_patch.height, _conf_size(), &geometry))
+    return FALSE;
   {
     const gint64 now = g_get_monotonic_time();
     if(darktable.unmuted & DT_DEBUG_VERBOSE)
       dt_print(DT_DEBUG_PERF, "[drawlayer] process step=build-process-roi ms=%.3f\n", (now - t) / 1000.0);
     t = now;
   }
-
-  if(combined_roi.scale <= 1e-6f || roi_out->width <= 0 || roi_out->height <= 0) return FALSE;
-
-  /* Keep one brush-radius margin around the visible process ROI so dabs near
-   * view edges are not clipped in realtime preview/process rendering. */
-  const float brush_radius_src = fmaxf(_conf_size(), 0.5f);
-  const int process_pad = MAX(0, (int)ceilf(brush_radius_src * combined_roi.scale));
-  dt_iop_roi_t padded_roi = combined_roi;
-  padded_roi.x -= process_pad;
-  padded_roi.y -= process_pad;
-  padded_roi.width += 2 * process_pad;
-  padded_roi.height += 2 * process_pad;
-  const int patch_width = roi_out->width + 2 * process_pad;
-  const int patch_height = roi_out->height + 2 * process_pad;
 
   gboolean have_process_patch = FALSE;
   gboolean same_geometry = FALSE;
@@ -805,20 +743,36 @@ gboolean dt_drawlayer_build_process_patch_from_base(dt_iop_module_t *self, dt_io
     previous_process_roi = g->process.process_combined_roi;
     previous_process_width = g->process.process_patch.width;
     previous_process_height = g->process.process_patch.height;
-    same_geometry = (g->process.process_patch_padding == process_pad && g->process.process_patch.width == patch_width
-                     && g->process.process_patch.height == patch_height && g->process.process_snapshot_valid
+    dt_drawlayer_cache_patch_t expected_process_patch = g->process.process_patch;
+    dt_drawlayer_cache_patch_t expected_read_patch = g->process.process_read_patch;
+    dt_iop_roi_t expected_roi = g->process.process_combined_roi;
+
+    expected_process_patch.width = geometry.patch_width;
+    expected_process_patch.height = geometry.patch_height;
+    expected_read_patch.pixels = g->process.process_read_patch.pixels ? g->process.process_read_patch.pixels : NULL;
+    expected_read_patch.width = geometry.patch_width;
+    expected_read_patch.height = geometry.patch_height;
+    expected_roi.x = geometry.padded_roi.x;
+    expected_roi.y = geometry.padded_roi.y;
+    expected_roi.width = geometry.padded_roi.width;
+    expected_roi.height = geometry.padded_roi.height;
+    expected_roi.scale = geometry.combined_roi.scale;
+
+    same_geometry = (g->process.process_patch_padding == geometry.process_pad && g->process.process_snapshot_valid
                      && g->process.process_read_patch.pixels
-                     && g->process.process_read_patch.width == patch_width && g->process.process_read_patch.height == patch_height
-                     && abs(g->process.process_combined_roi.x - padded_roi.x) <= 2
-                     && abs(g->process.process_combined_roi.y - padded_roi.y) <= 2
-                     && g->process.process_combined_roi.width == padded_roi.width
-                     && g->process.process_combined_roi.height == padded_roi.height
-                     && fabs(g->process.process_combined_roi.scale - combined_roi.scale) <= 1e-2);
+                     && memcmp(&g->process.process_patch, &expected_process_patch, sizeof(g->process.process_patch)) == 0
+                     && memcmp(&g->process.process_read_patch, &expected_read_patch, sizeof(g->process.process_read_patch)) == 0
+                     && abs(g->process.process_combined_roi.x - expected_roi.x) <= 2
+                     && abs(g->process.process_combined_roi.y - expected_roi.y) <= 2
+                     && g->process.process_combined_roi.width == expected_roi.width
+                     && g->process.process_combined_roi.height == expected_roi.height
+                     && fabs(g->process.process_combined_roi.scale - expected_roi.scale) <= 1e-2f);
     if(!same_geometry
        && ((g->manager.painting_active || dt_drawlayer_worker_any_active(g->stroke.worker))
            || have_pending_live_batch))
-      keep_live_geometry = (g->process.process_patch_padding == process_pad && g->process.process_patch.width == patch_width
-                            && g->process.process_patch.height == patch_height && g->process.process_snapshot_valid
+      keep_live_geometry = (g->process.process_patch_padding == geometry.process_pad
+                            && g->process.process_patch.width == geometry.patch_width
+                            && g->process.process_patch.height == geometry.patch_height && g->process.process_snapshot_valid
                             && g->process.process_read_patch.pixels);
     need_flush = g->process.process_patch_dirty;
   }
@@ -854,8 +808,8 @@ gboolean dt_drawlayer_build_process_patch_from_base(dt_iop_module_t *self, dt_io
                "new=(x=%d y=%d w=%d h=%d s=%.6f pw=%d ph=%d)\n",
                previous_process_roi.x, previous_process_roi.y, previous_process_roi.width,
                previous_process_roi.height, previous_process_roi.scale, previous_process_width,
-               previous_process_height, padded_roi.x, padded_roi.y, padded_roi.width, padded_roi.height,
-               padded_roi.scale, patch_width, patch_height);
+               previous_process_height, geometry.padded_roi.x, geometry.padded_roi.y, geometry.padded_roi.width,
+               geometry.padded_roi.height, geometry.padded_roi.scale, geometry.patch_width, geometry.patch_height);
   }
 
   if(need_flush)
@@ -876,7 +830,7 @@ gboolean dt_drawlayer_build_process_patch_from_base(dt_iop_module_t *self, dt_io
 
   gboolean populated = FALSE;
   if(!dt_drawlayer_cache_ensure_process_patch_buffer(&g->process.process_patch, &g->process.process_stroke_mask,
-                                                     patch_width, patch_height, "drawlayer process tile",
+                                                     geometry.patch_width, geometry.patch_height, "drawlayer process tile",
                                                      "drawlayer process stroke mask"))
     return FALSE;
   dt_drawlayer_cache_patch_wrlock(&g->process.process_patch);
@@ -889,8 +843,9 @@ gboolean dt_drawlayer_build_process_patch_from_base(dt_iop_module_t *self, dt_io
      * `process_patch` so realtime blending and previews can use a display-
      * sized mask without resampling on-the-fly. */
     populated = dt_drawlayer_cache_populate_process_patch_from_base(
-      &g->process.base_patch, &g->process.stroke_mask, &g->process.process_patch, &g->process.process_stroke_mask, &padded_roi, process_pad,
-      patch_width, patch_height, &g->process.process_patch_valid, &g->process.process_patch_dirty, &g->process.process_dirty_rect,
+      &g->process.base_patch, &g->process.stroke_mask, &g->process.process_patch, &g->process.process_stroke_mask,
+      &geometry.padded_roi, geometry.process_pad, geometry.patch_width, geometry.patch_height,
+      &g->process.process_patch_valid, &g->process.process_patch_dirty, &g->process.process_dirty_rect,
       &g->process.process_patch_padding, &g->process.process_combined_roi, "drawlayer process tile",
       "drawlayer process stroke mask");
   dt_drawlayer_cache_patch_wrunlock(&g->process.process_patch);
@@ -1268,67 +1223,6 @@ cleanup:
   return result;
 }
 #endif
-
-static void _virtual_piece_input_offset(dt_iop_module_t *self, int *x, int *y)
-{
-  int ox = 0;
-  int oy = 0;
-
-  if(self && self->dev && self->dev->virtual_pipe)
-  {
-    dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->virtual_pipe, self);
-    if(piece)
-      dt_drawlayer_cache_resolve_piece_input_origin(piece, piece->pipe->iwidth, piece->pipe->iheight, &ox, &oy);
-  }
-
-  if(x) *x = ox;
-  if(y) *y = oy;
-}
-
-static gboolean _widget_points_to_layer_coords(dt_iop_module_t *self, float *pts, const int count)
-{
-  if(!self || !self->dev || !self->dev->virtual_pipe || !pts || count <= 0) return FALSE;
-
-  dt_dev_coordinates_widget_to_image_norm(self->dev, pts, count);
-  dt_dev_coordinates_image_norm_to_image_abs(self->dev, pts, count);
-
-  if(!dt_dev_distort_backtransform_plus(self->dev, self->dev->virtual_pipe, self->iop_order,
-                                        DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, count))
-    return FALSE;
-
-  int offset_x = 0;
-  int offset_y = 0;
-  _virtual_piece_input_offset(self, &offset_x, &offset_y);
-  for(int i = 0; i < count; i++)
-  {
-    pts[2 * i] += offset_x;
-    pts[2 * i + 1] += offset_y;
-  }
-
-  return TRUE;
-}
-
-static gboolean _layer_points_to_widget_coords(dt_iop_module_t *self, float *pts, const int count)
-{
-  if(!self || !self->dev || !self->dev->virtual_pipe || !pts || count <= 0) return FALSE;
-
-  int offset_x = 0;
-  int offset_y = 0;
-  _virtual_piece_input_offset(self, &offset_x, &offset_y);
-  for(int i = 0; i < count; i++)
-  {
-    pts[2 * i] -= offset_x;
-    pts[2 * i + 1] -= offset_y;
-  }
-
-  if(!dt_dev_distort_transform_plus(self->dev, self->dev->virtual_pipe, self->iop_order,
-                                    DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, count))
-    return FALSE;
-
-  dt_dev_coordinates_image_abs_to_image_norm(self->dev, pts, count);
-  dt_dev_coordinates_image_norm_to_widget(self->dev, pts, count);
-  return TRUE;
-}
 
 static gboolean _profile_key_is_sane(const char *value)
 {
@@ -1712,19 +1606,6 @@ static void _sanitize_params(dt_iop_module_t *self, dt_iop_drawlayer_params_t *p
                                      sizeof(current_profile)))
       g_strlcpy(params->work_profile, current_profile, sizeof(params->work_profile));
   }
-}
-
-static gboolean _widget_to_layer_coords(dt_iop_module_t *self, const double wx, const double wy, float *lx,
-                                        float *ly)
-{
-  if(!self || !self->dev || !self->dev->virtual_pipe || !lx || !ly) return FALSE;
-
-  float pt[2] = { (float)wx, (float)wy };
-  if(!_widget_points_to_layer_coords(self, pt, 1)) return FALSE;
-
-  *lx = pt[0];
-  *ly = pt[1];
-  return TRUE;
 }
 
 static void _sanitize_requested_layer_name(dt_iop_module_t *self, const char *requested, char *name,
@@ -2223,11 +2104,11 @@ static gboolean _ensure_widget_cache(dt_iop_module_t *self)
   if(!g || !self->dev) return FALSE;
 
   drawlayer_view_patch_info_t view = { 0 };
-  if(!_compute_view_patch(self, 0.0f, &view)) return FALSE;
+  if(!dt_drawlayer_compute_view_patch(self, 0.0f, &view)) return FALSE;
 
   float wx0 = 0.0f, wy0 = 0.0f, wx1 = 0.0f, wy1 = 0.0f;
-  if(!_layer_bounds_to_widget_bounds(self, view.layer_x0, view.layer_y0, view.layer_x1, view.layer_y1, &wx0, &wy0,
-                                     &wx1, &wy1))
+  if(!dt_drawlayer_layer_bounds_to_widget_bounds(self, view.layer_x0, view.layer_y0, view.layer_x1,
+                                                 view.layer_y1, &wx0, &wy0, &wx1, &wy1))
     return FALSE;
 
   const dt_drawlayer_damaged_rect_t live_view_rect = {
@@ -2262,69 +2143,6 @@ static gboolean _ensure_widget_cache(dt_iop_module_t *self)
   g->session.last_view_y = self->dev->roi.y;
   g->session.last_view_scale = self->dev->roi.scaling;
   return TRUE;
-}
-
-float dt_drawlayer_current_live_padding(dt_iop_module_t *self)
-{
-  dt_drawlayer_brush_dab_t dab = {
-    .radius = fmaxf(_conf_size(), 0.5f),
-    .hardness = _conf_hardness(),
-    .shape = _conf_brush_shape(),
-  };
-  return ceilf(dab.radius + 1.0f);
-}
-
-static gboolean _compute_view_patch(dt_iop_module_t *self, const float padding, drawlayer_view_patch_info_t *view)
-{
-  if(!self || !self->dev || !view) return FALSE;
-
-  const int raw_width = self->dev->roi.raw_width;
-  const int raw_height = self->dev->roi.raw_height;
-  if(raw_width <= 0 || raw_height <= 0) return FALSE;
-
-  const float widget_w = (float)self->dev->roi.orig_width;
-  const float widget_h = (float)self->dev->roi.orig_height;
-  const float preview_w = self->dev->roi.preview_width;
-  const float preview_h = self->dev->roi.preview_height;
-  if(widget_w <= 0.0f || widget_h <= 0.0f || preview_w <= 0.0f || preview_h <= 0.0f) return FALSE;
-
-  const float zoom_scale = dt_dev_get_overlay_scale(self->dev);
-  const float border = (float)self->dev->roi.border_size;
-  const float roi_w = fminf(widget_w, preview_w * zoom_scale);
-  const float roi_h = fminf(widget_h, preview_h * zoom_scale);
-  const float rec_x = fmaxf(border, 0.5f * (widget_w - roi_w));
-  const float rec_y = fmaxf(border, 0.5f * (widget_h - roi_h));
-  const float rec_w = fminf(widget_w - 2.0f * border, roi_w);
-  const float rec_h = fminf(widget_h - 2.0f * border, roi_h);
-  if(rec_w <= 0.0f || rec_h <= 0.0f) return FALSE;
-
-  float pts[8] = { rec_x, rec_y, rec_x + rec_w, rec_y, rec_x, rec_y + rec_h, rec_x + rec_w, rec_y + rec_h };
-  if(!_widget_points_to_layer_coords(self, pts, 4)) return FALSE;
-
-  float min_x = pts[0];
-  float max_x = pts[0];
-  float min_y = pts[1];
-  float max_y = pts[1];
-  for(int i = 1; i < 4; i++)
-  {
-    min_x = fminf(min_x, pts[2 * i]);
-    max_x = fmaxf(max_x, pts[2 * i]);
-    min_y = fminf(min_y, pts[2 * i + 1]);
-    max_y = fmaxf(max_y, pts[2 * i + 1]);
-  }
-
-  view->layer_x0 = min_x;
-  view->layer_y0 = min_y;
-  view->layer_x1 = max_x;
-  view->layer_y1 = max_y;
-
-  view->patch.x = MAX(0, (int)floorf(min_x - padding));
-  view->patch.y = MAX(0, (int)floorf(min_y - padding));
-  const int right = MIN(raw_width, (int)ceilf(max_x + padding));
-  const int bottom = MIN(raw_height, (int)ceilf(max_y + padding));
-  view->patch.width = MAX(0, right - view->patch.x);
-  view->patch.height = MAX(0, bottom - view->patch.y);
-  return view->patch.width > 0 && view->patch.height > 0;
 }
 
 void dt_drawlayer_set_pipeline_realtime_mode(dt_iop_module_t *self, const gboolean state)
@@ -2472,33 +2290,6 @@ static drawlayer_preview_background_t _resolve_preview_background(const dt_iop_m
            : (preview_mode == DRAWLAYER_PREVIEW_BG_GREY) ? 0.5f
                                                          : 0.0f,
   };
-}
-
-static float _widget_brush_radius(dt_iop_module_t *self, const dt_drawlayer_brush_dab_t *dab, const float fallback)
-{
-  if(!self || !self->dev || !self->dev->virtual_pipe || !dab) return fallback;
-
-  float pts[6] = {
-    dab->x, dab->y, dab->x + dab->radius, dab->y, dab->x, dab->y + dab->radius,
-  };
-
-  if(!_layer_points_to_widget_coords(self, pts, 3)) return fallback;
-
-  const float rx = hypotf(pts[2] - pts[0], pts[3] - pts[1]);
-  const float ry = hypotf(pts[4] - pts[0], pts[5] - pts[1]);
-  const float radius = 0.5f * (rx + ry);
-  return fmaxf(0.5f, isfinite(radius) ? radius : fallback);
-}
-
-gboolean dt_drawlayer_layer_to_widget_coords(dt_iop_module_t *self, const float x, const float y, float *wx, float *wy)
-{
-  if(!self || !self->dev || !self->dev->virtual_pipe || !wx || !wy) return FALSE;
-
-  float pt[2] = { x, y };
-  if(!_layer_points_to_widget_coords(self, pt, 1)) return FALSE;
-  *wx = pt[0];
-  *wy = pt[1];
-  return TRUE;
 }
 
 void dt_drawlayer_touch_stroke_commit_hash(dt_iop_drawlayer_params_t *params, const int dab_count,
@@ -4390,7 +4181,7 @@ void gui_post_expose(dt_iop_module_t *self, cairo_t *cr, int32_t width, int32_t 
     float lx = 0.0f;
     float ly = 0.0f;
     float widget_radius = radius * dt_dev_get_overlay_scale(self->dev);
-    if(_widget_to_layer_coords(self, widget_x, widget_y, &lx, &ly))
+    if(dt_drawlayer_widget_to_layer_coords(self, widget_x, widget_y, &lx, &ly))
     {
       dt_drawlayer_brush_dab_t dab = {
         .x = lx,
@@ -4402,7 +4193,7 @@ void gui_post_expose(dt_iop_module_t *self, cairo_t *cr, int32_t width, int32_t 
         draw_x = widget_x;
         draw_y = widget_y;
       }
-      widget_radius = _widget_brush_radius(self, &dab, widget_radius);
+      widget_radius = dt_drawlayer_widget_brush_radius(self, &dab, widget_radius);
     }
 
     // Draw the brush mipmap

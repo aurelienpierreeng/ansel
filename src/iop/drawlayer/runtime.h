@@ -1,8 +1,7 @@
 #pragma once
 
-#include "iop/drawlayer/common.h"
+#include "iop/drawlayer/coordinates.h"
 #include "common/dtpthread.h"
-#include "iop/drawlayer/cache.h"
 #include "iop/drawlayer/widgets.h"
 #include "iop/drawlayer/worker.h"
 
@@ -15,14 +14,6 @@
 /** @file
  *  @brief Private runtime state/helpers shared by drawlayer module entrypoints.
  */
-
-typedef struct drawlayer_view_patch_t
-{
-  int x;
-  int y;
-  int width;
-  int height;
-} drawlayer_view_patch_t;
 
 typedef struct dt_drawlayer_session_state_t
 {

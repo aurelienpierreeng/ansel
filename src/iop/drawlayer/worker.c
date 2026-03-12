@@ -150,7 +150,8 @@ gboolean dt_drawlayer_build_worker_input_dab(dt_iop_module_t *self, dt_drawlayer
 
   float lx = input->lx;
   float ly = input->ly;
-  if(!input->have_layer_coords && !_widget_to_layer_coords(self, input->wx, input->wy, &lx, &ly)) return FALSE;
+  if(!input->have_layer_coords && !dt_drawlayer_widget_to_layer_coords(self, input->wx, input->wy, &lx, &ly))
+    return FALSE;
 
   const float pressure_norm = _clamp01(input->pressure);
   const float tilt_norm = _clamp01(input->tilt);
