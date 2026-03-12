@@ -1157,6 +1157,10 @@ static int _blend_layer_over_input_cl(const int devid, const int kernel_premult_
                                                                  &scratch->cl_background_rgba_pixels, out_pixels,
                                                                  "drawlayer process scratch");
     if(!background) goto cleanup;
+#ifdef _OPENMP
+#pragma omp parallel for default(none) schedule(static)                                                          \
+    dt_omp_firstprivate(background, out_pixels, preview_bg) if(out_pixels > 4096)
+#endif
     for(size_t kk = 0; kk < out_pixels; kk++)
     {
       float *pixel = background + 4 * kk;
@@ -3023,13 +3027,18 @@ static gboolean _fill_current_layer(dt_iop_module_t *self, const float value)
   if(!g->process.base_patch.pixels) return FALSE;
 
   const size_t count = (size_t)g->process.base_patch.width * g->process.base_patch.height;
+  float *const pixels = g->process.base_patch.pixels;
+  const float gray = _clamp01(value);
   dt_drawlayer_cache_patch_wrlock(&g->process.base_patch);
+#ifdef _OPENMP
+#pragma omp parallel for default(none) schedule(static) dt_omp_firstprivate(count, gray, pixels) if(count > 4096)
+#endif
   for(size_t k = 0; k < count; k++)
   {
-    float *pixel = g->process.base_patch.pixels + 4 * k;
-    pixel[0] = _clamp01(value);
-    pixel[1] = _clamp01(value);
-    pixel[2] = _clamp01(value);
+    float *pixel = pixels + 4 * k;
+    pixel[0] = gray;
+    pixel[1] = gray;
+    pixel[2] = gray;
     pixel[3] = 1.0f;
   }
   dt_drawlayer_cache_patch_wrunlock(&g->process.base_patch);

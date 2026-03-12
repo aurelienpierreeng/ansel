@@ -561,6 +561,10 @@ gboolean dt_drawlayer_worker_replay_finished_stroke_to_base_patch(dt_iop_module_
   };
 
   dt_drawlayer_cache_patch_rdlock(&g->process.base_patch);
+#ifdef _OPENMP
+#pragma omp parallel for default(none) schedule(static)                                                          \
+    dt_omp_firstprivate(g, replay_bounds, replay_height, replay_pixels, replay_width) if(replay_height > 8)
+#endif
   for(int yy = 0; yy < replay_height; yy++)
   {
     const float *src = g->process.base_patch.pixels
@@ -604,6 +608,10 @@ gboolean dt_drawlayer_worker_replay_finished_stroke_to_base_patch(dt_iop_module_
   if(wrote_replay_tile)
   {
     dt_drawlayer_cache_patch_wrlock(&g->process.base_patch);
+#ifdef _OPENMP
+#pragma omp parallel for default(none) schedule(static)                                                          \
+    dt_omp_firstprivate(g, replay_bounds, replay_height, replay_pixels, replay_width) if(replay_height > 8)
+#endif
     for(int yy = 0; yy < replay_height; yy++)
     {
       const float *src = replay_pixels + (size_t)yy * replay_width * 4;
