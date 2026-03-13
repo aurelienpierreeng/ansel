@@ -490,17 +490,20 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
     // has a new history state to consume.
     while(!dev->exit && dt_control_running() && !pipe->pause)
     {
-      const gboolean needs_regular_update
-          = (((pipe->status == DT_DEV_PIXELPIPE_DIRTY) || (pipe->changed != DT_DEV_PIPE_UNCHANGED))
-             && reentries < 2);
       const gboolean needs_realtime_update
-          = (dt_dev_get_history_hash(dev) != dt_dev_pixelpipe_get_history_hash(pipe));
-
-      if(!(needs_regular_update || needs_realtime_update)) break;
+          = (dt_dev_get_history_hash(dev) != dt_dev_pixelpipe_get_history_hash(pipe))
+            || (dt_dev_backbuf_get_hash(&pipe->backbuf) != dt_dev_pixelpipe_get_hash(pipe))
+            || (dt_dev_pixelpipe_get_hash(pipe) == DT_DEV_PIXELPIPE_INVALID);
 
       // If we know history changed, ensure at least the last step is resynced
       if(needs_realtime_update)
         pipe->changed |= DT_DEV_PIPE_TOP_CHANGED;
+
+      const gboolean needs_regular_update
+          = (((pipe->status == DT_DEV_PIXELPIPE_DIRTY) || (pipe->changed != DT_DEV_PIPE_UNCHANGED))
+             && reentries < 2);
+
+      if(!(needs_regular_update || needs_realtime_update)) break;
 
       dt_pthread_mutex_lock(&pipe->busy_mutex);
       pipe->processing = 1;
