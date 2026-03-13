@@ -1094,9 +1094,11 @@ static void _check_id(dt_masks_form_t *mask_form)
 
 static void _set_group_name_from_module(dt_iop_module_t *module, dt_masks_form_t *group_form)
 {
-  gchar *module_label = dt_history_item_get_name(module);
-  snprintf(group_form->name, sizeof(group_form->name), "grp %s", module_label);
+  gchar *module_multi_name = dt_dev_get_multi_name(module);
+  gchar *module_label = g_strcmp0(module_multi_name, "" ) ? dt_history_item_get_name(module) : g_strdup(module_multi_name);
+  g_snprintf(group_form->name, sizeof(group_form->name), "Mask %s", module_label);
   dt_free(module_label);
+  dt_free(module_multi_name);
 }
 
 static dt_masks_form_t *_group_create(dt_develop_t *develop, dt_iop_module_t *module, dt_masks_type_t group_type)

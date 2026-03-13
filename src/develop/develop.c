@@ -1258,6 +1258,16 @@ gchar *dt_history_item_get_label(const struct dt_iop_module_t *module)
   return label;
 }
 
+gchar *dt_dev_get_multi_name(const struct dt_iop_module_t *module)
+{
+  gchar *label =
+  (g_strcmp0(module->multi_name, "0") == 0 || g_strcmp0(module->multi_name, "") == 0)
+        ? g_strdup(module->multi_name) : g_strdup("");
+
+  return label;
+}
+
+
 gchar *dt_history_item_get_name(const struct dt_iop_module_t *module)
 {
   gchar *label;
