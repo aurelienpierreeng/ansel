@@ -265,7 +265,7 @@ static void _gradient_get_distance(float x, float y, float dist_mouse, dt_masks_
         _closest_point_on_line(x, y, gpt->border, separator_idx + 1, gpt->border_count,
                               &closest_x2, &closest_y2, &dist2_sq);
 
-        // Check if mouse is between the two closest points along gradient axis
+        // Check if we have valid closest points to both border lines.
         if(dist1_sq < FLT_MAX && dist2_sq < FLT_MAX)
         {
           // Vectors from mouse to each closest point
@@ -281,17 +281,16 @@ static void _gradient_get_distance(float x, float y, float dist_mouse, dt_masks_
           const float proj1 = to_line1_x * gradient_dx + to_line1_y * gradient_dy;
           const float proj2 = to_line2_x * gradient_dx + to_line2_y * gradient_dy;
 
-          // Mouse is between lines if projections have opposite signs
-          if(proj1 * proj2 < 0.0f)
-          {
-            *inside_border = 1;
+          // Mouse is between lines if projections have opposite signs.
+          const gboolean between_lines = (proj1 * proj2 < 0.0f);
+          if(between_lines) *inside_border = 1;
 
-            const float min_dist_sq = fminf(dist1_sq, dist2_sq);
-            if(min_dist_sq <= sqr_dist_mouse * 10)
-            {
-              *inside = 1;
-            }
-          }
+          // Rotation handle: accept hits on the border lines and slightly beyond.
+          const float min_dist_sq = fminf(dist1_sq, dist2_sq);
+          float handle_radius_sq = CLAMPF(gradient_len_sq * 0.125f, sqr_dist_mouse, sqr_dist_mouse * 5);
+
+          if(min_dist_sq <= handle_radius_sq)
+            *inside = 1;
         }
       }
     }
