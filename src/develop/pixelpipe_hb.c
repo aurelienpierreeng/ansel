@@ -1553,9 +1553,9 @@ static int _init_base_buffer(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, void *
       dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
       err = 1;
     }
-    else if(roi_in.scale == 1.0f)
+    else
     {
-      // fast branch for 1:1 pixel copies.
+      // 1:1 pixel copies.
       if(roi_out.width > 0 && roi_out.height > 0)
       {
         // last minute clamping to catch potential out-of-bounds in roi_in and roi_out
@@ -1581,16 +1581,6 @@ static int _init_base_buffer(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, void *
         dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
         err = 1;
       }
-    }
-    else
-    {
-      fprintf(stdout,
-                "Base buffer init: scale %f != 1.0 but the input has %li bytes per pixel. This case is not "
-                "covered by the pipeline, please report the bug.\n",
-                roi_out.scale, bpp);
-
-      dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
-      err = 1;
     }
   }
   // else found in cache.
