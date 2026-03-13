@@ -24,8 +24,8 @@ else
   SUDO=()
 fi
 
-ZYPPER_PACKAGES=(
-  Mesa-devel
+ZYPPER_PACKAGES=( 
+ Mesa-devel
   OpenEXR-devel
   SDL2-devel
   atk-devel
@@ -33,9 +33,10 @@ ZYPPER_PACKAGES=(
   clang
   cmake
   cmark-devel
-  colord-devel
-  colord-gtk-devel
-  cmocka-devel
+  libcolord-devel
+  libcolord-gtk-devel
+  libcmocka0
+  libcmocka-devel
   dbus-1-glib-devel
   desktop-file-utils
   doxygen
@@ -46,7 +47,7 @@ ZYPPER_PACKAGES=(
   gettext-tools
   git
   gstreamer
-  gmic
+  GraphicsMagick
   gnome-keyring-devel
   graphviz
   GraphicsMagick-devel
@@ -59,7 +60,6 @@ ZYPPER_PACKAGES=(
   lensfun-devel
   libavif-devel
   libcurl-devel
-  libde265-devel
   libexiv2-devel
   libexif-devel
   libheif-devel
@@ -82,29 +82,30 @@ ZYPPER_PACKAGES=(
   libxslt-devel
   libxshmfence-devel
   llvm-devel
-  libgomp-devel
+  libgomp1
   lua53-devel
   make
   ninja
   ocl-icd-devel
   opencl-headers
   openjpeg2-devel
-  osm-gps-map-devel
+  libosmgpsmap-1_0-1
+  libosmgpsmap-devel
   pango-devel
   perl
-  pixman-devel
+  libpixman-1-0
+  libpixman-1-0-devel
   pkg-config
   po4a
   pugixml-devel
   python3
   python3-jsonschema
   python3-pip
-  saxon
+  saxon10
   sqlite3-devel
   squashfs
   update-desktop-files
-  x265-devel
-  zlib-devel
+  libx265-215
 )
 
 "${SUDO[@]}" zypper --non-interactive install --no-recommends "${ZYPPER_PACKAGES[@]}"
