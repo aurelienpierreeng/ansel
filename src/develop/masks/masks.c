@@ -546,11 +546,26 @@ static gboolean _dt_masks_events_group_update_selection(dt_masks_form_t *group_f
   if(prev_border_selected && prev_group_selected >= 0)
   {
     dt_masks_form_group_t *selected_group_entry = dt_masks_form_get_selected_group_live(group_form, mask_gui);
-    if(selected_group_entry)
+    dt_masks_form_t *selected_form = selected_group_entry
+                                         ? dt_masks_get_from_id(dev, selected_group_entry->formid)
+                                         : NULL;
+    const gboolean has_border_lock_candidate = selected_group_entry
+                                               && selected_form
+                                               && (selected_form->type & DT_MASKS_IS_CLOSED_SHAPE)
+                                               && selected_form->functions
+                                               && selected_form->functions->get_distance;
+    if(has_border_lock_candidate)
     {
-      dt_masks_form_t *selected_form = dt_masks_get_from_id(dev, selected_group_entry->formid);
-      // Avoid selecting an unselected shape through its border if it's a closed shape type
-      if(selected_form && (selected_form->type & DT_MASKS_IS_CLOSED_SHAPE))
+      // Lock selection only when the click lands on the selected closed-shape border/segment.
+      int inside = 0;
+      int inside_border = 0;
+      int near = -1;
+      int inside_source = 0;
+      float dist = FLT_MAX;
+      selected_form->functions->get_distance(cursor_x, cursor_y, radius, mask_gui, prev_group_selected,
+                                             g_list_length(selected_form->points), &inside, &inside_border,
+                                             &near, &inside_source, &dist);
+      if(inside_border || near >= 0)
         locked_formid = selected_group_entry->formid;
     }
   }
@@ -582,10 +597,13 @@ static gboolean _dt_masks_events_group_update_selection(dt_masks_form_t *group_f
                                     &inside, &inside_border, &near, &inside_source, &dist);
 
     const gboolean is_selected_form = (prev_group_selected == index);
-    if(!is_selected_form && (inside_border || near >= 0))
+    const gboolean hit_border = (inside_border || near >= 0);
+    const gboolean is_open_shape = (form->type & DT_MASKS_IS_OPEN_SHAPE) != 0;
+    // Only open shapes can be selected via their border when unselected.
+    if(!is_selected_form && hit_border && !is_open_shape)
       continue;
 
-    if(inside || inside_border || near >= 0 || inside_source)
+    if(inside || hit_border || inside_source)
     {
       const float dx = mask_gui->raw_pos[0] - form->gravity_center[0];
       const float dy = mask_gui->raw_pos[1] - form->gravity_center[1];
