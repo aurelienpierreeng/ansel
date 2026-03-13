@@ -616,6 +616,11 @@ void dt_dev_pixelpipe_set_icc(dt_dev_pixelpipe_t *pipe, dt_colorspaces_color_pro
 
 void dt_dev_pixelpipe_cleanup(dt_dev_pixelpipe_t *pipe)
 {
+  /* Device-side cache payloads are only an acceleration layer. Once darkroom
+   * leaves and all pipe workers are quiescent, drop all cached cl_mem objects
+   * so a later reopen can only exact-hit host-authoritative cachelines. */
+  dt_dev_pixelpipe_cache_flush_clmem(darktable.pixelpipe_cache, -1, NULL);
+
   // blocks while busy and sets shutdown bit:
   dt_dev_pixelpipe_cleanup_nodes(pipe);
   // so now it's safe to clean up cache:
