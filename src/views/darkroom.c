@@ -824,8 +824,7 @@ void expose(
   cairo_save(cri);
 
   dt_develop_t *dev = (dt_develop_t *)self->data;
-  if(!dev->pixelpipe_init_batching)
-    dt_dev_start_all_pipelines(dev);
+  dt_dev_start_all_pipelines(dev);
 
   const int32_t border = dev->roi.border_size;
 
@@ -1173,7 +1172,6 @@ static void _darkroom_image_load_job_state(dt_job_t *job, dt_job_state_t state)
   if(state == DT_JOB_STATE_CANCELLED)
   {
     _darkroom_image_load_active_request = 0;
-    if(darktable.develop) darktable.develop->pixelpipe_init_batching = FALSE;
   }
   if(state >= DT_JOB_STATE_FINISHED) _darkroom_image_load_job = NULL;
 }
@@ -1239,7 +1237,6 @@ static void _darkroom_cancel_image_load_job(void)
   dt_control_job_cancel(_darkroom_image_load_job);
   _darkroom_image_load_job = NULL;
   _darkroom_image_load_active_request = 0;
-  if(darktable.develop) darktable.develop->pixelpipe_init_batching = FALSE;
   _darkroom_pending_focus_module = NULL;
 }
 
@@ -1252,12 +1249,10 @@ static void _darkroom_start_image_load(const int32_t imgid)
   }
 
   _darkroom_cancel_image_load_job();
-  if(darktable.develop) darktable.develop->pixelpipe_init_batching = TRUE;
 
   dt_job_t *job = dt_control_job_create(&_darkroom_image_load_job_run, "darkroom load image %d", imgid);
   if(!job)
   {
-    if(darktable.develop) darktable.develop->pixelpipe_init_batching = FALSE;
     dt_control_log(_("We could not queue the image load."));
     return;
   }
@@ -1288,15 +1283,10 @@ static void _darkroom_image_loaded_callback(gpointer instance, guint request_id,
 
   _darkroom_image_load_active_request = 0;
 
-  if(!loaded)
-  {
-    dev->pixelpipe_init_batching = FALSE;
-    return;
-  }
+  if(!loaded) return;
 
   if(result)
   {
-    dev->pixelpipe_init_batching = FALSE;
     _darkroom_log_image_load_error((int)result);
     return;
   }
@@ -1312,7 +1302,6 @@ static void _darkroom_image_loaded_callback(gpointer instance, guint request_id,
   const int ret = dt_dev_load_image_finish(dev, loaded->imgid);
   if(ret)
   {
-    dev->pixelpipe_init_batching = FALSE;
     _darkroom_log_image_load_error(ret);
     return;
   }
@@ -1358,7 +1347,6 @@ static void _darkroom_image_loaded_callback(gpointer instance, guint request_id,
   dt_view_active_images_reset(FALSE);
   dt_view_active_images_add(dev->image_storage.id, FALSE);
 
-  dev->pixelpipe_init_batching = FALSE;
   dt_control_queue_redraw_center();
 
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_IMAGE_CHANGED);
@@ -2629,7 +2617,6 @@ void leave(dt_view_t *self)
   dt_atomic_set_int(&dev->preview_pipe->shutdown, TRUE);
   if(dev->virtual_pipe) dt_atomic_set_int(&dev->virtual_pipe->shutdown, TRUE);
   dev->pipelines_started = FALSE;
-  dev->pixelpipe_init_batching = FALSE;
 
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_darkroom_image_loaded_callback), (gpointer)self);
   _darkroom_cancel_image_load_job();

@@ -1059,7 +1059,7 @@ void dt_dev_pop_history_items(dt_develop_t *dev)
   dt_dev_pop_history_items_ext(dev);
   dt_pthread_rwlock_unlock(&dev->history_mutex);
   // Update darkroom sizes after releasing the history lock to avoid deadlocks.
-  if(dev->gui_attached && !dev->pixelpipe_init_batching) dt_dev_get_thumbnail_size(dev);
+  if(dev->gui_attached) dt_dev_get_thumbnail_size(dev);
   if(darktable.gui && dev->gui_attached) --darktable.gui->reset;
 }
 

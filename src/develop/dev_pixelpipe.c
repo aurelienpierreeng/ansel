@@ -594,12 +594,6 @@ static void _sync_virtual_pipe(dt_develop_t *dev, dt_dev_pixelpipe_change_t flag
   if(!dev || !dev->gui_attached || !dev->virtual_pipe) return;
   if(!dev->roi.raw_inited || dev->image_storage.id <= 0) return;
 
-  if(dev->pixelpipe_init_batching)
-  {
-    _change_pipe(dev->virtual_pipe, flag);
-    return;
-  }
-
   // Ensure its input image metadata matches the current dev state.
   if(dev->virtual_pipe->imgid != dev->image_storage.id
      || dev->virtual_pipe->iwidth != dev->roi.raw_width

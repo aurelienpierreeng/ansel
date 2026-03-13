@@ -730,7 +730,7 @@ int dt_dev_load_image_finish(dt_develop_t *dev, const int32_t imgid)
     dt_dev_history_notify_change(dev, imgid);
   }
 
-  if(dev->gui_attached && !dev->pixelpipe_init_batching) 
+  if(dev->gui_attached) 
   {
     dt_dev_get_thumbnail_size(dev);
   }
