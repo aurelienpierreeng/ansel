@@ -3656,16 +3656,18 @@ static void _blendop_update_top_enable_label(dt_iop_module_t *module)
 
   gchar *clean_name = delete_underscore(module->name());
   const char *multi_name = module->multi_name[0] ? module->multi_name : "0";
-  gchar *label = g_strdup_printf(_("Enable blending/masking for module %s (%s)"), clean_name, multi_name);
-  gtk_button_set_label(GTK_BUTTON(bd->top_enable), label);
+  gchar *multi_name_dup = ((g_strcmp0(multi_name, "0") == 0) || (g_strcmp0(multi_name, "") == 0)) ?  g_strdup("") : g_strdup_printf(" (%s)", multi_name);
   GtkWidget *child = gtk_bin_get_child(GTK_BIN(bd->top_enable));
+  gchar *label = g_markup_printf_escaped(_("Enable blending/masking in <b>%s%s</b>"), clean_name, multi_name_dup);
   if(GTK_IS_LABEL(child))
   {
+    gtk_label_set_markup(GTK_LABEL(child), label);
     gtk_label_set_line_wrap(GTK_LABEL(child), TRUE);
     gtk_label_set_xalign(GTK_LABEL(child), 0.0f);
   }
   dt_free(label);
   dt_free(clean_name);
+  dt_free(multi_name_dup);
 }
 
 static GtkWidget *_blendop_create_notebook_page(GtkWidget *notebook, const gchar *label, GtkWidget **content)
