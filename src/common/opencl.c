@@ -2262,7 +2262,7 @@ static inline void *_dt_opencl_alloc_image2d(const int devid, const int width, c
       dt_print(DT_DEBUG_OPENCL,
                "[opencl %s] out of memory on device %d, flushing cached pinned buffers and retrying\n",
                context, devid);
-      dt_dev_pixelpipe_cache_flush_clmem(darktable.pixelpipe_cache, devid);
+      dt_dev_pixelpipe_cache_flush_clmem(darktable.pixelpipe_cache, devid, NULL);
       continue;
     }
     break;
@@ -2333,7 +2333,7 @@ void *dt_opencl_alloc_device_buffer_with_flags(const int devid, const size_t siz
       dt_print(DT_DEBUG_OPENCL,
                "[opencl alloc_device_buffer] out of memory on device %d, flushing cached pinned buffers and retrying\n",
                devid);
-      dt_dev_pixelpipe_cache_flush_clmem(darktable.pixelpipe_cache, devid);
+      dt_dev_pixelpipe_cache_flush_clmem(darktable.pixelpipe_cache, devid, NULL);
       continue;
     }
     break;
@@ -2493,21 +2493,27 @@ gboolean dt_opencl_image_fits_device(const int devid, const size_t width, const 
   if(!cl->inited || devid < 0) return FALSE;
 
   const size_t required  = width * height * bpp;
-  const double total = (double)required * (double)factor + (double)overhead;
+  const size_t total = (size_t)ceilf((float)required * factor) + overhead;
 
   if(cl->dev[devid].max_image_width < width || cl->dev[devid].max_image_height < height)
     return FALSE;
 
-  if(_opencl_get_device_memalloc(devid) < required)      return FALSE;
+  if(_opencl_get_device_memalloc(devid) < required)
+  {
+    dt_print(DT_DEBUG_OPENCL,
+             "[opencl] trying to allocate a buffer of %lu MiB while the vRAM has %lu MiB total\n",
+             required / (1024 * 1024), _opencl_get_device_memalloc(devid) / (1024 * 1024));
+    return FALSE;
+  }
 
-  if((double)dt_opencl_get_device_available(devid) >= total) return TRUE;
+  if(dt_opencl_get_device_available(devid) >= total) 
+    return TRUE;
 
   dt_print(DT_DEBUG_OPENCL,
-           "[dt_opencl_image_fits_device] not enough memory on device %d, flushing cached pinned buffers and retrying\n",
-           devid);
-  dt_dev_pixelpipe_cache_flush_clmem(darktable.pixelpipe_cache, devid);
+            "[opencl] trying to allocate a buffer of %lu MiB while the vRAM has %lu MiB left\n",
+            total / (1024 * 1024), dt_opencl_get_device_available(devid) / (1024 * 1024));
 
-  return ((double)dt_opencl_get_device_available(devid) >= total);
+  return FALSE;
 }
 
 /** round size to a multiple of the value given in the device specifig config parameter clroundup_wd/ht */

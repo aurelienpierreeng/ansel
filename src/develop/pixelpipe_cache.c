@@ -106,7 +106,7 @@ static dt_pixel_cache_entry_t *dt_pixel_cache_new_entry(const uint64_t hash, con
                                                         const dt_iop_buffer_dsc_t dsc, const char *name, const int id,
                                                         dt_dev_pixelpipe_cache_t *cache, gboolean alloc,
                                                         GHashTable *table);
-static void _cache_entry_clmem_flush_device(dt_pixel_cache_entry_t *entry, const int devid);
+static void _cache_entry_clmem_flush_device(dt_pixel_cache_entry_t *entry, const int devid, void *keep);
 static gboolean _cache_entry_materialize_host_data_locked(dt_pixel_cache_entry_t *entry, int preferred_devid);
 
 #ifdef HAVE_OPENCL
@@ -376,7 +376,7 @@ static void _cache_entry_clmem_flush_host_pinned_locked(dt_pixel_cache_entry_t *
 }
 #endif
 
-void dt_dev_pixelpipe_cache_flush_clmem(dt_dev_pixelpipe_cache_t *cache, const int devid)
+void dt_dev_pixelpipe_cache_flush_clmem(dt_dev_pixelpipe_cache_t *cache, const int devid, void *keep)
 {
   if(devid >= 0) dt_opencl_events_wait_for(devid);
 
@@ -391,7 +391,7 @@ void dt_dev_pixelpipe_cache_flush_clmem(dt_dev_pixelpipe_cache_t *cache, const i
      * must stay lightweight and must not wait on per-entry writer locks, otherwise
      * allocation fallback can deadlock against in-flight GPU renders that already
      * hold cache entry locks. */
-    _cache_entry_clmem_flush_device(entry, devid);
+    _cache_entry_clmem_flush_device(entry, devid, keep);
   }
   dt_pthread_mutex_unlock(&cache->lock);
 }
@@ -878,7 +878,8 @@ static inline void _log_arena_allocation_failure(dt_dev_pixelpipe_cache_t *cache
   (void)name_is_file; // kept for signature symmetry if future callers need it.
 }
 
-static void _cache_entry_clmem_flush_device(dt_pixel_cache_entry_t *entry, const int devid)
+// keep: OpenCL buffer to NOT release
+static void _cache_entry_clmem_flush_device(dt_pixel_cache_entry_t *entry, const int devid, void *keep)
 {
   dt_pthread_mutex_lock(&entry->cl_mem_lock);
   GList *l = entry->cl_mem_list;
@@ -886,7 +887,7 @@ static void _cache_entry_clmem_flush_device(dt_pixel_cache_entry_t *entry, const
   {
     GList *next = l->next;
     dt_cache_clmem_t *c = (dt_cache_clmem_t *)l->data;
-    if(devid < 0 || c->devid == devid)
+    if(devid < 0 || (c->devid == devid && c->mem != keep))
     {
       entry->cl_mem_list = g_list_delete_link(entry->cl_mem_list, l);
       dt_opencl_release_mem_object(c->mem);

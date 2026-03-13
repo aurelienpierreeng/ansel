@@ -942,6 +942,62 @@ static int _is_opencl_supported(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t
   return dt_opencl_is_inited() && piece->process_cl_ready && module->process_cl;
 }
 
+static int _gpu_init_input(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
+                           float **input, void **cl_mem_input,
+                           dt_iop_buffer_dsc_t *input_format, dt_iop_colorspace_type_t input_cst_cl,
+                           const dt_iop_roi_t *roi_in,
+                           void **output, void **cl_mem_output, dt_iop_buffer_dsc_t **out_format,
+                           const dt_iop_roi_t *roi_out,
+                           dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece,
+                           dt_develop_tiling_t *tiling, dt_pixelpipe_flow_t *pixelpipe_flow,
+                           const size_t in_bpp,
+                           dt_pixel_cache_entry_t *input_entry, dt_pixel_cache_entry_t *output_entry,
+                           dt_pixel_cache_entry_t *locked_input_entry)
+{
+  if(*input == NULL)
+  {
+    dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, TRUE, input_entry);
+    *input = dt_pixel_cache_alloc(darktable.pixelpipe_cache, input_entry);
+    dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE, input_entry);
+  }
+
+  if(*input == NULL)
+  {
+    dt_print(DT_DEBUG_OPENCL,
+              "[dev_pixelpipe] %s CPU fallback has no input buffer (cache allocation failed?)\n",
+              module->name());
+    _gpu_clear_buffer(cl_mem_output, output_entry, NULL, IOP_CS_NONE,
+                      _cache_gpu_device_buffer(pipe, output_entry));
+    _gpu_clear_buffer(cl_mem_input, input_entry, NULL, IOP_CS_NONE,
+                      _cache_gpu_device_buffer(pipe, input_entry));
+    return 1;
+  }
+
+  dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, TRUE, input_entry);
+  const int fail = _cl_pinned_memory_copy(pipe->devid, *input, *cl_mem_input, roi_in, CL_MAP_READ, in_bpp, module,
+                                          "cpu fallback input copy to cache");
+  // Enforce sync with the CPU/RAM cache so lock validity is guaranteed.
+  dt_opencl_finish(pipe->devid);
+  dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE, input_entry);
+
+  if(fail)
+  {
+    dt_print(DT_DEBUG_OPENCL,
+              "[dev_pixelpipe] %s couldn't resync GPU input to cache for CPU fallback\n",
+              module->name());
+    _gpu_clear_buffer(cl_mem_output, output_entry, NULL, IOP_CS_NONE,
+                      _cache_gpu_device_buffer(pipe, output_entry));
+    _gpu_clear_buffer(cl_mem_input, input_entry, NULL, IOP_CS_NONE,
+                      _cache_gpu_device_buffer(pipe, input_entry));
+    return 1;
+  }
+
+  // Color conversions happen in-place on OpenCL buffers: keep CPU metadata in sync.
+  input_format->cst = input_cst_cl;
+
+  return 0;
+}
+
 static int _gpu_cpu_fallback_from_opencl_error(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
                                                float *input, void *cl_mem_input,
                                                dt_iop_buffer_dsc_t *input_format, dt_iop_colorspace_type_t input_cst_cl,
@@ -954,8 +1010,6 @@ static int _gpu_cpu_fallback_from_opencl_error(dt_dev_pixelpipe_t *pipe, dt_deve
                                                dt_pixel_cache_entry_t *input_entry, dt_pixel_cache_entry_t *output_entry,
                                                dt_pixel_cache_entry_t *locked_input_entry)
 {
-  void *cl_mem_input_local = cl_mem_input;
-
   // If we kept a read lock for true zero-copy, drop it before attempting any write lock / cache alloc.
   if(locked_input_entry)
     dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE, locked_input_entry);
@@ -971,55 +1025,19 @@ static int _gpu_cpu_fallback_from_opencl_error(dt_dev_pixelpipe_t *pipe, dt_deve
                module->name());
       _gpu_clear_buffer(cl_mem_output, output_entry, NULL, IOP_CS_NONE,
                         _cache_gpu_device_buffer(pipe, output_entry));
-      _gpu_clear_buffer(&cl_mem_input_local, input_entry, NULL, IOP_CS_NONE,
+      _gpu_clear_buffer(&cl_mem_input, input_entry, NULL, IOP_CS_NONE,
                         _cache_gpu_device_buffer(pipe, input_entry));
       return 1;
     }
   }
 
   // If upstream ran GPU-only, `input` can be NULL while `cl_mem_input` contains the correct data.
-  if(cl_mem_input_local != NULL)
+  if(cl_mem_input != NULL)
   {
-    if(input == NULL)
-    {
-      dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, TRUE, input_entry);
-      input = dt_pixel_cache_alloc(darktable.pixelpipe_cache, input_entry);
-      dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE, input_entry);
-    }
-
-    if(input == NULL)
-    {
-      dt_print(DT_DEBUG_OPENCL,
-               "[dev_pixelpipe] %s CPU fallback has no input buffer (cache allocation failed?)\n",
-               module->name());
-      _gpu_clear_buffer(cl_mem_output, output_entry, NULL, IOP_CS_NONE,
-                        _cache_gpu_device_buffer(pipe, output_entry));
-      _gpu_clear_buffer(&cl_mem_input_local, input_entry, NULL, IOP_CS_NONE,
-                        _cache_gpu_device_buffer(pipe, input_entry));
+    if(_gpu_init_input(pipe, dev, &input, &cl_mem_input, input_format, input_cst_cl, roi_in, output, cl_mem_output,
+               out_format, roi_out, module, piece, tiling, pixelpipe_flow, in_bpp, input_entry,
+               output_entry, locked_input_entry))
       return 1;
-    }
-
-    dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, TRUE, input_entry);
-    const int fail = _cl_pinned_memory_copy(pipe->devid, input, cl_mem_input_local, roi_in, CL_MAP_READ, in_bpp, module,
-                                           "cpu fallback input copy to cache");
-    // Enforce sync with the CPU/RAM cache so lock validity is guaranteed.
-    dt_opencl_finish(pipe->devid);
-    dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE, input_entry);
-
-    if(fail)
-    {
-      dt_print(DT_DEBUG_OPENCL,
-               "[dev_pixelpipe] %s couldn't resync GPU input to cache for CPU fallback\n",
-               module->name());
-      _gpu_clear_buffer(cl_mem_output, output_entry, NULL, IOP_CS_NONE,
-                        _cache_gpu_device_buffer(pipe, output_entry));
-      _gpu_clear_buffer(&cl_mem_input_local, input_entry, NULL, IOP_CS_NONE,
-                        _cache_gpu_device_buffer(pipe, input_entry));
-      return 1;
-    }
-
-    // Color conversions happen in-place on OpenCL buffers: keep CPU metadata in sync.
-    input_format->cst = input_cst_cl;
   }
   else if(input == NULL)
   {
@@ -1034,7 +1052,7 @@ static int _gpu_cpu_fallback_from_opencl_error(dt_dev_pixelpipe_t *pipe, dt_deve
   // Release any OpenCL buffers from the failed GPU attempt before running the CPU module.
   _gpu_clear_buffer(cl_mem_output, output_entry, NULL, IOP_CS_NONE,
                     _cache_gpu_device_buffer(pipe, output_entry));
-  _gpu_clear_buffer(&cl_mem_input_local, input_entry, NULL, IOP_CS_NONE,
+  _gpu_clear_buffer(&cl_mem_input, input_entry, NULL, IOP_CS_NONE,
                     _cache_gpu_device_buffer(pipe, input_entry));
 
   return pixelpipe_process_on_CPU(pipe, dev, input, input_format, roi_in, output, out_format,
@@ -1164,7 +1182,7 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
     dt_print(DT_DEBUG_OPENCL,
              "[dev_pixelpipe] %s pre-check didn't fit on device, flushing cached pinned buffers and retrying\n",
              module->name());
-    dt_dev_pixelpipe_cache_flush_clmem(darktable.pixelpipe_cache, pipe->devid);
+    dt_dev_pixelpipe_cache_flush_clmem(darktable.pixelpipe_cache, pipe->devid, cl_mem_input);
     fits_on_device = dt_opencl_image_fits_device(pipe->devid, precheck_width, precheck_height,
                                                  MAX(in_bpp, bpp), required_factor_cl, tiling->overhead);
   }
@@ -1177,8 +1195,7 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
   // FIXME: the non-opencl preview pipe can be planned ahead in the cache
   // policy. Don't do it here.
   gboolean possible_cl = (
-      !(pipe->type == DT_DEV_PIXELPIPE_PREVIEW
-          && (module->flags() & IOP_FLAGS_PREVIEW_NON_OPENCL))
+      !(pipe->type == DT_DEV_PIXELPIPE_PREVIEW && (module->flags() & IOP_FLAGS_PREVIEW_NON_OPENCL))
       && (fits_on_device || piece->process_tiling_ready));
 
   // Force caching the output because it will probably be less of an hassle
@@ -1206,6 +1223,12 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
           module->name(), cl_px / 1e6f, dx*dy / 1e6f, (int)dx, (int)dy, (int)tiling->overlap);
       goto error;
     }
+
+    // alloc input and copy cl_mem_input if needed
+    if(_gpu_init_input(pipe, dev, &input, &cl_mem_input, input_format, input_cst_cl, roi_in, output, cl_mem_output,
+                       out_format, roi_out, module, piece, tiling, pixelpipe_flow, in_bpp, input_entry,
+                       output_entry, locked_input_entry))
+      goto error;
   }
 
   // Not enough memory for one-shot processing, or no tiling support, or tiling support
@@ -1216,7 +1239,7 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
   {
 	    /* image is small enough -> try to directly process entire image with opencl */
 	    if(_gpu_prepare_cl_input(pipe, module, input, &cl_mem_input, &input_cst_cl,
-	                             roi_in, in_bpp, input_entry, &locked_input_entry))
+	                             roi_in, in_bpp, input_entry, &locked_input_entry, NULL))
 	      goto error;
 
     // Allocate GPU memory for output: pinned memory if copying to cache, else device memory.
@@ -1232,7 +1255,7 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
       const gboolean reuse_output_pinned = reuse_output_cacheline;
       *cl_mem_output = _gpu_init_buffer(pipe->devid, *output, roi_out, bpp, module, "output", output_entry,
                                         reuse_output_pinned, reuse_output_cacheline,
-                                        &(*out_format)->cst, NULL);
+                                        &(*out_format)->cst, NULL, cl_mem_input);
       if(*cl_mem_output == NULL) goto error;
     }
 
