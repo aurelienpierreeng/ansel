@@ -1424,8 +1424,8 @@ gboolean _for_each_remove_old(gpointer key, gpointer value, gpointer user_data)
   // in microseconds
   int64_t delta = g_get_monotonic_time() - cache_entry->age;
 
-  // 3 min in microseconds
-  const int64_t three_min = 3 * 60 * 1000 * 1000;
+  // 5 min in microseconds
+  const int64_t three_min = 5 * 60 * 1000 * 1000;
 
   gboolean too_old = (delta > three_min) && (cache_entry->hits < 4);
 
