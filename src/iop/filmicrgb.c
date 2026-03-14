@@ -278,10 +278,10 @@ typedef struct dt_iop_filmicrgb_gui_data_t
   GtkWidget *white_point_target;
   GtkWidget *black_point_target;
   GtkWidget *output_power;
-  GtkWidget *latitude;
+  GtkWidget *toe;
+  GtkWidget *shoulder;
   GtkWidget *contrast;
   GtkWidget *saturation;
-  GtkWidget *balance;
   GtkWidget *preserve_color;
   GtkWidget *autoset_display_gamma;
   GtkWidget *shadows, *highlights;
@@ -397,6 +397,159 @@ int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_p
 
 inline static gboolean dt_iop_filmic_rgb_compute_spline(const dt_iop_filmicrgb_params_t *const p,
                                                     struct dt_iop_filmic_rgb_spline_t *const spline);
+
+typedef struct dt_iop_filmicrgb_v3_geometry_t
+{
+  float grey_log;
+  float grey_display;
+  float black_display;
+  float white_display;
+  float contrast;
+  float linear_intercept;
+  float xmin;
+  float xmax;
+  gboolean contrast_clamped;
+} dt_iop_filmicrgb_v3_geometry_t;
+
+typedef struct dt_iop_filmicrgb_v3_nodes_t
+{
+  float toe_log;
+  float shoulder_log;
+  float toe_display;
+  float shoulder_display;
+} dt_iop_filmicrgb_v3_nodes_t;
+
+/**
+ * Recover the affine segment used by the v3 spline generator from the user parameters.
+ *
+ * Toe and shoulder are defined on that affine segment, as percentages of the available
+ * room between middle grey and the points where the current slope hits display black
+ * and display white.
+ */
+static inline gboolean filmic_v3_compute_geometry(const dt_iop_filmicrgb_params_t *const p,
+                                                  dt_iop_filmicrgb_v3_geometry_t *const geometry)
+{
+  if(p->spline_version < DT_FILMIC_SPLINE_VERSION_V3) return FALSE;
+
+  if(p->custom_grey)
+    geometry->grey_display = powf(CLAMP(p->grey_point_target, p->black_point_target, p->white_point_target) / 100.0f,
+                                  1.0f / p->output_power);
+  else
+    geometry->grey_display = powf(0.1845f, 1.0f / p->output_power);
+
+  const float dynamic_range = p->white_point_source - p->black_point_source;
+  geometry->grey_log = fabsf(p->black_point_source) / dynamic_range;
+  geometry->black_display = powf(CLAMP(p->black_point_target, 0.0f, p->grey_point_target) / 100.0f,
+                                 1.0f / p->output_power);
+  geometry->white_display = powf(fmaxf(p->white_point_target, p->grey_point_target) / 100.0f,
+                                 1.0f / p->output_power);
+
+  const float slope = p->contrast * dynamic_range / 8.0f;
+  float min_contrast = 1.0f;
+  min_contrast = fmaxf(min_contrast,
+                       (geometry->white_display - geometry->grey_display) / (1.0f - geometry->grey_log));
+  min_contrast = fmaxf(min_contrast,
+                       (geometry->grey_display - geometry->black_display) / geometry->grey_log);
+  min_contrast += SAFETY_MARGIN;
+
+  geometry->contrast = slope / (p->output_power * powf(geometry->grey_display, p->output_power - 1.0f));
+  const float clamped_contrast = CLAMP(geometry->contrast, min_contrast, 100.0f);
+  geometry->contrast_clamped = (clamped_contrast != geometry->contrast);
+  geometry->contrast = clamped_contrast;
+
+  geometry->linear_intercept = geometry->grey_display - geometry->contrast * geometry->grey_log;
+  const float safety_margin = SAFETY_MARGIN * (geometry->white_display - geometry->black_display);
+  geometry->xmin = (geometry->black_display + safety_margin - geometry->linear_intercept) / geometry->contrast;
+  geometry->xmax = (geometry->white_display - safety_margin - geometry->linear_intercept) / geometry->contrast;
+  return TRUE;
+}
+
+/**
+ * Place the v3 toe and shoulder nodes from the legacy latitude/balance controls.
+ *
+ * The linear mid-tones segment is first expanded to the admissible [xmin ; xmax] interval
+ * for the current contrast, then latitude picks a symmetric position around middle grey.
+ * Balance finally translates that pair of nodes along the slope to favor shadows or highlights.
+ */
+static inline gboolean filmic_v3_compute_nodes_from_legacy(const dt_iop_filmicrgb_params_t *const p,
+                                                           dt_iop_filmicrgb_v3_geometry_t *const geometry,
+                                                           dt_iop_filmicrgb_v3_nodes_t *const nodes)
+{
+  if(!filmic_v3_compute_geometry(p, geometry)) return FALSE;
+
+  const float latitude = CLAMP(p->latitude, 0.0f, 100.0f) / 100.0f;
+  const float balance = CLAMP(p->balance, -50.0f, 50.0f) / 100.0f;
+
+  // Latitude positions toe and shoulder symmetrically between middle grey and the
+  // points where the current affine slope would meet output black and white.
+  nodes->toe_log = (1.0f - latitude) * geometry->grey_log + latitude * geometry->xmin;
+  nodes->shoulder_log = (1.0f - latitude) * geometry->grey_log + latitude * geometry->xmax;
+
+  // Balance is a signed translation of the latitude segment along the slope.
+  // Positive values protect highlights, negative values protect shadows.
+  const float balance_correction = (balance > 0.0f)
+                                       ? 2.0f * balance * (nodes->shoulder_log - geometry->grey_log)
+                                       : 2.0f * balance * (geometry->grey_log - nodes->toe_log);
+  nodes->toe_log -= balance_correction;
+  nodes->shoulder_log -= balance_correction;
+  nodes->toe_log = fmaxf(nodes->toe_log, geometry->xmin);
+  nodes->shoulder_log = fminf(nodes->shoulder_log, geometry->xmax);
+
+  nodes->toe_display = nodes->toe_log * geometry->contrast + geometry->linear_intercept;
+  nodes->shoulder_display = nodes->shoulder_log * geometry->contrast + geometry->linear_intercept;
+  return TRUE;
+}
+
+static inline void filmic_v3_legacy_to_direct(const dt_iop_filmicrgb_params_t *const p,
+                                              float *const toe, float *const shoulder)
+{
+  dt_iop_filmicrgb_v3_geometry_t geometry;
+  dt_iop_filmicrgb_v3_nodes_t nodes;
+  if(!filmic_v3_compute_nodes_from_legacy(p, &geometry, &nodes))
+  {
+    *toe = CLAMP(p->latitude, 0.0f, 100.0f);
+    *shoulder = CLAMP(p->latitude, 0.0f, 100.0f);
+    return;
+  }
+
+  const float toe_span = fmaxf(geometry.grey_log - geometry.xmin, 1e-6f);
+  const float shoulder_span = fmaxf(geometry.xmax - geometry.grey_log, 1e-6f);
+  *toe = CLAMP((geometry.grey_log - nodes.toe_log) / toe_span, 0.0f, 1.0f) * 100.0f;
+  *shoulder = CLAMP((nodes.shoulder_log - geometry.grey_log) / shoulder_span, 0.0f, 1.0f) * 100.0f;
+}
+
+static inline void filmic_v3_direct_to_legacy(const dt_iop_filmicrgb_params_t *const p,
+                                              const float toe, const float shoulder,
+                                              float *const latitude, float *const balance)
+{
+  dt_iop_filmicrgb_v3_geometry_t geometry;
+  if(!filmic_v3_compute_geometry(p, &geometry))
+  {
+    *latitude = p->latitude;
+    *balance = p->balance;
+    return;
+  }
+
+  const float toe_value = CLAMP(toe, 0.0f, 100.0f) / 100.0f;
+  const float shoulder_value = CLAMP(shoulder, 0.0f, 100.0f) / 100.0f;
+  const float toe_span = fmaxf(geometry.grey_log - geometry.xmin, 1e-6f);
+  const float shoulder_span = fmaxf(geometry.xmax - geometry.grey_log, 1e-6f);
+  const float latitude_value = CLAMP((toe_span * toe_value + shoulder_span * shoulder_value)
+                                         / (toe_span + shoulder_span),
+                                     0.0f, 1.0f);
+
+  float balance_value = 0.0f;
+  if(latitude_value > 1e-6f)
+  {
+    if(toe_value > shoulder_value)
+      balance_value = 0.5f * (1.0f - shoulder_value / latitude_value);
+    else if(shoulder_value > toe_value)
+      balance_value = 0.5f * (toe_value / latitude_value - 1.0f);
+  }
+
+  *latitude = latitude_value * 100.0f;
+  *balance = CLAMP(balance_value, -0.5f, 0.5f) * 100.0f;
+}
 
 // convert parameters from spline v1 or v2 to spline v3
 static inline void convert_to_spline_v3(dt_iop_filmicrgb_params_t* n)
@@ -3082,55 +3235,15 @@ inline static gboolean dt_iop_filmic_rgb_compute_spline(const dt_iop_filmicrgb_p
   }
   else // p->spline_version >= DT_FILMIC_SPLINE_VERSION_V3. Slope dependent on contrast only, and latitude as % of display range.
   {
-    const float hardness = p->output_power;
-    // latitude in %
-    float latitude = CLAMP(p->latitude, 0.0f, 100.0f) / 100.0f;
-    float slope = p->contrast * dynamic_range / 8.0f;
-    float min_contrast = 1.0f; // otherwise, white_display and black_display cannot be reached
-    // make sure there is enough contrast to be able to construct the top right part of the curve
-    min_contrast = fmaxf(min_contrast, (white_display - grey_display) / (white_log - grey_log));
-    // make sure there is enough contrast to be able to construct the bottom left part of the curve
-    min_contrast = fmaxf(min_contrast, (grey_display - black_display) / (grey_log - black_log));
-    min_contrast += SAFETY_MARGIN;
-    // we want a slope that depends only on contrast at gray point.
-    // let's consider f(x) = (contrast*x+linear_intercept)^hardness
-    // f'(x) = contrast * hardness * (contrast*x+linear_intercept)^(hardness-1)
-    // linear_intercept = grey_display - (contrast * grey_log);
-    // f'(grey_log) = contrast * hardness * (contrast * grey_log + grey_display - (contrast * grey_log))^(hardness-1)
-    //              = contrast * hardness * grey_display^(hardness-1)
-    // f'(grey_log) = target_contrast <=> contrast = target_contrast / (hardness * grey_display^(hardness-1))
-    contrast = slope / (hardness * powf(grey_display, hardness - 1.0f));
-    float clamped_contrast = CLAMP(contrast, min_contrast, 100.0f);
-    clamping = (clamped_contrast != contrast);
-    contrast = clamped_contrast;
-
-    // interception
-    float linear_intercept = grey_display - (contrast * grey_log);
-
-    // consider the line of equation y = contrast * x + linear_intercept
-    // we want to keep y in [black_display, white_display] (with some safety margin)
-    // thus, we compute x values such as y=black_display and y=white_display
-    // latitude will influence position of toe and shoulder in the [xmin, xmax] segment
-    const float xmin = (black_display + SAFETY_MARGIN * (white_display - black_display) - linear_intercept) / contrast;
-    const float xmax = (white_display - SAFETY_MARGIN * (white_display - black_display) - linear_intercept) / contrast;
-
-    // nodes for mapping from log encoding to desired target luminance
-    // X coordinates
-    toe_log = (1.0f - latitude) * grey_log + latitude * xmin;
-    shoulder_log = (1.0f - latitude) * grey_log + latitude * xmax;
-
-    // Apply the highlights/shadows balance as a shift along the contrast slope
-    // negative values drag to the left and compress the shadows, on the UI negative is the inverse
-    float balance_correction = (balance > 0.0f) ? 2.0f * balance * (shoulder_log - grey_log)
-                                                : 2.0f * balance * (grey_log - toe_log);
-    toe_log -= balance_correction;
-    shoulder_log -= balance_correction;
-    toe_log = fmaxf(toe_log, xmin);
-    shoulder_log = fminf(shoulder_log, xmax);
-
-    // y coordinates
-    toe_display = (toe_log * contrast + linear_intercept);
-    shoulder_display = (shoulder_log * contrast + linear_intercept);
+    dt_iop_filmicrgb_v3_geometry_t geometry;
+    dt_iop_filmicrgb_v3_nodes_t nodes;
+    filmic_v3_compute_nodes_from_legacy(p, &geometry, &nodes);
+    clamping = geometry.contrast_clamped;
+    contrast = geometry.contrast;
+    toe_log = nodes.toe_log;
+    shoulder_log = nodes.shoulder_log;
+    toe_display = nodes.toe_display;
+    shoulder_display = nodes.shoulder_display;
   }
 
   /**
@@ -3399,6 +3512,33 @@ void cleanup_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelp
   piece->data = NULL;
 }
 
+static void filmic_gui_sync_toe_shoulder(dt_iop_module_t *self)
+{
+  dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)self->gui_data;
+  dt_iop_filmicrgb_params_t *p = (dt_iop_filmicrgb_params_t *)self->params;
+  float toe = 0.0f;
+  float shoulder = 0.0f;
+  filmic_v3_legacy_to_direct(p, &toe, &shoulder);
+
+  ++darktable.gui->reset;
+  dt_bauhaus_slider_set(g->toe, toe);
+  dt_bauhaus_slider_set(g->shoulder, shoulder);
+  --darktable.gui->reset;
+}
+
+static void toe_shoulder_callback(GtkWidget *slider, gpointer user_data)
+{
+  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
+  if(darktable.gui->reset) return;
+
+  dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)self->gui_data;
+  dt_iop_filmicrgb_params_t *p = (dt_iop_filmicrgb_params_t *)self->params;
+  filmic_v3_direct_to_legacy(p, dt_bauhaus_slider_get(g->toe), dt_bauhaus_slider_get(g->shoulder),
+                             &p->latitude, &p->balance);
+  gui_changed(self, slider, NULL);
+  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+}
+
 void gui_update(dt_iop_module_t *self)
 {
   dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)self->gui_data;
@@ -3416,6 +3556,7 @@ void gui_update(dt_iop_module_t *self)
 
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->auto_hardness), p->auto_hardness);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->custom_grey), p->custom_grey);
+  filmic_gui_sync_toe_shoulder(self);
 
   gui_changed(self, NULL, NULL);
 }
@@ -4815,21 +4956,27 @@ void gui_init(dt_iop_module_t *self)
                                                  "increase to make highlights brighter and less compressed.\n"
                                                  "decrease to mute highlights."));
 
-  g->latitude = dt_bauhaus_slider_from_params(self, N_("latitude"));
-  dt_bauhaus_slider_set_soft_range(g->latitude, 0.1, 90.0);
-  dt_bauhaus_slider_set_format(g->latitude, "%");
-  gtk_widget_set_tooltip_text(g->latitude,
-                              _("width of the linear domain in the middle of the curve,\n"
-                                "increase to get more contrast and less desaturation at extreme luminances,\n"
-                                "decrease otherwise. no desaturation happens in the latitude range.\n"
-                                "this has no effect on mid-tones."));
+  g->toe = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 0.0f, 100.0f, 0.0f, 33.0f, 2);
+  gtk_box_pack_start(GTK_BOX(self->widget), g->toe, FALSE, FALSE, 0);
+  dt_bauhaus_widget_set_label(g->toe, N_("shadows"));
+  dt_bauhaus_slider_set_soft_range(g->toe, 0.1f, 90.0f);
+  dt_bauhaus_slider_set_format(g->toe, "%");
+  gtk_widget_set_tooltip_text(g->toe,
+                              _("distance between middle gray and the start of the shadows roll-off.\n"
+                                "0% keeps the toe at middle gray, 100% pushes it to the point where the\n"
+                                "current slope would hit the output black level."));
+  g_signal_connect(G_OBJECT(g->toe), "value-changed", G_CALLBACK(toe_shoulder_callback), self);
 
-  g->balance = dt_bauhaus_slider_from_params(self, "balance");
-  dt_bauhaus_slider_set_format(g->balance, "%");
-  gtk_widget_set_tooltip_text(g->balance, _("slides the latitude along the slope\n"
-                                            "to give more room to shadows or highlights.\n"
-                                            "use it if you need to protect the details\n"
-                                            "at one extremity of the histogram."));
+  g->shoulder = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 0.0f, 100.0f, 0.0f, 33.0f, 2);
+  gtk_box_pack_start(GTK_BOX(self->widget), g->shoulder, FALSE, FALSE, 0);
+  dt_bauhaus_widget_set_label(g->shoulder, N_("highlights"));
+  dt_bauhaus_slider_set_soft_range(g->shoulder, 0.1f, 90.0f);
+  dt_bauhaus_slider_set_format(g->shoulder, "%");
+  gtk_widget_set_tooltip_text(g->shoulder,
+                              _("distance between middle gray and the start of the highlights roll-off.\n"
+                                "0% keeps the shoulder at middle gray, 100% pushes it to the point where the\n"
+                                "current slope would hit the output white level."));
+  g_signal_connect(G_OBJECT(g->shoulder), "value-changed", G_CALLBACK(toe_shoulder_callback), self);
 
   // Curve type
   g->highlights = dt_bauhaus_combobox_from_params(self, "highlights");
@@ -5002,6 +5149,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
     gtk_widget_set_visible(g->grey_point_target, p->custom_grey);
   }
 
+  filmic_gui_sync_toe_shoulder(self);
   gtk_widget_queue_draw(GTK_WIDGET(g->area));
 }
 
