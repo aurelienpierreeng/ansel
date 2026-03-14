@@ -90,7 +90,7 @@ void dt_dev_pixelpipe_update_history_preview_real(dt_develop_t *dev)
 void dt_dev_pixelpipe_update_history_all_real(dt_develop_t *dev)
 {
   if(!dev || !dev->gui_attached) return;
-  dt_dev_pixelpipe_update_preview(dev);
+  dt_dev_pixelpipe_update_history_preview(dev);
   dt_dev_pixelpipe_update_history_main(dev);
 }
 

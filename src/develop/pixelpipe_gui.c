@@ -222,6 +222,32 @@ static gboolean _pipe_needs_gui_sampling_traversal(const dt_dev_pixelpipe_t *pip
   return FALSE;
 }
 
+/**
+ * @brief Tell whether an exact cache hit must still recurse to reach the active color picker module.
+ *
+ * @details
+ * Moving a picker changes only the sampled coordinates, not the module output hashes.
+ * This means downstream modules can exact-hit in cache while an upstream GUI module still
+ * needs fresh host-buffer sampling to emit `DT_SIGNAL_CONTROL_PICKERDATA_READY`.
+ *
+ * If we returned early from those downstream exact hits, the recursion would never reach the
+ * active GUI module and the picker would move on screen without updating any parameter.
+ */
+static inline gboolean _module_exact_hit_must_recurse_for_picker(const dt_dev_pixelpipe_t *pipe,
+                                                                 const dt_develop_t *dev,
+                                                                 const dt_iop_module_t *module)
+{
+  return _pipe_tracks_gui_observables(pipe, dev)
+         && module
+         && dev
+         && dev->gui_module
+         && darktable.lib->proxy.colorpicker.picker_proxy
+         && dev->gui_module->enabled
+         && dev->gui_module->request_color_pick != DT_REQUEST_COLORPICK_OFF
+         && module != dev->gui_module
+         && module->iop_order > dev->gui_module->iop_order;
+}
+
 static void _sync_module_output_backbuf_on_exact_hit(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
                                                      dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece,
                                                      dt_pixel_cache_entry_t *output_entry,

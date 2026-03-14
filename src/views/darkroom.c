@@ -2842,6 +2842,7 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
     if(mouse_in_imagearea(self, x, y))
     {
       dt_colorpicker_sample_t *const sample = darktable.lib->proxy.colorpicker.primary_sample;
+      gboolean sample_changed = FALSE;
       // Make sure a minimal width/height
       float delta_x = 1 / (float) dev->pipe->processed_width;
       float delta_y = 1 / (float) dev->pipe->processed_height;
@@ -2853,15 +2854,35 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
 
       if(sample->size == DT_LIB_COLORPICKER_SIZE_BOX)
       {
-        sample->box[0] = fmaxf(0.0, MIN(sample->point[0], mouse_x) - delta_x);
-        sample->box[1] = fmaxf(0.0, MIN(sample->point[1], mouse_y) - delta_y);
-        sample->box[2] = fminf(1.0, MAX(sample->point[0], mouse_x) + delta_x);
-        sample->box[3] = fminf(1.0, MAX(sample->point[1], mouse_y) + delta_y);
+        const float box[4] = {
+          fmaxf(0.0, MIN(sample->point[0], mouse_x) - delta_x),
+          fmaxf(0.0, MIN(sample->point[1], mouse_y) - delta_y),
+          fminf(1.0, MAX(sample->point[0], mouse_x) + delta_x),
+          fminf(1.0, MAX(sample->point[1], mouse_y) + delta_y)
+        };
+
+        for(int k = 0; k < 4; k++)
+        {
+          if(sample->box[k] != box[k])
+          {
+            sample->box[k] = box[k];
+            sample_changed = TRUE;
+          }
+        }
       }
       else if(sample->size == DT_LIB_COLORPICKER_SIZE_POINT)
       {
+        sample_changed = (sample->point[0] != mouse_x) || (sample->point[1] != mouse_y);
         sample->point[0] = mouse_x;
         sample->point[1] = mouse_y;
+      }
+
+      if(sample_changed)
+      {
+        /* Picker drags only move the sampling area.
+         * Mark the preview dirty so the worker resamples the active module
+         * without touching history or recomputing node hashes. */
+        dev->preview_pipe->status = DT_DEV_PIXELPIPE_DIRTY;
       }
     }
     ret = TRUE;
@@ -2935,7 +2956,10 @@ int button_released(dt_view_t *self, double x, double y, int which, uint32_t sta
     if(darktable.lib->proxy.colorpicker.primary_sample->size == DT_LIB_COLORPICKER_SIZE_BOX)
       dt_control_set_cursor(GDK_LEFT_PTR);
 
-    dt_dev_pixelpipe_update_preview(dev);
+    /* Final picker placement changes only the sample geometry.
+     * Keep the current history and ask for one fresh preview sampling pass. */
+    dt_dev_pixelpipe_update_history_preview(dev);
+    dt_control_queue_redraw_center();
     return 1;
   }
   // masks
@@ -2944,7 +2968,8 @@ int button_released(dt_view_t *self, double x, double y, int which, uint32_t sta
   {
     // Change on mask parameters and image output.
     dt_gui_throttle_queue(dev, _delayed_history_commit, dev);
-    dt_dev_pixelpipe_update_preview(dev); // Needed if mask selection changed
+    dt_dev_pixelpipe_update_history_preview(dev); // Needed if mask selection changed
+    dt_control_queue_redraw_center();
     return 1;
   }
 

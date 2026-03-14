@@ -1820,7 +1820,10 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   const gboolean exact_hit_needs_gui_output_backbuf
       = module && piece && _module_needs_gui_output_backbuf_sync(pipe, dev, module);
 
-  if(existing_cache && !exact_hit_needs_gui_host_input && !exact_hit_needs_gui_input_backbuf)
+  if(existing_cache
+     && !exact_hit_needs_gui_host_input
+     && !exact_hit_needs_gui_input_backbuf
+     && !_module_exact_hit_must_recurse_for_picker(pipe, dev, module))
   {
     if(exact_hit_needs_gui_output_backbuf)
       _sync_module_output_backbuf_on_exact_hit(pipe, dev, module, piece, existing_cache, roi_out, hash);

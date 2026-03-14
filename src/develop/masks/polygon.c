@@ -1940,7 +1940,7 @@ static int _polygon_events_key_pressed(struct dt_iop_module_t *module, GdkEventK
         // Decrease the current dragging node index
         mask_gui->node_dragging -= 1;
 
-        dt_dev_pixelpipe_update_preview(darktable.develop);
+        dt_dev_pixelpipe_update_history_preview(darktable.develop);
         return 1;
       }
       case GDK_KEY_KP_Enter:
