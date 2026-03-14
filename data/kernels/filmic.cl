@@ -319,14 +319,25 @@ static inline float4 pipe_RGB_to_Ych(float4 in, constant const float *const matr
   const float4 Yrg = LMS_to_Yrg(LMS);
 
   // rewrite in polar coordinates
-  return Yrg_to_Ych(Yrg);
+  //
+  // Note that we don't explicitly store the hue angle
+  // but rather just the cosine and sine of the angle.
+  // This is because we don't need the hue angle anywhere
+  // and this way we can avoid calculating expensive
+  // trigonometric functions.
+  const float r = Yrg.y - 0.21902143f;
+  const float g = Yrg.z - 0.54371398f;
+  const float c = hypot(g, r);
+  const float cos_h = c != 0.f ? r / c : 1.f;
+  const float sin_h = c != 0.f ? g / c : 0.f;
+  return (float4)(Yrg.x, c, cos_h, sin_h);
 }
 
 
 static inline float4 Ych_to_pipe_RGB(float4 in, constant const float *const matrix)
 {
   // rewrite in cartesian coordinates
-  const float4 Yrg = Ych_to_Yrg(in);
+  const float4 Yrg = (float4)(in.x, in.y * in.z + 0.21902143f, in.y * in.w + 0.54371398f, 0.f);
 
   // go from Kirk/Filmlight Yrg to CIE LMS 2006
   const float4 LMS = Yrg_to_LMS(Yrg);
@@ -480,6 +491,37 @@ static inline float clip_chroma(constant const float *const matrix_out, const fl
 }
 
 
+static inline float4 gamut_check_Yrg_filmic(float4 Ych)
+{
+  // Do a test conversion to Yrg
+  const float4 Yrg = (float4)(Ych.x, Ych.y * Ych.z + 0.21902143f, Ych.y * Ych.w + 0.54371398f, 0.f);
+
+  // Gamut-clip in Yrg at constant hue and luminance
+  // e.g. find the max chroma value that fits in gamut at the current hue
+  const float D65_r = 0.21902143f;
+  const float D65_g = 0.54371398f;
+  float max_c = Ych.y;
+
+  if(Yrg.y < 0.f)
+  {
+    max_c = fmin(-D65_r / Ych.z, max_c);
+  }
+  if(Yrg.z < 0.f)
+  {
+    max_c = fmin(-D65_g / Ych.w, max_c);
+  }
+  if(Yrg.y + Yrg.z > 1.f)
+  {
+    max_c = fmin((1.f - D65_r - D65_g) / (Ych.z + Ych.w), max_c);
+  }
+
+  // Overwrite chroma with the sanitized value
+  Ych.y = max_c;
+
+  return Ych;
+}
+
+
 static inline float4 gamut_check_RGB(constant const float *const matrix_in, constant const float *const matrix_out,
                                      const float display_black, const float display_white,
                                      const float4 Ych_in)
@@ -498,13 +540,10 @@ static inline float4 gamut_check_RGB(constant const float *const matrix_in, cons
   // into gamut.
   const float Y = clamp((Ych_in.x + Ych_brightened.x) / 2.f, CIE_Y_1931_to_CIE_Y_2006(display_black), CIE_Y_1931_to_CIE_Y_2006(display_white));
 
-  // Precompute sin and cos of hue for reuse
-  const float cos_h = native_cos(Ych_in.z);
-  const float sin_h = native_sin(Ych_in.z);
-  const float new_chroma = clip_chroma(matrix_out, display_white, Y, cos_h, sin_h, Ych_in.y);
+  const float new_chroma = clip_chroma(matrix_out, display_white, Y, Ych_in.z, Ych_in.w, Ych_in.y);
 
   // Go to RGB, using existing luminance and hue and the new chroma
-  const float4 Ych = (float4)(Y, new_chroma, Ych_in.z, 0.f);
+  const float4 Ych = (float4)(Y, new_chroma, Ych_in.z, Ych_in.w);
   const float4 RGB_out = Ych_to_pipe_RGB(Ych, matrix_out);
 
   // Clamp in target RGB as a final catch-all
@@ -522,6 +561,7 @@ static inline float4 gamut_mapping(float4 Ych_final, float4 Ych_original,
 {
   // Force final hue to original
   Ych_final.z = Ych_original.z;
+  Ych_final.w = Ych_original.w;
 
   // Clip luminance
   Ych_final.x = clamp(Ych_final.x,
@@ -530,7 +570,7 @@ static inline float4 gamut_mapping(float4 Ych_final, float4 Ych_original,
 
   // Massage chroma
   Ych_final = filmic_desaturate_v4(Ych_original, Ych_final, saturation);
-  Ych_final = gamut_check_Yrg(Ych_final);
+  Ych_final = gamut_check_Yrg_filmic(Ych_final);
 
   float4 output;
 

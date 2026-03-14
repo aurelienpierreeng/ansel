@@ -125,15 +125,9 @@ DT_MODULE_INTROSPECTION(5, dt_iop_filmicrgb_params_t)
 /** Note :
  * we use finite-math-only and fast-math because divisions by zero are manually avoided in the code
  * fp-contract=fast enables hardware-accelerated Fused Multiply-Add
- * the rest is loop reorganization and vectorization optimization
  **/
 #if defined(__GNUC__)
-#pragma GCC optimize("unroll-loops", "tree-loop-if-convert", "tree-loop-distribution", "no-strict-aliasing",      \
-                     "loop-interchange", "loop-nest-optimize", "tree-loop-im", "unswitch-loops",                  \
-                     "tree-loop-ivcanon", "ira-loop-pressure", "split-ivs-in-unroller",                           \
-                     "variable-expansion-in-unroller", "split-loops", "ivopts", "predictive-commoning",           \
-                     "tree-loop-linear", "loop-block", "loop-strip-mine", "finite-math-only", "fp-contract=fast", \
-                     "fast-math", "no-math-errno")
+#pragma GCC optimize("finite-math-only", "fp-contract=fast", "fast-math", "no-math-errno")
 #endif
 
 
@@ -912,80 +906,6 @@ static inline float filmic_spline(const float x, const dt_aligned_pixel_t M1, co
   return result;
 }
 
-typedef int dt_iop_filmicrgb_simd_mask_t __attribute__((vector_size(16), aligned(16)));
-
-typedef union dt_iop_filmicrgb_simd_cast_t
-{
-  dt_aligned_pixel_simd_t f;
-  dt_iop_filmicrgb_simd_mask_t i;
-} dt_iop_filmicrgb_simd_cast_t;
-
-static inline __attribute__((always_inline)) dt_aligned_pixel_simd_t
-filmic_blend_simd(const dt_iop_filmicrgb_simd_mask_t mask, const dt_aligned_pixel_simd_t on_true,
-                  const dt_aligned_pixel_simd_t on_false)
-{
-  const dt_iop_filmicrgb_simd_cast_t true_bits = { .f = on_true };
-  const dt_iop_filmicrgb_simd_cast_t false_bits = { .f = on_false };
-  dt_iop_filmicrgb_simd_cast_t out = { .i = (mask & true_bits.i) | (~mask & false_bits.i) };
-  return out.f;
-}
-
-static inline __attribute__((always_inline)) dt_aligned_pixel_simd_t
-filmic_spline_simd(const dt_aligned_pixel_simd_t x, const dt_aligned_pixel_t M1, const dt_aligned_pixel_t M2,
-                   const dt_aligned_pixel_t M3, const dt_aligned_pixel_t M4, const dt_aligned_pixel_t M5,
-                   const float latitude_min, const float latitude_max,
-                   const dt_iop_filmicrgb_curve_type_t type[2])
-{
-  // Keep the 3 possible spline sections explicit, then select per lane according to
-  // where each component lies relative to the latitude interval.
-  const dt_aligned_pixel_simd_t latitude = dt_simd_set1(M1[2]) + x * dt_simd_set1(M2[2]);
-
-  dt_aligned_pixel_simd_t toe;
-  if(type[0] == DT_FILMIC_CURVE_POLY_4)
-  {
-    // polynomial toe, 4th order
-    toe = dt_simd_set1(M1[0]) + x * (dt_simd_set1(M2[0]) + x * (dt_simd_set1(M3[0]) + x * (dt_simd_set1(M4[0]) + x * dt_simd_set1(M5[0]))));
-  }
-  else if(type[0] == DT_FILMIC_CURVE_POLY_3)
-  {
-    // polynomial toe, 3rd order
-    toe = dt_simd_set1(M1[0]) + x * (dt_simd_set1(M2[0]) + x * (dt_simd_set1(M3[0]) + x * dt_simd_set1(M4[0])));
-  }
-  else
-  {
-    // rational toe
-    const dt_aligned_pixel_simd_t xi = dt_simd_set1(latitude_min) - x;
-    const dt_aligned_pixel_simd_t rat = xi * (xi * dt_simd_set1(M2[0]) + dt_simd_set1(1.f));
-    toe = dt_simd_set1(M4[0]) - dt_simd_set1(M1[0]) * rat / (rat + dt_simd_set1(M3[0]));
-  }
-
-  dt_aligned_pixel_simd_t shoulder;
-  if(type[1] == DT_FILMIC_CURVE_POLY_4)
-  {
-    // polynomial shoulder, 4th order
-    shoulder = dt_simd_set1(M1[1]) + x * (dt_simd_set1(M2[1]) + x * (dt_simd_set1(M3[1]) + x * (dt_simd_set1(M4[1]) + x * dt_simd_set1(M5[1]))));
-  }
-  else if(type[1] == DT_FILMIC_CURVE_POLY_3)
-  {
-    // polynomial shoulder, 3rd order
-    shoulder = dt_simd_set1(M1[1]) + x * (dt_simd_set1(M2[1]) + x * (dt_simd_set1(M3[1]) + x * dt_simd_set1(M4[1])));
-  }
-  else
-  {
-    // rational shoulder
-    const dt_aligned_pixel_simd_t xi = x - dt_simd_set1(latitude_max);
-    const dt_aligned_pixel_simd_t rat = xi * (xi * dt_simd_set1(M2[1]) + dt_simd_set1(1.f));
-    shoulder = dt_simd_set1(M4[1]) + dt_simd_set1(M1[1]) * rat / (rat + dt_simd_set1(M3[1]));
-  }
-
-  const dt_iop_filmicrgb_simd_mask_t toe_mask = (dt_iop_filmicrgb_simd_mask_t)(x < dt_simd_set1(latitude_min));
-  const dt_iop_filmicrgb_simd_mask_t shoulder_mask = (dt_iop_filmicrgb_simd_mask_t)(x > dt_simd_set1(latitude_max));
-
-  const dt_aligned_pixel_simd_t toe_or_latitude = filmic_blend_simd(toe_mask, toe, latitude);
-  return filmic_blend_simd(shoulder_mask, shoulder, toe_or_latitude);
-}
-
-
 #ifdef _OPENMP
 #pragma omp declare simd uniform(sigma_toe, sigma_shoulder)
 #endif
@@ -1636,7 +1556,19 @@ pipe_RGB_to_Ych_simd(const dt_aligned_pixel_simd_t in, const dt_aligned_pixel_si
   // go from pipeline RGB to CIE 2006 LMS D65
   // go from CIE LMS 2006 to Kirk/Filmlight Yrg
   // rewrite in polar coordinates
-  return Yrg_to_Ych_simd(LMS_to_Yrg_simd(dt_mat3x4_mul_vec4(in, matrix0, matrix1, matrix2)));
+  //
+  // Note that we don't explicitly store the hue angle
+  // but rather just the cosine and sine of the angle.
+  // This is because we don't need the hue angle anywhere
+  // and this way we can avoid calculating expensive
+  // trigonometric functions.
+  const dt_aligned_pixel_simd_t Yrg = LMS_to_Yrg_simd(dt_mat3x4_mul_vec4(in, matrix0, matrix1, matrix2));
+  const float r = Yrg[1] - 0.21902143f;
+  const float g = Yrg[2] - 0.54371398f;
+  const float c = dt_fast_hypotf(g, r);
+  const float cos_h = c != 0.f ? r / c : 1.f;
+  const float sin_h = c != 0.f ? g / c : 0.f;
+  return (dt_aligned_pixel_simd_t){ Yrg[0], c, cos_h, sin_h };
 }
 
 
@@ -1647,10 +1579,18 @@ Ych_to_pipe_RGB_simd(const dt_aligned_pixel_simd_t in, const dt_aligned_pixel_si
   // rewrite in cartesian coordinates
   // go from Kirk/Filmlight Yrg to CIE LMS 2006
   // go from CIE LMS 2006 to pipeline RGB
-  return dt_mat3x4_mul_vec4(Yrg_to_LMS_simd(Ych_to_Yrg_simd(in)), matrix0, matrix1, matrix2);
+  const dt_aligned_pixel_simd_t Yrg = {
+    in[0],
+    in[1] * in[2] + 0.21902143f,
+    in[1] * in[3] + 0.54371398f,
+    0.f
+  };
+  return dt_mat3x4_mul_vec4(Yrg_to_LMS_simd(Yrg), matrix0, matrix1, matrix2);
 }
 
-static inline void filmic_desaturate_v4(const dt_aligned_pixel_t Ych_original, dt_aligned_pixel_t Ych_final, const float saturation)
+static inline __attribute__((always_inline)) dt_aligned_pixel_simd_t
+filmic_desaturate_v4(const dt_aligned_pixel_simd_t Ych_original, dt_aligned_pixel_simd_t Ych_final,
+                     const float saturation)
 {
   // Note : Ych is normalized trough the LMS conversion,
   // meaning c is actually a saturation (saturation ~= chroma / brightness).
@@ -1683,6 +1623,7 @@ static inline void filmic_desaturate_v4(const dt_aligned_pixel_t Ych_original, d
                       : chroma_final;
 
   Ych_final[1] = fmaxf(chroma_final / Ych_final[0], 0.f);
+  return Ych_final;
 }
 
 // Pipeline and ICC luminance is CIE Y 1931
@@ -1793,6 +1734,27 @@ static inline float clip_chroma(const dt_colormatrix_t matrix_out, const float t
 
 
 static inline __attribute__((always_inline)) dt_aligned_pixel_simd_t
+gamut_check_Yrg_filmic_simd(const dt_aligned_pixel_simd_t Ych)
+{
+  // Check if the color fits in Yrg and LMS cone space
+  // clip chroma at constant hue and luminance otherwise
+  const dt_aligned_pixel_simd_t Yrg = {
+    Ych[0],
+    Ych[1] * Ych[2] + 0.21902143f,
+    Ych[1] * Ych[3] + 0.54371398f,
+    0.f
+  };
+  float max_c = Ych[1];
+
+  if(Yrg[1] < 0.f) max_c = fminf(-0.21902143f / Ych[2], max_c);
+  if(Yrg[2] < 0.f) max_c = fminf(-0.54371398f / Ych[3], max_c);
+  if(Yrg[1] + Yrg[2] > 1.f) max_c = fminf((1.f - 0.21902143f - 0.54371398f) / (Ych[2] + Ych[3]), max_c);
+
+  return (dt_aligned_pixel_simd_t){ Ych[0], max_c, Ych[2], Ych[3] };
+}
+
+
+static inline __attribute__((always_inline)) dt_aligned_pixel_simd_t
 gamut_check_RGB_simd(const dt_colormatrix_t matrix_out, const dt_aligned_pixel_simd_t matrix_in0,
                      const dt_aligned_pixel_simd_t matrix_in1, const dt_aligned_pixel_simd_t matrix_in2,
                      const dt_aligned_pixel_simd_t matrix_out0, const dt_aligned_pixel_simd_t matrix_out1,
@@ -1816,14 +1778,11 @@ gamut_check_RGB_simd(const dt_colormatrix_t matrix_out, const dt_aligned_pixel_s
   const float Y = CLAMP((Ych_in[0] + Ych_brightened[0]) / 2.f,
                         CIE_Y_1931_to_CIE_Y_2006(display_black),
                         CIE_Y_1931_to_CIE_Y_2006(display_white));
-  // Precompute sin and cos of hue for reuse
-  const float cos_h = cosf(Ych_in[2]);
-  const float sin_h = sinf(Ych_in[2]);
-  const float new_chroma = clip_chroma(matrix_out, display_white, Y, cos_h, sin_h, Ych_in[1]);
+  const float new_chroma = clip_chroma(matrix_out, display_white, Y, Ych_in[2], Ych_in[3], Ych_in[1]);
 
   // Go to RGB, using existing luminance and hue and the new chroma
   dt_aligned_pixel_simd_t RGB_out
-      = Ych_to_pipe_RGB_simd((dt_aligned_pixel_simd_t){ Y, new_chroma, Ych_in[2], 0.f },
+      = Ych_to_pipe_RGB_simd((dt_aligned_pixel_simd_t){ Y, new_chroma, Ych_in[2], Ych_in[3] },
                              matrix_out0, matrix_out1, matrix_out2);
 
   // Clamp in target RGB as a final catch-all
@@ -1846,18 +1805,14 @@ gamut_mapping_simd(dt_aligned_pixel_simd_t Ych_final, const dt_aligned_pixel_sim
 {
   // Force final hue to original
   Ych_final[2] = Ych_original[2];
+  Ych_final[3] = Ych_original[3];
   // Clip luminance
   Ych_final[0] = CLAMP(Ych_final[0], CIE_Y_1931_to_CIE_Y_2006(display_black),
                        CIE_Y_1931_to_CIE_Y_2006(display_white));
 
-  dt_aligned_pixel_t Ych_final_a = { 0.f };
-  dt_aligned_pixel_t Ych_original_a = { 0.f };
-  dt_store_simd_aligned(Ych_final_a, Ych_final);
-  dt_store_simd_aligned(Ych_original_a, Ych_original);
-
   // Massage chroma
-  filmic_desaturate_v4(Ych_original_a, Ych_final_a, saturation);
-  Ych_final = gamut_check_Yrg_simd(dt_load_simd_aligned(Ych_final_a));
+  Ych_final = filmic_desaturate_v4(Ych_original, Ych_final, saturation);
+  Ych_final = gamut_check_Yrg_filmic_simd(Ych_final);
 
   if(!use_output_profile)
   {
@@ -1974,10 +1929,10 @@ norm_tone_mapping_v4_simd(const dt_aligned_pixel_simd_t pix_in,
   norm = log_tonemapping(norm, data->grey_source, data->black_source, data->dynamic_range);
   // Filmic S curve on the max RGB
   // Apply the transfer function of the display
-  const dt_aligned_pixel_simd_t norm_curve
-      = filmic_spline_simd(dt_simd_set1(norm), spline.M1, spline.M2, spline.M3, spline.M4, spline.M5,
-                           spline.latitude_min, spline.latitude_max, spline.type);
-  norm = powf(CLAMP(norm_curve[0], spline.y[0], spline.y[4]), data->output_power);
+  norm = powf(CLAMPF(filmic_spline(norm, spline.M1, spline.M2, spline.M3, spline.M4, spline.M5,
+                                   spline.latitude_min, spline.latitude_max, spline.type),
+                     spline.y[0], spline.y[4]),
+              data->output_power);
 
   // Restore RGB
   return ratios * dt_simd_set1(norm);
@@ -1987,19 +1942,17 @@ static inline __attribute__((always_inline)) dt_aligned_pixel_simd_t
 RGB_tone_mapping_v4_simd(const dt_aligned_pixel_simd_t pix_in, const dt_iop_filmicrgb_data_t *const data,
                          const dt_iop_filmic_rgb_spline_t spline)
 {
-  dt_aligned_pixel_simd_t log_rgb = pix_in;
-
-  // Log tone-mapping
-  for_each_channel(c)
-    log_rgb[c] = log_tonemapping(pix_in[c], data->grey_source, data->black_source, data->dynamic_range);
-
   // Filmic S curve on RGB
   // Apply the transfer function of the display
-  dt_aligned_pixel_simd_t pix_out
-      = filmic_spline_simd(log_rgb, spline.M1, spline.M2, spline.M3, spline.M4, spline.M5,
-                           spline.latitude_min, spline.latitude_max, spline.type);
-  for_each_channel(c)
-    pix_out[c] = powf(CLAMP(pix_out[c], 0.f, spline.y[4]), data->output_power);
+  dt_aligned_pixel_simd_t pix_out = pix_in;
+  for(size_t c = 0; c < 3; c++)
+  {
+    const float mapped = log_tonemapping(pix_in[c], data->grey_source, data->black_source, data->dynamic_range);
+    pix_out[c] = powf(CLAMPF(filmic_spline(mapped, spline.M1, spline.M2, spline.M3, spline.M4, spline.M5,
+                                           spline.latitude_min, spline.latitude_max, spline.type),
+                             0.f, spline.y[4]),
+                      data->output_power);
+  }
 
   return pix_out;
 }
@@ -2032,7 +1985,7 @@ static inline void filmic_chroma_v4(const float *const restrict in, float *const
     dt_omp_firstprivate(width, height, ch, data, in, out, work_profile, input_matrix, output_matrix, \
     variant, spline, display_white, display_black, export_input_matrix, export_output_matrix, \
     use_output_profile, norm_min, norm_max, simd_matrices) \
-    schedule(simd :static)
+    schedule(static)
 #endif
   for(size_t k = 0; k < height * width * ch; k += ch)
   {
@@ -2083,7 +2036,7 @@ static inline void filmic_split_v4(const float *const restrict in, float *const 
     dt_omp_firstprivate(width, height, ch, data, in, out, work_profile, input_matrix, output_matrix, \
     variant, spline, display_white, display_black, export_input_matrix, export_output_matrix, \
     use_output_profile, simd_matrices) \
-    schedule(simd :static)
+    schedule(static)
 #endif
   for(size_t k = 0; k < height * width * ch; k += ch)
   {
@@ -2137,7 +2090,7 @@ static inline void filmic_v5(const float *const restrict in, float *const restri
     dt_omp_firstprivate(width, height, ch, data, in, out, work_profile, input_matrix, output_matrix, \
     spline, display_white, display_black, norm_min, norm_max, export_input_matrix, export_output_matrix, \
     use_output_profile, simd_matrices) \
-    schedule(simd :static)
+    schedule(static)
 #endif
   for(size_t k = 0; k < height * width * ch; k += ch)
   {
