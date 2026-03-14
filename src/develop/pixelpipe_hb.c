@@ -2320,7 +2320,6 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop
 
   // Flag backbuf as invalid
   dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, dt_dev_backbuf_get_hash(&pipe->backbuf));
-  dt_dev_backbuf_set_hash(&pipe->backbuf, -1);
 
   dt_print(DT_DEBUG_DEV, "[pixelpipe] Started %s pipeline recompute at %i×%i px\n", 
            dt_pixelpipe_get_pipe_name(pipe->type), roi.width, roi.height);
