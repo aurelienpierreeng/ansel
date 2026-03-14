@@ -434,6 +434,7 @@ static inline void _transform_lab_to_rgb_matrix(const float *const image_in, flo
 {
   const int ch = 4;
   const size_t stride = (size_t)width * height * ch;
+  const int use_nontemporal = !profile_info->nonlinearlut;
   const dt_colormatrix_t *matrix_ptr = &profile_info->matrix_out_transposed;
   const dt_aligned_pixel_simd_t m0 = dt_colormatrix_row_to_simd(*matrix_ptr, 0);
   const dt_aligned_pixel_simd_t m1 = dt_colormatrix_row_to_simd(*matrix_ptr, 1);
@@ -441,7 +442,7 @@ static inline void _transform_lab_to_rgb_matrix(const float *const image_in, flo
 
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-  dt_omp_firstprivate(image_in, image_out, stride, profile_info, ch, m0, m1, m2)   \
+  dt_omp_firstprivate(image_in, image_out, stride, profile_info, ch, m0, m1, m2, use_nontemporal)   \
   schedule(static)
 #endif
   for(size_t y = 0; y < stride; y += ch)
@@ -453,9 +454,16 @@ static inline void _transform_lab_to_rgb_matrix(const float *const image_in, flo
     const float alpha = in[3]; // some code does in-place conversions and relies on alpha being preserved
     dt_Lab_to_XYZ(in, xyz);
     const dt_aligned_pixel_simd_t vxyz = dt_load_simd_aligned(xyz);
-    dt_store_simd_aligned(out, dt_mat3x4_mul_vec4(vxyz, m0, m1, m2));
-    out[3] = alpha;
+    dt_aligned_pixel_simd_t rgb = dt_mat3x4_mul_vec4(vxyz, m0, m1, m2);
+    rgb[3] = alpha;
+    if(use_nontemporal)
+      dt_store_simd_nontemporal(out, rgb);
+    else
+      dt_store_simd_aligned(out, rgb);
   }
+
+  if(use_nontemporal)
+    dt_omploop_sfence();  // ensure that nontemporal writes complete before we attempt to read output
 
   if(profile_info->nonlinearlut)
   {
@@ -490,6 +498,7 @@ static inline void _transform_matrix_rgb(const float *const restrict image_in,
 
   if(profile_info_from->nonlinearlut || profile_info_to->nonlinearlut)
   {
+    const int use_nontemporal = !profile_info_to->nonlinearlut;
     const int run_lut_in[3] DT_ALIGNED_PIXEL= { (profile_info_from->lut_in[0][0] >= 0.0f),
                                                 (profile_info_from->lut_in[1][0] >= 0.0f),
                                                 (profile_info_from->lut_in[2][0] >= 0.0f) };
@@ -500,7 +509,7 @@ static inline void _transform_matrix_rgb(const float *const restrict image_in,
 
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-    dt_omp_firstprivate(stride, image_in, image_out, profile_info_from, profile_info_to, run_lut_in, run_lut_out, m0, m1, m2) \
+    dt_omp_firstprivate(stride, image_in, image_out, profile_info_from, profile_info_to, run_lut_in, run_lut_out, m0, m1, m2, use_nontemporal) \
     schedule(static)
 #endif
     for(size_t y = 0; y < stride; y += 4)
@@ -546,9 +555,15 @@ static inline void _transform_matrix_rgb(const float *const restrict image_in,
       {
         // convert color space
         const dt_aligned_pixel_simd_t vrgb = dt_load_simd_aligned(rgb);
-        dt_store_simd_aligned(out, dt_mat3x4_mul_vec4(vrgb, m0, m1, m2));
+        if(use_nontemporal)
+          dt_store_simd_nontemporal(out, dt_mat3x4_mul_vec4(vrgb, m0, m1, m2));
+        else
+          dt_store_simd_aligned(out, dt_mat3x4_mul_vec4(vrgb, m0, m1, m2));
       }
     }
+
+    if(use_nontemporal)
+      dt_omploop_sfence();  // ensure that nontemporal writes complete before we attempt to read output
   }
   else
   {
@@ -563,8 +578,9 @@ static inline void _transform_matrix_rgb(const float *const restrict image_in,
       float *const restrict out = __builtin_assume_aligned(image_out + y, 16);
 
       const dt_aligned_pixel_simd_t vin = dt_load_simd_aligned(in);
-      dt_store_simd_aligned(out, dt_mat3x4_mul_vec4(vin, m0, m1, m2));
+      dt_store_simd_nontemporal(out, dt_mat3x4_mul_vec4(vin, m0, m1, m2));
     }
+    dt_omploop_sfence();  // ensure that nontemporal writes complete before we attempt to read output
   }
 }
 

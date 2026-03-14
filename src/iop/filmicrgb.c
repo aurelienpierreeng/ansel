@@ -2046,15 +2046,16 @@ static inline void filmic_chroma_v4(const float *const restrict in, float *const
     const dt_aligned_pixel_simd_t Ych_final = pipe_RGB_to_Ych_simd(pix_out, simd_matrices.input[0],
                                                                    simd_matrices.input[1], simd_matrices.input[2]);
 
-    dt_store_simd_aligned(out + k,
-                          gamut_mapping_simd(Ych_final, Ych_original, output_matrix,
-                                             simd_matrices.input[0], simd_matrices.input[1], simd_matrices.input[2],
-                                             simd_matrices.output[0], simd_matrices.output[1], simd_matrices.output[2],
-                                             export_output_matrix,
-                                             simd_matrices.export_input[0], simd_matrices.export_input[1], simd_matrices.export_input[2],
-                                             simd_matrices.export_output[0], simd_matrices.export_output[1], simd_matrices.export_output[2],
-                                             display_black, display_white, data->saturation, use_output_profile));
+    dt_store_simd_nontemporal(out + k,
+                              gamut_mapping_simd(Ych_final, Ych_original, output_matrix,
+                                                 simd_matrices.input[0], simd_matrices.input[1], simd_matrices.input[2],
+                                                 simd_matrices.output[0], simd_matrices.output[1], simd_matrices.output[2],
+                                                 export_output_matrix,
+                                                 simd_matrices.export_input[0], simd_matrices.export_input[1], simd_matrices.export_input[2],
+                                                 simd_matrices.export_output[0], simd_matrices.export_output[1], simd_matrices.export_output[2],
+                                                 display_black, display_white, data->saturation, use_output_profile));
   }
+  dt_omploop_sfence();  // ensure that nontemporal writes complete before we attempt to read output
 }
 
 static inline void filmic_split_v4(const float *const restrict in, float *const restrict out,
@@ -2095,15 +2096,16 @@ static inline void filmic_split_v4(const float *const restrict in, float *const 
 
     Ych_final[1] = fminf(Ych_original[1], Ych_final[1]);
 
-    dt_store_simd_aligned(out + k,
-                          gamut_mapping_simd(Ych_final, Ych_original, output_matrix,
-                                             simd_matrices.input[0], simd_matrices.input[1], simd_matrices.input[2],
-                                             simd_matrices.output[0], simd_matrices.output[1], simd_matrices.output[2],
-                                             export_output_matrix,
-                                             simd_matrices.export_input[0], simd_matrices.export_input[1], simd_matrices.export_input[2],
-                                             simd_matrices.export_output[0], simd_matrices.export_output[1], simd_matrices.export_output[2],
-                                             display_black, display_white, data->saturation, use_output_profile));
+    dt_store_simd_nontemporal(out + k,
+                              gamut_mapping_simd(Ych_final, Ych_original, output_matrix,
+                                                 simd_matrices.input[0], simd_matrices.input[1], simd_matrices.input[2],
+                                                 simd_matrices.output[0], simd_matrices.output[1], simd_matrices.output[2],
+                                                 export_output_matrix,
+                                                 simd_matrices.export_input[0], simd_matrices.export_input[1], simd_matrices.export_input[2],
+                                                 simd_matrices.export_output[0], simd_matrices.export_output[1], simd_matrices.export_output[2],
+                                                 display_black, display_white, data->saturation, use_output_profile));
   }
+  dt_omploop_sfence();  // ensure that nontemporal writes complete before we attempt to read output
 }
 
 
@@ -2156,15 +2158,16 @@ static inline void filmic_v5(const float *const restrict in, float *const restri
 
     Ych_final[1] = fminf(Ych_original[1], Ych_final[1]);
 
-    dt_store_simd_aligned(out + k,
-                          gamut_mapping_simd(Ych_final, Ych_original, output_matrix,
-                                             simd_matrices.input[0], simd_matrices.input[1], simd_matrices.input[2],
-                                             simd_matrices.output[0], simd_matrices.output[1], simd_matrices.output[2],
-                                             export_output_matrix,
-                                             simd_matrices.export_input[0], simd_matrices.export_input[1], simd_matrices.export_input[2],
-                                             simd_matrices.export_output[0], simd_matrices.export_output[1], simd_matrices.export_output[2],
-                                             display_black, display_white, 0.f, use_output_profile));
+    dt_store_simd_nontemporal(out + k,
+                              gamut_mapping_simd(Ych_final, Ych_original, output_matrix,
+                                                 simd_matrices.input[0], simd_matrices.input[1], simd_matrices.input[2],
+                                                 simd_matrices.output[0], simd_matrices.output[1], simd_matrices.output[2],
+                                                 export_output_matrix,
+                                                 simd_matrices.export_input[0], simd_matrices.export_input[1], simd_matrices.export_input[2],
+                                                 simd_matrices.export_output[0], simd_matrices.export_output[1], simd_matrices.export_output[2],
+                                                 display_black, display_white, 0.f, use_output_profile));
   }
+  dt_omploop_sfence();  // ensure that nontemporal writes complete before we attempt to read output
 }
 
 
@@ -2176,9 +2179,9 @@ static inline void display_mask(const float *const restrict mask, float *const r
 #endif
   for(size_t k = 0; k < height * width; k++)
   {
-    for_each_channel(c,aligned(out))
-      out[4*k+c] = mask[k];
+    dt_store_simd_nontemporal(out + 4 * k, dt_simd_set1(mask[k]));
   }
+  dt_omploop_sfence();  // ensure that nontemporal writes complete before we attempt to read output
 }
 
 
@@ -2196,8 +2199,9 @@ static inline void compute_ratios(const float *const restrict in, float *const r
     const dt_aligned_pixel_simd_t pix_in = dt_load_simd_aligned(in + k);
     const float norm = fmaxf(get_pixel_norm_simd(pix_in, variant, work_profile), NORM_MIN);
     norms[k / 4] = norm;
-    dt_store_simd_aligned(ratios + k, pix_in / dt_simd_set1(norm));
+    dt_store_simd_nontemporal(ratios + k, pix_in / dt_simd_set1(norm));
   }
+  dt_omploop_sfence();  // ensure that nontemporal writes complete before we attempt to read the ratios
 }
 
 
@@ -2217,8 +2221,9 @@ static inline void restore_ratios(float *const restrict ratios, const float *con
     for_each_channel(c,aligned(norms,ratios))
       ratio[c] = clamp_simd(ratio[c]) * norm;
 
-    dt_store_simd_aligned(ratios + 4 * k, ratio);
+    dt_store_simd_nontemporal(ratios + 4 * k, ratio);
   }
+  dt_omploop_sfence();  // ensure that nontemporal writes complete before we attempt to read the ratios
 }
 
 void tiling_callback(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece,

@@ -843,7 +843,7 @@ static inline void loop_switch(const float *const restrict in, float *const rest
     {
       // Turn LMS, XYZ or pipeline RGB into monochrome
       const float grey_mix = fmaxf(temp_two_v[0] * grey[0] + temp_two_v[1] * grey[1] + temp_two_v[2] * grey[2], 0.0f);
-      dt_store_simd_aligned(out + k, (dt_aligned_pixel_simd_t){ grey_mix, grey_mix, grey_mix, in_v[3] });
+      dt_store_simd_nontemporal(out + k, (dt_aligned_pixel_simd_t){ grey_mix, grey_mix, grey_mix, in_v[3] });
     }
     else
     {
@@ -877,9 +877,10 @@ static inline void loop_switch(const float *const restrict in, float *const rest
       temp_two_v = dt_mat3x4_mul_vec4(temp_one_v, xyz_to_rgb0, xyz_to_rgb1, xyz_to_rgb2);
       if(clip) temp_two_v = dt_simd_max_zero(temp_two_v);
 
-      dt_store_simd_aligned(out + k, (dt_aligned_pixel_simd_t){ temp_two_v[0], temp_two_v[1], temp_two_v[2], in_v[3] });
+      dt_store_simd_nontemporal(out + k, (dt_aligned_pixel_simd_t){ temp_two_v[0], temp_two_v[1], temp_two_v[2], in_v[3] });
     }
   }
+  dt_omploop_sfence();  // ensure that nontemporal writes complete before we attempt to read output
 }
 
 // util to shift pixel index without headache

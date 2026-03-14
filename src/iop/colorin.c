@@ -774,16 +774,17 @@ static void process_cmatrix_bm(struct dt_iop_module_t *self, dt_dev_pixelpipe_io
 
       if(!clipping)
       {
-        dt_store_simd_aligned(out_pixel, dt_mat3x4_mul_vec4(cam_v, cm0, cm1, cm2));
+        dt_store_simd_nontemporal(out_pixel, dt_mat3x4_mul_vec4(cam_v, cm0, cm1, cm2));
       }
       else
       {
         const dt_aligned_pixel_simd_t nRGB = dt_mat3x4_mul_vec4(cam_v, nm0, nm1, nm2);
         const dt_aligned_pixel_simd_t cRGB = _colorin_clamp_rgb01_vec4(nRGB);
-        dt_store_simd_aligned(out_pixel, dt_mat3x4_mul_vec4(cRGB, lm0, lm1, lm2));
+        dt_store_simd_nontemporal(out_pixel, dt_mat3x4_mul_vec4(cRGB, lm0, lm1, lm2));
       }
     }
   }
+  dt_omploop_sfence();  // ensure that nontemporal writes complete before we attempt to read output
 }
 
 __DT_CLONE_TARGETS__
@@ -815,8 +816,9 @@ static void process_cmatrix_fastpath_simple(struct dt_iop_module_t *self, dt_dev
   {
     const size_t idx = 4 * k;
     const dt_aligned_pixel_simd_t vin = dt_load_simd_aligned(in + idx);
-    dt_store_simd_aligned(out + idx, dt_mat3x4_mul_vec4(vin, cm0, cm1, cm2));
+    dt_store_simd_nontemporal(out + idx, dt_mat3x4_mul_vec4(vin, cm0, cm1, cm2));
   }
+  dt_omploop_sfence();  // ensure that nontemporal writes complete before we attempt to read output
 }
 
 __DT_CLONE_TARGETS__
@@ -854,8 +856,9 @@ static void process_cmatrix_fastpath_clipping(struct dt_iop_module_t *self, dt_d
     const dt_aligned_pixel_simd_t vin = dt_load_simd_aligned(in + idx);
     const dt_aligned_pixel_simd_t nRGB = dt_mat3x4_mul_vec4(vin, nm0, nm1, nm2);
     const dt_aligned_pixel_simd_t cRGB = _colorin_clamp_rgb01_vec4(nRGB);
-    dt_store_simd_aligned(out + idx, dt_mat3x4_mul_vec4(cRGB, lm0, lm1, lm2));
+    dt_store_simd_nontemporal(out + idx, dt_mat3x4_mul_vec4(cRGB, lm0, lm1, lm2));
   }
+  dt_omploop_sfence();  // ensure that nontemporal writes complete before we attempt to read output
 }
 
 __DT_CLONE_TARGETS__
@@ -924,15 +927,16 @@ static void process_cmatrix_proper(struct dt_iop_module_t *self, dt_dev_pixelpip
 
     if(!clipping)
     {
-      dt_store_simd_aligned(out, dt_mat3x4_mul_vec4(cam_v, cm0, cm1, cm2));
+      dt_store_simd_nontemporal(out, dt_mat3x4_mul_vec4(cam_v, cm0, cm1, cm2));
     }
     else
     {
       const dt_aligned_pixel_simd_t nRGB = dt_mat3x4_mul_vec4(cam_v, nm0, nm1, nm2);
       const dt_aligned_pixel_simd_t cRGB = _colorin_clamp_rgb01_vec4(nRGB);
-      dt_store_simd_aligned(out, dt_mat3x4_mul_vec4(cRGB, lm0, lm1, lm2));
+      dt_store_simd_nontemporal(out, dt_mat3x4_mul_vec4(cRGB, lm0, lm1, lm2));
     }
   }
+  dt_omploop_sfence();  // ensure that nontemporal writes complete before we attempt to read output
 }
 
 static void process_cmatrix(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
