@@ -305,7 +305,6 @@ typedef struct dt_develop_t
   // Darkroom pipelines are running fulltime in background until leaving darkroom.
   // Set that to TRUE once they get shutdown.
   gboolean pipelines_started;
-  gboolean pixelpipe_init_batching;
 
   /* proxy for communication between plugins and develop/darkroom */
   struct
