@@ -739,15 +739,11 @@ static inline void apply_toneequalizer(const float *const restrict in,
   {
     // The radial-basis interpolation is valid in [-8; 0] EV and can quickely diverge outside
     const float exposure = fast_clamp(log2f(luminance[k]), min_ev, max_ev);
-    float correction = lut[(unsigned)roundf((exposure - min_ev) * LUT_RESOLUTION)];
-    // apply correction
-    for(size_t c = 0; c < ch; c++)
-    {
-      if(c == 3)
-        out[k * ch + c] = in[k * ch + c];
-      else
-        out[k * ch + c] = correction * in[k * ch + c];
-    }
+    const float correction = lut[(unsigned)roundf((exposure - min_ev) * LUT_RESOLUTION)];
+    const size_t idx = k * ch;
+    const dt_aligned_pixel_simd_t pix_in = dt_load_simd_aligned(in + idx);
+    const dt_aligned_pixel_simd_t correction_v = { correction, correction, correction, 1.0f };
+    dt_store_simd_aligned(out + idx, pix_in * correction_v);
   }
 }
 
@@ -788,16 +784,11 @@ static inline void apply_toneequalizer(const float *const restrict in,
       result += gaussian_func(exposure - centers_ops[i], gauss_denom) * factors[i];
 
     // the user-set correction is expected in [-2;+2] EV, so is the interpolated one
-    float correction = fast_clamp(result, 0.25f, 4.0f);
-
-    // apply correction
-    for(size_t c = 0; c < ch; c++)
-    {
-      if(c == 3)
-        out[k * ch + c] = in[k * ch + c];
-      else
-        out[k * ch + c] = correction * in[k * ch + c];
-    }
+    const float correction = fast_clamp(result, 0.25f, 4.0f);
+    const size_t idx = k * ch;
+    const dt_aligned_pixel_simd_t pix_in = dt_load_simd_aligned(in + idx);
+    const dt_aligned_pixel_simd_t correction_v = { correction, correction, correction, 1.0f };
+    dt_store_simd_aligned(out + idx, pix_in * correction_v);
   }
 }
 #endif // USE_LUT
@@ -926,14 +917,16 @@ static inline void display_luminance_mask(const float *const restrict in,
       // and add a "gamma" 2.0 for better legibility in shadows
       const float intensity = sqrtf(fminf(fmaxf(luminance[(i + offset_y) * in_width  + (j + offset_x)] - 0.00390625f, 0.f) / 0.99609375f, 1.f));
       const size_t index = (i * out_width + j) * ch;
-      // set gray level for the mask
-      for_four_channels(c,aligned(out))
-      {
-        out[index + c] = intensity;
-      }
-      // copy alpha channel
+      dt_aligned_pixel_simd_t intensity_v = dt_simd_set1(intensity);
+
+      // Keep mask-display alpha consistent with the input while showing a grayscale mask.
       if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
-        out[index + 3] = in[((i + offset_y) * in_width + (j + offset_x)) * ch + 3];
+      {
+        const size_t in_index = ((i + offset_y) * in_width + (j + offset_x)) * ch;
+        intensity_v[3] = in[in_index + 3];
+      }
+
+      dt_store_simd_aligned(out + index, intensity_v);
     }
 }
 
