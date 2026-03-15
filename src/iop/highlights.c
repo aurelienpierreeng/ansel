@@ -78,6 +78,7 @@
 #include <inttypes.h>
 
 #define MAX_NUM_SCALES 12
+#define REDUCESIZE 64
 
 // Downsampling factor for guided-laplacian
 #define DS_FACTOR 4
@@ -165,6 +166,9 @@ typedef struct dt_iop_highlights_global_data_t
   int kernel_highlights_4f_clip;
   int kernel_highlights_bilinear_and_mask;
   int kernel_highlights_bilinear_and_mask_xtrans;
+  int kernel_highlights_normalize_reduce_first;
+  int kernel_highlights_normalize_reduce_first_xtrans;
+  int kernel_highlights_normalize_reduce_second;
   int kernel_highlights_remosaic_and_replace;
   int kernel_highlights_remosaic_and_replace_xtrans;
   int kernel_highlights_guide_laplacians;
@@ -1153,6 +1157,51 @@ static void _interpolate_and_mask(const float *const restrict input,
     }
 }
 
+/** Compute channel normalization factors from the current raw ROI.
+ *
+ * Guided Laplacians only needs a relative RGB normalization before the temporary
+ * bilinear reconstruction. Using the average measured value of each CFA color in
+ * the current tile keeps the normalization explicit and local to the data being
+ * reconstructed, instead of relying on the white balance declared upstream.
+ */
+static void _compute_laplacian_normalization(const float *const restrict input,
+                                             const dt_iop_roi_t *const roi_in,
+                                             const uint32_t filters,
+                                             const uint8_t (*const xtrans)[6],
+                                             dt_aligned_pixel_t normalization)
+{
+  float sum_R = 0.f;
+  float sum_G = 0.f;
+  float sum_B = 0.f;
+  const float n_pixels = roi_in->height * roi_in->width;
+
+#ifdef _OPENMP
+#pragma omp parallel for collapse(2) default(none) \
+  dt_omp_firstprivate(filters, input, roi_in, xtrans, n_pixels) \
+  reduction(+:sum_R, sum_G, sum_B) \
+  schedule(static)
+#endif
+  for(size_t i = 0; i < roi_in->height; i++)
+    for(size_t j = 0; j < roi_in->width; j++)
+    {
+      const int c = (filters == 9u) ? FCxtrans((int)i, (int)j, roi_in, xtrans) : FC(i, j, filters);
+      if(c < 0 || c > 2) continue;
+
+      const float value = input[i * roi_in->width + j] / n_pixels;
+      if(c == RED)
+        sum_R += value;
+      else if(c == GREEN)
+        sum_G += value;
+      else
+        sum_B += value;
+    }
+
+  normalization[RED] = sum_R;
+  normalization[GREEN] = sum_G;
+  normalization[BLUE] = sum_B;
+  normalization[ALPHA] = 1.f;
+}
+
 /** Build the X-Trans bilinear interpolation lookup for the current ROI phase.
  *
  * The lookup keeps the contributing 3x3 neighbours explicit for each position of
@@ -1765,13 +1814,6 @@ static int process_laplacian_bayer(struct dt_iop_module_t *self, dt_dev_pixelpip
   int err = 0;
 
   const uint32_t filters = piece->pipe->dsc.filters;
-  dt_aligned_pixel_t wb = { 1.f, 1.f, 1.f, 1.f };
-  if(piece->pipe->dsc.temperature.coeffs[0] != 0.f)
-  {
-    wb[0] = piece->pipe->dsc.temperature.coeffs[0];
-    wb[1] = piece->pipe->dsc.temperature.coeffs[1];
-    wb[2] = piece->pipe->dsc.temperature.coeffs[2];
-  }
 
   const size_t height = roi_in->height;
   const size_t width = roi_in->width;
@@ -1808,8 +1850,10 @@ static int process_laplacian_bayer(struct dt_iop_module_t *self, dt_dev_pixelpip
 
   const float *const restrict input = (const float *const restrict)ivoid;
   float *const restrict output = (float *const restrict)ovoid;
+  dt_aligned_pixel_t normalization = { 1.f, 1.f, 1.f, 1.f };
+  _compute_laplacian_normalization(input, roi_in, filters, NULL, normalization);
 
-  _interpolate_and_mask(input, interpolated, clipping_mask, clips, wb, filters, width, height);
+  _interpolate_and_mask(input, interpolated, clipping_mask, clips, normalization, filters, width, height);
   if(dt_box_mean(clipping_mask, height, width, 4, 2, 1) != 0)
   {
     err = 1;
@@ -1839,7 +1883,7 @@ static int process_laplacian_bayer(struct dt_iop_module_t *self, dt_dev_pixelpip
 
   // Upsample
   interpolate_bilinear(ds_interpolated, ds_width, ds_height, interpolated, width, height, 4);
-  _remosaic_and_replace(input, interpolated, clipping_mask, output, wb, filters, width, height);
+  _remosaic_and_replace(input, interpolated, clipping_mask, output, normalization, filters, width, height);
 
 #if DEBUG_DUMP_PFM
   dump_PFM("/tmp/interpolated.pfm", interpolated, width, height);
@@ -1868,13 +1912,6 @@ static int process_laplacian_xtrans(struct dt_iop_module_t *self, dt_dev_pixelpi
   (void)roi_out;
 
   const uint8_t(*const xtrans)[6] = (const uint8_t(*const)[6])piece->pipe->dsc.xtrans;
-  dt_aligned_pixel_t wb = { 1.f, 1.f, 1.f, 1.f };
-  if(piece->pipe->dsc.temperature.coeffs[0] != 0.f)
-  {
-    wb[0] = piece->pipe->dsc.temperature.coeffs[0];
-    wb[1] = piece->pipe->dsc.temperature.coeffs[1];
-    wb[2] = piece->pipe->dsc.temperature.coeffs[2];
-  }
 
   const size_t height = roi_in->height;
   const size_t width = roi_in->width;
@@ -1907,10 +1944,12 @@ static int process_laplacian_xtrans(struct dt_iop_module_t *self, dt_dev_pixelpi
 
   const float *const restrict input = (const float *const restrict)ivoid;
   float *const restrict output = (float *const restrict)ovoid;
+  dt_aligned_pixel_t normalization = { 1.f, 1.f, 1.f, 1.f };
   int32_t lookup[6][6][32] = { { { 0 } } };
 
+  _compute_laplacian_normalization(input, roi_in, 9u, xtrans, normalization);
   _build_xtrans_bilinear_lookup(lookup, roi_in, xtrans);
-  _interpolate_and_mask_xtrans(input, interpolated, clipping_mask, clips, wb, roi_in, lookup, xtrans, width, height);
+  _interpolate_and_mask_xtrans(input, interpolated, clipping_mask, clips, normalization, roi_in, lookup, xtrans, width, height);
   if(dt_box_mean(clipping_mask, height, width, 4, 2, 1) != 0)
   {
     err = 1;
@@ -1938,7 +1977,7 @@ static int process_laplacian_xtrans(struct dt_iop_module_t *self, dt_dev_pixelpi
   }
 
   interpolate_bilinear(ds_interpolated, ds_width, ds_height, interpolated, width, height, 4);
-  _remosaic_and_replace_xtrans(input, interpolated, clipping_mask, output, wb, roi_in, xtrans, width, height);
+  _remosaic_and_replace_xtrans(input, interpolated, clipping_mask, output, normalization, roi_in, xtrans, width, height);
 
 error:
   dt_pixelpipe_cache_free_align(interpolated);
@@ -2088,16 +2127,12 @@ static cl_int process_laplacian_bayer_cl(struct dt_iop_module_t *self, dt_dev_pi
 
   const uint32_t filters = piece->pipe->dsc.filters;
 
-  dt_aligned_pixel_t wb = { 1.f, 1.f, 1.f, 1.f };
-  if(piece->pipe->dsc.temperature.coeffs[0] != 0.f)
-  {
-    wb[0] = piece->pipe->dsc.temperature.coeffs[0];
-    wb[1] = piece->pipe->dsc.temperature.coeffs[1];
-    wb[2] = piece->pipe->dsc.temperature.coeffs[2];
-  }
-
   cl_mem interpolated = dt_opencl_alloc_device(devid, sizes[0], sizes[1], sizeof(float) * 4);  // [R, G, B, norm] for each pixel
   cl_mem clipping_mask = dt_opencl_alloc_device(devid, sizes[0], sizes[1], sizeof(float) * 4); // [R, G, B, norm] for each pixel
+  cl_mem normalization = NULL;
+  cl_mem normalization_tmp = NULL;
+  cl_mem normalization_partials = NULL;
+  cl_mem normalization_final = NULL;
 
   // temp buffer for blurs. We will need to cycle between them for memory efficiency
   cl_mem LF_odd = dt_opencl_alloc_device(devid, ds_sizes[0], ds_sizes[1], sizeof(float) * 4);
@@ -2114,19 +2149,84 @@ static cl_int process_laplacian_bayer_cl(struct dt_iop_module_t *self, dt_dev_pi
   cl_mem HF = dt_opencl_alloc_device(devid, ds_sizes[0], ds_sizes[1], sizeof(float) * 4);
   cl_mem ds_interpolated = dt_opencl_alloc_device(devid, ds_sizes[0], ds_sizes[1], sizeof(float) * 4);
   cl_mem ds_clipping_mask = dt_opencl_alloc_device(devid, ds_sizes[0], ds_sizes[1], sizeof(float) * 4);
-
   cl_mem clips_cl = dt_opencl_copy_host_to_device_constant(devid, 4 * sizeof(float), (float*)clips);
-  cl_mem wb_cl = dt_opencl_copy_host_to_device_constant(devid, 4 * sizeof(float), (float*)wb);
 
   if(!interpolated || !clipping_mask || !LF_odd || !LF_even || !temp || !HF || !ds_interpolated
-     || !ds_clipping_mask || !clips_cl || !wb_cl)
+     || !ds_clipping_mask || !clips_cl)
     goto error;
+
+  {
+    dt_opencl_local_buffer_t flocopt
+      = (dt_opencl_local_buffer_t){ .xoffset = 0, .xfactor = 1, .yoffset = 0, .yfactor = 1,
+                                    .cellsize = 4 * sizeof(float), .overhead = 0,
+                                    .sizex = 1 << 4, .sizey = 1 << 4 };
+
+    if(!dt_opencl_local_buffer_opt(devid, gd->kernel_highlights_normalize_reduce_first, &flocopt))
+      goto error;
+
+    const size_t bwidth = ROUNDUP(width, flocopt.sizex);
+    const size_t bheight = ROUNDUP(height, flocopt.sizey);
+    const int bufsize = (int)((bwidth / flocopt.sizex) * (bheight / flocopt.sizey));
+
+    normalization_partials = dt_opencl_alloc_device_buffer(devid, sizeof(float) * 4 * (size_t)bufsize);
+    normalization = dt_opencl_alloc_device_buffer(devid, sizeof(float) * 4 * REDUCESIZE);
+    normalization_tmp = dt_opencl_alloc_device_buffer(devid, sizeof(float) * 4 * REDUCESIZE);
+    if(!normalization_partials || !normalization || !normalization_tmp) goto error;
+
+    size_t fsizes[3] = { bwidth, bheight, 1 };
+    size_t flocal[3] = { flocopt.sizex, flocopt.sizey, 1 };
+    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_normalize_reduce_first, 0, sizeof(cl_mem), &dev_in);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_normalize_reduce_first, 1, sizeof(int), &width);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_normalize_reduce_first, 2, sizeof(int), &height);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_normalize_reduce_first, 3, sizeof(cl_mem), &normalization_partials);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_normalize_reduce_first, 4, sizeof(uint32_t), &filters);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_normalize_reduce_first, 5, sizeof(int), &roi_in->x);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_normalize_reduce_first, 6, sizeof(int), &roi_in->y);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_normalize_reduce_first, 7,
+                             sizeof(float) * 4 * flocopt.sizex * flocopt.sizey, NULL);
+    err = dt_opencl_enqueue_kernel_2d_with_local(devid, gd->kernel_highlights_normalize_reduce_first, fsizes, flocal);
+    if(err != CL_SUCCESS) goto error;
+
+    dt_opencl_local_buffer_t slocopt
+      = (dt_opencl_local_buffer_t){ .xoffset = 0, .xfactor = 1, .yoffset = 0, .yfactor = 1,
+                                    .cellsize = 4 * sizeof(float), .overhead = 0,
+                                    .sizex = 1 << 16, .sizey = 1 };
+
+    if(!dt_opencl_local_buffer_opt(devid, gd->kernel_highlights_normalize_reduce_second, &slocopt))
+      goto error;
+
+    int current_length = bufsize;
+    cl_mem reduce_in = normalization_partials;
+    cl_mem reduce_out = normalization;
+
+    while(TRUE)
+    {
+      const int reducesize = MIN(REDUCESIZE, ROUNDUP(current_length, slocopt.sizex) / slocopt.sizex);
+      size_t ssizes[3] = { (size_t)reducesize * slocopt.sizex, 1, 1 };
+      size_t slocal[3] = { slocopt.sizex, 1, 1 };
+      dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_normalize_reduce_second, 0, sizeof(cl_mem), &reduce_in);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_normalize_reduce_second, 1, sizeof(cl_mem), &reduce_out);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_normalize_reduce_second, 2, sizeof(int), &current_length);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_normalize_reduce_second, 3,
+                               sizeof(float) * 4 * slocopt.sizex, NULL);
+      err = dt_opencl_enqueue_kernel_2d_with_local(devid, gd->kernel_highlights_normalize_reduce_second, ssizes, slocal);
+      if(err != CL_SUCCESS) goto error;
+
+      if(reducesize == 1) break;
+      current_length = reducesize;
+      cl_mem swap = reduce_in;
+      reduce_in = reduce_out;
+      reduce_out = (swap == normalization_partials) ? normalization_tmp : normalization;
+    }
+
+    normalization_final = reduce_out;
+  }
 
   dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_bilinear_and_mask, 0, sizeof(cl_mem), (void *)&dev_in);
   dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_bilinear_and_mask, 1, sizeof(cl_mem), (void *)&interpolated);
   dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_bilinear_and_mask, 2, sizeof(cl_mem), (void *)&temp);
   dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_bilinear_and_mask, 3, sizeof(cl_mem), (void *)&clips_cl);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_bilinear_and_mask, 4, sizeof(cl_mem), (void *)&wb_cl);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_bilinear_and_mask, 4, sizeof(cl_mem), (void *)&normalization_final);
   dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_bilinear_and_mask, 5, sizeof(int), (void *)&filters);
   dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_bilinear_and_mask, 6, sizeof(int), (void *)&roi_out->width);
   dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_bilinear_and_mask, 7, sizeof(int),
@@ -2191,7 +2291,7 @@ static cl_int process_laplacian_bayer_cl(struct dt_iop_module_t *self, dt_dev_pi
   dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace, 1, sizeof(cl_mem), (void *)&interpolated);
   dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace, 2, sizeof(cl_mem), (void *)&clipping_mask);
   dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace, 3, sizeof(cl_mem), (void *)&dev_out);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace, 4, sizeof(cl_mem), (void *)&wb_cl);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace, 4, sizeof(cl_mem), (void *)&normalization_final);
   dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace, 5, sizeof(int), (void *)&filters);
   dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace, 6, sizeof(int), (void *)&width);
   dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace, 7, sizeof(int), (void *)&height);
@@ -2199,7 +2299,10 @@ static cl_int process_laplacian_bayer_cl(struct dt_iop_module_t *self, dt_dev_pi
   if(err != CL_SUCCESS) goto error;
 
   // cleanup and exit on success
-  dt_opencl_release_mem_object(wb_cl);
+  dt_opencl_release_mem_object(normalization_partials);
+  if(normalization_tmp != normalization_final) dt_opencl_release_mem_object(normalization_tmp);
+  if(normalization != normalization_final) dt_opencl_release_mem_object(normalization);
+  dt_opencl_release_mem_object(normalization_final);
   dt_opencl_release_mem_object(interpolated);
   dt_opencl_release_mem_object(clipping_mask);
   dt_opencl_release_mem_object(temp);
@@ -2211,7 +2314,10 @@ static cl_int process_laplacian_bayer_cl(struct dt_iop_module_t *self, dt_dev_pi
   return err;
 
 error:
-  dt_opencl_release_mem_object(wb_cl);
+  dt_opencl_release_mem_object(normalization_partials);
+  if(normalization_tmp != normalization_final) dt_opencl_release_mem_object(normalization_tmp);
+  if(normalization != normalization_final) dt_opencl_release_mem_object(normalization);
+  dt_opencl_release_mem_object(normalization_final);
   dt_opencl_release_mem_object(interpolated);
   dt_opencl_release_mem_object(clipping_mask);
   dt_opencl_release_mem_object(temp);
@@ -2246,16 +2352,12 @@ static cl_int process_laplacian_xtrans_cl(struct dt_iop_module_t *self, dt_dev_p
   size_t sizes[] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
   size_t ds_sizes[] = { ROUNDUPDWD(ds_width, devid), ROUNDUPDHT(ds_height, devid), 1 };
 
-  dt_aligned_pixel_t wb = { 1.f, 1.f, 1.f, 1.f };
-  if(piece->pipe->dsc.temperature.coeffs[0] != 0.f)
-  {
-    wb[0] = piece->pipe->dsc.temperature.coeffs[0];
-    wb[1] = piece->pipe->dsc.temperature.coeffs[1];
-    wb[2] = piece->pipe->dsc.temperature.coeffs[2];
-  }
-
   cl_mem interpolated = dt_opencl_alloc_device(devid, sizes[0], sizes[1], sizeof(float) * 4);
   cl_mem clipping_mask = dt_opencl_alloc_device(devid, sizes[0], sizes[1], sizeof(float) * 4);
+  cl_mem normalization = NULL;
+  cl_mem normalization_tmp = NULL;
+  cl_mem normalization_partials = NULL;
+  cl_mem normalization_final = NULL;
   cl_mem LF_odd = dt_opencl_alloc_device(devid, ds_sizes[0], ds_sizes[1], sizeof(float) * 4);
   cl_mem LF_even = dt_opencl_alloc_device(devid, ds_sizes[0], ds_sizes[1], sizeof(float) * 4);
   cl_mem temp = dt_opencl_alloc_device(devid, sizes[0], sizes[1], sizeof(float) * 4);
@@ -2270,21 +2372,87 @@ static cl_int process_laplacian_xtrans_cl(struct dt_iop_module_t *self, dt_dev_p
   cl_mem ds_clipping_mask = dt_opencl_alloc_device(devid, ds_sizes[0], ds_sizes[1], sizeof(float) * 4);
 
   cl_mem clips_cl = dt_opencl_copy_host_to_device_constant(devid, 4 * sizeof(float), (float *)clips);
-  cl_mem wb_cl = dt_opencl_copy_host_to_device_constant(devid, 4 * sizeof(float), (float *)wb);
   cl_mem dev_xtrans = dt_opencl_copy_host_to_device_constant(devid, sizeof(piece->pipe->dsc.xtrans), piece->pipe->dsc.xtrans);
   int32_t lookup[6][6][32] = { { { 0 } } };
   _build_xtrans_bilinear_lookup(lookup, roi_in, xtrans);
   cl_mem lookup_cl = dt_opencl_copy_host_to_device_constant(devid, sizeof(lookup), lookup);
 
   if(!interpolated || !clipping_mask || !LF_odd || !LF_even || !temp || !HF || !ds_interpolated
-     || !ds_clipping_mask || !clips_cl || !wb_cl || !dev_xtrans || !lookup_cl)
+     || !ds_clipping_mask || !clips_cl || !dev_xtrans || !lookup_cl)
     goto error;
+
+  {
+    dt_opencl_local_buffer_t flocopt
+      = (dt_opencl_local_buffer_t){ .xoffset = 0, .xfactor = 1, .yoffset = 0, .yfactor = 1,
+                                    .cellsize = 4 * sizeof(float), .overhead = 0,
+                                    .sizex = 1 << 4, .sizey = 1 << 4 };
+
+    if(!dt_opencl_local_buffer_opt(devid, gd->kernel_highlights_normalize_reduce_first_xtrans, &flocopt))
+      goto error;
+
+    const size_t bwidth = ROUNDUP(width, flocopt.sizex);
+    const size_t bheight = ROUNDUP(height, flocopt.sizey);
+    const int bufsize = (int)((bwidth / flocopt.sizex) * (bheight / flocopt.sizey));
+
+    normalization_partials = dt_opencl_alloc_device_buffer(devid, sizeof(float) * 4 * (size_t)bufsize);
+    normalization = dt_opencl_alloc_device_buffer(devid, sizeof(float) * 4 * REDUCESIZE);
+    normalization_tmp = dt_opencl_alloc_device_buffer(devid, sizeof(float) * 4 * REDUCESIZE);
+    if(!normalization_partials || !normalization || !normalization_tmp) goto error;
+
+    size_t fsizes[3] = { bwidth, bheight, 1 };
+    size_t flocal[3] = { flocopt.sizex, flocopt.sizey, 1 };
+    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_normalize_reduce_first_xtrans, 0, sizeof(cl_mem), &dev_in);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_normalize_reduce_first_xtrans, 1, sizeof(int), &width);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_normalize_reduce_first_xtrans, 2, sizeof(int), &height);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_normalize_reduce_first_xtrans, 3, sizeof(cl_mem), &normalization_partials);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_normalize_reduce_first_xtrans, 4, sizeof(int), &roi_in->x);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_normalize_reduce_first_xtrans, 5, sizeof(int), &roi_in->y);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_normalize_reduce_first_xtrans, 6, sizeof(cl_mem), &dev_xtrans);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_normalize_reduce_first_xtrans, 7,
+                             sizeof(float) * 4 * flocopt.sizex * flocopt.sizey, NULL);
+    err = dt_opencl_enqueue_kernel_2d_with_local(devid, gd->kernel_highlights_normalize_reduce_first_xtrans, fsizes, flocal);
+    if(err != CL_SUCCESS) goto error;
+
+    dt_opencl_local_buffer_t slocopt
+      = (dt_opencl_local_buffer_t){ .xoffset = 0, .xfactor = 1, .yoffset = 0, .yfactor = 1,
+                                    .cellsize = 4 * sizeof(float), .overhead = 0,
+                                    .sizex = 1 << 16, .sizey = 1 };
+
+    if(!dt_opencl_local_buffer_opt(devid, gd->kernel_highlights_normalize_reduce_second, &slocopt))
+      goto error;
+
+    int current_length = bufsize;
+    cl_mem reduce_in = normalization_partials;
+    cl_mem reduce_out = normalization;
+
+    while(TRUE)
+    {
+      const int reducesize = MIN(REDUCESIZE, ROUNDUP(current_length, slocopt.sizex) / slocopt.sizex);
+      size_t ssizes[3] = { (size_t)reducesize * slocopt.sizex, 1, 1 };
+      size_t slocal[3] = { slocopt.sizex, 1, 1 };
+      dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_normalize_reduce_second, 0, sizeof(cl_mem), &reduce_in);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_normalize_reduce_second, 1, sizeof(cl_mem), &reduce_out);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_normalize_reduce_second, 2, sizeof(int), &current_length);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_normalize_reduce_second, 3,
+                               sizeof(float) * 4 * slocopt.sizex, NULL);
+      err = dt_opencl_enqueue_kernel_2d_with_local(devid, gd->kernel_highlights_normalize_reduce_second, ssizes, slocal);
+      if(err != CL_SUCCESS) goto error;
+
+      if(reducesize == 1) break;
+      current_length = reducesize;
+      cl_mem swap = reduce_in;
+      reduce_in = reduce_out;
+      reduce_out = (swap == normalization_partials) ? normalization_tmp : normalization;
+    }
+
+    normalization_final = reduce_out;
+  }
 
   dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_bilinear_and_mask_xtrans, 0, sizeof(cl_mem), (void *)&dev_in);
   dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_bilinear_and_mask_xtrans, 1, sizeof(cl_mem), (void *)&interpolated);
   dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_bilinear_and_mask_xtrans, 2, sizeof(cl_mem), (void *)&temp);
   dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_bilinear_and_mask_xtrans, 3, sizeof(cl_mem), (void *)&clips_cl);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_bilinear_and_mask_xtrans, 4, sizeof(cl_mem), (void *)&wb_cl);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_bilinear_and_mask_xtrans, 4, sizeof(cl_mem), (void *)&normalization_final);
   dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_bilinear_and_mask_xtrans, 5, sizeof(int), (void *)&width);
   dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_bilinear_and_mask_xtrans, 6, sizeof(int), (void *)&height);
   dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_bilinear_and_mask_xtrans, 7, sizeof(int), (void *)&roi_in->x);
@@ -2349,7 +2517,7 @@ static cl_int process_laplacian_xtrans_cl(struct dt_iop_module_t *self, dt_dev_p
   dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace_xtrans, 1, sizeof(cl_mem), (void *)&interpolated);
   dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace_xtrans, 2, sizeof(cl_mem), (void *)&clipping_mask);
   dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace_xtrans, 3, sizeof(cl_mem), (void *)&dev_out);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace_xtrans, 4, sizeof(cl_mem), (void *)&wb_cl);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace_xtrans, 4, sizeof(cl_mem), (void *)&normalization_final);
   dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace_xtrans, 5, sizeof(int), (void *)&width);
   dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace_xtrans, 6, sizeof(int), (void *)&height);
   dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace_xtrans, 7, sizeof(int), (void *)&roi_in->x);
@@ -2360,7 +2528,10 @@ static cl_int process_laplacian_xtrans_cl(struct dt_iop_module_t *self, dt_dev_p
 
   dt_opencl_release_mem_object(lookup_cl);
   dt_opencl_release_mem_object(dev_xtrans);
-  dt_opencl_release_mem_object(wb_cl);
+  dt_opencl_release_mem_object(normalization_partials);
+  if(normalization_tmp != normalization_final) dt_opencl_release_mem_object(normalization_tmp);
+  if(normalization != normalization_final) dt_opencl_release_mem_object(normalization);
+  dt_opencl_release_mem_object(normalization_final);
   dt_opencl_release_mem_object(interpolated);
   dt_opencl_release_mem_object(clipping_mask);
   dt_opencl_release_mem_object(temp);
@@ -2375,7 +2546,10 @@ error:
   dt_opencl_release_mem_object(clips_cl);
   dt_opencl_release_mem_object(lookup_cl);
   dt_opencl_release_mem_object(dev_xtrans);
-  dt_opencl_release_mem_object(wb_cl);
+  dt_opencl_release_mem_object(normalization_partials);
+  if(normalization_tmp != normalization_final) dt_opencl_release_mem_object(normalization_tmp);
+  if(normalization != normalization_final) dt_opencl_release_mem_object(normalization);
+  dt_opencl_release_mem_object(normalization_final);
   dt_opencl_release_mem_object(interpolated);
   dt_opencl_release_mem_object(clipping_mask);
   dt_opencl_release_mem_object(temp);
@@ -2630,6 +2804,9 @@ void init_global(dt_iop_module_so_t *module)
   gd->kernel_highlights_4f_clip = dt_opencl_create_kernel(program, "highlights_4f_clip");
   gd->kernel_highlights_bilinear_and_mask = dt_opencl_create_kernel(program, "interpolate_and_mask");
   gd->kernel_highlights_bilinear_and_mask_xtrans = dt_opencl_create_kernel(program, "interpolate_and_mask_xtrans");
+  gd->kernel_highlights_normalize_reduce_first = dt_opencl_create_kernel(program, "highlights_normalize_reduce_first");
+  gd->kernel_highlights_normalize_reduce_first_xtrans = dt_opencl_create_kernel(program, "highlights_normalize_reduce_first_xtrans");
+  gd->kernel_highlights_normalize_reduce_second = dt_opencl_create_kernel(program, "highlights_normalize_reduce_second");
   gd->kernel_highlights_remosaic_and_replace = dt_opencl_create_kernel(program, "remosaic_and_replace");
   gd->kernel_highlights_remosaic_and_replace_xtrans = dt_opencl_create_kernel(program, "remosaic_and_replace_xtrans");
   gd->kernel_highlights_box_blur = dt_opencl_create_kernel(program, "box_blur_5x5");
@@ -2654,6 +2831,9 @@ void cleanup_global(dt_iop_module_so_t *module)
   dt_opencl_free_kernel(gd->kernel_highlights_1f_clip);
   dt_opencl_free_kernel(gd->kernel_highlights_bilinear_and_mask);
   dt_opencl_free_kernel(gd->kernel_highlights_bilinear_and_mask_xtrans);
+  dt_opencl_free_kernel(gd->kernel_highlights_normalize_reduce_first);
+  dt_opencl_free_kernel(gd->kernel_highlights_normalize_reduce_first_xtrans);
+  dt_opencl_free_kernel(gd->kernel_highlights_normalize_reduce_second);
   dt_opencl_free_kernel(gd->kernel_highlights_remosaic_and_replace);
   dt_opencl_free_kernel(gd->kernel_highlights_remosaic_and_replace_xtrans);
   dt_opencl_free_kernel(gd->kernel_highlights_box_blur);

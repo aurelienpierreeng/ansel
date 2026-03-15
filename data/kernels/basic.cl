@@ -679,6 +679,120 @@ interpolate_and_mask(read_only image2d_t input,
 }
 
 kernel void
+highlights_normalize_reduce_first(read_only image2d_t in, const int width, const int height,
+                                  global float4 *accu, const unsigned int filters,
+                                  const int rx, const int ry, local float4 *buffer)
+{
+  const int x = get_global_id(0);
+  const int y = get_global_id(1);
+  const int xlsz = get_local_size(0);
+  const int ylsz = get_local_size(1);
+  const int xlid = get_local_id(0);
+  const int ylid = get_local_id(1);
+  const int l = mad24(ylid, xlsz, xlid);
+
+  const float n_pixels = (float)(width * height);
+  const int inside = (x < width && y < height);
+  const int c = inside ? FC(y + ry, x + rx, filters) : -1;
+  const float pixel = inside ? read_imagef(in, sampleri, (int2)(x, y)).x / n_pixels : 0.f;
+
+  buffer[l] = (float4)(c == RED ? pixel : 0.f,
+                       c == GREEN ? pixel : 0.f,
+                       c == BLUE ? pixel : 0.f,
+                       1.f);
+
+  barrier(CLK_LOCAL_MEM_FENCE);
+
+  const int lsz = mul24(xlsz, ylsz);
+  for(int offset = lsz / 2; offset > 0; offset /= 2)
+  {
+    if(l < offset) buffer[l].xyz += buffer[l + offset].xyz;
+    barrier(CLK_LOCAL_MEM_FENCE);
+  }
+
+  if(l == 0)
+  {
+    const int xgid = get_group_id(0);
+    const int ygid = get_group_id(1);
+    const int xgsz = get_num_groups(0);
+    accu[mad24(ygid, xgsz, xgid)] = buffer[0];
+  }
+}
+
+kernel void
+highlights_normalize_reduce_first_xtrans(read_only image2d_t in, const int width, const int height,
+                                         global float4 *accu, const int rx, const int ry,
+                                         global const unsigned char (*const xtrans)[6],
+                                         local float4 *buffer)
+{
+  const int x = get_global_id(0);
+  const int y = get_global_id(1);
+  const int xlsz = get_local_size(0);
+  const int ylsz = get_local_size(1);
+  const int xlid = get_local_id(0);
+  const int ylid = get_local_id(1);
+  const int l = mad24(ylid, xlsz, xlid);
+
+  const float n_pixels = (float)(width * height);
+  const int inside = (x < width && y < height);
+  const int c = inside ? FCxtrans(y + ry, x + rx, xtrans) : -1;
+  const float pixel = inside ? read_imagef(in, sampleri, (int2)(x, y)).x / n_pixels : 0.f;
+
+  buffer[l] = (float4)(c == RED ? pixel : 0.f,
+                       c == GREEN ? pixel : 0.f,
+                       c == BLUE ? pixel : 0.f,
+                       1.f);
+
+  barrier(CLK_LOCAL_MEM_FENCE);
+
+  const int lsz = mul24(xlsz, ylsz);
+  for(int offset = lsz / 2; offset > 0; offset /= 2)
+  {
+    if(l < offset) buffer[l].xyz += buffer[l + offset].xyz;
+    barrier(CLK_LOCAL_MEM_FENCE);
+  }
+
+  if(l == 0)
+  {
+    const int xgid = get_group_id(0);
+    const int ygid = get_group_id(1);
+    const int xgsz = get_num_groups(0);
+    accu[mad24(ygid, xgsz, xgid)] = buffer[0];
+  }
+}
+
+kernel void
+highlights_normalize_reduce_second(const global float4 *input, global float4 *result,
+                                   const int length, local float4 *buffer)
+{
+  int x = get_global_id(0);
+  float4 sum = (float4)0.f;
+
+  while(x < length)
+  {
+    sum.xyz += input[x].xyz;
+    x += get_global_size(0);
+  }
+
+  const int lid = get_local_id(0);
+  buffer[lid] = sum;
+  barrier(CLK_LOCAL_MEM_FENCE);
+
+  for(int offset = get_local_size(0) / 2; offset > 0; offset /= 2)
+  {
+    if(lid < offset) buffer[lid].xyz += buffer[lid + offset].xyz;
+    barrier(CLK_LOCAL_MEM_FENCE);
+  }
+
+  if(lid == 0)
+  {
+    const int gid = get_group_id(0);
+    buffer[0].w = 1.f;
+    result[gid] = buffer[0];
+  }
+}
+
+kernel void
 interpolate_and_mask_xtrans(read_only image2d_t input,
                             write_only image2d_t interpolated,
                             write_only image2d_t clipping_mask,
