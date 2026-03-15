@@ -1327,7 +1327,12 @@ static void _darkroom_image_loaded_callback(gpointer instance, guint request_id,
     dt_dev_history_gui_update(dev);
 
   dt_dev_pixelpipe_rebuild_all(dev);
-  dt_dev_get_thumbnail_size(dev);
+  if(dt_dev_get_thumbnail_size(dev))
+  {
+    dt_control_log(_("The darkroom preview could not be initialized."));
+    dt_print(DT_DEBUG_CONTROL, "[darkroom] preview geometry missing after loading image %d\n", loaded->imgid);
+    return;
+  }
 
   if(_darkroom_pending_focus_module && g_list_find(dev->iop, _darkroom_pending_focus_module))
     dt_iop_request_focus(_darkroom_pending_focus_module);
@@ -2584,6 +2589,20 @@ void enter(dt_view_t *self)
   dt_thumbtable_show(darktable.gui->ui->thumbtable_filmstrip);
   gtk_widget_show(dt_ui_center(darktable.gui->ui));
   dt_thumbtable_update_parent(darktable.gui->ui->thumbtable_filmstrip);
+
+  // The image-load callback may finish before GTK emits a new configure event for darkroom.
+  // Seed the ROI from the already-allocated center widget so preview sizing is ready in time.
+  GtkAllocation allocation = { 0 };
+  gtk_widget_get_allocation(dt_ui_center(darktable.gui->ui), &allocation);
+  const int tb = darktable.control->tabborder;
+  const int center_width = allocation.width - 2 * tb;
+  const int center_height = allocation.height - 2 * tb;
+  if(center_width > 0 && center_height > 0)
+  {
+    dev->roi.orig_width = center_width;
+    dev->roi.orig_height = center_height;
+    _get_final_size_with_iso_12646(dev);
+  }
 
   // clear selection, we don't want selections in darkroom
   dt_selection_clear(darktable.selection);

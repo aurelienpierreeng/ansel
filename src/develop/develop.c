@@ -353,7 +353,25 @@ static gboolean _darkroom_pipeline_inputs_ready(const dt_develop_t *dev)
 
 int dt_dev_get_thumbnail_size(dt_develop_t *dev)
 {
-  if(!dev->roi.raw_inited || !dev->roi.gui_inited || !dev->history || !dev->iop || !dev->virtual_pipe) return 1;
+  if(!dev->roi.raw_inited || !dev->roi.gui_inited || !dev->history || !dev->iop || !dev->virtual_pipe)
+  {
+    // Keep stale geometry from a previous image from leaking into a new darkroom session.
+    dev->roi.processed_width = 0;
+    dev->roi.processed_height = 0;
+    dev->roi.preview_width = 0;
+    dev->roi.preview_height = 0;
+    dev->roi.natural_scale = 0.0f;
+    dev->roi.output_inited = FALSE;
+
+    dt_print(DT_DEBUG_DEV,
+             "[pixelpipe] thumbnail size unavailable raw:%d gui:%d history:%d iop:%d vpipe:%d image:%d"
+             " raw %dx%d gui %dx%d\n",
+             dev->roi.raw_inited, dev->roi.gui_inited, dev->history != NULL, dev->iop != NULL,
+             dev->virtual_pipe != NULL, dev->image_storage.id, dev->roi.raw_width, dev->roi.raw_height,
+             dev->roi.width, dev->roi.height);
+
+    return 1;
+  }
   
   // Keep the virtual pipe synced so ROI computations on the GUI thread
   // always use up-to-date history and input sizes.
@@ -785,7 +803,9 @@ int dt_dev_load_image_finish(dt_develop_t *dev, const int32_t imgid)
 
   if(dev->gui_attached) 
   {
-    dt_dev_get_thumbnail_size(dev);
+    if(dt_dev_get_thumbnail_size(dev))
+      dt_print(DT_DEBUG_DEV, "[pixelpipe] deferred thumbnail sizing for image %d until GUI geometry is ready\n",
+               imgid);
   }
 
   return 0;
