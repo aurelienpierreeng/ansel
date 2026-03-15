@@ -1274,7 +1274,7 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
   dt_iop_basicadj_gui_data_t *g = (dt_iop_basicadj_gui_data_t *)self->gui_data;
 
   // process auto levels
-  if(g && piece->pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
+  if(g && dt_dev_pixelpipe_has_preview_output(self->dev, piece->pipe, roi_out))
   {
     dt_iop_gui_enter_critical_section(self);
     if(g->call_auto_exposure == 1 && !darktable.gui->reset)

@@ -2463,7 +2463,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   dt_iop_colorzones_params_t *p = (dt_iop_colorzones_params_t *)p1;
   dt_iop_colorzones_gui_data_t *g = (dt_iop_colorzones_gui_data_t *)self->gui_data;
 
-  if(pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
+  if(dt_dev_pixelpipe_has_preview_output(self->dev, pipe, NULL))
     piece->request_histogram |= (DT_REQUEST_ON);
   else
     piece->request_histogram &= ~(DT_REQUEST_ON);

@@ -391,7 +391,7 @@ static dt_noiseprofile_t dt_iop_denoiseprofile_get_auto_profile(dt_iop_module_t 
 static void debug_dump_PFM(const dt_dev_pixelpipe_iop_t *const piece, const char *const namespec,
                            const float* const restrict buf, const int width, const int height, const int scale)
 {
-  if(piece->pipe->type != DT_DEV_PIXELPIPE_PREVIEW)
+  if(!dt_dev_pixelpipe_has_preview_output(piece->module->dev, piece->pipe, NULL))
   {
     char filename[512];
     snprintf(filename, sizeof(filename), namespec, scale);
@@ -1496,7 +1496,7 @@ static float nlmeans_scattering(int *nbhood, const dt_iop_denoiseprofile_data_t 
   int K = *nbhood;
   float scattering = d->scattering;
 
-  if(piece->pipe->type == DT_DEV_PIXELPIPE_PREVIEW
+  if(dt_dev_pixelpipe_has_preview_output(piece->module->dev, piece->pipe, NULL)
      || piece->pipe->type == DT_DEV_PIXELPIPE_THUMBNAIL)
   {
     // much faster slightly more inaccurate preview
@@ -1504,7 +1504,7 @@ static float nlmeans_scattering(int *nbhood, const dt_iop_denoiseprofile_data_t 
     K = MIN(3, K);
     scattering = (maxk - K) * 6.0 / (K * K * K + 7.0 * K * sqrt(K));
   }
-  if(piece->pipe->type == DT_DEV_PIXELPIPE_FULL)
+  if(!dt_dev_pixelpipe_has_preview_output(piece->module->dev, piece->pipe, NULL))
   {
     // much faster slightly more inaccurate preview
     const int maxk = (K * K * K + 7.0 * K * sqrt(K)) * scattering / 6.0 + K;
@@ -1752,7 +1752,7 @@ static int process_variance(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t
   size_t npixels = (size_t)width * height;
 
   memcpy(ovoid, ivoid, sizeof(float) * 4 * npixels);
-  if((piece->pipe->type == DT_DEV_PIXELPIPE_PREVIEW) || (g == NULL))
+  if(dt_dev_pixelpipe_has_preview_output(self->dev, piece->pipe, roi_out) || (g == NULL))
   {
     return 0;
   }

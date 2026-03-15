@@ -702,7 +702,7 @@ static int _polygon_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_
 
   const float input_width = pipe->iwidth;
   const float input_height = pipe->iheight;
-  const int pixel_threshold = (pipe->type == DT_DEV_PIXELPIPE_PREVIEW
+  const int pixel_threshold = (dt_dev_pixelpipe_has_preview_output(darktable.develop, pipe, NULL)
                                || pipe->type == DT_DEV_PIXELPIPE_THUMBNAIL) ? 3 : 1;
   const guint node_count = g_list_length(mask_form->points);
 
@@ -2471,7 +2471,7 @@ static int _polygon_get_mask(const dt_iop_module_t *const module, const dt_dev_p
 
   const int hb = *height;
   const int wb = *width;
-  const gboolean sparse = (piece->pipe->type == DT_DEV_PIXELPIPE_PREVIEW
+  const gboolean sparse = (dt_dev_pixelpipe_has_preview_output(piece->module->dev, piece->pipe, NULL)
                            || piece->pipe->type == DT_DEV_PIXELPIPE_THUMBNAIL);
   const int sparse_factor = sparse ? 4 : 1;
 
@@ -3060,7 +3060,7 @@ static int _polygon_get_mask_roi(const dt_iop_module_t *const module, const dt_d
   const int width = roi->width;
   const int height = roi->height;
   const float scale = roi->scale;
-  const gboolean sparse = (piece->pipe->type == DT_DEV_PIXELPIPE_PREVIEW
+  const gboolean sparse = (dt_dev_pixelpipe_has_preview_output(piece->module->dev, piece->pipe, roi)
                            || piece->pipe->type == DT_DEV_PIXELPIPE_THUMBNAIL);
   const int sparse_factor = sparse ? 4 : 1;
 

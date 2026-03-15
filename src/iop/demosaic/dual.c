@@ -57,7 +57,8 @@ static int dual_demosaic(dt_dev_pixelpipe_iop_t *piece, float *const restrict rg
     dt_control_log(_("[dual demosaic] can't allocate internal buffers"));
     return 1;
   }
-  const gboolean info = ((darktable.unmuted & (DT_DEBUG_DEMOSAIC | DT_DEBUG_PERF)) && (piece->pipe->type == DT_DEV_PIXELPIPE_FULL));
+  const gboolean info = ((darktable.unmuted & (DT_DEBUG_DEMOSAIC | DT_DEBUG_PERF))
+                         && (piece->pipe->type == DT_DEV_PIXELPIPE_FULL));
 
   if(vng_interpolate(vng_image, raw_data, roi_out, roi_in, filters, xtrans, FALSE))
   {

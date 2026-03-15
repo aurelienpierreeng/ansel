@@ -979,7 +979,7 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
 
   // Size of the checker
   const gint mask_display
-      = (piece->pipe->type== DT_DEV_PIXELPIPE_FULL && self->dev->gui_attached
+      = (piece->pipe->type == DT_DEV_PIXELPIPE_FULL && self->dev->gui_attached
          && g && g->mask_display);
   const int checker_1 = (mask_display) ? DT_PIXEL_APPLY_DPI(d->checker_size) : 0;
   const int checker_2 = 2 * checker_1;

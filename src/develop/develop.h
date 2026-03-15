@@ -596,6 +596,29 @@ float dt_dev_get_natural_scale(dt_develop_t *dev);
 int dt_dev_get_thumbnail_size(dt_develop_t *dev);
 
 /**
+ * @brief Tell whether a GUI-attached pipe currently targets the darkroom preview-sized output.
+ *
+ * @details
+ * GUI modules must no longer assume that `dev->preview_pipe` is the only pipe producing the
+ * full-image downsampled preview. When the main pipe renders the same geometry, it must follow
+ * the same heuristics.
+ *
+ * Pass `roi` when the caller already knows the current output ROI for this processing run.
+ * Pass `NULL` to fall back to the pipe backbuffer size from the last completed run.
+ */
+gboolean dt_dev_pixelpipe_has_preview_output(const dt_develop_t *dev, const struct dt_dev_pixelpipe_t *pipe,
+                                             const struct dt_iop_roi_t *roi);
+
+/**
+ * @brief Tell whether the darkroom main and preview pipes currently target the same GUI output.
+ *
+ * @details
+ * When both pipes would render the same geometry, preview must run first so the main pipe can
+ * reuse its backbuffer instead of recomputing the same image concurrently.
+ */
+gboolean dt_dev_pipelines_share_preview_output(dt_develop_t *dev);
+
+/**
  * @brief  Get the overlay scale factor
  * (scaling * natural_scale_on_processed_size * ppd)
  * 
