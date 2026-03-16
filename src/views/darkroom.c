@@ -2773,8 +2773,8 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
       dt_colorpicker_sample_t *const sample = darktable.lib->proxy.colorpicker.primary_sample;
       gboolean sample_changed = FALSE;
       // Make sure a minimal width/height
-      float delta_x = 1 / (float) dev->pipe->processed_width;
-      float delta_y = 1 / (float) dev->pipe->processed_height;
+      float delta_x = 1 / (float) dev->roi.processed_width;
+      float delta_y = 1 / (float) dev->roi.processed_height;
 
       float mouse_point[2] = { (float)x, (float)y };
       dt_dev_coordinates_widget_to_image_norm(dev, mouse_point, 1);
@@ -2854,8 +2854,8 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
     const double img_dy = roi_dy / scale;
 
     // new roi position in full image scale
-    float new_x = dev->roi.x - (img_dx / (float)dev->pipe->processed_width);
-    float new_y = dev->roi.y - (img_dy / (float)dev->pipe->processed_height);
+    float new_x = dev->roi.x - (img_dx / (float)dev->roi.processed_width);
+    float new_y = dev->roi.y - (img_dy / (float)dev->roi.processed_height);
   
     //fprintf(stderr, "BOUNDS new_x: %2.2f, new_y: %2.2f\n", new_x, new_y);
     dt_dev_check_zoom_pos_bounds(dev, &new_x, &new_y, NULL, NULL); 
@@ -2942,7 +2942,7 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
       {
         // The default box will be a square with 1% of the image width
         const float delta_x = 0.01f;
-        const float delta_y = delta_x * (float)dev->pipe->processed_width / (float)dev->pipe->processed_height;
+        const float delta_y = delta_x * (float)dev->roi.processed_width / (float)dev->roi.processed_height;
 
         // FIXME: here and in mouse move use to dt_lib_colorpicker_set_{box_area,point} interface? -- would require a different hack for figuring out base of the drag
         // hack: for box pickers, these represent the "base" point being dragged
@@ -3202,28 +3202,28 @@ int key_pressed(dt_view_t *self, GdkEventKey *event)
     case GDK_KEY_Up:
     case GDK_KEY_KP_Up:
     {
-      dev->roi.y -= delta / (float)dev->pipe->processed_height;
+      dev->roi.y -= delta / (float)dev->roi.processed_height;
       _key_scroll(dev);
       return 1;
     }
     case GDK_KEY_Down:
     case GDK_KEY_KP_Down:
     {
-      dev->roi.y += delta / (float)dev->pipe->processed_height;
+      dev->roi.y += delta / (float)dev->roi.processed_height;
       _key_scroll(dev);
       return 1;
     }
     case GDK_KEY_Left:
     case GDK_KEY_KP_Left:
     {
-      dev->roi.x -= delta / (float)dev->pipe->processed_height;
+      dev->roi.x -= delta / (float)dev->roi.processed_height;
       _key_scroll(dev);
       return 1;
     }
     case GDK_KEY_Right:
     case GDK_KEY_KP_Right:
     {
-      dev->roi.x += delta / (float)dev->pipe->processed_height;
+      dev->roi.x += delta / (float)dev->roi.processed_height;
       _key_scroll(dev);
       return 1;
     }
