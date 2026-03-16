@@ -1287,6 +1287,9 @@ void gui_init(struct dt_iop_module_t *self)
   dt_bauhaus_slider_set_format(g->ch, "%");
   gtk_widget_set_tooltip_text(g->ch, _("the bottom margin cannot overlap with the top margin"));
 
+  // Ensure the expander body has its subtree visible even when global show_all is blocked.
+  gtk_widget_show_all(GTK_WIDGET(g->cs.container));
+
   self->widget = box_enabled;
 }
 

@@ -2648,6 +2648,9 @@ void dt_gui_new_collapsible_section(dt_gui_collapsible_section_t *cs,
   gtk_box_pack_start(GTK_BOX(destdisp_head), cs->toggle, FALSE, FALSE, 0);
 
   cs->expander = dtgtk_expander_new(destdisp_head, GTK_WIDGET(cs->container));
+  // Keep collapsed bodies from being re-shown by gtk_widget_show_all().
+  GtkWidget *expander_frame = dtgtk_expander_get_frame(DTGTK_EXPANDER(cs->expander));
+  if(expander_frame) gtk_widget_set_no_show_all(expander_frame, TRUE);
   // Pack at the requested side so callers control ordering at insertion time.
   if(pack == GTK_PACK_START)
     gtk_box_pack_start(GTK_BOX(cs->parent), cs->expander, FALSE, FALSE, 0);
