@@ -2514,20 +2514,6 @@ void enter(dt_view_t *self)
   gtk_widget_show(dt_ui_center(darktable.gui->ui));
   dt_thumbtable_update_parent(darktable.gui->ui->thumbtable_filmstrip);
 
-  // The image-load callback may finish before GTK emits a new configure event for darkroom.
-  // Seed the ROI from the already-allocated center widget so preview sizing is ready in time.
-  GtkAllocation allocation = { 0 };
-  gtk_widget_get_allocation(dt_ui_center(darktable.gui->ui), &allocation);
-  const int tb = darktable.control->tabborder;
-  const int center_width = allocation.width - 2 * tb;
-  const int center_height = allocation.height - 2 * tb;
-  if(center_width > 0 && center_height > 0)
-  {
-    dev->roi.orig_width = center_width;
-    dev->roi.orig_height = center_height;
-    _get_final_size_with_iso_12646(dev);
-  }
-
   // clear selection, we don't want selections in darkroom
   dt_selection_clear(darktable.selection);
 
