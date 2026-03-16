@@ -534,7 +534,7 @@ int dt_dev_pixelpipe_init(dt_dev_pixelpipe_t *pipe)
 int dt_dev_pixelpipe_init_cached(dt_dev_pixelpipe_t *pipe)
 {
   pipe->devid = -1;
-  pipe->changed = DT_DEV_PIPE_UNCHANGED;
+  dt_dev_pixelpipe_set_changed(pipe, DT_DEV_PIPE_UNCHANGED);
   pipe->processed_width = pipe->iwidth = 0;
   pipe->processed_height = pipe->iheight = 0;
   pipe->nodes = NULL;

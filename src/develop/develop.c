@@ -314,7 +314,7 @@ void dt_dev_start_all_pipelines(dt_develop_t *dev)
 static void _flag_pipe(dt_dev_pixelpipe_t *pipe, gboolean error)
 {
   const gboolean shutdown = dt_atomic_get_int(&pipe->shutdown);
-  const gboolean pending_change = (pipe->changed != DT_DEV_PIPE_UNCHANGED);
+  const gboolean pending_change = (dt_dev_pixelpipe_get_changed(pipe) != DT_DEV_PIPE_UNCHANGED);
 
   // If dt_dev_pixelpipe_process() returned with a state int == 1
   // and the shutdown flag is on, it means history commit activated the kill-switch.
@@ -365,11 +365,11 @@ int dt_dev_get_thumbnail_size(dt_develop_t *dev)
                                 dev->roi.raw_width, dev->roi.raw_height, DT_MIPMAP_FULL);
 
   if(!dev->virtual_pipe->nodes)
-    dev->virtual_pipe->changed |= DT_DEV_PIPE_REMOVE;
+    dt_dev_pixelpipe_or_changed(dev->virtual_pipe, DT_DEV_PIPE_REMOVE);
   else if(dt_dev_pixelpipe_get_history_hash(dev->virtual_pipe) != dt_dev_get_history_hash(dev))
-    dev->virtual_pipe->changed |= DT_DEV_PIPE_SYNCH;
+    dt_dev_pixelpipe_or_changed(dev->virtual_pipe, DT_DEV_PIPE_SYNCH);
 
-  if(dev->virtual_pipe->changed != DT_DEV_PIPE_UNCHANGED)
+  if(dt_dev_pixelpipe_get_changed(dev->virtual_pipe) != DT_DEV_PIPE_UNCHANGED)
     dt_dev_pixelpipe_change(dev->virtual_pipe, dev);
 
   // Compute the virtual full-res output. This needs an inited history
@@ -535,11 +535,14 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
 
       // If we know history changed, ensure at least the last step is resynced
       if(history_outdated)
-        pipe->changed |= DT_DEV_PIPE_TOP_CHANGED;
+        dt_dev_pixelpipe_or_changed(pipe, DT_DEV_PIPE_TOP_CHANGED);
 
       // If any part of history needs resync, the pipe is dirty
-      if(pipe->changed != DT_DEV_PIPE_UNCHANGED)
+      if(dt_dev_pixelpipe_get_changed(pipe) != DT_DEV_PIPE_UNCHANGED)
+      {
         pipe->status = DT_DEV_PIXELPIPE_DIRTY;
+        fprintf(stdout, "PIPE %s needs update\n", pipe->type == DT_DEV_PIXELPIPE_FULL ? "full" : "preview");
+      }
 
       // DT_DEV_PIXELPIPE_DIRTY means we need to compute a new backbuffer,
       // for whatever reason. Could be that history changed,
@@ -559,8 +562,8 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
       // Mask previews and other main image displays need to ask for
       // only a recompute of the main pipe, which makes sense.
       if(pipe == dev->pipe 
-         && dt_dev_pipelines_share_preview_output(dev)
-         && dev->preview_pipe->changed != DT_DEV_PIPE_UNCHANGED)
+        && dt_dev_pipelines_share_preview_output(dev)
+        && dt_dev_pixelpipe_get_changed(dev->preview_pipe) != DT_DEV_PIPE_UNCHANGED)
       {
         dt_iop_nap(20000);
       }
@@ -576,12 +579,12 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
       // Need to be before dt_dev_pixelpipe_change()
       if(dt_dev_pixelpipe_has_reentry(pipe))
       {
-        pipe->changed |= DT_DEV_PIPE_REMOVE;
+        dt_dev_pixelpipe_or_changed(pipe, DT_DEV_PIPE_REMOVE);
         dt_dev_pixelpipe_cache_flush(darktable.pixelpipe_cache, pipe->type);
       }
 
       // Resynch history with pipeline. NB: this locks dev->history_mutex
-      while(pipe->changed != DT_DEV_PIPE_UNCHANGED)
+      while(dt_dev_pixelpipe_get_changed(pipe) != DT_DEV_PIPE_UNCHANGED)
         dt_dev_pixelpipe_change(pipe, dev);
 
       // If user zoomed/panned in darkroom during the previous loop of recomputation,
