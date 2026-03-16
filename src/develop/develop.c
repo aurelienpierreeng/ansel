@@ -1303,11 +1303,23 @@ gchar *dt_history_item_get_label(const struct dt_iop_module_t *module)
 
 gchar *dt_dev_get_multi_name(const struct dt_iop_module_t *module)
 {
-  gchar *label =
-  (g_strcmp0(module->multi_name, "0") == 0 || g_strcmp0(module->multi_name, "") == 0)
-        ? g_strdup(module->multi_name) : g_strdup("");
+  gboolean has_multi_name = g_strcmp0(module->multi_name, "0") != 0 && g_strcmp0(module->multi_name, "") != 0;
+  gchar *label = has_multi_name ? g_strdup(module->multi_name) : g_strdup("");
 
   return label;
+}
+
+gchar *dt_dev_get_masks_group_name(const struct dt_iop_module_t *module)
+{
+  gchar *module_multi_name = dt_dev_get_multi_name(module);
+  gboolean has_multi_name = g_strcmp0(module_multi_name, "") != 0;
+  // fallback to module name if no multi name
+  gchar *module_label = has_multi_name ?  g_strdup(module_multi_name) : dt_history_item_get_name(module);
+  gchar *group_name = g_strdup_printf("Mask %s", module_label);
+  dt_free(module_label);
+  dt_free(module_multi_name);
+
+  return group_name;
 }
 
 

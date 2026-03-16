@@ -532,6 +532,8 @@ void dt_dev_modules_update_multishow(dt_develop_t *dev);
 
 /** generates item multi-instance name without mnemonics */
 gchar *dt_dev_get_multi_name(const struct dt_iop_module_t *module);
+/** Get the module multi name, or the module name if no multi name is provided */
+gchar *dt_dev_get_masks_group_name(const struct dt_iop_module_t *module);
 gchar *dt_history_item_get_name(const struct dt_iop_module_t *module);
 gchar *dt_history_item_get_name_html(const struct dt_iop_module_t *module);
 

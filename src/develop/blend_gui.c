@@ -1607,6 +1607,9 @@ static gboolean _blendop_masks_all_button_pressed(GtkWidget *treeview, GdkEventB
 static void _blendop_masks_group_selection_changed(GtkTreeSelection *selection, dt_iop_module_t *module);
 static gboolean _blendop_masks_group_button_pressed(GtkWidget *treeview, GdkEventButton *event,
                                                     dt_iop_module_t *module);
+static void _blendop_masks_group_name_activate(GtkEntry *entry, dt_iop_module_t *module);
+static gboolean _blendop_masks_group_name_focus_out(GtkWidget *widget, GdkEventFocus *event,
+                                                    dt_iop_module_t *module);
 
 static void _blendop_masks_refresh_lists(dt_iop_module_t *module)
 {
@@ -1713,7 +1716,11 @@ static void _blendop_masks_refresh_lists(dt_iop_module_t *module)
   }
 
   if(group_form && (group_form->type & DT_MASKS_GROUP))
+  {
+    if(GTK_IS_ENTRY(bd->group_shapes_label))
+      gtk_entry_set_text(GTK_ENTRY(bd->group_shapes_label), group_form->name);
     _blendop_masks_group_tree_append(bd, GTK_TREE_STORE(group_model), NULL, group_form);
+  }
 
   // Unblock signals after model updates are complete
   g_signal_handlers_unblock_by_func(all_selection, G_CALLBACK(_blendop_masks_all_selection_changed), module);
@@ -1730,6 +1737,40 @@ static void _blendop_masks_apply_and_commit(dt_iop_module_t *module)
   dt_masks_iop_update(module);
   dt_dev_add_history_item(module->dev, module, TRUE, TRUE);
   dt_control_queue_redraw_center();
+}
+
+static void _blendop_masks_group_name_commit(dt_iop_module_t *module, const gchar *new_text)
+{
+  if(!module) return;
+  dt_masks_form_t *group_form = _blendop_masks_group_from_module(module);
+  if(!group_form) return;
+
+  gchar *mask_default_name = dt_dev_get_masks_group_name(module);
+  gchar *text = (new_text && *new_text) ? g_strdup(new_text) : g_strdup(mask_default_name);
+  g_free(mask_default_name);
+
+  g_strlcpy(group_form->name, text, sizeof(group_form->name));
+  _blendop_masks_apply_and_commit(module);
+  g_free(text);
+
+  _blendop_masks_refresh_lists(module);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, group_form->formid, 0,
+                                DT_MASKS_EVENT_CHANGE);
+}
+
+static void _blendop_masks_group_name_activate(GtkEntry *entry, dt_iop_module_t *module)
+{
+  if(!GTK_IS_ENTRY(entry)) return;
+  _blendop_masks_group_name_commit(module, gtk_entry_get_text(entry));
+}
+
+static gboolean _blendop_masks_group_name_focus_out(GtkWidget *widget, GdkEventFocus *event,
+                                                    dt_iop_module_t *module)
+{
+  (void)event;
+  if(GTK_IS_ENTRY(widget))
+    _blendop_masks_group_name_commit(module, gtk_entry_get_text(GTK_ENTRY(widget)));
+  return FALSE;
 }
 
 static void _blendop_masks_all_name_edited(GtkCellRendererText *cell, gchar *path_string,
@@ -2110,13 +2151,16 @@ static void _blendop_masks_edit_list_toggle(GtkToggleButton *togglebutton, dt_io
   // - global all-shapes list
   const gboolean edit_mode = gtk_toggle_button_get_active(togglebutton);
 
+  if(edit_mode)
+    gtk_button_set_label(GTK_BUTTON(togglebutton), _("OK"));
+  else
+    gtk_button_set_label(GTK_BUTTON(togglebutton), _("Wire shapes"));
+
   if(GTK_IS_STACK(bd->lists_stack))
     gtk_stack_set_visible_child_name(GTK_STACK(bd->lists_stack), edit_mode ? "all" : "group");
-  
 
-  if(GTK_IS_LABEL(bd->group_shapes_label))
-    gtk_label_set_text(GTK_LABEL(bd->group_shapes_label),
-                       edit_mode ? _("Add/remove shapes") : _("Current module mask"));
+  if(GTK_IS_ENTRY(bd->group_shapes_label))
+    gtk_widget_set_sensitive(bd->group_shapes_label, !edit_mode);
 }
 
 static GtkWidget *_blendop_masks_shape_buttons(dt_iop_module_t *module, dt_iop_gui_blend_data_t *bd)
@@ -3293,9 +3337,14 @@ void dt_iop_gui_init_masks(GtkBox *blendw, dt_iop_module_t *module)
 
     GtkWidget *group_shapes_header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
     dt_gui_add_class(group_shapes_header, "dt_section_label");
-    bd->group_shapes_label = gtk_label_new(_("Current mask"));
+    bd->group_shapes_label = gtk_entry_new();
+    gtk_entry_set_placeholder_text(GTK_ENTRY(bd->group_shapes_label), dt_dev_get_masks_group_name(module));
+    gtk_widget_set_tooltip_text(bd->group_shapes_label, _("Edit current module mask name"));
     gtk_widget_set_halign(bd->group_shapes_label, GTK_ALIGN_START);
     gtk_widget_set_hexpand(bd->group_shapes_label, TRUE);
+    g_signal_connect(bd->group_shapes_label, "activate", G_CALLBACK(_blendop_masks_group_name_activate), module);
+    g_signal_connect(bd->group_shapes_label, "focus-out-event",
+             G_CALLBACK(_blendop_masks_group_name_focus_out), module);
     gtk_box_pack_start(GTK_BOX(group_shapes_header), bd->group_shapes_label, TRUE, TRUE, 0);
 
     // buttons for mask polarity and edit mode
@@ -3309,11 +3358,6 @@ void dt_iop_gui_init_masks(GtkBox *blendw, dt_iop_module_t *module)
                                              N_("show and edit in restricted mode"),
                                              G_CALLBACK(_blendop_masks_show_and_edit),
                                              FALSE, 0, 0, dtgtk_cairo_paint_masks_eye, group_shapes_header);
-
-    bd->edit_toggle = gtk_toggle_button_new_with_label(_("Wire shapes"));
-    gtk_widget_set_tooltip_text(bd->edit_toggle, _("Show all shapes and groups to choose which ones to connect to or disconnect from the mask."));
-
-    gtk_box_pack_end(GTK_BOX(group_shapes_header), bd->edit_toggle, FALSE, FALSE, 0);
 
     gtk_box_pack_start(GTK_BOX(bd->lists_box), group_shapes_header, FALSE, FALSE, 0);
 
@@ -3357,7 +3401,15 @@ void dt_iop_gui_init_masks(GtkBox *blendw, dt_iop_module_t *module)
     // Creating shapes buttons (circle, ellipse ....)
     bd->all_shapes_buttons = _blendop_masks_shape_buttons(module, bd);
     if(!GTK_IS_WIDGET(bd->all_shapes_buttons)) return;
-    gtk_box_pack_end(GTK_BOX(bd->lists_box), bd->all_shapes_buttons, FALSE, FALSE, 0);
+    // Wire shapes toggle button
+    bd->wire_shape_toggle = gtk_toggle_button_new_with_label(_("Wire shapes"));
+    gtk_widget_set_tooltip_text(bd->wire_shape_toggle, _("Show all shapes and groups to choose which ones to connect to or disconnect from the mask."));
+
+    GtkWidget *bottom_bar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_box_pack_start(GTK_BOX(bottom_bar), bd->wire_shape_toggle, FALSE, FALSE, 0);
+    gtk_box_pack_end(GTK_BOX(bottom_bar), bd->all_shapes_buttons, FALSE, FALSE, 0);
+    gtk_box_pack_end(GTK_BOX(bd->lists_box), bottom_bar, FALSE, FALSE, 0);
+
 
     // All shapes list
     bd->masks_treeview = gtk_tree_view_new();
@@ -3421,11 +3473,11 @@ void dt_iop_gui_init_masks(GtkBox *blendw, dt_iop_module_t *module)
     // - current-module tree is visible
     // - all-shapes tree is hidden
     // The toggle callback flips these two scrolled windows.
-    g_signal_connect(bd->edit_toggle, "toggled", G_CALLBACK(_blendop_masks_edit_list_toggle), module);
-    if(GTK_IS_TOGGLE_BUTTON(bd->edit_toggle))
+    g_signal_connect(bd->wire_shape_toggle, "toggled", G_CALLBACK(_blendop_masks_edit_list_toggle), module);
+    if(GTK_IS_TOGGLE_BUTTON(bd->wire_shape_toggle))
     {
-      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->edit_toggle), FALSE);
-      _blendop_masks_edit_list_toggle(GTK_TOGGLE_BUTTON(bd->edit_toggle), module);
+      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->wire_shape_toggle), FALSE);
+      _blendop_masks_edit_list_toggle(GTK_TOGGLE_BUTTON(bd->wire_shape_toggle), module);
     }
 
     gtk_box_pack_start(GTK_BOX(bd->masks_box), bd->lists_box, FALSE, FALSE, 0);
@@ -4113,8 +4165,9 @@ void dt_iop_gui_cleanup_blending_body(dt_iop_module_t *module)
   bd->masks_combo = NULL;
   memset(bd->masks_shapes, 0, sizeof(bd->masks_shapes));
   bd->masks_edit = NULL;
+  bd->group_shapes_label = NULL;
   bd->masks_polarity = NULL;
-  bd->edit_toggle = NULL;
+  bd->wire_shape_toggle = NULL;
   bd->masks_treeview = NULL;
   bd->masks_group_treeview = NULL;
   bd->group_shapes_store = NULL;
