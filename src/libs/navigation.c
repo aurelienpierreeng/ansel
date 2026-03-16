@@ -210,7 +210,11 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
 
   GtkAllocation allocation;
   gtk_widget_get_allocation(widget, &allocation);
-  int width = allocation.width, height = allocation.height;
+  static int width = 0;
+  static int height = 0;
+  gboolean changed = (width != allocation.width) || (height != allocation.height);
+  width = allocation.width;
+  height = allocation.height;
 
   cairo_surface_t *cst = dt_cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
   cairo_t *cr = cairo_create(cst);
@@ -219,7 +223,7 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
   cairo_save(cr);
   
   if(has_preview_image
-     && (!d->image_surface || image_hash != dt_dev_backbuf_get_hash(&dev->preview_pipe->backbuf)))
+     && (!d->image_surface || image_hash != dt_dev_backbuf_get_hash(&dev->preview_pipe->backbuf) || changed))
   {
     if(d->image_surface) cairo_surface_destroy(d->image_surface);
     d->image_surface = dt_cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
@@ -344,7 +348,7 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
     if(dev->roi.scaling == 1.f)
       fit = g_strdup(_("Fit"));
   
-    zoomline = g_strdup_printf("%s %.0f%%", fit ? fit : "", dev->roi.scaling * dev->roi.natural_scale * 100);
+    zoomline = g_strdup_printf("%s %.0f%%", fit ? fit : "", dev->roi.scaling * dev->roi.natural_scale / darktable.gui->ppd * 100);
     if(fit)
     {
       dt_free(fit);
@@ -486,7 +490,7 @@ static void _zoom_preset_change(dt_lib_zoom_t zoom)
 
   // Actual pixelpipe scaling is dev->roi.scaling * dev->roi.natural_scale,
   // where dev->roi.natural_scale ensures the images fits within viewport
-  dev->roi.scaling /= dev->roi.natural_scale;
+  dev->roi.scaling /= dev->roi.natural_scale / darktable.gui->ppd;
 
   dt_dev_check_zoom_pos_bounds(dev, &dev->roi.x, &dev->roi.y, NULL, NULL);
   dt_dev_pixelpipe_change_zoom_main(dev);

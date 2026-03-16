@@ -614,10 +614,9 @@ void dt_dev_pixelpipe_sync_virtual(dt_develop_t *dev, dt_dev_pixelpipe_change_t 
 gboolean dt_dev_pixelpipe_is_backbufer_valid(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
 {
   return dt_dev_backbuf_get_hash(&pipe->backbuf) != DT_PIXELPIPE_CACHE_HASH_INVALID
-         && pipe->status == DT_DEV_PIXELPIPE_VALID 
-         && dt_dev_pixelpipe_get_changed(pipe) == DT_DEV_PIPE_UNCHANGED
          && dt_dev_pixelpipe_get_hash(pipe) == dt_dev_backbuf_get_hash(&pipe->backbuf)
-         && dt_dev_get_history_hash(dev) == dt_dev_backbuf_get_history_hash(&pipe->backbuf);
+         && dt_dev_get_history_hash(dev) == dt_dev_backbuf_get_history_hash(&pipe->backbuf)
+         && dt_dev_backbuf_get_history_hash(&pipe->backbuf) == dt_dev_get_history_hash(dev);
 }
 
 gboolean dt_dev_pixelpipe_is_pipeline_valid(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
