@@ -815,7 +815,6 @@ void expose(
   cairo_save(cri);
 
   dt_develop_t *dev = (dt_develop_t *)self->data;
-  dt_dev_start_all_pipelines(dev);
 
   const int32_t border = dev->roi.border_size;
 
@@ -1280,6 +1279,8 @@ static void _darkroom_image_loaded_callback(gpointer instance, guint request_id,
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_IMAGE_CHANGED);
 
   dt_view_image_info_update(dev->image_storage.id);
+
+  dt_dev_start_all_pipelines(dev);
 }
 
 int try_enter(dt_view_t *self)
