@@ -384,6 +384,8 @@ int dt_dev_get_thumbnail_size(dt_develop_t *dev)
   dev->roi.preview_height = dev->roi.natural_scale * dev->roi.processed_height;
   dev->roi.output_inited = TRUE;
 
+  dt_dev_update_mouse_effect_radius(dev); 
+
   dt_print(DT_DEBUG_DEV,
             "[pixelpipe] thumbnail sizes raw %dx%d -> processed %dx%d -> preview %dx%d (scale %.5f)\n",
             dev->roi.raw_width, dev->roi.raw_height, dev->roi.processed_width, dev->roi.processed_height,
@@ -509,7 +511,10 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
     int x = 0, y = 0, wd = 0, ht = 0;
 
     // Count the number of pipe re-entries and limit it to 2 to avoid infinite loops
+    // Re-entries are designed for raster masks when we lost their reference, so 
+    // we force a full pipeline computation from start to refresh them.
     int reentries = 0;
+    dt_dev_pixelpipe_reset_reentry(pipe);
 
     if(pipe->timeout)
     {
@@ -519,22 +524,27 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
 
     // Updating loop: run while output is invalid/unavailable, or while realtime mode
     // has a new history state to consume.
-    while(!dev->exit && dt_control_running() && !pipe->pause)
+    while(!dev->exit && dt_control_running() && !pipe->pause && reentries < 2)
     {
-      const gboolean needs_realtime_update
+      const gboolean history_outdated
           = (dt_dev_get_history_hash(dev) != dt_dev_pixelpipe_get_history_hash(pipe))
             || (dt_dev_backbuf_get_hash(&pipe->backbuf) != dt_dev_pixelpipe_get_hash(pipe))
             || (dt_dev_pixelpipe_get_hash(pipe) == DT_DEV_PIXELPIPE_INVALID);
 
       // If we know history changed, ensure at least the last step is resynced
-      if(needs_realtime_update)
+      if(history_outdated)
         pipe->changed |= DT_DEV_PIPE_TOP_CHANGED;
 
-      const gboolean needs_regular_update
-          = (((pipe->status == DT_DEV_PIXELPIPE_DIRTY) || (pipe->changed != DT_DEV_PIPE_UNCHANGED))
-             && reentries < 2);
+      // If any part of history needs resync, the pipe is dirty
+      if(pipe->changed != DT_DEV_PIPE_UNCHANGED)
+        pipe->status = DT_DEV_PIXELPIPE_DIRTY;
 
-      if(!(needs_regular_update || needs_realtime_update)) 
+      // DT_DEV_PIXELPIPE_DIRTY means we need to compute a new backbuffer,
+      // for whatever reason. Could be that history changed,
+      // could be that we got on error on previous try,
+      // could be that we got a new input image.
+      // BUT, on history change, we try only twice to refresh the image.
+      if(pipe->status != DT_DEV_PIXELPIPE_DIRTY) 
       {
         dt_iop_nap(50000); // wait 50 ms
         break;
@@ -783,7 +793,6 @@ void dt_dev_configure_real(dt_develop_t *dev, int wd, int ht)
   dt_print(DT_DEBUG_DEV, "[pixelpipe] Darkroom requested a %i×%i px main preview\n", wd, ht);
 
   dt_dev_get_thumbnail_size(dev);
-  dt_dev_update_mouse_effect_radius(dev); 
   dt_dev_pixelpipe_update_zoom_main(dev);
   dt_dev_pixelpipe_update_zoom_preview(dev);
 }

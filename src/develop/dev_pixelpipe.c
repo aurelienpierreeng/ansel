@@ -579,8 +579,6 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
   }
   dt_pthread_rwlock_unlock(&dev->history_mutex);
 
-  pipe->status = DT_DEV_PIXELPIPE_DIRTY;
-
   // If the pipe state wasn't overwritten during resync
   if(status == pipe->changed)
     pipe->changed = DT_DEV_PIPE_UNCHANGED;
