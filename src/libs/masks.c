@@ -197,6 +197,20 @@ static void _lib_masks_release_blending(dt_lib_masks_t *lm)
     _lib_masks_clear_blending_box(lm);
 }
 
+static void _lib_masks_show_blending_message(dt_lib_masks_t *lm, gchar *markup)
+{
+  if(!lm || !lm->blending_box || !markup) return;
+
+  GtkWidget *label = gtk_label_new(NULL);
+  gtk_label_set_markup(GTK_LABEL(label), markup);
+  gtk_label_set_xalign(GTK_LABEL(label), 0.0f);
+  gtk_label_set_line_wrap(GTK_LABEL(label), TRUE);
+  gtk_widget_set_margin_bottom(label, DT_PIXEL_APPLY_DPI(8));
+  gtk_widget_set_sensitive(label, FALSE);
+  gtk_box_pack_start(GTK_BOX(lm->blending_box), label, FALSE, FALSE, 0);
+  gtk_widget_show_all(lm->blending_box);
+}
+
 static void _lib_masks_reveal(dt_lib_module_t *self)
 {
   if(!dt_ui_panel_visible(darktable.gui->ui, DT_UI_PANEL_LEFT))
@@ -217,23 +231,38 @@ static void _lib_masks_blending_gui_changed_callback(gpointer instance, dt_lib_m
   if(!self || !self->data) return;
 
   dt_lib_masks_t *lm = (dt_lib_masks_t *)self->data;
-  if(!darktable.develop || !darktable.develop->history)
+  dt_iop_module_t *module = darktable.develop ? darktable.develop->gui_module : NULL;
+
+  if(!darktable.develop || !darktable.develop->history || !module)
   {
     _lib_masks_release_blending(lm);
-    gtk_widget_hide(lm->blending_box);
+    _lib_masks_clear_blending_box(lm);
+
+    gchar *markup = g_markup_printf_escaped(_("<i>Select a module to edit its blending settings.</i>"));
+
+    _lib_masks_show_blending_message(lm, markup);
+    g_free(markup);
+  
     return;
   }
-
-  dt_iop_module_t *module = darktable.develop ? darktable.develop->gui_module : NULL;
-  const gboolean module_changed = (lm->active_module != module);
-  lm->active_module = module;
 
   if(!_lib_masks_can_host_blending(module))
   {
     _lib_masks_release_blending(lm);
-    gtk_widget_hide(lm->blending_box);
+    _lib_masks_clear_blending_box(lm);
+
+    gchar *module_label = dt_history_item_get_name(module);
+    gchar *markup = g_markup_printf_escaped(_("<i>Blending is not available for the <b>%s</b> module.</i>"), module_label);
+
+    _lib_masks_show_blending_message(lm, markup);
+    g_free(markup);
+    dt_free(module_label);
+  
     return;
   }
+
+  const gboolean module_changed = (lm->active_module != module);
+  lm->active_module = module;
 
   if(module_changed) _lib_masks_release_blending(lm);
 
