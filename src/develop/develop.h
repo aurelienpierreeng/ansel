@@ -431,14 +431,11 @@ typedef enum dt_dev_image_storage_t
 // Returns a status code to differentiate missing source image data from DB/cache failures.
 dt_dev_image_storage_t dt_dev_ensure_image_storage(dt_develop_t *dev, const int32_t imgid);
 
-// GUI-thread second phase of image loading: read history and rebuild pipelines.
-int dt_dev_load_image_finish(dt_develop_t *dev, const int32_t imgid);
-
 // Start background pipeline threads. They run fulltime until we close darkroom,
 // so no need to recall that
 void dt_dev_start_all_pipelines(dt_develop_t *dev);
 
-int dt_dev_load_image(dt_develop_t *dev, const int32_t imgid);
+dt_dev_image_storage_t dt_dev_load_image(dt_develop_t *dev, const int32_t imgid);
 /** checks if provided imgid is the image currently in develop */
 int dt_dev_is_current_image(dt_develop_t *dev, int32_t imgid);
 

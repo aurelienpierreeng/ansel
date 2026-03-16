@@ -152,8 +152,7 @@ static void _update_softproof_gamut_checking(dt_develop_t *d);
 
 /* signal handler for filmstrip image switching */
 static void _view_darkroom_filmstrip_activate_callback(gpointer instance, int32_t imgid, gpointer user_data);
-static void _darkroom_image_loaded_callback(gpointer instance, guint request_id, guint result, gpointer payload,
-                                            gpointer user_data);
+static void _darkroom_image_loaded_callback(gpointer instance, guint request_id, guint result, gpointer user_data);
 static void _darkroom_cancel_image_load_job(void);
 
 static void _dev_change_image(dt_view_t *self, const int32_t imgid);
@@ -167,14 +166,6 @@ typedef struct dt_darkroom_image_load_job_t
   guint request_id;
 } dt_darkroom_image_load_job_t;
 
-typedef struct dt_darkroom_image_load_result_t
-{
-  int32_t imgid;
-  int32_t raw_width;
-  int32_t raw_height;
-  gboolean raw_inited;
-  dt_image_t image_storage;
-} dt_darkroom_image_load_result_t;
 
 static dt_job_t *_darkroom_image_load_job = NULL;
 static guint _darkroom_image_load_serial = 0;
@@ -1181,51 +1172,9 @@ static int32_t _darkroom_image_load_job_run(dt_job_t *job)
   const dt_darkroom_image_load_job_t *params = dt_control_job_get_params(job);
   if(!params) return 0;
 
-  dt_darkroom_image_load_result_t *loaded = g_new0(dt_darkroom_image_load_result_t, 1);
-  loaded->imgid = params->imgid;
+  int ret = dt_dev_load_image(darktable.develop, params->imgid);
 
-  int ret = DT_DEV_IMAGE_STORAGE_OK;
-  if(params->imgid <= 0 || !darktable.mipmap_cache || !darktable.image_cache)
-    ret = DT_DEV_IMAGE_STORAGE_DB_NOT_READ;
-
-  dt_mipmap_buffer_t buf = { 0 };
-  if(ret == DT_DEV_IMAGE_STORAGE_OK)
-  {
-    dt_mipmap_cache_get(darktable.mipmap_cache, &buf, params->imgid, DT_MIPMAP_FULL, DT_MIPMAP_BLOCKING, 'r');
-    if(buf.buf != NULL && buf.width != 0 && buf.height != 0)
-    {
-      loaded->raw_width = buf.width;
-      loaded->raw_height = buf.height;
-      loaded->raw_inited = TRUE;
-    }
-    else
-    {
-      ret = DT_DEV_IMAGE_STORAGE_MIPMAP_NOT_FOUND;
-    }
-    dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
-  }
-
-  if(ret == DT_DEV_IMAGE_STORAGE_OK)
-  {
-    const dt_image_t *image = dt_image_cache_get(darktable.image_cache, params->imgid, 'r');
-    if(image)
-    {
-      loaded->image_storage = *image;
-      dt_image_cache_read_release(darktable.image_cache, image);
-    }
-    else
-    {
-      ret = DT_DEV_IMAGE_STORAGE_DB_NOT_READ;
-    }
-  }
-
-  if(!darktable.signals || !dt_control_running())
-  {
-    dt_free(loaded);
-    return 0;
-  }
-
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_IMAGE_LOADED, params->request_id, (guint)ret, loaded);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_IMAGE_LOADED, params->request_id, (guint)ret);
 
   return 0;
 }
@@ -1270,39 +1219,18 @@ static void _darkroom_start_image_load(const int32_t imgid)
   dt_control_add_job(darktable.control, DT_JOB_QUEUE_USER_FG, job);
 }
 
-static void _darkroom_image_loaded_callback(gpointer instance, guint request_id, guint result, gpointer payload,
-                                            gpointer user_data)
+static void _darkroom_image_loaded_callback(gpointer instance, guint request_id, guint result, gpointer user_data)
 {
   dt_view_t *self = (dt_view_t *)user_data;
   dt_develop_t *dev = (dt_develop_t *)self->data;
-  const dt_darkroom_image_load_result_t *loaded = (dt_darkroom_image_load_result_t *)payload;
-  (void)instance;
-
   if(request_id == 0 || request_id != _darkroom_image_load_active_request) return;
   if(darktable.view_manager->current_view != self) return;
 
   _darkroom_image_load_active_request = 0;
 
-  if(!loaded) return;
-
   if(result)
   {
     _darkroom_log_image_load_error((int)result);
-    return;
-  }
-
-  dev->image_storage = loaded->image_storage;
-  if(dev->gui_attached && loaded->raw_inited)
-  {
-    dev->roi.raw_width = loaded->raw_width;
-    dev->roi.raw_height = loaded->raw_height;
-    dev->roi.raw_inited = TRUE;
-  }
-
-  const int ret = dt_dev_load_image_finish(dev, loaded->imgid);
-  if(ret)
-  {
-    _darkroom_log_image_load_error(ret);
     return;
   }
 
@@ -1327,12 +1255,7 @@ static void _darkroom_image_loaded_callback(gpointer instance, guint request_id,
     dt_dev_history_gui_update(dev);
 
   dt_dev_pixelpipe_rebuild_all(dev);
-  if(dt_dev_get_thumbnail_size(dev))
-  {
-    dt_control_log(_("The darkroom preview could not be initialized."));
-    dt_print(DT_DEBUG_CONTROL, "[darkroom] preview geometry missing after loading image %d\n", loaded->imgid);
-    return;
-  }
+  dt_dev_get_thumbnail_size(dev);
 
   if(_darkroom_pending_focus_module && g_list_find(dev->iop, _darkroom_pending_focus_module))
     dt_iop_request_focus(_darkroom_pending_focus_module);

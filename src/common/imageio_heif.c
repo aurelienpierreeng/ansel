@@ -128,32 +128,17 @@ dt_imageio_retval_t dt_imageio_open_heif(dt_image_t *img,
   img->buf_dsc.channels = 4;
   img->buf_dsc.datatype = TYPE_FLOAT;
   img->buf_dsc.cst = IOP_CS_RGB;
-
-  float *mipbuf = (float *)dt_mipmap_cache_alloc(mbuf, img);
-  if(mipbuf == NULL)
-  {
-    dt_print(DT_DEBUG_IMAGEIO,
-             "Failed to allocate mipmap buffer for HEIF image [%s]\n",
-             filename);
-    ret = DT_IMAGEIO_CACHE_FULL;
-    goto out;
-  }
-
   img->buf_dsc.filters = 0u;
   img->flags &= ~DT_IMAGE_RAW;
   img->flags &= ~DT_IMAGE_S_RAW;
 
-  // Get decoded pixel values bit depth (this is used to scale values to [0..1] range)
-  const int decoded_values_bit_depth = heif_image_get_bits_per_pixel_range(heif_img, heif_channel_interleaved);
   // Get original pixel values bit depth by querying the luma channel depth (this may differ from decoded values bit depth)
   const int original_values_bit_depth = heif_image_handle_get_luma_bits_per_pixel(handle);
-
   dt_print(DT_DEBUG_IMAGEIO,
              "Bit depth: '%d' for HEIF image [%s]\n",
              original_values_bit_depth,
              filename);
 
-  /* This can be LDR or HDR, it depends on the ICC profile. But if bit_depth <= 8 it must be LDR. */
   if(original_values_bit_depth > 8)
   {
     img->flags |= DT_IMAGE_HDR;
@@ -164,6 +149,26 @@ dt_imageio_retval_t dt_imageio_open_heif(dt_image_t *img,
     img->flags |= DT_IMAGE_LDR;
     img->flags &= ~DT_IMAGE_HDR;
   }
+
+  img->loader = LOADER_HEIF;
+
+  if(!mbuf)
+  {
+    ret = DT_IMAGEIO_OK;
+    goto out;
+  }
+
+  float *mipbuf = (float *)dt_mipmap_cache_alloc(mbuf, img);
+  if(mipbuf == NULL)
+  {
+    dt_print(DT_DEBUG_IMAGEIO,
+             "Failed to allocate mipmap buffer for HEIF image [%s]\n",
+             filename);
+    ret = DT_IMAGEIO_CACHE_FULL;
+    goto out;
+  }
+  // Get decoded pixel values bit depth (this is used to scale values to [0..1] range)
+  const int decoded_values_bit_depth = heif_image_get_bits_per_pixel_range(heif_img, heif_channel_interleaved);
 
   float max_channel_f = (float)((1 << decoded_values_bit_depth) - 1);
 
@@ -198,8 +203,6 @@ dt_imageio_retval_t dt_imageio_open_heif(dt_image_t *img,
     heif_image_handle_get_raw_color_profile(handle, img->profile);
     img->profile_size = icc_size;
   }
-
-  img->loader = LOADER_HEIF;
   ret = DT_IMAGEIO_OK;
 
 out:

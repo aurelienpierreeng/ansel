@@ -612,6 +612,20 @@ dt_imageio_retval_t dt_imageio_open_rgbe(dt_image_t *img, const char *filename, 
 
   img->buf_dsc.channels = 4;
   img->buf_dsc.datatype = TYPE_FLOAT;
+  img->buf_dsc.cst = IOP_CS_RGB;
+  img->buf_dsc.filters = 0u;
+  img->flags &= ~DT_IMAGE_LDR;
+  img->flags &= ~DT_IMAGE_RAW;
+  img->flags &= ~DT_IMAGE_S_RAW;
+  img->flags |= DT_IMAGE_HDR;
+  img->loader = LOADER_RGBE;
+
+  if(!mbuf)
+  {
+    fclose(f);
+    return DT_IMAGEIO_OK;
+  }
+
   float *buf = (float *)dt_mipmap_cache_alloc(mbuf, img);
   if(!buf) goto error_cache_full;
   if(RGBE_ReadPixels_RLE(f, buf, img->width, img->height))
@@ -636,14 +650,6 @@ dt_imageio_retval_t dt_imageio_open_rgbe(dt_image_t *img, const char *filename, 
     }
 
   mat3inv((float *)img->d65_color_matrix, (float *)mat);
-
-  img->buf_dsc.cst = IOP_CS_RGB;
-  img->buf_dsc.filters = 0u;
-  img->flags &= ~DT_IMAGE_LDR;
-  img->flags &= ~DT_IMAGE_RAW;
-  img->flags &= ~DT_IMAGE_S_RAW;
-  img->flags |= DT_IMAGE_HDR;
-  img->loader = LOADER_RGBE;
   return DT_IMAGEIO_OK;
 
 error_corrupt:
@@ -659,4 +665,3 @@ error_cache_full:
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

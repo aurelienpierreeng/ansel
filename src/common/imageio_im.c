@@ -104,6 +104,20 @@ dt_imageio_retval_t dt_imageio_open_im(dt_image_t *img, const char *filename, dt
 
   img->buf_dsc.channels = 4;
   img->buf_dsc.datatype = TYPE_FLOAT;
+  img->buf_dsc.cst = IOP_CS_RGB;
+  img->buf_dsc.filters = 0u;
+  img->flags &= ~DT_IMAGE_RAW;
+  img->flags &= ~DT_IMAGE_S_RAW;
+  img->flags &= ~DT_IMAGE_HDR;
+  img->flags |= DT_IMAGE_LDR;
+
+  img->loader = LOADER_IM;
+
+  if(!mbuf)
+  {
+    DestroyMagickWand(image);
+    return DT_IMAGEIO_OK;
+  }
 
   float *mipbuf = dt_mipmap_cache_alloc(mbuf, img);
   if (mipbuf == NULL) {
@@ -135,15 +149,6 @@ dt_imageio_retval_t dt_imageio_open_im(dt_image_t *img, const char *filename, dt
   }
 
   DestroyMagickWand(image);
-
-  img->buf_dsc.cst = IOP_CS_RGB;
-  img->buf_dsc.filters = 0u;
-  img->flags &= ~DT_IMAGE_RAW;
-  img->flags &= ~DT_IMAGE_S_RAW;
-  img->flags &= ~DT_IMAGE_HDR;
-  img->flags |= DT_IMAGE_LDR;
-
-  img->loader = LOADER_IM;
   return DT_IMAGEIO_OK;
 
 error:

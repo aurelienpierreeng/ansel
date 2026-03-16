@@ -434,20 +434,6 @@ dt_imageio_retval_t dt_imageio_open_tiff(dt_image_t *img, const char *filename, 
   t.image->buf_dsc.cst = IOP_CS_RGB;
   t.image->buf_dsc.filters = 0u;
 
-  t.mipbuf = (float *)dt_mipmap_cache_alloc(mbuf, t.image);
-  if(!t.mipbuf)
-  {
-    fprintf(stderr, "[tiff_open] error: could not alloc full buffer for image `%s'\n", t.image->filename);
-    TIFFClose(t.tiff);
-    return DT_IMAGEIO_CACHE_FULL;
-  }
-
-  if((t.buf = _TIFFmalloc(t.scanlinesize)) == NULL)
-  {
-    TIFFClose(t.tiff);
-    return DT_IMAGEIO_CACHE_FULL;
-  }
-
   // flag the image buffer properly depending on sample format
   if(t.sampleformat == SAMPLEFORMAT_IEEEFP)
   {
@@ -460,6 +446,33 @@ dt_imageio_retval_t dt_imageio_open_tiff(dt_image_t *img, const char *filename, 
     // LDR TIFF
     t.image->flags |= DT_IMAGE_LDR;
     t.image->flags &= ~DT_IMAGE_HDR;
+  }
+
+  if(photometric == PHOTOMETRIC_CIELAB || photometric == PHOTOMETRIC_ICCLAB)
+    t.image->buf_dsc.cst = IOP_CS_LAB;
+
+  t.image->flags &= ~DT_IMAGE_RAW;
+  t.image->flags &= ~DT_IMAGE_S_RAW;
+  t.image->loader = LOADER_TIFF;
+
+  if(!mbuf)
+  {
+    TIFFClose(t.tiff);
+    return DT_IMAGEIO_OK;
+  }
+
+  t.mipbuf = (float *)dt_mipmap_cache_alloc(mbuf, t.image);
+  if(!t.mipbuf)
+  {
+    fprintf(stderr, "[tiff_open] error: could not alloc full buffer for image `%s'\n", t.image->filename);
+    TIFFClose(t.tiff);
+    return DT_IMAGEIO_CACHE_FULL;
+  }
+
+  if((t.buf = _TIFFmalloc(t.scanlinesize)) == NULL)
+  {
+    TIFFClose(t.tiff);
+    return DT_IMAGEIO_CACHE_FULL;
   }
 
   int ok = 1;
@@ -493,9 +506,6 @@ dt_imageio_retval_t dt_imageio_open_tiff(dt_image_t *img, const char *filename, 
 
   if(ok == 1)
   {
-    img->flags &= ~DT_IMAGE_RAW;
-    img->flags &= ~DT_IMAGE_S_RAW;
-    img->loader = LOADER_TIFF;
     return DT_IMAGEIO_OK;
   }
   else
@@ -555,4 +565,3 @@ int dt_imageio_tiff_read_profile(const char *filename, uint8_t **out)
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-
