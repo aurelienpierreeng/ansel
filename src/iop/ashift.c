@@ -5586,7 +5586,7 @@ void gui_init(struct dt_iop_module_t *self)
     (&g->cs,
      "plugins/darkroom/ashift/expand_values",
      _("Manual settings"),
-     GTK_BOX(main_box));
+     GTK_BOX(main_box), GTK_PACK_END);
 
   self->widget = GTK_WIDGET(g->cs.container);
 

@@ -443,10 +443,21 @@ gboolean dt_gui_search_start(GtkWidget *widget, GdkEventKey *event, GtkSearchEnt
 // event handler for "stop-search" of GtkSearchEntry
 void dt_gui_search_stop(GtkSearchEntry *entry, GtkWidget *widget);
 
-// create a collapsible section, insert in parent, return the container
+/**
+ * @brief Create a collapsible section and pack it into the parent box.
+ *
+ * The `pack` argument makes the insertion side explicit so callers control
+ * layout order without reordering children later.
+ *
+ * @param cs section storage owned by the caller.
+ * @param confname configuration key used to persist the expanded state.
+ * @param label UI label for the section header.
+ * @param parent GtkBox that receives the section.
+ * @param pack either `GTK_PACK_START` or `GTK_PACK_END` to choose insertion side.
+ */
 void dt_gui_new_collapsible_section(dt_gui_collapsible_section_t *cs,
                                     const char *confname, const char *label,
-                                    GtkBox *parent);
+                                    GtkBox *parent, GtkPackType pack);
 // routine to be called from gui_update
 void dt_gui_update_collapsible_section(dt_gui_collapsible_section_t *cs);
 

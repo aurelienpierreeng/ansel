@@ -205,7 +205,8 @@ static void _lib_masks_show_blending_message(dt_lib_masks_t *lm, gchar *markup)
   gtk_label_set_markup(GTK_LABEL(label), markup);
   gtk_label_set_xalign(GTK_LABEL(label), 0.0f);
   gtk_label_set_line_wrap(GTK_LABEL(label), TRUE);
-  gtk_widget_set_margin_bottom(label, DT_PIXEL_APPLY_DPI(8));
+  gtk_widget_set_margin_top(label, DT_PIXEL_APPLY_DPI(16));
+  gtk_widget_set_margin_bottom(label, DT_PIXEL_APPLY_DPI(16));
   gtk_widget_set_sensitive(label, FALSE);
   gtk_box_pack_start(GTK_BOX(lm->blending_box), label, FALSE, FALSE, 0);
   gtk_widget_show_all(lm->blending_box);
@@ -265,6 +266,8 @@ static void _lib_masks_blending_gui_changed_callback(gpointer instance, dt_lib_m
   lm->active_module = module;
 
   if(module_changed) _lib_masks_release_blending(lm);
+
+  if(!lm->hosted_module) _lib_masks_clear_blending_box(lm);
 
   dt_iop_gui_init_blending_body(GTK_BOX(lm->blending_box), module);
   lm->hosted_module = module;
@@ -1925,18 +1928,12 @@ void gui_init(dt_lib_module_t *self)
   self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
   GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
 
-  d->blending_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-  gtk_box_pack_start(GTK_BOX(self->widget), d->blending_box, FALSE, FALSE, 0);
-  //gtk_widget_hide(d->blending_box);
+  dt_gui_collapsible_section_t *shape_manager_expander = malloc(sizeof(dt_gui_collapsible_section_t));
 
-  GtkWidget *shape_manager_expander = gtk_expander_new(_("Shape manager"));
-  gtk_expander_set_expanded(GTK_EXPANDER(shape_manager_expander), FALSE);
-  GtkWidget *shape_manager_expander_label = gtk_expander_get_label_widget(GTK_EXPANDER(shape_manager_expander));
-  if(shape_manager_expander_label)
-    dt_gui_add_class(shape_manager_expander_label, "dt_section_label");
-  GtkWidget *shape_manager_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-  gtk_container_add(GTK_CONTAINER(shape_manager_expander), shape_manager_box);
-  gtk_box_pack_start(GTK_BOX(self->widget), shape_manager_expander, TRUE, TRUE, 0);
+  dt_gui_new_collapsible_section(shape_manager_expander, "plugins/darkroom/shape_manager/expanded",
+                                 _("Shape manager"), GTK_BOX(self->widget), GTK_PACK_START);
+  GtkWidget *shape_manager_box = GTK_WIDGET(shape_manager_expander->container); // gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  //gtk_box_pack_start(GTK_BOX(shape_manager_expander->container), shape_manager_box, TRUE, TRUE, 0);
 
   GtkWidget *label = gtk_label_new(_("created shapes"));
   gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_END);
@@ -2009,6 +2006,15 @@ void gui_init(dt_lib_module_t *self)
 
   gtk_box_pack_start(GTK_BOX(shape_manager_box), d->treeview, TRUE, TRUE, 0);
   dt_gui_widget_init_auto_height(d->treeview, TREE_LIST_MIN_ROWS, TREE_LIST_MAX_ROWS);
+
+  
+  GtkWidget *blending_label = dt_ui_section_label_new(_("Blending"));
+  gtk_widget_set_margin_top(blending_label, DT_PIXEL_APPLY_DPI(12));
+  gtk_box_pack_start(GTK_BOX(self->widget), blending_label, TRUE, TRUE, 0);
+
+  d->blending_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  gtk_box_pack_start(GTK_BOX(self->widget), d->blending_box, FALSE, FALSE, 0);
+
 
   gtk_widget_show_all(self->widget);
   gtk_widget_hide(d->blending_box);

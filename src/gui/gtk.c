@@ -2622,7 +2622,8 @@ void dt_gui_hide_collapsible_section(dt_gui_collapsible_section_t *cs)
 }
 
 void dt_gui_new_collapsible_section(dt_gui_collapsible_section_t *cs,
-                                    const char *confname, const char *label, GtkBox *parent)
+                                    const char *confname, const char *label,
+                                    GtkBox *parent, GtkPackType pack)
 {
   const gboolean expanded = dt_conf_get_bool(confname);
 
@@ -2647,7 +2648,11 @@ void dt_gui_new_collapsible_section(dt_gui_collapsible_section_t *cs,
   gtk_box_pack_start(GTK_BOX(destdisp_head), cs->toggle, FALSE, FALSE, 0);
 
   cs->expander = dtgtk_expander_new(destdisp_head, GTK_WIDGET(cs->container));
-  gtk_box_pack_end(GTK_BOX(cs->parent), cs->expander, FALSE, FALSE, 0);
+  // Pack at the requested side so callers control ordering at insertion time.
+  if(pack == GTK_PACK_START)
+    gtk_box_pack_start(GTK_BOX(cs->parent), cs->expander, FALSE, FALSE, 0);
+  else
+    gtk_box_pack_end(GTK_BOX(cs->parent), cs->expander, FALSE, FALSE, 0);
   dtgtk_expander_set_expanded(DTGTK_EXPANDER(cs->expander), expanded);
   gtk_widget_set_name(cs->expander, "collapse-block");
 

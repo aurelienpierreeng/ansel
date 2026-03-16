@@ -4060,7 +4060,7 @@ void gui_init(struct dt_iop_module_t *self)
     (&g->csspot,
      "plugins/darkroom/channelmixerrgb/expand_picker_mapping",
      _("spot color mapping"),
-     GTK_BOX(self->widget));
+     GTK_BOX(self->widget), GTK_PACK_END);
 
   gtk_widget_set_tooltip_text(g->csspot.expander, _("use a color checker target to autoset CAT and channels"));
 
@@ -4186,7 +4186,7 @@ void gui_init(struct dt_iop_module_t *self)
     (&g->cs,
      "plugins/darkroom/channelmixerrgb/expand_values",
      _("calibrate with a color checker"),
-     GTK_BOX(self->widget));
+     GTK_BOX(self->widget), GTK_PACK_END);
 
   gtk_widget_set_tooltip_text(g->cs.toggle,
                               _("use a color checker target to autoset CAT and channels"));

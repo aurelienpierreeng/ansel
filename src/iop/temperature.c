@@ -1915,7 +1915,7 @@ void gui_init(struct dt_iop_module_t *self)
     (&g->cs,
      "plugins/darkroom/temperature/expand_coefficients",
      _("channel coefficients"),
-     GTK_BOX(box_enabled));
+     GTK_BOX(box_enabled), GTK_PACK_END);
 
   self->widget = GTK_WIDGET(g->cs.container);
 

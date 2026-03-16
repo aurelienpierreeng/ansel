@@ -1079,7 +1079,7 @@ void gui_init(struct dt_iop_module_t *self)
     (&g->cs,
      "plugins/darkroom/exposure/mapping",
      _("spot exposure mapping"),
-     GTK_BOX(self->widget));
+     GTK_BOX(self->widget), GTK_PACK_END);
 
   DT_BAUHAUS_COMBOBOX_NEW_FULL(darktable.bauhaus, g->spot_mode, DT_GUI_MODULE(self), N_("spot mode"),
                                 _("\"correction\" automatically adjust exposure\n"
