@@ -3938,9 +3938,9 @@ void dt_iop_gui_update_blending(dt_iop_module_t *module)
   _blendop_update_top_enable_label(module);
   _blendop_toggle_button_set_active(bd->top_enable, top_enabled);
   if(GTK_IS_WIDGET(bd->top_content))
-    gtk_widget_set_visible(bd->top_content, top_enabled);
+    gtk_widget_set_sensitive(bd->top_content, top_enabled);
   if(GTK_IS_WIDGET(bd->blending_notebook))
-    gtk_widget_set_visible(bd->blending_notebook, top_enabled);
+    gtk_widget_set_sensitive(bd->blending_notebook, top_enabled);
   _blendop_sync_toggle_state(bd->masks_enable, bd->masks_inited, masks_enabled, bd->masks_content);
   _blendop_sync_toggle_state(bd->raster_enable, bd->raster_inited, raster_enabled, bd->raster_content);
   _blendop_sync_toggle_state(bd->blendif_enable, bd->blendif_inited, blendif_enabled, bd->blendif_content);
@@ -4409,8 +4409,8 @@ void dt_iop_gui_init_blending_body(GtkBox *blendw, dt_iop_module_t *module)
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->blendif_enable), (mask_mode & DEVELOP_MASK_CONDITIONAL) != 0);
 
   gtk_widget_show_all(GTK_WIDGET(bd->blending_body_box));
-  gtk_widget_set_visible(bd->top_content, (mask_mode & DEVELOP_MASK_ENABLED) != 0);
-  gtk_widget_set_visible(bd->blending_notebook, (mask_mode & DEVELOP_MASK_ENABLED) != 0);
+  gtk_widget_set_sensitive(bd->top_content, (mask_mode & DEVELOP_MASK_ENABLED) != 0);
+  gtk_widget_set_sensitive(bd->blending_notebook, (mask_mode & DEVELOP_MASK_ENABLED) != 0);
 
   --darktable.gui->reset;
 }
