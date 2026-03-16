@@ -534,15 +534,23 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
           = (((pipe->status == DT_DEV_PIXELPIPE_DIRTY) || (pipe->changed != DT_DEV_PIPE_UNCHANGED))
              && reentries < 2);
 
-      if(!(needs_regular_update || needs_realtime_update)) break;
-
-      if(pipe == dev->pipe && dt_dev_pipelines_share_preview_output(dev)
-         && (dev->preview_pipe->processing
-             || dev->preview_pipe->status == DT_DEV_PIXELPIPE_DIRTY
-             || dev->preview_pipe->changed != DT_DEV_PIPE_UNCHANGED))
+      if(!(needs_regular_update || needs_realtime_update)) 
       {
-        dt_iop_nap(10000);
-        continue;
+        dt_iop_nap(50000); // wait 50 ms
+        break;
+      }
+
+      // If preview pipe and main pipe have the same size and are both
+      // due to recompute, give 20 ms of heads up 
+      // to preview because it computes histograms and some caches.
+      // This means main pipe will not compute but will fetch backbuffer directly.
+      // Mask previews and other main image displays need to ask for
+      // only a recompute of the main pipe, which makes sense.
+      if(pipe == dev->pipe 
+         && dt_dev_pipelines_share_preview_output(dev)
+         && dev->preview_pipe->changed != DT_DEV_PIPE_UNCHANGED)
+      {
+        dt_iop_nap(20000);
       }
 
       dt_pthread_mutex_lock(&pipe->busy_mutex);
