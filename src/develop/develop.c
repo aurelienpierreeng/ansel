@@ -530,8 +530,8 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
           = (dt_dev_pixelpipe_get_history_hash(pipe) != dt_dev_get_history_hash(dev))
             || (dt_dev_backbuf_get_hash(&pipe->backbuf) != dt_dev_pixelpipe_get_hash(pipe))
             || (dt_dev_backbuf_get_history_hash(&pipe->backbuf) != dt_dev_get_history_hash(dev))
-            || (dt_dev_pixelpipe_get_hash(pipe) == DT_DEV_PIXELPIPE_INVALID)
-            || (dt_dev_backbuf_get_hash(&pipe->backbuf) == DT_DEV_PIXELPIPE_INVALID);
+            || (dt_dev_pixelpipe_get_hash(pipe) == DT_PIXELPIPE_CACHE_HASH_INVALID)
+            || (dt_dev_backbuf_get_hash(&pipe->backbuf) == DT_PIXELPIPE_CACHE_HASH_INVALID);
 
       // If we know history changed, ensure at least the last step is resynced
       if(history_outdated)
