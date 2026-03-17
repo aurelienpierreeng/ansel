@@ -3345,8 +3345,8 @@ void init_global(dt_iop_module_so_t *module)
 {
   const int program = 3; // blendop.cl, from programs.conf
   dt_iop_drawlayer_global_data_t *gd = calloc(1, sizeof(*gd));
-  module->data = gd;
   if(!gd) return;
+  module->data = gd;
   gd->kernel_premult_over = -1;
 
   /* Reuse the existing blendop OpenCL program and add one drawlayer-specific
@@ -3399,17 +3399,15 @@ void init(dt_iop_module_t *module)
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
   piece->data = calloc(1, sizeof(dt_iop_drawlayer_data_t));
+  if(!piece->data) return;
   piece->data_size = sizeof(dt_iop_drawlayer_params_t);
-  if(piece->data)
-  {
-    dt_iop_drawlayer_data_t *data = (dt_iop_drawlayer_data_t *)piece->data;
-    data->params.layer_order = -1;
-    dt_drawlayer_process_state_init(&data->process);
-    dt_drawlayer_runtime_manager_init(&data->headless_manager);
-    dt_drawlayer_runtime_manager_bind_piece(&data->headless_manager, &data->process, NULL, NULL, FALSE,
-                                            &data->runtime_manager, &data->runtime_process,
-                                            &data->runtime_display_pipe);
-  }
+  dt_iop_drawlayer_data_t *data = (dt_iop_drawlayer_data_t *)piece->data;
+  data->params.layer_order = -1;
+  dt_drawlayer_process_state_init(&data->process);
+  dt_drawlayer_runtime_manager_init(&data->headless_manager);
+  dt_drawlayer_runtime_manager_bind_piece(&data->headless_manager, &data->process, NULL, NULL, FALSE,
+                                          &data->runtime_manager, &data->runtime_process,
+                                          &data->runtime_display_pipe);
 }
 
 /** @brief Cleanup per-pipe runtime data. */
