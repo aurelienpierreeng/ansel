@@ -54,6 +54,7 @@
 #include "common/math.h"
 #include "common/opencl.h"
 #include "common/iop_profile.h"
+#include "control/conf.h"
 #include "control/control.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
@@ -74,6 +75,7 @@
 #include <strings.h>
 
 #define NEUTRAL_GRAY 0.5
+#define BLEND_MASKMODE_CONF_KEY "plugins/darkroom/blending/mask_mode_tab"
 
 const dt_develop_name_value_t dt_develop_blend_mode_names[]
     = { { NC_("blendmode", "normal"), DEVELOP_BLEND_NORMAL2 },
@@ -1000,6 +1002,22 @@ static void _blendop_blendif_tab_switch(GtkNotebook *notebook, GtkWidget *page, 
   }
 
   _blendop_blendif_update_tab(data->module, data->tab);
+}
+
+/**
+ * @brief Persist the active blending notebook tab in anselrc.
+ *
+ * The blending UI is rebuilt per module instance, so we store only the last-used
+ * page index to restore a consistent view across sessions.
+ */
+static void _blendop_blending_notebook_switch(GtkNotebook *notebook, GtkWidget *page, guint page_num,
+                                              dt_iop_gui_blend_data_t *data)
+{
+  (void)notebook;
+  (void)page;
+  if(!data) return;
+
+  dt_conf_set_int(BLEND_MASKMODE_CONF_KEY, (int)page_num);
 }
 
 static void _blendop_blendif_boost_factor_callback(GtkWidget *slider, dt_iop_gui_blend_data_t *data)
@@ -4411,6 +4429,16 @@ void dt_iop_gui_init_blending_body(GtkBox *blendw, dt_iop_module_t *module)
   gtk_widget_show_all(GTK_WIDGET(bd->blending_body_box));
   gtk_widget_set_sensitive(bd->top_content, (mask_mode & DEVELOP_MASK_ENABLED) != 0);
   gtk_widget_set_sensitive(bd->blending_notebook, (mask_mode & DEVELOP_MASK_ENABLED) != 0);
+
+  g_signal_connect(G_OBJECT(bd->blending_notebook), "switch_page", G_CALLBACK(_blendop_blending_notebook_switch), bd);
+  const int page_count = gtk_notebook_get_n_pages(GTK_NOTEBOOK(bd->blending_notebook));
+  if(page_count > 0)
+  {
+    // Restore the last-used tab after the notebook has been fully realized.
+    int page = dt_conf_get_int(BLEND_MASKMODE_CONF_KEY);
+    page = CLAMP(page, 0, page_count - 1);
+    gtk_notebook_set_current_page(GTK_NOTEBOOK(bd->blending_notebook), page);
+  }
 
   --darktable.gui->reset;
 }
