@@ -3519,9 +3519,8 @@ static void _raster_combo_populate(GtkWidget *w, void *m)
 
   dt_bauhaus_combobox_clear(w);
 
-  raster_combo_entry_t *entry = (raster_combo_entry_t *)malloc(sizeof(raster_combo_entry_t));
-  entry->module = NULL;
-  entry->id = 0;
+  raster_combo_entry_t *entry = (raster_combo_entry_t *)calloc(1, sizeof(raster_combo_entry_t));
+  if(!entry) return;
   dt_bauhaus_combobox_add_full(w, _("no mask used"), DT_BAUHAUS_COMBOBOX_ALIGN_RIGHT, entry, free, TRUE);
 
   int i = 1;
@@ -4454,7 +4453,6 @@ void dt_iop_gui_init_blending(dt_iop_module_t *module)
   bd->csp = DEVELOP_BLEND_CS_NONE;
   bd->blend_modes_csp = DEVELOP_BLEND_CS_NONE;
   bd->channel_tabs_csp = DEVELOP_BLEND_CS_NONE;
-  bd->output_channels_shown = FALSE;
 
   const dt_iop_colorspace_type_t cst = module->blend_colorspace(module, NULL, NULL);
   bd->blendif_support = (cst == IOP_CS_LAB || cst == IOP_CS_RGB);
@@ -4462,8 +4460,6 @@ void dt_iop_gui_init_blending(dt_iop_module_t *module)
 
   dt_pthread_mutex_init(&bd->lock, NULL);
   dt_pthread_mutex_lock(&bd->lock);
-  bd->timeout_handle = 0;
-  bd->save_for_leave = 0;
   dt_pthread_mutex_unlock(&bd->lock);
 
   if(bd->masks_support)

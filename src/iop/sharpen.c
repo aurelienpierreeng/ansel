@@ -466,7 +466,8 @@ void init_global(dt_iop_module_so_t *module)
 {
   const int program = 7; // sharpen.cl, from programs.conf
   dt_iop_sharpen_global_data_t *gd
-      = (dt_iop_sharpen_global_data_t *)malloc(sizeof(dt_iop_sharpen_global_data_t));
+      = (dt_iop_sharpen_global_data_t *)calloc(1, sizeof(dt_iop_sharpen_global_data_t));
+  if(!gd) return;
   module->data = gd;
   gd->kernel_sharpen_hblur = dt_opencl_create_kernel(program, "sharpen_hblur");
   gd->kernel_sharpen_vblur = dt_opencl_create_kernel(program, "sharpen_vblur");

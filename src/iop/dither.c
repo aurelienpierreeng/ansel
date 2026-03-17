@@ -821,7 +821,8 @@ void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev
 void init_global(dt_iop_module_so_t *module)
 {
   const int program = 8; // extended.cl, from programs.conf
-  dt_iop_dither_global_data_t *gd = (dt_iop_dither_global_data_t *)malloc(sizeof(dt_iop_dither_global_data_t));
+  dt_iop_dither_global_data_t *gd = (dt_iop_dither_global_data_t *)calloc(1, sizeof(dt_iop_dither_global_data_t));
+  if(!gd) return;
   module->data = gd;
   gd->kernel_dither_random = dt_opencl_create_kernel(program, "dither_random");
 }

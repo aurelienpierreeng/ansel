@@ -689,12 +689,10 @@ void dt_dev_pixelpipe_create_nodes(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
   {
     dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
     dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)calloc(1, sizeof(dt_dev_pixelpipe_iop_t));
+    if(!piece) continue;
     piece->enabled = module->enabled;
     piece->request_histogram = DT_REQUEST_ONLY_IN_GUI;
-    piece->histogram_params.roi = NULL;
     piece->histogram_params.bins_count = 256;
-    piece->histogram_stats.bins_count = 0;
-    piece->histogram_stats.pixels = 0;
     piece->colors
         = ((module->default_colorspace(module, pipe, NULL) == IOP_CS_RAW) && (dt_image_is_raw(&pipe->image)))
               ? 1
@@ -703,26 +701,17 @@ void dt_dev_pixelpipe_create_nodes(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
     piece->iheight = pipe->iheight;
     piece->module = module;
     piece->pipe = pipe;
-    piece->data = NULL;
     piece->hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
     piece->blendop_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
     piece->global_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
     piece->global_mask_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
-    piece->bypass_cache = FALSE;
-    memset(&piece->cache_entry, 0, sizeof(piece->cache_entry));
     piece->cache_entry.hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
     piece->force_opencl_cache = TRUE;
-    piece->process_cl_ready = 0;
-    piece->process_tiling_ready = 0;
     piece->raster_masks = dt_pixelpipe_raster_alloc();
-    memset(&piece->planned_roi_in, 0, sizeof(piece->planned_roi_in));
-    memset(&piece->planned_roi_out, 0, sizeof(piece->planned_roi_out));
 
     // dsc_mask is static, single channel float image
-    memset(&piece->dsc_mask, 0, sizeof(piece->dsc_mask));
     piece->dsc_mask.channels = 1;
     piece->dsc_mask.datatype = TYPE_FLOAT;
-    piece->dsc_mask.filters = 0;
 
     dt_iop_init_pipe(piece->module, pipe, piece);
     

@@ -127,24 +127,14 @@ void dt_dev_init(dt_develop_t *dev, int32_t gui_attached)
 {
   memset(dev, 0, sizeof(dt_develop_t));
   dt_dev_set_history_hash(dev, DT_PIXELPIPE_CACHE_HASH_INVALID);
-  dev->gui_module = NULL;
   dt_pthread_rwlock_init(&dev->history_mutex, NULL);
   dt_pthread_rwlock_init(&dev->masks_mutex, NULL);
-  dev->history = NULL; // empty list
 
   dev->gui_attached = gui_attached;
   dev->roi.width = -1;
   dev->roi.height = -1;
-  dev->image_surface = NULL;
 
   dt_image_init(&dev->image_storage);
-  dev->pipe = dev->preview_pipe = NULL;
-  dev->virtual_pipe = NULL;
-  dev->histogram_pre_tonecurve = NULL;
-  dev->histogram_pre_levels = NULL;
-  dev->forms = NULL;
-  dev->form_gui = NULL;
-  dev->allforms = NULL;
 
   if(dev->gui_attached)
   {
@@ -167,12 +157,6 @@ void dt_dev_init(dt_develop_t *dev, int32_t gui_attached)
   dt_dev_set_backbuf(&dev->output_histogram, 0, 0, 0, -1, -1);
   dt_dev_set_backbuf(&dev->display_histogram, 0, 0, 0, -1, -1);
 
-  dev->iop = NULL;
-  dev->alliop = NULL;
-  dev->allprofile_info = NULL;
-  dev->iop_order_list = NULL;
-
-  dev->proxy.chroma_adaptation = NULL;
   dev->proxy.wb_is_D65 = TRUE; // don't display error messages until we know for sure it's FALSE
   dev->proxy.wb_coeffs[0] = 0.f;
 

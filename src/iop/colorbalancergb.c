@@ -1327,8 +1327,6 @@ void init_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe
   piece->data_size = sizeof(dt_iop_colorbalancergb_data_t);
   dt_iop_colorbalancergb_data_t *d = (dt_iop_colorbalancergb_data_t *)(piece->data);
   d->gamut_LUT = dt_alloc_align_float(LUT_ELEM);
-  d->lut_inited = FALSE;
-  d->work_profile = NULL;
 }
 
 void cleanup_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
