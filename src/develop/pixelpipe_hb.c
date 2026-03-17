@@ -494,7 +494,6 @@ int dt_dev_pixelpipe_init_thumbnail(dt_dev_pixelpipe_t *pipe)
 {
   const int res = dt_dev_pixelpipe_init_cached(pipe);
   pipe->type = DT_DEV_PIXELPIPE_THUMBNAIL;
-  pipe->gui_observable_source = FALSE;
   pipe->no_cache = TRUE;
   return res;
 }
@@ -503,7 +502,6 @@ int dt_dev_pixelpipe_init_dummy(dt_dev_pixelpipe_t *pipe)
 {
   const int res = dt_dev_pixelpipe_init_cached(pipe);
   pipe->type = DT_DEV_PIXELPIPE_THUMBNAIL;
-  pipe->gui_observable_source = FALSE;
   pipe->no_cache = TRUE;
   return res;
 }
@@ -524,7 +522,6 @@ int dt_dev_pixelpipe_init(dt_dev_pixelpipe_t *pipe)
 {
   const int res = dt_dev_pixelpipe_init_cached(pipe);
   pipe->type = DT_DEV_PIXELPIPE_FULL;
-  pipe->gui_observable_source = FALSE;
 
   // Needed for caching
   pipe->store_all_raster_masks = TRUE;
@@ -533,49 +530,26 @@ int dt_dev_pixelpipe_init(dt_dev_pixelpipe_t *pipe)
 
 int dt_dev_pixelpipe_init_cached(dt_dev_pixelpipe_t *pipe)
 {
+  // Set everything to 0 = NULL = FALSE
+  memset(pipe, 0, sizeof(dt_dev_pixelpipe_t));
+
+  // Set only the stuff that doesn't take 0 as default
   pipe->devid = -1;
   dt_dev_pixelpipe_set_changed(pipe, DT_DEV_PIPE_UNCHANGED);
-  pipe->processed_width = pipe->iwidth = 0;
-  pipe->processed_height = pipe->iheight = 0;
-  pipe->nodes = NULL;
   dt_dev_pixelpipe_set_hash(pipe, DT_PIXELPIPE_CACHE_HASH_INVALID);
   dt_dev_pixelpipe_set_history_hash(pipe, DT_PIXELPIPE_CACHE_HASH_INVALID);
-  pipe->bypass_cache = 0;
-  pipe->no_cache = FALSE;
   dt_dev_set_backbuf(&pipe->backbuf, 0, 0, 0, -1, -1);
+  pipe->last_history_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
 
   pipe->output_imgid = UNKNOWN_IMAGE;
-
-  pipe->rawdetail_mask_data = NULL;
-  pipe->want_detail_mask = DT_DEV_DETAIL_MASK_NONE;
-
-  pipe->processing = 0;
-  pipe->running = 0;
   dt_atomic_set_int(&pipe->shutdown, FALSE);
   dt_atomic_set_int(&pipe->realtime, FALSE);
-  pipe->opencl_error = 0;
-  pipe->tiling = 0;
-  pipe->mask_display = DT_DEV_PIXELPIPE_DISPLAY_NONE;
-  pipe->bypass_blendif = 0;
-  pipe->input_timestamp = 0;
-  pipe->gui_observable_source = FALSE;
+
   pipe->levels = IMAGEIO_RGB | IMAGEIO_INT8;
   dt_pthread_mutex_init(&(pipe->busy_mutex), NULL);
-  pipe->icc_type = DT_COLORSPACE_NONE;
-  pipe->icc_filename = NULL;
-  pipe->icc_intent = DT_INTENT_LAST;
-  pipe->iop_order_list = NULL;
-  pipe->forms = NULL;
-  pipe->store_all_raster_masks = FALSE;
-  pipe->work_profile_info = NULL;
-  pipe->input_profile_info = NULL;
-  pipe->output_profile_info = NULL;
 
-  pipe->status = DT_DEV_PIXELPIPE_DIRTY;
-  pipe->last_history_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
-  pipe->last_history_item = NULL;
-  pipe->flush_cache = FALSE;
-  pipe->timeout = 0;
+  pipe->icc_type = DT_COLORSPACE_NONE;
+  pipe->icc_intent = DT_INTENT_LAST;
 
   dt_dev_pixelpipe_reset_reentry(pipe);
   return 1;

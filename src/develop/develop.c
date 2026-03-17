@@ -800,6 +800,7 @@ void dt_dev_configure_real(dt_develop_t *dev, int wd, int ht)
   dt_dev_get_thumbnail_size(dev);
   dt_dev_pixelpipe_update_zoom_main(dev);
   dt_dev_pixelpipe_update_zoom_preview(dev);
+  dt_control_queue_redraw();
 }
 
 void dt_dev_check_zoom_pos_bounds(dt_develop_t *dev, float *dev_x, float *dev_y, float *box_w, float *box_h)
