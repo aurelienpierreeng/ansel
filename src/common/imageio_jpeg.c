@@ -758,6 +758,23 @@ dt_imageio_retval_t dt_imageio_open_jpeg(dt_image_t *img, const char *filename, 
   img->width = jpg.width;
   img->height = jpg.height;
 
+  img->buf_dsc.channels = 4;
+  img->buf_dsc.datatype = TYPE_FLOAT;
+  img->buf_dsc.cst = IOP_CS_RGB; // jpeg is always RGB
+  img->buf_dsc.filters = 0u;
+  img->flags &= ~DT_IMAGE_RAW;
+  img->flags &= ~DT_IMAGE_S_RAW;
+  img->flags &= ~DT_IMAGE_HDR;
+  img->flags |= DT_IMAGE_LDR;
+  img->loader = LOADER_JPEG;
+
+  if(!mbuf)
+  {
+    jpeg_destroy_decompress(&(jpg.dinfo));
+    fclose(jpg.f);
+    return DT_IMAGEIO_OK;
+  }
+
   uint8_t *tmp = (uint8_t *)dt_pixelpipe_cache_alloc_align_cache(
       sizeof(uint8_t) * 4 * jpg.width * jpg.height,
       0);
@@ -767,8 +784,6 @@ dt_imageio_retval_t dt_imageio_open_jpeg(dt_image_t *img, const char *filename, 
     return DT_IMAGEIO_FILE_CORRUPTED;
   }
 
-  img->buf_dsc.channels = 4;
-  img->buf_dsc.datatype = TYPE_FLOAT;
   void *buf = dt_mipmap_cache_alloc(mbuf, img);
   if(!buf)
   {
@@ -780,15 +795,6 @@ dt_imageio_retval_t dt_imageio_open_jpeg(dt_image_t *img, const char *filename, 
                                        jpg.height, 4 * jpg.width, 0);
 
   dt_pixelpipe_cache_free_align(tmp);
-
-  img->buf_dsc.cst = IOP_CS_RGB; // jpeg is always RGB
-  img->buf_dsc.filters = 0u;
-  img->flags &= ~DT_IMAGE_RAW;
-  img->flags &= ~DT_IMAGE_S_RAW;
-  img->flags &= ~DT_IMAGE_HDR;
-  img->flags |= DT_IMAGE_LDR;
-  img->loader = LOADER_JPEG;
-
   return DT_IMAGEIO_OK;
 }
 

@@ -338,8 +338,11 @@ void dt_dev_pixelpipe_cache_flush(dt_dev_pixelpipe_cache_t *cache, const int id)
  * This is intentionally a lightweight VRAM-pressure/retry helper: it drops cached
  * `cl_mem` objects without taking per-entry write locks. Realtime paths rely on it
  * to free scratch OpenCL buffers without stalling in-flight renders.
+ * 
+ * @param keep OpenCL buffer to keep. Typically, you want to keep the input if you
+ * are trying to make room for the output.
  */
-void dt_dev_pixelpipe_cache_flush_clmem(dt_dev_pixelpipe_cache_t *cache, const int devid);
+void dt_dev_pixelpipe_cache_flush_clmem(dt_dev_pixelpipe_cache_t *cache, const int devid, void *keep);
 
 
 /**

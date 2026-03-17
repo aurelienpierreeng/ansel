@@ -516,6 +516,32 @@ dt_store_simd_aligned(float *const pixel, const dt_aligned_pixel_simd_t value)
   dt_store_simd(out, value);
 }
 
+static inline __attribute__((always_inline)) void
+dt_store_simd_nontemporal(float *const pixel, const dt_aligned_pixel_simd_t value)
+{
+  float *const out = (float *const)__builtin_assume_aligned(pixel, 16);
+
+#if defined(__SSE__)
+  const union
+  {
+    dt_aligned_pixel_simd_t simd;
+    __m128 sse;
+  } cast = { .simd = value };
+  _mm_stream_ps(out, cast.sse);
+#elif defined(__aarch64__)
+  const union
+  {
+    dt_aligned_pixel_simd_t simd;
+    float32x4_t neon;
+  } cast = { .simd = value };
+  vst1q_f32(out, cast.neon);
+#elif (__clang__+0 > 7) && (__clang__+0 < 10)
+  for_each_channel(k,aligned(out:16)) __builtin_nontemporal_store(value[k], out[k]);
+#else
+  for_each_channel(k,aligned(out:16) dt_omp_nontemporal(out)) out[k] = value[k];
+#endif
+}
+
 static inline __attribute__((always_inline)) dt_aligned_pixel_simd_t
 dt_mat3x4_mul_vec4(const dt_aligned_pixel_simd_t in, const dt_aligned_pixel_simd_t row0,
                    const dt_aligned_pixel_simd_t row1, const dt_aligned_pixel_simd_t row2)
@@ -572,15 +598,7 @@ static inline void copy_pixel_nontemporal(
 	float *const __restrict__ out,
         const float *const __restrict__ in)
 {
-#if defined(__SSE__)
-  _mm_stream_ps(out, *((__m128*)in));
-#elif defined(__aarch64__)
-  vst1q_f32(out, *((float32x4_t *)in));
-#elif (__clang__+0 > 7) && (__clang__+0 < 10)
-  for_each_channel(k,aligned(in,out:16)) __builtin_nontemporal_store(in[k],out[k]);
-#else
-  for_each_channel(k,aligned(in,out:16) dt_omp_nontemporal(out)) out[k] = in[k];
-#endif
+  dt_store_simd_nontemporal(out, dt_load_simd(in));
 }
 
 

@@ -486,7 +486,7 @@ static void dt_wb_preset_interpolate(const wb_data *const p1, // the smaller tun
 static inline __attribute__((always_inline)) void
 scaled_copy_4wide(float *const outp, const float *const inp, const dt_aligned_pixel_simd_t coeffs)
 {
-  dt_store_simd(outp, dt_load_simd(inp) * coeffs);
+  dt_store_simd_nontemporal(outp, dt_load_simd(inp) * coeffs);
 }
 
 int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
@@ -509,6 +509,8 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
 #endif
     for(int j = 0; j < roi_out->height; j++)
     {
+      const size_t row_start = (size_t)j * roi_out->width;
+      const int use_simd = dt_is_aligned(in + row_start, 16) && dt_is_aligned(out + row_start, 16);
       const dt_aligned_pixel_simd_t coeffs[3] =
       {
         { d_coeffs[FCxtrans(j, 0, roi_out, xtrans)], d_coeffs[FCxtrans(j, 1, roi_out, xtrans)],
@@ -520,18 +522,22 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
       };
       // process sensels four at a time
       int i = 0;
-      for(int coeff = 0; i + 4 < roi_out->width; i += 4, coeff = (coeff+1)%3)
+      if(use_simd)
       {
-        const size_t p = (size_t)j * roi_out->width + i;
-        dt_store_simd(out + p, dt_load_simd(in + p) * coeffs[coeff]);
+        for(int coeff = 0; i + 4 < roi_out->width; i += 4, coeff = (coeff+1)%3)
+        {
+          const size_t p = row_start + i;
+          dt_store_simd_nontemporal(out + p, dt_load_simd(in + p) * coeffs[coeff]);
+        }
       }
       // process the leftover sensels
       for(; i < roi_out->width; i++)
       {
-        const size_t p = (size_t)j * roi_out->width + i;
+        const size_t p = row_start + i;
         out[p] = in[p] * d_coeffs[FCxtrans(j, i, roi_out, xtrans)];
       }
     }
+    dt_omploop_sfence();  // ensure that nontemporal writes complete before we attempt to read output
   }
   else if(filters)
   { // bayer float mosaiced
@@ -544,6 +550,8 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
     for(int j = 0; j < roi_out->height; j++)
     {
       const int offset_j = j + roi_out->y;
+      const size_t row_start = (size_t)j * width;
+      const int use_simd = dt_is_aligned(in + row_start, 16) && dt_is_aligned(out + row_start, 16);
       const dt_aligned_pixel_simd_t coeffs = {
         d_coeffs[FC(offset_j, roi_out->x + 0, filters)],
         d_coeffs[FC(offset_j, roi_out->x + 1, filters)],
@@ -552,17 +560,21 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
       };
       int i = 0;
 
-      for(; i + 3 < width; i += 4)
+      if(use_simd)
       {
-        const size_t p = (size_t)j * width + i;
-        scaled_copy_4wide(out + p, in + p, coeffs);
+        for(; i + 3 < width; i += 4)
+        {
+          const size_t p = row_start + i;
+          scaled_copy_4wide(out + p, in + p, coeffs);
+        }
       }
       for(; i < width; i++)
       {
-        const size_t p = (size_t)j * width + i;
+        const size_t p = row_start + i;
         out[p] = in[p] * d_coeffs[FC(offset_j, i + roi_out->x, filters)];
       }
     }
+    dt_omploop_sfence();  // ensure that nontemporal writes complete before we attempt to read output
   }
   else
   { // non-mosaiced
@@ -580,8 +592,9 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
       for(size_t k = 0; k < npixels; k++)
       {
         const size_t p = 4 * k;
-        dt_store_simd_aligned(out + p, dt_load_simd_aligned(in + p) * coeffs);
+        dt_store_simd_nontemporal(out + p, dt_load_simd_aligned(in + p) * coeffs);
       }
+      dt_omploop_sfence();  // ensure that nontemporal writes complete before we attempt to read output
     }
     else
     {
@@ -1902,7 +1915,7 @@ void gui_init(struct dt_iop_module_t *self)
     (&g->cs,
      "plugins/darkroom/temperature/expand_coefficients",
      _("channel coefficients"),
-     GTK_BOX(box_enabled));
+     GTK_BOX(box_enabled), GTK_PACK_END);
 
   self->widget = GTK_WIDGET(g->cs.container);
 
@@ -1933,6 +1946,9 @@ void gui_init(struct dt_iop_module_t *self)
 
   gtk_stack_add_named(GTK_STACK(self->widget), GTK_WIDGET(box_enabled), "enabled");
   gtk_stack_add_named(GTK_STACK(self->widget), label_disabled, "disabled");
+
+  // Ensure the expander body has its subtree visible even when global show_all is blocked.
+  gtk_widget_show_all(GTK_WIDGET(g->cs.container));
 }
 
 void gui_cleanup(struct dt_iop_module_t *self)

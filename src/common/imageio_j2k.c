@@ -280,6 +280,19 @@ dt_imageio_retval_t dt_imageio_open_j2k(dt_image_t *img, const char *filename, d
 
   img->buf_dsc.channels = 4;
   img->buf_dsc.datatype = TYPE_FLOAT;
+  img->buf_dsc.cst = IOP_CS_RGB; // j2k is always RGB
+  img->buf_dsc.filters = 0u;
+  img->flags &= ~DT_IMAGE_RAW;
+  img->flags &= ~DT_IMAGE_HDR;
+  img->flags &= ~DT_IMAGE_S_RAW;
+  img->flags |= DT_IMAGE_LDR;
+  img->loader = LOADER_J2K;
+
+  if(!mbuf)
+  {
+    ret = DT_IMAGEIO_OK;
+    goto end_of_the_world;
+  }
 
   float *buf = (float *)dt_mipmap_cache_alloc(mbuf, img);
   if(!buf)
@@ -315,14 +328,6 @@ dt_imageio_retval_t dt_imageio_open_j2k(dt_image_t *img, const char *filename, d
       for(int k = 0; k < 3; k++)
         buf[i * 4 + k] = (float)(image->comps[k].data[i] + signed_offsets[k]) / float_divs[k];
   }
-
-  img->buf_dsc.cst = IOP_CS_RGB; // j2k is always RGB
-  img->buf_dsc.filters = 0u;
-  img->flags &= ~DT_IMAGE_RAW;
-  img->flags &= ~DT_IMAGE_HDR;
-  img->flags &= ~DT_IMAGE_S_RAW;
-  img->flags |= DT_IMAGE_LDR;
-  img->loader = LOADER_J2K;
 
   ret = DT_IMAGEIO_OK;
 
@@ -721,4 +726,3 @@ static void color_sycc_to_rgb(opj_image_t *img)
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

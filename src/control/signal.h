@@ -195,8 +195,7 @@ typedef enum dt_signal_t
 
   /** \brief This signal is raised when an asynchronous darkroom image load finishes.
     1 : uint32_t the load request id
-    2 : uint32_t the async image-storage load return code
-    3 : gpointer to async image payload, automatically freed after callbacks return
+    2 : uint32_t the darkroom image load return code
     no returned value
     */
   DT_SIGNAL_IMAGE_LOADED,

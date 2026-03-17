@@ -41,7 +41,7 @@ void dt_dev_pixelpipe_update_history_main_real(struct dt_develop_t *dev);
 
 void dt_dev_pixelpipe_update_history_preview_real(struct dt_develop_t *dev);
 // Invalidate the thumbnail preview in darkroom, resync only the last history item.
-#define dt_dev_pixelpipe_update_preview(dev) DT_DEBUG_TRACE_WRAPPER(DT_DEBUG_DEV, dt_dev_pixelpipe_update_history_preview_real, (dev))
+#define dt_dev_pixelpipe_update_history_preview(dev) DT_DEBUG_TRACE_WRAPPER(DT_DEBUG_DEV, dt_dev_pixelpipe_update_history_preview_real, (dev))
 
 void dt_dev_pixelpipe_update_history_all_real(struct dt_develop_t *dev);
 // Invalidate the main image and the thumbnail in darkroom, resync only the last history item.

@@ -372,7 +372,7 @@ typedef struct dt_iop_gui_blend_data_t
   GtkWidget *masks_edit;
   GtkWidget *group_shapes_label;
   GtkWidget *masks_polarity;
-  GtkWidget *edit_toggle;
+  GtkWidget *wire_shape_toggle;
   int *masks_combo_ids;
   int masks_shown;
   GtkWidget *masks_treeview;

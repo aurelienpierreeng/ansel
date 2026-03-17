@@ -186,7 +186,8 @@ static inline gboolean _is_gamma_rgba8_output(const dt_iop_module_t *module, con
 }
 
 static void *_gpu_alloc_device_with_flush(int devid, const dt_iop_roi_t *roi, const size_t bpp,
-                                          const dt_iop_module_t *module, const char *message);
+                                          const dt_iop_module_t *module, const char *message,
+                                          void *keep);
 static void *_gpu_try_reuse_device_from_cache(dt_pixel_cache_entry_t *cache_entry, int devid,
                                               const dt_iop_roi_t *roi, const size_t bpp,
                                               gboolean *out_reused);
@@ -224,7 +225,7 @@ static void *_gpu_get_pinned_or_alloc(int devid, void *host_ptr, const dt_iop_ro
 
   if(!mem)
   {
-    dt_dev_pixelpipe_cache_flush_clmem(darktable.pixelpipe_cache, devid);
+    dt_dev_pixelpipe_cache_flush_clmem(darktable.pixelpipe_cache, devid, NULL);
     if(reuse_pinned)
       mem = _gpu_try_reuse_pinned_from_cache(cache_entry, host_ptr, devid, roi, bpp, flags, out_cst, out_reused);
     if(!mem)
@@ -240,16 +241,19 @@ static void *_gpu_get_pinned_or_alloc(int devid, void *host_ptr, const dt_iop_ro
  * @details
  * This is used when we intentionally do not want a pinned host-backed image (e.g. output buffers that we do
  * not plan to cache in RAM). Allocation failure triggers a clmem cache flush and one retry.
+ * 
+ * @param keep OpenCL buffer to NOT flush, typically the input
  */
 static void *_gpu_alloc_device_with_flush(int devid, const dt_iop_roi_t *roi, const size_t bpp,
-                                          const dt_iop_module_t *module, const char *message)
+                                          const dt_iop_module_t *module, const char *message,
+                                          void *keep)
 {
   const gboolean gamma_rgba8 = _is_gamma_rgba8_output(module, bpp, message);
   const int cl_bpp = gamma_rgba8 ? DT_OPENCL_BPP_ENCODE_RGBA8((int)bpp) : (int)bpp;
   void *mem = dt_opencl_alloc_device(devid, roi->width, roi->height, cl_bpp);
   if(!mem)
   {
-    dt_dev_pixelpipe_cache_flush_clmem(darktable.pixelpipe_cache, devid);
+    dt_dev_pixelpipe_cache_flush_clmem(darktable.pixelpipe_cache, devid, keep);
     mem = dt_opencl_alloc_device(devid, roi->width, roi->height, cl_bpp);
   }
   return mem;
@@ -321,7 +325,7 @@ static void *_gpu_init_buffer(int devid, void *const host_ptr, const dt_iop_roi_
                               dt_iop_module_t *module, const char *message,
                               dt_pixel_cache_entry_t *cache_entry, const gboolean reuse_pinned,
                               const gboolean reuse_device,
-                              int *out_cst, gboolean *out_reused)
+                              int *out_cst, gboolean *out_reused, void *keep)
 {
   // Need to use read-write mode because of in-place color space conversions.
   void *cl_mem_input = NULL;
@@ -342,7 +346,7 @@ static void *_gpu_init_buffer(int devid, void *const host_ptr, const dt_iop_roi_
       cl_mem_input = _gpu_try_reuse_device_from_cache(cache_entry, devid, roi, bpp, &reused_from_cache);
 
     if(!cl_mem_input)
-      cl_mem_input = _gpu_alloc_device_with_flush(devid, roi, bpp, module, message);
+      cl_mem_input = _gpu_alloc_device_with_flush(devid, roi, bpp, module, message, keep);
   }
 
   if(cl_mem_input == NULL)
@@ -564,7 +568,8 @@ static float *_resync_input_gpu_to_cache(dt_dev_pixelpipe_t *pipe, float *input,
 static int _gpu_prepare_cl_input(dt_dev_pixelpipe_t *pipe, dt_iop_module_t *module,
                                  float *input, void **cl_mem_input, dt_iop_colorspace_type_t *input_cst_cl,
                                  const dt_iop_roi_t *roi_in, const size_t in_bpp,
-                                 dt_pixel_cache_entry_t *input_entry, dt_pixel_cache_entry_t **locked_input_entry)
+                                 dt_pixel_cache_entry_t *input_entry, dt_pixel_cache_entry_t **locked_input_entry,
+                                 void *keep)
 {
   if(!locked_input_entry) return 1;
   *locked_input_entry = NULL;
@@ -598,7 +603,7 @@ static int _gpu_prepare_cl_input(dt_dev_pixelpipe_t *pipe, dt_iop_module_t *modu
   // Try to reuse a cached pinned buffer; otherwise allocate a new pinned image backed by `input`.
   gboolean input_reused_from_cache = FALSE;
   *cl_mem_input = _gpu_init_buffer(pipe->devid, input, roi_in, in_bpp, module, "input", input_entry,
-                                  TRUE, FALSE, input_cst_cl, &input_reused_from_cache);
+                                  TRUE, FALSE, input_cst_cl, &input_reused_from_cache, keep);
   int fail = (*cl_mem_input == NULL);
 
   // If the input is true zero-copy, the GPU will access host memory asynchronously: keep the cache

@@ -124,6 +124,7 @@
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
+#include "develop/pixelpipe_cache.h"
 #include "dtgtk/drawingarea.h"
 #include "dtgtk/expander.h"
 
@@ -242,10 +243,11 @@ typedef struct dt_iop_toneequalizer_gui_data_t
   int cursor_pos_y;
   int pipe_order;
 
-  // 6 uint64 to pack - contiguous-ish memory
-  uint64_t ui_preview_hash;
+  // Preview luminance cache state shared with the GUI.
+  // The GUI never owns raw luminance buffers directly anymore: it only keeps the
+  // cache hash, dimensions and one retained cache entry reference so every reader
+  // goes through the pixelpipe cache locking API before sampling.
   uint64_t thumb_preview_hash;
-  size_t full_preview_buf_width, full_preview_buf_height;
   size_t thumb_preview_buf_width, thumb_preview_buf_height;
 
   // Misc stuff, contiguity, length and alignment unknown
@@ -255,9 +257,10 @@ typedef struct dt_iop_toneequalizer_gui_data_t
   float histogram_first_decile;
   float histogram_last_decile;
 
-  // Heap arrays, 64 bits-aligned, unknown length
-  float *thumb_preview_buf;
-  float *full_preview_buf;
+  // Preview luminance cache entry retained across pipe runs for GUI sampling.
+  // Lifetime is explicit: process() transfers one ref to the GUI when the current
+  // preview-sized output matches darkroom preview, and invalidation/cleanup drop it.
+  dt_pixel_cache_entry_t *thumb_preview_entry;
 
   // GTK garbage, nobody cares, no SIMD here
   GtkWidget *noise, *ultra_deep_blacks, *deep_blacks, *blacks, *shadows, *midtones, *highlights, *whites, *speculars;
@@ -565,28 +568,32 @@ static gboolean in_mask_editing(dt_iop_module_t *self)
   return dev->form_gui && dt_masks_get_visible_form(dev);
 }
 
-static void hash_set_get(uint64_t *hash_in, uint64_t *hash_out, dt_pthread_mutex_t *lock)
-{
-  // Set or get a hash in a struct the thread-safe way
-  dt_pthread_mutex_lock(lock);
-  *hash_out = *hash_in;
-  dt_pthread_mutex_unlock(lock);
-}
-
-
 static void invalidate_luminance_cache(dt_iop_module_t *const self)
 {
-  // Invalidate the private luminance cache and histogram when
-  // the luminance mask extraction parameters have changed
+  // Invalidate the preview luminance cache and histogram when
+  // the luminance mask extraction parameters have changed.
+  // Keep the ref hand-off visible here: we detach the GUI from the shared cache
+  // entry under the GUI lock, then release the retained cache ref afterwards.
+  // This is one of the cases that used to go wrong when tone equalizer stored
+  // ad-hoc GUI buffers outside the pixelpipe cache.
   dt_iop_toneequalizer_gui_data_t *const restrict g = (dt_iop_toneequalizer_gui_data_t *)self->gui_data;
+  if(!g) return;
 
+  dt_pixel_cache_entry_t *preview_entry = NULL;
   dt_iop_gui_enter_critical_section(self);
   g->max_histogram = 1;
-  //g->luminance_valid = 0;
+  g->luminance_valid = FALSE;
   g->histogram_valid = 0;
-  g->thumb_preview_hash = 0;
-  g->ui_preview_hash = 0;
+  g->thumb_preview_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+  g->thumb_preview_buf_width = 0;
+  g->thumb_preview_buf_height = 0;
+  preview_entry = g->thumb_preview_entry;
+  g->thumb_preview_entry = NULL;
   dt_iop_gui_leave_critical_section(self);
+
+  if(preview_entry)
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE,
+                                           preview_entry);
 }
 
 
@@ -732,15 +739,11 @@ static inline void apply_toneequalizer(const float *const restrict in,
   {
     // The radial-basis interpolation is valid in [-8; 0] EV and can quickely diverge outside
     const float exposure = fast_clamp(log2f(luminance[k]), min_ev, max_ev);
-    float correction = lut[(unsigned)roundf((exposure - min_ev) * LUT_RESOLUTION)];
-    // apply correction
-    for(size_t c = 0; c < ch; c++)
-    {
-      if(c == 3)
-        out[k * ch + c] = in[k * ch + c];
-      else
-        out[k * ch + c] = correction * in[k * ch + c];
-    }
+    const float correction = lut[(unsigned)roundf((exposure - min_ev) * LUT_RESOLUTION)];
+    const size_t idx = k * ch;
+    const dt_aligned_pixel_simd_t pix_in = dt_load_simd_aligned(in + idx);
+    const dt_aligned_pixel_simd_t correction_v = { correction, correction, correction, 1.0f };
+    dt_store_simd_aligned(out + idx, pix_in * correction_v);
   }
 }
 
@@ -781,16 +784,11 @@ static inline void apply_toneequalizer(const float *const restrict in,
       result += gaussian_func(exposure - centers_ops[i], gauss_denom) * factors[i];
 
     // the user-set correction is expected in [-2;+2] EV, so is the interpolated one
-    float correction = fast_clamp(result, 0.25f, 4.0f);
-
-    // apply correction
-    for(size_t c = 0; c < ch; c++)
-    {
-      if(c == 3)
-        out[k * ch + c] = in[k * ch + c];
-      else
-        out[k * ch + c] = correction * in[k * ch + c];
-    }
+    const float correction = fast_clamp(result, 0.25f, 4.0f);
+    const size_t idx = k * ch;
+    const dt_aligned_pixel_simd_t pix_in = dt_load_simd_aligned(in + idx);
+    const dt_aligned_pixel_simd_t correction_v = { correction, correction, correction, 1.0f };
+    dt_store_simd_aligned(out + idx, pix_in * correction_v);
   }
 }
 #endif // USE_LUT
@@ -919,14 +917,16 @@ static inline void display_luminance_mask(const float *const restrict in,
       // and add a "gamma" 2.0 for better legibility in shadows
       const float intensity = sqrtf(fminf(fmaxf(luminance[(i + offset_y) * in_width  + (j + offset_x)] - 0.00390625f, 0.f) / 0.99609375f, 1.f));
       const size_t index = (i * out_width + j) * ch;
-      // set gray level for the mask
-      for_four_channels(c,aligned(out))
-      {
-        out[index + c] = intensity;
-      }
-      // copy alpha channel
+      dt_aligned_pixel_simd_t intensity_v = dt_simd_set1(intensity);
+
+      // Keep mask-display alpha consistent with the input while showing a grayscale mask.
       if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
-        out[index + 3] = in[((i + offset_y) * in_width + (j + offset_x)) * ch + 3];
+      {
+        const size_t in_index = ((i + offset_y) * in_width + (j + offset_x)) * ch;
+        intensity_v[3] = in[in_index + 3];
+      }
+
+      dt_store_simd_aligned(out + index, intensity_v);
     }
 }
 
@@ -941,6 +941,9 @@ static int toneeq_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *
   const float *const restrict in = dt_check_sse_aligned((float *const)ivoid);
   float *const restrict out = dt_check_sse_aligned((float *const)ovoid);
   float *restrict luminance = NULL;
+  dt_pixel_cache_entry_t *luminance_entry = NULL;
+  gboolean created_luminance_entry = FALSE;
+  uint64_t luminance_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
 
   if(in == NULL || out == NULL)
   {
@@ -957,7 +960,7 @@ static int toneeq_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *
 
   // Get the hash of the upstream pipe to track changes
   const int position = self->iop_order;
-  uint64_t hash = piece->global_hash;
+  const gboolean preview_output = dt_dev_pixelpipe_has_preview_output(self->dev, piece->pipe, roi_out);
 
   // Sanity checks
   if(width < 1 || height < 1) return 1;
@@ -971,150 +974,97 @@ static int toneeq_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *
     return 0;
   }
 
-  // Init the luminance masks buffers
-  gboolean cached = FALSE;
-
   if(self->dev->gui_attached)
   {
     // If the module instance has changed order in the pipe, invalidate the caches
-    if(g->pipe_order != position)
+    if(g && g->pipe_order != position)
     {
+      dt_pixel_cache_entry_t *preview_entry = NULL;
       dt_iop_gui_enter_critical_section(self);
-      g->ui_preview_hash = 0;
-      g->thumb_preview_hash = 0;
       g->pipe_order = position;
+      g->thumb_preview_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+      g->thumb_preview_buf_width = 0;
+      g->thumb_preview_buf_height = 0;
       g->luminance_valid = FALSE;
       g->histogram_valid = FALSE;
+      preview_entry = g->thumb_preview_entry;
+      g->thumb_preview_entry = NULL;
       dt_iop_gui_leave_critical_section(self);
+
+      if(preview_entry)
+        dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE,
+                                               preview_entry);
     }
-
-    if(piece->pipe->type == DT_DEV_PIXELPIPE_FULL)
-    {
-      // For DT_DEV_PIXELPIPE_FULL, we cache the luminance mask for performance
-      // but it's not accessed from GUI
-      // no need for threads lock since no other function is writing/reading that buffer
-
-      // Re-allocate a new buffer if the full preview size has changed
-      if(g->full_preview_buf_width != width || g->full_preview_buf_height != height)
-      {
-        dt_pixelpipe_cache_free_align(g->full_preview_buf);
-        g->full_preview_buf = dt_pixelpipe_cache_alloc_align_float(num_elem, piece->pipe);
-        if(!g->full_preview_buf) return 1;
-        g->full_preview_buf_width = width;
-        g->full_preview_buf_height = height;
-      }
-
-      luminance = g->full_preview_buf;
-      cached = TRUE;
-    }
-
-    else if(piece->pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
-    {
-      // For DT_DEV_PIXELPIPE_PREVIEW, we need to cache is too to compute the full image stats
-      // upon user request in GUI
-      // threads locks are required since GUI reads and writes on that buffer.
-
-      // Re-allocate a new buffer if the thumb preview size has changed
-      dt_iop_gui_enter_critical_section(self);
-      if(g->thumb_preview_buf_width != width || g->thumb_preview_buf_height != height)
-      {
-        dt_pixelpipe_cache_free_align(g->thumb_preview_buf);
-        g->thumb_preview_buf = dt_pixelpipe_cache_alloc_align_float(num_elem, piece->pipe);
-        if(!g->thumb_preview_buf)
-        {
-          dt_iop_gui_leave_critical_section(self);
-          return 1;
-        }
-        g->thumb_preview_buf_width = width;
-        g->thumb_preview_buf_height = height;
-        g->luminance_valid = FALSE;
-      }
-
-      luminance = g->thumb_preview_buf;
-      cached = TRUE;
-
-      dt_iop_gui_leave_critical_section(self);
-    }
-    else // just to please GCC
-    {
-      luminance = dt_pixelpipe_cache_alloc_align_float(num_elem, piece->pipe);
-    }
-
-  }
-  else
-  {
-    // no interactive editing/caching : just allocate a local temp buffer
-    luminance = dt_pixelpipe_cache_alloc_align_float(num_elem, piece->pipe);
   }
 
-  // Check if the luminance buffer exists
-  if(!luminance)
-    return 1;
-
-  // Compute the luminance mask
-  if(cached)
+  if(self->dev->gui_attached)
   {
-    // caching path : store the luminance mask for GUI access
+    // Cache the luminance mask in the shared pixelpipe cache so the key follows
+    // the exact module state and GUI readers can reuse the same lifetime/locking model.
+    // `piece->global_hash` already includes the upstream image state and the module
+    // params committed to that run, so the luminance cacheline stays coherent with
+    // both preview and main pipelines without adding toneequal-specific validity rules.
+    //
+    // The fixes we rely on here were exercised with:
+    // - history edits and parameter edits invalidating/rebuilding the mask,
+    // - opening the module on an already computed preview and reattaching to the
+    //   existing cacheline without waiting for a fresh process(),
+    // - GUI histogram/cursor sampling while the worker threads are running,
+    // - mask display staying restricted to the full pipe while the luminance data
+    //   itself comes from whichever pipe produced the preview-sized output.
+    dt_iop_buffer_dsc_t luminance_dsc = { 0 };
+    luminance_dsc.channels = 1;
+    luminance_dsc.datatype = TYPE_FLOAT;
+    luminance_dsc.cst = IOP_CS_NONE;
+    dt_iop_buffer_dsc_t *cache_dsc = &luminance_dsc;
+    void *cache_data = NULL;
+    static const char cache_tag[] = "toneequal:luminance";
+    luminance_hash = dt_hash(piece->global_hash, cache_tag, sizeof(cache_tag));
 
-    if(piece->pipe->type == DT_DEV_PIXELPIPE_FULL)
+    created_luminance_entry = dt_dev_pixelpipe_cache_get(darktable.pixelpipe_cache, luminance_hash,
+                                                         num_elem * sizeof(float), "toneequal luminance",
+                                                         piece->pipe->type, TRUE, &cache_data, &cache_dsc,
+                                                         &luminance_entry);
+    luminance = (float *)cache_data;
+    if(!luminance || !luminance_entry)
     {
-      uint64_t saved_hash;
-      hash_set_get(&g->ui_preview_hash, &saved_hash, &self->gui_lock);
-
-      dt_iop_gui_enter_critical_section(self);
-      const int luminance_valid = g->luminance_valid;
-      dt_iop_gui_leave_critical_section(self);
-
-      if(hash != saved_hash || !luminance_valid)
+      if(luminance_entry)
       {
-        /* compute only if upstream pipe state has changed */
-        if(compute_luminance_mask(in, luminance, width, height, ch, d) != 0)
-        {
-          if(!cached) dt_pixelpipe_cache_free_align(luminance);
-          return 1;
-        }
-        hash_set_get(&hash, &g->ui_preview_hash, &self->gui_lock);
+        if(created_luminance_entry)
+          dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE,
+                                              luminance_entry);
+        dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE,
+                                               luminance_entry);
       }
+      return 1;
     }
-    else if(piece->pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
-    {
-      uint64_t saved_hash;
-      hash_set_get(&g->thumb_preview_hash, &saved_hash, &self->gui_lock);
 
-      dt_iop_gui_enter_critical_section(self);
-      const int luminance_valid = g->luminance_valid;
-      dt_iop_gui_leave_critical_section(self);
-
-      if(saved_hash != hash || !luminance_valid)
-      {
-        /* compute only if upstream pipe state has changed */
-        if(compute_luminance_mask(in, luminance, width, height, ch, d) != 0)
-        {
-          if(!cached) dt_pixelpipe_cache_free_align(luminance);
-          return 1;
-        }
-        dt_iop_gui_enter_critical_section(self);
-        g->thumb_preview_hash = hash;
-        g->histogram_valid = FALSE;
-        g->luminance_valid = TRUE;
-        dt_iop_gui_leave_critical_section(self);
-      }
-    }
-    else // make it dummy-proof
+    if(created_luminance_entry)
     {
       if(compute_luminance_mask(in, luminance, width, height, ch, d) != 0)
       {
-        if(!cached) dt_pixelpipe_cache_free_align(luminance);
+        dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE,
+                                            luminance_entry);
+        dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE,
+                                               luminance_entry);
+        dt_dev_pixelpipe_cache_remove(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, TRUE,
+                                      luminance_entry);
         return 1;
       }
+
+      dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE,
+                                          luminance_entry);
     }
   }
   else
   {
-    // no caching path : compute no matter what
+    // Export/thumbnail pipes don't need persistent GUI sampling, so a local temp buffer is enough.
+    luminance = dt_pixelpipe_cache_alloc_align_float(num_elem, piece->pipe);
+    if(!luminance) return 1;
+
     if(compute_luminance_mask(in, luminance, width, height, ch, d) != 0)
     {
-      if(!cached) dt_pixelpipe_cache_free_align(luminance);
+      dt_pixelpipe_cache_free_align(luminance);
       return 1;
     }
   }
@@ -1136,7 +1086,47 @@ static int toneeq_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *
     apply_toneequalizer(in, luminance, out, roi_in, roi_out, ch, d);
   }
 
-  if(!cached) dt_pixelpipe_cache_free_align(luminance);
+  if(preview_output && self->dev->gui_attached && g && luminance_entry)
+  {
+    dt_pixel_cache_entry_t *old_entry = NULL;
+    gboolean keep_process_ref = FALSE;
+
+    // Transfer one cache ref from this process run to the GUI if this run produced
+    // the preview-sized image darkroom is sampling from. Keeping this explicit avoids
+    // guessing whether FULL/PREVIEW pipe type owns the GUI state when both pipes can
+    // share the same output size.
+    dt_iop_gui_enter_critical_section(self);
+    if(g->thumb_preview_entry != luminance_entry || g->thumb_preview_hash != luminance_hash)
+    {
+      old_entry = g->thumb_preview_entry;
+      g->thumb_preview_entry = luminance_entry;
+      g->thumb_preview_hash = luminance_hash;
+      g->thumb_preview_buf_width = width;
+      g->thumb_preview_buf_height = height;
+      g->luminance_valid = TRUE;
+      g->histogram_valid = FALSE;
+      keep_process_ref = TRUE;
+    }
+    dt_iop_gui_leave_critical_section(self);
+
+    if(old_entry)
+      dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE,
+                                             old_entry);
+
+    if(!keep_process_ref)
+      dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE,
+                                             luminance_entry);
+  }
+  else if(luminance_entry)
+  {
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE,
+                                           luminance_entry);
+  }
+  else
+  {
+    dt_pixelpipe_cache_free_align(luminance);
+  }
+
   return 0;
 }
 
@@ -1322,8 +1312,7 @@ static void gui_cache_init(struct dt_iop_module_t *self)
   if(g == NULL) return;
 
   dt_iop_gui_enter_critical_section(self);
-  g->ui_preview_hash = 0;
-  g->thumb_preview_hash = 0;
+  g->thumb_preview_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
   g->max_histogram = 1;
   g->scale = 1.0f;
   g->sigma = sqrtf(2.0f);
@@ -1344,11 +1333,7 @@ static void gui_cache_init(struct dt_iop_module_t *self)
   g->cursor_valid = FALSE;         // TRUE if mouse cursor is over the preview image
   g->has_focus = FALSE;            // TRUE if module has focus from GTK
 
-  g->full_preview_buf = NULL;
-  g->full_preview_buf_width = 0;
-  g->full_preview_buf_height = 0;
-
-  g->thumb_preview_buf = NULL;
+  g->thumb_preview_entry = NULL;
   g->thumb_preview_buf_width = 0;
   g->thumb_preview_buf_height = 0;
 
@@ -1460,16 +1445,71 @@ static inline void update_histogram(struct dt_iop_module_t *const self)
   dt_iop_toneequalizer_gui_data_t *const g = (dt_iop_toneequalizer_gui_data_t *)self->gui_data;
   if(g == NULL) return;
 
+  dt_pixel_cache_entry_t *preview_entry = NULL;
+  size_t width = 0;
+  size_t height = 0;
+  uint64_t preview_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+  gboolean needs_histogram = FALSE;
+
+  // Readers take a temporary cache ref while copying the GUI-visible entry pointer,
+  // then read-lock the cacheline only around the actual sampling. This keeps both
+  // ownership transfer and lock lifetime visible at the call site.
   dt_iop_gui_enter_critical_section(self);
-  if(!g->histogram_valid && g->luminance_valid)
+  if(!g->histogram_valid && g->luminance_valid && g->thumb_preview_entry)
   {
-    const size_t num_elem = g->thumb_preview_buf_height * g->thumb_preview_buf_width;
-    compute_log_histogram_and_stats(g->thumb_preview_buf, g->histogram, num_elem, &g->max_histogram,
-                                      &g->histogram_first_decile, &g->histogram_last_decile);
-    g->histogram_average = (g->histogram_first_decile + g->histogram_last_decile) / 2.0f;
+    preview_entry = g->thumb_preview_entry;
+    width = g->thumb_preview_buf_width;
+    height = g->thumb_preview_buf_height;
+    preview_hash = g->thumb_preview_hash;
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, TRUE,
+                                           preview_entry);
+    needs_histogram = TRUE;
+  }
+  dt_iop_gui_leave_critical_section(self);
+
+  if(!needs_histogram || width == 0 || height == 0)
+  {
+    if(preview_entry)
+      dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE,
+                                             preview_entry);
+    return;
+  }
+
+  int histogram[UI_SAMPLES];
+  int max_histogram = 1;
+  float first_decile = 0.0f;
+  float last_decile = 0.0f;
+
+  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, TRUE,
+                                      preview_entry);
+  const float *const preview_buf = (const float *const)dt_pixel_cache_entry_get_data(preview_entry);
+  if(preview_buf)
+    compute_log_histogram_and_stats(preview_buf, histogram, width * height, &max_histogram, &first_decile,
+                                    &last_decile);
+  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE,
+                                      preview_entry);
+
+  if(!preview_buf)
+  {
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE,
+                                           preview_entry);
+    return;
+  }
+
+  dt_iop_gui_enter_critical_section(self);
+  if(g->thumb_preview_entry == preview_entry && g->thumb_preview_hash == preview_hash && !g->histogram_valid)
+  {
+    memcpy(g->histogram, histogram, sizeof(histogram));
+    g->max_histogram = max_histogram;
+    g->histogram_first_decile = first_decile;
+    g->histogram_last_decile = last_decile;
+    g->histogram_average = (first_decile + last_decile) / 2.0f;
     g->histogram_valid = TRUE;
   }
   dt_iop_gui_leave_critical_section(self);
+
+  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE,
+                                         preview_entry);
 }
 
 
@@ -2057,12 +2097,47 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   }
   dt_iop_gui_leave_critical_section(self);
 
-  // store the actual exposure too, to spare I/O op
-  if(g->cursor_valid && !dev->pipe->processing && g->luminance_valid)
-    g->cursor_exposure = log2f(get_luminance_from_buffer(g->thumb_preview_buf,
-                                                         g->thumb_preview_buf_width,
-                                                         g->thumb_preview_buf_height,
-                                                         (size_t)x_pointer, (size_t)y_pointer));
+  // Store the current preview exposure too, to spare recomputing it in the UI callbacks.
+  if(g->cursor_valid && !dev->pipe->processing && g->luminance_valid && g->thumb_preview_entry)
+  {
+    dt_pixel_cache_entry_t *preview_entry = NULL;
+    size_t preview_width = 0;
+    size_t preview_height = 0;
+
+    dt_iop_gui_enter_critical_section(self);
+    preview_entry = g->thumb_preview_entry;
+    preview_width = g->thumb_preview_buf_width;
+    preview_height = g->thumb_preview_buf_height;
+    if(preview_entry)
+      dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, TRUE,
+                                             preview_entry);
+    dt_iop_gui_leave_critical_section(self);
+
+    if(preview_entry && preview_width > 0 && preview_height > 0)
+    {
+      dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, TRUE,
+                                          preview_entry);
+      const float *const preview_buf = (const float *const)dt_pixel_cache_entry_get_data(preview_entry);
+      const float cursor_exposure
+          = preview_buf ? log2f(get_luminance_from_buffer(preview_buf, preview_width, preview_height,
+                                                          (size_t)x_pointer, (size_t)y_pointer))
+                        : NAN;
+      dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE,
+                                          preview_entry);
+
+      if(!isnan(cursor_exposure))
+      {
+        dt_iop_gui_enter_critical_section(self);
+        g->cursor_exposure = cursor_exposure;
+        dt_iop_gui_leave_critical_section(self);
+      }
+
+    }
+
+    if(preview_entry)
+      dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE,
+                                             preview_entry);
+  }
 
   _switch_cursors(self);
   return 1;
@@ -2166,13 +2241,46 @@ int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t 
   dt_iop_gui_leave_critical_section(self);
   if(fail) return 1;
 
-  // re-read the exposure in case it has changed
+  // Re-read the exposure in case the preview changed after the mouse moved.
+  dt_pixel_cache_entry_t *preview_entry = NULL;
+  size_t preview_width = 0;
+  size_t preview_height = 0;
+  int cursor_x = 0;
+  int cursor_y = 0;
   dt_iop_gui_enter_critical_section(self);
-  g->cursor_exposure = log2f(get_luminance_from_buffer(g->thumb_preview_buf,
-                                                       g->thumb_preview_buf_width,
-                                                       g->thumb_preview_buf_height,
-                                                       (size_t)g->cursor_pos_x, (size_t)g->cursor_pos_y));
+  preview_entry = g->thumb_preview_entry;
+  preview_width = g->thumb_preview_buf_width;
+  preview_height = g->thumb_preview_buf_height;
+  cursor_x = g->cursor_pos_x;
+  cursor_y = g->cursor_pos_y;
+  if(preview_entry)
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, TRUE,
+                                           preview_entry);
   dt_iop_gui_leave_critical_section(self);
+
+  if(preview_entry && preview_width > 0 && preview_height > 0)
+  {
+    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, TRUE,
+                                        preview_entry);
+    const float *const preview_buf = (const float *const)dt_pixel_cache_entry_get_data(preview_entry);
+    const float cursor_exposure
+        = preview_buf ? log2f(get_luminance_from_buffer(preview_buf, preview_width, preview_height,
+                                                        (size_t)cursor_x, (size_t)cursor_y))
+                      : NAN;
+    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE,
+                                        preview_entry);
+
+    if(!isnan(cursor_exposure))
+    {
+      dt_iop_gui_enter_critical_section(self);
+      g->cursor_exposure = cursor_exposure;
+      dt_iop_gui_leave_critical_section(self);
+    }
+  }
+
+  if(preview_entry)
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE,
+                                           preview_entry);
 
   // Set the correction from mouse scroll input
   const float increment = (up) ? +1.0f : -1.0f;
@@ -2308,6 +2416,11 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   // Get coordinates
   const float x_pointer = g->cursor_pos_x;
   const float y_pointer = g->cursor_pos_y;
+  dt_pixel_cache_entry_t *preview_entry = NULL;
+  size_t preview_width = 0;
+  size_t preview_height = 0;
+  float factors[PIXEL_CHAN] DT_ALIGNED_ARRAY;
+  float sigma = 0.0f;
 
   float exposure_in = 0.0f;
   float luminance_in = 0.0f;
@@ -2316,23 +2429,51 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   float luminance_out = 0.0f;
   if(g->luminance_valid && self->enabled)
   {
-    // re-read the exposure in case it has changed
-    g->cursor_exposure = log2f(get_luminance_from_buffer(g->thumb_preview_buf,
-                                                         g->thumb_preview_buf_width,
-                                                         g->thumb_preview_buf_height,
-                                                         (size_t)g->cursor_pos_x, (size_t)g->cursor_pos_y));
-
-    // Get the corresponding exposure
-    exposure_in = g->cursor_exposure;
-    luminance_in = exp2f(exposure_in);
-
-    // Get the corresponding correction and compute resulting exposure
-    correction = log2f(pixel_correction(exposure_in, g->factors, g->sigma));
-    exposure_out = exposure_in + correction;
-    luminance_out = exp2f(exposure_out);
+    preview_entry = g->thumb_preview_entry;
+    preview_width = g->thumb_preview_buf_width;
+    preview_height = g->thumb_preview_buf_height;
+    if(preview_entry)
+      dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, TRUE,
+                                             preview_entry);
+    dt_simd_memcpy(g->factors, factors, PIXEL_CHAN);
+    sigma = g->sigma;
   }
 
   dt_iop_gui_leave_critical_section(self);
+
+  if(preview_entry && preview_width > 0 && preview_height > 0)
+  {
+    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, TRUE,
+                                        preview_entry);
+    const float *const preview_buf = (const float *const)dt_pixel_cache_entry_get_data(preview_entry);
+    if(preview_buf)
+    {
+      exposure_in = log2f(get_luminance_from_buffer(preview_buf, preview_width, preview_height,
+                                                    (size_t)x_pointer, (size_t)y_pointer));
+      luminance_in = exp2f(exposure_in);
+      correction = log2f(pixel_correction(exposure_in, factors, sigma));
+      exposure_out = exposure_in + correction;
+      luminance_out = exp2f(exposure_out);
+    }
+    else
+    {
+      exposure_in = NAN;
+      correction = NAN;
+    }
+    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE,
+                                        preview_entry);
+
+    if(!isnan(exposure_in))
+    {
+      dt_iop_gui_enter_critical_section(self);
+      g->cursor_exposure = exposure_in;
+      dt_iop_gui_leave_critical_section(self);
+    }
+  }
+
+  if(preview_entry)
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE,
+                                           preview_entry);
 
   if(isnan(correction) || isnan(exposure_in)) return; // something went wrong
 
@@ -2392,7 +2533,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   pango_cairo_context_set_resolution(pango_layout_get_context(layout), darktable.gui->dpi);
 
   // Build text object
-  if(g->luminance_valid && self->enabled)
+  if(preview_entry && self->enabled)
     snprintf(text, sizeof(text), _("%+.1f EV"), exposure_in);
   else
     snprintf(text, sizeof(text), "? EV");
@@ -2418,7 +2559,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   pango_font_description_free(desc);
   g_object_unref(layout);
 
-  if(g->luminance_valid && self->enabled)
+  if(preview_entry && self->enabled)
   {
     // Search for nearest node in graph and highlight it
     const float radius_threshold = 0.45f;
@@ -2454,6 +2595,64 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
   }
   else
   {
+    gboolean needs_preview_update = FALSE;
+
+    if(self->enabled && self->dev && self->dev->preview_pipe && !self->dev->preview_pipe->processing)
+    {
+      dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->preview_pipe, self);
+      if(piece && piece->enabled && piece->planned_roi_in.width > 0 && piece->planned_roi_in.height > 0)
+      {
+        // Opening the module can happen after preview processing already finished.
+        // In that case the preview pipe may stay idle because darkroom can reuse an
+        // existing backbuffer, so reattach to the existing luminance cacheline here
+        // instead of waiting for process() to run again. This was tested by opening
+        // tone equalizer on a fresh darkroom image with no pending recompute.
+        static const char cache_tag[] = "toneequal:luminance";
+        const uint64_t preview_hash = dt_hash(piece->global_hash, cache_tag, sizeof(cache_tag));
+        void *preview_buf = NULL;
+        dt_pixel_cache_entry_t *preview_entry = NULL;
+
+        if(dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, preview_hash, &preview_buf, NULL, &preview_entry)
+           && preview_buf && preview_entry)
+        {
+          dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, TRUE,
+                                                 preview_entry);
+
+          dt_pixel_cache_entry_t *old_entry = NULL;
+          gboolean keep_new_entry = FALSE;
+          dt_iop_gui_enter_critical_section(self);
+          if(g->thumb_preview_entry != preview_entry || g->thumb_preview_hash != preview_hash
+             || g->thumb_preview_buf_width != piece->planned_roi_in.width
+             || g->thumb_preview_buf_height != piece->planned_roi_in.height || !g->luminance_valid)
+          {
+            old_entry = g->thumb_preview_entry;
+            g->thumb_preview_entry = preview_entry;
+            g->thumb_preview_hash = preview_hash;
+            g->thumb_preview_buf_width = piece->planned_roi_in.width;
+            g->thumb_preview_buf_height = piece->planned_roi_in.height;
+            g->luminance_valid = TRUE;
+            g->histogram_valid = FALSE;
+            keep_new_entry = TRUE;
+          }
+          dt_iop_gui_leave_critical_section(self);
+
+          if(old_entry)
+            dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID,
+                                                   FALSE, old_entry);
+          if(!keep_new_entry)
+            dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID,
+                                                   FALSE, preview_entry);
+        }
+        else
+          needs_preview_update = TRUE;
+      }
+      else
+        needs_preview_update = TRUE;
+    }
+
+    if(needs_preview_update)
+      dt_dev_pixelpipe_update_history_preview(self->dev);
+
     dt_control_hinter_message(darktable.control,
                               _("scroll over image to change tone exposure\n"
                                 "shift+scroll for large steps; "
@@ -3242,8 +3441,9 @@ void gui_cleanup(struct dt_iop_module_t *self)
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_develop_ui_pipe_started_callback), self);
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_develop_preview_pipe_finished_callback), self);
 
-  dt_pixelpipe_cache_free_align(g->thumb_preview_buf);
-  dt_pixelpipe_cache_free_align(g->full_preview_buf);
+  if(g->thumb_preview_entry)
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE,
+                                           g->thumb_preview_entry);
   if(g->desc) pango_font_description_free(g->desc);
   if(g->layout) g_object_unref(g->layout);
   if(g->cr) cairo_destroy(g->cr);

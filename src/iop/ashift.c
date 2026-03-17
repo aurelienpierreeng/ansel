@@ -2933,7 +2933,7 @@ static int _do_get_structure_auto(dt_iop_module_t *self, dt_iop_ashift_params_t 
   if(b == NULL)
   {
     dt_control_log(_("Data pending - Please repeat"));
-    dt_dev_pixelpipe_update_preview(self->dev);
+    dt_dev_pixelpipe_update_history_preview(self->dev);
     goto error;
   }
 
@@ -2983,7 +2983,7 @@ static void _do_get_structure_lines(dt_iop_module_t *self)
   if(b == NULL)
   {
     dt_control_log(_("Data pending - Please repeat"));
-    dt_dev_pixelpipe_update_preview(self->dev);
+    dt_dev_pixelpipe_update_history_preview(self->dev);
     return;
   }
 
@@ -3018,7 +3018,7 @@ static void _do_get_structure_quad(dt_iop_module_t *self)
   if(b == NULL)
   {
     dt_control_log(_("Data pending - Please repeat"));
-    dt_dev_pixelpipe_update_preview(self->dev);
+    dt_dev_pixelpipe_update_history_preview(self->dev);
     return;
   }
 
@@ -3127,7 +3127,7 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
 
   // only for preview pipe: collect input buffer data and do some other evaluations
   if(g && self->dev->gui_attached
-     && piece->pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
+     && dt_dev_pixelpipe_has_preview_output(self->dev, piece->pipe, roi_out))
   {
     // we want to find out if the final output image is flipped in relation to this iop
     // so we can adjust the gui labels accordingly
@@ -3268,7 +3268,7 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
   cl_mem dev_homo = NULL;
 
   // only for preview pipe: collect input buffer data and do some other evaluations
-  if(self->dev->gui_attached && g && piece->pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
+  if(self->dev->gui_attached && g && dt_dev_pixelpipe_has_preview_output(self->dev, piece->pipe, roi_out))
   {
     // we want to find out if the final output image is flipped in relation to this iop
     // so we can adjust the gui labels accordingly
@@ -4985,7 +4985,7 @@ static int _event_fit_v_button_clicked(GtkWidget *widget, GdkEventButton *event,
       // the preview image is ready
       g->jobcode = ASHIFT_JOBCODE_FIT;
       g->jobparams = g->lastfit = fitaxis;
-      dt_dev_pixelpipe_update_preview(self->dev);
+      dt_dev_pixelpipe_update_history_preview(self->dev);
     }
     return TRUE;
   }
@@ -5032,7 +5032,7 @@ static int _event_fit_h_button_clicked(GtkWidget *widget, GdkEventButton *event,
       // the preview image is ready
       g->jobcode = ASHIFT_JOBCODE_FIT;
       g->jobparams = g->lastfit = fitaxis;
-      dt_dev_pixelpipe_update_preview(self->dev);
+      dt_dev_pixelpipe_update_history_preview(self->dev);
     }
     return TRUE;
   }
@@ -5081,7 +5081,7 @@ static int _event_fit_both_button_clicked(GtkWidget *widget, GdkEventButton *eve
       // the preview image is ready
       g->jobcode = ASHIFT_JOBCODE_FIT;
       g->jobparams = g->lastfit = fitaxis;
-      dt_dev_pixelpipe_update_preview(self->dev);
+      dt_dev_pixelpipe_update_history_preview(self->dev);
     }
     return TRUE;
   }
@@ -5137,7 +5137,7 @@ static int _event_structure_auto_clicked(GtkWidget *widget, GdkEventButton *even
       g->jobparams = enhance;
     }
 
-    dt_dev_pixelpipe_update_preview(self->dev);
+    dt_dev_pixelpipe_update_history_preview(self->dev);
     return TRUE;
   }
   return FALSE;
@@ -5162,7 +5162,7 @@ static int _event_structure_quad_clicked(GtkWidget *widget, GdkEventButton *even
     // module is not enabled -> invoke it and queue the job to be processed once
     // the preview image is ready
     g->jobcode = ASHIFT_JOBCODE_GET_STRUCTURE_QUAD;
-    dt_dev_pixelpipe_update_preview(self->dev);
+    dt_dev_pixelpipe_update_history_preview(self->dev);
   }
 
   return TRUE;
@@ -5189,7 +5189,7 @@ static int _event_structure_lines_clicked(GtkWidget *widget, GdkEventButton *eve
     g->jobcode = ASHIFT_JOBCODE_GET_STRUCTURE_LINES;
   }
 
-  dt_dev_pixelpipe_update_preview(self->dev);
+  dt_dev_pixelpipe_update_history_preview(self->dev);
   return TRUE;
 }
 
@@ -5586,7 +5586,7 @@ void gui_init(struct dt_iop_module_t *self)
     (&g->cs,
      "plugins/darkroom/ashift/expand_values",
      _("Manual settings"),
-     GTK_BOX(main_box));
+     GTK_BOX(main_box), GTK_PACK_END);
 
   self->widget = GTK_WIDGET(g->cs.container);
 
@@ -5715,6 +5715,9 @@ void gui_init(struct dt_iop_module_t *self)
                                                    "ctrl+shift+click for a combination of both methods"));
   gtk_widget_set_tooltip_text(g->structure_quad, _("manually define perspective rectangle"));
   gtk_widget_set_tooltip_text(g->structure_lines, _("manually draw structure lines"));
+
+  // Ensure the expander body has its subtree visible even when global show_all is blocked.
+  gtk_widget_show_all(GTK_WIDGET(g->cs.container));
 
   g_signal_connect(G_OBJECT(g->fit_v), "button-press-event", G_CALLBACK(_event_fit_v_button_clicked),
                    (gpointer)self);

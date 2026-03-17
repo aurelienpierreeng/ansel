@@ -203,7 +203,7 @@ typedef struct dt_dev_pixelpipe_t
   // instances of pixelpipe, stored in GList of dt_dev_pixelpipe_iop_t
   GList *nodes;
   // event flag
-  dt_dev_pixelpipe_change_t changed;
+  dt_atomic_int changed;
 
   // backbuffer (output)
   dt_backbuf_t backbuf;
@@ -337,6 +337,21 @@ static inline uint64_t dt_dev_pixelpipe_get_history_hash(const dt_dev_pixelpipe_
 static inline void dt_dev_pixelpipe_set_history_hash(dt_dev_pixelpipe_t *pipe, const uint64_t history_hash)
 {
   dt_atomic_set_uint64(&pipe->history_hash, history_hash);
+}
+
+static inline dt_dev_pixelpipe_change_t dt_dev_pixelpipe_get_changed(const dt_dev_pixelpipe_t *pipe)
+{
+  return (dt_dev_pixelpipe_change_t)dt_atomic_get_int((dt_atomic_int *)&pipe->changed);
+}
+
+static inline void dt_dev_pixelpipe_set_changed(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_change_t v)
+{
+  dt_atomic_set_int((dt_atomic_int *)&pipe->changed, (int)v);
+}
+
+static inline void dt_dev_pixelpipe_or_changed(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_change_t flags)
+{
+  dt_atomic_or_int((dt_atomic_int *)&pipe->changed, (int)flags);
 }
 
 struct dt_develop_t;

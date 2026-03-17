@@ -678,6 +678,239 @@ interpolate_and_mask(read_only image2d_t input,
   write_imagef(clipping_mask, (int2)(j, i), clipped);
 }
 
+kernel void
+highlights_normalize_reduce_first(read_only image2d_t in, const int width, const int height,
+                                  global float4 *accu, const unsigned int filters,
+                                  const int rx, const int ry, local float4 *buffer)
+{
+  const int x = get_global_id(0);
+  const int y = get_global_id(1);
+  const int xlsz = get_local_size(0);
+  const int ylsz = get_local_size(1);
+  const int xlid = get_local_id(0);
+  const int ylid = get_local_id(1);
+  const int l = mad24(ylid, xlsz, xlid);
+
+  const float n_pixels = (float)(width * height);
+  const int inside = (x < width && y < height);
+  const int c = inside ? FC(y + ry, x + rx, filters) : -1;
+  const float pixel = inside ? read_imagef(in, sampleri, (int2)(x, y)).x / n_pixels : 0.f;
+
+  buffer[l] = (float4)(c == RED ? pixel : 0.f,
+                       c == GREEN ? pixel : 0.f,
+                       c == BLUE ? pixel : 0.f,
+                       1.f);
+
+  barrier(CLK_LOCAL_MEM_FENCE);
+
+  const int lsz = mul24(xlsz, ylsz);
+  for(int offset = lsz / 2; offset > 0; offset /= 2)
+  {
+    if(l < offset) buffer[l].xyz += buffer[l + offset].xyz;
+    barrier(CLK_LOCAL_MEM_FENCE);
+  }
+
+  if(l == 0)
+  {
+    const int xgid = get_group_id(0);
+    const int ygid = get_group_id(1);
+    const int xgsz = get_num_groups(0);
+    accu[mad24(ygid, xgsz, xgid)] = buffer[0];
+  }
+}
+
+kernel void
+highlights_normalize_reduce_first_xtrans(read_only image2d_t in, const int width, const int height,
+                                         global float4 *accu, const int rx, const int ry,
+                                         global const unsigned char (*const xtrans)[6],
+                                         local float4 *buffer)
+{
+  const int x = get_global_id(0);
+  const int y = get_global_id(1);
+  const int xlsz = get_local_size(0);
+  const int ylsz = get_local_size(1);
+  const int xlid = get_local_id(0);
+  const int ylid = get_local_id(1);
+  const int l = mad24(ylid, xlsz, xlid);
+
+  const float n_pixels = (float)(width * height);
+  const int inside = (x < width && y < height);
+  const int c = inside ? FCxtrans(y + ry, x + rx, xtrans) : -1;
+  const float pixel = inside ? read_imagef(in, sampleri, (int2)(x, y)).x / n_pixels : 0.f;
+
+  buffer[l] = (float4)(c == RED ? pixel : 0.f,
+                       c == GREEN ? pixel : 0.f,
+                       c == BLUE ? pixel : 0.f,
+                       1.f);
+
+  barrier(CLK_LOCAL_MEM_FENCE);
+
+  const int lsz = mul24(xlsz, ylsz);
+  for(int offset = lsz / 2; offset > 0; offset /= 2)
+  {
+    if(l < offset) buffer[l].xyz += buffer[l + offset].xyz;
+    barrier(CLK_LOCAL_MEM_FENCE);
+  }
+
+  if(l == 0)
+  {
+    const int xgid = get_group_id(0);
+    const int ygid = get_group_id(1);
+    const int xgsz = get_num_groups(0);
+    accu[mad24(ygid, xgsz, xgid)] = buffer[0];
+  }
+}
+
+kernel void
+highlights_normalize_reduce_second(const global float4 *input, global float4 *result,
+                                   const int length, local float4 *buffer)
+{
+  int x = get_global_id(0);
+  float4 sum = (float4)0.f;
+
+  while(x < length)
+  {
+    sum.xyz += input[x].xyz;
+    x += get_global_size(0);
+  }
+
+  const int lid = get_local_id(0);
+  buffer[lid] = sum;
+  barrier(CLK_LOCAL_MEM_FENCE);
+
+  for(int offset = get_local_size(0) / 2; offset > 0; offset /= 2)
+  {
+    if(lid < offset) buffer[lid].xyz += buffer[lid + offset].xyz;
+    barrier(CLK_LOCAL_MEM_FENCE);
+  }
+
+  if(lid == 0)
+  {
+    const int gid = get_group_id(0);
+    buffer[0].w = 1.f;
+    result[gid] = buffer[0];
+  }
+}
+
+kernel void
+interpolate_and_mask_xtrans(read_only image2d_t input,
+                            write_only image2d_t interpolated,
+                            write_only image2d_t clipping_mask,
+                            constant float *clips,
+                            constant float *wb,
+                            const int width, const int height,
+                            const int rx, const int ry,
+                            global const unsigned char (*const xtrans)[6],
+                            global const int (*const lookup)[6][32])
+{
+  const int j = get_global_id(0);
+  const int i = get_global_id(1);
+
+  if(j >= width || i >= height) return;
+
+  const float center = read_imagef(input, sampleri, (int2)(j, i)).x;
+
+  float R = 0.f;
+  float G = 0.f;
+  float B = 0.f;
+
+  int R_clipped = 0;
+  int G_clipped = 0;
+  int B_clipped = 0;
+
+  if(i == 0 || j == 0 || i == height - 1 || j == width - 1)
+  {
+    float sum[3] = { 0.f };
+    int count[3] = { 0 };
+    int used_clipped[3] = { 0 };
+    const int f = FCxtrans(ry + i, rx + j, xtrans);
+
+    // Walk the available 3x3 neighbourhood on borders because the full support
+    // would otherwise leave the current tile.
+    for(int y = max(i - 1, 0); y <= min(i + 1, height - 1); y++)
+      for(int x = max(j - 1, 0); x <= min(j + 1, width - 1); x++)
+      {
+        const int color = FCxtrans(ry + y, rx + x, xtrans);
+        const float value = read_imagef(input, sampleri, (int2)(x, y)).x;
+        sum[color] += value;
+        count[color]++;
+        used_clipped[color] |= (value > clips[color]);
+      }
+
+    R = (f == RED   || count[RED]   == 0) ? center : sum[RED]   / count[RED];
+    G = (f == GREEN || count[GREEN] == 0) ? center : sum[GREEN] / count[GREEN];
+    B = (f == BLUE  || count[BLUE]  == 0) ? center : sum[BLUE]  / count[BLUE];
+
+    R_clipped = (f == RED   || count[RED]   == 0) ? (center > clips[RED])   : used_clipped[RED];
+    G_clipped = (f == GREEN || count[GREEN] == 0) ? (center > clips[GREEN]) : used_clipped[GREEN];
+    B_clipped = (f == BLUE  || count[BLUE]  == 0) ? (center > clips[BLUE])  : used_clipped[BLUE];
+  }
+  else
+  {
+    const global int *ip = &lookup[i % 6][j % 6][0];
+    float sum[3] = { 0.f };
+    int used_clipped[3] = { 0 };
+    const int neighbours = *ip++;
+
+    // Loop over every neighbour used by the X-Trans bilinear support so the
+    // OpenCL path matches the explicit CPU lookup.
+    for(int k = 0; k < neighbours; k++, ip += 3)
+    {
+      const int offset = ip[0];
+      const int x = (short)(offset & 0xffffu);
+      const int y = (short)(offset >> 16);
+      const int color = ip[2];
+      const float value = read_imagef(input, samplerA, (int2)(j + x, i + y)).x;
+      sum[color] += value * ip[1];
+      used_clipped[color] |= (value > clips[color]);
+    }
+
+    for(int k = 0; k < 2; k++, ip += 2)
+    {
+      const int color = ip[0];
+      const int total = ip[1];
+      if(color == RED)
+      {
+        R = (total > 0) ? sum[RED] / total : center;
+        R_clipped = used_clipped[RED];
+      }
+      else if(color == GREEN)
+      {
+        G = (total > 0) ? sum[GREEN] / total : center;
+        G_clipped = used_clipped[GREEN];
+      }
+      else
+      {
+        B = (total > 0) ? sum[BLUE] / total : center;
+        B_clipped = used_clipped[BLUE];
+      }
+    }
+
+    const int f = *ip;
+    if(f == RED)
+    {
+      R = center;
+      R_clipped = (center > clips[RED]);
+    }
+    else if(f == GREEN)
+    {
+      G = center;
+      G_clipped = (center > clips[GREEN]);
+    }
+    else
+    {
+      B = center;
+      B_clipped = (center > clips[BLUE]);
+    }
+  }
+
+  float4 RGB = { R, G, B, native_sqrt(R * R + G * G + B * B) };
+  float4 clipped = { R_clipped, G_clipped, B_clipped, (R_clipped || G_clipped || B_clipped) };
+  const float4 WB4 = { wb[0], wb[1], wb[2], wb[3] };
+  write_imagef(interpolated, (int2)(j, i), RGB / WB4);
+  write_imagef(clipping_mask, (int2)(j, i), clipped);
+}
+
 
 kernel void
 remosaic_and_replace(read_only image2d_t input,
@@ -695,6 +928,30 @@ remosaic_and_replace(read_only image2d_t input,
   if(j >= width || i >= height) return;
 
   const int c = FC(i, j, filters);
+  const float4 center = read_imagef(interpolated, sampleri, (int2)(j, i));
+  float *rgb = (float *)&center;
+  const float opacity = read_imagef(clipping_mask, sampleri, (int2)(j, i)).w;
+  const float4 pix_in = read_imagef(input, sampleri, (int2)(j, i));
+  const float4 pix_out = opacity * fmax(rgb[c] * wb[c], 0.f) + (1.f - opacity) * pix_in;
+  write_imagef(output, (int2)(j, i), pix_out);
+}
+
+kernel void
+remosaic_and_replace_xtrans(read_only image2d_t input,
+                            read_only image2d_t interpolated,
+                            read_only image2d_t clipping_mask,
+                            write_only image2d_t output,
+                            constant float *wb,
+                            const int width, const int height,
+                            const int rx, const int ry,
+                            global const unsigned char (*const xtrans)[6])
+{
+  const int j = get_global_id(0);
+  const int i = get_global_id(1);
+
+  if(j >= width || i >= height) return;
+
+  const int c = FCxtrans(ry + i, rx + j, xtrans);
   const float4 center = read_imagef(interpolated, sampleri, (int2)(j, i));
   float *rgb = (float *)&center;
   const float opacity = read_imagef(clipping_mask, sampleri, (int2)(j, i)).w;

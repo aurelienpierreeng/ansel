@@ -152,8 +152,7 @@ static void _update_softproof_gamut_checking(dt_develop_t *d);
 
 /* signal handler for filmstrip image switching */
 static void _view_darkroom_filmstrip_activate_callback(gpointer instance, int32_t imgid, gpointer user_data);
-static void _darkroom_image_loaded_callback(gpointer instance, guint request_id, guint result, gpointer payload,
-                                            gpointer user_data);
+static void _darkroom_image_loaded_callback(gpointer instance, guint request_id, guint result, gpointer user_data);
 static void _darkroom_cancel_image_load_job(void);
 
 static void _dev_change_image(dt_view_t *self, const int32_t imgid);
@@ -167,14 +166,6 @@ typedef struct dt_darkroom_image_load_job_t
   guint request_id;
 } dt_darkroom_image_load_job_t;
 
-typedef struct dt_darkroom_image_load_result_t
-{
-  int32_t imgid;
-  int32_t raw_width;
-  int32_t raw_height;
-  gboolean raw_inited;
-  dt_image_t image_storage;
-} dt_darkroom_image_load_result_t;
 
 static dt_job_t *_darkroom_image_load_job = NULL;
 static guint _darkroom_image_load_serial = 0;
@@ -824,7 +815,6 @@ void expose(
   cairo_save(cri);
 
   dt_develop_t *dev = (dt_develop_t *)self->data;
-  dt_dev_start_all_pipelines(dev);
 
   const int32_t border = dev->roi.border_size;
 
@@ -1181,51 +1171,9 @@ static int32_t _darkroom_image_load_job_run(dt_job_t *job)
   const dt_darkroom_image_load_job_t *params = dt_control_job_get_params(job);
   if(!params) return 0;
 
-  dt_darkroom_image_load_result_t *loaded = g_new0(dt_darkroom_image_load_result_t, 1);
-  loaded->imgid = params->imgid;
+  int ret = dt_dev_load_image(darktable.develop, params->imgid);
 
-  int ret = DT_DEV_IMAGE_STORAGE_OK;
-  if(params->imgid <= 0 || !darktable.mipmap_cache || !darktable.image_cache)
-    ret = DT_DEV_IMAGE_STORAGE_DB_NOT_READ;
-
-  dt_mipmap_buffer_t buf = { 0 };
-  if(ret == DT_DEV_IMAGE_STORAGE_OK)
-  {
-    dt_mipmap_cache_get(darktable.mipmap_cache, &buf, params->imgid, DT_MIPMAP_FULL, DT_MIPMAP_BLOCKING, 'r');
-    if(buf.buf != NULL && buf.width != 0 && buf.height != 0)
-    {
-      loaded->raw_width = buf.width;
-      loaded->raw_height = buf.height;
-      loaded->raw_inited = TRUE;
-    }
-    else
-    {
-      ret = DT_DEV_IMAGE_STORAGE_MIPMAP_NOT_FOUND;
-    }
-    dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
-  }
-
-  if(ret == DT_DEV_IMAGE_STORAGE_OK)
-  {
-    const dt_image_t *image = dt_image_cache_get(darktable.image_cache, params->imgid, 'r');
-    if(image)
-    {
-      loaded->image_storage = *image;
-      dt_image_cache_read_release(darktable.image_cache, image);
-    }
-    else
-    {
-      ret = DT_DEV_IMAGE_STORAGE_DB_NOT_READ;
-    }
-  }
-
-  if(!darktable.signals || !dt_control_running())
-  {
-    dt_free(loaded);
-    return 0;
-  }
-
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_IMAGE_LOADED, params->request_id, (guint)ret, loaded);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_IMAGE_LOADED, params->request_id, (guint)ret);
 
   return 0;
 }
@@ -1270,39 +1218,18 @@ static void _darkroom_start_image_load(const int32_t imgid)
   dt_control_add_job(darktable.control, DT_JOB_QUEUE_USER_FG, job);
 }
 
-static void _darkroom_image_loaded_callback(gpointer instance, guint request_id, guint result, gpointer payload,
-                                            gpointer user_data)
+static void _darkroom_image_loaded_callback(gpointer instance, guint request_id, guint result, gpointer user_data)
 {
   dt_view_t *self = (dt_view_t *)user_data;
   dt_develop_t *dev = (dt_develop_t *)self->data;
-  const dt_darkroom_image_load_result_t *loaded = (dt_darkroom_image_load_result_t *)payload;
-  (void)instance;
-
   if(request_id == 0 || request_id != _darkroom_image_load_active_request) return;
   if(darktable.view_manager->current_view != self) return;
 
   _darkroom_image_load_active_request = 0;
 
-  if(!loaded) return;
-
   if(result)
   {
     _darkroom_log_image_load_error((int)result);
-    return;
-  }
-
-  dev->image_storage = loaded->image_storage;
-  if(dev->gui_attached && loaded->raw_inited)
-  {
-    dev->roi.raw_width = loaded->raw_width;
-    dev->roi.raw_height = loaded->raw_height;
-    dev->roi.raw_inited = TRUE;
-  }
-
-  const int ret = dt_dev_load_image_finish(dev, loaded->imgid);
-  if(ret)
-  {
-    _darkroom_log_image_load_error(ret);
     return;
   }
 
@@ -1352,6 +1279,8 @@ static void _darkroom_image_loaded_callback(gpointer instance, guint request_id,
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_IMAGE_CHANGED);
 
   dt_view_image_info_update(dev->image_storage.id);
+
+  dt_dev_start_all_pipelines(dev);
 }
 
 int try_enter(dt_view_t *self)
@@ -2678,7 +2607,7 @@ void leave(dt_view_t *self)
   /* Device-side cache payloads are only an acceleration layer. Once darkroom
    * leaves and all pipe workers are quiescent, drop all cached cl_mem objects
    * so a later reopen can only exact-hit host-authoritative cachelines. */
-  dt_dev_pixelpipe_cache_flush_clmem(darktable.pixelpipe_cache, -1);
+  dt_dev_pixelpipe_cache_flush_clmem(darktable.pixelpipe_cache, -1, NULL);
 
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
   dt_dev_history_free_history(dev);
@@ -2842,9 +2771,10 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
     if(mouse_in_imagearea(self, x, y))
     {
       dt_colorpicker_sample_t *const sample = darktable.lib->proxy.colorpicker.primary_sample;
+      gboolean sample_changed = FALSE;
       // Make sure a minimal width/height
-      float delta_x = 1 / (float) dev->pipe->processed_width;
-      float delta_y = 1 / (float) dev->pipe->processed_height;
+      float delta_x = 1 / (float) dev->roi.processed_width;
+      float delta_y = 1 / (float) dev->roi.processed_height;
 
       float mouse_point[2] = { (float)x, (float)y };
       dt_dev_coordinates_widget_to_image_norm(dev, mouse_point, 1);
@@ -2853,15 +2783,35 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
 
       if(sample->size == DT_LIB_COLORPICKER_SIZE_BOX)
       {
-        sample->box[0] = fmaxf(0.0, MIN(sample->point[0], mouse_x) - delta_x);
-        sample->box[1] = fmaxf(0.0, MIN(sample->point[1], mouse_y) - delta_y);
-        sample->box[2] = fminf(1.0, MAX(sample->point[0], mouse_x) + delta_x);
-        sample->box[3] = fminf(1.0, MAX(sample->point[1], mouse_y) + delta_y);
+        const float box[4] = {
+          fmaxf(0.0, MIN(sample->point[0], mouse_x) - delta_x),
+          fmaxf(0.0, MIN(sample->point[1], mouse_y) - delta_y),
+          fminf(1.0, MAX(sample->point[0], mouse_x) + delta_x),
+          fminf(1.0, MAX(sample->point[1], mouse_y) + delta_y)
+        };
+
+        for(int k = 0; k < 4; k++)
+        {
+          if(sample->box[k] != box[k])
+          {
+            sample->box[k] = box[k];
+            sample_changed = TRUE;
+          }
+        }
       }
       else if(sample->size == DT_LIB_COLORPICKER_SIZE_POINT)
       {
+        sample_changed = (sample->point[0] != mouse_x) || (sample->point[1] != mouse_y);
         sample->point[0] = mouse_x;
         sample->point[1] = mouse_y;
+      }
+
+      if(sample_changed)
+      {
+        /* Picker drags only move the sampling area.
+         * Mark the preview dirty so the worker resamples the active module
+         * without touching history or recomputing node hashes. */
+        dev->preview_pipe->status = DT_DEV_PIXELPIPE_DIRTY;
       }
     }
     ret = TRUE;
@@ -2904,8 +2854,8 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
     const double img_dy = roi_dy / scale;
 
     // new roi position in full image scale
-    float new_x = dev->roi.x - (img_dx / (float)dev->pipe->processed_width);
-    float new_y = dev->roi.y - (img_dy / (float)dev->pipe->processed_height);
+    float new_x = dev->roi.x - (img_dx / (float)dev->roi.processed_width);
+    float new_y = dev->roi.y - (img_dy / (float)dev->roi.processed_height);
   
     //fprintf(stderr, "BOUNDS new_x: %2.2f, new_y: %2.2f\n", new_x, new_y);
     dt_dev_check_zoom_pos_bounds(dev, &new_x, &new_y, NULL, NULL); 
@@ -2935,7 +2885,10 @@ int button_released(dt_view_t *self, double x, double y, int which, uint32_t sta
     if(darktable.lib->proxy.colorpicker.primary_sample->size == DT_LIB_COLORPICKER_SIZE_BOX)
       dt_control_set_cursor(GDK_LEFT_PTR);
 
-    dt_dev_pixelpipe_update_preview(dev);
+    /* Final picker placement changes only the sample geometry.
+     * Keep the current history and ask for one fresh preview sampling pass. */
+    dt_dev_pixelpipe_update_history_preview(dev);
+    dt_control_queue_redraw_center();
     return 1;
   }
   // masks
@@ -2944,7 +2897,8 @@ int button_released(dt_view_t *self, double x, double y, int which, uint32_t sta
   {
     // Change on mask parameters and image output.
     dt_gui_throttle_queue(dev, _delayed_history_commit, dev);
-    dt_dev_pixelpipe_update_preview(dev); // Needed if mask selection changed
+    dt_dev_pixelpipe_update_history_preview(dev); // Needed if mask selection changed
+    dt_control_queue_redraw_center();
     return 1;
   }
 
@@ -2988,7 +2942,7 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
       {
         // The default box will be a square with 1% of the image width
         const float delta_x = 0.01f;
-        const float delta_y = delta_x * (float)dev->pipe->processed_width / (float)dev->pipe->processed_height;
+        const float delta_y = delta_x * (float)dev->roi.processed_width / (float)dev->roi.processed_height;
 
         // FIXME: here and in mouse move use to dt_lib_colorpicker_set_{box_area,point} interface? -- would require a different hack for figuring out base of the drag
         // hack: for box pickers, these represent the "base" point being dragged
@@ -3248,28 +3202,28 @@ int key_pressed(dt_view_t *self, GdkEventKey *event)
     case GDK_KEY_Up:
     case GDK_KEY_KP_Up:
     {
-      dev->roi.y -= delta / (float)dev->pipe->processed_height;
+      dev->roi.y -= delta / (float)dev->roi.processed_height;
       _key_scroll(dev);
       return 1;
     }
     case GDK_KEY_Down:
     case GDK_KEY_KP_Down:
     {
-      dev->roi.y += delta / (float)dev->pipe->processed_height;
+      dev->roi.y += delta / (float)dev->roi.processed_height;
       _key_scroll(dev);
       return 1;
     }
     case GDK_KEY_Left:
     case GDK_KEY_KP_Left:
     {
-      dev->roi.x -= delta / (float)dev->pipe->processed_height;
+      dev->roi.x -= delta / (float)dev->roi.processed_height;
       _key_scroll(dev);
       return 1;
     }
     case GDK_KEY_Right:
     case GDK_KEY_KP_Right:
     {
-      dev->roi.x += delta / (float)dev->pipe->processed_height;
+      dev->roi.x += delta / (float)dev->roi.processed_height;
       _key_scroll(dev);
       return 1;
     }

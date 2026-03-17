@@ -390,19 +390,27 @@ static inline void process_fastpath_matrix(const float *const restrict in, float
                                            const size_t npixels,
                                            const dt_aligned_pixel_simd_t cm0,
                                            const dt_aligned_pixel_simd_t cm1,
-                                           const dt_aligned_pixel_simd_t cm2)
+                                           const dt_aligned_pixel_simd_t cm2,
+                                           const int use_nontemporal)
 {
 #ifdef _OPENMP
 #pragma omp parallel for simd default(none) \
-    dt_omp_firstprivate(in, out, npixels, cm0, cm1, cm2) \
+    dt_omp_firstprivate(in, out, npixels, cm0, cm1, cm2, use_nontemporal) \
     schedule(static) aligned(in, out:64)
 #endif
   for(size_t k = 0; k < npixels; k++)
   {
     const size_t idx = 4 * k;
     const dt_aligned_pixel_simd_t vin = dt_load_simd_aligned(in + idx);
-    dt_store_simd_aligned(out + idx, dt_mat3x4_mul_vec4(vin, cm0, cm1, cm2));
+    const dt_aligned_pixel_simd_t vout = dt_mat3x4_mul_vec4(vin, cm0, cm1, cm2);
+    if(use_nontemporal)
+      dt_store_simd_nontemporal(out + idx, vout);
+    else
+      dt_store_simd_aligned(out + idx, vout);
   }
+
+  if(use_nontemporal)
+    dt_omploop_sfence();  // ensure that nontemporal writes complete before we attempt to read output
 }
 
 int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
@@ -424,13 +432,15 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
   {
     const float *const restrict in = DT_IS_ALIGNED(ivoid);
     float *const restrict out_aligned = DT_IS_ALIGNED(out);
+    const int use_nontemporal
+        = (d->lut[0][0] < 0.0f) && (d->lut[1][0] < 0.0f) && (d->lut[2][0] < 0.0f);
     dt_colormatrix_t cmatrix;
     transpose_3xSSE(d->cmatrix, cmatrix);
     const dt_aligned_pixel_simd_t cm0 = dt_colormatrix_row_to_simd(cmatrix, 0);
     const dt_aligned_pixel_simd_t cm1 = dt_colormatrix_row_to_simd(cmatrix, 1);
     const dt_aligned_pixel_simd_t cm2 = dt_colormatrix_row_to_simd(cmatrix, 2);
 
-    process_fastpath_matrix(in, out_aligned, npixels, cm0, cm1, cm2);
+    process_fastpath_matrix(in, out_aligned, npixels, cm0, cm1, cm2, use_nontemporal);
     process_fastpath_apply_tonecurves(d, out_aligned, npixels);
   }
   else
@@ -513,7 +523,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   cmsHPROFILE softproof = NULL;
   cmsUInt32Number output_format = TYPE_RGBA_FLT;
 
-  d->mode = (pipe->type== DT_DEV_PIXELPIPE_FULL) ? darktable.color_profiles->mode : DT_PROFILE_NORMAL;
+  d->mode = (pipe->type == DT_DEV_PIXELPIPE_FULL) ? darktable.color_profiles->mode : DT_PROFILE_NORMAL;
 
   // Softproof and gamut check take input from GUI and don't write it in internal parameters.
   // The cacheline integrity hash will not be meaningful in this scenario,

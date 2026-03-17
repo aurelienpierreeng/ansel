@@ -277,6 +277,9 @@ void dt_dev_cleanup(dt_develop_t *dev)
   dt_conf_set_float("darkroom/ui/overexposed/upper", dev->overexposed.upper);
 }
 
+static gboolean _update_darkroom_roi(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, int *x, int *y, int *wd, int *ht,
+                                     float *scale);
+
 static void _dev_start_pipeline(dt_develop_t *dev, struct dt_dev_pixelpipe_t *pipe)
 {
   if(!pipe->running)
@@ -302,9 +305,6 @@ void dt_dev_start_all_pipelines(dt_develop_t *dev)
   const gboolean main_running = dev && dev->pipe && dev->pipe->running;
   if(dev->pipelines_started && preview_running && main_running) return;
 
-  // Try to make the preview pipe runs first, we need it for many output sizes computations
-  // aka give a timeout to main pipe. No guaranty though, we don't control threads.
-  dev->pipe->timeout = 150000; // 150 ms
   _dev_start_pipeline(dev, dev->preview_pipe);
   _dev_start_pipeline(dev, dev->pipe);
 
@@ -314,7 +314,7 @@ void dt_dev_start_all_pipelines(dt_develop_t *dev)
 static void _flag_pipe(dt_dev_pixelpipe_t *pipe, gboolean error)
 {
   const gboolean shutdown = dt_atomic_get_int(&pipe->shutdown);
-  const gboolean pending_change = (pipe->changed != DT_DEV_PIPE_UNCHANGED);
+  const gboolean pending_change = (dt_dev_pixelpipe_get_changed(pipe) != DT_DEV_PIPE_UNCHANGED);
 
   // If dt_dev_pixelpipe_process() returned with a state int == 1
   // and the shutdown flag is on, it means history commit activated the kill-switch.
@@ -353,8 +353,8 @@ static gboolean _darkroom_pipeline_inputs_ready(const dt_develop_t *dev)
 
 int dt_dev_get_thumbnail_size(dt_develop_t *dev)
 {
-  if(!dev->roi.raw_inited || !dev->roi.gui_inited || !dev->history || !dev->iop || !dev->virtual_pipe) return 1;
-  
+  if(!dev->roi.raw_inited || !dev->roi.gui_inited) return 1;
+
   // Keep the virtual pipe synced so ROI computations on the GUI thread
   // always use up-to-date history and input sizes.
   if(dev->virtual_pipe->imgid != dev->image_storage.id
@@ -365,35 +365,26 @@ int dt_dev_get_thumbnail_size(dt_develop_t *dev)
                                 dev->roi.raw_width, dev->roi.raw_height, DT_MIPMAP_FULL);
 
   if(!dev->virtual_pipe->nodes)
-    dev->virtual_pipe->changed |= DT_DEV_PIPE_REMOVE;
+    dt_dev_pixelpipe_or_changed(dev->virtual_pipe, DT_DEV_PIPE_REMOVE);
   else if(dt_dev_pixelpipe_get_history_hash(dev->virtual_pipe) != dt_dev_get_history_hash(dev))
-    dev->virtual_pipe->changed |= DT_DEV_PIPE_SYNCH;
+    dt_dev_pixelpipe_or_changed(dev->virtual_pipe, DT_DEV_PIPE_SYNCH);
 
-  if(dev->virtual_pipe->changed != DT_DEV_PIPE_UNCHANGED)
+  if(dt_dev_pixelpipe_get_changed(dev->virtual_pipe) != DT_DEV_PIPE_UNCHANGED)
     dt_dev_pixelpipe_change(dev->virtual_pipe, dev);
 
   // Compute the virtual full-res output. This needs an inited history
-  int processed_width = dev->roi.processed_width;
-  int processed_height = dev->roi.processed_height;
   dt_dev_pixelpipe_get_roi_out(dev->virtual_pipe, dev, dev->roi.raw_width, dev->roi.raw_height, 
-                               &processed_width, &processed_height);
+                               &dev->roi.processed_width, &dev->roi.processed_height);
 
   // Compute the scaling factor that makes full-res output fit within widget
-  const float natural_scale = fminf(fminf((float)dev->roi.width / (float)processed_width,
-                                          (float)dev->roi.height / (float)processed_height),
-                                    1.f)
-                              * darktable.gui->ppd;
+  dev->roi.natural_scale = dt_dev_get_natural_scale(dev);
 
   // Get the final size of the preview backbuffer
-  const int preview_width = roundf(natural_scale * processed_width);
-  const int preview_height = roundf(natural_scale * processed_height);
-
-  dev->roi.processed_width = processed_width;
-  dev->roi.processed_height = processed_height;
-  dev->roi.natural_scale = natural_scale;
-  dev->roi.preview_width = preview_width;
-  dev->roi.preview_height = preview_height;
+  dev->roi.preview_width = dev->roi.natural_scale * dev->roi.processed_width;
+  dev->roi.preview_height = dev->roi.natural_scale * dev->roi.processed_height;
   dev->roi.output_inited = TRUE;
+
+  dt_dev_update_mouse_effect_radius(dev); 
 
   dt_print(DT_DEBUG_DEV,
             "[pixelpipe] thumbnail sizes raw %dx%d -> processed %dx%d -> preview %dx%d (scale %.5f)\n",
@@ -403,11 +394,41 @@ int dt_dev_get_thumbnail_size(dt_develop_t *dev)
   return 0;
 }
 
+gboolean dt_dev_pixelpipe_has_preview_output(const dt_develop_t *dev, const dt_dev_pixelpipe_t *pipe,
+                                             const dt_iop_roi_t *roi)
+{
+  if(!dev || !pipe || !dev->gui_attached || !dev->roi.output_inited) return FALSE;
+
+  int x = 0;
+  int y = 0;
+  int width = 0;
+  int height = 0;
+  float scale = dev->roi.natural_scale;
+
+  if(roi)
+  {
+    x = roi->x;
+    y = roi->y;
+    width = roi->width;
+    height = roi->height;
+    scale = roi->scale;
+  }
+  else
+  {
+    // Recompute the current darkroom output geometry so callers that run ahead of process()
+    // still classify the pipe from the image they are about to produce, not the last backbuffer.
+    _update_darkroom_roi((dt_develop_t *)dev, (dt_dev_pixelpipe_t *)pipe, &x, &y, &width, &height, &scale);
+  }
+
+  if(width != dev->roi.preview_width || height != dev->roi.preview_height) return FALSE;
+  return x == 0 && y == 0 && fabsf(scale - dev->roi.natural_scale) < 1e-4f;
+}
+
 
 // Return TRUE if ROI changed since previous computation
 static gboolean _update_darkroom_roi(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, int *x, int *y, int *wd, int *ht,
                                      float *scale)
-{
+{  
   if(!dev->roi.output_inited) return 1;
 
   // Store previous values
@@ -420,15 +441,14 @@ static gboolean _update_darkroom_roi(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe
   // Update theoritical final scale based on distorting modules
   // This also writes piece->buf_in/out for each pipe->nodes piece,
   // so it's not nearly a matter of getting processed_width/height
-  if(pipe->processed_height != dev->roi.processed_height 
-    || pipe->processed_width != dev->roi.processed_height)
-    dt_dev_pixelpipe_get_roi_out(pipe, dev, pipe->iwidth, pipe->iheight, &pipe->processed_width,
-                                 &pipe->processed_height);
+  dt_dev_pixelpipe_get_roi_out(pipe, dev, pipe->iwidth, pipe->iheight, &pipe->processed_width,
+                               &pipe->processed_height);
 
   // Scale is inited to the value that would fit our full-res raw to GUI viewport size
   *scale = dev->roi.natural_scale;
-  // The full pipeline shows only the ROI, which may be zoomed in/out
-  if(pipe->type == DT_DEV_PIXELPIPE_FULL) *scale *= dev->roi.scaling;
+  const gboolean preview_pipe = (pipe == dev->preview_pipe);
+  // The main darkroom pipe shows only the ROI, which may be zoomed in/out.
+  if(!preview_pipe) *scale *= dev->roi.scaling;
 
   // Backbuf size depends on GUI window size only
   int roi_width = roundf(*scale * dev->roi.processed_width);
@@ -442,14 +462,30 @@ static gboolean _update_darkroom_roi(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe
   // dev->roi.x,y are the relative coordinates of the ROI center.
   // in preview pipe, we always render a full image, so x,y = 0,0 
   // otherwise, x,y here are the top-left corner. Translate:
-  *x = (pipe->type == DT_DEV_PIXELPIPE_PREVIEW) ? 0 : roundf(dev->roi.x * roi_width - *wd * .5f);
-  *y = (pipe->type == DT_DEV_PIXELPIPE_PREVIEW) ? 0 : roundf(dev->roi.y * roi_height - *ht * .5f);
+  *x = preview_pipe ? 0 : roundf(dev->roi.x * roi_width - *wd * .5f);
+  *y = preview_pipe ? 0 : roundf(dev->roi.y * roi_height - *ht * .5f);
 
 /*  fprintf (stderr, "_update_darkroom_roi: dev %.2f %.2f  type %s  xy %d %d  dim %d %d"
                    "   ppd:%.4f scale:%.4f nat_scale:%.4f * scaling:%.4f\n",
             dev->roi.x, dev->roi.y, dt_pipe_type_to_str(pipe->type), *x, *y, *wd, *ht, darktable.gui->ppd, *scale, dev->roi.natural_scale, dev->roi.scaling);
 */
   return x_old != *x || y_old != *y || wd_old != *wd || ht_old != *ht || old_scale != *scale;
+}
+
+gboolean dt_dev_pipelines_share_preview_output(dt_develop_t *dev)
+{
+  if(!dev || !dev->gui_attached || !dev->pipe || !dev->preview_pipe || !dev->roi.output_inited) return FALSE;
+
+  float preview_scale = 1.0f;
+  float main_scale = 1.0f;
+  int preview_x = 0, preview_y = 0, preview_wd = 0, preview_ht = 0;
+  int main_x = 0, main_y = 0, main_wd = 0, main_ht = 0;
+
+  _update_darkroom_roi(dev, dev->preview_pipe, &preview_x, &preview_y, &preview_wd, &preview_ht, &preview_scale);
+  _update_darkroom_roi(dev, dev->pipe, &main_x, &main_y, &main_wd, &main_ht, &main_scale);
+
+  return preview_x == main_x && preview_y == main_y && preview_wd == main_wd && preview_ht == main_ht
+         && fabsf(preview_scale - main_scale) < 1e-4f;
 }
 
 void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
@@ -459,6 +495,10 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
   // Infinite loop: run for as long as the thread is running
   while(!dev->exit && dt_control_running())
   {
+    // This is cheap to run, keep it in sync always
+    dt_dev_pixelpipe_set_input(pipe, dev, dev->image_storage.id, dev->roi.raw_width, dev->roi.raw_height,
+                               DT_MIPMAP_FULL);
+
     if(!_darkroom_pipeline_inputs_ready(dev))
     {
       pipe->status = DT_DEV_PIXELPIPE_DIRTY;
@@ -466,19 +506,15 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
       continue;
     }
 
-    if(pipe->imgid != dev->image_storage.id
-       || pipe->iwidth != dev->roi.raw_width
-       || pipe->iheight != dev->roi.raw_height
-       || pipe->image.id != dev->image_storage.id)
-      dt_dev_pixelpipe_set_input(pipe, dev, dev->image_storage.id, dev->roi.raw_width, dev->roi.raw_height,
-                                 DT_MIPMAP_FULL);
-
     // Keep track of ROI changes out of the loop
     float scale = 1.f;
     int x = 0, y = 0, wd = 0, ht = 0;
 
     // Count the number of pipe re-entries and limit it to 2 to avoid infinite loops
+    // Re-entries are designed for raster masks when we lost their reference, so 
+    // we force a full pipeline computation from start to refresh them.
     int reentries = 0;
+    dt_dev_pixelpipe_reset_reentry(pipe);
 
     if(pipe->timeout)
     {
@@ -488,22 +524,49 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
 
     // Updating loop: run while output is invalid/unavailable, or while realtime mode
     // has a new history state to consume.
-    while(!dev->exit && dt_control_running() && !pipe->pause)
+    while(!dev->exit && dt_control_running() && !pipe->pause && reentries < 2)
     {
-      const gboolean needs_realtime_update
-          = (dt_dev_get_history_hash(dev) != dt_dev_pixelpipe_get_history_hash(pipe))
+      const gboolean history_outdated
+          = (dt_dev_pixelpipe_get_history_hash(pipe) != dt_dev_get_history_hash(dev))
             || (dt_dev_backbuf_get_hash(&pipe->backbuf) != dt_dev_pixelpipe_get_hash(pipe))
-            || (dt_dev_pixelpipe_get_hash(pipe) == DT_DEV_PIXELPIPE_INVALID);
+            || (dt_dev_backbuf_get_history_hash(&pipe->backbuf) != dt_dev_get_history_hash(dev))
+            || (dt_dev_pixelpipe_get_hash(pipe) == DT_DEV_PIXELPIPE_INVALID)
+            || (dt_dev_backbuf_get_hash(&pipe->backbuf) == DT_DEV_PIXELPIPE_INVALID);
 
       // If we know history changed, ensure at least the last step is resynced
-      if(needs_realtime_update)
-        pipe->changed |= DT_DEV_PIPE_TOP_CHANGED;
+      if(history_outdated)
+        dt_dev_pixelpipe_or_changed(pipe, DT_DEV_PIPE_TOP_CHANGED);
 
-      const gboolean needs_regular_update
-          = (((pipe->status == DT_DEV_PIXELPIPE_DIRTY) || (pipe->changed != DT_DEV_PIPE_UNCHANGED))
-             && reentries < 2);
+      // If any part of history needs resync, the pipe is dirty
+      if(dt_dev_pixelpipe_get_changed(pipe) != DT_DEV_PIPE_UNCHANGED)
+      {
+        pipe->status = DT_DEV_PIXELPIPE_DIRTY;
+        fprintf(stdout, "PIPE %s needs update\n", pipe->type == DT_DEV_PIXELPIPE_FULL ? "full" : "preview");
+      }
 
-      if(!(needs_regular_update || needs_realtime_update)) break;
+      // DT_DEV_PIXELPIPE_DIRTY means we need to compute a new backbuffer,
+      // for whatever reason. Could be that history changed,
+      // could be that we got on error on previous try,
+      // could be that we got a new input image.
+      // BUT, on history change, we try only twice to refresh the image.
+      if(pipe->status != DT_DEV_PIXELPIPE_DIRTY) 
+      {
+        dt_iop_nap(50000); // wait 50 ms
+        break;
+      }
+
+      // If preview pipe and main pipe have the same size and are both
+      // due to recompute, give 20 ms of heads up 
+      // to preview because it computes histograms and some caches.
+      // This means main pipe will not compute but will fetch backbuffer directly.
+      // Mask previews and other main image displays need to ask for
+      // only a recompute of the main pipe, which makes sense.
+      if(pipe == dev->pipe 
+        && dt_dev_pipelines_share_preview_output(dev)
+        && dt_dev_pixelpipe_get_changed(dev->preview_pipe) != DT_DEV_PIPE_UNCHANGED)
+      {
+        dt_iop_nap(20000);
+      }
 
       dt_pthread_mutex_lock(&pipe->busy_mutex);
       pipe->processing = 1;
@@ -516,15 +579,12 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
       // Need to be before dt_dev_pixelpipe_change()
       if(dt_dev_pixelpipe_has_reentry(pipe))
       {
-        pipe->changed |= DT_DEV_PIPE_REMOVE;
+        dt_dev_pixelpipe_or_changed(pipe, DT_DEV_PIPE_REMOVE);
         dt_dev_pixelpipe_cache_flush(darktable.pixelpipe_cache, pipe->type);
-        // Keep the virtual pipe aligned with preview re-entry rebuilds.
-        if(pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
-          dt_dev_pixelpipe_sync_virtual(dev, DT_DEV_PIPE_REMOVE);
       }
 
       // Resynch history with pipeline. NB: this locks dev->history_mutex
-      while(pipe->changed != DT_DEV_PIPE_UNCHANGED)
+      while(dt_dev_pixelpipe_get_changed(pipe) != DT_DEV_PIPE_UNCHANGED)
         dt_dev_pixelpipe_change(pipe, dev);
 
       // If user zoomed/panned in darkroom during the previous loop of recomputation,
@@ -667,7 +727,7 @@ dt_dev_image_storage_t dt_dev_ensure_image_storage(dt_develop_t *dev, const int3
 }
 
 // load the raw and get the new image struct, blocking in gui thread
-static inline int _dt_dev_load_raw(dt_develop_t *dev, const int32_t imgid)
+static inline dt_dev_image_storage_t _dt_dev_load_raw(dt_develop_t *dev, const int32_t imgid)
 {
   // then load the raw
   dt_times_t start;
@@ -681,7 +741,7 @@ static inline int _dt_dev_load_raw(dt_develop_t *dev, const int32_t imgid)
   
   dt_show_times_f(&start, "[dev_pixelpipe]", "to load the image.");
 
-  return 0;
+  return storage_status;
 }
 
 // return the zoom scale to fit into the viewport
@@ -692,22 +752,16 @@ float dt_dev_get_zoom_scale(const dt_develop_t *dev, const gboolean preview)
   return fminf(dev->roi.width / w, dev->roi.height / h);
 }
 
-int dt_dev_load_image(dt_develop_t *dev, const int32_t imgid)
+dt_dev_image_storage_t dt_dev_load_image(dt_develop_t *dev, const int32_t imgid)
 {
-  const int ret = _dt_dev_load_raw(dev, imgid);
+  const dt_dev_image_storage_t ret = _dt_dev_load_raw(dev, imgid);
   if(ret) return ret;
-
-  return dt_dev_load_image_finish(dev, imgid);
-}
-
-int dt_dev_load_image_finish(dt_develop_t *dev, const int32_t imgid)
-{
-  if(!dev) return DT_DEV_IMAGE_STORAGE_DB_NOT_READ;
 
   // we need a global lock as the dev->iop set must not be changed until read history is terminated
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
 
   const gboolean first_run = dt_dev_read_history_ext(dev, imgid);
+
   if(first_run && dev == darktable.develop)
   {
     // Resync our private copy of image image with DB,
@@ -730,36 +784,22 @@ int dt_dev_load_image_finish(dt_develop_t *dev, const int32_t imgid)
     dt_dev_history_notify_change(dev, imgid);
   }
 
-  if(dev->gui_attached) 
-  {
-    dt_dev_get_thumbnail_size(dev);
-  }
-
-  return 0;
+  return ret;
 }
 
 void dt_dev_configure_real(dt_develop_t *dev, int wd, int ht)
 {
   // Called only from Darkroom to init and update drawing size
-  // depending on sidebars and main window resizing.
-  if(dev->roi.width != wd || dev->roi.height != ht)
-  {
-    // If dimensions didn't change or we don't have a valid output image to display
+  // depending on sidebars and main window resizing
+  dev->roi.width = wd;
+  dev->roi.height = ht;
+  dev->roi.gui_inited = TRUE;
 
-    dev->roi.width = wd;
-    dev->roi.height = ht;
-    dev->roi.gui_inited = TRUE;
+  dt_print(DT_DEBUG_DEV, "[pixelpipe] Darkroom requested a %i×%i px main preview\n", wd, ht);
 
-    dt_print(DT_DEBUG_DEV, "[pixelpipe] Darkroom requested a %i×%i px main preview\n", wd, ht);
-
-    if(dev->image_storage.id != UNKNOWN_IMAGE)
-    {
-      dt_dev_get_thumbnail_size(dev);
-      dt_dev_update_mouse_effect_radius(dev); 
-      dt_dev_pixelpipe_update_zoom_main(dev);
-      dt_dev_pixelpipe_update_zoom_preview(dev);
-    }
-  }
+  dt_dev_get_thumbnail_size(dev);
+  dt_dev_pixelpipe_update_zoom_main(dev);
+  dt_dev_pixelpipe_update_zoom_preview(dev);
 }
 
 void dt_dev_check_zoom_pos_bounds(dt_develop_t *dev, float *dev_x, float *dev_y, float *box_w, float *box_h)
@@ -1263,11 +1303,23 @@ gchar *dt_history_item_get_label(const struct dt_iop_module_t *module)
 
 gchar *dt_dev_get_multi_name(const struct dt_iop_module_t *module)
 {
-  gchar *label =
-  (g_strcmp0(module->multi_name, "0") == 0 || g_strcmp0(module->multi_name, "") == 0)
-        ? g_strdup(module->multi_name) : g_strdup("");
+  gboolean has_multi_name = g_strcmp0(module->multi_name, "0") != 0 && g_strcmp0(module->multi_name, "") != 0;
+  gchar *label = has_multi_name ? g_strdup(module->multi_name) : g_strdup("");
 
   return label;
+}
+
+gchar *dt_dev_get_masks_group_name(const struct dt_iop_module_t *module)
+{
+  gchar *module_multi_name = dt_dev_get_multi_name(module);
+  gboolean has_multi_name = g_strcmp0(module_multi_name, "") != 0;
+  // fallback to module name if no multi name
+  gchar *module_label = has_multi_name ?  g_strdup(module_multi_name) : dt_history_item_get_name(module);
+  gchar *group_name = g_strdup_printf("Mask %s", module_label);
+  dt_free(module_label);
+  dt_free(module_multi_name);
+
+  return group_name;
 }
 
 
@@ -1486,7 +1538,7 @@ void dt_dev_masks_update_hash(dt_develop_t *dev)
 
 float dt_dev_get_natural_scale(dt_develop_t *dev)
 {
-  if(!dev->roi.gui_inited) return -1.f;
+  if(!dev->roi.gui_inited || !dev->roi.raw_inited) return -1.f;
 
   return fminf(fminf((float)dev->roi.width / (float)dev->roi.processed_width,
                       (float)dev->roi.height / (float)dev->roi.processed_height),

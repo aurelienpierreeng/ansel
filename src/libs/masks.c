@@ -197,6 +197,21 @@ static void _lib_masks_release_blending(dt_lib_masks_t *lm)
     _lib_masks_clear_blending_box(lm);
 }
 
+static void _lib_masks_show_blending_message(dt_lib_masks_t *lm, gchar *markup)
+{
+  if(!lm || !lm->blending_box || !markup) return;
+
+  GtkWidget *label = gtk_label_new(NULL);
+  gtk_label_set_markup(GTK_LABEL(label), markup);
+  gtk_label_set_xalign(GTK_LABEL(label), 0.0f);
+  gtk_label_set_line_wrap(GTK_LABEL(label), TRUE);
+  gtk_widget_set_margin_top(label, DT_PIXEL_APPLY_DPI(16));
+  gtk_widget_set_margin_bottom(label, DT_PIXEL_APPLY_DPI(16));
+  gtk_widget_set_sensitive(label, FALSE);
+  gtk_box_pack_start(GTK_BOX(lm->blending_box), label, FALSE, FALSE, 0);
+  gtk_widget_show_all(lm->blending_box);
+}
+
 static void _lib_masks_reveal(dt_lib_module_t *self)
 {
   if(!dt_ui_panel_visible(darktable.gui->ui, DT_UI_PANEL_LEFT))
@@ -217,25 +232,42 @@ static void _lib_masks_blending_gui_changed_callback(gpointer instance, dt_lib_m
   if(!self || !self->data) return;
 
   dt_lib_masks_t *lm = (dt_lib_masks_t *)self->data;
-  if(!darktable.develop || !darktable.develop->history)
+  dt_iop_module_t *module = darktable.develop ? darktable.develop->gui_module : NULL;
+
+  if(!darktable.develop || !darktable.develop->history || !module)
   {
     _lib_masks_release_blending(lm);
-    gtk_widget_hide(lm->blending_box);
+    _lib_masks_clear_blending_box(lm);
+
+    gchar *markup = g_markup_printf_escaped(_("<i>Select a module to edit its blending settings.</i>"));
+
+    _lib_masks_show_blending_message(lm, markup);
+    g_free(markup);
+  
     return;
   }
-
-  dt_iop_module_t *module = darktable.develop ? darktable.develop->gui_module : NULL;
-  const gboolean module_changed = (lm->active_module != module);
-  lm->active_module = module;
 
   if(!_lib_masks_can_host_blending(module))
   {
     _lib_masks_release_blending(lm);
-    gtk_widget_hide(lm->blending_box);
+    _lib_masks_clear_blending_box(lm);
+
+    gchar *module_label = dt_history_item_get_name(module);
+    gchar *markup = g_markup_printf_escaped(_("<i>Blending is not available for the <b>%s</b> module.</i>"), module_label);
+
+    _lib_masks_show_blending_message(lm, markup);
+    g_free(markup);
+    dt_free(module_label);
+  
     return;
   }
 
+  const gboolean module_changed = (lm->active_module != module);
+  lm->active_module = module;
+
   if(module_changed) _lib_masks_release_blending(lm);
+
+  if(!lm->hosted_module) _lib_masks_clear_blending_box(lm);
 
   dt_iop_gui_init_blending_body(GTK_BOX(lm->blending_box), module);
   lm->hosted_module = module;
@@ -1896,14 +1928,12 @@ void gui_init(dt_lib_module_t *self)
   self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
   GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
 
-  d->blending_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-  gtk_box_pack_start(GTK_BOX(self->widget), d->blending_box, FALSE, FALSE, 0);
-  //gtk_widget_hide(d->blending_box);
+  dt_gui_collapsible_section_t *shape_manager_expander = malloc(sizeof(dt_gui_collapsible_section_t));
 
-  GtkWidget *mask_manager_label = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-  gtk_box_pack_start(GTK_BOX(mask_manager_label), dt_ui_label_new(_("Shape manager")), TRUE, TRUE, 0);
-  dt_gui_add_class(mask_manager_label, "dt_section_label");
-  gtk_box_pack_start(GTK_BOX(self->widget), mask_manager_label, FALSE, FALSE, 0);
+  dt_gui_new_collapsible_section(shape_manager_expander, "plugins/darkroom/blending/shape_manager/expanded",
+                                 _("Shape manager"), GTK_BOX(self->widget), GTK_PACK_START);
+  GtkWidget *shape_manager_box = GTK_WIDGET(shape_manager_expander->container); // gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  //gtk_box_pack_start(GTK_BOX(shape_manager_expander->container), shape_manager_box, TRUE, TRUE, 0);
 
   GtkWidget *label = gtk_label_new(_("created shapes"));
   gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_END);
@@ -1939,7 +1969,7 @@ void gui_init(dt_lib_module_t *self)
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->bt_brush), FALSE);
   gtk_box_pack_end(GTK_BOX(hbox), d->bt_brush, FALSE, FALSE, 0);
 
-  gtk_box_pack_start(GTK_BOX(self->widget), hbox, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(shape_manager_box), hbox, TRUE, TRUE, 0);
 
   d->treeview = gtk_tree_view_new();
   GtkTreeViewColumn *col = gtk_tree_view_column_new();
@@ -1974,8 +2004,19 @@ void gui_init(dt_lib_module_t *self)
   g_signal_connect(selection, "changed", G_CALLBACK(_tree_selection_change), d);
   g_signal_connect(d->treeview, "button-press-event", (GCallback)_tree_button_pressed, self);
 
-  gtk_box_pack_start(GTK_BOX(self->widget), d->treeview, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(shape_manager_box), d->treeview, TRUE, TRUE, 0);
   dt_gui_widget_init_auto_height(d->treeview, TREE_LIST_MIN_ROWS, TREE_LIST_MAX_ROWS);
+  // Ensure the expander body has its subtree visible even when global show_all is blocked.
+  gtk_widget_show_all(shape_manager_box);
+
+  
+  GtkWidget *blending_label = dt_ui_section_label_new(_("Blending"));
+  gtk_widget_set_margin_top(blending_label, DT_PIXEL_APPLY_DPI(12));
+  gtk_box_pack_start(GTK_BOX(self->widget), blending_label, TRUE, TRUE, 0);
+
+  d->blending_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  gtk_box_pack_start(GTK_BOX(self->widget), d->blending_box, FALSE, FALSE, 0);
+
 
   gtk_widget_show_all(self->widget);
   gtk_widget_hide(d->blending_box);

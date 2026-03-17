@@ -730,7 +730,7 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
 
   const float iwd = pipe->iwidth;
   const float iht = pipe->iheight;
-  const int pixel_threshold = (pipe->type == DT_DEV_PIXELPIPE_PREVIEW
+  const int pixel_threshold = (dt_dev_pixelpipe_has_preview_output(darktable.develop, pipe, NULL)
                                || pipe->type == DT_DEV_PIXELPIPE_THUMBNAIL) ? 3 : 1;
 
   dt_masks_dynbuf_t *dpoints = NULL, *dborder = NULL, *dpayload = NULL;
@@ -2761,7 +2761,7 @@ static int _brush_get_mask(const dt_iop_module_t *const module, const dt_dev_pix
     *width = *height = *offset_x = *offset_y = 0;
     return 0;
   }
-  const gboolean use_sparse = (piece->pipe->type == DT_DEV_PIXELPIPE_PREVIEW
+  const gboolean use_sparse = (dt_dev_pixelpipe_has_preview_output(piece->module->dev, piece->pipe, NULL)
                                || piece->pipe->type == DT_DEV_PIXELPIPE_THUMBNAIL);
   const int sparse_step = use_sparse ? 4 : 1;
   _brush_bounding_box(points, border, node_count, points_count, width, height, offset_x, offset_y);
@@ -2913,7 +2913,7 @@ static int _brush_get_mask_roi(const dt_iop_module_t *const module, const dt_dev
   const int roi_width = roi->width;
   const int roi_height = roi->height;
   const float roi_scale = roi->scale;
-  const gboolean use_sparse = (piece->pipe->type == DT_DEV_PIXELPIPE_PREVIEW
+  const gboolean use_sparse = (dt_dev_pixelpipe_has_preview_output(piece->module->dev, piece->pipe, roi)
                                || piece->pipe->type == DT_DEV_PIXELPIPE_THUMBNAIL);
   const int sparse_step = use_sparse ? 4 : 1;
 

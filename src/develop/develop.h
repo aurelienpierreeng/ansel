@@ -305,7 +305,6 @@ typedef struct dt_develop_t
   // Darkroom pipelines are running fulltime in background until leaving darkroom.
   // Set that to TRUE once they get shutdown.
   gboolean pipelines_started;
-  gboolean pixelpipe_init_batching;
 
   /* proxy for communication between plugins and develop/darkroom */
   struct
@@ -432,14 +431,11 @@ typedef enum dt_dev_image_storage_t
 // Returns a status code to differentiate missing source image data from DB/cache failures.
 dt_dev_image_storage_t dt_dev_ensure_image_storage(dt_develop_t *dev, const int32_t imgid);
 
-// GUI-thread second phase of image loading: read history and rebuild pipelines.
-int dt_dev_load_image_finish(dt_develop_t *dev, const int32_t imgid);
-
 // Start background pipeline threads. They run fulltime until we close darkroom,
 // so no need to recall that
 void dt_dev_start_all_pipelines(dt_develop_t *dev);
 
-int dt_dev_load_image(dt_develop_t *dev, const int32_t imgid);
+dt_dev_image_storage_t dt_dev_load_image(dt_develop_t *dev, const int32_t imgid);
 /** checks if provided imgid is the image currently in develop */
 int dt_dev_is_current_image(dt_develop_t *dev, int32_t imgid);
 
@@ -536,6 +532,8 @@ void dt_dev_modules_update_multishow(dt_develop_t *dev);
 
 /** generates item multi-instance name without mnemonics */
 gchar *dt_dev_get_multi_name(const struct dt_iop_module_t *module);
+/** Get the module multi name, or the module name if no multi name is provided */
+gchar *dt_dev_get_masks_group_name(const struct dt_iop_module_t *module);
 gchar *dt_history_item_get_name(const struct dt_iop_module_t *module);
 gchar *dt_history_item_get_name_html(const struct dt_iop_module_t *module);
 
@@ -595,6 +593,29 @@ float dt_dev_get_natural_scale(dt_develop_t *dev);
 // Needs to be recomputed when module parameters change (for modules changing ROI)
 // or when the widget is resized.
 int dt_dev_get_thumbnail_size(dt_develop_t *dev);
+
+/**
+ * @brief Tell whether a GUI-attached pipe currently targets the darkroom preview-sized output.
+ *
+ * @details
+ * GUI modules must no longer assume that `dev->preview_pipe` is the only pipe producing the
+ * full-image downsampled preview. When the main pipe renders the same geometry, it must follow
+ * the same heuristics.
+ *
+ * Pass `roi` when the caller already knows the current output ROI for this processing run.
+ * Pass `NULL` to fall back to the pipe backbuffer size from the last completed run.
+ */
+gboolean dt_dev_pixelpipe_has_preview_output(const dt_develop_t *dev, const struct dt_dev_pixelpipe_t *pipe,
+                                             const struct dt_iop_roi_t *roi);
+
+/**
+ * @brief Tell whether the darkroom main and preview pipes currently target the same GUI output.
+ *
+ * @details
+ * When both pipes would render the same geometry, preview must run first so the main pipe can
+ * reuse its backbuffer instead of recomputing the same image concurrently.
+ */
+gboolean dt_dev_pipelines_share_preview_output(dt_develop_t *dev);
 
 /**
  * @brief  Get the overlay scale factor

@@ -1077,7 +1077,7 @@ static gboolean _drawlayer_acquire_layer_image(const int devid, dt_pixel_cache_e
     layer->mem = dt_opencl_alloc_device(devid, target_roi->width, target_roi->height, 4 * sizeof(float));
     if(!layer->mem)
     {
-      dt_dev_pixelpipe_cache_flush_clmem(darktable.pixelpipe_cache, devid);
+      dt_dev_pixelpipe_cache_flush_clmem(darktable.pixelpipe_cache, devid, dev_source_rgba);
       layer->mem = dt_opencl_alloc_device(devid, target_roi->width, target_roi->height, 4 * sizeof(float));
     }
   }

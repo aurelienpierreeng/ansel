@@ -437,7 +437,7 @@ static void _process_common_setup(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t 
     }
 
     // second, show computed correction in UI.
-    if(g && piece->pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
+    if(g && dt_dev_pixelpipe_has_preview_output(self->dev, piece->pipe, NULL))
     {
       dt_iop_gui_enter_critical_section(self);
       g->deflicker_computed_exposure = exposure;
@@ -1079,7 +1079,7 @@ void gui_init(struct dt_iop_module_t *self)
     (&g->cs,
      "plugins/darkroom/exposure/mapping",
      _("spot exposure mapping"),
-     GTK_BOX(self->widget));
+     GTK_BOX(self->widget), GTK_PACK_END);
 
   DT_BAUHAUS_COMBOBOX_NEW_FULL(darktable.bauhaus, g->spot_mode, DT_GUI_MODULE(self), N_("spot mode"),
                                 _("\"correction\" automatically adjust exposure\n"
@@ -1136,6 +1136,8 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(hhbox), GTK_WIDGET(vvbox), TRUE, TRUE, DT_BAUHAUS_SPACE);
 
   gtk_box_pack_start(GTK_BOX(g->cs.container), GTK_WIDGET(hhbox), FALSE, FALSE, 0);
+  // Ensure the expander body has its subtree visible even when global show_all is blocked.
+  gtk_widget_show_all(GTK_WIDGET(g->cs.container));
 
   g_signal_connect(G_OBJECT(self->widget), "draw", G_CALLBACK(_draw), self);
 }

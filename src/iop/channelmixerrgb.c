@@ -843,7 +843,7 @@ static inline void loop_switch(const float *const restrict in, float *const rest
     {
       // Turn LMS, XYZ or pipeline RGB into monochrome
       const float grey_mix = fmaxf(temp_two_v[0] * grey[0] + temp_two_v[1] * grey[1] + temp_two_v[2] * grey[2], 0.0f);
-      dt_store_simd_aligned(out + k, (dt_aligned_pixel_simd_t){ grey_mix, grey_mix, grey_mix, in_v[3] });
+      dt_store_simd_nontemporal(out + k, (dt_aligned_pixel_simd_t){ grey_mix, grey_mix, grey_mix, in_v[3] });
     }
     else
     {
@@ -877,9 +877,10 @@ static inline void loop_switch(const float *const restrict in, float *const rest
       temp_two_v = dt_mat3x4_mul_vec4(temp_one_v, xyz_to_rgb0, xyz_to_rgb1, xyz_to_rgb2);
       if(clip) temp_two_v = dt_simd_max_zero(temp_two_v);
 
-      dt_store_simd_aligned(out + k, (dt_aligned_pixel_simd_t){ temp_two_v[0], temp_two_v[1], temp_two_v[2], in_v[3] });
+      dt_store_simd_nontemporal(out + k, (dt_aligned_pixel_simd_t){ temp_two_v[0], temp_two_v[1], temp_two_v[2], in_v[3] });
     }
   }
+  dt_omploop_sfence();  // ensure that nontemporal writes complete before we attempt to read output
 }
 
 // util to shift pixel index without headache
@@ -4019,6 +4020,7 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(hbox), g->illum_color, TRUE, TRUE, 0);
 
   g->color_picker = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, hbox);
+  gtk_widget_set_name(g->color_picker, "keep-active");
   gtk_widget_set_tooltip_text(g->color_picker, _("set white balance to detected from area"));
 
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(hbox), FALSE, FALSE, 0);
@@ -4058,7 +4060,7 @@ void gui_init(struct dt_iop_module_t *self)
     (&g->csspot,
      "plugins/darkroom/channelmixerrgb/expand_picker_mapping",
      _("spot color mapping"),
-     GTK_BOX(self->widget));
+     GTK_BOX(self->widget), GTK_PACK_END);
 
   gtk_widget_set_tooltip_text(g->csspot.expander, _("use a color checker target to autoset CAT and channels"));
 
@@ -4184,7 +4186,7 @@ void gui_init(struct dt_iop_module_t *self)
     (&g->cs,
      "plugins/darkroom/channelmixerrgb/expand_values",
      _("calibrate with a color checker"),
-     GTK_BOX(self->widget));
+     GTK_BOX(self->widget), GTK_PACK_END);
 
   gtk_widget_set_tooltip_text(g->cs.toggle,
                               _("use a color checker target to autoset CAT and channels"));
@@ -4250,6 +4252,10 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_box_pack_end(GTK_BOX(toolbar), GTK_WIDGET(g->button_validate), FALSE, FALSE, 0);
 
   gtk_box_pack_start(GTK_BOX(collapsible), GTK_WIDGET(toolbar), FALSE, FALSE, 0);
+
+  // Ensure the expander body has its subtree visible even when global show_all is blocked.
+  gtk_widget_show_all(GTK_WIDGET(g->cs.container));
+  gtk_widget_show_all(GTK_WIDGET(g->csspot.container));
 }
 
 void gui_cleanup(struct dt_iop_module_t *self)

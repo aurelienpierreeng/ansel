@@ -53,6 +53,9 @@ inline int dt_atomic_CAS_int(dt_atomic_int *var, int *expected, int value)
   return __atomic_compare_exchange_n(var, expected, value, 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
 }
 
+inline void dt_atomic_or_int(dt_atomic_int *var, int flags) { __atomic_fetch_or(var, flags, __ATOMIC_SEQ_CST); }
+inline void dt_atomic_and_int(dt_atomic_int *var, int flags) { __atomic_fetch_and(var, flags, __ATOMIC_SEQ_CST); }
+
 #elif !defined(__STDC_NO_ATOMICS__)
 
 #include <stdatomic.h>
@@ -68,6 +71,9 @@ inline int dt_atomic_sub_int(dt_atomic_int *var, int decr) { return atomic_fetch
 inline int dt_atomic_exch_int(dt_atomic_int *var, int value) { return atomic_exchange(var,value); }
 inline int dt_atomic_CAS_int(dt_atomic_int *var, int *expected, int value)
 { return atomic_compare_exchange_strong(var,expected,value); }
+
+inline void dt_atomic_or_int(dt_atomic_int *var, int flags) { atomic_fetch_or(var, flags); }
+inline void dt_atomic_and_int(dt_atomic_int *var, int flags) { atomic_fetch_and(var, flags); }
 
 #elif defined(__GNUC__) && (__GNUC__ > 4 || (__GNUC__ == 4 && __GNU_MINOR__ >= 8))
 // we don't have or aren't supposed to use C11 atomics, but the compiler is a recent-enough version of GCC
@@ -88,6 +94,9 @@ inline int dt_atomic_exch_int(dt_atomic_int *var, int value)
 { int orig;  __atomic_exchange(var,&value,&orig,__ATOMIC_SEQ_CST); return orig; }
 inline int dt_atomic_CAS_int(dt_atomic_int *var, int *expected, int value)
 { return __atomic_compare_exchange(var,expected,&value,0,__ATOMIC_SEQ_CST,__ATOMIC_SEQ_CST); }
+
+inline void dt_atomic_or_int(dt_atomic_int *var, int flags) { __atomic_fetch_or(var, flags, __ATOMIC_SEQ_CST); }
+inline void dt_atomic_and_int(dt_atomic_int *var, int flags) { __atomic_fetch_and(var, flags, __ATOMIC_SEQ_CST); }
 
 #else
 // we don't have or aren't supposed to use C11 atomics, and don't have GNU intrinsics, so
@@ -168,6 +177,20 @@ inline int dt_atomic_CAS_int(dt_atomic_int *var, int *expected, int value)
   *expected = origvalue;
   pthread_mutex_unlock(&dt_atom_mutex);
   return success;
+}
+
+inline void dt_atomic_or_int(dt_atomic_int *var, int flags)
+{
+  pthread_mutex_lock(&dt_atom_mutex);
+  *var |= flags;
+  pthread_mutex_unlock(&dt_atom_mutex);
+}
+
+inline void dt_atomic_and_int(dt_atomic_int *var, int flags)
+{
+  pthread_mutex_lock(&dt_atom_mutex);
+  *var &= flags;
+  pthread_mutex_unlock(&dt_atom_mutex);
 }
 
 #endif // __STDC_NO_ATOMICS__

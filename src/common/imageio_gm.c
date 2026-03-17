@@ -106,6 +106,22 @@ dt_imageio_retval_t dt_imageio_open_gm(dt_image_t *img, const char *filename, dt
 
   img->buf_dsc.channels = 4;
   img->buf_dsc.datatype = TYPE_FLOAT;
+  img->buf_dsc.cst = IOP_CS_RGB;
+  img->buf_dsc.filters = 0u;
+  img->flags &= ~DT_IMAGE_RAW;
+  img->flags &= ~DT_IMAGE_HDR;
+  img->flags &= ~DT_IMAGE_S_RAW;
+  img->flags |= DT_IMAGE_LDR;
+
+  img->loader = LOADER_GM;
+
+  if(!mbuf)
+  {
+    if(image) DestroyImage(image);
+    if(image_info) DestroyImageInfo(image_info);
+    DestroyExceptionInfo(&exception);
+    return DT_IMAGEIO_OK;
+  }
 
   float *mipbuf = (float *)dt_mipmap_cache_alloc(mbuf, img);
   if(!mipbuf)
@@ -140,15 +156,6 @@ dt_imageio_retval_t dt_imageio_open_gm(dt_image_t *img, const char *filename, dt
   if(image) DestroyImage(image);
   if(image_info) DestroyImageInfo(image_info);
   DestroyExceptionInfo(&exception);
-
-  img->buf_dsc.cst = IOP_CS_RGB;
-  img->buf_dsc.filters = 0u;
-  img->flags &= ~DT_IMAGE_RAW;
-  img->flags &= ~DT_IMAGE_HDR;
-  img->flags &= ~DT_IMAGE_S_RAW;
-  img->flags |= DT_IMAGE_LDR;
-
-  img->loader = LOADER_GM;
   return DT_IMAGEIO_OK;
 
 error:
@@ -164,4 +171,3 @@ error:
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

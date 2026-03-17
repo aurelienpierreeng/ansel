@@ -102,6 +102,33 @@ dt_imageio_retval_t dt_imageio_open_avif(dt_image_t *img,
   img->buf_dsc.channels = 4;
   img->buf_dsc.datatype = TYPE_FLOAT;
   img->buf_dsc.cst = IOP_CS_RGB;
+  img->buf_dsc.filters = 0u;
+  img->flags &= ~DT_IMAGE_RAW;
+  img->flags &= ~DT_IMAGE_S_RAW;
+
+  switch(bit_depth) {
+  case 12:
+  case 10:
+    img->flags |= DT_IMAGE_HDR;
+    img->flags &= ~DT_IMAGE_LDR;
+    break;
+  case 8:
+    img->flags |= DT_IMAGE_LDR;
+    img->flags &= ~DT_IMAGE_HDR;
+    break;
+  default:
+    dt_print(DT_DEBUG_IMAGEIO, "[avif_open] invalid bit depth for `%s'\n", filename);
+    ret = DT_IMAGEIO_CACHE_FULL;
+    goto out;
+  }
+
+  img->loader = LOADER_AVIF;
+
+  if(!mbuf)
+  {
+    ret = DT_IMAGEIO_OK;
+    goto out;
+  }
 
   float *mipbuf = (float *)dt_mipmap_cache_alloc(mbuf, img);
   if(mipbuf == NULL)
@@ -110,11 +137,6 @@ dt_imageio_retval_t dt_imageio_open_avif(dt_image_t *img,
     ret = DT_IMAGEIO_CACHE_FULL;
     goto out;
   }
-
-  /* This can be LDR or HDR, it depends on the ICC profile. */
-  img->buf_dsc.filters = 0u;
-  img->flags &= ~DT_IMAGE_RAW;
-  img->flags &= ~DT_IMAGE_S_RAW;
 
   const float max_channel_f = (float)((1 << bit_depth) - 1);
 
@@ -125,8 +147,6 @@ dt_imageio_retval_t dt_imageio_open_avif(dt_image_t *img,
   switch (bit_depth) {
   case 12:
   case 10: {
-    img->flags |= DT_IMAGE_HDR;
-    img->flags &= ~DT_IMAGE_LDR;
 #ifdef _OPENMP
 #pragma omp parallel for simd default(none) \
   dt_omp_firstprivate(mipbuf, width, height, in, rowbytes, max_channel_f) \
@@ -150,8 +170,6 @@ dt_imageio_retval_t dt_imageio_open_avif(dt_image_t *img,
     break;
   }
   case 8: {
-    img->flags |= DT_IMAGE_LDR;
-    img->flags &= ~DT_IMAGE_HDR;
 #ifdef _OPENMP
 #pragma omp parallel for simd default(none) \
   dt_omp_firstprivate(mipbuf, width, height, in, rowbytes, max_channel_f) \
@@ -188,8 +206,6 @@ dt_imageio_retval_t dt_imageio_open_avif(dt_image_t *img,
     memcpy(img->profile, icc->data, icc->size);
     img->profile_size = icc->size;
   }
-
-  img->loader = LOADER_AVIF;
   ret = DT_IMAGEIO_OK;
 out:
   avifRGBImageFreePixels(&rgb);

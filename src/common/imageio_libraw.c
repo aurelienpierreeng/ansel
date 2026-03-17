@@ -310,30 +310,6 @@ dt_imageio_retval_t dt_imageio_open_libraw(dt_image_t *img, const char *filename
   img->buf_dsc.datatype = TYPE_UINT16;
   img->buf_dsc.cst = IOP_CS_RAW;
 
-  // Allocate and copy image from libraw buffer to dt
-  void *buf = dt_mipmap_cache_alloc(mbuf, img);
-  if(!buf)
-  {
-    fprintf(stderr, "[libraw_open] could not alloc full buffer for image `%s'\n", img->filename);
-    err = DT_IMAGEIO_CACHE_FULL;
-    goto error;
-  }
-  // Use faster memcpy if buffer sizes are equal
-  const size_t bufSize_mipmap = (size_t)img->width * img->height * sizeof(uint16_t);
-  const size_t bufSize_libraw = (size_t)raw->rawdata.sizes.raw_pitch * raw->rawdata.sizes.raw_height;
-  if(bufSize_mipmap == bufSize_libraw)
-  {
-    memcpy(buf, raw->rawdata.raw_image, bufSize_mipmap);
-  }
-  else
-  {
-    dt_imageio_flip_buffers((char *)buf, (char *)raw->rawdata.raw_image, sizeof(uint16_t),
-                            raw->rawdata.sizes.raw_width, raw->rawdata.sizes.raw_height,
-                            raw->rawdata.sizes.raw_width, raw->rawdata.sizes.raw_height,
-                            raw->rawdata.sizes.raw_pitch, ORIENTATION_NONE);
-  }
-
-  // Checks not really required for CR3 support, but it's taken from the old dt libraw integration.
   if(FILTERS_ARE_4BAYER(img->buf_dsc.filters))
   {
     img->flags |= DT_IMAGE_4BAYER;
@@ -358,6 +334,35 @@ dt_imageio_retval_t dt_imageio_open_libraw(dt_image_t *img, const char *filename
   }
 
   img->loader = LOADER_LIBRAW;
+
+  if(!mbuf)
+  {
+    err = DT_IMAGEIO_OK;
+    goto error;
+  }
+
+  // Allocate and copy image from libraw buffer to dt
+  void *buf = dt_mipmap_cache_alloc(mbuf, img);
+  if(!buf)
+  {
+    fprintf(stderr, "[libraw_open] could not alloc full buffer for image `%s'\n", img->filename);
+    err = DT_IMAGEIO_CACHE_FULL;
+    goto error;
+  }
+  // Use faster memcpy if buffer sizes are equal
+  const size_t bufSize_mipmap = (size_t)img->width * img->height * sizeof(uint16_t);
+  const size_t bufSize_libraw = (size_t)raw->rawdata.sizes.raw_pitch * raw->rawdata.sizes.raw_height;
+  if(bufSize_mipmap == bufSize_libraw)
+  {
+    memcpy(buf, raw->rawdata.raw_image, bufSize_mipmap);
+  }
+  else
+  {
+    dt_imageio_flip_buffers((char *)buf, (char *)raw->rawdata.raw_image, sizeof(uint16_t),
+                            raw->rawdata.sizes.raw_width, raw->rawdata.sizes.raw_height,
+                            raw->rawdata.sizes.raw_width, raw->rawdata.sizes.raw_height,
+                            raw->rawdata.sizes.raw_pitch, ORIENTATION_NONE);
+  }
 
   err = DT_IMAGEIO_OK;
 

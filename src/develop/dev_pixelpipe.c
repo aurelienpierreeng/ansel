@@ -40,7 +40,7 @@ static gchar *_get_debug_pipe_name(const dt_dev_pixelpipe_t *pipe, const dt_deve
 static void _change_pipe(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_change_t flag)
 {
   if(!pipe) return;
-  pipe->changed |= flag;
+  dt_dev_pixelpipe_or_changed(pipe, flag);
   dt_atomic_set_int(&pipe->shutdown, TRUE);
 }
 
@@ -90,7 +90,7 @@ void dt_dev_pixelpipe_update_history_preview_real(dt_develop_t *dev)
 void dt_dev_pixelpipe_update_history_all_real(dt_develop_t *dev)
 {
   if(!dev || !dev->gui_attached) return;
-  dt_dev_pixelpipe_update_preview(dev);
+  dt_dev_pixelpipe_update_history_preview(dev);
   dt_dev_pixelpipe_update_history_main(dev);
 }
 
@@ -529,7 +529,8 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
 
   // Read and write immediately to ensure cross-thread consistency of the value
   // in case the GUI overwrites that while we are syncing history and nodes
-  dt_dev_pixelpipe_change_t status = pipe->changed;
+  dt_dev_pixelpipe_change_t status = dt_dev_pixelpipe_get_changed(pipe);
+  dt_dev_pixelpipe_set_changed(pipe, DT_DEV_PIPE_UNCHANGED);
 
   gchar *type = _get_debug_pipe_name(pipe, dev);
   char *status_str = g_strdup_printf("%s%s%s%s%s",
@@ -579,12 +580,6 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
   }
   dt_pthread_rwlock_unlock(&dev->history_mutex);
 
-  pipe->status = DT_DEV_PIXELPIPE_DIRTY;
-
-  // If the pipe state wasn't overwritten during resync
-  if(status == pipe->changed)
-    pipe->changed = DT_DEV_PIPE_UNCHANGED;
-
   dt_show_times_f(&start, "[dev_pixelpipe] pipeline resync with history", "for pipe %s", type);
 }
 
@@ -619,10 +614,9 @@ void dt_dev_pixelpipe_sync_virtual(dt_develop_t *dev, dt_dev_pixelpipe_change_t 
 gboolean dt_dev_pixelpipe_is_backbufer_valid(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
 {
   return dt_dev_backbuf_get_hash(&pipe->backbuf) != DT_PIXELPIPE_CACHE_HASH_INVALID
-         && pipe->status == DT_DEV_PIXELPIPE_VALID 
-         && pipe->changed == DT_DEV_PIPE_UNCHANGED
          && dt_dev_pixelpipe_get_hash(pipe) == dt_dev_backbuf_get_hash(&pipe->backbuf)
-         && dt_dev_get_history_hash(dev) == dt_dev_backbuf_get_history_hash(&pipe->backbuf);
+         && dt_dev_get_history_hash(dev) == dt_dev_backbuf_get_history_hash(&pipe->backbuf)
+         && dt_dev_backbuf_get_history_hash(&pipe->backbuf) == dt_dev_get_history_hash(dev);
 }
 
 gboolean dt_dev_pixelpipe_is_pipeline_valid(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
