@@ -620,9 +620,13 @@ void dtgtk_cairo_paint_masks_ellipse(cairo_t *cr, gint x, gint y, gint w, gint h
   PREAMBLE(1.15, 1, 0, 0)
 
   cairo_save(cr);
-  cairo_translate(cr, 0.1465, 0);
-  cairo_scale(cr, 0.707, 1);
-  cairo_arc(cr, 0.5, 0.5, 0.4, 0, 6.2832);
+  // Apply rotation after the non-uniform scale so the ellipse orientation changes.
+  cairo_translate(cr, 0.5, 0.5);
+  cairo_rotate(cr, M_PI / 4.0);
+  // Radius chosen so the rotated/scaled ellipse touches the unit box edges.
+  const double radius = 0.5773;
+  cairo_scale(cr, 0.707, 1.0);
+  cairo_arc(cr, 0, 0, 0.45, 0, 2 * M_PI);
   cairo_restore(cr);
   cairo_stroke(cr);
 
