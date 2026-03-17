@@ -153,23 +153,12 @@ static void _update_softproof_gamut_checking(dt_develop_t *d);
 /* signal handler for filmstrip image switching */
 static void _view_darkroom_filmstrip_activate_callback(gpointer instance, int32_t imgid, gpointer user_data);
 static void _darkroom_image_loaded_callback(gpointer instance, guint request_id, guint result, gpointer user_data);
-static void _darkroom_cancel_image_load_job(void);
 
 static void _dev_change_image(dt_view_t *self, const int32_t imgid);
 
 static int _change_scaling(dt_develop_t *dev, const float x, const float y, const float new_scaling);
 static void _release_expose_source_caches(void);
 
-typedef struct dt_darkroom_image_load_job_t
-{
-  int32_t imgid;
-  guint request_id;
-} dt_darkroom_image_load_job_t;
-
-
-static dt_job_t *_darkroom_image_load_job = NULL;
-static guint _darkroom_image_load_serial = 0;
-static guint _darkroom_image_load_active_request = 0;
 static int32_t _darkroom_pending_imgid = UNKNOWN_IMAGE;
 static dt_iop_module_t *_darkroom_pending_focus_module = NULL;
 
@@ -215,9 +204,6 @@ void cleanup(dt_view_t *self)
 
   // unref the grid lines popover if needed
   if(darktable.view_manager->guides_popover) g_object_unref(darktable.view_manager->guides_popover);
-  if(darktable.signals)
-    DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_darkroom_image_loaded_callback), (gpointer)self);
-  _darkroom_cancel_image_load_job();
   _darkroom_pending_imgid = UNKNOWN_IMAGE;
   _darkroom_pending_focus_module = NULL;
   dt_dev_cleanup(dev);
@@ -1155,77 +1141,13 @@ static gboolean _darkroom_attach_missing_iop_guis(dt_develop_t *dev)
   return attached;
 }
 
-static void _darkroom_image_load_job_state(dt_job_t *job, dt_job_state_t state)
-{
-  if(job != _darkroom_image_load_job) return;
-
-  if(state == DT_JOB_STATE_CANCELLED)
-  {
-    _darkroom_image_load_active_request = 0;
-  }
-  if(state >= DT_JOB_STATE_FINISHED) _darkroom_image_load_job = NULL;
-}
-
-static int32_t _darkroom_image_load_job_run(dt_job_t *job)
-{
-  const dt_darkroom_image_load_job_t *params = dt_control_job_get_params(job);
-  if(!params) return 0;
-
-  int ret = dt_dev_load_image(darktable.develop, params->imgid);
-
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_IMAGE_LOADED, params->request_id, (guint)ret);
-
-  return 0;
-}
-
-static void _darkroom_cancel_image_load_job(void)
-{
-  if(!_darkroom_image_load_job) return;
-
-  dt_control_job_cancel(_darkroom_image_load_job);
-  _darkroom_image_load_job = NULL;
-  _darkroom_image_load_active_request = 0;
-  _darkroom_pending_focus_module = NULL;
-}
-
-static void _darkroom_start_image_load(const int32_t imgid)
-{
-  if(imgid <= UNKNOWN_IMAGE)
-  {
-    dt_control_log(_("No image to open !"));
-    return;
-  }
-
-  _darkroom_cancel_image_load_job();
-
-  dt_job_t *job = dt_control_job_create(&_darkroom_image_load_job_run, "darkroom load image %d", imgid);
-  if(!job)
-  {
-    dt_control_log(_("We could not queue the image load."));
-    return;
-  }
-
-  dt_darkroom_image_load_job_t *params = g_new0(dt_darkroom_image_load_job_t, 1);
-  params->imgid = imgid;
-  params->request_id = ++_darkroom_image_load_serial;
-
-  _darkroom_image_load_active_request = params->request_id;
-  _darkroom_image_load_job = job;
-
-  dt_control_job_set_params_with_size(job, params, sizeof(*params), g_free);
-  dt_control_job_set_state_callback(job, _darkroom_image_load_job_state);
-  dt_control_job_add_progress(job, _("loading image"), TRUE);
-  dt_control_add_job(darktable.control, DT_JOB_QUEUE_USER_FG, job);
-}
-
 static void _darkroom_image_loaded_callback(gpointer instance, guint request_id, guint result, gpointer user_data)
 {
   dt_view_t *self = (dt_view_t *)user_data;
   dt_develop_t *dev = (dt_develop_t *)self->data;
-  if(request_id == 0 || request_id != _darkroom_image_load_active_request) return;
+  if(request_id == 0) return;
   if(darktable.view_manager->current_view != self) return;
 
-  _darkroom_image_load_active_request = 0;
 
   if(result)
   {
@@ -2517,9 +2439,6 @@ void enter(dt_view_t *self)
   // clear selection, we don't want selections in darkroom
   dt_selection_clear(darktable.selection);
 
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_IMAGE_LOADED,
-                                  G_CALLBACK(_darkroom_image_loaded_callback), self);
-
   /* connect signal for filmstrip image activate */
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_VIEWMANAGER_THUMBTABLE_ACTIVATE,
                                   G_CALLBACK(_view_darkroom_filmstrip_activate_callback), self);
@@ -2528,7 +2447,8 @@ void enter(dt_view_t *self)
 
   const int32_t imgid = _darkroom_pending_imgid;
   _darkroom_pending_imgid = UNKNOWN_IMAGE;
-  _darkroom_start_image_load(imgid);
+  int ret = dt_dev_load_image(darktable.develop, imgid);
+  _darkroom_image_loaded_callback(NULL, imgid, ret, self);
 }
 
 void leave(dt_view_t *self)
@@ -2547,8 +2467,6 @@ void leave(dt_view_t *self)
   if(dev->virtual_pipe) dt_atomic_set_int(&dev->virtual_pipe->shutdown, TRUE);
   dev->pipelines_started = FALSE;
 
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_darkroom_image_loaded_callback), (gpointer)self);
-  _darkroom_cancel_image_load_job();
   _darkroom_pending_focus_module = NULL;
 
   // While we wait for possible pipelines to finish,
