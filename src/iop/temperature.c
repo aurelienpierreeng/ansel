@@ -1946,9 +1946,6 @@ void gui_init(struct dt_iop_module_t *self)
 
   gtk_stack_add_named(GTK_STACK(self->widget), GTK_WIDGET(box_enabled), "enabled");
   gtk_stack_add_named(GTK_STACK(self->widget), label_disabled, "disabled");
-
-  // Ensure the expander body has its subtree visible even when global show_all is blocked.
-  gtk_widget_show_all(GTK_WIDGET(g->cs.container));
 }
 
 void gui_cleanup(struct dt_iop_module_t *self)

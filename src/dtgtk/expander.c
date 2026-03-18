@@ -77,21 +77,11 @@ void dtgtk_expander_set_expanded(GtkDarktableExpander *expander, gboolean expand
   {
     expander->expanded = expanded;
 
-    GtkWidget *frame = expander->frame;
+    GtkWidget *frame = expander->body;
 
     if(frame)
     {
-      if(expander->expanded)
-      {
-        // Show the frame explicitly; then reveal the body subtree so late-added children become visible.
-        gtk_widget_show(frame);
-        gtk_widget_show(expander->body_evb);
-        gtk_widget_show_all(expander->body);
-      }
-      else
-      {
-        gtk_widget_hide(frame);
-      }
+      gtk_widget_set_visible(frame, expander->expanded);
     }
   }
 }
@@ -127,9 +117,6 @@ GtkWidget *dtgtk_expander_new(GtkWidget *header, GtkWidget *body)
   gtk_container_add(GTK_CONTAINER(expander->body_evb), expander->body);
   expander->frame = gtk_frame_new(NULL);
   gtk_container_add(GTK_CONTAINER(expander->frame), expander->body_evb);
-  // Ensure body widgets are marked visible so a later frame show reveals content.
-  gtk_widget_show(expander->body);
-  gtk_widget_show(expander->body_evb);
 
   gtk_box_pack_start(GTK_BOX(expander), expander->header_evb, TRUE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(expander), expander->frame, TRUE, FALSE, 0);

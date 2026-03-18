@@ -1930,7 +1930,7 @@ void gui_init(dt_lib_module_t *self)
 
   dt_gui_collapsible_section_t *shape_manager_expander = malloc(sizeof(dt_gui_collapsible_section_t));
 
-  dt_gui_new_collapsible_section(shape_manager_expander, "plugins/darkroom/blending/shape_manager/expanded",
+  dt_gui_new_collapsible_section(shape_manager_expander, "plugins/darkroom/shape_manager/expanded",
                                  _("Shape manager"), GTK_BOX(self->widget), GTK_PACK_START);
   GtkWidget *shape_manager_box = GTK_WIDGET(shape_manager_expander->container); // gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
   //gtk_box_pack_start(GTK_BOX(shape_manager_expander->container), shape_manager_box, TRUE, TRUE, 0);
@@ -2006,8 +2006,6 @@ void gui_init(dt_lib_module_t *self)
 
   gtk_box_pack_start(GTK_BOX(shape_manager_box), d->treeview, TRUE, TRUE, 0);
   dt_gui_widget_init_auto_height(d->treeview, TREE_LIST_MIN_ROWS, TREE_LIST_MAX_ROWS);
-  // Ensure the expander body has its subtree visible even when global show_all is blocked.
-  gtk_widget_show_all(shape_manager_box);
 
   
   GtkWidget *blending_label = dt_ui_section_label_new(_("Blending"));
