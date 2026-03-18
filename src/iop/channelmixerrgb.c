@@ -3713,14 +3713,18 @@ void _auto_set_illuminant(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe)
   // capture gui color picked event.
   if(self->picked_color_max[0] < self->picked_color_min[0]) return;
   const float *RGB = self->picked_color;
+  if(!isfinite(RGB[0]) || !isfinite(RGB[1]) || !isfinite(RGB[2])) return;
 
-  // Get work profile
-  const dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_pipe_work_profile_info(pipe);
-  if(work_profile == NULL) return;
+  // Get the module-stage profile matching the sampled buffer.
+  const dt_iop_order_iccprofile_info_t *const current_profile
+      = dt_ioppr_get_pipe_current_profile_info(self, pipe);
+  if(current_profile == NULL) return;
 
-  // Convert to XYZ
-  dt_aligned_pixel_t XYZ;
-  dot_product(RGB, work_profile->matrix_in, XYZ);
+  // Convert the sampled linear RGB code values to XYZ in the module profile.
+  // The picker already sampled the live module buffer, so keep the conversion explicit here.
+  dt_aligned_pixel_t XYZ = { 0.f };
+  dot_product(RGB, current_profile->matrix_in, XYZ);
+  if(!isfinite(XYZ[0]) || !isfinite(XYZ[1]) || !isfinite(XYZ[2])) return;
   dt_XYZ_to_sRGB(XYZ, g->spot_RGB);
 
   // Convert to Lch for GUI feedback (input)
