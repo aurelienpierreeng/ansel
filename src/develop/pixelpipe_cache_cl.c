@@ -330,8 +330,9 @@ static void *_gpu_init_buffer(int devid, void *const host_ptr, const dt_iop_roi_
   // Need to use read-write mode because of in-place color space conversions.
   void *cl_mem_input = NULL;
   gboolean reused_from_cache = FALSE;
-  const gboolean allow_reuse_pinned = reuse_pinned;
-  const gboolean allow_reuse_device = reuse_device;
+  const gboolean allow_reuse = !(darktable.unmuted & DT_DEBUG_NOCACHE_REUSE);
+  const gboolean allow_reuse_pinned = allow_reuse && reuse_pinned;
+  const gboolean allow_reuse_device = allow_reuse && reuse_device;
 
   if(out_reused) *out_reused = FALSE;
 
@@ -396,8 +397,10 @@ static void _gpu_clear_buffer(void **cl_mem_buffer, dt_pixel_cache_entry_t *cach
   {
     cl_mem mem = *cl_mem_buffer;
     const cl_mem_flags flags = dt_opencl_get_mem_flags(mem);
-    const gboolean can_cache_pinned = (cache_entry && host_ptr && (flags & CL_MEM_USE_HOST_PTR));
-    const gboolean can_cache_device = (cache_entry && !host_ptr && cache_device && !(flags & CL_MEM_USE_HOST_PTR));
+    const gboolean allow_reuse = !(darktable.unmuted & DT_DEBUG_NOCACHE_REUSE);
+    const gboolean can_cache_pinned = (allow_reuse && cache_entry && host_ptr && (flags & CL_MEM_USE_HOST_PTR));
+    const gboolean can_cache_device = (allow_reuse && cache_entry && !host_ptr && cache_device
+                                       && !(flags & CL_MEM_USE_HOST_PTR));
     const gboolean can_cache = (can_cache_pinned || can_cache_device);
     if(can_cache)
     {
@@ -523,7 +526,7 @@ static float *_resync_input_gpu_to_cache(dt_dev_pixelpipe_t *pipe, float *input,
                                          const char *message)
 {
   if(!cl_mem_input) return input;
-  dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, TRUE, input_entry);
+  dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, TRUE, input_entry);
 
   int fail = _cl_pinned_memory_copy(pipe->devid, input, cl_mem_input, roi_in, CL_MAP_READ, in_bpp, module, message);
 
@@ -532,7 +535,7 @@ static float *_resync_input_gpu_to_cache(dt_dev_pixelpipe_t *pipe, float *input,
 
   // Enforce the OpenCL pipe to run in sync with CPU RAM cache so lock validity is guaranteed.
   dt_opencl_finish(pipe->devid);
-  dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE, input_entry);
+  dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, FALSE, input_entry);
 
   // Update colorspace tag (again, for safety).
   input_format->cst = input_cst_cl;
@@ -586,7 +589,7 @@ static int _gpu_prepare_cl_input(dt_dev_pixelpipe_t *pipe, dt_iop_module_t *modu
     if(flags & CL_MEM_USE_HOST_PTR)
       if(_cl_is_zero_copy_image(pipe->devid, mem, input, roi_in, in_bpp))
       {
-        dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, TRUE, input_entry);
+        dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, input_entry);
         *locked_input_entry = input_entry;
       }
     return 0;
@@ -598,7 +601,7 @@ static int _gpu_prepare_cl_input(dt_dev_pixelpipe_t *pipe, dt_iop_module_t *modu
     return 1;
   }
 
-  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, TRUE, input_entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, input_entry);
 
   // Try to reuse a cached pinned buffer; otherwise allocate a new pinned image backed by `input`.
   gboolean input_reused_from_cache = FALSE;
@@ -642,7 +645,7 @@ static int _gpu_prepare_cl_input(dt_dev_pixelpipe_t *pipe, dt_iop_module_t *modu
   if(keep_lock)
     *locked_input_entry = input_entry;
   else
-    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE, input_entry);
+    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, input_entry);
 
   return fail ? 1 : 0;
 }

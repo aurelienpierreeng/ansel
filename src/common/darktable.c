@@ -191,7 +191,7 @@ static int usage(const char *argv0)
   printf("  --conf <key>=<value>\n");
   printf("  --configdir <user config directory>\n");
   printf("  -d {all,cache,camctl,camsupport,colorprofile,control,demosaic,dev,history,imageio,import,\n");
-  printf("      input,ioporder,lighttable,lua,masks,memory,nan,opencl,params,\n");
+  printf("      input,ioporder,lighttable,lua,masks,memory,nan,nocache_reuse,opencl,params,\n");
   printf("      perf,pipe,print,pwstorage,signal,sql,shortcuts,tiling,undo,verbose}\n");
   printf("  --d-signal <signal> \n");
   printf("  --d-signal-act <all,raise,connect,disconnect");
@@ -716,6 +716,8 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
           darktable.unmuted |= DT_DEBUG_CAMERA_SUPPORT; // camera support warnings are reported on console
         else if(!strcmp(argv[k + 1], "colorprofile"))
           darktable.unmuted |= DT_DEBUG_COLORPROFILE; // color profile handling
+        else if(!strcmp(argv[k + 1], "nocache_reuse"))
+          darktable.unmuted |= DT_DEBUG_NOCACHE_REUSE; // disable reusable pixelpipe cache buffers
         else if(!strcmp(argv[k + 1], "ioporder"))
           darktable.unmuted |= DT_DEBUG_IOPORDER; // iop order information are reported on console
         else if(!strcmp(argv[k + 1], "imageio"))

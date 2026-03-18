@@ -592,8 +592,7 @@ static void invalidate_luminance_cache(dt_iop_module_t *const self)
   dt_iop_gui_leave_critical_section(self);
 
   if(preview_entry)
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE,
-                                           preview_entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
 }
 
 
@@ -992,8 +991,7 @@ static int toneeq_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *
       dt_iop_gui_leave_critical_section(self);
 
       if(preview_entry)
-        dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE,
-                                               preview_entry);
+        dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
     }
   }
 
@@ -1031,10 +1029,8 @@ static int toneeq_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *
       if(luminance_entry)
       {
         if(created_luminance_entry)
-          dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE,
-                                              luminance_entry);
-        dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE,
-                                               luminance_entry);
+          dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, FALSE, luminance_entry);
+        dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, luminance_entry);
       }
       return 1;
     }
@@ -1043,17 +1039,13 @@ static int toneeq_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *
     {
       if(compute_luminance_mask(in, luminance, width, height, ch, d) != 0)
       {
-        dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE,
-                                            luminance_entry);
-        dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE,
-                                               luminance_entry);
-        dt_dev_pixelpipe_cache_remove(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, TRUE,
-                                      luminance_entry);
+        dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, FALSE, luminance_entry);
+        dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, luminance_entry);
+        dt_dev_pixelpipe_cache_remove(darktable.pixelpipe_cache, TRUE, luminance_entry);
         return 1;
       }
 
-      dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE,
-                                          luminance_entry);
+      dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, FALSE, luminance_entry);
     }
   }
   else
@@ -1110,17 +1102,14 @@ static int toneeq_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *
     dt_iop_gui_leave_critical_section(self);
 
     if(old_entry)
-      dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE,
-                                             old_entry);
+      dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, old_entry);
 
     if(!keep_process_ref)
-      dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE,
-                                             luminance_entry);
+      dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, luminance_entry);
   }
   else if(luminance_entry)
   {
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE,
-                                           luminance_entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, luminance_entry);
   }
   else
   {
@@ -1461,8 +1450,7 @@ static inline void update_histogram(struct dt_iop_module_t *const self)
     width = g->thumb_preview_buf_width;
     height = g->thumb_preview_buf_height;
     preview_hash = g->thumb_preview_hash;
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, TRUE,
-                                           preview_entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, preview_entry);
     needs_histogram = TRUE;
   }
   dt_iop_gui_leave_critical_section(self);
@@ -1470,8 +1458,7 @@ static inline void update_histogram(struct dt_iop_module_t *const self)
   if(!needs_histogram || width == 0 || height == 0)
   {
     if(preview_entry)
-      dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE,
-                                             preview_entry);
+      dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
     return;
   }
 
@@ -1480,19 +1467,16 @@ static inline void update_histogram(struct dt_iop_module_t *const self)
   float first_decile = 0.0f;
   float last_decile = 0.0f;
 
-  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, TRUE,
-                                      preview_entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, preview_entry);
   const float *const preview_buf = (const float *const)dt_pixel_cache_entry_get_data(preview_entry);
   if(preview_buf)
     compute_log_histogram_and_stats(preview_buf, histogram, width * height, &max_histogram, &first_decile,
                                     &last_decile);
-  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE,
-                                      preview_entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
 
   if(!preview_buf)
   {
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE,
-                                           preview_entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
     return;
   }
 
@@ -1508,8 +1492,7 @@ static inline void update_histogram(struct dt_iop_module_t *const self)
   }
   dt_iop_gui_leave_critical_section(self);
 
-  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE,
-                                         preview_entry);
+  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
 }
 
 
@@ -2109,21 +2092,18 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
     preview_width = g->thumb_preview_buf_width;
     preview_height = g->thumb_preview_buf_height;
     if(preview_entry)
-      dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, TRUE,
-                                             preview_entry);
+      dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, preview_entry);
     dt_iop_gui_leave_critical_section(self);
 
     if(preview_entry && preview_width > 0 && preview_height > 0)
     {
-      dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, TRUE,
-                                          preview_entry);
+      dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, preview_entry);
       const float *const preview_buf = (const float *const)dt_pixel_cache_entry_get_data(preview_entry);
       const float cursor_exposure
           = preview_buf ? log2f(get_luminance_from_buffer(preview_buf, preview_width, preview_height,
                                                           (size_t)x_pointer, (size_t)y_pointer))
                         : NAN;
-      dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE,
-                                          preview_entry);
+      dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
 
       if(!isnan(cursor_exposure))
       {
@@ -2135,8 +2115,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
     }
 
     if(preview_entry)
-      dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE,
-                                             preview_entry);
+      dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
   }
 
   _switch_cursors(self);
@@ -2254,21 +2233,18 @@ int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t 
   cursor_x = g->cursor_pos_x;
   cursor_y = g->cursor_pos_y;
   if(preview_entry)
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, TRUE,
-                                           preview_entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, preview_entry);
   dt_iop_gui_leave_critical_section(self);
 
   if(preview_entry && preview_width > 0 && preview_height > 0)
   {
-    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, TRUE,
-                                        preview_entry);
+    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, preview_entry);
     const float *const preview_buf = (const float *const)dt_pixel_cache_entry_get_data(preview_entry);
     const float cursor_exposure
         = preview_buf ? log2f(get_luminance_from_buffer(preview_buf, preview_width, preview_height,
                                                         (size_t)cursor_x, (size_t)cursor_y))
                       : NAN;
-    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE,
-                                        preview_entry);
+    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
 
     if(!isnan(cursor_exposure))
     {
@@ -2279,8 +2255,7 @@ int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t 
   }
 
   if(preview_entry)
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE,
-                                           preview_entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
 
   // Set the correction from mouse scroll input
   const float increment = (up) ? +1.0f : -1.0f;
@@ -2433,8 +2408,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
     preview_width = g->thumb_preview_buf_width;
     preview_height = g->thumb_preview_buf_height;
     if(preview_entry)
-      dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, TRUE,
-                                             preview_entry);
+      dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, preview_entry);
     dt_simd_memcpy(g->factors, factors, PIXEL_CHAN);
     sigma = g->sigma;
   }
@@ -2443,8 +2417,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
 
   if(preview_entry && preview_width > 0 && preview_height > 0)
   {
-    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, TRUE,
-                                        preview_entry);
+    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, preview_entry);
     const float *const preview_buf = (const float *const)dt_pixel_cache_entry_get_data(preview_entry);
     if(preview_buf)
     {
@@ -2460,8 +2433,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
       exposure_in = NAN;
       correction = NAN;
     }
-    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE,
-                                        preview_entry);
+    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
 
     if(!isnan(exposure_in))
     {
@@ -2472,8 +2444,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   }
 
   if(preview_entry)
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE,
-                                           preview_entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
 
   if(isnan(correction) || isnan(exposure_in)) return; // something went wrong
 
@@ -2612,11 +2583,11 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
         void *preview_buf = NULL;
         dt_pixel_cache_entry_t *preview_entry = NULL;
 
-        if(dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, preview_hash, &preview_buf, NULL, &preview_entry)
+        if(dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, preview_hash, &preview_buf, NULL, &preview_entry,
+                                       NULL, 0, -1, NULL)
            && preview_buf && preview_entry)
         {
-          dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, TRUE,
-                                                 preview_entry);
+          dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, preview_entry);
 
           dt_pixel_cache_entry_t *old_entry = NULL;
           gboolean keep_new_entry = FALSE;
@@ -2637,11 +2608,9 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
           dt_iop_gui_leave_critical_section(self);
 
           if(old_entry)
-            dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID,
-                                                   FALSE, old_entry);
+            dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, old_entry);
           if(!keep_new_entry)
-            dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID,
-                                                   FALSE, preview_entry);
+            dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
         }
         else
           needs_preview_update = TRUE;
@@ -3442,8 +3411,7 @@ void gui_cleanup(struct dt_iop_module_t *self)
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_develop_preview_pipe_finished_callback), self);
 
   if(g->thumb_preview_entry)
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE,
-                                           g->thumb_preview_entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, g->thumb_preview_entry);
   if(g->desc) pango_font_description_free(g->desc);
   if(g->layout) g_object_unref(g->layout);
   if(g->cr) cairo_destroy(g->cr);

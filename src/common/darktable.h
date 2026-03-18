@@ -661,7 +661,8 @@ typedef enum dt_debug_thread_t
   DT_DEBUG_PIPE           = 1 << 26,
   DT_DEBUG_IMPORT         = 1 << 27,
   DT_DEBUG_VERBOSE        = 1 << 28,
-  DT_DEBUG_COLORPROFILE   = 1 << 29
+  DT_DEBUG_COLORPROFILE   = 1 << 29,
+  DT_DEBUG_NOCACHE_REUSE  = 1 << 30
 } dt_debug_thread_t;
 
 typedef struct dt_codepath_t

@@ -310,6 +310,24 @@ inline static void histogram_helper_cs_Lab_LCh(const dt_dev_histogram_collection
   }
 }
 
+inline static void histogram_helper_cs_LCh(const dt_dev_histogram_collection_params_t *const histogram_params,
+                                           const void *pixel, uint32_t *histogram, int j,
+                                           const dt_iop_order_iccprofile_info_t *const profile_info)
+{
+  const dt_histogram_roi_t *roi = histogram_params->roi;
+  float *in = (float *)pixel + 4 * (roi->width * j + roi->crop_x);
+
+  for(int i = 0; i < roi->width - roi->crop_width - roi->crop_x; i++, in += 4)
+  {
+    const uint32_t L = PS((in[0] / 100.f), histogram_params);
+    const uint32_t C = PS((in[1] / (128.0f * sqrtf(2.0f))), histogram_params);
+    const uint32_t h = PS(in[2], histogram_params);
+    histogram[4 * L]++;
+    histogram[4 * C + 1]++;
+    histogram[4 * h + 2]++;
+  }
+}
+
 //==============================================================================
 
 void dt_histogram_worker(dt_dev_histogram_collection_params_t *const histogram_params,
@@ -374,6 +392,27 @@ void dt_histogram_helper(dt_dev_histogram_collection_params_t *histogram_params,
     const dt_iop_colorspace_type_t cst_to, const void *pixel, uint32_t **histogram,
     const int compensate_middle_grey, const dt_iop_order_iccprofile_info_t *const profile_info)
 {
+  float *converted = NULL;
+  if(cst == IOP_CS_LAB && cst_to == IOP_CS_LCH)
+  {
+    const dt_histogram_roi_t *roi = histogram_params->roi;
+    const size_t pixels = (size_t)roi->width * roi->height;
+    converted = dt_pixelpipe_cache_alloc_align_float_cache(4 * pixels, 0);
+
+    if(converted != NULL)
+    {
+#ifdef _OPENMP
+#pragma omp parallel for default(none) dt_omp_firstprivate(pixel, converted, pixels) schedule(static)
+#endif
+      for(size_t k = 0; k < pixels; k++)
+      {
+        const size_t offset = 4 * k;
+        dt_Lab_2_LCH((const float *)pixel + offset, converted + offset);
+        converted[offset + 3] = ((const float *)pixel)[offset + 3];
+      }
+    }
+  }
+
   switch(cst)
   {
     case IOP_CS_RAW:
@@ -393,11 +432,15 @@ void dt_histogram_helper(dt_dev_histogram_collection_params_t *histogram_params,
     default:
       if(cst_to != IOP_CS_LCH)
         dt_histogram_worker(histogram_params, histogram_stats, pixel, histogram, histogram_helper_cs_Lab, profile_info);
+      else if(converted != NULL)
+        dt_histogram_worker(histogram_params, histogram_stats, converted, histogram, histogram_helper_cs_LCh, profile_info);
       else
         dt_histogram_worker(histogram_params, histogram_stats, pixel, histogram, histogram_helper_cs_Lab_LCh, profile_info);
       histogram_stats->ch = 3u;
       break;
   }
+
+  dt_pixelpipe_cache_free_align(converted);
 }
 
 void dt_histogram_max_helper(const dt_dev_histogram_stats_t *const histogram_stats,
@@ -461,4 +504,3 @@ void dt_histogram_max_helper(const dt_dev_histogram_stats_t *const histogram_sta
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

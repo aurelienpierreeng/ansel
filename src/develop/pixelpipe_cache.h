@@ -144,6 +144,47 @@ int dt_dev_pixelpipe_cache_get(dt_dev_pixelpipe_cache_t *cache, const uint64_t h
                                void **data, struct dt_iop_buffer_dsc_t **dsc,
                                struct dt_pixel_cache_entry_t **entry);
 
+/**
+ * @brief Acquire a writable cache line for module output.
+ *
+ * @details
+ * This is the cache-side companion of pixelpipe output computation. The caller already decided that the
+ * published output for `hash` is not immediately reusable and needs to be overwritten.
+ *
+ * The cache then resolves how to provide that writable line:
+ * - if an entry already exists at `hash`, it is reused in place and write-locked,
+ * - else, if `allow_rekey_reuse` is TRUE and `reuse_hint` still points to a live cacheline with the right size,
+ *   that old cacheline is rekeyed to `hash`, write-locked, and returned,
+ * - else, a new cacheline is created.
+ *
+ * In all successful cases:
+ * - the returned entry refcount is incremented,
+ * - the returned entry is write-locked,
+ * - and `alloc` may materialize the host buffer if requested.
+ *
+ * The caller must later release the write lock and refcount from the same control flow.
+ *
+ * @param cache Pixelpipe cache.
+ * @param hash Target output hash for the module output.
+ * @param size Required buffer size in bytes.
+ * @param name Debug label for the cache line.
+ * @param id Owning pipeline id.
+ * @param alloc Whether a host buffer must be materialized immediately.
+ * @param allow_rekey_reuse Whether the cache may reuse the piece-local cached output line by rekeying it.
+ * @param reuse_hint Snapshot of the previously attached piece cacheline metadata, or NULL.
+ * @param[out] data Returned host pointer when available.
+ * @param[out] dsc Returned descriptor pointer.
+ * @param[out] entry Returned cache entry.
+ * @return int `0` when reusing an existing entry at `hash`, `1` when creating a new entry,
+ *         `2` when rekeying `reuse_hint`, `-1` on error.
+ */
+int dt_dev_pixelpipe_cache_get_writable(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash,
+                                        const size_t size, const char *name, const int id,
+                                        const gboolean alloc, const gboolean allow_rekey_reuse,
+                                        const struct dt_pixel_cache_entry_t *reuse_hint,
+                                        void **data, struct dt_iop_buffer_dsc_t **dsc,
+                                        struct dt_pixel_cache_entry_t **entry);
+
 /** OpenCL pinned buffer reuse tied to cache entries. */
 void *dt_pixel_cache_clmem_get(struct dt_pixel_cache_entry_t *entry, void *host_ptr, int devid,
                                int width, int height, int bpp, int flags, int *out_cst);
@@ -241,7 +282,7 @@ void dt_dev_pixelpipe_cache_resync_host_pinned_image(dt_dev_pixelpipe_cache_t *c
  * On success it increments the entry refcount before returning, so callers can
  * safely use the entry across asynchronous OpenCL operations.
  * Release it with:
- * `dt_dev_pixelpipe_cache_ref_count_entry(cache, entry->hash, FALSE, entry)`.
+ * `dt_dev_pixelpipe_cache_ref_count_entry(cache, FALSE, entry)`.
  *
  * @param cache Pixelpipe cache.
  * @param host_ptr Host buffer pointer to resolve.
@@ -304,21 +345,15 @@ void dt_pixelpipe_cache_free_align_cache(dt_dev_pixelpipe_cache_t *cache, void *
  * This does not create a new cache line and does not change reference counts or entry locks.
  * Callers that need lifetime guarantees must retain the entry explicitly with
  * `dt_dev_pixelpipe_cache_ref_count_entry()` and/or `dt_dev_pixelpipe_cache_rdlock_entry()`.
+ *
+ * If `roi != NULL`, the lookup becomes authoritative for exact-hit consumers:
+ * - write-locked / auto-destroy entries are rejected,
+ * - host data is restored from cached device state when possible,
+ * - device data is restored into `cl_mem_output` when requested,
+ * - broken entries with neither authoritative RAM nor vRAM payload are removed.
  */
 gboolean dt_dev_pixelpipe_cache_peek(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash, void **data,
-                                     struct dt_iop_buffer_dsc_t **dsc, struct dt_pixel_cache_entry_t **entry);
-
-/**
- * @brief Non-owning authoritative exact-hit lookup of an existing cache line.
- *
- * @details
- * Unlike `dt_dev_pixelpipe_cache_peek()`, this only succeeds if the cacheline can immediately
- * satisfy the hit from RAM, from a cached device buffer, or by materializing RAM from cached
- * device state. If that fails, the broken cacheline is removed and the function returns FALSE.
- */
-gboolean dt_dev_pixelpipe_cache_peek_exact(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash, void **data,
-                                           struct dt_iop_buffer_dsc_t **dsc,
-                                           struct dt_pixel_cache_entry_t **entry,
+                                     struct dt_iop_buffer_dsc_t **dsc, struct dt_pixel_cache_entry_t **entry,
                                            const struct dt_iop_roi_t *roi, const size_t bpp,
                                            const int preferred_devid, void **cl_mem_output);
 
@@ -359,10 +394,9 @@ int dt_dev_pixelpipe_cache_flush_old(dt_dev_pixelpipe_cache_t *cache);
  * locked will be ignored. If force is TRUE, we ignore reference count, but not locks.
  *
  * @param cache
- * @param hash Cache-entry hash fallback. Ignored when `entry` is not NULL.
  * @param force
  */
-int dt_dev_pixelpipe_cache_remove(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash, const gboolean force,
+int dt_dev_pixelpipe_cache_remove(dt_dev_pixelpipe_cache_t *cache, const gboolean force,
                                   struct dt_pixel_cache_entry_t *entry);
 
 
@@ -382,20 +416,18 @@ int dt_dev_pixel_pipe_cache_remove_lru(dt_dev_pixelpipe_cache_t *cache);
  * WARNING: cache entries whose reference count is greater than 0 will never be deleted from cache.
  *
  * @param cache
- * @param hash Cache-entry hash fallback. Ignored when `entry` is not NULL.
  * @param lock TRUE to lock, FALSE to unlock
  */
-void dt_dev_pixelpipe_cache_ref_count_entry(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash, gboolean lock,
+void dt_dev_pixelpipe_cache_ref_count_entry(dt_dev_pixelpipe_cache_t *cache, gboolean lock,
                                             struct dt_pixel_cache_entry_t *entry);
 
 /**
  * @brief Lock or release the write lock on the entry
  *
  * @param cache
- * @param hash Cache-entry hash fallback. Ignored when `entry` is not NULL.
  * @param lock TRUE to lock, FALSE to release
  */
-void dt_dev_pixelpipe_cache_wrlock_entry(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash, gboolean lock,
+void dt_dev_pixelpipe_cache_wrlock_entry(dt_dev_pixelpipe_cache_t *cache, gboolean lock,
                                          struct dt_pixel_cache_entry_t *entry);
 
 
@@ -403,39 +435,35 @@ void dt_dev_pixelpipe_cache_wrlock_entry(dt_dev_pixelpipe_cache_t *cache, const 
  * @brief Lock or release the read lock on the entry
  *
  * @param cache
- * @param hash checksum of the cache entry to fetch. Optional if `entry` is not NULL.
  * @param lock TRUE to lock, FALSE to release
- * @param entry The cache entry object to lock, if a reference is already known. Can be NULL, but then you
- * need to pass a hash.
+ * @param entry The cache entry object to lock.
  */
-void dt_dev_pixelpipe_cache_rdlock_entry(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash, gboolean lock,
+void dt_dev_pixelpipe_cache_rdlock_entry(dt_dev_pixelpipe_cache_t *cache, gboolean lock,
                                          struct dt_pixel_cache_entry_t *entry);
 
 
 /**
- * @brief Flag the cache entry matching hash as "auto_destroy". This is useful for short-lived/disposable
+ * @brief Flag the cache entry as "auto_destroy". This is useful for short-lived/disposable
  * cache entries, that won't be needed in the future. These will be freed out of the typical LRU, aged-based
  * garbage collection. The thread that tagged this entry as "auto_destroy" is responsible for freeing it
  * as soon as it is done with it, using `dt_dev_pixelpipe_cache_auto_destroy_apply()`.
  * If not manually freed this way, the entry will be caught using the generic LRU garbage collection.
  *
  * @param cache
- * @param hash Cache-entry hash fallback. Ignored when `entry` is not NULL.
  */
-void dt_dev_pixelpipe_cache_flag_auto_destroy(dt_dev_pixelpipe_cache_t *cache, uint64_t hash,
+void dt_dev_pixelpipe_cache_flag_auto_destroy(dt_dev_pixelpipe_cache_t *cache,
                                               struct dt_pixel_cache_entry_t *entry);
 
 /**
- * @brief Free the entry matching hash if it has the flag "auto_destroy".
+ * @brief Free the entry if it has the flag "auto_destroy".
  * See `dt_dev_pixelpipe_cache_flag_auto_destroy()`.
  * This will not check reference count nor read/write locks, so it has to happen in the thread that created the
  * entry, flagged it and owns it. Ensure your hashes are truly unique and not shared between pipelines to ensure
  * another thread will not free this or that another thread ends up using it.
  *
  * @param cache
- * @param hash Cache-entry hash fallback. Ignored when `entry` is not NULL.
  */
-void dt_dev_pixelpipe_cache_auto_destroy_apply(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash,
+void dt_dev_pixelpipe_cache_auto_destroy_apply(dt_dev_pixelpipe_cache_t *cache,
                                                struct dt_pixel_cache_entry_t *entry);
 
 

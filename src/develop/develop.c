@@ -634,6 +634,16 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
 
       dt_pthread_mutex_unlock(&pipe->busy_mutex);
 
+      if(pipe->pending_picker_module && pipe->pending_picker_piece)
+      {
+        dt_iop_module_t *picker_module = pipe->pending_picker_module;
+        dt_dev_pixelpipe_iop_t *picker_piece = pipe->pending_picker_piece;
+        pipe->pending_picker_module = NULL;
+        pipe->pending_picker_piece = NULL;
+        DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_CONTROL_PICKERDATA_READY,
+                                      picker_module, picker_piece);
+      }
+
       if(pipe->status == DT_DEV_PIXELPIPE_VALID)
       {
         if(pipe->type == DT_DEV_PIXELPIPE_FULL)

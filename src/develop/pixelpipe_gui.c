@@ -52,8 +52,8 @@
  *    `dev->gui_attached` is true. They must not be invoked for exports or background processing.
  *
  * 2) **Cache entries are the source of truth**
- *    The GUI should never access transient buffers directly. We always sample through cache entries, with
- *    appropriate cache locks, because the cache controls lifetime and eviction.
+ *    The GUI should never access transient buffers directly. We always sample through cache entries, and the
+ *    main pixelpipe recursion is responsible for holding the relevant cache locks while calling these helpers.
  *
  * 3) **Gamma special case**
  *    The `gamma` module produces `uint8` output for display. Histograms and picker sampling expect float buffers.
@@ -67,11 +67,9 @@
  *    GUI sampling runs on host buffers (RAM). Any OpenCL device buffers must have been synchronized into the cache
  *    earlier in the control flow (by design, the GUI always samples cache-backed host buffers).
  *
- * 6) **In-place colorspace conversions**
- *    Some sampling paths perform colorspace conversions in-place to make values meaningful to the user.
- *    This relies on higher-level pixelpipe control flow ensuring those buffers are not used afterward in a way that
- *    would be corrupted by the conversion (typically this is guarded by module activation / forced caching).
- *    If you change where these helpers are called, revisit those assumptions.
+ * 6) **No buffer ownership here**
+ *    This file does not acquire/release cache locks and does not decide whether a cacheline is safe to read.
+ *    It assumes the caller already established cache consistency and passes locked cache entries.
  */
 
 #include "common/color_picker.h"
@@ -106,6 +104,106 @@ typedef enum dt_pixelpipe_picker_source_t
   PIXELPIPE_PICKER_INPUT = 0,
   PIXELPIPE_PICKER_OUTPUT = 1
 } dt_pixelpipe_picker_source_t;
+
+static const char *_picker_source_name(const dt_pixelpipe_picker_source_t picker_source)
+{
+  switch(picker_source)
+  {
+    case PIXELPIPE_PICKER_INPUT:
+      return "input";
+    case PIXELPIPE_PICKER_OUTPUT:
+      return "output";
+    default:
+      return "unknown";
+  }
+}
+
+static const char *_picker_cst_name(const dt_iop_colorspace_type_t cst)
+{
+  switch(cst)
+  {
+    case IOP_CS_RAW:
+      return "RAW";
+    case IOP_CS_LAB:
+      return "LAB";
+    case IOP_CS_RGB:
+      return "RGB";
+    case IOP_CS_LCH:
+      return "LCH";
+    case IOP_CS_HSL:
+      return "HSL";
+    case IOP_CS_JZCZHZ:
+      return "JZCZHZ";
+    case IOP_CS_NONE:
+      return "NONE";
+    default:
+      return "UNKNOWN";
+  }
+}
+
+static const char *_picker_datatype_name(const dt_iop_buffer_type_t datatype)
+{
+  switch(datatype)
+  {
+    case TYPE_FLOAT:
+      return "f32";
+    case TYPE_UINT16:
+      return "u16";
+    case TYPE_UINT8:
+      return "u8";
+    default:
+      return "?";
+  }
+}
+
+static void _trace_picker_sample(const dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *module,
+                                 const dt_dev_pixelpipe_iop_t *piece, const dt_iop_buffer_dsc_t *dsc,
+                                 const dt_iop_roi_t *roi, const int *box, const uint64_t hash,
+                                 const dt_iop_colorspace_type_t image_cst,
+                                 const dt_iop_colorspace_type_t picker_cst,
+                                 const dt_pixelpipe_picker_source_t picker_source,
+                                 const dt_aligned_pixel_t avg, const dt_aligned_pixel_t min,
+                                 const dt_aligned_pixel_t max)
+{
+  if(!(darktable.unmuted & DT_DEBUG_PIPE)) return;
+
+  dt_print(DT_DEBUG_PIPE,
+           "[picker] pipe=%s module=%s piece=%s source=%s hash=%" PRIu64
+           " roi=%ix%i+%i+%i box=%i,%i,%i,%i dsc(ch=%u type=%s cst=%s) image_cst=%s picker_cst=%s "
+           "avg=%g,%g,%g,%g min=%g,%g,%g,%g max=%g,%g,%g,%g\n",
+           pipe ? dt_pixelpipe_get_pipe_name(pipe->type) : "-",
+           module ? module->op : "-",
+           (piece && piece->module) ? piece->module->op : "-",
+           _picker_source_name(picker_source),
+           hash,
+           roi ? roi->width : 0, roi ? roi->height : 0, roi ? roi->x : 0, roi ? roi->y : 0,
+           box ? box[0] : -1, box ? box[1] : -1, box ? box[2] : -1, box ? box[3] : -1,
+           dsc ? dsc->channels : 0,
+           dsc ? _picker_datatype_name(dsc->datatype) : "-",
+           dsc ? _picker_cst_name(dsc->cst) : "-",
+           _picker_cst_name(image_cst), _picker_cst_name(picker_cst),
+           avg[0], avg[1], avg[2], avg[3],
+           min[0], min[1], min[2], min[3],
+           max[0], max[1], max[2], max[3]);
+}
+
+static void _trace_histogram_backbuf(const dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *module,
+                                     const dt_backbuf_t *backbuf, const dt_iop_roi_t roi,
+                                     const dt_pixel_cache_entry_t *entry, const uint64_t previous_hash,
+                                     const uint64_t hash, const int bpp)
+{
+  if(!(darktable.unmuted & DT_DEBUG_PIPE)) return;
+
+  dt_print(DT_DEBUG_PIPE,
+           "[histogram_backbuf] pipe=%s module=%s prev=%" PRIu64 " new=%" PRIu64
+           " entry=%" PRIu64 " roi=%ix%i+%i+%i bpp=%i ready=%i\n",
+           pipe ? dt_pixelpipe_get_pipe_name(pipe->type) : "-",
+           module ? module->op : "-",
+           previous_hash, hash,
+           entry ? entry->hash : DT_PIXELPIPE_CACHE_HASH_INVALID,
+           roi.width, roi.height, roi.x, roi.y, bpp,
+           backbuf ? (dt_dev_backbuf_get_hash((dt_backbuf_t *)backbuf) != DT_PIXELPIPE_CACHE_HASH_INVALID) : 0);
+}
 
 /**
  * @brief Compute a histogram for a given module piece.
@@ -159,8 +257,9 @@ static dt_backbuf_t *_get_backuf(dt_develop_t *dev, const char *op)
     return NULL;
 }
 
-static void pixelpipe_get_histogram_backbuf(dt_develop_t *dev, const dt_iop_roi_t roi, dt_pixel_cache_entry_t *entry,
-                                            dt_iop_module_t *module, const uint64_t hash);
+static void pixelpipe_get_histogram_backbuf(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, const dt_iop_roi_t roi,
+                                            dt_pixel_cache_entry_t *entry, dt_iop_module_t *module,
+                                            const uint64_t hash);
 
 static inline gboolean _pipe_tracks_gui_observables(const dt_dev_pixelpipe_t *pipe, const dt_develop_t *dev)
 {
@@ -191,14 +290,6 @@ static inline gboolean _module_needs_gui_host_input_sampling(const dt_dev_pixelp
              || _module_requests_input_histogram(dev, piece));
 }
 
-static inline gboolean _module_needs_gui_output_backbuf_sync(const dt_dev_pixelpipe_t *pipe,
-                                                             const dt_develop_t *dev,
-                                                             const dt_iop_module_t *module)
-{
-  return _pipe_tracks_gui_observables(pipe, dev) && !dt_dev_pixelpipe_get_realtime(pipe)
-         && module && _get_backuf((dt_develop_t *)dev, module->op) && strcmp(module->op, "gamma") != 0;
-}
-
 static inline gboolean _module_needs_gui_input_backbuf_sync(const dt_dev_pixelpipe_t *pipe,
                                                             const dt_develop_t *dev,
                                                             const dt_iop_module_t *module)
@@ -207,9 +298,34 @@ static inline gboolean _module_needs_gui_input_backbuf_sync(const dt_dev_pixelpi
          && module && !strcmp(module->op, "gamma");
 }
 
+/**
+ * @brief Tell whether a preview recompute must walk the whole pipe to refresh GUI observables.
+ *
+ * @details
+ * Preview processing is not only about the final image. The darkroom histogram widgets and the module-local
+ * color picker observe intermediate stages (`demosaic`, `colorout`, `gamma`, and the active GUI module).
+ *
+ * When the preview pipe is recomputed in standard mode, we must therefore recurse through the whole pipe even if
+ * downstream modules exact-hit in cache:
+ * - global histograms need their stage backbuffers refreshed after upstream param/topology changes,
+ * - the active module color picker must reach the module that captures it,
+ * - exact-hit modules are still allowed to skip pixel recomputation once their upstream recursion completed.
+ *
+ * Realtime mode keeps its historical behavior and skips the full traversal because global histograms are disabled
+ * there on purpose.
+ */
+static inline gboolean _preview_pipe_needs_observable_traversal(const dt_dev_pixelpipe_t *pipe,
+                                                                const dt_develop_t *dev)
+{
+  return _pipe_tracks_gui_observables(pipe, dev)
+         && pipe->type == DT_DEV_PIXELPIPE_PREVIEW
+         && !dt_dev_pixelpipe_get_realtime(pipe);
+}
+
 static gboolean _pipe_needs_gui_sampling_traversal(const dt_dev_pixelpipe_t *pipe, const dt_develop_t *dev)
 {
   if(!_pipe_tracks_gui_observables(pipe, dev) || !pipe->nodes) return FALSE;
+  if(_preview_pipe_needs_observable_traversal(pipe, dev)) return TRUE;
 
   for(GList *pieces = g_list_first(pipe->nodes); pieces; pieces = g_list_next(pieces))
   {
@@ -248,15 +364,6 @@ static inline gboolean _module_exact_hit_must_recurse_for_picker(const dt_dev_pi
          && module->iop_order > dev->gui_module->iop_order;
 }
 
-static void _sync_module_output_backbuf_on_exact_hit(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
-                                                     dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece,
-                                                     dt_pixel_cache_entry_t *output_entry,
-                                                     const dt_iop_roi_t roi_out, const uint64_t hash)
-{
-  if(!_module_needs_gui_output_backbuf_sync(pipe, dev, module) || !output_entry) return;
-  pixelpipe_get_histogram_backbuf(dev, roi_out, output_entry, piece->module, hash);
-}
-
 /**
  * @brief Update the global histogram backbuffer to reference a specific cache entry.
  *
@@ -264,28 +371,33 @@ static void _sync_module_output_backbuf_on_exact_hit(dt_dev_pixelpipe_t *pipe, d
  * Global histograms are displayed outside of the pixelpipe processing call stack, so we must keep a cache
  * reference (refcount increment) to prevent eviction of the buffer being displayed.
  *
- * When the hash changes, we decrement the refcount of the previous entry and increment the refcount of the new one.
+ * The backbuffer metadata must be refreshed every time because the histogram widget only sees this shared state.
+ * We only touch cache refcounts when the cache hash changes.
  */
-static void pixelpipe_get_histogram_backbuf(dt_develop_t *dev, const dt_iop_roi_t roi, dt_pixel_cache_entry_t *entry,
-                                            dt_iop_module_t *module, const uint64_t hash)
+static void pixelpipe_get_histogram_backbuf(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, const dt_iop_roi_t roi,
+                                            dt_pixel_cache_entry_t *entry, dt_iop_module_t *module,
+                                            const uint64_t hash)
 {
   dt_backbuf_t *backbuf = _get_backuf(dev, module->op);
   if(backbuf == NULL) return;     // This module is not wired to global histograms.
-  if(dt_dev_backbuf_get_hash(backbuf) == hash) return; // Hash didn't change, nothing to update.
+
+  // Update metadata first so the histogram widget always sees the current ROI/format, even on pure cache hits.
+  const size_t entry_size = dt_pixel_cache_entry_get_size(entry);
+  const int bpp = (roi.width > 0 && roi.height > 0) ? (int)(entry_size / ((size_t)roi.width * (size_t)roi.height)) : 0;
+  const int64_t previous_hash = dt_dev_backbuf_get_hash(backbuf);
+  dt_dev_set_backbuf(backbuf, roi.width, roi.height, bpp, hash, -1);
+  _trace_histogram_backbuf(pipe, module, backbuf, roi, entry, previous_hash, hash, bpp);
+
+  if(previous_hash == hash) return; // Same cacheline, metadata is already refreshed above.
 
   // Hash has changed, our previous stored entry is obsolete: decrement its refcount.
   dt_pixel_cache_entry_t *previous_entry;
-  if(dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, dt_dev_backbuf_get_hash(backbuf), NULL, NULL,
-                                 &previous_entry))
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE, previous_entry);
-
-  // Update metadata. The global histogram backbuf stores its bpp; infer it from cache entry size.
-  const size_t entry_size = dt_pixel_cache_entry_get_size(entry);
-  const int bpp = (roi.width > 0 && roi.height > 0) ? (int)(entry_size / ((size_t)roi.width * (size_t)roi.height)) : 0;
-  dt_dev_set_backbuf(backbuf, roi.width, roi.height, bpp, hash, -1);
+  if(dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, previous_hash, NULL, NULL, &previous_entry,
+                                 NULL, 0, -1, NULL))
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, previous_entry);
 
   // Increment the refcount on current entry so nobody removes it while the GUI still needs it.
-  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, TRUE, entry);
+  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, entry);
 }
 
 /**
@@ -355,6 +467,17 @@ static int pixelpipe_picker_helper(dt_iop_module_t *module, const dt_iop_roi_t r
   // Safety check: area needs to have minimum 1 pixel width and height.
   if(box[2] <= box[0] || box[3] <= box[1]) return 1;
 
+  if((darktable.unmuted & DT_DEBUG_PIPE) && (darktable.unmuted & DT_DEBUG_VERBOSE))
+  {
+    dt_print(DT_DEBUG_PIPE,
+             "[picker_box] module=%s source=%s roi=%ix%i+%i+%i box=%i,%i,%i,%i sample=%s\n",
+             module ? module->op : "-",
+             _picker_source_name(picker_source),
+             roi.width, roi.height, roi.x, roi.y,
+             box[0], box[1], box[2], box[3],
+             sample->size == DT_LIB_COLORPICKER_SIZE_BOX ? "box" : "point");
+  }
+
   // If module isn't the one where pickers are assigned, reset the values and don't sample.
   if(module != darktable.develop->gui_module)
   {
@@ -380,7 +503,8 @@ static int pixelpipe_picker_helper(dt_iop_module_t *module, const dt_iop_roi_t r
 static void pixelpipe_picker(dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece, dt_iop_buffer_dsc_t *dsc,
                              const float *pixel, const dt_iop_roi_t roi, float *picked_color,
                              float *picked_color_min, float *picked_color_max,
-                             const dt_iop_colorspace_type_t image_cst, dt_pixelpipe_picker_source_t picker_source)
+                             const dt_iop_colorspace_type_t image_cst, dt_pixelpipe_picker_source_t picker_source,
+                             const uint64_t hash)
 {
   int box[4];
   if(pixelpipe_picker_helper(module, roi, picked_color, picked_color_min, picked_color_max, picker_source, box))
@@ -391,43 +515,17 @@ static void pixelpipe_picker(dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *pi
   dt_aligned_pixel_t max = { 0.0f };
 
   const dt_iop_order_iccprofile_info_t *const profile = dt_ioppr_get_pipe_work_profile_info(piece->pipe);
+  const dt_iop_colorspace_type_t picker_cst = dt_iop_color_picker_get_active_cst(module);
 
-  dt_color_picker_helper(dsc, pixel, &roi, box, avg, min, max, image_cst,
-                         dt_iop_color_picker_get_active_cst(module), profile);
+  dt_color_picker_helper(dsc, pixel, &roi, box, avg, min, max, image_cst, picker_cst, profile);
+  _trace_picker_sample(piece ? piece->pipe : NULL, module, piece, dsc, &roi, box, hash, image_cst, picker_cst,
+                       picker_source, avg, min, max);
 
   for(int k = 0; k < 4; k++)
   {
     picked_color_min[k] = min[k];
     picked_color_max[k] = max[k];
     picked_color[k] = avg[k];
-  }
-}
-
-/**
- * @brief Select a safe colorspace for picker sampling.
- *
- * @details
- * Some modules operate in RAW or specialized spaces. The picker wants meaningful values in an RGB-like space.
- * This helper maps the active picker colorspace request to a safe in-pipe colorspace, falling back to the
- * pipe colorspace when needed.
- */
-static dt_iop_colorspace_type_t _transform_for_picker(dt_iop_module_t *self, const dt_iop_colorspace_type_t cst)
-{
-  const dt_iop_colorspace_type_t picker_cst = dt_iop_color_picker_get_active_cst(self);
-
-  switch(picker_cst)
-  {
-    case IOP_CS_LAB:
-    case IOP_CS_RGB:
-    case IOP_CS_HSL:
-    case IOP_CS_JZCZHZ:
-      return IOP_CS_RGB;
-    case IOP_CS_NONE:
-      // IOP_CS_NONE is used by temperature.c as it may work in RAW or RGB: return the pipe colorspace to avoid
-      // extra conversions.
-      return cst;
-    default:
-      return picker_cst;
   }
 }
 
@@ -451,14 +549,6 @@ static void collect_histogram_on_CPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev
   if((dev->gui_attached || !(piece->request_histogram & DT_REQUEST_ONLY_IN_GUI))
      && (piece->request_histogram & DT_REQUEST_ON))
   {
-    const dt_iop_order_iccprofile_info_t *const work_profile
-        = (input_format->cst != IOP_CS_RAW) ? dt_ioppr_get_pipe_work_profile_info(pipe) : NULL;
-
-    // Transform to module input colorspace.
-    dt_ioppr_transform_image_colorspace(module, input, input, roi_in.width, roi_in.height, input_format->cst,
-                                        module->input_colorspace(module, pipe, piece), &input_format->cst,
-                                        work_profile);
-
     histogram_collect(piece, input, roi_in, &(piece->histogram), piece->histogram_max);
 
     if(piece->histogram && (module->request_histogram & DT_REQUEST_ON))
@@ -478,38 +568,36 @@ static void collect_histogram_on_CPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev
  *
  * @details
  * This is strictly GUI-only and only applies to the module currently being edited (`dev->gui_module`).
- * We may perform colorspace conversions in-place to match the picker expectations.
+ * Sampling happens while the relevant cache lines are locked for reading, therefore we must never rewrite those
+ * buffers here. The helper reads the buffers in their native colorspace and only applies conversions it natively
+ * supports while aggregating the picker values.
  */
 static void _sample_color_picker(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, float *input,
                                  dt_iop_buffer_dsc_t *input_format, const dt_iop_roi_t roi_in, void **output,
                                  dt_iop_buffer_dsc_t **out_format, const dt_iop_roi_t roi_out,
-                                 dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece)
+                                 dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece,
+                                 const uint64_t input_hash, const uint64_t output_hash)
 {
+  (void)pipe;
+
   if(!(darktable.lib->proxy.colorpicker.picker_proxy
        && module == dev->gui_module
        && dev->gui_module->enabled
        && module->request_color_pick != DT_REQUEST_COLORPICK_OFF))
     return;
 
-  const dt_iop_order_iccprofile_info_t *const work_profile
-      = (input_format->cst != IOP_CS_RAW) ? dt_ioppr_get_pipe_work_profile_info(pipe) : NULL;
-
-  // Ensure we are using the right colorspace for picker values.
-  dt_iop_colorspace_type_t picker_cst = _transform_for_picker(module, pipe->dsc.cst);
-  dt_ioppr_transform_image_colorspace(module, input, input, roi_in.width, roi_in.height,
-                                      input_format->cst, picker_cst, &input_format->cst,
-                                      work_profile);
-  dt_ioppr_transform_image_colorspace(module, *output, *output, roi_out.width, roi_out.height,
-                                      pipe->dsc.cst, picker_cst, &pipe->dsc.cst,
-                                      work_profile);
-
-  pixelpipe_picker(module, piece, &piece->dsc_in, (float *)input, roi_in, module->picked_color,
-                   module->picked_color_min, module->picked_color_max, input_format->cst, PIXELPIPE_PICKER_INPUT);
-  pixelpipe_picker(module, piece, &pipe->dsc, (float *)(*output), roi_out, module->picked_output_color,
+  pixelpipe_picker(module, piece, input_format, input, roi_in, module->picked_color,
+                   module->picked_color_min, module->picked_color_max, input_format->cst,
+                   PIXELPIPE_PICKER_INPUT, input_hash);
+  pixelpipe_picker(module, piece, *out_format, (float *)(*output), roi_out, module->picked_output_color,
                    module->picked_output_color_min, module->picked_output_color_max,
-                   pipe->dsc.cst, PIXELPIPE_PICKER_OUTPUT);
+                   (*out_format)->cst, PIXELPIPE_PICKER_OUTPUT, output_hash);
 
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_CONTROL_PICKERDATA_READY, module, piece);
+  // Sampling happens here while the pipeline still owns the relevant cache locks.
+  // The module callback itself is deferred until the pipeline thread released its
+  // recursion-owned state, because it may commit history and restart both pipes.
+  pipe->pending_picker_module = module;
+  pipe->pending_picker_piece = piece;
 }
 
 /**
@@ -523,7 +611,7 @@ static void _sample_color_picker(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, fl
  * - per-module histogram computation,
  * - color picker sampling for the active module (if enabled).
  *
- * It locks the relevant cache entries for reading while sampling.
+ * The caller must already hold pixel cache locks protecting `input_entry` and `output_entry`.
  */
 static void _sample_gui(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, void *input, void **output,
                         const dt_iop_roi_t roi_in, const dt_iop_roi_t roi_out, dt_iop_buffer_dsc_t *input_format,
@@ -531,14 +619,28 @@ static void _sample_gui(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, void *input
                         const uint64_t input_hash, const uint64_t hash, const size_t in_bpp, const size_t bpp,
                         dt_pixel_cache_entry_t *const input_entry, dt_pixel_cache_entry_t *const output_entry)
 {
-  (void)in_bpp;
-  (void)bpp;
-
   if(!_pipe_tracks_gui_observables(pipe, dev))
     return;
 
-  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, TRUE, output_entry);
-  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, TRUE, input_entry);
+  if(darktable.unmuted & DT_DEBUG_PIPE)
+  {
+    dt_print(DT_DEBUG_PIPE,
+             "[sample_gui] pipe=%s module=%s input=%" PRIu64 " output=%" PRIu64
+             " input_dsc(ch=%u type=%s cst=%s) output_dsc(ch=%u type=%s cst=%s)\n",
+             pipe ? dt_pixelpipe_get_pipe_name(pipe->type) : "-",
+             module ? module->op : "-",
+             input_hash, hash,
+             input_format ? input_format->channels : 0,
+             input_format ? _picker_datatype_name(input_format->datatype) : "-",
+             input_format ? _picker_cst_name(input_format->cst) : "-",
+             (output_format && *output_format) ? (*output_format)->channels : 0,
+             (output_format && *output_format) ? _picker_datatype_name((*output_format)->datatype) : "-",
+             (output_format && *output_format) ? _picker_cst_name((*output_format)->cst) : "-");
+  }
+
+  // GUI observables only sample the cachelines protected by the caller.
+  float *const sampled_input = input_entry ? (float *)input_entry->data : NULL;
+  void *sampled_output = output_entry ? output_entry->data : NULL;
 
   // Need to go first because we want module output RGB without color conversion.
   // Gamma outputs uint8_t so we take its input. We want float32.
@@ -562,75 +664,18 @@ static void _sample_gui(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, void *input
   // Copy the cache entry reference to global histogram cache, except in
   // realtime mode where we intentionally skip global histogram sampling.
   if(!dt_dev_pixelpipe_get_realtime(pipe))
-    pixelpipe_get_histogram_backbuf(dev, roi, entry, piece->module, buf_hash);
+    pixelpipe_get_histogram_backbuf(pipe, dev, roi, entry, piece->module, buf_hash);
 
-  // Sample internal histogram on input and color pickers.
-  collect_histogram_on_CPU(pipe, dev, (float *)input, roi_in, input_format, module, piece);
-  _sample_color_picker(pipe, dev, (float *)input, input_format, roi_in, output, output_format, roi_out, module, piece);
+  // Sample internal histogram on input and color pickers from the locked host cachelines only.
+  if(sampled_input && input_format && input_format->datatype == TYPE_FLOAT)
+    collect_histogram_on_CPU(pipe, dev, sampled_input, roi_in, input_format, module, piece);
 
-  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE, output_entry);
-  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE, input_entry);
-}
-
-/**
- * @brief Re-sync the global histogram cache references on a pure cache hit.
- *
- * @return TRUE if all required cache lines exist, FALSE if a recompute is needed.
- *
- * @details
- * A GUI-observable pipe can exit early if the final output cache entry is valid.
- * When that happens, we still need to update the global histogram backbuffers to point at the right cache
- * entries for `demosaic/colorout/gamma`.
- * Realtime mode explicitly skips this path to avoid histogram sampling overhead.
- *
- * If any required cache line is missing, we return FALSE so the caller recomputes the pipeline.
- */
-static gboolean _resync_global_histograms(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
-{
-  if(dt_dev_pixelpipe_get_realtime(pipe)) return 1;
-  if(!_pipe_tracks_gui_observables(pipe, dev)) return 1;
-
-  GList *pieces = g_list_first(pipe->nodes);
-  int64_t input_hash = -1;
-
-  while(pieces)
-  {
-    dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)pieces->data;
-    if(piece->enabled)
-    {
-      int64_t hash = piece->global_hash;
-
-      if(_get_backuf(dev, piece->module->op))
-      {
-        // Gamma outputs uint8_t so we take its input. We want float32.
-        dt_iop_roi_t roi;
-        dt_pixel_cache_entry_t *entry;
-        int64_t buf_hash;
-
-        if(strcmp(piece->module->op, "gamma") == 0)
-        {
-          roi = piece->planned_roi_in;
-          buf_hash = input_hash;
-        }
-        else
-        {
-          roi = piece->planned_roi_out;
-          buf_hash = hash;
-        }
-
-        if(!dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, buf_hash, NULL, NULL, &entry))
-          return 0;
-
-        pixelpipe_get_histogram_backbuf(dev, roi, entry, piece->module, buf_hash);
-      }
-
-      input_hash = hash;
-    }
-
-    pieces = g_list_next(pieces);
-  }
-
-  return 1;
+  if(sampled_input && sampled_output
+     && input_format && output_format && *output_format
+     && input_format->datatype == TYPE_FLOAT
+     && (*output_format)->datatype == TYPE_FLOAT)
+    _sample_color_picker(pipe, dev, sampled_input, input_format, roi_in, &sampled_output, output_format, roi_out,
+                         module, piece, input_hash, hash);
 }
 
 // clang-format off

@@ -270,6 +270,12 @@ typedef struct dt_dev_pixelpipe_t
   // the masks generated in the pipe for later reusal are inside dt_dev_pixelpipe_iop_t
   gboolean store_all_raster_masks;
 
+  // Picker sampling is done inside the preview recursion while cachelines are locked,
+  // but the module callback may commit history and restart pipelines. We therefore defer
+  // the callback dispatch until the pipeline thread has released its recursion-owned locks.
+  struct dt_iop_module_t *pending_picker_module;
+  struct dt_dev_pixelpipe_iop_t *pending_picker_piece;
+
   // hash of the last history item synchronized with pipeline
   // that's because the sync_top option can't assume only one history
   // item was added since the last synchronization.

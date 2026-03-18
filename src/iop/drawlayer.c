@@ -519,16 +519,14 @@ static gboolean _rekey_shared_base_patch(drawlayer_patch_t *patch, const int32_t
 static void _retain_base_patch_loaded_ref(dt_iop_drawlayer_gui_data_t *g)
 {
   if(!g || !g->process.base_patch.cache_entry || g->process.base_patch_loaded_ref) return;
-  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, g->process.base_patch.cache_hash, TRUE,
-                                         g->process.base_patch.cache_entry);
+  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, g->process.base_patch.cache_entry);
   g->process.base_patch_loaded_ref = TRUE;
 }
 
 static void _retain_base_patch_stroke_ref(dt_iop_drawlayer_gui_data_t *g)
 {
   if(!g || !g->process.base_patch.cache_entry) return;
-  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, g->process.base_patch.cache_hash, TRUE,
-                                         g->process.base_patch.cache_entry);
+  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, g->process.base_patch.cache_entry);
   g->process.base_patch_stroke_refs++;
 }
 
@@ -547,15 +545,13 @@ void dt_drawlayer_release_all_base_patch_extra_refs(dt_iop_drawlayer_gui_data_t 
 
   if(g->process.base_patch_loaded_ref)
   {
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, g->process.base_patch.cache_hash, FALSE,
-                                           g->process.base_patch.cache_entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, g->process.base_patch.cache_entry);
     g->process.base_patch_loaded_ref = FALSE;
   }
 
   while(g->process.base_patch_stroke_refs > 0)
   {
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, g->process.base_patch.cache_hash, FALSE,
-                                           g->process.base_patch.cache_entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, g->process.base_patch.cache_entry);
     g->process.base_patch_stroke_refs--;
   }
 }
@@ -1220,7 +1216,7 @@ cleanup:
   else if(!source_mem_override && source.mem)
     dt_opencl_release_mem_object(source.mem);
   if(resolved_entry_ref)
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE, resolved_entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, resolved_entry);
 
   if(err != CL_SUCCESS) dt_print(DT_DEBUG_OPENCL, "[drawlayer] process_cl blend path failed: %d\n\n", err);
 

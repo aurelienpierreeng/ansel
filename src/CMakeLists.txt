@@ -152,6 +152,8 @@ FILE(GLOB SOURCE_FILES
   "develop/lightroom.c"
   "develop/pixelpipe.c"
   "develop/pixelpipe_cache.c"
+  "develop/pixelpipe_cpu.c"
+  "develop/pixelpipe_gpu.c"
   "develop/blend.c"
   "develop/blend_gui.c"
   "develop/blends/blendif_lab.c"

@@ -543,7 +543,8 @@ static gboolean _lock_pipe_surface(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, 
   dt_pixel_cache_entry_t *live_entry = NULL;
   void *live_data = NULL;
   if(locked->surface && locked->hash == hash
-     && dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, hash, &live_data, NULL, &live_entry)
+     && dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, hash, &live_data, NULL, &live_entry,
+                                    NULL, 0, -1, NULL)
      && live_entry == locked->entry && live_data == locked->data)
   {
     locked->width = pipe->backbuf.width;
@@ -633,12 +634,12 @@ static gboolean _render_main_locked_surface(cairo_t *cr, dt_develop_t *dev, dark
 
   if(dev->iso_12646.enabled) _render_iso12646(cr, wd, ht, border);
 
-  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, locked->hash, TRUE, locked->entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, locked->entry);
   cairo_surface_set_device_scale(locked->surface, darktable.gui->ppd, darktable.gui->ppd);
   cairo_rectangle(cr, 0, 0, wd, ht);
   cairo_set_source_surface(cr, locked->surface, 0, 0);
   cairo_fill(cr);
-  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, locked->hash, FALSE, locked->entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, locked->entry);
 
   return TRUE;
 }
@@ -683,16 +684,14 @@ static gboolean _build_preview_fallback_surface(dt_develop_t *dev, const int wid
     cairo_restore(cr);
   }
 
-  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, _darkroom_preview_locked.hash, TRUE,
-                                      _darkroom_preview_locked.entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, _darkroom_preview_locked.entry);
   cairo_surface_set_device_scale(_darkroom_preview_locked.surface, 1., 1.);
   dt_dev_clip_roi(dev, cr, width, height);
   dt_dev_rescale_roi(dev, cr, width, height);
   cairo_rectangle(cr, 0, 0, wd, ht);
   cairo_set_source_surface(cr, _darkroom_preview_locked.surface, 0, 0);
   cairo_fill(cr);
-  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, _darkroom_preview_locked.hash, FALSE,
-                                      _darkroom_preview_locked.entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, _darkroom_preview_locked.entry);
   cairo_destroy(cr);
 
   _darkroom_preview_fallback_imgid = dev->image_storage.id;
