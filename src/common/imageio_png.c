@@ -178,6 +178,7 @@ dt_imageio_retval_t dt_imageio_open_png(dt_image_t *img, const char *filename, d
 
   img->buf_dsc.channels = 4;
   img->buf_dsc.datatype = TYPE_FLOAT;
+  img->buf_dsc.bpp = 4 * sizeof(float);
   img->buf_dsc.cst = IOP_CS_RGB; // png is always RGB
   img->buf_dsc.filters = 0u;
   img->flags &= ~DT_IMAGE_RAW;

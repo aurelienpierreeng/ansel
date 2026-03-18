@@ -1498,6 +1498,9 @@ gboolean dt_dev_pixelpipe_cache_peek(dt_dev_pixelpipe_cache_t *cache, const uint
 
   if(_cache_entry_has_host_payload(data))
   {
+    if(cl_mem_output)
+      _cache_try_restore_device_payload(cache_entry, roi, bpp, preferred_devid, cl_mem_output);
+
     _trace_exact_hit("host", hash, cache_entry, data ? *data : NULL,
                      cl_mem_output ? *cl_mem_output : NULL, preferred_devid, FALSE);
     if(entry) *entry = cache_entry;

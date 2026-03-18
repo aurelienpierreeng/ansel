@@ -12,13 +12,18 @@
 #include <math.h>
 #include <stdio.h>
 
-int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
-                             float *input, dt_iop_buffer_dsc_t *input_format, const dt_iop_roi_t *roi_in,
-                             void **output, dt_iop_buffer_dsc_t **out_format, const dt_iop_roi_t *roi_out,
-                             dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece,
+int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
                              dt_develop_tiling_t *tiling, dt_pixelpipe_flow_t *pixelpipe_flow,
                              dt_pixel_cache_entry_t *input_entry, dt_pixel_cache_entry_t *output_entry)
 {
+  dt_iop_module_t *module = piece->module;
+  const dt_iop_roi_t *roi_in = &piece->planned_roi_in;
+  const dt_iop_roi_t *roi_out = &piece->planned_roi_out;
+  float *input = dt_pixel_cache_entry_get_data(input_entry);
+  void *output = dt_pixel_cache_entry_get_data(output_entry);
+  dt_iop_buffer_dsc_t *input_format = &input_entry->dsc;
+  dt_iop_buffer_dsc_t *out_format = &output_entry->dsc;
+
   assert(input == dt_pixel_cache_entry_get_data(input_entry));
   gboolean input_rewritten = FALSE;
 
@@ -27,12 +32,10 @@ int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
     fprintf(stdout, "[dev_pixelpipe] %s got a NULL input, report that to developers\n", module->name());
     return 1;
   }
-  if(output && *output == NULL && output_entry)
-  {
-    *output = dt_pixel_cache_alloc(darktable.pixelpipe_cache, output_entry);
-  }
+  if(output == NULL)
+    output = dt_pixel_cache_alloc(darktable.pixelpipe_cache, output_entry);
 
-  if(output == NULL || *output == NULL)
+  if(output == NULL)
   {
     fprintf(stdout, "[dev_pixelpipe] %s got a NULL output, report that to developers\n", module->name());
     return 1;
@@ -50,17 +53,17 @@ int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
   dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, FALSE, input_entry);
   input_rewritten = TRUE;
 
-  const size_t in_bpp = dt_iop_buffer_dsc_to_bpp(input_format);
-  const size_t bpp = dt_iop_buffer_dsc_to_bpp(*out_format);
+  const size_t in_bpp = input_format->bpp;
+  const size_t bpp = out_format->bpp;
 
-  dt_dev_pixelpipe_debug_dump_module_io(pipe, module, "pre", FALSE, input_format, *out_format, roi_in, roi_out,
+  dt_dev_pixelpipe_debug_dump_module_io(pipe, module, "pre", FALSE, input_format, out_format, roi_in, roi_out,
                                         in_bpp, bpp, cst_before, cst_after);
 
-  if((darktable.unmuted & DT_DEBUG_NAN) && *output && (*out_format)->datatype == TYPE_FLOAT)
+  if((darktable.unmuted & DT_DEBUG_NAN) && output && out_format->datatype == TYPE_FLOAT)
   {
-    const size_t ch = (*out_format)->channels;
+    const size_t ch = out_format->channels;
     const size_t count = (size_t)roi_out->width * (size_t)roi_out->height * ch;
-    float *out = (float *)(*output);
+    float *out = (float *)output;
 #ifdef _OPENMP
 #pragma omp parallel for simd default(none) \
   dt_omp_firstprivate(out, count) schedule(static)
@@ -77,13 +80,13 @@ int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
   int err = 0;
   if(!fitting && piece->process_tiling_ready)
   {
-    err = module->process_tiling(module, piece, input, *output, roi_in, roi_out, in_bpp);
+    err = module->process_tiling(module, piece, input, output, roi_in, roi_out, in_bpp);
     *pixelpipe_flow |= (PIXELPIPE_FLOW_PROCESSED_ON_CPU | PIXELPIPE_FLOW_PROCESSED_WITH_TILING);
     *pixelpipe_flow &= ~(PIXELPIPE_FLOW_PROCESSED_ON_GPU);
   }
   else
   {
-    err = module->process(module, piece, input, *output, roi_in, roi_out);
+    err = module->process(module, piece, input, output, roi_in, roi_out);
     *pixelpipe_flow |= PIXELPIPE_FLOW_PROCESSED_ON_CPU;
     *pixelpipe_flow &= ~(PIXELPIPE_FLOW_PROCESSED_ON_GPU | PIXELPIPE_FLOW_PROCESSED_WITH_TILING);
   }
@@ -112,15 +115,15 @@ int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
                                           roi_in, in_bpp, in_bpp, blend_in_before, blend_in_after);
 
     const int blend_out_before = pipe->dsc.cst;
-    dt_ioppr_transform_image_colorspace(module, *output, *output, roi_out->width, roi_out->height,
+    dt_ioppr_transform_image_colorspace(module, output, output, roi_out->width, roi_out->height,
                                         pipe->dsc.cst, blend_cst, &pipe->dsc.cst, work_profile);
     const int blend_out_after = pipe->dsc.cst;
 
-    dt_dev_pixelpipe_debug_dump_module_io(pipe, module, "blend-out", FALSE, *out_format, &pipe->dsc, roi_out,
+    dt_dev_pixelpipe_debug_dump_module_io(pipe, module, "blend-out", FALSE, out_format, &pipe->dsc, roi_out,
                                           roi_out, bpp, bpp, blend_out_before, blend_out_after);
   }
 
-  err = dt_develop_blend_process(module, piece, input, *output, roi_in, roi_out);
+  err = dt_develop_blend_process(module, piece, input, output, roi_in, roi_out);
   *pixelpipe_flow |= PIXELPIPE_FLOW_BLENDED_ON_CPU;
   *pixelpipe_flow &= ~(PIXELPIPE_FLOW_BLENDED_ON_GPU);
 

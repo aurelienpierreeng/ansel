@@ -431,6 +431,7 @@ dt_imageio_retval_t dt_imageio_open_tiff(dt_image_t *img, const char *filename, 
 
   t.image->buf_dsc.channels = 4;
   t.image->buf_dsc.datatype = TYPE_FLOAT;
+  t.image->buf_dsc.bpp = 4 * sizeof(float);
   t.image->buf_dsc.cst = IOP_CS_RGB;
   t.image->buf_dsc.filters = 0u;
 

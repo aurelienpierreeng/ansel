@@ -337,7 +337,7 @@ void dt_image_print_debug_info(const dt_image_t *img, const char *context)
   const gboolean mosaic = dsc->filters != 0u;
   const gboolean xtrans = dsc->filters == 9u;
   const gboolean bayer = mosaic && !xtrans;
-  const size_t bpp = dt_iop_buffer_dsc_to_bpp(dsc);
+  const size_t bpp = dsc->bpp;
   int bit_depth = 0;
 
   switch(dsc->datatype)
@@ -1750,8 +1750,7 @@ void dt_image_init(dt_image_t *img)
   img->legacy_flip.legacy = 0;
   img->legacy_flip.user_flip = 0;
 
-  img->buf_dsc.filters = 0u;
-  img->buf_dsc = (dt_iop_buffer_dsc_t){.channels = 0, .datatype = TYPE_UNKNOWN };
+  img->buf_dsc = (dt_iop_buffer_dsc_t){ .channels = 0, .datatype = TYPE_UNKNOWN, .bpp = 0, .filters = 0u };
   img->film_id = UNKNOWN_IMAGE;
   img->group_id = UNKNOWN_IMAGE;
   img->group_members = 0;

@@ -308,6 +308,7 @@ dt_imageio_retval_t dt_imageio_open_libraw(dt_image_t *img, const char *filename
   // For CR3, we only have Bayer data and a single channel
   img->buf_dsc.channels = 1;
   img->buf_dsc.datatype = TYPE_UINT16;
+  img->buf_dsc.bpp = sizeof(uint16_t);
   img->buf_dsc.cst = IOP_CS_RAW;
 
   if(FILTERS_ARE_4BAYER(img->buf_dsc.filters))

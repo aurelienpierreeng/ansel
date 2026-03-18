@@ -50,6 +50,8 @@ typedef struct dt_iop_buffer_dsc_t
   unsigned int channels;
   /** what is the datatype? */
   dt_iop_buffer_type_t datatype;
+  /** bytes per pixel, derived from channels and datatype when the descriptor is updated */
+  size_t bpp;
   /** Bayer demosaic pattern */
   uint32_t filters;
   /** filter for Fuji X-Trans images, only used if filters == 9u */
@@ -75,6 +77,7 @@ typedef struct dt_iop_buffer_dsc_t
 
 } dt_iop_buffer_dsc_t;
 
+void dt_iop_buffer_dsc_update_bpp(struct dt_iop_buffer_dsc_t *dsc);
 size_t dt_iop_buffer_dsc_to_bpp(const struct dt_iop_buffer_dsc_t *dsc);
 
 void default_input_format(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_t *pipe,

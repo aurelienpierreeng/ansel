@@ -611,7 +611,8 @@ static int _default_process_tiling_ptp(struct dt_iop_module_t *self, struct dt_d
            self->op, roi_in->width, roi_in->height, roi_out->width, roi_out->height);
   dt_iop_buffer_dsc_t dsc;
   self->output_format(self, piece->pipe, piece, &dsc);
-  const int out_bpp = dt_iop_buffer_dsc_to_bpp(&dsc);
+  dt_iop_buffer_dsc_update_bpp(&dsc);
+  const int out_bpp = dsc.bpp;
 
   const int ipitch = roi_in->width * in_bpp;
   const int opitch = roi_out->width * out_bpp;
@@ -876,7 +877,8 @@ static int _default_process_tiling_roi(struct dt_iop_module_t *self, struct dt_d
 
   dt_iop_buffer_dsc_t dsc;
   self->output_format(self, piece->pipe, piece, &dsc);
-  const int out_bpp = dt_iop_buffer_dsc_to_bpp(&dsc);
+  dt_iop_buffer_dsc_update_bpp(&dsc);
+  const int out_bpp = dsc.bpp;
 
   const int ipitch = roi_in->width * in_bpp;
   const int opitch = roi_out->width * out_bpp;
@@ -1241,7 +1243,8 @@ static int _default_process_tiling_cl_ptp(struct dt_iop_module_t *self, struct d
 
   dt_iop_buffer_dsc_t dsc;
   self->output_format(self, piece->pipe, piece, &dsc);
-  const int out_bpp = dt_iop_buffer_dsc_to_bpp(&dsc);
+  dt_iop_buffer_dsc_update_bpp(&dsc);
+  const int out_bpp = dsc.bpp;
 
   const int devid = piece->pipe->devid;
   const int ipitch = roi_in->width * in_bpp;
@@ -1593,7 +1596,8 @@ static int _default_process_tiling_cl_roi(struct dt_iop_module_t *self, struct d
 
   dt_iop_buffer_dsc_t dsc;
   self->output_format(self, piece->pipe, piece, &dsc);
-  const int out_bpp = dt_iop_buffer_dsc_to_bpp(&dsc);
+  dt_iop_buffer_dsc_update_bpp(&dsc);
+  const int out_bpp = dsc.bpp;
 
   const int devid = piece->pipe->devid;
   const int ipitch = roi_in->width * in_bpp;

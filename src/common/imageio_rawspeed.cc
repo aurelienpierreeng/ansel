@@ -390,9 +390,11 @@ dt_imageio_retval_t dt_imageio_open_rawspeed(dt_image_t *img,
     {
       case sizeof(uint16_t):
         img->buf_dsc.datatype = TYPE_UINT16;
+        img->buf_dsc.bpp = sizeof(uint16_t);
         break;
       case sizeof(float):
         img->buf_dsc.datatype = TYPE_FLOAT;
+        img->buf_dsc.bpp = sizeof(float);
         break;
       default:
         return DT_IMAGEIO_UNSUPPORTED_FEATURE;
@@ -546,6 +548,7 @@ dt_imageio_retval_t dt_imageio_open_rawspeed_sraw(dt_image_t *img,
   // actually we want to store full floats here:
   img->buf_dsc.channels = 4;
   img->buf_dsc.datatype = TYPE_FLOAT;
+  img->buf_dsc.bpp = 4 * sizeof(float);
 
   if(r->getDataType() != TYPE_USHORT16 && r->getDataType() != TYPE_FLOAT32)
     return DT_IMAGEIO_UNSUPPORTED_FEATURE;

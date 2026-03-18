@@ -24,27 +24,33 @@
 #include "develop/format.h"
 #include "develop/imageop.h"
 
-size_t dt_iop_buffer_dsc_to_bpp(const struct dt_iop_buffer_dsc_t *dsc)
+void dt_iop_buffer_dsc_update_bpp(dt_iop_buffer_dsc_t *dsc)
 {
-  size_t bpp = dsc->channels;
+  dsc->bpp = dsc->channels;
 
   switch(dsc->datatype)
   {
     case TYPE_FLOAT:
-      bpp *= sizeof(float);
+      dsc->bpp *= sizeof(float);
       break;
     case TYPE_UINT16:
-      bpp *= sizeof(uint16_t);
+      dsc->bpp *= sizeof(uint16_t);
       break;
     case TYPE_UINT8:
-      bpp *= sizeof(uint8_t);
+      dsc->bpp *= sizeof(uint8_t);
+      break;
+    case TYPE_UNKNOWN:
+      dsc->bpp = 0;
       break;
     default:
       dt_unreachable_codepath();
       break;
   }
+}
 
-  return bpp;
+size_t dt_iop_buffer_dsc_to_bpp(const struct dt_iop_buffer_dsc_t *dsc)
+{
+  return dsc->bpp;
 }
 
 void default_input_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
@@ -54,15 +60,17 @@ void default_input_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_de
   dsc->datatype = TYPE_FLOAT;
   dsc->cst = self->input_colorspace(self, pipe, piece);
 
-  if(dsc->cst != IOP_CS_RAW) return;
+  if(dsc->cst == IOP_CS_RAW)
+  {
+    if(dt_image_is_raw(&pipe->image)) dsc->channels = 1;
 
-  if(dt_image_is_raw(&pipe->image)) dsc->channels = 1;
+    if(dt_ioppr_get_iop_order(pipe->iop_order_list, self->op, self->multi_priority)
+       <= dt_ioppr_get_iop_order(pipe->iop_order_list, "rawprepare", 0)
+       && piece->pipe->dsc.filters)
+      dsc->datatype = TYPE_UINT16;
+  }
 
-  if(dt_ioppr_get_iop_order(pipe->iop_order_list, self->op, self->multi_priority)
-     > dt_ioppr_get_iop_order(pipe->iop_order_list, "rawprepare", 0)) return;
-
-  if(piece->pipe->dsc.filters)
-    dsc->datatype = TYPE_UINT16;
+  dt_iop_buffer_dsc_update_bpp(dsc);
 }
 
 void default_output_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
@@ -72,15 +80,17 @@ void default_output_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_d
   dsc->datatype = TYPE_FLOAT;
   dsc->cst = self->output_colorspace(self, pipe, piece);
 
-  if(dsc->cst != IOP_CS_RAW) return;
+  if(dsc->cst == IOP_CS_RAW)
+  {
+    if(dt_image_is_raw(&pipe->image)) dsc->channels = 1;
 
-  if(dt_image_is_raw(&pipe->image)) dsc->channels = 1;
+    if(dt_ioppr_get_iop_order(pipe->iop_order_list, self->op, self->multi_priority)
+       < dt_ioppr_get_iop_order(pipe->iop_order_list, "rawprepare", 0)
+       && piece->pipe->dsc.filters)
+      dsc->datatype = TYPE_UINT16;
+  }
 
-  if(dt_ioppr_get_iop_order(pipe->iop_order_list, self->op, self->multi_priority)
-     >= dt_ioppr_get_iop_order(pipe->iop_order_list, "rawprepare", 0)) return;
-
-  if(piece->pipe->dsc.filters)
-    dsc->datatype = TYPE_UINT16;
+  dt_iop_buffer_dsc_update_bpp(dsc);
 }
 
 int default_input_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,

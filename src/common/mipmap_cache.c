@@ -452,7 +452,7 @@ void *dt_mipmap_cache_alloc(dt_mipmap_buffer_t *buf, const dt_image_t *img)
   // Get a new allocation
   const int wd = img->width;
   const int ht = img->height;
-  const size_t bpp = dt_iop_buffer_dsc_to_bpp(&img->buf_dsc);
+  const size_t bpp = img->buf_dsc.bpp;
   const size_t buffer_size = wd * ht * bpp;
   const size_t min_buffer_size = 64 * 4 * sizeof(float);
   entry->data = dt_alloc_align(_get_entry_size(MAX(buffer_size, min_buffer_size)));
