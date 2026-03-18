@@ -819,8 +819,9 @@ static int _init_base_buffer(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, void *
   // Note: dt_dev_pixelpipe_cache_get actually init/alloc *output
   dt_pixel_cache_entry_t *cache_entry;
   int new_entry = dt_dev_pixelpipe_cache_get(darktable.pixelpipe_cache, hash, bufsize, "base buffer", pipe->type,
-                                             TRUE, output, out_format, &cache_entry);
+                                             TRUE, output, *out_format, &cache_entry);
   if(cache_entry == NULL) return 1;
+  *out_format = &cache_entry->dsc;
 
   int err = 0;
   gboolean host_rewritten = FALSE;
@@ -983,8 +984,7 @@ static int dt_dev_pixelpipe_process_rec_darkroom(dt_dev_pixelpipe_t *pipe, dt_de
   dt_pixel_cache_entry_t *existing_cache = NULL;
   const gboolean exact_output_cache_hit
       = _requests_cache(pipe, piece)
-        && dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, hash, NULL, NULL, &existing_cache,
-                                       NULL, 0, -1, NULL);
+        && dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, hash, NULL, &existing_cache, -1, NULL);
 
   if(exact_output_cache_hit)
   {
@@ -1037,15 +1037,15 @@ static int dt_dev_pixelpipe_process_rec_darkroom(dt_dev_pixelpipe_t *pipe, dt_de
   // Get cache line for input as early as possible: this is needed for correctness (locks/refcounts)
   // and to ensure `input` points to the host buffer when it exists.
   dt_pixel_cache_entry_t *input_entry = NULL;
-  if(!dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, input_hash, &input, &input_format, &input_entry,
-                                  NULL, 0, -1, NULL))
+  if(!dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, input_hash, &input, &input_entry, -1, NULL))
   {
     dt_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] %s has no cache-backed input buffer\n", module->name());
     return 1;
   }
+  input_format = &input_entry->dsc;
   const size_t in_bpp = input_format->bpp;
-  if(!dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, input_hash, &input, &input_format, &input_entry,
-                                  &roi_in, in_bpp, pipe->devid, &cl_mem_input))
+  if(!dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, input_hash, &input, &input_entry,
+                                  pipe->devid, &cl_mem_input))
   {
     dt_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] %s has no cache-backed input payload\n", module->name());
     return 1;
@@ -1106,13 +1106,14 @@ static int dt_dev_pixelpipe_process_rec_darkroom(dt_dev_pixelpipe_t *pipe, dt_de
   const int acquire_status
       = dt_dev_pixelpipe_cache_get_writable(darktable.pixelpipe_cache, hash, bufsize, name, pipe->type,
                                             alloc_output, allow_rekey_reuse, &piece->cache_entry,
-                                            &output, &out_format, &output_entry);
+                                            &output, out_format, &output_entry);
   dt_free(name);
   if(!output_entry)
   {
     dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, input_entry);
     return 1;
   }
+  out_format = &output_entry->dsc;
   const gboolean new_entry = (acquire_status == 1);
   gboolean output_write_locked = TRUE;
   _trace_cache_owner(pipe, module, (acquire_status == 2) ? "acquire-rekeyed"
@@ -1304,8 +1305,7 @@ static int dt_dev_pixelpipe_process_rec_headless(dt_dev_pixelpipe_t *pipe, uint6
 
   dt_pixel_cache_entry_t *existing_cache = NULL;
   if(_requests_cache(pipe, piece)
-     && dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, hash, NULL, NULL, &existing_cache,
-                                    NULL, 0, -1, NULL))
+     && dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, hash, NULL, &existing_cache, -1, NULL))
   {
     if(existing_cache)
     {
@@ -1343,15 +1343,14 @@ static int dt_dev_pixelpipe_process_rec_headless(dt_dev_pixelpipe_t *pipe, uint6
     return 1;
 
   dt_pixel_cache_entry_t *input_entry = NULL;
-  if(!dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, input_hash, &input, &input_format, &input_entry,
-                                  NULL, 0, -1, NULL))
+  if(!dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, input_hash, &input, &input_entry, -1, NULL))
   {
     dt_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] %s has no cache-backed input buffer\n", module->name());
     return 1;
   }
-  const size_t in_bpp = input_format->bpp;
-  if(!dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, input_hash, &input, &input_format, &input_entry,
-                                  &roi_in, in_bpp, pipe->devid, &cl_mem_input))
+  input_format = &input_entry->dsc;
+  if(!dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, input_hash, &input, &input_entry,
+                                  pipe->devid, &cl_mem_input))
   {
     dt_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] %s has no cache-backed input payload\n", module->name());
     return 1;
@@ -1372,13 +1371,14 @@ static int dt_dev_pixelpipe_process_rec_headless(dt_dev_pixelpipe_t *pipe, uint6
   const int acquire_status
       = dt_dev_pixelpipe_cache_get_writable(darktable.pixelpipe_cache, hash, bufsize, name, pipe->type,
                                             piece->force_opencl_cache, FALSE, NULL,
-                                            &output, &out_format, &output_entry);
+                                            &output, out_format, &output_entry);
   dt_free(name);
   if(!output_entry)
   {
     dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, input_entry);
     return 1;
   }
+  out_format = &output_entry->dsc;
   _trace_cache_owner(pipe, module, (acquire_status == 1) ? "acquire-new" : "acquire-existing",
                      "output", hash, output, output_entry, FALSE);
 
@@ -1524,26 +1524,26 @@ static int dt_dev_pixelpipe_process_rec_sample(dt_dev_pixelpipe_t *pipe, dt_deve
   void *output = NULL;
   dt_iop_buffer_dsc_t *output_format = NULL;
   dt_pixel_cache_entry_t *output_entry = NULL;
-  if(!dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, hash, &output, &output_format, &output_entry,
-                                  &roi_out, 0, -1, NULL)
-     || !output_entry || !output || !output_format)
+  if(!dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, hash, &output, &output_entry, -1, NULL)
+     || !output_entry || !output)
   {
     _log_sampling_cache_miss(pipe, module, "output", hash);
     if(out_hash) *out_hash = hash;
     return 0;
   }
+  output_format = &output_entry->dsc;
 
   void *input = NULL;
   dt_iop_buffer_dsc_t *input_format = NULL;
   dt_pixel_cache_entry_t *input_entry = NULL;
-  if(!dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, input_hash, &input, &input_format, &input_entry,
-                                  &roi_in, 0, -1, NULL)
-     || !input_entry || !input || !input_format)
+  if(!dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, input_hash, &input, &input_entry, -1, NULL)
+     || !input_entry || !input)
   {
     _log_sampling_cache_miss(pipe, module, "input", input_hash);
     if(out_hash) *out_hash = hash;
     return 0;
   }
+  input_format = &input_entry->dsc;
 
   dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, output_entry);
   dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, output_entry);
@@ -1762,8 +1762,8 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop
   // sampling pass for histograms and picker reads.
   dt_pixel_cache_entry_t *entry = NULL;
   if(_requests_cache(pipe, NULL)
-     && dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, dt_dev_pixelpipe_get_hash(pipe), &buf, NULL, &entry,
-                                    NULL, 0, -1, NULL))
+     && dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, dt_dev_pixelpipe_get_hash(pipe), &buf, &entry,
+                                    -1, NULL))
   {
     _update_backbuf_cache_reference(pipe, roi, entry);
 
@@ -1863,8 +1863,8 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop
     {
       // No opencl errors, no killswitch triggered: we should have a valid output buffer now.
       dt_pixel_cache_entry_t *final_entry = NULL;
-      if(dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, dt_dev_pixelpipe_get_hash(pipe), NULL, NULL,
-                                     &final_entry, NULL, 0, -1, NULL))
+      if(dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, dt_dev_pixelpipe_get_hash(pipe), NULL,
+                                     &final_entry, -1, NULL))
         _update_backbuf_cache_reference(pipe, roi, final_entry);
 
       if(darkroom_pipe && needs_sampling)

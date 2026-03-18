@@ -202,8 +202,8 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *p
   dt_pixel_cache_entry_t *locked_input_entry = NULL;
   gboolean input_rewritten_on_host = FALSE;
 
-  dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, input_entry->hash, NULL, NULL, NULL, roi_in, in_bpp,
-                              pipe->devid, &cl_mem_input);
+  dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, input_entry->hash, NULL, NULL, pipe->devid,
+                              &cl_mem_input);
 
   if(input == NULL && cl_mem_input == NULL)
   {

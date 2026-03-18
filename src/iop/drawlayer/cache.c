@@ -94,12 +94,12 @@ gboolean dt_drawlayer_cache_patch_alloc_shared(dt_drawlayer_cache_patch_t *patch
   dsc.channels = 4;
   dsc.datatype = TYPE_FLOAT;
   dsc.cst = IOP_CS_RGB;
+  dt_iop_buffer_dsc_update_bpp(&dsc);
 
   void *data = NULL;
-  dt_iop_buffer_dsc_t *entry_dsc = &dsc;
   dt_pixel_cache_entry_t *entry = NULL;
   const int created = dt_dev_pixelpipe_cache_get(darktable.pixelpipe_cache, hash, pixel_count * 4 * sizeof(float),
-                                                 name, DT_DEV_PIXELPIPE_NONE, TRUE, &data, &entry_dsc, &entry);
+                                                 name, DT_DEV_PIXELPIPE_NONE, TRUE, &data, &dsc, &entry);
   if(created_out) *created_out = created;
   if(!data || !entry)
   {

@@ -543,8 +543,7 @@ static gboolean _lock_pipe_surface(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, 
   dt_pixel_cache_entry_t *live_entry = NULL;
   void *live_data = NULL;
   if(locked->surface && locked->hash == hash
-     && dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, hash, &live_data, NULL, &live_entry,
-                                    NULL, 0, -1, NULL)
+     && dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, hash, &live_data, &live_entry, -1, NULL)
      && live_entry == locked->entry && live_data == locked->data)
   {
     locked->width = pipe->backbuf.width;

@@ -1014,14 +1014,14 @@ static int toneeq_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *
     luminance_dsc.channels = 1;
     luminance_dsc.datatype = TYPE_FLOAT;
     luminance_dsc.cst = IOP_CS_NONE;
-    dt_iop_buffer_dsc_t *cache_dsc = &luminance_dsc;
+    dt_iop_buffer_dsc_update_bpp(&luminance_dsc);
     void *cache_data = NULL;
     static const char cache_tag[] = "toneequal:luminance";
     luminance_hash = dt_hash(piece->global_hash, cache_tag, sizeof(cache_tag));
 
     created_luminance_entry = dt_dev_pixelpipe_cache_get(darktable.pixelpipe_cache, luminance_hash,
                                                          num_elem * sizeof(float), "toneequal luminance",
-                                                         piece->pipe->type, TRUE, &cache_data, &cache_dsc,
+                                                         piece->pipe->type, TRUE, &cache_data, &luminance_dsc,
                                                          &luminance_entry);
     luminance = (float *)cache_data;
     if(!luminance || !luminance_entry)
@@ -2583,8 +2583,8 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
         void *preview_buf = NULL;
         dt_pixel_cache_entry_t *preview_entry = NULL;
 
-        if(dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, preview_hash, &preview_buf, NULL, &preview_entry,
-                                       NULL, 0, -1, NULL)
+        if(dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, preview_hash, &preview_buf, &preview_entry,
+                                       -1, NULL)
            && preview_buf && preview_entry)
         {
           dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, preview_entry);

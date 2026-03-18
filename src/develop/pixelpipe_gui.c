@@ -393,8 +393,7 @@ static void pixelpipe_get_histogram_backbuf(dt_dev_pixelpipe_t *pipe, dt_develop
 
   // Hash has changed, our previous stored entry is obsolete: decrement its refcount.
   dt_pixel_cache_entry_t *previous_entry;
-  if(dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, previous_hash, NULL, NULL, &previous_entry,
-                                 NULL, 0, -1, NULL))
+  if(dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, previous_hash, NULL, &previous_entry, -1, NULL))
     dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, previous_entry);
 
   // Increment the refcount on current entry so nobody removes it while the GUI still needs it.

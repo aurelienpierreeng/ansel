@@ -132,7 +132,7 @@ struct dt_pixel_cache_entry_t *dt_dev_pixelpipe_cache_get_entry(dt_dev_pixelpipe
  * @param name Name of the cache line (for debugging).
  * @param id ID of the pipeline owning the cache line.
  * @param data Pointer to the buffer pointer (returned).
- * @param dsc Pointer to the buffer descriptor (returned).
+ * @param dsc Descriptor used to initialize a newly-created cache entry.
  * @param alloc Whether or not we should actually alloc the buffer, or simply reserve it. If FALSE
  * use `dt_pixel_cache_alloc()` when you actually need the buffer.
  * @param cache_entry a reference to the cache entry, to be reused later. Can be NULL. The caller
@@ -141,7 +141,7 @@ struct dt_pixel_cache_entry_t *dt_dev_pixelpipe_cache_get_entry(dt_dev_pixelpipe
  */
 int dt_dev_pixelpipe_cache_get(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash, const size_t size,
                                const char *name, const int id, const gboolean alloc,
-                               void **data, struct dt_iop_buffer_dsc_t **dsc,
+                               void **data, const struct dt_iop_buffer_dsc_t *dsc,
                                struct dt_pixel_cache_entry_t **entry);
 
 /**
@@ -173,7 +173,7 @@ int dt_dev_pixelpipe_cache_get(dt_dev_pixelpipe_cache_t *cache, const uint64_t h
  * @param allow_rekey_reuse Whether the cache may reuse the piece-local cached output line by rekeying it.
  * @param reuse_hint Snapshot of the previously attached piece cacheline metadata, or NULL.
  * @param[out] data Returned host pointer when available.
- * @param[out] dsc Returned descriptor pointer.
+ * @param dsc Descriptor used to initialize a newly-created or rekeyed cache entry.
  * @param[out] entry Returned cache entry.
  * @return int `0` when reusing an existing entry at `hash`, `1` when creating a new entry,
  *         `2` when rekeying `reuse_hint`, `-1` on error.
@@ -182,7 +182,7 @@ int dt_dev_pixelpipe_cache_get_writable(dt_dev_pixelpipe_cache_t *cache, const u
                                         const size_t size, const char *name, const int id,
                                         const gboolean alloc, const gboolean allow_rekey_reuse,
                                         const struct dt_pixel_cache_entry_t *reuse_hint,
-                                        void **data, struct dt_iop_buffer_dsc_t **dsc,
+                                        void **data, const struct dt_iop_buffer_dsc_t *dsc,
                                         struct dt_pixel_cache_entry_t **entry);
 
 /** OpenCL pinned buffer reuse tied to cache entries. */
@@ -346,16 +346,15 @@ void dt_pixelpipe_cache_free_align_cache(dt_dev_pixelpipe_cache_t *cache, void *
  * Callers that need lifetime guarantees must retain the entry explicitly with
  * `dt_dev_pixelpipe_cache_ref_count_entry()` and/or `dt_dev_pixelpipe_cache_rdlock_entry()`.
  *
- * If `roi != NULL`, the lookup becomes authoritative for exact-hit consumers:
+ * If `cl_mem_output != NULL`, the lookup becomes authoritative for exact-hit consumers:
  * - write-locked / auto-destroy entries are rejected,
  * - host data is restored from cached device state when possible,
  * - device data is restored into `cl_mem_output` when requested,
  * - broken entries with neither authoritative RAM nor vRAM payload are removed.
  */
 gboolean dt_dev_pixelpipe_cache_peek(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash, void **data,
-                                     struct dt_iop_buffer_dsc_t **dsc, struct dt_pixel_cache_entry_t **entry,
-                                           const struct dt_iop_roi_t *roi, const size_t bpp,
-                                           const int preferred_devid, void **cl_mem_output);
+                                     struct dt_pixel_cache_entry_t **entry, const int preferred_devid,
+                                     void **cl_mem_output);
 
 /**
  * @brief Remove cache lines matching id. Entries locked in read/write or having reference
