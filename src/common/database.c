@@ -92,6 +92,7 @@
 /* transaction id */
 static dt_atomic_int _trxid;
 static dt_atomic_int _trx_batch_level;
+static gpointer _trx_owner = NULL;
 static gpointer _trx_batch_owner = NULL;
 
 typedef struct dt_database_t
@@ -4621,24 +4622,34 @@ gchar *dt_database_get_most_recent_snap(const char* db_filename)
 //
 void dt_database_start_transaction_debug(const struct dt_database_t *db)
 {
+  gpointer const owner = g_thread_self();
   const int batch_level = dt_atomic_get_int(&_trx_batch_level);
   if(batch_level > 0)
   {
     // If a batch transaction is active on this thread, suppress nested BEGIN/COMMIT
     // to avoid per-module transaction overhead during presets initialization.
-    if(g_atomic_pointer_get(&_trx_batch_owner) == g_thread_self())
+    if(g_atomic_pointer_get(&_trx_batch_owner) == owner)
     {
       dt_atomic_add_int(&_trxid, 1);
       return;
     }
   }
 
+  if(g_atomic_pointer_get(&_trx_owner) == owner)
+  {
+    dt_atomic_add_int(&_trxid, 1);
+    return;
+  }
+
+  dt_pthread_rwlock_wrlock(&darktable.database_threadsafe);
+  g_atomic_pointer_set(&_trx_owner, owner);
+
   const int trxid = dt_atomic_add_int(&_trxid, 1);
 
   // if top level a simple unamed transaction is used BEGIN / COMMIT / ROLLBACK
   // otherwise we use a savepoint (named transaction).
 
-  if(trxid == 0 || TRUE)
+  if(trxid == 0)
   {
     // In theads application it may be safer to use an IMMEDIATE transaction:
     // "BEGIN IMMEDIATE TRANSACTION"
@@ -4661,14 +4672,21 @@ void dt_database_start_transaction_debug(const struct dt_database_t *db)
 
 void dt_database_release_transaction_debug(const struct dt_database_t *db)
 {
+  gpointer const owner = g_thread_self();
   const int batch_level = dt_atomic_get_int(&_trx_batch_level);
   if(batch_level > 0)
   {
-    if(g_atomic_pointer_get(&_trx_batch_owner) == g_thread_self())
+    if(g_atomic_pointer_get(&_trx_batch_owner) == owner)
     {
       dt_atomic_sub_int(&_trxid, 1);
       return;
     }
+  }
+
+  if(g_atomic_pointer_get(&_trx_owner) != owner)
+  {
+    fprintf(stderr, "[dt_database_release_transaction] COMMIT from non-owner thread\n");
+    return;
   }
 
   const int trxid = dt_atomic_sub_int(&_trxid, 1);
@@ -4676,9 +4694,11 @@ void dt_database_release_transaction_debug(const struct dt_database_t *db)
   if(trxid <= 0)
     fprintf(stderr, "[dt_database_release_transaction] COMMIT outside a transaction\n");
 
-  if(trxid == 1 || TRUE)
+  if(trxid == 1)
   {
     DT_DEBUG_SQLITE3_EXEC(dt_database_get(db), "COMMIT TRANSACTION", NULL, NULL, NULL);
+    g_atomic_pointer_set(&_trx_owner, NULL);
+    dt_pthread_rwlock_unlock(&darktable.database_threadsafe);
   }
 #ifdef USE_NESTED_TRANSACTIONS
   else
@@ -4692,14 +4712,26 @@ void dt_database_release_transaction_debug(const struct dt_database_t *db)
 
 void dt_database_rollback_transaction(const struct dt_database_t *db)
 {
+  gpointer const owner = g_thread_self();
+  if(g_atomic_pointer_get(&_trx_owner) != owner && g_atomic_pointer_get(&_trx_batch_owner) != owner)
+  {
+    fprintf(stderr, "[dt_database_rollback_transaction] ROLLBACK from non-owner thread\n");
+    return;
+  }
+
   const int trxid = dt_atomic_sub_int(&_trxid, 1);
 
   if(trxid <= 0)
     fprintf(stderr, "[dt_database_rollback_transaction] ROLLBACK outside a transaction\n");
 
-  if(trxid == 1 || TRUE)
+  if(trxid >= 1)
   {
     DT_DEBUG_SQLITE3_EXEC(dt_database_get(db), "ROLLBACK TRANSACTION", NULL, NULL, NULL);
+    dt_atomic_set_int(&_trxid, 0);
+    dt_atomic_set_int(&_trx_batch_level, 0);
+    g_atomic_pointer_set(&_trx_owner, NULL);
+    g_atomic_pointer_set(&_trx_batch_owner, NULL);
+    dt_pthread_rwlock_unlock(&darktable.database_threadsafe);
   }
 #ifdef USE_NESTED_TRANSACTIONS
   else
@@ -4713,29 +4745,50 @@ void dt_database_rollback_transaction(const struct dt_database_t *db)
 
 void dt_database_begin_transaction_batch(const struct dt_database_t *db)
 {
+  gpointer const owner = g_thread_self();
+  if(g_atomic_pointer_get(&_trx_batch_owner) == owner)
+  {
+    dt_atomic_add_int(&_trx_batch_level, 1);
+    return;
+  }
+
+  dt_pthread_rwlock_wrlock(&darktable.database_threadsafe);
+  g_atomic_pointer_set(&_trx_owner, owner);
+  g_atomic_pointer_set(&_trx_batch_owner, owner);
+
   const int level = dt_atomic_add_int(&_trx_batch_level, 1);
   if(level == 0)
   {
-    g_atomic_pointer_set(&_trx_batch_owner, g_thread_self());
     DT_DEBUG_SQLITE3_EXEC(dt_database_get(db), "BEGIN TRANSACTION", NULL, NULL, NULL);
   }
 }
 
 void dt_database_end_transaction_batch(const struct dt_database_t *db)
 {
+  gpointer const owner = g_thread_self();
+  if(g_atomic_pointer_get(&_trx_batch_owner) != owner)
+  {
+    dt_print(DT_DEBUG_SQL, "[dt_database_end_transaction_batch] COMMIT from non-owner thread\n");
+    return;
+  }
+
   const int level = dt_atomic_sub_int(&_trx_batch_level, 1);
   if(level <= 0)
   {
     dt_print(DT_DEBUG_SQL, "[dt_database_end_transaction_batch] COMMIT outside a batch transaction\n");
     dt_atomic_set_int(&_trx_batch_level, 0);
+    g_atomic_pointer_set(&_trx_owner, NULL);
     g_atomic_pointer_set(&_trx_batch_owner, NULL);
+    dt_pthread_rwlock_unlock(&darktable.database_threadsafe);
     return;
   }
 
   if(level == 1)
   {
     DT_DEBUG_SQLITE3_EXEC(dt_database_get(db), "COMMIT TRANSACTION", NULL, NULL, NULL);
+    g_atomic_pointer_set(&_trx_owner, NULL);
     g_atomic_pointer_set(&_trx_batch_owner, NULL);
+    dt_pthread_rwlock_unlock(&darktable.database_threadsafe);
   }
 }
 
