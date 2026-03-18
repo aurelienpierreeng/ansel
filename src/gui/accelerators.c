@@ -1722,7 +1722,13 @@ static void _find_and_rank_matches(GtkTreeModel *model, GtkWidget *search_entry)
 typedef struct dt_accels_search_state_t
 {
   GtkListStore *store;
+  GtkTreeModel *filter_model;
   GtkWindow *main_window;
+  GtkWidget *search_entry;
+  GtkWidget *tree_view;
+  GtkWidget *window;
+  GMainLoop *loop;
+  gint response;
   dt_shortcut_t *selected;
 } dt_accels_search_state_t;
 
@@ -1738,6 +1744,22 @@ static void _search_entry_changed(GtkWidget *widget, gpointer user_data)
   dt_accels_search_state_t *state = (dt_accels_search_state_t *)user_data;
   state->selected = NULL;
   _find_and_rank_matches(GTK_TREE_MODEL(state->store), widget);
+  gtk_tree_model_filter_refilter(GTK_TREE_MODEL_FILTER(state->filter_model));
+
+  GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(state->tree_view));
+  gtk_tree_selection_unselect_all(selection);
+
+  GtkTreeIter iter;
+  if(gtk_tree_model_get_iter_first(state->filter_model, &iter))
+  {
+    GtkTreePath *path = gtk_tree_model_get_path(state->filter_model, &iter);
+    gtk_tree_selection_select_iter(selection, &iter);
+    gtk_tree_view_set_cursor(GTK_TREE_VIEW(state->tree_view), path, NULL, FALSE);
+    gtk_tree_view_scroll_to_cell(GTK_TREE_VIEW(state->tree_view), path, NULL, FALSE, 0.f, 0.f);
+    gtk_tree_path_free(path);
+
+    gtk_tree_model_get(state->filter_model, &iter, 1, &state->selected, -1);
+  }
 }
 
 // fire action callbacks even when they don't have a keyboard shortcut defined
@@ -1812,31 +1834,80 @@ static dt_shortcut_t *_find_first_match(dt_accels_search_state_t *state)
   return NULL;
 }
 
-static gboolean _cursor_on_match(GtkEntryCompletion *completion, GtkTreeModel *model, GtkTreeIter *iter, gpointer user_data)
+static gboolean _shortcut_search_visible(GtkTreeModel *model, GtkTreeIter *iter, gpointer user_data)
 {
-  dt_accels_search_state_t *state = (dt_accels_search_state_t *)user_data;
-  dt_shortcut_t *shortcut = NULL;
-  gtk_tree_model_get(model, iter, 1, &shortcut, -1);
-  state->selected = shortcut;
-  return FALSE;
+  int rank = -1;
+  gtk_tree_model_get(model, iter, 2, &rank, -1);
+  return rank >= 0;
 }
 
-static gboolean _queue_action_from_shortcut(dt_shortcut_t *shortcut, GtkDialog *dialog,
+static gboolean _queue_action_from_shortcut(dt_shortcut_t *shortcut, GtkWidget *window,
                                             dt_accels_search_state_t *state)
 {
   state->selected = shortcut;
-  gtk_dialog_response(dialog, GTK_RESPONSE_ACCEPT);
+  state->response = GTK_RESPONSE_ACCEPT;
+  gtk_widget_destroy(window);
   return TRUE;
 }
 
-// Click on one of the suggestions
-static gboolean _match_selected(GtkEntryCompletion *cmp, GtkTreeModel *model, GtkTreeIter *iter, gpointer user_data)
+static void _shortcut_search_selection_changed(GtkTreeSelection *selection, gpointer user_data)
 {
   dt_accels_search_state_t *state = (dt_accels_search_state_t *)user_data;
-  GtkDialog *dialog = GTK_DIALOG(gtk_widget_get_ancestor(gtk_entry_completion_get_entry(cmp), GTK_TYPE_DIALOG));
-  dt_shortcut_t *shortcut;
-  gtk_tree_model_get(model, iter, 1, &shortcut, -1);
-  return _queue_action_from_shortcut(shortcut, dialog, state);
+  GtkTreeIter iter;
+  if(gtk_tree_selection_get_selected(selection, NULL, &iter))
+  {
+    gtk_tree_model_get(state->filter_model, &iter, 1, &state->selected, -1);
+  }
+  else
+  {
+    state->selected = NULL;
+  }
+}
+
+static gboolean _shortcut_search_row_activated(GtkTreeView *tree_view, GtkTreePath *path,
+                                               GtkTreeViewColumn *column, gpointer user_data)
+{
+  dt_accels_search_state_t *state = (dt_accels_search_state_t *)user_data;
+  GtkTreeIter iter;
+  if(!gtk_tree_model_get_iter(state->filter_model, &iter, path)) return FALSE;
+
+  dt_shortcut_t *shortcut = NULL;
+  gtk_tree_model_get(state->filter_model, &iter, 1, &shortcut, -1);
+  return _queue_action_from_shortcut(shortcut, state->window, state);
+}
+
+static gboolean _shortcut_search_move_selection(dt_accels_search_state_t *state, const gboolean forward)
+{
+  GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(state->tree_view));
+  GtkTreeIter iter;
+  if(!gtk_tree_selection_get_selected(selection, NULL, &iter))
+  {
+    if(!gtk_tree_model_get_iter_first(state->filter_model, &iter)) return TRUE;
+  }
+  else if(forward)
+  {
+    if(!gtk_tree_model_iter_next(state->filter_model, &iter)) return TRUE;
+  }
+  else
+  {
+    GtkTreePath *path = gtk_tree_model_get_path(state->filter_model, &iter);
+    if(!gtk_tree_path_prev(path))
+    {
+      gtk_tree_path_free(path);
+      return TRUE;
+    }
+
+    gtk_tree_model_get_iter(state->filter_model, &iter, path);
+    gtk_tree_path_free(path);
+  }
+
+  GtkTreePath *path = gtk_tree_model_get_path(state->filter_model, &iter);
+  gtk_tree_selection_select_iter(selection, &iter);
+  gtk_tree_view_set_cursor(GTK_TREE_VIEW(state->tree_view), path, NULL, FALSE);
+  gtk_tree_view_scroll_to_cell(GTK_TREE_VIEW(state->tree_view), path, NULL, FALSE, 0.f, 0.f);
+  gtk_tree_path_free(path);
+  gtk_tree_model_get(state->filter_model, &iter, 1, &state->selected, -1);
+  return TRUE;
 }
 
 static gboolean _search_entry_key_pressed(GtkWidget *widget, GdkEventKey *event, gpointer user_data)
@@ -1844,57 +1915,94 @@ static gboolean _search_entry_key_pressed(GtkWidget *widget, GdkEventKey *event,
   dt_accels_search_state_t *state = (dt_accels_search_state_t *)user_data;
   if(event->keyval == GDK_KEY_Escape)
   {
-    // Close the popup
-    GtkDialog *dialog = GTK_DIALOG(gtk_widget_get_ancestor(widget, GTK_TYPE_DIALOG));
-    gtk_dialog_response(dialog, GTK_RESPONSE_CANCEL);
+    state->response = GTK_RESPONSE_CANCEL;
+    gtk_widget_destroy(state->window);
     return TRUE;
   }
+  if(event->keyval == GDK_KEY_Down)
+    return _shortcut_search_move_selection(state, TRUE);
+  if(event->keyval == GDK_KEY_Up)
+    return _shortcut_search_move_selection(state, FALSE);
   if(event->keyval == GDK_KEY_Return || event->keyval == GDK_KEY_KP_Enter)
   {
-    GtkDialog *dialog = GTK_DIALOG(gtk_widget_get_ancestor(widget, GTK_TYPE_DIALOG));
     dt_shortcut_t *shortcut = state->selected ? state->selected : _find_first_match(state);
     if(shortcut)
-      return _queue_action_from_shortcut(shortcut, dialog, state);
+      return _queue_action_from_shortcut(shortcut, state->window, state);
     return TRUE;
   }
   return FALSE;
 }
 
-// Restrict the suggestions list to actual matches
-gboolean _match_func(GtkEntryCompletion *completion, const gchar *key, GtkTreeIter *iter, gpointer user_data)
+static gboolean _shortcut_search_window_key_pressed(GtkWidget *widget, GdkEventKey *event, gpointer user_data)
 {
-  GtkTreeModel *model = gtk_entry_completion_get_model(completion);
-  int rank;
-  gtk_tree_model_get(model, iter, 2, &rank, -1);
-  return rank > -1;
+  return _search_entry_key_pressed(widget, event, user_data);
 }
 
-void dt_accels_search(dt_accels_t *accels, GtkWindow *main_window)
+static gboolean _shortcut_search_button_press(GtkWidget *widget, GdkEventButton *event, gpointer user_data)
 {
-  // Set dialog window properties
-  GtkWidget *dialog = gtk_dialog_new();
-  gtk_window_set_title(GTK_WINDOW(dialog), _("Ansel - Search accelerators"));
+  dt_accels_search_state_t *state = (dt_accels_search_state_t *)user_data;
+  GtkAllocation allocation = { 0 };
+  gtk_widget_get_allocation(widget, &allocation);
+
+  if(event->x >= 0.0 && event->x < allocation.width
+     && event->y >= 0.0 && event->y < allocation.height)
+    return FALSE;
+
+  state->response = GTK_RESPONSE_CANCEL;
+  gtk_widget_destroy(widget);
+  return TRUE;
+}
+
+static void _shortcut_search_destroy(GtkWidget *widget, gpointer user_data)
+{
+  dt_accels_search_state_t *state = (dt_accels_search_state_t *)user_data;
+  gtk_grab_remove(widget);
+  if(state->window == widget) state->window = NULL;
+  if(state->loop) g_main_loop_quit(state->loop);
+}
+
+void dt_accels_search(dt_accels_t *accels, GtkWindow *main_window, GtkWidget *anchor)
+{
+  (void)anchor;
+  GtkWidget *window = gtk_window_new(GTK_WINDOW_POPUP);
+  gtk_window_set_title(GTK_WINDOW(window), _("Ansel - Search accelerators"));
 
 #ifdef GDK_WINDOWING_QUARTZ
-  dt_osx_disallow_fullscreen(dialog);
+  dt_osx_disallow_fullscreen(window);
 #endif
 
   const int dialog_width = 800;
   const int dialog_height = 0;
 
-  gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_CANCEL);
-  gtk_window_set_decorated(GTK_WINDOW(dialog), FALSE);
-  gtk_window_set_position(GTK_WINDOW(dialog), GTK_WIN_POS_CENTER_ON_PARENT);
-  gtk_window_set_modal(GTK_WINDOW(dialog), TRUE);
-  gtk_window_set_transient_for(GTK_WINDOW(dialog), main_window);
-  gtk_window_set_default_size(GTK_WINDOW(dialog), dialog_width, dialog_height);
-  gtk_widget_set_name(dialog, "shortcut-search-dialog");
+  gtk_window_set_decorated(GTK_WINDOW(window), FALSE);
+  gtk_window_set_modal(GTK_WINDOW(window), FALSE);
+  gtk_window_set_transient_for(GTK_WINDOW(window), main_window);
+  gtk_window_set_attached_to(GTK_WINDOW(window), GTK_WIDGET(main_window));
+  gtk_window_set_resizable(GTK_WINDOW(window), FALSE);
+  gtk_window_set_skip_taskbar_hint(GTK_WINDOW(window), TRUE);
+  gtk_window_set_skip_pager_hint(GTK_WINDOW(window), TRUE);
+  gtk_window_set_accept_focus(GTK_WINDOW(window), TRUE);
+  gtk_window_set_focus_on_map(GTK_WINDOW(window), TRUE);
+  gtk_window_set_default_size(GTK_WINDOW(window), dialog_width, dialog_height);
+  gtk_widget_set_name(window, "shortcut-search-dialog");
+  gtk_widget_add_events(window, GDK_BUTTON_PRESS_MASK);
 
   // Build the list of currently-relevant shortcut pathes
   GtkListStore *store = gtk_list_store_new(7, G_TYPE_STRING, G_TYPE_POINTER, G_TYPE_INT, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_UINT, G_TYPE_UINT);
   g_hash_table_foreach(accels->acceleratables, _for_each_path_create_treeview_row, store);
 
-  dt_accels_search_state_t state = { .store = store, .main_window = main_window, .selected = NULL };
+  GMainLoop *loop = g_main_loop_new(NULL, FALSE);
+  dt_accels_search_state_t state = {
+    .store = store,
+    .filter_model = NULL,
+    .main_window = main_window,
+    .search_entry = NULL,
+    .tree_view = NULL,
+    .window = window,
+    .loop = loop,
+    .response = GTK_RESPONSE_CANCEL,
+    .selected = NULL
+  };
 
   // Sort the filtered model by relevance
   gtk_tree_sortable_set_sort_func(GTK_TREE_SORTABLE(store), 2,
@@ -1903,64 +2011,99 @@ void dt_accels_search(dt_accels_t *accels, GtkWindow *main_window)
 
   // Build the search entry
   GtkWidget *search_entry = gtk_search_entry_new();
-  gtk_grab_add(search_entry);
-  gtk_box_pack_start(GTK_BOX(gtk_dialog_get_content_area(GTK_DIALOG(dialog))), search_entry, TRUE, TRUE, 0);
+  state.search_entry = search_entry;
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  gtk_container_add(GTK_CONTAINER(window), box);
+  gtk_box_pack_start(GTK_BOX(box), search_entry, TRUE, TRUE, 0);
+  GtkTreeModel *filter_model = gtk_tree_model_filter_new(GTK_TREE_MODEL(store), NULL);
+  state.filter_model = filter_model;
+  gtk_tree_model_filter_set_visible_func(GTK_TREE_MODEL_FILTER(filter_model),
+                                         _shortcut_search_visible, NULL, NULL);
 
-  // Attach the completion list to the search entry
-  GtkEntryCompletion *completion = gtk_entry_completion_new();
-  gtk_entry_set_completion(GTK_ENTRY(search_entry), completion);
-  gtk_entry_completion_set_model(completion, GTK_TREE_MODEL(store));
-  gtk_entry_completion_set_text_column(completion, 0);
-  gtk_entry_completion_set_inline_completion(completion, TRUE);
-  gtk_entry_completion_set_inline_selection(completion, FALSE);
-  gtk_entry_completion_set_popup_completion(completion, TRUE);
-  gtk_entry_completion_set_minimum_key_length(completion, 1);
-  gtk_entry_completion_set_popup_single_match(completion, TRUE);
-  gtk_entry_completion_set_match_func(completion, _match_func, NULL, NULL);
+  GtkWidget *scrolled = gtk_scrolled_window_new(NULL, NULL);
+  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled),
+                                 GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+  gtk_widget_set_size_request(scrolled, dialog_width, 320);
+  gtk_box_pack_start(GTK_BOX(box), scrolled, TRUE, TRUE, 0);
 
-  // Completion cells rendering
-  GtkCellRenderer *r2 = gtk_cell_renderer_text_new ();
-  g_object_set(r2, "foreground", "#ccc", "xpad", 10,NULL);
-  gtk_cell_layout_pack_start(GTK_CELL_LAYOUT(completion), r2, TRUE);
-  gtk_cell_layout_add_attribute(GTK_CELL_LAYOUT(completion), r2, "text", 3);
+  GtkWidget *tree_view = gtk_tree_view_new_with_model(filter_model);
+  state.tree_view = tree_view;
+  gtk_tree_view_set_headers_visible(GTK_TREE_VIEW(tree_view), FALSE);
+  gtk_tree_view_set_enable_search(GTK_TREE_VIEW(tree_view), FALSE);
+  gtk_tree_view_set_hover_selection(GTK_TREE_VIEW(tree_view), TRUE);
+  gtk_tree_view_set_activate_on_single_click(GTK_TREE_VIEW(tree_view), TRUE);
+  gtk_tree_view_set_tooltip_column(GTK_TREE_VIEW(tree_view), 0);
+  gtk_widget_set_hexpand(tree_view, TRUE);
+  gtk_widget_set_vexpand(tree_view, TRUE);
+  gtk_container_add(GTK_CONTAINER(scrolled), tree_view);
 
-  GtkCellRenderer *r1 = gtk_cell_renderer_accel_new ();
-  g_object_set(r1, "editable", FALSE, "accel-mode", GTK_CELL_RENDERER_ACCEL_MODE_OTHER, "foreground", "#eee", "xpad", 10, NULL);
-  gtk_cell_layout_pack_start(GTK_CELL_LAYOUT(completion), r1, TRUE);
-  gtk_cell_layout_add_attribute(GTK_CELL_LAYOUT(completion), r1, "accel-key", 5);
-  gtk_cell_layout_add_attribute(GTK_CELL_LAYOUT(completion), r1, "accel-mods", 6);
+  GtkCellRenderer *txt = gtk_cell_renderer_text_new();
+  g_object_set(txt, "ellipsize", PANGO_ELLIPSIZE_END, "ellipsize-set", TRUE, "max-width-chars", 70,
+               "foreground", "#ccc", "xpad", 10, NULL);
+  GtkTreeViewColumn *column = gtk_tree_view_column_new_with_attributes(NULL, txt, "text", 0, NULL);
+  gtk_tree_view_column_set_expand(column, FALSE);
+  gtk_tree_view_column_set_sizing(column, GTK_TREE_VIEW_COLUMN_FIXED);
+  gtk_tree_view_column_set_min_width(column, 360);
+  gtk_tree_view_append_column(GTK_TREE_VIEW(tree_view), column);
 
-  // Note: we can't set CSS classes on cell renderers, so hard-coded style it is
+  GtkCellRenderer *accel = gtk_cell_renderer_accel_new();
+  g_object_set(accel, "editable", FALSE, "accel-mode", GTK_CELL_RENDERER_ACCEL_MODE_OTHER,
+               "foreground", "#eee", "xpad", 10, NULL);
+  column = gtk_tree_view_column_new_with_attributes(NULL, accel, "accel-key", 5, "accel-mods", 6, NULL);
+  gtk_tree_view_column_set_min_width(column, 140);
+  gtk_tree_view_append_column(GTK_TREE_VIEW(tree_view), column);
 
-  // Style the main column
-  GList *cells = gtk_cell_layout_get_cells(GTK_CELL_LAYOUT(completion));
-  GtkCellRenderer *txt = cells ? cells->data : NULL;
-  if(txt)
-    g_object_set(txt, "ellipsize", PANGO_ELLIPSIZE_END, "ellipsize-set", TRUE, "max-width-chars", 70, NULL);
+  GtkCellRenderer *description = gtk_cell_renderer_text_new();
+  g_object_set(description, "ellipsize", PANGO_ELLIPSIZE_END, "ellipsize-set", TRUE,
+               "foreground", "#aaa", "xpad", 10, NULL);
+  column = gtk_tree_view_column_new_with_attributes(NULL, description, "text", 3, NULL);
+  gtk_tree_view_column_set_sizing(column, GTK_TREE_VIEW_COLUMN_FIXED);
+  gtk_tree_view_column_set_min_width(column, 280);
+  gtk_tree_view_column_set_expand(column, TRUE);
+  gtk_tree_view_append_column(GTK_TREE_VIEW(tree_view), column);
+
+  GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(tree_view));
+  gtk_tree_selection_set_mode(selection, GTK_SELECTION_BROWSE);
 
   // Wire callbacks
   g_signal_connect(G_OBJECT(search_entry), "changed", G_CALLBACK(_search_entry_changed), &state);
   g_signal_connect(G_OBJECT(search_entry), "key-press-event", G_CALLBACK(_search_entry_key_pressed), &state);
-  g_signal_connect(G_OBJECT(completion), "cursor-on-match", G_CALLBACK(_cursor_on_match), &state);
-  g_signal_connect(G_OBJECT(completion), "match-selected", G_CALLBACK(_match_selected), &state);
+  g_signal_connect(G_OBJECT(selection), "changed", G_CALLBACK(_shortcut_search_selection_changed), &state);
+  g_signal_connect(G_OBJECT(tree_view), "row-activated", G_CALLBACK(_shortcut_search_row_activated), &state);
+  g_signal_connect(G_OBJECT(window), "key-press-event", G_CALLBACK(_shortcut_search_window_key_pressed), &state);
+  g_signal_connect(G_OBJECT(window), "button-press-event", G_CALLBACK(_shortcut_search_button_press), &state);
+  g_signal_connect(G_OBJECT(window), "destroy", G_CALLBACK(_shortcut_search_destroy), &state);
 
-  gtk_widget_show_all(dialog);
+  _search_entry_changed(search_entry, &state);
 
-  // Manually-position the popup at the top of the window
-  GtkAllocation tmp = { 0 };
-  gtk_window_get_size(main_window, &tmp.width, &tmp.height);
-  gdk_window_move_to_rect(GDK_WINDOW(gtk_widget_get_window(dialog)), &tmp, GDK_GRAVITY_NORTH, GDK_GRAVITY_NORTH, 0,
-                          0, 0);
+  // Place the popup at the horizontal center of the main application window.
+  GdkRectangle rect = { 0 };
+  GtkAllocation main_alloc = { 0 };
+  gtk_widget_get_allocation(GTK_WIDGET(main_window), &main_alloc);
+  rect.x = MAX((main_alloc.width - dialog_width) / 2, 0);
+  rect.y = 0;
+  rect.width = MAX(dialog_width, 1);
+  rect.height = 1;
 
-  const gint response = gtk_dialog_run(GTK_DIALOG(dialog));
-  gtk_grab_remove(search_entry);
-  if(response == GTK_RESPONSE_ACCEPT && state.selected)
+  gtk_widget_realize(window);
+  gdk_window_move_to_rect(gtk_widget_get_window(window), &rect,
+                          GDK_GRAVITY_STATIC, GDK_GRAVITY_STATIC,
+                          GDK_ANCHOR_SLIDE | GDK_ANCHOR_FLIP_Y, 0, 0);
+  gtk_widget_show_all(window);
+  gtk_grab_add(window);
+  gdk_window_focus(gtk_widget_get_window(window), GDK_CURRENT_TIME);
+  gtk_window_set_focus(GTK_WINDOW(window), search_entry);
+  gtk_widget_grab_focus(search_entry);
+
+  g_main_loop_run(loop);
+  g_main_loop_unref(loop);
+  if(state.response == GTK_RESPONSE_ACCEPT && state.selected)
   {
     dt_accels_dispatch_state_t *dispatch = g_malloc0(sizeof(*dispatch));
     dispatch->shortcut = state.selected;
     dispatch->main_window = main_window;
     g_idle_add(_dispatch_selected_shortcut_idle, dispatch);
   }
-  gtk_widget_destroy(dialog);
+  if(state.window) gtk_widget_destroy(state.window);
   g_object_unref(store);
 }

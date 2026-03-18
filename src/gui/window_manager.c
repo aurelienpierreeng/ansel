@@ -652,7 +652,7 @@ void _iconify_callback(GtkWidget *w, gpointer data)
 
 void _open_accel_search_callback(GtkWidget *w, gpointer data)
 {
-  dt_accels_search(darktable.gui->accels, GTK_WINDOW(darktable.gui->ui->main_window));
+  dt_accels_search(darktable.gui->accels, GTK_WINDOW(darktable.gui->ui->main_window), w);
 }
 
 void dt_ui_init_global_menu(dt_ui_t *ui)

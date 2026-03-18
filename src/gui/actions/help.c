@@ -212,7 +212,8 @@ static gboolean contextual_help_callback(GtkAccelGroup *group, GObject *accelera
 
 static gboolean search_accels_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
-  dt_accels_search(darktable.gui->accels, GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)));
+  GtkWidget *main = dt_ui_main_window(darktable.gui->ui);
+  dt_accels_search(darktable.gui->accels, GTK_WINDOW(main), main);
   return TRUE;
 }
 

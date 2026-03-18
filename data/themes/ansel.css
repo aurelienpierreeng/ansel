@@ -2657,7 +2657,7 @@ tooltip label,
 {
   margin: 0;
   padding: 0;
-  background: transparent;
+  background-color: @field_bg;
 }
 
 #shortcut-search-dialog entry

@@ -366,4 +366,4 @@ void dt_accels_remove_shortcut(dt_accels_t *accels, const char *path);
  */
 void dt_accels_window(dt_accels_t *accels, GtkWindow *main_window);
 
-void dt_accels_search(dt_accels_t *accels, GtkWindow *main_window);
+void dt_accels_search(dt_accels_t *accels, GtkWindow *main_window, GtkWidget *anchor);
