@@ -17,8 +17,8 @@ int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *p
                              dt_pixel_cache_entry_t *input_entry, dt_pixel_cache_entry_t *output_entry)
 {
   dt_iop_module_t *module = piece->module;
-  const dt_iop_roi_t *roi_in = &piece->planned_roi_in;
-  const dt_iop_roi_t *roi_out = &piece->planned_roi_out;
+  const dt_iop_roi_t *roi_in = &piece->roi_in;
+  const dt_iop_roi_t *roi_out = &piece->roi_out;
   float *input = dt_pixel_cache_entry_get_data(input_entry);
   void *output = dt_pixel_cache_entry_get_data(output_entry);
   dt_iop_buffer_dsc_t *input_format = &input_entry->dsc;

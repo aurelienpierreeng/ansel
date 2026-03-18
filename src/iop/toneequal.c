@@ -2571,7 +2571,7 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
     if(self->enabled && self->dev && self->dev->preview_pipe && !self->dev->preview_pipe->processing)
     {
       dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->preview_pipe, self);
-      if(piece && piece->enabled && piece->planned_roi_in.width > 0 && piece->planned_roi_in.height > 0)
+      if(piece && piece->enabled && piece->roi_in.width > 0 && piece->roi_in.height > 0)
       {
         // Opening the module can happen after preview processing already finished.
         // In that case the preview pipe may stay idle because darkroom can reuse an
@@ -2593,14 +2593,14 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
           gboolean keep_new_entry = FALSE;
           dt_iop_gui_enter_critical_section(self);
           if(g->thumb_preview_entry != preview_entry || g->thumb_preview_hash != preview_hash
-             || g->thumb_preview_buf_width != piece->planned_roi_in.width
-             || g->thumb_preview_buf_height != piece->planned_roi_in.height || !g->luminance_valid)
+             || g->thumb_preview_buf_width != piece->roi_in.width
+             || g->thumb_preview_buf_height != piece->roi_in.height || !g->luminance_valid)
           {
             old_entry = g->thumb_preview_entry;
             g->thumb_preview_entry = preview_entry;
             g->thumb_preview_hash = preview_hash;
-            g->thumb_preview_buf_width = piece->planned_roi_in.width;
-            g->thumb_preview_buf_height = piece->planned_roi_in.height;
+            g->thumb_preview_buf_width = piece->roi_in.width;
+            g->thumb_preview_buf_height = piece->roi_in.height;
             g->luminance_valid = TRUE;
             g->histogram_valid = FALSE;
             keep_new_entry = TRUE;

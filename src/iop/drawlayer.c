@@ -2197,7 +2197,7 @@ gboolean dt_drawlayer_prime_live_process_patch_before_stroke(dt_iop_module_t *se
     dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, pipe, self);
     if(!piece || !_is_drawlayer_display_pipe(self, piece)) continue;
 
-    if(_build_process_patch_from_base(self, g, piece, &piece->planned_roi_in, &piece->planned_roi_out))
+    if(_build_process_patch_from_base(self, g, piece, &piece->roi_in, &piece->roi_out))
       return TRUE;
   }
 

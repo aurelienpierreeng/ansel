@@ -212,9 +212,10 @@ static void _trace_histogram_backbuf(const dt_dev_pixelpipe_t *pipe, const dt_io
  * This is the per-module histogram that can be shown in module UIs. Each module may set
  * `piece->histogram_params` to define a ROI. If no ROI is specified, we use the full ROI.
  */
-static void histogram_collect(dt_dev_pixelpipe_iop_t *piece, const void *pixel, const dt_iop_roi_t roi,
+static void histogram_collect(dt_dev_pixelpipe_iop_t *piece, const void *pixel,
                               uint32_t **histogram, uint32_t *histogram_max)
 {
+  const dt_iop_roi_t roi = piece->roi_in;
   dt_dev_histogram_collection_params_t histogram_params = piece->histogram_params;
   dt_histogram_roi_t histogram_roi;
 
@@ -541,15 +542,16 @@ static void pixelpipe_picker(dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *pi
  * The histogram is stored both in the piece (for internal use) and optionally copied to the module (for UI).
  */
 static void collect_histogram_on_CPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
-                                     float *input, const dt_iop_roi_t roi_in,
-                                     dt_iop_buffer_dsc_t *input_format,
+                                     float *input, dt_iop_buffer_dsc_t *input_format,
                                      dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece)
 {
+  (void)pipe;
+  (void)input_format;
   // Histogram collection for module.
   if((dev->gui_attached || !(piece->request_histogram & DT_REQUEST_ONLY_IN_GUI))
      && (piece->request_histogram & DT_REQUEST_ON))
   {
-    histogram_collect(piece, input, roi_in, &(piece->histogram), piece->histogram_max);
+    histogram_collect(piece, input, &(piece->histogram), piece->histogram_max);
 
     if(piece->histogram && (module->request_histogram & DT_REQUEST_ON))
     {
@@ -573,12 +575,14 @@ static void collect_histogram_on_CPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev
  * supports while aggregating the picker values.
  */
 static void _sample_color_picker(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, float *input,
-                                 dt_iop_buffer_dsc_t *input_format, const dt_iop_roi_t roi_in, void **output,
-                                 dt_iop_buffer_dsc_t **out_format, const dt_iop_roi_t roi_out,
+                                 dt_iop_buffer_dsc_t *input_format, void **output,
+                                 dt_iop_buffer_dsc_t **out_format,
                                  dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece,
                                  const uint64_t input_hash, const uint64_t output_hash)
 {
   (void)pipe;
+  const dt_iop_roi_t roi_in = piece->roi_in;
+  const dt_iop_roi_t roi_out = piece->roi_out;
 
   if(!(darktable.lib->proxy.colorpicker.picker_proxy
        && module == dev->gui_module
@@ -614,11 +618,13 @@ static void _sample_color_picker(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, fl
  * The caller must already hold pixel cache locks protecting `input_entry` and `output_entry`.
  */
 static void _sample_gui(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, void *input, void **output,
-                        const dt_iop_roi_t roi_in, const dt_iop_roi_t roi_out, dt_iop_buffer_dsc_t *input_format,
+                        dt_iop_buffer_dsc_t *input_format,
                         dt_iop_buffer_dsc_t **output_format, dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece,
-                        const uint64_t input_hash, const uint64_t hash, const size_t in_bpp, const size_t bpp,
+                        const uint64_t input_hash, const uint64_t hash,
                         dt_pixel_cache_entry_t *const input_entry, dt_pixel_cache_entry_t *const output_entry)
 {
+  const dt_iop_roi_t roi_in = piece->roi_in;
+  const dt_iop_roi_t roi_out = piece->roi_out;
   if(!_pipe_tracks_gui_observables(pipe, dev))
     return;
 
@@ -668,13 +674,13 @@ static void _sample_gui(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, void *input
 
   // Sample internal histogram on input and color pickers from the locked host cachelines only.
   if(sampled_input && input_format && input_format->datatype == TYPE_FLOAT)
-    collect_histogram_on_CPU(pipe, dev, sampled_input, roi_in, input_format, module, piece);
+    collect_histogram_on_CPU(pipe, dev, sampled_input, input_format, module, piece);
 
   if(sampled_input && sampled_output
      && input_format && output_format && *output_format
      && input_format->datatype == TYPE_FLOAT
      && (*output_format)->datatype == TYPE_FLOAT)
-    _sample_color_picker(pipe, dev, sampled_input, input_format, roi_in, &sampled_output, output_format, roi_out,
+    _sample_color_picker(pipe, dev, sampled_input, input_format, &sampled_output, output_format,
                          module, piece, input_hash, hash);
 }
 

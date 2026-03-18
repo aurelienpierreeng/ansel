@@ -208,7 +208,7 @@ void dt_dev_pixelpipe_get_roi_in(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *
     dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)nodes->data;
     dt_iop_module_t *module = piece->module;
 
-    piece->planned_roi_out = roi_out_temp;
+    piece->roi_out = roi_out_temp;
 
     // If in GUI and using a module that needs a full, undistorterted image,
     // we need to shutdown temporarily any module distorting the image.
@@ -232,7 +232,7 @@ void dt_dev_pixelpipe_get_roi_in(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *
     }
     */
 
-    piece->planned_roi_in = roi_in;
+    piece->roi_in = roi_in;
     roi_out_temp = roi_in;
   }
 
@@ -293,15 +293,15 @@ void dt_pixelpipe_get_global_hash(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
 
     // Panning and zooming change the ROI. Some GUI modes (crop in editing mode) too.
     // dt_dev_get_roi_in() should have run before
-    local_hash = dt_hash(local_hash, (const char *)&piece->planned_roi_in, sizeof(dt_iop_roi_t));
-    local_hash = dt_hash(local_hash, (const char *)&piece->planned_roi_out, sizeof(dt_iop_roi_t));
+    local_hash = dt_hash(local_hash, (const char *)&piece->roi_in, sizeof(dt_iop_roi_t));
+    local_hash = dt_hash(local_hash, (const char *)&piece->roi_out, sizeof(dt_iop_roi_t));
 /*
     fprintf(stdout, "start->end : %-17s | ROI in: %4ix%-4i @%2.4f | ROI out: %4ix%-4i @%2.4f\n", piece->module->op,
             piece->buf_in.width, piece->buf_in.height, piece->buf_in.scale, piece->buf_out.width,
             piece->buf_out.height, piece->buf_out.scale);
     fprintf(stdout, "end->start : %-17s | ROI in: %4ix%-4i @%2.4f | ROI out: %4ix%-4i @%2.4f\n", piece->module->op,
-            piece->planned_roi_in.width, piece->planned_roi_in.height, piece->planned_roi_in.scale,
-            piece->planned_roi_out.width, piece->planned_roi_out.height, piece->planned_roi_out.scale);
+            piece->roi_in.width, piece->roi_in.height, piece->planned_roi_in.scale,
+            piece->roi_out.width, piece->roi_out.height, piece->roi_out.scale);
 */
     // Mask preview display doesn't re-commit params, so we need to keep that of it here
     // Too much GUI stuff interleaved with pipeline stuff...

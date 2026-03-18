@@ -52,10 +52,11 @@ static int _is_opencl_supported(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t
 static int _gpu_init_input(dt_dev_pixelpipe_t *pipe,
                            float **input, void **cl_mem_input,
                            dt_iop_buffer_dsc_t *input_format, dt_iop_colorspace_type_t input_cst_cl,
-                           const dt_iop_roi_t *roi_in,
-                           dt_iop_module_t *module, dt_develop_tiling_t *tiling,
+                           dt_dev_pixelpipe_iop_t *piece, dt_develop_tiling_t *tiling,
                            dt_pixel_cache_entry_t *input_entry, dt_pixel_cache_entry_t *output_entry)
 {
+  dt_iop_module_t *module = piece->module;
+  const dt_iop_roi_t *roi_in = &piece->roi_in;
   const size_t in_bpp = input_format->bpp;
 
   if(*input == NULL)
@@ -95,20 +96,19 @@ static int _gpu_cpu_fallback_from_opencl_error(dt_dev_pixelpipe_t *pipe, float *
                                                void *cl_mem_input,
                                                dt_iop_buffer_dsc_t *input_format,
                                                dt_iop_colorspace_type_t input_cst_cl,
-                                               const dt_iop_roi_t *roi_in,
-                                               void **cl_mem_output, const dt_iop_roi_t *roi_out,
-                                               dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece,
+                                               void **cl_mem_output, dt_dev_pixelpipe_iop_t *piece,
                                                dt_develop_tiling_t *tiling, dt_pixelpipe_flow_t *pixelpipe_flow,
                                                dt_pixel_cache_entry_t *input_entry,
                                                dt_pixel_cache_entry_t *output_entry,
                                                dt_pixel_cache_entry_t *locked_input_entry)
 {
+  dt_iop_module_t *module = piece->module;
   if(locked_input_entry)
     dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, locked_input_entry);
 
   if(cl_mem_input != NULL)
   {
-    if(_gpu_init_input(pipe, &input, &cl_mem_input, input_format, input_cst_cl, roi_in, module, tiling,
+    if(_gpu_init_input(pipe, &input, &cl_mem_input, input_format, input_cst_cl, piece, tiling,
                        input_entry, output_entry))
       return 1;
   }
@@ -132,14 +132,14 @@ static int _gpu_cpu_fallback_from_opencl_error(dt_dev_pixelpipe_t *pipe, float *
 
 static int _gpu_early_cpu_fallback_if_unsupported(dt_dev_pixelpipe_t *pipe, float **input,
                                                   void **cl_mem_input,
-                                                  dt_iop_buffer_dsc_t *input_format, const dt_iop_roi_t *roi_in,
-                                                  const dt_iop_roi_t *roi_out,
-                                                  dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece,
+                                                  dt_iop_buffer_dsc_t *input_format, dt_dev_pixelpipe_iop_t *piece,
                                                   dt_develop_tiling_t *tiling,
                                                   dt_pixelpipe_flow_t *pixelpipe_flow,
                                                   dt_pixel_cache_entry_t *input_entry,
                                                   dt_pixel_cache_entry_t *output_entry)
 {
+  dt_iop_module_t *module = piece->module;
+  const dt_iop_roi_t *roi_in = &piece->roi_in;
   const dt_iop_colorspace_type_t input_cst_cl = input_format->cst;
   const size_t in_bpp = input_format->bpp;
 
@@ -187,8 +187,8 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *p
                              dt_pixel_cache_entry_t *input_entry, dt_pixel_cache_entry_t *output_entry)
 {
   dt_iop_module_t *module = piece->module;
-  const dt_iop_roi_t *roi_in = &piece->planned_roi_in;
-  const dt_iop_roi_t *roi_out = &piece->planned_roi_out;
+  const dt_iop_roi_t *roi_in = &piece->roi_in;
+  const dt_iop_roi_t *roi_out = &piece->roi_out;
   float *input = dt_pixel_cache_entry_get_data(input_entry);
   void *output = dt_pixel_cache_entry_get_data(output_entry);
   dt_iop_buffer_dsc_t *input_format = &input_entry->dsc;
@@ -213,8 +213,8 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *p
 
   if(!_is_opencl_supported(pipe, piece, module) || !pipe->opencl_enabled || !(pipe->devid >= 0))
   {
-    return _gpu_early_cpu_fallback_if_unsupported(pipe, &input, &cl_mem_input, input_format, roi_in, roi_out,
-                                                  module, piece, tiling, pixelpipe_flow, input_entry, output_entry);
+    return _gpu_early_cpu_fallback_if_unsupported(pipe, &input, &cl_mem_input, input_format, piece, tiling,
+                                                  pixelpipe_flow, input_entry, output_entry);
   }
 
   const dt_iop_order_iccprofile_info_t *const work_profile
@@ -264,7 +264,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *p
       goto error;
     }
 
-    if(_gpu_init_input(pipe, &input, &cl_mem_input, input_format, input_cst_cl, roi_in, module, tiling,
+    if(_gpu_init_input(pipe, &input, &cl_mem_input, input_format, input_cst_cl, piece, tiling,
                        input_entry, output_entry))
       goto error;
   }
@@ -413,8 +413,8 @@ error:
   dt_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] %s couldn't process on GPU\n", module->name());
   piece->force_opencl_cache = TRUE;
 
-  return _gpu_cpu_fallback_from_opencl_error(pipe, input, cl_mem_input, input_format, input_cst_cl, roi_in,
-                                             &cl_mem_output, roi_out, module, piece, tiling,
+  return _gpu_cpu_fallback_from_opencl_error(pipe, input, cl_mem_input, input_format, input_cst_cl,
+                                             &cl_mem_output, piece, tiling,
                                              pixelpipe_flow, cpu_input_entry, output_entry,
                                              locked_input_entry);
 }

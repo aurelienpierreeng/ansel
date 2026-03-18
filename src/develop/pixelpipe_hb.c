@@ -939,8 +939,8 @@ static int dt_dev_pixelpipe_process_rec_darkroom(dt_dev_pixelpipe_t *pipe, dt_de
 
     if(piece) 
     {
-      roi_out = piece->planned_roi_out;
-      roi_in = piece->planned_roi_in;
+      roi_out = piece->roi_out;
+      roi_in = piece->roi_in;
       module = piece->module;
     }
 
@@ -957,7 +957,7 @@ static int dt_dev_pixelpipe_process_rec_darkroom(dt_dev_pixelpipe_t *pipe, dt_de
       dt_dev_pixelpipe_iop_t *base_piece = (dt_dev_pixelpipe_iop_t *)node->data;
       if(base_piece && base_piece->enabled)
       {
-        roi_out = roi_in = base_piece->planned_roi_in;
+        roi_out = roi_in = base_piece->roi_in;
         break;
       }
     }
@@ -1275,8 +1275,8 @@ static int dt_dev_pixelpipe_process_rec_headless(dt_dev_pixelpipe_t *pipe, uint6
 
     if(piece)
     {
-      roi_out = piece->planned_roi_out;
-      roi_in = piece->planned_roi_in;
+      roi_out = piece->roi_out;
+      roi_in = piece->roi_in;
       module = piece->module;
     }
 
@@ -1290,7 +1290,7 @@ static int dt_dev_pixelpipe_process_rec_headless(dt_dev_pixelpipe_t *pipe, uint6
       dt_dev_pixelpipe_iop_t *base_piece = (dt_dev_pixelpipe_iop_t *)node->data;
       if(base_piece && base_piece->enabled)
       {
-        roi_out = roi_in = base_piece->planned_roi_in;
+        roi_out = roi_in = base_piece->roi_in;
         break;
       }
     }
@@ -1482,8 +1482,8 @@ static int dt_dev_pixelpipe_process_rec_sample(dt_dev_pixelpipe_t *pipe, dt_deve
     piece = (dt_dev_pixelpipe_iop_t *)pieces->data;
     if(piece)
     {
-      roi_out = piece->planned_roi_out;
-      roi_in = piece->planned_roi_in;
+      roi_out = piece->roi_out;
+      roi_in = piece->roi_in;
       module = piece->module;
     }
 
@@ -1497,7 +1497,7 @@ static int dt_dev_pixelpipe_process_rec_sample(dt_dev_pixelpipe_t *pipe, dt_deve
       dt_dev_pixelpipe_iop_t *base_piece = (dt_dev_pixelpipe_iop_t *)node->data;
       if(base_piece && base_piece->enabled)
       {
-        roi_out = roi_in = base_piece->planned_roi_in;
+        roi_out = roi_in = base_piece->roi_in;
         break;
       }
     }
@@ -1550,8 +1550,8 @@ static int dt_dev_pixelpipe_process_rec_sample(dt_dev_pixelpipe_t *pipe, dt_deve
   dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, input_entry);
   dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, input_entry);
 
-  _sample_gui(pipe, dev, input, &output, roi_in, roi_out, input_format, &output_format, module, piece, input_hash,
-              hash, 0, 0, input_entry, output_entry);
+  _sample_gui(pipe, dev, input, &output, input_format, &output_format, module, piece, input_hash,
+              hash, input_entry, output_entry);
 
   dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, input_entry);
   dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, input_entry);

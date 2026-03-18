@@ -85,7 +85,7 @@ void dt_dev_pixelpipe_change_zoom_main(struct dt_develop_t *dev);
 void dt_dev_pixelpipe_get_roi_out(struct dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev, const int width_in,
                                   const int height_in, int *width, int *height);
                                 
-// Compute and save into each piece->planned_roi_out/in the proper module-wise ROI to achieve
+// Compute and save into each piece->roi_out/in the proper module-wise ROI to achieve
 // the desired sizes from roi_out, from end to start. This chains calls to module's modify_roi_in() methods
 // in pipeline reverse order.
 // Doesn't actually compute pixels.

@@ -94,9 +94,8 @@ typedef struct dt_dev_pixelpipe_iop_t
 
   int bpc;             // bits per channel, 32 means float
   int colors;          // how many colors per pixel
-  dt_iop_roi_t buf_in,
-      buf_out;                // theoretical full buffer regions of interest, as passed through modify_roi_out
-  dt_iop_roi_t planned_roi_in, planned_roi_out; // sizes planned ahead for cache hash
+  dt_iop_roi_t buf_in, buf_out; // theoretical full buffer regions of interest, as passed through modify_roi_out
+  dt_iop_roi_t roi_in, roi_out; // pipeline sizes planned ahead for cache hash
   int process_cl_ready;       // set this to 0 in commit_params to temporarily disable the use of process_cl
   int process_tiling_ready;   // set this to 0 in commit_params to temporarily disable tiling
 

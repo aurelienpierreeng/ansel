@@ -343,7 +343,7 @@ static void commit_params_late(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *pi
 
   if(d->mode == LEVELS_MODE_AUTOMATIC)
   {
-    if(g && !dt_dev_pixelpipe_has_preview_output(self->dev, piece->pipe, &piece->planned_roi_out))
+    if(g && !dt_dev_pixelpipe_has_preview_output(self->dev, piece->pipe, &piece->roi_out))
     {
       dt_iop_gui_enter_critical_section(self);
       const uint64_t hash = g->hash;
@@ -365,7 +365,7 @@ static void commit_params_late(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *pi
       compute_lut(piece);
     }
 
-    if(dt_dev_pixelpipe_has_preview_output(self->dev, piece->pipe, &piece->planned_roi_out)
+    if(dt_dev_pixelpipe_has_preview_output(self->dev, piece->pipe, &piece->roi_out)
        || isnan(d->levels[0]) || isnan(d->levels[1])
        || isnan(d->levels[2]))
     {
@@ -373,7 +373,7 @@ static void commit_params_late(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *pi
       compute_lut(piece);
     }
 
-    if(g && dt_dev_pixelpipe_has_preview_output(self->dev, piece->pipe, &piece->planned_roi_out)
+    if(g && dt_dev_pixelpipe_has_preview_output(self->dev, piece->pipe, &piece->roi_out)
        && d->mode == LEVELS_MODE_AUTOMATIC)
     {
       uint64_t hash = piece->global_hash;

@@ -178,30 +178,30 @@ float *dt_dev_distort_detail_mask(const dt_dev_pixelpipe_t *pipe, float *src,
       {
         if(module->module->distort_mask
            && !(!strcmp(module->module->op, "finalscale")
-                && module->planned_roi_in.width == 0
-                && module->planned_roi_in.height == 0))
+                && module->roi_in.width == 0
+                && module->roi_in.height == 0))
         {
           float *tmp = dt_pixelpipe_cache_alloc_align_float_cache(
-              (size_t)module->planned_roi_out.width * module->planned_roi_out.height, 0);
+              (size_t)module->roi_out.width * module->roi_out.height, 0);
           dt_vprint(DT_DEBUG_MASKS, "   %s %ix%i -> %ix%i\n", module->module->op,
-                    module->planned_roi_in.width, module->planned_roi_in.height,
-                    module->planned_roi_out.width, module->planned_roi_out.height);
+                    module->roi_in.width, module->roi_in.height,
+                    module->roi_out.width, module->roi_out.height);
           module->module->distort_mask(module->module, module, inmask, tmp,
-                                       &module->planned_roi_in, &module->planned_roi_out);
+                                       &module->roi_in, &module->roi_out);
           resmask = tmp;
           if(inmask != src) dt_pixelpipe_cache_free_align(inmask);
           inmask = tmp;
         }
         else if(!module->module->distort_mask
-                && (module->planned_roi_in.width != module->planned_roi_out.width
-                    || module->planned_roi_in.height != module->planned_roi_out.height
-                    || module->planned_roi_in.x != module->planned_roi_out.x
-                    || module->planned_roi_in.y != module->planned_roi_out.y))
+                && (module->roi_in.width != module->roi_out.width
+                    || module->roi_in.height != module->roi_out.height
+                    || module->roi_in.x != module->roi_out.x
+                    || module->roi_in.y != module->roi_out.y))
           fprintf(stderr, "FIXME: module `%s' changed the roi from %d x %d @ %d / %d to %d x %d | %d / %d but doesn't have "
-                          "distort_mask() implemented!\n", module->module->op, module->planned_roi_in.width,
-                          module->planned_roi_in.height, module->planned_roi_in.x, module->planned_roi_in.y,
-                          module->planned_roi_out.width, module->planned_roi_out.height, module->planned_roi_out.x,
-                          module->planned_roi_out.y);
+                          "distort_mask() implemented!\n", module->module->op, module->roi_in.width,
+                          module->roi_in.height, module->roi_in.x, module->roi_in.y,
+                          module->roi_out.width, module->roi_out.height, module->roi_out.x,
+                          module->roi_out.y);
 
         if(module->module == target_module) break;
       }
