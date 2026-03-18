@@ -435,6 +435,20 @@ void dt_gui_container_destroy_children(GtkContainer *container);
 
 void dt_gui_menu_popup(GtkMenu *menu, GtkWidget *button, GdkGravity widget_anchor, GdkGravity menu_anchor);
 
+/**
+ * @brief Resolve the widget used as parent for nested popups on Wayland.
+ *
+ * Gtk on Wayland requires popups to use the top-most enclosing popup as parent.
+ * This helper walks the parent chain to find that anchor while keeping the caller
+ * in charge of the popup logic. When @p rect is not NULL, it returns the position
+ * and size of @p widget in the coordinate system of the returned anchor.
+ *
+ * @param widget the widget the popup should visually point to.
+ * @param rect optional output rectangle receiving the geometry of @p widget.
+ * @return the widget to use as popup parent, or NULL when @p widget is NULL.
+ */
+GtkWidget *dt_gui_get_popup_relative_widget(GtkWidget *widget, GdkRectangle *rect);
+
 void dt_gui_draw_rounded_rectangle(cairo_t *cr, float width, float height, float x, float y);
 
 // event handler for "key-press-event" of GtkTreeView to decide if focus switches to GtkSearchEntry

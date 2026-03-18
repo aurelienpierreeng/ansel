@@ -401,17 +401,10 @@ static void _completion_update(dt_lib_module_t *self)
   gtk_text_view_get_iter_location(d->edit_view, &cursor, &rect);
   gtk_text_view_buffer_to_window_coords(d->edit_view, GTK_TEXT_WINDOW_WIDGET,
                                         rect.x, rect.y + rect.height, &rect.x, &rect.y);
-  GtkWidget *anchor = d->root ? d->root : GTK_WIDGET(d->edit_view);
-  gtk_popover_set_relative_to(GTK_POPOVER(d->completion_popover), anchor);
-  if(anchor != GTK_WIDGET(d->edit_view))
-  {
-    int ax = 0, ay = 0;
-    if(gtk_widget_translate_coordinates(GTK_WIDGET(d->edit_view), anchor, rect.x, rect.y, &ax, &ay))
-    {
-      rect.x = ax;
-      rect.y = ay;
-    }
-  }
+  GtkWidget *anchor = dt_gui_get_popup_relative_widget(d->root ? d->root : GTK_WIDGET(d->edit_view), NULL);
+  gtk_popover_set_relative_to(GTK_POPOVER(d->completion_popover), anchor ? anchor : GTK_WIDGET(d->edit_view));
+  if(anchor && anchor != GTK_WIDGET(d->edit_view))
+    gtk_widget_translate_coordinates(GTK_WIDGET(d->edit_view), anchor, rect.x, rect.y, &rect.x, &rect.y);
   if(rect.width <= 0) rect.width = 1;
   rect.height = 1;
   gtk_popover_set_pointing_to(GTK_POPOVER(d->completion_popover), &rect);
@@ -513,7 +506,8 @@ static void _setup_completion(dt_lib_module_t *self, GtkWidget *textview)
 
   d->completion_popover = gtk_popover_new(NULL);
   gtk_popover_set_position(GTK_POPOVER(d->completion_popover), GTK_POS_BOTTOM);
-  gtk_popover_set_relative_to(GTK_POPOVER(d->completion_popover), textview);
+  GtkWidget *relative = dt_gui_get_popup_relative_widget(textview, NULL);
+  gtk_popover_set_relative_to(GTK_POPOVER(d->completion_popover), relative ? relative : textview);
   gtk_container_add(GTK_CONTAINER(d->completion_popover), completion_sw);
   d->completion_tree = completion_tree;
 }

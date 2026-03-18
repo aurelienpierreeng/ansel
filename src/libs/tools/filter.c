@@ -553,7 +553,7 @@ static void _select_none_callback(GtkWidget *widget, dt_lib_module_t *self)
 static gboolean _show_popover_menu(dt_lib_module_t *self, GtkWidget *w)
 {
   dt_lib_tool_filter_t *d = (dt_lib_tool_filter_t *)self->data;
-  gtk_menu_popup_at_widget(GTK_MENU(d->menu), w, GDK_GRAVITY_SOUTH, GDK_GRAVITY_NORTH, NULL);
+  dt_gui_menu_popup(GTK_MENU(d->menu), w, GDK_GRAVITY_SOUTH, GDK_GRAVITY_NORTH);
   return TRUE;
 }
 

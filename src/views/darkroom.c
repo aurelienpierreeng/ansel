@@ -1276,6 +1276,8 @@ static gboolean _toolbar_show_popup(gpointer user_data)
   GtkPopover *popover = GTK_POPOVER(user_data);
 
   GtkWidget *button = gtk_popover_get_relative_to(popover);
+  GdkRectangle button_rect = { 0 };
+  GtkWidget *anchor = dt_gui_get_popup_relative_widget(button, &button_rect);
   GdkDevice *pointer = gdk_seat_get_pointer(gdk_display_get_default_seat(gdk_display_get_default()));
 
   int x, y;
@@ -1284,10 +1286,19 @@ static gboolean _toolbar_show_popup(gpointer user_data)
   if(pointer_window)
     gdk_window_get_user_data(pointer_window, &pointer_widget);
 
-  GdkRectangle rect = { gtk_widget_get_allocated_width(button) / 2, 0, 1, 1 };
+  gtk_popover_set_relative_to(popover, anchor ? anchor : button);
 
-  if(pointer_widget && button != pointer_widget)
-    gtk_widget_translate_coordinates(pointer_widget, button, x, y, &rect.x, &rect.y);
+  GdkRectangle rect = { button_rect.x + button_rect.width / 2, button_rect.y, 1, 1 };
+
+  if(pointer_widget == anchor)
+  {
+    rect.x = x;
+    rect.y = y;
+  }
+  else if(pointer_widget && anchor && pointer_widget != anchor)
+  {
+    gtk_widget_translate_coordinates(pointer_widget, anchor, x, y, &rect.x, &rect.y);
+  }
 
   gtk_popover_set_pointing_to(popover, &rect);
 
@@ -1600,7 +1611,6 @@ static gboolean _quickbutton_press_release(GtkWidget *button, GdkEventButton *ev
      (event->type == GDK_BUTTON_RELEASE && event->time - start_time > delay))
   {
     gtk_popover_set_relative_to(GTK_POPOVER(popover), button);
-
     g_object_set(G_OBJECT(popover), "transitions-enabled", FALSE, NULL);
 
     _toolbar_show_popup(popover);

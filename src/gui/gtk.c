@@ -2497,14 +2497,48 @@ void dt_gui_container_destroy_children(GtkContainer *container)
   gtk_container_foreach(container, _delete_child, NULL);
 }
 
+GtkWidget *dt_gui_get_popup_relative_widget(GtkWidget *widget, GdkRectangle *rect)
+{
+  if(!widget) return NULL;
+
+  GtkWidget *relative = widget;
+
+  // Wayland only accepts the top-most enclosing popup as transient parent.
+  for(GtkWidget *parent = gtk_widget_get_parent(widget); parent; parent = gtk_widget_get_parent(parent))
+    if(GTK_IS_POPOVER(parent)) relative = parent;
+
+  if(rect)
+  {
+    rect->x = 0;
+    rect->y = 0;
+    rect->width = MAX(gtk_widget_get_allocated_width(widget), 1);
+    rect->height = MAX(gtk_widget_get_allocated_height(widget), 1);
+
+    if(relative != widget
+       && !gtk_widget_translate_coordinates(widget, relative, 0, 0, &rect->x, &rect->y))
+    {
+      rect->x = 0;
+      rect->y = 0;
+    }
+  }
+
+  return relative;
+}
+
 void dt_gui_menu_popup(GtkMenu *menu, GtkWidget *button, GdkGravity widget_anchor, GdkGravity menu_anchor)
 {
   gtk_widget_show_all(GTK_WIDGET(menu));
 
   GdkEvent *event = gtk_get_current_event();
-  if(button && event)
+  if(button)
   {
-    gtk_menu_popup_at_widget(menu, button, widget_anchor, menu_anchor, event);
+    GdkRectangle rect = { 0 };
+    GtkWidget *relative = dt_gui_get_popup_relative_widget(button, &rect);
+
+    if(relative && relative != button && gtk_widget_get_window(relative))
+      gtk_menu_popup_at_rect(menu, gtk_widget_get_window(relative), &rect, widget_anchor, menu_anchor, event);
+    else
+      gtk_menu_popup_at_widget(menu, button, widget_anchor, menu_anchor, event);
   }
   else
   {
@@ -2519,6 +2553,14 @@ void dt_gui_menu_popup(GtkMenu *menu, GtkWidget *button, GdkGravity widget_ancho
     gtk_menu_popup_at_pointer(menu, event);
   }
   gdk_event_free(event);
+}
+
+static void _popover_set_relative_to_topmost_parent(GtkPopover *popover, GtkWidget *button)
+{
+  GdkRectangle rect = { 0 };
+  GtkWidget *relative = dt_gui_get_popup_relative_widget(button, &rect);
+  gtk_popover_set_relative_to(popover, relative ? relative : button);
+  gtk_popover_set_pointing_to(popover, &rect);
 }
 
 // draw rounded rectangle
@@ -2701,6 +2743,7 @@ GtkBox * attach_popover(GtkWidget *widget, const char *icon, GtkWidget *content)
   GtkWidget *popover = gtk_popover_new(button);
   gtk_container_add(GTK_CONTAINER(popover), popover_box);
   gtk_popover_set_modal(GTK_POPOVER(popover), FALSE);
+  g_signal_connect(G_OBJECT(popover), "show", G_CALLBACK(_popover_set_relative_to_topmost_parent), button);
   gtk_menu_button_set_popover(GTK_MENU_BUTTON(button), popover);
   gtk_widget_show_all(popover_box);
 

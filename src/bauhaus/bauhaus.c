@@ -67,6 +67,7 @@
 
 #include "gui/color_picker_proxy.h"
 #include "gui/gui_throttle.h"
+#include "gui/gtk.h"
 #ifdef GDK_WINDOWING_QUARTZ
 #include "osx/osx.h"
 #endif
@@ -2550,22 +2551,28 @@ void dt_bauhaus_show_popup(GtkWidget *widget)
   /* Bind to CSS rules from parent widget */
   GtkStyleContext *context = gtk_widget_get_style_context(w->bauhaus->popup_area);
   gtk_style_context_add_class(context, "dt_bauhaus_popup");
-  gtk_window_set_attached_to(GTK_WINDOW(w->bauhaus->popup_window), widget);
+  GtkWidget *relative = dt_gui_get_popup_relative_widget(widget, NULL);
+  gtk_window_set_attached_to(GTK_WINDOW(w->bauhaus->popup_window), relative ? relative : widget);
 
-  // Get the origin coordinates of the parent widget allocation box with regard to the main window
+  // The popup window stays transient for the main application window, so the anchor
+  // rectangle needs to remain expressed in that coordinate space even when the popup is
+  // logically attached to an enclosing popover on Wayland.
   gint wx = 0, wy = 0;
   GdkWindow *widget_window = gtk_widget_get_window(widget);
   if(widget_window) gdk_window_get_origin(widget_window, &wx, &wy);
   wx += w->margin->left;
   wy += w->margin->top;
 
-  // Get the origin coordinates of the main window box with regard to the screen
   gint wwx = 0, wwy = 0;
-  gdk_window_get_origin(gtk_widget_get_window(dt_ui_main_window(darktable.gui->ui)), &wwx, &wwy);
+  GdkWindow *main_window = gtk_widget_get_window(dt_ui_main_window(darktable.gui->ui));
+  if(main_window) gdk_window_get_origin(main_window, &wwx, &wwy);
 
-  // Final coordinates of the allocation box where to anchor the popup
-  tmp.x = wx - wwx;
-  tmp.y = wy - wwy;
+  GdkRectangle anchor = {
+    .x = wx - wwx,
+    .y = wy - wwy,
+    .width = tmp.width,
+    .height = tmp.height
+  };
 
   // Set desired size, but it's more a guide than a rule.
   gtk_widget_set_size_request(w->bauhaus->popup_area, width, height);
@@ -2577,7 +2584,7 @@ void dt_bauhaus_show_popup(GtkWidget *widget)
   GdkWindow *window = gtk_widget_get_window(w->bauhaus->popup_window);
 
   // For Wayland (and supposed to work on X11 too) and Gtk 3.24 this is how you do it
-  gdk_window_move_to_rect(GDK_WINDOW(window), &tmp, GDK_GRAVITY_STATIC, GDK_GRAVITY_STATIC,
+  gdk_window_move_to_rect(GDK_WINDOW(window), &anchor, GDK_GRAVITY_STATIC, GDK_GRAVITY_STATIC,
                           GDK_ANCHOR_SLIDE, 0, 0);
 
   gtk_widget_show_all(w->bauhaus->popup_window);
