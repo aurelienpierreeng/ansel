@@ -177,9 +177,9 @@ diffuse_pde(read_only image2d_t HF, read_only image2d_t LF,
             write_only image2d_t output,
             const int width, const int height,
             const float4 anisotropy, const int4 isotropy_type,
-            const float regularization, const float variance_threshold,
-            const float current_radius_square, const int mult,
-            const float4 ABCD, const float strength)
+            const float normalized_regularization, const float variance_threshold,
+            const int mult, const float4 ABCD,
+            const float strength)
 {
   const int x = get_global_id(0);
   const int y = get_global_id(1);
@@ -188,13 +188,16 @@ diffuse_pde(read_only image2d_t HF, read_only image2d_t LF,
 
   const char opacity = (has_mask) ? read_imageui(mask, sampleri, (int2)(x, y)).x : 1;
 
-  const float4 regularization_factor = regularization * current_radius_square / 9.f;
+  const float lf_first = ABCD.x;
+  const float lf_second = ABCD.y;
+  const float hf_third = ABCD.z;
+  const float hf_fourth = ABCD.w;
 
   float4 out;
 
   if(opacity)
   {
-    // non-local neighbours coordinates
+    // Walk the same sparse a-trous sub-lattice as the historical solver.
     const int j_neighbours[3] = {
       clamp((x - mult * H_STEP), 0, width - 1),
       x,
@@ -204,7 +207,8 @@ diffuse_pde(read_only image2d_t HF, read_only image2d_t LF,
       y,
       clamp((y + mult * H_STEP), 0, height - 1) };
 
-    // fetch non-local pixels and store them locally and contiguously
+    // Fetch the local 3x3 neighborhoods used by the anisotropic stencils
+    // and by the HF/LF energy-ratio regularizer.
     float4 neighbour_pixel_HF[9];
     float4 neighbour_pixel_LF[9];
 
@@ -258,9 +262,14 @@ diffuse_pde(read_only image2d_t HF, read_only image2d_t LF,
     compute_kern(c2[2], cos_theta_sin_theta_grad, cos_theta_grad_sq, sin_theta_grad_sq, isotropy_type.z, kern_third);
     compute_kern(c2[3], cos_theta_sin_theta_lapl, cos_theta_lapl_sq, sin_theta_lapl_sq, isotropy_type.w, kern_fourth);
 
-    // convolve filters and compute the variance and the regularization term
+    // Convolve filters and accumulate the local HF band energy over the
+    // current 3x3 support. This is not a statistical variance estimator:
+    // HF is a band-pass residual, so we normalize each sample by the
+    // corresponding LF value before squaring it, then normalize the summed
+    // ratio by the physical kernel-variance increment of the current
+    // wavelet band.
     float4 derivatives[4] = { (float4)0.f };
-    float4 variance = (float4)0.f;
+    float4 energy = (float4)0.f;
 
     #pragma unroll
     for(int k = 0; k < 9; k++)
@@ -269,20 +278,21 @@ diffuse_pde(read_only image2d_t HF, read_only image2d_t LF,
       derivatives[1] += kern_second[k] * neighbour_pixel_LF[k];
       derivatives[2] += kern_third[k] * neighbour_pixel_HF[k];
       derivatives[3] += kern_fourth[k] * neighbour_pixel_HF[k];
-      variance += sqf(neighbour_pixel_HF[k]);
+      energy += sqf(neighbour_pixel_HF[k] / fmax(neighbour_pixel_LF[k], (float4)(FLT_MIN)));
     }
 
-    // Regularize the variance taking into account the blurring scale.
-    // This allows to keep the scene-referred variance roughly constant
-    // regardless of the wavelet scale where we compute it.
-    // Prevents large scale halos when deblurring.
-    variance = variance_threshold + variance * regularization_factor;
+    // normalized_regularization already folds together the user
+    // regularization, the 3x3-support averaging factor, the physical blur
+    // radius carried by the current wavelet band and its scale normalization.
+    energy = variance_threshold + energy * normalized_regularization;
 
-    // compute the update
-    float4 acc = (float4)0.f;
-    for(int k = 0; k < 4; k++) acc += derivatives[k] * ((float *)&ABCD)[k];
+    // Compute the update on the current a-trous sub-lattice.
+    float4 acc = derivatives[0] * lf_first
+               + derivatives[1] * lf_second
+               + derivatives[2] * hf_third
+               + derivatives[3] * hf_fourth;
     float4 hf = read_imagef(HF, samplerA, (int2)(x, y));
-    acc = (hf * strength + acc / variance);
+    acc = (hf * strength + acc / energy);
 
     // update the solution
     float4 lf = read_imagef(LF, samplerA, (int2)(x, y));
@@ -292,7 +302,7 @@ diffuse_pde(read_only image2d_t HF, read_only image2d_t LF,
   {
     float4 hf = read_imagef(HF, samplerA, (int2)(x, y));
     float4 lf = read_imagef(LF, samplerA, (int2)(x, y));
-    out = hf + lf;
+    out = fmax(hf + lf, 0.f);
   }
 
   write_imagef(output, (int2)(x, y), out);

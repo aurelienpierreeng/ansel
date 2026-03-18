@@ -72,6 +72,11 @@ static inline unsigned int num_steps_to_reach_equivalent_sigma(const float sigma
   return s + 1;
 }
 
+static inline size_t decimated_bspline_size(const size_t size)
+{
+  return (size - 1u) / 2u + 1u;
+}
+
 
 #ifdef _OPENMP
 #pragma omp declare simd aligned(buf, indices, result:64)
@@ -149,6 +154,206 @@ static inline void _bspline_horizontal(const float *const restrict temp, float *
   // Compute the horizontal blur of the already vertically-blurred pixel and store the result at the proper
   //  row/column location in the output buffer
   sparse_scalar_product(temp, indices, out, clip_negatives);
+}
+
+#ifdef _OPENMP
+#pragma omp declare simd aligned(temp, out)
+#endif
+static inline void _bspline_horizontal_decimated(const float *const restrict temp, float *const restrict out,
+                                                 const size_t col, const size_t width,
+                                                 const gboolean clip_negatives)
+{
+  // The vertical pass has already been evaluated on the fine grid. We now only
+  // sample the horizontal convolution on the even columns kept by the decimated
+  // spline pyramid.
+  const size_t center = col * 2u;
+  size_t DT_ALIGNED_ARRAY indices[BSPLINE_FSIZE];
+  indices[0] = 4 * MAX((int)center - 2, 0);
+  indices[1] = 4 * MAX((int)center - 1, 0);
+  indices[2] = 4 * center;
+  indices[3] = 4 * MIN(center + 1, width - 1);
+  indices[4] = 4 * MIN(center + 2, width - 1);
+  sparse_scalar_product(temp, indices, out, clip_negatives);
+}
+
+#ifdef _OPENMP
+#pragma omp declare simd aligned(in, out:64) aligned(tempbuf:16)
+#endif
+inline static void reduce_2D_Bspline(const float *const restrict in, float *const restrict out,
+                                     const size_t width, const size_t height,
+                                     float *const restrict tempbuf, const size_t padded_size,
+                                     const gboolean clip_negatives)
+{
+  const size_t coarse_width = decimated_bspline_size(width);
+  const size_t coarse_height = decimated_bspline_size(height);
+  const gboolean use_replicated_boundary = (coarse_width > 2u && coarse_height > 2u);
+  static const float filter[BSPLINE_FSIZE] = { 1.0f / 16.0f,
+                                               4.0f / 16.0f,
+                                               6.0f / 16.0f,
+                                               4.0f / 16.0f,
+                                               1.0f / 16.0f };
+  (void)tempbuf;
+  (void)padded_size;
+
+#ifdef _OPENMP
+#pragma omp parallel for default(none) \
+  dt_omp_firstprivate(width, height, coarse_width, coarse_height, padded_size, clip_negatives, use_replicated_boundary) \
+  dt_omp_sharedconst(in, out, tempbuf, filter) \
+  schedule(static)
+#endif
+  for(size_t row = 0; row < coarse_height; ++row)
+  {
+    for(size_t col = 0; col < coarse_width; ++col)
+    {
+      dt_aligned_pixel_t accum = { 0.f };
+      const size_t sample_row = use_replicated_boundary ? CLAMP((int)row, 1, (int)coarse_height - 2) : row;
+      const size_t sample_col = use_replicated_boundary ? CLAMP((int)col, 1, (int)coarse_width - 2) : col;
+      const size_t center_row = sample_row * 2u;
+      const size_t center_col = sample_col * 2u;
+
+      // Evaluate the decimated 5x5 cardinal B-spline on the current grid. This
+      // is the Gaussian-pyramid reduce stage used to build the hybrid decimated
+      // wavelet stack.
+      for(int jj = -2; jj <= 2; ++jj)
+      {
+        const size_t yy = CLAMP((int)center_row + jj, 0, (int)height - 1);
+        for(int ii = -2; ii <= 2; ++ii)
+        {
+          const size_t xx = CLAMP((int)center_col + ii, 0, (int)width - 1);
+          const float weight = filter[ii + 2] * filter[jj + 2];
+          const size_t index = 4 * (yy * width + xx);
+          for_four_channels(c)
+            accum[c] += weight * in[index + c];
+        }
+      }
+
+      const size_t out_index = 4 * (row * coarse_width + col);
+      if(clip_negatives)
+      {
+        for_four_channels(c)
+          out[out_index + c] = MAX(accum[c], 0.f);
+      }
+      else
+      {
+        copy_pixel_nontemporal(out + out_index, accum);
+      }
+    }
+  }
+}
+
+#ifdef _OPENMP
+#pragma omp declare simd aligned(in, out:64)
+#endif
+inline static void expand_2D_Bspline(const float *const restrict in, float *const restrict out,
+                                     const size_t width, const size_t height,
+                                     const gboolean clip_negatives)
+{
+  const size_t coarse_width = decimated_bspline_size(width);
+  const size_t coarse_height = decimated_bspline_size(height);
+  const gboolean use_replicated_boundary = (width > 2u && height > 2u && coarse_width > 1u && coarse_height > 1u);
+  static const float filter[BSPLINE_FSIZE] = { 1.0f / 16.0f,
+                                               4.0f / 16.0f,
+                                               6.0f / 16.0f,
+                                               4.0f / 16.0f,
+                                               1.0f / 16.0f };
+
+#ifdef _OPENMP
+#pragma omp parallel for default(none) \
+  dt_omp_firstprivate(width, height, coarse_width, coarse_height, clip_negatives, use_replicated_boundary) \
+  dt_omp_sharedconst(in, out, filter) \
+  schedule(static) \
+  collapse(2)
+#endif
+  for(size_t row = 0; row < height; ++row)
+    for(size_t col = 0; col < width; ++col)
+    {
+      size_t sample_row = row;
+      size_t sample_col = col;
+      if(use_replicated_boundary)
+      {
+        const size_t max_row = (height & 1u) ? height - 2u : height - 3u;
+        const size_t max_col = (width & 1u) ? width - 2u : width - 3u;
+        sample_row = CLAMP((int)row, 1, (int)max_row);
+        sample_col = CLAMP((int)col, 1, (int)max_col);
+      }
+
+      const size_t center_row = sample_row >> 1;
+      const size_t center_col = sample_col >> 1;
+      dt_aligned_pixel_t accum = { 0.f };
+
+      // Rebuild the fine sample with the same parity-dependent Gaussian expand
+      // used by the local-laplacian pyramid, but on 4-channel spline data.
+      switch((sample_col & 1u) + 2u * (sample_row & 1u))
+      {
+        case 0:
+        {
+          for(int jj = -1; jj <= 1; ++jj)
+            for(int ii = -1; ii <= 1; ++ii)
+            {
+              const size_t yy = center_row + jj;
+              const size_t xx = center_col + ii;
+              const float weight = 4.f * filter[2 * (jj + 1)] * filter[2 * (ii + 1)];
+              const size_t index = 4 * (yy * coarse_width + xx);
+              for_four_channels(c)
+                accum[c] += weight * in[index + c];
+            }
+          break;
+        }
+        case 1:
+        {
+          for(int jj = -1; jj <= 1; ++jj)
+            for(int ii = 0; ii <= 1; ++ii)
+            {
+              const size_t yy = center_row + jj;
+              const size_t xx = center_col + ii;
+              const float weight = 4.f * filter[2 * (jj + 1)] * filter[2 * ii + 1];
+              const size_t index = 4 * (yy * coarse_width + xx);
+              for_four_channels(c)
+                accum[c] += weight * in[index + c];
+            }
+          break;
+        }
+        case 2:
+        {
+          for(int jj = 0; jj <= 1; ++jj)
+            for(int ii = -1; ii <= 1; ++ii)
+            {
+              const size_t yy = center_row + jj;
+              const size_t xx = center_col + ii;
+              const float weight = 4.f * filter[2 * jj + 1] * filter[2 * (ii + 1)];
+              const size_t index = 4 * (yy * coarse_width + xx);
+              for_four_channels(c)
+                accum[c] += weight * in[index + c];
+            }
+          break;
+        }
+        default:
+        {
+          for(int jj = 0; jj <= 1; ++jj)
+            for(int ii = 0; ii <= 1; ++ii)
+            {
+              const size_t yy = center_row + jj;
+              const size_t xx = center_col + ii;
+              const float weight = 4.f * filter[2 * jj + 1] * filter[2 * ii + 1];
+              const size_t index = 4 * (yy * coarse_width + xx);
+              for_four_channels(c)
+                accum[c] += weight * in[index + c];
+            }
+          break;
+        }
+      }
+
+      const size_t out_index = 4 * (row * width + col);
+      if(clip_negatives)
+      {
+        for_four_channels(c)
+          out[out_index + c] = MAX(accum[c], 0.f);
+      }
+      else
+      {
+        copy_pixel_nontemporal(out + out_index, accum);
+      }
+    }
 }
 
 #ifdef _OPENMP

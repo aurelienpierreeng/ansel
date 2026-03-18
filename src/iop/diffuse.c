@@ -64,7 +64,17 @@
 // Set to one to output intermediate image steps as PFM in /tmp
 #define DEBUG_DUMP_PFM 0
 
+// Diffuse v3 adds a new parameter that allows more aggressive "sharpening"
+// (and mathematically-accurate multiscale handling...)
+// on coarse scales, ensuring each HF details band is normalized to the same
+// energy. This makes the `radius span` parameter much more impactful.
+#define DIFFUSE_V3 0
+
+#if DIFFUSE_V3
+DT_MODULE_INTROSPECTION(3, dt_iop_diffuse_params_t)
+#else
 DT_MODULE_INTROSPECTION(2, dt_iop_diffuse_params_t)
+#endif
 
 #define MAX_NUM_SCALES 10
 typedef struct dt_iop_diffuse_params_t
@@ -92,6 +102,12 @@ typedef struct dt_iop_diffuse_params_t
   int radius_center;        // $MIN: 0    $MAX: 1024 $DEFAULT: 0  $DESCRIPTION: "central radius"
 
   // new versions add params mandatorily at the end, so we can memcpy old parameters at the beginning
+
+  // v3 : Ansel 1.0
+  // bool normalize_band_energy; // $DEFAULT: FALSE $DESCRIPTION: "normalize coarse scales"
+  // When disabled, this will boost coarse scale sharpening by a lot.
+  // There is no reason to enable it for new edits, 
+  // it's there to keep compatiblity with old edits.
 
 } dt_iop_diffuse_params_t;
 
@@ -226,8 +242,58 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
     // init only new parameters
     n->radius_center = 0;
 
+#if !DIFFUSE_V3
+    // When version 3 will be out, we need to handle v1 -> v2 -> v3 conversion,
+    // so don't return just yet.
+    return 0;
+#endif
+  }
+
+#if DIFFUSE_V3
+  if(old_version == 2 && new_version == 3)
+  {
+    typedef struct dt_iop_diffuse_params_v2_t
+    {
+      // global parameters
+      int iterations;           // $MIN: 0    $MAX: 500  $DEFAULT: 1  $DESCRIPTION: "iterations"
+      float sharpness;          // $MIN: -1.  $MAX: 1.   $DEFAULT: 0. $DESCRIPTION: "sharpness"
+      int radius;               // $MIN: 0    $MAX: 2048 $DEFAULT: 8  $DESCRIPTION: "radius span"
+      float regularization;     // $MIN: 0.   $MAX: 8.   $DEFAULT: 0. $DESCRIPTION: "edge sensitivity"
+      float variance_threshold; // $MIN: -3.  $MAX: 3.   $DEFAULT: 0. $DESCRIPTION: "edge threshold"
+
+      float anisotropy_first;   // $MIN: -100. $MAX: 100.  $DEFAULT: 0. $DESCRIPTION: "1st order anisotropy"
+      float anisotropy_second;  // $MIN: -100. $MAX: 100.  $DEFAULT: 0. $DESCRIPTION: "2nd order anisotropy"
+      float anisotropy_third;   // $MIN: -100. $MAX: 100.  $DEFAULT: 0. $DESCRIPTION: "3rd order anisotropy"
+      float anisotropy_fourth;  // $MIN: -100. $MAX: 100.  $DEFAULT: 0. $DESCRIPTION: "4th order anisotropy"
+
+      float threshold;          // $MIN: 0.   $MAX: 8.   $DEFAULT: 0. $DESCRIPTION: "luminance masking threshold"
+
+      float first;              // $MIN: -1.  $MAX: 1.   $DEFAULT: 0. $DESCRIPTION: "1st order speed"
+      float second;             // $MIN: -1.  $MAX: 1.   $DEFAULT: 0. $DESCRIPTION: "2nd order speed"
+      float third;              // $MIN: -1.  $MAX: 1.   $DEFAULT: 0. $DESCRIPTION: "3rd order speed"
+      float fourth;             // $MIN: -1.  $MAX: 1.   $DEFAULT: 0. $DESCRIPTION: "4th order speed"
+
+      // v2
+      int radius_center;        // $MIN: 0    $MAX: 1024 $DEFAULT: 0  $DESCRIPTION: "central radius"
+
+    } dt_iop_diffuse_params_v2_t;
+
+    dt_iop_diffuse_params_v2_t *o = (dt_iop_diffuse_params_v2_t *)old_params;
+    dt_iop_diffuse_params_t *n = (dt_iop_diffuse_params_t *)new_params;
+    dt_iop_diffuse_params_t *d = (dt_iop_diffuse_params_t *)self->default_params;
+
+    *n = *d; // start with a fresh copy of default parameters
+
+    // copy common parameters
+    memcpy(n, o, sizeof(dt_iop_diffuse_params_v2_t));
+
+    // init only new parameters
+    n->normalize_band_energy = 1; // legacy compatiblity
+
     return 0;
   }
+#endif
+
   return 1;
 }
 
@@ -514,8 +580,19 @@ void tiling_callback(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t
 {
   dt_iop_diffuse_data_t *data = (dt_iop_diffuse_data_t *)piece->data;
 
-  const float scale = fmaxf(1.f / roi_in->scale, 1.f);
-  const float final_radius = (data->radius + data->radius_center) * 2.f / scale;
+  // The GUI radii live in full-resolution image pixels. For this module the
+  // relevant ROI scale is the input one, because the PDE works on the current
+  // input grid. However, the thumbnail pipe may start from an already
+  // downsampled mipmap input (for example DT_MIPMAP_F), in which case
+  // roi_in->scale only accounts for the scaling applied after that mipmap was
+  // chosen. Fold both factors together to recover the full-resolution pixel
+  // footprint of one current-grid pixel.
+  const float roi_zoom = fmaxf(1.f / roi_in->scale, 1.f);
+  const float mipmap_zoom = fmaxf(fmaxf((float)piece->pipe->image.width / (float)piece->pipe->iwidth,
+                                        (float)piece->pipe->image.height / (float)piece->pipe->iheight),
+                                  1.f);
+  const float zoom = roi_zoom * mipmap_zoom;
+  const float final_radius = (data->radius + data->radius_center) * 2.f / zoom;
   const int diffusion_scales = num_steps_to_reach_equivalent_sigma(B_SPLINE_SIGMA, final_radius);
   const int scales = CLAMP(diffusion_scales, 1, MAX_NUM_SCALES);
   const int max_filter_radius = (1 << scales);
@@ -711,8 +788,8 @@ static inline void heat_PDE_diffusion(const float *const restrict high_freq, con
                                       const uint8_t *const restrict mask, const int has_mask,
                                       float *const restrict output, const size_t width, const size_t height,
                                       const dt_aligned_pixel_t anisotropy, const dt_isotropy_t isotropy_type[4],
-                                      const float regularization, const float variance_threshold,
-                                      const float current_radius_square, const int mult,
+                                      const float variance_threshold, const int mult,
+                                      const float normalized_regularization,
                                       const dt_aligned_pixel_t ABCD, const float strength)
 {
   // Simultaneous inpainting for image structure and texture using anisotropic heat transfer model
@@ -721,19 +798,18 @@ static inline void heat_PDE_diffusion(const float *const restrict high_freq, con
   //  * apply it in a multi-scale wavelet setup : we basically solve it twice, on the wavelets LF and HF layers.
   //  * replace the manual texture direction/distance selection by an automatic detection similar to the structure one,
   //  * generalize the framework for isotropic diffusion and anisotropic weighted on the isophote direction
-  //  * add a variance regularization to better avoid edges.
+  //  * add an HF-band energy regularization to better avoid edges.
   // The sharpness setting mimics the contrast equalizer effect by simply multiplying the HF by some gain.
 
   float *const restrict out = DT_IS_ALIGNED(output);
   const float *const restrict LF = DT_IS_ALIGNED(low_freq);
   const float *const restrict HF = DT_IS_ALIGNED(high_freq);
 
-  const float regularization_factor = regularization * current_radius_square / 9.f;
-
 #ifdef _OPENMP
 #pragma omp parallel for default(none)                                                                            \
     dt_omp_firstprivate(out, mask, HF, LF, height, width, ABCD, has_mask, variance_threshold, anisotropy,         \
-                        regularization_factor, mult, strength, isotropy_type) schedule(static)
+                        normalized_regularization, mult, strength, isotropy_type)                                  \
+    schedule(static)
 #endif
   for(size_t row = 0; row < height; ++row)
   {
@@ -777,6 +853,10 @@ static inline void heat_PDE_diffusion(const float *const restrict high_freq, con
         dt_aligned_pixel_t c2[4];
         // build the local anisotropic convolution filters for gradients and laplacians
         dt_aligned_pixel_t gradient[2], laplacian[2]; // x, y for each channel
+
+        // FIXME:
+        // Kind of misleading here : the gradient evaluated on LF is called gradient,
+        // the gradient evaluated on HF is called laplacian.
         find_gradients(neighbour_pixel_LF, gradient);
         find_gradients(neighbour_pixel_HF, laplacian);
 
@@ -833,8 +913,13 @@ static inline void heat_PDE_diffusion(const float *const restrict high_freq, con
                        kern_fourth);
 
         dt_aligned_pixel_t derivatives[4] = { { 0.f } };
-        dt_aligned_pixel_t variance = { 0.f };
-        // convolve filters and compute the variance and the regularization term
+        dt_aligned_pixel_t energy = { 0.f };
+        // Convolve filters and accumulate the local HF band energy over the
+        // current 3x3 support. This is not a statistical variance estimator:
+        // HF is a band-pass residual, so we normalize each sample by the
+        // corresponding LF value before squaring it, then normalize the summed
+        // ratio by the physical kernel-variance increment of the current
+        // wavelet band.
         for(size_t k = 0; k < 9; k++)
         {
           for_each_channel(c,aligned(derivatives,neighbour_pixel_LF,kern_first,kern_second))
@@ -843,16 +928,14 @@ static inline void heat_PDE_diffusion(const float *const restrict high_freq, con
             derivatives[1][c] += kern_second[k][c] * neighbour_pixel_LF[k][c];
             derivatives[2][c] += kern_third[k][c] * neighbour_pixel_HF[k][c];
             derivatives[3][c] += kern_fourth[k][c] * neighbour_pixel_HF[k][c];
-            variance[c] += sqf(neighbour_pixel_HF[k][c]);
+            energy[c] += sqf(neighbour_pixel_HF[k][c] / fmaxf(neighbour_pixel_LF[k][c], FLT_MIN));
           }
         }
-        // Regularize the variance taking into account the blurring scale.
-        // This allows to keep the scene-referred variance roughly constant
-        // regardless of the wavelet scale where we compute it.
-        // Prevents large scale halos when deblurring.
-        for_each_channel(c, aligned(variance))
+        // Scale-normalize the summed HF/LF energy ratio with the physical
+        // variance increment of the current wavelet band.
+        for_each_channel(c, aligned(energy))
         {
-          variance[c] = variance_threshold + variance[c] * regularization_factor;
+          energy[c] = variance_threshold + energy[c] * normalized_regularization;
         }
         // compute the update
         dt_aligned_pixel_t acc = { 0.f };
@@ -861,9 +944,9 @@ static inline void heat_PDE_diffusion(const float *const restrict high_freq, con
           for_each_channel(c, aligned(acc,derivatives,ABCD))
             acc[c] += derivatives[k][c] * ABCD[k];
         }
-        for_each_channel(c, aligned(acc,HF,LF,variance,out))
+        for_each_channel(c, aligned(acc,HF,LF,energy,out))
         {
-          acc[c] = (HF[index + c] * strength + acc[c] / variance[c]);
+          acc[c] = (HF[index + c] * strength + acc[c] / energy[c]);
           // update the solution
           out[index + c] = fmaxf(acc[c] + LF[index + c], 0.f);
         }
@@ -872,7 +955,7 @@ static inline void heat_PDE_diffusion(const float *const restrict high_freq, con
       {
         // only copy input to output, do nothing
         for_each_channel(c, aligned(out, HF, LF : 64))
-          out[index + c] = HF[index + c] + LF[index + c];
+          out[index + c] = fmaxf(HF[index + c] + LF[index + c], 0.f);
       }
     }
   }
@@ -902,7 +985,7 @@ static void dump_PFM(const char *filename, const float* out, const uint32_t w, c
 static inline int wavelets_process(const float *const restrict in, float *const restrict reconstructed,
                                    const uint8_t *const restrict mask, const size_t width,
                                    const size_t height, const dt_iop_diffuse_data_t *const data,
-                                   const float final_radius, const float zoom, const int scales,
+                                   const float zoom, const int scales,
                                    const int has_mask,
                                    float *const restrict HF[MAX_NUM_SCALES],
                                    float *const restrict LF_odd,
@@ -934,7 +1017,6 @@ static inline int wavelets_process(const float *const restrict in, float *const 
 
   for(int s = 0; s < scales; ++s)
   {
-    /* fprintf(stdout, "Wavelet decompose : scale %i\n", s); */
     const int mult = 1 << s;
 
     const float *restrict buffer_in;
@@ -973,23 +1055,30 @@ static inline int wavelets_process(const float *const restrict in, float *const 
 
   // will store the temp buffer NOT containing the last step of blur
   float *restrict temp = (residual == LF_even) ? LF_odd : LF_even;
-
   int count = 0;
+
   for(int s = scales - 1; s > -1; --s)
   {
     const int mult = 1 << s;
     const float current_radius = equivalent_sigma_at_step(B_SPLINE_SIGMA, s);
     const float real_radius = current_radius * zoom;
 
-    const float norm = expf(-sqf(real_radius - (float)data->radius_center) / sqf(data->radius));
-    const dt_aligned_pixel_t ABCD = { data->first * KAPPA * norm, data->second * KAPPA * norm,
-                                      data->third * KAPPA * norm, data->fourth * KAPPA * norm };
-    const float strength = data->sharpness * norm + 1.f;
+#if DIFFUSE_V3
+    const float normalized_regularization = 
+      (data->normalize_band_energy) 
+        ? regularization * sqf(real_radius) / 9.f
+        : regularization / 9.f;
+#else
+    const float normalized_regularization = regularization / 9.f * sqf(real_radius);
+#endif
 
-    /* debug
-    fprintf(stdout, "PDE solve : scale %i : mult = %i ; current rad = %.0f ; real rad = %.0f ; norm = %f ; strength = %f\n", s,
-            1 << s, current_radius, real_radius, norm, strength);
-    */
+    const float norm = expf(-sqf(real_radius - (float)data->radius_center) / sqf(data->radius));
+
+    const dt_aligned_pixel_t ABCD = { data->first * KAPPA * norm,
+                                      data->second * KAPPA * norm,
+                                      data->third * KAPPA * norm,
+                                      data->fourth * KAPPA * norm };
+    const float strength = data->sharpness * norm + 1.f;
 
     const float *restrict buffer_in;
     float *restrict buffer_out;
@@ -1012,16 +1101,9 @@ static inline int wavelets_process(const float *const restrict in, float *const 
 
     if(s == 0) buffer_out = reconstructed;
 
-    // Compute wavelets low-frequency scales
     heat_PDE_diffusion(HF[s], buffer_in, mask, has_mask, buffer_out, width, height,
-                       anisotropy, isotropy_type, regularization,
-                       variance_threshold, sqf(current_radius), mult, ABCD, strength);
-
-#if DEBUG_DUMP_PFM
-    char name[64];
-    sprintf(name, "/tmp/scale-up-unblur-%i.pfm", s);
-    dump_PFM(name, buffer_out, width, height);
-#endif
+                       anisotropy, isotropy_type, variance_threshold, mult,
+                       normalized_regularization, ABCD, strength);
 
     count++;
   }
@@ -1083,9 +1165,6 @@ int process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *co
 {
   const dt_iop_diffuse_data_t *const data = (dt_iop_diffuse_data_t *)piece->data;
 
-  const size_t width = roi_out->width;
-  const size_t height = roi_out->height;
-
   float *restrict in = DT_IS_ALIGNED((float *const restrict)ivoid);
   float *const restrict out = DT_IS_ALIGNED((float *const restrict)ovoid);
 
@@ -1100,26 +1179,36 @@ int process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *co
       sizeof(uint8_t) * roi_out->width * roi_out->height,
       piece->pipe);
 
-  const float scale = fmaxf(1.f / roi_in->scale, 1.f);
-  const float final_radius = (data->radius + data->radius_center) * 2.f / scale;
-
-  const int iterations = MAX(ceilf((float)data->iterations), 1);
+  // The relevant scale for a non-geometric module is roi_in->scale, since it
+  // describes the current input grid processed by the PDE. On the thumbnail
+  // pipe this current grid may already come from a reduced mipmap input, so
+  // we also need the ratio between the full image dimensions and the pipe
+  // input dimensions to recover the full-resolution pixel footprint.
+  const float roi_zoom = fmaxf(1.f / roi_in->scale, 1.f);
+  const float mipmap_zoom = fmaxf(fmaxf((float)piece->pipe->image.width / (float)piece->pipe->iwidth,
+                                        (float)piece->pipe->image.height / (float)piece->pipe->iheight),
+                                  1.f);
+  const float zoom = roi_zoom * mipmap_zoom;
+  const float final_radius = (data->radius + data->radius_center) * 2.f / zoom;
+  // No legacy iteration remap is applied here anymore. The current solver uses
+  // the historical a-trous band order and kernel-variance increments exactly,
+  // so any extra factor would be content-dependent and belong to pixel math,
+  // not to the user parameter itself.
+  const int iterations = MAX((int)ceilf((float)data->iterations), 1);
   const int diffusion_scales = num_steps_to_reach_equivalent_sigma(B_SPLINE_SIGMA, final_radius);
   const int scales = CLAMP(diffusion_scales, 1, MAX_NUM_SCALES);
 
   gboolean out_of_memory = (temp1 == NULL) || (temp2 == NULL);
-
-  // wavelets scales buffers
-  float *restrict HF[MAX_NUM_SCALES];
+  // One full-resolution buffer per stored wavelet band.
+  float *restrict HF[MAX_NUM_SCALES] = { NULL };
   for(int s = 0; s < scales; s++)
   {
-    HF[s] = dt_pixelpipe_cache_alloc_align_float(width * height * 4, piece->pipe);
+    HF[s] = dt_pixelpipe_cache_alloc_align_float(roi_out->width * roi_out->height * 4, piece->pipe);
     if(!HF[s]) out_of_memory = TRUE;
   }
-
-  // temp buffer for blurs. We will need to cycle between them for memory efficiency
-  float *const restrict LF_odd = dt_pixelpipe_cache_alloc_align_float(width * height * 4, piece->pipe);
-  float *const restrict LF_even = dt_pixelpipe_cache_alloc_align_float(width * height * 4, piece->pipe);
+  // Two ping-pong low-pass buffers reused by the decomposition/synthesis.
+  float *const restrict LF_odd = dt_pixelpipe_cache_alloc_align_float(roi_out->width * roi_out->height * 4, piece->pipe);
+  float *const restrict LF_even = dt_pixelpipe_cache_alloc_align_float(roi_out->width * roi_out->height * 4, piece->pipe);
 
   // PAUSE !
   // check that all buffers exist before processing,
@@ -1164,9 +1253,8 @@ int process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *co
     if(it == (int)iterations - 1)
       temp_out = out;
 
-    if(wavelets_process(temp_in, temp_out, mask,
-                        roi_out->width, roi_out->height,
-                        data, final_radius, scale, scales, has_mask, HF, LF_odd, LF_even))
+    if(wavelets_process(temp_in, temp_out, mask, roi_out->width, roi_out->height,
+                        data, zoom, scales, has_mask, HF, LF_odd, LF_even))
     {
       err = 1;
       goto error;
@@ -1179,7 +1267,8 @@ error:
   dt_pixelpipe_cache_free_align(temp2);
   dt_pixelpipe_cache_free_align(LF_even);
   dt_pixelpipe_cache_free_align(LF_odd);
-  for(int s = 0; s < scales; s++) if(HF[s]) dt_pixelpipe_cache_free_align(HF[s]);
+  for(int s = 0; s < scales; s++)
+    if(HF[s]) dt_pixelpipe_cache_free_align(HF[s]);
   return err;
 }
 
@@ -1188,7 +1277,7 @@ static inline cl_int wavelets_process_cl(const int devid, cl_mem in, cl_mem reco
                                          const size_t sizes[3], const int width, const int height,
                                          const dt_iop_diffuse_data_t *const data,
                                          dt_iop_diffuse_global_data_t *const gd,
-                                         const float final_radius, const float zoom, const int scales,
+                                         const float zoom, const int scales,
                                          const int has_mask,
                                          cl_mem HF[MAX_NUM_SCALES],
                                          cl_mem LF_odd,
@@ -1218,14 +1307,11 @@ static inline cl_int wavelets_process_cl(const int devid, cl_mem in, cl_mem reco
                   isotropy_type[0], isotropy_type[1], isotropy_type[2], isotropy_type[3]);
   */
 
-  float regularization = powf(10.f, data->regularization) - 1.f;
-  float variance_threshold = powf(10.f, data->variance_threshold);
-
-
-  // À trous wavelet decompose
-  // there is a paper from a guy we know that explains it : https://jo.dreggn.org/home/2010_atrous.pdf
-  // the wavelets decomposition here is the same as the equalizer/atrous module,
+  const float regularization = powf(10.f, data->regularization) - 1.f;
+  const float variance_threshold = powf(10.f, data->variance_threshold);
+  // Same a-trous decomposition as the CPU path, mirrored in OpenCL.
   cl_mem residual;
+
   for(int s = 0; s < scales; ++s)
   {
     const int mult = 1 << s;
@@ -1282,20 +1368,31 @@ static inline cl_int wavelets_process_cl(const int devid, cl_mem in, cl_mem reco
     residual = buffer_out;
   }
 
-  // will store the temp buffer NOT containing the last step of blur
+  // Ping-pong low-pass buffer not currently holding the coarsest residual.
   cl_mem temp = (residual == LF_even) ? LF_odd : LF_even;
-
   int count = 0;
+
   for(int s = scales - 1; s > -1; --s)
   {
     const int mult = 1 << s;
     const float current_radius = equivalent_sigma_at_step(B_SPLINE_SIGMA, s);
     const float real_radius = current_radius * zoom;
-    const float current_radius_square = sqf(current_radius);
+
+#if DIFFUSE_V3
+    const float normalized_regularization = 
+      (data->normalize_band_energy) 
+        ? regularization * sqf(real_radius) / 9.f
+        : regularization / 9.f;
+#else
+    const float normalized_regularization = regularization / 9.f * sqf(real_radius);
+#endif
 
     const float norm = expf(-sqf(real_radius - (float)data->radius_center) / sqf(data->radius));
-    const dt_aligned_pixel_t ABCD = { data->first * KAPPA * norm, data->second * KAPPA * norm,
-                                      data->third * KAPPA * norm, data->fourth * KAPPA * norm };
+
+    const dt_aligned_pixel_t ABCD = { data->first * KAPPA * norm,
+                                      data->second * KAPPA * norm,
+                                      data->third * KAPPA * norm,
+                                      data->fourth * KAPPA * norm };
     const float strength = data->sharpness * norm + 1.f;
 
     cl_mem buffer_in;
@@ -1329,12 +1426,11 @@ static inline cl_int wavelets_process_cl(const int devid, cl_mem in, cl_mem reco
     dt_opencl_set_kernel_arg(devid, gd->kernel_diffuse_pde, 6, sizeof(int), (void *)&height);
     dt_opencl_set_kernel_arg(devid, gd->kernel_diffuse_pde, 7, 4 * sizeof(float), (void *)&anisotropy);
     dt_opencl_set_kernel_arg(devid, gd->kernel_diffuse_pde, 8, 4 * sizeof(dt_isotropy_t), (void *)&isotropy_type);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_diffuse_pde, 9, sizeof(float), (void *)&regularization);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_diffuse_pde, 9, sizeof(float), (void *)&normalized_regularization);
     dt_opencl_set_kernel_arg(devid, gd->kernel_diffuse_pde, 10, sizeof(float), (void *)&variance_threshold);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_diffuse_pde, 11, sizeof(float), (void *)&current_radius_square);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_diffuse_pde, 12, sizeof(int), (void *)&mult);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_diffuse_pde, 13, 4 * sizeof(float), (void *)&ABCD);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_diffuse_pde, 14, sizeof(float), (void *)&strength);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_diffuse_pde, 11, sizeof(int), (void *)&mult);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_diffuse_pde, 12, 4 * sizeof(float), (void *)&ABCD);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_diffuse_pde, 13, sizeof(float), (void *)&strength);
     err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_diffuse_pde, sizes);
     if(err != CL_SUCCESS) return err;
 
@@ -1370,22 +1466,26 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
 
   cl_mem mask = dt_opencl_alloc_device(devid, sizes[0], sizes[1], sizeof(uint8_t));
 
-  const float scale = fmaxf(1.f / roi_in->scale, 1.f);
-  const float final_radius = (data->radius + data->radius_center) * 2.f / scale;
-
-  const int iterations = MAX(ceilf((float)data->iterations), 1);
+  const float roi_zoom = fmaxf(1.f / roi_in->scale, 1.f);
+  const float mipmap_zoom = fmaxf(fmaxf((float)piece->pipe->image.width / (float)piece->pipe->iwidth,
+                                        (float)piece->pipe->image.height / (float)piece->pipe->iheight),
+                                  1.f);
+  const float zoom = roi_zoom * mipmap_zoom;
+  const float final_radius = (data->radius + data->radius_center) * 2.f / zoom;
+  // See the CPU path above: iterations stay in user space because the current
+  // solver already matches the historical a-trous band ordering and kernel
+  // variance increments. There is no content-independent remap left to apply.
+  const int iterations = MAX((int)ceilf((float)data->iterations), 1);
   const int diffusion_scales = num_steps_to_reach_equivalent_sigma(B_SPLINE_SIGMA, final_radius);
   const int scales = CLAMP(diffusion_scales, 1, MAX_NUM_SCALES);
-
-  // wavelets scales buffers
-  cl_mem HF[MAX_NUM_SCALES];
+  // One device buffer per stored wavelet band.
+  cl_mem HF[MAX_NUM_SCALES] = { NULL };
   for(int s = 0; s < scales; s++)
   {
     HF[s] = dt_opencl_alloc_device(devid, sizes[0], sizes[1], sizeof(float) * 4);
     if(!HF[s]) out_of_memory = TRUE;
   }
-
-  // temp buffer for blurs. We will need to cycle between them for memory efficiency
+  // Two low-pass ping-pong buffers reused across all scales.
   cl_mem LF_even = dt_opencl_alloc_device(devid, sizes[0], sizes[1], sizeof(float) * 4);
   cl_mem LF_odd = dt_opencl_alloc_device(devid, sizes[0], sizes[1], sizeof(float) * 4);
 
@@ -1442,7 +1542,8 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
     }
 
     if(it == (int)iterations - 1) temp_out = dev_out;
-    err = wavelets_process_cl(devid, temp_in, temp_out, mask, sizes, width, height, data, gd, final_radius, scale, scales, has_mask, HF, LF_odd, LF_even);
+    err = wavelets_process_cl(devid, temp_in, temp_out, mask, sizes, width, height,
+                              data, gd, zoom, scales, has_mask, HF, LF_odd, LF_even);
     if(err != CL_SUCCESS) goto error;
   }
 
@@ -1469,7 +1570,7 @@ error:
 
 void init_global(dt_iop_module_so_t *module)
 {
-  const int program = 33; // extended.cl in programs.conf
+  const int program = 33; // diffuse.cl in programs.conf
   dt_iop_diffuse_global_data_t *gd = (dt_iop_diffuse_global_data_t *)malloc(sizeof(dt_iop_diffuse_global_data_t));
 
   module->data = gd;
