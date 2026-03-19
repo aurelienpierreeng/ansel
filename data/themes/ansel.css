@@ -659,13 +659,17 @@ menubar menuitem label
   ---------------------------*/
 /* Frame around modules boxes */
 /*** NOTE: bauhaus controls inherit their font properties from there ***/
-dialog,  /* dialog window background */
 dialog .sidebar row:selected,   /* .sidebar lines here allow to select same settings for sidebar in preferences and filechooser */
 dialog .sidebar row:selected:hover label,
 #bauhaus-slider,  /* be sure there's some visible "spacing" around arrow on sliders by setting specific background on bauhaus-slider */
 #background-job-eventbox  /* background of export progress bar */
 {
   background-color: @plugin_bg_color;
+}
+
+dialog  /* dialog window background */
+{
+  background-color: @bg_color;
 }
 
 .dt_plugin_ui
@@ -1402,6 +1406,7 @@ treeview header label
 #quick-presets-manager box  /* set same setting on quick preset manager dialog window ; accessible to bottom left button on footer bar in darkroom view */
 {
   margin: 0; /* reset default dialog margin to main items. And needed to have an hover and selected effect on all width of categories in sidebar */
+  background-color: @bg_color;
 }
 
 /* Set preferences margins in main part */
@@ -1412,12 +1417,9 @@ treeview header label
 }
 
 /* Edit CSS view on preferences dialog window */
-#usercss-box
+#usercss-box 
 {
-  border: 0.07em inset @border_color;
-  background-color: shade(@bg_color, 1.075);
-  margin-top: 0.7em;
-  padding: 0.7em;
+  margin: 2em 0;
 }
 
 /* Set text size */
@@ -1558,7 +1560,7 @@ filechooser .sidebar,
 {
   padding: 0; /* needed to have an hover and selected effect on all width of categories in sidebar */
   font-size: 1.1em;
-  background-color: @bg_color;
+  background-color: @grey_40;
 }
 
 #preferences-box .sidebar row
