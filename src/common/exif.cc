@@ -4620,7 +4620,10 @@ void dt_exif_init()
   #endif
   #endif
 
+  // XmpParser init/term are required on older exiv2, but are deprecated no-ops from 0.28+.
+  #if !EXIV2_TEST_VERSION(0,28,0)
   Exiv2::XmpParser::initialize();
+  #endif
   // this has to stay with the old url (namespace already propagated outside dt)
   Exiv2::XmpProperties::registerNs("http://darktable.sf.net/", "darktable");
   // check is Exiv2 version already knows these prefixes
@@ -4646,7 +4649,10 @@ void dt_exif_init()
 
 void dt_exif_cleanup()
 {
+  // Keep explicit termination for older exiv2; deprecated no-op in 0.28+.
+  #if !EXIV2_TEST_VERSION(0,28,0)
   Exiv2::XmpParser::terminate();
+  #endif
 }
 
 // clang-format off
