@@ -73,7 +73,7 @@ static int _gpu_init_input(dt_dev_pixelpipe_t *pipe,
 
   dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, TRUE, input_entry);
   const int fail = _cl_pinned_memory_copy(pipe->devid, *input, *cl_mem_input, &piece->roi_in, CL_MAP_READ,
-                                          input_entry->dsc.bpp, module,
+                                          piece->dsc_in.bpp, module,
                                           "cpu fallback input copy to cache");
   dt_opencl_finish(pipe->devid);
   dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, FALSE, input_entry);
@@ -121,7 +121,7 @@ static int _gpu_early_cpu_fallback_if_unsupported(dt_dev_pixelpipe_t *pipe, floa
     }
 
     *input = _resync_input_gpu_to_cache(pipe, *input, *cl_mem_input, &piece->roi_in, module,
-                                        input_entry->dsc.bpp, input_entry,
+                                        piece->dsc_in.bpp, input_entry,
                                         "cpu fallback input copy to cache");
   }
   else if(!input || *input == NULL)
@@ -169,7 +169,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
   {
     cl_mem_input = dt_pixel_cache_clmem_ref(input_entry, NULL, pipe->devid,
                                             piece->roi_in.width, piece->roi_in.height,
-                                            input_entry->dsc.bpp, CL_MEM_READ_WRITE);
+                                            piece->dsc_in.bpp, CL_MEM_READ_WRITE);
     borrowed_cl_mem_input = (cl_mem_input != NULL);
   }
 
@@ -195,7 +195,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
   const size_t precheck_width = ROUNDUPDWD(MAX(piece->roi_in.width, piece->roi_out.width), pipe->devid);
   const size_t precheck_height = ROUNDUPDHT(MAX(piece->roi_in.height, piece->roi_out.height), pipe->devid);
   gboolean fits_on_device = dt_opencl_image_fits_device(pipe->devid, precheck_width, precheck_height,
-                                                        MAX(input_entry->dsc.bpp, output_entry->dsc.bpp),
+                                                        MAX(piece->dsc_in.bpp, piece->dsc_out.bpp),
                                                         required_factor_cl, tiling->overhead);
   if(!fits_on_device)
   {
@@ -204,7 +204,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
              module->name());
     dt_dev_pixelpipe_cache_flush_clmem(darktable.pixelpipe_cache, pipe->devid, cl_mem_input);
     fits_on_device = dt_opencl_image_fits_device(pipe->devid, precheck_width, precheck_height,
-                                                 MAX(input_entry->dsc.bpp, output_entry->dsc.bpp),
+                                                 MAX(piece->dsc_in.bpp, piece->dsc_out.bpp),
                                                  required_factor_cl, tiling->overhead);
   }
 
@@ -222,7 +222,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
   if(possible_cl && !fits_on_device)
   {
     const float cl_px = dt_opencl_get_device_available(pipe->devid)
-                        / (sizeof(float) * MAX(input_entry->dsc.bpp, output_entry->dsc.bpp)
+                        / (sizeof(float) * MAX(piece->dsc_in.bpp, piece->dsc_out.bpp)
                            * ceilf(required_factor_cl));
     const float dx = MAX(piece->roi_in.width, piece->roi_out.width);
     const float dy = MAX(piece->roi_in.height, piece->roi_out.height);
@@ -246,7 +246,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
   if(fits_on_device)
   {
     if(_gpu_prepare_cl_input(pipe, module, input, &cl_mem_input,
-                             &piece->roi_in, input_entry->dsc.bpp, input_entry,
+                             &piece->roi_in, piece->dsc_in.bpp, input_entry,
                              &locked_input_entry, NULL))
       goto error;
     cl_mem_process_input = cl_mem_input;
@@ -256,7 +256,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
       const gboolean reuse_output_cacheline = _requests_cache(pipe, piece)
                                               && (pipe->realtime || !(*cache_output));
       const gboolean reuse_output_pinned = reuse_output_cacheline;
-      cl_mem_output = _gpu_init_buffer(pipe->devid, output, &piece->roi_out, output_entry->dsc.bpp, module,
+      cl_mem_output = _gpu_init_buffer(pipe->devid, output, &piece->roi_out, piece->dsc_out.bpp, module,
                                        "output", output_entry, reuse_output_pinned, reuse_output_cacheline,
                                        NULL, cl_mem_input);
       if(cl_mem_output == NULL) goto error;
@@ -265,7 +265,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
     const int cst_before_cl = process_input_dsc.cst;
     if(process_input_dsc.cst != piece->dsc_in.cst)
     {
-      cl_mem_process_input_temp = _gpu_alloc_device_with_flush(pipe->devid, &piece->roi_in, input_entry->dsc.bpp,
+      cl_mem_process_input_temp = _gpu_alloc_device_with_flush(pipe->devid, &piece->roi_in, piece->dsc_in.bpp,
                                                                module, "module input colorspace temp",
                                                                cl_mem_input);
       if(cl_mem_process_input_temp == NULL)
@@ -315,7 +315,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
         const int blend_in_before = blend_input_dsc.cst;
         if(blend_transforms & DT_DEV_PIXELPIPE_BLEND_TRANSFORM_INPUT)
         {
-          cl_mem_blend_input_temp = _gpu_alloc_device_with_flush(pipe->devid, &piece->roi_in, input_entry->dsc.bpp,
+          cl_mem_blend_input_temp = _gpu_alloc_device_with_flush(pipe->devid, &piece->roi_in, piece->dsc_in.bpp,
                                                                  module, "blend input colorspace temp",
                                                                  cl_mem_process_input);
           if(cl_mem_blend_input_temp == NULL)
@@ -338,7 +338,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
         if(blend_transforms & DT_DEV_PIXELPIPE_BLEND_TRANSFORM_OUTPUT)
         {
           cl_mem_blend_output_temp = _gpu_alloc_device_with_flush(pipe->devid, &piece->roi_out,
-                                                                  output_entry->dsc.bpp, module,
+                                                                  piece->dsc_out.bpp, module,
                                                                   "blend output colorspace temp", cl_mem_output);
           if(cl_mem_blend_output_temp == NULL)
             goto error;
@@ -391,7 +391,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
     if(*cache_output)
     {
       if(_cl_pinned_memory_copy(pipe->devid, output, cl_mem_output, &piece->roi_out, CL_MAP_READ,
-                                output_entry->dsc.bpp, module,
+                                piece->dsc_out.bpp, module,
                                 "output to cache"))
         goto error;
       dt_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] output memory was copied to cache for %s\n", module->name());
@@ -437,7 +437,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
       input_locked = TRUE;
     }
 
-    int fail = !module->process_tiling_cl(module, pipe, piece, module_input, output, input_entry->dsc.bpp);
+    int fail = !module->process_tiling_cl(module, pipe, piece, module_input, output, piece->dsc_in.bpp);
     dt_opencl_finish(pipe->devid);
 
     if(fail)

@@ -100,10 +100,9 @@ static void _pixelpipe_cache_finalize_entry(dt_pixel_cache_entry_t *cache_entry,
                                             const char *message);
 static dt_pixel_cache_entry_t *_pixelpipe_cache_create_entry_locked(dt_dev_pixelpipe_cache_t *cache,
                                                                     const uint64_t hash, const size_t size,
-                                                                    const dt_iop_buffer_dsc_t *dsc,
                                                                     const char *name, const int id);
 static dt_pixel_cache_entry_t *dt_pixel_cache_new_entry(const uint64_t hash, const size_t size,
-                                                        const dt_iop_buffer_dsc_t dsc, const char *name, const int id,
+                                                        const char *name, const int id,
                                                         dt_dev_pixelpipe_cache_t *cache, gboolean alloc,
                                                         GHashTable *table);
 static void _cache_entry_clmem_flush_device(dt_pixel_cache_entry_t *entry, const int devid, void *keep);
@@ -1085,13 +1084,12 @@ void *dt_pixelpipe_cache_alloc_align_cache_impl(dt_dev_pixelpipe_cache_t *cache,
   }
 
   void *aligned = __builtin_assume_aligned(buf, DT_CACHELINE_BYTES);
-  dt_iop_buffer_dsc_t dsc = {0};
 
   const uint64_t hash = (uint64_t)(uintptr_t)(aligned);
 
   dt_pthread_mutex_lock(&cache->lock);
   dt_pixel_cache_entry_t *cache_entry
-      = dt_pixel_cache_new_entry(hash, page_size, dsc, name, id, cache, FALSE, cache->external_entries);
+      = dt_pixel_cache_new_entry(hash, page_size, name, id, cache, FALSE, cache->external_entries);
 
   if(!cache_entry)
   {
@@ -1137,7 +1135,7 @@ void dt_pixelpipe_cache_free_align_cache(dt_dev_pixelpipe_cache_t *cache, void *
 
 // WARNING: not thread-safe, protect its calls with mutex lock
 static dt_pixel_cache_entry_t *dt_pixel_cache_new_entry(const uint64_t hash, const size_t size,
-                                                        const dt_iop_buffer_dsc_t dsc, const char *name, const int id,
+                                                        const char *name, const int id,
                                                         dt_dev_pixelpipe_cache_t *cache, gboolean alloc,
                                                         GHashTable *table)
 {
@@ -1159,7 +1157,6 @@ static dt_pixel_cache_entry_t *dt_pixel_cache_new_entry(const uint64_t hash, con
   cache_entry->size = rounded_size;
   cache_entry->age = 0;
   cache_entry->hits = 0;
-  cache_entry->dsc = dsc;
   cache_entry->hash = hash;
   cache_entry->serial = cache->next_serial++;
   cache_entry->id = id;
@@ -1278,10 +1275,9 @@ void dt_dev_pixelpipe_cache_cleanup(dt_dev_pixelpipe_cache_t *cache)
 
 static dt_pixel_cache_entry_t *_pixelpipe_cache_create_entry_locked(dt_dev_pixelpipe_cache_t *cache,
                                                                     const uint64_t hash, const size_t size,
-                                                                    const dt_iop_buffer_dsc_t *dsc,
                                                                     const char *name, const int id)
 {
-  dt_pixel_cache_entry_t *cache_entry = dt_pixel_cache_new_entry(hash, size, *dsc, name, id, cache, FALSE, cache->entries);
+  dt_pixel_cache_entry_t *cache_entry = dt_pixel_cache_new_entry(hash, size, name, id, cache, FALSE, cache->entries);
   if(!cache_entry) return NULL;
 
   // Increase ref_count, consumer will have to decrease it
@@ -1340,7 +1336,7 @@ static dt_pixel_cache_entry_t *_cache_try_rekey_reuse_locked(dt_dev_pixelpipe_ca
 
 int dt_dev_pixelpipe_cache_get(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash,
                                const size_t size, const char *name, const int id,
-                               const gboolean alloc, void **data, const dt_iop_buffer_dsc_t *dsc,
+                               const gboolean alloc, void **data,
                                dt_pixel_cache_entry_t **entry)
 {
   if(hash == DT_PIXELPIPE_CACHE_HASH_INVALID)
@@ -1384,7 +1380,7 @@ int dt_dev_pixelpipe_cache_get(dt_dev_pixelpipe_cache_t *cache, const uint64_t h
     return 0;
   }
 
-  cache_entry = _pixelpipe_cache_create_entry_locked(cache, hash, size, dsc, name, id);
+  cache_entry = _pixelpipe_cache_create_entry_locked(cache, hash, size, name, id);
   if(!cache_entry)
   {
     dt_print(DT_DEBUG_CACHE, "couldn't allocate new cache entry %" PRIu64 "\n", hash);
@@ -1412,7 +1408,7 @@ dt_dev_pixelpipe_cache_get_writable(dt_dev_pixelpipe_cache_t *cache, const uint6
                                     const size_t size, const char *name, const int id,
                                     const gboolean alloc, const gboolean allow_rekey_reuse,
                                     const dt_pixel_cache_entry_t *reuse_hint,
-                                    void **data, const dt_iop_buffer_dsc_t *dsc,
+                                    void **data,
                                     dt_pixel_cache_entry_t **entry)
 {
   if(hash == DT_PIXELPIPE_CACHE_HASH_INVALID)
@@ -1448,14 +1444,13 @@ dt_dev_pixelpipe_cache_get_writable(dt_dev_pixelpipe_cache_t *cache, const uint6
     {
       dt_pthread_mutex_unlock(&cache->lock);
       if(alloc && cache_entry->data == NULL) dt_pixel_cache_alloc(cache, cache_entry);
-      cache_entry->dsc = *dsc;
       _pixelpipe_cache_finalize_entry(cache_entry, data, "writable-rekeyed");
       if(entry) *entry = cache_entry;
       return DT_DEV_PIXELPIPE_CACHE_WRITABLE_REKEYED;
     }
   }
 
-  cache_entry = _pixelpipe_cache_create_entry_locked(cache, hash, size, dsc, name, id);
+  cache_entry = _pixelpipe_cache_create_entry_locked(cache, hash, size, name, id);
   if(!cache_entry)
   {
     dt_pthread_mutex_unlock(&cache->lock);

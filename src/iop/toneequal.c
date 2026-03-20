@@ -1017,18 +1017,13 @@ static int toneeq_process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t
     // - GUI histogram/cursor sampling while the worker threads are running,
     // - mask display staying restricted to the full pipe while the luminance data
     //   itself comes from whichever pipe produced the preview-sized output.
-    dt_iop_buffer_dsc_t luminance_dsc = { 0 };
-    luminance_dsc.channels = 1;
-    luminance_dsc.datatype = TYPE_FLOAT;
-    luminance_dsc.cst = IOP_CS_NONE;
-    dt_iop_buffer_dsc_update_bpp(&luminance_dsc);
     void *cache_data = NULL;
     static const char cache_tag[] = "toneequal:luminance";
     luminance_hash = dt_hash(piece->global_hash, cache_tag, sizeof(cache_tag));
 
     created_luminance_entry = dt_dev_pixelpipe_cache_get(darktable.pixelpipe_cache, luminance_hash,
                                                          num_elem * sizeof(float), "toneequal luminance",
-                                                         pipe->type, TRUE, &cache_data, &luminance_dsc,
+                                                         pipe->type, TRUE, &cache_data,
                                                          &luminance_entry);
     luminance = (float *)cache_data;
     if(!luminance || !luminance_entry)

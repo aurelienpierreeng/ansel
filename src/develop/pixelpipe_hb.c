@@ -802,7 +802,7 @@ static int _init_base_buffer(dt_dev_pixelpipe_t *pipe)
   dt_pixel_cache_entry_t *cache_entry;
   void *output;
   int new_entry = dt_dev_pixelpipe_cache_get(darktable.pixelpipe_cache, hash, bufsize, "base buffer", pipe->type,
-                                             TRUE, &output, out_format, &cache_entry);
+                                             TRUE, &output, &cache_entry);
   if(cache_entry == NULL) return 1;
 
   int err = 0;
@@ -978,7 +978,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, input_entry);
   input = dt_pixel_cache_entry_get_data(input_entry);
   _trace_cache_owner(pipe, module, "acquire", "input", input_hash, input, input_entry, FALSE);
-  _trace_buffer_content(pipe, module, "input-acquire", input, &input_entry->dsc, &piece->roi_in);
+  _trace_buffer_content(pipe, module, "input-acquire", input, &piece->dsc_in, &piece->roi_in);
   const size_t bufsize = (size_t)piece->dsc_out.bpp * piece->roi_out.width * piece->roi_out.height;
 
   // Note: input == NULL is valid if we are on a GPU-only path, aka previous module ran on GPU
@@ -1031,7 +1031,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
       = dt_dev_pixelpipe_cache_get_writable(darktable.pixelpipe_cache, hash, bufsize, name, pipe->type,
                                             cache_output, allow_rekey_reuse,
                                             allow_rekey_reuse ? &piece->cache_entry : NULL,
-                                            &output, &piece->dsc_out, &output_entry);
+                                            &output, &output_entry);
   dt_free(name);
   if(acquire_status == DT_DEV_PIXELPIPE_CACHE_WRITABLE_EXACT_HIT)
   {
@@ -1134,7 +1134,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   // Publish the module output descriptor authored for this stage. The cache entry keeps the
   // descriptor of the pixels this module actually published, not the stale descriptor of its input.
   _trace_cache_owner(pipe, module, "publish", "output", hash, output, output_entry, FALSE);
-  _trace_buffer_content(pipe, module, "publish", output, &output_entry->dsc, &piece->roi_out);
+  _trace_buffer_content(pipe, module, "publish", output, &piece->dsc_out, &piece->roi_out);
 
   if(piece && allow_rekey_reuse && output_entry && !cache_output)
   {
@@ -1182,7 +1182,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   if((darktable.unmuted & DT_DEBUG_NAN) && strcmp(module->op, "gamma") != 0 && output)
   {
     dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, output_entry);
-    _print_nan_debug(pipe, cl_mem_output, output, &piece->roi_out, &output_entry->dsc, module);
+    _print_nan_debug(pipe, cl_mem_output, output, &piece->roi_out, &piece->dsc_out, module);
     dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, output_entry);
   }
 

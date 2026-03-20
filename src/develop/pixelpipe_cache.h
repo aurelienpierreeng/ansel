@@ -88,7 +88,6 @@ typedef struct dt_pixel_cache_entry_t
   uint64_t serial;          // stable identity across rekeys, changes on fresh allocations
   void *data;               // buffer holding pixels... or anything else
   size_t size;              // size of the data buffer
-  dt_iop_buffer_dsc_t dsc;  // metadata of the data buffer
   int64_t age;              // timestamp of creation. Oldest entry will be the first freed if it's not locked
   char *name;               // name of the cache entry, for debugging
   int id;                   // id of the pipeline owning this entry. Used when flushing, a pipe can only flush its own.
@@ -140,7 +139,6 @@ struct dt_pixel_cache_entry_t *dt_dev_pixelpipe_cache_get_entry(dt_dev_pixelpipe
  * @param name Name of the cache line (for debugging).
  * @param id ID of the pipeline owning the cache line.
  * @param data Pointer to the buffer pointer (returned).
- * @param dsc Descriptor used to initialize a newly-created cache entry.
  * @param alloc Whether or not we should actually alloc the buffer, or simply reserve it. If FALSE
  * use `dt_pixel_cache_alloc()` when you actually need the buffer.
  * @param cache_entry a reference to the cache entry, to be reused later. Can be NULL. The caller
@@ -149,7 +147,7 @@ struct dt_pixel_cache_entry_t *dt_dev_pixelpipe_cache_get_entry(dt_dev_pixelpipe
  */
 int dt_dev_pixelpipe_cache_get(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash, const size_t size,
                                const char *name, const int id, const gboolean alloc,
-                               void **data, const struct dt_iop_buffer_dsc_t *dsc,
+                               void **data,
                                struct dt_pixel_cache_entry_t **entry);
 
 /**
@@ -182,7 +180,6 @@ int dt_dev_pixelpipe_cache_get(dt_dev_pixelpipe_cache_t *cache, const uint64_t h
  * @param allow_rekey_reuse Whether the cache may reuse the piece-local cached output line by rekeying it.
  * @param reuse_hint Snapshot of the previously attached piece cacheline metadata, or NULL.
  * @param[out] data Returned host pointer when available.
- * @param dsc Descriptor used to initialize a newly-created or rekeyed cache entry.
  * @param[out] entry Returned cache entry.
  * @return dt_dev_pixelpipe_cache_writable_status_t `DT_DEV_PIXELPIPE_CACHE_WRITABLE_CREATED`
  *         when creating a new entry, `DT_DEV_PIXELPIPE_CACHE_WRITABLE_REKEYED` when rekeying
@@ -195,7 +192,7 @@ dt_dev_pixelpipe_cache_get_writable(dt_dev_pixelpipe_cache_t *cache, const uint6
                                     const size_t size, const char *name, const int id,
                                     const gboolean alloc, const gboolean allow_rekey_reuse,
                                     const struct dt_pixel_cache_entry_t *reuse_hint,
-                                    void **data, const struct dt_iop_buffer_dsc_t *dsc,
+                                    void **data,
                                     struct dt_pixel_cache_entry_t **entry);
 
 /** OpenCL pinned buffer reuse tied to cache entries. */
