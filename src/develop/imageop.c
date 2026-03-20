@@ -187,6 +187,15 @@ static gboolean default_has_defaults(struct dt_iop_module_t *self)
   return memcmp(self->params, self->default_params, self->params_size) == 0;
 }
 
+static gboolean default_runtime_data_hash(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
+                                          const dt_dev_pixelpipe_iop_t *piece)
+{
+  (void)self;
+  (void)pipe;
+  (void)piece;
+  return FALSE;
+}
+
 static void default_commit_params(struct dt_iop_module_t *self, dt_iop_params_t *params,
                                    dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
@@ -1852,12 +1861,11 @@ void dt_iop_commit_params(dt_iop_module_t *module, dt_iop_params_t *params,
   //if(old_hash != hash)
   //  fprintf(stdout, "WARNING: hash changed at history -> pipeline commit time for %s\n", module->op);
 
-  // Take dynamically-set parameters into account.
-  // Because colorout sets up output color profile at commit_params() time.
-  // But in general we shouldn't do it because data may contain non-constant stuff
-  // like pointers addresses or rounding errors.
-  // Hello uglyness my old friend...
-  if(!strcmp(piece->module->op, "colorout"))
+  /* Some modules seal part of their effective runtime contract only in commit_params(),
+   * after reading GUI-only state, pipe mode, or other non-history inputs. Those modules
+   * must opt in explicitly, because piece->data may also contain transient pointers or
+   * scratch state for other modules and therefore cannot be hashed blindly. */
+  if(module->runtime_data_hash(module, pipe, piece))
   {
     hash = dt_hash(hash, (const char *)piece->data, piece->data_size);
   }

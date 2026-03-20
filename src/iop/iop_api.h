@@ -167,6 +167,10 @@ OPTIONAL(void, reload_defaults, struct dt_iop_module_t *self);
  */
 DEFAULT(gboolean, has_defaults, struct dt_iop_module_t *self);
 
+/** whether commit_params() seals extra effective runtime state into piece->data that must be part of the cache hash */
+DEFAULT(gboolean, runtime_data_hash, struct dt_iop_module_t *self, struct dt_dev_pixelpipe_t *pipe,
+                                     const struct dt_dev_pixelpipe_iop_t *piece);
+
 /** called after the image has changed in darkroom */
 OPTIONAL(void, change_image, struct dt_iop_module_t *self);
 

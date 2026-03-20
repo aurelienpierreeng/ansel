@@ -557,8 +557,8 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
       {
         p->type = icc_input->type;
         g_strlcpy(p->filename, icc_input->filename, sizeof(p->filename));
-      }
-    }
+  }
+}
 
     if((unsigned int)pipe->icc_intent < DT_INTENT_LAST)
     {
@@ -785,6 +785,15 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   dt_colorspaces_cleanup_profile(softproof);
 
   dt_ioppr_set_pipe_output_profile_info(self->dev, pipe, d->type, out_filename, p->intent);
+}
+
+gboolean runtime_data_hash(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
+                           const dt_dev_pixelpipe_iop_t *piece)
+{
+  (void)self;
+  (void)pipe;
+  (void)piece;
+  return TRUE;
 }
 
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)

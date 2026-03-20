@@ -2560,7 +2560,10 @@ static void do_crop(dt_iop_module_t *self, dt_iop_ashift_params_t *p)
   if(p->cropmode == ASHIFT_CROP_OFF)
   {
     _clear_shadow_crop_box(g);
-    dt_dev_pixelpipe_update_history_all(self->dev);
+    if(g->editing)
+      dt_dev_pixelpipe_resync_history_all(self->dev);
+    else
+      dt_dev_pixelpipe_update_history_all(self->dev);
     return;
   }
 
@@ -2687,7 +2690,10 @@ static void do_crop(dt_iop_module_t *self, dt_iop_ashift_params_t *p)
          iter, cropfit.x, cropfit.y, cropfit.alpha, p->cl, p->cr, p->ct, p->cb, wd, ht);
 #endif
 
-  dt_dev_pixelpipe_update_history_all(self->dev);
+  if(g->editing)
+    dt_dev_pixelpipe_resync_history_all(self->dev);
+  else
+    dt_dev_pixelpipe_update_history_all(self->dev);
   return;
 
 failed:
@@ -2701,7 +2707,10 @@ failed:
   g->fitting = 0;
   dt_control_log(_("automatic cropping failed"));
 
-  dt_dev_pixelpipe_update_history_all(self->dev);
+  if(g->editing)
+    dt_dev_pixelpipe_resync_history_all(self->dev);
+  else
+    dt_dev_pixelpipe_update_history_all(self->dev);
   return;
 }
 
@@ -2919,6 +2928,77 @@ static int _do_clean_structure(dt_iop_module_t *module, dt_iop_ashift_params_t *
   return TRUE;
 }
 
+/**
+ * @brief Rebuild the GUI-side fitting buffer from the authoritative preview cacheline.
+ *
+ * The ashift GUI keeps a private float buffer used by structure detection and fit. That buffer is
+ * not owned by the pixelpipe cache and may disappear on darkroom teardown while the preview pipe
+ * still exact-hits cached hashes on re-entry. In that case, the correct recovery is to reopen the
+ * cached upstream preview input of the ashift piece and copy it back into @p g->buf.
+ *
+ * This helper performs only that buffer resynchronization. Callers keep ownership of the fallback
+ * policy when the cacheline is unavailable, so the control flow that removes cache suffixes,
+ * requeues jobs, and resyncs preview remains explicit at the call site.
+ *
+ * @param self Current ashift module.
+ * @param[out] preview_piece_out Matching ashift piece on the preview pipe, used by callers when
+ * the cache restore fails and they need to invalidate the preview suffix explicitly.
+ *
+ * @return TRUE when @p g->buf has been repopulated from cache, FALSE otherwise.
+ */
+static gboolean _sync_private_buffer_from_preview_cache(dt_iop_module_t *self,
+                                                        dt_dev_pixelpipe_iop_t **preview_piece_out)
+{
+  dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
+  dt_dev_pixelpipe_iop_t *preview_piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->preview_pipe, self);
+  if(preview_piece_out) *preview_piece_out = preview_piece;
+
+  if(!preview_piece || !preview_piece->enabled || preview_piece->roi_in.width <= 0 || preview_piece->roi_in.height <= 0)
+    return FALSE;
+
+  const dt_dev_pixelpipe_iop_t *previous_piece = NULL;
+  for(GList *node = g_list_first(self->dev->preview_pipe->nodes); node; node = g_list_next(node))
+  {
+    const dt_dev_pixelpipe_iop_t *current = (dt_dev_pixelpipe_iop_t *)node->data;
+    if(current == preview_piece) break;
+    if(current->enabled) previous_piece = current;
+  }
+
+  const uint64_t upstream_hash
+      = dt_dev_pixelpipe_node_hash(self->dev->preview_pipe, previous_piece, preview_piece->roi_in, 0);
+  void *preview_buf = NULL;
+  dt_pixel_cache_entry_t *preview_entry = NULL;
+  if(!dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, upstream_hash, &preview_buf, &preview_entry, -1, NULL)
+     || !preview_buf || !preview_entry)
+    return FALSE;
+
+  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, preview_entry);
+
+  const int width = preview_piece->roi_in.width;
+  const int height = preview_piece->roi_in.height;
+  const int ch = preview_piece->dsc_in.channels;
+  dt_iop_gui_enter_critical_section(self);
+  if(g->buf == NULL || (size_t)g->buf_width * g->buf_height < (size_t)width * height)
+  {
+    dt_free(g->buf);
+    g->buf = malloc(sizeof(float) * 4 * (size_t)width * height);
+  }
+  if(g->buf)
+  {
+    dt_iop_image_copy_by_size(g->buf, preview_buf, width, height, ch);
+    g->buf_width = width;
+    g->buf_height = height;
+    g->buf_x_off = preview_piece->roi_in.x;
+    g->buf_y_off = preview_piece->roi_in.y;
+    g->buf_scale = preview_piece->roi_in.scale;
+    g->buf_hash = upstream_hash;
+  }
+  dt_iop_gui_leave_critical_section(self);
+
+  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
+  return g->buf != NULL;
+}
+
 // helper function to start analysis for structural data and report about errors
 static int _do_get_structure_auto(dt_iop_module_t *self, dt_iop_ashift_params_t *p,
                                   dt_iop_ashift_enhance_t enhance)
@@ -2935,9 +3015,35 @@ static int _do_get_structure_auto(dt_iop_module_t *self, dt_iop_ashift_params_t 
 
   if(b == NULL)
   {
-    dt_control_log(_("Data pending - Please repeat"));
-    dt_dev_pixelpipe_update_history_preview(self->dev);
-    goto error;
+    dt_dev_pixelpipe_iop_t *preview_piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->preview_pipe, self);
+    if(_sync_private_buffer_from_preview_cache(self, &preview_piece)) b = g->buf;
+
+    if(b == NULL)
+    {
+      dt_control_log(_("Data pending - Please repeat"));
+      // If preview is already valid here, the GUI state was lost while the pipe can still exact-hit
+      // downstream cachelines. Remove the preview chain from ashift onward so the worker recomputes
+      // exactly that suffix. On a cold first run, just queue the job and let preview build normally.
+      if(dt_dev_pixelpipe_is_backbufer_valid(self->dev->preview_pipe, self->dev) && preview_piece)
+      {
+        gboolean remove_from_ashift = FALSE;
+        for(GList *node = g_list_first(self->dev->preview_pipe->nodes); node; node = g_list_next(node))
+        {
+          dt_dev_pixelpipe_iop_t *current = (dt_dev_pixelpipe_iop_t *)node->data;
+          remove_from_ashift |= (current == preview_piece);
+          if(!remove_from_ashift) continue;
+          if(current->global_hash == DT_PIXELPIPE_CACHE_HASH_INVALID) continue;
+
+          dt_pixel_cache_entry_t *entry
+              = dt_dev_pixelpipe_cache_get_entry(darktable.pixelpipe_cache, current->global_hash);
+          if(entry) dt_dev_pixelpipe_cache_remove(darktable.pixelpipe_cache, TRUE, entry);
+        }
+      }
+      g->jobcode = ASHIFT_JOBCODE_GET_STRUCTURE;
+      g->jobparams = enhance;
+      dt_dev_pixelpipe_resync_history_preview(self->dev);
+      goto error;
+    }
   }
 
   if(!_get_structure(self, enhance))
@@ -2985,9 +3091,32 @@ static void _do_get_structure_lines(dt_iop_module_t *self)
 
   if(b == NULL)
   {
-    dt_control_log(_("Data pending - Please repeat"));
-    dt_dev_pixelpipe_update_history_preview(self->dev);
-    return;
+    dt_dev_pixelpipe_iop_t *preview_piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->preview_pipe, self);
+    if(_sync_private_buffer_from_preview_cache(self, &preview_piece)) b = g->buf;
+
+    if(b == NULL)
+    {
+      dt_control_log(_("Data pending - Please repeat"));
+      if(dt_dev_pixelpipe_is_backbufer_valid(self->dev->preview_pipe, self->dev) && preview_piece)
+      {
+        gboolean remove_from_ashift = FALSE;
+        for(GList *node = g_list_first(self->dev->preview_pipe->nodes); node; node = g_list_next(node))
+        {
+          dt_dev_pixelpipe_iop_t *current = (dt_dev_pixelpipe_iop_t *)node->data;
+          remove_from_ashift |= (current == preview_piece);
+          if(!remove_from_ashift) continue;
+          if(current->global_hash == DT_PIXELPIPE_CACHE_HASH_INVALID) continue;
+
+          dt_pixel_cache_entry_t *entry
+              = dt_dev_pixelpipe_cache_get_entry(darktable.pixelpipe_cache, current->global_hash);
+          if(entry) dt_dev_pixelpipe_cache_remove(darktable.pixelpipe_cache, TRUE, entry);
+        }
+      }
+      g->jobcode = ASHIFT_JOBCODE_GET_STRUCTURE_LINES;
+      g->jobparams = 0;
+      dt_dev_pixelpipe_resync_history_preview(self->dev);
+      return;
+    }
   }
 
   dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->virtual_pipe, self);
@@ -3020,9 +3149,32 @@ static void _do_get_structure_quad(dt_iop_module_t *self)
 
   if(b == NULL)
   {
-    dt_control_log(_("Data pending - Please repeat"));
-    dt_dev_pixelpipe_update_history_preview(self->dev);
-    return;
+    dt_dev_pixelpipe_iop_t *preview_piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->preview_pipe, self);
+    if(_sync_private_buffer_from_preview_cache(self, &preview_piece)) b = g->buf;
+
+    if(b == NULL)
+    {
+      dt_control_log(_("Data pending - Please repeat"));
+      if(dt_dev_pixelpipe_is_backbufer_valid(self->dev->preview_pipe, self->dev) && preview_piece)
+      {
+        gboolean remove_from_ashift = FALSE;
+        for(GList *node = g_list_first(self->dev->preview_pipe->nodes); node; node = g_list_next(node))
+        {
+          dt_dev_pixelpipe_iop_t *current = (dt_dev_pixelpipe_iop_t *)node->data;
+          remove_from_ashift |= (current == preview_piece);
+          if(!remove_from_ashift) continue;
+          if(current->global_hash == DT_PIXELPIPE_CACHE_HASH_INVALID) continue;
+
+          dt_pixel_cache_entry_t *entry
+              = dt_dev_pixelpipe_cache_get_entry(darktable.pixelpipe_cache, current->global_hash);
+          if(entry) dt_dev_pixelpipe_cache_remove(darktable.pixelpipe_cache, TRUE, entry);
+        }
+      }
+      g->jobcode = ASHIFT_JOBCODE_GET_STRUCTURE_QUAD;
+      g->jobparams = 0;
+      dt_dev_pixelpipe_resync_history_preview(self->dev);
+      return;
+    }
   }
 
   dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->virtual_pipe, self);
@@ -3086,6 +3238,36 @@ static void do_fit(dt_iop_module_t *module, dt_iop_ashift_params_t *p, dt_iop_as
   if(g->lines == NULL)
     if(!_do_get_structure_auto(module, p, ASHIFT_ENHANCE_NONE)) return;
 
+  if(g->lines_in_width > 0 && g->lines_in_height > 0)
+  {
+    const float f_length_kb = (p->mode == ASHIFT_MODE_GENERIC) ? DEFAULT_F_LENGTH : p->f_length * p->crop_factor;
+    const float orthocorr = (p->mode == ASHIFT_MODE_GENERIC) ? 0.0f : p->orthocorr;
+    const float aspect = (p->mode == ASHIFT_MODE_GENERIC) ? 1.0f : p->aspect;
+
+    float homograph[3][3];
+    homography((float *)homograph, p->rotation, p->lensshift_v, p->lensshift_h, p->shear, f_length_kb,
+               orthocorr, aspect, g->lines_in_width, g->lines_in_height, ASHIFT_HOMOGRAPH_FORWARD);
+
+    const float ivec[2] = { (float)g->lines_in_width, (float)g->lines_in_height };
+    const float ivecl = sqrtf(ivec[0] * ivec[0] + ivec[1] * ivec[1]);
+
+    const float pin0[3] = { 0.0f, 0.0f, 1.0f };
+    const float pin1[3] = { (float)g->lines_in_width, (float)g->lines_in_height, 1.0f };
+    float pout0[3];
+    float pout1[3];
+    mat3mulv(pout0, (float *)homograph, pin0);
+    mat3mulv(pout1, (float *)homograph, pin1);
+    pout0[0] /= pout0[2];
+    pout0[1] /= pout0[2];
+    pout1[0] /= pout1[2];
+    pout1[1] /= pout1[2];
+
+    const float ovec[2] = { pout1[0] - pout0[0], pout1[1] - pout0[1] };
+    const float ovecl = sqrtf(ovec[0] * ovec[0] + ovec[1] * ovec[1]);
+    const float alpha = acos(CLAMP((ivec[0] * ovec[0] + ivec[1] * ovec[1]) / (ivecl * ovecl), -1.0f, 1.0f));
+    g->isflipped = fabs(fmod(alpha + M_PI, M_PI) - M_PI / 2.0f) < M_PI / 4.0f ? 1 : 0;
+  }
+
   g->fitting = 1;
 
   dt_iop_ashift_nmsresult_t res = nmsfit(module, p, dir);
@@ -3132,6 +3314,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
   // only for preview pipe: collect input buffer data and do some other evaluations
   if(g && self->dev->gui_attached
+     && pipe == self->dev->preview_pipe
      && dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
   {
     // we want to find out if the final output image is flipped in relation to this iop
@@ -3274,7 +3457,9 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   cl_mem dev_homo = NULL;
 
   // only for preview pipe: collect input buffer data and do some other evaluations
-  if(self->dev->gui_attached && g && dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
+  if(self->dev->gui_attached && g
+     && pipe == self->dev->preview_pipe
+     && dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
   {
     // we want to find out if the final output image is flipped in relation to this iop
     // so we can adjust the gui labels accordingly
@@ -4900,9 +5085,13 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
   if(g->buf_height > 0 && g->buf_width > 0)
     do_crop(self, p);
   else
+  {
     g->jobcode = ASHIFT_JOBCODE_DO_CROP;
-
-  dt_dev_pixelpipe_update_history_all(self->dev);
+    if(g->editing)
+      dt_dev_pixelpipe_resync_history_all(self->dev);
+    else
+      dt_dev_pixelpipe_update_history_all(self->dev);
+  }
 }
 
 void gui_reset(struct dt_iop_module_t *self)
@@ -4941,8 +5130,7 @@ static void cropmode_callback(GtkWidget *widget, gpointer user_data)
 
   if(g->editing)
   {
-    // Update temporary copy
-    dt_dev_pixelpipe_update_history_all(self->dev);
+    // do_crop() already resealed the temporary GUI-only contract and refreshed the ROI.
   }
   else
   {
@@ -5242,6 +5430,8 @@ static void _enter_edit_mode(GtkToggleButton* button, struct dt_iop_module_t *se
   // It sucks that we need to invalidate the preview too but we need its final dimension.
   dt_dev_pixelpipe_resync_history_all(self->dev);
   dt_dev_get_thumbnail_size(self->dev);
+  dt_dev_pixelpipe_update_zoom_main(self->dev);
+  dt_dev_pixelpipe_update_zoom_preview(self->dev);
 }
 
 static void _event_commit_clicked(GtkButton *button, dt_iop_module_t *self)
@@ -5261,6 +5451,8 @@ static void _event_commit_clicked(GtkButton *button, dt_iop_module_t *self)
   // Commit history and refresh view
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
   dt_dev_get_thumbnail_size(self->dev);
+  dt_dev_pixelpipe_update_zoom_main(self->dev);
+  dt_dev_pixelpipe_update_zoom_preview(self->dev);
 
   // The following will de-activate the edit button and trigger the callback.
   // Prevent the callback to revert the param change.
@@ -5351,6 +5543,15 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   d->f_length_kb = (p->mode == ASHIFT_MODE_GENERIC) ? DEFAULT_F_LENGTH : p->f_length * p->crop_factor;
   d->orthocorr = (p->mode == ASHIFT_MODE_GENERIC) ? 0.0f : p->orthocorr;
   d->aspect = (p->mode == ASHIFT_MODE_GENERIC) ? 1.0f : p->aspect;
+}
+
+gboolean runtime_data_hash(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
+                           const dt_dev_pixelpipe_iop_t *piece)
+{
+  (void)self;
+  (void)pipe;
+  (void)piece;
+  return TRUE;
 }
 
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
@@ -5744,6 +5945,7 @@ void gui_init(struct dt_iop_module_t *self)
 void gui_cleanup(struct dt_iop_module_t *self)
 {
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_event_process_after_preview_callback), self);
+  dt_iop_set_cache_bypass(self, FALSE);
 
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
   if(g->lines)
