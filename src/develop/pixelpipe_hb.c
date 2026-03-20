@@ -882,17 +882,6 @@ static inline gboolean _is_darkroom_compute_pipe(const dt_dev_pixelpipe_t *pipe)
   return pipe && (pipe->type == DT_DEV_PIXELPIPE_FULL || pipe->type == DT_DEV_PIXELPIPE_PREVIEW);
 }
 
-static void _log_sampling_cache_miss(dt_dev_pixelpipe_t *pipe, dt_iop_module_t *module,
-                                     const char *slot, const uint64_t hash)
-{
-  dt_print(DT_DEBUG_PIPE,
-           "[sample_gui] missing %s cacheline for module=%s pipe=%s hash=%" PRIu64 "\n",
-           slot ? slot : "-", module ? module->op : "-", dt_pixelpipe_get_pipe_name(pipe->type), hash);
-
-  if(module)
-    dt_control_log(_("sampling buffer for module `%s` was not found in cache"), module->name());
-}
-
 static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
                                         uint64_t *out_hash, const dt_dev_pixelpipe_iop_t **out_piece,
                                         GList *pieces, int pos)
@@ -1241,36 +1230,27 @@ int dt_dev_pixelpipe_process_rec_sample(dt_dev_pixelpipe_t *pipe, dt_develop_t *
     if(!dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, hash, &output, &output_entry, -1, NULL)
        || !output_entry || !output)
     {
-      _log_sampling_cache_miss(pipe, module, "output", hash);
-      break;
+      continue;
     }
 
     void *input = NULL;
     dt_pixel_cache_entry_t *input_entry = NULL;
-    if(input_hash != DT_PIXELPIPE_CACHE_HASH_INVALID
-       && (!dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, input_hash, &input, &input_entry, -1, NULL)
-           || !input_entry || !input))
+    if(!dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, input_hash, &input, &input_entry, -1, NULL)
+        || !input_entry || !input)
     {
-      _log_sampling_cache_miss(pipe, module, "input", input_hash);
-      break;
+      continue;
     }
 
     dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, output_entry);
     dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, output_entry);
-    if(input_entry)
-    {
-      dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, input_entry);
-      dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, input_entry);
-    }
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, input_entry);
+    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, input_entry);
 
     _sample_gui(pipe, dev, input, &output, module, piece, input_hash,
                 hash, input_entry, output_entry);
 
-    if(input_entry)
-    {
-      dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, input_entry);
-      dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, input_entry);
-    }
+    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, input_entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, input_entry);
     dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, output_entry);
     dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, output_entry);
 
