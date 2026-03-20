@@ -23,6 +23,13 @@ typedef enum dt_pixelpipe_flow_t
   PIXELPIPE_FLOW_BLENDED_ON_GPU = 1 << 7
 } dt_pixelpipe_flow_t;
 
+typedef enum dt_pixelpipe_blend_transform_t
+{
+  DT_DEV_PIXELPIPE_BLEND_TRANSFORM_NONE = 0,
+  DT_DEV_PIXELPIPE_BLEND_TRANSFORM_INPUT = 1 << 0,
+  DT_DEV_PIXELPIPE_BLEND_TRANSFORM_OUTPUT = 1 << 1
+} dt_pixelpipe_blend_transform_t;
+
 /**
  * @brief Tell whether the current pipeline state forbids keeping this module output in cache.
  *
@@ -41,11 +48,17 @@ static inline gboolean _bypass_cache(const dt_dev_pixelpipe_t *pipe, const dt_de
 }
 
 /**
- * @brief Tell whether cache reuse / exact hits are allowed for the current pipeline state.
+ * @brief Tell whether cache lookups and published cachelines are allowed for the current pipeline state.
+ *
+ * @details
+ * `DT_DEBUG_NOCACHE_REUSE` is intentionally not handled here. That debug mode is meant to
+ * disable writable output reuse, not to disable cache reads entirely. Exact hits on already
+ * published cachelines are still valid in that mode, but later writable acquisition must
+ * refuse to reopen those cachelines for overwrite.
  */
 static inline gboolean _requests_cache(const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece)
 {
-  return pipe && !_bypass_cache(pipe, piece) && !(darktable.unmuted & DT_DEBUG_NOCACHE_REUSE);
+  return pipe && !_bypass_cache(pipe, piece);
 }
 
 /**
@@ -71,11 +84,12 @@ void dt_dev_pixelpipe_debug_dump_module_io(dt_dev_pixelpipe_t *pipe, dt_iop_modu
                                            const dt_iop_roi_t *roi_out, size_t in_bpp, size_t out_bpp,
                                            int cst_before, int cst_after);
 
-gboolean dt_dev_pixelpipe_transform_for_blend(const dt_iop_module_t *self,
-                                              const dt_dev_pixelpipe_iop_t *piece);
+dt_pixelpipe_blend_transform_t dt_dev_pixelpipe_transform_for_blend(const dt_iop_module_t *self,
+                                                                    const dt_dev_pixelpipe_iop_t *piece,
+                                                                    const dt_iop_buffer_dsc_t *output_dsc);
 
 gboolean dt_dev_pixelpipe_cache_gpu_device_buffer(const dt_dev_pixelpipe_t *pipe,
                                                   const dt_pixel_cache_entry_t *cache_entry);
 
 void dt_dev_pixelpipe_gpu_clear_buffer(void **cl_mem_buffer, dt_pixel_cache_entry_t *cache_entry,
-                                       void *host_ptr, int cst, gboolean allow_reuse);
+                                       void *host_ptr, gboolean allow_reuse);

@@ -184,7 +184,7 @@ int default_group()
 }
 
 
-int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
+int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece)
 {
   return IOP_CS_RGB;
 }
@@ -273,13 +273,11 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_
 }
 
 
-int process(struct dt_iop_module_t *const self, dt_dev_pixelpipe_iop_t *const piece,
+int process(struct dt_iop_module_t *const self, const dt_dev_pixelpipe_iop_t *const piece,
              const void *const restrict ivoid, void *const restrict ovoid,
              const dt_iop_roi_t *const restrict roi_in, const dt_iop_roi_t *const restrict roi_out)
 {
   const dt_iop_negadoctor_data_t *const d = piece->data;
-  assert(piece->colors = 4);
-
   const float *const restrict in = (float *)ivoid;
   float *const restrict out = (float *)ovoid;
 
@@ -323,7 +321,7 @@ int process(struct dt_iop_module_t *const self, dt_dev_pixelpipe_iop_t *const pi
 
 
 #ifdef HAVE_OPENCL
-int process_cl(struct dt_iop_module_t *const self, dt_dev_pixelpipe_iop_t *const piece, cl_mem dev_in, cl_mem dev_out,
+int process_cl(struct dt_iop_module_t *const self, const dt_dev_pixelpipe_iop_t *const piece, cl_mem dev_in, cl_mem dev_out,
                const dt_iop_roi_t *const restrict roi_in, const dt_iop_roi_t *const restrict roi_out)
 {
   const dt_iop_negadoctor_data_t *const d = (dt_iop_negadoctor_data_t *)piece->data;

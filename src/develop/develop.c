@@ -703,6 +703,7 @@ static gboolean _dt_dev_refresh_image_storage(dt_develop_t *dev, const int32_t i
   if(!image) return FALSE;
   dev->image_storage = *image;
   dt_image_cache_read_release(darktable.image_cache, image);
+  dt_iop_buffer_dsc_update_bpp(&dev->image_storage.dsc);
   return TRUE;
 }
 

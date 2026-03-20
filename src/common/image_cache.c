@@ -222,7 +222,7 @@ void dt_image_from_stmt(dt_image_t *img, sqlite3_stmt *stmt)
   
   dt_datetime_gtimespan_to_local(img->datetime, sizeof(img->datetime), img->exif_datetime_taken, FALSE, FALSE);
 
-  // img->buf_dsc are written by imageio drivers : never (re)set them from DB,
+  // img->dsc are written by imageio drivers : never (re)set them from DB,
   // they are not saved anyway.
 
   img->has_localcopy = (img->flags & DT_IMAGE_LOCAL_COPY);

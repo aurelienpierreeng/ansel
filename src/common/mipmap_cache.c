@@ -452,7 +452,7 @@ void *dt_mipmap_cache_alloc(dt_mipmap_buffer_t *buf, const dt_image_t *img)
   // Get a new allocation
   const int wd = img->width;
   const int ht = img->height;
-  const size_t bpp = img->buf_dsc.bpp;
+  const size_t bpp = img->dsc.bpp;
   const size_t buffer_size = wd * ht * bpp;
   const size_t min_buffer_size = 64 * 4 * sizeof(float);
   entry->data = dt_alloc_align(_get_entry_size(MAX(buffer_size, min_buffer_size)));
@@ -1156,27 +1156,27 @@ static void _init_f(dt_mipmap_buffer_t *mipmap_buf, float *out, uint32_t *width,
 
   mipmap_buf->color_space = DT_COLORSPACE_NONE; // TODO: do we need that information in this buffer?
 
-  if(image->buf_dsc.filters)
+  if(image->dsc.filters)
   {
-    if(image->buf_dsc.filters != 9u && image->buf_dsc.datatype == TYPE_FLOAT)
+    if(image->dsc.filters != 9u && image->dsc.datatype == TYPE_FLOAT)
     {
       dt_iop_clip_and_zoom_mosaic_half_size_f((float *const)out, (const float *const)buf.buf, &roi_out, &roi_in,
-                                              roi_out.width, roi_in.width, image->buf_dsc.filters);
+                                              roi_out.width, roi_in.width, image->dsc.filters);
     }
-    else if(image->buf_dsc.filters != 9u && image->buf_dsc.datatype == TYPE_UINT16)
+    else if(image->dsc.filters != 9u && image->dsc.datatype == TYPE_UINT16)
     {
       dt_iop_clip_and_zoom_mosaic_half_size((uint16_t * const)out, (const uint16_t *)buf.buf, &roi_out, &roi_in,
-                                            roi_out.width, roi_in.width, image->buf_dsc.filters);
+                                            roi_out.width, roi_in.width, image->dsc.filters);
     }
-    else if(image->buf_dsc.filters == 9u && image->buf_dsc.datatype == TYPE_UINT16)
+    else if(image->dsc.filters == 9u && image->dsc.datatype == TYPE_UINT16)
     {
       dt_iop_clip_and_zoom_mosaic_third_size_xtrans((uint16_t * const)out, (const uint16_t *)buf.buf, &roi_out,
-                                                    &roi_in, roi_out.width, roi_in.width, image->buf_dsc.xtrans);
+                                                    &roi_in, roi_out.width, roi_in.width, image->dsc.xtrans);
     }
-    else if(image->buf_dsc.filters == 9u && image->buf_dsc.datatype == TYPE_FLOAT)
+    else if(image->dsc.filters == 9u && image->dsc.datatype == TYPE_FLOAT)
     {
       dt_iop_clip_and_zoom_mosaic_third_size_xtrans_f(out, (const float *)buf.buf, &roi_out, &roi_in,
-                                                      roi_out.width, roi_in.width, image->buf_dsc.xtrans);
+                                                      roi_out.width, roi_in.width, image->dsc.xtrans);
     }
     else
     {

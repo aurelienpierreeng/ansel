@@ -95,12 +95,12 @@ int flags()
   return IOP_FLAGS_ALLOW_TILING | IOP_FLAGS_HIDDEN | IOP_FLAGS_ONE_INSTANCE | IOP_FLAGS_NO_HISTORY_STACK;
 }
 
-int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
+int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece)
 {
   return IOP_CS_RGB;
 }
 
-static void process_common_setup(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece)
+static void process_common_setup(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece)
 {
   dt_develop_t *dev = self->dev;
   dt_iop_rawoverexposed_data_t *d = piece->data;
@@ -117,15 +117,15 @@ static void process_common_setup(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *
     float chthr = threshold;
 
     // "undo" rawprepare iop
-    chthr *= piece->pipe->dsc.rawprepare.raw_white_point - piece->pipe->dsc.rawprepare.raw_black_level;
-    chthr += piece->pipe->dsc.rawprepare.raw_black_level;
+    chthr *= piece->dsc_in.rawprepare.raw_white_point - piece->dsc_in.rawprepare.raw_black_level;
+    chthr += piece->dsc_in.rawprepare.raw_black_level;
 
     // and this is that threshold, but in raw input buffer values
     d->threshold[k] = (unsigned int)chthr;
   }
 }
 
-int process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid,
+int process(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid,
              const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   const dt_iop_rawoverexposed_data_t *const d = piece->data;
@@ -135,7 +135,7 @@ int process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *co
   dt_develop_t *dev = self->dev;
   const dt_image_t *const image = &(dev->image_storage);
 
-  const int ch = piece->colors;
+  const int ch = piece->dsc_in.channels;
   const double iop_order = self->iop_order;
 
   const dt_dev_rawoverexposed_mode_t mode = dev->rawoverexposed.mode;
@@ -166,8 +166,8 @@ int process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *co
   float *const restrict out = DT_IS_ALIGNED((float *const)ovoid);
 
   // NOT FROM THE PIPE !!!
-  const uint32_t filters = image->buf_dsc.filters;
-  const uint8_t(*const xtrans)[6] = (const uint8_t(*const)[6])image->buf_dsc.xtrans;
+  const uint32_t filters = image->dsc.filters;
+  const uint8_t(*const xtrans)[6] = (const uint8_t(*const)[6])image->dsc.xtrans;
 
   // acquire temp memory for distorted pixel coords
   size_t coordbufsize;
@@ -251,7 +251,7 @@ int process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *co
 }
 
 #ifdef HAVE_OPENCL
-int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
+int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
                const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   const dt_iop_rawoverexposed_data_t *const d = piece->data;
@@ -295,7 +295,7 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
   const float *const color = dt_iop_rawoverexposed_colors[colorscheme];
 
   // NOT FROM THE PIPE !!!
-  const uint32_t filters = image->buf_dsc.filters;
+  const uint32_t filters = image->dsc.filters;
 
   const int raw_width = buf.width;
   const int raw_height = buf.height;
@@ -365,7 +365,7 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
   if(filters == 9u)
   {
     dev_xtrans
-        = dt_opencl_copy_host_to_device_constant(devid, sizeof(image->buf_dsc.xtrans), (void *)image->buf_dsc.xtrans);
+        = dt_opencl_copy_host_to_device_constant(devid, sizeof(image->dsc.xtrans), (void *)image->dsc.xtrans);
     if(dev_xtrans == NULL) goto error;
   }
 
@@ -416,7 +416,7 @@ error:
 }
 #endif
 
-void tiling_callback(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece,
+void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
                      const dt_iop_roi_t *roi_in, const dt_iop_roi_t *roi_out,
                      struct dt_develop_tiling_t *tiling)
 {
@@ -460,7 +460,7 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_
 
   if(image->flags & DT_IMAGE_4BAYER) piece->enabled = 0;
 
-  if(image->buf_dsc.datatype != TYPE_UINT16 || !image->buf_dsc.filters) piece->enabled = 0;
+  if(image->dsc.datatype != TYPE_UINT16 || !image->dsc.filters) piece->enabled = 0;
 }
 
 void init_global(dt_iop_module_so_t *module)

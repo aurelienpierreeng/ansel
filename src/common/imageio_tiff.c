@@ -429,11 +429,11 @@ dt_imageio_retval_t dt_imageio_open_tiff(dt_image_t *img, const char *filename, 
   t.image->width = t.width;
   t.image->height = t.height;
 
-  t.image->buf_dsc.channels = 4;
-  t.image->buf_dsc.datatype = TYPE_FLOAT;
-  t.image->buf_dsc.bpp = 4 * sizeof(float);
-  t.image->buf_dsc.cst = IOP_CS_RGB;
-  t.image->buf_dsc.filters = 0u;
+  t.image->dsc.channels = 4;
+  t.image->dsc.datatype = TYPE_FLOAT;
+  t.image->dsc.bpp = 4 * sizeof(float);
+  t.image->dsc.cst = IOP_CS_RGB;
+  t.image->dsc.filters = 0u;
 
   // flag the image buffer properly depending on sample format
   if(t.sampleformat == SAMPLEFORMAT_IEEEFP)
@@ -450,7 +450,7 @@ dt_imageio_retval_t dt_imageio_open_tiff(dt_image_t *img, const char *filename, 
   }
 
   if(photometric == PHOTOMETRIC_CIELAB || photometric == PHOTOMETRIC_ICCLAB)
-    t.image->buf_dsc.cst = IOP_CS_LAB;
+    t.image->dsc.cst = IOP_CS_LAB;
 
   t.image->flags &= ~DT_IMAGE_RAW;
   t.image->flags &= ~DT_IMAGE_S_RAW;
@@ -481,12 +481,12 @@ dt_imageio_retval_t dt_imageio_open_tiff(dt_image_t *img, const char *filename, 
   if((photometric == PHOTOMETRIC_CIELAB || photometric == PHOTOMETRIC_ICCLAB) && t.bpp == 8 && t.sampleformat == SAMPLEFORMAT_UINT)
   {
     ok = _read_chunky_8_Lab(&t, photometric);
-    t.image->buf_dsc.cst = IOP_CS_LAB;
+    t.image->dsc.cst = IOP_CS_LAB;
   }
   else if((photometric == PHOTOMETRIC_CIELAB || photometric == PHOTOMETRIC_ICCLAB) && t.bpp == 16 && t.sampleformat == SAMPLEFORMAT_UINT)
   {
     ok = _read_chunky_16_Lab(&t, photometric);
-    t.image->buf_dsc.cst = IOP_CS_LAB;
+    t.image->dsc.cst = IOP_CS_LAB;
   }
   else if(t.bpp == 8 && t.sampleformat == SAMPLEFORMAT_UINT)
     ok = _read_chunky_8(&t);

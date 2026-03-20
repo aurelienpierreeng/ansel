@@ -243,8 +243,6 @@ typedef struct dt_image_geoloc_t
 
 struct dt_cache_entry_t;
 
-// TODO: add color labels and such as cacheable
-// __attribute__ ((aligned (128)))
 typedef struct dt_image_t
 {
   // minimal exif data here (all in multiples of 4-byte to interface nicely with c++):
@@ -296,7 +294,7 @@ typedef struct dt_image_t
 
   dt_image_loader_t loader;
 
-  dt_iop_buffer_dsc_t buf_dsc;
+  dt_iop_buffer_dsc_t dsc;
 
   float d65_color_matrix[9]; // the 3x3 matrix embedded in some DNGs
   uint8_t *profile;          // embedded profile, for example from JPEGs

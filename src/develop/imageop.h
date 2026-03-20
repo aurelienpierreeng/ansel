@@ -205,7 +205,7 @@ typedef struct dt_iop_module_so_t
 //  dt_iop_gui_data_t *gui_data;
   /** which results in this widget here, too. */
 
-  int (*process_plain)(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece,
+  int (*process_plain)(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
                        const void *const i, void *const o, const struct dt_iop_roi_t *const roi_in,
                        const struct dt_iop_roi_t *const roi_out);
 
@@ -336,7 +336,7 @@ typedef struct dt_iop_module_t
   /** delayed-event handling */
   guint timeout_handle;
 
-  int (*process_plain)(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece,
+  int (*process_plain)(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
                        const void *const i, void *const o, const struct dt_iop_roi_t *const roi_in,
                        const struct dt_iop_roi_t *const roi_out);
 
@@ -501,13 +501,6 @@ static inline dt_iop_gui_data_t *_iop_gui_alloc(dt_iop_module_t *module, size_t 
     self->gui_data = NULL;                         \
   }                                                \
   self->gui_data = NULL;
-
-/** check whether we have the required number of channels in the input data; if not, copy the input buffer to the
- ** output buffer, set the module's trouble message, and return FALSE */
-gboolean dt_iop_have_required_input_format(const int required_ch, struct dt_iop_module_t *const module,
-                                           const int actual_pipe_ch,
-                                           const void *const __restrict__ ivoid, void *const __restrict__ ovoid,
-                                           const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out);
 
 /* bring up module rename dialog */
 void dt_iop_gui_rename_module(dt_iop_module_t *module);

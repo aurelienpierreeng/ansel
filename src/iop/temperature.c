@@ -250,13 +250,19 @@ int flags()
   return IOP_FLAGS_ALLOW_TILING | IOP_FLAGS_ONE_INSTANCE;
 }
 
-int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
+int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece)
 {
   // This module may work in RAW or RGB (e.g. for TIFF files) depending on the input
   // The module does not change the color space between the input and output, therefore implement it here
   if(piece && piece->dsc_in.cst != IOP_CS_RAW)
     return IOP_CS_RGB;
   return IOP_CS_RAW;
+}
+
+void output_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
+                   dt_iop_buffer_dsc_t *dsc)
+{
+  default_output_format(self, pipe, piece, dsc);
 }
 
 /*
@@ -489,11 +495,11 @@ scaled_copy_4wide(float *const outp, const float *const inp, const dt_aligned_pi
   dt_store_simd_nontemporal(outp, dt_load_simd(inp) * coeffs);
 }
 
-int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
-  const uint32_t filters = piece->pipe->dsc.filters;
-  const uint8_t(*const xtrans)[6] = (const uint8_t(*const)[6])piece->pipe->dsc.xtrans;
+  const uint32_t filters = piece->dsc_in.filters;
+  const uint8_t(*const xtrans)[6] = (const uint8_t(*const)[6])piece->dsc_in.xtrans;
   const dt_iop_temperature_data_t *const d = (dt_iop_temperature_data_t *)piece->data;
 
   const float *const in = (const float *const)ivoid;
@@ -578,7 +584,7 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
   }
   else
   { // non-mosaiced
-    const size_t ch = piece->colors;
+    const size_t ch = piece->dsc_in.channels;
     const size_t npixels = (size_t)roi_out->width * roi_out->height;
 
     if(ch == 4)
@@ -617,25 +623,18 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
       dt_iop_alpha_copy(ivoid, ovoid, roi_out->width, roi_out->height);
   }
 
-  piece->pipe->dsc.temperature.enabled = 1;
-  for(int k = 0; k < 4; k++)
-  {
-    piece->pipe->dsc.temperature.coeffs[k] = d->coeffs[k];
-    piece->pipe->dsc.processed_maximum[k] = d->coeffs[k] * piece->pipe->dsc.processed_maximum[k];
-    self->dev->proxy.wb_coeffs[k] = d->coeffs[k];
-  }
   return 0;
 }
 
 #ifdef HAVE_OPENCL
-int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
+int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
                const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   dt_iop_temperature_data_t *d = (dt_iop_temperature_data_t *)piece->data;
   dt_iop_temperature_global_data_t *gd = (dt_iop_temperature_global_data_t *)self->global_data;
 
   const int devid = piece->pipe->devid;
-  const uint32_t filters = piece->pipe->dsc.filters;
+  const uint32_t filters = piece->dsc_in.filters;
   cl_mem dev_coeffs = NULL;
   cl_mem dev_xtrans = NULL;
   cl_int err = -999;
@@ -656,8 +655,7 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
 
   if(filters == 9u)
   {
-    dev_xtrans
-        = dt_opencl_copy_host_to_device_constant(devid, sizeof(piece->pipe->dsc.xtrans), piece->pipe->dsc.xtrans);
+    dev_xtrans = dt_opencl_copy_host_to_device_constant(devid, sizeof(piece->dsc_in.xtrans), piece->dsc_in.xtrans);
     if(dev_xtrans == NULL) goto error;
   }
 
@@ -683,13 +681,6 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
   dt_opencl_release_mem_object(dev_coeffs);
   dt_opencl_release_mem_object(dev_xtrans);
 
-  piece->pipe->dsc.temperature.enabled = 1;
-  for(int k = 0; k < 4; k++)
-  {
-    piece->pipe->dsc.temperature.coeffs[k] = d->coeffs[k];
-    piece->pipe->dsc.processed_maximum[k] = d->coeffs[k] * piece->pipe->dsc.processed_maximum[k];
-    self->dev->proxy.wb_coeffs[k] = d->coeffs[k];
-  }
   return TRUE;
 
 error:
@@ -717,6 +708,13 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   d->coeffs[1] = p->green;
   d->coeffs[2] = p->blue;
   d->coeffs[3] = p->g2;
+  for(int k = 0; k < 4; k++) self->dev->proxy.wb_coeffs[k] = d->coeffs[k];
+  piece->dsc_out.temperature.enabled = 1;
+  for(int k = 0; k < 4; k++)
+  {
+    piece->dsc_out.temperature.coeffs[k] = d->coeffs[k];
+    piece->dsc_out.processed_maximum[k] = piece->dsc_in.processed_maximum[k] * d->coeffs[k];
+  }
 
   // 4Bayer images not implemented in OpenCL yet
   if(self->dev->image_storage.flags & DT_IMAGE_4BAYER) piece->process_cl_ready = 0;
@@ -1791,7 +1789,7 @@ static void gui_sliders_update(struct dt_iop_module_t *self)
   const dt_image_t *img = &self->dev->image_storage;
   dt_iop_temperature_gui_data_t *g = (dt_iop_temperature_gui_data_t *)self->gui_data;
 
-  if(FILTERS_ARE_CYGM(img->buf_dsc.filters))
+  if(FILTERS_ARE_CYGM(img->dsc.filters))
   {
     dt_bauhaus_widget_set_label(g->scale_r, N_("green"));
     gtk_widget_set_tooltip_text(g->scale_r, _("green channel coefficient"));

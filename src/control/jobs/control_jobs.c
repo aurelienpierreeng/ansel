@@ -396,7 +396,7 @@ static int dt_control_merge_hdr_process(dt_imageio_module_data_t *datai, const c
   if(!d->pixels)
   {
     d->first_imgid = imgid;
-    d->first_filter = image.buf_dsc.filters;
+    d->first_filter = image.dsc.filters;
     // sensor layout is just passed on to be written to dng.
     // we offset it to the crop of the image here, so we don't
     // need to load in the FCxtrans dependency into the dng writer.
@@ -406,7 +406,7 @@ static int dt_control_merge_hdr_process(dt_imageio_module_data_t *datai, const c
     roi.x = image.crop_x;
     roi.y = image.crop_y;
     for(int j=0;j<6;j++)
-      for(int i = 0; i < 6; i++) d->first_xtrans[j][i] = FCxtrans(j, i, &roi, image.buf_dsc.xtrans);
+      for(int i = 0; i < 6; i++) d->first_xtrans[j][i] = FCxtrans(j, i, &roi, image.dsc.xtrans);
     d->pixels = calloc((size_t)datai->width * datai->height, sizeof(float));
     d->weight = calloc((size_t)datai->width * datai->height, sizeof(float));
     d->wd = datai->width;
@@ -419,13 +419,13 @@ static int dt_control_merge_hdr_process(dt_imageio_module_data_t *datai, const c
         d->adobe_XYZ_to_CAM[k][i] = image.adobe_XYZ_to_CAM[k][i];
   }
 
-  if(image.buf_dsc.filters == 0u || image.buf_dsc.channels != 1 || image.buf_dsc.datatype != TYPE_UINT16)
+  if(image.dsc.filters == 0u || image.dsc.channels != 1 || image.dsc.datatype != TYPE_UINT16)
   {
     dt_control_log(_("exposure bracketing only works on raw images."));
     d->abort = TRUE;
     return 1;
   }
-  else if(datai->width != d->wd || datai->height != d->ht || d->first_filter != image.buf_dsc.filters
+  else if(datai->width != d->wd || datai->height != d->ht || d->first_filter != image.dsc.filters
           || d->orientation != image.orientation)
   {
     dt_control_log(_("images have to be of same size and orientation!"));

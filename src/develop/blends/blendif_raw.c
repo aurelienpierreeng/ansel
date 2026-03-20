@@ -42,13 +42,13 @@ typedef void(_blend_row_func)(const float *const restrict a, const float *const 
                               float *const restrict out, const float *const restrict mask, const size_t stride);
 
 
-void dt_develop_blendif_raw_make_mask(struct dt_dev_pixelpipe_iop_t *piece, const float *const restrict a,
+void dt_develop_blendif_raw_make_mask(const struct dt_dev_pixelpipe_iop_t *piece, const float *const restrict a,
                                       const float *const restrict b, const struct dt_iop_roi_t *const roi_in,
                                       const struct dt_iop_roi_t *const roi_out, float *const restrict mask)
 {
   const dt_develop_blend_params_t *const d = (const dt_develop_blend_params_t *const)piece->blendop_data;
 
-  if(piece->colors != 1) return;
+  if(piece->dsc_in.channels != 1) return;
 
   const int owidth = roi_out->width;
   const int oheight = roi_out->height;
@@ -396,7 +396,7 @@ static _blend_row_func *_choose_blend_func(const unsigned int blend_mode)
 }
 
 
-void dt_develop_blendif_raw_blend(struct dt_dev_pixelpipe_iop_t *piece,
+void dt_develop_blendif_raw_blend(const struct dt_dev_pixelpipe_iop_t *piece,
                                   const float *const restrict a, float *const restrict b,
                                   const struct dt_iop_roi_t *const roi_in,
                                   const struct dt_iop_roi_t *const roi_out,
@@ -405,7 +405,7 @@ void dt_develop_blendif_raw_blend(struct dt_dev_pixelpipe_iop_t *piece,
 {
   const dt_develop_blend_params_t *const d = (const dt_develop_blend_params_t *const)piece->blendop_data;
 
-  if(piece->colors != 1) return;
+  if(piece->dsc_in.channels != 1) return;
 
   const int xoffs = roi_out->x - roi_in->x;
   const int yoffs = roi_out->y - roi_in->y;
@@ -463,4 +463,3 @@ void dt_develop_blendif_raw_blend(struct dt_dev_pixelpipe_iop_t *piece,
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

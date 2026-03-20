@@ -14,7 +14,7 @@ void dt_dev_clear_rawdetail_mask(dt_dev_pixelpipe_t *pipe)
   pipe->rawdetail_mask_data = NULL;
 }
 
-gboolean dt_dev_write_rawdetail_mask(dt_dev_pixelpipe_iop_t *piece, float *const rgb,
+gboolean dt_dev_write_rawdetail_mask(const dt_dev_pixelpipe_iop_t *piece, float *const rgb,
                                      const dt_iop_roi_t *const roi_in, const int mode)
 {
   dt_dev_pixelpipe_t *p = piece->pipe;
@@ -37,9 +37,9 @@ gboolean dt_dev_write_rawdetail_mask(dt_dev_pixelpipe_iop_t *piece, float *const
   p->rawdetail_mask_data = mask;
   memcpy(&p->rawdetail_mask_roi, roi_in, sizeof(dt_iop_roi_t));
 
-  dt_aligned_pixel_t wb = { piece->pipe->dsc.temperature.coeffs[0],
-                            piece->pipe->dsc.temperature.coeffs[1],
-                            piece->pipe->dsc.temperature.coeffs[2] };
+  dt_aligned_pixel_t wb = { piece->dsc_in.temperature.coeffs[0],
+                            piece->dsc_in.temperature.coeffs[1],
+                            piece->dsc_in.temperature.coeffs[2] };
   if((p->want_detail_mask & ~DT_DEV_DETAIL_MASK_REQUIRED) == DT_DEV_DETAIL_MASK_RAWPREPARE)
     wb[0] = wb[1] = wb[2] = 1.0f;
 
@@ -56,7 +56,7 @@ error:
 }
 
 #ifdef HAVE_OPENCL
-gboolean dt_dev_write_rawdetail_mask_cl(dt_dev_pixelpipe_iop_t *piece, cl_mem in,
+gboolean dt_dev_write_rawdetail_mask_cl(const dt_dev_pixelpipe_iop_t *piece, cl_mem in,
                                         const dt_iop_roi_t *const roi_in, const int mode)
 {
   dt_dev_pixelpipe_t *p = piece->pipe;
@@ -89,9 +89,9 @@ gboolean dt_dev_write_rawdetail_mask_cl(dt_dev_pixelpipe_iop_t *piece, cl_mem in
 
   {
     const int kernel = darktable.opencl->blendop->kernel_calc_Y0_mask;
-    dt_aligned_pixel_t wb = { piece->pipe->dsc.temperature.coeffs[0],
-                              piece->pipe->dsc.temperature.coeffs[1],
-                              piece->pipe->dsc.temperature.coeffs[2] };
+    dt_aligned_pixel_t wb = { piece->dsc_in.temperature.coeffs[0],
+                              piece->dsc_in.temperature.coeffs[1],
+                              piece->dsc_in.temperature.coeffs[2] };
     if((p->want_detail_mask & ~DT_DEV_DETAIL_MASK_REQUIRED) == DT_DEV_DETAIL_MASK_RAWPREPARE)
       wb[0] = wb[1] = wb[2] = 1.0f;
 

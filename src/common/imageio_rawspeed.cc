@@ -335,10 +335,10 @@ dt_imageio_retval_t dt_imageio_open_rawspeed(dt_image_t *img,
       // otherwise (e.g. HDRMerge files), let rawprepare normalize as usual.
       if(r->whitePoint == 0x3F800000) img->raw_white_point = 1;
       if(img->raw_white_point == 1)
-        for(int k = 0; k < 4; k++) img->buf_dsc.processed_maximum[k] = 1.0f;
+        for(int k = 0; k < 4; k++) img->dsc.processed_maximum[k] = 1.0f;
     }
 
-    img->buf_dsc.filters = 0u;
+    img->dsc.filters = 0u;
 
     // dimensions of uncropped image
     const iPoint2D dimUncropped = r->getUncroppedDim();
@@ -384,17 +384,17 @@ dt_imageio_retval_t dt_imageio_open_rawspeed(dt_image_t *img,
     const float cpp = r->getCpp();
     if(cpp != 1) return DT_IMAGEIO_LOAD_FAILED;
 
-    img->buf_dsc.channels = 1;
+    img->dsc.channels = 1;
 
     switch(r->getBpp())
     {
       case sizeof(uint16_t):
-        img->buf_dsc.datatype = TYPE_UINT16;
-        img->buf_dsc.bpp = sizeof(uint16_t);
+        img->dsc.datatype = TYPE_UINT16;
+        img->dsc.bpp = sizeof(uint16_t);
         break;
       case sizeof(float):
-        img->buf_dsc.datatype = TYPE_FLOAT;
-        img->buf_dsc.bpp = sizeof(float);
+        img->dsc.datatype = TYPE_FLOAT;
+        img->dsc.bpp = sizeof(float);
         break;
       default:
         return DT_IMAGEIO_UNSUPPORTED_FEATURE;
@@ -402,17 +402,17 @@ dt_imageio_retval_t dt_imageio_open_rawspeed(dt_image_t *img,
 
     // as the X-Trans filters comments later on states, these are for
     // cropped image, so we need to uncrop them.
-    img->buf_dsc.filters = dt_rawspeed_crop_dcraw_filters(r->cfa.getDcrawFilter(), cropTL.x, cropTL.y);
+    img->dsc.filters = dt_rawspeed_crop_dcraw_filters(r->cfa.getDcrawFilter(), cropTL.x, cropTL.y);
 
-    if(FILTERS_ARE_4BAYER(img->buf_dsc.filters)) img->flags |= DT_IMAGE_4BAYER;
+    if(FILTERS_ARE_4BAYER(img->dsc.filters)) img->flags |= DT_IMAGE_4BAYER;
 
-    if(img->buf_dsc.filters)
+    if(img->dsc.filters)
     {
       img->flags &= ~DT_IMAGE_LDR;
       img->flags |= DT_IMAGE_RAW;
 
       // special handling for x-trans sensors
-      if(img->buf_dsc.filters == 9u)
+      if(img->dsc.filters == 9u)
       {
         // get 6x6 CFA offset from top left of cropped image
         // NOTE: This is different from how things are done with Bayer
@@ -423,14 +423,14 @@ dt_imageio_retval_t dt_imageio_open_rawspeed(dt_image_t *img,
         for(int i = 0; i < 6; ++i)
           for(int j = 0; j < 6; ++j)
           {
-            img->buf_dsc.xtrans[j][i] = (uint8_t)r->cfa.getColorAt(i % 6, j % 6);
+            img->dsc.xtrans[j][i] = (uint8_t)r->cfa.getColorAt(i % 6, j % 6);
           }
       }
     }
     // if buf is NULL, we quit the fct here
     if(!mbuf)
     {
-      img->buf_dsc.cst = IOP_CS_RAW;
+      img->dsc.cst = IOP_CS_RAW;
       img->loader = LOADER_RAWSPEED;
       return DT_IMAGEIO_OK;
     }
@@ -530,7 +530,7 @@ dt_imageio_retval_t dt_imageio_open_rawspeed(dt_image_t *img,
     return DT_IMAGEIO_FILE_CORRUPTED;
   }
 
-  img->buf_dsc.cst = IOP_CS_RAW;
+  img->dsc.cst = IOP_CS_RAW;
   img->loader = LOADER_RAWSPEED;
 
   return DT_IMAGEIO_OK;
@@ -546,9 +546,9 @@ dt_imageio_retval_t dt_imageio_open_rawspeed_sraw(dt_image_t *img,
   img->flags |= DT_IMAGE_S_RAW;
 
   // actually we want to store full floats here:
-  img->buf_dsc.channels = 4;
-  img->buf_dsc.datatype = TYPE_FLOAT;
-  img->buf_dsc.bpp = 4 * sizeof(float);
+  img->dsc.channels = 4;
+  img->dsc.datatype = TYPE_FLOAT;
+  img->dsc.bpp = 4 * sizeof(float);
 
   if(r->getDataType() != TYPE_USHORT16 && r->getDataType() != TYPE_FLOAT32)
     return DT_IMAGEIO_UNSUPPORTED_FEATURE;
@@ -559,7 +559,7 @@ dt_imageio_retval_t dt_imageio_open_rawspeed_sraw(dt_image_t *img,
   // if buf is NULL, we quit the fct here
   if(!mbuf)
   {
-    img->buf_dsc.cst = IOP_CS_RAW;
+    img->dsc.cst = IOP_CS_RAW;
     img->loader = LOADER_RAWSPEED;
     return DT_IMAGEIO_OK;
   }
@@ -656,7 +656,7 @@ dt_imageio_retval_t dt_imageio_open_rawspeed_sraw(dt_image_t *img,
     }
   }
 
-  img->buf_dsc.cst = IOP_CS_RGB;
+  img->dsc.cst = IOP_CS_RGB;
   img->loader = LOADER_RAWSPEED;
 
   //  Check if the camera is missing samples

@@ -65,6 +65,14 @@ typedef struct dt_dev_pixelpipe_cache_t
   dt_cache_arena_t arena;
 } dt_dev_pixelpipe_cache_t;
 
+typedef enum dt_dev_pixelpipe_cache_writable_status_t
+{
+  DT_DEV_PIXELPIPE_CACHE_WRITABLE_ERROR = -1,
+  DT_DEV_PIXELPIPE_CACHE_WRITABLE_EXACT_HIT = -2,
+  DT_DEV_PIXELPIPE_CACHE_WRITABLE_CREATED = 1,
+  DT_DEV_PIXELPIPE_CACHE_WRITABLE_REKEYED = 2
+} dt_dev_pixelpipe_cache_writable_status_t;
+
 /** constructs a new cache with given cache line count (entries) and float buffer entry size in bytes.
   \param[out] returns 0 if fail to allocate mem cache.
 */
@@ -152,7 +160,8 @@ int dt_dev_pixelpipe_cache_get(dt_dev_pixelpipe_cache_t *cache, const uint64_t h
  * published output for `hash` is not immediately reusable and needs to be overwritten.
  *
  * The cache then resolves how to provide that writable line:
- * - if an entry already exists at `hash`, it is reused in place and write-locked,
+ * - if an entry already exists at `hash`, that hash is already published and must not be overwritten.
+ *   The caller must exact-hit it instead of recomputing,
  * - else, if `allow_rekey_reuse` is TRUE and `reuse_hint` still points to a live cacheline with the right size,
  *   that old cacheline is rekeyed to `hash`, write-locked, and returned,
  * - else, a new cacheline is created.
@@ -175,21 +184,28 @@ int dt_dev_pixelpipe_cache_get(dt_dev_pixelpipe_cache_t *cache, const uint64_t h
  * @param[out] data Returned host pointer when available.
  * @param dsc Descriptor used to initialize a newly-created or rekeyed cache entry.
  * @param[out] entry Returned cache entry.
- * @return int `0` when reusing an existing entry at `hash`, `1` when creating a new entry,
- *         `2` when rekeying `reuse_hint`, `-1` on error.
+ * @return dt_dev_pixelpipe_cache_writable_status_t `DT_DEV_PIXELPIPE_CACHE_WRITABLE_CREATED`
+ *         when creating a new entry, `DT_DEV_PIXELPIPE_CACHE_WRITABLE_REKEYED` when rekeying
+ *         `reuse_hint`, `DT_DEV_PIXELPIPE_CACHE_WRITABLE_EXACT_HIT` when a published entry already
+ *         exists at `hash` and the caller must exact-hit it, `DT_DEV_PIXELPIPE_CACHE_WRITABLE_ERROR`
+ *         on error.
  */
-int dt_dev_pixelpipe_cache_get_writable(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash,
-                                        const size_t size, const char *name, const int id,
-                                        const gboolean alloc, const gboolean allow_rekey_reuse,
-                                        const struct dt_pixel_cache_entry_t *reuse_hint,
-                                        void **data, const struct dt_iop_buffer_dsc_t *dsc,
-                                        struct dt_pixel_cache_entry_t **entry);
+dt_dev_pixelpipe_cache_writable_status_t
+dt_dev_pixelpipe_cache_get_writable(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash,
+                                    const size_t size, const char *name, const int id,
+                                    const gboolean alloc, const gboolean allow_rekey_reuse,
+                                    const struct dt_pixel_cache_entry_t *reuse_hint,
+                                    void **data, const struct dt_iop_buffer_dsc_t *dsc,
+                                    struct dt_pixel_cache_entry_t **entry);
 
 /** OpenCL pinned buffer reuse tied to cache entries. */
 void *dt_pixel_cache_clmem_get(struct dt_pixel_cache_entry_t *entry, void *host_ptr, int devid,
-                               int width, int height, int bpp, int flags, int *out_cst);
+                               int width, int height, int bpp, int flags);
+void *dt_pixel_cache_clmem_ref(struct dt_pixel_cache_entry_t *entry, void *host_ptr, int devid,
+                               int width, int height, int bpp, int flags);
+void dt_pixel_cache_clmem_unref(struct dt_pixel_cache_entry_t *entry, void *mem);
 void dt_pixel_cache_clmem_put(struct dt_pixel_cache_entry_t *entry, void *host_ptr, int devid,
-                              int width, int height, int bpp, int flags, int cst, void *mem);
+                              int width, int height, int bpp, int flags, void *mem);
 void dt_pixel_cache_clmem_remove(struct dt_pixel_cache_entry_t *entry, void *mem);
 void dt_pixel_cache_clmem_flush(struct dt_pixel_cache_entry_t *entry);
 
@@ -212,13 +228,12 @@ void dt_pixel_cache_clmem_flush(struct dt_pixel_cache_entry_t *entry);
  * @param height Image height.
  * @param bpp Bytes per pixel.
  * @param flags OpenCL allocation flags (must include `CL_MEM_USE_HOST_PTR`).
- * @param[out] out_cst Optional cached colorspace tag for reused buffers.
  * @param[out] out_reused Optional flag set TRUE when an existing pinned image was reused.
  * @return void* OpenCL image (`cl_mem`) or NULL on failure.
  */
 void *dt_dev_pixelpipe_cache_get_pinned_image(dt_dev_pixelpipe_cache_t *cache, void *host_ptr,
                                               struct dt_pixel_cache_entry_t *entry_hint, int devid,
-                                              int width, int height, int bpp, int flags, int *out_cst,
+                                              int width, int height, int bpp, int flags,
                                               gboolean *out_reused);
 
 /**
@@ -232,11 +247,10 @@ void *dt_dev_pixelpipe_cache_get_pinned_image(dt_dev_pixelpipe_cache_t *cache, v
  * @param cache Pixelpipe cache.
  * @param host_ptr Host-backed image data.
  * @param entry_hint Optional owning cache entry for regular cache lines, or NULL.
- * @param cst Colorspace tag stored alongside the pinned image.
  * @param[in,out] mem Pointer to the `cl_mem` handle (cleared on return).
  */
 void dt_dev_pixelpipe_cache_put_pinned_image(dt_dev_pixelpipe_cache_t *cache, void *host_ptr,
-                                             struct dt_pixel_cache_entry_t *entry_hint, int cst, void **mem);
+                                             struct dt_pixel_cache_entry_t *entry_hint, void **mem);
 
 /**
  * @brief Drop cached pinned OpenCL images associated with a given host buffer.

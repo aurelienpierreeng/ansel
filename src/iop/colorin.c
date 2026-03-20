@@ -192,30 +192,19 @@ int flags()
   return IOP_FLAGS_ALLOW_TILING | IOP_FLAGS_ONE_INSTANCE | IOP_FLAGS_UNSAFE_COPY;
 }
 
-int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
+int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece)
 {
   return IOP_CS_RGB;
 }
 
-int input_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
-                     dt_dev_pixelpipe_iop_t *piece)
+static dt_iop_colorspace_type_t _colorin_format_cst(dt_iop_module_t *self,
+                                                    dt_dev_pixelpipe_iop_t *piece)
 {
   if(piece)
   {
     const dt_iop_colorin_data_t *const d = (dt_iop_colorin_data_t *)piece->data;
     if(d->type == DT_COLORSPACE_LAB)
       return IOP_CS_LAB;
-  }
-  return IOP_CS_RGB;
-}
-
-int output_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
-                      dt_dev_pixelpipe_iop_t *piece)
-{
-  if(piece)
-  {
-    const dt_iop_colorin_data_t *const d = (dt_iop_colorin_data_t *)piece->data;
-    if(d->type == DT_COLORSPACE_LAB) return IOP_CS_LAB;
   }
   else
   {
@@ -224,6 +213,22 @@ int output_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
   }
 
   return IOP_CS_RGB;
+}
+
+void input_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
+                  dt_iop_buffer_dsc_t *dsc)
+{
+  dsc->channels = 4;
+  dsc->datatype = TYPE_FLOAT;
+  dsc->cst = _colorin_format_cst(self, piece);
+}
+
+void output_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
+                   dt_iop_buffer_dsc_t *dsc)
+{
+  dsc->channels = 4;
+  dsc->datatype = TYPE_FLOAT;
+  dsc->cst = _colorin_format_cst(self, piece);
 }
 
 static void _resolve_work_profile(dt_colorspaces_color_profile_type_t *work_type, char *work_filename)
@@ -602,7 +607,7 @@ static void workicc_changed(GtkWidget *widget, gpointer user_data)
 
 
 #ifdef HAVE_OPENCL
-int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
+int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
                const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   dt_iop_colorin_data_t *d = (dt_iop_colorin_data_t *)piece->data;
@@ -725,7 +730,7 @@ static void process_cmatrix_bm(struct dt_iop_module_t *self, dt_dev_pixelpipe_io
                                const dt_iop_roi_t *const roi_out)
 {
   const dt_iop_colorin_data_t *const d = (dt_iop_colorin_data_t *)piece->data;
-  const int ch = piece->colors;
+  const int ch = 4;
   const int clipping = (d->nrgb != NULL);
 
   dt_colormatrix_t cmatrix;
@@ -793,7 +798,6 @@ static void process_cmatrix_fastpath_simple(struct dt_iop_module_t *self, dt_dev
                                             const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   const dt_iop_colorin_data_t *const d = (dt_iop_colorin_data_t *)piece->data;
-  assert(piece->colors == 4);
   const size_t npixels = (size_t)roi_out->width * roi_out->height;
 
   const float *const restrict in = DT_IS_ALIGNED(ivoid);
@@ -827,7 +831,6 @@ static void process_cmatrix_fastpath_clipping(struct dt_iop_module_t *self, dt_d
                                               const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   const dt_iop_colorin_data_t *const d = (dt_iop_colorin_data_t *)piece->data;
-  assert(piece->colors == 4);
   const size_t npixels = (size_t)roi_out->width * roi_out->height;
   const float *const restrict in = DT_IS_ALIGNED(ivoid);
   float *const restrict out = DT_IS_ALIGNED(ovoid);
@@ -970,9 +973,7 @@ static void process_lcms2_bm(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_
   const cmsHTRANSFORM xform_cam_nrgb = d->xform_cam_nrgb;
   const cmsHTRANSFORM xform_nrgb_lab = d->xform_nrgb_Lab;
   const gboolean use_nrgb = (d->nrgb != NULL);
-  const int ch = piece->colors;
-  assert(ch == 4);
-
+  const int ch = 4;
 // use general lcms2 fallback
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
@@ -1029,7 +1030,7 @@ static void process_lcms2_proper(struct dt_iop_module_t *self, dt_dev_pixelpipe_
   const cmsHTRANSFORM xform_cam_nrgb = d->xform_cam_nrgb;
   const cmsHTRANSFORM xform_nrgb_lab = d->xform_nrgb_Lab;
   const gboolean use_nrgb = (d->nrgb != NULL);
-  const int ch = piece->colors;
+  const int ch = 4;
 
 // use general lcms2 fallback
 #ifdef _OPENMP
@@ -1084,14 +1085,14 @@ static void process_lcms2(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *
   }
 }
 
-int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   const dt_iop_colorin_data_t *const d = (dt_iop_colorin_data_t *)piece->data;
 
   if(d->type == DT_COLORSPACE_LAB)
   {
-    dt_iop_image_copy_by_size(ovoid, ivoid, roi_out->width, roi_out->height, piece->colors);
+    dt_iop_image_copy_by_size(ovoid, ivoid, roi_out->width, roi_out->height, 4);
   }
   else if(!isnan(d->cmatrix[0][0]))
   {

@@ -131,9 +131,17 @@ int flags()
   return IOP_FLAGS_ONE_INSTANCE | IOP_FLAGS_DEPRECATED;
 }
 
-int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
+int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece)
 {
   return IOP_CS_RAW;
+}
+
+void input_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
+                  dt_iop_buffer_dsc_t *dsc)
+{
+  default_input_format(self, pipe, piece, dsc);
+  dsc->channels = 1;
+  dt_iop_buffer_dsc_update_bpp(dsc);
 }
 
 int legacy_params(dt_iop_module_t *self, const void *const old_params, const int old_version,
@@ -305,7 +313,7 @@ static inline void pixSort(float *a, float *b)
   There is no "maths background" so i chose this after a lot of testing.
 */
 #define CA_SIZE_MINIMUM (1600)
-int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o,
+int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o,
                     const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   const float *const in2 = (float *)i;
@@ -316,7 +324,7 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
   const int h_width = (width + 1) / 2;
   const int h_height = (height + 1) / 2;
 
-  const uint32_t filters = piece->pipe->dsc.filters;
+  const uint32_t filters = piece->dsc_in.filters;
 
   const gboolean valid = MAX(width, height) >= CA_SIZE_MINIMUM;
 
@@ -1394,7 +1402,7 @@ void reload_defaults(dt_iop_module_t *module)
 {
   dt_image_t *img = &module->dev->image_storage;
   // can't be switched on for non-raw or x-trans images:
-  const gboolean active = (dt_image_is_raw(img) && (img->buf_dsc.filters != 9u) && !(dt_image_is_monochrome(img)));
+  const gboolean active = (dt_image_is_raw(img) && (img->dsc.filters != 9u) && !(dt_image_is_monochrome(img)));
   module->hide_enable_button = !active;
 }
 
@@ -1406,7 +1414,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *params, dt_dev
   dt_iop_cacorrect_data_t *d = (dt_iop_cacorrect_data_t *) piece->data;
 
   dt_image_t *img = &pipe->image;
-  const gboolean active = (dt_image_is_raw(img) && (img->buf_dsc.filters != 9u) && !(dt_image_is_monochrome(img)));
+  const gboolean active = (dt_image_is_raw(img) && (img->dsc.filters != 9u) && !(dt_image_is_monochrome(img)));
 
   if(!active) piece->enabled = 0;
 
@@ -1433,7 +1441,7 @@ void gui_update(dt_iop_module_t *self)
 
   dt_image_t *img = &self->dev->image_storage;
 
-  const gboolean active = (dt_image_is_raw(img) && (img->buf_dsc.filters != 9u) && !(dt_image_is_monochrome(img)));
+  const gboolean active = (dt_image_is_raw(img) && (img->dsc.filters != 9u) && !(dt_image_is_monochrome(img)));
   self->hide_enable_button = !active;
 
   gtk_stack_set_visible_child_name(GTK_STACK(self->widget), active ? "raw" : "non_raw");
@@ -1451,7 +1459,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 
   dt_image_t *img = &self->dev->image_storage;
 
-  const gboolean active = (dt_image_is_raw(img) && (img->buf_dsc.filters != 9u) && !(dt_image_is_monochrome(img)));
+  const gboolean active = (dt_image_is_raw(img) && (img->dsc.filters != 9u) && !(dt_image_is_monochrome(img)));
 
   gtk_stack_set_visible_child_name(GTK_STACK(self->widget), active ? "raw" : "non_raw");
 

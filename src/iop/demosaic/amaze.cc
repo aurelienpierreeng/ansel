@@ -44,7 +44,7 @@
 // otherwise the name will be mangled and the linker won't be able to see the function ...
 extern "C" {
 void amaze_demosaic_RT(
-    dt_dev_pixelpipe_iop_t *piece,
+    const dt_dev_pixelpipe_iop_t *piece,
     const float *const in,
     float *out,
     const dt_iop_roi_t *const roi_in,
@@ -334,7 +334,7 @@ template <typename _Tp> static inline const _Tp ULIM(const _Tp a, const _Tp b, c
 ////////////////////////////////////////////////////////////////
 
 
-void amaze_demosaic_RT(dt_dev_pixelpipe_iop_t *piece, const float *const in,
+void amaze_demosaic_RT(const dt_dev_pixelpipe_iop_t *piece, const float *const in,
                        float *out, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out,
                        const int filters)
 {
@@ -344,8 +344,8 @@ void amaze_demosaic_RT(dt_dev_pixelpipe_iop_t *piece, const float *const in,
   int winh = roi_in->height;
 
   const int width = winw, height = winh;
-  const float clip_pt = fminf(piece->pipe->dsc.processed_maximum[0],
-                              fminf(piece->pipe->dsc.processed_maximum[1], piece->pipe->dsc.processed_maximum[2]));
+  const float clip_pt = fminf(piece->dsc_in.processed_maximum[0],
+                              fminf(piece->dsc_in.processed_maximum[1], piece->dsc_in.processed_maximum[2]));
   const float clip_pt8 = 0.8f * clip_pt;
 
 // this allows to pass AMAZETS to the code. On some machines larger AMAZETS is faster
@@ -2410,4 +2410,3 @@ void amaze_demosaic_RT(dt_dev_pixelpipe_iop_t *piece, const float *const in,
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

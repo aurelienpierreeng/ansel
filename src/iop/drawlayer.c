@@ -977,7 +977,7 @@ static gboolean _drawlayer_acquire_source_image(const int devid, const float *la
 
   source->mem = dt_dev_pixelpipe_cache_get_pinned_image(
       darktable.pixelpipe_cache, (void *)layer_pixels, resolved_entry, devid, source_w, source_h,
-      4 * sizeof(float), CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR, NULL, NULL);
+      4 * sizeof(float), CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR, NULL);
   if(source->mem)
   {
     source->is_pinned = TRUE;
@@ -987,7 +987,7 @@ static gboolean _drawlayer_acquire_source_image(const int devid, const float *la
   if(realtime_reuse && resolved_entry)
   {
     source->mem = dt_pixel_cache_clmem_get(resolved_entry, NULL, devid, source_w, source_h, 4 * (int)sizeof(float),
-                                           CL_MEM_READ_WRITE, NULL);
+                                           CL_MEM_READ_WRITE);
     if(source->mem)
     {
       if(_drawlayer_sync_host_image_to_device(devid, source->mem, (void *)layer_pixels, source_w, source_h,
@@ -1064,7 +1064,7 @@ static gboolean _drawlayer_acquire_layer_image(const int devid, dt_pixel_cache_e
   if(realtime_reuse && resolved_entry)
   {
     layer->mem = dt_pixel_cache_clmem_get(resolved_entry, NULL, devid, target_roi->width, target_roi->height,
-                                          4 * (int)sizeof(float), CL_MEM_READ_WRITE, NULL);
+                                          4 * (int)sizeof(float), CL_MEM_READ_WRITE);
     layer->is_cached_device = (layer->mem != NULL);
   }
 
@@ -1167,7 +1167,7 @@ static int _blend_layer_over_input_cl(const int devid, const int kernel_premult_
     }
     dev_background = dt_dev_pixelpipe_cache_get_pinned_image(
         darktable.pixelpipe_cache, background, NULL, devid, target_roi->width, target_roi->height,
-        4 * sizeof(float), CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR, NULL, NULL);
+        4 * sizeof(float), CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR, NULL);
     if(!dev_background) goto cleanup;
   }
   else
@@ -1197,22 +1197,22 @@ static int _blend_layer_over_input_cl(const int devid, const int kernel_premult_
 
 cleanup:
   if(use_preview_bg)
-    dt_dev_pixelpipe_cache_put_pinned_image(darktable.pixelpipe_cache, scratch->cl_background_rgba, NULL, -1,
+    dt_dev_pixelpipe_cache_put_pinned_image(darktable.pixelpipe_cache, scratch->cl_background_rgba, NULL,
                                             (void **)&dev_background);
   if(layer.mem && layer.mem != source.mem)
   {
     if(layer.is_cached_device && resolved_entry)
       dt_pixel_cache_clmem_put(resolved_entry, NULL, devid, target_roi->width, target_roi->height,
-                               4 * (int)sizeof(float), CL_MEM_READ_WRITE, IOP_CS_RGB, layer.mem);
+                               4 * (int)sizeof(float), CL_MEM_READ_WRITE, layer.mem);
     else
       dt_opencl_release_mem_object(layer.mem);
   }
   if(!source_mem_override && source.is_pinned)
-    dt_dev_pixelpipe_cache_put_pinned_image(darktable.pixelpipe_cache, (void *)layer_pixels, resolved_entry, -1,
+    dt_dev_pixelpipe_cache_put_pinned_image(darktable.pixelpipe_cache, (void *)layer_pixels, resolved_entry,
                                             (void **)&source.mem);
   else if(!source_mem_override && source.is_cached_device && resolved_entry)
     dt_pixel_cache_clmem_put(resolved_entry, NULL, devid, source_w, source_h, 4 * (int)sizeof(float),
-                             CL_MEM_READ_WRITE, IOP_CS_RGB, source.mem);
+                             CL_MEM_READ_WRITE, source.mem);
   else if(!source_mem_override && source.mem)
     dt_opencl_release_mem_object(source.mem);
   if(resolved_entry_ref)
@@ -3375,7 +3375,7 @@ int flags()
 }
 
 /** @brief Return default colorspace expected by drawlayer process paths. */
-int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
+int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece)
 {
   return IOP_CS_RGB;
 }
@@ -4543,7 +4543,7 @@ int scrolled(dt_iop_module_t *self, double x, double y, int up, uint32_t state)
 
 #ifdef HAVE_OPENCL
 /** @brief OpenCL processing path for layer-over-input compositing. */
-int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
+int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
                const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   const gint64 process_t0 = g_get_monotonic_time();
@@ -4714,7 +4714,7 @@ process_cl_fallback:
 #endif
 
 /** @brief CPU processing path for layer-over-input compositing. */
-int process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid,
+int process(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid,
             const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   dt_iop_drawlayer_gui_data_t *gui = (dt_iop_drawlayer_gui_data_t *)self->gui_data;

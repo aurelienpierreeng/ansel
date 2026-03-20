@@ -215,7 +215,7 @@ static void _blendif_combine_channels(const float *const restrict pixels, float 
   }
 }
 
-void dt_develop_blendif_rgb_jzczhz_make_mask(struct dt_dev_pixelpipe_iop_t *piece,
+void dt_develop_blendif_rgb_jzczhz_make_mask(const struct dt_dev_pixelpipe_iop_t *piece,
                                              const float *const restrict a,
                                              const float *const restrict b,
                                              const struct dt_iop_roi_t *const roi_in,
@@ -224,7 +224,7 @@ void dt_develop_blendif_rgb_jzczhz_make_mask(struct dt_dev_pixelpipe_iop_t *piec
 {
   const dt_develop_blend_params_t *const d = (const dt_develop_blend_params_t *const)piece->blendop_data;
 
-  if(piece->colors != DT_BLENDIF_RGB_CH) return;
+  if(piece->dsc_in.channels != DT_BLENDIF_RGB_CH) return;
 
   const int xoffs = roi_out->x - roi_in->x;
   const int yoffs = roi_out->y - roi_in->y;
@@ -970,14 +970,14 @@ static inline void _copy_mask(const float *const restrict a, float *const restri
   for(size_t x = DT_BLENDIF_RGB_BCH; x < stride; x += DT_BLENDIF_RGB_CH) b[x] = a[x];
 }
 
-void dt_develop_blendif_rgb_jzczhz_blend(struct dt_dev_pixelpipe_iop_t *piece, const float *const restrict a,
+void dt_develop_blendif_rgb_jzczhz_blend(const struct dt_dev_pixelpipe_iop_t *piece, const float *const restrict a,
                                          float *const restrict b, const struct dt_iop_roi_t *const roi_in,
                                          const struct dt_iop_roi_t *const roi_out, const float *const restrict mask,
                                          const dt_dev_pixelpipe_display_mask_t request_mask_display)
 {
   const dt_develop_blend_params_t *const d = (const dt_develop_blend_params_t *const)piece->blendop_data;
 
-  if(piece->colors != DT_BLENDIF_RGB_CH) return;
+  if(piece->dsc_in.channels != DT_BLENDIF_RGB_CH) return;
 
   const int xoffs = roi_out->x - roi_in->x;
   const int yoffs = roi_out->y - roi_in->y;
@@ -1074,4 +1074,3 @@ void dt_develop_blendif_rgb_jzczhz_blend(struct dt_dev_pixelpipe_iop_t *piece, c
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

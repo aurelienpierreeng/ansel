@@ -50,6 +50,7 @@
 #include "develop/pixelpipe.h"
 #include "develop/develop.h"
 
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1287,6 +1288,10 @@ int dt_ioppr_transform_image_colorspace_cl(struct dt_iop_module_t *self, const i
 {
   cl_int err = CL_SUCCESS;
 
+  assert(dev_img_in != NULL);
+  assert(dev_img_out != NULL);
+  assert(dev_img_in != dev_img_out);
+
   if(cst_from == cst_to)
   {
     *converted_cst = cst_to;
@@ -1305,10 +1310,8 @@ int dt_ioppr_transform_image_colorspace_cl(struct dt_iop_module_t *self, const i
 
   const size_t ch = 4;
   float *src_buffer = NULL;
-  int in_place = (dev_img_in == dev_img_out);
 
   int kernel_transform = 0;
-  cl_mem dev_tmp = NULL;
   cl_mem dev_profile_info = NULL;
   cl_mem dev_lut = NULL;
   dt_colorspaces_iccprofile_info_cl_t profile_info_cl;
@@ -1321,9 +1324,6 @@ int dt_ioppr_transform_image_colorspace_cl(struct dt_iop_module_t *self, const i
   {
     dt_times_t start_time = { 0 }, end_time = { 0 };
     if(darktable.unmuted & DT_DEBUG_PERF) dt_get_times(&start_time);
-
-    size_t origin[] = { 0, 0, 0 };
-    size_t region[] = { width, height, 1 };
 
     if(cst_from == IOP_CS_RGB && cst_to == IOP_CS_LAB)
     {
@@ -1344,29 +1344,6 @@ int dt_ioppr_transform_image_colorspace_cl(struct dt_iop_module_t *self, const i
     dt_ioppr_get_profile_info_cl(profile_info, &profile_info_cl);
     lut_cl = dt_ioppr_get_trc_cl(profile_info);
 
-    if(in_place)
-    {
-      dev_tmp = dt_opencl_alloc_device(devid, width, height, sizeof(float) * 4);
-      if(dev_tmp == NULL)
-      {
-        fprintf(stderr,
-                "[dt_ioppr_transform_image_colorspace_cl] error allocating memory for color transformation 4\n");
-        err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
-        goto cleanup;
-      }
-
-      err = dt_opencl_enqueue_copy_image(devid, dev_img_in, dev_tmp, origin, origin, region);
-      if(err != CL_SUCCESS)
-      {
-        fprintf(stderr, "[dt_ioppr_transform_image_colorspace_cl] error on copy image for color transformation\n");
-        goto cleanup;
-      }
-    }
-    else
-    {
-      dev_tmp = dev_img_in;
-    }
-
     dev_profile_info = dt_opencl_copy_host_to_device_constant(devid, sizeof(profile_info_cl), &profile_info_cl);
     if(dev_profile_info == NULL)
     {
@@ -1384,7 +1361,7 @@ int dt_ioppr_transform_image_colorspace_cl(struct dt_iop_module_t *self, const i
 
     size_t sizes[] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
 
-    dt_opencl_set_kernel_arg(devid, kernel_transform, 0, sizeof(cl_mem), (void *)&dev_tmp);
+    dt_opencl_set_kernel_arg(devid, kernel_transform, 0, sizeof(cl_mem), (void *)&dev_img_in);
     dt_opencl_set_kernel_arg(devid, kernel_transform, 1, sizeof(cl_mem), (void *)&dev_img_out);
     dt_opencl_set_kernel_arg(devid, kernel_transform, 2, sizeof(int), (void *)&width);
     dt_opencl_set_kernel_arg(devid, kernel_transform, 3, sizeof(int), (void *)&height);
@@ -1439,7 +1416,6 @@ int dt_ioppr_transform_image_colorspace_cl(struct dt_iop_module_t *self, const i
 
 cleanup:
   dt_pixelpipe_cache_free_align(src_buffer);
-  if(dev_tmp && in_place) dt_opencl_release_mem_object(dev_tmp);
   dt_opencl_release_mem_object(dev_profile_info);
   dt_opencl_release_mem_object(dev_lut);
   dt_free(lut_cl);

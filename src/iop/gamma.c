@@ -111,9 +111,17 @@ int flags()
   return IOP_FLAGS_HIDDEN | IOP_FLAGS_ONE_INSTANCE | IOP_FLAGS_FENCE | IOP_FLAGS_UNSAFE_COPY | IOP_FLAGS_NO_HISTORY_STACK;
 }
 
-int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
+int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece)
 {
   return IOP_CS_RGB;
+}
+
+void input_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
+                  dt_iop_buffer_dsc_t *dsc)
+{
+  default_input_format(self, pipe, piece, dsc);
+  dsc->channels = 4;
+  dsc->datatype = TYPE_FLOAT;
 }
 
 void output_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
@@ -121,7 +129,7 @@ void output_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixel
 {
   dsc->channels = 4;
   dsc->datatype = TYPE_UINT8;
-  dsc->cst = self->output_colorspace(self, pipe, piece);
+  dsc->cst = self->default_colorspace(self, pipe, piece);
 }
 
 
@@ -375,19 +383,9 @@ static void _copy_output(const float *const restrict in, uint8_t *const restrict
 }
 
 
-int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o,
+int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o,
              const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
-  if (!dt_iop_have_required_input_format(4 /*we need full-color pixels*/, self, piece->colors,
-                                         i, o, roi_in, roi_out))
-    return 0; // image has been copied through to output and module's trouble flag has been updated
-
-  // this module also expects the same size of input image as the output image
-  // This test is overkill since the only thing that could change roi_in/roi_out
-  // is a modify_roi_in/modify_roi_out that this module doesn't implement.
-  if(roi_in->width != roi_out->width || roi_in->height != roi_out->height)
-    return 0;
-
   const dt_dev_pixelpipe_display_mask_t mask_display = piece->pipe->mask_display;
   const gboolean fcolor = dt_conf_is_equal("channel_display", "false color");
 
@@ -452,28 +450,15 @@ static int _false_color_channel_to_kernel_code(const dt_dev_pixelpipe_display_ma
   }
 }
 
-int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
+int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
                const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   dt_iop_gamma_global_data_t *gd = (dt_iop_gamma_global_data_t *)self->global_data;
   const int devid = piece->pipe->devid;
   cl_int err = CL_SUCCESS;
 
-  if(piece->colors != 4) return FALSE;
-
-  // this module expects the same size of input image as the output image.
-  if(roi_in->width != roi_out->width || roi_in->height != roi_out->height) return FALSE;
-
   const int width = roi_out->width;
   const int height = roi_out->height;
-  const int in_bpp = dt_opencl_get_image_element_size(dev_in);
-  const int out_bpp = dt_opencl_get_image_element_size(dev_out);
-  if(in_bpp != (int)(4 * sizeof(float)) || out_bpp != (int)(4 * sizeof(uint8_t)))
-  {
-    dt_print(DT_DEBUG_OPENCL, "[opencl_gamma] unsupported image format in_bpp=%d out_bpp=%d\n",
-             in_bpp, out_bpp);
-    return FALSE;
-  }
 
   size_t sizes[] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
 

@@ -234,7 +234,7 @@ static int default_distort_backtransform(dt_iop_module_t *self, dt_dev_pixelpipe
   return 1;
 }
 
-static int default_process(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece,
+static int default_process(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
                            const void *const i, void *const o, const struct dt_iop_roi_t *const roi_in,
                            const struct dt_iop_roi_t *const roi_out)
 {
@@ -2822,30 +2822,6 @@ const char **dt_iop_set_description(dt_iop_module_t *module, const char *main_te
   str_out[4] = output;
 
   return (const char **)str_out;
-}
-
-gboolean dt_iop_have_required_input_format(const int req_ch, struct dt_iop_module_t *const module, const int ch,
-                                           const void *const restrict ivoid, void *const restrict ovoid,
-                                           const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
-{
-  if(ch == req_ch)
-  {
-    return TRUE;
-  }
-  else
-  {
-    // copy the input buffer to the output
-    dt_iop_copy_image_roi(ovoid, ivoid, ch, roi_in, roi_out, TRUE);
-    // and set the module's trouble message
-    if (module)
-      fprintf(stdout, "you have placed the module %s at a position in the pipeline where"
-                      "the data format does not match its requirements.", module->name());
-    else
-    {
-      //TODO: pop up a toast message?
-    }
-    return FALSE;
-  }
 }
 
 void dt_iop_gui_changed(dt_iop_module_t *action, GtkWidget *widget, gpointer data)

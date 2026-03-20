@@ -134,7 +134,7 @@ int default_group()
   return IOP_GROUP_TECHNICAL;
 }
 
-int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
+int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece)
 {
   if(piece && piece->dsc_in.cst != IOP_CS_RAW)
     return IOP_CS_RGB;
@@ -196,10 +196,39 @@ void init_presets(dt_iop_module_so_t *self)
   dt_database_release_transaction(darktable.db);
 }
 
-static int compute_proper_crop(dt_dev_pixelpipe_iop_t *piece, const dt_iop_roi_t *const roi_in, int value)
+static int compute_proper_crop(const dt_dev_pixelpipe_iop_t *piece, const dt_iop_roi_t *const roi_in, int value)
 {
   const double scale = roi_in->scale;
   return (int)roundf((double)value * scale);
+}
+
+static void _update_output_cfa_descriptor(const dt_dev_pixelpipe_iop_t *piece,
+                                          const dt_iop_roi_t *const roi_in,
+                                          dt_iop_buffer_dsc_t *dsc)
+{
+  if(!piece || !roi_in || !dsc) return;
+
+  dsc->filters = piece->dsc_in.filters;
+  memcpy(dsc->xtrans, piece->dsc_in.xtrans, sizeof(dsc->xtrans));
+
+  if(!piece->dsc_in.filters) return;
+
+  const dt_iop_rawprepare_data_t *d = (dt_iop_rawprepare_data_t *)piece->data;
+  const uint32_t crop_x = compute_proper_crop(piece, roi_in, d->x);
+  const uint32_t crop_y = compute_proper_crop(piece, roi_in, d->y);
+
+  dsc->filters = dt_rawspeed_crop_dcraw_filters(piece->dsc_in.filters, crop_x, crop_y);
+
+  if(piece->dsc_in.filters == 9u)
+  {
+    for(int i = 0; i < 6; ++i)
+    {
+      for(int j = 0; j < 6; ++j)
+      {
+        dsc->xtrans[j][i] = piece->dsc_in.xtrans[(j + crop_y) % 6][(i + crop_x) % 6];
+      }
+    }
+  }
 }
 
 int distort_transform(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, float *const restrict points, size_t points_count)
@@ -276,6 +305,11 @@ void modify_roi_out(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, dt_iop
   const double scale = roi_in->scale;
   roi_out->width = (int)round((double)roi_out->width - x * scale);
   roi_out->height = (int)round((double)roi_out->height - y * scale);
+
+  /* Rawprepare changes the CFA phase according to the effective crop on the current ROI scale.
+   * That contract cannot be authored at history resync time because `piece->roi_in` is not known yet.
+   * Bind the crop-dependent descriptor fields here, when ROI planning has provided the real input ROI. */
+  _update_output_cfa_descriptor(piece, roi_in, &piece->dsc_out);
 }
 
 // see ../../doc/resizing-scaling.md for details
@@ -290,29 +324,18 @@ void modify_roi_in(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const d
   const double scale = roi_in->scale;
   roi_in->width = (int)round((double)roi_in->width + x * scale);
   roi_in->height = (int)round((double)roi_in->height + y * scale);
+
+  /* Same reasoning as in modify_roi_out(): the CFA/X-Trans descriptor depends on the input ROI scale,
+   * so finalize it here once the upstream ROI has been computed. */
+  _update_output_cfa_descriptor(piece, roi_in, &piece->dsc_out);
 }
 
 void output_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
                    dt_iop_buffer_dsc_t *dsc)
 {
   default_output_format(self, pipe, piece, dsc);
-
-  dt_iop_rawprepare_data_t *d = (dt_iop_rawprepare_data_t *)piece->data;
-
-  dsc->rawprepare.raw_black_level = d->rawprepare.raw_black_level;
-  dsc->rawprepare.raw_white_point = d->rawprepare.raw_white_point;
-}
-
-static void adjust_xtrans_filters(dt_dev_pixelpipe_t *pipe,
-                                  uint32_t crop_x, uint32_t crop_y)
-{
-  for(int i = 0; i < 6; ++i)
-  {
-    for(int j = 0; j < 6; ++j)
-    {
-      pipe->dsc.xtrans[j][i] = pipe->image.buf_dsc.xtrans[(j + crop_y) % 6][(i + crop_x) % 6];
-    }
-  }
+  dsc->filters = piece->dsc_in.filters;
+  memcpy(dsc->xtrans, piece->dsc_in.xtrans, sizeof(dsc->xtrans));
 }
 
 static int BL(const dt_iop_roi_t *const roi_out, const dt_iop_rawprepare_data_t *const d, const int row,
@@ -325,7 +348,7 @@ static int BL(const dt_iop_roi_t *const roi_out, const dt_iop_rawprepare_data_t 
    compile generated code vs SSE specific code. This depends slightly on the cpu but it's 1.2 to 3-fold
    better for all tested cases.
 */
-int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   const dt_iop_rawprepare_data_t *const d = (dt_iop_rawprepare_data_t *)piece->data;
@@ -335,7 +358,7 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
   const int csx = compute_proper_crop(piece, roi_in, d->x);
   const int csy = compute_proper_crop(piece, roi_in, d->y);
 
-  if(piece->pipe->dsc.filters && piece->dsc_in.channels == 1
+  if(piece->dsc_in.filters && piece->dsc_in.channels == 1
      && piece->dsc_in.datatype == TYPE_UINT16)
   { // raw mosaic
 
@@ -360,10 +383,8 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
       }
     }
 
-    piece->pipe->dsc.filters = dt_rawspeed_crop_dcraw_filters(self->dev->image_storage.buf_dsc.filters, csx, csy);
-    adjust_xtrans_filters(piece->pipe, csx, csy);
   }
-  else if(piece->pipe->dsc.filters && piece->dsc_in.channels == 1
+  else if(piece->dsc_in.filters && piece->dsc_in.channels == 1
           && piece->dsc_in.datatype == TYPE_FLOAT)
   { // raw mosaic, fp, unnormalized
 
@@ -388,8 +409,6 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
       }
     }
 
-    piece->pipe->dsc.filters = dt_rawspeed_crop_dcraw_filters(self->dev->image_storage.buf_dsc.filters, csx, csy);
-    adjust_xtrans_filters(piece->pipe, csx, csy);
   }
   else
   { // pre-downsampled buffer that needs black/white scaling
@@ -399,7 +418,7 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
 
     const float sub = d->sub[0], div = d->div[0];
 
-    const int ch = piece->colors;
+    const int ch = piece->dsc_in.channels;
 
 #ifdef _OPENMP
 #pragma omp parallel for SIMD() default(none) \
@@ -421,7 +440,7 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
     }
   }
 
-  if(piece->pipe->dsc.filters && piece->dsc_in.channels == 1 && d->apply_gainmaps)
+  if(piece->dsc_in.filters && piece->dsc_in.channels == 1 && d->apply_gainmaps)
   {
     const uint32_t map_w = d->gainmaps[0]->map_points_h;
     const uint32_t map_h = d->gainmaps[0]->map_points_v;
@@ -468,19 +487,18 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
 
   dt_dev_write_rawdetail_mask(piece, (float *const)ovoid, roi_in, DT_DEV_DETAIL_MASK_RAWPREPARE);
 
-  for(int k = 0; k < 4; k++) piece->pipe->dsc.processed_maximum[k] = 1.0f;
   return 0;
 }
 
 #ifdef HAVE_OPENCL
-int process_cl(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
+int process_cl(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
                const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   dt_iop_rawprepare_data_t *d = (dt_iop_rawprepare_data_t *)piece->data;
   dt_iop_rawprepare_global_data_t *gd = (dt_iop_rawprepare_global_data_t *)self->global_data;
 
   // Scanner DNGs and already-demosaiced files have no CFA; OpenCL path assumes CFA.
-  if(piece->pipe->dsc.filters == 0) return FALSE;
+  if(piece->dsc_in.filters == 0) return FALSE;
 
   const int devid = piece->pipe->devid;
   cl_mem dev_sub = NULL;
@@ -575,14 +593,6 @@ int process_cl(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_mem dev_
   dt_opencl_release_mem_object(dev_div);
   for(int i = 0; i < 4; i++) dt_opencl_release_mem_object(dev_gainmap[i]);
 
-  if(piece->pipe->dsc.filters)
-  {
-    piece->pipe->dsc.filters = dt_rawspeed_crop_dcraw_filters(self->dev->image_storage.buf_dsc.filters, csx, csy);
-    adjust_xtrans_filters(piece->pipe, csx, csy);
-  }
-
-  for(int k = 0; k < 4; k++) piece->pipe->dsc.processed_maximum[k] = 1.0f;
-
   err = dt_dev_write_rawdetail_mask_cl(piece, dev_out, roi_in, DT_DEV_DETAIL_MASK_RAWPREPARE);
   if(err != CL_SUCCESS) goto error;
 
@@ -613,7 +623,7 @@ static int image_is_normalized(const dt_image_t *const image)
   }
 
   // else, assume normalized
-  return image->buf_dsc.channels == 1 && image->buf_dsc.datatype == TYPE_FLOAT;
+  return image->dsc.channels == 1 && image->dsc.datatype == TYPE_FLOAT;
 }
 
 static gboolean image_set_rawcrops(const int32_t imgid, int dx, int dy)
@@ -697,7 +707,7 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelp
   d->width = p->width;
   d->height = p->height;
 
-  if(piece->pipe->dsc.filters)
+  if(img->dsc.filters)
   {
     const float white = (float)p->raw_white_point;
 
@@ -733,6 +743,9 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelp
   }
   d->rawprepare.raw_black_level = (uint16_t)(black / 4.0f);
   d->rawprepare.raw_white_point = p->raw_white_point;
+  piece->dsc_out.rawprepare.raw_black_level = d->rawprepare.raw_black_level;
+  piece->dsc_out.rawprepare.raw_white_point = d->rawprepare.raw_white_point;
+  for(int k = 0; k < 4; k++) piece->dsc_out.processed_maximum[k] = 1.0f;
 
   if(p->flat_field == FLAT_FIELD_EMBEDDED)
     d->apply_gainmaps = check_gain_maps(self, d->gainmaps);
@@ -742,12 +755,12 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelp
   if(image_set_rawcrops(pipe->image.id, d->x + d->width, d->y + d->height))
     DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_METADATA_UPDATE);
 
-  if(!(dt_image_is_rawprepare_supported(&piece->pipe->image))
-     || image_is_normalized(&piece->pipe->image))
+  if(!(dt_image_is_rawprepare_supported(&pipe->image))
+     || image_is_normalized(&pipe->image))
     piece->enabled = 0;
 
   // OpenCL path only for RAW, single-channel, CFA images.
-  const gboolean cl_ok = (img->buf_dsc.cst == IOP_CS_RAW && img->buf_dsc.channels == 1 && img->buf_dsc.filters);
+  const gboolean cl_ok = (img->dsc.cst == IOP_CS_RAW && img->dsc.channels == 1 && img->dsc.filters);
   if(!cl_ok) piece->process_cl_ready = FALSE;
 
   if(piece->pipe->want_detail_mask == (DT_DEV_DETAIL_MASK_REQUIRED | DT_DEV_DETAIL_MASK_RAWPREPARE))

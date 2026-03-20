@@ -191,7 +191,7 @@ int default_group()
   return IOP_GROUP_REPAIR;
 }
 
-int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
+int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece)
 {
   return IOP_CS_RGB;
 }
@@ -744,17 +744,14 @@ error:;
   return err;
 }
 
-int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid,
+int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid,
              const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
-  if (!dt_iop_have_required_input_format(4 /*we need full-color pixels*/, self, piece->colors,
-                                         ivoid, ovoid, roi_in, roi_out))
-    return 0; // ivoid has been copied to ovoid and the module's trouble flag has been set
 
   dt_iop_cacorrectrgb_params_t *d = (dt_iop_cacorrectrgb_params_t *)piece->data;
   // used to adjuste blur level depending on size. Don't amplify noise if magnified > 100%
   const float scale = fmaxf(1.f / roi_in->scale, 1.f);
-  const int ch = piece->colors;
+  const int ch = piece->dsc_in.channels;
   const size_t width = roi_out->width;
   const size_t height = roi_out->height;
   const float* in = (float*)ivoid;

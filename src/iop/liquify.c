@@ -342,9 +342,17 @@ int operation_tags()
    return IOP_TAG_DISTORT;
 }
 
-int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
+int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece)
 {
   return IOP_CS_RGB;
+}
+
+void input_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
+                  dt_iop_buffer_dsc_t *dsc)
+{
+  default_input_format(self, pipe, piece, dsc);
+  dsc->channels = 4;
+  dsc->datatype = TYPE_FLOAT;
 }
 
 /******************************************************************************/
@@ -1067,15 +1075,15 @@ static void add_to_global_distortion_map(float complex *global_map,
 */
 
 static void apply_global_distortion_map(struct dt_iop_module_t *module,
-                                         dt_dev_pixelpipe_iop_t *piece,
+                                         const dt_dev_pixelpipe_iop_t *piece,
                                          const float *const restrict in,
                                          float *const restrict out,
                                          const dt_iop_roi_t *const roi_in,
                                          const dt_iop_roi_t *const roi_out,
+                                         const int ch,
                                          const float complex *const map,
                                          const cairo_rectangle_int_t *extent)
 {
-  const int ch = piece->colors;
   const int ch_width = ch * roi_in->width;
   const struct dt_interpolation * const interpolation =
     dt_interpolation_new(DT_INTERPOLATION_USERPREF_WARP);
@@ -1493,25 +1501,18 @@ void distort_mask(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *p
   // 3. apply the map
 
   if(map_extent.width != 0 && map_extent.height != 0)
-  {
-    int ch = piece->colors;
-    piece->colors = 1;
-    apply_global_distortion_map(self, piece, in, out, roi_in, roi_out, map, &map_extent);
-    piece->colors = ch;
-  }
+    apply_global_distortion_map(self, piece, in, out, roi_in, roi_out, 1, map, &map_extent);
 
   dt_pixelpipe_cache_free_align(map);
 
 }
 
-int process(struct dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece, const void *const in,
+int process(struct dt_iop_module_t *module, const dt_dev_pixelpipe_iop_t *piece, const void *const in,
              void *const out, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   // 1. copy the whole image (we'll change only a small part of it)
 
-  const int ch = piece->colors;
-  assert(ch == 4);
-
+  const int ch = 4;
   const int height = MIN(roi_in->height, roi_out->height);
   const int width = MIN(roi_in->width, roi_out->width);
 
@@ -1542,7 +1543,7 @@ int process(struct dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece, const
   // 3. apply the map
 
   if(map_extent.width != 0 && map_extent.height != 0)
-    apply_global_distortion_map(module, piece, in, out, roi_in, roi_out, map, &map_extent);
+    apply_global_distortion_map(module, piece, in, out, roi_in, roi_out, 1, map, &map_extent);
 
   dt_pixelpipe_cache_free_align(map);
 
@@ -1581,7 +1582,7 @@ typedef cl_mem cl_mem_t;
 typedef cl_int cl_int_t;
 
 static cl_int_t apply_global_distortion_map_cl(struct dt_iop_module_t *module,
-                                                dt_dev_pixelpipe_iop_t *piece,
+                                                const dt_dev_pixelpipe_iop_t *piece,
                                                 const cl_mem_t dev_in,
                                                 const cl_mem_t dev_out,
                                                 const dt_iop_roi_t *roi_in,
@@ -1684,7 +1685,7 @@ error:
 }
 
 int process_cl(struct dt_iop_module_t *module,
-                dt_dev_pixelpipe_iop_t *piece,
+                const dt_dev_pixelpipe_iop_t *piece,
                 const cl_mem_t dev_in,
                 const cl_mem_t dev_out,
                 const dt_iop_roi_t *roi_in,

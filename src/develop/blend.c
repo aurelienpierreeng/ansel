@@ -249,7 +249,7 @@ void dt_develop_blendif_process_parameters(float *const restrict parameters,
 }
 
 // See function definition in blend.h for important information
-int dt_develop_blendif_init_masking_profile(struct dt_dev_pixelpipe_iop_t *piece,
+int dt_develop_blendif_init_masking_profile(const struct dt_dev_pixelpipe_iop_t *piece,
                                             dt_iop_order_iccprofile_info_t *blending_profile,
                                             dt_develop_blend_colorspace_t cst)
 {
@@ -287,7 +287,7 @@ static inline float _detail_mask_threshold(const float level, const gboolean det
   return 0.005f * (detail ? powf(level, 2.0f) : 1.0f - powf(fabs(level), 0.5f ));
 }
 
-static void _refine_with_detail_mask(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece, float *mask, const struct dt_iop_roi_t *const roi_in, const struct dt_iop_roi_t *const roi_out, const float level)
+static void _refine_with_detail_mask(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece, float *mask, const struct dt_iop_roi_t *const roi_in, const struct dt_iop_roi_t *const roi_out, const float level)
 {
   if(level == 0.0f) return;
   const gboolean info = ((darktable.unmuted & DT_DEBUG_MASKS) && (piece->pipe->type == DT_DEV_PIXELPIPE_FULL));
@@ -350,7 +350,7 @@ static size_t _develop_mask_get_post_operations(const dt_develop_blend_params_t 
                                                 const dt_dev_pixelpipe_iop_t *const piece,
                                                 _develop_mask_post_processing operations[3])
 {
-  const gboolean mask_feather = params->feathering_radius > 0.1f && piece->colors >= 3;
+  const gboolean mask_feather = params->feathering_radius > 0.1f && piece->dsc_in.channels >= 3;
   const gboolean mask_blur = params->blur_radius > 0.1f;
   const gboolean mask_tone_curve = fabsf(params->contrast) >= 0.01f || fabsf(params->brightness) >= 0.01f;
   const gboolean mask_feather_before = params->feathering_guide == DEVELOP_MASK_GUIDE_IN_BEFORE_BLUR
@@ -446,7 +446,7 @@ static const dt_iop_module_t *_develop_blend_get_raster_source_module(const dt_d
 
 static void _develop_blend_init_raster_mask(const dt_develop_blend_params_t *const params,
                                             dt_iop_module_t *self,
-                                            dt_dev_pixelpipe_iop_t *piece,
+                                            const dt_dev_pixelpipe_iop_t *piece,
                                             float *const restrict mask,
                                             const size_t owidth,
                                             const size_t oheight,
@@ -489,7 +489,7 @@ static void _develop_blend_init_raster_mask(const dt_develop_blend_params_t *con
 
 static int _develop_blend_init_drawn_mask(const dt_develop_blend_params_t *const params,
                                           dt_iop_module_t *self,
-                                          dt_dev_pixelpipe_iop_t *piece,
+                                          const dt_dev_pixelpipe_iop_t *piece,
                                           const struct dt_iop_roi_t *const roi_out,
                                           float *const restrict mask,
                                           const size_t owidth,
@@ -588,7 +588,7 @@ static void _develop_blend_process_mask_tone_curve(float *const restrict mask, c
 }
 
 
-int dt_develop_blend_process(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece,
+int dt_develop_blend_process(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
                               const void *const ivoid, void *const ovoid, const struct dt_iop_roi_t *const roi_in,
                               const struct dt_iop_roi_t *const roi_out)
 {
@@ -602,7 +602,7 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, struct dt_dev_pixelpi
   if(!(mask_mode & DEVELOP_MASK_ENABLED)) return 0;
   const unsigned int preview_mask_mode = mask_mode & (DEVELOP_MASK_MASK_CONDITIONAL | DEVELOP_MASK_RASTER);
 
-  const size_t ch = piece->colors;           // the number of channels in the buffer
+  const size_t ch = piece->dsc_in.channels;           // the number of channels in the buffer
   const int xoffs = roi_out->x - roi_in->x;
   const int yoffs = roi_out->y - roi_in->y;
   const int iwidth = roi_in->width;
@@ -842,7 +842,7 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, struct dt_dev_pixelpi
 }
 
 #ifdef HAVE_OPENCL
-static void _refine_with_detail_mask_cl(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece, float *mask, const struct dt_iop_roi_t *roi_in,
+static void _refine_with_detail_mask_cl(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece, float *mask, const struct dt_iop_roi_t *roi_in,
                                 const struct dt_iop_roi_t *roi_out, const float level, const int devid)
 {
   if(level == 0.0f) return;
@@ -982,7 +982,7 @@ static inline void _blend_process_cl_exchange(cl_mem *a, cl_mem *b)
   *b = tmp;
 }
 
-int dt_develop_blend_process_cl(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece,
+int dt_develop_blend_process_cl(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
                                 cl_mem dev_in, cl_mem dev_out, const struct dt_iop_roi_t *roi_in,
                                 const struct dt_iop_roi_t *roi_out)
 {
@@ -996,7 +996,7 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, struct dt_dev_pixe
   if(!(mask_mode & DEVELOP_MASK_ENABLED)) return 0;
   const unsigned int preview_mask_mode = mask_mode & (DEVELOP_MASK_MASK_CONDITIONAL | DEVELOP_MASK_RASTER);
 
-  const int ch = piece->colors; // the number of channels in the buffer
+  const int ch = piece->dsc_in.channels; // the number of channels in the buffer
   const int xoffs = roi_out->x - roi_in->x;
   const int yoffs = roi_out->y - roi_in->y;
   const int iwidth = roi_in->width;
@@ -1319,7 +1319,7 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, struct dt_dev_pixe
     // load the boost factors in the device memory
     dev_boost_factors = dt_opencl_copy_host_to_device_constant(devid, sizeof(d->blendif_boost_factors),
                                                                d->blendif_boost_factors);
-    if(dev_blendif_params == NULL) goto error;
+    if(dev_boost_factors == NULL) goto error;
 
     // the display channel of Lab blending is generated in RGB and should be transformed to Lab
     // the transformation in the pipeline is currently always using the work profile
@@ -1498,7 +1498,7 @@ int dt_develop_blend_version(void)
 }
 
 /** report back specific memory requirements for blend step (only relevant for OpenCL path) */
-void tiling_callback_blendop(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece,
+void tiling_callback_blendop(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
                              const dt_iop_roi_t *roi_in, const dt_iop_roi_t *roi_out,
                              struct dt_develop_tiling_t *tiling)
 {

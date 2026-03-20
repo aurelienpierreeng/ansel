@@ -303,15 +303,15 @@ dt_imageio_retval_t dt_imageio_open_libraw(dt_image_t *img, const char *filename
   // This incurs a significant performance penalty.
   libraw_err = libraw_dcraw_process(raw);
   if(libraw_err != LIBRAW_SUCCESS) goto error;
-  img->buf_dsc.filters = raw->idata.filters;
+  img->dsc.filters = raw->idata.filters;
 
   // For CR3, we only have Bayer data and a single channel
-  img->buf_dsc.channels = 1;
-  img->buf_dsc.datatype = TYPE_UINT16;
-  img->buf_dsc.bpp = sizeof(uint16_t);
-  img->buf_dsc.cst = IOP_CS_RAW;
+  img->dsc.channels = 1;
+  img->dsc.datatype = TYPE_UINT16;
+  img->dsc.bpp = sizeof(uint16_t);
+  img->dsc.cst = IOP_CS_RAW;
 
-  if(FILTERS_ARE_4BAYER(img->buf_dsc.filters))
+  if(FILTERS_ARE_4BAYER(img->dsc.filters))
   {
     img->flags |= DT_IMAGE_4BAYER;
   }
@@ -320,7 +320,7 @@ dt_imageio_retval_t dt_imageio_open_libraw(dt_image_t *img, const char *filename
     img->flags &= ~DT_IMAGE_4BAYER;
   }
 
-  if(img->buf_dsc.filters)
+  if(img->dsc.filters)
   {
     img->flags &= ~DT_IMAGE_LDR;
     img->flags &= ~DT_IMAGE_HDR;

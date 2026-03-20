@@ -182,7 +182,7 @@ int default_group()
   return IOP_GROUP_COLOR;
 }
 
-int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
+int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece)
 {
   return IOP_CS_RGB;
 }
@@ -240,7 +240,7 @@ static void process_hsl_v1(dt_dev_pixelpipe_iop_t *piece, const float *const res
   const dt_iop_channelmixer_data_t *data = (dt_iop_channelmixer_data_t *)piece->data;
   const float *const restrict hsl_matrix = data->hsl_matrix;
   const float *const restrict rgb_matrix = data->rgb_matrix;
-  const int ch = piece->colors;
+  const int ch = piece->dsc_in.channels;
   const size_t pixel_count = (size_t)ch * roi_out->width * roi_out->height;
 
 #ifdef _OPENMP
@@ -289,7 +289,7 @@ static void process_hsl_v2(dt_dev_pixelpipe_iop_t *piece, const float *const res
   const dt_iop_channelmixer_data_t *data = (dt_iop_channelmixer_data_t *)piece->data;
   const float *const restrict hsl_matrix = data->hsl_matrix;
   const float *const restrict rgb_matrix = data->rgb_matrix;
-  const int ch = piece->colors;
+  const int ch = piece->dsc_in.channels;
   const size_t pixel_count = (size_t)ch * roi_out->width * roi_out->height;
 
 #ifdef _OPENMP
@@ -342,7 +342,7 @@ static void process_rgb(dt_dev_pixelpipe_iop_t *piece, const float *const restri
 {
   const dt_iop_channelmixer_data_t *data = (dt_iop_channelmixer_data_t *)piece->data;
   const float *const restrict rgb_matrix = data->rgb_matrix;
-  const int ch = piece->colors;
+  const int ch = piece->dsc_in.channels;
   const size_t pixel_count = (size_t)ch * roi_out->width * roi_out->height;
 
 #ifdef _OPENMP
@@ -366,7 +366,7 @@ static void process_gray(dt_dev_pixelpipe_iop_t *piece, const float *const restr
 {
   const dt_iop_channelmixer_data_t *data = (dt_iop_channelmixer_data_t *)piece->data;
   const float *const restrict rgb_matrix = data->rgb_matrix;
-  const int ch = piece->colors;
+  const int ch = piece->dsc_in.channels;
   const size_t pixel_count = (size_t)ch * roi_out->width * roi_out->height;
 
 #ifdef _OPENMP
@@ -385,7 +385,7 @@ static void process_gray(dt_dev_pixelpipe_iop_t *piece, const float *const restr
   }
 }
 
-int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   const dt_iop_channelmixer_data_t *data = (dt_iop_channelmixer_data_t *)piece->data;

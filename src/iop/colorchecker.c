@@ -166,9 +166,17 @@ int flags()
   return IOP_FLAGS_SUPPORTS_BLENDING | IOP_FLAGS_ALLOW_TILING;
 }
 
-int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
+int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece)
 {
   return IOP_CS_LAB;
+}
+
+void input_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
+                  dt_iop_buffer_dsc_t *dsc)
+{
+  default_input_format(self, pipe, piece, dsc);
+  dsc->channels = 4;
+  dsc->datatype = TYPE_FLOAT;
 }
 
 int legacy_params(
@@ -471,11 +479,11 @@ static inline float kernel(const float *x, const float *y)
   return r2*fastlog(MAX(1e-8f,r2));
 }
 
-int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   const dt_iop_colorchecker_data_t *const data = (dt_iop_colorchecker_data_t *)piece->data;
-  const int ch = piece->colors;
+  const int ch = 4;
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(ch, data, ivoid, ovoid, roi_in, roi_out) \
@@ -517,60 +525,9 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
   return 0;
 }
 
-#if 0 // TODO:
-int process_sse2(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
-             void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
-{
-  const dt_iop_colorchecker_data_t *const data = (dt_iop_colorchecker_data_t *)piece->data;
-  const int ch = piece->colors;
-  // TODO: swizzle this so we can eval the distance of one point
-  // TODO: to four patches at the same time
-  v4sf source_Lab[data->num_patches];
-  for(int i=0;i<data->num_patches;i++)
-    source_Lab[i] = _mm_set_ps(1.0,
-        data->source_Lab[3*i+0],
-        data->source_Lab[3*i+1],
-        data->source_Lab[3*i+2]);
-#ifdef _OPENMP
-#pragma omp parallel for default(none) schedule(static) collapse(2)
-#endif
-  for(int j=0;j<roi_out->height;j++)
-  {
-    for(int i=0;i<roi_out->width;i++)
-    {
-      const float *in = ((float *)ivoid) + (size_t)ch * (j * roi_in->width + i);
-      float *out = ((float *)ovoid) + (size_t)ch * (j * roi_in->width + i);
-      // TODO: do this part in SSE (maybe need to store coeff_L in _mm128 on data struct)
-      out[0] = data->coeff_L[data->num_patches];
-      out[1] = data->coeff_a[data->num_patches];
-      out[2] = data->coeff_b[data->num_patches];
-      // polynomial part:
-      out[0] += data->coeff_L[data->num_patches+1] * in[0] +
-                data->coeff_L[data->num_patches+2] * in[1] +
-                data->coeff_L[data->num_patches+3] * in[2];
-      out[1] += data->coeff_a[data->num_patches+1] * in[0] +
-                data->coeff_a[data->num_patches+2] * in[1] +
-                data->coeff_a[data->num_patches+3] * in[2];
-      out[2] += data->coeff_b[data->num_patches+1] * in[0] +
-                data->coeff_b[data->num_patches+2] * in[1] +
-                data->coeff_b[data->num_patches+3] * in[2];
-      for(int k=0;k<data->num_patches;k+=4)
-      { // rbf from thin plate spline
-        const v4sf phi = kerneldist4(in, source_Lab[k]);
-        // TODO: add up 4x output channels
-        out[0] += data->coeff_L[k] * phi[0];
-        out[1] += data->coeff_a[k] * phi[0];
-        out[2] += data->coeff_b[k] * phi[0];
-      }
-    }
-  }
-  if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK) dt_iop_alpha_copy(ivoid, ovoid, roi_out->width, roi_out->height);
-  return 0;
-}
-#endif
 
 #ifdef HAVE_OPENCL
-int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
+int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
                const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   dt_iop_colorchecker_data_t *d = (dt_iop_colorchecker_data_t *)piece->data;

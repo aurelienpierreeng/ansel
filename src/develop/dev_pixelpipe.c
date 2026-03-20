@@ -262,6 +262,165 @@ uint64_t dt_dev_pixelpipe_node_hash(dt_dev_pixelpipe_t *pipe, const dt_dev_pixel
   }
 }
 
+static gboolean _prepare_piece_input_contract(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
+                                              dt_iop_buffer_dsc_t *upstream_dsc)
+{
+  piece->dsc_in = *upstream_dsc;
+  piece->module->input_format(piece->module, pipe, piece, &piece->dsc_in);
+  dt_iop_buffer_dsc_update_bpp(&piece->dsc_in);
+  piece->dsc_out = piece->dsc_in;
+  dt_iop_buffer_dsc_update_bpp(&piece->dsc_out);
+
+  const gboolean input_mismatch
+      = piece->enabled
+        && (piece->dsc_in.bpp != upstream_dsc->bpp
+            || piece->dsc_in.channels != upstream_dsc->channels
+            || piece->dsc_in.filters != upstream_dsc->filters);
+  if(input_mismatch)
+  {
+    dt_control_log(_("disabled module `%s`: unexpected input buffer format"),
+                   piece->module->name());
+    dt_print(DT_DEBUG_DEV,
+             "[pixelpipe] disabling module %s because input format expects %zu B/px, %u channels, filters %u but upstream publishes %zu B/px, %u channels, filters %u\n",
+             piece->module->op, piece->dsc_in.bpp, piece->dsc_in.channels, piece->dsc_in.filters,
+             upstream_dsc->bpp, upstream_dsc->channels, upstream_dsc->filters);
+  }
+
+  if(input_mismatch)
+  {
+    piece->enabled = FALSE;
+    piece->hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+    piece->blendop_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+    piece->global_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+    piece->global_mask_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+    piece->dsc_in = *upstream_dsc;
+    piece->dsc_out = *upstream_dsc;
+    dt_iop_buffer_dsc_update_bpp(&piece->dsc_in);
+    dt_iop_buffer_dsc_update_bpp(&piece->dsc_out);
+  }
+
+  *upstream_dsc = piece->dsc_out;
+  return !input_mismatch;
+}
+
+static void _commit_piece_contract(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
+                                   dt_iop_params_t *params, dt_develop_blend_params_t *blend_params,
+                                   dt_iop_buffer_dsc_t *upstream_dsc)
+{
+  if(!_prepare_piece_input_contract(pipe, piece, upstream_dsc)) return;
+
+  dt_iop_commit_params(piece->module, params, blend_params, pipe, piece);
+  if(piece->blendop_data)
+  {
+    const dt_develop_blend_params_t *const bp = (const dt_develop_blend_params_t *)piece->blendop_data;
+    if(bp->details != 0.0f)
+      pipe->want_detail_mask |= DT_DEV_DETAIL_MASK_REQUIRED;
+  }
+
+  if(piece->enabled)
+  {
+    piece->module->output_format(piece->module, pipe, piece, &piece->dsc_out);
+    dt_iop_buffer_dsc_update_bpp(&piece->dsc_out);
+  }
+
+  *upstream_dsc = piece->dsc_out;
+}
+
+static void _sync_pipe_nodes_from_history(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, const uint32_t history_end,
+                                          const char *debug_label)
+{
+  dt_iop_buffer_dsc_t upstream_dsc = pipe->image.dsc;
+
+  for(GList *nodes = g_list_first(pipe->nodes); nodes; nodes = g_list_next(nodes))
+  {
+    dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)nodes->data;
+    if(!piece) continue;
+
+    piece->hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+    piece->blendop_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+    piece->global_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+    piece->global_mask_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+    piece->enabled = piece->module->default_enabled;
+
+    dt_iop_params_t *params = piece->module->default_params;
+    dt_develop_blend_params_t *blend_params = piece->module->default_blendop_params;
+    gboolean found_history = FALSE;
+
+    for(GList *history = g_list_nth(dev->history, history_end - 1);
+        history;
+        history = g_list_previous(history))
+    {
+      dt_dev_history_item_t *hist = (dt_dev_history_item_t *)history->data;
+      if(piece->module == hist->module)
+      {
+        piece->enabled = hist->enabled;
+        params = hist->params;
+        blend_params = hist->blend_params;
+        found_history = TRUE;
+        break;
+      }
+    }
+
+    _commit_piece_contract(pipe, piece, params, blend_params, &upstream_dsc);
+
+    if(!found_history)
+      dt_print(DT_DEBUG_PARAMS, "[pixelpipe] info: committed default params for %s (%s) in pipe %s\n",
+               piece->module->op, piece->module->multi_name, debug_label);
+  }
+}
+
+static void _sync_pipe_nodes_from_history_from_node(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
+                                                    const uint32_t history_end, GList *start_node,
+                                                    const char *debug_label)
+{
+  if(!pipe || !start_node) return;
+
+  dt_iop_buffer_dsc_t upstream_dsc = pipe->image.dsc;
+  for(GList *node = g_list_first(pipe->nodes); node && node != start_node; node = g_list_next(node))
+  {
+    dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)node->data;
+    if(piece) upstream_dsc = piece->dsc_out;
+  }
+
+  for(GList *nodes = start_node; nodes; nodes = g_list_next(nodes))
+  {
+    dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)nodes->data;
+    if(!piece) continue;
+
+    piece->hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+    piece->blendop_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+    piece->global_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+    piece->global_mask_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+
+    piece->enabled = piece->module->default_enabled;
+
+    dt_iop_params_t *params = piece->module->default_params;
+    dt_develop_blend_params_t *blend_params = piece->module->default_blendop_params;
+    gboolean found_history = FALSE;
+
+    for(GList *history = g_list_nth(dev->history, history_end - 1);
+        history;
+        history = g_list_previous(history))
+    {
+      dt_dev_history_item_t *hist = (dt_dev_history_item_t *)history->data;
+      if(piece->module == hist->module)
+      {
+        piece->enabled = hist->enabled;
+        params = hist->params;
+        blend_params = hist->blend_params;
+        found_history = TRUE;
+        break;
+      }
+    }
+
+    _commit_piece_contract(pipe, piece, params, blend_params, &upstream_dsc);
+
+    if(!found_history)
+      dt_print(DT_DEBUG_PARAMS, "[pixelpipe] info: committed default params for %s (%s) in pipe %s\n",
+               piece->module->op, piece->module->multi_name, debug_label);
+  }
+}
+
 void dt_pixelpipe_get_global_hash(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
 {
   /* Traverse the pipeline node by node and compute the cumulative (global) hash of each module.
@@ -355,42 +514,6 @@ void dt_pixelpipe_get_global_hash(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
   pipe->bypass_cache = bypass_cache;
 }
 
-gboolean _commit_history_to_node(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece, dt_dev_history_item_t *hist)
-{
-  if(piece->module == hist->module)
-  {
-    piece->enabled = hist->enabled;
-    dt_iop_commit_params(hist->module, hist->params, hist->blend_params, pipe, piece);
-
-    if(piece->blendop_data)
-    {
-      const dt_develop_blend_params_t *const bp = (const dt_develop_blend_params_t *)piece->blendop_data;
-      if(bp->details != 0.0f)
-        pipe->want_detail_mask |= DT_DEV_DETAIL_MASK_REQUIRED;
-    }
-    return TRUE;
-  }
-  return FALSE;
-}
-
-// helper
-void dt_dev_pixelpipe_synch(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, GList *history)
-{
-  dt_dev_history_item_t *hist = (dt_dev_history_item_t *)history->data;
-  dt_dev_pixelpipe_iop_t *piece = NULL;
-
-  // Traverse the list of pipe nodes until we found the one matching our history item.
-  // We begin by the end, because it's expected that users will follow an editing history
-  // roughly similar to node order, so as history is growing, we shall have an higher
-  // probability of finding the last history item node at the end of the pipeline.
-  for(GList *nodes = g_list_last(pipe->nodes); nodes; nodes = g_list_previous(nodes))
-  {
-    piece = (dt_dev_pixelpipe_iop_t *)nodes->data;
-    if(_commit_history_to_node(pipe, piece, hist))
-      break;
-  }
-}
-
 /**
  * @brief Find the last history item matching each pipeline node (module), in the order of pipeline execution.
  * This is super important because modules providing raster masks need to be inited before modules using them,
@@ -406,44 +529,8 @@ void dt_dev_pixelpipe_synch_all_real(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev
   gchar *type = _get_debug_pipe_name(pipe, dev);
   dt_print(DT_DEBUG_DEV, "[pixelpipe] synch all modules with history for pipe %s called from %s\n", type, caller_func);
 
-  // go through all history items and adjust params
-  // note that we don't necessarily process the whole history, history_end is an user param.
   const uint32_t history_end = dt_dev_get_history_end_ext(dev);
-
-  for(GList *nodes = g_list_first(pipe->nodes); nodes; nodes = g_list_next(nodes))
-  {
-    dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)nodes->data;
-    piece->hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
-    piece->blendop_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
-    piece->global_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
-    piece->global_mask_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
-    piece->enabled = piece->module->default_enabled;
-    gboolean found_history = FALSE;
-
-    // now browse all history items from the end. Since each history item is a full snapshot of parameters,
-    // the latest history entry matching current node is the one we want, and we don't need to look for the previous.
-    for(GList *history = g_list_nth(dev->history, history_end - 1);
-        history;
-        history = g_list_previous(history))
-    {
-      dt_dev_history_item_t *hist = (dt_dev_history_item_t *)history->data;
-      if(_commit_history_to_node(pipe, piece, hist))
-      {
-        found_history = TRUE;
-        break;
-      }
-    }
-
-    // No history found, commit default params even if module is disabled because some
-    // may self-enable conditionnaly there
-    if(!found_history)
-    {
-      dt_iop_commit_params(piece->module, piece->module->default_params, piece->module->default_blendop_params,
-                           pipe, piece);
-    
-      dt_print(DT_DEBUG_PARAMS, "[pixelpipe] info: committed default params for %s (%s) in pipe %s \n", piece->module->op, piece->module->multi_name, type);
-    }
-  }
+  _sync_pipe_nodes_from_history(pipe, dev, history_end, type);
 
   // Keep track of the last history item to have been synced
   GList *last_item = g_list_nth(dev->history, history_end - 1);
@@ -464,17 +551,12 @@ void dt_dev_pixelpipe_synch_all_real(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev
 
 void dt_dev_pixelpipe_synch_top(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
 {
-  // We can't be sure that there is only one history item to resync
-  // since the last history -> pipe nodes resync: on slow systems,
-  // user may have added more than one during a single pipe recompute.
-  // Note however that the sync_top method is only used when adding new history items
-  // on top. So we need to resync every history item from end to start, until
-  // we find the previously synchronized one. This uses history hashes.
   gchar *type = _get_debug_pipe_name(pipe, dev);
 
   dt_print(DT_DEBUG_DEV, "[pixelpipe] synch top modules with history for pipe %s\n", type);
 
-  GList *last_item = g_list_nth(dev->history, dt_dev_get_history_end_ext(dev) - 1);
+  const uint32_t history_end = dt_dev_get_history_end_ext(dev);
+  GList *last_item = g_list_nth(dev->history, history_end - 1);
   if(last_item)
   {
     GList *first_item = NULL;
@@ -484,30 +566,25 @@ void dt_dev_pixelpipe_synch_top(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
       first_item = history;
 
       if(hist->hash == pipe->last_history_hash || hist == pipe->last_history_item)
-      {
-        // Note that this also takes care of the case where the
-        // last-known history item reference hasn't changed, but its internal
-        // parameters have.
         break;
-      }
-      // if we don't find the hash again, we will just iterate over the whole history.
     }
 
-    // We also need to care about the case where the history_end is not at the actual end of the history
-    // aka stop looping before we overflow the desired range of history.
-    GList *fence_item = g_list_nth(dev->history, dt_dev_get_history_end_ext(dev));
-    // if the history end cursor is at the actual end of the history, dt_dev_get_history_end_ext()
-    // returns an index that is outside of the range (equal to number of elements),
-    // so fence_item = NULL but the code works as expected since we check history != NULL
-    // first.
+    GList *fence_item = g_list_nth(dev->history, history_end);
     for(GList *history = first_item; history && history != fence_item; history = g_list_next(history))
     {
       dt_dev_history_item_t *hist = (dt_dev_history_item_t *)history->data;
-      dt_print(DT_DEBUG_PARAMS, "[pixelpipe] synch top history module `%s` (%s) for pipe %s\n", hist->module->op, hist->module->multi_name, type);
-      dt_dev_pixelpipe_synch(pipe, dev, history);
+      dt_print(DT_DEBUG_PARAMS, "[pixelpipe] synch top history module `%s` (%s) for pipe %s\n",
+               hist->module->op, hist->module->multi_name, type);
+      for(GList *nodes = g_list_last(pipe->nodes); nodes; nodes = g_list_previous(nodes))
+      {
+        dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)nodes->data;
+        if(!piece || piece->module != hist->module) continue;
+
+        _sync_pipe_nodes_from_history_from_node(pipe, dev, history_end, nodes, type);
+        break;
+      }
     }
 
-    // Keep track of the last history item to have been synced
     dt_dev_history_item_t *last_hist = (dt_dev_history_item_t *)last_item->data;
     pipe->last_history_hash = last_hist->hash;
     pipe->last_history_item = last_hist;

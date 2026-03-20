@@ -145,7 +145,7 @@ const char *deprecated_msg()
   return _("this module is deprecated. better use color mapping module instead.");
 }
 
-int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
+int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece)
 {
   return IOP_CS_LAB;
 }
@@ -351,14 +351,14 @@ static int kmeans(const float *col, const dt_iop_roi_t *const roi, const int n, 
   return 0;
 }
 
-int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   // FIXME: this returns nan!!
   dt_iop_colortransfer_data_t *data = (dt_iop_colortransfer_data_t *)piece->data;
   float *in = (float *)ivoid;
   float *out = (float *)ovoid;
-  const int ch = piece->colors;
+  const int ch = piece->dsc_in.channels;
 
   if(data->flag == ACQUIRE)
   {

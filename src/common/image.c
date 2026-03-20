@@ -268,7 +268,7 @@ gboolean dt_image_is_matrix_correction_supported(const dt_image_t *img)
 {
   if(!(img->flags & (DT_IMAGE_RAW | DT_IMAGE_S_RAW))) return FALSE;
   if(img->flags & DT_IMAGE_MONOCHROME) return FALSE;
-  if((img->flags & DT_IMAGE_S_RAW) && img->buf_dsc.filters == 0) return FALSE;
+  if((img->flags & DT_IMAGE_S_RAW) && img->dsc.filters == 0) return FALSE;
 
   const gboolean has_d65 = _image_matrix_has_data(img->d65_color_matrix, 9);
   const gboolean has_adobe = _image_matrix_has_data(&img->adobe_XYZ_to_CAM[0][0], 9);
@@ -327,7 +327,7 @@ void dt_image_print_debug_info(const dt_image_t *img, const char *context)
   if(!img) return;
 
   const char *ctx = context ? context : "image";
-  const dt_iop_buffer_dsc_t *dsc = &img->buf_dsc;
+  const dt_iop_buffer_dsc_t *dsc = &img->dsc;
   const gboolean is_raw = dt_image_is_raw(img);
   const gboolean is_ldr = dt_image_is_ldr(img);
   const gboolean is_hdr = dt_image_is_hdr(img);
@@ -1750,7 +1750,7 @@ void dt_image_init(dt_image_t *img)
   img->legacy_flip.legacy = 0;
   img->legacy_flip.user_flip = 0;
 
-  img->buf_dsc = (dt_iop_buffer_dsc_t){ .channels = 0, .datatype = TYPE_UNKNOWN, .bpp = 0, .filters = 0u };
+  img->dsc = (dt_iop_buffer_dsc_t){ .channels = 0, .datatype = TYPE_UNKNOWN, .bpp = 0, .filters = 0u };
   img->film_id = UNKNOWN_IMAGE;
   img->group_id = UNKNOWN_IMAGE;
   img->group_members = 0;

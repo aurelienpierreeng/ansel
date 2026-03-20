@@ -210,23 +210,23 @@ static int vng_interpolate(float *out, const float *const in,
 
 #ifdef HAVE_OPENCL
 
-static int process_vng_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in,
+static int process_vng_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in,
                           cl_mem dev_out, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out,
                           const gboolean smooth, const int only_vng_linear)
 {
   dt_iop_demosaic_data_t *data = (dt_iop_demosaic_data_t *)piece->data;
   dt_iop_demosaic_global_data_t *gd = (dt_iop_demosaic_global_data_t *)self->global_data;
 
-  const uint8_t(*const xtrans)[6] = (const uint8_t(*const)[6])piece->pipe->dsc.xtrans;
+  const uint8_t(*const xtrans)[6] = (const uint8_t(*const)[6])piece->dsc_in.xtrans;
 
   // separate out G1 and G2 in Bayer patterns
   uint32_t filters4;
-  if(piece->pipe->dsc.filters == 9u)
-    filters4 = piece->pipe->dsc.filters;
-  else if((piece->pipe->dsc.filters & 3) == 1)
-    filters4 = piece->pipe->dsc.filters | 0x03030303u;
+  if(piece->dsc_in.filters == 9u)
+    filters4 = piece->dsc_in.filters;
+  else if((piece->dsc_in.filters & 3) == 1)
+    filters4 = piece->dsc_in.filters | 0x03030303u;
   else
-    filters4 = piece->pipe->dsc.filters | 0x0c0c0c0cu;
+    filters4 = piece->dsc_in.filters | 0x0c0c0c0cu;
 
   const int size = (filters4 == 9u) ? 6 : 16;
   const int colors = (filters4 == 9u) ? 3 : 4;
@@ -235,8 +235,8 @@ static int process_vng_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *
   const int devid = piece->pipe->devid;
 
   const float processed_maximum[4]
-      = { piece->pipe->dsc.processed_maximum[0], piece->pipe->dsc.processed_maximum[1],
-          piece->pipe->dsc.processed_maximum[2], 1.0f };
+      = { piece->dsc_in.processed_maximum[0], piece->dsc_in.processed_maximum[1],
+          piece->dsc_in.processed_maximum[2], 1.0f };
 
   int *ips = NULL;
 
@@ -251,10 +251,9 @@ static int process_vng_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *
 
   int32_t(*lookup)[16][32] = NULL;
 
-  if(piece->pipe->dsc.filters == 9u)
+  if(piece->dsc_in.filters == 9u)
   {
-    dev_xtrans
-        = dt_opencl_copy_host_to_device_constant(devid, sizeof(piece->pipe->dsc.xtrans), piece->pipe->dsc.xtrans);
+    dev_xtrans = dt_opencl_copy_host_to_device_constant(devid, sizeof(piece->dsc_in.xtrans), piece->dsc_in.xtrans);
     if(dev_xtrans == NULL) goto error;
   }
 
@@ -384,7 +383,7 @@ static int process_vng_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *
   if(dev_ips == NULL) goto error;
 
   // green equilibration for Bayer sensors
-  if(piece->pipe->dsc.filters != 9u && data->green_eq != DT_IOP_GREEN_EQ_NO)
+  if(piece->dsc_in.filters != 9u && data->green_eq != DT_IOP_GREEN_EQ_NO)
   {
     dev_green_eq = dt_opencl_alloc_device(devid, roi_in->width, roi_in->height, sizeof(float));
     if(dev_green_eq == NULL) goto error;

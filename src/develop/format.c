@@ -58,7 +58,7 @@ void default_input_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_de
 {
   dsc->channels = 4;
   dsc->datatype = TYPE_FLOAT;
-  dsc->cst = self->input_colorspace(self, pipe, piece);
+  dsc->cst = self->default_colorspace(self, pipe, piece);
 
   if(dsc->cst == IOP_CS_RAW)
   {
@@ -66,11 +66,9 @@ void default_input_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_de
 
     if(dt_ioppr_get_iop_order(pipe->iop_order_list, self->op, self->multi_priority)
        <= dt_ioppr_get_iop_order(pipe->iop_order_list, "rawprepare", 0)
-       && piece->pipe->dsc.filters)
+       && ((piece && piece->dsc_in.filters) || (!piece && pipe->image.dsc.filters)))
       dsc->datatype = TYPE_UINT16;
   }
-
-  dt_iop_buffer_dsc_update_bpp(dsc);
 }
 
 void default_output_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
@@ -78,7 +76,7 @@ void default_output_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_d
 {
   dsc->channels = 4;
   dsc->datatype = TYPE_FLOAT;
-  dsc->cst = self->output_colorspace(self, pipe, piece);
+  dsc->cst = self->default_colorspace(self, pipe, piece);
 
   if(dsc->cst == IOP_CS_RAW)
   {
@@ -86,27 +84,13 @@ void default_output_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_d
 
     if(dt_ioppr_get_iop_order(pipe->iop_order_list, self->op, self->multi_priority)
        < dt_ioppr_get_iop_order(pipe->iop_order_list, "rawprepare", 0)
-       && piece->pipe->dsc.filters)
+       && ((piece && piece->dsc_in.filters) || (!piece && pipe->image.dsc.filters)))
       dsc->datatype = TYPE_UINT16;
   }
-
-  dt_iop_buffer_dsc_update_bpp(dsc);
-}
-
-int default_input_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
-                     dt_dev_pixelpipe_iop_t *piece)
-{
-  return self->default_colorspace(self, pipe, piece);
-}
-
-int default_output_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
-                      dt_dev_pixelpipe_iop_t *piece)
-{
-  return self->default_colorspace(self, pipe, piece);
 }
 
 int default_blend_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
-                      dt_dev_pixelpipe_iop_t *piece)
+                      const dt_dev_pixelpipe_iop_t *piece)
 {
   return self->default_colorspace(self, pipe, piece);
 }

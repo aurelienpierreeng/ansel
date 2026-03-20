@@ -93,7 +93,6 @@ typedef struct dt_dev_pixelpipe_iop_t
   uint64_t global_mask_hash;
 
   int bpc;             // bits per channel, 32 means float
-  int colors;          // how many colors per pixel
   dt_iop_roi_t buf_in, buf_out; // theoretical full buffer regions of interest, as passed through modify_roi_out
   dt_iop_roi_t roi_in, roi_out; // pipeline sizes planned ahead for cache hash
   int process_cl_ready;       // set this to 0 in commit_params to temporarily disable the use of process_cl
@@ -185,10 +184,6 @@ typedef struct dt_dev_pixelpipe_t
 
   // dimensions of processed buffer assuming we take full-resolution input
   int processed_width, processed_height;
-
-  // this one actually contains the expected output format,
-  // and should be modified by process*(), if necessary.
-  dt_iop_buffer_dsc_t dsc;
 
   dt_dev_pixelpipe_status_t status;
 
@@ -425,9 +420,9 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const struct dt_iop_modu
 // some helper functions related to the details mask interface
 void dt_dev_clear_rawdetail_mask(dt_dev_pixelpipe_t *pipe);
 
-gboolean dt_dev_write_rawdetail_mask(dt_dev_pixelpipe_iop_t *piece, float *const rgb, const dt_iop_roi_t *const roi_in, const int mode);
+gboolean dt_dev_write_rawdetail_mask(const dt_dev_pixelpipe_iop_t *piece, float *const rgb, const dt_iop_roi_t *const roi_in, const int mode);
 #ifdef HAVE_OPENCL
-gboolean dt_dev_write_rawdetail_mask_cl(dt_dev_pixelpipe_iop_t *piece, cl_mem in, const dt_iop_roi_t *const roi_in, const int mode);
+gboolean dt_dev_write_rawdetail_mask_cl(const dt_dev_pixelpipe_iop_t *piece, cl_mem in, const dt_iop_roi_t *const roi_in, const int mode);
 #endif
 
 // helper function writing the pipe-processed ctmask data to dest

@@ -1640,7 +1640,7 @@ static void xtrans_fdc_interpolate(struct dt_iop_module_t *self, float *out, con
 
 #ifdef HAVE_OPENCL
 
-static int process_markesteijn_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in,
+static int process_markesteijn_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in,
                                   cl_mem dev_out, const dt_iop_roi_t *const roi_in,
                                   const dt_iop_roi_t *const roi_out, const gboolean smooth)
 {
@@ -1648,11 +1648,11 @@ static int process_markesteijn_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe
   dt_iop_demosaic_global_data_t *gd = (dt_iop_demosaic_global_data_t *)self->global_data;
 
   const int devid = piece->pipe->devid;
-  const uint8_t(*const xtrans)[6] = (const uint8_t(*const)[6])piece->pipe->dsc.xtrans;
+  const uint8_t(*const xtrans)[6] = (const uint8_t(*const)[6])piece->dsc_in.xtrans;
 
   const float processed_maximum[4]
-      = { piece->pipe->dsc.processed_maximum[0], piece->pipe->dsc.processed_maximum[1],
-          piece->pipe->dsc.processed_maximum[2], 1.0f };
+      = { piece->dsc_in.processed_maximum[0], piece->dsc_in.processed_maximum[1],
+          piece->dsc_in.processed_maximum[2], 1.0f };
 
   cl_mem dev_tmp = NULL;
   cl_mem dev_tmptmp = NULL;
@@ -1671,8 +1671,7 @@ static int process_markesteijn_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe
 
   cl_mem *dev_rgb = dev_rgbv;
 
-  dev_xtrans
-      = dt_opencl_copy_host_to_device_constant(devid, sizeof(piece->pipe->dsc.xtrans), piece->pipe->dsc.xtrans);
+  dev_xtrans = dt_opencl_copy_host_to_device_constant(devid, sizeof(piece->dsc_in.xtrans), piece->dsc_in.xtrans);
   if(dev_xtrans == NULL) goto error;
 
   int width = roi_in->width;

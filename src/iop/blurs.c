@@ -116,7 +116,7 @@ int default_group()
 }
 
 
-int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
+int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece)
 {
   return IOP_CS_RGB;
 }
@@ -424,9 +424,6 @@ static void process_fft(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *pi
   dt_iop_blurs_params_t *p = (dt_iop_blurs_params_t *)piece->data;
   const float scale = 1.f / roi_in->scale;
 
-  if (!dt_iop_have_required_input_format(4, self, piece->colors, ivoid, ovoid, roi_in, roi_out))
-    return;
-
   const float *const restrict in = __builtin_assume_aligned(ivoid, 64);
   //float *const restrict out = __builtin_assume_aligned(ovoid, 64);
 
@@ -562,15 +559,12 @@ static void process_fft(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *pi
 // Spatial convolution should be slower for large blurs because it is o(N²) where N is the width of the kernel
 // but code is much simpler and easier to debug
 
-int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
+int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece,
                     const void *const restrict ivoid, void *const restrict ovoid,
                     const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   dt_iop_blurs_params_t *p = (dt_iop_blurs_params_t *)piece->data;
   const float scale = fmaxf(1.f / roi_in->scale, 1.f);
-
-  if (!dt_iop_have_required_input_format(4, self, piece->colors, ivoid, ovoid, roi_in, roi_out))
-    return 0;
 
   const float *const restrict in = __builtin_assume_aligned(ivoid, 64);
   float *const restrict out = __builtin_assume_aligned(ovoid, 64);
@@ -647,7 +641,7 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
 
 
 #if HAVE_OPENCL
-int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
+int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
                const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   dt_iop_blurs_params_t *p = (dt_iop_blurs_params_t *)piece->data;

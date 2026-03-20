@@ -116,16 +116,22 @@ const char *deprecated_msg()
   return _("this module is deprecated. please use the local contrast or tone equalizer module instead.");
 }
 
-int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
+int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece)
 {
   return IOP_CS_RGB;
 }
 
-int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+void output_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
+                   dt_iop_buffer_dsc_t *dsc)
+{
+  default_output_format(self, pipe, piece, dsc);
+}
+
+int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   dt_iop_tonemapping_data_t *data = (dt_iop_tonemapping_data_t *)piece->data;
-  const int ch = piece->colors;
+  const int ch = piece->dsc_in.channels;
 
   int width, height;
   float inv_sigma_s;
@@ -215,14 +221,6 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
       out[3] = in[3];
     }
   }
-  // also process the clipping point, as good as we can without knowing
-  // the local environment (i.e. assuming detail == 0)
-  float *pmax = piece->pipe->dsc.processed_maximum;
-  float L = 0.2126 * pmax[0] + 0.7152 * pmax[1] + 0.0722 * pmax[2];
-  if(L <= 0.0) L = 1e-6;
-  L = logf(L);
-  const float Ln = expf(L * (contr - 1.0f) - 1.0f);
-  for(int k = 0; k < 3; k++) pmax[k] *= Ln;
   return 0;
 }
 
@@ -236,6 +234,16 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   dt_iop_tonemapping_data_t *d = (dt_iop_tonemapping_data_t *)piece->data;
   d->contrast = p->contrast;
   d->Fsize = p->Fsize;
+
+  const float contr = 1.0f / d->contrast;
+  float L = 0.2126f * piece->dsc_in.processed_maximum[0]
+          + 0.7152f * piece->dsc_in.processed_maximum[1]
+          + 0.0722f * piece->dsc_in.processed_maximum[2];
+  if(L <= 0.0f) L = 1e-6f;
+  L = logf(L);
+
+  const float Ln = expf(L * (contr - 1.0f) - 1.0f);
+  for(int k = 0; k < 3; k++) piece->dsc_out.processed_maximum[k] = piece->dsc_in.processed_maximum[k] * Ln;
 }
 
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)

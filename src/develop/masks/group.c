@@ -733,7 +733,7 @@ static int _group_get_mask_roi(const dt_iop_module_t *const restrict module,
   return err;
 }
 
-int dt_masks_group_render_roi(dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece, dt_masks_form_t *form,
+int dt_masks_group_render_roi(dt_iop_module_t *module, const dt_dev_pixelpipe_iop_t *piece, dt_masks_form_t *form,
                               const dt_iop_roi_t *roi, float *buffer)
 {
   const double start = dt_get_wtime();
