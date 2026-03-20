@@ -454,6 +454,10 @@ void dt_pixelpipe_get_global_hash(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
     // dt_dev_get_roi_in() should have run before
     local_hash = dt_hash(local_hash, (const char *)&piece->roi_in, sizeof(dt_iop_roi_t));
     local_hash = dt_hash(local_hash, (const char *)&piece->roi_out, sizeof(dt_iop_roi_t));
+
+    local_hash = dt_hash(local_hash, (const char *)&piece->dsc_in, sizeof(dt_iop_buffer_dsc_t));
+    local_hash = dt_hash(local_hash, (const char *)&piece->dsc_out, sizeof(dt_iop_buffer_dsc_t));
+
 /*
     fprintf(stdout, "start->end : %-17s | ROI in: %4ix%-4i @%2.4f | ROI out: %4ix%-4i @%2.4f\n", piece->module->op,
             piece->buf_in.width, piece->buf_in.height, piece->buf_in.scale, piece->buf_out.width,
