@@ -496,7 +496,8 @@ static inline void transform(float *x, float *o, const float *m, const float t_h
   o[0] *= (1.0f + o[1] * t_v);
 }
 
-int distort_transform(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece, float *const restrict points, size_t points_count)
+int distort_transform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
+                      float *const restrict points, size_t points_count)
 {
   // as dt_iop_roi_t contain int values and not floats, we can have some rounding errors
   // as a workaround, we use a factor for preview pipes
@@ -504,10 +505,11 @@ int distort_transform(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pi
   if(dt_dev_pixelpipe_has_preview_output(self->dev, pipe, NULL)) factor = 100.0f;
   // we first need to be sure that all data values are computed
   // this is done in modify_roi_out fct, so we create tmp roi
+  dt_dev_pixelpipe_iop_t piece_copy = *piece;
   dt_iop_roi_t roi_out, roi_in;
   roi_in.width = piece->buf_in.width * factor;
   roi_in.height = piece->buf_in.height * factor;
-  self->modify_roi_out(self, piece, &roi_out, &roi_in);
+  self->modify_roi_out(self, &piece_copy, &roi_out, &roi_in);
 
   dt_iop_clipping_data_t *d = (dt_iop_clipping_data_t *)piece->data;
 
@@ -560,13 +562,13 @@ int distort_transform(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pi
   {
     roi_in.width = piece->buf_in.width;
     roi_in.height = piece->buf_in.height;
-    self->modify_roi_out(self, piece, &roi_out, &roi_in);
+    self->modify_roi_out(self, &piece_copy, &roi_out, &roi_in);
   }
 
   return 1;
 }
-int distort_backtransform(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece, float *const restrict points,
-                          size_t points_count)
+int distort_backtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
+                          float *const restrict points, size_t points_count)
 {
   // as dt_iop_roi_t contain int values and not floats, we can have some rounding errors
   // as a workaround, we use a factor for preview pipes
@@ -574,10 +576,11 @@ int distort_backtransform(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_de
   if(dt_dev_pixelpipe_has_preview_output(self->dev, pipe, NULL)) factor = 100.0f;
   // we first need to be sure that all data values are computed
   // this is done in modify_roi_out fct, so we create tmp roi
+  dt_dev_pixelpipe_iop_t piece_copy = *piece;
   dt_iop_roi_t roi_out, roi_in;
   roi_in.width = piece->buf_in.width * factor;
   roi_in.height = piece->buf_in.height * factor;
-  self->modify_roi_out(self, piece, &roi_out, &roi_in);
+  self->modify_roi_out(self, &piece_copy, &roi_out, &roi_in);
 
   dt_iop_clipping_data_t *d = (dt_iop_clipping_data_t *)piece->data;
 
@@ -630,13 +633,13 @@ int distort_backtransform(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_de
   {
     roi_in.width = piece->buf_in.width;
     roi_in.height = piece->buf_in.height;
-    self->modify_roi_out(self, piece, &roi_out, &roi_in);
+    self->modify_roi_out(self, &piece_copy, &roi_out, &roi_in);
   }
 
   return 1;
 }
 
-void distort_mask(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_t *pipe, struct dt_dev_pixelpipe_iop_t *piece,
+void distort_mask(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe, struct dt_dev_pixelpipe_iop_t *piece,
                   const float *const in, float *const out, const dt_iop_roi_t *const roi_in,
                   const dt_iop_roi_t *const roi_out)
 {

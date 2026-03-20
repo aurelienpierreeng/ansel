@@ -216,13 +216,13 @@ OPTIONAL(int, process_tiling_cl, struct dt_iop_module_t *self, const struct dt_d
  * points is an array of float {x1,y1,x2,y2,...}
  * size is 2*points_count */
 /** points before the iop is applied => point after processed */
-DEFAULT(int, distort_transform, struct dt_iop_module_t *self, struct dt_dev_pixelpipe_t *pipe,
-                                 struct dt_dev_pixelpipe_iop_t *piece, float *points, size_t points_count);
+DEFAULT(int, distort_transform, struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+                                 const struct dt_dev_pixelpipe_iop_t *piece, float *points, size_t points_count);
 /** reverse points after the iop is applied => point before process */
-DEFAULT(int, distort_backtransform, struct dt_iop_module_t *self, struct dt_dev_pixelpipe_t *pipe,
-                                     struct dt_dev_pixelpipe_iop_t *piece, float *points, size_t points_count);
+DEFAULT(int, distort_backtransform, struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+                                     const struct dt_dev_pixelpipe_iop_t *piece, float *points, size_t points_count);
 
-OPTIONAL(void, distort_mask, struct dt_iop_module_t *self, struct dt_dev_pixelpipe_t *pipe,
+OPTIONAL(void, distort_mask, struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
                              struct dt_dev_pixelpipe_iop_t *piece, const float *const in, float *const out,
                              const struct dt_iop_roi_t *const roi_in, const struct dt_iop_roi_t *const roi_out);
 

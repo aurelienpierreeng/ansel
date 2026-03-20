@@ -144,7 +144,8 @@ static void backtransform(const dt_dev_pixelpipe_iop_t *const piece, const float
   o[1] += d->ry * scale;
 }
 
-int distort_transform(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece, float *const restrict points, size_t points_count)
+int distort_transform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
+                      float *const restrict points, size_t points_count)
 {
   const float scale = piece->buf_in.scale;
 
@@ -169,8 +170,8 @@ int distort_transform(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pi
   return 1;
 }
 
-int distort_backtransform(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece, float *const restrict points,
-                          size_t points_count)
+int distort_backtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
+                          float *const restrict points, size_t points_count)
 {
   const float scale = piece->buf_in.scale;
 
@@ -195,7 +196,7 @@ int distort_backtransform(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_de
   return 1;
 }
 
-void distort_mask(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_t *pipe, struct dt_dev_pixelpipe_iop_t *piece,
+void distort_mask(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe, struct dt_dev_pixelpipe_iop_t *piece,
                   const float *const in, float *const out, const dt_iop_roi_t *const roi_in,
                   const dt_iop_roi_t *const roi_out)
 {

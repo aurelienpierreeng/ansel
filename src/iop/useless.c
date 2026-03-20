@@ -258,7 +258,8 @@ void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe
 
 #if 0
 /** modify pixel coordinates according to the pixel shifts the module applies (optional, per-pixel ops don't need) */
-int distort_transform(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece, float *points, size_t points_count)
+int distort_transform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
+                      float *points, size_t points_count)
 {
   const dt_iop_useless_params_t *d = (dt_iop_useless_params_t *)piece->data;
 
@@ -281,7 +282,8 @@ int distort_transform(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pi
 
 #if 0
 /** undo pixel shifts the module applies (optional, per-pixel ops don't need this) */
-int distort_backtransform(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece, float *points, size_t points_count)
+int distort_backtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
+                          float *points, size_t points_count)
 {
   const dt_iop_useless_params_t *d = (dt_iop_useless_params_t *)piece->data;
 

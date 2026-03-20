@@ -409,7 +409,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
       blocksizex = blocksizey = 1;
 
     dev_xtrans
-        = dt_opencl_copy_host_to_device_constant(devid, sizeof(piece->dsc_in.xtrans), piece->dsc_in.xtrans);
+        = dt_opencl_copy_host_to_device_constant(devid, sizeof(piece->dsc_in.xtrans), (void *)piece->dsc_in.xtrans);
     if(dev_xtrans == NULL) goto error;
 
     size_t sizes[] = { ROUNDUP(width, blocksizex), ROUNDUP(height, blocksizey), 1 };
@@ -452,7 +452,6 @@ error:
 void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe, const struct dt_dev_pixelpipe_iop_t *piece, struct dt_develop_tiling_t *tiling)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
-  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_highlights_data_t *d = (dt_iop_highlights_data_t *)piece->data;
   const uint32_t filters = piece->dsc_in.filters;
 
@@ -2373,7 +2372,7 @@ static cl_int process_laplacian_xtrans_cl(struct dt_iop_module_t *self, const dt
   cl_mem ds_clipping_mask = dt_opencl_alloc_device(devid, ds_sizes[0], ds_sizes[1], sizeof(float) * 4);
 
   cl_mem clips_cl = dt_opencl_copy_host_to_device_constant(devid, 4 * sizeof(float), (float *)clips);
-  cl_mem dev_xtrans = dt_opencl_copy_host_to_device_constant(devid, sizeof(piece->dsc_in.xtrans), piece->dsc_in.xtrans);
+  cl_mem dev_xtrans = dt_opencl_copy_host_to_device_constant(devid, sizeof(piece->dsc_in.xtrans), (void *)piece->dsc_in.xtrans);
   int32_t lookup[6][6][32] = { { { 0 } } };
   _build_xtrans_bilinear_lookup(lookup, roi_in, xtrans);
   cl_mem lookup_cl = dt_opencl_copy_host_to_device_constant(devid, sizeof(lookup), lookup);

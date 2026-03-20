@@ -549,10 +549,10 @@ int dt_dev_coordinates_raw_abs_to_image_abs(dt_develop_t *dev, float *points, si
 /** reverse apply all transforms to the specified points (in virtual preview-pipe space) */
 int dt_dev_coordinates_image_abs_to_raw_abs(dt_develop_t *dev, float *points, size_t points_count);
 /** same fct, but we can specify iop with priority between pmin and pmax */
-int dt_dev_distort_transform_plus(dt_develop_t *dev, struct dt_dev_pixelpipe_t *pipe, const double iop_order, const int transf_direction,
+int dt_dev_distort_transform_plus(dt_develop_t *dev, const struct dt_dev_pixelpipe_t *pipe, const double iop_order, const int transf_direction,
                                   float *points, size_t points_count);
 /** same fct, but can only be called from a distort_transform function called by dt_dev_distort_transform_plus */
-int dt_dev_distort_transform_locked(dt_develop_t *dev, struct dt_dev_pixelpipe_t *pipe, const double iop_order,
+int dt_dev_distort_transform_locked(dt_develop_t *dev, const struct dt_dev_pixelpipe_t *pipe, const double iop_order,
                                     const int transf_direction, float *points, size_t points_count);
 /** same fct as dt_dev_coordinates_image_abs_to_raw_abs, but we can specify iop with priority between pmin and pmax */
 int dt_dev_distort_backtransform_plus(dt_develop_t *dev, struct dt_dev_pixelpipe_t *pipe, const double iop_order, const int transf_direction,

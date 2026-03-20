@@ -793,7 +793,7 @@ static void process_cmatrix_bm(struct dt_iop_module_t *self, const dt_dev_pixelp
 }
 
 __DT_CLONE_TARGETS__
-static void process_cmatrix_fastpath_simple(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
+static void process_cmatrix_fastpath_simple(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece,
                                             const void *const ivoid, void *const ovoid,
                                             const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
@@ -826,7 +826,7 @@ static void process_cmatrix_fastpath_simple(struct dt_iop_module_t *self, dt_dev
 }
 
 __DT_CLONE_TARGETS__
-static void process_cmatrix_fastpath_clipping(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
+static void process_cmatrix_fastpath_clipping(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece,
                                               const void *const ivoid, void *const ovoid,
                                               const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
@@ -1020,7 +1020,7 @@ static void process_lcms2_bm(struct dt_iop_module_t *self, const dt_dev_pixelpip
   }
 }
 
-static void process_lcms2_proper(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
+static void process_lcms2_proper(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece,
                                  const void *const ivoid, void *const ovoid, const dt_iop_roi_t *const roi_in,
                                  const dt_iop_roi_t *const roi_out)
 {

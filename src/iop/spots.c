@@ -387,14 +387,16 @@ static gboolean _edit_masks(GtkWidget *widget, GdkEventButton *e, dt_iop_module_
   return TRUE;
 }
 
-static gboolean masks_form_is_in_roi(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
+static gboolean masks_form_is_in_roi(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, 
+                                     const dt_dev_pixelpipe_iop_t *piece,
                                      dt_masks_form_t *form, const dt_iop_roi_t *roi_in,
                                      const dt_iop_roi_t *roi_out)
 {
   // we get the area for the form
   int fl, ft, fw, fh;
+  dt_dev_pixelpipe_iop_t piece_copy = *piece;
 
-  if(dt_masks_get_area(self, pipe, piece, form, &fw, &fh, &fl, &ft) != 0) return FALSE;
+  if(dt_masks_get_area(self, (dt_dev_pixelpipe_t *)pipe, &piece_copy, form, &fw, &fh, &fl, &ft) != 0) return FALSE;
 
   // is the form outside of the roi?
   fw *= roi_in->scale, fh *= roi_in->scale, fl *= roi_in->scale, ft *= roi_in->scale;
@@ -481,8 +483,7 @@ static void masks_point_denormalize(const dt_dev_pixelpipe_t *pipe, const dt_iop
   }
 }
 
-static int masks_point_calc_delta(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
-                                  dt_dev_pixelpipe_iop_t *piece,
+static int masks_point_calc_delta(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
                                   const dt_iop_roi_t *roi, const float *target, const float *source, int *dx,
                                   int *dy)
 {
@@ -499,7 +500,7 @@ static int masks_point_calc_delta(dt_iop_module_t *self, dt_dev_pixelpipe_t *pip
   return res;
 }
 
-static int masks_get_delta(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
+static int masks_get_delta(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
                            const dt_iop_roi_t *roi,
                            dt_masks_form_t *form, int *dx, int *dy)
 {
@@ -509,25 +510,25 @@ static int masks_get_delta(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_d
   {
     dt_masks_node_polygon_t *pt = (dt_masks_node_polygon_t *)form->points->data;
 
-    res = masks_point_calc_delta(self, pipe, piece, roi, pt->node, form->source, dx, dy);
+    res = masks_point_calc_delta(self, pipe, roi, pt->node, form->source, dx, dy);
   }
   else if(form->type & DT_MASKS_CIRCLE)
   {
     dt_masks_node_circle_t *pt = (dt_masks_node_circle_t *)form->points->data;
 
-    res = masks_point_calc_delta(self, pipe, piece, roi, pt->center, form->source, dx, dy);
+    res = masks_point_calc_delta(self, pipe, roi, pt->center, form->source, dx, dy);
   }
   else if(form->type & DT_MASKS_ELLIPSE)
   {
     dt_masks_node_ellipse_t *pt = (dt_masks_node_ellipse_t *)form->points->data;
 
-    res = masks_point_calc_delta(self, pipe, piece, roi, pt->center, form->source, dx, dy);
+    res = masks_point_calc_delta(self, pipe, roi, pt->center, form->source, dx, dy);
   }
 
   return res;
 }
 
-static int _process(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
+static int _process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
                     const float *const in,
                     float *const out, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out, const int ch)
 {
@@ -641,7 +642,7 @@ static int _process(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_d
         // we get the mask
         float *mask = NULL;
         int posx, posy, width, height;
-        if(dt_masks_get_mask(self, pipe, piece, form, &mask, &width, &height, &posx, &posy) != 0)
+        if(dt_masks_get_mask(self, (dt_dev_pixelpipe_t *)pipe, piece, form, &mask, &width, &height, &posx, &posy) != 0)
         {
           return 1;
         }
@@ -657,7 +658,7 @@ static int _process(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_d
         int dx = 0, dy = 0;
 
         // now we search the delta with the source
-        if(!masks_get_delta(self, pipe, piece, roi_in, form, &dx, &dy))
+        if(!masks_get_delta(self, pipe, roi_in, form, &dx, &dy))
         {
           dt_pixelpipe_cache_free_align(mask);
           continue;
@@ -705,7 +706,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   return _process(self, pipe, piece, in, out, roi_in, roi_out, piece->dsc_in.channels);
 }
 
-void distort_mask(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
+void distort_mask(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
                   const float *const in, float *const out, const dt_iop_roi_t *const roi_in,
                   const dt_iop_roi_t *const roi_out)
 {

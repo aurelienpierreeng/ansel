@@ -554,7 +554,7 @@ static void path_delete(dt_iop_liquify_params_t *p, dt_liquify_path_data_t *this
 typedef struct
 {
   dt_develop_t *develop;
-  dt_dev_pixelpipe_t *pipe;
+  const dt_dev_pixelpipe_t *pipe;
   float from_scale;
   float to_scale;
   int transf_direction;
@@ -680,7 +680,7 @@ static void _distort_paths(const struct dt_iop_module_t *module,
 }
 
 static void distort_paths_raw_to_piece(const struct dt_iop_module_t *module,
-                                        dt_dev_pixelpipe_t *pipe,
+                                        const dt_dev_pixelpipe_t *pipe,
                                         const float roi_in_scale,
                                         dt_iop_liquify_params_t *p,
                                         const gboolean from_distort_transform)
@@ -1266,7 +1266,7 @@ static float complex *create_global_distortion_map(const cairo_rectangle_int_t *
 }
 
 static float complex *build_global_distortion_map(struct dt_iop_module_t *module,
-                                                   dt_dev_pixelpipe_t *pipe,
+                                                   const dt_dev_pixelpipe_t *pipe,
                                                    const dt_dev_pixelpipe_iop_t *piece,
                                                    const dt_iop_roi_t *roi_in,
                                                    const dt_iop_roi_t *roi_out,
@@ -1361,7 +1361,8 @@ void modify_roi_in(struct dt_iop_module_t *module,
   cairo_region_destroy(roi_in_region);
 }
 
-static int _distort_xtransform(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
+static int _distort_xtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
+                               const dt_dev_pixelpipe_iop_t *piece,
                                float *const restrict points, const size_t points_count,
                                const gboolean inverted)
 {
@@ -1462,17 +1463,19 @@ static gboolean is_dragging(const dt_iop_liquify_gui_data_t *g)
   return g->dragging.elem != NULL;
 }
 
-int distort_transform(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece, float *const restrict points, size_t points_count)
+int distort_transform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
+                      float *const restrict points, size_t points_count)
 {
   return _distort_xtransform(self, self->dev->preview_pipe, piece, points, points_count, TRUE);
 }
 
-int distort_backtransform(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece, float *const restrict points, size_t points_count)
+int distort_backtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
+                          float *const restrict points, size_t points_count)
 {
   return _distort_xtransform(self, self->dev->preview_pipe, piece, points, points_count, FALSE);
 }
 
-void distort_mask(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_t *pipe, struct dt_dev_pixelpipe_iop_t *piece,
+void distort_mask(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe, struct dt_dev_pixelpipe_iop_t *piece,
                   const float *const in, float *const out, const dt_iop_roi_t *const roi_in,
                   const dt_iop_roi_t *const roi_out)
 {

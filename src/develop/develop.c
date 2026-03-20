@@ -1361,7 +1361,7 @@ int dt_dev_coordinates_image_abs_to_raw_abs(dt_develop_t *dev, float *points, si
 }
 
 // only call directly or indirectly from dt_dev_distort_transform_plus, so that it runs with the history locked
-int dt_dev_distort_transform_locked(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, const double iop_order,
+int dt_dev_distort_transform_locked(dt_develop_t *dev, const dt_dev_pixelpipe_t *pipe, const double iop_order,
                                     const int transf_direction, float *points, size_t points_count)
 {
   for(GList *pieces = g_list_first(pipe->nodes); pieces; pieces = g_list_next(pieces))
@@ -1382,7 +1382,7 @@ int dt_dev_distort_transform_locked(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe,
   return 1;
 }
 
-int dt_dev_distort_transform_plus(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, const double iop_order, const int transf_direction,
+int dt_dev_distort_transform_plus(dt_develop_t *dev, const dt_dev_pixelpipe_t *pipe, const double iop_order, const int transf_direction,
                                   float *points, size_t points_count)
 {
   dt_dev_distort_transform_locked(dev, pipe, iop_order, transf_direction, points, points_count);

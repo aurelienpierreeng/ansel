@@ -378,7 +378,7 @@ static int get_dither_parameters(const dt_iop_dither_data_t *const data, const d
 #pragma omp declare simd aligned(ivoid, ovoid : 64)
 #endif
 static void process_floyd_steinberg(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
-                                    dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid,
+                                    const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid,
                                     const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   const dt_iop_dither_data_t *const restrict data = (dt_iop_dither_data_t *)piece->data;
@@ -506,7 +506,7 @@ static void process_floyd_steinberg(struct dt_iop_module_t *self, const dt_dev_p
 #pragma omp declare simd aligned(ivoid, ovoid : 64)
 #endif
 static void process_floyd_steinberg_sse2(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
-                                         dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid,
+                                         const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid,
                                          const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   dt_iop_dither_data_t *data = (dt_iop_dither_data_t *)piece->data;
@@ -631,7 +631,7 @@ static void process_floyd_steinberg_sse2(struct dt_iop_module_t *self, const dt_
 #endif
 
 static void process_random(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
-                           dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid,
+                           const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid,
                            const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   const dt_iop_dither_data_t *const data = (dt_iop_dither_data_t *)piece->data;
@@ -700,7 +700,6 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
-  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   const dt_iop_dither_data_t *const d = (dt_iop_dither_data_t *)piece->data;
   dt_iop_dither_global_data_t *const gd = (dt_iop_dither_global_data_t *)self->global_data;
   cl_mem dev_work = NULL;
