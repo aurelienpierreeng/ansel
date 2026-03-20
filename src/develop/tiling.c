@@ -603,11 +603,13 @@ static int _fit_output_to_input_roi(struct dt_iop_module_t *self, const struct d
 
 
 /* simple tiling algorithm for roi_in == roi_out, i.e. for pixel to pixel modules/operations */
-static int _default_process_tiling_ptp(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
+static int _default_process_tiling_ptp(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+                                        const struct dt_dev_pixelpipe_iop_t *piece,
                                         const void *const ivoid, void *const ovoid,
                                         const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out,
                                         const int in_bpp)
 {
+  dt_dev_pixelpipe_t *const mutable_pipe = (dt_dev_pixelpipe_t *)pipe;
   void *input = NULL;
   void *output = NULL;
   dt_print(DT_DEBUG_TILING, "[default_process_tiling_ptp] **** tiling module '%s' for image with size %dx%d --> %dx%d\n",
@@ -620,7 +622,7 @@ static int _default_process_tiling_ptp(struct dt_iop_module_t *self, const struc
 
   /* get tiling requirements of module */
   dt_develop_tiling_t tiling = { 0 };
-  self->tiling_callback(self, piece, &tiling);
+  self->tiling_callback(self, pipe, piece, &tiling);
 
   /* tiling really does not make sense in these cases. standard process() is not better or worse than we are
    */
@@ -723,7 +725,7 @@ static int _default_process_tiling_ptp(struct dt_iop_module_t *self, const struc
   /* reserve input and output buffers for tiles */
   input = dt_pixelpipe_cache_alloc_align_cache(
       (size_t)width * height * in_bpp,
-      piece->pipe->type);
+      pipe->type);
   if(input == NULL)
   {
     dt_print(DT_DEBUG_TILING, "[default_process_tiling_ptp] could not alloc input buffer for module '%s'\n",
@@ -732,7 +734,7 @@ static int _default_process_tiling_ptp(struct dt_iop_module_t *self, const struc
   }
   output = dt_pixelpipe_cache_alloc_align_cache(
       (size_t)width * height * out_bpp,
-      piece->pipe->type);
+      pipe->type);
   if(output == NULL)
   {
     dt_print(DT_DEBUG_TILING, "[default_process_tiling_ptp] could not alloc output buffer for module '%s'\n",
@@ -746,7 +748,7 @@ static int _default_process_tiling_ptp(struct dt_iop_module_t *self, const struc
     const size_t wd = tx * tile_wd + width > roi_in->width ? roi_in->width - tx * tile_wd : width;
     for(size_t ty = 0; ty < tiles_y; ty++)
     {
-      piece->pipe->tiling = 1;
+      mutable_pipe->tiling = 1;
 
       const size_t ht = ty * tile_ht + height > roi_in->height ? roi_in->height - ty * tile_ht : height;
 
@@ -783,12 +785,12 @@ static int _default_process_tiling_ptp(struct dt_iop_module_t *self, const struc
       dt_dev_pixelpipe_iop_t piece_tile = *piece;
       piece_tile.roi_in = iroi;
       piece_tile.roi_out = oroi;
-      int err = self->process(self, &piece_tile, input, output);
+      int err = self->process(self, pipe, &piece_tile, input, output);
       if(err)
       {
         dt_pixelpipe_cache_free_align(input);
         dt_pixelpipe_cache_free_align(output);
-        piece->pipe->tiling = 0;
+        mutable_pipe->tiling = 0;
         return err;
       }
 
@@ -822,7 +824,7 @@ static int _default_process_tiling_ptp(struct dt_iop_module_t *self, const struc
 
   dt_pixelpipe_cache_free_align(input);
   dt_pixelpipe_cache_free_align(output);
-  piece->pipe->tiling = 0;
+  mutable_pipe->tiling = 0;
   return 0;
 
 error:
@@ -832,10 +834,10 @@ error:
 fallback:
   dt_pixelpipe_cache_free_align(input);
   dt_pixelpipe_cache_free_align(output);
-  piece->pipe->tiling = 0;
+  mutable_pipe->tiling = 0;
   dt_print(DT_DEBUG_TILING, "[default_process_tiling_ptp] fall back to standard processing for module '%s'\n",
            self->op);
-  int err = self->process(self, piece, ivoid, ovoid);
+  int err = self->process(self, pipe, piece, ivoid, ovoid);
   return err;
 }
 
@@ -843,11 +845,13 @@ fallback:
 
 /* more elaborate tiling algorithm for roi_in != roi_out: slower than the ptp variant,
    more tiles and larger overlap */
-static int _default_process_tiling_roi(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
+static int _default_process_tiling_roi(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+                                        const struct dt_dev_pixelpipe_iop_t *piece,
                                         const void *const ivoid, void *const ovoid,
                                         const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out,
                                         const int in_bpp)
 {
+  dt_dev_pixelpipe_t *const mutable_pipe = (dt_dev_pixelpipe_t *)pipe;
   void *input = NULL;
   void *output = NULL;
 
@@ -873,7 +877,7 @@ static int _default_process_tiling_roi(struct dt_iop_module_t *self, const struc
 
   /* get tiling requirements of module */
   dt_develop_tiling_t tiling = { 0 };
-  self->tiling_callback(self, piece, &tiling);
+  self->tiling_callback(self, pipe, piece, &tiling);
 
   /* tiling really does not make sense in these cases. standard process() is not better or worse than we are
    */
@@ -993,7 +997,7 @@ static int _default_process_tiling_roi(struct dt_iop_module_t *self, const struc
   for(size_t tx = 0; tx < tiles_x; tx++)
     for(size_t ty = 0; ty < tiles_y; ty++)
     {
-      piece->pipe->tiling = 1;
+      mutable_pipe->tiling = 1;
 
       /* the output dimensions of the good part of this specific tile */
       const size_t wd = (tx + 1) * tile_wd > roi_out->width ? (size_t)roi_out->width - tx * tile_wd : tile_wd;
@@ -1087,7 +1091,7 @@ static int _default_process_tiling_roi(struct dt_iop_module_t *self, const struc
       /* prepare input tile buffer */
       input = dt_pixelpipe_cache_alloc_align_cache(
           (size_t)iroi_full.width * iroi_full.height * in_bpp,
-          piece->pipe->type);
+          pipe->type);
       if(input == NULL)
       {
         dt_print(DT_DEBUG_TILING, "[default_process_tiling_roi] could not alloc input buffer for module '%s'\n",
@@ -1096,7 +1100,7 @@ static int _default_process_tiling_roi(struct dt_iop_module_t *self, const struc
       }
       output = dt_pixelpipe_cache_alloc_align_cache(
           (size_t)oroi_full.width * oroi_full.height * out_bpp,
-          piece->pipe->type);
+          pipe->type);
       if(output == NULL)
       {
         dt_print(DT_DEBUG_TILING, "[default_process_tiling_roi] could not alloc output buffer for module '%s'\n",
@@ -1118,12 +1122,12 @@ static int _default_process_tiling_roi(struct dt_iop_module_t *self, const struc
       dt_dev_pixelpipe_iop_t piece_tile = *piece;
       piece_tile.roi_in = iroi_full;
       piece_tile.roi_out = oroi_full;
-      int err = self->process(self, &piece_tile, input, output);
+      int err = self->process(self, pipe, &piece_tile, input, output);
       if(err)
       {
         dt_pixelpipe_cache_free_align(input);
         dt_pixelpipe_cache_free_align(output);
-        piece->pipe->tiling = 0;
+        mutable_pipe->tiling = 0;
         return err;
       }
 
@@ -1148,7 +1152,7 @@ static int _default_process_tiling_roi(struct dt_iop_module_t *self, const struc
 
   dt_pixelpipe_cache_free_align(input);
   dt_pixelpipe_cache_free_align(output);
-  piece->pipe->tiling = 0;
+  mutable_pipe->tiling = 0;
   return 0;
 
 error:
@@ -1158,10 +1162,10 @@ error:
 fallback:
   dt_pixelpipe_cache_free_align(input);
   dt_pixelpipe_cache_free_align(output);
-  piece->pipe->tiling = 0;
+  mutable_pipe->tiling = 0;
   dt_print(DT_DEBUG_TILING, "[default_process_tiling_roi] fall back to standard processing for module '%s'\n",
            self->op);
-  int err = self->process(self, piece, ivoid, ovoid);
+  int err = self->process(self, pipe, piece, ivoid, ovoid);
   return err;
 }
 
@@ -1172,26 +1176,29 @@ fallback:
    _default_process_tiling_roi() takes care of all other cases where image gets distorted and for module
    "clipping",
    "flip" as this may flip or mirror the image. */
-int default_process_tiling(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
+int default_process_tiling(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+                           const struct dt_dev_pixelpipe_iop_t *piece,
                            const void *const ivoid, void *const ovoid, const int in_bpp)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
   if(memcmp(roi_in, roi_out, sizeof(struct dt_iop_roi_t)) || (self->flags() & IOP_FLAGS_TILING_FULL_ROI))
-    return _default_process_tiling_roi(self, piece, ivoid, ovoid, roi_in, roi_out, in_bpp);
+    return _default_process_tiling_roi(self, pipe, piece, ivoid, ovoid, roi_in, roi_out, in_bpp);
   else
-    return _default_process_tiling_ptp(self, piece, ivoid, ovoid, roi_in, roi_out, in_bpp);
+    return _default_process_tiling_ptp(self, pipe, piece, ivoid, ovoid, roi_in, roi_out, in_bpp);
 }
 
 
 
 #ifdef HAVE_OPENCL
 /* simple tiling algorithm for roi_in == roi_out, i.e. for pixel to pixel modules/operations */
-static int _default_process_tiling_cl_ptp(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
+static int _default_process_tiling_cl_ptp(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+                                          const struct dt_dev_pixelpipe_iop_t *piece,
                                           const void *const ivoid, void *const ovoid,
                                           const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out,
                                           const int in_bpp)
 {
+  dt_dev_pixelpipe_t *const mutable_pipe = (dt_dev_pixelpipe_t *)pipe;
   cl_int err = -999;
   cl_mem input = NULL;
   cl_mem output = NULL;
@@ -1205,14 +1212,14 @@ static int _default_process_tiling_cl_ptp(struct dt_iop_module_t *self, const st
 
   const int out_bpp = piece->dsc_out.bpp;
 
-  const int devid = piece->pipe->devid;
+  const int devid = pipe->devid;
   const int ipitch = roi_in->width * in_bpp;
   const int opitch = roi_out->width * out_bpp;
   const int max_bpp = _max(in_bpp, out_bpp);
 
   /* get tiling requirements of module */
   dt_develop_tiling_t tiling = { 0 };
-  self->tiling_callback(self, piece, &tiling);
+  self->tiling_callback(self, pipe, piece, &tiling);
 
   /* shall we use pinned memory transfers? */
   gboolean use_pinned_memory = dt_opencl_use_pinned_memory(devid);
@@ -1361,7 +1368,7 @@ static int _default_process_tiling_cl_ptp(struct dt_iop_module_t *self, const st
   for(size_t tx = 0; tx < tiles_x; tx++)
     for(size_t ty = 0; ty < tiles_y; ty++)
     {
-      piece->pipe->tiling = 1;
+      mutable_pipe->tiling = 1;
 
       const size_t wd = tx * tile_wd + width > roi_in->width ? roi_in->width - tx * tile_wd : width;
       const size_t ht = ty * tile_ht + height > roi_in->height ? roi_in->height - ty * tile_ht : height;
@@ -1426,7 +1433,7 @@ static int _default_process_tiling_cl_ptp(struct dt_iop_module_t *self, const st
       dt_dev_pixelpipe_iop_t piece_tile = *piece;
       piece_tile.roi_in = iroi;
       piece_tile.roi_out = oroi;
-      if(!self->process_cl(self, &piece_tile, input, output)) goto error;
+      if(!self->process_cl(self, pipe, &piece_tile, input, output)) goto error;
 
       if(use_pinned_memory)
       {
@@ -1491,7 +1498,7 @@ static int _default_process_tiling_cl_ptp(struct dt_iop_module_t *self, const st
   dt_opencl_release_mem_object(pinned_output);
   dt_opencl_release_mem_object(input);
   dt_opencl_release_mem_object(output);
-  piece->pipe->tiling = 0;
+  mutable_pipe->tiling = 0;
   return TRUE;
 
 error:
@@ -1501,7 +1508,7 @@ error:
   dt_opencl_release_mem_object(pinned_output);
   dt_opencl_release_mem_object(input);
   dt_opencl_release_mem_object(output);
-  piece->pipe->tiling = 0;
+  mutable_pipe->tiling = 0;
   const gboolean pinning_error = (use_pinned_memory == FALSE) && dt_opencl_use_pinned_memory(devid);
   dt_print(DT_DEBUG_TILING | DT_DEBUG_OPENCL,
       "[default_process_tiling_opencl_ptp] couldn't run process_cl() for module '%s' in tiling mode:%s %i\n",
@@ -1513,11 +1520,13 @@ error:
 
 /* more elaborate tiling algorithm for roi_in != roi_out: slower than the ptp variant,
    more tiles and larger overlap */
-static int _default_process_tiling_cl_roi(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
+static int _default_process_tiling_cl_roi(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+                                          const struct dt_dev_pixelpipe_iop_t *piece,
                                           const void *const ivoid, void *const ovoid,
                                           const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out,
                                           const int in_bpp)
 {
+  dt_dev_pixelpipe_t *const mutable_pipe = (dt_dev_pixelpipe_t *)pipe;
   cl_int err = -999;
   cl_mem input = NULL;
   cl_mem output = NULL;
@@ -1534,7 +1543,7 @@ static int _default_process_tiling_cl_roi(struct dt_iop_module_t *self, const st
 
   const int out_bpp = piece->dsc_out.bpp;
 
-  const int devid = piece->pipe->devid;
+  const int devid = pipe->devid;
   const int ipitch = roi_in->width * in_bpp;
   const int opitch = roi_out->width * out_bpp;
   const int max_bpp = _max(in_bpp, out_bpp);
@@ -1550,7 +1559,7 @@ static int _default_process_tiling_cl_roi(struct dt_iop_module_t *self, const st
 
   /* get tiling requirements of module */
   dt_develop_tiling_t tiling = { 0 };
-  self->tiling_callback(self, piece, &tiling);
+  self->tiling_callback(self, pipe, piece, &tiling);
 
   /* shall we use pinned memory transfers? */
   gboolean use_pinned_memory = dt_opencl_use_pinned_memory(devid);
@@ -1713,7 +1722,7 @@ static int _default_process_tiling_cl_roi(struct dt_iop_module_t *self, const st
   for(size_t tx = 0; tx < tiles_x; tx++)
     for(size_t ty = 0; ty < tiles_y; ty++)
     {
-      piece->pipe->tiling = 1;
+      mutable_pipe->tiling = 1;
 
       /* the output dimensions of the good part of this specific tile */
       const size_t wd = (tx + 1) * tile_wd > roi_out->width ? (size_t)roi_out->width - tx * tile_wd : tile_wd;
@@ -1861,7 +1870,7 @@ static int _default_process_tiling_cl_roi(struct dt_iop_module_t *self, const st
       dt_dev_pixelpipe_iop_t piece_tile = *piece;
       piece_tile.roi_in = iroi_full;
       piece_tile.roi_out = oroi_full;
-      if(!self->process_cl(self, &piece_tile, input, output)) goto error;
+      if(!self->process_cl(self, pipe, &piece_tile, input, output)) goto error;
 
       if(use_pinned_memory)
       {
@@ -1909,7 +1918,7 @@ static int _default_process_tiling_cl_roi(struct dt_iop_module_t *self, const st
   dt_opencl_release_mem_object(pinned_output);
   dt_opencl_release_mem_object(input);
   dt_opencl_release_mem_object(output);
-  piece->pipe->tiling = 0;
+  mutable_pipe->tiling = 0;
   return TRUE;
 
 error:
@@ -1919,7 +1928,7 @@ error:
   dt_opencl_release_mem_object(pinned_output);
   dt_opencl_release_mem_object(input);
   dt_opencl_release_mem_object(output);
-  piece->pipe->tiling = 0;
+  mutable_pipe->tiling = 0;
   const gboolean pinning_error = (use_pinned_memory == FALSE) && dt_opencl_use_pinned_memory(devid);
   dt_print(DT_DEBUG_OPENCL | DT_DEBUG_TILING,
       "[default_process_tiling_opencl_roi] couldn't run process_cl() for module '%s' in tiling mode:%s %i\n",
@@ -1933,21 +1942,24 @@ error:
 /* if a module does not implement process_tiling_cl() by itself, this function is called instead.
    _default_process_tiling_cl_ptp() is able to handle standard cases where pixels do not change their places.
    _default_process_tiling_cl_roi() takes care of all other cases where image gets distorted. */
-int default_process_tiling_cl(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
+int default_process_tiling_cl(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+                              const struct dt_dev_pixelpipe_iop_t *piece,
                               const void *const ivoid, void *const ovoid, const int in_bpp)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
   if(memcmp(roi_in, roi_out, sizeof(struct dt_iop_roi_t)) || (self->flags() & IOP_FLAGS_TILING_FULL_ROI))
-    return _default_process_tiling_cl_roi(self, piece, ivoid, ovoid, roi_in, roi_out, in_bpp);
+    return _default_process_tiling_cl_roi(self, pipe, piece, ivoid, ovoid, roi_in, roi_out, in_bpp);
   else
-    return _default_process_tiling_cl_ptp(self, piece, ivoid, ovoid, roi_in, roi_out, in_bpp);
+    return _default_process_tiling_cl_ptp(self, pipe, piece, ivoid, ovoid, roi_in, roi_out, in_bpp);
 }
 
 #else
-int default_process_tiling_cl(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
+int default_process_tiling_cl(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+                              const struct dt_dev_pixelpipe_iop_t *piece,
                               const void *const ivoid, void *const ovoid, const int in_bpp)
 {
+  (void)pipe;
   return FALSE;
 }
 #endif
@@ -1959,7 +1971,8 @@ int default_process_tiling_cl(struct dt_iop_module_t *self, const struct dt_dev_
    alignment required. Simple pixel to pixel modules (take tonecurve as an example) can happily
    live with that.
    (1) Small overhead like look-up-tables in tonecurve can be ignored safely. */
-void default_tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
+void default_tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+                             const struct dt_dev_pixelpipe_iop_t *piece,
                              struct dt_develop_tiling_t *tiling)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
@@ -1978,7 +1991,7 @@ void default_tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_p
 
   if((self->flags() & IOP_FLAGS_TILING_FULL_ROI) == IOP_FLAGS_TILING_FULL_ROI) tiling->overlap = 4;
 
-  if(self->iop_order > dt_ioppr_get_iop_order(piece->pipe->iop_order_list, "demosaic", 0)) return;
+  if(self->iop_order > dt_ioppr_get_iop_order(pipe->iop_order_list, "demosaic", 0)) return;
 
   // all operations that work with mosaiced data should respect pattern size!
 

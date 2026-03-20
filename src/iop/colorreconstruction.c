@@ -580,7 +580,7 @@ static void dt_iop_colorreconstruct_bilateral_slice(const dt_iop_colorreconstruc
 }
 
 
-int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
@@ -608,7 +608,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, c
 
   // here is where we generate the canned bilateral grid of the preview pipe for later use
   int err = 0;
-  if(self->dev->gui_attached && g && dt_dev_pixelpipe_has_preview_output(self->dev, piece->pipe, roi_out))
+  if(self->dev->gui_attached && g && dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
   {
     uint64_t hash = piece->global_hash;
     dt_iop_gui_enter_critical_section(self);
@@ -921,7 +921,7 @@ static cl_int dt_iop_colorreconstruct_bilateral_slice_cl(dt_iop_colorreconstruct
   return err;
 }
 
-int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
+int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
@@ -940,7 +940,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece
 
   dt_iop_colorreconstruct_bilateral_cl_t *b;
 
-  b = dt_iop_colorreconstruct_bilateral_init_cl(piece->pipe->devid, gd, roi_in, 1.f, sigma_s, sigma_r);
+  b = dt_iop_colorreconstruct_bilateral_init_cl(pipe->devid, gd, roi_in, 1.f, sigma_s, sigma_r);
   if(!b) goto error;
   err = dt_iop_colorreconstruct_bilateral_splat_cl(b, dev_in, d->threshold, d->precedence, params);
   if(err != CL_SUCCESS) goto error;
@@ -950,7 +950,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece
   err = dt_iop_colorreconstruct_bilateral_slice_cl(b, dev_in, dev_out, d->threshold, roi_in, 1.f);
   if(err != CL_SUCCESS) goto error;
 
-  if(self->dev->gui_attached && g && dt_dev_pixelpipe_has_preview_output(self->dev, piece->pipe, roi_out))
+  if(self->dev->gui_attached && g && dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
   {
     uint64_t hash = piece->global_hash;
     dt_iop_gui_enter_critical_section(self);
@@ -1007,11 +1007,11 @@ static size_t dt_iop_colorreconstruct_bilateral_singlebuffer_size(const int widt
   return size_x * size_y * size_z * 4 * sizeof(float);
 }
 
-void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece, struct dt_develop_tiling_t *tiling)
+void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe, const struct dt_dev_pixelpipe_iop_t *piece, struct dt_develop_tiling_t *tiling)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
-  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_colorreconstruct_data_t *d = (dt_iop_colorreconstruct_data_t *)piece->data;
+  (void)pipe;
   // the total scale is composed of scale before input to the pipeline (iscale),
   // and the scale of the roi.
   const float scale = 1.f / roi_in->scale;

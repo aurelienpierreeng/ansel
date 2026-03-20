@@ -271,7 +271,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
       if(cl_mem_process_input_temp == NULL)
         goto error;
 
-      if(!dt_ioppr_transform_image_colorspace_cl(module, piece->pipe->devid, cl_mem_input, cl_mem_process_input_temp,
+      if(!dt_ioppr_transform_image_colorspace_cl(module, pipe->devid, cl_mem_input, cl_mem_process_input_temp,
                                                  piece->roi_in.width, piece->roi_in.height,
                                                  process_input_dsc.cst, piece->dsc_in.cst,
                                                  &process_input_dsc.cst, work_profile))
@@ -285,7 +285,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
                                           process_input_dsc.bpp, piece->dsc_out.bpp,
                                           cst_before_cl, cst_after_cl);
 
-      if(!module->process_cl(module, piece, cl_mem_process_input, cl_mem_output))
+      if(!module->process_cl(module, pipe, piece, cl_mem_process_input, cl_mem_output))
       goto error;
 
     *pixelpipe_flow |= PIXELPIPE_FLOW_PROCESSED_ON_GPU;
@@ -298,7 +298,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
                                                               & (DEVELOP_MASK_MASK_CONDITIONAL | DEVELOP_MASK_RASTER)
                                                           : 0;
       const dt_dev_pixelpipe_display_mask_t request_mask_display
-          = (module->dev->gui_attached && (module == module->dev->gui_module) && (piece->pipe == module->dev->pipe)
+          = (module->dev->gui_attached && (module == module->dev->gui_module) && (pipe == module->dev->pipe)
              && preview_mask_mode)
                 ? module->request_mask_display
                 : DT_DEV_PIXELPIPE_DISPLAY_NONE;
@@ -321,7 +321,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
           if(cl_mem_blend_input_temp == NULL)
             goto error;
 
-          success &= dt_ioppr_transform_image_colorspace_cl(module, piece->pipe->devid,
+          success &= dt_ioppr_transform_image_colorspace_cl(module, pipe->devid,
                                                             cl_mem_process_input, cl_mem_blend_input_temp,
                                                             piece->roi_in.width, piece->roi_in.height,
                                                             blend_input_dsc.cst, blend_cst,
@@ -343,7 +343,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
           if(cl_mem_blend_output_temp == NULL)
             goto error;
 
-          success &= dt_ioppr_transform_image_colorspace_cl(module, piece->pipe->devid, cl_mem_output,
+          success &= dt_ioppr_transform_image_colorspace_cl(module, pipe->devid, cl_mem_output,
                                                             cl_mem_blend_output_temp, piece->roi_out.width,
                                                             piece->roi_out.height, blend_output_dsc.cst, blend_cst,
                                                             &blend_output_dsc.cst, work_profile);
@@ -364,7 +364,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
         }
       }
 
-      if(dt_develop_blend_process_cl(module, piece, cl_mem_blend_input, cl_mem_blend_output))
+      if(dt_develop_blend_process_cl(module, pipe, piece, cl_mem_blend_input, cl_mem_blend_output))
         goto error;
 
       if((blend_transforms & DT_DEV_PIXELPIPE_BLEND_TRANSFORM_OUTPUT)
@@ -372,12 +372,12 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
       {
         size_t origin[] = { 0, 0, 0 };
         size_t region[] = { piece->roi_out.width, piece->roi_out.height, 1 };
-        if(dt_opencl_enqueue_copy_image(piece->pipe->devid, cl_mem_blend_output, cl_mem_output, origin, origin,
+        if(dt_opencl_enqueue_copy_image(pipe->devid, cl_mem_blend_output, cl_mem_output, origin, origin,
                                         region) != CL_SUCCESS)
           goto error;
       }
       else if((blend_transforms & DT_DEV_PIXELPIPE_BLEND_TRANSFORM_OUTPUT)
-              && !dt_ioppr_transform_image_colorspace_cl(module, piece->pipe->devid, cl_mem_blend_output,
+              && !dt_ioppr_transform_image_colorspace_cl(module, pipe->devid, cl_mem_blend_output,
                                                          cl_mem_output, piece->roi_out.width,
                                                          piece->roi_out.height, blend_output_dsc.cst,
                                                          piece->dsc_out.cst, &blend_output_dsc.cst,
@@ -437,7 +437,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
       input_locked = TRUE;
     }
 
-    int fail = !module->process_tiling_cl(module, piece, module_input, output, input_entry->dsc.bpp);
+    int fail = !module->process_tiling_cl(module, pipe, piece, module_input, output, input_entry->dsc.bpp);
     dt_opencl_finish(pipe->devid);
 
     if(fail)
@@ -505,7 +505,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
       }
     }
 
-    dt_develop_blend_process(module, piece, blend_input, blend_output);
+    dt_develop_blend_process(module, pipe, piece, blend_input, blend_output);
     *pixelpipe_flow |= PIXELPIPE_FLOW_BLENDED_ON_CPU;
     *pixelpipe_flow &= ~(PIXELPIPE_FLOW_BLENDED_ON_GPU);
 

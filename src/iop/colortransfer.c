@@ -351,7 +351,7 @@ static int kmeans(const float *col, const dt_iop_roi_t *const roi, const int n, 
   return 0;
 }
 
-int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
@@ -364,7 +364,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, c
 
   if(data->flag == ACQUIRE)
   {
-    if(dt_dev_pixelpipe_has_preview_output(self->dev, piece->pipe, roi_out))
+    if(dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
     {
       // only get stuff from the preview pipe, rest stays untouched.
       int hist[HISTN];

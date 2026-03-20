@@ -125,7 +125,8 @@ static void process_common_setup(dt_iop_module_t *self, const dt_dev_pixelpipe_i
   }
 }
 
-int process(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid)
+int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
+            const void *const ivoid, void *const ovoid)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
@@ -135,6 +136,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const vo
 
   dt_develop_t *dev = self->dev;
   const dt_image_t *const image = &(dev->image_storage);
+  dt_dev_pixelpipe_t *const runtime_pipe = (dt_dev_pixelpipe_t *)pipe;
 
   const int ch = piece->dsc_in.channels;
   const double iop_order = self->iop_order;
@@ -183,7 +185,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const vo
 #pragma omp parallel for SIMD() default(none) \
   dt_omp_firstprivate(ch, color, coordbufsize, d, \
                       dt_iop_rawoverexposed_colors, filters, iop_order, mode, \
-                      out, raw, roi_in, roi_out, xtrans) \
+                      out, raw, roi_in, roi_out, runtime_pipe, xtrans) \
   dt_omp_sharedconst(coordbuf) \
   shared(self, buf) \
   schedule(static)
@@ -200,7 +202,8 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const vo
     }
 
     // where did they come from?
-    dt_dev_distort_backtransform_plus(self->dev, self->dev->pipe, iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, bufptr, roi_out->width);
+    dt_dev_distort_backtransform_plus(self->dev, runtime_pipe, iop_order,
+                                      DT_DEV_TRANSFORM_DIR_BACK_INCL, bufptr, roi_out->width);
 
     for(int i = 0; i < roi_out->width; i++)
     {
@@ -247,12 +250,12 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const vo
 
   dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
 
-  if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK) dt_iop_alpha_copy(ivoid, ovoid, roi_out->width, roi_out->height);
+  if(pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK) dt_iop_alpha_copy(ivoid, ovoid, roi_out->width, roi_out->height);
   return 0;
 }
 
 #ifdef HAVE_OPENCL
-int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
+int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
@@ -280,7 +283,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece
     goto error;
   }
 
-  const int devid = piece->pipe->devid;
+  const int devid = pipe->devid;
 
   const int width = roi_out->width;
   const int height = roi_out->height;
@@ -307,9 +310,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece
 
   const size_t coordbufsize = (size_t)height * width * 2 * sizeof(float);
 
-  coordbuf = dt_pixelpipe_cache_alloc_align_cache(
-      coordbufsize,
-      piece->pipe->type);
+  coordbuf = dt_pixelpipe_cache_alloc_align_cache(coordbufsize, pipe->type);
   if(coordbuf == NULL) goto error;
 
 #ifdef _OPENMP
@@ -418,10 +419,8 @@ error:
 }
 #endif
 
-void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece, struct dt_develop_tiling_t *tiling)
+void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe, const struct dt_dev_pixelpipe_iop_t *piece, struct dt_develop_tiling_t *tiling)
 {
-  const dt_iop_roi_t *const roi_in = &piece->roi_in;
-  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_develop_t *dev = self->dev;
   const dt_image_t *const image = &(dev->image_storage);
 

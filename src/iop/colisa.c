@@ -122,11 +122,12 @@ void input_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelp
   dsc->datatype = TYPE_FLOAT;
 }
 
-int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid)
 {
+  (void)self;
+  (void)pipe;
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
-  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_colisa_data_t *data = (dt_iop_colisa_data_t *)piece->data;
   float *in = (float *)ivoid;
   float *out = (float *)ovoid;

@@ -440,7 +440,8 @@ static inline void _lens_fill_vignette_row(float *const buf, const int width, co
    As green / Y channel is the most centric i took that as the canonical value instead of taking the mean.
 */
 
-int process(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid)
+int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
+            const void *const ivoid, void *const ovoid)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
@@ -449,7 +450,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const vo
 
   const int ch = piece->dsc_in.channels;
   const int ch_width = ch * roi_in->width;
-  const int mask_display = piece->pipe->mask_display;
+  const int mask_display = pipe->mask_display;
 
   const unsigned int pixelformat = ch == 3 ? LF_CR_3(RED, GREEN, BLUE) : LF_CR_4(RED, GREEN, BLUE, UNKNOWN);
 
@@ -572,7 +573,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const vo
     const size_t bufsize = (size_t)roi_in->width * roi_in->height * ch * sizeof(float);
     void *buf = dt_pixelpipe_cache_alloc_align_cache(
         bufsize,
-        piece->pipe->type);
+        pipe->type);
     if(buf == NULL) return 1;
     memcpy(buf, ivoid, bufsize);
 
@@ -670,7 +671,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const vo
   }
   delete modifier;
 
-  if(self->dev->gui_attached && g && dt_dev_pixelpipe_has_preview_output(self->dev, piece->pipe, roi_out))
+  if(self->dev->gui_attached && g && dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
   {
     dt_iop_gui_enter_critical_section(self);
     g->corrections_done = (modflags & LENSFUN_MODFLAG_MASK);
@@ -680,7 +681,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const vo
 }
 
 #ifdef HAVE_OPENCL
-int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
+int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
@@ -698,7 +699,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece
   float *tmpbuf = NULL;
   lfModifier *modifier = NULL;
 
-  const int devid = piece->pipe->devid;
+  const int devid = pipe->devid;
   const int iwidth = roi_in->width;
   const int iheight = roi_in->height;
   const int owidth = roi_out->width;
@@ -753,7 +754,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece
 
   tmpbuf = (float *)dt_pixelpipe_cache_alloc_align_cache(
       tmpbuflen,
-      piece->pipe->type);
+      pipe->type);
   if(tmpbuf == NULL) goto error;
 
   dev_tmp = (cl_mem)dt_opencl_alloc_device(devid, width, height, sizeof(float) * 4);
@@ -925,7 +926,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece
     }
   }
 
-  if(self->dev->gui_attached && g && dt_dev_pixelpipe_has_preview_output(self->dev, piece->pipe, roi_out))
+  if(self->dev->gui_attached && g && dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
   {
     dt_iop_gui_enter_critical_section(self);
     g->corrections_done = (modflags & LENSFUN_MODFLAG_MASK);
@@ -948,7 +949,7 @@ error:
 }
 #endif
 
-void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece, struct dt_develop_tiling_t *tiling)
+void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe, const struct dt_dev_pixelpipe_iop_t *piece, struct dt_develop_tiling_t *tiling)
 {
   tiling->factor = 4.5f; // in + out + tmp + tmpbuf
   tiling->maxbuf = 1.5f;
@@ -959,7 +960,7 @@ void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe
   return;
 }
 
-int distort_transform(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, float *const __restrict points, size_t points_count)
+int distort_transform(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece, float *const __restrict points, size_t points_count)
 {
   dt_iop_lensfun_data_t *d = (dt_iop_lensfun_data_t *)piece->data;
   if(!d->lens || !d->lens->Maker || d->crop <= 0.0f) return 0;
@@ -991,7 +992,7 @@ int distort_transform(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, floa
   return 1;
 }
 
-int distort_backtransform(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, float *const __restrict points,
+int distort_backtransform(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece, float *const __restrict points,
                           size_t points_count)
 {
   dt_iop_lensfun_data_t *d = (dt_iop_lensfun_data_t *)piece->data;
@@ -1026,9 +1027,11 @@ int distort_backtransform(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, 
 }
 
 // TODO: Shall we keep LF_MODIFY_TCA in the modifiers?
-void distort_mask(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece, const float *const in,
-                  float *const out, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+void distort_mask(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_t *pipe, struct dt_dev_pixelpipe_iop_t *piece,
+                  const float *const in, float *const out, const dt_iop_roi_t *const roi_in,
+                  const dt_iop_roi_t *const roi_out)
 {
+  (void)pipe;
   const dt_iop_lensfun_data_t *const d = (dt_iop_lensfun_data_t *)piece->data;
 
   if(!d->lens || !d->lens->Maker || d->crop <= 0.0f)
@@ -1124,8 +1127,10 @@ void modify_roi_in(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *
     float xm = FLT_MAX, xM = -FLT_MAX, ym = FLT_MAX, yM = -FLT_MAX;
     const size_t nbpoints = 2 * awidth + 2 * aheight;
 
+    // ROI planning does not thread the current pipe here yet. This temporary edge buffer only
+    // needs an allocator bucket id, so use a stable generic bucket.
     float *const buf = (float *)dt_pixelpipe_cache_alloc_align_cache(sizeof(float) * nbpoints * 2 * 3,
-                                                                     piece->pipe->type);
+                                                                     DT_DEV_PIXELPIPE_FULL);
     if(buf == NULL) return;
 
 #ifdef _OPENMP

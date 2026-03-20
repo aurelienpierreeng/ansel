@@ -210,8 +210,9 @@ static int vng_interpolate(float *out, const float *const in,
 
 #ifdef HAVE_OPENCL
 
-static int process_vng_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in,
-                          cl_mem dev_out, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out,
+static int process_vng_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
+                          const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
+                          const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out,
                           const gboolean smooth, const int only_vng_linear)
 {
   dt_iop_demosaic_data_t *data = (dt_iop_demosaic_data_t *)piece->data;
@@ -232,7 +233,7 @@ static int process_vng_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_i
   const int colors = (filters4 == 9u) ? 3 : 4;
   const int prow = (filters4 == 9u) ? 6 : 8;
   const int pcol = (filters4 == 9u) ? 6 : 2;
-  const int devid = piece->pipe->devid;
+  const int devid = pipe->devid;
 
   const float processed_maximum[4]
       = { piece->dsc_in.processed_maximum[0], piece->dsc_in.processed_maximum[1],
@@ -253,7 +254,7 @@ static int process_vng_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_i
 
   if(piece->dsc_in.filters == 9u)
   {
-    dev_xtrans = dt_opencl_copy_host_to_device_constant(devid, sizeof(piece->dsc_in.xtrans), piece->dsc_in.xtrans);
+    dev_xtrans = dt_opencl_copy_host_to_device_constant(devid, sizeof(piece->dsc_in.xtrans), (void *)piece->dsc_in.xtrans);
     if(dev_xtrans == NULL) goto error;
   }
 
@@ -388,7 +389,7 @@ static int process_vng_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_i
     dev_green_eq = dt_opencl_alloc_device(devid, roi_in->width, roi_in->height, sizeof(float));
     if(dev_green_eq == NULL) goto error;
 
-    if(!green_equilibration_cl(self, piece, dev_in, dev_green_eq, roi_in))
+    if(!green_equilibration_cl(self, pipe, piece, dev_in, dev_green_eq, roi_in))
       goto error;
 
     dev_in = dev_green_eq;
@@ -506,7 +507,7 @@ static int process_vng_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_i
     err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_vng_green_equilibrate, sizes);
     if(err != CL_SUCCESS) goto error;
   }
-  dt_dev_write_rawdetail_mask_cl(piece, dev_aux, roi_in, DT_DEV_DETAIL_MASK_DEMOSAIC);
+  dt_dev_write_rawdetail_mask_cl(pipe, piece, dev_aux, roi_in, DT_DEV_DETAIL_MASK_DEMOSAIC);
 
   if(dev_aux != dev_out) dt_opencl_release_mem_object(dev_aux);
   dev_aux = NULL;
@@ -536,7 +537,7 @@ static int process_vng_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_i
   // color smoothing
   if((data->color_smoothing) && smooth)
   {
-    if(!color_smoothing_cl(self, piece, dev_out, dev_out, roi_out, data->color_smoothing))
+    if(!color_smoothing_cl(self, pipe, piece, dev_out, dev_out, roi_out, data->color_smoothing))
       goto error;
   }
 

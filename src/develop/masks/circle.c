@@ -657,14 +657,15 @@ static int _circle_get_points_border(dt_develop_t *dev, struct dt_masks_form_t *
   return 1;
 }
 
-static int _circle_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece,
+static int _circle_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe,
+                                   dt_dev_pixelpipe_iop_t *piece,
                                    dt_masks_form_t *form, int *width, int *height, int *posx, int *posy)
 {
   // we get the circle values
   if(!form || !form->points) return 0;
   dt_masks_node_circle_t *circle = (dt_masks_node_circle_t *)((form->points)->data);
   if(!circle) return 0;
-  float wd = piece->pipe->iwidth, ht = piece->pipe->iheight;
+  float wd = pipe->iwidth, ht = pipe->iheight;
 
   // compute the points we need to transform (center and circumference of circle)
   const float outer_radius = circle->radius + circle->border;
@@ -675,7 +676,7 @@ static int _circle_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_iop
     return 1;
 
   // and transform them with all distorted modules
-  if(!dt_dev_distort_transform_plus(darktable.develop, piece->pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points, num_points))
+  if(!dt_dev_distort_transform_plus(darktable.develop, pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points, num_points))
   {
     dt_pixelpipe_cache_free_align(points);
     return 1;
@@ -686,7 +687,7 @@ static int _circle_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_iop
   return 0;
 }
 
-static int _circle_get_area(const dt_iop_module_t *const restrict module,
+static int _circle_get_area(const dt_iop_module_t *const restrict module, dt_dev_pixelpipe_t *pipe,
                             const dt_dev_pixelpipe_iop_t *const restrict piece,
                             dt_masks_form_t *const restrict form,
                             int *width, int *height, int *posx, int *posy)
@@ -695,7 +696,7 @@ static int _circle_get_area(const dt_iop_module_t *const restrict module,
   // we get the circle values
   dt_masks_node_circle_t *circle = (dt_masks_node_circle_t *)((form->points)->data);
   if(!circle) return 0;
-  float wd = piece->pipe->iwidth, ht = piece->pipe->iheight;
+  float wd = pipe->iwidth, ht = pipe->iheight;
 
   // compute the points we need to transform (center and circumference of circle)
   const float outer_radius = circle->radius + circle->border;
@@ -706,7 +707,7 @@ static int _circle_get_area(const dt_iop_module_t *const restrict module,
     return 1;
 
   // and transform them with all distorted modules
-  if(!dt_dev_distort_transform_plus(module->dev, piece->pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points, num_points))
+  if(!dt_dev_distort_transform_plus(module->dev, pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points, num_points))
   {
     dt_pixelpipe_cache_free_align(points);
     return 1;
@@ -717,7 +718,7 @@ static int _circle_get_area(const dt_iop_module_t *const restrict module,
   return 0;
 }
 
-static int _circle_get_mask(const dt_iop_module_t *const restrict module,
+static int _circle_get_mask(const dt_iop_module_t *const restrict module, dt_dev_pixelpipe_t *pipe,
                             const dt_dev_pixelpipe_iop_t *const restrict piece,
                             dt_masks_form_t *const restrict form,
                             float **buffer, int *width, int *height, int *posx, int *posy)
@@ -726,7 +727,7 @@ static int _circle_get_mask(const dt_iop_module_t *const restrict module,
   if(darktable.unmuted & DT_DEBUG_PERF) start2 = dt_get_wtime();
 
   // we get the area
-  if(_circle_get_area(module, piece, form, width, height, posx, posy) != 0) return 1;
+  if(_circle_get_area(module, pipe, piece, form, width, height, posx, posy) != 0) return 1;
 
   if(darktable.unmuted & DT_DEBUG_PERF)
   {
@@ -770,7 +771,7 @@ static int _circle_get_mask(const dt_iop_module_t *const restrict module,
     start2 = dt_get_wtime();
   }
   // we back transform all this points
-  if(!dt_dev_distort_backtransform_plus(module->dev, piece->pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points, (size_t)w * h))
+  if(!dt_dev_distort_backtransform_plus(module->dev, pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points, (size_t)w * h))
   {
     dt_pixelpipe_cache_free_align(points);
     return 1;
@@ -793,7 +794,7 @@ static int _circle_get_mask(const dt_iop_module_t *const restrict module,
 
   // we populate the buffer
   float *const restrict ptbuffer = *buffer;
-  const int wi = piece->pipe->iwidth, hi = piece->pipe->iheight;
+  const int wi = pipe->iwidth, hi = pipe->iheight;
   const int mindim = MIN(wi, hi);
   const float centerx = circle->center[0] * wi;
   const float centery = circle->center[1] * hi;
@@ -826,7 +827,7 @@ static int _circle_get_mask(const dt_iop_module_t *const restrict module,
 }
 
 
-static int _circle_get_mask_roi(const dt_iop_module_t *const restrict module,
+static int _circle_get_mask_roi(const dt_iop_module_t *const restrict module, dt_dev_pixelpipe_t *pipe,
                                 const dt_dev_pixelpipe_iop_t *const restrict piece,
                                 dt_masks_form_t *const form, const dt_iop_roi_t *const roi,
                                 float *const restrict buffer)
@@ -841,7 +842,7 @@ static int _circle_get_mask_roi(const dt_iop_module_t *const restrict module,
   // we get the circle parameters
   dt_masks_node_circle_t *circle = (dt_masks_node_circle_t *)((form->points)->data);
   if(!circle) return 1;
-  const int wi = piece->pipe->iwidth, hi = piece->pipe->iheight;
+  const int wi = pipe->iwidth, hi = pipe->iheight;
   const float centerx = circle->center[0] * wi;
   const float centery = circle->center[1] * hi;
   const int min_dimention = MIN(wi, hi);
@@ -912,7 +913,7 @@ static int _circle_get_mask_roi(const dt_iop_module_t *const restrict module,
   }
 
   // we transform the outer circle from input image coordinates to current point in pixelpipe
-  if(!dt_dev_distort_transform_plus(module->dev, piece->pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, circ,
+  if(!dt_dev_distort_transform_plus(module->dev, pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, circ,
                                         circpts))
   {
     dt_pixelpipe_cache_free_align(circ);
@@ -995,7 +996,7 @@ static int _circle_get_mask_roi(const dt_iop_module_t *const restrict module,
   }
 
   // we back transform all these points to the input image coordinates
-  if(!dt_dev_distort_backtransform_plus(module->dev, piece->pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points,
+  if(!dt_dev_distort_backtransform_plus(module->dev, pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points,
                                         (size_t)bbw * bbh))
   {
     dt_pixelpipe_cache_free_align(points);

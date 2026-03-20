@@ -2363,7 +2363,8 @@ static void _polygon_bounding_box(const float *const point_buffer, const float *
   *posy = ymin - 2;
 }
 
-static int _get_area(const dt_iop_module_t *const module, const dt_dev_pixelpipe_iop_t *const piece,
+static int _get_area(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+                     const dt_dev_pixelpipe_iop_t *const piece,
                      dt_masks_form_t *const mask_form, int *width, int *height, int *posx, int *posy,
                      gboolean get_source)
 {
@@ -2375,7 +2376,7 @@ static int _get_area(const dt_iop_module_t *const module, const dt_dev_pixelpipe
   int point_count = 0;
   int border_count = 0;
 
-  if(_polygon_get_pts_border(module->dev, mask_form, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, piece->pipe,
+  if(_polygon_get_pts_border(module->dev, mask_form, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, pipe,
                              &point_buffer, &point_count, &border_buffer, &border_count, get_source) != 0)
   {
     dt_pixelpipe_cache_free_align(point_buffer);
@@ -2392,17 +2393,19 @@ static int _get_area(const dt_iop_module_t *const module, const dt_dev_pixelpipe
   return 0;
 }
 
-static int _polygon_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece,
+static int _polygon_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe,
+                                   dt_dev_pixelpipe_iop_t *piece,
                                    dt_masks_form_t *mask_form, int *width, int *height, int *posx, int *posy)
 {
-  return _get_area(module, piece, mask_form, width, height, posx, posy, TRUE);
+  return _get_area(module, pipe, piece, mask_form, width, height, posx, posy, TRUE);
 }
 
-static int _polygon_get_area(const dt_iop_module_t *const module, const dt_dev_pixelpipe_iop_t *const piece,
+static int _polygon_get_area(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+                             const dt_dev_pixelpipe_iop_t *const piece,
                              dt_masks_form_t *const mask_form,
                              int *width, int *height, int *posx, int *posy)
 {
-  return _get_area(module, piece, mask_form, width, height, posx, posy, FALSE);
+  return _get_area(module, pipe, piece, mask_form, width, height, posx, posy, FALSE);
 }
 
 /**
@@ -2433,7 +2436,8 @@ static int _polygon_get_area(const dt_iop_module_t *const module, const dt_dev_p
   }
 }
 
-static int _polygon_get_mask(const dt_iop_module_t *const module, const dt_dev_pixelpipe_iop_t *const piece,
+static int _polygon_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+                             const dt_dev_pixelpipe_iop_t *const piece,
                              dt_masks_form_t *const mask_form,
                              float **buffer, int *width, int *height, int *posx, int *posy)
 {
@@ -2449,7 +2453,7 @@ static int _polygon_get_mask(const dt_iop_module_t *const module, const dt_dev_p
   int point_count = 0;
   int border_count = 0;
   if(_polygon_get_pts_border(module->dev, mask_form, module->iop_order,
-                             DT_DEV_TRANSFORM_DIR_BACK_INCL, piece->pipe, &point_buffer, &point_count,
+                             DT_DEV_TRANSFORM_DIR_BACK_INCL, pipe, &point_buffer, &point_count,
                              &border_buffer, &border_count, FALSE) != 0)
   {
     dt_pixelpipe_cache_free_align(point_buffer);
@@ -2471,8 +2475,8 @@ static int _polygon_get_mask(const dt_iop_module_t *const module, const dt_dev_p
 
   const int hb = *height;
   const int wb = *width;
-  const gboolean sparse = (dt_dev_pixelpipe_has_preview_output(piece->module->dev, piece->pipe, NULL)
-                           || piece->pipe->type == DT_DEV_PIXELPIPE_THUMBNAIL);
+  const gboolean sparse = (dt_dev_pixelpipe_has_preview_output(piece->module->dev, pipe, NULL)
+                           || pipe->type == DT_DEV_PIXELPIPE_THUMBNAIL);
   const int sparse_factor = sparse ? 4 : 1;
 
   if(darktable.unmuted & DT_DEBUG_PERF)
@@ -3046,7 +3050,8 @@ static inline void _polygon_falloff_roi(float *buffer, int *p0, int *p1, int bw,
 
 // build a stamp which can be combined with other shapes in the same group
 // prerequisite: 'buffer' is all zeros
-static int _polygon_get_mask_roi(const dt_iop_module_t *const module, const dt_dev_pixelpipe_iop_t *const piece,
+static int _polygon_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+                                 const dt_dev_pixelpipe_iop_t *const piece,
                                  dt_masks_form_t *const mask_form,
                                  const dt_iop_roi_t *roi, float *buffer)
 {
@@ -3060,8 +3065,8 @@ static int _polygon_get_mask_roi(const dt_iop_module_t *const module, const dt_d
   const int width = roi->width;
   const int height = roi->height;
   const float scale = roi->scale;
-  const gboolean sparse = (dt_dev_pixelpipe_has_preview_output(piece->module->dev, piece->pipe, roi)
-                           || piece->pipe->type == DT_DEV_PIXELPIPE_THUMBNAIL);
+  const gboolean sparse = (dt_dev_pixelpipe_has_preview_output(piece->module->dev, pipe, roi)
+                           || pipe->type == DT_DEV_PIXELPIPE_THUMBNAIL);
   const int sparse_factor = sparse ? 4 : 1;
 
   // we need to take care of four different cases:
@@ -3077,7 +3082,7 @@ static int _polygon_get_mask_roi(const dt_iop_module_t *const module, const dt_d
   float *points = NULL, *border = NULL;
   int points_count = 0, border_count = 0;
   if(_polygon_get_pts_border(module->dev, mask_form, module->iop_order,
-                             DT_DEV_TRANSFORM_DIR_BACK_INCL, piece->pipe,
+                             DT_DEV_TRANSFORM_DIR_BACK_INCL, pipe,
                              &points, &points_count, &border, &border_count, FALSE) != 0)
   {
     dt_pixelpipe_cache_free_align(points);

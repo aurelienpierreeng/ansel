@@ -212,7 +212,7 @@ static void _trace_histogram_backbuf(const dt_dev_pixelpipe_t *pipe, const dt_io
  * This is the per-module histogram that can be shown in module UIs. Each module may set
  * `piece->histogram_params` to define a ROI. If no ROI is specified, we use the full ROI.
  */
-static void histogram_collect(dt_dev_pixelpipe_iop_t *piece, const void *pixel,
+static void histogram_collect(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece, const void *pixel,
                               uint32_t **histogram, uint32_t *histogram_max)
 {
   dt_dev_histogram_collection_params_t histogram_params = piece->histogram_params;
@@ -232,7 +232,7 @@ static void histogram_collect(dt_dev_pixelpipe_iop_t *piece, const void *pixel,
   const dt_iop_colorspace_type_t cst = piece->dsc_in.cst;
 
   dt_histogram_helper(&histogram_params, &piece->histogram_stats, cst, piece->module->histogram_cst, pixel, histogram,
-                      piece->module->histogram_middle_grey, dt_ioppr_get_pipe_work_profile_info(piece->pipe));
+                      piece->module->histogram_middle_grey, dt_ioppr_get_pipe_work_profile_info(pipe));
   dt_histogram_max_helper(&piece->histogram_stats, cst, piece->module->histogram_cst, histogram, histogram_max);
 }
 
@@ -500,7 +500,8 @@ static int pixelpipe_picker_helper(dt_iop_module_t *module, const dt_iop_roi_t r
  * The picker expects float buffers with known colorspace metadata. This function delegates the pixel
  * aggregation to `dt_color_picker_helper()`.
  */
-static void pixelpipe_picker(dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece, dt_iop_buffer_dsc_t *dsc,
+static void pixelpipe_picker(dt_dev_pixelpipe_t *pipe, dt_iop_module_t *module,
+                             dt_dev_pixelpipe_iop_t *piece, dt_iop_buffer_dsc_t *dsc,
                              const float *pixel, const dt_iop_roi_t roi, float *picked_color,
                              float *picked_color_min, float *picked_color_max,
                              const dt_iop_colorspace_type_t image_cst, dt_pixelpipe_picker_source_t picker_source,
@@ -514,11 +515,11 @@ static void pixelpipe_picker(dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *pi
   dt_aligned_pixel_t min = { 0.0f };
   dt_aligned_pixel_t max = { 0.0f };
 
-  const dt_iop_order_iccprofile_info_t *const profile = dt_ioppr_get_pipe_work_profile_info(piece->pipe);
+  const dt_iop_order_iccprofile_info_t *const profile = dt_ioppr_get_pipe_work_profile_info(pipe);
   const dt_iop_colorspace_type_t picker_cst = dt_iop_color_picker_get_active_cst(module);
 
   dt_color_picker_helper(dsc, pixel, &roi, box, avg, min, max, image_cst, picker_cst, profile);
-  _trace_picker_sample(piece ? piece->pipe : NULL, module, piece, dsc, &roi, box, hash, image_cst, picker_cst,
+  _trace_picker_sample(pipe, module, piece, dsc, &roi, box, hash, image_cst, picker_cst,
                        picker_source, avg, min, max);
 
   for(int k = 0; k < 4; k++)
@@ -550,7 +551,7 @@ static void collect_histogram_on_CPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev
   if((dev->gui_attached || !(piece->request_histogram & DT_REQUEST_ONLY_IN_GUI))
      && (piece->request_histogram & DT_REQUEST_ON))
   {
-    histogram_collect(piece, input, &(piece->histogram), piece->histogram_max);
+    histogram_collect(pipe, piece, input, &(piece->histogram), piece->histogram_max);
 
     if(piece->histogram && (module->request_histogram & DT_REQUEST_ON))
     {
@@ -586,10 +587,10 @@ static void _sample_color_picker(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, fl
        && module->request_color_pick != DT_REQUEST_COLORPICK_OFF))
     return;
 
-  pixelpipe_picker(module, piece, &input_entry->dsc, input, piece->roi_in, module->picked_color,
+  pixelpipe_picker(pipe, module, piece, &input_entry->dsc, input, piece->roi_in, module->picked_color,
                    module->picked_color_min, module->picked_color_max, input_entry->dsc.cst,
                    PIXELPIPE_PICKER_INPUT, input_hash);
-  pixelpipe_picker(module, piece, &output_entry->dsc, (float *)(*output), piece->roi_out,
+  pixelpipe_picker(pipe, module, piece, &output_entry->dsc, (float *)(*output), piece->roi_out,
                    module->picked_output_color,
                    module->picked_output_color_min, module->picked_output_color_max,
                    output_entry->dsc.cst, PIXELPIPE_PICKER_OUTPUT, output_hash);

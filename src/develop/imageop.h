@@ -205,8 +205,8 @@ typedef struct dt_iop_module_so_t
 //  dt_iop_gui_data_t *gui_data;
   /** which results in this widget here, too. */
 
-  int (*process_plain)(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
-                       const void *const i, void *const o);
+  int (*process_plain)(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+                       const struct dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o);
 
   // introspection related data
   gboolean have_introspection;
@@ -335,8 +335,8 @@ typedef struct dt_iop_module_t
   /** delayed-event handling */
   guint timeout_handle;
 
-  int (*process_plain)(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
-                       const void *const i, void *const o);
+  int (*process_plain)(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+                       const struct dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o);
 
   // introspection related data
   gboolean have_introspection;

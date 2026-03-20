@@ -300,13 +300,14 @@ static inline void clipnan_pixel(float *const restrict out, const float *const r
 // clipnan_pixel proves to vectorize just fine, so don't bother implementing a separate SSE version
 #define clipnan_pixel_sse clipnan_pixel
 
-static int get_dither_parameters(const dt_iop_dither_data_t *const data, const dt_dev_pixelpipe_iop_t *const piece,
+static int get_dither_parameters(const dt_iop_dither_data_t *const data, const dt_dev_pixelpipe_t *const pipe,
+                                 const dt_dev_pixelpipe_iop_t *const piece,
                                  const float scale, unsigned int *const restrict levels)
 {
   int graymode = -1;
   *levels = 65536;
   const int l1 = floorf(1.0f + dt_log2f(1.0f / scale));
-  const int bds = (piece->pipe->type != DT_DEV_PIXELPIPE_EXPORT) ? l1 * l1 : 1;
+  const int bds = (pipe->type != DT_DEV_PIXELPIPE_EXPORT) ? l1 * l1 : 1;
 
   switch(data->dither_type)
   {
@@ -327,7 +328,7 @@ static int get_dither_parameters(const dt_iop_dither_data_t *const data, const d
       *levels = 65536;
       break;
     case DITHER_FSAUTO:
-      switch(piece->pipe->levels & IMAGEIO_CHANNEL_MASK)
+      switch(pipe->levels & IMAGEIO_CHANNEL_MASK)
       {
         case IMAGEIO_RGB:
           graymode = 0;
@@ -337,7 +338,7 @@ static int get_dither_parameters(const dt_iop_dither_data_t *const data, const d
           break;
       }
 
-      switch(piece->pipe->levels & IMAGEIO_PREC_MASK)
+      switch(pipe->levels & IMAGEIO_PREC_MASK)
       {
         case IMAGEIO_INT8:
           *levels = 256;
@@ -376,8 +377,8 @@ static int get_dither_parameters(const dt_iop_dither_data_t *const data, const d
 #ifdef _OPENMP
 #pragma omp declare simd aligned(ivoid, ovoid : 64)
 #endif
-static void process_floyd_steinberg(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
-                                    const void *const ivoid, void *const ovoid,
+static void process_floyd_steinberg(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
+                                    dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid,
                                     const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   const dt_iop_dither_data_t *const restrict data = (dt_iop_dither_data_t *)piece->data;
@@ -390,7 +391,7 @@ static void process_floyd_steinberg(struct dt_iop_module_t *self, dt_dev_pixelpi
   float *const restrict out = (float *)ovoid;
 
   unsigned int levels = 1;
-  int graymode = get_dither_parameters(data,piece,scale,&levels);
+  int graymode = get_dither_parameters(data, pipe, piece, scale, &levels);
   if(graymode < 0)
   {
     for(int j = 0; j < height * width; j++)
@@ -411,7 +412,7 @@ static void process_floyd_steinberg(struct dt_iop_module_t *self, dt_dev_pixelpi
       nearest_color(out + 4 * j, err, graymode, f, rf);
     }
 
-    if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
+    if(pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
       dt_iop_alpha_copy(ivoid, ovoid, roi_out->width, roi_out->height);
     return;
   }
@@ -496,7 +497,7 @@ static void process_floyd_steinberg(struct dt_iop_module_t *self, dt_dev_pixelpi
   }
 
   // copy alpha channel if needed
-  if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
+  if(pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
     dt_iop_alpha_copy(ivoid, ovoid, roi_out->width, roi_out->height);
 }
 
@@ -504,8 +505,8 @@ static void process_floyd_steinberg(struct dt_iop_module_t *self, dt_dev_pixelpi
 #ifdef _OPENMP
 #pragma omp declare simd aligned(ivoid, ovoid : 64)
 #endif
-static void process_floyd_steinberg_sse2(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
-                                         const void *const ivoid, void *const ovoid,
+static void process_floyd_steinberg_sse2(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
+                                         dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid,
                                          const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   dt_iop_dither_data_t *data = (dt_iop_dither_data_t *)piece->data;
@@ -518,7 +519,7 @@ static void process_floyd_steinberg_sse2(struct dt_iop_module_t *self, dt_dev_pi
   float *const restrict out = (float *)ovoid;
 
   unsigned int levels = 1;
-  int graymode = get_dither_parameters(data,piece,scale,&levels);
+  int graymode = get_dither_parameters(data, pipe, piece, scale, &levels);
   if(graymode < 0)
   {
     for(int j = 0; j < height * width; j++)
@@ -538,7 +539,7 @@ static void process_floyd_steinberg_sse2(struct dt_iop_module_t *self, dt_dev_pi
       (void)nearest_color_sse(out + 4 * j, graymode, f, rf);
     }
 
-    if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
+    if(pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
       dt_iop_alpha_copy(ivoid, ovoid, roi_out->width, roi_out->height);
     return;
   }
@@ -624,14 +625,14 @@ static void process_floyd_steinberg_sse2(struct dt_iop_module_t *self, dt_dev_pi
   }
 
   // copy alpha channel if needed
-  if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
+  if(pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
     dt_iop_alpha_copy(ivoid, ovoid, roi_out->width, roi_out->height);
 }
 #endif
 
-static void process_random(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
-                           const void *const ivoid, void *const ovoid, const dt_iop_roi_t *const roi_in,
-                           const dt_iop_roi_t *const roi_out)
+static void process_random(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
+                           dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid,
+                           const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   const dt_iop_dither_data_t *const data = (dt_iop_dither_data_t *)piece->data;
 
@@ -675,11 +676,11 @@ static void process_random(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t 
   }
   free_tea_states(tea_states);
 
-  if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK) dt_iop_alpha_copy(ivoid, ovoid, width, height);
+  if(pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK) dt_iop_alpha_copy(ivoid, ovoid, width, height);
 }
 
 
-int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
@@ -687,16 +688,16 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, c
   dt_iop_dither_data_t *data = (dt_iop_dither_data_t *)piece->data;
 
   if(data->dither_type == DITHER_RANDOM)
-    process_random(self, piece, ivoid, ovoid, roi_in, roi_out);
+    process_random(self, pipe, piece, ivoid, ovoid, roi_in, roi_out);
   else
   {
-    process_floyd_steinberg(self, piece, ivoid, ovoid, roi_in, roi_out);
+    process_floyd_steinberg(self, pipe, piece, ivoid, ovoid, roi_in, roi_out);
   }
   return 0;
 }
 
 #ifdef HAVE_OPENCL
-int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
+int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
@@ -706,8 +707,8 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece
 
   const int width = roi_in->width;
   const int height = roi_in->height;
-  const int devid = piece->pipe->devid;
-  const int preserve_alpha = (piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK) ? 1 : 0;
+  const int devid = pipe->devid;
+  const int preserve_alpha = (pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK) ? 1 : 0;
   cl_int err = CL_SUCCESS;
   size_t sizes[] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
 
@@ -734,7 +735,7 @@ error:
 #endif
 
 #if defined(__SSE2__)
-int process_sse2(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process_sse2(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
                   void *const ovoid)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
@@ -742,10 +743,10 @@ int process_sse2(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *pie
   dt_iop_dither_data_t *data = (dt_iop_dither_data_t *)piece->data;
 
   if(data->dither_type == DITHER_RANDOM)
-    process_random(self, piece, ivoid, ovoid, roi_in, roi_out);
+    process_random(self, pipe, piece, ivoid, ovoid, roi_in, roi_out);
   else
   {
-    process_floyd_steinberg_sse2(self, piece, ivoid, ovoid, roi_in, roi_out);
+    process_floyd_steinberg_sse2(self, pipe, piece, ivoid, ovoid, roi_in, roi_out);
   }
   return 0;
 }

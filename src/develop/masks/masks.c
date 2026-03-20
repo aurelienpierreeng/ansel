@@ -1285,18 +1285,18 @@ int dt_masks_get_points_border(dt_develop_t *develop, dt_masks_form_t *mask_form
   return 1;
 }
 
-int dt_masks_get_area(dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece,
-                      dt_masks_form_t *mask_form,
+int dt_masks_get_area(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe,
+                      dt_dev_pixelpipe_iop_t *piece, dt_masks_form_t *mask_form,
                       int *area_width, int *area_height, int *area_pos_x, int *area_pos_y)
 {
   if(mask_form->functions && mask_form->functions->get_area)
-    return mask_form->functions->get_area(module, piece, mask_form, area_width, area_height,
+    return mask_form->functions->get_area(module, pipe, piece, mask_form, area_width, area_height,
                                           area_pos_x, area_pos_y);
   return 1;
 }
 
-int dt_masks_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece,
-                             dt_masks_form_t *mask_form,
+int dt_masks_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe,
+                             dt_dev_pixelpipe_iop_t *piece, dt_masks_form_t *mask_form,
                              int *area_width, int *area_height,
                              int *area_pos_x, int *area_pos_y)
 {
@@ -1306,7 +1306,7 @@ int dt_masks_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *pi
   if(mask_form->type & DT_MASKS_CLONE)
   {
     if(mask_form->functions && mask_form->functions->get_source_area)
-      return mask_form->functions->get_source_area(module, piece, mask_form, area_width, area_height,
+      return mask_form->functions->get_source_area(module, pipe, piece, mask_form, area_width, area_height,
                                                    area_pos_x, area_pos_y);
   }
   return 1;
@@ -1370,7 +1370,7 @@ static int dt_masks_legacy_params_v1_to_v2(dt_develop_t *develop, void *params)
     {
       dt_masks_node_circle_t *circle = (dt_masks_node_circle_t *)point_node->data;
       if(!circle) return 1;
-      module->distort_backtransform(module, &piece, circle->center, 1);
+      module->distort_backtransform(module, NULL, &piece, circle->center, 1);
     }
     else if(mask_form->type & DT_MASKS_POLYGON)
     {
@@ -1378,16 +1378,16 @@ static int dt_masks_legacy_params_v1_to_v2(dt_develop_t *develop, void *params)
       {
         dt_masks_node_polygon_t *polygon_node = (dt_masks_node_polygon_t *)point_node->data;
         if(!polygon_node) return 1;
-        module->distort_backtransform(module, &piece, polygon_node->node, 1);
-        module->distort_backtransform(module, &piece, polygon_node->ctrl1, 1);
-        module->distort_backtransform(module, &piece, polygon_node->ctrl2, 1);
+        module->distort_backtransform(module, NULL, &piece, polygon_node->node, 1);
+        module->distort_backtransform(module, NULL, &piece, polygon_node->ctrl1, 1);
+        module->distort_backtransform(module, NULL, &piece, polygon_node->ctrl2, 1);
       }
     }
     else if(mask_form->type & DT_MASKS_GRADIENT)
     { // TODO: new ones have wrong rotation.
       dt_masks_anchor_gradient_t *gradient = (dt_masks_anchor_gradient_t *)point_node->data;
       if(!gradient) return 1;
-      module->distort_backtransform(module, &piece, gradient->center, 1);
+      module->distort_backtransform(module, NULL, &piece, gradient->center, 1);
 
       if(orientation == ORIENTATION_ROTATE_180_DEG)
         gradient->rotation -= 180.0f;
@@ -1399,7 +1399,7 @@ static int dt_masks_legacy_params_v1_to_v2(dt_develop_t *develop, void *params)
     else if(mask_form->type & DT_MASKS_ELLIPSE)
     {
       dt_masks_node_ellipse_t *ellipse = (dt_masks_node_ellipse_t *)point_node->data;
-      module->distort_backtransform(module, &piece, ellipse->center, 1);
+      module->distort_backtransform(module, NULL, &piece, ellipse->center, 1);
 
       if(orientation & ORIENTATION_SWAP_XY)
       {
@@ -1414,16 +1414,16 @@ static int dt_masks_legacy_params_v1_to_v2(dt_develop_t *develop, void *params)
       {
         dt_masks_node_brush_t *brush_node = (dt_masks_node_brush_t *)point_node->data;
         if(!brush_node) return 1;
-        module->distort_backtransform(module, &piece, brush_node->node, 1);
-        module->distort_backtransform(module, &piece, brush_node->ctrl1, 1);
-        module->distort_backtransform(module, &piece, brush_node->ctrl2, 1);
+        module->distort_backtransform(module, NULL, &piece, brush_node->node, 1);
+        module->distort_backtransform(module, NULL, &piece, brush_node->ctrl1, 1);
+        module->distort_backtransform(module, NULL, &piece, brush_node->ctrl2, 1);
       }
     }
 
     if(mask_form->type & DT_MASKS_CLONE)
     {
       // NOTE: can be: DT_MASKS_CIRCLE, DT_MASKS_ELLIPSE, DT_MASKS_POLYGON
-      module->distort_backtransform(module, &piece, mask_form->source, 1);
+      module->distort_backtransform(module, NULL, &piece, mask_form->source, 1);
     }
 
     mask_form->version = 2;

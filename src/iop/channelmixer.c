@@ -234,7 +234,7 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
   return 1;
 }
 
-static void process_hsl_v1(dt_dev_pixelpipe_iop_t *piece, const float *const restrict in,
+static void process_hsl_v1(const dt_dev_pixelpipe_iop_t *piece, const float *const restrict in,
                            float *const restrict out, const dt_iop_roi_t *const roi_out)
 {
   const dt_iop_channelmixer_data_t *data = (dt_iop_channelmixer_data_t *)piece->data;
@@ -283,7 +283,7 @@ static void process_hsl_v1(dt_dev_pixelpipe_iop_t *piece, const float *const res
   }
 }
 
-static void process_hsl_v2(dt_dev_pixelpipe_iop_t *piece, const float *const restrict in,
+static void process_hsl_v2(const dt_dev_pixelpipe_iop_t *piece, const float *const restrict in,
                            float *const restrict out, const dt_iop_roi_t *const roi_out)
 {
   const dt_iop_channelmixer_data_t *data = (dt_iop_channelmixer_data_t *)piece->data;
@@ -337,7 +337,7 @@ static void process_hsl_v2(dt_dev_pixelpipe_iop_t *piece, const float *const res
   }
 }
 
-static void process_rgb(dt_dev_pixelpipe_iop_t *piece, const float *const restrict in,
+static void process_rgb(const dt_dev_pixelpipe_iop_t *piece, const float *const restrict in,
                         float *const restrict out, const dt_iop_roi_t *const roi_out)
 {
   const dt_iop_channelmixer_data_t *data = (dt_iop_channelmixer_data_t *)piece->data;
@@ -361,7 +361,7 @@ static void process_rgb(dt_dev_pixelpipe_iop_t *piece, const float *const restri
   }
 }
 
-static void process_gray(dt_dev_pixelpipe_iop_t *piece, const float *const restrict in,
+static void process_gray(const dt_dev_pixelpipe_iop_t *piece, const float *const restrict in,
                          float *const restrict out, const dt_iop_roi_t *const roi_out)
 {
   const dt_iop_channelmixer_data_t *data = (dt_iop_channelmixer_data_t *)piece->data;
@@ -385,7 +385,7 @@ static void process_gray(dt_dev_pixelpipe_iop_t *piece, const float *const restr
   }
 }
 
-int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
@@ -408,7 +408,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, c
     default:
       break;
   }
-  if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK) dt_iop_alpha_copy(ivoid, ovoid, roi_out->width, roi_out->height);
+  if(pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK) dt_iop_alpha_copy(ivoid, ovoid, roi_out->width, roi_out->height);
   return 0;
 }
 

@@ -461,7 +461,7 @@ error:
 }
 
 
-int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
@@ -500,7 +500,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, c
   // only see part of the image (region of interest).  Therefore, we
   // try to get A0 and distance_max from the PREVIEW pixelpipe which
   // luckily stores it for us.
-  if(self->dev->gui_attached && g && !dt_dev_pixelpipe_has_preview_output(self->dev, piece->pipe, roi_out))
+  if(self->dev->gui_attached && g && !dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
   {
     dt_iop_gui_enter_critical_section(self);
     const uint64_t hash = g->hash;
@@ -530,7 +530,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, c
     }
   }
   // PREVIEW pixelpipe stores values.
-  if(self->dev->gui_attached && g && dt_dev_pixelpipe_has_preview_output(self->dev, piece->pipe, roi_out))
+  if(self->dev->gui_attached && g && dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
   {
     uint64_t hash = piece->global_hash;
     dt_iop_gui_enter_critical_section(self);
@@ -596,7 +596,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, c
   free_gray_image(&trans_map);
   free_gray_image(&trans_map_filtered);
 
-  if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
+  if(pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
     dt_iop_alpha_copy(ivoid, ovoid, roi_out->width, roi_out->height);
   return 0;
 
@@ -760,7 +760,7 @@ static int dehaze_cl(struct dt_iop_module_t *self, int devid, cl_mem img_in, cl_
   return err;
 }
 
-void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece, struct dt_develop_tiling_t *tiling)
+void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe, const struct dt_dev_pixelpipe_iop_t *piece, struct dt_develop_tiling_t *tiling)
 {
   tiling->factor = 2.5f;  // in + out + two single-channel temp buffers
   tiling->factor_cl = 5.0f;
@@ -772,7 +772,7 @@ void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe
   tiling->yalign = 1;
 }
 
-int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem img_in, cl_mem img_out)
+int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, cl_mem img_in, cl_mem img_out)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
@@ -780,7 +780,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece
   dt_iop_hazeremoval_params_t *d = piece->data;
 
   const int ch = piece->dsc_in.channels;
-  const int devid = piece->pipe->devid;
+  const int devid = pipe->devid;
   const int width = roi_in->width;
   const int height = roi_in->height;
   const int w1 = 6; // window size (positive integer) for determining the dark channel and the transition map
@@ -804,7 +804,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece
   // only see part of the image (region of interest).  Therefore, we
   // try to get A0 and distance_max from the PREVIEW pixelpipe which
   // luckily stores it for us.
-  if(self->dev->gui_attached && g && !dt_dev_pixelpipe_has_preview_output(self->dev, piece->pipe, roi_out))
+  if(self->dev->gui_attached && g && !dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
   {
     dt_iop_gui_enter_critical_section(self);
     const uint64_t hash = g->hash;
@@ -832,7 +832,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece
     distance_max = max_depth;
   }
   // PREVIEW pixelpipe stores values.
-  if(self->dev->gui_attached && g && dt_dev_pixelpipe_has_preview_output(self->dev, piece->pipe, roi_out))
+  if(self->dev->gui_attached && g && dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
   {
     uint64_t hash = piece->global_hash;
     dt_iop_gui_enter_critical_section(self);

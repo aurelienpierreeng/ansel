@@ -293,8 +293,9 @@ static int get_scales(float (*thrs)[4], float (*boost)[4], float *sharp, const d
 }
 
 /* just process the supplied image buffer, upstream default_process_tiling() does the rest */
-static int process_wavelets(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
-                            const void *const i, void *const o, const dt_iop_roi_t *const roi_in,
+static int process_wavelets(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+                            const struct dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o,
+                            const dt_iop_roi_t *const roi_in,
                             const dt_iop_roi_t *const roi_out, const eaw_decompose_t decompose,
                             const eaw_synthesize_t synthesize)
 {
@@ -308,7 +309,7 @@ static int process_wavelets(struct dt_iop_module_t *self, const struct dt_dev_pi
   const int width = roi_out->width;
   const int height = roi_out->height;
 
-  if(self->dev->gui_attached && !dt_dev_pixelpipe_has_preview_output(self->dev, piece->pipe, roi_out))
+  if(self->dev->gui_attached && !dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
   {
     dt_iop_atrous_gui_data_t *g = (dt_iop_atrous_gui_data_t *)self->gui_data;
     g->num_samples = get_samples(g->sample, d, roi_in, piece);
@@ -359,7 +360,7 @@ static int process_wavelets(struct dt_iop_module_t *self, const struct dt_dev_pi
   for (size_t k = 0; k < (size_t)4 * width * height; k++)
     out[k] += buf1[k];
 
-  if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
+  if(pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
     dt_iop_alpha_copy(i, o, width, height);
 
   dt_pixelpipe_cache_free_align(detail);
@@ -368,21 +369,21 @@ static int process_wavelets(struct dt_iop_module_t *self, const struct dt_dev_pi
   return 0;
 }
 
-int process(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece, const void *const i,
-             void *const o)
+int process(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+            const struct dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
-  return process_wavelets(self, piece, i, o, roi_in, roi_out, eaw_decompose, eaw_synthesize);
+  return process_wavelets(self, pipe, piece, i, o, roi_in, roi_out, eaw_decompose, eaw_synthesize);
 }
 
 #if defined(__SSE2__)
-int process_sse2(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece, const void *const i,
-                  void *const o)
+int process_sse2(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+                 const struct dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
-  return process_wavelets(self, piece, i, o, roi_in, roi_out, eaw_decompose_sse2, eaw_synthesize_sse2);
+  return process_wavelets(self, pipe, piece, i, o, roi_in, roi_out, eaw_decompose_sse2, eaw_synthesize_sse2);
 }
 #endif
 
@@ -390,7 +391,7 @@ int process_sse2(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop
 
 #ifdef USE_NEW_CL
 /* this version is adapted to the new global tiling mechanism. it no longer does tiling by itself. */
-int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
+int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
@@ -400,7 +401,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece
   float sharp[MAX_NUM_SCALES];
   const int max_scale = get_scales(thrs, boost, sharp, d, roi_in, piece);
 
-  if(self->dev->gui_attached && !dt_dev_pixelpipe_has_preview_output(self->dev, piece->pipe, roi_out))
+  if(self->dev->gui_attached && !dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
   {
     dt_iop_atrous_gui_data_t *g = (dt_iop_atrous_gui_data_t *)self->gui_data;
     g->num_samples = get_samples(g->sample, d, roi_in, piece);
@@ -411,7 +412,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece
 
   dt_iop_atrous_global_data_t *gd = (dt_iop_atrous_global_data_t *)self->global_data;
 
-  const int devid = piece->pipe->devid;
+  const int devid = pipe->devid;
   cl_int err = -999;
   cl_mem dev_filter = NULL;
   cl_mem dev_tmp = NULL;
@@ -527,7 +528,7 @@ error:
 #else // ======== old, memory-hungry implementation ========================================================
 
 /* this version is adapted to the new global tiling mechanism. it no longer does tiling by itself. */
-int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
+int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
@@ -537,7 +538,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece
   float sharp[MAX_NUM_SCALES];
   const int max_scale = get_scales(thrs, boost, sharp, d, roi_in, piece);
 
-  if(self->dev->gui_attached && !dt_dev_pixelpipe_has_preview_output(self->dev, piece->pipe, roi_out))
+  if(self->dev->gui_attached && !dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
   {
     dt_iop_atrous_gui_data_t *g = (dt_iop_atrous_gui_data_t *)self->gui_data;
     g->num_samples = get_samples(g->sample, d, roi_in, piece);
@@ -548,7 +549,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece
 
   dt_iop_atrous_global_data_t *gd = (dt_iop_atrous_global_data_t *)self->global_data;
 
-  const int devid = piece->pipe->devid;
+  const int devid = pipe->devid;
   cl_int err = -999;
   cl_mem dev_filter = NULL;
   cl_mem dev_tmp = NULL;
@@ -670,7 +671,7 @@ error:
 
 #endif // HAVE_OPENCL
 
-void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece, struct dt_develop_tiling_t *tiling)
+void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe, const struct dt_dev_pixelpipe_iop_t *piece, struct dt_develop_tiling_t *tiling)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;

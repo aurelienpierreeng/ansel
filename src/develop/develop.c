@@ -1376,7 +1376,7 @@ int dt_dev_distort_transform_locked(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe,
            || (transf_direction == DT_DEV_TRANSFORM_DIR_BACK_EXCL && module->iop_order < iop_order))
        && !dt_dev_pixelpipe_activemodule_disables_currentmodule(dev, module))
     {
-      module->distort_transform(module, piece, points, points_count);
+      module->distort_transform(module, pipe, piece, points, points_count);
     }
   }
   return 1;
@@ -1405,7 +1405,7 @@ static int dt_dev_distort_backtransform_locked(dt_develop_t *dev, dt_dev_pixelpi
            || (transf_direction == DT_DEV_TRANSFORM_DIR_BACK_EXCL && module->iop_order < iop_order))
        && !dt_dev_pixelpipe_activemodule_disables_currentmodule(dev, module))
     {
-      module->distort_backtransform(module, piece, points, points_count);
+      module->distort_backtransform(module, pipe, piece, points, points_count);
     }
   }
   return 1;

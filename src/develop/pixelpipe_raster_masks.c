@@ -175,7 +175,7 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
             return NULL;
           }
 
-          module->module->distort_mask(module->module, module, raster_mask, transformed_mask,
+          module->module->distort_mask(module->module, pipe, module, raster_mask, transformed_mask,
                                        &module->roi_in, &module->roi_out);
           if(*free_mask) dt_pixelpipe_cache_free_align(raster_mask);
           *free_mask = TRUE;

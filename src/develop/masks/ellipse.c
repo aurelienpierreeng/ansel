@@ -1194,14 +1194,15 @@ static float *const _ellipse_points_to_transform(const float center_x, const flo
   return points;
 }
 
-static int _ellipse_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece,
+static int _ellipse_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe,
+                                    dt_dev_pixelpipe_iop_t *piece,
                                     dt_masks_form_t *form, int *width, int *height, int *posx, int *posy)
 {
   if(!form || !form->points) return 0;
   // we get the ellipse values
   dt_masks_node_ellipse_t *ellipse = (dt_masks_node_ellipse_t *)((form->points)->data);
   if(!ellipse) return 0;
-  const float wd = piece->pipe->iwidth, ht = piece->pipe->iheight;
+  const float wd = pipe->iwidth, ht = pipe->iheight;
   const int prop = ellipse->flags & DT_MASKS_ELLIPSE_PROPORTIONAL;
   const float total[2] = { (prop ? ellipse->radius[0] * (1.0f + ellipse->border) : ellipse->radius[0] + ellipse->border) * MIN(wd, ht),
                            (prop ? ellipse->radius[1] * (1.0f + ellipse->border) : ellipse->radius[1] + ellipse->border) * MIN(wd, ht) };
@@ -1214,7 +1215,7 @@ static int _ellipse_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_io
     return 1;
 
   // and we transform them with all distorted modules
-  if(!dt_dev_distort_transform_plus(darktable.develop, piece->pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points, point_count))
+  if(!dt_dev_distort_transform_plus(darktable.develop, pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points, point_count))
   {
     dt_pixelpipe_cache_free_align(points);
     return 1;
@@ -1226,7 +1227,8 @@ static int _ellipse_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_io
   return 0;
 }
 
-static int _ellipse_get_area(const dt_iop_module_t *const module, const dt_dev_pixelpipe_iop_t *const piece,
+static int _ellipse_get_area(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+                             const dt_dev_pixelpipe_iop_t *const piece,
                              dt_masks_form_t *const form,
                              int *width, int *height, int *posx, int *posy)
 {
@@ -1234,7 +1236,7 @@ static int _ellipse_get_area(const dt_iop_module_t *const module, const dt_dev_p
   // we get the ellipse values
   dt_masks_node_ellipse_t *ellipse = (dt_masks_node_ellipse_t *)((form->points)->data);
   if(!ellipse) return 0;
-  const float wd = piece->pipe->iwidth, ht = piece->pipe->iheight;
+  const float wd = pipe->iwidth, ht = pipe->iheight;
   const int prop = ellipse->flags & DT_MASKS_ELLIPSE_PROPORTIONAL;
   const float total[2] = { (prop ? ellipse->radius[0] * (1.0f + ellipse->border) : ellipse->radius[0] + ellipse->border) * MIN(wd, ht),
                            (prop ? ellipse->radius[1] * (1.0f + ellipse->border) : ellipse->radius[1] + ellipse->border) * MIN(wd, ht) };
@@ -1247,7 +1249,7 @@ static int _ellipse_get_area(const dt_iop_module_t *const module, const dt_dev_p
     return 1;
 
   // and we transform them with all distorted modules
-  if(!dt_dev_distort_transform_plus(module->dev, piece->pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points, point_count))
+  if(!dt_dev_distort_transform_plus(module->dev, pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points, point_count))
   {
     dt_pixelpipe_cache_free_align(points);
     return 1;
@@ -1259,7 +1261,8 @@ static int _ellipse_get_area(const dt_iop_module_t *const module, const dt_dev_p
   return 0;
 }
 
-static int _ellipse_get_mask(const dt_iop_module_t *const module, const dt_dev_pixelpipe_iop_t *const piece,
+static int _ellipse_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+                             const dt_dev_pixelpipe_iop_t *const piece,
                              dt_masks_form_t *const form,
                              float **buffer, int *width, int *height, int *posx, int *posy)
 {
@@ -1268,7 +1271,7 @@ static int _ellipse_get_mask(const dt_iop_module_t *const module, const dt_dev_p
   if(darktable.unmuted & DT_DEBUG_PERF) start2 = dt_get_wtime();
 
   // we get the area
-  if(_ellipse_get_area(module, piece, form, width, height, posx, posy) != 0) return 1;
+  if(_ellipse_get_area(module, pipe, piece, form, width, height, posx, posy) != 0) return 1;
 
   if(darktable.unmuted & DT_DEBUG_PERF)
   {
@@ -1306,7 +1309,7 @@ static int _ellipse_get_mask(const dt_iop_module_t *const module, const dt_dev_p
   }
 
   // we back transform all this points
-  if(!dt_dev_distort_backtransform_plus(module->dev, piece->pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points, (size_t)w * h))
+  if(!dt_dev_distort_backtransform_plus(module->dev, pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points, (size_t)w * h))
   {
     dt_pixelpipe_cache_free_align(points);
     return 1;
@@ -1328,7 +1331,7 @@ static int _ellipse_get_mask(const dt_iop_module_t *const module, const dt_dev_p
   }
 
   // we populate the buffer
-  const int wi = piece->pipe->iwidth, hi = piece->pipe->iheight;
+  const int wi = pipe->iwidth, hi = pipe->iheight;
   const float center[2] = { ellipse->center[0] * wi, ellipse->center[1] * hi };
   const float radius[2] = { ellipse->radius[0] * MIN(wi, hi), ellipse->radius[1] * MIN(wi, hi) };
   const float total[2] =  { (ellipse->flags & DT_MASKS_ELLIPSE_PROPORTIONAL ? ellipse->radius[0] * (1.0f + ellipse->border) : ellipse->radius[0] + ellipse->border) * MIN(wi, hi),
@@ -1365,7 +1368,8 @@ static int _ellipse_get_mask(const dt_iop_module_t *const module, const dt_dev_p
   return 0;
 }
 
-static int _ellipse_get_mask_roi(const dt_iop_module_t *const module, const dt_dev_pixelpipe_iop_t *const piece,
+static int _ellipse_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+                                 const dt_dev_pixelpipe_iop_t *const piece,
                                  dt_masks_form_t *const form, const dt_iop_roi_t *roi, float *buffer)
 {
   if(!form || !form->points) return 0;
@@ -1377,7 +1381,7 @@ static int _ellipse_get_mask_roi(const dt_iop_module_t *const module, const dt_d
   // we get the ellipse parameters
   dt_masks_node_ellipse_t *ellipse = (dt_masks_node_ellipse_t *)((form->points)->data);
   if(!ellipse) return 0;
-  const int wi = piece->pipe->iwidth, hi = piece->pipe->iheight;
+  const int wi = pipe->iwidth, hi = pipe->iheight;
   const float center[2] = { ellipse->center[0] * wi, ellipse->center[1] * hi };
   const float radius[2] = { ellipse->radius[0] * MIN(wi, hi), ellipse->radius[1] * MIN(wi, hi) };
   const float total[2] = { (ellipse->flags & DT_MASKS_ELLIPSE_PROPORTIONAL ? ellipse->radius[0] * (1.0f + ellipse->border) : ellipse->radius[0] + ellipse->border) * MIN(wi, hi),
@@ -1439,8 +1443,8 @@ static int _ellipse_get_mask_roi(const dt_iop_module_t *const module, const dt_d
   }
 
   // we transform the outline from input image coordinates to current position in pixelpipe
-  if(!dt_dev_distort_transform_plus(module->dev, piece->pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, ell,
-                                        ellpts))
+  if(!dt_dev_distort_transform_plus(module->dev, pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, ell,
+                                    ellpts))
   {
     dt_pixelpipe_cache_free_align(ell);
     return 1;
@@ -1521,7 +1525,7 @@ static int _ellipse_get_mask_roi(const dt_iop_module_t *const module, const dt_d
   }
 
   // we back transform all these points to the input image coordinates
-  if(!dt_dev_distort_backtransform_plus(module->dev, piece->pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points,
+  if(!dt_dev_distort_backtransform_plus(module->dev, pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points,
                                         (size_t)bbw * bbh))
   {
     dt_pixelpipe_cache_free_align(points);

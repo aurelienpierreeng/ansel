@@ -224,7 +224,7 @@ static void backtransform(const int32_t *x, int32_t *o, const dt_image_orientati
   }
 }
 
-int distort_transform(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, float *const restrict points, size_t points_count)
+int distort_transform(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece, float *const restrict points, size_t points_count)
 {
   // if (!self->enabled) return 2;
   const dt_iop_flip_data_t *d = (dt_iop_flip_data_t *)piece->data;
@@ -255,7 +255,7 @@ int distort_transform(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, floa
 
   return 1;
 }
-int distort_backtransform(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, float *const restrict points,
+int distort_backtransform(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece, float *const restrict points,
                           size_t points_count)
 {
   // if (!self->enabled) return 2;
@@ -292,9 +292,11 @@ int distort_backtransform(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, 
   return 1;
 }
 
-void distort_mask(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece, const float *const in,
-                  float *const out, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+void distort_mask(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_t *pipe, struct dt_dev_pixelpipe_iop_t *piece,
+                  const float *const in, float *const out, const dt_iop_roi_t *const roi_in,
+                  const dt_iop_roi_t *const roi_out)
 {
+  (void)pipe;
   const dt_iop_flip_data_t *d = (dt_iop_flip_data_t *)piece->data;
 
   const int bpp = sizeof(float);
@@ -361,7 +363,7 @@ void modify_roi_in(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *
 
 // 3rd (final) pass: you get this input region (may be different from what was requested above),
 // do your best to fill the output region!
-int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
@@ -376,14 +378,14 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, c
 }
 
 #ifdef HAVE_OPENCL
-int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
+int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_flip_data_t *data = (dt_iop_flip_data_t *)piece->data;
   const dt_iop_flip_global_data_t *gd = (dt_iop_flip_global_data_t *)self->global_data;
   cl_int err = -999;
 
-  const int devid = piece->pipe->devid;
+  const int devid = pipe->devid;
   const int width = roi_in->width;
   const int height = roi_in->height;
   const int orientation = data->orientation;

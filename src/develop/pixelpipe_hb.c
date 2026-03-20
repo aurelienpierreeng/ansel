@@ -610,7 +610,6 @@ void dt_dev_pixelpipe_create_nodes(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
     piece->iwidth = pipe->iwidth;
     piece->iheight = pipe->iheight;
     piece->module = module;
-    piece->pipe = pipe;
     piece->hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
     piece->blendop_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
     piece->global_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
@@ -1062,7 +1061,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   /* get tiling requirement of module */
   dt_develop_tiling_t tiling = { 0 };
   tiling.factor_cl = tiling.maxbuf_cl = -1;	// set sentinel value to detect whether callback set sizes
-  module->tiling_callback(module, piece, &tiling);
+  module->tiling_callback(module, pipe, piece, &tiling);
   if (tiling.factor_cl < 0) tiling.factor_cl = tiling.factor; // default to CPU size if callback didn't set GPU
   if (tiling.maxbuf_cl < 0) tiling.maxbuf_cl = tiling.maxbuf;
 
@@ -1071,7 +1070,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   {
     /* get specific memory requirement for blending */
     dt_develop_tiling_t tiling_blendop = { 0 };
-    tiling_callback_blendop(module, piece, &tiling_blendop);
+    tiling_callback_blendop(module, pipe, piece, &tiling_blendop);
 
     /* aggregate in structure tiling */
     tiling.factor = fmax(tiling.factor, tiling_blendop.factor);

@@ -396,9 +396,13 @@ static _blend_row_func *_choose_blend_func(const unsigned int blend_mode)
 }
 
 
-void dt_develop_blendif_raw_blend(const struct dt_dev_pixelpipe_iop_t *piece,
-                                  const float *const restrict a, float *const restrict b, const float *const restrict mask, const dt_dev_pixelpipe_display_mask_t request_mask_display)
+void dt_develop_blendif_raw_blend(const struct dt_dev_pixelpipe_t *pipe,
+                                  const struct dt_dev_pixelpipe_iop_t *piece,
+                                  const float *const restrict a, float *const restrict b,
+                                  const float *const restrict mask,
+                                  const dt_dev_pixelpipe_display_mask_t request_mask_display)
 {
+  (void)pipe;
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
   const dt_develop_blend_params_t *const d = (const dt_develop_blend_params_t *const)piece->blendop_data;

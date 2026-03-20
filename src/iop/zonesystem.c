@@ -196,14 +196,15 @@ static inline void _iop_zonesystem_calculate_zonemap(struct dt_iop_zonesystem_pa
   }
 }
 
-static void process_common_setup(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
+static void process_common_setup(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
+                                 dt_dev_pixelpipe_iop_t *piece,
                                  const void *const ivoid, void *const ovoid, const dt_iop_roi_t *const roi_in,
                                  const dt_iop_roi_t *const roi_out)
 {
   const int width = roi_out->width;
   const int height = roi_out->height;
 
-  if(self->dev->gui_attached && dt_dev_pixelpipe_has_preview_output(self->dev, piece->pipe, roi_out))
+  if(self->dev->gui_attached && dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
   {
     dt_iop_zonesystem_gui_data_t *g = (dt_iop_zonesystem_gui_data_t *)self->gui_data;
     dt_iop_gui_enter_critical_section(self);
@@ -221,7 +222,8 @@ static void process_common_setup(struct dt_iop_module_t *self, dt_dev_pixelpipe_
   }
 }
 
-static void process_common_cleanup(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
+static void process_common_cleanup(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
+                                   dt_dev_pixelpipe_iop_t *piece,
                                    const void *const ivoid, void *const ovoid,
                                    const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
@@ -233,11 +235,11 @@ static void process_common_cleanup(struct dt_iop_module_t *self, dt_dev_pixelpip
   const size_t ch = piece->dsc_in.channels;
   const int size = d->params.size;
 
-  if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK) dt_iop_alpha_copy(ivoid, ovoid, width, height);
+  if(pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK) dt_iop_alpha_copy(ivoid, ovoid, width, height);
 
   /* if gui and have buffer lets gaussblur and fill buffer with zone indexes */
   if(self->dev->gui_attached
-     && dt_dev_pixelpipe_has_preview_output(self->dev, piece->pipe, roi_out)
+     && dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out)
      && g && g->in_preview_buffer
      && g->out_preview_buffer)
   {
@@ -310,14 +312,14 @@ static void process_common_cleanup(struct dt_iop_module_t *self, dt_dev_pixelpip
   }
 }
 
-int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
 
   const dt_iop_zonesystem_data_t *const d = (const dt_iop_zonesystem_data_t *const)piece->data;
-  process_common_setup(self, piece, ivoid, ovoid, roi_in, roi_out);
+  process_common_setup(self, pipe, piece, ivoid, ovoid, roi_in, roi_out);
 
   const int size = d->params.size;
 
@@ -341,7 +343,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, c
     }
   }
 
-  process_common_cleanup(self, piece, ivoid, ovoid, roi_in, roi_out);
+  process_common_cleanup(self, pipe, piece, ivoid, ovoid, roi_in, roi_out);
   return 0;
 }
 

@@ -200,7 +200,7 @@ void init_presets(dt_iop_module_so_t *self)
 
 
 #ifdef HAVE_OPENCL
-int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
+int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   dt_iop_bilat_data_t *d = (dt_iop_bilat_data_t *)piece->data;
@@ -215,7 +215,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece
     cl_int err = -666;
 
     dt_bilateral_cl_t *b
-      = dt_bilateral_init_cl(piece->pipe->devid, roi_in->width, roi_in->height, sigma_s, sigma_r);
+      = dt_bilateral_init_cl(pipe->devid, roi_in->width, roi_in->height, sigma_s, sigma_r);
     if(!b) goto error;
     err = dt_bilateral_splat_cl(b, dev_in);
     if(err != CL_SUCCESS) goto error;
@@ -232,7 +232,7 @@ error:
   }
   else // mode == s_mode_local_laplacian
   {
-    dt_local_laplacian_cl_t *b = dt_local_laplacian_init_cl(piece->pipe->devid, roi_in->width, roi_in->height,
+    dt_local_laplacian_cl_t *b = dt_local_laplacian_init_cl(pipe->devid, roi_in->width, roi_in->height,
         d->midtone, d->sigma_s, d->sigma_r, d->detail);
     if(!b) goto error_ll;
     if(dt_local_laplacian_cl(b, dev_in, dev_out) != CL_SUCCESS) goto error_ll;
@@ -246,7 +246,7 @@ error_ll:
 #endif
 
 
-void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece, struct dt_develop_tiling_t *tiling)
+void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe, const struct dt_dev_pixelpipe_iop_t *piece, struct dt_develop_tiling_t *tiling)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   dt_iop_bilat_data_t *d = (dt_iop_bilat_data_t *)piece->data;
@@ -326,7 +326,7 @@ void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev
 
 
 #if defined(__SSE2__)
-int process_sse2(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o)
+int process_sse2(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   // this is called for preview and full pipe separately, each with its own pixelpipe piece.
@@ -355,12 +355,12 @@ int process_sse2(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *pie
       return 1;
   }
 
-  if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK) dt_iop_alpha_copy(i, o, roi_in->width, roi_in->height);
+  if(pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK) dt_iop_alpha_copy(i, o, roi_in->width, roi_in->height);
   return 0;
 }
 #endif
 
-int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o)
+int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   // this is called for preview and full pipe separately, each with its own pixelpipe piece.
@@ -389,7 +389,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, c
       return 1;
   }
 
-  if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK) dt_iop_alpha_copy(i, o, roi_in->width, roi_in->height);
+  if(pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK) dt_iop_alpha_copy(i, o, roi_in->width, roi_in->height);
   return 0;
 }
 

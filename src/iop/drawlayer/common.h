@@ -39,6 +39,7 @@ gboolean dt_drawlayer_build_worker_input_dab(dt_iop_module_t *self, dt_drawlayer
 gboolean dt_drawlayer_prime_live_process_patch_before_stroke(dt_iop_module_t *self);
 gboolean dt_drawlayer_ensure_layer_cache(dt_iop_module_t *self);
 gboolean dt_drawlayer_build_process_patch_from_base(dt_iop_module_t *self, dt_iop_drawlayer_gui_data_t *g,
+                                                    const dt_dev_pixelpipe_t *pipe,
                                                     const dt_dev_pixelpipe_iop_t *piece,
                                                     const dt_iop_roi_t *roi_in,
                                                     const dt_iop_roi_t *roi_out);

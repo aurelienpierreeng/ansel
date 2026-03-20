@@ -127,10 +127,9 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
 }
 
 
-int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid)
 {
-  const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
 
   dt_develop_t *dev = self->dev;
@@ -147,7 +146,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, c
   const float *const restrict in = __builtin_assume_aligned((const float *const restrict)ivoid, 64);
   float *const restrict out = __builtin_assume_aligned((float *const restrict)ovoid, 64);
 
-  const dt_iop_order_iccprofile_info_t *const current_profile = dt_ioppr_get_pipe_current_profile_info(self, piece->pipe);
+  const dt_iop_order_iccprofile_info_t *const current_profile = dt_ioppr_get_pipe_current_profile_info(self, pipe);
 
   #ifdef __SSE2__
     // flush denormals to zero to avoid performance penalty if there are a lot of near-zero values
@@ -323,26 +322,25 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, c
     _MM_SET_FLUSH_ZERO_MODE(oldMode);
   #endif
 
-  if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
+  if(pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
     dt_iop_alpha_copy(ivoid, ovoid, roi_out->width, roi_out->height);
 
   return 0;
 }
 
 #ifdef HAVE_OPENCL
-int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
+int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
 {
-  const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_develop_t *dev = self->dev;
   dt_iop_overexposed_global_data_t *gd = (dt_iop_overexposed_global_data_t *)self->global_data;
 
   cl_int err = -999;
-  const int devid = piece->pipe->devid;
+  const int devid = pipe->devid;
   const int width = roi_out->width;
   const int height = roi_out->height;
 
-  const dt_iop_order_iccprofile_info_t *const current_profile = dt_ioppr_get_pipe_current_profile_info(self, piece->pipe);
+  const dt_iop_order_iccprofile_info_t *const current_profile = dt_ioppr_get_pipe_current_profile_info(self, pipe);
 
   const int use_work_profile = (current_profile == NULL) ? 0 : 1;
   cl_mem dev_profile_info = NULL;
@@ -385,10 +383,8 @@ error:
 }
 #endif
 
-void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece, struct dt_develop_tiling_t *tiling)
+void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe, const struct dt_dev_pixelpipe_iop_t *piece, struct dt_develop_tiling_t *tiling)
 {
-  const dt_iop_roi_t *const roi_in = &piece->roi_in;
-  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   tiling->factor = 3.0f;  // in + out + temp
   tiling->factor_cl = 3.0f;
   tiling->maxbuf = 1.0f;

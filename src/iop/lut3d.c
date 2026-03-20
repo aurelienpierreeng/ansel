@@ -990,7 +990,7 @@ uint16_t calculate_clut_3dl(const char *const filepath, float **clut)
 }
 
 #ifdef HAVE_OPENCL
-int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
+int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   dt_iop_lut3d_data_t *d = (dt_iop_lut3d_data_t *)piece->data;
@@ -1014,7 +1014,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece
     = dt_ioppr_get_iop_work_profile_info(self, self->dev->iop);
   gboolean transform = (work_profile != NULL && lut_profile != NULL) ? TRUE : FALSE;
   cl_mem clut_cl = NULL;
-  const int devid = piece->pipe->devid;
+  const int devid = pipe->devid;
   const int width = roi_in->width;
   const int height = roi_in->height;
   const size_t sizes[] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
@@ -1071,7 +1071,7 @@ cleanup:
 }
 #endif
 
-int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ibuf, void *const obuf)
+int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const void *const ibuf, void *const obuf)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   dt_iop_lut3d_data_t *d = (dt_iop_lut3d_data_t *)piece->data;

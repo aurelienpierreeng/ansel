@@ -1864,14 +1864,14 @@ int validate_color_checker(const float *const restrict in,
   return 0;
 }
 
-int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece,
+int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
              const void *const restrict ivoid, void *const restrict ovoid)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_channelmixer_rbg_data_t *data = (dt_iop_channelmixer_rbg_data_t *)piece->data;
-  const struct dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_pipe_current_profile_info(self, piece->pipe);
-  const struct dt_iop_order_iccprofile_info_t *const input_profile = dt_ioppr_get_pipe_input_profile_info(piece->pipe);
+  const struct dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_pipe_current_profile_info(self, pipe);
+  const struct dt_iop_order_iccprofile_info_t *const input_profile = dt_ioppr_get_pipe_input_profile_info(pipe);
   dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
 
   declare_cat_on_pipe(self, FALSE);
@@ -1899,7 +1899,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece,
   {
     gboolean exit = FALSE;
 
-    if(g->run_profile && piece->pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
+    if(g->run_profile && pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
     {
       dt_iop_gui_enter_critical_section(self);
       const int err = extract_color_checker(in, out, roi_in, g, RGB_to_XYZ, XYZ_to_RGB, XYZ_to_CAM, data->adaptation);
@@ -1911,7 +1911,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece,
 
     if(data->illuminant_type == DT_ILLUMINANT_DETECT_EDGES || data->illuminant_type == DT_ILLUMINANT_DETECT_SURFACES)
     {
-      if(piece->pipe->type == DT_DEV_PIXELPIPE_FULL)
+      if(pipe->type == DT_DEV_PIXELPIPE_FULL)
       {
         // detection on full image only
         dt_iop_gui_enter_critical_section(self);
@@ -2011,7 +2011,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece,
 
   // run dE validation at output
   if(self->dev->gui_attached && g)
-    if(g->run_validation && piece->pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
+    if(g->run_validation && pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
     {
       const int err = validate_color_checker(out, roi_out, g, RGB_to_XYZ, XYZ_to_RGB, XYZ_to_CAM);
       g->run_validation = FALSE;
@@ -2022,13 +2022,12 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece,
 }
 
 #if HAVE_OPENCL
-int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
+int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
-  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_channelmixer_rbg_data_t *const d = (dt_iop_channelmixer_rbg_data_t *)piece->data;
   dt_iop_channelmixer_rgb_global_data_t *const gd = (dt_iop_channelmixer_rgb_global_data_t *)self->global_data;
-  const struct dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_pipe_current_profile_info(self, piece->pipe);
+  const struct dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_pipe_current_profile_info(self, pipe);
   //dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
 
   declare_cat_on_pipe(self, FALSE);
@@ -2059,7 +2058,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece
 
   cl_int err = -999;
 
-  const int devid = piece->pipe->devid;
+  const int devid = pipe->devid;
   const int width = roi_in->width;
   const int height = roi_in->height;
 
@@ -2828,11 +2827,11 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   // Disable OpenCL path if we are in any kind of diagnose mode (only C path has diagnostics)
   if(self->dev->gui_attached && g)
   {
-    if( (g->run_profile && piece->pipe->type == DT_DEV_PIXELPIPE_PREVIEW) || // color checker extraction mode
-        (g->run_validation && piece->pipe->type == DT_DEV_PIXELPIPE_PREVIEW) || // delta E validation
+    if( (g->run_profile && pipe->type == DT_DEV_PIXELPIPE_PREVIEW) || // color checker extraction mode
+        (g->run_validation && pipe->type == DT_DEV_PIXELPIPE_PREVIEW) || // delta E validation
         ( (d->illuminant_type == DT_ILLUMINANT_DETECT_EDGES ||
            d->illuminant_type == DT_ILLUMINANT_DETECT_SURFACES ) && // WB extraction mode
-           piece->pipe->type == DT_DEV_PIXELPIPE_FULL ) )
+           pipe->type == DT_DEV_PIXELPIPE_FULL ) )
     {
       piece->process_cl_ready = 0;
     }
@@ -3956,10 +3955,10 @@ void _auto_set_illuminant(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe)
 }
 
 
-void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpipe_iop_t *piece)
+void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
   if(darktable.gui->reset) return;
-  _auto_set_illuminant(self, piece->pipe);
+  _auto_set_illuminant(self, pipe);
 }
 
 

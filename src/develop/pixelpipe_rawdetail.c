@@ -14,19 +14,19 @@ void dt_dev_clear_rawdetail_mask(dt_dev_pixelpipe_t *pipe)
   pipe->rawdetail_mask_data = NULL;
 }
 
-gboolean dt_dev_write_rawdetail_mask(const dt_dev_pixelpipe_iop_t *piece, float *const rgb,
-                                     const dt_iop_roi_t *const roi_in, const int mode)
+gboolean dt_dev_write_rawdetail_mask(const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
+                                     float *const rgb, const dt_iop_roi_t *const roi_in, const int mode)
 {
-  dt_dev_pixelpipe_t *p = piece->pipe;
-  if((p->want_detail_mask & DT_DEV_DETAIL_MASK_REQUIRED) == 0)
+  dt_dev_pixelpipe_t *const mutable_pipe = (dt_dev_pixelpipe_t *)pipe;
+  if((pipe->want_detail_mask & DT_DEV_DETAIL_MASK_REQUIRED) == 0)
   {
-    if(p->rawdetail_mask_data)
-      dt_dev_clear_rawdetail_mask(p);
+    if(pipe->rawdetail_mask_data)
+      dt_dev_clear_rawdetail_mask(mutable_pipe);
     return FALSE;
   }
-  if((p->want_detail_mask & ~DT_DEV_DETAIL_MASK_REQUIRED) != mode) return FALSE;
+  if((pipe->want_detail_mask & ~DT_DEV_DETAIL_MASK_REQUIRED) != mode) return FALSE;
 
-  dt_dev_clear_rawdetail_mask(p);
+  dt_dev_clear_rawdetail_mask(mutable_pipe);
 
   const int width = roi_in->width;
   const int height = roi_in->height;
@@ -34,13 +34,13 @@ gboolean dt_dev_write_rawdetail_mask(const dt_dev_pixelpipe_iop_t *piece, float 
   float *tmp = dt_pixelpipe_cache_alloc_align_float_cache((size_t)width * height, 0);
   if((mask == NULL) || (tmp == NULL)) goto error;
 
-  p->rawdetail_mask_data = mask;
-  memcpy(&p->rawdetail_mask_roi, roi_in, sizeof(dt_iop_roi_t));
+  mutable_pipe->rawdetail_mask_data = mask;
+  memcpy(&mutable_pipe->rawdetail_mask_roi, roi_in, sizeof(dt_iop_roi_t));
 
   dt_aligned_pixel_t wb = { piece->dsc_in.temperature.coeffs[0],
                             piece->dsc_in.temperature.coeffs[1],
                             piece->dsc_in.temperature.coeffs[2] };
-  if((p->want_detail_mask & ~DT_DEV_DETAIL_MASK_REQUIRED) == DT_DEV_DETAIL_MASK_RAWPREPARE)
+  if((pipe->want_detail_mask & ~DT_DEV_DETAIL_MASK_REQUIRED) == DT_DEV_DETAIL_MASK_RAWPREPARE)
     wb[0] = wb[1] = wb[2] = 1.0f;
 
   dt_masks_calc_rawdetail_mask(rgb, mask, tmp, width, height, wb);
@@ -56,20 +56,20 @@ error:
 }
 
 #ifdef HAVE_OPENCL
-gboolean dt_dev_write_rawdetail_mask_cl(const dt_dev_pixelpipe_iop_t *piece, cl_mem in,
+gboolean dt_dev_write_rawdetail_mask_cl(const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, cl_mem in,
                                         const dt_iop_roi_t *const roi_in, const int mode)
 {
-  dt_dev_pixelpipe_t *p = piece->pipe;
-  if((p->want_detail_mask & DT_DEV_DETAIL_MASK_REQUIRED) == 0)
+  dt_dev_pixelpipe_t *const mutable_pipe = (dt_dev_pixelpipe_t *)pipe;
+  if((pipe->want_detail_mask & DT_DEV_DETAIL_MASK_REQUIRED) == 0)
   {
-    if(p->rawdetail_mask_data)
-      dt_dev_clear_rawdetail_mask(p);
+    if(pipe->rawdetail_mask_data)
+      dt_dev_clear_rawdetail_mask(mutable_pipe);
     return FALSE;
   }
 
-  if((p->want_detail_mask & ~DT_DEV_DETAIL_MASK_REQUIRED) != mode) return FALSE;
+  if((pipe->want_detail_mask & ~DT_DEV_DETAIL_MASK_REQUIRED) != mode) return FALSE;
 
-  dt_dev_clear_rawdetail_mask(p);
+  dt_dev_clear_rawdetail_mask(mutable_pipe);
 
   const int width = roi_in->width;
   const int height = roi_in->height;
@@ -77,7 +77,7 @@ gboolean dt_dev_write_rawdetail_mask_cl(const dt_dev_pixelpipe_iop_t *piece, cl_
   cl_mem out = NULL;
   cl_mem tmp = NULL;
   float *mask = NULL;
-  const int devid = p->devid;
+  const int devid = pipe->devid;
 
   cl_int err = CL_SUCCESS;
   mask = dt_pixelpipe_cache_alloc_align_float_cache((size_t)width * height, 0);
@@ -92,7 +92,7 @@ gboolean dt_dev_write_rawdetail_mask_cl(const dt_dev_pixelpipe_iop_t *piece, cl_
     dt_aligned_pixel_t wb = { piece->dsc_in.temperature.coeffs[0],
                               piece->dsc_in.temperature.coeffs[1],
                               piece->dsc_in.temperature.coeffs[2] };
-    if((p->want_detail_mask & ~DT_DEV_DETAIL_MASK_REQUIRED) == DT_DEV_DETAIL_MASK_RAWPREPARE)
+    if((pipe->want_detail_mask & ~DT_DEV_DETAIL_MASK_REQUIRED) == DT_DEV_DETAIL_MASK_RAWPREPARE)
       wb[0] = wb[1] = wb[2] = 1.0f;
 
     size_t sizes[3] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
@@ -121,8 +121,8 @@ gboolean dt_dev_write_rawdetail_mask_cl(const dt_dev_pixelpipe_iop_t *piece, cl_
     if(err != CL_SUCCESS) goto error;
   }
 
-  p->rawdetail_mask_data = mask;
-  memcpy(&p->rawdetail_mask_roi, roi_in, sizeof(dt_iop_roi_t));
+  mutable_pipe->rawdetail_mask_data = mask;
+  memcpy(&mutable_pipe->rawdetail_mask_roi, roi_in, sizeof(dt_iop_roi_t));
 
   dt_opencl_release_mem_object(out);
   dt_opencl_release_mem_object(tmp);
@@ -131,7 +131,7 @@ gboolean dt_dev_write_rawdetail_mask_cl(const dt_dev_pixelpipe_iop_t *piece, cl_
 
 error:
   fprintf(stderr, "[dt_dev_write_rawdetail_mask_cl] couldn't write detail mask: %i\n", err);
-  dt_dev_clear_rawdetail_mask(p);
+  dt_dev_clear_rawdetail_mask(mutable_pipe);
   dt_opencl_release_mem_object(out);
   dt_opencl_release_mem_object(tmp);
   dt_pixelpipe_cache_free_align(mask);
@@ -186,7 +186,7 @@ float *dt_dev_distort_detail_mask(const dt_dev_pixelpipe_t *pipe, float *src,
           dt_vprint(DT_DEBUG_MASKS, "   %s %ix%i -> %ix%i\n", module->module->op,
                     module->roi_in.width, module->roi_in.height,
                     module->roi_out.width, module->roi_out.height);
-          module->module->distort_mask(module->module, module, inmask, tmp,
+          module->module->distort_mask(module->module, (dt_dev_pixelpipe_t *)pipe, module, inmask, tmp,
                                        &module->roi_in, &module->roi_out);
           resmask = tmp;
           if(inmask != src) dt_pixelpipe_cache_free_align(inmask);

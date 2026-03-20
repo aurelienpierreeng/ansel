@@ -578,14 +578,15 @@ static void rcd_demosaic(const dt_dev_pixelpipe_iop_t *piece, float *const restr
 
 #ifdef HAVE_OPENCL
 
-static int process_rcd_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in,
-                              cl_mem dev_out, const dt_iop_roi_t *const roi_in,
-                              const dt_iop_roi_t *const roi_out, const gboolean smooth)
+static int process_rcd_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
+                          const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
+                          const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out,
+                          const gboolean smooth)
 {
   dt_iop_demosaic_data_t *data = (dt_iop_demosaic_data_t *)piece->data;
   dt_iop_demosaic_global_data_t *gd = (dt_iop_demosaic_global_data_t *)self->global_data;
 
-  const int devid = piece->pipe->devid;
+  const int devid = pipe->devid;
 
   cl_mem dev_aux = NULL;
   cl_mem dev_tmp = NULL;
@@ -609,7 +610,7 @@ static int process_rcd_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_i
   {
     dev_green_eq = dt_opencl_alloc_device(devid, roi_in->width, roi_in->height, sizeof(float));
     if(dev_green_eq == NULL) goto error;
-    if(!green_equilibration_cl(self, piece, dev_in, dev_green_eq, roi_in)) goto error;
+    if(!green_equilibration_cl(self, pipe, piece, dev_in, dev_green_eq, roi_in)) goto error;
     dev_in = dev_green_eq;
   }
 
@@ -842,7 +843,7 @@ static int process_rcd_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_i
   dt_opencl_release_mem_object(dev_green_eq);
   dev_green_eq = cfa = rgb0 = rgb1 = rgb2 = VH_dir = PQ_dir = VP_diff = HQ_diff = NULL;
 
-  dt_dev_write_rawdetail_mask_cl(piece, dev_aux, roi_in, DT_DEV_DETAIL_MASK_DEMOSAIC);
+  dt_dev_write_rawdetail_mask_cl(pipe, piece, dev_aux, roi_in, DT_DEV_DETAIL_MASK_DEMOSAIC);
 
   if(dev_aux != dev_out) dt_opencl_release_mem_object(dev_aux);
   dev_aux = NULL;
@@ -850,7 +851,7 @@ static int process_rcd_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_i
   // color smoothing
   if((data->color_smoothing) && smooth)
   {
-    if(!color_smoothing_cl(self, piece, dev_out, dev_out, roi_out, data->color_smoothing))
+    if(!color_smoothing_cl(self, pipe, piece, dev_out, dev_out, roi_out, data->color_smoothing))
       goto error;
   }
 

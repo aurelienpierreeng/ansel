@@ -231,15 +231,15 @@ typedef struct drawlayer_wait_dialog_t
   GtkWidget *dialog;
 } drawlayer_wait_dialog_t;
 
-static gboolean _is_drawlayer_display_pipe(const dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece)
+static gboolean _is_drawlayer_display_pipe(const dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe)
 {
-  if(!self || !self->dev || !piece || !piece->pipe) return FALSE;
+  if(!self || !self->dev || !pipe) return FALSE;
   if(self->dev->gui_module != self) return FALSE;
   /* Displayed darkroom rendering can come from either `dev->pipe` or
    * `dev->preview_pipe` depending on current scheduling/state. Both must use
    * the GUI-owned process patch fast path to avoid falling back to the
    * headless full-res clip+zoom path (slow and stale during live strokes). */
-  return (piece->pipe == self->dev->pipe || piece->pipe == self->dev->preview_pipe);
+  return (pipe == self->dev->pipe || pipe == self->dev->preview_pipe);
 }
 static inline float _clamp01(const float value)
 {
@@ -557,7 +557,8 @@ void dt_drawlayer_release_all_base_patch_extra_refs(dt_iop_drawlayer_gui_data_t 
 }
 
 static gboolean _refresh_piece_base_cache(dt_iop_module_t *self, dt_iop_drawlayer_data_t *data,
-                                          const dt_iop_drawlayer_params_t *params, dt_dev_pixelpipe_iop_t *piece)
+                                          const dt_iop_drawlayer_params_t *params, dt_dev_pixelpipe_t *pipe,
+                                          dt_dev_pixelpipe_iop_t *piece)
 {
   if(!self || !data || !params || !piece) return FALSE;
   if(params->layer_name[0] == '\0')
@@ -572,11 +573,11 @@ static gboolean _refresh_piece_base_cache(dt_iop_module_t *self, dt_iop_drawlaye
     return TRUE;
   }
 
-  const uint64_t base_hash = _drawlayer_params_cache_hash(piece->pipe->image.id, params);
+  const uint64_t base_hash = _drawlayer_params_cache_hash(pipe->image.id, params);
   const int known_width = data->process.base_patch.width;
   const int known_height = data->process.base_patch.height;
   if(data->process.cache_valid && data->process.base_patch.cache_entry
-     && data->process.base_patch.cache_hash == base_hash && data->process.cache_imgid == piece->pipe->image.id
+     && data->process.base_patch.cache_hash == base_hash && data->process.cache_imgid == pipe->image.id
      && !g_strcmp0(data->process.cache_layer_name, params->layer_name))
     return TRUE;
 
@@ -592,7 +593,7 @@ static gboolean _refresh_piece_base_cache(dt_iop_module_t *self, dt_iop_drawlaye
   {
     int created = 0;
     if(!dt_drawlayer_cache_patch_alloc_shared(&data->process.base_patch,
-                                              _drawlayer_params_cache_hash(piece->pipe->image.id, params),
+                                              _drawlayer_params_cache_hash(pipe->image.id, params),
                                               (size_t)known_width * known_height, known_width, known_height,
                                               "drawlayer sidecar cache", &created))
       return FALSE;
@@ -600,7 +601,7 @@ static gboolean _refresh_piece_base_cache(dt_iop_module_t *self, dt_iop_drawlaye
     if(!created)
     {
       data->process.cache_valid = TRUE;
-      data->process.cache_imgid = piece->pipe->image.id;
+      data->process.cache_imgid = pipe->image.id;
       g_strlcpy(data->process.cache_layer_name, params->layer_name, sizeof(data->process.cache_layer_name));
       data->process.cache_layer_order = params->layer_order;
       return TRUE;
@@ -608,7 +609,7 @@ static gboolean _refresh_piece_base_cache(dt_iop_module_t *self, dt_iop_drawlaye
 
     char warm_path[PATH_MAX] = { 0 };
     gboolean warm_loaded = FALSE;
-    if(dt_drawlayer_io_sidecar_path(piece->pipe->image.id, warm_path, sizeof(warm_path))
+    if(dt_drawlayer_io_sidecar_path(pipe->image.id, warm_path, sizeof(warm_path))
        && g_file_test(warm_path, G_FILE_TEST_EXISTS))
     {
       dt_drawlayer_io_patch_t warm_patch = { 0 };
@@ -626,7 +627,7 @@ static gboolean _refresh_piece_base_cache(dt_iop_module_t *self, dt_iop_drawlaye
     if(warm_loaded)
     {
       data->process.cache_valid = TRUE;
-      data->process.cache_imgid = piece->pipe->image.id;
+      data->process.cache_imgid = pipe->image.id;
       g_strlcpy(data->process.cache_layer_name, params->layer_name, sizeof(data->process.cache_layer_name));
       data->process.cache_layer_order = params->layer_order;
       return TRUE;
@@ -642,7 +643,7 @@ static gboolean _refresh_piece_base_cache(dt_iop_module_t *self, dt_iop_drawlaye
   }
 
   char path[PATH_MAX] = { 0 };
-  if(!dt_drawlayer_io_sidecar_path(piece->pipe->image.id, path, sizeof(path))) return FALSE;
+  if(!dt_drawlayer_io_sidecar_path(pipe->image.id, path, sizeof(path))) return FALSE;
   if(!g_file_test(path, G_FILE_TEST_EXISTS)) return FALSE;
 
   dt_drawlayer_io_layer_info_t io_info = { 0 };
@@ -659,7 +660,7 @@ static gboolean _refresh_piece_base_cache(dt_iop_module_t *self, dt_iop_drawlaye
 
   int created = 0;
   if(!dt_drawlayer_cache_patch_alloc_shared(&data->process.base_patch,
-                                            _drawlayer_params_cache_hash(piece->pipe->image.id, params),
+                                            _drawlayer_params_cache_hash(pipe->image.id, params),
                                             (size_t)info.width * info.height, (int)info.width, (int)info.height,
                                             "drawlayer sidecar cache", &created))
     return FALSE;
@@ -691,14 +692,16 @@ static gboolean _refresh_piece_base_cache(dt_iop_module_t *self, dt_iop_drawlaye
   }
 
   data->process.cache_valid = TRUE;
-  data->process.cache_imgid = piece->pipe->image.id;
+  data->process.cache_imgid = pipe->image.id;
   g_strlcpy(data->process.cache_layer_name, params->layer_name, sizeof(data->process.cache_layer_name));
   data->process.cache_layer_order = info.index;
   return TRUE;
 }
 
 gboolean dt_drawlayer_build_process_patch_from_base(dt_iop_module_t *self, dt_iop_drawlayer_gui_data_t *g,
-                                                    const dt_dev_pixelpipe_iop_t *piece, const dt_iop_roi_t *roi_in,
+                                                    const dt_dev_pixelpipe_t *pipe,
+                                                    const dt_dev_pixelpipe_iop_t *piece,
+                                                    const dt_iop_roi_t *roi_in,
                                                     const dt_iop_roi_t *roi_out)
 {
   const gint64 t0 = g_get_monotonic_time();
@@ -714,7 +717,7 @@ gboolean dt_drawlayer_build_process_patch_from_base(dt_iop_module_t *self, dt_io
   if(!self || !g || !piece || !roi_out || !g->process.base_patch.pixels) return FALSE;
 
   dt_drawlayer_process_patch_geometry_t geometry = { 0 };
-  if(!dt_drawlayer_compute_process_patch_geometry(piece, roi_in, roi_out, g->process.base_patch.width,
+  if(!dt_drawlayer_compute_process_patch_geometry(pipe, piece, roi_in, roi_out, g->process.base_patch.width,
                                                   g->process.base_patch.height, _conf_size(), &geometry))
     return FALSE;
   {
@@ -1499,7 +1502,7 @@ static gboolean _brush_profile_button_press(GtkWidget *widget, GdkEventButton *e
   return TRUE;
 }
 
-static gboolean _working_rgb_to_display_rgb(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
+static gboolean _working_rgb_to_display_rgb(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
                                             const float working_rgb[3], float display_rgb[3])
 {
   if(!working_rgb || !display_rgb) return FALSE;
@@ -1508,7 +1511,6 @@ static gboolean _working_rgb_to_display_rgb(dt_iop_module_t *self, dt_dev_pixelp
   display_rgb[1] = _clamp01(working_rgb[1]);
   display_rgb[2] = _clamp01(working_rgb[2]);
 
-  dt_dev_pixelpipe_t *pipe = piece ? piece->pipe : (self && self->dev ? self->dev->pipe : NULL);
   if(!self || !pipe) return TRUE;
 
   const dt_iop_order_iccprofile_info_t *const work_profile
@@ -1526,9 +1528,10 @@ static gboolean _working_rgb_to_display_rgb(dt_iop_module_t *self, dt_dev_pixelp
 }
 
 /** @brief Apply selected picker color to drawlayer brush color. */
-void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpipe_iop_t *piece)
+void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
   (void)picker;
+  (void)piece;
   if(!self || darktable.gui->reset) return;
   const drawlayer_pick_source_t source = _conf_pick_source();
   const float *picked = (source == DRAWLAYER_PICK_SOURCE_OUTPUT) ? self->picked_output_color : self->picked_color;
@@ -1539,7 +1542,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
   if(picked_max[0] < picked_min[0]) return;
 
   float display_rgb[3] = { 0.0f };
-  if(!_working_rgb_to_display_rgb(self, piece, picked, display_rgb)) return;
+  if(!_working_rgb_to_display_rgb(self, pipe, picked, display_rgb)) return;
   _apply_display_brush_color(self, display_rgb, TRUE);
 }
 
@@ -2195,9 +2198,9 @@ gboolean dt_drawlayer_prime_live_process_patch_before_stroke(dt_iop_module_t *se
     if(!pipe) continue;
 
     dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, pipe, self);
-    if(!piece || !_is_drawlayer_display_pipe(self, piece)) continue;
+    if(!piece || !_is_drawlayer_display_pipe(self, pipe)) continue;
 
-    if(_build_process_patch_from_base(self, g, piece, &piece->roi_in, &piece->roi_out))
+    if(_build_process_patch_from_base(self, g, pipe, piece, &piece->roi_in, &piece->roi_out))
       return TRUE;
   }
 
@@ -2210,11 +2213,12 @@ static gboolean _update_runtime_state(const drawlayer_runtime_request_t *request
                                       dt_drawlayer_runtime_source_t *source)
 {
   if(source) *source = (dt_drawlayer_runtime_source_t){ 0 };
-  if(!request || !request->self || !request->piece || !request->piece->pipe || !request->roi_out
+  if(!request || !request->self || !request->piece || !request->pipe || !request->roi_out
      || !request->runtime_params || !source)
     return FALSE;
 
   dt_dev_pixelpipe_iop_t *const piece = request->piece;
+  const dt_dev_pixelpipe_t *const pipe = request->pipe;
   const dt_iop_drawlayer_params_t *const runtime_params = request->runtime_params;
   dt_iop_drawlayer_gui_data_t *const gui = request->gui;
   dt_drawlayer_runtime_manager_t *const manager = request->manager;
@@ -2224,9 +2228,9 @@ static gboolean _update_runtime_state(const drawlayer_runtime_request_t *request
   if(process && request->display_pipe)
   {
     const drawlayer_layer_cache_key_t cache_key = {
-      .imgid = piece->pipe->image.id,
-      .raw_width = process->base_patch.width > 0 ? process->base_patch.width : piece->pipe->iwidth,
-      .raw_height = process->base_patch.height > 0 ? process->base_patch.height : piece->pipe->iheight,
+      .imgid = pipe->image.id,
+      .raw_width = process->base_patch.width > 0 ? process->base_patch.width : pipe->iwidth,
+      .raw_height = process->base_patch.height > 0 ? process->base_patch.height : pipe->iheight,
       .layer_name = runtime_params->layer_name,
       .layer_order = runtime_params->layer_order,
     };
@@ -2243,7 +2247,7 @@ static gboolean _update_runtime_state(const drawlayer_runtime_request_t *request
 
   // Export and thumbnail pipelines : leech an existing preview pipe cache if any.
   if(process && !request->display_pipe && process->cache_valid && process->base_patch.pixels
-     && process->cache_imgid == piece->pipe->image.id)
+     && process->cache_imgid == pipe->image.id)
   {
     const dt_iop_roi_t process_roi = request->roi_in ? *request->roi_in : *request->roi_out;
     source->kind = DT_DRAWLAYER_SOURCE_HEADLESS_BASE;
@@ -2260,7 +2264,7 @@ static gboolean _update_runtime_state(const drawlayer_runtime_request_t *request
       .scale = 1.0f,
     };
     dt_drawlayer_cache_build_combined_process_roi_for_piece(
-        piece, &process_roi, piece->pipe->iwidth, piece->pipe->iheight, process->base_patch.width,
+        piece, &process_roi, pipe->iwidth, pipe->iheight, process->base_patch.width,
         process->base_patch.height, &source->target_roi);
     dt_drawlayer_cache_patch_rdlock(&process->base_patch);
     if(manager)
@@ -3437,7 +3441,7 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelp
    * the pixelpipe cache during `commit_params()`. GUI pipes still keep their
    * own transformed ROI cache on top, but they attach to the same shared base
    * line as headless pipes instead of carrying a private sidecar mirror. */
-  _refresh_piece_base_cache(self, data, &data->params, piece);
+  _refresh_piece_base_cache(self, data, &data->params, pipe, piece);
 }
 
 /** @brief Reset GUI/session state for current drawlayer instance. */
@@ -4543,7 +4547,7 @@ int scrolled(dt_iop_module_t *self, double x, double y, int up, uint32_t state)
 
 #ifdef HAVE_OPENCL
 /** @brief OpenCL processing path for layer-over-input compositing. */
-int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
+int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
@@ -4552,7 +4556,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece
   dt_iop_drawlayer_gui_data_t *gui = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
   const gboolean have_gui = (gui != NULL);
   {
-    const gboolean display_pipe = have_gui && (piece->pipe == self->dev->pipe || piece->pipe == self->dev->preview_pipe);
+    const gboolean display_pipe = have_gui && (pipe == self->dev->pipe || pipe == self->dev->preview_pipe);
     dt_iop_drawlayer_data_t *data = (dt_iop_drawlayer_data_t *)piece->data;
     dt_drawlayer_runtime_manager_bind_piece(&data->headless_manager, &data->process, gui ? &gui->manager : NULL,
                                             gui ? &gui->process : NULL, display_pipe, &data->runtime_manager,
@@ -4563,7 +4567,8 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece
       = &runtime_data->params;
   const drawlayer_runtime_request_t runtime_request = {
     .self = self,
-    .piece = piece,
+    .pipe = pipe,
+    .piece = (dt_dev_pixelpipe_iop_t *)piece,
     .runtime_params = runtime_params,
     .gui = gui,
     .manager = runtime_data->runtime_manager,
@@ -4613,7 +4618,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece
   {
     const char *const source_label
         = (source.kind == DT_DRAWLAYER_SOURCE_GUI_PROCESS) ? "process-patch" : "headless";
-    const gboolean realtime = dt_dev_pixelpipe_get_realtime(piece->pipe);
+    const gboolean realtime = dt_dev_pixelpipe_get_realtime(pipe);
     const gboolean reuse_process_clmem = (source.kind == DT_DRAWLAYER_SOURCE_GUI_PROCESS);
     const gboolean reuse_device_buffers = realtime || reuse_process_clmem;
     dt_iop_roi_t target_roi = source.target_roi;
@@ -4635,7 +4640,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece
         source_width = process_patch->width;
         source_height = process_patch->height;
         source_entry = process_patch->cache_entry;
-        source_mem = gui ? dt_drawlayer_process_state_ensure_read_clmem_locked(&gui->process, piece->pipe->devid)
+        source_mem = gui ? dt_drawlayer_process_state_ensure_read_clmem_locked(&gui->process, pipe->devid)
                          : NULL;
         if(!source_mem)
         {
@@ -4662,7 +4667,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece
       goto process_cl_fallback;
 
     gboolean ok = _blend_layer_over_input_cl(
-        piece->pipe->devid, global->kernel_premult_over, dev_out, dev_in, scratch, source_pixels, source_entry,
+        pipe->devid, global->kernel_premult_over, dev_out, dev_in, scratch, source_pixels, source_entry,
         source_mem, source_width, source_height, &target_roi, &source_roi, direct_copy,
         preview_bg.enabled, preview_bg.value, reuse_device_buffers,
         reuse_process_clmem && !source_mem);
@@ -4683,7 +4688,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece
         if(local_copy)
         {
           memcpy(local_copy, process_patch->pixels, source_pixel_count * 4 * sizeof(float));
-          ok = _blend_layer_over_input_cl(piece->pipe->devid, global->kernel_premult_over, dev_out, dev_in, scratch,
+          ok = _blend_layer_over_input_cl(pipe->devid, global->kernel_premult_over, dev_out, dev_in, scratch,
                                           local_copy, NULL, NULL, process_patch->width, process_patch->height,
                                           &target_roi, &source_roi, direct_copy,
                                           preview_bg.enabled, preview_bg.value, reuse_device_buffers, TRUE);
@@ -4707,7 +4712,7 @@ process_cl_fallback:
   if(darktable.unmuted & DT_DEBUG_VERBOSE)
     dt_print(DT_DEBUG_PERF, "[drawlayer] process_cl step=no-cache-pass-through total=%.3f\n",
              (g_get_monotonic_time() - process_t0) / 1000.0);
-  const gboolean ok = dt_iop_clip_and_zoom_roi_cl(piece->pipe->devid, dev_out, dev_in, roi_out, roi_in)
+  const gboolean ok = dt_iop_clip_and_zoom_roi_cl(pipe->devid, dev_out, dev_in, roi_out, roi_in)
                       == CL_SUCCESS;
   dt_drawlayer_runtime_manager_update(manager, &process_post, &runtime_manager);
   return ok;
@@ -4715,14 +4720,15 @@ process_cl_fallback:
 #endif
 
 /** @brief CPU processing path for layer-over-input compositing. */
-int process(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid)
+int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
+            const void *const ivoid, void *const ovoid)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_drawlayer_gui_data_t *gui = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
   const gboolean have_gui = (gui != NULL);
   {
-    const gboolean display_pipe = have_gui && (piece->pipe == self->dev->pipe || piece->pipe == self->dev->preview_pipe);
+    const gboolean display_pipe = have_gui && (pipe == self->dev->pipe || pipe == self->dev->preview_pipe);
     dt_iop_drawlayer_data_t *data = (dt_iop_drawlayer_data_t *)piece->data;
     dt_drawlayer_runtime_manager_bind_piece(&data->headless_manager, &data->process, gui ? &gui->manager : NULL,
                                             gui ? &gui->process : NULL, display_pipe, &data->runtime_manager,
@@ -4733,7 +4739,8 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const vo
       = &runtime_data->params;
   const drawlayer_runtime_request_t runtime_request = {
     .self = self,
-    .piece = piece,
+    .pipe = pipe,
+    .piece = (dt_dev_pixelpipe_iop_t *)piece,
     .runtime_params = runtime_params,
     .gui = gui,
     .manager = runtime_data->runtime_manager,

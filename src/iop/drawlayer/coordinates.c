@@ -27,7 +27,8 @@ static void _virtual_piece_input_offset(dt_iop_module_t *self, int *x, int *y)
   {
     dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->virtual_pipe, self);
     if(piece)
-      dt_drawlayer_cache_resolve_piece_input_origin(piece, piece->pipe->iwidth, piece->pipe->iheight, &ox, &oy);
+      dt_drawlayer_cache_resolve_piece_input_origin(piece, self->dev->virtual_pipe->iwidth,
+                                                    self->dev->virtual_pipe->iheight, &ox, &oy);
   }
 
   if(x) *x = ox;
@@ -218,7 +219,8 @@ gboolean dt_drawlayer_compute_view_patch(dt_iop_module_t *self, const float padd
   return view->patch.width > 0 && view->patch.height > 0;
 }
 
-gboolean dt_drawlayer_compute_process_patch_geometry(const dt_dev_pixelpipe_iop_t *piece,
+gboolean dt_drawlayer_compute_process_patch_geometry(const dt_dev_pixelpipe_t *pipe,
+                                                     const dt_dev_pixelpipe_iop_t *piece,
                                                      const dt_iop_roi_t *roi_in,
                                                      const dt_iop_roi_t *roi_out,
                                                      const int base_width,
@@ -227,11 +229,11 @@ gboolean dt_drawlayer_compute_process_patch_geometry(const dt_dev_pixelpipe_iop_
                                                      dt_drawlayer_process_patch_geometry_t *geometry)
 {
   if(geometry) *geometry = (dt_drawlayer_process_patch_geometry_t){ 0 };
-  if(!piece || !piece->pipe || !roi_out || !geometry || base_width <= 0 || base_height <= 0) return FALSE;
+  if(!pipe || !piece || !roi_out || !geometry || base_width <= 0 || base_height <= 0) return FALSE;
 
   geometry->process_roi = roi_in ? *roi_in : *roi_out;
   dt_drawlayer_cache_build_combined_process_roi_for_piece(piece, &geometry->process_roi,
-                                                          piece->pipe->iwidth, piece->pipe->iheight,
+                                                          pipe->iwidth, pipe->iheight,
                                                           base_width, base_height, &geometry->combined_roi);
   if(geometry->combined_roi.scale <= 1e-6f || roi_out->width <= 0 || roi_out->height <= 0) return FALSE;
 

@@ -957,8 +957,8 @@ dt_drawlayer_runtime_result_t dt_drawlayer_runtime_manager_update(dt_drawlayer_r
       }
       if(schedule.build_process_patch && self && g && process && process->cache_valid && context->runtime.piece
          && context->runtime.roi_out)
-        dt_drawlayer_build_process_patch_from_base(self, g, context->runtime.piece, context->runtime.roi_in,
-                                                   context->runtime.roi_out);
+        dt_drawlayer_build_process_patch_from_base(self, g, context->runtime.pipe, context->runtime.piece,
+                                                   context->runtime.roi_in, context->runtime.roi_out);
       break;
 
     case DT_DRAWLAYER_RUNTIME_EVENT_PROCESS_CPU_AFTER:

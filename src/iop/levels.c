@@ -277,8 +277,10 @@ static void compute_lut(const dt_dev_pixelpipe_iop_t *piece)
   }
 }
 
-void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpipe_iop_t *piece)
+void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
+  (void)pipe;
+  (void)piece;
   dt_iop_levels_gui_data_t *c = (dt_iop_levels_gui_data_t *)self->gui_data;
   dt_iop_levels_params_t *p = (dt_iop_levels_params_t *)self->params;
 
@@ -344,14 +346,15 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
  * WARNING: unlike commit_params, which is thread safe wrt gui thread and
  * pipes, this function lives in the pipeline thread, and NOT thread safe!
  */
-static void commit_params_late(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece)
+static void commit_params_late(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
+                               const dt_dev_pixelpipe_iop_t *piece)
 {
   dt_iop_levels_data_t *d = (dt_iop_levels_data_t *)piece->data;
   dt_iop_levels_gui_data_t *g = (dt_iop_levels_gui_data_t *)self->gui_data;
 
   if(d->mode == LEVELS_MODE_AUTOMATIC)
   {
-    if(g && !dt_dev_pixelpipe_has_preview_output(self->dev, piece->pipe, &piece->roi_out))
+    if(g && !dt_dev_pixelpipe_has_preview_output(self->dev, pipe, &piece->roi_out))
     {
       dt_iop_gui_enter_critical_section(self);
       const uint64_t hash = g->hash;
@@ -373,7 +376,7 @@ static void commit_params_late(dt_iop_module_t *self, const dt_dev_pixelpipe_iop
       compute_lut(piece);
     }
 
-    if(dt_dev_pixelpipe_has_preview_output(self->dev, piece->pipe, &piece->roi_out)
+    if(dt_dev_pixelpipe_has_preview_output(self->dev, pipe, &piece->roi_out)
        || isnan(d->levels[0]) || isnan(d->levels[1])
        || isnan(d->levels[2]))
     {
@@ -381,7 +384,7 @@ static void commit_params_late(dt_iop_module_t *self, const dt_dev_pixelpipe_iop
       compute_lut(piece);
     }
 
-    if(g && dt_dev_pixelpipe_has_preview_output(self->dev, piece->pipe, &piece->roi_out)
+    if(g && dt_dev_pixelpipe_has_preview_output(self->dev, pipe, &piece->roi_out)
        && d->mode == LEVELS_MODE_AUTOMATIC)
     {
       uint64_t hash = piece->global_hash;
@@ -395,16 +398,18 @@ static void commit_params_late(dt_iop_module_t *self, const dt_dev_pixelpipe_iop
   }
 }
 
-int process(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid)
+int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
+            const void *const ivoid, void *const ovoid)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
   const int ch = 4;
   const dt_iop_levels_data_t *const d = (dt_iop_levels_data_t *)piece->data;
+  (void)pipe;
 
   if(d->mode == LEVELS_MODE_AUTOMATIC)
   {
-    commit_params_late(self, piece);
+    commit_params_late(self, pipe, piece);
   }
 
   const float *const restrict in = (float*)ivoid;
@@ -440,7 +445,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const vo
     out[i+2] = in[i+2] * L_out / denom;
   }
 
-  if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
+  if(pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
     dt_iop_alpha_copy(ivoid, ovoid, roi_out->width, roi_out->height);
   return 0;
 }

@@ -57,7 +57,6 @@ typedef struct dt_dev_pixelpipe_raster_mask_t
 typedef struct dt_dev_pixelpipe_iop_t
 {
   struct dt_iop_module_t *module;  // the module in the dev operation stack
-  struct dt_dev_pixelpipe_t *pipe; // the pipe this piece belongs to
   void *data;                      // to be used by the module to store stuff per pipe piece
 
   // Memory size of *data upon which we will compute integrity hashes.
@@ -420,9 +419,11 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const struct dt_iop_modu
 // some helper functions related to the details mask interface
 void dt_dev_clear_rawdetail_mask(dt_dev_pixelpipe_t *pipe);
 
-gboolean dt_dev_write_rawdetail_mask(const dt_dev_pixelpipe_iop_t *piece, float *const rgb, const dt_iop_roi_t *const roi_in, const int mode);
+gboolean dt_dev_write_rawdetail_mask(const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
+                                     float *const rgb, const dt_iop_roi_t *const roi_in, const int mode);
 #ifdef HAVE_OPENCL
-gboolean dt_dev_write_rawdetail_mask_cl(const dt_dev_pixelpipe_iop_t *piece, cl_mem in, const dt_iop_roi_t *const roi_in, const int mode);
+gboolean dt_dev_write_rawdetail_mask_cl(const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
+                                        cl_mem in, const dt_iop_roi_t *const roi_in, const int mode);
 #endif
 
 // helper function writing the pipe-processed ctmask data to dest

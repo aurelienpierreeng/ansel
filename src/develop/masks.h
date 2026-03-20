@@ -325,16 +325,20 @@ typedef struct dt_masks_functions_t
                     float **points, int *points_count);
   int (*get_points_border)(struct dt_develop_t *dev, struct dt_masks_form_t *form, float **points, int *points_count,
                            float **border, int *border_count, int source, const dt_iop_module_t *const module);
-  int (*get_mask)(const dt_iop_module_t *const module, const dt_dev_pixelpipe_iop_t *const piece,
+  int (*get_mask)(const dt_iop_module_t *const module, struct dt_dev_pixelpipe_t *pipe,
+                  const dt_dev_pixelpipe_iop_t *const piece,
                   struct dt_masks_form_t *const form,
                   float **buffer, int *width, int *height, int *posx, int *posy);
-  int (*get_mask_roi)(const dt_iop_module_t *const fmodule, const dt_dev_pixelpipe_iop_t *const piece,
+  int (*get_mask_roi)(const dt_iop_module_t *const fmodule, struct dt_dev_pixelpipe_t *pipe,
+                      const dt_dev_pixelpipe_iop_t *const piece,
                       struct dt_masks_form_t *const form,
                       const dt_iop_roi_t *roi, float *buffer);
-  int (*get_area)(const dt_iop_module_t *const module, const dt_dev_pixelpipe_iop_t *const piece,
+  int (*get_area)(const dt_iop_module_t *const module, struct dt_dev_pixelpipe_t *pipe,
+                  const dt_dev_pixelpipe_iop_t *const piece,
                   struct dt_masks_form_t *const form,
                   int *width, int *height, int *posx, int *posy);
-  int (*get_source_area)(dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece, struct dt_masks_form_t *form,
+  int (*get_source_area)(dt_iop_module_t *module, struct dt_dev_pixelpipe_t *pipe,
+                         dt_dev_pixelpipe_iop_t *piece, struct dt_masks_form_t *form,
                          int *width, int *height, int *posx, int *posy);
   gboolean (*get_gravity_center)(const struct dt_masks_form_t *form, float center[2], float *area);
   float (*get_interaction_value)(const struct dt_masks_form_t *form, dt_masks_interaction_t interaction);
@@ -829,28 +833,33 @@ int dt_masks_get_points_border(struct dt_develop_t *dev, dt_masks_form_t *form, 
                                float **border, int *border_count, int source, dt_iop_module_t *module);
 
 /** get the rectangle which include the form and his border */
-int dt_masks_get_area(dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece, dt_masks_form_t *form,
+int dt_masks_get_area(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
+                      dt_masks_form_t *form,
                       int *width, int *height, int *posx, int *posy);
-int dt_masks_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece, dt_masks_form_t *form,
+int dt_masks_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe,
+                             dt_dev_pixelpipe_iop_t *piece, dt_masks_form_t *form,
                              int *width, int *height, int *posx, int *posy);
 /** get the transparency mask of the form and his border */
-static inline int dt_masks_get_mask(const dt_iop_module_t *const module, const dt_dev_pixelpipe_iop_t *const piece,
+static inline int dt_masks_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+                      const dt_dev_pixelpipe_iop_t *const piece,
                       dt_masks_form_t *const form,
                       float **buffer, int *width, int *height, int *posx, int *posy)
 {
   return (form->functions && form->functions->get_mask)
-    ? form->functions->get_mask(module, piece, form, buffer, width, height, posx, posy)
+    ? form->functions->get_mask(module, pipe, piece, form, buffer, width, height, posx, posy)
     : 1;
 }
-static inline int dt_masks_get_mask_roi(const dt_iop_module_t *const module, const dt_dev_pixelpipe_iop_t *const piece,
+static inline int dt_masks_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+                          const dt_dev_pixelpipe_iop_t *const piece,
                           dt_masks_form_t *const form, const dt_iop_roi_t *roi, float *buffer)
 {
   return (form->functions && form->functions->get_mask_roi)
-    ? form->functions->get_mask_roi(module, piece, form, roi, buffer)
+    ? form->functions->get_mask_roi(module, pipe, piece, form, roi, buffer)
     : 1;
 }
 
-int dt_masks_group_render_roi(dt_iop_module_t *module, const dt_dev_pixelpipe_iop_t *piece, dt_masks_form_t *form,
+int dt_masks_group_render_roi(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe,
+                              const dt_dev_pixelpipe_iop_t *piece, dt_masks_form_t *form,
                               const dt_iop_roi_t *roi, float *buffer);
 
 // returns current masks version

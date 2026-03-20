@@ -420,8 +420,9 @@ static inline float strength(float value, float strength)
   return value + (value - 0.5f) * (strength / 100.0f);
 }
 
-void process_display(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
-                     void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+void process_display(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
+                     const void *const ivoid, void *const ovoid, const dt_iop_roi_t *const roi_in,
+                     const dt_iop_roi_t *const roi_out)
 {
   dt_iop_colorzones_data_t *d = (dt_iop_colorzones_data_t *)(piece->data);
   dt_iop_colorzones_gui_data_t *g = (dt_iop_colorzones_gui_data_t *)self->gui_data;
@@ -466,11 +467,11 @@ void process_display(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece
     out[3] = CLAMP(out[3], 0.f, 1.f);
   }
 
-  piece->pipe->mask_display = DT_DEV_PIXELPIPE_DISPLAY_MASK;
-  piece->pipe->bypass_blendif = 1;
+  pipe->mask_display = DT_DEV_PIXELPIPE_DISPLAY_MASK;
+  pipe->bypass_blendif = 1;
 }
 
-void process_v1(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+void process_v1(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
                 void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   dt_iop_colorzones_data_t *d = (dt_iop_colorzones_data_t *)(piece->data);
@@ -517,7 +518,7 @@ void process_v1(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, con
   }
 }
 
-void process_v3(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+void process_v3(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
                 void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   dt_iop_colorzones_data_t *d = (dt_iop_colorzones_data_t *)(piece->data);
@@ -561,7 +562,7 @@ void process_v3(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, con
   }
 }
 
-int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
@@ -570,9 +571,9 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, c
   dt_iop_colorzones_gui_data_t *g = (dt_iop_colorzones_gui_data_t *)self->gui_data;
 
   // display selection if requested
-  if(piece->pipe->type == DT_DEV_PIXELPIPE_FULL && g && g->display_mask && self->dev->gui_attached
-     && (self == self->dev->gui_module) && (piece->pipe == self->dev->pipe))
-    process_display(self, piece, ivoid, ovoid, roi_in, roi_out);
+  if(pipe->type == DT_DEV_PIXELPIPE_FULL && g && g->display_mask && self->dev->gui_attached
+     && (self == self->dev->gui_module) && (pipe == self->dev->pipe))
+    process_display(self, (dt_dev_pixelpipe_t *)pipe, piece, ivoid, ovoid, roi_in, roi_out);
   else if(d->mode == DT_IOP_COLORZONES_MODE_SMOOTH)
     process_v3(self, piece, ivoid, ovoid, roi_in, roi_out);
   else
@@ -581,16 +582,15 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, c
 }
 
 #ifdef HAVE_OPENCL
-int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
+int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
-  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_colorzones_data_t *d = (dt_iop_colorzones_data_t *)piece->data;
   dt_iop_colorzones_global_data_t *gd = (dt_iop_colorzones_global_data_t *)self->global_data;
   cl_mem dev_L, dev_a, dev_b = NULL;
   cl_int err = -999;
 
-  const int devid = piece->pipe->devid;
+  const int devid = pipe->devid;
   const int width = roi_in->width;
   const int height = roi_in->height;
   const int kernel_colorzones
@@ -2166,7 +2166,7 @@ static void _display_mask_callback(GtkToggleButton *togglebutton, dt_iop_module_
   dt_dev_pixelpipe_update_history_main(module->dev);
 }
 
-void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpipe_iop_t *piece)
+void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
   dt_iop_colorzones_gui_data_t *g = (dt_iop_colorzones_gui_data_t *)self->gui_data;
   if(picker == g->colorpicker_set_values)

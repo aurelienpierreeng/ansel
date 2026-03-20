@@ -283,14 +283,16 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
 }
 
 #ifdef HAVE_OPENCL
-static cl_int process_laplacian_bayer_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece,
-                                         cl_mem dev_in, cl_mem dev_out, const dt_iop_roi_t *const roi_in,
+static cl_int process_laplacian_bayer_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
+                                         const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
+                                         const dt_iop_roi_t *const roi_in,
                                          const dt_iop_roi_t *const roi_out, const dt_aligned_pixel_t clips);
-static cl_int process_laplacian_xtrans_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece,
-                                          cl_mem dev_in, cl_mem dev_out, const dt_iop_roi_t *const roi_in,
+static cl_int process_laplacian_xtrans_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
+                                          const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
+                                          const dt_iop_roi_t *const roi_in,
                                           const dt_iop_roi_t *const roi_out, const dt_aligned_pixel_t clips);
 
-int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
+int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
@@ -299,11 +301,11 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece
   dt_iop_highlights_global_data_t *gd = (dt_iop_highlights_global_data_t *)self->global_data;
 
   const uint32_t filters = piece->dsc_in.filters;
-  const int devid = piece->pipe->devid;
+  const int devid = pipe->devid;
   const int width = roi_in->width;
   const int height = roi_in->height;
 
-  const gboolean fullpipe = !dt_dev_pixelpipe_has_preview_output(self->dev, piece->pipe, roi_out);
+  const gboolean fullpipe = !dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out);
   const gboolean visualizing = (g != NULL) ? g->show_visualize && fullpipe : FALSE;
 
   cl_int err = DT_OPENCL_DEFAULT_ERROR;
@@ -335,7 +337,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece
     err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_highlights_false_color, sizes);
     if(err != CL_SUCCESS) goto error;
 
-    piece->pipe->mask_display = DT_DEV_PIXELPIPE_DISPLAY_PASSTHRU;
+    ((dt_dev_pixelpipe_t *)pipe)->mask_display = DT_DEV_PIXELPIPE_DISPLAY_PASSTHRU;
     dt_opencl_release_mem_object(dev_clips);
     return TRUE;
   }
@@ -432,8 +434,8 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece
                                         0.995f * d->clip * piece->dsc_in.processed_maximum[1],
                                         0.995f * d->clip * piece->dsc_in.processed_maximum[2], clip };
     err = (filters == 9u)
-              ? process_laplacian_xtrans_cl(self, piece, dev_in, dev_out, roi_in, roi_out, clips)
-              : process_laplacian_bayer_cl(self, piece, dev_in, dev_out, roi_in, roi_out, clips);
+              ? process_laplacian_xtrans_cl(self, pipe, piece, dev_in, dev_out, roi_in, roi_out, clips)
+              : process_laplacian_bayer_cl(self, pipe, piece, dev_in, dev_out, roi_in, roi_out, clips);
     if(err != CL_SUCCESS) goto error;
   }
 
@@ -447,7 +449,7 @@ error:
 }
 #endif
 
-void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece, struct dt_develop_tiling_t *tiling)
+void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe, const struct dt_dev_pixelpipe_iop_t *piece, struct dt_develop_tiling_t *tiling)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
@@ -1802,8 +1804,9 @@ static inline int wavelets_process(const float *const restrict in, float
 }
 
 
-static int process_laplacian_bayer(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece,
-                                   const void *const restrict ivoid, void *const restrict ovoid,
+static int process_laplacian_bayer(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
+                                   const dt_dev_pixelpipe_iop_t *piece, const void *const restrict ivoid,
+                                   void *const restrict ovoid,
                                    const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out,
                                    const dt_aligned_pixel_t clips)
 {
@@ -1820,13 +1823,13 @@ static int process_laplacian_bayer(struct dt_iop_module_t *self, const dt_dev_pi
   const size_t ds_width = width / DS_FACTOR;
   const size_t ds_size = ds_height * ds_width;
 
-  float *const restrict interpolated = dt_pixelpipe_cache_alloc_align_float(size * 4, piece->pipe);  // [R, G, B, norm] for each pixel
-  float *const restrict clipping_mask = dt_pixelpipe_cache_alloc_align_float(size * 4, piece->pipe); // [R, G, B, norm] for each pixel
+  float *const restrict interpolated = dt_pixelpipe_cache_alloc_align_float(size * 4, pipe);  // [R, G, B, norm] for each pixel
+  float *const restrict clipping_mask = dt_pixelpipe_cache_alloc_align_float(size * 4, pipe); // [R, G, B, norm] for each pixel
 
   // temp buffer for blurs. We will need to cycle between them for memory efficiency
-  float *const restrict LF_odd = dt_pixelpipe_cache_alloc_align_float(ds_size * 4, piece->pipe);
-  float *const restrict LF_even = dt_pixelpipe_cache_alloc_align_float(ds_size * 4, piece->pipe);
-  float *const restrict temp = dt_pixelpipe_cache_alloc_align_float(ds_size * 4, piece->pipe);
+  float *const restrict LF_odd = dt_pixelpipe_cache_alloc_align_float(ds_size * 4, pipe);
+  float *const restrict LF_even = dt_pixelpipe_cache_alloc_align_float(ds_size * 4, pipe);
+  float *const restrict temp = dt_pixelpipe_cache_alloc_align_float(ds_size * 4, pipe);
 
   const float scale = fmaxf(DS_FACTOR / (roi_in->scale), 1.f);
   const float final_radius = (float)((int)(1 << data->scales)) / scale;
@@ -1835,9 +1838,9 @@ static int process_laplacian_bayer(struct dt_iop_module_t *self, const dt_dev_pi
   const float noise_level = data->noise_level / scale;
 
   // wavelets scales buffers
-  float *restrict HF = dt_pixelpipe_cache_alloc_align_float(ds_size * 4, piece->pipe);
-  float *restrict ds_interpolated = dt_pixelpipe_cache_alloc_align_float(ds_size * 4, piece->pipe);
-  float *restrict ds_clipping_mask = dt_pixelpipe_cache_alloc_align_float(ds_size * 4, piece->pipe);
+  float *restrict HF = dt_pixelpipe_cache_alloc_align_float(ds_size * 4, pipe);
+  float *restrict ds_interpolated = dt_pixelpipe_cache_alloc_align_float(ds_size * 4, pipe);
+  float *restrict ds_clipping_mask = dt_pixelpipe_cache_alloc_align_float(ds_size * 4, pipe);
 
   if(!interpolated || !clipping_mask || !LF_odd || !LF_even || !temp || !HF || !ds_interpolated || !ds_clipping_mask)
   {
@@ -1899,8 +1902,9 @@ error:;
   return err;
 }
 
-static int process_laplacian_xtrans(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece,
-                                    const void *const restrict ivoid, void *const restrict ovoid,
+static int process_laplacian_xtrans(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
+                                    const dt_dev_pixelpipe_iop_t *piece, const void *const restrict ivoid,
+                                    void *const restrict ovoid,
                                     const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out,
                                     const dt_aligned_pixel_t clips)
 {
@@ -1918,20 +1922,20 @@ static int process_laplacian_xtrans(struct dt_iop_module_t *self, const dt_dev_p
   const size_t ds_width = width / DS_FACTOR;
   const size_t ds_size = ds_height * ds_width;
 
-  float *const restrict interpolated = dt_pixelpipe_cache_alloc_align_float(size * 4, piece->pipe);
-  float *const restrict clipping_mask = dt_pixelpipe_cache_alloc_align_float(size * 4, piece->pipe);
-  float *const restrict LF_odd = dt_pixelpipe_cache_alloc_align_float(ds_size * 4, piece->pipe);
-  float *const restrict LF_even = dt_pixelpipe_cache_alloc_align_float(ds_size * 4, piece->pipe);
-  float *const restrict temp = dt_pixelpipe_cache_alloc_align_float(ds_size * 4, piece->pipe);
+  float *const restrict interpolated = dt_pixelpipe_cache_alloc_align_float(size * 4, pipe);
+  float *const restrict clipping_mask = dt_pixelpipe_cache_alloc_align_float(size * 4, pipe);
+  float *const restrict LF_odd = dt_pixelpipe_cache_alloc_align_float(ds_size * 4, pipe);
+  float *const restrict LF_even = dt_pixelpipe_cache_alloc_align_float(ds_size * 4, pipe);
+  float *const restrict temp = dt_pixelpipe_cache_alloc_align_float(ds_size * 4, pipe);
 
   const float scale = fmaxf(DS_FACTOR / (roi_in->scale), 1.f);
   const float final_radius = (float)((int)(1 << data->scales)) / scale;
   const int scales = CLAMP((int)ceilf(log2f(final_radius)), 1, MAX_NUM_SCALES);
   const float noise_level = data->noise_level / scale;
 
-  float *restrict HF = dt_pixelpipe_cache_alloc_align_float(ds_size * 4, piece->pipe);
-  float *restrict ds_interpolated = dt_pixelpipe_cache_alloc_align_float(ds_size * 4, piece->pipe);
-  float *restrict ds_clipping_mask = dt_pixelpipe_cache_alloc_align_float(ds_size * 4, piece->pipe);
+  float *restrict HF = dt_pixelpipe_cache_alloc_align_float(ds_size * 4, pipe);
+  float *restrict ds_interpolated = dt_pixelpipe_cache_alloc_align_float(ds_size * 4, pipe);
+  float *restrict ds_clipping_mask = dt_pixelpipe_cache_alloc_align_float(ds_size * 4, pipe);
 
   if(!interpolated || !clipping_mask || !LF_odd || !LF_even || !temp || !HF || !ds_interpolated || !ds_clipping_mask)
   {
@@ -2102,8 +2106,8 @@ static inline cl_int wavelets_process_cl(const int devid,
   return err;
 }
 
-static cl_int process_laplacian_bayer_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece,
-                                         cl_mem dev_in, cl_mem dev_out,
+static cl_int process_laplacian_bayer_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
+                                         const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
                                          const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out,
                                          const dt_aligned_pixel_t clips)
 {
@@ -2112,7 +2116,7 @@ static cl_int process_laplacian_bayer_cl(struct dt_iop_module_t *self, const dt_
 
   cl_int err = DT_OPENCL_DEFAULT_ERROR;
 
-  const int devid = piece->pipe->devid;
+  const int devid = pipe->devid;
   const int width = roi_in->width;
   const int height = roi_in->height;
 
@@ -2328,8 +2332,8 @@ error:
   return err;
 }
 
-static cl_int process_laplacian_xtrans_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece,
-                                          cl_mem dev_in, cl_mem dev_out,
+static cl_int process_laplacian_xtrans_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
+                                          const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
                                           const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out,
                                           const dt_aligned_pixel_t clips)
 {
@@ -2339,7 +2343,7 @@ static cl_int process_laplacian_xtrans_cl(struct dt_iop_module_t *self, const dt
   cl_int err = DT_OPENCL_DEFAULT_ERROR;
 
   const uint8_t(*const xtrans)[6] = (const uint8_t(*const)[6])piece->dsc_in.xtrans;
-  const int devid = piece->pipe->devid;
+  const int devid = pipe->devid;
   const int width = roi_in->width;
   const int height = roi_in->height;
 
@@ -2626,7 +2630,7 @@ static void process_visualize(const dt_dev_pixelpipe_iop_t *piece, const void *c
   }
 }
 
-int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
@@ -2635,13 +2639,13 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, c
   dt_iop_highlights_data_t *data = (dt_iop_highlights_data_t *)piece->data;
   dt_iop_highlights_gui_data_t *g = (dt_iop_highlights_gui_data_t *)self->gui_data;
 
-  const gboolean fullpipe = !dt_dev_pixelpipe_has_preview_output(self->dev, piece->pipe, roi_out);
+  const gboolean fullpipe = !dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out);
   const gboolean visualizing = (g != NULL) ? g->show_visualize && fullpipe : FALSE;
 
   if(visualizing)
   {
     process_visualize(piece, ivoid, ovoid, roi_in, roi_out, filters, data);
-    piece->pipe->mask_display = DT_DEV_PIXELPIPE_DISPLAY_PASSTHRU;
+    ((dt_dev_pixelpipe_t *)pipe)->mask_display = DT_DEV_PIXELPIPE_DISPLAY_PASSTHRU;
     return 0;
   }
 
@@ -2729,8 +2733,8 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, c
       const dt_aligned_pixel_t clips = { 0.995f * data->clip * piece->dsc_in.processed_maximum[0],
                                          0.995f * data->clip * piece->dsc_in.processed_maximum[1],
                                          0.995f * data->clip * piece->dsc_in.processed_maximum[2], clip };
-      if((filters == 9u && process_laplacian_xtrans(self, piece, ivoid, ovoid, roi_in, roi_out, clips))
-         || (filters != 9u && process_laplacian_bayer(self, piece, ivoid, ovoid, roi_in, roi_out, clips)))
+      if((filters == 9u && process_laplacian_xtrans(self, pipe, piece, ivoid, ovoid, roi_in, roi_out, clips))
+         || (filters != 9u && process_laplacian_bayer(self, pipe, piece, ivoid, ovoid, roi_in, roi_out, clips)))
         return 1;
       break;
     }
@@ -2740,7 +2744,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, c
       break;
   }
 
-  if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK) dt_iop_alpha_copy(ivoid, ovoid, roi_out->width, roi_out->height);
+  if(pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK) dt_iop_alpha_copy(ivoid, ovoid, roi_out->width, roi_out->height);
   return 0;
 }
 

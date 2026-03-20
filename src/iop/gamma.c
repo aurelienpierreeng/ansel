@@ -383,11 +383,10 @@ static void _copy_output(const float *const restrict in, uint8_t *const restrict
 }
 
 
-int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o)
+int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o)
 {
-  const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
-  const dt_dev_pixelpipe_display_mask_t mask_display = piece->pipe->mask_display;
+  const dt_dev_pixelpipe_display_mask_t mask_display = pipe->mask_display;
   const gboolean fcolor = dt_conf_is_equal("channel_display", "false color");
 
   const size_t buffsize = (size_t)roi_out->width * roi_out->height * 4;
@@ -451,12 +450,11 @@ static int _false_color_channel_to_kernel_code(const dt_dev_pixelpipe_display_ma
   }
 }
 
-int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
+int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
 {
-  const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_gamma_global_data_t *gd = (dt_iop_gamma_global_data_t *)self->global_data;
-  const int devid = piece->pipe->devid;
+  const int devid = pipe->devid;
   cl_int err = CL_SUCCESS;
 
   const int width = roi_out->width;
@@ -464,7 +462,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece
 
   size_t sizes[] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
 
-  const dt_dev_pixelpipe_display_mask_t mask_display = piece->pipe->mask_display;
+  const dt_dev_pixelpipe_display_mask_t mask_display = pipe->mask_display;
   const gboolean fcolor = dt_conf_is_equal("channel_display", "false color");
   int mode = DT_IOP_GAMMA_KERNEL_COPY;
   int channel = DT_IOP_GAMMA_FALSE_COLOR_MONO;
@@ -547,7 +545,7 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelp
                    dt_dev_pixelpipe_iop_t *piece)
 {
   // Only GUI pipes return 8 bits unsigned integer BGRA
-  if(piece->pipe->type == DT_DEV_PIXELPIPE_PREVIEW || piece->pipe->type == DT_DEV_PIXELPIPE_FULL)
+  if(pipe->type == DT_DEV_PIXELPIPE_PREVIEW || pipe->type == DT_DEV_PIXELPIPE_FULL)
     piece->enabled = 1;
   else
     piece->enabled = 0;

@@ -182,7 +182,8 @@ static inline void process_reinhard(struct dt_iop_module_t *self, const dt_dev_p
   }
 }
 
-static inline void process_drago(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece,
+static inline void process_drago(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
+                                 const dt_dev_pixelpipe_iop_t *piece,
                                  const void *const ivoid, void *const ovoid, const dt_iop_roi_t *const roi_in,
                                  const dt_iop_roi_t *const roi_out, dt_iop_global_tonemap_data_t *data)
 {
@@ -199,7 +200,7 @@ static inline void process_drago(struct dt_iop_module_t *self, const dt_dev_pixe
   // Drago needs the absolute Lmax value of the image. In pixelpipe FULL we can not reliably get this value
   // as the pixelpipe might only see part of the image (region of interest). Therefore we try to get lwmax from
   // the PREVIEW pixelpipe which luckily stores it for us.
-  if(self->dev->gui_attached && g && !dt_dev_pixelpipe_has_preview_output(self->dev, piece->pipe, roi_out))
+  if(self->dev->gui_attached && g && !dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
   {
     dt_iop_gui_enter_critical_section(self);
     const uint64_t hash = g->hash;
@@ -238,7 +239,7 @@ static inline void process_drago(struct dt_iop_module_t *self, const dt_dev_pixe
   }
 
   // PREVIEW pixelpipe stores lwmax
-  if(self->dev->gui_attached && g && dt_dev_pixelpipe_has_preview_output(self->dev, piece->pipe, roi_out))
+  if(self->dev->gui_attached && g && dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
   {
     uint64_t hash = piece->global_hash;
     dt_iop_gui_enter_critical_section(self);
@@ -295,7 +296,7 @@ static inline void process_filmic(struct dt_iop_module_t *self, const dt_dev_pix
   }
 }
 
-int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
@@ -321,7 +322,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, c
       process_reinhard(self, piece, ivoid, ovoid, roi_in, roi_out, data);
       break;
     case OPERATOR_DRAGO:
-      process_drago(self, piece, ivoid, ovoid, roi_in, roi_out, data);
+      process_drago(self, pipe, piece, ivoid, ovoid, roi_in, roi_out, data);
       break;
     case OPERATOR_FILMIC:
       process_filmic(self, piece, ivoid, ovoid, roi_in, roi_out, data);
@@ -336,11 +337,11 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, c
     dt_bilateral_free(b);
   }
 
-  if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK) dt_iop_alpha_copy(ivoid, ovoid, roi_out->width, roi_out->height);
+  if(pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK) dt_iop_alpha_copy(ivoid, ovoid, roi_out->width, roi_out->height);
   return 0;
 }
 
-void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece, struct dt_develop_tiling_t *tiling)
+void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe, const struct dt_dev_pixelpipe_iop_t *piece, struct dt_develop_tiling_t *tiling)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   dt_iop_global_tonemap_data_t *d = (dt_iop_global_tonemap_data_t *)piece->data;

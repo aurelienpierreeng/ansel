@@ -578,14 +578,14 @@ static inline float lookup_gamut(const float *const gamut_lut, const float x)
 }
 
 
-int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid)
 {
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_colorbalancergb_data_t *d = (dt_iop_colorbalancergb_data_t *)piece->data;
   dt_iop_colorbalancergb_gui_data_t *g = (dt_iop_colorbalancergb_gui_data_t *)self->gui_data;
   const struct dt_iop_order_iccprofile_info_t *const work_profile
-      = dt_ioppr_get_pipe_current_profile_info(self, piece->pipe);
+      = dt_ioppr_get_pipe_current_profile_info(self, pipe);
   if(work_profile == NULL) return 0; // no point
 
   // work profile can't be fetched in commit_params since it is not yet initialised
@@ -658,7 +658,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, c
   const dt_aligned_pixel_simd_t jz_ai2 = dt_colormatrix_row_to_simd(AI_transposed, 2);
 
   const gint mask_display
-      = (piece->pipe->type == DT_DEV_PIXELPIPE_FULL && self->dev->gui_attached
+      = (pipe->type == DT_DEV_PIXELPIPE_FULL && self->dev->gui_attached
          && g && g->mask_display);
 
   // pixel size of the checker background
@@ -901,7 +901,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, c
 
 
 #if HAVE_OPENCL
-int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
+int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_colorbalancergb_data_t *const d = (dt_iop_colorbalancergb_data_t *)piece->data;
@@ -910,7 +910,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece
 
   cl_int err = -999;
 
-  const int devid = piece->pipe->devid;
+  const int devid = pipe->devid;
   const int width = roi_in->width;
   const int height = roi_in->height;
 
@@ -918,7 +918,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece
 
   // Get working color profile
   const struct dt_iop_order_iccprofile_info_t *const work_profile
-      = dt_ioppr_get_pipe_current_profile_info(self, piece->pipe);
+      = dt_ioppr_get_pipe_current_profile_info(self, pipe);
   if(work_profile == NULL) return err; // no point
 
   cl_mem dev_profile_info = NULL;
@@ -982,7 +982,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece
 
   // Size of the checker
   const gint mask_display
-      = (piece->pipe->type == DT_DEV_PIXELPIPE_FULL && self->dev->gui_attached
+      = (pipe->type == DT_DEV_PIXELPIPE_FULL && self->dev->gui_attached
          && g && g->mask_display);
   const int checker_1 = (mask_display) ? DT_PIXEL_APPLY_DPI(d->checker_size) : 0;
   const int checker_2 = 2 * checker_1;
@@ -1165,7 +1165,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   // Check if the RGB working profile has changed in pipe
   // WARNING: this function is not triggered upon working profile change,
   // so the gamut boundaries are wrong until we change some param in this module
-  struct dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_pipe_current_profile_info(self, piece->pipe);
+  struct dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_pipe_current_profile_info(self, pipe);
   if(work_profile == NULL) return;
   if(work_profile != d->work_profile)
   {
@@ -1341,10 +1341,10 @@ void cleanup_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelp
   piece->data = NULL;
 }
 
-void pipe_RGB_to_Ych(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const dt_aligned_pixel_t RGB,
+void pipe_RGB_to_Ych(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, const dt_aligned_pixel_t RGB,
                      dt_aligned_pixel_t Ych)
 {
-  const struct dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_pipe_current_profile_info(self, piece->pipe);
+  const struct dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_pipe_current_profile_info(self, pipe);
   if(work_profile == NULL) return; // no point
 
   dt_aligned_pixel_t XYZ_D50 = { 0.f };
@@ -1361,15 +1361,15 @@ void pipe_RGB_to_Ych(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const
 }
 
 
-void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpipe_iop_t *piece)
+void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
   dt_iop_colorbalancergb_gui_data_t *g = (dt_iop_colorbalancergb_gui_data_t *)self->gui_data;
   dt_iop_colorbalancergb_params_t *p = (dt_iop_colorbalancergb_params_t *)self->params;
 
   dt_aligned_pixel_t Ych = { 0.f };
   dt_aligned_pixel_t max_Ych = { 0.f };
-  pipe_RGB_to_Ych(self, piece, (const float *)self->picked_color, Ych);
-  pipe_RGB_to_Ych(self, piece, (const float *)self->picked_color_max, max_Ych);
+  pipe_RGB_to_Ych(self, pipe, (const float *)self->picked_color, Ych);
+  pipe_RGB_to_Ych(self, pipe, (const float *)self->picked_color_max, max_Ych);
   float hue = RAD_TO_DEG(Ych[2]) + 180.f;   // take the opponent color
   hue = (hue > 360.f) ? hue - 360.f : hue;  // normalize in [0 ; 360]°
 

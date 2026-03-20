@@ -56,26 +56,30 @@ typedef struct dt_develop_tiling_t
   unsigned yalign;
 } dt_develop_tiling_t;
 
-int default_process_tiling_cl(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
-                              const void *const ivoid, void *const ovoid, const int bpp);
+int default_process_tiling_cl(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+                              const struct dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+                              void *const ovoid, const int bpp);
 
-int process_tiling_cl(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
-                      const void *const ivoid, void *const ovoid, const int bpp);
+int process_tiling_cl(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+                      const struct dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+                      void *const ovoid, const int bpp);
 
-int default_process_tiling(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
-                           const void *const ivoid, void *const ovid, const int bpp);
+int default_process_tiling(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+                           const struct dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+                           void *const ovid, const int bpp);
 
-int process_tiling(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
-                   const void *const ivoid, void *const ovoid, const int bpp);
+int process_tiling(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+                   const struct dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid,
+                   const int bpp);
 
-void default_tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
-                             struct dt_develop_tiling_t *tiling);
+void default_tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+                             const struct dt_dev_pixelpipe_iop_t *piece, struct dt_develop_tiling_t *tiling);
 
-void tiling_callback_blendop(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
-                             struct dt_develop_tiling_t *tiling);
+void tiling_callback_blendop(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+                             const struct dt_dev_pixelpipe_iop_t *piece, struct dt_develop_tiling_t *tiling);
 
-void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
-                     struct dt_develop_tiling_t *tiling);
+void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+                     const struct dt_dev_pixelpipe_iop_t *piece, struct dt_develop_tiling_t *tiling);
 
 int dt_tiling_piece_fits_host_memory(const size_t width, const size_t height, const unsigned bpp,
                                      const float factor, const size_t overhead);

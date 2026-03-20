@@ -223,18 +223,21 @@ static void default_cleanup(dt_iop_module_t *module)
 }
 
 
-static int default_distort_transform(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, float *points,
+static int default_distort_transform(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
+                                     dt_dev_pixelpipe_iop_t *piece, float *points,
                                      size_t points_count)
 {
   return 1;
 }
-static int default_distort_backtransform(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, float *points,
+static int default_distort_backtransform(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
+                                         dt_dev_pixelpipe_iop_t *piece, float *points,
                                          size_t points_count)
 {
   return 1;
 }
 
-static int default_process(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
+static int default_process(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+                           const struct dt_dev_pixelpipe_iop_t *piece,
                            const void *const i, void *const o)
 {
   const struct dt_iop_roi_t *const roi_in = &piece->roi_in;
@@ -242,13 +245,13 @@ static int default_process(struct dt_iop_module_t *self, const struct dt_dev_pix
   if(roi_in->width <= 1 || roi_in->height <= 1 || roi_out->width <= 1 || roi_out->height <= 1) return 0;
 
   if(darktable.codepath.OPENMP_SIMD && self->process_plain)
-    return self->process_plain(self, piece, i, o);
+    return self->process_plain(self, pipe, piece, i, o);
 #if defined(__SSE__)
   else if(darktable.codepath.SSE2 && self->process_sse2)
-    return self->process_sse2(self, piece, i, o);
+    return self->process_sse2(self, pipe, piece, i, o);
 #endif
   else if(self->process_plain)
-    return self->process_plain(self, piece, i, o);
+    return self->process_plain(self, pipe, piece, i, o);
   else
     dt_unreachable_codepath_with_desc(self->op);
   return 1;
@@ -1789,7 +1792,6 @@ void dt_iop_commit_params(dt_iop_module_t *module, dt_iop_params_t *params,
                           dt_develop_blend_params_t *blendop_params, dt_dev_pixelpipe_t *pipe,
                           dt_dev_pixelpipe_iop_t *piece)
 {
-  assert(piece->pipe == pipe);
   if(!piece->enabled)
   {
     piece->global_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;

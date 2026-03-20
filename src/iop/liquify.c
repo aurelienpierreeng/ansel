@@ -1266,6 +1266,7 @@ static float complex *create_global_distortion_map(const cairo_rectangle_int_t *
 }
 
 static float complex *build_global_distortion_map(struct dt_iop_module_t *module,
+                                                   dt_dev_pixelpipe_t *pipe,
                                                    const dt_dev_pixelpipe_iop_t *piece,
                                                    const dt_iop_roi_t *roi_in,
                                                    const dt_iop_roi_t *roi_out,
@@ -1275,7 +1276,7 @@ static float complex *build_global_distortion_map(struct dt_iop_module_t *module
   dt_iop_liquify_params_t copy_params;
   memcpy(&copy_params, (dt_iop_liquify_params_t *)piece->data, sizeof(dt_iop_liquify_params_t));
 
-  distort_paths_raw_to_piece(module, piece->pipe, roi_in->scale, &copy_params, FALSE);
+  distort_paths_raw_to_piece(module, pipe, roi_in->scale, &copy_params, FALSE);
 
   GList *interpolated = interpolate_paths(&copy_params);
   GSList *interpolated_in_roi = _get_map_extent(roi_out, interpolated, map_extent);
@@ -1316,7 +1317,7 @@ void modify_roi_in(struct dt_iop_module_t *module,
   dt_iop_liquify_params_t copy_params;
   memcpy(&copy_params, (dt_iop_liquify_params_t*)piece->data, sizeof(dt_iop_liquify_params_t));
 
-  distort_paths_raw_to_piece(module, piece->pipe, roi_in->scale, &copy_params, FALSE);
+  distort_paths_raw_to_piece(module, module->dev->preview_pipe, roi_in->scale, &copy_params, FALSE);
 
   cairo_rectangle_int_t pipe_rect =
     {
@@ -1360,7 +1361,8 @@ void modify_roi_in(struct dt_iop_module_t *module,
   cairo_region_destroy(roi_in_region);
 }
 
-static int _distort_xtransform(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, float *const restrict points, const size_t points_count,
+static int _distort_xtransform(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
+                               float *const restrict points, const size_t points_count,
                                const gboolean inverted)
 {
 
@@ -1392,7 +1394,7 @@ static int _distort_xtransform(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *pi
     dt_iop_liquify_params_t copy_params;
     memcpy(&copy_params, (dt_iop_liquify_params_t *)piece->data, sizeof(dt_iop_liquify_params_t));
 
-    distort_paths_raw_to_piece(self, piece->pipe, 1.f, &copy_params, TRUE);
+    distort_paths_raw_to_piece(self, pipe, 1.f, &copy_params, TRUE);
 
     // create the distortion map for this extent
 
@@ -1460,19 +1462,21 @@ static gboolean is_dragging(const dt_iop_liquify_gui_data_t *g)
   return g->dragging.elem != NULL;
 }
 
-int distort_transform(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, float *const restrict points, size_t points_count)
+int distort_transform(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece, float *const restrict points, size_t points_count)
 {
-  return _distort_xtransform(self, piece, points, points_count, TRUE);
+  return _distort_xtransform(self, self->dev->preview_pipe, piece, points, points_count, TRUE);
 }
 
-int distort_backtransform(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, float *const restrict points, size_t points_count)
+int distort_backtransform(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece, float *const restrict points, size_t points_count)
 {
-  return _distort_xtransform(self, piece, points, points_count, FALSE);
+  return _distort_xtransform(self, self->dev->preview_pipe, piece, points, points_count, FALSE);
 }
 
-void distort_mask(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece, const float *const in,
-                  float *const out, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+void distort_mask(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_t *pipe, struct dt_dev_pixelpipe_iop_t *piece,
+                  const float *const in, float *const out, const dt_iop_roi_t *const roi_in,
+                  const dt_iop_roi_t *const roi_out)
 {
+  (void)pipe;
   // 1. copy the whole image (we'll change only a small part of it)
 
 #ifdef _OPENMP
@@ -1491,7 +1495,7 @@ void distort_mask(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *p
   // 2. build the distortion map
 
   cairo_rectangle_int_t map_extent;
-  float complex *map = build_global_distortion_map(self, piece, roi_in, roi_out, &map_extent);
+  float complex *map = build_global_distortion_map(self, pipe, piece, roi_in, roi_out, &map_extent);
   if(map == NULL)
   {
     if(map_extent.width != 0 && map_extent.height != 0) return;
@@ -1507,7 +1511,8 @@ void distort_mask(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *p
 
 }
 
-int process(struct dt_iop_module_t *module, const dt_dev_pixelpipe_iop_t *piece, const void *const in,
+int process(struct dt_iop_module_t *module, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
+            const void *const in,
              void *const out)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
@@ -1535,7 +1540,7 @@ int process(struct dt_iop_module_t *module, const dt_dev_pixelpipe_iop_t *piece,
   // 2. build the distortion map
 
   cairo_rectangle_int_t map_extent;
-  float complex *map = build_global_distortion_map(module, piece, roi_in, roi_out, &map_extent);
+  float complex *map = build_global_distortion_map(module, pipe, piece, roi_in, roi_out, &map_extent);
   if(map == NULL)
   {
     if(map_extent.width != 0 && map_extent.height != 0) return 1;
@@ -1584,6 +1589,7 @@ typedef cl_mem cl_mem_t;
 typedef cl_int cl_int_t;
 
 static cl_int_t apply_global_distortion_map_cl(struct dt_iop_module_t *module,
+                                                const dt_dev_pixelpipe_t *pipe,
                                                 const dt_dev_pixelpipe_iop_t *piece,
                                                 const cl_mem_t dev_in,
                                                 const cl_mem_t dev_out,
@@ -1595,7 +1601,7 @@ static cl_int_t apply_global_distortion_map_cl(struct dt_iop_module_t *module,
   cl_int_t err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
 
   dt_iop_liquify_global_data_t *gd = (dt_iop_liquify_global_data_t *) module->global_data;
-  const int devid = piece->pipe->devid;
+  const int devid = pipe->devid;
 
   const struct dt_interpolation* interpolation = dt_interpolation_new(DT_INTERPOLATION_USERPREF_WARP);
   dt_liquify_kernel_descriptor_t kdesc = { .size = 0, .resolution = 100 };
@@ -1686,7 +1692,7 @@ error:
   return err;
 }
 
-int process_cl(struct dt_iop_module_t *module,
+int process_cl(struct dt_iop_module_t *module, const dt_dev_pixelpipe_t *pipe,
                 const dt_dev_pixelpipe_iop_t *piece,
                 const cl_mem_t dev_in,
                 const cl_mem_t dev_out)
@@ -1694,7 +1700,7 @@ int process_cl(struct dt_iop_module_t *module,
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
   cl_int_t err = -999;
-  const int devid = piece->pipe->devid;
+  const int devid = pipe->devid;
   const int height = MIN(roi_in->height, roi_out->height);
   const int width = MIN(roi_in->width, roi_out->width);
 
@@ -1709,7 +1715,7 @@ int process_cl(struct dt_iop_module_t *module,
 
   // 2. build the distortion map
   cairo_rectangle_int_t map_extent;
-  const float complex *map = build_global_distortion_map(module, piece, roi_in, roi_out, &map_extent);
+  const float complex *map = build_global_distortion_map(module, pipe, piece, roi_in, roi_out, &map_extent);
   if(map == NULL)
   {
     if(map_extent.width != 0 && map_extent.height != 0) return FALSE;
@@ -1718,7 +1724,7 @@ int process_cl(struct dt_iop_module_t *module,
 
   // 3. apply the map
   if(map_extent.width != 0 && map_extent.height != 0)
-    err = apply_global_distortion_map_cl(module, piece, dev_in, dev_out, roi_in, roi_out, map, &map_extent);
+    err = apply_global_distortion_map_cl(module, pipe, piece, dev_in, dev_out, roi_in, roi_out, map, &map_extent);
   dt_pixelpipe_cache_free_align(map);
   if(err != CL_SUCCESS) goto error;
 

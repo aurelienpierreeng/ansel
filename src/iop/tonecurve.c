@@ -324,9 +324,9 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
   return 1;
 }
 
-int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o)
+int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o)
 {
-  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  (void)pipe;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
 
   const dt_iop_tonecurve_data_t *const restrict d = (dt_iop_tonecurve_data_t *)(piece->data);
@@ -936,8 +936,9 @@ static float to_lin(const float x, const float base, const int ch, const int sem
   }
 }
 
-void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpipe_iop_t *piece)
+void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
+  (void)pipe;
   dt_iop_tonecurve_global_data_t *gd = (dt_iop_tonecurve_global_data_t *)self->global_data;
 
   for(int k=0; k<3; k++)

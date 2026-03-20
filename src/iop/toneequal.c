@@ -899,7 +899,7 @@ static inline void display_luminance_mask(const float *const restrict in,
                                           const float *const restrict luminance,
                                           float *const restrict out,
                                           const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out,
-                                          dt_dev_pixelpipe_iop_t *piece,
+                                          const dt_dev_pixelpipe_t *pipe,
                                           const size_t ch)
 {
   const size_t offset_x = (roi_in->x < roi_out->x) ? -roi_in->x + roi_out->x : 0;
@@ -914,7 +914,7 @@ static inline void display_luminance_mask(const float *const restrict in,
 
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-  dt_omp_firstprivate(luminance, out, in, piece, in_width, out_width, out_height, offset_x, offset_y, ch) \
+  dt_omp_firstprivate(luminance, out, in, pipe, in_width, out_width, out_height, offset_x, offset_y, ch) \
   schedule(static) collapse(2)
 #endif
   for(size_t i = 0 ; i < out_height; ++i)
@@ -927,7 +927,7 @@ static inline void display_luminance_mask(const float *const restrict in,
       dt_aligned_pixel_simd_t intensity_v = dt_simd_set1(intensity);
 
       // Keep mask-display alpha consistent with the input while showing a grayscale mask.
-      if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
+      if(pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
       {
         const size_t in_index = ((i + offset_y) * in_width + (j + offset_x)) * ch;
         intensity_v[3] = in[in_index + 3];
@@ -938,9 +938,10 @@ static inline void display_luminance_mask(const float *const restrict in,
 }
 
 
-static int toneeq_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
-             const void *const restrict ivoid, void *const restrict ovoid,
-             const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+static int toneeq_process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
+                          const dt_dev_pixelpipe_iop_t *piece, const void *const restrict ivoid,
+                          void *const restrict ovoid, const dt_iop_roi_t *const roi_in,
+                          const dt_iop_roi_t *const roi_out)
 {
   const dt_iop_toneequalizer_data_t *const d = (const dt_iop_toneequalizer_data_t *const)piece->data;
   dt_iop_toneequalizer_gui_data_t *const g = (dt_iop_toneequalizer_gui_data_t *)self->gui_data;
@@ -967,7 +968,7 @@ static int toneeq_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *
 
   // Get the hash of the upstream pipe to track changes
   const int position = self->iop_order;
-  const gboolean preview_output = dt_dev_pixelpipe_has_preview_output(self->dev, piece->pipe, roi_out);
+  const gboolean preview_output = dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out);
 
   // Sanity checks
   if(width < 1 || height < 1) return 1;
@@ -1027,7 +1028,7 @@ static int toneeq_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *
 
     created_luminance_entry = dt_dev_pixelpipe_cache_get(darktable.pixelpipe_cache, luminance_hash,
                                                          num_elem * sizeof(float), "toneequal luminance",
-                                                         piece->pipe->type, TRUE, &cache_data, &luminance_dsc,
+                                                         pipe->type, TRUE, &cache_data, &luminance_dsc,
                                                          &luminance_entry);
     luminance = (float *)cache_data;
     if(!luminance || !luminance_entry)
@@ -1057,7 +1058,7 @@ static int toneeq_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *
   else
   {
     // Export/thumbnail pipes don't need persistent GUI sampling, so a local temp buffer is enough.
-    luminance = dt_pixelpipe_cache_alloc_align_float(num_elem, piece->pipe);
+    luminance = dt_pixelpipe_cache_alloc_align_float(num_elem, pipe);
     if(!luminance) return 1;
 
     if(compute_luminance_mask(in, luminance, width, height, ch, d) != 0)
@@ -1068,13 +1069,13 @@ static int toneeq_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *
   }
 
   // Display output
-  if(self->dev->gui_attached && piece->pipe->type == DT_DEV_PIXELPIPE_FULL)
+  if(self->dev->gui_attached && pipe->type == DT_DEV_PIXELPIPE_FULL)
   {
     if(g->mask_display)
     {
-      display_luminance_mask(in, luminance, out, roi_in, roi_out, piece, ch);
-      piece->pipe->mask_display = DT_DEV_PIXELPIPE_DISPLAY_PASSTHRU;
-      piece->pipe->bypass_blendif = 1;
+      display_luminance_mask(in, luminance, out, roi_in, roi_out, pipe, ch);
+      ((dt_dev_pixelpipe_t *)pipe)->mask_display = DT_DEV_PIXELPIPE_DISPLAY_PASSTHRU;
+      ((dt_dev_pixelpipe_t *)pipe)->bypass_blendif = 1;
     }
     else
       apply_toneequalizer(in, luminance, out, roi_in, roi_out, ch, d);
@@ -1125,12 +1126,12 @@ static int toneeq_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *
   return 0;
 }
 
-int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece,
+int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
              const void *const restrict ivoid, void *const restrict ovoid)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
-  return toneeq_process(self, piece, ivoid, ovoid, roi_in, roi_out);
+  return toneeq_process(self, pipe, piece, ivoid, ovoid, roi_in, roi_out);
 }
 
 

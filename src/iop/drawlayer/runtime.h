@@ -291,6 +291,7 @@ typedef struct dt_iop_drawlayer_gui_data_t
 typedef struct dt_drawlayer_runtime_request_t
 {
   dt_iop_module_t *self;
+  const dt_dev_pixelpipe_t *pipe;
   dt_dev_pixelpipe_iop_t *piece;
   const dt_iop_drawlayer_params_t *runtime_params;
   dt_iop_drawlayer_gui_data_t *gui;

@@ -1392,7 +1392,7 @@ static int get_scales(const dt_iop_roi_t *roi_in, const dt_dev_pixelpipe_iop_t *
 static inline int reconstruct_highlights(const float *const restrict in, const float *const restrict mask,
                                          float *const restrict reconstructed,
                                          const dt_iop_filmicrgb_reconstruction_type_t variant, const size_t ch,
-                                         const dt_iop_filmicrgb_data_t *const data, dt_dev_pixelpipe_iop_t *piece,
+                                         const dt_iop_filmicrgb_data_t *const data, const dt_dev_pixelpipe_iop_t *piece,
                                          const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   int err = 0;
@@ -2340,10 +2340,9 @@ static inline void restore_ratios(float *const restrict ratios, const float *con
   dt_omploop_sfence();  // ensure that nontemporal writes complete before we attempt to read the ratios
 }
 
-void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece, struct dt_develop_tiling_t *tiling)
+void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe, const struct dt_dev_pixelpipe_iop_t *piece, struct dt_develop_tiling_t *tiling)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
-  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   const int scales = get_scales(roi_in, piece);
   const int max_filter_radius = (1 << scales);
 
@@ -2360,14 +2359,15 @@ void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe
   return;
 }
 
-int process(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const restrict ivoid,
+int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
+            const void *const restrict ivoid,
              void *const restrict ovoid)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
   const dt_iop_filmicrgb_data_t *const data = (dt_iop_filmicrgb_data_t *)piece->data;
-  const dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_pipe_work_profile_info(piece->pipe);
-  const dt_iop_order_iccprofile_info_t *const export_profile = dt_ioppr_get_pipe_output_profile_info(piece->pipe);
+  const dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_pipe_work_profile_info(pipe);
+  const dt_iop_order_iccprofile_info_t *const export_profile = dt_ioppr_get_pipe_output_profile_info(pipe);
 
   const size_t ch = 4;
 
@@ -2382,7 +2382,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const vo
 
   float *restrict in = (float *)ivoid;
   float *const restrict out = (float *)ovoid;
-  float *const restrict mask = dt_pixelpipe_cache_alloc_align_float((size_t)roi_out->width * roi_out->height, piece->pipe);
+  float *const restrict mask = dt_pixelpipe_cache_alloc_align_float((size_t)roi_out->width * roi_out->height, pipe);
   if(!mask) return 1;
 
   // used to adjuste noise level depending on size. Don't amplify noise if magnified > 100%
@@ -2392,7 +2392,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const vo
   const int recover_highlights = mask_clipped_pixels(in, mask, data->normalize, data->reconstruct_feather, roi_out->width, roi_out->height, 4);
 
   // display mask and exit
-  if(self->dev->gui_attached && piece->pipe->type == DT_DEV_PIXELPIPE_FULL && mask)
+  if(self->dev->gui_attached && pipe->type == DT_DEV_PIXELPIPE_FULL && mask)
   {
     dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)self->gui_data;
 
@@ -2404,7 +2404,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const vo
     }
   }
 
-  float *const restrict reconstructed = dt_pixelpipe_cache_alloc_align_float((size_t)roi_out->width * roi_out->height * 4, piece->pipe);
+  float *const restrict reconstructed = dt_pixelpipe_cache_alloc_align_float((size_t)roi_out->width * roi_out->height * 4, pipe);
   if(recover_highlights && !reconstructed)
   {
     dt_pixelpipe_cache_free_align(mask);
@@ -2415,7 +2415,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const vo
   if(recover_highlights && mask && reconstructed)
   {
     // init the blown areas with noise to create particles
-    float *const restrict inpainted =  dt_pixelpipe_cache_alloc_align_float((size_t)roi_out->width * roi_out->height * 4, piece->pipe);
+    float *const restrict inpainted =  dt_pixelpipe_cache_alloc_align_float((size_t)roi_out->width * roi_out->height * 4, pipe);
     if(!inpainted)
     {
       dt_pixelpipe_cache_free_align(mask);
@@ -2441,8 +2441,8 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const vo
 
     if(data->high_quality_reconstruction > 0)
     {
-      float *const restrict norms = dt_pixelpipe_cache_alloc_align_float((size_t)roi_out->width * roi_out->height, piece->pipe);
-      float *const restrict ratios = dt_pixelpipe_cache_alloc_align_float((size_t)roi_out->width * roi_out->height * 4, piece->pipe);
+      float *const restrict norms = dt_pixelpipe_cache_alloc_align_float((size_t)roi_out->width * roi_out->height, pipe);
+      float *const restrict ratios = dt_pixelpipe_cache_alloc_align_float((size_t)roi_out->width * roi_out->height * 4, pipe);
       if(!norms || !ratios)
       {
         dt_pixelpipe_cache_free_align(norms);
@@ -2523,19 +2523,19 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const vo
 
   dt_pixelpipe_cache_free_align(reconstructed);
 
-  if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
+  if(pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
     dt_iop_alpha_copy(ivoid, ovoid, roi_out->width, roi_out->height);
   return 0;
 }
 
 #ifdef HAVE_OPENCL
-static inline cl_int reconstruct_highlights_cl(cl_mem in, cl_mem mask, cl_mem reconstructed,
+static inline cl_int reconstruct_highlights_cl(const dt_dev_pixelpipe_t *pipe, cl_mem in, cl_mem mask, cl_mem reconstructed,
                                           const dt_iop_filmicrgb_reconstruction_type_t variant, dt_iop_filmicrgb_global_data_t *const gd,
-                                          const dt_iop_filmicrgb_data_t *const data, dt_dev_pixelpipe_iop_t *piece,
+                                          const dt_iop_filmicrgb_data_t *const data, const dt_dev_pixelpipe_iop_t *piece,
                                           const dt_iop_roi_t *const roi_in)
 {
   cl_int err = -999;
-  const int devid = piece->pipe->devid;
+  const int devid = pipe->devid;
   const int width = roi_in->width;
   const int height = roi_in->height;
   size_t sizes[] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
@@ -2694,16 +2694,15 @@ error:
 }
 
 
-int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
+int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
-  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   const dt_iop_filmicrgb_data_t *const d = (dt_iop_filmicrgb_data_t *)piece->data;
   dt_iop_filmicrgb_global_data_t *const gd = (dt_iop_filmicrgb_global_data_t *)self->global_data;
 
   cl_int err = -999;
 
-  const int devid = piece->pipe->devid;
+  const int devid = pipe->devid;
   const int width = roi_in->width;
   const int height = roi_in->height;
 
@@ -2717,8 +2716,8 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece
   cl_mem norms = NULL;
 
   // fetch working color profile
-  const dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_pipe_work_profile_info(piece->pipe);
-  const dt_iop_order_iccprofile_info_t *const export_profile = dt_ioppr_get_pipe_output_profile_info(piece->pipe);
+  const dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_pipe_work_profile_info(pipe);
+  const dt_iop_order_iccprofile_info_t *const export_profile = dt_ioppr_get_pipe_output_profile_info(pipe);
   const int use_work_profile = (work_profile == NULL) ? 0 : 1;
 
   // See colorbalancergb.c for details
@@ -2791,7 +2790,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece
   clipped = NULL;
 
   // display mask and exit
-  if(self->dev->gui_attached && piece->pipe->type == DT_DEV_PIXELPIPE_FULL)
+  if(self->dev->gui_attached && pipe->type == DT_DEV_PIXELPIPE_FULL)
   {
     dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)self->gui_data;
 
@@ -2826,7 +2825,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece
 
     // first step of highlight reconstruction in RGB
     reconstructed = dt_opencl_alloc_device(devid, sizes[0], sizes[1], sizeof(float) * 4);
-    err = reconstruct_highlights_cl(inpainted, mask, reconstructed, DT_FILMIC_RECONSTRUCT_RGB, gd, d, piece, roi_in);
+    err = reconstruct_highlights_cl(pipe, inpainted, mask, reconstructed, DT_FILMIC_RECONSTRUCT_RGB, gd, d, piece, roi_in);
     if(err != CL_SUCCESS) goto error;
     dt_opencl_release_mem_object(inpainted);
     inpainted = NULL;
@@ -2851,7 +2850,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece
           if(err != CL_SUCCESS) goto error;
 
           // second step of reconstruction over ratios
-          err = reconstruct_highlights_cl(ratios, mask, reconstructed, DT_FILMIC_RECONSTRUCT_RATIOS, gd, d, piece, roi_in);
+          err = reconstruct_highlights_cl(pipe, ratios, mask, reconstructed, DT_FILMIC_RECONSTRUCT_RATIOS, gd, d, piece, roi_in);
           if(err != CL_SUCCESS) goto error;
 
           // restore ratios to RGB
@@ -3114,7 +3113,7 @@ static void apply_autotune(dt_iop_module_t *self)
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
-void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpipe_iop_t *piece)
+void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
   dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)self->gui_data;
 

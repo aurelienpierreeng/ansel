@@ -607,10 +607,9 @@ static void workicc_changed(GtkWidget *widget, gpointer user_data)
 
 
 #ifdef HAVE_OPENCL
-int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
+int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
-  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_colorin_data_t *d = (dt_iop_colorin_data_t *)piece->data;
   dt_iop_colorin_global_data_t *gd = (dt_iop_colorin_global_data_t *)self->global_data;
   cl_mem dev_m = NULL, dev_l = NULL, dev_r = NULL, dev_g = NULL, dev_b = NULL, dev_coeffs = NULL;
@@ -632,8 +631,8 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece
   }
 
   cl_int err = -999;
-  const int blue_mapping = d->blue_mapping && dt_image_is_matrix_correction_supported(&piece->pipe->image);
-  const int devid = piece->pipe->devid;
+  const int blue_mapping = d->blue_mapping && dt_image_is_matrix_correction_supported(&pipe->image);
+  const int devid = pipe->devid;
   const int width = roi_in->width;
   const int height = roi_in->height;
 
@@ -726,7 +725,7 @@ static inline __attribute__((always_inline)) dt_aligned_pixel_simd_t _colorin_cl
 }
 
 __DT_CLONE_TARGETS__
-static void process_cmatrix_bm(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
+static void process_cmatrix_bm(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece,
                                const void *const ivoid, void *const ovoid, const dt_iop_roi_t *const roi_in,
                                const dt_iop_roi_t *const roi_out)
 {
@@ -866,7 +865,7 @@ static void process_cmatrix_fastpath_clipping(struct dt_iop_module_t *self, dt_d
 }
 
 __DT_CLONE_TARGETS__
-static void process_cmatrix_fastpath(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
+static void process_cmatrix_fastpath(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece,
                                      const void *const ivoid, void *const ovoid, const dt_iop_roi_t *const roi_in,
                                      const dt_iop_roi_t *const roi_out)
 {
@@ -883,7 +882,7 @@ static void process_cmatrix_fastpath(struct dt_iop_module_t *self, dt_dev_pixelp
   }
 }
 
-static void process_cmatrix_proper(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
+static void process_cmatrix_proper(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece,
                                    const void *const ivoid, void *const ovoid, const dt_iop_roi_t *const roi_in,
                                    const dt_iop_roi_t *const roi_out)
 {
@@ -943,11 +942,12 @@ static void process_cmatrix_proper(struct dt_iop_module_t *self, dt_dev_pixelpip
   dt_omploop_sfence();  // ensure that nontemporal writes complete before we attempt to read output
 }
 
-static void process_cmatrix(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
-                            void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+static void process_cmatrix(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
+                            const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid,
+                            const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   const dt_iop_colorin_data_t *const d = (dt_iop_colorin_data_t *)piece->data;
-  const int blue_mapping = d->blue_mapping && dt_image_is_matrix_correction_supported(&piece->pipe->image);
+  const int blue_mapping = d->blue_mapping && dt_image_is_matrix_correction_supported(&pipe->image);
 
   if(!blue_mapping && d->nonlinearlut == 0)
   {
@@ -963,7 +963,7 @@ static void process_cmatrix(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t
   }
 }
 
-static void process_lcms2_bm(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+static void process_lcms2_bm(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
                              void *const ovoid, const dt_iop_roi_t *const roi_in,
                              const dt_iop_roi_t *const roi_out)
 {
@@ -1069,11 +1069,12 @@ static void process_lcms2_proper(struct dt_iop_module_t *self, dt_dev_pixelpipe_
   }
 }
 
-static void process_lcms2(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
-                          void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+static void process_lcms2(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
+                          const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid,
+                          const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   const dt_iop_colorin_data_t *const d = (dt_iop_colorin_data_t *)piece->data;
-  const int blue_mapping = d->blue_mapping && dt_image_is_matrix_correction_supported(&piece->pipe->image);
+  const int blue_mapping = d->blue_mapping && dt_image_is_matrix_correction_supported(&pipe->image);
 
   // use general lcms2 fallback
   if(blue_mapping)
@@ -1086,7 +1087,7 @@ static void process_lcms2(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *
   }
 }
 
-int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
@@ -1099,14 +1100,14 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, c
   }
   else if(!isnan(d->cmatrix[0][0]))
   {
-    process_cmatrix(self, piece, ivoid, ovoid, roi_in, roi_out);
+    process_cmatrix(self, pipe, piece, ivoid, ovoid, roi_in, roi_out);
   }
   else
   {
-    process_lcms2(self, piece, ivoid, ovoid, roi_in, roi_out);
+    process_lcms2(self, pipe, piece, ivoid, ovoid, roi_in, roi_out);
   }
 
-  if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK) dt_iop_alpha_copy(ivoid, ovoid, roi_out->width, roi_out->height);
+  if(pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK) dt_iop_alpha_copy(ivoid, ovoid, roi_out->width, roi_out->height);
   return 0;
 }
 
@@ -1264,7 +1265,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
 
   // commit and resolve working profile first, it is the target output profile of this module
   dt_iop_order_iccprofile_info_t *work_profile_info
-      = dt_ioppr_set_pipe_work_profile_info(self->dev, piece->pipe, d->type_work, d->filename_work, DT_INTENT_PERCEPTUAL);
+      = dt_ioppr_set_pipe_work_profile_info(self->dev, pipe, d->type_work, d->filename_work, DT_INTENT_PERCEPTUAL);
   if(work_profile_info)
   {
     d->type_work = work_profile_info->type;
@@ -1449,7 +1450,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   if(d->input)
     dt_colorspaces_get_matrix_from_input_profile(d->input, input_matrix_for_pipe, NULL, NULL, NULL, 0);
 
-  dt_ioppr_set_pipe_input_profile_info(self->dev, piece->pipe, d->type, d->filename, p->intent,
+  dt_ioppr_set_pipe_input_profile_info(self->dev, pipe, d->type, d->filename, p->intent,
                                        input_matrix_for_pipe);
 }
 

@@ -1418,8 +1418,11 @@ static inline void _copy_mask(const float *const restrict a, float *const restri
   for(size_t x = DT_BLENDIF_LAB_BCH; x < stride; x += DT_BLENDIF_LAB_CH) b[x] = a[x];
 }
 
-void dt_develop_blendif_lab_blend(const struct dt_dev_pixelpipe_iop_t *piece,
-                                  const float *const a, float *const b, const float *const restrict mask, const dt_dev_pixelpipe_display_mask_t request_mask_display)
+void dt_develop_blendif_lab_blend(const struct dt_dev_pixelpipe_t *pipe,
+                                  const struct dt_dev_pixelpipe_iop_t *piece,
+                                  const float *const a, float *const b,
+                                  const float *const restrict mask,
+                                  const dt_dev_pixelpipe_display_mask_t request_mask_display)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
@@ -1434,14 +1437,14 @@ void dt_develop_blendif_lab_blend(const struct dt_dev_pixelpipe_iop_t *piece,
   const int oheight = roi_out->height;
 
   // only non-zero if mask_display was set by an _earlier_ module
-  const dt_dev_pixelpipe_display_mask_t mask_display = piece->pipe->mask_display;
+  const dt_dev_pixelpipe_display_mask_t mask_display = pipe->mask_display;
 
   // process the blending operator
   if(request_mask_display & DT_DEV_PIXELPIPE_DISPLAY_ANY)
   {
     const float *const restrict boost_factors = d->blendif_boost_factors;
     const dt_dev_pixelpipe_display_mask_t channel = request_mask_display & DT_DEV_PIXELPIPE_DISPLAY_ANY;
-    const dt_iop_order_iccprofile_info_t *const profile = dt_ioppr_get_pipe_work_profile_info(piece->pipe);
+    const dt_iop_order_iccprofile_info_t *const profile = dt_ioppr_get_pipe_work_profile_info(pipe);
 
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static) default(none) \

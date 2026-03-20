@@ -220,7 +220,8 @@ static int _inverse_mask(const dt_iop_module_t *const module, const dt_dev_pixel
   return 0;
 }
 
-static int _group_get_mask(const dt_iop_module_t *const module, const dt_dev_pixelpipe_iop_t *const piece,
+static int _group_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+                           const dt_dev_pixelpipe_iop_t *const piece,
                            dt_masks_form_t *const form,
                            float **buffer, int *width, int *height, int *posx, int *posy)
 {
@@ -261,7 +262,7 @@ static int _group_get_mask(const dt_iop_module_t *const module, const dt_dev_pix
     dt_masks_form_t *sel = dt_masks_get_from_id(module->dev, fpt->formid);
     if(sel)
     {
-      if(dt_masks_get_mask(module, piece, sel, &bufs[pos], &w[pos], &h[pos], &px[pos], &py[pos]) != 0)
+      if(dt_masks_get_mask(module, pipe, piece, sel, &bufs[pos], &w[pos], &h[pos], &px[pos], &py[pos]) != 0)
       {
         err = 1;
         break;
@@ -642,7 +643,7 @@ static void _combine_masks_exclusion(float *const restrict dest, float *const re
   }
 }
 
-static int _group_get_mask_roi(const dt_iop_module_t *const restrict module,
+static int _group_get_mask_roi(const dt_iop_module_t *const restrict module, dt_dev_pixelpipe_t *pipe,
                                const dt_dev_pixelpipe_iop_t *const restrict piece,
                                dt_masks_form_t *const form, const dt_iop_roi_t *const roi,
                                float *const restrict buffer)
@@ -671,7 +672,7 @@ static int _group_get_mask_roi(const dt_iop_module_t *const restrict module,
     {
       // ensure that we start with a zeroed buffer regardless of what was previously written into 'bufs'
       memset(bufs, 0, npixels*sizeof(float));
-      const int err_child = dt_masks_get_mask_roi(module, piece, sel, roi, bufs);
+      const int err_child = dt_masks_get_mask_roi(module, pipe, piece, sel, roi, bufs);
       const float op = fpt->opacity;
       // Add a foolproof to ensure that the first shape is no-op
       const int no_op_state = fpt->state & ~(DT_MASKS_STATE_IS_COMBINE_OP) ;
@@ -733,13 +734,14 @@ static int _group_get_mask_roi(const dt_iop_module_t *const restrict module,
   return err;
 }
 
-int dt_masks_group_render_roi(dt_iop_module_t *module, const dt_dev_pixelpipe_iop_t *piece, dt_masks_form_t *form,
+int dt_masks_group_render_roi(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe,
+                              const dt_dev_pixelpipe_iop_t *piece, dt_masks_form_t *form,
                               const dt_iop_roi_t *roi, float *buffer)
 {
   const double start = dt_get_wtime();
   if(!form) return 0;
 
-  const int err = dt_masks_get_mask_roi(module, piece, form, roi, buffer);
+  const int err = dt_masks_get_mask_roi(module, pipe, piece, form, roi, buffer);
 
   if(darktable.unmuted & DT_DEBUG_PERF)
     dt_print(DT_DEBUG_MASKS, "[masks] render all masks took %0.04f sec\n", dt_get_wtime() - start);

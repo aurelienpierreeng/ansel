@@ -185,7 +185,8 @@ int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, const dt
   return IOP_CS_RGB;
 }
 
-static void _process_common_setup(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece);
+static void _process_common_setup(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
+                                  const dt_dev_pixelpipe_iop_t *piece);
 
 void output_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
                    dt_iop_buffer_dsc_t *dsc)
@@ -421,7 +422,8 @@ static void _compute_correction(dt_iop_module_t *self, dt_iop_params_t *p1,
   *correction = p->deflicker_target_level - ev;
 }
 
-static void _process_common_setup(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece)
+static void _process_common_setup(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
+                                  const dt_dev_pixelpipe_iop_t *piece)
 {
   dt_iop_exposure_gui_data_t *g = (dt_iop_exposure_gui_data_t*)self->gui_data;
   dt_iop_exposure_data_t *d = piece->data;
@@ -447,7 +449,7 @@ static void _process_common_setup(dt_iop_module_t *self, const dt_dev_pixelpipe_
     }
 
     // second, show computed correction in UI.
-    if(g && dt_dev_pixelpipe_has_preview_output(self->dev, piece->pipe, NULL))
+    if(g && dt_dev_pixelpipe_has_preview_output(self->dev, pipe, NULL))
     {
       dt_iop_gui_enter_critical_section(self);
       g->deflicker_computed_exposure = exposure;
@@ -460,15 +462,14 @@ static void _process_common_setup(dt_iop_module_t *self, const dt_dev_pixelpipe_
 }
 
 #ifdef HAVE_OPENCL
-int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
+int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
-  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_exposure_data_t *d = (dt_iop_exposure_data_t *)piece->data;
   dt_iop_exposure_global_data_t *gd = (dt_iop_exposure_global_data_t *)self->global_data;
 
   cl_int err = -999;
-  const int devid = piece->pipe->devid;
+  const int devid = pipe->devid;
   const int width = roi_in->width;
   const int height = roi_in->height;
 
@@ -490,9 +491,8 @@ error:
 }
 #endif
 
-int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o)
+int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o)
 {
-  const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
   const dt_iop_exposure_data_t *const d = (const dt_iop_exposure_data_t *const)piece->data;
 
@@ -533,7 +533,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, c
     }
   }
 
-  if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
+  if(pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
     dt_iop_alpha_copy(i, o, roi_out->width, roi_out->height);
 
   return 0;
@@ -581,7 +581,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
     d->deflicker = 1;
   }
 
-  _process_common_setup(self, piece);
+  _process_common_setup(self, pipe, piece);
   for(int k = 0; k < 3; k++) piece->dsc_out.processed_maximum[k] = piece->dsc_in.processed_maximum[k] * d->scale;
 }
 
@@ -807,10 +807,12 @@ static void _auto_set_exposure(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe)
 }
 
 
-void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpipe_iop_t *piece)
+void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
+  (void)picker;
+  (void)piece;
   if(darktable.gui->reset) return;
-  _auto_set_exposure(self, piece->pipe);
+  _auto_set_exposure(self, pipe);
 }
 
 

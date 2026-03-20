@@ -495,10 +495,9 @@ scaled_copy_4wide(float *const outp, const float *const inp, const dt_aligned_pi
   dt_store_simd_nontemporal(outp, dt_load_simd(inp) * coeffs);
 }
 
-int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid)
 {
-  const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
   const uint32_t filters = piece->dsc_in.filters;
   const uint8_t(*const xtrans)[6] = (const uint8_t(*const)[6])piece->dsc_in.xtrans;
@@ -621,7 +620,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, c
       }
     }
 
-    if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
+    if(pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
       dt_iop_alpha_copy(ivoid, ovoid, roi_out->width, roi_out->height);
   }
 
@@ -629,14 +628,14 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, c
 }
 
 #ifdef HAVE_OPENCL
-int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
+int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_temperature_data_t *d = (dt_iop_temperature_data_t *)piece->data;
   dt_iop_temperature_global_data_t *gd = (dt_iop_temperature_global_data_t *)self->global_data;
 
-  const int devid = piece->pipe->devid;
+  const int devid = pipe->devid;
   const uint32_t filters = piece->dsc_in.filters;
   cl_mem dev_coeffs = NULL;
   cl_mem dev_xtrans = NULL;
@@ -658,7 +657,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece
 
   if(filters == 9u)
   {
-    dev_xtrans = dt_opencl_copy_host_to_device_constant(devid, sizeof(piece->dsc_in.xtrans), piece->dsc_in.xtrans);
+    dev_xtrans = dt_opencl_copy_host_to_device_constant(devid, sizeof(piece->dsc_in.xtrans), (void *)piece->dsc_in.xtrans);
     if(dev_xtrans == NULL) goto error;
   }
 
@@ -1748,8 +1747,11 @@ static void preset_tune_callback(GtkWidget *widget, dt_iop_module_t *self)
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
-void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpipe_iop_t *piece)
+void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
+  (void)picker;
+  (void)pipe;
+  (void)piece;
   if(darktable.gui->reset) return;
 
   dt_iop_temperature_gui_data_t *g = (dt_iop_temperature_gui_data_t *)self->gui_data;

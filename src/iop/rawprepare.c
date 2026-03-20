@@ -231,7 +231,7 @@ static void _update_output_cfa_descriptor(const dt_dev_pixelpipe_iop_t *piece,
   }
 }
 
-int distort_transform(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, float *const restrict points, size_t points_count)
+int distort_transform(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece, float *const restrict points, size_t points_count)
 {
   dt_iop_rawprepare_data_t *d = (dt_iop_rawprepare_data_t *)piece->data;
 
@@ -257,7 +257,7 @@ int distort_transform(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, floa
   return 1;
 }
 
-int distort_backtransform(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, float *const restrict points,
+int distort_backtransform(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece, float *const restrict points,
                           size_t points_count)
 {
   dt_iop_rawprepare_data_t *d = (dt_iop_rawprepare_data_t *)piece->data;
@@ -284,9 +284,13 @@ int distort_backtransform(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, 
   return 1;
 }
 
-void distort_mask(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece, const float *const in,
-                  float *const out, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+void distort_mask(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_t *pipe,
+                  struct dt_dev_pixelpipe_iop_t *piece, const float *const in, float *const out,
+                  const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
+  (void)self;
+  (void)pipe;
+  (void)piece;
   dt_iop_copy_image_roi(out, in, 1, roi_in, roi_out, TRUE);
 }
 
@@ -348,8 +352,8 @@ static int BL(const dt_iop_roi_t *const roi_out, const dt_iop_rawprepare_data_t 
    compile generated code vs SSE specific code. This depends slightly on the cpu but it's 1.2 to 3-fold
    better for all tested cases.
 */
-int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
-             void *const ovoid)
+int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
+            const void *const ivoid, void *const ovoid)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
@@ -487,13 +491,14 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, c
     }
   }
 
-  dt_dev_write_rawdetail_mask(piece, (float *const)ovoid, roi_in, DT_DEV_DETAIL_MASK_RAWPREPARE);
+  dt_dev_write_rawdetail_mask(pipe, piece, (float *const)ovoid, roi_in, DT_DEV_DETAIL_MASK_RAWPREPARE);
 
   return 0;
 }
 
 #ifdef HAVE_OPENCL
-int process_cl(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
+int process_cl(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
+               cl_mem dev_in, cl_mem dev_out)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
@@ -503,7 +508,7 @@ int process_cl(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_me
   // Scanner DNGs and already-demosaiced files have no CFA; OpenCL path assumes CFA.
   if(piece->dsc_in.filters == 0) return FALSE;
 
-  const int devid = piece->pipe->devid;
+  const int devid = pipe->devid;
   cl_mem dev_sub = NULL;
   cl_mem dev_div = NULL;
   cl_mem dev_gainmap[4] = {0};
@@ -596,7 +601,7 @@ int process_cl(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_me
   dt_opencl_release_mem_object(dev_div);
   for(int i = 0; i < 4; i++) dt_opencl_release_mem_object(dev_gainmap[i]);
 
-  err = dt_dev_write_rawdetail_mask_cl(piece, dev_out, roi_in, DT_DEV_DETAIL_MASK_RAWPREPARE);
+  err = dt_dev_write_rawdetail_mask_cl(pipe, piece, dev_out, roi_in, DT_DEV_DETAIL_MASK_RAWPREPARE);
   if(err != CL_SUCCESS) goto error;
 
   return TRUE;
@@ -703,7 +708,7 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelp
 {
   const dt_iop_rawprepare_params_t *const p = (dt_iop_rawprepare_params_t *)params;
   dt_iop_rawprepare_data_t *d = (dt_iop_rawprepare_data_t *)piece->data;
-  const dt_image_t *const img = &piece->pipe->image;
+  const dt_image_t *const img = &pipe->image;
 
   d->x = p->x;
   d->y = p->y;
@@ -723,7 +728,7 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelp
   else
   {
     const float normalizer
-        = ((piece->pipe->image.flags & DT_IMAGE_HDR) == DT_IMAGE_HDR) ? 1.0f : (float)UINT16_MAX;
+        = ((pipe->image.flags & DT_IMAGE_HDR) == DT_IMAGE_HDR) ? 1.0f : (float)UINT16_MAX;
     const float white = (float)p->raw_white_point / normalizer;
     float black = 0;
     for(int i = 0; i < 4; i++)
@@ -766,7 +771,7 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelp
   const gboolean cl_ok = (img->dsc.cst == IOP_CS_RAW && img->dsc.channels == 1 && img->dsc.filters);
   if(!cl_ok) piece->process_cl_ready = FALSE;
 
-  if(piece->pipe->want_detail_mask == (DT_DEV_DETAIL_MASK_REQUIRED | DT_DEV_DETAIL_MASK_RAWPREPARE))
+  if(pipe->want_detail_mask == (DT_DEV_DETAIL_MASK_REQUIRED | DT_DEV_DETAIL_MASK_RAWPREPARE))
     piece->process_tiling_ready = 0;
 }
 

@@ -981,7 +981,7 @@ static inline int isneutral(const dt_iop_ashift_data_t *data)
 }
 
 
-int distort_transform(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, float *const restrict points, size_t points_count)
+int distort_transform(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece, float *const restrict points, size_t points_count)
 {
   const dt_iop_ashift_data_t *const data = (dt_iop_ashift_data_t *)piece->data;
 
@@ -1016,7 +1016,7 @@ int distort_transform(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, floa
 }
 
 
-int distort_backtransform(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, float *points,
+int distort_backtransform(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece, float *points,
                           size_t points_count)
 {
   const dt_iop_ashift_data_t *const data = (dt_iop_ashift_data_t *)piece->data;
@@ -1051,9 +1051,11 @@ int distort_backtransform(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, 
   return 1;
 }
 
-void distort_mask(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece, const float *const in,
-                  float *const out, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+void distort_mask(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_t *pipe, struct dt_dev_pixelpipe_iop_t *piece,
+                  const float *const in, float *const out, const dt_iop_roi_t *const roi_in,
+                  const dt_iop_roi_t *const roi_out)
 {
+  (void)pipe;
   const dt_iop_ashift_data_t *const data = (dt_iop_ashift_data_t *)piece->data;
 
   // if module is set to neutral parameters we just copy input->output and are done
@@ -3116,7 +3118,7 @@ static void do_fit(dt_iop_module_t *module, dt_iop_ashift_params_t *p, dt_iop_as
   --darktable.gui->reset;
 }
 
-int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
@@ -3129,7 +3131,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, c
 
   // only for preview pipe: collect input buffer data and do some other evaluations
   if(g && self->dev->gui_attached
-     && dt_dev_pixelpipe_has_preview_output(self->dev, piece->pipe, roi_out))
+     && dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
   {
     // we want to find out if the final output image is flipped in relation to this iop
     // so we can adjust the gui labels accordingly
@@ -3253,7 +3255,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, c
 }
 
 #ifdef HAVE_OPENCL
-int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
+int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
@@ -3261,7 +3263,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece
   dt_iop_ashift_global_data_t *gd = (dt_iop_ashift_global_data_t *)self->global_data;
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
 
-  const int devid = piece->pipe->devid;
+  const int devid = pipe->devid;
   const int iwidth = roi_in->width;
   const int iheight = roi_in->height;
   const int width = roi_out->width;
@@ -3271,7 +3273,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece
   cl_mem dev_homo = NULL;
 
   // only for preview pipe: collect input buffer data and do some other evaluations
-  if(self->dev->gui_attached && g && dt_dev_pixelpipe_has_preview_output(self->dev, piece->pipe, roi_out))
+  if(self->dev->gui_attached && g && dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
   {
     // we want to find out if the final output image is flipped in relation to this iop
     // so we can adjust the gui labels accordingly
@@ -3710,7 +3712,7 @@ static int call_distort_transform(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, s
      !dt_dev_pixelpipe_activemodule_disables_currentmodule(dev, piece->module))
   {
     if(piece->module->distort_transform)
-    ret = piece->module->distort_transform(piece->module, piece, points, points_count);
+    ret = piece->module->distort_transform(piece->module, pipe, piece, points, points_count);
   }
   return ret;
   //NOTE: piece->enabled is FALSE for exactly the first mouse_moved event following a button_pressed event

@@ -111,8 +111,8 @@ DEFAULT(int, blend_colorspace, struct dt_iop_module_t *self, struct dt_dev_pixel
                                 const struct dt_dev_pixelpipe_iop_t *piece);
 
 /** report back info for tiling: memory usage and overlap. Memory usage: factor * input_size + overhead */
-DEFAULT(void, tiling_callback, struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
-                                struct dt_develop_tiling_t *tiling);
+DEFAULT(void, tiling_callback, struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+                                const struct dt_dev_pixelpipe_iop_t *piece, struct dt_develop_tiling_t *tiling);
 
 /** callback methods for gui. */
 /** synch gtk interface with gui params, if necessary. */
@@ -122,7 +122,8 @@ OPTIONAL(void, gui_reset, struct dt_iop_module_t *self);
 /** construct widget. */
 OPTIONAL(void, gui_init, struct dt_iop_module_t *self);
 /** apply color picker results */
-OPTIONAL(void, color_picker_apply, struct dt_iop_module_t *self, struct _GtkWidget *picker, struct dt_dev_pixelpipe_iop_t *piece);
+OPTIONAL(void, color_picker_apply, struct dt_iop_module_t *self, struct _GtkWidget *picker,
+                                 struct dt_dev_pixelpipe_t *pipe, struct dt_dev_pixelpipe_iop_t *piece);
 /** called by standard widget callbacks after value changed */
 OPTIONAL(void, gui_changed, struct dt_iop_module_t *self, GtkWidget *widget, void *previous);
 /** destroy widget. */
@@ -187,25 +188,27 @@ OPTIONAL(void, masks_selection_changed, struct dt_iop_module_t *self, const int 
   * formats may be filled by this callback, if the pipeline can handle it. */
 /** the simplest variant of process(). you can only use OpenMP SIMD here, no intrinsics */
 /** must be provided by each IOP. */
-REQUIRED(int, process, struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece, const void *const i,
-                        void *const o);
+REQUIRED(int, process, struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+                        const struct dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o);
 /** a tiling variant of process(). */
-DEFAULT(int, process_tiling, struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece, const void *const i,
-                               void *const o, const int bpp);
+DEFAULT(int, process_tiling, struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+                               const struct dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o,
+                               const int bpp);
 
 #if defined(__SSE__)
 /** a variant process(), that can contain SSE2 intrinsics. */
 /** can be provided by each IOP. */
-OPTIONAL(int, process_sse2, struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece, const void *const i,
-                             void *const o);
+OPTIONAL(int, process_sse2, struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+                             const struct dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o);
 #endif
 
 #ifdef HAVE_OPENCL
 /** the opencl equivalent of process(). */
-OPTIONAL(int, process_cl, struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in,
-                          cl_mem dev_out);
+OPTIONAL(int, process_cl, struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+                          const struct dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out);
 /** a tiling variant of process_cl(). */
-OPTIONAL(int, process_tiling_cl, struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece, const void *const i,
+OPTIONAL(int, process_tiling_cl, struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+                                 const struct dt_dev_pixelpipe_iop_t *piece, const void *const i,
                                  void *const o, const int bpp);
 #endif
 
@@ -213,14 +216,15 @@ OPTIONAL(int, process_tiling_cl, struct dt_iop_module_t *self, const struct dt_d
  * points is an array of float {x1,y1,x2,y2,...}
  * size is 2*points_count */
 /** points before the iop is applied => point after processed */
-DEFAULT(int, distort_transform, struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece, float *points,
-                                 size_t points_count);
+DEFAULT(int, distort_transform, struct dt_iop_module_t *self, struct dt_dev_pixelpipe_t *pipe,
+                                 struct dt_dev_pixelpipe_iop_t *piece, float *points, size_t points_count);
 /** reverse points after the iop is applied => point before process */
-DEFAULT(int, distort_backtransform, struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece, float *points,
-                                     size_t points_count);
+DEFAULT(int, distort_backtransform, struct dt_iop_module_t *self, struct dt_dev_pixelpipe_t *pipe,
+                                     struct dt_dev_pixelpipe_iop_t *piece, float *points, size_t points_count);
 
-OPTIONAL(void, distort_mask, struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece, const float *const in,
-                             float *const out, const struct dt_iop_roi_t *const roi_in, const struct dt_iop_roi_t *const roi_out);
+OPTIONAL(void, distort_mask, struct dt_iop_module_t *self, struct dt_dev_pixelpipe_t *pipe,
+                             struct dt_dev_pixelpipe_iop_t *piece, const float *const in, float *const out,
+                             const struct dt_iop_roi_t *const roi_in, const struct dt_iop_roi_t *const roi_out);
 
 // introspection related callbacks, will be auto-implemented if DT_MODULE_INTROSPECTION() is used,
 OPTIONAL(int, introspection_init, struct dt_iop_module_so_t *self, int api_version);

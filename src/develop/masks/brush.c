@@ -2641,7 +2641,8 @@ static void _brush_bounding_box(const float *const points, const float *const bo
  *
  * Used by both ROI and full-frame paths to size temporary buffers.
  */
-static int _get_area(const dt_iop_module_t *const module, const dt_dev_pixelpipe_iop_t *const piece,
+static int _get_area(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+                     const dt_dev_pixelpipe_iop_t *const piece,
                      dt_masks_form_t *const mask_form, int *width, int *height, int *offset_x, int *offset_y,
                      int include_source)
 {
@@ -2649,7 +2650,7 @@ static int _get_area(const dt_iop_module_t *const module, const dt_dev_pixelpipe
   // we get buffers for all points
   float *points = NULL, *border = NULL;
   int points_count, border_count;
-  if(_brush_get_pts_border(module->dev, mask_form, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, piece->pipe,
+  if(_brush_get_pts_border(module->dev, mask_form, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, pipe,
                            &points, &points_count, &border, &border_count, NULL, NULL, include_source) != 0)
   {
     dt_pixelpipe_cache_free_align(points);
@@ -2672,17 +2673,19 @@ static int _get_area(const dt_iop_module_t *const module, const dt_dev_pixelpipe
   return 0;
 }
 
-static int _brush_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece,
+static int _brush_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe,
+                                  dt_dev_pixelpipe_iop_t *piece,
                                   dt_masks_form_t *mask_form, int *width, int *height, int *offset_x, int *offset_y)
 {
-  return _get_area(module, piece, mask_form, width, height, offset_x, offset_y, 1);
+  return _get_area(module, pipe, piece, mask_form, width, height, offset_x, offset_y, 1);
 }
 
-static int _brush_get_area(const dt_iop_module_t *const module, const dt_dev_pixelpipe_iop_t *const piece,
+static int _brush_get_area(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+                           const dt_dev_pixelpipe_iop_t *const piece,
                            dt_masks_form_t *const mask_form, int *width, int *height, int *offset_x,
                            int *offset_y)
 {
-  return _get_area(module, piece, mask_form, width, height, offset_x, offset_y, 0);
+  return _get_area(module, pipe, piece, mask_form, width, height, offset_x, offset_y, 0);
 }
 
 /** we write a falloff segment */
@@ -2721,7 +2724,8 @@ static void _brush_falloff(float *const restrict buffer, int segment_start[2], i
  *
  * The buffer is returned zero-initialized and filled only in the falloff region.
  */
-static int _brush_get_mask(const dt_iop_module_t *const module, const dt_dev_pixelpipe_iop_t *const piece,
+static int _brush_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+                           const dt_dev_pixelpipe_iop_t *const piece,
                            dt_masks_form_t *const mask_form,
                            float **buffer, int *width, int *height, int *offset_x, int *offset_y)
 {
@@ -2733,7 +2737,7 @@ static int _brush_get_mask(const dt_iop_module_t *const module, const dt_dev_pix
   // we get buffers for all points
   float *points = NULL, *border = NULL, *payload = NULL;
   int points_count, border_count, payload_count;
-  if(_brush_get_pts_border(module->dev, mask_form, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, piece->pipe,
+  if(_brush_get_pts_border(module->dev, mask_form, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, pipe,
                            &points, &points_count,
                                &border, &border_count, &payload, &payload_count, 0) != 0)
   {
@@ -2761,8 +2765,8 @@ static int _brush_get_mask(const dt_iop_module_t *const module, const dt_dev_pix
     *width = *height = *offset_x = *offset_y = 0;
     return 0;
   }
-  const gboolean use_sparse = (dt_dev_pixelpipe_has_preview_output(piece->module->dev, piece->pipe, NULL)
-                               || piece->pipe->type == DT_DEV_PIXELPIPE_THUMBNAIL);
+  const gboolean use_sparse = (dt_dev_pixelpipe_has_preview_output(piece->module->dev, pipe, NULL)
+                               || pipe->type == DT_DEV_PIXELPIPE_THUMBNAIL);
   const int sparse_step = use_sparse ? 4 : 1;
   _brush_bounding_box(points, border, node_count, points_count, width, height, offset_x, offset_y);
 
@@ -2900,7 +2904,8 @@ static inline void _brush_falloff_roi(float *buffer, const int *segment_start, c
  *
  * The buffer is assumed pre-zeroed. Points are scaled/shifted into ROI space before stamping.
  */
-static int _brush_get_mask_roi(const dt_iop_module_t *const module, const dt_dev_pixelpipe_iop_t *const piece,
+static int _brush_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+                               const dt_dev_pixelpipe_iop_t *const piece,
                                dt_masks_form_t *const mask_form, const dt_iop_roi_t *roi, float *buffer)
 {
   if(!module) return 1;
@@ -2913,8 +2918,8 @@ static int _brush_get_mask_roi(const dt_iop_module_t *const module, const dt_dev
   const int roi_width = roi->width;
   const int roi_height = roi->height;
   const float roi_scale = roi->scale;
-  const gboolean use_sparse = (dt_dev_pixelpipe_has_preview_output(piece->module->dev, piece->pipe, roi)
-                               || piece->pipe->type == DT_DEV_PIXELPIPE_THUMBNAIL);
+  const gboolean use_sparse = (dt_dev_pixelpipe_has_preview_output(piece->module->dev, pipe, roi)
+                               || pipe->type == DT_DEV_PIXELPIPE_THUMBNAIL);
   const int sparse_step = use_sparse ? 4 : 1;
 
   // we get buffers for all points
@@ -2922,7 +2927,7 @@ static int _brush_get_mask_roi(const dt_iop_module_t *const module, const dt_dev
 
   int points_count, border_count, payload_count;
 
-  if(_brush_get_pts_border(module->dev, mask_form, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, piece->pipe,
+  if(_brush_get_pts_border(module->dev, mask_form, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, pipe,
                            &points, &points_count, &border, &border_count, &payload, &payload_count, 0) != 0)
   {
     dt_pixelpipe_cache_free_align(points);

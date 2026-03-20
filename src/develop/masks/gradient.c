@@ -1100,16 +1100,17 @@ static int _gradient_get_points_border(dt_develop_t *dev, dt_masks_form_t *form,
   return 0;
 }
 
-static int _gradient_get_area(const dt_iop_module_t *const module, const dt_dev_pixelpipe_iop_t *const piece,
+static int _gradient_get_area(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+                              const dt_dev_pixelpipe_iop_t *const piece,
                               dt_masks_form_t *const form,
                               int *width, int *height, int *posx, int *posy)
 {
-  const float wd = piece->pipe->iwidth, ht = piece->pipe->iheight;
+  const float wd = pipe->iwidth, ht = pipe->iheight;
 
   float points[8] = { 0.0f, 0.0f, wd, 0.0f, wd, ht, 0.0f, ht };
 
   // and we transform them with all distorted modules
-  if(!dt_dev_distort_transform_plus(module->dev, piece->pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points, 4))
+  if(!dt_dev_distort_transform_plus(module->dev, pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points, 4))
     return 1;
 
   // now we search min and max
@@ -1141,7 +1142,8 @@ static inline float dt_gradient_lookup(const float *lut, const float i)
   return lut[bin1] * f + lut[bin0] * (1.0f - f);
 }
 
-static int _gradient_get_mask(const dt_iop_module_t *const module, const dt_dev_pixelpipe_iop_t *const piece,
+static int _gradient_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+                              const dt_dev_pixelpipe_iop_t *const piece,
                               dt_masks_form_t *const form,
                               float **buffer, int *width, int *height, int *posx, int *posy)
 {
@@ -1149,7 +1151,7 @@ static int _gradient_get_mask(const dt_iop_module_t *const module, const dt_dev_
   double start2 = 0.0;
   if(darktable.unmuted & DT_DEBUG_PERF) start2 = dt_get_wtime();
   // we get the area
-  if(_gradient_get_area(module, piece, form, width, height, posx, posy) != 0) return 1;
+  if(_gradient_get_area(module, pipe, piece, form, width, height, posx, posy) != 0) return 1;
 
   if(darktable.unmuted & DT_DEBUG_PERF)
   {
@@ -1193,7 +1195,7 @@ static int _gradient_get_mask(const dt_iop_module_t *const module, const dt_dev_
   }
 
   // we backtransform all these points
-  if(!dt_dev_distort_backtransform_plus(module->dev, piece->pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points, (size_t)gw * gh))
+  if(!dt_dev_distort_backtransform_plus(module->dev, pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points, (size_t)gw * gh))
   {
     dt_pixelpipe_cache_free_align(points);
     return 1;
@@ -1207,8 +1209,8 @@ static int _gradient_get_mask(const dt_iop_module_t *const module, const dt_dev_
   }
 
   // we calculate the mask at grid points and recycle point buffer to store results
-  const float wd = piece->pipe->iwidth;
-  const float ht = piece->pipe->iheight;
+  const float wd = pipe->iwidth;
+  const float ht = pipe->iheight;
   const float hwscale = 1.0f / sqrtf(wd * wd + ht * ht);
   const float ihwscale = 1.0f / hwscale;
   const float v = (-gradient->rotation / 180.0f) * M_PI;
@@ -1334,7 +1336,8 @@ static int _gradient_get_mask(const dt_iop_module_t *const module, const dt_dev_
 }
 
 
-static int _gradient_get_mask_roi(const dt_iop_module_t *const module, const dt_dev_pixelpipe_iop_t *const piece,
+static int _gradient_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+                                  const dt_dev_pixelpipe_iop_t *const piece,
                                   dt_masks_form_t *const form, const dt_iop_roi_t *roi, float *buffer)
 {
   if(!form || !form->points) return 0;
@@ -1379,7 +1382,7 @@ static int _gradient_get_mask_roi(const dt_iop_module_t *const module, const dt_
   }
 
   // we backtransform all these points
-  if(!dt_dev_distort_backtransform_plus(module->dev, piece->pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points,
+  if(!dt_dev_distort_backtransform_plus(module->dev, pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points,
                                         (size_t)gw * gh))
   {
     dt_pixelpipe_cache_free_align(points);
@@ -1394,8 +1397,8 @@ static int _gradient_get_mask_roi(const dt_iop_module_t *const module, const dt_
   }
 
   // we calculate the mask at grid points and recycle point buffer to store results
-  const float wd = piece->pipe->iwidth;
-  const float ht = piece->pipe->iheight;
+  const float wd = pipe->iwidth;
+  const float ht = pipe->iheight;
   const float hwscale = 1.0f / sqrtf(wd * wd + ht * ht);
   const float ihwscale = 1.0f / hwscale;
   const float v = (-gradient->rotation / 180.0f) * M_PI;

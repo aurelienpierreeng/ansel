@@ -45,7 +45,8 @@ gboolean dt_drawlayer_layer_bounds_to_widget_bounds(dt_iop_module_t *self, float
 float dt_drawlayer_widget_brush_radius(dt_iop_module_t *self, const dt_drawlayer_brush_dab_t *dab, float fallback);
 float dt_drawlayer_current_live_padding(dt_iop_module_t *self);
 gboolean dt_drawlayer_compute_view_patch(dt_iop_module_t *self, float padding, drawlayer_view_patch_info_t *view);
-gboolean dt_drawlayer_compute_process_patch_geometry(const dt_dev_pixelpipe_iop_t *piece,
+gboolean dt_drawlayer_compute_process_patch_geometry(const dt_dev_pixelpipe_t *pipe,
+                                                     const dt_dev_pixelpipe_iop_t *piece,
                                                      const dt_iop_roi_t *roi_in,
                                                      const dt_iop_roi_t *roi_out,
                                                      int base_width, int base_height,

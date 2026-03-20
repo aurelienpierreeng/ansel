@@ -574,7 +574,7 @@ void init_presets(dt_iop_module_so_t *self)
                              DEVELOP_BLEND_CS_RGB_SCENE);
 }
 
-void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece, struct dt_develop_tiling_t *tiling)
+void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe, const struct dt_dev_pixelpipe_iop_t *piece, struct dt_develop_tiling_t *tiling)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   dt_iop_diffuse_data_t *data = (dt_iop_diffuse_data_t *)piece->data;
@@ -587,8 +587,8 @@ void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe
   // chosen. Fold both factors together to recover the full-resolution pixel
   // footprint of one current-grid pixel.
   const float roi_zoom = fmaxf(1.f / roi_in->scale, 1.f);
-  const float mipmap_zoom = fmaxf(fmaxf((float)piece->pipe->image.width / (float)piece->pipe->iwidth,
-                                        (float)piece->pipe->image.height / (float)piece->pipe->iheight),
+  const float mipmap_zoom = fmaxf(fmaxf((float)pipe->image.width / (float)pipe->iwidth,
+                                        (float)pipe->image.height / (float)pipe->iheight),
                                   1.f);
   const float zoom = roi_zoom * mipmap_zoom;
   const float final_radius = (data->radius + data->radius_center) * 2.f / zoom;
@@ -1159,8 +1159,8 @@ static inline void inpaint_mask(float *const restrict inpainted, const float *co
   }
 }
 
-int process(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const restrict ivoid,
-             void *const restrict ovoid)
+int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
+            const void *const restrict ivoid, void *const restrict ovoid)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
@@ -1169,8 +1169,8 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const vo
   float *restrict in = DT_IS_ALIGNED((float *const restrict)ivoid);
   float *const restrict out = DT_IS_ALIGNED((float *const restrict)ovoid);
 
-  float *const restrict temp1 = dt_pixelpipe_cache_alloc_align_float((size_t)roi_out->width * roi_out->height * 4, piece->pipe);
-  float *const restrict temp2 = dt_pixelpipe_cache_alloc_align_float((size_t)roi_out->width * roi_out->height * 4, piece->pipe);
+  float *const restrict temp1 = dt_pixelpipe_cache_alloc_align_float((size_t)roi_out->width * roi_out->height * 4, pipe);
+  float *const restrict temp2 = dt_pixelpipe_cache_alloc_align_float((size_t)roi_out->width * roi_out->height * 4, pipe);
 
   float *restrict temp_in = NULL;
   float *restrict temp_out = NULL;
@@ -1178,7 +1178,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const vo
 
   uint8_t *const restrict mask = dt_pixelpipe_cache_alloc_align(
       sizeof(uint8_t) * roi_out->width * roi_out->height,
-      piece->pipe);
+      pipe);
 
   // The relevant scale for a non-geometric module is roi_in->scale, since it
   // describes the current input grid processed by the PDE. On the thumbnail
@@ -1186,8 +1186,8 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const vo
   // we also need the ratio between the full image dimensions and the pipe
   // input dimensions to recover the full-resolution pixel footprint.
   const float roi_zoom = fmaxf(1.f / roi_in->scale, 1.f);
-  const float mipmap_zoom = fmaxf(fmaxf((float)piece->pipe->image.width / (float)piece->pipe->iwidth,
-                                        (float)piece->pipe->image.height / (float)piece->pipe->iheight),
+  const float mipmap_zoom = fmaxf(fmaxf((float)pipe->image.width / (float)pipe->iwidth,
+                                        (float)pipe->image.height / (float)pipe->iheight),
                                   1.f);
   const float zoom = roi_zoom * mipmap_zoom;
   const float final_radius = (data->radius + data->radius_center) * 2.f / zoom;
@@ -1204,12 +1204,12 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const vo
   float *restrict HF[MAX_NUM_SCALES] = { NULL };
   for(int s = 0; s < scales; s++)
   {
-    HF[s] = dt_pixelpipe_cache_alloc_align_float(roi_out->width * roi_out->height * 4, piece->pipe);
+    HF[s] = dt_pixelpipe_cache_alloc_align_float(roi_out->width * roi_out->height * 4, pipe);
     if(!HF[s]) out_of_memory = TRUE;
   }
   // Two ping-pong low-pass buffers reused by the decomposition/synthesis.
-  float *const restrict LF_odd = dt_pixelpipe_cache_alloc_align_float(roi_out->width * roi_out->height * 4, piece->pipe);
-  float *const restrict LF_even = dt_pixelpipe_cache_alloc_align_float(roi_out->width * roi_out->height * 4, piece->pipe);
+  float *const restrict LF_odd = dt_pixelpipe_cache_alloc_align_float(roi_out->width * roi_out->height * 4, pipe);
+  float *const restrict LF_even = dt_pixelpipe_cache_alloc_align_float(roi_out->width * roi_out->height * 4, pipe);
 
   // PAUSE !
   // check that all buffers exist before processing,
@@ -1441,7 +1441,7 @@ static inline cl_int wavelets_process_cl(const int devid, cl_mem in, cl_mem reco
   return err;
 }
 
-int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
+int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
@@ -1452,7 +1452,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece
 
   cl_int err = -999;
 
-  const int devid = piece->pipe->devid;
+  const int devid = pipe->devid;
   const int width = roi_in->width;
   const int height = roi_in->height;
 
@@ -1469,8 +1469,8 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece
   cl_mem mask = dt_opencl_alloc_device(devid, sizes[0], sizes[1], sizeof(uint8_t));
 
   const float roi_zoom = fmaxf(1.f / roi_in->scale, 1.f);
-  const float mipmap_zoom = fmaxf(fmaxf((float)piece->pipe->image.width / (float)piece->pipe->iwidth,
-                                        (float)piece->pipe->image.height / (float)piece->pipe->iheight),
+  const float mipmap_zoom = fmaxf(fmaxf((float)pipe->image.width / (float)pipe->iwidth,
+                                        (float)pipe->image.height / (float)pipe->iheight),
                                   1.f);
   const float zoom = roi_zoom * mipmap_zoom;
   const float final_radius = (data->radius + data->radius_center) * 2.f / zoom;

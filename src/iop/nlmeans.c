@@ -171,10 +171,9 @@ static int bucket_next(unsigned int *state, unsigned int max)
   return next;
 }
 
-int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
+int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
-  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_nlmeans_params_t *d = (dt_iop_nlmeans_params_t *)piece->data;
   dt_iop_nlmeans_global_data_t *gd = (dt_iop_nlmeans_global_data_t *)self->global_data;
 #if USE_NEW_IMPL_CL
@@ -192,7 +191,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece
   const float norm2[4] = { nL, nC }; //luma and chroma scaling factors
 
   // allocate a buffer to receive the denoised image
-  const int devid = piece->pipe->devid;
+  const int devid = pipe->devid;
   cl_mem dev_U2 = dt_opencl_alloc_device_buffer(devid, sizeof(float) * 4 * width * height);
   if(dev_U2 == NULL)
   {
@@ -212,7 +211,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece
     .search_radius = K,
     .decimate = 0,
     .norm = norm2,
-    .pipetype = piece->pipe->type,
+    .pipetype = pipe->type,
     .kernel_init = gd->kernel_nlmeans_init,
     .kernel_dist = gd->kernel_nlmeans_dist,
     .kernel_horiz = gd->kernel_nlmeans_horiz,
@@ -257,7 +256,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece
   const float nL2 = nL * nL, nC2 = nC * nC;
   const dt_aligned_pixel_t weight = { d->luma, d->chroma, d->chroma, 1.0f };
 
-  const int devid = piece->pipe->devid;
+  const int devid = pipe->devid;
   cl_mem dev_U2 = dt_opencl_alloc_device_buffer(devid, sizeof(float) * 4 * width * height);
   if(dev_U2 == NULL) goto error;
 
@@ -405,10 +404,9 @@ error:
 #endif
 
 
-void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece, struct dt_develop_tiling_t *tiling)
+void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe, const struct dt_dev_pixelpipe_iop_t *piece, struct dt_develop_tiling_t *tiling)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
-  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_nlmeans_params_t *d = (dt_iop_nlmeans_params_t *)piece->data;
   const int P = ceilf(d->radius * fmin(roi_in->scale, 2.0f)); // pixel filter size
   const int K = ceilf(7 * fmin(roi_in->scale, 2.0f));         // nbhood
@@ -422,7 +420,8 @@ void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe
   return;
 }
 
-static void process_cpu(const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+static void process_cpu(const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
+                        const void *const ivoid,
                         void *const ovoid, const dt_iop_roi_t *const roi_in,
                         const dt_iop_roi_t *const roi_out,
                         void (*denoiser)(const float *const inbuf, float *const outbuf,
@@ -445,8 +444,8 @@ static void process_cpu(const dt_dev_pixelpipe_iop_t *piece, const void *const i
   const dt_aligned_pixel_t norm2 = { nL * nL, nC * nC, nC * nC, 1.0f };
 
   // faster but less accurate processing by skipping half the patches on previews and thumbnails
-  const int decimate = (piece->pipe->type == DT_DEV_PIXELPIPE_THUMBNAIL
-                        || dt_dev_pixelpipe_has_preview_output(piece->module->dev, piece->pipe, roi_out));
+  const int decimate = (pipe->type == DT_DEV_PIXELPIPE_THUMBNAIL
+                        || dt_dev_pixelpipe_has_preview_output(piece->module->dev, pipe, roi_out));
 
   const dt_nlmeans_param_t params = { .scattering = 0,
                                       .scale = scale,
@@ -459,27 +458,27 @@ static void process_cpu(const dt_dev_pixelpipe_iop_t *piece, const void *const i
                                       .decimate = decimate,
                                       .norm = norm2 };
   denoiser(ivoid,ovoid,roi_in,roi_out,&params);
-  if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
+  if(pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
     dt_iop_alpha_copy(ivoid, ovoid, roi_out->width, roi_out->height);
 }
 
-int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
-  process_cpu(piece,ivoid,ovoid,roi_in,roi_out,nlmeans_denoise);
+  process_cpu(pipe, piece, ivoid, ovoid, roi_in, roi_out, nlmeans_denoise);
   return 0;
 }
 
 #if defined(__SSE__)
 /** process, all real work is done here. */
-int process_sse2(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process_sse2(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
                   void *const ovoid)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
-  process_cpu(piece,ivoid,ovoid,roi_in,roi_out,nlmeans_denoise_sse2);
+  process_cpu(pipe, piece, ivoid, ovoid, roi_in, roi_out, nlmeans_denoise_sse2);
   return 0;
 }
 #endif

@@ -1640,14 +1640,15 @@ static void xtrans_fdc_interpolate(struct dt_iop_module_t *self, float *out, con
 
 #ifdef HAVE_OPENCL
 
-static int process_markesteijn_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in,
-                                  cl_mem dev_out, const dt_iop_roi_t *const roi_in,
-                                  const dt_iop_roi_t *const roi_out, const gboolean smooth)
+static int process_markesteijn_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
+                                  const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
+                                  const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out,
+                                  const gboolean smooth)
 {
   dt_iop_demosaic_data_t *data = (dt_iop_demosaic_data_t *)piece->data;
   dt_iop_demosaic_global_data_t *gd = (dt_iop_demosaic_global_data_t *)self->global_data;
 
-  const int devid = piece->pipe->devid;
+  const int devid = pipe->devid;
   const uint8_t(*const xtrans)[6] = (const uint8_t(*const)[6])piece->dsc_in.xtrans;
 
   const float processed_maximum[4]
@@ -1671,7 +1672,7 @@ static int process_markesteijn_cl(struct dt_iop_module_t *self, const dt_dev_pix
 
   cl_mem *dev_rgb = dev_rgbv;
 
-  dev_xtrans = dt_opencl_copy_host_to_device_constant(devid, sizeof(piece->dsc_in.xtrans), piece->dsc_in.xtrans);
+  dev_xtrans = dt_opencl_copy_host_to_device_constant(devid, sizeof(piece->dsc_in.xtrans), (void *)piece->dsc_in.xtrans);
   if(dev_xtrans == NULL) goto error;
 
   int width = roi_in->width;
@@ -2267,7 +2268,7 @@ static int process_markesteijn_cl(struct dt_iop_module_t *self, const dt_dev_pix
     if(err != CL_SUCCESS) goto error;
 
     // VNG processing
-    if(!process_vng_cl(self, piece, dev_edge_in, dev_edge_out, &roi, &roi, smooth, FALSE))
+    if(!process_vng_cl(self, pipe, piece, dev_edge_in, dev_edge_out, &roi, &roi, smooth, FALSE))
       goto error;
 
     // adjust for "good" part, dropping linear border where possible
@@ -2287,7 +2288,7 @@ static int process_markesteijn_cl(struct dt_iop_module_t *self, const dt_dev_pix
     dt_opencl_release_mem_object(dev_edge_out);
     dev_edge_in = dev_edge_out = NULL;
   }
-  dt_dev_write_rawdetail_mask_cl(piece, dev_tmp, roi_in, DT_DEV_DETAIL_MASK_DEMOSAIC);
+  dt_dev_write_rawdetail_mask_cl(pipe, piece, dev_tmp, roi_in, DT_DEV_DETAIL_MASK_DEMOSAIC);
 
 
   // free remaining temporary buffers
@@ -2301,7 +2302,7 @@ static int process_markesteijn_cl(struct dt_iop_module_t *self, const dt_dev_pix
   // color smoothing
   if(data->color_smoothing)
   {
-    if(!color_smoothing_cl(self, piece, dev_out, dev_out, roi_out, data->color_smoothing))
+    if(!color_smoothing_cl(self, pipe, piece, dev_out, dev_out, roi_out, data->color_smoothing))
       goto error;
   }
 

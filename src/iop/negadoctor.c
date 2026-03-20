@@ -273,8 +273,9 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_
 }
 
 
-int process(struct dt_iop_module_t *const self, const dt_dev_pixelpipe_iop_t *const piece,
-             const void *const restrict ivoid, void *const restrict ovoid)
+int process(struct dt_iop_module_t *const self, const dt_dev_pixelpipe_t *const pipe,
+            const dt_dev_pixelpipe_iop_t *const piece, const void *const restrict ivoid,
+            void *const restrict ovoid)
 {
   const dt_iop_roi_t *const restrict roi_out = &piece->roi_out;
   const dt_iop_negadoctor_data_t *const d = piece->data;
@@ -314,14 +315,15 @@ int process(struct dt_iop_module_t *const self, const dt_dev_pixelpipe_iop_t *co
     }
   }
 
-  if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
+  if(pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
     dt_iop_alpha_copy(ivoid, ovoid, roi_out->width, roi_out->height);
   return 0;
 }
 
 
 #ifdef HAVE_OPENCL
-int process_cl(struct dt_iop_module_t *const self, const dt_dev_pixelpipe_iop_t *const piece, cl_mem dev_in, cl_mem dev_out)
+int process_cl(struct dt_iop_module_t *const self, const dt_dev_pixelpipe_t *const pipe,
+               const dt_dev_pixelpipe_iop_t *const piece, cl_mem dev_in, cl_mem dev_out)
 {
   const dt_iop_roi_t *const restrict roi_in = &piece->roi_in;
   const dt_iop_negadoctor_data_t *const d = (dt_iop_negadoctor_data_t *)piece->data;
@@ -329,7 +331,7 @@ int process_cl(struct dt_iop_module_t *const self, const dt_dev_pixelpipe_iop_t 
 
   cl_int err = -999;
 
-  const int devid = piece->pipe->devid;
+  const int devid = pipe->devid;
   const int width = roi_in->width;
   const int height = roi_in->height;
 
@@ -829,8 +831,10 @@ static void apply_auto_exposure(dt_iop_module_t *self)
 }
 
 
-void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpipe_iop_t *piece)
+void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
+  (void)pipe;
+  (void)piece;
   if(darktable.gui->reset) return;
   dt_iop_negadoctor_gui_data_t *g = (dt_iop_negadoctor_gui_data_t *)self->gui_data;
 

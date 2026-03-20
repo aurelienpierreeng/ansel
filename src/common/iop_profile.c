@@ -911,22 +911,23 @@ dt_ioppr_set_pipe_output_profile_info(struct dt_develop_t *dev,
   return profile_info;
 }
 
-dt_iop_order_iccprofile_info_t *dt_ioppr_get_pipe_work_profile_info(struct dt_dev_pixelpipe_t *pipe)
+dt_iop_order_iccprofile_info_t *dt_ioppr_get_pipe_work_profile_info(const struct dt_dev_pixelpipe_t *pipe)
 {
   return pipe->work_profile_info;
 }
 
-dt_iop_order_iccprofile_info_t *dt_ioppr_get_pipe_input_profile_info(struct dt_dev_pixelpipe_t *pipe)
+dt_iop_order_iccprofile_info_t *dt_ioppr_get_pipe_input_profile_info(const struct dt_dev_pixelpipe_t *pipe)
 {
   return pipe->input_profile_info;
 }
 
-dt_iop_order_iccprofile_info_t *dt_ioppr_get_pipe_output_profile_info(struct dt_dev_pixelpipe_t *pipe)
+dt_iop_order_iccprofile_info_t *dt_ioppr_get_pipe_output_profile_info(const struct dt_dev_pixelpipe_t *pipe)
 {
   return pipe->output_profile_info;
 }
 
-dt_iop_order_iccprofile_info_t *dt_ioppr_get_pipe_current_profile_info(dt_iop_module_t *module, struct dt_dev_pixelpipe_t *pipe)
+dt_iop_order_iccprofile_info_t *dt_ioppr_get_pipe_current_profile_info(dt_iop_module_t *module,
+                                                                       const struct dt_dev_pixelpipe_t *pipe)
 {
   dt_iop_order_iccprofile_info_t *restrict color_profile;
 

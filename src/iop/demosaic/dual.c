@@ -35,9 +35,11 @@ static float slider2contrast(float slider)
 {
   return 0.005f * powf(slider, 1.1f);
 }
-static int dual_demosaic(const dt_dev_pixelpipe_iop_t *piece, float *const restrict rgb_data, const float *const restrict raw_data,
-                          dt_iop_roi_t *const roi_out, const dt_iop_roi_t *const roi_in, const uint32_t filters, const uint8_t (*const xtrans)[6],
-                          const gboolean dual_mask, float dual_threshold)
+static int dual_demosaic(const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
+                         float *const restrict rgb_data, const float *const restrict raw_data,
+                         dt_iop_roi_t *const roi_out, const dt_iop_roi_t *const roi_in,
+                         const uint32_t filters, const uint8_t (*const xtrans)[6],
+                         const gboolean dual_mask, float dual_threshold)
 {
   const int width = roi_in->width;
   const int height = roi_in->height;
@@ -46,9 +48,9 @@ static int dual_demosaic(const dt_dev_pixelpipe_iop_t *piece, float *const restr
   // If the threshold is zero and we don't want to see the blend mask we don't do anything
   if(dual_threshold <= 0.0f) return 0;
 
-  float *blend = dt_pixelpipe_cache_alloc_align_float((size_t) width * height, piece->pipe);
-  float *tmp = dt_pixelpipe_cache_alloc_align_float((size_t) width * height, piece->pipe);
-  float *vng_image = dt_pixelpipe_cache_alloc_align_float((size_t) 4 * width * height, piece->pipe);
+  float *blend = dt_pixelpipe_cache_alloc_align_float((size_t) width * height, pipe);
+  float *tmp = dt_pixelpipe_cache_alloc_align_float((size_t) width * height, pipe);
+  float *vng_image = dt_pixelpipe_cache_alloc_align_float((size_t) 4 * width * height, pipe);
   if(!blend || !tmp || !vng_image)
   {
     dt_pixelpipe_cache_free_align(tmp);
@@ -58,7 +60,7 @@ static int dual_demosaic(const dt_dev_pixelpipe_iop_t *piece, float *const restr
     return 1;
   }
   const gboolean info = ((darktable.unmuted & (DT_DEBUG_DEMOSAIC | DT_DEBUG_PERF))
-                         && (piece->pipe->type == DT_DEV_PIXELPIPE_FULL));
+                         && (pipe->type == DT_DEV_PIXELPIPE_FULL));
 
   if(vng_interpolate(vng_image, raw_data, roi_out, roi_in, filters, xtrans, FALSE))
   {
@@ -79,7 +81,7 @@ static int dual_demosaic(const dt_dev_pixelpipe_iop_t *piece, float *const restr
 
   if(dual_mask)
   {
-    piece->pipe->mask_display = DT_DEV_PIXELPIPE_DISPLAY_PASSTHRU;
+    ((dt_dev_pixelpipe_t *)pipe)->mask_display = DT_DEV_PIXELPIPE_DISPLAY_PASSTHRU;
 #ifdef _OPENMP
   #pragma omp parallel for simd default(none) \
   dt_omp_firstprivate(blend, rgb_data, vng_image, width, height) \
@@ -117,15 +119,18 @@ static int dual_demosaic(const dt_dev_pixelpipe_iop_t *piece, float *const restr
 }
 
 #ifdef HAVE_OPENCL
-gboolean dual_demosaic_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem detail, cl_mem blend, cl_mem high_image, cl_mem low_image, cl_mem out, const int width, const int height, const int showmask)
+gboolean dual_demosaic_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
+                          const dt_dev_pixelpipe_iop_t *piece, cl_mem detail, cl_mem blend,
+                          cl_mem high_image, cl_mem low_image, cl_mem out, const int width,
+                          const int height, const int showmask)
 {
-  const int devid = piece->pipe->devid;
+  const int devid = pipe->devid;
   dt_iop_demosaic_data_t *data = (dt_iop_demosaic_data_t *)piece->data;
   dt_iop_demosaic_global_data_t *gd = (dt_iop_demosaic_global_data_t *)self->global_data;
 
   const float contrastf = slider2contrast(data->dual_thrs);
   if(showmask)
-    piece->pipe->mask_display = DT_DEV_PIXELPIPE_DISPLAY_PASSTHRU;
+    ((dt_dev_pixelpipe_t *)pipe)->mask_display = DT_DEV_PIXELPIPE_DISPLAY_PASSTHRU;
 
   {
     size_t sizes[3] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };

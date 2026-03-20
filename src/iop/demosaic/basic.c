@@ -360,12 +360,13 @@ static void green_equilibration_favg(float *out, const float *const in, const in
 #ifdef HAVE_OPENCL
 
 // color smoothing step by multiple passes of median filtering
-static int color_smoothing_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in,
-                              cl_mem dev_out, const dt_iop_roi_t *const roi_out, const int passes)
+static int color_smoothing_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
+                              const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
+                              const dt_iop_roi_t *const roi_out, const int passes)
 {
   dt_iop_demosaic_global_data_t *gd = (dt_iop_demosaic_global_data_t *)self->global_data;
 
-  const int devid = piece->pipe->devid;
+  const int devid = pipe->devid;
   const int width = roi_out->width;
   const int height = roi_out->height;
 
@@ -425,13 +426,14 @@ error:
   return FALSE;
 }
 
-static int green_equilibration_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in,
-                                  cl_mem dev_out, const dt_iop_roi_t *const roi_in)
+static int green_equilibration_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
+                                  const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
+                                  const dt_iop_roi_t *const roi_in)
 {
   dt_iop_demosaic_data_t *data = (dt_iop_demosaic_data_t *)piece->data;
   dt_iop_demosaic_global_data_t *gd = (dt_iop_demosaic_global_data_t *)self->global_data;
 
-  const int devid = piece->pipe->devid;
+  const int devid = pipe->devid;
   const int width = roi_in->width;
   const int height = roi_in->height;
 
@@ -529,7 +531,7 @@ static int green_equilibration_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe
                                                  slocal);
     if(err != CL_SUCCESS) goto error;
 
-    sumsum = dt_pixelpipe_cache_alloc_align_float((size_t)2 * reducesize, piece->pipe);
+    sumsum = dt_pixelpipe_cache_alloc_align_float((size_t)2 * reducesize, pipe);
     if(sumsum == NULL) goto error;
     err = dt_opencl_read_buffer_from_device(devid, (void *)sumsum, dev_r, 0,
                                             sizeof(float) * 2 * reducesize, CL_TRUE);

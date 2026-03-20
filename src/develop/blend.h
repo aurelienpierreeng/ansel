@@ -407,8 +407,8 @@ dt_blendop_cl_global_t *dt_develop_blend_init_cl_global(void);
 void dt_develop_blend_free_cl_global(dt_blendop_cl_global_t *b);
 
 /** apply blend. Return 0 if ok, 1 if error */
-int dt_develop_blend_process(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
-                              const void *const i, void *const o);
+int dt_develop_blend_process(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_t *pipe,
+                             const struct dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o);
 
 /** get blend version */
 int dt_develop_blend_version(void);
@@ -458,7 +458,8 @@ void dt_develop_blendif_process_parameters(float *const parameters, const dt_dev
  *
  * The initialized profile may only be used to convert from RGB to XYZ.
  */
-int dt_develop_blendif_init_masking_profile(const struct dt_dev_pixelpipe_iop_t *piece,
+int dt_develop_blendif_init_masking_profile(const struct dt_dev_pixelpipe_t *pipe,
+                                            const struct dt_dev_pixelpipe_iop_t *piece,
                                             dt_iop_order_iccprofile_info_t *blending_profile,
                                             dt_develop_blend_colorspace_t cst);
 
@@ -468,24 +469,30 @@ void dt_develop_blendif_raw_make_mask(const struct dt_dev_pixelpipe_iop_t *piece
                                       const float *const b, float *const mask);
 void dt_develop_blendif_lab_make_mask(const struct dt_dev_pixelpipe_iop_t *piece, const float *const a,
                                       const float *const b, float *const mask);
-void dt_develop_blendif_rgb_hsl_make_mask(const struct dt_dev_pixelpipe_iop_t *piece, const float *const a,
-                                          const float *const b, float *const mask);
-void dt_develop_blendif_rgb_jzczhz_make_mask(const struct dt_dev_pixelpipe_iop_t *piece, const float *const a,
-                                             const float *const b, float *const mask);
+void dt_develop_blendif_rgb_hsl_make_mask(const struct dt_dev_pixelpipe_t *pipe,
+                                          const struct dt_dev_pixelpipe_iop_t *piece,
+                                          const float *const a, const float *const b, float *const mask);
+void dt_develop_blendif_rgb_jzczhz_make_mask(const struct dt_dev_pixelpipe_t *pipe,
+                                             const struct dt_dev_pixelpipe_iop_t *piece,
+                                             const float *const a, const float *const b, float *const mask);
 
 /** color blending operators */
 
-void dt_develop_blendif_raw_blend(const struct dt_dev_pixelpipe_iop_t *piece, const float *const a, float *const b,
-                                  const float *const mask,
+void dt_develop_blendif_raw_blend(const struct dt_dev_pixelpipe_t *pipe,
+                                  const struct dt_dev_pixelpipe_iop_t *piece, const float *const a,
+                                  float *const b, const float *const mask,
                                   const dt_dev_pixelpipe_display_mask_t request_mask_display);
-void dt_develop_blendif_lab_blend(const struct dt_dev_pixelpipe_iop_t *piece, const float *const a, float *const b,
-                                  const float *const mask,
+void dt_develop_blendif_lab_blend(const struct dt_dev_pixelpipe_t *pipe,
+                                  const struct dt_dev_pixelpipe_iop_t *piece, const float *const a,
+                                  float *const b, const float *const mask,
                                   const dt_dev_pixelpipe_display_mask_t request_mask_display);
-void dt_develop_blendif_rgb_hsl_blend(const struct dt_dev_pixelpipe_iop_t *piece, const float *const a, float *const b,
-                                      const float *const mask,
+void dt_develop_blendif_rgb_hsl_blend(const struct dt_dev_pixelpipe_t *pipe,
+                                      const struct dt_dev_pixelpipe_iop_t *piece, const float *const a,
+                                      float *const b, const float *const mask,
                                       const dt_dev_pixelpipe_display_mask_t request_mask_display);
-void dt_develop_blendif_rgb_jzczhz_blend(const struct dt_dev_pixelpipe_iop_t *piece, const float *const a, float *const b,
-                                         const float *const mask,
+void dt_develop_blendif_rgb_jzczhz_blend(const struct dt_dev_pixelpipe_t *pipe,
+                                         const struct dt_dev_pixelpipe_iop_t *piece, const float *const a,
+                                         float *const b, const float *const mask,
                                          const dt_dev_pixelpipe_display_mask_t request_mask_display);
 
 
@@ -500,13 +507,14 @@ void dt_iop_gui_cleanup_blending(dt_iop_module_t *module);
 void dt_iop_gui_blending_lose_focus(dt_iop_module_t *module);
 void dt_iop_gui_blending_reload_defaults(dt_iop_module_t *module);
 
-gboolean blend_color_picker_apply(dt_iop_module_t *module, GtkWidget *picker, dt_dev_pixelpipe_iop_t *piece);
+gboolean blend_color_picker_apply(dt_iop_module_t *module, GtkWidget *picker, dt_dev_pixelpipe_t *pipe,
+                                  dt_dev_pixelpipe_iop_t *piece);
 
 
 #ifdef HAVE_OPENCL
 /** apply blend for opencl modules. Return 0 if ok, 1 on error*/
-int dt_develop_blend_process_cl(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
-                                cl_mem dev_in, cl_mem dev_out);
+int dt_develop_blend_process_cl(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_t *pipe,
+                                const struct dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out);
 #endif
 
 #ifdef __cplusplus

@@ -313,7 +313,7 @@ static inline void pixSort(float *a, float *b)
   There is no "maths background" so i chose this after a lot of testing.
 */
 #define CA_SIZE_MINIMUM (1600)
-int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o)
+int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
@@ -374,21 +374,21 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, c
   if(avoidshift)
   {
     const size_t buffsize = (size_t)h_width * h_height;
-    redfactor = dt_pixelpipe_cache_alloc_align_float(buffsize, piece->pipe);
+    redfactor = dt_pixelpipe_cache_alloc_align_float(buffsize, pipe);
     if(!redfactor)
     {
       err = 1;
       goto cleanup;
     }
     memset(redfactor, 0, sizeof(float) * buffsize);
-    bluefactor = dt_pixelpipe_cache_alloc_align_float(buffsize, piece->pipe);
+    bluefactor = dt_pixelpipe_cache_alloc_align_float(buffsize, pipe);
     if(!bluefactor)
     {
       err = 1;
       goto cleanup;
     }
     memset(bluefactor, 0, sizeof(float) * buffsize);
-    oldraw = dt_pixelpipe_cache_alloc_align_float(buffsize * 2, piece->pipe);
+    oldraw = dt_pixelpipe_cache_alloc_align_float(buffsize * 2, pipe);
     if(!oldraw)
     {
       err = 1;
@@ -409,7 +409,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, c
   }
 
   // temporary array to store simple interpolation of G
-  Gtmp = dt_pixelpipe_cache_alloc_align_float((size_t)height * width, piece->pipe);
+  Gtmp = dt_pixelpipe_cache_alloc_align_float((size_t)height * width, pipe);
   if(!Gtmp)
   {
     err = 1;
@@ -418,7 +418,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, c
   memset(Gtmp, 0, sizeof(float) * height * width);
 
   // temporary array to avoid race conflicts, only every second pixel needs to be saved here
-  RawDataTmp = dt_pixelpipe_cache_alloc_align_float(height * width / 2 + 4, piece->pipe);
+  RawDataTmp = dt_pixelpipe_cache_alloc_align_float(height * width / 2 + 4, pipe);
   if(!RawDataTmp)
   {
     err = 1;
