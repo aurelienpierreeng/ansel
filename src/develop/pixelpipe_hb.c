@@ -894,7 +894,8 @@ static void _log_sampling_cache_miss(dt_dev_pixelpipe_t *pipe, dt_iop_module_t *
 }
 
 static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
-                                        uint64_t *out_hash, GList *pieces, int pos)
+                                        uint64_t *out_hash, const dt_dev_pixelpipe_iop_t **out_piece,
+                                        GList *pieces, int pos)
 {
   // The pipeline is executed recursively, from the end. For each module n, starting from the end,
   // if output is cached, take it, else if input is cached, take it, process it and output,
@@ -915,6 +916,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
 
     dt_show_times_f(&start, "[dev_pixelpipe]", "initing base buffer [%s]", dt_pixelpipe_get_pipe_name(pipe->type));
     *out_hash = dt_dev_pixelpipe_node_hash(pipe, NULL, *_get_first_roi(pipe), pos);
+    *out_piece = NULL;
     return 0;
   }
 
@@ -925,7 +927,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
 
   // skip this module?
   if(!piece->enabled)
-    return dt_dev_pixelpipe_process_rec(pipe, dev, out_hash, g_list_previous(pieces), pos - 1);
+    return dt_dev_pixelpipe_process_rec(pipe, dev, out_hash, out_piece, g_list_previous(pieces), pos - 1);
 
   module = piece->module;
 
@@ -951,12 +953,14 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   {
     _trace_cache_owner(pipe, module, "exact-hit-direct", "output", hash, NULL, existing_cache, FALSE);
     *out_hash = hash;
+    *out_piece = piece;
     return 0;
   }
 
   // 3) now recurse through the pipeline.
   uint64_t input_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
-  if(dt_dev_pixelpipe_process_rec(pipe, dev, &input_hash, g_list_previous(pieces), pos - 1))
+  const dt_dev_pixelpipe_iop_t *previous_piece = NULL;
+  if(dt_dev_pixelpipe_process_rec(pipe, dev, &input_hash, &previous_piece, g_list_previous(pieces), pos - 1))
   {
     /* Child recursion failed before this module acquired any output cache entry.
      * Dropping `hash` here underflows cached exact-hit outputs during shutdown. */
@@ -980,7 +984,6 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   _trace_cache_owner(pipe, module, "acquire", "input", input_hash, input, input_entry, FALSE);
   _trace_buffer_content(pipe, module, "input-acquire", input, &piece->dsc_in, &piece->roi_in);
   const size_t bufsize = (size_t)piece->dsc_out.bpp * piece->roi_out.width * piece->roi_out.height;
-
   // Note: input == NULL is valid if we are on a GPU-only path, aka previous module ran on GPU
   // without leaving its output on a RAM cache copy, and current module will also run on GPU.
   // In this case, we rely on cl_mem_input for best performance (avoid memcpy between RAM and GPU).
@@ -1042,6 +1045,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
       _trace_cache_owner(pipe, module, "exact-hit-race", "output", hash, raced_output, raced_entry, FALSE);
       dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, input_entry);
       *out_hash = hash;
+      *out_piece = piece;
       return 0;
     }
 
@@ -1096,11 +1100,11 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   const char *prev_module = dt_pixelpipe_cache_set_current_module(module ? module->op : NULL);
 
 #ifdef HAVE_OPENCL
-  error = pixelpipe_process_on_GPU(pipe, piece, &tiling, &pixelpipe_flow,
+  error = pixelpipe_process_on_GPU(pipe, piece, previous_piece, &tiling, &pixelpipe_flow,
                                    &cache_output,
                                    input_entry, output_entry);
 #else
-  error = pixelpipe_process_on_CPU(pipe, piece, &tiling, &pixelpipe_flow,
+  error = pixelpipe_process_on_CPU(pipe, piece, previous_piece, &tiling, &pixelpipe_flow,
                                    &cache_output,
                                    input_entry, output_entry);
 #endif
@@ -1189,6 +1193,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   KILL_SWITCH_AND_FLUSH_CACHE;
 
   *out_hash = hash;
+  *out_piece = piece;
   return 0;
 }
 
@@ -1524,7 +1529,9 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop
     dt_times_t start;
     dt_get_times(&start);
     uint64_t final_hash = -1;
-    err = dt_dev_pixelpipe_process_rec(pipe, darkroom_pipe ? dev : NULL, &final_hash, pieces, pos);
+    const dt_dev_pixelpipe_iop_t *final_piece = NULL;
+    err = dt_dev_pixelpipe_process_rec(pipe, darkroom_pipe ? dev : NULL, &final_hash, &final_piece, pieces, pos);
+    (void)final_piece;
     gchar *msg = g_strdup_printf("[pixelpipe] %s internal pixel pipeline processing", dt_pixelpipe_get_pipe_name(pipe->type));
     dt_show_times(&start, msg);
     dt_free(msg);

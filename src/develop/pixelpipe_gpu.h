@@ -6,6 +6,7 @@ void dt_dev_pixelpipe_gpu_flush_host_pinned_images(dt_dev_pixelpipe_t *pipe, voi
                                                    dt_pixel_cache_entry_t *cache_entry, const char *reason);
 
 int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
+                             const dt_dev_pixelpipe_iop_t *previous_piece,
                              dt_develop_tiling_t *tiling,
                              dt_pixelpipe_flow_t *pixelpipe_flow,
                              gboolean *cache_output,

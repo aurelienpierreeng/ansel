@@ -265,7 +265,9 @@ uint64_t dt_dev_pixelpipe_node_hash(dt_dev_pixelpipe_t *pipe, const dt_dev_pixel
 static gboolean _prepare_piece_input_contract(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
                                               dt_iop_buffer_dsc_t *upstream_dsc)
 {
-  piece->dsc_in = *upstream_dsc;
+  const dt_iop_buffer_dsc_t actual_input_dsc = *upstream_dsc;
+
+  piece->dsc_in = actual_input_dsc;
   piece->module->input_format(piece->module, pipe, piece, &piece->dsc_in);
   dt_iop_buffer_dsc_update_bpp(&piece->dsc_in);
   piece->dsc_out = piece->dsc_in;
@@ -273,9 +275,9 @@ static gboolean _prepare_piece_input_contract(dt_dev_pixelpipe_t *pipe, dt_dev_p
 
   const gboolean input_mismatch
       = piece->enabled
-        && (piece->dsc_in.bpp != upstream_dsc->bpp
-            || piece->dsc_in.channels != upstream_dsc->channels
-            || piece->dsc_in.filters != upstream_dsc->filters);
+        && (piece->dsc_in.bpp != actual_input_dsc.bpp
+            || piece->dsc_in.channels != actual_input_dsc.channels
+            || piece->dsc_in.filters != actual_input_dsc.filters);
   if(input_mismatch)
   {
     dt_control_log(_("disabled module `%s`: unexpected input buffer format"),
@@ -283,7 +285,7 @@ static gboolean _prepare_piece_input_contract(dt_dev_pixelpipe_t *pipe, dt_dev_p
     dt_print(DT_DEBUG_DEV,
              "[pixelpipe] disabling module %s because input format expects %zu B/px, %u channels, filters %u but upstream publishes %zu B/px, %u channels, filters %u\n",
              piece->module->op, piece->dsc_in.bpp, piece->dsc_in.channels, piece->dsc_in.filters,
-             upstream_dsc->bpp, upstream_dsc->channels, upstream_dsc->filters);
+             actual_input_dsc.bpp, actual_input_dsc.channels, actual_input_dsc.filters);
   }
 
   if(input_mismatch)
@@ -293,13 +295,12 @@ static gboolean _prepare_piece_input_contract(dt_dev_pixelpipe_t *pipe, dt_dev_p
     piece->blendop_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
     piece->global_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
     piece->global_mask_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
-    piece->dsc_in = *upstream_dsc;
-    piece->dsc_out = *upstream_dsc;
+    piece->dsc_in = actual_input_dsc;
+    piece->dsc_out = actual_input_dsc;
     dt_iop_buffer_dsc_update_bpp(&piece->dsc_in);
     dt_iop_buffer_dsc_update_bpp(&piece->dsc_out);
   }
 
-  *upstream_dsc = piece->dsc_out;
   return !input_mismatch;
 }
 

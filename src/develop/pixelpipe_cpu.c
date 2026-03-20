@@ -13,6 +13,7 @@
 #include <stdio.h>
 
 int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
+                             const dt_dev_pixelpipe_iop_t *previous_piece,
                              dt_develop_tiling_t *tiling, dt_pixelpipe_flow_t *pixelpipe_flow,
                              gboolean *const cache_output,
                              dt_pixel_cache_entry_t *input_entry, dt_pixel_cache_entry_t *output_entry)
@@ -26,8 +27,9 @@ int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
   const float *process_input = input;
   const float *blend_input = input;
   void *blend_output = output;
-  dt_iop_buffer_dsc_t process_input_dsc = piece->dsc_in;
-  dt_iop_buffer_dsc_t blend_input_dsc = piece->dsc_in;
+  const dt_iop_buffer_dsc_t actual_input_dsc = previous_piece ? previous_piece->dsc_out : pipe->image.dsc;
+  dt_iop_buffer_dsc_t process_input_dsc = actual_input_dsc;
+  dt_iop_buffer_dsc_t blend_input_dsc = actual_input_dsc;
   dt_iop_buffer_dsc_t blend_output_dsc = piece->dsc_out;
   gboolean input_locked = FALSE;
 
@@ -48,7 +50,9 @@ int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
   }
 
   const dt_iop_order_iccprofile_info_t *const work_profile
-      = (process_input_dsc.cst != IOP_CS_RAW) ? dt_ioppr_get_pipe_work_profile_info(pipe) : NULL;
+      = (process_input_dsc.cst != IOP_CS_RAW || piece->dsc_in.cst != IOP_CS_RAW)
+            ? dt_ioppr_get_pipe_work_profile_info(pipe)
+            : NULL;
 
   const int cst_before = process_input_dsc.cst;
   if(process_input_dsc.cst != piece->dsc_in.cst)

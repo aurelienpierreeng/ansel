@@ -54,6 +54,43 @@ typedef struct dt_dev_pixelpipe_raster_mask_t
   float *mask;
 } dt_dev_pixelpipe_raster_mask_t;
 
+/**
+ * Runtime representation of one history item instantiated inside a pixelpipe node.
+ *
+ * A piece is the sealed processing contract for one module on one pipe. It is
+ * authored during history -> pipe synchronization and then consumed by the
+ * recursive runtime without recomputing its format contract.
+ *
+ * Contract sealing order:
+ * - the upstream descriptor is copied into #dsc_in,
+ * - module `input_format()` may overwrite the fields it requires on #dsc_in,
+ * - the resulting hard storage contract is sanitized against the actual
+ *   upstream storage format; only bit depth, channel count, and RAW filter
+ *   layout must match,
+ * - #dsc_out is initialized from #dsc_in,
+ * - `commit_params()` may update value-domain metadata that depends on module
+ *   parameters, such as `processed_maximum` or RAW normalization coefficients,
+ * - module `output_format()` may finally overwrite the output storage contract.
+ *
+ * After synchronization:
+ * - #dsc_in and #dsc_out are authoritative and immutable during
+ *   `process()`, `process_cl()`, `process_tiling()`, and blending,
+ * - runtime code may compare the previous piece output descriptor with #dsc_in
+ *   to decide whether a colorspace conversion is needed, but it must not
+ *   rewrite the contract,
+ * - ROI callbacks (`modify_roi_in()` / `modify_roi_out()`) are still allowed
+ *   to mutate the piece because ROI planning happens before processing starts
+ *   and some modules derive descriptor details from the planned crop,
+ * - cache entries published by this piece inherit the descriptor of the
+ *   pixels produced by this stage, namely #dsc_out.
+ *
+ * Mutable lifecycle summary:
+ * - `commit_params()`, `input_format()`, `output_format()`, and ROI planning
+ *   are the only places allowed to author the contract,
+ * - processing code treats the piece as read-only,
+ * - the cache-related fields only track output ownership/reuse hints and do
+ *   not participate in the pixel format contract itself.
+ */
 typedef struct dt_dev_pixelpipe_iop_t
 {
   struct dt_iop_module_t *module;  // the module in the dev operation stack
@@ -93,11 +130,16 @@ typedef struct dt_dev_pixelpipe_iop_t
 
   int bpc;             // bits per channel, 32 means float
   dt_iop_roi_t buf_in, buf_out; // theoretical full buffer regions of interest, as passed through modify_roi_out
-  dt_iop_roi_t roi_in, roi_out; // pipeline sizes planned ahead for cache hash
+  dt_iop_roi_t roi_in, roi_out; // planned runtime regions of interest after backward ROI propagation
   int process_cl_ready;       // set this to 0 in commit_params to temporarily disable the use of process_cl
   int process_tiling_ready;   // set this to 0 in commit_params to temporarily disable tiling
 
-  // the following are used internally for caching:
+  // Sealed descriptor contract for this module instance.
+  // dsc_in is the module input contract after input_format() sanitized against
+  // the actual upstream storage format.
+  // dsc_out is the authored module output contract after commit_params() and
+  // output_format().
+  // dsc_mask carries the mask-side storage contract when masks are produced.
   dt_iop_buffer_dsc_t dsc_in, dsc_out, dsc_mask;
 
   // bypass the cache for this module
@@ -111,9 +153,10 @@ typedef struct dt_dev_pixelpipe_iop_t
   // fails before producing a valid output for the new hash.
   dt_pixel_cache_entry_t cache_entry;
 
-  // Set to TRUE for modules that should mandatorily cache their output to the RAM
-  // even when running on OpenCL. This is counter-productive for lightweight pixel ops
-  // like scalar operations, due to memory copy overhead. Not for diffuse & sharpen
+  // Set to TRUE for modules that should mandatorily cache their output to RAM
+  // even when running on OpenCL. This is a processing-policy flag authored
+  // during synchronization and then consumed by one recursion step; it does not
+  // change the descriptor contract.
   gboolean force_opencl_cache;
 
   GHashTable *raster_masks; // GList* of dt_dev_pixelpipe_raster_mask_t

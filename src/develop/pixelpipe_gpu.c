@@ -91,6 +91,7 @@ static int _gpu_init_input(dt_dev_pixelpipe_t *pipe,
 static int _gpu_early_cpu_fallback_if_unsupported(dt_dev_pixelpipe_t *pipe, float **input,
                                                   void **cl_mem_input,
                                                   const dt_dev_pixelpipe_iop_t *piece,
+                                                  const dt_dev_pixelpipe_iop_t *previous_piece,
                                                   dt_develop_tiling_t *tiling,
                                                   dt_pixelpipe_flow_t *pixelpipe_flow,
                                                   gboolean *const cache_output,
@@ -135,11 +136,12 @@ static int _gpu_early_cpu_fallback_if_unsupported(dt_dev_pixelpipe_t *pipe, floa
   dt_dev_pixelpipe_gpu_clear_buffer(cl_mem_input, input_entry, *input,
                                     dt_dev_pixelpipe_cache_gpu_device_buffer(pipe, input_entry));
 
-  return pixelpipe_process_on_CPU(pipe, piece, tiling, pixelpipe_flow,
+  return pixelpipe_process_on_CPU(pipe, piece, previous_piece, tiling, pixelpipe_flow,
                                   cache_output, input_entry, output_entry);
 }
 
 int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
+                             const dt_dev_pixelpipe_iop_t *previous_piece,
                              dt_develop_tiling_t *tiling,
                              dt_pixelpipe_flow_t *pixelpipe_flow,
                              gboolean *const cache_output,
@@ -159,8 +161,9 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
   dt_pixel_cache_entry_t *cpu_input_entry = input_entry;
   dt_pixel_cache_entry_t *locked_input_entry = NULL;
   gboolean borrowed_cl_mem_input = FALSE;
-  dt_iop_buffer_dsc_t process_input_dsc = piece->dsc_in;
-  dt_iop_buffer_dsc_t blend_input_dsc = piece->dsc_in;
+  const dt_iop_buffer_dsc_t actual_input_dsc = previous_piece ? previous_piece->dsc_out : pipe->image.dsc;
+  dt_iop_buffer_dsc_t process_input_dsc = actual_input_dsc;
+  dt_iop_buffer_dsc_t blend_input_dsc = actual_input_dsc;
   dt_iop_buffer_dsc_t blend_output_dsc = piece->dsc_out;
   /* The recursion already owns `input_entry`, so GPU payload recovery must happen from that entry
    * directly instead of going back through the hash lookup path. Hash lookup is for published
@@ -181,13 +184,15 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
 
   if(!_is_opencl_supported(pipe, piece, module) || !pipe->opencl_enabled || !(pipe->devid >= 0))
   {
-    return _gpu_early_cpu_fallback_if_unsupported(pipe, &input, &cl_mem_input, piece, tiling,
+    return _gpu_early_cpu_fallback_if_unsupported(pipe, &input, &cl_mem_input, piece, previous_piece, tiling,
                                                   pixelpipe_flow, cache_output,
                                                   input_entry, output_entry);
   }
 
   const dt_iop_order_iccprofile_info_t *const work_profile
-      = (process_input_dsc.cst != IOP_CS_RAW) ? dt_ioppr_get_pipe_work_profile_info(pipe) : NULL;
+      = (process_input_dsc.cst != IOP_CS_RAW || piece->dsc_in.cst != IOP_CS_RAW)
+            ? dt_ioppr_get_pipe_work_profile_info(pipe)
+            : NULL;
 
   const float required_factor_cl
       = fmaxf(1.0f, (cl_mem_input != NULL) ? tiling->factor_cl - 1.0f : tiling->factor_cl);
@@ -605,19 +610,20 @@ error:
     dt_dev_pixelpipe_gpu_clear_buffer(&cl_mem_input, cpu_input_entry, input,
                                       dt_dev_pixelpipe_cache_gpu_device_buffer(pipe, cpu_input_entry));
 
-  return pixelpipe_process_on_CPU(pipe, piece, tiling, pixelpipe_flow,
+  return pixelpipe_process_on_CPU(pipe, piece, previous_piece, tiling, pixelpipe_flow,
                                   cache_output, cpu_input_entry, output_entry);
 }
 
 #else
 
 int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
+                             const dt_dev_pixelpipe_iop_t *previous_piece,
                              dt_develop_tiling_t *tiling,
                              dt_pixelpipe_flow_t *pixelpipe_flow,
                              gboolean *const cache_output,
                              dt_pixel_cache_entry_t *input_entry, dt_pixel_cache_entry_t *output_entry)
 {
-  return pixelpipe_process_on_CPU(pipe, piece, tiling, pixelpipe_flow,
+  return pixelpipe_process_on_CPU(pipe, piece, previous_piece, tiling, pixelpipe_flow,
                                   cache_output, input_entry, output_entry);
 }
 
