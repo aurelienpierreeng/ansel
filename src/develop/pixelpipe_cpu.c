@@ -129,13 +129,8 @@ int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
     blend_input_dsc = process_input_dsc;
     blend_output = output;
     blend_output_dsc = piece->dsc_out;
-    const dt_develop_blend_params_t *const blend_params = (const dt_develop_blend_params_t *)piece->blendop_data;
-    const unsigned int preview_mask_mode = blend_params ? blend_params->mask_mode
-                                                            & (DEVELOP_MASK_MASK_CONDITIONAL | DEVELOP_MASK_RASTER)
-                                                        : 0;
     const dt_dev_pixelpipe_display_mask_t request_mask_display
-        = (module->dev->gui_attached && (module == module->dev->gui_module) && (pipe == module->dev->pipe)
-           && preview_mask_mode)
+        = (module->dev->gui_attached && (module == module->dev->gui_module) && (pipe == module->dev->pipe))
               ? module->request_mask_display
               : DT_DEV_PIXELPIPE_DISPLAY_NONE;
 

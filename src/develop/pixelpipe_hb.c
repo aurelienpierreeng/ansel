@@ -1002,6 +1002,13 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
      && (piece->dsc_in.bpp == piece->dsc_out.bpp)
      && !memcmp(&piece->roi_in, &piece->roi_out, sizeof(struct dt_iop_roi_t)))
   {
+    /* Mask/channel passthrough keeps the exact child buffer alive for the next
+     * downstream module. This stage does not publish a new cacheline, so it
+     * must forward the child hash and actual previous piece contract exactly as
+     * they came from recursion. */
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, input_entry);
+    *out_hash = input_hash;
+    *out_piece = previous_piece;
     return 0;
   }
 
@@ -1519,6 +1526,11 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop
   while(keep_running && runs < 3)
   {
     ++runs;
+
+    /* Mask preview is authored while the current run advances through blend.c.
+     * Reset it for each retry so a stale state from a previous pass cannot leak
+     * into the next recursion before the active module reaches its own blend. */
+    pipe->mask_display = DT_DEV_PIXELPIPE_DISPLAY_NONE;
 
 #ifdef HAVE_OPENCL
     dt_opencl_check_tuning(pipe->devid);
