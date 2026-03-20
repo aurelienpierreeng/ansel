@@ -512,8 +512,8 @@ static void pixelpipe_picker(dt_dev_pixelpipe_t *pipe, dt_iop_module_t *module,
     return;
 
   dt_aligned_pixel_t avg = { 0.0f };
-  dt_aligned_pixel_t min = { 0.0f };
-  dt_aligned_pixel_t max = { 0.0f };
+  dt_aligned_pixel_t min = { INFINITY, INFINITY, INFINITY, INFINITY };
+  dt_aligned_pixel_t max = { -INFINITY, -INFINITY, -INFINITY, -INFINITY };
 
   const dt_iop_order_iccprofile_info_t *const profile = dt_ioppr_get_pipe_work_profile_info(pipe);
   const dt_iop_colorspace_type_t picker_cst = dt_iop_color_picker_get_active_cst(module);

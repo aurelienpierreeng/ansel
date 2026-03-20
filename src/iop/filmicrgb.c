@@ -2989,14 +2989,13 @@ error:
 #endif
 
 
-static void apply_auto_grey(dt_iop_module_t *self)
+static void apply_auto_grey(dt_iop_module_t *self,
+                            const dt_iop_order_iccprofile_info_t *const work_profile)
 {
   if(darktable.gui->reset) return;
   dt_iop_filmicrgb_params_t *p = (dt_iop_filmicrgb_params_t *)self->params;
   dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)self->gui_data;
 
-  const dt_iop_order_iccprofile_info_t *const work_profile
-      = dt_ioppr_get_iop_work_profile_info(self, self->dev->iop);
   const float grey = get_pixel_norm(self->picked_color, p->preserve_color, work_profile) / 2.0f;
 
   const float prev_grey = p->grey_point_source;
@@ -3018,15 +3017,14 @@ static void apply_auto_grey(dt_iop_module_t *self)
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
-static void apply_auto_black(dt_iop_module_t *self)
+static void apply_auto_black(dt_iop_module_t *self,
+                             const dt_iop_order_iccprofile_info_t *const work_profile)
 {
   if(darktable.gui->reset) return;
   dt_iop_filmicrgb_params_t *p = (dt_iop_filmicrgb_params_t *)self->params;
   dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)self->gui_data;
 
   // Black
-  const dt_iop_order_iccprofile_info_t *const work_profile
-      = dt_ioppr_get_iop_work_profile_info(self, self->dev->iop);
   const float black = get_pixel_norm(self->picked_color_min, DT_FILMIC_METHOD_MAX_RGB, work_profile);
 
   float EVmin = CLAMP(log2f(black / (p->grey_point_source / 100.0f)), -16.0f, -1.0f);
@@ -3046,15 +3044,14 @@ static void apply_auto_black(dt_iop_module_t *self)
 }
 
 
-static void apply_auto_white_point_source(dt_iop_module_t *self)
+static void apply_auto_white_point_source(dt_iop_module_t *self,
+                                          const dt_iop_order_iccprofile_info_t *const work_profile)
 {
   if(darktable.gui->reset) return;
   dt_iop_filmicrgb_params_t *p = (dt_iop_filmicrgb_params_t *)self->params;
   dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)self->gui_data;
 
   // White
-  const dt_iop_order_iccprofile_info_t *const work_profile
-      = dt_ioppr_get_iop_work_profile_info(self, self->dev->iop);
   const float white = get_pixel_norm(self->picked_color_max, DT_FILMIC_METHOD_MAX_RGB, work_profile);
 
   float EVmax = CLAMP(log2f(white / (p->grey_point_source / 100.0f)), 1.0f, 16.0f);
@@ -3073,12 +3070,11 @@ static void apply_auto_white_point_source(dt_iop_module_t *self)
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
-static void apply_autotune(dt_iop_module_t *self)
+static void apply_autotune(dt_iop_module_t *self,
+                           const dt_iop_order_iccprofile_info_t *const work_profile)
 {
   dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)self->gui_data;
   dt_iop_filmicrgb_params_t *p = (dt_iop_filmicrgb_params_t *)self->params;
-  const dt_iop_order_iccprofile_info_t *const work_profile
-      = dt_ioppr_get_iop_work_profile_info(self, self->dev->iop);
 
   // Grey
   if(p->custom_grey)
@@ -3115,16 +3111,20 @@ static void apply_autotune(dt_iop_module_t *self)
 
 void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
+  (void)piece;
   dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)self->gui_data;
+  const dt_iop_order_iccprofile_info_t *const work_profile
+      = pipe ? dt_ioppr_get_pipe_current_profile_info(self, pipe)
+             : dt_ioppr_get_iop_work_profile_info(self, self->dev->iop);
 
   if(picker == g->grey_point_source)
-    apply_auto_grey(self);
+    apply_auto_grey(self, work_profile);
   else if(picker == g->black_point_source)
-    apply_auto_black(self);
+    apply_auto_black(self, work_profile);
   else if(picker == g->white_point_source)
-    apply_auto_white_point_source(self);
+    apply_auto_white_point_source(self, work_profile);
   else if(picker == g->auto_button)
-    apply_autotune(self);
+    apply_autotune(self, work_profile);
 }
 
 static void show_mask_callback(GtkToggleButton *button, GdkEventButton *event, gpointer user_data)
