@@ -75,6 +75,7 @@ static GType int_arg[] = { G_TYPE_INT };
 static GType uint_2arg[] = { G_TYPE_UINT, G_TYPE_UINT };
 static GType pointer_arg[] = { G_TYPE_POINTER };
 static GType pointer_2arg[] = { G_TYPE_POINTER, G_TYPE_POINTER };
+static GType pointer_3arg[] = { G_TYPE_POINTER, G_TYPE_POINTER, G_TYPE_POINTER };
 static GType collection_args[] = { G_TYPE_UINT, G_TYPE_UINT, G_TYPE_POINTER, G_TYPE_UINT };
 static GType image_export_arg[]
     = { G_TYPE_UINT, G_TYPE_STRING, G_TYPE_POINTER, G_TYPE_POINTER, G_TYPE_POINTER, G_TYPE_POINTER };
@@ -209,7 +210,7 @@ static dt_signal_description _signal_description[DT_SIGNAL_COUNT] = {
   { "dt-control-toast-redraw", NULL, NULL, G_TYPE_NONE, g_cclosure_marshal_VOID__VOID, 0, NULL, NULL,
     FALSE }, // DT_SIGNAL_CONTROL_TOAST_REDRAW
 
-  { "dt-control-pickerdata-ready", NULL, NULL, G_TYPE_NONE, g_cclosure_marshal_generic, 2, pointer_2arg, NULL,
+  { "dt-control-pickerdata-ready", NULL, NULL, G_TYPE_NONE, g_cclosure_marshal_generic, 3, pointer_3arg, NULL,
     FALSE }, // DT_SIGNAL_CONTROL_PICKERDATA_REAEDY
 
   { "dt-metadata-update", NULL, NULL, G_TYPE_NONE, g_cclosure_marshal_VOID__VOID, 0, NULL, NULL,

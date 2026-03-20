@@ -264,11 +264,10 @@ dt_iop_colorspace_type_t dt_iop_color_picker_get_active_cst(dt_iop_module_t *mod
     return IOP_CS_NONE;
 }
 
-static void _iop_color_picker_pickerdata_ready_callback(gpointer instance, dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece,
+static void _iop_color_picker_pickerdata_ready_callback(gpointer instance, dt_iop_module_t *module,
+                                                        dt_dev_pixelpipe_iop_t *piece, dt_dev_pixelpipe_t *pipe,
                                                         gpointer user_data)
 {
-  (void)instance;
-  dt_dev_pixelpipe_t *pipe = (dt_dev_pixelpipe_t *)user_data;
   // an iop colorpicker receives new data from the pixelpipe
   dt_iop_color_picker_t *picker = darktable.lib->proxy.colorpicker.picker_proxy;
   if(!picker) return;

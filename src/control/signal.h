@@ -260,6 +260,7 @@ typedef enum dt_signal_t
   /** \brief This signal is raised when new color picker data are available in the pixelpipe.
     1 module
     2 piece
+    3 pipe
     no returned value
   */
   DT_SIGNAL_CONTROL_PICKERDATA_READY,
