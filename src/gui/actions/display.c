@@ -20,6 +20,7 @@
 #include "common/darktable.h"
 #include "common/collection.h"
 #include "control/control.h"
+#include "develop/dev_pixelpipe.h"
 #include "gui/actions/menu.h"
 #include "gui/gtk.h"
 

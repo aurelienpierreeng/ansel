@@ -369,9 +369,8 @@ static void _process_histogram(dt_backbuf_t *backbuf, cairo_t *cr, const int wid
 {
   // Check if the cache entry we know is still active on the cache
   struct dt_pixel_cache_entry_t *entry;
-  dt_develop_t *dev = darktable.develop;
   void *data = dt_dev_pixelpipe_cache_get_read_only(darktable.pixelpipe_cache, dt_dev_backbuf_get_hash(backbuf),
-                                                    &entry, dev, dev->preview_pipe);
+                                                    &entry);
   if(!data) return;
 
   uint32_t *bins = calloc(4 * HISTOGRAM_BINS, sizeof(uint32_t));
@@ -623,9 +622,8 @@ static void _paint_parade(cairo_t *cr, uint8_t *const restrict image, const int 
 static void _process_waveform(dt_backbuf_t *backbuf, cairo_t *cr, const int width, const int height, const gboolean vertical, const gboolean parade)
 {
   struct dt_pixel_cache_entry_t *entry;
-  dt_develop_t *dev = darktable.develop;
   void *data = dt_dev_pixelpipe_cache_get_read_only(darktable.pixelpipe_cache, dt_dev_backbuf_get_hash(backbuf),
-                                                    &entry, dev, dev->preview_pipe);
+                                                    &entry);
   if(!data) return;
 
   const size_t binning_size = (vertical) ? 4 * TONES * backbuf->height : 4 * TONES * backbuf->width;
@@ -830,9 +828,8 @@ static void _process_vectorscope(dt_backbuf_t *backbuf, cairo_t *cr, const int w
   if(profile == NULL) return;
 
   struct dt_pixel_cache_entry_t *entry;
-  dt_develop_t *dev = darktable.develop;
   void *data = dt_dev_pixelpipe_cache_get_read_only(darktable.pixelpipe_cache, dt_dev_backbuf_get_hash(backbuf),
-                                                    &entry, dev, dev->pipe);
+                                                    &entry);
   if(!data) return;
 
   uint32_t *const restrict vectorscope = dt_pixelpipe_cache_alloc_align_cache(
@@ -1122,9 +1119,8 @@ static void _pixelpipe_pick_from_image(const dt_backbuf_t *const backbuf,
                                        dt_colorpicker_sample_t *const sample, dt_lib_histogram_t *d)
 {
   struct dt_pixel_cache_entry_t *entry;
-  dt_develop_t *dev = darktable.develop;
   void *data = dt_dev_pixelpipe_cache_get_read_only(darktable.pixelpipe_cache, dt_dev_backbuf_get_hash(backbuf),
-                                                    &entry, dev, dev->preview_pipe);
+                                                    &entry);
   if(!data) return;
 
   const float *const pixel = data;

@@ -26,6 +26,7 @@
 #include "common/history.h"
 #include "common/history_merge.h"
 #include "develop/dev_history.h"
+#include "develop/develop.h"
 #include "control/control.h"
 
 

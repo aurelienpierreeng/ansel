@@ -46,6 +46,7 @@
 #include "common/tags.h"
 #include "common/metadata.h"
 #include "control/control.h"
+#include "develop/develop.h"
 
 #include <ctype.h>
 #include <libxml/parser.h>

@@ -1192,8 +1192,10 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   return 0;
 }
 
-static int dt_dev_pixelpipe_process_rec_sample(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
+int dt_dev_pixelpipe_process_rec_sample(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
 {
+  if(!_is_darkroom_compute_pipe(pipe) || !_pipe_needs_gui_sampling_traversal(pipe, dev)) return 0;
+
   uint64_t input_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
 
   /* Sampling only consumes already-published cachelines, so there is no reason to recurse.
@@ -1459,7 +1461,6 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop
   void *buf = NULL;
 
   const gboolean darkroom_pipe = _is_darkroom_compute_pipe(pipe);
-  const gboolean needs_sampling = darkroom_pipe && _pipe_needs_gui_sampling_traversal(pipe, dev);
 
   // If the final output cacheline already matches the current pipeline state,
   // we can skip compute entirely. Darkroom pipes may still need the post-compute
@@ -1471,12 +1472,6 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop
      && buf != NULL)
   {
     _update_backbuf_cache_reference(pipe, roi, entry);
-
-      if(darkroom_pipe && needs_sampling)
-      {
-        dt_dev_pixelpipe_process_rec_sample(pipe, dev);
-      }
-
     return 0;
   }
 
@@ -1572,11 +1567,6 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop
                                      &final_entry, pipe->devid, NULL)
          && final_buf != NULL)
         _update_backbuf_cache_reference(pipe, roi, final_entry);
-
-      if(darkroom_pipe && needs_sampling)
-      {
-        dt_dev_pixelpipe_process_rec_sample(pipe, dev);
-      }
 
       // Note : the last output (backbuf) of the pixelpipe cache is internally locked
       // Whatever consuming it will need to unlock it.

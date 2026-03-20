@@ -232,7 +232,7 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
     struct dt_pixel_cache_entry_t *cache_entry;
     void *data = dt_dev_pixelpipe_cache_get_read_only(darktable.pixelpipe_cache,
                                                       dt_dev_backbuf_get_hash(&dev->preview_pipe->backbuf),
-                                                      &cache_entry, darktable.develop, dev->preview_pipe);
+                                                      &cache_entry);
     if(!data) return TRUE;
 
     wd = dev->preview_pipe->backbuf.width;

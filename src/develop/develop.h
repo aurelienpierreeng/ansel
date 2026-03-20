@@ -417,9 +417,6 @@ void dt_dev_init(dt_develop_t *dev, int32_t gui_attached);
 void dt_dev_cleanup(dt_develop_t *dev);
 GList *dt_dev_load_modules(dt_develop_t *dev);
 
-void dt_dev_process_image_job(dt_develop_t *dev);
-void dt_dev_process_preview_job(dt_develop_t *dev);
-
 typedef enum dt_dev_image_storage_t
 {
   DT_DEV_IMAGE_STORAGE_OK = 0,

@@ -311,11 +311,6 @@ typedef struct dt_dev_pixelpipe_t
   // Temporarily pause the infinite loop of pipeline
   gboolean pause;
 
-  // Timeout in usec to delay the start of the pipeline
-  // Use for example if you want to ensure one pipe starts after another.
-  // Timeout is reset to 0 after the pipeline has run.
-  int timeout;
-
 } dt_dev_pixelpipe_t;
 
 static inline uint64_t dt_dev_pixelpipe_get_hash(const dt_dev_pixelpipe_t *pipe)
@@ -401,6 +396,9 @@ void dt_dev_pixelpipe_synch_top(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *d
 
 // process region of interest of pixels. returns 1 if pipe was altered during processing.
 int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev, dt_iop_roi_t roi);
+
+// Refresh GUI samplers from the cachelines already published by a darkroom pipe.
+int dt_dev_pixelpipe_process_rec_sample(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev);
 
 // disable given op and all that comes after it in the pipe:
 void dt_dev_pixelpipe_disable_after(dt_dev_pixelpipe_t *pipe, const char *op);

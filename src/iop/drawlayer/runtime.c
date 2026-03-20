@@ -19,6 +19,7 @@
 #include "develop/pixelpipe_cache.h"
 #include "control/control.h"
 #include "iop/drawlayer/runtime.h"
+#include "develop/develop.h"
 
 #include <string.h>
 

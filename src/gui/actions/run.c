@@ -20,6 +20,7 @@
 #include "common/collection.h"
 #include "common/selection.h"
 #include "control/jobs.h"
+#include "develop/dev_pixelpipe.h"
 
 static gboolean clear_caches_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {

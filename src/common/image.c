@@ -96,6 +96,7 @@
 #include "control/control.h"
 #include "control/jobs.h"
 #include "develop/lightroom.h"
+#include "develop/develop.h"
 #include "win/filepath.h"
 #ifdef USE_LUA
 #include "lua/image.h"

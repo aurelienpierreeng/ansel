@@ -1832,8 +1832,7 @@ void dt_dev_pixelpipe_cache_auto_destroy_apply(dt_dev_pixelpipe_cache_t *cache,
 }
 
 void *dt_dev_pixelpipe_cache_get_read_only(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash, 
-                                           dt_pixel_cache_entry_t **cache_entry, 
-                                           dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
+                                           dt_pixel_cache_entry_t **cache_entry)
 {
   if(hash == DT_PIXELPIPE_CACHE_HASH_INVALID) return NULL;
 
