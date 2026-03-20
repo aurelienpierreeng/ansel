@@ -137,8 +137,10 @@ const char *deprecated_msg()
 
 
 int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
-             void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+             void *const ovoid)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   const int chs = piece->dsc_in.channels;
   const int width = roi_in->width, height = roi_in->height;
   const float scale = roi_in->scale;

@@ -495,10 +495,10 @@ static inline float get_lut_contrast(const float x, const float contrast, const 
                    : lut[CLAMP((int)(x * 0x10000ul), 0, 0xffff)];
 }
 
-void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
-                     const dt_iop_roi_t *roi_in, const dt_iop_roi_t *roi_out,
-                     struct dt_develop_tiling_t *tiling)
+void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece, struct dt_develop_tiling_t *tiling)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   tiling->factor = 2.0f;
   tiling->factor_cl = 3.0f;
   tiling->maxbuf = 1.0f;
@@ -1264,8 +1264,10 @@ static void _get_selected_area(struct dt_iop_module_t *self, dt_dev_pixelpipe_io
 }
 
 int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
-             void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+             void *const ovoid)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   const dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_iop_work_profile_info(self, self->dev->iop);
 
   const int ch = piece->dsc_in.channels;

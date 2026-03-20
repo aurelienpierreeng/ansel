@@ -188,8 +188,10 @@ void init_presets(dt_iop_module_so_t *self)
 }
 
 int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
-             void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+             void *const ovoid)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
 
   const dt_iop_splittoning_data_t *const data = (dt_iop_splittoning_data_t *)piece->data;
   const float compress = (data->compress / 110.0) / 2.0; // Don't allow 100% compression..

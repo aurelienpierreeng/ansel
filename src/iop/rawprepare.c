@@ -349,8 +349,10 @@ static int BL(const dt_iop_roi_t *const roi_out, const dt_iop_rawprepare_data_t 
    better for all tested cases.
 */
 int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
-             void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+             void *const ovoid)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   const dt_iop_rawprepare_data_t *const d = (dt_iop_rawprepare_data_t *)piece->data;
   // fprintf(stderr, "roi in %d %d %d %d\n", roi_in->x, roi_in->y, roi_in->width, roi_in->height);
   // fprintf(stderr, "roi out %d %d %d %d\n", roi_out->x, roi_out->y, roi_out->width, roi_out->height);
@@ -491,9 +493,10 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, c
 }
 
 #ifdef HAVE_OPENCL
-int process_cl(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
-               const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+int process_cl(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_rawprepare_data_t *d = (dt_iop_rawprepare_data_t *)piece->data;
   dt_iop_rawprepare_global_data_t *gd = (dt_iop_rawprepare_global_data_t *)self->global_data;
 

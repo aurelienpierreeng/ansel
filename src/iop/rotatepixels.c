@@ -293,9 +293,10 @@ void modify_roi_in(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const d
 
 // 3rd (final) pass: you get this input region (may be different from what was requested above),
 // do your best to fill the output region!
-int process(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid,
-             const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+int process(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   const int ch = piece->dsc_in.channels;
   const int ch_width = ch * roi_in->width;
 

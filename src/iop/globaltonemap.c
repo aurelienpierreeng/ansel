@@ -296,8 +296,10 @@ static inline void process_filmic(struct dt_iop_module_t *self, const dt_dev_pix
 }
 
 int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
-             void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+             void *const ovoid)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_global_tonemap_data_t *data = (dt_iop_global_tonemap_data_t *)piece->data;
   const float scale = fmaxf(1.f / roi_in->scale, 1.f);
   const float sigma_r = 8.0f; // does not depend on scale
@@ -338,10 +340,9 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, c
   return 0;
 }
 
-void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
-                     const dt_iop_roi_t *roi_in, const dt_iop_roi_t *roi_out,
-                     struct dt_develop_tiling_t *tiling)
+void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece, struct dt_develop_tiling_t *tiling)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
   dt_iop_global_tonemap_data_t *d = (dt_iop_global_tonemap_data_t *)piece->data;
 
   const float scale = 1.f / roi_in->scale;

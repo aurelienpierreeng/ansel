@@ -201,8 +201,10 @@ void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev
 }
 
 int process(struct dt_iop_module_t *module, const dt_dev_pixelpipe_iop_t *piece, const void *const i,
-             void *const o, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+             void *const o)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_defringe_data_t *const d = (dt_iop_defringe_data_t *)piece->data;
 
   const int order = 1; // 0,1,2

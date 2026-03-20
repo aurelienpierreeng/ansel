@@ -658,8 +658,10 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
 }
 
 int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
-             void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+             void *const ovoid)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   const dt_iop_vignette_data_t *data = (dt_iop_vignette_data_t *)piece->data;
   const dt_iop_roi_t *buf_in = &piece->buf_in;
   const size_t ch = piece->dsc_in.channels;
@@ -811,9 +813,10 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, c
 
 
 #ifdef HAVE_OPENCL
-int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
-               const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_vignette_data_t *data = (dt_iop_vignette_data_t *)piece->data;
   dt_iop_vignette_global_data_t *gd = (dt_iop_vignette_global_data_t *)self->global_data;
 

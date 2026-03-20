@@ -210,9 +210,10 @@ void modify_roi_in(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const d
   roi_in->y = roi_out->y * d->y_scale;
 }
 
-int process(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid,
-             const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+int process(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   const int ch = piece->dsc_in.channels;
   const int ch_width = ch * roi_in->width;
   const struct dt_interpolation *interpolation = dt_interpolation_new(DT_INTERPOLATION_USERPREF);

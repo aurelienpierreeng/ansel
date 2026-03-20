@@ -152,9 +152,10 @@ void init_presets(dt_iop_module_so_t *self)
                              self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 }
 
-int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o,
-             const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   const dt_iop_colorcorrection_data_t *const d = (dt_iop_colorcorrection_data_t *)piece->data;
   const float *const restrict in = (float *)DT_IS_ALIGNED(i);
   float *const restrict out = (float *)DT_IS_ALIGNED(o);
@@ -183,9 +184,10 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, c
 }
 
 #ifdef HAVE_OPENCL
-int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
-               const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_colorcorrection_data_t *d = (dt_iop_colorcorrection_data_t *)piece->data;
   dt_iop_colorcorrection_global_data_t *gd = (dt_iop_colorcorrection_global_data_t *)self->global_data;
 

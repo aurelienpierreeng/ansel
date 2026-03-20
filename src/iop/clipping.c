@@ -1005,8 +1005,10 @@ void modify_roi_in(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *
 // 3rd (final) pass: you get this input region (may be different from what was requested above),
 // do your best to fill the output region!
 int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
-             void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+             void *const ovoid)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
 
   dt_iop_clipping_data_t *d = (dt_iop_clipping_data_t *)piece->data;
 

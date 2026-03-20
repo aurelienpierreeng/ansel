@@ -1508,8 +1508,10 @@ void distort_mask(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *p
 }
 
 int process(struct dt_iop_module_t *module, const dt_dev_pixelpipe_iop_t *piece, const void *const in,
-             void *const out, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+             void *const out)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   // 1. copy the whole image (we'll change only a small part of it)
 
   const int ch = 4;
@@ -1687,10 +1689,10 @@ error:
 int process_cl(struct dt_iop_module_t *module,
                 const dt_dev_pixelpipe_iop_t *piece,
                 const cl_mem_t dev_in,
-                const cl_mem_t dev_out,
-                const dt_iop_roi_t *roi_in,
-                const dt_iop_roi_t *roi_out)
+                const cl_mem_t dev_out)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   cl_int_t err = -999;
   const int devid = piece->pipe->devid;
   const int height = MIN(roi_in->height, roi_out->height);

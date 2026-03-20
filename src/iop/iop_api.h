@@ -112,7 +112,6 @@ DEFAULT(int, blend_colorspace, struct dt_iop_module_t *self, struct dt_dev_pixel
 
 /** report back info for tiling: memory usage and overlap. Memory usage: factor * input_size + overhead */
 DEFAULT(void, tiling_callback, struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
-                                const struct dt_iop_roi_t *roi_in, const struct dt_iop_roi_t *roi_out,
                                 struct dt_develop_tiling_t *tiling);
 
 /** callback methods for gui. */
@@ -189,30 +188,25 @@ OPTIONAL(void, masks_selection_changed, struct dt_iop_module_t *self, const int 
 /** the simplest variant of process(). you can only use OpenMP SIMD here, no intrinsics */
 /** must be provided by each IOP. */
 REQUIRED(int, process, struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece, const void *const i,
-                        void *const o, const struct dt_iop_roi_t *const roi_in,
-                        const struct dt_iop_roi_t *const roi_out);
+                        void *const o);
 /** a tiling variant of process(). */
 DEFAULT(int, process_tiling, struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece, const void *const i,
-                               void *const o, const struct dt_iop_roi_t *const roi_in,
-                               const struct dt_iop_roi_t *const roi_out, const int bpp);
+                               void *const o, const int bpp);
 
 #if defined(__SSE__)
 /** a variant process(), that can contain SSE2 intrinsics. */
 /** can be provided by each IOP. */
 OPTIONAL(int, process_sse2, struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece, const void *const i,
-                             void *const o, const struct dt_iop_roi_t *const roi_in,
-                             const struct dt_iop_roi_t *const roi_out);
+                             void *const o);
 #endif
 
 #ifdef HAVE_OPENCL
 /** the opencl equivalent of process(). */
 OPTIONAL(int, process_cl, struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in,
-                          cl_mem dev_out, const struct dt_iop_roi_t *const roi_in,
-                          const struct dt_iop_roi_t *const roi_out);
+                          cl_mem dev_out);
 /** a tiling variant of process_cl(). */
 OPTIONAL(int, process_tiling_cl, struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece, const void *const i,
-                                 void *const o, const struct dt_iop_roi_t *const roi_in,
-                                 const struct dt_iop_roi_t *const roi_out, const int bpp);
+                                 void *const o, const int bpp);
 #endif
 
 /** this functions are used for distort iop

@@ -237,8 +237,9 @@ static void colorpicker_callback(GtkColorButton *widget, dt_iop_module_t *self)
 }
 
 int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
-             void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+             void *const ovoid)
 {
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   const dt_iop_invert_data_t *const d = (dt_iop_invert_data_t *)piece->data;
 
   const float *const m = piece->dsc_in.processed_maximum;

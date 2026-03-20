@@ -200,9 +200,10 @@ static float envelope(const float L)
   }
 }
 
-int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o,
-             const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_monochrome_data_t *d = (dt_iop_monochrome_data_t *)piece->data;
   const float sigma2 = (d->size * 128.0) * (d->size * 128.0f);
 // first pass: evaluate color filter:
@@ -252,10 +253,10 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, c
 }
 
 
-void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
-                     const dt_iop_roi_t *roi_in, const dt_iop_roi_t *roi_out,
-                     struct dt_develop_tiling_t *tiling)
+void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece, struct dt_develop_tiling_t *tiling)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   const float scale = 1.f / roi_in->scale;
   const float sigma_s = 20.0f / scale;
   const float sigma_r = 250.0f;

@@ -319,9 +319,10 @@ static void process_fastpath_apply_tonecurves(const dt_iop_colorout_data_t *cons
 }
 
 #ifdef HAVE_OPENCL
-int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
-               const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_colorout_data_t *d = (dt_iop_colorout_data_t *)piece->data;
   dt_iop_colorout_global_data_t *gd = (dt_iop_colorout_global_data_t *)self->global_data;
   cl_mem dev_m = NULL, dev_r = NULL, dev_g = NULL, dev_b = NULL, dev_coeffs = NULL;
@@ -414,8 +415,10 @@ static inline void process_fastpath_matrix(const float *const restrict in, float
 }
 
 int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
-             void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+             void *const ovoid)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   const dt_iop_colorout_data_t *const d = (dt_iop_colorout_data_t *)piece->data;
   const int gamutcheck = (d->mode == DT_PROFILE_GAMUTCHECK);
   const size_t npixels = (size_t)roi_out->width * roi_out->height;

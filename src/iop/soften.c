@@ -126,8 +126,10 @@ const char **description(struct dt_iop_module_t *self)
 }
 
 int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
-             void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+             void *const ovoid)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   const dt_iop_soften_data_t *const d = (const dt_iop_soften_data_t *const)piece->data;
 
   const float brightness = 1.0 / exp2f(-d->brightness);
@@ -170,10 +172,10 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, c
   return 0;
 }
 
-void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
-                     const dt_iop_roi_t *roi_in, const dt_iop_roi_t *roi_out,
-                     struct dt_develop_tiling_t *tiling)
+void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece, struct dt_develop_tiling_t *tiling)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_soften_data_t *d = (dt_iop_soften_data_t *)piece->data;
 
   const float w = piece->iwidth;

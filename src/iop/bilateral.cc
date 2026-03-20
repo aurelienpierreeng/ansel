@@ -133,8 +133,10 @@ const char **description(struct dt_iop_module_t *self)
 }
 
 int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
-             void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+             void *const ovoid)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_bilateral_data_t *data = (dt_iop_bilateral_data_t *)piece->data;
 
   const int ch = piece->dsc_in.channels;
@@ -310,10 +312,10 @@ void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev
   piece->data = NULL;
 }
 
-void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
-                     const dt_iop_roi_t *roi_in, const dt_iop_roi_t *roi_out,
-                     struct dt_develop_tiling_t *tiling)
+void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece, struct dt_develop_tiling_t *tiling)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_bilateral_data_t *data = (dt_iop_bilateral_data_t *)piece->data;
   float sigma[5];
   sigma[0] = data->sigma[0] * roi_in->scale;

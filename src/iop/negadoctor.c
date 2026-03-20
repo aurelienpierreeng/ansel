@@ -274,9 +274,9 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_
 
 
 int process(struct dt_iop_module_t *const self, const dt_dev_pixelpipe_iop_t *const piece,
-             const void *const restrict ivoid, void *const restrict ovoid,
-             const dt_iop_roi_t *const restrict roi_in, const dt_iop_roi_t *const restrict roi_out)
+             const void *const restrict ivoid, void *const restrict ovoid)
 {
+  const dt_iop_roi_t *const restrict roi_out = &piece->roi_out;
   const dt_iop_negadoctor_data_t *const d = piece->data;
   const float *const restrict in = (float *)ivoid;
   float *const restrict out = (float *)ovoid;
@@ -321,9 +321,9 @@ int process(struct dt_iop_module_t *const self, const dt_dev_pixelpipe_iop_t *co
 
 
 #ifdef HAVE_OPENCL
-int process_cl(struct dt_iop_module_t *const self, const dt_dev_pixelpipe_iop_t *const piece, cl_mem dev_in, cl_mem dev_out,
-               const dt_iop_roi_t *const restrict roi_in, const dt_iop_roi_t *const restrict roi_out)
+int process_cl(struct dt_iop_module_t *const self, const dt_dev_pixelpipe_iop_t *const piece, cl_mem dev_in, cl_mem dev_out)
 {
+  const dt_iop_roi_t *const restrict roi_in = &piece->roi_in;
   const dt_iop_negadoctor_data_t *const d = (dt_iop_negadoctor_data_t *)piece->data;
   const dt_iop_negadoctor_global_data_t *const gd = (dt_iop_negadoctor_global_data_t *)self->global_data;
 

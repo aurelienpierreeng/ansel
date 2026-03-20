@@ -990,9 +990,9 @@ uint16_t calculate_clut_3dl(const char *const filepath, float **clut)
 }
 
 #ifdef HAVE_OPENCL
-int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
-               const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
   dt_iop_lut3d_data_t *d = (dt_iop_lut3d_data_t *)piece->data;
   dt_iop_lut3d_global_data_t *gd = (dt_iop_lut3d_global_data_t *)self->global_data;
   cl_int err = CL_SUCCESS;
@@ -1071,9 +1071,9 @@ cleanup:
 }
 #endif
 
-int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ibuf, void *const obuf,
-             const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ibuf, void *const obuf)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
   dt_iop_lut3d_data_t *d = (dt_iop_lut3d_data_t *)piece->data;
   const int width = roi_in->width;
   const int height = roi_in->height;

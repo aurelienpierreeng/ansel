@@ -206,8 +206,7 @@ typedef struct dt_iop_module_so_t
   /** which results in this widget here, too. */
 
   int (*process_plain)(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
-                       const void *const i, void *const o, const struct dt_iop_roi_t *const roi_in,
-                       const struct dt_iop_roi_t *const roi_out);
+                       const void *const i, void *const o);
 
   // introspection related data
   gboolean have_introspection;
@@ -337,8 +336,7 @@ typedef struct dt_iop_module_t
   guint timeout_handle;
 
   int (*process_plain)(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
-                       const void *const i, void *const o, const struct dt_iop_roi_t *const roi_in,
-                       const struct dt_iop_roi_t *const roi_out);
+                       const void *const i, void *const o);
 
   // introspection related data
   gboolean have_introspection;

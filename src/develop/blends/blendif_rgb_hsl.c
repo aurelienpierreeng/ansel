@@ -244,9 +244,10 @@ static void _blendif_combine_channels(const float *const restrict pixels, float 
 }
 
 void dt_develop_blendif_rgb_hsl_make_mask(const struct dt_dev_pixelpipe_iop_t *piece, const float *const restrict a,
-                                          const float *const restrict b, const struct dt_iop_roi_t *const roi_in,
-                                          const struct dt_iop_roi_t *const roi_out, float *const restrict mask)
+                                          const float *const restrict b, float *const restrict mask)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   const dt_develop_blend_params_t *const d = (const dt_develop_blend_params_t *const)piece->blendop_data;
 
   if(piece->dsc_in.channels != DT_BLENDIF_RGB_CH) return;
@@ -1318,12 +1319,10 @@ static inline void _copy_mask(const float *const restrict a, float *const restri
 }
 
 void dt_develop_blendif_rgb_hsl_blend(const struct dt_dev_pixelpipe_iop_t *piece,
-                                      const float *const restrict a, float *const restrict b,
-                                      const struct dt_iop_roi_t *const roi_in,
-                                      const struct dt_iop_roi_t *const roi_out,
-                                      const float *const restrict mask,
-                                      const dt_dev_pixelpipe_display_mask_t request_mask_display)
+                                      const float *const restrict a, float *const restrict b, const float *const restrict mask, const dt_dev_pixelpipe_display_mask_t request_mask_display)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   const dt_develop_blend_params_t *const d = (const dt_develop_blend_params_t *const)piece->blendop_data;
 
   if(piece->dsc_in.channels != DT_BLENDIF_RGB_CH) return;

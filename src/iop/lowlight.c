@@ -149,9 +149,10 @@ static float lookup(const float *lut, const float i)
   return lut[bin1] * f + lut[bin0] * (1. - f);
 }
 
-int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o,
-             const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_lowlight_data_t *d = (dt_iop_lowlight_data_t *)(piece->data);
   const int ch = 4;
 

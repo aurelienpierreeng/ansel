@@ -692,9 +692,10 @@ static int _process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
   return 0;
 }
 
-int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o,
-             const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   const float *in = (float *)i;
   float *out = (float *)o;
   return _process(self, piece, in, out, roi_in, roi_out, piece->dsc_in.channels);

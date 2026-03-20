@@ -1030,9 +1030,10 @@ static void _auto_levels(const float *const img, const int width, const int heig
   p->levels[channel][1] = (p->levels[channel][2] + p->levels[channel][0]) / 2.f;
 }
 
-int process(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid,
-             const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+int process(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
 
   const dt_iop_rgblevels_data_t *const d = (dt_iop_rgblevels_data_t *)piece->data;
   dt_iop_rgblevels_params_t *p = (dt_iop_rgblevels_params_t *)&d->params;

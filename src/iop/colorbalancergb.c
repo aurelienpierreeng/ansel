@@ -579,8 +579,9 @@ static inline float lookup_gamut(const float *const gamut_lut, const float x)
 
 
 int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
-             void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+             void *const ovoid)
 {
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_colorbalancergb_data_t *d = (dt_iop_colorbalancergb_data_t *)piece->data;
   dt_iop_colorbalancergb_gui_data_t *g = (dt_iop_colorbalancergb_gui_data_t *)self->gui_data;
   const struct dt_iop_order_iccprofile_info_t *const work_profile
@@ -668,7 +669,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, c
   const float L_white = Y_to_dt_UCS_L_star(d->white_fulcrum);
   #ifdef _OPENMP
   #pragma omp parallel for default(none) \
-    dt_omp_firstprivate(in, out, roi_in, roi_out, d, g, mask_display, gamut_LUT, npixels, \
+    dt_omp_firstprivate(in, out, roi_out, d, g, mask_display, gamut_LUT, npixels, \
       global, highlights, shadows, midtones, chroma, saturation, brilliance, checker_1, checker_2, L_white, \
       input0, input1, input2, output0, output1, output2, global_v, highlights_v, shadows_v, midtones_v, \
       checker_color_1_v, checker_color_2_v, jz_ai0, jz_ai1, jz_ai2) \
@@ -900,9 +901,9 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, c
 
 
 #if HAVE_OPENCL
-int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
-               const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_colorbalancergb_data_t *const d = (dt_iop_colorbalancergb_data_t *)piece->data;
   dt_iop_colorbalancergb_global_data_t *const gd = (dt_iop_colorbalancergb_global_data_t *)self->global_data;
   dt_iop_colorbalancergb_gui_data_t *g = (dt_iop_colorbalancergb_gui_data_t *)self->gui_data;

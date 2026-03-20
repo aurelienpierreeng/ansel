@@ -620,7 +620,7 @@ static int _default_process_tiling_ptp(struct dt_iop_module_t *self, const struc
 
   /* get tiling requirements of module */
   dt_develop_tiling_t tiling = { 0 };
-  self->tiling_callback(self, piece, roi_in, roi_out, &tiling);
+  self->tiling_callback(self, piece, &tiling);
 
   /* tiling really does not make sense in these cases. standard process() is not better or worse than we are
    */
@@ -780,7 +780,10 @@ static int _default_process_tiling_ptp(struct dt_iop_module_t *self, const struc
         memcpy((char *)input + j * wd * in_bpp, (char *)ivoid + ioffs + j * ipitch, (size_t)wd * in_bpp);
 
       /* call process() of module */
-      int err = self->process(self, piece, input, output, &iroi, &oroi);
+      dt_dev_pixelpipe_iop_t piece_tile = *piece;
+      piece_tile.roi_in = iroi;
+      piece_tile.roi_out = oroi;
+      int err = self->process(self, &piece_tile, input, output);
       if(err)
       {
         dt_pixelpipe_cache_free_align(input);
@@ -832,7 +835,7 @@ fallback:
   piece->pipe->tiling = 0;
   dt_print(DT_DEBUG_TILING, "[default_process_tiling_ptp] fall back to standard processing for module '%s'\n",
            self->op);
-  int err = self->process(self, piece, ivoid, ovoid, roi_in, roi_out);
+  int err = self->process(self, piece, ivoid, ovoid);
   return err;
 }
 
@@ -870,7 +873,7 @@ static int _default_process_tiling_roi(struct dt_iop_module_t *self, const struc
 
   /* get tiling requirements of module */
   dt_develop_tiling_t tiling = { 0 };
-  self->tiling_callback(self, piece, roi_in, roi_out, &tiling);
+  self->tiling_callback(self, piece, &tiling);
 
   /* tiling really does not make sense in these cases. standard process() is not better or worse than we are
    */
@@ -1112,7 +1115,10 @@ static int _default_process_tiling_roi(struct dt_iop_module_t *self, const struc
                (size_t)iroi_full.width * in_bpp);
 
       /* call process() of module */
-      int err = self->process(self, piece, input, output, &iroi_full, &oroi_full);
+      dt_dev_pixelpipe_iop_t piece_tile = *piece;
+      piece_tile.roi_in = iroi_full;
+      piece_tile.roi_out = oroi_full;
+      int err = self->process(self, &piece_tile, input, output);
       if(err)
       {
         dt_pixelpipe_cache_free_align(input);
@@ -1155,7 +1161,7 @@ fallback:
   piece->pipe->tiling = 0;
   dt_print(DT_DEBUG_TILING, "[default_process_tiling_roi] fall back to standard processing for module '%s'\n",
            self->op);
-  int err = self->process(self, piece, ivoid, ovoid, roi_in, roi_out);
+  int err = self->process(self, piece, ivoid, ovoid);
   return err;
 }
 
@@ -1167,9 +1173,10 @@ fallback:
    "clipping",
    "flip" as this may flip or mirror the image. */
 int default_process_tiling(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
-                           const void *const ivoid, void *const ovoid, const dt_iop_roi_t *const roi_in,
-                           const dt_iop_roi_t *const roi_out, const int in_bpp)
+                           const void *const ivoid, void *const ovoid, const int in_bpp)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   if(memcmp(roi_in, roi_out, sizeof(struct dt_iop_roi_t)) || (self->flags() & IOP_FLAGS_TILING_FULL_ROI))
     return _default_process_tiling_roi(self, piece, ivoid, ovoid, roi_in, roi_out, in_bpp);
   else
@@ -1205,7 +1212,7 @@ static int _default_process_tiling_cl_ptp(struct dt_iop_module_t *self, const st
 
   /* get tiling requirements of module */
   dt_develop_tiling_t tiling = { 0 };
-  self->tiling_callback(self, piece, roi_in, roi_out, &tiling);
+  self->tiling_callback(self, piece, &tiling);
 
   /* shall we use pinned memory transfers? */
   gboolean use_pinned_memory = dt_opencl_use_pinned_memory(devid);
@@ -1416,7 +1423,10 @@ static int _default_process_tiling_cl_ptp(struct dt_iop_module_t *self, const st
       }
 
       /* call process_cl of module */
-      if(!self->process_cl(self, piece, input, output, &iroi, &oroi)) goto error;
+      dt_dev_pixelpipe_iop_t piece_tile = *piece;
+      piece_tile.roi_in = iroi;
+      piece_tile.roi_out = oroi;
+      if(!self->process_cl(self, &piece_tile, input, output)) goto error;
 
       if(use_pinned_memory)
       {
@@ -1540,7 +1550,7 @@ static int _default_process_tiling_cl_roi(struct dt_iop_module_t *self, const st
 
   /* get tiling requirements of module */
   dt_develop_tiling_t tiling = { 0 };
-  self->tiling_callback(self, piece, roi_in, roi_out, &tiling);
+  self->tiling_callback(self, piece, &tiling);
 
   /* shall we use pinned memory transfers? */
   gboolean use_pinned_memory = dt_opencl_use_pinned_memory(devid);
@@ -1848,7 +1858,10 @@ static int _default_process_tiling_cl_roi(struct dt_iop_module_t *self, const st
       }
 
       /* call process_cl of module */
-      if(!self->process_cl(self, piece, input, output, &iroi_full, &oroi_full)) goto error;
+      dt_dev_pixelpipe_iop_t piece_tile = *piece;
+      piece_tile.roi_in = iroi_full;
+      piece_tile.roi_out = oroi_full;
+      if(!self->process_cl(self, &piece_tile, input, output)) goto error;
 
       if(use_pinned_memory)
       {
@@ -1921,9 +1934,10 @@ error:
    _default_process_tiling_cl_ptp() is able to handle standard cases where pixels do not change their places.
    _default_process_tiling_cl_roi() takes care of all other cases where image gets distorted. */
 int default_process_tiling_cl(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
-                              const void *const ivoid, void *const ovoid, const dt_iop_roi_t *const roi_in,
-                              const dt_iop_roi_t *const roi_out, const int in_bpp)
+                              const void *const ivoid, void *const ovoid, const int in_bpp)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   if(memcmp(roi_in, roi_out, sizeof(struct dt_iop_roi_t)) || (self->flags() & IOP_FLAGS_TILING_FULL_ROI))
     return _default_process_tiling_cl_roi(self, piece, ivoid, ovoid, roi_in, roi_out, in_bpp);
   else
@@ -1932,8 +1946,7 @@ int default_process_tiling_cl(struct dt_iop_module_t *self, const struct dt_dev_
 
 #else
 int default_process_tiling_cl(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
-                              const void *const ivoid, void *const ovoid, const dt_iop_roi_t *const roi_in,
-                              const dt_iop_roi_t *const roi_out, const int in_bpp)
+                              const void *const ivoid, void *const ovoid, const int in_bpp)
 {
   return FALSE;
 }
@@ -1947,9 +1960,10 @@ int default_process_tiling_cl(struct dt_iop_module_t *self, const struct dt_dev_
    live with that.
    (1) Small overhead like look-up-tables in tonecurve can be ignored safely. */
 void default_tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
-                             const dt_iop_roi_t *roi_in, const dt_iop_roi_t *roi_out,
                              struct dt_develop_tiling_t *tiling)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   const float ioratio
       = ((float)roi_out->width * (float)roi_out->height) / ((float)roi_in->width * (float)roi_in->height);
 

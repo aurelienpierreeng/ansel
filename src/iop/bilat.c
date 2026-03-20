@@ -200,9 +200,9 @@ void init_presets(dt_iop_module_so_t *self)
 
 
 #ifdef HAVE_OPENCL
-int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
-               const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
   dt_iop_bilat_data_t *d = (dt_iop_bilat_data_t *)piece->data;
 
   if(d->mode == s_mode_bilateral)
@@ -246,10 +246,9 @@ error_ll:
 #endif
 
 
-void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
-                     const dt_iop_roi_t *roi_in, const dt_iop_roi_t *roi_out,
-                     struct dt_develop_tiling_t *tiling)
+void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece, struct dt_develop_tiling_t *tiling)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
   dt_iop_bilat_data_t *d = (dt_iop_bilat_data_t *)piece->data;
   // the total scale is composed of scale before input to the pipeline (iscale),
   // and the scale of the roi.
@@ -327,9 +326,9 @@ void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev
 
 
 #if defined(__SSE2__)
-int process_sse2(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o,
-             const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+int process_sse2(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
   // this is called for preview and full pipe separately, each with its own pixelpipe piece.
   // get our data struct:
   dt_iop_bilat_data_t *d = (dt_iop_bilat_data_t *)piece->data;
@@ -361,9 +360,9 @@ int process_sse2(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *pie
 }
 #endif
 
-int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o,
-             const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
   // this is called for preview and full pipe separately, each with its own pixelpipe piece.
   // get our data struct:
   dt_iop_bilat_data_t *d = (dt_iop_bilat_data_t *)piece->data;

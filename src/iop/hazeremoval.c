@@ -462,8 +462,10 @@ error:
 
 
 int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
-             void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+             void *const ovoid)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_hazeremoval_gui_data_t *const g = (dt_iop_hazeremoval_gui_data_t*)self->gui_data;
   dt_iop_hazeremoval_params_t *d = piece->data;
   int err = 0;
@@ -758,9 +760,7 @@ static int dehaze_cl(struct dt_iop_module_t *self, int devid, cl_mem img_in, cl_
   return err;
 }
 
-void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
-                     const dt_iop_roi_t *roi_in, const dt_iop_roi_t *roi_out,
-                     struct dt_develop_tiling_t *tiling)
+void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece, struct dt_develop_tiling_t *tiling)
 {
   tiling->factor = 2.5f;  // in + out + two single-channel temp buffers
   tiling->factor_cl = 5.0f;
@@ -772,9 +772,10 @@ void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe
   tiling->yalign = 1;
 }
 
-int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem img_in, cl_mem img_out,
-               const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem img_in, cl_mem img_out)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_hazeremoval_gui_data_t *const g = (dt_iop_hazeremoval_gui_data_t*)self->gui_data;
   dt_iop_hazeremoval_params_t *d = piece->data;
 

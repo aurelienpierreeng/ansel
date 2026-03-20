@@ -383,9 +383,10 @@ static void _copy_output(const float *const restrict in, uint8_t *const restrict
 }
 
 
-int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o,
-             const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   const dt_dev_pixelpipe_display_mask_t mask_display = piece->pipe->mask_display;
   const gboolean fcolor = dt_conf_is_equal("channel_display", "false color");
 
@@ -450,9 +451,10 @@ static int _false_color_channel_to_kernel_code(const dt_dev_pixelpipe_display_ma
   }
 }
 
-int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
-               const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_gamma_global_data_t *gd = (dt_iop_gamma_global_data_t *)self->global_data;
   const int devid = piece->pipe->devid;
   cl_int err = CL_SUCCESS;

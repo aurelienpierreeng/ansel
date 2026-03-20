@@ -235,10 +235,10 @@ commit_params(dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_t *pi
 /** optional, always needed if tiling is permitted by setting IOP_FLAGS_ALLOW_TILING
     Also define this if the module uses more memory on the OpenCl device than the in& output buffers.
 */
-void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
-                     const dt_iop_roi_t *roi_in, const dt_iop_roi_t *roi_out,
-                     struct dt_develop_tiling_t *tiling)
+void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece, struct dt_develop_tiling_t *tiling)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   tiling->factor = 2.0f;    // input buffer + output buffer; increase if additional memory allocated
   tiling->factor_cl = 2.0f; // same, but for OpenCL code path running on GPU
   tiling->maxbuf = 1.0f;    // largest buffer needed regardless of how tiling splits up the processing
@@ -313,9 +313,10 @@ int distort_backtransform(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, 
           a signal should be used (raise a signal here) and a corresponding callback
           must be connected to this signal.
 */
-int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid,
-             const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   // this is called for preview and full pipe separately, each with its own pixelpipe piece.
   // get our data struct:
   dt_iop_useless_params_t *d = (dt_iop_useless_params_t *)piece->data;

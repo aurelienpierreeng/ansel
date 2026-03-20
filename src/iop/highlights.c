@@ -290,9 +290,10 @@ static cl_int process_laplacian_xtrans_cl(struct dt_iop_module_t *self, const dt
                                           cl_mem dev_in, cl_mem dev_out, const dt_iop_roi_t *const roi_in,
                                           const dt_iop_roi_t *const roi_out, const dt_aligned_pixel_t clips);
 
-int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
-               const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_highlights_data_t *d = (dt_iop_highlights_data_t *)piece->data;
   dt_iop_highlights_gui_data_t *g = (dt_iop_highlights_gui_data_t *)self->gui_data;
   dt_iop_highlights_global_data_t *gd = (dt_iop_highlights_global_data_t *)self->global_data;
@@ -446,10 +447,10 @@ error:
 }
 #endif
 
-void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
-                     const dt_iop_roi_t *roi_in, const dt_iop_roi_t *roi_out,
-                     struct dt_develop_tiling_t *tiling)
+void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece, struct dt_develop_tiling_t *tiling)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_highlights_data_t *d = (dt_iop_highlights_data_t *)piece->data;
   const uint32_t filters = piece->dsc_in.filters;
 
@@ -2626,8 +2627,10 @@ static void process_visualize(const dt_dev_pixelpipe_iop_t *piece, const void *c
 }
 
 int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
-             void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+             void *const ovoid)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   const uint32_t filters = piece->dsc_in.filters;
   dt_iop_highlights_data_t *data = (dt_iop_highlights_data_t *)piece->data;
   dt_iop_highlights_gui_data_t *g = (dt_iop_highlights_gui_data_t *)self->gui_data;

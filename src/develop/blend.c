@@ -287,8 +287,9 @@ static inline float _detail_mask_threshold(const float level, const gboolean det
   return 0.005f * (detail ? powf(level, 2.0f) : 1.0f - powf(fabs(level), 0.5f ));
 }
 
-static void _refine_with_detail_mask(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece, float *mask, const struct dt_iop_roi_t *const roi_in, const struct dt_iop_roi_t *const roi_out, const float level)
+static void _refine_with_detail_mask(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece, float *mask, const float level)
 {
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   if(level == 0.0f) return;
   const gboolean info = ((darktable.unmuted & DT_DEBUG_MASKS) && (piece->pipe->type == DT_DEV_PIXELPIPE_FULL));
 
@@ -589,9 +590,10 @@ static void _develop_blend_process_mask_tone_curve(float *const restrict mask, c
 
 
 int dt_develop_blend_process(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
-                              const void *const ivoid, void *const ovoid, const struct dt_iop_roi_t *const roi_in,
-                              const struct dt_iop_roi_t *const roi_out)
+                              const void *const ivoid, void *const ovoid)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   if(piece->pipe->bypass_blendif && self->dev->gui_attached && (self == self->dev->gui_module)) return 0;
 
   const dt_develop_blend_params_t *const d = (const dt_develop_blend_params_t *const)piece->blendop_data;
@@ -709,26 +711,26 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, const struct dt_dev_p
       return 1;
     }
 
-    _refine_with_detail_mask(self, piece, mask, roi_in, roi_out, d->details);
+    _refine_with_detail_mask(self, piece, mask, d->details);
 
     // get parametric mask (if any) and apply global opacity
     switch(blend_csp)
     {
       case DEVELOP_BLEND_CS_LAB:
         dt_develop_blendif_lab_make_mask(piece, (const float *const restrict)ivoid,
-                                         (const float *const restrict)ovoid, roi_in, roi_out, mask);
+                                         (const float *const restrict)ovoid, mask);
         break;
       case DEVELOP_BLEND_CS_RGB_DISPLAY:
         dt_develop_blendif_rgb_hsl_make_mask(piece, (const float *const restrict)ivoid,
-                                             (const float *const restrict)ovoid, roi_in, roi_out, mask);
+                                             (const float *const restrict)ovoid, mask);
         break;
       case DEVELOP_BLEND_CS_RGB_SCENE:
         dt_develop_blendif_rgb_jzczhz_make_mask(piece, (const float *const restrict)ivoid,
-                                                (const float *const restrict)ovoid, roi_in, roi_out, mask);
+                                                (const float *const restrict)ovoid, mask);
         break;
       case DEVELOP_BLEND_CS_RAW:
         dt_develop_blendif_raw_make_mask(piece, (const float *const restrict)ivoid,
-                                         (const float *const restrict)ovoid, roi_in, roi_out, mask);
+                                         (const float *const restrict)ovoid, mask);
         break;
       default:
         break;
@@ -797,19 +799,19 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, const struct dt_dev_p
   {
     case DEVELOP_BLEND_CS_LAB:
       dt_develop_blendif_lab_blend(piece, (const float *const restrict)ivoid, (float *const restrict)ovoid,
-                                   roi_in, roi_out, mask, request_mask_display);
+                                   mask, request_mask_display);
       break;
     case DEVELOP_BLEND_CS_RGB_DISPLAY:
       dt_develop_blendif_rgb_hsl_blend(piece, (const float *const restrict)ivoid, (float *const restrict)ovoid,
-                                       roi_in, roi_out, mask, request_mask_display);
+                                       mask, request_mask_display);
       break;
     case DEVELOP_BLEND_CS_RGB_SCENE:
       dt_develop_blendif_rgb_jzczhz_blend(piece, (const float *const restrict)ivoid, (float *const restrict)ovoid,
-                                          roi_in, roi_out, mask, request_mask_display);
+                                          mask, request_mask_display);
       break;
     case DEVELOP_BLEND_CS_RAW:
       dt_develop_blendif_raw_blend(piece, (const float *const restrict)ivoid, (float *const restrict)ovoid,
-                                   roi_in, roi_out, mask, request_mask_display);
+                                   mask, request_mask_display);
       break;
     default:
       break;
@@ -842,9 +844,9 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, const struct dt_dev_p
 }
 
 #ifdef HAVE_OPENCL
-static void _refine_with_detail_mask_cl(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece, float *mask, const struct dt_iop_roi_t *roi_in,
-                                const struct dt_iop_roi_t *roi_out, const float level, const int devid)
+static void _refine_with_detail_mask_cl(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece, float *mask, const float level, const int devid)
 {
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   if(level == 0.0f) return;
   const gboolean info = (darktable.unmuted & DT_DEBUG_MASKS);
 
@@ -983,9 +985,10 @@ static inline void _blend_process_cl_exchange(cl_mem *a, cl_mem *b)
 }
 
 int dt_develop_blend_process_cl(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
-                                cl_mem dev_in, cl_mem dev_out, const struct dt_iop_roi_t *roi_in,
-                                const struct dt_iop_roi_t *roi_out)
+                                cl_mem dev_in, cl_mem dev_out)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   if(piece->pipe->bypass_blendif && self->dev->gui_attached && (self == self->dev->gui_module)) return 0;
 
   dt_develop_blend_params_t *const d = (dt_develop_blend_params_t *const)piece->blendop_data;
@@ -1184,7 +1187,7 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, const struct dt_de
     {
       goto error;
     }
-    _refine_with_detail_mask_cl(self, piece, mask, roi_in, roi_out, d->details, devid);
+    _refine_with_detail_mask_cl(self, piece, mask, d->details, devid);
 
     // write mask from host to device
     dev_mask_2 = dt_opencl_alloc_device(devid, owidth, oheight, sizeof(float));
@@ -1499,7 +1502,6 @@ int dt_develop_blend_version(void)
 
 /** report back specific memory requirements for blend step (only relevant for OpenCL path) */
 void tiling_callback_blendop(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
-                             const dt_iop_roi_t *roi_in, const dt_iop_roi_t *roi_out,
                              struct dt_develop_tiling_t *tiling)
 {
   tiling->factor = 3.5f; // in + out + (guide, tmp) + two quarter buffers for the mask

@@ -680,8 +680,10 @@ static void process_random(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t 
 
 
 int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
-             void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+             void *const ovoid)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_dither_data_t *data = (dt_iop_dither_data_t *)piece->data;
 
   if(data->dither_type == DITHER_RANDOM)
@@ -694,9 +696,10 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, c
 }
 
 #ifdef HAVE_OPENCL
-int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
-               const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   const dt_iop_dither_data_t *const d = (dt_iop_dither_data_t *)piece->data;
   dt_iop_dither_global_data_t *const gd = (dt_iop_dither_global_data_t *)self->global_data;
   cl_mem dev_work = NULL;
@@ -732,8 +735,10 @@ error:
 
 #if defined(__SSE2__)
 int process_sse2(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
-                  void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+                  void *const ovoid)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_dither_data_t *data = (dt_iop_dither_data_t *)piece->data;
 
   if(data->dither_type == DITHER_RANDOM)

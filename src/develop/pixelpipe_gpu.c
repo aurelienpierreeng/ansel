@@ -285,7 +285,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
                                           process_input_dsc.bpp, piece->dsc_out.bpp,
                                           cst_before_cl, cst_after_cl);
 
-      if(!module->process_cl(module, (dt_dev_pixelpipe_iop_t *)piece, cl_mem_process_input, cl_mem_output, &piece->roi_in, &piece->roi_out))
+      if(!module->process_cl(module, piece, cl_mem_process_input, cl_mem_output))
       goto error;
 
     *pixelpipe_flow |= PIXELPIPE_FLOW_PROCESSED_ON_GPU;
@@ -364,8 +364,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
         }
       }
 
-      if(dt_develop_blend_process_cl(module, (dt_dev_pixelpipe_iop_t *)piece, cl_mem_blend_input, cl_mem_blend_output,
-                                     &piece->roi_in, &piece->roi_out))
+      if(dt_develop_blend_process_cl(module, piece, cl_mem_blend_input, cl_mem_blend_output))
         goto error;
 
       if((blend_transforms & DT_DEV_PIXELPIPE_BLEND_TRANSFORM_OUTPUT)
@@ -438,8 +437,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
       input_locked = TRUE;
     }
 
-    int fail = !module->process_tiling_cl(module, piece, module_input, output,
-                                          &piece->roi_in, &piece->roi_out, input_entry->dsc.bpp);
+    int fail = !module->process_tiling_cl(module, piece, module_input, output, input_entry->dsc.bpp);
     dt_opencl_finish(pipe->devid);
 
     if(fail)
@@ -507,7 +505,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
       }
     }
 
-    dt_develop_blend_process(module, piece, blend_input, blend_output, &piece->roi_in, &piece->roi_out);
+    dt_develop_blend_process(module, piece, blend_input, blend_output);
     *pixelpipe_flow |= PIXELPIPE_FLOW_BLENDED_ON_CPU;
     *pixelpipe_flow &= ~(PIXELPIPE_FLOW_BLENDED_ON_GPU);
 

@@ -171,9 +171,10 @@ static int bucket_next(unsigned int *state, unsigned int max)
   return next;
 }
 
-int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
-               const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_nlmeans_params_t *d = (dt_iop_nlmeans_params_t *)piece->data;
   dt_iop_nlmeans_global_data_t *gd = (dt_iop_nlmeans_global_data_t *)self->global_data;
 #if USE_NEW_IMPL_CL
@@ -404,10 +405,10 @@ error:
 #endif
 
 
-void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
-                     const dt_iop_roi_t *roi_in, const dt_iop_roi_t *roi_out,
-                     struct dt_develop_tiling_t *tiling)
+void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece, struct dt_develop_tiling_t *tiling)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_nlmeans_params_t *d = (dt_iop_nlmeans_params_t *)piece->data;
   const int P = ceilf(d->radius * fmin(roi_in->scale, 2.0f)); // pixel filter size
   const int K = ceilf(7 * fmin(roi_in->scale, 2.0f));         // nbhood
@@ -463,8 +464,10 @@ static void process_cpu(const dt_dev_pixelpipe_iop_t *piece, const void *const i
 }
 
 int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
-             void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+             void *const ovoid)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   process_cpu(piece,ivoid,ovoid,roi_in,roi_out,nlmeans_denoise);
   return 0;
 }
@@ -472,8 +475,10 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, c
 #if defined(__SSE__)
 /** process, all real work is done here. */
 int process_sse2(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
-                  void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+                  void *const ovoid)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   process_cpu(piece,ivoid,ovoid,roi_in,roi_out,nlmeans_denoise_sse2);
   return 0;
 }

@@ -1126,9 +1126,10 @@ static int toneeq_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *
 }
 
 int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece,
-             const void *const restrict ivoid, void *const restrict ovoid,
-             const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+             const void *const restrict ivoid, void *const restrict ovoid)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   return toneeq_process(self, piece, ivoid, ovoid, roi_in, roi_out);
 }
 

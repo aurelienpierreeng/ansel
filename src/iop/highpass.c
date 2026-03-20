@@ -123,10 +123,10 @@ int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, const dt
   return IOP_CS_LAB;
 }
 
-void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
-                     const dt_iop_roi_t *roi_in, const dt_iop_roi_t *roi_out,
-                     struct dt_develop_tiling_t *tiling)
+void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece, struct dt_develop_tiling_t *tiling)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_highpass_data_t *d = (dt_iop_highpass_data_t *)piece->data;
 
   const int rad = MAX_RADIUS * (fmin(100.0f, d->sharpness + 1) / 100.0f);
@@ -147,9 +147,10 @@ void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe
 
 
 #ifdef HAVE_OPENCL
-int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
-               const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_highpass_data_t *d = (dt_iop_highpass_data_t *)piece->data;
   dt_iop_highpass_global_data_t *gd = (dt_iop_highpass_global_data_t *)self->global_data;
 
@@ -297,8 +298,10 @@ error:
 #endif
 
 int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
-             void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+             void *const ovoid)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_highpass_data_t *data = (dt_iop_highpass_data_t *)piece->data;
   const float *const in = (float *)ivoid;
   float *out = (float *)ovoid;

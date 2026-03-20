@@ -369,15 +369,19 @@ static int process_wavelets(struct dt_iop_module_t *self, const struct dt_dev_pi
 }
 
 int process(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece, const void *const i,
-             void *const o, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+             void *const o)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   return process_wavelets(self, piece, i, o, roi_in, roi_out, eaw_decompose, eaw_synthesize);
 }
 
 #if defined(__SSE2__)
 int process_sse2(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece, const void *const i,
-                  void *const o, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+                  void *const o)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   return process_wavelets(self, piece, i, o, roi_in, roi_out, eaw_decompose_sse2, eaw_synthesize_sse2);
 }
 #endif
@@ -386,9 +390,10 @@ int process_sse2(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop
 
 #ifdef USE_NEW_CL
 /* this version is adapted to the new global tiling mechanism. it no longer does tiling by itself. */
-int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
-               const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_atrous_data_t *d = (dt_iop_atrous_data_t *)piece->data;
   dt_aligned_pixel_t thrs[MAX_NUM_SCALES];
   dt_aligned_pixel_t boost[MAX_NUM_SCALES];
@@ -522,9 +527,10 @@ error:
 #else // ======== old, memory-hungry implementation ========================================================
 
 /* this version is adapted to the new global tiling mechanism. it no longer does tiling by itself. */
-int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
-               const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_atrous_data_t *d = (dt_iop_atrous_data_t *)piece->data;
   dt_aligned_pixel_t thrs[MAX_NUM_SCALES];
   dt_aligned_pixel_t boost[MAX_NUM_SCALES];
@@ -664,10 +670,10 @@ error:
 
 #endif // HAVE_OPENCL
 
-void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
-                     const dt_iop_roi_t *roi_in, const dt_iop_roi_t *roi_out,
-                     struct dt_develop_tiling_t *tiling)
+void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece, struct dt_develop_tiling_t *tiling)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_atrous_data_t *d = (dt_iop_atrous_data_t *)piece->data;
   dt_aligned_pixel_t thrs[MAX_NUM_SCALES];
   dt_aligned_pixel_t boost[MAX_NUM_SCALES];

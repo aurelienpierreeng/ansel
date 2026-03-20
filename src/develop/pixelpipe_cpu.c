@@ -99,14 +99,13 @@ int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
   int err = 0;
   if(!fitting && piece->process_tiling_ready)
   {
-    err = module->process_tiling(module, piece, process_input, output, &piece->roi_in, &piece->roi_out,
-                                 process_input_dsc.bpp);
+    err = module->process_tiling(module, piece, process_input, output, process_input_dsc.bpp);
     *pixelpipe_flow |= (PIXELPIPE_FLOW_PROCESSED_ON_CPU | PIXELPIPE_FLOW_PROCESSED_WITH_TILING);
     *pixelpipe_flow &= ~(PIXELPIPE_FLOW_PROCESSED_ON_GPU);
   }
   else
   {
-    err = module->process(module, piece, process_input, output, &piece->roi_in, &piece->roi_out);
+    err = module->process(module, piece, process_input, output);
     *pixelpipe_flow |= PIXELPIPE_FLOW_PROCESSED_ON_CPU;
     *pixelpipe_flow &= ~(PIXELPIPE_FLOW_PROCESSED_ON_GPU | PIXELPIPE_FLOW_PROCESSED_WITH_TILING);
   }
@@ -198,7 +197,7 @@ int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
                                             blend_out_before, blend_out_after);
     }
 
-    err = dt_develop_blend_process(module, piece, blend_input, blend_output, &piece->roi_in, &piece->roi_out);
+    err = dt_develop_blend_process(module, piece, blend_input, blend_output);
     *pixelpipe_flow |= PIXELPIPE_FLOW_BLENDED_ON_CPU;
     *pixelpipe_flow &= ~(PIXELPIPE_FLOW_BLENDED_ON_GPU);
 

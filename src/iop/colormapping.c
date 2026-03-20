@@ -450,8 +450,10 @@ static void kmeans(const float *col, const int width, const int height, const in
 }
 
 int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
-             void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+             void *const ovoid)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_colormapping_data_t *const restrict data = (dt_iop_colormapping_data_t *)piece->data;
   dt_iop_colormapping_gui_data_t *const restrict g = (dt_iop_colormapping_gui_data_t *)self->gui_data;
   float *const restrict in = (float *)ivoid;
@@ -610,10 +612,10 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, c
   return 0;
 }
 
-void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
-                     const dt_iop_roi_t *roi_in, const dt_iop_roi_t *roi_out,
-                     struct dt_develop_tiling_t *tiling)
+void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece, struct dt_develop_tiling_t *tiling)
 {
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
   const float scale = 1.f / roi_in->scale;
   const float sigma_s = 50.0f / scale;
   const float sigma_r = 8.0f; // does not depend on scale
