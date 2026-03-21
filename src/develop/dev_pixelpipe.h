@@ -114,6 +114,39 @@ uint64_t dt_dev_pixelpipe_node_hash(struct dt_dev_pixelpipe_t *pipe,
                                     const struct dt_dev_pixelpipe_iop_t *piece, 
                                     const struct dt_iop_roi_t, const int pos);
 
+/**
+ * @brief Return the enabled piece owned by @p module in @p pipe.
+ *
+ * @details
+ * GUI-side cache readers must resolve the current live piece from the current
+ * pipe graph every time they sample. Piece pointers are not stable across
+ * history resyncs or pipe rebuilds, so callers should never persist them.
+ *
+ * @param pipe Current pipe graph.
+ * @param module Module instance to look up.
+ *
+ * @return The enabled piece matching @p module, or NULL if none exists in the
+ * current pipe graph.
+ */
+const struct dt_dev_pixelpipe_iop_t *dt_dev_pixelpipe_get_module_piece(const struct dt_dev_pixelpipe_t *pipe,
+                                                                       const struct dt_iop_module_t *module);
+
+/**
+ * @brief Return the closest enabled piece located immediately before @p piece in @p pipe.
+ *
+ * @details
+ * Cache readers that need the input buffer of one module must reopen the previous enabled module output,
+ * not simply the previous list node, because disabled pieces keep their place in `pipe->nodes` while not
+ * producing any cacheline. This utility keeps that rule centralized at the pixelpipe level.
+ *
+ * @param pipe Current pipe graph.
+ * @param piece Reference piece inside @p pipe.
+ *
+ * @return The previous enabled piece, or NULL if @p piece is the first enabled node or if either input is invalid.
+ */
+const struct dt_dev_pixelpipe_iop_t *dt_dev_pixelpipe_get_prev_enabled_piece(const struct dt_dev_pixelpipe_t *pipe,
+                                                                             const struct dt_dev_pixelpipe_iop_t *piece);
+
 // Compute the sequential hash over the pipeline for each module.
 // Need to run after dt_dev_pixelpipe_get_roi_in() has updated processed ROI in/out
 void dt_pixelpipe_get_global_hash(struct dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev);

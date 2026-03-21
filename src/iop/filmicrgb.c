@@ -3112,6 +3112,9 @@ static void apply_autotune(dt_iop_module_t *self,
 void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
   (void)piece;
+  dt_print(DT_DEBUG_DEV, "[picker/filmicrgb] apply picker=%p pipe=%p min=%g max=%g avg=%g\n",
+           (void *)picker, (void *)pipe,
+           self->picked_color_min[0], self->picked_color_max[0], self->picked_color[0]);
   dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)self->gui_data;
   const dt_iop_order_iccprofile_info_t *const work_profile
       = pipe ? dt_ioppr_get_pipe_current_profile_info(self, pipe)
@@ -4786,7 +4789,6 @@ void gui_init(dt_iop_module_t *self)
 
   g->grey_point_source
       = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, dt_bauhaus_slider_from_params(self, "grey_point_source"));
-  gtk_widget_set_name(g->grey_point_source, "keep-active");
   dt_bauhaus_slider_set_soft_range(g->grey_point_source, .1, 36.0);
   dt_bauhaus_slider_set_format(g->grey_point_source, "%");
   gtk_widget_set_tooltip_text(g->grey_point_source,
@@ -4797,7 +4799,6 @@ void gui_init(dt_iop_module_t *self)
   // White slider
   g->white_point_source
       = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, dt_bauhaus_slider_from_params(self, "white_point_source"));
-  gtk_widget_set_name(g->white_point_source, "keep-active");
   dt_bauhaus_slider_set_soft_range(g->white_point_source, 2.0, 8.0);
   dt_bauhaus_slider_set_format(g->white_point_source, _(" EV"));
   gtk_widget_set_tooltip_text(g->white_point_source,
@@ -4808,7 +4809,6 @@ void gui_init(dt_iop_module_t *self)
   // Black slider
   g->black_point_source
       = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, dt_bauhaus_slider_from_params(self, "black_point_source"));
-  gtk_widget_set_name(g->black_point_source, "keep-active");
   dt_bauhaus_slider_set_soft_range(g->black_point_source, -14.0, -3);
   dt_bauhaus_slider_set_format(g->black_point_source, _(" EV"));
   gtk_widget_set_tooltip_text(
@@ -4827,7 +4827,6 @@ void gui_init(dt_iop_module_t *self)
   GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
   gtk_box_pack_start(GTK_BOX(hbox), dt_ui_label_new(_("auto tune levels")), TRUE, TRUE, 0);
   g->auto_button = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, NULL);
-  gtk_widget_set_name(g->auto_button, "keep-active");
   gtk_box_pack_start(GTK_BOX(hbox), g->auto_button, FALSE, FALSE, 0);
   dt_gui_add_class(g->auto_button, "dt_bauhaus_alignment");
   gtk_widget_set_tooltip_text(g->auto_button, _("try to optimize the settings with some statistical assumptions.\n"

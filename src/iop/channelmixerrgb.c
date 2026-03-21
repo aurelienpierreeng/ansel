@@ -2685,6 +2685,7 @@ static void commit_profile_callback(GtkWidget *widget, GdkEventButton *event, gp
 
   gui_changed(self, NULL, NULL);
 
+  dt_print(DT_DEBUG_DEV, "[picker/channelmixerrgb] history commit source=commit_profile\n");
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
@@ -2726,6 +2727,7 @@ static void _develop_ui_pipe_finished_callback(gpointer instance, gpointer user_
 
   gui_changed(self, NULL, NULL);
 
+  dt_print(DT_DEBUG_DEV, "[picker/channelmixerrgb] history commit source=ui_pipe_finished\n");
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
@@ -3362,6 +3364,8 @@ static void illum_xy_callback(GtkWidget *slider, gpointer user_data)
   paint_temperature_background(self);
   --darktable.gui->reset;
 
+  dt_print(DT_DEBUG_DEV, "[picker/channelmixerrgb] history commit source=illum_xy_callback slider=%p\n",
+           (void *)slider);
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
@@ -3393,6 +3397,12 @@ void gui_update(struct dt_iop_module_t *self)
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)module->params;
 
   dt_iop_color_picker_reset(self, TRUE);
+
+  /* Restoring GUI state from params must not re-enter widget callbacks.
+     Channelmixer's spot/color widgets can otherwise rerun auto-picking while
+     a history refresh is already in flight, which feeds TOP_CHANGED/full-pipe
+     loops when the picker is active. */
+  ++darktable.gui->reset;
 
   // always reset the mode the correct
   dt_bauhaus_combobox_set(g->spot_mode, DT_SPOT_MODE_CORRECT);
@@ -3461,6 +3471,8 @@ void gui_update(struct dt_iop_module_t *self)
   g->spot_RGB[1] = 0.f;
   g->spot_RGB[2] = 0.f;
   g->spot_RGB[3] = 0.f;
+
+  --darktable.gui->reset;
 
   gui_changed(self, NULL, NULL);
 }
@@ -3579,9 +3591,10 @@ static void _spot_settings_changed_callback(GtkWidget *slider, dt_iop_module_t *
   paint_hue(self);
   --darktable.gui->reset;
 
-  // Re-run auto illuminant if color picker is active and mode is correct
+  // Re-run auto illuminant only for the module that currently owns the active picker.
   const dt_spot_mode_t mode = dt_bauhaus_combobox_get(g->spot_mode);
-  if(mode == DT_SPOT_MODE_CORRECT)
+  const gboolean picker_active = dt_iop_color_picker_is_active_module(self);
+  if(mode == DT_SPOT_MODE_CORRECT && picker_active)
     _auto_set_illuminant(self, self->dev->pipe);
   // else : just record new values and do nothing
 }
@@ -3707,16 +3720,33 @@ void _auto_set_illuminant(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe)
 {
   dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
+  const dt_iop_channelmixer_rgb_params_t previous = *p;
 
   // capture gui color picked event.
-  if(self->picked_color_max[0] < self->picked_color_min[0]) return;
+  if(self->picked_color_max[0] < self->picked_color_min[0])
+  {
+    dt_print(DT_DEBUG_DEV, "[picker/channelmixerrgb] rejected invalid min/max min=%g max=%g\n",
+             self->picked_color_min[0], self->picked_color_max[0]);
+    return;
+  }
   const float *RGB = self->picked_color;
-  if(!isfinite(RGB[0]) || !isfinite(RGB[1]) || !isfinite(RGB[2])) return;
+  if(!isfinite(RGB[0]) || !isfinite(RGB[1]) || !isfinite(RGB[2]))
+  {
+    dt_print(DT_DEBUG_DEV, "[picker/channelmixerrgb] rejected nonfinite RGB=(%g,%g,%g)\n",
+             RGB[0], RGB[1], RGB[2]);
+    return;
+  }
+  dt_print(DT_DEBUG_DEV, "[picker/channelmixerrgb] RGB=(%g,%g,%g) pipe=%p\n",
+           RGB[0], RGB[1], RGB[2], (void *)pipe);
 
   // Get the module-stage profile matching the sampled buffer.
   const dt_iop_order_iccprofile_info_t *const current_profile
       = dt_ioppr_get_pipe_current_profile_info(self, pipe);
-  if(current_profile == NULL) return;
+  if(current_profile == NULL)
+  {
+    dt_print(DT_DEBUG_DEV, "[picker/channelmixerrgb] missing current profile\n");
+    return;
+  }
 
   // Convert the sampled linear RGB code values to XYZ in the module profile.
   // The picker already sampled the live module buffer, so keep the conversion explicit here.
@@ -3736,6 +3766,7 @@ void _auto_set_illuminant(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe)
   gtk_label_set_text(GTK_LABEL(g->Lch_origin),
                      g_strdup_printf(_("L: \t%.1f %%\nh: \t%.1f \302\260\nc: \t%.1f"),
                                      Lch[0], Lch[2] * 360.f, Lch[1] ));
+  gtk_widget_queue_draw(g->origin_spot);
   --darktable.gui->reset;
 
   const dt_spot_mode_t mode = dt_bauhaus_combobox_get(g->spot_mode);
@@ -3950,7 +3981,15 @@ void _auto_set_illuminant(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe)
 
     --darktable.gui->reset;
 
-    dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+    if(memcmp(&previous, p, sizeof(previous)) != 0)
+    {
+      /* Auto-illuminant is driven by live picker motion. Writing history synchronously for every
+         sampled move can outpace the preview worker and keep it permanently in TOP_CHANGED.
+         Queue the standard throttled history update instead so the picker remains live while
+         the worker converges on the latest sampled state. */
+      dt_print(DT_DEBUG_DEV, "[picker/channelmixerrgb] history commit source=auto_set_illuminant\n");
+      dt_gui_throttle_queue(self, dt_iop_throttled_history_update, self);
+    }
   }
 }
 
@@ -3958,6 +3997,7 @@ void _auto_set_illuminant(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe)
 void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
   if(darktable.gui->reset) return;
+  dt_print(DT_DEBUG_DEV, "[picker/channelmixerrgb] apply picker=%p pipe=%p\n", (void *)picker, (void *)pipe);
   _auto_set_illuminant(self, pipe);
 }
 
@@ -4022,7 +4062,6 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(hbox), g->illum_color, TRUE, TRUE, 0);
 
   g->color_picker = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, hbox);
-  gtk_widget_set_name(g->color_picker, "keep-active");
   gtk_widget_set_tooltip_text(g->color_picker, _("set white balance to detected from area"));
 
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(hbox), FALSE, FALSE, 0);

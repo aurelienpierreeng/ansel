@@ -226,7 +226,7 @@ static dt_darkroom_layout_t _lib_darkroom_get_layout(dt_view_t *self)
 
 static gboolean _darkroom_is_only_selected_sample(gboolean is_primary_sample, dt_colorpicker_sample_t *selected_sample, gboolean display_samples)
 {
-  return !is_primary_sample && selected_sample && !darktable.lib->proxy.colorpicker.display_samples;
+  return !is_primary_sample && selected_sample && !display_samples;
 }
 
 /**
@@ -263,8 +263,10 @@ static void _darkroom_pickers_draw(dt_view_t *self, cairo_t *cri,
   // makes point sample crosshair gap look nicer
   cairo_set_line_cap(cri, CAIRO_LINE_CAP_SQUARE);
 
-  dt_colorpicker_sample_t *selected_sample = darktable.lib->proxy.colorpicker.selected_sample;
-  const gboolean only_selected_sample = _darkroom_is_only_selected_sample(is_primary_sample, selected_sample, darktable.lib->proxy.colorpicker.display_samples);
+  dt_colorpicker_sample_t *selected_sample = darktable.develop->color_picker.selected_sample;
+  const gboolean only_selected_sample
+      = _darkroom_is_only_selected_sample(is_primary_sample, selected_sample,
+                                          darktable.develop->color_picker.display_samples);
   
   for( ; samples; samples = g_slist_next(samples))
   {
@@ -1022,12 +1024,12 @@ void expose(
   }
 
   // Displaying sample areas if enabled
-  if(darktable.lib->proxy.colorpicker.live_samples
-     && (darktable.lib->proxy.colorpicker.display_samples
-         || (darktable.lib->proxy.colorpicker.selected_sample &&
-             darktable.lib->proxy.colorpicker.selected_sample != darktable.lib->proxy.colorpicker.primary_sample)))
+  if(darktable.develop->color_picker.samples
+     && (darktable.develop->color_picker.display_samples
+         || (darktable.develop->color_picker.selected_sample &&
+             darktable.develop->color_picker.selected_sample != darktable.develop->color_picker.primary_sample)))
   {
-    _darkroom_pickers_draw(self, cri, width, height, pointerx, pointery, darktable.lib->proxy.colorpicker.live_samples, FALSE);
+    _darkroom_pickers_draw(self, cri, width, height, pointerx, pointery, darktable.develop->color_picker.samples, FALSE);
   }
 
   // draw guide lines if needed
@@ -1052,7 +1054,7 @@ void expose(
   // FIXME: draw picker in gui_post_expose() hook in libs/colorpicker.c -- catch would be that live samples would appear over guides, softproof/gamut text overlay would be hidden by picker
   if(dt_iop_color_picker_is_visible(dev))
   {
-    GSList samples = { .data = darktable.lib->proxy.colorpicker.primary_sample, .next = NULL };
+    GSList samples = { .data = darktable.develop->color_picker.primary_sample, .next = NULL };
     _darkroom_pickers_draw(self, cri, width, height, pointerx, pointery, &samples, TRUE);
   }
   else
@@ -2500,8 +2502,8 @@ void leave(dt_view_t *self)
 
   dt_iop_color_picker_cleanup();
 
-  if(darktable.lib->proxy.colorpicker.picker_proxy)
-    dt_iop_color_picker_reset(darktable.lib->proxy.colorpicker.picker_proxy->module, FALSE);
+  if(darktable.develop->color_picker.picker)
+    dt_iop_color_picker_reset(darktable.develop->color_picker.picker->module, FALSE);
 
   _unregister_modules_drag_n_drop(self);
 
@@ -2696,7 +2698,7 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
     // module requested a color box
     if(mouse_in_imagearea(self, x, y))
     {
-      dt_colorpicker_sample_t *const sample = darktable.lib->proxy.colorpicker.primary_sample;
+      dt_colorpicker_sample_t *const sample = darktable.develop->color_picker.primary_sample;
       gboolean sample_changed = FALSE;
       // Make sure a minimal width/height
       float delta_x = 1 / (float) dev->roi.processed_width;
@@ -2717,27 +2719,19 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
         };
 
         for(int k = 0; k < 4; k++)
-        {
-          if(sample->box[k] != box[k])
-          {
-            sample->box[k] = box[k];
-            sample_changed = TRUE;
-          }
-        }
+          sample_changed |= (sample->box[k] != box[k]);
+
+        if(sample_changed)
+          dt_lib_colorpicker_set_box_area(darktable.lib, box);
       }
       else if(sample->size == DT_LIB_COLORPICKER_SIZE_POINT)
       {
         sample_changed = (sample->point[0] != mouse_x) || (sample->point[1] != mouse_y);
-        sample->point[0] = mouse_x;
-        sample->point[1] = mouse_y;
-      }
-
-      if(sample_changed)
-      {
-        /* Picker drags only move the sampling area.
-         * Mark the preview dirty so the worker resamples the active module
-         * without touching history or recomputing node hashes. */
-        dev->preview_pipe->status = DT_DEV_PIXELPIPE_DIRTY;
+        if(sample_changed)
+        {
+          const float point[2] = { mouse_x, mouse_y };
+          dt_lib_colorpicker_set_point(darktable.lib, point);
+        }
       }
     }
     ret = TRUE;
@@ -2808,12 +2802,9 @@ int button_released(dt_view_t *self, double x, double y, int which, uint32_t sta
   if(dt_iop_color_picker_is_visible(dev) && which == 1)
   {
     // only sample box picker at end, for speed
-    if(darktable.lib->proxy.colorpicker.primary_sample->size == DT_LIB_COLORPICKER_SIZE_BOX)
+    if(darktable.develop->color_picker.primary_sample->size == DT_LIB_COLORPICKER_SIZE_BOX)
       dt_control_set_cursor(GDK_LEFT_PTR);
 
-    /* Final picker placement changes only the sample geometry.
-     * Keep the current history and ask for one fresh preview sampling pass. */
-    dt_dev_pixelpipe_update_history_preview(dev);
     dt_control_queue_redraw_center();
     return 1;
   }
@@ -2842,7 +2833,7 @@ int button_released(dt_view_t *self, double x, double y, int which, uint32_t sta
 
 int button_pressed(dt_view_t *self, double x, double y, double pressure, int which, int type, uint32_t state)
 {
-  dt_colorpicker_sample_t *const sample = darktable.lib->proxy.colorpicker.primary_sample;
+  dt_colorpicker_sample_t *const sample = darktable.develop->color_picker.primary_sample;
   dt_develop_t *dev = (dt_develop_t *)self->data;
 
   dt_print(DT_DEBUG_INPUT, "[darkroom] button pressed  which: %d  type: %d x: %.2f y: %.2f pressure: %f\n",
@@ -2870,8 +2861,8 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
         const float delta_x = 0.01f;
         const float delta_y = delta_x * (float)dev->roi.processed_width / (float)dev->roi.processed_height;
 
-        // FIXME: here and in mouse move use to dt_lib_colorpicker_set_{box_area,point} interface? -- would require a different hack for figuring out base of the drag
-        // hack: for box pickers, these represent the "base" point being dragged
+        // Box drags need one anchor corner. Keep it in sample->point, but hand the actual sampling
+        // geometry to the picker API so preview dirtiness stays centralized.
         sample->point[0] = pzx;
         sample->point[1] = pzy;
 
@@ -2906,12 +2897,20 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
           }
           else
           {
-            sample->box[0] = fmaxf(0.0, pzx - delta_x);
-            sample->box[1] = fmaxf(0.0, pzy - delta_y);
-            sample->box[2] = fminf(1.0, pzx + delta_x);
-            sample->box[3] = fminf(1.0, pzy + delta_y);
+            const dt_boundingbox_t box = {
+              fmaxf(0.0, pzx - delta_x),
+              fmaxf(0.0, pzy - delta_y),
+              fminf(1.0, pzx + delta_x),
+              fminf(1.0, pzy + delta_y)
+            };
+            dt_lib_colorpicker_set_box_area(darktable.lib, box);
           }
           dt_control_set_cursor(GDK_FLEUR);
+        }
+        else
+        {
+          const float point[2] = { pzx, pzy };
+          dt_lib_colorpicker_set_point(darktable.lib, point);
         }
       }
       return 1;
@@ -2921,9 +2920,9 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
     {
       // apply a live sample's area to the active picker?
       // FIXME: this is a naive implementation, nicer would be to cycle through overlapping samples then reset
-      dt_iop_color_picker_t *picker = darktable.lib->proxy.colorpicker.picker_proxy;
-      if(darktable.lib->proxy.colorpicker.display_samples && mouse_in_imagearea(self, x, y))
-        for(GSList *samples = darktable.lib->proxy.colorpicker.live_samples; samples; samples = g_slist_next(samples))
+      dt_iop_color_picker_t *picker = darktable.develop->color_picker.picker;
+      if(darktable.develop->color_picker.display_samples && mouse_in_imagearea(self, x, y))
+        for(GSList *samples = darktable.develop->color_picker.samples; samples; samples = g_slist_next(samples))
         {
           dt_colorpicker_sample_t *live_sample = samples->data;
           if(live_sample->size == DT_LIB_COLORPICKER_SIZE_BOX && picker->kind != DT_COLOR_PICKER_POINT)

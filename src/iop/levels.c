@@ -221,11 +221,24 @@ static void dt_iop_levels_compute_levels_manual(const uint32_t *histogram, float
   levels[1] = levels[0] / 2 + levels[2] / 2;
 }
 
-static void dt_iop_levels_compute_levels_automatic(const dt_dev_pixelpipe_iop_t *piece)
+static void dt_iop_levels_compute_levels_automatic(dt_iop_module_t *self,
+                                                   const dt_dev_pixelpipe_iop_t *piece)
 {
   dt_iop_levels_data_t *d = (dt_iop_levels_data_t *)piece->data;
+  dt_dev_histogram_stats_t histogram_stats = { 0 };
+  uint32_t *histogram = NULL;
 
-  uint32_t total = piece->histogram_stats.pixels;
+  dt_iop_gui_enter_critical_section(self);
+  histogram_stats = self->histogram_stats;
+  if(self->histogram && histogram_stats.bins_count > 0)
+  {
+    const size_t histogram_size = 4 * histogram_stats.bins_count * sizeof(uint32_t);
+    histogram = dt_alloc_align(histogram_size);
+    if(histogram) memcpy(histogram, self->histogram, histogram_size);
+  }
+  dt_iop_gui_leave_critical_section(self);
+
+  uint32_t total = histogram_stats.pixels;
 
   dt_aligned_pixel_t thr;
   for(int k = 0; k < 3; k++)
@@ -234,22 +247,25 @@ static void dt_iop_levels_compute_levels_automatic(const dt_dev_pixelpipe_iop_t 
     d->levels[k] = NAN;
   }
 
-  if(piece->histogram == NULL) return;
+  if(histogram == NULL) return;
 
   // find min and max levels
   size_t n = 0;
-  for(uint32_t i = 0; i < piece->histogram_stats.bins_count; i++)
+  for(uint32_t i = 0; i < histogram_stats.bins_count; i++)
   {
-    n += piece->histogram[4 * i];
+    n += histogram[4 * i];
 
     for(int k = 0; k < 3; k++)
     {
       if(isnan(d->levels[k]) && (n >= thr[k]))
       {
-        d->levels[k] = (float)i / (float)(piece->histogram_stats.bins_count - 1);
+        d->levels[k] = (float)i / (float)(histogram_stats.bins_count - 1);
       }
     }
   }
+
+  dt_free_align(histogram);
+
   // for numerical reasons sometimes the threshold is sharp but in float and n is size_t.
   // in this case we want to make sure we don't keep nan:
   if(isnan(d->levels[2])) d->levels[2] = 1.0f;
@@ -380,7 +396,7 @@ static void commit_params_late(dt_iop_module_t *self, const dt_dev_pixelpipe_t *
        || isnan(d->levels[0]) || isnan(d->levels[1])
        || isnan(d->levels[2]))
     {
-      dt_iop_levels_compute_levels_automatic(piece);
+      dt_iop_levels_compute_levels_automatic(self, piece);
       compute_lut(piece);
     }
 

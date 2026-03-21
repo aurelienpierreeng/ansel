@@ -22,7 +22,9 @@
 #include "common/dtpthread.h"
 #include "develop/imageop.h"
 #include "develop/pixelpipe.h"
+#include "develop/pixelpipe_gui.h"
 #include "develop/blend.h"
+#include "gui/color_picker_proxy.h"
 #include "control/control.h"
 #include <stdint.h>
 
@@ -42,6 +44,72 @@ static void _change_pipe(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_change_t fla
   if(!pipe) return;
   dt_dev_pixelpipe_or_changed(pipe, flag);
   dt_atomic_set_int(&pipe->shutdown, TRUE);
+}
+
+/**
+ * @brief Seal host-cache retention policy on synchronized pieces before processing starts.
+ *
+ * @details
+ * `piece->force_opencl_cache` is part of the sealed runtime contract: the
+ * processing recursion only consumes it and must not infer GUI/runtime
+ * heuristics while running. This pass therefore authors all host-cache
+ * retention requests immediately after history synchronization, while the live
+ * pipe graph and current GUI state are both known.
+ *
+ * The reverse walk carries one upstream requirement:
+ * "the previous enabled module must keep its output on host because the current
+ * enabled module will read from RAM instead of OpenCL".
+ *
+ * We add to that:
+ * - the module's own authored `force_opencl_cache`,
+ * - user cache preferences,
+ * - active color-picker sampling,
+ * - global histogram stages sampling their output,
+ * - active GUI editing on the module itself.
+ */
+static void _seal_opencl_cache_policy(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
+{
+  if(!pipe || !pipe->nodes) return;
+
+  gboolean upstream_must_cache_host = TRUE;
+
+  for(GList *pieces = g_list_last(pipe->nodes); pieces; pieces = g_list_previous(pieces))
+  {
+    dt_dev_pixelpipe_iop_t *piece = pieces->data;
+    dt_iop_module_t *module = piece ? piece->module : NULL;
+    if(!piece || !module || !piece->enabled) continue;
+
+    gboolean supports_opencl = FALSE;
+#ifdef HAVE_OPENCL
+    supports_opencl = dt_opencl_is_inited() && piece->process_cl_ready && module->process_cl;
+#endif
+
+    gchar *string = g_strdup_printf("/plugins/%s/cache", module->op);
+    if(!dt_conf_key_exists(string) || !dt_conf_key_not_empty(string))
+      dt_conf_set_bool(string, piece->force_opencl_cache);
+
+    const gboolean authored_cache = piece->force_opencl_cache;
+    const gboolean user_requested_cache = dt_conf_get_bool(string);
+    dt_free(string);
+
+    const gboolean color_picker_on = dt_iop_color_picker_force_cache(dev, pipe, module);
+    const gboolean global_hist_output_on = dt_dev_module_requires_global_histogram_output_cache(pipe, module);
+    const gboolean global_hist_input_on = dt_dev_module_requires_global_histogram_input_cache(pipe, module);
+    const gboolean module_hist_on
+        = (pipe->type == DT_DEV_PIXELPIPE_PREVIEW
+           && pipe->gui_observable_source
+           && (dev->gui_attached || !(piece->request_histogram & DT_REQUEST_ONLY_IN_GUI))
+           && (piece->request_histogram & DT_REQUEST_ON));
+    const gboolean active_in_gui
+        = (pipe->type == DT_DEV_PIXELPIPE_FULL || pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
+           && dev->gui_module == module;
+
+    piece->force_opencl_cache
+        = authored_cache || user_requested_cache || color_picker_on || global_hist_output_on
+          || upstream_must_cache_host;
+
+    upstream_must_cache_host = !supports_opencl || active_in_gui || module_hist_on || global_hist_input_on;
+  }
 }
 
 void dt_dev_pixelpipe_rebuild_all_real(dt_develop_t *dev)
@@ -260,6 +328,39 @@ uint64_t dt_dev_pixelpipe_node_hash(dt_dev_pixelpipe_t *pipe, const dt_dev_pixel
     hash = dt_hash(hash, (const char *)&roi_out, sizeof(dt_iop_roi_t));
     return dt_hash(hash, (const char *)&pos, sizeof(int));
   }
+}
+
+const dt_dev_pixelpipe_iop_t *dt_dev_pixelpipe_get_module_piece(const dt_dev_pixelpipe_t *pipe,
+                                                                const dt_iop_module_t *module)
+{
+  if(!pipe || !module) return NULL;
+
+  for(GList *node = g_list_first(pipe->nodes); node; node = g_list_next(node))
+  {
+    dt_dev_pixelpipe_iop_t *const piece = node->data;
+    if(piece && piece->enabled && piece->module == module)
+      return piece;
+  }
+
+  return NULL;
+}
+
+const dt_dev_pixelpipe_iop_t *dt_dev_pixelpipe_get_prev_enabled_piece(const dt_dev_pixelpipe_t *pipe,
+                                                                      const dt_dev_pixelpipe_iop_t *piece)
+{
+  if(!pipe || !piece) return NULL;
+
+  GList *node = g_list_find(pipe->nodes, (gpointer)piece);
+  if(!node) return NULL;
+
+  for(node = g_list_previous(node); node; node = g_list_previous(node))
+  {
+    dt_dev_pixelpipe_iop_t *const previous = node->data;
+    if(previous && previous->enabled)
+      return previous;
+  }
+
+  return NULL;
 }
 
 static gboolean _prepare_piece_input_contract(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
@@ -660,6 +761,9 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
     // only top history item(s) changed.
     dt_dev_pixelpipe_synch_top(pipe, dev);
   }
+
+  _seal_opencl_cache_policy(pipe, dev);
+
   dt_pthread_rwlock_unlock(&dev->history_mutex);
 
   dt_show_times_f(&start, "[dev_pixelpipe] pipeline resync with history", "for pipe %s", type);

@@ -55,6 +55,7 @@
 
 #include "bauhaus/bauhaus.h"
 #include "common/atomic.h"
+#include "common/color_picker.h"
 #include "common/color_vocabulary.h"
 #include "common/darktable.h"
 #include "common/debug.h"
@@ -67,6 +68,7 @@
 #include "control/control.h"
 #include "develop/develop.h"
 #include "develop/pixelpipe_cache.h"
+#include "develop/pixelpipe_gui.h"
 #include "dtgtk/drawingarea.h"
 #include "dtgtk/button.h"
 #include "gui/color_picker_proxy.h"
@@ -144,7 +146,6 @@ typedef struct dt_lib_histogram_t
   GtkWidget *samples_container;
   GtkWidget *add_sample_button;
   GtkWidget *display_samples_check_box;
-  dt_colorpicker_sample_t primary_sample;
 
 } dt_lib_histogram_t;
 
@@ -175,21 +176,7 @@ int position()
 }
 
 static void _update_picker_output(dt_lib_module_t *self);
-static void _update_samples_output(dt_lib_module_t *self);
 static void _update_sample_label(dt_lib_module_t *self, dt_colorpicker_sample_t *sample);
-
-
-dt_backbuf_t * _get_backuf(dt_develop_t *dev, const char *op)
-{
-  if(!strcmp(op, "demosaic"))
-    return &dev->raw_histogram;
-  else if(!strcmp(op, "colorout"))
-    return &dev->output_histogram;
-  else if(!strcmp(op, "gamma"))
-    return &dev->display_histogram;
-  else
-    return NULL;
-}
 
 
 void _backbuf_int_to_op(const int value, dt_lib_histogram_t *d)
@@ -257,19 +244,18 @@ void _scope_pixel_to_display_rgb(const dt_aligned_pixel_t rgb_in, dt_aligned_pix
   if(_backbuf_op_to_int(d) > 0)
   {
     // We are in display RGB
-    *rgb_out = *rgb_in;
+    for_each_channel(c)
+      rgb_out[c] = rgb_in[c];
   }
   else
   {
-    // We are in sensor RGB
-    dt_aligned_pixel_t xyz = { 0.f };
+    // We are in the sensor/input RGB profile. Convert directly between the
+    // cached stage profile and the display profile so the swatch patch uses
+    // the same authoritative ICC path as the rest of the GUI.
     const dt_iop_order_iccprofile_info_t *const profile_in = darktable.develop->preview_pipe->input_profile_info;
-    dt_ioppr_rgb_matrix_to_xyz(rgb_in, xyz, profile_in->matrix_in_transposed, profile_in->lut_in, profile_in->unbounded_coeffs_in,
-                               profile_in->lutsize, profile_in->nonlinearlut);
-
     const dt_iop_order_iccprofile_info_t *const profile_out = darktable.develop->preview_pipe->output_profile_info;
-    dt_ioppr_rgb_matrix_to_xyz(xyz, rgb_out, profile_out->matrix_out_transposed, profile_out->lut_out, profile_out->unbounded_coeffs_out,
-                               profile_out->lutsize, profile_out->nonlinearlut);
+    dt_ioppr_transform_image_colorspace_rgb(rgb_in, rgb_out, 1, 1, profile_in, profile_out,
+                                            "[histogram] sample swatch");
   }
 }
 
@@ -383,7 +369,7 @@ static void _process_histogram(dt_backbuf_t *backbuf, cairo_t *cr, const int wid
   if(dt_conf_get_bool("ui_last/colorpicker_restrict_histogram"))
   {
     // Bin only areas within color pickers
-    GSList *samples = darktable.lib->proxy.colorpicker.live_samples;
+    GSList *samples = darktable.develop->color_picker.samples;
     while(samples)
     {
       dt_colorpicker_sample_t *sample = samples->data;
@@ -392,9 +378,9 @@ static void _process_histogram(dt_backbuf_t *backbuf, cairo_t *cr, const int wid
       samples = g_slist_next(samples);
     }
 
-    if(darktable.lib->proxy.colorpicker.picker_proxy)
+    if(darktable.develop->color_picker.picker)
       _bin_pickers_histogram(data, backbuf->width, backbuf->height,
-                             bins, darktable.lib->proxy.colorpicker.primary_sample);
+                             bins, darktable.develop->color_picker.primary_sample);
   }
   else
   {
@@ -504,7 +490,7 @@ static inline void _bin_pixels_waveform(const float *const restrict image, uint3
   if(dt_conf_get_bool("ui_last/colorpicker_restrict_histogram"))
   {
     // Bin only areas within color pickers
-    GSList *samples = darktable.lib->proxy.colorpicker.live_samples;
+    GSList *samples = darktable.develop->color_picker.samples;
     while(samples)
     {
       dt_colorpicker_sample_t *sample = samples->data;
@@ -512,8 +498,9 @@ static inline void _bin_pixels_waveform(const float *const restrict image, uint3
       samples = g_slist_next(samples);
     }
 
-    if(darktable.lib->proxy.colorpicker.picker_proxy)
-      _bin_pickers_waveforms(image, bins, width, height, binning_size, vertical, darktable.lib->proxy.colorpicker.primary_sample);
+    if(darktable.develop->color_picker.picker)
+      _bin_pickers_waveforms(image, bins, width, height, binning_size, vertical,
+                             darktable.develop->color_picker.primary_sample);
   }
   else
   {
@@ -802,7 +789,7 @@ static void _bin_vectorscope(const float *const restrict image, uint32_t *const 
   if(dt_conf_get_bool("ui_last/colorpicker_restrict_histogram"))
   {
     // Bin only areas within color pickers
-    GSList *samples = darktable.lib->proxy.colorpicker.live_samples;
+    GSList *samples = darktable.develop->color_picker.samples;
     while(samples)
     {
       dt_colorpicker_sample_t *sample = samples->data;
@@ -810,9 +797,9 @@ static void _bin_vectorscope(const float *const restrict image, uint32_t *const 
       samples = g_slist_next(samples);
     }
 
-    if(darktable.lib->proxy.colorpicker.picker_proxy)
+    if(darktable.develop->color_picker.picker)
       _bin_pickers_vectorscope(image, vectorscope, width, height, zoom, d,
-                               darktable.lib->proxy.colorpicker.primary_sample);
+                               darktable.develop->color_picker.primary_sample);
   }
   else
   {
@@ -1116,7 +1103,8 @@ gboolean _trigger_recompute(dt_lib_histogram_t *d)
 }
 
 static void _pixelpipe_pick_from_image(const dt_backbuf_t *const backbuf,
-                                       dt_colorpicker_sample_t *const sample, dt_lib_histogram_t *d)
+                                       dt_colorpicker_sample_t *const sample, dt_lib_histogram_t *d,
+                                       const char *op)
 {
   struct dt_pixel_cache_entry_t *entry;
   void *data = dt_dev_pixelpipe_cache_get_read_only(darktable.pixelpipe_cache, dt_dev_backbuf_get_hash(backbuf),
@@ -1124,83 +1112,79 @@ static void _pixelpipe_pick_from_image(const dt_backbuf_t *const backbuf,
   if(!data) return;
 
   const float *const pixel = data;
+  const dt_iop_buffer_dsc_t dsc = {
+    .channels = 4,
+    .datatype = TYPE_FLOAT,
+    .bpp = 4 * sizeof(float),
+    .cst = IOP_CS_RGB
+  };
+  const dt_iop_roi_t roi = {
+    .x = 0,
+    .y = 0,
+    .width = (int)backbuf->width,
+    .height = (int)backbuf->height,
+    .scale = 1.0
+  };
+  int box[4];
 
   if(sample->size == DT_LIB_COLORPICKER_SIZE_BOX)
   {
-    const size_t box[4] = {
-      CLAMP((size_t)roundf(sample->box[0] * backbuf->width), 0, backbuf->width - 1),
-      CLAMP((size_t)roundf(sample->box[1] * backbuf->height), 0, backbuf->height - 1),
-      CLAMP((size_t)roundf(sample->box[2] * backbuf->width), 0, backbuf->width - 1),
-      CLAMP((size_t)roundf(sample->box[3] * backbuf->height), 0, backbuf->height - 1)
-    };
-    const float box_pixels = (float)((box[3] - box[1] + 1) * (box[2] - box[0] + 1));
-    lib_colorpicker_sample_statistics picked_rgb = { { 0.0f },
-                                                     { FLT_MAX, FLT_MAX, FLT_MAX },
-                                                     { FLT_MIN, FLT_MIN, FLT_MIN } };
-
-    // Init the picker color conversions
-    memcpy(sample->display, picked_rgb, sizeof(lib_colorpicker_sample_statistics));
-    memcpy(sample->lab, picked_rgb, sizeof(lib_colorpicker_sample_statistics));
-
-    for(size_t j = box[1]; j <= box[3]; j++)
-      for(size_t i = box[0]; i <= box[2]; i++)
-        for_each_channel(ch, aligned(picked_rgb) aligned(pixel:64))
-        {
-          const float v = pixel[4 * (backbuf->width * j + i) + ch];
-
-          picked_rgb[DT_LIB_COLORPICKER_STATISTIC_MIN][ch]
-              = MIN(picked_rgb[DT_LIB_COLORPICKER_STATISTIC_MIN][ch], v);
-
-          picked_rgb[DT_LIB_COLORPICKER_STATISTIC_MAX][ch]
-              = MAX(picked_rgb[DT_LIB_COLORPICKER_STATISTIC_MAX][ch], v);
-
-          picked_rgb[DT_LIB_COLORPICKER_STATISTIC_MEAN][ch] += v / box_pixels;
-        }
-
-    memcpy(sample->scope, picked_rgb, sizeof(lib_colorpicker_sample_statistics));
-
-    // We don't convert min/max to other color spaces because min/max are channel-wise,
-    // so taking the min/max of each channel for all pixels does not represent a color
-    _scope_pixel_to_display_rgb(sample->scope[DT_LIB_COLORPICKER_STATISTIC_MEAN], sample->display[DT_LIB_COLORPICKER_STATISTIC_MEAN], d);
-
-    dt_aligned_pixel_t XYZ = { 0.f };
-    _scope_pixel_to_xyz(sample->scope[DT_LIB_COLORPICKER_STATISTIC_MEAN], XYZ, d);
-    dt_XYZ_to_Lab(XYZ, sample->lab[DT_LIB_COLORPICKER_STATISTIC_MEAN]);
+    // `dt_color_picker_helper()` uses an exclusive max corner, while the histogram UI stores
+    // the live sample as normalized box edges. Clamp the normalized box to the preview backbuffer
+    // and expand the max corner so the helper samples the full rectangle.
+    box[0] = CLAMP((int)roundf(sample->box[0] * backbuf->width), 0, (int)backbuf->width - 1);
+    box[1] = CLAMP((int)roundf(sample->box[1] * backbuf->height), 0, (int)backbuf->height - 1);
+    box[2] = CLAMP((int)roundf(sample->box[2] * backbuf->width), 0, (int)backbuf->width - 1) + 1;
+    box[3] = CLAMP((int)roundf(sample->box[3] * backbuf->height), 0, (int)backbuf->height - 1) + 1;
   }
   else if(sample->size == DT_LIB_COLORPICKER_SIZE_POINT)
   {
-    const size_t x = CLAMP((size_t)roundf(sample->point[0] * backbuf->width), 0, backbuf->width - 1);
-    const size_t y = CLAMP((size_t)roundf(sample->point[1] * backbuf->height), 0, backbuf->height - 1);
-    for(dt_lib_colorpicker_statistic_t k = 0; k < DT_LIB_COLORPICKER_STATISTIC_N; k++)
-    {
-      for_each_channel(ch, aligned(pixel:64))
-        sample->scope[k][ch] = pixel[4 * (backbuf->width * y + x) + ch];
+    const int x = CLAMP((int)roundf(sample->point[0] * backbuf->width), 0, (int)backbuf->width - 1);
+    const int y = CLAMP((int)roundf(sample->point[1] * backbuf->height), 0, (int)backbuf->height - 1);
+    box[0] = x;
+    box[1] = y;
+    box[2] = x + 1;
+    box[3] = y + 1;
+  }
 
-      _scope_pixel_to_display_rgb(sample->scope[k], sample->display[k], d);
+  dt_color_picker_helper(&dsc, pixel, &roi, box,
+                         sample->scope[DT_LIB_COLORPICKER_STATISTIC_MEAN],
+                         sample->scope[DT_LIB_COLORPICKER_STATISTIC_MIN],
+                         sample->scope[DT_LIB_COLORPICKER_STATISTIC_MAX],
+                         IOP_CS_RGB, IOP_CS_RGB, NULL);
 
-      dt_aligned_pixel_t XYZ = { 0.f };
-      _scope_pixel_to_xyz(sample->scope[k], XYZ, d);
-      dt_XYZ_to_Lab(XYZ, sample->lab[k]);
-    }
+  dt_lib_histogram_t scope = *d;
+  scope.op = op;
+
+  for(dt_lib_colorpicker_statistic_t k = 0; k < DT_LIB_COLORPICKER_STATISTIC_N; k++)
+  {
+    _scope_pixel_to_display_rgb(sample->scope[k], sample->display[k], &scope);
+
+    dt_aligned_pixel_t XYZ = { 0.f };
+    _scope_pixel_to_xyz(sample->scope[k], XYZ, &scope);
+    dt_XYZ_to_Lab(XYZ, sample->lab[k]);
   }
 
   dt_dev_pixelpipe_cache_close_read_only(darktable.pixelpipe_cache, dt_dev_backbuf_get_hash(backbuf), entry);
-
-  memcpy(sample->display, sample->scope, sizeof(lib_colorpicker_sample_statistics));
 }
 
 static void _pixelpipe_pick_samples(dt_lib_histogram_t *d)
 {
-  GSList *samples = darktable.lib->proxy.colorpicker.live_samples;
+  GSList *samples = darktable.develop->color_picker.samples;
   while(samples)
   {
     dt_colorpicker_sample_t *sample = samples->data;
-    if(!sample->locked) _pixelpipe_pick_from_image(d->backbuf, sample, d);
+    if(!sample->locked)
+    {
+      const char *const op = sample->backbuf_op[0] ? sample->backbuf_op : d->op;
+      dt_backbuf_t *const backbuf = dt_dev_get_histogram_backbuf(darktable.develop, op);
+      if(backbuf) _pixelpipe_pick_from_image(backbuf, sample, d, op);
+    }
     samples = g_slist_next(samples);
   }
 
-  if(darktable.lib->proxy.colorpicker.picker_proxy)
-    _pixelpipe_pick_from_image(d->backbuf, darktable.lib->proxy.colorpicker.primary_sample, d);
+  if(darktable.develop->color_picker.picker)
+    _pixelpipe_pick_from_image(d->backbuf, darktable.develop->color_picker.primary_sample, d, d->op);
 }
 
 
@@ -1215,18 +1199,18 @@ static void _update_everything(dt_lib_module_t *self)
 
   _pixelpipe_pick_samples(d);
 
-  for(GSList *samples = darktable.lib->proxy.colorpicker.live_samples;
+  for(GSList *samples = darktable.develop->color_picker.samples;
       samples;
       samples = g_slist_next(samples))
   {
     _update_sample_label(self, samples->data);
   }
 
-  _update_sample_label(self, &d->primary_sample);
+  _update_sample_label(self, darktable.develop->color_picker.primary_sample);
 
   // allow live sample button to work for iop samples
   gtk_widget_set_sensitive(GTK_WIDGET(d->add_sample_button),
-                           darktable.lib->proxy.colorpicker.picker_proxy != NULL);
+                           darktable.develop->color_picker.picker != NULL);
 }
 
 
@@ -1234,7 +1218,7 @@ static void _update_everything(dt_lib_module_t *self)
 static void _lib_histogram_preview_updated_callback(gpointer instance, dt_lib_module_t *self)
 {
   dt_lib_histogram_t *d = (dt_lib_histogram_t *)self->data;
-  d->backbuf = _get_backuf(darktable.develop, d->op);
+  d->backbuf = dt_dev_get_histogram_backbuf(darktable.develop, d->op);
   _update_everything(self);
 }
 
@@ -1267,7 +1251,8 @@ void _stage_callback(GtkWidget *widget, dt_lib_module_t *self)
   // Disable vectorscope for RAW stage
   dt_bauhaus_combobox_entry_set_sensitive(d->display, DT_LIB_HISTOGRAM_SCOPE_VECTORSCOPE, strcmp(d->op, "demosaic"));
 
-  d->backbuf = _get_backuf(darktable.develop, d->op);
+  dt_dev_refresh_preview_histograms(darktable.develop);
+  d->backbuf = dt_dev_get_histogram_backbuf(darktable.develop, d->op);
   _update_everything(self);
 }
 
@@ -1312,7 +1297,7 @@ static gboolean _area_scrolled_callback(GtkWidget *widget, GdkEventScroll *event
 void _set_params(dt_lib_histogram_t *d)
 {
   d->op = dt_conf_get_string_const("plugin/darkroom/histogram/op");
-  d->backbuf = _get_backuf(darktable.develop, d->op);
+  d->backbuf = dt_dev_get_histogram_backbuf(darktable.develop, d->op);
   d->zoom = fminf(fmaxf(dt_conf_get_float("plugin/darkroom/histogram/zoom"), 32.f), 252.f);
 
   // Disable RAW stage for non-RAW images
@@ -1420,25 +1405,17 @@ static void _picker_button_toggled(GtkToggleButton *button, dt_lib_histogram_t *
 
 static void _update_size(dt_lib_module_t *self, dt_lib_colorpicker_size_t size)
 {
-  dt_lib_histogram_t *d = self->data;
-  d->primary_sample.size = size;
+  darktable.develop->color_picker.primary_sample->size = size;
   _update_picker_output(self);
-}
-
-static void _update_samples_output(dt_lib_module_t *self)
-{
-  _update_everything(self);
 }
 
 /* set sample area proxy impl */
 
 static void _set_sample_box_area(dt_lib_module_t *self, const dt_boundingbox_t box)
 {
-  dt_lib_histogram_t *d = self->data;
-
   // primary sample always follows/represents current picker
   for(int k = 0; k < 4; k++)
-    d->primary_sample.box[k] = box[k];
+    darktable.develop->color_picker.primary_sample->box[k] = box[k];
 
   _update_size(self, DT_LIB_COLORPICKER_SIZE_BOX);
   _update_everything(self);
@@ -1446,11 +1423,9 @@ static void _set_sample_box_area(dt_lib_module_t *self, const dt_boundingbox_t b
 
 static void _set_sample_point(dt_lib_module_t *self, const float pos[2])
 {
-  dt_lib_histogram_t *d = self->data;
-
   // primary sample always follows/represents current picker
-  d->primary_sample.point[0] = pos[0];
-  d->primary_sample.point[1] = pos[1];
+  darktable.develop->color_picker.primary_sample->point[0] = pos[0];
+  darktable.develop->color_picker.primary_sample->point[1] = pos[1];
 
   _update_size(self, DT_LIB_COLORPICKER_SIZE_POINT);
   _update_everything(self);
@@ -1521,7 +1496,7 @@ static void _statistic_changed(GtkWidget *widget, dt_lib_module_t *self)
 {
   dt_lib_histogram_t *d = self->data;
   d->statistic = dt_bauhaus_combobox_get(widget);
-  darktable.lib->proxy.colorpicker.statistic = (int)d->statistic;
+  darktable.develop->color_picker.statistic = (int)d->statistic;
   dt_conf_set_string("ui_last/colorpicker_mode", dt_lib_colorpicker_statistic_names[d->statistic]);
   _update_everything(self);
 }
@@ -1556,9 +1531,9 @@ static void _label_size_allocate_callback(GtkWidget *widget, GdkRectangle *alloc
 
 static gboolean _sample_enter_callback(GtkWidget *widget, GdkEvent *event, dt_colorpicker_sample_t *sample)
 {
-  if(darktable.lib->proxy.colorpicker.picker_proxy)
+  if(darktable.develop->color_picker.picker)
   {
-    darktable.lib->proxy.colorpicker.selected_sample = sample;
+    darktable.develop->color_picker.selected_sample = sample;
    	dt_control_queue_redraw_center();
   }
 
@@ -1569,9 +1544,9 @@ static gboolean _sample_leave_callback(GtkWidget *widget, GdkEvent *event, gpoin
 {
   if(event->crossing.detail == GDK_NOTIFY_INFERIOR) return FALSE;
 
-  if(darktable.lib->proxy.colorpicker.selected_sample)
+  if(darktable.develop->color_picker.selected_sample)
   {
-    darktable.lib->proxy.colorpicker.selected_sample = NULL;
+    darktable.develop->color_picker.selected_sample = NULL;
    	dt_control_queue_redraw_center();
   }
 
@@ -1581,8 +1556,8 @@ static gboolean _sample_leave_callback(GtkWidget *widget, GdkEvent *event, gpoin
 static void _remove_sample(dt_colorpicker_sample_t *sample)
 {
   gtk_widget_destroy(sample->container);
-  darktable.lib->proxy.colorpicker.live_samples
-    = g_slist_remove(darktable.lib->proxy.colorpicker.live_samples, (gpointer)sample);
+  darktable.develop->color_picker.samples
+    = g_slist_remove(darktable.develop->color_picker.samples, (gpointer)sample);
   dt_free(sample);
 }
 
@@ -1602,8 +1577,8 @@ static gboolean _live_sample_button(GtkWidget *widget, GdkEventButton *event, dt
   else if(event->button == 3)
   {
     // copy to active picker
-    dt_lib_module_t *self = darktable.lib->proxy.colorpicker.module;
-    dt_iop_color_picker_t *picker = darktable.lib->proxy.colorpicker.picker_proxy;
+    dt_lib_module_t *self = darktable.develop->color_picker.histogram_module;
+    dt_iop_color_picker_t *picker = darktable.develop->color_picker.picker;
 
     // no active picker, too much iffy GTK work to activate a default
     if(!picker) return FALSE;
@@ -1623,13 +1598,16 @@ static gboolean _live_sample_button(GtkWidget *widget, GdkEventButton *event, dt
 static void _add_sample(GtkButton *widget, dt_lib_module_t *self)
 {
   dt_lib_histogram_t *d = self->data;
-  dt_colorpicker_sample_t *sample = (dt_colorpicker_sample_t *)malloc(sizeof(dt_colorpicker_sample_t));
 
-  if(!darktable.lib->proxy.colorpicker.picker_proxy)
+  if(!darktable.develop->color_picker.picker)
     return;
 
-  memcpy(sample, &d->primary_sample, sizeof(dt_colorpicker_sample_t));
+  dt_colorpicker_sample_t *sample = (dt_colorpicker_sample_t *)malloc(sizeof(dt_colorpicker_sample_t));
+  if(!sample) return;
+
+  memcpy(sample, darktable.develop->color_picker.primary_sample, sizeof(dt_colorpicker_sample_t));
   sample->locked = FALSE;
+  g_strlcpy(sample->backbuf_op, d->op ? d->op : "", sizeof(sample->backbuf_op));
 
   sample->container = gtk_event_box_new();
   gtk_widget_add_events(sample->container, GDK_ENTER_NOTIFY_MASK | GDK_LEAVE_NOTIFY_MASK);
@@ -1668,11 +1646,11 @@ static void _add_sample(GtkButton *widget, dt_lib_module_t *self)
   gtk_box_pack_start(GTK_BOX(d->samples_container), sample->container, FALSE, FALSE, 0);
   gtk_widget_show_all(sample->container);
 
-  darktable.lib->proxy.colorpicker.live_samples
-      = g_slist_append(darktable.lib->proxy.colorpicker.live_samples, sample);
+  darktable.develop->color_picker.samples
+      = g_slist_append(darktable.develop->color_picker.samples, sample);
 
   // remove emphasis on primary sample from mouseover on this button
-  darktable.lib->proxy.colorpicker.selected_sample = NULL;
+  darktable.develop->color_picker.selected_sample = NULL;
 
   // Updating the display
   _update_everything(self);
@@ -1681,7 +1659,7 @@ static void _add_sample(GtkButton *widget, dt_lib_module_t *self)
 static void _display_samples_changed(GtkToggleButton *button, dt_lib_module_t *self)
 {
   dt_conf_set_bool("ui_last/colorpicker_display_samples", gtk_toggle_button_get_active(button));
-  darktable.lib->proxy.colorpicker.display_samples = gtk_toggle_button_get_active(button);
+  darktable.develop->color_picker.display_samples = gtk_toggle_button_get_active(button);
   _update_everything(self);
   dt_control_queue_redraw_center();
 }
@@ -1689,13 +1667,14 @@ static void _display_samples_changed(GtkToggleButton *button, dt_lib_module_t *s
 static void _restrict_histogram_changed(GtkToggleButton *button, dt_lib_module_t *self)
 {
   dt_conf_set_bool("ui_last/colorpicker_restrict_histogram", gtk_toggle_button_get_active(button));
-  darktable.lib->proxy.colorpicker.restrict_histogram = gtk_toggle_button_get_active(button);
+  darktable.develop->color_picker.restrict_histogram = gtk_toggle_button_get_active(button);
   _update_everything(self);
 }
 
 void gui_reset(dt_lib_module_t *self)
 {
   dt_lib_histogram_t *d = self->data;
+  dt_colorpicker_sample_t *const primary_sample = darktable.develop->color_picker.primary_sample;
 
   dt_iop_color_picker_reset(NULL, FALSE);
 
@@ -1704,20 +1683,20 @@ void gui_reset(dt_lib_module_t *self)
   {
     for(int s = 0; s < DT_LIB_COLORPICKER_STATISTIC_N; s++)
     {
-      d->primary_sample.display[s][i] = 0.f;
-      d->primary_sample.scope[s][i] = 0.f;
-      d->primary_sample.lab[s][i] = 0.f;
+      primary_sample->display[s][i] = 0.f;
+      primary_sample->scope[s][i] = 0.f;
+      primary_sample->lab[s][i] = 0.f;
     }
-    d->primary_sample.label_rgb[i] = 0;
+    primary_sample->label_rgb[i] = 0;
   }
-  d->primary_sample.swatch.red = d->primary_sample.swatch.green
-    = d->primary_sample.swatch.blue = 0.0;
+  primary_sample->swatch.red = primary_sample->swatch.green
+    = primary_sample->swatch.blue = 0.0;
 
   _update_picker_output(self);
 
   // Removing any live samples
-  while(darktable.lib->proxy.colorpicker.live_samples)
-    _remove_sample(darktable.lib->proxy.colorpicker.live_samples->data);
+  while(darktable.develop->color_picker.samples)
+    _remove_sample(darktable.develop->color_picker.samples->data);
 
   // Resetting GUI elements
   dt_bauhaus_combobox_set(d->statistic_selector, 0);
@@ -1773,19 +1752,12 @@ void gui_init(dt_lib_module_t *self)
   GtkWidget *label = dt_ui_section_label_new(_("Color picker"));
   gtk_box_pack_start(GTK_BOX(self->widget), label, TRUE, TRUE, 0);
 
-  // _update_samples_output() will update the RGB values
-  d->primary_sample.swatch.alpha = 1.0;
-
-  // Initializing proxy functions and data
-  darktable.lib->proxy.colorpicker.module = self;
-  darktable.lib->proxy.colorpicker.display_samples = dt_conf_get_bool("ui_last/colorpicker_display_samples");
-  darktable.lib->proxy.colorpicker.primary_sample = &d->primary_sample;
-  darktable.lib->proxy.colorpicker.picker_proxy = NULL;
-  darktable.lib->proxy.colorpicker.live_samples = NULL;
-  darktable.lib->proxy.colorpicker.update_panel = _update_picker_output;
-  darktable.lib->proxy.colorpicker.update_samples = _update_samples_output;
-  darktable.lib->proxy.colorpicker.set_sample_box_area = _set_sample_box_area;
-  darktable.lib->proxy.colorpicker.set_sample_point = _set_sample_point;
+  // The develop module owns the picker state because both the preview pipe and the GUI need to
+  // observe it. Histogram only binds its widgets to that shared state.
+  darktable.develop->color_picker.histogram_module = self;
+  darktable.develop->color_picker.display_samples = dt_conf_get_bool("ui_last/colorpicker_display_samples");
+  darktable.develop->color_picker.restrict_histogram = dt_conf_get_bool("ui_last/colorpicker_restrict_histogram");
+  darktable.develop->color_picker.primary_sample->swatch.alpha = 1.0;
 
   const char *str = dt_conf_get_string_const("ui_last/colorpicker_model");
   const char **names = dt_lib_colorpicker_model_names;
@@ -1832,29 +1804,34 @@ void gui_init(dt_lib_module_t *self)
   // The small sample, label and add button
   GtkWidget *sample_row_events = gtk_event_box_new();
   gtk_widget_add_events(sample_row_events, GDK_ENTER_NOTIFY_MASK | GDK_LEAVE_NOTIFY_MASK);
-  g_signal_connect(G_OBJECT(sample_row_events), "enter-notify-event", G_CALLBACK(_sample_enter_callback), &d->primary_sample);
-  g_signal_connect(G_OBJECT(sample_row_events), "leave-notify-event", G_CALLBACK(_sample_leave_callback), &d->primary_sample);
+  g_signal_connect(G_OBJECT(sample_row_events), "enter-notify-event", G_CALLBACK(_sample_enter_callback),
+                   darktable.develop->color_picker.primary_sample);
+  g_signal_connect(G_OBJECT(sample_row_events), "leave-notify-event", G_CALLBACK(_sample_leave_callback),
+                   darktable.develop->color_picker.primary_sample);
   gtk_box_pack_start(GTK_BOX(self->widget), sample_row_events, TRUE, TRUE, 0);
 
   GtkWidget *sample_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
   gtk_container_add(GTK_CONTAINER(sample_row_events), sample_row);
 
-  d->primary_sample.color_patch = gtk_drawing_area_new();
-  g_signal_connect(G_OBJECT(d->primary_sample.color_patch), "draw", G_CALLBACK(_sample_draw_callback), &d->primary_sample);
+  darktable.develop->color_picker.primary_sample->color_patch = gtk_drawing_area_new();
+  g_signal_connect(G_OBJECT(darktable.develop->color_picker.primary_sample->color_patch), "draw",
+                   G_CALLBACK(_sample_draw_callback), darktable.develop->color_picker.primary_sample);
 
   color_patch_wrapper = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
   gtk_widget_set_name(color_patch_wrapper, "live-sample");
-  gtk_box_pack_start(GTK_BOX(color_patch_wrapper), d->primary_sample.color_patch, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(color_patch_wrapper), darktable.develop->color_picker.primary_sample->color_patch, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(sample_row), color_patch_wrapper, TRUE, TRUE, 0);
 
-  label = d->primary_sample.output_label = gtk_label_new("");
+  label = darktable.develop->color_picker.primary_sample->output_label = gtk_label_new("");
   gtk_label_set_justify(GTK_LABEL(label), GTK_JUSTIFY_CENTER);
   gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_START);
   gtk_label_set_selectable(GTK_LABEL(label), TRUE);
   dt_gui_add_class(label, "dt_monospace");
   gtk_widget_set_has_tooltip(label, TRUE);
-  g_signal_connect(G_OBJECT(label), "query-tooltip", G_CALLBACK(_sample_tooltip_callback), &d->primary_sample);
-  g_signal_connect(G_OBJECT(label), "size-allocate", G_CALLBACK(_label_size_allocate_callback), &d->primary_sample);
+  g_signal_connect(G_OBJECT(label), "query-tooltip", G_CALLBACK(_sample_tooltip_callback),
+                   darktable.develop->color_picker.primary_sample);
+  g_signal_connect(G_OBJECT(label), "size-allocate", G_CALLBACK(_label_size_allocate_callback),
+                   darktable.develop->color_picker.primary_sample);
   gtk_box_pack_start(GTK_BOX(sample_row), label, TRUE, TRUE, 0);
 
   d->add_sample_button = dtgtk_button_new(dtgtk_cairo_paint_square_plus, 0, NULL);
@@ -1883,7 +1860,6 @@ void gui_init(dt_lib_module_t *self)
   gtk_label_set_ellipsize(GTK_LABEL(gtk_bin_get_child(GTK_BIN(restrict_button))), PANGO_ELLIPSIZE_MIDDLE);
   gboolean restrict_histogram = dt_conf_get_bool("ui_last/colorpicker_restrict_histogram");
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(restrict_button), restrict_histogram);
-  darktable.lib->proxy.colorpicker.restrict_histogram = restrict_histogram;
   g_signal_connect(G_OBJECT(restrict_button), "toggled", G_CALLBACK(_restrict_histogram_changed), self);
   gtk_box_pack_start(GTK_BOX(self->widget), restrict_button, TRUE, TRUE, 0);
 
@@ -1897,16 +1873,9 @@ void gui_cleanup(dt_lib_module_t *self)
   _destroy_surface(d);
   dt_iop_color_picker_reset(NULL, FALSE);
 
-  // Clearing proxy functions
-  darktable.lib->proxy.colorpicker.module = NULL;
-  darktable.lib->proxy.colorpicker.update_panel = NULL;
-  darktable.lib->proxy.colorpicker.update_samples = NULL;
-  darktable.lib->proxy.colorpicker.set_sample_box_area = NULL;
-  darktable.lib->proxy.colorpicker.set_sample_point = NULL;
-
-  darktable.lib->proxy.colorpicker.primary_sample = NULL;
-  while(darktable.lib->proxy.colorpicker.live_samples)
-    _remove_sample(darktable.lib->proxy.colorpicker.live_samples->data);
+  darktable.develop->color_picker.histogram_module = NULL;
+  while(darktable.develop->color_picker.samples)
+    _remove_sample(darktable.develop->color_picker.samples->data);
 
   dt_pixelpipe_cache_free_align(self->data);
   self->data = NULL;

@@ -62,6 +62,10 @@
 
 
 struct dt_iop_module_t;
+struct dt_iop_color_picker_t;
+struct dt_colorpicker_sample_t;
+struct dt_lib_module_t;
+struct dt_dev_pixelpipe_iop_t;
 
 typedef enum dt_dev_overexposed_colorscheme_t
 {
@@ -305,6 +309,66 @@ typedef struct dt_develop_t
   // Darkroom pipelines are running fulltime in background until leaving darkroom.
   // Set that to TRUE once they get shutdown.
   gboolean pipelines_started;
+
+  /**
+   * @brief Authoritative darkroom color-picker state.
+   *
+   * @details
+   * Picker ownership used to be split between `darktable.lib->proxy.colorpicker`, the preview pipe,
+   * and the module widgets. That made it difficult to tell whether a picker move should:
+   * - dirtify the preview pipe,
+   * - resample a cached buffer directly,
+   * - keep an intermediate cacheline alive on CPU/OpenCL,
+   * - or emit the deferred picker callback once the sample became available.
+   *
+   * The picker state now lives under `dt_develop_t` because the develop module is the only subsystem
+   * that simultaneously knows:
+   * - which GUI module currently captures the picker,
+   * - which preview pipe and cacheline should be sampled,
+   * - which histogram live samples must be refreshed on every preview update,
+   * - and which sampled state must be published when fresh picker data are available.
+   *
+   * Ownership rules:
+   * - `module`, `picker`, and `widget` describe the currently active module picker.
+   * - `primary_sample` is the editable picker drawn in darkroom for that active picker.
+   * - `samples` are the histogram live samples refreshed from the preview backbuffer.
+   * - `piece_hash` remembers which immutable preview-piece contract produced the current picker values.
+   * - `pending_module`, `pending_pipe`, and `piece_hash` hold the ready-to-consume sample locator between
+   *   cache sampling and `DT_SIGNAL_CONTROL_PICKERDATA_READY`.
+ *
+   * We intentionally do not keep a `dt_dev_pixelpipe_iop_t *` across that signal boundary. Piece objects
+   * belong to one concrete pipe graph instance and may disappear when the preview pipe is resynchronized
+   * or rebuilt. The stable locator is therefore the sealed `piece->global_hash`, which lets signal
+   * subscribers reopen the current piece from the current pipe graph when they consume the ready state.
+   *
+   * This state is GUI-only. Export/headless code paths never own or mutate it.
+   */
+  struct
+  {
+    struct dt_iop_module_t *module;
+    struct dt_iop_color_picker_t *picker;
+    GtkWidget *widget;
+    int kind;
+    int picker_cst;
+    gboolean enabled;
+    gboolean update_pending;
+    gboolean recompute_requested;
+    guint refresh_idle_source;
+
+    struct dt_colorpicker_sample_t *primary_sample;
+    GSList *samples;
+    struct dt_colorpicker_sample_t *selected_sample;
+    gboolean display_samples;
+    gboolean live_samples_enabled;
+    gboolean restrict_histogram;
+    int statistic;
+    struct dt_lib_module_t *histogram_module;
+
+    uint64_t piece_hash;
+
+    struct dt_iop_module_t *pending_module;
+    struct dt_dev_pixelpipe_t *pending_pipe;
+  } color_picker;
 
   /* proxy for communication between plugins and develop/darkroom */
   struct

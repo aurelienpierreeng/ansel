@@ -1367,7 +1367,7 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
       // the global live samples ...
       cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(3));
 
-      for(GSList *samples = darktable.lib->proxy.colorpicker.live_samples; samples; samples = g_slist_next(samples))
+      for(GSList *samples = darktable.develop->color_picker.samples; samples; samples = g_slist_next(samples))
       {
         dt_colorpicker_sample_t *sample = samples->data;
 

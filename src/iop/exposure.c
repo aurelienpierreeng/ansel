@@ -722,12 +722,23 @@ static void _auto_set_exposure(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe)
   dt_iop_exposure_params_t *p = (dt_iop_exposure_params_t *)self->params;
 
   // capture gui color picked event.
-  if(self->picked_color_max[0] < self->picked_color_min[0]) return;
+  if(self->picked_color_max[0] < self->picked_color_min[0])
+  {
+    dt_print(DT_DEBUG_DEV, "[picker/exposure] rejected invalid min/max min=%g max=%g\n",
+             self->picked_color_min[0], self->picked_color_max[0]);
+    return;
+  }
   const float *RGB = self->picked_color;
+  dt_print(DT_DEBUG_DEV, "[picker/exposure] RGB=(%g,%g,%g) pipe=%p\n",
+           RGB[0], RGB[1], RGB[2], (void *)pipe);
 
   // Get input profile, assuming we are before colorin
   const dt_iop_order_iccprofile_info_t *const input_profile = dt_ioppr_get_pipe_input_profile_info(pipe);
-  if(input_profile == NULL) return;
+  if(input_profile == NULL)
+  {
+    dt_print(DT_DEBUG_DEV, "[picker/exposure] missing input profile\n");
+    return;
+  }
 
   // Convert to XYZ
   dt_aligned_pixel_t XYZ;
@@ -746,6 +757,7 @@ static void _auto_set_exposure(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe)
   ++darktable.gui->reset;
   gtk_label_set_text(GTK_LABEL(g->Lch_origin),
                      g_strdup_printf(_("L : \t%.1f %%"), Lch[0]));
+  gtk_widget_queue_draw(g->origin_spot);
   --darktable.gui->reset;
 
   const dt_spot_mode_t mode = dt_bauhaus_combobox_get(g->spot_mode);
@@ -812,6 +824,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
   (void)picker;
   (void)piece;
   if(darktable.gui->reset) return;
+  dt_print(DT_DEBUG_DEV, "[picker/exposure] apply picker=%p pipe=%p\n", (void *)picker, (void *)pipe);
   _auto_set_exposure(self, pipe);
 }
 
@@ -1006,9 +1019,10 @@ static void _spot_settings_changed_callback(GtkWidget *slider, dt_iop_module_t *
   _paint_hue(self);
   --darktable.gui->reset;
 
-  // Re-run auto compute if color picker active and mode is correct
+  // Re-run auto compute only for the module that currently owns the active picker.
   const dt_spot_mode_t mode = dt_bauhaus_combobox_get(g->spot_mode);
-  if(mode == DT_SPOT_MODE_CORRECT)
+  const gboolean picker_active = dt_iop_color_picker_is_active_module(self);
+  if(mode == DT_SPOT_MODE_CORRECT && picker_active)
     _auto_set_exposure(self, self->dev->pipe);
   // else : just record new values and do nothing
 }

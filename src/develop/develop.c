@@ -61,6 +61,7 @@
 #include <assert.h>
 #include <stddef.h>
 #include <glib/gprintf.h>
+#include <inttypes.h>
 #include <math.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -87,9 +88,11 @@
 #include "develop/lightroom.h"
 #include "develop/masks.h"
 #include "develop/pixelpipe_cache.h"
+#include "develop/pixelpipe_gui.h"
 #include "gui/gtk.h"
 #include "gui/gui_throttle.h"
 #include "gui/presets.h"
+#include "libs/colorpicker.h"
 
 #define DT_IOP_ORDER_INFO (darktable.unmuted & DT_DEBUG_IOPORDER)
 
@@ -169,6 +172,15 @@ void dt_dev_init(dt_develop_t *dev, int32_t gui_attached)
   dev->overexposed.lower = dt_conf_get_float("darkroom/ui/overexposed/lower");
   dev->overexposed.upper = dt_conf_get_float("darkroom/ui/overexposed/upper");
 
+  if(dev->gui_attached)
+  {
+    dev->color_picker.primary_sample = g_malloc0(sizeof(dt_colorpicker_sample_t));
+    dev->color_picker.display_samples = dt_conf_get_bool("ui_last/colorpicker_display_samples");
+    dev->color_picker.live_samples_enabled = TRUE;
+    dev->color_picker.restrict_histogram = dt_conf_get_bool("ui_last/colorpicker_restrict_histogram");
+    dt_dev_pixelpipe_gui_init();
+  }
+
   dt_dev_reset_roi(dev);
 
   dev->iop = dt_dev_load_modules(dev);
@@ -199,6 +211,9 @@ void dt_dev_cleanup(dt_develop_t *dev)
     dt_dev_pixelpipe_cleanup(dev->virtual_pipe);
     dt_free(dev->virtual_pipe);
   }
+
+  if(dev->gui_attached)
+    dt_dev_pixelpipe_gui_cleanup();
 
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
   while(dev->history)
@@ -242,6 +257,12 @@ void dt_dev_cleanup(dt_develop_t *dev)
   dt_free(dev->histogram_pre_tonecurve);
   dt_free(dev->histogram_pre_levels);
 
+  if(dev->color_picker.primary_sample)
+  {
+    dt_free(dev->color_picker.primary_sample);
+    dev->color_picker.primary_sample = NULL;
+  }
+
   dt_pthread_rwlock_wrlock(&dev->masks_mutex);
   g_list_free_full(dev->forms, (void (*)(void *))dt_masks_free_form);
   dev->forms = NULL;
@@ -273,7 +294,20 @@ static void _flag_pipe(dt_dev_pixelpipe_t *pipe, gboolean error)
   // and the shutdown flag is on, it means history commit activated the kill-switch.
   // Any other circomstance returning 1 is a runtime error, flag it invalid.
   if(error && !shutdown)
+  {
+    if(pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
+    {
+      dt_print(DT_DEBUG_DEV,
+               "[picker/worker] preview process failed pipe_history=%" PRIu64
+               " pipe=%" PRIu64 " backbuf=%" PRIu64 " backbuf_history=%" PRIu64
+               " changed=%d processing=%d\n",
+               dt_dev_pixelpipe_get_history_hash(pipe), dt_dev_pixelpipe_get_hash(pipe),
+               dt_dev_backbuf_get_hash(&pipe->backbuf),
+               dt_dev_backbuf_get_history_hash(&pipe->backbuf),
+               dt_dev_pixelpipe_get_changed(pipe), pipe->processing);
+    }
     pipe->status = DT_DEV_PIXELPIPE_INVALID;
+  }
 
   /* If a new change request landed while this run was executing, keep the
    * loop in DIRTY state regardless of intermediate VALID/UNDEF transitions.
@@ -501,14 +535,32 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
       // has a new history state to consume.
       while(!dev->exit && dt_control_running() && !pipe->pause && reentries < 2)
       {
+        const uint64_t pipe_history_hash = dt_dev_pixelpipe_get_history_hash(pipe);
+        const uint64_t dev_history_hash = dt_dev_get_history_hash(dev);
+        const uint64_t backbuf_hash = dt_dev_backbuf_get_hash(&pipe->backbuf);
+        const uint64_t pipe_hash = dt_dev_pixelpipe_get_hash(pipe);
+        const uint64_t backbuf_history_hash = dt_dev_backbuf_get_history_hash(&pipe->backbuf);
         const gboolean history_outdated
-            = (dt_dev_pixelpipe_get_history_hash(pipe) != dt_dev_get_history_hash(dev))
-              || (dt_dev_backbuf_get_hash(&pipe->backbuf) != dt_dev_pixelpipe_get_hash(pipe))
-              || (dt_dev_backbuf_get_history_hash(&pipe->backbuf) != dt_dev_get_history_hash(dev));
+            = (pipe_history_hash != dev_history_hash)
+              || (backbuf_hash != pipe_hash)
+              || (backbuf_history_hash != dev_history_hash);
 
         // If we know history changed, ensure at least the last step is resynced.
         if(history_outdated)
+        {
+          if(pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
+          {
+            dt_print(DT_DEBUG_DEV,
+                     "[picker/worker] preview outdated module=%s pipe_history=%" PRIu64
+                     " dev_history=%" PRIu64 " backbuf=%" PRIu64 " pipe=%" PRIu64
+                     " backbuf_history=%" PRIu64 " processing=%d status=%d changed=%d\n",
+                     dev->color_picker.module ? dev->color_picker.module->op : "-",
+                     pipe_history_hash, dev_history_hash, backbuf_hash, pipe_hash,
+                     backbuf_history_hash, pipe->processing, pipe->status,
+                     dt_dev_pixelpipe_get_changed(pipe));
+          }
           dt_dev_pixelpipe_or_changed(pipe, DT_DEV_PIPE_TOP_CHANGED);
+        }
 
         // If any part of history needs resync, the pipe is dirty.
         if(dt_dev_pixelpipe_get_changed(pipe) != DT_DEV_PIPE_UNCHANGED)
@@ -624,19 +676,6 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
         DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED);
         dt_control_queue_redraw();
       }
-    }
-
-    dt_dev_pixelpipe_process_rec_sample(dev->preview_pipe, dev);
-
-    if(dev->preview_pipe->pending_picker_module && dev->preview_pipe->pending_picker_piece)
-    {
-      dt_iop_module_t *picker_module = dev->preview_pipe->pending_picker_module;
-      dt_dev_pixelpipe_iop_t *picker_piece = dev->preview_pipe->pending_picker_piece;
-      dt_dev_pixelpipe_t *picker_pipe = dev->preview_pipe;
-      dev->preview_pipe->pending_picker_module = NULL;
-      dev->preview_pipe->pending_picker_piece = NULL;
-      DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_CONTROL_PICKERDATA_READY,
-                                    picker_module, picker_piece, picker_pipe);
     }
 
     if(!any_pipe_ran)

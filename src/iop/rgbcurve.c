@@ -849,7 +849,7 @@ static gboolean _area_draw_callback(GtkWidget *widget, cairo_t *crf, dt_iop_modu
       dt_aligned_pixel_t picker_mean, picker_min, picker_max;
 
       // the global live samples ...
-      GSList *samples = darktable.lib->proxy.colorpicker.live_samples;
+      GSList *samples = darktable.develop->color_picker.samples;
       if(samples)
       {
         const dt_iop_order_iccprofile_info_t *const display_profile = dt_ioppr_get_pipe_output_profile_info(dev->pipe);
@@ -1305,7 +1305,6 @@ void gui_init(struct dt_iop_module_t *self)
   // color pickers
   g->colorpicker = dt_color_picker_new(self, DT_COLOR_PICKER_POINT_AREA, hbox);
   gtk_widget_set_tooltip_text(g->colorpicker, _("pick GUI color from image\nctrl+click or right-click to select an area"));
-  gtk_widget_set_name(g->colorpicker, "keep-active");
   g->colorpicker_set_values = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, hbox);
   dtgtk_togglebutton_set_paint(DTGTK_TOGGLEBUTTON(g->colorpicker_set_values),
                                dtgtk_cairo_paint_colorpicker_set_values, 0, NULL);

@@ -62,6 +62,8 @@
 #include "dtgtk/expander.h"
 #include "dtgtk/icon.h"
 
+#include "gui/color_picker_proxy.h"
+#include "libs/colorpicker.h"
 #include "gui/gtk.h"
 #include "gui/presets.h"
 #ifdef GDK_WINDOWING_QUARTZ
@@ -1313,15 +1315,38 @@ gchar *dt_lib_get_localized_name(const gchar *plugin_name)
 
 void dt_lib_colorpicker_set_box_area(dt_lib_t *lib, const dt_boundingbox_t box)
 {
-  if(!lib->proxy.colorpicker.module || !lib->proxy.colorpicker.set_sample_box_area) return;
-  lib->proxy.colorpicker.set_sample_box_area(lib->proxy.colorpicker.module, box);
+  dt_develop_t *const dev = darktable.develop;
+  dt_colorpicker_sample_t *const sample = dev ? dev->color_picker.primary_sample : NULL;
+  if(!sample) return;
+
+  gboolean changed = (sample->size != DT_LIB_COLORPICKER_SIZE_BOX);
+  sample->size = DT_LIB_COLORPICKER_SIZE_BOX;
+  for(int k = 0; k < 4; k++)
+  {
+    changed |= (sample->box[k] != box[k]);
+    sample->box[k] = box[k];
+  }
+
+  if(!changed) return;
+  dt_iop_color_picker_request_update();
   dt_gui_refocus_center();
 }
 
 void dt_lib_colorpicker_set_point(dt_lib_t *lib, const float pos[2])
 {
-  if(!lib->proxy.colorpicker.module || !lib->proxy.colorpicker.set_sample_point) return;
-  lib->proxy.colorpicker.set_sample_point(lib->proxy.colorpicker.module, pos);
+  dt_develop_t *const dev = darktable.develop;
+  dt_colorpicker_sample_t *const sample = dev ? dev->color_picker.primary_sample : NULL;
+  if(!sample) return;
+
+  const gboolean changed = sample->size != DT_LIB_COLORPICKER_SIZE_POINT
+                        || sample->point[0] != pos[0]
+                        || sample->point[1] != pos[1];
+  sample->size = DT_LIB_COLORPICKER_SIZE_POINT;
+  sample->point[0] = pos[0];
+  sample->point[1] = pos[1];
+
+  if(!changed) return;
+  dt_iop_color_picker_request_update();
   dt_gui_refocus_center();
 }
 

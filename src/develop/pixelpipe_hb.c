@@ -51,7 +51,6 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "common/color_picker.h"
 #include "common/colorspaces.h"
 #include "common/darktable.h"
 #include "common/histogram.h"
@@ -70,6 +69,7 @@
 #include "develop/pixelpipe_cache.h"
 #include "develop/pixelpipe_cpu.h"
 #include "develop/pixelpipe_gpu.h"
+#include "develop/pixelpipe_gui.h"
 #include "develop/pixelpipe_process.h"
 #include "develop/tiling.h"
 #include "develop/masks.h"
@@ -580,7 +580,6 @@ void dt_dev_pixelpipe_cleanup_nodes(dt_dev_pixelpipe_t *pipe)
     if(piece == NULL) continue;
     // printf("cleanup module `%s'\n", piece->module->name());
     if(piece->module) dt_iop_cleanup_pipe(piece->module, pipe, piece);
-    dt_free(piece->histogram);
     dt_pixelpipe_raster_cleanup(piece->raster_masks);
     dt_free(piece);
   }
@@ -877,11 +876,6 @@ static int _init_base_buffer(dt_dev_pixelpipe_t *pipe)
   return err;
 }
 
-static inline gboolean _is_darkroom_compute_pipe(const dt_dev_pixelpipe_t *pipe)
-{
-  return pipe && (pipe->type == DT_DEV_PIXELPIPE_FULL || pipe->type == DT_DEV_PIXELPIPE_PREVIEW);
-}
-
 static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
                                         uint64_t *out_hash, const dt_dev_pixelpipe_iop_t **out_piece,
                                         GList *pieces, int pos)
@@ -920,7 +914,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
 
   module = piece->module;
 
-  if(dev) dev->progress.total++;
+  if(dev->gui_attached) dev->progress.total++;
   
   KILL_SWITCH_ABORT;
 
@@ -953,6 +947,9 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   {
     /* Child recursion failed before this module acquired any output cache entry.
      * Dropping `hash` here underflows cached exact-hit outputs during shutdown. */
+    dt_print(DT_DEBUG_DEV,
+             "[picker/rec] module=%s child recursion failed input_hash=%" PRIu64 " output_hash=%" PRIu64 "\n",
+             module->op, input_hash, hash);
     return 1;
   }
 
@@ -965,7 +962,13 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
       = dt_dev_pixelpipe_cache_get_entry(darktable.pixelpipe_cache, input_hash);
   if(!input_entry)
   {
-    dt_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] %s has no cache-backed input entry\n", module->name());
+    dt_print(DT_DEBUG_DEV,
+             "[picker/rec] module=%s input cache entry missing input_hash=%" PRIu64 " output_hash=%" PRIu64
+             " prev_module=%s prev_hash=%" PRIu64 "\n",
+             module->op, input_hash, hash,
+             previous_piece ? previous_piece->module->op : "base",
+             previous_piece ? previous_piece->global_hash
+                           : dt_dev_pixelpipe_node_hash(pipe, NULL, *_get_first_roi(pipe), 0));
     return 1;
   }
   dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, input_entry);
@@ -984,8 +987,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   // special case: user requests to see channel data in the parametric mask of a module, or the blending
   // mask. In that case we skip all modules manipulating pixel content and only process image distorting
   // modules. Finally "gamma" is responsible for displaying channel/mask data accordingly.
-  if(dev
-     && (strcmp(module->op, "gamma") != 0)
+  if(dev->gui_attached
      && (pipe->mask_display != DT_DEV_PIXELPIPE_DISPLAY_NONE)
      && !(module->operation_tags() & IOP_TAG_DISTORT)
      && (piece->dsc_in.bpp == piece->dsc_out.bpp)
@@ -1001,7 +1003,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
     return 0;
   }
 
-  if(dev)
+  if(dev->gui_attached)
   {
     gchar *module_label = dt_history_item_get_name(module);
     dt_free(darktable.main_message);
@@ -1025,7 +1027,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
    * RAM, rekey reuse must stop for that piece so later runs cannot overwrite a long-term state in
    * place just because the pipe is running in realtime. */
   const gboolean allow_rekey_reuse = dev && _requests_cache(pipe, piece) && allow_cache_reuse
-                                     && !piece->force_opencl_cache;
+                                     && !cache_output;
   const dt_dev_pixelpipe_cache_writable_status_t acquire_status
       = dt_dev_pixelpipe_cache_get_writable(darktable.pixelpipe_cache, hash, bufsize, name, pipe->type,
                                             cache_output, allow_rekey_reuse,
@@ -1034,22 +1036,40 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   dt_free(name);
   if(acquire_status == DT_DEV_PIXELPIPE_CACHE_WRITABLE_EXACT_HIT)
   {
-    dt_pixel_cache_entry_t *raced_entry = NULL;
-    void *raced_output = NULL;
-    if(dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, hash, &raced_output, &raced_entry, -1, NULL))
+    /* Another pipe already owns a cacheline for this exact hash. If that cacheline is
+     * still write-locked, this is not a processing error: it only means the concurrent
+     * publisher has not finished exposing the exact-hit payload yet. Wait for that
+     * publication to complete instead of aborting the whole recursion. */
+    dt_pixel_cache_entry_t *exact_entry
+        = dt_dev_pixelpipe_cache_get_entry(darktable.pixelpipe_cache, hash);
+    if(!exact_entry)
     {
-      _trace_cache_owner(pipe, module, "exact-hit-race", "output", hash, raced_output, raced_entry, FALSE);
+      dt_print(DT_DEBUG_DEV,
+               "[picker/rec] module=%s exact-hit entry missing output_hash=%" PRIu64 "\n",
+               module->op, hash);
       dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, input_entry);
-      *out_hash = hash;
-      *out_piece = piece;
-      return 0;
+      return 1;
     }
 
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, exact_entry);
+    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, exact_entry);
+    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, exact_entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, exact_entry);
+
+    _trace_cache_owner(pipe, module, "exact-hit-wait", "output", hash,
+                       dt_pixel_cache_entry_get_data(exact_entry), exact_entry, FALSE);
+
     dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, input_entry);
-    return 1;
+    *out_hash = hash;
+    *out_piece = piece;
+    return 0;
   }
   if(!output_entry)
   {
+    dt_print(DT_DEBUG_DEV,
+             "[picker/rec] module=%s writable output acquisition failed output_hash=%" PRIu64
+             " acquire_status=%d\n",
+             module->op, hash, acquire_status);
     dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, input_entry);
     return 1;
   }
@@ -1111,11 +1131,15 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   _print_perf_debug(pipe, pixelpipe_flow, piece, module,
                     (acquire_status != DT_DEV_PIXELPIPE_CACHE_WRITABLE_CREATED), &start);
 
-  if(dev)
-    dev->progress.completed++;
+  if(dev->gui_attached) dev->progress.completed++;
 
   if(error)
   {
+    dt_print(DT_DEBUG_DEV,
+             "[picker/rec] module=%s backend processing failed input_hash=%" PRIu64 " output_hash=%" PRIu64
+             " input_cst=%d output_cst=%d roi_in=%dx%d roi_out=%dx%d\n",
+             module->op, input_hash, hash, piece->dsc_in.cst, piece->dsc_out.cst,
+             piece->roi_in.width, piece->roi_in.height, piece->roi_out.width, piece->roi_out.height);
     _trace_cache_owner(pipe, module, "error-cleanup", "input", input_hash, input, input_entry, FALSE);
     _trace_cache_owner(pipe, module, "error-cleanup", "output", hash, output, output_entry, FALSE);
     // Ensure we always release locks and cache references on error, otherwise cache eviction/GC will stall.
@@ -1160,7 +1184,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   if(_bypass_cache(pipe, piece) && !cache_output)
       dt_dev_pixelpipe_cache_flag_auto_destroy(darktable.pixelpipe_cache, output_entry);
 
-  if(dev)
+  if(dev->gui_attached)
   {
     dt_free(darktable.main_message);
     dt_control_queue_redraw_center();
@@ -1190,73 +1214,6 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
 
   *out_hash = hash;
   *out_piece = piece;
-  return 0;
-}
-
-int dt_dev_pixelpipe_process_rec_sample(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
-{
-  if(!_is_darkroom_compute_pipe(pipe) || !_pipe_needs_gui_sampling_traversal(pipe, dev)) return 0;
-
-  uint64_t input_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
-
-  /* Sampling only consumes already-published cachelines, so there is no reason to recurse.
-   * Walk enabled pieces from start to end, carrying the previous module output hash as input for
-   * the current module. Sampling is module-only, so the base buffer is not part of this traversal. */
-  for(GList *node = g_list_first(pipe->nodes); node; node = g_list_next(node))
-  {
-    dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)node->data;
-    if(!piece || !piece->enabled) continue;
-
-    dt_iop_module_t *module = piece->module;
-    const uint64_t hash = piece->global_hash;
-
-    /* Sampling is defined between module cachelines, not between the base buffer and the first
-     * module. Prime the chain on the first enabled piece, then start sampling once we have a
-     * previous module output hash. */
-    if(input_hash == DT_PIXELPIPE_CACHE_HASH_INVALID)
-    {
-      input_hash = hash;
-      continue;
-    }
-
-    if(!piece->force_opencl_cache)
-    {
-      input_hash = hash;
-      continue;
-    }
-
-    void *output = NULL;
-    dt_pixel_cache_entry_t *output_entry = NULL;
-    if(!dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, hash, &output, &output_entry, -1, NULL)
-       || !output_entry || !output)
-    {
-      continue;
-    }
-
-    void *input = NULL;
-    dt_pixel_cache_entry_t *input_entry = NULL;
-    if(!dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, input_hash, &input, &input_entry, -1, NULL)
-        || !input_entry || !input)
-    {
-      continue;
-    }
-
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, output_entry);
-    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, output_entry);
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, input_entry);
-    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, input_entry);
-
-    _sample_gui(pipe, dev, input, &output, module, piece, input_hash,
-                hash, input_entry, output_entry);
-
-    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, input_entry);
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, input_entry);
-    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, output_entry);
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, output_entry);
-
-    input_hash = hash;
-  }
-
   return 0;
 }
 
@@ -1364,72 +1321,6 @@ static void _update_backbuf_cache_reference(dt_dev_pixelpipe_t *pipe, dt_iop_roi
                      dt_dev_pixelpipe_get_history_hash(pipe));
 }
 
-static void _set_opencl_cache(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
-{
-  // Starting with the end of the pipe, gamma sends its buffer to GUI, so it needs RAM caching.
-  // Any module not supporting OpenCL will set this to TRUE for the previous
-  gboolean opencl_cache = TRUE;
-
-  for(GList *pieces = g_list_last(pipe->nodes); pieces; pieces = g_list_previous(pieces))
-  {
-    dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)pieces->data;
-    dt_iop_module_t *module = piece->module;
-
-    if(piece->enabled)
-    {
-      // Host cache retention is forced if:
-      // - current module explicitly requests it
-      // - next module doesn't support OpenCL (will take its input from host cache)
-      // - current module has global histogram sampling
-      // - current module has colorpicker/internal histogram
-      // - current module is currently being modified in GUI
-      gboolean supports_opencl = FALSE;
-
-#ifdef HAVE_OPENCL
-      supports_opencl = dt_opencl_is_inited() && piece->process_cl_ready && module->process_cl;
-#endif
-
-      // Get user caching requirements
-      gchar *string = g_strdup_printf("/plugins/%s/cache", module->op);
-      
-      if(!dt_conf_key_exists(string) || !dt_conf_key_not_empty(string)) 
-          dt_conf_set_bool(string, piece->force_opencl_cache);
-
-      piece->force_opencl_cache = dt_conf_get_bool(string);
-
-      dt_free(string);
-
-      gboolean color_picker_on
-          = (dev->gui_module && darktable.lib->proxy.colorpicker.picker_proxy 
-             && module == dev->gui_module && dev->gui_module->enabled
-             && dev->gui_module->request_color_pick != DT_REQUEST_COLORPICK_OFF);
-
-      gboolean histogram_on
-          = (!(piece->request_histogram & DT_REQUEST_ONLY_IN_GUI) 
-             && (piece->request_histogram & DT_REQUEST_ON));
-
-      gboolean global_hist_on
-          = (!dt_dev_pixelpipe_get_realtime(pipe)
-             && _get_backuf(dev, piece->module->op)
-             && pipe->gui_observable_source);
-
-      gboolean requested = piece->force_opencl_cache
-          || color_picker_on || histogram_on || global_hist_on;
-
-      piece->force_opencl_cache = (requested || opencl_cache);
-
-      //fprintf(stdout, "%s has OpenCL cache %i, requested intern %i, requested next %i\n", piece->module->op, piece->force_opencl_cache, requested, opencl_cache);
-
-      gboolean active_in_gui = (pipe->type == DT_DEV_PIXELPIPE_FULL || pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
-                               && dev->gui_module == module;
-
-      // previous module in pipeline will need to cache its output to RAM
-      // if the current one doesn't handle OpenCL or is being edited
-      opencl_cache = !supports_opencl || active_in_gui;
-    }
-  }
-}
-
 int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop_roi_t roi)
 {
   if(darktable.unmuted & DT_DEBUG_MEMORY)
@@ -1440,19 +1331,20 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop
 
   dt_dev_pixelpipe_cache_print(darktable.pixelpipe_cache);
 
-  pipe->pending_picker_module = NULL;
-  pipe->pending_picker_piece = NULL;
+  if(dev->gui_attached)
+  {
+    dev->color_picker.pending_module = NULL;
+    dev->color_picker.pending_pipe = NULL;
+    dev->color_picker.piece_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+  }
 
   // Get the roi_out hash of all nodes.
   // Get the previous output size of the module, for cache invalidation.
   dt_dev_pixelpipe_get_roi_in(pipe, dev, roi);
   dt_pixelpipe_get_global_hash(pipe, dev);
   const guint pos = g_list_length(dev->iop);
-  _set_opencl_cache(pipe, dev);
 
   void *buf = NULL;
-
-  const gboolean darkroom_pipe = _is_darkroom_compute_pipe(pipe);
 
   // If the final output cacheline already matches the current pipeline state,
   // we can skip compute entirely. Darkroom pipes may still need the post-compute
@@ -1522,7 +1414,7 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop
     dt_get_times(&start);
     uint64_t final_hash = -1;
     const dt_dev_pixelpipe_iop_t *final_piece = NULL;
-    err = dt_dev_pixelpipe_process_rec(pipe, darkroom_pipe ? dev : NULL, &final_hash, &final_piece, pieces, pos);
+    err = dt_dev_pixelpipe_process_rec(pipe, dev, &final_hash, &final_piece, pieces, pos);
     (void)final_piece;
     gchar *msg = g_strdup_printf("[pixelpipe] %s internal pixel pipeline processing", dt_pixelpipe_get_pipe_name(pipe->type));
     dt_show_times(&start, msg);
@@ -1566,6 +1458,12 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop
                                      &final_entry, pipe->devid, NULL)
          && final_buf != NULL)
         _update_backbuf_cache_reference(pipe, roi, final_entry);
+      else
+        dt_print(DT_DEBUG_DEV,
+                 "[picker/rec] final output cache missing pipe=%s hash=%" PRIu64 " history=%" PRIu64
+                 " devid=%d err=%d\n",
+                 dt_pixelpipe_get_pipe_name(pipe->type), dt_dev_pixelpipe_get_hash(pipe),
+                 dt_dev_pixelpipe_get_history_hash(pipe), pipe->devid, err);
 
       // Note : the last output (backbuf) of the pixelpipe cache is internally locked
       // Whatever consuming it will need to unlock it.

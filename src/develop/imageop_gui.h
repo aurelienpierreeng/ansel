@@ -24,6 +24,7 @@
 
 #pragma once
 
+#include "control/signal.h"
 #include "develop/imageop.h"
 
 #ifdef __cplusplus
@@ -56,4 +57,3 @@ gboolean dt_mask_scroll_increases(int up);
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

@@ -74,6 +74,20 @@ typedef struct dt_colorpicker_sample_t
   // in display profile with current statistic
   GdkRGBA swatch;
 
+  /**
+   * @brief Global histogram stage backing this live sample.
+   *
+   * @details
+   * Histogram live samples are no longer resampled from whichever global
+   * histogram stage happens to be selected in the scopes module. Each sample
+   * remembers the stage from which it was captured so it can reopen the same
+   * preview-cache source on every refresh.
+   *
+   * The primary editable sample ignores this field and always follows the
+   * currently selected histogram stage.
+   */
+  char backbuf_op[32];
+
   /** The GUI elements */
   GtkWidget *container;
   GtkWidget *color_patch;
@@ -86,4 +100,3 @@ typedef struct dt_colorpicker_sample_t
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

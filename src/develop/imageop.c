@@ -77,6 +77,7 @@
 #include "common/opencl.h"
 #include "common/usermanual_url.h"
 #include "control/control.h"
+#include "control/signal.h"
 #include "develop/blend.h"
 #include "develop/develop.h"
 #include "develop/format.h"
@@ -229,6 +230,22 @@ static void default_cleanup(dt_iop_module_t *module)
 {
   dt_free(module->params);
   dt_free(module->default_params);
+}
+
+static void _iop_color_picker_data_ready_callback(gpointer instance, gpointer user_data)
+{
+  dt_iop_module_t *const module = user_data;
+  GtkWidget *picker = NULL;
+  dt_dev_pixelpipe_t *pipe = NULL;
+  const dt_dev_pixelpipe_iop_t *piece = NULL;
+  if(!module || !module->color_picker_apply) return;
+  if(dt_iop_color_picker_get_ready_data(module, &picker, &pipe, &piece)) return;
+
+  dt_print(DT_DEBUG_DEV, "[picker] dispatch module=%s picker=%p pipe=%p hash=%" PRIu64 "\n",
+           module->op, (void *)picker, (void *)pipe, piece ? piece->global_hash : 0);
+
+  if(!module->blend_data || !blend_color_picker_apply(module, picker, pipe, (dt_dev_pixelpipe_iop_t *)piece))
+    module->color_picker_apply(module, picker, pipe, (dt_dev_pixelpipe_iop_t *)piece);
 }
 
 
@@ -1184,6 +1201,11 @@ void dt_iop_gui_init(dt_iop_module_t *module)
 
   // We absolutely need to init the module controls after the module object
   if(module->gui_init) module->gui_init(module);
+  if(module->color_picker_apply)
+  {
+    DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_CONTROL_PICKERDATA_READY,
+                                    G_CALLBACK(_iop_color_picker_data_ready_callback), module);
+  }
 
   --darktable.gui->reset;
 }
@@ -1488,10 +1510,16 @@ void dt_iop_cleanup_module(dt_iop_module_t *module)
   dt_free(module->default_blendop_params);
 
   // don't have a picker pointing to a disappeared module
-  if(darktable.lib
-     && darktable.lib->proxy.colorpicker.picker_proxy
-     && darktable.lib->proxy.colorpicker.picker_proxy->module == module)
-    darktable.lib->proxy.colorpicker.picker_proxy = NULL;
+  if(darktable.develop
+     && darktable.develop->color_picker.picker
+     && darktable.develop->color_picker.picker->module == module)
+  {
+    darktable.develop->color_picker.picker = NULL;
+    darktable.develop->color_picker.widget = NULL;
+    darktable.develop->color_picker.module = NULL;
+    darktable.develop->color_picker.enabled = FALSE;
+    darktable.develop->color_picker.update_pending = FALSE;
+  }
 
   dt_free(module->histogram);
   g_hash_table_destroy(module->raster_mask.source.users);
@@ -1912,6 +1940,10 @@ void dt_iop_gui_cleanup_module(dt_iop_module_t *module)
   dt_free(m->name);
   dt_free(m->view);
 
+  if(module->color_picker_apply)
+  {
+    DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_iop_color_picker_data_ready_callback), module);
+  }
   if(module->gui_data && module->gui_cleanup) module->gui_cleanup(module);
   dt_iop_gui_cleanup_blending(module);
 
