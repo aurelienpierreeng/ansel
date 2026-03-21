@@ -1176,13 +1176,13 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
     dt_dev_pixelpipe_gpu_clear_buffer(&cl_mem_output, output_entry, output,
                                       dt_dev_pixelpipe_cache_gpu_device_buffer(pipe, output_entry));
 
-  // Flag to throw away the output as soon as we are done consuming it in this thread, at the next module.
-  // Cache bypass is requested by modules like crop/perspective, when they show the full image,
-  // and when doing anything transient. Do this only after the current authoritative payload
-  // (RAM or vRAM) has been attached to the cache entry, otherwise the next module would see a
-  // disposable metadata-only line.
-  if(_bypass_cache(pipe, piece) && !cache_output)
-      dt_dev_pixelpipe_cache_flag_auto_destroy(darktable.pixelpipe_cache, output_entry);
+  // Flag to throw away intermediate outputs as soon as the next module consumes them.
+  // The final output still needs to survive long enough for dt_dev_pixelpipe_process()
+  // to promote it to the backbuffer, otherwise thumbnail/export callers only see a
+  // missing exact-hit and fall back to invalid placeholder pixels.
+  const gboolean keep_final_output = (hash == dt_dev_pixelpipe_get_hash(pipe));
+  if(_bypass_cache(pipe, piece) && !cache_output && !keep_final_output)
+    dt_dev_pixelpipe_cache_flag_auto_destroy(darktable.pixelpipe_cache, output_entry);
 
   if(dev->gui_attached)
   {

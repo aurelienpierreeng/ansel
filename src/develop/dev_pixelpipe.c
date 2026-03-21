@@ -369,6 +369,15 @@ static gboolean _prepare_piece_input_contract(dt_dev_pixelpipe_t *pipe, dt_dev_p
   const dt_iop_buffer_dsc_t actual_input_dsc = *upstream_dsc;
 
   piece->dsc_in = actual_input_dsc;
+  piece->dsc_out = actual_input_dsc;
+  dt_iop_buffer_dsc_update_bpp(&piece->dsc_in);
+  dt_iop_buffer_dsc_update_bpp(&piece->dsc_out);
+
+  /* Disabled modules are strict pass-through stages. Their advertised contracts must
+   * not rewrite the upstream descriptor, otherwise a disabled RGB-only module can make
+   * downstream RAW stages such as demosaic believe the stream was already converted. */
+  if(!piece->enabled) return TRUE;
+
   piece->module->input_format(piece->module, pipe, piece, &piece->dsc_in);
   dt_iop_buffer_dsc_update_bpp(&piece->dsc_in);
   piece->dsc_out = piece->dsc_in;
@@ -409,6 +418,7 @@ static void _commit_piece_contract(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_io
                                    dt_iop_params_t *params, dt_develop_blend_params_t *blend_params,
                                    dt_iop_buffer_dsc_t *upstream_dsc)
 {
+  const dt_iop_buffer_dsc_t actual_input_dsc = *upstream_dsc;
   if(!_prepare_piece_input_contract(pipe, piece, upstream_dsc)) return;
 
   dt_iop_commit_params(piece->module, params, blend_params, pipe, piece);
@@ -422,6 +432,13 @@ static void _commit_piece_contract(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_io
   if(piece->enabled)
   {
     piece->module->output_format(piece->module, pipe, piece, &piece->dsc_out);
+    dt_iop_buffer_dsc_update_bpp(&piece->dsc_out);
+  }
+  else
+  {
+    piece->dsc_in = actual_input_dsc;
+    piece->dsc_out = actual_input_dsc;
+    dt_iop_buffer_dsc_update_bpp(&piece->dsc_in);
     dt_iop_buffer_dsc_update_bpp(&piece->dsc_out);
   }
 
