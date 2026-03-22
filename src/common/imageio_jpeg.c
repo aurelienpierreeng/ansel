@@ -309,19 +309,17 @@ int dt_imageio_jpeg_compress(const uint8_t *in, uint8_t *out, const int width, c
   if(quality > 90) jpg.cinfo.comp_info[0].v_samp_factor = 1;
   if(quality > 92) jpg.cinfo.comp_info[0].h_samp_factor = 1;
   jpeg_start_compress(&(jpg.cinfo), TRUE);
-  uint8_t *row = dt_pixelpipe_cache_alloc_align_cache(sizeof(uint8_t) * 3 * width, 0);
+  JSAMPARRAY row = (*jpg.cinfo.mem->alloc_sarray)((j_common_ptr)&jpg.cinfo, JPOOL_IMAGE,
+                                                  (JDIMENSION)(3 * width), 1);
   const uint8_t *buf;
   while(jpg.cinfo.next_scanline < jpg.cinfo.image_height)
   {
-    JSAMPROW tmp[1];
     buf = in + jpg.cinfo.next_scanline * jpg.cinfo.image_width * 4;
     for(int i = 0; i < width; i++)
-      for(int k = 0; k < 3; k++) row[3 * i + k] = buf[4 * i + k];
-    tmp[0] = row;
-    jpeg_write_scanlines(&(jpg.cinfo), tmp, 1);
+      for(int k = 0; k < 3; k++) row[0][3 * i + k] = buf[4 * i + k];
+    jpeg_write_scanlines(&(jpg.cinfo), row, 1);
   }
   jpeg_finish_compress(&(jpg.cinfo));
-  dt_pixelpipe_cache_free_align(row);
   jpeg_destroy_compress(&(jpg.cinfo));
   return sizeof(uint8_t) * 4 * width * height - jpg.dest.free_in_buffer;
 }
@@ -558,19 +556,17 @@ int dt_imageio_jpeg_write_with_icc_profile(const char *filename, const uint8_t *
 
   if(exif && exif_len > 0 && exif_len < 65534) jpeg_write_marker(&(jpg.cinfo), JPEG_APP0 + 1, exif, exif_len);
 
-  uint8_t *row = dt_pixelpipe_cache_alloc_align_cache(sizeof(uint8_t) * 3 * width, 0);
+  JSAMPARRAY row = (*jpg.cinfo.mem->alloc_sarray)((j_common_ptr)&jpg.cinfo, JPOOL_IMAGE,
+                                                  (JDIMENSION)(3 * width), 1);
   const uint8_t *buf;
   while(jpg.cinfo.next_scanline < jpg.cinfo.image_height)
   {
-    JSAMPROW tmp[1];
     buf = in + jpg.cinfo.next_scanline * jpg.cinfo.image_width * 4;
     for(int i = 0; i < width; i++)
-      for(int k = 0; k < 3; k++) row[3 * i + k] = buf[4 * i + k];
-    tmp[0] = row;
-    jpeg_write_scanlines(&(jpg.cinfo), tmp, 1);
+      for(int k = 0; k < 3; k++) row[0][3 * i + k] = buf[4 * i + k];
+    jpeg_write_scanlines(&(jpg.cinfo), row, 1);
   }
   jpeg_finish_compress(&(jpg.cinfo));
-  dt_pixelpipe_cache_free_align(row);
   jpeg_destroy_compress(&(jpg.cinfo));
   fclose(f);
   return 0;
