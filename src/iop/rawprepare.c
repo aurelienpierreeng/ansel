@@ -301,7 +301,8 @@ void distort_mask(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t 
 
 // we're not scaling here (bayer input), so just crop borders
 // see ../../doc/resizing-scaling.md for details
-void modify_roi_out(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, dt_iop_roi_t *roi_out,
+void modify_roi_out(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
+                    dt_iop_roi_t *roi_out,
                     const dt_iop_roi_t *const roi_in)
 {
   *roi_out = *roi_in;
@@ -322,7 +323,8 @@ void modify_roi_out(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, dt_iop
 }
 
 // see ../../doc/resizing-scaling.md for details
-void modify_roi_in(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const dt_iop_roi_t *const roi_out,
+void modify_roi_in(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
+                   const dt_iop_roi_t *const roi_out,
                    dt_iop_roi_t *roi_in)
 {
   *roi_in = *roi_out;

@@ -177,9 +177,11 @@ OPTIONAL(void, change_image, struct dt_iop_module_t *self);
 /** this destroys all resources needed by the piece of the pixelpipe. */
 DEFAULT(void, cleanup_pipe, struct dt_iop_module_t *self, struct dt_dev_pixelpipe_t *pipe,
                              struct dt_dev_pixelpipe_iop_t *piece);
-OPTIONAL(void, modify_roi_in, struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece,
+OPTIONAL(void, modify_roi_in, struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+                              struct dt_dev_pixelpipe_iop_t *piece,
                               const struct dt_iop_roi_t *roi_out, struct dt_iop_roi_t *roi_in);
-OPTIONAL(void, modify_roi_out, struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece,
+OPTIONAL(void, modify_roi_out, struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+                               struct dt_dev_pixelpipe_iop_t *piece,
                                struct dt_iop_roi_t *roi_out, const struct dt_iop_roi_t *roi_in);
 OPTIONAL(int, legacy_params, struct dt_iop_module_t *self, const void *const old_params, const int old_version,
                              void *new_params, const int new_version);

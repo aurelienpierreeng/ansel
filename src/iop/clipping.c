@@ -509,7 +509,7 @@ int distort_transform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   dt_iop_roi_t roi_out, roi_in;
   roi_in.width = piece->buf_in.width * factor;
   roi_in.height = piece->buf_in.height * factor;
-  self->modify_roi_out(self, &piece_copy, &roi_out, &roi_in);
+  self->modify_roi_out(self, pipe, &piece_copy, &roi_out, &roi_in);
 
   dt_iop_clipping_data_t *d = (dt_iop_clipping_data_t *)piece->data;
 
@@ -562,7 +562,7 @@ int distort_transform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   {
     roi_in.width = piece->buf_in.width;
     roi_in.height = piece->buf_in.height;
-    self->modify_roi_out(self, &piece_copy, &roi_out, &roi_in);
+    self->modify_roi_out(self, pipe, &piece_copy, &roi_out, &roi_in);
   }
 
   return 1;
@@ -580,7 +580,7 @@ int distort_backtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
   dt_iop_roi_t roi_out, roi_in;
   roi_in.width = piece->buf_in.width * factor;
   roi_in.height = piece->buf_in.height * factor;
-  self->modify_roi_out(self, &piece_copy, &roi_out, &roi_in);
+  self->modify_roi_out(self, pipe, &piece_copy, &roi_out, &roi_in);
 
   dt_iop_clipping_data_t *d = (dt_iop_clipping_data_t *)piece->data;
 
@@ -633,7 +633,7 @@ int distort_backtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
   {
     roi_in.width = piece->buf_in.width;
     roi_in.height = piece->buf_in.height;
-    self->modify_roi_out(self, &piece_copy, &roi_out, &roi_in);
+    self->modify_roi_out(self, pipe, &piece_copy, &roi_out, &roi_in);
   }
 
   return 1;
@@ -747,7 +747,8 @@ static int _iop_clipping_set_max_clip(struct dt_iop_module_t *self)
 
 // 1st pass: how large would the output be, given this input roi?
 // this is always called with the full buffer before processing.
-void modify_roi_out(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece, dt_iop_roi_t *roi_out,
+void modify_roi_out(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+                    struct dt_dev_pixelpipe_iop_t *piece, dt_iop_roi_t *roi_out,
                     const dt_iop_roi_t *roi_in_orig)
 {
   dt_iop_roi_t roi_in_d = *roi_in_orig;
@@ -934,7 +935,8 @@ void modify_roi_out(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t 
 }
 
 // 2nd pass: which roi would this operation need as input to fill the given output region?
-void modify_roi_in(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece,
+void modify_roi_in(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+                   struct dt_dev_pixelpipe_iop_t *piece,
                    const dt_iop_roi_t *roi_out, dt_iop_roi_t *roi_in)
 {
   dt_iop_clipping_data_t *d = (dt_iop_clipping_data_t *)piece->data;

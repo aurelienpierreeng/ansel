@@ -77,3 +77,4 @@ After non-trivial code changes, run the narrowest relevant build or test target 
 - The maximum cyclomatic complexity of a single sourcecode file is 500. If you reach more than that, find a way to topically split features into subfiles.
 - Use the least amount of public API, and keep as much as possible private.
 - Write C in an object-oriented mindset: `.h` are public API, `.c` are private, both should inherit from parent but not from children, they should depend on the least amount of external resources and be fully enclosed (modular). Data structures are classes, they take properties and can take callbacks as methods. Implement abstract API using preprocessor macros.
+- Never reference unused function input arguments as `(void)arg` inside functions. That only creates noise. API functions may have unused arguments, that's life.

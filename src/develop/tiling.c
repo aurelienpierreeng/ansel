@@ -144,6 +144,7 @@ static double _nm_fitness(double x[], void *rest[])
   const struct dt_dev_pixelpipe_iop_t *piece = (const struct dt_dev_pixelpipe_iop_t *)rest[1];
   struct dt_iop_roi_t *iroi = (struct dt_iop_roi_t *)rest[2];
   struct dt_iop_roi_t *oroi = (struct dt_iop_roi_t *)rest[3];
+  const struct dt_dev_pixelpipe_t *pipe = (const struct dt_dev_pixelpipe_t *)rest[4];
 
   dt_iop_roi_t oroi_test = *oroi;
   oroi_test.x = x[0] * piece->iwidth;
@@ -153,7 +154,7 @@ static double _nm_fitness(double x[], void *rest[])
 
   dt_iop_roi_t iroi_probe = *iroi;
   dt_dev_pixelpipe_iop_t piece_copy = *piece;
-  self->modify_roi_in(self, &piece_copy, &oroi_test, &iroi_probe);
+  self->modify_roi_in(self, pipe, &piece_copy, &oroi_test, &iroi_probe);
 
   double fitness = 0.0;
 
@@ -534,10 +535,11 @@ static int _simplex(double (*objfunc)(double[], void *[]), double start[], int n
 }
 
 
-static int _nm_fit_output_to_input_roi(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
-                                       const dt_iop_roi_t *iroi, dt_iop_roi_t *oroi, int delta)
+static int _nm_fit_output_to_input_roi(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+                                       const struct dt_dev_pixelpipe_iop_t *piece, const dt_iop_roi_t *iroi,
+                                       dt_iop_roi_t *oroi, int delta)
 {
-  void *rest[4] = { (void *)self, (void *)piece, (void *)iroi, (void *)oroi };
+  void *rest[5] = { (void *)self, (void *)piece, (void *)iroi, (void *)oroi, (void *)pipe };
   double start[4] = { (float)oroi->x / piece->iwidth, (float)oroi->y / piece->iheight,
                       (float)oroi->width / piece->iwidth, (float)oroi->height / piece->iheight };
   double epsilon = (double)delta / MIN(piece->iwidth, piece->iheight);
@@ -560,8 +562,9 @@ static int _nm_fit_output_to_input_roi(struct dt_iop_module_t *self, const struc
 /* find a matching oroi_full by probing start value of oroi and get corresponding input roi into iroi_probe.
    We search in two steps. first by a simplicistic iterative search which will succeed in most cases.
    If this does not converge, we do a downhill simplex (nelder-mead) fitting */
-static int _fit_output_to_input_roi(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_iop_t *piece,
-                                    const dt_iop_roi_t *iroi, dt_iop_roi_t *oroi, int delta, int iter)
+static int _fit_output_to_input_roi(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+                                    const struct dt_dev_pixelpipe_iop_t *piece, const dt_iop_roi_t *iroi,
+                                    dt_iop_roi_t *oroi, int delta, int iter)
 {
   dt_iop_roi_t iroi_probe = *iroi;
   dt_iop_roi_t save_oroi = *oroi;
@@ -569,7 +572,7 @@ static int _fit_output_to_input_roi(struct dt_iop_module_t *self, const struct d
 
   // try to go the easy way. this works in many cases where output is
   // just like input, only scaled down
-  self->modify_roi_in(self, &piece_copy, oroi, &iroi_probe);
+  self->modify_roi_in(self, pipe, &piece_copy, oroi, &iroi_probe);
   while((abs((int)iroi_probe.x - (int)iroi->x) > delta || abs((int)iroi_probe.y - (int)iroi->y) > delta
          || abs((int)iroi_probe.width - (int)iroi->width) > delta
          || abs((int)iroi_probe.height - (int)iroi->height) > delta) && iter > 0)
@@ -585,7 +588,7 @@ static int _fit_output_to_input_roi(struct dt_iop_module_t *self, const struct d
     _print_roi(oroi, "tile oroi new");
 
     piece_copy = *piece;
-    self->modify_roi_in(self, &piece_copy, oroi, &iroi_probe);
+    self->modify_roi_in(self, pipe, &piece_copy, oroi, &iroi_probe);
     iter--;
   }
 
@@ -597,7 +600,7 @@ static int _fit_output_to_input_roi(struct dt_iop_module_t *self, const struct d
   // try simplex downhill fitting now.
   // it's crucial that we have a good starting point in oroi, else this
   // will not converge as well.
-  int fit = _nm_fit_output_to_input_roi(self, piece, iroi, oroi, delta);
+  int fit = _nm_fit_output_to_input_roi(self, pipe, piece, iroi, oroi, delta);
   return fit;
 }
 
@@ -1009,7 +1012,7 @@ static int _default_process_tiling_roi(struct dt_iop_module_t *self, const struc
       dt_iop_roi_t oroi_good = { roi_out->x + tx * tile_wd, roi_out->y + ty * tile_ht, wd, ht, roi_out->scale };
 
       dt_dev_pixelpipe_iop_t piece_copy = *piece;
-      self->modify_roi_in(self, &piece_copy, &oroi_good, &iroi_good);
+      self->modify_roi_in(self, pipe, &piece_copy, &oroi_good, &iroi_good);
 
       /* clamp iroi_good to not exceed roi_in */
       iroi_good.x = _max(iroi_good.x, roi_in->x);
@@ -1044,7 +1047,7 @@ static int _default_process_tiling_roi(struct dt_iop_module_t *self, const struc
       _print_roi(&oroi_full, "tile oroi_full before optimization");
 
       /* try to find a matching oroi_full */
-      if(!_fit_output_to_input_roi(self, piece, &iroi_full, &oroi_full, delta, 10))
+      if(!_fit_output_to_input_roi(self, pipe, piece, &iroi_full, &oroi_full, delta, 10))
       {
         dt_print(DT_DEBUG_TILING, "[default_process_tiling_roi] can not handle requested roi's. tiling for "
                                "module '%s' not possible.\n",
@@ -1070,7 +1073,7 @@ static int _default_process_tiling_roi(struct dt_iop_module_t *self, const struc
 
       /* calculate final iroi_full */
       dt_dev_pixelpipe_iop_t piece_full = *piece;
-      self->modify_roi_in(self, &piece_full, &oroi_full, &iroi_full);
+      self->modify_roi_in(self, pipe, &piece_full, &oroi_full, &iroi_full);
 
       /* clamp iroi_full to not exceed roi_in */
       iroi_full.x = _max(iroi_full.x, roi_in->x);
@@ -1734,7 +1737,7 @@ static int _default_process_tiling_cl_roi(struct dt_iop_module_t *self, const st
       dt_iop_roi_t oroi_good = { roi_out->x + tx * tile_wd, roi_out->y + ty * tile_ht, wd, ht, roi_out->scale };
 
       dt_dev_pixelpipe_iop_t piece_copy = *piece;
-      self->modify_roi_in(self, &piece_copy, &oroi_good, &iroi_good);
+      self->modify_roi_in(self, pipe, &piece_copy, &oroi_good, &iroi_good);
 
       /* clamp iroi_good to not exceed roi_in */
       iroi_good.x = _max(iroi_good.x, roi_in->x);
@@ -1769,7 +1772,7 @@ static int _default_process_tiling_cl_roi(struct dt_iop_module_t *self, const st
       _print_roi(&oroi_full, "tile oroi_full before optimization");
 
       /* try to find a matching oroi_full */
-      if(!_fit_output_to_input_roi(self, piece, &iroi_full, &oroi_full, delta, 10))
+      if(!_fit_output_to_input_roi(self, pipe, piece, &iroi_full, &oroi_full, delta, 10))
       {
         dt_print(DT_DEBUG_OPENCL | DT_DEBUG_TILING, "[default_process_tiling_cl_roi] can not handle requested roi's tiling "
                                   "for module '%s' not possible.\n",
@@ -1794,7 +1797,7 @@ static int _default_process_tiling_cl_roi(struct dt_iop_module_t *self, const st
 
       /* calculate final iroi_full */
       dt_dev_pixelpipe_iop_t piece_full = *piece;
-      self->modify_roi_in(self, &piece_full, &oroi_full, &iroi_full);
+      self->modify_roi_in(self, pipe, &piece_full, &oroi_full, &iroi_full);
 
       /* clamp iroi_full to not exceed roi_in */
       iroi_full.x = _max(iroi_full.x, roi_in->x);

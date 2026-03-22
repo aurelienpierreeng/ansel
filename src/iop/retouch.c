@@ -2523,13 +2523,15 @@ void gui_cleanup(dt_iop_module_t *self)
   IOP_GUI_FREE;
 }
 
-void modify_roi_out(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece, dt_iop_roi_t *roi_out,
+void modify_roi_out(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+                    struct dt_dev_pixelpipe_iop_t *piece, dt_iop_roi_t *roi_out,
                     const dt_iop_roi_t *roi_in)
 {
   *roi_out = *roi_in;
 }
 
-static void rt_compute_roi_in(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece,
+static void rt_compute_roi_in(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *const pipe,
+                              struct dt_dev_pixelpipe_iop_t *piece,
                               dt_iop_roi_t *roi_in, int *_roir, int *_roib, int *_roix, int *_roiy)
 {
   dt_iop_retouch_params_t *p = (dt_iop_retouch_params_t *)piece->data;
@@ -2563,7 +2565,7 @@ static void rt_compute_roi_in(struct dt_iop_module_t *self, struct dt_dev_pixelp
       // if the form is outside the roi, we just skip it
       // we get the area for the form
       int fl, ft, fw, fh;
-      if(!dt_masks_get_area(self, self->dev->preview_pipe, piece, form, &fw, &fh, &fl, &ft))
+      if(dt_masks_get_area(self, pipe, piece, form, &fw, &fh, &fl, &ft) != 0)
       {
         continue;
       }
@@ -2599,7 +2601,7 @@ static void rt_compute_roi_in(struct dt_iop_module_t *self, struct dt_dev_pixelp
           || p->rt_forms[index].algorithm == DT_IOP_RETOUCH_CLONE)
       {
         float dx = 0.f, dy = 0.f;
-        if(rt_masks_get_delta_to_destination(self, self->dev->preview_pipe, piece, roi_in, form, &dx, &dy,
+        if(rt_masks_get_delta_to_destination(self, pipe, piece, roi_in, form, &dx, &dy,
                                               p->rt_forms[index].distort_mode))
         {
           roiy = fminf(ft - dy, roiy);
@@ -2619,7 +2621,8 @@ static void rt_compute_roi_in(struct dt_iop_module_t *self, struct dt_dev_pixelp
 
 // for a given form, if a previous clone/heal destination intersects the source area,
 // include that area in roi_in too
-static void rt_extend_roi_in_from_source_clones(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece,
+static void rt_extend_roi_in_from_source_clones(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *const pipe,
+                                                struct dt_dev_pixelpipe_iop_t *piece,
                                                 dt_iop_roi_t *roi_in, const int formid_src, const int fl_src,
                                                 const int ft_src, const int fw_src, const int fh_src, int *_roir,
                                                 int *_roib, int *_roix, int *_roiy)
@@ -2661,7 +2664,7 @@ static void rt_extend_roi_in_from_source_clones(struct dt_iop_module_t *self, st
       
       // we get the source area
       int fl, ft, fw, fh;
-      if(!dt_masks_get_source_area(self, self->dev->preview_pipe, piece, form, &fw, &fh, &fl, &ft))
+      if(dt_masks_get_source_area(self, pipe, piece, form, &fw, &fh, &fl, &ft) != 0)
       {
         continue;
       }
@@ -2670,7 +2673,7 @@ static void rt_extend_roi_in_from_source_clones(struct dt_iop_module_t *self, st
       // get the destination area
       int fl_dest, ft_dest;
       float dx = 0.f, dy = 0.f;
-      if(!rt_masks_get_delta_to_destination(self, self->dev->preview_pipe, piece, roi_in, form, &dx, &dy,
+      if(!rt_masks_get_delta_to_destination(self, pipe, piece, roi_in, form, &dx, &dy,
                                             p->rt_forms[index].distort_mode))
       {
         continue;
@@ -2707,7 +2710,8 @@ static void rt_extend_roi_in_from_source_clones(struct dt_iop_module_t *self, st
 
 // for clone and heal, if the source area is the destination from another clone/heal,
 // we also need the area from that previous clone/heal
-static void rt_extend_roi_in_for_clone(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece,
+static void rt_extend_roi_in_for_clone(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *const pipe,
+                                       struct dt_dev_pixelpipe_iop_t *piece,
                                        dt_iop_roi_t *roi_in, int *_roir, int *_roib, int *_roix, int *_roiy)
 {
   dt_iop_retouch_params_t *p = (dt_iop_retouch_params_t *)piece->data;
@@ -2745,7 +2749,7 @@ static void rt_extend_roi_in_for_clone(struct dt_iop_module_t *self, struct dt_d
 
       // get the source area
       int fl_src, ft_src, fw_src, fh_src;
-      if(!dt_masks_get_source_area(self, self->dev->preview_pipe, piece, form, &fw_src, &fh_src, &fl_src, &ft_src))
+      if(dt_masks_get_source_area(self, pipe, piece, form, &fw_src, &fh_src, &fl_src, &ft_src) != 0)
       {
         continue;
       }
@@ -2756,8 +2760,8 @@ static void rt_extend_roi_in_for_clone(struct dt_iop_module_t *self, struct dt_d
       const int intersects
           = !(roib < ft_src || ft_src + fh_src < roiy || roir < fl_src || fl_src + fw_src < roix);
       if(intersects)
-        rt_extend_roi_in_from_source_clones(self, piece, roi_in, formid, fl_src, ft_src, fw_src, fh_src, &roir,
-                                            &roib, &roix, &roiy);
+        rt_extend_roi_in_from_source_clones(self, pipe, piece, roi_in, formid, fl_src, ft_src, fw_src, fh_src,
+                                            &roir, &roib, &roix, &roiy);
     }
   }
 
@@ -2768,9 +2772,11 @@ static void rt_extend_roi_in_for_clone(struct dt_iop_module_t *self, struct dt_d
 }
 
 // needed if mask dest is in roi and mask src is not
-void modify_roi_in(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece, const dt_iop_roi_t *roi_out,
+void modify_roi_in(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+                   struct dt_dev_pixelpipe_iop_t *piece, const dt_iop_roi_t *roi_out,
                    dt_iop_roi_t *roi_in)
 {
+  dt_dev_pixelpipe_t *const processing_pipe = (dt_dev_pixelpipe_t *)pipe;
   *roi_in = *roi_out;
 
   int roir = roi_in->width + roi_in->x;
@@ -2778,7 +2784,7 @@ void modify_roi_in(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *
   int roix = roi_in->x;
   int roiy = roi_in->y;
 
-  rt_compute_roi_in(self, piece, roi_in, &roir, &roib, &roix, &roiy);
+  rt_compute_roi_in(self, processing_pipe, piece, roi_in, &roir, &roib, &roix, &roiy);
 
   int roir_prev = -1, roib_prev = -1, roix_prev = -1, roiy_prev = -1;
 
@@ -2789,7 +2795,7 @@ void modify_roi_in(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *
     roix_prev = roix;
     roiy_prev = roiy;
 
-    rt_extend_roi_in_for_clone(self, piece, roi_in, &roir, &roib, &roix, &roiy);
+    rt_extend_roi_in_for_clone(self, processing_pipe, piece, roi_in, &roir, &roib, &roix, &roiy);
   }
 
   // now we set the values

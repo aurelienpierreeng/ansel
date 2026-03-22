@@ -1117,7 +1117,8 @@ void distort_mask(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t 
   }
 }
 
-void modify_roi_out(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece, dt_iop_roi_t *roi_out,
+void modify_roi_out(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+                    struct dt_dev_pixelpipe_iop_t *piece, dt_iop_roi_t *roi_out,
                     const dt_iop_roi_t *roi_in)
 {
   dt_iop_ashift_data_t *data = (dt_iop_ashift_data_t *)piece->data;
@@ -1177,9 +1178,11 @@ void modify_roi_out(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t 
 #endif
 }
 
-void modify_roi_in(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece,
+void modify_roi_in(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+                   struct dt_dev_pixelpipe_iop_t *piece,
                    const dt_iop_roi_t *const roi_out, dt_iop_roi_t *roi_in)
 {
+  (void)pipe;
   dt_iop_ashift_data_t *data = (dt_iop_ashift_data_t *)piece->data;
   *roi_in = *roi_out;
 

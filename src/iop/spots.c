@@ -407,17 +407,19 @@ static gboolean masks_form_is_in_roi(dt_iop_module_t *self, const dt_dev_pixelpi
   return TRUE;
 }
 
-void modify_roi_out(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece, dt_iop_roi_t *roi_out,
+void modify_roi_out(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+                    struct dt_dev_pixelpipe_iop_t *piece, dt_iop_roi_t *roi_out,
                     const dt_iop_roi_t *roi_in)
 {
   *roi_out = *roi_in;
 }
 
 // needed if mask dest is in roi and mask src is not
-void modify_roi_in(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece,
+void modify_roi_in(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+                   struct dt_dev_pixelpipe_iop_t *piece,
                    const dt_iop_roi_t *roi_out, dt_iop_roi_t *roi_in)
 {
-  dt_dev_pixelpipe_t *const pipe = self->dev->preview_pipe;
+  dt_dev_pixelpipe_t *const processing_pipe = (dt_dev_pixelpipe_t *)pipe;
   *roi_in = *roi_out;
 
   int roir = roi_in->width + roi_in->x;
@@ -425,7 +427,6 @@ void modify_roi_in(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *
   int roix = roi_in->x;
   int roiy = roi_in->y;
 
-  // dt_iop_spots_params_t *d = (dt_iop_spots_params_t *)piece->data;
   dt_develop_blend_params_t *bp = self->blend_params;
 
   // We iterate through all spots or polygons
@@ -440,7 +441,7 @@ void modify_roi_in(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *
       if(form)
       {
         // if the form is outside the roi, we just skip it
-        if(!masks_form_is_in_roi(self, pipe, piece, form, roi_in, roi_out))
+        if(!masks_form_is_in_roi(self, processing_pipe, piece, form, roi_in, roi_out))
         {
           continue;
         }
@@ -448,7 +449,7 @@ void modify_roi_in(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *
         // we get the area for the source
         int fl, ft, fw, fh;
 
-        if(dt_masks_get_source_area(self, pipe, piece, form, &fw, &fh, &fl, &ft) != 0)
+        if(dt_masks_get_source_area(self, processing_pipe, piece, form, &fw, &fh, &fl, &ft) != 0)
         {
           continue;
         }

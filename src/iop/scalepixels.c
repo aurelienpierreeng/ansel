@@ -112,7 +112,8 @@ static void transform(const dt_dev_pixelpipe_iop_t *const piece, float *p)
   }
 }
 
-static void precalculate_scale(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece)
+static void precalculate_scale(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
+                               const dt_dev_pixelpipe_iop_t *piece)
 {
   // Since the scaling is calculated by modify_roi_in use that to get them
   // This doesn't seem strictly needed but since clipping.c also does it we try
@@ -121,14 +122,13 @@ static void precalculate_scale(dt_iop_module_t *self, const dt_dev_pixelpipe_iop
   dt_iop_roi_t roi_out, roi_in;
   roi_out.width = piece->buf_in.width;
   roi_out.height = piece->buf_in.height;
-  self->modify_roi_in(self, &piece_copy, &roi_out, &roi_in);
+  self->modify_roi_in(self, pipe, &piece_copy, &roi_out, &roi_in);
 }
 
 int distort_transform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
                       float *points, size_t points_count)
 {
-  (void)pipe;
-  precalculate_scale(self, piece);
+  precalculate_scale(self, pipe, piece);
   dt_iop_scalepixels_data_t *d = piece->data;
 
   for(size_t i = 0; i < points_count * 2; i += 2)
@@ -143,8 +143,7 @@ int distort_transform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
 int distort_backtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
                           float *points, size_t points_count)
 {
-  (void)pipe;
-  precalculate_scale(self, piece);
+  precalculate_scale(self, pipe, piece);
   dt_iop_scalepixels_data_t *d = piece->data;
 
   for(size_t i = 0; i < points_count * 2; i += 2)
@@ -166,7 +165,8 @@ void distort_mask(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t 
   fprintf(stderr, "TODO: implement %s() in %s\n", __FUNCTION__, __FILE__);
 }
 
-void modify_roi_out(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, dt_iop_roi_t *roi_out,
+void modify_roi_out(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
+                    dt_iop_roi_t *roi_out,
                     const dt_iop_roi_t *const roi_in)
 {
   *roi_out = *roi_in;
@@ -189,7 +189,8 @@ void modify_roi_out(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, dt_iop
   if(roi_out->height < 1) roi_out->height = 1;
 }
 
-void modify_roi_in(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const dt_iop_roi_t *const roi_out,
+void modify_roi_in(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
+                   const dt_iop_roi_t *const roi_out,
                    dt_iop_roi_t *roi_in)
 {
   *roi_in = *roi_out;

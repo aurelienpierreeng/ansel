@@ -244,7 +244,7 @@ void dt_dev_pixelpipe_get_roi_out(dt_dev_pixelpipe_t *pipe, struct dt_develop_t 
 
     // If module is disabled, modify_roi_out() is a no-op
     if(piece->enabled)
-      module->modify_roi_out(module, piece, &roi_out, &roi_in);
+      module->modify_roi_out(module, pipe, piece, &roi_out, &roi_in);
     else
       roi_out = roi_in;
 
@@ -285,7 +285,7 @@ void dt_dev_pixelpipe_get_roi_in(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *
 
     // If module is disabled, modify_roi_in() is a no-op
     if(piece->enabled)
-      module->modify_roi_in(module, piece, &roi_out_temp, &roi_in);
+      module->modify_roi_in(module, pipe, piece, &roi_out_temp, &roi_in);
     else
       roi_in = roi_out_temp;
 
