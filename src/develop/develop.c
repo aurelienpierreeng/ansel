@@ -366,7 +366,9 @@ int dt_dev_get_thumbnail_size(dt_develop_t *dev)
   // Compute the scaling factor that makes full-res output fit within widget
   dev->roi.natural_scale = dt_dev_get_natural_scale(dev);
 
-  // Get the final size of the preview backbuffer
+  // The preview backbuffer and the pipeline ROI both live in raster pixels.
+  // `natural_scale` therefore directly maps the processed image size to the
+  // raster backbuffer size, without any GUI-density factor mixed in.
   dev->roi.preview_width = dev->roi.natural_scale * dev->roi.processed_width;
   dev->roi.preview_height = dev->roi.natural_scale * dev->roi.processed_height;
   dev->roi.output_inited = TRUE;
@@ -431,17 +433,18 @@ static gboolean _update_darkroom_roi(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe
   dt_dev_pixelpipe_get_roi_out(pipe, dev, pipe->iwidth, pipe->iheight, &pipe->processed_width,
                                &pipe->processed_height);
 
-  // Scale is inited to the value that would fit our full-res raw to GUI viewport size
+  // roi->scale is the pipeline sampling ratio against the processed image and
+  // therefore excludes the GUI backing-store density.
   *scale = dev->roi.natural_scale;
   const gboolean preview_pipe = (pipe == dev->preview_pipe);
-  // The main darkroom pipe shows only the ROI, which may be zoomed in/out.
   if(!preview_pipe) *scale *= dev->roi.scaling;
 
-  // Backbuf size depends on GUI window size only
+  // Width, height, x and y are already expressed in raster pixels, so they
+  // must follow the same raster-space sampling ratio as roi->scale.
   int roi_width = roundf(*scale * dev->roi.processed_width);
   int roi_height = roundf(*scale * dev->roi.processed_height);
-  int widget_wd = dev->roi.width * darktable.gui->ppd;
-  int widget_ht = dev->roi.height * darktable.gui->ppd;
+  int widget_wd = dev->roi.width;
+  int widget_ht = dev->roi.height;
 
   *wd = roundf(fminf(roi_width, widget_wd));
   *ht = roundf(fminf(roi_height, widget_ht));
@@ -816,13 +819,19 @@ dt_dev_image_storage_t dt_dev_load_image(dt_develop_t *dev, const int32_t imgid)
 
 void dt_dev_configure_real(dt_develop_t *dev, int wd, int ht)
 {
-  // Called only from Darkroom to init and update drawing size
-  // depending on sidebars and main window resizing
-  dev->roi.width = wd;
-  dev->roi.height = ht;
+  // Called only from Darkroom to convert the widget allocation into the
+  // raster ROI contract consumed by the pipeline. Everything stored in
+  // dev->roi below is expressed in real buffer pixels.
+  const dt_iop_roi_t gui_roi = { .x = 0, .y = 0, .width = wd, .height = ht, .scale = 1.0f };
+  dt_iop_roi_t pipe_roi = { 0 };
+  dt_dev_convert_roi(dev, &gui_roi, &pipe_roi, DT_DEV_ROI_GUI_LOGICAL, DT_DEV_ROI_PIPELINE);
+  dev->roi.width = pipe_roi.width;
+  dev->roi.height = pipe_roi.height;
   dev->roi.gui_inited = TRUE;
 
-  dt_print(DT_DEBUG_DEV, "[pixelpipe] Darkroom requested a %i×%i px main preview\n", wd, ht);
+  dt_print(DT_DEBUG_DEV,
+           "[pixelpipe] Darkroom requested a %i×%i px widget -> %i×%i px raster preview\n",
+           wd, ht, dev->roi.width, dev->roi.height);
 
   dt_dev_get_thumbnail_size(dev);
   dt_dev_pixelpipe_update_zoom_main(dev);
@@ -838,7 +847,7 @@ void dt_dev_check_zoom_pos_bounds(dt_develop_t *dev, float *dev_x, float *dev_y,
   int proc_w = 0;
   int proc_h = 0;
   dt_dev_get_processed_size(dev, &proc_w, &proc_h);
-  const float scale = dt_dev_get_zoom_level(dev)/ darktable.gui->ppd;
+  const float scale = dt_dev_get_zoom_level(dev);
 
   // find the box size
   const float bw = dev->roi.width / (proc_w * scale);
@@ -872,9 +881,21 @@ void dt_dev_get_processed_size(const dt_develop_t *dev, int *procw, int *proch)
   *proch = dev->roi.processed_height;
  }
 
-void dt_dev_coordinates_widget_delta_to_image_delta(dt_develop_t *dev, const int delta_in, float *delta_out)
+void dt_dev_coordinates_widget_delta_to_image_delta(dt_develop_t *dev, float *points, size_t num_points)
 {
-  
+  if(!dev || !points || num_points == 0) return;
+
+  const float scale = dt_dev_get_zoom_level(dev) / darktable.gui->ppd;
+  if(scale == 0.0f) return;
+
+  // Widget deltas are measured in Gtk logical pixels. Convert them to processed-image
+  // pixels here so dragging thresholds and keyboard pans share the same zoom math.
+  for(size_t i = 0; i < num_points; ++i)
+  {
+    const size_t idx = i * 2;
+    points[idx + 0] /= scale;
+    points[idx + 1] /= scale;
+  }
 }
 
 void dt_dev_coordinates_widget_to_image_norm(dt_develop_t *dev, float *points, size_t num_points)
@@ -884,6 +905,9 @@ void dt_dev_coordinates_widget_to_image_norm(dt_develop_t *dev, float *points, s
   const float processed_height = dev->roi.processed_height;
   if(processed_width == 0.0f || processed_height == 0.0f) return;
 
+  // Widget events are expressed in GUI logical coordinates, while the pipeline
+  // zoom lives in raster pixels. Convert back to the same GUI-space zoom used
+  // by dt_dev_rescale_roi() so event hit-testing and overlay drawing stay aligned.
   const float scale = dt_dev_get_zoom_level(dev) / darktable.gui->ppd;
   const float roi_x = (float)dev->roi.x;
   const float roi_y = (float)dev->roi.y;
@@ -909,6 +933,8 @@ void dt_dev_coordinates_image_norm_to_widget(dt_develop_t *dev, float *points, s
   const float processed_height = dev->roi.processed_height;
   if(processed_width == 0.0f || processed_height == 0.0f) return;
 
+  // GUI overlays are drawn in logical widget coordinates, so use the same
+  // GUI-space zoom that the Cairo darkroom transform applies.
   const float scale = dt_dev_get_zoom_level(dev) / darktable.gui->ppd;
   const float roi_x = (float)dev->roi.x;
   const float roi_y = (float)dev->roi.y;
@@ -1570,21 +1596,46 @@ float dt_dev_get_natural_scale(dt_develop_t *dev)
 
   return fminf(fminf((float)dev->roi.width / (float)dev->roi.processed_width,
                       (float)dev->roi.height / (float)dev->roi.processed_height),
-                1.f)
-          * darktable.gui->ppd;
+                1.f);
 }
 
 float dt_dev_get_fit_scale(dt_develop_t *dev)
 {
-  const float nat_scale = fminf(fminf((float)dev->roi.width / (float)dev->roi.preview_width,
-                         (float)dev->roi.height / (float)dev->roi.preview_height),
-                          1.f);
-  return dev->roi.scaling * nat_scale;
+  if(!dev) return 1.0f;
+  return dev->roi.scaling / darktable.gui->ppd;
 }
 
 float dt_dev_get_overlay_scale(dt_develop_t *dev)
 {
-  return dt_dev_get_fit_scale(dev) * darktable.gui->ppd;
+  return dt_dev_get_fit_scale(dev);
+}
+
+float dt_dev_get_widget_zoom_scale(const dt_develop_t *dev, const float scaling)
+{
+  if(!dev) return 1.0f;
+  return scaling * dev->roi.natural_scale / darktable.gui->ppd;
+}
+
+void dt_dev_get_widget_center(const dt_develop_t *dev, float *point)
+{
+  if(!dev || !point) return;
+  point[0] = 0.5f * dev->roi.orig_width;
+  point[1] = 0.5f * dev->roi.orig_height;
+}
+
+void dt_dev_get_image_box_in_widget(const dt_develop_t *dev, const int32_t width, const int32_t height, float *box)
+{
+  if(!dev || !box) return;
+
+  const float scale = dev->roi.scaling / darktable.gui->ppd;
+  const float roi_width = fminf(width, dev->roi.preview_width * scale);
+  const float roi_height = fminf(height, dev->roi.preview_height * scale);
+  const float border = dev->roi.border_size;
+
+  box[0] = fmaxf(border, 0.5f * (width - roi_width));
+  box[1] = fmaxf(border, 0.5f * (height - roi_height));
+  box[2] = fminf(width - 2 * border, roi_width);
+  box[3] = fminf(height - 2 * border, roi_height);
 }
 
 float dt_dev_get_zoom_level(const dt_develop_t *dev)
@@ -1599,6 +1650,28 @@ void dt_dev_reset_roi(dt_develop_t *dev)
   dev->roi.scaling = 1.f;
   dev->roi.x = 0.5f;
   dev->roi.y = 0.5f;
+}
+
+void dt_dev_convert_roi(const dt_develop_t *dev, const dt_iop_roi_t *roi_in, dt_iop_roi_t *roi_out,
+                        const dt_dev_roi_space_t from, const dt_dev_roi_space_t to)
+{
+  if(!dev || !roi_in || !roi_out) return;
+
+  *roi_out = *roi_in;
+  if(from == to) return;
+
+  const float factor = (from == DT_DEV_ROI_GUI_LOGICAL && to == DT_DEV_ROI_PIPELINE)
+                           ? darktable.gui->ppd
+                           : 1.0f / darktable.gui->ppd;
+
+  // x/y/width/height belong to the GUI/pipeline geometry boundary and therefore
+  // follow the ppd factor. roi->scale stays unchanged because it expresses the
+  // image-space sampling ratio, which must not depend on GUI density.
+  roi_out->x = lroundf(roi_in->x * factor);
+  roi_out->y = lroundf(roi_in->y * factor);
+  roi_out->width = lroundf(roi_in->width * factor);
+  roi_out->height = lroundf(roi_in->height * factor);
+  roi_out->scale = roi_in->scale * factor;
 }
 
 gboolean dt_dev_clip_roi(dt_develop_t *dev, cairo_t *cr, int32_t width, int32_t height)
@@ -1667,11 +1740,10 @@ gboolean dt_dev_rescale_roi_to_input(dt_develop_t *dev, cairo_t *cr, int32_t wid
 gboolean dt_dev_check_zoom_scale_bounds(dt_develop_t *dev)
 {
   const float natural_scale = dev->roi.natural_scale;
-  const float ppd = darktable.gui->ppd;
 
   // Limit zoom in to 16x the size of an apparent pixel on screen
   const float pixel_actual_size = natural_scale * dev->roi.scaling;
-  const float pixel_max_size = 16.f * ppd;
+  const float pixel_max_size = 16.f;
   
   if(pixel_actual_size >= pixel_max_size)
   {

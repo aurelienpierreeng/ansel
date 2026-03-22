@@ -106,6 +106,12 @@ typedef enum dt_dev_transform_direction_t
   DT_DEV_TRANSFORM_DIR_BACK_EXCL = 4
 } dt_dev_transform_direction_t;
 
+typedef enum dt_dev_roi_space_t
+{
+  DT_DEV_ROI_PIPELINE = 0,
+  DT_DEV_ROI_GUI_LOGICAL = 1
+} dt_dev_roi_space_t;
+
 typedef enum dt_dev_pixelpipe_display_mask_t
 {
   DT_DEV_PIXELPIPE_DISPLAY_NONE = 0,
@@ -168,8 +174,9 @@ typedef struct dt_develop_t
   struct {
     // width = orig_width - 2 * border_size,
     // height = orig_height - 2 * border_size,
-    // aka the surface actually covered by an image backbuffer (ROI)
-    // set by `dt_dev_configure()`
+    // converted to raster pixels through the GUI ppd factor.
+    // This is the surface actually covered by an image backbuffer (ROI)
+    // and it is set by `dt_dev_configure()`.
     int32_t width, height;
 
     // User-defined scaling factor, related to GUI zoom.
@@ -183,12 +190,12 @@ typedef struct dt_develop_t
     // darkroom border size: ISO 12646 borders or user-defined borders
     int32_t border_size;
 
-    // Those are the darkroom main widget size, aka max paintable area.
-    // This size is allocated by Gtk from the window size minus all panels.
-    // It is NOT the size of the backbuffer/ROI.
+    // Those are the darkroom main widget size in GUI coordinates, aka max
+    // paintable area. This size is allocated by Gtk from the window size
+    // minus all panels. It is NOT the size of the backbuffer/ROI.
     int32_t orig_width, orig_height;
 
-    // Dimensions of the preview backbuffer, depending on the 
+    // Dimensions of the preview backbuffer, depending on the
     // darkroom main widget size and DPI factor.
     // These are computed early, before we have the actual buffer.
     // Use them everywhere in GUI.
@@ -521,6 +528,20 @@ void dt_dev_set_backbuf(dt_backbuf_t *backbuf, const int width, const int height
  * @param num_points number of coordinate pairs referenced by points.
  */
 void dt_dev_coordinates_widget_to_image_norm(dt_develop_t *dev, float *points, size_t num_points);
+/**
+ * @brief Convert a widget-space distance to processed-image pixels.
+ *
+ * @details
+ * Mouse drags and GUI handle sizes are expressed in darkroom logical pixels.
+ * Interactive modules compare them against image data, so this helper applies
+ * the current widget zoom once in the develop API instead of duplicating the
+ * same division in every callback.
+ *
+ * @param dev the develop instance
+ * @param points pointer to num_points delta pairs stored as {dx, dy}; data is modified in place.
+ * @param num_points number of delta pairs referenced by points.
+ */
+void dt_dev_coordinates_widget_delta_to_image_delta(dt_develop_t *dev, float *points, size_t num_points);
 void dt_dev_coordinates_image_norm_to_widget(dt_develop_t *dev, float *points, size_t num_points);
 void dt_dev_coordinates_image_norm_to_image_abs(dt_develop_t *dev, float *points, size_t num_points);
 void dt_dev_coordinates_image_abs_to_image_norm(dt_develop_t *dev, float *points, size_t num_points);
@@ -679,28 +700,86 @@ gboolean dt_dev_pixelpipe_has_preview_output(const dt_develop_t *dev, const stru
 gboolean dt_dev_pipelines_share_preview_output(dt_develop_t *dev);
 
 /**
- * @brief  Get the overlay scale factor
- * (scaling * natural_scale_on_processed_size * ppd)
- * 
+ * @brief Get the overlay scale factor in GUI logical coordinates.
+ *
+ * @details This is the GUI-space scale used to draw preview overlays from the
+ * raster backbuffer dimensions stored in the pipeline ROI.
+ *
  * @param dev the develop instance
  * @return float :the overlay scale factor
  */
 float dt_dev_get_overlay_scale(dt_develop_t *dev);
 
 /**
- * @brief Get the scale factor to fit the image into the darkroom area.
- * (scaling * natural_scale_on_processed_size)
- * 
+ * @brief Convert a darkroom scaling factor to GUI logical zoom.
+ *
+ * @details
+ * Pipeline zoom is tracked in raster-space units. Gtk callbacks and overlay
+ * drawing operate in logical widget coordinates, so the ppd correction belongs
+ * here rather than at every interactive call site.
+ *
+ * @param dev the develop instance
+ * @param scaling the darkroom scaling factor to evaluate
+ * @return float : the GUI logical zoom
+ */
+float dt_dev_get_widget_zoom_scale(const dt_develop_t *dev, float scaling);
+
+/**
+ * @brief Get the center of the darkroom widget in logical coordinates.
+ *
+ * @param dev the develop instance
+ * @param point returned widget center stored as {x, y}
+ */
+void dt_dev_get_widget_center(const dt_develop_t *dev, float *point);
+
+/**
+ * @brief Get the displayed image rectangle in darkroom widget coordinates.
+ *
+ * @details
+ * Input callbacks often need to know whether the pointer is inside the image
+ * or in the margin area. This exposes the current displayed backbuffer
+ * footprint in logical coordinates, including the ppd conversion.
+ *
+ * @param dev the develop instance
+ * @param width the current darkroom widget width
+ * @param height the current darkroom widget height
+ * @param box returned image box stored as {x, y, width, height}
+ */
+void dt_dev_get_image_box_in_widget(const dt_develop_t *dev, int32_t width, int32_t height, float *box);
+
+/**
+ * @brief Get the scale factor that maps preview-buffer pixels to GUI coordinates.
+ *
+ * @details The pipeline ROI is stored in raster pixels. GUI drawing still
+ * happens in Gtk logical coordinates, so this helper exposes the explicit
+ * raster-to-GUI conversion used by overlays.
+ *
  * @param dev the develop instance
  * @return float : the fit scale factor
  */
 float dt_dev_get_fit_scale(dt_develop_t *dev);
 
-// Get the current zoom factor ( scaling * natural_scale )
+// Get the current pipeline zoom factor in image-space units ( scaling * natural_scale ).
 float dt_dev_get_zoom_level(const dt_develop_t *dev);
 
 // Reset darkroom ROI scaling and position
 void dt_dev_reset_roi(dt_develop_t *dev);
+
+/**
+ * @brief Convert a full ROI object between pipeline raster coordinates and GUI logical coordinates.
+ *
+ * @details The pipeline stores ROI geometry in real buffer pixels while Gtk events and drawing
+ * use logical coordinates. x/y/width/height cross that boundary through the ppd factor, while
+ * roi->scale remains the same because it expresses image-space sampling, not GUI density.
+ *
+ * @param dev the develop instance carrying the ppd factor
+ * @param roi_in the source ROI
+ * @param roi_out the converted ROI
+ * @param from the source coordinate space
+ * @param to the destination coordinate space
+ */
+void dt_dev_convert_roi(const dt_develop_t *dev, const dt_iop_roi_t *roi_in, dt_iop_roi_t *roi_out,
+                        const dt_dev_roi_space_t from, const dt_dev_roi_space_t to);
 
 /**
  * @brief Clip the view to the ROI.

@@ -62,7 +62,12 @@
 extern "C" {
 #endif
 
-/** region of interest */
+/**
+ * @brief Region of interest passed through the pixelpipe.
+ *
+ * @details `scale` must stay consistent with `x`, `y`, `width` and `height`,
+ * which all describe the same raster ROI seen by the current pipeline stage.
+ */
 typedef struct dt_iop_roi_t
 {
   int x, y, width, height;

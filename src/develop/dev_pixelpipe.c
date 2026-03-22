@@ -36,7 +36,7 @@ static gchar *_get_debug_pipe_name(const dt_dev_pixelpipe_t *pipe, const dt_deve
   if(dev && pipe && dev->virtual_pipe == pipe)
     return g_strdup("virtual-preview");
 
-  return dt_pixelpipe_get_pipe_name(pipe ? pipe->type : DT_DEV_PIXELPIPE_NONE);
+  return g_strdup(dt_pixelpipe_get_pipe_name(pipe ? pipe->type : DT_DEV_PIXELPIPE_NONE));
 }
 
 static void _change_pipe(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_change_t flag)
@@ -229,6 +229,9 @@ void dt_dev_pixelpipe_get_roi_out(dt_dev_pixelpipe_t *pipe, struct dt_develop_t 
 {
   dt_iop_roi_t roi_in = (dt_iop_roi_t){ 0, 0, width_in, height_in, 1.0 };
   dt_iop_roi_t roi_out = roi_in;
+  gchar *pipe_name = NULL;
+  if(darktable.unmuted & DT_DEBUG_PIPE)
+    pipe_name = _get_debug_pipe_name(pipe, dev);
 
   for(GList *nodes = g_list_first(pipe->nodes); nodes; nodes = g_list_next(nodes))
   {
@@ -248,10 +251,22 @@ void dt_dev_pixelpipe_get_roi_out(dt_dev_pixelpipe_t *pipe, struct dt_develop_t 
     else
       roi_out = roi_in;
 
+    // Forward ROI planning answers "what output rectangle does this module
+    // produce from the previous one ?". Logging the tuple here makes each
+    // module-local geometry change visible on `-d pipe`.
+    if(darktable.unmuted & DT_DEBUG_PIPE)
+      dt_print(DT_DEBUG_PIPE,
+               "[roi-out] pipe=%s module=%s enabled=%d in=(x=%d y=%d w=%d h=%d scale=%.6f)"
+               " out=(x=%d y=%d w=%d h=%d scale=%.6f)\n",
+               pipe_name, module->op, piece->enabled,
+               roi_in.x, roi_in.y, roi_in.width, roi_in.height, roi_in.scale,
+               roi_out.x, roi_out.y, roi_out.width, roi_out.height, roi_out.scale);
+
     piece->buf_out = roi_out;
     roi_in = roi_out;
   }
 
+  if(pipe_name) dt_free(pipe_name);
   *width = roi_out.width;
   *height = roi_out.height;
 }
@@ -271,6 +286,9 @@ void dt_dev_pixelpipe_get_roi_in(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *
 
   dt_iop_roi_t roi_out_temp = roi_out;
   dt_iop_roi_t roi_in;
+  gchar *pipe_name = NULL;
+  if(darktable.unmuted & DT_DEBUG_PIPE)
+    pipe_name = _get_debug_pipe_name(pipe, dev);
   for(GList *nodes = g_list_last(pipe->nodes); nodes; nodes = g_list_previous(nodes))
   {
     dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)nodes->data;
@@ -289,20 +307,23 @@ void dt_dev_pixelpipe_get_roi_in(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *
     else
       roi_in = roi_out_temp;
 
-    /*
-    if(piece->enabled)
-    {
-      fprintf(stdout, "%s : scale : in %f out %f - (x, y) : (%i, %i) to (%i, %i)\n",
-        module->op, 
-        roi_in.scale, roi_out.scale, 
-        roi_in.x, roi_in.y,
-        roi_out.x, roi_out.y);
-    }
-    */
+    // Backward ROI planning answers "how much input rectangle does this
+    // module need from upstream to deliver the requested downstream output ?".
+    // Logging that request before and after modify_roi_in() makes ROI growth
+    // and padding traceable module-by-module on `-d pipe`.
+    if(darktable.unmuted & DT_DEBUG_PIPE)
+      dt_print(DT_DEBUG_PIPE,
+               "[roi-in ] pipe=%s module=%s enabled=%d out=(x=%d y=%d w=%d h=%d scale=%.6f)"
+               " in=(x=%d y=%d w=%d h=%d scale=%.6f)\n",
+               pipe_name, module->op, piece->enabled,
+               roi_out_temp.x, roi_out_temp.y, roi_out_temp.width, roi_out_temp.height, roi_out_temp.scale,
+               roi_in.x, roi_in.y, roi_in.width, roi_in.height, roi_in.scale);
 
     piece->roi_in = roi_in;
     roi_out_temp = roi_in;
   }
+
+  if(pipe_name) dt_free(pipe_name);
 
   /* ROI planning runs backwards, but rawprepare seals the effective Bayer/X-Trans phase only once
    * the real input crop is known. Forward that authored RAW descriptor now so the downstream RAW

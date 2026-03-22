@@ -2980,6 +2980,16 @@ static gboolean _sync_private_buffer_from_preview_cache(dt_iop_module_t *self,
   const int width = preview_piece->roi_in.width;
   const int height = preview_piece->roi_in.height;
   const int ch = preview_piece->dsc_in.channels;
+  const float scale_x = (preview_piece->buf_in.width > 0)
+                            ? (float)width / (float)preview_piece->buf_in.width
+                            : 1.0f;
+  const float scale_y = (preview_piece->buf_in.height > 0)
+                            ? (float)height / (float)preview_piece->buf_in.height
+                            : 1.0f;
+  // The line detector needs the actual preview-buffer decimation factor to map
+  // detected segments back to the module input. Derive it from buffer sizes so
+  // it stays correct even if ROI bookkeeping changes around the GUI boundary.
+  const float buffer_scale = 0.5f * (scale_x + scale_y);
   dt_iop_gui_enter_critical_section(self);
   if(g->buf == NULL || (size_t)g->buf_width * g->buf_height < (size_t)width * height)
   {
@@ -2993,7 +3003,7 @@ static gboolean _sync_private_buffer_from_preview_cache(dt_iop_module_t *self,
     g->buf_height = height;
     g->buf_x_off = preview_piece->roi_in.x;
     g->buf_y_off = preview_piece->roi_in.y;
-    g->buf_scale = preview_piece->roi_in.scale;
+    g->buf_scale = buffer_scale;
     g->buf_hash = upstream_hash;
   }
   dt_iop_gui_leave_critical_section(self);
@@ -3326,7 +3336,11 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     const int height = roi_in->height;
     const int x_off = roi_in->x;
     const int y_off = roi_in->y;
-    const float scale = roi_in->scale;
+    const float scale_x = (piece->buf_in.width > 0) ? (float)width / (float)piece->buf_in.width : 1.0f;
+    const float scale_y = (piece->buf_in.height > 0) ? (float)height / (float)piece->buf_in.height : 1.0f;
+    // Keep structure detection anchored to the actual preview buffer resolution,
+    // not to external ROI scale semantics.
+    const float scale = 0.5f * (scale_x + scale_y);
 
     // origin of image and opposite corner as reference points
     dt_boundingbox_t points = { 0.0f, 0.0f, (float)piece->buf_in.width, (float)piece->buf_in.height };
@@ -3468,7 +3482,11 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     // so we can adjust the gui labels accordingly
     const int x_off = roi_in->x;
     const int y_off = roi_in->y;
-    const float scale = roi_in->scale;
+    const float scale_x = (piece->buf_in.width > 0) ? (float)iwidth / (float)piece->buf_in.width : 1.0f;
+    const float scale_y = (piece->buf_in.height > 0) ? (float)iheight / (float)piece->buf_in.height : 1.0f;
+    // Keep structure detection anchored to the actual preview buffer resolution,
+    // not to external ROI scale semantics.
+    const float scale = 0.5f * (scale_x + scale_y);
 
     // origin of image and opposite corner as reference points
     dt_boundingbox_t points = { 0.0f, 0.0f, (float)piece->buf_in.width, (float)piece->buf_in.height };
@@ -3855,12 +3873,15 @@ static int get_points(struct dt_iop_module_t *self, const dt_iop_ashift_line_t *
     const size_t offset = my_points_idx[n].offset;
     const int length = my_points_idx[n].length;
 
+    // Walk the full rasterized polyline so the hit-test bounding box matches
+    // the displayed line, not only its first sample.
     for(int l = 0; l < length; l++)
     {
-      xmin = fmin(xmin, my_points[2 * offset]);
-      xmax = fmax(xmax, my_points[2 * offset]);
-      ymin = fmin(ymin, my_points[2 * offset + 1]);
-      ymax = fmax(ymax, my_points[2 * offset + 1]);
+      const size_t point = offset + l;
+      xmin = fmin(xmin, my_points[2 * point]);
+      xmax = fmax(xmax, my_points[2 * point]);
+      ymin = fmin(ymin, my_points[2 * point + 1]);
+      ymax = fmax(ymax, my_points[2 * point + 1]);
     }
 
     my_points_idx[n].bbx = xmin;
