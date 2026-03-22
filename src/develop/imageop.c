@@ -132,13 +132,15 @@ void dt_iop_load_default_params(dt_iop_module_t *module)
   dt_iop_compute_module_hash(module, module->dev->forms);
 }
 
-static void _iop_modify_roi_in(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece,
+static void _iop_modify_roi_in(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+                               struct dt_dev_pixelpipe_iop_t *piece,
                                const dt_iop_roi_t *roi_out, dt_iop_roi_t *roi_in)
 {
   *roi_in = *roi_out;
 }
 
-static void _iop_modify_roi_out(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece,
+static void _iop_modify_roi_out(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+                                struct dt_dev_pixelpipe_iop_t *piece,
                                 dt_iop_roi_t *roi_out, const dt_iop_roi_t *roi_in)
 {
   *roi_out = *roi_in;

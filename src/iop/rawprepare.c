@@ -202,31 +202,37 @@ static int compute_proper_crop(const dt_dev_pixelpipe_iop_t *piece, const dt_iop
   return (int)roundf((double)value * scale);
 }
 
-static void _update_output_cfa_descriptor(const dt_dev_pixelpipe_iop_t *piece,
+static void _update_output_cfa_descriptor(const dt_dev_pixelpipe_t *pipe,
+                                          const dt_dev_pixelpipe_iop_t *piece,
                                           const dt_iop_roi_t *const roi_in,
                                           dt_iop_buffer_dsc_t *dsc)
 {
-  if(!piece || !roi_in || !dsc) return;
+  if(!pipe || !piece || !roi_in || !dsc) return;
 
-  dsc->filters = piece->dsc_in.filters;
-  memcpy(dsc->xtrans, piece->dsc_in.xtrans, sizeof(dsc->xtrans));
+  dsc->filters = pipe->image.dsc.filters;
+  memcpy(dsc->xtrans, pipe->image.dsc.xtrans, sizeof(dsc->xtrans));
 
-  if(!piece->dsc_in.filters) return;
+  if(!pipe->image.dsc.filters) return;
+
+  /* Rawprepare is the stage that converts the immutable sensor-aligned RAW descriptor
+   * attached to the input image into the runtime descriptor seen by downstream RAW
+   * modules. Rebuild that contract from the pipe image each time instead of chaining
+   * shifts from `piece->dsc_in`, otherwise repeated ROI planning can compound the
+   * Bayer/X-Trans phase offset. */
 
   const dt_iop_rawprepare_data_t *d = (dt_iop_rawprepare_data_t *)piece->data;
   const uint32_t crop_x = compute_proper_crop(piece, roi_in, d->x);
   const uint32_t crop_y = compute_proper_crop(piece, roi_in, d->y);
 
-  dsc->filters = dt_rawspeed_crop_dcraw_filters(piece->dsc_in.filters, crop_x, crop_y);
+  dsc->filters = dt_rawspeed_crop_dcraw_filters(pipe->image.dsc.filters, crop_x, crop_y);
 
-  if(piece->dsc_in.filters == 9u)
+  if(pipe->image.dsc.filters != 9u) return;
+
+  for(int i = 0; i < 6; ++i)
   {
-    for(int i = 0; i < 6; ++i)
+    for(int j = 0; j < 6; ++j)
     {
-      for(int j = 0; j < 6; ++j)
-      {
-        dsc->xtrans[j][i] = piece->dsc_in.xtrans[(j + crop_y) % 6][(i + crop_x) % 6];
-      }
+      dsc->xtrans[j][i] = pipe->image.dsc.xtrans[(j + crop_y) % 6][(i + crop_x) % 6];
     }
   }
 }
@@ -319,7 +325,7 @@ void modify_roi_out(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, dt_de
   /* Rawprepare changes the CFA phase according to the effective crop on the current ROI scale.
    * That contract cannot be authored at history resync time because `piece->roi_in` is not known yet.
    * Bind the crop-dependent descriptor fields here, when ROI planning has provided the real input ROI. */
-  _update_output_cfa_descriptor(piece, roi_in, &piece->dsc_out);
+  _update_output_cfa_descriptor(pipe, piece, roi_in, &piece->dsc_out);
 }
 
 // see ../../doc/resizing-scaling.md for details
@@ -338,7 +344,7 @@ void modify_roi_in(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, dt_dev
 
   /* Same reasoning as in modify_roi_out(): the CFA/X-Trans descriptor depends on the input ROI scale,
    * so finalize it here once the upstream ROI has been computed. */
-  _update_output_cfa_descriptor(piece, roi_in, &piece->dsc_out);
+  _update_output_cfa_descriptor(pipe, piece, roi_in, &piece->dsc_out);
 }
 
 void output_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,

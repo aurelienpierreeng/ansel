@@ -304,6 +304,30 @@ void dt_dev_pixelpipe_get_roi_in(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *
     roi_out_temp = roi_in;
   }
 
+  /* ROI planning runs backwards, but rawprepare seals the effective Bayer/X-Trans phase only once
+   * the real input crop is known. Forward that authored RAW descriptor now so the downstream RAW
+   * modules process with the same CFA layout that rawprepare just computed for this run. */
+  dt_iop_buffer_dsc_t upstream_dsc = pipe->image.dsc;
+  for(GList *nodes = g_list_first(pipe->nodes); nodes; nodes = g_list_next(nodes))
+  {
+    dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)nodes->data;
+
+    if(piece->dsc_in.cst == IOP_CS_RAW && piece->dsc_in.channels == 1)
+    {
+      piece->dsc_in.filters = upstream_dsc.filters;
+      memcpy(piece->dsc_in.xtrans, upstream_dsc.xtrans, sizeof(piece->dsc_in.xtrans));
+    }
+
+    if(piece->dsc_out.cst == IOP_CS_RAW && piece->dsc_out.channels == 1
+       && (!piece->enabled || strcmp(piece->module->op, "rawprepare")))
+    {
+      piece->dsc_out.filters = piece->dsc_in.filters;
+      memcpy(piece->dsc_out.xtrans, piece->dsc_in.xtrans, sizeof(piece->dsc_out.xtrans));
+    }
+
+    upstream_dsc = piece->dsc_out;
+  }
+
 }
 
 static uint64_t _default_pipe_hash(dt_dev_pixelpipe_t *pipe)

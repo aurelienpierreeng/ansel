@@ -147,20 +147,18 @@ int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, const dt
 }
 
 static dt_iop_colorspace_type_t _colorout_format_cst(dt_iop_module_t *self,
-                                                     dt_dev_pixelpipe_iop_t *piece)
+                                                     const dt_dev_pixelpipe_t *pipe)
 {
-  if(piece)
-  {
-    const dt_iop_colorout_data_t *const d = (dt_iop_colorout_data_t *)piece->data;
-    if(d->type == DT_COLORSPACE_LAB) return IOP_CS_LAB;
-  }
-  else
-  {
-    dt_iop_colorout_params_t *p = (dt_iop_colorout_params_t *)self->params;
-    if(p->type == DT_COLORSPACE_LAB) return IOP_CS_LAB;
-  }
+  const dt_iop_colorout_params_t *const p = (dt_iop_colorout_params_t *)self->params;
+  dt_colorspaces_color_profile_type_t type = p->type;
 
-  return IOP_CS_RGB;
+  /* Export overrides are applied in commit_params(), but the sealed pipeline needs the buffer
+   * contract before that. Mirror the only colorspace-affecting override here so colorout
+   * advertises the current RGB/Lab contract instead of the previous image runtime state. */
+  if(pipe->type == DT_DEV_PIXELPIPE_EXPORT && pipe->icc_type != DT_COLORSPACE_NONE)
+    type = pipe->icc_type;
+
+  return (type == DT_COLORSPACE_LAB) ? IOP_CS_LAB : IOP_CS_RGB;
 }
 
 void input_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
@@ -168,7 +166,7 @@ void input_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelp
 {
   dsc->channels = 4;
   dsc->datatype = TYPE_FLOAT;
-  dsc->cst = _colorout_format_cst(self, piece);
+  dsc->cst = _colorout_format_cst(self, pipe);
 }
 
 void output_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
@@ -176,7 +174,7 @@ void output_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixel
 {
   dsc->channels = 4;
   dsc->datatype = TYPE_FLOAT;
-  dsc->cst = _colorout_format_cst(self, piece);
+  dsc->cst = _colorout_format_cst(self, pipe);
 }
 
 int legacy_params(dt_iop_module_t *self, const void *const old_params, const int old_version,
