@@ -207,6 +207,31 @@ void dt_pixel_cache_clmem_remove(struct dt_pixel_cache_entry_t *entry, void *mem
 void dt_pixel_cache_clmem_flush(struct dt_pixel_cache_entry_t *entry);
 
 /**
+ * @brief Materialize a host payload for a live cache entry from its cached device payload.
+ *
+ * @details
+ * Recursive pixelpipe stages reopen transient upstream cache entries directly, before those
+ * entries become valid exact-hits. When such an entry only carries a GPU payload, the caller
+ * may still need a host pointer for CPU fallback or for a non-OpenCL module. This helper keeps
+ * the recovery local to the cache layer:
+ *
+ * - allocate host RAM for `entry` when needed,
+ * - copy the most relevant cached device payload back to host,
+ * - return the restored host pointer through `data`.
+ *
+ * The function leaves the cache entry owned by the caller. It does not change refcounts.
+ *
+ * @param cache Pixelpipe cache.
+ * @param entry Live cache entry to restore.
+ * @param preferred_devid Preferred OpenCL device id, or `-1` for any.
+ * @param[out] data Restored host pointer, or NULL on failure.
+ * @return gboolean TRUE when host data is available after the call, FALSE otherwise.
+ */
+gboolean dt_dev_pixelpipe_cache_restore_host_payload(dt_dev_pixelpipe_cache_t *cache,
+                                                     struct dt_pixel_cache_entry_t *entry,
+                                                     int preferred_devid, void **data);
+
+/**
  * @brief Acquire a pinned OpenCL image for a host buffer tracked by the pixelpipe cache.
  *
  * @details

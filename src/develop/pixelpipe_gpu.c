@@ -90,6 +90,7 @@ static int _gpu_init_input(dt_dev_pixelpipe_t *pipe,
 
 static int _gpu_early_cpu_fallback_if_unsupported(dt_dev_pixelpipe_t *pipe, float **input,
                                                   void **cl_mem_input,
+                                                  gboolean *const borrowed_cl_mem_input,
                                                   const dt_dev_pixelpipe_iop_t *piece,
                                                   const dt_dev_pixelpipe_iop_t *previous_piece,
                                                   dt_develop_tiling_t *tiling,
@@ -116,14 +117,62 @@ static int _gpu_early_cpu_fallback_if_unsupported(dt_dev_pixelpipe_t *pipe, floa
       dt_print(DT_DEBUG_OPENCL,
                "[dev_pixelpipe] %s CPU fallback has no input buffer (cache allocation failed?)\n",
                module->name());
-      dt_dev_pixelpipe_gpu_clear_buffer(cl_mem_input, input_entry, NULL,
-                                        dt_dev_pixelpipe_cache_gpu_device_buffer(pipe, input_entry));
+      if(borrowed_cl_mem_input && *borrowed_cl_mem_input)
+      {
+        dt_pixel_cache_clmem_unref(input_entry, *cl_mem_input);
+        *cl_mem_input = NULL;
+        *borrowed_cl_mem_input = FALSE;
+      }
+      else
+        dt_dev_pixelpipe_gpu_clear_buffer(cl_mem_input, input_entry, NULL,
+                                          dt_dev_pixelpipe_cache_gpu_device_buffer(pipe, input_entry));
       return 1;
     }
 
     *input = _resync_input_gpu_to_cache(pipe, *input, *cl_mem_input, &piece->roi_in, module,
                                         piece->dsc_in.bpp, input_entry,
                                         "cpu fallback input copy to cache");
+    if(*input == NULL)
+    {
+      dt_print(DT_DEBUG_OPENCL,
+               "[dev_pixelpipe] %s couldn't resync GPU input to cache for CPU fallback\n",
+               module->name());
+      if(borrowed_cl_mem_input && *borrowed_cl_mem_input)
+      {
+        dt_pixel_cache_clmem_unref(input_entry, *cl_mem_input);
+        *cl_mem_input = NULL;
+        *borrowed_cl_mem_input = FALSE;
+      }
+      else
+        dt_dev_pixelpipe_gpu_clear_buffer(cl_mem_input, input_entry, NULL,
+                                          dt_dev_pixelpipe_cache_gpu_device_buffer(pipe, input_entry));
+      return 1;
+    }
+  }
+  else if(input && *input != NULL)
+  {
+    void *cached_pinned_input = dt_pixel_cache_clmem_ref(input_entry, *input, pipe->devid,
+                                                         piece->roi_in.width, piece->roi_in.height,
+                                                         piece->dsc_in.bpp,
+                                                         CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR);
+    if(cached_pinned_input != NULL)
+    {
+      dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, TRUE, input_entry);
+      const int fail = _cl_pinned_memory_copy(pipe->devid, *input, cached_pinned_input, &piece->roi_in,
+                                              CL_MAP_READ, piece->dsc_in.bpp, module,
+                                              "cpu fallback pinned input copy to cache");
+      dt_opencl_finish(pipe->devid);
+      dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, FALSE, input_entry);
+      dt_pixel_cache_clmem_unref(input_entry, cached_pinned_input);
+
+      if(fail)
+      {
+        dt_print(DT_DEBUG_OPENCL,
+                 "[dev_pixelpipe] %s couldn't resync cached pinned input to cache for CPU fallback\n",
+                 module->name());
+        return 1;
+      }
+    }
   }
   else if(!input || *input == NULL)
   {
@@ -133,8 +182,19 @@ static int _gpu_early_cpu_fallback_if_unsupported(dt_dev_pixelpipe_t *pipe, floa
     return 1;
   }
 
-  dt_dev_pixelpipe_gpu_clear_buffer(cl_mem_input, input_entry, *input,
-                                    dt_dev_pixelpipe_cache_gpu_device_buffer(pipe, input_entry));
+  if(borrowed_cl_mem_input && *borrowed_cl_mem_input)
+  {
+    /* Device-only inputs borrowed from the cache stay owned by the cache entry.
+     * CPU fallback only needs to drop the temporary borrow after the device->host
+     * sync, otherwise releasing the cl_mem here leaves a stale cache-side pointer
+     * that later thumbnail runs may reopen as corrupted input. */
+    dt_pixel_cache_clmem_unref(input_entry, *cl_mem_input);
+    *cl_mem_input = NULL;
+    *borrowed_cl_mem_input = FALSE;
+  }
+  else
+    dt_dev_pixelpipe_gpu_clear_buffer(cl_mem_input, input_entry, *input,
+                                      dt_dev_pixelpipe_cache_gpu_device_buffer(pipe, input_entry));
 
   return pixelpipe_process_on_CPU(pipe, piece, previous_piece, tiling, pixelpipe_flow,
                                   cache_output, input_entry, output_entry);
@@ -176,6 +236,20 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
     borrowed_cl_mem_input = (cl_mem_input != NULL);
   }
 
+  /* Recursive thumbnail/export stages can reopen a transient upstream cacheline before it becomes
+   * a published exact-hit. When that cacheline only carries a cached device payload, OpenCL reuse
+   * should normally recover it through `dt_pixel_cache_clmem_ref()`. If that fast path misses, we
+   * still need a host fallback buffer before aborting the whole pipeline, otherwise one bad reopen
+   * collapses the thumbnail to the 8x8 skull placeholder. */
+  if(input == NULL && cl_mem_input == NULL
+     && dt_dev_pixelpipe_cache_restore_host_payload(darktable.pixelpipe_cache, input_entry,
+                                                    pipe->devid, (void **)&input))
+  {
+    dt_print(DT_DEBUG_OPENCL,
+             "[dev_pixelpipe] %s restored host input from cached device payload for CPU fallback\n",
+             module->name());
+  }
+
   if(input == NULL && cl_mem_input == NULL)
   {
     dt_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] %s has no RAM nor vRAM input... aborting.\n", module->name());
@@ -184,7 +258,8 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
 
   if(!_is_opencl_supported(pipe, piece, module) || !pipe->opencl_enabled || !(pipe->devid >= 0))
   {
-    return _gpu_early_cpu_fallback_if_unsupported(pipe, &input, &cl_mem_input, piece, previous_piece, tiling,
+    return _gpu_early_cpu_fallback_if_unsupported(pipe, &input, &cl_mem_input,
+                                                  &borrowed_cl_mem_input, piece, previous_piece, tiling,
                                                   pixelpipe_flow, cache_output,
                                                   input_entry, output_entry);
   }
@@ -600,6 +675,31 @@ error:
         dt_dev_pixelpipe_gpu_clear_buffer(&cl_mem_input, cpu_input_entry, NULL,
                                           dt_dev_pixelpipe_cache_gpu_device_buffer(pipe, cpu_input_entry));
       return 1;
+    }
+  }
+  else if(input != NULL)
+  {
+    void *cached_pinned_input = dt_pixel_cache_clmem_ref(cpu_input_entry, input, pipe->devid,
+                                                         piece->roi_in.width, piece->roi_in.height,
+                                                         piece->dsc_in.bpp,
+                                                         CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR);
+    if(cached_pinned_input != NULL)
+    {
+      dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, TRUE, cpu_input_entry);
+      const int fail = _cl_pinned_memory_copy(pipe->devid, input, cached_pinned_input, &piece->roi_in,
+                                              CL_MAP_READ, piece->dsc_in.bpp, module,
+                                              "gpu error fallback pinned input copy to cache");
+      dt_opencl_finish(pipe->devid);
+      dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, FALSE, cpu_input_entry);
+      dt_pixel_cache_clmem_unref(cpu_input_entry, cached_pinned_input);
+
+      if(fail)
+      {
+        dt_print(DT_DEBUG_OPENCL,
+                 "[dev_pixelpipe] %s couldn't resync cached pinned input to cache after GPU failure\n",
+                 module->name());
+        return 1;
+      }
     }
   }
   else if(input == NULL)

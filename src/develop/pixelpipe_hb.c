@@ -863,7 +863,13 @@ static int _init_base_buffer(dt_dev_pixelpipe_t *pipe)
     dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, FALSE, cache_entry);
 
   if(!err && host_rewritten)
+  {
     dt_dev_pixelpipe_gpu_flush_host_pinned_images(pipe, output, cache_entry, "base buffer copy");
+    /* The base buffer now owns the authoritative host pixels for this cacheline. Any older device-only
+     * payloads attached to the reused cache entry are stale and must not survive into later thumbnail runs,
+     * otherwise a downstream GPU->CPU fallback can reopen previous-image pixels from the same entry. */
+    dt_pixel_cache_clmem_flush(cache_entry);
+  }
 
   // For one-shot pipelines (thumbnail export), ensure the base buffer cacheline is not kept around.
   // It will be freed as soon as the next module is done consuming it as input.
@@ -1170,18 +1176,29 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   if(output_entry && output != NULL
      && ((pixelpipe_flow & PIXELPIPE_FLOW_PROCESSED_ON_CPU)
          || (pixelpipe_flow & PIXELPIPE_FLOW_PROCESSED_WITH_TILING)))
+  {
     dt_dev_pixelpipe_gpu_flush_host_pinned_images(pipe, output, output_entry, "module output host rewrite");
+    /* CPU/tiling processing rewrote the whole host buffer for this output. If the cache entry was rekeyed
+     * from an older GPU stage, any cached device-only images still hanging off the same entry now point to
+     * obsolete pixels. Drop them here so later mixed GPU/CPU modules cannot resurrect stale device payloads. */
+    dt_pixel_cache_clmem_flush(output_entry);
+  }
 
   if(cl_mem_output != NULL)
     dt_dev_pixelpipe_gpu_clear_buffer(&cl_mem_output, output_entry, output,
                                       dt_dev_pixelpipe_cache_gpu_device_buffer(pipe, output_entry));
 
   // Flag to throw away intermediate outputs as soon as the next module consumes them.
-  // The final output still needs to survive long enough for dt_dev_pixelpipe_process()
-  // to promote it to the backbuffer, otherwise thumbnail/export callers only see a
-  // missing exact-hit and fall back to invalid placeholder pixels.
+  // `cache_output` only means the backend had to keep a host-authoritative payload for this
+  // stage (for example because the next module may need RAM or because the current stage ran
+  // through an OpenCL cache path). In no-cache/bypass pipelines, that does not make the
+  // published cacheline long-lived: once the downstream module takes its input ref, this
+  // stage is transient and must disappear on release. Only the final published output needs
+  // to survive long enough for dt_dev_pixelpipe_process() to promote it to the backbuffer,
+  // otherwise thumbnail/export callers only see a missing exact-hit and fall back to invalid
+  // placeholder pixels.
   const gboolean keep_final_output = (hash == dt_dev_pixelpipe_get_hash(pipe));
-  if(_bypass_cache(pipe, piece) && !cache_output && !keep_final_output)
+  if(_bypass_cache(pipe, piece) && !keep_final_output)
     dt_dev_pixelpipe_cache_flag_auto_destroy(darktable.pixelpipe_cache, output_entry);
 
   if(dev->gui_attached)

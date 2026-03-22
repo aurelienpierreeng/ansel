@@ -106,7 +106,8 @@ static dt_pixel_cache_entry_t *dt_pixel_cache_new_entry(const uint64_t hash, con
                                                         dt_dev_pixelpipe_cache_t *cache, gboolean alloc,
                                                         GHashTable *table);
 static void _cache_entry_clmem_flush_device(dt_pixel_cache_entry_t *entry, const int devid, void *keep);
-static gboolean _cache_entry_materialize_host_data_locked(dt_pixel_cache_entry_t *entry, int preferred_devid);
+static gboolean _cache_entry_materialize_host_data_locked(dt_pixel_cache_entry_t *entry, int preferred_devid,
+                                                          gboolean prefer_device_payload);
 
 #ifdef HAVE_OPENCL
 static void _cache_entry_resync_host_pinned_images_locked(dt_pixel_cache_entry_t *entry, void *host_ptr,
@@ -215,31 +216,32 @@ int dt_dev_pixelpipe_cache_remove(dt_dev_pixelpipe_cache_t *cache, const gboolea
 }
 
 #ifdef HAVE_OPENCL
-static gboolean _cache_entry_materialize_host_data_locked(dt_pixel_cache_entry_t *entry, int preferred_devid)
+static gboolean _cache_entry_materialize_host_data_locked(dt_pixel_cache_entry_t *entry, int preferred_devid,
+                                                          gboolean prefer_device_payload)
 {
   if(!entry) return FALSE;
   dt_cache_clmem_t *source = NULL;
-  gboolean ok = TRUE;
+  gboolean ok = FALSE;
   dt_pthread_mutex_lock(&entry->cl_mem_lock);
 
-  for(GList *l = entry->cl_mem_list; l; l = l->next)
-  {
-    dt_cache_clmem_t *c = (dt_cache_clmem_t *)l->data;
-    const cl_mem_flags flags = dt_opencl_get_mem_flags((cl_mem)c->mem);
-    if(c->host_ptr == entry->data && (flags & CL_MEM_USE_HOST_PTR)
-       && (preferred_devid < 0 || c->devid == preferred_devid))
+  if(!prefer_device_payload)
+    for(GList *l = entry->cl_mem_list; l; l = l->next)
     {
-      source = c;
-      break;
+      dt_cache_clmem_t *c = (dt_cache_clmem_t *)l->data;
+      const cl_mem_flags flags = dt_opencl_get_mem_flags((cl_mem)c->mem);
+      if(c->host_ptr == entry->data && (flags & CL_MEM_USE_HOST_PTR)
+         && (preferred_devid < 0 || c->devid == preferred_devid))
+      {
+        source = c;
+        break;
+      }
     }
-  }
 
   if(!source && preferred_devid >= 0)
     for(GList *l = entry->cl_mem_list; l; l = l->next)
     {
       dt_cache_clmem_t *c = (dt_cache_clmem_t *)l->data;
-      const cl_mem_flags flags = dt_opencl_get_mem_flags((cl_mem)c->mem);
-      if(c->host_ptr == entry->data && (flags & CL_MEM_USE_HOST_PTR))
+      if(c && c->host_ptr == NULL && c->devid == preferred_devid)
       {
         source = c;
         break;
@@ -257,11 +259,37 @@ static gboolean _cache_entry_materialize_host_data_locked(dt_pixel_cache_entry_t
       }
     }
 
-  if(!source)
+  if(!source && !prefer_device_payload)
     for(GList *l = entry->cl_mem_list; l; l = l->next)
     {
       dt_cache_clmem_t *c = (dt_cache_clmem_t *)l->data;
-      if(c && c->host_ptr == NULL)
+      const cl_mem_flags flags = dt_opencl_get_mem_flags((cl_mem)c->mem);
+      if(c->host_ptr == entry->data && (flags & CL_MEM_USE_HOST_PTR))
+      {
+        source = c;
+        break;
+      }
+    }
+
+  if(!source && prefer_device_payload)
+    for(GList *l = entry->cl_mem_list; l; l = l->next)
+    {
+      dt_cache_clmem_t *c = (dt_cache_clmem_t *)l->data;
+      const cl_mem_flags flags = dt_opencl_get_mem_flags((cl_mem)c->mem);
+      if(c->host_ptr == entry->data && (flags & CL_MEM_USE_HOST_PTR)
+         && (preferred_devid < 0 || c->devid == preferred_devid))
+      {
+        source = c;
+        break;
+      }
+    }
+
+  if(!source && prefer_device_payload)
+    for(GList *l = entry->cl_mem_list; l; l = l->next)
+    {
+      dt_cache_clmem_t *c = (dt_cache_clmem_t *)l->data;
+      const cl_mem_flags flags = dt_opencl_get_mem_flags((cl_mem)c->mem);
+      if(c->host_ptr == entry->data && (flags & CL_MEM_USE_HOST_PTR))
       {
         source = c;
         break;
@@ -281,12 +309,28 @@ static gboolean _cache_entry_materialize_host_data_locked(dt_pixel_cache_entry_t
       }
       else
       {
-        if(mapped != entry->data)
-          memcpy(entry->data, mapped, (size_t)source->width * (size_t)source->height * (size_t)source->bpp);
-
         const cl_int unmap_err = dt_opencl_unmap_mem_object(source->devid, (cl_mem)source->mem, mapped);
-        ok = (unmap_err == CL_SUCCESS);
-        if(ok) dt_opencl_finish(source->devid);
+        if(unmap_err != CL_SUCCESS)
+        {
+          ok = FALSE;
+        }
+        else
+        {
+          dt_opencl_finish(source->devid);
+
+          /* dt_opencl_map_image() does not expose the mapped row pitch, so a non-zero-copy mapping
+           * cannot be copied back with a flat memcpy without risking row-stride corruption. Only the
+           * true zero-copy case guarantees that `entry->data` already aliases the authoritative pixels.
+           * Otherwise, fall back to the explicit device->host transfer helper, which handles image rows
+           * correctly through the OpenCL runtime. */
+          if(mapped == entry->data)
+            ok = TRUE;
+          else
+            ok = (dt_opencl_read_host_from_device(source->devid, entry->data, source->mem,
+                                                  source->width, source->height, source->bpp) == CL_SUCCESS);
+
+          if(ok) dt_opencl_finish(source->devid);
+        }
       }
     }
     else
@@ -301,9 +345,11 @@ static gboolean _cache_entry_materialize_host_data_locked(dt_pixel_cache_entry_t
   return ok;
 }
 #else
-static gboolean _cache_entry_materialize_host_data_locked(dt_pixel_cache_entry_t *entry, int preferred_devid)
+static gboolean _cache_entry_materialize_host_data_locked(dt_pixel_cache_entry_t *entry, int preferred_devid,
+                                                          gboolean prefer_device_payload)
 {
   (void)preferred_devid;
+  (void)prefer_device_payload;
   return entry && entry->data != NULL;
 }
 #endif
@@ -314,9 +360,10 @@ static gboolean _cache_entry_materialize_host_data(dt_dev_pixelpipe_cache_t *cac
   if(!cache || !entry) return FALSE;
 
   dt_dev_pixelpipe_cache_wrlock_entry(cache, TRUE, entry);
-  if(dt_pixel_cache_entry_get_data(entry) == NULL)
+  const gboolean had_host_payload = (dt_pixel_cache_entry_get_data(entry) != NULL);
+  if(!had_host_payload)
     dt_pixel_cache_alloc(cache, entry);
-  const gboolean ok = _cache_entry_materialize_host_data_locked(entry, preferred_devid);
+  const gboolean ok = _cache_entry_materialize_host_data_locked(entry, preferred_devid, !had_host_payload);
   dt_dev_pixelpipe_cache_wrlock_entry(cache, FALSE, entry);
 
   return ok;
@@ -985,6 +1032,18 @@ static void _cache_entry_clmem_flush_device(dt_pixel_cache_entry_t *entry, const
     dt_cache_clmem_t *c = (dt_cache_clmem_t *)l->data;
     if(devid < 0 || (c->devid == devid && c->mem != keep))
     {
+      /* Device-only payloads on hostless cache entries are the authoritative pixels until some
+       * downstream CPU stage materializes RAM or the entry gets destroyed. A global OpenCL flush
+       * may run between 2 modules of the same thumbnail batch, so only looking at `c->refs` is
+       * not enough here: a published entry can be live through its cache refcount while its
+       * device payload has not been borrowed yet by the next module. Flushing it in that window
+       * turns a valid GPU-only intermediate into an empty cacheline that later aborts on consume. */
+      if(c->host_ptr == NULL && entry->data == NULL && dt_atomic_get_int(&entry->refcount) > 0)
+      {
+        l = next;
+        continue;
+      }
+
       if(c->refs > 0)
       {
         l = next;
@@ -1207,10 +1266,33 @@ static void _free_cache_entry(dt_pixel_cache_entry_t *cache_entry)
 
   if(cache_entry->data)
   {
+#ifdef HAVE_OPENCL
+    dt_pthread_mutex_lock(&cache_entry->cl_mem_lock);
+    for(GList *l = cache_entry->cl_mem_list; l; l = l->next)
+    {
+      dt_cache_clmem_t *c = (dt_cache_clmem_t *)l->data;
+      if(!c || c->host_ptr != cache_entry->data) continue;
+
+      const cl_mem_flags flags = dt_opencl_get_mem_flags((cl_mem)c->mem);
+      if(flags & CL_MEM_USE_HOST_PTR)
+      {
+        /* Host-backed OpenCL images may still dereference `cache_entry->data` asynchronously until their
+         * queued work completes. We therefore wait for the owning device before releasing the host arena slot,
+         * otherwise an auto-destroyed intermediate can be recycled into another module output while the GPU
+         * is still reading the previous pixels. */
+        dt_opencl_finish(c->devid);
+      }
+    }
+    dt_pthread_mutex_unlock(&cache_entry->cl_mem_lock);
+#endif
+
+    dt_pixel_cache_clmem_flush(cache_entry);
     dt_cache_arena_free(&cache_entry->cache->arena, cache_entry->data, cache_entry->size);
   }
-
-  dt_pixel_cache_clmem_flush(cache_entry);
+  else
+  {
+    dt_pixel_cache_clmem_flush(cache_entry);
+  }
 
   cache_entry->data = NULL;
   cache_entry->cache->current_memory -= cache_entry->size;
@@ -1308,6 +1390,25 @@ static dt_pixel_cache_entry_t *_cache_try_rekey_reuse_locked(dt_dev_pixelpipe_ca
 
   _non_thread_safe_cache_ref_count_entry(cache, TRUE, cache_entry);
   dt_dev_pixelpipe_cache_wrlock_entry(cache, TRUE, cache_entry);
+
+  /* Rekey reuse transfers the RAM arena slot to a completely different hash. Any cached OpenCL payload
+   * still attached to the previous owner would otherwise remain reachable through the new hash and could
+   * later be materialized as if it belonged to the new module output. Bail out if some GPU path is still
+   * borrowing one of those payloads, otherwise flush the stale bookkeeping before publishing the new hash. */
+  dt_pthread_mutex_lock(&cache_entry->cl_mem_lock);
+  for(GList *l = cache_entry->cl_mem_list; l; l = l->next)
+  {
+    dt_cache_clmem_t *c = (dt_cache_clmem_t *)l->data;
+    if(c && c->refs > 0)
+    {
+      dt_pthread_mutex_unlock(&cache_entry->cl_mem_lock);
+      dt_dev_pixelpipe_cache_wrlock_entry(cache, FALSE, cache_entry);
+      dt_dev_pixelpipe_cache_ref_count_entry(cache, FALSE, cache_entry);
+      return NULL;
+    }
+  }
+  dt_pthread_mutex_unlock(&cache_entry->cl_mem_lock);
+  dt_pixel_cache_clmem_flush(cache_entry);
 
   gpointer stolen_key = NULL;
   gpointer stolen_value = NULL;
@@ -1570,6 +1671,22 @@ static gboolean _cache_try_restore_host_payload(dt_dev_pixelpipe_cache_t *cache,
 
   if(data) *data = dt_pixel_cache_entry_get_data(cache_entry);
   return _cache_entry_has_host_payload_ptr(cache_entry);
+}
+
+gboolean dt_dev_pixelpipe_cache_restore_host_payload(dt_dev_pixelpipe_cache_t *cache,
+                                                     dt_pixel_cache_entry_t *cache_entry,
+                                                     const int preferred_devid, void **data)
+{
+  if(data) *data = NULL;
+  if(!cache || !cache_entry) return FALSE;
+
+  if(_cache_entry_has_host_payload_ptr(cache_entry))
+  {
+    if(data) *data = dt_pixel_cache_entry_get_data(cache_entry);
+    return TRUE;
+  }
+
+  return _cache_try_restore_host_payload(cache, data, cache_entry, preferred_devid);
 }
 
 static void _cache_remove_invalid_exact_hit(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash,
@@ -1963,6 +2080,24 @@ int dt_dev_pixelpipe_cache_rekey(dt_dev_pixelpipe_cache_t *cache, const uint64_t
     dt_pthread_mutex_unlock(&cache->lock);
     return 1;
   }
+
+  /* Explicit rekeying also changes cacheline ownership. The OpenCL payload cache is only valid for the
+   * previous hash, so do not let the new hash inherit stale device-side state. If some GPU code is still
+   * borrowing one of these payloads, refuse the rekey instead of publishing an ambiguous cache entry. */
+  dt_pthread_mutex_lock(&entry->cl_mem_lock);
+  for(GList *l = entry->cl_mem_list; l; l = l->next)
+  {
+    dt_cache_clmem_t *c = (dt_cache_clmem_t *)l->data;
+    if(c && c->refs > 0)
+    {
+      dt_pthread_mutex_unlock(&entry->cl_mem_lock);
+      g_hash_table_insert(cache->entries, stolen_key, stolen_value);
+      dt_pthread_mutex_unlock(&cache->lock);
+      return 1;
+    }
+  }
+  dt_pthread_mutex_unlock(&entry->cl_mem_lock);
+  dt_pixel_cache_clmem_flush(entry);
 
   *(uint64_t *)stolen_key = new_hash;
   entry->hash = new_hash;

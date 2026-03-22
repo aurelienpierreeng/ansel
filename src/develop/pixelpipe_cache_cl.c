@@ -516,12 +516,13 @@ static float *_resync_input_gpu_to_cache(dt_dev_pixelpipe_t *pipe, float *input,
   if(!cl_mem_input) return input;
   dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, TRUE, input_entry);
 
-  _cl_pinned_memory_copy(pipe->devid, input, cl_mem_input, roi_in, CL_MAP_READ, in_bpp, module, message);
+  const int fail = _cl_pinned_memory_copy(pipe->devid, input, cl_mem_input, roi_in, CL_MAP_READ, in_bpp,
+                                          module, message);
 
   // Enforce the OpenCL pipe to run in sync with CPU RAM cache so lock validity is guaranteed.
   dt_opencl_finish(pipe->devid);
   dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, FALSE, input_entry);
-  return input;
+  return fail ? NULL : input;
 }
 
 /**

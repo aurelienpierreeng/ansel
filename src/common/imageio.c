@@ -1098,7 +1098,12 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
   if(!dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, dt_dev_backbuf_get_hash(&pipe.backbuf), &data,
                                   &cache_entry, -1, NULL))
     goto error;
-  
+
+  /* `peek()` only exposes the published cacheline, it does not transfer ownership.
+   * Thumbnail/export conversion borrows the final pipeline output while the pipe backbuffer keeps
+   * its own keepalive reference. Take and release our own explicit cache ref here so we don't
+   * accidentally consume the backbuffer keepalive and free the final output too early. */
+  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, cache_entry);
   dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, cache_entry);
 
   // Down-conversion to low-precision formats:
@@ -1112,6 +1117,20 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
       _swap_byteorder_float_to_uint8(data, outbuf, pipe.backbuf.width, pipe.backbuf.height);
     else if(outbuf)
       _clamp_float_to_uint8(data, outbuf, pipe.backbuf.width, pipe.backbuf.height);
+
+    /* Thumbnail export stores the in-memory RGBA buffer straight into the mipmap cache.
+     * The thumbnail pipeline does not maintain a meaningful alpha contract across all
+     * modules, so random zero/garbage alpha values would make valid RGB thumbnails render
+     * black in consumers that composite the mipmap buffer. Keep thumbnail alpha opaque at
+     * the export boundary and leave RGB untouched. */
+    if(outbuf && thumbnail_export)
+    {
+      uint8_t *thumbnail_buf = (uint8_t *)outbuf;
+#ifdef _OPENMP
+#pragma omp parallel for default(none) dt_omp_firstprivate(thumbnail_buf, pixels) schedule(static)
+#endif
+      for(size_t k = 0; k < pixels / 4; k++) thumbnail_buf[4 * k + 3] = UINT8_MAX;
+    }
   }
   else if(bpp == 16)
   {
@@ -1120,6 +1139,15 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
         0);
     if(outbuf)
       _export_final_buffer_to_uint16(data, outbuf, pipe.backbuf.width, pipe.backbuf.height);
+
+    if(outbuf && thumbnail_export)
+    {
+      uint16_t *thumbnail_buf = (uint16_t *)outbuf;
+#ifdef _OPENMP
+#pragma omp parallel for default(none) dt_omp_firstprivate(thumbnail_buf, pixels) schedule(static)
+#endif
+      for(size_t k = 0; k < pixels / 4; k++) thumbnail_buf[4 * k + 3] = UINT16_MAX;
+    }
   }
   else // output float, no further harm done to the pixels :)
   {
@@ -1128,6 +1156,15 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
         0);
     if(outbuf)
       memcpy(outbuf, data, sizeof(float_t) * pixels);
+
+    if(outbuf && thumbnail_export)
+    {
+      float *thumbnail_buf = (float *)outbuf;
+#ifdef _OPENMP
+#pragma omp parallel for default(none) dt_omp_firstprivate(thumbnail_buf, pixels) schedule(static)
+#endif
+      for(size_t k = 0; k < pixels / 4; k++) thumbnail_buf[4 * k + 3] = 1.0f;
+    }
   }
 
   // Decrease ref count on the cache entry and release the read lock

@@ -950,11 +950,11 @@ static gboolean _drawlayer_sync_host_image_to_device(const int devid, cl_mem dev
     void *mapped = dt_opencl_map_image(devid, device_image, TRUE, CL_MAP_WRITE, width, height, bpp);
     if(mapped)
     {
-      if(mapped != host_pixels) memcpy(mapped, host_pixels, (size_t)width * height * bpp);
+      const gboolean zero_copy = (mapped == host_pixels);
       if(dt_opencl_unmap_mem_object(devid, device_image, mapped) == CL_SUCCESS)
       {
         dt_opencl_finish(devid);
-        return TRUE;
+        if(zero_copy) return TRUE;
       }
     }
   }
