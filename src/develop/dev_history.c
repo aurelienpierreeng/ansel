@@ -758,7 +758,7 @@ gboolean dt_dev_add_history_item_ext(dt_develop_t *dev, struct dt_iop_module_t *
     dt_dev_history_item_t *last_item = (dt_dev_history_item_t *)last->data;
     dt_iop_module_t *last_module = last_item->module;
     new_is_old = dt_iop_check_modules_equal(module, last_module);
-    // add_new_pipe_node = FALSE
+    add_new_pipe_node = FALSE;
   }
   else
   {
@@ -851,7 +851,6 @@ void dt_dev_add_history_item_real(dt_develop_t *dev, dt_iop_module_t *module, gb
 {
   dt_atomic_set_int(&dev->pipe->shutdown, TRUE);
   dt_atomic_set_int(&dev->preview_pipe->shutdown, TRUE);
-  if(dev->virtual_pipe) dt_atomic_set_int(&dev->virtual_pipe->shutdown, TRUE);
 
   dt_dev_undo_start_record(dev);
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
@@ -898,17 +897,19 @@ void dt_dev_add_history_item_real(dt_develop_t *dev, dt_iop_module_t *module, gb
 
   dt_dev_masks_list_update(dev);
 
-  if(darktable.gui && dev->gui_attached)
+  if(darktable.gui && dev->gui_attached && module)
   {
-    if(module && (module->modify_roi_in || module->modify_roi_out))
+    // If module params change the geometry of the ROI,
+    // update immediately so we avoid drawing glitches.
+    if(module->modify_roi_in || module->modify_roi_out)
       dt_dev_get_thumbnail_size(dev);
     
-    if(module) 
-    { 
-      ++darktable.gui->reset; // don't run GUI callbacks when setting GUI state
-      dt_iop_gui_set_enable_button(module);
-      --darktable.gui->reset;
-    }
+
+    // Changing a parameter of a disabled module enables it,
+    // so update the GUI toggle state to reflect it.
+    ++darktable.gui->reset; // don't run GUI callbacks when setting GUI state
+    dt_iop_gui_set_enable_button(module);
+    --darktable.gui->reset;
   }
   
   // Save history straight away

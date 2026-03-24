@@ -2650,52 +2650,6 @@ int dt_iop_get_module_flags(const char *op)
   return 0;
 }
 
-#if 0
-
-static void _enable_module_callback(dt_iop_module_t *module)
-{
-  //cannot toggle module if there's no enable button
-  if(module->hide_enable_button) return;
-
-  gboolean active = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(module->off));
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(module->off), !active);
-}
-
-static void _enable_module()
-{
-  dt_iop_module_t *focused = darktable.develop->gui_module;
-  if(focused != NULL && dt_iop_gui_module_is_visible(focused))
-  {
-    if(!focused->enabled)
-    {
-      focused->enabled = TRUE;
-      dt_iop_gui_set_enable_button(focused);
-    }
-    // else : don't change the enabled status but still grab focus on the internal widget
-
-    darktable.gui->scroll_to[1] = focused->expander;
-    gtk_widget_grab_focus(focused->widget);
-  }
-}
-
-static void _disable_module()
-{
-  dt_iop_module_t *focused = darktable.develop->gui_module;
-  if(focused != NULL && dt_iop_gui_module_is_visible(focused))
-  {
-    if(focused->enabled)
-    {
-      focused->enabled = FALSE;
-      dt_iop_gui_set_enable_button(focused);
-    }
-    // else : don't change the enabled status but still grab focus on the external widget
-
-    gtk_widget_grab_focus(focused->expander);
-  }
-}
-
-#endif
-
 // to be called before issuing any query based on memory.darktable_iop_names
 void dt_iop_set_darktable_iop_table()
 {
