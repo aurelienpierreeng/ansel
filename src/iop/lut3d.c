@@ -47,6 +47,7 @@
 #include "common/colorspaces_inline_conversions.h"
 #include "common/file_location.h"
 #include "common/iop_profile.h"
+#include "common/lut3d.h"
 #include "control/control.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
@@ -224,244 +225,6 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
 
   return 1;
 }
-// From `HaldCLUT_correct.c' by Eskil Steenberg (http://www.quelsolaar.com) (BSD licensed)
-void correct_pixel_trilinear(const float *const in, float *const out,
-                             const size_t pixel_nb, const float *const restrict clut, const uint16_t level)
-{
-  const int level2 = level * level;
-#ifdef _OPENMP
-#pragma omp parallel for SIMD() default(none) \
-  dt_omp_firstprivate(clut, in, level, level2, out, pixel_nb) \
-  schedule(static)
-#endif
-  for(size_t k = 0; k < (size_t)(pixel_nb * 4); k+=4)
-  {
-    float *const input = ((float *const)in) + k;
-    float *const output = ((float *const)out) + k;
-
-    int rgbi[3], i, j;
-    float tmp[6];
-    dt_aligned_pixel_t rgbd;
-
-    for(int c = 0; c < 3; ++c) input[c] = fminf(fmaxf(input[c], 0.0f), 1.0f);
-
-    rgbd[0] = input[0] * (float)(level - 1);
-    rgbd[1] = input[1] * (float)(level - 1);
-    rgbd[2] = input[2] * (float)(level - 1);
-
-    rgbi[0] = CLAMP((int)rgbd[0], 0, level - 2);
-    rgbi[1] = CLAMP((int)rgbd[1], 0, level - 2);
-    rgbi[2] = CLAMP((int)rgbd[2], 0, level - 2);
-
-    rgbd[0] = rgbd[0] - rgbi[0]; // delta red
-    rgbd[1] = rgbd[1] - rgbi[1]; // delta green
-    rgbd[2] = rgbd[2] - rgbi[2]; // delta blue
-
-  // indexes of P000 to P111 in clut
-    const int color = rgbi[0] + rgbi[1] * level + rgbi[2] * level * level;
-    i = color * 3;  // P000
-    j = (color + 1) * 3;  // P100
-
-    tmp[0] = clut[i] * (1 - rgbd[0]) + clut[j] * rgbd[0];
-    tmp[1] = clut[i+1] * (1 - rgbd[0]) + clut[j+1] * rgbd[0];
-    tmp[2] = clut[i+2] * (1 - rgbd[0]) + clut[j+2] * rgbd[0];
-
-    i = (color + level) * 3;  // P010
-    j = (color + level + 1) * 3;  //P110
-
-    tmp[3] = clut[i] * (1 - rgbd[0]) + clut[j] * rgbd[0];
-    tmp[4] = clut[i+1] * (1 - rgbd[0]) + clut[j+1] * rgbd[0];
-    tmp[5] = clut[i+2] * (1 - rgbd[0]) + clut[j+2] * rgbd[0];
-
-    output[0] = tmp[0] * (1 - rgbd[1]) + tmp[3] * rgbd[1];
-    output[1] = tmp[1] * (1 - rgbd[1]) + tmp[4] * rgbd[1];
-    output[2] = tmp[2] * (1 - rgbd[1]) + tmp[5] * rgbd[1];
-
-    i = (color + level2) * 3;  // P001
-    j = (color + level2 + 1) * 3;  // P101
-
-    tmp[0] = clut[i] * (1 - rgbd[0]) + clut[j] * rgbd[0];
-    tmp[1] = clut[i+1] * (1 - rgbd[0]) + clut[j+1] * rgbd[0];
-    tmp[2] = clut[i+2] * (1 - rgbd[0]) + clut[j+2] * rgbd[0];
-
-    i = (color + level + level2) * 3;  // P011
-    j = (color + level + level2 + 1) * 3;  // P111
-
-    tmp[3] = clut[i] * (1 - rgbd[0]) + clut[j] * rgbd[0];
-    tmp[4] = clut[i+1] * (1 - rgbd[0]) + clut[j+1] * rgbd[0];
-    tmp[5] = clut[i+2] * (1 - rgbd[0]) + clut[j+2] * rgbd[0];
-
-    tmp[0] = tmp[0] * (1 - rgbd[1]) + tmp[3] * rgbd[1];
-    tmp[1] = tmp[1] * (1 - rgbd[1]) + tmp[4] * rgbd[1];
-    tmp[2] = tmp[2] * (1 - rgbd[1]) + tmp[5] * rgbd[1];
-
-    output[0] = output[0] * (1 - rgbd[2]) + tmp[0] * rgbd[2];
-    output[1] = output[1] * (1 - rgbd[2]) + tmp[1] * rgbd[2];
-    output[2] = output[2] * (1 - rgbd[2]) + tmp[2] * rgbd[2];
- }
-}
-
-// from OpenColorIO
-// https://github.com/imageworks/OpenColorIO/blob/master/src/OpenColorIO/ops/Lut3D/Lut3DOp.cpp
-void correct_pixel_tetrahedral(const float *const in, float *const out,
-                               const size_t pixel_nb, const float *const restrict clut, const uint16_t level)
-{
-  const int level2 = level * level;
-#ifdef _OPENMP
-#pragma omp parallel for SIMD() default(none) \
-  dt_omp_firstprivate(clut, in, level, level2, out, pixel_nb) \
-  schedule(static)
-#endif
-  for(size_t k = 0; k < (size_t)(pixel_nb * 4); k+=4)
-  {
-    float *const input = ((float *const)in) + k;
-    float *const output = ((float *const)out) + k;
-
-    int rgbi[3];
-    dt_aligned_pixel_t rgbd;
-    for(int c = 0; c < 3; ++c) input[c] = fminf(fmaxf(input[c], 0.0f), 1.0f);
-
-    rgbd[0] = input[0] * (float)(level - 1);
-    rgbd[1] = input[1] * (float)(level - 1);
-    rgbd[2] = input[2] * (float)(level - 1);
-
-    rgbi[0] = CLAMP((int)rgbd[0], 0, level - 2);
-    rgbi[1] = CLAMP((int)rgbd[1], 0, level - 2);
-    rgbi[2] = CLAMP((int)rgbd[2], 0, level - 2);
-
-    rgbd[0] = rgbd[0] - rgbi[0]; // delta red
-    rgbd[1] = rgbd[1] - rgbi[1]; // delta green
-    rgbd[2] = rgbd[2] - rgbi[2]; // delta blue
-
-  // indexes of P000 to P111 in clut
-    const int color = rgbi[0] + rgbi[1] * level + rgbi[2] * level * level;
-    const int i000 = color * 3;                     // P000
-    const int i100 = i000 + 3;                      // P100
-    const int i010 = (color + level) * 3;           // P010
-    const int i110 = i010 + 3;                      // P110
-    const int i001 = (color + level2) * 3;          // P001
-    const int i101 = i001 + 3;                      // P101
-    const int i011 = (color + level + level2) * 3;  // P011
-    const int i111 = i011 + 3;                      // P111
-
-    if (rgbd[0] > rgbd[1])
-    {
-      if (rgbd[1] > rgbd[2])
-      {
-        output[0] = (1-rgbd[0])*clut[i000] + (rgbd[0]-rgbd[1])*clut[i100] + (rgbd[1]-rgbd[2])*clut[i110] + rgbd[2]*clut[i111];
-        output[1] = (1-rgbd[0])*clut[i000+1] + (rgbd[0]-rgbd[1])*clut[i100+1] + (rgbd[1]-rgbd[2])*clut[i110+1] + rgbd[2]*clut[i111+1];
-        output[2] = (1-rgbd[0])*clut[i000+2] + (rgbd[0]-rgbd[1])*clut[i100+2] + (rgbd[1]-rgbd[2])*clut[i110+2] + rgbd[2]*clut[i111+2];
-      }
-      else if (rgbd[0] > rgbd[2])
-      {
-        output[0] = (1-rgbd[0])*clut[i000] + (rgbd[0]-rgbd[2])*clut[i100] + (rgbd[2]-rgbd[1])*clut[i101] + rgbd[1]*clut[i111];
-        output[1] = (1-rgbd[0])*clut[i000+1] + (rgbd[0]-rgbd[2])*clut[i100+1] + (rgbd[2]-rgbd[1])*clut[i101+1] + rgbd[1]*clut[i111+1];
-        output[2] = (1-rgbd[0])*clut[i000+2] + (rgbd[0]-rgbd[2])*clut[i100+2] + (rgbd[2]-rgbd[1])*clut[i101+2] + rgbd[1]*clut[i111+2];
-      }
-      else
-      {
-        output[0] = (1-rgbd[2])*clut[i000] + (rgbd[2]-rgbd[0])*clut[i001] + (rgbd[0]-rgbd[1])*clut[i101] + rgbd[1]*clut[i111];
-        output[1] = (1-rgbd[2])*clut[i000+1] + (rgbd[2]-rgbd[0])*clut[i001+1] + (rgbd[0]-rgbd[1])*clut[i101+1] + rgbd[1]*clut[i111+1];
-        output[2] = (1-rgbd[2])*clut[i000+2] + (rgbd[2]-rgbd[0])*clut[i001+2] + (rgbd[0]-rgbd[1])*clut[i101+2] + rgbd[1]*clut[i111+2];
-      }
-    }
-    else
-    {
-      if (rgbd[2] > rgbd[1])
-      {
-        output[0] = (1-rgbd[2])*clut[i000] + (rgbd[2]-rgbd[1])*clut[i001] + (rgbd[1]-rgbd[0])*clut[i011] + rgbd[0]*clut[i111];
-        output[1] = (1-rgbd[2])*clut[i000+1] + (rgbd[2]-rgbd[1])*clut[i001+1] + (rgbd[1]-rgbd[0])*clut[i011+1] + rgbd[0]*clut[i111+1];
-        output[2] = (1-rgbd[2])*clut[i000+2] + (rgbd[2]-rgbd[1])*clut[i001+2] + (rgbd[1]-rgbd[0])*clut[i011+2] + rgbd[0]*clut[i111+2];
-      }
-      else if (rgbd[2] > rgbd[0])
-      {
-        output[0] = (1-rgbd[1])*clut[i000] + (rgbd[1]-rgbd[2])*clut[i010] + (rgbd[2]-rgbd[0])*clut[i011] + rgbd[0]*clut[i111];
-        output[1] = (1-rgbd[1])*clut[i000+1] + (rgbd[1]-rgbd[2])*clut[i010+1] + (rgbd[2]-rgbd[0])*clut[i011+1] + rgbd[0]*clut[i111+1];
-        output[2] = (1-rgbd[1])*clut[i000+2] + (rgbd[1]-rgbd[2])*clut[i010+2] + (rgbd[2]-rgbd[0])*clut[i011+2] + rgbd[0]*clut[i111+2];
-      }
-      else
-      {
-        output[0] = (1-rgbd[1])*clut[i000] + (rgbd[1]-rgbd[0])*clut[i010] + (rgbd[0]-rgbd[2])*clut[i110] + rgbd[2]*clut[i111];
-        output[1] = (1-rgbd[1])*clut[i000+1] + (rgbd[1]-rgbd[0])*clut[i010+1] + (rgbd[0]-rgbd[2])*clut[i110+1] + rgbd[2]*clut[i111+1];
-        output[2] = (1-rgbd[1])*clut[i000+2] + (rgbd[1]-rgbd[0])*clut[i010+2] + (rgbd[0]-rgbd[2])*clut[i110+2] + rgbd[2]*clut[i111+2];
-      }
-    }
-  }
-}
-
-// from Study on the 3D Interpolation Models Used in Color Conversion
-// http://ijetch.org/papers/318-T860.pdf
-void correct_pixel_pyramid(const float *const in, float *const out,
-                           const size_t pixel_nb, const float *const restrict clut, const uint16_t level)
-{
-  const int level2 = level * level;
-#ifdef _OPENMP
-#pragma omp parallel for SIMD() default(none) \
-  dt_omp_firstprivate(clut, in, level, level2, out, pixel_nb) \
-  schedule(static)
-#endif
-  for(size_t k = 0; k < (size_t)(pixel_nb * 4); k+=4)
-  {
-    float *const input = ((float *const)in) + k;
-    float *const output = ((float *const)out) + k;
-
-    int rgbi[3];
-    dt_aligned_pixel_t rgbd;
-    for(int c = 0; c < 3; ++c) input[c] = fminf(fmaxf(input[c], 0.0f), 1.0f);
-
-    rgbd[0] = input[0] * (float)(level - 1);
-    rgbd[1] = input[1] * (float)(level - 1);
-    rgbd[2] = input[2] * (float)(level - 1);
-
-    rgbi[0] = CLAMP((int)rgbd[0], 0, level - 2);
-    rgbi[1] = CLAMP((int)rgbd[1], 0, level - 2);
-    rgbi[2] = CLAMP((int)rgbd[2], 0, level - 2);
-
-    rgbd[0] = rgbd[0] - rgbi[0]; // delta red
-    rgbd[1] = rgbd[1] - rgbi[1]; // delta green
-    rgbd[2] = rgbd[2] - rgbi[2]; // delta blue
-
-  // indexes of P000 to P111 in clut
-    const int color = rgbi[0] + rgbi[1] * level + rgbi[2] * level * level;
-    const int i000 = color * 3;                     // P000
-    const int i100 = i000 + 3;                      // P100
-    const int i010 = (color + level) * 3;           // P010
-    const int i110 = i010 + 3;                      // P110
-    const int i001 = (color + level2) * 3;          // P001
-    const int i101 = i001 + 3;                      // P101
-    const int i011 = (color + level + level2) * 3;  // P011
-    const int i111 = i011 + 3;                      // P111
-
-    if (rgbd[1] > rgbd[0] && rgbd[2] > rgbd[0])
-    {
-      output[0] = clut[i000] + (clut[i111]-clut[i011])*rgbd[0] + (clut[i010]-clut[i000])*rgbd[1] + (clut[i001]-clut[i000])*rgbd[2]
-        + (clut[i011]-clut[i001]-clut[i010]+clut[i000])*rgbd[1]*rgbd[2];
-      output[1] = clut[i000+1] + (clut[i111+1]-clut[i011+1])*rgbd[0] + (clut[i010+1]-clut[i000+1])*rgbd[1] + (clut[i001+1]-clut[i000+1])*rgbd[2]
-        + (clut[i011+1]-clut[i001+1]-clut[i010+1]+clut[i000+1])*rgbd[1]*rgbd[2];
-      output[2] = clut[i000+2] + (clut[i111+2]-clut[i011+2])*rgbd[0] + (clut[i010+2]-clut[i000+2])*rgbd[1] + (clut[i001+2]-clut[i000+2])*rgbd[2]
-        + (clut[i011+2]-clut[i001+2]-clut[i010+2]+clut[i000+2])*rgbd[1]*rgbd[2];
-    }
-    else if (rgbd[0] > rgbd[1] && rgbd[2] > rgbd[1])
-    {
-      output[0] = clut[i000] + (clut[i100]-clut[i000])*rgbd[0] + (clut[i111]-clut[i101])*rgbd[1] + (clut[i001]-clut[i000])*rgbd[2]
-        + (clut[i101]-clut[i001]-clut[i100]+clut[i000])*rgbd[0]*rgbd[2];
-      output[1] = clut[i000+1] + (clut[i100+1]-clut[i000+1])*rgbd[0] + (clut[i111+1]-clut[i101+1])*rgbd[1] + (clut[i001+1]-clut[i000+1])*rgbd[2]
-        + (clut[i101+1]-clut[i001+1]-clut[i100+1]+clut[i000+1])*rgbd[0]*rgbd[2];
-      output[2] = clut[i000+2] + (clut[i100+2]-clut[i000+2])*rgbd[0] + (clut[i111]-clut[i101+2])*rgbd[1] + (clut[i001+2]-clut[i000+2])*rgbd[2]
-        + (clut[i101+2]-clut[i001+2]-clut[i100+2]+clut[i000+2])*rgbd[0]*rgbd[2];
-    }
-    else
-    {
-      output[0] = clut[i000] + (clut[i100]-clut[i000])*rgbd[0] + (clut[i010]-clut[i000])*rgbd[1] + (clut[i111]-clut[i110])*rgbd[2]
-        + (clut[i110]-clut[i100]-clut[i010]+clut[i000])*rgbd[0]*rgbd[1];
-      output[1] = clut[i000+1] + (clut[i100+1]-clut[i000+1])*rgbd[0] + (clut[i010+1]-clut[i000+1])*rgbd[1] + (clut[i111+1]-clut[i110+1])*rgbd[2]
-        + (clut[i110+1]-clut[i100+1]-clut[i010+1]+clut[i000+1])*rgbd[0]*rgbd[1];
-      output[2] = clut[i000+2] + (clut[i100+2]-clut[i000+2])*rgbd[0] + (clut[i010+2]-clut[i000+2])*rgbd[1] + (clut[i111+2]-clut[i110+2])*rgbd[2]
-        + (clut[i110+2]-clut[i100+2]-clut[i010+2]+clut[i000+2])*rgbd[0]*rgbd[1];
-    }
-  }
-}
-
 void get_cache_filename(const char *const lutname, char *const cache_filename)
 {
   char *cache_dir = g_build_filename(g_get_user_cache_dir(), "gmic", NULL);
@@ -1100,23 +863,15 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     {
       dt_ioppr_transform_image_colorspace_rgb(ibuf, obuf, width, height,
         work_profile, lut_profile, "work profile to LUT profile");
-      if (interpolation == DT_IOP_TETRAHEDRAL)
-        correct_pixel_tetrahedral(obuf, obuf, (size_t)width * height, clut, level);
-      else if (interpolation == DT_IOP_TRILINEAR)
-        correct_pixel_trilinear(obuf, obuf, (size_t)width * height, clut, level);
-      else
-        correct_pixel_pyramid(obuf, obuf, (size_t)width * height, clut, level);
+      dt_lut3d_apply(obuf, obuf, (size_t)width * height, clut, level, 1.f,
+                     (dt_lut3d_interpolation_t)interpolation);
       dt_ioppr_transform_image_colorspace_rgb(obuf, obuf, width, height,
         lut_profile, work_profile, "LUT profile to work profile");
     }
     else
     {
-      if (interpolation == DT_IOP_TETRAHEDRAL)
-        correct_pixel_tetrahedral(ibuf, obuf, (size_t)width * height, clut, level);
-      else if (interpolation == DT_IOP_TRILINEAR)
-        correct_pixel_trilinear(ibuf, obuf, (size_t)width * height, clut, level);
-      else
-        correct_pixel_pyramid(ibuf, obuf, (size_t)width * height, clut, level);
+      dt_lut3d_apply(ibuf, obuf, (size_t)width * height, clut, level, 1.f,
+                     (dt_lut3d_interpolation_t)interpolation);
     }
   }
   else  // no clut

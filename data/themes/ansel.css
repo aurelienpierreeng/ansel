@@ -1303,6 +1303,101 @@ notebook header /* add space between notebook tabs and options below */
   border: none;
 }
 
+#colorequal-ring-tabs > header > tabs > tab
+{
+  min-width: 5.1em;
+  min-height: 2.1em;
+  padding: 0;
+  margin: 0.22em 0.12em 0;
+  border: 1px solid alpha(@grey_95, 0.10);
+  border-radius: 0.48em 0.48em 0 0;
+  background-color: @grey_35;
+}
+
+#colorequal-ring-tabs > header > tabs arrow
+{
+  border: none;
+  color: @grey_70;
+}
+
+#colorequal-ring-tabs > header
+{
+  margin: 0;
+  background-color: @bg_color;
+  border-bottom: none;
+}
+
+#colorequal-ring-tabs > header > tabs
+{
+  background-color: transparent;
+  border: none;
+  border-bottom: 1px solid alpha(@grey_95, 0.36);
+}
+
+#colorequal-ring-tabs > header,
+#colorequal-ring-tabs
+{
+  margin-bottom: 0;
+  border: none;
+  box-shadow: none;
+}
+
+#colorequal-ring-tabs > header > tabs > tab label,
+#colorequal-ring-tabs > header > tabs > tab label.dt_modulegroups_tab_label
+{
+  color: @grey_70;
+  opacity: 1;
+  font-size: 0.95em;
+  font-weight: 500;
+  background-color: transparent;
+  border: none;
+  padding: 0.16em 0.36em 0.14em;
+}
+
+#colorequal-ring-tabs > header > tabs > tab:hover
+{
+  border-color: alpha(@grey_95, 0.20);
+  background-color: @grey_38;
+}
+
+#colorequal-ring-tabs > header > tabs > tab:hover label,
+#colorequal-ring-tabs > header > tabs > tab:hover label.dt_modulegroups_tab_label
+{
+  color: @grey_90;
+  border: none;
+}
+
+#colorequal-ring-tabs > header > tabs > tab:checked
+{
+  border-top: 1px solid alpha(@grey_95, 0.36);
+  border-left: 1px solid alpha(@grey_95, 0.36);
+  border-right: 1px solid alpha(@grey_95, 0.36);
+  border-bottom: none;
+  background-color: @grey_44;
+  margin-bottom: -1px;
+}
+
+#colorequal-ring-tabs > header > tabs > tab:checked label,
+#colorequal-ring-tabs > header > tabs > tab:checked label.dt_modulegroups_tab_label
+{
+  color: @grey_100;
+  font-weight: 700;
+  border: none;
+}
+
+#colorequal-ring-tabs:disabled > header > tabs > tab
+{
+  border-color: alpha(@grey_95, 0.08);
+  background-color: @grey_35;
+}
+
+#colorequal-ring-tabs:disabled > header > tabs > tab label,
+#colorequal-ring-tabs:disabled > header > tabs > tab label.dt_modulegroups_tab_label
+{
+  color: @grey_65;
+  border: none;
+}
+
 
 
 /*--------------------------

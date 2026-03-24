@@ -102,6 +102,8 @@ FILE(GLOB SOURCE_FILES
   "common/locallaplacian.c"
   "common/locallaplaciancl.c"
   "common/l10n.c"
+  "common/lut3d.c"
+  "common/lut_viewer.c"
   "common/matrices.c"
   "common/metadata.c"
   "common/metadata_export.c"
