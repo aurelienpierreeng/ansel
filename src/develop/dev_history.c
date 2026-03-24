@@ -1206,12 +1206,34 @@ void dt_dev_write_history_ext(dt_develop_t *dev, const int32_t imgid)
   dt_mipmap_cache_remove(darktable.mipmap_cache, dev->image_storage.id, TRUE);
 }
 
+// Schedule history write as a background job to avoid blocking the GUI.
+// If scheduling fails, fall back to synchronous write to preserve behaviour.
+static int _dt_dev_write_history_job_run(dt_job_t *job)
+{
+  dt_develop_t *d = dt_control_job_get_params(job);
+  if(!d) return 1;
+  dt_pthread_rwlock_rdlock(&d->history_mutex);
+  dt_dev_write_history_ext(d, d->image_storage.id);
+  dt_pthread_rwlock_unlock(&d->history_mutex);
+  return 0;
+}
+
 // Write TO XMP, so from the dev perspective, it's a read
 void dt_dev_write_history(dt_develop_t *dev)
 {
-  dt_pthread_rwlock_rdlock(&dev->history_mutex);
-  dt_dev_write_history_ext(dev, dev->image_storage.id);
-  dt_pthread_rwlock_unlock(&dev->history_mutex);
+  dt_job_t *job = dt_control_job_create(&_dt_dev_write_history_job_run, "write history %d",
+                                        dev->image_storage.id);
+  dt_control_job_set_params(job, dev, NULL);
+  dt_control_job_add_progress(job, _("writing history"), TRUE);
+
+  if(dt_control_add_job(darktable.control, DT_JOB_QUEUE_USER_BG, job) != 0)
+  {
+    // scheduling failed: dispose job and run synchronously
+    dt_control_job_dispose(job);
+    dt_pthread_rwlock_rdlock(&dev->history_mutex);
+    dt_dev_write_history_ext(dev, dev->image_storage.id);
+    dt_pthread_rwlock_unlock(&dev->history_mutex);
+  }
 }
 
 /**
