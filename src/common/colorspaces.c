@@ -417,30 +417,23 @@ static double _PQ_fct(double x)
 // Hybrid Log-Gamma
 static double _HLG_fct(double x)
 {
-  static const double Beta  = 0.04;
-  static const double RA    = 5.591816309728916; // 1.0 / A where A = 0.17883277
-  static const double B     = 0.28466892; // 1.0 - 4.0 * A
-  static const double C     = 0.5599107295; // 0,5 -aln(4a)
+  static const double A = 0.17883277;
+  static const double B = 0.28466892;
+  static const double C = 0.55991073;
 
-  double e = MAX(x * (1.0 - Beta) + Beta, 0.0);
+  /**
+   * BT.2100 HLG EOTF inverse, mapping non-linear HLG code values to linear
+   * light. The standard is defined on `[0, +inf)`, but we extend it by odd
+   * symmetry so profile round-trips keep signed RGB values continuous around
+   * black instead of clipping negative excursions.
+   */
+  const double sign = x;
+  const double e = fabs(x);
 
-  if (e == 0.0) return 0.0;
+  if(e <= 0.5)
+    return copysign((e * e) / 3.0, sign);
 
-  const double sign = e;
-  e = fabs(e);
-
-  double res = 0.0;
-
-  if (e <= 0.5)
-  {
-    res = e * e / 3.0;
-  }
-  else
-  {
-    res = (exp((e - C) * RA) + B) / 12.0;
-  }
-
-  return copysign(res, sign);
+  return copysign((exp((e - C) / A) + B) / 12.0, sign);
 }
 
 static cmsToneCurve* _colorspaces_create_transfer(int32_t size, double (*fct)(double))
