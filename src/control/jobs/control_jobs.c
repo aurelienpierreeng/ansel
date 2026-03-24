@@ -1549,7 +1549,7 @@ void dt_control_save_xmp(const int32_t imgid)
   dt_control_add_job(darktable.control, DT_JOB_QUEUE_USER_FG,
                      dt_control_generic_images_job_create(&dt_control_save_xmps_job_run,
                                                           N_("save history to XMP"),
-                                                          0, NULL, PROGRESS_SIMPLE, imgid));
+                                                          0, NULL, PROGRESS_NONE, imgid));
 }
 
 void dt_control_save_xmps(const GList *imgids, const gboolean check_history)
