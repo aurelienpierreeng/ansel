@@ -177,6 +177,46 @@
 
 darktable_t darktable;
 
+/**
+ * GLib 2.82 routes GTK/GDK diagnostics through the structured log writer, so
+ * filtering them with g_log_set_handler() is not sufficient here. We drop only
+ * the known harmless startup messages and forward every other record to the
+ * default writer unchanged.
+ */
+static GLogWriterOutput _gtk_log_writer_filter(GLogLevelFlags log_level, const GLogField *fields,
+                                               gsize n_fields, gpointer user_data)
+{
+  const gchar *message = NULL;
+
+  for(gsize k = 0; k < n_fields; k++)
+  {
+    if(g_strcmp0(fields[k].key, "MESSAGE")) continue;
+
+    message = fields[k].value;
+    break;
+  }
+
+  // Silence only warnings/errors that come from default Adwaita CSS or desktop theme
+  // because there is nothing we can do about those.
+  // Yes, default Adwaita GTK CSS is still using deprecated GTK stuff in 2026...
+  // Even those morons can't keep up with the pace of their own deprecations.
+  if(message)
+  {
+    if(!g_strcmp0(message, "Unable to load dot from the cursor theme"))
+      return G_LOG_WRITER_HANDLED;
+
+    if(g_str_has_prefix(message, "Theme parsing error:")
+       && g_str_has_suffix(message, "The :insensitive pseudo-class is deprecated. Use :disabled instead."))
+      return G_LOG_WRITER_HANDLED;
+
+    if(g_str_has_prefix(message, "Theme parsing error:")
+       && g_str_has_suffix(message, "The :inconsistent pseudo-class is deprecated. Use :indeterminate instead."))
+      return G_LOG_WRITER_HANDLED;
+  }
+
+  return g_log_writer_default(log_level, fields, n_fields, user_data);
+}
+
 static int usage(const char *argv0)
 {
 #ifdef _WIN32
@@ -1032,6 +1072,7 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   // we need this REALLY early so that error messages can be shown, however after gtk_disable_setlocale
   if(init_gui)
   {
+    g_log_set_writer_func(_gtk_log_writer_filter, NULL, NULL);
     gtk_init(&argc, &argv);
 
     darktable.themes = NULL;
