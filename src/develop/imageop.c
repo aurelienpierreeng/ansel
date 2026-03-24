@@ -1036,6 +1036,15 @@ static void _gui_off_callback(GtkToggleButton *togglebutton, gpointer user_data)
 
   if(!darktable.gui->reset)
   {
+    /**
+     * Modules may keep a delayed history commit queued while the user edits a
+     * control, for example through gui-throttled graph interactions. Enabling
+     * or disabling a module is an immediate history state change, so any stale
+     * delayed task must be canceled first or it may land afterwards and replay
+     * an older enabled+params state over the newer toggle action.
+     */
+    dt_gui_throttle_cancel(module);
+
     if(gtk_toggle_button_get_active(togglebutton))
     {
       module->enabled = 1;
