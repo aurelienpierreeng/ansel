@@ -772,10 +772,16 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
   dt_times_t start;
   dt_get_times(&start);
 
-  // Read and write immediately to ensure cross-thread consistency of the value
-  // in case the GUI overwrites that while we are syncing history and nodes
-  dt_dev_pixelpipe_change_t status = dt_dev_pixelpipe_get_changed(pipe);
-  dt_dev_pixelpipe_set_changed(pipe, DT_DEV_PIPE_UNCHANGED);
+  /**
+   * Consume and clear pending change flags in one atomic step.
+   *
+   * The previous get-then-store sequence could lose updates when another
+   * thread OR-ed a new flag between the load and the reset. That made history
+   * resync requests randomly disappear, especially under fast GUI actions such
+   * as toggles or consecutive parameter commits.
+   */
+  dt_dev_pixelpipe_change_t status
+      = (dt_dev_pixelpipe_change_t)dt_atomic_exch_int((dt_atomic_int *)&pipe->changed, DT_DEV_PIPE_UNCHANGED);
 
   gchar *type = _get_debug_pipe_name(pipe, dev);
   char *status_str = g_strdup_printf("%s%s%s%s%s",

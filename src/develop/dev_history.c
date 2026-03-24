@@ -849,12 +849,14 @@ uint64_t dt_dev_history_compute_hash(dt_develop_t *dev)
 
 void dt_dev_add_history_item_real(dt_develop_t *dev, dt_iop_module_t *module, gboolean enable, gboolean redraw)
 {
+  gboolean add_new_pipe_node = FALSE;
+
   dt_atomic_set_int(&dev->pipe->shutdown, TRUE);
   dt_atomic_set_int(&dev->preview_pipe->shutdown, TRUE);
 
   dt_dev_undo_start_record(dev);
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
-  dt_dev_add_history_item_ext(dev, module, enable, FALSE);
+  add_new_pipe_node = dt_dev_add_history_item_ext(dev, module, enable, FALSE);
   dt_pthread_rwlock_unlock(&dev->history_mutex);
   dt_dev_undo_end_record(dev);
 
@@ -877,7 +879,7 @@ void dt_dev_add_history_item_real(dt_develop_t *dev, dt_iop_module_t *module, gb
 
   // Recompute pipeline last
   const gboolean has_raster = module && dt_iop_module_has_raster_mask(module);
-  if(module && !(has_forms || has_raster))
+  if(module && !(has_forms || has_raster) && !add_new_pipe_node)
   {
     // If we have a module and it doesn't use drawn or raster masks,
     // we only need to resync the top-most history item with pipeline
@@ -886,7 +888,12 @@ void dt_dev_add_history_item_real(dt_develop_t *dev, dt_iop_module_t *module, gb
   else
   {
     // We either don't have a module, meaning we have the mask manager, or
-    // we have a module and it uses masks (drawn or raster).
+    // we have a module and it uses masks (drawn or raster), or the current
+    // history commit changes the pipeline topology. The latter happens for
+    // example when enabling/disabling a module or when a module gets its first
+    // history entry. In all these cases, updating only the top-most synced
+    // history tail is insufficient because the set of active pipe nodes itself
+    // may differ from the previous run.
     // Because masks can affect several modules anywhere, not necessarily sequentially,
     // we need a full resync of all pipeline with history.
     // Note that the blendop params (thus their hash) references the raster mask provider
