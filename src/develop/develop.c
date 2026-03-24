@@ -285,44 +285,6 @@ void dt_dev_cleanup(dt_develop_t *dev)
 static gboolean _update_darkroom_roi(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, int *x, int *y, int *wd, int *ht,
                                      float *scale);
 
-static void _flag_pipe(dt_dev_pixelpipe_t *pipe, gboolean error)
-{
-  const gboolean shutdown = dt_atomic_get_int(&pipe->shutdown);
-  const gboolean pending_change = (dt_dev_pixelpipe_get_changed(pipe) != DT_DEV_PIPE_UNCHANGED);
-
-  // If dt_dev_pixelpipe_process() returned with a state int == 1
-  // and the shutdown flag is on, it means history commit activated the kill-switch.
-  // Any other circomstance returning 1 is a runtime error, flag it invalid.
-  if(error && !shutdown)
-  {
-    if(pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
-    {
-      dt_print(DT_DEBUG_DEV,
-               "[picker/worker] preview process failed pipe_history=%" PRIu64
-               " pipe=%" PRIu64 " backbuf=%" PRIu64 " backbuf_history=%" PRIu64
-               " changed=%d processing=%d\n",
-               dt_dev_pixelpipe_get_history_hash(pipe), dt_dev_pixelpipe_get_hash(pipe),
-               dt_dev_backbuf_get_hash(&pipe->backbuf),
-               dt_dev_backbuf_get_history_hash(&pipe->backbuf),
-               dt_dev_pixelpipe_get_changed(pipe), pipe->processing);
-    }
-    pipe->status = DT_DEV_PIXELPIPE_INVALID;
-  }
-
-  /* If a new change request landed while this run was executing, keep the
-   * loop in DIRTY state regardless of intermediate VALID/UNDEF transitions.
-   * This decouples "needs another run" from GUI writes to pipe->status. */
-  else if(shutdown || pending_change)
-    pipe->status = DT_DEV_PIXELPIPE_DIRTY;
-
-  // Before calling dt_dev_pixelpipe_process(), we set the status to DT_DEV_PIXELPIPE_UNDEF.
-  // If it's still set to this value and we have a backbuf, everything went well.
-  else if(pipe->status == DT_DEV_PIXELPIPE_UNDEF)
-    pipe->status = DT_DEV_PIXELPIPE_VALID;
-
-  // Otherwise keep the status as-is and let the outer loop decide.
-}
-
 static gboolean _darkroom_pipeline_inputs_ready(const dt_develop_t *dev)
 {
   if(!dev) return FALSE;
@@ -427,12 +389,6 @@ static gboolean _update_darkroom_roi(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe
   int ht_old = *ht;
   float old_scale = *scale;
 
-  // Update theoritical final scale based on distorting modules
-  // This also writes piece->buf_in/out for each pipe->nodes piece,
-  // so it's not nearly a matter of getting processed_width/height
-  dt_dev_pixelpipe_get_roi_out(pipe, dev, pipe->iwidth, pipe->iheight, &pipe->processed_width,
-                               &pipe->processed_height);
-
   // roi->scale is the pipeline sampling ratio against the processed image and
   // therefore excludes the GUI backing-store density.
   *scale = dev->roi.natural_scale;
@@ -499,24 +455,8 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
   // Infinite loop: run for as long as the worker thread is running.
   while(!dev->exit && dt_control_running())
   {
-    gboolean any_pipe_ran = FALSE;
-    gboolean any_realtime = FALSE;
-    gboolean run_sampling[G_N_ELEMENTS(pipes)] = { FALSE };
-
-    for(size_t i = 0; i < G_N_ELEMENTS(pipes); i++)
-    {
-      dt_dev_pixelpipe_t *pipe = pipes[i];
-
-      // This is cheap to run, keep it in sync always.
-      dt_dev_pixelpipe_set_input(pipe, dev, dev->image_storage.id, dev->roi.raw_width, dev->roi.raw_height,
-                                 DT_MIPMAP_FULL);
-    }
-
     if(!_darkroom_pipeline_inputs_ready(dev))
     {
-      for(size_t i = 0; i < G_N_ELEMENTS(pipes); i++)
-        pipes[i]->status = DT_DEV_PIXELPIPE_DIRTY;
-
       dt_iop_nap(50000); // wait 50 ms until GUI/image sizes are initialized
       continue;
     }
@@ -526,6 +466,21 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
     for(size_t i = 0; i < G_N_ELEMENTS(pipes); i++)
     {
       dt_dev_pixelpipe_t *pipe = pipes[i];
+
+      // We recompute if history hash changed or ROI has changed.
+      // If we know history changed, ensure at least the last step is resynced.
+      if(dt_dev_pixelpipe_get_history_hash(pipe) != dt_dev_get_history_hash(dev))
+        dt_dev_pixelpipe_or_changed(pipe, DT_DEV_PIPE_TOP_CHANGED);
+
+      // pipe->changed is set by zoom/pan otherwise.
+      // So at this point, if nothing changed, skip.
+      gboolean needs_update = (dt_dev_pixelpipe_get_changed(pipe) != DT_DEV_PIPE_UNCHANGED) && !pipe->pause;
+      if(!needs_update) continue;
+
+      // This is cheap to run, keep it in sync always.
+      dt_dev_pixelpipe_set_input(pipe, dev, dev->image_storage.id, dev->roi.raw_width, dev->roi.raw_height,
+                                 DT_MIPMAP_FULL);
+
       float scale = 1.f;
       int x = 0, y = 0, wd = 0, ht = 0;
 
@@ -534,52 +489,13 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
       int reentries = 0;
       dt_dev_pixelpipe_reset_reentry(pipe);
 
+      int runs = 0;
+
       // Updating loop: run while output is invalid/unavailable, or while realtime mode
       // has a new history state to consume.
-      while(!dev->exit && dt_control_running() && !pipe->pause && reentries < 2)
+      while(!dev->exit && dt_control_running() && reentries < 2 && runs < 2 && needs_update)
       {
-        const uint64_t pipe_history_hash = dt_dev_pixelpipe_get_history_hash(pipe);
-        const uint64_t dev_history_hash = dt_dev_get_history_hash(dev);
-        const uint64_t backbuf_hash = dt_dev_backbuf_get_hash(&pipe->backbuf);
-        const uint64_t pipe_hash = dt_dev_pixelpipe_get_hash(pipe);
-        const uint64_t backbuf_history_hash = dt_dev_backbuf_get_history_hash(&pipe->backbuf);
-        const gboolean history_outdated
-            = (pipe_history_hash != dev_history_hash)
-              || (backbuf_hash != pipe_hash)
-              || (backbuf_history_hash != dev_history_hash);
-
-        // If we know history changed, ensure at least the last step is resynced.
-        if(history_outdated)
-        {
-          if(pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
-          {
-            dt_print(DT_DEBUG_DEV,
-                     "[picker/worker] preview outdated module=%s pipe_history=%" PRIu64
-                     " dev_history=%" PRIu64 " backbuf=%" PRIu64 " pipe=%" PRIu64
-                     " backbuf_history=%" PRIu64 " processing=%d status=%d changed=%d\n",
-                     dev->color_picker.module ? dev->color_picker.module->op : "-",
-                     pipe_history_hash, dev_history_hash, backbuf_hash, pipe_hash,
-                     backbuf_history_hash, pipe->processing, pipe->status,
-                     dt_dev_pixelpipe_get_changed(pipe));
-          }
-          dt_dev_pixelpipe_or_changed(pipe, DT_DEV_PIPE_TOP_CHANGED);
-        }
-
-        // If any part of history needs resync, the pipe is dirty.
-        if(dt_dev_pixelpipe_get_changed(pipe) != DT_DEV_PIPE_UNCHANGED)
-        {
-          pipe->status = DT_DEV_PIXELPIPE_DIRTY;
-          dt_print(DT_DEBUG_PIPE, "PIPE %s needs update\n", pipe->type == DT_DEV_PIXELPIPE_FULL ? "full" : "preview");
-        }
-
-        // DT_DEV_PIXELPIPE_DIRTY means we need to compute a new backbuffer,
-        // for whatever reason. Could be that history changed,
-        // could be that we got on error on previous try,
-        // could be that we got a new input image.
-        if(pipe->status != DT_DEV_PIXELPIPE_DIRTY) break;
-
-        any_pipe_ran = TRUE;
-        any_realtime = any_realtime || dt_dev_pixelpipe_get_realtime(pipe);
+        dt_print(DT_DEBUG_PIPE | DT_DEBUG_DEV, "PIPE %s needs update\n", pipe->type == DT_DEV_PIXELPIPE_FULL ? "full" : "preview");
 
         dt_pthread_mutex_lock(&pipe->busy_mutex);
         pipe->processing = 1;
@@ -613,12 +529,8 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
         {
           pipe->processing = 0;
           dt_pthread_mutex_unlock(&pipe->busy_mutex);
-          pipe->status = DT_DEV_PIXELPIPE_DIRTY;
           break;
         }
-
-        // Signal that we are starting.
-        pipe->status = DT_DEV_PIXELPIPE_UNDEF;
 
         dt_iop_roi_t roi = (dt_iop_roi_t){ x, y, wd, ht, scale };
 
@@ -647,44 +559,41 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
         if(dt_dev_pixelpipe_has_reentry(pipe))
         {
           reentries++;
-          pipe->status = DT_DEV_PIXELPIPE_DIRTY;
         }
-        else
+        else if(!dt_atomic_get_int(&pipe->shutdown))
         {
-          _flag_pipe(pipe, ret);
-          run_sampling[i] = (pipe->status == DT_DEV_PIXELPIPE_VALID);
+          runs++;
         }
-
-        if(pipe->status == DT_DEV_PIXELPIPE_VALID) dt_gui_throttle_record_runtime(pipe, process_runtime_us);
 
         pipe->processing = 0;
         dt_pthread_mutex_unlock(&pipe->busy_mutex);
+
+        if(!ret && !dt_atomic_get_int(&pipe->shutdown))
+        {
+          dt_gui_throttle_record_runtime(pipe, process_runtime_us);
+          needs_update = FALSE;
+        }
+
+        if(pipe->type == DT_DEV_PIXELPIPE_FULL)
+        {
+          DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_UI_PIPE_FINISHED);
+          dt_control_queue_redraw_center();
+        }
+        else if(pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
+        {
+          DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED);
+          dt_control_queue_redraw();
+        }
+
+        // Allow some breathing room to the OS and GPU
+        dt_iop_nap(10000); // 10 ms
       }
     }
 
-    for(size_t i = 0; i < G_N_ELEMENTS(pipes); i++)
-    {
-      dt_dev_pixelpipe_t *pipe = pipes[i];
-      if(!run_sampling[i]) continue;
-
-      if(pipe->status != DT_DEV_PIXELPIPE_VALID) continue;
-
-      if(pipe->type == DT_DEV_PIXELPIPE_FULL)
-      {
-        DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_UI_PIPE_FINISHED);
-        dt_control_queue_redraw_center();
-      }
-      else if(pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
-      {
-        DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED);
-        dt_control_queue_redraw();
-      }
-    }
-
-    if(!any_pipe_ran)
-      dt_iop_nap(50000); // wait 50 ms when both pipes are clean or paused
-    else if(any_realtime)
+    if(dt_dev_pixelpipe_get_realtime(pipes[0]) || dt_dev_pixelpipe_get_realtime(pipes[1]))
       dt_iop_nap(10000);
+    else
+      dt_iop_nap(50000);
   }
 
   for(size_t i = 0; i < G_N_ELEMENTS(pipes); i++)

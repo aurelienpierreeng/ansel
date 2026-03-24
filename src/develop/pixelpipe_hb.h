@@ -169,14 +169,6 @@ typedef enum dt_dev_pixelpipe_change_t
   DT_DEV_PIPE_ZOOMED = 1 << 3 // zoom event, preview pipe does not need changes
 } dt_dev_pixelpipe_change_t;
 
-typedef enum dt_dev_pixelpipe_status_t
-{
-  DT_DEV_PIXELPIPE_DIRTY = 0,   // history stack changed or image new
-  DT_DEV_PIXELPIPE_UNDEF = 1,   // pixelpipe computation started and we don't know yet
-  DT_DEV_PIXELPIPE_VALID = 2,   // pixelpipe has finished; valid result
-  DT_DEV_PIXELPIPE_INVALID = 3  // pixelpipe has finished; invalid result
-} dt_dev_pixelpipe_status_t;
-
 /**
  * this encapsulates the pixelpipe.
  * a develop module will need several of these:
@@ -223,8 +215,6 @@ typedef struct dt_dev_pixelpipe_t
 
   // dimensions of processed buffer assuming we take full-resolution input
   int processed_width, processed_height;
-
-  dt_dev_pixelpipe_status_t status;
 
   /** work profile info of the image */
   struct dt_iop_order_iccprofile_info_t *work_profile_info;

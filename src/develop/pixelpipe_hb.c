@@ -235,7 +235,6 @@ static int _abort_module_shutdown_cleanup(dt_dev_pixelpipe_t *pipe, dt_dev_pixel
     dt_dev_pixelpipe_gpu_clear_buffer(cl_mem_output, NULL, NULL, FALSE);
 
   dt_iop_nap(5000);
-  pipe->status = DT_DEV_PIXELPIPE_DIRTY;
   return 1;
 }
 
@@ -655,7 +654,6 @@ dt_pixelpipe_blend_transform_t dt_dev_pixelpipe_transform_for_blend(const dt_iop
       dt_dev_pixelpipe_gpu_clear_buffer(&cl_mem_output, NULL, NULL, FALSE);                                      \
     }                                                                                                             \
     dt_iop_nap(5000);                                                                                             \
-    pipe->status = DT_DEV_PIXELPIPE_DIRTY;                                                                        \
     return 1;                                                                                                     \
   }
 
@@ -1270,7 +1268,6 @@ void dt_dev_pixelpipe_disable_before(dt_dev_pixelpipe_t *pipe, const char *op)
       dt_opencl_unlock_device(pipe->devid);                                                                       \
       pipe->devid = -1;                                                                                           \
     }                                                                                                             \
-    pipe->status = DT_DEV_PIXELPIPE_DIRTY;                                                                        \
     if(pipe->forms)                                                                                               \
     {                                                                                                             \
       g_list_free_full(pipe->forms, (void (*)(void *))dt_masks_free_form);                                        \
@@ -1375,9 +1372,6 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop
     _update_backbuf_cache_reference(pipe, roi, entry);
     return 0;
   }
-
-  // Flag backbuf as invalid
-  dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, dt_dev_backbuf_get_hash(&pipe->backbuf));
 
   dt_print(DT_DEBUG_DEV, "[pixelpipe] Started %s pipeline recompute at %i×%i px\n", 
            dt_pixelpipe_get_pipe_name(pipe->type), roi.width, roi.height);

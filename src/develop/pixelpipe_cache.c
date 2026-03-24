@@ -1720,6 +1720,19 @@ gboolean dt_dev_pixelpipe_cache_peek(dt_dev_pixelpipe_cache_t *cache, const uint
     return FALSE;
   }
 
+  /* Exact-hit callers treat the returned payload as already published. Reject
+   * cachelines that are still write-locked: reusable output cachelines are
+   * rekeyed to their new hash before recompute starts, so exposing them here
+   * would let concurrent pipes consume stale or half-written buffers. */
+  if(dt_pthread_rwlock_tryrdlock(&cache_entry->lock) != 0)
+  {
+    _trace_exact_hit("locked", hash, cache_entry, data ? *data : NULL,
+                     cl_mem_output ? *cl_mem_output : NULL, preferred_devid, FALSE);
+    _cache_clear_lookup_outputs(data, entry);
+    return FALSE;
+  }
+  dt_pthread_rwlock_unlock(&cache_entry->lock);
+
   if(!data && !cl_mem_output)
   {
     if(entry) *entry = cache_entry;
@@ -1736,19 +1749,6 @@ gboolean dt_dev_pixelpipe_cache_peek(dt_dev_pixelpipe_cache_t *cache, const uint
     _cache_clear_lookup_outputs(data, entry);
     return FALSE;
   }
-
-  /* Exact-hit callers treat the returned payload as already published. Reject
-   * cachelines that are still write-locked: reusable output cachelines are
-   * rekeyed to their new hash before recompute starts, so exposing them here
-   * would let concurrent pipes consume stale or half-written buffers. */
-  if(dt_pthread_rwlock_tryrdlock(&cache_entry->lock) != 0)
-  {
-    _trace_exact_hit("locked", hash, cache_entry, data ? *data : NULL,
-                     cl_mem_output ? *cl_mem_output : NULL, preferred_devid, FALSE);
-    _cache_clear_lookup_outputs(data, entry);
-    return FALSE;
-  }
-  dt_pthread_rwlock_unlock(&cache_entry->lock);
 
   if(_cache_entry_has_host_payload_ptr(cache_entry))
   {

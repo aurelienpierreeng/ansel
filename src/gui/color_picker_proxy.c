@@ -417,10 +417,9 @@ static void _refresh_active_picker(dt_develop_t *dev)
   if(!dev->color_picker.picker->update_pending && !dev->color_picker.update_pending) return;
 
   dt_print(DT_DEBUG_DEV,
-           "[picker] refresh module=%s update_pending=%d widget_pending=%d pipe_status=%d processing=%d\n",
+           "[picker] refresh module=%s update_pending=%d widget_pending=%d processing=%d\n",
            dev->color_picker.module ? dev->color_picker.module->op : "-",
            dev->color_picker.update_pending, dev->color_picker.picker->update_pending,
-           dev->preview_pipe ? dev->preview_pipe->status : -1,
            dev->preview_pipe ? dev->preview_pipe->processing : -1);
 
   _record_point_area(dev->color_picker.picker);

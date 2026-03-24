@@ -823,10 +823,15 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
     // only top history item(s) changed.
     dt_dev_pixelpipe_synch_top(pipe, dev);
   }
+  dt_pthread_rwlock_unlock(&dev->history_mutex);
 
   _seal_opencl_cache_policy(pipe, dev);
-
-  dt_pthread_rwlock_unlock(&dev->history_mutex);
+  
+  // Update theoritical final scale based on distorting modules
+  // This also writes piece->buf_in/out for each pipe->nodes piece,
+  // so it's not nearly a matter of getting processed_width/height
+  dt_dev_pixelpipe_get_roi_out(pipe, dev, pipe->iwidth, pipe->iheight, &pipe->processed_width,
+                               &pipe->processed_height);
 
   dt_show_times_f(&start, "[dev_pixelpipe] pipeline resync with history", "for pipe %s", type);
 }
@@ -850,8 +855,6 @@ static void _sync_virtual_pipe(dt_develop_t *dev, dt_dev_pixelpipe_change_t flag
   // Mirror the preview-pipe change flags and commit immediately.
   _change_pipe(dev->virtual_pipe, flag);
   dt_dev_pixelpipe_change(dev->virtual_pipe, dev);
-
-  dev->virtual_pipe->status = DT_DEV_PIXELPIPE_VALID;
 }
 
 void dt_dev_pixelpipe_sync_virtual(dt_develop_t *dev, dt_dev_pixelpipe_change_t flag)

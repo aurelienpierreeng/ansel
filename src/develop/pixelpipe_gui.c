@@ -149,7 +149,6 @@ static void _refresh_global_histogram_backbuf(dt_develop_t *dev, const char *op)
 gboolean dt_dev_refresh_module_histogram(dt_develop_t *dev, dt_iop_module_t *module)
 {
   if(!dev || !dev->preview_pipe || !module) return FALSE;
-  if(dev->preview_pipe->status != DT_DEV_PIXELPIPE_VALID) return FALSE;
 
   const dt_dev_pixelpipe_iop_t *const piece = dt_dev_pixelpipe_get_module_piece(dev->preview_pipe, module);
   if(!piece || !(piece->request_histogram & DT_REQUEST_ON)) return FALSE;
@@ -229,7 +228,6 @@ gboolean dt_dev_module_requires_global_histogram_input_cache(const dt_dev_pixelp
 void dt_dev_refresh_preview_histograms(dt_develop_t *dev)
 {
   if(!dev || !dev->gui_attached || !dev->preview_pipe) return;
-  if(dev->preview_pipe->status != DT_DEV_PIXELPIPE_VALID) return;
   if(!dev->preview_pipe->gui_observable_source) return;
 
   _refresh_global_histogram_backbuf(dev, "demosaic");
