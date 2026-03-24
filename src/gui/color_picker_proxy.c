@@ -318,16 +318,29 @@ static dt_color_picker_resample_status_t _sample_picker_from_cache(dt_develop_t 
 
   void *output = NULL;
   dt_pixel_cache_entry_t *output_entry = NULL;
-  if(!dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, piece->global_hash,
-                                  &output, &output_entry, -1, NULL)
-     || !output_entry || !output)
+  const gboolean have_output
+      = dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, piece->global_hash,
+                                    &output, &output_entry, -1, NULL)
+        && output_entry && output;
+  if(!have_output)
   {
+    /* Module GUIs such as color equalizer only consume the module-input sample. A missing output
+       cacheline must therefore not block picker feedback forever, otherwise one unavailable host
+       cache entry feeds an endless recompute/retry loop. Keep output statistics explicitly invalid
+       so output-dependent consumers can detect the missing sample, but still publish the ready
+       input sample. */
     dt_print(DT_DEBUG_DEV, "[picker] output cache miss module=%s hash=%" PRIu64 "\n",
              piece->module->op, piece->global_hash);
-    return DT_COLOR_PICKER_RESAMPLE_RETRY;
+
+    for(int k = 0; k < 4; k++)
+    {
+      piece->module->picked_output_color[k] = 0.0f;
+      piece->module->picked_output_color_min[k] = 666.0f;
+      piece->module->picked_output_color_max[k] = -666.0f;
+    }
   }
 
-  if(previous_piece->dsc_out.datatype != TYPE_FLOAT || piece->dsc_out.datatype != TYPE_FLOAT)
+  if(previous_piece->dsc_out.datatype != TYPE_FLOAT || (have_output && piece->dsc_out.datatype != TYPE_FLOAT))
   {
     dt_print(DT_DEBUG_DEV,
              "[picker] non-float buffers module=%s input_type=%d output_type=%d\n",
@@ -337,24 +350,32 @@ static dt_color_picker_resample_status_t _sample_picker_from_cache(dt_develop_t 
 
   dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, input_entry);
   dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, input_entry);
-  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, output_entry);
-  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, output_entry);
+  if(have_output)
+  {
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, output_entry);
+    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, output_entry);
+  }
 
   const gboolean sampled_input
       = _sample_picker_buffer(pipe, piece->module, &previous_piece->dsc_out, &previous_piece->roi_out,
                               input, piece->module->picked_color, piece->module->picked_color_min,
                               piece->module->picked_color_max, PIXELPIPE_PICKER_INPUT);
   const gboolean sampled_output
-      = _sample_picker_buffer(pipe, piece->module, &piece->dsc_out, &piece->roi_out, output,
-                              piece->module->picked_output_color, piece->module->picked_output_color_min,
-                              piece->module->picked_output_color_max, PIXELPIPE_PICKER_OUTPUT);
+      = have_output
+          ? _sample_picker_buffer(pipe, piece->module, &piece->dsc_out, &piece->roi_out, output,
+                                  piece->module->picked_output_color, piece->module->picked_output_color_min,
+                                  piece->module->picked_output_color_max, PIXELPIPE_PICKER_OUTPUT)
+          : FALSE;
 
-  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, output_entry);
-  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, output_entry);
+  if(have_output)
+  {
+    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, output_entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, output_entry);
+  }
   dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, input_entry);
   dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, input_entry);
 
-  if(!sampled_input || !sampled_output)
+  if(!sampled_input)
   {
     dt_print(DT_DEBUG_DEV, "[picker] sample failed module=%s input=%d output=%d\n",
              piece->module->op, sampled_input, sampled_output);
@@ -431,12 +452,15 @@ static void _refresh_active_picker(dt_develop_t *dev)
 
   if(dev->preview_pipe)
   {
-    dev->color_picker.recompute_requested = FALSE;
     const dt_color_picker_resample_status_t sampled = _sample_picker_from_cache(dev);
     if(sampled != DT_COLOR_PICKER_RESAMPLE_RETRY)
+    {
+      dev->color_picker.recompute_requested = FALSE;
       return;
+    }
   }
 
+  if(dev->color_picker.recompute_requested) return;
   _request_picker_recompute(dev);
 }
 
@@ -534,7 +558,6 @@ static gboolean _color_picker_callback_button_press(GtkWidget *button, GdkEventB
   if (prior_picker != self || (kind == DT_COLOR_PICKER_POINT_AREA &&
       (ctrl_key_pressed ^ (dev->color_picker.primary_sample->size == DT_LIB_COLORPICKER_SIZE_BOX))))
   {
-    if(module) dt_iop_set_cache_bypass(module, TRUE);
     dev->color_picker.picker = self;
     dev->color_picker.widget = self->colorpick;
     dev->color_picker.module = module;
@@ -631,7 +654,11 @@ void dt_iop_color_picker_request_update(void)
   dt_develop_t *const dev = darktable.develop;
   dt_iop_color_picker_t *picker = dev ? dev->color_picker.picker : NULL;
   if(picker) picker->update_pending = TRUE;
-  if(dev) dev->color_picker.update_pending = TRUE;
+  if(dev)
+  {
+    dev->color_picker.update_pending = TRUE;
+    dev->color_picker.recompute_requested = FALSE;
+  }
   if(dev)
     dt_print(DT_DEBUG_DEV, "[picker] request update module=%s picker=%p widget=%p\n",
              dev->color_picker.module ? dev->color_picker.module->op : "-",
@@ -657,7 +684,6 @@ gboolean dt_iop_color_picker_force_cache(const dt_develop_t *dev, const dt_dev_p
 static void _iop_color_picker_preview_pipe_finished_callback(gpointer instance, gpointer user_data)
 {
   dt_develop_t *const dev = darktable.develop;
-  if(dev) dev->color_picker.recompute_requested = FALSE;
   _queue_refresh_active_picker(dev);
 }
 
@@ -698,7 +724,6 @@ static GtkWidget *_color_picker_new(dt_iop_module_t *module, dt_iop_color_picker
     {
       dev->color_picker.picker = color_picker;
       dev->color_picker.widget = button;
-      if(module) dt_iop_set_cache_bypass(module, TRUE);
 
       ++darktable.gui->reset;
       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(button), TRUE);
@@ -726,7 +751,6 @@ static GtkWidget *_color_picker_new(dt_iop_module_t *module, dt_iop_color_picker
     {
       dev->color_picker.picker = color_picker;
       dev->color_picker.widget = w;
-      if(module) dt_iop_set_cache_bypass(module, TRUE);
 
       ++darktable.gui->reset;
       dt_bauhaus_widget_set_quad_active(w, TRUE);

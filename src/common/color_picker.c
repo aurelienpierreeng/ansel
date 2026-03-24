@@ -83,6 +83,34 @@ static void _color_picker_convert_buffer(const float *const restrict input, floa
       output[offset + 3] = input[offset + 3];
     }
   }
+  else if(image_cst == IOP_CS_LAB && picker_cst == IOP_CS_RGB)
+  {
+#ifdef _OPENMP
+#pragma omp parallel for default(none) dt_omp_firstprivate(input, output, pixels, profile) schedule(static)
+#endif
+    for(size_t k = 0; k < pixels; k++)
+    {
+      const size_t offset = 4 * k;
+      dt_ioppr_lab_to_rgb_matrix(input + offset, output + offset, profile->matrix_out_transposed,
+                                 profile->lut_out, profile->unbounded_coeffs_out,
+                                 profile->lutsize, profile->nonlinearlut);
+      output[offset + 3] = input[offset + 3];
+    }
+  }
+  else if(image_cst == IOP_CS_RGB && picker_cst == IOP_CS_LAB)
+  {
+#ifdef _OPENMP
+#pragma omp parallel for default(none) dt_omp_firstprivate(input, output, pixels, profile) schedule(static)
+#endif
+    for(size_t k = 0; k < pixels; k++)
+    {
+      const size_t offset = 4 * k;
+      dt_ioppr_rgb_matrix_to_lab(input + offset, output + offset, profile->matrix_in_transposed,
+                                 profile->lut_in, profile->unbounded_coeffs_in,
+                                 profile->lutsize, profile->nonlinearlut);
+      output[offset + 3] = input[offset + 3];
+    }
+  }
   else if(image_cst == IOP_CS_RGB && picker_cst == IOP_CS_JZCZHZ)
   {
 #ifdef _OPENMP
@@ -844,17 +872,15 @@ void dt_color_picker_helper(const dt_iop_buffer_dsc_t *dsc, const float *const p
 
     if(((image_cst == picker_cst) || (picker_cst == IOP_CS_NONE)))
       color_picker_helper_4ch(dsc, denoised, roi, box, picked_color, picked_color_min, picked_color_max, picker_cst, profile);
-    else if(image_cst == IOP_CS_LAB && picker_cst == IOP_CS_LCH)
+    else if((image_cst == IOP_CS_LAB
+             && (picker_cst == IOP_CS_LCH || picker_cst == IOP_CS_RGB))
+            || (image_cst == IOP_CS_RGB
+                && (picker_cst == IOP_CS_LAB || picker_cst == IOP_CS_HSL || picker_cst == IOP_CS_JZCZHZ)))
     {
-      converted = dt_pixelpipe_cache_alloc_align_float_cache(4 * roi->width * roi->height, 0);
-      if(converted == NULL)
-        goto error;
-
-      _color_picker_convert_buffer(denoised, converted, (size_t)roi->width * roi->height, image_cst, picker_cst, profile);
-      color_picker_helper_4ch_converted(converted, roi, box, picked_color, picked_color_min, picked_color_max, picker_cst);
-    }
-    else if(image_cst == IOP_CS_RGB && (picker_cst == IOP_CS_HSL || picker_cst == IOP_CS_JZCZHZ))
-    {
+      /* The picker samples module input/output buffers after the previous piece has written them.
+         When the requested picker colorspace differs from that buffer colorspace, we need a real
+         conversion before averaging. Falling back to raw channel statistics would silently report
+         Lab values as RGB (or the other way around), which makes module-side picker feedback wrong. */
       converted = dt_pixelpipe_cache_alloc_align_float_cache(4 * roi->width * roi->height, 0);
       if(converted == NULL)
         goto error;

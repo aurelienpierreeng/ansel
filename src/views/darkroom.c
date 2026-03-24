@@ -2867,12 +2867,13 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
         const float delta_x = 0.01f;
         const float delta_y = delta_x * (float)dev->roi.processed_width / (float)dev->roi.processed_height;
 
-        // Box drags need one anchor corner. Keep it in sample->point, but hand the actual sampling
-        // geometry to the picker API so preview dirtiness stays centralized.
-        memcpy(sample->point, point, sizeof(point));
-
         if(sample->size == DT_LIB_COLORPICKER_SIZE_BOX)
         {
+          /* Box drags need one anchor corner stored in sample->point so mouse motion can stretch
+             the rectangle against that fixed corner. Keep that anchor local to the darkroom drag
+             state, but let the picker API own the actual sampling geometry and update signaling. */
+          memcpy(sample->point, point, sizeof(point));
+
           // this is slightly more than as drawn, to give room for slop
           gboolean on_corner_prev_box = TRUE;
           float opposite[2] = { 0.0f };
@@ -2906,7 +2907,11 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
           dt_control_set_cursor(GDK_FLEUR);
         }
         else
+        {
+          /* Point pickers must not pre-write sample->point before going through the picker API,
+             otherwise the setter sees no geometry change and skips the resample request. */
           dt_lib_colorpicker_set_point(darktable.lib, point);
+        }
       }
       return 1;
     }
