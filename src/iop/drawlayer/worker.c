@@ -999,10 +999,11 @@ static guint _rasterize_pending_dab_batch(drawlayer_paint_backend_ctx_t *ctx, gi
   dt_drawlayer_paint_stroke_t *stroke = ctx ? ctx->stroke : NULL;
   if(!g || !stroke || !stroke->pending_dabs || stroke->pending_dabs->len == 0) return 0;
 
-  const guint remaining_dabs = stroke->pending_dabs->len;
   const guint min_batch = _worker_batch_min_size();
 
 #if defined(_OPENMP) && OUTER_LOOP
+  const guint remaining_dabs = stroke->pending_dabs->len;
+
   if(remaining_dabs >= min_batch && _dab_batch_supports_outer_loop(stroke->pending_dabs, remaining_dabs))
   {
     const guint batch_dabs = (budget_us > 0)
