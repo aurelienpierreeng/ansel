@@ -645,9 +645,10 @@ void dt_dev_pixelpipe_cache_flag_auto_destroy(dt_dev_pixelpipe_cache_t *cache,
 /**
  * @brief Free the entry if it has the flag "auto_destroy".
  * See `dt_dev_pixelpipe_cache_flag_auto_destroy()`.
- * This will not check reference count nor read/write locks, so it has to happen in the thread that created the
- * entry, flagged it and owns it. Ensure your hashes are truly unique and not shared between pipelines to ensure
- * another thread will not free this or that another thread ends up using it.
+ * This only removes entries whose reference count already dropped to 0 and whose lock is currently free.
+ * Call it right after the final consumer releases its refcount, from the same control flow that flagged the
+ * entry for auto-destruction. If another consumer still owns the entry, this becomes a no-op and generic cache
+ * eviction or a later explicit retry will reap it once ownership reaches 0.
  *
  * @param cache
  */

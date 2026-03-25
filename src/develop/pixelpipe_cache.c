@@ -2464,8 +2464,27 @@ void dt_dev_pixelpipe_cache_auto_destroy_apply(dt_dev_pixelpipe_cache_t *cache,
 
   if(cache_entry->auto_destroy)
   {
-    _pixel_cache_message(cache_entry, "auto destroy removing", FALSE);
-    g_hash_table_remove(cache->entries, &cache_entry->hash);
+    /* `auto_destroy` is still a normal cache lifecycle: the creator flags a transient entry, then the final
+     * consumer decrements its refcount and asks the cache to reap it. Only remove it once no consumer owns
+     * it anymore and nobody still holds the entry lock, otherwise teardown paths can free cachelines that
+     * still report `refs>0` and hide ownership bugs instead of exposing them. */
+    const gboolean locked = dt_pthread_rwlock_trywrlock(&cache_entry->lock);
+    if(!locked) dt_pthread_rwlock_unlock(&cache_entry->lock);
+    const gboolean used = dt_atomic_get_int(&cache_entry->refcount) > 0;
+
+    if(!used && !locked)
+    {
+      _pixel_cache_message(cache_entry, "auto destroy removing", FALSE);
+      g_hash_table_remove(cache->entries, &cache_entry->hash);
+    }
+    else if(used)
+    {
+      _pixel_cache_message(cache_entry, "auto destroy postponed: used", TRUE);
+    }
+    else
+    {
+      _pixel_cache_message(cache_entry, "auto destroy postponed: locked", TRUE);
+    }
   }
   else
   {

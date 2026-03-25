@@ -510,9 +510,20 @@ void dt_dev_pixelpipe_cleanup(dt_dev_pixelpipe_t *pipe)
   const uint64_t old_backbuf_hash = dt_dev_backbuf_get_hash(&pipe->backbuf);
   if(pipe->no_cache)
   {
-    dt_pixel_cache_entry_t *old_backbuf_entry
-        = dt_dev_pixelpipe_cache_get_entry(darktable.pixelpipe_cache, old_backbuf_hash);
-    dt_dev_pixelpipe_cache_remove(darktable.pixelpipe_cache, TRUE, old_backbuf_entry);
+    if(old_backbuf_hash != DT_PIXELPIPE_CACHE_HASH_INVALID)
+    {
+      /* The last displayed output is just another consumer-owned cache ref. Drop it explicitly before asking
+       * the cache to recycle the one-shot final output, otherwise cleanup removes the cacheline with `refs=1`
+       * and hides the lifetime mismatch behind a forced delete. */
+      dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, old_backbuf_hash);
+      dt_pixel_cache_entry_t *old_backbuf_entry
+          = dt_dev_pixelpipe_cache_get_entry(darktable.pixelpipe_cache, old_backbuf_hash);
+      if(old_backbuf_entry)
+      {
+        dt_dev_pixelpipe_cache_flag_auto_destroy(darktable.pixelpipe_cache, old_backbuf_entry);
+        dt_dev_pixelpipe_cache_auto_destroy_apply(darktable.pixelpipe_cache, old_backbuf_entry);
+      }
+    }
     dt_dev_set_backbuf(&pipe->backbuf, 0, 0, 0, DT_PIXELPIPE_CACHE_HASH_INVALID, DT_PIXELPIPE_CACHE_HASH_INVALID);
   }
   dt_pthread_mutex_destroy(&(pipe->busy_mutex));
@@ -938,6 +949,10 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
 
   if(exact_output_cache_hit)
   {
+    /* An exact-hit child still needs one ref reserved for the immediate caller that will consume it next.
+     * `process_rec()` returns that upcoming-consumer ref as part of its contract instead of asking the caller
+     * to bump the counter again on input acquisition. */
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, existing_cache);
     _trace_cache_owner(pipe, module, "exact-hit-direct", "output", hash, NULL, existing_cache, FALSE);
     *out_hash = hash;
     *out_piece = piece;
@@ -959,9 +974,10 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
 
   KILL_SWITCH_ABORT;
 
-  // Child recursion just published this hash. Reopen the live cache entry directly instead of going
-  // through exact-hit lookup, because exact-hit intentionally rejects auto-destroy entries while
-  // the parent recursion still needs to consume transient outputs in the same run.
+  // Child recursion just published or exact-hit returned this hash with one ref already reserved for
+  // this immediate consumer. Reopen the live cache entry directly instead of going through exact-hit
+  // lookup, because exact-hit intentionally rejects auto-destroy entries while the parent recursion
+  // still needs to consume transient outputs in the same run.
   dt_pixel_cache_entry_t *input_entry
       = dt_dev_pixelpipe_cache_get_entry(darktable.pixelpipe_cache, input_hash);
   if(!input_entry)
@@ -975,7 +991,6 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
                            : dt_dev_pixelpipe_node_hash(pipe, NULL, *_get_first_roi(pipe), 0));
     return 1;
   }
-  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, input_entry);
   input = dt_pixel_cache_entry_get_data(input_entry);
   _trace_cache_owner(pipe, module, "acquire", "input", input_hash, input, input_entry, FALSE);
   _trace_buffer_content(pipe, module, "input-acquire", input, &piece->dsc_in, &piece->roi_in);
@@ -1000,8 +1015,8 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
     /* Mask/channel passthrough keeps the exact child buffer alive for the next
      * downstream module. This stage does not publish a new cacheline, so it
      * must forward the child hash and actual previous piece contract exactly as
-     * they came from recursion. */
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, input_entry);
+     * they came from recursion, including the single reserved ref for the next
+     * real consumer. */
     *out_hash = input_hash;
     *out_piece = previous_piece;
     return 0;
@@ -1059,6 +1074,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
     dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, exact_entry);
     dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, exact_entry);
     dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, exact_entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, exact_entry);
 
     _trace_cache_owner(pipe, module, "exact-hit-wait", "output", hash,
                        dt_pixel_cache_entry_get_data(exact_entry), exact_entry, FALSE);
@@ -1226,15 +1242,6 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   }
 
   KILL_SWITCH_AND_FLUSH_CACHE;
-
-  /* `dt_dev_pixelpipe_cache_get_writable()` increments the output cacheline refcount so backend processing
-   * and publication own one explicit reference while the entry is write-locked. Once the module published
-   * its result, downstream recursion reopens the same cacheline by hash and acquires its own input ref.
-   * Release the writable-owner ref here, in the same visible tail path where we already release the input,
-   * otherwise every successful publication leaves one permanent "used" entry behind and the LRU can no longer
-   * evict anything once the cache fills up. */
-  _trace_cache_owner(pipe, module, "release", "output", hash, output, output_entry, FALSE);
-  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, output_entry);
 
   *out_hash = hash;
   *out_piece = piece;
@@ -1477,13 +1484,19 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop
       if(dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, dt_dev_pixelpipe_get_hash(pipe), &final_buf,
                                      &final_entry, pipe->devid, NULL)
          && final_buf != NULL)
+      {
         _update_backbuf_cache_reference(pipe, roi, final_entry);
+        dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, final_hash);
+      }
       else
+      {
         dt_print(DT_DEBUG_DEV,
                  "[picker/rec] final output cache missing pipe=%s hash=%" PRIu64 " history=%" PRIu64
                  " devid=%d err=%d\n",
                  dt_pixelpipe_get_pipe_name(pipe->type), dt_dev_pixelpipe_get_hash(pipe),
                  dt_dev_pixelpipe_get_history_hash(pipe), pipe->devid, err);
+        dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, final_hash);
+      }
 
       // Note : the last output (backbuf) of the pixelpipe cache is internally locked
       // Whatever consuming it will need to unlock it.
