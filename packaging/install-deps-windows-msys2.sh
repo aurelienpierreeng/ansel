@@ -66,7 +66,6 @@ MINGW_PACKAGES=(
   nsis
   openexr
   openjpeg2
-  openmp
   osm-gps-map
   pugixml
   python
