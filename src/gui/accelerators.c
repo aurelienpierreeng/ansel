@@ -208,7 +208,7 @@ static void _clean_shortcut(gpointer data)
 // Return the last closure in the list
 PayloadClosure *dt_shortcut_get_payload_closure(dt_shortcut_t *shortcut)
 {
-  GList *link = g_list_first(shortcut->closure);
+  GList *link = g_list_last(shortcut->closure);
   if(link)
     return (PayloadClosure *)link->data;
   else
@@ -281,7 +281,8 @@ static void _find_parent_hashtable(gpointer _key, gpointer value, gpointer user_
   {
     GClosure *parent_closure = dt_shortcut_get_closure(parent_shortcut);
     PayloadClosure *child_closure = dt_shortcut_get_payload_closure(child_shortcut);
-    child_closure->parent_data = parent_closure->data;
+    if(parent_closure && child_closure)
+      child_closure->parent_data = parent_closure->data;
 
     /*
     fprintf(stdout, "%s is the parent of %s - pointer %p\n", parent_shortcut->path, child_shortcut->path,
@@ -490,6 +491,7 @@ static void _remove_generic_accel(dt_shortcut_t *shortcut)
 {
   // Need to increase the number of references to avoid loosing the closure just yet.
   GClosure *cl = dt_shortcut_get_closure(shortcut);
+  if(!cl) return;
   g_closure_ref(cl);
   g_closure_sink(cl);
   gtk_accel_group_disconnect(shortcut->accel_group, cl);
@@ -698,7 +700,9 @@ void dt_accels_new_action_shortcut(dt_accels_t *accels,
   dt_shortcut_t *shortcut = (dt_shortcut_t *)g_hash_table_lookup(accels->acceleratables, accel_path);
   dt_pthread_mutex_unlock(&accels->lock);
 
-  if(shortcut && dt_shortcut_get_closure(shortcut) && dt_shortcut_get_closure(shortcut)->data == data)
+  GClosure *closure = shortcut ? dt_shortcut_get_closure(shortcut) : NULL;
+
+  if(closure && closure->data == data)
   {
     // reference is still up-to-date: nothing to do.
     return;
@@ -706,7 +710,7 @@ void dt_accels_new_action_shortcut(dt_accels_t *accels,
   else if(shortcut && shortcut->type != DT_SHORTCUT_UNSET)
   {
     // If we already have a shortcut object wired to Gtk for this accel path, just update it
-    if(shortcut->key > 0) _remove_generic_accel(shortcut);
+    if(shortcut->key > 0 && closure) _remove_generic_accel(shortcut);
     dt_shortcut_set_closure(shortcut, action_callback, data);
     if(shortcut->key > 0) _add_generic_accel(shortcut, accels->flags);
   }
