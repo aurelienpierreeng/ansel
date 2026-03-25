@@ -518,9 +518,6 @@ GList *dt_ioppr_get_iop_order_rules()
     { .op_prev = "flip",        .op_next = "clipping"    }, // clipping GUI broken if flip is done on top
     { .op_prev = "ashift",      .op_next = "clipping"    }, // clipping GUI broken if ashift is done on top
     { .op_prev = "colorin",     .op_next = "channelmixerrgb"},
-    { .op_prev = "colorbalancergb", .op_next = "colorequal" },
-    { .op_prev = "colorequal", .op_next = "drawlayer" },
-    { .op_prev = "drawlayer", .op_next = "rgbcurve" },
     { "\0", "\0" } };
 
   int i = 0;

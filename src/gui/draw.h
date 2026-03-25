@@ -265,6 +265,65 @@ static inline void dt_draw_horizontal_lines(cairo_t *cr, const int num, const in
   }
 }
 
+/**
+ * @brief Draw a compact square flowchart icon for the pipeline graph button.
+ *
+ * The icon stays readable at toolbar size by using four square nodes and two
+ * simple branch arrows instead of a rounded organic graph.
+ *
+ * @param cr Cairo context.
+ * @param x Left coordinate.
+ * @param y Top coordinate.
+ * @param w Icon width.
+ * @param h Icon height.
+ * @param flags Paint flags from the dtgtk button API.
+ * @param data Optional user data, unused.
+ */
+static inline void dt_draw_icon_flowchart(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data)
+{
+  const double size = MIN(w, h);
+  const double side = floor(size * 0.30);
+  const double line_width = DT_PIXEL_APPLY_DPI(1.);
+  const double left = x + floor(w * 0.08);
+  const double top = y + floor(h * 0.54);
+  const double middle = x + floor(w * 0.39);
+  const double right = x + floor(w * 0.70);
+  const double branch_top = y + floor(h * 0.10);
+  const double center_y = top + side * 0.5;
+  const double branch_x = middle + side * 0.5;
+  const double arrow = MAX(2.4, floor(size * 0.14));
+
+  cairo_save(cr);
+  cairo_set_line_width(cr, line_width);
+  cairo_set_line_cap(cr, CAIRO_LINE_CAP_SQUARE);
+  cairo_set_line_join(cr, CAIRO_LINE_JOIN_MITER);
+
+  cairo_rectangle(cr, left, top, side, side);
+  cairo_rectangle(cr, middle, top, side, side);
+  cairo_rectangle(cr, right, top, side, side);
+  cairo_rectangle(cr, middle, branch_top, side, side);
+  cairo_stroke(cr);
+
+  cairo_move_to(cr, left + side, center_y);
+  cairo_line_to(cr, middle, center_y);
+  cairo_move_to(cr, middle + side, center_y);
+  cairo_line_to(cr, right, center_y);
+  cairo_move_to(cr, branch_x, top);
+  cairo_line_to(cr, branch_x, branch_top + side);
+  cairo_stroke(cr);
+
+  cairo_move_to(cr, right, center_y);
+  cairo_line_to(cr, right - arrow, center_y - arrow * 0.7);
+  cairo_move_to(cr, right, center_y);
+  cairo_line_to(cr, right - arrow, center_y + arrow * 0.7);
+  cairo_move_to(cr, branch_x, branch_top + side);
+  cairo_line_to(cr, branch_x - arrow * 0.65, branch_top + side + arrow);
+  cairo_move_to(cr, branch_x, branch_top + side);
+  cairo_line_to(cr, branch_x + arrow * 0.65, branch_top + side + arrow);
+  cairo_stroke(cr);
+  cairo_restore(cr);
+}
+
 static inline dt_draw_curve_t *dt_draw_curve_new(const float min, const float max, unsigned int type)
 {
   dt_draw_curve_t *c = (dt_draw_curve_t *)malloc(sizeof(dt_draw_curve_t));

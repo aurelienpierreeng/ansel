@@ -108,11 +108,13 @@
 #include "dtgtk/thumbtable.h"
 
 #include "gui/color_picker_proxy.h"
+#include "gui/draw.h"
 #include "gui/gtk.h"
 #include "gui/gui_throttle.h"
 #include "gui/guides.h"
 #include "gui/presets.h"
 #include "libs/colorpicker.h"
+#include "libs/lib.h"
 #include "libs/modulegroups.h"
 #include "views/view.h"
 #include "views/view_api.h"
@@ -161,6 +163,17 @@ static void _release_expose_source_caches(void);
 
 static int32_t _darkroom_pending_imgid = UNKNOWN_IMAGE;
 static dt_iop_module_t *_darkroom_pending_focus_module = NULL;
+static GtkWidget *_darkroom_ioporder_button = NULL;
+
+static void _darkroom_ioporder_quickbutton_clicked(GtkButton *button, gpointer user_data)
+{
+  dt_lib_module_t *module = dt_lib_get_module("ioporder");
+  if(module && module->show_popup)
+    module->show_popup(module);
+
+  (void)button;
+  (void)user_data;
+}
 
 const char *name(const dt_view_t *self)
 {
@@ -1826,6 +1839,12 @@ void gui_init(dt_view_t *self)
     g_signal_connect(G_OBJECT(borders), "value-changed", G_CALLBACK(display_borders_callback), dev);
     gtk_box_pack_start(GTK_BOX(vbox), GTK_WIDGET(borders), TRUE, TRUE, 0);
   }
+
+  _darkroom_ioporder_button = dtgtk_button_new(dt_draw_icon_flowchart, 0, NULL);
+  gtk_widget_set_tooltip_text(_darkroom_ioporder_button, _("show the pipeline node graph"));
+  g_signal_connect(G_OBJECT(_darkroom_ioporder_button), "clicked",
+                   G_CALLBACK(_darkroom_ioporder_quickbutton_clicked), dev);
+  dt_view_manager_module_toolbox_add(darktable.view_manager, _darkroom_ioporder_button, DT_VIEW_DARKROOM);
 
   GtkWidget *colorscheme, *mode;
 
