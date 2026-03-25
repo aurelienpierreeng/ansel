@@ -49,8 +49,14 @@ typedef enum dt_lib_modulegroup_t
 
 static inline gboolean dt_is_module_in_group(dt_iop_module_t *module, dt_lib_modulegroup_t group)
 {
-  // Does module belong to group ?
-  return (module->default_group() == group) || (group == DT_MODULEGROUP_NONE) || (module->enabled && group == DT_MODULEGROUP_ACTIVE_PIPE);
+  // The "basic" tab aggregates tones, film and color while preserving the
+  // original group of each module for sectioning inside the tab.
+  return (module->default_group() == group)
+         || (group == DT_MODULEGROUP_TONES
+             && module->default_group() >= DT_MODULEGROUP_TONES
+             && module->default_group() <= DT_MODULEGROUP_COLOR)
+         || (group == DT_MODULEGROUP_NONE)
+         || (module->enabled && group == DT_MODULEGROUP_ACTIVE_PIPE);
 }
 
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.sh

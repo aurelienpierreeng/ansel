@@ -120,6 +120,7 @@ typedef struct dt_iop_gui_simple_callback_t
 
 static gboolean _iop_plugin_focus_accel(GtkAccelGroup *accel_group, GObject *accelerable, guint keyval,
                                         GdkModifierType modifier, gpointer data);
+static gboolean _iop_plugin_header_button_release(GtkWidget *w, GdkEventButton *e, gpointer user_data);
 
 
 void dt_iop_load_default_params(dt_iop_module_t *module)
@@ -594,11 +595,6 @@ static void _gui_delete_callback(GtkButton *button, dt_iop_module_t *module)
     // we just hide the module to avoid lots of gtk critical warnings
     gtk_widget_hide(module->expander);
 
-    // we move the module far away, to avoid problems when reordering instance after that
-    // FIXME: ?????
-    gtk_box_reorder_child(dt_ui_get_container(darktable.gui->ui, DT_UI_CONTAINER_PANEL_RIGHT_CENTER),
-                          module->expander, -1);
-
     dt_iop_gui_cleanup_module(module);
     dt_gui_refocus_center();
     gtk_widget_destroy(module->widget);
@@ -651,6 +647,7 @@ static void _gui_delete_callback(GtkButton *button, dt_iop_module_t *module)
 
   // we update show params for multi-instances for each other instances
   dt_dev_modules_update_multishow(dev);
+  dt_dev_modulegroups_update_visibility(dev);
 
   /* redraw */
   dt_dev_pixelpipe_rebuild_all(dev);
@@ -706,15 +703,6 @@ static void _gui_movedown_callback(GtkButton *button, dt_iop_module_t *module)
   // dt_ioppr_check_iop_order(module->dev, "dt_iop_gui_movedown_callback 2");
   if(!moved) return;
 
-  // we move the headers
-  GValue gv = { 0, { { 0 } } };
-  g_value_init(&gv, G_TYPE_INT);
-  gtk_container_child_get_property(
-      GTK_CONTAINER(dt_ui_get_container(darktable.gui->ui, DT_UI_CONTAINER_PANEL_RIGHT_CENTER)), prev->expander,
-      "position", &gv);
-  gtk_box_reorder_child(dt_ui_get_container(darktable.gui->ui, DT_UI_CONTAINER_PANEL_RIGHT_CENTER),
-                        module->expander, g_value_get_int(&gv));
-
   // we update the headers
   dt_dev_modules_update_multishow(prev->dev);
 
@@ -736,16 +724,6 @@ static void _gui_moveup_callback(GtkButton *button, dt_iop_module_t *module)
 
   const int moved = dt_ioppr_move_iop_after(module->dev, module, next);
   if(!moved) return;
-
-  // we move the headers
-  GValue gv = { 0, { { 0 } } };
-  g_value_init(&gv, G_TYPE_INT);
-  gtk_container_child_get_property(
-      GTK_CONTAINER(dt_ui_get_container(darktable.gui->ui, DT_UI_CONTAINER_PANEL_RIGHT_CENTER)), next->expander,
-      "position", &gv);
-
-  gtk_box_reorder_child(dt_ui_get_container(darktable.gui->ui, DT_UI_CONTAINER_PANEL_RIGHT_CENTER),
-                        module->expander, g_value_get_int(&gv));
 
   // we update the headers
   dt_dev_modules_update_multishow(next->dev);
@@ -769,22 +747,6 @@ dt_iop_module_t *dt_iop_gui_duplicate(dt_iop_module_t *base, gboolean copy_param
   --darktable.gui->reset;
   if(!module) return NULL;
 
-  // what is the position of the module in the pipe ?
-  GList *modules = module->dev->iop;
-  int pos_module = 0;
-  int pos_base = 0;
-  int pos = 0;
-  while(modules)
-  {
-    dt_iop_module_t *mod = (dt_iop_module_t *)modules->data;
-    if(mod == module)
-      pos_module = pos;
-    else if(mod == base)
-      pos_base = pos;
-    modules = g_list_next(modules);
-    pos++;
-  }
-
   // we set the gui part of it
   /* initialize gui if iop have one defined */
   if(!dt_iop_is_hidden(module))
@@ -794,13 +756,6 @@ dt_iop_module_t *dt_iop_gui_duplicate(dt_iop_module_t *base, gboolean copy_param
 
     /* add module to right panel */
     dt_iop_gui_set_expander(module);
-    GValue gv = { 0, { { 0 } } };
-    g_value_init(&gv, G_TYPE_INT);
-    gtk_container_child_get_property(
-        GTK_CONTAINER(dt_ui_get_container(darktable.gui->ui, DT_UI_CONTAINER_PANEL_RIGHT_CENTER)),
-        base->expander, "position", &gv);
-    gtk_box_reorder_child(dt_ui_get_container(darktable.gui->ui, DT_UI_CONTAINER_PANEL_RIGHT_CENTER),
-                          module->expander, g_value_get_int(&gv) + pos_base - pos_module + 1);
 
     dt_iop_reload_defaults(module); // some modules like profiled denoise update the gui in reload_defaults
 
@@ -2238,26 +2193,15 @@ static gboolean _iop_plugin_header_button_press(GtkWidget *w, GdkEventButton *e,
 
   if(e->button == 1)
   {
-    if(dt_modifier_is(e->state, GDK_SHIFT_MASK | GDK_CONTROL_MASK))
+    if(module->expander) g_object_set_data(G_OBJECT(module->expander), "dt-module-dragged", NULL);
+
+    if(!dt_modifier_is(e->state, GDK_CONTROL_MASK))
     {
-      GtkBox *container = dt_ui_get_container(darktable.gui->ui, DT_UI_CONTAINER_PANEL_RIGHT_CENTER);
-      g_object_set_data(G_OBJECT(container), "source_data", user_data);
       return FALSE;
-    }
-    else if(dt_modifier_is(e->state, GDK_CONTROL_MASK))
-    {
-      dt_iop_gui_rename_module(module);
-      return TRUE;
     }
     else
     {
-      dt_iop_request_focus(module);
-
-      // make gtk scroll to the module once it updated its allocation size
-      darktable.gui->scroll_to[1] = module->expander;
-      gboolean collapse_others = dt_modifier_is(e->state, GDK_SHIFT_MASK) ? FALSE : TRUE;
-      dt_iop_gui_set_expanded(module, !module->expanded, collapse_others);
-
+      dt_iop_gui_rename_module(module);
       return TRUE;
     }
   }
@@ -2268,6 +2212,29 @@ static gboolean _iop_plugin_header_button_press(GtkWidget *w, GdkEventButton *e,
     return TRUE;
   }
   return FALSE;
+}
+
+static gboolean _iop_plugin_header_button_release(GtkWidget *w, GdkEventButton *e, gpointer user_data)
+{
+  if(e->button != 1 || e->type != GDK_BUTTON_RELEASE) return FALSE;
+
+  dt_iop_module_t *module = (dt_iop_module_t *)user_data;
+  if(!module || !module->expander) return FALSE;
+
+  if(g_object_get_data(G_OBJECT(module->expander), "dt-module-dragged"))
+  {
+    g_object_set_data(G_OBJECT(module->expander), "dt-module-dragged", NULL);
+    return TRUE;
+  }
+
+  dt_iop_request_focus(module);
+
+  // make gtk scroll to the module once it updated its allocation size
+  darktable.gui->scroll_to[1] = module->expander;
+  const gboolean collapse_others = dt_modifier_is(e->state, GDK_SHIFT_MASK) ? FALSE : TRUE;
+  dt_iop_gui_set_expanded(module, !module->expanded, collapse_others);
+
+  return TRUE;
 }
 
 static void _display_mask_indicator_callback(GtkToggleButton *bt, dt_iop_module_t *module)
@@ -2455,6 +2422,7 @@ void dt_iop_gui_set_expander(dt_iop_module_t *module)
 
   /* setup the header box */
   g_signal_connect(G_OBJECT(header_evb), "button-press-event", G_CALLBACK(_iop_plugin_header_button_press), module);
+  g_signal_connect(G_OBJECT(header_evb), "button-release-event", G_CALLBACK(_iop_plugin_header_button_release), module);
   g_signal_connect(G_OBJECT(header_evb), "mnemonic-activate", G_CALLBACK(_iop_plugin_header_activate), module);
   gtk_widget_add_events(header_evb, GDK_POINTER_MOTION_MASK);
 

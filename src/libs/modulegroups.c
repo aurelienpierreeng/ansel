@@ -49,6 +49,7 @@
 #include "common/darktable.h"
 #include "common/debug.h"
 #include "common/image_cache.h"
+#include "common/iop_order.h"
 #include "control/conf.h"
 #include "control/control.h"
 #include "control/signal.h"
@@ -67,10 +68,38 @@ typedef struct dt_lib_modulegroups_t
 {
   uint32_t current;
   GtkWidget *notebook;
+  GtkWidget *page_pipeline;
+  GtkWidget *page_basic;
+  GtkWidget *page_repair;
+  GtkWidget *page_sharpness;
+  GtkWidget *page_effects;
+  GtkWidget *page_technical;
+  GtkWidget *page_all;
+  GtkWidget *section_color;
+  GtkWidget *section_film;
+  GtkWidget *section_tones;
+  GtkWidget *container_color;
+  GtkWidget *container_film;
+  GtkWidget *container_tones;
+  GtkWidget *drag_highlight;
+  dt_iop_module_t *drag_source;
 } dt_lib_modulegroups_t;
 
 static dt_lib_module_t *g_modulegroups_module = NULL;
 static dt_lib_modulegroups_t *g_modulegroups_data = NULL;
+static const dt_lib_modulegroup_t _modulegroups_pages[] = { DT_MODULEGROUP_ACTIVE_PIPE, DT_MODULEGROUP_TONES,
+                                                            DT_MODULEGROUP_REPAIR, DT_MODULEGROUP_SHARPNESS,
+                                                            DT_MODULEGROUP_EFFECTS, DT_MODULEGROUP_TECHNICAL,
+                                                            DT_MODULEGROUP_NONE };
+typedef enum dt_modulegroups_dnd_target_t
+{
+  DT_MODULEGROUPS_DND_TARGET_IOP = 0
+} dt_modulegroups_dnd_target_t;
+
+static const GtkTargetEntry _modulegroups_target_list[] = {
+  { "iop", GTK_TARGET_SAME_APP, DT_MODULEGROUPS_DND_TARGET_IOP }
+};
+static const guint _modulegroups_n_targets = G_N_ELEMENTS(_modulegroups_target_list);
 
 /* toggle button callback */
 static void _lib_modulegroups_toggle(GtkNotebook *notebook, GtkWidget *page, guint page_num, gpointer user_data);
@@ -78,12 +107,421 @@ static void _lib_modulegroups_toggle(GtkNotebook *notebook, GtkWidget *page, gui
 static void _lib_modulegroups_update_iop_visibility(dt_lib_module_t *self);
 
 static void _lib_modulegroups_signal_set(gpointer instance, gpointer module, gpointer user_data);
+static void _lib_modulegroups_module_moved(gpointer instance, gpointer user_data);
+static void _lib_modulegroups_refresh(gpointer instance, gpointer user_data);
 
 static gboolean _focus_next_module();
 static gboolean _focus_previous_module();
 static gboolean _focus_next_control();
 static gboolean _focus_previous_control();
 static gboolean _is_module_in_history(const dt_iop_module_t *module);
+static void _modulegroups_ensure_page_widgets(dt_lib_module_t *self);
+
+/**
+ * @brief Align the basic-tab section labels with the module expander margins.
+ *
+ * The section label border is drawn on the label widget itself. To make that
+ * border line start and end exactly where module boxes do, we copy the current
+ * expander margins from the first available module widget.
+ *
+ * @param d Modulegroups runtime data.
+ */
+static void _modulegroups_sync_section_label_margins(dt_lib_modulegroups_t *d)
+{
+  if(!d || !darktable.develop) return;
+  if(!d->section_color || !d->section_film || !d->section_tones) return;
+
+  GtkWidget *reference = NULL;
+  for(const GList *modules = g_list_first(darktable.develop->iop); modules; modules = g_list_next(modules))
+  {
+    dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
+    if(!dt_iop_is_hidden(module) && module->expander)
+    {
+      reference = module->expander;
+      break;
+    }
+  }
+  if(!reference) return;
+
+  GtkBorder margin = { 0 };
+  GtkStyleContext *context = gtk_widget_get_style_context(reference);
+  gtk_style_context_get_margin(context, gtk_style_context_get_state(context), &margin);
+
+  GtkWidget *labels[] = { d->section_color, d->section_film, d->section_tones };
+  for(size_t i = 0; i < G_N_ELEMENTS(labels); i++)
+  {
+    gtk_widget_set_margin_start(labels[i], margin.left);
+    gtk_widget_set_margin_end(labels[i], margin.right);
+    gtk_widget_set_margin_top(labels[i], margin.top);
+    gtk_widget_set_margin_bottom(labels[i], margin.bottom);
+  }
+}
+
+/**
+ * @brief Remove all drag-and-drop visual feedback from module headers.
+ *
+ * Modulegroups owns the containers hosting the module expanders, so it also
+ * owns the temporary drop markers shown while reordering the list.
+ *
+ * @param d Modulegroups runtime data.
+ */
+static void _modulegroups_clear_drop_state(dt_lib_modulegroups_t *d)
+{
+  if(d && d->drag_highlight)
+  {
+    gtk_drag_unhighlight(d->drag_highlight);
+    d->drag_highlight = NULL;
+  }
+
+  if(!darktable.develop) return;
+
+  /* Walk every module and clear the before/after classes that motion handlers add. */
+  for(const GList *modules = g_list_last(darktable.develop->iop); modules; modules = g_list_previous(modules))
+  {
+    dt_iop_module_t *module = (dt_iop_module_t *)(modules->data);
+    if(!module->expander) continue;
+    dt_gui_remove_class(module->expander, "iop_drop_after");
+    dt_gui_remove_class(module->expander, "iop_drop_before");
+  }
+}
+
+/**
+ * @brief Append visible module expanders in display order from a page subtree.
+ *
+ * The basic tab nests its sections inside extra boxes, so drag-and-drop must
+ * recurse through the visible widget tree and keep only actual module
+ * expanders.
+ *
+ * @param widget Current widget in the page subtree.
+ * @param widgets Output list collecting expanders in display order.
+ */
+static void _modulegroups_append_visible_expanders(GtkWidget *widget, GList **widgets)
+{
+  if(!GTK_IS_WIDGET(widget) || !gtk_widget_is_visible(widget)) return;
+
+  if(g_object_get_data(G_OBJECT(widget), "dt-module"))
+  {
+    *widgets = g_list_append(*widgets, widget);
+    return;
+  }
+
+  if(!GTK_IS_CONTAINER(widget)) return;
+
+  /* Recurse over the current page subtree to preserve the visual order seen by the user. */
+  GList *children = gtk_container_get_children(GTK_CONTAINER(widget));
+  for(GList *child = children; child; child = g_list_next(child))
+    _modulegroups_append_visible_expanders(GTK_WIDGET(child->data), widgets);
+  g_list_free(children);
+}
+
+/**
+ * @brief Find the module header under the current drop position.
+ *
+ * The y coordinate is relative to the page widget receiving the drop event.
+ * We translate each visible module expander into that same coordinate space so
+ * reordering keeps working across nested section containers.
+ *
+ * @param page Visible modulegroups page handling the drag.
+ * @param y Drop coordinate in the page reference frame.
+ * @param module_src Drag source module.
+ * @return Destination module under the drop position, or NULL.
+ */
+static dt_iop_module_t *_modulegroups_get_dnd_dest_module(GtkWidget *page, const gint y,
+                                                          dt_iop_module_t *module_src)
+{
+  if(!GTK_IS_WIDGET(page) || !module_src) return NULL;
+
+  GtkAllocation source_allocation = { 0 };
+  gtk_widget_get_allocation(module_src->header, &source_allocation);
+  const int y_slop = source_allocation.height / 2;
+  gboolean after_src = TRUE;
+  dt_iop_module_t *module_dest = NULL;
+
+  GList *children = NULL;
+  _modulegroups_append_visible_expanders(page, &children);
+
+  /* Walk the displayed headers in page coordinates and pick the closest valid insertion anchor. */
+  for(GList *l = children; l; l = g_list_next(l))
+  {
+    GtkWidget *w = GTK_WIDGET(l->data);
+    if(w == module_src->expander) after_src = FALSE;
+
+    int widget_x = 0;
+    int widget_y = 0;
+    if(!gtk_widget_translate_coordinates(w, page, 0, 0, &widget_x, &widget_y)) continue;
+
+    GtkAllocation allocation = { 0 };
+    gtk_widget_get_allocation(w, &allocation);
+    if((after_src && y <= widget_y + y_slop)
+       || (!after_src && y <= widget_y + allocation.height + y_slop))
+    {
+      module_dest = (dt_iop_module_t *)g_object_get_data(G_OBJECT(w), "dt-module");
+      break;
+    }
+  }
+
+  g_list_free(children);
+  return module_dest;
+}
+
+static void _modulegroups_drag_begin(GtkWidget *widget, GdkDragContext *context, gpointer user_data);
+static void _modulegroups_drag_end(GtkWidget *widget, GdkDragContext *context, gpointer user_data);
+static void _modulegroups_drag_data_get(GtkWidget *widget, GdkDragContext *context,
+                                        GtkSelectionData *selection_data, guint info, guint time,
+                                        gpointer user_data);
+static gboolean _modulegroups_drag_drop(GtkWidget *widget, GdkDragContext *dc, gint x, gint y,
+                                        guint time, gpointer user_data);
+static gboolean _modulegroups_drag_motion(GtkWidget *widget, GdkDragContext *dc, gint x, gint y,
+                                          guint time, gpointer user_data);
+static void _modulegroups_drag_data_received(GtkWidget *widget, GdkDragContext *dc, gint x, gint y,
+                                             GtkSelectionData *selection_data, guint info, guint time,
+                                             gpointer user_data);
+static void _modulegroups_drag_leave(GtkWidget *widget, GdkDragContext *dc, guint time, gpointer user_data);
+
+static void _modulegroups_move_widget(GtkWidget *widget, GtkWidget *target)
+{
+  if(!GTK_IS_WIDGET(widget) || !GTK_IS_BOX(target)) return;
+
+  GtkWidget *parent = gtk_widget_get_parent(widget);
+  if(parent == target) return;
+
+  g_object_ref(widget);
+  if(GTK_IS_CONTAINER(parent)) gtk_container_remove(GTK_CONTAINER(parent), widget);
+  gtk_box_pack_start(GTK_BOX(target), widget, FALSE, FALSE, 0);
+  g_object_unref(widget);
+}
+
+static void _modulegroups_track_widget(GtkWidget **slot, GtkWidget *widget)
+{
+  *slot = widget;
+  g_object_add_weak_pointer(G_OBJECT(widget), (gpointer *)slot);
+}
+
+static void _modulegroups_ensure_page_widgets(dt_lib_module_t *self)
+{
+  if(!self || !self->data || !darktable.gui || !darktable.gui->ui) return;
+
+  dt_lib_modulegroups_t *d = (dt_lib_modulegroups_t *)self->data;
+  if(d->page_pipeline && d->page_basic && d->page_repair && d->page_sharpness
+     && d->page_effects && d->page_technical && d->page_all
+     && d->section_color && d->section_film && d->section_tones
+     && d->container_color && d->container_film && d->container_tones)
+    return;
+
+  GtkBox *root = dt_ui_get_container(darktable.gui->ui, DT_UI_CONTAINER_PANEL_RIGHT_CENTER);
+  if(!root) return;
+
+  _modulegroups_track_widget(&d->page_pipeline, gtk_box_new(GTK_ORIENTATION_VERTICAL, 0));
+  gtk_box_pack_start(root, d->page_pipeline, FALSE, FALSE, 0);
+
+  _modulegroups_track_widget(&d->page_basic, gtk_box_new(GTK_ORIENTATION_VERTICAL, 0));
+  _modulegroups_track_widget(&d->section_color, dt_ui_section_label_new(_("color")));
+  _modulegroups_track_widget(&d->container_color, gtk_box_new(GTK_ORIENTATION_VERTICAL, 0));
+  _modulegroups_track_widget(&d->section_film, dt_ui_section_label_new(_("film")));
+  _modulegroups_track_widget(&d->container_film, gtk_box_new(GTK_ORIENTATION_VERTICAL, 0));
+  _modulegroups_track_widget(&d->section_tones, dt_ui_section_label_new(_("tones")));
+  _modulegroups_track_widget(&d->container_tones, gtk_box_new(GTK_ORIENTATION_VERTICAL, 0));
+  gtk_box_pack_start(GTK_BOX(d->page_basic), d->section_color, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(d->page_basic), d->container_color, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(d->page_basic), d->section_film, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(d->page_basic), d->container_film, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(d->page_basic), d->section_tones, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(d->page_basic), d->container_tones, FALSE, FALSE, 0);
+  gtk_box_pack_start(root, d->page_basic, FALSE, FALSE, 0);
+
+  _modulegroups_track_widget(&d->page_repair, gtk_box_new(GTK_ORIENTATION_VERTICAL, 0));
+  gtk_box_pack_start(root, d->page_repair, FALSE, FALSE, 0);
+  _modulegroups_track_widget(&d->page_sharpness, gtk_box_new(GTK_ORIENTATION_VERTICAL, 0));
+  gtk_box_pack_start(root, d->page_sharpness, FALSE, FALSE, 0);
+  _modulegroups_track_widget(&d->page_effects, gtk_box_new(GTK_ORIENTATION_VERTICAL, 0));
+  gtk_box_pack_start(root, d->page_effects, FALSE, FALSE, 0);
+  _modulegroups_track_widget(&d->page_technical, gtk_box_new(GTK_ORIENTATION_VERTICAL, 0));
+  gtk_box_pack_start(root, d->page_technical, FALSE, FALSE, 0);
+  _modulegroups_track_widget(&d->page_all, gtk_box_new(GTK_ORIENTATION_VERTICAL, 0));
+  gtk_box_pack_start(root, d->page_all, FALSE, FALSE, 0);
+
+  GtkWidget *pages[] = {
+    d->page_pipeline, d->page_basic, d->page_repair, d->page_sharpness,
+    d->page_effects, d->page_technical, d->page_all
+  };
+  for(size_t i = 0; i < G_N_ELEMENTS(pages); i++)
+  {
+    gtk_drag_dest_set(pages[i], 0, _modulegroups_target_list, _modulegroups_n_targets, GDK_ACTION_COPY);
+    g_signal_connect(pages[i], "drag-data-received", G_CALLBACK(_modulegroups_drag_data_received), self);
+    g_signal_connect(pages[i], "drag-drop", G_CALLBACK(_modulegroups_drag_drop), self);
+    g_signal_connect(pages[i], "drag-motion", G_CALLBACK(_modulegroups_drag_motion), self);
+    g_signal_connect(pages[i], "drag-leave", G_CALLBACK(_modulegroups_drag_leave), self);
+  }
+
+  gtk_widget_show_all(d->page_pipeline);
+  gtk_widget_show_all(d->page_basic);
+  gtk_widget_show_all(d->page_repair);
+  gtk_widget_show_all(d->page_sharpness);
+  gtk_widget_show_all(d->page_effects);
+  gtk_widget_show_all(d->page_technical);
+  gtk_widget_show_all(d->page_all);
+  gtk_widget_hide(d->page_pipeline);
+  gtk_widget_hide(d->page_basic);
+  gtk_widget_hide(d->page_repair);
+  gtk_widget_hide(d->page_sharpness);
+  gtk_widget_hide(d->page_effects);
+  gtk_widget_hide(d->page_technical);
+  gtk_widget_hide(d->page_all);
+}
+
+static void _modulegroups_drag_begin(GtkWidget *widget, GdkDragContext *context, gpointer user_data)
+{
+  dt_lib_module_t *self = (dt_lib_module_t *)user_data;
+  dt_lib_modulegroups_t *d = (dt_lib_modulegroups_t *)self->data;
+  dt_iop_module_t *module_src = (dt_iop_module_t *)g_object_get_data(G_OBJECT(widget), "dt-module");
+
+  d->drag_source = module_src;
+  _modulegroups_clear_drop_state(d);
+  g_object_set_data(G_OBJECT(widget), "dt-module-dragged", GINT_TO_POINTER(TRUE));
+
+  if(!module_src || !module_src->header) return;
+
+  GdkWindow *window = gtk_widget_get_parent_window(module_src->header);
+  if(!window) return;
+
+  GtkAllocation allocation = { 0 };
+  gtk_widget_get_allocation(module_src->header, &allocation);
+  cairo_surface_t *surface = dt_cairo_image_surface_create(CAIRO_FORMAT_RGB24, allocation.width, allocation.height);
+  cairo_t *cr = cairo_create(surface);
+
+  dt_gui_add_class(module_src->header, "iop_drag_icon");
+  gtk_widget_draw(module_src->header, cr);
+  dt_gui_remove_class(module_src->header, "iop_drag_icon");
+
+  cairo_surface_set_device_offset(surface, -allocation.width * darktable.gui->ppd / 2,
+                                  -allocation.height * darktable.gui->ppd / 2);
+  gtk_drag_set_icon_surface(context, surface);
+
+  cairo_destroy(cr);
+  cairo_surface_destroy(surface);
+}
+
+static void _modulegroups_drag_end(GtkWidget *widget, GdkDragContext *context, gpointer user_data)
+{
+  dt_lib_module_t *self = (dt_lib_module_t *)user_data;
+  dt_lib_modulegroups_t *d = (dt_lib_modulegroups_t *)self->data;
+
+  _modulegroups_clear_drop_state(d);
+  d->drag_source = NULL;
+  g_object_set_data(G_OBJECT(widget), "dt-module-dragged", NULL);
+}
+
+static void _modulegroups_drag_data_get(GtkWidget *widget, GdkDragContext *context,
+                                        GtkSelectionData *selection_data, guint info, guint time,
+                                        gpointer user_data)
+{
+  const guint number_data = 1;
+  gtk_selection_data_set(selection_data, gdk_atom_intern("iop", TRUE), 32, (const guchar *)&number_data, 1);
+}
+
+static gboolean _modulegroups_drag_drop(GtkWidget *widget, GdkDragContext *dc, gint x, gint y,
+                                        guint time, gpointer user_data)
+{
+  gtk_drag_get_data(widget, dc, gdk_atom_intern("iop", TRUE), time);
+  return TRUE;
+}
+
+static gboolean _modulegroups_drag_motion(GtkWidget *widget, GdkDragContext *dc, gint x, gint y,
+                                          guint time, gpointer user_data)
+{
+  dt_lib_module_t *self = (dt_lib_module_t *)user_data;
+  dt_lib_modulegroups_t *d = (dt_lib_modulegroups_t *)self->data;
+  dt_iop_module_t *module_src = d->drag_source;
+  if(!module_src) return FALSE;
+
+  dt_iop_module_t *module_dest = _modulegroups_get_dnd_dest_module(widget, y, module_src);
+  gboolean can_move = FALSE;
+  _modulegroups_clear_drop_state(d);
+
+  if(module_dest && module_src != module_dest)
+  {
+    if(module_src->iop_order < module_dest->iop_order)
+      can_move = dt_ioppr_check_can_move_after_iop(darktable.develop->iop, module_src, module_dest);
+    else
+      can_move = dt_ioppr_check_can_move_before_iop(darktable.develop->iop, module_src, module_dest);
+  }
+
+  if(!can_move)
+  {
+    gdk_drag_status(dc, 0, time);
+    return FALSE;
+  }
+
+  if(module_src->iop_order < module_dest->iop_order)
+    dt_gui_add_class(module_dest->expander, "iop_drop_after");
+  else
+    dt_gui_add_class(module_dest->expander, "iop_drop_before");
+
+  d->drag_highlight = module_dest->expander;
+  gtk_drag_highlight(module_dest->expander);
+  gdk_drag_status(dc, GDK_ACTION_COPY, time);
+  return TRUE;
+}
+
+static void _modulegroups_drag_data_received(GtkWidget *widget, GdkDragContext *dc, gint x, gint y,
+                                             GtkSelectionData *selection_data, guint info, guint time,
+                                             gpointer user_data)
+{
+  dt_lib_module_t *self = (dt_lib_module_t *)user_data;
+  dt_lib_modulegroups_t *d = (dt_lib_modulegroups_t *)self->data;
+  dt_iop_module_t *module_src = d->drag_source;
+  dt_iop_module_t *module_dest = _modulegroups_get_dnd_dest_module(widget, y, module_src);
+  int moved = 0;
+
+  if(module_src && module_dest && module_src != module_dest)
+  {
+    if(module_src->iop_order < module_dest->iop_order)
+      moved = dt_ioppr_move_iop_after(darktable.develop, module_src, module_dest);
+    else
+      moved = dt_ioppr_move_iop_before(darktable.develop, module_src, module_dest);
+  }
+
+  gtk_drag_finish(dc, TRUE, FALSE, time);
+  _modulegroups_clear_drop_state(d);
+  d->drag_source = NULL;
+
+  if(!moved) return;
+
+  dt_dev_modules_update_multishow(module_src->dev);
+  dt_dev_pixelpipe_rebuild_all(module_src->dev);
+  dt_dev_add_history_item(module_src->dev, module_src, TRUE, TRUE);
+  dt_ioppr_check_iop_order(module_src->dev, 0, "_modulegroups_drag_data_received");
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_MODULE_MOVED);
+}
+
+static void _modulegroups_drag_leave(GtkWidget *widget, GdkDragContext *dc, guint time, gpointer user_data)
+{
+  dt_lib_module_t *self = (dt_lib_module_t *)user_data;
+  dt_lib_modulegroups_t *d = (dt_lib_modulegroups_t *)self->data;
+  _modulegroups_clear_drop_state(d);
+}
+
+static int _modulegroups_page_count()
+{
+  return (int)G_N_ELEMENTS(_modulegroups_pages);
+}
+
+static int _modulegroups_page_from_group(uint32_t group)
+{
+  if(group == DT_MODULEGROUP_FILM || group == DT_MODULEGROUP_COLOR) group = DT_MODULEGROUP_TONES;
+
+  for(int page = 0; page < _modulegroups_page_count(); page++)
+    if(_modulegroups_pages[page] == group) return page;
+
+  return 0;
+}
+
+static uint32_t _modulegroups_group_from_page(int page)
+{
+  if(page < 0) return _modulegroups_pages[_modulegroups_page_count() - 1];
+  if(page >= _modulegroups_page_count()) return _modulegroups_pages[0];
+  return _modulegroups_pages[page];
+}
 
 const char *name(struct dt_lib_module_t *self)
 {
@@ -124,9 +562,9 @@ int _modulegroups_cycle_tabs(int user_set_group)
   if(user_set_group < 0)
   {
     // cycle to the end
-    group = DT_MODULEGROUP_SIZE - 1;
+    group = _modulegroups_page_count() - 1;
   }
-  else if(user_set_group >= DT_MODULEGROUP_SIZE)
+  else if(user_set_group >= _modulegroups_page_count())
   {
     // cycle to the beginning
     group = 0;
@@ -150,11 +588,12 @@ static void _modulegroups_set_current_group(uint32_t group)
 {
   if(!g_modulegroups_module || !g_modulegroups_data) return;
   if(group >= DT_MODULEGROUP_SIZE) return;
+  if(group == DT_MODULEGROUP_FILM || group == DT_MODULEGROUP_COLOR) group = DT_MODULEGROUP_TONES;
   if(g_modulegroups_data->current == group) return;
 
   g_modulegroups_data->current = group;
   if(GTK_IS_NOTEBOOK(g_modulegroups_data->notebook))
-    gtk_notebook_set_current_page(GTK_NOTEBOOK(g_modulegroups_data->notebook), group);
+    gtk_notebook_set_current_page(GTK_NOTEBOOK(g_modulegroups_data->notebook), _modulegroups_page_from_group(group));
 
   _lib_modulegroups_update_iop_visibility(g_modulegroups_module);
 }
@@ -168,8 +607,8 @@ static gboolean _modulegroups_switch_tab_next(GtkAccelGroup *accel_group, GObjec
   dt_iop_module_t *focused = dev->gui_module;
   if(focused) dt_iop_gui_set_expanded(focused, FALSE, TRUE);
 
-  uint32_t current = _modulegroups_get_current_group();
-  _modulegroups_set_current_group(_modulegroups_cycle_tabs(current + 1));
+  const int current = _modulegroups_page_from_group(_modulegroups_get_current_group());
+  _modulegroups_set_current_group(_modulegroups_group_from_page(_modulegroups_cycle_tabs(current + 1)));
   dt_iop_request_focus(NULL);
   return TRUE;
 }
@@ -183,8 +622,8 @@ static gboolean _modulegroups_switch_tab_previous(GtkAccelGroup *accel_group, GO
   dt_iop_module_t *focused = dev->gui_module;
   if(focused) dt_iop_gui_set_expanded(focused, FALSE, TRUE);
 
-  uint32_t current = _modulegroups_get_current_group();
-  _modulegroups_set_current_group(_modulegroups_cycle_tabs(current - 1));
+  const int current = _modulegroups_page_from_group(_modulegroups_get_current_group());
+  _modulegroups_set_current_group(_modulegroups_group_from_page(_modulegroups_cycle_tabs(current - 1)));
   dt_iop_request_focus(NULL);
 
   return TRUE;
@@ -199,14 +638,14 @@ static gboolean _lib_modulegroups_scroll(GtkWidget *widget, GdkEventScroll *even
 
   if(dt_gui_get_scroll_unit_deltas(event, &delta_x, &delta_y))
   {
-    int current = _modulegroups_get_current_group();
+    int current = _modulegroups_page_from_group(_modulegroups_get_current_group());
     int future = 0;
     if(delta_x > 0. || delta_y > 0.)
       future = current + 1;
     else if(delta_x < 0. || delta_y < 0.)
       future = current - 1;
 
-    if(future < 0 || future > DT_MODULEGROUP_SIZE - 1)
+    if(future < 0 || future > _modulegroups_page_count() - 1)
     {
       // We reached the end of tabs. Allow cycling through, but add a little inertia to fight.
       // This is to ensure user really wants to cycle through.
@@ -222,7 +661,7 @@ static gboolean _lib_modulegroups_scroll(GtkWidget *widget, GdkEventScroll *even
       }
     }
 
-    _modulegroups_set_current_group(_modulegroups_cycle_tabs(future));
+    _modulegroups_set_current_group(_modulegroups_group_from_page(_modulegroups_cycle_tabs(future)));
     dt_iop_request_focus(NULL);
   }
 
@@ -446,6 +885,8 @@ void gui_init(dt_lib_module_t *self)
   d->current = (conf_group >= 0 && conf_group < DT_MODULEGROUP_SIZE)
                    ? (uint32_t)conf_group
                    : DT_MODULEGROUP_ACTIVE_PIPE;
+  if(d->current == DT_MODULEGROUP_FILM || d->current == DT_MODULEGROUP_COLOR)
+    d->current = DT_MODULEGROUP_TONES;
   g_modulegroups_module = self;
   g_modulegroups_data = d;
 
@@ -455,20 +896,17 @@ void gui_init(dt_lib_module_t *self)
 
   /* Tabs */
   d->notebook = GTK_WIDGET(gtk_notebook_new());
-  char *labels[DT_MODULEGROUP_SIZE] = { _("Pipeline"),  _("Tones"),   _("Film"),     _("Color"), _("Repair"),
-                                        _("Sharpness"), _("Effects"), _("Technics"), _("All") };
-  char *tooltips[DT_MODULEGROUP_SIZE]
+  char *labels[] = { _("Pipeline"), _("Basic"), _("Repair"), _("Sharpness"), _("Effects"), _("Technics"), _("All") };
+  char *tooltips[]
       = { _("List all modules currently enabled in the reverse order of application in the pipeline."),
-          _("Modules destined to adjust brightness, contrast and dynamic range."),
-          _("Modules used when working with film scans."),
-          _("Modules destined to adjust white balance and perform color-grading."),
+          _("Modules destined to adjust brightness, contrast and dynamic range, work with film scans, and perform color-grading."),
           _("Modules destined to repair and reconstruct noisy or missing pixels."),
           _("Modules destined to manipulate local contrast, sharpness and blur."),
           _("Modules applying special effects."),
           _("Technical modules that can be ignored in most situations."),
           _("All modules available in the software.") };
 
-  for(int i = 0; i < DT_MODULEGROUP_SIZE; i++)
+  for(int i = 0; i < _modulegroups_page_count(); i++)
   {
     GtkWidget *label = gtk_label_new(labels[i]);
     dt_gui_add_class(label, "dt_modulegroups_tab_label");
@@ -481,7 +919,7 @@ void gui_init(dt_lib_module_t *self)
     gtk_notebook_append_page(GTK_NOTEBOOK(d->notebook), page, label);
     gtk_container_child_set(GTK_CONTAINER(d->notebook), page, "tab-expand", TRUE, "tab-fill", TRUE, NULL);
   }
-  gtk_notebook_set_current_page(GTK_NOTEBOOK(d->notebook), d->current);
+  gtk_notebook_set_current_page(GTK_NOTEBOOK(d->notebook), _modulegroups_page_from_group(d->current));
   gtk_notebook_popup_enable(GTK_NOTEBOOK(d->notebook));
   gtk_notebook_set_scrollable(GTK_NOTEBOOK(d->notebook), TRUE);
   g_signal_connect(G_OBJECT(d->notebook), "switch_page", G_CALLBACK(_lib_modulegroups_toggle), self);
@@ -489,12 +927,18 @@ void gui_init(dt_lib_module_t *self)
   gtk_widget_add_events(GTK_WIDGET(d->notebook), darktable.gui->scroll_mask);
 
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(d->notebook), TRUE, TRUE, 0);
-
-  _lib_modulegroups_update_iop_visibility(self);
   gtk_widget_show_all(self->widget);
 
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_MODULEGROUPS_SET,
                                   G_CALLBACK(_lib_modulegroups_signal_set), self);
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_MODULE_MOVED,
+                                  G_CALLBACK(_lib_modulegroups_module_moved), self);
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_INITIALIZE,
+                                  G_CALLBACK(_lib_modulegroups_refresh), self);
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_IMAGE_CHANGED,
+                                  G_CALLBACK(_lib_modulegroups_refresh), self);
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE,
+                                  G_CALLBACK(_lib_modulegroups_refresh), self);
 
   dt_accels_new_darkroom_action(_modulegroups_switch_tab_next, darktable.develop, N_("Darkroom/Actions"),
                                 N_("move to the next modules tab"), GDK_KEY_Tab, GDK_CONTROL_MASK, _("Triggers the action"));
@@ -516,20 +960,54 @@ void gui_init(dt_lib_module_t *self)
 void gui_cleanup(dt_lib_module_t *self)
 {
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_lib_modulegroups_signal_set), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_lib_modulegroups_module_moved), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_lib_modulegroups_refresh), self);
 
   if(self->data)
   {
     dt_lib_modulegroups_t *d = (dt_lib_modulegroups_t *)self->data;
+    self->data = NULL;
+    if(g_modulegroups_module == self)
+    {
+      g_modulegroups_module = NULL;
+      g_modulegroups_data = NULL;
+    }
     dt_conf_set_int("plugins/darkroom/groups", (int)d->current);
+    _modulegroups_clear_drop_state(d);
+    GtkBox *root = dt_ui_get_container(darktable.gui->ui, DT_UI_CONTAINER_PANEL_RIGHT_CENTER);
+    if(darktable.develop && root)
+    {
+      /* Hand module expanders back to the right-panel root before destroying
+       * our page boxes, otherwise Gtk would destroy the module widgets along
+       * with the page containers. */
+      for(GList *modules = g_list_first(darktable.develop->iop); modules; modules = g_list_next(modules))
+      {
+        dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
+        if(module->expander) _modulegroups_move_widget(module->expander, GTK_WIDGET(root));
+      }
+    }
+    if(d->page_pipeline) gtk_widget_destroy(d->page_pipeline);
+    if(d->page_basic) gtk_widget_destroy(d->page_basic);
+    if(d->page_repair) gtk_widget_destroy(d->page_repair);
+    if(d->page_sharpness) gtk_widget_destroy(d->page_sharpness);
+    if(d->page_effects) gtk_widget_destroy(d->page_effects);
+    if(d->page_technical) gtk_widget_destroy(d->page_technical);
+    if(d->page_all) gtk_widget_destroy(d->page_all);
+    d->page_pipeline = NULL;
+    d->page_basic = NULL;
+    d->page_repair = NULL;
+    d->page_sharpness = NULL;
+    d->page_effects = NULL;
+    d->page_technical = NULL;
+    d->page_all = NULL;
+    d->section_color = NULL;
+    d->section_film = NULL;
+    d->section_tones = NULL;
+    d->container_color = NULL;
+    d->container_film = NULL;
+    d->container_tones = NULL;
+    dt_free(d);
   }
-
-  if(g_modulegroups_module == self)
-  {
-    g_modulegroups_module = NULL;
-    g_modulegroups_data = NULL;
-  }
-
-  dt_free(self->data);
 }
 
 static gboolean _is_module_in_history(const dt_iop_module_t *module)
@@ -555,6 +1033,10 @@ static gboolean _modulegroups_module_visible_in_current(const dt_lib_modulegroup
     case DT_MODULEGROUP_NONE:
       return !(module->flags() & IOP_FLAGS_DEPRECATED) || module->enabled;
 
+    case DT_MODULEGROUP_TONES:
+      return dt_is_module_in_group((dt_iop_module_t *)module, DT_MODULEGROUP_TONES)
+             && (!(module->flags() & IOP_FLAGS_DEPRECATED) || module->enabled || _is_module_in_history(module));
+
     default:
       return d->current == module->default_group();
   }
@@ -563,12 +1045,29 @@ static gboolean _modulegroups_module_visible_in_current(const dt_lib_modulegroup
 
 static void _lib_modulegroups_update_iop_visibility(dt_lib_module_t *self)
 {
+  if(!self || !self->data || !darktable.develop) return;
+  if(darktable.develop->image_storage.id <= 0) return;
+  _modulegroups_ensure_page_widgets(self);
   dt_lib_modulegroups_t *d = (dt_lib_modulegroups_t *)self->data;
+  gboolean has_color = FALSE, has_film = FALSE, has_tones = FALSE;
+
+  if(!d->page_pipeline || !d->page_basic || !d->page_repair || !d->page_sharpness
+     || !d->page_effects || !d->page_technical || !d->page_all) return;
+  _modulegroups_sync_section_label_margins(d);
+
+  gtk_widget_hide(d->page_pipeline);
+  gtk_widget_hide(d->page_basic);
+  gtk_widget_hide(d->page_repair);
+  gtk_widget_hide(d->page_sharpness);
+  gtk_widget_hide(d->page_effects);
+  gtk_widget_hide(d->page_technical);
+  gtk_widget_hide(d->page_all);
   for(GList *modules = g_list_first(darktable.develop->iop); modules; modules = g_list_next(modules))
   {
-
     dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
     GtkWidget *w = module->expander;
+    GtkWidget *target = NULL;
+    gboolean visible = FALSE;
 
     /* skip modules without a gui */
     if(dt_iop_is_hidden(module)) continue;
@@ -578,63 +1077,179 @@ static void _lib_modulegroups_update_iop_visibility(dt_lib_module_t *self)
     {
       case DT_MODULEGROUP_ACTIVE_PIPE:
       {
-        if(_is_module_in_history(module) || module->enabled)
-        {
-          if(w) gtk_widget_show(w);
-        }
-        else
-        {
-          if(darktable.develop->gui_module == module) dt_iop_request_focus(NULL);
-          if(w) gtk_widget_hide(w);
-        }
+        visible = _is_module_in_history(module) || module->enabled;
+        target = d->page_pipeline;
         break;
       }
 
       case DT_MODULEGROUP_NONE:
       {
-        /* show all except deprecated ones - in case of deprecated, still show it if enabled*/
-        if(!(module->flags() & IOP_FLAGS_DEPRECATED) || module->enabled)
+        visible = !(module->flags() & IOP_FLAGS_DEPRECATED) || module->enabled;
+        target = d->page_all;
+        break;
+      }
+
+      case DT_MODULEGROUP_TONES:
+      {
+        visible = dt_is_module_in_group(module, DT_MODULEGROUP_TONES)
+                  && (!(module->flags() & IOP_FLAGS_DEPRECATED)
+                      || module->enabled
+                      || _is_module_in_history(module));
+        if(module->default_group() == DT_MODULEGROUP_COLOR)
         {
-          if(w) gtk_widget_show(w);
+          target = d->container_color;
         }
-        else
+        else if(module->default_group() == DT_MODULEGROUP_FILM)
         {
-          if(darktable.develop->gui_module == module) dt_iop_request_focus(NULL);
-          if(w) gtk_widget_hide(w);
+          target = d->container_film;
+        }
+        else if(module->default_group() == DT_MODULEGROUP_TONES)
+        {
+          target = d->container_tones;
         }
         break;
       }
 
       default:
       {
-        if(d->current == module->default_group() 
-           && (!(module->flags() & IOP_FLAGS_DEPRECATED) 
-               || module->enabled
-               || _is_module_in_history(module)))
+        visible = d->current == module->default_group()
+                  && (!(module->flags() & IOP_FLAGS_DEPRECATED)
+                      || module->enabled
+                      || _is_module_in_history(module));
+        if(d->current == DT_MODULEGROUP_REPAIR)
         {
-          if(w) gtk_widget_show(w);
+          target = d->page_repair;
         }
-        else
+        else if(d->current == DT_MODULEGROUP_SHARPNESS)
         {
-          if(darktable.develop->gui_module == module) dt_iop_request_focus(NULL);
-          if(w) gtk_widget_hide(w);
+          target = d->page_sharpness;
+        }
+        else if(d->current == DT_MODULEGROUP_EFFECTS)
+        {
+          target = d->page_effects;
+        }
+        else if(d->current == DT_MODULEGROUP_TECHNICAL)
+        {
+          target = d->page_technical;
         }
       }
     }
+
+    if(visible && GTK_IS_WIDGET(w) && GTK_IS_WIDGET(target))
+    {
+      g_object_set_data(G_OBJECT(w), "dt-module", module);
+      if(!g_object_get_data(G_OBJECT(w), "modulegroups-dnd"))
+      {
+        gtk_drag_source_set(w, GDK_BUTTON1_MASK,
+                            _modulegroups_target_list, _modulegroups_n_targets, GDK_ACTION_COPY);
+        g_signal_connect(w, "drag-begin", G_CALLBACK(_modulegroups_drag_begin), self);
+        g_signal_connect(w, "drag-data-get", G_CALLBACK(_modulegroups_drag_data_get), self);
+        g_signal_connect(w, "drag-end", G_CALLBACK(_modulegroups_drag_end), self);
+        g_object_set_data(G_OBJECT(w), "modulegroups-dnd", GINT_TO_POINTER(TRUE));
+      }
+      _modulegroups_move_widget(w, target);
+      gtk_widget_show(w);
+    }
+    else if(GTK_IS_WIDGET(w))
+    {
+      if(darktable.develop->gui_module == module) dt_iop_request_focus(NULL);
+      gtk_widget_hide(w);
+    }
   }
-  // now that visibility has been updated set multi-show
+
+  /* Multishow may hide extra instances, so we only compute section occupancy
+   * and final ordering after it has settled the visible module set. */
   dt_dev_modules_update_multishow(darktable.develop);
+
+  if(d->current == DT_MODULEGROUP_ACTIVE_PIPE)
+  {
+    int position = 0;
+    for(GList *modules = g_list_last(darktable.develop->iop); modules; modules = g_list_previous(modules))
+    {
+      dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
+      if(dt_iop_is_hidden(module) || !module->expander || !gtk_widget_get_visible(module->expander)) continue;
+      gtk_box_reorder_child(GTK_BOX(d->page_pipeline), module->expander, position++);
+    }
+    gtk_widget_show(d->page_pipeline);
+  }
+  else if(d->current == DT_MODULEGROUP_NONE)
+  {
+    int position = 0;
+    for(GList *modules = g_list_last(darktable.develop->iop); modules; modules = g_list_previous(modules))
+    {
+      dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
+      if(dt_iop_is_hidden(module) || !module->expander || !gtk_widget_get_visible(module->expander)) continue;
+      gtk_box_reorder_child(GTK_BOX(d->page_all), module->expander, position++);
+    }
+    gtk_widget_show(d->page_all);
+  }
+  else if(d->current == DT_MODULEGROUP_TONES)
+  {
+    int color_position = 0;
+    int film_position = 0;
+    int tones_position = 0;
+
+    for(GList *modules = g_list_last(darktable.develop->iop); modules; modules = g_list_previous(modules))
+    {
+      dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
+      if(dt_iop_is_hidden(module) || !module->expander || !gtk_widget_get_visible(module->expander)) continue;
+
+      if(module->default_group() == DT_MODULEGROUP_COLOR)
+      {
+        gtk_box_reorder_child(GTK_BOX(d->container_color), module->expander, color_position++);
+        has_color = TRUE;
+      }
+      else if(module->default_group() == DT_MODULEGROUP_FILM)
+      {
+        gtk_box_reorder_child(GTK_BOX(d->container_film), module->expander, film_position++);
+        has_film = TRUE;
+      }
+      else if(module->default_group() == DT_MODULEGROUP_TONES)
+      {
+        gtk_box_reorder_child(GTK_BOX(d->container_tones), module->expander, tones_position++);
+        has_tones = TRUE;
+      }
+    }
+
+    gtk_widget_set_visible(d->section_color, has_color);
+    gtk_widget_set_visible(d->container_color, has_color);
+    gtk_widget_set_visible(d->section_film, has_film);
+    gtk_widget_set_visible(d->container_film, has_film);
+    gtk_widget_set_visible(d->section_tones, has_tones);
+    gtk_widget_set_visible(d->container_tones, has_tones);
+    gtk_widget_show(d->page_basic);
+  }
+  else
+  {
+    GtkWidget *target = d->current == DT_MODULEGROUP_REPAIR ? d->page_repair
+                       : d->current == DT_MODULEGROUP_SHARPNESS ? d->page_sharpness
+                       : d->current == DT_MODULEGROUP_EFFECTS ? d->page_effects
+                       : d->page_technical;
+    int position = 0;
+
+    /* Walk the whole pipeline in reverse order and keep only visible modules
+     * from the current tab to preserve the usual GUI order inside that page. */
+    for(GList *modules = g_list_last(darktable.develop->iop); modules; modules = g_list_previous(modules))
+    {
+      dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
+      if(dt_iop_is_hidden(module) || !module->expander || !gtk_widget_get_visible(module->expander)) continue;
+      gtk_box_reorder_child(GTK_BOX(target), module->expander, position++);
+    }
+    gtk_widget_show(target);
+  }
 }
 
 static void _lib_modulegroups_toggle(GtkNotebook *notebook, GtkWidget *page, guint page_num, gpointer user_data)
 {
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
+  if(!self || !self->data) return;
   dt_lib_modulegroups_t *d = (dt_lib_modulegroups_t *)self->data;
+  const uint32_t group = _modulegroups_group_from_page(page_num);
 
-  if(d->current == page_num)
+  if(d->current == group)
     return; // nothing to do
   else
-    d->current = page_num;
+    d->current = group;
 
   /* update visibility */
   _lib_modulegroups_update_iop_visibility(self);
@@ -643,19 +1258,35 @@ static void _lib_modulegroups_toggle(GtkNotebook *notebook, GtkWidget *page, gui
 static void _lib_modulegroups_signal_set(gpointer instance, gpointer module, gpointer user_data)
 {
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
+  if(!self || !self->data) return;
   dt_lib_modulegroups_t *d = (dt_lib_modulegroups_t *)self->data;
   dt_iop_module_t *iop_module = (dt_iop_module_t *)module;
 
   if(iop_module && !_modulegroups_module_visible_in_current(d, iop_module) && GTK_IS_NOTEBOOK(d->notebook))
   {
-    const uint32_t group = iop_module->default_group();
+    uint32_t group = iop_module->default_group();
+    if(group == DT_MODULEGROUP_FILM || group == DT_MODULEGROUP_COLOR) group = DT_MODULEGROUP_TONES;
     if(group < DT_MODULEGROUP_SIZE)
     {
       d->current = group;
-      gtk_notebook_set_current_page(GTK_NOTEBOOK(d->notebook), group);
+      gtk_notebook_set_current_page(GTK_NOTEBOOK(d->notebook), _modulegroups_page_from_group(group));
     }
   }
 
+  _lib_modulegroups_update_iop_visibility(self);
+}
+
+static void _lib_modulegroups_module_moved(gpointer instance, gpointer user_data)
+{
+  dt_lib_module_t *self = (dt_lib_module_t *)user_data;
+  if(!self || !self->data) return;
+  _lib_modulegroups_update_iop_visibility(self);
+}
+
+static void _lib_modulegroups_refresh(gpointer instance, gpointer user_data)
+{
+  dt_lib_module_t *self = (dt_lib_module_t *)user_data;
+  if(!self || !self->data) return;
   _lib_modulegroups_update_iop_visibility(self);
 }
 

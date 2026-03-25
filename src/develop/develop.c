@@ -1402,18 +1402,8 @@ dt_dev_pixelpipe_iop_t *dt_dev_distort_get_iop_pipe(dt_develop_t *dev, struct dt
 // set the module list order
 void dt_dev_reorder_gui_module_list(dt_develop_t *dev)
 {
-  int pos_module = 0;
-  for(const GList *modules = g_list_last(dev->iop); modules; modules = g_list_previous(modules))
-  {
-    dt_iop_module_t *module = (dt_iop_module_t *)(modules->data);
-
-    GtkWidget *expander = module->expander;
-    if(expander)
-    {
-      gtk_box_reorder_child(dt_ui_get_container(darktable.gui->ui, DT_UI_CONTAINER_PANEL_RIGHT_CENTER), expander,
-                            pos_module++);
-    }
-  }
+  if(!dev) return;
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_MODULE_MOVED);
 }
 
 void dt_dev_undo_start_record(dt_develop_t *dev)

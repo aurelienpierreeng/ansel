@@ -1489,14 +1489,6 @@ static void _ioporder_drag_data_received(GtkWidget *widget, GdkDragContext *dc, 
 
   if(moved)
   {
-    GValue gv = G_VALUE_INIT;
-    g_value_init(&gv, G_TYPE_INT);
-    gtk_container_child_get_property(GTK_CONTAINER(dt_ui_get_container(darktable.gui->ui,
-                                                                       DT_UI_CONTAINER_PANEL_RIGHT_CENTER)),
-                                     module_dest->expander, "position", &gv);
-    gtk_box_reorder_child(dt_ui_get_container(darktable.gui->ui, DT_UI_CONTAINER_PANEL_RIGHT_CENTER),
-                          module_src->expander, g_value_get_int(&gv));
-
     dt_dev_modules_update_multishow(module_src->dev);
     dt_dev_pixelpipe_rebuild_all(module_src->dev);
     dt_dev_add_history_item(module_src->dev, module_src, TRUE, TRUE);

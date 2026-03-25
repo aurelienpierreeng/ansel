@@ -2128,27 +2128,6 @@ static int _check_deleted_instances(dt_develop_t *dev, GList **_iop_list, GList 
 }
 
 /**
- * @brief Reorder GUI module expanders to match dev->iop order.
- *
- * @param dev Develop context.
- */
-static void _reorder_gui_module_list(dt_develop_t *dev)
-{
-  int pos_module = 0;
-  for(const GList *modules = g_list_last(dev->iop); modules; modules = g_list_previous(modules))
-  {
-    dt_iop_module_t *module = (dt_iop_module_t *)(modules->data);
-
-    GtkWidget *expander = module->expander;
-    if(expander)
-    {
-      gtk_box_reorder_child(dt_ui_get_container(darktable.gui->ui, DT_UI_CONTAINER_PANEL_RIGHT_CENTER), expander,
-                            pos_module++);
-    }
-  }
-}
-
-/**
  * @brief Resync module multi_priority values from history.
  *
  * @param history_list History list.
@@ -2315,7 +2294,7 @@ int dt_dev_history_refresh_nodes_ext(dt_develop_t *dev, GList **iop, GList *hist
   *iop = iop_list;
 
   // if topology has changed, we need to reorder modules in GUI
-  if(pipe_remove) _reorder_gui_module_list(dev);
+  if(pipe_remove) dt_dev_reorder_gui_module_list(dev);
 
   return pipe_remove;
 }
