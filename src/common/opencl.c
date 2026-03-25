@@ -2501,8 +2501,10 @@ gboolean dt_opencl_image_fits_device(const int devid, const size_t width, const 
   if(_opencl_get_device_memalloc(devid) < required)
   {
     dt_print(DT_DEBUG_OPENCL,
-             "[opencl] trying to allocate a buffer of %lu MiB while the vRAM has %lu MiB total\n",
-             required / (1024 * 1024), _opencl_get_device_memalloc(devid) / (1024 * 1024));
+             "[opencl] trying to allocate a buffer of %" PRIu64 " MiB while the vRAM has %" PRIu64
+             " MiB total\n",
+             (uint64_t)(required / (1024 * 1024)),
+             (uint64_t)(_opencl_get_device_memalloc(devid) / (1024 * 1024)));
     return FALSE;
   }
 
@@ -2510,8 +2512,10 @@ gboolean dt_opencl_image_fits_device(const int devid, const size_t width, const 
     return TRUE;
 
   dt_print(DT_DEBUG_OPENCL,
-            "[opencl] trying to allocate a buffer of %lu MiB while the vRAM has %lu MiB left\n",
-            total / (1024 * 1024), dt_opencl_get_device_available(devid) / (1024 * 1024));
+            "[opencl] trying to allocate a buffer of %" PRIu64 " MiB while the vRAM has %" PRIu64
+            " MiB left\n",
+            (uint64_t)(total / (1024 * 1024)),
+            (uint64_t)(dt_opencl_get_device_available(devid) / (1024 * 1024)));
 
   return FALSE;
 }
