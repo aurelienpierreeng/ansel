@@ -240,7 +240,7 @@ gboolean dt_dev_add_history_item_ext(struct dt_develop_t *dev, struct dt_iop_mod
  * @brief Thread-safe wrapper around dt_dev_add_history_item_ext().
  *
  * Locks history mutex, invalidates pipelines, triggers recomputation and
- * schedules history auto-save. This is the typical entry point for GUI actions.
+ * saves history. This is the typical entry point for GUI actions.
  *
  * @param dev Develop context.
  * @param module Module instance.
@@ -267,8 +267,10 @@ void dt_dev_write_history_ext(struct dt_develop_t *dev, const int32_t imgid);
  * @brief Thread-safe wrapper around dt_dev_write_history_ext() for dev->image_storage.id.
  *
  * @param dev Develop context.
+ * @param async When TRUE, schedule the write in a background job. When FALSE,
+ *              write immediately before returning.
  */
-void dt_dev_write_history(struct dt_develop_t *dev);
+void dt_dev_write_history(struct dt_develop_t *dev, gboolean async);
 
 /**
  * @brief Apply history-loaded params to module GUIs.
@@ -510,11 +512,11 @@ dt_dev_history_item_t *dt_dev_history_get_last_item_by_module(GList *history_lis
  * the GUI list according to history/pipeline ordering.
  *
  * @param dev Develop context.
- * @param iop Module list.
+ * @param iop Module list pointer.
  * @param history History list.
  * @return 0 on success, non-zero on error.
  */
-int dt_dev_history_refresh_nodes_ext(struct dt_develop_t *dev, GList *iop, GList *history);
+int dt_dev_history_refresh_nodes_ext(struct dt_develop_t *dev, GList **iop, GList *history);
 
 /** truncate history stack */
 void dt_dev_history_truncate(struct dt_develop_t *dev, const int32_t imgid);

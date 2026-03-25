@@ -197,6 +197,7 @@ typedef struct dt_bauhaus_widget_t
   // TRUE if accels should not be enabled here.
   // Use that for blending
   gboolean no_accels;
+  gboolean no_module_list;
 
   // Reference to the global bauhaus structure holding common styles and such.
   dt_bauhaus_t *bauhaus;
@@ -395,6 +396,8 @@ void dt_bauhaus_combobox_set_entries_ellipsis(GtkWidget *widget, PangoEllipsizeM
 * It will be useless for the "one-line" init & setter functions.
 */
 void dt_bauhaus_disable_accels(GtkWidget *widget);
+/** Prevent this Bauhaus widget from being tracked in the parent module refresh lists. */
+void dt_bauhaus_disable_module_list(GtkWidget *widget);
 
 static inline void set_color(cairo_t *cr, GdkRGBA color)
 {

@@ -1130,6 +1130,7 @@ static void _bauhaus_widget_init(dt_bauhaus_t *bauhaus, dt_bauhaus_widget_t *w, 
   w->field = NULL;
 
   w->no_accels = FALSE;
+  w->no_module_list = FALSE;
   w->bauhaus = bauhaus;
   w->use_default_callback = FALSE;
 
@@ -1271,14 +1272,14 @@ void dt_bauhaus_widget_set_label(GtkWidget *widget, const char *label)
   {
     // Widgets auto-set by params introspection need to be added to the list of stuff to auto-update
     dt_gui_module_t *m = w->module;
-    if(m)
+    if(m && !w->no_module_list)
       m->widget_list = g_list_append(m->widget_list, w);
 
-    if(m && w->field)
+    if(m && w->field && !w->no_module_list)
       m->widget_list_bh = g_list_append(m->widget_list_bh, w);
 
     // Wire the focusing action
-    // Note: once the focus is grabbed, interaction with the widget happens through arrow keys or mouse wheel.
+    // Note: once the focus is grabbed, interaction with the widget happens through arrow keys or mouse wheel.
     // No need to wire all possible events/interactions.
     if(m && !w->no_accels && !w->module->deprecated && label)
     {
@@ -3230,6 +3231,12 @@ void dt_bauhaus_disable_accels(GtkWidget *widget)
 {
   struct dt_bauhaus_widget_t *w = (struct dt_bauhaus_widget_t *)widget;
   w->no_accels = TRUE;
+}
+
+void dt_bauhaus_disable_module_list(GtkWidget *widget)
+{
+  struct dt_bauhaus_widget_t *w = (struct dt_bauhaus_widget_t *)widget;
+  w->no_module_list = TRUE;
 }
 
 void dt_bauhaus_set_use_default_callback(GtkWidget *widget)

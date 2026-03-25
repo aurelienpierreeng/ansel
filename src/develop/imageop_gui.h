@@ -40,6 +40,11 @@ GtkWidget *dt_bauhaus_toggle_from_params(dt_iop_module_t *self, const char *para
 GtkWidget *dt_iop_togglebutton_new(dt_iop_module_t *self, const char *section, const gchar *label, const gchar *ctrl_label,
                                    GCallback callback, gboolean local, guint accel_key, GdkModifierType mods,
                                    DTGTKCairoPaintIconFunc paint, GtkWidget *box);
+/** Build an IOP toggle button without registering it for module GUI refresh. */
+GtkWidget *dt_iop_togglebutton_new_no_register(dt_iop_module_t *self, const char *section, const gchar *label,
+                                               const gchar *ctrl_label, GCallback callback, gboolean local,
+                                               guint accel_key, GdkModifierType mods,
+                                               DTGTKCairoPaintIconFunc paint, GtkWidget *box);
 
 GtkWidget *dt_iop_button_new(dt_iop_module_t *self, const gchar *label,
                              GCallback callback, gboolean local, guint accel_key, GdkModifierType mods,

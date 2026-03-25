@@ -655,7 +655,7 @@ static void _history_apply_history_end(const int history_end)
 
   dt_dev_undo_end_record(dev);
 
-  dt_dev_write_history(dev);
+  dt_dev_write_history(dev, FALSE);
   dt_dev_history_gui_update(dev);
   dt_dev_history_pixelpipe_update(dev, FALSE);
   dt_dev_history_notify_change(dev, dev->image_storage.id);

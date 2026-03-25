@@ -311,6 +311,29 @@ GtkWidget *dt_iop_togglebutton_new(dt_iop_module_t *self, const char *section, c
   return w;
 }
 
+GtkWidget *dt_iop_togglebutton_new_no_register(dt_iop_module_t *self, const char *section, const gchar *label,
+                                               const gchar *ctrl_label, GCallback callback, gboolean local,
+                                               guint accel_key, GdkModifierType mods,
+                                               DTGTKCairoPaintIconFunc paint, GtkWidget *box)
+{
+  GtkWidget *w = dtgtk_togglebutton_new(paint, 0, NULL);
+  g_signal_connect(G_OBJECT(w), "button-press-event", callback, self);
+
+  if(!ctrl_label)
+    gtk_widget_set_tooltip_text(w, _(label));
+  else
+  {
+    gchar *tooltip = g_strdup_printf(_("%s\nctrl+click to %s"), _(label), _(ctrl_label));
+    gtk_widget_set_tooltip_text(w, tooltip);
+    dt_free(tooltip);
+  }
+
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(w), FALSE);
+  if(GTK_IS_BOX(box)) gtk_box_pack_end(GTK_BOX(box), w, FALSE, FALSE, 0);
+
+  return w;
+}
+
 GtkWidget *dt_iop_button_new(dt_iop_module_t *self, const gchar *label,
                              GCallback callback, gboolean local, guint accel_key, GdkModifierType mods,
                              DTGTKCairoPaintIconFunc paint, gint paintflags, GtkWidget *box)

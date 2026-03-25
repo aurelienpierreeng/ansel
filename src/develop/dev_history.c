@@ -335,7 +335,7 @@ int dt_dev_merge_history_into_image(dt_develop_t *dev_src, int32_t dest_imgid, c
   if(ret_val == 0)
   {
     dt_dev_pop_history_items_ext(&dev_dest);
-    dt_dev_write_history(&dev_dest);
+    dt_dev_write_history(&dev_dest, FALSE);
   }
 
   dt_dev_cleanup(&dev_dest);
@@ -919,8 +919,10 @@ void dt_dev_add_history_item_real(dt_develop_t *dev, dt_iop_module_t *module, gb
     --darktable.gui->reset;
   }
   
-  // Save history straight away
-  dt_dev_write_history(dev);
+  // Save history straight away. Regular GUI edits are the only place where
+  // we accept an asynchronous write because `dev` is the long-lived darkroom
+  // context and there is no immediate DB read on the same control path.
+  dt_dev_write_history(dev, TRUE);
   dt_dev_history_notify_change(dev, dev->image_storage.id);
 }
 
@@ -1079,7 +1081,7 @@ void dt_dev_history_gui_update(dt_develop_t *dev)
   // hide/remove instances that are no longer referenced by any history item.
   // Note: this may also reorder modules in the GUI if needed.
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
-  dt_dev_history_refresh_nodes_ext(dev, dev->iop, dev->history);
+  dt_dev_history_refresh_nodes_ext(dev, &dev->iop, dev->history);
   dt_pthread_rwlock_unlock(&dev->history_mutex);
 
   ++darktable.gui->reset;
@@ -1227,8 +1229,16 @@ static int _dt_dev_write_history_job_run(dt_job_t *job)
 }
 
 // Write TO XMP, so from the dev perspective, it's a read
-void dt_dev_write_history(dt_develop_t *dev)
+void dt_dev_write_history(dt_develop_t *dev, gboolean async)
 {
+  if(!async)
+  {
+    dt_pthread_rwlock_rdlock(&dev->history_mutex);
+    dt_dev_write_history_ext(dev, dev->image_storage.id);
+    dt_pthread_rwlock_unlock(&dev->history_mutex);
+    return;
+  }
+
   dt_job_t *job = dt_control_job_create(&_dt_dev_write_history_job_run, "write history %d",
                                         dev->image_storage.id);
   dt_control_job_set_params(job, dev, NULL);
@@ -1237,9 +1247,7 @@ void dt_dev_write_history(dt_develop_t *dev)
   {
     // scheduling failed: dispose job and run synchronously
     dt_control_job_dispose(job);
-    dt_pthread_rwlock_rdlock(&dev->history_mutex);
-    dt_dev_write_history_ext(dev, dev->image_storage.id);
-    dt_pthread_rwlock_unlock(&dev->history_mutex);
+    dt_dev_write_history(dev, FALSE);
   }
 }
 
@@ -1411,7 +1419,7 @@ int dt_dev_replace_history_on_image(dt_develop_t *dev_src, const int32_t dest_im
   }
 
   dt_dev_pop_history_items_ext(dev_src);
-  dt_dev_write_history(dev_src);
+  dt_dev_write_history(dev_src, FALSE);
 
   return 0;
 }
@@ -2281,8 +2289,10 @@ static int _create_deleted_modules(GList **_iop_list, GList *history_list)
 
 // returns 1 if the topology of the pipe has changed, aka it needs a full rebuild
 // 0 means only internal parameters of pipe nodes have change, so it's a mere resync
-int dt_dev_history_refresh_nodes_ext(dt_develop_t *dev, GList *iop, GList *history)
+int dt_dev_history_refresh_nodes_ext(dt_develop_t *dev, GList **iop, GList *history)
 {
+  GList *iop_list = *iop;
+
   // topology has changed?
   int pipe_remove = 0;
 
@@ -2291,16 +2301,18 @@ int dt_dev_history_refresh_nodes_ext(dt_develop_t *dev, GList *iop, GList *histo
   if(_rebuild_multi_priority(history))
   {
     pipe_remove = 1;
-    iop = g_list_sort(iop, dt_sort_iop_by_order);
+    iop_list = g_list_sort(iop_list, dt_sort_iop_by_order);
   }
 
   // check if this undo a delete module and re-create it
-  if(_create_deleted_modules(&iop, history))
+  if(_create_deleted_modules(&iop_list, history))
     pipe_remove = 1;
 
   // check if this is a redo of a delete module or an undo of an add module
-  if(_check_deleted_instances(dev, &iop, history))
+  if(_check_deleted_instances(dev, &iop_list, history))
     pipe_remove = 1;
+
+  *iop = iop_list;
 
   // if topology has changed, we need to reorder modules in GUI
   if(pipe_remove) _reorder_gui_module_list(dev);

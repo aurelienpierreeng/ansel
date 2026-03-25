@@ -2439,7 +2439,7 @@ gboolean dt_drawlayer_commit_dabs(dt_iop_module_t *self, const gboolean record_h
       g->manager.realtime_active = FALSE;
       _set_drawlayer_pipeline_realtime_mode(self, FALSE);
       dt_dev_pixelpipe_update_history_all(self->dev);
-      dt_dev_write_history(self->dev);
+      dt_dev_write_history(self->dev, FALSE);
       dt_dev_history_notify_change(self->dev, self->dev->image_storage.id);
     }
 
@@ -3984,7 +3984,7 @@ void gui_focus(dt_iop_module_t *self, gboolean in)
       dt_pthread_rwlock_unlock(&self->dev->history_mutex);
       dt_dev_undo_end_record(self->dev);
       if(self->post_history_commit) self->post_history_commit(self);
-      dt_dev_write_history(self->dev);
+      dt_dev_write_history(self->dev, FALSE);
       dt_dev_history_notify_change(self->dev, self->dev->image_storage.id);
     }
   }

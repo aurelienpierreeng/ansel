@@ -179,7 +179,10 @@ static gboolean copy_callback(GtkAccelGroup *group, GObject *acceleratable, guin
 
   if(is_darkroom_image_in_list)
   {
-    dt_dev_write_history(darktable.develop);
+    // Copy/paste reloads the source history from the database right away.
+    // Flush the current darkroom history synchronously here so the copied
+    // source matches the edit stack currently shown in the GUI.
+    dt_dev_write_history(darktable.develop, FALSE);
   }
 
   dt_history_copy(dt_selection_get_first_id(darktable.selection));
@@ -203,7 +206,10 @@ static gboolean copy_parts_callback(GtkAccelGroup *group, GObject *acceleratable
 
   if(is_darkroom_image_in_list)
   {
-    dt_dev_write_history(darktable.develop);
+    // Selective copy opens the same immediate DB read path as full copy.
+    // Keep the persisted history in sync with the current darkroom stack
+    // before building the copy/paste state from this image.
+    dt_dev_write_history(darktable.develop, FALSE);
   }
 
   dt_history_copy_parts(dt_selection_get_first_id(darktable.selection));
@@ -355,6 +361,17 @@ static gboolean duplicate_callback(GtkAccelGroup *group, GObject *acceleratable,
 {
   if(has_active_images())
   {
+    GList *imgs = dt_selection_get_list(darktable.selection);
+    if(dt_menu_is_image_in_dev(imgs))
+    {
+      // Duplication copies history from the source image into the new version.
+      // When the source is the current darkroom image, persist its live history
+      // before the background duplicate job reloads it from the database.
+      dt_dev_write_history(darktable.develop, FALSE);
+    }
+    g_list_free(imgs);
+    imgs = NULL;
+
     dt_control_duplicate_images(FALSE);
     return TRUE;
   }
@@ -367,6 +384,16 @@ static gboolean new_history_callback(GtkAccelGroup *group, GObject *acceleratabl
 {
   if(has_active_images())
   {
+    GList *imgs = dt_selection_get_list(darktable.selection);
+    if(dt_menu_is_image_in_dev(imgs))
+    {
+      // Creating a new duplicate version still starts from the current source
+      // image state, so flush the live darkroom history before duplicating it.
+      dt_dev_write_history(darktable.develop, FALSE);
+    }
+    g_list_free(imgs);
+    imgs = NULL;
+
     dt_control_duplicate_images(TRUE);
     return TRUE;
   }
