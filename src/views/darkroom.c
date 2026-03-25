@@ -1340,6 +1340,39 @@ static gboolean _toolbar_show_popup(gpointer user_data)
   return FALSE;
 }
 
+/**
+ * DOC
+ * Toolbox accelerators forward keyboard activation to the existing Gtk buttons
+ * so the keyboard path reuses the exact same callbacks, state changes and
+ * popover anchoring as the pointer path.
+ */
+static gboolean _darkroom_toolbox_button_activate_accel(GtkAccelGroup *accel_group, GObject *accelerable,
+                                                        guint keyval, GdkModifierType modifier,
+                                                        gpointer data)
+{
+  GtkWidget *button = GTK_WIDGET(data);
+  if(!button || !gtk_widget_is_visible(button) || !gtk_widget_is_sensitive(button)) return FALSE;
+
+  gtk_button_clicked(GTK_BUTTON(button));
+  return TRUE;
+}
+
+static gboolean _darkroom_toolbox_button_focus_accel(GtkAccelGroup *accel_group, GObject *accelerable,
+                                                     guint keyval, GdkModifierType modifier,
+                                                     gpointer data)
+{
+  GtkWidget *button = GTK_WIDGET(data);
+  if(!button || !gtk_widget_is_visible(button) || !gtk_widget_is_sensitive(button)) return FALSE;
+
+  GtkWidget *popover = g_object_get_data(G_OBJECT(button), "dt-darkroom-toolbox-popover");
+  if(!popover || !gtk_widget_is_sensitive(popover)) return FALSE;
+
+  gtk_widget_grab_focus(button);
+  gtk_popover_set_relative_to(GTK_POPOVER(popover), button);
+  _toolbar_show_popup(popover);
+  return TRUE;
+}
+
 static void _get_final_size_with_iso_12646(dt_develop_t *d)
 {
   if(d->iso_12646.enabled)
@@ -1808,6 +1841,10 @@ void gui_init(dt_view_t *self)
                               _("toggle ISO 12646 color assessment conditions"));
   g_signal_connect(G_OBJECT(dev->iso_12646.button), "clicked", G_CALLBACK(_iso_12646_quickbutton_clicked), dev);
   dt_view_manager_module_toolbox_add(darktable.view_manager, dev->iso_12646.button, DT_VIEW_DARKROOM);
+  dt_accels_new_darkroom_action(_darkroom_toolbox_button_activate_accel, dev->iso_12646.button,
+                                N_("Darkroom/Toolbox"),
+                                N_("Toggle ISO 12646 color assessment conditions"), 0, 0,
+                                _("Triggers the action"));
 
   /* display background options */
   {
@@ -1820,6 +1857,12 @@ void gui_init(dt_view_t *self)
     // and the popup window
     dev->display.floating_window = gtk_popover_new(dev->display.button);
     connect_button_press_release(dev->display.button, dev->display.floating_window);
+    g_object_set_data(G_OBJECT(dev->display.button), "dt-darkroom-toolbox-popover",
+                      dev->display.floating_window);
+    dt_accels_new_darkroom_action(_darkroom_toolbox_button_focus_accel, dev->display.button,
+                                  N_("Darkroom/Toolbox"),
+                                  N_("Focus picture display options"), 0, 0,
+                                  _("Shows the options popover"));
 
     GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_container_add(GTK_CONTAINER(dev->display.floating_window), vbox);
@@ -1845,6 +1888,10 @@ void gui_init(dt_view_t *self)
   g_signal_connect(G_OBJECT(_darkroom_ioporder_button), "clicked",
                    G_CALLBACK(_darkroom_ioporder_quickbutton_clicked), dev);
   dt_view_manager_module_toolbox_add(darktable.view_manager, _darkroom_ioporder_button, DT_VIEW_DARKROOM);
+  dt_accels_new_darkroom_action(_darkroom_toolbox_button_activate_accel, _darkroom_ioporder_button,
+                                N_("Darkroom/Toolbox"),
+                                N_("Show the pipeline node graph"), 0, 0,
+                                _("Triggers the action"));
 
   GtkWidget *colorscheme, *mode;
 
@@ -1862,6 +1909,16 @@ void gui_init(dt_view_t *self)
     // and the popup window
     dev->rawoverexposed.floating_window = gtk_popover_new(dev->rawoverexposed.button);
     connect_button_press_release(dev->rawoverexposed.button, dev->rawoverexposed.floating_window);
+    g_object_set_data(G_OBJECT(dev->rawoverexposed.button), "dt-darkroom-toolbox-popover",
+                      dev->rawoverexposed.floating_window);
+    dt_accels_new_darkroom_action(_darkroom_toolbox_button_activate_accel, dev->rawoverexposed.button,
+                                  N_("Darkroom/Toolbox"),
+                                  N_("Toggle raw over exposed indication"), 0, 0,
+                                  _("Triggers the action"));
+    dt_accels_new_darkroom_action(_darkroom_toolbox_button_focus_accel, dev->rawoverexposed.button,
+                                  N_("Darkroom/Toolbox"),
+                                  N_("Focus raw over exposed indication options"), 0, 0,
+                                  _("Shows the options popover"));
 
     GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_container_add(GTK_CONTAINER(dev->rawoverexposed.floating_window), vbox);
@@ -1915,6 +1972,16 @@ void gui_init(dt_view_t *self)
     // and the popup window
     dev->overexposed.floating_window = gtk_popover_new(dev->overexposed.button);
     connect_button_press_release(dev->overexposed.button, dev->overexposed.floating_window);
+    g_object_set_data(G_OBJECT(dev->overexposed.button), "dt-darkroom-toolbox-popover",
+                      dev->overexposed.floating_window);
+    dt_accels_new_darkroom_action(_darkroom_toolbox_button_activate_accel, dev->overexposed.button,
+                                  N_("Darkroom/Toolbox"),
+                                  N_("Toggle clipping indication"), 0, 0,
+                                  _("Triggers the action"));
+    dt_accels_new_darkroom_action(_darkroom_toolbox_button_focus_accel, dev->overexposed.button,
+                                  N_("Darkroom/Toolbox"),
+                                  N_("Focus clipping indication options"), 0, 0,
+                                  _("Shows the options popover"));
 
     GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_container_add(GTK_CONTAINER(dev->overexposed.floating_window), vbox);
@@ -1989,6 +2056,26 @@ void gui_init(dt_view_t *self)
     dev->profile.floating_window = gtk_popover_new(NULL);
     connect_button_press_release(dev->profile.softproof_button, dev->profile.floating_window);
     connect_button_press_release(dev->profile.gamut_button, dev->profile.floating_window);
+    g_object_set_data(G_OBJECT(dev->profile.softproof_button), "dt-darkroom-toolbox-popover",
+                      dev->profile.floating_window);
+    g_object_set_data(G_OBJECT(dev->profile.gamut_button), "dt-darkroom-toolbox-popover",
+                      dev->profile.floating_window);
+    dt_accels_new_darkroom_action(_darkroom_toolbox_button_activate_accel,
+                                  dev->profile.softproof_button, N_("Darkroom/Toolbox"),
+                                  N_("Toggle softproofing"), 0, 0,
+                                  _("Triggers the action"));
+    dt_accels_new_darkroom_action(_darkroom_toolbox_button_focus_accel,
+                                  dev->profile.softproof_button, N_("Darkroom/Toolbox"),
+                                  N_("Focus softproof options"), 0, 0,
+                                  _("Shows the options popover"));
+    dt_accels_new_darkroom_action(_darkroom_toolbox_button_activate_accel,
+                                  dev->profile.gamut_button, N_("Darkroom/Toolbox"),
+                                  N_("Toggle gamut checking"), 0, 0,
+                                  _("Triggers the action"));
+    dt_accels_new_darkroom_action(_darkroom_toolbox_button_focus_accel,
+                                  dev->profile.gamut_button, N_("Darkroom/Toolbox"),
+                                  N_("Focus gamut checking options"), 0, 0,
+                                  _("Shows the options popover"));
 
     GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_container_add(GTK_CONTAINER(dev->profile.floating_window), vbox);
@@ -2044,8 +2131,18 @@ void gui_init(dt_view_t *self)
     g_signal_connect(G_OBJECT(darktable.view_manager->guides_toggle), "clicked",
                      G_CALLBACK(_guides_quickbutton_clicked), dev);
     connect_button_press_release(darktable.view_manager->guides_toggle, darktable.view_manager->guides_popover);
+    g_object_set_data(G_OBJECT(darktable.view_manager->guides_toggle), "dt-darkroom-toolbox-popover",
+                      darktable.view_manager->guides_popover);
     dt_view_manager_module_toolbox_add(darktable.view_manager, darktable.view_manager->guides_toggle,
                                        DT_VIEW_DARKROOM);
+    dt_accels_new_darkroom_action(_darkroom_toolbox_button_activate_accel,
+                                  darktable.view_manager->guides_toggle, N_("Darkroom/Toolbox"),
+                                  N_("Toggle guide lines"), 0, 0,
+                                  _("Triggers the action"));
+    dt_accels_new_darkroom_action(_darkroom_toolbox_button_focus_accel,
+                                  darktable.view_manager->guides_toggle, N_("Darkroom/Toolbox"),
+                                  N_("Focus guide lines options"), 0, 0,
+                                  _("Shows the options popover"));
     // we want to update button state each time the view change
     DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_VIEWMANAGER_VIEW_CHANGED,
                                     G_CALLBACK(_guides_view_changed), dev);
