@@ -139,7 +139,6 @@ static gboolean _rt_queue_pop_locked(dt_drawlayer_worker_t *rt,
 static drawlayer_fullres_replay_scratch_t *_get_fullres_replay_scratch(void);
 static float *_ensure_fullres_replay_float_buffer(float **buffer, size_t *capacity_values, size_t needed_values);
 static guint _worker_batch_min_size(void);
-static gboolean _dab_batch_supports_outer_loop(const GArray *dabs, guint count);
 static void _log_worker_batch_timing(const char *tag, guint processed_dabs, guint thread_count, double elapsed_ms,
                                      gboolean outer_loop);
 #if defined(_OPENMP) && OUTER_LOOP
@@ -148,6 +147,7 @@ static guint _rasterize_dab_batch_outer_loop(const GArray *dabs, guint max_dabs,
                                              dt_drawlayer_cache_patch_t *stroke_mask,
                                              dt_drawlayer_damaged_rect_t *batch_damage,
                                              const char *tag);
+static gboolean _dab_batch_supports_outer_loop(const GArray *dabs, guint count);
 #endif
 
 /* GUI worker painting into uint8 buffers is deimplemented. Realtime preview
@@ -797,6 +797,7 @@ static guint _worker_batch_min_size(void)
 #endif
 }
 
+#if defined(_OPENMP) && OUTER_LOOP
 static gboolean _dab_batch_supports_outer_loop(const GArray *dabs, const guint count)
 {
   if(!dabs || count == 0) return FALSE;
@@ -807,6 +808,7 @@ static gboolean _dab_batch_supports_outer_loop(const GArray *dabs, const guint c
   }
   return TRUE;
 }
+#endif
 
 static void _log_worker_batch_timing(const char *tag, const guint processed_dabs, const guint thread_count,
                                      const double elapsed_ms, const gboolean outer_loop)
