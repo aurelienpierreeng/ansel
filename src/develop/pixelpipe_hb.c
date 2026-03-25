@@ -880,10 +880,10 @@ static int _init_base_buffer(dt_dev_pixelpipe_t *pipe)
     dt_dev_pixelpipe_cache_flush_entry_clmem(cache_entry);
   }
 
-  // For one-shot pipelines (thumbnail export), ensure the base buffer cacheline is not kept around.
-  // It will be freed as soon as the next module is done consuming it as input.
-  if(pipe->no_cache)
-    dt_dev_pixelpipe_cache_flag_auto_destroy(darktable.pixelpipe_cache, cache_entry);
+  /* The base buffer is only a thread-safe staging copy of mipmap-cache pixels while the first pipeline stage
+   * consumes them. Keeping it in both caches beyond that point duplicates the same image for no benefit, so
+   * always reap the pixelpipe cacheline as soon as its immediate consumer releases the input ref. */
+  dt_dev_pixelpipe_cache_flag_auto_destroy(darktable.pixelpipe_cache, cache_entry);
 
   if(err)
     dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, hash);
