@@ -1227,6 +1227,15 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
 
   KILL_SWITCH_AND_FLUSH_CACHE;
 
+  /* `dt_dev_pixelpipe_cache_get_writable()` increments the output cacheline refcount so backend processing
+   * and publication own one explicit reference while the entry is write-locked. Once the module published
+   * its result, downstream recursion reopens the same cacheline by hash and acquires its own input ref.
+   * Release the writable-owner ref here, in the same visible tail path where we already release the input,
+   * otherwise every successful publication leaves one permanent "used" entry behind and the LRU can no longer
+   * evict anything once the cache fills up. */
+  _trace_cache_owner(pipe, module, "release", "output", hash, output, output_entry, FALSE);
+  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, output_entry);
+
   *out_hash = hash;
   *out_piece = piece;
   return 0;
