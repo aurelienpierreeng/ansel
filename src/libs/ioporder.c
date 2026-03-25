@@ -127,6 +127,7 @@ static void _ioporder_drag_data_received(GtkWidget *widget, GdkDragContext *dc, 
                                          GtkSelectionData *selection_data, guint info, guint time,
                                          gpointer user_data);
 static void _ioporder_free_graph_node(gpointer data);
+static void _ioporder_popup_destroy(GtkWidget *widget, gpointer user_data);
 
 /**
  * @brief Return TRUE when a module already exists in history.
@@ -621,6 +622,37 @@ static void _ioporder_clear_graph(dt_lib_ioporder_t *d)
 
   g_list_free_full(d->nodes, _ioporder_free_graph_node);
   d->nodes = NULL;
+}
+
+/**
+ * @brief Drop cached popup widget pointers once GTK destroys the popup.
+ *
+ * The popup is transient-for the main window and uses destroy-with-parent, so
+ * application shutdown may destroy it before the lib cleanup code runs. Keep
+ * the graph node bookkeeping cleanup local here while the widget ownership is
+ * still entirely on the GTK side, then invalidate every cached widget pointer
+ * so later teardown paths don't touch stale instances.
+ *
+ * @param widget Destroyed popup window.
+ * @param user_data The ioporder lib private state.
+ */
+static void _ioporder_popup_destroy(GtkWidget *widget, gpointer user_data)
+{
+  dt_lib_ioporder_t *d = (dt_lib_ioporder_t *)user_data;
+  if(!d) return;
+
+  g_list_free_full(d->nodes, _ioporder_free_graph_node);
+  d->nodes = NULL;
+
+  d->window = NULL;
+  d->toolbar_label = NULL;
+  d->preset_combo = NULL;
+  d->graph_scroll = NULL;
+  d->graph_overlay = NULL;
+  d->graph_drawing = NULL;
+  d->graph_fixed = NULL;
+  d->drag_source = NULL;
+  d->drag_dest = NULL;
 }
 
 /**
@@ -1625,6 +1657,7 @@ static void _ioporder_init_popup(dt_lib_module_t *self)
   gtk_container_add(GTK_CONTAINER(window), root);
 
   g_signal_connect(window, "delete-event", G_CALLBACK(gtk_widget_hide_on_delete), NULL);
+  g_signal_connect(window, "destroy", G_CALLBACK(_ioporder_popup_destroy), d);
   g_signal_connect(add_preset, "clicked", G_CALLBACK(_ioporder_add_preset), self);
   g_signal_connect(reset, "clicked", G_CALLBACK(_ioporder_reset_order), self);
   g_signal_connect(preset_combo, "changed", G_CALLBACK(_ioporder_apply_preset), self);
@@ -1747,8 +1780,8 @@ void gui_cleanup(dt_lib_module_t *self)
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_ioporder_refresh_callback), self);
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_ioporder_presets_changed_callback), self);
 
-  if(d->window) gtk_widget_destroy(d->window);
   _ioporder_clear_graph(d);
+  if(d->window) gtk_widget_destroy(d->window);
   dt_free(self->data);
   self->data = NULL;
 }
