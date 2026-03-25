@@ -116,6 +116,29 @@ static gboolean _focus_next_control();
 static gboolean _focus_previous_control();
 static gboolean _is_module_in_history(const dt_iop_module_t *module);
 static void _modulegroups_ensure_page_widgets(dt_lib_module_t *self);
+static GtkWidget *_modulegroups_target_container(const dt_lib_modulegroups_t *d, const dt_iop_module_t *module);
+static void _modulegroups_setup_drag_source(dt_lib_module_t *self, dt_iop_module_t *module);
+static gboolean _modulegroups_reorder_target(GtkWidget *target);
+
+/**
+ * @brief Hide every modulegroups-owned page before showing the active one.
+ *
+ * We always start a refresh by hiding all pages, then we show only the page
+ * matching the current tab once the modules have been reparented and reordered.
+ *
+ * @param d Modulegroups runtime data.
+ */
+static void _modulegroups_hide_pages(const dt_lib_modulegroups_t *d)
+{
+  if(!d) return;
+  if(d->page_pipeline) gtk_widget_hide(d->page_pipeline);
+  if(d->page_basic) gtk_widget_hide(d->page_basic);
+  if(d->page_repair) gtk_widget_hide(d->page_repair);
+  if(d->page_sharpness) gtk_widget_hide(d->page_sharpness);
+  if(d->page_effects) gtk_widget_hide(d->page_effects);
+  if(d->page_technical) gtk_widget_hide(d->page_technical);
+  if(d->page_all) gtk_widget_hide(d->page_all);
+}
 
 /**
  * @brief Align the basic-tab section labels with the module expander margins.
@@ -367,6 +390,107 @@ static void _modulegroups_ensure_page_widgets(dt_lib_module_t *self)
   gtk_widget_hide(d->page_effects);
   gtk_widget_hide(d->page_technical);
   gtk_widget_hide(d->page_all);
+}
+
+/**
+ * @brief Return the GtkBox currently hosting a module for the active tab.
+ *
+ * The basic tab splits its modules into three subgroup containers, while the
+ * other tabs each own a single page box.
+ *
+ * @param d Modulegroups runtime data.
+ * @param module Module whose container is requested.
+ * @return Target GtkWidget container, or NULL when the current tab should not host it.
+ */
+static GtkWidget *_modulegroups_target_container(const dt_lib_modulegroups_t *d, const dt_iop_module_t *module)
+{
+  if(!d || !module) return NULL;
+
+  switch(d->current)
+  {
+    case DT_MODULEGROUP_ACTIVE_PIPE:
+      return d->page_pipeline;
+
+    case DT_MODULEGROUP_NONE:
+      return d->page_all;
+
+    case DT_MODULEGROUP_TONES:
+      if(module->default_group() == DT_MODULEGROUP_COLOR) return d->container_color;
+      if(module->default_group() == DT_MODULEGROUP_FILM) return d->container_film;
+      if(module->default_group() == DT_MODULEGROUP_TONES) return d->container_tones;
+      return NULL;
+
+    case DT_MODULEGROUP_REPAIR:
+      return d->page_repair;
+
+    case DT_MODULEGROUP_SHARPNESS:
+      return d->page_sharpness;
+
+    case DT_MODULEGROUP_EFFECTS:
+      return d->page_effects;
+
+    case DT_MODULEGROUP_TECHNICAL:
+      return d->page_technical;
+
+    default:
+      return NULL;
+  }
+}
+
+/**
+ * @brief Attach the module drag source handlers once to an expander widget.
+ *
+ * Modulegroups owns module reordering in the darkroom panel, so it also owns
+ * the drag source registration for every visible expander.
+ *
+ * @param self Modulegroups lib module.
+ * @param module Module whose expander should become draggable.
+ */
+static void _modulegroups_setup_drag_source(dt_lib_module_t *self, dt_iop_module_t *module)
+{
+  if(!self || !module || !module->expander) return;
+
+  GtkWidget *widget = module->expander;
+  g_object_set_data(G_OBJECT(widget), "dt-module", module);
+
+  if(g_object_get_data(G_OBJECT(widget), "modulegroups-dnd")) return;
+
+  gtk_drag_source_set(widget, GDK_BUTTON1_MASK, _modulegroups_target_list, _modulegroups_n_targets, GDK_ACTION_COPY);
+  g_signal_connect(widget, "drag-begin", G_CALLBACK(_modulegroups_drag_begin), self);
+  g_signal_connect(widget, "drag-data-get", G_CALLBACK(_modulegroups_drag_data_get), self);
+  g_signal_connect(widget, "drag-end", G_CALLBACK(_modulegroups_drag_end), self);
+  g_object_set_data(G_OBJECT(widget), "modulegroups-dnd", GINT_TO_POINTER(TRUE));
+}
+
+/**
+ * @brief Reorder one page or subgroup container to match reverse pipeline order.
+ *
+ * We walk the whole pipeline from last to first and keep only expanders whose
+ * current parent is the requested container. This keeps the GUI order
+ * consistent regardless of the active tab layout.
+ *
+ * @param target Page or subgroup container to reorder.
+ * @return TRUE when at least one visible module ended up in that container.
+ */
+static gboolean _modulegroups_reorder_target(GtkWidget *target)
+{
+  if(!GTK_IS_WIDGET(target) || !darktable.develop) return FALSE;
+
+  gboolean has_visible = FALSE;
+  int position = 0;
+
+  /* Walk the whole pipeline in reverse order and keep only the modules currently parented here. */
+  for(GList *modules = g_list_last(darktable.develop->iop); modules; modules = g_list_previous(modules))
+  {
+    dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
+    if(dt_iop_is_hidden(module) || !module->expander || !gtk_widget_get_visible(module->expander)) continue;
+    if(gtk_widget_get_parent(module->expander) != target) continue;
+
+    gtk_box_reorder_child(GTK_BOX(target), module->expander, position++);
+    has_visible = TRUE;
+  }
+
+  return has_visible;
 }
 
 static void _modulegroups_drag_begin(GtkWidget *widget, GdkDragContext *context, gpointer user_data)
@@ -1049,104 +1173,27 @@ static void _lib_modulegroups_update_iop_visibility(dt_lib_module_t *self)
   if(darktable.develop->image_storage.id <= 0) return;
   _modulegroups_ensure_page_widgets(self);
   dt_lib_modulegroups_t *d = (dt_lib_modulegroups_t *)self->data;
-  gboolean has_color = FALSE, has_film = FALSE, has_tones = FALSE;
 
   if(!d->page_pipeline || !d->page_basic || !d->page_repair || !d->page_sharpness
      || !d->page_effects || !d->page_technical || !d->page_all) return;
   _modulegroups_sync_section_label_margins(d);
+  _modulegroups_hide_pages(d);
 
-  gtk_widget_hide(d->page_pipeline);
-  gtk_widget_hide(d->page_basic);
-  gtk_widget_hide(d->page_repair);
-  gtk_widget_hide(d->page_sharpness);
-  gtk_widget_hide(d->page_effects);
-  gtk_widget_hide(d->page_technical);
-  gtk_widget_hide(d->page_all);
+  /* Walk every develop module and decide whether it belongs to the active tab and which box should host it. */
   for(GList *modules = g_list_first(darktable.develop->iop); modules; modules = g_list_next(modules))
   {
     dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
     GtkWidget *w = module->expander;
-    GtkWidget *target = NULL;
-    gboolean visible = FALSE;
 
     /* skip modules without a gui */
     if(dt_iop_is_hidden(module)) continue;
 
-    /* lets show/hide modules dependent on current group*/
-    switch(d->current)
-    {
-      case DT_MODULEGROUP_ACTIVE_PIPE:
-      {
-        visible = _is_module_in_history(module) || module->enabled;
-        target = d->page_pipeline;
-        break;
-      }
-
-      case DT_MODULEGROUP_NONE:
-      {
-        visible = !(module->flags() & IOP_FLAGS_DEPRECATED) || module->enabled;
-        target = d->page_all;
-        break;
-      }
-
-      case DT_MODULEGROUP_TONES:
-      {
-        visible = dt_is_module_in_group(module, DT_MODULEGROUP_TONES)
-                  && (!(module->flags() & IOP_FLAGS_DEPRECATED)
-                      || module->enabled
-                      || _is_module_in_history(module));
-        if(module->default_group() == DT_MODULEGROUP_COLOR)
-        {
-          target = d->container_color;
-        }
-        else if(module->default_group() == DT_MODULEGROUP_FILM)
-        {
-          target = d->container_film;
-        }
-        else if(module->default_group() == DT_MODULEGROUP_TONES)
-        {
-          target = d->container_tones;
-        }
-        break;
-      }
-
-      default:
-      {
-        visible = d->current == module->default_group()
-                  && (!(module->flags() & IOP_FLAGS_DEPRECATED)
-                      || module->enabled
-                      || _is_module_in_history(module));
-        if(d->current == DT_MODULEGROUP_REPAIR)
-        {
-          target = d->page_repair;
-        }
-        else if(d->current == DT_MODULEGROUP_SHARPNESS)
-        {
-          target = d->page_sharpness;
-        }
-        else if(d->current == DT_MODULEGROUP_EFFECTS)
-        {
-          target = d->page_effects;
-        }
-        else if(d->current == DT_MODULEGROUP_TECHNICAL)
-        {
-          target = d->page_technical;
-        }
-      }
-    }
+    const gboolean visible = _modulegroups_module_visible_in_current(d, module);
+    GtkWidget *target = visible ? _modulegroups_target_container(d, module) : NULL;
 
     if(visible && GTK_IS_WIDGET(w) && GTK_IS_WIDGET(target))
     {
-      g_object_set_data(G_OBJECT(w), "dt-module", module);
-      if(!g_object_get_data(G_OBJECT(w), "modulegroups-dnd"))
-      {
-        gtk_drag_source_set(w, GDK_BUTTON1_MASK,
-                            _modulegroups_target_list, _modulegroups_n_targets, GDK_ACTION_COPY);
-        g_signal_connect(w, "drag-begin", G_CALLBACK(_modulegroups_drag_begin), self);
-        g_signal_connect(w, "drag-data-get", G_CALLBACK(_modulegroups_drag_data_get), self);
-        g_signal_connect(w, "drag-end", G_CALLBACK(_modulegroups_drag_end), self);
-        g_object_set_data(G_OBJECT(w), "modulegroups-dnd", GINT_TO_POINTER(TRUE));
-      }
+      _modulegroups_setup_drag_source(self, module);
       _modulegroups_move_widget(w, target);
       gtk_widget_show(w);
     }
@@ -1163,54 +1210,19 @@ static void _lib_modulegroups_update_iop_visibility(dt_lib_module_t *self)
 
   if(d->current == DT_MODULEGROUP_ACTIVE_PIPE)
   {
-    int position = 0;
-    for(GList *modules = g_list_last(darktable.develop->iop); modules; modules = g_list_previous(modules))
-    {
-      dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
-      if(dt_iop_is_hidden(module) || !module->expander || !gtk_widget_get_visible(module->expander)) continue;
-      gtk_box_reorder_child(GTK_BOX(d->page_pipeline), module->expander, position++);
-    }
+    _modulegroups_reorder_target(d->page_pipeline);
     gtk_widget_show(d->page_pipeline);
   }
   else if(d->current == DT_MODULEGROUP_NONE)
   {
-    int position = 0;
-    for(GList *modules = g_list_last(darktable.develop->iop); modules; modules = g_list_previous(modules))
-    {
-      dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
-      if(dt_iop_is_hidden(module) || !module->expander || !gtk_widget_get_visible(module->expander)) continue;
-      gtk_box_reorder_child(GTK_BOX(d->page_all), module->expander, position++);
-    }
+    _modulegroups_reorder_target(d->page_all);
     gtk_widget_show(d->page_all);
   }
   else if(d->current == DT_MODULEGROUP_TONES)
   {
-    int color_position = 0;
-    int film_position = 0;
-    int tones_position = 0;
-
-    for(GList *modules = g_list_last(darktable.develop->iop); modules; modules = g_list_previous(modules))
-    {
-      dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
-      if(dt_iop_is_hidden(module) || !module->expander || !gtk_widget_get_visible(module->expander)) continue;
-
-      if(module->default_group() == DT_MODULEGROUP_COLOR)
-      {
-        gtk_box_reorder_child(GTK_BOX(d->container_color), module->expander, color_position++);
-        has_color = TRUE;
-      }
-      else if(module->default_group() == DT_MODULEGROUP_FILM)
-      {
-        gtk_box_reorder_child(GTK_BOX(d->container_film), module->expander, film_position++);
-        has_film = TRUE;
-      }
-      else if(module->default_group() == DT_MODULEGROUP_TONES)
-      {
-        gtk_box_reorder_child(GTK_BOX(d->container_tones), module->expander, tones_position++);
-        has_tones = TRUE;
-      }
-    }
-
+    const gboolean has_color = _modulegroups_reorder_target(d->container_color);
+    const gboolean has_film = _modulegroups_reorder_target(d->container_film);
+    const gboolean has_tones = _modulegroups_reorder_target(d->container_tones);
     gtk_widget_set_visible(d->section_color, has_color);
     gtk_widget_set_visible(d->container_color, has_color);
     gtk_widget_set_visible(d->section_film, has_film);
@@ -1221,21 +1233,14 @@ static void _lib_modulegroups_update_iop_visibility(dt_lib_module_t *self)
   }
   else
   {
-    GtkWidget *target = d->current == DT_MODULEGROUP_REPAIR ? d->page_repair
-                       : d->current == DT_MODULEGROUP_SHARPNESS ? d->page_sharpness
-                       : d->current == DT_MODULEGROUP_EFFECTS ? d->page_effects
-                       : d->page_technical;
-    int position = 0;
+    GtkWidget *target = NULL;
+    if(d->current == DT_MODULEGROUP_REPAIR) target = d->page_repair;
+    else if(d->current == DT_MODULEGROUP_SHARPNESS) target = d->page_sharpness;
+    else if(d->current == DT_MODULEGROUP_EFFECTS) target = d->page_effects;
+    else if(d->current == DT_MODULEGROUP_TECHNICAL) target = d->page_technical;
 
-    /* Walk the whole pipeline in reverse order and keep only visible modules
-     * from the current tab to preserve the usual GUI order inside that page. */
-    for(GList *modules = g_list_last(darktable.develop->iop); modules; modules = g_list_previous(modules))
-    {
-      dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
-      if(dt_iop_is_hidden(module) || !module->expander || !gtk_widget_get_visible(module->expander)) continue;
-      gtk_box_reorder_child(GTK_BOX(target), module->expander, position++);
-    }
-    gtk_widget_show(target);
+    _modulegroups_reorder_target(target);
+    if(target) gtk_widget_show(target);
   }
 }
 
