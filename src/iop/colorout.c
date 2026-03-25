@@ -146,8 +146,8 @@ int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, const dt
   return IOP_CS_RGB;
 }
 
-static dt_iop_colorspace_type_t _colorout_format_cst(dt_iop_module_t *self,
-                                                     const dt_dev_pixelpipe_t *pipe)
+static dt_iop_colorspace_type_t _colorout_input_format_cst(dt_iop_module_t *self,
+                                                           const dt_dev_pixelpipe_t *pipe)
 {
   const dt_iop_colorout_params_t *const p = (dt_iop_colorout_params_t *)self->params;
   dt_colorspaces_color_profile_type_t type = p->type;
@@ -161,12 +161,19 @@ static dt_iop_colorspace_type_t _colorout_format_cst(dt_iop_module_t *self,
   return (type == DT_COLORSPACE_LAB) ? IOP_CS_LAB : IOP_CS_RGB;
 }
 
+static dt_iop_colorspace_type_t _colorout_output_format_cst(dt_iop_module_t *self,
+                                                            const dt_dev_pixelpipe_t *pipe)
+{
+  const dt_iop_colorspace_type_t input_cst = _colorout_input_format_cst(self, pipe);
+  return input_cst == IOP_CS_LAB ? IOP_CS_LAB : IOP_CS_RGB_DISPLAY;
+}
+
 void input_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
                   dt_iop_buffer_dsc_t *dsc)
 {
   dsc->channels = 4;
   dsc->datatype = TYPE_FLOAT;
-  dsc->cst = _colorout_format_cst(self, pipe);
+  dsc->cst = _colorout_input_format_cst(self, pipe);
 }
 
 void output_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
@@ -174,7 +181,7 @@ void output_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixel
 {
   dsc->channels = 4;
   dsc->datatype = TYPE_FLOAT;
-  dsc->cst = _colorout_format_cst(self, pipe);
+  dsc->cst = _colorout_output_format_cst(self, pipe);
 }
 
 int legacy_params(dt_iop_module_t *self, const void *const old_params, const int old_version,

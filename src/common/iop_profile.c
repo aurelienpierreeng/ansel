@@ -260,14 +260,14 @@ static void _transform_lcms2(struct dt_iop_module_t *self, const float *const im
 
   *converted_cst = cst_to;
 
-  if(cst_from == IOP_CS_RGB && cst_to == IOP_CS_LAB)
+  if(dt_iop_colorspace_is_rgb(cst_from) && cst_to == IOP_CS_LAB)
   {
     dt_print(DT_DEBUG_DEV,
              "[_transform_lcms2] transfoming from RGB to Lab (%s %s)\n", self->op, self->multi_name);
     _transform_from_to_rgb_lab_lcms2(image_in, image_out, width, height, profile_info->type,
                                      profile_info->filename, profile_info->intent, 1);
   }
-  else if(cst_from == IOP_CS_LAB && cst_to == IOP_CS_RGB)
+  else if(cst_from == IOP_CS_LAB && dt_iop_colorspace_is_rgb(cst_to))
   {
     dt_print(DT_DEBUG_DEV,
              "[_transform_lcms2] transfoming from Lab to RGB (%s %s)\n", self->op, self->multi_name);
@@ -603,11 +603,11 @@ static inline void _transform_matrix(struct dt_iop_module_t *self,
 
   *converted_cst = cst_to;
 
-  if(cst_from == IOP_CS_RGB && cst_to == IOP_CS_LAB)
+  if(dt_iop_colorspace_is_rgb(cst_from) && cst_to == IOP_CS_LAB)
   {
     _transform_rgb_to_lab_matrix(image_in, image_out, width, height, profile_info);
   }
-  else if(cst_from == IOP_CS_LAB && cst_to == IOP_CS_RGB)
+  else if(cst_from == IOP_CS_LAB && dt_iop_colorspace_is_rgb(cst_to))
   {
     _transform_lab_to_rgb_matrix(image_in, image_out, width, height, profile_info);
   }
@@ -1051,6 +1051,11 @@ void dt_ioppr_transform_image_colorspace(struct dt_iop_module_t *self, const flo
     *converted_cst = cst_to;
     return;
   }
+  if(dt_iop_colorspace_is_rgb(cst_from) && dt_iop_colorspace_is_rgb(cst_to))
+  {
+    *converted_cst = cst_to;
+    return;
+  }
   if(profile_info == NULL)
   {
     *converted_cst = cst_from;
@@ -1074,7 +1079,8 @@ void dt_ioppr_transform_image_colorspace(struct dt_iop_module_t *self, const flo
     {
       dt_get_times(&end_time);
       fprintf(stderr, "image colorspace transform %s-->%s took %.3f secs (%.3f CPU) [%s %s]\n",
-          (cst_from == IOP_CS_RGB) ? "RGB": "Lab", (cst_to == IOP_CS_RGB) ? "RGB": "Lab",
+          dt_iop_colorspace_is_rgb(cst_from) ? "RGB" : "Lab",
+          dt_iop_colorspace_is_rgb(cst_to) ? "RGB" : "Lab",
           end_time.clock - start_time.clock, end_time.user - start_time.user, self->op, self->multi_name);
     }
   }
@@ -1086,7 +1092,8 @@ void dt_ioppr_transform_image_colorspace(struct dt_iop_module_t *self, const flo
     {
       dt_get_times(&end_time);
       fprintf(stderr, "image colorspace transform %s-->%s took %.3f secs (%.3f lcms2) [%s %s]\n",
-          (cst_from == IOP_CS_RGB) ? "RGB": "Lab", (cst_to == IOP_CS_RGB) ? "RGB": "Lab",
+          dt_iop_colorspace_is_rgb(cst_from) ? "RGB" : "Lab",
+          dt_iop_colorspace_is_rgb(cst_to) ? "RGB" : "Lab",
           end_time.clock - start_time.clock, end_time.user - start_time.user, self->op, self->multi_name);
     }
   }
@@ -1298,6 +1305,11 @@ int dt_ioppr_transform_image_colorspace_cl(struct dt_iop_module_t *self, const i
     *converted_cst = cst_to;
     return TRUE;
   }
+  if(dt_iop_colorspace_is_rgb(cst_from) && dt_iop_colorspace_is_rgb(cst_to))
+  {
+    *converted_cst = cst_to;
+    return TRUE;
+  }
   if(profile_info == NULL)
   {
     *converted_cst = cst_from;
@@ -1326,11 +1338,11 @@ int dt_ioppr_transform_image_colorspace_cl(struct dt_iop_module_t *self, const i
     dt_times_t start_time = { 0 }, end_time = { 0 };
     if(darktable.unmuted & DT_DEBUG_PERF) dt_get_times(&start_time);
 
-    if(cst_from == IOP_CS_RGB && cst_to == IOP_CS_LAB)
+    if(dt_iop_colorspace_is_rgb(cst_from) && cst_to == IOP_CS_LAB)
     {
       kernel_transform = darktable.opencl->colorspaces->kernel_colorspaces_transform_rgb_matrix_to_lab;
     }
-    else if(cst_from == IOP_CS_LAB && cst_to == IOP_CS_RGB)
+    else if(cst_from == IOP_CS_LAB && dt_iop_colorspace_is_rgb(cst_to))
     {
       kernel_transform = darktable.opencl->colorspaces->kernel_colorspaces_transform_lab_to_rgb_matrix;
     }
@@ -1381,7 +1393,8 @@ int dt_ioppr_transform_image_colorspace_cl(struct dt_iop_module_t *self, const i
     {
       dt_get_times(&end_time);
       fprintf(stderr, "image colorspace transform %s-->%s took %.3f secs (%.3f GPU) [%s %s]\n",
-          (cst_from == IOP_CS_RGB) ? "RGB": "Lab", (cst_to == IOP_CS_RGB) ? "RGB": "Lab",
+          dt_iop_colorspace_is_rgb(cst_from) ? "RGB" : "Lab",
+          dt_iop_colorspace_is_rgb(cst_to) ? "RGB" : "Lab",
           end_time.clock - start_time.clock, end_time.user - start_time.user, self->op, self->multi_name);
     }
   }

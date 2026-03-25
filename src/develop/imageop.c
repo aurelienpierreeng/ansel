@@ -1475,7 +1475,7 @@ static void _init_module_so(void *m)
 
         if((module->flags() & IOP_FLAGS_SUPPORTS_BLENDING) &&
            !(module->flags() & IOP_FLAGS_NO_MASKS) &&
-           (cst == IOP_CS_LAB || cst == IOP_CS_RGB))
+           (cst == IOP_CS_LAB || dt_iop_colorspace_is_rgb(cst)))
         {
           dt_iop_gui_init_blending(module_instance);
           dt_iop_gui_cleanup_blending(module_instance);

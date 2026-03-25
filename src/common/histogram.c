@@ -421,6 +421,7 @@ void dt_histogram_helper(dt_dev_histogram_collection_params_t *histogram_params,
       break;
 
     case IOP_CS_RGB:
+    case IOP_CS_RGB_DISPLAY:
       if(compensate_middle_grey && profile_info)
         dt_histogram_worker(histogram_params, histogram_stats, pixel, histogram, histogram_helper_cs_rgb_compensated, profile_info);
       else
@@ -458,6 +459,7 @@ void dt_histogram_max_helper(const dt_dev_histogram_stats_t *const histogram_sta
       break;
 
     case IOP_CS_RGB:
+    case IOP_CS_RGB_DISPLAY:
       // don't count <= 0 pixels
       for(int k = 4; k < 4 * histogram_stats->bins_count; k += 4)
         histogram_max[0] = histogram_max[0] > hist[k] ? histogram_max[0] : hist[k];

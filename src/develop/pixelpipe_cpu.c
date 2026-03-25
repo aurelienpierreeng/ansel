@@ -55,7 +55,8 @@ int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
             : NULL;
 
   const int cst_before = process_input_dsc.cst;
-  if(process_input_dsc.cst != piece->dsc_in.cst)
+  if(process_input_dsc.cst != piece->dsc_in.cst
+     && !(dt_iop_colorspace_is_rgb(process_input_dsc.cst) && dt_iop_colorspace_is_rgb(piece->dsc_in.cst)))
   {
     process_input_temp
         = dt_pixelpipe_cache_alloc_align_float((size_t)piece->roi_in.width * piece->roi_in.height * 4, pipe);
@@ -70,6 +71,12 @@ int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
     dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, input_entry);
     input_locked = FALSE;
     process_input = process_input_temp;
+  }
+  else if(process_input_dsc.cst != piece->dsc_in.cst)
+  {
+    process_input_dsc.cst = piece->dsc_in.cst;
+    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, input_entry);
+    input_locked = TRUE;
   }
   else
   {

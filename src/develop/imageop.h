@@ -188,7 +188,13 @@ typedef enum dt_iop_colorspace_type_t
   IOP_CS_LCH = 3,
   IOP_CS_HSL = 4,
   IOP_CS_JZCZHZ = 5,
+  IOP_CS_RGB_DISPLAY = 6,
 } dt_iop_colorspace_type_t;
+
+static inline gboolean dt_iop_colorspace_is_rgb(const dt_iop_colorspace_type_t cst)
+{
+  return cst == IOP_CS_RGB || cst == IOP_CS_RGB_DISPLAY;
+}
 
 /** part of the module which only contains the cached dlopen stuff. */
 typedef struct dt_iop_module_so_t

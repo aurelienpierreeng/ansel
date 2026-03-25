@@ -361,6 +361,7 @@ static void _blendif_scale(dt_iop_gui_blend_data_t *data, dt_iop_colorspace_type
       out[CHANNEL_INDEX_b] = ((in[2] / _get_boost_factor(data, 2, in_out)) + 128.0f) / 256.0f;
       break;
     case IOP_CS_RGB:
+    case IOP_CS_RGB_DISPLAY:
       if(work_profile == NULL)
         out[CHANNEL_INDEX_g] = 0.3f * in[0] + 0.59f * in[1] + 0.11f * in[2];
       else
@@ -406,6 +407,7 @@ static void _blendif_cook(dt_iop_colorspace_type_t cst, const float *in, float *
       out[CHANNEL_INDEX_b] = in[2];
       break;
     case IOP_CS_RGB:
+    case IOP_CS_RGB_DISPLAY:
       if(work_profile == NULL)
         out[CHANNEL_INDEX_g] = (0.3f * in[0] + 0.59f * in[1] + 0.11f * in[2]) * 100.0f;
       else
@@ -4465,7 +4467,7 @@ void dt_iop_gui_init_blending(dt_iop_module_t *module)
   bd->channel_tabs_csp = DEVELOP_BLEND_CS_NONE;
 
   const dt_iop_colorspace_type_t cst = module->blend_colorspace(module, NULL, NULL);
-  bd->blendif_support = (cst == IOP_CS_LAB || cst == IOP_CS_RGB);
+  bd->blendif_support = (cst == IOP_CS_LAB || dt_iop_colorspace_is_rgb(cst));
   bd->masks_support = !(module->flags() & IOP_FLAGS_NO_MASKS);
 
   dt_pthread_mutex_init(&bd->lock, NULL);

@@ -124,6 +124,7 @@ static inline dt_develop_blend_colorspace_t _blend_default_module_blend_colorspa
       case IOP_CS_LCH:
         return DEVELOP_BLEND_CS_LAB;
       case IOP_CS_RGB:
+      case IOP_CS_RGB_DISPLAY:
         return is_scene_referred ? DEVELOP_BLEND_CS_RGB_SCENE : DEVELOP_BLEND_CS_RGB_DISPLAY;
       case IOP_CS_HSL:
         return DEVELOP_BLEND_CS_RGB_DISPLAY;
@@ -748,7 +749,7 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *p
       _develop_mask_post_processing operation = post_operations[index];
       if(operation == DEVELOP_MASK_POST_FEATHER_IN)
       {
-        const float guide_weight = cst == IOP_CS_RGB ? 100.0f : 1.0f;
+        const float guide_weight = dt_iop_colorspace_is_rgb(cst) ? 100.0f : 1.0f;
         float *restrict guide = (float *restrict)ivoid;
         if(!rois_equal)
           guide = _develop_blend_process_copy_region(guide, ch * iwidth, ch * xoffs, ch * yoffs,
@@ -771,7 +772,7 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *p
       }
       else if(operation == DEVELOP_MASK_POST_FEATHER_OUT)
       {
-        const float guide_weight = cst == IOP_CS_RGB ? 100.0f : 1.0f;
+        const float guide_weight = dt_iop_colorspace_is_rgb(cst) ? 100.0f : 1.0f;
         if(_develop_blend_process_feather((const float *const restrict)ovoid, mask, owidth, oheight, ch,
                                           guide_weight, d->feathering_radius, roi_out->scale) != 0)
         {
@@ -1248,7 +1249,7 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_t
         int w = (int)(2 * d->feathering_radius * roi_out->scale + 0.5f);
         if (w < 1) w = 1;
         const float sqrt_eps = 1.0f;
-        const float guide_weight = cst == IOP_CS_RGB ? 100.0f : 1.0f;
+        const float guide_weight = dt_iop_colorspace_is_rgb(cst) ? 100.0f : 1.0f;
 
         cl_mem guide = dev_in;
         if(!rois_equal)
@@ -1276,7 +1277,7 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_t
         int w = (int)(2 * d->feathering_radius * roi_out->scale + 0.5f);
         if (w < 1) w = 1;
         const float sqrt_eps = 1.0f;
-        const float guide_weight = cst == IOP_CS_RGB ? 100.0f : 1.0f;
+        const float guide_weight = dt_iop_colorspace_is_rgb(cst) ? 100.0f : 1.0f;
 
         if(guided_filter_cl(devid, dev_out, dev_mask_1, dev_mask_2, owidth, oheight, ch, w, sqrt_eps, guide_weight,
                             0.0f, 1.0f) != 0)

@@ -71,7 +71,7 @@ static void _color_picker_convert_buffer(const float *const restrict input, floa
       output[offset + 3] = input[offset + 3];
     }
   }
-  else if(image_cst == IOP_CS_RGB && picker_cst == IOP_CS_HSL)
+  else if(dt_iop_colorspace_is_rgb(image_cst) && picker_cst == IOP_CS_HSL)
   {
 #ifdef _OPENMP
 #pragma omp parallel for default(none) dt_omp_firstprivate(input, output, pixels) schedule(static)
@@ -97,7 +97,7 @@ static void _color_picker_convert_buffer(const float *const restrict input, floa
       output[offset + 3] = input[offset + 3];
     }
   }
-  else if(image_cst == IOP_CS_RGB && picker_cst == IOP_CS_LAB)
+  else if(dt_iop_colorspace_is_rgb(image_cst) && picker_cst == IOP_CS_LAB)
   {
 #ifdef _OPENMP
 #pragma omp parallel for default(none) dt_omp_firstprivate(input, output, pixels, profile) schedule(static)
@@ -111,7 +111,7 @@ static void _color_picker_convert_buffer(const float *const restrict input, floa
       output[offset + 3] = input[offset + 3];
     }
   }
-  else if(image_cst == IOP_CS_RGB && picker_cst == IOP_CS_JZCZHZ)
+  else if(dt_iop_colorspace_is_rgb(image_cst) && picker_cst == IOP_CS_JZCZHZ)
   {
 #ifdef _OPENMP
 #pragma omp parallel for default(none) dt_omp_firstprivate(input, output, pixels, profile) schedule(static)
@@ -874,7 +874,7 @@ void dt_color_picker_helper(const dt_iop_buffer_dsc_t *dsc, const float *const p
       color_picker_helper_4ch(dsc, denoised, roi, box, picked_color, picked_color_min, picked_color_max, picker_cst, profile);
     else if((image_cst == IOP_CS_LAB
              && (picker_cst == IOP_CS_LCH || picker_cst == IOP_CS_RGB))
-            || (image_cst == IOP_CS_RGB
+            || (dt_iop_colorspace_is_rgb(image_cst)
                 && (picker_cst == IOP_CS_LAB || picker_cst == IOP_CS_HSL || picker_cst == IOP_CS_JZCZHZ)))
     {
       /* The picker samples module input/output buffers after the previous piece has written them.

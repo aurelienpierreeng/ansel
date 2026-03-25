@@ -327,6 +327,8 @@ static const char *_debug_cst_to_string(const int cst)
       return "lab";
     case IOP_CS_RGB:
       return "rgb";
+    case IOP_CS_RGB_DISPLAY:
+      return "display-rgb";
     case IOP_CS_LCH:
       return "lch";
     case IOP_CS_HSL:
@@ -649,9 +651,11 @@ dt_pixelpipe_blend_transform_t dt_dev_pixelpipe_transform_for_blend(const dt_iop
 
   const dt_iop_colorspace_type_t blend_cst = dt_develop_blend_colorspace(piece, output_dsc->cst);
   dt_pixelpipe_blend_transform_t transforms = DT_DEV_PIXELPIPE_BLEND_TRANSFORM_NONE;
-  if(piece->dsc_in.cst != blend_cst)
+  if(piece->dsc_in.cst != blend_cst
+     && !(dt_iop_colorspace_is_rgb(piece->dsc_in.cst) && dt_iop_colorspace_is_rgb(blend_cst)))
     transforms |= DT_DEV_PIXELPIPE_BLEND_TRANSFORM_INPUT;
-  if(output_dsc->cst != blend_cst)
+  if(output_dsc->cst != blend_cst
+     && !(dt_iop_colorspace_is_rgb(output_dsc->cst) && dt_iop_colorspace_is_rgb(blend_cst)))
     transforms |= DT_DEV_PIXELPIPE_BLEND_TRANSFORM_OUTPUT;
 
   return transforms;

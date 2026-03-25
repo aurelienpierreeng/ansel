@@ -177,7 +177,8 @@ gboolean dt_dev_refresh_module_histogram(dt_develop_t *dev, dt_iop_module_t *mod
   float *transformed_input = NULL;
   dt_iop_buffer_dsc_t input_dsc = previous_piece->dsc_out;
 
-  if(input_dsc.cst != piece->dsc_in.cst)
+  if(input_dsc.cst != piece->dsc_in.cst
+     && !(dt_iop_colorspace_is_rgb(input_dsc.cst) && dt_iop_colorspace_is_rgb(piece->dsc_in.cst)))
   {
     const size_t pixels = (size_t)piece->roi_in.width * (size_t)piece->roi_in.height;
     const size_t bytes = pixels * (size_t)piece->dsc_in.channels * sizeof(float);
@@ -196,6 +197,10 @@ gboolean dt_dev_refresh_module_histogram(dt_develop_t *dev, dt_iop_module_t *mod
                                         input_dsc.cst, piece->dsc_in.cst, &input_dsc.cst,
                                         dt_ioppr_get_pipe_work_profile_info(dev->preview_pipe));
     histogram_input = transformed_input;
+  }
+  else if(input_dsc.cst != piece->dsc_in.cst)
+  {
+    input_dsc.cst = piece->dsc_in.cst;
   }
 
   _refresh_module_histogram(dev->preview_pipe, piece, histogram_input, module);

@@ -335,7 +335,8 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
     }
 
     const int cst_before_cl = process_input_dsc.cst;
-    if(process_input_dsc.cst != piece->dsc_in.cst)
+    if(process_input_dsc.cst != piece->dsc_in.cst
+       && !(dt_iop_colorspace_is_rgb(process_input_dsc.cst) && dt_iop_colorspace_is_rgb(piece->dsc_in.cst)))
     {
       cl_mem_process_input_temp = dt_dev_pixelpipe_cache_alloc_cl_device_buffer(pipe->devid, &piece->roi_in, piece->dsc_in.bpp,
                                                                module, "module input colorspace temp",
@@ -349,6 +350,10 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
                                                  &process_input_dsc.cst, work_profile))
         goto error;
       cl_mem_process_input = cl_mem_process_input_temp;
+    }
+    else if(process_input_dsc.cst != piece->dsc_in.cst)
+    {
+      process_input_dsc.cst = piece->dsc_in.cst;
     }
     const int cst_after_cl = process_input_dsc.cst;
 
@@ -482,7 +487,8 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
       dt_dev_pixelpipe_cache_release_cl_buffer(&cl_mem_input, input_entry, input,
                                         dt_dev_pixelpipe_cache_gpu_device_buffer(pipe, input_entry));
 
-    if(process_input_dsc.cst != piece->dsc_in.cst)
+    if(process_input_dsc.cst != piece->dsc_in.cst
+       && !(dt_iop_colorspace_is_rgb(process_input_dsc.cst) && dt_iop_colorspace_is_rgb(piece->dsc_in.cst)))
     {
       module_input_temp
           = dt_pixelpipe_cache_alloc_align_float((size_t)piece->roi_in.width * piece->roi_in.height * 4, pipe);
@@ -497,6 +503,12 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
       dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, input_entry);
       input_locked = FALSE;
       module_input = module_input_temp;
+    }
+    else if(process_input_dsc.cst != piece->dsc_in.cst)
+    {
+      process_input_dsc.cst = piece->dsc_in.cst;
+      dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, input_entry);
+      input_locked = TRUE;
     }
     else
     {
