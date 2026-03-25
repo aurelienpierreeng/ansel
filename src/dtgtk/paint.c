@@ -3360,6 +3360,58 @@ void dtgtk_cairo_paint_link_chain(cairo_t *cr, gint x, gint y, gint w, gint h, g
   FINISH
 }
 
+/**
+ * @brief Paint the flowchart icon using normalized 0..1 coordinates.
+ *
+ * The icon geometry is expressed in normalized icon space so it scales
+ * uniformly with the PREAMBLE square and stays independent from the
+ * widget pixel size.
+ */
+void dtgtk_cairo_paint_flowchart(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data)
+{
+  PREAMBLE(1, 1, 0, 0)
+
+  // Draw in a SOURCE group so overlapping strokes don't accumulate alpha.
+  const cairo_operator_t prev_operator = cairo_get_operator(cr);
+  cairo_push_group(cr);
+  cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+
+  cairo_set_line_cap(cr, CAIRO_LINE_CAP_SQUARE);
+
+  const double width = 0.25;
+  const double height = 0.25;
+  const double margin = 0.05;
+
+  // Rectangle positions and dimensions
+  const double left = margin;
+  const double top = margin;
+  const double right = 1.0 - margin - width;
+  const double bottom = 1.0 - margin - height;
+  const double center_x = margin + width * 0.5;
+  const double half_width = width * 0.5;
+
+  // Draw rectangles forming flowchart boxes
+  cairo_rectangle(cr, left, top, width, height);
+  cairo_rectangle(cr, right, top, width, height);
+  cairo_rectangle(cr, left, bottom, width, height);
+
+  // Draw vertical connector line
+  cairo_move_to(cr, center_x, bottom);
+  cairo_line_to(cr, center_x, top + height);
+
+  // Draw curved connector to right box
+  cairo_move_to(cr, center_x, 0.5);
+  cairo_curve_to(cr, right + half_width, 0.5, right + half_width, 0.5, right + half_width, margin + height);
+
+  cairo_stroke(cr);
+
+  cairo_pop_group_to_source(cr);
+  cairo_set_operator(cr, prev_operator);
+  cairo_paint(cr);
+
+  FINISH
+}
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
