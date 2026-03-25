@@ -90,6 +90,3 @@ dt_pixelpipe_blend_transform_t dt_dev_pixelpipe_transform_for_blend(const dt_iop
 
 gboolean dt_dev_pixelpipe_cache_gpu_device_buffer(const dt_dev_pixelpipe_t *pipe,
                                                   const dt_pixel_cache_entry_t *cache_entry);
-
-void dt_dev_pixelpipe_gpu_clear_buffer(void **cl_mem_buffer, dt_pixel_cache_entry_t *cache_entry,
-                                       void *host_ptr, gboolean allow_reuse);

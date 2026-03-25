@@ -232,7 +232,7 @@ static int _abort_module_shutdown_cleanup(dt_dev_pixelpipe_t *pipe, dt_dev_pixel
   if(output) *output = NULL;
 
   if(*cl_mem_output != NULL)
-    dt_dev_pixelpipe_gpu_clear_buffer(cl_mem_output, NULL, NULL, FALSE);
+    dt_dev_pixelpipe_cache_release_cl_buffer(cl_mem_output, NULL, NULL, FALSE);
 
   dt_iop_nap(5000);
   return 1;
@@ -651,7 +651,7 @@ dt_pixelpipe_blend_transform_t dt_dev_pixelpipe_transform_for_blend(const dt_iop
   {                                                                                                               \
     if(cl_mem_output != NULL)                                                                                     \
     {                                                                                                             \
-      dt_dev_pixelpipe_gpu_clear_buffer(&cl_mem_output, NULL, NULL, FALSE);                                      \
+      dt_dev_pixelpipe_cache_release_cl_buffer(&cl_mem_output, NULL, NULL, FALSE);                                      \
     }                                                                                                             \
     dt_iop_nap(5000);                                                                                             \
     return 1;                                                                                                     \
@@ -866,7 +866,7 @@ static int _init_base_buffer(dt_dev_pixelpipe_t *pipe)
     /* The base buffer now owns the authoritative host pixels for this cacheline. Any older device-only
      * payloads attached to the reused cache entry are stale and must not survive into later thumbnail runs,
      * otherwise a downstream GPU->CPU fallback can reopen previous-image pixels from the same entry. */
-    dt_pixel_cache_clmem_flush(cache_entry);
+    dt_dev_pixelpipe_cache_flush_entry_clmem(cache_entry);
   }
 
   // For one-shot pipelines (thumbnail export), ensure the base buffer cacheline is not kept around.
@@ -1179,11 +1179,11 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
     /* CPU/tiling processing rewrote the whole host buffer for this output. If the cache entry was rekeyed
      * from an older GPU stage, any cached device-only images still hanging off the same entry now point to
      * obsolete pixels. Drop them here so later mixed GPU/CPU modules cannot resurrect stale device payloads. */
-    dt_pixel_cache_clmem_flush(output_entry);
+    dt_dev_pixelpipe_cache_flush_entry_clmem(output_entry);
   }
 
   if(cl_mem_output != NULL)
-    dt_dev_pixelpipe_gpu_clear_buffer(&cl_mem_output, output_entry, output,
+    dt_dev_pixelpipe_cache_release_cl_buffer(&cl_mem_output, output_entry, output,
                                       dt_dev_pixelpipe_cache_gpu_device_buffer(pipe, output_entry));
 
   // Flag to throw away intermediate outputs as soon as the next module consumes them.

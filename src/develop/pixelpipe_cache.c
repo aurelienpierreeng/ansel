@@ -42,6 +42,7 @@
 
 #include "control/control.h"
 #include "develop/pixelpipe_cache.h"
+#include "develop/pixelpipe.h"
 #include "common/darktable.h"
 #include "common/debug.h"
 #include "common/opencl.h"
@@ -143,13 +144,13 @@ dt_pixel_cache_entry_t *dt_dev_pixelpipe_cache_get_entry(dt_dev_pixelpipe_cache_
 }
 
 
-size_t dt_pixel_cache_get_size(dt_pixel_cache_entry_t *cache_entry)
+static size_t _pixel_cache_get_size(dt_pixel_cache_entry_t *cache_entry)
 {
   return cache_entry->size / (1024 * 1024);
 }
 
 
-void dt_pixel_cache_message(dt_pixel_cache_entry_t *cache_entry, const char *message, gboolean verbose)
+static void _pixel_cache_message(dt_pixel_cache_entry_t *cache_entry, const char *message, gboolean verbose)
 {
   if(!(darktable.unmuted & DT_DEBUG_CACHE)) return;
   if(verbose && !(darktable.unmuted & DT_DEBUG_VERBOSE)) return;
@@ -158,7 +159,7 @@ void dt_pixel_cache_message(dt_pixel_cache_entry_t *cache_entry, const char *mes
            " - hits %i - refs %i - auto %i - ext %i - id %i - module %s) %s\n",
            cache_entry->hash, cache_entry->serial,
            cache_entry->name ? cache_entry->name : "-", cache_entry->data,
-           dt_pixel_cache_get_size(cache_entry), cache_entry->age, cache_entry->hits,
+           _pixel_cache_get_size(cache_entry), cache_entry->age, cache_entry->hits,
            dt_atomic_get_int(&cache_entry->refcount), cache_entry->auto_destroy,
            cache_entry->external_alloc, cache_entry->id, _cache_debug_module_name(), message);
 }
@@ -169,7 +170,7 @@ static void _pixelpipe_cache_finalize_entry(dt_pixel_cache_entry_t *cache_entry,
   cache_entry->age = g_get_monotonic_time(); // Update MRU timestamp
   if(data)
     *data = cache_entry->data ? __builtin_assume_aligned(cache_entry->data, DT_CACHELINE_BYTES) : NULL;
-  dt_pixel_cache_message(cache_entry, message, FALSE);
+  _pixel_cache_message(cache_entry, message, FALSE);
 }
 
 
@@ -194,9 +195,9 @@ int _non_thread_safe_cache_remove(dt_dev_pixelpipe_cache_t *cache, const gboolea
       return 0;
     }
     else if(used)
-      dt_pixel_cache_message(cache_entry, "cannot remove: used", TRUE);
+      _pixel_cache_message(cache_entry, "cannot remove: used", TRUE);
     else if(locked)
-      dt_pixel_cache_message(cache_entry, "cannot remove: locked", TRUE);
+      _pixel_cache_message(cache_entry, "cannot remove: locked", TRUE);
   }
   else
   {
@@ -487,7 +488,7 @@ typedef struct _cache_lru_t
 
 
 // find the cache entry hash with the oldest use
-void _cache_get_oldest(gpointer key, gpointer value, gpointer user_data)
+static void _cache_get_oldest(gpointer key, gpointer value, gpointer user_data)
 {
   dt_pixel_cache_entry_t *cache_entry = (dt_pixel_cache_entry_t *)value;
   _cache_lru_t *lru = (_cache_lru_t *)user_data;
@@ -510,19 +511,19 @@ void _cache_get_oldest(gpointer key, gpointer value, gpointer user_data)
       lru->max_age = cache_entry->age;
       lru->hash = cache_entry->hash;
       lru->cache_entry = cache_entry;
-      dt_pixel_cache_message(cache_entry, "candidate for deletion", TRUE);
+      _pixel_cache_message(cache_entry, "candidate for deletion", TRUE);
     }
     else if(used)
-      dt_pixel_cache_message(cache_entry, "cannot be deleted: used", TRUE);
+      _pixel_cache_message(cache_entry, "cannot be deleted: used", TRUE);
     else if(locked)
-      dt_pixel_cache_message(cache_entry, "cannot be deleted: locked", TRUE);
+      _pixel_cache_message(cache_entry, "cannot be deleted: locked", TRUE);
   }
 }
 
-void _print_cache_lines(gpointer key, gpointer value, gpointer user_data)
+static void _print_cache_lines(gpointer key, gpointer value, gpointer user_data)
 {
   dt_pixel_cache_entry_t *cache_entry = (dt_pixel_cache_entry_t *)value;
-  dt_pixel_cache_message(cache_entry, "", FALSE);
+  _pixel_cache_message(cache_entry, "", FALSE);
 }
 
 
@@ -567,8 +568,8 @@ int dt_dev_pixel_pipe_cache_remove_lru(dt_dev_pixelpipe_cache_t *cache)
   return error;
 }
 
-void *dt_pixel_cache_clmem_get(dt_pixel_cache_entry_t *entry, void *host_ptr, int devid,
-                               int width, int height, int bpp, int flags)
+static void *_pixel_cache_clmem_get(dt_pixel_cache_entry_t *entry, void *host_ptr, int devid,
+                                    int width, int height, int bpp, int flags)
 {
 #ifdef HAVE_OPENCL
 
@@ -609,8 +610,8 @@ void *dt_pixel_cache_clmem_get(dt_pixel_cache_entry_t *entry, void *host_ptr, in
   return NULL;
 }
 
-void *dt_pixel_cache_clmem_ref(dt_pixel_cache_entry_t *entry, void *host_ptr, int devid,
-                               int width, int height, int bpp, int flags)
+void *dt_dev_pixelpipe_cache_borrow_cl_payload(dt_pixel_cache_entry_t *entry, void *host_ptr, int devid,
+                                               int width, int height, int bpp, int flags)
 {
 #ifdef HAVE_OPENCL
 
@@ -638,7 +639,7 @@ void *dt_pixel_cache_clmem_ref(dt_pixel_cache_entry_t *entry, void *host_ptr, in
   return NULL;
 }
 
-void dt_pixel_cache_clmem_unref(dt_pixel_cache_entry_t *entry, void *mem)
+void dt_dev_pixelpipe_cache_return_cl_payload(dt_pixel_cache_entry_t *entry, void *mem)
 {
 #ifdef HAVE_OPENCL
 
@@ -662,8 +663,8 @@ void dt_pixel_cache_clmem_unref(dt_pixel_cache_entry_t *entry, void *mem)
 #endif
 }
 
-void dt_pixel_cache_clmem_put(dt_pixel_cache_entry_t *entry, void *host_ptr, int devid,
-                              int width, int height, int bpp, int flags, void *mem)
+static void _pixel_cache_clmem_put(dt_pixel_cache_entry_t *entry, void *host_ptr, int devid,
+                                   int width, int height, int bpp, int flags, void *mem)
 {
 
   dt_pthread_mutex_lock(&entry->cl_mem_lock);
@@ -707,7 +708,7 @@ void dt_pixel_cache_clmem_put(dt_pixel_cache_entry_t *entry, void *host_ptr, int
   dt_pthread_mutex_unlock(&entry->cl_mem_lock);
 }
 
-void dt_pixel_cache_clmem_remove(dt_pixel_cache_entry_t *entry, void *mem)
+static void _pixel_cache_clmem_remove(dt_pixel_cache_entry_t *entry, void *mem)
 {
   if(!entry || !mem) return;
 
@@ -732,7 +733,7 @@ void dt_pixel_cache_clmem_remove(dt_pixel_cache_entry_t *entry, void *mem)
   dt_pthread_mutex_unlock(&entry->cl_mem_lock);
 }
 
-void dt_pixel_cache_clmem_flush(dt_pixel_cache_entry_t *entry)
+void dt_dev_pixelpipe_cache_flush_entry_clmem(dt_pixel_cache_entry_t *entry)
 {
   dt_pthread_mutex_lock(&entry->cl_mem_lock);
   for(GList *l = entry->cl_mem_list; l;)
@@ -773,7 +774,7 @@ void *dt_dev_pixelpipe_cache_get_pinned_image(dt_dev_pixelpipe_cache_t *cache, v
   void *mem = NULL;
   if(entry)
   {
-    mem = dt_pixel_cache_clmem_get(entry, host_ptr, devid, width, height, bpp, flags);
+    mem = _pixel_cache_clmem_get(entry, host_ptr, devid, width, height, bpp, flags);
     if(mem && out_reused) *out_reused = TRUE;
   }
 
@@ -804,7 +805,7 @@ void *dt_dev_pixelpipe_cache_get_pinned_image(dt_dev_pixelpipe_cache_t *cache, v
 
   if(!synced && dt_opencl_write_host_to_device(devid, host_ptr, mem, width, height, bpp) != CL_SUCCESS)
   {
-    if(entry) dt_pixel_cache_clmem_remove(entry, mem);
+    if(entry) _pixel_cache_clmem_remove(entry, mem);
     dt_opencl_release_mem_object(mem);
     return NULL;
   }
@@ -834,11 +835,11 @@ void dt_dev_pixelpipe_cache_put_pinned_image(dt_dev_pixelpipe_cache_t *cache, vo
     const int width = dt_opencl_get_image_width(clmem);
     const int height = dt_opencl_get_image_height(clmem);
     const int bpp = dt_opencl_get_image_element_size(clmem);
-    dt_pixel_cache_clmem_put(entry, host_ptr, devid, width, height, bpp, (int)flags, clmem);
+    _pixel_cache_clmem_put(entry, host_ptr, devid, width, height, bpp, (int)flags, clmem);
   }
   else
   {
-    if(entry) dt_pixel_cache_clmem_remove(entry, clmem);
+    if(entry) _pixel_cache_clmem_remove(entry, clmem);
     dt_opencl_release_mem_object(clmem);
   }
 
@@ -931,6 +932,640 @@ void dt_dev_pixelpipe_cache_resync_host_pinned_image(dt_dev_pixelpipe_cache_t *c
   (void)host_ptr;
   (void)entry_hint;
   (void)devid;
+}
+#endif
+
+/**
+ * @brief Determine whether a `CL_MEM_USE_HOST_PTR` OpenCL image is truly "zero-copy".
+ *
+ * @param devid OpenCL device index.
+ * @param mem OpenCL image object (`cl_mem`).
+ * @param host_ptr The CPU pointer we passed to `CL_MEM_USE_HOST_PTR`.
+ * @param roi Image dimensions.
+ * @param bpp Bytes per pixel.
+ *
+ * @return TRUE if the OpenCL driver mapped the image to the exact same `host_ptr` pointer, meaning
+ *         the device is directly accessing the host memory (true zero-copy). FALSE otherwise.
+ *
+ * @details
+ * Many drivers accept `CL_MEM_USE_HOST_PTR` but still create an internal device-side copy.
+ * In that case, host memory is not automatically in sync with device memory, and explicit transfers
+ * are required for correctness.
+ *
+ * We use a conservative runtime test:
+ *
+ * - map the image (blocking),
+ * - compare the returned pointer with the original `host_ptr`,
+ * - unmap and `clFinish` to ensure the unmap/synchronization completed.
+ *
+ * If the pointer matches, we treat the image as zero-copy and keep the cache entry locked while GPU
+ * work is in flight.
+ */
+#ifdef HAVE_OPENCL
+static gboolean _cl_is_zero_copy_image(const int devid, cl_mem mem, void *host_ptr, const dt_iop_roi_t *roi,
+                                       const size_t bpp)
+{
+  if(devid < 0 || !mem || !host_ptr || !roi || roi->width <= 0 || roi->height <= 0 || bpp == 0) return FALSE;
+
+  void *mapped = dt_opencl_map_image(devid, mem, TRUE, CL_MAP_READ, roi->width, roi->height, (int)bpp);
+  if(!mapped) return FALSE;
+
+  const gboolean ptr_matches = (mapped == host_ptr);
+  const gboolean is_zero_copy = ptr_matches;
+  const cl_int unmap_err = dt_opencl_unmap_mem_object(devid, mem, mapped);
+  if(unmap_err != CL_SUCCESS) return FALSE;
+
+  // Use clFinish rather than event wait: some drivers disable event tracking, but we still need to guarantee
+  // the unmap (and implicit sync) is complete before touching host memory or unlocking the cache entry.
+  dt_opencl_finish(devid);
+
+  return is_zero_copy;
+}
+
+/**
+ * @brief Try to fetch a reusable pinned OpenCL image from a cache entry.
+ *
+ * @param cache_entry Pixelpipe cache entry currently associated with `host_ptr`.
+ * @param host_ptr Host buffer pointer used as the key for pinned images.
+ * @param devid OpenCL device index.
+ * @param roi Image dimensions.
+ * @param bpp Bytes per pixel.
+ * @param flags OpenCL mem flags we require (`CL_MEM_USE_HOST_PTR` etc.).
+ * @param[out] out_reused Optional boolean set to TRUE when we got a cached image.
+ *
+ * @return `cl_mem` as a `void *` if found, NULL otherwise.
+ *
+ * @details
+ * We cache pinned images per *host pointer* in each pixelpipe cache entry. This matters because the host
+ * pointer is the actual backing store for `CL_MEM_USE_HOST_PTR`. Reusing the pinned allocation avoids
+ * repeated driver overhead and reduces fragmentation in OpenCL memory pools.
+ */
+static void *_gpu_try_reuse_pinned_from_cache(dt_pixel_cache_entry_t *cache_entry, void *host_ptr, int devid,
+                                              const dt_iop_roi_t *roi, const size_t bpp, const int flags,
+                                              gboolean *out_reused)
+{
+  if(out_reused) *out_reused = FALSE;
+  if(!cache_entry || !host_ptr || devid < 0) return NULL;
+
+  void *mem = _pixel_cache_clmem_get(cache_entry, host_ptr, devid, roi->width, roi->height, (int)bpp, flags);
+  if(mem)
+    if(out_reused) *out_reused = TRUE;
+
+  return mem;
+}
+
+static inline gboolean _is_gamma_rgba8_output(const dt_iop_module_t *module, const size_t bpp,
+                                              const char *message)
+{
+  return module && message && bpp == 4 * sizeof(uint8_t) && strcmp(module->op, "gamma") == 0
+         && strcmp(message, "output") == 0;
+}
+
+/**
+ * @brief Allocate a pure device-side OpenCL image, retrying once after flushing cached pinned buffers.
+ *
+ * @details
+ * This is used when we intentionally do not want a pinned host-backed image (e.g. output buffers that we do
+ * not plan to cache in RAM). Allocation failure triggers a clmem cache flush and one retry.
+ *
+ * @param keep OpenCL buffer to NOT flush, typically the input
+ */
+void *dt_dev_pixelpipe_cache_alloc_cl_device_buffer(int devid, const dt_iop_roi_t *roi, const size_t bpp,
+                                                    const dt_iop_module_t *module, const char *message,
+                                                    void *keep)
+{
+  const gboolean gamma_rgba8 = _is_gamma_rgba8_output(module, bpp, message);
+  const int cl_bpp = gamma_rgba8 ? DT_OPENCL_BPP_ENCODE_RGBA8((int)bpp) : (int)bpp;
+  void *mem = dt_opencl_alloc_device(devid, roi->width, roi->height, cl_bpp);
+  if(!mem)
+  {
+    dt_dev_pixelpipe_cache_flush_clmem(darktable.pixelpipe_cache, devid, keep);
+    mem = dt_opencl_alloc_device(devid, roi->width, roi->height, cl_bpp);
+  }
+  return mem;
+}
+
+static void *_gpu_try_reuse_device_from_cache(dt_pixel_cache_entry_t *cache_entry, int devid,
+                                              const dt_iop_roi_t *roi, const size_t bpp,
+                                              gboolean *out_reused)
+{
+  if(out_reused) *out_reused = FALSE;
+  if(!cache_entry || devid < 0 || !roi || roi->width <= 0 || roi->height <= 0 || bpp == 0) return NULL;
+
+  // Device-only allocations are tracked with a NULL host_ptr key and a
+  // normalized READ_WRITE flag so we can reliably match across drivers.
+  void *mem = _pixel_cache_clmem_get(cache_entry, NULL, devid, roi->width, roi->height, (int)bpp,
+                                       CL_MEM_READ_WRITE);
+  if(mem && out_reused) *out_reused = TRUE;
+  return mem;
+}
+
+/**
+ * @brief Optional debug counters for pinned-buffer reuse.
+ *
+ * @details
+ * This is purely informational: it helps assess whether our pinned buffer caching strategy is effective.
+ * It is intentionally static and local to the process to keep overhead negligible.
+ */
+static void _gpu_log_pinned_reuse(dt_iop_module_t *module, const gboolean reused_from_cache)
+{
+  static dt_atomic_int clmem_reuse_hits;
+  static dt_atomic_int clmem_reuse_misses;
+
+  if(reused_from_cache)
+  {
+    const int hits = dt_atomic_add_int(&clmem_reuse_hits, 1) + 1;
+    const int misses = dt_atomic_get_int(&clmem_reuse_misses);
+    dt_print(DT_DEBUG_OPENCL,
+             "[opencl_pixelpipe] %s reused pinned input from cache (hits=%d, misses=%d)\n",
+             module ? module->name() : "unknown", hits, misses);
+  }
+  else
+  {
+    (void)dt_atomic_add_int(&clmem_reuse_misses, 1);
+  }
+}
+
+/**
+ * @brief Allocate a pinned (`CL_MEM_USE_HOST_PTR`) OpenCL image, with optional reuse from cache and a flush retry.
+ *
+ * @details
+ * We prefer pinned buffers because they enable:
+ *
+ * - fast DMA transfers (map/unmap or explicit copies),
+ * - potential true zero-copy on some devices/drivers,
+ * - caching/reuse of the OpenCL image object across runs.
+ *
+ * If allocation fails, we flush cached `cl_mem` objects in the pixelpipe cache (`dt_dev_pixelpipe_cache_flush_clmem`)
+ * and retry once. This is a pragmatic workaround for driver-side memory fragmentation and stale allocations.
+ */
+static void *_gpu_get_pinned_or_alloc(int devid, void *host_ptr, const dt_iop_roi_t *roi, const size_t bpp,
+                                      dt_pixel_cache_entry_t *cache_entry, const gboolean reuse_pinned,
+                                      gboolean *out_reused,
+                                      const dt_iop_module_t *module, const char *message)
+{
+  const int flags = CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR;
+  void *mem = NULL;
+  const gboolean gamma_rgba8 = _is_gamma_rgba8_output(module, bpp, message);
+  const int cl_bpp = gamma_rgba8 ? DT_OPENCL_BPP_ENCODE_RGBA8((int)bpp) : (int)bpp;
+
+  if(out_reused) *out_reused = FALSE;
+
+  if(reuse_pinned)
+    mem = _gpu_try_reuse_pinned_from_cache(cache_entry, host_ptr, devid, roi, bpp, flags, out_reused);
+
+  if(!mem)
+    mem = dt_opencl_alloc_device_use_host_pointer(devid, roi->width, roi->height, cl_bpp, host_ptr, flags);
+
+  if(!mem)
+  {
+    dt_dev_pixelpipe_cache_flush_clmem(darktable.pixelpipe_cache, devid, NULL);
+    if(reuse_pinned)
+      mem = _gpu_try_reuse_pinned_from_cache(cache_entry, host_ptr, devid, roi, bpp, flags, out_reused);
+    if(!mem)
+      mem = dt_opencl_alloc_device_use_host_pointer(devid, roi->width, roi->height, cl_bpp, host_ptr, flags);
+  }
+
+  return mem;
+}
+
+/**
+ * @brief Initialize an OpenCL buffer for the pixelpipe.
+ *
+ * @param devid OpenCL device index.
+ * @param host_ptr If non-NULL, request a pinned host-backed image (`CL_MEM_USE_HOST_PTR`).
+ * @param roi Image dimensions.
+ * @param bpp Bytes per pixel.
+ * @param module Module for debug messages.
+ * @param message Human-readable context for debug messages.
+ * @param cache_entry Pixelpipe cache entry owning `host_ptr`, used to reuse/categorize pinned allocations.
+ * @param reuse_pinned If TRUE and `host_ptr` is non-NULL, attempt to reuse a cached pinned allocation.
+ * @param reuse_device If TRUE and `host_ptr` is NULL, attempt to reuse a cached pure device allocation.
+ * @param[out] out_reused Optional flag set to TRUE when the OpenCL image came from the cache.
+ *
+ * @return An OpenCL image (`cl_mem`) as a `void *`, or NULL on failure.
+ *
+ * @details
+ * If `host_ptr == NULL`, we allocate a plain device image and rely on explicit copies when needed.
+ * If `host_ptr != NULL`, we allocate a pinned host-backed image, enabling (potentially) true zero-copy.
+ */
+void *dt_dev_pixelpipe_cache_get_cl_buffer(int devid, void *const host_ptr, const dt_iop_roi_t *roi,
+                                           const size_t bpp, dt_iop_module_t *module,
+                                           const char *message, dt_pixel_cache_entry_t *cache_entry,
+                                           const gboolean reuse_pinned, const gboolean reuse_device,
+                                           gboolean *out_reused, void *keep)
+{
+  // Need to use read-write mode because of in-place color space conversions.
+  void *cl_mem_input = NULL;
+  gboolean reused_from_cache = FALSE;
+
+  if(out_reused) *out_reused = FALSE;
+
+  if(host_ptr)
+  {
+    cl_mem_input = _gpu_get_pinned_or_alloc(devid, host_ptr, roi, bpp, cache_entry, reuse_pinned,
+                                            &reused_from_cache, module, message);
+  }
+  else
+  {
+    if(reuse_device)
+      cl_mem_input = _gpu_try_reuse_device_from_cache(cache_entry, devid, roi, bpp, &reused_from_cache);
+
+    if(!cl_mem_input)
+      cl_mem_input = dt_dev_pixelpipe_cache_alloc_cl_device_buffer(devid, roi, bpp, module, message, keep);
+  }
+
+  if(cl_mem_input == NULL)
+  {
+    dt_print(DT_DEBUG_OPENCL, "[opencl_pixelpipe] couldn't generate %s buffer for module %s\n", message,
+             module ? module->op : "unknown");
+  }
+  else if(reuse_pinned && cache_entry && host_ptr)
+  {
+    if(out_reused) *out_reused = reused_from_cache;
+    _gpu_log_pinned_reuse(module, reused_from_cache);
+  }
+  else if(reuse_device && cache_entry && !host_ptr && out_reused)
+  {
+    *out_reused = reused_from_cache;
+  }
+
+  return cl_mem_input;
+}
+#endif
+
+#ifdef HAVE_OPENCL
+/**
+ * @brief Release or cache an OpenCL image associated with a host cache line.
+ *
+ * @param[in,out] cl_mem_buffer Pointer to a `cl_mem` stored as `void*`.
+ * @param cache_entry Pixelpipe cache entry the host pointer belongs to (may be NULL).
+ * @param host_ptr Host pointer backing the OpenCL image (may be NULL).
+ * @param cache_device Allow caching pure device-side buffers for scratch reuse.
+ *
+ * @details
+ * This helper is a *single point of truth* for OpenCL image lifetime management in the pixelpipe:
+ *
+ * - If the image is host-backed (`CL_MEM_USE_HOST_PTR`) and we have both `cache_entry` and `host_ptr`,
+ *   we put it in the cache entry's `cl_mem_list` for reuse.
+ * - Otherwise, we release it immediately.
+ * - Pure device allocations may also be cached for scratch-pad reuse. When those cached `cl_mem`
+ *   objects are later evicted, the cache layer is responsible for materializing host RAM first if
+ *   no authoritative host buffer exists yet.
+ *
+ * Additionally, when we release an image, we must ensure there is no stale pointer in `cl_mem_list`
+ * (for example, if some earlier path cached it and we are now deciding to free it). We call
+ * `_pixel_cache_clmem_remove()` before releasing to keep the cache bookkeeping coherent.
+ */
+void dt_dev_pixelpipe_cache_release_cl_buffer(void **cl_mem_buffer, dt_pixel_cache_entry_t *cache_entry,
+                                              void *host_ptr, const gboolean cache_device)
+{
+  if(cl_mem_buffer && *cl_mem_buffer != NULL)
+  {
+    cl_mem mem = *cl_mem_buffer;
+    const cl_mem_flags flags = dt_opencl_get_mem_flags(mem);
+    const gboolean can_cache_pinned = (cache_entry && host_ptr && (flags & CL_MEM_USE_HOST_PTR));
+    const gboolean can_cache_device = (cache_entry && !host_ptr && cache_device
+                                       && !(flags & CL_MEM_USE_HOST_PTR));
+    const gboolean can_cache = (can_cache_pinned || can_cache_device);
+    if(can_cache)
+    {
+      const int devid = dt_opencl_get_mem_context_id(mem);
+      const int width = dt_opencl_get_image_width(mem);
+      const int height = dt_opencl_get_image_height(mem);
+      const int bpp = dt_opencl_get_image_element_size(mem);
+      const int tracked_flags = can_cache_device ? CL_MEM_READ_WRITE : (int)flags;
+      _pixel_cache_clmem_put(cache_entry, host_ptr, devid, width, height, bpp, tracked_flags, mem);
+    }
+    else
+    {
+      if(cache_entry) _pixel_cache_clmem_remove(cache_entry, mem);
+      dt_opencl_release_mem_object(mem);
+    }
+    *cl_mem_buffer = NULL;
+  }
+}
+
+/**
+ * @brief Synchronize between host memory and a pinned OpenCL image.
+ *
+ * @param devid OpenCL device index.
+ * @param host_ptr Host pointer to read from / write to.
+ * @param cl_mem_buffer OpenCL image.
+ * @param roi Image dimensions.
+ * @param cl_mode `CL_MAP_WRITE` for host→device, `CL_MAP_READ` for device→host.
+ * @param bpp Bytes per pixel.
+ * @param module Module for debug logs (may be NULL).
+ * @param message Context string for debug logs.
+ *
+ * @return 0 on success, 1 on failure.
+ *
+ * @details
+ * This function intentionally tries a hierarchy of synchronization mechanisms:
+ *
+ * 1. For `CL_MEM_USE_HOST_PTR` images, we *attempt* a map/unmap cycle. If the mapped pointer equals `host_ptr`,
+ *    we treat it as true zero-copy and the map/unmap acts as a synchronization barrier (fast, avoids extra copies).
+ * 2. Otherwise, we fall back to explicit blocking transfers (`dt_opencl_write_host_to_device` /
+ *    `dt_opencl_read_host_from_device`).
+ *
+ * The map/unmap approach is used as a synchronization barrier because on many drivers it will:
+ *
+ * - flush CPU caches / invalidate as needed,
+ * - ensure GPU work touching that memory is completed (for blocking map),
+ * - and potentially avoid a full copy when true zero-copy is supported.
+ */
+int dt_dev_pixelpipe_cache_sync_cl_buffer(const int devid, void *host_ptr, void *cl_mem_buffer,
+                                          const dt_iop_roi_t *roi, int cl_mode, size_t bpp,
+                                          dt_iop_module_t *module, const char *message)
+{
+  if(!host_ptr || !cl_mem_buffer) return 1;
+
+  const cl_mem mem = (cl_mem)cl_mem_buffer;
+  const cl_mem_flags flags = dt_opencl_get_mem_flags(mem);
+
+  // Fast path for true zero-copy pinned images: map/unmap is enough to synchronize host<->device.
+  if(flags & CL_MEM_USE_HOST_PTR)
+  {
+    void *mapped = dt_opencl_map_image(devid, mem, TRUE, cl_mode, roi->width, roi->height, (int)bpp);
+    if(mapped)
+    {
+      const gboolean ptr_matches = (mapped == host_ptr);
+      const cl_int unmap_err = dt_opencl_unmap_mem_object(devid, mem, mapped);
+      if(unmap_err != CL_SUCCESS) return 1;
+
+      // Ensure unmap (and any implicit sync) completed before we possibly enqueue explicit transfers.
+      // When event tracking is disabled, clFinish is the only reliable barrier.
+      dt_opencl_finish(devid);
+
+      if(ptr_matches)
+      {
+        dt_print(DT_DEBUG_OPENCL,
+                 "[opencl_pixelpipe] successfully synced image %s via map/unmap for module %s (%s)\n",
+                 (cl_mode == CL_MAP_WRITE) ? "host to device" : "device to host",
+                 (module) ? module->op : "base buffer", message);
+        return 0;
+      }
+    }
+  }
+
+  // Fallback: explicit blocking transfers (safe on all drivers).
+  cl_int err = CL_SUCCESS;
+  if(cl_mode == CL_MAP_WRITE)
+    err = dt_opencl_write_host_to_device(devid, host_ptr, mem, roi->width, roi->height, (int)bpp);
+  else if(cl_mode == CL_MAP_READ)
+    err = dt_opencl_read_host_from_device(devid, host_ptr, mem, roi->width, roi->height, (int)bpp);
+  else
+    return 1;
+
+  if(err != CL_SUCCESS)
+  {
+    dt_print(DT_DEBUG_OPENCL, "[opencl_pixelpipe] couldn't copy image %s for module %s (%s)\n",
+             (cl_mode == CL_MAP_WRITE) ? "host to device" : "device to host",
+             (module) ? module->op : "base buffer", message);
+    return 1;
+  }
+
+  dt_print(DT_DEBUG_OPENCL, "[opencl_pixelpipe] successfully copied image %s for module %s (%s)\n",
+           (cl_mode == CL_MAP_WRITE) ? "host to device" : "device to host",
+           (module) ? module->op : "base buffer", message);
+  return 0;
+}
+
+/**
+ * @brief Force device → host resynchronization of the pixelpipe input cache line.
+ *
+ * @details
+ * This is used when we are about to switch from GPU processing to CPU processing for a given module.
+ * In that scenario, the most recent correct pixels may only exist in `cl_mem_input` (GPU-only intermediate),
+ * while `input` (host pointer) is either NULL or stale.
+ *
+ * The function:
+ *
+ * - write-locks the cache entry (we are modifying host memory),
+ * - performs a device→host copy (map/unmap if possible, explicit copy otherwise),
+ * - updates the buffer descriptor colorspace tag,
+ * - calls `dt_opencl_finish()` to ensure command queue completion before releasing the lock.
+ */
+float *dt_dev_pixelpipe_cache_restore_cl_buffer(dt_dev_pixelpipe_t *pipe, float *input, void *cl_mem_input,
+                                                const dt_iop_roi_t *roi_in, dt_iop_module_t *module,
+                                                const size_t in_bpp, dt_pixel_cache_entry_t *input_entry,
+                                                const char *message)
+{
+  if(!cl_mem_input) return input;
+  dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, TRUE, input_entry);
+
+  const int fail = dt_dev_pixelpipe_cache_sync_cl_buffer(pipe->devid, input, cl_mem_input, roi_in,
+                                                         CL_MAP_READ, in_bpp, module, message);
+
+  // Enforce the OpenCL pipe to run in sync with CPU RAM cache so lock validity is guaranteed.
+  dt_opencl_finish(pipe->devid);
+  dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, FALSE, input_entry);
+  return fail ? NULL : input;
+}
+
+/**
+ * @brief Prepare/obtain the OpenCL input image for a module.
+ *
+ * @param pipe Current pixelpipe (provides device id + global settings).
+ * @param module Module being processed (for debug logs).
+ * @param input Host input pointer (may be NULL on GPU-only paths).
+ * @param[in,out] cl_mem_input OpenCL input image; may already be set by the previous module.
+ * @param roi_in ROI for the input buffer.
+ * @param in_bpp Input bytes-per-pixel.
+ * @param input_entry Pixelpipe cache entry corresponding to the input hash.
+ * @param[out] locked_input_entry If non-NULL on return, the caller must unlock it after GPU work completed.
+ * @param keep OpenCL buffer to keep alive while flushing device scratch allocations.
+ *
+ * @return 0 on success, 1 on failure.
+ *
+ * @details
+ * There are two major cases:
+ *
+ * 1) `*cl_mem_input != NULL`:
+ *    The previous module already produced an OpenCL buffer and we are continuing on GPU. We may still need to
+ *    keep the cache entry write-locked if it is a true zero-copy pinned image, because in-place OpenCL
+ *    colorspace transforms can mutate the host-backed buffer before the current module runs.
+ *
+ * 2) `*cl_mem_input == NULL`:
+ *    We start from a host cache buffer (`input`). We allocate (or reuse) a pinned image backed by that host buffer,
+ *    and if it is not true zero-copy we push host→device once before running kernels.
+ */
+int dt_dev_pixelpipe_cache_prepare_cl_input(dt_dev_pixelpipe_t *pipe, dt_iop_module_t *module,
+                                            float *input, void **cl_mem_input,
+                                            const dt_iop_roi_t *roi_in, const size_t in_bpp,
+                                            dt_pixel_cache_entry_t *input_entry,
+                                            dt_pixel_cache_entry_t **locked_input_entry, void *keep)
+{
+  if(!locked_input_entry) return 1;
+  *locked_input_entry = NULL;
+
+  if(*cl_mem_input != NULL)
+  {
+    // We passed the OpenCL memory buffer through directly on vRAM from previous module.
+    // This is fast and efficient.
+    // If it's a true zero-copy pinned image, keep the input cache entry read-locked until kernels complete,
+    // otherwise another thread may overwrite host memory while the GPU is still reading it.
+    dt_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] %s will use its input directly from vRAM\n", module->name());
+    const cl_mem mem = (cl_mem)*cl_mem_input;
+    const cl_mem_flags flags = dt_opencl_get_mem_flags(mem);
+    if(flags & CL_MEM_USE_HOST_PTR)
+      if(_cl_is_zero_copy_image(pipe->devid, mem, input, roi_in, in_bpp))
+      {
+        dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, input_entry);
+        *locked_input_entry = input_entry;
+      }
+    return 0;
+  }
+
+  if(!input)
+  {
+    dt_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] %s has no input (cache)\n", module->name());
+    return 1;
+  }
+
+  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, input_entry);
+
+  // Try to reuse a cached pinned buffer; otherwise allocate a new pinned image backed by `input`.
+  gboolean input_reused_from_cache = FALSE;
+  *cl_mem_input = dt_dev_pixelpipe_cache_get_cl_buffer(pipe->devid, input, roi_in, in_bpp, module,
+                                                       "input", input_entry, TRUE, FALSE,
+                                                       &input_reused_from_cache, keep);
+  int fail = (*cl_mem_input == NULL);
+
+  // If the input is true zero-copy, the GPU will access host memory asynchronously: keep the cache
+  // entry read-locked until all kernels have completed. If not, drivers may use a device-side copy
+  // which must be synchronized from the host before running kernels.
+  gboolean keep_lock = FALSE;
+  cl_mem mem = NULL;
+  if(!fail && *cl_mem_input)
+  {
+    mem = (cl_mem)*cl_mem_input;
+    const cl_mem_flags flags = dt_opencl_get_mem_flags(mem);
+    if(flags & CL_MEM_USE_HOST_PTR)
+      keep_lock = _cl_is_zero_copy_image(pipe->devid, mem, input, roi_in, in_bpp);
+  }
+
+  /* A reused cached pinned image already carries the authoritative device payload from the
+   * previous module output. Re-uploading host RAM here would overwrite that valid vRAM state
+   * with whatever stale contents the host buffer still has when the previous stage stayed GPU-only.
+   * Only freshly allocated pinned inputs need an explicit host->device copy. */
+  if(!fail && mem && !keep_lock && !input_reused_from_cache)
+  {
+    const cl_int err = dt_opencl_write_host_to_device(pipe->devid, input, mem, roi_in->width, roi_in->height,
+                                                      (int)in_bpp);
+    if(err != CL_SUCCESS)
+    {
+      dt_print(DT_DEBUG_OPENCL, "[opencl_pixelpipe] couldn't copy image host to device for module %s (%s)\n",
+               (module) ? module->op : "base buffer", "cache to input");
+      fail = TRUE;
+    }
+    else
+    {
+      dt_print(DT_DEBUG_OPENCL, "[opencl_pixelpipe] successfully copied image host to device for module %s (%s)\n",
+               (module) ? module->op : "base buffer", "cache to input");
+    }
+  }
+
+  // Enforce sync with the CPU/RAM cache so lock validity is guaranteed.
+  dt_opencl_events_wait_for(pipe->devid);
+
+  if(keep_lock)
+    *locked_input_entry = input_entry;
+  else
+    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, input_entry);
+
+  return fail ? 1 : 0;
+}
+#else
+void *dt_dev_pixelpipe_cache_get_cl_buffer(int devid, void *host_ptr, const dt_iop_roi_t *roi,
+                                           size_t bpp, dt_iop_module_t *module, const char *message,
+                                           dt_pixel_cache_entry_t *entry, gboolean reuse_pinned,
+                                           gboolean reuse_device, gboolean *out_reused, void *keep)
+{
+  (void)devid;
+  (void)host_ptr;
+  (void)roi;
+  (void)bpp;
+  (void)module;
+  (void)message;
+  (void)entry;
+  (void)reuse_pinned;
+  (void)reuse_device;
+  (void)keep;
+  if(out_reused) *out_reused = FALSE;
+  return NULL;
+}
+
+void *dt_dev_pixelpipe_cache_alloc_cl_device_buffer(int devid, const dt_iop_roi_t *roi, size_t bpp,
+                                                    const dt_iop_module_t *module,
+                                                    const char *message, void *keep)
+{
+  (void)devid;
+  (void)roi;
+  (void)bpp;
+  (void)module;
+  (void)message;
+  (void)keep;
+  return NULL;
+}
+
+void dt_dev_pixelpipe_cache_release_cl_buffer(void **cl_mem_buffer, dt_pixel_cache_entry_t *entry,
+                                              void *host_ptr, gboolean cache_device)
+{
+  (void)entry;
+  (void)host_ptr;
+  (void)cache_device;
+  if(cl_mem_buffer) *cl_mem_buffer = NULL;
+}
+
+int dt_dev_pixelpipe_cache_sync_cl_buffer(int devid, void *host_ptr, void *cl_mem_buffer,
+                                          const dt_iop_roi_t *roi, int cl_mode, size_t bpp,
+                                          dt_iop_module_t *module, const char *message)
+{
+  (void)devid;
+  (void)host_ptr;
+  (void)cl_mem_buffer;
+  (void)roi;
+  (void)cl_mode;
+  (void)bpp;
+  (void)module;
+  (void)message;
+  return 1;
+}
+
+float *dt_dev_pixelpipe_cache_restore_cl_buffer(dt_dev_pixelpipe_t *pipe, float *input,
+                                                void *cl_mem_input, const dt_iop_roi_t *roi_in,
+                                                dt_iop_module_t *module, size_t in_bpp,
+                                                dt_pixel_cache_entry_t *input_entry,
+                                                const char *message)
+{
+  (void)pipe;
+  (void)cl_mem_input;
+  (void)roi_in;
+  (void)module;
+  (void)in_bpp;
+  (void)input_entry;
+  (void)message;
+  return input;
+}
+
+int dt_dev_pixelpipe_cache_prepare_cl_input(dt_dev_pixelpipe_t *pipe, dt_iop_module_t *module,
+                                            float *input, void **cl_mem_input,
+                                            const dt_iop_roi_t *roi_in, size_t in_bpp,
+                                            dt_pixel_cache_entry_t *input_entry,
+                                            dt_pixel_cache_entry_t **locked_input_entry,
+                                            void *keep)
+{
+  (void)pipe;
+  (void)module;
+  (void)input;
+  (void)cl_mem_input;
+  (void)roi_in;
+  (void)in_bpp;
+  (void)input_entry;
+  (void)locked_input_entry;
+  (void)keep;
+  return 1;
 }
 #endif
 
@@ -1262,7 +1897,7 @@ static dt_pixel_cache_entry_t *dt_pixel_cache_new_entry(const uint64_t hash, con
 
 static void _free_cache_entry(dt_pixel_cache_entry_t *cache_entry)
 {
-  dt_pixel_cache_message(cache_entry, "freed", FALSE);
+  _pixel_cache_message(cache_entry, "freed", FALSE);
 
   if(cache_entry->data)
   {
@@ -1286,12 +1921,12 @@ static void _free_cache_entry(dt_pixel_cache_entry_t *cache_entry)
     dt_pthread_mutex_unlock(&cache_entry->cl_mem_lock);
 #endif
 
-    dt_pixel_cache_clmem_flush(cache_entry);
+    dt_dev_pixelpipe_cache_flush_entry_clmem(cache_entry);
     dt_cache_arena_free(&cache_entry->cache->arena, cache_entry->data, cache_entry->size);
   }
   else
   {
-    dt_pixel_cache_clmem_flush(cache_entry);
+    dt_dev_pixelpipe_cache_flush_entry_clmem(cache_entry);
   }
 
   cache_entry->data = NULL;
@@ -1408,7 +2043,7 @@ static dt_pixel_cache_entry_t *_cache_try_rekey_reuse_locked(dt_dev_pixelpipe_ca
     }
   }
   dt_pthread_mutex_unlock(&cache_entry->cl_mem_lock);
-  dt_pixel_cache_clmem_flush(cache_entry);
+  dt_dev_pixelpipe_cache_flush_entry_clmem(cache_entry);
 
   gpointer stolen_key = NULL;
   gpointer stolen_value = NULL;
@@ -1456,7 +2091,7 @@ int dt_dev_pixelpipe_cache_get(dt_dev_pixelpipe_cache_t *cache, const uint64_t h
   dt_pixel_cache_entry_t *cache_entry = _non_threadsafe_cache_get_entry(cache, cache->entries, hash);
   if(cache_entry && cache_entry->auto_destroy)
   {
-    dt_pixel_cache_message(cache_entry, "dropping auto-destroy entry before cache_get reuse", FALSE);
+    _pixel_cache_message(cache_entry, "dropping auto-destroy entry before cache_get reuse", FALSE);
     if(_non_thread_safe_cache_remove(cache, FALSE, cache_entry, cache->entries) == 0)
       cache_entry = NULL;
   }
@@ -1525,7 +2160,7 @@ dt_dev_pixelpipe_cache_get_writable(dt_dev_pixelpipe_cache_t *cache, const uint6
   dt_pixel_cache_entry_t *cache_entry = _non_threadsafe_cache_get_entry(cache, cache->entries, hash);
   if(cache_entry && cache_entry->auto_destroy)
   {
-    dt_pixel_cache_message(cache_entry, "dropping auto-destroy entry before writable reuse", FALSE);
+    _pixel_cache_message(cache_entry, "dropping auto-destroy entry before writable reuse", FALSE);
     if(_non_thread_safe_cache_remove(cache, FALSE, cache_entry, cache->entries) == 0)
       cache_entry = NULL;
   }
@@ -1790,7 +2425,7 @@ gboolean dt_dev_pixelpipe_cache_peek(dt_dev_pixelpipe_cache_t *cache, const uint
 }
 
 
-gboolean _for_each_remove(gpointer key, gpointer value, gpointer user_data)
+static gboolean _for_each_remove(gpointer key, gpointer value, gpointer user_data)
 {
   dt_pixel_cache_entry_t *cache_entry = (dt_pixel_cache_entry_t *)value;
   const int id = GPOINTER_TO_INT(user_data);
@@ -1812,7 +2447,7 @@ void dt_dev_pixelpipe_cache_flush(dt_dev_pixelpipe_cache_t *cache, const int id)
 }
 
 
-gboolean _for_each_remove_old(gpointer key, gpointer value, gpointer user_data)
+static gboolean _for_each_remove_old(gpointer key, gpointer value, gpointer user_data)
 {
   dt_pixel_cache_entry_t *cache_entry = (dt_pixel_cache_entry_t *)value;
 
@@ -1858,12 +2493,12 @@ void _non_thread_safe_cache_ref_count_entry(dt_dev_pixelpipe_cache_t *cache, gbo
   if(lock)
   {
     dt_atomic_add_int(&cache_entry->refcount, 1);
-    dt_pixel_cache_message(cache_entry, "ref count ++", TRUE);
+    _pixel_cache_message(cache_entry, "ref count ++", TRUE);
   }
   else
   {
     dt_atomic_sub_int(&cache_entry->refcount, 1);
-    dt_pixel_cache_message(cache_entry, "ref count --", TRUE);
+    _pixel_cache_message(cache_entry, "ref count --", TRUE);
   }
 }
 
@@ -1883,12 +2518,12 @@ void dt_dev_pixelpipe_cache_wrlock_entry(dt_dev_pixelpipe_cache_t *cache, gboole
   if(lock)
   {
     dt_pthread_rwlock_wrlock(&cache_entry->lock);
-    dt_pixel_cache_message(cache_entry, "write lock", TRUE);
+    _pixel_cache_message(cache_entry, "write lock", TRUE);
   }
   else
   {
     dt_pthread_rwlock_unlock(&cache_entry->lock);
-    dt_pixel_cache_message(cache_entry, "write unlock", TRUE);
+    _pixel_cache_message(cache_entry, "write unlock", TRUE);
   }
 }
 
@@ -1899,12 +2534,12 @@ void dt_dev_pixelpipe_cache_rdlock_entry(dt_dev_pixelpipe_cache_t *cache, gboole
   if(lock)
   {
     dt_pthread_rwlock_rdlock(&cache_entry->lock);
-    dt_pixel_cache_message(cache_entry, "read lock", TRUE);
+    _pixel_cache_message(cache_entry, "read lock", TRUE);
   }
   else
   {
     dt_pthread_rwlock_unlock(&cache_entry->lock);
-    dt_pixel_cache_message(cache_entry, "read unlock", TRUE);
+    _pixel_cache_message(cache_entry, "read unlock", TRUE);
   }
 }
 
@@ -1920,7 +2555,7 @@ void dt_dev_pixelpipe_cache_flag_auto_destroy(dt_dev_pixelpipe_cache_t *cache,
   }
 
   cache_entry->auto_destroy = TRUE;
-  dt_pixel_cache_message(cache_entry, "auto destroy flagged", TRUE);
+  _pixel_cache_message(cache_entry, "auto destroy flagged", TRUE);
   dt_pthread_mutex_unlock(&cache->lock);
 }
 
@@ -1937,12 +2572,12 @@ void dt_dev_pixelpipe_cache_auto_destroy_apply(dt_dev_pixelpipe_cache_t *cache,
 
   if(cache_entry->auto_destroy)
   {
-    dt_pixel_cache_message(cache_entry, "auto destroy removing", FALSE);
+    _pixel_cache_message(cache_entry, "auto destroy removing", FALSE);
     g_hash_table_remove(cache->entries, &cache_entry->hash);
   }
   else
   {
-    dt_pixel_cache_message(cache_entry, "auto destroy skipped", TRUE);
+    _pixel_cache_message(cache_entry, "auto destroy skipped", TRUE);
   }
   
   dt_pthread_mutex_unlock(&cache->lock);
@@ -2097,7 +2732,7 @@ int dt_dev_pixelpipe_cache_rekey(dt_dev_pixelpipe_cache_t *cache, const uint64_t
     }
   }
   dt_pthread_mutex_unlock(&entry->cl_mem_lock);
-  dt_pixel_cache_clmem_flush(entry);
+  dt_dev_pixelpipe_cache_flush_entry_clmem(entry);
 
   *(uint64_t *)stolen_key = new_hash;
   entry->hash = new_hash;

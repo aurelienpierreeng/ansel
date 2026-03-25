@@ -36,6 +36,7 @@
 #include <stddef.h>
 
 struct dt_dev_pixelpipe_t;
+struct dt_iop_module_t;
 struct dt_iop_roi_t;
 
 #define DT_PIXELPIPE_CACHE_HASH_INVALID ((uint64_t)-1)
@@ -195,16 +196,43 @@ dt_dev_pixelpipe_cache_get_writable(dt_dev_pixelpipe_cache_t *cache, const uint6
                                     void **data,
                                     struct dt_pixel_cache_entry_t **entry);
 
-/** OpenCL pinned buffer reuse tied to cache entries. */
-void *dt_pixel_cache_clmem_get(struct dt_pixel_cache_entry_t *entry, void *host_ptr, int devid,
-                               int width, int height, int bpp, int flags);
-void *dt_pixel_cache_clmem_ref(struct dt_pixel_cache_entry_t *entry, void *host_ptr, int devid,
-                               int width, int height, int bpp, int flags);
-void dt_pixel_cache_clmem_unref(struct dt_pixel_cache_entry_t *entry, void *mem);
-void dt_pixel_cache_clmem_put(struct dt_pixel_cache_entry_t *entry, void *host_ptr, int devid,
-                              int width, int height, int bpp, int flags, void *mem);
-void dt_pixel_cache_clmem_remove(struct dt_pixel_cache_entry_t *entry, void *mem);
-void dt_pixel_cache_clmem_flush(struct dt_pixel_cache_entry_t *entry);
+/**
+ * @brief Borrow a cached OpenCL payload attached to a cache entry.
+ *
+ * @details
+ * This reopens a cached `cl_mem` image already tracked by the cache entry and increments its
+ * internal borrow counter so cache flush/eviction paths will keep it alive until the caller
+ * returns it with `dt_dev_pixelpipe_cache_return_cl_payload()`.
+ *
+ * @param entry Cache entry owning the payload.
+ * @param host_ptr Host pointer key for pinned payloads, or NULL for device-only payloads.
+ * @param devid OpenCL device id.
+ * @param width Image width.
+ * @param height Image height.
+ * @param bpp Bytes per pixel.
+ * @param flags Tracked OpenCL flags used when the payload was cached.
+ * @return void* Borrowed `cl_mem`, or NULL if no matching cached payload exists.
+ */
+void *dt_dev_pixelpipe_cache_borrow_cl_payload(struct dt_pixel_cache_entry_t *entry, void *host_ptr,
+                                               int devid, int width, int height, int bpp, int flags);
+
+/**
+ * @brief Return a borrowed cached OpenCL payload to its cache entry.
+ *
+ * @param entry Cache entry owning the payload.
+ * @param mem Borrowed `cl_mem` to release back to cache bookkeeping.
+ */
+void dt_dev_pixelpipe_cache_return_cl_payload(struct dt_pixel_cache_entry_t *entry, void *mem);
+
+/**
+ * @brief Flush all reusable OpenCL payloads cached on one cache entry.
+ *
+ * @details
+ * Borrowed payloads are preserved until all borrowers returned them.
+ *
+ * @param entry Cache entry whose cached `cl_mem` payloads should be flushed.
+ */
+void dt_dev_pixelpipe_cache_flush_entry_clmem(struct dt_pixel_cache_entry_t *entry);
 
 /**
  * @brief Materialize a host payload for a live cache entry from its cached device payload.
@@ -307,6 +335,131 @@ void dt_dev_pixelpipe_cache_flush_host_pinned_image(dt_dev_pixelpipe_cache_t *ca
  */
 void dt_dev_pixelpipe_cache_resync_host_pinned_image(dt_dev_pixelpipe_cache_t *cache, void *host_ptr,
                                                      struct dt_pixel_cache_entry_t *entry_hint, int devid);
+
+/**
+ * @brief Allocate or reuse an OpenCL buffer for one cache entry payload.
+ *
+ * @details
+ * This is the cache-owned buffer acquisition helper used by the OpenCL pixelpipe backend:
+ *
+ * - if `host_ptr != NULL`, it may reuse or allocate a pinned `CL_MEM_USE_HOST_PTR` image,
+ * - if `host_ptr == NULL`, it may reuse or allocate a device-only scratch image,
+ * - allocation failures may trigger a cache-side `cl_mem` flush and one retry.
+ *
+ * @param devid OpenCL device id.
+ * @param host_ptr Host backing store for pinned images, or NULL for device-only images.
+ * @param roi Buffer dimensions.
+ * @param bpp Bytes per pixel.
+ * @param module Module for debug messages.
+ * @param message Human-readable allocation context.
+ * @param entry Owning cache entry.
+ * @param reuse_pinned Whether pinned images may be reused from cache.
+ * @param reuse_device Whether device-only images may be reused from cache.
+ * @param[out] out_reused Optional flag set TRUE when the buffer came from cache reuse.
+ * @param keep Optional OpenCL buffer that must not be flushed during retry.
+ * @return void* OpenCL image (`cl_mem`) or NULL on failure.
+ */
+void *dt_dev_pixelpipe_cache_get_cl_buffer(int devid, void *host_ptr, const struct dt_iop_roi_t *roi,
+                                           size_t bpp, struct dt_iop_module_t *module,
+                                           const char *message, struct dt_pixel_cache_entry_t *entry,
+                                           gboolean reuse_pinned, gboolean reuse_device,
+                                           gboolean *out_reused, void *keep);
+
+/**
+ * @brief Allocate a temporary device-only OpenCL image, retrying once after cache flush.
+ *
+ * @param devid OpenCL device id.
+ * @param roi Buffer dimensions.
+ * @param bpp Bytes per pixel.
+ * @param module Module for debug messages.
+ * @param message Human-readable allocation context.
+ * @param keep Optional OpenCL buffer that must not be flushed during retry.
+ * @return void* OpenCL image (`cl_mem`) or NULL on failure.
+ */
+void *dt_dev_pixelpipe_cache_alloc_cl_device_buffer(int devid, const struct dt_iop_roi_t *roi, size_t bpp,
+                                                    const struct dt_iop_module_t *module,
+                                                    const char *message, void *keep);
+
+/**
+ * @brief Release or cache an OpenCL image associated with one cache entry.
+ *
+ * @details
+ * Pinned host-backed images and reusable device-only images are returned to the cache entry when possible.
+ * Otherwise the OpenCL object is released immediately and any stale cache bookkeeping for it is dropped.
+ *
+ * @param[in,out] cl_mem_buffer Pointer to the `cl_mem` handle. Cleared on return.
+ * @param entry Owning cache entry, or NULL when the buffer is not cache-backed.
+ * @param host_ptr Host pointer backing pinned images, or NULL for device-only images.
+ * @param cache_device Whether device-only images may be kept for reuse.
+ */
+void dt_dev_pixelpipe_cache_release_cl_buffer(void **cl_mem_buffer, struct dt_pixel_cache_entry_t *entry,
+                                              void *host_ptr, gboolean cache_device);
+
+/**
+ * @brief Synchronize between host memory and a pinned OpenCL image.
+ *
+ * @param devid OpenCL device id.
+ * @param host_ptr Host pointer to read from / write to.
+ * @param cl_mem_buffer OpenCL image.
+ * @param roi Buffer dimensions.
+ * @param cl_mode `CL_MAP_WRITE` for host→device, `CL_MAP_READ` for device→host.
+ * @param bpp Bytes per pixel.
+ * @param module Module for debug logs.
+ * @param message Human-readable sync context.
+ * @return int 0 on success, 1 on failure.
+ */
+int dt_dev_pixelpipe_cache_sync_cl_buffer(int devid, void *host_ptr, void *cl_mem_buffer,
+                                          const struct dt_iop_roi_t *roi, int cl_mode, size_t bpp,
+                                          struct dt_iop_module_t *module, const char *message);
+
+/**
+ * @brief Resynchronize one OpenCL input payload back into its cache-backed host buffer.
+ *
+ * @param pipe Current pixelpipe.
+ * @param input Host cache buffer.
+ * @param cl_mem_input OpenCL image holding the authoritative pixels.
+ * @param roi_in Buffer dimensions.
+ * @param module Module for debug logs.
+ * @param in_bpp Bytes per pixel.
+ * @param input_entry Owning cache entry.
+ * @param message Human-readable sync context.
+ * @return float* `input` on success, NULL on failure.
+ */
+float *dt_dev_pixelpipe_cache_restore_cl_buffer(struct dt_dev_pixelpipe_t *pipe, float *input,
+                                                void *cl_mem_input, const struct dt_iop_roi_t *roi_in,
+                                                struct dt_iop_module_t *module, size_t in_bpp,
+                                                struct dt_pixel_cache_entry_t *input_entry,
+                                                const char *message);
+
+/**
+ * @brief Prepare the OpenCL input image corresponding to one cache-backed module input.
+ *
+ * @details
+ * This centralizes the decision tree for:
+ *
+ * - continuing from an already-live GPU payload,
+ * - reopening or allocating a pinned input image from host RAM,
+ * - taking the read lock required by true zero-copy buffers,
+ * - and pushing host→device sync only when needed.
+ *
+ * @param pipe Current pixelpipe.
+ * @param module Module being processed.
+ * @param input Host input pointer.
+ * @param[in,out] cl_mem_input OpenCL input image.
+ * @param roi_in Buffer dimensions.
+ * @param in_bpp Bytes per pixel.
+ * @param input_entry Owning cache entry.
+ * @param[out] locked_input_entry Returned cache entry that stayed read-locked for zero-copy safety.
+ * @param keep Optional OpenCL buffer that must not be flushed during retry.
+ * @return int 0 on success, 1 on failure.
+ */
+int dt_dev_pixelpipe_cache_prepare_cl_input(struct dt_dev_pixelpipe_t *pipe,
+                                            struct dt_iop_module_t *module,
+                                            float *input, void **cl_mem_input,
+                                            const struct dt_iop_roi_t *roi_in, size_t in_bpp,
+                                            struct dt_pixel_cache_entry_t *input_entry,
+                                            struct dt_pixel_cache_entry_t **locked_input_entry,
+                                            void *keep);
 
 /**
  * @brief Resolve and retain the cache entry owning a host pointer.
