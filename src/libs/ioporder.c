@@ -55,8 +55,10 @@ DT_MODULE(1)
 #define DT_IOPORDER_GRAPH_LEFT_MARGIN DT_PIXEL_APPLY_DPI(60)
 #define DT_IOPORDER_GRAPH_TOP_MARGIN DT_PIXEL_APPLY_DPI(68)
 #define DT_IOPORDER_GRAPH_MIN_WIDTH DT_PIXEL_APPLY_DPI(640)
-#define DT_IOPORDER_GRAPH_HEIGHT DT_PIXEL_APPLY_DPI(470)
+#define DT_IOPORDER_GRAPH_HEIGHT DT_PIXEL_APPLY_DPI(540)
 #define DT_IOPORDER_BAND_HEIGHT DT_PIXEL_APPLY_DPI(26)
+#define DT_IOPORDER_MASK_ARROW_OFFSET DT_PIXEL_APPLY_DPI(12)
+#define DT_IOPORDER_MASK_BOTTOM_MARGIN DT_PIXEL_APPLY_DPI(56)
 
 typedef enum dt_ioporder_dnd_target_t
 {
@@ -1098,7 +1100,7 @@ static void _ioporder_draw_mask_arrow(GtkWidget *widget, cairo_t *cr, const doub
 
   const double span = fabs(dx - sx);
   const double lift = DT_PIXEL_APPLY_DPI(36) + span * 0.20;
-  const double cy = MIN(area.height - DT_PIXEL_APPLY_DPI(38), MAX(sy, dy) + lift);
+  const double cy = MIN(area.height - DT_IOPORDER_MASK_BOTTOM_MARGIN, MAX(sy, dy) + lift);
   const double c1x = sx + (dx - sx) * 0.25;
   const double c2x = sx + (dx - sx) * 0.75;
 
@@ -1296,9 +1298,9 @@ static gboolean _ioporder_graph_draw(GtkWidget *widget, cairo_t *cr, gpointer us
 
       _ioporder_draw_mask_arrow(widget, cr,
                                 source_alloc.x + source_alloc.width * 0.5,
-                                source_alloc.y + source_alloc.height + DT_PIXEL_APPLY_DPI(4),
+                                source_alloc.y + source_alloc.height + DT_IOPORDER_MASK_ARROW_OFFSET,
                                 sink_alloc.x + sink_alloc.width * 0.5,
-                                sink_alloc.y + sink_alloc.height + DT_PIXEL_APPLY_DPI(4));
+                                sink_alloc.y + sink_alloc.height + DT_IOPORDER_MASK_ARROW_OFFSET);
     }
   }
 
