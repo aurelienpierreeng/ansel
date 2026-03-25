@@ -33,6 +33,10 @@
 #include <stdint.h>
 #include "common/darktable.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct dt_dev_pixelpipe_iop_t;
 struct dt_dev_pixelpipe_t;
 struct dt_iop_module_t;
@@ -87,6 +91,10 @@ void default_output_format(struct dt_iop_module_t *self, struct dt_dev_pixelpipe
                            struct dt_dev_pixelpipe_iop_t *piece, struct dt_iop_buffer_dsc_t *dsc);
 
 int default_blend_colorspace(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_t *pipe, const struct dt_dev_pixelpipe_iop_t *piece);
+
+#ifdef __cplusplus
+}
+#endif
 
 
 // clang-format off
