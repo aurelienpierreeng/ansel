@@ -680,35 +680,6 @@ void dt_dev_pixelpipe_cache_close_read_only(dt_dev_pixelpipe_cache_t *cache, con
                                             struct dt_pixel_cache_entry_t *cache_entry);
 
 /**
- * @brief Find an existing cache entry, synchronize once with a short read lock,
- * then keep only a refcount (no long-lived read lock).
- *
- * @details
- * Intended for best-effort realtime display paths where pointer stability is
- * preferred over lock contention:
- * - we attempt `tryrdlock` + immediate unlock as a synchronization point,
- * - then keep the entry alive via refcount only.
- * - if tryrdlock fails (writer active), we still return the refcounted pointer
- *   in best-effort mode to avoid stalling/dropping realtime redraws.
- *
- * Consumers must tolerate concurrent writes after acquisition.
- *
- * @param cache
- * @param hash
- * @param cache_entry Found cache entry if any, written by the function.
- * @return void* Data buffer associated with the cache entry, or NULL.
- */
-void *dt_dev_pixelpipe_cache_get_ref_unlocked(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash,
-                                              struct dt_pixel_cache_entry_t **cache_entry);
-
-/**
- * @brief Decrease the refcount of an entry previously acquired with the
- * transient realtime getter above.
- */
-void dt_dev_pixelpipe_cache_unref_unlocked(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash,
-                                           struct dt_pixel_cache_entry_t *cache_entry);
-
-/**
  * @brief Find the entry matching hash, and decrease its ref_count if found.
  * 
  * @param cache 

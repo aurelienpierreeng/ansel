@@ -2523,42 +2523,6 @@ void dt_dev_pixelpipe_cache_close_read_only(dt_dev_pixelpipe_cache_t *cache, con
   dt_dev_pixelpipe_cache_rdlock_entry(cache, FALSE, cache_entry);
 }
 
-void *dt_dev_pixelpipe_cache_get_ref_unlocked(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash,
-                                              dt_pixel_cache_entry_t **cache_entry)
-{
-  if(hash == DT_PIXELPIPE_CACHE_HASH_INVALID) return NULL;
-
-  // Realtime/display helper:
-  // 1. briefly try-read-lock to avoid acquiring while a writer is active,
-  // 2. unlock immediately,
-  // 3. keep only a refcount (no long-lived read lock).
-  // This avoids GUI-side lock contention while still providing a synchronized
-  // acquisition point for the pointer.
-  void *data = NULL;
-  if(!dt_dev_pixelpipe_cache_peek(cache, hash, &data, cache_entry, -1, NULL)) return NULL;
-  if(!cache_entry || !*cache_entry) return NULL;
-
-  // Keep GUI responsive: never block on writer-held entries.
-  // tryrdlock returns 0 on success, non-zero if lock cannot be acquired now.
-  //
-  // If tryrdlock fails, still return a refcounted pointer in best-effort mode:
-  // realtime display prefers continuous refresh over strict read consistency.
-  // The caller already accepts transient tearing while the producer writes.
-  if(dt_pthread_rwlock_tryrdlock(&((*cache_entry)->lock)) == 0)
-    dt_pthread_rwlock_unlock(&((*cache_entry)->lock));
-
-  dt_dev_pixelpipe_cache_ref_count_entry(cache, TRUE, *cache_entry);
-  return data ? __builtin_assume_aligned(data, DT_CACHELINE_BYTES) : NULL;
-}
-
-void dt_dev_pixelpipe_cache_unref_unlocked(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash,
-                                           dt_pixel_cache_entry_t *cache_entry)
-{
-  // Companion of dt_dev_pixelpipe_cache_get_ref_unlocked():
-  // release the refcount without touching rwlocks.
-  dt_dev_pixelpipe_cache_ref_count_entry(cache, FALSE, cache_entry);
-}
-
 void dt_dev_pixelpipe_cache_unref_hash(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash)
 {
   if(hash == DT_PIXELPIPE_CACHE_HASH_INVALID) return;

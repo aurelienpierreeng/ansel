@@ -228,12 +228,17 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
     if(d->image_surface) cairo_surface_destroy(d->image_surface);
     d->image_surface = dt_cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
 
-    // Fetch the backbuffer
-    struct dt_pixel_cache_entry_t *cache_entry;
-    void *data = dt_dev_pixelpipe_cache_get_read_only(darktable.pixelpipe_cache,
-                                                      dt_dev_backbuf_get_hash(&dev->preview_pipe->backbuf),
-                                                      &cache_entry);
+    // Fetch the backbuffer. The preview pipe backbuffer already owns the cache keepalive ref:
+    // navigation only needs a short read-only critical section while it copies into its own cairo surface.
+    struct dt_pixel_cache_entry_t *cache_entry = NULL;
+    void *data = NULL;
+    if(!dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache,
+                                    dt_dev_backbuf_get_hash(&dev->preview_pipe->backbuf),
+                                    &data, &cache_entry, -1, NULL))
+      return TRUE;
     if(!data) return TRUE;
+
+    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, cache_entry);
 
     wd = dev->preview_pipe->backbuf.width;
     ht = dev->preview_pipe->backbuf.height;
@@ -253,8 +258,7 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
     cairo_surface_destroy(tmp_surface);
     cairo_destroy(cri);
 
-    dt_dev_pixelpipe_cache_close_read_only(darktable.pixelpipe_cache,
-                                           dt_dev_backbuf_get_hash(&dev->preview_pipe->backbuf), cache_entry);
+    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, cache_entry);
 
     imgid = dev->image_storage.id;
   }

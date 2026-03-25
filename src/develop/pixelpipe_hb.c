@@ -508,14 +508,14 @@ void dt_dev_pixelpipe_cleanup(dt_dev_pixelpipe_t *pipe)
   dt_dev_pixelpipe_cleanup_nodes(pipe);
   // so now it's safe to clean up cache:
   const uint64_t old_backbuf_hash = dt_dev_backbuf_get_hash(&pipe->backbuf);
-  if(pipe->no_cache)
+  if(old_backbuf_hash != DT_PIXELPIPE_CACHE_HASH_INVALID)
   {
-    if(old_backbuf_hash != DT_PIXELPIPE_CACHE_HASH_INVALID)
+    /* Backbuffer ownership belongs to the pipeline, not its GUI consumers. Once the pipe itself is
+     * torn down, always release that keepalive ref and invalidate the published backbuffer metadata. */
+    dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, old_backbuf_hash);
+
+    if(pipe->no_cache)
     {
-      /* The last displayed output is just another consumer-owned cache ref. Drop it explicitly before asking
-       * the cache to recycle the one-shot final output, otherwise cleanup removes the cacheline with `refs=1`
-       * and hides the lifetime mismatch behind a forced delete. */
-      dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, old_backbuf_hash);
       dt_pixel_cache_entry_t *old_backbuf_entry
           = dt_dev_pixelpipe_cache_get_entry(darktable.pixelpipe_cache, old_backbuf_hash);
       if(old_backbuf_entry)
@@ -524,8 +524,8 @@ void dt_dev_pixelpipe_cleanup(dt_dev_pixelpipe_t *pipe)
         dt_dev_pixelpipe_cache_auto_destroy_apply(darktable.pixelpipe_cache, old_backbuf_entry);
       }
     }
-    dt_dev_set_backbuf(&pipe->backbuf, 0, 0, 0, DT_PIXELPIPE_CACHE_HASH_INVALID, DT_PIXELPIPE_CACHE_HASH_INVALID);
   }
+  dt_dev_set_backbuf(&pipe->backbuf, 0, 0, 0, DT_PIXELPIPE_CACHE_HASH_INVALID, DT_PIXELPIPE_CACHE_HASH_INVALID);
   dt_pthread_mutex_destroy(&(pipe->busy_mutex));
   pipe->icc_type = DT_COLORSPACE_NONE;
   dt_free(pipe->icc_filename);

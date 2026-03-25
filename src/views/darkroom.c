@@ -419,18 +419,19 @@ static gboolean _render_main_direct_debug(cairo_t *cr, dt_develop_t *dev, const 
   if(hash == (uint64_t)-1) return FALSE;
 
   dt_pixel_cache_entry_t *entry = NULL;
-  void *data = dt_dev_pixelpipe_cache_get_ref_unlocked(darktable.pixelpipe_cache, hash, &entry);
-  if(!data || !entry)
-  {
-    if(entry) dt_dev_pixelpipe_cache_unref_unlocked(darktable.pixelpipe_cache, hash, entry);
+  void *data = NULL;
+  if(!dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, hash, &data, &entry, -1, NULL))
     return FALSE;
-  }
+  if(!data || !entry)
+    return FALSE;
+
+  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, entry);
 
   const int bw = (int)dev->pipe->backbuf.width;
   const int bh = (int)dev->pipe->backbuf.height;
   if(bw <= 0 || bh <= 0)
   {
-    dt_dev_pixelpipe_cache_unref_unlocked(darktable.pixelpipe_cache, hash, entry);
+    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, entry);
     return FALSE;
   }
 
@@ -439,7 +440,7 @@ static gboolean _render_main_direct_debug(cairo_t *cr, dt_develop_t *dev, const 
   const size_t entry_size = dt_pixel_cache_entry_get_size(entry);
   if(entry_size < required_size || dt_pixel_cache_entry_get_data(entry) != data)
   {
-    dt_dev_pixelpipe_cache_unref_unlocked(darktable.pixelpipe_cache, hash, entry);
+    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, entry);
     return FALSE;
   }
 
@@ -448,7 +449,7 @@ static gboolean _render_main_direct_debug(cairo_t *cr, dt_develop_t *dev, const 
   if(!surface || cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS)
   {
     if(surface) cairo_surface_destroy(surface);
-    dt_dev_pixelpipe_cache_unref_unlocked(darktable.pixelpipe_cache, hash, entry);
+    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, entry);
     return FALSE;
   }
 
@@ -464,7 +465,7 @@ static gboolean _render_main_direct_debug(cairo_t *cr, dt_develop_t *dev, const 
   cairo_fill(cr);
 
   cairo_surface_destroy(surface);
-  dt_dev_pixelpipe_cache_unref_unlocked(darktable.pixelpipe_cache, hash, entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, entry);
   return TRUE;
 }
 #endif
@@ -498,11 +499,9 @@ static void _release_locked_surface(darkroom_locked_surface_t *locked)
     locked->surface = NULL;
   }
 
-  if(locked->entry && locked->hash != (uint64_t)-1)
-  {
-    dt_dev_pixelpipe_cache_unref_unlocked(darktable.pixelpipe_cache, locked->hash, locked->entry);
-  }
-
+  /* These cairo views only mirror whatever cacheline the pipeline currently exposes as backbuffer.
+   * They never own the backbuffer keepalive ref themselves: `pixelpipe_hb.c` swaps that ownership
+   * when publishing a new backbuffer. Releasing the surface must therefore only drop the GUI view. */
   locked->entry = NULL;
   locked->data = NULL;
   locked->hash = (uint64_t)-1;
@@ -556,11 +555,11 @@ static gboolean _lock_pipe_surface(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, 
   }
 
   struct dt_pixel_cache_entry_t *entry = NULL;
-  /* Never keep long-lived read locks on cache-backed GUI surfaces.
-   * Recomputing the same image can reuse the same cache hash and needs a write
-   * lock on that entry; if darkroom still holds a read lock on the old surface,
-   * the worker can block forever waiting for the GUI to replace the surface. */
-  void *data = dt_dev_pixelpipe_cache_get_ref_unlocked(darktable.pixelpipe_cache, hash, &entry);
+  /* GUI surfaces only borrow the currently published backbuffer. They rely on the backbuffer keepalive ref
+   * owned by `pixelpipe_hb.c`, so they must not take or drop their own cache refs here. */
+  void *data = NULL;
+  if(!dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, hash, &data, &entry, -1, NULL))
+    data = NULL;
   if(!data)
   {
     /* Keep previous frame only while waiting for a *different* target hash.
@@ -579,7 +578,6 @@ static gboolean _lock_pipe_surface(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, 
   const size_t entry_size = dt_pixel_cache_entry_get_size(entry);
   if(width <= 0 || height <= 0 || entry_size < required_size || dt_pixel_cache_entry_get_data(entry) != data)
   {
-    dt_dev_pixelpipe_cache_unref_unlocked(darktable.pixelpipe_cache, hash, entry);
     if(keep_previous_on_fail && locked->surface && locked->hash != hash) return TRUE;
     _release_locked_surface(locked);
     return FALSE;
@@ -587,10 +585,6 @@ static gboolean _lock_pipe_surface(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, 
 
   if(locked->surface && locked->data == data && locked->width == width && locked->height == height)
   {
-    if(locked->entry && locked->hash != (uint64_t)-1)
-    {
-      dt_dev_pixelpipe_cache_unref_unlocked(darktable.pixelpipe_cache, locked->hash, locked->entry);
-    }
     locked->hash = hash;
     locked->entry = entry;
     locked->data = data;
@@ -601,7 +595,6 @@ static gboolean _lock_pipe_surface(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, 
   if(!surface || cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS)
   {
     if(surface) cairo_surface_destroy(surface);
-    dt_dev_pixelpipe_cache_unref_unlocked(darktable.pixelpipe_cache, hash, entry);
     if(keep_previous_on_fail && locked->surface) return TRUE;
     _release_locked_surface(locked);
     return FALSE;
@@ -2544,14 +2537,22 @@ void leave(dt_view_t *self)
   // before destroying the actual modules being referenced.
   dt_pthread_mutex_lock(&dev->pipe->busy_mutex);
   dt_dev_pixelpipe_cleanup_nodes(dev->pipe);
+  dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, dt_dev_backbuf_get_hash(&dev->pipe->backbuf));
+  dt_dev_set_backbuf(&dev->pipe->backbuf, 0, 0, 0, DT_PIXELPIPE_CACHE_HASH_INVALID, DT_PIXELPIPE_CACHE_HASH_INVALID);
   dt_pthread_mutex_unlock(&dev->pipe->busy_mutex);
 
   dt_pthread_mutex_lock(&dev->preview_pipe->busy_mutex);
   dt_dev_pixelpipe_cleanup_nodes(dev->preview_pipe);
+  dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, dt_dev_backbuf_get_hash(&dev->preview_pipe->backbuf));
+  dt_dev_set_backbuf(&dev->preview_pipe->backbuf, 0, 0, 0, DT_PIXELPIPE_CACHE_HASH_INVALID,
+                     DT_PIXELPIPE_CACHE_HASH_INVALID);
   dt_pthread_mutex_unlock(&dev->preview_pipe->busy_mutex);
 
   dt_pthread_mutex_lock(&dev->virtual_pipe->busy_mutex);
   dt_dev_pixelpipe_cleanup_nodes(dev->virtual_pipe);
+  dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, dt_dev_backbuf_get_hash(&dev->virtual_pipe->backbuf));
+  dt_dev_set_backbuf(&dev->virtual_pipe->backbuf, 0, 0, 0, DT_PIXELPIPE_CACHE_HASH_INVALID,
+                     DT_PIXELPIPE_CACHE_HASH_INVALID);
   dt_pthread_mutex_unlock(&dev->virtual_pipe->busy_mutex);
 
   /* Device-side cache payloads are only an acceleration layer. Once darkroom
@@ -2609,15 +2610,8 @@ void leave(dt_view_t *self)
   dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, dt_dev_backbuf_get_hash(&dev->display_histogram));
   dt_dev_backbuf_set_hash(&dev->display_histogram, -1);
 
-  // Release the cache entries for GUI backbufs
-  dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, dt_dev_backbuf_get_hash(&dev->pipe->backbuf));
-  dt_dev_backbuf_set_hash(&dev->pipe->backbuf, -1);
-
-  dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, dt_dev_backbuf_get_hash(&dev->preview_pipe->backbuf));
-  dt_dev_backbuf_set_hash(&dev->preview_pipe->backbuf, -1);
-
-  dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, dt_dev_backbuf_get_hash(&dev->virtual_pipe->backbuf));
-  dt_dev_backbuf_set_hash(&dev->virtual_pipe->backbuf, -1);
+  /* GUI backbuffers were already released when each pipeline was quiesced above. Keep the view-side teardown
+   * free of extra unref paths so pipeline ownership stays centralized. */
 
 
   dt_print(DT_DEBUG_CONTROL, "[run_job-] 11 %f in darkroom mode\n", dt_get_wtime());

@@ -348,6 +348,10 @@ static dt_color_picker_resample_status_t _sample_picker_from_cache(dt_develop_t 
     return DT_COLOR_PICKER_RESAMPLE_CONSUMED;
   }
 
+  /* Unlike histogram/global backbuffers, module color-pickers do not publish a dedicated long-lived buffer.
+   * They reopen the current module input/output cachelines by immutable `global_hash`, then take a temporary
+   * ref plus read lock only for the duration of the sampling pass so concurrent cache recycling cannot free
+   * the payload mid-read. */
   dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, input_entry);
   dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, input_entry);
   if(have_output)

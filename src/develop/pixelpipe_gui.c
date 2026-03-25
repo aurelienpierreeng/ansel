@@ -92,6 +92,8 @@ static void _clear_histogram_backbuf(dt_backbuf_t *backbuf)
 {
   if(!backbuf) return;
 
+  /* Global histogram backbuffers own one extra cache ref on top of the module output lifetime:
+   * dropping the published histogram view therefore means releasing that structural keepalive ref. */
   dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, dt_dev_backbuf_get_hash(backbuf));
   dt_dev_set_backbuf(backbuf, 0, 0, 0, DT_PIXELPIPE_CACHE_HASH_INVALID, DT_PIXELPIPE_CACHE_HASH_INVALID);
 }
@@ -139,6 +141,8 @@ static void _refresh_global_histogram_backbuf(dt_develop_t *dev, const char *op)
   const uint64_t previous_hash = dt_dev_backbuf_get_hash(backbuf);
   if(previous_hash != hash)
   {
+    /* The module output already owns its producer ref. Tagging it as a global histogram backbuffer reserves
+     * one additional consumer ref so GUI readers can borrow it with `peek()`/read locks only. */
     dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, previous_hash);
     dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, entry);
   }
