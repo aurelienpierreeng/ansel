@@ -478,6 +478,54 @@ dt_iop_module_t *dt_iop_gui_get_previous_visible_module(dt_iop_module_t *module)
 dt_iop_module_t *dt_iop_gui_get_next_visible_module(dt_iop_module_t *module);
 /** check if current module is visible **/
 gboolean dt_iop_gui_module_is_visible(dt_iop_module_t *module);
+/**
+ * @brief Move a module before another one and commit the GUI-side effects.
+ *
+ * This is the GUI boundary for module reordering: @ref dt_ioppr_move_iop_before
+ * only mutates the pipeline list and order list, while this function is
+ * responsible for updating visible headers, rebuilding the pipes, recording the
+ * history step and notifying GUI listeners.
+ *
+ * @param module Module being moved.
+ * @param module_next Module that should end up immediately after @p module.
+ * @param reason Debug string used in IOP-order checks.
+ * @return TRUE if the move was applied, FALSE otherwise.
+ */
+gboolean dt_iop_gui_move_module_before(dt_iop_module_t *module, dt_iop_module_t *module_next,
+                                       const char *reason);
+/**
+ * @brief Commit the GUI-side consequences of an IOP-order change.
+ *
+ * Order changes may come from drag-and-drop, context-menu move commands or
+ * preset application. The low-level order code only mutates @ref dt_develop_t::iop
+ * and the serialized order list; this function updates module headers, rebuilds
+ * the pipes, stores the history item when requested and broadcasts the GUI
+ * change signal.
+ *
+ * @param dev Develop instance owning the reordered modules.
+ * @param module Module to record in history, or NULL for whole-pipeline changes.
+ * @param enable History enable state passed to @ref dt_dev_add_history_item.
+ * @param write_history TRUE to record a history item, FALSE to skip it.
+ * @param reason Debug string used in IOP-order checks.
+ * @return TRUE when the GUI refresh completed, FALSE if @p dev was NULL.
+ */
+gboolean dt_iop_gui_commit_iop_order_change(struct dt_develop_t *dev, dt_iop_module_t *module,
+                                            gboolean enable, gboolean write_history, const char *reason);
+/**
+ * @brief Move a module after another one and commit the GUI-side effects.
+ *
+ * This is the GUI boundary for module reordering: @ref dt_ioppr_move_iop_after
+ * only mutates the pipeline list and order list, while this function is
+ * responsible for updating visible headers, rebuilding the pipes, recording the
+ * history step and notifying GUI listeners.
+ *
+ * @param module Module being moved.
+ * @param module_prev Module that should end up immediately before @p module.
+ * @param reason Debug string used in IOP-order checks.
+ * @return TRUE if the move was applied, FALSE otherwise.
+ */
+gboolean dt_iop_gui_move_module_after(dt_iop_module_t *module, dt_iop_module_t *module_prev,
+                                      const char *reason);
 
 // initializes memory.darktable_iop_names
 void dt_iop_set_darktable_iop_table();

@@ -595,14 +595,14 @@ static void _modulegroups_drag_data_received(GtkWidget *widget, GdkDragContext *
   dt_lib_modulegroups_t *d = (dt_lib_modulegroups_t *)self->data;
   dt_iop_module_t *module_src = d->drag_source;
   dt_iop_module_t *module_dest = _modulegroups_get_dnd_dest_module(widget, y, module_src);
-  int moved = 0;
+  gboolean moved = FALSE;
 
   if(module_src && module_dest && module_src != module_dest)
   {
     if(module_src->iop_order < module_dest->iop_order)
-      moved = dt_ioppr_move_iop_after(darktable.develop, module_src, module_dest);
+      moved = dt_iop_gui_move_module_after(module_src, module_dest, "_modulegroups_drag_data_received");
     else
-      moved = dt_ioppr_move_iop_before(darktable.develop, module_src, module_dest);
+      moved = dt_iop_gui_move_module_before(module_src, module_dest, "_modulegroups_drag_data_received");
   }
 
   gtk_drag_finish(dc, TRUE, FALSE, time);
@@ -610,12 +610,6 @@ static void _modulegroups_drag_data_received(GtkWidget *widget, GdkDragContext *
   d->drag_source = NULL;
 
   if(!moved) return;
-
-  dt_dev_modules_update_multishow(module_src->dev);
-  dt_dev_pixelpipe_rebuild_all(module_src->dev);
-  dt_dev_add_history_item(module_src->dev, module_src, TRUE, TRUE);
-  dt_ioppr_check_iop_order(module_src->dev, 0, "_modulegroups_drag_data_received");
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_MODULE_MOVED);
 }
 
 static void _modulegroups_drag_leave(GtkWidget *widget, GdkDragContext *dc, guint time, gpointer user_data)

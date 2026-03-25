@@ -662,6 +662,35 @@ gboolean dt_iop_gui_module_is_visible(dt_iop_module_t *module)
   return (expander && gtk_widget_is_visible(expander) && !dt_iop_is_hidden(module));
 }
 
+gboolean dt_iop_gui_commit_iop_order_change(dt_develop_t *dev, dt_iop_module_t *module,
+                                            gboolean enable, gboolean write_history, const char *reason)
+{
+  if(!dev) return FALSE;
+
+  dt_dev_modules_update_multishow(dev);
+  dt_dev_pixelpipe_rebuild_all(dev);
+  if(write_history) dt_dev_add_history_item(dev, module, enable, TRUE);
+
+  if(reason) dt_ioppr_check_iop_order(dev, 0, reason);
+
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_MODULE_MOVED);
+  return TRUE;
+}
+
+gboolean dt_iop_gui_move_module_before(dt_iop_module_t *module, dt_iop_module_t *module_next,
+                                       const char *reason)
+{
+  if(!dt_ioppr_move_iop_before(module->dev, module, module_next)) return FALSE;
+  return dt_iop_gui_commit_iop_order_change(module->dev, module, TRUE, TRUE, reason);
+}
+
+gboolean dt_iop_gui_move_module_after(dt_iop_module_t *module, dt_iop_module_t *module_prev,
+                                      const char *reason)
+{
+  if(!dt_ioppr_move_iop_after(module->dev, module, module_prev)) return FALSE;
+  return dt_iop_gui_commit_iop_order_change(module->dev, module, TRUE, TRUE, reason);
+}
+
 dt_iop_module_t *dt_iop_gui_get_previous_visible_module(dt_iop_module_t *module)
 {
   dt_iop_module_t *prev = NULL;
@@ -696,22 +725,9 @@ static void _gui_movedown_callback(GtkButton *button, dt_iop_module_t *module)
 
   // we need to place this module right before the previous
   dt_iop_module_t *prev = dt_iop_gui_get_previous_visible_module(module);
-  // dt_ioppr_check_iop_order(module->dev, "dt_iop_gui_movedown_callback 1");
   if(!prev) return;
 
-  const int moved = dt_ioppr_move_iop_before(module->dev, module, prev);
-  // dt_ioppr_check_iop_order(module->dev, "dt_iop_gui_movedown_callback 2");
-  if(!moved) return;
-
-  // we update the headers
-  dt_dev_modules_update_multishow(prev->dev);
-
-  dt_dev_pixelpipe_rebuild_all(module->dev);
-  dt_dev_add_history_item(prev->dev, module, TRUE, TRUE);
-
-  dt_ioppr_check_iop_order(module->dev, 0, "dt_iop_gui_movedown_callback end");
-
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_MODULE_MOVED);
+  dt_iop_gui_move_module_before(module, prev, "dt_iop_gui_movedown_callback end");
 }
 
 static void _gui_moveup_callback(GtkButton *button, dt_iop_module_t *module)
@@ -722,18 +738,7 @@ static void _gui_moveup_callback(GtkButton *button, dt_iop_module_t *module)
   dt_iop_module_t *next = dt_iop_gui_get_next_visible_module(module);
   if(!next) return;
 
-  const int moved = dt_ioppr_move_iop_after(module->dev, module, next);
-  if(!moved) return;
-
-  // we update the headers
-  dt_dev_modules_update_multishow(next->dev);
-
-  dt_dev_pixelpipe_rebuild_all(next->dev);
-  dt_dev_add_history_item(next->dev, module, TRUE, TRUE);
-
-  dt_ioppr_check_iop_order(module->dev, 0, "dt_iop_gui_moveup_callback end");
-
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_MODULE_MOVED);
+  dt_iop_gui_move_module_after(module, next, "dt_iop_gui_moveup_callback end");
 }
 
 dt_iop_module_t *dt_iop_gui_duplicate(dt_iop_module_t *base, gboolean copy_params)

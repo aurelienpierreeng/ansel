@@ -1473,28 +1473,18 @@ static void _ioporder_drag_data_received(GtkWidget *widget, GdkDragContext *dc, 
   dt_lib_ioporder_t *d = (dt_lib_ioporder_t *)self->data;
   dt_iop_module_t *module_src = d->drag_source;
   dt_iop_module_t *module_dest = (dt_iop_module_t *)g_object_get_data(G_OBJECT(widget), "dt-ioporder-module");
-  int moved = 0;
 
   if(module_src && module_dest && module_src != module_dest)
   {
     if(module_src->iop_order < module_dest->iop_order)
-      moved = dt_ioppr_move_iop_after(darktable.develop, module_src, module_dest);
+      dt_iop_gui_move_module_after(module_src, module_dest, "_ioporder_drag_data_received");
     else
-      moved = dt_ioppr_move_iop_before(darktable.develop, module_src, module_dest);
+      dt_iop_gui_move_module_before(module_src, module_dest, "_ioporder_drag_data_received");
   }
 
   gtk_drag_finish(dc, TRUE, FALSE, time);
   d->drag_source = NULL;
   d->drag_dest = NULL;
-
-  if(moved)
-  {
-    dt_dev_modules_update_multishow(module_src->dev);
-    dt_dev_pixelpipe_rebuild_all(module_src->dev);
-    dt_dev_add_history_item(module_src->dev, module_src, TRUE, TRUE);
-    dt_ioppr_check_iop_order(module_src->dev, 0, "_ioporder_drag_data_received");
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_MODULE_MOVED);
-  }
 
   _ioporder_rebuild_graph(self);
 }
@@ -1573,13 +1563,7 @@ static void _ioporder_apply_preset(GtkComboBox *combo, gpointer user_data)
     return;
 
   dt_lib_presets_apply(preset_name, self->plugin_name, self->version());
-  if(darktable.develop)
-  {
-    dt_dev_modules_update_multishow(darktable.develop);
-    dt_dev_pixelpipe_rebuild_all(darktable.develop);
-    dt_dev_add_history_item(darktable.develop, NULL, FALSE, TRUE);
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_MODULE_MOVED);
-  }
+  dt_iop_gui_commit_iop_order_change(darktable.develop, NULL, FALSE, TRUE, "_ioporder_apply_preset");
   _ioporder_rebuild_graph(self);
 }
 
@@ -1777,7 +1761,7 @@ void gui_reset(dt_lib_module_t *self)
 
   const int32_t imgid = darktable.develop->image_storage.id;
   dt_ioppr_change_iop_order(darktable.develop, imgid, iop_order_list);
-  dt_dev_pixelpipe_rebuild_all(darktable.develop);
+  dt_iop_gui_commit_iop_order_change(darktable.develop, NULL, FALSE, FALSE, "dt_lib_ioporder_gui_reset");
 
   d->current_mode = DT_IOP_ORDER_V30;
   g_list_free_full(iop_order_list, dt_free_gpointer);
@@ -1819,7 +1803,7 @@ int set_params(dt_lib_module_t *self, const void *params, int size)
 
   const int32_t imgid = darktable.develop->image_storage.id;
   dt_ioppr_change_iop_order(darktable.develop, imgid, iop_order_list);
-  dt_dev_pixelpipe_rebuild_all(darktable.develop);
+  dt_iop_gui_commit_iop_order_change(darktable.develop, NULL, FALSE, FALSE, "dt_lib_ioporder_set_params");
   g_list_free_full(iop_order_list, dt_free_gpointer);
   return 0;
 }
