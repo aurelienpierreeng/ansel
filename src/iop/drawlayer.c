@@ -49,6 +49,7 @@
 #include "iop/drawlayer/common.h"
 #include "iop/drawlayer/coordinates.h"
 #include "iop/drawlayer/io.h"
+#include "iop/drawlayer/module.h"
 #include "iop/drawlayer/paint.h"
 #include "iop/drawlayer/runtime.h"
 #include "iop/drawlayer/widgets.h"
@@ -97,51 +98,6 @@ DT_MODULE_INTROSPECTION(1, dt_iop_drawlayer_params_t)
  * cannot drift apart due to duplicated math.
  */
 
-#define DRAWLAYER_WORKER_RING_CAPACITY 65536
-#define DRAWLAYER_COMPARE_ANALYTIC_TIMINGS 1
-
-typedef enum drawlayer_mapping_profile_t
-{
-  DRAWLAYER_PROFILE_LINEAR = 0,
-  DRAWLAYER_PROFILE_QUADRATIC = 1,
-  DRAWLAYER_PROFILE_SQRT = 2,
-  DRAWLAYER_PROFILE_INV_LINEAR = 3,
-  DRAWLAYER_PROFILE_INV_SQRT = 4,
-  DRAWLAYER_PROFILE_INV_QUADRATIC = 5,
-} drawlayer_mapping_profile_t;
-
-typedef enum drawlayer_input_map_flag_t
-{
-  DRAWLAYER_INPUT_MAP_PRESSURE_SIZE = 1u << 0,
-  DRAWLAYER_INPUT_MAP_PRESSURE_OPACITY = 1u << 1,
-  DRAWLAYER_INPUT_MAP_PRESSURE_FLOW = 1u << 2,
-  DRAWLAYER_INPUT_MAP_PRESSURE_SOFTNESS = 1u << 3,
-  DRAWLAYER_INPUT_MAP_TILT_SIZE = 1u << 4,
-  DRAWLAYER_INPUT_MAP_TILT_OPACITY = 1u << 5,
-  DRAWLAYER_INPUT_MAP_TILT_FLOW = 1u << 6,
-  DRAWLAYER_INPUT_MAP_TILT_SOFTNESS = 1u << 7,
-  DRAWLAYER_INPUT_MAP_ACCEL_SIZE = 1u << 8,
-  DRAWLAYER_INPUT_MAP_ACCEL_OPACITY = 1u << 9,
-  DRAWLAYER_INPUT_MAP_ACCEL_FLOW = 1u << 10,
-  DRAWLAYER_INPUT_MAP_ACCEL_SOFTNESS = 1u << 11,
-} drawlayer_input_map_flag_t;
-
-typedef enum drawlayer_preview_bg_mode_t
-{
-  DRAWLAYER_PREVIEW_BG_IMAGE = 0,
-  DRAWLAYER_PREVIEW_BG_WHITE = 1,
-  DRAWLAYER_PREVIEW_BG_GREY = 2,
-  DRAWLAYER_PREVIEW_BG_BLACK = 3,
-} drawlayer_preview_bg_mode_t;
-
-typedef enum drawlayer_pick_source_t
-{
-  DRAWLAYER_PICK_SOURCE_INPUT = 0,
-  DRAWLAYER_PICK_SOURCE_OUTPUT = 1,
-} drawlayer_pick_source_t;
-
-typedef dt_drawlayer_cache_patch_t drawlayer_patch_t;
-
 typedef struct drawlayer_dir_info_t
 {
   gboolean found;
@@ -152,22 +108,6 @@ typedef struct drawlayer_dir_info_t
   char name[DRAWLAYER_NAME_SIZE];
   char work_profile[DRAWLAYER_PROFILE_SIZE];
 } drawlayer_dir_info_t;
-
-typedef struct dt_iop_drawlayer_data_t
-{
-  /* Keep serialized params as the first field so the pipe runtime can mirror the
-   * module params while also carrying per-piece cache/process state. */
-  dt_iop_drawlayer_params_t params;
-
-  /* Non-display pipelines still need the same authoritative base-layer cache as
-   * the GUI, just without GUI-only transformed-preview state. Reuse the normal
-   * process-state container so both paths speak the same cache model. */
-  dt_drawlayer_process_state_t process;
-  dt_drawlayer_runtime_manager_t headless_manager;
-  dt_drawlayer_runtime_manager_t *runtime_manager;
-  dt_drawlayer_process_state_t *runtime_process;
-  gboolean runtime_display_pipe;
-} dt_iop_drawlayer_data_t;
 
 #ifdef HAVE_OPENCL
 typedef struct dt_iop_drawlayer_global_data_t
@@ -229,11 +169,6 @@ typedef struct drawlayer_wait_dialog_t
   GtkWidget *dialog;
 } drawlayer_wait_dialog_t;
 
-static inline float _clamp01(const float value)
-{
-  return fminf(fmaxf(value, 0.0f), 1.0f);
-}
-
 #include "drawlayer/conf.c"
 #include "drawlayer/coordinates.c"
 
@@ -272,27 +207,6 @@ static void _get_brush_colors(dt_iop_module_t *self, float display_rgb[3], float
   pipeline_rgb[0] *= gain;
   pipeline_rgb[1] *= gain;
   pipeline_rgb[2] *= gain;
-}
-
-static inline float _mapping_profile_value(const drawlayer_mapping_profile_t profile, const float x)
-{
-  const float v = _clamp01(x);
-  switch(profile)
-  {
-    case DRAWLAYER_PROFILE_QUADRATIC:
-      return 1.f + v * v;
-    case DRAWLAYER_PROFILE_SQRT:
-      return 1.f + sqrtf(v);
-    case DRAWLAYER_PROFILE_INV_LINEAR:
-      return 1.0f / (1.f + v);
-    case DRAWLAYER_PROFILE_INV_SQRT:
-      return 1.0f / (1.f + sqrtf(v));
-    case DRAWLAYER_PROFILE_INV_QUADRATIC:
-      return 1.0f / (1.f + v * v);
-    case DRAWLAYER_PROFILE_LINEAR:
-    default:
-      return 1.f + v;
-  }
 }
 
 static void _fill_input_brush_settings(dt_iop_module_t *self, dt_drawlayer_paint_raw_input_t *input)
@@ -2621,6 +2535,38 @@ static void _widget_changed(GtkWidget *widget, gpointer user_data)
     _sync_brush_profile_preview_widget(self);
 }
 
+/** @brief Apply one selected on-disk layer from the combobox to module params/history. */
+static gboolean _apply_selected_layer_attachment(dt_iop_module_t *self, dt_iop_drawlayer_gui_data_t *g,
+                                                 dt_iop_drawlayer_params_t *params, const char *layer_name,
+                                                 const int layer_order)
+{
+  if(!self || !g || !params || layer_order < 0 || !_layer_name_non_empty(layer_name)) return FALSE;
+
+  char previous_name[DRAWLAYER_NAME_SIZE] = { 0 };
+  g_strlcpy(previous_name, params->layer_name, sizeof(previous_name));
+  const int previous_order = params->layer_order;
+
+  g_strlcpy(params->layer_name, layer_name, sizeof(params->layer_name));
+  params->layer_order = layer_order;
+  if(!_update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_SYNC_TEMP_BUFFERS, TRUE).ok)
+  {
+    g_strlcpy(params->layer_name, previous_name, sizeof(params->layer_name));
+    params->layer_order = previous_order;
+    gui_update(self);
+    return FALSE;
+  }
+
+  g->session.missing_layer_error[0] = '\0';
+  _touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f, 0u);
+  if(self->dev)
+  {
+    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
+    dt_dev_pixelpipe_update_history_all(self->dev);
+  }
+  _refresh_layer_widgets(self);
+  return TRUE;
+}
+
 static void _layer_selected(GtkWidget *widget, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
@@ -2639,28 +2585,7 @@ static void _layer_selected(GtkWidget *widget, gpointer user_data)
     _sync_layer_controls(self);
     return;
   }
-
-  char previous_name[DRAWLAYER_NAME_SIZE] = { 0 };
-  g_strlcpy(previous_name, params->layer_name, sizeof(previous_name));
-  const int previous_order = params->layer_order;
-  g_strlcpy(params->layer_name, text, sizeof(params->layer_name));
-  params->layer_order = active;
-  if(!_update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_SYNC_TEMP_BUFFERS, TRUE).ok)
-  {
-    g_strlcpy(params->layer_name, previous_name, sizeof(params->layer_name));
-    params->layer_order = previous_order;
-    gui_update(self);
-    return;
-  }
-
-  g->session.missing_layer_error[0] = '\0';
-  _touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f, 0u);
-  if(self->dev)
-  {
-    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
-    dt_dev_pixelpipe_update_history_all(self->dev);
-  }
-  _refresh_layer_widgets(self);
+  _apply_selected_layer_attachment(self, g, params, text, active);
 }
 
 static void _attach_selected_layer_clicked(GtkButton *button, gpointer user_data)
@@ -2677,28 +2602,7 @@ static void _attach_selected_layer_clicked(GtkButton *button, gpointer user_data
 
   const char *text = dt_bauhaus_combobox_get_text(g->controls.layer_select);
   if(!_layer_name_non_empty(text)) return;
-
-  char previous_name[DRAWLAYER_NAME_SIZE] = { 0 };
-  g_strlcpy(previous_name, params->layer_name, sizeof(previous_name));
-  const int previous_order = params->layer_order;
-  g_strlcpy(params->layer_name, text, sizeof(params->layer_name));
-  params->layer_order = active;
-  if(!_update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_SYNC_TEMP_BUFFERS, TRUE).ok)
-  {
-    g_strlcpy(params->layer_name, previous_name, sizeof(params->layer_name));
-    params->layer_order = previous_order;
-    gui_update(self);
-    return;
-  }
-
-  g->session.missing_layer_error[0] = '\0';
-  _touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f, 0u);
-  if(self->dev)
-  {
-    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
-    dt_dev_pixelpipe_update_history_all(self->dev);
-  }
-  _refresh_layer_widgets(self);
+  _apply_selected_layer_attachment(self, g, params, text, active);
 }
 
 static void _rename_layer_clicked(GtkButton *button, gpointer user_data)
