@@ -2178,6 +2178,15 @@ static gboolean _iop_plugin_header_activate(GtkWidget* self, gboolean group_cycl
   return module->focus(module, TRUE);
 }
 
+static gboolean _iop_plugin_header_child_button_press(GtkWidget *widget, GdkEventButton *event, gpointer user_data)
+{
+  dt_iop_module_t *module = (dt_iop_module_t *)user_data;
+  if(module && module->expander)
+    g_object_set_data(G_OBJECT(module->expander), "dt-module-header-child-click", GINT_TO_POINTER(TRUE));
+
+  return FALSE;
+}
+
 static gboolean _iop_plugin_focus_accel(GtkAccelGroup *accel_group, GObject *accelerable, guint keyval,
                                         GdkModifierType modifier, gpointer data)
 {
@@ -2225,6 +2234,12 @@ static gboolean _iop_plugin_header_button_release(GtkWidget *w, GdkEventButton *
 
   dt_iop_module_t *module = (dt_iop_module_t *)user_data;
   if(!module || !module->expander) return FALSE;
+
+  if(g_object_get_data(G_OBJECT(module->expander), "dt-module-header-child-click"))
+  {
+    g_object_set_data(G_OBJECT(module->expander), "dt-module-header-child-click", NULL);
+    return FALSE;
+  }
 
   if(g_object_get_data(G_OBJECT(module->expander), "dt-module-dragged"))
   {
@@ -2467,6 +2482,8 @@ void dt_iop_gui_set_expander(dt_iop_module_t *module)
   dt_gui_add_class(hw[IOP_MODULE_MASK], "dt_transparent_background");
   g_signal_connect(G_OBJECT(hw[IOP_MODULE_MASK]), "toggled",
                     G_CALLBACK(_display_mask_indicator_callback), module);
+  g_signal_connect(G_OBJECT(hw[IOP_MODULE_MASK]), "button-press-event",
+                   G_CALLBACK(_iop_plugin_header_child_button_press), module);
   g_signal_connect(G_OBJECT(hw[IOP_MODULE_MASK]), "query-tooltip",
                     G_CALLBACK(_mask_indicator_tooltip), module);
   module->mask_indicator = hw[IOP_MODULE_MASK];
@@ -2476,6 +2493,8 @@ void dt_iop_gui_set_expander(dt_iop_module_t *module)
   module->multimenu_button = GTK_WIDGET(hw[IOP_MODULE_INSTANCE]);
   gtk_widget_set_tooltip_text(GTK_WIDGET(hw[IOP_MODULE_INSTANCE]),
                               _("multiple instance actions\nright-click creates new instance"));
+  g_signal_connect(G_OBJECT(hw[IOP_MODULE_INSTANCE]), "button-press-event",
+                   G_CALLBACK(_iop_plugin_header_child_button_press), module);
   g_signal_connect(G_OBJECT(hw[IOP_MODULE_INSTANCE]), "button-press-event", G_CALLBACK(_gui_multiinstance_callback),
                    module);
 
@@ -2485,6 +2504,8 @@ void dt_iop_gui_set_expander(dt_iop_module_t *module)
   hw[IOP_MODULE_RESET] = dtgtk_button_new(dtgtk_cairo_paint_reset, 0, NULL);
   module->reset_button = GTK_WIDGET(hw[IOP_MODULE_RESET]);
   gtk_widget_set_tooltip_text(GTK_WIDGET(hw[IOP_MODULE_RESET]), _("reset parameters\nctrl+click to reapply any automatic presets"));
+  g_signal_connect(G_OBJECT(hw[IOP_MODULE_RESET]), "button-press-event",
+                   G_CALLBACK(_iop_plugin_header_child_button_press), module);
   g_signal_connect(G_OBJECT(hw[IOP_MODULE_RESET]), "button-press-event", G_CALLBACK(_gui_reset_callback), module);
 
   /* add preset button if module has implementation */
@@ -2492,6 +2513,8 @@ void dt_iop_gui_set_expander(dt_iop_module_t *module)
   module->presets_button = GTK_WIDGET(hw[IOP_MODULE_PRESETS]);
   if(!(module->flags() & IOP_FLAGS_ONE_INSTANCE))
     gtk_widget_set_tooltip_text(GTK_WIDGET(hw[IOP_MODULE_PRESETS]), _("presets\nright-click to apply on new instance"));
+  g_signal_connect(G_OBJECT(hw[IOP_MODULE_PRESETS]), "button-press-event",
+                   G_CALLBACK(_iop_plugin_header_child_button_press), module);
   g_signal_connect(G_OBJECT(hw[IOP_MODULE_PRESETS]), "clicked", G_CALLBACK(_presets_popup_callback), module);
 
   /* add enabled button */
@@ -2500,6 +2523,8 @@ void dt_iop_gui_set_expander(dt_iop_module_t *module)
   dt_gui_add_class(hw[IOP_MODULE_SWITCH], "dt_iop_enable_button");
   dt_iop_gui_set_enable_button_icon(hw[IOP_MODULE_SWITCH], module);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(hw[IOP_MODULE_SWITCH]), module->enabled);
+  g_signal_connect(G_OBJECT(hw[IOP_MODULE_SWITCH]), "button-press-event",
+                   G_CALLBACK(_iop_plugin_header_child_button_press), module);
   g_signal_connect(G_OBJECT(hw[IOP_MODULE_SWITCH]), "toggled", G_CALLBACK(_gui_off_callback), module);
   g_signal_connect(G_OBJECT(hw[IOP_MODULE_SWITCH]), "button-press-event", G_CALLBACK(_gui_off_button_press), module);
 
