@@ -370,6 +370,7 @@ typedef struct dt_develop_t
     gboolean restrict_histogram;
     int statistic;
     struct dt_lib_module_t *histogram_module;
+    gboolean (*refresh_global_picker)(struct dt_lib_module_t *self);
 
     uint64_t piece_hash;
 

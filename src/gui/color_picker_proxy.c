@@ -454,6 +454,23 @@ static void _refresh_active_picker(dt_develop_t *dev)
      loops and prevents the current run from ever publishing the cacheline we are waiting for. */
   if(dev->preview_pipe && dev->preview_pipe->processing) return;
 
+  if(!dev->color_picker.module)
+  {
+    /* The global picker already samples from histogram backbuffers published by preview updates.
+       Refresh it directly from that GUI-owned cache when possible so dragging the picker updates
+       the histogram labels immediately without waiting for another preview completion. */
+    if(dev->color_picker.histogram_module
+       && dev->color_picker.refresh_global_picker
+       && dev->color_picker.refresh_global_picker(dev->color_picker.histogram_module))
+    {
+      dev->color_picker.picker->update_pending = FALSE;
+      dev->color_picker.update_pending = FALSE;
+      dev->color_picker.recompute_requested = FALSE;
+      dt_control_queue_redraw_center();
+      return;
+    }
+  }
+
   if(dev->preview_pipe)
   {
     const dt_color_picker_resample_status_t sampled = _sample_picker_from_cache(dev);
