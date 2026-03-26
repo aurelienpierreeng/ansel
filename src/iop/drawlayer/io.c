@@ -642,7 +642,28 @@ static void _sanitize_requested_layer_name(const char *requested, const char *fa
 {
   if(!name || name_size == 0) return;
   name[0] = '\0';
-  if(requested && requested[0]) g_strlcpy(name, requested, name_size);
+  if(requested && requested[0])
+  {
+    gboolean last_was_space = FALSE;
+    size_t out = 0;
+    for(size_t in = 0; requested[in] != '\0' && out + 1 < name_size; in++)
+    {
+      const unsigned char ch = (unsigned char)requested[in];
+      if(g_ascii_isspace(ch))
+      {
+        if(out > 0 && !last_was_space)
+        {
+          name[out++] = ' ';
+          last_was_space = TRUE;
+        }
+        continue;
+      }
+
+      name[out++] = (char)ch;
+      last_was_space = FALSE;
+    }
+    name[out] = '\0';
+  }
   g_strstrip(name);
   if(name[0] == '\0' && fallback_name && fallback_name[0]) g_strlcpy(name, fallback_name, name_size);
 }
@@ -898,6 +919,49 @@ gboolean dt_drawlayer_io_insert_layer(const char *path, const char *target_name,
   const int insert_order = (insert_after_order >= 0) ? (insert_after_order + 1) : -1;
   return _rewrite_sidecar(path, target_name, -1, work_profile, patch, raw_width, raw_height, FALSE, insert_order,
                           final_order);
+}
+
+/** @brief Rename one existing layer page while preserving its directory payload. */
+gboolean dt_drawlayer_io_rename_layer(const char *path, const char *current_name, const char *new_name,
+                                      const char *work_profile, const int raw_width, const int raw_height,
+                                      dt_drawlayer_io_layer_info_t *info)
+{
+  if(info) memset(info, 0, sizeof(*info));
+  if(!path || !current_name || current_name[0] == '\0' || !new_name || new_name[0] == '\0') return FALSE;
+  if(!g_file_test(path, G_FILE_TEST_EXISTS)) return FALSE;
+
+  dt_drawlayer_io_layer_info_t current = { 0 };
+  if(!dt_drawlayer_io_find_layer(path, current_name, -1, &current)) return FALSE;
+  if(dt_drawlayer_io_layer_name_exists(path, new_name, current.index)) return FALSE;
+
+  int final_order = current.index;
+  if(!dt_drawlayer_io_store_layer(path, new_name, current.index, work_profile, NULL, raw_width, raw_height, FALSE,
+                                  &final_order))
+    return FALSE;
+
+  if(info)
+  {
+    *info = current;
+    info->found = TRUE;
+    info->index = final_order;
+    g_strlcpy(info->name, new_name, sizeof(info->name));
+    if(work_profile && work_profile[0] != '\0')
+      g_strlcpy(info->work_profile, work_profile, sizeof(info->work_profile));
+  }
+  return TRUE;
+}
+
+/** @brief Delete one existing layer page from the sidecar TIFF. */
+gboolean dt_drawlayer_io_delete_layer(const char *path, const char *target_name, const int raw_width,
+                                      const int raw_height)
+{
+  if(!path || !target_name || target_name[0] == '\0') return FALSE;
+  if(!g_file_test(path, G_FILE_TEST_EXISTS)) return FALSE;
+
+  dt_drawlayer_io_layer_info_t info = { 0 };
+  if(!dt_drawlayer_io_find_layer(path, target_name, -1, &info)) return FALSE;
+
+  return dt_drawlayer_io_store_layer(path, target_name, info.index, NULL, NULL, raw_width, raw_height, TRUE, NULL);
 }
 
 /** @brief Create unique layer name with fallback if requested name is empty. */

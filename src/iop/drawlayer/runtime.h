@@ -26,7 +26,7 @@ typedef struct dt_drawlayer_session_state_t
   dt_drawlayer_damaged_rect_t preview_rect;
   drawlayer_view_patch_t live_patch;
   int preview_bg_mode;
-  char missing_layer_prompt_name[DRAWLAYER_NAME_SIZE];
+  char missing_layer_error[256];
   gboolean background_job_running;
 } dt_drawlayer_session_state_t;
 
@@ -118,6 +118,15 @@ typedef struct dt_drawlayer_ui_state_t
 
 typedef struct dt_drawlayer_controls_t
 {
+  GtkWidget *notebook;
+  GtkWidget *brush_tab;
+  GtkWidget *layer_tab;
+  GtkWidget *input_tab;
+  GtkWidget *preview_title;
+  GtkWidget *preview_box;
+  GtkWidget *layer_action_row;
+  GtkWidget *layer_fill_title;
+  GtkWidget *layer_fill_row;
   GtkWidget *brush_shape;
   GtkWidget *brush_mode;
   GtkWidget *color;
@@ -135,7 +144,7 @@ typedef struct dt_drawlayer_controls_t
   GtkWidget *sprinkle_coarseness;
   GtkWidget *softness;
   GtkWidget *hdr_exposure;
-  GtkEntry *layer_name;
+  GtkWidget *layer_status;
   GtkWidget *layer_select;
   GtkWidget *preview_bg_image;
   GtkWidget *preview_bg_white;
@@ -143,6 +152,8 @@ typedef struct dt_drawlayer_controls_t
   GtkWidget *preview_bg_black;
   GtkWidget *delete_layer;
   GtkWidget *create_layer;
+  GtkWidget *rename_layer;
+  GtkWidget *attach_layer;
   GtkWidget *create_background;
   GtkWidget *save_layer;
   GtkWidget *fill_white;
@@ -259,6 +270,8 @@ typedef struct dt_drawlayer_runtime_inputs_t
   gboolean module_focused;
   gboolean display_pipe;
   gboolean have_layer_selection;
+  const char *selected_layer_name;
+  int selected_layer_order;
   gboolean have_valid_output_roi;
   gboolean use_opencl;
   gboolean view_changed;

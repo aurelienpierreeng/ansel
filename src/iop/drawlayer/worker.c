@@ -56,6 +56,7 @@ typedef struct drawlayer_rt_callbacks_t
 typedef struct drawlayer_rt_worker_t
 {
   pthread_t thread;                              /**< POSIX worker thread handle. */
+  gboolean thread_started;                       /**< TRUE once `thread` is owned by this worker. */
   dt_drawlayer_paint_raw_input_t *ring;          /**< FIFO ring storage. */
   guint ring_capacity;                           /**< Max events in ring. */
   guint ring_head;                               /**< Pop index. */
@@ -91,6 +92,7 @@ struct dt_drawlayer_worker_t
   uint32_t live_publish_serial;                 /**< Monotonic live publish serial. */
   dt_drawlayer_damaged_rect_t live_publish_damage; /**< Worker-owned accumulated publish damage. */
   pthread_t fullres_thread;                     /**< Deferred full-resolution replay worker. */
+  gboolean fullres_thread_started;              /**< TRUE once `fullres_thread` is owned by this worker. */
   GQueue *finished_stroke_queue;                /**< Queue of finished stroke replay jobs. */
   dt_drawlayer_worker_state_t fullres_state;    /**< Full-resolution worker lifecycle state. */
   gboolean fullres_stop;                        /**< Full-resolution worker stop flag. */
@@ -1129,7 +1131,7 @@ static gboolean _rt_queue_pop_locked(dt_drawlayer_worker_t *rt,
 
 static inline gboolean _worker_is_started(const drawlayer_rt_worker_t *worker)
 {
-  return worker && worker->state != DT_DRAWLAYER_WORKER_STATE_STOPPED;
+  return worker && worker->thread_started;
 }
 
 static inline gboolean _worker_is_busy(const drawlayer_rt_worker_t *worker)
@@ -1151,7 +1153,7 @@ static inline gboolean _backend_pending_dabs_locked(const dt_drawlayer_worker_t 
 
 static inline gboolean _fullres_worker_started(const dt_drawlayer_worker_t *rt)
 {
-  return rt && rt->fullres_state != DT_DRAWLAYER_WORKER_STATE_STOPPED;
+  return rt && rt->fullres_thread_started;
 }
 
 static inline gboolean _fullres_worker_busy(const dt_drawlayer_worker_t *rt)
@@ -1473,7 +1475,7 @@ static gboolean _start_fullres_worker(dt_drawlayer_worker_t *rt)
   if(_fullres_worker_started(rt)) return TRUE;
 
   rt->fullres_stop = FALSE;
-  rt->fullres_state = DT_DRAWLAYER_WORKER_STATE_IDLE;
+  rt->fullres_state = DT_DRAWLAYER_WORKER_STATE_STOPPED;
 
   drawlayer_rt_thread_ctx_t *ctx = g_malloc(sizeof(*ctx));
   if(!ctx) return FALSE;
@@ -1483,9 +1485,12 @@ static gboolean _start_fullres_worker(dt_drawlayer_worker_t *rt)
   if(err != 0)
   {
     dt_free(ctx);
+    rt->fullres_thread_started = FALSE;
+    rt->fullres_state = DT_DRAWLAYER_WORKER_STATE_STOPPED;
     return FALSE;
   }
 
+  rt->fullres_thread_started = TRUE;
   rt->fullres_state = DT_DRAWLAYER_WORKER_STATE_IDLE;
   return TRUE;
 }
@@ -1660,7 +1665,7 @@ static gboolean _start_worker(dt_iop_module_t *self, dt_drawlayer_worker_t *rt)
   }
 
   worker->stop = FALSE;
-  worker->state = DT_DRAWLAYER_WORKER_STATE_IDLE;
+  worker->state = DT_DRAWLAYER_WORKER_STATE_STOPPED;
 
   drawlayer_rt_thread_ctx_t *ctx = g_malloc(sizeof(*ctx));
   if(!ctx) return FALSE;
@@ -1670,9 +1675,12 @@ static gboolean _start_worker(dt_iop_module_t *self, dt_drawlayer_worker_t *rt)
   if(err != 0)
   {
     dt_free(ctx);
+    worker->thread_started = FALSE;
+    worker->state = DT_DRAWLAYER_WORKER_STATE_STOPPED;
     return FALSE;
   }
 
+  worker->thread_started = TRUE;
   worker->state = DT_DRAWLAYER_WORKER_STATE_IDLE;
   if(!_fullres_worker_started(rt)) _start_fullres_worker(rt);
   return TRUE;
@@ -1696,9 +1704,9 @@ static void _cancel_async_commit(dt_drawlayer_worker_t *rt)
 /** @brief Stop worker thread and clear transient state. */
 static void _stop_worker(dt_iop_module_t *self, dt_drawlayer_worker_t *rt)
 {
+  if(!rt) return;
   drawlayer_rt_worker_t *worker = _backend_worker(rt);
   _cancel_async_commit(rt);
-  if(!rt) return;
 
   if(worker && _worker_is_started(worker))
   {
@@ -1710,6 +1718,8 @@ static void _stop_worker(dt_iop_module_t *self, dt_drawlayer_worker_t *rt)
     dt_pthread_mutex_unlock(&rt->worker_mutex);
 
     pthread_join(worker->thread, NULL);
+    memset(&worker->thread, 0, sizeof(worker->thread));
+    worker->thread_started = FALSE;
     worker->state = DT_DRAWLAYER_WORKER_STATE_STOPPED;
     worker->stop = FALSE;
     _rt_queue_clear_locked(rt);
@@ -1726,6 +1736,8 @@ static void _stop_worker(dt_iop_module_t *self, dt_drawlayer_worker_t *rt)
     dt_pthread_mutex_unlock(&rt->worker_mutex);
 
     pthread_join(rt->fullres_thread, NULL);
+    memset(&rt->fullres_thread, 0, sizeof(rt->fullres_thread));
+    rt->fullres_thread_started = FALSE;
     rt->fullres_state = DT_DRAWLAYER_WORKER_STATE_STOPPED;
     rt->fullres_stop = FALSE;
   }

@@ -216,9 +216,13 @@ gboolean dt_drawlayer_flush_layer_cache(dt_iop_module_t *self);
 void dt_drawlayer_flush_process_patch_to_base(dt_iop_module_t *self, dt_iop_drawlayer_gui_data_t *g);
 static void _flush_process_patch_to_base_locked(dt_iop_module_t *self, dt_iop_drawlayer_gui_data_t *g);
 static void _sync_mode_sensitive_widgets(dt_iop_module_t *self);
+static void _refresh_layer_widgets(dt_iop_module_t *self);
+static void _sync_layer_controls(dt_iop_module_t *self);
+static void _sanitize_requested_layer_name(const char *requested, char *name, size_t name_size);
+static gboolean _prompt_layer_name_dialog(const char *title, const char *message, const char *initial_name,
+                                          char *name, size_t name_size);
 gboolean dt_drawlayer_sync_widget_cache(dt_iop_module_t *self);
 void dt_drawlayer_set_pipeline_realtime_mode(dt_iop_module_t *self, gboolean state);
-static int _offer_missing_layer_recreation(dt_iop_module_t *self, const char *missing_name);
 static gboolean _background_layer_job_done_idle(gpointer user_data);
 gboolean dt_drawlayer_prime_live_process_patch_before_stroke(dt_iop_module_t *self);
 static dt_drawlayer_runtime_result_t _update_gui_runtime_manager(dt_iop_module_t *self,
@@ -370,20 +374,6 @@ static void _fill_input_layer_coords(dt_iop_module_t *self, dt_drawlayer_paint_r
   }
 }
 
-static void _default_layer_name(dt_iop_module_t *self, char *name, const size_t name_size)
-{
-  const char *suffix = "0";
-  if(self && self->multi_name[0] != '\0')
-    suffix = self->multi_name;
-  else if(self)
-  {
-    static char fallback[16];
-    g_snprintf(fallback, sizeof(fallback), "%d", MAX(self->multi_priority, 0) + 1);
-    suffix = fallback;
-  }
-  g_snprintf(name, name_size, "layer %s", suffix);
-}
-
 static gboolean _layer_name_non_empty(const char *name)
 {
   if(!name) return FALSE;
@@ -406,13 +396,6 @@ static gboolean _get_current_work_profile_key(dt_iop_module_t *self, GList *iop_
   g_snprintf(key, key_size, "%d|%d|%s", (int)work_profile->type, (int)work_profile->intent,
              work_profile->filename);
   return key[0] != '\0';
-}
-
-static void _ensure_layer_name(dt_iop_module_t *self, dt_iop_drawlayer_params_t *params)
-{
-  if(params->layer_name[0] != '\0') return;
-  _default_layer_name(self, params->layer_name, sizeof(params->layer_name));
-  params->layer_order = -1;
 }
 
 typedef struct drawlayer_process_scratch_t
@@ -633,13 +616,12 @@ static gboolean _refresh_piece_base_cache(dt_iop_module_t *self, dt_iop_drawlaye
       return TRUE;
     }
 
-    dt_drawlayer_cache_patch_clear(&data->process.base_patch, "drawlayer patch");
-    data->process.cache_valid = FALSE;
+    data->process.cache_valid = TRUE;
     data->process.cache_dirty = FALSE;
-    data->process.cache_imgid = -1;
-    data->process.cache_layer_name[0] = '\0';
-    data->process.cache_layer_order = -1;
-    dt_drawlayer_process_state_invalidate(&data->process);
+    data->process.cache_imgid = pipe->image.id;
+    g_strlcpy(data->process.cache_layer_name, params->layer_name, sizeof(data->process.cache_layer_name));
+    data->process.cache_layer_order = params->layer_order;
+    return TRUE;
   }
 
   char path[PATH_MAX] = { 0 };
@@ -1424,6 +1406,44 @@ static void _show_drawlayer_modal_message(const GtkMessageType type, const char 
   gtk_widget_destroy(dialog);
 }
 
+static gboolean _prompt_layer_name_dialog(const char *title, const char *message, const char *initial_name,
+                                          char *name, const size_t name_size)
+{
+  if(!darktable.gui || !darktable.gui->ui || !title || title[0] == '\0' || !name || name_size == 0) return FALSE;
+
+  GtkWidget *dialog = gtk_dialog_new_with_buttons(
+      title, GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)),
+      GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL, _("Cancel"), GTK_RESPONSE_CANCEL,
+      _("Confirm"), GTK_RESPONSE_ACCEPT, NULL);
+  GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_PIXEL_APPLY_DPI(8));
+  GtkWidget *entry = gtk_entry_new();
+  if(message && message[0] != '\0')
+  {
+    GtkWidget *label = gtk_label_new(message);
+    gtk_label_set_xalign(GTK_LABEL(label), 0.0f);
+    gtk_label_set_line_wrap(GTK_LABEL(label), TRUE);
+    gtk_box_pack_start(GTK_BOX(box), label, FALSE, FALSE, 0);
+  }
+  gtk_entry_set_activates_default(GTK_ENTRY(entry), TRUE);
+  if(initial_name && initial_name[0] != '\0') gtk_entry_set_text(GTK_ENTRY(entry), initial_name);
+  gtk_box_pack_start(GTK_BOX(box), entry, FALSE, FALSE, 0);
+  gtk_container_set_border_width(GTK_CONTAINER(box), DT_PIXEL_APPLY_DPI(12));
+  gtk_box_pack_start(GTK_BOX(content), box, TRUE, TRUE, 0);
+  gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_ACCEPT);
+  gtk_widget_show_all(dialog);
+
+  gboolean accepted = FALSE;
+  if(gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT)
+  {
+    _sanitize_requested_layer_name(gtk_entry_get_text(GTK_ENTRY(entry)), name, name_size);
+    accepted = _layer_name_non_empty(name);
+  }
+
+  gtk_widget_destroy(dialog);
+  return accepted;
+}
+
 static gboolean _color_picker_set_from_position(dt_iop_module_t *self, const float x, const float y)
 {
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
@@ -1586,11 +1606,22 @@ static void _sanitize_params(dt_iop_module_t *self, dt_iop_drawlayer_params_t *p
   else
     params->layer_name[sizeof(params->layer_name) - 1] = '\0';
 
+  char sanitized_layer_name[DRAWLAYER_NAME_SIZE] = { 0 };
+  _sanitize_requested_layer_name(params->layer_name, sanitized_layer_name, sizeof(sanitized_layer_name));
+  if(g_strcmp0(params->layer_name, sanitized_layer_name))
+    g_strlcpy(params->layer_name, sanitized_layer_name, sizeof(params->layer_name));
+
   if(memchr(params->work_profile, '\0', sizeof(params->work_profile)) == NULL)
     memset(params->work_profile, 0, sizeof(params->work_profile));
   else
     params->work_profile[sizeof(params->work_profile) - 1] = '\0';
 
+  if(!_layer_name_non_empty(params->layer_name))
+  {
+    params->layer_name[0] = '\0';
+    params->layer_order = -1;
+    params->sidecar_timestamp = 0;
+  }
   if(params->layer_order < -1) params->layer_order = -1;
   if(params->work_profile[0] != '\0' && !_profile_key_is_sane(params->work_profile))
     memset(params->work_profile, 0, sizeof(params->work_profile));
@@ -1598,8 +1629,6 @@ static void _sanitize_params(dt_iop_module_t *self, dt_iop_drawlayer_params_t *p
   // Freshly enabled or migrated instances without a concrete sidecar page should adopt the current profile.
   if(params->layer_order < 0 && params->stroke_commit_hash == 0u)
     memset(params->work_profile, 0, sizeof(params->work_profile));
-
-  _ensure_layer_name(self, params);
 
   if(params->work_profile[0] == '\0' && self && self->dev)
   {
@@ -1610,14 +1639,32 @@ static void _sanitize_params(dt_iop_module_t *self, dt_iop_drawlayer_params_t *p
   }
 }
 
-static void _sanitize_requested_layer_name(dt_iop_module_t *self, const char *requested, char *name,
-                                           const size_t name_size)
+static void _sanitize_requested_layer_name(const char *requested, char *name, const size_t name_size)
 {
   if(!name || name_size == 0) return;
   name[0] = '\0';
-  if(requested && requested[0]) g_strlcpy(name, requested, name_size);
+  if(!(requested && requested[0])) return;
+
+  gboolean last_was_space = FALSE;
+  size_t out = 0;
+  for(size_t in = 0; requested[in] != '\0' && out + 1 < name_size; in++)
+  {
+    const unsigned char ch = (unsigned char)requested[in];
+    if(g_ascii_isspace(ch))
+    {
+      if(out > 0 && !last_was_space)
+      {
+        name[out++] = ' ';
+        last_was_space = TRUE;
+      }
+      continue;
+    }
+
+    name[out++] = (char)ch;
+    last_was_space = FALSE;
+  }
+  name[out] = '\0';
   g_strstrip(name);
-  if(name[0] == '\0') _default_layer_name(self, name, name_size);
 }
 
 static void _layerio_append_error(GString *errors, const char *message)
@@ -1639,15 +1686,13 @@ static void _populate_layer_list(dt_iop_module_t *self)
   dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
   if(!g) return;
   if(darktable.gui) ++darktable.gui->reset;
-  _ensure_layer_name(self, params);
 
   while(dt_bauhaus_combobox_length(g->controls.layer_select) > 0)
     dt_bauhaus_combobox_remove_at(g->controls.layer_select, dt_bauhaus_combobox_length(g->controls.layer_select) - 1);
 
   if(!self->dev)
   {
-    dt_bauhaus_combobox_add(g->controls.layer_select, params->layer_name);
-    dt_bauhaus_combobox_set(g->controls.layer_select, 0);
+    dt_bauhaus_combobox_set(g->controls.layer_select, -1);
     if(darktable.gui) --darktable.gui->reset;
     return;
   }
@@ -1655,16 +1700,11 @@ static void _populate_layer_list(dt_iop_module_t *self)
   char path[PATH_MAX] = { 0 };
   char **names = NULL;
   int count = 0;
-  if(!dt_drawlayer_io_sidecar_path(self->dev->image_storage.id, path, sizeof(path))
-     || !dt_drawlayer_io_list_layer_names(path, &names, &count))
-  {
-    dt_bauhaus_combobox_add(g->controls.layer_select, params->layer_name);
-    dt_bauhaus_combobox_set(g->controls.layer_select, 0);
-    if(darktable.gui) --darktable.gui->reset;
-    return;
-  }
+  if(dt_drawlayer_io_sidecar_path(self->dev->image_storage.id, path, sizeof(path)))
+    dt_drawlayer_io_list_layer_names(path, &names, &count);
 
   int active = -1;
+  const int listed_count = count;
   for(int i = 0; i < count; i++)
   {
     const char *page_name = names[i] ? names[i] : "";
@@ -1674,15 +1714,15 @@ static void _populate_layer_list(dt_iop_module_t *self)
   }
 
   dt_drawlayer_io_free_layer_names(&names, &count);
-  if(count == 0)
-  {
-    dt_bauhaus_combobox_add(g->controls.layer_select, params->layer_name);
-    dt_bauhaus_combobox_set(g->controls.layer_select, 0);
-  }
-  else if(active >= 0)
+  if(active >= 0)
     dt_bauhaus_combobox_set(g->controls.layer_select, active);
-  else
+  else if(listed_count > 0 && !_layer_name_non_empty(params->layer_name))
     dt_bauhaus_combobox_set(g->controls.layer_select, 0);
+  else
+    /* The combobox is reserved for layers that already exist in the TIFF
+     * sidecar. Keep unsaved or missing module attachments out of the shared
+     * list so switching layers never invents phantom entries. */
+    dt_bauhaus_combobox_set(g->controls.layer_select, -1);
   if(darktable.gui) --darktable.gui->reset;
 }
 
@@ -1752,7 +1792,19 @@ gboolean dt_drawlayer_ensure_layer_cache(dt_iop_module_t *self)
   GMainContext *const ui_ctx = g_main_context_default();
   const gboolean ui_thread = ui_ctx && g_main_context_is_owner(ui_ctx);
   if(imgid <= 0 || raw_width <= 0 || raw_height <= 0) return FALSE;
-  const gboolean bootstrap = (params->sidecar_timestamp == 0 && params->layer_order < 0);
+  if(!_layer_name_non_empty(params->layer_name))
+  {
+    _release_all_base_patch_extra_refs(g);
+    dt_drawlayer_cache_patch_clear(&g->process.base_patch, "drawlayer patch");
+    g->process.cache_valid = FALSE;
+    g->process.cache_dirty = FALSE;
+    g->process.cache_imgid = -1;
+    g->process.cache_layer_name[0] = '\0';
+    g->process.cache_layer_order = -1;
+    dt_drawlayer_process_state_invalidate(&g->process);
+    if(ui_thread) _refresh_layer_widgets(self);
+    return TRUE;
+  }
   const drawlayer_layer_cache_key_t cache_key = {
     .imgid = imgid,
     .raw_width = raw_width,
@@ -1766,9 +1818,7 @@ gboolean dt_drawlayer_ensure_layer_cache(dt_iop_module_t *self)
   char current_profile[DRAWLAYER_PROFILE_SIZE] = { 0 };
   const gboolean have_current_profile = _get_current_work_profile_key(self, self->dev->iop, self->dev->pipe,
                                                                       current_profile, sizeof(current_profile));
-  if(bootstrap && have_current_profile)
-    g_strlcpy(params->work_profile, current_profile, sizeof(params->work_profile));
-  else if(!have_current_profile)
+  if(!have_current_profile)
     _layerio_append_error(errors, _("failed to resolve drawlayer working profile"));
   else if(params->work_profile[0] == '\0')
     g_strlcpy(params->work_profile, current_profile, sizeof(params->work_profile));
@@ -1834,147 +1884,43 @@ gboolean dt_drawlayer_ensure_layer_cache(dt_iop_module_t *self)
 
   if(created) file_exists = g_file_test(path, G_FILE_TEST_EXISTS);
 
-  if(created && bootstrap)
+  if(created && !file_exists)
   {
-    if(!have_current_profile)
-    {
-      ok = FALSE;
-    }
-    else
-    {
-      gboolean initialized = FALSE;
-
-      /* Bootstrap should not rename/create layers blindly when reopening an
-       * existing image: first try to resolve the layer by its serialized name. */
-      if(file_exists)
-      {
-        drawlayer_dir_info_t info = { 0 };
-        dt_drawlayer_io_layer_info_t io_info = { 0 };
-        if(dt_drawlayer_io_find_layer(path, params->layer_name, -1, &io_info))
-        {
-          info.found = io_info.found;
-          info.index = io_info.index;
-          info.count = io_info.count;
-          info.width = io_info.width;
-          info.height = io_info.height;
-          g_strlcpy(info.name, io_info.name, sizeof(info.name));
-          g_strlcpy(info.work_profile, io_info.work_profile, sizeof(info.work_profile));
-          dt_drawlayer_io_patch_t io_patch = {
-            .x = g->process.base_patch.x,
-            .y = g->process.base_patch.y,
-            .width = g->process.base_patch.width,
-            .height = g->process.base_patch.height,
-            .pixels = g->process.base_patch.pixels,
-          };
-          if(!dt_drawlayer_io_load_layer(path, params->layer_name, info.index, raw_width, raw_height, &io_patch))
-          {
-            _layerio_append_error(errors, _("failed to read drawing layer sidecar"));
-            ok = FALSE;
-          }
-          else
-          {
-            params->layer_order = info.index;
-            params->sidecar_timestamp = _sidecar_timestamp_from_path(path);
-            cache_loaded = TRUE;
-            initialized = TRUE;
-          }
-        }
-      }
-
-      if(ok && !initialized)
-      {
-        char unique_name[DRAWLAYER_NAME_SIZE] = { 0 };
-        char fallback[DRAWLAYER_NAME_SIZE] = { 0 };
-        _default_layer_name(self, fallback, sizeof(fallback));
-        dt_drawlayer_io_make_unique_name(path, params->layer_name, fallback, unique_name, sizeof(unique_name));
-        g_strlcpy(params->layer_name, unique_name, sizeof(params->layer_name));
-
-        int final_order = -1;
-        dt_drawlayer_cache_patch_rdlock(&g->process.base_patch);
-        dt_drawlayer_io_patch_t io_patch = {
-          .x = g->process.base_patch.x,
-          .y = g->process.base_patch.y,
-          .width = g->process.base_patch.width,
-          .height = g->process.base_patch.height,
-          .pixels = g->process.base_patch.pixels,
-        };
-        const gboolean stored = dt_drawlayer_io_store_layer(path, params->layer_name, -1, params->work_profile,
-                                                            &io_patch, raw_width, raw_height, FALSE, &final_order);
-        dt_drawlayer_cache_patch_rdunlock(&g->process.base_patch);
-        if(!stored)
-        {
-          _layerio_append_error(errors, _("failed to initialize drawing layer sidecar"));
-          ok = FALSE;
-        }
-        else
-        {
-          params->layer_order = final_order;
-          params->sidecar_timestamp = _sidecar_timestamp_from_path(path);
-          _invalidate_process_patch(g);
-          cache_loaded = TRUE;
-        }
-      }
-    }
-  }
-  else if(created && !file_exists)
-  {
-    _layerio_append_error(errors, _("drawlayer sidecar TIFF is missing"));
+    cache_loaded = TRUE;
+    params->layer_order = -1;
+    params->sidecar_timestamp = 0;
+    _invalidate_process_patch(g);
   }
   else if(created)
   {
+    const gboolean pending_new_layer = (params->layer_order < 0 && params->sidecar_timestamp == 0);
     drawlayer_dir_info_t info = { 0 };
     dt_drawlayer_io_layer_info_t io_info = { 0 };
     if(!dt_drawlayer_io_find_layer(path, params->layer_name, -1, &io_info))
     {
-      int missing_action = 0;
-      if(ui_thread && self->dev && self->dev->gui_module == self)
-        missing_action = _offer_missing_layer_recreation(self, params->layer_name);
-
-      if(missing_action == 2)
+      if(pending_new_layer)
       {
-        if(!have_current_profile)
-        {
-          _layerio_append_error(errors, _("failed to resolve drawlayer working profile"));
-          ok = FALSE;
-        }
-        else
-        {
-          g_string_truncate(errors, 0);
-          g_strlcpy(params->work_profile, current_profile, sizeof(params->work_profile));
-          int final_order = -1;
-          dt_drawlayer_cache_patch_rdlock(&g->process.base_patch);
-          dt_drawlayer_io_patch_t io_patch = {
-            .x = g->process.base_patch.x,
-            .y = g->process.base_patch.y,
-            .width = g->process.base_patch.width,
-            .height = g->process.base_patch.height,
-            .pixels = g->process.base_patch.pixels,
-          };
-          const gboolean stored
-              = dt_drawlayer_io_store_layer(path, params->layer_name, -1, params->work_profile, &io_patch,
-                                            raw_width, raw_height, FALSE, &final_order);
-          dt_drawlayer_cache_patch_rdunlock(&g->process.base_patch);
-          if(!stored)
-          {
-            _layerio_append_error(errors, _("failed to initialize drawing layer sidecar"));
-            ok = FALSE;
-          }
-          else
-          {
-            if(g)
-            {
-              g->session.missing_layer_prompt_name[0] = '\0';
-            }
-            params->layer_order = final_order;
-            params->sidecar_timestamp = _sidecar_timestamp_from_path(path);
-            _invalidate_process_patch(g);
-            cache_loaded = TRUE;
-          }
-        }
+        cache_loaded = TRUE;
+        _invalidate_process_patch(g);
       }
-      else if(missing_action == 0)
+      else
       {
-        _layerio_append_error(errors, _("drawlayer layer not found in sidecar TIFF"));
+        g_snprintf(g->session.missing_layer_error, sizeof(g->session.missing_layer_error),
+                   _("The drawing layer \"%s\" was not found in the sidecar TIFF."),
+                   params->layer_name);
+        params->layer_name[0] = '\0';
+        params->layer_order = -1;
+        params->sidecar_timestamp = 0;
+        memset(params->work_profile, 0, sizeof(params->work_profile));
+        _release_all_base_patch_extra_refs(g);
+        dt_drawlayer_cache_patch_clear(&g->process.base_patch, "drawlayer patch");
+        g->process.cache_valid = FALSE;
+        g->process.cache_dirty = FALSE;
+        g->process.cache_imgid = -1;
+        g->process.cache_layer_name[0] = '\0';
+        g->process.cache_layer_order = -1;
+        _reset_stroke_session(g);
+        dt_drawlayer_process_state_invalidate(&g->process);
       }
     }
     else
@@ -1986,10 +1932,7 @@ gboolean dt_drawlayer_ensure_layer_cache(dt_iop_module_t *self)
       info.height = io_info.height;
       g_strlcpy(info.name, io_info.name, sizeof(info.name));
       g_strlcpy(info.work_profile, io_info.work_profile, sizeof(info.work_profile));
-      if(g)
-      {
-        g->session.missing_layer_prompt_name[0] = '\0';
-      }
+      if(g) g->session.missing_layer_error[0] = '\0';
       params->layer_order = info.index;
       if(info.work_profile[0] != '\0' && params->work_profile[0] == '\0')
         g_strlcpy(params->work_profile, info.work_profile, sizeof(params->work_profile));
@@ -2029,15 +1972,10 @@ gboolean dt_drawlayer_ensure_layer_cache(dt_iop_module_t *self)
     g->process.cache_imgid = imgid;
     g_strlcpy(g->process.cache_layer_name, params->layer_name, sizeof(g->process.cache_layer_name));
     g->process.cache_layer_order = params->layer_order;
-
-    if(ui_thread && g->controls.layer_name && g_strcmp0(gtk_entry_get_text(g->controls.layer_name), params->layer_name))
-    {
-      gtk_entry_set_text(g->controls.layer_name, params->layer_name);
-    }
     if(ui_thread && g->controls.layer_select) _populate_layer_list(self);
     if(created) _retain_base_patch_loaded_ref(g);
   }
-  else
+  else if(_layer_name_non_empty(params->layer_name))
   {
     _release_all_base_patch_extra_refs(g);
     dt_drawlayer_cache_patch_clear(&g->process.base_patch, "drawlayer patch");
@@ -2045,6 +1983,7 @@ gboolean dt_drawlayer_ensure_layer_cache(dt_iop_module_t *self)
     g->process.cache_dirty = FALSE;
   }
 
+  if(ui_thread && !cache_loaded) _refresh_layer_widgets(self);
   _layerio_log_errors(errors);
   g_string_free(errors, TRUE);
   return ok || !cache_loaded;
@@ -2053,7 +1992,9 @@ gboolean dt_drawlayer_ensure_layer_cache(dt_iop_module_t *self)
 gboolean dt_drawlayer_flush_layer_cache(dt_iop_module_t *self)
 {
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
+  const dt_iop_drawlayer_params_t *params = (const dt_iop_drawlayer_params_t *)self->params;
   if(!g || !self->dev || !g->process.cache_valid || !g->process.cache_dirty || !g->process.base_patch.pixels) return TRUE;
+  if(!_layer_name_non_empty(params ? params->layer_name : NULL)) return TRUE;
   if(!_layer_name_non_empty(g->process.cache_layer_name)) return FALSE;
   if(dt_drawlayer_worker_any_active(g->stroke.worker)) dt_drawlayer_worker_flush_finished_strokes(g->stroke.worker);
 
@@ -2070,7 +2011,6 @@ gboolean dt_drawlayer_flush_layer_cache(dt_iop_module_t *self)
   if(!dt_drawlayer_io_sidecar_path(flush_imgid, path, sizeof(path))) return FALSE;
 
   int final_order = g->process.cache_layer_order;
-  const dt_iop_drawlayer_params_t *params = (const dt_iop_drawlayer_params_t *)self->params;
   const char *work_profile = params ? params->work_profile : "";
   dt_drawlayer_cache_patch_rdlock(&g->process.base_patch);
   dt_drawlayer_io_patch_t io_patch = {
@@ -2328,13 +2268,55 @@ static void _refresh_layer_widgets(dt_iop_module_t *self)
 
   g->manager.background_job_running = g->session.background_job_running;
 
-  if(g->controls.layer_name)
+  if(g->controls.layer_select) _populate_layer_list(self);
+  _sync_layer_controls(self);
+}
+
+static void _sync_layer_controls(dt_iop_module_t *self)
+{
+  dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
+  dt_iop_drawlayer_params_t *params = self ? (dt_iop_drawlayer_params_t *)self->params : NULL;
+  if(!g || !params) return;
+
+  const gboolean attached = _layer_name_non_empty(params->layer_name);
+  const gboolean missing = (g->session.missing_layer_error[0] != '\0');
+  const gboolean have_existing_layers = g->controls.layer_select && dt_bauhaus_combobox_length(g->controls.layer_select) > 0;
+
+  if(g->controls.notebook)
   {
-    gtk_entry_set_text(g->controls.layer_name, params->layer_name);
+    if(g->controls.brush_tab) gtk_widget_set_visible(g->controls.brush_tab, attached);
+    if(g->controls.input_tab) gtk_widget_set_visible(g->controls.input_tab, attached);
+    if(g->controls.layer_tab) gtk_widget_set_visible(g->controls.layer_tab, TRUE);
+    gtk_notebook_set_show_tabs(GTK_NOTEBOOK(g->controls.notebook), attached);
+    gtk_notebook_set_show_border(GTK_NOTEBOOK(g->controls.notebook), attached);
+    if(!attached && g->controls.layer_tab)
+      gtk_notebook_set_current_page(GTK_NOTEBOOK(g->controls.notebook),
+                                    gtk_notebook_page_num(GTK_NOTEBOOK(g->controls.notebook), g->controls.layer_tab));
   }
 
-  if(g->controls.layer_select) _populate_layer_list(self);
-  if(g->controls.create_background) gtk_widget_set_sensitive(g->controls.create_background, !g->session.background_job_running);
+  if(g->controls.preview_title) gtk_widget_set_visible(g->controls.preview_title, attached);
+  if(g->controls.preview_box) gtk_widget_set_visible(g->controls.preview_box, attached);
+  if(g->controls.layer_action_row) gtk_widget_set_visible(g->controls.layer_action_row, TRUE);
+  if(g->controls.layer_status)
+  {
+    gtk_label_set_text(GTK_LABEL(g->controls.layer_status), missing ? g->session.missing_layer_error : "");
+    gtk_widget_set_visible(g->controls.layer_status, missing);
+  }
+  if(g->controls.delete_layer) gtk_widget_set_visible(g->controls.delete_layer, attached);
+  if(g->controls.rename_layer) gtk_widget_set_visible(g->controls.rename_layer, attached);
+  if(g->controls.layer_fill_title) gtk_widget_set_visible(g->controls.layer_fill_title, attached);
+  if(g->controls.layer_fill_row) gtk_widget_set_visible(g->controls.layer_fill_row, attached);
+  if(g->controls.create_background) gtk_widget_set_visible(g->controls.create_background, attached);
+  if(g->controls.save_layer) gtk_widget_set_visible(g->controls.save_layer, attached);
+  if(g->controls.attach_layer) gtk_widget_set_visible(g->controls.attach_layer, !attached && have_existing_layers);
+
+  if(g->controls.layer_select) gtk_widget_set_visible(g->controls.layer_select, attached || have_existing_layers);
+  if(g->controls.create_layer) gtk_widget_set_sensitive(g->controls.create_layer, TRUE);
+  if(g->controls.rename_layer) gtk_widget_set_sensitive(g->controls.rename_layer, attached);
+  if(g->controls.attach_layer) gtk_widget_set_sensitive(g->controls.attach_layer, have_existing_layers);
+  if(g->controls.create_background)
+    gtk_widget_set_sensitive(g->controls.create_background, attached && !g->session.background_job_running);
+  if(g->controls.save_layer) gtk_widget_set_sensitive(g->controls.save_layer, attached);
 }
 
 static void _sync_preview_bg_buttons(dt_iop_module_t *self)
@@ -2509,7 +2491,7 @@ static gboolean _delete_current_layer(dt_iop_module_t *self)
 
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
   dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
-  _ensure_layer_name(self, params);
+  if(!_layer_name_non_empty(params->layer_name)) return FALSE;
 
   GString *errors = g_string_new(NULL);
   gboolean deleted = FALSE;
@@ -2525,45 +2507,28 @@ static gboolean _delete_current_layer(dt_iop_module_t *self)
   }
   else
   {
-    drawlayer_dir_info_t info = { 0 };
-    dt_drawlayer_io_layer_info_t io_info = { 0 };
-    if(!dt_drawlayer_io_find_layer(path, params->layer_name, -1, &io_info))
-    {
-      _layerio_append_error(errors, _("drawlayer layer not found in sidecar TIFF"));
-    }
+    if(!dt_drawlayer_io_delete_layer(path, params->layer_name, self->dev->roi.raw_width, self->dev->roi.raw_height))
+      _layerio_append_error(errors, _("failed to delete drawing layer from sidecar"));
     else
     {
-      info.found = io_info.found;
-      info.index = io_info.index;
-      info.count = io_info.count;
-      info.width = io_info.width;
-      info.height = io_info.height;
-      g_strlcpy(info.name, io_info.name, sizeof(info.name));
-      g_strlcpy(info.work_profile, io_info.work_profile, sizeof(info.work_profile));
-      if(!dt_drawlayer_io_store_layer(path, params->layer_name, info.index, NULL, NULL, self->dev->roi.raw_width,
-                                      self->dev->roi.raw_height, TRUE, NULL))
+      deleted = TRUE;
+      params->layer_name[0] = '\0';
+      params->layer_order = -1;
+      params->sidecar_timestamp = 0;
+      memset(params->work_profile, 0, sizeof(params->work_profile));
+      if(g) g->session.missing_layer_error[0] = '\0';
+      if(g)
       {
-        _layerio_append_error(errors, _("failed to delete drawing layer from sidecar"));
+        _release_all_base_patch_extra_refs(g);
+        dt_drawlayer_cache_patch_clear(&g->process.base_patch, "drawlayer patch");
+        g->process.cache_valid = FALSE;
+        g->process.cache_dirty = FALSE;
+        g->process.cache_imgid = -1;
+        g->process.cache_layer_name[0] = '\0';
+        g->process.cache_layer_order = -1;
+        _reset_stroke_session(g);
       }
-      else
-      {
-        deleted = TRUE;
-        _default_layer_name(self, params->layer_name, sizeof(params->layer_name));
-        params->layer_order = -1;
-        params->sidecar_timestamp = 0;
-        memset(params->work_profile, 0, sizeof(params->work_profile));
-        if(g)
-        {
-          _release_all_base_patch_extra_refs(g);
-          dt_drawlayer_cache_patch_clear(&g->process.base_patch, "drawlayer patch");
-          g->process.cache_valid = FALSE;
-          g->process.cache_dirty = FALSE;
-          g->process.cache_layer_name[0] = '\0';
-          g->process.cache_layer_order = -1;
-          _reset_stroke_session(g);
-        }
-        _refresh_layer_widgets(self);
-      }
+      _refresh_layer_widgets(self);
     }
   }
 
@@ -2577,7 +2542,7 @@ static gboolean _confirm_delete_layer(dt_iop_module_t *self, const gboolean remo
   if(!self->dev) return FALSE;
 
   dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
-  _ensure_layer_name(self, params);
+  if(!_layer_name_non_empty(params->layer_name)) return removing_module;
 
   GtkWidget *dialog = gtk_message_dialog_new(
       GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)), GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL,
@@ -2615,23 +2580,17 @@ static gboolean _rename_current_layer_from_gui(dt_iop_module_t *self, const char
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
   dt_iop_drawlayer_params_t *params = self ? (dt_iop_drawlayer_params_t *)self->params : NULL;
   if(!self || !self->dev || !g || !params) return FALSE;
+  if(!_layer_name_non_empty(params->layer_name)) return FALSE;
 
   char new_name[DRAWLAYER_NAME_SIZE] = { 0 };
   char stripped_requested[DRAWLAYER_NAME_SIZE] = { 0 };
   if(requested_name) g_strlcpy(stripped_requested, requested_name, sizeof(stripped_requested));
   g_strstrip(stripped_requested);
   if(stripped_requested[0] == '\0') return FALSE;
-  _sanitize_requested_layer_name(self, requested_name, new_name, sizeof(new_name));
+  _sanitize_requested_layer_name(requested_name, new_name, sizeof(new_name));
   if(new_name[0] == '\0') return FALSE;
 
-  if(!g_strcmp0(new_name, params->layer_name))
-  {
-    if(g_strcmp0(gtk_entry_get_text(g->controls.layer_name), new_name))
-    {
-      gtk_entry_set_text(g->controls.layer_name, new_name);
-    }
-    return TRUE;
-  }
+  if(!g_strcmp0(new_name, params->layer_name)) return TRUE;
 
   GString *errors = g_string_new(NULL);
   gboolean renamed = FALSE;
@@ -2649,50 +2608,25 @@ static gboolean _rename_current_layer_from_gui(dt_iop_module_t *self, const char
       _layerio_append_error(errors, _("drawlayer sidecar TIFF is missing"));
     else
     {
-      drawlayer_dir_info_t info = { 0 };
-      dt_drawlayer_io_layer_info_t io_info = { 0 };
-      if(!dt_drawlayer_io_find_layer(path, params->layer_name, -1, &io_info))
-      {
-        _layerio_append_error(errors, _("drawlayer layer not found in sidecar TIFF"));
-      }
+      dt_drawlayer_io_layer_info_t info = { 0 };
+      if(!dt_drawlayer_io_rename_layer(path, params->layer_name, new_name, params->work_profile,
+                                       self->dev->roi.raw_width, self->dev->roi.raw_height, &info))
+        _layerio_append_error(errors, _("failed to rename drawing layer in sidecar"));
       else
       {
-        info.found = io_info.found;
-        info.index = io_info.index;
-        info.count = io_info.count;
-        info.width = io_info.width;
-        info.height = io_info.height;
-        g_strlcpy(info.name, io_info.name, sizeof(info.name));
-        g_strlcpy(info.work_profile, io_info.work_profile, sizeof(info.work_profile));
-        if(dt_drawlayer_io_layer_name_exists(path, new_name, info.index))
-        {
-          _layerio_append_error(errors, _("drawlayer layer name already exists"));
-        }
-        else
-        {
-          int final_order = info.index;
-          if(!dt_drawlayer_io_store_layer(path, new_name, info.index, params->work_profile, NULL,
-                                          self->dev->roi.raw_width, self->dev->roi.raw_height, FALSE, &final_order))
-          {
-            _layerio_append_error(errors, _("failed to rename drawing layer in sidecar"));
-          }
-          else
-          {
-            g_strlcpy(params->layer_name, new_name, sizeof(params->layer_name));
-            params->layer_order = final_order;
-            params->sidecar_timestamp = _sidecar_timestamp_from_path(path);
-            g_strlcpy(g->process.cache_layer_name, params->layer_name, sizeof(g->process.cache_layer_name));
-            g->process.cache_layer_order = params->layer_order;
-            renamed = TRUE;
-          }
-        }
+        g_strlcpy(params->layer_name, new_name, sizeof(params->layer_name));
+        params->layer_order = info.index;
+        params->sidecar_timestamp = _sidecar_timestamp_from_path(path);
+        g_strlcpy(g->process.cache_layer_name, params->layer_name, sizeof(g->process.cache_layer_name));
+        g->process.cache_layer_order = params->layer_order;
+        renamed = TRUE;
       }
     }
   }
 
   if(renamed)
   {
-    g->session.missing_layer_prompt_name[0] = '\0';
+    g->session.missing_layer_error[0] = '\0';
     _refresh_layer_widgets(self);
     if(self->dev) dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   }
@@ -2717,8 +2651,18 @@ static gboolean _create_new_layer(dt_iop_module_t *self, const char *requested_n
   if(requested_name) g_strlcpy(stripped_requested, requested_name, sizeof(stripped_requested));
   g_strstrip(stripped_requested);
   if(stripped_requested[0] == '\0') return FALSE;
-  _sanitize_requested_layer_name(self, requested_name, new_name, sizeof(new_name));
+  _sanitize_requested_layer_name(requested_name, new_name, sizeof(new_name));
   if(new_name[0] == '\0') return FALSE;
+
+  char path[PATH_MAX] = { 0 };
+  if(dt_drawlayer_io_sidecar_path(self->dev->image_storage.id, path, sizeof(path))
+     && dt_drawlayer_io_layer_name_exists(path, new_name, -1))
+  {
+    _show_drawlayer_modal_message(GTK_MESSAGE_ERROR,
+                                  _("A drawing layer with that name already exists."),
+                                  _("Choose a different layer name."));
+    return FALSE;
+  }
 
   const dt_iop_drawlayer_params_t previous = *params;
 
@@ -2737,7 +2681,24 @@ static gboolean _create_new_layer(dt_iop_module_t *self, const char *requested_n
     return FALSE;
   }
 
-  g->session.missing_layer_prompt_name[0] = '\0';
+  /* Creating a layer must materialize it in the TIFF immediately so the
+   * shared combobox only ever lists real on-disk layers and drawing can start
+   * on the same authoritative cache line without a later bootstrap step. */
+  if(!g->process.cache_valid || !g->process.base_patch.pixels)
+  {
+    *params = previous;
+    gui_update(self);
+    return FALSE;
+  }
+  g->process.cache_dirty = TRUE;
+  if(!_flush_layer_cache(self))
+  {
+    *params = previous;
+    gui_update(self);
+    return FALSE;
+  }
+
+  g->session.missing_layer_error[0] = '\0';
   _touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f, 0u);
   if(self->dev)
   {
@@ -2825,7 +2786,6 @@ static gboolean _create_background_layer_from_input(dt_iop_module_t *self)
   dt_iop_drawlayer_params_t *params = self ? (dt_iop_drawlayer_params_t *)self->params : NULL;
   if(!self || !self->dev || !g || !params) return FALSE;
   if(g->session.background_job_running) return FALSE;
-  _ensure_layer_name(self, params);
   if(!_layer_name_non_empty(params->layer_name)) return FALSE;
 
   if(!_commit_dabs(self, FALSE)) return FALSE;
@@ -2895,58 +2855,11 @@ static gboolean _create_background_layer_from_input(dt_iop_module_t *self)
   return TRUE;
 }
 
-static int _offer_missing_layer_recreation(dt_iop_module_t *self, const char *missing_name)
-{
-  dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
-  if(!self || !self->dev || !g) return FALSE;
-  if(self->dev->gui_module != self) return 0;
-
-  if(g->session.missing_layer_prompt_name[0] != '\0'
-     && !g_strcmp0(g->session.missing_layer_prompt_name, missing_name ? missing_name : ""))
-    return 1;
-
-  g_strlcpy(g->session.missing_layer_prompt_name, missing_name ? missing_name : "", sizeof(g->session.missing_layer_prompt_name));
-
-  GtkWidget *dialog = gtk_message_dialog_new(GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)),
-                                             GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL,
-                                             GTK_MESSAGE_WARNING, GTK_BUTTONS_NONE, "%s",
-                                             _("The linked drawing layer was not found in the sidecar TIFF."));
-  gtk_message_dialog_format_secondary_text(GTK_MESSAGE_DIALOG(dialog), "%s",
-                                           _("Do you want to create a new layer for this module now?"));
-  gtk_dialog_add_button(GTK_DIALOG(dialog), _("Keep module as no-op"), GTK_RESPONSE_NO);
-  gtk_dialog_add_button(GTK_DIALOG(dialog), _("Create new layer"), GTK_RESPONSE_YES);
-
-  const int response = gtk_dialog_run(GTK_DIALOG(dialog));
-  gtk_widget_destroy(dialog);
-
-  if(response == GTK_RESPONSE_YES) return 2;
-  return 1;
-}
-
-static gboolean _current_layer_missing_in_sidecar(dt_iop_module_t *self)
-{
-  dt_iop_drawlayer_params_t *params = self ? (dt_iop_drawlayer_params_t *)self->params : NULL;
-  if(!self || !self->dev || !params || params->layer_name[0] == '\0') return FALSE;
-
-  char path[PATH_MAX] = { 0 };
-  if(!dt_drawlayer_io_sidecar_path(self->dev->image_storage.id, path, sizeof(path))) return FALSE;
-  if(!g_file_test(path, G_FILE_TEST_EXISTS)) return FALSE;
-
-  dt_drawlayer_io_layer_info_t info = { 0 };
-  return !dt_drawlayer_io_find_layer(path, params->layer_name, -1, &info);
-}
-
 static void _widget_changed(GtkWidget *widget, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
   if(!g || (darktable.gui && darktable.gui->reset)) return;
-
-  if(widget == GTK_WIDGET(g->controls.layer_name))
-  {
-    _rename_current_layer_from_gui(self, gtk_entry_get_text(g->controls.layer_name));
-    return;
-  }
 
   _sync_params_from_gui(self, FALSE);
 
@@ -2973,7 +2886,11 @@ static void _layer_selected(GtkWidget *widget, gpointer user_data)
   const char *text = dt_bauhaus_combobox_get_text(g->controls.layer_select);
   if(!text) return;
 
-  gtk_entry_set_text(g->controls.layer_name, text);
+  if(!_layer_name_non_empty(params->layer_name))
+  {
+    _sync_layer_controls(self);
+    return;
+  }
 
   char previous_name[DRAWLAYER_NAME_SIZE] = { 0 };
   g_strlcpy(previous_name, params->layer_name, sizeof(previous_name));
@@ -2988,7 +2905,7 @@ static void _layer_selected(GtkWidget *widget, gpointer user_data)
     return;
   }
 
-  g->session.missing_layer_prompt_name[0] = '\0';
+  g->session.missing_layer_error[0] = '\0';
   _touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f, 0u);
   if(self->dev)
   {
@@ -2996,6 +2913,63 @@ static void _layer_selected(GtkWidget *widget, gpointer user_data)
     dt_dev_pixelpipe_update_history_all(self->dev);
   }
   _refresh_layer_widgets(self);
+}
+
+static void _attach_selected_layer_clicked(GtkButton *button, gpointer user_data)
+{
+  (void)button;
+  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
+  dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
+  dt_iop_drawlayer_params_t *params = self ? (dt_iop_drawlayer_params_t *)self->params : NULL;
+  if(!self || !self->dev || !g || !params) return;
+  if(_layer_name_non_empty(params->layer_name)) return;
+
+  const int active = dt_bauhaus_combobox_get(g->controls.layer_select);
+  if(active < 0) return;
+
+  const char *text = dt_bauhaus_combobox_get_text(g->controls.layer_select);
+  if(!_layer_name_non_empty(text)) return;
+
+  char previous_name[DRAWLAYER_NAME_SIZE] = { 0 };
+  g_strlcpy(previous_name, params->layer_name, sizeof(previous_name));
+  const int previous_order = params->layer_order;
+  g_strlcpy(params->layer_name, text, sizeof(params->layer_name));
+  params->layer_order = active;
+  if(!_update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_SYNC_TEMP_BUFFERS, TRUE).ok)
+  {
+    g_strlcpy(params->layer_name, previous_name, sizeof(params->layer_name));
+    params->layer_order = previous_order;
+    gui_update(self);
+    return;
+  }
+
+  g->session.missing_layer_error[0] = '\0';
+  _touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f, 0u);
+  if(self->dev)
+  {
+    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
+    dt_dev_pixelpipe_update_history_all(self->dev);
+  }
+  _refresh_layer_widgets(self);
+}
+
+static void _rename_layer_clicked(GtkButton *button, gpointer user_data)
+{
+  (void)button;
+  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
+  dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
+  dt_iop_drawlayer_params_t *params = self ? (dt_iop_drawlayer_params_t *)self->params : NULL;
+  if(!self || !self->dev || !g || !params) return;
+  if(!_layer_name_non_empty(params->layer_name)) return;
+
+  char requested_name[DRAWLAYER_NAME_SIZE] = { 0 };
+  if(!_prompt_layer_name_dialog(_("Rename drawing layer"),
+                                _("Enter the new name for the current drawing layer."),
+                                params->layer_name, requested_name, sizeof(requested_name)))
+    return;
+
+  if(!_rename_current_layer_from_gui(self, requested_name))
+    dt_control_log(_("failed to rename drawing layer"));
 }
 
 static void _delete_layer_clicked(GtkButton *button, gpointer user_data)
@@ -3008,8 +2982,6 @@ static void _delete_layer_clicked(GtkButton *button, gpointer user_data)
 
   dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
   _touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f, 0u);
-  self->enabled = FALSE;
-  dt_iop_gui_set_enable_button(self);
   if(self->dev) dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   _refresh_layer_widgets(self);
   gui_update(self);
@@ -3173,9 +3145,15 @@ static void _create_layer_clicked(GtkButton *button, gpointer user_data)
 {
   (void)button;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
-  if(!self || !g) return;
-  if(!_create_new_layer(self, gtk_entry_get_text(g->controls.layer_name)))
+  if(!self) return;
+
+  char requested_name[DRAWLAYER_NAME_SIZE] = { 0 };
+  if(!_prompt_layer_name_dialog(_("Create drawing layer"),
+                                _("Enter the name of the new drawing layer."),
+                                "", requested_name, sizeof(requested_name)))
+    return;
+
+  if(!_create_new_layer(self, requested_name))
     dt_control_log(_("failed to create drawing layer"));
 }
 
@@ -3451,12 +3429,15 @@ void gui_reset(dt_iop_module_t *self)
   if(!_confirm_delete_layer(self, FALSE)) return;
 
   dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
-  _default_layer_name(self, params->layer_name, sizeof(params->layer_name));
+  params->layer_name[0] = '\0';
   params->layer_order = -1;
+  params->sidecar_timestamp = 0;
+  memset(params->work_profile, 0, sizeof(params->work_profile));
   _touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f, 0u);
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
   if(g)
   {
+    g->session.missing_layer_error[0] = '\0';
     drawlayer_runtime_host_context_t runtime_host = {
       .runtime = {
         .self = self,
@@ -3479,6 +3460,9 @@ void gui_reset(dt_iop_module_t *self)
         },
         &runtime_manager);
   }
+
+  _sync_mode_sensitive_widgets(self);
+  _refresh_layer_widgets(self);
 }
 
 /** @brief Hook called before module removal from history stack. */
@@ -3501,7 +3485,6 @@ void gui_init(dt_iop_module_t *self)
   dt_drawlayer_runtime_manager_init(&g->manager);
   dt_drawlayer_process_state_init(&g->process);
   _load_color_history(g);
-  _ensure_layer_name(self, params);
   _sanitize_params(self, params);
 
   dt_drawlayer_worker_init(self, &g->stroke.worker, &g->manager.painting_active,
@@ -3528,12 +3511,16 @@ void gui_init(dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(self->widget), history_box, FALSE, FALSE, 0);
 
   GtkWidget *notebook = gtk_notebook_new();
+  g->controls.notebook = notebook;
   gtk_widget_set_hexpand(notebook, TRUE);
   gtk_box_pack_start(GTK_BOX(self->widget), notebook, FALSE, FALSE, 0);
 
   GtkWidget *brush_tab = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_IOP_MODULE_CONTROL_SPACING);
   GtkWidget *layer_tab = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_IOP_MODULE_CONTROL_SPACING);
   GtkWidget *input_tab = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_IOP_MODULE_CONTROL_SPACING);
+  g->controls.brush_tab = brush_tab;
+  g->controls.layer_tab = layer_tab;
+  g->controls.input_tab = input_tab;
 
   gtk_notebook_append_page(GTK_NOTEBOOK(notebook), brush_tab, gtk_label_new(_("Brush")));
   gtk_notebook_append_page(GTK_NOTEBOOK(notebook), layer_tab, gtk_label_new(_("Layer")));
@@ -3543,8 +3530,10 @@ void gui_init(dt_iop_module_t *self)
   gtk_container_child_set(GTK_CONTAINER(notebook), input_tab, "tab-expand", TRUE, "tab-fill", TRUE, NULL);
 
   GtkWidget *preview_title = gtk_label_new(_("Background"));
+  g->controls.preview_title = preview_title;
   gtk_widget_set_halign(preview_title, GTK_ALIGN_START);
   GtkWidget *preview_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_IOP_MODULE_CONTROL_SPACING);
+  g->controls.preview_box = preview_box;
   GSList *preview_group = NULL;
   g->controls.preview_bg_image = gtk_radio_button_new_with_label(preview_group, _("image"));
   preview_group = gtk_radio_button_get_group(GTK_RADIO_BUTTON(g->controls.preview_bg_image));
@@ -3668,26 +3657,33 @@ void gui_init(dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(brush_tab), g->controls.sprinkle_coarseness, TRUE, TRUE, 0);
 
   GtkWidget *layer_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_IOP_MODULE_CONTROL_SPACING);
-  GtkWidget *layer_name_title = gtk_label_new(_("Layer name"));
-  gtk_widget_set_halign(layer_name_title, GTK_ALIGN_START);
+  GtkWidget *layer_status = gtk_label_new("");
+  g->controls.layer_status = layer_status;
+  gtk_widget_set_halign(layer_status, GTK_ALIGN_START);
+  gtk_label_set_xalign(GTK_LABEL(layer_status), 0.0f);
+  gtk_label_set_line_wrap(GTK_LABEL(layer_status), TRUE);
   GtkWidget *layer_fill_title = gtk_label_new(_("Fill"));
+  g->controls.layer_fill_title = layer_fill_title;
   gtk_widget_set_halign(layer_fill_title, GTK_ALIGN_START);
   GtkWidget *layer_action_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_IOP_MODULE_CONTROL_SPACING);
+  g->controls.layer_action_row = layer_action_row;
   GtkWidget *layer_fill_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_IOP_MODULE_CONTROL_SPACING);
-  g->controls.layer_name = GTK_ENTRY(gtk_entry_new());
-  dt_accels_disconnect_on_text_input(GTK_WIDGET(g->controls.layer_name));
+  g->controls.layer_fill_row = layer_fill_row;
   g->controls.layer_select = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
   dt_bauhaus_widget_set_label(g->controls.layer_select, _("Source layer"));
   g->controls.delete_layer = gtk_button_new_with_label(_("delete layer"));
   g->controls.create_layer = gtk_button_new_with_label(_("create new layer"));
+  g->controls.rename_layer = gtk_button_new_with_label(_("rename layer"));
+  g->controls.attach_layer = gtk_button_new_with_label(_("reuse selected layer"));
   g->controls.create_background = gtk_button_new_with_label(_("create background from input"));
   g->controls.fill_white = gtk_button_new_with_label(_("white"));
   g->controls.fill_black = gtk_button_new_with_label(_("black"));
   g->controls.fill_transparent = gtk_button_new_with_label(_("transparency"));
-  gtk_box_pack_start(GTK_BOX(layer_box), layer_name_title, FALSE, FALSE, 0);
-  gtk_box_pack_start(GTK_BOX(layer_box), GTK_WIDGET(g->controls.layer_name), FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(layer_box), layer_status, FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(layer_box), g->controls.layer_select, FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(layer_action_row), g->controls.create_layer, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(layer_action_row), g->controls.rename_layer, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(layer_action_row), g->controls.attach_layer, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(layer_action_row), g->controls.delete_layer, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(layer_box), layer_action_row, FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(layer_box), layer_fill_title, FALSE, FALSE, 0);
@@ -3762,13 +3758,14 @@ void gui_init(dt_iop_module_t *self)
   g_signal_connect(G_OBJECT(g->controls.sprinkle_coarseness), "value-changed", G_CALLBACK(_widget_changed), self);
   g_signal_connect(G_OBJECT(g->controls.softness), "value-changed", G_CALLBACK(_widget_changed), self);
   g_signal_connect(G_OBJECT(g->controls.hdr_exposure), "value-changed", G_CALLBACK(_widget_changed), self);
-  g_signal_connect(g->controls.layer_name, "changed", G_CALLBACK(_widget_changed), self);
   g_signal_connect(G_OBJECT(g->controls.layer_select), "value-changed", G_CALLBACK(_layer_selected), self);
   g_signal_connect(g->controls.preview_bg_image, "toggled", G_CALLBACK(_preview_bg_toggled), self);
   g_signal_connect(g->controls.preview_bg_white, "toggled", G_CALLBACK(_preview_bg_toggled), self);
   g_signal_connect(g->controls.preview_bg_grey, "toggled", G_CALLBACK(_preview_bg_toggled), self);
   g_signal_connect(g->controls.preview_bg_black, "toggled", G_CALLBACK(_preview_bg_toggled), self);
   g_signal_connect(g->controls.create_layer, "clicked", G_CALLBACK(_create_layer_clicked), self);
+  g_signal_connect(g->controls.rename_layer, "clicked", G_CALLBACK(_rename_layer_clicked), self);
+  g_signal_connect(g->controls.attach_layer, "clicked", G_CALLBACK(_attach_selected_layer_clicked), self);
   g_signal_connect(g->controls.create_background, "clicked", G_CALLBACK(_create_background_clicked), self);
   g_signal_connect(g->controls.save_layer, "clicked", G_CALLBACK(_save_layer_clicked), self);
   g_signal_connect(g->controls.delete_layer, "clicked", G_CALLBACK(_delete_layer_clicked), self);
@@ -3818,7 +3815,6 @@ void gui_update(dt_iop_module_t *self)
   dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
   if(!g) return;
 
-  _ensure_layer_name(self, params);
   _sanitize_params(self, params);
 
   dt_bauhaus_combobox_set(g->controls.brush_mode, _conf_brush_mode());
@@ -3837,7 +3833,6 @@ void gui_update(dt_iop_module_t *self)
   _sync_color_picker_from_conf(self);
   _sync_brush_profile_preview_widget(self);
   if(g->controls.color) gtk_widget_queue_draw(g->controls.color);
-  gtk_entry_set_text(g->controls.layer_name, params->layer_name);
 
   if(GTK_IS_TOGGLE_BUTTON(g->controls.map_pressure_size))
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->controls.map_pressure_size),
@@ -3887,6 +3882,7 @@ void gui_update(dt_iop_module_t *self)
   _sync_mode_sensitive_widgets(self);
   _sync_preview_bg_buttons(self);
   _populate_layer_list(self);
+  _sync_layer_controls(self);
 
   if(self->dev)
   {
@@ -3920,6 +3916,7 @@ void change_image(dt_iop_module_t *self)
   if(self->gui_data)
   {
     dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
+    g->session.missing_layer_error[0] = '\0';
     drawlayer_runtime_host_context_t runtime_host = {
       .runtime = {
         .self = self,
@@ -3991,7 +3988,6 @@ void gui_focus(dt_iop_module_t *self, gboolean in)
   else if(self->gui_data)
   {
     dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
-    dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
     drawlayer_runtime_host_context_t runtime_host = {
       .runtime = {
         .self = self,
@@ -4010,19 +4006,7 @@ void gui_focus(dt_iop_module_t *self, gboolean in)
       .event = DT_DRAWLAYER_RUNTIME_EVENT_GUI_FOCUS_GAIN,
       .raw_input_kind = DT_DRAWLAYER_RUNTIME_RAW_INPUT_NONE,
     };
-    if(g)
-    {
-      g->session.missing_layer_prompt_name[0] = '\0';
-    }
-
     dt_drawlayer_runtime_manager_update(&g->manager, &update, &runtime_manager);
-
-    if(g && params && !g->process.cache_valid && _current_layer_missing_in_sidecar(self))
-    {
-      const int action = _offer_missing_layer_recreation(self, params->layer_name);
-      if(action == 2 && !_create_new_layer(self, params->layer_name))
-        dt_control_log(_("failed to create drawing layer"));
-    }
   }
 }
 
@@ -4395,7 +4379,9 @@ int mouse_moved(dt_iop_module_t *self, double x, double y, double pressure, int 
 int button_pressed(dt_iop_module_t *self, double x, double y, double pressure, int which, int type, uint32_t state)
 {
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
+  dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
   if(!g || !self->dev || which != 1) return 0;
+  if(!_layer_name_non_empty(params ? params->layer_name : NULL)) return 0;
 
   if(self->dev->gui_module != self)
   {

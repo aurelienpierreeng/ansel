@@ -218,6 +218,8 @@ static void _fill_runtime_inputs(const dt_drawlayer_runtime_context_t *runtime,
     .module_focused = self && self->dev && self->dev->gui_module == self,
     .display_pipe = request->display_pipe,
     .have_layer_selection = runtime_params && runtime_params->layer_name[0] != '\0',
+    .selected_layer_name = runtime_params ? runtime_params->layer_name : NULL,
+    .selected_layer_order = runtime_params ? runtime_params->layer_order : -1,
     .have_valid_output_roi = request->roi_out && request->roi_out->width > 0 && request->roi_out->height > 0,
     .use_opencl = request->use_opencl,
     .view_changed = g && self && self->dev
@@ -570,6 +572,13 @@ static void _build_runtime_schedule(dt_drawlayer_runtime_manager_t *state,
   const dt_drawlayer_stroke_state_t *stroke = inputs ? inputs->stroke : NULL;
   if(!schedule || !inputs || !request || !priv) return;
 
+  const gboolean layer_selection_changed
+      = inputs->have_layer_selection && process
+        && (!process->cache_valid || g_strcmp0(process->cache_layer_name,
+                                               inputs->selected_layer_name ? inputs->selected_layer_name : "")
+            || (process->cache_layer_order >= 0 && inputs->selected_layer_order >= 0
+                && process->cache_layer_order != inputs->selected_layer_order));
+
   schedule->rasterization_busy
       = priv->threads[DT_DRAWLAYER_RUNTIME_ACTOR_RASTER_BACKEND].active
         || priv->threads[DT_DRAWLAYER_RUNTIME_ACTOR_RASTER_FULLRES].active;
@@ -631,7 +640,9 @@ static void _build_runtime_schedule(dt_drawlayer_runtime_manager_t *state,
       schedule->commit_mode = (request->flush_pending && have_pending_gui_stroke_work)
                                   ? DT_DRAWLAYER_RUNTIME_COMMIT_QUIET
                                   : DT_DRAWLAYER_RUNTIME_COMMIT_NONE;
+      schedule->invalidate_layer_cache = layer_selection_changed;
       schedule->sync_widget_cache = inputs->gui_attached && inputs->have_layer_selection;
+      schedule->ensure_worker_running = inputs->module_focused && inputs->have_layer_selection;
       break;
 
     case DT_DRAWLAYER_RUNTIME_EVENT_GUI_CHANGE_IMAGE:
@@ -650,7 +661,9 @@ static void _build_runtime_schedule(dt_drawlayer_runtime_manager_t *state,
       break;
 
     case DT_DRAWLAYER_RUNTIME_EVENT_GUI_RESYNC:
+      schedule->invalidate_layer_cache = layer_selection_changed;
       schedule->sync_widget_cache = inputs->gui_attached && inputs->have_layer_selection;
+      schedule->ensure_worker_running = inputs->module_focused && inputs->have_layer_selection;
       break;
 
     case DT_DRAWLAYER_RUNTIME_EVENT_GUI_PIPE_FINISHED:
@@ -804,9 +817,26 @@ dt_drawlayer_runtime_result_t dt_drawlayer_runtime_manager_update(dt_drawlayer_r
       if(result.ok
          && !_perform_runtime_commit_sequence(state, request, host, schedule.commit_mode, &result))
         result.ok = FALSE;
+      if(schedule.invalidate_layer_cache && g)
+      {
+        dt_drawlayer_release_all_base_patch_extra_refs(g);
+        dt_drawlayer_cache_patch_clear(&g->process.base_patch, "drawlayer patch");
+        g->process.cache_valid = FALSE;
+        g->process.cache_dirty = FALSE;
+        g->process.cache_imgid = -1;
+        g->process.cache_layer_name[0] = '\0';
+        g->process.cache_layer_order = -1;
+        dt_drawlayer_process_state_invalidate(&g->process);
+      }
       if(result.ok && schedule.sync_widget_cache
          && !_perform_runtime_widget_cache_sync(host, &result))
         result.ok = FALSE;
+      if(result.ok && schedule.ensure_worker_running && self && g
+         && !dt_drawlayer_worker_ensure_running(self, g->stroke.worker))
+      {
+        dt_control_log(_("failed to start drawing worker"));
+        result.ok = FALSE;
+      }
       if(schedule.queue_redraw_center) dt_control_queue_redraw_center();
       break;
 

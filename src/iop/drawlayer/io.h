@@ -100,6 +100,12 @@ gboolean dt_drawlayer_io_store_layer(const char *path, const char *target_name, 
 gboolean dt_drawlayer_io_insert_layer(const char *path, const char *target_name, int insert_after_order,
                                       const char *work_profile, const dt_drawlayer_io_patch_t *patch, int raw_width,
                                       int raw_height, int *final_order);
+/** @brief Rename one existing layer entry in sidecar TIFF. */
+gboolean dt_drawlayer_io_rename_layer(const char *path, const char *current_name, const char *new_name,
+                                      const char *work_profile, int raw_width, int raw_height,
+                                      dt_drawlayer_io_layer_info_t *info);
+/** @brief Delete one existing layer entry from sidecar TIFF. */
+gboolean dt_drawlayer_io_delete_layer(const char *path, const char *target_name, int raw_width, int raw_height);
 /** @brief Load full TIFF page as flat RGBA float image. */
 gboolean dt_drawlayer_io_load_flat_rgba(const char *path, float **pixels, int *width, int *height);
 /** @brief Check whether candidate layer name already exists. */
