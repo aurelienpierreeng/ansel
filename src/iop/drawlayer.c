@@ -143,6 +143,7 @@ static dt_drawlayer_runtime_result_t _update_gui_runtime_manager(dt_iop_module_t
                                                                  dt_iop_drawlayer_gui_data_t *g,
                                                                  dt_drawlayer_runtime_event_t event,
                                                                  gboolean flush_pending);
+static void _sync_cached_brush_colors(dt_iop_module_t *self, const float display_rgb[3]);
 
 typedef struct drawlayer_wait_dialog_t
 {
@@ -152,18 +153,14 @@ typedef struct drawlayer_wait_dialog_t
 #include "drawlayer/conf.c"
 #include "drawlayer/coordinates.c"
 
-static void _get_brush_colors(dt_iop_module_t *self, float display_rgb[3], float pipeline_rgb[3])
+/** @brief Convert one display-space brush color snapshot to pipeline space. */
+static void _brush_pipeline_color_from_display(dt_iop_module_t *self, const float display_rgb[3], float pipeline_rgb[3])
 {
-  float raw_display_rgb[3] = { 0.0f };
-  _conf_display_color(raw_display_rgb);
-  pipeline_rgb[0] = raw_display_rgb[0];
-  pipeline_rgb[1] = raw_display_rgb[1];
-  pipeline_rgb[2] = raw_display_rgb[2];
+  if(!display_rgb || !pipeline_rgb) return;
 
-  // The GUI overlay is painted through cairo as a display-referred feedback surface.
-  display_rgb[0] = _clamp01(raw_display_rgb[0]);
-  display_rgb[1] = _clamp01(raw_display_rgb[1]);
-  display_rgb[2] = _clamp01(raw_display_rgb[2]);
+  pipeline_rgb[0] = _clamp01(display_rgb[0]);
+  pipeline_rgb[1] = _clamp01(display_rgb[1]);
+  pipeline_rgb[2] = _clamp01(display_rgb[2]);
 
   if(self && self->dev && self->dev->pipe)
   {
@@ -173,8 +170,8 @@ static void _get_brush_colors(dt_iop_module_t *self, float display_rgb[3], float
         = dt_ioppr_get_iop_work_profile_info(self, self->dev->iop);
     if(display_profile && work_profile)
     {
-      float in[4] = { raw_display_rgb[0], raw_display_rgb[1], raw_display_rgb[2], 0.0f };
-      float out[4] = { raw_display_rgb[0], raw_display_rgb[1], raw_display_rgb[2], 0.0f };
+      float in[4] = { pipeline_rgb[0], pipeline_rgb[1], pipeline_rgb[2], 0.0f };
+      float out[4] = { pipeline_rgb[0], pipeline_rgb[1], pipeline_rgb[2], 0.0f };
       dt_ioppr_transform_image_colorspace_rgb(in, out, 1, 1, display_profile, work_profile,
                                               "drawlayer brush color");
       pipeline_rgb[0] = out[0];
@@ -189,9 +186,23 @@ static void _get_brush_colors(dt_iop_module_t *self, float display_rgb[3], float
   pipeline_rgb[2] *= gain;
 }
 
+/** @brief Cache brush colors in GUI state so stroke input snapshots don't re-transform per event. */
+static void _sync_cached_brush_colors(dt_iop_module_t *self, const float display_rgb[3])
+{
+  dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
+  if(!g || !display_rgb) return;
+
+  g->ui.brush_display_color[0] = _clamp01(display_rgb[0]);
+  g->ui.brush_display_color[1] = _clamp01(display_rgb[1]);
+  g->ui.brush_display_color[2] = _clamp01(display_rgb[2]);
+  _brush_pipeline_color_from_display(self, g->ui.brush_display_color, g->ui.brush_pipeline_color);
+  g->ui.brush_color_valid = TRUE;
+}
+
 static void _fill_input_brush_settings(dt_iop_module_t *self, dt_drawlayer_paint_raw_input_t *input)
 {
   if(!self || !input) return;
+  dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
 
   uint32_t map_flags = 0u;
   if(dt_conf_get_bool(DRAWLAYER_CONF_MAP_PRESSURE_SIZE)) map_flags |= DRAWLAYER_INPUT_MAP_PRESSURE_SIZE;
@@ -209,7 +220,28 @@ static void _fill_input_brush_settings(dt_iop_module_t *self, dt_drawlayer_paint
 
   float display_rgb[3] = { 0.0f };
   float pipeline_rgb[3] = { 0.0f };
-  _get_brush_colors(self, display_rgb, pipeline_rgb);
+  if(g && g->ui.brush_color_valid)
+  {
+    memcpy(display_rgb, g->ui.brush_display_color, sizeof(display_rgb));
+    memcpy(pipeline_rgb, g->ui.brush_pipeline_color, sizeof(pipeline_rgb));
+  }
+  else
+  {
+    _conf_display_color(display_rgb);
+    if(g) _sync_cached_brush_colors(self, display_rgb);
+    if(g && g->ui.brush_color_valid)
+    {
+      memcpy(display_rgb, g->ui.brush_display_color, sizeof(display_rgb));
+      memcpy(pipeline_rgb, g->ui.brush_pipeline_color, sizeof(pipeline_rgb));
+    }
+    else
+    {
+      _brush_pipeline_color_from_display(self, display_rgb, pipeline_rgb);
+      display_rgb[0] = _clamp01(display_rgb[0]);
+      display_rgb[1] = _clamp01(display_rgb[1]);
+      display_rgb[2] = _clamp01(display_rgb[2]);
+    }
+  }
 
   input->map_flags = map_flags;
   input->pressure_profile = (uint8_t)_conf_mapping_profile(DRAWLAYER_CONF_PRESSURE_PROFILE);
@@ -484,11 +516,29 @@ static gboolean _refresh_piece_base_cache(dt_iop_module_t *self, dt_iop_drawlaye
     dt_drawlayer_cache_patch_clear(&data->process.base_patch, "drawlayer patch");
     data->process.cache_valid = FALSE;
     data->process.cache_dirty = FALSE;
+    dt_drawlayer_paint_runtime_state_reset(&data->process.cache_dirty_rect);
     data->process.cache_imgid = -1;
     data->process.cache_layer_name[0] = '\0';
     data->process.cache_layer_order = -1;
     dt_drawlayer_process_state_invalidate(&data->process);
     return TRUE;
+  }
+
+  /* Display heartbeats hit this path for every pipeline pass. When the current
+   * in-memory patch already matches the selected layer identity and geometry,
+   * stay entirely in RAM and skip sidecar probing altogether. Layer names are
+   * the stable identity here; page order is only a lookup hint and may drift
+   * after sidecar rewrites without invalidating the pixels already cached. */
+  if(data->process.cache_valid && data->process.base_patch.cache_entry
+     && data->process.cache_imgid == pipe->image.id
+     && !g_strcmp0(data->process.cache_layer_name, params->layer_name)
+     && data->process.base_patch.width > 0 && data->process.base_patch.height > 0)
+  {
+    const uint64_t cached_hash = _drawlayer_params_cache_hash(pipe->image.id, params,
+                                                              data->process.base_patch.width,
+                                                              data->process.base_patch.height);
+    if(data->process.base_patch.cache_hash == cached_hash)
+      return TRUE;
   }
 
   char path[PATH_MAX] = { 0 };
@@ -536,6 +586,7 @@ static gboolean _refresh_piece_base_cache(dt_iop_module_t *self, dt_iop_drawlaye
   dt_drawlayer_cache_patch_clear(&data->process.base_patch, "drawlayer patch");
   data->process.cache_valid = FALSE;
   data->process.cache_dirty = FALSE;
+  dt_drawlayer_paint_runtime_state_reset(&data->process.cache_dirty_rect);
   data->process.cache_imgid = -1;
   data->process.cache_layer_name[0] = '\0';
   data->process.cache_layer_order = -1;
@@ -581,11 +632,13 @@ static gboolean _refresh_piece_base_cache(dt_iop_module_t *self, dt_iop_drawlaye
       data->process.cache_imgid = pipe->image.id;
       g_strlcpy(data->process.cache_layer_name, params->layer_name, sizeof(data->process.cache_layer_name));
       data->process.cache_layer_order = info.found ? info.index : params->layer_order;
+      dt_drawlayer_paint_runtime_state_reset(&data->process.cache_dirty_rect);
       return TRUE;
     }
 
     data->process.cache_valid = TRUE;
     data->process.cache_dirty = FALSE;
+    dt_drawlayer_paint_runtime_state_reset(&data->process.cache_dirty_rect);
     data->process.cache_imgid = pipe->image.id;
     g_strlcpy(data->process.cache_layer_name, params->layer_name, sizeof(data->process.cache_layer_name));
     data->process.cache_layer_order = info.found ? info.index : params->layer_order;
@@ -637,9 +690,29 @@ typedef struct drawlayer_cl_image_handle_t
 } drawlayer_cl_image_handle_t;
 
 static gboolean _drawlayer_sync_host_image_to_device(const int devid, cl_mem device_image, void *host_pixels,
-                                                     const int width, const int height, const int bpp)
+                                                     const int width, const int height, const int bpp,
+                                                     const dt_drawlayer_damaged_rect_t *dirty_rect)
 {
   if(!device_image || !host_pixels || width <= 0 || height <= 0 || bpp <= 0) return FALSE;
+
+  if(dirty_rect && dirty_rect->valid)
+  {
+    const int dirty_x0 = CLAMP(dirty_rect->nw[0], 0, width);
+    const int dirty_y0 = CLAMP(dirty_rect->nw[1], 0, height);
+    const int dirty_x1 = CLAMP(dirty_rect->se[0], 0, width);
+    const int dirty_y1 = CLAMP(dirty_rect->se[1], 0, height);
+    const int dirty_w = dirty_x1 - dirty_x0;
+    const int dirty_h = dirty_y1 - dirty_y0;
+    if(dirty_w > 0 && dirty_h > 0 && (dirty_w < width || dirty_h < height))
+    {
+      const size_t origin[] = { (size_t)dirty_x0, (size_t)dirty_y0, 0 };
+      const size_t region[] = { (size_t)dirty_w, (size_t)dirty_h, 1 };
+      char *host_origin = (char *)host_pixels + ((size_t)dirty_y0 * width + dirty_x0) * (size_t)bpp;
+      if(dt_opencl_write_host_to_device_raw(devid, host_origin, device_image, origin, region, width * bpp,
+                                            CL_TRUE) == CL_SUCCESS)
+        return TRUE;
+    }
+  }
 
   const cl_mem_flags flags = dt_opencl_get_mem_flags(device_image);
   if(flags & CL_MEM_USE_HOST_PTR)
@@ -663,6 +736,7 @@ static gboolean _drawlayer_acquire_source_image(const int devid, const float *la
                                                 dt_pixel_cache_entry_t *resolved_entry,
                                                 const gboolean force_device_copy, const gboolean realtime_reuse,
                                                 const int source_w, const int source_h,
+                                                dt_drawlayer_process_state_t *process,
                                                 drawlayer_cl_image_handle_t *source)
 {
   if(!source || !layer_pixels || source_w <= 0 || source_h <= 0) return FALSE;
@@ -675,6 +749,32 @@ static gboolean _drawlayer_acquire_source_image(const int devid, const float *la
     return source->mem != NULL;
   }
 
+  /* Realtime redraws keep revisiting the same host-backed layer cache. Prefer a
+   * reusable device buffer first so the blend path can stay asynchronous instead
+   * of forcing a full `dt_opencl_finish()` before the base patch lock is released. */
+  if(realtime_reuse && resolved_entry)
+  {
+    const dt_iop_roi_t source_roi = { .width = source_w, .height = source_h };
+    gboolean reused_from_cache = FALSE;
+    source->mem = dt_dev_pixelpipe_cache_get_cl_buffer(devid, NULL, &source_roi, 4 * sizeof(float), NULL,
+                                                       "drawlayer source", resolved_entry, FALSE, TRUE,
+                                                       &reused_from_cache, NULL);
+    if(source->mem)
+    {
+      const dt_drawlayer_damaged_rect_t *dirty_rect
+          = (reused_from_cache && process) ? &process->cache_dirty_rect : NULL;
+      if(_drawlayer_sync_host_image_to_device(devid, source->mem, (void *)layer_pixels, source_w, source_h,
+                                              4 * sizeof(float), dirty_rect))
+      {
+        source->is_cached_device = TRUE;
+        if(process) dt_drawlayer_paint_runtime_state_reset(&process->cache_dirty_rect);
+        return TRUE;
+      }
+
+      dt_dev_pixelpipe_cache_release_cl_buffer((void **)&source->mem, resolved_entry, NULL, FALSE);
+    }
+  }
+
   source->mem = dt_dev_pixelpipe_cache_get_pinned_image(
       darktable.pixelpipe_cache, (void *)layer_pixels, resolved_entry, devid, source_w, source_h,
       4 * sizeof(float), CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR, NULL);
@@ -684,31 +784,12 @@ static gboolean _drawlayer_acquire_source_image(const int devid, const float *la
     return TRUE;
   }
 
-  if(realtime_reuse && resolved_entry)
-  {
-    const dt_iop_roi_t source_roi = { .width = source_w, .height = source_h };
-    source->mem = dt_dev_pixelpipe_cache_get_cl_buffer(devid, NULL, &source_roi, 4 * sizeof(float), NULL,
-                                                       "drawlayer source", resolved_entry, FALSE, TRUE, NULL,
-                                                       NULL);
-    if(source->mem)
-    {
-      if(_drawlayer_sync_host_image_to_device(devid, source->mem, (void *)layer_pixels, source_w, source_h,
-                                              4 * sizeof(float)))
-      {
-        source->is_cached_device = TRUE;
-        return TRUE;
-      }
-
-      dt_dev_pixelpipe_cache_release_cl_buffer((void **)&source->mem, resolved_entry, NULL, FALSE);
-    }
-  }
-
   source->mem = dt_opencl_alloc_device_use_host_pointer(
       devid, source_w, source_h, 4 * sizeof(float), (void *)layer_pixels, CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR);
   if(source->mem)
   {
     if(_drawlayer_sync_host_image_to_device(devid, source->mem, (void *)layer_pixels, source_w, source_h,
-                                            4 * sizeof(float)))
+                                            4 * sizeof(float), NULL))
     {
       source->is_pinned = TRUE;
       return TRUE;
@@ -812,6 +893,7 @@ static int _blend_layer_over_input_cl(const int devid, const int kernel_premult_
                                       cl_mem dev_in, drawlayer_process_scratch_t *scratch,
                                       const float *layer_pixels, dt_pixel_cache_entry_t *source_entry,
                                       cl_mem source_mem_override, const int source_w, const int source_h,
+                                      dt_drawlayer_process_state_t *process,
                                       const dt_iop_roi_t *const target_roi, const dt_iop_roi_t *const source_roi,
                                       const gboolean direct_copy, const gboolean use_preview_bg,
                                       const float preview_bg, const gboolean realtime_reuse,
@@ -839,7 +921,7 @@ static int _blend_layer_over_input_cl(const int devid, const int kernel_premult_
   if(source_mem_override)
     source.mem = source_mem_override;
   else if(!_drawlayer_acquire_source_image(devid, layer_pixels, resolved_entry, force_device_copy, realtime_reuse,
-                                           source_w, source_h, &source))
+                                           source_w, source_h, process, &source))
     goto cleanup;
 
   if(!_drawlayer_acquire_layer_image(devid, resolved_entry, realtime_reuse, direct_copy, source.mem, source_w,
@@ -1237,9 +1319,17 @@ static gboolean _working_rgb_to_display_rgb(dt_iop_module_t *self, dt_dev_pixelp
 {
   if(!working_rgb || !display_rgb) return FALSE;
 
-  display_rgb[0] = _clamp01(working_rgb[0]);
-  display_rgb[1] = _clamp01(working_rgb[1]);
-  display_rgb[2] = _clamp01(working_rgb[2]);
+  const float gain = exp2f(_conf_hdr_exposure());
+  const float inv_gain = (gain > 0.0f) ? 1.0f / gain : 1.0f;
+  const float preview_rgb[3] = {
+    working_rgb[0] * inv_gain,
+    working_rgb[1] * inv_gain,
+    working_rgb[2] * inv_gain,
+  };
+
+  display_rgb[0] = _clamp01(preview_rgb[0]);
+  display_rgb[1] = _clamp01(preview_rgb[1]);
+  display_rgb[2] = _clamp01(preview_rgb[2]);
 
   if(!self || !pipe) return TRUE;
 
@@ -1248,8 +1338,8 @@ static gboolean _working_rgb_to_display_rgb(dt_iop_module_t *self, dt_dev_pixelp
   const dt_iop_order_iccprofile_info_t *const display_profile = dt_ioppr_get_pipe_output_profile_info(pipe);
   if(!work_profile || !display_profile) return TRUE;
 
-  float in[4] = { working_rgb[0], working_rgb[1], working_rgb[2], 0.0f };
-  float out[4] = { working_rgb[0], working_rgb[1], working_rgb[2], 0.0f };
+  float in[4] = { preview_rgb[0], preview_rgb[1], preview_rgb[2], 0.0f };
+  float out[4] = { preview_rgb[0], preview_rgb[1], preview_rgb[2], 0.0f };
   dt_ioppr_transform_image_colorspace_rgb(in, out, 1, 1, work_profile, display_profile, "drawlayer picked color");
   display_rgb[0] = _clamp01(out[0]);
   display_rgb[1] = _clamp01(out[1]);
@@ -1725,6 +1815,7 @@ static gboolean _delete_current_layer(dt_iop_module_t *self)
         dt_drawlayer_cache_patch_clear(&g->process.base_patch, "drawlayer patch");
         g->process.cache_valid = FALSE;
         g->process.cache_dirty = FALSE;
+        dt_drawlayer_paint_runtime_state_reset(&g->process.cache_dirty_rect);
         g->process.cache_imgid = -1;
         g->process.cache_layer_name[0] = '\0';
         g->process.cache_layer_order = -1;
@@ -2069,6 +2160,13 @@ static void _widget_changed(GtkWidget *widget, gpointer user_data)
   if(widget == g->controls.size || widget == g->controls.softness || widget == g->controls.brush_shape)
     _update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_SYNC_TEMP_BUFFERS, TRUE);
 
+  if(widget == g->controls.hdr_exposure)
+  {
+    float display_rgb[3] = { 0.0f };
+    if(dt_drawlayer_widgets_get_display_color(g->ui.widgets, display_rgb))
+      _sync_cached_brush_colors(self, display_rgb);
+  }
+
   if(widget == g->controls.brush_shape || widget == g->controls.opacity || widget == g->controls.softness || widget == g->controls.sprinkles
      || widget == g->controls.sprinkle_size || widget == g->controls.sprinkle_coarseness)
     _sync_brush_profile_preview_widget(self);
@@ -2206,6 +2304,11 @@ static gboolean _fill_current_layer(dt_iop_module_t *self, const float value)
   dt_drawlayer_cache_patch_wrunlock(&g->process.base_patch);
 
   g->process.cache_dirty = TRUE;
+  g->process.cache_dirty_rect.valid = TRUE;
+  g->process.cache_dirty_rect.nw[0] = 0;
+  g->process.cache_dirty_rect.nw[1] = 0;
+  g->process.cache_dirty_rect.se[0] = g->process.base_patch.width;
+  g->process.cache_dirty_rect.se[1] = g->process.base_patch.height;
   _touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f, 0u);
   _reset_stroke_session(g);
 
@@ -2229,6 +2332,11 @@ static gboolean _clear_current_layer(dt_iop_module_t *self)
   dt_drawlayer_cache_patch_wrunlock(&g->process.base_patch);
 
   g->process.cache_dirty = TRUE;
+  g->process.cache_dirty_rect.valid = TRUE;
+  g->process.cache_dirty_rect.nw[0] = 0;
+  g->process.cache_dirty_rect.nw[1] = 0;
+  g->process.cache_dirty_rect.se[0] = g->process.base_patch.width;
+  g->process.cache_dirty_rect.se[1] = g->process.base_patch.height;
   _touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f, 0u);
   _reset_stroke_session(g);
 
@@ -3805,7 +3913,8 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
 
     gboolean ok = _blend_layer_over_input_cl(
         pipe->devid, global->kernel_premult_over, dev_out, dev_in, scratch, source_pixels, source_entry, NULL,
-        source_width, source_height, &target_roi, &source_roi, direct_copy, preview_bg.enabled, preview_bg.value,
+        source_width, source_height, runtime_request.process_state, &target_roi, &source_roi, direct_copy,
+        preview_bg.enabled, preview_bg.value,
         reuse_device_buffers, FALSE);
 
     process_post.release = (dt_drawlayer_runtime_release_t){

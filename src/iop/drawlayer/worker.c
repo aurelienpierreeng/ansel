@@ -19,10 +19,15 @@
 /*
  * drawlayer realtime worker subsystem
  *
- * Realtime painting rasterizes directly into the authoritative
- * full-resolution `base_patch`. The backend worker consumes GUI raw input,
- * interpolates dabs, updates the full-resolution layer cache, and publishes
- * damage for preview redraw/history invalidation.
+ * Realtime painting now advances in heartbeat batches:
+ * - read current layer content from the authoritative full-resolution
+ *   `base_patch`,
+ * - rasterize a small dab batch into a worker-private scratch patch,
+ * - copy only the damaged area back into `base_patch`,
+ * - publish one regular pipeline refresh before continuing.
+ *
+ * This keeps base-patch ownership authoritative while avoiding long stretches
+ * where rasterization and pipeline refresh starve each other.
  */
 
 /** @file
@@ -78,14 +83,14 @@ struct dt_drawlayer_worker_t
   dt_pthread_mutex_t worker_mutex;              /**< Mutex guarding queue/flags. */
   pthread_cond_t worker_cond;                   /**< Condition variable for worker wakeups. */
   drawlayer_rt_worker_t workers[DRAWLAYER_RT_WORKER_COUNT]; /**< Worker slots. */
-  guint finish_commit_source_id;                /**< Pending idle callback id (0 if none). */
-  guint live_publish_source_id;                 /**< Pending main-thread live publish callback id (0 if none). */
   GArray *backend_history;                      /**< Emitted dab history owned by worker. */
   GArray *stroke_raw_inputs;                    /**< Preserved raw input history for current stroke. */
   dt_drawlayer_paint_stroke_t *stroke;          /**< Worker-owned current stroke runtime. */
   dt_drawlayer_damaged_rect_t *backend_path;    /**< Worker-owned backend damage accumulator. */
+  dt_drawlayer_cache_patch_t heartbeat_patch;   /**< Worker-private scratch patch for one heartbeat batch. */
+  dt_drawlayer_cache_patch_t heartbeat_stroke_mask; /**< Worker-private stroke mask for one heartbeat batch. */
   gint64 live_publish_ts;                       /**< Realtime publish pacing timestamp. */
-  uint32_t live_publish_serial;                 /**< Monotonic live publish serial. */
+  uint32_t live_publish_serial;                 /**< Monotonic live publish serial committed by heartbeat flushes. */
   dt_drawlayer_damaged_rect_t live_publish_damage; /**< Worker-owned accumulated publish damage. */
 };
 
@@ -101,11 +106,13 @@ static gboolean _paint_build_dab_cb(void *user_data, dt_drawlayer_paint_stroke_t
 static gboolean _paint_layer_to_widget_cb(void *user_data, float lx, float ly, float *wx, float *wy);
 static void _paint_stroke_seed_cb(void *user_data, uint64_t stroke_seed);
 static void _publish_backend_progress(drawlayer_paint_backend_ctx_t *ctx, gboolean flush_pending);
-static gboolean _publish_backend_progress_idle(gpointer user_data);
 static void _process_backend_input(dt_iop_module_t *self, const dt_drawlayer_paint_raw_input_t *input,
                                    dt_drawlayer_paint_stroke_t *stroke);
-static void _process_backend_dab(dt_iop_module_t *self, const dt_drawlayer_brush_dab_t *dab,
-                                 drawlayer_paint_backend_ctx_t *ctx);
+static gboolean _process_backend_dab(const dt_drawlayer_brush_dab_t *dab, drawlayer_paint_backend_ctx_t *ctx,
+                                     const dt_drawlayer_cache_patch_t *sample_patch,
+                                     dt_drawlayer_cache_patch_t *patch,
+                                     dt_drawlayer_cache_patch_t *stroke_mask,
+                                     dt_drawlayer_damaged_rect_t *batch_damage);
 static inline drawlayer_rt_worker_t *_backend_worker(dt_drawlayer_worker_t *rt);
 static inline const drawlayer_rt_worker_t *_backend_worker_const(const dt_drawlayer_worker_t *rt);
 static inline gint64 _live_publish_interval_us(void);
@@ -119,8 +126,11 @@ static gboolean _rt_queue_pop_locked(dt_drawlayer_worker_t *rt,
 static guint _worker_batch_min_size(void);
 static void _log_worker_batch_timing(const char *tag, guint processed_dabs, guint thread_count, double elapsed_ms,
                                      gboolean outer_loop);
+static gboolean _dab_bounds_in_patch(const dt_drawlayer_cache_patch_t *patch, float scale,
+                                     const dt_drawlayer_brush_dab_t *dab, dt_drawlayer_damaged_rect_t *bounds);
 #if defined(_OPENMP) && OUTER_LOOP
 static guint _rasterize_dab_batch_outer_loop(const GArray *dabs, guint max_dabs, float distance_percent,
+                                             const dt_drawlayer_cache_patch_t *sample_patch,
                                              dt_drawlayer_cache_patch_t *patch, float scale,
                                              dt_drawlayer_cache_patch_t *stroke_mask,
                                              dt_drawlayer_damaged_rect_t *batch_damage,
@@ -136,6 +146,8 @@ static gboolean _dab_batch_supports_outer_loop(const GArray *dabs, guint count);
 #endif
 
 #define DRAWLAYER_BATCH_TILE_SIZE 128
+#define DRAWLAYER_HEARTBEAT_PATCH_NAME "drawlayer heartbeat patch"
+#define DRAWLAYER_HEARTBEAT_MASK_NAME "drawlayer heartbeat stroke mask"
 #define DRAWLAYER_OUTER_LIVE_BATCH_MULTIPLIER 2u
 
 gboolean dt_drawlayer_build_worker_input_dab(dt_iop_module_t *self, dt_drawlayer_paint_stroke_t *state,
@@ -285,59 +297,29 @@ static void _publish_backend_progress(drawlayer_paint_backend_ctx_t *ctx, gboole
 {
   if(!ctx || !ctx->self || !flush_pending) return;
 
+  dt_iop_module_t *self = ctx->self;
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)ctx->self->gui_data;
-  if(!ctx->worker || !g || !ctx->worker->live_publish_damage.valid) return;
+  dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
+  dt_develop_t *dev = self->dev;
+  if(!ctx->worker || !g || !params || !dev || !ctx->worker->live_publish_damage.valid) return;
 
-  if(g->process.base_patch.pixels)
-    dt_dev_pixelpipe_cache_flush_host_pinned_image(darktable.pixelpipe_cache, g->process.base_patch.pixels,
-                                                   g->process.base_patch.cache_entry, -1);
   ctx->worker->live_publish_serial++;
   dt_drawlayer_paint_runtime_state_reset(&ctx->worker->live_publish_damage);
   ctx->worker->live_publish_ts = g_get_monotonic_time();
 
-  dt_pthread_mutex_lock(&ctx->worker->worker_mutex);
-  if(ctx->worker->live_publish_source_id == 0)
-    ctx->worker->live_publish_source_id = g_idle_add(_publish_backend_progress_idle, ctx->worker);
-  dt_pthread_mutex_unlock(&ctx->worker->worker_mutex);
-}
-
-/** @brief Refresh history/display from the latest full-resolution live paint on the GTK thread.
- *
- *  The worker now rasterizes directly into `base_patch`, so the GUI preview
- *  needs a regular pipeline refresh to sample that updated cache line.
- *  Performing history synchronization here keeps GTK/history ownership on the
- *  main thread and avoids mutating the history stack from the realtime worker.
- */
-static gboolean _publish_backend_progress_idle(gpointer user_data)
-{
-  dt_drawlayer_worker_t *rt = (dt_drawlayer_worker_t *)user_data;
-  if(!rt || !rt->self || !rt->self->dev) return G_SOURCE_REMOVE;
-
-  dt_iop_module_t *self = rt->self;
-  dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
-  dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
-  dt_develop_t *dev = self->dev;
-  uint32_t publish_serial = 0u;
-
-  dt_pthread_mutex_lock(&rt->worker_mutex);
-  publish_serial = rt->live_publish_serial;
-  rt->live_publish_source_id = 0;
-  dt_pthread_mutex_unlock(&rt->worker_mutex);
-
-  if(!g || !params || !dev) return G_SOURCE_REMOVE;
-
   const int sample_count = (int)g->stroke.stroke_sample_count;
   dt_drawlayer_touch_stroke_commit_hash(params, sample_count, g->stroke.last_dab_valid, g->stroke.last_dab_x,
-                                        g->stroke.last_dab_y, publish_serial);
+                                        g->stroke.last_dab_y, ctx->worker->live_publish_serial);
 
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
   dt_dev_add_history_item_ext(dev, self, FALSE, FALSE);
   dt_dev_set_history_hash(dev, dt_dev_history_compute_hash(dev));
   dt_pthread_rwlock_unlock(&dev->history_mutex);
 
-  dt_dev_pixelpipe_update_history_all(dev);
+  /* Heartbeat publish only updates drawlayer history ownership here. Realtime
+   * full-pipe bypassing of history resynchronization is handled inside the
+   * pipeline code itself, where pipe pieces may be updated legally. */
   dt_control_queue_redraw_center();
-  return G_SOURCE_REMOVE;
 }
 
 static void _process_backend_input(dt_iop_module_t *self, const dt_drawlayer_paint_raw_input_t *input,
@@ -377,40 +359,32 @@ void dt_drawlayer_worker_publish_backend_stroke_damage(dt_iop_module_t *self)
 
   dt_drawlayer_damaged_rect_t backend_damage = { 0 };
   if(g->stroke.worker && dt_drawlayer_paint_merge_runtime_stroke_damage(g->stroke.worker->backend_path, &backend_damage))
+  {
     g->process.cache_dirty = TRUE;
+    dt_drawlayer_paint_runtime_note_dab_damage(&g->process.cache_dirty_rect, &backend_damage);
+  }
 }
 
-static void _process_backend_dab(dt_iop_module_t *self, const dt_drawlayer_brush_dab_t *dab,
-                                 drawlayer_paint_backend_ctx_t *ctx)
+static gboolean _process_backend_dab(const dt_drawlayer_brush_dab_t *dab, drawlayer_paint_backend_ctx_t *ctx,
+                                     const dt_drawlayer_cache_patch_t *sample_patch,
+                                     dt_drawlayer_cache_patch_t *patch,
+                                     dt_drawlayer_cache_patch_t *stroke_mask,
+                                     dt_drawlayer_damaged_rect_t *batch_damage)
 {
   dt_drawlayer_paint_stroke_t *stroke = ctx ? ctx->stroke : NULL;
-  dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
-  if(!g || !stroke || !stroke->dab_window || !dab) return;
+  if(!ctx || !stroke || !stroke->dab_window || !dab || !patch || !patch->pixels || !stroke_mask
+     || !stroke_mask->pixels)
+    return FALSE;
 
-  gboolean have_base_damage = FALSE;
-  dt_drawlayer_damaged_rect_t base_step_path = { 0 };
-  dt_drawlayer_damaged_rect_t base_step_damage = { 0 };
-  dt_drawlayer_paint_runtime_state_reset(&base_step_path);
+  dt_drawlayer_damaged_rect_t step_damage = { 0 };
+  if(!dt_drawlayer_paint_rasterize_segment_to_buffer(dab, _clamp01(stroke->distance_percent), sample_patch,
+                                                     patch, 1.0f, stroke_mask, &step_damage, stroke))
+    return FALSE;
 
-  if(g->process.base_patch.pixels && g->process.base_patch.width > 0 && g->process.base_patch.height > 0
-     && g->process.stroke_mask.pixels)
-  {
-    dt_drawlayer_paint_rasterize_segment_to_buffer(
-        dab, _clamp01(stroke->distance_percent), &g->process.base_patch, 1.0f, &g->process.stroke_mask,
-        &base_step_path, stroke);
-    have_base_damage = dt_drawlayer_paint_runtime_get_stroke_damage(&base_step_path, &base_step_damage);
-
-  }
-
-  if(have_base_damage)
-  {
-    g->process.cache_dirty = TRUE;
-    if(ctx && ctx->worker)
-      dt_drawlayer_paint_runtime_note_dab_damage(&ctx->worker->live_publish_damage, &base_step_damage);
-    g->stroke.last_dab_valid = TRUE;
-    g->stroke.last_dab_x = dab->x;
-    g->stroke.last_dab_y = dab->y;
-  }
+  if(step_damage.valid && batch_damage)
+    dt_drawlayer_paint_runtime_note_dab_damage(batch_damage, &step_damage);
+  
+  return step_damage.valid;
 }
 
 static const drawlayer_rt_callbacks_t _rt_callbacks[DRAWLAYER_RT_WORKER_COUNT];
@@ -564,7 +538,6 @@ static inline drawlayer_paint_backend_ctx_t _make_backend_ctx(dt_iop_module_t *s
   };
 }
 
-#if defined(_OPENMP) && OUTER_LOOP
 static gboolean _dab_bounds_in_patch(const dt_drawlayer_cache_patch_t *patch, const float scale,
                                      const dt_drawlayer_brush_dab_t *dab, dt_drawlayer_damaged_rect_t *bounds)
 {
@@ -582,6 +555,191 @@ static gboolean _dab_bounds_in_patch(const dt_drawlayer_cache_patch_t *patch, co
   return bounds->se[0] > bounds->nw[0] && bounds->se[1] > bounds->nw[1];
 }
 
+/** @brief Build the scratch patch bounds that cover the next heartbeat dab batch. */
+static gboolean _collect_batch_bounds(const GArray *dabs, const guint max_dabs,
+                                      const dt_drawlayer_cache_patch_t *patch,
+                                      dt_drawlayer_damaged_rect_t *batch_bounds)
+{
+  if(batch_bounds) *batch_bounds = (dt_drawlayer_damaged_rect_t){ 0 };
+  if(!dabs || max_dabs == 0 || !patch || !batch_bounds) return FALSE;
+
+  /* Walk the upcoming batch in FIFO order and union every dab footprint that
+   * can touch the destination patch. This keeps the worker scratch patch as
+   * small as possible while still covering all writes for the current heartbeat. */
+  for(guint i = 0; i < max_dabs; i++)
+  {
+    dt_drawlayer_damaged_rect_t dab_bounds = { 0 };
+    const dt_drawlayer_brush_dab_t *dab = &g_array_index(dabs, dt_drawlayer_brush_dab_t, i);
+    if(_dab_bounds_in_patch(patch, 1.0f, dab, &dab_bounds))
+      dt_drawlayer_paint_runtime_note_dab_damage(batch_bounds, &dab_bounds);
+  }
+
+  return batch_bounds->valid;
+}
+
+/** @brief Ensure worker-private heartbeat scratch buffers match the requested batch bounds. */
+static gboolean _ensure_heartbeat_batch_buffers(dt_drawlayer_worker_t *rt,
+                                                const dt_drawlayer_damaged_rect_t *batch_bounds)
+{
+  if(!rt || !batch_bounds || !batch_bounds->valid) return FALSE;
+
+  const int width = batch_bounds->se[0] - batch_bounds->nw[0];
+  const int height = batch_bounds->se[1] - batch_bounds->nw[1];
+  if(width <= 0 || height <= 0) return FALSE;
+  if(!dt_drawlayer_cache_ensure_process_patch_buffer(&rt->heartbeat_patch, &rt->heartbeat_stroke_mask,
+                                                     width, height, DRAWLAYER_HEARTBEAT_PATCH_NAME,
+                                                     DRAWLAYER_HEARTBEAT_MASK_NAME))
+    return FALSE;
+
+  rt->heartbeat_patch.x = batch_bounds->nw[0];
+  rt->heartbeat_patch.y = batch_bounds->nw[1];
+  rt->heartbeat_stroke_mask.x = batch_bounds->nw[0];
+  rt->heartbeat_stroke_mask.y = batch_bounds->nw[1];
+  return TRUE;
+}
+
+/** @brief Copy one locked RGBA source region into the heartbeat scratch patch. */
+static void _copy_rgba_batch_from_locked_patch(const dt_drawlayer_cache_patch_t *src,
+                                               dt_drawlayer_cache_patch_t *dst)
+{
+  if(!src || !dst || !src->pixels || !dst->pixels || dst->width <= 0 || dst->height <= 0) return;
+
+  const int src_x0 = dst->x - src->x;
+  const int src_y0 = dst->y - src->y;
+  if(src_x0 < 0 || src_y0 < 0 || src_x0 + dst->width > src->width || src_y0 + dst->height > src->height) return;
+
+  for(int y = 0; y < dst->height; y++)
+  {
+    const float *src_row = src->pixels + 4 * ((size_t)(src_y0 + y) * src->width + src_x0);
+    float *dst_row = dst->pixels + 4 * ((size_t)y * dst->width);
+    memcpy(dst_row, src_row, (size_t)dst->width * 4 * sizeof(float));
+  }
+}
+
+/** @brief Copy one locked alpha-mask source region into the heartbeat scratch mask. */
+static void _copy_mask_batch_from_locked_patch(const dt_drawlayer_cache_patch_t *src,
+                                               dt_drawlayer_cache_patch_t *dst)
+{
+  if(!dst || !dst->pixels || dst->width <= 0 || dst->height <= 0) return;
+  if(!src || !src->pixels)
+  {
+    memset(dst->pixels, 0, (size_t)dst->width * dst->height * sizeof(float));
+    return;
+  }
+
+  const int src_x0 = dst->x - src->x;
+  const int src_y0 = dst->y - src->y;
+  if(src_x0 < 0 || src_y0 < 0 || src_x0 + dst->width > src->width || src_y0 + dst->height > src->height)
+  {
+    memset(dst->pixels, 0, (size_t)dst->width * dst->height * sizeof(float));
+    return;
+  }
+
+  for(int y = 0; y < dst->height; y++)
+  {
+    const float *src_row = src->pixels + (size_t)(src_y0 + y) * src->width + src_x0;
+    float *dst_row = dst->pixels + (size_t)y * dst->width;
+    memcpy(dst_row, src_row, (size_t)dst->width * sizeof(float));
+  }
+}
+
+/** @brief Translate scratch-local damage coordinates back into base-patch coordinates. */
+static gboolean _translate_batch_damage(const dt_drawlayer_cache_patch_t *patch,
+                                        const dt_drawlayer_damaged_rect_t *local_damage,
+                                        dt_drawlayer_damaged_rect_t *absolute_damage)
+{
+  if(absolute_damage) *absolute_damage = (dt_drawlayer_damaged_rect_t){ 0 };
+  if(!patch || !local_damage || !local_damage->valid || !absolute_damage) return FALSE;
+
+  *absolute_damage = *local_damage;
+  absolute_damage->nw[0] += patch->x;
+  absolute_damage->nw[1] += patch->y;
+  absolute_damage->se[0] += patch->x;
+  absolute_damage->se[1] += patch->y;
+  return TRUE;
+}
+
+/** @brief Copy the written scratch sub-rectangle back into the locked base patch. */
+static void _copy_rgba_damage_to_locked_patch(const dt_drawlayer_cache_patch_t *src,
+                                              const dt_drawlayer_damaged_rect_t *local_damage,
+                                              dt_drawlayer_cache_patch_t *dst)
+{
+  if(!src || !dst || !local_damage || !local_damage->valid || !src->pixels || !dst->pixels) return;
+
+  const int copy_w = local_damage->se[0] - local_damage->nw[0];
+  const int copy_h = local_damage->se[1] - local_damage->nw[1];
+  if(copy_w <= 0 || copy_h <= 0) return;
+
+  const int dst_x0 = src->x + local_damage->nw[0] - dst->x;
+  const int dst_y0 = src->y + local_damage->nw[1] - dst->y;
+  if(dst_x0 < 0 || dst_y0 < 0 || dst_x0 + copy_w > dst->width || dst_y0 + copy_h > dst->height) return;
+
+  for(int y = 0; y < copy_h; y++)
+  {
+    const float *src_row = src->pixels + 4 * ((size_t)(local_damage->nw[1] + y) * src->width + local_damage->nw[0]);
+    float *dst_row = dst->pixels + 4 * ((size_t)(dst_y0 + y) * dst->width + dst_x0);
+    memcpy(dst_row, src_row, (size_t)copy_w * 4 * sizeof(float));
+  }
+}
+
+/** @brief Copy the written scratch mask sub-rectangle back into the locked base stroke mask. */
+static void _copy_mask_damage_to_locked_patch(const dt_drawlayer_cache_patch_t *src,
+                                              const dt_drawlayer_damaged_rect_t *local_damage,
+                                              dt_drawlayer_cache_patch_t *dst)
+{
+  if(!src || !dst || !local_damage || !local_damage->valid || !src->pixels || !dst->pixels) return;
+
+  const int copy_w = local_damage->se[0] - local_damage->nw[0];
+  const int copy_h = local_damage->se[1] - local_damage->nw[1];
+  if(copy_w <= 0 || copy_h <= 0) return;
+
+  const int dst_x0 = src->x + local_damage->nw[0] - dst->x;
+  const int dst_y0 = src->y + local_damage->nw[1] - dst->y;
+  if(dst_x0 < 0 || dst_y0 < 0 || dst_x0 + copy_w > dst->width || dst_y0 + copy_h > dst->height) return;
+
+  for(int y = 0; y < copy_h; y++)
+  {
+    const float *src_row = src->pixels + (size_t)(local_damage->nw[1] + y) * src->width + local_damage->nw[0];
+    float *dst_row = dst->pixels + (size_t)(dst_y0 + y) * dst->width + dst_x0;
+    memcpy(dst_row, src_row, (size_t)copy_w * sizeof(float));
+  }
+}
+
+/** @brief Clear only the flushed RGBA sub-rectangle in the heartbeat scratch patch. */
+static void _clear_rgba_damage_in_patch(dt_drawlayer_cache_patch_t *patch,
+                                        const dt_drawlayer_damaged_rect_t *local_damage)
+{
+  if(!patch || !local_damage || !local_damage->valid || !patch->pixels) return;
+
+  const int clear_w = local_damage->se[0] - local_damage->nw[0];
+  const int clear_h = local_damage->se[1] - local_damage->nw[1];
+  if(clear_w <= 0 || clear_h <= 0) return;
+
+  for(int y = 0; y < clear_h; y++)
+  {
+    float *row = patch->pixels + 4 * ((size_t)(local_damage->nw[1] + y) * patch->width + local_damage->nw[0]);
+    memset(row, 0, (size_t)clear_w * 4 * sizeof(float));
+  }
+}
+
+/** @brief Clear only the flushed alpha-mask sub-rectangle in the heartbeat scratch mask. */
+static void _clear_mask_damage_in_patch(dt_drawlayer_cache_patch_t *patch,
+                                        const dt_drawlayer_damaged_rect_t *local_damage)
+{
+  if(!patch || !local_damage || !local_damage->valid || !patch->pixels) return;
+
+  const int clear_w = local_damage->se[0] - local_damage->nw[0];
+  const int clear_h = local_damage->se[1] - local_damage->nw[1];
+  if(clear_w <= 0 || clear_h <= 0) return;
+
+  for(int y = 0; y < clear_h; y++)
+  {
+    float *row = patch->pixels + (size_t)(local_damage->nw[1] + y) * patch->width + local_damage->nw[0];
+    memset(row, 0, (size_t)clear_w * sizeof(float));
+  }
+}
+
+#if defined(_OPENMP) && OUTER_LOOP
 static dt_drawlayer_paint_stroke_t *_create_batch_runtime(void)
 {
   dt_drawlayer_paint_stroke_t *runtime = dt_drawlayer_paint_runtime_private_create();
@@ -630,6 +788,7 @@ static void _unlock_batch_tiles(omp_lock_t *locks, const int tile_cols, const in
 }
 
 static guint _rasterize_dab_batch_outer_loop(const GArray *dabs, const guint max_dabs, const float distance_percent,
+                                             const dt_drawlayer_cache_patch_t *sample_patch,
                                              dt_drawlayer_cache_patch_t *patch, const float scale,
                                              dt_drawlayer_cache_patch_t *stroke_mask,
                                              dt_drawlayer_damaged_rect_t *batch_damage,
@@ -681,7 +840,7 @@ static guint _rasterize_dab_batch_outer_loop(const GArray *dabs, const guint max
 
   const double t0 = dt_get_wtime();
 #pragma omp parallel for schedule(static) default(none) \
-  shared(dabs, patch, stroke_mask, thread_runtime, thread_damage, tile_locks, tile_cols, tile_origin_x, tile_origin_y, max_dabs, distance_percent, scale)
+  shared(dabs, sample_patch, patch, stroke_mask, thread_runtime, thread_damage, tile_locks, tile_cols, tile_origin_x, tile_origin_y, max_dabs, distance_percent, scale)
   for(guint i = 0; i < max_dabs; i++)
   {
     const int tid = omp_get_thread_num();
@@ -698,7 +857,7 @@ static guint _rasterize_dab_batch_outer_loop(const GArray *dabs, const guint max
       continue;
 
     _lock_batch_tiles(tile_locks, tile_cols, tile_origin_x, tile_origin_y, &bounds);
-    dt_drawlayer_paint_rasterize_segment_to_buffer(dab, distance_percent, patch, scale, stroke_mask,
+    dt_drawlayer_paint_rasterize_segment_to_buffer(dab, distance_percent, sample_patch, patch, scale, stroke_mask,
                                                    &runtime_damage, runtime);
     _unlock_batch_tiles(tile_locks, tile_cols, tile_origin_x, tile_origin_y, &bounds);
 
@@ -729,52 +888,55 @@ static guint _rasterize_pending_dab_batch(drawlayer_paint_backend_ctx_t *ctx, gi
 {
   dt_iop_drawlayer_gui_data_t *g = (ctx && ctx->self) ? (dt_iop_drawlayer_gui_data_t *)ctx->self->gui_data : NULL;
   dt_drawlayer_paint_stroke_t *stroke = ctx ? ctx->stroke : NULL;
-  if(!g || !stroke || !stroke->pending_dabs || stroke->pending_dabs->len == 0) return 0;
+  dt_drawlayer_worker_t *worker = ctx ? ctx->worker : NULL;
+  if(!g || !stroke || !worker || !stroke->pending_dabs || stroke->pending_dabs->len == 0) return 0;
+  if(!g->process.base_patch.pixels || g->process.base_patch.width <= 0 || g->process.base_patch.height <= 0)
+    return 0;
 
   const guint min_batch = _worker_batch_min_size();
-
-#if defined(_OPENMP) && OUTER_LOOP
   const guint remaining_dabs = stroke->pending_dabs->len;
+  const guint batch_dabs = (budget_us > 0)
+                               ? MIN(remaining_dabs, min_batch * DRAWLAYER_OUTER_LIVE_BATCH_MULTIPLIER)
+                               : remaining_dabs;
+  if(batch_dabs == 0) return 0;
 
-  if(remaining_dabs >= min_batch && _dab_batch_supports_outer_loop(stroke->pending_dabs, remaining_dabs))
+  dt_drawlayer_damaged_rect_t batch_bounds = { 0 };
+  if(!_collect_batch_bounds(stroke->pending_dabs, batch_dabs, &g->process.base_patch, &batch_bounds))
   {
-    const guint batch_dabs = (budget_us > 0)
-                                 ? MIN(remaining_dabs, min_batch * DRAWLAYER_OUTER_LIVE_BATCH_MULTIPLIER)
-                                 : remaining_dabs;
-    dt_drawlayer_damaged_rect_t batch_damage = { 0 };
-    dt_drawlayer_cache_patch_wrlock(&g->process.base_patch);
-    const guint processed_dabs = _rasterize_dab_batch_outer_loop(
-        stroke->pending_dabs, batch_dabs, _clamp01(stroke->distance_percent), &g->process.base_patch, 1.0f,
-        &g->process.stroke_mask, &batch_damage, "realtime");
-    dt_drawlayer_cache_patch_wrunlock(&g->process.base_patch);
+    g_array_remove_range(stroke->pending_dabs, 0, batch_dabs);
+    return batch_dabs;
+  }
+  if(!_ensure_heartbeat_batch_buffers(worker, &batch_bounds)) return 0;
 
-    if(processed_dabs > 0)
-    {
-      const dt_drawlayer_brush_dab_t *last_dab
-          = &g_array_index(stroke->pending_dabs, dt_drawlayer_brush_dab_t, processed_dabs - 1);
-      g_array_remove_range(stroke->pending_dabs, 0, processed_dabs);
-      if(batch_damage.valid)
-      {
-        g->process.cache_dirty = TRUE;
-        if(ctx->worker)
-          dt_drawlayer_paint_runtime_note_dab_damage(&ctx->worker->live_publish_damage, &batch_damage);
-        g->stroke.last_dab_valid = TRUE;
-        g->stroke.last_dab_x = last_dab->x;
-        g->stroke.last_dab_y = last_dab->y;
-      }
-    }
-    return processed_dabs;
+  dt_drawlayer_cache_patch_t *const heartbeat_patch = &worker->heartbeat_patch;
+  dt_drawlayer_cache_patch_t *const heartbeat_mask = &worker->heartbeat_stroke_mask;
+  dt_drawlayer_damaged_rect_t batch_damage = { 0 };
+  guint processed_dabs = 0;
+  gboolean used_outer_loop = FALSE;
+  const double batch_t0 = dt_get_wtime();
+
+  /* Build the heartbeat scratch patch from the latest committed layer state,
+   * then keep the authoritative base patch read-locked while blur/smudge
+   * sample from it during rasterization. */
+  dt_drawlayer_cache_patch_rdlock(&g->process.base_patch);
+  dt_drawlayer_cache_patch_rdlock(&g->process.stroke_mask);
+  _copy_rgba_batch_from_locked_patch(&g->process.base_patch, heartbeat_patch);
+  _copy_mask_batch_from_locked_patch(&g->process.stroke_mask, heartbeat_mask);
+#if defined(_OPENMP) && OUTER_LOOP
+  if(batch_dabs >= min_batch && _dab_batch_supports_outer_loop(stroke->pending_dabs, batch_dabs))
+  {
+    used_outer_loop = TRUE;
+    processed_dabs = _rasterize_dab_batch_outer_loop(stroke->pending_dabs, batch_dabs,
+                                                     _clamp01(stroke->distance_percent),
+                                                     &g->process.base_patch, heartbeat_patch, 1.0f,
+                                                     heartbeat_mask, &batch_damage, "heartbeat");
   }
 #endif
-
-  dt_drawlayer_cache_patch_wrlock(&g->process.base_patch);
-  guint processed_dabs = 0;
-  const double batch_t0 = dt_get_wtime();
-  while(processed_dabs < stroke->pending_dabs->len)
+  while(processed_dabs < batch_dabs)
   {
     const dt_drawlayer_brush_dab_t *dab
         = &g_array_index(stroke->pending_dabs, dt_drawlayer_brush_dab_t, processed_dabs);
-    _process_backend_dab(ctx->self, dab, ctx);
+    _process_backend_dab(dab, ctx, &g->process.base_patch, heartbeat_patch, heartbeat_mask, &batch_damage);
     processed_dabs++;
 
     if(budget_us > 0)
@@ -783,10 +945,43 @@ static guint _rasterize_pending_dab_batch(drawlayer_paint_backend_ctx_t *ctx, gi
       if(processed_dabs >= min_batch && elapsed_us >= budget_us) break;
     }
   }
-  if(processed_dabs > 0) g_array_remove_range(stroke->pending_dabs, 0, processed_dabs);
-  dt_drawlayer_cache_patch_wrunlock(&g->process.base_patch);
-  if(processed_dabs > 0)
-    _log_worker_batch_timing("realtime", processed_dabs, 1, 1000.0 * (dt_get_wtime() - batch_t0), FALSE);
+  dt_drawlayer_cache_patch_rdunlock(&g->process.stroke_mask);
+  dt_drawlayer_cache_patch_rdunlock(&g->process.base_patch);
+
+  if(processed_dabs == 0) return 0;
+
+  const dt_drawlayer_brush_dab_t *last_dab
+      = &g_array_index(stroke->pending_dabs, dt_drawlayer_brush_dab_t, processed_dabs - 1);
+  g_array_remove_range(stroke->pending_dabs, 0, processed_dabs);
+
+  if(batch_damage.valid)
+  {
+    dt_drawlayer_damaged_rect_t absolute_damage = { 0 };
+    if(_translate_batch_damage(heartbeat_patch, &batch_damage, &absolute_damage))
+    {
+      dt_drawlayer_cache_patch_wrlock(&g->process.base_patch);
+      dt_drawlayer_cache_patch_wrlock(&g->process.stroke_mask);
+      _copy_rgba_damage_to_locked_patch(heartbeat_patch, &batch_damage, &g->process.base_patch);
+      _copy_mask_damage_to_locked_patch(heartbeat_mask, &batch_damage, &g->process.stroke_mask);
+      _clear_rgba_damage_in_patch(heartbeat_patch, &batch_damage);
+      _clear_mask_damage_in_patch(heartbeat_mask, &batch_damage);
+      dt_dev_pixelpipe_cache_flush_host_pinned_image(darktable.pixelpipe_cache, g->process.base_patch.pixels,
+                                                     g->process.base_patch.cache_entry, -1);
+      dt_drawlayer_cache_patch_wrunlock(&g->process.stroke_mask);
+      dt_drawlayer_cache_patch_wrunlock(&g->process.base_patch);
+
+      g->process.cache_dirty = TRUE;
+      dt_drawlayer_paint_runtime_note_dab_damage(&g->process.cache_dirty_rect, &absolute_damage);
+      dt_drawlayer_paint_runtime_note_dab_damage(worker->backend_path, &absolute_damage);
+      dt_drawlayer_paint_runtime_note_dab_damage(&worker->live_publish_damage, &absolute_damage);
+      g->stroke.last_dab_valid = TRUE;
+      g->stroke.last_dab_x = last_dab->x;
+      g->stroke.last_dab_y = last_dab->y;
+    }
+  }
+
+  if(!used_outer_loop)
+    _log_worker_batch_timing("heartbeat", processed_dabs, 1, 1000.0 * (dt_get_wtime() - batch_t0), FALSE);
   return processed_dabs;
 }
 
@@ -886,6 +1081,7 @@ static gboolean _workers_active_locked(const dt_drawlayer_worker_t *rt)
 {
   const drawlayer_rt_worker_t *worker = _backend_worker_const(rt);
   return worker && (_worker_is_busy(worker) || worker->ring_count > 0
+                    || _backend_pending_dabs_locked(rt)
                     || (rt->finish_commit_pending && *rt->finish_commit_pending));
 }
 
@@ -901,7 +1097,8 @@ static gboolean _workers_ready_for_commit_locked(const dt_drawlayer_worker_t *rt
   const drawlayer_rt_worker_t *worker = _backend_worker_const(rt);
   return worker && rt->finish_commit_pending && rt->painting
          && *rt->finish_commit_pending && !*rt->painting
-         && !_worker_is_busy(worker) && worker->ring_count == 0;
+         && !_worker_is_busy(worker) && worker->ring_count == 0
+         && !_backend_pending_dabs_locked(rt);
 }
 
 /** @brief Thread-safe wrapper for active-workers status. */
@@ -926,31 +1123,6 @@ static gboolean _rt_workers_any_active(dt_drawlayer_worker_t *rt)
   return active;
 }
 
-/** @brief Idle callback committing pending stroke once workers are fully idle. */
-static gboolean _async_commit_idle(gpointer user_data)
-{
-  dt_drawlayer_worker_t *rt = (dt_drawlayer_worker_t *)user_data;
-  dt_iop_module_t *self = rt ? rt->self : NULL;
-  if(!rt || !self || !self->dev) return G_SOURCE_REMOVE;
-
-  gboolean should_commit = FALSE;
-  dt_pthread_mutex_lock(&rt->worker_mutex);
-  rt->finish_commit_source_id = 0;
-  should_commit = _workers_ready_for_commit_locked(rt);
-  dt_pthread_mutex_unlock(&rt->worker_mutex);
-
-  if(should_commit) _commit_dabs(self, TRUE);
-  return G_SOURCE_REMOVE;
-}
-
-/** @brief Schedule async commit when lock-state indicates readiness. */
-static void _schedule_async_commit_if_ready_locked(dt_drawlayer_worker_t *rt)
-{
-  if(!rt || !rt->self || !rt->self->dev) return;
-  if(_workers_ready_for_commit_locked(rt) && rt->finish_commit_source_id == 0)
-    rt->finish_commit_source_id = g_idle_add(_async_commit_idle, rt);
-}
-
 /** @brief Backend-worker idle hook. */
 static void _backend_worker_on_idle(dt_iop_module_t *self, dt_drawlayer_worker_t *rt)
 {
@@ -958,15 +1130,32 @@ static void _backend_worker_on_idle(dt_iop_module_t *self, dt_drawlayer_worker_t
   drawlayer_paint_backend_ctx_t ctx = _make_backend_ctx(self, rt, rt ? rt->stroke : NULL);
   if(self && g && rt && rt->stroke && rt->stroke->pending_dabs && rt->stroke->pending_dabs->len > 0)
   {
-    const guint processed_dabs = _rasterize_pending_dab_batch(&ctx, _live_publish_interval_us());
-    if(processed_dabs > 0) _publish_backend_progress(&ctx, TRUE);
-    return;
+    /* Once a stroke has emitted dabs, keep draining the heartbeat backlog in
+     * this same idle phase instead of returning to the outer loop after each
+     * batch. Otherwise long strokes can momentarily "stall" between batches as
+     * the worker bounces through the queue/idle state machine waiting for the
+     * next loop turn. */
+    while(rt->stroke && rt->stroke->pending_dabs && rt->stroke->pending_dabs->len > 0)
+    {
+      guint processed_dabs = 0;
+      dt_pthread_mutex_lock(&rt->worker_mutex);
+      const gboolean should_stop = _worker_pause_requested(_backend_worker_const(rt))
+                                   || _backend_worker_const(rt)->stop;
+      dt_pthread_mutex_unlock(&rt->worker_mutex);
+      if(should_stop) break;
+
+      processed_dabs = _rasterize_pending_dab_batch(&ctx, _live_publish_interval_us());
+      if(processed_dabs == 0) break;
+      _publish_backend_progress(&ctx, TRUE);
+    }
   }
 
   if(!rt) return;
+  gboolean should_commit = FALSE;
   dt_pthread_mutex_lock(&rt->worker_mutex);
-  _schedule_async_commit_if_ready_locked(rt);
+  should_commit = _workers_ready_for_commit_locked(rt);
   dt_pthread_mutex_unlock(&rt->worker_mutex);
+  if(should_commit) _commit_dabs(self, TRUE);
 }
 
 /** @brief Process one backend raw input event. */
@@ -989,22 +1178,16 @@ static void _backend_worker_process_stroke_end(dt_iop_module_t *self, dt_drawlay
 {
   if(!rt) return;
 
-  /* Worker only drains per-stroke pending samples. Stroke-damage rectangles are
-   * consumed/applied by drawlayer during commit, after worker idle is reached. */
+  /* Stroke end only finalizes path generation and asks for commit. Pending dabs
+   * still drain through the same heartbeat batches as live painting, so the
+   * worker keeps alternating raster and pipeline refresh until the stroke is
+   * fully materialized. */
   if(rt->stroke)
   {
-    dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
-    drawlayer_paint_backend_ctx_t ctx = _make_backend_ctx(self, rt, rt->stroke);
-    if(g)
-    {
-      dt_drawlayer_paint_finalize_path(rt->stroke);
-      _rasterize_pending_dab_batch(&ctx, 0);
-      _publish_backend_progress(&ctx, TRUE);
-    }
+    dt_drawlayer_paint_finalize_path(rt->stroke);
   }
   dt_pthread_mutex_lock(&rt->worker_mutex);
   if(rt->finish_commit_pending) *rt->finish_commit_pending = TRUE;
-  _schedule_async_commit_if_ready_locked(rt);
   pthread_cond_broadcast(&rt->worker_cond);
   dt_pthread_mutex_unlock(&rt->worker_mutex);
 }
@@ -1024,17 +1207,13 @@ static void _rt_destroy_state(dt_iop_module_t *self, dt_drawlayer_worker_t **rt_
   if(!rt_out || !*rt_out) return;
   dt_drawlayer_worker_t *rt = *rt_out;
   drawlayer_rt_worker_t *worker = _backend_worker(rt);
-  guint live_publish_source_id = 0;
-  dt_pthread_mutex_lock(&rt->worker_mutex);
-  live_publish_source_id = rt->live_publish_source_id;
-  rt->live_publish_source_id = 0;
-  dt_pthread_mutex_unlock(&rt->worker_mutex);
-  if(live_publish_source_id != 0) g_source_remove(live_publish_source_id);
   _stop_worker(self ? self : rt->self, rt);
   _stroke_destroy(rt);
   if(rt->backend_history) g_array_free(rt->backend_history, TRUE);
   if(rt->stroke_raw_inputs) g_array_free(rt->stroke_raw_inputs, TRUE);
   dt_drawlayer_paint_runtime_state_destroy(&rt->backend_path);
+  dt_drawlayer_cache_patch_clear(&rt->heartbeat_patch, DRAWLAYER_HEARTBEAT_PATCH_NAME);
+  dt_drawlayer_cache_patch_clear(&rt->heartbeat_stroke_mask, DRAWLAYER_HEARTBEAT_MASK_NAME);
   dt_free(worker->ring);
   pthread_cond_destroy(&rt->worker_cond);
   dt_pthread_mutex_destroy(&rt->worker_mutex);
@@ -1211,19 +1390,14 @@ static gboolean _start_worker(dt_iop_module_t *self, dt_drawlayer_worker_t *rt)
   return TRUE;
 }
 
-/** @brief Cancel pending async commit idle callback if any. */
+/** @brief Cancel deferred commit request state if any. */
 static void _cancel_async_commit(dt_drawlayer_worker_t *rt)
 {
   if(!rt) return;
 
-  guint source_id = 0;
   dt_pthread_mutex_lock(&rt->worker_mutex);
   if(rt->finish_commit_pending) *rt->finish_commit_pending = FALSE;
-  source_id = rt->finish_commit_source_id;
-  rt->finish_commit_source_id = 0;
   dt_pthread_mutex_unlock(&rt->worker_mutex);
-
-  if(source_id != 0) g_source_remove(source_id);
 }
 
 /** @brief Stop worker thread and clear transient state. */
@@ -1411,7 +1585,6 @@ void dt_drawlayer_worker_request_commit(dt_drawlayer_worker_t *worker)
   if(!worker) return;
   dt_pthread_mutex_lock(&worker->worker_mutex);
   if(worker->finish_commit_pending) *worker->finish_commit_pending = TRUE;
-  _schedule_async_commit_if_ready_locked(worker);
   pthread_cond_broadcast(&worker->worker_cond);
   dt_pthread_mutex_unlock(&worker->worker_mutex);
 }

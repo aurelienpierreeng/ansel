@@ -435,6 +435,8 @@ static gboolean _prepare_analytic_pixel_context(const dt_drawlayer_brush_runtime
  * @return TRUE when footprint contributed at least one weighted sample.
  */
 static gboolean _prepare_blur_context(dt_aligned_pixel_simd_t *blur_px, const float *buffer, const int width,
+                                      const int height, const int source_origin_x, const int source_origin_y,
+                                      const int patch_origin_x, const int patch_origin_y,
                                       const dt_drawlayer_brush_runtime_view_t *view)
 {
   if(!blur_px) return FALSE;
@@ -452,7 +454,10 @@ static gboolean _prepare_blur_context(dt_aligned_pixel_simd_t *blur_px, const fl
       const float blur_weight = dt_drawlayer_brush_profile_eval(dab, dx * dx + dy2);
       if(blur_weight <= 0.0f) continue;
 
-      const float *pixel = buffer + 4 * ((size_t)y * width + x);
+      const int source_x = x + patch_origin_x - source_origin_x;
+      const int source_y = y + patch_origin_y - source_origin_y;
+      if(source_x < 0 || source_y < 0 || source_x >= width || source_y >= height) continue;
+      const float *pixel = buffer + 4 * ((size_t)source_y * width + source_x);
       blur_sum += dt_load_simd(pixel) * dt_simd_set1(blur_weight);
       blur_weight_sum += blur_weight;
     }
@@ -579,17 +584,23 @@ static inline float _smudge_deposit_alpha(const float src_alpha, const float car
  * @brief Apply smudge mode for one pixel and update carried sample.
  * @pre Smudge buffer must be allocated for current dab footprint.
  */
-static dt_aligned_pixel_simd_t _apply_smudge_stroke_mode(float *buffer, const int width, const int height,
+static dt_aligned_pixel_simd_t _apply_smudge_stroke_mode(const float *source_buffer, const int source_width,
+                                                         const int source_height, const int source_origin_x,
+                                                         const int source_origin_y,
                                                          dt_drawlayer_paint_stroke_t *runtime_private,
                                                          const dt_drawlayer_brush_runtime_view_t *view,
-                                                         const float scale, const int origin_x,
-                                                         const int origin_y, const int x, const int y,
+                                                         const float scale, const int patch_origin_x,
+                                                         const int patch_origin_y, const int x, const int y,
                                                          const float src_alpha,
                                                          const dt_aligned_pixel_simd_t old_px)
 {
   const dt_drawlayer_brush_dab_t *dab = view->dab;
-  float sample_x = (float)x;
-  float sample_y = (float)y;
+  const float source_x_offset = (float)(patch_origin_x - source_origin_x);
+  const float source_y_offset = (float)(patch_origin_y - source_origin_y);
+  const float center_abs_x = view->center_x + (float)patch_origin_x;
+  const float center_abs_y = view->center_y + (float)patch_origin_y;
+  float sample_x = (float)x + source_x_offset;
+  float sample_y = (float)y + source_y_offset;
   float motion_dx = 0.0f;
   float motion_dy = 0.0f;
   float *smudge_pixels = dt_drawlayer_paint_runtime_smudge_pixels(runtime_private);
@@ -601,16 +612,17 @@ static dt_aligned_pixel_simd_t _apply_smudge_stroke_mode(float *buffer, const in
     float pickup_center_x = 0.0f;
     float pickup_center_y = 0.0f;
     dt_drawlayer_paint_runtime_get_smudge_pickup(runtime_private, &pickup_center_x, &pickup_center_y);
-    pickup_center_x = pickup_center_x * scale - (float)origin_x;
-    pickup_center_y = pickup_center_y * scale - (float)origin_y;
-    sample_x = (float)x + (pickup_center_x - view->center_x);
-    sample_y = (float)y + (pickup_center_y - view->center_y);
-    motion_dx = view->center_x - pickup_center_x;
-    motion_dy = view->center_y - pickup_center_y;
+    pickup_center_x *= scale;
+    pickup_center_y *= scale;
+    sample_x += pickup_center_x - center_abs_x;
+    sample_y += pickup_center_y - center_abs_y;
+    motion_dx = center_abs_x - pickup_center_x;
+    motion_dy = center_abs_y - pickup_center_y;
   }
 
   const dt_aligned_pixel_simd_t sampled_px
-      = _sample_smudge_source_float(buffer, width, height, sample_x, sample_y, motion_dx, motion_dy,
+      = _sample_smudge_source_float(source_buffer, source_width, source_height, sample_x, sample_y,
+                                    motion_dx, motion_dy,
                                     x - view->bounds.nw[0], y - view->bounds.nw[1]);
 
   if(!smudge_pixels || smudge_width <= 0) return old_px;
@@ -633,7 +645,8 @@ static dt_aligned_pixel_simd_t _apply_smudge_stroke_mode(float *buffer, const in
  * @brief Public dab rasterization entry point.
  * @details Assumes caller already converted coordinates to layer space.
  */
-gboolean dt_drawlayer_brush_rasterize(dt_drawlayer_cache_patch_t *patch, const float scale,
+gboolean dt_drawlayer_brush_rasterize(const dt_drawlayer_cache_patch_t *sample_patch,
+                                      dt_drawlayer_cache_patch_t *patch, const float scale,
                                       const dt_drawlayer_brush_dab_t *dab,
                                       const float sample_opacity_scale,
                                       dt_drawlayer_cache_patch_t *stroke_mask,
@@ -652,6 +665,13 @@ gboolean dt_drawlayer_brush_rasterize(dt_drawlayer_cache_patch_t *patch, const f
   const int height = patch->height;
   const int origin_x = patch->x;
   const int origin_y = patch->y;
+  const dt_drawlayer_cache_patch_t *const source_patch
+      = (sample_patch && sample_patch->pixels) ? sample_patch : patch;
+  const float *const source_buffer = source_patch->pixels;
+  const int source_width = source_patch->width;
+  const int source_height = source_patch->height;
+  const int source_origin_x = source_patch->x;
+  const int source_origin_y = source_patch->y;
   float *const stroke_mask_pixels = stroke_mask ? stroke_mask->pixels : NULL;
   const int stroke_mask_width = stroke_mask ? stroke_mask->width : 0;
   const int stroke_mask_height = stroke_mask ? stroke_mask->height : 0;
@@ -674,7 +694,9 @@ gboolean dt_drawlayer_brush_rasterize(dt_drawlayer_cache_patch_t *patch, const f
   switch(view.dab->mode)
   {
     case DT_DRAWLAYER_BRUSH_MODE_BLUR:
-      if(!_prepare_blur_context(&blur_px, buffer, width, &view)) return FALSE;
+      if(!_prepare_blur_context(&blur_px, source_buffer, source_width, source_height, source_origin_x,
+                                source_origin_y, origin_x, origin_y, &view))
+        return FALSE;
       break;
     case DT_DRAWLAYER_BRUSH_MODE_SMUDGE:
       if(!dt_drawlayer_paint_runtime_ensure_smudge_pixels(runtime_private,
@@ -704,7 +726,8 @@ gboolean dt_drawlayer_brush_rasterize(dt_drawlayer_cache_patch_t *patch, const f
           continue;
 
         const dt_aligned_pixel_simd_t out_px
-            = _apply_smudge_stroke_mode(buffer, width, height, runtime_private, &view,
+            = _apply_smudge_stroke_mode(source_buffer, source_width, source_height, source_origin_x,
+                                        source_origin_y, runtime_private, &view,
                                         scale, origin_x, origin_y,
                                         x, y, pixel_eval.src_alpha, old_px);
         dt_store_simd(pixel, out_px);

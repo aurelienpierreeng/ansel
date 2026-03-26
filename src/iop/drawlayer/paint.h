@@ -168,6 +168,8 @@ void dt_drawlayer_paint_finalize_path(dt_drawlayer_paint_stroke_t *state);
  *
  * @param dab Input dab sample from path stream.
  * @param distance_percent Sampling distance parameter in [0,1].
+ * @param sample_patch Optional read-only source patch used by blur/smudge sampling.
+ * When NULL, sampling falls back to `patch`.
  * @param patch Destination float RGBA patch.
  * @param scale Layer-to-buffer scale factor.
  * @param stroke_mask Optional stroke-local alpha mask patch.
@@ -177,6 +179,7 @@ void dt_drawlayer_paint_finalize_path(dt_drawlayer_paint_stroke_t *state);
  */
 gboolean dt_drawlayer_paint_rasterize_segment_to_buffer(const dt_drawlayer_brush_dab_t *dab,
                                                         float distance_percent,
+                                                        const dt_drawlayer_cache_patch_t *sample_patch,
                                                         dt_drawlayer_cache_patch_t *patch,
                                                         float scale,
                                                         dt_drawlayer_cache_patch_t *stroke_mask,

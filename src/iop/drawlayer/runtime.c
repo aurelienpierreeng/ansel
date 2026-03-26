@@ -735,6 +735,7 @@ dt_drawlayer_runtime_result_t dt_drawlayer_runtime_manager_update(dt_drawlayer_r
         dt_drawlayer_cache_patch_clear(&g->process.base_patch, "drawlayer patch");
         g->process.cache_valid = FALSE;
         g->process.cache_dirty = FALSE;
+        dt_drawlayer_paint_runtime_state_reset(&g->process.cache_dirty_rect);
         g->process.cache_imgid = -1;
         g->process.cache_layer_name[0] = '\0';
         g->process.cache_layer_order = -1;
@@ -795,6 +796,7 @@ dt_drawlayer_runtime_result_t dt_drawlayer_runtime_manager_update(dt_drawlayer_r
         dt_drawlayer_cache_patch_clear(&g->process.base_patch, "drawlayer patch");
         g->process.cache_valid = FALSE;
         g->process.cache_dirty = FALSE;
+        dt_drawlayer_paint_runtime_state_reset(&g->process.cache_dirty_rect);
         dt_drawlayer_process_state_invalidate(&g->process);
       }
       if(schedule.refresh_gui && self) gui_update(self);

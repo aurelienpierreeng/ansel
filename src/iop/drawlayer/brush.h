@@ -90,6 +90,8 @@ struct dt_drawlayer_paint_stroke_t;
 /**
  * @brief Rasterize one dab into a float RGBA buffer.
  *
+ * @param sample_patch Optional read-only source patch used by blur/smudge sampling.
+ * When NULL, sampling falls back to `patch`.
  * @param patch Destination premultiplied RGBA float patch.
  * @param scale Layer-to-buffer scale factor, must be >0.
  * @param dab Fully resolved dab input (coordinates already in layer space).
@@ -101,7 +103,8 @@ struct dt_drawlayer_paint_stroke_t;
  * @pre `dab->radius > 0`, `dab->opacity > 0`, `scale > 0`.
  * @pre Coordinates transformation to layer space is handled by the caller.
  */
-gboolean dt_drawlayer_brush_rasterize(dt_drawlayer_cache_patch_t *patch, float scale,
+gboolean dt_drawlayer_brush_rasterize(const dt_drawlayer_cache_patch_t *sample_patch,
+                                      dt_drawlayer_cache_patch_t *patch, float scale,
                                       const dt_drawlayer_brush_dab_t *dab,
                                       float sample_opacity_scale,
                                       dt_drawlayer_cache_patch_t *stroke_mask,

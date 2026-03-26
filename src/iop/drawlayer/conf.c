@@ -301,6 +301,7 @@ static void _apply_display_brush_color(dt_iop_module_t *self, const float displa
   dt_conf_set_float(DRAWLAYER_CONF_COLOR_R, _clamp01(display_rgb[0]));
   dt_conf_set_float(DRAWLAYER_CONF_COLOR_G, _clamp01(display_rgb[1]));
   dt_conf_set_float(DRAWLAYER_CONF_COLOR_B, _clamp01(display_rgb[2]));
+  _sync_cached_brush_colors(self, display_rgb);
 
   dt_drawlayer_widgets_set_display_color(g->ui.widgets, display_rgb);
   dt_drawlayer_ui_cursor_clear(&g->ui);
@@ -320,6 +321,7 @@ static void _sync_color_picker_from_conf(dt_iop_module_t *self)
 
   float display_rgb[3] = { 0.0f };
   _conf_display_color(display_rgb);
+  _sync_cached_brush_colors(self, display_rgb);
 
   dt_drawlayer_widgets_set_display_color(g->ui.widgets, display_rgb);
   if(g->controls.color_swatch) gtk_widget_queue_draw(g->controls.color_swatch);

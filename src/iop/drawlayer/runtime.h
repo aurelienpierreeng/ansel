@@ -43,6 +43,7 @@ typedef struct dt_drawlayer_process_state_t
   dt_drawlayer_cache_patch_t stroke_mask;
   gboolean cache_valid;
   gboolean cache_dirty;
+  dt_drawlayer_damaged_rect_t cache_dirty_rect;
 
   int32_t cache_imgid;
   char cache_layer_name[DRAWLAYER_NAME_SIZE];
@@ -74,6 +75,9 @@ typedef struct dt_drawlayer_ui_state_t
   float cursor_hardness;
   int cursor_shape;
   float cursor_color[3];
+  float brush_display_color[3];
+  float brush_pipeline_color[3];
+  gboolean brush_color_valid;
 } dt_drawlayer_ui_state_t;
 
 typedef struct dt_drawlayer_controls_t

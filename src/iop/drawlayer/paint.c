@@ -713,6 +713,7 @@ static inline void _advance_smudge_pickup_state(dt_drawlayer_paint_stroke_t *sta
 
 gboolean dt_drawlayer_paint_rasterize_segment_to_buffer(const dt_drawlayer_brush_dab_t *dab,
                                                         const float distance_percent,
+                                                        const dt_drawlayer_cache_patch_t *sample_patch,
                                                         dt_drawlayer_cache_patch_t *patch,
                                                         const float scale,
                                                         dt_drawlayer_cache_patch_t *stroke_mask,
@@ -757,7 +758,8 @@ gboolean dt_drawlayer_paint_rasterize_segment_to_buffer(const dt_drawlayer_brush
 
   const double t0 = dt_get_wtime();
   const gboolean rasterized
-      = dt_drawlayer_brush_rasterize(patch, scale, sample, sample_opacity_scale, stroke_mask, runtime_private);
+      = dt_drawlayer_brush_rasterize(sample_patch, patch, scale, sample, sample_opacity_scale, stroke_mask,
+                                     runtime_private);
   const double t1 = dt_get_wtime();
   if(rasterized && runtime_state && runtime_private && runtime_private->bounds.valid)
     dt_drawlayer_paint_runtime_note_dab_damage(runtime_state, &runtime_private->bounds);

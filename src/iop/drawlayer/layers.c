@@ -151,6 +151,7 @@ gboolean dt_drawlayer_ensure_layer_cache(dt_iop_module_t *self)
     dt_drawlayer_cache_patch_clear(&g->process.base_patch, "drawlayer patch");
     g->process.cache_valid = FALSE;
     g->process.cache_dirty = FALSE;
+    dt_drawlayer_paint_runtime_state_reset(&g->process.cache_dirty_rect);
     g->process.cache_imgid = -1;
     g->process.cache_layer_name[0] = '\0';
     g->process.cache_layer_order = -1;
@@ -279,6 +280,7 @@ gboolean dt_drawlayer_ensure_layer_cache(dt_iop_module_t *self)
         dt_drawlayer_cache_patch_clear(&g->process.base_patch, "drawlayer patch");
         g->process.cache_valid = FALSE;
         g->process.cache_dirty = FALSE;
+        dt_drawlayer_paint_runtime_state_reset(&g->process.cache_dirty_rect);
         g->process.cache_imgid = -1;
         g->process.cache_layer_name[0] = '\0';
         g->process.cache_layer_order = -1;
@@ -331,6 +333,7 @@ gboolean dt_drawlayer_ensure_layer_cache(dt_iop_module_t *self)
   {
     g->process.cache_valid = TRUE;
     g->process.cache_dirty = FALSE;
+    dt_drawlayer_paint_runtime_state_reset(&g->process.cache_dirty_rect);
     g->process.cache_imgid = imgid;
     g_strlcpy(g->process.cache_layer_name, params->layer_name, sizeof(g->process.cache_layer_name));
     g->process.cache_layer_order = params->layer_order;
@@ -343,6 +346,7 @@ gboolean dt_drawlayer_ensure_layer_cache(dt_iop_module_t *self)
     dt_drawlayer_cache_patch_clear(&g->process.base_patch, "drawlayer patch");
     g->process.cache_valid = FALSE;
     g->process.cache_dirty = FALSE;
+    dt_drawlayer_paint_runtime_state_reset(&g->process.cache_dirty_rect);
   }
 
   if(ui_thread && !cache_loaded) _refresh_layer_widgets(self);
@@ -383,6 +387,7 @@ gboolean dt_drawlayer_flush_layer_cache(dt_iop_module_t *self)
 
   g->process.cache_layer_order = final_order;
   g->process.cache_dirty = FALSE;
+  dt_drawlayer_paint_runtime_state_reset(&g->process.cache_dirty_rect);
 
   dt_iop_drawlayer_params_t *mutable_params = (dt_iop_drawlayer_params_t *)self->params;
   if(mutable_params)
