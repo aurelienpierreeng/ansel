@@ -30,11 +30,11 @@
 #define DT_DRAWLAYER_IO_NAME_SIZE 64
 #define DT_DRAWLAYER_IO_PROFILE_SIZE 256
 
-/** @brief Raw float RGBA patch used by drawlayer I/O routines. */
+/** @brief Float RGBA patch used by drawlayer I/O routines. */
 typedef struct dt_drawlayer_io_patch_t
 {
-  int x;          /**< Patch origin X in raw layer coordinates. */
-  int y;          /**< Patch origin Y in raw layer coordinates. */
+  int x;          /**< Patch origin X in image-space layer coordinates. */
+  int y;          /**< Patch origin Y in image-space layer coordinates. */
   int width;      /**< Patch width in pixels. */
   int height;     /**< Patch height in pixels. */
   float *pixels;  /**< Interleaved RGBA float pixel data. */
@@ -58,8 +58,8 @@ typedef struct _dt_job_t dt_job_t;
 typedef struct dt_drawlayer_io_background_job_params_t
 {
   int32_t imgid;
-  int raw_width;
-  int raw_height;
+  int layer_width;
+  int layer_height;
   int dst_x;
   int dst_y;
   int insert_after_order;
@@ -90,22 +90,22 @@ gboolean dt_drawlayer_io_sidecar_path(int32_t imgid, char *path, size_t path_siz
 gboolean dt_drawlayer_io_find_layer(const char *path, const char *target_name, int target_order,
                                     dt_drawlayer_io_layer_info_t *info);
 /** @brief Load one layer from TIFF sidecar into float RGBA patch. */
-gboolean dt_drawlayer_io_load_layer(const char *path, const char *target_name, int target_order, int raw_width,
-                                    int raw_height, dt_drawlayer_io_patch_t *patch);
+gboolean dt_drawlayer_io_load_layer(const char *path, const char *target_name, int target_order, int layer_width,
+                                    int layer_height, dt_drawlayer_io_patch_t *patch);
 /** @brief Store or replace one layer page in sidecar TIFF. */
 gboolean dt_drawlayer_io_store_layer(const char *path, const char *target_name, int target_order,
-                                     const char *work_profile, const dt_drawlayer_io_patch_t *patch, int raw_width,
-                                     int raw_height, gboolean delete_target, int *final_order);
+                                     const char *work_profile, const dt_drawlayer_io_patch_t *patch, int layer_width,
+                                     int layer_height, gboolean delete_target, int *final_order);
 /** @brief Insert new layer after target order in sidecar TIFF. */
 gboolean dt_drawlayer_io_insert_layer(const char *path, const char *target_name, int insert_after_order,
-                                      const char *work_profile, const dt_drawlayer_io_patch_t *patch, int raw_width,
-                                      int raw_height, int *final_order);
+                                      const char *work_profile, const dt_drawlayer_io_patch_t *patch, int layer_width,
+                                      int layer_height, int *final_order);
 /** @brief Rename one existing layer entry in sidecar TIFF. */
 gboolean dt_drawlayer_io_rename_layer(const char *path, const char *current_name, const char *new_name,
-                                      const char *work_profile, int raw_width, int raw_height,
+                                      const char *work_profile, int layer_width, int layer_height,
                                       dt_drawlayer_io_layer_info_t *info);
 /** @brief Delete one existing layer entry from sidecar TIFF. */
-gboolean dt_drawlayer_io_delete_layer(const char *path, const char *target_name, int raw_width, int raw_height);
+gboolean dt_drawlayer_io_delete_layer(const char *path, const char *target_name, int layer_width, int layer_height);
 /** @brief Load full TIFF page as flat RGBA float image. */
 gboolean dt_drawlayer_io_load_flat_rgba(const char *path, float **pixels, int *width, int *height);
 /** @brief Check whether candidate layer name already exists. */

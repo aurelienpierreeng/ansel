@@ -39,13 +39,8 @@ typedef struct dt_drawlayer_worker_snapshot_t
 {
   dt_drawlayer_worker_state_t backend_state;
   guint backend_queue_count;
-  dt_drawlayer_worker_state_t fullres_state;
-  guint fullres_queue_count;
   gboolean commit_pending;
 } dt_drawlayer_worker_snapshot_t;
-/** @brief Callback processing one finished stroke on the deferred full-resolution worker. */
-typedef gboolean (*dt_drawlayer_worker_finished_stroke_cb)(dt_iop_module_t *self,
-                                                           const GArray *raw_inputs);
 
 /** @brief Initialize worker and bind external state mirrors. */
 void dt_drawlayer_worker_init(dt_iop_module_t *self,
@@ -53,13 +48,12 @@ void dt_drawlayer_worker_init(dt_iop_module_t *self,
                               gboolean *painting,
                               gboolean *finish_commit_pending,
                               guint *stroke_sample_count,
-                              uint32_t *current_stroke_batch,
-                              dt_drawlayer_worker_finished_stroke_cb finished_stroke_cb);
+                              uint32_t *current_stroke_batch);
 /** @brief Stop worker and release all resources. */
 void dt_drawlayer_worker_cleanup(dt_drawlayer_worker_t **worker);
 /** @brief Query whether realtime/backend worker still has pending activity. */
 gboolean dt_drawlayer_worker_active(const dt_drawlayer_worker_t *worker);
-/** @brief Query whether any worker still has pending activity, including full-resolution replay. */
+/** @brief Query whether any worker still has pending activity. */
 gboolean dt_drawlayer_worker_any_active(const dt_drawlayer_worker_t *worker);
 /** @brief Return a thread-safe worker snapshot for runtime scheduling. */
 void dt_drawlayer_worker_get_snapshot(const dt_drawlayer_worker_t *worker,
@@ -72,10 +66,8 @@ void dt_drawlayer_worker_flush_pending(dt_drawlayer_worker_t *worker);
 gboolean dt_drawlayer_worker_ensure_running(dt_iop_module_t *self, dt_drawlayer_worker_t *worker);
 /** @brief Stop realtime and full-resolution worker threads. */
 void dt_drawlayer_worker_stop(dt_iop_module_t *self, dt_drawlayer_worker_t *worker);
-/** @brief Seal current stroke for synchronous commit by folding queued raw inputs into preserved history. */
+/** @brief Seal current stroke for synchronous commit. */
 void dt_drawlayer_worker_seal_for_commit(dt_drawlayer_worker_t *worker);
-/** @brief Wait until deferred full-resolution replay queue is idle. */
-void dt_drawlayer_worker_flush_finished_strokes(dt_drawlayer_worker_t *worker);
 /** @brief Publish accumulated backend stroke damage into drawlayer process/runtime state. */
 void dt_drawlayer_worker_publish_backend_stroke_damage(dt_iop_module_t *self);
 /** @brief Reset worker-owned backend damage accumulator. */
@@ -90,10 +82,6 @@ GArray *dt_drawlayer_worker_raw_inputs(dt_drawlayer_worker_t *worker);
 dt_drawlayer_paint_stroke_t *dt_drawlayer_worker_stroke(dt_drawlayer_worker_t *worker);
 /** @brief Return the number of interpolated-but-not-yet-rasterized dabs in the current stroke batch. */
 guint dt_drawlayer_worker_pending_dab_count(const dt_drawlayer_worker_t *worker);
-/** @brief Query whether the current preserved stroke has already been handed off for full-resolution replay. */
-gboolean dt_drawlayer_worker_finished_stroke_queued(const dt_drawlayer_worker_t *worker);
-/** @brief Replay one finished stroke into the authoritative base patch from preserved raw inputs. */
-gboolean dt_drawlayer_worker_replay_finished_stroke_to_base_patch(dt_iop_module_t *self, const GArray *raw_inputs);
 
 /** @brief Enqueue one raw input event (FIFO, no coalescing). */
 gboolean dt_drawlayer_worker_enqueue_input(dt_drawlayer_worker_t *worker,

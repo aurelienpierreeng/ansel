@@ -61,6 +61,9 @@ void dt_drawlayer_cache_patch_clear(dt_drawlayer_cache_patch_t *patch, const cha
 /** @brief Allocate/reuse shared patch storage from pixel cache. */
 gboolean dt_drawlayer_cache_patch_alloc_shared(dt_drawlayer_cache_patch_t *patch, uint64_t hash, size_t pixel_count,
                                                int width, int height, const char *name, int *created_out);
+/** @brief Ensure a float stroke-mask buffer exists for the requested size. */
+gboolean dt_drawlayer_cache_ensure_mask_buffer(dt_drawlayer_cache_patch_t *mask, int width, int height,
+                                               const char *name);
 /** @brief Acquire read lock on shared patch cache entry. */
 void dt_drawlayer_cache_patch_rdlock(const dt_drawlayer_cache_patch_t *patch);
 /** @brief Release read lock on shared patch cache entry. */

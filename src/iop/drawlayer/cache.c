@@ -119,6 +119,42 @@ gboolean dt_drawlayer_cache_patch_alloc_shared(dt_drawlayer_cache_patch_t *patch
   return TRUE;
 }
 
+/** @brief Ensure a float stroke-mask buffer exists and matches the requested size. */
+gboolean dt_drawlayer_cache_ensure_mask_buffer(dt_drawlayer_cache_patch_t *mask, const int width,
+                                               const int height, const char *name)
+{
+  if(!mask || width <= 0 || height <= 0) return FALSE;
+
+  const gboolean size_changed = (mask->width != width || mask->height != height || !mask->pixels);
+  if(size_changed)
+  {
+    dt_drawlayer_cache_patch_clear(mask, name);
+    mask->width = width;
+    mask->height = height;
+    mask->x = 0;
+    mask->y = 0;
+    mask->pixels = dt_drawlayer_cache_alloc_temp_buffer((size_t)width * height * sizeof(float), name);
+    mask->external_alloc = TRUE;
+    if(!mask->pixels)
+    {
+      mask->width = 0;
+      mask->height = 0;
+      return FALSE;
+    }
+
+    mask->cache_entry = dt_dev_pixelpipe_cache_ref_entry_for_host_ptr(darktable.pixelpipe_cache, mask->pixels);
+    mask->cache_hash = mask->cache_entry ? mask->cache_entry->hash : DT_PIXELPIPE_CACHE_HASH_INVALID;
+    if(!mask->cache_entry)
+    {
+      dt_drawlayer_cache_patch_clear(mask, name);
+      return FALSE;
+    }
+  }
+
+  memset(mask->pixels, 0, (size_t)width * height * sizeof(float));
+  return TRUE;
+}
+
 /** @brief Acquire read lock on shared patch cache entry. */
 void dt_drawlayer_cache_patch_rdlock(const dt_drawlayer_cache_patch_t *patch)
 {

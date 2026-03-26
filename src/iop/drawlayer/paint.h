@@ -137,8 +137,6 @@ typedef gboolean (*dt_drawlayer_paint_build_dab_cb)(void *user_data,
 /** @brief Convert layer-space coordinates back to widget-space (for HUD/preview alignment). */
 typedef gboolean (*dt_drawlayer_paint_layer_to_widget_cb)(void *user_data, float lx, float ly,
                                                            float *wx, float *wy);
-/** @brief Consume one emitted dab sample from path processing. */
-typedef void (*dt_drawlayer_paint_emit_dab_cb)(void *user_data, const dt_drawlayer_brush_dab_t *dab);
 /** @brief Notify caller when a new stroke seed is started. */
 typedef void (*dt_drawlayer_paint_stroke_seed_cb)(void *user_data, uint64_t stroke_seed);
 
@@ -147,7 +145,6 @@ typedef struct dt_drawlayer_paint_callbacks_t
 {
   dt_drawlayer_paint_build_dab_cb build_dab; /**< Mandatory: raw event -> resolved dab conversion. */
   dt_drawlayer_paint_layer_to_widget_cb layer_to_widget; /**< Optional: layer->widget transform callback. */
-  dt_drawlayer_paint_emit_dab_cb emit_dab; /**< Mandatory: emitted dab sink. */
   dt_drawlayer_paint_stroke_seed_cb on_stroke_seed; /**< Optional: stroke-seed notification hook. */
 } dt_drawlayer_paint_callbacks_t;
 
@@ -165,17 +162,7 @@ void dt_drawlayer_paint_interpolate_path(dt_drawlayer_paint_stroke_t *state,
                                          const dt_drawlayer_paint_callbacks_t *callbacks,
                                          void *user_data);
 /** @brief Force emission of a pending initial dab when a stroke had no emitted samples yet. */
-void dt_drawlayer_paint_finalize_path(dt_drawlayer_paint_stroke_t *state,
-                                      const dt_drawlayer_paint_callbacks_t *callbacks,
-                                      void *user_data);
-/** @brief Rasterize a precomputed dab list into one float RGBA patch. */
-gboolean dt_drawlayer_paint_raster_path(const GArray *dabs,
-                                        float distance_percent,
-                                        dt_drawlayer_cache_patch_t *patch,
-                                        float scale,
-                                        dt_drawlayer_cache_patch_t *stroke_mask,
-                                        dt_drawlayer_damaged_rect_t *runtime_state,
-                                        dt_drawlayer_paint_stroke_t *runtime_private);
+void dt_drawlayer_paint_finalize_path(dt_drawlayer_paint_stroke_t *state);
 /**
  * @brief Replay one emitted dab segment into a float buffer through brush API.
  *

@@ -437,10 +437,10 @@ static void _scan_directories(TIFF *tiff, const char *target_name, const int tar
 
 /** @brief Write one output page, optionally copying from source and patch overlay. */
 static gboolean _write_page(TIFF *dst, TIFF *src, const int src_dir, const char *name, const char *work_profile,
-                            const dt_drawlayer_io_patch_t *patch, const int raw_width, const int raw_height)
+                            const dt_drawlayer_io_patch_t *patch, const int layer_width, const int layer_height)
 {
-  uint32_t width = (uint32_t)raw_width;
-  uint32_t height = (uint32_t)raw_height;
+  uint32_t width = patch ? (uint32_t)patch->width : (uint32_t)layer_width;
+  uint32_t height = patch ? (uint32_t)patch->height : (uint32_t)layer_height;
   const char *page_profile = work_profile;
   uint8_t *icc_profile = NULL;
   uint32_t icc_profile_len = 0;
@@ -448,8 +448,11 @@ static gboolean _write_page(TIFF *dst, TIFF *src, const int src_dir, const char 
   if(src)
   {
     if(!TIFFSetDirectory(src, (tdir_t)src_dir)) return FALSE;
-    TIFFGetField(src, TIFFTAG_IMAGEWIDTH, &width);
-    TIFFGetField(src, TIFFTAG_IMAGELENGTH, &height);
+    if(!patch)
+    {
+      TIFFGetField(src, TIFFTAG_IMAGEWIDTH, &width);
+      TIFFGetField(src, TIFFTAG_IMAGELENGTH, &height);
+    }
     if(!name)
     {
       char *src_name = NULL;
@@ -478,8 +481,8 @@ static gboolean _write_page(TIFF *dst, TIFF *src, const int src_dir, const char 
     return FALSE;
   }
 
-  const int offset_x = (raw_width - (int)width) / 2;
-  const int offset_y = (raw_height - (int)height) / 2;
+  const int offset_x = (layer_width - (int)width) / 2;
+  const int offset_y = (layer_height - (int)height) / 2;
 
   for(uint32_t y = 0; y < height; y++)
   {
@@ -499,8 +502,8 @@ static gboolean _write_page(TIFF *dst, TIFF *src, const int src_dir, const char 
 
     if(patch)
     {
-      const int raw_y = (int)y + offset_y;
-      _overlay_patch_row_rgba(dst_row, width, offset_x, raw_y, patch);
+      const int layer_y = (int)y + offset_y;
+      _overlay_patch_row_rgba(dst_row, width, offset_x, layer_y, patch);
     }
 
     if(!_write_scanline_rgba(dst, y, dst_row))
@@ -520,8 +523,8 @@ static gboolean _write_page(TIFF *dst, TIFF *src, const int src_dir, const char 
 
 /** @brief Rewrite sidecar with optional update/insert/delete of one target layer. */
 static gboolean _rewrite_sidecar(const char *path, const char *target_name, const int target_order,
-                                 const char *work_profile, const dt_drawlayer_io_patch_t *patch, const int raw_width,
-                                 const int raw_height, const gboolean delete_target, const int insert_order,
+                                 const char *work_profile, const dt_drawlayer_io_patch_t *patch, const int layer_width,
+                                 const int layer_height, const gboolean delete_target, const int insert_order,
                                  int *final_order)
 {
   if(final_order) *final_order = -1;
@@ -568,7 +571,7 @@ static gboolean _rewrite_sidecar(const char *path, const char *target_name, cons
     {
       if(!delete_target && !info.found && insert_order >= 0 && written_index == insert_order)
       {
-        ok = _write_page(dst, NULL, -1, target_name, work_profile, patch, raw_width, raw_height);
+        ok = _write_page(dst, NULL, -1, target_name, work_profile, patch, layer_width, layer_height);
         if(ok && final_order) *final_order = written_index;
         if(ok) written_index++;
       }
@@ -579,7 +582,8 @@ static gboolean _rewrite_sidecar(const char *path, const char *target_name, cons
       const dt_drawlayer_io_patch_t *page_patch = (is_target && !delete_target) ? patch : NULL;
       const char *page_label = is_target ? target_name : NULL;
 
-      ok = _write_page(dst, src, dir, page_label, is_target ? work_profile : NULL, page_patch, raw_width, raw_height);
+      ok = _write_page(dst, src, dir, page_label, is_target ? work_profile : NULL, page_patch, layer_width,
+                       layer_height);
       if(ok && is_target && !delete_target && final_order) *final_order = written_index;
       if(ok) written_index++;
     }
@@ -590,7 +594,7 @@ static gboolean _rewrite_sidecar(const char *path, const char *target_name, cons
     const gboolean append_at_end = (insert_order < 0 || insert_order >= written_index || !src);
     if(append_at_end)
     {
-      ok = _write_page(dst, NULL, -1, target_name, work_profile, patch, raw_width, raw_height);
+      ok = _write_page(dst, NULL, -1, target_name, work_profile, patch, layer_width, layer_height);
       if(ok && final_order) *final_order = written_index;
     }
   }
@@ -695,7 +699,7 @@ gboolean dt_drawlayer_io_find_layer(const char *path, const char *target_name, c
 
 /** @brief Load one sidecar layer patch into float RGBA destination patch. */
 gboolean dt_drawlayer_io_load_layer(const char *path, const char *target_name, const int target_order,
-                                    const int raw_width, const int raw_height, dt_drawlayer_io_patch_t *patch)
+                                    const int layer_width, const int layer_height, dt_drawlayer_io_patch_t *patch)
 {
   if(!patch || !patch->pixels || patch->width <= 0 || patch->height <= 0) return FALSE;
   dt_drawlayer_cache_clear_transparent_float(patch->pixels, (size_t)patch->width * patch->height);
@@ -726,13 +730,13 @@ gboolean dt_drawlayer_io_load_layer(const char *path, const char *target_name, c
     return FALSE;
   }
 
-  const int offset_x = (raw_width - (int)info.width) / 2;
-  const int offset_y = (raw_height - (int)info.height) / 2;
+  const int offset_x = (layer_width - (int)info.width) / 2;
+  const int offset_y = (layer_height - (int)info.height) / 2;
 
   for(int py = 0; py < patch->height; py++)
   {
-    const int raw_y = patch->y + py;
-    const int src_y = raw_y - offset_y;
+    const int layer_y = patch->y + py;
+    const int src_y = layer_y - offset_y;
     if(src_y < 0 || src_y >= (int)info.height) continue;
     if(!_read_scanline_rgba(tiff, info.width, (uint32_t)src_y, row))
     {
@@ -743,8 +747,8 @@ gboolean dt_drawlayer_io_load_layer(const char *path, const char *target_name, c
 
     for(int px = 0; px < patch->width; px++)
     {
-      const int raw_x = patch->x + px;
-      const int src_x = raw_x - offset_x;
+      const int layer_x = patch->x + px;
+      const int src_x = layer_x - offset_x;
       if(src_x < 0 || src_x >= (int)info.width) continue;
       float *dst = patch->pixels + 4 * ((size_t)py * patch->width + px);
       _load_half_pixel_rgba(row + 4 * src_x, dst);
@@ -902,28 +906,28 @@ gboolean dt_drawlayer_io_load_flat_rgba(const char *path, float **pixels, int *w
 /** @brief Store/update/delete one layer entry in sidecar TIFF. */
 gboolean dt_drawlayer_io_store_layer(const char *path, const char *target_name, const int target_order,
                                      const char *work_profile, const dt_drawlayer_io_patch_t *patch,
-                                     const int raw_width, const int raw_height, const gboolean delete_target,
+                                     const int layer_width, const int layer_height, const gboolean delete_target,
                                      int *final_order)
 {
   if(!target_name || target_name[0] == '\0') return FALSE;
-  return _rewrite_sidecar(path, target_name, target_order, work_profile, patch, raw_width, raw_height, delete_target,
-                          -1, final_order);
+  return _rewrite_sidecar(path, target_name, target_order, work_profile, patch, layer_width, layer_height,
+                          delete_target, -1, final_order);
 }
 
 /** @brief Insert a new layer after given order in sidecar TIFF. */
 gboolean dt_drawlayer_io_insert_layer(const char *path, const char *target_name, const int insert_after_order,
                                       const char *work_profile, const dt_drawlayer_io_patch_t *patch,
-                                      const int raw_width, const int raw_height, int *final_order)
+                                      const int layer_width, const int layer_height, int *final_order)
 {
   if(!target_name || target_name[0] == '\0') return FALSE;
   const int insert_order = (insert_after_order >= 0) ? (insert_after_order + 1) : -1;
-  return _rewrite_sidecar(path, target_name, -1, work_profile, patch, raw_width, raw_height, FALSE, insert_order,
+  return _rewrite_sidecar(path, target_name, -1, work_profile, patch, layer_width, layer_height, FALSE, insert_order,
                           final_order);
 }
 
 /** @brief Rename one existing layer page while preserving its directory payload. */
 gboolean dt_drawlayer_io_rename_layer(const char *path, const char *current_name, const char *new_name,
-                                      const char *work_profile, const int raw_width, const int raw_height,
+                                      const char *work_profile, const int layer_width, const int layer_height,
                                       dt_drawlayer_io_layer_info_t *info)
 {
   if(info) memset(info, 0, sizeof(*info));
@@ -935,7 +939,7 @@ gboolean dt_drawlayer_io_rename_layer(const char *path, const char *current_name
   if(dt_drawlayer_io_layer_name_exists(path, new_name, current.index)) return FALSE;
 
   int final_order = current.index;
-  if(!dt_drawlayer_io_store_layer(path, new_name, current.index, work_profile, NULL, raw_width, raw_height, FALSE,
+  if(!dt_drawlayer_io_store_layer(path, new_name, current.index, work_profile, NULL, layer_width, layer_height, FALSE,
                                   &final_order))
     return FALSE;
 
@@ -952,8 +956,8 @@ gboolean dt_drawlayer_io_rename_layer(const char *path, const char *current_name
 }
 
 /** @brief Delete one existing layer page from the sidecar TIFF. */
-gboolean dt_drawlayer_io_delete_layer(const char *path, const char *target_name, const int raw_width,
-                                      const int raw_height)
+gboolean dt_drawlayer_io_delete_layer(const char *path, const char *target_name, const int layer_width,
+                                      const int layer_height)
 {
   if(!path || !target_name || target_name[0] == '\0') return FALSE;
   if(!g_file_test(path, G_FILE_TEST_EXISTS)) return FALSE;
@@ -961,7 +965,8 @@ gboolean dt_drawlayer_io_delete_layer(const char *path, const char *target_name,
   dt_drawlayer_io_layer_info_t info = { 0 };
   if(!dt_drawlayer_io_find_layer(path, target_name, -1, &info)) return FALSE;
 
-  return dt_drawlayer_io_store_layer(path, target_name, info.index, NULL, NULL, raw_width, raw_height, TRUE, NULL);
+  return dt_drawlayer_io_store_layer(path, target_name, info.index, NULL, NULL, layer_width, layer_height, TRUE,
+                                     NULL);
 }
 
 /** @brief Create unique layer name with fallback if requested name is empty. */
@@ -1078,19 +1083,19 @@ int32_t dt_drawlayer_io_background_layer_job_run(dt_job_t *job)
     if(!dt_drawlayer_io_load_flat_rgba(tmp_path, &export_pixels, &export_w, &export_h)) break;
     if(!export_pixels || export_w <= 0 || export_h <= 0) break;
 
-    bg_patch.width = params->raw_width;
-    bg_patch.height = params->raw_height;
+    bg_patch.width = params->layer_width;
+    bg_patch.height = params->layer_height;
     bg_patch.x = 0;
     bg_patch.y = 0;
     bg_patch.pixels = dt_drawlayer_cache_alloc_temp_buffer(
-        (size_t)params->raw_width * params->raw_height * 4 * sizeof(float), "drawlayer bg layer");
+        (size_t)params->layer_width * params->layer_height * 4 * sizeof(float), "drawlayer bg layer");
     if(!bg_patch.pixels) break;
-    dt_drawlayer_cache_clear_transparent_float(bg_patch.pixels, (size_t)params->raw_width * params->raw_height);
+    dt_drawlayer_cache_clear_transparent_float(bg_patch.pixels, (size_t)params->layer_width * params->layer_height);
 
     const int clip_x0 = MAX(params->dst_x, 0);
     const int clip_y0 = MAX(params->dst_y, 0);
-    const int clip_x1 = MIN(params->dst_x + export_w, params->raw_width);
-    const int clip_y1 = MIN(params->dst_y + export_h, params->raw_height);
+    const int clip_x1 = MIN(params->dst_x + export_w, params->layer_width);
+    const int clip_y1 = MIN(params->dst_y + export_h, params->layer_height);
     if(clip_x1 <= clip_x0 || clip_y1 <= clip_y0) break;
 
     const int copy_w = clip_x1 - clip_x0;
@@ -1100,7 +1105,7 @@ int32_t dt_drawlayer_io_background_layer_job_run(dt_job_t *job)
     for(int y = 0; y < copy_h; y++)
     {
       const float *src = export_pixels + 4 * ((size_t)(src_y0 + y) * export_w + src_x0);
-      float *dst = bg_patch.pixels + 4 * ((size_t)(clip_y0 + y) * params->raw_width + clip_x0);
+      float *dst = bg_patch.pixels + 4 * ((size_t)(clip_y0 + y) * params->layer_width + clip_x0);
       memcpy(dst, src, (size_t)copy_w * 4 * sizeof(float));
     }
 
@@ -1111,7 +1116,7 @@ int32_t dt_drawlayer_io_background_layer_job_run(dt_job_t *job)
 
     int final_order = -1;
     if(!dt_drawlayer_io_insert_layer(params->sidecar_path, bg_name, params->insert_after_order,
-                                     params->work_profile, &bg_patch, params->raw_width, params->raw_height,
+                                     params->work_profile, &bg_patch, params->layer_width, params->layer_height,
                                      &final_order))
       break;
 

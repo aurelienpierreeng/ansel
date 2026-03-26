@@ -506,11 +506,9 @@ static uint64_t _paint_make_stroke_seed(const dt_drawlayer_paint_raw_input_t *in
 }
 
 /** @brief Optionally emit first sample immediately when stroke starts. */
-static void _emit_first_sample_if_needed(dt_drawlayer_paint_stroke_t *state, const dt_drawlayer_brush_dab_t *dab,
-                                         const dt_drawlayer_paint_callbacks_t *callbacks, void *user_data)
+static void _emit_first_sample_if_needed(dt_drawlayer_paint_stroke_t *state,
+                                         const dt_drawlayer_brush_dab_t *dab)
 {
-  (void)callbacks;
-  (void)user_data;
   if(!state || !dab || !state->history || !_ensure_pending_dabs(state)) return;
   state->last_input_dab = *dab;
   state->have_last_input_dab = TRUE;
@@ -526,12 +524,8 @@ static void _emit_first_sample_if_needed(dt_drawlayer_paint_stroke_t *state, con
  * @brief Finalize stroke by force-emitting the pending first sample if needed.
  * @note Used for very short strokes that collected no middle sample.
  */
-void dt_drawlayer_paint_finalize_path(dt_drawlayer_paint_stroke_t *state,
-                                      const dt_drawlayer_paint_callbacks_t *callbacks,
-                                      void *user_data)
+void dt_drawlayer_paint_finalize_path(dt_drawlayer_paint_stroke_t *state)
 {
-  (void)callbacks;
-  (void)user_data;
   if(!state || !state->have_last_input_dab || !state->history || !_ensure_pending_dabs(state)) return;
   if(!state->history || state->history->len > 0) return;
 
@@ -544,8 +538,7 @@ void dt_drawlayer_paint_finalize_path(dt_drawlayer_paint_stroke_t *state,
 
 /** @brief Flush deferred initial dab before regular segment emission starts. */
 static void _flush_pending_initial_if_needed(dt_drawlayer_paint_stroke_t *state,
-                                             const dt_drawlayer_brush_dab_t *dab,
-                                             const dt_drawlayer_paint_callbacks_t *callbacks, void *user_data)
+                                             const dt_drawlayer_brush_dab_t *dab)
 {
   if(!state || !dab || !state->history || state->history->len != 0) return;
 
@@ -558,7 +551,7 @@ static void _flush_pending_initial_if_needed(dt_drawlayer_paint_stroke_t *state,
     state->last_input_dab.dir_y = dy / dir_len;
   }
 
-  dt_drawlayer_paint_finalize_path(state, callbacks, user_data);
+  dt_drawlayer_paint_finalize_path(state);
 }
 
 /**
@@ -593,7 +586,7 @@ static void _paint_process_one_raw_input(dt_drawlayer_paint_stroke_t *state,
 
   if(!state->have_last_input_dab)
   {
-    _emit_first_sample_if_needed(state, &dab, callbacks, user_data);
+    _emit_first_sample_if_needed(state, &dab);
     return;
   }
 
@@ -607,7 +600,7 @@ static void _paint_process_one_raw_input(dt_drawlayer_paint_stroke_t *state,
                                       arc_lut, arc_lut_segments, &arc_total);
   const float seg_arc = (arc_total > 1e-6f) ? arc_total : seg_len;
   state->stroke_arc_length += seg_arc;
-  _flush_pending_initial_if_needed(state, &dab, callbacks, user_data);
+  _flush_pending_initial_if_needed(state, &dab);
 
   if(seg_arc > 1e-6f)
   {
@@ -686,26 +679,6 @@ void dt_drawlayer_paint_interpolate_path(dt_drawlayer_paint_stroke_t *state,
   }
 
   _paint_compact_raw_input_queue(state);
-}
-
-gboolean dt_drawlayer_paint_raster_path(const GArray *dabs,
-                                        const float distance_percent,
-                                        dt_drawlayer_cache_patch_t *patch,
-                                        const float scale,
-                                        dt_drawlayer_cache_patch_t *stroke_mask,
-                                        dt_drawlayer_damaged_rect_t *runtime_state,
-                                        dt_drawlayer_paint_stroke_t *runtime_private)
-{
-  if(!dabs || dabs->len == 0 || !runtime_private) return FALSE;
-
-  gboolean wrote = FALSE;
-  for(guint i = 0; i < dabs->len; i++)
-  {
-    const dt_drawlayer_brush_dab_t *dab = &g_array_index(dabs, dt_drawlayer_brush_dab_t, i);
-    wrote |= dt_drawlayer_paint_rasterize_segment_to_buffer(dab, distance_percent, patch, scale, stroke_mask,
-                                                            runtime_state, runtime_private);
-  }
-  return wrote;
 }
 
 static inline void _advance_smudge_pickup_state(dt_drawlayer_paint_stroke_t *state,
