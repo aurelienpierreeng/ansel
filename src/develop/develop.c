@@ -316,7 +316,12 @@ int dt_dev_get_thumbnail_size(dt_develop_t *dev)
   if(!dev->virtual_pipe->nodes)
     dt_dev_pixelpipe_or_changed(dev->virtual_pipe, DT_DEV_PIPE_REMOVE);
   else if(dt_dev_pixelpipe_get_history_hash(dev->virtual_pipe) != dt_dev_get_history_hash(dev))
-    dt_dev_pixelpipe_or_changed(dev->virtual_pipe, DT_DEV_PIPE_SYNCH);
+  {
+    if(dt_dev_pixelpipe_get_realtime(dev->pipe))
+      dt_dev_pixelpipe_set_history_hash(dev->virtual_pipe, dt_dev_get_history_hash(dev));
+    else
+      dt_dev_pixelpipe_or_changed(dev->virtual_pipe, DT_DEV_PIPE_SYNCH);
+  }
 
   if(dt_dev_pixelpipe_get_changed(dev->virtual_pipe) != DT_DEV_PIPE_UNCHANGED)
     dt_dev_pixelpipe_change(dev->virtual_pipe, dev);

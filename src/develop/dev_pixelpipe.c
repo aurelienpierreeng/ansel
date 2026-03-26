@@ -47,6 +47,47 @@ static void _change_pipe(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_change_t fla
 }
 
 /**
+ * @brief Update the current top history entry in place for realtime pipes.
+ *
+ * @details
+ * Realtime editing keeps appending new top history items for the currently
+ * focused module while the pipe is already instantiated. In that situation we
+ * can refresh just that module piece from the newest top history item and
+ * advance the pipe history fence without replaying the generic `synch_top()`
+ * walk through the whole tail of the stack.
+ *
+ * This helper only replaces the history-tail replay. The rest of
+ * `dt_dev_pixelpipe_change()` still needs to run afterwards so cache policy and
+ * ROI contracts remain sealed for the next processing pass.
+ */
+static gboolean _sync_realtime_top_history_in_place(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
+{
+  if(!pipe || !dev || !dt_dev_pixelpipe_get_realtime(pipe))
+    return FALSE;
+
+  const uint32_t history_end = dt_dev_get_history_end_ext(dev);
+  if(history_end == 0 || !dev->gui_module) return FALSE;
+
+  GList *last_item = g_list_nth(dev->history, history_end - 1);
+  if(!last_item) return FALSE;
+
+  dt_dev_history_item_t *hist = (dt_dev_history_item_t *)last_item->data;
+  if(!hist || !hist->module || hist->module != dev->gui_module) return FALSE;
+
+  dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)dt_dev_pixelpipe_get_module_piece(pipe, hist->module);
+  if(!piece) return FALSE;
+
+  piece->enabled = hist->enabled;
+  dt_iop_commit_params(hist->module, hist->params, hist->blend_params, pipe, piece);
+  dt_pixelpipe_get_global_hash(pipe, dev);
+
+  pipe->last_history_hash = hist->hash;
+  pipe->last_history_item = hist;
+  dt_dev_pixelpipe_set_history_hash(pipe, dt_dev_get_history_hash(dev));
+  return TRUE;
+}
+
+/**
  * @brief Seal host-cache retention policy on synchronized pieces before processing starts.
  *
  * @details
@@ -827,7 +868,8 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
   else if(status & DT_DEV_PIPE_TOP_CHANGED)
   {
     // only top history item(s) changed.
-    dt_dev_pixelpipe_synch_top(pipe, dev);
+    if(!_sync_realtime_top_history_in_place(pipe, dev))
+      dt_dev_pixelpipe_synch_top(pipe, dev);
   }
   dt_pthread_rwlock_unlock(&dev->history_mutex);
 
