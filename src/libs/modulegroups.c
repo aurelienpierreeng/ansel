@@ -1055,8 +1055,10 @@ void gui_init(dt_lib_module_t *self)
                                   G_CALLBACK(_lib_modulegroups_refresh), self);
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_IMAGE_CHANGED,
                                   G_CALLBACK(_lib_modulegroups_refresh), self);
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE,
-                                  G_CALLBACK(_lib_modulegroups_refresh), self);
+  // History edits already trigger explicit modulegroups visibility updates through
+  // DT_SIGNAL_DEVELOP_MODULEGROUPS_SET. Listening to generic history changes here
+  // causes unnecessary expander reparenting, which drops native Gtk focus from
+  // focused Bauhaus controls after committed key/scroll edits.
 
   dt_accels_new_darkroom_action(_modulegroups_switch_tab_next, darktable.develop, N_("Darkroom/Actions"),
                                 N_("move to the next modules tab"), GDK_KEY_Tab, GDK_CONTROL_MASK, _("Triggers the action"));

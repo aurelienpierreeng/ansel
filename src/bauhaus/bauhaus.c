@@ -398,17 +398,16 @@ gboolean dt_bauhaus_focus_in_callback(GtkWidget *widget, GdkEventFocus event, gp
   // because of Gtk notebooks (tabs): Gtk gives focus automatically to the first
   // notebook child, which is not what we want for scroll event capture.
   darktable.gui->has_scroll_focus = widget;
-  gtk_widget_set_state_flags(widget, GTK_STATE_FLAG_FOCUSED, TRUE);
   gtk_widget_queue_draw(widget);
-  return TRUE;
+  return FALSE;
 }
 
 gboolean dt_bauhaus_focus_out_callback(GtkWidget *widget, GdkEventFocus event, gpointer user_data)
 {
-  darktable.gui->has_scroll_focus = NULL;
-  gtk_widget_set_state_flags(widget, GTK_STATE_FLAG_NORMAL, TRUE);
+  // Scroll focus is released from leave-notify so wheel capture survives
+  // transient Gtk focus changes while the pointer is still over the widget.
   gtk_widget_queue_draw(widget);
-  return TRUE;
+  return FALSE;
 }
 
 
@@ -836,7 +835,6 @@ static gboolean dt_bauhaus_popup_button_press(GtkWidget *widget, GdkEventButton 
     dt_bauhaus_widget_reject(w);
     bh->hiding = TRUE;
   }
-  gtk_widget_set_state_flags(GTK_WIDGET(w), GTK_STATE_FLAG_FOCUSED, TRUE);
   return TRUE;
 }
 
@@ -860,7 +858,15 @@ static gboolean _enter_leave(GtkWidget *widget, GdkEventCrossing *event)
   else
   {
     gtk_widget_unset_state_flags(widget, GTK_STATE_FLAG_PRELIGHT);
-    darktable.gui->has_scroll_focus = NULL;
+
+    // GUI refreshes can emit synthetic crossing events while the pointer never
+    // physically leaves the widget. Only drop wheel capture on a real pointer
+    // leave from the widget itself.
+    const gboolean real_leave = event->mode == GDK_CROSSING_NORMAL
+                                && event->detail != GDK_NOTIFY_INFERIOR
+                                && (!darktable.gui || !darktable.gui->reset);
+    if(real_leave && darktable.gui->has_scroll_focus == widget)
+      darktable.gui->has_scroll_focus = NULL;
   }
 
   gtk_widget_queue_draw(widget);
@@ -871,6 +877,8 @@ static gboolean _enter_leave(GtkWidget *widget, GdkEventCrossing *event)
 static void _widget_finalize(GObject *widget)
 {
   struct dt_bauhaus_widget_t *w = DT_BAUHAUS_WIDGET(widget);
+  if(darktable.gui && darktable.gui->has_scroll_focus == GTK_WIDGET(w))
+    darktable.gui->has_scroll_focus = NULL;
   dt_gui_throttle_cancel(widget);
   if(w->type == DT_BAUHAUS_SLIDER)
   {
@@ -2359,7 +2367,11 @@ static gboolean _widget_draw(GtkWidget *widget, cairo_t *crf)
   GdkRGBA *text_color = default_color_assign();
   GdkRGBA *value_color = default_color_assign();
   GdkRGBA *value_text_color = default_color_assign();
-  const GtkStateFlags state = gtk_widget_get_state_flags(widget);
+  GtkStateFlags state = gtk_widget_get_state_flags(widget);
+  if(gtk_widget_has_focus(widget))
+    state |= GTK_STATE_FLAG_FOCUSED;
+  gtk_style_context_save(context);
+  gtk_style_context_set_state(context, state);
   gtk_style_context_get_color(context, state, text_color);
   gtk_style_context_get(context, state, "background-color", &bg_color, NULL);
   *value_color = gtk_widget_is_sensitive(widget) ? w->bauhaus->color_value : w->bauhaus->color_value_insensitive;
@@ -2469,6 +2481,7 @@ static gboolean _widget_draw(GtkWidget *widget, cairo_t *crf)
   cairo_set_source_surface(crf, cst, 0, 0);
   cairo_paint(crf);
   cairo_surface_destroy(cst);
+  gtk_style_context_restore(context);
 
   gdk_rgba_free(text_color);
   gdk_rgba_free(value_color);
@@ -2614,14 +2627,24 @@ static void _slider_add_step(GtkWidget *widget, float delta, guint state)
 static gboolean _widget_scroll(GtkWidget *widget, GdkEventScroll *event)
 {
   struct dt_bauhaus_widget_t *w = DT_BAUHAUS_WIDGET(widget);
+  const gboolean popup_captured = (w->bauhaus->current == w);
+  const gboolean scroll_captured = (darktable.gui->has_scroll_focus == widget);
+  const gboolean key_captured = gtk_widget_has_focus(widget);
 
   // We have 2 overlapping focusing state:
   // - native Gtk focus (keyboard), that takes precedence and records all keyboard events,
   // - custom scroll focus (mouse wheel), that should not overlap with vertical scrolling.
   // Scroll focus is a subset of Gtk focus, aka we can lose scroll focus while we have Gtk focus,
-  // but we can't have scroll focus if we don't have Gtk focus.
-  // We extend widget focus with the popup window focus if it is captured by the current widget.
-  if(!gtk_widget_has_focus(widget) && w->bauhaus->current != w) return FALSE;
+  // but delayed history commits may transiently steal Gtk focus while the
+  // pointer never leaves the widget. In that case, keep trusting the explicit
+  // scroll focus until leave-notify releases it.
+  // We also extend widget focus with the popup window focus if it is captured
+  // by the current widget.
+  if(!key_captured && !popup_captured && !scroll_captured) return FALSE;
+
+  // Scroll focus is handled separately from Gtk key focus so panel scrolling
+  // can be captured without stealing native focus ownership.
+  darktable.gui->has_scroll_focus = widget;
 
   int delta_y = 0;
   int delta_x = 0;

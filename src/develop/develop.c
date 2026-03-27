@@ -982,12 +982,6 @@ void dt_dev_modulegroups_switch(dt_develop_t *dev, dt_iop_module_t *module)
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_MODULEGROUPS_SET, module);
 }
 
-void dt_dev_modulegroups_update_visibility(dt_develop_t *dev)
-{
-  if(!dev) return;
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_MODULEGROUPS_SET, NULL);
-}
-
 void dt_dev_masks_list_change(dt_develop_t *dev)
 {
   if(dev->proxy.masks.module && dev->proxy.masks.list_change)

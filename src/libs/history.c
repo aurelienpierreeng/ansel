@@ -857,8 +857,6 @@ void gui_reset(dt_lib_module_t *self)
 
     dt_dev_undo_end_record(darktable.develop);
 
-    dt_dev_modulegroups_update_visibility(darktable.develop);
-
     dt_dev_pixelpipe_resync_history_all(darktable.develop);
   }
 }

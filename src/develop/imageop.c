@@ -647,7 +647,7 @@ static void _gui_delete_callback(GtkButton *button, dt_iop_module_t *module)
 
   // we update show params for multi-instances for each other instances
   dt_dev_modules_update_multishow(dev);
-  dt_dev_modulegroups_update_visibility(dev);
+  dt_dev_modulegroups_switch(dev, next);
 
   /* redraw */
   dt_dev_pixelpipe_rebuild_all(dev);
@@ -800,7 +800,7 @@ dt_iop_module_t *dt_iop_gui_duplicate(dt_iop_module_t *base, gboolean copy_param
   /* update ui to new parameters */
   dt_iop_gui_update(module);
 
-  dt_dev_modulegroups_update_visibility(darktable.develop);
+  dt_dev_modulegroups_switch(darktable.develop, module);
 
   return module;
 }
@@ -1034,7 +1034,7 @@ static void _gui_off_callback(GtkToggleButton *togglebutton, gpointer user_data)
   gtk_widget_queue_draw(GTK_WIDGET(togglebutton));
 
   if(module->enabled && !gtk_widget_is_visible(module->header))
-    dt_dev_modulegroups_update_visibility(darktable.develop);
+    dt_dev_modulegroups_switch(darktable.develop, module);
 }
 
 gboolean dt_iop_so_is_hidden(dt_iop_module_so_t *module)
@@ -2004,6 +2004,14 @@ void dt_iop_request_focus(dt_iop_module_t *module)
   /* lets lose the focus of previous focus module*/
   if(out_focus_module)
   {
+    GtkWidget *out_focus_widget = dt_iop_gui_get_pluginui(out_focus_module);
+    GtkWidget *scroll_focus = darktable.gui->has_scroll_focus;
+    if(scroll_focus && out_focus_widget && gtk_widget_is_ancestor(scroll_focus, out_focus_widget))
+    {
+      darktable.gui->has_scroll_focus = NULL;
+      gtk_widget_queue_draw(scroll_focus);
+    }
+
     if(out_focus_module->gui_focus)
       out_focus_module->gui_focus(out_focus_module, FALSE);
 
