@@ -67,7 +67,8 @@ typedef enum dtgtk_cairo_paint_flags_t
   CPF_ACTIVE = 1 << 11,
   CPF_PRELIGHT = 1 << 12,
   CPF_FOCUS = 1 << 13,
-  CPF_SPECIAL_FLAG = 1 << 14, // this needs to be the last one. also update shift in dtgtk_cairo_paint_alignment
+  CPF_ALTER = 1 << 14, // used to indicate an altered state for the icon
+  CPF_SPECIAL_FLAG = 1 << 15, // this needs to be the last one. also update shift in dtgtk_cairo_paint_alignment
 } dtgtk_cairo_paint_flags_t;
 
 
@@ -291,7 +292,7 @@ void dtgtk_cairo_paint_masks_ellipse(cairo_t *cr, gint x, gint y, gint w, gint h
 /** Paint a gradient icon for masks */
 void dtgtk_cairo_paint_masks_gradient(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
 /** Paint a path icon for masks */
-void dtgtk_cairo_paint_masks_path(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
+void dtgtk_cairo_paint_masks_polygon(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
 
 // FLO
 

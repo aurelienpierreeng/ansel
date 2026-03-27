@@ -1912,7 +1912,7 @@ void gui_init(dt_view_t *self)
     gtk_box_pack_start(GTK_BOX(vbox), GTK_WIDGET(borders), TRUE, TRUE, 0);
   }
 
-  _darkroom_ioporder_button = dtgtk_button_new(dt_draw_icon_flowchart, 0, NULL);
+  _darkroom_ioporder_button = dtgtk_button_new(dtgtk_cairo_paint_flowchart, 0, NULL);
   gtk_widget_set_tooltip_text(_darkroom_ioporder_button, _("show the pipeline node graph"));
   g_signal_connect(G_OBJECT(_darkroom_ioporder_button), "clicked",
                    G_CALLBACK(_darkroom_ioporder_quickbutton_clicked), dev);

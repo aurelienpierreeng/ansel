@@ -2208,11 +2208,11 @@ static GtkWidget *_blendop_masks_shape_buttons(dt_iop_module_t *module, dt_iop_g
   gtk_widget_set_valign(bd->masks_shapes[4], GTK_ALIGN_START);
 
   bd->masks_type[1] = DT_MASKS_POLYGON;
-  bd->masks_shapes[1] = dt_iop_togglebutton_new_no_register(module, "blend`shapes", N_("add path"),
-                                                            N_("add multiple paths"),
-                                                            G_CALLBACK(_blendop_masks_add_shape),
-                                                            FALSE, 0, 0, dtgtk_cairo_paint_masks_path,
-                                                            all_shapes_buttons);
+  bd->masks_shapes[1] = dt_iop_togglebutton_new(module, "blend`shapes", N_("add polygon"),
+                                                N_("add multiple polygons"),
+                                                G_CALLBACK(_blendop_masks_add_shape),
+                                                FALSE, 0, 0, dtgtk_cairo_paint_masks_polygon,
+                                                all_shapes_buttons);
   gtk_widget_set_valign(bd->masks_shapes[1], GTK_ALIGN_START);
 
   bd->masks_type[2] = DT_MASKS_ELLIPSE;
@@ -3173,7 +3173,7 @@ void dt_iop_gui_init_blendif(GtkBox *blendw, dt_iop_module_t *module)
 
     bd->colorpicker_set_values = dt_color_picker_new(module, DT_COLOR_PICKER_AREA, header);
     dtgtk_togglebutton_set_paint(DTGTK_TOGGLEBUTTON(bd->colorpicker_set_values),
-                                 dtgtk_cairo_paint_colorpicker_set_values, 0, NULL);
+                                 dtgtk_cairo_paint_colorpicker, CPF_ALTER, NULL);
     dt_gui_add_class(bd->colorpicker_set_values, "dt_transparent_background");
     gtk_widget_set_tooltip_text(bd->colorpicker_set_values, _("set the range based on an area from the image\n"
                                                               "drag to use the input image\n"

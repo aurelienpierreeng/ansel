@@ -843,7 +843,7 @@ void gui_init(dt_iop_module_t *self)
 
   g->bt_path = dt_iop_togglebutton_new(self, N_("shapes"), N_("add path"), N_("add multiple paths"),
                                        G_CALLBACK(_add_shape_callback), TRUE, 0, 0,
-                                       dtgtk_cairo_paint_masks_path, hbox);
+                                       dtgtk_cairo_paint_masks_polygon, hbox);
 
   g->bt_ellipse = dt_iop_togglebutton_new(self, N_("shapes"), N_("add ellipse"), N_("add multiple ellipses"),
                                           G_CALLBACK(_add_shape_callback), TRUE, 0, 0,

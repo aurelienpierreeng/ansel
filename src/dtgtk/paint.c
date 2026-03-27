@@ -85,6 +85,32 @@ static void _rounded_rectangle(cairo_t *cr)  // create rounded rectangle to use 
   cairo_close_path (cr);
 }
 
+/**
+ * @brief Draw a plus sign centered at the given position.
+ *
+ * The line width scale is applied to the current Cairo line width so the
+ * plus sign stays consistent with the caller's icon scaling.
+ *
+ * @param cr Cairo context.
+ * @param x Center X in normalized icon space.
+ * @param y Center Y in normalized icon space.
+ * @param size Half-length of each arm in normalized icon space.
+ * @param line_width_scale Multiplier applied to the current line width.
+ */
+static void _draw_plus_sign(cairo_t *cr, float x, float y, float size, float line_width_scale)
+{
+  const float base_line_width = cairo_get_line_width(cr);
+  cairo_set_line_width(cr, base_line_width * line_width_scale);
+
+  cairo_move_to(cr, x, y - size);
+  cairo_line_to(cr, x, y + size);
+  cairo_move_to(cr, x - size, y);
+  cairo_line_to(cr, x + size, y);
+
+  cairo_stroke(cr);
+  cairo_set_line_width(cr, base_line_width);
+}
+
 void dtgtk_cairo_paint_empty(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data)
 {
   PREAMBLE(1, 1, 0, 0)
@@ -648,7 +674,7 @@ void dtgtk_cairo_paint_masks_gradient(cairo_t *cr, gint x, gint y, gint w, gint 
   FINISH
 }
 
-void dtgtk_cairo_paint_masks_path(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data)
+void dtgtk_cairo_paint_masks_polygon(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data)
 {
   PREAMBLE(1.05, 1, 0, 0)
 
@@ -1952,32 +1978,100 @@ void dtgtk_cairo_paint_label_flower(cairo_t *cr, gint x, gint y, gint w, gint h,
 
 void dtgtk_cairo_paint_colorpicker(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data)
 {
-  PREAMBLE(1, 1, 0, 0.05)
+  PREAMBLE(1, 1, 0, 0)
+  
+  // Draw in a SOURCE group so overlapping strokes don't accumulate alpha.
+  const cairo_operator_t prev_operator = cairo_get_operator(cr);
+  cairo_push_group(cr);
+  cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
 
-  /* draw pipette */
+  if(flags & CPF_ALTER)
+  {
+    // plus sign
+    _draw_plus_sign(cr, 0.18f, 0.18f, 0.18f, 1.0f);
+  }
 
-  // drop
-  cairo_move_to(cr, 0., 1. - 0.0);
-  cairo_line_to(cr, 0.08, 1. - 0.15);
-  cairo_line_to(cr, 0.16, 1. - 0.0);
-  cairo_arc(cr, 0.08, 1. - 0.15 + 0.1926, 0.090666667, -0.49, 3.63);
+  cairo_translate(cr, 0.5, 0.5);
+  cairo_rotate(cr, M_PI * 0.2973);
+  cairo_scale(cr, 1.2, 1.2);
+  cairo_translate(cr, -0.5, -0.5);
+  cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
+
+  // Shaft
+  const float top_width = 0.25f;
+  const float top_height = 0.15f;
+  const float bottom_width = top_width * 1.5f;
+  const float bottom_height = 0.13f;
+
+  const float x1 = 0.5f - top_width * 0.5f;
+  const float y1 = 0.0f;
+
+  cairo_rectangle(cr, x1, y1, top_width, top_height);
+  cairo_arc(cr, 0.5f, 0.0, top_width * 0.5, -M_PI, 0);
+  
+  // Bottom rectangle with rounded top corners
+  const float x3 = 0.5f - bottom_width * 0.5f;
+  const float y3 = top_height;
+  const float x4 = 0.5f + bottom_width * 0.5f;
+  const float y4 = top_height + bottom_height;
+  const float radius = 0.035f;
+  
+  cairo_move_to(cr, x3 + radius, y3);
+  cairo_line_to(cr, x4 - radius, y3);
+  cairo_arc(cr, x4 - radius, y3 + radius, radius, -M_PI / 2, 0);
+  cairo_line_to(cr, x4, y4);
+  cairo_line_to(cr, x3, y4);
+  cairo_line_to(cr, x3, y3 + radius);
+  cairo_arc(cr, x3 + radius, y3 + radius, radius, M_PI, 3 * M_PI / 2);
+  cairo_close_path(cr);
   cairo_fill(cr);
 
-  // cross line
-  cairo_set_line_width(cr, 0.15);
-  cairo_move_to(cr, 0.48, 1. - 0.831);
-  cairo_line_to(cr, 0.739, 1. - 0.482);
+  // Tube and tip
+  const float tube_width = 0.2f - 0.07f;
+  const float x5 = 0.5f - tube_width * 0.5f;
+  const float x6 = 0.5f + tube_width * 0.5f;
 
-  // shaft
-  cairo_move_to(cr, 0.124, 1. - 0.297);
-  cairo_line_to(cr, 0.823, 1. - 0.814);
+  // Liquid level
+  const float center_y = 0.6f;
+  const float offset_y = 0.088f;
+  const float stem_start_y = y4 + 0.05f;
+
+  const float tip_radius = 0.0125f;
+  const float tip_base = 0.85f;
+  const float tip_shoulder = 0.95f;
+  const float tip_y = 1.0f - tip_radius;
+  const float tip_x_left = 0.5f - tip_radius;
+  const float tip_x_right = 0.5f + tip_radius;
+
+  cairo_set_line_cap(cr, CAIRO_LINE_CAP_SQUARE);
+  cairo_set_line_width(cr, 0.03);
+
+  // Tube sides
+  cairo_move_to(cr, x5, stem_start_y);
+  cairo_line_to(cr, x5, center_y + offset_y);
+  cairo_move_to(cr, x6, stem_start_y);
+  cairo_line_to(cr, x6, center_y - offset_y);
   cairo_stroke(cr);
 
-  // end
-  cairo_set_line_width(cr, 0.35);
-  cairo_move_to(cr, 0.823, 1. - 0.814);
-  cairo_line_to(cr, 0.648, 1. - 0.685);
-  cairo_stroke(cr);
+  // Liquid
+  cairo_move_to(cr, x5, center_y + offset_y);
+  cairo_line_to(cr, x5, tip_base);
+  cairo_line_to(cr, tip_x_left, tip_shoulder);
+  cairo_line_to(cr, tip_x_left, tip_y);
+  cairo_line_to(cr, tip_x_right, tip_y);
+  cairo_line_to(cr, tip_x_right, tip_shoulder);
+  cairo_line_to(cr, x6, tip_base);
+  cairo_line_to(cr, x6, center_y - offset_y);
+  cairo_close_path(cr);
+  cairo_stroke_preserve(cr);
+  cairo_fill(cr);
+
+  cairo_arc(cr, 0.5f, 1.0f - tip_radius, tip_radius, 0, M_PI);
+  cairo_fill(cr);
+
+  cairo_pop_group_to_source(cr);
+  cairo_set_operator(cr, prev_operator);
+  cairo_paint(cr);
 
   FINISH
 }
