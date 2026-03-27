@@ -1153,10 +1153,10 @@ static gboolean _modulegroups_module_visible_in_current(const dt_lib_modulegroup
 
     case DT_MODULEGROUP_TONES:
       return dt_is_module_in_group((dt_iop_module_t *)module, DT_MODULEGROUP_TONES)
-             && (!(module->flags() & IOP_FLAGS_DEPRECATED) || module->enabled || _is_module_in_history(module));
+             && !(module->flags() & IOP_FLAGS_DEPRECATED);
 
     default:
-      return d->current == module->default_group();
+      return (d->current == module->default_group()) && !(module->flags() & IOP_FLAGS_DEPRECATED);
   }
 }
 
