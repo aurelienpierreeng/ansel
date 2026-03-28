@@ -1316,7 +1316,9 @@ void modify_roi_in(struct dt_iop_module_t *module, const struct dt_dev_pixelpipe
   dt_iop_liquify_params_t copy_params;
   memcpy(&copy_params, (dt_iop_liquify_params_t*)piece->data, sizeof(dt_iop_liquify_params_t));
 
-  distort_paths_raw_to_piece(module, module->dev->preview_pipe, roi_in->scale, &copy_params, FALSE);
+  // Keep ROI expansion on the same processing pipe as piece->data. Preview-only state can be NULL
+  // in workers, and mixing pipes here desynchronizes the distortion graph from the current piece.
+  distort_paths_raw_to_piece(module, pipe, roi_in->scale, &copy_params, FALSE);
 
   cairo_rectangle_int_t pipe_rect =
     {
@@ -1465,13 +1467,15 @@ static gboolean is_dragging(const dt_iop_liquify_gui_data_t *g)
 int distort_transform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
                       float *const restrict points, size_t points_count)
 {
-  return _distort_xtransform(self, self->dev->preview_pipe, piece, points, points_count, TRUE);
+  // Recurse on the caller pipe so we reuse the same node list and piece data in preview, export,
+  // thumbnail, and mask evaluation paths.
+  return _distort_xtransform(self, pipe, piece, points, points_count, TRUE);
 }
 
 int distort_backtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
                           float *const restrict points, size_t points_count)
 {
-  return _distort_xtransform(self, self->dev->preview_pipe, piece, points, points_count, FALSE);
+  return _distort_xtransform(self, pipe, piece, points, points_count, FALSE);
 }
 
 void distort_mask(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe, struct dt_dev_pixelpipe_iop_t *piece,
