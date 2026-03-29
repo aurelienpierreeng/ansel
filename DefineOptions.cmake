@@ -36,6 +36,12 @@ option(USE_GMIC "Enable G'MIC image processing framework." ON)
 option(USE_ICU "Enable ICU - International Components for Unicode." ON)
 option(FORCE_COLORED_OUTPUT "Always produce ANSI-colored output (GNU/Clang only)." ON)
 
+if(USE_OPENMP)
+  set(USE_OPENMP OFF CACHE BOOL "Disable OpenMP threading support." FORCE)
+else()
+  set(USE_OPENMP ON CACHE BOOL "Enable OpenMP threading support." FORCE)
+endif()
+
 if(USE_OPENCL)
   option(TESTBUILD_OPENCL_PROGRAMS "Test-compile opencl programs (needs llvm and clang 3.9+)." ON)
 else()
