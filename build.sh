@@ -378,6 +378,7 @@ MAKE=$(make_name)
 
 features_set_to_autodetect
 FEAT_CMARK=1
+FEAT_OPENMP=1
 parse_args "$@"
 
 if [ $PRINT_HELP -ne 0 ] ; then
