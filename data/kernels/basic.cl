@@ -1040,6 +1040,9 @@ enum wavelets_scale_t
   LAST_SCALE  = 1 << 2, // last wavelets scale  : reconstruct += residual
 };
 
+constant float anisotropic_kernel_isophote[9]
+  = { 0.25f, 0.5f, 0.25f, 0.5f, -3.f, 0.5f, 0.25f, 0.5f, 0.25f };
+
 
 kernel void
 guide_laplacians(read_only image2d_t HF, read_only image2d_t LF,
@@ -1275,8 +1278,6 @@ diffuse_color(read_only image2d_t HF, read_only image2d_t LF,
     float4 update = 0.f;
 
     // Compute the laplacian in the direction parallel to the steepest gradient on the norm
-    float anisotropic_kernel_isophote[9] = { 0.25f, 0.5f, 0.25f, 0.5f, -3.f, 0.5f, 0.25f, 0.5f, 0.25f };
-
     // Convolve the filter to get the laplacian
     float4 laplacian_HF = 0.f;
     for(int k = 0; k < 9; k++)

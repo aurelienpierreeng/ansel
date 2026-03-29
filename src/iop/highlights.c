@@ -86,6 +86,9 @@
 // Set to one to output intermediate image steps as PFM in /tmp
 #define DEBUG_DUMP_PFM 0
 
+static const float DT_ALIGNED_ARRAY anisotropic_kernel_isophote[9]
+  = { 0.25f, 0.5f, 0.25f, 0.5f, -3.f, 0.5f, 0.25f, 0.5f, 0.25f };
+
 #if DEBUG_DUMP_PFM
 static void dump_PFM(const char *filename, const float* out, const uint32_t w, const uint32_t h)
 {
@@ -1621,7 +1624,7 @@ static inline void heat_PDE_diffusion(const float *const restrict high_freq, con
 
 #ifdef _OPENMP
 #pragma omp parallel for default(none)                                                                            \
-    dt_omp_firstprivate(out, clipping_mask, HF, LF, height, width, mult, scale, first_order_factor) \
+    dt_omp_firstprivate(out, clipping_mask, HF, LF, height, width, mult, scale, first_order_factor, anisotropic_kernel_isophote) \
     schedule(static)
 #endif
   for(size_t row = 0; row < height; ++row)
@@ -1678,8 +1681,6 @@ static inline void heat_PDE_diffusion(const float *const restrict high_freq, con
         }
 
         // Compute the laplacian in the direction parallel to the steepest gradient on the norm
-        float DT_ALIGNED_ARRAY anisotropic_kernel_isophote[9] = { 0.25f, 0.5f, 0.25f, 0.5f, -3.f, 0.5f, 0.25f, 0.5f, 0.25f };
-
         // Convolve the filter to get the laplacian
         dt_aligned_pixel_t laplacian_HF = { 0.f, 0.f, 0.f, 0.f };
         for(int k = 0; k < 9; k++)
@@ -2525,7 +2526,6 @@ static cl_int process_laplacian_xtrans_cl(struct dt_iop_module_t *self, const dt
   dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace_xtrans, 9, sizeof(cl_mem), (void *)&dev_xtrans);
   err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_highlights_remosaic_and_replace_xtrans, sizes);
   if(err != CL_SUCCESS) goto error;
-
   dt_opencl_release_mem_object(lookup_cl);
   dt_opencl_release_mem_object(dev_xtrans);
   dt_opencl_release_mem_object(normalization_partials);
