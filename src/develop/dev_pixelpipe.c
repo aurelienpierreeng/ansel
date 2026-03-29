@@ -897,7 +897,7 @@ static void _sync_virtual_pipe(dt_develop_t *dev, dt_dev_pixelpipe_change_t flag
      || dev->virtual_pipe->image.id != dev->image_storage.id)
   {
     dt_dev_pixelpipe_set_input(dev->virtual_pipe, dev, dev->image_storage.id,
-                               dev->roi.raw_width, dev->roi.raw_height, DT_MIPMAP_FULL);
+                               dev->roi.raw_width, dev->roi.raw_height, 1.0f, DT_MIPMAP_FULL);
   }
 
   // Mirror the preview-pipe change flags and commit immediately.

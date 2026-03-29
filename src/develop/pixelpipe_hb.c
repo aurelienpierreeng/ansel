@@ -456,6 +456,7 @@ int dt_dev_pixelpipe_init_cached(dt_dev_pixelpipe_t *pipe)
   pipe->last_history_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
 
   pipe->output_imgid = UNKNOWN_IMAGE;
+  pipe->iscale = 1.0f;
   dt_atomic_set_int(&pipe->shutdown, FALSE);
   dt_atomic_set_int(&pipe->realtime, FALSE);
 
@@ -481,10 +482,11 @@ gboolean dt_dev_pixelpipe_get_realtime(const dt_dev_pixelpipe_t *pipe)
 }
 
 void dt_dev_pixelpipe_set_input(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, int32_t imgid, int width, int height,
-                                dt_mipmap_size_t size)
+                                float iscale, dt_mipmap_size_t size)
 {
   pipe->iwidth = width;
   pipe->iheight = height;
+  pipe->iscale = iscale;
   pipe->imgid = imgid;
   pipe->image = dev->image_storage;
   pipe->size = size;

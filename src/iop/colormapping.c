@@ -462,7 +462,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const int width = roi_in->width;
   const int height = roi_in->height;
 
-  const float scale = 1.f / roi_in->scale;
+  const float scale = dt_dev_get_module_scale(pipe, roi_in);
   const float sigma_s = 50.0f / scale;
   const float sigma_r = 8.0f; // does not depend on scale
 
@@ -615,7 +615,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe, const struct dt_dev_pixelpipe_iop_t *piece, struct dt_develop_tiling_t *tiling)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
-  const float scale = 1.f / roi_in->scale;
+  const float scale = dt_dev_get_module_scale(pipe, roi_in);
   const float sigma_s = 50.0f / scale;
   const float sigma_r = 8.0f; // does not depend on scale
 

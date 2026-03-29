@@ -209,7 +209,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   {
     // the total scale is composed of scale before input to the pipeline (iscale),
     // and the scale of the roi.
-    const float scale = fmaxf(1.f / roi_in->scale, 1.f);
+    const float scale = fmaxf(dt_dev_get_module_scale(pipe, roi_in), 1.f);
     const float sigma_r = d->sigma_r; // does not depend on scale
     const float sigma_s = d->sigma_s / scale;
     cl_int err = -666;
@@ -256,7 +256,7 @@ void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe
   if(d->mode == s_mode_bilateral)
   {
     // used to adjuste blur level depending on size. Don't amplify noise if magnified > 100%
-    const float scale = fmaxf(1.f / roi_in->scale, 1.f);
+    const float scale = fmaxf(dt_dev_get_module_scale(pipe, roi_in), 1.f);
     const float sigma_r = d->sigma_r;
     const float sigma_s = d->sigma_s / scale;
 
@@ -281,7 +281,7 @@ void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe
     const int channels = piece->dsc_in.channels;
 
     const size_t basebuffer = sizeof(float) * channels * width * height;
-    const int rad = MIN(roi_in->width, ceilf(256 * roi_in->scale));
+    const int rad = MIN(roi_in->width, ceilf(256.0f / dt_dev_get_module_scale(pipe, roi_in)));
 
     tiling->factor = 2.0f + (float)local_laplacian_memory_use(width, height) / basebuffer;
     tiling->maxbuf
@@ -335,7 +335,7 @@ int process_sse2(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, c
   // the total scale is composed of scale before input to the pipeline (iscale),
   // and the scale of the roi.
   // used to adjuste blur level depending on size. Don't amplify noise if magnified > 100%
-  const float scale = fmaxf(1.f / roi_in->scale, 1.f);
+  const float scale = fmaxf(dt_dev_get_module_scale(pipe, roi_in), 1.f);
   const float sigma_r = d->sigma_r; // does not depend on scale
   const float sigma_s = d->sigma_s / scale;
 
@@ -369,7 +369,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   // the total scale is composed of scale before input to the pipeline (iscale),
   // and the scale of the roi.
   // used to adjuste blur level depending on size. Don't amplify noise if magnified > 100%
-  const float scale = fmaxf(1.f / roi_in->scale, 1.f);
+  const float scale = fmaxf(dt_dev_get_module_scale(pipe, roi_in), 1.f);
   const float sigma_r = d->sigma_r; // does not depend on scale
   const float sigma_s = d->sigma_s / scale;
 

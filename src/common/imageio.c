@@ -1016,7 +1016,7 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
   if(thumbnail_export)
   {
     // Init size with full-resolution raw
-    dt_dev_pixelpipe_set_input(&pipe, &dev, imgid, width, height, size);
+    dt_dev_pixelpipe_set_input(&pipe, &dev, imgid, width, height, 1.0f, size);
     dt_dev_pixelpipe_synch_all(&pipe, &dev);
 
     // Test if using the half-sized raw as input would still give us enough pixels to cover the desired image surface
@@ -1042,7 +1042,7 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
   dt_mipmap_cache_release(cache, &buf);
 
   // Update size with actual input and resync nodes
-  dt_dev_pixelpipe_set_input(&pipe, &dev, imgid, buf_width, buf_height, size);
+  dt_dev_pixelpipe_set_input(&pipe, &dev, imgid, buf_width, buf_height, buf.iscale, size);
   dt_dev_pixelpipe_synch_all(&pipe, &dev);
 
   // Write debug info to stdout

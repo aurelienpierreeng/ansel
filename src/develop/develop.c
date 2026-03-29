@@ -311,7 +311,7 @@ int dt_dev_get_thumbnail_size(dt_develop_t *dev)
       || dev->virtual_pipe->iheight != dev->roi.raw_height
       || dev->virtual_pipe->image.id != dev->image_storage.id)
     dt_dev_pixelpipe_set_input(dev->virtual_pipe, dev, dev->image_storage.id,
-                                dev->roi.raw_width, dev->roi.raw_height, DT_MIPMAP_FULL);
+                                dev->roi.raw_width, dev->roi.raw_height, 1.0f, DT_MIPMAP_FULL);
 
   if(!dev->virtual_pipe->nodes)
     dt_dev_pixelpipe_or_changed(dev->virtual_pipe, DT_DEV_PIPE_REMOVE);
@@ -484,7 +484,7 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
 
       // This is cheap to run, keep it in sync always.
       dt_dev_pixelpipe_set_input(pipe, dev, dev->image_storage.id, dev->roi.raw_width, dev->roi.raw_height,
-                                 DT_MIPMAP_FULL);
+                                 1.0f, DT_MIPMAP_FULL);
 
       float scale = 1.f;
       int x = 0, y = 0, wd = 0, ht = 0;

@@ -213,6 +213,11 @@ typedef struct dt_dev_pixelpipe_t
   // width and height of full-resolution input buffer
   int iwidth, iheight;
 
+  // Input scaling between full-resolution source image and
+  // actual pipeline mipmap input. 
+  // = 1.f, unless we take downscaled RAW for thumbnail export.
+  float iscale;
+
   // dimensions of processed buffer assuming we take full-resolution input
   int processed_width, processed_height;
 
@@ -401,7 +406,7 @@ void dt_dev_pixelpipe_set_realtime(dt_dev_pixelpipe_t *pipe, gboolean state);
 gboolean dt_dev_pixelpipe_get_realtime(const dt_dev_pixelpipe_t *pipe);
 // constructs a new input buffer from given RGB float array.
 void dt_dev_pixelpipe_set_input(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev, int32_t imgid, int width,
-                                int height, dt_mipmap_size_t size);
+                                int height, float iscale, dt_mipmap_size_t size);
 // set some metadata for colorout to avoid race conditions.
 void dt_dev_pixelpipe_set_icc(dt_dev_pixelpipe_t *pipe, dt_colorspaces_color_profile_type_t icc_type,
                               const gchar *icc_filename, dt_iop_color_intent_t icc_intent);

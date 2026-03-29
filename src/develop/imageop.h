@@ -112,6 +112,24 @@ typedef enum dt_iop_module_header_icons_t
   IOP_MODULE_LAST
 } dt_iop_module_header_icons_t;
 
+/**
+ * @brief Get the size of one current-grid pixel in full-resolution image pixels.
+ *
+ * @details `pipe->iscale` tracks how much the pipeline input was already
+ * downsampled when the mipmap cache selected the source buffer. `roi_in->scale`
+ * then applies the per-module raster scaling on top of that buffer. Modules
+ * that author radii or frequencies in original-image pixels should derive
+ * their current working scale from this ratio and clamp it locally only when
+ * they explicitly want to avoid magnifying the effect above 100%.
+ *
+ * @param pipe current pixelpipe input contract.
+ * @param roi_in input ROI currently processed by the module.
+ *
+ * @return float current-grid pixel footprint expressed in full-resolution image
+ * pixels.
+ */
+float dt_dev_get_module_scale(const struct dt_dev_pixelpipe_t *pipe, const dt_iop_roi_t *roi_in);
+
 /** module group */
 typedef enum dt_iop_group_t
 {

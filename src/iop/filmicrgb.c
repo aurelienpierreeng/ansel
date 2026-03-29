@@ -1370,7 +1370,8 @@ static inline void wavelets_detail_level(const float *const restrict detail, con
   }
 }
 
-static int get_scales(const dt_iop_roi_t *roi_in, const dt_dev_pixelpipe_iop_t *const piece)
+static int get_scales(const dt_dev_pixelpipe_t *const pipe, const dt_iop_roi_t *roi_in,
+                      const dt_dev_pixelpipe_iop_t *const piece)
 {
   /* How many wavelets scales do we need to compute at current zoom level ?
    * 0. To get the same preview no matter the zoom scale, the relative image coverage ratio of the filter at
@@ -1382,14 +1383,15 @@ static int get_scales(const dt_iop_roi_t *roi_in, const dt_dev_pixelpipe_iop_t *
    * So we compute the level that solves 1. subject to 3. Of course, integer rounding doesn't make that 1:1
    * accurate.
    */
-  const float scale = roi_in->scale;
-  const size_t size = MAX(piece->buf_in.height, piece->buf_in.width);
+  const float scale = 1.0f / dt_dev_get_module_scale(pipe, roi_in);
+  const size_t size = MAX(piece->buf_in.height * pipe->iscale, piece->buf_in.width * pipe->iscale);
   const int scales = floorf(log2f((2.0f * size * scale / ((BSPLINE_FSIZE - 1) * BSPLINE_FSIZE)) - 1.0f));
   return CLAMP(scales, 1, MAX_NUM_SCALES);
 }
 
 
-static inline int reconstruct_highlights(const float *const restrict in, const float *const restrict mask,
+static inline int reconstruct_highlights(const dt_dev_pixelpipe_t *const pipe,
+                                         const float *const restrict in, const float *const restrict mask,
                                          float *const restrict reconstructed,
                                          const dt_iop_filmicrgb_reconstruction_type_t variant, const size_t ch,
                                          const dt_iop_filmicrgb_data_t *const data, const dt_dev_pixelpipe_iop_t *piece,
@@ -1398,7 +1400,7 @@ static inline int reconstruct_highlights(const float *const restrict in, const f
   int err = 0;
 
   // wavelets scales
-  const int scales = get_scales(roi_in, piece);
+  const int scales = get_scales(pipe, roi_in, piece);
 
   // wavelets scales buffers
   float *const restrict LF_even = dt_pixelpipe_cache_alloc_align_float_cache(ch * roi_out->width * roi_out->height, 0); // low-frequencies RGB
@@ -2343,7 +2345,7 @@ static inline void restore_ratios(float *const restrict ratios, const float *con
 void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe, const struct dt_dev_pixelpipe_iop_t *piece, struct dt_develop_tiling_t *tiling)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
-  const int scales = get_scales(roi_in, piece);
+  const int scales = get_scales(pipe, roi_in, piece);
   const int max_filter_radius = (1 << scales);
 
   // in + out + 2 * tmp + 2 * LF + 2 * temp + ratios
@@ -2386,7 +2388,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
   if(!mask) return 1;
 
   // used to adjuste noise level depending on size. Don't amplify noise if magnified > 100%
-  const float scale = fmaxf(1.f / roi_in->scale, 1.f);
+  const float scale = fmaxf(dt_dev_get_module_scale(pipe, roi_in), 1.f);
 
   // build a mask of clipped pixels
   const int recover_highlights = mask_clipped_pixels(in, mask, data->normalize, data->reconstruct_feather, roi_out->width, roi_out->height, 4);
@@ -2427,7 +2429,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
 
     // diffuse particles with wavelets reconstruction
     // PASS 1 on RGB channels
-    const int err_1 = reconstruct_highlights(inpainted, mask, reconstructed, DT_FILMIC_RECONSTRUCT_RGB, ch, data, piece, roi_in, roi_out);
+    const int err_1 = reconstruct_highlights(pipe, inpainted, mask, reconstructed, DT_FILMIC_RECONSTRUCT_RGB, ch, data, piece, roi_in, roi_out);
     int err_2 = 0;
 
     dt_pixelpipe_cache_free_align(inpainted);
@@ -2459,7 +2461,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
         {
           compute_ratios(reconstructed, norms, ratios, work_profile, DT_FILMIC_METHOD_EUCLIDEAN_NORM_V1,
                          roi_out->width, roi_out->height);
-          if(reconstruct_highlights(ratios, mask, reconstructed, DT_FILMIC_RECONSTRUCT_RATIOS, ch,
+          if(reconstruct_highlights(pipe, ratios, mask, reconstructed, DT_FILMIC_RECONSTRUCT_RATIOS, ch,
                                     data, piece, roi_in, roi_out))
           {
             err_2 = 1;
@@ -2541,7 +2543,7 @@ static inline cl_int reconstruct_highlights_cl(const dt_dev_pixelpipe_t *pipe, c
   size_t sizes[] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
 
   // wavelets scales
-  const int scales = get_scales(roi_in, piece);
+  const int scales = get_scales(pipe, roi_in, piece);
 
   // wavelets scales buffers
   cl_mem LF_even = dt_opencl_alloc_device(devid, sizes[0], sizes[1], sizeof(float) * 4); // low-frequencies RGB
@@ -2764,7 +2766,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   }
 
   // used to adjust noise level depending on size. Don't amplify noise if magnified > 100%
-  const float scale = fmaxf(1.f / roi_in->scale, 1.f);
+  const float scale = fmaxf(dt_dev_get_module_scale(pipe, roi_in), 1.f);
 
   uint32_t is_clipped = 0;
   clipped = dt_opencl_alloc_device_buffer(devid, sizeof(uint32_t));

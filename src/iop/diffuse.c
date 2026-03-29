@@ -579,18 +579,7 @@ void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   dt_iop_diffuse_data_t *data = (dt_iop_diffuse_data_t *)piece->data;
 
-  // The GUI radii live in full-resolution image pixels. For this module the
-  // relevant ROI scale is the input one, because the PDE works on the current
-  // input grid. However, the thumbnail pipe may start from an already
-  // downsampled mipmap input (for example DT_MIPMAP_F), in which case
-  // roi_in->scale only accounts for the scaling applied after that mipmap was
-  // chosen. Fold both factors together to recover the full-resolution pixel
-  // footprint of one current-grid pixel.
-  const float roi_zoom = fmaxf(1.f / roi_in->scale, 1.f);
-  const float mipmap_zoom = fmaxf(fmaxf((float)pipe->image.width / (float)pipe->iwidth,
-                                        (float)pipe->image.height / (float)pipe->iheight),
-                                  1.f);
-  const float zoom = roi_zoom * mipmap_zoom;
+  const float zoom = fmaxf(dt_dev_get_module_scale(pipe, roi_in), 1.f);
   const float final_radius = (data->radius + data->radius_center) * 2.f / zoom;
   const int diffusion_scales = num_steps_to_reach_equivalent_sigma(B_SPLINE_SIGMA, final_radius);
   const int scales = CLAMP(diffusion_scales, 1, MAX_NUM_SCALES);
@@ -1180,16 +1169,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
       sizeof(uint8_t) * roi_out->width * roi_out->height,
       pipe);
 
-  // The relevant scale for a non-geometric module is roi_in->scale, since it
-  // describes the current input grid processed by the PDE. On the thumbnail
-  // pipe this current grid may already come from a reduced mipmap input, so
-  // we also need the ratio between the full image dimensions and the pipe
-  // input dimensions to recover the full-resolution pixel footprint.
-  const float roi_zoom = fmaxf(1.f / roi_in->scale, 1.f);
-  const float mipmap_zoom = fmaxf(fmaxf((float)pipe->image.width / (float)pipe->iwidth,
-                                        (float)pipe->image.height / (float)pipe->iheight),
-                                  1.f);
-  const float zoom = roi_zoom * mipmap_zoom;
+  const float zoom = fmaxf(dt_dev_get_module_scale(pipe, roi_in), 1.f);
   const float final_radius = (data->radius + data->radius_center) * 2.f / zoom;
   // No legacy iteration remap is applied here anymore. The current solver uses
   // the historical a-trous band order and kernel-variance increments exactly,
@@ -1468,11 +1448,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
 
   cl_mem mask = dt_opencl_alloc_device(devid, sizes[0], sizes[1], sizeof(uint8_t));
 
-  const float roi_zoom = fmaxf(1.f / roi_in->scale, 1.f);
-  const float mipmap_zoom = fmaxf(fmaxf((float)pipe->image.width / (float)pipe->iwidth,
-                                        (float)pipe->image.height / (float)pipe->iheight),
-                                  1.f);
-  const float zoom = roi_zoom * mipmap_zoom;
+  const float zoom = fmaxf(dt_dev_get_module_scale(pipe, roi_in), 1.f);
   const float final_radius = (data->radius + data->radius_center) * 2.f / zoom;
   // See the CPU path above: iterations stay in user space because the current
   // solver already matches the historical a-trous band ordering and kernel

@@ -122,6 +122,11 @@ static gboolean _iop_plugin_focus_accel(GtkAccelGroup *accel_group, GObject *acc
                                         GdkModifierType modifier, gpointer data);
 static gboolean _iop_plugin_header_button_release(GtkWidget *w, GdkEventButton *e, gpointer user_data);
 
+float dt_dev_get_module_scale(const dt_dev_pixelpipe_t *const pipe, const dt_iop_roi_t *const roi_in)
+{
+  return pipe->iscale / roi_in->scale;
+}
+
 
 void dt_iop_load_default_params(dt_iop_module_t *module)
 {

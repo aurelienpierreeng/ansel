@@ -751,7 +751,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
   dt_iop_cacorrectrgb_params_t *d = (dt_iop_cacorrectrgb_params_t *)piece->data;
   // used to adjuste blur level depending on size. Don't amplify noise if magnified > 100%
-  const float scale = fmaxf(1.f / roi_in->scale, 1.f);
+  const float scale = fmaxf(dt_dev_get_module_scale(pipe, roi_in), 1.f);
   const int ch = piece->dsc_in.channels;
   const size_t width = roi_out->width;
   const size_t height = roi_out->height;

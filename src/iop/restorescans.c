@@ -143,7 +143,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_restorescans_data_t *d = (dt_iop_restorescans_data_t *)piece->data;
-  const float scale = 1.f / roi_in->scale;
+  const float scale = dt_dev_get_module_scale(pipe, roi_in);
 
   const float *const restrict in = (const float *const restrict)ivoid;
   float *const restrict out = (float *const restrict)ovoid;
