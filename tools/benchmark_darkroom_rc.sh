@@ -109,6 +109,7 @@ set_ansel_defaults()
   set_rc_key "$ANSEL_RC" "opencl_devid_thumbnail" "+0"
   set_rc_key "$ANSEL_RC" "plugins/lighttable/export/pixel_interpolator_warp" "lanczos2"
   set_rc_key "$ANSEL_RC" "plugins/lighttable/export/pixel_interpolator" "lanczos3"
+  set_rc_keey "$ANSEL_RC" "plugins/lighttable/export/force_lcms2" "false"
 }
 
 set_darktable_defaults()
