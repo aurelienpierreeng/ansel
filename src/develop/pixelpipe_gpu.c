@@ -622,6 +622,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
   }
 
   dt_opencl_finish(pipe->devid);
+  
   if(locked_input_entry)
     dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, locked_input_entry);
 
@@ -654,11 +655,12 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
 error:
   dt_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] %s couldn't process on GPU\n", module->name());
 
+  dt_opencl_finish(pipe->devid);
+
   dt_dev_pixelpipe_cache_release_cl_buffer(&cl_mem_blend_output_temp, NULL, NULL, FALSE);
   dt_dev_pixelpipe_cache_release_cl_buffer(&cl_mem_blend_input_temp, NULL, NULL, FALSE);
   dt_dev_pixelpipe_cache_release_cl_buffer(&cl_mem_process_input_temp, NULL, NULL, FALSE);
 
-  dt_opencl_finish(pipe->devid);
   if(locked_input_entry)
     dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, locked_input_entry);
 
