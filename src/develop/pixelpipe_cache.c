@@ -118,6 +118,7 @@ static dt_pixel_cache_entry_t *dt_pixel_cache_new_entry(const uint64_t hash, con
 static void _cache_entry_clmem_flush_device(dt_pixel_cache_entry_t *entry, const int devid, void *keep);
 static gboolean _cache_entry_materialize_host_data_locked(dt_pixel_cache_entry_t *entry, int preferred_devid,
                                                           gboolean prefer_device_payload);
+static int dt_dev_pixelpipe_cache_flush_old(dt_dev_pixelpipe_cache_t *cache);
 
 #ifdef HAVE_OPENCL
 static void _cache_entry_clmem_flush_host_pinned_locked(dt_pixel_cache_entry_t *entry, void *host_ptr, int devid);
@@ -2262,9 +2263,9 @@ static gboolean _for_each_remove_old(gpointer key, gpointer value, gpointer user
   return too_old && !used && !locked;
 }
 
-int dt_dev_pixelpipe_cache_flush_old(dt_dev_pixelpipe_cache_t *cache)
+static int dt_dev_pixelpipe_cache_flush_old(dt_dev_pixelpipe_cache_t *cache)
 {
-  // Don't hang the GUI thread if the cache is locked by a pipeline.
+  // Don't hang the GUI thread if the cache is locked by a pipeline.
   // Better luck next time.
   if(dt_pthread_mutex_trylock(&cache->lock)) return G_SOURCE_CONTINUE;
   g_hash_table_foreach_remove(cache->entries, _for_each_remove_old, NULL);
@@ -2394,35 +2395,6 @@ void dt_dev_pixelpipe_cache_auto_destroy_apply(dt_dev_pixelpipe_cache_t *cache,
   }
   
   dt_pthread_mutex_unlock(&cache->lock);
-}
-
-void *dt_dev_pixelpipe_cache_get_read_only(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash, 
-                                           dt_pixel_cache_entry_t **cache_entry)
-{
-  if(hash == DT_PIXELPIPE_CACHE_HASH_INVALID) return NULL;
-
-  void *data = NULL;
-  if(!dt_dev_pixelpipe_cache_peek(cache, hash, &data, cache_entry, -1, NULL))
-    return NULL;
-
-  // Assuming this function is called from GUI, we don't want to make it hang
-  // if our entry data is getting written by something heavy in a pipe thread.
-  // It should be tried again when the pipeline returns and emits "finished" signal.
-  // Meanwhile, abort for now.
-  gboolean locked = dt_pthread_rwlock_tryrdlock(&((*cache_entry)->lock));
-  if(locked) return NULL;
-  // else: trylock also locks it.
-
-  dt_dev_pixelpipe_cache_ref_count_entry(cache, TRUE, *cache_entry);
-
-  return data ? __builtin_assume_aligned(data, DT_CACHELINE_BYTES) : NULL;
-}
-
-void dt_dev_pixelpipe_cache_close_read_only(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash, 
-                                            dt_pixel_cache_entry_t *cache_entry)
-{
-  dt_dev_pixelpipe_cache_ref_count_entry(cache, FALSE, cache_entry);
-  dt_dev_pixelpipe_cache_rdlock_entry(cache, FALSE, cache_entry);
 }
 
 void dt_dev_pixelpipe_cache_unref_hash(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash)
