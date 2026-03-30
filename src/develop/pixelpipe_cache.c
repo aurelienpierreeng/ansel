@@ -498,11 +498,10 @@ int dt_dev_pixel_pipe_cache_remove_lru(dt_dev_pixelpipe_cache_t *cache)
   return error;
 }
 
+#ifdef HAVE_OPENCL
 static void *_pixel_cache_clmem_get(dt_pixel_cache_entry_t *entry, void *host_ptr, int devid,
                                     int width, int height, int bpp, int flags)
 {
-#ifdef HAVE_OPENCL
-
   dt_pthread_mutex_lock(&entry->cl_mem_lock);
   for(GList *l = entry->cl_mem_list; l;)
   {
@@ -539,10 +538,9 @@ static void *_pixel_cache_clmem_get(dt_pixel_cache_entry_t *entry, void *host_pt
   }
   dt_pthread_mutex_unlock(&entry->cl_mem_lock);
 
-#endif
-
   return NULL;
 }
+#endif
 
 void *dt_dev_pixelpipe_cache_borrow_cl_payload(dt_pixel_cache_entry_t *entry, void *host_ptr, int devid,
                                                int width, int height, int bpp, int flags)
@@ -597,6 +595,7 @@ void dt_dev_pixelpipe_cache_return_cl_payload(dt_pixel_cache_entry_t *entry, voi
 #endif
 }
 
+#ifdef HAVE_OPENCL
 static void _pixel_cache_clmem_put(dt_pixel_cache_entry_t *entry, void *host_ptr, int devid,
                                    int width, int height, int bpp, int flags, void *mem)
 {
@@ -666,6 +665,7 @@ static void _pixel_cache_clmem_remove(dt_pixel_cache_entry_t *entry, void *mem)
   }
   dt_pthread_mutex_unlock(&entry->cl_mem_lock);
 }
+#endif
 
 void dt_dev_pixelpipe_cache_flush_entry_clmem(dt_pixel_cache_entry_t *entry)
 {
