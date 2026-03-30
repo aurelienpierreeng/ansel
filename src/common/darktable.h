@@ -798,9 +798,6 @@ int dt_worker_threads();
 // once we subtracted caches memory and headroom from system memory
 size_t dt_get_available_mem();
 
-// Get the maximum size of allocation of a single image buffer
-size_t dt_get_singlebuffer_mem();
-
 // Get the maximum size for the whole mipmap cache
 size_t dt_get_mipmap_mem();
 

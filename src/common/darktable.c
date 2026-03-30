@@ -1713,12 +1713,6 @@ size_t dt_get_available_mem()
   return darktable.pixelpipe_cache->max_memory - darktable.pixelpipe_cache->current_memory;
 }
 
-size_t dt_get_singlebuffer_mem()
-{
-  return 4 * sizeof(float) * 6000 * 4000;
-}
-
-
 size_t dt_get_mipmap_mem()
 {
   return darktable.dtresources.mipmap_memory;
