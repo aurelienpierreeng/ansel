@@ -297,14 +297,14 @@ static gboolean _cache_entry_materialize_host_data_locked(dt_pixel_cache_entry_t
       else
       {
         const cl_int unmap_err = dt_opencl_unmap_mem_object(source->devid, (cl_mem)source->mem, mapped);
+        dt_opencl_finish(source->devid);
+
         if(unmap_err != CL_SUCCESS)
         {
           ok = FALSE;
         }
         else
         {
-          dt_opencl_finish(source->devid);
-
           /* dt_opencl_map_image() does not expose the mapped row pitch, so a non-zero-copy mapping
            * cannot be copied back with a flat memcpy without risking row-stride corruption. Only the
            * true zero-copy case guarantees that `entry->data` already aliases the authoritative pixels.
@@ -313,10 +313,12 @@ static gboolean _cache_entry_materialize_host_data_locked(dt_pixel_cache_entry_t
           if(mapped == entry->data)
             ok = TRUE;
           else
+          {
             ok = (dt_opencl_read_host_from_device(source->devid, entry->data, source->mem,
                                                   source->width, source->height, source->bpp) == CL_SUCCESS);
 
-          if(ok) dt_opencl_finish(source->devid);
+            dt_opencl_finish(source->devid);
+          }
         }
       }
     }
@@ -324,7 +326,7 @@ static gboolean _cache_entry_materialize_host_data_locked(dt_pixel_cache_entry_t
     {
       ok = (dt_opencl_read_host_from_device(source->devid, entry->data, source->mem,
                                             source->width, source->height, source->bpp) == CL_SUCCESS);
-      if(ok) dt_opencl_finish(source->devid);
+      dt_opencl_finish(source->devid);
     }
   }
 
@@ -1148,6 +1150,8 @@ int dt_dev_pixelpipe_cache_sync_cl_buffer(const int devid, void *host_ptr, void 
     return 1;
   }
 
+  dt_opencl_finish(devid);
+
   dt_print(DT_DEBUG_OPENCL, "[opencl_pixelpipe] successfully copied image %s for module %s (%s)\n",
            (cl_mode == CL_MAP_WRITE) ? "host to device" : "device to host",
            (module) ? module->op : "base buffer", message);
@@ -1730,16 +1734,12 @@ static void _free_cache_entry(dt_pixel_cache_entry_t *cache_entry)
     {
       dt_cache_clmem_t *c = (dt_cache_clmem_t *)l->data;
       if(!c || c->host_ptr != cache_entry->data) continue;
-
-      const cl_mem_flags flags = dt_opencl_get_mem_flags((cl_mem)c->mem);
-      if(flags & CL_MEM_USE_HOST_PTR)
-      {
-        /* Host-backed OpenCL images may still dereference `cache_entry->data` asynchronously until their
-         * queued work completes. We therefore wait for the owning device before releasing the host arena slot,
-         * otherwise an auto-destroyed intermediate can be recycled into another module output while the GPU
-         * is still reading the previous pixels. */
-        dt_opencl_finish(c->devid);
-      }
+      
+      /* Host-backed OpenCL images may still dereference `cache_entry->data` asynchronously until their
+        * queued work completes. We therefore wait for the owning device before releasing the host arena slot,
+        * otherwise an auto-destroyed intermediate can be recycled into another module output while the GPU
+        * is still reading the previous pixels. */
+      dt_opencl_finish(c->devid);
     }
     dt_pthread_mutex_unlock(&cache_entry->cl_mem_lock);
 #endif

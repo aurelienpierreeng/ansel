@@ -67,7 +67,6 @@ static int _gpu_init_input(dt_dev_pixelpipe_t *pipe,
   const int fail = dt_dev_pixelpipe_cache_sync_cl_buffer(pipe->devid, *input, *cl_mem_input, &piece->roi_in, CL_MAP_READ,
                                           piece->dsc_in.bpp, module,
                                           "cpu fallback input copy to cache");
-  dt_opencl_finish(pipe->devid);
   dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, FALSE, input_entry);
 
   if(fail)
@@ -153,7 +152,6 @@ static int _gpu_early_cpu_fallback_if_unsupported(dt_dev_pixelpipe_t *pipe, floa
       const int fail = dt_dev_pixelpipe_cache_sync_cl_buffer(pipe->devid, *input, cached_pinned_input, &piece->roi_in,
                                               CL_MAP_READ, piece->dsc_in.bpp, module,
                                               "cpu fallback pinned input copy to cache");
-      dt_opencl_finish(pipe->devid);
       dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, FALSE, input_entry);
       dt_dev_pixelpipe_cache_return_cl_payload(input_entry, cached_pinned_input);
 
@@ -622,7 +620,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
   }
 
   dt_opencl_finish(pipe->devid);
-  
+
   if(locked_input_entry)
     dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, locked_input_entry);
 
@@ -650,6 +648,8 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
   dt_dev_pixelpipe_cache_release_cl_buffer(&cl_mem_blend_input_temp, NULL, NULL, FALSE);
   dt_dev_pixelpipe_cache_release_cl_buffer(&cl_mem_process_input_temp, NULL, NULL, FALSE);
 
+  dt_opencl_finish(pipe->devid);
+
   return 0;
 
 error:
@@ -665,6 +665,8 @@ error:
     dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, locked_input_entry);
 
   dt_dev_pixelpipe_cache_release_cl_buffer(&cl_mem_output, output_entry, NULL, FALSE);
+
+  dt_opencl_finish(pipe->devid);
 
   if(cl_mem_input != NULL)
   {
@@ -695,7 +697,6 @@ error:
       const int fail = dt_dev_pixelpipe_cache_sync_cl_buffer(pipe->devid, input, cached_pinned_input, &piece->roi_in,
                                               CL_MAP_READ, piece->dsc_in.bpp, module,
                                               "gpu error fallback pinned input copy to cache");
-      dt_opencl_finish(pipe->devid);
       dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, FALSE, cpu_input_entry);
       dt_dev_pixelpipe_cache_return_cl_payload(cpu_input_entry, cached_pinned_input);
 
