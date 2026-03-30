@@ -131,8 +131,10 @@ static void _refresh_global_histogram_backbuf(dt_develop_t *dev, const char *op)
     hash = previous_piece->global_hash;
   }
 
-  dt_pixel_cache_entry_t *const entry = dt_dev_pixelpipe_cache_get_entry(darktable.pixelpipe_cache, hash);
-  if(!entry || hash == DT_PIXELPIPE_CACHE_HASH_INVALID)
+  dt_pixel_cache_entry_t *entry = NULL;
+  if(hash == DT_PIXELPIPE_CACHE_HASH_INVALID
+     || !dt_dev_pixelpipe_cache_peek_gui(dev->preview_pipe, !strcmp(op, "gamma") ? previous_piece : piece,
+                                         NULL, &entry))
   {
     _clear_histogram_backbuf(backbuf);
     return;
@@ -165,9 +167,7 @@ gboolean dt_dev_refresh_module_histogram(dt_develop_t *dev, dt_iop_module_t *mod
 
   void *input = NULL;
   dt_pixel_cache_entry_t *input_entry = NULL;
-  if(!dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, previous_piece->global_hash,
-                                  &input, &input_entry, -1, NULL)
-     || !input_entry || !input)
+  if(!dt_dev_pixelpipe_cache_peek_gui(dev->preview_pipe, previous_piece, &input, &input_entry))
     return FALSE;
 
   dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, input_entry);

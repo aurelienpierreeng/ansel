@@ -459,6 +459,7 @@ int dt_dev_pixelpipe_init_cached(dt_dev_pixelpipe_t *pipe)
   pipe->iscale = 1.0f;
   dt_atomic_set_int(&pipe->shutdown, FALSE);
   dt_atomic_set_int(&pipe->realtime, FALSE);
+  dt_dev_pixelpipe_reset_cache_request(pipe);
 
   pipe->levels = IMAGEIO_RGB | IMAGEIO_INT8;
   dt_pthread_mutex_init(&(pipe->busy_mutex), NULL);
@@ -530,6 +531,7 @@ void dt_dev_pixelpipe_cleanup(dt_dev_pixelpipe_t *pipe)
     }
   }
   dt_dev_set_backbuf(&pipe->backbuf, 0, 0, 0, DT_PIXELPIPE_CACHE_HASH_INVALID, DT_PIXELPIPE_CACHE_HASH_INVALID);
+  dt_dev_pixelpipe_reset_cache_request(pipe);
   dt_pthread_mutex_destroy(&(pipe->busy_mutex));
   pipe->icc_type = DT_COLORSPACE_NONE;
   dt_free(pipe->icc_filename);
@@ -1357,6 +1359,25 @@ static void _update_backbuf_cache_reference(dt_dev_pixelpipe_t *pipe, dt_iop_roi
                      dt_dev_pixelpipe_get_history_hash(pipe));
 }
 
+static GList *_get_requested_piece_node(const dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *module, int *pos)
+{
+  if(pos) *pos = 0;
+  if(!pipe || !module) return NULL;
+
+  int current_pos = 1;
+  for(GList *node = g_list_first(pipe->nodes); node; node = g_list_next(node), current_pos++)
+  {
+    dt_dev_pixelpipe_iop_t *const piece = node->data;
+    if(piece && piece->enabled && piece->module == module)
+    {
+      if(pos) *pos = current_pos;
+      return node;
+    }
+  }
+
+  return NULL;
+}
+
 int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop_roi_t roi)
 {
   if(darktable.unmuted & DT_DEBUG_MEMORY)
@@ -1380,18 +1401,47 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop
   dt_pixelpipe_get_global_hash(pipe, dev);
   const guint pos = g_list_length(dev->iop);
 
+  dt_dev_pixelpipe_cache_request_t cache_request = dt_dev_pixelpipe_get_cache_request(pipe);
+  const dt_iop_module_t *const requested_module = dt_dev_pixelpipe_get_cache_request_module(pipe);
+  dt_dev_pixelpipe_reset_cache_request(pipe);
+
+  GList *requested_pieces = g_list_last(pipe->nodes);
+  int requested_pos = (int)pos;
+  dt_dev_pixelpipe_iop_t *requested_piece = NULL;
+  gboolean requested_backbuf = TRUE;
+
+  if(cache_request == DT_DEV_PIXELPIPE_CACHE_REQUEST_MODULE && requested_module)
+  {
+    requested_pieces = _get_requested_piece_node(pipe, requested_module, &requested_pos);
+    if(requested_pieces)
+    {
+      requested_piece = requested_pieces->data;
+      requested_backbuf = FALSE;
+    }
+    else
+    {
+      dt_print(DT_DEBUG_DEV, "[pixelpipe/gui] requested module cache target disappeared pipe=%s module=%s\n",
+               dt_pixelpipe_get_pipe_name(pipe->type), requested_module->op);
+    }
+  }
+
   void *buf = NULL;
 
-  // If the final output cacheline already matches the current pipeline state,
-  // we can skip compute entirely. Darkroom pipes may still need the post-compute
-  // sampling pass for histograms and picker reads.
+  /* GUI cache requests can target either the final backbuffer or one module output in the middle of the
+     current synchronized graph. Exact-hit checks must therefore look at the requested target instead of
+     always assuming the run goes to the pipe end. */
+  const uint64_t requested_hash = requested_backbuf ? dt_dev_pixelpipe_get_hash(pipe)
+                                                    : requested_piece ? requested_piece->global_hash
+                                                                      : DT_PIXELPIPE_CACHE_HASH_INVALID;
   dt_pixel_cache_entry_t *entry = NULL;
-  if(_requests_cache(pipe, NULL)
-     && dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, dt_dev_pixelpipe_get_hash(pipe), &buf, &entry,
+  if(_requests_cache(pipe, requested_piece)
+     && requested_hash != DT_PIXELPIPE_CACHE_HASH_INVALID
+     && dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, requested_hash, &buf, &entry,
                                     -1, NULL)
      && buf != NULL)
   {
-    _update_backbuf_cache_reference(pipe, roi, entry);
+    if(requested_backbuf)
+      _update_backbuf_cache_reference(pipe, roi, entry);
     return 0;
   }
 
@@ -1447,7 +1497,9 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop
     dt_get_times(&start);
     uint64_t final_hash = -1;
     const dt_dev_pixelpipe_iop_t *final_piece = NULL;
-    err = dt_dev_pixelpipe_process_rec(pipe, dev, &final_hash, &final_piece, pieces, pos);
+    err = dt_dev_pixelpipe_process_rec(pipe, dev, &final_hash, &final_piece,
+                                       requested_backbuf ? pieces : requested_pieces,
+                                       requested_backbuf ? pos : requested_pos);
     (void)final_piece;
     gchar *msg = g_strdup_printf("[pixelpipe] %s internal pixel pipeline processing", dt_pixelpipe_get_pipe_name(pipe->type));
     dt_show_times(&start, msg);
@@ -1487,9 +1539,13 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop
       // No opencl errors, no killswitch triggered: we should have a valid output buffer now.
       dt_pixel_cache_entry_t *final_entry = NULL;
       void *final_buf = NULL;
-      if(dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, dt_dev_pixelpipe_get_hash(pipe), &final_buf,
-                                     &final_entry, pipe->devid, NULL)
-         && final_buf != NULL)
+      if(!requested_backbuf)
+      {
+        dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, final_hash);
+      }
+      else if(dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, dt_dev_pixelpipe_get_hash(pipe), &final_buf,
+                                          &final_entry, pipe->devid, NULL)
+              && final_buf != NULL)
       {
         _update_backbuf_cache_reference(pipe, roi, final_entry);
         dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, final_hash);

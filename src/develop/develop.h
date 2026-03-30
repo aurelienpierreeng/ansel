@@ -359,7 +359,6 @@ typedef struct dt_develop_t
     int picker_cst;
     gboolean enabled;
     gboolean update_pending;
-    gboolean recompute_requested;
     guint refresh_idle_source;
 
     struct dt_colorpicker_sample_t *primary_sample;

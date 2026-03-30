@@ -101,6 +101,7 @@
 #include "control/control.h"
 #include "control/jobs.h"
 #include "develop/blend.h"
+#include "develop/dev_pixelpipe.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/masks.h"
@@ -433,9 +434,7 @@ static gboolean _render_main_direct_debug(cairo_t *cr, dt_develop_t *dev, const 
 
   dt_pixel_cache_entry_t *entry = NULL;
   void *data = NULL;
-  if(!dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, hash, &data, &entry, -1, NULL))
-    return FALSE;
-  if(!data || !entry)
+  if(!dt_dev_pixelpipe_cache_peek_gui(dev->pipe, NULL, &data, &entry))
     return FALSE;
 
   dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, entry);
@@ -559,7 +558,7 @@ static gboolean _lock_pipe_surface(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, 
   dt_pixel_cache_entry_t *live_entry = NULL;
   void *live_data = NULL;
   if(locked->surface && locked->hash == hash
-     && dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, hash, &live_data, &live_entry, -1, NULL)
+     && dt_dev_pixelpipe_cache_peek_gui(pipe, NULL, &live_data, &live_entry)
      && live_entry == locked->entry && live_data == locked->data)
   {
     locked->width = pipe->backbuf.width;
@@ -571,7 +570,7 @@ static gboolean _lock_pipe_surface(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, 
   /* GUI surfaces only borrow the currently published backbuffer. They rely on the backbuffer keepalive ref
    * owned by `pixelpipe_hb.c`, so they must not take or drop their own cache refs here. */
   void *data = NULL;
-  if(!dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, hash, &data, &entry, -1, NULL))
+  if(!dt_dev_pixelpipe_cache_peek_gui(pipe, NULL, &data, &entry))
     data = NULL;
   if(!data)
   {
@@ -1078,9 +1077,11 @@ void expose(
     cairo_restore(cri);
   }
 
+  const gboolean picker_active = dt_iop_color_picker_is_visible(dev);
+
   // draw colorpicker for in focus module or execute module callback hook
   // FIXME: draw picker in gui_post_expose() hook in libs/colorpicker.c -- catch would be that live samples would appear over guides, softproof/gamut text overlay would be hidden by picker
-  if(dt_iop_color_picker_is_visible(dev))
+  if(picker_active)
   {
     GSList samples = { .data = darktable.develop->color_picker.primary_sample, .next = NULL };
     _darkroom_pickers_draw(self, cri, width, height, pointerx, pointery, &samples, TRUE);
@@ -2488,12 +2489,13 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
 {
   dt_develop_t *dev = (dt_develop_t *)self->data;
   dt_control_t *ctl = darktable.control;
+  const gboolean picker_active = dt_iop_color_picker_is_visible(dev);
 
   // change cursor appearance by default
   _set_default_cursor(self, x, y);
   gboolean ret = FALSE;
 
-  if(dt_iop_color_picker_is_visible(dev) && ctl->button_down && ctl->button_down_which == 1)
+  if(picker_active && ctl->button_down && ctl->button_down_which == 1)
   {
     // module requested a color box
     if(mouse_in_imagearea(self, x, y))
@@ -2529,6 +2531,11 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
           dt_lib_colorpicker_set_point(darktable.lib, mouse_point);
       }
     }
+    ret = TRUE;
+  }
+  else if(picker_active)
+  {
+    // Keep module-specific hover overlays and live-edit cursors disabled while the picker owns the center view.
     ret = TRUE;
   }
 

@@ -307,9 +307,7 @@ static dt_color_picker_resample_status_t _sample_picker_from_cache(dt_develop_t 
 
   void *input = NULL;
   dt_pixel_cache_entry_t *input_entry = NULL;
-  if(!dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, previous_piece->global_hash,
-                                  &input, &input_entry, -1, NULL)
-     || !input_entry || !input)
+  if(!dt_dev_pixelpipe_cache_peek_gui(pipe, previous_piece, &input, &input_entry))
   {
     dt_print(DT_DEBUG_DEV, "[picker] input cache miss module=%s prev_hash=%" PRIu64 "\n",
              piece->module->op, previous_piece->global_hash);
@@ -318,10 +316,7 @@ static dt_color_picker_resample_status_t _sample_picker_from_cache(dt_develop_t 
 
   void *output = NULL;
   dt_pixel_cache_entry_t *output_entry = NULL;
-  const gboolean have_output
-      = dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, piece->global_hash,
-                                    &output, &output_entry, -1, NULL)
-        && output_entry && output;
+  const gboolean have_output = dt_dev_pixelpipe_cache_peek_gui(pipe, piece, &output, &output_entry);
   if(!have_output)
   {
     /* Module GUIs such as color equalizer only consume the module-input sample. A missing output
@@ -408,19 +403,6 @@ static dt_color_picker_resample_status_t _sample_picker_from_cache(dt_develop_t 
   return DT_COLOR_PICKER_RESAMPLE_EMITTED;
 }
 
-static void _request_picker_recompute(dt_develop_t *dev)
-{
-  if(!dev || !dev->preview_pipe) return;
-  if(dev->color_picker.recompute_requested) return;
-  dev->color_picker.recompute_requested = TRUE;
-  dt_print(DT_DEBUG_DEV, "[picker] request recompute module=%s\n",
-           dev->color_picker.module ? dev->color_picker.module->op : "-");
-  /* Picker moves only change the sampling geometry. They do not change history or the sealed
-     piece contracts, so preview refresh must follow the regular TOP_CHANGED path instead of
-     forcing a full SYNCH rebuild on every drag event. */
-  dt_dev_pixelpipe_update_history_preview(dev);
-}
-
 static gboolean _refresh_active_picker_idle(gpointer user_data)
 {
   dt_develop_t *const dev = (dt_develop_t *)user_data;
@@ -465,7 +447,6 @@ static void _refresh_active_picker(dt_develop_t *dev)
     {
       dev->color_picker.picker->update_pending = FALSE;
       dev->color_picker.update_pending = FALSE;
-      dev->color_picker.recompute_requested = FALSE;
       dt_control_queue_redraw_center();
       return;
     }
@@ -475,14 +456,8 @@ static void _refresh_active_picker(dt_develop_t *dev)
   {
     const dt_color_picker_resample_status_t sampled = _sample_picker_from_cache(dev);
     if(sampled != DT_COLOR_PICKER_RESAMPLE_RETRY)
-    {
-      dev->color_picker.recompute_requested = FALSE;
       return;
-    }
   }
-
-  if(dev->color_picker.recompute_requested) return;
-  _request_picker_recompute(dev);
 }
 
 static void _color_picker_reset(dt_iop_color_picker_t *picker)
@@ -528,7 +503,6 @@ void dt_iop_color_picker_reset(dt_iop_module_t *module, gboolean keep)
       dev->color_picker.picker_cst = IOP_CS_NONE;
       dev->color_picker.enabled = FALSE;
       dev->color_picker.update_pending = FALSE;
-      dev->color_picker.recompute_requested = FALSE;
       if(module) module->request_color_pick = DT_REQUEST_COLORPICK_OFF;
     }
   }
@@ -585,7 +559,6 @@ static gboolean _color_picker_callback_button_press(GtkWidget *button, GdkEventB
     dev->color_picker.kind = kind;
     dev->color_picker.picker_cst = self->picker_cst;
     dev->color_picker.enabled = TRUE;
-    dev->color_picker.recompute_requested = FALSE;
 
     if(module) module->request_color_pick = DT_REQUEST_COLORPICK_MODULE;
 
@@ -626,7 +599,6 @@ static gboolean _color_picker_callback_button_press(GtkWidget *button, GdkEventB
     dev->color_picker.picker_cst = IOP_CS_NONE;
     dev->color_picker.enabled = FALSE;
     dev->color_picker.update_pending = FALSE;
-    dev->color_picker.recompute_requested = FALSE;
     _color_picker_reset(self);
     if(module)
     {
@@ -678,7 +650,6 @@ void dt_iop_color_picker_request_update(void)
   if(dev)
   {
     dev->color_picker.update_pending = TRUE;
-    dev->color_picker.recompute_requested = FALSE;
   }
   if(dev)
     dt_print(DT_DEBUG_DEV, "[picker] request update module=%s picker=%p widget=%p\n",

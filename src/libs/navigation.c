@@ -49,6 +49,7 @@
 #include "common/image_cache.h"
 #include "control/conf.h"
 #include "control/control.h"
+#include "develop/dev_pixelpipe.h"
 #include "develop/develop.h"
 
 #include "gui/gtk.h"
@@ -232,11 +233,8 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
     // navigation only needs a short read-only critical section while it copies into its own cairo surface.
     struct dt_pixel_cache_entry_t *cache_entry = NULL;
     void *data = NULL;
-    if(!dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache,
-                                    dt_dev_backbuf_get_hash(&dev->preview_pipe->backbuf),
-                                    &data, &cache_entry, -1, NULL))
+    if(!dt_dev_pixelpipe_cache_peek_gui(dev->preview_pipe, NULL, &data, &cache_entry))
       return TRUE;
-    if(!data) return TRUE;
 
     dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, cache_entry);
 

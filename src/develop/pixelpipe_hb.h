@@ -166,8 +166,16 @@ typedef enum dt_dev_pixelpipe_change_t
   DT_DEV_PIPE_REMOVE = 1 << 1,      // possibly elements of the pipe have to be removed
   DT_DEV_PIPE_SYNCH
   = 1 << 2, // all nodes up to end need to be synched, but no removal of module pieces is necessary
-  DT_DEV_PIPE_ZOOMED = 1 << 3 // zoom event, preview pipe does not need changes
+  DT_DEV_PIPE_ZOOMED = 1 << 3, // zoom event, preview pipe does not need changes
+  DT_DEV_PIPE_CACHE_REQUEST = 1 << 4 // GUI requested one cacheline to be materialized on host
 } dt_dev_pixelpipe_change_t;
+
+typedef enum dt_dev_pixelpipe_cache_request_t
+{
+  DT_DEV_PIXELPIPE_CACHE_REQUEST_NONE = 0,
+  DT_DEV_PIXELPIPE_CACHE_REQUEST_BACKBUF = 1,
+  DT_DEV_PIXELPIPE_CACHE_REQUEST_MODULE = 2
+} dt_dev_pixelpipe_cache_request_t;
 
 /**
  * this encapsulates the pixelpipe.
@@ -311,6 +319,11 @@ typedef struct dt_dev_pixelpipe_t
   // between pipe and history. This is a local copy of 
   // dev_history_get_hash()
   dt_atomic_uint64 history_hash;
+  // GUI readers can request one extra host-visible cacheline without pretending
+  // history changed. BACKBUF targets the final pipe output, MODULE targets the
+  // output of cache_request_module.
+  dt_atomic_int cache_request;
+  dt_atomic_ptr cache_request_module;
   // Modules can set this to TRUE internally so the pipeline will
   // restart right away, in the same thread.
   // The reentry flag can only be reset (to FALSE) by the same object that captured it.
@@ -375,6 +388,33 @@ static inline void dt_dev_pixelpipe_set_changed(dt_dev_pixelpipe_t *pipe, const 
 static inline void dt_dev_pixelpipe_or_changed(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_change_t flags)
 {
   dt_atomic_or_int((dt_atomic_int *)&pipe->changed, (int)flags);
+}
+
+static inline dt_dev_pixelpipe_cache_request_t dt_dev_pixelpipe_get_cache_request(const dt_dev_pixelpipe_t *pipe)
+{
+  return pipe ? (dt_dev_pixelpipe_cache_request_t)dt_atomic_get_int((dt_atomic_int *)&pipe->cache_request)
+              : DT_DEV_PIXELPIPE_CACHE_REQUEST_NONE;
+}
+
+static inline const struct dt_iop_module_t *dt_dev_pixelpipe_get_cache_request_module(const dt_dev_pixelpipe_t *pipe)
+{
+  return pipe ? (const struct dt_iop_module_t *)dt_atomic_get_ptr(&pipe->cache_request_module) : NULL;
+}
+
+static inline void dt_dev_pixelpipe_set_cache_request(dt_dev_pixelpipe_t *pipe,
+                                                      const dt_dev_pixelpipe_cache_request_t request,
+                                                      const struct dt_iop_module_t *module)
+{
+  if(!pipe) return;
+  dt_atomic_set_ptr(&pipe->cache_request_module, (void *)module);
+  dt_atomic_set_int((dt_atomic_int *)&pipe->cache_request, (int)request);
+}
+
+static inline void dt_dev_pixelpipe_reset_cache_request(dt_dev_pixelpipe_t *pipe)
+{
+  if(!pipe) return;
+  dt_atomic_set_int((dt_atomic_int *)&pipe->cache_request, DT_DEV_PIXELPIPE_CACHE_REQUEST_NONE);
+  dt_atomic_set_ptr(&pipe->cache_request_module, NULL);
 }
 
 struct dt_develop_t;

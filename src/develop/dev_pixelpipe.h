@@ -147,6 +147,35 @@ const struct dt_dev_pixelpipe_iop_t *dt_dev_pixelpipe_get_module_piece(const str
 const struct dt_dev_pixelpipe_iop_t *dt_dev_pixelpipe_get_prev_enabled_piece(const struct dt_dev_pixelpipe_t *pipe,
                                                                              const struct dt_dev_pixelpipe_iop_t *piece);
 
+/**
+ * @brief Reopen one GUI-visible host cacheline, or queue the minimal pipe recompute needed to publish it.
+ *
+ * @details
+ * GUI samplers only consume host-visible buffers. This wrapper first tries to reopen the requested cacheline:
+ * - @p piece output if @p piece is not NULL,
+ * - the pipe final backbuffer cacheline if @p piece is NULL.
+ *
+ * If that cacheline does not exist yet, or only exists as a device-side OpenCL payload, the wrapper schedules one
+ * dedicated pipe run:
+ * - module requests stop recursion at that module and force one host cacheline there,
+ * - NULL requests ask for the final pipe backbuffer.
+ *
+ * The request uses a dedicated pipe state instead of pretending history changed, so the worker can rerun just
+ * enough of the current synchronized graph to satisfy the GUI reader.
+ *
+ * @param pipe Current live pipe.
+ * @param piece Target module piece, or NULL for the final backbuffer.
+ * @param data Returned host-visible pixel buffer on success.
+ * @param cache_entry Returned cache entry owning @p data on success.
+ *
+ * @return TRUE when a host buffer is immediately available, FALSE when the caller must retry after the queued pipe
+ * update completed.
+ */
+gboolean dt_dev_pixelpipe_cache_peek_gui(dt_dev_pixelpipe_t *pipe,
+                                         const struct dt_dev_pixelpipe_iop_t *piece,
+                                         void **data,
+                                         struct dt_pixel_cache_entry_t **cache_entry);
+
 // Compute the sequential hash over the pipeline for each module.
 // Need to run after dt_dev_pixelpipe_get_roi_in() has updated processed ROI in/out
 void dt_pixelpipe_get_global_hash(struct dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev);

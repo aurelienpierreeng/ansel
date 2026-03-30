@@ -22,6 +22,7 @@
 #include "common/dtpthread.h"
 #include "develop/imageop.h"
 #include "develop/pixelpipe.h"
+#include "develop/pixelpipe_cache.h"
 #include "develop/pixelpipe_gui.h"
 #include "develop/blend.h"
 #include "gui/color_picker_proxy.h"
@@ -104,6 +105,7 @@ static gboolean _sync_realtime_top_history_in_place(dt_dev_pixelpipe_t *pipe, dt
  * We add to that:
  * - the module's own authored `force_opencl_cache`,
  * - user cache preferences,
+ * - explicit GUI cache requests on one module output,
  * - active color-picker sampling,
  * - global histogram stages sampling their output,
  * - active GUI editing on the module itself.
@@ -112,6 +114,11 @@ static void _seal_opencl_cache_policy(dt_dev_pixelpipe_t *pipe, dt_develop_t *de
 {
   if(!pipe || !pipe->nodes) return;
 
+  const dt_dev_pixelpipe_cache_request_t cache_request = dt_dev_pixelpipe_get_cache_request(pipe);
+  const dt_iop_module_t *const requested_cache_module
+      = (cache_request == DT_DEV_PIXELPIPE_CACHE_REQUEST_MODULE)
+          ? dt_dev_pixelpipe_get_cache_request_module(pipe)
+          : NULL;
   gboolean upstream_must_cache_host = TRUE;
 
   for(GList *pieces = g_list_last(pipe->nodes); pieces; pieces = g_list_previous(pieces))
@@ -136,6 +143,7 @@ static void _seal_opencl_cache_policy(dt_dev_pixelpipe_t *pipe, dt_develop_t *de
     const gboolean color_picker_on = dt_iop_color_picker_force_cache(dev, pipe, module);
     const gboolean global_hist_output_on = dt_dev_module_requires_global_histogram_output_cache(pipe, module);
     const gboolean global_hist_input_on = dt_dev_module_requires_global_histogram_input_cache(pipe, module);
+    const gboolean requested_gui_cache_on = requested_cache_module == module;
     const gboolean module_hist_on
         = (pipe->type == DT_DEV_PIXELPIPE_PREVIEW
            && pipe->gui_observable_source
@@ -146,7 +154,8 @@ static void _seal_opencl_cache_policy(dt_dev_pixelpipe_t *pipe, dt_develop_t *de
            && dev->gui_module == module;
 
     piece->force_opencl_cache
-        = authored_cache || user_requested_cache || color_picker_on || global_hist_output_on
+        = authored_cache || user_requested_cache || requested_gui_cache_on || color_picker_on
+          || global_hist_output_on
           || upstream_must_cache_host;
 
     upstream_must_cache_host = !supports_opencl || active_in_gui || module_hist_on || global_hist_input_on;
@@ -447,6 +456,38 @@ const dt_dev_pixelpipe_iop_t *dt_dev_pixelpipe_get_prev_enabled_piece(const dt_d
   }
 
   return NULL;
+}
+
+gboolean dt_dev_pixelpipe_cache_peek_gui(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
+                                         void **data, dt_pixel_cache_entry_t **cache_entry)
+{
+  if(data) *data = NULL;
+  if(cache_entry) *cache_entry = NULL;
+  if(!pipe) return FALSE;
+
+  const uint64_t hash = piece ? piece->global_hash : dt_dev_backbuf_get_hash(&pipe->backbuf);
+  void *buffer = NULL;
+  dt_pixel_cache_entry_t *entry = NULL;
+  if(hash != DT_PIXELPIPE_CACHE_HASH_INVALID
+     && dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, hash, &buffer, &entry, -1, NULL)
+     && buffer && entry)
+  {
+    if(data) *data = buffer;
+    if(cache_entry) *cache_entry = entry;
+    return TRUE;
+  }
+
+  dt_dev_pixelpipe_set_cache_request(pipe,
+                                     piece ? DT_DEV_PIXELPIPE_CACHE_REQUEST_MODULE
+                                           : DT_DEV_PIXELPIPE_CACHE_REQUEST_BACKBUF,
+                                     piece ? piece->module : NULL);
+  dt_dev_pixelpipe_or_changed(pipe, DT_DEV_PIPE_CACHE_REQUEST);
+
+  dt_print(DT_DEBUG_DEV, "[pixelpipe/gui] request host cache pipe=%s target=%s hash=%" PRIu64 "\n",
+           dt_pixelpipe_get_pipe_name(pipe->type),
+           piece && piece->module ? piece->module->op : "backbuf", hash);
+
+  return FALSE;
 }
 
 static gboolean _prepare_piece_input_contract(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
@@ -825,12 +866,13 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
       = (dt_dev_pixelpipe_change_t)dt_atomic_exch_int((dt_atomic_int *)&pipe->changed, DT_DEV_PIPE_UNCHANGED);
 
   gchar *type = _get_debug_pipe_name(pipe, dev);
-  char *status_str = g_strdup_printf("%s%s%s%s%s",
+  char *status_str = g_strdup_printf("%s%s%s%s%s%s",
                                   (status & DT_DEV_PIPE_UNCHANGED) ? "UNCHANGED " : "",
                                   (status & DT_DEV_PIPE_REMOVE) ? "REMOVE " : "",
                                   (status & DT_DEV_PIPE_TOP_CHANGED) ? "TOP_CHANGED " : "",
                                   (status & DT_DEV_PIPE_SYNCH) ? "SYNCH " : "",
-                                  (status & DT_DEV_PIPE_ZOOMED) ? "ZOOMED " : "");
+                                  (status & DT_DEV_PIPE_ZOOMED) ? "ZOOMED " : "",
+                                  (status & DT_DEV_PIPE_CACHE_REQUEST) ? "CACHE_REQUEST " : "");
 
   dt_print(DT_DEBUG_DEV, "[dt_dev_pixelpipe_change] pipeline state changing for pipe %s, flag %s\n",
      type, status_str);
