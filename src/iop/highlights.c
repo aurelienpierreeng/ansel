@@ -2244,7 +2244,6 @@ static cl_int process_laplacian_bayer_cl(struct dt_iop_module_t *self, const dt_
   dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_bilinear_and_mask, 7, sizeof(int),
                            (void *)&roi_out->height);
   err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_highlights_bilinear_and_mask, sizes);
-  dt_opencl_release_mem_object(clips_cl);
   if(err != CL_SUCCESS) goto error;
 
   dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_box_blur, 0, sizeof(cl_mem), (void *)&temp);
@@ -2313,6 +2312,7 @@ static cl_int process_laplacian_bayer_cl(struct dt_iop_module_t *self, const dt_
   if(err != CL_SUCCESS) goto error;
 
   // cleanup and exit on success
+  dt_opencl_release_mem_object(clips_cl);
   dt_opencl_release_mem_object(normalization_partials);
   if(normalization_tmp != normalization_final) dt_opencl_release_mem_object(normalization_tmp);
   if(normalization != normalization_final) dt_opencl_release_mem_object(normalization);
@@ -2329,6 +2329,7 @@ static cl_int process_laplacian_bayer_cl(struct dt_iop_module_t *self, const dt_
   return err;
 
 error:
+  dt_opencl_release_mem_object(clips_cl);
   dt_opencl_release_mem_object(normalization_partials);
   if(normalization_tmp != normalization_final) dt_opencl_release_mem_object(normalization_tmp);
   if(normalization != normalization_final) dt_opencl_release_mem_object(normalization);
@@ -2477,8 +2478,6 @@ static cl_int process_laplacian_xtrans_cl(struct dt_iop_module_t *self, const dt
   dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_bilinear_and_mask_xtrans, 9, sizeof(cl_mem), (void *)&dev_xtrans);
   dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_bilinear_and_mask_xtrans, 10, sizeof(cl_mem), (void *)&lookup_cl);
   err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_highlights_bilinear_and_mask_xtrans, sizes);
-  dt_opencl_release_mem_object(clips_cl);
-  clips_cl = NULL;
   if(err != CL_SUCCESS) goto error;
 
   dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_box_blur, 0, sizeof(cl_mem), (void *)&temp);
@@ -2544,6 +2543,7 @@ static cl_int process_laplacian_xtrans_cl(struct dt_iop_module_t *self, const dt
   dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace_xtrans, 9, sizeof(cl_mem), (void *)&dev_xtrans);
   err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_highlights_remosaic_and_replace_xtrans, sizes);
   if(err != CL_SUCCESS) goto error;
+  dt_opencl_release_mem_object(clips_cl);
   dt_opencl_release_mem_object(lookup_cl);
   dt_opencl_release_mem_object(dev_xtrans);
   dt_opencl_release_mem_object(normalization_partials);
