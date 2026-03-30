@@ -120,8 +120,6 @@ static gboolean _cache_entry_materialize_host_data_locked(dt_pixel_cache_entry_t
                                                           gboolean prefer_device_payload);
 
 #ifdef HAVE_OPENCL
-static void _cache_entry_resync_host_pinned_images_locked(dt_pixel_cache_entry_t *entry, void *host_ptr,
-                                                          int devid);
 static void _cache_entry_clmem_flush_host_pinned_locked(dt_pixel_cache_entry_t *entry, void *host_ptr, int devid);
 #endif
 
@@ -356,64 +354,6 @@ static gboolean _cache_entry_materialize_host_data(dt_dev_pixelpipe_cache_t *cac
 
   return ok;
 }
-
-#ifdef HAVE_OPENCL
-static void _cache_entry_resync_host_pinned_images_locked(dt_pixel_cache_entry_t *entry, void *host_ptr, int devid)
-{
-  if(!entry || !host_ptr) return;
-
-  dt_pthread_mutex_lock(&entry->cl_mem_lock);
-  for(GList *l = entry->cl_mem_list; l;)
-  {
-    GList *next = l->next;
-    dt_cache_clmem_t *c = (dt_cache_clmem_t *)l->data;
-
-    if(c && c->host_ptr == host_ptr && (devid < 0 || c->devid == devid))
-    {
-      const cl_mem mem = (cl_mem)c->mem;
-      const cl_mem_flags flags = dt_opencl_get_mem_flags(mem);
-      gboolean synced = FALSE;
-
-      if(flags & CL_MEM_USE_HOST_PTR)
-      {
-        void *mapped = dt_opencl_map_image(c->devid, mem, TRUE, CL_MAP_WRITE, c->width, c->height, c->bpp);
-        if(mapped)
-        {
-          const gboolean zero_copy = (mapped == host_ptr);
-          const cl_int unmap_err = dt_opencl_unmap_mem_object(c->devid, mem, mapped);
-          if(unmap_err == CL_SUCCESS)
-          {
-            dt_opencl_finish(c->devid);
-            synced = zero_copy;
-          }
-        }
-      }
-
-      if(!synced)
-      {
-        const cl_int err = dt_opencl_write_host_to_device(c->devid, host_ptr, mem, c->width, c->height, c->bpp);
-        synced = (err == CL_SUCCESS);
-      }
-
-      if(!synced)
-      {
-        if(c->refs > 0)
-        {
-          l = next;
-          continue;
-        }
-
-        entry->cl_mem_list = g_list_delete_link(entry->cl_mem_list, l);
-        dt_opencl_release_mem_object(mem);
-        dt_free(c);
-      }
-    }
-
-    l = next;
-  }
-  dt_pthread_mutex_unlock(&entry->cl_mem_lock);
-}
-#endif
 
 #ifdef HAVE_OPENCL
 static void _cache_entry_clmem_flush_host_pinned_locked(dt_pixel_cache_entry_t *entry, void *host_ptr, int devid)
@@ -858,45 +798,7 @@ void dt_dev_pixelpipe_cache_flush_host_pinned_image(dt_dev_pixelpipe_cache_t *ca
   dt_dev_pixelpipe_cache_ref_count_entry(cache, FALSE, entry);
 }
 
-void dt_dev_pixelpipe_cache_resync_host_pinned_image(dt_dev_pixelpipe_cache_t *cache, void *host_ptr,
-                                                     dt_pixel_cache_entry_t *entry_hint, int devid)
-{
-  if(!cache || !host_ptr) return;
-
-  dt_pixel_cache_entry_t *entry = entry_hint;
-  if(!entry)
-  {
-    dt_pthread_mutex_lock(&cache->lock);
-    entry = _cache_entry_for_host_ptr_locked(cache, host_ptr);
-    dt_pthread_mutex_unlock(&cache->lock);
-  }
-
-  if(!entry) return;
-
-  if(devid >= 0) dt_opencl_events_wait_for(devid);
-  dt_dev_pixelpipe_cache_ref_count_entry(cache, TRUE, entry);
-  dt_dev_pixelpipe_cache_wrlock_entry(cache, TRUE, entry);
-  _cache_entry_resync_host_pinned_images_locked(entry, host_ptr, devid);
-  dt_dev_pixelpipe_cache_wrlock_entry(cache, FALSE, entry);
-  dt_dev_pixelpipe_cache_ref_count_entry(cache, FALSE, entry);
-}
 #else
-void *dt_dev_pixelpipe_cache_get_pinned_image(dt_dev_pixelpipe_cache_t *cache, void *host_ptr,
-                                              dt_pixel_cache_entry_t *entry_hint, int devid,
-                                              int width, int height, int bpp, int flags,
-                                              gboolean *out_reused)
-{
-  (void)cache;
-  (void)host_ptr;
-  (void)entry_hint;
-  (void)devid;
-  (void)width;
-  (void)height;
-  (void)bpp;
-  (void)flags;
-  if(out_reused) *out_reused = FALSE;
-  return NULL;
-}
 
 void dt_dev_pixelpipe_cache_put_pinned_image(dt_dev_pixelpipe_cache_t *cache, void *host_ptr,
                                              dt_pixel_cache_entry_t *entry_hint, void **mem)

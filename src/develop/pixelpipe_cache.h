@@ -320,23 +320,6 @@ void dt_dev_pixelpipe_cache_flush_host_pinned_image(dt_dev_pixelpipe_cache_t *ca
                                                     struct dt_pixel_cache_entry_t *entry_hint, int devid);
 
 /**
- * @brief Resynchronize cached pinned OpenCL images from an authoritative host buffer.
- *
- * @details
- * This is meant for host-backed cachelines that stay valid but are rewritten in place by the CPU.
- * Unlike `dt_dev_pixelpipe_cache_flush_host_pinned_image()`, this preserves reusable pinned
- * `CL_MEM_USE_HOST_PTR` images when possible by pushing current host contents back to the cached
- * OpenCL image objects. Any cached image that cannot be synchronized is dropped individually.
- *
- * @param cache Pixelpipe cache.
- * @param host_ptr Host-backed image data.
- * @param entry_hint Optional owning cache entry for regular cache lines, or NULL.
- * @param devid Device id to resynchronize, or -1 for all cached devices for that host buffer.
- */
-void dt_dev_pixelpipe_cache_resync_host_pinned_image(dt_dev_pixelpipe_cache_t *cache, void *host_ptr,
-                                                     struct dt_pixel_cache_entry_t *entry_hint, int devid);
-
-/**
  * @brief Allocate or reuse an OpenCL buffer for one cache entry payload.
  *
  * @details
