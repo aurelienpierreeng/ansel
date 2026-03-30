@@ -645,13 +645,13 @@ static int _default_process_tiling_ptp(struct dt_iop_module_t *self, const struc
                    - ((float)roi_in->width * roi_in->height * in_bpp) - tiling.overhead,
                    0);
 
-  /* we ignore the above value if singlebuffer_limit (is defined and) is higher than available/tiling.factor.
-     this will mainly allow tiling for modules with high and "unpredictable" memory demand which is
-     reflected in high values of tiling.factor (take bilateral noise reduction as an example). */
-  float singlebuffer = dt_get_singlebuffer_mem();
+  /* Size the tile from the memory left in the host cache.
+     Using the generic singlebuffer floor here can oversize tiles for modules whose
+     scratch buffers scale with tiling.factor, which defeats tiling and makes the
+     tile-local allocations fail later on. */
   const float factor = fmaxf(tiling.factor, 1.0f);
   const float maxbuf = fmaxf(tiling.maxbuf, 1.0f);
-  singlebuffer = fmaxf(available / factor, singlebuffer);
+  const float singlebuffer = available / factor;
 
   int width = roi_in->width;
   int height = roi_in->height;
@@ -899,13 +899,13 @@ static int _default_process_tiling_roi(struct dt_iop_module_t *self, const struc
                    - ((float)roi_in->width * roi_in->height * in_bpp) - tiling.overhead,
                    0);
 
-  /* we ignore the above value if singlebuffer_limit (is defined and) is higher than available/tiling.factor.
-     this will mainly allow tiling for modules with high and "unpredictable" memory demand which is
-     reflected in high values of tiling.factor (take bilateral noise reduction as an example). */
-  float singlebuffer = dt_get_singlebuffer_mem();
+  /* Size the tile from the memory left in the host cache.
+     Using the generic singlebuffer floor here can oversize tiles for modules whose
+     scratch buffers scale with tiling.factor, which defeats tiling and makes the
+     tile-local allocations fail later on. */
   const float factor = fmaxf(tiling.factor, 1.0f);
   const float maxbuf = fmaxf(tiling.maxbuf, 1.0f);
-  singlebuffer = fmaxf(available / factor, singlebuffer);
+  const float singlebuffer = available / factor;
 
   int width = _max(roi_in->width, roi_out->width);
   int height = _max(roi_in->height, roi_out->height);
