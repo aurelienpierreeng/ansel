@@ -36,10 +36,14 @@
 #include "common/lut_viewer.h"
 #include "common/opencl.h"
 #include "control/conf.h"
+#include "control/control.h"
 #include "control/signal.h"
+#include "develop/develop.h"
+#include "develop/dev_pixelpipe.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
 #include "develop/imageop_math.h"
+#include "develop/pixelpipe_cache.h"
 #include "dtgtk/drawingarea.h"
 #include "gui/color_picker_proxy.h"
 #include "gui/draw.h"
@@ -71,8 +75,16 @@
 #define DT_IOP_COLOREQUAL_CLUT_LEVEL 64
 #define DT_IOP_COLOREQUAL_LOCAL_FIELD_RINGS (DT_IOP_COLOREQUAL_NUM_RINGS + 1)
 #define DT_IOP_COLOREQUAL_MIN_X_DISTANCE 0.01f
+#define DT_IOP_COLOREQUAL_PREVIEW_CURSOR_RADIUS DT_PIXEL_APPLY_DPI(14.f)
 #define DT_IOP_COLOREQUAL_GRAPH_INSET DT_PIXEL_APPLY_DPI(4)
 #define DT_IOP_COLOREQUAL_AXIS_HEIGHT DT_PIXEL_APPLY_DPI(14)
+#define DT_IOP_COLOREQUAL_SCROLL_SIGMA 2.f * M_PI_F / 128.f
+#define DT_IOP_COLOREQUAL_SCROLL_STEP 0.05f
+#define DT_IOP_COLOREQUAL_SCROLL_STEP_FINE 0.02f
+#define DT_IOP_COLOREQUAL_SCROLL_STEP_COARSE 0.10f
+#define DT_IOP_COLOREQUAL_SCROLL_HUE_STEP (5.f * M_PI_F / 180.f)
+#define DT_IOP_COLOREQUAL_SCROLL_HUE_STEP_FINE (1.f * M_PI_F / 180.f)
+#define DT_IOP_COLOREQUAL_SCROLL_HUE_STEP_COARSE (10.f * M_PI_F / 180.f)
 
 DT_MODULE_INTROSPECTION(1, dt_iop_colorequal_params_t)
 
@@ -167,9 +179,17 @@ typedef struct dt_iop_colorequal_gui_data_t
   gboolean viewer_lut_dirty;
   gboolean viewer_lut_valid;
   gboolean preview_signal_connected;
+  gboolean has_focus;
   gboolean picker_valid;
+  gboolean cursor_valid;
+  gboolean cursor_sample_valid;
   float picker_hue;
   float picker_brightness;
+  float cursor_hue;
+  int cursor_pos_x;
+  int cursor_pos_y;
+  dt_aligned_pixel_t cursor_input_display;
+  dt_aligned_pixel_t cursor_output_display;
   float reference_saturation[DT_IOP_COLOREQUAL_NUM_RINGS];
   float cached_white[DT_IOP_COLOREQUAL_NUM_RINGS][DT_IOP_COLOREQUAL_NUM_CHANNELS];
   float cached_reference_saturation[DT_IOP_COLOREQUAL_NUM_RINGS][DT_IOP_COLOREQUAL_NUM_CHANNELS];
@@ -209,6 +229,10 @@ int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, const dt
 {
   return IOP_CS_RGB;
 }
+
+static void _update_gui_lut_cache(dt_iop_module_t *self);
+static void _switch_preview_cursor(dt_iop_module_t *self);
+static gboolean _refresh_preview_cursor_sample(dt_iop_module_t *self);
 
 static inline float _wrap_hue_2pi(float hue)
 {
@@ -363,6 +387,152 @@ static inline float _curve_periodic_sample(const dt_iop_colorequal_node_t *curve
   }
 
   return interpolate_val_V2_periodic(nodes, anchors, x, MONOTONE_HERMITE, 1.f);
+}
+
+static inline float _curve_periodic_distance(const float x0, const float x1)
+{
+  const float distance = fabsf(x0 - x1);
+  return fminf(distance, 1.f - distance);
+}
+
+static inline dt_iop_colorequal_channel_t _channel_from_page(const int page)
+{
+  switch(CLAMP(page, 0, DT_IOP_COLOREQUAL_NUM_CHANNELS - 1))
+  {
+    case 1:
+      return DT_IOP_COLOREQUAL_BRIGHTNESS;
+    case 2:
+      return DT_IOP_COLOREQUAL_HUE;
+    case 0:
+    default:
+      return DT_IOP_COLOREQUAL_SATURATION;
+  }
+}
+
+static inline dt_iop_colorequal_ring_t _active_ring_from_gui(const dt_iop_colorequal_gui_data_t *g)
+{
+  const int page = (g && g->ring_notebook) ? gtk_notebook_get_current_page(g->ring_notebook) : -1;
+  if(page >= 0 && page < DT_IOP_COLOREQUAL_NUM_RINGS) return (dt_iop_colorequal_ring_t)page;
+  return (dt_iop_colorequal_ring_t)CLAMP(dt_conf_get_int("plugins/darkroom/colorequal/gui_ring_page"), 0,
+                                         DT_IOP_COLOREQUAL_NUM_RINGS - 1);
+}
+
+static inline dt_iop_colorequal_channel_t _active_channel_from_gui(const dt_iop_colorequal_gui_data_t *g,
+                                                                   const dt_iop_colorequal_ring_t ring)
+{
+  const int page = (g && g->channel_notebook[ring]) ? gtk_notebook_get_current_page(g->channel_notebook[ring]) : -1;
+  if(page >= 0 && page < DT_IOP_COLOREQUAL_NUM_CHANNELS) return _channel_from_page(page);
+  return _channel_from_page(dt_conf_get_int("plugins/darkroom/colorequal/gui_channel_page"));
+}
+
+static inline void _invalidate_preview_cursor(dt_iop_colorequal_gui_data_t *g)
+{
+  if(!g) return;
+  g->cursor_sample_valid = FALSE;
+  g->cursor_hue = 0.f;
+  memset(g->cursor_input_display, 0, sizeof(g->cursor_input_display));
+  memset(g->cursor_output_display, 0, sizeof(g->cursor_output_display));
+}
+
+static inline gboolean _cursor_curve_state(const dt_iop_colorequal_params_t *p, const dt_iop_colorequal_ring_t ring,
+                                           const dt_iop_colorequal_channel_t channel, const float hue,
+                                           float *curve_x, float *curve_y, float *offset_normalized)
+{
+  if(!p || !isfinite(hue)) return FALSE;
+
+  const int nodes = _curve_nodes_count_const(p, ring, channel);
+  const dt_iop_colorequal_node_t *curve = _curve_nodes_const(p, ring, channel);
+  if(nodes < 1 || !curve) return FALSE;
+
+  const float x = _hue_to_curve_x(hue);
+  const float y = _curve_periodic_sample(curve, nodes, x);
+  const float value = _channel_value_from_y(channel, y);
+
+  if(curve_x) *curve_x = x;
+  if(curve_y) *curve_y = y;
+
+  if(offset_normalized)
+  {
+    switch(channel)
+    {
+      case DT_IOP_COLOREQUAL_HUE:
+        *offset_normalized = CLAMP(value / M_PI_F, -1.f, 1.f);
+        break;
+      case DT_IOP_COLOREQUAL_SATURATION:
+      case DT_IOP_COLOREQUAL_BRIGHTNESS:
+      default:
+        *offset_normalized = CLAMP(value - 1.f, -1.f, 1.f);
+        break;
+    }
+  }
+
+  return TRUE;
+}
+
+static inline void _clamp_display_rgb(dt_aligned_pixel_t RGB)
+{
+  RGB[0] = CLAMP(RGB[0], 0.f, 1.f);
+  RGB[1] = CLAMP(RGB[1], 0.f, 1.f);
+  RGB[2] = CLAMP(RGB[2], 0.f, 1.f);
+  RGB[3] = 0.f;
+}
+
+static void _work_rgb_to_display_rgb(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, const dt_aligned_pixel_t work_rgb,
+                                     dt_aligned_pixel_t display_rgb)
+{
+  if(!display_rgb) return;
+
+  memcpy(display_rgb, work_rgb, sizeof(dt_aligned_pixel_t));
+  _clamp_display_rgb(display_rgb);
+
+  if(!self || !pipe) return;
+
+  const dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_pipe_current_profile_info(self, pipe);
+  const dt_iop_order_iccprofile_info_t *const display_profile = dt_ioppr_get_pipe_output_profile_info(pipe);
+  if(!work_profile || !display_profile) return;
+
+  float in[4] = { work_rgb[0], work_rgb[1], work_rgb[2], 0.f };
+  float out[4] = { work_rgb[0], work_rgb[1], work_rgb[2], 0.f };
+  dt_ioppr_transform_image_colorspace_rgb(in, out, 1, 1, work_profile, display_profile, "colorequal swatch");
+  display_rgb[0] = out[0];
+  display_rgb[1] = out[1];
+  display_rgb[2] = out[2];
+  _clamp_display_rgb(display_rgb);
+}
+
+static gboolean _apply_colorequal_lut_rgb(const dt_aligned_pixel_t input_rgb, const float white_level,
+                                          const dt_iop_order_iccprofile_info_t *const work_profile,
+                                          const dt_iop_order_iccprofile_info_t *const lut_profile,
+                                          const float *const clut, const uint16_t clut_level,
+                                          dt_pthread_rwlock_t *const clut_lock,
+                                          const dt_lut3d_interpolation_t interpolation,
+                                          dt_aligned_pixel_t output_rgb)
+{
+  if(!output_rgb) return FALSE;
+
+  memcpy(output_rgb, input_rgb, sizeof(dt_aligned_pixel_t));
+
+  if(!work_profile || !lut_profile || !clut || clut_level == 0) return FALSE;
+
+  const float normalized_white = fmaxf(white_level, 1e-6f);
+  output_rgb[0] = input_rgb[0] / normalized_white;
+  output_rgb[1] = input_rgb[1] / normalized_white;
+  output_rgb[2] = input_rgb[2] / normalized_white;
+  output_rgb[3] = 0.f;
+
+  dt_ioppr_transform_image_colorspace_rgb((float *)output_rgb, (float *)output_rgb, 1, 1, work_profile, lut_profile,
+                                          "colorequal swatch work to HLG Rec2020");
+  if(clut_lock) dt_pthread_rwlock_rdlock(clut_lock);
+  dt_lut3d_apply((float *)output_rgb, (float *)output_rgb, 1, clut, clut_level, 1.f, interpolation);
+  if(clut_lock) dt_pthread_rwlock_unlock(clut_lock);
+  dt_ioppr_transform_image_colorspace_rgb((float *)output_rgb, (float *)output_rgb, 1, 1, lut_profile, work_profile,
+                                          "colorequal swatch HLG Rec2020 to work");
+
+  output_rgb[0] *= normalized_white;
+  output_rgb[1] *= normalized_white;
+  output_rgb[2] *= normalized_white;
+  output_rgb[3] = 0.f;
+  return TRUE;
 }
 
 static inline void _xyz_d50_to_profile_rgb(const dt_aligned_pixel_t XYZ_D50,
@@ -1476,6 +1646,25 @@ static gboolean _draw_curve(GtkWidget *widget, cairo_t *crf, gpointer user_data)
     cairo_stroke(cr);
   }
 
+  const dt_iop_colorequal_ring_t active_ring = _active_ring_from_gui(g);
+  const dt_iop_colorequal_channel_t active_channel = _active_channel_from_gui(g, active_ring);
+  if(g->cursor_sample_valid && ring == active_ring && channel == active_channel)
+  {
+    const float cursor_x = _hue_to_curve_x(g->cursor_hue) * graph_width;
+    cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(2.5f));
+    cairo_set_source_rgba(cr, 0.f, 0.f, 0.f, 0.75f);
+    cairo_move_to(cr, cursor_x, 0.f);
+    cairo_line_to(cr, cursor_x, graph_height + DT_IOP_COLOREQUAL_AXIS_HEIGHT);
+    cairo_stroke(cr);
+
+    cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(1.25f));
+    cairo_set_source_rgba(cr, g->cursor_output_display[0], g->cursor_output_display[1], g->cursor_output_display[2],
+                          0.95);
+    cairo_move_to(cr, cursor_x, 0.f);
+    cairo_line_to(cr, cursor_x, graph_height + DT_IOP_COLOREQUAL_AXIS_HEIGHT);
+    cairo_stroke(cr);
+  }
+
   cairo_rectangle(cr, 0.f, 0.f, graph_width, graph_height);
   cairo_clip(cr);
 
@@ -1510,6 +1699,54 @@ static gboolean _draw_curve(GtkWidget *widget, cairo_t *crf, gpointer user_data)
     cairo_fill(cr);
   }
 
+  if(g->cursor_sample_valid && ring == active_ring && channel == active_channel)
+  {
+    float curve_x = 0.f;
+    float curve_y = 0.f;
+    float offset_normalized = 0.f;
+    if(_cursor_curve_state(p, ring, channel, g->cursor_hue, &curve_x, &curve_y, &offset_normalized))
+    {
+      const float marker_x = curve_x * graph_width;
+      const float marker_y = (1.f - curve_y) * graph_height;
+      const float outer_radius = DT_PIXEL_APPLY_DPI(7.f);
+      const float inner_radius = DT_PIXEL_APPLY_DPI(4.f);
+      const float intensity_radius = DT_PIXEL_APPLY_DPI(11.f);
+
+      cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(1.25f));
+      cairo_set_source_rgba(cr, 0.f, 0.f, 0.f, 0.4f);
+      cairo_arc(cr, marker_x, marker_y, intensity_radius, 0.f, 2.f * M_PI_F);
+      cairo_stroke(cr);
+
+      if(fabsf(offset_normalized) > 1e-4f)
+      {
+        cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(2.25f));
+        cairo_set_source_rgba(cr, g->cursor_output_display[0], g->cursor_output_display[1],
+                              g->cursor_output_display[2], 0.95);
+        if(offset_normalized > 0.f)
+          cairo_arc(cr, marker_x, marker_y, intensity_radius, -M_PI_F / 2.f,
+                    -M_PI_F / 2.f + 2.f * M_PI_F * fabsf(offset_normalized));
+        else
+          cairo_arc_negative(cr, marker_x, marker_y, intensity_radius, -M_PI_F / 2.f,
+                             -M_PI_F / 2.f - 2.f * M_PI_F * fabsf(offset_normalized));
+        cairo_stroke(cr);
+      }
+
+      cairo_arc(cr, marker_x, marker_y, outer_radius, 0.f, 2.f * M_PI_F);
+      cairo_set_source_rgba(cr, g->cursor_output_display[0], g->cursor_output_display[1],
+                            g->cursor_output_display[2], 0.95);
+      cairo_fill_preserve(cr);
+      cairo_set_source_rgba(cr, 0.f, 0.f, 0.f, 0.9f);
+      cairo_stroke(cr);
+
+      cairo_arc(cr, marker_x, marker_y, inner_radius, 0.f, 2.f * M_PI_F);
+      cairo_set_source_rgba(cr, g->cursor_input_display[0], g->cursor_input_display[1], g->cursor_input_display[2],
+                            0.95);
+      cairo_fill_preserve(cr);
+      cairo_set_source_rgba(cr, 1.f, 1.f, 1.f, 0.8f);
+      cairo_stroke(cr);
+    }
+  }
+
   cairo_reset_clip(cr);
 
   cairo_destroy(cr);
@@ -1525,7 +1762,19 @@ static void _preview_pipe_finished_callback(gpointer instance, gpointer user_dat
   dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
   dt_iop_colorequal_global_data_t *gd = (dt_iop_colorequal_global_data_t *)self->global_data;
   uint64_t cache_generation = 0;
-  if(!g || !g->viewer || !gd) return;
+  if(!g || !gd) return;
+
+  if(g->has_focus && g->cursor_valid && self->enabled)
+  {
+    _refresh_preview_cursor_sample(self);
+    const dt_iop_colorequal_ring_t ring = _active_ring_from_gui(g);
+    const dt_iop_colorequal_channel_t channel = _active_channel_from_gui(g, ring);
+    gtk_widget_queue_draw(GTK_WIDGET(g->area[ring][channel]));
+    dt_control_queue_redraw_center();
+  }
+
+  _switch_preview_cursor(self);
+  if(!g->viewer) return;
 
   dt_pthread_rwlock_rdlock(&gd->lock);
   cache_generation = gd->cache_generation;
@@ -1658,6 +1907,12 @@ static gboolean _area_motion_notify_callback(GtkWidget *widget, GdkEventMotion *
       memcpy(self->params, &g->gui_params, sizeof(dt_iop_colorequal_params_t));
       g->curve_cache_valid = FALSE;
       g->viewer_lut_dirty = TRUE;
+      if(g->cursor_valid && g->has_focus)
+      {
+        _update_gui_lut_cache(self);
+        _refresh_preview_cursor_sample(self);
+        dt_control_queue_redraw_center();
+      }
       dt_gui_throttle_queue(self, dt_iop_throttled_history_update, self);
       gtk_widget_queue_draw(widget);
     }
@@ -1703,6 +1958,12 @@ static gboolean _area_button_press_callback(GtkWidget *widget, GdkEventButton *e
     memcpy(self->params, &g->gui_params, sizeof(dt_iop_colorequal_params_t));
     g->curve_cache_valid = FALSE;
     g->viewer_lut_dirty = TRUE;
+    if(g->cursor_valid && g->has_focus)
+    {
+      _update_gui_lut_cache(self);
+      _refresh_preview_cursor_sample(self);
+      dt_control_queue_redraw_center();
+    }
     dt_gui_throttle_queue(self, dt_iop_throttled_history_update, self);
     gtk_widget_queue_draw(widget);
     return TRUE;
@@ -1719,6 +1980,12 @@ static gboolean _area_button_press_callback(GtkWidget *widget, GdkEventButton *e
       memcpy(self->params, &g->gui_params, sizeof(dt_iop_colorequal_params_t));
       g->curve_cache_valid = FALSE;
       g->viewer_lut_dirty = TRUE;
+      if(g->cursor_valid && g->has_focus)
+      {
+        _update_gui_lut_cache(self);
+        _refresh_preview_cursor_sample(self);
+        dt_control_queue_redraw_center();
+      }
       dt_gui_throttle_queue(self, dt_iop_throttled_history_update, self);
       gtk_widget_queue_draw(widget);
     }
@@ -1743,6 +2010,12 @@ static gboolean _area_button_press_callback(GtkWidget *widget, GdkEventButton *e
     memcpy(self->params, &g->gui_params, sizeof(dt_iop_colorequal_params_t));
     g->curve_cache_valid = FALSE;
     g->viewer_lut_dirty = TRUE;
+    if(g->cursor_valid && g->has_focus)
+    {
+      _update_gui_lut_cache(self);
+      _refresh_preview_cursor_sample(self);
+      dt_control_queue_redraw_center();
+    }
     dt_gui_throttle_queue(self, dt_iop_throttled_history_update, self);
     gtk_widget_queue_draw(widget);
     return TRUE;
@@ -1801,6 +2074,8 @@ static void _channel_tabs_switch_callback(GtkNotebook *notebook, GtkWidget *page
 
     for(int ring = 0; ring < DT_IOP_COLOREQUAL_NUM_RINGS; ring++)
       gtk_widget_queue_draw(GTK_WIDGET(g->area[ring][channel]));
+
+    if(g->cursor_valid && g->has_focus) dt_control_queue_redraw_center();
   }
 }
 
@@ -1823,6 +2098,255 @@ static void _ring_tabs_switch_callback(GtkNotebook *notebook, GtkWidget *page, g
       if(channel < DT_IOP_COLOREQUAL_NUM_CHANNELS) gtk_widget_queue_draw(GTK_WIDGET(g->area[page_num][channel]));
     }
   }
+
+  if(g->cursor_valid && g->has_focus)
+  {
+    const dt_iop_colorequal_ring_t ring = _active_ring_from_gui(g);
+    const dt_iop_colorequal_channel_t channel = _active_channel_from_gui(g, ring);
+    gtk_widget_queue_draw(GTK_WIDGET(g->area[ring][channel]));
+    dt_control_queue_redraw_center();
+  }
+}
+
+int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressure, int which)
+{
+  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
+  dt_develop_t *dev = self ? self->dev : NULL;
+  if(!self || !g || !dev || !g->has_focus) return 0;
+
+  if(dt_iop_color_picker_is_visible(dev))
+  {
+    g->cursor_valid = FALSE;
+    _invalidate_preview_cursor(g);
+    _switch_preview_cursor(self);
+    dt_control_queue_redraw_center();
+    return 0;
+  }
+
+  const int wd = dev->roi.preview_width;
+  const int ht = dev->roi.preview_height;
+  if(wd < 1 || ht < 1) return 0;
+
+  float point[2] = { (float)x, (float)y };
+  dt_dev_coordinates_widget_to_image_norm(dev, point, 1);
+  dt_dev_coordinates_image_norm_to_preview_abs(dev, point, 1);
+
+  const int cursor_x = (int)point[0];
+  const int cursor_y = (int)point[1];
+  if(cursor_x >= 0 && cursor_x < wd && cursor_y >= 0 && cursor_y < ht)
+  {
+    g->cursor_valid = TRUE;
+    g->cursor_pos_x = cursor_x;
+    g->cursor_pos_y = cursor_y;
+
+    if(dev->preview_pipe && !dev->preview_pipe->processing) _refresh_preview_cursor_sample(self);
+  }
+  else
+  {
+    g->cursor_valid = FALSE;
+    _invalidate_preview_cursor(g);
+  }
+
+  _switch_preview_cursor(self);
+
+  const dt_iop_colorequal_ring_t ring = _active_ring_from_gui(g);
+  const dt_iop_colorequal_channel_t channel = _active_channel_from_gui(g, ring);
+  gtk_widget_queue_draw(GTK_WIDGET(g->area[ring][channel]));
+  dt_control_queue_redraw_center();
+  return g->cursor_valid ? 1 : 0;
+}
+
+int mouse_leave(struct dt_iop_module_t *self)
+{
+  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
+  if(!g) return 0;
+
+  g->cursor_valid = FALSE;
+  _invalidate_preview_cursor(g);
+  _switch_preview_cursor(self);
+
+  const dt_iop_colorequal_ring_t ring = _active_ring_from_gui(g);
+  const dt_iop_colorequal_channel_t channel = _active_channel_from_gui(g, ring);
+  gtk_widget_queue_draw(GTK_WIDGET(g->area[ring][channel]));
+  dt_control_queue_redraw_center();
+  return 1;
+}
+
+int button_pressed(struct dt_iop_module_t *self, double x, double y, double pressure, int which, int type,
+                   uint32_t state)
+{
+  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
+  if(!self || !g || !g->has_focus || which != 3 || !g->cursor_valid || !g->cursor_sample_valid
+     || dt_iop_color_picker_is_visible(self->dev))
+    return 0;
+
+  if(!self->enabled)
+  {
+    if(self->off) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(self->off), 1);
+    return 1;
+  }
+
+  const dt_iop_colorequal_ring_t ring = _active_ring_from_gui(g);
+  const dt_iop_colorequal_channel_t channel = _active_channel_from_gui(g, ring);
+  dt_iop_colorequal_node_t *curve = _curve_nodes(&g->gui_params, ring, channel);
+  int *nodes = _curve_nodes_count(&g->gui_params, ring, channel);
+  if(*nodes >= DT_IOP_COLOREQUAL_MAXNODES) return 1;
+
+  const float curve_x = _hue_to_curve_x(g->cursor_hue);
+  const float curve_y = _curve_periodic_sample(curve, *nodes, curve_x);
+  const int selected = _add_node(curve, nodes, curve_x, curve_y);
+  if(selected < 0) return 1;
+
+  g->selected[ring][channel] = selected;
+  memcpy(self->params, &g->gui_params, sizeof(dt_iop_colorequal_params_t));
+  g->curve_cache_valid = FALSE;
+  g->viewer_lut_dirty = TRUE;
+  _update_gui_lut_cache(self);
+  _refresh_preview_cursor_sample(self);
+  gtk_widget_queue_draw(GTK_WIDGET(g->area[ring][channel]));
+  dt_control_queue_redraw_center();
+  dt_dev_add_history_item(darktable.develop, self, FALSE, TRUE);
+  return 1;
+}
+
+int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t state)
+{
+  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
+  if(!self || !g || !g->has_focus || !g->cursor_valid || !g->cursor_sample_valid || dt_iop_color_picker_is_visible(self->dev))
+    return 0;
+
+  if(!self->enabled)
+  {
+    if(self->off) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(self->off), 1);
+    return 1;
+  }
+
+  const dt_iop_colorequal_ring_t ring = _active_ring_from_gui(g);
+  const dt_iop_colorequal_channel_t channel = _active_channel_from_gui(g, ring);
+  dt_iop_colorequal_node_t *curve = _curve_nodes(&g->gui_params, ring, channel);
+  const int nodes = _curve_nodes_count_const(&g->gui_params, ring, channel);
+  if(nodes < 1) return 1;
+
+  const float direction = up ? 1.f : -1.f;
+  const float curve_x = _hue_to_curve_x(g->cursor_hue);
+  const float sigma = DT_IOP_COLOREQUAL_SCROLL_SIGMA;
+  const float sigma2 = 2.f * sigma * sigma;
+  const float step = (channel == DT_IOP_COLOREQUAL_HUE)
+                         ? (dt_modifier_is(state, GDK_SHIFT_MASK) ? DT_IOP_COLOREQUAL_SCROLL_HUE_STEP_COARSE
+                            : dt_modifier_is(state, GDK_CONTROL_MASK) ? DT_IOP_COLOREQUAL_SCROLL_HUE_STEP_FINE
+                                                                      : DT_IOP_COLOREQUAL_SCROLL_HUE_STEP)
+                         : (dt_modifier_is(state, GDK_SHIFT_MASK) ? DT_IOP_COLOREQUAL_SCROLL_STEP_COARSE
+                            : dt_modifier_is(state, GDK_CONTROL_MASK) ? DT_IOP_COLOREQUAL_SCROLL_STEP_FINE
+                                                                      : DT_IOP_COLOREQUAL_SCROLL_STEP);
+
+  for(int k = 0; k < nodes; k++)
+  {
+    const float distance = _curve_periodic_distance(curve[k].x, curve_x);
+    const float weight = expf(-(distance * distance) / sigma2);
+    float value = _channel_value_from_y(channel, curve[k].y);
+    value += direction * step * weight;
+
+    switch(channel)
+    {
+      case DT_IOP_COLOREQUAL_HUE:
+        value = CLAMP(value, -M_PI_F, M_PI_F);
+        break;
+      case DT_IOP_COLOREQUAL_SATURATION:
+      case DT_IOP_COLOREQUAL_BRIGHTNESS:
+      default:
+        value = CLAMP(value, 0.f, 2.f);
+        break;
+    }
+
+    curve[k].y = _channel_y_from_value(channel, value);
+  }
+
+  memcpy(self->params, &g->gui_params, sizeof(dt_iop_colorequal_params_t));
+  g->curve_cache_valid = FALSE;
+  g->viewer_lut_dirty = TRUE;
+  _update_gui_lut_cache(self);
+  _refresh_preview_cursor_sample(self);
+  gtk_widget_queue_draw(GTK_WIDGET(g->area[ring][channel]));
+  dt_control_queue_redraw_center();
+  dt_dev_add_history_item(darktable.develop, self, FALSE, TRUE);
+  return 1;
+}
+
+void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, int32_t height,
+                     int32_t pointerx, int32_t pointery)
+{
+  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
+  dt_develop_t *dev = self ? self->dev : NULL;
+  if(!self || !g || !dev || !g->has_focus || !self->enabled || !g->cursor_valid || dt_iop_color_picker_is_visible(dev))
+    return;
+
+  if((dev->preview_pipe && dev->preview_pipe->processing) || !g->cursor_sample_valid)
+  {
+    if(!_refresh_preview_cursor_sample(self)) return;
+  }
+
+  const dt_iop_colorequal_ring_t ring = _active_ring_from_gui(g);
+  const dt_iop_colorequal_channel_t channel = _active_channel_from_gui(g, ring);
+  float curve_x = 0.f;
+  float curve_y = 0.f;
+  float offset_normalized = 0.f;
+  if(!_cursor_curve_state(&g->gui_params, ring, channel, g->cursor_hue, &curve_x, &curve_y, &offset_normalized))
+    return;
+
+  const float zoom_scale = dt_dev_get_overlay_scale(dev);
+  dt_dev_rescale_roi(dev, cr, width, height);
+
+  const float pointer_x = g->cursor_pos_x;
+  const float pointer_y = g->cursor_pos_y;
+  const float outer_radius = DT_IOP_COLOREQUAL_PREVIEW_CURSOR_RADIUS / zoom_scale;
+  const float inner_radius = outer_radius * 0.55f;
+  const float intensity_radius = outer_radius * 1.55f;
+  const float crosshair_gap = outer_radius * 0.25f;
+  const float crosshair_extent = intensity_radius + DT_PIXEL_APPLY_DPI(5.f) / zoom_scale;
+
+  cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(1.5f) / zoom_scale);
+  cairo_set_source_rgba(cr, 0.f, 0.f, 0.f, 0.35f);
+  cairo_arc(cr, pointer_x, pointer_y, intensity_radius, 0.f, 2.f * M_PI_F);
+  cairo_stroke(cr);
+
+  if(fabsf(offset_normalized) > 1e-4f)
+  {
+    cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(3.f) / zoom_scale);
+    cairo_set_source_rgba(cr, g->cursor_output_display[0], g->cursor_output_display[1], g->cursor_output_display[2],
+                          0.95);
+    if(offset_normalized > 0.f)
+      cairo_arc(cr, pointer_x, pointer_y, intensity_radius, -M_PI_F / 2.f,
+                -M_PI_F / 2.f + 2.f * M_PI_F * fabsf(offset_normalized));
+    else
+      cairo_arc_negative(cr, pointer_x, pointer_y, intensity_radius, -M_PI_F / 2.f,
+                         -M_PI_F / 2.f - 2.f * M_PI_F * fabsf(offset_normalized));
+    cairo_stroke(cr);
+  }
+
+  cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(1.25f) / zoom_scale);
+  cairo_set_source_rgba(cr, 1.f, 1.f, 1.f, 0.6f);
+  cairo_move_to(cr, pointer_x - crosshair_extent, pointer_y);
+  cairo_line_to(cr, pointer_x - outer_radius - crosshair_gap, pointer_y);
+  cairo_move_to(cr, pointer_x + outer_radius + crosshair_gap, pointer_y);
+  cairo_line_to(cr, pointer_x + crosshair_extent, pointer_y);
+  cairo_move_to(cr, pointer_x, pointer_y - crosshair_extent);
+  cairo_line_to(cr, pointer_x, pointer_y - outer_radius - crosshair_gap);
+  cairo_move_to(cr, pointer_x, pointer_y + outer_radius + crosshair_gap);
+  cairo_line_to(cr, pointer_x, pointer_y + crosshair_extent);
+  cairo_stroke(cr);
+
+  cairo_arc(cr, pointer_x, pointer_y, outer_radius, 0.f, 2.f * M_PI_F);
+  cairo_set_source_rgba(cr, g->cursor_output_display[0], g->cursor_output_display[1], g->cursor_output_display[2],
+                        0.95);
+  cairo_fill_preserve(cr);
+  cairo_set_source_rgba(cr, 0.f, 0.f, 0.f, 0.9f);
+  cairo_stroke(cr);
+
+  cairo_arc(cr, pointer_x, pointer_y, inner_radius, 0.f, 2.f * M_PI_F);
+  cairo_set_source_rgba(cr, g->cursor_input_display[0], g->cursor_input_display[1], g->cursor_input_display[2], 0.95);
+  cairo_fill_preserve(cr);
+  cairo_set_source_rgba(cr, 1.f, 1.f, 1.f, 0.8f);
+  cairo_stroke(cr);
 }
 
 static void _pipe_rgb_to_Ych(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, const dt_aligned_pixel_t RGB,
@@ -1869,6 +2393,137 @@ static void _pipe_rgb_to_dt_ucs_hsb(dt_iop_module_t *self, dt_dev_pixelpipe_t *p
   dt_XYZ_to_xyY(XYZ_D65, xyY);
   xyY_to_dt_UCS_JCH(xyY, _dt_ucs_graph_white(), JCH);
   dt_UCS_JCH_to_HSB(JCH, HSB);
+}
+
+static void _switch_preview_cursor(dt_iop_module_t *self)
+{
+  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
+  GtkWidget *widget = dt_ui_main_window(darktable.gui->ui);
+
+  if(!g || !widget || !gtk_widget_get_window(widget)) return;
+
+  if(!g->has_focus || dt_iop_color_picker_is_visible(self->dev))
+  {
+    GdkCursor *const cursor = gdk_cursor_new_from_name(gdk_display_get_default(), "default");
+    gdk_window_set_cursor(gtk_widget_get_window(widget), cursor);
+    g_object_unref(cursor);
+    return;
+  }
+
+  if(g->cursor_valid && self->dev && self->dev->preview_pipe && self->dev->preview_pipe->processing)
+  {
+    GdkCursor *const cursor = gdk_cursor_new_from_name(gdk_display_get_default(), "wait");
+    gdk_window_set_cursor(gtk_widget_get_window(widget), cursor);
+    g_object_unref(cursor);
+    return;
+  }
+
+  if(g->cursor_valid && self->enabled)
+  {
+    dt_control_change_cursor(GDK_BLANK_CURSOR);
+    dt_control_set_cursor(GDK_BLANK_CURSOR);
+    dt_control_hinter_message(darktable.control,
+                              _("scroll over image to adjust the selected color graph\n"
+                                "right-click to add a node at the sampled hue"));
+    return;
+  }
+
+  GdkCursor *const cursor = gdk_cursor_new_from_name(gdk_display_get_default(), "default");
+  gdk_window_set_cursor(gtk_widget_get_window(widget), cursor);
+  g_object_unref(cursor);
+}
+
+static gboolean _refresh_preview_cursor_sample(dt_iop_module_t *self)
+{
+  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
+  dt_iop_colorequal_global_data_t *gd = (dt_iop_colorequal_global_data_t *)self->global_data;
+  dt_develop_t *dev = self ? self->dev : NULL;
+  if(!self || !g || !gd || !dev || !dev->preview_pipe || !self->enabled || !g->cursor_valid)
+  {
+    _invalidate_preview_cursor(g);
+    return FALSE;
+  }
+
+  const dt_dev_pixelpipe_iop_t *const piece = dt_dev_pixelpipe_get_module_piece(dev->preview_pipe, self);
+  const dt_dev_pixelpipe_iop_t *const previous_piece
+      = piece ? dt_dev_pixelpipe_get_prev_enabled_piece(dev->preview_pipe, piece) : NULL;
+  if(!piece || !previous_piece || previous_piece->dsc_out.datatype != TYPE_FLOAT || previous_piece->dsc_out.channels < 3)
+  {
+    _invalidate_preview_cursor(g);
+    return FALSE;
+  }
+
+  void *input = NULL;
+  dt_pixel_cache_entry_t *input_entry = NULL;
+  if(!dt_dev_pixelpipe_cache_peek_gui(dev->preview_pipe, previous_piece, &input, &input_entry) || !input || !input_entry)
+  {
+    _invalidate_preview_cursor(g);
+    return FALSE;
+  }
+
+  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, input_entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, input_entry);
+
+  const float point_preview[2] = { (float)g->cursor_pos_x, (float)g->cursor_pos_y };
+  float point_image[2] = { point_preview[0], point_preview[1] };
+  dt_dev_coordinates_preview_abs_to_image_norm(dev, point_image, 1);
+
+  const float scale_x = (previous_piece->buf_out.width > 0)
+                            ? (float)previous_piece->roi_out.width / (float)previous_piece->buf_out.width
+                            : 1.f;
+  const float scale_y = (previous_piece->buf_out.height > 0)
+                            ? (float)previous_piece->roi_out.height / (float)previous_piece->buf_out.height
+                            : 1.f;
+  const float sample_x
+      = point_image[0] * (float)previous_piece->buf_out.width * scale_x - (float)previous_piece->roi_out.x;
+  const float sample_y
+      = point_image[1] * (float)previous_piece->buf_out.height * scale_y - (float)previous_piece->roi_out.y;
+  const int xi = CLAMP((int)lroundf(sample_x), 0, previous_piece->roi_out.width - 1);
+  const int yi = CLAMP((int)lroundf(sample_y), 0, previous_piece->roi_out.height - 1);
+
+  dt_aligned_pixel_t input_rgb = { 0.f };
+  const float *const input_rgbf
+      = (const float *)input + ((size_t)yi * (size_t)previous_piece->roi_out.width + (size_t)xi) * previous_piece->dsc_out.channels;
+  input_rgb[0] = input_rgbf[0];
+  input_rgb[1] = input_rgbf[1];
+  input_rgb[2] = input_rgbf[2];
+  input_rgb[3] = 0.f;
+
+  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, input_entry);
+  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, input_entry);
+
+  if(g->viewer && (g->viewer_lut_dirty || !g->viewer_lut_valid)) _update_gui_lut_cache(self);
+
+  const dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_pipe_current_profile_info(self, dev->preview_pipe);
+  const dt_iop_order_iccprofile_info_t *const lut_profile = g->viewer_lut.lut_profile;
+  dt_aligned_pixel_t output_rgb = { input_rgb[0], input_rgb[1], input_rgb[2], 0.f };
+  _apply_colorequal_lut_rgb(input_rgb, exp2f(g->gui_params.white_level), work_profile, lut_profile, g->viewer_lut.clut,
+                            g->viewer_lut.clut_level, &gd->lock,
+                            (dt_lut3d_interpolation_t)g->gui_params.interpolation, output_rgb);
+
+  dt_aligned_pixel_t projected_rgb = { 0.f };
+  const float white_level = fmaxf(exp2f(g->gui_params.white_level), 1e-6f);
+  projected_rgb[0] = input_rgb[0] / white_level;
+  projected_rgb[1] = input_rgb[1] / white_level;
+  projected_rgb[2] = input_rgb[2] / white_level;
+
+  const float neutral = CLAMP((projected_rgb[0] + projected_rgb[1] + projected_rgb[2]) / 3.f, 0.f, 1.f);
+  dt_aligned_pixel_t axis = { neutral, neutral, neutral, 0.f };
+  _project_to_cube_shell(axis, projected_rgb);
+
+  dt_aligned_pixel_t HSB = { 0.f };
+  _pipe_rgb_to_dt_ucs_hsb(self, dev->preview_pipe, projected_rgb, HSB);
+  if(!isfinite(HSB[0]))
+  {
+    _invalidate_preview_cursor(g);
+    return FALSE;
+  }
+
+  g->cursor_hue = _wrap_hue_pi(HSB[0]);
+  _work_rgb_to_display_rgb(self, dev->preview_pipe, input_rgb, g->cursor_input_display);
+  _work_rgb_to_display_rgb(self, dev->preview_pipe, output_rgb, g->cursor_output_display);
+  g->cursor_sample_valid = TRUE;
+  return TRUE;
 }
 
 /**
@@ -1986,6 +2641,8 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
       for(int ring = 0; ring < DT_IOP_COLOREQUAL_NUM_RINGS; ring++)
         for(int ch = 0; ch < DT_IOP_COLOREQUAL_NUM_CHANNELS; ch++)
           gtk_widget_queue_draw(GTK_WIDGET(g->area[ring][ch]));
+
+      if(g->cursor_valid && g->has_focus) dt_control_queue_redraw_center();
     }
 
     if(lut_changed)
@@ -1994,7 +2651,9 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
       if(self->dev && self->dev->gui_module == self && self->dev->preview_pipe && !self->dev->preview_pipe->processing)
       {
         _update_gui_lut_cache(self);
+        if(g->cursor_valid && g->has_focus) _refresh_preview_cursor_sample(self);
         dt_lut_viewer_queue_draw(g->viewer);
+        if(g->cursor_valid && g->has_focus) dt_control_queue_redraw_center();
       }
     }
   }
@@ -2032,6 +2691,8 @@ void gui_update(dt_iop_module_t *self)
       for(int ring = 0; ring < DT_IOP_COLOREQUAL_NUM_RINGS; ring++)
         for(int ch = 0; ch < DT_IOP_COLOREQUAL_NUM_CHANNELS; ch++)
           gtk_widget_queue_draw(GTK_WIDGET(g->area[ring][ch]));
+
+      if(g->cursor_valid && g->has_focus) dt_control_queue_redraw_center();
     }
 
     if(lut_changed)
@@ -2040,7 +2701,9 @@ void gui_update(dt_iop_module_t *self)
       if(self->dev && self->dev->gui_module == self && self->dev->preview_pipe && !self->dev->preview_pipe->processing)
       {
         _update_gui_lut_cache(self);
+        if(g->cursor_valid && g->has_focus) _refresh_preview_cursor_sample(self);
         dt_lut_viewer_queue_draw(g->viewer);
+        if(g->cursor_valid && g->has_focus) dt_control_queue_redraw_center();
       }
     }
   }
@@ -2050,6 +2713,8 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
 {
   dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
   if(!g) return;
+
+  g->has_focus = in;
 
   if(in)
   {
@@ -2065,12 +2730,18 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
       _update_gui_lut_cache(self);
       dt_lut_viewer_queue_draw(g->viewer);
     }
+
+    if(g->cursor_valid && self->dev && self->dev->preview_pipe && !self->dev->preview_pipe->processing)
+      _refresh_preview_cursor_sample(self);
   }
   else if(g->preview_signal_connected)
   {
     DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_preview_pipe_finished_callback), self);
     g->preview_signal_connected = FALSE;
   }
+
+  _switch_preview_cursor(self);
+  dt_control_queue_redraw_center();
 }
 
 void gui_cleanup(dt_iop_module_t *self)
@@ -2113,6 +2784,7 @@ void gui_init(dt_iop_module_t *self)
   g->viewer_lut_valid = FALSE;
   g->viewer_lut_generation = 0;
   g->preview_signal_connected = FALSE;
+  g->has_focus = FALSE;
 
   self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
 
