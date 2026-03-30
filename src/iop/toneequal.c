@@ -135,6 +135,7 @@
 #include "gui/color_picker_proxy.h"
 #include "iop/iop_api.h"
 #include "iop/choleski.h"
+#include "libs/colorpicker.h"
 
 #ifdef _OPENMP
 #include <omp.h>
@@ -1791,151 +1792,6 @@ static void smoothing_callback(GtkWidget *slider, gpointer user_data)
   dt_iop_color_picker_reset(self, TRUE);
 }
 
-static void auto_adjust_exposure_boost(GtkWidget *quad, gpointer user_data)
-{
-  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_toneequalizer_params_t *p = (dt_iop_toneequalizer_params_t *)self->params;
-  dt_iop_toneequalizer_gui_data_t *g = (dt_iop_toneequalizer_gui_data_t *)self->gui_data;
-
-  if(darktable.gui->reset) return;
-
-  dt_iop_request_focus(self);
-
-  if(!self->enabled)
-  {
-    // activate module and do nothing
-    ++darktable.gui->reset;
-    dt_bauhaus_slider_set(g->exposure_boost, p->exposure_boost);
-    --darktable.gui->reset;
-
-    invalidate_luminance_cache(self);
-    dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
-    return;
-  }
-
-  if(!g->luminance_valid || self->dev->pipe->processing || !g->histogram_valid)
-  {
-    dt_control_log(_("wait for the preview to finish recomputing"));
-    return;
-  }
-
-  // The goal is to get the exposure distribution centered on the equalizer view
-  // to spread it over as many nodes as possible for better exposure control.
-  // Controls nodes are between -8 and 0 EV,
-  // so we aim at centering the exposure distribution on -4 EV
-
-  dt_iop_gui_enter_critical_section(self);
-  g->histogram_valid = 0;
-  dt_iop_gui_leave_critical_section(self);
-
-  update_histogram(self);
-
-  // calculate exposure correction
-  const float fd_new = exp2f(g->histogram_first_decile);
-  const float ld_new = exp2f(g->histogram_last_decile);
-  const float e = exp2f(p->exposure_boost);
-  const float c = exp2f(p->contrast_boost);
-  // revert current transformation
-  const float fd_old = ((fd_new - CONTRAST_FULCRUM) / c + CONTRAST_FULCRUM) / e;
-  const float ld_old = ((ld_new - CONTRAST_FULCRUM) / c + CONTRAST_FULCRUM) / e;
-
-  // calculate correction
-  const float s1 = CONTRAST_FULCRUM - exp2f(-7.0);
-  const float s2 = exp2f(-1.0) - CONTRAST_FULCRUM;
-  const float mix = fd_old * s2 +  ld_old * s1;
-
-  p->exposure_boost = log2f(CONTRAST_FULCRUM * (s1 + s2) / mix);
-
-  // Update the GUI stuff
-  ++darktable.gui->reset;
-  dt_bauhaus_slider_set(g->exposure_boost, p->exposure_boost);
-  --darktable.gui->reset;
-  invalidate_luminance_cache(self);
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
-
-  // Unlock the colour picker so we can display our own custom cursor
-  dt_iop_color_picker_reset(self, TRUE);
-}
-
-
-static void auto_adjust_contrast_boost(GtkWidget *quad, gpointer user_data)
-{
-  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_toneequalizer_params_t *p = (dt_iop_toneequalizer_params_t *)self->params;
-  dt_iop_toneequalizer_gui_data_t *g = (dt_iop_toneequalizer_gui_data_t *)self->gui_data;
-
-  if(darktable.gui->reset) return;
-
-  dt_iop_request_focus(self);
-
-  if(!self->enabled)
-  {
-    // activate module and do nothing
-    ++darktable.gui->reset;
-    dt_bauhaus_slider_set(g->contrast_boost, p->contrast_boost);
-    --darktable.gui->reset;
-
-    invalidate_luminance_cache(self);
-    dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
-    return;
-  }
-
-  if(!g->luminance_valid || self->dev->pipe->processing || !g->histogram_valid)
-  {
-    dt_control_log(_("wait for the preview to finish recomputing"));
-    return;
-  }
-
-  // The goal is to spread 90 % of the exposure histogram in the [-7, -1] EV
-  dt_iop_gui_enter_critical_section(self);
-  g->histogram_valid = 0;
-  dt_iop_gui_leave_critical_section(self);
-
-  update_histogram(self);
-
-  // calculate contrast correction
-  const float fd_new = exp2f(g->histogram_first_decile);
-  const float ld_new = exp2f(g->histogram_last_decile);
-  const float e = exp2f(p->exposure_boost);
-  float c = exp2f(p->contrast_boost);
-  // revert current transformation
-  const float fd_old = ((fd_new - CONTRAST_FULCRUM) / c + CONTRAST_FULCRUM) / e;
-  const float ld_old = ((ld_new - CONTRAST_FULCRUM) / c + CONTRAST_FULCRUM) / e;
-
-  // calculate correction
-  const float s1 = CONTRAST_FULCRUM - exp2f(-7.0);
-  const float s2 = exp2f(-1.0) - CONTRAST_FULCRUM;
-  const float mix = fd_old * s2 +  ld_old * s1;
-
-  c = log2f(mix / (CONTRAST_FULCRUM * (ld_old - fd_old)) / c);
-
-  // when adding contrast, blur filters modify the histogram in a way difficult to predict
-  // here we implement a heuristic correction based on a set of images and regression analysis
-  if(p->details == DT_TONEEQ_EIGF && c > 0.0f)
-  {
-    const float correction = -0.0276f + 0.01823 * p->feathering + (0.7566f - 1.0f) * c;
-    if(p->feathering < 5.0f)
-      c += correction;
-    else if(p->feathering < 10.0f)
-      c += correction * (2.0f - p->feathering / 5.0f);
-  }
-  else if(p->details == DT_TONEEQ_GUIDED && c > 0.0f)
-      c = 0.0235f + 1.1225f * c;
-
-  p->contrast_boost += c;
-
-  // Update the GUI stuff
-  ++darktable.gui->reset;
-  dt_bauhaus_slider_set(g->contrast_boost, p->contrast_boost);
-  --darktable.gui->reset;
-  invalidate_luminance_cache(self);
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
-
-  // Unlock the colour picker so we can display our own custom cursor
-  dt_iop_color_picker_reset(self, TRUE);
-}
-
-
 static void show_luminance_mask_callback(GtkWidget *togglebutton, GdkEventButton *event, dt_iop_module_t *self)
 {
   if(darktable.gui->reset) return;
@@ -2054,6 +1910,17 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   const int fail = !sanity_check(self);
   dt_iop_gui_leave_critical_section(self);
   if(fail) return 0;
+
+  if(dt_iop_color_picker_is_visible(dev))
+  {
+    dt_iop_gui_enter_critical_section(self);
+    g->cursor_valid = FALSE;
+    g->area_active_node = -1;
+    dt_iop_gui_leave_critical_section(self);
+    _switch_cursors(self);
+    gtk_widget_queue_draw(GTK_WIDGET(g->area));
+    return 0;
+  }
 
   const int wd = dev->roi.preview_width;
   const int ht = dev->roi.preview_height;
@@ -2213,6 +2080,7 @@ int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t 
   if(darktable.gui->reset) return 1;
   if(g == NULL) return 0;
   if(!g->has_focus) return 0;
+  if(dt_iop_color_picker_is_visible(dev)) return 0;
 
   // turn-on the module if off
   if(!self->enabled)
@@ -2379,8 +2247,8 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   dt_develop_t *dev = self->dev;
   dt_iop_toneequalizer_gui_data_t *g = (dt_iop_toneequalizer_gui_data_t *)self->gui_data;
 
-  // if we are editing masks, do not display controls
-  if(in_mask_editing(self)) return;
+  // If the darkroom picker owns the center view, keep tone equalizer overlays out of the way.
+  if(in_mask_editing(self) || dt_iop_color_picker_is_visible(dev)) return;
 
   dt_iop_gui_enter_critical_section(self);
   const int fail = (!g->cursor_valid || !g->interpolation_valid || dev->pipe->processing || !sanity_check(self) || !g->has_focus);
@@ -3230,6 +3098,214 @@ void gui_reset(struct dt_iop_module_t *self)
   gtk_widget_queue_draw(self->widget);
 }
 
+static gboolean _sample_picker_luminance_mask(const float *const buffer, const size_t width, const size_t height,
+                                              float *const picked, float *const picked_min, float *const picked_max)
+{
+  const dt_develop_t *const dev = darktable.develop;
+  const dt_colorpicker_sample_t *const sample = dev ? dev->color_picker.primary_sample : NULL;
+  if(!buffer || !sample || width < 1 || height < 1 || !picked || !picked_min || !picked_max) return FALSE;
+
+  if(sample->size == DT_LIB_COLORPICKER_SIZE_BOX)
+  {
+    const size_t box[4] = {
+      CLAMP((size_t)roundf(sample->box[0] * width), 0, width),
+      CLAMP((size_t)roundf(sample->box[1] * height), 0, height),
+      CLAMP((size_t)roundf(sample->box[2] * width), 0, width),
+      CLAMP((size_t)roundf(sample->box[3] * height), 0, height)
+    };
+    const size_t x0 = MIN(box[0], width - 1);
+    const size_t y0 = MIN(box[1], height - 1);
+    const size_t x1 = CLAMP(MAX(box[2], x0 + 1), 1, width);
+    const size_t y1 = CLAMP(MAX(box[3], y0 + 1), 1, height);
+
+    float mean = 0.0f;
+    float minimum = INFINITY;
+    float maximum = -INFINITY;
+    size_t count = 0;
+
+    // Browse the exact picker box on the preview luminance mask so picker feedback
+    // reflects the same scalar field tone equalizer actually edits.
+    for(size_t y = y0; y < y1; ++y)
+    {
+      const size_t row = y * width;
+      for(size_t x = x0; x < x1; ++x)
+      {
+        const float value = buffer[row + x];
+        mean += value;
+        minimum = fminf(minimum, value);
+        maximum = fmaxf(maximum, value);
+        ++count;
+      }
+    }
+
+    if(count == 0) return FALSE;
+    *picked = mean / (float)count;
+    *picked_min = minimum;
+    *picked_max = maximum;
+    return isfinite(*picked) && isfinite(*picked_min) && isfinite(*picked_max);
+  }
+
+  const size_t x = CLAMP((size_t)roundf(sample->point[0] * width), 0, width - 1);
+  const size_t y = CLAMP((size_t)roundf(sample->point[1] * height), 0, height - 1);
+  const float value = get_luminance_from_buffer(buffer, width, height, x, y);
+  *picked = value;
+  *picked_min = value;
+  *picked_max = value;
+  return isfinite(value);
+}
+
+/**
+ * @brief Update tone equalizer sliders from one picker sample.
+ *
+ * @details
+ * Tone equalizer exposes picker-enabled bauhaus sliders for exposure and contrast
+ * compensation. The sample is taken from the module input cache, so the picked
+ * luminance is measured before tone equalizer applies its own mask remapping.
+ * This keeps the call chain identical to filmicrgb: picker activation comes from
+ * the slider quad, sampling arrives through the shared picker proxy, and the
+ * callback commits the resulting parameter directly back into the GUI slider.
+ *
+ * Blend and mask pickers dispatch through the same hook, therefore only the two
+ * tone equalizer slider widgets are handled here and every other picker falls
+ * through untouched.
+ *
+ * @param self Current module instance.
+ * @param picker Active picker widget dispatched by the picker proxy.
+ * @param pipe Preview pipe that was sampled.
+ * @param piece Live pipe piece matching the sampled cacheline.
+ */
+void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpipe_t *pipe,
+                        dt_dev_pixelpipe_iop_t *piece)
+{
+  dt_iop_toneequalizer_gui_data_t *g = (dt_iop_toneequalizer_gui_data_t *)self->gui_data;
+  dt_iop_toneequalizer_params_t *p = (dt_iop_toneequalizer_params_t *)self->params;
+  dt_pixel_cache_entry_t *preview_entry = NULL;
+  size_t preview_width = 0;
+  size_t preview_height = 0;
+
+  if(!g || (picker != g->exposure_boost && picker != g->contrast_boost))
+  {
+    dt_print(DT_DEBUG_DEV, "[picker/toneequal] passthrough picker=%p pipe=%p hash=%" PRIu64 "\n",
+             (void *)picker, (void *)pipe, piece ? piece->global_hash : 0);
+    _switch_cursors(self);
+    return;
+  }
+
+  dt_iop_gui_enter_critical_section(self);
+  preview_entry = g->thumb_preview_entry;
+  preview_width = g->thumb_preview_buf_width;
+  preview_height = g->thumb_preview_buf_height;
+  g->area_active_node = -1;
+  if(preview_entry)
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, preview_entry);
+  dt_iop_gui_leave_critical_section(self);
+
+  if(!preview_entry || preview_width < 1 || preview_height < 1)
+  {
+    if(preview_entry)
+      dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
+    dt_print(DT_DEBUG_DEV, "[picker/toneequal] no preview mask picker=%p pipe=%p hash=%" PRIu64 "\n",
+             (void *)picker, (void *)pipe, piece ? piece->global_hash : 0);
+    _switch_cursors(self);
+    return;
+  }
+
+  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, preview_entry);
+  const float *const preview_buf = (const float *const)dt_pixel_cache_entry_get_data(preview_entry);
+  float picked = NAN;
+  float picked_min = NAN;
+  float picked_max = NAN;
+  const gboolean sampled = _sample_picker_luminance_mask(preview_buf, preview_width, preview_height,
+                                                         &picked, &picked_min, &picked_max);
+  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
+  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
+
+  if(!sampled)
+  {
+    dt_print(DT_DEBUG_DEV, "[picker/toneequal] mask sample failed picker=%p pipe=%p hash=%" PRIu64 "\n",
+             (void *)picker, (void *)pipe, piece ? piece->global_hash : 0);
+    _switch_cursors(self);
+    return;
+  }
+
+  dt_iop_gui_enter_critical_section(self);
+  g->cursor_valid = isfinite(picked) && picked > 0.0f;
+  g->cursor_exposure = g->cursor_valid ? log2f(picked) : 0.0f;
+  dt_iop_gui_leave_critical_section(self);
+
+  if(picker == g->exposure_boost)
+  {
+    if(isfinite(picked) && picked > 0.0f)
+    {
+      p->exposure_boost = log2f(CONTRAST_FULCRUM / picked);
+      ++darktable.gui->reset;
+      dt_bauhaus_slider_set(g->exposure_boost, p->exposure_boost);
+      --darktable.gui->reset;
+      invalidate_luminance_cache(self);
+      dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+      dt_print(DT_DEBUG_DEV,
+               "[picker/toneequal] exposure picker=%p luminance=%g set=%g pipe=%p hash=%" PRIu64 "\n",
+               (void *)picker, picked, p->exposure_boost, (void *)pipe, piece ? piece->global_hash : 0);
+    }
+    else
+    {
+      dt_print(DT_DEBUG_DEV,
+               "[picker/toneequal] exposure picker=%p invalid luminance=%g pipe=%p hash=%" PRIu64 "\n",
+               (void *)picker, picked, (void *)pipe, piece ? piece->global_hash : 0);
+    }
+  }
+  else
+  {
+    const float fd_old = fminf(picked_min, picked_max);
+    const float ld_old = fmaxf(picked_min, picked_max);
+
+    if(isfinite(fd_old) && isfinite(ld_old) && fd_old > 0.0f && ld_old > fd_old)
+    {
+      const float s1 = CONTRAST_FULCRUM - exp2f(-7.0f);
+      const float s2 = exp2f(-1.0f) - CONTRAST_FULCRUM;
+      const float mix = fd_old * s2 + ld_old * s1;
+      float contrast = log2f(mix / (CONTRAST_FULCRUM * (ld_old - fd_old)));
+
+      // Blur-assisted detail modes need the same positive-contrast correction as
+      // the legacy auto button because the sampled spread is measured upstream of
+      // the guided filter blur and would otherwise undershoot in the final mask.
+      if(p->details == DT_TONEEQ_EIGF && contrast > 0.0f)
+      {
+        const float correction = -0.0276f + 0.01823f * p->feathering + (0.7566f - 1.0f) * contrast;
+        if(p->feathering < 5.0f)
+          contrast += correction;
+        else if(p->feathering < 10.0f)
+          contrast += correction * (2.0f - p->feathering / 5.0f);
+      }
+      else if(p->details == DT_TONEEQ_GUIDED && contrast > 0.0f)
+      {
+        contrast = 0.0235f + 1.1225f * contrast;
+      }
+
+      p->contrast_boost = contrast;
+      ++darktable.gui->reset;
+      dt_bauhaus_slider_set(g->contrast_boost, p->contrast_boost);
+      --darktable.gui->reset;
+      invalidate_luminance_cache(self);
+      dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+      dt_print(DT_DEBUG_DEV,
+               "[picker/toneequal] contrast picker=%p min=%g max=%g set=%g pipe=%p hash=%" PRIu64 "\n",
+               (void *)picker, fd_old, ld_old, p->contrast_boost, (void *)pipe,
+               piece ? piece->global_hash : 0);
+    }
+    else
+    {
+      dt_print(DT_DEBUG_DEV,
+               "[picker/toneequal] contrast picker=%p invalid min=%g max=%g pipe=%p hash=%" PRIu64 "\n",
+               (void *)picker, fd_old, ld_old, (void *)pipe, piece ? piece->global_hash : 0);
+    }
+  }
+
+  dt_control_queue_redraw_center();
+  gtk_widget_queue_draw(GTK_WIDGET(g->area));
+  _switch_cursors(self);
+}
+
 
 void gui_init(struct dt_iop_module_t *self)
 {
@@ -3267,27 +3343,23 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(self->widget), g->smoothing, FALSE, FALSE, 0);
   g_signal_connect(G_OBJECT(g->smoothing), "value-changed", G_CALLBACK(smoothing_callback), self);
 
-  g->exposure_boost = dt_bauhaus_slider_from_params(self, "exposure_boost");
+  g->exposure_boost = dt_color_picker_new(self, DT_COLOR_PICKER_AREA,
+                                          dt_bauhaus_slider_from_params(self, "exposure_boost"));
   dt_bauhaus_slider_set_soft_range(g->exposure_boost, -4.0, 4.0);
   dt_bauhaus_slider_set_format(g->exposure_boost, _(" EV"));
   gtk_widget_set_tooltip_text(g->exposure_boost, _("use this to slide the mask average exposure along channels\n"
                                                    "for a better control of the exposure correction with the available nodes.\n"
-                                                   "the magic wand will auto-adjust the average exposure"));
-  dt_bauhaus_widget_set_quad_paint(g->exposure_boost, dtgtk_cairo_paint_wand, 0, NULL);
-  dt_bauhaus_widget_set_quad_toggle(g->exposure_boost, FALSE);
-  g_signal_connect(G_OBJECT(g->exposure_boost), "quad-pressed", G_CALLBACK(auto_adjust_exposure_boost), self);
+                                                   "the color picker will map the sampled tone to -4 EV."));
 
-  g->contrast_boost = dt_bauhaus_slider_from_params(self, "contrast_boost");
+  g->contrast_boost = dt_color_picker_new(self, DT_COLOR_PICKER_AREA,
+                                          dt_bauhaus_slider_from_params(self, "contrast_boost"));
   dt_bauhaus_slider_set_soft_range(g->contrast_boost, -2.0, 2.0);
   dt_bauhaus_slider_set_format(g->contrast_boost, _(" EV"));
   gtk_widget_set_tooltip_text(g->contrast_boost, _("use this to counter the averaging effect of the guided filter\n"
                                                    "and dilate the mask contrast around -4EV\n"
                                                    "this allows to spread the exposure histogram over more channels\n"
                                                    "for a better control of the exposure correction.\n"
-                                                   "the magic wand will auto-adjust the contrast"));
-  dt_bauhaus_widget_set_quad_paint(g->contrast_boost, dtgtk_cairo_paint_wand, 0, NULL);
-  dt_bauhaus_widget_set_quad_toggle(g->contrast_boost, FALSE);
-  g_signal_connect(G_OBJECT(g->contrast_boost), "quad-pressed", G_CALLBACK(auto_adjust_contrast_boost), self);
+                                                   "the color picker will fit the sampled spread inside the control range."));
 
   // Simple view
 
