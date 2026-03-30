@@ -195,6 +195,8 @@ dt_dlopencl_t *dt_dlopencl_init(const char *name)
                                            (void (**)(void)) & ocl->symbols->dt_clGetKernelInfo);
     success = success && dt_gmodule_symbol(module, "clEnqueueBarrier",
                                            (void (**)(void)) & ocl->symbols->dt_clEnqueueBarrier);
+    success = success && dt_gmodule_symbol(module, "clFlush",
+                                           (void (**)(void)) & ocl->symbols->dt_clFlush);
     success = success && dt_gmodule_symbol(module, "clGetKernelWorkGroupInfo",
                                            (void (**)(void)) & ocl->symbols->dt_clGetKernelWorkGroupInfo);
     success = success && dt_gmodule_symbol(module, "clEnqueueReadBuffer",
