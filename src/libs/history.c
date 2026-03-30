@@ -651,6 +651,10 @@ static void _history_apply_history_end(const int history_end)
   dt_dev_set_history_end_ext(dev, history_end);
   dt_dev_pop_history_items_ext(dev);
   dt_pthread_rwlock_unlock(&dev->history_mutex);
+  // Apply the same post-history sync as dt_dev_pop_history_items():
+  // darkroom geometry and the virtual preview pipe must be refreshed only
+  // after releasing history_mutex to avoid lock inversions with GUI users.
+  if(dev->gui_attached) dt_dev_get_thumbnail_size(dev);
   if(darktable.gui && dev->gui_attached) --darktable.gui->reset;
 
   dt_dev_undo_end_record(dev);
