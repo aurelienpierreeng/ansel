@@ -295,24 +295,14 @@ static inline float _seed_probability(const float filling, const float crystal_a
 static inline float _crystal_coverage(const int dx, const int dy, const float radius_f, const float vertices,
                                       const float rotation)
 {
-  const int use_circle = (vertices > 5.0f);
   const float local_radius = hypotf((float)dx, (float)dy);
   float signed_distance = 0.0f;
-
-  if(use_circle)
-  {
-    signed_distance = radius_f - local_radius;
-  }
-  else
-  {
-    const float theta = atan2f((float)dy, (float)dx);
-    const float envelope = cosf(M_PI_F / vertices)
-                           / cosf((2.0f * asinf(cosf(vertices * (theta + rotation))) + M_PI_F)
-                                  / (2.0f * vertices));
-    const float polygon_radius = radius_f * envelope;
-    signed_distance = polygon_radius - local_radius;
-  }
-
+  const float theta = atan2f((float)dy, (float)dx);
+  const float envelope = cosf(M_PI_F / vertices)
+                          / cosf((2.0f * asinf(cosf(vertices * (theta + rotation))) + M_PI_F)
+                                / (2.0f * vertices));
+  const float polygon_radius = radius_f * envelope;
+  signed_distance = polygon_radius - local_radius;
   return CLAMPS(signed_distance + 0.5f, 0.0f, 1.0f);
 }
 
