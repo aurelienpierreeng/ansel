@@ -469,7 +469,9 @@ void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe
     // Warning: in and out are single-channel in RAW mode.
     // in + out + interpolated + ds_interpolated + ds_tmp + 2 * ds_LF + ds_HF + mask + ds_mask
     tiling->factor = 2.f + 2.f * 4 + 6.f * 4 / DS_FACTOR;
-    tiling->factor_cl =  2.f + 3.f * 4 + 5.f * 4 / DS_FACTOR;
+    // OpenCL adds a downsampled scratch accumulator to keep the guided-laplacian read/write images distinct.
+    // in + out + interpolated + temp + mask + ds_interpolated + reconstructed_scratch + 2 * ds_LF + ds_HF + ds_mask
+    tiling->factor_cl = 2.f + 3.f * 4 + 6.f * 4 / DS_FACTOR;
 
     // The wavelets decomposition uses a temp buffer of size 4 x ds_width
     tiling->maxbuf = 1.f / roi_in->height * 4.f / DS_FACTOR;
@@ -1995,6 +1997,7 @@ error:
 #ifdef HAVE_OPENCL
 static inline cl_int wavelets_process_cl(const int devid,
                                          cl_mem in, cl_mem reconstructed,
+                                         cl_mem reconstructed_scratch,
                                          cl_mem clipping_mask,
                                          const size_t sizes[3], const int width, const int height,
                                          dt_iop_highlights_global_data_t *const gd,
@@ -2007,6 +2010,7 @@ static inline cl_int wavelets_process_cl(const int devid,
                                          const int salt, const float solid_color)
 {
   cl_int err = DT_OPENCL_DEFAULT_ERROR;
+  cl_mem reconstruct_read = reconstructed_scratch;
 
   // À trous wavelet decompose
   // there is a paper from a guy we know that explains it : https://jo.dreggn.org/home/2010_atrous.pdf
@@ -2067,15 +2071,19 @@ static inline cl_int wavelets_process_cl(const int devid,
 
     uint8_t current_scale_type = scale_type(s, scales);
     const float radius = sqf(equivalent_sigma_at_step(B_SPLINE_SIGMA, s * DS_FACTOR));
+    cl_mem reconstruct_write = (s == scales - 1)
+                                 ? reconstructed
+                                 : (reconstruct_read == reconstructed ? reconstructed_scratch : reconstructed);
 
-    // Compute wavelets low-frequency scales
+    // Keep the accumulation image read/write handles distinct at each scale.
+    // Some AMD OpenCL drivers get unstable when the same image is bound for both roles.
     if(variant == DIFFUSE_RECONSTRUCT_RGB)
     {
       dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_guide_laplacians, 0, sizeof(cl_mem), (void *)&HF);
       dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_guide_laplacians, 1, sizeof(cl_mem), (void *)&buffer_out);
       dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_guide_laplacians, 2, sizeof(cl_mem), (void *)&clipping_mask);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_guide_laplacians, 3, sizeof(cl_mem), (void *)&reconstructed); // read-only
-      dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_guide_laplacians, 4, sizeof(cl_mem), (void *)&reconstructed); // write-only
+      dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_guide_laplacians, 3, sizeof(cl_mem), (void *)&reconstruct_read);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_guide_laplacians, 4, sizeof(cl_mem), (void *)&reconstruct_write);
       dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_guide_laplacians, 5, sizeof(int), (void *)&width);
       dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_guide_laplacians, 6, sizeof(int), (void *)&height);
       dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_guide_laplacians, 7, sizeof(int), (void *)&mult);
@@ -2091,8 +2099,8 @@ static inline cl_int wavelets_process_cl(const int devid,
       dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_diffuse_color, 0, sizeof(cl_mem), (void *)&HF);
       dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_diffuse_color, 1, sizeof(cl_mem), (void *)&buffer_out);
       dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_diffuse_color, 2, sizeof(cl_mem), (void *)&clipping_mask);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_diffuse_color, 3, sizeof(cl_mem), (void *)&reconstructed); // read-only
-      dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_diffuse_color, 4, sizeof(cl_mem), (void *)&reconstructed); // write-only
+      dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_diffuse_color, 3, sizeof(cl_mem), (void *)&reconstruct_read);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_diffuse_color, 4, sizeof(cl_mem), (void *)&reconstruct_write);
       dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_diffuse_color, 5, sizeof(int), (void *)&width);
       dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_diffuse_color, 6, sizeof(int), (void *)&height);
       dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_diffuse_color, 7, sizeof(int), (void *)&mult);
@@ -2101,6 +2109,8 @@ static inline cl_int wavelets_process_cl(const int devid,
       err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_highlights_diffuse_color, sizes);
       if(err != CL_SUCCESS) return err;
     }
+
+    reconstruct_read = reconstruct_write;
   }
 
   return err;
@@ -2150,10 +2160,11 @@ static cl_int process_laplacian_bayer_cl(struct dt_iop_module_t *self, const dt_
   cl_mem HF = dt_opencl_alloc_device(devid, ds_sizes[0], ds_sizes[1], sizeof(float) * 4);
   cl_mem ds_interpolated = dt_opencl_alloc_device(devid, ds_sizes[0], ds_sizes[1], sizeof(float) * 4);
   cl_mem ds_clipping_mask = dt_opencl_alloc_device(devid, ds_sizes[0], ds_sizes[1], sizeof(float) * 4);
+  cl_mem reconstructed_scratch = dt_opencl_alloc_device(devid, ds_sizes[0], ds_sizes[1], sizeof(float) * 4);
   cl_mem clips_cl = dt_opencl_copy_host_to_device_constant(devid, 4 * sizeof(float), (float*)clips);
 
   if(!interpolated || !clipping_mask || !LF_odd || !LF_even || !temp || !HF || !ds_interpolated
-     || !ds_clipping_mask || !clips_cl)
+     || !ds_clipping_mask || !reconstructed_scratch || !clips_cl)
     goto error;
 
   {
@@ -2268,12 +2279,14 @@ static cl_int process_laplacian_bayer_cl(struct dt_iop_module_t *self, const dt_
   for(int i = 0; i < data->iterations; i++)
   {
     const int salt = (i == data->iterations - 1); // add noise on the last iteration only
-    err = wavelets_process_cl(devid, ds_interpolated, temp, ds_clipping_mask, ds_sizes, ds_width, ds_height, gd, scales, HF,
-                              LF_odd, LF_even, DIFFUSE_RECONSTRUCT_RGB, noise_level, salt, data->solid_color);
+    err = wavelets_process_cl(devid, ds_interpolated, temp, reconstructed_scratch, ds_clipping_mask,
+                              ds_sizes, ds_width, ds_height, gd, scales, HF, LF_odd, LF_even,
+                              DIFFUSE_RECONSTRUCT_RGB, noise_level, salt, data->solid_color);
     if(err != CL_SUCCESS) goto error;
 
-    err = wavelets_process_cl(devid, temp, ds_interpolated, ds_clipping_mask, ds_sizes, ds_width, ds_height, gd, scales, HF,
-                              LF_odd, LF_even, DIFFUSE_RECONSTRUCT_CHROMA, noise_level, salt, data->solid_color);
+    err = wavelets_process_cl(devid, temp, ds_interpolated, reconstructed_scratch, ds_clipping_mask,
+                              ds_sizes, ds_width, ds_height, gd, scales, HF, LF_odd, LF_even,
+                              DIFFUSE_RECONSTRUCT_CHROMA, noise_level, salt, data->solid_color);
     if(err != CL_SUCCESS) goto error;
   }
 
@@ -2312,6 +2325,7 @@ static cl_int process_laplacian_bayer_cl(struct dt_iop_module_t *self, const dt_
   dt_opencl_release_mem_object(HF);
   dt_opencl_release_mem_object(ds_clipping_mask);
   dt_opencl_release_mem_object(ds_interpolated);
+  dt_opencl_release_mem_object(reconstructed_scratch);
   return err;
 
 error:
@@ -2327,6 +2341,7 @@ error:
   dt_opencl_release_mem_object(HF);
   dt_opencl_release_mem_object(ds_clipping_mask);
   dt_opencl_release_mem_object(ds_interpolated);
+  dt_opencl_release_mem_object(reconstructed_scratch);
 
   dt_print(DT_DEBUG_OPENCL, "[opencl_highlights] couldn't enqueue kernel! %i\n", err);
   return err;
@@ -2371,6 +2386,7 @@ static cl_int process_laplacian_xtrans_cl(struct dt_iop_module_t *self, const dt
   cl_mem HF = dt_opencl_alloc_device(devid, ds_sizes[0], ds_sizes[1], sizeof(float) * 4);
   cl_mem ds_interpolated = dt_opencl_alloc_device(devid, ds_sizes[0], ds_sizes[1], sizeof(float) * 4);
   cl_mem ds_clipping_mask = dt_opencl_alloc_device(devid, ds_sizes[0], ds_sizes[1], sizeof(float) * 4);
+  cl_mem reconstructed_scratch = dt_opencl_alloc_device(devid, ds_sizes[0], ds_sizes[1], sizeof(float) * 4);
 
   cl_mem clips_cl = dt_opencl_copy_host_to_device_constant(devid, 4 * sizeof(float), (float *)clips);
   cl_mem dev_xtrans = dt_opencl_copy_host_to_device_constant(devid, sizeof(piece->dsc_in.xtrans), (void *)piece->dsc_in.xtrans);
@@ -2379,7 +2395,7 @@ static cl_int process_laplacian_xtrans_cl(struct dt_iop_module_t *self, const dt
   cl_mem lookup_cl = dt_opencl_copy_host_to_device_constant(devid, sizeof(lookup), lookup);
 
   if(!interpolated || !clipping_mask || !LF_odd || !LF_even || !temp || !HF || !ds_interpolated
-     || !ds_clipping_mask || !clips_cl || !dev_xtrans || !lookup_cl)
+     || !ds_clipping_mask || !reconstructed_scratch || !clips_cl || !dev_xtrans || !lookup_cl)
     goto error;
 
   {
@@ -2496,12 +2512,14 @@ static cl_int process_laplacian_xtrans_cl(struct dt_iop_module_t *self, const dt
   for(int i = 0; i < data->iterations; i++)
   {
     const int salt = (i == data->iterations - 1);
-    err = wavelets_process_cl(devid, ds_interpolated, temp, ds_clipping_mask, ds_sizes, ds_width, ds_height, gd, scales, HF,
-                              LF_odd, LF_even, DIFFUSE_RECONSTRUCT_RGB, noise_level, salt, data->solid_color);
+    err = wavelets_process_cl(devid, ds_interpolated, temp, reconstructed_scratch, ds_clipping_mask,
+                              ds_sizes, ds_width, ds_height, gd, scales, HF, LF_odd, LF_even,
+                              DIFFUSE_RECONSTRUCT_RGB, noise_level, salt, data->solid_color);
     if(err != CL_SUCCESS) goto error;
 
-    err = wavelets_process_cl(devid, temp, ds_interpolated, ds_clipping_mask, ds_sizes, ds_width, ds_height, gd, scales, HF,
-                              LF_odd, LF_even, DIFFUSE_RECONSTRUCT_CHROMA, noise_level, salt, data->solid_color);
+    err = wavelets_process_cl(devid, temp, ds_interpolated, reconstructed_scratch, ds_clipping_mask,
+                              ds_sizes, ds_width, ds_height, gd, scales, HF, LF_odd, LF_even,
+                              DIFFUSE_RECONSTRUCT_CHROMA, noise_level, salt, data->solid_color);
     if(err != CL_SUCCESS) goto error;
   }
 
@@ -2540,6 +2558,7 @@ static cl_int process_laplacian_xtrans_cl(struct dt_iop_module_t *self, const dt
   dt_opencl_release_mem_object(HF);
   dt_opencl_release_mem_object(ds_clipping_mask);
   dt_opencl_release_mem_object(ds_interpolated);
+  dt_opencl_release_mem_object(reconstructed_scratch);
   return err;
 
 error:
@@ -2558,6 +2577,7 @@ error:
   dt_opencl_release_mem_object(HF);
   dt_opencl_release_mem_object(ds_clipping_mask);
   dt_opencl_release_mem_object(ds_interpolated);
+  dt_opencl_release_mem_object(reconstructed_scratch);
 
   dt_print(DT_DEBUG_OPENCL, "[opencl_highlights] couldn't enqueue kernel! %i\n", err);
   return err;
