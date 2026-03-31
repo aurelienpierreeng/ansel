@@ -36,28 +36,28 @@
 typedef int dt_atomic_int;
 typedef uint64_t dt_atomic_uint64;
 typedef void *dt_atomic_ptr;
-inline void dt_atomic_set_int(dt_atomic_int *var, int value) { __atomic_store_n(var, value, __ATOMIC_SEQ_CST); }
-inline int dt_atomic_get_int(dt_atomic_int *var) { return __atomic_load_n(var, __ATOMIC_SEQ_CST); }
-inline void dt_atomic_set_uint64(dt_atomic_uint64 *var, uint64_t value)
+static inline void dt_atomic_set_int(dt_atomic_int *var, int value) { __atomic_store_n(var, value, __ATOMIC_SEQ_CST); }
+static inline int dt_atomic_get_int(dt_atomic_int *var) { return __atomic_load_n(var, __ATOMIC_SEQ_CST); }
+static inline void dt_atomic_set_uint64(dt_atomic_uint64 *var, uint64_t value)
 {
   __atomic_store_n(var, value, __ATOMIC_SEQ_CST);
 }
-inline uint64_t dt_atomic_get_uint64(const dt_atomic_uint64 *var)
+static inline uint64_t dt_atomic_get_uint64(const dt_atomic_uint64 *var)
 {
   return __atomic_load_n(var, __ATOMIC_SEQ_CST);
 }
-inline void dt_atomic_set_ptr(dt_atomic_ptr *var, void *value) { __atomic_store_n(var, value, __ATOMIC_SEQ_CST); }
-inline void *dt_atomic_get_ptr(const dt_atomic_ptr *var) { return __atomic_load_n(var, __ATOMIC_SEQ_CST); }
-inline int dt_atomic_add_int(dt_atomic_int *var, int incr) { return __atomic_fetch_add(var, incr, __ATOMIC_SEQ_CST); }
-inline int dt_atomic_sub_int(dt_atomic_int *var, int decr) { return __atomic_fetch_sub(var, decr, __ATOMIC_SEQ_CST); }
-inline int dt_atomic_exch_int(dt_atomic_int *var, int value) { return __atomic_exchange_n(var, value, __ATOMIC_SEQ_CST); }
-inline int dt_atomic_CAS_int(dt_atomic_int *var, int *expected, int value)
+static inline void dt_atomic_set_ptr(dt_atomic_ptr *var, void *value) { __atomic_store_n(var, value, __ATOMIC_SEQ_CST); }
+static inline void *dt_atomic_get_ptr(const dt_atomic_ptr *var) { return __atomic_load_n(var, __ATOMIC_SEQ_CST); }
+static inline int dt_atomic_add_int(dt_atomic_int *var, int incr) { return __atomic_fetch_add(var, incr, __ATOMIC_SEQ_CST); }
+static inline int dt_atomic_sub_int(dt_atomic_int *var, int decr) { return __atomic_fetch_sub(var, decr, __ATOMIC_SEQ_CST); }
+static inline int dt_atomic_exch_int(dt_atomic_int *var, int value) { return __atomic_exchange_n(var, value, __ATOMIC_SEQ_CST); }
+static inline int dt_atomic_CAS_int(dt_atomic_int *var, int *expected, int value)
 {
   return __atomic_compare_exchange_n(var, expected, value, 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
 }
 
-inline void dt_atomic_or_int(dt_atomic_int *var, int flags) { __atomic_fetch_or(var, flags, __ATOMIC_SEQ_CST); }
-inline void dt_atomic_and_int(dt_atomic_int *var, int flags) { __atomic_fetch_and(var, flags, __ATOMIC_SEQ_CST); }
+static inline void dt_atomic_or_int(dt_atomic_int *var, int flags) { __atomic_fetch_or(var, flags, __ATOMIC_SEQ_CST); }
+static inline void dt_atomic_and_int(dt_atomic_int *var, int flags) { __atomic_fetch_and(var, flags, __ATOMIC_SEQ_CST); }
 
 #elif !defined(__STDC_NO_ATOMICS__)
 
@@ -66,20 +66,20 @@ inline void dt_atomic_and_int(dt_atomic_int *var, int flags) { __atomic_fetch_an
 typedef atomic_int dt_atomic_int;
 typedef _Atomic(uint64_t) dt_atomic_uint64;
 typedef _Atomic(void *) dt_atomic_ptr;
-inline void dt_atomic_set_int(dt_atomic_int *var, int value) { atomic_store(var,value); }
-inline int dt_atomic_get_int(dt_atomic_int *var) { return atomic_load(var); }
-inline void dt_atomic_set_uint64(dt_atomic_uint64 *var, uint64_t value) { atomic_store(var,value); }
-inline uint64_t dt_atomic_get_uint64(const dt_atomic_uint64 *var) { return atomic_load(var); }
-inline void dt_atomic_set_ptr(dt_atomic_ptr *var, void *value) { atomic_store(var,value); }
-inline void *dt_atomic_get_ptr(const dt_atomic_ptr *var) { return atomic_load(var); }
-inline int dt_atomic_add_int(dt_atomic_int *var, int incr) { return atomic_fetch_add(var,incr); }
-inline int dt_atomic_sub_int(dt_atomic_int *var, int decr) { return atomic_fetch_sub(var,decr); }
-inline int dt_atomic_exch_int(dt_atomic_int *var, int value) { return atomic_exchange(var,value); }
-inline int dt_atomic_CAS_int(dt_atomic_int *var, int *expected, int value)
+static inline void dt_atomic_set_int(dt_atomic_int *var, int value) { atomic_store(var,value); }
+static inline int dt_atomic_get_int(dt_atomic_int *var) { return atomic_load(var); }
+static inline void dt_atomic_set_uint64(dt_atomic_uint64 *var, uint64_t value) { atomic_store(var,value); }
+static inline uint64_t dt_atomic_get_uint64(const dt_atomic_uint64 *var) { return atomic_load(var); }
+static inline void dt_atomic_set_ptr(dt_atomic_ptr *var, void *value) { atomic_store(var,value); }
+static inline void *dt_atomic_get_ptr(const dt_atomic_ptr *var) { return atomic_load(var); }
+static inline int dt_atomic_add_int(dt_atomic_int *var, int incr) { return atomic_fetch_add(var,incr); }
+static inline int dt_atomic_sub_int(dt_atomic_int *var, int decr) { return atomic_fetch_sub(var,decr); }
+static inline int dt_atomic_exch_int(dt_atomic_int *var, int value) { return atomic_exchange(var,value); }
+static inline int dt_atomic_CAS_int(dt_atomic_int *var, int *expected, int value)
 { return atomic_compare_exchange_strong(var,expected,value); }
 
-inline void dt_atomic_or_int(dt_atomic_int *var, int flags) { atomic_fetch_or(var, flags); }
-inline void dt_atomic_and_int(dt_atomic_int *var, int flags) { atomic_fetch_and(var, flags); }
+static inline void dt_atomic_or_int(dt_atomic_int *var, int flags) { atomic_fetch_or(var, flags); }
+static inline void dt_atomic_and_int(dt_atomic_int *var, int flags) { atomic_fetch_and(var, flags); }
 
 #elif defined(__GNUC__) && (__GNUC__ > 4 || (__GNUC__ == 4 && __GNU_MINOR__ >= 8))
 // we don't have or aren't supposed to use C11 atomics, but the compiler is a recent-enough version of GCC
@@ -88,25 +88,25 @@ inline void dt_atomic_and_int(dt_atomic_int *var, int flags) { atomic_fetch_and(
 typedef volatile int dt_atomic_int;
 typedef volatile uint64_t dt_atomic_uint64;
 typedef void *volatile dt_atomic_ptr;
-inline void dt_atomic_set_int(dt_atomic_int *var, int value) { __atomic_store(var,&value,__ATOMIC_SEQ_CST); }
-inline int dt_atomic_get_int(dt_atomic_int *var)
+static inline void dt_atomic_set_int(dt_atomic_int *var, int value) { __atomic_store(var,&value,__ATOMIC_SEQ_CST); }
+static inline int dt_atomic_get_int(dt_atomic_int *var)
 { int value ; __atomic_load(var,&value,__ATOMIC_SEQ_CST); return value; }
-inline void dt_atomic_set_uint64(dt_atomic_uint64 *var, uint64_t value) { __atomic_store(var,&value,__ATOMIC_SEQ_CST); }
-inline uint64_t dt_atomic_get_uint64(const dt_atomic_uint64 *var)
+static inline void dt_atomic_set_uint64(dt_atomic_uint64 *var, uint64_t value) { __atomic_store(var,&value,__ATOMIC_SEQ_CST); }
+static inline uint64_t dt_atomic_get_uint64(const dt_atomic_uint64 *var)
 { uint64_t value; __atomic_load(var,&value,__ATOMIC_SEQ_CST); return value; }
-inline void dt_atomic_set_ptr(dt_atomic_ptr *var, void *value) { __atomic_store(var,&value,__ATOMIC_SEQ_CST); }
-inline void *dt_atomic_get_ptr(const dt_atomic_ptr *var)
+static inline void dt_atomic_set_ptr(dt_atomic_ptr *var, void *value) { __atomic_store(var,&value,__ATOMIC_SEQ_CST); }
+static inline void *dt_atomic_get_ptr(const dt_atomic_ptr *var)
 { void *value; __atomic_load(var,&value,__ATOMIC_SEQ_CST); return value; }
 
-inline int dt_atomic_add_int(dt_atomic_int *var, int incr) { return __atomic_fetch_add(var,incr,__ATOMIC_SEQ_CST); }
-inline int dt_atomic_sub_int(dt_atomic_int *var, int decr) { return __atomic_fetch_sub(var,decr,__ATOMIC_SEQ_CST); }
-inline int dt_atomic_exch_int(dt_atomic_int *var, int value)
+static inline int dt_atomic_add_int(dt_atomic_int *var, int incr) { return __atomic_fetch_add(var,incr,__ATOMIC_SEQ_CST); }
+static inline int dt_atomic_sub_int(dt_atomic_int *var, int decr) { return __atomic_fetch_sub(var,decr,__ATOMIC_SEQ_CST); }
+static inline int dt_atomic_exch_int(dt_atomic_int *var, int value)
 { int orig;  __atomic_exchange(var,&value,&orig,__ATOMIC_SEQ_CST); return orig; }
-inline int dt_atomic_CAS_int(dt_atomic_int *var, int *expected, int value)
+static inline int dt_atomic_CAS_int(dt_atomic_int *var, int *expected, int value)
 { return __atomic_compare_exchange(var,expected,&value,0,__ATOMIC_SEQ_CST,__ATOMIC_SEQ_CST); }
 
-inline void dt_atomic_or_int(dt_atomic_int *var, int flags) { __atomic_fetch_or(var, flags, __ATOMIC_SEQ_CST); }
-inline void dt_atomic_and_int(dt_atomic_int *var, int flags) { __atomic_fetch_and(var, flags, __ATOMIC_SEQ_CST); }
+static inline void dt_atomic_or_int(dt_atomic_int *var, int flags) { __atomic_fetch_or(var, flags, __ATOMIC_SEQ_CST); }
+static inline void dt_atomic_and_int(dt_atomic_int *var, int flags) { __atomic_fetch_and(var, flags, __ATOMIC_SEQ_CST); }
 
 #else
 // we don't have or aren't supposed to use C11 atomics, and don't have GNU intrinsics, so
@@ -118,28 +118,28 @@ extern pthread_mutex_t dt_atom_mutex;
 typedef int dt_atomic_int;
 typedef uint64_t dt_atomic_uint64;
 typedef void *dt_atomic_ptr;
-inline void dt_atomic_set_int(dt_atomic_int *var, int value)
+static inline void dt_atomic_set_int(dt_atomic_int *var, int value)
 {
   pthread_mutex_lock(&dt_atom_mutex);
   *var = value;
   pthread_mutex_unlock(&dt_atom_mutex);
 }
 
-inline void dt_atomic_set_uint64(dt_atomic_uint64 *var, uint64_t value)
+static inline void dt_atomic_set_uint64(dt_atomic_uint64 *var, uint64_t value)
 {
   pthread_mutex_lock(&dt_atom_mutex);
   *var = value;
   pthread_mutex_unlock(&dt_atom_mutex);
 }
 
-inline void dt_atomic_set_ptr(dt_atomic_ptr *var, void *value)
+static inline void dt_atomic_set_ptr(dt_atomic_ptr *var, void *value)
 {
   pthread_mutex_lock(&dt_atom_mutex);
   *var = value;
   pthread_mutex_unlock(&dt_atom_mutex);
 }
 
-inline int dt_atomic_get_int(const dt_atomic_int *const var)
+static inline int dt_atomic_get_int(const dt_atomic_int *const var)
 {
   pthread_mutex_lock(&dt_atom_mutex);
   int value = *var;
@@ -147,7 +147,7 @@ inline int dt_atomic_get_int(const dt_atomic_int *const var)
   return value;
 }
 
-inline uint64_t dt_atomic_get_uint64(const dt_atomic_uint64 *const var)
+static inline uint64_t dt_atomic_get_uint64(const dt_atomic_uint64 *const var)
 {
   pthread_mutex_lock(&dt_atom_mutex);
   const uint64_t value = *var;
@@ -155,7 +155,7 @@ inline uint64_t dt_atomic_get_uint64(const dt_atomic_uint64 *const var)
   return value;
 }
 
-inline void *dt_atomic_get_ptr(const dt_atomic_ptr *const var)
+static inline void *dt_atomic_get_ptr(const dt_atomic_ptr *const var)
 {
   pthread_mutex_lock(&dt_atom_mutex);
   void *value = *var;
@@ -163,7 +163,7 @@ inline void *dt_atomic_get_ptr(const dt_atomic_ptr *const var)
   return value;
 }
 
-inline int dt_atomic_add_int(const dt_atomic_int *const var, int incr)
+static inline int dt_atomic_add_int(const dt_atomic_int *const var, int incr)
 {
   pthread_mutex_lock(&dt_atom_mutex);
   int value = *var;
@@ -172,7 +172,7 @@ inline int dt_atomic_add_int(const dt_atomic_int *const var, int incr)
   return value;
 }
 
-inline int dt_atomic_sub_int(const dt_atomic_int *const var, int decr)
+static inline int dt_atomic_sub_int(const dt_atomic_int *const var, int decr)
 {
   pthread_mutex_lock(&dt_atom_mutex);
   int value = *var;
@@ -181,7 +181,7 @@ inline int dt_atomic_sub_int(const dt_atomic_int *const var, int decr)
   return value;
 }
 
-inline int dt_atomic_exch_int(dt_atomic_int *var, int value)
+static inline int dt_atomic_exch_int(dt_atomic_int *var, int value)
 {
   pthread_mutex_lock(&dt_atom_mutex);
   int origvalue = *var;
@@ -190,7 +190,7 @@ inline int dt_atomic_exch_int(dt_atomic_int *var, int value)
   return origvalue;
 }
 
-inline int dt_atomic_CAS_int(dt_atomic_int *var, int *expected, int value)
+static inline int dt_atomic_CAS_int(dt_atomic_int *var, int *expected, int value)
 {
   pthread_mutex_lock(&dt_atom_mutex);
   int origvalue = *var;
@@ -205,14 +205,14 @@ inline int dt_atomic_CAS_int(dt_atomic_int *var, int *expected, int value)
   return success;
 }
 
-inline void dt_atomic_or_int(dt_atomic_int *var, int flags)
+static inline void dt_atomic_or_int(dt_atomic_int *var, int flags)
 {
   pthread_mutex_lock(&dt_atom_mutex);
   *var |= flags;
   pthread_mutex_unlock(&dt_atom_mutex);
 }
 
-inline void dt_atomic_and_int(dt_atomic_int *var, int flags)
+static inline void dt_atomic_and_int(dt_atomic_int *var, int flags)
 {
   pthread_mutex_lock(&dt_atom_mutex);
   *var &= flags;
