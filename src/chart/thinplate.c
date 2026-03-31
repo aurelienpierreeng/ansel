@@ -35,7 +35,7 @@
 #include "common/darktable.h"
 #include "chart/thinplate.h"
 #include "chart/deltaE.h"
-#include "iop/svd.h"
+#include "common/svd/svd.h"
 
 #include <assert.h>
 #include <float.h>

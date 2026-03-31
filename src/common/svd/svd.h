@@ -21,25 +21,15 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-/*
- * svdcomp - SVD decomposition routine.
- * Takes an mxn matrix a and decomposes it into udv, where u,v are
- * left and right orthogonal transformation matrices, and d is a
- * diagonal matrix of singular values.
+
+/**
+ * @file
+ * @brief Singular value decomposition helper shared by chart and color-math code.
  *
- * This routine is adapted from svdecomp.c in XLISP-STAT 2.1 which is
- * adapted by Luke Tierney and David Betz.
- *
- * the now dead xlisp-stat package seems to have been distributed
- * under some sort of BSD license.
- *
- * Input to dsvd is as follows:
- *   a = mxn matrix to be decomposed, gets overwritten with u
- *   m = row dimension of a
- *   n = column dimension of a
- *   w = returns the vector of singular values of a
- *   v = returns the right orthogonal transformation matrix
-*/
+ * This routine computes the SVD of a dense matrix stored row-major with an
+ * explicit row stride. It is adapted from the `svdecomp.c` implementation that
+ * shipped with XLISP-STAT 2.1, itself credited to Luke Tierney and David Betz.
+ */
 
 #pragma once
 
@@ -71,13 +61,22 @@ static inline double PYTHAG(double a, double b)
 }
 
 
-// decompose (m >= n)
-//      n             n               n
-//   |      |      |     |   n     |     |
-// m |  a   |  = m |  u  | diag(w) | v^t | n
-//   |      |      |     |         |     |
-//
-// where the data layout of a (in) and u (out) is strided by str for every row
+/**
+ * @brief Compute the singular value decomposition of a dense matrix.
+ *
+ * The input matrix is overwritten by the left singular vectors. The right
+ * singular vectors are stored in @p v and the singular values are stored in
+ * @p w. The function assumes @p m >= @p n and returns zero if the problem is
+ * malformed or the QR iteration does not converge.
+ *
+ * @param[in,out] a Input matrix overwritten with the left singular vectors.
+ * @param[in] m Number of rows of @p a.
+ * @param[in] n Number of columns of @p a.
+ * @param[in] str Row stride of @p a.
+ * @param[out] w Singular values, length @p n.
+ * @param[out] v Right singular vectors stored as an @p n x @p n row-major matrix.
+ * @return 1 on success, 0 on failure.
+ */
 static inline int dsvd(
     double *a,    // input matrix a[j*str + i] is j-th row and i-th column. will be overwritten by u
     int m,        // number of rows of a and u
@@ -361,4 +360,3 @@ static inline int dsvd(
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-
