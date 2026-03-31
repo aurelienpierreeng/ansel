@@ -5904,8 +5904,12 @@ void gui_init(struct dt_iop_module_t *self)
   g_signal_connect(G_OBJECT(g->primaries_gain), "value-changed",
                    G_CALLBACK(_channelmixerrgb_primaries_slider_callback), self);
 
-#define NOTEBOOK_PAGE(var, short, label, tooltip, section, swap)              \
-  self->widget = dt_ui_notebook_page(g->notebook, label, _(tooltip));         \
+  GtkWidget *outputs_page = dt_ui_notebook_page(g->notebook, N_("Outputs"),
+                                                _("output colorfulness, brightness and B&W mixing"));
+  self->widget = outputs_page;
+
+#define OUTPUT_SECTION(var, short, section, swap)                              \
+  gtk_box_pack_start(GTK_BOX(outputs_page), dt_ui_section_label_new(section), FALSE, FALSE, 0); \
                                                                               \
   first = dt_bauhaus_slider_from_params(self, swap ? #var "[2]" : #var "[0]");\
   dt_bauhaus_slider_set_digits(first, 3);                                     \
@@ -5925,16 +5929,17 @@ void gui_init(struct dt_iop_module_t *self)
                                                                               \
   g->normalize_##short = dt_bauhaus_toggle_from_params(self, "normalize_" #short);
 
-  NOTEBOOK_PAGE(saturation, sat, N_("colorfulness"), N_("output colorfulness"), N_("colorfulness"), FALSE)
+  OUTPUT_SECTION(saturation, sat, _("colorfulness"), FALSE)
   g->saturation_version = dt_bauhaus_combobox_from_params(self, "version");
-  NOTEBOOK_PAGE(lightness, light, N_("brightness"), N_("output brightness"), N_("brightness"), FALSE)
-  NOTEBOOK_PAGE(grey, grey, N_("B&W"), N_("output gray"), N_("gray"), FALSE)
+  OUTPUT_SECTION(lightness, light, _("brightness"), FALSE)
+  OUTPUT_SECTION(grey, grey, _("B&W"), FALSE)
 
   // start building top level widget
   self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
 
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(g->notebook), FALSE, FALSE, 0);
-  const int active_page = dt_conf_get_int("plugins/darkroom/channelmixerrgb/gui_page");
+  const int saved_page = dt_conf_get_int("plugins/darkroom/channelmixerrgb/gui_page");
+  const int active_page = saved_page > 2 ? 2 : CLAMP(saved_page, 0, 2);
   gtk_widget_show(gtk_notebook_get_nth_page(g->notebook, active_page));
   gtk_notebook_set_current_page(g->notebook, active_page);
 
