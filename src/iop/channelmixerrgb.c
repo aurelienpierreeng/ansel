@@ -51,6 +51,7 @@
 #include "common/chromatic_adaptation.h"
 #include "common/colorspaces_inline_conversions.h"
 #include "common/colorchecker.h"
+#include "common/matrices.h"
 #include "common/opencl.h"
 #include "common/illuminants.h"
 #include "common/imagebuf.h"
@@ -66,6 +67,7 @@
 #include "gaussian_elimination.h"
 
 #include <assert.h>
+#include <float.h>
 #include <gtk/gtk.h>
 #include <inttypes.h>
 #include <math.h>
@@ -167,6 +169,7 @@ typedef enum dt_iop_channelmixer_rgb_mixer_mode_t
 {
   DT_CHANNELMIXERRGB_MIXER_COMPLETE = 0,
   DT_CHANNELMIXERRGB_MIXER_SIMPLE = 1,
+  DT_CHANNELMIXERRGB_MIXER_PRIMARIES = 2,
 } dt_iop_channelmixer_rgb_mixer_mode_t;
 
 typedef enum dt_iop_channelmixer_rgb_simple_probe_t
@@ -175,6 +178,14 @@ typedef enum dt_iop_channelmixer_rgb_simple_probe_t
   DT_CHANNELMIXERRGB_SIMPLE_PROBE_AXIS_1 = 1,
   DT_CHANNELMIXERRGB_SIMPLE_PROBE_AXIS_2 = 2,
 } dt_iop_channelmixer_rgb_simple_probe_t;
+
+typedef enum dt_iop_channelmixer_rgb_primaries_basis_t
+{
+  DT_CHANNELMIXERRGB_PRIMARIES_BASIS_RGB = 0,
+  DT_CHANNELMIXERRGB_PRIMARIES_BASIS_XYZ = 1,
+  DT_CHANNELMIXERRGB_PRIMARIES_BASIS_BRADFORD = 2,
+  DT_CHANNELMIXERRGB_PRIMARIES_BASIS_CAT16 = 3,
+} dt_iop_channelmixer_rgb_primaries_basis_t;
 
 typedef struct dt_iop_channelmixer_rgb_simple_params_t
 {
@@ -186,11 +197,26 @@ typedef struct dt_iop_channelmixer_rgb_simple_params_t
   float coupling_2;
 } dt_iop_channelmixer_rgb_simple_params_t;
 
+typedef struct dt_iop_channelmixer_rgb_primaries_params_t
+{
+  float achromatic_hue;
+  float achromatic_purity;
+  float red_hue;
+  float red_purity;
+  float green_hue;
+  float green_purity;
+  float blue_hue;
+  float blue_purity;
+  float gain;
+} dt_iop_channelmixer_rgb_primaries_params_t;
+
 typedef struct dt_iop_channelmixer_rgb_gui_data_t
 {
   GtkNotebook *notebook;
   GtkWidget *mixer_mode, *mixer_stack;
   GtkWidget *simple_theta, *simple_psi, *simple_stretch_1, *simple_stretch_2, *simple_coupling_1, *simple_coupling_2;
+  GtkWidget *primaries_achromatic_hue, *primaries_achromatic_purity, *primaries_red_hue, *primaries_red_purity;
+  GtkWidget *primaries_green_hue, *primaries_green_purity, *primaries_blue_hue, *primaries_blue_purity, *primaries_gain;
   GtkWidget *illuminant, *temperature, *adaptation, *gamut, *clip;
   GtkWidget *illum_fluo, *illum_led, *illum_x, *illum_y, *approx_cct, *illum_color;
   GtkWidget *scale_red_R, *scale_red_G, *scale_red_B;
@@ -274,6 +300,9 @@ static void _channelmixerrgb_work_rgb_to_display(const dt_aligned_pixel_t work_r
                                                  const dt_iop_order_iccprofile_info_t *work_profile,
                                                  const dt_iop_order_iccprofile_info_t *display_profile,
                                                  dt_aligned_pixel_t display_rgb);
+static void _channelmixerrgb_simple_module_color_to_display(dt_iop_module_t *self,
+                                                            const dt_iop_channelmixer_rgb_params_t *p,
+                                                            const float module_color[3], float display_rgb[3]);
 
 
 const char *name()
@@ -3455,6 +3484,618 @@ static float _channelmixerrgb_simple_roundtrip_error(const float M[3][3], const 
 }
 
 /**
+ * @brief Map the current chromatic adaptation to the affine primaries basis used in the GUI.
+ *
+ * The primaries mode works entirely in the GUI layer. It interprets the current
+ * mixer matrix in whatever linear basis the module currently uses, so the same
+ * affine construction can be reused for work RGB, XYZ and the two LMS spaces.
+ *
+ * @param[in] adaptation Current mixer adaptation mode.
+ * @return Affine primaries basis associated with the current adaptation.
+ */
+static inline dt_iop_channelmixer_rgb_primaries_basis_t
+_channelmixerrgb_primaries_basis_from_adaptation(const dt_adaptation_t adaptation)
+{
+  switch(adaptation)
+  {
+    case DT_ADAPTATION_FULL_BRADFORD:
+    case DT_ADAPTATION_LINEAR_BRADFORD:
+      return DT_CHANNELMIXERRGB_PRIMARIES_BASIS_BRADFORD;
+    case DT_ADAPTATION_CAT16:
+      return DT_CHANNELMIXERRGB_PRIMARIES_BASIS_CAT16;
+    case DT_ADAPTATION_XYZ:
+      return DT_CHANNELMIXERRGB_PRIMARIES_BASIS_XYZ;
+    case DT_ADAPTATION_RGB:
+    case DT_ADAPTATION_LAST:
+    default:
+      return DT_CHANNELMIXERRGB_PRIMARIES_BASIS_RGB;
+  }
+}
+
+/**
+ * @brief Return the D50 white vector in the current affine primaries basis.
+ *
+ * The affine primaries model operates in the same coordinates as the mixer
+ * matrix. D50 therefore needs to be expressed in that same basis so the white
+ * tint sliders remain meaningful in RGB, XYZ and LMS modes alike.
+ *
+ * @param[in] basis Affine primaries basis used by the mixer GUI.
+ * @param[out] white D50 white vector in that basis.
+ */
+static void _channelmixerrgb_primaries_reference_white(const dt_iop_channelmixer_rgb_primaries_basis_t basis,
+                                                       float white[3])
+{
+  dt_aligned_pixel_t D50 = { 0.f };
+  switch(basis)
+  {
+    case DT_CHANNELMIXERRGB_PRIMARIES_BASIS_BRADFORD:
+      convert_D50_to_LMS(DT_ADAPTATION_LINEAR_BRADFORD, D50);
+      break;
+    case DT_CHANNELMIXERRGB_PRIMARIES_BASIS_CAT16:
+      convert_D50_to_LMS(DT_ADAPTATION_CAT16, D50);
+      break;
+    case DT_CHANNELMIXERRGB_PRIMARIES_BASIS_XYZ:
+      convert_D50_to_LMS(DT_ADAPTATION_XYZ, D50);
+      break;
+    case DT_CHANNELMIXERRGB_PRIMARIES_BASIS_RGB:
+    default:
+      convert_D50_to_LMS(DT_ADAPTATION_RGB, D50);
+      break;
+  }
+
+  for(int c = 0; c < 3; c++) white[c] = D50[c];
+}
+
+/**
+ * @brief Return the affine sum of a triplet in the current mixer basis.
+ *
+ * The primaries mode uses the plane r + g + b = 1 of the current basis as its
+ * generalized chromaticity plane. Dividing by that affine sum turns any
+ * non-degenerate basis vector into a point on that plane.
+ *
+ * @param[in] vector 3-vector in the current mixer basis.
+ * @return Affine sum of the input vector.
+ */
+static inline float _channelmixerrgb_affine_sum3(const float vector[3])
+{
+  return vector[0] + vector[1] + vector[2];
+}
+
+/**
+ * @brief Project a 3-vector on the normalized affine plane r + g + b = 1.
+ *
+ * @param[in] vector 3-vector in the current mixer basis.
+ * @param[out] normalized Vector normalized to the affine plane.
+ * @return TRUE when the affine sum is non-zero, FALSE otherwise.
+ */
+static gboolean _channelmixerrgb_affine_normalize(const float vector[3], float normalized[3])
+{
+  const float sum = _channelmixerrgb_affine_sum3(vector);
+  if(fabsf(sum) < DT_CHANNELMIXERRGB_SIMPLE_EPS) return FALSE;
+
+  for(int c = 0; c < 3; c++) normalized[c] = vector[c] / sum;
+  return TRUE;
+}
+
+/**
+ * @brief Project a difference on the 2D chromaticity plane of the affine simplex.
+ *
+ * The vectors returned here live in the sum-zero subspace. Using the same
+ * orthonormal frame as the normalized simple mode keeps the geometry compact
+ * while remaining independent from the actual adaptation basis.
+ *
+ * @param[in] difference Difference of two normalized affine coordinates.
+ * @param[out] uv 2D coordinates in the chromaticity plane.
+ */
+static void _channelmixerrgb_affine_project_difference(const float difference[3], float uv[2])
+{
+  uv[0] = 0.7071067811865475f * (difference[0] - difference[1]);
+  uv[1] = 0.4082482904638631f * (difference[0] + difference[1]) - 0.8164965809277261f * difference[2];
+}
+
+/**
+ * @brief Lift a 2D chromaticity-plane vector back to the affine simplex.
+ *
+ * @param[in] uv 2D coordinates in the chromaticity plane.
+ * @param[out] difference Difference vector in the affine plane.
+ */
+static void _channelmixerrgb_affine_unproject_difference(const float uv[2], float difference[3])
+{
+  difference[0] = 0.7071067811865475f * uv[0] + 0.4082482904638631f * uv[1];
+  difference[1] = -0.7071067811865475f * uv[0] + 0.4082482904638631f * uv[1];
+  difference[2] = -0.8164965809277261f * uv[1];
+}
+
+/**
+ * @brief Rotate a 2D vector around the affine white point.
+ *
+ * @param[in] vector Input vector in 2D chromaticity coordinates.
+ * @param[in] angle Rotation angle in radians.
+ * @param[out] rotated Rotated 2D vector.
+ */
+static void _channelmixerrgb_rotate_2d(const float vector[2], const float angle, float rotated[2])
+{
+  const float cosine = cosf(angle);
+  const float sine = sinf(angle);
+  rotated[0] = cosine * vector[0] - sine * vector[1];
+  rotated[1] = sine * vector[0] + cosine * vector[1];
+}
+
+/**
+ * @brief Intersect a chromaticity-plane ray with a triangle edge segment.
+ *
+ * @param[in] direction Unit ray direction from the affine white point.
+ * @param[in] first First edge vertex in 2D coordinates relative to white.
+ * @param[in] second Second edge vertex in 2D coordinates relative to white.
+ * @return Distance along the ray to the intersection, or FLT_MAX when none exists.
+ */
+static float _channelmixerrgb_intersect_affine_ray_segment(const float direction[2], const float first[2],
+                                                           const float second[2])
+{
+  const float edge_x = second[0] - first[0];
+  const float edge_y = second[1] - first[1];
+  const float denominator = direction[0] * edge_y - direction[1] * edge_x;
+  if(fabsf(denominator) < DT_CHANNELMIXERRGB_SIMPLE_EPS) return FLT_MAX;
+
+  const float t = (first[0] * edge_y - first[1] * edge_x) / denominator;
+  const float u = (first[0] * direction[1] - first[1] * direction[0]) / denominator;
+  if(t >= 0.f && u >= 0.f && u <= 1.f) return t;
+  return FLT_MAX;
+}
+
+/**
+ * @brief Measure the distance from the affine white point to the simplex edge.
+ *
+ * @param[in] direction Unit direction in the 2D chromaticity plane.
+ * @param[in] reference_primaries 2D coordinates of the 3 reference primaries relative to white.
+ * @return Distance from the white point to the simplex edge along @p direction.
+ */
+static float _channelmixerrgb_affine_distance_to_edge(const float direction[2], const float reference_primaries[3][2])
+{
+  float distance_to_edge = FLT_MAX;
+  for(int i = 0; i < 3; i++)
+  {
+    const int next = i == 2 ? 0 : i + 1;
+    const float distance = _channelmixerrgb_intersect_affine_ray_segment(direction, reference_primaries[i],
+                                                                         reference_primaries[next]);
+    if(distance < distance_to_edge) distance_to_edge = distance;
+  }
+
+  return distance_to_edge;
+}
+
+/**
+ * @brief Build the reference affine simplex for the current primaries basis.
+ *
+ * The three mixer basis vectors are used as reference primaries. They are
+ * translated to the generalized chromaticity plane relative to the D50 white
+ * of the same basis, so every adaptation mode reuses the same geometric
+ * construction.
+ *
+ * @param[in] basis Affine primaries basis used by the mixer GUI.
+ * @param[out] white_normalized D50 white point normalized to the affine plane.
+ * @param[out] reference_primaries 2D coordinates of the 3 reference primaries relative to white.
+ * @return TRUE on success, FALSE when the white point cannot be normalized.
+ */
+static gboolean _channelmixerrgb_build_affine_simplex(const dt_iop_channelmixer_rgb_primaries_basis_t basis,
+                                                      float white_normalized[3], float reference_primaries[3][2])
+{
+  const float identity[3][3] = { { 1.f, 0.f, 0.f },
+                                 { 0.f, 1.f, 0.f },
+                                 { 0.f, 0.f, 1.f } };
+  float white[3] = { 0.f };
+
+  _channelmixerrgb_primaries_reference_white(basis, white);
+  if(!_channelmixerrgb_affine_normalize(white, white_normalized)) return FALSE;
+
+  for(int i = 0; i < 3; i++)
+  {
+    float difference[3] = { identity[i][0] - white_normalized[0],
+                            identity[i][1] - white_normalized[1],
+                            identity[i][2] - white_normalized[2] };
+    _channelmixerrgb_affine_project_difference(difference, reference_primaries[i]);
+  }
+
+  return TRUE;
+}
+
+/**
+ * @brief Convert one affine primaries slider pair to a normalized basis vector.
+ *
+ * @param[in] white_normalized Reference white point on the affine plane.
+ * @param[in] reference_primaries 2D coordinates of the reference primaries relative to white.
+ * @param[in] reference_index Which reference primary defines the zero-angle direction.
+ * @param[in] hue Rotation angle in radians.
+ * @param[in] purity Radial scale factor along the simplex footprint.
+ * @param[out] point_normalized Normalized point on the affine plane.
+ * @return TRUE on success, FALSE when the simplex geometry degenerates.
+ */
+static gboolean _channelmixerrgb_affine_point_from_polar(const float white_normalized[3],
+                                                         const float reference_primaries[3][2],
+                                                         const int reference_index, const float hue,
+                                                         const float purity, float point_normalized[3])
+{
+  const float *const reference = reference_primaries[reference_index];
+  const float radius = hypotf(reference[0], reference[1]);
+  if(radius < DT_CHANNELMIXERRGB_SIMPLE_EPS) return FALSE;
+
+  const float direction_reference[2] = { reference[0] / radius, reference[1] / radius };
+  float direction[2] = { 0.f };
+  float difference[3] = { 0.f };
+  _channelmixerrgb_rotate_2d(direction_reference, hue, direction);
+
+  const float distance_to_edge = _channelmixerrgb_affine_distance_to_edge(direction, reference_primaries);
+  if(distance_to_edge == FLT_MAX) return FALSE;
+
+  const float uv[2] = { purity * distance_to_edge * direction[0],
+                        purity * distance_to_edge * direction[1] };
+  _channelmixerrgb_affine_unproject_difference(uv, difference);
+
+  for(int c = 0; c < 3; c++) point_normalized[c] = white_normalized[c] + difference[c];
+  return TRUE;
+}
+
+/**
+ * @brief Convert a normalized affine point to primaries hue/purity sliders.
+ *
+ * @param[in] white_normalized Reference white point on the affine plane.
+ * @param[in] reference_primaries 2D coordinates of the reference primaries relative to white.
+ * @param[in] reference_index Which reference primary defines the zero-angle direction.
+ * @param[in] point_normalized Normalized affine point to analyze.
+ * @param[out] hue Rotation angle in radians.
+ * @param[out] purity Radial scale factor along the simplex footprint.
+ * @return TRUE on success, FALSE when the simplex geometry degenerates.
+ */
+static gboolean _channelmixerrgb_affine_polar_from_point(const float white_normalized[3],
+                                                         const float reference_primaries[3][2],
+                                                         const int reference_index,
+                                                         const float point_normalized[3], float *const hue,
+                                                         float *const purity)
+{
+  const float *const reference = reference_primaries[reference_index];
+  const float reference_angle = atan2f(reference[1], reference[0]);
+  float difference[3] = { point_normalized[0] - white_normalized[0],
+                          point_normalized[1] - white_normalized[1],
+                          point_normalized[2] - white_normalized[2] };
+  float uv[2] = { 0.f };
+  _channelmixerrgb_affine_project_difference(difference, uv);
+
+  const float radius = hypotf(uv[0], uv[1]);
+  if(radius < DT_CHANNELMIXERRGB_SIMPLE_EPS)
+  {
+    *hue = 0.f;
+    *purity = 0.f;
+    return TRUE;
+  }
+
+  const float direction[2] = { uv[0] / radius, uv[1] / radius };
+  const float distance_to_edge = _channelmixerrgb_affine_distance_to_edge(direction, reference_primaries);
+  if(distance_to_edge == FLT_MAX || distance_to_edge < DT_CHANNELMIXERRGB_SIMPLE_EPS) return FALSE;
+
+  *hue = _channelmixerrgb_wrap_pi(atan2f(direction[1], direction[0]) - reference_angle);
+  *purity = radius / distance_to_edge;
+  return TRUE;
+}
+
+/**
+ * @brief Convert primaries sliders to an exact mixer matrix in the current basis.
+ *
+ * The matrix columns are the custom basis vectors expressed in the current
+ * mixer coordinates. We first build normalized affine coordinates for the three
+ * primaries and the custom white, then solve the per-column gains that enforce
+ * the requested white vector. The extra gain slider restores the missing ninth
+ * degree of freedom absent from the original primaries-only parametrization.
+ *
+ * @param[in] basis Affine primaries basis used by the mixer GUI.
+ * @param[in] primaries Primaries-mode parameters.
+ * @param[out] M Mixer matrix in current module coordinates.
+ * @return TRUE on success, FALSE when the construction becomes singular.
+ */
+static gboolean _channelmixerrgb_primaries_to_matrix(const dt_iop_channelmixer_rgb_primaries_basis_t basis,
+                                                     const dt_iop_channelmixer_rgb_primaries_params_t *const primaries,
+                                                     float M[3][3])
+{
+  float white_reference[3] = { 0.f };
+  float reference_primaries[3][2] = { { 0.f } };
+  float white_reference_normalized[3] = { 0.f };
+  float custom_white_normalized[3] = { 0.f };
+  float custom_primaries[3][3] = { { 0.f } };
+  dt_colormatrix_t normalized_inverse = { { 0.f } };
+  dt_colormatrix_t normalized_primaries = { { 0.f } };
+
+  _channelmixerrgb_primaries_reference_white(basis, white_reference);
+  const float white_reference_sum = _channelmixerrgb_affine_sum3(white_reference);
+  if(fabsf(white_reference_sum) < DT_CHANNELMIXERRGB_SIMPLE_EPS) return FALSE;
+
+  if(!_channelmixerrgb_build_affine_simplex(basis, white_reference_normalized, reference_primaries)) return FALSE;
+
+  if(!_channelmixerrgb_affine_point_from_polar(white_reference_normalized, reference_primaries, 0,
+                                               primaries->achromatic_hue, primaries->achromatic_purity,
+                                               custom_white_normalized))
+    return FALSE;
+
+  if(!_channelmixerrgb_affine_point_from_polar(white_reference_normalized, reference_primaries, 0, primaries->red_hue,
+                                               primaries->red_purity, custom_primaries[0]))
+    return FALSE;
+  if(!_channelmixerrgb_affine_point_from_polar(white_reference_normalized, reference_primaries, 1, primaries->green_hue,
+                                               primaries->green_purity, custom_primaries[1]))
+    return FALSE;
+  if(!_channelmixerrgb_affine_point_from_polar(white_reference_normalized, reference_primaries, 2, primaries->blue_hue,
+                                               primaries->blue_purity, custom_primaries[2]))
+    return FALSE;
+
+  for(int row = 0; row < 3; row++)
+    for(int col = 0; col < 3; col++)
+      normalized_primaries[row][col] = custom_primaries[col][row];
+
+  if(mat3SSEinv(normalized_inverse, normalized_primaries)) return FALSE;
+
+  const float white_gain = primaries->gain * white_reference_sum;
+  const dt_aligned_pixel_t custom_white = { white_gain * custom_white_normalized[0],
+                                            white_gain * custom_white_normalized[1],
+                                            white_gain * custom_white_normalized[2],
+                                            0.f };
+  dt_aligned_pixel_t column_scales = { 0.f };
+  dt_apply_transposed_color_matrix(custom_white, normalized_inverse, column_scales);
+
+  for(int col = 0; col < 3; col++)
+    for(int row = 0; row < 3; row++)
+      M[row][col] = column_scales[col] * custom_primaries[col][row];
+
+  return TRUE;
+}
+
+/**
+ * @brief Convert the current mixer matrix to primaries sliders and gain.
+ *
+ * The conversion is exact for non-singular matrices whose three columns and
+ * white vector can be normalized on the affine plane r + g + b = 1. Those
+ * conditions are checked explicitly before attempting the roundtrip.
+ *
+ * @param[in] basis Affine primaries basis used by the mixer GUI.
+ * @param[in] M Mixer matrix in current module coordinates.
+ * @param[out] primaries Primaries-mode parameters recovered from @p M.
+ * @return TRUE on success, FALSE when the matrix cannot be represented.
+ */
+static gboolean _channelmixerrgb_primaries_from_matrix(const dt_iop_channelmixer_rgb_primaries_basis_t basis,
+                                                       const float M[3][3],
+                                                       dt_iop_channelmixer_rgb_primaries_params_t *primaries)
+{
+  dt_colormatrix_t padded = { { 0.f } };
+  dt_colormatrix_t inverse = { { 0.f } };
+  float white_reference[3] = { 0.f };
+  float white_reference_normalized[3] = { 0.f };
+  float reference_primaries[3][2] = { { 0.f } };
+  float custom_white[3] = { 0.f };
+  float custom_white_normalized[3] = { 0.f };
+  float custom_primary_normalized[3] = { 0.f };
+
+  for(int row = 0; row < 3; row++)
+    for(int col = 0; col < 3; col++)
+      padded[row][col] = M[row][col];
+  if(mat3SSEinv(inverse, padded)) return FALSE;
+
+  _channelmixerrgb_primaries_reference_white(basis, white_reference);
+  const float white_reference_sum = _channelmixerrgb_affine_sum3(white_reference);
+  if(fabsf(white_reference_sum) < DT_CHANNELMIXERRGB_SIMPLE_EPS) return FALSE;
+
+  if(!_channelmixerrgb_build_affine_simplex(basis, white_reference_normalized, reference_primaries)) return FALSE;
+
+  for(int row = 0; row < 3; row++)
+    custom_white[row] = M[row][0] + M[row][1] + M[row][2];
+  if(!_channelmixerrgb_affine_normalize(custom_white, custom_white_normalized)) return FALSE;
+
+  primaries->gain = _channelmixerrgb_affine_sum3(custom_white) / white_reference_sum;
+  if(!_channelmixerrgb_affine_polar_from_point(white_reference_normalized, reference_primaries, 0,
+                                               custom_white_normalized, &primaries->achromatic_hue,
+                                               &primaries->achromatic_purity))
+    return FALSE;
+
+  for(int primary = 0; primary < 3; primary++)
+  {
+    const float column[3] = { M[0][primary], M[1][primary], M[2][primary] };
+    if(!_channelmixerrgb_affine_normalize(column, custom_primary_normalized)) return FALSE;
+
+    float *hue = primary == 0 ? &primaries->red_hue : primary == 1 ? &primaries->green_hue : &primaries->blue_hue;
+    float *purity = primary == 0 ? &primaries->red_purity : primary == 1 ? &primaries->green_purity : &primaries->blue_purity;
+
+    if(!_channelmixerrgb_affine_polar_from_point(white_reference_normalized, reference_primaries, primary,
+                                                 custom_primary_normalized, hue, purity))
+      return FALSE;
+  }
+
+  return TRUE;
+}
+
+/**
+ * @brief Read the current primaries-mode widgets and decode them.
+ *
+ * @param[in] g Channel mixer GUI data.
+ * @param[out] primaries Decoded primaries-mode parameters.
+ */
+static void _channelmixerrgb_primaries_from_widgets(const dt_iop_channelmixer_rgb_gui_data_t *const g,
+                                                    dt_iop_channelmixer_rgb_primaries_params_t *primaries)
+{
+  primaries->achromatic_hue = dt_bauhaus_slider_get(g->primaries_achromatic_hue) * (float)M_PI_2;
+  primaries->achromatic_purity = dt_bauhaus_slider_get(g->primaries_achromatic_purity);
+  primaries->red_hue = dt_bauhaus_slider_get(g->primaries_red_hue) * (float)M_PI_2;
+  primaries->red_purity = dt_bauhaus_slider_get(g->primaries_red_purity);
+  primaries->green_hue = dt_bauhaus_slider_get(g->primaries_green_hue) * (float)M_PI_2;
+  primaries->green_purity = dt_bauhaus_slider_get(g->primaries_green_purity);
+  primaries->blue_hue = dt_bauhaus_slider_get(g->primaries_blue_hue) * (float)M_PI_2;
+  primaries->blue_purity = dt_bauhaus_slider_get(g->primaries_blue_purity);
+  primaries->gain = dt_bauhaus_slider_get(g->primaries_gain);
+}
+
+/**
+ * @brief Push primaries-mode parameters back to the GUI widgets.
+ *
+ * @param[in] g Channel mixer GUI data.
+ * @param[in] primaries Primaries-mode parameters to show.
+ */
+static void _channelmixerrgb_primaries_to_widgets(dt_iop_channelmixer_rgb_gui_data_t *const g,
+                                                  const dt_iop_channelmixer_rgb_primaries_params_t *const primaries)
+{
+  dt_bauhaus_slider_set(g->primaries_achromatic_hue,
+                        CLAMP(primaries->achromatic_hue / (float)M_PI_2, -1.f, 1.f));
+  dt_bauhaus_slider_set(g->primaries_achromatic_purity, primaries->achromatic_purity);
+  dt_bauhaus_slider_set(g->primaries_red_hue, CLAMP(primaries->red_hue / (float)M_PI_2, -1.f, 1.f));
+  dt_bauhaus_slider_set(g->primaries_red_purity, primaries->red_purity);
+  dt_bauhaus_slider_set(g->primaries_green_hue, CLAMP(primaries->green_hue / (float)M_PI_2, -1.f, 1.f));
+  dt_bauhaus_slider_set(g->primaries_green_purity, primaries->green_purity);
+  dt_bauhaus_slider_set(g->primaries_blue_hue, CLAMP(primaries->blue_hue / (float)M_PI_2, -1.f, 1.f));
+  dt_bauhaus_slider_set(g->primaries_blue_purity, primaries->blue_purity);
+  dt_bauhaus_slider_set(g->primaries_gain, primaries->gain);
+}
+
+/**
+ * @brief Synchronize the primaries-mode GUI from the effective mixer matrix.
+ *
+ * @param[in] self Current module instance.
+ * @param[out] error Largest absolute coefficient error after a full roundtrip.
+ * @return TRUE when the effective matrix is representable by the primaries mode.
+ */
+static gboolean _channelmixerrgb_sync_primaries_from_params(dt_iop_module_t *self, float *error)
+{
+  dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
+  const dt_iop_channelmixer_rgb_params_t *const p = (dt_iop_channelmixer_rgb_params_t *)self->params;
+  dt_iop_channelmixer_rgb_primaries_params_t primaries;
+  const dt_iop_channelmixer_rgb_primaries_basis_t basis
+      = _channelmixerrgb_primaries_basis_from_adaptation(p->adaptation);
+  float M[3][3] = { { 0.f } };
+  float roundtrip[3][3] = { { 0.f } };
+
+  if(!_channelmixerrgb_get_mixer_matrix(p, M, FALSE)) return FALSE;
+  if(!_channelmixerrgb_primaries_from_matrix(basis, M, &primaries)) return FALSE;
+  if(!_channelmixerrgb_primaries_to_matrix(basis, &primaries, roundtrip)) return FALSE;
+
+  const float roundtrip_error = _channelmixerrgb_simple_roundtrip_error(M, roundtrip);
+  if(error) *error = roundtrip_error;
+
+  ++darktable.gui->reset;
+  _channelmixerrgb_primaries_to_widgets(g, &primaries);
+  --darktable.gui->reset;
+  return isfinite(roundtrip_error) && roundtrip_error <= DT_CHANNELMIXERRGB_SIMPLE_EPS;
+}
+
+/**
+ * @brief Build the module-space probe color used to paint one primaries slider.
+ *
+ * The primaries UI controls either one custom basis vector or the custom white
+ * vector. When painting a slider background, we vary only that parameter while
+ * keeping every other primaries parameter constant and reuse the affected
+ * module-space vector as the probe color.
+ *
+ * @param[in] M Mixer matrix built from the probed primaries parameters.
+ * @param[in] widget_index Index of the primaries slider being painted.
+ * @param[out] module_color Probe color in the current mixer basis.
+ */
+static void _channelmixerrgb_primaries_probe_color(const float M[3][3], const int widget_index, float module_color[3])
+{
+  if(widget_index <= 1 || widget_index == 8)
+  {
+    for(int row = 0; row < 3; row++)
+      module_color[row] = M[row][0] + M[row][1] + M[row][2];
+    return;
+  }
+
+  const int column = widget_index <= 3 ? 0 : widget_index <= 5 ? 1 : 2;
+  for(int row = 0; row < 3; row++)
+    module_color[row] = M[row][column];
+}
+
+/**
+ * @brief Paint the primaries-mode sliders from the current primaries model.
+ *
+ * Each slider is swept through its own hard range while all the other
+ * parameters are kept constant. The resulting custom basis vector or white
+ * vector is then converted through the active display profile using the same
+ * linear-display normalization path as the other mixer previews.
+ *
+ * @param[in] self Current module instance.
+ */
+static void _channelmixerrgb_update_primaries_colors(dt_iop_module_t *self)
+{
+  dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
+  dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
+  const GtkWidget *widgets[9]
+      = { g->primaries_achromatic_hue, g->primaries_achromatic_purity, g->primaries_red_hue, g->primaries_red_purity,
+          g->primaries_green_hue, g->primaries_green_purity, g->primaries_blue_hue, g->primaries_blue_purity,
+          g->primaries_gain };
+  dt_iop_channelmixer_rgb_primaries_params_t primaries;
+  const dt_iop_channelmixer_rgb_primaries_basis_t basis
+      = _channelmixerrgb_primaries_basis_from_adaptation(p->adaptation);
+
+  _channelmixerrgb_primaries_from_widgets(g, &primaries);
+
+  for(int i = 0; i < DT_BAUHAUS_SLIDER_MAX_STOPS; i++)
+  {
+    const float stop = (float)i / (float)(DT_BAUHAUS_SLIDER_MAX_STOPS - 1);
+
+    for(int widget = 0; widget < 9; widget++)
+    {
+      dt_iop_channelmixer_rgb_primaries_params_t probe = primaries;
+      float M[3][3] = { { 0.f } };
+      float module_color[3] = { 0.f };
+      float display_rgb[3] = { 0.f };
+      const float hard_min = dt_bauhaus_slider_get_hard_min((GtkWidget *)widgets[widget]);
+      const float hard_max = dt_bauhaus_slider_get_hard_max((GtkWidget *)widgets[widget]);
+      const float value = hard_min + stop * (hard_max - hard_min);
+
+      switch(widget)
+      {
+        case 0:
+          probe.achromatic_hue = value * (float)M_PI_2;
+          break;
+        case 1:
+          probe.achromatic_purity = value;
+          break;
+        case 2:
+          probe.red_hue = value * (float)M_PI_2;
+          break;
+        case 3:
+          probe.red_purity = value;
+          break;
+        case 4:
+          probe.green_hue = value * (float)M_PI_2;
+          break;
+        case 5:
+          probe.green_purity = value;
+          break;
+        case 6:
+          probe.blue_hue = value * (float)M_PI_2;
+          break;
+        case 7:
+          probe.blue_purity = value;
+          break;
+        case 8:
+          probe.gain = value;
+          break;
+        default:
+          break;
+      }
+
+      if(!_channelmixerrgb_primaries_to_matrix(basis, &probe, M)) continue;
+
+      _channelmixerrgb_primaries_probe_color(M, widget, module_color);
+      _channelmixerrgb_simple_module_color_to_display(self, p, module_color, display_rgb);
+      dt_bauhaus_slider_set_stop((GtkWidget *)widgets[widget], stop, display_rgb[0], display_rgb[1],
+                                 display_rgb[2]);
+    }
+  }
+
+  gtk_widget_queue_draw(g->primaries_achromatic_hue);
+  gtk_widget_queue_draw(g->primaries_achromatic_purity);
+  gtk_widget_queue_draw(g->primaries_red_hue);
+  gtk_widget_queue_draw(g->primaries_red_purity);
+  gtk_widget_queue_draw(g->primaries_green_hue);
+  gtk_widget_queue_draw(g->primaries_green_purity);
+  gtk_widget_queue_draw(g->primaries_blue_hue);
+  gtk_widget_queue_draw(g->primaries_blue_purity);
+  gtk_widget_queue_draw(g->primaries_gain);
+}
+
+/**
  * @brief Convert a module-space pseudo color to the actual display profile.
  *
  * The complete RGB mixer already paints slider stops from synthetic colors.
@@ -4003,6 +4644,7 @@ void gui_update(struct dt_iop_module_t *self)
   dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)module->params;
   float simple_error = INFINITY;
+  float primaries_error = INFINITY;
   const gboolean rows_are_normalized = _channelmixerrgb_rows_are_normalized(p);
 
   dt_iop_color_picker_reset(self, TRUE);
@@ -4047,6 +4689,7 @@ void gui_update(struct dt_iop_module_t *self)
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->normalize_B), p->normalize_B);
 
   const gboolean simple_ok = rows_are_normalized && _channelmixerrgb_sync_simple_from_params(self, &simple_error);
+  const gboolean primaries_ok = _channelmixerrgb_sync_primaries_from_params(self, &primaries_error);
   const dt_iop_channelmixer_rgb_mixer_mode_t requested_mode
       = dt_conf_key_exists(DT_CHANNELMIXERRGB_SIMPLE_MODE_CONF)
             ? dt_conf_get_int(DT_CHANNELMIXERRGB_SIMPLE_MODE_CONF)
@@ -4054,9 +4697,11 @@ void gui_update(struct dt_iop_module_t *self)
                    ? DT_CHANNELMIXERRGB_MIXER_SIMPLE
                    : DT_CHANNELMIXERRGB_MIXER_COMPLETE);
   const dt_iop_channelmixer_rgb_mixer_mode_t mixer_mode
-      = (requested_mode == DT_CHANNELMIXERRGB_MIXER_SIMPLE && rows_are_normalized && simple_ok)
+      = requested_mode == DT_CHANNELMIXERRGB_MIXER_SIMPLE && rows_are_normalized && simple_ok
             ? DT_CHANNELMIXERRGB_MIXER_SIMPLE
-            : DT_CHANNELMIXERRGB_MIXER_COMPLETE;
+            : requested_mode == DT_CHANNELMIXERRGB_MIXER_PRIMARIES && primaries_ok
+                  ? DT_CHANNELMIXERRGB_MIXER_PRIMARIES
+                  : DT_CHANNELMIXERRGB_MIXER_COMPLETE;
   dt_bauhaus_combobox_set(g->mixer_mode, mixer_mode);
   _channelmixerrgb_set_mixer_mode(g, mixer_mode);
 
@@ -4233,7 +4878,9 @@ static void _channelmixerrgb_set_mixer_mode(dt_iop_channelmixer_rgb_gui_data_t *
                                             const dt_iop_channelmixer_rgb_mixer_mode_t mode)
 {
   gtk_stack_set_visible_child_name(GTK_STACK(g->mixer_stack),
-                                   mode == DT_CHANNELMIXERRGB_MIXER_SIMPLE ? "simple" : "complete");
+                                   mode == DT_CHANNELMIXERRGB_MIXER_SIMPLE ? "simple"
+                                   : mode == DT_CHANNELMIXERRGB_MIXER_PRIMARIES ? "primaries"
+                                   : "complete");
 }
 
 static void _channelmixerrgb_mixer_mode_callback(GtkWidget *combo, gpointer user_data)
@@ -4247,45 +4894,103 @@ static void _channelmixerrgb_mixer_mode_callback(GtkWidget *combo, gpointer user
 
   dt_conf_set_int(DT_CHANNELMIXERRGB_SIMPLE_MODE_CONF, mode);
 
-  if(mode != DT_CHANNELMIXERRGB_MIXER_SIMPLE)
+  if(mode == DT_CHANNELMIXERRGB_MIXER_COMPLETE)
   {
     _channelmixerrgb_set_mixer_mode(g, mode);
     return;
   }
 
-  float error = INFINITY;
-  if(!_channelmixerrgb_get_mixer_matrix(p, (float[3][3]) { { 0.f } }, TRUE))
+  if(mode == DT_CHANNELMIXERRGB_MIXER_SIMPLE)
   {
-    dt_control_log(_("simple mixer mode requires non-zero row sums."));
+    float error = INFINITY;
+    if(!_channelmixerrgb_get_mixer_matrix(p, (float[3][3]) { { 0.f } }, TRUE))
+    {
+      dt_control_log(_("simple mixer mode requires non-zero row sums."));
+      ++darktable.gui->reset;
+      dt_bauhaus_combobox_set(g->mixer_mode, DT_CHANNELMIXERRGB_MIXER_COMPLETE);
+      --darktable.gui->reset;
+      _channelmixerrgb_set_mixer_mode(g, DT_CHANNELMIXERRGB_MIXER_COMPLETE);
+      dt_conf_set_int(DT_CHANNELMIXERRGB_SIMPLE_MODE_CONF, DT_CHANNELMIXERRGB_MIXER_COMPLETE);
+      return;
+    }
+
+    const gboolean changed = !p->normalize_R || !p->normalize_G || !p->normalize_B;
+    p->normalize_R = TRUE;
+    p->normalize_G = TRUE;
+    p->normalize_B = TRUE;
+
     ++darktable.gui->reset;
-    dt_bauhaus_combobox_set(g->mixer_mode, DT_CHANNELMIXERRGB_MIXER_COMPLETE);
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->normalize_R), TRUE);
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->normalize_G), TRUE);
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->normalize_B), TRUE);
     --darktable.gui->reset;
-    _channelmixerrgb_set_mixer_mode(g, DT_CHANNELMIXERRGB_MIXER_COMPLETE);
-    dt_conf_set_int(DT_CHANNELMIXERRGB_SIMPLE_MODE_CONF, DT_CHANNELMIXERRGB_MIXER_COMPLETE);
+
+    if(!_channelmixerrgb_sync_simple_from_params(self, &error))
+      dt_print(DT_DEBUG_DEV, "[channelmixerrgb] simple mixer roundtrip error=%g\n", error);
+
+    _channelmixerrgb_set_mixer_mode(g, mode);
+    gui_changed(self, NULL, NULL);
+
+    if(changed)
+    {
+      dt_print(DT_DEBUG_DEV, "[channelmixerrgb] history commit source=mixer_mode_simple\n");
+      dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+    }
     return;
   }
 
-  const gboolean changed = !p->normalize_R || !p->normalize_G || !p->normalize_B;
-  p->normalize_R = TRUE;
-  p->normalize_G = TRUE;
-  p->normalize_B = TRUE;
-
-  ++darktable.gui->reset;
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->normalize_R), TRUE);
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->normalize_G), TRUE);
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->normalize_B), TRUE);
-  --darktable.gui->reset;
-
-  if(!_channelmixerrgb_sync_simple_from_params(self, &error))
-    dt_print(DT_DEBUG_DEV, "[channelmixerrgb] simple mixer roundtrip error=%g\n", error);
-
-  _channelmixerrgb_set_mixer_mode(g, mode);
-  gui_changed(self, NULL, NULL);
-
-  if(changed)
+  if(mode == DT_CHANNELMIXERRGB_MIXER_PRIMARIES)
   {
-    dt_print(DT_DEBUG_DEV, "[channelmixerrgb] history commit source=mixer_mode_simple\n");
-    dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+    float M[3][3] = { { 0.f } };
+    float error = INFINITY;
+    if(!_channelmixerrgb_get_mixer_matrix(p, M, FALSE)
+       || !_channelmixerrgb_sync_primaries_from_params(self, &error))
+    {
+      dt_control_log(_("primaries mixer mode requires a non-singular 3x3 matrix with non-zero affine sums."));
+      ++darktable.gui->reset;
+      dt_bauhaus_combobox_set(g->mixer_mode, DT_CHANNELMIXERRGB_MIXER_COMPLETE);
+      --darktable.gui->reset;
+      _channelmixerrgb_set_mixer_mode(g, DT_CHANNELMIXERRGB_MIXER_COMPLETE);
+      dt_conf_set_int(DT_CHANNELMIXERRGB_SIMPLE_MODE_CONF, DT_CHANNELMIXERRGB_MIXER_COMPLETE);
+      return;
+    }
+
+    gboolean changed = p->normalize_R || p->normalize_G || p->normalize_B;
+    for(int col = 0; col < 3; col++)
+    {
+      changed = changed || p->red[col] != M[0][col] || p->green[col] != M[1][col] || p->blue[col] != M[2][col];
+      p->red[col] = M[0][col];
+      p->green[col] = M[1][col];
+      p->blue[col] = M[2][col];
+    }
+
+    p->normalize_R = FALSE;
+    p->normalize_G = FALSE;
+    p->normalize_B = FALSE;
+
+    ++darktable.gui->reset;
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->normalize_R), FALSE);
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->normalize_G), FALSE);
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->normalize_B), FALSE);
+    dt_bauhaus_slider_set(g->scale_red_R, p->red[0]);
+    dt_bauhaus_slider_set(g->scale_red_G, p->red[1]);
+    dt_bauhaus_slider_set(g->scale_red_B, p->red[2]);
+    dt_bauhaus_slider_set(g->scale_green_R, p->green[0]);
+    dt_bauhaus_slider_set(g->scale_green_G, p->green[1]);
+    dt_bauhaus_slider_set(g->scale_green_B, p->green[2]);
+    dt_bauhaus_slider_set(g->scale_blue_R, p->blue[0]);
+    dt_bauhaus_slider_set(g->scale_blue_G, p->blue[1]);
+    dt_bauhaus_slider_set(g->scale_blue_B, p->blue[2]);
+    --darktable.gui->reset;
+
+    _channelmixerrgb_set_mixer_mode(g, mode);
+    gui_changed(self, NULL, NULL);
+
+    if(changed)
+    {
+      dt_print(DT_DEBUG_DEV, "[channelmixerrgb] history commit source=mixer_mode_primaries\n");
+      dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+    }
   }
 }
 
@@ -4325,6 +5030,57 @@ static void _channelmixerrgb_simple_slider_callback(GtkWidget *slider, gpointer 
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
+static void _channelmixerrgb_primaries_slider_callback(GtkWidget *slider, gpointer user_data)
+{
+  if(darktable.gui->reset) return;
+
+  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
+  dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
+  dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
+  dt_iop_channelmixer_rgb_primaries_params_t primaries;
+  const dt_iop_channelmixer_rgb_primaries_basis_t basis
+      = _channelmixerrgb_primaries_basis_from_adaptation(p->adaptation);
+  float M[3][3] = { { 0.f } };
+
+  _channelmixerrgb_primaries_from_widgets(g, &primaries);
+  if(!_channelmixerrgb_primaries_to_matrix(basis, &primaries, M))
+  {
+    dt_control_log(_("primaries mixer mode requires a non-singular 3x3 matrix with non-zero affine sums."));
+    return;
+  }
+
+  for(int col = 0; col < 3; col++)
+  {
+    p->red[col] = M[0][col];
+    p->green[col] = M[1][col];
+    p->blue[col] = M[2][col];
+  }
+  p->normalize_R = FALSE;
+  p->normalize_G = FALSE;
+  p->normalize_B = FALSE;
+
+  ++darktable.gui->reset;
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->normalize_R), FALSE);
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->normalize_G), FALSE);
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->normalize_B), FALSE);
+
+  dt_bauhaus_slider_set(g->scale_red_R, p->red[0]);
+  dt_bauhaus_slider_set(g->scale_red_G, p->red[1]);
+  dt_bauhaus_slider_set(g->scale_red_B, p->red[2]);
+  dt_bauhaus_slider_set(g->scale_green_R, p->green[0]);
+  dt_bauhaus_slider_set(g->scale_green_G, p->green[1]);
+  dt_bauhaus_slider_set(g->scale_green_B, p->green[2]);
+  dt_bauhaus_slider_set(g->scale_blue_R, p->blue[0]);
+  dt_bauhaus_slider_set(g->scale_blue_G, p->blue[1]);
+  dt_bauhaus_slider_set(g->scale_blue_B, p->blue[2]);
+  --darktable.gui->reset;
+
+  gui_changed(self, slider, NULL);
+
+  dt_print(DT_DEBUG_DEV, "[channelmixerrgb] history commit source=primaries_slider slider=%p\n", (void *)slider);
+  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+}
+
 
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
@@ -4333,6 +5089,10 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
   const gboolean simple_widget
       = w == g->simple_theta || w == g->simple_psi || w == g->simple_stretch_1 || w == g->simple_stretch_2
         || w == g->simple_coupling_1 || w == g->simple_coupling_2;
+  const gboolean primaries_widget
+      = w == g->primaries_achromatic_hue || w == g->primaries_achromatic_purity || w == g->primaries_red_hue
+        || w == g->primaries_red_purity || w == g->primaries_green_hue || w == g->primaries_green_purity
+        || w == g->primaries_blue_hue || w == g->primaries_blue_purity || w == g->primaries_gain;
   const gboolean rows_are_normalized = _channelmixerrgb_rows_are_normalized(p);
   const gboolean complete_widget
       = w == g->scale_red_R || w == g->scale_red_G || w == g->scale_red_B || w == g->scale_green_R
@@ -4427,11 +5187,11 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
   if(w == g->adaptation)
     update_illuminants(self);
 
-  if(!w || w == g->adaptation || w == g->scale_red_R   || w == g->scale_red_G   || w == g->scale_red_B   || w == g->normalize_R)
+  if(!w || w == g->adaptation || primaries_widget || w == g->scale_red_R   || w == g->scale_red_G   || w == g->scale_red_B   || w == g->normalize_R)
     _update_RGB_colors(self, 1, 0, 0, p->normalize_R, p->red, g->scale_red_R, g->scale_red_G, g->scale_red_B);
-  if(!w || w == g->adaptation || w == g->scale_green_R || w == g->scale_green_G || w == g->scale_green_B || w == g->normalize_G)
+  if(!w || w == g->adaptation || primaries_widget || w == g->scale_green_R || w == g->scale_green_G || w == g->scale_green_B || w == g->normalize_G)
     _update_RGB_colors(self, 0, 1, 0, p->normalize_G, p->green, g->scale_green_R, g->scale_green_G, g->scale_green_B);
-  if(!w || w == g->adaptation || w == g->scale_blue_R  || w == g->scale_blue_G  || w == g->scale_blue_B  || w == g->normalize_B)
+  if(!w || w == g->adaptation || primaries_widget || w == g->scale_blue_R  || w == g->scale_blue_G  || w == g->scale_blue_B  || w == g->normalize_B)
     _update_RGB_colors(self, 0, 0, 1, p->normalize_B, p->blue, g->scale_blue_R, g->scale_blue_G, g->scale_blue_B);
 
   if(rows_are_normalized && !simple_widget && (!w || complete_widget))
@@ -4441,8 +5201,26 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
       dt_print(DT_DEBUG_DEV, "[channelmixerrgb] simple mixer roundtrip error=%g\n", error);
   }
 
-  if(!w || w == g->adaptation || complete_widget || simple_widget)
+  if(!primaries_widget && (!w || complete_widget || simple_widget || w == g->adaptation))
+  {
+    float error = INFINITY;
+    if(!_channelmixerrgb_sync_primaries_from_params(self, &error))
+    {
+      if(dt_bauhaus_combobox_get(g->mixer_mode) == DT_CHANNELMIXERRGB_MIXER_PRIMARIES)
+      {
+        dt_print(DT_DEBUG_DEV, "[channelmixerrgb] primaries mixer roundtrip error=%g\n", error);
+        dt_conf_set_int(DT_CHANNELMIXERRGB_SIMPLE_MODE_CONF, DT_CHANNELMIXERRGB_MIXER_COMPLETE);
+        dt_bauhaus_combobox_set(g->mixer_mode, DT_CHANNELMIXERRGB_MIXER_COMPLETE);
+        _channelmixerrgb_set_mixer_mode(g, DT_CHANNELMIXERRGB_MIXER_COMPLETE);
+      }
+    }
+  }
+
+  if(!w || w == g->adaptation || complete_widget || simple_widget || primaries_widget)
     _channelmixerrgb_update_simple_colors(self);
+
+  if(!w || w == g->adaptation || complete_widget || simple_widget || primaries_widget)
+    _channelmixerrgb_update_primaries_colors(self);
 
   // if grey channel is used and norm = 0 and normalization = ON, we are going to have a division by zero
   // in commit_param, we avoid dividing by zero automatically, but user needs a notification
@@ -4932,10 +5710,12 @@ void gui_init(struct dt_iop_module_t *self)
   dt_bauhaus_widget_set_label(g->mixer_mode, N_("mode"));
   dt_bauhaus_combobox_add(g->mixer_mode, _("Complete"));
   dt_bauhaus_combobox_add(g->mixer_mode, _("Simple"));
+  dt_bauhaus_combobox_add(g->mixer_mode, _("Primaries"));
   gtk_widget_set_tooltip_text(g->mixer_mode,
                               _("complete exposes the original nine mixer coefficients.\n"
                                 "simple rebuilds the normalized mixer as an exact chroma-plane rotation,\n"
-                                "two signed stretches and two neutral couplings."));
+                                "two signed stretches and two neutral couplings.\n"
+                                "primaries rebuilds the mixer as a generalized primaries, white tint and gain model."));
   gtk_box_pack_start(GTK_BOX(mixer_page), GTK_WIDGET(g->mixer_mode), FALSE, FALSE, 0);
   g_signal_connect(G_OBJECT(g->mixer_mode), "value-changed", G_CALLBACK(_channelmixerrgb_mixer_mode_callback), self);
 
@@ -5014,6 +5794,99 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(g->simple_coupling_2, _("mix the current v chroma axis into the preserved neutral axis."));
   gtk_box_pack_start(GTK_BOX(mixer_simple), GTK_WIDGET(g->simple_coupling_2), FALSE, FALSE, 0);
   g_signal_connect(G_OBJECT(g->simple_coupling_2), "value-changed", G_CALLBACK(_channelmixerrgb_simple_slider_callback), self);
+
+  GtkWidget *mixer_primaries = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+  gtk_stack_add_named(GTK_STACK(g->mixer_stack), mixer_primaries, "primaries");
+
+  gtk_box_pack_start(GTK_BOX(mixer_primaries), dt_ui_section_label_new(_("achromatic axis")), FALSE, FALSE, 0);
+
+  g->primaries_achromatic_hue = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), -1.f, 1.f, 0, 0, 3);
+  dt_bauhaus_widget_set_label(g->primaries_achromatic_hue, N_("white hue"));
+  dt_bauhaus_slider_set_factor(g->primaries_achromatic_hue, 90.f);
+  dt_bauhaus_slider_set_format(g->primaries_achromatic_hue, "\302\260");
+  gtk_widget_set_tooltip_text(g->primaries_achromatic_hue,
+                              _("rotate the custom white vector around the D50 white of the current mixer basis."));
+  gtk_box_pack_start(GTK_BOX(mixer_primaries), GTK_WIDGET(g->primaries_achromatic_hue), FALSE, FALSE, 0);
+  g_signal_connect(G_OBJECT(g->primaries_achromatic_hue), "value-changed",
+                   G_CALLBACK(_channelmixerrgb_primaries_slider_callback), self);
+
+  g->primaries_achromatic_purity = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 0.f, 2.f, 0, 0, 3);
+  dt_bauhaus_widget_set_label(g->primaries_achromatic_purity, N_("white purity"));
+  gtk_widget_set_tooltip_text(g->primaries_achromatic_purity,
+                              _("distance of the custom white vector from the D50 white within the current mixer basis."));
+  gtk_box_pack_start(GTK_BOX(mixer_primaries), GTK_WIDGET(g->primaries_achromatic_purity), FALSE, FALSE, 0);
+  g_signal_connect(G_OBJECT(g->primaries_achromatic_purity), "value-changed",
+                   G_CALLBACK(_channelmixerrgb_primaries_slider_callback), self);
+
+  gtk_box_pack_start(GTK_BOX(mixer_primaries), dt_ui_section_label_new(_("red primary")), FALSE, FALSE, 0);
+
+  g->primaries_red_hue = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), -1.f, 1.f, 0, 0, 3);
+  dt_bauhaus_widget_set_label(g->primaries_red_hue, N_("red hue"));
+  dt_bauhaus_slider_set_factor(g->primaries_red_hue, 90.f);
+  dt_bauhaus_slider_set_format(g->primaries_red_hue, "\302\260");
+  gtk_widget_set_tooltip_text(g->primaries_red_hue,
+                              _("rotate the first basis vector around the D50 white of the current mixer basis."));
+  gtk_box_pack_start(GTK_BOX(mixer_primaries), GTK_WIDGET(g->primaries_red_hue), FALSE, FALSE, 0);
+  g_signal_connect(G_OBJECT(g->primaries_red_hue), "value-changed",
+                   G_CALLBACK(_channelmixerrgb_primaries_slider_callback), self);
+
+  g->primaries_red_purity = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 0.f, 2.f, 0, 1.f, 3);
+  dt_bauhaus_widget_set_label(g->primaries_red_purity, N_("red purity"));
+  gtk_widget_set_tooltip_text(g->primaries_red_purity,
+                              _("radial scaling of the first basis vector inside the affine primaries footprint."));
+  gtk_box_pack_start(GTK_BOX(mixer_primaries), GTK_WIDGET(g->primaries_red_purity), FALSE, FALSE, 0);
+  g_signal_connect(G_OBJECT(g->primaries_red_purity), "value-changed",
+                   G_CALLBACK(_channelmixerrgb_primaries_slider_callback), self);
+
+  gtk_box_pack_start(GTK_BOX(mixer_primaries), dt_ui_section_label_new(_("green primary")), FALSE, FALSE, 0);
+
+  g->primaries_green_hue = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), -1.f, 1.f, 0, 0, 3);
+  dt_bauhaus_widget_set_label(g->primaries_green_hue, N_("green hue"));
+  dt_bauhaus_slider_set_factor(g->primaries_green_hue, 90.f);
+  dt_bauhaus_slider_set_format(g->primaries_green_hue, "\302\260");
+  gtk_widget_set_tooltip_text(g->primaries_green_hue,
+                              _("rotate the second basis vector around the D50 white of the current mixer basis."));
+  gtk_box_pack_start(GTK_BOX(mixer_primaries), GTK_WIDGET(g->primaries_green_hue), FALSE, FALSE, 0);
+  g_signal_connect(G_OBJECT(g->primaries_green_hue), "value-changed",
+                   G_CALLBACK(_channelmixerrgb_primaries_slider_callback), self);
+
+  g->primaries_green_purity = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 0.f, 2.f, 0, 1.f, 3);
+  dt_bauhaus_widget_set_label(g->primaries_green_purity, N_("green purity"));
+  gtk_widget_set_tooltip_text(g->primaries_green_purity,
+                              _("radial scaling of the second basis vector inside the affine primaries footprint."));
+  gtk_box_pack_start(GTK_BOX(mixer_primaries), GTK_WIDGET(g->primaries_green_purity), FALSE, FALSE, 0);
+  g_signal_connect(G_OBJECT(g->primaries_green_purity), "value-changed",
+                   G_CALLBACK(_channelmixerrgb_primaries_slider_callback), self);
+
+  gtk_box_pack_start(GTK_BOX(mixer_primaries), dt_ui_section_label_new(_("blue primary")), FALSE, FALSE, 0);
+
+  g->primaries_blue_hue = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), -1.f, 1.f, 0, 0, 3);
+  dt_bauhaus_widget_set_label(g->primaries_blue_hue, N_("blue hue"));
+  dt_bauhaus_slider_set_factor(g->primaries_blue_hue, 90.f);
+  dt_bauhaus_slider_set_format(g->primaries_blue_hue, "\302\260");
+  gtk_widget_set_tooltip_text(g->primaries_blue_hue,
+                              _("rotate the third basis vector around the D50 white of the current mixer basis."));
+  gtk_box_pack_start(GTK_BOX(mixer_primaries), GTK_WIDGET(g->primaries_blue_hue), FALSE, FALSE, 0);
+  g_signal_connect(G_OBJECT(g->primaries_blue_hue), "value-changed",
+                   G_CALLBACK(_channelmixerrgb_primaries_slider_callback), self);
+
+  g->primaries_blue_purity = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 0.f, 2.f, 0, 1.f, 3);
+  dt_bauhaus_widget_set_label(g->primaries_blue_purity, N_("blue purity"));
+  gtk_widget_set_tooltip_text(g->primaries_blue_purity,
+                              _("radial scaling of the third basis vector inside the affine primaries footprint."));
+  gtk_box_pack_start(GTK_BOX(mixer_primaries), GTK_WIDGET(g->primaries_blue_purity), FALSE, FALSE, 0);
+  g_signal_connect(G_OBJECT(g->primaries_blue_purity), "value-changed",
+                   G_CALLBACK(_channelmixerrgb_primaries_slider_callback), self);
+
+  gtk_box_pack_start(GTK_BOX(mixer_primaries), dt_ui_section_label_new(_("gain correction")), FALSE, FALSE, 0);
+
+  g->primaries_gain = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), -8.f, 8.f, 0, 1.f, 3);
+  dt_bauhaus_widget_set_label(g->primaries_gain, N_("gain"));
+  gtk_widget_set_tooltip_text(g->primaries_gain,
+                              _("global gain multiplying the custom white vector after the affine primaries transform."));
+  gtk_box_pack_start(GTK_BOX(mixer_primaries), GTK_WIDGET(g->primaries_gain), FALSE, FALSE, 0);
+  g_signal_connect(G_OBJECT(g->primaries_gain), "value-changed",
+                   G_CALLBACK(_channelmixerrgb_primaries_slider_callback), self);
 
 #define NOTEBOOK_PAGE(var, short, label, tooltip, section, swap)              \
   self->widget = dt_ui_notebook_page(g->notebook, label, _(tooltip));         \
