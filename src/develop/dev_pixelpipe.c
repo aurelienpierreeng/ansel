@@ -477,6 +477,14 @@ gboolean dt_dev_pixelpipe_cache_peek_gui(dt_dev_pixelpipe_t *pipe, const dt_dev_
     return TRUE;
   }
 
+  // Module-output cache requests are not satisfiable while the current pipe run
+  // intentionally bypasses cache retention. Re-queueing them from GUI redraws
+  // would keep transient edit modes in a self-feeding recompute loop.
+  if(piece
+     && (dt_dev_pixelpipe_get_realtime(pipe) || pipe->bypass_cache || pipe->no_cache
+         || piece->bypass_cache))
+    return FALSE;
+
   dt_dev_pixelpipe_set_cache_request(pipe,
                                      piece ? DT_DEV_PIXELPIPE_CACHE_REQUEST_MODULE
                                            : DT_DEV_PIXELPIPE_CACHE_REQUEST_BACKBUF,
@@ -678,6 +686,7 @@ void dt_pixelpipe_get_global_hash(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
 
   // bernstein hash (djb2)
   uint64_t hash = _default_pipe_hash(pipe);
+  gboolean passthrough_preview = FALSE;
 
   // Bypassing cache contaminates downstream modules, starting at the module requesting it.
   // Usecase : crop, clip, ashift, etc. that need the uncropped image ;
@@ -695,6 +704,20 @@ void dt_pixelpipe_get_global_hash(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
 
     // Combine with the previous modules hashes
     uint64_t local_hash = piece->hash;
+
+    // Some GUI previews author their final display inside the active module,
+    // then runtime forwards that exact buffer through later pass-through stages.
+    // Keep the planned hash contract aligned with the published cacheline so the
+    // GUI does not keep requesting a downstream output hash that will never exist.
+    if(passthrough_preview
+       && !(piece->module->operation_tags() & IOP_TAG_DISTORT)
+       && (piece->dsc_in.bpp == piece->dsc_out.bpp)
+       && !memcmp(&piece->roi_in, &piece->roi_out, sizeof(dt_iop_roi_t)))
+    {
+      piece->global_mask_hash = hash;
+      piece->global_hash = hash;
+      continue;
+    }
 
     // Panning and zooming change the ROI. Some GUI modes (crop in editing mode) too.
     // dt_dev_get_roi_in() should have run before
@@ -757,6 +780,15 @@ void dt_pixelpipe_get_global_hash(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
     // Finally, the output of the module also depends on the mask:
     hash = dt_hash(hash, (const char *)&piece->global_mask_hash, sizeof(uint64_t));
     piece->global_hash = hash;
+
+    if(pipe->type == DT_DEV_PIXELPIPE_FULL
+       && dev->gui_attached
+       && (pipe == dev->pipe)
+       && (piece->module == dev->gui_module)
+       && (piece->module->request_mask_display != DT_DEV_PIXELPIPE_DISPLAY_NONE))
+    {
+      passthrough_preview = TRUE;
+    }
   }
 
   // The pipe hash is the hash of its last module.
