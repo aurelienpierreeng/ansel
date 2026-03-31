@@ -193,8 +193,8 @@ typedef struct dt_iop_channelmixer_rgb_simple_params_t
   float psi;
   float stretch_1;
   float stretch_2;
-  float coupling_1;
-  float coupling_2;
+  float coupling_amount;
+  float coupling_hue;
 } dt_iop_channelmixer_rgb_simple_params_t;
 
 typedef struct dt_iop_channelmixer_rgb_primaries_params_t
@@ -303,7 +303,6 @@ static void _channelmixerrgb_work_rgb_to_display(const dt_aligned_pixel_t work_r
 static void _channelmixerrgb_simple_module_color_to_display(dt_iop_module_t *self,
                                                             const dt_iop_channelmixer_rgb_params_t *p,
                                                             const float module_color[3], float display_rgb[3]);
-
 
 const char *name()
 {
@@ -3194,34 +3193,38 @@ static inline float _channelmixerrgb_decode_simple_stretch(const float slider)
 }
 
 /**
- * @brief Encode a signed neutral-coupling coefficient for the simple mixer GUI.
+ * @brief Encode a non-negative neutral-coupling amount for the simple mixer GUI.
  *
- * @param[in] coupling Signed coupling coefficient.
- * @return Encoded slider value in [-1 ; 1] up to floating point precision.
+ * The amount slider is bounded in [0 ; 1] while the underlying coupling norm is
+ * unbounded. Using atan() keeps zero at slider value 0 and still lets the GUI
+ * roundtrip any finite coupling norm.
+ *
+ * @param[in] amount Non-negative coupling magnitude.
+ * @return Encoded slider value in [0 ; 1] up to floating point precision.
  */
-static inline float _channelmixerrgb_encode_simple_coupling(const float coupling)
+static inline float _channelmixerrgb_encode_simple_coupling_amount(const float amount)
 {
-  return atanf(coupling) / DT_CHANNELMIXERRGB_SIMPLE_TAN_SCALE;
+  return atanf(fmaxf(amount, 0.f)) / DT_CHANNELMIXERRGB_SIMPLE_TAN_SCALE;
 }
 
 /**
- * @brief Decode a bounded simple-mode slider to a signed neutral coupling.
+ * @brief Decode a bounded simple-mode slider to a non-negative coupling amount.
  *
- * @param[in] slider Slider value in [-1 ; 1].
- * @return Signed coupling coefficient.
+ * @param[in] slider Slider value in [0 ; 1].
+ * @return Non-negative coupling magnitude.
  */
-static inline float _channelmixerrgb_decode_simple_coupling(const float slider)
+static inline float _channelmixerrgb_decode_simple_coupling_amount(const float slider)
 {
-  const float bounded = CLAMP(slider, -0.999f, 0.999f);
+  const float bounded = CLAMP(slider, 0.f, 0.999f);
   return tanf(bounded * DT_CHANNELMIXERRGB_SIMPLE_TAN_SCALE);
 }
 
 /**
  * @brief Tell whether the three mixer rows are already normalized by params.
  *
- * Automatic entry into the simple GUI is only safe when the stored params are
- * already in the exact normalized subspace represented by that model. Otherwise
- * switching would silently project the matrix and lose information.
+ * The simple GUI is only valid when the three mixer rows are explicitly
+ * normalized in params. Otherwise switching would silently project the matrix
+ * and lose information.
  *
  * @param[in] p Current module params.
  * @return TRUE when the three RGB rows are normalized by params.
@@ -3235,7 +3238,7 @@ static inline gboolean _channelmixerrgb_rows_are_normalized(const dt_iop_channel
  * @brief Build the normalized 3x3 mixer matrix used by the simple GUI model.
  *
  * The complete mixer can optionally leave row normalization disabled. The
- * simple mode always works on the row-normalized matrix because preserving the
+ * simple mode only accepts the exact normalized subspace because preserving the
  * neutral axis reduces the problem to an exact 6 degree-of-freedom transform in
  * the chroma plane plus two neutral couplings.
  *
@@ -3273,14 +3276,14 @@ static gboolean _channelmixerrgb_get_mixer_matrix(const dt_iop_channelmixer_rgb_
 /**
  * @brief Write a normalized 3x3 mixer matrix back into module params.
  *
- * The simple mode stores the normalized rows directly and forces the complete
- * mixer normalize toggles on so the processing path and the GUI describe the
- * same effective transform.
+ * The simple mode only writes normalized matrices. Keeping this write path
+ * explicit preserves the exact normalized transform while leaving ownership of
+ * the normalization toggles in the caller.
  *
  * @param[in,out] p Current module params.
  * @param[in] M Normalized 3x3 mixer matrix.
  */
-static void _channelmixerrgb_set_mixer_matrix(dt_iop_channelmixer_rgb_params_t *const p, const float M[3][3])
+static void _channelmixerrgb_set_effective_mixer_matrix(dt_iop_channelmixer_rgb_params_t *const p, const float M[3][3])
 {
   for(int col = 0; col < 3; col++)
   {
@@ -3288,10 +3291,6 @@ static void _channelmixerrgb_set_mixer_matrix(dt_iop_channelmixer_rgb_params_t *
     p->green[col] = M[1][col];
     p->blue[col] = M[2][col];
   }
-
-  p->normalize_R = TRUE;
-  p->normalize_G = TRUE;
-  p->normalize_B = TRUE;
 }
 
 /**
@@ -3316,9 +3315,7 @@ static void _channelmixerrgb_mul3x3(const float A[3][3], const float B[3][3], fl
  * @brief Convert an RGB-basis mixer to the exact normalized chroma-plane model.
  *
  * We use the orthonormal basis {c1, c2, n} where n is the neutral axis and
- * c1/c2 span the chroma plane. Normalized mixer rows keep n fixed, so in that
- * basis the matrix has the exact structure [[C, 0], [u, 1]] with a full 2x2
- * chroma transform C and two neutral couplings u.
+ * c1/c2 span the chroma plane.
  *
  * @param[in] M Normalized 3x3 mixer matrix in module coordinates.
  * @param[out] B Mixer matrix in the {c1, c2, n} basis.
@@ -3366,11 +3363,12 @@ static void _channelmixerrgb_mixer_from_chroma_basis(const float B[3][3], float 
 /**
  * @brief Decompose a normalized mixer matrix into the exact simple GUI model.
  *
- * The top-left 2x2 block of the chroma basis is factorized as
- * R(theta) * S, where S is symmetric. The eigenvectors of S define the stretch
- * orientation psi while its signed eigenvalues are stored by the two stretch
- * controls. The remaining bottom-row coefficients are the two neutral
- * couplings.
+ * The top-left 2x2 block of the chroma basis is factorized as R(theta) * S,
+ * where S is symmetric. The eigenvectors of S define the stretch orientation
+ * psi while its signed eigenvalues are stored by the two stretch controls.
+ * The remaining 2 parameters store the neutral-coupling vector in polar form
+ * in the fixed chroma basis, so their meaning stays independent from the
+ * principal-axis orientation slider.
  *
  * @param[in] M Normalized 3x3 mixer matrix in module coordinates.
  * @param[out] simple Exact simple-mode parameters.
@@ -3395,15 +3393,12 @@ static void _channelmixerrgb_simple_from_matrix(const float M[3][3], dt_iop_chan
   const float psi = _channelmixerrgb_wrap_half_pi(0.5f * atan2f(2.f * s01, diff));
   const float radius = hypotf(0.5f * diff, s01);
   const float trace = s00 + s11;
-  const float cpsi = cosf(psi);
-  const float spsi = sinf(psi);
-
   simple->theta = theta;
   simple->psi = psi;
   simple->stretch_1 = 0.5f * trace + radius;
   simple->stretch_2 = 0.5f * trace - radius;
-  simple->coupling_1 = B[2][0] * cpsi + B[2][1] * spsi;
-  simple->coupling_2 = -B[2][0] * spsi + B[2][1] * cpsi;
+  simple->coupling_amount = hypotf(B[2][0], B[2][1]);
+  simple->coupling_hue = simple->coupling_amount > 0.f ? _channelmixerrgb_wrap_pi(atan2f(B[2][1], B[2][0])) : 0.f;
 }
 
 /**
@@ -3418,8 +3413,8 @@ static void _channelmixerrgb_simple_to_matrix(const dt_iop_channelmixer_rgb_simp
   const float stheta = sinf(simple->theta);
   const float cpsi = cosf(simple->psi);
   const float spsi = sinf(simple->psi);
-  const float coupling_0 = simple->coupling_1 * cpsi - simple->coupling_2 * spsi;
-  const float coupling_1 = simple->coupling_1 * spsi + simple->coupling_2 * cpsi;
+  const float coupling_0 = simple->coupling_amount * cosf(simple->coupling_hue);
+  const float coupling_1 = simple->coupling_amount * sinf(simple->coupling_hue);
 
   const float s00 = simple->stretch_1 * cpsi * cpsi + simple->stretch_2 * spsi * spsi;
   const float s01 = (simple->stretch_1 - simple->stretch_2) * cpsi * spsi;
@@ -3445,8 +3440,8 @@ static void _channelmixerrgb_simple_from_widgets(const dt_iop_channelmixer_rgb_g
   simple->psi = dt_bauhaus_slider_get(g->simple_psi) * (float)M_PI_2;
   simple->stretch_1 = _channelmixerrgb_decode_simple_stretch(dt_bauhaus_slider_get(g->simple_stretch_1));
   simple->stretch_2 = _channelmixerrgb_decode_simple_stretch(dt_bauhaus_slider_get(g->simple_stretch_2));
-  simple->coupling_1 = _channelmixerrgb_decode_simple_coupling(dt_bauhaus_slider_get(g->simple_coupling_1));
-  simple->coupling_2 = _channelmixerrgb_decode_simple_coupling(dt_bauhaus_slider_get(g->simple_coupling_2));
+  simple->coupling_amount = _channelmixerrgb_decode_simple_coupling_amount(dt_bauhaus_slider_get(g->simple_coupling_1));
+  simple->coupling_hue = dt_bauhaus_slider_get(g->simple_coupling_2) * (float)M_PI;
 }
 
 /**
@@ -3462,8 +3457,8 @@ static void _channelmixerrgb_simple_to_widgets(dt_iop_channelmixer_rgb_gui_data_
   dt_bauhaus_slider_set(g->simple_psi, _channelmixerrgb_wrap_half_pi(simple->psi) / (float)M_PI_2);
   dt_bauhaus_slider_set(g->simple_stretch_1, _channelmixerrgb_encode_simple_stretch(simple->stretch_1));
   dt_bauhaus_slider_set(g->simple_stretch_2, _channelmixerrgb_encode_simple_stretch(simple->stretch_2));
-  dt_bauhaus_slider_set(g->simple_coupling_1, _channelmixerrgb_encode_simple_coupling(simple->coupling_1));
-  dt_bauhaus_slider_set(g->simple_coupling_2, _channelmixerrgb_encode_simple_coupling(simple->coupling_2));
+  dt_bauhaus_slider_set(g->simple_coupling_1, _channelmixerrgb_encode_simple_coupling_amount(simple->coupling_amount));
+  dt_bauhaus_slider_set(g->simple_coupling_2, _channelmixerrgb_wrap_pi(simple->coupling_hue) / (float)M_PI);
 }
 
 /**
@@ -4164,21 +4159,22 @@ static void _channelmixerrgb_simple_probe_source(const dt_iop_channelmixer_rgb_s
 }
 
 /**
- * @brief Normalize a linear display RGB triplet by its maximum channel.
+ * @brief Normalize a linear display RGB triplet only when it exceeds display white.
  *
- * Slider backgrounds are tints rather than exposure previews. Normalizing in
- * the linear display space preserves the hue direction while keeping the most
- * saturated channel at unity before the display TRC is applied.
+ * Slider backgrounds are tints rather than exposure previews. When at least one
+ * linear-display channel goes above one, rescaling by the maximum channel
+ * preserves the hue direction while keeping the brightest channel at display
+ * white before the display TRC is applied. Sub-white colors are kept unchanged.
  *
  * @param[in,out] linear_display_rgb Linear display-space RGB triplet.
  */
 static void _channelmixerrgb_normalize_linear_display_rgb(dt_aligned_pixel_t linear_display_rgb)
 {
   const float max_RGB = fmaxf(fmaxf(linear_display_rgb[0], linear_display_rgb[1]), linear_display_rgb[2]);
-  if(max_RGB > 0.f)
+  if(max_RGB > 1.f)
     for(int c = 0; c < 3; c++) linear_display_rgb[c] = fmaxf(linear_display_rgb[c] / max_RGB, 0.f);
   else
-    for(int c = 0; c < 3; c++) linear_display_rgb[c] = 0.f;
+    for(int c = 0; c < 3; c++) linear_display_rgb[c] = fmaxf(linear_display_rgb[c], 0.f);
 }
 
 /**
@@ -4288,16 +4284,11 @@ static void _update_RGB_colors(dt_iop_module_t *self, float r, float g, float b,
 }
 
 /**
- * @brief Rebuild the six simple mixer sliders from the current normalized 3x3 matrix.
- *
- * The exact 6 degree-of-freedom model only exists for normalized mixer rows.
- * When that normalization cannot be formed, we keep the complete mode available
- * and report the issue to the caller instead of forcing an approximate
- * projection.
+ * @brief Rebuild the simple mixer sliders from the current normalized 3x3 matrix.
  *
  * @param[in] self Current module instance.
  * @param[out] error Largest absolute roundtrip error after 3x3 -> simple -> 3x3.
- * @return TRUE if the current params can be represented exactly in simple mode.
+ * @return TRUE if the current params belong to the normalized simple subspace.
  */
 static gboolean _channelmixerrgb_sync_simple_from_params(dt_iop_module_t *self, float *error)
 {
@@ -4308,7 +4299,8 @@ static gboolean _channelmixerrgb_sync_simple_from_params(dt_iop_module_t *self, 
   dt_iop_channelmixer_rgb_simple_params_t simple;
 
   if(error) *error = INFINITY;
-  if(!_channelmixerrgb_get_mixer_matrix(p, M, TRUE)) return FALSE;
+  if(!_channelmixerrgb_rows_are_normalized(p)) return FALSE;
+  if(!_channelmixerrgb_get_mixer_matrix(p, M, FALSE)) return FALSE;
 
   _channelmixerrgb_simple_from_matrix(M, &simple);
   _channelmixerrgb_simple_to_matrix(&simple, roundtrip);
@@ -4324,7 +4316,7 @@ static gboolean _channelmixerrgb_sync_simple_from_params(dt_iop_module_t *self, 
 }
 
 /**
- * @brief Paint the six simple mixer sliders from the exact normalized model.
+ * @brief Paint the simple mixer sliders from the exact chroma-basis model.
  *
  * Each slider is swept independently while the others keep their current
  * values. We probe the resulting mixer on representative chroma-plane vectors,
@@ -4360,20 +4352,54 @@ static void _channelmixerrgb_update_simple_colors(dt_iop_module_t *self)
       float module_color[3] = { 0.f };
       float display_rgb[3] = { 0.f };
       float M[3][3] = { { 0.f } };
+      float coupling_hue = simple.coupling_hue;
 
       switch(widget)
       {
-        case 0: probe_simple.theta = slider * (float)M_PI; break;
-        case 1: probe_simple.psi = slider * (float)M_PI_2; break;
-        case 2: probe_simple.stretch_1 = _channelmixerrgb_decode_simple_stretch(slider); break;
-        case 3: probe_simple.stretch_2 = _channelmixerrgb_decode_simple_stretch(slider); break;
-        case 4: probe_simple.coupling_1 = _channelmixerrgb_decode_simple_coupling(slider); break;
-        case 5: probe_simple.coupling_2 = _channelmixerrgb_decode_simple_coupling(slider); break;
-        default: break;
+        case 0:
+          probe_simple.theta = slider * (float)M_PI;
+          break;
+        case 1:
+          probe_simple.psi = slider * (float)M_PI_2;
+          break;
+        case 2:
+          probe_simple.stretch_1 = _channelmixerrgb_decode_simple_stretch(slider);
+          break;
+        case 3:
+          probe_simple.stretch_2 = _channelmixerrgb_decode_simple_stretch(slider);
+          break;
+        case 4:
+          probe_simple.coupling_amount = _channelmixerrgb_decode_simple_coupling_amount(stop);
+          break;
+        case 5:
+          probe_simple.coupling_hue = slider * (float)M_PI;
+          coupling_hue = probe_simple.coupling_hue;
+          break;
+        default:
+          break;
       }
 
       _channelmixerrgb_simple_to_matrix(&probe_simple, M);
-      _channelmixerrgb_simple_probe_source(probes[widget], source);
+      if(widget < 4)
+        _channelmixerrgb_simple_probe_source(probes[widget], source);
+      else
+      {
+        static const float P[3][3]
+            = { { 0.7071067811865475f,  0.4082482904638631f, INVERSE_SQRT_3 },
+                { -0.7071067811865475f, 0.4082482904638631f, INVERSE_SQRT_3 },
+                { 0.f,                 -0.8164965809277261f, INVERSE_SQRT_3 } };
+        const float basis[3]
+            = { DT_CHANNELMIXERRGB_SIMPLE_CHROMA_PROBE * cosf(coupling_hue),
+                DT_CHANNELMIXERRGB_SIMPLE_CHROMA_PROBE * sinf(coupling_hue),
+                1.f };
+
+        for(int row = 0; row < 3; row++)
+        {
+          source[row] = 0.f;
+          for(int col = 0; col < 3; col++) 
+            source[row] += P[row][col] * basis[col];
+        }
+      }
 
       for(int row = 0; row < 3; row++)
         for(int col = 0; col < 3; col++) module_color[row] += M[row][col] * source[col];
@@ -4645,7 +4671,6 @@ void gui_update(struct dt_iop_module_t *self)
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)module->params;
   float simple_error = INFINITY;
   float primaries_error = INFINITY;
-  const gboolean rows_are_normalized = _channelmixerrgb_rows_are_normalized(p);
 
   dt_iop_color_picker_reset(self, TRUE);
 
@@ -4688,16 +4713,14 @@ void gui_update(struct dt_iop_module_t *self)
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->normalize_G), p->normalize_G);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->normalize_B), p->normalize_B);
 
-  const gboolean simple_ok = rows_are_normalized && _channelmixerrgb_sync_simple_from_params(self, &simple_error);
+  const gboolean simple_ok = _channelmixerrgb_sync_simple_from_params(self, &simple_error);
   const gboolean primaries_ok = _channelmixerrgb_sync_primaries_from_params(self, &primaries_error);
   const dt_iop_channelmixer_rgb_mixer_mode_t requested_mode
       = dt_conf_key_exists(DT_CHANNELMIXERRGB_SIMPLE_MODE_CONF)
             ? dt_conf_get_int(DT_CHANNELMIXERRGB_SIMPLE_MODE_CONF)
-            : (rows_are_normalized
-                   ? DT_CHANNELMIXERRGB_MIXER_SIMPLE
-                   : DT_CHANNELMIXERRGB_MIXER_COMPLETE);
+            : DT_CHANNELMIXERRGB_MIXER_COMPLETE;
   const dt_iop_channelmixer_rgb_mixer_mode_t mixer_mode
-      = requested_mode == DT_CHANNELMIXERRGB_MIXER_SIMPLE && rows_are_normalized && simple_ok
+      = requested_mode == DT_CHANNELMIXERRGB_MIXER_SIMPLE && simple_ok
             ? DT_CHANNELMIXERRGB_MIXER_SIMPLE
             : requested_mode == DT_CHANNELMIXERRGB_MIXER_PRIMARIES && primaries_ok
                   ? DT_CHANNELMIXERRGB_MIXER_PRIMARIES
@@ -4903,9 +4926,9 @@ static void _channelmixerrgb_mixer_mode_callback(GtkWidget *combo, gpointer user
   if(mode == DT_CHANNELMIXERRGB_MIXER_SIMPLE)
   {
     float error = INFINITY;
-    if(!_channelmixerrgb_get_mixer_matrix(p, (float[3][3]) { { 0.f } }, TRUE))
+    if(!_channelmixerrgb_rows_are_normalized(p) || !_channelmixerrgb_sync_simple_from_params(self, &error))
     {
-      dt_control_log(_("simple mixer mode requires non-zero row sums."));
+      dt_control_log(_("simple mixer mode requires all three output rows to be normalized with non-zero sums."));
       ++darktable.gui->reset;
       dt_bauhaus_combobox_set(g->mixer_mode, DT_CHANNELMIXERRGB_MIXER_COMPLETE);
       --darktable.gui->reset;
@@ -4914,28 +4937,8 @@ static void _channelmixerrgb_mixer_mode_callback(GtkWidget *combo, gpointer user
       return;
     }
 
-    const gboolean changed = !p->normalize_R || !p->normalize_G || !p->normalize_B;
-    p->normalize_R = TRUE;
-    p->normalize_G = TRUE;
-    p->normalize_B = TRUE;
-
-    ++darktable.gui->reset;
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->normalize_R), TRUE);
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->normalize_G), TRUE);
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->normalize_B), TRUE);
-    --darktable.gui->reset;
-
-    if(!_channelmixerrgb_sync_simple_from_params(self, &error))
-      dt_print(DT_DEBUG_DEV, "[channelmixerrgb] simple mixer roundtrip error=%g\n", error);
-
     _channelmixerrgb_set_mixer_mode(g, mode);
     gui_changed(self, NULL, NULL);
-
-    if(changed)
-    {
-      dt_print(DT_DEBUG_DEV, "[channelmixerrgb] history commit source=mixer_mode_simple\n");
-      dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
-    }
     return;
   }
 
@@ -5003,15 +5006,14 @@ static void _channelmixerrgb_simple_slider_callback(GtkWidget *slider, gpointer 
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
   dt_iop_channelmixer_rgb_simple_params_t simple;
   float M[3][3] = { { 0.f } };
-
   _channelmixerrgb_simple_from_widgets(g, &simple);
   _channelmixerrgb_simple_to_matrix(&simple, M);
-  _channelmixerrgb_set_mixer_matrix(p, M);
+  _channelmixerrgb_set_effective_mixer_matrix(p, M);
 
   ++darktable.gui->reset;
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->normalize_R), TRUE);
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->normalize_G), TRUE);
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->normalize_B), TRUE);
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->normalize_R), p->normalize_R);
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->normalize_G), p->normalize_G);
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->normalize_B), p->normalize_B);
 
   dt_bauhaus_slider_set(g->scale_red_R, p->red[0]);
   dt_bauhaus_slider_set(g->scale_red_G, p->red[1]);
@@ -5198,7 +5200,19 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
   {
     float error = INFINITY;
     if(!_channelmixerrgb_sync_simple_from_params(self, &error))
-      dt_print(DT_DEBUG_DEV, "[channelmixerrgb] simple mixer roundtrip error=%g\n", error);
+    {
+      if(dt_bauhaus_combobox_get(g->mixer_mode) == DT_CHANNELMIXERRGB_MIXER_SIMPLE)
+      {
+        dt_print(DT_DEBUG_DEV, "[channelmixerrgb] simple mixer rejected error=%g normalized=%d%d%d\n",
+                 error, p->normalize_R, p->normalize_G, p->normalize_B);
+        dt_control_log(_("simple mixer mode requires all three output rows to be normalized with non-zero sums."));
+        dt_conf_set_int(DT_CHANNELMIXERRGB_SIMPLE_MODE_CONF, DT_CHANNELMIXERRGB_MIXER_COMPLETE);
+        dt_bauhaus_combobox_set(g->mixer_mode, DT_CHANNELMIXERRGB_MIXER_COMPLETE);
+        _channelmixerrgb_set_mixer_mode(g, DT_CHANNELMIXERRGB_MIXER_COMPLETE);
+      }
+      else
+        dt_print(DT_DEBUG_DEV, "[channelmixerrgb] simple mixer roundtrip error=%g\n", error);
+    }
   }
 
   if(!primaries_widget && (!w || complete_widget || simple_widget || w == g->adaptation))
@@ -5770,28 +5784,30 @@ void gui_init(struct dt_iop_module_t *self)
   g_signal_connect(G_OBJECT(g->simple_psi), "value-changed", G_CALLBACK(_channelmixerrgb_simple_slider_callback), self);
 
   g->simple_stretch_1 = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), -1.f, 1.f, 0, 0, 3);
-  dt_bauhaus_widget_set_label(g->simple_stretch_1, N_("u gain"));
+  dt_bauhaus_widget_set_label(g->simple_stretch_1, N_("u stretch"));
   gtk_widget_set_tooltip_text(g->simple_stretch_1, _("signed stretch along the first principal chroma axis. Zero keeps the identity."));
   gtk_box_pack_start(GTK_BOX(mixer_simple), GTK_WIDGET(g->simple_stretch_1), FALSE, FALSE, 0);
   g_signal_connect(G_OBJECT(g->simple_stretch_1), "value-changed", G_CALLBACK(_channelmixerrgb_simple_slider_callback), self);
 
   g->simple_stretch_2 = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), -1.f, 1.f, 0, 0, 3);
-  dt_bauhaus_widget_set_label(g->simple_stretch_2, N_("v gain"));
+  dt_bauhaus_widget_set_label(g->simple_stretch_2, N_("v stretch"));
   gtk_widget_set_tooltip_text(g->simple_stretch_2, _("signed stretch along the second principal chroma axis. Zero keeps the identity."));
   gtk_box_pack_start(GTK_BOX(mixer_simple), GTK_WIDGET(g->simple_stretch_2), FALSE, FALSE, 0);
   g_signal_connect(G_OBJECT(g->simple_stretch_2), "value-changed", G_CALLBACK(_channelmixerrgb_simple_slider_callback), self);
 
-  gtk_box_pack_start(GTK_BOX(mixer_simple), dt_ui_section_label_new(_("neutral coupling")), FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(mixer_simple), dt_ui_section_label_new(_("achromatic coupling")), FALSE, FALSE, 0);
 
-  g->simple_coupling_1 = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), -1.f, 1.f, 0, 0, 3);
-  dt_bauhaus_widget_set_label(g->simple_coupling_1, N_("u bleaching"));
-  gtk_widget_set_tooltip_text(g->simple_coupling_1, _("mix the current u chroma axis into the preserved neutral axis."));
+  g->simple_coupling_1 = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 0.f, 1.f, 0, 0, 3);
+  dt_bauhaus_widget_set_label(g->simple_coupling_1, N_("achromatic coupling amount"));
+  gtk_widget_set_tooltip_text(g->simple_coupling_1, _("strength of the chroma-to-achromatic coupling in the fixed chroma basis."));
   gtk_box_pack_start(GTK_BOX(mixer_simple), GTK_WIDGET(g->simple_coupling_1), FALSE, FALSE, 0);
   g_signal_connect(G_OBJECT(g->simple_coupling_1), "value-changed", G_CALLBACK(_channelmixerrgb_simple_slider_callback), self);
 
   g->simple_coupling_2 = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), -1.f, 1.f, 0, 0, 3);
-  dt_bauhaus_widget_set_label(g->simple_coupling_2, N_("v bleaching"));
-  gtk_widget_set_tooltip_text(g->simple_coupling_2, _("mix the current v chroma axis into the preserved neutral axis."));
+  dt_bauhaus_widget_set_label(g->simple_coupling_2, N_("achromatic coupling hue"));
+  dt_bauhaus_slider_set_factor(g->simple_coupling_2, 180.f);
+  dt_bauhaus_slider_set_format(g->simple_coupling_2, "\302\260");
+  gtk_widget_set_tooltip_text(g->simple_coupling_2, _("chroma direction, in the fixed chroma basis, that is coupled into the achromatic axis."));
   gtk_box_pack_start(GTK_BOX(mixer_simple), GTK_WIDGET(g->simple_coupling_2), FALSE, FALSE, 0);
   g_signal_connect(G_OBJECT(g->simple_coupling_2), "value-changed", G_CALLBACK(_channelmixerrgb_simple_slider_callback), self);
 
