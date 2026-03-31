@@ -3165,31 +3165,40 @@ static inline float _channelmixerrgb_wrap_half_pi(float angle)
 }
 
 /**
- * @brief Encode a signed simple-mode stretch around the identity.
+ * @brief Encode the simple-mode chroma stretch to the anchored GUI scale.
  *
- * The simple GUI keeps sliders bounded in [-1 ; 1] while the underlying signed
- * stretch eigenvalues are unbounded. Using tan() around zero keeps the identity
- * at slider value 0 and still lets the conversion roundtrip any finite
- * eigenvalue.
+ * The stretch sliders expose these exact anchors:
+ *
+ * - slider  0.0 : achromatic neutralization,
+ * - slider  1.0 : identity,
+ * - slider  1.5 : contrast boost,
+ * - slider -1.0 : color reversal,
+ * - slider -1.5 : color reversal with added contrast.
+ *
+ * The mapping is piecewise-linear so those landmarks remain visually stable in
+ * the GUI and in the roundtrip.
  *
  * @param[in] stretch Signed eigenvalue of the symmetric chroma factor.
- * @return Encoded slider value in [-1 ; 1] up to floating point precision.
+ * @return Encoded slider value in [-1.5 ; 1.5].
  */
 static inline float _channelmixerrgb_encode_simple_stretch(const float stretch)
 {
-  return atanf(stretch - 1.f) / DT_CHANNELMIXERRGB_SIMPLE_TAN_SCALE;
+  if(stretch >= 1.f) return fminf(0.5f * (stretch + 1.f), 1.5f);
+  if(stretch >= -1.f) return stretch;
+  return fmaxf(0.5f * (stretch - 1.f), -1.5f);
 }
 
 /**
- * @brief Decode a bounded simple-mode slider to a signed stretch eigenvalue.
+ * @brief Decode the anchored stretch slider to the chroma stretch eigenvalue.
  *
- * @param[in] slider Slider value in [-1 ; 1].
+ * @param[in] slider Slider value in [-1.5 ; 1.5].
  * @return Signed eigenvalue of the symmetric chroma factor.
  */
 static inline float _channelmixerrgb_decode_simple_stretch(const float slider)
 {
-  const float bounded = CLAMP(slider, -0.999f, 0.999f);
-  return 1.f + tanf(bounded * DT_CHANNELMIXERRGB_SIMPLE_TAN_SCALE);
+  if(slider >= 1.f) return 2.f * slider - 1.f;
+  if(slider >= -1.f) return slider;
+  return 2.f * slider + 1.f;
 }
 
 /**
@@ -4344,6 +4353,7 @@ static void _channelmixerrgb_update_simple_colors(dt_iop_module_t *self)
   {
     const float stop = (float)i / (float)(DT_BAUHAUS_SLIDER_MAX_STOPS - 1);
     const float slider = 2.f * stop - 1.f;
+    const float stretch_slider = 3.f * stop - 1.5f;
 
     for(int widget = 0; widget < 6; widget++)
     {
@@ -4363,10 +4373,10 @@ static void _channelmixerrgb_update_simple_colors(dt_iop_module_t *self)
           probe_simple.psi = slider * (float)M_PI_2;
           break;
         case 2:
-          probe_simple.stretch_1 = _channelmixerrgb_decode_simple_stretch(slider);
+          probe_simple.stretch_1 = _channelmixerrgb_decode_simple_stretch(stretch_slider);
           break;
         case 3:
-          probe_simple.stretch_2 = _channelmixerrgb_decode_simple_stretch(slider);
+          probe_simple.stretch_2 = _channelmixerrgb_decode_simple_stretch(stretch_slider);
           break;
         case 4:
           probe_simple.coupling_amount = _channelmixerrgb_decode_simple_coupling_amount(stop);
@@ -5783,25 +5793,19 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(mixer_simple), GTK_WIDGET(g->simple_psi), FALSE, FALSE, 0);
   g_signal_connect(G_OBJECT(g->simple_psi), "value-changed", G_CALLBACK(_channelmixerrgb_simple_slider_callback), self);
 
-  g->simple_stretch_1 = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), -1.f, 1.f, 0, 0, 3);
+  g->simple_stretch_1 = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), -1.5f, 1.5f, 0, 1.f, 3);
   dt_bauhaus_widget_set_label(g->simple_stretch_1, N_("u stretch"));
-  gtk_widget_set_tooltip_text(g->simple_stretch_1, _("signed stretch along the first principal chroma axis. Zero keeps the identity."));
+  gtk_widget_set_tooltip_text(g->simple_stretch_1, _("stretch along the first principal chroma axis. 0 neutralizes chroma, 1 keeps identity, -1 reverses chroma and +/-1.5 add contrast."));
   gtk_box_pack_start(GTK_BOX(mixer_simple), GTK_WIDGET(g->simple_stretch_1), FALSE, FALSE, 0);
   g_signal_connect(G_OBJECT(g->simple_stretch_1), "value-changed", G_CALLBACK(_channelmixerrgb_simple_slider_callback), self);
 
-  g->simple_stretch_2 = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), -1.f, 1.f, 0, 0, 3);
+  g->simple_stretch_2 = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), -1.5f, 1.5f, 0, 1.f, 3);
   dt_bauhaus_widget_set_label(g->simple_stretch_2, N_("v stretch"));
-  gtk_widget_set_tooltip_text(g->simple_stretch_2, _("signed stretch along the second principal chroma axis. Zero keeps the identity."));
+  gtk_widget_set_tooltip_text(g->simple_stretch_2, _("stretch along the second principal chroma axis. 0 neutralizes chroma, 1 keeps identity, -1 reverses chroma and +/-1.5 add contrast."));
   gtk_box_pack_start(GTK_BOX(mixer_simple), GTK_WIDGET(g->simple_stretch_2), FALSE, FALSE, 0);
   g_signal_connect(G_OBJECT(g->simple_stretch_2), "value-changed", G_CALLBACK(_channelmixerrgb_simple_slider_callback), self);
 
   gtk_box_pack_start(GTK_BOX(mixer_simple), dt_ui_section_label_new(_("achromatic coupling")), FALSE, FALSE, 0);
-
-  g->simple_coupling_1 = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 0.f, 1.f, 0, 0, 3);
-  dt_bauhaus_widget_set_label(g->simple_coupling_1, N_("achromatic coupling amount"));
-  gtk_widget_set_tooltip_text(g->simple_coupling_1, _("strength of the chroma-to-achromatic coupling in the fixed chroma basis."));
-  gtk_box_pack_start(GTK_BOX(mixer_simple), GTK_WIDGET(g->simple_coupling_1), FALSE, FALSE, 0);
-  g_signal_connect(G_OBJECT(g->simple_coupling_1), "value-changed", G_CALLBACK(_channelmixerrgb_simple_slider_callback), self);
 
   g->simple_coupling_2 = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), -1.f, 1.f, 0, 0, 3);
   dt_bauhaus_widget_set_label(g->simple_coupling_2, N_("achromatic coupling hue"));
@@ -5810,6 +5814,12 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(g->simple_coupling_2, _("chroma direction, in the fixed chroma basis, that is coupled into the achromatic axis."));
   gtk_box_pack_start(GTK_BOX(mixer_simple), GTK_WIDGET(g->simple_coupling_2), FALSE, FALSE, 0);
   g_signal_connect(G_OBJECT(g->simple_coupling_2), "value-changed", G_CALLBACK(_channelmixerrgb_simple_slider_callback), self);
+
+  g->simple_coupling_1 = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 0.f, 1.f, 0, 0, 3);
+  dt_bauhaus_widget_set_label(g->simple_coupling_1, N_("achromatic coupling amount"));
+  gtk_widget_set_tooltip_text(g->simple_coupling_1, _("strength of the chroma-to-achromatic coupling in the fixed chroma basis."));
+  gtk_box_pack_start(GTK_BOX(mixer_simple), GTK_WIDGET(g->simple_coupling_1), FALSE, FALSE, 0);
+  g_signal_connect(G_OBJECT(g->simple_coupling_1), "value-changed", G_CALLBACK(_channelmixerrgb_simple_slider_callback), self);
 
   GtkWidget *mixer_primaries = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
   gtk_stack_add_named(GTK_STACK(g->mixer_stack), mixer_primaries, "primaries");
