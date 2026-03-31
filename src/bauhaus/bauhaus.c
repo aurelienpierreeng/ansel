@@ -1844,7 +1844,7 @@ static void draw_equilateral_triangle(cairo_t *cr, float radius)
   cairo_arc(cr, 0, 0, radius, 0, M_PI * 2);
 }
 
-static void dt_bauhaus_draw_indicator(struct dt_bauhaus_widget_t *w, float pos, cairo_t *cr, float wd, const GdkRGBA fg_color, const GdkRGBA border_color)
+static void dt_bauhaus_draw_indicator(struct dt_bauhaus_widget_t *w, float pos, cairo_t *cr, float wd)
 {
   // draw scale indicator (the tiny triangle)
   const float size = w->bauhaus->marker_size;
@@ -1859,18 +1859,21 @@ static void dt_bauhaus_draw_indicator(struct dt_bauhaus_widget_t *w, float pos, 
   cairo_translate(cr, horizontal_position, vertical_position);
 
   const dt_bauhaus_slider_data_t *d = &w->data.slider;
+  const gboolean has_colored_background = d->grad_cnt > 0;
 
-  if(d->fill_feedback)
+  if(!has_colored_background && d->fill_feedback)
   {
     // Plain indicator (regular sliders)
     draw_equilateral_triangle(cr, size / 2.);
+    set_color(cr, w->bauhaus->color_fg);
     cairo_set_line_width(cr, 0);
     cairo_fill(cr);
   }
   else
   {
-    // Hollow indicator to see a color through it (gradient sliders)
+    // Hollow indicator to keep the slider background visible through the marker.
     const float border = (size - w->bauhaus->baseline_size) / 2.;
+    set_color(cr, w->bauhaus->color_fg);
     cairo_set_line_width(cr, border);
     draw_equilateral_triangle(cr, size / 2. - border / 2.);
     cairo_stroke(cr);
@@ -1916,13 +1919,14 @@ static void dt_bauhaus_draw_baseline(struct dt_bauhaus_widget_t *w, cairo_t *cr,
   // draw line for orientation in slider
   cairo_save(cr);
   dt_bauhaus_slider_data_t *d = &w->data.slider;
+  const gboolean has_colored_background = d->grad_cnt > 0;
   const float baseline_top = w->bauhaus->line_height + INNER_PADDING;
   const float baseline_height = w->bauhaus->baseline_size;
 
   // the background of the line
   cairo_rectangle(cr, 0, baseline_top, width, baseline_height);
   cairo_pattern_t *gradient = NULL;
-  if(d->grad_cnt > 0)
+  if(has_colored_background)
   {
     // gradient line as used in some modules for hue, saturation, lightness
     const double zoom = (d->max - d->min) / (d->hard_max - d->hard_min);
@@ -1949,7 +1953,7 @@ static void dt_bauhaus_draw_baseline(struct dt_bauhaus_widget_t *w, cairo_t *cr,
   const float delta = position - origin;
 
   // have a `fill ratio feel' from zero to current position
-  if(d->fill_feedback)
+  if(!has_colored_background && d->fill_feedback)
   {
     // only brighten, useful for colored sliders to not get too faint:
     cairo_save(cr);
@@ -2154,7 +2158,7 @@ static gboolean dt_bauhaus_popup_draw(GtkWidget *widget, cairo_t *crf, gpointer 
       cairo_stroke(cr);
 
       // draw indicator
-      dt_bauhaus_draw_indicator(w, d->pos, cr, main_width, w->bauhaus->color_value, *bg_color);
+      dt_bauhaus_draw_indicator(w, d->pos, cr, main_width);
 
       cairo_restore(cr);
 
@@ -2446,7 +2450,7 @@ static gboolean _widget_draw(GtkWidget *widget, cairo_t *crf)
       if(gtk_widget_is_sensitive(widget))
       {
         cairo_save(cr);
-        dt_bauhaus_draw_indicator(w, w->data.slider.pos, cr, available_width, *value_color, *bg_color);
+        dt_bauhaus_draw_indicator(w, w->data.slider.pos, cr, available_width);
         cairo_restore(cr);
 
         char *text = dt_bauhaus_slider_get_text(widget, dt_bauhaus_slider_get(widget));
