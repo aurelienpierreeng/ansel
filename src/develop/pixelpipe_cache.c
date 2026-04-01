@@ -241,15 +241,34 @@ static gboolean _cache_entry_materialize_host_data_locked(dt_pixel_cache_entry_t
    * - if a preferred OpenCL device is known, rank payloads from that device ahead of the rest.
    * This keeps the fallback order explicit without scattering it over six loops. */
   dt_pixel_cache_materialize_source_rank_t best_rank = DT_PIXEL_CACHE_MATERIALIZE_SOURCE_NONE;
-  for(GList *l = entry->cl_mem_list; l; l = l->next)
+  for(GList *l = entry->cl_mem_list; l;)
   {
+    GList *next = g_list_next(l);
     dt_cache_clmem_t *c = (dt_cache_clmem_t *)l->data;
-    if(!c || !c->mem) continue;
+    if(!c || !c->mem)
+    {
+      l = next;
+      continue;
+    }
+
+    /* We are looking for one authoritative cached payload to materialize back to RAM.
+     * Only consider records whose live OpenCL context still matches the recorded device.
+     * Other cached payloads may belong to a different pipeline/device and must stay untouched. */
+    const int mem_devid = dt_opencl_get_mem_context_id((cl_mem)c->mem);
+    if(mem_devid != c->devid)
+    {
+      l = next;
+      continue;
+    }
 
     const cl_mem_flags flags = dt_opencl_get_mem_flags((cl_mem)c->mem);
     const gboolean host_backed = (c->host_ptr == entry->data) && (flags & CL_MEM_USE_HOST_PTR);
     const gboolean device_only = (c->host_ptr == NULL);
-    if(!host_backed && !device_only) continue;
+    if(!host_backed && !device_only)
+    {
+      l = next;
+      continue;
+    }
 
     dt_pixel_cache_materialize_source_rank_t rank = DT_PIXEL_CACHE_MATERIALIZE_SOURCE_NONE;
     if(!prefer_device_payload)
@@ -281,6 +300,8 @@ static gboolean _cache_entry_materialize_host_data_locked(dt_pixel_cache_entry_t
       source = c;
       if(rank == DT_PIXEL_CACHE_MATERIALIZE_SOURCE_PRIMARY_PREFERRED) break;
     }
+
+    l = next;
   }
 
   if(source)
@@ -347,6 +368,7 @@ static gboolean _cache_entry_materialize_host_data(dt_dev_pixelpipe_cache_t *cac
                                                    dt_pixel_cache_entry_t *entry)
 {
   if(!cache || !entry) return FALSE;
+  if(preferred_devid < 0 && dt_pixel_cache_entry_get_data(entry) == NULL) return FALSE;
 
   dt_dev_pixelpipe_cache_wrlock_entry(cache, TRUE, entry);
   const gboolean had_host_payload = (dt_pixel_cache_entry_get_data(entry) != NULL);
@@ -366,9 +388,16 @@ static void _cache_entry_clmem_flush_host_pinned_locked(dt_pixel_cache_entry_t *
   dt_pthread_mutex_lock(&entry->cl_mem_lock);
   for(GList *l = entry->cl_mem_list; l;)
   {
-    GList *next = l->next;
+    GList *next = g_list_next(l);
     dt_cache_clmem_t *c = (dt_cache_clmem_t *)l->data;
+    const int mem_devid = (c && c->mem) ? dt_opencl_get_mem_context_id((cl_mem)c->mem) : -1;
     const cl_mem_flags flags = c ? dt_opencl_get_mem_flags((cl_mem)c->mem) : 0;
+
+    if(c && c->mem && mem_devid != c->devid)
+    {
+      l = next;
+      continue;
+    }
 
     if(c && c->host_ptr == host_ptr && (devid < 0 || c->devid == devid) && (flags & CL_MEM_USE_HOST_PTR))
     {
@@ -505,7 +534,7 @@ static void *_pixel_cache_clmem_get(dt_pixel_cache_entry_t *entry, void *host_pt
   dt_pthread_mutex_lock(&entry->cl_mem_lock);
   for(GList *l = entry->cl_mem_list; l;)
   {
-    GList *next = l->next;
+    GList *next = g_list_next(l);
     dt_cache_clmem_t *c = (dt_cache_clmem_t *)l->data;
     if(c && c->host_ptr == host_ptr && c->width == width && c->height == height
        && c->bpp == bpp && c->flags == flags)
@@ -548,7 +577,7 @@ void *dt_dev_pixelpipe_cache_borrow_cl_payload(dt_pixel_cache_entry_t *entry, vo
 #ifdef HAVE_OPENCL
 
   dt_pthread_mutex_lock(&entry->cl_mem_lock);
-  for(GList *l = entry->cl_mem_list; l; l = l->next)
+  for(GList *l = entry->cl_mem_list; l; l = g_list_next(l))
   {
     dt_cache_clmem_t *c = (dt_cache_clmem_t *)l->data;
     if(c && c->host_ptr == host_ptr && c->width == width && c->height == height
@@ -578,7 +607,7 @@ void dt_dev_pixelpipe_cache_return_cl_payload(dt_pixel_cache_entry_t *entry, voi
   if(!entry || !mem) return;
 
   dt_pthread_mutex_lock(&entry->cl_mem_lock);
-  for(GList *l = entry->cl_mem_list; l; l = l->next)
+  for(GList *l = entry->cl_mem_list; l; l = g_list_next(l))
   {
     dt_cache_clmem_t *c = (dt_cache_clmem_t *)l->data;
     if(c && c->mem == mem)
@@ -599,9 +628,18 @@ void dt_dev_pixelpipe_cache_return_cl_payload(dt_pixel_cache_entry_t *entry, voi
 static void _pixel_cache_clmem_put(dt_pixel_cache_entry_t *entry, void *host_ptr, int devid,
                                    int width, int height, int bpp, int flags, void *mem)
 {
+  const int mem_devid = dt_opencl_get_mem_context_id((cl_mem)mem);
+  if(mem_devid < 0 || mem_devid != devid)
+  {
+    dt_print(DT_DEBUG_OPENCL,
+             "[pixelpipe_cache] refusing to cache cl_mem %p on recorded device %d (live device %d)\n",
+             mem, devid, mem_devid);
+    dt_opencl_release_mem_object((cl_mem)mem);
+    return;
+  }
 
   dt_pthread_mutex_lock(&entry->cl_mem_lock);
-  for(GList *l = entry->cl_mem_list; l; l = l->next)
+  for(GList *l = entry->cl_mem_list; l; l = g_list_next(l))
   {
     dt_cache_clmem_t *c = (dt_cache_clmem_t *)l->data;
     if(c->mem == mem)
@@ -648,7 +686,7 @@ static void _pixel_cache_clmem_remove(dt_pixel_cache_entry_t *entry, void *mem)
   dt_pthread_mutex_lock(&entry->cl_mem_lock);
   for(GList *l = entry->cl_mem_list; l;)
   {
-    GList *next = l->next;
+    GList *next = g_list_next(l);
     dt_cache_clmem_t *c = (dt_cache_clmem_t *)l->data;
     if(c && c->mem == mem)
     {
@@ -672,7 +710,7 @@ void dt_dev_pixelpipe_cache_flush_entry_clmem(dt_pixel_cache_entry_t *entry)
   dt_pthread_mutex_lock(&entry->cl_mem_lock);
   for(GList *l = entry->cl_mem_list; l;)
   {
-    GList *next = l->next;
+    GList *next = g_list_next(l);
     dt_cache_clmem_t *c = (dt_cache_clmem_t *)l->data;
     if(c->refs > 0)
     {
@@ -1490,9 +1528,16 @@ static void _cache_entry_clmem_flush_device(dt_pixel_cache_entry_t *entry, const
   GList *l = entry->cl_mem_list;
   while(l)
   {
-    GList *next = l->next;
+    GList *next = g_list_next(l);
     dt_cache_clmem_t *c = (dt_cache_clmem_t *)l->data;
-    if(devid < 0 || (c->devid == devid && c->mem != keep))
+    const int mem_devid = (c && c->mem) ? dt_opencl_get_mem_context_id((cl_mem)c->mem) : -1;
+    if(c && c->mem && mem_devid != c->devid)
+    {
+      l = next;
+      continue;
+    }
+
+    if(c && (devid < 0 || (c->devid == devid && c->mem != keep)))
     {
       /* Device-only payloads on hostless cache entries are the authoritative pixels until some
        * downstream CPU stage materializes RAM or the entry gets destroyed. A global OpenCL flush
@@ -1730,7 +1775,7 @@ static void _free_cache_entry(dt_pixel_cache_entry_t *cache_entry)
   {
 #ifdef HAVE_OPENCL
     dt_pthread_mutex_lock(&cache_entry->cl_mem_lock);
-    for(GList *l = cache_entry->cl_mem_list; l; l = l->next)
+    for(GList *l = cache_entry->cl_mem_list; l; l = g_list_next(l))
     {
       dt_cache_clmem_t *c = (dt_cache_clmem_t *)l->data;
       if(!c || c->host_ptr != cache_entry->data) continue;
@@ -1739,7 +1784,8 @@ static void _free_cache_entry(dt_pixel_cache_entry_t *cache_entry)
         * queued work completes. We therefore wait for the owning device before releasing the host arena slot,
         * otherwise an auto-destroyed intermediate can be recycled into another module output while the GPU
         * is still reading the previous pixels. */
-      dt_opencl_finish(c->devid);
+      const int mem_devid = dt_opencl_get_mem_context_id((cl_mem)c->mem);
+      dt_opencl_finish(mem_devid >= 0 ? mem_devid : c->devid);
     }
     dt_pthread_mutex_unlock(&cache_entry->cl_mem_lock);
 #endif
@@ -1854,7 +1900,7 @@ static dt_pixel_cache_entry_t *_cache_try_rekey_reuse_locked(dt_dev_pixelpipe_ca
    * later be materialized as if it belonged to the new module output. Bail out if some GPU path is still
    * borrowing one of those payloads, otherwise flush the stale bookkeeping before publishing the new hash. */
   dt_pthread_mutex_lock(&cache_entry->cl_mem_lock);
-  for(GList *l = cache_entry->cl_mem_list; l; l = l->next)
+  for(GList *l = cache_entry->cl_mem_list; l; l = g_list_next(l))
   {
     dt_cache_clmem_t *c = (dt_cache_clmem_t *)l->data;
     if(c && c->refs > 0)
@@ -2034,14 +2080,30 @@ static gboolean _cache_entry_has_device_payload(dt_pixel_cache_entry_t *cache_en
 #ifdef HAVE_OPENCL
   gboolean has_payload = FALSE;
   dt_pthread_mutex_lock(&cache_entry->cl_mem_lock);
-  for(GList *l = cache_entry->cl_mem_list; l; l = l->next)
+  for(GList *l = cache_entry->cl_mem_list; l;)
   {
+    GList *next = g_list_next(l);
     dt_cache_clmem_t *c = (dt_cache_clmem_t *)l->data;
-    if(c && c->host_ptr == NULL && (preferred_devid < 0 || c->devid == preferred_devid))
+    if(!c || !c->mem)
+    {
+      l = next;
+      continue;
+    }
+
+    const int mem_devid = dt_opencl_get_mem_context_id((cl_mem)c->mem);
+    if(mem_devid != c->devid)
+    {
+      l = next;
+      continue;
+    }
+
+    if(c->host_ptr == NULL && (preferred_devid < 0 || c->devid == preferred_devid))
     {
       has_payload = TRUE;
       break;
     }
+
+    l = next;
   }
   dt_pthread_mutex_unlock(&cache_entry->cl_mem_lock);
   return has_payload;
@@ -2079,10 +2141,17 @@ static gboolean _cache_try_restore_device_payload(dt_pixel_cache_entry_t *cache_
   dt_pthread_mutex_lock(&cache_entry->cl_mem_lock);
   for(GList *l = cache_entry->cl_mem_list; l;)
   {
-    GList *next = l->next;
+    GList *next = g_list_next(l);
     dt_cache_clmem_t *c = (dt_cache_clmem_t *)l->data;
     if(c && c->host_ptr == NULL && c->devid == preferred_devid && c->flags == CL_MEM_READ_WRITE)
     {
+      const int mem_devid = dt_opencl_get_mem_context_id((cl_mem)c->mem);
+      if(mem_devid != preferred_devid)
+      {
+        l = next;
+        continue;
+      }
+
       if(c->refs > 0)
       {
         l = next;
@@ -2185,6 +2254,17 @@ gboolean dt_dev_pixelpipe_cache_peek(dt_dev_pixelpipe_cache_t *cache, const uint
     return TRUE;
   }
 
+  /* `preferred_devid < 0` means the caller is on a CPU path and does not own any
+   * OpenCL device. In that case, hostless cachelines are not consumable here:
+   * reopening device-only payloads would enqueue hidden GPU work without a locked
+   * device, while reporting a device-only exact-hit would let CPU callers sample
+   * an uninitialized host buffer. */
+  if(preferred_devid < 0)
+  {
+    _trace_exact_hit("cpu-no-device", hash, cache_entry, NULL, NULL, preferred_devid, FALSE);
+    return FALSE;
+  }
+
   if(_cache_try_restore_device_payload(cache_entry, preferred_devid, cl_mem_output))
   {
     _trace_exact_hit("device", hash, cache_entry, data ? *data : NULL,
@@ -2205,8 +2285,7 @@ gboolean dt_dev_pixelpipe_cache_peek(dt_dev_pixelpipe_cache_t *cache, const uint
   {
     if(data) *data = NULL;
     _trace_exact_hit("device-only", hash, cache_entry, NULL, NULL, preferred_devid, FALSE);
-    if(entry) *entry = cache_entry;
-    return TRUE;
+    return FALSE;
   }
 
   _trace_exact_hit("drop-invalid", hash, cache_entry, data ? *data : NULL,
@@ -2469,7 +2548,7 @@ int dt_dev_pixelpipe_cache_rekey(dt_dev_pixelpipe_cache_t *cache, const uint64_t
    * previous hash, so do not let the new hash inherit stale device-side state. If some GPU code is still
    * borrowing one of these payloads, refuse the rekey instead of publishing an ambiguous cache entry. */
   dt_pthread_mutex_lock(&entry->cl_mem_lock);
-  for(GList *l = entry->cl_mem_list; l; l = l->next)
+  for(GList *l = entry->cl_mem_list; l; l = g_list_next(l))
   {
     dt_cache_clmem_t *c = (dt_cache_clmem_t *)l->data;
     if(c && c->refs > 0)

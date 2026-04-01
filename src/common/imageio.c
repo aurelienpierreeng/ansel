@@ -1114,7 +1114,7 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
   struct dt_pixel_cache_entry_t *cache_entry;
   void *data = NULL;
   if(!dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, dt_dev_backbuf_get_hash(&pipe.backbuf), &data,
-                                  &cache_entry, -1, NULL))
+                                  &cache_entry, pipe.devid, NULL))
     goto error;
 
   /* `peek()` only exposes the published cacheline, it does not transfer ownership.

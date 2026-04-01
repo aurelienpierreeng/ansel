@@ -2456,7 +2456,7 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
         dt_pixel_cache_entry_t *preview_entry = NULL;
 
         if(dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, preview_hash, &preview_buf, &preview_entry,
-                                       -1, NULL)
+                                       self->dev->preview_pipe->devid, NULL)
            && preview_buf && preview_entry)
         {
           dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, preview_entry);

@@ -953,7 +953,8 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   const gboolean exact_output_cache_hit
       = _requests_cache(pipe, piece)
         && dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, hash, &existing_output, &existing_cache,
-                                       -1, NULL);
+                                       pipe->devid, NULL)
+        && existing_output != NULL;
 
   if(exact_output_cache_hit)
   {
@@ -1380,6 +1381,11 @@ static GList *_get_requested_piece_node(const dt_dev_pixelpipe_t *pipe, const dt
 
 int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop_roi_t roi)
 {
+  /* `pipe->devid` is only valid while the current run owns the OpenCL device lock.
+   * Reset it before any cache probe so callers never reuse a stale device id from a
+   * previous pipeline pass. */
+  pipe->devid = -1;
+
   if(darktable.unmuted & DT_DEBUG_MEMORY)
   {
     fprintf(stderr, "[memory] before pixelpipe process\n");
@@ -1437,7 +1443,7 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop
   if(_requests_cache(pipe, requested_piece)
      && requested_hash != DT_PIXELPIPE_CACHE_HASH_INVALID
      && dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, requested_hash, &buf, &entry,
-                                    -1, NULL)
+                                    pipe->devid, NULL)
      && buf != NULL)
   {
     if(requested_backbuf)

@@ -2971,7 +2971,8 @@ static gboolean _sync_private_buffer_from_preview_cache(dt_iop_module_t *self,
       = dt_dev_pixelpipe_node_hash(self->dev->preview_pipe, previous_piece, preview_piece->roi_in, 0);
   void *preview_buf = NULL;
   dt_pixel_cache_entry_t *preview_entry = NULL;
-  if(!dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, upstream_hash, &preview_buf, &preview_entry, -1, NULL)
+  if(!dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, upstream_hash, &preview_buf, &preview_entry,
+                                  self->dev->preview_pipe->devid, NULL)
      || !preview_buf || !preview_entry)
     return FALSE;
 

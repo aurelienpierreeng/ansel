@@ -469,7 +469,7 @@ gboolean dt_dev_pixelpipe_cache_peek_gui(dt_dev_pixelpipe_t *pipe, const dt_dev_
   void *buffer = NULL;
   dt_pixel_cache_entry_t *entry = NULL;
   if(hash != DT_PIXELPIPE_CACHE_HASH_INVALID
-     && dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, hash, &buffer, &entry, -1, NULL)
+     && dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, hash, &buffer, &entry, pipe->devid, NULL)
      && buffer && entry)
   {
     if(data) *data = buffer;
