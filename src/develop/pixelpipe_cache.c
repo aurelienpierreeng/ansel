@@ -337,8 +337,6 @@ static gboolean _cache_entry_materialize_host_data_locked(dt_pixel_cache_entry_t
           {
             ok = (dt_opencl_read_host_from_device(source->devid, entry->data, source->mem,
                                                   source->width, source->height, source->bpp) == CL_SUCCESS);
-
-            dt_opencl_finish(source->devid);
           }
         }
       }
@@ -347,7 +345,6 @@ static gboolean _cache_entry_materialize_host_data_locked(dt_pixel_cache_entry_t
     {
       ok = (dt_opencl_read_host_from_device(source->devid, entry->data, source->mem,
                                             source->width, source->height, source->bpp) == CL_SUCCESS);
-      dt_opencl_finish(source->devid);
     }
   }
 
@@ -1161,7 +1158,8 @@ void dt_dev_pixelpipe_cache_release_cl_buffer(void **cl_mem_buffer, dt_pixel_cac
  * 1. For `CL_MEM_USE_HOST_PTR` images, we *attempt* a map/unmap cycle. If the mapped pointer equals `host_ptr`,
  *    we treat it as true zero-copy and the map/unmap acts as a synchronization barrier (fast, avoids extra copies).
  * 2. Otherwise, we fall back to explicit blocking transfers (`dt_opencl_write_host_to_device` /
- *    `dt_opencl_read_host_from_device`).
+ *    `dt_opencl_read_host_from_device`), which already guarantee that the copied pixels are visible
+ *    on the host/device side when the helper returns.
  *
  * The map/unmap approach is used as a synchronization barrier because on many drivers it will:
  *
@@ -1220,8 +1218,6 @@ int dt_dev_pixelpipe_cache_sync_cl_buffer(const int devid, void *host_ptr, void 
     return 1;
   }
 
-  dt_opencl_finish(devid);
-
   dt_print(DT_DEBUG_OPENCL, "[opencl_pixelpipe] successfully copied image %s for module %s (%s)\n",
            (cl_mode == CL_MAP_WRITE) ? "host to device" : "device to host",
            (module) ? module->op : "base buffer", message);
@@ -1240,8 +1236,7 @@ int dt_dev_pixelpipe_cache_sync_cl_buffer(const int devid, void *host_ptr, void 
  *
  * - write-locks the cache entry (we are modifying host memory),
  * - performs a device→host copy (map/unmap if possible, explicit copy otherwise),
- * - updates the buffer descriptor colorspace tag,
- * - calls `dt_opencl_finish()` to ensure command queue completion before releasing the lock.
+ * - updates the buffer descriptor colorspace tag.
  */
 float *dt_dev_pixelpipe_cache_restore_cl_buffer(dt_dev_pixelpipe_t *pipe, float *input, void *cl_mem_input,
                                                 const dt_iop_roi_t *roi_in, dt_iop_module_t *module,
@@ -1253,9 +1248,6 @@ float *dt_dev_pixelpipe_cache_restore_cl_buffer(dt_dev_pixelpipe_t *pipe, float 
 
   const int fail = dt_dev_pixelpipe_cache_sync_cl_buffer(pipe->devid, input, cl_mem_input, roi_in,
                                                          CL_MAP_READ, in_bpp, module, message);
-
-  // Enforce the OpenCL pipe to run in sync with CPU RAM cache so lock validity is guaranteed.
-  dt_opencl_finish(pipe->devid);
   dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, FALSE, input_entry);
   return fail ? NULL : input;
 }
