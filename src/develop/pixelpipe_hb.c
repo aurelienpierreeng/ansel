@@ -823,7 +823,9 @@ static int _init_base_buffer(dt_dev_pixelpipe_t *pipe)
   if(cache_entry == NULL) return 1;
 
   int err = 0;
-  gboolean host_rewritten = FALSE;
+#ifdef HAVE_OPENCL
+  gboolean preload_base_pinned = FALSE;
+#endif
 
   if(new_entry)
   {
@@ -859,7 +861,24 @@ static int _init_base_buffer(dt_dev_pixelpipe_t *pipe)
 
         _copy_buffer((const char *const)buf.buf, (char *const)output, cp_height, roi.width,
                       pipe->iwidth, in_x, in_y, bpp * cp_width, bpp);
-        host_rewritten = TRUE;
+
+#ifdef HAVE_OPENCL
+        /* Fresh base-buffer cache misses start from a brand-new entry, so there is no stale OpenCL
+         * payload to invalidate here. If the first enabled stage is OpenCL-capable, seed the cache
+         * entry with a pinned host-backed image now so the first GPU consumer can reopen it without
+         * another allocation/upload round-trip. */
+        if(pipe->opencl_enabled && pipe->devid >= 0)
+        {
+          for(GList *node = g_list_first(pipe->nodes); node; node = g_list_next(node))
+          {
+            dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)node->data;
+            if(!piece || !piece->enabled) continue;
+
+            preload_base_pinned = piece->module && piece->process_cl_ready && piece->module->process_cl;
+            break;
+          }
+        }
+#endif
 
         dt_dev_pixelpipe_debug_dump_module_io(pipe, NULL, "base-init", FALSE, NULL, out_format, NULL, &roi,
                               0, bpp, IOP_CS_NONE, IOP_CS_NONE);
@@ -880,14 +899,24 @@ static int _init_base_buffer(dt_dev_pixelpipe_t *pipe)
   if(new_entry)
     dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, FALSE, cache_entry);
 
-  if(!err && host_rewritten)
+#ifdef HAVE_OPENCL
+  if(!err && preload_base_pinned)
   {
-    dt_dev_pixelpipe_gpu_flush_host_pinned_images(pipe, output, cache_entry, "base buffer copy");
-    /* The base buffer now owns the authoritative host pixels for this cacheline. Any older device-only
-     * payloads attached to the reused cache entry are stale and must not survive into later thumbnail runs,
-     * otherwise a downstream GPU->CPU fallback can reopen previous-image pixels from the same entry. */
-    dt_dev_pixelpipe_cache_flush_entry_clmem(cache_entry);
+    void *cl_mem_base = dt_dev_pixelpipe_cache_get_pinned_image(darktable.pixelpipe_cache, output,
+                                                                cache_entry, pipe->devid, roi.width,
+                                                                roi.height, (int)bpp,
+                                                                CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
+                                                                NULL);
+    if(cl_mem_base != NULL)
+    {
+      if(dt_dev_pixelpipe_cache_sync_cl_buffer(pipe->devid, output, cl_mem_base, &roi, CL_MAP_WRITE,
+                                               bpp, NULL, "base input preload to device") == 0)
+        dt_dev_pixelpipe_cache_put_pinned_image(darktable.pixelpipe_cache, output, cache_entry, &cl_mem_base);
+      else
+        dt_dev_pixelpipe_cache_release_cl_buffer(&cl_mem_base, cache_entry, NULL, FALSE);
+    }
   }
+#endif
 
   /* The base buffer is only a thread-safe staging copy of mipmap-cache pixels while the first pipeline stage
    * consumes them. Keeping it in both caches beyond that point duplicates the same image for no benefit, so

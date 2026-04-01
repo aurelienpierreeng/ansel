@@ -217,8 +217,19 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
   dt_iop_buffer_dsc_t blend_output_dsc = piece->dsc_out;
   /* The recursion already owns `input_entry`, so GPU payload recovery must happen from that entry
    * directly instead of going back through the hash lookup path. Hash lookup is for published
-   * cache hits; here we are consuming the current upstream stage inside the same pipeline run. */
-  if(input == NULL && pipe->devid >= 0)
+   * cache hits; here we are consuming the current upstream stage inside the same pipeline run.
+   * Base-buffer initialization may have already seeded a pinned host-backed image for the first
+   * OpenCL stage, so reopen that payload directly when there is no upstream GPU producer yet. */
+  if(previous_piece == NULL && input != NULL && pipe->devid >= 0)
+  {
+    cl_mem_input = dt_dev_pixelpipe_cache_borrow_cl_payload(input_entry, input, pipe->devid,
+                                            piece->roi_in.width, piece->roi_in.height,
+                                            piece->dsc_in.bpp,
+                                            CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR);
+    borrowed_cl_mem_input = (cl_mem_input != NULL);
+  }
+
+  if(cl_mem_input == NULL && input == NULL && pipe->devid >= 0)
   {
     cl_mem_input = dt_dev_pixelpipe_cache_borrow_cl_payload(input_entry, NULL, pipe->devid,
                                             piece->roi_in.width, piece->roi_in.height,
