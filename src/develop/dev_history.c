@@ -1628,6 +1628,13 @@ static void _process_history_db_entry(dt_develop_t *dev, const int32_t imgid, co
     return;
   }
 
+  /**
+   * History rows may outlive modules that were removed or renamed between
+   * releases. If the operation no longer exists in the current module list,
+   * drop that row quietly instead of treating it as a broken install.
+   */
+  if(!dt_iop_get_module_from_list(dev->iop, operation)) return;
+
   const int iop_order = dt_ioppr_get_iop_order(dev->iop_order_list, operation, multi_priority);
 
   // Init a bare minimal history entry
