@@ -185,7 +185,8 @@ typedef struct dt_iop_demosaic_global_data_t
   int kernel_guided_laplacian_finalize;
   int kernel_bspline_horizontal;
   int kernel_bspline_vertical;
-  int kernel_bspline_detail;
+  int kernel_bspline_horizontal_local;
+  int kernel_bspline_vertical_local;
   int kernel_vng_green_equilibrate;
   int kernel_vng_interpolate;
   int kernel_markesteijn_initial_copy;
@@ -1395,7 +1396,6 @@ static gboolean _downsample_guided_laplacian_postfilter_cl(struct dt_iop_module_
 
   cl_mem LF_even = NULL;
   cl_mem LF_odd = NULL;
-  cl_mem HF = NULL;
   cl_mem temp = NULL;
   cl_mem coeff = NULL;
   cl_mem bias = NULL;
@@ -1410,14 +1410,13 @@ static gboolean _downsample_guided_laplacian_postfilter_cl(struct dt_iop_module_
 
   LF_even = dt_opencl_alloc_device(devid, width, height, sizeof(float) * 4);
   LF_odd = dt_opencl_alloc_device(devid, width, height, sizeof(float) * 4);
-  HF = dt_opencl_alloc_device(devid, width, height, sizeof(float) * 4);
   temp = dt_opencl_alloc_device(devid, width, height, sizeof(float) * 4);
   coeff = dt_opencl_alloc_device(devid, width, height, sizeof(float) * 4);
   bias = dt_opencl_alloc_device(devid, width, height, sizeof(float) * 4);
   coeff_tmp = dt_opencl_alloc_device(devid, width, height, sizeof(float) * 4);
   reconstructed_a = dt_opencl_alloc_device(devid, width, height, sizeof(float) * 4);
   reconstructed_b = dt_opencl_alloc_device(devid, width, height, sizeof(float) * 4);
-  if(!LF_even || !LF_odd || !HF || !temp || !coeff || !bias || !coeff_tmp
+  if(!LF_even || !LF_odd || !temp || !coeff || !bias || !coeff_tmp
      || !reconstructed_a || !reconstructed_b)
     goto error;
 
@@ -1451,33 +1450,81 @@ static gboolean _downsample_guided_laplacian_postfilter_cl(struct dt_iop_module_
         buffer_out = LF_odd;
       }
 
-      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_horizontal, 0, sizeof(cl_mem), &buffer_in);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_horizontal, 1, sizeof(cl_mem), &temp);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_horizontal, 2, sizeof(int), &width);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_horizontal, 3, sizeof(int), &height);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_horizontal, 4, sizeof(int), &mult);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_horizontal, 5, sizeof(int), &clip_negatives);
-      err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_bspline_horizontal, sizes);
+      int hblocksize;
+      dt_opencl_local_buffer_t hlocopt = (dt_opencl_local_buffer_t){ .xoffset = 2 * mult, .xfactor = 1,
+                                                                      .yoffset = 0, .yfactor = 1,
+                                                                      .cellsize = 4 * sizeof(float), .overhead = 0,
+                                                                      .sizex = 1 << 16, .sizey = 1 };
+      if(dt_opencl_local_buffer_opt(devid, gd->kernel_bspline_horizontal_local, &hlocopt))
+        hblocksize = hlocopt.sizex;
+      else
+        hblocksize = 1;
+
+      if(hblocksize > 1)
+      {
+        const size_t horizontal_sizes[3] = { ROUNDUP(width, hblocksize), ROUNDUPDHT(height, devid), 1 };
+        const size_t horizontal_local[3] = { hblocksize, 1, 1 };
+        dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_horizontal_local, 0, sizeof(cl_mem), &buffer_in);
+        dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_horizontal_local, 1, sizeof(cl_mem), &temp);
+        dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_horizontal_local, 2, sizeof(int), &width);
+        dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_horizontal_local, 3, sizeof(int), &height);
+        dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_horizontal_local, 4, sizeof(int), &mult);
+        dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_horizontal_local, 5, sizeof(int), &clip_negatives);
+        dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_horizontal_local, 6,
+                                 (hblocksize + 4 * mult) * 4 * sizeof(float), NULL);
+        err = dt_opencl_enqueue_kernel_2d_with_local(devid, gd->kernel_bspline_horizontal_local,
+                                                     horizontal_sizes, horizontal_local);
+      }
+      else
+      {
+        dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_horizontal, 0, sizeof(cl_mem), &buffer_in);
+        dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_horizontal, 1, sizeof(cl_mem), &temp);
+        dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_horizontal, 2, sizeof(int), &width);
+        dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_horizontal, 3, sizeof(int), &height);
+        dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_horizontal, 4, sizeof(int), &mult);
+        dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_horizontal, 5, sizeof(int), &clip_negatives);
+        err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_bspline_horizontal, sizes);
+      }
       if(err != CL_SUCCESS) goto error;
 
-      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_vertical, 0, sizeof(cl_mem), &temp);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_vertical, 1, sizeof(cl_mem), &buffer_out);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_vertical, 2, sizeof(int), &width);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_vertical, 3, sizeof(int), &height);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_vertical, 4, sizeof(int), &mult);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_vertical, 5, sizeof(int), &clip_negatives);
-      err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_bspline_vertical, sizes);
+      int vblocksize;
+      dt_opencl_local_buffer_t vlocopt = (dt_opencl_local_buffer_t){ .xoffset = 0, .xfactor = 1,
+                                                                      .yoffset = 2 * mult, .yfactor = 1,
+                                                                      .cellsize = 4 * sizeof(float), .overhead = 0,
+                                                                      .sizex = 1, .sizey = 1 << 16 };
+      if(dt_opencl_local_buffer_opt(devid, gd->kernel_bspline_vertical_local, &vlocopt))
+        vblocksize = vlocopt.sizey;
+      else
+        vblocksize = 1;
+
+      if(vblocksize > 1)
+      {
+        const size_t vertical_sizes[3] = { ROUNDUPDWD(width, devid), ROUNDUP(height, vblocksize), 1 };
+        const size_t vertical_local[3] = { 1, vblocksize, 1 };
+        dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_vertical_local, 0, sizeof(cl_mem), &temp);
+        dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_vertical_local, 1, sizeof(cl_mem), &buffer_out);
+        dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_vertical_local, 2, sizeof(int), &width);
+        dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_vertical_local, 3, sizeof(int), &height);
+        dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_vertical_local, 4, sizeof(int), &mult);
+        dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_vertical_local, 5, sizeof(int), &clip_negatives);
+        dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_vertical_local, 6,
+                                 (vblocksize + 4 * mult) * 4 * sizeof(float), NULL);
+        err = dt_opencl_enqueue_kernel_2d_with_local(devid, gd->kernel_bspline_vertical_local,
+                                                     vertical_sizes, vertical_local);
+      }
+      else
+      {
+        dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_vertical, 0, sizeof(cl_mem), &temp);
+        dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_vertical, 1, sizeof(cl_mem), &buffer_out);
+        dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_vertical, 2, sizeof(int), &width);
+        dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_vertical, 3, sizeof(int), &height);
+        dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_vertical, 4, sizeof(int), &mult);
+        dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_vertical, 5, sizeof(int), &clip_negatives);
+        err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_bspline_vertical, sizes);
+      }
       if(err != CL_SUCCESS) goto error;
 
-      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_detail, 0, sizeof(cl_mem), &buffer_in);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_detail, 1, sizeof(cl_mem), &buffer_out);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_detail, 2, sizeof(cl_mem), &HF);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_detail, 3, sizeof(int), &width);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_detail, 4, sizeof(int), &height);
-      err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_bspline_detail, sizes);
-      if(err != CL_SUCCESS) goto error;
-
-      dt_opencl_set_kernel_arg(devid, gd->kernel_guided_laplacian_normalize, 0, sizeof(cl_mem), &HF);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_guided_laplacian_normalize, 0, sizeof(cl_mem), &buffer_in);
       dt_opencl_set_kernel_arg(devid, gd->kernel_guided_laplacian_normalize, 1, sizeof(cl_mem), &buffer_out);
       dt_opencl_set_kernel_arg(devid, gd->kernel_guided_laplacian_normalize, 2, sizeof(cl_mem), &temp);
       dt_opencl_set_kernel_arg(devid, gd->kernel_guided_laplacian_normalize, 3, sizeof(int), &width);
@@ -1563,7 +1610,6 @@ static gboolean _downsample_guided_laplacian_postfilter_cl(struct dt_iop_module_
   dt_opencl_release_mem_object(bias);
   dt_opencl_release_mem_object(coeff);
   dt_opencl_release_mem_object(temp);
-  dt_opencl_release_mem_object(HF);
   dt_opencl_release_mem_object(LF_odd);
   dt_opencl_release_mem_object(LF_even);
   return TRUE;
@@ -1575,7 +1621,6 @@ error:
   dt_opencl_release_mem_object(bias);
   dt_opencl_release_mem_object(coeff);
   dt_opencl_release_mem_object(temp);
-  dt_opencl_release_mem_object(HF);
   dt_opencl_release_mem_object(LF_odd);
   dt_opencl_release_mem_object(LF_even);
   dt_print(DT_DEBUG_OPENCL, "[opencl_demosaic] guided laplacian postfilter failed: %d\n", err);
@@ -1968,7 +2013,8 @@ void init_global(dt_iop_module_so_t *module)
   gd->kernel_guided_laplacian_finalize = dt_opencl_create_kernel(wavelets, "guided_laplacian_finalize");
   gd->kernel_bspline_horizontal = dt_opencl_create_kernel(wavelets, "blur_2D_Bspline_horizontal");
   gd->kernel_bspline_vertical = dt_opencl_create_kernel(wavelets, "blur_2D_Bspline_vertical");
-  gd->kernel_bspline_detail = dt_opencl_create_kernel(wavelets, "wavelets_detail_level");
+  gd->kernel_bspline_horizontal_local = dt_opencl_create_kernel(wavelets, "blur_2D_Bspline_horizontal_local");
+  gd->kernel_bspline_vertical_local = dt_opencl_create_kernel(wavelets, "blur_2D_Bspline_vertical_local");
   gd->lmmse_gamma_in = NULL;
   gd->lmmse_gamma_out = NULL;
 }
@@ -2000,7 +2046,8 @@ void cleanup_global(dt_iop_module_so_t *module)
   dt_opencl_free_kernel(gd->kernel_guided_laplacian_finalize);
   dt_opencl_free_kernel(gd->kernel_bspline_horizontal);
   dt_opencl_free_kernel(gd->kernel_bspline_vertical);
-  dt_opencl_free_kernel(gd->kernel_bspline_detail);
+  dt_opencl_free_kernel(gd->kernel_bspline_horizontal_local);
+  dt_opencl_free_kernel(gd->kernel_bspline_vertical_local);
   dt_opencl_free_kernel(gd->kernel_vng_green_equilibrate);
   dt_opencl_free_kernel(gd->kernel_vng_interpolate);
   dt_opencl_free_kernel(gd->kernel_markesteijn_initial_copy);

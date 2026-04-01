@@ -351,6 +351,8 @@ typedef struct dt_iop_filmicrgb_global_data_t
   int kernel_filmic_inpaint_noise;
   int kernel_filmic_bspline_vertical;
   int kernel_filmic_bspline_horizontal;
+  int kernel_filmic_bspline_vertical_local;
+  int kernel_filmic_bspline_horizontal_local;
   int kernel_filmic_init_reconstruct;
   int kernel_filmic_wavelets_detail;
   int kernel_filmic_wavelets_reconstruct;
@@ -2611,22 +2613,78 @@ static inline cl_int reconstruct_highlights_cl(const dt_dev_pixelpipe_t *pipe, c
 
     // Compute wavelets low-frequency scales
     const int clamp_lf = 1;
-    dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal, 0, sizeof(cl_mem), (void *)&detail);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal, 1, sizeof(cl_mem), (void *)&temp);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal, 2, sizeof(int), (void *)&width);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal, 3, sizeof(int), (void *)&height);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal, 4, sizeof(int), (void *)&mult);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal, 5, sizeof(int), (void *)&clamp_lf);
-    err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_filmic_bspline_horizontal, sizes);
+    int hblocksize;
+    dt_opencl_local_buffer_t hlocopt = (dt_opencl_local_buffer_t){ .xoffset = 2 * mult, .xfactor = 1,
+                                                                    .yoffset = 0, .yfactor = 1,
+                                                                    .cellsize = 4 * sizeof(float), .overhead = 0,
+                                                                    .sizex = 1 << 16, .sizey = 1 };
+    if(dt_opencl_local_buffer_opt(devid, gd->kernel_filmic_bspline_horizontal_local, &hlocopt))
+      hblocksize = hlocopt.sizex;
+    else
+      hblocksize = 1;
+
+    if(hblocksize > 1)
+    {
+      const size_t horizontal_sizes[3] = { ROUNDUP(width, hblocksize), ROUNDUPDHT(height, devid), 1 };
+      const size_t horizontal_local[3] = { hblocksize, 1, 1 };
+      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal_local, 0, sizeof(cl_mem), (void *)&detail);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal_local, 1, sizeof(cl_mem), (void *)&temp);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal_local, 2, sizeof(int), (void *)&width);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal_local, 3, sizeof(int), (void *)&height);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal_local, 4, sizeof(int), (void *)&mult);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal_local, 5, sizeof(int), (void *)&clamp_lf);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal_local, 6,
+                               (hblocksize + 4 * mult) * 4 * sizeof(float), NULL);
+      err = dt_opencl_enqueue_kernel_2d_with_local(devid, gd->kernel_filmic_bspline_horizontal_local,
+                                                   horizontal_sizes, horizontal_local);
+    }
+    else
+    {
+      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal, 0, sizeof(cl_mem), (void *)&detail);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal, 1, sizeof(cl_mem), (void *)&temp);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal, 2, sizeof(int), (void *)&width);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal, 3, sizeof(int), (void *)&height);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal, 4, sizeof(int), (void *)&mult);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal, 5, sizeof(int), (void *)&clamp_lf);
+      err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_filmic_bspline_horizontal, sizes);
+    }
     if(err != CL_SUCCESS) goto error;
 
-    dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_vertical, 0, sizeof(cl_mem), (void *)&temp);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_vertical, 1, sizeof(cl_mem), (void *)&LF);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_vertical, 2, sizeof(int), (void *)&width);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_vertical, 3, sizeof(int), (void *)&height);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_vertical, 4, sizeof(int), (void *)&mult);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_vertical, 5, sizeof(int), (void *)&clamp_lf);
-    err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_filmic_bspline_vertical, sizes);
+    int vblocksize;
+    dt_opencl_local_buffer_t vlocopt = (dt_opencl_local_buffer_t){ .xoffset = 0, .xfactor = 1,
+                                                                    .yoffset = 2 * mult, .yfactor = 1,
+                                                                    .cellsize = 4 * sizeof(float), .overhead = 0,
+                                                                    .sizex = 1, .sizey = 1 << 16 };
+    if(dt_opencl_local_buffer_opt(devid, gd->kernel_filmic_bspline_vertical_local, &vlocopt))
+      vblocksize = vlocopt.sizey;
+    else
+      vblocksize = 1;
+
+    if(vblocksize > 1)
+    {
+      const size_t vertical_sizes[3] = { ROUNDUPDWD(width, devid), ROUNDUP(height, vblocksize), 1 };
+      const size_t vertical_local[3] = { 1, vblocksize, 1 };
+      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_vertical_local, 0, sizeof(cl_mem), (void *)&temp);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_vertical_local, 1, sizeof(cl_mem), (void *)&LF);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_vertical_local, 2, sizeof(int), (void *)&width);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_vertical_local, 3, sizeof(int), (void *)&height);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_vertical_local, 4, sizeof(int), (void *)&mult);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_vertical_local, 5, sizeof(int), (void *)&clamp_lf);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_vertical_local, 6,
+                               (vblocksize + 4 * mult) * 4 * sizeof(float), NULL);
+      err = dt_opencl_enqueue_kernel_2d_with_local(devid, gd->kernel_filmic_bspline_vertical_local,
+                                                   vertical_sizes, vertical_local);
+    }
+    else
+    {
+      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_vertical, 0, sizeof(cl_mem), (void *)&temp);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_vertical, 1, sizeof(cl_mem), (void *)&LF);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_vertical, 2, sizeof(int), (void *)&width);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_vertical, 3, sizeof(int), (void *)&height);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_vertical, 4, sizeof(int), (void *)&mult);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_vertical, 5, sizeof(int), (void *)&clamp_lf);
+      err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_filmic_bspline_vertical, sizes);
+    }
     if(err != CL_SUCCESS) goto error;
 
     // Compute wavelets high-frequency scales and backup the maximum of texture over the RGB channels
@@ -3611,6 +3669,8 @@ void init_global(dt_iop_module_so_t *module)
   const int wavelets = 35; // bspline.cl, from programs.conf
   gd->kernel_filmic_bspline_horizontal = dt_opencl_create_kernel(wavelets, "blur_2D_Bspline_horizontal");
   gd->kernel_filmic_bspline_vertical = dt_opencl_create_kernel(wavelets, "blur_2D_Bspline_vertical");
+  gd->kernel_filmic_bspline_horizontal_local = dt_opencl_create_kernel(wavelets, "blur_2D_Bspline_horizontal_local");
+  gd->kernel_filmic_bspline_vertical_local = dt_opencl_create_kernel(wavelets, "blur_2D_Bspline_vertical_local");
   gd->kernel_filmic_wavelets_detail = dt_opencl_create_kernel(wavelets, "wavelets_detail_level");
 }
 
@@ -3624,6 +3684,8 @@ void cleanup_global(dt_iop_module_so_t *module)
   dt_opencl_free_kernel(gd->kernel_filmic_inpaint_noise);
   dt_opencl_free_kernel(gd->kernel_filmic_bspline_vertical);
   dt_opencl_free_kernel(gd->kernel_filmic_bspline_horizontal);
+  dt_opencl_free_kernel(gd->kernel_filmic_bspline_vertical_local);
+  dt_opencl_free_kernel(gd->kernel_filmic_bspline_horizontal_local);
   dt_opencl_free_kernel(gd->kernel_filmic_init_reconstruct);
   dt_opencl_free_kernel(gd->kernel_filmic_wavelets_detail);
   dt_opencl_free_kernel(gd->kernel_filmic_wavelets_reconstruct);

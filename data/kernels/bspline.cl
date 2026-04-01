@@ -55,6 +55,42 @@ kernel void blur_2D_Bspline_vertical(read_only image2d_t in, write_only image2d_
     write_imagef(out, (int2)(x, y), accumulator);
 }
 
+kernel void blur_2D_Bspline_vertical_local(read_only image2d_t in, write_only image2d_t out,
+                                           const int width, const int height, const int mult,
+                                           const int clip_negative, local float4 *buffer)
+{
+  // À-trous B-spline interpolation/blur shifted by mult.
+  // Reuse the 5-tap vertical support inside local memory so neighbouring
+  // work-items do not refetch the same pixels from device memory.
+  const int x = get_global_id(0);
+  const int y = get_global_id(1);
+  const int lid = get_local_id(1);
+  const int blocksize = get_local_size(1);
+  const int base = get_group_id(1) * blocksize;
+  const int span = blocksize + 4 * mult;
+  const int xx = clamp(x, 0, width - 1);
+  const bool active = (x < width && y < height);
+
+  for(int k = lid; k < span; k += blocksize)
+  {
+    const int yy = clamp(base + k - 2 * mult, 0, height - 1);
+    buffer[k] = read_imagef(in, samplerA, (int2)(xx, yy));
+  }
+
+  barrier(CLK_LOCAL_MEM_FENCE);
+
+  const int center = lid + 2 * mult;
+  const float4 accumulator = buffer[center] * (6.0f / 16.0f)
+                           + (buffer[center - mult] + buffer[center + mult]) * (4.0f / 16.0f)
+                           + (buffer[center - 2 * mult] + buffer[center + 2 * mult]) * (1.0f / 16.0f);
+
+  if(!active)
+    return;
+  else if(clip_negative)
+    write_imagef(out, (int2)(x, y), fmax(accumulator, 0.0f));
+  else
+    write_imagef(out, (int2)(x, y), accumulator);
+}
 
 kernel void blur_2D_Bspline_horizontal(read_only image2d_t in, write_only image2d_t out,
                                        const int width, const int height, const int mult,
@@ -83,6 +119,43 @@ kernel void blur_2D_Bspline_horizontal(read_only image2d_t in, write_only image2
 
   if(clip_negative)
     write_imagef(out, (int2)(x, y), fmax(accumulator, 0.f));
+  else
+    write_imagef(out, (int2)(x, y), accumulator);
+}
+
+kernel void blur_2D_Bspline_horizontal_local(read_only image2d_t in, write_only image2d_t out,
+                                             const int width, const int height, const int mult,
+                                             const int clip_negative, local float4 *buffer)
+{
+  // À-trous B-spline interpolation/blur shifted by mult.
+  // Reuse the 5-tap horizontal support inside local memory so neighbouring
+  // work-items do not refetch the same pixels from device memory.
+  const int x = get_global_id(0);
+  const int y = get_global_id(1);
+  const int lid = get_local_id(0);
+  const int blocksize = get_local_size(0);
+  const int base = get_group_id(0) * blocksize;
+  const int span = blocksize + 4 * mult;
+  const int yy = clamp(y, 0, height - 1);
+  const bool active = (x < width && y < height);
+
+  for(int k = lid; k < span; k += blocksize)
+  {
+    const int xx = clamp(base + k - 2 * mult, 0, width - 1);
+    buffer[k] = read_imagef(in, samplerA, (int2)(xx, yy));
+  }
+
+  barrier(CLK_LOCAL_MEM_FENCE);
+
+  const int center = lid + 2 * mult;
+  const float4 accumulator = buffer[center] * (6.0f / 16.0f)
+                           + (buffer[center - mult] + buffer[center + mult]) * (4.0f / 16.0f)
+                           + (buffer[center - 2 * mult] + buffer[center + 2 * mult]) * (1.0f / 16.0f);
+
+  if(!active)
+    return;
+  else if(clip_negative)
+    write_imagef(out, (int2)(x, y), fmax(accumulator, 0.0f));
   else
     write_imagef(out, (int2)(x, y), accumulator);
 }
@@ -170,7 +243,7 @@ kernel void guided_laplacian_coefficients(read_only image2d_t HF,
   write_imagef(bias, (int2)(x, y), (float4)(b_r, b_g, b_b, 0.0f));
 }
 
-kernel void guided_laplacian_normalize(read_only image2d_t HF,
+kernel void guided_laplacian_normalize(read_only image2d_t detail,
                                        read_only image2d_t LF,
                                        write_only image2d_t normalized_HF,
                                        const int width, const int height)
@@ -179,8 +252,8 @@ kernel void guided_laplacian_normalize(read_only image2d_t HF,
   const int y = get_global_id(1);
   if(x >= width || y >= height) return;
 
-  const float4 hf = read_imagef(HF, samplerA, (int2)(x, y));
   const float4 lf = read_imagef(LF, samplerA, (int2)(x, y));
+  const float4 hf = read_imagef(detail, samplerA, (int2)(x, y)) - lf;
   const float4 normalized = (float4)(hf.x / fmax(lf.x, 1e-8f),
                                      hf.y / fmax(lf.y, 1e-8f),
                                      hf.z / fmax(lf.z, 1e-8f),

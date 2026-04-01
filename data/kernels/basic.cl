@@ -1047,7 +1047,7 @@ constant float anisotropic_kernel_isophote[9]
 
 
 kernel void
-guide_laplacians(read_only image2d_t HF, read_only image2d_t LF,
+guide_laplacians(read_only image2d_t detail, read_only image2d_t LF,
                  read_only image2d_t mask,
                  read_only image2d_t output_r, write_only image2d_t output_w,
                  const int width, const int height, const int mult,
@@ -1061,123 +1061,130 @@ guide_laplacians(read_only image2d_t HF, read_only image2d_t LF,
 
   const float alpha = read_imagef(mask, samplerA, (int2)(x, y)).w;
   const float alpha_comp = 1.f - alpha;
-
-  float4 high_frequency = read_imagef(HF, samplerA, (int2)(x, y));
+  const float4 low_frequency = read_imagef(LF, samplerA, (int2)(x, y));
+  float4 high_frequency = read_imagef(detail, samplerA, (int2)(x, y)) - low_frequency;
 
   float4 out;
 
   if(alpha > 0.f) // reconstruct
   {
-    // non-local neighbours coordinates
-    const int j_neighbours[3] = {
-      max(x - mult, 0),
-      x,
-      min(x + mult, width - 1) };
-    const int i_neighbours[3] = {
-      max(y - mult, 0),
-      y,
-      min(y + mult, height - 1) };
+    // Recover the raw moments of the 3x3 support directly instead of materializing
+    // the full neighbourhood and revisiting it for variance/covariance. This keeps
+    // the same guide selection logic as the CPU path while exposing simpler scalar
+    // dataflow to the OpenCL backend.
+    const int x0 = max(x - mult, 0);
+    const int x1 = x;
+    const int x2 = min(x + mult, width - 1);
+    const int y0 = max(y - mult, 0);
+    const int y1 = y;
+    const int y2 = min(y + mult, height - 1);
+    const int x_neighbours[3] = { x0, x1, x2 };
+    const int y_neighbours[3] = { y0, y1, y2 };
+    const float inv_patch = 1.f / 9.f;
+    const float eps = 1e-12f;
 
-    // fetch non-local pixels and store them locally and contiguously
-    float4 neighbour_pixel_HF[9];
-    neighbour_pixel_HF[3 * 0 + 0] = read_imagef(HF, samplerA, (int2)(j_neighbours[0], i_neighbours[0]));
-    neighbour_pixel_HF[3 * 0 + 1] = read_imagef(HF, samplerA, (int2)(j_neighbours[1], i_neighbours[0]));
-    neighbour_pixel_HF[3 * 0 + 2] = read_imagef(HF, samplerA, (int2)(j_neighbours[2], i_neighbours[0]));
+    float sum_r = 0.f;
+    float sum_g = 0.f;
+    float sum_b = 0.f;
+    float sum_a = 0.f;
+    float sum_rr = 0.f;
+    float sum_gg = 0.f;
+    float sum_bb = 0.f;
+    float sum_rg = 0.f;
+    float sum_rb = 0.f;
+    float sum_gb = 0.f;
+    float sum_ar = 0.f;
+    float sum_ag = 0.f;
+    float sum_ab = 0.f;
 
-    neighbour_pixel_HF[3 * 1 + 0] = read_imagef(HF, samplerA, (int2)(j_neighbours[0], i_neighbours[1]));
-    neighbour_pixel_HF[3 * 1 + 1] = read_imagef(HF, samplerA, (int2)(j_neighbours[1], i_neighbours[1]));
-    neighbour_pixel_HF[3 * 1 + 2] = read_imagef(HF, samplerA, (int2)(j_neighbours[2], i_neighbours[1]));
-
-    neighbour_pixel_HF[3 * 2 + 0] = read_imagef(HF, samplerA, (int2)(j_neighbours[0], i_neighbours[2]));
-    neighbour_pixel_HF[3 * 2 + 1] = read_imagef(HF, samplerA, (int2)(j_neighbours[1], i_neighbours[2]));
-    neighbour_pixel_HF[3 * 2 + 2] = read_imagef(HF, samplerA, (int2)(j_neighbours[2], i_neighbours[2]));
-
-    // Compute the linear fit of the laplacian of chromaticity against the laplacian of the norm
-    // that is the chromaticity filter guided by the norm
-
-    // Get the local average per channel
-    float4 means_HF = 0.f;
-    for(int k = 0; k < 9; k++)
+    for(int jj = 0; jj < 3; ++jj)
     {
-      means_HF += neighbour_pixel_HF[k] / 9.f;
-    }
-
-    // Get the local variance per channel
-    float4 variance_HF = 0.f;
-    for(int k = 0; k < 9; k++)
-    {
-      variance_HF += sqf(neighbour_pixel_HF[k] - means_HF) / 9.f;
-    }
-
-    // Find the channel most likely to contain details = max( variance(HF) )
-    // But since OpenCL is not designed to iterate over float4,
-    // we need to check each channel in sequence
-    int guiding_channel_HF = ALPHA;
-    float guiding_value_HF = 0.f;
-
-    if(variance_HF.x > guiding_value_HF)
-    {
-      guiding_value_HF = variance_HF.x;
-      guiding_channel_HF = RED;
-    }
-    if(variance_HF.y > guiding_value_HF)
+      const int yy = y_neighbours[jj];
+      for(int ii = 0; ii < 3; ++ii)
       {
-      guiding_value_HF = variance_HF.y;
-      guiding_channel_HF = GREEN;
+        const float4 sample = read_imagef(detail, samplerA, (int2)(x_neighbours[ii], yy))
+                            - read_imagef(LF, samplerA, (int2)(x_neighbours[ii], yy));
+        const float sample_r = sample.x;
+        const float sample_g = sample.y;
+        const float sample_b = sample.z;
+        const float sample_a = sample.w;
+
+        sum_r += sample_r;
+        sum_g += sample_g;
+        sum_b += sample_b;
+        sum_a += sample_a;
+        sum_rr += sample_r * sample_r;
+        sum_gg += sample_g * sample_g;
+        sum_bb += sample_b * sample_b;
+        sum_rg += sample_r * sample_g;
+        sum_rb += sample_r * sample_b;
+        sum_gb += sample_g * sample_b;
+        sum_ar += sample_a * sample_r;
+        sum_ag += sample_a * sample_g;
+        sum_ab += sample_a * sample_b;
       }
-    if(variance_HF.z > guiding_value_HF)
-    {
-      guiding_value_HF = variance_HF.z;
-      guiding_channel_HF = BLUE;
     }
 
-    // Extract the guiding values for HF and LF now
-    // so we can proceed after with vectorized code
-    float means_HF_guide = 0.f;
-    float variance_HF_guide = 0.f;
-    float channel_guide_HF[9];
-    float high_frequency_guide = 0.f;
+    const float mean_r = sum_r * inv_patch;
+    const float mean_g = sum_g * inv_patch;
+    const float mean_b = sum_b * inv_patch;
+    const float mean_a = sum_a * inv_patch;
+    const float var_r = fmax(sum_rr * inv_patch - mean_r * mean_r, 0.f);
+    const float var_g = fmax(sum_gg * inv_patch - mean_g * mean_g, 0.f);
+    const float var_b = fmax(sum_bb * inv_patch - mean_b * mean_b, 0.f);
 
-    if(guiding_channel_HF == RED)
+    float guide_mean = mean_r;
+    float guide_variance = var_r;
+    float guide_value = high_frequency.x;
+    float cov_r = var_r;
+    float cov_g = sum_rg * inv_patch - mean_r * mean_g;
+    float cov_b = sum_rb * inv_patch - mean_r * mean_b;
+    float cov_a = sum_ar * inv_patch - mean_a * mean_r;
+
+    if(var_g > guide_variance)
     {
-      means_HF_guide = means_HF.x;
-      variance_HF_guide = variance_HF.x;
-      high_frequency_guide = high_frequency.x;
-      for(int k = 0; k < 9; k++) channel_guide_HF[k] = neighbour_pixel_HF[k].x;
+      guide_mean = mean_g;
+      guide_variance = var_g;
+      guide_value = high_frequency.y;
+      cov_r = sum_rg * inv_patch - mean_r * mean_g;
+      cov_g = var_g;
+      cov_b = sum_gb * inv_patch - mean_g * mean_b;
+      cov_a = sum_ag * inv_patch - mean_a * mean_g;
     }
-    else if(guiding_channel_HF == GREEN)
+    if(var_b > guide_variance)
     {
-      means_HF_guide = means_HF.y;
-      variance_HF_guide = variance_HF.y;
-      high_frequency_guide = high_frequency.y;
-      for(int k = 0; k < 9; k++) channel_guide_HF[k] = neighbour_pixel_HF[k].y;
+      guide_mean = mean_b;
+      guide_variance = var_b;
+      guide_value = high_frequency.z;
+      cov_r = sum_rb * inv_patch - mean_r * mean_b;
+      cov_g = sum_gb * inv_patch - mean_g * mean_b;
+      cov_b = var_b;
+      cov_a = sum_ab * inv_patch - mean_a * mean_b;
     }
-    else // BLUE
+
+    if(guide_variance > eps)
     {
-      means_HF_guide = means_HF.z;
-      variance_HF_guide = variance_HF.z;
-      high_frequency_guide = high_frequency.z;
-      for(int k = 0; k < 9; k++) channel_guide_HF[k] = neighbour_pixel_HF[k].z;
+      const float scale_multiplier = 1.f / radius_sq;
+      const float4 alpha_ch = read_imagef(mask, samplerA, (int2)(x, y));
+      const float inv_guide_variance = 1.f / guide_variance;
+      const float a_r = fmax(cov_r * inv_guide_variance, 0.f);
+      const float a_g = fmax(cov_g * inv_guide_variance, 0.f);
+      const float a_b = fmax(cov_b * inv_guide_variance, 0.f);
+      const float a_a = fmax(cov_a * inv_guide_variance, 0.f);
+      const float b_r = mean_r - a_r * guide_mean;
+      const float b_g = mean_g - a_g * guide_mean;
+      const float b_b = mean_b - a_b * guide_mean;
+      const float b_a = mean_a - a_a * guide_mean;
+
+      const float blend_r = alpha_ch.x * scale_multiplier;
+      const float blend_g = alpha_ch.y * scale_multiplier;
+      const float blend_b = alpha_ch.z * scale_multiplier;
+      const float blend_a = alpha_ch.w * scale_multiplier;
+      high_frequency.x = blend_r * (a_r * guide_value + b_r) + (1.f - blend_r) * high_frequency.x;
+      high_frequency.y = blend_g * (a_g * guide_value + b_g) + (1.f - blend_g) * high_frequency.y;
+      high_frequency.z = blend_b * (a_b * guide_value + b_b) + (1.f - blend_b) * high_frequency.z;
+      high_frequency.w = blend_a * (a_a * guide_value + b_a) + (1.f - blend_a) * high_frequency.w;
     }
-
-    // Compute the linear regression channel = f(guide)
-    float4 covariance_HF = 0.f;
-    for(int k = 0; k < 9; k++)
-    {
-      covariance_HF += (neighbour_pixel_HF[k] - means_HF)
-                       * (channel_guide_HF[k] - means_HF_guide) / 9.f;
-    }
-
-    const float scale_multiplier = 1.f / radius_sq;
-    const float4 alpha_ch = read_imagef(mask, samplerA, (int2)(x, y));
-
-    const float4 a_HF = fmax(covariance_HF / variance_HF_guide, 0.f);
-    const float4 b_HF = means_HF - a_HF * means_HF_guide;
-
-    // Guide all channels by the norms
-    high_frequency = alpha_ch * scale_multiplier * (a_HF * high_frequency_guide + b_HF)
-                   + (1.f - alpha_ch * scale_multiplier) * high_frequency;
-
   }
 
   if((scale & FIRST_SCALE))
@@ -1194,7 +1201,7 @@ guide_laplacians(read_only image2d_t HF, read_only image2d_t LF,
   if((scale & LAST_SCALE))
   {
     // add the residual and clamp
-    out = fmax(out + read_imagef(LF, samplerA, (int2)(x, y)), (float4)0.f);
+    out = fmax(out + low_frequency, (float4)0.f);
   }
 
   // Last step of RGB reconstruct : add noise
@@ -1229,7 +1236,7 @@ guide_laplacians(read_only image2d_t HF, read_only image2d_t LF,
 }
 
 kernel void
-diffuse_color(read_only image2d_t HF, read_only image2d_t LF,
+diffuse_color(read_only image2d_t detail, read_only image2d_t LF,
               read_only image2d_t mask,
               read_only image2d_t output_r, write_only image2d_t output_w,
               const int width, const int height,
@@ -1241,8 +1248,8 @@ diffuse_color(read_only image2d_t HF, read_only image2d_t LF,
   if(x >= width || y >= height) return;
 
   const float4 alpha = read_imagef(mask, samplerA, (int2)(x, y));
-
-  float4 high_frequency = read_imagef(HF, samplerA, (int2)(x, y));
+  const float4 low_frequency = read_imagef(LF, samplerA, (int2)(x, y));
+  float4 high_frequency = read_imagef(detail, samplerA, (int2)(x, y)) - low_frequency;
 
   // We use 4 floats SIMD instructions but we don't want to diffuse the norm, make sure to store and restore it later.
   // This is not much of an issue when processing image at full-res, but more harmful since
@@ -1253,44 +1260,41 @@ diffuse_color(read_only image2d_t HF, read_only image2d_t LF,
 
   if(alpha.w > 0.f) // reconstruct
   {
-    // non-local neighbours coordinates
-    const int j_neighbours[3] = {
-      max(x - mult, 0),
-      x,
-      min(x + mult, width - 1) };
-    const int i_neighbours[3] = {
-      max(y - mult, 0),
-      y,
-      min(y + mult, height - 1) };
+    // Diffusion only updates the RGB ratios. Keep the norm channel outside the
+    // 3x3 stencil so the GPU does not carry a useless fourth lane through the
+    // anisotropic convolution.
+    const int x0 = max(x - mult, 0);
+    const int x1 = x;
+    const int x2 = min(x + mult, width - 1);
+    const int y0 = max(y - mult, 0);
+    const int y1 = y;
+    const int y2 = min(y + mult, height - 1);
+    const int x_neighbours[3] = { x0, x1, x2 };
+    const int y_neighbours[3] = { y0, y1, y2 };
 
-    // fetch non-local pixels and store them locally and contiguously
-    float4 neighbour_pixel_HF[9];
-    neighbour_pixel_HF[3 * 0 + 0] = read_imagef(HF, samplerA, (int2)(j_neighbours[0], i_neighbours[0]));
-    neighbour_pixel_HF[3 * 0 + 1] = read_imagef(HF, samplerA, (int2)(j_neighbours[1], i_neighbours[0]));
-    neighbour_pixel_HF[3 * 0 + 2] = read_imagef(HF, samplerA, (int2)(j_neighbours[2], i_neighbours[0]));
+    float laplacian_r = 0.f;
+    float laplacian_g = 0.f;
+    float laplacian_b = 0.f;
+    int kernel_index = 0;
 
-    neighbour_pixel_HF[3 * 1 + 0] = read_imagef(HF, samplerA, (int2)(j_neighbours[0], i_neighbours[1]));
-    neighbour_pixel_HF[3 * 1 + 1] = read_imagef(HF, samplerA, (int2)(j_neighbours[1], i_neighbours[1]));
-    neighbour_pixel_HF[3 * 1 + 2] = read_imagef(HF, samplerA, (int2)(j_neighbours[2], i_neighbours[1]));
-
-    neighbour_pixel_HF[3 * 2 + 0] = read_imagef(HF, samplerA, (int2)(j_neighbours[0], i_neighbours[2]));
-    neighbour_pixel_HF[3 * 2 + 1] = read_imagef(HF, samplerA, (int2)(j_neighbours[1], i_neighbours[2]));
-    neighbour_pixel_HF[3 * 2 + 2] = read_imagef(HF, samplerA, (int2)(j_neighbours[2], i_neighbours[2]));
-
-    float4 update = 0.f;
-
-    // Compute the laplacian in the direction parallel to the steepest gradient on the norm
-    // Convolve the filter to get the laplacian
-    float4 laplacian_HF = 0.f;
-    for(int k = 0; k < 9; k++)
+    for(int jj = 0; jj < 3; ++jj)
     {
-      laplacian_HF += neighbour_pixel_HF[k] * anisotropic_kernel_isophote[k];
+      const int yy = y_neighbours[jj];
+      for(int ii = 0; ii < 3; ++ii, ++kernel_index)
+      {
+        const float4 sample = read_imagef(detail, samplerA, (int2)(x_neighbours[ii], yy))
+                            - read_imagef(LF, samplerA, (int2)(x_neighbours[ii], yy));
+        const float weight = anisotropic_kernel_isophote[kernel_index];
+        laplacian_r += sample.x * weight;
+        laplacian_g += sample.y * weight;
+        laplacian_b += sample.z * weight;
+      }
     }
 
-    // Diffuse
-    const float4 multipliers_HF = { 1.f / B_SPLINE_TO_LAPLACIAN, 1.f / B_SPLINE_TO_LAPLACIAN, 1.f / B_SPLINE_TO_LAPLACIAN, 0.f };
-    high_frequency += alpha * multipliers_HF * (laplacian_HF - first_order_factor * high_frequency);
-
+    const float multiplier = 1.f / B_SPLINE_TO_LAPLACIAN;
+    high_frequency.x += alpha.x * multiplier * (laplacian_r - first_order_factor * high_frequency.x);
+    high_frequency.y += alpha.y * multiplier * (laplacian_g - first_order_factor * high_frequency.y);
+    high_frequency.z += alpha.z * multiplier * (laplacian_b - first_order_factor * high_frequency.z);
     high_frequency.w = norm_backup;
   }
 
@@ -1308,7 +1312,7 @@ diffuse_color(read_only image2d_t HF, read_only image2d_t LF,
   if((scale & LAST_SCALE))
   {
     // add the residual and clamp
-    out = fmax(out + read_imagef(LF, samplerA, (int2)(x, y)), (float4)0.f);
+    out = fmax(out + low_frequency, (float4)0.f);
 
     // renormalize ratios
     if(alpha.w > 0.f)
