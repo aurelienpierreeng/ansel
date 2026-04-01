@@ -147,6 +147,7 @@ const dt_iop_order_entry_t legacy_order[] = {
   { {31.0f }, "equalizer", 0},
   { {32.0f }, "vibrance", 0},
   { {33.0f }, "colorbalance", 0},
+  { {33.45f }, "colorprimaries", 0},
   { {33.5f }, "colorbalancergb", 0},
   { {33.6f }, "colorequal", 0},
   { {33.7f }, "drawlayer", 0},
@@ -258,7 +259,8 @@ const dt_iop_order_entry_t v30_order[] = {
                                   //    very good in scene-referred workflow
   { {40.0f }, "basicadj", 0},        // module mixing view/model/control at once, usage should be discouraged
   { {41.0f }, "colorbalance", 0},    // scene-referred color manipulation
-  { {41.5f }, "colorbalancergb", 0},    // scene-referred color manipulation
+  { {41.45f }, "colorprimaries", 0}, // editable RGB/CYM primary nodes in dt UCS
+  { {41.5f }, "colorbalancergb", 0}, // scene-referred color manipulation
   { {41.6f }, "colorequal", 0},      // dynamic hue-defined RGB stretching around the achromatic axis
   { {41.7f }, "drawlayer", 0},       // TIFF-backed paint layers in scene-referred RGB
   { {42.0f }, "rgbcurve", 0},        // really versatile way to edit colour in scene-referred and display-referred workflow
@@ -372,6 +374,7 @@ const dt_iop_order_entry_t v30_jpg_order[] = {
                                     //    good in scene-referred workflow
   { { 40.0f }, "basicadj", 0 },        // module mixing view/model/control at once, usage should be discouraged
   { { 41.0f }, "colorbalance", 0 },    // scene-referred color manipulation
+  { { 41.45f }, "colorprimaries", 0 }, // editable RGB/CYM primary nodes in dt UCS
   { { 41.5f }, "colorbalancergb", 0 }, // scene-referred color manipulation
   { { 41.6f }, "colorequal", 0 },      // dynamic hue-defined RGB stretching around the achromatic axis
   { { 41.7f }, "drawlayer", 0 },       // TIFF-backed paint layers in scene-referred RGB
@@ -876,6 +879,7 @@ GList *dt_ioppr_get_iop_order_list(int32_t imgid, gboolean sorted)
           _insert_before(iop_order_list, "negadoctor", "channelmixerrgb");
           _insert_before(iop_order_list, "negadoctor", "censorize");
           _insert_before(iop_order_list, "rgbcurve", "colorbalancergb");
+          _insert_before(iop_order_list, "colorbalancergb", "colorprimaries");
           _insert_before(iop_order_list, "drawlayer", "colorequal");
           _insert_before(iop_order_list, "rgbcurve", "drawlayer");
           _insert_before(iop_order_list, "ashift", "cacorrectrgb");
