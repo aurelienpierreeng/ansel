@@ -14,8 +14,8 @@
 
 set -eu
 
-ANSEL_RC="${ANSEL_RC:-$HOME/.config/anselrc}"
-DARKTABLE_RC="${DARKTABLE_RC:-$HOME/.config/darktablerc}"
+ANSEL_RC="${ANSEL_RC:-$HOME/.config/ansel/anselrc}"
+DARKTABLE_RC="${DARKTABLE_RC:-$HOME/.config/darktable/darktablerc}"
 
 SIDEBAR_SIZE="${SIDEBAR_SIZE:-350}"
 BOTTOM_PANEL_SIZE="${BOTTOM_PANEL_SIZE:-120}"
@@ -102,14 +102,14 @@ set_ansel_defaults()
 
   # Use the highest-quality interpolators available in the shared code path so
   # transforms and final scaling don't benchmark lower-quality shortcuts.
-  set_rc_key "$ANSEL_RC" "codepaths/openmp_simd" "false"
+  set_rc_key "$ANSEL_RC" "codepaths/openmp_simd" "true"
   set_rc_key "$ANSEL_RC" "opencl_devid_darkroom" "+0"
   set_rc_key "$ANSEL_RC" "opencl_devid_preview" "+0"
   set_rc_key "$ANSEL_RC" "opencl_devid_export" "+0"
   set_rc_key "$ANSEL_RC" "opencl_devid_thumbnail" "+0"
   set_rc_key "$ANSEL_RC" "plugins/lighttable/export/pixel_interpolator_warp" "lanczos2"
   set_rc_key "$ANSEL_RC" "plugins/lighttable/export/pixel_interpolator" "lanczos3"
-  set_rc_keey "$ANSEL_RC" "plugins/lighttable/export/force_lcms2" "false"
+  set_rc_key "$ANSEL_RC" "plugins/lighttable/export/force_lcms2" "false"
 }
 
 set_darktable_defaults()
@@ -128,7 +128,7 @@ set_darktable_defaults()
   set_rc_key "$DARKTABLE_RC" "second_window/color_assessment" "false"
 
   # Disable preview shortcuts and enable the slow/high-quality export path.
-  set_rc_key "$DARKTABLE_RC" "codepaths/openmp_simd" "false"
+  set_rc_key "$DARKTABLE_RC" "codepaths/openmp_simd" "true"
   set_rc_key "$DARKTABLE_RC" "opencl_device_priority" "+0/+0/+0/+0/+0"
   set_rc_key "$DARKTABLE_RC" "opencl_scheduling_profile" "very fast GPU"
   set_rc_key "$DARKTABLE_RC" "preview_downsampling" "original"
