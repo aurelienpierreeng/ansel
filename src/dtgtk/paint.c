@@ -675,9 +675,18 @@ void dtgtk_cairo_paint_masks_gradient(cairo_t *cr, gint x, gint y, gint w, gint 
 
   cairo_save(cr);
 
+  cairo_pattern_t *src = cairo_get_source(cr);
+  double r = 0.7, g = 0.7, b = 0.7, a = 1.0;
+  if(cairo_pattern_get_rgba(src, &r, &g, &b, &a) != CAIRO_STATUS_SUCCESS)
+  {
+    /* fallback */
+    r = g = b = 0.7;
+    a = 1.0;
+  }
+
   cairo_pattern_t *pat = cairo_pattern_create_linear(0.0, 1.0, 1.0, 0.0);
-  cairo_pattern_add_color_stop_rgba(pat, 0.33, 0.7, 0.7, 0.7, 0.6);
-  cairo_pattern_add_color_stop_rgba(pat, 0.66, 0.7, 0.7, 0.7, 0.);
+  cairo_pattern_add_color_stop_rgba(pat, 0.33, r, g, b, 0.3);
+  cairo_pattern_add_color_stop_rgba(pat, 0.66, r, g, b, 0.);
   cairo_rectangle(cr, 0.0, 0.0, 1, 1);
   cairo_set_source(cr, pat);
   cairo_fill(cr);
