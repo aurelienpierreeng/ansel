@@ -1175,22 +1175,6 @@ gboolean dt_opencl_finish(const int devid)
   return (err == CL_SUCCESS && success == CL_COMPLETE);
 }
 
-static inline cl_int _dt_opencl_perf_flush(const int devid)
-{
-  dt_opencl_t *cl = darktable.opencl;
-  if(!cl->inited || devid < 0) return CL_SUCCESS;
-  if(!(darktable.unmuted & DT_DEBUG_PERF)) return CL_SUCCESS;
-
-  // Profiled queues can batch submissions differently across drivers. Flush each
-  // successful enqueue in perf mode so command publication stays explicit while
-  // keeping CL_QUEUE_PROFILING_ENABLE enabled.
-  const cl_int err = (cl->dlocl->symbols->dt_clFlush)(cl->dev[devid].cmd_queue);
-  if(err != CL_SUCCESS)
-    dt_print(DT_DEBUG_OPENCL, "[opencl_perf_flush] could not flush queue on device %d: %i\n", devid, err);
-
-  return err;
-}
-
 int dt_opencl_enqueue_barrier(const int devid)
 {
   dt_opencl_t *cl = darktable.opencl;
@@ -1979,8 +1963,6 @@ int dt_opencl_enqueue_kernel_2d_with_local(const int dev, const int kernel, cons
 
   if(err != CL_SUCCESS)
     dt_print(DT_DEBUG_OPENCL, "[dt_opencl_enqueue_kernel_2d_with_local] kernel %i (%s) on device %d: %i\n", kernel, buf, dev, err);
-  else if(_dt_opencl_perf_flush(dev) != CL_SUCCESS)
-    return -1;
 
   return err;
 }
@@ -2033,11 +2015,9 @@ int dt_opencl_read_host_from_device_raw(const int devid, void *host, void *devic
 
   cl_event *eventp = dt_opencl_events_get_slot(devid, "[Read Image (from device to host)]");
 
-  const cl_int err = (darktable.opencl->dlocl->symbols->dt_clEnqueueReadImage)(
-      darktable.opencl->dev[devid].cmd_queue, device, blocking ? CL_TRUE : CL_FALSE, origin, region, rowpitch,
-      0, host, 0, NULL, eventp);
-  if(err == CL_SUCCESS && _dt_opencl_perf_flush(devid) != CL_SUCCESS) return -1;
-  return err;
+  return (darktable.opencl->dlocl->symbols->dt_clEnqueueReadImage)(darktable.opencl->dev[devid].cmd_queue,
+                                                                   device, blocking ? CL_TRUE : CL_FALSE, origin, region, rowpitch,
+                                                                   0, host, 0, NULL, eventp);
 }
 
 int dt_opencl_write_host_to_device(const int devid, void *host, void *device, const int width,
@@ -2080,11 +2060,9 @@ int dt_opencl_write_host_to_device_raw(const int devid, void *host, void *device
 
   cl_event *eventp = dt_opencl_events_get_slot(devid, "[Write Image (from host to device)]");
 
-  const cl_int err = (darktable.opencl->dlocl->symbols->dt_clEnqueueWriteImage)(darktable.opencl->dev[devid].cmd_queue,
-                                                                                 device, blocking ? CL_TRUE : CL_FALSE, origin, region,
-                                                                                 rowpitch, 0, host, 0, NULL, eventp);
-  if(err == CL_SUCCESS && _dt_opencl_perf_flush(devid) != CL_SUCCESS) return -1;
-  return err;
+  return (darktable.opencl->dlocl->symbols->dt_clEnqueueWriteImage)(darktable.opencl->dev[devid].cmd_queue,
+                                                                    device, blocking ? CL_TRUE : CL_FALSE, origin, region,
+                                                                    rowpitch, 0, host, 0, NULL, eventp);
 }
 
 int dt_opencl_enqueue_copy_image(const int devid, cl_mem src, cl_mem dst, size_t *orig_src, size_t *orig_dst,
@@ -2095,7 +2073,6 @@ int dt_opencl_enqueue_copy_image(const int devid, cl_mem src, cl_mem dst, size_t
   cl_int err = (darktable.opencl->dlocl->symbols->dt_clEnqueueCopyImage)(
       darktable.opencl->dev[devid].cmd_queue, src, dst, orig_src, orig_dst, region, 0, NULL, eventp);
   if(err != CL_SUCCESS) dt_print(DT_DEBUG_OPENCL, "[opencl copy_image] could not copy image on device %d: %i\n", devid, err);
-  else if(_dt_opencl_perf_flush(devid) != CL_SUCCESS) return -1;
   return err;
 }
 
@@ -2108,7 +2085,6 @@ int dt_opencl_enqueue_copy_image_to_buffer(const int devid, cl_mem src_image, cl
       darktable.opencl->dev[devid].cmd_queue, src_image, dst_buffer, origin, region, offset, 0, NULL, eventp);
   if(err != CL_SUCCESS)
     dt_print(DT_DEBUG_OPENCL, "[opencl copy_image_to_buffer] could not copy image on device %d: %i\n", devid, err);
-  else if(_dt_opencl_perf_flush(devid) != CL_SUCCESS) return -1;
   return err;
 }
 
@@ -2121,7 +2097,6 @@ int dt_opencl_enqueue_copy_buffer_to_image(const int devid, cl_mem src_buffer, c
       darktable.opencl->dev[devid].cmd_queue, src_buffer, dst_image, offset, origin, region, 0, NULL, eventp);
   if(err != CL_SUCCESS)
     dt_print(DT_DEBUG_OPENCL, "[opencl copy_buffer_to_image] could not copy buffer on device %d: %i\n", devid, err);
-  else if(_dt_opencl_perf_flush(devid) != CL_SUCCESS) return -1;
   return err;
 }
 
@@ -2135,7 +2110,6 @@ int dt_opencl_enqueue_copy_buffer_to_buffer(const int devid, cl_mem src_buffer, 
                                                                    dstoffset, size, 0, NULL, eventp);
   if(err != CL_SUCCESS)
     dt_print(DT_DEBUG_OPENCL, "[opencl copy_buffer_to_buffer] could not copy buffer on device %d: %i\n", devid, err);
-  else if(_dt_opencl_perf_flush(devid) != CL_SUCCESS) return -1;
   return err;
 }
 
@@ -2146,10 +2120,8 @@ int dt_opencl_read_buffer_from_device(const int devid, void *host, void *device,
 
   cl_event *eventp = dt_opencl_events_get_slot(devid, "[Read Buffer (from device to host)]");
 
-  const cl_int err = (darktable.opencl->dlocl->symbols->dt_clEnqueueReadBuffer)(
+  return (darktable.opencl->dlocl->symbols->dt_clEnqueueReadBuffer)(
       darktable.opencl->dev[devid].cmd_queue, device, blocking ? CL_TRUE : CL_FALSE, offset, size, host, 0, NULL, eventp);
-  if(err == CL_SUCCESS && _dt_opencl_perf_flush(devid) != CL_SUCCESS) return -1;
-  return err;
 }
 
 int dt_opencl_write_buffer_to_device(const int devid, void *host, void *device, const size_t offset,
@@ -2159,10 +2131,8 @@ int dt_opencl_write_buffer_to_device(const int devid, void *host, void *device, 
 
   cl_event *eventp = dt_opencl_events_get_slot(devid, "[Write Buffer (from host to device)]");
 
-  const cl_int err = (darktable.opencl->dlocl->symbols->dt_clEnqueueWriteBuffer)(
+  return (darktable.opencl->dlocl->symbols->dt_clEnqueueWriteBuffer)(
       darktable.opencl->dev[devid].cmd_queue, device, blocking ? CL_TRUE : CL_FALSE, offset, size, host, 0, NULL, eventp);
-  if(err == CL_SUCCESS && _dt_opencl_perf_flush(devid) != CL_SUCCESS) return -1;
-  return err;
 }
 
 
@@ -2240,7 +2210,6 @@ void *dt_opencl_map_buffer(const int devid, cl_mem buffer, const int blocking, c
   ptr = (darktable.opencl->dlocl->symbols->dt_clEnqueueMapBuffer)(
       darktable.opencl->dev[devid].cmd_queue, buffer, blocking ? CL_TRUE : CL_FALSE, flags, offset, size, 0, NULL, eventp, &err);
   if(err != CL_SUCCESS) dt_print(DT_DEBUG_OPENCL, "[opencl map buffer] could not map buffer on device %d: %i\n", devid, err);
-  else if(_dt_opencl_perf_flush(devid) != CL_SUCCESS) return NULL;
   return ptr;
 }
 
@@ -2261,7 +2230,6 @@ void *dt_opencl_map_image(const int devid, cl_mem buffer, const int blocking, co
 
   if(err != CL_SUCCESS)
     dt_print(DT_DEBUG_OPENCL, "[opencl map buffer] could not map image on device %d: %i\n", devid, err);
-  else if(_dt_opencl_perf_flush(devid) != CL_SUCCESS) return NULL;
   return ptr;
 }
 
@@ -2274,7 +2242,6 @@ int dt_opencl_unmap_mem_object(const int devid, cl_mem mem_object, void *mapped_
       darktable.opencl->dev[devid].cmd_queue, mem_object, mapped_ptr, 0, NULL, eventp);
   if(err != CL_SUCCESS)
     dt_print(DT_DEBUG_OPENCL, "[opencl unmap mem object] could not unmap mem object on device %d: %i\n", devid, err);
-  else if(_dt_opencl_perf_flush(devid) != CL_SUCCESS) return -1;
   return err;
 }
 
