@@ -68,6 +68,7 @@
 #define DT_IOP_COLOREQUAL_GRAPH_RES 360
 #define DT_IOP_COLOREQUAL_GRAPH_GRADIENTS 48
 #define DT_IOP_COLOREQUAL_HUE_SAMPLES 64
+#define DT_IOP_COLOREQUAL_VIEWER_CONTROL_NODES (DT_IOP_COLOREQUAL_NUM_RINGS * DT_IOP_COLOREQUAL_HUE_SAMPLES)
 #define DT_IOP_COLOREQUAL_AXIAL_SAMPLES 64
 #define DT_IOP_COLOREQUAL_CLUT_LEVEL 64
 #define DT_IOP_COLOREQUAL_LOCAL_FIELD_RINGS (DT_IOP_COLOREQUAL_NUM_RINGS + 1)
@@ -187,6 +188,8 @@ typedef struct dt_iop_colorequal_gui_data_t
   int cursor_pos_y;
   dt_aligned_pixel_t cursor_input_display;
   dt_aligned_pixel_t cursor_output_display;
+  dt_lut_viewer_control_node_t viewer_control_nodes[DT_IOP_COLOREQUAL_VIEWER_CONTROL_NODES];
+  size_t viewer_control_node_count;
   float reference_saturation[DT_IOP_COLOREQUAL_NUM_RINGS];
   float cached_white[DT_IOP_COLOREQUAL_NUM_RINGS][DT_IOP_COLOREQUAL_NUM_CHANNELS];
   float cached_reference_saturation[DT_IOP_COLOREQUAL_NUM_RINGS][DT_IOP_COLOREQUAL_NUM_CHANNELS];
@@ -673,6 +676,76 @@ static void _build_clut(dt_iop_colorequal_data_t *d, const dt_iop_colorequal_par
              1000.0 * (dt_get_wtime() - start));
 }
 
+static size_t _build_viewer_control_nodes(const dt_iop_colorequal_params_t *p,
+                                          const dt_iop_order_iccprofile_info_t *lut_profile,
+                                          dt_lut_viewer_control_node_t *control_nodes)
+{
+  if(!p || !lut_profile || !control_nodes) return 0;
+
+  const float white = dt_colorrings_graph_white();
+  float reference_saturation[DT_IOP_COLOREQUAL_NUM_RINGS] = { 0.f };
+  size_t count = 0;
+
+  dt_colorrings_compute_reference_saturations(white, reference_saturation);
+
+  /**
+   * The LUT viewer should display the same sparse control surface the local
+   * field actually interpolates. Rebuild the ring samples here from the GUI
+   * curves so the control-node overlay matches the authored RGB anchors
+   * exactly, not just the user-visible spline control points.
+   */
+  for(int ring = 0; ring < DT_IOP_COLOREQUAL_NUM_RINGS; ring++)
+  {
+    const dt_iop_colorequal_ring_t current_ring = (dt_iop_colorequal_ring_t)ring;
+    const float brightness = dt_colorrings_ring_brightness((dt_colorrings_ring_t)current_ring);
+    const float saturation = reference_saturation[ring];
+    dt_aligned_pixel_t neutral_rgb = { 0.f };
+
+    dt_colorrings_brightness_to_axis_rgb(brightness, white, lut_profile, neutral_rgb);
+
+    for(int hue_sample = 0; hue_sample < DT_IOP_COLOREQUAL_HUE_SAMPLES; hue_sample++)
+    {
+      const float x = (float)hue_sample / (float)DT_IOP_COLOREQUAL_HUE_SAMPLES;
+      const float hue = dt_colorrings_curve_x_to_hue(x);
+      const float hue_shift = _channel_value_from_y(
+          DT_IOP_COLOREQUAL_HUE,
+          dt_colorrings_curve_periodic_sample(
+              (const dt_colorrings_node_t *)_curve_nodes_const(p, current_ring, DT_IOP_COLOREQUAL_HUE),
+              _curve_nodes_count_const(p, current_ring, DT_IOP_COLOREQUAL_HUE), x));
+      const float sat_gain = _channel_value_from_y(
+          DT_IOP_COLOREQUAL_SATURATION,
+          dt_colorrings_curve_periodic_sample(
+              (const dt_colorrings_node_t *)_curve_nodes_const(p, current_ring, DT_IOP_COLOREQUAL_SATURATION),
+              _curve_nodes_count_const(p, current_ring, DT_IOP_COLOREQUAL_SATURATION), x));
+      const float bright_gain = _channel_value_from_y(
+          DT_IOP_COLOREQUAL_BRIGHTNESS,
+          dt_colorrings_curve_periodic_sample(
+              (const dt_colorrings_node_t *)_curve_nodes_const(p, current_ring, DT_IOP_COLOREQUAL_BRIGHTNESS),
+              _curve_nodes_count_const(p, current_ring, DT_IOP_COLOREQUAL_BRIGHTNESS), x));
+      const dt_aligned_pixel_t before_hsb = { hue, saturation, brightness, 0.f };
+      const dt_aligned_pixel_t after_hsb
+          = { dt_colorrings_wrap_hue_pi(hue + hue_shift), CLAMP(saturation * sat_gain, 0.f, 1.f),
+              CLAMP(brightness * bright_gain, 0.f, 1.f), 0.f };
+      dt_aligned_pixel_t before_rgb = { 0.f };
+      dt_aligned_pixel_t after_rgb = { 0.f };
+
+      dt_colorrings_hsb_to_profile_rgb(before_hsb, white, lut_profile, before_rgb);
+      dt_colorrings_hsb_to_profile_rgb(after_hsb, white, lut_profile, after_rgb);
+      dt_colorrings_project_to_cube_shell(neutral_rgb, before_rgb);
+      dt_colorrings_project_to_cube_shell(neutral_rgb, after_rgb);
+
+      for(int c = 0; c < 3; c++)
+      {
+        control_nodes[count].input_rgb[c] = before_rgb[c];
+        control_nodes[count].output_rgb[c] = after_rgb[c];
+      }
+      count++;
+    }
+  }
+
+  return count;
+}
+
 void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_t *pipe,
                    dt_dev_pixelpipe_iop_t *piece)
 {
@@ -907,9 +980,11 @@ static void _update_gui_lut_cache(dt_iop_module_t *self)
   if(!lut_profile)
   {
     dt_lut_viewer_set_lut(g->viewer, NULL, 0, NULL, NULL, NULL);
+    dt_lut_viewer_set_control_nodes(g->viewer, NULL, 0);
     g->viewer_lut_dirty = FALSE;
     g->viewer_lut_valid = FALSE;
     g->viewer_lut_generation = 0;
+    g->viewer_control_node_count = 0;
     return;
   }
 
@@ -927,8 +1002,10 @@ static void _update_gui_lut_cache(dt_iop_module_t *self)
   g->viewer_lut.clut_level = gd->cache.clut_level;
   g->viewer_lut.lut_profile = (dt_iop_order_iccprofile_info_t *)lut_profile;
   memcpy(g->viewer_lut.reference_saturation, gd->cache.reference_saturation, sizeof(g->viewer_lut.reference_saturation));
+  g->viewer_control_node_count = _build_viewer_control_nodes(p, lut_profile, g->viewer_control_nodes);
   dt_lut_viewer_set_lut(g->viewer, g->viewer_lut.clut, g->viewer_lut.clut_level, &gd->lock,
                         g->viewer_lut.lut_profile, display_profile);
+  dt_lut_viewer_set_control_nodes(g->viewer, g->viewer_control_nodes, g->viewer_control_node_count);
   dt_pthread_rwlock_unlock(&gd->lock);
   g->viewer_lut_dirty = FALSE;
   g->viewer_lut_valid = TRUE;
@@ -2387,6 +2464,7 @@ void gui_init(dt_iop_module_t *self)
   memset(g->viewer_lut.reference_saturation, 0, sizeof(g->viewer_lut.reference_saturation));
   g->viewer_lut.lut_profile = NULL;
   g->viewer_lut.work_profile = NULL;
+  g->viewer_control_node_count = 0;
   g->viewer = dt_lut_viewer_new(DT_GUI_MODULE(self));
   if(g->viewer)
     gtk_box_pack_start(GTK_BOX(GTK_BOX(self->widget)), dt_lut_viewer_get_widget(g->viewer), TRUE, TRUE, 0);
