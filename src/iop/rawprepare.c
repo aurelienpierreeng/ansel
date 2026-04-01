@@ -355,8 +355,9 @@ void output_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixel
   memcpy(dsc->xtrans, piece->dsc_in.xtrans, sizeof(dsc->xtrans));
 }
 
-static int BL(const dt_iop_roi_t *const roi_out, const dt_iop_rawprepare_data_t *const d, const int row,
-              const int col)
+static inline __attribute__((always_inline)) int BL(const dt_iop_roi_t *const roi_out,
+                                                    const dt_iop_rawprepare_data_t *const d, const int row,
+                                                    const int col)
 {
   return ((((row + roi_out->y + d->y) & 1) << 1) + ((col + roi_out->x + d->x) & 1));
 }
@@ -371,6 +372,13 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
   const dt_iop_rawprepare_data_t *const d = (dt_iop_rawprepare_data_t *)piece->data;
+  const int width = roi_out->width;
+  const int height = roi_out->height;
+  const int input_width = roi_in->width;
+  const int roi_x = roi_out->x;
+  const int roi_y = roi_out->y;
+  const int cfa_x = roi_x + d->x;
+  const int cfa_y = roi_y + d->y;
   // fprintf(stderr, "roi in %d %d %d %d\n", roi_in->x, roi_in->y, roi_in->width, roi_in->height);
   // fprintf(stderr, "roi out %d %d %d %d\n", roi_out->x, roi_out->y, roi_out->width, roi_out->height);
 
@@ -383,22 +391,40 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
     const uint16_t *const in = (const uint16_t *const)ivoid;
     float *const out = (float *const)ovoid;
+    const int x_phase = cfa_x & 1;
+    float inv_div[4];
+    for(int k = 0; k < 4; k++) inv_div[k] = 1.0f / d->div[k];
 
 #ifdef _OPENMP
-#pragma omp parallel for SIMD() default(none) \
-    dt_omp_firstprivate(csx, csy, d, in, out, roi_in, roi_out) \
-    schedule(static) \
-    collapse(2)
+#pragma omp parallel for default(none) \
+    dt_omp_firstprivate(csx, csy, cfa_y, d, height, in, input_width, inv_div, out, width, x_phase) \
+    schedule(static)
 #endif
-    for(int j = 0; j < roi_out->height; j++)
+    for(int j = 0; j < height; j++)
     {
-      for(int i = 0; i < roi_out->width; i++)
-      {
-        const size_t pin = (size_t)(roi_in->width * (j + csy) + csx) + i;
-        const size_t pout = (size_t)j * roi_out->width + i;
+      /* We loop on one mosaic row at a time so the 2-sensel CFA period is explicit to the compiler.
+         This keeps the black/white normalization vectors constant for the whole row. */
+      const size_t pin = (size_t)input_width * (j + csy) + csx;
+      const size_t pout = (size_t)j * width;
+      const int row_phase = ((j + cfa_y) & 1) << 1;
+      const int id0 = row_phase + x_phase;
+      const int id1 = row_phase + (x_phase ^ 1);
+      const dt_aligned_pixel_simd_t sub_v = { d->sub[id0], d->sub[id1], d->sub[id0], d->sub[id1] };
+      const dt_aligned_pixel_simd_t inv_v = { inv_div[id0], inv_div[id1], inv_div[id0], inv_div[id1] };
+      int i = 0;
 
-        const int id = BL(roi_out, d, j, i);
-        out[pout] = (in[pin] - d->sub[id]) / d->div[id];
+      for(; i + 3 < width; i += 4)
+      {
+        const dt_aligned_pixel_simd_t in_v = {
+          (float)in[pin + i + 0], (float)in[pin + i + 1], (float)in[pin + i + 2], (float)in[pin + i + 3]
+        };
+        dt_store_simd(out + pout + i, (in_v - sub_v) * inv_v);
+      }
+
+      for(; i < width; i++)
+      {
+        const int id = row_phase + ((x_phase + i) & 1);
+        out[pout + i] = ((float)in[pin + i] - d->sub[id]) * inv_div[id];
       }
     }
 
@@ -409,22 +435,37 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
     const float *const in = (const float *const)ivoid;
     float *const out = (float *const)ovoid;
+    const int x_phase = cfa_x & 1;
+    float inv_div[4];
+    for(int k = 0; k < 4; k++) inv_div[k] = 1.0f / d->div[k];
 
 #ifdef _OPENMP
-#pragma omp parallel for SIMD() default(none) \
-    dt_omp_firstprivate(csx, csy, d, in, out, roi_in, roi_out) \
-    schedule(static) \
-    collapse(2)
+#pragma omp parallel for default(none) \
+    dt_omp_firstprivate(csx, csy, cfa_y, d, height, in, input_width, inv_div, out, width, x_phase) \
+    schedule(static)
 #endif
-    for(int j = 0; j < roi_out->height; j++)
+    for(int j = 0; j < height; j++)
     {
-      for(int i = 0; i < roi_out->width; i++)
-      {
-        const size_t pin = (size_t)(roi_in->width * (j + csy) + csx) + i;
-        const size_t pout = (size_t)j * roi_out->width + i;
+      /* We loop on one mosaic row at a time so the 2-sensel CFA period is explicit to the compiler.
+         This keeps the black/white normalization vectors constant for the whole row. */
+      const size_t pin = (size_t)input_width * (j + csy) + csx;
+      const size_t pout = (size_t)j * width;
+      const int row_phase = ((j + cfa_y) & 1) << 1;
+      const int id0 = row_phase + x_phase;
+      const int id1 = row_phase + (x_phase ^ 1);
+      const dt_aligned_pixel_simd_t sub_v = { d->sub[id0], d->sub[id1], d->sub[id0], d->sub[id1] };
+      const dt_aligned_pixel_simd_t inv_v = { inv_div[id0], inv_div[id1], inv_div[id0], inv_div[id1] };
+      int i = 0;
 
-        const int id = BL(roi_out, d, j, i);
-        out[pout] = (in[pin] - d->sub[id]) / d->div[id];
+      for(; i + 3 < width; i += 4)
+      {
+        dt_store_simd(out + pout + i, (dt_load_simd(in + pin + i) - sub_v) * inv_v);
+      }
+
+      for(; i < width; i++)
+      {
+        const int id = row_phase + ((x_phase + i) & 1);
+        out[pout + i] = (in[pin + i] - d->sub[id]) * inv_div[id];
       }
     }
 
@@ -441,17 +482,17 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
 #ifdef _OPENMP
 #pragma omp parallel for SIMD() default(none) \
-    dt_omp_firstprivate(ch, csx, csy, div, in, out, roi_in, roi_out, sub) \
+    dt_omp_firstprivate(ch, csx, csy, div, height, in, input_width, out, sub, width) \
     schedule(static) collapse(3)
 #endif
-    for(int j = 0; j < roi_out->height; j++)
+    for(int j = 0; j < height; j++)
     {
-      for(int i = 0; i < roi_out->width; i++)
+      for(int i = 0; i < width; i++)
       {
         for(int c = 0; c < ch; c++)
         {
-          const size_t pin = (size_t)ch * (roi_in->width * (j + csy) + csx + i) + c;
-          const size_t pout = (size_t)ch * (j * roi_out->width + i) + c;
+          const size_t pin = (size_t)ch * (input_width * (j + csy) + csx + i) + c;
+          const size_t pout = (size_t)ch * (j * width + i) + c;
 
           out[pout] = (in[pin] - sub) / div;
         }
@@ -463,23 +504,25 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   {
     const uint32_t map_w = d->gainmaps[0]->map_points_h;
     const uint32_t map_h = d->gainmaps[0]->map_points_v;
-    const float im_to_rel_x = 1.0 / piece->buf_in.width;
-    const float im_to_rel_y = 1.0 / piece->buf_in.height;
-    const float rel_to_map_x = 1.0 / d->gainmaps[0]->map_spacing_h;
-    const float rel_to_map_y = 1.0 / d->gainmaps[0]->map_spacing_v;
+    const float im_to_rel_x = 1.0f / piece->buf_in.width;
+    const float im_to_rel_y = 1.0f / piece->buf_in.height;
+    const float rel_to_map_x = 1.0f / d->gainmaps[0]->map_spacing_h;
+    const float rel_to_map_y = 1.0f / d->gainmaps[0]->map_spacing_v;
     const float map_origin_h = d->gainmaps[0]->map_origin_h;
     const float map_origin_v = d->gainmaps[0]->map_origin_v;
     float *const out = (float *const)ovoid;
 
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-    dt_omp_firstprivate(csx, csy, roi_out, out, im_to_rel_x, im_to_rel_y, rel_to_map_x, rel_to_map_y, \
-                        map_w, map_h, map_origin_h, map_origin_v) \
-    dt_omp_sharedconst(d) schedule(static)
+    dt_omp_firstprivate(csx, csy, height, out, im_to_rel_x, im_to_rel_y, rel_to_map_x, rel_to_map_y, \
+                        roi_out, roi_x, roi_y, \
+                        map_w, map_h, map_origin_h, map_origin_v, width) \
+    dt_omp_sharedconst(d) \
+    schedule(static)
 #endif
-    for(int j = 0; j < roi_out->height; j++)
+    for(int j = 0; j < height; j++)
     {
-      const float y_map = CLAMP(((roi_out->y + csy + j) * im_to_rel_y - map_origin_v) * rel_to_map_y, 0, map_h);
+      const float y_map = CLAMP(((roi_y + csy + j) * im_to_rel_y - map_origin_v) * rel_to_map_y, 0, map_h);
       const uint32_t y_i0 = MIN(y_map, map_h - 1);
       const uint32_t y_i1 = MIN(y_i0 + 1, map_h - 1);
       const float y_frac = y_map - y_i0;
@@ -490,16 +533,16 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
         map_row0[f] = &d->gainmaps[f]->map_gain[y_i0 * map_w];
         map_row1[f] = &d->gainmaps[f]->map_gain[y_i1 * map_w];
       }
-      for(int i = 0; i < roi_out->width; i++)
+      for(int i = 0; i < width; i++)
       {
         const int id = BL(roi_out, d, j, i);
-        const float x_map = CLAMP(((roi_out->x + csx + i) * im_to_rel_x - map_origin_h) * rel_to_map_x, 0, map_w);
+        const float x_map = CLAMP(((roi_x + csx + i) * im_to_rel_x - map_origin_h) * rel_to_map_x, 0, map_w);
         const uint32_t x_i0 = MIN(x_map, map_w - 1);
         const uint32_t x_i1 = MIN(x_i0 + 1, map_w - 1);
         const float x_frac = x_map - x_i0;
         const float gain_top = (1.0f - x_frac) * map_row0[id][x_i0] + x_frac * map_row0[id][x_i1];
         const float gain_bottom = (1.0f - x_frac) * map_row1[id][x_i0] + x_frac * map_row1[id][x_i1];
-        out[j * roi_out->width + i] *= (1.0f - y_frac) * gain_top + y_frac * gain_bottom;
+        out[j * width + i] *= (1.0f - y_frac) * gain_top + y_frac * gain_bottom;
       }
     }
   }
@@ -569,7 +612,7 @@ int process_cl(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_d
   const int width = roi_out->width;
   const int height = roi_out->height;
 
-  size_t sizes[] = { ROUNDUPDWD(roi_in->width, devid), ROUNDUPDHT(roi_in->height, devid), 1 };
+  size_t sizes[] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
   dt_opencl_set_kernel_arg(devid, kernel, 0, sizeof(cl_mem), (void *)&dev_in);
   dt_opencl_set_kernel_arg(devid, kernel, 1, sizeof(cl_mem), (void *)&dev_out);
   dt_opencl_set_kernel_arg(devid, kernel, 2, sizeof(int), (void *)&(width));

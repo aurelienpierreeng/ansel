@@ -502,6 +502,8 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const uint32_t filters = piece->dsc_in.filters;
   const uint8_t(*const xtrans)[6] = (const uint8_t(*const)[6])piece->dsc_in.xtrans;
   const dt_iop_temperature_data_t *const d = (dt_iop_temperature_data_t *)piece->data;
+  const int width = roi_out->width;
+  const int height = roi_out->height;
 
   const float *const in = (const float *const)ivoid;
   float *const out = (float *const)ovoid;
@@ -511,12 +513,12 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   { // xtrans float mosaiced
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-    dt_omp_firstprivate(d_coeffs, in, out, roi_out, xtrans) \
+    dt_omp_firstprivate(d_coeffs, height, in, out, roi_out, width, xtrans) \
     schedule(static)
 #endif
-    for(int j = 0; j < roi_out->height; j++)
+    for(int j = 0; j < height; j++)
     {
-      const size_t row_start = (size_t)j * roi_out->width;
+      const size_t row_start = (size_t)j * width;
       const int use_simd = dt_is_aligned(in + row_start, 16) && dt_is_aligned(out + row_start, 16);
       const dt_aligned_pixel_simd_t coeffs[3] =
       {
@@ -527,18 +529,24 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
         { d_coeffs[FCxtrans(j, 8, roi_out, xtrans)], d_coeffs[FCxtrans(j, 9, roi_out, xtrans)],
           d_coeffs[FCxtrans(j, 10, roi_out, xtrans)], d_coeffs[FCxtrans(j, 11, roi_out, xtrans)] },
       };
-      // process sensels four at a time
+      /* We loop on one X-Trans row at a time and keep the 12-sensel horizontal period explicit,
+         so each 4-sensel SIMD block reuses one precomputed coefficient vector. */
       int i = 0;
       if(use_simd)
       {
-        for(int coeff = 0; i + 4 < roi_out->width; i += 4, coeff = (coeff+1)%3)
+        for(; i + 11 < width; i += 12)
+        {
+          dt_store_simd_nontemporal(out + row_start + i + 0, dt_load_simd(in + row_start + i + 0) * coeffs[0]);
+          dt_store_simd_nontemporal(out + row_start + i + 4, dt_load_simd(in + row_start + i + 4) * coeffs[1]);
+          dt_store_simd_nontemporal(out + row_start + i + 8, dt_load_simd(in + row_start + i + 8) * coeffs[2]);
+        }
+        for(int coeff = 0; i + 3 < width; i += 4, coeff++)
         {
           const size_t p = row_start + i;
           dt_store_simd_nontemporal(out + p, dt_load_simd(in + p) * coeffs[coeff]);
         }
       }
-      // process the leftover sensels
-      for(; i < roi_out->width; i++)
+      for(; i < width; i++)
       {
         const size_t p = row_start + i;
         out[p] = in[p] * d_coeffs[FCxtrans(j, i, roi_out, xtrans)];
@@ -548,22 +556,21 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   }
   else if(filters)
   { // bayer float mosaiced
-    const int width = roi_out->width;
+    const int cfa_x = roi_out->x & 1;
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-    dt_omp_firstprivate(d_coeffs, filters, in, out, roi_out, width)       \
+    dt_omp_firstprivate(cfa_x, d_coeffs, filters, height, in, out, roi_out, width) \
     schedule(static)
 #endif
-    for(int j = 0; j < roi_out->height; j++)
+    for(int j = 0; j < height; j++)
     {
       const int offset_j = j + roi_out->y;
       const size_t row_start = (size_t)j * width;
       const int use_simd = dt_is_aligned(in + row_start, 16) && dt_is_aligned(out + row_start, 16);
+      const int id0 = FC(offset_j, cfa_x + 0, filters);
+      const int id1 = FC(offset_j, cfa_x + 1, filters);
       const dt_aligned_pixel_simd_t coeffs = {
-        d_coeffs[FC(offset_j, roi_out->x + 0, filters)],
-        d_coeffs[FC(offset_j, roi_out->x + 1, filters)],
-        d_coeffs[FC(offset_j, roi_out->x + 2, filters)],
-        d_coeffs[FC(offset_j, roi_out->x + 3, filters)]
+        d_coeffs[id0], d_coeffs[id1], d_coeffs[id0], d_coeffs[id1]
       };
       int i = 0;
 
