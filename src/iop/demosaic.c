@@ -79,6 +79,7 @@
 #include "common/colorspaces.h"
 #include "control/conf.h"
 #include "common/colorspaces_inline_conversions.h"
+#include "common/bspline.h"
 
 #include "gui/gtk.h"
 #include "iop/iop_api.h"
@@ -102,6 +103,7 @@
 
 #define XTRANS_SNAPPER 3
 #define BAYER_SNAPPER 2
+#define DOWNSAMPLE_GUIDED_SCALES 3
 
 DT_MODULE_INTROSPECTION(4, dt_iop_demosaic_params_t)
 
@@ -125,6 +127,7 @@ typedef enum dt_iop_demosaic_method_t
   DT_IOP_DEMOSAIC_MARKEST3_VNG = DEMOSAIC_DUAL | DT_IOP_DEMOSAIC_MARKESTEIJN_3, // $DESCRIPTION: "Markesteijn 3-pass + VNG"
   DT_IOP_DEMOSAIC_PASSTHR_MONOX = DEMOSAIC_XTRANS | 3, // $DESCRIPTION: "passthrough (monochrome)"
   DT_IOP_DEMOSAIC_PASSTHR_COLORX = DEMOSAIC_XTRANS | 5, // $DESCRIPTION: "photosite color (debug)"
+  DT_IOP_DEMOSAIC_DOWNSAMPLE = 7, // $DESCRIPTION: "downsample"
 } dt_iop_demosaic_method_t;
 
 typedef enum dt_iop_demosaic_greeneq_t
@@ -175,6 +178,14 @@ typedef struct dt_iop_demosaic_global_data_t
   int kernel_vng_border_interpolate;
   int kernel_vng_lin_interpolate;
   int kernel_zoom_third_size;
+  int kernel_zoom_half_size_xtrans;
+  int kernel_guided_laplacian_coefficients;
+  int kernel_guided_laplacian_normalize;
+  int kernel_guided_laplacian_apply;
+  int kernel_guided_laplacian_finalize;
+  int kernel_bspline_horizontal;
+  int kernel_bspline_vertical;
+  int kernel_bspline_detail;
   int kernel_vng_green_equilibrate;
   int kernel_vng_interpolate;
   int kernel_markesteijn_initial_copy;
@@ -421,10 +432,495 @@ static const char* method2string(dt_iop_demosaic_method_t method)
     case DT_IOP_DEMOSAIC_PASSTHR_COLORX:
       string = "photosites (XTrans)";
       break;
+    case DT_IOP_DEMOSAIC_DOWNSAMPLE:
+      string = "downsample";
+      break;
     default:
       string = "(unknown method)";
   }
   return string;
+}
+
+static inline gboolean _is_downsample_method(const dt_iop_demosaic_method_t method)
+{
+  return method == DT_IOP_DEMOSAIC_DOWNSAMPLE;
+}
+
+/**
+ * @brief Build one half-size RGB pixel from the 2x2 CFA block backing it.
+ *
+ * The loop walks the sensor block that maps to the output pixel and keeps only the
+ * real photosites that actually exist there. Bayer gets one red, one blue and two
+ * greens. 4Bayer keeps the four camera primaries, which are converted to RGB right
+ * away so the caller stays in the regular RGB pipe.
+ */
+static void _downsample_bayer_half_size(float *const out, const float *const in,
+                                        const dt_iop_roi_t *const roi_out,
+                                        const dt_iop_roi_t *const roi_in, const uint32_t filters,
+                                        const gboolean is_4bayer, const double CAM_to_RGB[3][4])
+{
+#ifdef _OPENMP
+#pragma omp parallel for default(none) \
+  dt_omp_firstprivate(in, filters, is_4bayer, roi_in, roi_out, CAM_to_RGB) \
+  shared(out) \
+  schedule(static) collapse(2)
+#endif
+  for(int y = 0; y < roi_out->height; y++)
+  {
+    for(int x = 0; x < roi_out->width; x++)
+    {
+      float *const outc = out + 4 * ((size_t)y * roi_out->width + x);
+      dt_aligned_pixel_t cam = { 0.0f };
+      int samples[4] = { 0 };
+      const int px = MIN(2 * x, roi_in->width - 1);
+      const int py = MIN(2 * y, roi_in->height - 1);
+
+      // Collect the 2x2 source block feeding this output pixel and average only
+      // same-colour photosites together so we do not invent new chroma detail.
+      for(int j = 0; j < 2; j++)
+      {
+        for(int i = 0; i < 2; i++)
+        {
+          const int xx = MIN(px + i, roi_in->width - 1);
+          const int yy = MIN(py + j, roi_in->height - 1);
+          const int c = FC(yy, xx, filters);
+          cam[c] += in[(size_t)yy * roi_in->width + xx];
+          samples[c]++;
+        }
+      }
+
+      for(int c = 0; c < 4; c++)
+        if(samples[c] > 0) cam[c] /= (float)samples[c];
+
+      if(is_4bayer)
+      {
+        for(int c = 0; c < 3; c++)
+        {
+          outc[c] = 0.0f;
+          for(int k = 0; k < 4; k++) outc[c] += CAM_to_RGB[c][k] * cam[k];
+        }
+      }
+      else
+      {
+        outc[0] = cam[RED];
+        outc[1] = cam[GREEN];
+        outc[2] = cam[BLUE];
+      }
+
+      outc[3] = 0.0f;
+    }
+  }
+}
+
+/**
+ * @brief Reconstruct one missing X-Trans colour from the nearest surrounding photosites.
+ *
+ * We first look for the closest sample in each quadrant around the half-size pixel centre.
+ * When the CFA leaves a 2-pixel chroma gap, these four neighbours define the smallest local
+ * rectangle of same-colour samples and we bilinearly interpolate inside it. If the search hits
+ * an image edge, we fall back to averaging the available neighbours instead of extrapolating.
+ */
+static float _downsample_xtrans_missing_colour(const float *const in, const dt_iop_roi_t *const roi_in,
+                                               const int px, const int py,
+                                               const uint8_t (*const xtrans)[6], const int colour)
+{
+  const float cx = px + 0.5f;
+  const float cy = py + 0.5f;
+  const int xmin = MAX(0, px - 3);
+  const int xmax = MIN(roi_in->width - 1, px + 4);
+  const int ymin = MAX(0, py - 3);
+  const int ymax = MIN(roi_in->height - 1, py + 4);
+
+  float quadrant_value[4] = { 0.0f };
+  float quadrant_dist[4] = { INFINITY, INFINITY, INFINITY, INFINITY };
+  int quadrant_x[4] = { 0 };
+  int quadrant_y[4] = { 0 };
+  gboolean quadrant_valid[4] = { FALSE, FALSE, FALSE, FALSE };
+
+  float nearest_value = 0.0f;
+  float nearest_dist = INFINITY;
+
+  // Search the local 7x7 neighbourhood because X-Trans can place the next sample
+  // of a given colour two pixels away from the 2x2 block feeding the output.
+  for(int yy = ymin; yy <= ymax; yy++)
+  {
+    for(int xx = xmin; xx <= xmax; xx++)
+    {
+      if(FCxtrans(yy, xx, roi_in, xtrans) != colour) continue;
+
+      const float dx = xx - cx;
+      const float dy = yy - cy;
+      const float dist2 = dx * dx + dy * dy;
+      if(dist2 < nearest_dist)
+      {
+        nearest_dist = dist2;
+        nearest_value = in[(size_t)yy * roi_in->width + xx];
+      }
+
+      const int quadrant = ((yy > cy) ? 2 : 0) + ((xx > cx) ? 1 : 0);
+      if(dist2 < quadrant_dist[quadrant])
+      {
+        quadrant_dist[quadrant] = dist2;
+        quadrant_value[quadrant] = in[(size_t)yy * roi_in->width + xx];
+        quadrant_x[quadrant] = xx;
+        quadrant_y[quadrant] = yy;
+        quadrant_valid[quadrant] = TRUE;
+      }
+    }
+  }
+
+  if(quadrant_valid[0] && quadrant_valid[1] && quadrant_valid[2] && quadrant_valid[3])
+  {
+    const float x_left = 0.5f * (quadrant_x[0] + quadrant_x[2]);
+    const float x_right = 0.5f * (quadrant_x[1] + quadrant_x[3]);
+    const float y_top = 0.5f * (quadrant_y[0] + quadrant_y[1]);
+    const float y_bottom = 0.5f * (quadrant_y[2] + quadrant_y[3]);
+    const float tx = CLAMP((cx - x_left) / MAX(x_right - x_left, 1e-6f), 0.0f, 1.0f);
+    const float ty = CLAMP((cy - y_top) / MAX(y_bottom - y_top, 1e-6f), 0.0f, 1.0f);
+    const float top = quadrant_value[0] + tx * (quadrant_value[1] - quadrant_value[0]);
+    const float bottom = quadrant_value[2] + tx * (quadrant_value[3] - quadrant_value[2]);
+    return top + ty * (bottom - top);
+  }
+
+  float sum = 0.0f;
+  int count = 0;
+  for(int q = 0; q < 4; q++)
+  {
+    if(!quadrant_valid[q]) continue;
+    sum += quadrant_value[q];
+    count++;
+  }
+
+  return (count > 0) ? sum / (float)count : nearest_value;
+}
+
+/**
+ * @brief Build one half-size RGB pixel from a 2x2 X-Trans block.
+ *
+ * We first reuse any real photosites that fall inside the 2x2 block mapped to the
+ * output pixel. When a colour is absent from that block, we reconstruct it from the
+ * nearest surrounding same-colour samples so the half-size image keeps all channels.
+ */
+static void _downsample_xtrans_half_size(float *const out, const float *const in,
+                                         const dt_iop_roi_t *const roi_out,
+                                         const dt_iop_roi_t *const roi_in,
+                                         const uint8_t (*const xtrans)[6])
+{
+#ifdef _OPENMP
+#pragma omp parallel for default(none) \
+  dt_omp_firstprivate(in, roi_in, roi_out, xtrans) \
+  shared(out) \
+  schedule(static) collapse(2)
+#endif
+  for(int y = 0; y < roi_out->height; y++)
+  {
+    for(int x = 0; x < roi_out->width; x++)
+    {
+      float *const outc = out + 4 * ((size_t)y * roi_out->width + x);
+      dt_aligned_pixel_t rgb = { 0.0f };
+      int samples[3] = { 0 };
+      const int px = MIN(2 * x, roi_in->width - 1);
+      const int py = MIN(2 * y, roi_in->height - 1);
+
+      // Reuse the real X-Trans photosites that already fall inside the source 2x2 block
+      // and only interpolate the colours that the local pattern does not sample there.
+      for(int j = 0; j < 2; j++)
+      {
+        for(int i = 0; i < 2; i++)
+        {
+          const int xx = MIN(px + i, roi_in->width - 1);
+          const int yy = MIN(py + j, roi_in->height - 1);
+          const int c = FCxtrans(yy, xx, roi_in, xtrans);
+          rgb[c] += in[(size_t)yy * roi_in->width + xx];
+          samples[c]++;
+        }
+      }
+
+      for(int c = 0; c < 3; c++)
+      {
+        if(samples[c] > 0)
+          outc[c] = rgb[c] / (float)samples[c];
+        else
+          outc[c] = _downsample_xtrans_missing_colour(in, roi_in, px, py, xtrans, c);
+      }
+
+      outc[3] = 0.0f;
+    }
+  }
+}
+
+/**
+ * @brief Fit one local affine RGB model for the current high-frequency scale.
+ *
+ * For each pixel we collect a dense immediate 5x5 patch and accumulate its raw RGB
+ * and guide moments. We then recover the channel-wise means plus the variance of the
+ * shared RGB-average guide from those fixed-size sums, which keeps the hot loop free
+ * from running-mean updates and per-sample divisions.
+ * The three target-channel slopes are stored as one RGB pixel so the apply stage can
+ * evaluate them from the same scalar guide with minimal scratch memory. The intercept
+ * is kept in a separate RGB image so its three channel-wise components can be blurred
+ * just like the slopes before we reconstruct the filtered detail.
+ */
+static void _downsample_guided_laplacian_fit(const float *const restrict HF,
+                                             float *const restrict coeff,
+                                             float *const restrict bias,
+                                             const size_t width, const size_t height)
+{
+  const float eps = 1e-12f;
+  const dt_aligned_pixel_simd_t zero = dt_simd_set1(0.f);
+  const dt_aligned_pixel_simd_t inv_patch = dt_simd_set1(1.f / 25.f);
+
+#ifdef _OPENMP
+#pragma omp parallel for default(none) \
+  dt_omp_firstprivate(HF, coeff, bias, width, height, eps, zero, inv_patch) \
+  schedule(static)
+#endif
+  for(size_t row = 0; row < height; ++row)
+  {
+    const float *const row0 = HF + 4 * ((size_t)CLAMP((int)row - 2, 0, (int)height - 1) * width);
+    const float *const row1 = HF + 4 * ((size_t)CLAMP((int)row - 1, 0, (int)height - 1) * width);
+    const float *const row2 = HF + 4 * (row * width);
+    const float *const row3 = HF + 4 * ((size_t)CLAMP((int)row + 1, 0, (int)height - 1) * width);
+    const float *const row4 = HF + 4 * ((size_t)CLAMP((int)row + 2, 0, (int)height - 1) * width);
+    const float *const rows[BSPLINE_FSIZE] = { row0, row1, row2, row3, row4 };
+    const int max_col = (int)width - 1;
+
+    for(size_t col = 0; col < width; ++col)
+    {
+      dt_aligned_pixel_simd_t sum_rgb = zero;
+      dt_aligned_pixel_simd_t sum_rgb_guide = zero;
+      float sum_guide = 0.f;
+      float sum_guide_sq = 0.f;
+      const int col_offsets[BSPLINE_FSIZE]
+        = { 4 * CLAMP((int)col - 2, 0, max_col),
+            4 * CLAMP((int)col - 1, 0, max_col),
+            4 * (int)col,
+            4 * CLAMP((int)col + 1, 0, max_col),
+            4 * CLAMP((int)col + 2, 0, max_col) };
+
+      // Walk the dense 5x5 neighbourhood once. The 5 clamped column offsets are
+      // hoisted once per output pixel so the inner loop keeps only loads and moment
+      // accumulation for the RGB channels and their shared guide. Keep those loops
+      // as counted loops so GCC does not fully unroll all 25 taps and spill the
+      // intermediate guide terms to the stack.
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC unroll 1
+#endif
+      for(int jj = 0; jj < BSPLINE_FSIZE; ++jj)
+      {
+        const float *const row_ptr = rows[jj];
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC unroll 1
+#endif
+        for(int ii = 0; ii < BSPLINE_FSIZE; ++ii)
+        {
+          const dt_aligned_pixel_simd_t sample = dt_load_simd_aligned(row_ptr + col_offsets[ii]);
+          const float guide = (sample[RED] + sample[GREEN] + sample[BLUE]) / 3.f;
+
+          sum_rgb += sample;
+          sum_guide += guide;
+          sum_guide_sq += guide * guide;
+          sum_rgb_guide += sample * dt_simd_set1(guide);
+        }
+      }
+
+      dt_aligned_pixel_simd_t means = sum_rgb * inv_patch;
+      const float guide_mean = sum_guide * (1.f / 25.f);
+      float variance = sum_guide_sq * (1.f / 25.f) - sqf(guide_mean);
+      dt_aligned_pixel_simd_t covariance = sum_rgb_guide * inv_patch - means * dt_simd_set1(guide_mean);
+      means[ALPHA] = 0.f;
+      covariance[ALPHA] = 0.f;
+
+      if(variance < 0.f) variance = 0.f;
+
+      dt_aligned_pixel_simd_t slope = zero;
+      if(variance > eps) slope = covariance / dt_simd_set1(variance);
+      slope[ALPHA] = 0.f;
+
+      dt_aligned_pixel_simd_t intercept = means - slope * dt_simd_set1(guide_mean);
+      intercept[ALPHA] = 0.f;
+
+      dt_store_simd_aligned(coeff + 4 * (row * width + col), slope);
+      dt_store_simd_aligned(bias + 4 * (row * width + col), intercept);
+    }
+  }
+}
+
+/**
+ * @brief Apply the locally averaged affine RGB model to one high-frequency layer.
+ *
+ * The coefficients and intercept have already been smoothed with the same a-trous
+ * kernel as the wavelet scale, so we simply predict each channel from the local RGB
+ * HF vector, add the channel-wise intercept, and accumulate the filtered detail bands
+ * for later resynthesis.
+ */
+static void _downsample_guided_laplacian_apply(const float *const restrict HF,
+                                               const float *const restrict coeff,
+                                               const float *const restrict bias,
+                                               const float *const restrict LF,
+                                               float *const restrict reconstructed,
+                                               const size_t width, const size_t height,
+                                               const gboolean reset)
+{
+#ifdef _OPENMP
+#pragma omp parallel for default(none) \
+  dt_omp_firstprivate(HF, coeff, bias, LF, reconstructed, width, height, reset) \
+  schedule(static)
+#endif
+  for(size_t row = 0; row < height; ++row)
+  {
+    for(size_t col = 0; col < width; ++col)
+    {
+      const size_t index = 4 * (row * width + col);
+      const dt_aligned_pixel_simd_t hf = dt_load_simd_aligned(HF + index);
+      const dt_aligned_pixel_simd_t guide = dt_simd_set1((hf[RED] + hf[GREEN] + hf[BLUE]) / 3.f);
+      dt_aligned_pixel_simd_t filtered = (dt_load_simd_aligned(coeff + index) * guide
+                                          + dt_load_simd_aligned(bias + index))
+                                         * dt_load_simd_aligned(LF + index);
+
+      if(!reset) filtered += dt_load_simd_aligned(reconstructed + index);
+      filtered[ALPHA] = 0.f;
+      dt_store_simd_aligned(reconstructed + index, filtered);
+    }
+  }
+}
+
+/**
+ * @brief Denoise the half-size demosaic result by filtering its wavelet details.
+ *
+ * We decompose the half-size RGB image over three a-trous B-spline scales. At each
+ * scale we normalize the high-frequency layer by the blur that produced it, fit a
+ * local affine RGB model on that relative detail, blur one RGB slope field plus one
+ * RGB intercept field over the immediate neighbourhood, then reconstruct a filtered relative
+ * detail layer and rescale it back by the current blur. Repeating the full three-scale
+ * pass lets the module gradually even out chroma details over several user-selected
+ * iterations. The output is the sum of all filtered high frequencies plus the final
+ * low-frequency residual.
+ */
+static int _downsample_guided_laplacian_postfilter(float *const out,
+                                                   const size_t width, const size_t height,
+                                                   const int iterations)
+{
+  if(iterations <= 0) return 0;
+
+  const size_t pixels = width * height;
+  float *const restrict LF_even = dt_pixelpipe_cache_alloc_align_float_cache(4 * pixels, 0);
+  float *const restrict LF_odd = dt_pixelpipe_cache_alloc_align_float_cache(4 * pixels, 0);
+  float *const restrict HF = dt_pixelpipe_cache_alloc_align_float_cache(4 * pixels, 0);
+  float *const restrict reconstructed = dt_pixelpipe_cache_alloc_align_float_cache(4 * pixels, 0);
+  float *const restrict coeff = dt_pixelpipe_cache_alloc_align_float_cache(4 * pixels, 0);
+  float *const restrict bias = dt_pixelpipe_cache_alloc_align_float_cache(4 * pixels, 0);
+  float *const restrict coeff_tmp = dt_pixelpipe_cache_alloc_align_float_cache(4 * pixels, 0);
+  size_t padded_size;
+  float *const restrict tempbuf = dt_pixelpipe_cache_alloc_perthread_float(4 * width, &padded_size);
+  const float *restrict residual = out;
+  int err = 0;
+
+  if(!LF_even || !LF_odd || !HF || !reconstructed || !coeff || !bias || !coeff_tmp || !tempbuf)
+  {
+    err = 1;
+    goto cleanup;
+  }
+
+  for(int iteration = 0; iteration < iterations; ++iteration)
+  {
+    residual = out;
+
+    for(int s = 0; s < DOWNSAMPLE_GUIDED_SCALES; ++s)
+    {
+      const int mult = 1 << s;
+      const float *restrict buffer_in;
+      float *restrict buffer_out;
+
+      if(s == 0)
+      {
+        buffer_in = out;
+        buffer_out = LF_odd;
+      }
+      else if(s % 2 != 0)
+      {
+        buffer_in = LF_odd;
+        buffer_out = LF_even;
+      }
+      else
+      {
+        buffer_in = LF_even;
+        buffer_out = LF_odd;
+      }
+
+      decompose_2D_Bspline(buffer_in, HF, buffer_out, width, height, mult, tempbuf, padded_size);
+      // Express the current wavelet band as relative detail over the blur that created it
+      // so the linear RGB model follows local chroma ratios instead of absolute amplitudes.
+#ifdef _OPENMP
+#pragma omp parallel for default(none) \
+  dt_omp_firstprivate(HF, buffer_out, width, height) \
+  schedule(static)
+#endif
+      for(size_t row = 0; row < height; ++row)
+      {
+        for(size_t col = 0; col < width; ++col)
+        {
+          const size_t index = 4 * (row * width + col);
+          dt_aligned_pixel_simd_t lf = dt_load_simd_aligned(buffer_out + index);
+          lf[RED] = fmaxf(lf[RED], 1e-8f);
+          lf[GREEN] = fmaxf(lf[GREEN], 1e-8f);
+          lf[BLUE] = fmaxf(lf[BLUE], 1e-8f);
+          lf[ALPHA] = 1.f;
+
+          dt_aligned_pixel_simd_t normalized = dt_load_simd_aligned(HF + index) / lf;
+          normalized[ALPHA] = 0.f;
+          dt_store_simd_aligned(HF + index, normalized);
+        }
+      }
+
+      _downsample_guided_laplacian_fit(HF, coeff, bias, width, height);
+
+      blur_2D_Bspline(coeff, coeff_tmp, tempbuf, width, height, 1, FALSE);
+      dt_iop_image_copy_by_size(coeff, coeff_tmp, width, height, 4);
+      blur_2D_Bspline(bias, coeff_tmp, tempbuf, width, height, 1, FALSE);
+      dt_iop_image_copy_by_size(bias, coeff_tmp, width, height, 4);
+
+      _downsample_guided_laplacian_apply(HF, coeff, bias, buffer_out, reconstructed,
+                                         width, height, s == 0);
+      residual = buffer_out;
+    }
+
+    const gboolean last_iteration = (iteration == iterations - 1);
+
+#ifdef _OPENMP
+#pragma omp parallel for default(none) \
+  dt_omp_firstprivate(out, reconstructed, residual, width, height, last_iteration) \
+  schedule(static)
+#endif
+    for(size_t row = 0; row < height; ++row)
+    {
+      for(size_t col = 0; col < width; ++col)
+      {
+        const size_t index = 4 * (row * width + col);
+        dt_aligned_pixel_simd_t pixel
+            = dt_simd_max_zero(dt_load_simd_aligned(reconstructed + index)
+                               + dt_load_simd_aligned(residual + index));
+        pixel[ALPHA] = 0.f;
+
+        if(last_iteration)
+          dt_store_simd_nontemporal(out + index, pixel);
+        else
+          dt_store_simd_aligned(out + index, pixel);
+      }
+    }
+  }
+  dt_omploop_sfence();  // ensure the final nontemporal writeback completes before the caller reads out
+
+cleanup:
+  dt_pixelpipe_cache_free_align(tempbuf);
+  dt_pixelpipe_cache_free_align(coeff_tmp);
+  dt_pixelpipe_cache_free_align(bias);
+  dt_pixelpipe_cache_free_align(coeff);
+  dt_pixelpipe_cache_free_align(reconstructed);
+  dt_pixelpipe_cache_free_align(HF);
+  dt_pixelpipe_cache_free_align(LF_odd);
+  dt_pixelpipe_cache_free_align(LF_even);
+  return err;
 }
 
 
@@ -442,6 +938,13 @@ void modify_roi_out(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_
                     const dt_iop_roi_t *const roi_in)
 {
   *roi_out = *roi_in;
+
+  dt_iop_demosaic_data_t *data = (dt_iop_demosaic_data_t *)piece->data;
+  if(_is_downsample_method(data->demosaicing_method))
+  {
+    roi_out->width = (roi_in->width + 1) / 2;
+    roi_out->height = (roi_in->height + 1) / 2;
+  }
 
   // snap to start of mosaic block:
   roi_out->x = 0; // MAX(0, roi_out->x & ~1);
@@ -462,6 +965,23 @@ void modify_roi_in(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t
   const int method = data->demosaicing_method;
   const gboolean passthrough = (method == DT_IOP_DEMOSAIC_PASSTHROUGH_MONOCHROME) ||
                                (method == DT_IOP_DEMOSAIC_PASSTHR_MONOX);
+  const gboolean downsample = _is_downsample_method(method);
+
+  if(downsample)
+  {
+    roi_in->x *= 2;
+    roi_in->y *= 2;
+    roi_in->width *= 2;
+    roi_in->height *= 2;
+
+    // Half-size mode maps each output pixel to one 2x2 raw block, so keep the exact
+    // 2x addressing and clamp only the tail block against the available input buffer.
+    roi_in->x = CLAMP(roi_in->x, 0, MAX(0, piece->buf_in.width - 1));
+    roi_in->y = CLAMP(roi_in->y, 0, MAX(0, piece->buf_in.height - 1));
+    roi_in->width = CLAMP(roi_in->width, 1, piece->buf_in.width - roi_in->x);
+    roi_in->height = CLAMP(roi_in->height, 1, piece->buf_in.height - roi_in->y);
+    return;
+  }
 
   // set position to closest sensor pattern snap
   if(!passthrough)
@@ -520,7 +1040,17 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   // Full demosaic and then scaling if needed
   if(info) dt_get_times(&start_time);
 
-  if(demosaicing_method == DT_IOP_DEMOSAIC_PASSTHROUGH_MONOCHROME)
+  if(_is_downsample_method(demosaicing_method))
+  {
+    if(piece->dsc_in.filters == 9u)
+      _downsample_xtrans_half_size(o, pixels, &roo, &roi, xtrans);
+    else
+      _downsample_bayer_half_size(o, pixels, &roo, &roi, piece->dsc_in.filters,
+                                  img->flags & DT_IMAGE_4BAYER, data->CAM_to_RGB);
+
+    if(_downsample_guided_laplacian_postfilter(o, roo.width, roo.height, data->color_smoothing)) return 1;
+  }
+  else if(demosaicing_method == DT_IOP_DEMOSAIC_PASSTHROUGH_MONOCHROME)
   {
     passthrough_monochrome(o, pixels, &roo, &roi);
   }
@@ -658,7 +1188,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
       return 1;
   }
 
-  if(data->color_smoothing)
+  if(data->color_smoothing && !_is_downsample_method(demosaicing_method))
     color_smoothing(o, roi_out, data->color_smoothing);
     
   return 0;
@@ -846,6 +1376,212 @@ error:
   return FALSE;
 }
 
+static gboolean _downsample_guided_laplacian_postfilter_cl(struct dt_iop_module_t *self,
+                                                           const dt_dev_pixelpipe_t *pipe,
+                                                           cl_mem dev_out,
+                                                           const dt_iop_roi_t *const roi_out,
+                                                           const int iterations)
+{
+  if(iterations <= 0) return TRUE;
+
+  dt_iop_demosaic_global_data_t *gd = (dt_iop_demosaic_global_data_t *)self->global_data;
+  const int devid = pipe->devid;
+  const int width = roi_out->width;
+  const int height = roi_out->height;
+  const int clip_negatives = 1;
+  const int keep_signed = 0;
+  const int dense_mult = 1;
+  size_t sizes[] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
+
+  cl_mem LF_even = NULL;
+  cl_mem LF_odd = NULL;
+  cl_mem HF = NULL;
+  cl_mem temp = NULL;
+  cl_mem coeff = NULL;
+  cl_mem bias = NULL;
+  cl_mem coeff_tmp = NULL;
+  cl_mem reconstructed_a = NULL;
+  cl_mem reconstructed_b = NULL;
+  cl_mem residual = NULL;
+  cl_mem reconstructed_read = NULL;
+  cl_mem reconstructed_write = NULL;
+  cl_mem reconstructed_final = NULL;
+  cl_int err = DT_OPENCL_DEFAULT_ERROR;
+
+  LF_even = dt_opencl_alloc_device(devid, width, height, sizeof(float) * 4);
+  LF_odd = dt_opencl_alloc_device(devid, width, height, sizeof(float) * 4);
+  HF = dt_opencl_alloc_device(devid, width, height, sizeof(float) * 4);
+  temp = dt_opencl_alloc_device(devid, width, height, sizeof(float) * 4);
+  coeff = dt_opencl_alloc_device(devid, width, height, sizeof(float) * 4);
+  bias = dt_opencl_alloc_device(devid, width, height, sizeof(float) * 4);
+  coeff_tmp = dt_opencl_alloc_device(devid, width, height, sizeof(float) * 4);
+  reconstructed_a = dt_opencl_alloc_device(devid, width, height, sizeof(float) * 4);
+  reconstructed_b = dt_opencl_alloc_device(devid, width, height, sizeof(float) * 4);
+  if(!LF_even || !LF_odd || !HF || !temp || !coeff || !bias || !coeff_tmp
+     || !reconstructed_a || !reconstructed_b)
+    goto error;
+
+  for(int iteration = 0; iteration < iterations; ++iteration)
+  {
+    reconstructed_read = reconstructed_a;
+    reconstructed_write = reconstructed_b;
+    reconstructed_final = NULL;
+    residual = dev_out;
+
+    for(int s = 0; s < DOWNSAMPLE_GUIDED_SCALES; ++s)
+    {
+      const int mult = 1 << s;
+      const int first_scale = (s == 0);
+      cl_mem buffer_in;
+      cl_mem buffer_out;
+
+      if(s == 0)
+      {
+        buffer_in = dev_out;
+        buffer_out = LF_odd;
+      }
+      else if(s % 2 != 0)
+      {
+        buffer_in = LF_odd;
+        buffer_out = LF_even;
+      }
+      else
+      {
+        buffer_in = LF_even;
+        buffer_out = LF_odd;
+      }
+
+      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_horizontal, 0, sizeof(cl_mem), &buffer_in);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_horizontal, 1, sizeof(cl_mem), &temp);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_horizontal, 2, sizeof(int), &width);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_horizontal, 3, sizeof(int), &height);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_horizontal, 4, sizeof(int), &mult);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_horizontal, 5, sizeof(int), &clip_negatives);
+      err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_bspline_horizontal, sizes);
+      if(err != CL_SUCCESS) goto error;
+
+      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_vertical, 0, sizeof(cl_mem), &temp);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_vertical, 1, sizeof(cl_mem), &buffer_out);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_vertical, 2, sizeof(int), &width);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_vertical, 3, sizeof(int), &height);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_vertical, 4, sizeof(int), &mult);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_vertical, 5, sizeof(int), &clip_negatives);
+      err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_bspline_vertical, sizes);
+      if(err != CL_SUCCESS) goto error;
+
+      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_detail, 0, sizeof(cl_mem), &buffer_in);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_detail, 1, sizeof(cl_mem), &buffer_out);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_detail, 2, sizeof(cl_mem), &HF);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_detail, 3, sizeof(int), &width);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_detail, 4, sizeof(int), &height);
+      err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_bspline_detail, sizes);
+      if(err != CL_SUCCESS) goto error;
+
+      dt_opencl_set_kernel_arg(devid, gd->kernel_guided_laplacian_normalize, 0, sizeof(cl_mem), &HF);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_guided_laplacian_normalize, 1, sizeof(cl_mem), &buffer_out);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_guided_laplacian_normalize, 2, sizeof(cl_mem), &temp);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_guided_laplacian_normalize, 3, sizeof(int), &width);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_guided_laplacian_normalize, 4, sizeof(int), &height);
+      err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_guided_laplacian_normalize, sizes);
+      if(err != CL_SUCCESS) goto error;
+
+      dt_opencl_set_kernel_arg(devid, gd->kernel_guided_laplacian_coefficients, 0, sizeof(cl_mem), &temp);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_guided_laplacian_coefficients, 1, sizeof(cl_mem), &coeff);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_guided_laplacian_coefficients, 2, sizeof(cl_mem), &bias);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_guided_laplacian_coefficients, 3, sizeof(int), &width);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_guided_laplacian_coefficients, 4, sizeof(int), &height);
+      err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_guided_laplacian_coefficients, sizes);
+      if(err != CL_SUCCESS) goto error;
+
+      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_horizontal, 0, sizeof(cl_mem), &coeff);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_horizontal, 1, sizeof(cl_mem), &coeff_tmp);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_horizontal, 2, sizeof(int), &width);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_horizontal, 3, sizeof(int), &height);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_horizontal, 4, sizeof(int), &dense_mult);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_horizontal, 5, sizeof(int), &keep_signed);
+      err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_bspline_horizontal, sizes);
+      if(err != CL_SUCCESS) goto error;
+
+      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_vertical, 0, sizeof(cl_mem), &coeff_tmp);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_vertical, 1, sizeof(cl_mem), &coeff);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_vertical, 2, sizeof(int), &width);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_vertical, 3, sizeof(int), &height);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_vertical, 4, sizeof(int), &dense_mult);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_vertical, 5, sizeof(int), &keep_signed);
+      err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_bspline_vertical, sizes);
+      if(err != CL_SUCCESS) goto error;
+
+      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_horizontal, 0, sizeof(cl_mem), &bias);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_horizontal, 1, sizeof(cl_mem), &coeff_tmp);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_horizontal, 2, sizeof(int), &width);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_horizontal, 3, sizeof(int), &height);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_horizontal, 4, sizeof(int), &dense_mult);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_horizontal, 5, sizeof(int), &keep_signed);
+      err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_bspline_horizontal, sizes);
+      if(err != CL_SUCCESS) goto error;
+
+      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_vertical, 0, sizeof(cl_mem), &coeff_tmp);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_vertical, 1, sizeof(cl_mem), &bias);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_vertical, 2, sizeof(int), &width);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_vertical, 3, sizeof(int), &height);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_vertical, 4, sizeof(int), &dense_mult);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_bspline_vertical, 5, sizeof(int), &keep_signed);
+      err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_bspline_vertical, sizes);
+      if(err != CL_SUCCESS) goto error;
+
+      dt_opencl_set_kernel_arg(devid, gd->kernel_guided_laplacian_apply, 0, sizeof(cl_mem), &temp);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_guided_laplacian_apply, 1, sizeof(cl_mem), &coeff);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_guided_laplacian_apply, 2, sizeof(cl_mem), &bias);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_guided_laplacian_apply, 3, sizeof(cl_mem), &buffer_out);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_guided_laplacian_apply, 4, sizeof(cl_mem), &reconstructed_read);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_guided_laplacian_apply, 5, sizeof(cl_mem), &reconstructed_write);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_guided_laplacian_apply, 6, sizeof(int), &width);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_guided_laplacian_apply, 7, sizeof(int), &height);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_guided_laplacian_apply, 8, sizeof(int), &first_scale);
+      err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_guided_laplacian_apply, sizes);
+      if(err != CL_SUCCESS) goto error;
+
+      residual = buffer_out;
+      reconstructed_final = reconstructed_write;
+      cl_mem tmp = reconstructed_read;
+      reconstructed_read = reconstructed_write;
+      reconstructed_write = tmp;
+    }
+
+    dt_opencl_set_kernel_arg(devid, gd->kernel_guided_laplacian_finalize, 0, sizeof(cl_mem), &reconstructed_final);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_guided_laplacian_finalize, 1, sizeof(cl_mem), &residual);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_guided_laplacian_finalize, 2, sizeof(cl_mem), &dev_out);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_guided_laplacian_finalize, 3, sizeof(int), &width);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_guided_laplacian_finalize, 4, sizeof(int), &height);
+    err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_guided_laplacian_finalize, sizes);
+    if(err != CL_SUCCESS) goto error;
+  }
+
+  dt_opencl_release_mem_object(reconstructed_b);
+  dt_opencl_release_mem_object(reconstructed_a);
+  dt_opencl_release_mem_object(coeff_tmp);
+  dt_opencl_release_mem_object(bias);
+  dt_opencl_release_mem_object(coeff);
+  dt_opencl_release_mem_object(temp);
+  dt_opencl_release_mem_object(HF);
+  dt_opencl_release_mem_object(LF_odd);
+  dt_opencl_release_mem_object(LF_even);
+  return TRUE;
+
+error:
+  dt_opencl_release_mem_object(reconstructed_b);
+  dt_opencl_release_mem_object(reconstructed_a);
+  dt_opencl_release_mem_object(coeff_tmp);
+  dt_opencl_release_mem_object(bias);
+  dt_opencl_release_mem_object(coeff);
+  dt_opencl_release_mem_object(temp);
+  dt_opencl_release_mem_object(HF);
+  dt_opencl_release_mem_object(LF_odd);
+  dt_opencl_release_mem_object(LF_even);
+  dt_print(DT_DEBUG_OPENCL, "[opencl_demosaic] guided laplacian postfilter failed: %d\n", err);
+  return FALSE;
+}
+
 int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
                cl_mem dev_in, cl_mem dev_out)
 {
@@ -856,6 +1592,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
                          && (pipe->type == DT_DEV_PIXELPIPE_FULL));
 
   dt_iop_demosaic_data_t *data = (dt_iop_demosaic_data_t *)piece->data;
+  dt_iop_demosaic_global_data_t *gd = (dt_iop_demosaic_global_data_t *)self->global_data;
 
   int demosaicing_method = data->demosaicing_method;
 
@@ -876,6 +1613,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   cl_mem blend = NULL;
   cl_mem details = NULL;
   cl_mem dev_aux = NULL;
+  cl_mem dev_xtrans = NULL;
   const gboolean dual = ((demosaicing_method & DEMOSAIC_DUAL) && (data->dual_thrs > 0.0f));
   const int devid = pipe->devid;
   gboolean retval = FALSE;
@@ -887,6 +1625,64 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
      demosaicing_method == DT_IOP_DEMOSAIC_PASSTHROUGH_COLOR )
   {
     if(!process_default_cl(self, pipe, piece, dev_in, dev_out, roi_in, roi_out, demosaicing_method)) return FALSE;
+  }
+  else if(_is_downsample_method(demosaicing_method))
+  {
+    const int width = roi_out->width;
+    const int height = roi_out->height;
+    size_t sizes[3] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
+
+    if(piece->dsc_in.filters == 9u)
+    {
+      dev_xtrans = dt_opencl_copy_host_to_device_constant(devid, sizeof(piece->dsc_in.xtrans),
+                                                          (void *)piece->dsc_in.xtrans);
+      if(dev_xtrans == NULL) goto finish;
+
+      dt_opencl_set_kernel_arg(devid, gd->kernel_zoom_half_size_xtrans, 0, sizeof(cl_mem), &dev_in);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_zoom_half_size_xtrans, 1, sizeof(cl_mem), &dev_out);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_zoom_half_size_xtrans, 2, sizeof(int), &width);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_zoom_half_size_xtrans, 3, sizeof(int), &height);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_zoom_half_size_xtrans, 4, sizeof(int), (void *)&roi_in->x);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_zoom_half_size_xtrans, 5, sizeof(int), (void *)&roi_in->y);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_zoom_half_size_xtrans, 6, sizeof(int), (void *)&roi_in->width);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_zoom_half_size_xtrans, 7, sizeof(int), (void *)&roi_in->height);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_zoom_half_size_xtrans, 8, sizeof(cl_mem), (void *)&dev_xtrans);
+      const cl_int err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_zoom_half_size_xtrans, sizes);
+      if(err != CL_SUCCESS) goto finish;
+    }
+    else
+    {
+      const int zero = 0;
+      const int is_4bayer = self->dev->image_storage.flags & DT_IMAGE_4BAYER;
+      const float cam_to_rgb_0[4] = { data->CAM_to_RGB[0][0], data->CAM_to_RGB[0][1],
+                                      data->CAM_to_RGB[0][2], data->CAM_to_RGB[0][3] };
+      const float cam_to_rgb_1[4] = { data->CAM_to_RGB[1][0], data->CAM_to_RGB[1][1],
+                                      data->CAM_to_RGB[1][2], data->CAM_to_RGB[1][3] };
+      const float cam_to_rgb_2[4] = { data->CAM_to_RGB[2][0], data->CAM_to_RGB[2][1],
+                                      data->CAM_to_RGB[2][2], data->CAM_to_RGB[2][3] };
+
+      dt_opencl_set_kernel_arg(devid, gd->kernel_zoom_half_size, 0, sizeof(cl_mem), &dev_in);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_zoom_half_size, 1, sizeof(cl_mem), &dev_out);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_zoom_half_size, 2, sizeof(int), &width);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_zoom_half_size, 3, sizeof(int), &height);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_zoom_half_size, 4, sizeof(int), &zero);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_zoom_half_size, 5, sizeof(int), &zero);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_zoom_half_size, 6, sizeof(int), (void *)&roi_in->width);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_zoom_half_size, 7, sizeof(int), (void *)&roi_in->height);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_zoom_half_size, 8, sizeof(float), (void *)&roi_out->scale);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_zoom_half_size, 9, sizeof(uint32_t), (void *)&piece->dsc_in.filters);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_zoom_half_size, 10, sizeof(int), &is_4bayer);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_zoom_half_size, 11, sizeof(cam_to_rgb_0), cam_to_rgb_0);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_zoom_half_size, 12, sizeof(cam_to_rgb_1), cam_to_rgb_1);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_zoom_half_size, 13, sizeof(cam_to_rgb_2), cam_to_rgb_2);
+      const cl_int err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_zoom_half_size, sizes);
+      if(err != CL_SUCCESS) goto finish;
+    }
+
+    if(!_downsample_guided_laplacian_postfilter_cl(self, pipe, dev_out, roi_out, data->color_smoothing)) goto finish;
+
+    retval = TRUE;
+    goto finish;
   }
   else if((demosaicing_method & ~DEMOSAIC_DUAL) == DT_IOP_DEMOSAIC_RCD)
   {
@@ -993,7 +1789,8 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   dt_opencl_release_mem_object(details);
   dt_opencl_release_mem_object(blend);
   if(dev_aux != dev_out) dt_opencl_release_mem_object(dev_aux);
-  if(!retval) dt_control_log(_("[dual demosaic_cl] internal problem"));
+  dt_opencl_release_mem_object(dev_xtrans);
+  if(!retval && dual) dt_control_log(_("[dual demosaic_cl] internal problem"));
   return retval;
 }
 #endif
@@ -1010,7 +1807,16 @@ void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe
       = ((piece->dsc_in.filters != 9u) && (data->green_eq != DT_IOP_GREEN_EQ_NO)) ? 0.25f : 0.0f;
   const dt_iop_demosaic_method_t demosaicing_method = data->demosaicing_method & ~DEMOSAIC_DUAL;
 
-  if((demosaicing_method == DT_IOP_DEMOSAIC_PPG) ||
+  if(demosaicing_method == DT_IOP_DEMOSAIC_DOWNSAMPLE)
+  {
+    tiling->factor = 1.0f + ioratio + (data->color_smoothing ? 7.0f * ioratio : 0.0f);
+    tiling->maxbuf = 1.0f;
+    tiling->overhead = 0;
+    tiling->xalign = 1;
+    tiling->yalign = 1;
+    tiling->overlap = (piece->dsc_in.filters == 9u) ? 18 : 16;
+  }
+  else if((demosaicing_method == DT_IOP_DEMOSAIC_PPG) ||
       (demosaicing_method == DT_IOP_DEMOSAIC_PASSTHROUGH_MONOCHROME) ||
       (demosaicing_method == DT_IOP_DEMOSAIC_PASSTHROUGH_COLOR) ||
       (demosaicing_method == DT_IOP_DEMOSAIC_AMAZE))
@@ -1116,6 +1922,7 @@ void init_global(dt_iop_module_so_t *module)
   gd->kernel_vng_border_interpolate = dt_opencl_create_kernel(vng, "vng_border_interpolate");
   gd->kernel_vng_lin_interpolate = dt_opencl_create_kernel(vng, "vng_lin_interpolate");
   gd->kernel_zoom_third_size = dt_opencl_create_kernel(vng, "clip_and_zoom_demosaic_third_size_xtrans");
+  gd->kernel_zoom_half_size_xtrans = dt_opencl_create_kernel(vng, "clip_and_zoom_demosaic_half_size_xtrans");
   gd->kernel_vng_green_equilibrate = dt_opencl_create_kernel(vng, "vng_green_equilibrate");
   gd->kernel_vng_interpolate = dt_opencl_create_kernel(vng, "vng_interpolate");
 
@@ -1153,6 +1960,15 @@ void init_global(dt_iop_module_so_t *module)
   gd->kernel_rcd_border_redblue = dt_opencl_create_kernel(rcd, "rcd_border_redblue");
   gd->kernel_rcd_border_green = dt_opencl_create_kernel(rcd, "rcd_border_green");
   gd->kernel_write_blended_dual  = dt_opencl_create_kernel(rcd, "write_blended_dual");
+
+  const int wavelets = 35; // bspline.cl, from programs.conf
+  gd->kernel_guided_laplacian_coefficients = dt_opencl_create_kernel(wavelets, "guided_laplacian_coefficients");
+  gd->kernel_guided_laplacian_normalize = dt_opencl_create_kernel(wavelets, "guided_laplacian_normalize");
+  gd->kernel_guided_laplacian_apply = dt_opencl_create_kernel(wavelets, "guided_laplacian_apply");
+  gd->kernel_guided_laplacian_finalize = dt_opencl_create_kernel(wavelets, "guided_laplacian_finalize");
+  gd->kernel_bspline_horizontal = dt_opencl_create_kernel(wavelets, "blur_2D_Bspline_horizontal");
+  gd->kernel_bspline_vertical = dt_opencl_create_kernel(wavelets, "blur_2D_Bspline_vertical");
+  gd->kernel_bspline_detail = dt_opencl_create_kernel(wavelets, "wavelets_detail_level");
   gd->lmmse_gamma_in = NULL;
   gd->lmmse_gamma_out = NULL;
 }
@@ -1177,6 +1993,14 @@ void cleanup_global(dt_iop_module_so_t *module)
   dt_opencl_free_kernel(gd->kernel_vng_border_interpolate);
   dt_opencl_free_kernel(gd->kernel_vng_lin_interpolate);
   dt_opencl_free_kernel(gd->kernel_zoom_third_size);
+  dt_opencl_free_kernel(gd->kernel_zoom_half_size_xtrans);
+  dt_opencl_free_kernel(gd->kernel_guided_laplacian_coefficients);
+  dt_opencl_free_kernel(gd->kernel_guided_laplacian_normalize);
+  dt_opencl_free_kernel(gd->kernel_guided_laplacian_apply);
+  dt_opencl_free_kernel(gd->kernel_guided_laplacian_finalize);
+  dt_opencl_free_kernel(gd->kernel_bspline_horizontal);
+  dt_opencl_free_kernel(gd->kernel_bspline_vertical);
+  dt_opencl_free_kernel(gd->kernel_bspline_detail);
   dt_opencl_free_kernel(gd->kernel_vng_green_equilibrate);
   dt_opencl_free_kernel(gd->kernel_vng_interpolate);
   dt_opencl_free_kernel(gd->kernel_markesteijn_initial_copy);
@@ -1238,16 +2062,21 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *params, dt_dev
   dt_iop_demosaic_method_t use_method = p->demosaicing_method;
   const gboolean xmethod = use_method & DEMOSAIC_XTRANS;
   const gboolean bayer   = (self->dev->image_storage.dsc.filters != 9u);
+  const gboolean downsample = _is_downsample_method(use_method);
 
-  if(bayer && xmethod)   use_method = DT_IOP_DEMOSAIC_RCD;
-  if(!bayer && !xmethod) use_method = DT_IOP_DEMOSAIC_MARKESTEIJN;
+  if(!downsample)
+  {
+    if(bayer && xmethod)   use_method = DT_IOP_DEMOSAIC_RCD;
+    if(!bayer && !xmethod) use_method = DT_IOP_DEMOSAIC_MARKESTEIJN;
+  }
 
   if(use_method == DT_IOP_DEMOSAIC_PASSTHROUGH_MONOCHROME || use_method == DT_IOP_DEMOSAIC_PASSTHR_MONOX)
     use_method = DT_IOP_DEMOSAIC_PASSTHROUGH_MONOCHROME;
   if(use_method == DT_IOP_DEMOSAIC_PASSTHROUGH_COLOR || use_method == DT_IOP_DEMOSAIC_PASSTHR_COLORX)
     use_method = DT_IOP_DEMOSAIC_PASSTHROUGH_COLOR;
 
-  const gboolean passing = (use_method == DT_IOP_DEMOSAIC_PASSTHROUGH_MONOCHROME || use_method == DT_IOP_DEMOSAIC_PASSTHROUGH_COLOR);
+  const gboolean passing = (use_method == DT_IOP_DEMOSAIC_PASSTHROUGH_MONOCHROME
+                            || use_method == DT_IOP_DEMOSAIC_PASSTHROUGH_COLOR);
 
   if(!(use_method == DT_IOP_DEMOSAIC_PPG))
     d->median_thrs = 0.0f;
@@ -1256,6 +2085,12 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *params, dt_dev
   {
     d->green_eq = DT_IOP_GREEN_EQ_NO;
     d->color_smoothing = 0;
+    d->dual_thrs = 0.0f;
+  }
+  else if(downsample)
+  {
+    d->green_eq = DT_IOP_GREEN_EQ_NO;
+    d->dual_thrs = 0.0f;
   }
 
   if(use_method & DEMOSAIC_DUAL)
@@ -1308,6 +2143,9 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *params, dt_dev
     case DT_IOP_DEMOSAIC_FDC:
       piece->process_cl_ready = 0;
       break;
+    case DT_IOP_DEMOSAIC_DOWNSAMPLE:
+      piece->process_cl_ready = 1;
+      break;
     default:
       piece->process_cl_ready = 0;
   }
@@ -1322,8 +2160,8 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *params, dt_dev
 
   if(self->dev->image_storage.flags & DT_IMAGE_4BAYER)
   {
-    // 4Bayer images not implemented in OpenCL yet
-    piece->process_cl_ready = 0;
+    // 4Bayer images only support the dedicated half-size downsample path in OpenCL.
+    if(d->demosaicing_method != DT_IOP_DEMOSAIC_DOWNSAMPLE) piece->process_cl_ready = 0;
 
     // Get and store the matrix to go from camera to RGB for 4Bayer images
     if(!dt_colorspaces_conversion_matrices_rgb(self->dev->image_storage.adobe_XYZ_to_CAM,
@@ -1376,11 +2214,15 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
   dt_iop_demosaic_method_t use_method = p->demosaicing_method;
   const gboolean xmethod = use_method & DEMOSAIC_XTRANS;
 
-  if(bayer && xmethod)   use_method = DT_IOP_DEMOSAIC_RCD;
-  if(!bayer && !xmethod) use_method = DT_IOP_DEMOSAIC_MARKESTEIJN;
+  if(!_is_downsample_method(use_method))
+  {
+    if(bayer && xmethod)   use_method = DT_IOP_DEMOSAIC_RCD;
+    if(!bayer && !xmethod) use_method = DT_IOP_DEMOSAIC_MARKESTEIJN;
+  }
 
   const gboolean isppg = (use_method == DT_IOP_DEMOSAIC_PPG);
-  const gboolean isdual = (use_method & DEMOSAIC_DUAL);
+  const gboolean isdownsample = _is_downsample_method(use_method);
+  const gboolean isdual = !isdownsample && (use_method & DEMOSAIC_DUAL);
   const gboolean islmmse = (use_method == DT_IOP_DEMOSAIC_LMMSE);
   const gboolean passing = ((use_method == DT_IOP_DEMOSAIC_PASSTHROUGH_MONOCHROME) ||
                             (use_method == DT_IOP_DEMOSAIC_PASSTHROUGH_COLOR) ||
@@ -1395,7 +2237,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
     dt_bauhaus_combobox_set_from_value(g->demosaic_method_xtrans, p->demosaicing_method);
 
   gtk_widget_set_visible(g->median_thrs, bayer && isppg);
-  gtk_widget_set_visible(g->greeneq, !passing);
+  gtk_widget_set_visible(g->greeneq, !passing && !isdownsample);
   gtk_widget_set_visible(g->color_smoothing, !passing && !isdual);
   gtk_widget_set_visible(g->dual_thrs, isdual);
   gtk_widget_set_visible(g->lmmse_refine, islmmse);
@@ -1473,7 +2315,7 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(g->lmmse_refine, _("LMMSE refinement steps. the median steps average the output,\nrefine adds some recalculation of red & blue channels"));
 
   g->color_smoothing = dt_bauhaus_combobox_from_params(self, "color_smoothing");
-  gtk_widget_set_tooltip_text(g->color_smoothing, _("how many color smoothing median steps after demosaicing"));
+  gtk_widget_set_tooltip_text(g->color_smoothing, _("how many post-demosaic smoothing passes.\nin downsample mode this sets the guided detail equalization iterations"));
 
   g->greeneq = dt_bauhaus_combobox_from_params(self, "green_eq");
   gtk_widget_set_tooltip_text(g->greeneq, _("green channels matching method"));

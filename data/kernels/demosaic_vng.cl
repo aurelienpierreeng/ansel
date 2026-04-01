@@ -364,3 +364,111 @@ clip_and_zoom_demosaic_third_size_xtrans(read_only image2d_t in, write_only imag
   write_imagef(out, (int2)(x, y), (float4)(col[0], col[1], col[2], 0.0f));
 }
 
+kernel void
+clip_and_zoom_demosaic_half_size_xtrans(read_only image2d_t in, write_only image2d_t out, const int width, const int height,
+                                        const int r_x, const int r_y, const int rin_wd, const int rin_ht,
+                                        global const unsigned char (*const xtrans)[6])
+{
+  const int x = get_global_id(0);
+  const int y = get_global_id(1);
+
+  if(x >= width || y >= height) return;
+
+  const int px = min(2 * x, rin_wd - 1);
+  const int py = min(2 * y, rin_ht - 1);
+
+  float col[3] = { 0.0f, 0.0f, 0.0f };
+  int samples[3] = { 0, 0, 0 };
+
+  // Reuse every real X-Trans photosite already present in the source 2x2 block and
+  // only synthesize the colour channels the local pattern does not carry there.
+  for(int j = 0; j < 2; j++)
+    for(int i = 0; i < 2; i++)
+    {
+      const int xx = min(px + i, rin_wd - 1);
+      const int yy = min(py + j, rin_ht - 1);
+      const int c = FCxtrans(yy + r_y, xx + r_x, xtrans);
+      col[c] += read_imagef(in, sampleri, (int2)(xx, yy)).x;
+      samples[c]++;
+    }
+
+  for(int c = 0; c < 3; c++)
+  {
+    if(samples[c] > 0)
+    {
+      col[c] /= samples[c];
+      continue;
+    }
+
+    const float cx = px + 0.5f;
+    const float cy = py + 0.5f;
+    const int xmin = max(0, px - 3);
+    const int xmax = min(rin_wd - 1, px + 4);
+    const int ymin = max(0, py - 3);
+    const int ymax = min(rin_ht - 1, py + 4);
+
+    float quadrant_value[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+    float quadrant_dist[4] = { INFINITY, INFINITY, INFINITY, INFINITY };
+    int quadrant_x[4] = { 0, 0, 0, 0 };
+    int quadrant_y[4] = { 0, 0, 0, 0 };
+    int quadrant_valid[4] = { 0, 0, 0, 0 };
+
+    float nearest_value = 0.0f;
+    float nearest_dist = INFINITY;
+
+    // Search the local neighbourhood for the nearest same-colour photosites and use
+    // the four directional anchors for bilinear reconstruction across larger CFA gaps.
+    for(int yy = ymin; yy <= ymax; yy++)
+      for(int xx = xmin; xx <= xmax; xx++)
+      {
+        if(FCxtrans(yy + r_y, xx + r_x, xtrans) != c) continue;
+
+        const float dx = xx - cx;
+        const float dy = yy - cy;
+        const float dist2 = dx * dx + dy * dy;
+
+        if(dist2 < nearest_dist)
+        {
+          nearest_dist = dist2;
+          nearest_value = read_imagef(in, sampleri, (int2)(xx, yy)).x;
+        }
+
+        const int quadrant = ((yy > cy) ? 2 : 0) + ((xx > cx) ? 1 : 0);
+        if(dist2 < quadrant_dist[quadrant])
+        {
+          quadrant_dist[quadrant] = dist2;
+          quadrant_value[quadrant] = read_imagef(in, sampleri, (int2)(xx, yy)).x;
+          quadrant_x[quadrant] = xx;
+          quadrant_y[quadrant] = yy;
+          quadrant_valid[quadrant] = 1;
+        }
+      }
+
+    if(quadrant_valid[0] && quadrant_valid[1] && quadrant_valid[2] && quadrant_valid[3])
+    {
+      const float x_left = 0.5f * (quadrant_x[0] + quadrant_x[2]);
+      const float x_right = 0.5f * (quadrant_x[1] + quadrant_x[3]);
+      const float y_top = 0.5f * (quadrant_y[0] + quadrant_y[1]);
+      const float y_bottom = 0.5f * (quadrant_y[2] + quadrant_y[3]);
+      const float tx = clamp((cx - x_left) / fmax(x_right - x_left, 1e-6f), 0.0f, 1.0f);
+      const float ty = clamp((cy - y_top) / fmax(y_bottom - y_top, 1e-6f), 0.0f, 1.0f);
+      const float top = quadrant_value[0] + tx * (quadrant_value[1] - quadrant_value[0]);
+      const float bottom = quadrant_value[2] + tx * (quadrant_value[3] - quadrant_value[2]);
+      col[c] = top + ty * (bottom - top);
+    }
+    else
+    {
+      float sum = 0.0f;
+      int count = 0;
+      for(int q = 0; q < 4; q++)
+      {
+        if(!quadrant_valid[q]) continue;
+        sum += quadrant_value[q];
+        count++;
+      }
+      col[c] = (count > 0) ? sum / count : nearest_value;
+    }
+  }
+
+  write_imagef(out, (int2)(x, y), (float4)(col[0], col[1], col[2], 0.0f));
+}

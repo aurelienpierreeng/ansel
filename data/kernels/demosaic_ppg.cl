@@ -469,7 +469,8 @@ clip_and_zoom(read_only image2d_t in, write_only image2d_t out, const int width,
  */
 __kernel void
 clip_and_zoom_demosaic_half_size(__read_only image2d_t in, __write_only image2d_t out, const int width, const int height,
-    const int r_x, const int r_y, const int rin_wd, const int rin_ht, const float r_scale, const unsigned int filters)
+    const int r_x, const int r_y, const int rin_wd, const int rin_ht, const float r_scale, const unsigned int filters,
+    const int is_4bayer, const float4 CAM_to_RGB_0, const float4 CAM_to_RGB_1, const float4 CAM_to_RGB_2)
 {
   // global id is pixel in output image (float4)
   const int x = get_global_id(0);
@@ -477,52 +478,49 @@ clip_and_zoom_demosaic_half_size(__read_only image2d_t in, __write_only image2d_
 
   if(x >= width || y >= height) return;
 
-  float4 color = (float4)(0.0f, 0.0f, 0.0f, 0.0f);
-  float weight = 0.0f;
+  const int px = min(2 * x, rin_wd - 1);
+  const int py = min(2 * y, rin_ht - 1);
+  float4 color = (float4)(0.0f);
 
-  // adjust to pixel region and don't sample more than scale/2 nbs!
-  // pixel footprint on input buffer, radius:
-  const float px_footprint = 1.0f/r_scale;
-  // how many 2x2 blocks can be sampled inside that area
-  const int samples = round(px_footprint/2.0f);
+  // Half-size mode maps one output pixel to one source 2x2 block, so keep the
+  // reconstruction local to those four real photosites instead of scale-driven filtering.
+  const float p1 = read_imagef(in, sampleri, (int2)(px,             py)).x;
+  const float p2 = read_imagef(in, sampleri, (int2)(min(px + 1, rin_wd - 1), py)).x;
+  const float p3 = read_imagef(in, sampleri, (int2)(px,             min(py + 1, rin_ht - 1))).x;
+  const float p4 = read_imagef(in, sampleri, (int2)(min(px + 1, rin_wd - 1), min(py + 1, rin_ht - 1))).x;
 
-  int trggbx = 0, trggby = 0;
-  if(FC(trggby, trggbx+1, filters) != 1) trggbx++;
-  if(FC(trggby, trggbx,   filters) != 0)
+  if(is_4bayer)
   {
-    trggbx = (trggbx + 1)&1;
-    trggby++;
+    float4 cam = (float4)(0.0f);
+    float4 count = (float4)(0.0f);
+    cam[FC(py, px, filters)] += p1;
+    cam[FC(py, min(px + 1, rin_wd - 1), filters)] += p2;
+    cam[FC(min(py + 1, rin_ht - 1), px, filters)] += p3;
+    cam[FC(min(py + 1, rin_ht - 1), min(px + 1, rin_wd - 1), filters)] += p4;
+    count[FC(py, px, filters)] += 1.0f;
+    count[FC(py, min(px + 1, rin_wd - 1), filters)] += 1.0f;
+    count[FC(min(py + 1, rin_ht - 1), px, filters)] += 1.0f;
+    count[FC(min(py + 1, rin_ht - 1), min(px + 1, rin_wd - 1), filters)] += 1.0f;
+    cam = select(cam, cam / count, count > 0.0f);
+    color = (float4)(dot(CAM_to_RGB_0, cam), dot(CAM_to_RGB_1, cam), dot(CAM_to_RGB_2, cam), 0.0f);
   }
-  const int2 rggb = (int2)(trggbx, trggby);
-
-
-  // upper left corner:
-  const float2 f = (float2)((x + r_x) * px_footprint, (y + r_y) * px_footprint);
-  int2 p = (int2)((int)f.x & ~1, (int)f.y & ~1);
-  const float2 d = (float2)((f.x - p.x)/2.0f, (f.y - p.y)/2.0f);
-
-  // now move p to point to an rggb block:
-  p += rggb;
-
-  for(int j=0;j<=samples+1;j++) for(int i=0;i<=samples+1;i++)
+  else
   {
-    const int xx = p.x + 2*i;
-    const int yy = p.y + 2*j;
-
-    if(xx + 1 >= rin_wd || yy + 1 >= rin_ht) continue;
-
-    float xfilter = (i == 0) ? 1.0f - d.x : ((i == samples+1) ? d.x : 1.0f);
-    float yfilter = (j == 0) ? 1.0f - d.y : ((j == samples+1) ? d.y : 1.0f);
-
-    // get four mosaic pattern uint16:
-    float p1 = read_imagef(in, sampleri, (int2)(xx,   yy  )).x;
-    float p2 = read_imagef(in, sampleri, (int2)(xx+1, yy  )).x;
-    float p3 = read_imagef(in, sampleri, (int2)(xx,   yy+1)).x;
-    float p4 = read_imagef(in, sampleri, (int2)(xx+1, yy+1)).x;
-    color += yfilter*xfilter*(float4)(p1, (p2+p3)*0.5f, p4, 0.0f);
-    weight += yfilter*xfilter;
+    float rgb[3] = { 0.0f, 0.0f, 0.0f };
+    int count[3] = { 0, 0, 0 };
+    rgb[FC(py, px, filters)] += p1;
+    rgb[FC(py, min(px + 1, rin_wd - 1), filters)] += p2;
+    rgb[FC(min(py + 1, rin_ht - 1), px, filters)] += p3;
+    rgb[FC(min(py + 1, rin_ht - 1), min(px + 1, rin_wd - 1), filters)] += p4;
+    count[FC(py, px, filters)]++;
+    count[FC(py, min(px + 1, rin_wd - 1), filters)]++;
+    count[FC(min(py + 1, rin_ht - 1), px, filters)]++;
+    count[FC(min(py + 1, rin_ht - 1), min(px + 1, rin_wd - 1), filters)]++;
+    color = (float4)(rgb[RED] / max(count[RED], 1),
+                     rgb[GREEN] / max(count[GREEN], 1),
+                     rgb[BLUE] / max(count[BLUE], 1), 0.0f);
   }
-  color = (weight > 0.0f) ? color/weight : (float4)0.0f;
+
   write_imagef (out, (int2)(x, y), color);
 }
 

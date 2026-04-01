@@ -101,6 +101,142 @@ kernel void wavelets_detail_level(read_only image2d_t detail, read_only image2d_
   write_imagef(HF, (int2)(x, y), d - lf);
 }
 
+kernel void guided_laplacian_coefficients(read_only image2d_t HF,
+                                          write_only image2d_t coeff,
+                                          write_only image2d_t bias,
+                                          const int width, const int height)
+{
+  const int x = get_global_id(0);
+  const int y = get_global_id(1);
+  if(x >= width || y >= height) return;
+
+  const float inv_patch = 1.0f / 25.0f;
+  const float inv_guide = 1.0f / 3.0f;
+  const float eps = 1e-12f;
+  float sum_r = 0.0f;
+  float sum_g = 0.0f;
+  float sum_b = 0.0f;
+  float sum_r_guide = 0.0f;
+  float sum_g_guide = 0.0f;
+  float sum_b_guide = 0.0f;
+  float sum_guide = 0.0f;
+  float sum_guide_sq = 0.0f;
+
+  for(int jj = -2; jj <= 2; ++jj)
+  {
+    const int yy = clamp(y + jj, 0, height - 1);
+    for(int ii = -2; ii <= 2; ++ii)
+    {
+      const int xx = clamp(x + ii, 0, width - 1);
+      const float4 sample = read_imagef(HF, samplerA, (int2)(xx, yy));
+      const float guide = (sample.x + sample.y + sample.z) * inv_guide;
+
+      sum_r += sample.x;
+      sum_g += sample.y;
+      sum_b += sample.z;
+      sum_guide += guide;
+      sum_guide_sq += guide * guide;
+      sum_r_guide += sample.x * guide;
+      sum_g_guide += sample.y * guide;
+      sum_b_guide += sample.z * guide;
+    }
+  }
+
+  const float mean_r = sum_r * inv_patch;
+  const float mean_g = sum_g * inv_patch;
+  const float mean_b = sum_b * inv_patch;
+  const float guide_mean = sum_guide * inv_patch;
+  const float variance = fmax(sum_guide_sq * inv_patch - guide_mean * guide_mean, 0.0f);
+  const float covariance_r = sum_r_guide * inv_patch - mean_r * guide_mean;
+  const float covariance_g = sum_g_guide * inv_patch - mean_g * guide_mean;
+  const float covariance_b = sum_b_guide * inv_patch - mean_b * guide_mean;
+
+  float a_r = 0.0f;
+  float a_g = 0.0f;
+  float a_b = 0.0f;
+
+  if(variance > eps)
+  {
+    a_r = covariance_r / variance;
+    a_g = covariance_g / variance;
+    a_b = covariance_b / variance;
+  }
+
+  const float b_r = mean_r - a_r * guide_mean;
+  const float b_g = mean_g - a_g * guide_mean;
+  const float b_b = mean_b - a_b * guide_mean;
+
+  write_imagef(coeff, (int2)(x, y), (float4)(a_r, a_g, a_b, 0.0f));
+  write_imagef(bias, (int2)(x, y), (float4)(b_r, b_g, b_b, 0.0f));
+}
+
+kernel void guided_laplacian_normalize(read_only image2d_t HF,
+                                       read_only image2d_t LF,
+                                       write_only image2d_t normalized_HF,
+                                       const int width, const int height)
+{
+  const int x = get_global_id(0);
+  const int y = get_global_id(1);
+  if(x >= width || y >= height) return;
+
+  const float4 hf = read_imagef(HF, samplerA, (int2)(x, y));
+  const float4 lf = read_imagef(LF, samplerA, (int2)(x, y));
+  const float4 normalized = (float4)(hf.x / fmax(lf.x, 1e-8f),
+                                     hf.y / fmax(lf.y, 1e-8f),
+                                     hf.z / fmax(lf.z, 1e-8f),
+                                     0.0f);
+  write_imagef(normalized_HF, (int2)(x, y), normalized);
+}
+
+kernel void guided_laplacian_apply(read_only image2d_t HF,
+                                   read_only image2d_t coeff,
+                                   read_only image2d_t bias,
+                                   read_only image2d_t LF,
+                                   read_only image2d_t reconstructed_read,
+                                   write_only image2d_t reconstructed_write,
+                                   const int width, const int height, const int first_scale)
+{
+  const int x = get_global_id(0);
+  const int y = get_global_id(1);
+  if(x >= width || y >= height) return;
+
+  const float inv_guide = 1.0f / 3.0f;
+  const float3 hf = read_imagef(HF, samplerA, (int2)(x, y)).xyz;
+  const float3 a = read_imagef(coeff, samplerA, (int2)(x, y)).xyz;
+  const float3 b = read_imagef(bias, samplerA, (int2)(x, y)).xyz;
+  const float guide = (hf.x + hf.y + hf.z) * inv_guide;
+  const float3 lf = read_imagef(LF, samplerA, (int2)(x, y)).xyz;
+  const float3 filtered = (a * guide + b) * lf;
+
+  if(first_scale)
+  {
+    write_imagef(reconstructed_write, (int2)(x, y), (float4)(filtered.x, filtered.y, filtered.z, 0.0f));
+  }
+  else
+  {
+    const float3 accumulated = read_imagef(reconstructed_read, samplerA, (int2)(x, y)).xyz;
+    const float3 reconstructed = accumulated + filtered;
+    write_imagef(reconstructed_write, (int2)(x, y),
+                 (float4)(reconstructed.x, reconstructed.y, reconstructed.z, 0.0f));
+  }
+}
+
+kernel void guided_laplacian_finalize(read_only image2d_t reconstructed,
+                                      read_only image2d_t residual,
+                                      write_only image2d_t out,
+                                      const int width, const int height)
+{
+  const int x = get_global_id(0);
+  const int y = get_global_id(1);
+  if(x >= width || y >= height) return;
+
+  float4 pixel = read_imagef(reconstructed, samplerA, (int2)(x, y))
+               + read_imagef(residual, samplerA, (int2)(x, y));
+  pixel = fmax(pixel, 0.0f);
+  pixel.w = 0.0f;
+  write_imagef(out, (int2)(x, y), pixel);
+}
+
 kernel void reduce_2D_mask(read_only image2d_t in, write_only image2d_t out,
                            const int width, const int height)
 {
