@@ -153,20 +153,20 @@ static gboolean _sync_realtime_top_history_in_place(dt_dev_pixelpipe_t *pipe, dt
  * We add to that:
  * - the module's own authored `force_opencl_cache`,
  * - user cache preferences,
- * - explicit GUI cache requests on one module output,
  * - active color-picker sampling,
  * - global histogram stages sampling their output,
  * - active GUI editing on the module itself.
+ *
+ * GUI cache requests are intentionally not turned into eager host retention
+ * here. `dt_dev_pixelpipe_cache_peek_gui()` can already reopen a device-only
+ * cacheline and materialize RAM on demand, so keeping the one-shot request out
+ * of this policy avoids forcing stale module-output cachelines to be published
+ * to host just because a transient GUI reader missed once.
  */
 static void _seal_opencl_cache_policy(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
 {
   if(!pipe || !pipe->nodes) return;
 
-  const dt_dev_pixelpipe_cache_request_t cache_request = dt_dev_pixelpipe_get_cache_request(pipe);
-  const dt_iop_module_t *const requested_cache_module
-      = (cache_request == DT_DEV_PIXELPIPE_CACHE_REQUEST_MODULE)
-          ? dt_dev_pixelpipe_get_cache_request_module(pipe)
-          : NULL;
   gboolean upstream_must_cache_host = TRUE;
 
   for(GList *pieces = g_list_last(pipe->nodes); pieces; pieces = g_list_previous(pieces))
@@ -191,7 +191,6 @@ static void _seal_opencl_cache_policy(dt_dev_pixelpipe_t *pipe, dt_develop_t *de
     const gboolean color_picker_on = dt_iop_color_picker_force_cache(dev, pipe, module);
     const gboolean global_hist_output_on = dt_dev_module_requires_global_histogram_output_cache(pipe, module);
     const gboolean global_hist_input_on = dt_dev_module_requires_global_histogram_input_cache(pipe, module);
-    const gboolean requested_gui_cache_on = requested_cache_module == module;
     const gboolean module_hist_on
         = (pipe->type == DT_DEV_PIXELPIPE_PREVIEW
            && pipe->gui_observable_source
@@ -202,7 +201,7 @@ static void _seal_opencl_cache_policy(dt_dev_pixelpipe_t *pipe, dt_develop_t *de
            && dev->gui_module == module;
 
     piece->force_opencl_cache
-        = authored_cache || user_requested_cache || requested_gui_cache_on || color_picker_on
+        = authored_cache || user_requested_cache || color_picker_on
           || global_hist_output_on
           || upstream_must_cache_host;
 

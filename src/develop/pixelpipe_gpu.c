@@ -223,20 +223,6 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
     borrowed_cl_mem_input = (cl_mem_input != NULL);
   }
 
-  /* Recursive thumbnail/export stages can reopen a transient upstream cacheline before it becomes
-   * a published exact-hit. When that cacheline only carries a cached device payload, OpenCL reuse
-   * should normally recover it through `dt_dev_pixelpipe_cache_borrow_cl_payload()`. If that fast path misses, we
-   * still need a host fallback buffer before aborting the whole pipeline, otherwise one bad reopen
-   * collapses the thumbnail to the 8x8 skull placeholder. */
-  if(input == NULL && cl_mem_input == NULL
-     && dt_dev_pixelpipe_cache_restore_host_payload(darktable.pixelpipe_cache, input_entry,
-                                                    pipe->devid, (void **)&input))
-  {
-    dt_print(DT_DEBUG_OPENCL,
-             "[dev_pixelpipe] %s restored host input from cached device payload for CPU fallback\n",
-             module->name());
-  }
-
   if(input == NULL && cl_mem_input == NULL)
   {
     dt_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] %s has no RAM nor vRAM input... aborting.\n", module->name());
