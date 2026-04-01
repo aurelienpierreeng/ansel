@@ -21,10 +21,10 @@ void dt_dev_pixelpipe_gpu_flush_host_pinned_images(dt_dev_pixelpipe_t *pipe, voi
   {
     /* Non-realtime host writes invalidate reusable pinned images bound to the previous ROI/hash.
      * Realtime keeps its pinned reuse untouched to avoid stalling the live draw path. */
-    dt_dev_pixelpipe_cache_flush_host_pinned_image(darktable.pixelpipe_cache, host_ptr, cache_entry,
-                                                   pipe->devid);
-    dt_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] flushed pinned OpenCL images after %s\n",
-             reason ? reason : "host write");
+    if(dt_dev_pixelpipe_cache_flush_host_pinned_image(darktable.pixelpipe_cache, host_ptr, cache_entry,
+                                                      pipe->devid))
+      dt_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] flushed pinned OpenCL images after %s\n",
+               reason ? reason : "host write");
   }
 #else
   (void)pipe;
@@ -94,7 +94,16 @@ static int _gpu_early_cpu_fallback_if_unsupported(dt_dev_pixelpipe_t *pipe, floa
 
   dt_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] %s will run directly on CPU\n", module->name());
 
-  if(cl_mem_input && *cl_mem_input != NULL)
+  /* CPU fallback only needs a valid host buffer. If `input` already exists here, the upstream
+   * hand-off has already materialized authoritative RAM and re-reading the same pixels back out
+   * of the cached OpenCL image is redundant. */
+  if(input && *input != NULL)
+  {
+    dt_print(DT_DEBUG_OPENCL,
+             "[dev_pixelpipe] %s CPU fallback will reuse host input\n",
+             module->name());
+  }
+  else if(cl_mem_input && *cl_mem_input != NULL)
   {
     if(input && *input == NULL)
     {
@@ -138,30 +147,6 @@ static int _gpu_early_cpu_fallback_if_unsupported(dt_dev_pixelpipe_t *pipe, floa
         dt_dev_pixelpipe_cache_release_cl_buffer(cl_mem_input, input_entry, NULL,
                                           dt_dev_pixelpipe_cache_gpu_device_buffer(pipe, input_entry));
       return 1;
-    }
-  }
-  else if(input && *input != NULL)
-  {
-    void *cached_pinned_input = dt_dev_pixelpipe_cache_borrow_cl_payload(input_entry, *input, pipe->devid,
-                                                         piece->roi_in.width, piece->roi_in.height,
-                                                         piece->dsc_in.bpp,
-                                                         CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR);
-    if(cached_pinned_input != NULL)
-    {
-      dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, TRUE, input_entry);
-      const int fail = dt_dev_pixelpipe_cache_sync_cl_buffer(pipe->devid, *input, cached_pinned_input, &piece->roi_in,
-                                              CL_MAP_READ, piece->dsc_in.bpp, module,
-                                              "cpu fallback pinned input copy to cache");
-      dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, FALSE, input_entry);
-      dt_dev_pixelpipe_cache_return_cl_payload(input_entry, cached_pinned_input);
-
-      if(fail)
-      {
-        dt_print(DT_DEBUG_OPENCL,
-                 "[dev_pixelpipe] %s couldn't resync cached pinned input to cache for CPU fallback\n",
-                 module->name());
-        return 1;
-      }
     }
   }
   else if(!input || *input == NULL)
@@ -680,7 +665,13 @@ error:
 
   dt_opencl_finish(pipe->devid);
 
-  if(cl_mem_input != NULL)
+  if(input != NULL)
+  {
+    dt_print(DT_DEBUG_OPENCL,
+             "[dev_pixelpipe] %s GPU error fallback will reuse host input\n",
+             module->name());
+  }
+  else if(cl_mem_input != NULL)
   {
     if(_gpu_init_input(pipe, &input, &cl_mem_input, piece, tiling,
                        cpu_input_entry, output_entry))
@@ -695,30 +686,6 @@ error:
         dt_dev_pixelpipe_cache_release_cl_buffer(&cl_mem_input, cpu_input_entry, NULL,
                                           dt_dev_pixelpipe_cache_gpu_device_buffer(pipe, cpu_input_entry));
       return 1;
-    }
-  }
-  else if(input != NULL)
-  {
-    void *cached_pinned_input = dt_dev_pixelpipe_cache_borrow_cl_payload(cpu_input_entry, input, pipe->devid,
-                                                         piece->roi_in.width, piece->roi_in.height,
-                                                         piece->dsc_in.bpp,
-                                                         CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR);
-    if(cached_pinned_input != NULL)
-    {
-      dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, TRUE, cpu_input_entry);
-      const int fail = dt_dev_pixelpipe_cache_sync_cl_buffer(pipe->devid, input, cached_pinned_input, &piece->roi_in,
-                                              CL_MAP_READ, piece->dsc_in.bpp, module,
-                                              "gpu error fallback pinned input copy to cache");
-      dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, FALSE, cpu_input_entry);
-      dt_dev_pixelpipe_cache_return_cl_payload(cpu_input_entry, cached_pinned_input);
-
-      if(fail)
-      {
-        dt_print(DT_DEBUG_OPENCL,
-                 "[dev_pixelpipe] %s couldn't resync cached pinned input to cache after GPU failure\n",
-                 module->name());
-        return 1;
-      }
     }
   }
   else if(input == NULL)

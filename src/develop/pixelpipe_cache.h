@@ -315,9 +315,10 @@ void dt_dev_pixelpipe_cache_put_pinned_image(dt_dev_pixelpipe_cache_t *cache, vo
  * @param host_ptr Host-backed image data.
  * @param entry_hint Optional owning cache entry for regular cache lines, or NULL.
  * @param devid Device id to flush, or -1 for all cached devices for that host buffer.
+ * @return gboolean TRUE if at least one pinned image was flushed, FALSE otherwise.
  */
-void dt_dev_pixelpipe_cache_flush_host_pinned_image(dt_dev_pixelpipe_cache_t *cache, void *host_ptr,
-                                                    struct dt_pixel_cache_entry_t *entry_hint, int devid);
+gboolean dt_dev_pixelpipe_cache_flush_host_pinned_image(dt_dev_pixelpipe_cache_t *cache, void *host_ptr,
+                                                        struct dt_pixel_cache_entry_t *entry_hint, int devid);
 
 /**
  * @brief Allocate or reuse an OpenCL buffer for one cache entry payload.

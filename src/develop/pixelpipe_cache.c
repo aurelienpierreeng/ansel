@@ -121,7 +121,7 @@ static gboolean _cache_entry_materialize_host_data_locked(dt_pixel_cache_entry_t
 static int dt_dev_pixelpipe_cache_flush_old(dt_dev_pixelpipe_cache_t *cache);
 
 #ifdef HAVE_OPENCL
-static void _cache_entry_clmem_flush_host_pinned_locked(dt_pixel_cache_entry_t *entry, void *host_ptr, int devid);
+static gboolean _cache_entry_clmem_flush_host_pinned_locked(dt_pixel_cache_entry_t *entry, void *host_ptr, int devid);
 #endif
 
 static dt_pixel_cache_entry_t *_cache_entry_for_host_ptr_locked(dt_dev_pixelpipe_cache_t *cache, void *host_ptr)
@@ -381,10 +381,37 @@ static gboolean _cache_entry_materialize_host_data(dt_dev_pixelpipe_cache_t *cac
 }
 
 #ifdef HAVE_OPENCL
-static void _cache_entry_clmem_flush_host_pinned_locked(dt_pixel_cache_entry_t *entry, void *host_ptr, int devid)
+static gboolean _cache_entry_clmem_has_host_pinned_locked(dt_pixel_cache_entry_t *entry, void *host_ptr, int devid)
 {
-  if(!entry || !host_ptr) return;
+  if(!entry || !host_ptr) return FALSE;
 
+  gboolean found = FALSE;
+  dt_pthread_mutex_lock(&entry->cl_mem_lock);
+  for(GList *l = entry->cl_mem_list; l; l = g_list_next(l))
+  {
+    dt_cache_clmem_t *c = (dt_cache_clmem_t *)l->data;
+    const int mem_devid = (c && c->mem) ? dt_opencl_get_mem_context_id((cl_mem)c->mem) : -1;
+    const cl_mem_flags flags = c ? dt_opencl_get_mem_flags((cl_mem)c->mem) : 0;
+
+    if(c && c->mem && mem_devid != c->devid) continue;
+
+    if(c && c->mem && c->refs == 0 && c->host_ptr == host_ptr && (devid < 0 || c->devid == devid)
+       && (flags & CL_MEM_USE_HOST_PTR))
+    {
+      found = TRUE;
+      break;
+    }
+  }
+  dt_pthread_mutex_unlock(&entry->cl_mem_lock);
+
+  return found;
+}
+
+static gboolean _cache_entry_clmem_flush_host_pinned_locked(dt_pixel_cache_entry_t *entry, void *host_ptr, int devid)
+{
+  if(!entry || !host_ptr) return FALSE;
+
+  gboolean flushed = FALSE;
   dt_pthread_mutex_lock(&entry->cl_mem_lock);
   for(GList *l = entry->cl_mem_list; l;)
   {
@@ -410,11 +437,13 @@ static void _cache_entry_clmem_flush_host_pinned_locked(dt_pixel_cache_entry_t *
       entry->cl_mem_list = g_list_delete_link(entry->cl_mem_list, l);
       dt_opencl_release_mem_object(c->mem);
       dt_free(c);
+      flushed = TRUE;
     }
 
     l = next;
   }
   dt_pthread_mutex_unlock(&entry->cl_mem_lock);
+  return flushed;
 }
 #endif
 
@@ -818,10 +847,10 @@ void dt_dev_pixelpipe_cache_put_pinned_image(dt_dev_pixelpipe_cache_t *cache, vo
   *mem = NULL;
 }
 
-void dt_dev_pixelpipe_cache_flush_host_pinned_image(dt_dev_pixelpipe_cache_t *cache, void *host_ptr,
-                                                    dt_pixel_cache_entry_t *entry_hint, int devid)
+gboolean dt_dev_pixelpipe_cache_flush_host_pinned_image(dt_dev_pixelpipe_cache_t *cache, void *host_ptr,
+                                                        dt_pixel_cache_entry_t *entry_hint, int devid)
 {
-  if(!cache || !host_ptr) return;
+  if(!cache || !host_ptr) return FALSE;
 
   dt_pixel_cache_entry_t *entry = entry_hint;
   if(!entry)
@@ -831,12 +860,14 @@ void dt_dev_pixelpipe_cache_flush_host_pinned_image(dt_dev_pixelpipe_cache_t *ca
     dt_pthread_mutex_unlock(&cache->lock);
   }
 
-  if(!entry) return;
+  if(!entry) return FALSE;
+  if(!_cache_entry_clmem_has_host_pinned_locked(entry, host_ptr, devid)) return FALSE;
 
   if(devid >= 0) dt_opencl_events_wait_for(devid);
   dt_dev_pixelpipe_cache_ref_count_entry(cache, TRUE, entry);
-  _cache_entry_clmem_flush_host_pinned_locked(entry, host_ptr, devid);
+  const gboolean flushed = _cache_entry_clmem_flush_host_pinned_locked(entry, host_ptr, devid);
   dt_dev_pixelpipe_cache_ref_count_entry(cache, FALSE, entry);
+  return flushed;
 }
 
 #else
@@ -850,13 +881,14 @@ void dt_dev_pixelpipe_cache_put_pinned_image(dt_dev_pixelpipe_cache_t *cache, vo
   if(mem) *mem = NULL;
 }
 
-void dt_dev_pixelpipe_cache_flush_host_pinned_image(dt_dev_pixelpipe_cache_t *cache, void *host_ptr,
-                                                    dt_pixel_cache_entry_t *entry_hint, int devid)
+gboolean dt_dev_pixelpipe_cache_flush_host_pinned_image(dt_dev_pixelpipe_cache_t *cache, void *host_ptr,
+                                                        dt_pixel_cache_entry_t *entry_hint, int devid)
 {
   (void)cache;
   (void)host_ptr;
   (void)entry_hint;
   (void)devid;
+  return FALSE;
 }
 
 void dt_dev_pixelpipe_cache_resync_host_pinned_image(dt_dev_pixelpipe_cache_t *cache, void *host_ptr,
