@@ -112,6 +112,7 @@ const dt_iop_order_entry_t legacy_order[] = {
   { { 6.0f }, "hotpixels", 0},
   { { 7.0f }, "rawdenoise", 0},
   { { 8.0f }, "demosaic", 0},
+  { { 8.5f }, "detailmask", 0},
   { { 9.0f }, "mask_manager", 0},
   { {10.0f }, "denoiseprofile", 0},
   { {11.0f }, "tonemap", 0},
@@ -207,6 +208,7 @@ const dt_iop_order_entry_t v30_order[] = {
   { { 6.0f }, "hotpixels", 0},
   { { 7.0f }, "rawdenoise", 0},
   { { 8.0f }, "demosaic", 0},
+  { { 8.5f }, "detailmask", 0},
   { { 9.0f }, "denoiseprofile", 0},
   { {10.0f }, "bilateral", 0},
   { {11.0f }, "rotatepixels", 0},
@@ -318,6 +320,7 @@ const dt_iop_order_entry_t v30_jpg_order[] = {
   { { 6.0f }, "hotpixels", 0 },
   { { 7.0f }, "rawdenoise", 0 },
   { { 8.0f }, "demosaic", 0 },
+  { { 8.5f }, "detailmask", 0 },
   // all the modules between [8; 28] expect linear RGB, so they need to be moved after colorin
   { { 28.0f }, "colorin", 0 },
   // moved modules : (copy-pasted in the same order)
@@ -888,6 +891,7 @@ GList *dt_ioppr_get_iop_order_list(int32_t imgid, gboolean sorted)
           _insert_before(iop_order_list, "nlmeans", "blurs");
           _insert_before(iop_order_list, "ashift", "initialscale");
           _insert_before(iop_order_list, "filmicrgb", "crystgrain");
+          _insert_before(iop_order_list, "maskmanager", "detailmask");
         }
       }
       else if(version == DT_IOP_ORDER_LEGACY)

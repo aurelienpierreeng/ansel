@@ -31,6 +31,9 @@
 
 // Keep a preview-like virtual pipe in sync with history without running pixels.
 static void _sync_virtual_pipe(dt_develop_t *dev, dt_dev_pixelpipe_change_t flag);
+static void _sync_pipe_nodes_from_history_from_node(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
+                                                    const uint32_t history_end, GList *start_node,
+                                                    const char *debug_label);
 
 static gchar *_get_debug_pipe_name(const dt_dev_pixelpipe_t *pipe, const dt_develop_t *dev)
 {
@@ -38,6 +41,47 @@ static gchar *_get_debug_pipe_name(const dt_dev_pixelpipe_t *pipe, const dt_deve
     return g_strdup("virtual-preview");
 
   return g_strdup(dt_pixelpipe_get_pipe_name(pipe ? pipe->type : DT_DEV_PIXELPIPE_NONE));
+}
+
+static GList *_find_detailmask_node(dt_dev_pixelpipe_t *pipe)
+{
+  for(GList *nodes = g_list_first(pipe->nodes); nodes; nodes = g_list_next(nodes))
+  {
+    dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)nodes->data;
+    if(piece && !strcmp(piece->module->op, "detailmask")) return nodes;
+  }
+
+  return NULL;
+}
+
+static void _refresh_pipe_detail_mask_state(dt_dev_pixelpipe_t *pipe)
+{
+  dt_dev_pixelpipe_iop_t *detailmask_piece = NULL;
+  pipe->want_detail_mask = DT_DEV_DETAIL_MASK_NONE;
+
+  for(GList *nodes = g_list_first(pipe->nodes); nodes; nodes = g_list_next(nodes))
+  {
+    dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)nodes->data;
+    if(!piece) continue;
+
+    if(!strcmp(piece->module->op, "detailmask")) detailmask_piece = piece;
+    if(piece->detail_mask)
+    {
+      pipe->want_detail_mask = DT_DEV_DETAIL_MASK_ENABLED;
+      break;
+    }
+  }
+
+  if(detailmask_piece)
+  {
+    const gboolean enabled = (pipe->want_detail_mask == DT_DEV_DETAIL_MASK_ENABLED)
+                             && (detailmask_piece->dsc_in.channels == 4)
+                             && (detailmask_piece->dsc_in.datatype == TYPE_FLOAT)
+                             && (detailmask_piece->dsc_in.cst == IOP_CS_RGB);
+    detailmask_piece->enabled = enabled;
+    detailmask_piece->process_tiling_ready = !enabled;
+    if(detailmask_piece->data) *((int *)detailmask_piece->data) = enabled ? 1 : 0;
+  }
 }
 
 static void _change_pipe(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_change_t flag)
@@ -78,8 +122,12 @@ static gboolean _sync_realtime_top_history_in_place(dt_dev_pixelpipe_t *pipe, dt
   dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)dt_dev_pixelpipe_get_module_piece(pipe, hist->module);
   if(!piece) return FALSE;
 
+  const gboolean previous_want_detail_mask = (pipe->want_detail_mask != DT_DEV_DETAIL_MASK_NONE);
   piece->enabled = hist->enabled;
+  piece->detail_mask = hist->blend_params && hist->blend_params->details != 0.0f;
   dt_iop_commit_params(hist->module, hist->params, hist->blend_params, pipe, piece);
+  _refresh_pipe_detail_mask_state(pipe);
+  if(previous_want_detail_mask != (pipe->want_detail_mask != DT_DEV_DETAIL_MASK_NONE)) return FALSE;
   dt_pixelpipe_get_global_hash(pipe, dev);
 
   pipe->last_history_hash = hist->hash;
@@ -557,12 +605,6 @@ static void _commit_piece_contract(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_io
   if(!_prepare_piece_input_contract(pipe, piece, upstream_dsc)) return;
 
   dt_iop_commit_params(piece->module, params, blend_params, pipe, piece);
-  if(piece->blendop_data)
-  {
-    const dt_develop_blend_params_t *const bp = (const dt_develop_blend_params_t *)piece->blendop_data;
-    if(bp->details != 0.0f)
-      pipe->want_detail_mask |= DT_DEV_DETAIL_MASK_REQUIRED;
-  }
 
   if(piece->enabled)
   {
@@ -584,6 +626,7 @@ static void _sync_pipe_nodes_from_history(dt_dev_pixelpipe_t *pipe, dt_develop_t
                                           const char *debug_label)
 {
   dt_iop_buffer_dsc_t upstream_dsc = pipe->image.dsc;
+  const gboolean previous_want_detail_mask = (pipe->want_detail_mask != DT_DEV_DETAIL_MASK_NONE);
 
   for(GList *nodes = g_list_first(pipe->nodes); nodes; nodes = g_list_next(nodes))
   {
@@ -595,6 +638,7 @@ static void _sync_pipe_nodes_from_history(dt_dev_pixelpipe_t *pipe, dt_develop_t
     piece->global_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
     piece->global_mask_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
     piece->enabled = piece->module->default_enabled;
+    piece->detail_mask = FALSE;
 
     dt_iop_params_t *params = piece->module->default_params;
     dt_develop_blend_params_t *blend_params = piece->module->default_blendop_params;
@@ -615,11 +659,22 @@ static void _sync_pipe_nodes_from_history(dt_dev_pixelpipe_t *pipe, dt_develop_t
       }
     }
 
+    piece->detail_mask = blend_params && blend_params->details != 0.0f;
+    if(!strcmp(piece->module->op, "detailmask"))
+      piece->enabled = (pipe->want_detail_mask == DT_DEV_DETAIL_MASK_ENABLED);
     _commit_piece_contract(pipe, piece, params, blend_params, &upstream_dsc);
 
     if(!found_history)
       dt_print(DT_DEBUG_PARAMS, "[pixelpipe] info: committed default params for %s (%s) in pipe %s\n",
                piece->module->op, piece->module->multi_name, debug_label);
+  }
+
+  _refresh_pipe_detail_mask_state(pipe);
+  if(previous_want_detail_mask != (pipe->want_detail_mask != DT_DEV_DETAIL_MASK_NONE))
+  {
+    GList *detailmask_node = _find_detailmask_node(pipe);
+    if(detailmask_node)
+      _sync_pipe_nodes_from_history_from_node(pipe, dev, history_end, detailmask_node, debug_label);
   }
 }
 
@@ -630,10 +685,13 @@ static void _sync_pipe_nodes_from_history_from_node(dt_dev_pixelpipe_t *pipe, dt
   if(!pipe || !start_node) return;
 
   dt_iop_buffer_dsc_t upstream_dsc = pipe->image.dsc;
+  const gboolean previous_want_detail_mask = (pipe->want_detail_mask != DT_DEV_DETAIL_MASK_NONE);
   for(GList *node = g_list_first(pipe->nodes); node && node != start_node; node = g_list_next(node))
   {
     dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)node->data;
-    if(piece) upstream_dsc = piece->dsc_out;
+    if(!piece) continue;
+
+    upstream_dsc = piece->dsc_out;
   }
 
   for(GList *nodes = start_node; nodes; nodes = g_list_next(nodes))
@@ -647,6 +705,7 @@ static void _sync_pipe_nodes_from_history_from_node(dt_dev_pixelpipe_t *pipe, dt
     piece->global_mask_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
 
     piece->enabled = piece->module->default_enabled;
+    piece->detail_mask = FALSE;
 
     dt_iop_params_t *params = piece->module->default_params;
     dt_develop_blend_params_t *blend_params = piece->module->default_blendop_params;
@@ -667,11 +726,22 @@ static void _sync_pipe_nodes_from_history_from_node(dt_dev_pixelpipe_t *pipe, dt
       }
     }
 
+    piece->detail_mask = blend_params && blend_params->details != 0.0f;
+    if(!strcmp(piece->module->op, "detailmask"))
+      piece->enabled = (pipe->want_detail_mask == DT_DEV_DETAIL_MASK_ENABLED);
     _commit_piece_contract(pipe, piece, params, blend_params, &upstream_dsc);
 
     if(!found_history)
       dt_print(DT_DEBUG_PARAMS, "[pixelpipe] info: committed default params for %s (%s) in pipe %s\n",
                piece->module->op, piece->module->multi_name, debug_label);
+  }
+
+  _refresh_pipe_detail_mask_state(pipe);
+  if(previous_want_detail_mask != (pipe->want_detail_mask != DT_DEV_DETAIL_MASK_NONE))
+  {
+    GList *detailmask_node = _find_detailmask_node(pipe);
+    if(detailmask_node && detailmask_node != start_node)
+      _sync_pipe_nodes_from_history_from_node(pipe, dev, history_end, detailmask_node, debug_label);
   }
 }
 
@@ -913,16 +983,16 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
 
   // mask display off as a starting point
   pipe->mask_display = DT_DEV_PIXELPIPE_DISPLAY_NONE;
-  // and blendif active
   pipe->bypass_blendif = 0;
 
-  // Init fucking details masks
-  const dt_image_t *img = &pipe->image;
-  pipe->want_detail_mask &= DT_DEV_DETAIL_MASK_REQUIRED;
-  if(dt_image_is_raw(img))
-    pipe->want_detail_mask |= DT_DEV_DETAIL_MASK_DEMOSAIC;
-  else if(dt_image_is_rawprepare_supported(img))
-    pipe->want_detail_mask |= DT_DEV_DETAIL_MASK_RAWPREPARE;
+  /* Zoom/pan only replans ROI and hashes, it does not replay history sync.
+   * Rebuild the aggregate detail-mask demand from the already synchronized
+   * pieces in that case, otherwise the pipe forgets that the hidden
+   * `detailmask` stage is needed before the next processing run starts. */
+  if(status & (DT_DEV_PIPE_REMOVE | DT_DEV_PIPE_SYNCH | DT_DEV_PIPE_TOP_CHANGED))
+    pipe->want_detail_mask = DT_DEV_DETAIL_MASK_NONE;
+  else
+    _refresh_pipe_detail_mask_state(pipe);
 
   dt_pthread_rwlock_rdlock(&dev->history_mutex);
 

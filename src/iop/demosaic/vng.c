@@ -507,8 +507,6 @@ static int process_vng_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t
     err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_vng_green_equilibrate, sizes);
     if(err != CL_SUCCESS) goto error;
   }
-  dt_dev_write_rawdetail_mask_cl(pipe, piece, dev_aux, roi_in, DT_DEV_DETAIL_MASK_DEMOSAIC);
-
   if(dev_aux != dev_out) dt_opencl_release_mem_object(dev_aux);
   dev_aux = NULL;
 

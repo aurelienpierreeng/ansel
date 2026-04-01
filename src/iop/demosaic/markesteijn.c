@@ -2288,9 +2288,6 @@ static int process_markesteijn_cl(struct dt_iop_module_t *self, const dt_dev_pix
     dt_opencl_release_mem_object(dev_edge_out);
     dev_edge_in = dev_edge_out = NULL;
   }
-  dt_dev_write_rawdetail_mask_cl(pipe, piece, dev_tmp, roi_in, DT_DEV_DETAIL_MASK_DEMOSAIC);
-
-
   // free remaining temporary buffers
   if(dev_tmp != dev_out) dt_opencl_release_mem_object(dev_tmp);
   dev_tmp = NULL;

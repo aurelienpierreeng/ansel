@@ -84,6 +84,26 @@ GHashTable *dt_pixelpipe_raster_alloc();
 void dt_pixelpipe_raster_cleanup(GHashTable *raster_masks);
 
 /**
+ * @brief Build the shared cache key used by the hidden detailmask module.
+ *
+ * @details
+ * The detailmask module copies its input pixels to its regular output cacheline,
+ * so the side-band detail mask needs its own stable cache identity. We derive it
+ * from the producer piece global hash with a constant salt so:
+ * - upstream edits and module-state edits invalidate the detail mask together
+ *   with the producer,
+ * - the pixel payload cacheline and the side-band mask never alias,
+ * - any pipe can recover the same detail mask from the shared cache by hash.
+ */
+uint64_t dt_dev_pixelpipe_rawdetail_mask_hash(const struct dt_dev_pixelpipe_iop_t *piece);
+
+/**
+ * @brief Release the side-band detail mask cache reference currently owned by
+ * the pipeline.
+ */
+void dt_dev_clear_rawdetail_mask(struct dt_dev_pixelpipe_t *pipe);
+
+/**
  * @brief Replace a raster mask in the raster masks hashtable of the pixelpipe.
  * 
  * @param raster_masks the raster masks hashtable of the pixelpipe

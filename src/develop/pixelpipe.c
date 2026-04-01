@@ -47,9 +47,24 @@ static void _free_raster_mask(void *mask)
   dt_pixelpipe_cache_free_align(mask);
 }
 
+uint64_t dt_dev_pixelpipe_rawdetail_mask_hash(const dt_dev_pixelpipe_iop_t *piece)
+{
+  static const char cache_tag[] = "detailmask:rawdetail";
+  if(piece == NULL || piece->global_hash == DT_PIXELPIPE_CACHE_HASH_INVALID)
+    return DT_PIXELPIPE_CACHE_HASH_INVALID;
+  return dt_hash(piece->global_hash, cache_tag, sizeof(cache_tag));
+}
+
 GHashTable *dt_pixelpipe_raster_alloc()
 {
   return g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, _free_raster_mask);
+}
+
+void dt_dev_clear_rawdetail_mask(dt_dev_pixelpipe_t *pipe)
+{
+  dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, pipe->rawdetail_mask_hash);
+  pipe->rawdetail_mask_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+  memset(&pipe->rawdetail_mask_roi, 0, sizeof(pipe->rawdetail_mask_roi));
 }
 
 void dt_pixelpipe_raster_cleanup(GHashTable *raster_masks)

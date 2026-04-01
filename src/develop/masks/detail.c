@@ -41,21 +41,19 @@
   A threshold value of 0.0 means bypassing.
 
   So the first important point is:
-  We make sure taking the input data for the DM right from the demosaicer for normal raws
-  or from rawprepare in case of monochromes. This means some additional housekeeping for the
-  pixelpipe.
+  We make sure taking the input data for the DM from a dedicated hidden pipeline stage placed
+  right after demosaic. This means some additional housekeeping for the pixelpipe.
   If any mask in any module selects a threshold of != 0.0 we leave a flag in the pipe struct
-  telling a) we want a DM and b) we want it from either demosaic or from rawprepare.
-  If such a flag has not been previously set we will force a pipeline reprocessing.
+  telling that we want a DM from that dedicated stage. If such a flag has not been previously
+  set we will force a pipeline reprocessing.
 
-  gboolean dt_dev_write_rawdetail_mask(dt_dev_pixelpipe_iop_t *piece, float *const rgb, const dt_iop_roi_t *const roi_in, const int mode, const dt_aligned_pixel_t wb);
-  or it's _cl equivalent write a preliminary mask holding signal-change values for every pixel.
+  The hidden `detailmask` module writes a preliminary mask holding signal-change values for every pixel
+  in its CPU and OpenCL `process()` callbacks.
   These mask values are calculated as
   a) get Y0 for every pixel
   b) apply a scharr operator on it
 
-  This raw detail mask (RM) is not scaled but only cropped to the roi of the writing module (demosaic
-  or rawprepare).
+  This raw detail mask (RM) is not scaled but only cropped to the roi of the writing module.
   The pipe gets roi copy of the writing module so we can later scale/distort the LM.
 
   Calculating the RM is done for performance and lower mem pressure reasons, so we don't have to
@@ -79,8 +77,8 @@
   All other refinements and parametric parameters are untouched.
 
   Some additional comments:
-  1. intentionally this details mask refinement has only been implemented for raws. Especially for compressed
-     inmages like jpegs or 8bit input the algo didn't work as good because of input precision and compression artifacts.
+  1. the detail mask is authored from the RGBA float pipeline stage immediately after demosaic,
+     which keeps the source buffer format stable across RAW and non-RAW inputs.
   2. In the gui the slider is above the rest of the refinemt sliders to emphasize that blurring & feathering use the
      mask corrected by detail refinemnt.
   3. Of course credit goes to Ingo @heckflosse from rt team for the original idea. (in the rt world this is knowb

@@ -454,6 +454,7 @@ int dt_dev_pixelpipe_init_cached(dt_dev_pixelpipe_t *pipe)
   dt_dev_pixelpipe_set_history_hash(pipe, DT_PIXELPIPE_CACHE_HASH_INVALID);
   dt_dev_set_backbuf(&pipe->backbuf, 0, 0, 0, -1, -1);
   pipe->last_history_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+  pipe->rawdetail_mask_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
 
   pipe->output_imgid = UNKNOWN_IMAGE;
   pipe->iscale = 1.0f;

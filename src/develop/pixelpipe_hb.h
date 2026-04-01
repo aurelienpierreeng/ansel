@@ -108,6 +108,7 @@ typedef struct dt_dev_pixelpipe_iop_t
 
   void *blendop_data;              // to be used by the module to store blendop per pipe piece
   gboolean enabled; // used to disable parts of the pipe for export, independent on module itself.
+  gboolean detail_mask; // TRUE when the piece blend parameters request detail-mask refinement.
 
   dt_dev_request_flags_t request_histogram;              // (bitwise) set if you want an histogram captured
   dt_dev_histogram_collection_params_t histogram_params; // set histogram generation params
@@ -253,9 +254,12 @@ typedef struct dt_dev_pixelpipe_t
 
   dt_pthread_mutex_t busy_mutex;
 
-  // the data for the luminance mask are kept in a buffer written by demosaic or rawprepare
-  // as we have to scale the mask later ke keep roi at that stage
-  float *rawdetail_mask_data;
+  // The hidden detailmask module publishes the full-resolution detail mask in
+  // the global pixelpipe cache under a salted hash derived from its
+  // piece->global_hash. The pipeline keeps only that cache key plus the source
+  // ROI of the published mask so zoom/pan updates can reuse the same payload
+  // exactly like raster masks do.
+  uint64_t rawdetail_mask_hash;
   struct dt_iop_roi_t rawdetail_mask_roi;
   int want_detail_mask;
 
@@ -482,18 +486,9 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const struct dt_iop_modu
                               const int raster_mask_id, const struct dt_iop_module_t *target_module,
                               gboolean *free_mask, int *error);
 
-// some helper functions related to the details mask interface
-void dt_dev_clear_rawdetail_mask(dt_dev_pixelpipe_t *pipe);
-
-gboolean dt_dev_write_rawdetail_mask(const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
-                                     float *const rgb, const dt_iop_roi_t *const roi_in, const int mode);
-#ifdef HAVE_OPENCL
-gboolean dt_dev_write_rawdetail_mask_cl(const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
-                                        cl_mem in, const dt_iop_roi_t *const roi_in, const int mode);
-#endif
-
 // helper function writing the pipe-processed ctmask data to dest
 float *dt_dev_distort_detail_mask(const dt_dev_pixelpipe_t *pipe, float *src, const struct dt_iop_module_t *target_module);
+float *dt_dev_retrieve_rawdetail_mask(const dt_dev_pixelpipe_t *pipe, const struct dt_iop_module_t *target_module);
 
 
 /**

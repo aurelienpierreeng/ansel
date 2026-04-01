@@ -843,8 +843,6 @@ static int process_rcd_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t
   dt_opencl_release_mem_object(dev_green_eq);
   dev_green_eq = cfa = rgb0 = rgb1 = rgb2 = VH_dir = PQ_dir = VP_diff = HQ_diff = NULL;
 
-  dt_dev_write_rawdetail_mask_cl(pipe, piece, dev_aux, roi_in, DT_DEV_DETAIL_MASK_DEMOSAIC);
-
   if(dev_aux != dev_out) dt_opencl_release_mem_object(dev_aux);
   dev_aux = NULL;
 

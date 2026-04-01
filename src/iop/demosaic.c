@@ -489,8 +489,6 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const float threshold = 0.0001f * img->exif_iso;
   dt_times_t start_time = { 0 }, end_time = { 0 };
 
-  dt_dev_clear_rawdetail_mask((dt_dev_pixelpipe_t *)pipe);
-
   dt_iop_roi_t roi = *roi_in;
   dt_iop_roi_t roo = *roi_out;
   roo.x = roo.y = 0;
@@ -653,8 +651,6 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     fprintf(stderr," [demosaic] process CPU `%s' did %.2fmpix, %.4f secs (%.4f CPU), %.2f pix/us\n",
       method2string(demosaicing_method & ~DEMOSAIC_DUAL), mpixels, tclock, uclock, mpixels / tclock);
   }
-
-  dt_dev_write_rawdetail_mask(pipe, piece, o, roi_in, DT_DEV_DETAIL_MASK_DEMOSAIC);
 
   if((demosaicing_method & DEMOSAIC_DUAL))
   {
@@ -826,9 +822,6 @@ static int process_default_cl(struct dt_iop_module_t *self, const dt_dev_pixelpi
     }
   }
 
-  dt_dev_write_rawdetail_mask_cl(pipe, piece, dev_aux, roi_in, DT_DEV_DETAIL_MASK_DEMOSAIC);
-
-
   if(dev_aux != dev_out) dt_opencl_release_mem_object(dev_aux);
   if(dev_med != dev_in) dt_opencl_release_mem_object(dev_med);
   dt_opencl_release_mem_object(dev_green_eq);
@@ -861,8 +854,6 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   dt_times_t start_time = { 0 }, end_time = { 0 };
   const gboolean info = ((darktable.unmuted & (DT_DEBUG_DEMOSAIC | DT_DEBUG_PERF))
                          && (pipe->type == DT_DEV_PIXELPIPE_FULL));
-
-  dt_dev_clear_rawdetail_mask((dt_dev_pixelpipe_t *)pipe);
 
   dt_iop_demosaic_data_t *data = (dt_iop_demosaic_data_t *)piece->data;
 
@@ -1322,11 +1313,9 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *params, dt_dev
   }
 
   // green-equilibrate over full image excludes tiling
-  // The details mask is written inside process, this does not allow tiling.
   if((d->green_eq == DT_IOP_GREEN_EQ_FULL
       || d->green_eq == DT_IOP_GREEN_EQ_BOTH)
-     || ((use_method & DEMOSAIC_DUAL) && (d->dual_thrs > 0.0f))
-     || (pipe->want_detail_mask == (DT_DEV_DETAIL_MASK_REQUIRED | DT_DEV_DETAIL_MASK_DEMOSAIC)))
+     || ((use_method & DEMOSAIC_DUAL) && (d->dual_thrs > 0.0f)))
   {
     piece->process_tiling_ready = 0;
   }

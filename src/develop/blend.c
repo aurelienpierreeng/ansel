@@ -49,6 +49,7 @@
 #include "control/control.h"
 #include "develop/imageop.h"
 #include "develop/masks.h"
+#include "develop/pixelpipe_hb.h"
 #include "develop/tiling.h"
 #include "develop/imageop_math.h"
 #include <inttypes.h>
@@ -303,9 +304,11 @@ static void _refine_with_detail_mask(struct dt_iop_module_t *self, const struct 
   float *tmp = NULL;
   float *lum = NULL;
   float *warp_mask = NULL;
+  float *rawdetail_mask = NULL;
 
   const dt_dev_pixelpipe_t *p = pipe;
-  if(p->rawdetail_mask_data == NULL) return;
+  rawdetail_mask = dt_dev_retrieve_rawdetail_mask(pipe, self);
+  if(rawdetail_mask == NULL) return;
 
   const int iwidth  = p->rawdetail_mask_roi.width;
   const int iheight = p->rawdetail_mask_roi.height;
@@ -319,7 +322,7 @@ static void _refine_with_detail_mask(struct dt_iop_module_t *self, const struct 
   lum = dt_pixelpipe_cache_alloc_align_float(bufsize, pipe);
   if((tmp == NULL) || (lum == NULL)) goto error;
 
-  dt_masks_calc_detail_mask(p->rawdetail_mask_data, lum, tmp, iwidth, iheight, threshold, detail);
+  dt_masks_calc_detail_mask(rawdetail_mask, lum, tmp, iwidth, iheight, threshold, detail);
   dt_pixelpipe_cache_free_align(tmp);
   tmp = NULL;
 
@@ -862,12 +865,14 @@ static void _refine_with_detail_mask_cl(struct dt_iop_module_t *self, const stru
   const int detail = (level > 0.0f);
   const float threshold = _detail_mask_threshold(level, detail);
   float *lum = NULL;
+  float *rawdetail_mask = NULL;
   cl_mem tmp = NULL;
   cl_mem blur = NULL;
   cl_mem out = NULL;
 
   const dt_dev_pixelpipe_t *p = pipe;
-  if(p->rawdetail_mask_data == NULL) return;
+  rawdetail_mask = dt_dev_retrieve_rawdetail_mask(pipe, self);
+  if(rawdetail_mask == NULL) return;
 
   const int iwidth  = p->rawdetail_mask_roi.width;
   const int iheight = p->rawdetail_mask_roi.height;
@@ -885,7 +890,7 @@ static void _refine_with_detail_mask_cl(struct dt_iop_module_t *self, const stru
   if(blur == NULL) goto error;
 
   {
-    const int err = dt_opencl_write_host_to_device(devid, p->rawdetail_mask_data, tmp, iwidth, iheight, sizeof(float));
+    const int err = dt_opencl_write_host_to_device(devid, rawdetail_mask, tmp, iwidth, iheight, sizeof(float));
     if(err != CL_SUCCESS) goto error;
   }
 
@@ -1463,7 +1468,6 @@ dt_blendop_cl_global_t *dt_develop_blend_init_cl_global(void)
   const int program_rcd = 31;
   b->kernel_calc_Y0_mask = dt_opencl_create_kernel(program_rcd, "calc_Y0_mask");
   b->kernel_calc_scharr_mask = dt_opencl_create_kernel(program_rcd, "calc_scharr_mask");
-  b->kernel_write_scharr_mask = dt_opencl_create_kernel(program_rcd, "write_scharr_mask");
   b->kernel_write_mask = dt_opencl_create_kernel(program_rcd, "writeout_mask");
   b->kernel_read_mask  = dt_opencl_create_kernel(program_rcd, "readin_mask");
   b->kernel_calc_blend = dt_opencl_create_kernel(program_rcd, "calc_detail_blend");
@@ -1494,7 +1498,6 @@ void dt_develop_blend_free_cl_global(dt_blendop_cl_global_t *b)
   dt_opencl_free_kernel(b->kernel_blendop_display_channel);
   dt_opencl_free_kernel(b->kernel_calc_Y0_mask);
   dt_opencl_free_kernel(b->kernel_calc_scharr_mask);
-  dt_opencl_free_kernel(b->kernel_write_scharr_mask);
   dt_opencl_free_kernel(b->kernel_write_mask);
   dt_opencl_free_kernel(b->kernel_read_mask);
   dt_opencl_free_kernel(b->kernel_calc_blend);

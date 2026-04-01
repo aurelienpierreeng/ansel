@@ -504,8 +504,6 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     }
   }
 
-  dt_dev_write_rawdetail_mask(pipe, piece, (float *const)ovoid, roi_in, DT_DEV_DETAIL_MASK_RAWPREPARE);
-
   return 0;
 }
 
@@ -613,9 +611,6 @@ int process_cl(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_d
   dt_opencl_release_mem_object(dev_sub);
   dt_opencl_release_mem_object(dev_div);
   for(int i = 0; i < 4; i++) dt_opencl_release_mem_object(dev_gainmap[i]);
-
-  err = dt_dev_write_rawdetail_mask_cl(pipe, piece, dev_out, roi_in, DT_DEV_DETAIL_MASK_RAWPREPARE);
-  if(err != CL_SUCCESS) goto error;
 
   return TRUE;
 
@@ -784,8 +779,6 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelp
   const gboolean cl_ok = (img->dsc.cst == IOP_CS_RAW && img->dsc.channels == 1 && img->dsc.filters);
   if(!cl_ok) piece->process_cl_ready = FALSE;
 
-  if(pipe->want_detail_mask == (DT_DEV_DETAIL_MASK_REQUIRED | DT_DEV_DETAIL_MASK_RAWPREPARE))
-    piece->process_tiling_ready = 0;
 }
 
 void init_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)

@@ -3968,9 +3968,9 @@ void dt_iop_gui_update_blending(dt_iop_module_t *module)
   _blendop_sync_toggle_state(bd->blendif_enable, bd->blendif_inited, blendif_enabled, bd->blendif_content);
   gtk_widget_set_sensitive(bd->bottom_content, bottom_enabled);
 
-  const dt_image_t img = module->dev->image_storage;
-  // Details mask is deprecated. Show it only if it was used in an old edit
-  gtk_widget_set_visible(bd->details_slider, dt_image_is_rawprepare_supported(&img) && (module->blend_params->details != 0.0f));
+  // Details mask is deprecated. Show it only if it was used in an old edit,
+  // but do not hide it solely because the current input is not RAW.
+  gtk_widget_set_visible(bd->details_slider, module->blend_params->details != 0.0f);
 
   if(bd->blendif_inited && blendif_enabled)
   {
@@ -4298,7 +4298,7 @@ void dt_iop_gui_init_blending_body(GtkBox *blendw, dt_iop_module_t *module)
   dt_bauhaus_disable_accels(bd->details_slider);
   dt_bauhaus_widget_set_label(bd->details_slider, N_("details threshold"));
   dt_bauhaus_slider_set_format(bd->details_slider, "%");
-  gtk_widget_set_tooltip_text(bd->details_slider, _("adjust the threshold for the details mask (using raw data), "
+  gtk_widget_set_tooltip_text(bd->details_slider, _("adjust the threshold for the details mask, "
                                                     "\npositive values selects areas with strong details, "
                                                     "\nnegative values select flat areas"));
   g_signal_connect(G_OBJECT(bd->details_slider), "value-changed", G_CALLBACK(_blendop_blendif_details_callback), bd);
