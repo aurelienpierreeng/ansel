@@ -22,9 +22,16 @@
 #include "common/gui_module_api.h"
 #include "common/iop_profile.h"
 
+#include <stddef.h>
 #include <gtk/gtk.h>
 
 typedef struct dt_lut_viewer_t dt_lut_viewer_t;
+
+typedef struct dt_lut_viewer_control_node_t
+{
+  float input_rgb[3];
+  float output_rgb[3];
+} dt_lut_viewer_control_node_t;
 
 /**
  * Build a reusable GTK widget able to preview a 3D LUT as target/output RGB
@@ -53,6 +60,15 @@ void dt_lut_viewer_set_lut(dt_lut_viewer_t *viewer, const float *clut, uint16_t 
                            dt_pthread_rwlock_t *clut_lock,
                            const dt_iop_order_iccprofile_info_t *lut_profile,
                            const dt_iop_order_iccprofile_info_t *display_profile);
+
+/**
+ * Update the list of sparse control nodes displayed by the viewer when the
+ * caller enables the dedicated control-node mode. The viewer does not take
+ * ownership of this memory and expects it to stay valid until the next update.
+ */
+void dt_lut_viewer_set_control_nodes(dt_lut_viewer_t *viewer,
+                                     const dt_lut_viewer_control_node_t *control_nodes,
+                                     size_t control_node_count);
 
 /**
  * Queue a redraw of the drawing area after the cache has been invalidated.

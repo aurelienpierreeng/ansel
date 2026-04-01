@@ -27,6 +27,7 @@
 #include <string.h>
 
 #include "bauhaus/bauhaus.h"
+#include "common/colorequal_shared.h"
 #include "common/chromatic_adaptation.h"
 #include "common/colorspaces_inline_conversions.h"
 #include "common/darktable.h"
@@ -60,10 +61,6 @@
  * hue of sRGB red sits around +20 degrees, so the graph is shifted to place red
  * at the left edge of the widget.
  */
-#define ANGLE_SHIFT +20.f
-#define DEG_TO_RAD(x) ((x + ANGLE_SHIFT) * M_PI_F / 180.f)
-#define RAD_TO_DEG(x) (x * 180.f / M_PI_F - ANGLE_SHIFT)
-
 #define DT_IOP_COLOREQUAL_NUM_CHANNELS 3
 #define DT_IOP_COLOREQUAL_NUM_RINGS 3
 #define DT_IOP_COLOREQUAL_MAXNODES 20
@@ -195,6 +192,8 @@ typedef struct dt_iop_colorequal_gui_data_t
   float cached_reference_saturation[DT_IOP_COLOREQUAL_NUM_RINGS][DT_IOP_COLOREQUAL_NUM_CHANNELS];
   int cached_width[DT_IOP_COLOREQUAL_NUM_RINGS][DT_IOP_COLOREQUAL_NUM_CHANNELS];
   int cached_height[DT_IOP_COLOREQUAL_NUM_RINGS][DT_IOP_COLOREQUAL_NUM_CHANNELS];
+  const dt_iop_order_iccprofile_info_t *cached_display_profile[DT_IOP_COLOREQUAL_NUM_RINGS]
+                                                              [DT_IOP_COLOREQUAL_NUM_CHANNELS];
   cairo_surface_t *background_surface[DT_IOP_COLOREQUAL_NUM_RINGS][DT_IOP_COLOREQUAL_NUM_CHANNELS];
 } dt_iop_colorequal_gui_data_t;
 
@@ -234,29 +233,6 @@ static void _update_gui_lut_cache(dt_iop_module_t *self);
 static void _switch_preview_cursor(dt_iop_module_t *self);
 static gboolean _refresh_preview_cursor_sample(dt_iop_module_t *self);
 
-static inline float _wrap_hue_2pi(float hue)
-{
-  while(hue < 0.f) hue += 2.f * M_PI_F;
-  while(hue >= 2.f * M_PI_F) hue -= 2.f * M_PI_F;
-  return hue;
-}
-
-static inline float _wrap_hue_pi(float hue)
-{
-  hue = _wrap_hue_2pi(hue + M_PI_F);
-  return hue - M_PI_F;
-}
-
-static inline float _curve_x_to_hue(const float x)
-{
-  return _wrap_hue_pi(DEG_TO_RAD(360.f * x));
-}
-
-static inline float _hue_to_curve_x(const float hue)
-{
-  return _wrap_hue_2pi(hue - DEG_TO_RAD(0.f)) / (2.f * M_PI_F);
-}
-
 static inline float _channel_value_from_y(const dt_iop_colorequal_channel_t channel, const float y)
 {
   switch(channel)
@@ -280,20 +256,6 @@ static inline float _channel_y_from_value(const dt_iop_colorequal_channel_t chan
     case DT_IOP_COLOREQUAL_BRIGHTNESS:
     default:
       return CLAMP(value * 0.5f, 0.f, 1.f);
-  }
-}
-
-static inline float _ring_brightness(const dt_iop_colorequal_ring_t ring)
-{
-  switch(ring)
-  {
-    case DT_IOP_COLOREQUAL_RING_DARK:
-      return 0.15f;
-    case DT_IOP_COLOREQUAL_RING_LIGHT:
-      return 0.75f;
-    case DT_IOP_COLOREQUAL_RING_MID:
-    default:
-      return 0.45f;
   }
 }
 
@@ -357,11 +319,6 @@ static void _init_default_curves(dt_iop_colorequal_params_t *p)
       _reset_channel_nodes(p, (dt_iop_colorequal_ring_t)ring, (dt_iop_colorequal_channel_t)ch);
 }
 
-static inline float _dt_ucs_graph_white(void)
-{
-  return Y_to_dt_UCS_L_star(1.f);
-}
-
 static inline gboolean _curve_fields_equal(const dt_iop_colorequal_params_t *const a,
                                            const dt_iop_colorequal_params_t *const b)
 {
@@ -374,19 +331,6 @@ static inline gboolean _lut_fields_equal(const dt_iop_colorequal_params_t *const
 {
   return _curve_fields_equal(a, b) && a->sigma_L == b->sigma_L && a->sigma_rho == b->sigma_rho
          && a->sigma_theta == b->sigma_theta && a->neutral_protection == b->neutral_protection;
-}
-
-static inline float _curve_periodic_sample(const dt_iop_colorequal_node_t *curve, const int nodes, const float x)
-{
-  CurveAnchorPoint anchors[DT_IOP_COLOREQUAL_MAXNODES];
-
-  for(int k = 0; k < nodes; k++)
-  {
-    anchors[k].x = curve[k].x;
-    anchors[k].y = curve[k].y;
-  }
-
-  return interpolate_val_V2_periodic(nodes, anchors, x, MONOTONE_HERMITE, 1.f);
 }
 
 static inline float _curve_periodic_distance(const float x0, const float x1)
@@ -444,8 +388,8 @@ static inline gboolean _cursor_curve_state(const dt_iop_colorequal_params_t *p, 
   const dt_iop_colorequal_node_t *curve = _curve_nodes_const(p, ring, channel);
   if(nodes < 1 || !curve) return FALSE;
 
-  const float x = _hue_to_curve_x(hue);
-  const float y = _curve_periodic_sample(curve, nodes, x);
+  const float x = dt_colorrings_hue_to_curve_x(hue);
+  const float y = dt_colorrings_curve_periodic_sample((const dt_colorrings_node_t *)curve, nodes, x);
   const float value = _channel_value_from_y(channel, y);
 
   if(curve_x) *curve_x = x;
@@ -500,216 +444,18 @@ static void _work_rgb_to_display_rgb(dt_iop_module_t *self, dt_dev_pixelpipe_t *
   _clamp_display_rgb(display_rgb);
 }
 
-static gboolean _apply_colorequal_lut_rgb(const dt_aligned_pixel_t input_rgb, const float white_level,
-                                          const dt_iop_order_iccprofile_info_t *const work_profile,
-                                          const dt_iop_order_iccprofile_info_t *const lut_profile,
-                                          const float *const clut, const uint16_t clut_level,
-                                          dt_pthread_rwlock_t *const clut_lock,
-                                          const dt_lut3d_interpolation_t interpolation,
-                                          dt_aligned_pixel_t output_rgb)
-{
-  if(!output_rgb) return FALSE;
-
-  memcpy(output_rgb, input_rgb, sizeof(dt_aligned_pixel_t));
-
-  if(!work_profile || !lut_profile || !clut || clut_level == 0) return FALSE;
-
-  const float normalized_white = fmaxf(white_level, 1e-6f);
-  output_rgb[0] = input_rgb[0] / normalized_white;
-  output_rgb[1] = input_rgb[1] / normalized_white;
-  output_rgb[2] = input_rgb[2] / normalized_white;
-  output_rgb[3] = 0.f;
-
-  dt_ioppr_transform_image_colorspace_rgb((float *)output_rgb, (float *)output_rgb, 1, 1, work_profile, lut_profile,
-                                          "colorequal swatch work to HLG Rec2020");
-  if(clut_lock) dt_pthread_rwlock_rdlock(clut_lock);
-  dt_lut3d_apply((float *)output_rgb, (float *)output_rgb, 1, clut, clut_level, 1.f, interpolation);
-  if(clut_lock) dt_pthread_rwlock_unlock(clut_lock);
-  dt_ioppr_transform_image_colorspace_rgb((float *)output_rgb, (float *)output_rgb, 1, 1, lut_profile, work_profile,
-                                          "colorequal swatch HLG Rec2020 to work");
-
-  output_rgb[0] *= normalized_white;
-  output_rgb[1] *= normalized_white;
-  output_rgb[2] *= normalized_white;
-  output_rgb[3] = 0.f;
-  return TRUE;
-}
-
-static inline void _xyz_d50_to_profile_rgb(const dt_aligned_pixel_t XYZ_D50,
-                                           const dt_iop_order_iccprofile_info_t *const profile,
-                                           dt_aligned_pixel_t RGB)
-{
-  dt_aligned_pixel_t linear_rgb = { 0.f };
-  dt_apply_transposed_color_matrix(XYZ_D50, profile->matrix_out_transposed, linear_rgb);
-
-  if(profile->nonlinearlut)
-    _apply_trc(linear_rgb, RGB, profile->lut_out, profile->unbounded_coeffs_out, profile->lutsize);
-  else
-    for_each_channel(c, aligned(RGB, linear_rgb)) RGB[c] = linear_rgb[c];
-}
-
-static inline void _dt_ucs_hsb_to_profile_rgb(const dt_aligned_pixel_t HSB, const float white,
-                                              const dt_iop_order_iccprofile_info_t *const profile,
-                                              dt_aligned_pixel_t RGB)
-{
-  dt_aligned_pixel_t XYZ_D65 = { 0.f };
-  dt_aligned_pixel_t XYZ_D50 = { 0.f };
-  dt_UCS_HSB_to_XYZ(HSB, white, XYZ_D65);
-  XYZ_D65_to_D50(XYZ_D65, XYZ_D50);
-  _xyz_d50_to_profile_rgb(XYZ_D50, profile, RGB);
-}
-
-static inline void _work_rgb_to_dt_ucs_hsb(const dt_aligned_pixel_t RGB, const float white,
-                                           const dt_colormatrix_t input_matrix, dt_aligned_pixel_t HSB)
-{
-  dt_aligned_pixel_t XYZ_D65 = { 0.f };
-  dt_aligned_pixel_t xyY = { 0.f };
-  dot_product(RGB, input_matrix, XYZ_D65);
-  for_each_channel(c, aligned(XYZ_D65)) XYZ_D65[c] = fmaxf(XYZ_D65[c], 0.f);
-
-  dt_aligned_pixel_t JCH = { 0.f };
-  dt_XYZ_to_xyY(XYZ_D65, xyY);
-  xyY_to_dt_UCS_JCH(xyY, white, JCH);
-  dt_UCS_JCH_to_HSB(JCH, HSB);
-}
-
-static inline void _dt_ucs_hsb_to_preview_rgb(const dt_aligned_pixel_t HSB, const float white,
-                                              dt_aligned_pixel_t RGB)
-{
-  dt_aligned_pixel_t XYZ_D65 = { 0.f };
-  dt_aligned_pixel_t XYZ_D50 = { 0.f };
-  dt_UCS_HSB_to_XYZ(HSB, white, XYZ_D65);
-  XYZ_D65_to_D50(XYZ_D65, XYZ_D50);
-  dt_XYZ_to_sRGB(XYZ_D50, RGB);
-  for_each_channel(c, aligned(RGB)) RGB[c] = CLAMP(RGB[c], 0.f, 1.f);
-}
-
-static float _compute_reference_saturation(const float white, const float brightness)
-{
-  float low = 0.f;
-  float high = 1.f;
-
-  /**
-   * Each graph controls one fixed-brightness dt UCS hue ring. We only probe the
-   * saturation of that ring against the sRGB shell so the editable nodes stay
-   * vivid while remaining fully representable in the preview gamut.
-   */
-  for(int iter = 0; iter < 18; iter++)
-  {
-    const float candidate = 0.5f * (low + high);
-    gboolean valid = TRUE;
-
-    for(int hue = 0; hue < DT_IOP_COLOREQUAL_HUE_SAMPLES; hue++)
-    {
-      dt_aligned_pixel_t XYZ_D65 = { 0.f };
-      dt_aligned_pixel_t XYZ_D50 = { 0.f };
-      dt_aligned_pixel_t RGB = { 0.f };
-      const dt_aligned_pixel_t HSB
-          = { _curve_x_to_hue((float)hue / (float)DT_IOP_COLOREQUAL_HUE_SAMPLES), candidate, brightness, 0.f };
-
-      dt_UCS_HSB_to_XYZ(HSB, white, XYZ_D65);
-      XYZ_D65_to_D50(XYZ_D65, XYZ_D50);
-      dt_XYZ_to_sRGB(XYZ_D50, RGB);
-
-      if(RGB[0] < 0.f || RGB[0] > 1.f || RGB[1] < 0.f || RGB[1] > 1.f || RGB[2] < 0.f || RGB[2] > 1.f)
-      {
-        valid = FALSE;
-        break;
-      }
-    }
-
-    if(valid)
-      low = candidate;
-    else
-      high = candidate;
-  }
-
-  return low;
-}
-
-static void _compute_reference_saturations(const float white,
-                                           float reference_saturation[DT_IOP_COLOREQUAL_NUM_RINGS])
-{
-  for(int ring = 0; ring < DT_IOP_COLOREQUAL_NUM_RINGS; ring++)
-  {
-    if(reference_saturation[ring] == 0.f)
-      reference_saturation[ring]
-          = _compute_reference_saturation(white, _ring_brightness((dt_iop_colorequal_ring_t)ring));
-  }
-}
-
-/**
- * Convert a neutral dt UCS HSB brightness value into the matching neutral code
- * value of the current work RGB space. The GUI still edits dt UCS HSB, but the
- * CLUT itself must be built directly in the pipeline RGB coordinates.
- */
-static inline float _ring_axis_position_from_brightness(const float brightness, const float white,
-                                                        const dt_iop_order_iccprofile_info_t *const profile)
-{
-  const dt_aligned_pixel_t HSB = { 0.f, 0.f, CLAMP(brightness, 0.f, 1.f), 0.f };
-  dt_aligned_pixel_t RGB = { 0.f };
-  _dt_ucs_hsb_to_profile_rgb(HSB, white, profile, RGB);
-  return CLAMP((RGB[0] + RGB[1] + RGB[2]) / 3.f, 0.f, 1.f);
-}
-
-static inline float _distance_to_cube_shell(const dt_aligned_pixel_t axis, const dt_aligned_pixel_t direction)
-{
-  float distance = INFINITY;
-
-  for(int c = 0; c < 3; c++)
-  {
-    if(fabsf(direction[c]) < 1e-6f) continue;
-
-    const float bound = (direction[c] > 0.f) ? 1.f : 0.f;
-    const float candidate = (bound - axis[c]) / direction[c];
-    if(candidate > 0.f && candidate < distance) distance = candidate;
-  }
-
-  return isfinite(distance) ? distance : 0.f;
-}
-
 static inline void _mix_rgb_anchors(const dt_aligned_pixel_t low, const dt_aligned_pixel_t high, const float mix,
                                     dt_aligned_pixel_t RGB)
 {
   for(int c = 0; c < 3; c++) RGB[c] = low[c] * (1.f - mix) + high[c] * mix;
 }
 
-static inline void _brightness_to_axis_rgb(const float brightness, const float white,
-                                           const dt_iop_order_iccprofile_info_t *const profile,
-                                           dt_aligned_pixel_t RGB)
-{
-  const float axis = _ring_axis_position_from_brightness(brightness, white, profile);
-  RGB[0] = axis;
-  RGB[1] = axis;
-  RGB[2] = axis;
-  RGB[3] = 0.f;
-}
-
-static inline void _project_to_cube_shell(const dt_aligned_pixel_t axis, dt_aligned_pixel_t RGB)
-{
-  dt_aligned_pixel_t vector = { RGB[0] - axis[0], RGB[1] - axis[1], RGB[2] - axis[2], 0.f };
-
-  const float vector_norm = sqrtf(sqf(vector[0]) + sqf(vector[1]) + sqf(vector[2]));
-  if(vector_norm < 1e-6f) return;
-
-  const float shell_scale = _distance_to_cube_shell(axis, vector);
-  if(shell_scale < 1.f)
-  {
-    RGB[0] = axis[0] + shell_scale * vector[0];
-    RGB[1] = axis[1] + shell_scale * vector[1];
-    RGB[2] = axis[2] + shell_scale * vector[2];
-  }
-
-  RGB[0] = CLAMP(RGB[0], 0.f, 1.f);
-  RGB[1] = CLAMP(RGB[1], 0.f, 1.f);
-  RGB[2] = CLAMP(RGB[2], 0.f, 1.f);
-}
-
 static inline void
 _sample_ring_hue(const float ring_surface[DT_IOP_COLOREQUAL_NUM_RINGS][DT_IOP_COLOREQUAL_HUE_SAMPLES][3],
                  const int ring, const float hue_position, dt_aligned_pixel_t RGB)
 {
-  const float hue = _wrap_hue_2pi(hue_position * 2.f * M_PI_F) / (2.f * M_PI_F) * DT_IOP_COLOREQUAL_HUE_SAMPLES;
+  const float hue = dt_colorrings_wrap_hue_2pi(hue_position * 2.f * M_PI_F) / (2.f * M_PI_F)
+                    * DT_IOP_COLOREQUAL_HUE_SAMPLES;
   const int hue0 = ((int)floorf(hue)) % DT_IOP_COLOREQUAL_HUE_SAMPLES;
   const int hue1 = (hue0 + 1) % DT_IOP_COLOREQUAL_HUE_SAMPLES;
   const float mix = hue - floorf(hue);
@@ -730,8 +476,11 @@ _sample_ring_anchor(const float ring_surface[DT_IOP_COLOREQUAL_NUM_RINGS][DT_IOP
                     const dt_iop_order_iccprofile_info_t *const profile, dt_aligned_pixel_t RGB)
 {
   const float anchor_positions[DT_IOP_COLOREQUAL_NUM_RINGS + 2]
-      = { 0.f, _ring_brightness(DT_IOP_COLOREQUAL_RING_DARK), _ring_brightness(DT_IOP_COLOREQUAL_RING_MID),
-          _ring_brightness(DT_IOP_COLOREQUAL_RING_LIGHT), 1.f };
+      = { 0.f,
+          dt_colorrings_ring_brightness((dt_colorrings_ring_t)DT_IOP_COLOREQUAL_RING_DARK),
+          dt_colorrings_ring_brightness((dt_colorrings_ring_t)DT_IOP_COLOREQUAL_RING_MID),
+          dt_colorrings_ring_brightness((dt_colorrings_ring_t)DT_IOP_COLOREQUAL_RING_LIGHT),
+          1.f };
   int segment = 0;
 
   while(segment < DT_IOP_COLOREQUAL_NUM_RINGS + 1 && brightness > anchor_positions[segment + 1]) segment++;
@@ -745,13 +494,13 @@ _sample_ring_anchor(const float ring_surface[DT_IOP_COLOREQUAL_NUM_RINGS][DT_IOP
 
   if(segment == 0)
   {
-    _brightness_to_axis_rgb(0.f, white, profile, low);
+    dt_colorrings_brightness_to_axis_rgb(0.f, white, profile, low);
     _sample_ring_hue(ring_surface, 0, hue_position, high);
   }
   else if(segment == DT_IOP_COLOREQUAL_NUM_RINGS)
   {
     _sample_ring_hue(ring_surface, DT_IOP_COLOREQUAL_NUM_RINGS - 1, hue_position, low);
-    _brightness_to_axis_rgb(1.f, white, profile, high);
+    dt_colorrings_brightness_to_axis_rgb(1.f, white, profile, high);
   }
   else
   {
@@ -760,264 +509,6 @@ _sample_ring_anchor(const float ring_surface[DT_IOP_COLOREQUAL_NUM_RINGS][DT_IOP
   }
 
   _mix_rgb_anchors(low, high, CLAMP(mix, 0.f, 1.f), RGB);
-}
-
-static inline float _vector_norm3(const dt_aligned_pixel_t vector)
-{
-  return sqrtf(sqf(vector[0]) + sqf(vector[1]) + sqf(vector[2]));
-}
-
-static inline float _dot3(const dt_aligned_pixel_t a, const dt_aligned_pixel_t b)
-{
-  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-}
-
-static inline void _cross3(const dt_aligned_pixel_t a, const dt_aligned_pixel_t b, dt_aligned_pixel_t out)
-{
-  out[0] = a[1] * b[2] - a[2] * b[1];
-  out[1] = a[2] * b[0] - a[0] * b[2];
-  out[2] = a[0] * b[1] - a[1] * b[0];
-  out[3] = 0.f;
-}
-
-static inline void _normalize3(dt_aligned_pixel_t vector)
-{
-  const float norm = _vector_norm3(vector);
-  if(norm < 1e-6f) return;
-
-  vector[0] /= norm;
-  vector[1] /= norm;
-  vector[2] /= norm;
-}
-
-static inline void _rotate_around_axis(const dt_aligned_pixel_t input, const dt_aligned_pixel_t axis,
-                                       const float cos_angle, const float sin_angle, dt_aligned_pixel_t output)
-{
-  dt_aligned_pixel_t cross = { 0.f };
-  _cross3(axis, input, cross);
-  const float axis_dot = _dot3(axis, input);
-
-  for(int c = 0; c < 3; c++)
-    output[c] = input[c] * cos_angle + cross[c] * sin_angle + axis[c] * axis_dot * (1.f - cos_angle);
-  output[3] = 0.f;
-}
-
-static inline void dt_rgb_to_gray_cyl(const float rgb[3], float *L, float *rho, float *theta)
-{
-  /* orthonormal basis aligned with gray axis */
-  const float eL0 = 0.5773502691896258f; /* 1/sqrt(3) */
-  const float eL1 = 0.5773502691896258f;
-  const float eL2 = 0.5773502691896258f;
-
-  const float eu0 = 0.7071067811865475f; /* 1/sqrt(2) */
-  const float eu1 = -0.7071067811865475f;
-  const float eu2 = 0.0f;
-
-  const float ev0 = 0.4082482904638630f; /* 1/sqrt(6) */
-  const float ev1 = 0.4082482904638630f;
-  const float ev2 = -0.8164965809277260f; /* -2/sqrt(6) */
-
-  *L = rgb[0] * eL0 + rgb[1] * eL1 + rgb[2] * eL2;
-
-  const float u = rgb[0] * eu0 + rgb[1] * eu1 + rgb[2] * eu2;
-  const float v = rgb[0] * ev0 + rgb[1] * ev1 + rgb[2] * ev2;
-
-  *rho = sqrtf(u * u + v * v);
-  *theta = atan2f(v, u);
-}
-
-static inline void dt_gray_basis_to_rgb(const float L, const float u, const float v, float rgb[3])
-{
-  const float eL0 = 0.5773502691896258f;
-  const float eL1 = 0.5773502691896258f;
-  const float eL2 = 0.5773502691896258f;
-
-  const float eu0 = 0.7071067811865475f;
-  const float eu1 = -0.7071067811865475f;
-  const float eu2 = 0.0f;
-
-  const float ev0 = 0.4082482904638630f;
-  const float ev1 = 0.4082482904638630f;
-  const float ev2 = -0.8164965809277260f;
-
-  rgb[0] = L * eL0 + u * eu0 + v * ev0;
-  rgb[1] = L * eL1 + u * eu1 + v * ev1;
-  rgb[2] = L * eL2 + u * eu2 + v * ev2;
-}
-
-static inline void _gray_axis_rgb_from_L(const float L, dt_aligned_pixel_t RGB)
-{
-  const float value = L * 0.5773502691896258f;
-  RGB[0] = value;
-  RGB[1] = value;
-  RGB[2] = value;
-  RGB[3] = 0.f;
-}
-
-static inline float dt_wendland_c2(float d)
-{
-  if(d >= 1.0f) return 0.0f;
-  const float t = 1.0f - d;
-  return t * t * t * t * (4.0f * d + 1.0f);
-}
-
-static inline float dt_wrap_pi(float x)
-{
-  const float two_pi = 2.0f * (float)M_PI;
-  while(x <= -(float)M_PI) x += two_pi;
-  while(x > (float)M_PI) x -= two_pi;
-  return x;
-}
-
-/*
-  Local interpolation of the displacement field from your ring samples.
-
-  sigma_L     : locality along achromatic axis
-  sigma_rho   : locality in chroma radius
-  sigma_theta : locality in hue angle, in radians
-
-  Typical starting values:
-    sigma_L     = 0.10f
-    sigma_rho   = 0.12f
-    sigma_theta = 0.20f   // about 11 degrees
-*/
-static inline void dt_colorequal_eval_local_field(
-  const float x[3],
-  const float anchor_L[DT_IOP_COLOREQUAL_LOCAL_FIELD_RINGS][DT_IOP_COLOREQUAL_HUE_SAMPLES],
-  const float anchor_rho[DT_IOP_COLOREQUAL_LOCAL_FIELD_RINGS][DT_IOP_COLOREQUAL_HUE_SAMPLES],
-  const float anchor_theta[DT_IOP_COLOREQUAL_LOCAL_FIELD_RINGS][DT_IOP_COLOREQUAL_HUE_SAMPLES],
-  const float delta_L[DT_IOP_COLOREQUAL_LOCAL_FIELD_RINGS][DT_IOP_COLOREQUAL_HUE_SAMPLES],
-  const float chroma_scale[DT_IOP_COLOREQUAL_LOCAL_FIELD_RINGS][DT_IOP_COLOREQUAL_HUE_SAMPLES],
-  const float delta_theta[DT_IOP_COLOREQUAL_LOCAL_FIELD_RINGS][DT_IOP_COLOREQUAL_HUE_SAMPLES],
-  const float inv_sigma_L,
-  const float inv_sigma_rho,
-  const float inv_sigma_theta,
-  const float rho0,
-  float out[3])
-{
-  float Lx, rhox, thetax;
-  dt_rgb_to_gray_cyl(x, &Lx, &rhox, &thetax);
-
-  // Hard boundary condition: the achromatic axis is fixed.
-  if(rhox <= 1e-6f)
-  {
-    out[0] = 0.0f;
-    out[1] = 0.0f;
-    out[2] = 0.0f;
-    return;
-  }
-
-  float sum_w = 0.0f;
-  float sum_dL = 0.0f;
-  float sum_scale = 0.0f;
-  float sum_dtheta = 0.0f;
-
-  const int n = DT_IOP_COLOREQUAL_LOCAL_FIELD_RINGS * DT_IOP_COLOREQUAL_HUE_SAMPLES;
-  const int axis_ring = DT_IOP_COLOREQUAL_LOCAL_FIELD_RINGS - 1;
-  const float axis_weight_scale = 1.0f / (float)DT_IOP_COLOREQUAL_HUE_SAMPLES;
-
-  for(int k = 0; k < n; k++)
-  {
-    const int ring = k / DT_IOP_COLOREQUAL_HUE_SAMPLES;
-    const int h = k - ring * DT_IOP_COLOREQUAL_HUE_SAMPLES;
-    const float dL = (Lx - anchor_L[ring][h]) * inv_sigma_L;
-    const float dr = (rhox - anchor_rho[ring][h]) * inv_sigma_rho;
-    const float dh = dt_wrap_pi(thetax - anchor_theta[ring][h]) * inv_sigma_theta;
-    const float d2 = dL * dL + dr * dr + dh * dh;
-
-    if(d2 >= 1.f) continue;
-
-    float w = dt_wendland_c2(sqrtf(d2));
-
-    if(ring == axis_ring) w *= axis_weight_scale;
-
-    sum_w += w;
-    sum_dL += w * delta_L[ring][h];
-    sum_scale += w * chroma_scale[ring][h];
-    sum_dtheta += w * delta_theta[ring][h];
-  }
-
-  if(sum_w > FLT_MIN)
-  {
-    const float inv_w = 1.0f / sum_w;
-    const float target_delta_L = sum_dL * inv_w;
-    const float scale = sum_scale * inv_w;
-    const float target_delta_theta = sum_dtheta * inv_w;
-
-    const float t = CLAMP(rhox / rho0, 0.f, 1.f);
-
-    // smoothstep
-    const float alpha = t * t * (3.0f - 2.0f * t);
-    const float target_L = Lx + alpha * target_delta_L;
-    const float target_rho = rhox * fmaxf(1.f + alpha * (scale - 1.f), 0.f);
-    const float target_theta = thetax + alpha * target_delta_theta;
-    dt_aligned_pixel_t target_rgb = { 0.f };
-    dt_aligned_pixel_t axis = { 0.f };
-    dt_gray_basis_to_rgb(target_L, target_rho * cosf(target_theta), target_rho * sinf(target_theta), target_rgb);
-    _gray_axis_rgb_from_L(target_L, axis);
-
-    /**
-     * The local field may still overshoot between sparse anchors even if every
-     * user-defined destination node was already projected to the gamut shell.
-     * Project every dense LUT sample back to that shell around its own
-     * achromatic point so the built lattice never encodes out-of-gamut values.
-     */
-    _project_to_cube_shell(axis, target_rgb);
-
-    out[0] = target_rgb[0] - x[0];
-    out[1] = target_rgb[1] - x[1];
-    out[2] = target_rgb[2] - x[2];
-  }
-  else
-  {
-    out[0] = 0.0f;
-    out[1] = 0.0f;
-    out[2] = 0.0f;
-  }
-}
-
-static inline void dt_colorequal_fill_lut_local_field(float *lut, const int level,
-                                                      const float anchor_L[DT_IOP_COLOREQUAL_LOCAL_FIELD_RINGS]
-                                                                          [DT_IOP_COLOREQUAL_HUE_SAMPLES],
-                                                      const float anchor_rho[DT_IOP_COLOREQUAL_LOCAL_FIELD_RINGS]
-                                                                            [DT_IOP_COLOREQUAL_HUE_SAMPLES],
-                                                      const float anchor_theta[DT_IOP_COLOREQUAL_LOCAL_FIELD_RINGS]
-                                                                              [DT_IOP_COLOREQUAL_HUE_SAMPLES],
-                                                      const float delta_L[DT_IOP_COLOREQUAL_LOCAL_FIELD_RINGS]
-                                                                         [DT_IOP_COLOREQUAL_HUE_SAMPLES],
-                                                      const float chroma_scale[DT_IOP_COLOREQUAL_LOCAL_FIELD_RINGS]
-                                                                              [DT_IOP_COLOREQUAL_HUE_SAMPLES],
-                                                      const float delta_theta[DT_IOP_COLOREQUAL_LOCAL_FIELD_RINGS]
-                                                                            [DT_IOP_COLOREQUAL_HUE_SAMPLES],
-                                                      const float inv_sigma_L, const float inv_sigma_rho,
-                                                      const float inv_sigma_theta, const float rho0)
-{
-#ifdef _OPENMP
-#pragma omp parallel for default(none) schedule(static) collapse(3) dt_omp_firstprivate(                          \
-        lut, level, anchor_L, anchor_rho, anchor_theta, delta_L, chroma_scale, delta_theta, inv_sigma_L,          \
-        inv_sigma_rho, inv_sigma_theta, rho0)
-#endif
-  for(int b = 0; b < level; b++)
-    for(int g = 0; g < level; g++)
-      for(int r = 0; r < level; r++)
-      {
-        const float x[3]
-            = { (float)r / (float)(level - 1), (float)g / (float)(level - 1), (float)b / (float)(level - 1) };
-
-        float d[3];
-        dt_colorequal_eval_local_field(x, anchor_L, anchor_rho, anchor_theta, delta_L, chroma_scale, delta_theta,
-                                       inv_sigma_L, inv_sigma_rho, inv_sigma_theta, rho0, d);
-
-        const size_t idx = (((size_t)b * level + (size_t)g) * level + (size_t)r) * 3u;
-        /**
-         * The local field already projects the target color to the gamut shell
-         * when needed. Keep the final store clamped as a last safety net
-         * against numerical noise at the exact cube boundary.
-         */
-        lut[idx + 0] = CLAMP(x[0] + d[0], 0.0f, 1.0f);
-        lut[idx + 1] = CLAMP(x[1] + d[1], 0.0f, 1.0f);
-        lut[idx + 2] = CLAMP(x[2] + d[2], 0.0f, 1.0f);
-      }
 }
 
 /**
@@ -1047,14 +538,14 @@ static void _build_clut(dt_iop_colorequal_data_t *d, const dt_iop_colorequal_par
 {
   const gboolean log_perf = (darktable.unmuted & DT_DEBUG_PERF) != 0;
   const double start = log_perf ? dt_get_wtime() : 0.0;
-  const float white = _dt_ucs_graph_white();
+  const float white = dt_colorrings_graph_white();
   const size_t clut_size
       = (size_t)DT_IOP_COLOREQUAL_CLUT_LEVEL * DT_IOP_COLOREQUAL_CLUT_LEVEL * DT_IOP_COLOREQUAL_CLUT_LEVEL * 3;
 
   if(!d->clut) d->clut = dt_alloc_align_float(clut_size);
   d->lut_profile = (dt_iop_order_iccprofile_info_t *)lut_profile;
 
-  _compute_reference_saturations(white, d->reference_saturation);
+  dt_colorrings_compute_reference_saturations(white, d->reference_saturation);
   float anchor_L[DT_IOP_COLOREQUAL_LOCAL_FIELD_RINGS][DT_IOP_COLOREQUAL_HUE_SAMPLES] = { { 0.f } };
   float anchor_rho[DT_IOP_COLOREQUAL_LOCAL_FIELD_RINGS][DT_IOP_COLOREQUAL_HUE_SAMPLES] = { { 0.f } };
   float anchor_theta[DT_IOP_COLOREQUAL_LOCAL_FIELD_RINGS][DT_IOP_COLOREQUAL_HUE_SAMPLES] = { { 0.f } };
@@ -1074,44 +565,48 @@ static void _build_clut(dt_iop_colorequal_data_t *d, const dt_iop_colorequal_par
   for(int ring = 0; ring < DT_IOP_COLOREQUAL_NUM_RINGS; ring++)
   {
     const dt_iop_colorequal_ring_t current_ring = (dt_iop_colorequal_ring_t)ring;
-    const float brightness = _ring_brightness(current_ring);
+    const float brightness = dt_colorrings_ring_brightness((dt_colorrings_ring_t)current_ring);
     const float reference_saturation = d->reference_saturation[ring];
     dt_aligned_pixel_t neutral_rgb = { 0.f };
-    _brightness_to_axis_rgb(brightness, white, lut_profile, neutral_rgb);
+    dt_colorrings_brightness_to_axis_rgb(brightness, white, lut_profile, neutral_rgb);
 
     for(int hue_sample = 0; hue_sample < DT_IOP_COLOREQUAL_HUE_SAMPLES; hue_sample++)
     {
       const float x = (float)hue_sample / (float)DT_IOP_COLOREQUAL_HUE_SAMPLES;
-      const float hue = _curve_x_to_hue(x);
+      const float hue = dt_colorrings_curve_x_to_hue(x);
       const float hue_shift = _channel_value_from_y(
           DT_IOP_COLOREQUAL_HUE,
-          _curve_periodic_sample(_curve_nodes_const(p, current_ring, DT_IOP_COLOREQUAL_HUE),
-                                 _curve_nodes_count_const(p, current_ring, DT_IOP_COLOREQUAL_HUE), x));
+          dt_colorrings_curve_periodic_sample(
+              (const dt_colorrings_node_t *)_curve_nodes_const(p, current_ring, DT_IOP_COLOREQUAL_HUE),
+              _curve_nodes_count_const(p, current_ring, DT_IOP_COLOREQUAL_HUE), x));
       const float sat_gain = _channel_value_from_y(
           DT_IOP_COLOREQUAL_SATURATION,
-          _curve_periodic_sample(_curve_nodes_const(p, current_ring, DT_IOP_COLOREQUAL_SATURATION),
-                                 _curve_nodes_count_const(p, current_ring, DT_IOP_COLOREQUAL_SATURATION), x));
+          dt_colorrings_curve_periodic_sample(
+              (const dt_colorrings_node_t *)_curve_nodes_const(p, current_ring, DT_IOP_COLOREQUAL_SATURATION),
+              _curve_nodes_count_const(p, current_ring, DT_IOP_COLOREQUAL_SATURATION), x));
       const float bright_gain = _channel_value_from_y(
           DT_IOP_COLOREQUAL_BRIGHTNESS,
-          _curve_periodic_sample(_curve_nodes_const(p, current_ring, DT_IOP_COLOREQUAL_BRIGHTNESS),
-                                 _curve_nodes_count_const(p, current_ring, DT_IOP_COLOREQUAL_BRIGHTNESS), x));
+          dt_colorrings_curve_periodic_sample(
+              (const dt_colorrings_node_t *)_curve_nodes_const(p, current_ring, DT_IOP_COLOREQUAL_BRIGHTNESS),
+              _curve_nodes_count_const(p, current_ring, DT_IOP_COLOREQUAL_BRIGHTNESS), x));
 
       const dt_aligned_pixel_t before_hsb = { hue, reference_saturation, brightness, 0.f };
       const dt_aligned_pixel_t after_hsb
-          = { _wrap_hue_pi(hue + hue_shift), CLAMP(reference_saturation * sat_gain, 0.f, 1.f),
+          = { dt_colorrings_wrap_hue_pi(hue + hue_shift), CLAMP(reference_saturation * sat_gain, 0.f, 1.f),
               CLAMP(brightness * bright_gain, 0.f, 1.f), 0.f };
 
       dt_aligned_pixel_t before_rgb = { 0.f };
       dt_aligned_pixel_t after_rgb = { 0.f };
-      _dt_ucs_hsb_to_profile_rgb(before_hsb, white, lut_profile, before_rgb);
-      _dt_ucs_hsb_to_profile_rgb(after_hsb, white, lut_profile, after_rgb);
-      _project_to_cube_shell(neutral_rgb, after_rgb);
+      dt_colorrings_hsb_to_profile_rgb(before_hsb, white, lut_profile, before_rgb);
+      dt_colorrings_hsb_to_profile_rgb(after_hsb, white, lut_profile, after_rgb);
+      dt_colorrings_project_to_cube_shell(neutral_rgb, before_rgb);
+      dt_colorrings_project_to_cube_shell(neutral_rgb, after_rgb);
 
       float Lp, rhop, thetap;
       float La, rhoa;
       float unused_theta;
-      dt_rgb_to_gray_cyl(before_rgb, &Lp, &rhop, &thetap);
-      dt_rgb_to_gray_cyl(after_rgb, &La, &rhoa, &unused_theta);
+      dt_colorrings_rgb_to_gray_cyl(before_rgb, &Lp, &rhop, &thetap);
+      dt_colorrings_rgb_to_gray_cyl(after_rgb, &La, &rhoa, &unused_theta);
 
       /**
        * The user edits hue and saturation in dt UCS HSB, so the local field
@@ -1136,7 +631,7 @@ static void _build_clut(dt_iop_colorequal_data_t *d, const dt_iop_colorequal_par
       anchor_theta[ring][hue_sample] = thetap;
       delta_L[ring][hue_sample] = La - Lp;
       chroma_scale[ring][hue_sample] = effective_scale;
-      delta_theta[ring][hue_sample] = dt_wrap_pi(hue_shift);
+      delta_theta[ring][hue_sample] = dt_colorrings_wrap_pi(hue_shift);
     }
   }
 
@@ -1167,7 +662,7 @@ static void _build_clut(dt_iop_colorequal_data_t *d, const dt_iop_colorequal_par
   const float sigma_rho = fmaxf(p->sigma_rho, 1e-6f);
   const float sigma_theta = fmaxf(p->sigma_theta, 1e-6f);
   const float neutral_protection = fmaxf(p->neutral_protection, 0.f);
-  dt_colorequal_fill_lut_local_field(d->clut, DT_IOP_COLOREQUAL_CLUT_LEVEL, anchor_L, anchor_rho, anchor_theta,
+  dt_colorrings_fill_lut_local_field(d->clut, DT_IOP_COLOREQUAL_CLUT_LEVEL, anchor_L, anchor_rho, anchor_theta,
                                      delta_L, chroma_scale, delta_theta, 1.f / sigma_L, 1.f / sigma_rho,
                                      1.f / sigma_theta, neutral_protection * sigma_rho);
 
@@ -1485,12 +980,12 @@ static inline void _graph_background_hsb(const dt_iop_colorequal_channel_t chann
                                          const float ring_brightness, const float reference_saturation,
                                          dt_aligned_pixel_t HSB)
 {
-  const float hue = _curve_x_to_hue(x);
+  const float hue = dt_colorrings_curve_x_to_hue(x);
 
   switch(channel)
   {
     case DT_IOP_COLOREQUAL_HUE:
-      HSB[0] = _wrap_hue_pi(hue + _channel_value_from_y(channel, y));
+      HSB[0] = dt_colorrings_wrap_hue_pi(hue + _channel_value_from_y(channel, y));
       HSB[1] = reference_saturation;
       HSB[2] = ring_brightness;
       break;
@@ -1510,9 +1005,10 @@ static inline void _graph_background_hsb(const dt_iop_colorequal_channel_t chann
 
 static void _draw_graph_background(cairo_t *cr, const dt_iop_colorequal_channel_t channel,
                                    const dt_iop_colorequal_ring_t ring, const float graph_width,
-                                   const float graph_height, const float white, const float reference_saturation)
+                                   const float graph_height, const float white, const float reference_saturation,
+                                   const dt_iop_order_iccprofile_info_t *display_profile)
 {
-  const float ring_brightness = _ring_brightness(ring);
+  const float ring_brightness = dt_colorrings_ring_brightness((dt_colorrings_ring_t)ring);
 
   for(int slice = 0; slice < DT_IOP_COLOREQUAL_GRAPH_GRADIENTS; slice++)
   {
@@ -1522,7 +1018,8 @@ static void _draw_graph_background(cairo_t *cr, const dt_iop_colorequal_channel_
 
 #ifdef _OPENMP
 #pragma omp parallel for default(none) schedule(static) dt_omp_firstprivate(channel, ring_brightness,          \
-                                                                            reference_saturation, white, y)     \
+                                                                            reference_saturation, white, y,     \
+                                                                            display_profile)                    \
   shared(colors)
 #endif
     for(int k = 0; k < DT_IOP_COLOREQUAL_GRAPH_RES; k++)
@@ -1530,7 +1027,7 @@ static void _draw_graph_background(cairo_t *cr, const dt_iop_colorequal_channel_
       const float x = (float)k / (float)(DT_IOP_COLOREQUAL_GRAPH_RES - 1);
       dt_aligned_pixel_t HSB = { 0.f };
       _graph_background_hsb(channel, x, y, ring_brightness, reference_saturation, HSB);
-      _dt_ucs_hsb_to_preview_rgb(HSB, white, colors[k]);
+      dt_colorrings_hsb_to_display_rgb(HSB, white, display_profile, colors[k]);
     }
 
     /**
@@ -1571,9 +1068,21 @@ static gboolean _draw_curve(GtkWidget *widget, cairo_t *crf, gpointer user_data)
   const float inset = DT_IOP_COLOREQUAL_GRAPH_INSET;
   const float graph_width = allocation.width - 2.f * inset;
   const float graph_height = allocation.height - DT_IOP_COLOREQUAL_AXIS_HEIGHT - 2.f * inset;
-  const float white = _dt_ucs_graph_white();
-  _compute_reference_saturations(white, g->reference_saturation);
-  const float background_saturation = CLAMP(g->reference_saturation[ring] * 1.35f, 0.f, 1.f);
+  const float white = dt_colorrings_graph_white();
+  const dt_iop_order_iccprofile_info_t *const display_profile
+      = (self->dev && self->dev->preview_pipe) ? dt_ioppr_get_pipe_output_profile_info(self->dev->preview_pipe)
+                                               : NULL;
+  dt_colorrings_compute_reference_saturations(white, g->reference_saturation);
+  /**
+   * Hue backgrounds need to keep the ring lightness cue readable across the
+   * three tabs. Pushing their saturation beyond the in-gamut reference sends
+   * more hues into the display normalization path, which flattens the intended
+   * 15/45/75% brightness separation. Keep the hue tab on the reference ring
+   * and only boost the other channels for contrast.
+   */
+  const float background_saturation
+      = (channel == DT_IOP_COLOREQUAL_HUE) ? g->reference_saturation[ring]
+                                           : CLAMP(g->reference_saturation[ring] * 1.35f, 0.f, 1.f);
 
   cairo_surface_t *cst = dt_cairo_image_surface_create(CAIRO_FORMAT_ARGB32, allocation.width, allocation.height);
   cairo_t *cr = cairo_create(cst);
@@ -1581,7 +1090,8 @@ static gboolean _draw_curve(GtkWidget *widget, cairo_t *crf, gpointer user_data)
   if(!g->background_surface[ring][channel] || g->cached_width[ring][channel] != allocation.width
      || g->cached_height[ring][channel] != allocation.height
      || fabsf(g->cached_white[ring][channel] - white) > 1e-6f
-     || fabsf(g->cached_reference_saturation[ring][channel] - background_saturation) > 1e-6f)
+     || fabsf(g->cached_reference_saturation[ring][channel] - background_saturation) > 1e-6f
+     || g->cached_display_profile[ring][channel] != display_profile)
   {
     if(g->background_surface[ring][channel]) cairo_surface_destroy(g->background_surface[ring][channel]);
     g->background_surface[ring][channel]
@@ -1590,7 +1100,8 @@ static gboolean _draw_curve(GtkWidget *widget, cairo_t *crf, gpointer user_data)
 
     gtk_render_background(context, background_cr, 0, 0, allocation.width, allocation.height);
     cairo_translate(background_cr, inset, inset);
-    _draw_graph_background(background_cr, channel, ring, graph_width, graph_height, white, background_saturation);
+    _draw_graph_background(background_cr, channel, ring, graph_width, graph_height, white, background_saturation,
+                           display_profile);
 
     cairo_rectangle(background_cr, 0.f, 0.f, graph_width, graph_height);
     cairo_clip(background_cr);
@@ -1613,9 +1124,10 @@ static gboolean _draw_curve(GtkWidget *widget, cairo_t *crf, gpointer user_data)
     {
       const float x = (float)k / (float)(DT_IOP_COLOREQUAL_GRAPH_RES - 1);
       dt_aligned_pixel_t RGB = { 0.f };
-      _dt_ucs_hsb_to_preview_rgb(
-          (dt_aligned_pixel_t){ _curve_x_to_hue(x), background_saturation, _ring_brightness(ring), 0.f }, white,
-          RGB);
+      dt_colorrings_hsb_to_display_rgb(
+          (dt_aligned_pixel_t){ dt_colorrings_curve_x_to_hue(x), background_saturation,
+                                dt_colorrings_ring_brightness((dt_colorrings_ring_t)ring), 0.f },
+          white, display_profile, RGB);
       cairo_pattern_add_color_stop_rgba(axis, x, RGB[0], RGB[1], RGB[2], 1.0);
     }
 
@@ -1629,6 +1141,7 @@ static gboolean _draw_curve(GtkWidget *widget, cairo_t *crf, gpointer user_data)
     g->cached_height[ring][channel] = allocation.height;
     g->cached_white[ring][channel] = white;
     g->cached_reference_saturation[ring][channel] = background_saturation;
+    g->cached_display_profile[ring][channel] = display_profile;
   }
 
   cairo_set_source_surface(cr, g->background_surface[ring][channel], 0, 0);
@@ -1638,7 +1151,7 @@ static gboolean _draw_curve(GtkWidget *widget, cairo_t *crf, gpointer user_data)
 
   if(g->picker_valid)
   {
-    const float picker_x = _hue_to_curve_x(g->picker_hue) * graph_width;
+    const float picker_x = dt_colorrings_hue_to_curve_x(g->picker_hue) * graph_width;
     cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(1.5f));
     set_color(cr, darktable.bauhaus->graph_fg);
     cairo_move_to(cr, picker_x, 0.f);
@@ -1650,7 +1163,7 @@ static gboolean _draw_curve(GtkWidget *widget, cairo_t *crf, gpointer user_data)
   const dt_iop_colorequal_channel_t active_channel = _active_channel_from_gui(g, active_ring);
   if(g->cursor_sample_valid && ring == active_ring && channel == active_channel)
   {
-    const float cursor_x = _hue_to_curve_x(g->cursor_hue) * graph_width;
+    const float cursor_x = dt_colorrings_hue_to_curve_x(g->cursor_hue) * graph_width;
     cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(2.5f));
     cairo_set_source_rgba(cr, 0.f, 0.f, 0.f, 0.75f);
     cairo_move_to(cr, cursor_x, 0.f);
@@ -1971,7 +1484,8 @@ static gboolean _area_button_press_callback(GtkWidget *widget, GdkEventButton *e
 
   if(event->button == 1 && dt_modifier_is(event->state, GDK_CONTROL_MASK) && *nodes < DT_IOP_COLOREQUAL_MAXNODES)
   {
-    const float y = _curve_periodic_sample(curve, *nodes, mouse_x);
+    const float y
+        = dt_colorrings_curve_periodic_sample((const dt_colorrings_node_t *)curve, *nodes, mouse_x);
     const int selected = _add_node(curve, nodes, mouse_x, y);
 
     if(selected >= 0)
@@ -2192,8 +1706,9 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
   int *nodes = _curve_nodes_count(&g->gui_params, ring, channel);
   if(*nodes >= DT_IOP_COLOREQUAL_MAXNODES) return 1;
 
-  const float curve_x = _hue_to_curve_x(g->cursor_hue);
-  const float curve_y = _curve_periodic_sample(curve, *nodes, curve_x);
+  const float curve_x = dt_colorrings_hue_to_curve_x(g->cursor_hue);
+  const float curve_y
+      = dt_colorrings_curve_periodic_sample((const dt_colorrings_node_t *)curve, *nodes, curve_x);
   const int selected = _add_node(curve, nodes, curve_x, curve_y);
   if(selected < 0) return 1;
 
@@ -2228,7 +1743,7 @@ int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t 
   if(nodes < 1) return 1;
 
   const float direction = up ? 1.f : -1.f;
-  const float curve_x = _hue_to_curve_x(g->cursor_hue);
+  const float curve_x = dt_colorrings_hue_to_curve_x(g->cursor_hue);
   const float sigma = DT_IOP_COLOREQUAL_SCROLL_SIGMA;
   const float sigma2 = 2.f * sigma * sigma;
   const float step = (channel == DT_IOP_COLOREQUAL_HUE)
@@ -2354,16 +1869,7 @@ static void _pipe_rgb_to_Ych(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, co
 {
   const dt_iop_order_iccprofile_info_t *work_profile = dt_ioppr_get_pipe_current_profile_info(self, pipe);
   if(!work_profile) return;
-
-  dt_aligned_pixel_t XYZ_D50 = { 0.f };
-  dt_aligned_pixel_t XYZ_D65 = { 0.f };
-
-  dt_ioppr_rgb_matrix_to_xyz(RGB, XYZ_D50, work_profile->matrix_in_transposed, work_profile->lut_in,
-                             work_profile->unbounded_coeffs_in, work_profile->lutsize, work_profile->nonlinearlut);
-  XYZ_D50_to_D65(XYZ_D50, XYZ_D65);
-  XYZ_to_Ych(XYZ_D65, Ych);
-
-  if(Ych[2] < 0.f) Ych[2] = 2.f * M_PI_F + Ych[2];
+  dt_colorrings_profile_rgb_to_Ych(RGB, work_profile, Ych);
 }
 
 static void _pipe_rgb_to_dt_ucs_hsb(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, const dt_aligned_pixel_t RGB,
@@ -2371,28 +1877,7 @@ static void _pipe_rgb_to_dt_ucs_hsb(dt_iop_module_t *self, dt_dev_pixelpipe_t *p
 {
   const dt_iop_order_iccprofile_info_t *work_profile = dt_ioppr_get_pipe_current_profile_info(self, pipe);
   if(!work_profile) return;
-
-  dt_aligned_pixel_t XYZ_D50 = { 0.f };
-  dt_aligned_pixel_t XYZ_D65 = { 0.f };
-  dt_aligned_pixel_t xyY = { 0.f };
-  dt_aligned_pixel_t JCH = { 0.f };
-
-  dt_ioppr_rgb_matrix_to_xyz(RGB, XYZ_D50, work_profile->matrix_in_transposed, work_profile->lut_in,
-                             work_profile->unbounded_coeffs_in, work_profile->lutsize, work_profile->nonlinearlut);
-  XYZ_D50_to_D65(XYZ_D50, XYZ_D65);
-  for_each_channel(c, aligned(XYZ_D65)) XYZ_D65[c] = fmaxf(XYZ_D65[c], 0.f);
-
-  if(XYZ_D65[0] + XYZ_D65[1] + XYZ_D65[2] <= 1e-6f)
-  {
-    HSB[0] = 0.f;
-    HSB[1] = 0.f;
-    HSB[2] = 0.f;
-    return;
-  }
-
-  dt_XYZ_to_xyY(XYZ_D65, xyY);
-  xyY_to_dt_UCS_JCH(xyY, _dt_ucs_graph_white(), JCH);
-  dt_UCS_JCH_to_HSB(JCH, HSB);
+  dt_colorrings_profile_rgb_to_dt_ucs_hsb(RGB, dt_colorrings_graph_white(), work_profile, HSB);
 }
 
 static void _switch_preview_cursor(dt_iop_module_t *self)
@@ -2497,9 +1982,9 @@ static gboolean _refresh_preview_cursor_sample(dt_iop_module_t *self)
   const dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_pipe_current_profile_info(self, dev->preview_pipe);
   const dt_iop_order_iccprofile_info_t *const lut_profile = g->viewer_lut.lut_profile;
   dt_aligned_pixel_t output_rgb = { input_rgb[0], input_rgb[1], input_rgb[2], 0.f };
-  _apply_colorequal_lut_rgb(input_rgb, exp2f(g->gui_params.white_level), work_profile, lut_profile, g->viewer_lut.clut,
-                            g->viewer_lut.clut_level, &gd->lock,
-                            (dt_lut3d_interpolation_t)g->gui_params.interpolation, output_rgb);
+  dt_colorrings_apply_rgb_lut(input_rgb, exp2f(g->gui_params.white_level), work_profile, lut_profile,
+                              g->viewer_lut.clut, g->viewer_lut.clut_level, &gd->lock,
+                              (dt_lut3d_interpolation_t)g->gui_params.interpolation, output_rgb);
 
   dt_aligned_pixel_t projected_rgb = { 0.f };
   const float white_level = fmaxf(exp2f(g->gui_params.white_level), 1e-6f);
@@ -2509,7 +1994,7 @@ static gboolean _refresh_preview_cursor_sample(dt_iop_module_t *self)
 
   const float neutral = CLAMP((projected_rgb[0] + projected_rgb[1] + projected_rgb[2]) / 3.f, 0.f, 1.f);
   dt_aligned_pixel_t axis = { neutral, neutral, neutral, 0.f };
-  _project_to_cube_shell(axis, projected_rgb);
+  dt_colorrings_project_to_cube_shell(axis, projected_rgb);
 
   dt_aligned_pixel_t HSB = { 0.f };
   _pipe_rgb_to_dt_ucs_hsb(self, dev->preview_pipe, projected_rgb, HSB);
@@ -2519,7 +2004,7 @@ static gboolean _refresh_preview_cursor_sample(dt_iop_module_t *self)
     return FALSE;
   }
 
-  g->cursor_hue = _wrap_hue_pi(HSB[0]);
+  g->cursor_hue = dt_colorrings_wrap_hue_pi(HSB[0]);
   _work_rgb_to_display_rgb(self, dev->preview_pipe, input_rgb, g->cursor_input_display);
   _work_rgb_to_display_rgb(self, dev->preview_pipe, output_rgb, g->cursor_output_display);
   g->cursor_sample_valid = TRUE;
@@ -2611,11 +2096,11 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
     axis[0] = neutral;
     axis[1] = neutral;
     axis[2] = neutral;
-    _project_to_cube_shell(axis, RGB);
+    dt_colorrings_project_to_cube_shell(axis, RGB);
     _pipe_rgb_to_dt_ucs_hsb(self, pipe, RGB, HSB);
 
     g->picker_valid = TRUE;
-    g->picker_hue = _wrap_hue_pi(HSB[0]);
+    g->picker_hue = dt_colorrings_wrap_hue_pi(HSB[0]);
     g->picker_brightness = CLAMP(HSB[2], 0.f, 1.f);
     _format_picker_brightness_position(g->picker_brightness, text, sizeof(text));
     gtk_label_set_text(GTK_LABEL(g->picker_info), text);

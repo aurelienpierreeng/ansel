@@ -57,6 +57,7 @@ FILE(GLOB SOURCE_FILES
   "common/color_picker.c"
   "common/color_vocabulary.c"
   "common/colorlabels.c"
+  "common/colorequal_shared.c"
   "common/colorspaces.c"
   "common/curve_tools.c"
   "common/splines.cpp"

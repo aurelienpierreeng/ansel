@@ -80,6 +80,7 @@ struct dt_lut_viewer_t
   GtkWidget *slice_depth;
   GtkWidget *slice_thickness;
   GtkWidget *shift_threshold;
+  GtkWidget *show_control_nodes;
   GtkWidget *gamut;
 
   const float *clut;
@@ -87,6 +88,8 @@ struct dt_lut_viewer_t
   dt_pthread_rwlock_t *clut_lock;
   const dt_iop_order_iccprofile_info_t *lut_profile;
   const dt_iop_order_iccprofile_info_t *display_profile;
+  const dt_lut_viewer_control_node_t *control_nodes;
+  size_t control_node_count;
   float zoom;
   float pan_x;
   float pan_y;
@@ -113,6 +116,9 @@ struct dt_lut_viewer_t
   uint16_t cached_clut_level;
   const dt_iop_order_iccprofile_info_t *cached_lut_profile;
   const dt_iop_order_iccprofile_info_t *cached_display_profile;
+  const dt_lut_viewer_control_node_t *cached_control_nodes;
+  size_t cached_control_node_count;
+  gboolean cached_show_control_nodes;
   double cached_ppd;
   cairo_surface_t *surface;
 
@@ -135,6 +141,9 @@ struct dt_lut_viewer_t
   uint16_t sample_cache_clut_level;
   const dt_iop_order_iccprofile_info_t *sample_cache_lut_profile;
   const dt_iop_order_iccprofile_info_t *sample_cache_display_profile;
+  const dt_lut_viewer_control_node_t *sample_cache_control_nodes;
+  size_t sample_cache_control_node_count;
+  gboolean sample_cache_show_control_nodes;
 };
 
 static inline dt_aligned_pixel_simd_t _set_vector(const float x, const float y, const float z)
@@ -285,6 +294,12 @@ static void _invalidate_sample_cache(dt_lut_viewer_t *viewer)
   viewer->sample_count = 0;
   viewer->sample_white_index = 0;
   viewer->sample_draw_white_last = FALSE;
+}
+
+static inline gboolean _show_control_nodes(const dt_lut_viewer_t *viewer)
+{
+  return viewer && viewer->show_control_nodes
+         && gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(viewer->show_control_nodes));
 }
 
 static int _ensure_sample_cache_capacity(dt_lut_viewer_t *viewer, const size_t capacity)
@@ -663,7 +678,14 @@ static inline int _sample_index(const int sample, const int samples, const int l
 static void _draw_samples(cairo_t *cr, const dt_lut_viewer_t *viewer,
                           const dt_lut_viewer_projection_t *projection, const dt_lut_viewer_gamut_t gamut)
 {
-  if(!viewer->clut || !viewer->lut_profile || viewer->clut_level < 2) return;
+  const gboolean show_control_nodes = _show_control_nodes(viewer);
+  if(!viewer->lut_profile) return;
+  if(show_control_nodes)
+  {
+    if(!viewer->control_nodes || viewer->control_node_count == 0) return;
+  }
+  else if(!viewer->clut || viewer->clut_level < 2)
+    return;
 
   dt_lut_viewer_t *mutable_viewer = (dt_lut_viewer_t *)viewer;
   const gboolean log_perf = (darktable.unmuted & DT_DEBUG_PERF) != 0;
@@ -674,10 +696,11 @@ static void _draw_samples(cairo_t *cr, const dt_lut_viewer_t *viewer,
   const gboolean same_gamut_as_lut_profile = _gamut_matches_lut_profile(viewer, gamut);
   if(!same_gamut_as_lut_profile && _get_xyz_to_rgb_matrix(gamut, xyz_to_rgb)) return;
 
-  const int stride = _sample_stride(viewer->clut_level);
-  const int samples = _sample_count(viewer->clut_level, stride);
+  const int stride = show_control_nodes ? 1 : _sample_stride(viewer->clut_level);
+  const int samples = show_control_nodes ? 0 : _sample_count(viewer->clut_level, stride);
   const int level2 = viewer->clut_level * viewer->clut_level;
-  const size_t max_samples = (size_t)samples * (size_t)samples * (size_t)samples;
+  const size_t max_samples = show_control_nodes ? viewer->control_node_count
+                                                : (size_t)samples * (size_t)samples * (size_t)samples;
   const float rotation_around_axis = dt_bauhaus_slider_get(viewer->rotation_around_axis);
   const float rotation_of_axis = dt_bauhaus_slider_get(viewer->rotation_of_axis);
   const float slice_depth = dt_bauhaus_slider_get(viewer->slice_depth);
@@ -697,7 +720,10 @@ static void _draw_samples(cairo_t *cr, const dt_lut_viewer_t *viewer,
         || viewer->sample_cache_clut != viewer->clut
         || viewer->sample_cache_clut_level != viewer->clut_level
         || viewer->sample_cache_lut_profile != viewer->lut_profile
-        || viewer->sample_cache_display_profile != viewer->display_profile;
+        || viewer->sample_cache_display_profile != viewer->display_profile
+        || viewer->sample_cache_control_nodes != viewer->control_nodes
+        || viewer->sample_cache_control_node_count != viewer->control_node_count
+        || viewer->sample_cache_show_control_nodes != show_control_nodes;
 
   if(rebuild_sample_cache)
   {
@@ -707,72 +733,108 @@ static void _draw_samples(cairo_t *cr, const dt_lut_viewer_t *viewer,
     mutable_viewer->sample_white_index = 0;
     mutable_viewer->sample_draw_white_last = FALSE;
 
-    /**
-     * We sample the lattice sparsely enough to stay interactive in Cairo while
-     * still covering the RGB cube evenly. The selected gamut is applied to the
-     * target lattice points so the viewer previews how the LUT deforms the chosen
-     * source volume inside the LUT RGB cube.
-     */
-    /**
-     * The sparse Cairo preview must still sample the outer shell of the CLUT.
-     * Mapping the reduced lattice back to `[0, level - 1]` guarantees that the
-     * last sample of every axis lies exactly on the cube boundary instead of
-     * stopping short whenever `stride` does not divide `level - 1`.
-     */
-    for(int sample_b = 0; sample_b < samples; sample_b++)
-      for(int sample_g = 0; sample_g < samples; sample_g++)
-        for(int sample_r = 0; sample_r < samples; sample_r++)
+    if(show_control_nodes)
+    {
+      for(size_t k = 0; k < viewer->control_node_count; k++)
+      {
+        const dt_aligned_pixel_simd_t input_rgb = {
+          CLAMP(viewer->control_nodes[k].input_rgb[0], 0.f, 1.f),
+          CLAMP(viewer->control_nodes[k].input_rgb[1], 0.f, 1.f),
+          CLAMP(viewer->control_nodes[k].input_rgb[2], 0.f, 1.f),
+          0.f
+        };
+        const dt_aligned_pixel_simd_t output_rgb = {
+          CLAMP(viewer->control_nodes[k].output_rgb[0], 0.f, 1.f),
+          CLAMP(viewer->control_nodes[k].output_rgb[1], 0.f, 1.f),
+          CLAMP(viewer->control_nodes[k].output_rgb[2], 0.f, 1.f),
+          0.f
+        };
+        if(!same_gamut_as_lut_profile && !_sample_fits_gamut(viewer->lut_profile, xyz_to_rgb, input_rgb)) continue;
+
+        float x0 = 0.f, y0 = 0.f, depth0 = 0.f;
+        float x1 = 0.f, y1 = 0.f, depth1 = 0.f;
+        _project_point(projection, input_rgb, &x0, &y0, &depth0);
+        _project_point(projection, output_rgb, &x1, &y1, &depth1);
+
+        const gboolean target_in_slice = fabsf(depth0 - projection->slice_depth) <= projection->slice_half_thickness;
+        const gboolean destination_in_slice
+            = fabsf(depth1 - projection->slice_depth) <= projection->slice_half_thickness;
+        if(!target_in_slice && !destination_in_slice) continue;
+
+        mutable_viewer->sample_input_work[mutable_viewer->sample_count] = input_rgb;
+        mutable_viewer->sample_output_work[mutable_viewer->sample_count] = output_rgb;
+
+        if(input_rgb[0] >= 1.f - 1e-6f && input_rgb[1] >= 1.f - 1e-6f && input_rgb[2] >= 1.f - 1e-6f)
         {
-          const int b = _sample_index(sample_b, samples, viewer->clut_level);
-          const int g = _sample_index(sample_g, samples, viewer->clut_level);
-          const int r = _sample_index(sample_r, samples, viewer->clut_level);
-          const dt_aligned_pixel_simd_t input_rgb = {
-            (float)r / (float)(viewer->clut_level - 1),
-            (float)g / (float)(viewer->clut_level - 1),
-            (float)b / (float)(viewer->clut_level - 1),
-            0.f
-          };
-
-          /**
-           * The CLUT coordinates always live in the LUT internal RGB profile.
-           * When the requested display gamut matches that LUT profile, every lattice point is by
-           * definition already expressed in the target gamut and we must not send
-           * it through another ICC round-trip just to decide visibility.
-           */
-          if(!same_gamut_as_lut_profile && !_sample_fits_gamut(viewer->lut_profile, xyz_to_rgb, input_rgb))
-            continue;
-
-          const size_t index = (size_t)(r + g * viewer->clut_level + b * level2) * 3;
-          const dt_aligned_pixel_simd_t output_rgb = {
-            CLAMP(viewer->clut[index + 0], 0.f, 1.f),
-            CLAMP(viewer->clut[index + 1], 0.f, 1.f),
-            CLAMP(viewer->clut[index + 2], 0.f, 1.f),
-            0.f
-          };
-          if(_shift_distance_percent(input_rgb, output_rgb) < shift_threshold)
-            continue;
-
-          float x0 = 0.f, y0 = 0.f, depth0 = 0.f;
-          float x1 = 0.f, y1 = 0.f, depth1 = 0.f;
-          _project_point(projection, input_rgb, &x0, &y0, &depth0);
-          _project_point(projection, output_rgb, &x1, &y1, &depth1);
-
-          const gboolean target_in_slice
-              = fabsf(depth0 - projection->slice_depth) <= projection->slice_half_thickness;
-          const gboolean destination_in_slice
-              = fabsf(depth1 - projection->slice_depth) <= projection->slice_half_thickness;
-          if(!target_in_slice && !destination_in_slice) continue;
-
-          mutable_viewer->sample_input_work[mutable_viewer->sample_count] = input_rgb;
-          mutable_viewer->sample_output_work[mutable_viewer->sample_count] = output_rgb;
-
-          if(r == viewer->clut_level - 1 && g == viewer->clut_level - 1 && b == viewer->clut_level - 1)
-          {
-            mutable_viewer->sample_white_index = mutable_viewer->sample_count;
-            mutable_viewer->sample_draw_white_last = TRUE;
-          }
-          mutable_viewer->sample_count++;
+          mutable_viewer->sample_white_index = mutable_viewer->sample_count;
+          mutable_viewer->sample_draw_white_last = TRUE;
         }
+
+        mutable_viewer->sample_count++;
+      }
+    }
+    else
+    {
+      /**
+       * We sample the lattice sparsely enough to stay interactive in Cairo while
+       * still covering the RGB cube evenly. The selected gamut is applied to the
+       * target lattice points so the viewer previews how the LUT deforms the chosen
+       * source volume inside the LUT RGB cube.
+       */
+      /**
+       * The sparse Cairo preview must still sample the outer shell of the CLUT.
+       * Mapping the reduced lattice back to `[0, level - 1]` guarantees that the
+       * last sample of every axis lies exactly on the cube boundary instead of
+       * stopping short whenever `stride` does not divide `level - 1`.
+       */
+      for(int sample_b = 0; sample_b < samples; sample_b++)
+        for(int sample_g = 0; sample_g < samples; sample_g++)
+          for(int sample_r = 0; sample_r < samples; sample_r++)
+          {
+            const int b = _sample_index(sample_b, samples, viewer->clut_level);
+            const int g = _sample_index(sample_g, samples, viewer->clut_level);
+            const int r = _sample_index(sample_r, samples, viewer->clut_level);
+            const dt_aligned_pixel_simd_t input_rgb = {
+              (float)r / (float)(viewer->clut_level - 1),
+              (float)g / (float)(viewer->clut_level - 1),
+              (float)b / (float)(viewer->clut_level - 1),
+              0.f
+            };
+
+            if(!same_gamut_as_lut_profile && !_sample_fits_gamut(viewer->lut_profile, xyz_to_rgb, input_rgb))
+              continue;
+
+            const size_t index = (size_t)(r + g * viewer->clut_level + b * level2) * 3;
+            const dt_aligned_pixel_simd_t output_rgb = {
+              CLAMP(viewer->clut[index + 0], 0.f, 1.f),
+              CLAMP(viewer->clut[index + 1], 0.f, 1.f),
+              CLAMP(viewer->clut[index + 2], 0.f, 1.f),
+              0.f
+            };
+            if(_shift_distance_percent(input_rgb, output_rgb) < shift_threshold) continue;
+
+            float x0 = 0.f, y0 = 0.f, depth0 = 0.f;
+            float x1 = 0.f, y1 = 0.f, depth1 = 0.f;
+            _project_point(projection, input_rgb, &x0, &y0, &depth0);
+            _project_point(projection, output_rgb, &x1, &y1, &depth1);
+
+            const gboolean target_in_slice
+                = fabsf(depth0 - projection->slice_depth) <= projection->slice_half_thickness;
+            const gboolean destination_in_slice
+                = fabsf(depth1 - projection->slice_depth) <= projection->slice_half_thickness;
+            if(!target_in_slice && !destination_in_slice) continue;
+
+            mutable_viewer->sample_input_work[mutable_viewer->sample_count] = input_rgb;
+            mutable_viewer->sample_output_work[mutable_viewer->sample_count] = output_rgb;
+
+            if(r == viewer->clut_level - 1 && g == viewer->clut_level - 1 && b == viewer->clut_level - 1)
+            {
+              mutable_viewer->sample_white_index = mutable_viewer->sample_count;
+              mutable_viewer->sample_draw_white_last = TRUE;
+            }
+            mutable_viewer->sample_count++;
+          }
+    }
 
     if(log_perf) collect_done = dt_get_wtime();
 
@@ -792,6 +854,9 @@ static void _draw_samples(cairo_t *cr, const dt_lut_viewer_t *viewer,
     mutable_viewer->sample_cache_clut_level = viewer->clut_level;
     mutable_viewer->sample_cache_lut_profile = viewer->lut_profile;
     mutable_viewer->sample_cache_display_profile = viewer->display_profile;
+    mutable_viewer->sample_cache_control_nodes = viewer->control_nodes;
+    mutable_viewer->sample_cache_control_node_count = viewer->control_node_count;
+    mutable_viewer->sample_cache_show_control_nodes = show_control_nodes;
     mutable_viewer->sample_cache_valid = TRUE;
   }
   else if(log_perf)
@@ -855,8 +920,8 @@ static void _draw_samples(cairo_t *cr, const dt_lut_viewer_t *viewer,
   {
     const double total_done = dt_get_wtime();
     dt_print(DT_DEBUG_PERF,
-             "[lut_viewer] draw_samples level=%u sparse=%d^3 max=%zu drawn=%zu gamut=%d cache=%s collect=%.3fms convert=%.3fms paint=%.3fms total=%.3fms\n",
-             viewer->clut_level, samples, max_samples, viewer->sample_count, gamut,
+             "[lut_viewer] draw_samples mode=%s level=%u sparse=%d^3 max=%zu drawn=%zu gamut=%d cache=%s collect=%.3fms convert=%.3fms paint=%.3fms total=%.3fms\n",
+             show_control_nodes ? "controls" : "lut", viewer->clut_level, samples, max_samples, viewer->sample_count, gamut,
              rebuild_sample_cache ? "rebuild" : "reuse",
              1000.0 * (collect_done - total_start),
              1000.0 * (convert_done - collect_done),
@@ -893,7 +958,29 @@ static void _render_surface(dt_lut_viewer_t *viewer, const int width, const int 
   gtk_render_background(context, cr, 0, 0, width, height);
   gtk_render_frame(context, cr, 0, 0, width, height);
 
-  if(!viewer->clut || !viewer->lut_profile || viewer->clut_level < 2)
+  if(!viewer->lut_profile)
+  {
+    _draw_placeholder(cr, width, height, _("no LUT to display"));
+    cairo_destroy(cr);
+    if(viewer->clut_lock) dt_pthread_rwlock_unlock(viewer->clut_lock);
+    if(log_perf)
+      dt_print(DT_DEBUG_PERF,
+               "[lut_viewer] render_surface %dx%d ppd=%.2f placeholder=1 total=%.3fms\n",
+               width, height, ppd, 1000.0 * (dt_get_wtime() - start));
+    return;
+  }
+
+  if(_show_control_nodes(viewer))
+  {
+    if(!viewer->control_nodes || viewer->control_node_count == 0)
+    {
+      _draw_placeholder(cr, width, height, _("no control nodes to display"));
+      cairo_destroy(cr);
+      if(viewer->clut_lock) dt_pthread_rwlock_unlock(viewer->clut_lock);
+      return;
+    }
+  }
+  else if(!viewer->clut || viewer->clut_level < 2)
   {
     _draw_placeholder(cr, width, height, _("no LUT to display"));
     cairo_destroy(cr);
@@ -943,6 +1030,7 @@ static gboolean _draw_callback(GtkWidget *widget, cairo_t *cr, gpointer user_dat
   const float shift_threshold = dt_bauhaus_slider_get(viewer->shift_threshold);
   const float zoom = viewer->zoom;
   const int gamut = dt_bauhaus_combobox_get(viewer->gamut);
+  const gboolean show_control_nodes = _show_control_nodes(viewer);
   const double ppd = (darktable.gui && darktable.gui->ppd > 0.0) ? darktable.gui->ppd : 1.0;
 
   if(!viewer->surface
@@ -961,6 +1049,9 @@ static gboolean _draw_callback(GtkWidget *widget, cairo_t *cr, gpointer user_dat
      || viewer->cached_clut_level != viewer->clut_level
      || viewer->cached_lut_profile != viewer->lut_profile
      || viewer->cached_display_profile != viewer->display_profile
+     || viewer->cached_control_nodes != viewer->control_nodes
+     || viewer->cached_control_node_count != viewer->control_node_count
+     || viewer->cached_show_control_nodes != show_control_nodes
      || fabs(viewer->cached_ppd - ppd) > 1e-9)
   {
     _render_surface(viewer, allocation.width, allocation.height);
@@ -979,6 +1070,9 @@ static gboolean _draw_callback(GtkWidget *widget, cairo_t *cr, gpointer user_dat
     viewer->cached_clut_level = viewer->clut_level;
     viewer->cached_lut_profile = viewer->lut_profile;
     viewer->cached_display_profile = viewer->display_profile;
+    viewer->cached_control_nodes = viewer->control_nodes;
+    viewer->cached_control_node_count = viewer->control_node_count;
+    viewer->cached_show_control_nodes = show_control_nodes;
     viewer->cached_ppd = ppd;
   }
 
@@ -1235,6 +1329,11 @@ dt_lut_viewer_t *dt_lut_viewer_new(dt_gui_module_t *module)
   gtk_box_pack_start(GTK_BOX(viewer->controls), viewer->shift_threshold, FALSE, FALSE, 0);
   g_signal_connect(G_OBJECT(viewer->shift_threshold), "value-changed", G_CALLBACK(_control_changed), viewer);
 
+  viewer->show_control_nodes = gtk_check_button_new_with_label(_("show control nodes"));
+  gtk_widget_set_sensitive(viewer->show_control_nodes, FALSE);
+  gtk_box_pack_start(GTK_BOX(viewer->controls), viewer->show_control_nodes, FALSE, FALSE, 0);
+  g_signal_connect(G_OBJECT(viewer->show_control_nodes), "toggled", G_CALLBACK(_control_changed), viewer);
+
   viewer->gamut = dt_bauhaus_combobox_new(darktable.bauhaus, module);
   dt_bauhaus_widget_set_label(viewer->gamut, _("target gamut"));
   dt_bauhaus_combobox_add(viewer->gamut, _("sRGB/Rec709"));
@@ -1274,6 +1373,9 @@ dt_lut_viewer_t *dt_lut_viewer_new(dt_gui_module_t *module)
   viewer->sample_cache_slice_thickness = NAN;
   viewer->sample_cache_shift_threshold = NAN;
   viewer->sample_cache_gamut = -1;
+  viewer->sample_cache_control_nodes = NULL;
+  viewer->sample_cache_control_node_count = 0;
+  viewer->sample_cache_show_control_nodes = FALSE;
   return viewer;
 }
 
@@ -1307,6 +1409,26 @@ void dt_lut_viewer_set_lut(dt_lut_viewer_t *viewer, const float *clut, uint16_t 
   viewer->clut_lock = clut_lock;
   viewer->lut_profile = lut_profile;
   viewer->display_profile = display_profile;
+  _invalidate_sample_cache(viewer);
+  _invalidate_surface(viewer);
+}
+
+void dt_lut_viewer_set_control_nodes(dt_lut_viewer_t *viewer,
+                                     const dt_lut_viewer_control_node_t *control_nodes,
+                                     size_t control_node_count)
+{
+  if(!viewer) return;
+
+  viewer->control_nodes = control_nodes;
+  viewer->control_node_count = control_node_count;
+
+  if(viewer->show_control_nodes)
+  {
+    const gboolean enabled = control_nodes && control_node_count > 0;
+    gtk_widget_set_sensitive(viewer->show_control_nodes, enabled);
+    if(!enabled) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(viewer->show_control_nodes), FALSE);
+  }
+
   _invalidate_sample_cache(viewer);
   _invalidate_surface(viewer);
 }
