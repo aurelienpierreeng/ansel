@@ -78,7 +78,7 @@ dt_backbuf_t *dt_dev_get_histogram_backbuf(dt_develop_t *dev, const char *op)
 {
   if(!dev || !op) return NULL;
 
-  if(!strcmp(op, "demosaic"))
+  if(!strcmp(op, "initialscale"))
     return &dev->raw_histogram;
   else if(!strcmp(op, "colorout"))
     return &dev->output_histogram;
@@ -220,7 +220,7 @@ gboolean dt_dev_module_requires_global_histogram_output_cache(const dt_dev_pixel
   if(dt_dev_pixelpipe_get_realtime(pipe)) return FALSE;
   if(!pipe->gui_observable_source) return FALSE;
 
-  return !strcmp(module->op, "demosaic") || !strcmp(module->op, "colorout");
+  return !strcmp(module->op, "initialscale") || !strcmp(module->op, "colorout");
 }
 
 gboolean dt_dev_module_requires_global_histogram_input_cache(const dt_dev_pixelpipe_t *pipe,
@@ -239,7 +239,7 @@ void dt_dev_refresh_preview_histograms(dt_develop_t *dev)
   if(!dev || !dev->gui_attached || !dev->preview_pipe) return;
   if(!dev->preview_pipe->gui_observable_source) return;
 
-  _refresh_global_histogram_backbuf(dev, "demosaic");
+  _refresh_global_histogram_backbuf(dev, "initialscale");
   _refresh_global_histogram_backbuf(dev, "colorout");
   _refresh_global_histogram_backbuf(dev, "gamma");
 

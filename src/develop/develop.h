@@ -303,7 +303,7 @@ typedef struct dt_develop_t
   // aka dev->forms and dev->all_forms
   dt_pthread_rwlock_t masks_mutex;
 
-  dt_backbuf_t raw_histogram;     // backbuf to prepare the raw histogram (before white balance)
+  dt_backbuf_t raw_histogram;     // preview raw-stage histogram, currently sampled from initialscale output
   dt_backbuf_t output_histogram;  // backbuf to prepare the display-agnostic output histogram (in the middle of colorout)
   dt_backbuf_t display_histogram; // backbuf to prepare the display-referred output histogram (at the far end of the pipe)
   
