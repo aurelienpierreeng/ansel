@@ -712,33 +712,31 @@ static int process_rcd_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t
   }
 
   {
-    // Step 1.1: Calculate a squared vertical and horizontal high pass filter on color differences
-    size_t sizes[3] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
-    dt_opencl_set_kernel_arg(devid, gd->kernel_rcd_step_1_1, 0, sizeof(cl_mem), &cfa);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_rcd_step_1_1, 1, sizeof(cl_mem), &VP_diff);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_rcd_step_1_1, 2, sizeof(cl_mem), &HQ_diff);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_rcd_step_1_1, 3, sizeof(int), &width);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_rcd_step_1_1, 4, sizeof(int), &height);
-    err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_rcd_step_1_1, sizes);
+    // Fuse the vertical/horizontal high-pass and discrimination stages so the intermediate
+    // directional filters stay tile-local instead of being written to global memory.
+    dt_opencl_local_buffer_t locopt
+      = (dt_opencl_local_buffer_t){ .xoffset = 8, .xfactor = 1, .yoffset = 8, .yfactor = 1,
+                                    .cellsize = sizeof(float), .overhead = 0,
+                                    .sizex = 64, .sizey = 64 };
+
+    if(!dt_opencl_local_buffer_opt(devid, gd->kernel_rcd_step_1, &locopt)) goto error;
+    size_t sizes[3] = { ROUNDUP(width, locopt.sizex), ROUNDUP(height, locopt.sizey), 1 };
+    size_t local[3] = { locopt.sizex, locopt.sizey, 1 };
+    dt_opencl_set_kernel_arg(devid, gd->kernel_rcd_step_1, 0, sizeof(cl_mem), &cfa);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_rcd_step_1, 1, sizeof(cl_mem), &VH_dir);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_rcd_step_1, 2, sizeof(int), &width);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_rcd_step_1, 3, sizeof(int), &height);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_rcd_step_1, 4,
+                             sizeof(float) * (locopt.sizex + 8) * (locopt.sizey + 8), NULL);
+    err = dt_opencl_enqueue_kernel_2d_with_local(devid, gd->kernel_rcd_step_1, sizes, local);
     if(err != CL_SUCCESS) goto error;
   }
 
   {
-    // Step 1.2: Calculate vertical and horizontal local discrimination
-    size_t sizes[3] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
-    dt_opencl_set_kernel_arg(devid, gd->kernel_rcd_step_1_2, 0, sizeof(cl_mem), &VH_dir);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_rcd_step_1_2, 1, sizeof(cl_mem), &VP_diff);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_rcd_step_1_2, 2, sizeof(cl_mem), &HQ_diff);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_rcd_step_1_2, 3, sizeof(int), &width);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_rcd_step_1_2, 4, sizeof(int), &height);
-    err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_rcd_step_1_2, sizes);
-    if(err != CL_SUCCESS) goto error;
-  }
-
-  {
-    // Step 2.1: Low pass filter incorporating green, red and blue local samples from the raw data
+    // Reuse PQ_dir as the packed low-pass field consumed by step 3, then overwrite the same
+    // half-width buffer later with the diagonal discriminator used by step 5.
     size_t sizes[3] = { ROUNDUPDWD(width / 2, devid), ROUNDUPDHT(height, devid), 1 };
-    dt_opencl_set_kernel_arg(devid, gd->kernel_rcd_step_2_1, 0, sizeof(cl_mem), &PQ_dir); // double-use PQ_dir also for lpf
+    dt_opencl_set_kernel_arg(devid, gd->kernel_rcd_step_2_1, 0, sizeof(cl_mem), &PQ_dir);
     dt_opencl_set_kernel_arg(devid, gd->kernel_rcd_step_2_1, 1, sizeof(cl_mem), &cfa);
     dt_opencl_set_kernel_arg(devid, gd->kernel_rcd_step_2_1, 2, sizeof(int), &width);
     dt_opencl_set_kernel_arg(devid, gd->kernel_rcd_step_2_1, 3, sizeof(int), &height);
@@ -748,9 +746,8 @@ static int process_rcd_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t
   }
 
   {
-    // Step 3.1: Populate the green channel at blue and red CFA positions
     size_t sizes[3] = { ROUNDUPDWD(width / 2, devid), ROUNDUPDHT(height, devid), 1 };
-    dt_opencl_set_kernel_arg(devid, gd->kernel_rcd_step_3_1, 0, sizeof(cl_mem), &PQ_dir); // double-use PQ_dir also for lpf
+    dt_opencl_set_kernel_arg(devid, gd->kernel_rcd_step_3_1, 0, sizeof(cl_mem), &PQ_dir);
     dt_opencl_set_kernel_arg(devid, gd->kernel_rcd_step_3_1, 1, sizeof(cl_mem), &cfa);
     dt_opencl_set_kernel_arg(devid, gd->kernel_rcd_step_3_1, 2, sizeof(cl_mem), &rgb1);
     dt_opencl_set_kernel_arg(devid, gd->kernel_rcd_step_3_1, 3, sizeof(cl_mem), &VH_dir);
@@ -762,8 +759,9 @@ static int process_rcd_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t
   }
 
   {
-    // Step 4.1: Calculate a squared P/Q diagonals high pass filter on color differences
     size_t sizes[3] = { ROUNDUPDWD(width / 2, devid), ROUNDUPDHT(height, devid), 1 };
+    // Reuse the full-size scratch pair for the diagonal high-pass fields, then collapse
+    // them into PQ_dir before the red/blue reconstruction reads that compact field.
     dt_opencl_set_kernel_arg(devid, gd->kernel_rcd_step_4_1, 0, sizeof(cl_mem), &cfa);
     dt_opencl_set_kernel_arg(devid, gd->kernel_rcd_step_4_1, 1, sizeof(cl_mem), &VP_diff);
     dt_opencl_set_kernel_arg(devid, gd->kernel_rcd_step_4_1, 2, sizeof(cl_mem), &HQ_diff);
@@ -772,11 +770,7 @@ static int process_rcd_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t
     dt_opencl_set_kernel_arg(devid, gd->kernel_rcd_step_4_1, 5, sizeof(uint32_t), (void *)&piece->dsc_in.filters);
     err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_rcd_step_4_1, sizes);
     if(err != CL_SUCCESS) goto error;
-  }
 
-  {
-    // Step 4.2: Calculate P/Q diagonal local discrimination
-    size_t sizes[3] = { ROUNDUPDWD(width / 2, devid), ROUNDUPDHT(height, devid), 1 };
     dt_opencl_set_kernel_arg(devid, gd->kernel_rcd_step_4_2, 0, sizeof(cl_mem), &PQ_dir);
     dt_opencl_set_kernel_arg(devid, gd->kernel_rcd_step_4_2, 1, sizeof(cl_mem), &VP_diff);
     dt_opencl_set_kernel_arg(devid, gd->kernel_rcd_step_4_2, 2, sizeof(cl_mem), &HQ_diff);
@@ -785,11 +779,7 @@ static int process_rcd_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t
     dt_opencl_set_kernel_arg(devid, gd->kernel_rcd_step_4_2, 5, sizeof(uint32_t), (void *)&piece->dsc_in.filters);
     err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_rcd_step_4_2, sizes);
     if(err != CL_SUCCESS) goto error;
-  }
 
-  {
-    // Step 4.3: Populate the red and blue channels at blue and red CFA positions
-    size_t sizes[3] = { ROUNDUPDWD(width / 2, devid), ROUNDUPDHT(height, devid), 1 };
     dt_opencl_set_kernel_arg(devid, gd->kernel_rcd_step_5_1, 0, sizeof(cl_mem), &PQ_dir);
     dt_opencl_set_kernel_arg(devid, gd->kernel_rcd_step_5_1, 1, sizeof(cl_mem), &rgb0);
     dt_opencl_set_kernel_arg(devid, gd->kernel_rcd_step_5_1, 2, sizeof(cl_mem), &rgb1);
@@ -799,11 +789,7 @@ static int process_rcd_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t
     dt_opencl_set_kernel_arg(devid, gd->kernel_rcd_step_5_1, 6, sizeof(uint32_t), (void *)&piece->dsc_in.filters);
     err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_rcd_step_5_1, sizes);
     if(err != CL_SUCCESS) goto error;
-  }
 
-  {
-    // Step 5.2: Populate the red and blue channels at green CFA positions
-    size_t sizes[3] = { ROUNDUPDWD(width / 2, devid), ROUNDUPDHT(height, devid), 1 };
     dt_opencl_set_kernel_arg(devid, gd->kernel_rcd_step_5_2, 0, sizeof(cl_mem), &VH_dir);
     dt_opencl_set_kernel_arg(devid, gd->kernel_rcd_step_5_2, 1, sizeof(cl_mem), &rgb0);
     dt_opencl_set_kernel_arg(devid, gd->kernel_rcd_step_5_2, 2, sizeof(cl_mem), &rgb1);

@@ -33,6 +33,17 @@ static inline float calcBlendFactor(float val, float threshold)
     return 1.0f / (1.0f + native_exp(16.0f - (16.0f / threshold) * val));
 }
 
+static inline float rcd_vdiff_local(local const float *buf, const int stride)
+{
+  return sqrf(buf[-3 * stride] - 3.0f * buf[-2 * stride] - buf[-stride] + 6.0f * buf[0]
+            - buf[stride] - 3.0f * buf[2 * stride] + buf[3 * stride]);
+}
+
+static inline float rcd_hdiff_local(local const float *buf)
+{
+  return sqrf(buf[-3] - 3.0f * buf[-2] - buf[-1] + 6.0f * buf[0] - buf[1] - 3.0f * buf[2] + buf[3]);
+}
+
 // Populate cfa and rgb data by normalized input
 __kernel void rcd_populate (__read_only image2d_t in, global float *cfa, global float *rgb0, global float *rgb1, global float *rgb2, const int w, const int height, const unsigned int filters, const float scale)
 {
@@ -61,35 +72,48 @@ __kernel void rcd_write_output (__write_only image2d_t out, global float *rgb0, 
   write_imagef(out, (int2)(col, row), (float4)(fmax(scale * rgb0[idx], 0.0f), fmax(scale * rgb1[idx], 0.0f), fmax(scale * rgb2[idx], 0.0f), 0.0f));
 }
 
-// Step 1.1: Calculate a squared vertical and horizontal high pass filter on color differences
-__kernel void rcd_step_1_1 (global float *cfa, global float *v_diff, global float *h_diff, const int w, const int height)
+// Step 1.1 + 1.2: preload one CFA tile and derive the directional discrimination locally
+// so we avoid materializing two full-frame high-pass buffers in global memory.
+__kernel void rcd_step_1(global float *cfa, global float *VH_dir, const int w, const int height, local float *buffer)
 {
-  const int col = 3 + get_global_id(0);
-  const int row = 3 + get_global_id(1);
-  if((row > height - 4) || (col > w - 4)) return;
-  const int idx = mad24(row, w, col);
-  const int w2 = 2 * w;
-  const int w3 = 3 * w;
-  
-  v_diff[idx] = sqrf(cfa[idx - w3] - 3.0f * cfa[idx - w2] - cfa[idx - w] + 6.0f * cfa[idx] - cfa[idx + w] - 3.0f * cfa[idx + w2] + cfa[idx + w3]);
-  h_diff[idx] = sqrf(cfa[idx -  3] - 3.0f * cfa[idx -  2] - cfa[idx - 1] + 6.0f * cfa[idx] - cfa[idx + 1] - 3.0f * cfa[idx +  2] + cfa[idx +  3]);
-}
+  const int xlsz = get_local_size(0);
+  const int ylsz = get_local_size(1);
+  const int xlid = get_local_id(0);
+  const int ylid = get_local_id(1);
+  const int xgid = get_group_id(0);
+  const int ygid = get_group_id(1);
+  const int l = mad24(ylid, xlsz, xlid);
+  const int lsz = mul24(xlsz, ylsz);
+  const int stride = xlsz + 8;
+  const int maxbuf = mul24(stride, ylsz + 8);
+  const int xul = mul24(xgid, xlsz) - 2;
+  const int yul = mul24(ygid, ylsz) - 2;
 
-// Step 1.2: Calculate vertical and horizontal local discrimination
-__kernel void rcd_step_1_2 (global float *VH_dir, global float *v_diff, global float *h_diff, const int w, const int height)
-{
+  for(int n = 0; n <= maxbuf / lsz; n++)
+  {
+    const int bufidx = mad24(n, lsz, l);
+    if(bufidx >= maxbuf) continue;
+    const int xx = clamp(xul + bufidx % stride, 0, w - 1);
+    const int yy = clamp(yul + bufidx / stride, 0, height - 1);
+    buffer[bufidx] = cfa[mad24(yy, w, xx)];
+  }
+
+  barrier(CLK_LOCAL_MEM_FENCE);
+
   const int col = 2 + get_global_id(0);
   const int row = 2 + get_global_id(1);
   if((row > height - 3) || (col > w - 3)) return;
   const int idx = mad24(row, w, col);
   const float eps = 1e-10f;
+  local const float *buf = buffer + mad24(ylid + 4, stride, xlid + 4);
 
-  const float V_Stat = fmax(eps, v_diff[idx - w] + v_diff[idx] + v_diff[idx + w]);
-  const float H_Stat = fmax(eps, h_diff[idx - 1] + h_diff[idx] + h_diff[idx + 1]);
+  const float V_Stat = fmax(eps, rcd_vdiff_local(buf - stride, stride) + rcd_vdiff_local(buf, stride)
+                                 + rcd_vdiff_local(buf + stride, stride));
+  const float H_Stat = fmax(eps, rcd_hdiff_local(buf - 1) + rcd_hdiff_local(buf) + rcd_hdiff_local(buf + 1));
   VH_dir[idx] = V_Stat / (V_Stat + H_Stat);
 }
 
-// Step 2.1: Low pass filter incorporating green, red and blue local samples from the raw data
+// Step 2.1: low pass filter incorporating green, red and blue local samples from the raw data.
 __kernel void rcd_step_2_1(global float *lpf, global float *cfa, const int w, const int height, const unsigned int filters)
 {
   const int row = 2 + get_global_id(1);
@@ -102,7 +126,7 @@ __kernel void rcd_step_2_1(global float *lpf, global float *cfa, const int w, co
     + 0.25f * (cfa[idx - w - 1] + cfa[idx - w + 1] + cfa[idx + w - 1] + cfa[idx + w + 1]);
 }
 
-// Step 3.1: Populate the green channel at blue and red CFA positions
+// Step 3.1: populate the green channel at blue and red CFA positions.
 __kernel void rcd_step_3_1(global float *lpf, global float *cfa, global float *rgb1, global float *VH_Dir, const int w, const int height, const unsigned int filters)
 {
   const int row = 4 + get_global_id(1);
@@ -140,9 +164,9 @@ __kernel void rcd_step_3_1(global float *lpf, global float *cfa, global float *r
 
   // G@B and G@R interpolation
   rgb1[idx] = mix(V_Est, H_Est, VH_Disc);
-} 
+}
 
-// Step 4.0: Calculate the square of the P/Q diagonals color difference high pass filter
+// Step 4.1: calculate the square of the P/Q diagonals color difference high pass filter.
 __kernel void rcd_step_4_1(global float *cfa, global float *p_diff, global float *q_diff, const int w, const int height, const unsigned int filters)
 {
   const int row = 3 + get_global_id(1);
@@ -153,11 +177,13 @@ __kernel void rcd_step_4_1(global float *cfa, global float *p_diff, global float
   const int w2 = 2 * w;
   const int w3 = 3 * w;
 
-  p_diff[idx2] = sqrf((cfa[idx - w3 - 3] - cfa[idx - w - 1] - cfa[idx + w + 1] + cfa[idx + w3 + 3]) - 3.0f * (cfa[idx - w2 - 2] + cfa[idx + w2 + 2]) + 6.0f * cfa[idx]);
-  q_diff[idx2] = sqrf((cfa[idx - w3 + 3] - cfa[idx - w + 1] - cfa[idx + w - 1] + cfa[idx + w3 - 3]) - 3.0f * (cfa[idx - w2 + 2] + cfa[idx + w2 - 2]) + 6.0f * cfa[idx]);
+  p_diff[idx2] = sqrf((cfa[idx - w3 - 3] - cfa[idx - w - 1] - cfa[idx + w + 1] + cfa[idx + w3 + 3])
+                    - 3.0f * (cfa[idx - w2 - 2] + cfa[idx + w2 + 2]) + 6.0f * cfa[idx]);
+  q_diff[idx2] = sqrf((cfa[idx - w3 + 3] - cfa[idx - w + 1] - cfa[idx + w - 1] + cfa[idx + w3 - 3])
+                    - 3.0f * (cfa[idx - w2 + 2] + cfa[idx + w2 - 2]) + 6.0f * cfa[idx]);
 }
 
-// Step 4.1: Calculate P/Q diagonals local discrimination strength
+// Step 4.2: calculate P/Q diagonals local discrimination strength.
 __kernel void rcd_step_4_2(global float *PQ_dir, global float *p_diff, global float *q_diff, const int w, const int height, const unsigned int filters)
 {
   const int row = 2 + get_global_id(1);
@@ -166,7 +192,7 @@ __kernel void rcd_step_4_2(global float *PQ_dir, global float *p_diff, global fl
   const int idx = mad24(row, w, col);
   const int idx2 = idx / 2;
   const int idx3 = (idx - w - 1) / 2;
-  const int idx4 = (idx + w - 1) / 2;  
+  const int idx4 = (idx + w - 1) / 2;
   const float eps = 1e-10f;
 
   const float P_Stat = fmax(eps, p_diff[idx3]     + p_diff[idx2] + p_diff[idx4 + 1]);
@@ -174,7 +200,7 @@ __kernel void rcd_step_4_2(global float *PQ_dir, global float *p_diff, global fl
   PQ_dir[idx2] = P_Stat / (P_Stat + Q_Stat);
 }
 
-// Step 4.2: Populate the red and blue channels at blue and red CFA positions
+// Step 5.1: populate the red and blue channels at blue and red CFA positions.
 __kernel void rcd_step_5_1(global float *PQ_dir, global float *rgb0, global float *rgb1, global float *rgb2, const int w, const int height, const unsigned int filters)
 {
   const int row = 4 + get_global_id(1);
@@ -186,7 +212,7 @@ __kernel void rcd_step_5_1(global float *PQ_dir, global float *rgb0, global floa
   global float *rgbc = rgb0;
   if(color == 1) rgbc = rgb1;
   else if(color == 2) rgbc = rgb2;
- 
+
   const int idx = mad24(row, w, col);
   const int pqidx = idx / 2;
   const int pqidx2 = (idx - w - 1) / 2;
@@ -215,7 +241,7 @@ __kernel void rcd_step_5_1(global float *PQ_dir, global float *rgb0, global floa
   rgbc[idx]= rgb1[idx] + mix(P_Est, Q_Est, PQ_Disc);
 }
 
-// Step 4.3: Populate the red and blue channels at green CFA positions
+// Step 5.2: populate the red and blue channels at green CFA positions.
 __kernel void rcd_step_5_2(global float *VH_dir, global float *rgb0, global float *rgb1, global float *rgb2, const int w, const int height, const unsigned int filters)
 {
   const int row = 4 + get_global_id(1);
@@ -250,7 +276,7 @@ __kernel void rcd_step_5_2(global float *VH_dir, global float *rgb0, global floa
 
     const float SNabs = fabs(rgbc[idx - w] - rgbc[idx + w]);
     const float EWabs = fabs(rgbc[idx - 1] - rgbc[idx + 1]);
- 
+
     // Cardinal gradients
     const float N_Grad = N1 + SNabs + fabs(rgbc[idx - w] - rgbc[idx - w3]);
     const float S_Grad = S1 + SNabs + fabs(rgbc[idx + w] - rgbc[idx + w3]);
@@ -629,4 +655,3 @@ kernel void rcd_border_redblue(read_only image2d_t in, write_only image2d_t out,
   }
   write_imagef (out, (int2)(x, y), fmax(color, 0.0f));
 }
-

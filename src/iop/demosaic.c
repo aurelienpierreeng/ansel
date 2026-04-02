@@ -209,8 +209,7 @@ typedef struct dt_iop_demosaic_global_data_t
   int kernel_markesteijn_final;
   int kernel_rcd_populate;
   int kernel_rcd_write_output;
-  int kernel_rcd_step_1_1;
-  int kernel_rcd_step_1_2;
+  int kernel_rcd_step_1;
   int kernel_rcd_step_2_1;
   int kernel_rcd_step_3_1;
   int kernel_rcd_step_4_1;
@@ -1994,8 +1993,7 @@ void init_global(dt_iop_module_so_t *module)
   const int rcd = 31; // from programs.conf
   gd->kernel_rcd_populate = dt_opencl_create_kernel(rcd, "rcd_populate");
   gd->kernel_rcd_write_output = dt_opencl_create_kernel(rcd, "rcd_write_output");
-  gd->kernel_rcd_step_1_1 = dt_opencl_create_kernel(rcd, "rcd_step_1_1");
-  gd->kernel_rcd_step_1_2 = dt_opencl_create_kernel(rcd, "rcd_step_1_2");
+  gd->kernel_rcd_step_1 = dt_opencl_create_kernel(rcd, "rcd_step_1");
   gd->kernel_rcd_step_2_1 = dt_opencl_create_kernel(rcd, "rcd_step_2_1");
   gd->kernel_rcd_step_3_1 = dt_opencl_create_kernel(rcd, "rcd_step_3_1");
   gd->kernel_rcd_step_4_1 = dt_opencl_create_kernel(rcd, "rcd_step_4_1");
@@ -2070,8 +2068,7 @@ void cleanup_global(dt_iop_module_so_t *module)
   dt_opencl_free_kernel(gd->kernel_markesteijn_final);
   dt_opencl_free_kernel(gd->kernel_rcd_populate);
   dt_opencl_free_kernel(gd->kernel_rcd_write_output);
-  dt_opencl_free_kernel(gd->kernel_rcd_step_1_1);
-  dt_opencl_free_kernel(gd->kernel_rcd_step_1_2);
+  dt_opencl_free_kernel(gd->kernel_rcd_step_1);
   dt_opencl_free_kernel(gd->kernel_rcd_step_2_1);
   dt_opencl_free_kernel(gd->kernel_rcd_step_3_1);
   dt_opencl_free_kernel(gd->kernel_rcd_step_4_1);
