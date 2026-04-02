@@ -751,8 +751,9 @@ static inline void apply_toneequalizer(const float *const restrict in,
     const size_t idx = k * ch;
     const dt_aligned_pixel_simd_t pix_in = dt_load_simd_aligned(in + idx);
     const dt_aligned_pixel_simd_t correction_v = { correction, correction, correction, 1.0f };
-    dt_store_simd_aligned(out + idx, pix_in * correction_v);
+    dt_store_simd_nontemporal(out + idx, pix_in * correction_v);
   }
+  dt_omploop_sfence();  // ensure that nontemporal writes complete before the caller reads output
 }
 
 #else
@@ -796,8 +797,9 @@ static inline void apply_toneequalizer(const float *const restrict in,
     const size_t idx = k * ch;
     const dt_aligned_pixel_simd_t pix_in = dt_load_simd_aligned(in + idx);
     const dt_aligned_pixel_simd_t correction_v = { correction, correction, correction, 1.0f };
-    dt_store_simd_aligned(out + idx, pix_in * correction_v);
+    dt_store_simd_nontemporal(out + idx, pix_in * correction_v);
   }
+  dt_omploop_sfence();  // ensure that nontemporal writes complete before the caller reads output
 }
 #endif // USE_LUT
 
@@ -934,8 +936,9 @@ static inline void display_luminance_mask(const float *const restrict in,
         intensity_v[3] = in[in_index + 3];
       }
 
-      dt_store_simd_aligned(out + index, intensity_v);
+      dt_store_simd_nontemporal(out + index, intensity_v);
     }
+  dt_omploop_sfence();  // ensure that nontemporal writes complete before the caller reads output
 }
 
 

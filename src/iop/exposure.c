@@ -503,6 +503,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const float black = d->black;
   const float scale = d->scale;
   const size_t npixels = (size_t)roi_out->width * roi_out->height;
+  const gboolean use_stream = (ch == 4);
 
   if(ch == 4)
   {
@@ -517,7 +518,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     {
       const size_t p = 4 * k;
       const dt_aligned_pixel_simd_t in_v = dt_load_simd_aligned(in + p);
-      dt_store_simd_aligned(out + p, (in_v - black_v) * scale_v);
+      dt_store_simd_nontemporal(out + p, (in_v - black_v) * scale_v);
     }
   }
   else
@@ -532,6 +533,8 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
       out[k] = (in[k] - black) * scale;
     }
   }
+
+  if(use_stream) dt_omploop_sfence();  // ensure streamed RGB writes complete before alpha copy touches output
 
   if(pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
     dt_iop_alpha_copy(i, o, roi_out->width, roi_out->height);

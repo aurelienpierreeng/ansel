@@ -893,8 +893,9 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
       pix_out_v = dt_simd_max_zero(pix_out_v);
       pix_out_v[3] = pix_in_v[3];
     }
-    dt_store_simd_aligned(pix_out, pix_out_v);
+    dt_store_simd_nontemporal(pix_out, pix_out_v);
   }
+  dt_omploop_sfence();  // ensure that nontemporal writes complete before the caller reads output
 
   return 0;
 }
