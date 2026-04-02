@@ -391,7 +391,8 @@ colorbalancergb (read_only image2d_t in, write_only image2d_t out,
                  constant const float4 *const matrix_in, constant const float4 *const matrix_out,
                  read_only image2d_t gamut_lut,
                  const float shadows_weight, const float highlights_weight, const float midtones_weight, const float mask_grey_fulcrum,
-                 const float hue_angle, const float chroma_global, const float4 chroma, const float vibrance,
+                 const float2 hue_rotation_row_0, const float2 hue_rotation_row_1,
+                 const float chroma_global, const float4 chroma, const float vibrance,
                  const float4 global_offset, const float4 shadows, const float4 highlights, const float4 midtones,
                  const float white_fulcrum, const float midtones_Y,
                  const float grey_fulcrum, const float contrast,
@@ -410,7 +411,6 @@ colorbalancergb (read_only image2d_t in, write_only image2d_t out,
   float4 LMS = 0.f;
   float4 RGB = 0.f;
   float4 Yrg = 0.f;
-  float4 Ych = 0.f;
 
   // clip pipeline RGB
   RGB = fmax(pix_in, 0.f);
@@ -421,33 +421,45 @@ colorbalancergb (read_only image2d_t in, write_only image2d_t out,
   // go to Filmlight Yrg
   Yrg = LMS_to_Yrg(LMS);
 
-  // go to Ych
-  Ych = Yrg_to_Ych(Yrg);
-
   // Sanitize input : no negative luminance
-  Ych.x = fmax(Ych.x, 0.f);
-  const float4 opacities = opacity_masks(native_powr(Ych.x, 0.4101205819200422f), // center middle grey in 50 %
+  Yrg.x = max(Yrg.x, 0.f);
+  const float4 opacities = opacity_masks(native_powr(Yrg.x, 0.4101205819200422f), // center middle grey in 50 %
                                          shadows_weight, highlights_weight, midtones_weight, mask_grey_fulcrum);
   const float4 opacities_comp = (float4)1.f - opacities;
 
-  // Hue shift - do it now because we need the gamut limit at output hue right after
-  Ych.z += hue_angle;
-
-  // Ensure hue ± correction is in [-PI; PI]
-  if(Ych.z > M_PI_F) Ych.z -= 2.f * M_PI_F;
-  else if(Ych.z < -M_PI_F) Ych.z += 2.f * M_PI_F;
-
-  // Linear chroma : distance to achromatic at constant luminance in scene-referred
+  // Rotate the centered chromaticity plane directly so hue shift stays a 2D transform.
+  const float2 rg_centered = (float2)(Yrg.y - 0.21902143f, Yrg.z - 0.54371398f);
+  const float2 rg_rotated = (float2)(dot(hue_rotation_row_0, rg_centered), dot(hue_rotation_row_1, rg_centered));
+  const float chroma_in = sqrt(dot(rg_rotated, rg_rotated));
+  const float inv_chroma_in = (chroma_in > 0.f) ? 1.f / chroma_in : 0.f;
+  const float cos_h = rg_rotated.x * inv_chroma_in;
+  const float sin_h = rg_rotated.y * inv_chroma_in;
   const float chroma_boost = chroma_global + dot(opacities, chroma);
-  const float vib = vibrance * (1.0f - native_powr(Ych.y, fabs(vibrance)));
-  const float chroma_factor = fmax(1.f + chroma_boost + vib, 0.f);
-  Ych.y *= chroma_factor;
+  const float vib = vibrance * (1.0f - native_powr(chroma_in, fabs(vibrance)));
+  const float chroma_factor = max(1.f + chroma_boost + vib, 0.f);
+  float chroma_out = chroma_in * chroma_factor;
 
-  // clip chroma at constant Y and hue
-  Ych = gamut_check_Yrg(Ych);
+  // Clamp the rotated chroma before rebuilding Yrg so we avoid another polar round-trip.
+  const float r_shifted = chroma_out * cos_h + 0.21902143f;
+  const float g_shifted = chroma_out * sin_h + 0.54371398f;
+  if(r_shifted < 0.f)
+  {
+    const float r_limit = -0.21902143f / cos_h;
+    chroma_out = min(r_limit, chroma_out);
+  }
+  if(g_shifted < 0.f)
+  {
+    const float g_limit = -0.54371398f / sin_h;
+    chroma_out = min(g_limit, chroma_out);
+  }
+  if(r_shifted + g_shifted > 1.f)
+  {
+    const float sum_limit = (1.f - 0.21902143f - 0.54371398f) / (cos_h + sin_h);
+    chroma_out = min(sum_limit, chroma_out);
+  }
 
-  // go to Yrg for real
-  Yrg = Ych_to_Yrg(Ych);
+  Yrg.y = chroma_out * cos_h + 0.21902143f;
+  Yrg.z = chroma_out * sin_h + 0.54371398f;
 
   // Go to LMS
   LMS = Yrg_to_LMS(Yrg);
@@ -472,7 +484,7 @@ colorbalancergb (read_only image2d_t in, write_only image2d_t out,
   Yrg = LMS_to_Yrg(LMS);
 
   // Y midtones power (gamma)
-  Yrg.x = native_powr(fmax(Yrg.x / white_fulcrum, 0.f), midtones_Y) * white_fulcrum;
+  Yrg.x = native_powr(max(Yrg.x / white_fulcrum, 0.f), midtones_Y) * white_fulcrum;
 
   // Y fulcrumed contrast
   Yrg.x = grey_fulcrum * native_powr(Yrg.x / grey_fulcrum, contrast);
@@ -490,6 +502,9 @@ colorbalancergb (read_only image2d_t in, write_only image2d_t out,
     // Convert to JCh
     float JC[2] = { Jab.x, hypot(Jab.y, Jab.z) };               // brightness/chroma vector
     const float h = atan2(Jab.z, Jab.y);  // hue : (a, b) angle
+    const float inv_chroma = (JC[1] > 0.f) ? 1.f / JC[1] : 0.f;
+    const float cos_H = Jab.y * inv_chroma;
+    const float sin_H = Jab.z * inv_chroma;
 
     // Project JC onto S, the saturation eigenvector, with orthogonal vector O.
     // Note : O should be = (C * cosf(T) - J * sinf(T)) = 0 since S is the eigenvector,
@@ -509,11 +524,11 @@ colorbalancergb (read_only image2d_t in, write_only image2d_t out,
 
     SO[0] = JC[0] * M_rot_dir[0][0] + JC[1] * M_rot_dir[0][1];
     SO[1] = SO[0] * clamp(T * boosts[1], -T, M_PI_F / 2.f - T);
-    SO[0] = fmax(SO[0] * boosts[0], 0.f);
+    SO[0] = max(SO[0] * boosts[0], 0.f);
 
     // Project back to JCh, that is rotate back of -T angle
-    JC[0] = fmax(SO[0] * M_rot_inv[0][0] + SO[1] * M_rot_inv[0][1], 0.f);
-    JC[1] = fmax(SO[0] * M_rot_inv[1][0] + SO[1] * M_rot_inv[1][1], 0.f);
+    JC[0] = max(SO[0] * M_rot_inv[0][0] + SO[1] * M_rot_inv[0][1], 0.f);
+    JC[1] = max(SO[0] * M_rot_inv[1][0] + SO[1] * M_rot_inv[1][1], 0.f);
 
     // Gamut mapping
     const float out_max_sat_h = lookup_gamut(gamut_lut, h);
@@ -529,14 +544,11 @@ colorbalancergb (read_only image2d_t in, write_only image2d_t out,
     // Gamut-clip in Jch at constant hue and lightness,
     // e.g. find the max chroma available at current hue that doesn't
     // yield negative L'M'S' values, which will need to be clipped during conversion
-    const float cos_H = native_cos(h);
-    const float sin_H = native_sin(h);
-
     const float d0 = 1.6295499532821566e-11f;
     const float d = -0.56f;
     float Iz = JC[0] + d0;
     Iz /= (1.f + d - d * Iz);
-    Iz = fmax(Iz, 0.f);
+    Iz = max(Iz, 0.f);
 
     const float4 AI[3] = { {  1.0f,  0.1386050432715393f,  0.0580473161561189f, 0.0f },
                           {  1.0f, -0.1386050432715393f, -0.0580473161561189f, 0.0f },
@@ -551,13 +563,13 @@ colorbalancergb (read_only image2d_t in, write_only image2d_t out,
     // Clip chroma
     float max_C = JC[1];
     if(LMS.x < 0.f)
-      max_C = fmin(-Iz / (AI[0].y * cos_H + AI[0].z * sin_H), max_C);
+      max_C = min(-Iz / (AI[0].y * cos_H + AI[0].z * sin_H), max_C);
 
     if(LMS.y < 0.f)
-      max_C = fmin(-Iz / (AI[1].y * cos_H + AI[1].z * sin_H), max_C);
+      max_C = min(-Iz / (AI[1].y * cos_H + AI[1].z * sin_H), max_C);
 
     if(LMS.z < 0.f)
-      max_C = fmin(-Iz / (AI[2].y * cos_H + AI[2].z * sin_H), max_C);
+      max_C = min(-Iz / (AI[2].y * cos_H + AI[2].z * sin_H), max_C);
 
     // Project back to JzAzBz for real
     Jab.x = JC[0];
@@ -579,11 +591,13 @@ colorbalancergb (read_only image2d_t in, write_only image2d_t out,
     // This would be the full matrice of direct rotation if we didn't need only its last row
     //const float M_rot_dir[2][2] = { { cos_T, -sin_T }, {  sin_T, cos_T } };
 
-    float P = HCB.y;
+    float P = max(HCB.y, FLT_MIN);
     float W = sin_T * HCB.y + cos_T * HCB.z;
 
-    float a = fmax(1.f + saturation_global + dot(opacities, saturation), 0.f);
-    const float b = fmax(1.f + brilliance_global + dot(opacities, brilliance), 0.f);
+    const float2 sat_bri = max((float2)(1.f + saturation_global + dot(opacities, saturation),
+                                        1.f + brilliance_global + dot(opacities, brilliance)), 0.f);
+    float a = sat_bri.x;
+    const float b = sat_bri.y;
 
     const float max_a = hypot(P, W) / P;
     a = soft_clip(a, 0.5f * max_a, max_a);
@@ -591,8 +605,8 @@ colorbalancergb (read_only image2d_t in, write_only image2d_t out,
     const float P_prime = (a - 1.f) * P;
     const float W_prime = native_sqrt(sqf(P) * (1.f - sqf(a)) + sqf(W)) * b;
 
-    HCB.y = fmax(M_rot_inv[0][0] * P_prime + M_rot_inv[0][1] * W_prime, 0.f);
-    HCB.z = fmax(M_rot_inv[1][0] * P_prime + M_rot_inv[1][1] * W_prime, 0.f);
+    HCB.y = max(M_rot_inv[0][0] * P_prime + M_rot_inv[0][1] * W_prime, 0.f);
+    HCB.z = max(M_rot_inv[1][0] * P_prime + M_rot_inv[1][1] * W_prime, 0.f);
 
     JCH = dt_UCS_HCB_to_JCH(HCB);
 

@@ -665,12 +665,18 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const size_t checker_1 = (mask_display) ? DT_PIXEL_APPLY_DPI(d->checker_size) : 0;
   const size_t checker_2 = 2 * checker_1;
   const size_t npixels = (size_t)roi_out->width * roi_out->height;
+  const size_t out_width = roi_out->width;
 
   const float L_white = Y_to_dt_UCS_L_star(d->white_fulcrum);
+  const float DT_ALIGNED_PIXEL hue_rotation_matrix[2][2] = {
+    { cosf(d->hue_angle), -sinf(d->hue_angle) },
+    { sinf(d->hue_angle),  cosf(d->hue_angle) },
+  };
   #ifdef _OPENMP
   #pragma omp parallel for default(none) \
     dt_omp_firstprivate(in, out, roi_out, d, g, mask_display, gamut_LUT, npixels, \
-      global, highlights, shadows, midtones, chroma, saturation, brilliance, checker_1, checker_2, L_white, \
+      global, highlights, shadows, midtones, chroma, saturation, brilliance, checker_1, checker_2, out_width, \
+      hue_rotation_matrix, L_white, \
       input0, input1, input2, output0, output1, output2, global_v, highlights_v, shadows_v, midtones_v, \
       checker_color_1_v, checker_color_2_v, jz_ai0, jz_ai1, jz_ai2) \
       schedule(static)
@@ -685,31 +691,48 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     dt_aligned_pixel_simd_t RGB_v = dt_simd_max_zero(pix_in_v);
     RGB_v[3] = 0.f;
     const dt_aligned_pixel_simd_t LMS_v = dt_mat3x4_mul_vec4(RGB_v, input0, input1, input2);
-    dt_aligned_pixel_simd_t Ych_v = Yrg_to_Ych_simd(LMS_to_Yrg_simd(LMS_v));
-    Ych_v[0] = fmaxf(Ych_v[0], 0.f);
+    dt_aligned_pixel_simd_t Yrg_v = LMS_to_Yrg_simd(LMS_v);
+    Yrg_v[0] = MAX(Yrg_v[0], 0.f);
     dt_aligned_pixel_t opacities = { 0.f };
     dt_aligned_pixel_t opacities_comp = { 0.f };
-    opacity_masks(powf(Ych_v[0], 0.4101205819200422f), d->shadows_weight, d->highlights_weight,
+    opacity_masks(powf(Yrg_v[0], 0.4101205819200422f), d->shadows_weight, d->highlights_weight,
                   d->midtones_weight, d->mask_grey_fulcrum, opacities, opacities_comp);
 
-    // Hue shift - do it now because we need the gamut limit at output hue right after
-    Ych_v[2] += d->hue_angle;
-
-    // Ensure hue +- correction is in [-PI; PI]
-    if(Ych_v[2] > M_PI_F) Ych_v[2] -= 2.f * M_PI_F;
-    else if(Ych_v[2] < -M_PI_F) Ych_v[2] += 2.f * M_PI_F;
-
-    // Linear chroma : distance to achromatic at constant luminance in scene-referred
+    // Rotate the centered chromaticity plane directly so we keep the hue shift as a 2D transform
+    // and only rebuild polar hue/chroma once, after the saturation/vibrance scaling.
+    const float r_centered = Yrg_v[1] - 0.21902143f;
+    const float g_centered = Yrg_v[2] - 0.54371398f;
+    const float r_rotated = hue_rotation_matrix[0][0] * r_centered + hue_rotation_matrix[0][1] * g_centered;
+    const float g_rotated = hue_rotation_matrix[1][0] * r_centered + hue_rotation_matrix[1][1] * g_centered;
+    const float chroma_in = dt_fast_hypotf(g_rotated, r_rotated);
+    const float inv_chroma_in = (chroma_in > 0.f) ? 1.f / chroma_in : 0.f;
+    const float cos_h = r_rotated * inv_chroma_in;
+    const float sin_h = g_rotated * inv_chroma_in;
     const float chroma_boost = d->chroma_global + scalar_product(opacities, chroma);
-    const float vibrance = d->vibrance * (1.0f - powf(Ych_v[1], fabsf(d->vibrance)));
-    const float chroma_factor = fmaxf(1.f + chroma_boost + vibrance, 0.f);
-    Ych_v[1] *= chroma_factor;
+    const float vibrance = d->vibrance * (1.0f - powf(chroma_in, fabsf(d->vibrance)));
+    const float chroma_factor = MAX(1.f + chroma_boost + vibrance, 0.f);
+    float chroma_out = chroma_in * chroma_factor;
 
-    // clip chroma at constant hue and Y if needed
-    Ych_v = gamut_check_Yrg_simd(Ych_v);
-
-    // go to Yrg for real
-    dt_aligned_pixel_simd_t Yrg_v = Ych_to_Yrg_simd(Ych_v);
+    // Clamp the rotated chroma before rebuilding Yrg so we avoid a second sin/cos round-trip.
+    const float r_shifted = chroma_out * cos_h + 0.21902143f;
+    const float g_shifted = chroma_out * sin_h + 0.54371398f;
+    if(r_shifted < 0.f)
+    {
+      const float r_limit = -0.21902143f / cos_h;
+      chroma_out = MIN(r_limit, chroma_out);
+    }
+    if(g_shifted < 0.f)
+    {
+      const float g_limit = -0.54371398f / sin_h;
+      chroma_out = MIN(g_limit, chroma_out);
+    }
+    if(r_shifted + g_shifted > 1.f)
+    {
+      const float sum_limit = (1.f - 0.21902143f - 0.54371398f) / (cos_h + sin_h);
+      chroma_out = MIN(sum_limit, chroma_out);
+    }
+    Yrg_v[1] = chroma_out * cos_h + 0.21902143f;
+    Yrg_v[2] = chroma_out * sin_h + 0.54371398f;
 
     // Go to LMS
     dt_aligned_pixel_simd_t LMS_work_v = Yrg_to_LMS_simd(Yrg_v);
@@ -737,7 +760,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     Yrg_v = LMS_to_Yrg_simd(LMS_work_v);
 
     // Y midtones power (gamma)
-    Yrg_v[0] = powf(fmaxf(Yrg_v[0] / d->white_fulcrum, 0.f), d->midtones_Y) * d->white_fulcrum;
+    Yrg_v[0] = powf(MAX(Yrg_v[0] / d->white_fulcrum, 0.f), d->midtones_Y) * d->white_fulcrum;
 
     // Y fulcrumed contrast
     Yrg_v[0] = d->grey_fulcrum * powf(Yrg_v[0] / d->grey_fulcrum, d->contrast);
@@ -753,6 +776,9 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
       // Convert to JCh
       float JC[2] = { Jab_v[0], dt_fast_hypotf(Jab_v[1], Jab_v[2]) };   // brightness/chroma vector
       const float h = atan2f(Jab_v[2], Jab_v[1]);  // hue : (a, b) angle
+      const float inv_chroma = (JC[1] > 0.f) ? 1.f / JC[1] : 0.f;
+      const float cos_H = Jab_v[1] * inv_chroma;
+      const float sin_H = Jab_v[2] * inv_chroma;
 
       // Project JC onto S, the saturation eigenvector, with orthogonal vector O.
       // Note : O should be = (C * cosf(T) - J * sinf(T)) = 0 since S is the eigenvector,
@@ -771,12 +797,12 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
                                 d->saturation_global + scalar_product(opacities, saturation) }; // move in O direction
 
       SO[0] = JC[0] * M_rot_dir[0][0] + JC[1] * M_rot_dir[0][1];
-      SO[1] = SO[0] * fminf(fmaxf(T * boosts[1], -T), DT_M_PI_F / 2.f - T);
-      SO[0] = fmaxf(SO[0] * boosts[0], 0.f);
+      SO[1] = SO[0] * MIN(MAX(T * boosts[1], -T), DT_M_PI_F / 2.f - T);
+      SO[0] = MAX(SO[0] * boosts[0], 0.f);
 
       // Project back to JCh, that is rotate back of -T angle
-      JC[0] = fmaxf(SO[0] * M_rot_inv[0][0] + SO[1] * M_rot_inv[0][1], 0.f);
-      JC[1] = fmaxf(SO[0] * M_rot_inv[1][0] + SO[1] * M_rot_inv[1][1], 0.f);
+      JC[0] = MAX(SO[0] * M_rot_inv[0][0] + SO[1] * M_rot_inv[0][1], 0.f);
+      JC[1] = MAX(SO[0] * M_rot_inv[1][0] + SO[1] * M_rot_inv[1][1], 0.f);
 
       // Gamut mapping
       const float out_max_sat_h = lookup_gamut(gamut_LUT, h);
@@ -792,14 +818,11 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
       // Gamut-clip in Jch at constant hue and lightness,
       // e.g. find the max chroma available at current hue that doesn't
       // yield negative L'M'S' values, which will need to be clipped during conversion
-      const float cos_H = cosf(h);
-      const float sin_H = sinf(h);
-
       const float d0 = 1.6295499532821566e-11f;
       const float dd = -0.56f;
       float Iz = JC[0] + d0;
       Iz /= (1.f + dd - dd * Iz);
-      Iz = fmaxf(Iz, 0.f);
+      Iz = MAX(Iz, 0.f);
 
       const dt_colormatrix_t AI
           = { {  1.0f,  0.1386050432715393f,  0.0580473161561189f, 0.0f },
@@ -813,13 +836,13 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
       // Clip chroma
       float max_C = JC[1];
       if(LMS_test_v[0] < 0.f)
-        max_C = fmin(-Iz / (AI[0][1] * cos_H + AI[0][2] * sin_H), max_C);
+        max_C = MIN(-Iz / (AI[0][1] * cos_H + AI[0][2] * sin_H), max_C);
 
       if(LMS_test_v[1] < 0.f)
-        max_C = fmin(-Iz / (AI[1][1] * cos_H + AI[1][2] * sin_H), max_C);
+        max_C = MIN(-Iz / (AI[1][1] * cos_H + AI[1][2] * sin_H), max_C);
 
       if(LMS_test_v[2] < 0.f)
-        max_C = fmin(-Iz / (AI[2][1] * cos_H + AI[2][2] * sin_H), max_C);
+        max_C = MIN(-Iz / (AI[2][1] * cos_H + AI[2][2] * sin_H), max_C);
 
       // Project back to JzAzBz for real
       const dt_aligned_pixel_simd_t Jab_out_v = { JC[0], max_C * cos_H, max_C * sin_H, 0.f };
@@ -831,25 +854,30 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
       dt_aligned_pixel_simd_t JCH_v = xyY_to_dt_UCS_JCH_simd(xyY_v, L_white);
       dt_aligned_pixel_simd_t HCB_v = dt_UCS_JCH_to_HCB_simd(JCH_v);
 
-      const float radius = hypotf(HCB_v[1], HCB_v[2]);
+      const float radius = dt_fast_hypotf(HCB_v[1], HCB_v[2]);
       const float sin_T = (radius > 0.f) ? HCB_v[1] / radius : 0.f;
       const float cos_T = (radius > 0.f) ? HCB_v[2] / radius : 0.f;
       const float DT_ALIGNED_PIXEL M_rot_inv[2][2] = { { cos_T,  sin_T }, { -sin_T, cos_T } };
 
-      float P = HCB_v[1];
+      float P = MAX(HCB_v[1], FLT_MIN);
       float W = sin_T * HCB_v[1] + cos_T * HCB_v[2];
 
-      float a = fmaxf(1.f + d->saturation_global + scalar_product(opacities, saturation), 0.f);
-      const float b = fmaxf(1.f + d->brilliance_global + scalar_product(opacities, brilliance), 0.f);
+      const dt_aligned_pixel_simd_t sat_bri_v = dt_simd_max_zero((dt_aligned_pixel_simd_t){
+        1.f + d->saturation_global + scalar_product(opacities, saturation),
+        1.f + d->brilliance_global + scalar_product(opacities, brilliance),
+        0.f, 0.f
+      });
+      float a = sat_bri_v[0];
+      const float b = sat_bri_v[1];
 
-      const float max_a = hypotf(P, W) / P;
+      const float max_a = dt_fast_hypotf(P, W) / P;
       a = soft_clip(a, 0.5f * max_a, max_a);
 
       const float P_prime = (a - 1.f) * P;
       const float W_prime = sqrtf(sqf(P) * (1.f - sqf(a)) + sqf(W)) * b;
 
-      HCB_v[1] = fmaxf(M_rot_inv[0][0] * P_prime + M_rot_inv[0][1] * W_prime, 0.f);
-      HCB_v[2] = fmaxf(M_rot_inv[1][0] * P_prime + M_rot_inv[1][1] * W_prime, 0.f);
+      HCB_v[1] = MAX(M_rot_inv[0][0] * P_prime + M_rot_inv[0][1] * W_prime, 0.f);
+      HCB_v[2] = MAX(M_rot_inv[1][0] * P_prime + M_rot_inv[1][1] * W_prime, 0.f);
 
       JCH_v = dt_UCS_HCB_to_JCH_simd(HCB_v);
       const float max_colorfulness = lookup_gamut(gamut_LUT, JCH_v[2]);
@@ -867,8 +895,8 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     dt_aligned_pixel_simd_t pix_out_v = dt_mat3x4_mul_vec4(XYZ_D65_v, output0, output1, output2);
     if(mask_display)
     {
-      const size_t i = idx / roi_out->width;
-      const size_t j = idx - i * roi_out->width;
+      const size_t i = idx / out_width;
+      const size_t j = idx - i * out_width;
       
       dt_aligned_pixel_simd_t color_v;
       if(i % checker_1 < i % checker_2)
@@ -990,6 +1018,8 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   const int mask_type = (mask_display) ? g->mask_type : 0;
 
   const float L_white = Y_to_dt_UCS_L_star(d->white_fulcrum);
+  const cl_float2 hue_rotation_row_0 = {{ cosf(d->hue_angle), -sinf(d->hue_angle) }};
+  const cl_float2 hue_rotation_row_1 = {{ sinf(d->hue_angle),  cosf(d->hue_angle) }};
 
   dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 0, sizeof(cl_mem), (void *)&dev_in);
   dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 1, sizeof(cl_mem), (void *)&dev_out);
@@ -1003,30 +1033,31 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 9, sizeof(float), (void *)&d->highlights_weight);
   dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 10, sizeof(float), (void *)&d->midtones_weight);
   dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 11, sizeof(float), (void *)&d->mask_grey_fulcrum);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 12, sizeof(float), (void *)&d->hue_angle);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 13, sizeof(float), (void *)&d->chroma_global);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 14, 4 * sizeof(float), (void *)&d->chroma);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 15, sizeof(float), (void *)&d->vibrance);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 16, 4 * sizeof(float), (void *)&d->global);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 17, 4 * sizeof(float), (void *)&d->shadows);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 18, 4 * sizeof(float), (void *)&d->highlights);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 19, 4 * sizeof(float), (void *)&d->midtones);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 20, sizeof(float), (void *)&d->white_fulcrum);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 21, sizeof(float), (void *)&d->midtones_Y);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 22, sizeof(float), (void *)&d->grey_fulcrum);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 23, sizeof(float), (void *)&d->contrast);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 24, sizeof(float), (void *)&d->brilliance_global);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 25, 4 * sizeof(float), (void *)&d->brilliance);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 26, sizeof(float), (void *)&d->saturation_global);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 27, 4 * sizeof(float), (void *)&d->saturation);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 28, sizeof(int), (void *)&mask_display);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 29, sizeof(int), (void *)&mask_type);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 30, sizeof(int), (void *)&checker_1);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 31, sizeof(int), (void *)&checker_2);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 32, 4 * sizeof(float), (void *)&d->checker_color_1);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 33, 4 * sizeof(float), (void *)&d->checker_color_2);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 34, sizeof(float), (void *)&L_white);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 35, sizeof(dt_iop_colorbalancrgb_saturation_t), (void *)&d->saturation_formula);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 12, sizeof(cl_float2), (void *)&hue_rotation_row_0);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 13, sizeof(cl_float2), (void *)&hue_rotation_row_1);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 14, sizeof(float), (void *)&d->chroma_global);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 15, 4 * sizeof(float), (void *)&d->chroma);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 16, sizeof(float), (void *)&d->vibrance);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 17, 4 * sizeof(float), (void *)&d->global);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 18, 4 * sizeof(float), (void *)&d->shadows);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 19, 4 * sizeof(float), (void *)&d->highlights);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 20, 4 * sizeof(float), (void *)&d->midtones);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 21, sizeof(float), (void *)&d->white_fulcrum);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 22, sizeof(float), (void *)&d->midtones_Y);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 23, sizeof(float), (void *)&d->grey_fulcrum);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 24, sizeof(float), (void *)&d->contrast);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 25, sizeof(float), (void *)&d->brilliance_global);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 26, 4 * sizeof(float), (void *)&d->brilliance);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 27, sizeof(float), (void *)&d->saturation_global);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 28, 4 * sizeof(float), (void *)&d->saturation);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 29, sizeof(int), (void *)&mask_display);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 30, sizeof(int), (void *)&mask_type);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 31, sizeof(int), (void *)&checker_1);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 32, sizeof(int), (void *)&checker_2);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 33, 4 * sizeof(float), (void *)&d->checker_color_1);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 34, 4 * sizeof(float), (void *)&d->checker_color_2);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 35, sizeof(float), (void *)&L_white);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 36, sizeof(dt_iop_colorbalancrgb_saturation_t), (void *)&d->saturation_formula);
 
   err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_colorbalance_rgb, sizes);
   if(err != CL_SUCCESS) goto error;
