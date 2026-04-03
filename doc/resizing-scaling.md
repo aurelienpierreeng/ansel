@@ -9,8 +9,8 @@ This document describes how ROI (Region of Interest) sizes are computed in the p
 - ROI values are integers; rounding occurs whenever a float scale is applied.
 
 **Two ROI passes**
-- Forward (input → output): `dt_dev_pixelpipe_get_roi_out()` walks the modules in order and calls each `modify_roi_out()`. It starts from the full input `(0,0,width_in,height_in,1.0)` and computes the full-image processed size. It also fills `piece->buf_in/buf_out` for modules. This pass is only used to compute `pipe->processed_width/height` for GUI sizing and export sizing.
-- Backward (output → input): `dt_dev_pixelpipe_get_roi_in()` walks the modules in reverse and calls each `modify_roi_in()`. It starts from the requested output ROI and computes the minimal upstream ROI needed for that request. It stores `piece->planned_roi_out/in`, which are then used for cache hashing and for actual processing in `dt_dev_pixelpipe_process_rec()`.
+ - Forward (input → output): `dt_dev_pixelpipe_get_roi_out()` walks the modules in order and calls each `modify_roi_out()`. It starts from the full input `(0,0,width_in,height_in,1.0)` and computes the full-image processed size. It also fills `piece->buf_in`/`piece->buf_out` (the buffer ROI published by each module). This pass is only used to compute `pipe->processed_width`/`pipe->processed_height` for GUI sizing and export sizing.
+ - Backward (output → input): `dt_dev_pixelpipe_get_roi_in()` walks the modules in reverse and calls each `modify_roi_in()`. It starts from the requested output ROI and computes the minimal upstream ROI needed for that request. It writes `piece->roi_out` and `piece->roi_in` for each piece; those per-piece ROIs are then used for cache hashing and by `dt_dev_pixelpipe_process_rec()` when actual pixels are requested.
 
 If a module is disabled, or temporarily bypassed while editing (distortion bypass), both passes treat it as a no-op.
 
@@ -31,6 +31,6 @@ If a module is disabled, or temporarily bypassed while editing (distortion bypas
 - `iop/finalscale.c`: export and GUI upscaling. `modify_roi_in()` maps `roi_out` back to scale 1.0 when exporting or when `roi_out.scale > 1`, so upstream modules stay at 1:1 and finalscale does the resampling. It does not change the forward size.
 
 **Assumptions and pitfalls**
-- Cache hashes include `planned_roi_in/out`, so any rounding mismatch between forward/backward ROI passes causes cache misses or incorrect reuse. Modules generally clamp and add interpolation padding to mitigate this.
+- Cache hashes include the per-piece ROI values (`piece->roi_in` / `piece->roi_out`) (as well as descriptors like `piece->dsc_in`/`piece->dsc_out`), so any rounding mismatch between forward/backward ROI passes causes cache misses or incorrect reuse. Modules generally clamp and add interpolation padding to mitigate this.
 - ROI is integer-based but `scale` is float. All resampling is handled by `initialscale` and `finalscale`; the base buffer path only supports `scale == 1.0` for the raw/full input copy.
 - During GUI editing, distortion modules can be bypassed to give an undistorted view for the active module. This affects ROI planning and hashes by design.
