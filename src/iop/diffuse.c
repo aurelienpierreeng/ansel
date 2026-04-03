@@ -587,9 +587,11 @@ void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe
   const int scales = CLAMP(diffusion_scales, 1, MAX_NUM_SCALES);
   const int max_filter_radius = (1 << scales);
 
-  // in + out + 2 * tmp + 2 * LF + s details + grey mask
-  tiling->factor = 6.25f + scales;
-  tiling->factor_cl = 6.25f + scales;
+  // Account for the exact full-frame buffers kept alive by the CPU/OpenCL paths:
+  // one borrowed input, one output, two temp ping-pong buffers, two low-pass ping-pong
+  // buffers, one stored detail buffer per wavelet scale, and one 8-bit mask.
+  tiling->factor = 6.0625f + scales;
+  tiling->factor_cl = 6.0625f + scales;
 
   tiling->maxbuf = 1.0f;
   tiling->maxbuf_cl = 1.0f;
