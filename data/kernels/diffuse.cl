@@ -239,13 +239,18 @@ diffuse_pde(read_only image2d_t HF, read_only image2d_t LF,
         const float4 lf_value = read_imagef(LF, samplerA, p);
         neighbour_pixel_HF[k] = hf_value;
         neighbour_pixel_LF[k] = lf_value;
-        energy += sqf(hf_value / fmax(lf_value, (float4)(FLT_MIN)));
+        const float4 safe_lf = fmax(lf_value - (float4)(FLT_MIN), (float4)0.f) + (float4)(FLT_MIN);
+        const float4 ratio = hf_value / safe_lf;
+        energy += ratio * ratio;
       }
 
-    float4 hf_gradient[2];
-    find_gradient(neighbour_pixel_HF, hf_gradient);
+    // normalized_regularization already folds together the user
+    // regularization, the 3x3-support averaging factor, the physical blur
+    // radius carried by the current wavelet band and its scale normalization.
+    energy = variance_threshold + energy * normalized_regularization;
 
-    float4 lf_gradient[2];
+    float4 hf_gradient[2], lf_gradient[2];
+    find_gradient(neighbour_pixel_HF, hf_gradient);
     find_gradient(neighbour_pixel_LF, lf_gradient);
 
     // Convolve filters and accumulate the local HF band energy over the
@@ -264,22 +269,14 @@ diffuse_pde(read_only image2d_t HF, read_only image2d_t LF,
     derivatives[3] = convolve_kernel(neighbour_pixel_HF, hf_gradient,
                                      anisotropy.w, isotropy_type.w);
 
-    // normalized_regularization already folds together the user
-    // regularization, the 3x3-support averaging factor, the physical blur
-    // radius carried by the current wavelet band and its scale normalization.
-    energy = variance_threshold + energy * normalized_regularization;
-
     // Compute the update on the current a-trous sub-lattice.
-    const float4 hf = read_imagef(HF, samplerA, (int2)(x, y));
-
     const float4 acc
-        = hf * strength 
+        = neighbour_pixel_HF[4] * strength 
           + (derivatives[0] * ABCD.x + derivatives[1] * ABCD.y
                + derivatives[2] * ABCD.z + derivatives[3] * ABCD.w) / energy;
 
     // update the solution
-    const float4 lf = read_imagef(LF, samplerA, (int2)(x, y));
-    out = fmax(acc + lf, 0.f);
+    out = fmax(acc + neighbour_pixel_LF[4], 0.f);
   }
   else
   {

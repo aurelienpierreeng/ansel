@@ -827,19 +827,20 @@ static inline void heat_PDE_diffusion(const float *const restrict high_freq, con
             energy += ratio * ratio;
           }
 
-        // build the local anisotropic convolution filters for gradients and laplacians
-        dt_aligned_pixel_simd_t gradient[2], laplacian[2]; // x, y for each channel
+        // normalized_regularization already folds together the user
+        // regularization, the 3x3-support averaging factor, the physical blur
+        // radius carried by the current wavelet band and its scale normalization.
+        energy = variance_threshold_v + energy * normalized_regularization_v;
 
-        // FIXME:
-        // Kind of misleading here : the gradient evaluated on LF is called gradient,
-        // the gradient evaluated on HF is called laplacian.
-        find_gradients(neighbour_pixel_LF, gradient);
-        find_gradients(neighbour_pixel_HF, laplacian);
+        // build the local anisotropic convolution filters for gradients and laplacians
+        dt_aligned_pixel_simd_t lf_gradient[2], hf_gradient[2]; // x, y for each channel
+        find_gradients(neighbour_pixel_LF, lf_gradient);
+        find_gradients(neighbour_pixel_HF, hf_gradient);
 
         // c² in https://www.researchgate.net/publication/220663968
         dt_aligned_pixel_simd_t c2[4];
-        dt_aligned_pixel_simd_t grad_x = gradient[0];
-        dt_aligned_pixel_simd_t grad_y = gradient[1];
+        dt_aligned_pixel_simd_t grad_x = lf_gradient[0];
+        dt_aligned_pixel_simd_t grad_y = lf_gradient[1];
         dt_aligned_pixel_simd_t c2_first = zero;
         dt_aligned_pixel_simd_t c2_third = zero;
         dt_aligned_pixel_simd_t cos_theta_grad_sq = zero;
@@ -864,8 +865,8 @@ static inline void heat_PDE_diffusion(const float *const restrict high_freq, con
 
         c2[0] = c2_first;
         c2[2] = c2_third;
-        dt_aligned_pixel_simd_t lapl_x = laplacian[0];
-        dt_aligned_pixel_simd_t lapl_y = laplacian[1];
+        dt_aligned_pixel_simd_t lapl_x = hf_gradient[0];
+        dt_aligned_pixel_simd_t lapl_y = hf_gradient[1];
         dt_aligned_pixel_simd_t c2_second = zero;
         dt_aligned_pixel_simd_t c2_fourth = zero;
         dt_aligned_pixel_simd_t cos_theta_lapl_sq = zero;
@@ -919,18 +920,13 @@ static inline void heat_PDE_diffusion(const float *const restrict high_freq, con
           derivatives[2] += kern_third[k] * neighbour_pixel_HF[k];
           derivatives[3] += kern_fourth[k] * neighbour_pixel_HF[k];
         }
-        // Scale-normalize the summed HF/LF energy ratio with the physical
-        // variance increment of the current wavelet band.
-        energy = variance_threshold_v + energy * normalized_regularization_v;
+
         // compute the update
-        const dt_aligned_pixel_simd_t abcd0 = dt_simd_set1(ABCD[0]);
-        const dt_aligned_pixel_simd_t abcd1 = dt_simd_set1(ABCD[1]);
-        const dt_aligned_pixel_simd_t abcd2 = dt_simd_set1(ABCD[2]);
-        const dt_aligned_pixel_simd_t abcd3 = dt_simd_set1(ABCD[3]);
         const dt_aligned_pixel_simd_t acc
             = neighbour_pixel_HF[4] * strength_v
-              + (derivatives[0] * abcd0 + derivatives[1] * abcd1
-                 + derivatives[2] * abcd2 + derivatives[3] * abcd3) / energy;
+              + (derivatives[0] * ABCD[0] + derivatives[1] * ABCD[1]
+                 + derivatives[2] * ABCD[2] + derivatives[3] * ABCD[3]) / energy;
+
         if(use_nontemporal)
           dt_store_simd_nontemporal(out + index, dt_simd_max_zero(acc + neighbour_pixel_LF[4]));
         else
@@ -1331,33 +1327,7 @@ static inline cl_int wavelets_process_cl(const int devid, cl_mem in, cl_mem reco
     else
       hblocksize = 1;
 
-    if(hblocksize > 1)
-    {
-      const size_t horizontal_sizes[3] = { ROUNDUP(width, hblocksize), ROUNDUPDHT(height, devid), 1 };
-      const size_t horizontal_local[3] = { hblocksize, 1, 1 };
-      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal_local, 0, sizeof(cl_mem), (void *)&buffer_in);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal_local, 1, sizeof(cl_mem), (void *)&HF[s]);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal_local, 2, sizeof(int), (void *)&width);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal_local, 3, sizeof(int), (void *)&height);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal_local, 4, sizeof(int), (void *)&mult);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal_local, 5, sizeof(int), (void *)&clamp_lf);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal_local, 6,
-                               (hblocksize + 4 * mult) * 4 * sizeof(float), NULL);
-      err = dt_opencl_enqueue_kernel_2d_with_local(devid, gd->kernel_filmic_bspline_horizontal_local,
-                                                   horizontal_sizes, horizontal_local);
-    }
-    else
-    {
-      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal, 0, sizeof(cl_mem), (void *)&buffer_in);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal, 1, sizeof(cl_mem), (void *)&HF[s]);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal, 2, sizeof(int), (void *)&width);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal, 3, sizeof(int), (void *)&height);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal, 4, sizeof(int), (void *)&mult);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal, 5, sizeof(int), (void *)&clamp_lf);
-      err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_filmic_bspline_horizontal, sizes);
-    }
-    if(err != CL_SUCCESS) return err;
-
+    /* Run vertical then horizontal to match the CPU ordering. */
     int vblocksize;
     dt_opencl_local_buffer_t vlocopt = (dt_opencl_local_buffer_t){ .xoffset = 0, .xfactor = 1,
                                                                     .yoffset = 2 * mult, .yfactor = 1,
@@ -1392,6 +1362,33 @@ static inline cl_int wavelets_process_cl(const int devid, cl_mem in, cl_mem reco
       dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_vertical, 4, sizeof(int), (void *)&mult);
       dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_vertical, 5, sizeof(int), (void *)&clamp_lf);
       err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_filmic_bspline_vertical, sizes);
+    }
+    if(err != CL_SUCCESS) return err;
+
+    if(hblocksize > 1)
+    {
+      const size_t horizontal_sizes[3] = { ROUNDUP(width, hblocksize), ROUNDUPDHT(height, devid), 1 };
+      const size_t horizontal_local[3] = { hblocksize, 1, 1 };
+      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal_local, 0, sizeof(cl_mem), (void *)&buffer_in);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal_local, 1, sizeof(cl_mem), (void *)&HF[s]);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal_local, 2, sizeof(int), (void *)&width);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal_local, 3, sizeof(int), (void *)&height);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal_local, 4, sizeof(int), (void *)&mult);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal_local, 5, sizeof(int), (void *)&clamp_lf);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal_local, 6,
+                               (hblocksize + 4 * mult) * 4 * sizeof(float), NULL);
+      err = dt_opencl_enqueue_kernel_2d_with_local(devid, gd->kernel_filmic_bspline_horizontal_local,
+                                                   horizontal_sizes, horizontal_local);
+    }
+    else
+    {
+      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal, 0, sizeof(cl_mem), (void *)&buffer_in);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal, 1, sizeof(cl_mem), (void *)&HF[s]);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal, 2, sizeof(int), (void *)&width);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal, 3, sizeof(int), (void *)&height);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal, 4, sizeof(int), (void *)&mult);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal, 5, sizeof(int), (void *)&clamp_lf);
+      err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_filmic_bspline_horizontal, sizes);
     }
     if(err != CL_SUCCESS) return err;
 
