@@ -97,7 +97,7 @@ uint32_t container(dt_lib_module_t *self)
 
 int position()
 {
-  return 875;
+  return 200;
 }
 
 static void _save_now(dt_lib_module_t *self);
