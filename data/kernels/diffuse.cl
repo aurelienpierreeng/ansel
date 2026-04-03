@@ -137,16 +137,16 @@ static inline void isotrope_laplacian(float4 kern[9])
 }
 
 
-static inline void compute_kern(const float4 grad_x, const float4 grad_y, const float anisotropy,
+static inline void compute_kern(const float4 grad[2], const float anisotropy,
                   const dt_isotropy_t isotropy_type, float4 kern[9])
 {
-  const float4 magnitude = native_sqrt(sqf(grad_x) + sqf(grad_y));
+  const float4 magnitude = hypot(grad[0], grad[1]);
   // Compute cos/sin(arg(grad)) with a branchless normalization, forcing
   // arg(grad)=0 when magnitude is zero.
   const float4 nonzero = convert_float4(magnitude != 0.f);
   const float4 inv_mag = 1.f / (magnitude + (1.f - nonzero));
-  const float4 cos_theta = grad_x * inv_mag + (1.f - nonzero); // cos(0)
-  const float4 sin_theta = grad_y * inv_mag;                  // sin(0)
+  const float4 cos_theta = grad[0] * inv_mag + (1.f - nonzero); // cos(0)
+  const float4 sin_theta = grad[1] * inv_mag;                  // sin(0)
   const float4 c2 = native_exp(-magnitude * anisotropy);
   const float4 cos_theta2 = sqf(cos_theta);
   const float4 sin_theta2 = sqf(sin_theta);
@@ -179,22 +179,15 @@ static inline void compute_kern(const float4 grad_x, const float4 grad_y, const 
   }
 }
 
-static inline float4 convolve_kernel(read_only image2d_t img, const int j_neighbours[3],
-                       const int i_neighbours[3], const float4 grad_x,
-                       const float4 grad_y, const float anisotropy,
-                       const dt_isotropy_t isotropy_type)
+static inline float4 convolve_kernel(const float4 input[9], const float4 grad[2],
+                                     const float anisotropy, const dt_isotropy_t isotropy_type)
 {
   float4 kern[9];
-  compute_kern(grad_x, grad_y, anisotropy, isotropy_type, kern);
+  compute_kern(grad, anisotropy, isotropy_type, kern);
 
   float4 acc = (float4)0.f;
-  for(int ii = 0; ii < 3; ii++)
-    for(int jj = 0; jj < 3; jj++)
-    {
-      const int k = 3 * ii + jj;
-      const float4 value = read_imagef(img, samplerA, (int2)(j_neighbours[ii], i_neighbours[jj]));
-      acc += kern[k] * value;
-    }
+  for(int k = 0; k < 9; k++)
+    acc += kern[k] * input[k];
 
   return acc;
 }
@@ -233,7 +226,8 @@ diffuse_pde(read_only image2d_t HF, read_only image2d_t LF,
 
     // Fetch the local 3x3 neighborhood for HF, compute its gradient direction,
     // and accumulate HF/LF energy in the same pass.
-    float4 neighbour_pixel[9];
+    float4 neighbour_pixel_HF[9];
+    float4 neighbour_pixel_LF[9];
     float4 energy = (float4)0.f;
 
     for(int ii = 0; ii < 3; ii++)
@@ -243,24 +237,16 @@ diffuse_pde(read_only image2d_t HF, read_only image2d_t LF,
         const int2 p = (int2)(j_neighbours[ii], i_neighbours[jj]);
         const float4 hf_value = read_imagef(HF, samplerA, p);
         const float4 lf_value = read_imagef(LF, samplerA, p);
-        neighbour_pixel[k] = hf_value;
+        neighbour_pixel_HF[k] = hf_value;
+        neighbour_pixel_LF[k] = lf_value;
         energy += sqf(hf_value / fmax(lf_value, (float4)(FLT_MIN)));
       }
 
     float4 hf_gradient[2];
-    find_gradient(neighbour_pixel, hf_gradient);
-
-    // Fetch the local 3x3 neighborhood for LF and compute its gradient.
-    for(int ii = 0; ii < 3; ii++)
-      for(int jj = 0; jj < 3; jj++)
-      {
-        const int k = 3 * ii + jj;
-        const int2 p = (int2)(j_neighbours[ii], i_neighbours[jj]);
-        neighbour_pixel[k] = read_imagef(LF, samplerA, p);
-      }
+    find_gradient(neighbour_pixel_HF, hf_gradient);
 
     float4 lf_gradient[2];
-    find_gradient(neighbour_pixel, lf_gradient);
+    find_gradient(neighbour_pixel_LF, lf_gradient);
 
     // Convolve filters and accumulate the local HF band energy over the
     // current 3x3 support. This is not a statistical variance estimator:
@@ -269,13 +255,13 @@ diffuse_pde(read_only image2d_t HF, read_only image2d_t LF,
     // ratio by the physical kernel-variance increment of the current
     // wavelet band.
     float4 derivatives[4];
-    derivatives[0] = convolve_kernel(LF, j_neighbours, i_neighbours, lf_gradient[0], lf_gradient[1],
+    derivatives[0] = convolve_kernel(neighbour_pixel_LF, lf_gradient,
                                      anisotropy.x, isotropy_type.x);
-    derivatives[1] = convolve_kernel(LF, j_neighbours, i_neighbours, hf_gradient[0], hf_gradient[1],
+    derivatives[1] = convolve_kernel(neighbour_pixel_LF, hf_gradient,
                                      anisotropy.y, isotropy_type.y);
-    derivatives[2] = convolve_kernel(HF, j_neighbours, i_neighbours, lf_gradient[0], lf_gradient[1],
+    derivatives[2] = convolve_kernel(neighbour_pixel_HF, lf_gradient,
                                      anisotropy.z, isotropy_type.z);
-    derivatives[3] = convolve_kernel(HF, j_neighbours, i_neighbours, hf_gradient[0], hf_gradient[1],
+    derivatives[3] = convolve_kernel(neighbour_pixel_HF, hf_gradient,
                                      anisotropy.w, isotropy_type.w);
 
     // normalized_regularization already folds together the user
@@ -284,12 +270,12 @@ diffuse_pde(read_only image2d_t HF, read_only image2d_t LF,
     energy = variance_threshold + energy * normalized_regularization;
 
     // Compute the update on the current a-trous sub-lattice.
-    float4 acc = derivatives[0] * ABCD.x
-               + derivatives[1] * ABCD.y
-               + derivatives[2] * ABCD.z
-               + derivatives[3] * ABCD.w;
     const float4 hf = read_imagef(HF, samplerA, (int2)(x, y));
-    acc = (hf * strength + acc / energy);
+
+    const float4 acc
+        = hf * strength 
+          + (derivatives[0] * ABCD.x + derivatives[1] * ABCD.y
+               + derivatives[2] * ABCD.z + derivatives[3] * ABCD.w) / energy;
 
     // update the solution
     const float4 lf = read_imagef(LF, samplerA, (int2)(x, y));
