@@ -53,6 +53,7 @@
 #include "common/bilateral.h"
 #include "common/colorspaces_inline_conversions.h"
 #include "common/debug.h"
+#include "common/image.h"
 #include "common/imagebuf.h"
 #include "common/interpolation.h"
 #include "common/math.h"
@@ -2545,6 +2546,40 @@ static double crop_fitness(double *params, void *data)
   return -A;
 }
 
+/**
+ * @brief Return the crop rectangle diagonal angle matching the final displayed aspect.
+ *
+ * Auto-crop is solved in ashift input coordinates, before the orientation module rotates the
+ * image for portrait display. The crop rectangle itself still lives in ashift coordinates, but
+ * its aspect ratio needs to match what the user finally sees on screen. When the final display is
+ * rotated by 90 degrees, that means swapping width and height before building the diagonal angle
+ * used by the crop fit.
+ *
+ * @param self Current ashift module.
+ * @param g GUI state used to reuse the current pipeline flip diagnosis when available.
+ * @param width Ashift input width.
+ * @param height Ashift input height.
+ *
+ * @return Diagonal angle in radians for the crop rectangle.
+ */
+static float _get_crop_aspect_angle(dt_iop_module_t *self, const dt_iop_ashift_gui_data_t *g,
+                                    const int width, const int height)
+{
+  int isflipped = 0;
+
+  if(g && g->isflipped != -1)
+  {
+    isflipped = g->isflipped;
+  }
+  else if(self->dev)
+  {
+    const dt_image_orientation_t orientation = dt_image_get_orientation(self->dev->image_storage.id);
+    isflipped = (orientation & ORIENTATION_SWAP_XY) ? 1 : 0;
+  }
+
+  return isflipped ? atan2f((float)width, (float)height) : atan2f((float)height, (float)width);
+}
+
 // strategy: for a given center of the crop area and a specific aspect angle
 // we calculate the largest crop area that still lies within the output image;
 // now we allow a Nelder-Mead simplex to search for the center coordinates
@@ -2593,6 +2628,7 @@ static void do_crop(dt_iop_module_t *self, dt_iop_ashift_params_t *p)
 
   const float wd = cropfit.width;
   const float ht = cropfit.height;
+  const float crop_alpha = _get_crop_aspect_angle(self, g, cropfit.width, cropfit.height);
 
   // the four vertices of the image in input image coordinates
   const float Vc[4][3] = { { 0.0f, 0.0f, 1.0f },
@@ -2631,7 +2667,7 @@ static void do_crop(dt_iop_module_t *self, dt_iop_ashift_params_t *p)
   {
     params[0] = 0.5;
     params[1] = 0.5;
-    params[2] = atan2f((float)cropfit.height, (float)cropfit.width);
+    params[2] = crop_alpha;
     cropfit.x = NAN;
     cropfit.y = NAN;
     cropfit.alpha = NAN;
@@ -2643,7 +2679,7 @@ static void do_crop(dt_iop_module_t *self, dt_iop_ashift_params_t *p)
     params[1] = 0.5;
     cropfit.x = NAN;
     cropfit.y = NAN;
-    cropfit.alpha = atan2f((float)cropfit.height, (float)cropfit.width);
+    cropfit.alpha = crop_alpha;
     pcount = 2;
   }
 
@@ -5151,7 +5187,7 @@ static void cropmode_callback(GtkWidget *widget, gpointer user_data)
 
   p->cropmode = crop_mode;
   g->jobcode = ASHIFT_JOBCODE_DO_CROP;
-  do_crop(self, &g->new_params);
+  do_crop(self, p);
 
   if(g->editing)
   {
@@ -5545,20 +5581,10 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   if(g && g->editing)
   {
     p = (dt_iop_ashift_params_t *)&g->new_params;
-
-    // If we are editing in GUI, we want to see the full uncropped image
-    d->cl = 0.0f;
-    d->cr = 1.0f;
-    d->ct = 0.0f;
-    d->cb = 1.0f;
   }
   else
   {
     p = (dt_iop_ashift_params_t *)p1;
-    d->cl = p->cl;
-    d->cr = p->cr;
-    d->ct = p->ct;
-    d->cb = p->cb;
   }
 
   d->rotation = p->rotation;
@@ -5568,6 +5594,10 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   d->f_length_kb = (p->mode == ASHIFT_MODE_GENERIC) ? DEFAULT_F_LENGTH : p->f_length * p->crop_factor;
   d->orthocorr = (p->mode == ASHIFT_MODE_GENERIC) ? 0.0f : p->orthocorr;
   d->aspect = (p->mode == ASHIFT_MODE_GENERIC) ? 1.0f : p->aspect;
+  d->cl = p->cl;
+  d->cr = p->cr;
+  d->ct = p->ct;
+  d->cb = p->cb;
 }
 
 gboolean runtime_data_hash(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
