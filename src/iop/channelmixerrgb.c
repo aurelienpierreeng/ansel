@@ -63,8 +63,13 @@
 #include "gui/color_picker_proxy.h"
 #include "gui/gtk.h"
 #include "gui/presets.h"
+#include "iop/channelmixerrgb_shared.h"
 #include "iop/iop_api.h"
 #include "gaussian_elimination.h"
+
+// Keep the shared implementation in this translation unit to avoid
+// duplicate globals from a separate compiled object.
+#include "channelmixerrgb_shared.c"
 
 #include <assert.h>
 #include <float.h>
@@ -107,9 +112,9 @@ DT_MODULE_INTROSPECTION(3, dt_iop_channelmixer_rgb_params_t)
 #define TEMP_MIN 1667.
 #define TEMP_MAX 25000.
 #define DT_CHANNELMIXERRGB_SIMPLE_MODE_CONF "plugins/darkroom/channelmixerrgb/mixer_mode"
-#define DT_CHANNELMIXERRGB_SIMPLE_TAN_SCALE 1.55f
-#define DT_CHANNELMIXERRGB_SIMPLE_EPS 5e-5f
-#define DT_CHANNELMIXERRGB_SIMPLE_CHROMA_PROBE 0.5f
+#define DT_CHANNELMIXERRGB_SIMPLE_TAN_SCALE DT_IOP_CHANNELMIXER_SHARED_SIMPLE_TAN_SCALE
+#define DT_CHANNELMIXERRGB_SIMPLE_EPS DT_IOP_CHANNELMIXER_SHARED_SIMPLE_EPS
+#define DT_CHANNELMIXERRGB_SIMPLE_CHROMA_PROBE DT_IOP_CHANNELMIXER_SHARED_SIMPLE_CHROMA_PROBE
 
 typedef enum dt_iop_channelmixer_rgb_version_t
 {
@@ -172,43 +177,18 @@ typedef enum dt_iop_channelmixer_rgb_mixer_mode_t
   DT_CHANNELMIXERRGB_MIXER_PRIMARIES = 2,
 } dt_iop_channelmixer_rgb_mixer_mode_t;
 
-typedef enum dt_iop_channelmixer_rgb_simple_probe_t
-{
-  DT_CHANNELMIXERRGB_SIMPLE_PROBE_ROTATION = 0,
-  DT_CHANNELMIXERRGB_SIMPLE_PROBE_AXIS_1 = 1,
-  DT_CHANNELMIXERRGB_SIMPLE_PROBE_AXIS_2 = 2,
-} dt_iop_channelmixer_rgb_simple_probe_t;
+typedef dt_iop_channelmixer_shared_simple_probe_t dt_iop_channelmixer_rgb_simple_probe_t;
+typedef dt_iop_channelmixer_shared_primaries_basis_t dt_iop_channelmixer_rgb_primaries_basis_t;
+typedef dt_iop_channelmixer_shared_simple_params_t dt_iop_channelmixer_rgb_simple_params_t;
+typedef dt_iop_channelmixer_shared_primaries_params_t dt_iop_channelmixer_rgb_primaries_params_t;
 
-typedef enum dt_iop_channelmixer_rgb_primaries_basis_t
-{
-  DT_CHANNELMIXERRGB_PRIMARIES_BASIS_RGB = 0,
-  DT_CHANNELMIXERRGB_PRIMARIES_BASIS_XYZ = 1,
-  DT_CHANNELMIXERRGB_PRIMARIES_BASIS_BRADFORD = 2,
-  DT_CHANNELMIXERRGB_PRIMARIES_BASIS_CAT16 = 3,
-} dt_iop_channelmixer_rgb_primaries_basis_t;
-
-typedef struct dt_iop_channelmixer_rgb_simple_params_t
-{
-  float theta;
-  float psi;
-  float stretch_1;
-  float stretch_2;
-  float coupling_amount;
-  float coupling_hue;
-} dt_iop_channelmixer_rgb_simple_params_t;
-
-typedef struct dt_iop_channelmixer_rgb_primaries_params_t
-{
-  float achromatic_hue;
-  float achromatic_purity;
-  float red_hue;
-  float red_purity;
-  float green_hue;
-  float green_purity;
-  float blue_hue;
-  float blue_purity;
-  float gain;
-} dt_iop_channelmixer_rgb_primaries_params_t;
+#define DT_CHANNELMIXERRGB_SIMPLE_PROBE_ROTATION DT_IOP_CHANNELMIXER_SHARED_SIMPLE_PROBE_ROTATION
+#define DT_CHANNELMIXERRGB_SIMPLE_PROBE_AXIS_1 DT_IOP_CHANNELMIXER_SHARED_SIMPLE_PROBE_AXIS_1
+#define DT_CHANNELMIXERRGB_SIMPLE_PROBE_AXIS_2 DT_IOP_CHANNELMIXER_SHARED_SIMPLE_PROBE_AXIS_2
+#define DT_CHANNELMIXERRGB_PRIMARIES_BASIS_RGB DT_IOP_CHANNELMIXER_SHARED_PRIMARIES_BASIS_RGB
+#define DT_CHANNELMIXERRGB_PRIMARIES_BASIS_XYZ DT_IOP_CHANNELMIXER_SHARED_PRIMARIES_BASIS_XYZ
+#define DT_CHANNELMIXERRGB_PRIMARIES_BASIS_BRADFORD DT_IOP_CHANNELMIXER_SHARED_PRIMARIES_BASIS_BRADFORD
+#define DT_CHANNELMIXERRGB_PRIMARIES_BASIS_CAT16 DT_IOP_CHANNELMIXER_SHARED_PRIMARIES_BASIS_CAT16
 
 typedef struct dt_iop_channelmixer_rgb_gui_data_t
 {
@@ -296,13 +276,6 @@ typedef struct dt_iop_channelmixer_rgb_global_data_t
 void _auto_set_illuminant(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe);
 static void _channelmixerrgb_set_mixer_mode(dt_iop_channelmixer_rgb_gui_data_t *g,
                                             dt_iop_channelmixer_rgb_mixer_mode_t mode);
-static void _channelmixerrgb_work_rgb_to_display(const dt_aligned_pixel_t work_rgb,
-                                                 const dt_iop_order_iccprofile_info_t *work_profile,
-                                                 const dt_iop_order_iccprofile_info_t *display_profile,
-                                                 dt_aligned_pixel_t display_rgb);
-static void _channelmixerrgb_simple_module_color_to_display(dt_iop_module_t *self,
-                                                            const dt_iop_channelmixer_rgb_params_t *p,
-                                                            const float module_color[3], float display_rgb[3]);
 
 const char *name()
 {
@@ -1177,7 +1150,6 @@ static inline gboolean _is_another_module_cat_on_pipe(struct dt_iop_module_t *se
 static void update_illuminants(struct dt_iop_module_t *self);
 static void update_approx_cct(struct dt_iop_module_t *self);
 static void update_illuminant_color(struct dt_iop_module_t *self);
-static void paint_temperature_background(struct dt_iop_module_t *self);
 
 
 static void check_if_close_to_daylight(const float x, const float y, float *temperature,
@@ -2784,7 +2756,7 @@ static void _develop_ui_pipe_finished_callback(gpointer instance, gpointer user_
   update_illuminants(self);
   update_approx_cct(self);
   update_illuminant_color(self);
-  paint_temperature_background(self);
+  dt_iop_channelmixer_shared_paint_temperature_slider(g->temperature, TEMP_MIN, TEMP_MAX);
 
   --darktable.gui->reset;
 
@@ -3130,827 +3102,6 @@ static void paint_hue(dt_iop_module_t *self)
   gtk_widget_queue_draw(g->target_spot);
 }
 
-/**
- * @brief Return the rotation angle wrapped to the canonical range [-pi ; pi].
- *
- * The simple mixer GUI stores angles in canonical intervals so the roundtrip
- * 3x3 -> simple -> 3x3 remains stable while the user edits near periodic
- * boundaries.
- *
- * @param[in] angle Rotation angle in radians.
- * @return Equivalent angle wrapped to [-pi ; pi].
- */
-static inline float _channelmixerrgb_wrap_pi(float angle)
-{
-  while(angle <= -M_PI) angle += 2.f * (float)M_PI;
-  while(angle > M_PI) angle -= 2.f * (float)M_PI;
-  return angle;
-}
-
-/**
- * @brief Return the symmetric-axis angle wrapped to the canonical range ]-pi/2 ; pi/2].
- *
- * Symmetric eigenspaces are pi-periodic. Wrapping in that interval prevents the
- * GUI sliders from jumping by half turns when we rebuild the controls from a
- * matrix already stored in params.
- *
- * @param[in] angle Axis angle in radians.
- * @return Equivalent angle wrapped to ]-pi/2 ; pi/2].
- */
-static inline float _channelmixerrgb_wrap_half_pi(float angle)
-{
-  while(angle <= -(float)M_PI_2) angle += (float)M_PI;
-  while(angle > (float)M_PI_2) angle -= (float)M_PI;
-  return angle;
-}
-
-/**
- * @brief Encode the simple-mode chroma stretch to the anchored GUI scale.
- *
- * The stretch sliders expose these exact anchors:
- *
- * - slider  0.0 : achromatic neutralization,
- * - slider  1.0 : identity,
- * - slider  1.5 : contrast boost,
- * - slider -1.0 : color reversal,
- * - slider -1.5 : color reversal with added contrast.
- *
- * The mapping is piecewise-linear so those landmarks remain visually stable in
- * the GUI and in the roundtrip.
- *
- * @param[in] stretch Signed eigenvalue of the symmetric chroma factor.
- * @return Encoded slider value in [-1.5 ; 1.5].
- */
-static inline float _channelmixerrgb_encode_simple_stretch(const float stretch)
-{
-  if(stretch >= 1.f) return fminf(0.5f * (stretch + 1.f), 1.5f);
-  if(stretch >= -1.f) return stretch;
-  return fmaxf(0.5f * (stretch - 1.f), -1.5f);
-}
-
-/**
- * @brief Decode the anchored stretch slider to the chroma stretch eigenvalue.
- *
- * @param[in] slider Slider value in [-1.5 ; 1.5].
- * @return Signed eigenvalue of the symmetric chroma factor.
- */
-static inline float _channelmixerrgb_decode_simple_stretch(const float slider)
-{
-  if(slider >= 1.f) return 2.f * slider - 1.f;
-  if(slider >= -1.f) return slider;
-  return 2.f * slider + 1.f;
-}
-
-/**
- * @brief Encode a non-negative neutral-coupling amount for the simple mixer GUI.
- *
- * The amount slider is bounded in [0 ; 1] while the underlying coupling norm is
- * unbounded. Using atan() keeps zero at slider value 0 and still lets the GUI
- * roundtrip any finite coupling norm.
- *
- * @param[in] amount Non-negative coupling magnitude.
- * @return Encoded slider value in [0 ; 1] up to floating point precision.
- */
-static inline float _channelmixerrgb_encode_simple_coupling_amount(const float amount)
-{
-  return atanf(fmaxf(amount, 0.f)) / DT_CHANNELMIXERRGB_SIMPLE_TAN_SCALE;
-}
-
-/**
- * @brief Decode a bounded simple-mode slider to a non-negative coupling amount.
- *
- * @param[in] slider Slider value in [0 ; 1].
- * @return Non-negative coupling magnitude.
- */
-static inline float _channelmixerrgb_decode_simple_coupling_amount(const float slider)
-{
-  const float bounded = CLAMP(slider, 0.f, 0.999f);
-  return tanf(bounded * DT_CHANNELMIXERRGB_SIMPLE_TAN_SCALE);
-}
-
-/**
- * @brief Tell whether the three mixer rows are already normalized by params.
- *
- * The simple GUI is only valid when the three mixer rows are explicitly
- * normalized in params. Otherwise switching would silently project the matrix
- * and lose information.
- *
- * @param[in] p Current module params.
- * @return TRUE when the three RGB rows are normalized by params.
- */
-static inline gboolean _channelmixerrgb_rows_are_normalized(const dt_iop_channelmixer_rgb_params_t *const p)
-{
-  return p->normalize_R && p->normalize_G && p->normalize_B;
-}
-
-/**
- * @brief Build the normalized 3x3 mixer matrix used by the simple GUI model.
- *
- * The complete mixer can optionally leave row normalization disabled. The
- * simple mode only accepts the exact normalized subspace because preserving the
- * neutral axis reduces the problem to an exact 6 degree-of-freedom transform in
- * the chroma plane plus two neutral couplings.
- *
- * @param[in] p Current module params.
- * @param[out] M Normalized 3x3 mixer matrix.
- * @param[in] force_normalize Whether the rows must be normalized even if the
- * corresponding params toggles are off.
- * @return TRUE if the matrix could be normalized, FALSE if at least one row sum
- * is zero.
- */
-static gboolean _channelmixerrgb_get_mixer_matrix(const dt_iop_channelmixer_rgb_params_t *const p, float M[3][3],
-                                                  const gboolean force_normalize)
-{
-  const float *const rows[3] = { p->red, p->green, p->blue };
-  const gboolean normalize[3] = { p->normalize_R || force_normalize, 
-                                  p->normalize_G || force_normalize,
-                                  p->normalize_B || force_normalize };
-
-  for(int row = 0; row < 3; row++)
-  {
-    float sum = 1.f;
-    if(normalize[row])
-    {
-      sum = rows[row][0] + rows[row][1] + rows[row][2];
-      if(sum == 0.f) return FALSE;
-    }
-
-    for(int col = 0; col < 3; col++) 
-      M[row][col] = rows[row][col] / sum;
-  }
-
-  return TRUE;
-}
-
-/**
- * @brief Write a normalized 3x3 mixer matrix back into module params.
- *
- * The simple mode only writes normalized matrices. Keeping this write path
- * explicit preserves the exact normalized transform while leaving ownership of
- * the normalization toggles in the caller.
- *
- * @param[in,out] p Current module params.
- * @param[in] M Normalized 3x3 mixer matrix.
- */
-static void _channelmixerrgb_set_effective_mixer_matrix(dt_iop_channelmixer_rgb_params_t *const p, const float M[3][3])
-{
-  for(int col = 0; col < 3; col++)
-  {
-    p->red[col] = M[0][col];
-    p->green[col] = M[1][col];
-    p->blue[col] = M[2][col];
-  }
-}
-
-/**
- * @brief Multiply two dense 3x3 matrices stored in row-major order.
- *
- * @param[in] A Left matrix.
- * @param[in] B Right matrix.
- * @param[out] C Product matrix.
- */
-static void _channelmixerrgb_mul3x3(const float A[3][3], const float B[3][3], float C[3][3])
-{
-  for(int row = 0; row < 3; row++)
-    for(int col = 0; col < 3; col++)
-    {
-      C[row][col] = 0.f;
-      for(int k = 0; k < 3; k++) 
-        C[row][col] += A[row][k] * B[k][col];
-    }
-}
-
-/**
- * @brief Convert an RGB-basis mixer to the exact normalized chroma-plane model.
- *
- * We use the orthonormal basis {c1, c2, n} where n is the neutral axis and
- * c1/c2 span the chroma plane.
- *
- * @param[in] M Normalized 3x3 mixer matrix in module coordinates.
- * @param[out] B Mixer matrix in the {c1, c2, n} basis.
- */
-static void _channelmixerrgb_mixer_to_chroma_basis(const float M[3][3], float B[3][3])
-{
-  static const float P[3][3]
-      = { { 0.7071067811865475f,  0.4082482904638631f, INVERSE_SQRT_3 },
-          { -0.7071067811865475f, 0.4082482904638631f, INVERSE_SQRT_3 },
-          { 0.f,                 -0.8164965809277261f, INVERSE_SQRT_3 } };
-  float PTM[3][3] = { { 0.f } };
-  float PT[3][3] = { { 0.f } };
-
-  for(int row = 0; row < 3; row++)
-    for(int col = 0; col < 3; col++) 
-      PT[row][col] = P[col][row];
-
-  _channelmixerrgb_mul3x3(PT, M, PTM);
-  _channelmixerrgb_mul3x3(PTM, P, B);
-}
-
-/**
- * @brief Convert an exact chroma-plane mixer back to the RGB basis.
- *
- * @param[in] B Mixer matrix in the {c1, c2, n} basis.
- * @param[out] M Mixer matrix in module coordinates.
- */
-static void _channelmixerrgb_mixer_from_chroma_basis(const float B[3][3], float M[3][3])
-{
-  static const float P[3][3]
-      = { { 0.7071067811865475f,  0.4082482904638631f, INVERSE_SQRT_3 },
-          { -0.7071067811865475f, 0.4082482904638631f, INVERSE_SQRT_3 },
-          { 0.f,                 -0.8164965809277261f, INVERSE_SQRT_3 } };
-  float temp[3][3] = { { 0.f } };
-  float PT[3][3] = { { 0.f } };
-
-  for(int row = 0; row < 3; row++)
-    for(int col = 0; col < 3; col++) 
-      PT[row][col] = P[col][row];
-
-  _channelmixerrgb_mul3x3(P, B, temp);
-  _channelmixerrgb_mul3x3(temp, PT, M);
-}
-
-/**
- * @brief Decompose a normalized mixer matrix into the exact simple GUI model.
- *
- * The top-left 2x2 block of the chroma basis is factorized as R(theta) * S,
- * where S is symmetric. The eigenvectors of S define the stretch orientation
- * psi while its signed eigenvalues are stored by the two stretch controls.
- * The remaining 2 parameters store the neutral-coupling vector in polar form
- * in the fixed chroma basis, so their meaning stays independent from the
- * principal-axis orientation slider.
- *
- * @param[in] M Normalized 3x3 mixer matrix in module coordinates.
- * @param[out] simple Exact simple-mode parameters.
- */
-static void _channelmixerrgb_simple_from_matrix(const float M[3][3], dt_iop_channelmixer_rgb_simple_params_t *simple)
-{
-  float B[3][3] = { { 0.f } };
-  _channelmixerrgb_mixer_to_chroma_basis(M, B);
-
-  const float a = B[0][0];
-  const float b = B[0][1];
-  const float c = B[1][0];
-  const float d = B[1][1];
-  const float theta = _channelmixerrgb_wrap_pi(atan2f(c - b, a + d));
-  const float ctheta = cosf(theta);
-  const float stheta = sinf(theta);
-
-  const float s00 = ctheta * a + stheta * c;
-  const float s01 = ctheta * b + stheta * d;
-  const float s11 = -stheta * b + ctheta * d;
-  const float diff = s00 - s11;
-  const float psi = _channelmixerrgb_wrap_half_pi(0.5f * atan2f(2.f * s01, diff));
-  const float radius = hypotf(0.5f * diff, s01);
-  const float trace = s00 + s11;
-  simple->theta = theta;
-  simple->psi = psi;
-  simple->stretch_1 = 0.5f * trace + radius;
-  simple->stretch_2 = 0.5f * trace - radius;
-  simple->coupling_amount = hypotf(B[2][0], B[2][1]);
-  simple->coupling_hue = simple->coupling_amount > 0.f ? _channelmixerrgb_wrap_pi(atan2f(B[2][1], B[2][0])) : 0.f;
-}
-
-/**
- * @brief Rebuild a normalized mixer matrix from the exact simple GUI model.
- *
- * @param[in] simple Exact simple-mode parameters.
- * @param[out] M Normalized 3x3 mixer matrix in module coordinates.
- */
-static void _channelmixerrgb_simple_to_matrix(const dt_iop_channelmixer_rgb_simple_params_t *const simple, float M[3][3])
-{
-  const float ctheta = cosf(simple->theta);
-  const float stheta = sinf(simple->theta);
-  const float cpsi = cosf(simple->psi);
-  const float spsi = sinf(simple->psi);
-  const float coupling_0 = simple->coupling_amount * cosf(simple->coupling_hue);
-  const float coupling_1 = simple->coupling_amount * sinf(simple->coupling_hue);
-
-  const float s00 = simple->stretch_1 * cpsi * cpsi + simple->stretch_2 * spsi * spsi;
-  const float s01 = (simple->stretch_1 - simple->stretch_2) * cpsi * spsi;
-  const float s11 = simple->stretch_1 * spsi * spsi + simple->stretch_2 * cpsi * cpsi;
-  const float B[3][3]
-      = { { ctheta * s00 - stheta * s01, ctheta * s01 - stheta * s11, 0.f },
-          { stheta * s00 + ctheta * s01, stheta * s01 + ctheta * s11, 0.f },
-          { coupling_0, coupling_1, 1.f } };
-
-  _channelmixerrgb_mixer_from_chroma_basis(B, M);
-}
-
-/**
- * @brief Read the current simple-mode sliders and decode them to geometric params.
- *
- * @param[in] g Channel mixer GUI data.
- * @param[out] simple Decoded exact simple-mode parameters.
- */
-static void _channelmixerrgb_simple_from_widgets(const dt_iop_channelmixer_rgb_gui_data_t *const g,
-                                                 dt_iop_channelmixer_rgb_simple_params_t *simple)
-{
-  simple->theta = dt_bauhaus_slider_get(g->simple_theta) * (float)M_PI;
-  simple->psi = dt_bauhaus_slider_get(g->simple_psi) * (float)M_PI_2;
-  simple->stretch_1 = _channelmixerrgb_decode_simple_stretch(dt_bauhaus_slider_get(g->simple_stretch_1));
-  simple->stretch_2 = _channelmixerrgb_decode_simple_stretch(dt_bauhaus_slider_get(g->simple_stretch_2));
-  simple->coupling_amount = _channelmixerrgb_decode_simple_coupling_amount(dt_bauhaus_slider_get(g->simple_coupling_1));
-  simple->coupling_hue = dt_bauhaus_slider_get(g->simple_coupling_2) * (float)M_PI;
-}
-
-/**
- * @brief Push decoded simple-mode params back to the six GUI sliders.
- *
- * @param[in] g Channel mixer GUI data.
- * @param[in] simple Exact simple-mode parameters.
- */
-static void _channelmixerrgb_simple_to_widgets(dt_iop_channelmixer_rgb_gui_data_t *const g,
-                                               const dt_iop_channelmixer_rgb_simple_params_t *const simple)
-{
-  dt_bauhaus_slider_set(g->simple_theta, _channelmixerrgb_wrap_pi(simple->theta) / (float)M_PI);
-  dt_bauhaus_slider_set(g->simple_psi, _channelmixerrgb_wrap_half_pi(simple->psi) / (float)M_PI_2);
-  dt_bauhaus_slider_set(g->simple_stretch_1, _channelmixerrgb_encode_simple_stretch(simple->stretch_1));
-  dt_bauhaus_slider_set(g->simple_stretch_2, _channelmixerrgb_encode_simple_stretch(simple->stretch_2));
-  dt_bauhaus_slider_set(g->simple_coupling_1, _channelmixerrgb_encode_simple_coupling_amount(simple->coupling_amount));
-  dt_bauhaus_slider_set(g->simple_coupling_2, _channelmixerrgb_wrap_pi(simple->coupling_hue) / (float)M_PI);
-}
-
-/**
- * @brief Measure the numerical stability of the exact simple-mode roundtrip.
- *
- * @param[in] M Reference normalized 3x3 mixer matrix.
- * @param[in] roundtrip Matrix rebuilt from the simple controls.
- * @return Largest absolute coefficient error between @p M and @p roundtrip.
- */
-static float _channelmixerrgb_simple_roundtrip_error(const float M[3][3], const float roundtrip[3][3])
-{
-  float max_error = 0.f;
-  for(int row = 0; row < 3; row++)
-    for(int col = 0; col < 3; col++)
-      max_error = fmaxf(max_error, fabsf(M[row][col] - roundtrip[row][col]));
-
-  return max_error;
-}
-
-/**
- * @brief Map the current chromatic adaptation to the affine primaries basis used in the GUI.
- *
- * The primaries mode works entirely in the GUI layer. It interprets the current
- * mixer matrix in whatever linear basis the module currently uses, so the same
- * affine construction can be reused for work RGB, XYZ and the two LMS spaces.
- *
- * @param[in] adaptation Current mixer adaptation mode.
- * @return Affine primaries basis associated with the current adaptation.
- */
-static inline dt_iop_channelmixer_rgb_primaries_basis_t
-_channelmixerrgb_primaries_basis_from_adaptation(const dt_adaptation_t adaptation)
-{
-  switch(adaptation)
-  {
-    case DT_ADAPTATION_FULL_BRADFORD:
-    case DT_ADAPTATION_LINEAR_BRADFORD:
-      return DT_CHANNELMIXERRGB_PRIMARIES_BASIS_BRADFORD;
-    case DT_ADAPTATION_CAT16:
-      return DT_CHANNELMIXERRGB_PRIMARIES_BASIS_CAT16;
-    case DT_ADAPTATION_XYZ:
-      return DT_CHANNELMIXERRGB_PRIMARIES_BASIS_XYZ;
-    case DT_ADAPTATION_RGB:
-    case DT_ADAPTATION_LAST:
-    default:
-      return DT_CHANNELMIXERRGB_PRIMARIES_BASIS_RGB;
-  }
-}
-
-/**
- * @brief Return the D50 white vector in the current affine primaries basis.
- *
- * The affine primaries model operates in the same coordinates as the mixer
- * matrix. D50 therefore needs to be expressed in that same basis so the white
- * tint sliders remain meaningful in RGB, XYZ and LMS modes alike.
- *
- * @param[in] basis Affine primaries basis used by the mixer GUI.
- * @param[out] white D50 white vector in that basis.
- */
-static void _channelmixerrgb_primaries_reference_white(const dt_iop_channelmixer_rgb_primaries_basis_t basis,
-                                                       float white[3])
-{
-  dt_aligned_pixel_t D50 = { 0.f };
-  switch(basis)
-  {
-    case DT_CHANNELMIXERRGB_PRIMARIES_BASIS_BRADFORD:
-      convert_D50_to_LMS(DT_ADAPTATION_LINEAR_BRADFORD, D50);
-      break;
-    case DT_CHANNELMIXERRGB_PRIMARIES_BASIS_CAT16:
-      convert_D50_to_LMS(DT_ADAPTATION_CAT16, D50);
-      break;
-    case DT_CHANNELMIXERRGB_PRIMARIES_BASIS_XYZ:
-      convert_D50_to_LMS(DT_ADAPTATION_XYZ, D50);
-      break;
-    case DT_CHANNELMIXERRGB_PRIMARIES_BASIS_RGB:
-    default:
-      convert_D50_to_LMS(DT_ADAPTATION_RGB, D50);
-      break;
-  }
-
-  for(int c = 0; c < 3; c++) white[c] = D50[c];
-}
-
-/**
- * @brief Return the affine sum of a triplet in the current mixer basis.
- *
- * The primaries mode uses the plane r + g + b = 1 of the current basis as its
- * generalized chromaticity plane. Dividing by that affine sum turns any
- * non-degenerate basis vector into a point on that plane.
- *
- * @param[in] vector 3-vector in the current mixer basis.
- * @return Affine sum of the input vector.
- */
-static inline float _channelmixerrgb_affine_sum3(const float vector[3])
-{
-  return vector[0] + vector[1] + vector[2];
-}
-
-/**
- * @brief Project a 3-vector on the normalized affine plane r + g + b = 1.
- *
- * @param[in] vector 3-vector in the current mixer basis.
- * @param[out] normalized Vector normalized to the affine plane.
- * @return TRUE when the affine sum is non-zero, FALSE otherwise.
- */
-static gboolean _channelmixerrgb_affine_normalize(const float vector[3], float normalized[3])
-{
-  const float sum = _channelmixerrgb_affine_sum3(vector);
-  if(fabsf(sum) < DT_CHANNELMIXERRGB_SIMPLE_EPS) return FALSE;
-
-  for(int c = 0; c < 3; c++) normalized[c] = vector[c] / sum;
-  return TRUE;
-}
-
-/**
- * @brief Project a difference on the 2D chromaticity plane of the affine simplex.
- *
- * The vectors returned here live in the sum-zero subspace. Using the same
- * orthonormal frame as the normalized simple mode keeps the geometry compact
- * while remaining independent from the actual adaptation basis.
- *
- * @param[in] difference Difference of two normalized affine coordinates.
- * @param[out] uv 2D coordinates in the chromaticity plane.
- */
-static void _channelmixerrgb_affine_project_difference(const float difference[3], float uv[2])
-{
-  uv[0] = 0.7071067811865475f * (difference[0] - difference[1]);
-  uv[1] = 0.4082482904638631f * (difference[0] + difference[1]) - 0.8164965809277261f * difference[2];
-}
-
-/**
- * @brief Lift a 2D chromaticity-plane vector back to the affine simplex.
- *
- * @param[in] uv 2D coordinates in the chromaticity plane.
- * @param[out] difference Difference vector in the affine plane.
- */
-static void _channelmixerrgb_affine_unproject_difference(const float uv[2], float difference[3])
-{
-  difference[0] = 0.7071067811865475f * uv[0] + 0.4082482904638631f * uv[1];
-  difference[1] = -0.7071067811865475f * uv[0] + 0.4082482904638631f * uv[1];
-  difference[2] = -0.8164965809277261f * uv[1];
-}
-
-/**
- * @brief Rotate a 2D vector around the affine white point.
- *
- * @param[in] vector Input vector in 2D chromaticity coordinates.
- * @param[in] angle Rotation angle in radians.
- * @param[out] rotated Rotated 2D vector.
- */
-static void _channelmixerrgb_rotate_2d(const float vector[2], const float angle, float rotated[2])
-{
-  const float cosine = cosf(angle);
-  const float sine = sinf(angle);
-  rotated[0] = cosine * vector[0] - sine * vector[1];
-  rotated[1] = sine * vector[0] + cosine * vector[1];
-}
-
-/**
- * @brief Intersect a chromaticity-plane ray with a triangle edge segment.
- *
- * @param[in] direction Unit ray direction from the affine white point.
- * @param[in] first First edge vertex in 2D coordinates relative to white.
- * @param[in] second Second edge vertex in 2D coordinates relative to white.
- * @return Distance along the ray to the intersection, or FLT_MAX when none exists.
- */
-static float _channelmixerrgb_intersect_affine_ray_segment(const float direction[2], const float first[2],
-                                                           const float second[2])
-{
-  const float edge_x = second[0] - first[0];
-  const float edge_y = second[1] - first[1];
-  const float denominator = direction[0] * edge_y - direction[1] * edge_x;
-  if(fabsf(denominator) < DT_CHANNELMIXERRGB_SIMPLE_EPS) return FLT_MAX;
-
-  const float t = (first[0] * edge_y - first[1] * edge_x) / denominator;
-  const float u = (first[0] * direction[1] - first[1] * direction[0]) / denominator;
-  if(t >= 0.f && u >= 0.f && u <= 1.f) return t;
-  return FLT_MAX;
-}
-
-/**
- * @brief Measure the distance from the affine white point to the simplex edge.
- *
- * @param[in] direction Unit direction in the 2D chromaticity plane.
- * @param[in] reference_primaries 2D coordinates of the 3 reference primaries relative to white.
- * @return Distance from the white point to the simplex edge along @p direction.
- */
-static float _channelmixerrgb_affine_distance_to_edge(const float direction[2], const float reference_primaries[3][2])
-{
-  float distance_to_edge = FLT_MAX;
-  for(int i = 0; i < 3; i++)
-  {
-    const int next = i == 2 ? 0 : i + 1;
-    const float distance = _channelmixerrgb_intersect_affine_ray_segment(direction, reference_primaries[i],
-                                                                         reference_primaries[next]);
-    if(distance < distance_to_edge) distance_to_edge = distance;
-  }
-
-  return distance_to_edge;
-}
-
-/**
- * @brief Build the reference affine simplex for the current primaries basis.
- *
- * The three mixer basis vectors are used as reference primaries. They are
- * translated to the generalized chromaticity plane relative to the D50 white
- * of the same basis, so every adaptation mode reuses the same geometric
- * construction.
- *
- * @param[in] basis Affine primaries basis used by the mixer GUI.
- * @param[out] white_normalized D50 white point normalized to the affine plane.
- * @param[out] reference_primaries 2D coordinates of the 3 reference primaries relative to white.
- * @return TRUE on success, FALSE when the white point cannot be normalized.
- */
-static gboolean _channelmixerrgb_build_affine_simplex(const dt_iop_channelmixer_rgb_primaries_basis_t basis,
-                                                      float white_normalized[3], float reference_primaries[3][2])
-{
-  const float identity[3][3] = { { 1.f, 0.f, 0.f },
-                                 { 0.f, 1.f, 0.f },
-                                 { 0.f, 0.f, 1.f } };
-  float white[3] = { 0.f };
-
-  _channelmixerrgb_primaries_reference_white(basis, white);
-  if(!_channelmixerrgb_affine_normalize(white, white_normalized)) return FALSE;
-
-  for(int i = 0; i < 3; i++)
-  {
-    float difference[3] = { identity[i][0] - white_normalized[0],
-                            identity[i][1] - white_normalized[1],
-                            identity[i][2] - white_normalized[2] };
-    _channelmixerrgb_affine_project_difference(difference, reference_primaries[i]);
-  }
-
-  return TRUE;
-}
-
-/**
- * @brief Convert one affine primaries slider pair to a normalized basis vector.
- *
- * @param[in] white_normalized Reference white point on the affine plane.
- * @param[in] reference_primaries 2D coordinates of the reference primaries relative to white.
- * @param[in] reference_index Which reference primary defines the zero-angle direction.
- * @param[in] hue Rotation angle in radians.
- * @param[in] purity Radial scale factor along the simplex footprint.
- * @param[out] point_normalized Normalized point on the affine plane.
- * @return TRUE on success, FALSE when the simplex geometry degenerates.
- */
-static gboolean _channelmixerrgb_affine_point_from_polar(const float white_normalized[3],
-                                                         const float reference_primaries[3][2],
-                                                         const int reference_index, const float hue,
-                                                         const float purity, float point_normalized[3])
-{
-  const float *const reference = reference_primaries[reference_index];
-  const float radius = hypotf(reference[0], reference[1]);
-  if(radius < DT_CHANNELMIXERRGB_SIMPLE_EPS) return FALSE;
-
-  const float direction_reference[2] = { reference[0] / radius, reference[1] / radius };
-  float direction[2] = { 0.f };
-  float difference[3] = { 0.f };
-  _channelmixerrgb_rotate_2d(direction_reference, hue, direction);
-
-  const float distance_to_edge = _channelmixerrgb_affine_distance_to_edge(direction, reference_primaries);
-  if(distance_to_edge == FLT_MAX) return FALSE;
-
-  const float uv[2] = { purity * distance_to_edge * direction[0],
-                        purity * distance_to_edge * direction[1] };
-  _channelmixerrgb_affine_unproject_difference(uv, difference);
-
-  for(int c = 0; c < 3; c++) point_normalized[c] = white_normalized[c] + difference[c];
-  return TRUE;
-}
-
-/**
- * @brief Convert a normalized affine point to primaries hue/purity sliders.
- *
- * @param[in] white_normalized Reference white point on the affine plane.
- * @param[in] reference_primaries 2D coordinates of the reference primaries relative to white.
- * @param[in] reference_index Which reference primary defines the zero-angle direction.
- * @param[in] point_normalized Normalized affine point to analyze.
- * @param[out] hue Rotation angle in radians.
- * @param[out] purity Radial scale factor along the simplex footprint.
- * @return TRUE on success, FALSE when the simplex geometry degenerates.
- */
-static gboolean _channelmixerrgb_affine_polar_from_point(const float white_normalized[3],
-                                                         const float reference_primaries[3][2],
-                                                         const int reference_index,
-                                                         const float point_normalized[3], float *const hue,
-                                                         float *const purity)
-{
-  const float *const reference = reference_primaries[reference_index];
-  const float reference_angle = atan2f(reference[1], reference[0]);
-  float difference[3] = { point_normalized[0] - white_normalized[0],
-                          point_normalized[1] - white_normalized[1],
-                          point_normalized[2] - white_normalized[2] };
-  float uv[2] = { 0.f };
-  _channelmixerrgb_affine_project_difference(difference, uv);
-
-  const float radius = hypotf(uv[0], uv[1]);
-  if(radius < DT_CHANNELMIXERRGB_SIMPLE_EPS)
-  {
-    *hue = 0.f;
-    *purity = 0.f;
-    return TRUE;
-  }
-
-  const float direction[2] = { uv[0] / radius, uv[1] / radius };
-  const float distance_to_edge = _channelmixerrgb_affine_distance_to_edge(direction, reference_primaries);
-  if(distance_to_edge == FLT_MAX || distance_to_edge < DT_CHANNELMIXERRGB_SIMPLE_EPS) return FALSE;
-
-  *hue = _channelmixerrgb_wrap_pi(atan2f(direction[1], direction[0]) - reference_angle);
-  *purity = radius / distance_to_edge;
-  return TRUE;
-}
-
-/**
- * @brief Convert primaries sliders to an exact mixer matrix in the current basis.
- *
- * The matrix columns are the custom basis vectors expressed in the current
- * mixer coordinates. We first build normalized affine coordinates for the three
- * primaries and the custom white, then solve the per-column gains that enforce
- * the requested white vector. The extra gain slider restores the missing ninth
- * degree of freedom absent from the original primaries-only parametrization.
- *
- * @param[in] basis Affine primaries basis used by the mixer GUI.
- * @param[in] primaries Primaries-mode parameters.
- * @param[out] M Mixer matrix in current module coordinates.
- * @return TRUE on success, FALSE when the construction becomes singular.
- */
-static gboolean _channelmixerrgb_primaries_to_matrix(const dt_iop_channelmixer_rgb_primaries_basis_t basis,
-                                                     const dt_iop_channelmixer_rgb_primaries_params_t *const primaries,
-                                                     float M[3][3])
-{
-  float white_reference[3] = { 0.f };
-  float reference_primaries[3][2] = { { 0.f } };
-  float white_reference_normalized[3] = { 0.f };
-  float custom_white_normalized[3] = { 0.f };
-  float custom_primaries[3][3] = { { 0.f } };
-  dt_colormatrix_t normalized_inverse = { { 0.f } };
-  dt_colormatrix_t normalized_primaries = { { 0.f } };
-
-  _channelmixerrgb_primaries_reference_white(basis, white_reference);
-  const float white_reference_sum = _channelmixerrgb_affine_sum3(white_reference);
-  if(fabsf(white_reference_sum) < DT_CHANNELMIXERRGB_SIMPLE_EPS) return FALSE;
-
-  if(!_channelmixerrgb_build_affine_simplex(basis, white_reference_normalized, reference_primaries)) return FALSE;
-
-  if(!_channelmixerrgb_affine_point_from_polar(white_reference_normalized, reference_primaries, 0,
-                                               primaries->achromatic_hue, primaries->achromatic_purity,
-                                               custom_white_normalized))
-    return FALSE;
-
-  if(!_channelmixerrgb_affine_point_from_polar(white_reference_normalized, reference_primaries, 0, primaries->red_hue,
-                                               primaries->red_purity, custom_primaries[0]))
-    return FALSE;
-  if(!_channelmixerrgb_affine_point_from_polar(white_reference_normalized, reference_primaries, 1, primaries->green_hue,
-                                               primaries->green_purity, custom_primaries[1]))
-    return FALSE;
-  if(!_channelmixerrgb_affine_point_from_polar(white_reference_normalized, reference_primaries, 2, primaries->blue_hue,
-                                               primaries->blue_purity, custom_primaries[2]))
-    return FALSE;
-
-  for(int row = 0; row < 3; row++)
-    for(int col = 0; col < 3; col++)
-      normalized_primaries[row][col] = custom_primaries[col][row];
-
-  if(mat3SSEinv(normalized_inverse, normalized_primaries)) return FALSE;
-
-  const float white_gain = primaries->gain * white_reference_sum;
-  const dt_aligned_pixel_t custom_white = { white_gain * custom_white_normalized[0],
-                                            white_gain * custom_white_normalized[1],
-                                            white_gain * custom_white_normalized[2],
-                                            0.f };
-  dt_aligned_pixel_t column_scales = { 0.f };
-  dt_apply_transposed_color_matrix(custom_white, normalized_inverse, column_scales);
-
-  for(int col = 0; col < 3; col++)
-    for(int row = 0; row < 3; row++)
-      M[row][col] = column_scales[col] * custom_primaries[col][row];
-
-  return TRUE;
-}
-
-/**
- * @brief Convert the current mixer matrix to primaries sliders and gain.
- *
- * The conversion is exact for non-singular matrices whose three columns and
- * white vector can be normalized on the affine plane r + g + b = 1. Those
- * conditions are checked explicitly before attempting the roundtrip.
- *
- * @param[in] basis Affine primaries basis used by the mixer GUI.
- * @param[in] M Mixer matrix in current module coordinates.
- * @param[out] primaries Primaries-mode parameters recovered from @p M.
- * @return TRUE on success, FALSE when the matrix cannot be represented.
- */
-static gboolean _channelmixerrgb_primaries_from_matrix(const dt_iop_channelmixer_rgb_primaries_basis_t basis,
-                                                       const float M[3][3],
-                                                       dt_iop_channelmixer_rgb_primaries_params_t *primaries)
-{
-  dt_colormatrix_t padded = { { 0.f } };
-  dt_colormatrix_t inverse = { { 0.f } };
-  float white_reference[3] = { 0.f };
-  float white_reference_normalized[3] = { 0.f };
-  float reference_primaries[3][2] = { { 0.f } };
-  float custom_white[3] = { 0.f };
-  float custom_white_normalized[3] = { 0.f };
-  float custom_primary_normalized[3] = { 0.f };
-
-  for(int row = 0; row < 3; row++)
-    for(int col = 0; col < 3; col++)
-      padded[row][col] = M[row][col];
-  if(mat3SSEinv(inverse, padded)) return FALSE;
-
-  _channelmixerrgb_primaries_reference_white(basis, white_reference);
-  const float white_reference_sum = _channelmixerrgb_affine_sum3(white_reference);
-  if(fabsf(white_reference_sum) < DT_CHANNELMIXERRGB_SIMPLE_EPS) return FALSE;
-
-  if(!_channelmixerrgb_build_affine_simplex(basis, white_reference_normalized, reference_primaries)) return FALSE;
-
-  for(int row = 0; row < 3; row++)
-    custom_white[row] = M[row][0] + M[row][1] + M[row][2];
-  if(!_channelmixerrgb_affine_normalize(custom_white, custom_white_normalized)) return FALSE;
-
-  primaries->gain = _channelmixerrgb_affine_sum3(custom_white) / white_reference_sum;
-  if(!_channelmixerrgb_affine_polar_from_point(white_reference_normalized, reference_primaries, 0,
-                                               custom_white_normalized, &primaries->achromatic_hue,
-                                               &primaries->achromatic_purity))
-    return FALSE;
-
-  for(int primary = 0; primary < 3; primary++)
-  {
-    const float column[3] = { M[0][primary], M[1][primary], M[2][primary] };
-    if(!_channelmixerrgb_affine_normalize(column, custom_primary_normalized)) return FALSE;
-
-    float *hue = primary == 0 ? &primaries->red_hue : primary == 1 ? &primaries->green_hue : &primaries->blue_hue;
-    float *purity = primary == 0 ? &primaries->red_purity : primary == 1 ? &primaries->green_purity : &primaries->blue_purity;
-
-    if(!_channelmixerrgb_affine_polar_from_point(white_reference_normalized, reference_primaries, primary,
-                                                 custom_primary_normalized, hue, purity))
-      return FALSE;
-  }
-
-  return TRUE;
-}
-
-/**
- * @brief Read the current primaries-mode widgets and decode them.
- *
- * @param[in] g Channel mixer GUI data.
- * @param[out] primaries Decoded primaries-mode parameters.
- */
-static void _channelmixerrgb_primaries_from_widgets(const dt_iop_channelmixer_rgb_gui_data_t *const g,
-                                                    dt_iop_channelmixer_rgb_primaries_params_t *primaries)
-{
-  primaries->achromatic_hue = dt_bauhaus_slider_get(g->primaries_achromatic_hue) * (float)M_PI_2;
-  primaries->achromatic_purity = dt_bauhaus_slider_get(g->primaries_achromatic_purity);
-  primaries->red_hue = dt_bauhaus_slider_get(g->primaries_red_hue) * (float)M_PI_2;
-  primaries->red_purity = dt_bauhaus_slider_get(g->primaries_red_purity);
-  primaries->green_hue = dt_bauhaus_slider_get(g->primaries_green_hue) * (float)M_PI_2;
-  primaries->green_purity = dt_bauhaus_slider_get(g->primaries_green_purity);
-  primaries->blue_hue = dt_bauhaus_slider_get(g->primaries_blue_hue) * (float)M_PI_2;
-  primaries->blue_purity = dt_bauhaus_slider_get(g->primaries_blue_purity);
-  primaries->gain = dt_bauhaus_slider_get(g->primaries_gain);
-}
-
-/**
- * @brief Push primaries-mode parameters back to the GUI widgets.
- *
- * @param[in] g Channel mixer GUI data.
- * @param[in] primaries Primaries-mode parameters to show.
- */
-static void _channelmixerrgb_primaries_to_widgets(dt_iop_channelmixer_rgb_gui_data_t *const g,
-                                                  const dt_iop_channelmixer_rgb_primaries_params_t *const primaries)
-{
-  dt_bauhaus_slider_set(g->primaries_achromatic_hue,
-                        CLAMP(primaries->achromatic_hue / (float)M_PI_2, -1.f, 1.f));
-  dt_bauhaus_slider_set(g->primaries_achromatic_purity, primaries->achromatic_purity);
-  dt_bauhaus_slider_set(g->primaries_red_hue, CLAMP(primaries->red_hue / (float)M_PI_2, -1.f, 1.f));
-  dt_bauhaus_slider_set(g->primaries_red_purity, primaries->red_purity);
-  dt_bauhaus_slider_set(g->primaries_green_hue, CLAMP(primaries->green_hue / (float)M_PI_2, -1.f, 1.f));
-  dt_bauhaus_slider_set(g->primaries_green_purity, primaries->green_purity);
-  dt_bauhaus_slider_set(g->primaries_blue_hue, CLAMP(primaries->blue_hue / (float)M_PI_2, -1.f, 1.f));
-  dt_bauhaus_slider_set(g->primaries_blue_purity, primaries->blue_purity);
-  dt_bauhaus_slider_set(g->primaries_gain, primaries->gain);
-}
 
 /**
  * @brief Synchronize the primaries-mode GUI from the effective mixer matrix.
@@ -3963,266 +3114,51 @@ static gboolean _channelmixerrgb_sync_primaries_from_params(dt_iop_module_t *sel
 {
   dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
   const dt_iop_channelmixer_rgb_params_t *const p = (dt_iop_channelmixer_rgb_params_t *)self->params;
+  GtkWidget *const widgets[9]
+      = { g->primaries_achromatic_hue, g->primaries_achromatic_purity, g->primaries_red_hue,
+          g->primaries_red_purity, g->primaries_green_hue, g->primaries_green_purity,
+          g->primaries_blue_hue, g->primaries_blue_purity, g->primaries_gain };
   dt_iop_channelmixer_rgb_primaries_params_t primaries;
   const dt_iop_channelmixer_rgb_primaries_basis_t basis
-      = _channelmixerrgb_primaries_basis_from_adaptation(p->adaptation);
+      = dt_iop_channelmixer_shared_primaries_basis_from_adaptation(p->adaptation);
+  const float rows[3][3] = { { p->red[0], p->red[1], p->red[2] },
+                             { p->green[0], p->green[1], p->green[2] },
+                             { p->blue[0], p->blue[1], p->blue[2] } };
+  const gboolean normalize[3] = { p->normalize_R, p->normalize_G, p->normalize_B };
   float M[3][3] = { { 0.f } };
   float roundtrip[3][3] = { { 0.f } };
 
-  if(!_channelmixerrgb_get_mixer_matrix(p, M, FALSE)) return FALSE;
-  if(!_channelmixerrgb_primaries_from_matrix(basis, M, &primaries)) return FALSE;
-  if(!_channelmixerrgb_primaries_to_matrix(basis, &primaries, roundtrip)) return FALSE;
+  if(!dt_iop_channelmixer_shared_get_matrix(rows, normalize, FALSE, M)) return FALSE;
+  if(!dt_iop_channelmixer_shared_primaries_from_matrix(basis, M, &primaries)) return FALSE;
+  if(!dt_iop_channelmixer_shared_primaries_to_matrix(basis, &primaries, roundtrip)) return FALSE;
 
-  const float roundtrip_error = _channelmixerrgb_simple_roundtrip_error(M, roundtrip);
+  const float roundtrip_error = dt_iop_channelmixer_shared_roundtrip_error(M, roundtrip);
   if(error) *error = roundtrip_error;
 
   ++darktable.gui->reset;
-  _channelmixerrgb_primaries_to_widgets(g, &primaries);
+  dt_iop_channelmixer_shared_primaries_to_sliders(&primaries, widgets);
   --darktable.gui->reset;
   return isfinite(roundtrip_error) && roundtrip_error <= DT_CHANNELMIXERRGB_SIMPLE_EPS;
 }
 
-/**
- * @brief Build the module-space probe color used to paint one primaries slider.
- *
- * The primaries UI controls either one custom basis vector or the custom white
- * vector. When painting a slider background, we vary only that parameter while
- * keeping every other primaries parameter constant and reuse the affected
- * module-space vector as the probe color.
- *
- * @param[in] M Mixer matrix built from the probed primaries parameters.
- * @param[in] widget_index Index of the primaries slider being painted.
- * @param[out] module_color Probe color in the current mixer basis.
- */
-static void _channelmixerrgb_primaries_probe_color(const float M[3][3], const int widget_index, float module_color[3])
-{
-  if(widget_index <= 1 || widget_index == 8)
-  {
-    for(int row = 0; row < 3; row++)
-      module_color[row] = M[row][0] + M[row][1] + M[row][2];
-    return;
-  }
-
-  const int column = widget_index <= 3 ? 0 : widget_index <= 5 ? 1 : 2;
-  for(int row = 0; row < 3; row++)
-    module_color[row] = M[row][column];
-}
-
-/**
- * @brief Paint the primaries-mode sliders from the current primaries model.
- *
- * Each slider is swept through its own hard range while all the other
- * parameters are kept constant. The resulting custom basis vector or white
- * vector is then converted through the active display profile using the same
- * linear-display normalization path as the other mixer previews.
- *
- * @param[in] self Current module instance.
- */
 static void _channelmixerrgb_update_primaries_colors(dt_iop_module_t *self)
 {
   dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
-  const GtkWidget *widgets[9]
-      = { g->primaries_achromatic_hue, g->primaries_achromatic_purity, g->primaries_red_hue, g->primaries_red_purity,
-          g->primaries_green_hue, g->primaries_green_purity, g->primaries_blue_hue, g->primaries_blue_purity,
-          g->primaries_gain };
+  const dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_pipe_work_profile_info(self->dev->pipe);
+  const dt_iop_order_iccprofile_info_t *const display_profile
+      = dt_ioppr_get_pipe_output_profile_info(self->dev->pipe);
+  GtkWidget *const widgets[9]
+      = { g->primaries_achromatic_hue, g->primaries_achromatic_purity, g->primaries_red_hue,
+          g->primaries_red_purity, g->primaries_green_hue, g->primaries_green_purity,
+          g->primaries_blue_hue, g->primaries_blue_purity, g->primaries_gain };
   dt_iop_channelmixer_rgb_primaries_params_t primaries;
   const dt_iop_channelmixer_rgb_primaries_basis_t basis
-      = _channelmixerrgb_primaries_basis_from_adaptation(p->adaptation);
+      = dt_iop_channelmixer_shared_primaries_basis_from_adaptation(p->adaptation);
 
-  _channelmixerrgb_primaries_from_widgets(g, &primaries);
-
-  for(int i = 0; i < DT_BAUHAUS_SLIDER_MAX_STOPS; i++)
-  {
-    const float stop = (float)i / (float)(DT_BAUHAUS_SLIDER_MAX_STOPS - 1);
-
-    for(int widget = 0; widget < 9; widget++)
-    {
-      dt_iop_channelmixer_rgb_primaries_params_t probe = primaries;
-      float M[3][3] = { { 0.f } };
-      float module_color[3] = { 0.f };
-      float display_rgb[3] = { 0.f };
-      const float hard_min = dt_bauhaus_slider_get_hard_min((GtkWidget *)widgets[widget]);
-      const float hard_max = dt_bauhaus_slider_get_hard_max((GtkWidget *)widgets[widget]);
-      const float value = hard_min + stop * (hard_max - hard_min);
-
-      switch(widget)
-      {
-        case 0:
-          probe.achromatic_hue = value * (float)M_PI_2;
-          break;
-        case 1:
-          probe.achromatic_purity = value;
-          break;
-        case 2:
-          probe.red_hue = value * (float)M_PI_2;
-          break;
-        case 3:
-          probe.red_purity = value;
-          break;
-        case 4:
-          probe.green_hue = value * (float)M_PI_2;
-          break;
-        case 5:
-          probe.green_purity = value;
-          break;
-        case 6:
-          probe.blue_hue = value * (float)M_PI_2;
-          break;
-        case 7:
-          probe.blue_purity = value;
-          break;
-        case 8:
-          probe.gain = value;
-          break;
-        default:
-          break;
-      }
-
-      if(!_channelmixerrgb_primaries_to_matrix(basis, &probe, M)) continue;
-
-      _channelmixerrgb_primaries_probe_color(M, widget, module_color);
-      _channelmixerrgb_simple_module_color_to_display(self, p, module_color, display_rgb);
-      dt_bauhaus_slider_set_stop((GtkWidget *)widgets[widget], stop, display_rgb[0], display_rgb[1],
-                                 display_rgb[2]);
-    }
-  }
-
-  gtk_widget_queue_draw(g->primaries_achromatic_hue);
-  gtk_widget_queue_draw(g->primaries_achromatic_purity);
-  gtk_widget_queue_draw(g->primaries_red_hue);
-  gtk_widget_queue_draw(g->primaries_red_purity);
-  gtk_widget_queue_draw(g->primaries_green_hue);
-  gtk_widget_queue_draw(g->primaries_green_purity);
-  gtk_widget_queue_draw(g->primaries_blue_hue);
-  gtk_widget_queue_draw(g->primaries_blue_purity);
-  gtk_widget_queue_draw(g->primaries_gain);
-}
-
-/**
- * @brief Convert a module-space pseudo color to the actual display profile.
- *
- * The complete RGB mixer already paints slider stops from synthetic colors.
- * Here we make that path explicit for the simple mode: we probe the current
- * mixer in module coordinates, convert back to working RGB when the module runs
- * in a CAT space, then transform that working RGB swatch to the display
- * profile.
- *
- * @param[in] self Current module instance.
- * @param[in] p Current module params.
- * @param[in] module_color Probe color in the module working coordinates.
- * @param[out] display_rgb Color transformed to the display profile.
- */
-static void _channelmixerrgb_simple_module_color_to_display(dt_iop_module_t *self,
-                                                            const dt_iop_channelmixer_rgb_params_t *const p,
-                                                            const float module_color[3], float display_rgb[3])
-{
-  dt_aligned_pixel_t work_rgb = { module_color[0], module_color[1], module_color[2], 0.f };
-  dt_aligned_pixel_t display = { 0.f };
-
-  if(p->adaptation != DT_ADAPTATION_RGB)
-  {
-    dt_aligned_pixel_t LMS = { module_color[0], module_color[1], module_color[2], 0.f };
-    convert_any_LMS_to_RGB(LMS, work_rgb, p->adaptation);
-  }
-
-  const dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_pipe_work_profile_info(self->dev->pipe);
-  const dt_iop_order_iccprofile_info_t *const display_profile = dt_ioppr_get_pipe_output_profile_info(self->dev->pipe);
-  _channelmixerrgb_work_rgb_to_display(work_rgb, work_profile, display_profile, display);
-  for(int c = 0; c < 3; c++) display_rgb[c] = display[c];
-}
-
-/**
- * @brief Build a representative module-space probe vector for one simple slider.
- *
- * We sweep each slider independently, so the preview color needs to stay tied
- * to the current mixer geometry while still isolating the parameter being
- * painted. We therefore probe the current matrix on one chroma-plane axis at a
- * time, with a neutral offset to keep the color in a displayable range.
- *
- * @param[in] probe Which chroma direction to test.
- * @param[out] source Probe vector in module coordinates.
- */
-static void _channelmixerrgb_simple_probe_source(const dt_iop_channelmixer_rgb_simple_probe_t probe, float source[3])
-{
-  static const float P[3][3]
-      = { { 0.7071067811865475f,  0.4082482904638631f, INVERSE_SQRT_3 },
-          { -0.7071067811865475f, 0.4082482904638631f, INVERSE_SQRT_3 },
-          { 0.f,                 -0.8164965809277261f, INVERSE_SQRT_3 } };
-  const float basis[3]
-      = { probe == DT_CHANNELMIXERRGB_SIMPLE_PROBE_AXIS_1 ? DT_CHANNELMIXERRGB_SIMPLE_CHROMA_PROBE
-                                                           : probe == DT_CHANNELMIXERRGB_SIMPLE_PROBE_ROTATION
-                                                                 ? DT_CHANNELMIXERRGB_SIMPLE_CHROMA_PROBE * 0.7071067811865475f
-                                                                 : 0.f,
-          probe == DT_CHANNELMIXERRGB_SIMPLE_PROBE_AXIS_2 ? DT_CHANNELMIXERRGB_SIMPLE_CHROMA_PROBE
-                                                           : probe == DT_CHANNELMIXERRGB_SIMPLE_PROBE_ROTATION
-                                                                 ? DT_CHANNELMIXERRGB_SIMPLE_CHROMA_PROBE * 0.7071067811865475f
-                                                                 : 0.f,
-          1.f };
-
-  for(int row = 0; row < 3; row++)
-  {
-    source[row] = 0.f;
-    for(int col = 0; col < 3; col++) source[row] += P[row][col] * basis[col];
-  }
-}
-
-/**
- * @brief Normalize a linear display RGB triplet only when it exceeds display white.
- *
- * Slider backgrounds are tints rather than exposure previews. When at least one
- * linear-display channel goes above one, rescaling by the maximum channel
- * preserves the hue direction while keeping the brightest channel at display
- * white before the display TRC is applied. Sub-white colors are kept unchanged.
- *
- * @param[in,out] linear_display_rgb Linear display-space RGB triplet.
- */
-static void _channelmixerrgb_normalize_linear_display_rgb(dt_aligned_pixel_t linear_display_rgb)
-{
-  const float max_RGB = fmaxf(fmaxf(linear_display_rgb[0], linear_display_rgb[1]), linear_display_rgb[2]);
-  if(max_RGB > 1.f)
-    for(int c = 0; c < 3; c++) linear_display_rgb[c] = fmaxf(linear_display_rgb[c] / max_RGB, 0.f);
-  else
-    for(int c = 0; c < 3; c++) linear_display_rgb[c] = fmaxf(linear_display_rgb[c], 0.f);
-}
-
-/**
- * @brief Convert a work-RGB swatch to display RGB after linear-space normalization.
- *
- * @param[in] work_rgb Probe color in the module working RGB basis.
- * @param[in] work_profile Active working profile.
- * @param[in] display_profile Active display profile.
- * @param[out] display_rgb Display-ready RGB values for slider painting.
- */
-static void _channelmixerrgb_work_rgb_to_display(const dt_aligned_pixel_t work_rgb,
-                                                 const dt_iop_order_iccprofile_info_t *const work_profile,
-                                                 const dt_iop_order_iccprofile_info_t *const display_profile,
-                                                 dt_aligned_pixel_t display_rgb)
-{
-  if(work_profile && display_profile)
-  {
-    dt_aligned_pixel_t XYZ = { 0.f };
-    dt_aligned_pixel_t linear_display_rgb = { 0.f };
-
-    dt_ioppr_rgb_matrix_to_xyz(work_rgb, XYZ, work_profile->matrix_in_transposed, work_profile->lut_in,
-                               work_profile->unbounded_coeffs_in, work_profile->lutsize,
-                               work_profile->nonlinearlut);
-    dt_apply_transposed_color_matrix(XYZ, display_profile->matrix_out_transposed, linear_display_rgb);
-    _channelmixerrgb_normalize_linear_display_rgb(linear_display_rgb);
-
-    if(display_profile->nonlinearlut)
-      _apply_trc(linear_display_rgb, display_rgb, display_profile->lut_out, display_profile->unbounded_coeffs_out,
-                 display_profile->lutsize);
-    else
-      for(int c = 0; c < 4; c++) display_rgb[c] = linear_display_rgb[c];
-  }
-  else
-  {
-    for(int c = 0; c < 4; c++) display_rgb[c] = work_rgb[c];
-    _channelmixerrgb_normalize_linear_display_rgb(display_rgb);
-  }
-
-  for(int c = 0; c < 3; c++) display_rgb[c] = CLAMP(display_rgb[c], 0.f, 1.f);
+  dt_iop_channelmixer_shared_primaries_from_sliders(widgets, &primaries);
+  dt_iop_channelmixer_shared_paint_primaries_sliders(p->adaptation, work_profile, display_profile, basis, &primaries,
+                                                     widgets);
 }
 
 static void _convert_GUI_colors(dt_iop_channelmixer_rgb_params_t *p,
@@ -4241,7 +3177,7 @@ static void _convert_GUI_colors(dt_iop_channelmixer_rgb_params_t *p,
     for(size_t c = 0; c < 3; c++) work_rgb[c] = LMS[c];
   }
 
-  _channelmixerrgb_work_rgb_to_display(work_rgb, work_profile, display_profile, RGB);
+  dt_iop_channelmixer_shared_work_rgb_to_display(work_rgb, work_profile, display_profile, RGB);
 }
 
 static void _update_RGB_slider_stop(dt_iop_channelmixer_rgb_params_t *p,
@@ -4303,22 +3239,29 @@ static gboolean _channelmixerrgb_sync_simple_from_params(dt_iop_module_t *self, 
 {
   dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
+  GtkWidget *const widgets[6]
+      = { g->simple_theta, g->simple_psi, g->simple_stretch_1, g->simple_stretch_2, g->simple_coupling_1,
+          g->simple_coupling_2 };
+  const float rows[3][3] = { { p->red[0], p->red[1], p->red[2] },
+                             { p->green[0], p->green[1], p->green[2] },
+                             { p->blue[0], p->blue[1], p->blue[2] } };
+  const gboolean normalize[3] = { p->normalize_R, p->normalize_G, p->normalize_B };
   float M[3][3] = { { 0.f } };
   float roundtrip[3][3] = { { 0.f } };
   dt_iop_channelmixer_rgb_simple_params_t simple;
 
   if(error) *error = INFINITY;
-  if(!_channelmixerrgb_rows_are_normalized(p)) return FALSE;
-  if(!_channelmixerrgb_get_mixer_matrix(p, M, FALSE)) return FALSE;
+  if(!dt_iop_channelmixer_shared_rows_are_normalized(normalize)) return FALSE;
+  if(!dt_iop_channelmixer_shared_get_matrix(rows, normalize, FALSE, M)) return FALSE;
 
-  _channelmixerrgb_simple_from_matrix(M, &simple);
-  _channelmixerrgb_simple_to_matrix(&simple, roundtrip);
+  dt_iop_channelmixer_shared_simple_from_matrix(M, &simple);
+  dt_iop_channelmixer_shared_simple_to_matrix(&simple, roundtrip);
 
-  const float roundtrip_error = _channelmixerrgb_simple_roundtrip_error(M, roundtrip);
+  const float roundtrip_error = dt_iop_channelmixer_shared_roundtrip_error(M, roundtrip);
   if(error) *error = roundtrip_error;
 
   ++darktable.gui->reset;
-  _channelmixerrgb_simple_to_widgets(g, &simple);
+  dt_iop_channelmixer_shared_simple_to_sliders(&simple, widgets);
   --darktable.gui->reset;
 
   return isfinite(roundtrip_error) && roundtrip_error <= DT_CHANNELMIXERRGB_SIMPLE_EPS;
@@ -4337,112 +3280,17 @@ static gboolean _channelmixerrgb_sync_simple_from_params(dt_iop_module_t *self, 
 static void _channelmixerrgb_update_simple_colors(dt_iop_module_t *self)
 {
   dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
-  dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
-  const GtkWidget *widgets[6]
-      = { g->simple_theta, g->simple_psi, g->simple_stretch_1, g->simple_stretch_2,
-          g->simple_coupling_1, g->simple_coupling_2 };
-  const dt_iop_channelmixer_rgb_simple_probe_t probes[6]
-      = { DT_CHANNELMIXERRGB_SIMPLE_PROBE_ROTATION, DT_CHANNELMIXERRGB_SIMPLE_PROBE_ROTATION,
-          DT_CHANNELMIXERRGB_SIMPLE_PROBE_AXIS_1, DT_CHANNELMIXERRGB_SIMPLE_PROBE_AXIS_2,
-          DT_CHANNELMIXERRGB_SIMPLE_PROBE_AXIS_1, DT_CHANNELMIXERRGB_SIMPLE_PROBE_AXIS_2 };
+  const dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
+  const dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_pipe_work_profile_info(self->dev->pipe);
+  const dt_iop_order_iccprofile_info_t *const display_profile
+      = dt_ioppr_get_pipe_output_profile_info(self->dev->pipe);
+  GtkWidget *const widgets[6]
+      = { g->simple_theta, g->simple_psi, g->simple_stretch_1, g->simple_stretch_2, g->simple_coupling_1,
+          g->simple_coupling_2 };
   dt_iop_channelmixer_rgb_simple_params_t simple;
 
-  _channelmixerrgb_simple_from_widgets(g, &simple);
-
-  for(int i = 0; i < DT_BAUHAUS_SLIDER_MAX_STOPS; i++)
-  {
-    const float stop = (float)i / (float)(DT_BAUHAUS_SLIDER_MAX_STOPS - 1);
-    const float slider = 2.f * stop - 1.f;
-    const float stretch_slider = 3.f * stop - 1.5f;
-
-    for(int widget = 0; widget < 6; widget++)
-    {
-      dt_iop_channelmixer_rgb_simple_params_t probe_simple = simple;
-      float source[3] = { 0.f };
-      float module_color[3] = { 0.f };
-      float display_rgb[3] = { 0.f };
-      float M[3][3] = { { 0.f } };
-      float coupling_hue = simple.coupling_hue;
-
-      switch(widget)
-      {
-        case 0:
-          probe_simple.theta = slider * (float)M_PI;
-          break;
-        case 1:
-          probe_simple.psi = slider * (float)M_PI_2;
-          break;
-        case 2:
-          probe_simple.stretch_1 = _channelmixerrgb_decode_simple_stretch(stretch_slider);
-          break;
-        case 3:
-          probe_simple.stretch_2 = _channelmixerrgb_decode_simple_stretch(stretch_slider);
-          break;
-        case 4:
-          probe_simple.coupling_amount = _channelmixerrgb_decode_simple_coupling_amount(stop);
-          break;
-        case 5:
-          probe_simple.coupling_hue = slider * (float)M_PI;
-          coupling_hue = probe_simple.coupling_hue;
-          break;
-        default:
-          break;
-      }
-
-      _channelmixerrgb_simple_to_matrix(&probe_simple, M);
-      if(widget < 4)
-        _channelmixerrgb_simple_probe_source(probes[widget], source);
-      else
-      {
-        static const float P[3][3]
-            = { { 0.7071067811865475f,  0.4082482904638631f, INVERSE_SQRT_3 },
-                { -0.7071067811865475f, 0.4082482904638631f, INVERSE_SQRT_3 },
-                { 0.f,                 -0.8164965809277261f, INVERSE_SQRT_3 } };
-        const float basis[3]
-            = { DT_CHANNELMIXERRGB_SIMPLE_CHROMA_PROBE * cosf(coupling_hue),
-                DT_CHANNELMIXERRGB_SIMPLE_CHROMA_PROBE * sinf(coupling_hue),
-                1.f };
-
-        for(int row = 0; row < 3; row++)
-        {
-          source[row] = 0.f;
-          for(int col = 0; col < 3; col++) 
-            source[row] += P[row][col] * basis[col];
-        }
-      }
-
-      for(int row = 0; row < 3; row++)
-        for(int col = 0; col < 3; col++) module_color[row] += M[row][col] * source[col];
-
-      _channelmixerrgb_simple_module_color_to_display(self, p, module_color, display_rgb);
-      dt_bauhaus_slider_set_stop((GtkWidget *)widgets[widget], stop, display_rgb[0], display_rgb[1], display_rgb[2]);
-    }
-  }
-
-  gtk_widget_queue_draw(g->simple_theta);
-  gtk_widget_queue_draw(g->simple_psi);
-  gtk_widget_queue_draw(g->simple_stretch_1);
-  gtk_widget_queue_draw(g->simple_stretch_2);
-  gtk_widget_queue_draw(g->simple_coupling_1);
-  gtk_widget_queue_draw(g->simple_coupling_2);
-}
-
-static void paint_temperature_background(struct dt_iop_module_t *self)
-{
-  dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
-
-  const float temp_range = TEMP_MAX - TEMP_MIN;
-
-  for(int i = 0; i < DT_BAUHAUS_SLIDER_MAX_STOPS; i++)
-  {
-    const float stop = ((float)i / (float)(DT_BAUHAUS_SLIDER_MAX_STOPS - 1));
-    const float t = TEMP_MIN + stop * temp_range;
-    dt_aligned_pixel_t RGB = { 0 };
-    illuminant_CCT_to_RGB(t, RGB);
-    dt_bauhaus_slider_set_stop(g->temperature, stop, RGB[0], RGB[1], RGB[2]);
-  }
-
-  gtk_widget_queue_draw(g->temperature);
+  dt_iop_channelmixer_shared_simple_from_sliders(widgets, &simple);
+  dt_iop_channelmixer_shared_paint_simple_sliders(p->adaptation, work_profile, display_profile, &simple, widgets);
 }
 
 
@@ -4645,7 +3493,7 @@ static void illum_xy_callback(GtkWidget *slider, gpointer user_data)
   dt_bauhaus_slider_set(g->temperature, p->temperature);
   update_approx_cct(self);
   update_illuminant_color(self);
-  paint_temperature_background(self);
+  dt_iop_channelmixer_shared_paint_temperature_slider(g->temperature, TEMP_MIN, TEMP_MAX);
   --darktable.gui->reset;
 
   dt_print(DT_DEBUG_DEV, "[picker/channelmixerrgb] history commit source=illum_xy_callback slider=%p\n",
@@ -4936,7 +3784,7 @@ static void _channelmixerrgb_mixer_mode_callback(GtkWidget *combo, gpointer user
   if(mode == DT_CHANNELMIXERRGB_MIXER_SIMPLE)
   {
     float error = INFINITY;
-    if(!_channelmixerrgb_rows_are_normalized(p) || !_channelmixerrgb_sync_simple_from_params(self, &error))
+    if(!_channelmixerrgb_sync_simple_from_params(self, &error))
     {
       dt_control_log(_("simple mixer mode requires all three output rows to be normalized with non-zero sums."));
       ++darktable.gui->reset;
@@ -4954,9 +3802,13 @@ static void _channelmixerrgb_mixer_mode_callback(GtkWidget *combo, gpointer user
 
   if(mode == DT_CHANNELMIXERRGB_MIXER_PRIMARIES)
   {
+    const float rows[3][3] = { { p->red[0], p->red[1], p->red[2] },
+                               { p->green[0], p->green[1], p->green[2] },
+                               { p->blue[0], p->blue[1], p->blue[2] } };
+    const gboolean normalize[3] = { p->normalize_R, p->normalize_G, p->normalize_B };
     float M[3][3] = { { 0.f } };
     float error = INFINITY;
-    if(!_channelmixerrgb_get_mixer_matrix(p, M, FALSE)
+    if(!dt_iop_channelmixer_shared_get_matrix(rows, normalize, FALSE, M)
        || !_channelmixerrgb_sync_primaries_from_params(self, &error))
     {
       dt_control_log(_("primaries mixer mode requires a non-singular 3x3 matrix with non-zero affine sums."));
@@ -5014,11 +3866,21 @@ static void _channelmixerrgb_simple_slider_callback(GtkWidget *slider, gpointer 
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
+  GtkWidget *const widgets[6]
+      = { g->simple_theta, g->simple_psi, g->simple_stretch_1, g->simple_stretch_2, g->simple_coupling_1,
+          g->simple_coupling_2 };
   dt_iop_channelmixer_rgb_simple_params_t simple;
   float M[3][3] = { { 0.f } };
-  _channelmixerrgb_simple_from_widgets(g, &simple);
-  _channelmixerrgb_simple_to_matrix(&simple, M);
-  _channelmixerrgb_set_effective_mixer_matrix(p, M);
+
+  dt_iop_channelmixer_shared_simple_from_sliders(widgets, &simple);
+  dt_iop_channelmixer_shared_simple_to_matrix(&simple, M);
+
+  for(int col = 0; col < 3; col++)
+  {
+    p->red[col] = M[0][col];
+    p->green[col] = M[1][col];
+    p->blue[col] = M[2][col];
+  }
 
   ++darktable.gui->reset;
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->normalize_R), p->normalize_R);
@@ -5049,13 +3911,17 @@ static void _channelmixerrgb_primaries_slider_callback(GtkWidget *slider, gpoint
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
+  GtkWidget *const widgets[9]
+      = { g->primaries_achromatic_hue, g->primaries_achromatic_purity, g->primaries_red_hue,
+          g->primaries_red_purity, g->primaries_green_hue, g->primaries_green_purity,
+          g->primaries_blue_hue, g->primaries_blue_purity, g->primaries_gain };
   dt_iop_channelmixer_rgb_primaries_params_t primaries;
   const dt_iop_channelmixer_rgb_primaries_basis_t basis
-      = _channelmixerrgb_primaries_basis_from_adaptation(p->adaptation);
+      = dt_iop_channelmixer_shared_primaries_basis_from_adaptation(p->adaptation);
   float M[3][3] = { { 0.f } };
 
-  _channelmixerrgb_primaries_from_widgets(g, &primaries);
-  if(!_channelmixerrgb_primaries_to_matrix(basis, &primaries, M))
+  dt_iop_channelmixer_shared_primaries_from_sliders(widgets, &primaries);
+  if(!dt_iop_channelmixer_shared_primaries_to_matrix(basis, &primaries, M))
   {
     dt_control_log(_("primaries mixer mode requires a non-singular 3x3 matrix with non-zero affine sums."));
     return;
@@ -5105,7 +3971,8 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
       = w == g->primaries_achromatic_hue || w == g->primaries_achromatic_purity || w == g->primaries_red_hue
         || w == g->primaries_red_purity || w == g->primaries_green_hue || w == g->primaries_green_purity
         || w == g->primaries_blue_hue || w == g->primaries_blue_purity || w == g->primaries_gain;
-  const gboolean rows_are_normalized = _channelmixerrgb_rows_are_normalized(p);
+  const gboolean normalize[3] = { p->normalize_R, p->normalize_G, p->normalize_B };
+  const gboolean rows_are_normalized = dt_iop_channelmixer_shared_rows_are_normalized(normalize);
   const gboolean complete_widget
       = w == g->scale_red_R || w == g->scale_red_G || w == g->scale_red_B || w == g->scale_green_R
         || w == g->scale_green_G || w == g->scale_green_B || w == g->scale_blue_R || w == g->scale_blue_G
@@ -5193,7 +4060,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 
     // Redraw the temperature background color taking new soft bounds into account
     dt_bauhaus_slider_set(g->temperature, p->temperature);
-    paint_temperature_background(self);
+    dt_iop_channelmixer_shared_paint_temperature_slider(g->temperature, TEMP_MIN, TEMP_MAX);
   }
 
   if(w == g->adaptation)
@@ -5522,7 +4389,7 @@ void _auto_set_illuminant(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe)
     update_approx_cct(self);
     update_illuminant_color(self);
     paint_hue(self);
-    paint_temperature_background(self);
+    dt_iop_channelmixer_shared_paint_temperature_slider(g->temperature, TEMP_MIN, TEMP_MAX);
     gtk_widget_queue_draw(g->origin_spot);
 
     --darktable.gui->reset;

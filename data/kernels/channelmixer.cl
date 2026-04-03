@@ -1,6 +1,6 @@
 /*
     This file is part of darktable,
-    Copyright (C) 2021 Aurélien PIERRE.
+    Copyright (C) 2021, 2026 Aurélien PIERRE.
     Copyright (C) 2021 David Koller.
     Copyright (C) 2021 mtvoid.
     Copyright (C) 2021-2022 Sakari Kapanen.
@@ -757,4 +757,58 @@ channelmixerrgb_RGB(read_only image2d_t in, write_only image2d_t out,
   }
 
   write_imagef(out, (int2)(x, y), RGB);
+}
+
+kernel void
+splittoningrgb(read_only image2d_t in, write_only image2d_t out,
+               const int width, const int height,
+               constant const float4 *const RGB_to_XYZ,
+               constant const float4 *const dark_matrix,
+               constant const float4 *const bright_matrix,
+               const float dark_luminance, const float bright_luminance)
+{
+  const int x = get_global_id(0);
+  const int y = get_global_id(1);
+
+  if(x >= width || y >= height) return;
+
+  const float4 pix_in = read_imagef(in, sampleri, (int2)(x, y));
+  const float4 pix_rgb = (float4)(pix_in.x, pix_in.y, pix_in.z, 0.f);
+  const float4 XYZ = matrix_product_float4(pix_rgb, (constant const float *const)RGB_to_XYZ);
+  const float luminance = fmax(XYZ.y, 0.f);
+  const float segment = fmax(bright_luminance - dark_luminance, NORM_MIN);
+
+  const float4 identity_row_0 = (float4)(1.f, 0.f, 0.f, 0.f);
+  const float4 identity_row_1 = (float4)(0.f, 1.f, 0.f, 0.f);
+  const float4 identity_row_2 = (float4)(0.f, 0.f, 1.f, 0.f);
+
+  float alpha = 0.f;
+  float4 row_0 = identity_row_0;
+  float4 row_1 = identity_row_1;
+  float4 row_2 = identity_row_2;
+
+  if(luminance <= dark_luminance)
+  {
+    alpha = clamp(1.f - (dark_luminance - luminance) / segment, 0.f, 1.f);
+    row_0 = identity_row_0 + alpha * (dark_matrix[0] - identity_row_0);
+    row_1 = identity_row_1 + alpha * (dark_matrix[1] - identity_row_1);
+    row_2 = identity_row_2 + alpha * (dark_matrix[2] - identity_row_2);
+  }
+  else if(luminance >= bright_luminance)
+  {
+    alpha = clamp(1.f - (luminance - bright_luminance) / segment, 0.f, 1.f);
+    row_0 = identity_row_0 + alpha * (bright_matrix[0] - identity_row_0);
+    row_1 = identity_row_1 + alpha * (bright_matrix[1] - identity_row_1);
+    row_2 = identity_row_2 + alpha * (bright_matrix[2] - identity_row_2);
+  }
+  else
+  {
+    alpha = clamp((luminance - dark_luminance) / segment, 0.f, 1.f);
+    row_0 = dark_matrix[0] + alpha * (bright_matrix[0] - dark_matrix[0]);
+    row_1 = dark_matrix[1] + alpha * (bright_matrix[1] - dark_matrix[1]);
+    row_2 = dark_matrix[2] + alpha * (bright_matrix[2] - dark_matrix[2]);
+  }
+
+  const float3 out_rgb = matrix_dot_float4_rows(row_0, row_1, row_2, pix_in.xyz);
+  write_imagef(out, (int2)(x, y), (float4)(out_rgb.x, out_rgb.y, out_rgb.z, pix_in.w));
 }

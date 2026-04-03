@@ -148,6 +148,7 @@ const dt_iop_order_entry_t legacy_order[] = {
   { {31.0f }, "equalizer", 0},
   { {32.0f }, "vibrance", 0},
   { {33.0f }, "colorbalance", 0},
+  { {33.4f }, "splittoningrgb", 0},
   { {33.45f }, "colorprimaries", 0},
   { {33.5f }, "colorbalancergb", 0},
   { {33.6f }, "colorequal", 0},
@@ -261,6 +262,7 @@ const dt_iop_order_entry_t v30_order[] = {
                                   //    very good in scene-referred workflow
   { {40.0f }, "basicadj", 0},        // module mixing view/model/control at once, usage should be discouraged
   { {41.0f }, "colorbalance", 0},    // scene-referred color manipulation
+  { {41.4f }, "splittoningrgb", 0},  // keyed CAT16 plus RGB mixer before primary warping
   { {41.45f }, "colorprimaries", 0}, // editable RGB/CYM primary nodes in dt UCS
   { {41.5f }, "colorbalancergb", 0}, // scene-referred color manipulation
   { {41.6f }, "colorequal", 0},      // dynamic hue-defined RGB stretching around the achromatic axis
@@ -377,6 +379,7 @@ const dt_iop_order_entry_t v30_jpg_order[] = {
                                     //    good in scene-referred workflow
   { { 40.0f }, "basicadj", 0 },        // module mixing view/model/control at once, usage should be discouraged
   { { 41.0f }, "colorbalance", 0 },    // scene-referred color manipulation
+  { { 41.4f }, "splittoningrgb", 0 },  // keyed CAT16 plus RGB mixer before primary warping
   { { 41.45f }, "colorprimaries", 0 }, // editable RGB/CYM primary nodes in dt UCS
   { { 41.5f }, "colorbalancergb", 0 }, // scene-referred color manipulation
   { { 41.6f }, "colorequal", 0 },      // dynamic hue-defined RGB stretching around the achromatic axis
@@ -883,6 +886,7 @@ GList *dt_ioppr_get_iop_order_list(int32_t imgid, gboolean sorted)
           _insert_before(iop_order_list, "negadoctor", "censorize");
           _insert_before(iop_order_list, "rgbcurve", "colorbalancergb");
           _insert_before(iop_order_list, "colorbalancergb", "colorprimaries");
+          _insert_before(iop_order_list, "colorprimaries", "splittoningrgb");
           _insert_before(iop_order_list, "drawlayer", "colorequal");
           _insert_before(iop_order_list, "rgbcurve", "drawlayer");
           _insert_before(iop_order_list, "ashift", "cacorrectrgb");
