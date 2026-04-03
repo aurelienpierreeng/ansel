@@ -772,7 +772,10 @@ static inline void heat_PDE_diffusion(const float *const restrict high_freq, con
   const float *const restrict LF = DT_IS_ALIGNED(low_freq);
   const float *const restrict HF = DT_IS_ALIGNED(high_freq);
   const dt_aligned_pixel_simd_t zero = dt_simd_set1(0.f);
+
+  #if DIFFUSE_V3
   const dt_aligned_pixel_simd_t flt_min = dt_simd_set1(FLT_MIN);
+  #endif
   const dt_aligned_pixel_simd_t variance_threshold_v = dt_simd_set1(variance_threshold);
   const dt_aligned_pixel_simd_t normalized_regularization_v = dt_simd_set1(normalized_regularization);
   const dt_aligned_pixel_simd_t strength_v = dt_simd_set1(strength);
@@ -780,7 +783,7 @@ static inline void heat_PDE_diffusion(const float *const restrict high_freq, con
 #ifdef _OPENMP
 #pragma omp parallel for default(none)                                                                            \
     dt_omp_firstprivate(out, mask, HF, LF, height, width, ABCD, has_mask, variance_threshold, anisotropy,         \
-                        normalized_regularization, mult, strength, isotropy_type, zero, flt_min, use_nontemporal, \
+                        normalized_regularization, mult, strength, isotropy_type, zero, use_nontemporal,           \
                         variance_threshold_v, normalized_regularization_v, strength_v)                             \
     schedule(static)
 #endif
@@ -820,10 +823,15 @@ static inline void heat_PDE_diffusion(const float *const restrict high_freq, con
             const dt_aligned_pixel_simd_t lf_value = dt_load_simd_aligned(LF + neighbor);
             neighbour_pixel_HF[3 * ii + jj] = hf_value;
             neighbour_pixel_LF[3 * ii + jj] = lf_value;
+            #if DIFFUSE_V3
+            // Will need to protect that with a check to handle legacy compatibility
             // Clamp LF to a strictly positive floor to avoid divide-by-zero in
             // the HF/LF energy estimate without branching per channel.
             const dt_aligned_pixel_simd_t safe_lf = dt_simd_max_zero(lf_value - flt_min) + flt_min;
             const dt_aligned_pixel_simd_t ratio = hf_value / safe_lf;
+            #else 
+            const dt_aligned_pixel_simd_t ratio = hf_value;
+            #endif
             energy += ratio * ratio;
           }
 

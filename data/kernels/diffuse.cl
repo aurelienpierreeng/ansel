@@ -27,6 +27,8 @@
 #define B_SPLINE_TO_LAPLACIAN 3.182727439285017f
 #define B_SPLINE_TO_LAPLACIAN_2 10.129753952777762f // square
 
+#define DIFFUSE_V3 0
+
 
 typedef enum dt_isotropy_t
 {
@@ -244,7 +246,12 @@ diffuse_pde(read_only image2d_t HF, read_only image2d_t LF,
         const float4 hf_value = read_imagef(HF, samplerA, p);
         const float4 lf_value = read_imagef(LF, samplerA, p);
         neighbour_pixel[k] = hf_value;
+        #if DIFFUSE_V3
+        // Will need to protect that with a check to handle legacy compatibility
         energy += sqf(hf_value / fmax(lf_value, (float4)(FLT_MIN)));
+        #else
+        energy += sqf(hf_value);
+        #endif
       }
 
     float4 hf_gradient[2];
