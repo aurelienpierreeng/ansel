@@ -1290,6 +1290,23 @@ static int _default_process_tiling_cl_ptp(struct dt_iop_module_t *self, const st
   if(width < roi_in->width) width = (width / walign) * walign;
   if(height < roi_in->height) height = (height / halign) * halign;
 
+  /* OpenCL image allocations are backed by device-specific row/height strides.
+     The generic full-frame pre-check already reasons on rounded dimensions, so
+     tiling needs to use the same planning rule or it may pick a tile that fits
+     mathematically in width*height*bpp but still fails once the driver rounds it
+     up internally. Shrink the candidate tile until the rounded image footprint
+     fits the per-buffer budget. */
+  while((float)ROUNDUPDWD(width, devid) * ROUNDUPDHT(height, devid) * max_bpp * maxbuf > singlebuffer)
+  {
+    if(width <= (int)walign && height <= (int)halign) break;
+    if(width < height && height > (int)halign)
+      height -= halign;
+    else if(width > (int)walign)
+      width -= walign;
+    else
+      height -= halign;
+  }
+
   /* also make sure that overlap follows alignment rules by making it wider when needed */
   const int overlap = tiling.overlap % xyalign != 0 ? (tiling.overlap / xyalign + 1) * xyalign
                                                     : tiling.overlap;
@@ -1625,6 +1642,21 @@ static int _default_process_tiling_cl_roi(struct dt_iop_module_t *self, const st
      overlap_in needs to be aligned, overlap_out is only here to calculate output buffer size */
   const int overlap_in = _align_up(tiling.overlap, xyalign);
   const int overlap_out = ceilf((float)overlap_in / fullscale);
+
+  /* As in the pixel-perfect tiler above, keep planning conservative with the
+     same rounded OpenCL dimensions used by the non-tiling GPU fit checks. The
+     ROI path can otherwise accept a tile whose raw area fits `singlebuffer`
+     even though the driver-backed image allocation for the tile does not. */
+  while((float)ROUNDUPDWD(width, devid) * ROUNDUPDHT(height, devid) * max_bpp * maxbuf > singlebuffer)
+  {
+    if(width <= (int)xyalign && height <= (int)xyalign) break;
+    if(width < height && height > (int)xyalign)
+      height -= xyalign;
+    else if(width > (int)xyalign)
+      width -= xyalign;
+    else
+      height -= xyalign;
+  }
 
   int tiles_x = 1, tiles_y = 1;
 
