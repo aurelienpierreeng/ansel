@@ -183,7 +183,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
                              dt_pixel_cache_entry_t *input_entry, dt_pixel_cache_entry_t *output_entry)
 {
   dt_iop_module_t *module = piece->module;
-  float *input = dt_pixel_cache_entry_get_data(input_entry);
+  float *input = input_entry ? dt_pixel_cache_entry_get_data(input_entry) : NULL;
   void *output = dt_pixel_cache_entry_get_data(output_entry);
   void *cl_mem_input = NULL;
   void *cl_mem_output = NULL;
@@ -200,6 +200,11 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
   dt_iop_buffer_dsc_t process_input_dsc = actual_input_dsc;
   dt_iop_buffer_dsc_t blend_input_dsc = actual_input_dsc;
   dt_iop_buffer_dsc_t blend_output_dsc = piece->dsc_out;
+
+  if(input_entry == NULL)
+    return pixelpipe_process_on_CPU(pipe, piece, previous_piece, tiling, pixelpipe_flow,
+                                    cache_output, NULL, output_entry);
+
   /* The recursion already owns `input_entry`, so GPU payload recovery must happen from that entry
    * directly instead of going back through the hash lookup path. Hash lookup is for published
    * cache hits; here we are consuming the current upstream stage inside the same pipeline run.

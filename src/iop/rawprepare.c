@@ -323,14 +323,8 @@ void modify_roi_in(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, dt_dev
                    const dt_iop_roi_t *const roi_out,
                    dt_iop_roi_t *roi_in)
 {
-  *roi_in = *roi_out;
-  dt_iop_rawprepare_data_t *d = (dt_iop_rawprepare_data_t *)piece->data;
-
-  const double x = d->x + d->width;
-  const double y = d->y + d->height;
-  const double scale = roi_in->scale;
-  roi_in->width = (int)round((double)roi_in->width + x * scale);
-  roi_in->height = (int)round((double)roi_in->height + y * scale);
+  // Input is always full-size raw
+  *roi_in = (dt_iop_roi_t){ 0, 0, pipe->iwidth, pipe->iheight, 1.f };
 
   /* Same reasoning as in modify_roi_out(): the CFA/X-Trans descriptor depends on the input ROI scale,
    * so finalize it here once the upstream ROI has been computed. */

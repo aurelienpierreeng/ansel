@@ -156,6 +156,44 @@ dt_pixel_cache_entry_t *dt_dev_pixelpipe_cache_get_entry(dt_dev_pixelpipe_cache_
 }
 
 
+dt_pixel_cache_entry_t *dt_dev_pixelpipe_cache_get_entry_by_data(dt_dev_pixelpipe_cache_t *cache, void *data)
+{
+  if(!cache || !data) return NULL;
+
+  dt_pthread_mutex_lock(&cache->lock);
+
+  GHashTableIter iter;
+  gpointer key, value;
+
+  /* Search regular entries table */
+  g_hash_table_iter_init(&iter, cache->entries);
+  while(g_hash_table_iter_next(&iter, &key, &value))
+  {
+    dt_pixel_cache_entry_t *entry = (dt_pixel_cache_entry_t *)value;
+    if(entry && entry->data == data)
+    {
+      dt_pthread_mutex_unlock(&cache->lock);
+      return entry;
+    }
+  }
+
+  /* Search external entries table */
+  g_hash_table_iter_init(&iter, cache->external_entries);
+  while(g_hash_table_iter_next(&iter, &key, &value))
+  {
+    dt_pixel_cache_entry_t *entry = (dt_pixel_cache_entry_t *)value;
+    if(entry && entry->data == data)
+    {
+      dt_pthread_mutex_unlock(&cache->lock);
+      return entry;
+    }
+  }
+
+  dt_pthread_mutex_unlock(&cache->lock);
+  return NULL;
+}
+
+
 static size_t _pixel_cache_get_size(dt_pixel_cache_entry_t *cache_entry)
 {
   return cache_entry->size / (1024 * 1024);

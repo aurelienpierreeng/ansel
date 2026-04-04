@@ -69,7 +69,9 @@ const char *iop_order_string[] =
   N_("custom"),
   N_("legacy"),
   N_("v3.0 RAW"),
-  N_("v3.0 JPEG")
+  N_("v3.0 JPEG"),
+  N_("Ansel RAW"),
+  N_("Ansel JPEG")
 };
 
 const char *dt_iop_order_string(const dt_iop_order_t order)
@@ -88,6 +90,7 @@ const char *dt_iop_order_string(const dt_iop_order_t order)
 // @@_NEW_MODULE: For new module it is required to insert the new module name in both lists below.
 
 const dt_iop_order_entry_t legacy_order[] = {
+  { { 0.5f }, "basebuffer", 0},
   { { 1.0f }, "rawprepare", 0},
   { { 2.0f }, "invert", 0},
   { { 3.0f }, "temperature", 0},
@@ -183,6 +186,7 @@ const dt_iop_order_entry_t legacy_order[] = {
 
 // default order for RAW files, assumed to be linear from start
 const dt_iop_order_entry_t v30_order[] = {
+  { { 0.5 }, "basebuffer", 0},
   { { 1.0 }, "rawprepare", 0},
   { { 2.0 }, "invert", 0},
   { { 3.0f }, "temperature", 0},
@@ -294,6 +298,7 @@ const dt_iop_order_entry_t v30_order[] = {
 // default order for JPEG/TIFF/PNG files, non-linear before colorin
 const dt_iop_order_entry_t v30_jpg_order[] = {
   // the following modules are not used anyway for non-RAW images :
+  { { 0.5 }, "basebuffer", 0 },
   { { 1.0 }, "rawprepare", 0 },
   { { 2.0 }, "invert", 0 },
   { { 3.0f }, "temperature", 0 },
@@ -405,6 +410,7 @@ const dt_iop_order_entry_t v30_jpg_order[] = {
 
 const dt_iop_order_entry_t ansel_jpg_order[] = {
   // RAW modules. Not used on JPG anyway
+  { { 0.0}, "basebuffer", 0 },
   { { 1.0 }, "rawprepare", 0 },
   { { 2.0 }, "invert", 0 },
   { { 4.0f }, "highlights", 0 },
@@ -549,6 +555,7 @@ const dt_iop_order_entry_t ansel_jpg_order[] = {
 // default order for RAW files, assumed to be linear from start
 const dt_iop_order_entry_t ansel_raw_order[] = {
   // RAW stuff
+  { { 0.0}, "basebuffer", 0 },
   { { 1.0 }, "rawprepare", 0},
   { { 2.0 }, "invert", 0},
   { { 3.0f }, "temperature", 0},
@@ -774,6 +781,7 @@ GList *dt_ioppr_get_iop_order_rules()
   GList *rules = NULL;
 
   const dt_iop_order_rule_t rule_entry[] = {
+    { .op_prev = "basebuffer",  .op_next = "rawprepare"  },
     { .op_prev = "rawprepare",  .op_next = "invert"      },
     { .op_prev = "invert",      .op_next = "temperature" },
     { .op_prev = "temperature", .op_next = "highlights"  },
@@ -2514,13 +2522,13 @@ static gboolean _ioppr_sanity_check_iop_order(GList *list)
 {
   gboolean ok = TRUE;
 
-  // First check that first module is rawprepare (even for a jpeg, we
+  // First check that first module is basebuffer (even for a jpeg, we
   // are speaking of the module ordering not the activated modules.
 
   GList *first = g_list_first(list);
   dt_iop_order_entry_t *entry_first = (dt_iop_order_entry_t *)first->data;
 
-  ok = ok && (g_strcmp0(entry_first->operation, "rawprepare") == 0);
+  ok = ok && (g_strcmp0(entry_first->operation, "basebuffer") == 0);
 
   // Then check that last module is gamma
 
