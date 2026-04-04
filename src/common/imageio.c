@@ -1013,20 +1013,6 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
   
   // Find out what input size we want
   dt_mipmap_size_t size = DT_MIPMAP_FULL;
-  if(thumbnail_export)
-  {
-    // Init size with full-resolution raw
-    dt_dev_pixelpipe_set_input(&pipe, &dev, imgid, width, height, 1.0f, size);
-    dt_dev_pixelpipe_synch_all(&pipe, &dev);
-
-    // Test if using the half-sized raw as input would still give us enough pixels to cover the desired image surface
-    int out_width, out_height;
-    dt_dev_pixelpipe_get_roi_out(&pipe, &dev, cache->max_width[DT_MIPMAP_F], cache->max_height[DT_MIPMAP_F], &out_width, &out_height);
-
-    // Only one dimension needs to be at least as large as the requested surface
-    if(out_width >= width || out_height >= height)
-      size = DT_MIPMAP_F;
-  }
 
   // Take a local copy of the input buffer so we can release the mipmap cache lock immediately
   dt_mipmap_cache_get(cache, &buf, imgid, size, DT_MIPMAP_BLOCKING, 'r');
@@ -1065,26 +1051,8 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
   // while preserving original image ratio
   int processed_width = 0;
   int processed_height = 0;
-  if(thumbnail_export && !is_scaling && width > 0 && height > 0)
-  {
-    /* Keep raw-generated thumbnails on the same integer fitting contract as embedded or
-     * sidecar JPEG thumbnails. `dt_iop_flip_and_zoom_8()` floors the fitted size when it
-     * writes 8-bit mipmaps, so using `roundf()` here would grow the raw thumbnail frame by
-     * one pixel on some aspect ratios, most noticeably on portrait images. */
-    const double scale_fit = fmax(1.0,
-                                  fmax((double)pipe.processed_width / (double)width,
-                                       (double)pipe.processed_height / (double)height));
-    processed_width = MIN(width, (int)((double)pipe.processed_width / scale_fit));
-    processed_height = MIN(height, (int)((double)pipe.processed_height / scale_fit));
-    const double scale_x = (double)processed_width / (double)pipe.processed_width;
-    const double scale_y = (double)processed_height / (double)pipe.processed_height;
-    scale = fmin(scale_x, scale_y);
-  }
-  else
-  {
-    _get_export_size(&dev, &pipe, format_params, is_scaling, &scale, width, height,
+  _get_export_size(&dev, &pipe, format_params, is_scaling, &scale, width, height,
                      &processed_width, &processed_height);
-  }
 
   dt_print(DT_DEBUG_IMAGEIO,
            "[dt_imageio_export] (direct) image input %ix%i, turned to output %ix%i, will be exported to fit %ix%i "
