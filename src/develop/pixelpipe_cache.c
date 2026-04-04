@@ -1546,6 +1546,7 @@ static inline void _log_arena_allocation_failure(dt_dev_pixelpipe_cache_t *cache
 }
 
 // keep: OpenCL buffer to NOT release
+#ifdef HAVE_OPENCL
 static void _cache_entry_clmem_flush_device(dt_pixel_cache_entry_t *entry, const int devid, void *keep)
 {
   dt_pthread_mutex_lock(&entry->cl_mem_lock);
@@ -1589,7 +1590,12 @@ static void _cache_entry_clmem_flush_device(dt_pixel_cache_entry_t *entry, const
   }
   dt_pthread_mutex_unlock(&entry->cl_mem_lock);
 }
-
+#else 
+static void _cache_entry_clmem_flush_device(dt_pixel_cache_entry_t *entry, const int devid, void *keep)
+{
+  return;
+}
+#endif
 
 void *dt_pixel_cache_alloc(dt_dev_pixelpipe_cache_t *cache, dt_pixel_cache_entry_t *cache_entry)
 {
