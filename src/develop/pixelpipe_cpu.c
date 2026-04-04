@@ -19,7 +19,7 @@ int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
                              dt_pixel_cache_entry_t *input_entry, dt_pixel_cache_entry_t *output_entry)
 {
   dt_iop_module_t *module = piece->module;
-  float *input = dt_pixel_cache_entry_get_data(input_entry);
+  float *input = input_entry ? dt_pixel_cache_entry_get_data(input_entry) : NULL;
   void *output = dt_pixel_cache_entry_get_data(output_entry);
   float *process_input_temp = NULL;
   float *blend_input_temp = NULL;
@@ -33,9 +33,9 @@ int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
   dt_iop_buffer_dsc_t blend_output_dsc = piece->dsc_out;
   gboolean input_locked = FALSE;
 
-  assert(input == dt_pixel_cache_entry_get_data(input_entry));
+  assert(!input_entry || input == dt_pixel_cache_entry_get_data(input_entry));
 
-  if(input == NULL)
+  if(input == NULL && previous_piece != NULL)
   {
     fprintf(stdout, "[dev_pixelpipe] %s got a NULL input, report that to developers\n", module->name());
     return 1;
@@ -75,13 +75,19 @@ int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
   else if(process_input_dsc.cst != piece->dsc_in.cst)
   {
     process_input_dsc.cst = piece->dsc_in.cst;
-    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, input_entry);
-    input_locked = TRUE;
+    if(input_entry)
+    {
+      dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, input_entry);
+      input_locked = TRUE;
+    }
   }
   else
   {
-    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, input_entry);
-    input_locked = TRUE;
+    if(input_entry)
+    {
+      dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, input_entry);
+      input_locked = TRUE;
+    }
   }
   const int cst_after = process_input_dsc.cst;
 

@@ -122,6 +122,16 @@ const char *dt_pixelpipe_cache_set_current_module(const char *module);
 struct dt_pixel_cache_entry_t *dt_dev_pixelpipe_cache_get_entry(dt_dev_pixelpipe_cache_t *cache,
                                                                 const uint64_t hash);
 
+/*
+ * @brief Find a cache entry that holds the exact data buffer pointer `data`.
+ *
+ * This searches both regular and external cache tables under the cache mutex.
+ * It does not change refcounts or locks on the returned entry; the caller must
+ * manage lifetime if needed.
+ */
+struct dt_pixel_cache_entry_t *dt_dev_pixelpipe_cache_get_entry_by_data(dt_dev_pixelpipe_cache_t *cache,
+                                                                        void *data);
+
 
 /**
  * @brief Get a cache line from the cache.
