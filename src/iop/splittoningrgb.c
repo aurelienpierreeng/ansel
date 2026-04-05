@@ -608,13 +608,13 @@ static void _commit_gui_change(dt_iop_module_t *self, GtkWidget *changed)
  */
 static void _render_preview_surface(dt_iop_module_t *self, cairo_surface_t *surface)
 {
+  if(!self->dev || !self->dev->preview_pipe) return;
+
   dt_iop_splittoning_rgb_params_t *p = (dt_iop_splittoning_rgb_params_t *)self->params;
-  const dt_iop_order_iccprofile_info_t *work_profile = self->dev && self->dev->pipe
-                                                           ? dt_ioppr_get_pipe_work_profile_info(self->dev->pipe)
-                                                           : NULL;
-  const dt_iop_order_iccprofile_info_t *display_profile = self->dev && self->dev->pipe
-                                                              ? dt_ioppr_get_pipe_output_profile_info(self->dev->pipe)
-                                                              : NULL;
+  const dt_iop_order_iccprofile_info_t *work_profile = dt_ioppr_get_pipe_work_profile_info(self->dev->preview_pipe);
+  const dt_iop_order_iccprofile_info_t *display_profile = dt_ioppr_get_pipe_output_profile_info(self->dev->preview_pipe);
+  if(!work_profile || !display_profile) return;
+
   dt_iop_splittoning_rgb_data_t state = { 0 };
   cairo_t *cr = cairo_create(surface);
   const int width = cairo_image_surface_get_width(surface);
@@ -680,6 +680,7 @@ static gboolean _preview_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data
   {
     if(g->preview_surface) cairo_surface_destroy(g->preview_surface);
     g->preview_surface = cairo_image_surface_create(CAIRO_FORMAT_RGB24, allocation.width, allocation.height);
+    if(g->preview_surface == NULL) return FALSE;
     g->preview_width = allocation.width;
     g->preview_height = allocation.height;
     _render_preview_surface(self, g->preview_surface);
@@ -1163,17 +1164,22 @@ static void _build_simple_ui(dt_iop_module_t *self, dt_iop_splittoning_rgb_gui_d
 
   GtkWidget *widgets[] = {
     g->point[point].simple_theta,
+    dt_ui_section_label_new(_("chroma")),
     g->point[point].simple_psi,
     g->point[point].simple_stretch_1,
     g->point[point].simple_stretch_2,
+    dt_ui_section_label_new(_("achromatic coupling")),
     g->point[point].simple_coupling_2,
     g->point[point].simple_coupling_1,
   };
 
   for(size_t i = 0; i < G_N_ELEMENTS(widgets); i++)
   {
-    _tag_widget(widgets[i], point);
-    g_signal_connect(G_OBJECT(widgets[i]), "value-changed", G_CALLBACK(_simple_slider_callback), self);
+    if(i != 1 && i != 5)
+    {
+      _tag_widget(widgets[i], point);
+      g_signal_connect(G_OBJECT(widgets[i]), "value-changed", G_CALLBACK(_simple_slider_callback), self);
+    }
     gtk_box_pack_start(GTK_BOX(container), widgets[i], FALSE, FALSE, 0);
   }
 }
@@ -1226,21 +1232,29 @@ static void _build_primaries_ui(dt_iop_module_t *self, dt_iop_splittoning_rgb_gu
   dt_bauhaus_widget_set_label(g->point[point].primaries_gain, N_("gain"));
 
   GtkWidget *widgets[] = {
+    dt_ui_section_label_new(_("achromatic axis")),
     g->point[point].primaries_achromatic_hue,
     g->point[point].primaries_achromatic_purity,
+    dt_ui_section_label_new(_("red primary")),
     g->point[point].primaries_red_hue,
     g->point[point].primaries_red_purity,
+    dt_ui_section_label_new(_("green primary")),
     g->point[point].primaries_green_hue,
     g->point[point].primaries_green_purity,
+    dt_ui_section_label_new(_("blue primary")),
     g->point[point].primaries_blue_hue,
     g->point[point].primaries_blue_purity,
+    dt_ui_section_label_new(_("gain correction")),
     g->point[point].primaries_gain,
   };
 
   for(size_t i = 0; i < G_N_ELEMENTS(widgets); i++)
   {
-    _tag_widget(widgets[i], point);
-    g_signal_connect(G_OBJECT(widgets[i]), "value-changed", G_CALLBACK(_primaries_slider_callback), self);
+    if(i % 3 != 0)
+    {
+      _tag_widget(widgets[i], point);
+      g_signal_connect(G_OBJECT(widgets[i]), "value-changed", G_CALLBACK(_primaries_slider_callback), self);
+    }
     gtk_box_pack_start(GTK_BOX(container), widgets[i], FALSE, FALSE, 0);
   }
 }
