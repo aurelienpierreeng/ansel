@@ -1070,7 +1070,8 @@ gboolean dt_accels_dispatch(GtkWidget *w, GdkEvent *event, gpointer user_data)
   guint keyval;
   _accels_keys_decode(accels, event, &keyval, &mods);
 
-  if(event->type == GDK_KEY_PRESS)
+  if(event->type == GDK_KEY_PRESS && 
+    !(keyval == accels->active_key.accel_key && mods == accels->active_key.accel_mods))
   {
     // Store active keys until release
     accels->active_key.accel_key = keyval;
