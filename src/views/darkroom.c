@@ -2951,12 +2951,10 @@ int key_pressed(dt_view_t *self, GdkEventKey *event)
       _key_scroll(dev);
       return 1;
     }
-    case GDK_KEY_Return:
-    case GDK_KEY_KP_Enter:
+    case GDK_KEY_Escape:
     {
-      // "Give focus to the main image"
-      gtk_widget_grab_focus(dt_ui_center(darktable.gui->ui));
-      return 1;
+      dt_ctl_switch_mode_to("lighttable");
+      return TRUE;
     }
   }
 
