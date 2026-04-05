@@ -24,6 +24,8 @@ MSYS_PACKAGES=(
   base-devel
   git
   intltool
+  perl
+  perl-XML-Parser
   po4a
 )
 
@@ -76,11 +78,11 @@ MINGW_PACKAGES=(
   zlib
 )
 
-pacman -Sy --noconfirm
+pacman -Suy --noconfirm
 
 # libsoup package name differs across MSYS2 repositories.
 LIBSOUP_PKG=""
-for cand in libsoup libsoup2; do
+for cand in libsoup3 libsoup libsoup2; do
   if pacman -Si "${MINGW_PREFIX}-${cand}" >/dev/null 2>&1; then
     LIBSOUP_PKG="${cand}"
     break

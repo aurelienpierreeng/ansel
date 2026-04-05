@@ -73,7 +73,7 @@ jobs:
       - uses: msys2/setup-msys2@v2
         with:
           msystem: ${{ matrix.msystem }}
-          update: false
+          update: true
       - name: Checkout ansel source
         uses: actions/checkout@v4
         with:
