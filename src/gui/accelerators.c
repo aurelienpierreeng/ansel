@@ -1046,7 +1046,6 @@ static gboolean _key_pressed(GtkWidget *w, GdkEvent *event, dt_accels_t *accels,
 gboolean dt_accels_dispatch(GtkWidget *w, GdkEvent *event, gpointer user_data)
 {
   dt_accels_t *accels = (dt_accels_t *)user_data;
-  if(accels->disable_accels) return FALSE;
 
   // Ditch everything that is not a key stroke or key strokes that are modifiers alone
   // Abort early for performance.
@@ -1069,6 +1068,18 @@ gboolean dt_accels_dispatch(GtkWidget *w, GdkEvent *event, gpointer user_data)
   GdkModifierType mods;
   guint keyval;
   _accels_keys_decode(accels, event, &keyval, &mods);
+
+  // Ugly design : global shortcuts are supposed to have a key modifier.
+  // To allow single-key shortcuts, we have to work around that and impose our own shortcut handler.
+  // But then, that breaks regular text input on GtkEntry, GtkSearchEntry, etc. 
+  // because letters are then captured as shortcuts.
+  // Which was the whole purpose of forcing global shortcuts to use modifiers.
+  // So, to avoid that, when text entries get focused, we manually set accels->disable_accels,
+  // and unset it when they loose focus.
+  // When "disabled", we reset typical Gtk behaviour : capture global shortcuts only if there is a modifier.
+  // NOTE: this nasty workaround should not be taken as an incentive to extend it further.
+  // It's bad design, it should not be turned into a rule.
+  if(accels->disable_accels && !mods) return FALSE;
 
   if(event->type == GDK_KEY_PRESS && 
     !(keyval == accels->active_key.accel_key && mods == accels->active_key.accel_mods))
