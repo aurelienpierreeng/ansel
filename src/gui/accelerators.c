@@ -1048,12 +1048,6 @@ gboolean dt_accels_dispatch(GtkWidget *w, GdkEvent *event, gpointer user_data)
   dt_accels_t *accels = (dt_accels_t *)user_data;
   if(accels->disable_accels) return FALSE;
 
-  if(event->type == GDK_KEY_PRESS && event->key.keyval == GDK_KEY_Escape)
-  {
-    dt_ctl_switch_mode_to("lighttable");
-    return TRUE;
-  }
-
   // Ditch everything that is not a key stroke or key strokes that are modifiers alone
   // Abort early for performance.
   if(event->key.is_modifier || accels->active_group == NULL || accels->reset > 0 || !gtk_window_is_active(GTK_WINDOW(w)))
