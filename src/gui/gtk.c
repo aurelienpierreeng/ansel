@@ -1312,6 +1312,7 @@ static void _init_widgets(dt_gui_gtk_t *gui)
   g_signal_connect(G_OBJECT(gui->ui->main_window ), "delete_event", G_CALLBACK(dt_gui_quit_callback), NULL);
   g_signal_connect(G_OBJECT(gui->ui->main_window ), "focus-in-event", G_CALLBACK(_focus_in_out_event), NULL);
   g_signal_connect(G_OBJECT(gui->ui->main_window ), "focus-out-event", G_CALLBACK(_focus_in_out_event), NULL);
+  g_signal_connect_after(G_OBJECT(gui->ui->main_window ), "key-press-event", G_CALLBACK(_key_pressed), NULL);
 
   container = gui->ui->main_window;
 
