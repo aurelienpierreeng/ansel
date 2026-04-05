@@ -2634,8 +2634,8 @@ static gboolean _widget_scroll(GtkWidget *widget, GdkEventScroll *event)
   const gboolean popup_captured = (w->bauhaus->current == w);
   const gboolean scroll_captured = (darktable.gui->has_scroll_focus == widget);
   const gboolean key_captured = gtk_widget_has_focus(widget);
+  const gboolean smooth = (event->direction == GDK_SCROLL_SMOOTH);
 
-  // We have 2 overlapping focusing state:
   // - native Gtk focus (keyboard), that takes precedence and records all keyboard events,
   // - custom scroll focus (mouse wheel), that should not overlap with vertical scrolling.
   // Scroll focus is a subset of Gtk focus, aka we can lose scroll focus while we have Gtk focus,
@@ -2644,45 +2644,54 @@ static gboolean _widget_scroll(GtkWidget *widget, GdkEventScroll *event)
   // scroll focus until leave-notify releases it.
   // We also extend widget focus with the popup window focus if it is captured
   // by the current widget.
-  if(!key_captured && !popup_captured && !scroll_captured) return FALSE;
+  if(!key_captured && !popup_captured && !scroll_captured)
+    return FALSE;
 
-  // Scroll focus is handled separately from Gtk key focus so panel scrolling
-  // can be captured without stealing native focus ownership.
+  // Keep ownership of the whole touchpad gesture sequence.
   darktable.gui->has_scroll_focus = widget;
 
-  int delta_y = 0;
   int delta_x = 0;
-  if(dt_gui_get_scroll_unit_deltas(event, &delta_x, &delta_y))
-  {
-    // On touchpad emulated scrolls, we usually have both directions so
-    // find the principal direction here.
-    const gboolean vscroll = delta_y != 0 && abs(delta_y) > abs(delta_x);
-    const gboolean hscroll = delta_x != 0 && abs(delta_x) > abs(delta_y);
+  int delta_y = 0;
 
-    if(w->type == DT_BAUHAUS_SLIDER)
+  if(!dt_gui_get_scroll_unit_deltas(event, &delta_x, &delta_y))
+  {
+    // Important: for touchpad scroll, sub-unit deltas and stop events must not
+    // propagate to the parent scrolled window, otherwise the same gesture gets
+    // re-accumulated there.
+    return smooth;
+  }
+
+  const gboolean vscroll = delta_y != 0 && abs(delta_y) > abs(delta_x);
+  const gboolean hscroll = delta_x != 0 && abs(delta_x) > abs(delta_y);
+
+  if(w->type == DT_BAUHAUS_SLIDER)
+  {
+    if(hscroll)
     {
-      if(hscroll)
-      {
-        // inconditionnaly record horizontal scroll on slider
-        _slider_add_step(widget, delta_x, event->state);
-        return TRUE;
-      }
-      else if(vscroll && darktable.gui->has_scroll_focus)
-      {
-        // convert vertical scrolling to horizontal only if we have the scroll focus
-        _slider_add_step(widget, -delta_y, event->state);
-        return TRUE;
-      }
-      else
-        return FALSE;
+      // inconditionnaly record horizontal scroll on slider
+      _slider_add_step(widget, delta_x, event->state);
+      return TRUE;
     }
     else if(vscroll && darktable.gui->has_scroll_focus)
+    {
+      // convert vertical scrolling to horizontal only if we have the scroll focus
+      _slider_add_step(widget, -delta_y, event->state);
+      return TRUE;
+    }
+
+    // Diagonal smooth gestures: consume them if captured, so they do not leak.
+    return smooth;
+  }
+  else
+  {
+    if(vscroll && darktable.gui->has_scroll_focus)
     {
       _combobox_next_sensitive(w, delta_y);
       return TRUE;
     }
+
+    return smooth;
   }
-  return FALSE;
 }
 
 static gboolean _widget_key_press(GtkWidget *widget, GdkEventKey *event)
