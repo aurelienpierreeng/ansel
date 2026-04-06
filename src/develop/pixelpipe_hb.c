@@ -605,6 +605,7 @@ void dt_dev_pixelpipe_cleanup_nodes(dt_dev_pixelpipe_t *pipe)
   // and iop order
   g_list_free_full(pipe->iop_order_list, dt_free_gpointer);
   pipe->iop_order_list = NULL;
+  dt_dev_pixelpipe_set_history_hash(pipe, DT_PIXELPIPE_CACHE_HASH_INVALID);
 }
 
 void dt_dev_pixelpipe_create_nodes(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)

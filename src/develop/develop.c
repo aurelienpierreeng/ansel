@@ -472,9 +472,6 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
     dt_dev_pixelpipe_set_input(dev->preview_pipe, dev, dev->image_storage.id, dev->roi.raw_width, dev->roi.raw_height,
                                1.0f, DT_MIPMAP_FULL);
 
-    // If main and preview images share the same output size, we compute one pipe for both
-    const gboolean preview_size = dt_dev_pipelines_share_preview_output(dev);
-
     // Always service preview first, then the main pipe, so the main pipe can reuse the cache state
     // just published by preview instead of trying to race it from another thread.
     for(size_t i = 0; i < G_N_ELEMENTS(pipes); i++)
@@ -584,15 +581,14 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
           needs_update = FALSE;
         }
 
-        if(pipe->type == DT_DEV_PIXELPIPE_FULL || preview_size)
+        if(pipe->type == DT_DEV_PIXELPIPE_FULL)
         {
           DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_UI_PIPE_FINISHED);
           dt_control_queue_redraw_center();
         }
-        if(pipe->type == DT_DEV_PIXELPIPE_PREVIEW || preview_size)
+        if(pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
         {
           DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED);
-          dt_control_navigation_redraw();
           dt_control_queue_redraw();
         }
 
