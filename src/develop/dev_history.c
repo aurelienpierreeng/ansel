@@ -1156,7 +1156,8 @@ void dt_dev_history_notify_change(dt_develop_t *dev, const int32_t imgid)
 // helper used to synch a single history item with db
 int dt_dev_write_history_item(const int32_t imgid, dt_dev_history_item_t *h, int32_t num)
 {
-  dt_print(DT_DEBUG_HISTORY, "[dt_dev_write_history_item] writing history for module %s (%s) at pipe position %i for image %i...\n", h->op_name, h->multi_name, h->iop_order, imgid);
+  dt_print(DT_DEBUG_HISTORY, "[dt_dev_write_history_item] writing history for module %s (%s) (enabled %i) at pipe position %i for image %i\n", 
+                                                    h->op_name, h->multi_name, h->enabled, h->iop_order, imgid);
 
   dt_history_db_write_history_item(imgid, num, h->module->op, h->params, h->module->params_size, h->module->version(),
                                    h->enabled != 0, h->blend_params, sizeof(dt_develop_blend_params_t),
@@ -1341,8 +1342,6 @@ static void _insert_default_modules(dt_develop_t *dev, dt_iop_module_t *module, 
   }
 
   dt_image_t *image = &dev->image_storage;
-  const gboolean has_matrix = dt_image_is_matrix_correction_supported(image);
-  const gboolean is_raw = dt_image_is_raw(image);
 
   // Prior to Darktable 3.0, modules enabled by default which still had
   // default params (no user change) were not inserted into history/DB.
@@ -1352,6 +1351,9 @@ static void _insert_default_modules(dt_develop_t *dev, dt_iop_module_t *module, 
   if(module->default_enabled || (module->force_enable && module->force_enable(module, FALSE)))
   {
     module->enabled = TRUE;
+    const gboolean has_matrix = dt_image_is_matrix_correction_supported(image);
+    const gboolean is_raw = dt_image_is_raw(image);
+
     if(!strcmp(module->op, "temperature")
        && (image->change_timestamp == -1) // change_timestamp is not defined for old pics
        && is_raw && is_inited && has_matrix)
@@ -1378,6 +1380,9 @@ static void _insert_default_modules(dt_develop_t *dev, dt_iop_module_t *module, 
     module->enabled = TRUE;
     dt_dev_add_history_item_ext(dev, module, TRUE, TRUE);
   }
+
+  if(module->enabled)
+    dt_print(DT_DEBUG_HISTORY, "[history] %s was inserted into history by default (enabled %i)\n", module->op, module->enabled);
 }
 
 // Returns TRUE if this is a freshly-inited history on which we just applied auto presets and defaults,
@@ -1932,7 +1937,7 @@ static gboolean _compress_enabled_user_nondefault_params(dt_iop_module_t *module
 static gboolean _compress_disabled_with_history(dt_iop_module_t *module)
 {
   return !module->enabled
-         && (module->default_enabled || _module_has_nondefault_internal_params(module));
+         && (module->default_enabled || module->workflow_enabled || _module_has_nondefault_internal_params(module));
 }
 
 /**
@@ -1946,6 +1951,8 @@ static gboolean _compress_disabled_with_history(dt_iop_module_t *module)
 static void _dt_dev_history_compress_internal(dt_develop_t *dev, const gboolean write_history)
 {
   const int32_t imgid = dev->image_storage.id;
+
+  dt_pthread_rwlock_wrlock(&dev->history_mutex);
 
   // Cleanup old history
   dt_dev_history_free_history(dev);
@@ -1971,6 +1978,8 @@ static void _dt_dev_history_compress_internal(dt_develop_t *dev, const gboolean 
   dt_dev_set_history_end_ext(dev, g_list_length(dev->history));
   dt_dev_pop_history_items_ext(dev);
   if(write_history) dt_dev_write_history_ext(dev, imgid);
+
+  dt_pthread_rwlock_unlock(&dev->history_mutex);
 }
 
 void dt_dev_history_compress_ext(dt_develop_t *dev, gboolean write_history)

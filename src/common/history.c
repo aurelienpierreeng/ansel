@@ -298,7 +298,7 @@ gboolean dt_history_check_module_exists(int32_t imgid, const char *operation, gb
       dt_database_get(darktable.db),
       "SELECT imgid"
       " FROM main.history"
-      " WHERE imgid= ?1 AND operation = ?2 AND enabled in (1, ?3)",
+      " WHERE imgid= ?1 AND operation = ?2",
       -1, &_history_check_module_exists_stmt, NULL);
     // clang-format on
   }
@@ -307,7 +307,6 @@ gboolean dt_history_check_module_exists(int32_t imgid, const char *operation, gb
   sqlite3_clear_bindings(stmt);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
   DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, operation, -1, SQLITE_TRANSIENT);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 3, enabled);
   if (sqlite3_step(stmt) == SQLITE_ROW) result = TRUE;
   dt_pthread_mutex_unlock(&_history_stmt_mutex);
 
