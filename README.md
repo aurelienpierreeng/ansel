@@ -59,6 +59,32 @@ Go and support these projects so they can have more man-hours put on fixing thos
 - [Matrix chatrooms](https://app.element.io/#/room/#ansel:matrix.org)
 - [Support](https://ansel.photos/en/support/)
 
+## What changed ?
+
+- The import window has been [fully rewritten](https://ansel.photos/en/news/rewriting-import/)
+- The lighttable/filmstrip have been [almost fully rewritten](https://ansel.photos/en/news/redesigning-lighttable-and-mipmap-cache/)
+- The keyboard shortcuts backend has been [rewritten from scratch](https://ansel.photos/en/news/rewriting-key-shortcuts/)
+- The development history backend and copy-pasting/styling has been [almost fully rewritten](https://ansel.photos/en/news/history-merge-topology/)
+- The pipeline cache backend has been [fully rewritten](https://ansel.photos/en/news/complete-pipeline-overhaul/)
+- The scene-referred workflow feature split is [now complete](https://ansel.photos/en/news/color-controls-finally-correct/), with 5 new color modules and alternative GUI for color calibration
+- The GUI has been entirely redesigned and simplified : global menu, features reordering and reorganizing workflow-wise
+- Many user preferences have been removed or factorized.
+
+## Why is Ansel better than Darktable ?
+
+- Opening the lighttable is [3.53 times faster](https://ansel.photos/en/news/redesigning-lighttable-and-mipmap-cache/#benchmarks) on Ansel,
+- Switching from lighttable to darkroom is [6 times faster](https://ansel.photos/en/news/redesigning-lighttable-and-mipmap-cache/#benchmarks) on Ansel,
+- Scrolling in lighttable responds [7 times faster](https://ansel.photos/en/news/redesigning-lighttable-and-mipmap-cache/#benchmarks) in Ansel,
+- Ansel consumes [1.5 times less CPU](https://ansel.photos/en/news/redesigning-lighttable-and-mipmap-cache/#benchmarks) / [121 times less energy](https://ansel.photos/en/news/redesigning-lighttable-and-mipmap-cache/#benchmarks) in lighttable, and [2.9 less energy](https://ansel.photos/en/news/redesigning-lighttable-and-mipmap-cache/#benchmarks) in darkroom,
+- GPU modules are in average [1.6 times faster](https://ansel.photos/en/news/complete-pipeline-overhaul/#conclusion) on Ansel,
+- CPU modules are in average [1.4 times faster](https://ansel.photos/en/news/complete-pipeline-overhaul/#conclusion) on Ansel,
+- When changing a module parameters, mid-pipeline, Ansel recomputes only downstream modules in the pipeline, which is [5.4 to 40 times faster](https://ansel.photos/en/news/complete-pipeline-overhaul/#conclusion) than Darktable,
+- Exporting the same image several times at different resolutions doesn't recompute a full pipeline, but caches the common part, which is [1.27 to 100 times faster](https://ansel.photos/en/news/complete-pipeline-overhaul/#conclusion) on Ansel,
+- Ansel keeps global features in a global menu,
+- There is a lot less of GUI bloat.
+
+But to achieve all that, it was necessary to stop working on any new feature to focus on redesigning the core architecture for 4 years. APIs have been tightened, libraries have been isolated, GUI code has been removed from pipeline backend, SQL code has been removed from GUI features, the whole thing has been greatly sanitized and simplified.
+
 ## Code analysis
 
 Ansel was forked from Darktable after commit 7b88fdd7afe7b8530a992ae3c12e7a088dc9e992, 1 month before Darktable 4.0 release
