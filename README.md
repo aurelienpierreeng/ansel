@@ -80,8 +80,11 @@ Go and support these projects so they can have more man-hours put on fixing thos
 - CPU modules are in average [1.4 times faster](https://ansel.photos/en/news/complete-pipeline-overhaul/#conclusion) on Ansel,
 - When changing a module parameters, mid-pipeline, Ansel recomputes only downstream modules in the pipeline, which is [5.4 to 40 times faster](https://ansel.photos/en/news/complete-pipeline-overhaul/#conclusion) than Darktable,
 - Exporting the same image several times at different resolutions doesn't recompute a full pipeline, but caches the common part, which is [1.27 to 100 times faster](https://ansel.photos/en/news/complete-pipeline-overhaul/#conclusion) on Ansel,
-- Ansel keeps global features in a global menu,
-- There is a lot less of GUI bloat.
+- Ansel keeps global features in a global menu and doesn't hide them in undocumented shortcuts,
+- There is a lot less of GUI bloat,
+- Ansel does metadata writing on images only after they got selected explicitely (mouse click or keyboard shortcut), no destructive operations on hover events,
+- Scrolling works as you would expect it in any application,
+- Copy-pasting editing histories gives you the opportunity to review the resulting pipeline ordering.
 
 But to achieve all that, it was necessary to stop working on any new feature to focus on redesigning the core architecture for 4 years. APIs have been tightened, libraries have been isolated, GUI code has been removed from pipeline backend, SQL code has been removed from GUI features, the whole thing has been greatly sanitized and simplified.
 
