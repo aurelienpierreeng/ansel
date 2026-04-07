@@ -1007,7 +1007,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
     /* Child recursion failed before this module acquired any output cache entry.
      * Dropping `hash` here underflows cached exact-hit outputs during shutdown. */
     dt_print(DT_DEBUG_DEV,
-             "[picker/rec] module=%s child recursion failed input_hash=%" PRIu64 " output_hash=%" PRIu64 "\n",
+             "[pipeline] module=%s child recursion failed input_hash=%" PRIu64 " output_hash=%" PRIu64 "\n",
              module->op, input_hash, hash);
     return 1;
   }
@@ -1023,7 +1023,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   if(!input_entry)
   {
     dt_print(DT_DEBUG_DEV,
-             "[picker/rec] module=%s input cache entry missing input_hash=%" PRIu64 " output_hash=%" PRIu64
+             "[pipeline] module=%s input cache entry missing input_hash=%" PRIu64 " output_hash=%" PRIu64
              " prev_module=%s prev_hash=%" PRIu64 "\n",
              module->op, input_hash, hash,
              previous_piece ? previous_piece->module->op : "base",
@@ -1104,7 +1104,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
     if(!exact_entry)
     {
       dt_print(DT_DEBUG_DEV,
-               "[picker/rec] module=%s exact-hit entry missing output_hash=%" PRIu64 "\n",
+               "[pipeline] module=%s exact-hit entry missing output_hash=%" PRIu64 "\n",
                module->op, hash);
       dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, input_entry);
       return 1;
@@ -1127,7 +1127,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   if(!output_entry)
   {
     dt_print(DT_DEBUG_DEV,
-             "[picker/rec] module=%s writable output acquisition failed output_hash=%" PRIu64
+             "[pipeline] module=%s writable output acquisition failed output_hash=%" PRIu64
              " acquire_status=%d\n",
              module->op, hash, acquire_status);
     dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, input_entry);
@@ -1196,7 +1196,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   if(error)
   {
     dt_print(DT_DEBUG_DEV,
-             "[picker/rec] module=%s backend processing failed input_hash=%" PRIu64 " output_hash=%" PRIu64
+             "[pipeline] module=%s backend processing failed input_hash=%" PRIu64 " output_hash=%" PRIu64
              " input_cst=%d output_cst=%d roi_in=%dx%d roi_out=%dx%d\n",
              module->op, input_hash, hash, piece->dsc_in.cst, piece->dsc_out.cst,
              piece->roi_in.width, piece->roi_in.height, piece->roi_out.width, piece->roi_out.height);
