@@ -240,8 +240,8 @@ Github doesn't show anymore the contributions for repositories having more than 
 ```bash
 $ git shortlog -sn --no-merges
   4295  Pascal Obry
+  3679  Aurélien PIERRE
   3597  johannes hanika
-  2565  Aurélien PIERRE
   2127  Tobias Ellinghaus
   2083  Roman Lebedev
   1757  Henrik Andersson
@@ -252,13 +252,14 @@ $ git shortlog -sn --no-merges
    692  Ralf Brown
    604  Jérémy Rosen
    601  Dan Torop
-   566  Diederik ter Rahe
+   560  Diederik Ter Rahe
    546  Philippe Weyland
    516  Hanno Schwalm
    430  Hubert Kowalski
    355  parafin
+   341  Chris Elston
    331  Ger Siemerink
-   286  Chris.Elston
+   285  Guillaume Stutin
    283  Jeronimo Pellegrini
    276  rawfiner
    243  Nicolas Auffray
@@ -271,7 +272,7 @@ $ git shortlog -sn --no-merges
    180  Heiko Bauke
    172  Edouard Gomez
    162  Stefan Schöfegger
-   155  edgardoh
+   155  Edgardo Hoszowski
    140  Miloš Komarčević
    126  Peter Budai
    122  Victor Forsiuk
@@ -289,16 +290,15 @@ $ git shortlog -sn --no-merges
     55  Matthieu Moy
     55  bartokk
     50  Rostyslav Pidgornyi
-    49  Chris Elston
     48  Moritz Lipp
     48  tatica
     44  Dennis Gnad
     43  Marco Carrarini
     42  Christian Tellefsen
+    42  Maurizio Paglia
     41  Josep V. Moragues
     39  Matt Maguire
     38  Matthieu Volat
-    38  Maurizio Paglia
     36  Daniel Vogelbacher
     36  Jakub Filipowicz
     35  Thomas Pryds
@@ -306,7 +306,6 @@ $ git shortlog -sn --no-merges
     32  GrahamByrnes
     32  Harold le Clément de Saint-Marcq
     31  Marco
-    30  Guillaume Stutin
     30  marcel
     28  wpferguson
     27  HansBull
@@ -316,6 +315,7 @@ $ git shortlog -sn --no-merges
     25  shlomi braitbart
     24  Michal Babej
     23  lhietal
+    22  luzpaz
     22  quovadit
     21  Antony Dovgal
     21  Jacques Le Clerc
@@ -323,7 +323,6 @@ $ git shortlog -sn --no-merges
     20  Sam Smith
     19  Richard Wonka
     19  Ryo Shinozaki
-    18  Jiyone
     18  Rikard Öxler
     18  darkelectron
     17  Guillaume Marty
@@ -339,7 +338,6 @@ $ git shortlog -sn --no-merges
     14  Brian Teague
     14  Frédéric Grollier
     14  lologor
-    14  luzpaz
     13  Kevin Vermassen
     13  Marcus Gama
     13  Novy Sawai
@@ -361,6 +359,7 @@ $ git shortlog -sn --no-merges
     10  Victor Engmark
     10  Wyatt Olson
     10  junkyardsparkle
+    10  starapo7348
     10  thisnamewasnottaken
      9  Arnaud TANGUY
      9  Fabio Heer
@@ -373,12 +372,12 @@ $ git shortlog -sn --no-merges
      8  Jan Kundrát
      8  Jochen Schroeder
      8  Matteo Mardegan
+     8  Miguel Moquillon
      8  Petr Styblo
      8  Robert William Hutton
      8  Roman Khatko
      8  Stuart Henderson
      8  itinerarium
-     8  luz paz
      8  vertama
      8  vrnhgd
      7  Ammon Riley
@@ -391,12 +390,12 @@ $ git shortlog -sn --no-merges
      7  Marcus Rückert
      7  Richard Hughes
      7  calca
-     7  elstoc
      7  篠崎亮　Ryo Shinozaki
      6  Artur de Sousa Rocha
      6  Cherrot Luo
      6  Christian Himpel
      6  Denis Dyakov
+     6  Diederik ter Rahe
      6  Dominik Markiewicz
      6  Guillaume Benny
      6  Harald
@@ -428,36 +427,45 @@ $ git shortlog -sn --no-merges
 
 ```bash
 $ git shortlog -sn --no-merges --since "JUN 1 2022"
-  1576  Aurélien PIERRE
+  2690  Aurélien PIERRE
+   285  Guillaume Stutin
    100  Alynx Zhou
-    30  Guillaume Stutin
     24  Hanno Schwalm
-    18  Jiyone
     17  Guillaume Marty
     14  lologor
+    13  Maurizio Paglia
     11  Miloš Komarčević
     10  Sakari Kapanen
-     9  Maurizio Paglia
+    10  starapo7348
      9  Victor Forsiuk
+     8  Miguel Moquillon
      6  Pascal Obry
      5  Luca Zulberti
      4  Alban Gruin
      4  Ricky Moon
      3  Sidney Markowitz
-     2  Diederik ter Rahe
+     2  Diederik Ter Rahe
      2  Marrony Neris
-     2  Miguel Moquillon
      2  Roman Neuhauser
+     2  Sergio Schvezov
+     2  lu-k
      2  parafin
      1  Aldric Renaudin
      1  André Doherty
      1  Chris Elston
      1  Germano Massullo
+     1  Hubert Figuière
      1  Jehan Singh
      1  Marc Cousin
+     1  Patryk Kocielnik
+     1  Peter Kovář
      1  Philippe Weyland
      1  Ralf Brown
      1  Roman Lebedev
+     1  Stephan Kleine
+     1  jakehl
+     1  lukadh
+     1  mattF11
      1  naveen
      1  realSpok
      1  tatu
