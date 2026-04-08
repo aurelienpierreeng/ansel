@@ -487,14 +487,6 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
       dt_pthread_mutex_lock(&pipe->busy_mutex);
       pipe->processing = 1;
 
-      // Re-entries are authored by the previous run. They must be resolved into a fresh
-      // pipeline graph before any GUI subscriber caches the next piece hashes.
-      if(dt_dev_pixelpipe_has_reentry(pipe))
-      {
-        dt_dev_pixelpipe_or_changed(pipe, DT_DEV_PIPE_REMOVE);
-        dt_dev_pixelpipe_cache_flush(darktable.pixelpipe_cache, pipe->type);
-      }
-
       gboolean pipe_resynced = FALSE;
       while(dt_dev_pixelpipe_get_changed(pipe) != DT_DEV_PIPE_UNCHANGED)
       {
