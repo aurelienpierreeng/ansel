@@ -137,21 +137,12 @@ static inline void isotrope_laplacian(float4 kern[9])
 }
 
 
-static inline void compute_kern(const float4 grad[2], const float anisotropy,
-                  const dt_isotropy_t isotropy_type, float4 kern[9])
+static inline void compute_kern(const float4 c2,
+                           const float4 cos_theta_sin_theta,
+                           const float4 cos_theta2, const float4 sin_theta2,
+                           const dt_isotropy_t isotropy_type,
+                           float4 kern[9])
 {
-  const float4 magnitude = hypot(grad[0], grad[1]);
-  // Compute cos/sin(arg(grad)) with a branchless normalization, forcing
-  // arg(grad)=0 when magnitude is zero.
-  const float4 nonzero = convert_float4(magnitude != 0.f);
-  const float4 inv_mag = 1.f / (magnitude + (1.f - nonzero));
-  const float4 cos_theta = grad[0] * inv_mag + (1.f - nonzero); // cos(0)
-  const float4 sin_theta = grad[1] * inv_mag;                  // sin(0)
-  const float4 c2 = native_exp(-magnitude * anisotropy);
-  const float4 cos_theta2 = sqf(cos_theta);
-  const float4 sin_theta2 = sqf(sin_theta);
-  const float4 cos_theta_sin_theta = cos_theta * sin_theta;
-
   // Build the matrix of rotation with anisotropy
 
   switch(isotropy_type)
@@ -178,20 +169,6 @@ static inline void compute_kern(const float4 grad[2], const float anisotropy,
     }
   }
 }
-
-static inline float4 convolve_kernel(const float4 input[9], const float4 grad[2],
-                                     const float anisotropy, const dt_isotropy_t isotropy_type)
-{
-  float4 kern[9];
-  compute_kern(grad, anisotropy, isotropy_type, kern);
-
-  float4 acc = (float4)0.f;
-  for(int k = 0; k < 9; k++)
-    acc += kern[k] * input[k];
-
-  return acc;
-}
-
 
 kernel void
 diffuse_pde(read_only image2d_t HF, read_only image2d_t LF,
@@ -224,8 +201,8 @@ diffuse_pde(read_only image2d_t HF, read_only image2d_t LF,
       y,
       clamp((y + mult * H_STEP), 0, height - 1) };
 
-    // Fetch the local 3x3 neighborhood for HF, compute its gradient direction,
-    // and accumulate HF/LF energy in the same pass.
+    // Fetch the local 3x3 neighborhoods used by the anisotropic stencils
+    // and accumulate the HF/LF energy regularizer in the same pass.
     float4 neighbour_pixel_HF[9];
     float4 neighbour_pixel_LF[9];
     float4 energy = (float4)0.f;
@@ -239,19 +216,41 @@ diffuse_pde(read_only image2d_t HF, read_only image2d_t LF,
         const float4 lf_value = read_imagef(LF, samplerA, p);
         neighbour_pixel_HF[k] = hf_value;
         neighbour_pixel_LF[k] = lf_value;
+        // Clamp LF to a strictly positive floor to match the CPU path and
+        // avoid divide-by-zero in the HF/LF energy estimate.
         const float4 safe_lf = fmax(lf_value - (float4)(FLT_MIN), (float4)0.f) + (float4)(FLT_MIN);
         const float4 ratio = hf_value / safe_lf;
         energy += ratio * ratio;
       }
-
     // normalized_regularization already folds together the user
     // regularization, the 3x3-support averaging factor, the physical blur
     // radius carried by the current wavelet band and its scale normalization.
     energy = variance_threshold + energy * normalized_regularization;
 
-    float4 hf_gradient[2], lf_gradient[2];
-    find_gradient(neighbour_pixel_HF, hf_gradient);
-    find_gradient(neighbour_pixel_LF, lf_gradient);
+    // build the local anisotropic convolution filters for gradients and laplacians
+    float4 gradient[2], laplacian[2];
+    find_gradient(neighbour_pixel_LF, gradient);
+    find_gradient(neighbour_pixel_HF, laplacian);
+
+    const float4 magnitude_grad = native_sqrt(sqf(gradient[0]) + sqf(gradient[1]));
+    gradient[0] = (magnitude_grad != 0.f) ? gradient[0] / magnitude_grad : 1.f;
+    gradient[1] = (magnitude_grad != 0.f) ? gradient[1] / magnitude_grad : 0.f;
+
+    const float4 magnitude_lapl = native_sqrt(sqf(laplacian[0]) + sqf(laplacian[1]));
+    laplacian[0] = (magnitude_lapl != 0.f) ? laplacian[0] / magnitude_lapl : 1.f;
+    laplacian[1] = (magnitude_lapl != 0.f) ? laplacian[1] / magnitude_lapl : 0.f;
+
+    const float4 cos_theta_grad_sq = sqf(gradient[0]);
+    const float4 sin_theta_grad_sq = sqf(gradient[1]);
+    const float4 cos_theta_sin_theta_grad = gradient[0] * gradient[1];
+    const float4 cos_theta_lapl_sq = sqf(laplacian[0]);
+    const float4 sin_theta_lapl_sq = sqf(laplacian[1]);
+    const float4 cos_theta_sin_theta_lapl = laplacian[0] * laplacian[1];
+
+    const float4 c2[4] = { native_exp(-magnitude_grad * anisotropy.x),
+                           native_exp(-magnitude_lapl * anisotropy.y),
+                           native_exp(-magnitude_grad * anisotropy.z),
+                           native_exp(-magnitude_lapl * anisotropy.w) };
 
     // Convolve filters and accumulate the local HF band energy over the
     // current 3x3 support. This is not a statistical variance estimator:
@@ -259,23 +258,28 @@ diffuse_pde(read_only image2d_t HF, read_only image2d_t LF,
     // corresponding LF value before squaring it, then normalize the summed
     // ratio by the physical kernel-variance increment of the current
     // wavelet band.
-    float4 derivatives[4];
-    derivatives[0] = convolve_kernel(neighbour_pixel_LF, lf_gradient,
-                                     anisotropy.x, isotropy_type.x);
-    derivatives[1] = convolve_kernel(neighbour_pixel_LF, hf_gradient,
-                                     anisotropy.y, isotropy_type.y);
-    derivatives[2] = convolve_kernel(neighbour_pixel_HF, lf_gradient,
-                                     anisotropy.z, isotropy_type.z);
-    derivatives[3] = convolve_kernel(neighbour_pixel_HF, hf_gradient,
-                                     anisotropy.w, isotropy_type.w);
+    float4 derivatives[4] = { (float4)0.f };
 
-    // Compute the update on the current a-trous sub-lattice.
-    const float4 acc
-        = neighbour_pixel_HF[4] * strength 
+    float4 kern_first[9], kern_second[9], kern_third[9], kern_fourth[9];
+    compute_kern(c2[0], cos_theta_sin_theta_grad, cos_theta_grad_sq, sin_theta_grad_sq, isotropy_type.x, kern_first);
+    compute_kern(c2[1], cos_theta_sin_theta_lapl, cos_theta_lapl_sq, sin_theta_lapl_sq, isotropy_type.y, kern_second);
+    compute_kern(c2[2], cos_theta_sin_theta_grad, cos_theta_grad_sq, sin_theta_grad_sq, isotropy_type.z, kern_third);
+    compute_kern(c2[3], cos_theta_sin_theta_lapl, cos_theta_lapl_sq, sin_theta_lapl_sq, isotropy_type.w, kern_fourth);
+
+    #pragma unroll
+    for(int k = 0; k < 9; k++)
+    {
+      derivatives[0] += kern_first[k] * neighbour_pixel_LF[k];
+      derivatives[1] += kern_second[k] * neighbour_pixel_LF[k];
+      derivatives[2] += kern_third[k] * neighbour_pixel_HF[k];
+      derivatives[3] += kern_fourth[k] * neighbour_pixel_HF[k];
+    }
+
+    const float4 acc 
+        = neighbour_pixel_HF[4] * strength
           + (derivatives[0] * ABCD.x + derivatives[1] * ABCD.y
-               + derivatives[2] * ABCD.z + derivatives[3] * ABCD.w) / energy;
+              + derivatives[2] * ABCD.z + derivatives[3] * ABCD.w) / energy;
 
-    // update the solution
     out = fmax(acc + neighbour_pixel_LF[4], 0.f);
   }
   else

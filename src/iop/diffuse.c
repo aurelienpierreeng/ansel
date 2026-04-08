@@ -1327,7 +1327,8 @@ static inline cl_int wavelets_process_cl(const int devid, cl_mem in, cl_mem reco
     else
       hblocksize = 1;
 
-    /* Run vertical then horizontal to match the CPU ordering. */
+    // Keep the same separable order as the CPU path: vertical pass first,
+    // store its intermediate into HF[s], then horizontal pass builds LF.
     int vblocksize;
     dt_opencl_local_buffer_t vlocopt = (dt_opencl_local_buffer_t){ .xoffset = 0, .xfactor = 1,
                                                                     .yoffset = 2 * mult, .yfactor = 1,
@@ -1342,8 +1343,8 @@ static inline cl_int wavelets_process_cl(const int devid, cl_mem in, cl_mem reco
     {
       const size_t vertical_sizes[3] = { ROUNDUPDWD(width, devid), ROUNDUP(height, vblocksize), 1 };
       const size_t vertical_local[3] = { 1, vblocksize, 1 };
-      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_vertical_local, 0, sizeof(cl_mem), (void *)&HF[s]);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_vertical_local, 1, sizeof(cl_mem), (void *)&buffer_out);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_vertical_local, 0, sizeof(cl_mem), (void *)&buffer_in);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_vertical_local, 1, sizeof(cl_mem), (void *)&HF[s]);
       dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_vertical_local, 2, sizeof(int), (void *)&width);
       dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_vertical_local, 3, sizeof(int), (void *)&height);
       dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_vertical_local, 4, sizeof(int), (void *)&mult);
@@ -1355,8 +1356,8 @@ static inline cl_int wavelets_process_cl(const int devid, cl_mem in, cl_mem reco
     }
     else
     {
-      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_vertical, 0, sizeof(cl_mem), (void *)&HF[s]);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_vertical, 1, sizeof(cl_mem), (void *)&buffer_out);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_vertical, 0, sizeof(cl_mem), (void *)&buffer_in);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_vertical, 1, sizeof(cl_mem), (void *)&HF[s]);
       dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_vertical, 2, sizeof(int), (void *)&width);
       dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_vertical, 3, sizeof(int), (void *)&height);
       dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_vertical, 4, sizeof(int), (void *)&mult);
@@ -1369,8 +1370,8 @@ static inline cl_int wavelets_process_cl(const int devid, cl_mem in, cl_mem reco
     {
       const size_t horizontal_sizes[3] = { ROUNDUP(width, hblocksize), ROUNDUPDHT(height, devid), 1 };
       const size_t horizontal_local[3] = { hblocksize, 1, 1 };
-      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal_local, 0, sizeof(cl_mem), (void *)&buffer_in);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal_local, 1, sizeof(cl_mem), (void *)&HF[s]);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal_local, 0, sizeof(cl_mem), (void *)&HF[s]);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal_local, 1, sizeof(cl_mem), (void *)&buffer_out);
       dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal_local, 2, sizeof(int), (void *)&width);
       dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal_local, 3, sizeof(int), (void *)&height);
       dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal_local, 4, sizeof(int), (void *)&mult);
@@ -1382,8 +1383,8 @@ static inline cl_int wavelets_process_cl(const int devid, cl_mem in, cl_mem reco
     }
     else
     {
-      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal, 0, sizeof(cl_mem), (void *)&buffer_in);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal, 1, sizeof(cl_mem), (void *)&HF[s]);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal, 0, sizeof(cl_mem), (void *)&HF[s]);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal, 1, sizeof(cl_mem), (void *)&buffer_out);
       dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal, 2, sizeof(int), (void *)&width);
       dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal, 3, sizeof(int), (void *)&height);
       dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_bspline_horizontal, 4, sizeof(int), (void *)&mult);
