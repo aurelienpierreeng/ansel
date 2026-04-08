@@ -78,10 +78,7 @@ static void _show_osd_toggled(GtkToggleButton *button, gpointer data)
 
 static void _parameter_changed(GtkToggleButton *button, gpointer data)
 {
-  if(darktable.view_manager->proxy.map.view)
-  {
-    darktable.view_manager->proxy.map.redraw(darktable.view_manager->proxy.map.view);
-  }
+  dt_view_map_redraw(darktable.view_manager);
 }
 
 static void _map_source_changed(GtkWidget *widget, gpointer data)
