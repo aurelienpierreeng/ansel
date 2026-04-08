@@ -531,11 +531,14 @@ int32_t _get_image_buffer(dt_job_t *job)
   // Write temporary surface into actual image surface if we still have a widget to paint on
   if(thumb && thumb->widget && thumb->w_main)
   {
+    double sx = 1.0, sy = 1.0;
+    cairo_surface_get_device_scale(surface, &sx, &sy);
+
     dt_pthread_mutex_lock(&thumb->lock);
-    thumb->img_width = img_width;
-    thumb->img_height = img_height;
-    thumb->zoomx = zoomx;
-    thumb->zoomy = zoomy;
+    thumb->img_width = roundf(img_width / sx);
+    thumb->img_height = roundf(img_height / sy);
+    thumb->zoomx = zoomx / sx;
+    thumb->zoomy = zoomy / sy;
     thumb->img_surf = surface;
     dt_pthread_mutex_unlock(&thumb->lock);
 
@@ -637,8 +640,8 @@ _thumb_draw_image(GtkWidget *widget, cairo_t *cr, gpointer user_data)
     // dt_view_image_get_surface() aspect-fits the image inside the widget box,
     // so one surface dimension is typically smaller than the widget even when up-to-date.
     // Only invalidate cached buffers when the surface is too small in *both* dimensions.
-    const int req_w = (int)roundf(darktable.gui->ppd * w);
-    const int req_h = (int)roundf(darktable.gui->ppd * h);
+    const int req_w = w;
+    const int req_h = h;
     if(thumb->img_width + 1 < req_w && thumb->img_height + 1 < req_h)
       thumb->image_inited = FALSE;
   }
@@ -653,12 +656,6 @@ _thumb_draw_image(GtkWidget *widget, cairo_t *cr, gpointer user_data)
   {
     // we draw the image
     cairo_save(cr);
-    const float scaler = 1.0f / darktable.gui->ppd;
-    cairo_scale(cr, scaler, scaler);
-
-    // Correct allocation size for HighDPI scaling
-    w *= darktable.gui->ppd;
-    h *= darktable.gui->ppd;
     double x_offset = (w - thumb->img_width) / 2.;
     double y_offset = (h - thumb->img_height) / 2.;
 
@@ -1049,8 +1046,8 @@ static gboolean _event_image_motion(GtkWidget *widget, GdkEventMotion *event, gp
   thumb_return_if_fails(thumb, TRUE);
   if(thumb->dragging)
   {
-    const double delta_x = (event->x - thumb->drag_x_start) * darktable.gui->ppd;
-    const double delta_y = (event->y - thumb->drag_y_start) * darktable.gui->ppd;
+    const double delta_x = event->x - thumb->drag_x_start;
+    const double delta_y = event->y - thumb->drag_y_start;
     const gboolean global_shift = dt_modifier_is(event->state, GDK_SHIFT_MASK) && thumb->table;
 
     if(global_shift)

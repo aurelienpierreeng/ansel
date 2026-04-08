@@ -47,9 +47,11 @@
 #pragma once
 
 #include "common/act_on.h"
+#include "common/atomic.h"
 
 #include "common/history.h"
 #include "common/image.h"
+#include "common/dtpthread.h"
 #ifdef HAVE_PRINT
 #include "common/cups_print.h"
 #include "common/printing.h"
@@ -109,6 +111,37 @@ typedef enum dt_view_surface_value_t
   DT_VIEW_SURFACE_KO,
 } dt_view_surface_value_t;
 
+typedef struct _dt_job_t dt_job_t;
+
+/**
+ * @brief Track one asynchronous Cairo surface fetch request for a GUI widget.
+ *
+ * The fetcher owns the background job bookkeeping and the current cached surface
+ * metadata. The actual Cairo surface remains owned by the caller through the
+ * `target` pointer passed to dt_view_image_get_surface_async().
+ */
+typedef struct dt_view_image_surface_fetcher_t
+{
+  dt_pthread_mutex_t lock;
+  pthread_cond_t cond;
+  GWeakRef widget_ref;
+  cairo_surface_t **target;
+  int32_t imgid;
+  int width;
+  int height;
+  int zoom;
+  int32_t cached_imgid;
+  int cached_width;
+  int cached_height;
+  int cached_zoom;
+  dt_atomic_int shutdown;
+  guint request_id;
+  guint queued_request_id;
+  gboolean commit_pending;
+  gboolean job_queued;
+  gboolean destroying;
+} dt_view_image_surface_fetcher_t;
+
 #define DT_VIEW_ALL                                                                              \
   (DT_VIEW_LIGHTTABLE | DT_VIEW_DARKROOM | DT_VIEW_TETHERING | DT_VIEW_MAP | DT_VIEW_SLIDESHOW | \
    DT_VIEW_PRINT)
@@ -157,6 +190,12 @@ char* dt_view_extend_modes_str(const char * name, const gboolean is_hdr, const g
 /** expose an image and return a cair0_surface. */
 dt_view_surface_value_t dt_view_image_get_surface(int32_t imgid, int width, int height, cairo_surface_t **surface,
                                                   int zoom);
+void dt_view_image_surface_fetcher_init(dt_view_image_surface_fetcher_t *fetcher);
+void dt_view_image_surface_fetcher_cleanup(dt_view_image_surface_fetcher_t *fetcher);
+void dt_view_image_surface_fetcher_invalidate(dt_view_image_surface_fetcher_t *fetcher, cairo_surface_t **target);
+dt_view_surface_value_t dt_view_image_get_surface_async(dt_view_image_surface_fetcher_t *fetcher, int32_t imgid,
+                                                        int width, int height, cairo_surface_t **target,
+                                                        GtkWidget *widget, int zoom);
 
 
 /**

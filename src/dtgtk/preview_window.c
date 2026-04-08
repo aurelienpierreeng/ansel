@@ -26,46 +26,73 @@
 #include "osx/osx.h"
 #endif
 
-
-void _close_preview_popup(GtkWidget *dialog, gint response_id, gpointer data)
+typedef struct dt_preview_window_t
 {
+  int32_t imgid;
+  cairo_surface_t *surface;
+  dt_view_image_surface_fetcher_t fetcher;
+  int width;
+  int height;
+} dt_preview_window_t;
+
+static void _preview_window_destroy(GtkWidget *dialog, gpointer user_data)
+{
+  dt_preview_window_t *preview = (dt_preview_window_t *)user_data;
+  dt_view_image_surface_fetcher_cleanup(&preview->fetcher);
+  dt_free(preview);
 }
 
+static void _close_preview_popup(GtkWidget *dialog, gint response_id, gpointer data)
+{
+  gtk_widget_destroy(dialog);
+}
 
-// Note: the only event that will trigger a redraw is resizing the window,
-// or getting a new mipmap when the cache pipeline finishes,
-// which will all require refreshing the image surface.
-// So we don't do clever double-buffering, caching and invalidation here.
+static void _preview_window_size_allocate(GtkWidget *widget, GtkAllocation *allocation, gpointer user_data)
+{
+  dt_preview_window_t *preview = (dt_preview_window_t *)user_data;
+  if(!preview || !allocation) return;
+  if(allocation->width < 2 || allocation->height < 2) return;
+  if(preview->width == allocation->width && preview->height == allocation->height) return;
+
+  preview->width = allocation->width;
+  preview->height = allocation->height;
+
+  /* The async fetcher can stop its current pixelpipe through the request-owned
+   * shutdown flag. Trigger that as soon as the popup size changes so we don't
+   * keep rendering a surface for an obsolete allocation. */
+  dt_view_image_surface_fetcher_invalidate(&preview->fetcher, &preview->surface);
+  gtk_widget_queue_draw(widget);
+}
+
 static gboolean
 _thumb_draw_image(GtkWidget *widget, cairo_t *cr, gpointer user_data)
 {
-  if(!user_data) return TRUE;
-
-  while(gtk_events_pending()) gtk_main_iteration();
+  dt_preview_window_t *preview = (dt_preview_window_t *)user_data;
+  if(!preview) return TRUE;
 
   const double start = dt_get_wtime();
 
-  int32_t imgid = GPOINTER_TO_INT(user_data);
   int w = gtk_widget_get_allocated_width(widget);
   int h = gtk_widget_get_allocated_height(widget);
 
-  cairo_surface_t *surface = NULL;
-  dt_view_surface_value_t res = dt_view_image_get_surface(imgid, w, h, &surface, 0);
+  const dt_view_surface_value_t res =
+      dt_view_image_get_surface_async(&preview->fetcher, preview->imgid, w, h, &preview->surface, widget, 0);
 
-  if(surface && res == DT_VIEW_SURFACE_OK)
+  if(preview->surface && res == DT_VIEW_SURFACE_OK)
   {
     // The image is immediately available
-    int width = cairo_image_surface_get_width(surface);
-    int height = cairo_image_surface_get_height(surface);
+    int width = cairo_image_surface_get_width(preview->surface);
+    int height = cairo_image_surface_get_height(preview->surface);
+    double sx = 1.0, sy = 1.0;
+    cairo_surface_get_device_scale(preview->surface, &sx, &sy);
+    const double logical_width = width / sx;
+    const double logical_height = height / sy;
 
     // we draw the image
     cairo_save(cr);
-    const float scaler = 1.0f / darktable.gui->ppd;
-    cairo_scale(cr, scaler, scaler);
-
-    double x_offset = (w * darktable.gui->ppd - width) / 2.;
-    double y_offset = (h * darktable.gui->ppd - height) / 2.;
-    cairo_set_source_surface(cr, surface, x_offset, y_offset);
+    double x_offset = (w - logical_width) / 2.;
+    double y_offset = (h - logical_height) / 2.;
+    cairo_set_source_surface(cr, preview->surface, x_offset, y_offset);
 
     // get the transparency value
     GdkRGBA im_color;
@@ -74,16 +101,15 @@ _thumb_draw_image(GtkWidget *widget, cairo_t *cr, gpointer user_data)
     cairo_paint_with_alpha(cr, im_color.alpha);
 
     // and eventually the image border
-    gtk_render_frame(context, cr, 0, 0, w * darktable.gui->ppd, h * darktable.gui->ppd);
+    gtk_render_frame(context, cr, 0, 0, w, h);
     cairo_restore(cr);
-    cairo_surface_destroy(surface);
   }
   else
   {
     dt_control_draw_busy_msg(cr, w, h);
   }
 
-  dt_print(DT_DEBUG_LIGHTTABLE, "Redrawing the preview window for %i in %0.04f sec\n", imgid,
+  dt_print(DT_DEBUG_LIGHTTABLE, "Redrawing the preview window for %i in %0.04f sec\n", preview->imgid,
     dt_get_wtime() - start);
 
   return TRUE;
@@ -92,6 +118,10 @@ _thumb_draw_image(GtkWidget *widget, cairo_t *cr, gpointer user_data)
 
 void dt_preview_window_spawn(const int32_t imgid)
 {
+  dt_preview_window_t *preview = calloc(1, sizeof(dt_preview_window_t));
+  preview->imgid = imgid;
+  dt_view_image_surface_fetcher_init(&preview->fetcher);
+
   GtkWidget *dialog = gtk_dialog_new();
 
   const dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
@@ -109,7 +139,8 @@ void dt_preview_window_spawn(const int32_t imgid)
   gtk_window_set_modal(GTK_WINDOW(dialog), FALSE);
   gtk_window_set_transient_for(GTK_WINDOW(dialog), GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)));
   gtk_window_set_default_size(GTK_WINDOW(dialog), 350, 350);
-  g_signal_connect(G_OBJECT(dialog), "response", G_CALLBACK(_close_preview_popup), dialog);
+  g_signal_connect(G_OBJECT(dialog), "response", G_CALLBACK(_close_preview_popup), NULL);
+  g_signal_connect(G_OBJECT(dialog), "destroy", G_CALLBACK(_preview_window_destroy), preview);
 
   GtkWidget *area = gtk_drawing_area_new();
   gtk_widget_set_hexpand(area, TRUE);
@@ -118,7 +149,8 @@ void dt_preview_window_spawn(const int32_t imgid)
   gtk_widget_set_valign(area, GTK_ALIGN_FILL);
   gtk_widget_set_size_request(area, 350, 350);
   gtk_box_pack_start(GTK_BOX(gtk_dialog_get_content_area(GTK_DIALOG(dialog))), area, TRUE, TRUE, 0);
-  g_signal_connect(G_OBJECT(area), "draw", G_CALLBACK(_thumb_draw_image), GINT_TO_POINTER(imgid));
+  g_signal_connect(G_OBJECT(area), "draw", G_CALLBACK(_thumb_draw_image), preview);
+  g_signal_connect(G_OBJECT(area), "size-allocate", G_CALLBACK(_preview_window_size_allocate), preview);
 
 
   gtk_widget_set_visible(area, TRUE);

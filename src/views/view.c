@@ -109,6 +109,7 @@
 static void dt_view_manager_load_modules(dt_view_manager_t *vm);
 static int dt_view_load_module(void *v, const char *libname, const char *module_name);
 static void dt_view_unload_module(dt_view_t *view);
+static int32_t _view_surface_fetch_job_run(dt_job_t *job);
 
 void dt_view_manager_init(dt_view_manager_t *vm)
 {
@@ -644,8 +645,283 @@ int dt_view_manager_scrolled(dt_view_manager_t *vm, double x, double y, int up, 
   return 0;
 }
 
-dt_view_surface_value_t dt_view_image_get_surface(int32_t imgid, int width, int height, cairo_surface_t **surface,
-                                                  int zoom)
+typedef struct dt_view_surface_fetch_job_t
+{
+  dt_view_image_surface_fetcher_t *fetcher;
+  guint request_id;
+  int32_t imgid;
+  int width;
+  int height;
+  int zoom;
+} dt_view_surface_fetch_job_t;
+
+typedef struct dt_view_surface_fetch_commit_t
+{
+  dt_view_image_surface_fetcher_t *fetcher;
+  guint request_id;
+  int32_t imgid;
+  int width;
+  int height;
+  int zoom;
+  cairo_surface_t *surface;
+  dt_view_surface_value_t result;
+} dt_view_surface_fetch_commit_t;
+
+static dt_view_surface_value_t _view_image_get_surface_internal(int32_t imgid, int width, int height,
+                                                                cairo_surface_t **surface, int zoom,
+                                                                dt_atomic_int *shutdown);
+
+static void _destroy_surface(cairo_surface_t **surface)
+{
+  if(surface && *surface && cairo_surface_get_reference_count(*surface) > 0)
+    cairo_surface_destroy(*surface);
+  if(surface) *surface = NULL;
+}
+
+static gboolean _view_surface_matches(const dt_view_image_surface_fetcher_t *fetcher, cairo_surface_t **target,
+                                      const int32_t imgid, const int width, const int height, const int zoom)
+{
+  return target && *target && fetcher->cached_imgid == imgid && fetcher->cached_width == width
+         && fetcher->cached_height == height && fetcher->cached_zoom == zoom;
+}
+
+static void _enqueue_surface_fetch(dt_view_image_surface_fetcher_t *fetcher)
+{
+  dt_view_surface_fetch_job_t *params = g_malloc0(sizeof(dt_view_surface_fetch_job_t));
+  params->fetcher = fetcher;
+  params->request_id = fetcher->request_id;
+  params->imgid = fetcher->imgid;
+  params->width = fetcher->width;
+  params->height = fetcher->height;
+  params->zoom = fetcher->zoom;
+
+  dt_job_t *job = dt_control_job_create(&_view_surface_fetch_job_run, "fetch image surface %i", params->imgid);
+  if(!job)
+  {
+    g_free(params);
+    return;
+  }
+
+  dt_atomic_set_int(&fetcher->shutdown, FALSE);
+  dt_control_job_set_params_with_size(job, params, sizeof(dt_view_surface_fetch_job_t), g_free);
+  fetcher->job_queued = TRUE;
+  fetcher->queued_request_id = fetcher->request_id;
+  dt_control_add_job(darktable.control, DT_JOB_QUEUE_SYSTEM_FG, job);
+}
+
+static gboolean _view_surface_commit_main(gpointer user_data)
+{
+  dt_view_surface_fetch_commit_t *commit = (dt_view_surface_fetch_commit_t *)user_data;
+  dt_view_image_surface_fetcher_t *fetcher = commit->fetcher;
+
+  gboolean queue_redraw = FALSE;
+  gboolean enqueue_next = FALSE;
+
+  dt_pthread_mutex_lock(&fetcher->lock);
+  fetcher->commit_pending = FALSE;
+  pthread_cond_broadcast(&fetcher->cond);
+
+  if(!fetcher->destroying && commit->request_id == fetcher->request_id && commit->result == DT_VIEW_SURFACE_OK)
+  {
+    _destroy_surface(fetcher->target);
+    if(fetcher->target) *fetcher->target = commit->surface;
+    commit->surface = NULL;
+    fetcher->cached_imgid = commit->imgid;
+    fetcher->cached_width = commit->width;
+    fetcher->cached_height = commit->height;
+    fetcher->cached_zoom = commit->zoom;
+    queue_redraw = TRUE;
+  }
+
+  if(!fetcher->destroying && !fetcher->job_queued && fetcher->request_id != commit->request_id)
+    enqueue_next = TRUE;
+  dt_pthread_mutex_unlock(&fetcher->lock);
+
+  if(commit->surface) cairo_surface_destroy(commit->surface);
+
+  if(queue_redraw)
+  {
+    GtkWidget *widget = g_weak_ref_get(&fetcher->widget_ref);
+    if(widget)
+    {
+      if(widget == dt_ui_center(darktable.gui->ui))
+      {
+        dt_control_queue_redraw_center();
+      }
+      else
+      {
+        gtk_widget_queue_draw(widget);
+        GdkWindow *window = gtk_widget_get_window(widget);
+        if(window)
+        {
+          G_GNUC_BEGIN_IGNORE_DEPRECATIONS
+          gdk_window_process_updates(window, TRUE);
+          G_GNUC_END_IGNORE_DEPRECATIONS
+        }
+      }
+      g_object_unref(widget);
+    }
+  }
+
+  if(enqueue_next)
+  {
+    dt_pthread_mutex_lock(&fetcher->lock);
+    if(!fetcher->destroying && !fetcher->job_queued && !fetcher->commit_pending)
+      _enqueue_surface_fetch(fetcher);
+    dt_pthread_mutex_unlock(&fetcher->lock);
+  }
+
+  g_free(commit);
+  return G_SOURCE_REMOVE;
+}
+
+static int32_t _view_surface_fetch_job_run(dt_job_t *job)
+{
+  dt_view_surface_fetch_job_t *params = dt_control_job_get_params(job);
+  dt_view_image_surface_fetcher_t *fetcher = params->fetcher;
+
+  dt_pthread_mutex_lock(&fetcher->lock);
+  const gboolean stale = fetcher->destroying || params->request_id != fetcher->request_id;
+  const gboolean cancelled = dt_control_job_get_state(job) == DT_JOB_STATE_CANCELLED;
+  if(stale || cancelled)
+  {
+    if(fetcher->job_queued && fetcher->queued_request_id == params->request_id) fetcher->job_queued = FALSE;
+
+    // A stale request means the widget parameters changed while the current
+    // job was queued or running. If no newer request is already tracked
+    // locally, start the latest one immediately from the current fetcher
+    // state instead of trying to reason about queue-owned job objects.
+    if(!fetcher->destroying && params->request_id != fetcher->request_id && !fetcher->job_queued
+       && !fetcher->commit_pending)
+      _enqueue_surface_fetch(fetcher);
+
+    pthread_cond_broadcast(&fetcher->cond);
+    dt_pthread_mutex_unlock(&fetcher->lock);
+    return 0;
+  }
+  dt_pthread_mutex_unlock(&fetcher->lock);
+
+  cairo_surface_t *surface = NULL;
+  const dt_view_surface_value_t result =
+      _view_image_get_surface_internal(params->imgid, params->width, params->height, &surface, params->zoom,
+                                       &fetcher->shutdown);
+
+  dt_view_surface_fetch_commit_t *commit = g_malloc0(sizeof(dt_view_surface_fetch_commit_t));
+  commit->fetcher = fetcher;
+  commit->request_id = params->request_id;
+  commit->imgid = params->imgid;
+  commit->width = params->width;
+  commit->height = params->height;
+  commit->zoom = params->zoom;
+  commit->surface = surface;
+  commit->result = result;
+
+  dt_pthread_mutex_lock(&fetcher->lock);
+  if(fetcher->job_queued && fetcher->queued_request_id == params->request_id) fetcher->job_queued = FALSE;
+  fetcher->commit_pending = TRUE;
+  pthread_cond_broadcast(&fetcher->cond);
+  dt_pthread_mutex_unlock(&fetcher->lock);
+
+  g_main_context_invoke_full(g_main_context_default(), G_PRIORITY_DEFAULT, _view_surface_commit_main,
+                             commit, NULL);
+  g_main_context_wakeup(g_main_context_default());
+  return 0;
+}
+
+void dt_view_image_surface_fetcher_init(dt_view_image_surface_fetcher_t *fetcher)
+{
+  memset(fetcher, 0, sizeof(dt_view_image_surface_fetcher_t));
+  dt_pthread_mutex_init(&fetcher->lock, NULL);
+  pthread_cond_init(&fetcher->cond, NULL);
+  g_weak_ref_init(&fetcher->widget_ref, NULL);
+  fetcher->cached_imgid = UNKNOWN_IMAGE;
+  fetcher->imgid = UNKNOWN_IMAGE;
+  dt_atomic_set_int(&fetcher->shutdown, FALSE);
+}
+
+void dt_view_image_surface_fetcher_cleanup(dt_view_image_surface_fetcher_t *fetcher)
+{
+  dt_pthread_mutex_lock(&fetcher->lock);
+  fetcher->destroying = TRUE;
+  dt_atomic_set_int(&fetcher->shutdown, TRUE);
+  while(fetcher->job_queued)
+    dt_pthread_cond_wait(&fetcher->cond, &fetcher->lock);
+  dt_pthread_mutex_unlock(&fetcher->lock);
+
+  for(;;)
+  {
+    dt_pthread_mutex_lock(&fetcher->lock);
+    const gboolean pending = fetcher->commit_pending;
+    dt_pthread_mutex_unlock(&fetcher->lock);
+    if(!pending) break;
+    g_main_context_iteration(g_main_context_default(), TRUE);
+  }
+
+  _destroy_surface(fetcher->target);
+  g_weak_ref_clear(&fetcher->widget_ref);
+  pthread_cond_destroy(&fetcher->cond);
+  dt_pthread_mutex_destroy(&fetcher->lock);
+}
+
+void dt_view_image_surface_fetcher_invalidate(dt_view_image_surface_fetcher_t *fetcher, cairo_surface_t **target)
+{
+  dt_pthread_mutex_lock(&fetcher->lock);
+  fetcher->target = target;
+  fetcher->request_id++;
+  dt_atomic_set_int(&fetcher->shutdown, TRUE);
+  fetcher->cached_imgid = UNKNOWN_IMAGE;
+  fetcher->cached_width = 0;
+  fetcher->cached_height = 0;
+  fetcher->cached_zoom = 0;
+  dt_pthread_mutex_unlock(&fetcher->lock);
+
+  _destroy_surface(target);
+}
+
+dt_view_surface_value_t dt_view_image_get_surface_async(dt_view_image_surface_fetcher_t *fetcher, int32_t imgid,
+                                                        int width, int height, cairo_surface_t **target,
+                                                        GtkWidget *widget, int zoom)
+{
+  if(!fetcher || !target || !widget || width < 2 || height < 2 || imgid <= UNKNOWN_IMAGE)
+    return DT_VIEW_SURFACE_KO;
+
+  dt_view_surface_value_t ret = DT_VIEW_SURFACE_KO;
+
+  dt_pthread_mutex_lock(&fetcher->lock);
+  const gboolean changed = fetcher->target != target || fetcher->imgid != imgid || fetcher->width != width
+                           || fetcher->height != height || fetcher->zoom != zoom;
+  const gboolean exact_match = _view_surface_matches(fetcher, target, imgid, width, height, zoom);
+  const gboolean fallback_match = target && *target && fetcher->cached_imgid == imgid
+                                  && fetcher->cached_zoom == zoom;
+  fetcher->target = target;
+  fetcher->imgid = imgid;
+  fetcher->width = width;
+  fetcher->height = height;
+  fetcher->zoom = zoom;
+  g_weak_ref_set(&fetcher->widget_ref, widget);
+
+  if(exact_match || fallback_match)
+    ret = DT_VIEW_SURFACE_OK;
+
+  if(changed && !exact_match && !fetcher->destroying && !fetcher->job_queued
+     && !fetcher->commit_pending)
+  {
+    fetcher->request_id++;
+    _enqueue_surface_fetch(fetcher);
+  }
+  else if(changed && !exact_match && !fetcher->destroying)
+  {
+    fetcher->request_id++;
+    dt_atomic_set_int(&fetcher->shutdown, TRUE);
+  }
+  dt_pthread_mutex_unlock(&fetcher->lock);
+
+  return ret;
+}
+
+static dt_view_surface_value_t _view_image_get_surface_internal(int32_t imgid, int width, int height,
+                                                                cairo_surface_t **surface, int zoom,
+                                                                dt_atomic_int *shutdown)
 {
   double tt = 0;
   if((darktable.unmuted & (DT_DEBUG_LIGHTTABLE | DT_DEBUG_PERF)) == (DT_DEBUG_LIGHTTABLE | DT_DEBUG_PERF))
@@ -684,7 +960,7 @@ dt_view_surface_value_t dt_view_image_get_surface(int32_t imgid, int width, int 
 
   // if needed, we load the mimap buffer
   dt_mipmap_buffer_t buf;
-  dt_mipmap_cache_get(cache, &buf, imgid, mip, DT_MIPMAP_BLOCKING, 'r');
+  dt_mipmap_cache_get_with_shutdown(cache, &buf, imgid, mip, DT_MIPMAP_BLOCKING, 'r', shutdown);
   const int buf_wd = buf.width;
   const int buf_ht = buf.height;
 
@@ -783,6 +1059,11 @@ dt_view_surface_value_t dt_view_image_get_surface(int32_t imgid, int width, int 
   cairo_surface_destroy(tmp_surface);
   cairo_destroy(cr);
 
+  /* The async/shared surface path returns pixel-sized Cairo image surfaces.
+   * Publish the widget PPD on the finished surface so GUI callers can place it
+   * in logical coordinates without re-deriving HiDPI scaling on every draw. */
+  cairo_surface_set_device_scale(*surface, darktable.gui->ppd, darktable.gui->ppd);
+
   // we consider skull as ok as the image hasn't to be reloaded
   if(buf_wd <= 8 && buf_ht <= 8)
     ret = DT_VIEW_SURFACE_OK;
@@ -806,6 +1087,12 @@ dt_view_surface_value_t dt_view_image_get_surface(int32_t imgid, int width, int 
 
   // we consider skull as ok as the image hasn't to be reload
   return ret;
+}
+
+dt_view_surface_value_t dt_view_image_get_surface(int32_t imgid, int width, int height, cairo_surface_t **surface,
+                                                  int zoom)
+{
+  return _view_image_get_surface_internal(imgid, width, height, surface, zoom, NULL);
 }
 
 char* dt_view_extend_modes_str(const char * name, const gboolean is_hdr, const gboolean is_bw, const gboolean is_bw_flow)
