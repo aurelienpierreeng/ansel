@@ -434,7 +434,7 @@ static gboolean _render_main_direct_debug(cairo_t *cr, dt_develop_t *dev, const 
 
   dt_pixel_cache_entry_t *entry = NULL;
   void *data = NULL;
-  if(!dt_dev_pixelpipe_cache_peek_gui(dev->pipe, NULL, &data, &entry))
+  if(!dt_dev_pixelpipe_cache_peek_gui(dev->pipe, NULL, &data, &entry, NULL, NULL, NULL))
     return FALSE;
 
   dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, entry);
@@ -558,7 +558,7 @@ static gboolean _lock_pipe_surface(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, 
   dt_pixel_cache_entry_t *live_entry = NULL;
   void *live_data = NULL;
   if(locked->surface && locked->hash == hash
-     && dt_dev_pixelpipe_cache_peek_gui(pipe, NULL, &live_data, &live_entry)
+     && dt_dev_pixelpipe_cache_peek_gui(pipe, NULL, &live_data, &live_entry, NULL, NULL, NULL)
      && live_entry == locked->entry && live_data == locked->data)
   {
     locked->width = pipe->backbuf.width;
@@ -570,7 +570,7 @@ static gboolean _lock_pipe_surface(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, 
   /* GUI surfaces only borrow the currently published backbuffer. They rely on the backbuffer keepalive ref
    * owned by `pixelpipe_hb.c`, so they must not take or drop their own cache refs here. */
   void *data = NULL;
-  if(!dt_dev_pixelpipe_cache_peek_gui(pipe, NULL, &data, &entry))
+  if(!dt_dev_pixelpipe_cache_peek_gui(pipe, NULL, &data, &entry, NULL, NULL, NULL))
     data = NULL;
   if(!data)
   {

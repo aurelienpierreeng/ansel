@@ -249,6 +249,7 @@ typedef struct dt_iop_toneequalizer_gui_data_t
   // cache hash, dimensions and one retained cache entry reference so every reader
   // goes through the pixelpipe cache locking API before sampling.
   uint64_t thumb_preview_hash;
+  uint64_t pending_preview_hash;
   size_t thumb_preview_buf_width, thumb_preview_buf_height;
 
   // Misc stuff, contiguity, length and alignment unknown
@@ -594,6 +595,7 @@ static void invalidate_luminance_cache(dt_iop_module_t *const self)
   g->luminance_valid = FALSE;
   g->histogram_valid = 0;
   g->thumb_preview_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+  g->pending_preview_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
   g->thumb_preview_buf_width = 0;
   g->thumb_preview_buf_height = 0;
   preview_entry = g->thumb_preview_entry;
@@ -993,6 +995,7 @@ static int toneeq_process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t
       dt_iop_gui_enter_critical_section(self);
       g->pipe_order = position;
       g->thumb_preview_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+      g->pending_preview_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
       g->thumb_preview_buf_width = 0;
       g->thumb_preview_buf_height = 0;
       g->luminance_valid = FALSE;
@@ -1099,6 +1102,7 @@ static int toneeq_process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t
       old_entry = g->thumb_preview_entry;
       g->thumb_preview_entry = luminance_entry;
       g->thumb_preview_hash = luminance_hash;
+      g->pending_preview_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
       g->thumb_preview_buf_width = width;
       g->thumb_preview_buf_height = height;
       g->luminance_valid = TRUE;
@@ -1310,6 +1314,7 @@ static void gui_cache_init(struct dt_iop_module_t *self)
 
   dt_iop_gui_enter_critical_section(self);
   g->thumb_preview_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+  g->pending_preview_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
   g->max_histogram = 1;
   g->scale = 1.0f;
   g->sigma = sqrtf(2.0f);
@@ -1342,6 +1347,23 @@ static void gui_cache_init(struct dt_iop_module_t *self)
 
   g->pipe_order = 0;
   dt_iop_gui_leave_critical_section(self);
+}
+
+static uint64_t _current_preview_luminance_hash(dt_iop_module_t *self, size_t *width, size_t *height)
+{
+  if(width) *width = 0;
+  if(height) *height = 0;
+  if(!self || !self->dev || !self->dev->preview_pipe) return DT_PIXELPIPE_CACHE_HASH_INVALID;
+
+  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->preview_pipe, self);
+  if(!piece || !piece->enabled || piece->roi_in.width <= 0 || piece->roi_in.height <= 0)
+    return DT_PIXELPIPE_CACHE_HASH_INVALID;
+
+  if(width) *width = piece->roi_in.width;
+  if(height) *height = piece->roi_in.height;
+
+  static const char cache_tag[] = "toneequal:luminance";
+  return dt_hash(piece->global_hash, cache_tag, sizeof(cache_tag));
 }
 
 
@@ -2435,6 +2457,7 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
     //lost focus - stop showing mask
     const gboolean was_mask = g->mask_display;
     g->mask_display = FALSE;
+    g->pending_preview_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->show_luminance_mask), FALSE);
     if(was_mask) dt_dev_pixelpipe_update_history_main(self->dev);
     dt_collection_hint_message(darktable.collection);
@@ -2474,6 +2497,7 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
             old_entry = g->thumb_preview_entry;
             g->thumb_preview_entry = preview_entry;
             g->thumb_preview_hash = preview_hash;
+            g->pending_preview_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
             g->thumb_preview_buf_width = piece->roi_in.width;
             g->thumb_preview_buf_height = piece->roi_in.height;
             g->luminance_valid = TRUE;
@@ -2488,7 +2512,10 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
             dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
         }
         else
+        {
+          g->pending_preview_hash = preview_hash;
           needs_preview_update = TRUE;
+        }
       }
       else
         needs_preview_update = TRUE;
@@ -3069,11 +3096,134 @@ static void _develop_ui_pipe_started_callback(gpointer instance, gpointer user_d
 }
 
 
-static void _develop_preview_pipe_finished_callback(gpointer instance, gpointer user_data)
+static void _develop_history_resync_callback(gpointer instance, gpointer user_data)
 {
+  (void)instance;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_toneequalizer_gui_data_t *g = (dt_iop_toneequalizer_gui_data_t *)self->gui_data;
-  if(g == NULL) return;
+  if(g == NULL || !self->dev || !self->dev->preview_pipe) return;
+
+  const uint64_t preview_hash = _current_preview_luminance_hash(self, NULL, NULL);
+  if(preview_hash == DT_PIXELPIPE_CACHE_HASH_INVALID)
+  {
+    dt_iop_gui_enter_critical_section(self);
+    g->pending_preview_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+    dt_iop_gui_leave_critical_section(self);
+    _switch_cursors(self);
+    gtk_widget_queue_draw(GTK_WIDGET(g->area));
+    return;
+  }
+
+  gboolean already_attached = FALSE;
+  dt_iop_gui_enter_critical_section(self);
+  if(g->thumb_preview_entry && g->thumb_preview_hash == preview_hash && g->luminance_valid)
+  {
+    g->pending_preview_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+    already_attached = TRUE;
+  }
+  dt_iop_gui_leave_critical_section(self);
+
+  if(!already_attached)
+  {
+    void *preview_buf = NULL;
+    dt_pixel_cache_entry_t *preview_entry = NULL;
+    if(dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, preview_hash, &preview_buf, &preview_entry,
+                                   self->dev->preview_pipe->devid, NULL)
+       && preview_buf && preview_entry)
+    {
+      size_t preview_width = 0;
+      size_t preview_height = 0;
+      (void)_current_preview_luminance_hash(self, &preview_width, &preview_height);
+      dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, preview_entry);
+
+      dt_pixel_cache_entry_t *old_entry = NULL;
+      gboolean keep_new_entry = FALSE;
+      dt_iop_gui_enter_critical_section(self);
+      if(g->thumb_preview_entry != preview_entry || g->thumb_preview_hash != preview_hash
+         || g->thumb_preview_buf_width != preview_width || g->thumb_preview_buf_height != preview_height
+         || !g->luminance_valid)
+      {
+        old_entry = g->thumb_preview_entry;
+        g->thumb_preview_entry = preview_entry;
+        g->thumb_preview_hash = preview_hash;
+        g->pending_preview_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+        g->thumb_preview_buf_width = preview_width;
+        g->thumb_preview_buf_height = preview_height;
+        g->luminance_valid = TRUE;
+        g->histogram_valid = FALSE;
+        keep_new_entry = TRUE;
+      }
+      else
+        g->pending_preview_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+      dt_iop_gui_leave_critical_section(self);
+
+      if(old_entry)
+        dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, old_entry);
+      if(!keep_new_entry)
+        dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
+    }
+    else
+    {
+      dt_iop_gui_enter_critical_section(self);
+      g->pending_preview_hash = preview_hash;
+      dt_iop_gui_leave_critical_section(self);
+    }
+  }
+
+  _switch_cursors(self);
+  gtk_widget_queue_draw(GTK_WIDGET(g->area));
+}
+
+static void _develop_cacheline_ready_callback(gpointer instance, const guint64 hash, gpointer user_data)
+{
+  (void)instance;
+  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
+  dt_iop_toneequalizer_gui_data_t *g = (dt_iop_toneequalizer_gui_data_t *)self->gui_data;
+  if(g == NULL || !self->dev || !self->dev->preview_pipe) return;
+
+  dt_iop_gui_enter_critical_section(self);
+  const gboolean matched = (g->pending_preview_hash == hash);
+  dt_iop_gui_leave_critical_section(self);
+  if(!matched) return;
+
+  size_t preview_width = 0;
+  size_t preview_height = 0;
+  const uint64_t preview_hash = _current_preview_luminance_hash(self, &preview_width, &preview_height);
+  if(preview_hash != hash) return;
+
+  void *preview_buf = NULL;
+  dt_pixel_cache_entry_t *preview_entry = NULL;
+  if(!dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, preview_hash, &preview_buf, &preview_entry,
+                                  self->dev->preview_pipe->devid, NULL)
+     || !preview_buf || !preview_entry)
+    return;
+
+  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, preview_entry);
+
+  dt_pixel_cache_entry_t *old_entry = NULL;
+  gboolean keep_new_entry = FALSE;
+  dt_iop_gui_enter_critical_section(self);
+  if(g->thumb_preview_entry != preview_entry || g->thumb_preview_hash != preview_hash
+     || g->thumb_preview_buf_width != preview_width || g->thumb_preview_buf_height != preview_height
+     || !g->luminance_valid)
+  {
+    old_entry = g->thumb_preview_entry;
+    g->thumb_preview_entry = preview_entry;
+    g->thumb_preview_hash = preview_hash;
+    g->thumb_preview_buf_width = preview_width;
+    g->thumb_preview_buf_height = preview_height;
+    g->luminance_valid = TRUE;
+    g->histogram_valid = FALSE;
+    keep_new_entry = TRUE;
+  }
+  g->pending_preview_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+  dt_iop_gui_leave_critical_section(self);
+
+  if(old_entry)
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, old_entry);
+  if(!keep_new_entry)
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
+
   _switch_cursors(self);
   gtk_widget_queue_draw(GTK_WIDGET(g->area));
 }
@@ -3468,8 +3618,10 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(self->widget), hbox, FALSE, FALSE, 0);
 
   // Force UI redraws when pipe starts/finishes computing and switch cursors
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED,
-                            G_CALLBACK(_develop_preview_pipe_finished_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_HISTORY_RESYNC,
+                            G_CALLBACK(_develop_history_resync_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_CACHELINE_READY,
+                            G_CALLBACK(_develop_cacheline_ready_callback), self);
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_UI_PIPE_FINISHED,
                             G_CALLBACK(_develop_ui_pipe_finished_callback), self);
 
@@ -3487,7 +3639,8 @@ void gui_cleanup(struct dt_iop_module_t *self)
 
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_develop_ui_pipe_finished_callback), self);
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_develop_ui_pipe_started_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_develop_preview_pipe_finished_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_develop_history_resync_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_develop_cacheline_ready_callback), self);
 
   if(g->thumb_preview_entry)
     dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, g->thumb_preview_entry);

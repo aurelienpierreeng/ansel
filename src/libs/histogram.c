@@ -66,10 +66,10 @@
 #include "common/math.h"
 #include "control/conf.h"
 #include "control/control.h"
+#include "control/signal.h"
 #include "develop/dev_pixelpipe.h"
 #include "develop/develop.h"
 #include "develop/pixelpipe_cache.h"
-#include "develop/pixelpipe_gui.h"
 #include "dtgtk/drawingarea.h"
 #include "dtgtk/button.h"
 #include "gui/color_picker_proxy.h"
@@ -147,8 +147,311 @@ typedef struct dt_lib_histogram_t
   GtkWidget *samples_container;
   GtkWidget *add_sample_button;
   GtkWidget *display_samples_check_box;
+  GArray *pending_hashes;
+  guint refresh_idle_source;
 
 } dt_lib_histogram_t;
+
+typedef struct dt_histogram_pending_module_refresh_t
+{
+  dt_iop_module_t *module;
+  uint64_t hash;
+} dt_histogram_pending_module_refresh_t;
+
+typedef struct dt_histogram_preview_refresh_state_t
+{
+  uint64_t initialscale_hash;
+  uint64_t colorout_hash;
+  uint64_t gamma_hash;
+  GList *module_histograms;
+} dt_histogram_preview_refresh_state_t;
+
+static dt_histogram_preview_refresh_state_t _preview_refresh_state
+    = { DT_PIXELPIPE_CACHE_HASH_INVALID, DT_PIXELPIPE_CACHE_HASH_INVALID,
+        DT_PIXELPIPE_CACHE_HASH_INVALID, NULL };
+
+static void _clear_pending_preview_histograms(void)
+{
+  g_list_free_full(_preview_refresh_state.module_histograms, g_free);
+  _preview_refresh_state.module_histograms = NULL;
+  _preview_refresh_state.initialscale_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+  _preview_refresh_state.colorout_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+  _preview_refresh_state.gamma_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+}
+
+static void _refresh_module_histogram(const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
+                                      const float *pixel, dt_iop_module_t *module)
+{
+  dt_dev_histogram_collection_params_t histogram_params = piece->histogram_params;
+  dt_histogram_roi_t histogram_roi;
+
+  if(histogram_params.roi == NULL)
+  {
+    histogram_roi = (dt_histogram_roi_t){
+      .width = piece->roi_in.width, .height = piece->roi_in.height,
+      .crop_x = 0, .crop_y = 0, .crop_width = 0, .crop_height = 0
+    };
+    histogram_params.roi = &histogram_roi;
+  }
+
+  dt_iop_gui_enter_critical_section(module);
+  dt_histogram_helper(&histogram_params, &module->histogram_stats, piece->dsc_in.cst, module->histogram_cst,
+                      pixel, &module->histogram, module->histogram_middle_grey,
+                      dt_ioppr_get_pipe_work_profile_info(pipe));
+  dt_histogram_max_helper(&module->histogram_stats, piece->dsc_in.cst, module->histogram_cst,
+                          &module->histogram, module->histogram_max);
+  dt_iop_gui_leave_critical_section(module);
+
+  if(module->widget) dt_control_queue_redraw_widget(module->widget);
+}
+
+static dt_backbuf_t *_get_histogram_backbuf(dt_develop_t *dev, const char *op)
+{
+  if(!dev || !op) return NULL;
+
+  if(!strcmp(op, "initialscale"))
+    return &dev->raw_histogram;
+  else if(!strcmp(op, "colorout"))
+    return &dev->output_histogram;
+  else if(!strcmp(op, "gamma"))
+    return &dev->display_histogram;
+  else
+    return NULL;
+}
+
+static void _clear_histogram_backbuf(dt_backbuf_t *backbuf)
+{
+  if(!backbuf) return;
+
+  /* Global histogram backbuffers keep one structural ref on top of the module-output lifetime.
+   * Clearing that published view therefore means releasing the extra GUI-side keepalive ref here. */
+  dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, dt_dev_backbuf_get_hash(backbuf));
+  dt_dev_set_backbuf(backbuf, 0, 0, 0, DT_PIXELPIPE_CACHE_HASH_INVALID, DT_PIXELPIPE_CACHE_HASH_INVALID);
+}
+
+static gboolean _refresh_global_histogram_backbuf_for_hash(dt_develop_t *dev, const char *op,
+                                                           const uint64_t expected_hash)
+{
+  dt_backbuf_t *const backbuf = _get_histogram_backbuf(dev, op);
+  if(!backbuf || !dev || !dev->preview_pipe) return FALSE;
+
+  const dt_dev_pixelpipe_iop_t *const piece = dt_dev_pixelpipe_get_module_piece(
+      dev->preview_pipe, dt_iop_get_module_by_op_priority(dev->iop, op, 0));
+  if(!piece)
+  {
+    _clear_histogram_backbuf(backbuf);
+    return FALSE;
+  }
+
+  const dt_dev_pixelpipe_iop_t *const previous_piece
+      = dt_dev_pixelpipe_get_prev_enabled_piece(dev->preview_pipe, piece);
+
+  const dt_iop_roi_t *roi = &piece->roi_out;
+  const dt_iop_buffer_dsc_t *dsc = &piece->dsc_out;
+  uint64_t hash = piece->global_hash;
+
+  if(!strcmp(op, "gamma"))
+  {
+    if(!previous_piece)
+    {
+      _clear_histogram_backbuf(backbuf);
+      return FALSE;
+    }
+
+    roi = &previous_piece->roi_out;
+    dsc = &previous_piece->dsc_out;
+    hash = previous_piece->global_hash;
+  }
+
+  if(expected_hash != DT_PIXELPIPE_CACHE_HASH_INVALID && hash != expected_hash) return FALSE;
+
+  dt_pixel_cache_entry_t *entry = NULL;
+  if(hash == DT_PIXELPIPE_CACHE_HASH_INVALID
+     || !dt_dev_pixelpipe_cache_peek_gui(dev->preview_pipe, !strcmp(op, "gamma") ? previous_piece : piece,
+                                         NULL, &entry, NULL, NULL, NULL))
+  {
+    _clear_histogram_backbuf(backbuf);
+    return FALSE;
+  }
+
+  const uint64_t previous_hash = dt_dev_backbuf_get_hash(backbuf);
+  if(previous_hash != hash)
+  {
+    /* The module output already owns its producer ref. Tagging it as a global histogram backbuffer
+     * reserves one additional consumer ref so GUI readers only need `peek()` and read locks later. */
+    dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, previous_hash);
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, entry);
+  }
+
+  dt_dev_set_backbuf(backbuf, roi->width, roi->height, dsc->bpp, hash, DT_PIXELPIPE_CACHE_HASH_INVALID);
+  return TRUE;
+}
+
+static gboolean _refresh_preview_module_histogram_for_hash(dt_develop_t *dev, dt_iop_module_t *module,
+                                                           const uint64_t expected_hash)
+{
+  if(!dev || !dev->preview_pipe || !module) return FALSE;
+
+  const dt_dev_pixelpipe_iop_t *const piece = dt_dev_pixelpipe_get_module_piece(dev->preview_pipe, module);
+  if(!piece || !(piece->request_histogram & DT_REQUEST_ON)) return FALSE;
+  if((piece->request_histogram & DT_REQUEST_ONLY_IN_GUI) && !dev->gui_attached) return FALSE;
+
+  const dt_dev_pixelpipe_iop_t *const previous_piece
+      = dt_dev_pixelpipe_get_prev_enabled_piece(dev->preview_pipe, piece);
+  if(!previous_piece || previous_piece->global_hash == DT_PIXELPIPE_CACHE_HASH_INVALID) return FALSE;
+  if(expected_hash != DT_PIXELPIPE_CACHE_HASH_INVALID && previous_piece->global_hash != expected_hash) return FALSE;
+  if(previous_piece->dsc_out.datatype != TYPE_FLOAT) return FALSE;
+
+  void *input = NULL;
+  dt_pixel_cache_entry_t *input_entry = NULL;
+  if(!dt_dev_pixelpipe_cache_peek_gui(dev->preview_pipe, previous_piece, &input, &input_entry, NULL, NULL, NULL))
+    return FALSE;
+
+  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, input_entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, input_entry);
+
+  const float *histogram_input = input;
+  float *transformed_input = NULL;
+  dt_iop_buffer_dsc_t input_dsc = previous_piece->dsc_out;
+
+  if(input_dsc.cst != piece->dsc_in.cst
+     && !(dt_iop_colorspace_is_rgb(input_dsc.cst) && dt_iop_colorspace_is_rgb(piece->dsc_in.cst)))
+  {
+    const size_t pixels = (size_t)piece->roi_in.width * (size_t)piece->roi_in.height;
+    const size_t bytes = pixels * (size_t)piece->dsc_in.channels * sizeof(float);
+    transformed_input = dt_alloc_align(bytes);
+
+    if(!transformed_input)
+    {
+      dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, input_entry);
+      dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, input_entry);
+      return FALSE;
+    }
+
+    memcpy(transformed_input, input, bytes);
+    dt_ioppr_transform_image_colorspace(module, transformed_input, transformed_input,
+                                        piece->roi_in.width, piece->roi_in.height,
+                                        input_dsc.cst, piece->dsc_in.cst, &input_dsc.cst,
+                                        dt_ioppr_get_pipe_work_profile_info(dev->preview_pipe));
+    histogram_input = transformed_input;
+  }
+  else if(input_dsc.cst != piece->dsc_in.cst)
+  {
+    input_dsc.cst = piece->dsc_in.cst;
+  }
+
+  _refresh_module_histogram(dev->preview_pipe, piece, histogram_input, module);
+
+  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, input_entry);
+  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, input_entry);
+  dt_free_align(transformed_input);
+
+  return TRUE;
+}
+
+static void _refresh_preview_histograms(dt_develop_t *dev)
+{
+  if(!dev || !dev->gui_attached || !dev->preview_pipe) return;
+  if(!dev->preview_pipe->gui_observable_source) return;
+
+  _clear_pending_preview_histograms();
+
+  const char *ops[] = { "initialscale", "colorout", "gamma" };
+  uint64_t *pending_hashes[] = {
+    &_preview_refresh_state.initialscale_hash,
+    &_preview_refresh_state.colorout_hash,
+    &_preview_refresh_state.gamma_hash
+  };
+
+  for(size_t i = 0; i < G_N_ELEMENTS(ops); i++)
+  {
+    const dt_dev_pixelpipe_iop_t *piece = dt_dev_pixelpipe_get_module_piece(
+        dev->preview_pipe, dt_iop_get_module_by_op_priority(dev->iop, ops[i], 0));
+    if(!piece)
+    {
+      _clear_histogram_backbuf(_get_histogram_backbuf(dev, ops[i]));
+      continue;
+    }
+
+    uint64_t hash = piece->global_hash;
+    if(!strcmp(ops[i], "gamma"))
+    {
+      const dt_dev_pixelpipe_iop_t *const previous_piece
+          = dt_dev_pixelpipe_get_prev_enabled_piece(dev->preview_pipe, piece);
+      hash = previous_piece ? previous_piece->global_hash : DT_PIXELPIPE_CACHE_HASH_INVALID;
+    }
+
+    if(hash == DT_PIXELPIPE_CACHE_HASH_INVALID
+       || !_refresh_global_histogram_backbuf_for_hash(dev, ops[i], hash))
+      *pending_hashes[i] = hash;
+  }
+
+  for(GList *node = g_list_first(dev->preview_pipe->nodes); node; node = g_list_next(node))
+  {
+    dt_dev_pixelpipe_iop_t *piece = node->data;
+    if(!piece || !piece->enabled) continue;
+    if(!(piece->request_histogram & DT_REQUEST_ON)) continue;
+    if((piece->request_histogram & DT_REQUEST_ONLY_IN_GUI) && !dev->gui_attached) continue;
+
+    const dt_dev_pixelpipe_iop_t *const previous_piece
+        = dt_dev_pixelpipe_get_prev_enabled_piece(dev->preview_pipe, piece);
+    if(previous_piece && !_refresh_preview_module_histogram_for_hash(dev, piece->module, previous_piece->global_hash))
+    {
+      dt_histogram_pending_module_refresh_t *pending = g_malloc0(sizeof(*pending));
+      pending->module = piece->module;
+      pending->hash = previous_piece->global_hash;
+      _preview_refresh_state.module_histograms
+          = g_list_prepend(_preview_refresh_state.module_histograms, pending);
+    }
+  }
+}
+
+static void _preview_history_resync_callback(gpointer instance, gpointer user_data)
+{
+  (void)instance;
+  (void)user_data;
+  _refresh_preview_histograms(darktable.develop);
+}
+
+static void _preview_cacheline_ready_callback(gpointer instance, const guint64 hash, gpointer user_data)
+{
+  (void)instance;
+  (void)user_data;
+
+  dt_develop_t *const dev = darktable.develop;
+  if(!dev || !dev->gui_attached || !dev->preview_pipe) return;
+
+  if(_preview_refresh_state.initialscale_hash == hash)
+  {
+    _refresh_global_histogram_backbuf_for_hash(dev, "initialscale", hash);
+    _preview_refresh_state.initialscale_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+  }
+
+  if(_preview_refresh_state.colorout_hash == hash)
+  {
+    _refresh_global_histogram_backbuf_for_hash(dev, "colorout", hash);
+    _preview_refresh_state.colorout_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+  }
+
+  if(_preview_refresh_state.gamma_hash == hash)
+  {
+    _refresh_global_histogram_backbuf_for_hash(dev, "gamma", hash);
+    _preview_refresh_state.gamma_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+  }
+
+  for(GList *l = _preview_refresh_state.module_histograms; l;)
+  {
+    GList *next = g_list_next(l);
+    dt_histogram_pending_module_refresh_t *pending = l->data;
+    if(pending->hash == hash)
+    {
+      _refresh_preview_module_histogram_for_hash(dev, pending->module, pending->hash);
+      _preview_refresh_state.module_histograms = g_list_delete_link(_preview_refresh_state.module_histograms, l);
+      g_free(pending);
+    }
+    l = next;
+  }
+}
 
 const char *name(struct dt_lib_module_t *self)
 {
@@ -178,6 +481,7 @@ int position()
 
 static void _update_picker_output(dt_lib_module_t *self);
 static void _update_sample_label(dt_lib_module_t *self, dt_colorpicker_sample_t *sample);
+static void _update_everything(dt_lib_module_t *self);
 
 
 void _backbuf_int_to_op(const int value, dt_lib_histogram_t *d)
@@ -267,6 +571,103 @@ void _reset_cache(dt_lib_histogram_t *d)
   d->cache.height = -1;
   d->cache.hash = (uint64_t)-1;
   d->cache.zoom = -1.;
+}
+
+static void _clear_pending_hashes(dt_lib_histogram_t *d)
+{
+  if(!d || !d->pending_hashes) return;
+  g_array_set_size(d->pending_hashes, 0);
+}
+
+static gboolean _has_pending_hash(const dt_lib_histogram_t *d, const uint64_t hash)
+{
+  if(!d || !d->pending_hashes || hash == DT_PIXELPIPE_CACHE_HASH_INVALID) return FALSE;
+
+  for(guint i = 0; i < d->pending_hashes->len; i++)
+    if(g_array_index(d->pending_hashes, uint64_t, i) == hash) return TRUE;
+
+  return FALSE;
+}
+
+static void _add_pending_hash(dt_lib_histogram_t *d, const uint64_t hash)
+{
+  if(!d || !d->pending_hashes || hash == DT_PIXELPIPE_CACHE_HASH_INVALID || _has_pending_hash(d, hash)) return;
+  g_array_append_val(d->pending_hashes, hash);
+}
+
+static gboolean _remove_pending_hash(dt_lib_histogram_t *d, const uint64_t hash)
+{
+  if(!d || !d->pending_hashes || hash == DT_PIXELPIPE_CACHE_HASH_INVALID) return FALSE;
+
+  for(guint i = 0; i < d->pending_hashes->len; i++)
+  {
+    if(g_array_index(d->pending_hashes, uint64_t, i) == hash)
+    {
+      g_array_remove_index(d->pending_hashes, i);
+      return TRUE;
+    }
+  }
+
+  return FALSE;
+}
+
+static uint64_t _get_live_histogram_hash(const char *op)
+{
+  dt_develop_t *const dev = darktable.develop;
+  dt_dev_pixelpipe_t *const pipe = dev ? dev->preview_pipe : NULL;
+  if(!dev || !pipe || !op) return DT_PIXELPIPE_CACHE_HASH_INVALID;
+
+  dt_iop_module_t *const module = dt_iop_get_module_by_op_priority(dev->iop, op, 0);
+  if(!module) return DT_PIXELPIPE_CACHE_HASH_INVALID;
+
+  const dt_dev_pixelpipe_iop_t *piece = dt_dev_pixelpipe_get_module_piece(pipe, module);
+  if(!piece) return DT_PIXELPIPE_CACHE_HASH_INVALID;
+
+  if(!strcmp(op, "gamma"))
+    piece = dt_dev_pixelpipe_get_prev_enabled_piece(pipe, piece);
+
+  return piece ? piece->global_hash : DT_PIXELPIPE_CACHE_HASH_INVALID;
+}
+
+static gboolean _histogram_refresh_idle(gpointer user_data)
+{
+  dt_lib_module_t *self = (dt_lib_module_t *)user_data;
+  dt_lib_histogram_t *d = self ? self->data : NULL;
+  if(!d) return G_SOURCE_REMOVE;
+
+  d->refresh_idle_source = 0;
+  d->backbuf = _get_histogram_backbuf(darktable.develop, d->op);
+  _update_everything(self);
+  return G_SOURCE_REMOVE;
+}
+
+static void _schedule_histogram_refresh(dt_lib_module_t *self)
+{
+  dt_lib_histogram_t *d = self ? self->data : NULL;
+  if(!d || d->refresh_idle_source != 0) return;
+  d->refresh_idle_source = g_idle_add(_histogram_refresh_idle, self);
+}
+
+static void _sync_pending_histogram_hashes(dt_lib_module_t *self)
+{
+  dt_lib_histogram_t *d = (dt_lib_histogram_t *)self->data;
+  if(!d) return;
+
+  _clear_pending_hashes(d);
+  _add_pending_hash(d, _get_live_histogram_hash(d->op));
+
+  for(GSList *samples = darktable.develop->color_picker.samples; samples; samples = g_slist_next(samples))
+  {
+    dt_colorpicker_sample_t *sample = samples->data;
+    if(sample->locked) continue;
+    _add_pending_hash(d, _get_live_histogram_hash(sample->backbuf_op[0] ? sample->backbuf_op : d->op));
+  }
+
+  if(darktable.develop->color_picker.picker)
+    _add_pending_hash(d, _get_live_histogram_hash(d->op));
+
+  d->backbuf = _get_histogram_backbuf(darktable.develop, d->op);
+  _update_everything(self);
 }
 
 
@@ -362,7 +763,7 @@ static void _process_histogram(dt_backbuf_t *backbuf, const char *op, cairo_t *c
   struct dt_pixel_cache_entry_t *entry = NULL;
   void *data = NULL;
   const dt_dev_pixelpipe_iop_t *const piece = _get_backbuf_source_piece(backbuf, op);
-  if(!piece || !dt_dev_pixelpipe_cache_peek_gui(darktable.develop->preview_pipe, piece, &data, &entry))
+  if(!piece || !dt_dev_pixelpipe_cache_peek_gui(darktable.develop->preview_pipe, piece, &data, &entry, NULL, NULL, NULL))
     return;
 
   dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, entry);
@@ -620,7 +1021,7 @@ static void _process_waveform(dt_backbuf_t *backbuf, const char *op, cairo_t *cr
   struct dt_pixel_cache_entry_t *entry = NULL;
   void *data = NULL;
   const dt_dev_pixelpipe_iop_t *const piece = _get_backbuf_source_piece(backbuf, op);
-  if(!piece || !dt_dev_pixelpipe_cache_peek_gui(darktable.develop->preview_pipe, piece, &data, &entry))
+  if(!piece || !dt_dev_pixelpipe_cache_peek_gui(darktable.develop->preview_pipe, piece, &data, &entry, NULL, NULL, NULL))
     return;
 
   dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, entry);
@@ -830,7 +1231,7 @@ static void _process_vectorscope(dt_backbuf_t *backbuf, const char *op, cairo_t 
   struct dt_pixel_cache_entry_t *entry = NULL;
   void *data = NULL;
   const dt_dev_pixelpipe_iop_t *const piece = _get_backbuf_source_piece(backbuf, op);
-  if(!piece || !dt_dev_pixelpipe_cache_peek_gui(darktable.develop->preview_pipe, piece, &data, &entry))
+  if(!piece || !dt_dev_pixelpipe_cache_peek_gui(darktable.develop->preview_pipe, piece, &data, &entry, NULL, NULL, NULL))
     return;
 
   dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, entry);
@@ -1203,7 +1604,7 @@ static void _pixelpipe_pick_from_image(const dt_backbuf_t *const backbuf,
   void *data = NULL;
   const dt_dev_pixelpipe_iop_t *const source_piece = _get_backbuf_source_piece(backbuf, op);
   if(!source_piece
-     || !dt_dev_pixelpipe_cache_peek_gui(darktable.develop->preview_pipe, source_piece, &data, &entry))
+     || !dt_dev_pixelpipe_cache_peek_gui(darktable.develop->preview_pipe, source_piece, &data, &entry, NULL, NULL, NULL))
     return;
 
   dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, entry);
@@ -1314,7 +1715,7 @@ static void _pixelpipe_pick_samples(dt_lib_histogram_t *d)
     if(!sample->locked)
     {
       const char *const op = sample->backbuf_op[0] ? sample->backbuf_op : d->op;
-      dt_backbuf_t *const backbuf = dt_dev_get_histogram_backbuf(darktable.develop, op);
+      dt_backbuf_t *const backbuf = _get_histogram_backbuf(darktable.develop, op);
       if(backbuf) _pixelpipe_pick_from_image(backbuf, sample, d, op);
     }
     samples = g_slist_next(samples);
@@ -1355,7 +1756,7 @@ static gboolean _refresh_global_picker(dt_lib_module_t *self)
   if(!self || !self->data) return FALSE;
 
   dt_lib_histogram_t *d = (dt_lib_histogram_t *)self->data;
-  d->backbuf = dt_dev_get_histogram_backbuf(darktable.develop, d->op);
+  d->backbuf = _get_histogram_backbuf(darktable.develop, d->op);
 
   if(!_is_backbuf_ready(d)) return FALSE;
 
@@ -1364,22 +1765,35 @@ static gboolean _refresh_global_picker(dt_lib_module_t *self)
 }
 
 
-// this is only called in darkroom view when preview pipe finishes
-static void _lib_histogram_preview_updated_callback(gpointer instance, dt_lib_module_t *self)
+static void _lib_histogram_history_resync_callback(gpointer instance, dt_lib_module_t *self)
 {
-  dt_lib_histogram_t *d = (dt_lib_histogram_t *)self->data;
-  d->backbuf = dt_dev_get_histogram_backbuf(darktable.develop, d->op);
-  _update_everything(self);
+  (void)instance;
+  _sync_pending_histogram_hashes(self);
 }
 
+static void _lib_histogram_cacheline_ready_callback(gpointer instance, const guint64 hash, dt_lib_module_t *self)
+{
+  (void)instance;
+  dt_lib_histogram_t *d = (dt_lib_histogram_t *)self->data;
+  if(!d || !_remove_pending_hash(d, hash)) return;
 
+  _schedule_histogram_refresh(self);
+}
+
+// this is only called in darkroom view when history was resynchronized
 void view_enter(struct dt_lib_module_t *self, struct dt_view_t *old_view, struct dt_view_t *new_view)
 {
   dt_lib_histogram_t *d = self->data;
   _reset_cache(d);
 
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED,
-                                  G_CALLBACK(_lib_histogram_preview_updated_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_HISTORY_RESYNC,
+                                  G_CALLBACK(_preview_history_resync_callback), NULL);
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_CACHELINE_READY,
+                                  G_CALLBACK(_preview_cacheline_ready_callback), NULL);
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_HISTORY_RESYNC,
+                                  G_CALLBACK(_lib_histogram_history_resync_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_CACHELINE_READY,
+                                  G_CALLBACK(_lib_histogram_cacheline_ready_callback), self);
 }
 
 void view_leave(struct dt_lib_module_t *self, struct dt_view_t *old_view, struct dt_view_t *new_view)
@@ -1387,7 +1801,18 @@ void view_leave(struct dt_lib_module_t *self, struct dt_view_t *old_view, struct
   dt_lib_histogram_t *d = self->data;
   _reset_cache(d);
 
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_lib_histogram_preview_updated_callback), self);
+  _clear_pending_preview_histograms();
+  _clear_pending_hashes(d);
+  if(d->refresh_idle_source != 0)
+  {
+    g_source_remove(d->refresh_idle_source);
+    d->refresh_idle_source = 0;
+  }
+
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_preview_history_resync_callback), NULL);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_preview_cacheline_ready_callback), NULL);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_lib_histogram_history_resync_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_lib_histogram_cacheline_ready_callback), self);
 }
 
 
@@ -1402,9 +1827,8 @@ void _stage_callback(GtkWidget *widget, dt_lib_module_t *self)
   dt_bauhaus_combobox_entry_set_sensitive(d->display, DT_LIB_HISTOGRAM_SCOPE_VECTORSCOPE,
                                           strcmp(d->op, "initialscale"));
 
-  dt_dev_refresh_preview_histograms(darktable.develop);
-  d->backbuf = dt_dev_get_histogram_backbuf(darktable.develop, d->op);
-  _update_everything(self);
+  _refresh_preview_histograms(darktable.develop);
+  _sync_pending_histogram_hashes(self);
 }
 
 
@@ -1453,7 +1877,7 @@ void _set_params(dt_lib_histogram_t *d)
     d->op = "initialscale";
     dt_conf_set_string("plugin/darkroom/histogram/op", d->op);
   }
-  d->backbuf = dt_dev_get_histogram_backbuf(darktable.develop, d->op);
+  d->backbuf = _get_histogram_backbuf(darktable.develop, d->op);
   d->zoom = fminf(fmaxf(dt_conf_get_float("plugin/darkroom/histogram/zoom"), 32.f), 252.f);
 
   // Disable RAW stage for non-RAW images
@@ -1876,6 +2300,8 @@ void gui_init(dt_lib_module_t *self)
   if(d) memset(d, 0, sizeof(dt_lib_histogram_t));
   self->data = (void *)d;
   d->cst = NULL;
+  d->pending_hashes = g_array_new(FALSE, FALSE, sizeof(uint64_t));
+  d->refresh_idle_source = 0;
 
   self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
   d->scope_draw = dtgtk_drawing_area_new_with_aspect_ratio(1.);
@@ -2028,6 +2454,14 @@ void gui_init(dt_lib_module_t *self)
 void gui_cleanup(dt_lib_module_t *self)
 {
   dt_lib_histogram_t *d = self->data;
+  _clear_pending_preview_histograms();
+  _clear_pending_hashes(d);
+  if(d->refresh_idle_source != 0)
+  {
+    g_source_remove(d->refresh_idle_source);
+    d->refresh_idle_source = 0;
+  }
+  if(d->pending_hashes) g_array_free(d->pending_hashes, TRUE);
   _destroy_surface(d);
   dt_iop_color_picker_reset(NULL, FALSE);
 

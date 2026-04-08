@@ -23,10 +23,10 @@
 #include "develop/imageop.h"
 #include "develop/pixelpipe.h"
 #include "develop/pixelpipe_cache.h"
-#include "develop/pixelpipe_gui.h"
 #include "develop/blend.h"
 #include "gui/color_picker_proxy.h"
 #include "control/control.h"
+#include "control/signal.h"
 #include <stdint.h>
 
 // Keep a preview-like virtual pipe in sync with history without running pixels.
@@ -34,6 +34,30 @@ static void _sync_virtual_pipe(dt_develop_t *dev, dt_dev_pixelpipe_change_t flag
 static void _sync_pipe_nodes_from_history_from_node(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
                                                     const uint32_t history_end, GList *start_node,
                                                     const char *debug_label);
+static void _dt_dev_pixelpipe_cache_wait_ready_callback(gpointer instance, const guint64 hash,
+                                                        dt_dev_pixelpipe_cache_wait_t *wait);
+
+static gboolean _module_requires_global_histogram_output_cache(const dt_dev_pixelpipe_t *pipe,
+                                                               const dt_iop_module_t *module)
+{
+  if(!pipe || !module) return FALSE;
+  if(pipe->type != DT_DEV_PIXELPIPE_PREVIEW) return FALSE;
+  if(dt_dev_pixelpipe_get_realtime(pipe)) return FALSE;
+  if(!pipe->gui_observable_source) return FALSE;
+
+  return !strcmp(module->op, "initialscale") || !strcmp(module->op, "colorout");
+}
+
+static gboolean _module_requires_global_histogram_input_cache(const dt_dev_pixelpipe_t *pipe,
+                                                              const dt_iop_module_t *module)
+{
+  if(!pipe || !module) return FALSE;
+  if(pipe->type != DT_DEV_PIXELPIPE_PREVIEW) return FALSE;
+  if(dt_dev_pixelpipe_get_realtime(pipe)) return FALSE;
+  if(!pipe->gui_observable_source) return FALSE;
+
+  return !strcmp(module->op, "gamma");
+}
 
 static gchar *_get_debug_pipe_name(const dt_dev_pixelpipe_t *pipe, const dt_develop_t *dev)
 {
@@ -150,6 +174,10 @@ static gboolean _sync_realtime_top_history_in_place(dt_dev_pixelpipe_t *pipe, dt
  * "the previous enabled module must keep its output on host because the current
  * enabled module will read from RAM instead of OpenCL".
  *
+ * Keep that carry explicit: we only cache module outputs, so any consumer that
+ * needs the current module input must author a requirement on the previous
+ * enabled module, not on the current one.
+ *
  * We add to that:
  * - the module's own authored `force_opencl_cache`,
  * - user cache preferences,
@@ -167,7 +195,7 @@ static void _seal_opencl_cache_policy(dt_dev_pixelpipe_t *pipe, dt_develop_t *de
 {
   if(!pipe || !pipe->nodes) return;
 
-  gboolean upstream_must_cache_host = TRUE;
+  gboolean current_output_must_cache_host = TRUE;
 
   for(GList *pieces = g_list_last(pipe->nodes); pieces; pieces = g_list_previous(pieces))
   {
@@ -189,8 +217,8 @@ static void _seal_opencl_cache_policy(dt_dev_pixelpipe_t *pipe, dt_develop_t *de
     dt_free(string);
 
     const gboolean color_picker_on = dt_iop_color_picker_force_cache(dev, pipe, module);
-    const gboolean global_hist_output_on = dt_dev_module_requires_global_histogram_output_cache(pipe, module);
-    const gboolean global_hist_input_on = dt_dev_module_requires_global_histogram_input_cache(pipe, module);
+    const gboolean global_hist_output_on = _module_requires_global_histogram_output_cache(pipe, module);
+    const gboolean global_hist_input_on = _module_requires_global_histogram_input_cache(pipe, module);
     const gboolean module_hist_on
         = (pipe->type == DT_DEV_PIXELPIPE_PREVIEW
            && pipe->gui_observable_source
@@ -199,13 +227,15 @@ static void _seal_opencl_cache_policy(dt_dev_pixelpipe_t *pipe, dt_develop_t *de
     const gboolean active_in_gui
         = (pipe->type == DT_DEV_PIXELPIPE_FULL || pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
            && dev->gui_module == module;
+    const gboolean previous_output_must_cache_host
+        = !supports_opencl || active_in_gui || module_hist_on || global_hist_input_on;
 
     piece->force_opencl_cache
         = authored_cache || user_requested_cache || color_picker_on
           || global_hist_output_on
-          || upstream_must_cache_host;
+          || current_output_must_cache_host;
 
-    upstream_must_cache_host = !supports_opencl || active_in_gui || module_hist_on || global_hist_input_on;
+    current_output_must_cache_host = previous_output_must_cache_host;
   }
 }
 
@@ -506,19 +536,23 @@ const dt_dev_pixelpipe_iop_t *dt_dev_pixelpipe_get_prev_enabled_piece(const dt_d
 }
 
 gboolean dt_dev_pixelpipe_cache_peek_gui(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
-                                         void **data, dt_pixel_cache_entry_t **cache_entry)
+                                         void **data, dt_pixel_cache_entry_t **cache_entry,
+                                         dt_dev_pixelpipe_cache_wait_t *wait,
+                                         dt_dev_pixelpipe_cache_ready_callback_t restart,
+                                         gpointer restart_data)
 {
   if(data) *data = NULL;
   if(cache_entry) *cache_entry = NULL;
   if(!pipe) return FALSE;
 
-  const uint64_t hash = piece ? piece->global_hash : dt_dev_backbuf_get_hash(&pipe->backbuf);
+  const uint64_t hash = piece ? piece->global_hash : dt_dev_pixelpipe_get_hash(pipe);
   void *buffer = NULL;
   dt_pixel_cache_entry_t *entry = NULL;
   if(hash != DT_PIXELPIPE_CACHE_HASH_INVALID
      && dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, hash, &buffer, &entry, pipe->devid, NULL)
      && buffer && entry)
   {
+    dt_dev_pixelpipe_cache_wait_cleanup(wait);
     if(data) *data = buffer;
     if(cache_entry) *cache_entry = entry;
     return TRUE;
@@ -532,6 +566,27 @@ gboolean dt_dev_pixelpipe_cache_peek_gui(dt_dev_pixelpipe_t *pipe, const dt_dev_
          || piece->bypass_cache))
     return FALSE;
 
+  if(wait && restart && hash != DT_PIXELPIPE_CACHE_HASH_INVALID)
+  {
+    const gboolean changed_target = !wait->connected
+                                    || wait->pipe != pipe
+                                    || wait->module != (piece ? piece->module : NULL)
+                                    || wait->hash != hash
+                                    || wait->restart != restart;
+    if(changed_target)
+    {
+      dt_dev_pixelpipe_cache_wait_cleanup(wait);
+      wait->pipe = pipe;
+      wait->module = piece ? piece->module : NULL;
+      wait->hash = hash;
+      wait->restart = restart;
+      wait->user_data = restart_data;
+      wait->connected = TRUE;
+      DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_CACHELINE_READY,
+                                      G_CALLBACK(_dt_dev_pixelpipe_cache_wait_ready_callback), wait);
+    }
+  }
+
   dt_dev_pixelpipe_set_cache_request(pipe,
                                      piece ? DT_DEV_PIXELPIPE_CACHE_REQUEST_MODULE
                                            : DT_DEV_PIXELPIPE_CACHE_REQUEST_BACKBUF,
@@ -543,6 +598,32 @@ gboolean dt_dev_pixelpipe_cache_peek_gui(dt_dev_pixelpipe_t *pipe, const dt_dev_
            piece && piece->module ? piece->module->op : "backbuf", hash);
 
   return FALSE;
+}
+
+static void _dt_dev_pixelpipe_cache_wait_ready_callback(gpointer instance, const guint64 hash,
+                                                        dt_dev_pixelpipe_cache_wait_t *wait)
+{
+  (void)instance;
+  if(!wait || !wait->connected || wait->hash != hash) return;
+
+  dt_dev_pixelpipe_cache_ready_callback_t restart = wait->restart;
+  gpointer user_data = wait->user_data;
+  dt_dev_pixelpipe_cache_wait_cleanup(wait);
+  if(restart) restart(user_data);
+}
+
+void dt_dev_pixelpipe_cache_wait_cleanup(dt_dev_pixelpipe_cache_wait_t *wait)
+{
+  if(!wait || !wait->connected) return;
+
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals,
+                                     G_CALLBACK(_dt_dev_pixelpipe_cache_wait_ready_callback), wait);
+  wait->pipe = NULL;
+  wait->module = NULL;
+  wait->hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+  wait->restart = NULL;
+  wait->user_data = NULL;
+  wait->connected = FALSE;
 }
 
 static gboolean _prepare_piece_input_contract(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,

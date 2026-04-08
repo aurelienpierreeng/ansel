@@ -69,7 +69,6 @@
 #include "develop/pixelpipe_cache.h"
 #include "develop/pixelpipe_cpu.h"
 #include "develop/pixelpipe_gpu.h"
-#include "develop/pixelpipe_gui.h"
 #include "develop/pixelpipe_process.h"
 #include "develop/tiling.h"
 #include "develop/masks.h"
@@ -87,7 +86,6 @@
 #include <strings.h>
 #include <unistd.h>
 
-#include "develop/pixelpipe_gui.c"
 #include "develop/pixelpipe_raster_masks.c"
 #include "develop/pixelpipe_rawdetail.c"
 

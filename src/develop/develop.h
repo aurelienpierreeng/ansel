@@ -370,6 +370,8 @@ typedef struct dt_develop_t
     gboolean (*refresh_global_picker)(struct dt_lib_module_t *self);
 
     uint64_t piece_hash;
+    uint64_t wait_input_hash;
+    uint64_t wait_output_hash;
 
     struct dt_iop_module_t *pending_module;
     struct dt_dev_pixelpipe_t *pending_pipe;

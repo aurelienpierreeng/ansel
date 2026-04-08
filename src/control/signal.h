@@ -162,6 +162,12 @@ typedef enum dt_signal_t
     */
   DT_SIGNAL_DEVELOP_UI_PIPE_FINISHED,
 
+  /** \brief This signal is raised when one cacheline write lock is released.
+    1 : uint64_t cacheline hash
+    no returned value
+    */
+  DT_SIGNAL_CACHELINE_READY,
+
   /** \brief This signal is raised to request a modulegroups update.
     1 : dt_iop_module_t *module, or NULL to only refresh visibility
     no returned value
@@ -180,6 +186,11 @@ typedef enum dt_signal_t
   no param, no returned value
     */
   DT_SIGNAL_DEVELOP_HISTORY_CHANGE,
+
+  /** \brief This signal is raised once darkroom history has been resynchronized into all live pipelines.
+  no param, no returned value
+    */
+  DT_SIGNAL_HISTORY_RESYNC,
 
   /** \brief This signal is raised when a module is removed from the history stack
     1 module

@@ -147,6 +147,20 @@ const struct dt_dev_pixelpipe_iop_t *dt_dev_pixelpipe_get_module_piece(const str
 const struct dt_dev_pixelpipe_iop_t *dt_dev_pixelpipe_get_prev_enabled_piece(const struct dt_dev_pixelpipe_t *pipe,
                                                                              const struct dt_dev_pixelpipe_iop_t *piece);
 
+typedef void (*dt_dev_pixelpipe_cache_ready_callback_t)(gpointer user_data);
+
+typedef struct dt_dev_pixelpipe_cache_wait_t
+{
+  struct dt_dev_pixelpipe_t *pipe;
+  const struct dt_iop_module_t *module;
+  uint64_t hash;
+  dt_dev_pixelpipe_cache_ready_callback_t restart;
+  gpointer user_data;
+  gboolean connected;
+} dt_dev_pixelpipe_cache_wait_t;
+
+void dt_dev_pixelpipe_cache_wait_cleanup(dt_dev_pixelpipe_cache_wait_t *wait);
+
 /**
  * @brief Reopen one GUI-visible host cacheline, or queue the minimal pipe recompute needed to publish it.
  *
@@ -167,6 +181,9 @@ const struct dt_dev_pixelpipe_iop_t *dt_dev_pixelpipe_get_prev_enabled_piece(con
  * @param piece Target module piece, or NULL for the final backbuffer.
  * @param data Returned host-visible pixel buffer on success.
  * @param cache_entry Returned cache entry owning @p data on success.
+ * @param wait Optional one-shot cacheline-ready watcher owned by the caller.
+ * @param restart Optional restart callback used with @p wait when the cacheline must be published asynchronously.
+ * @param restart_data Opaque pointer forwarded to @p restart.
  *
  * @return TRUE when a host buffer is immediately available, FALSE when the caller must retry after the queued pipe
  * update completed.
@@ -174,7 +191,10 @@ const struct dt_dev_pixelpipe_iop_t *dt_dev_pixelpipe_get_prev_enabled_piece(con
 gboolean dt_dev_pixelpipe_cache_peek_gui(dt_dev_pixelpipe_t *pipe,
                                          const struct dt_dev_pixelpipe_iop_t *piece,
                                          void **data,
-                                         struct dt_pixel_cache_entry_t **cache_entry);
+                                         struct dt_pixel_cache_entry_t **cache_entry,
+                                         dt_dev_pixelpipe_cache_wait_t *wait,
+                                         dt_dev_pixelpipe_cache_ready_callback_t restart,
+                                         gpointer restart_data);
 
 // Compute the sequential hash over the pipeline for each module.
 // Need to run after dt_dev_pixelpipe_get_roi_in() has updated processed ROI in/out

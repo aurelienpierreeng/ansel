@@ -516,6 +516,7 @@ typedef struct dt_iop_ashift_gui_data_t
   float crop_cy;
   dt_iop_ashift_jobcode_t jobcode;
   int jobparams;
+  uint64_t pending_preview_input_hash;
 
   dt_iop_ashift_method_t current_structure_method;
   int draw_near_point;
@@ -3052,6 +3053,25 @@ static gboolean _sync_private_buffer_from_preview_cache(dt_iop_module_t *self,
   return g->buf != NULL;
 }
 
+static uint64_t _current_preview_input_hash(dt_iop_module_t *self)
+{
+  if(!self || !self->dev || !self->dev->preview_pipe) return DT_PIXELPIPE_CACHE_HASH_INVALID;
+
+  dt_dev_pixelpipe_iop_t *preview_piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->preview_pipe, self);
+  if(!preview_piece || !preview_piece->enabled || preview_piece->roi_in.width <= 0 || preview_piece->roi_in.height <= 0)
+    return DT_PIXELPIPE_CACHE_HASH_INVALID;
+
+  const dt_dev_pixelpipe_iop_t *previous_piece = NULL;
+  for(GList *node = g_list_first(self->dev->preview_pipe->nodes); node; node = g_list_next(node))
+  {
+    const dt_dev_pixelpipe_iop_t *current = (dt_dev_pixelpipe_iop_t *)node->data;
+    if(current == preview_piece) break;
+    if(current->enabled) previous_piece = current;
+  }
+
+  return dt_dev_pixelpipe_node_hash(self->dev->preview_pipe, previous_piece, preview_piece->roi_in, 0);
+}
+
 // helper function to start analysis for structural data and report about errors
 static int _do_get_structure_auto(dt_iop_module_t *self, dt_iop_ashift_params_t *p,
                                   dt_iop_ashift_enhance_t enhance)
@@ -5164,6 +5184,7 @@ void gui_reset(struct dt_iop_module_t *self)
   g->editing = FALSE;
   g->jobcode = ASHIFT_JOBCODE_NONE;
   g->jobparams = 0;
+  g->pending_preview_input_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
   dt_iop_set_cache_bypass(self, FALSE);
 
   dt_iop_ashift_params_t *p = (dt_iop_ashift_params_t *)self->params;
@@ -5536,12 +5557,8 @@ static void _event_commit_clicked(GtkButton *button, dt_iop_module_t *self)
   g_signal_handlers_unblock_by_func(g->edit_button, _enter_edit_mode, self);
 }
 
-// routine that is called after preview image has been processed. we use it
-// to perform structure collection or fitting in case those have been triggered while
-// the module had not yet been enabled
-static void _event_process_after_preview_callback(gpointer instance, gpointer user_data)
+static void _run_pending_preview_job(dt_iop_module_t *self)
 {
-  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
   dt_iop_ashift_params_t *p = _get_ashift_params(self);
 
@@ -5553,9 +5570,6 @@ static void _event_process_after_preview_callback(gpointer instance, gpointer us
   g->jobparams = 0;
 
   if(darktable.gui->reset) return;
-
-  if(g->buf == NULL)
-    (void)_sync_private_buffer_from_preview_cache(self, NULL);
 
   switch(jobcode)
   {
@@ -5583,7 +5597,41 @@ static void _event_process_after_preview_callback(gpointer instance, gpointer us
     default:
       break;
   }
+}
 
+static void _event_history_resync_callback(gpointer instance, gpointer user_data)
+{
+  (void)instance;
+  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
+  dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
+  if(!g || g->jobcode == ASHIFT_JOBCODE_NONE || darktable.gui->reset) return;
+
+  const uint64_t preview_input_hash = _current_preview_input_hash(self);
+  if(preview_input_hash == DT_PIXELPIPE_CACHE_HASH_INVALID) return;
+
+  if((g->buf == NULL || g->buf_hash != preview_input_hash)
+     && !_sync_private_buffer_from_preview_cache(self, NULL))
+  {
+    g->pending_preview_input_hash = preview_input_hash;
+    return;
+  }
+
+  g->pending_preview_input_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+  _run_pending_preview_job(self);
+  dt_control_queue_redraw_center();
+}
+
+static void _event_cacheline_ready_callback(gpointer instance, const guint64 hash, gpointer user_data)
+{
+  (void)instance;
+  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
+  dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
+  if(!g || g->pending_preview_input_hash != hash || darktable.gui->reset) return;
+
+  if(!_sync_private_buffer_from_preview_cache(self, NULL)) return;
+
+  g->pending_preview_input_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+  _run_pending_preview_job(self);
   dt_control_queue_redraw_center();
 }
 
@@ -5758,6 +5806,7 @@ void reload_defaults(dt_iop_module_t *module)
 
     g->jobcode = ASHIFT_JOBCODE_NONE;
     g->jobparams = 0;
+    g->pending_preview_input_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
     g->lastx = g->lasty = -1.0f;
     g->crop_cx = g->crop_cy = 1.0f;
 
@@ -5864,6 +5913,7 @@ void gui_init(struct dt_iop_module_t *self)
 
   g->jobcode = ASHIFT_JOBCODE_NONE;
   g->jobparams = 0;
+  g->pending_preview_input_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
   g->lastx = g->lasty = -1.0f;
   g->crop_cx = g->crop_cy = 1.0f;
   memcpy(&g->previous_params, self->params, sizeof(dt_iop_ashift_params_t));
@@ -6036,16 +6086,19 @@ void gui_init(struct dt_iop_module_t *self)
                    (gpointer)self);
   g_signal_connect(G_OBJECT(self->widget), "draw", G_CALLBACK(_event_draw), self);
 
-  /* add signal handler for preview pipe finish to redraw the overlay */
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED,
-                                  G_CALLBACK(_event_process_after_preview_callback), self);
+  /* pending structure jobs now wake up from targeted preview-cache publication */
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_HISTORY_RESYNC,
+                                  G_CALLBACK(_event_history_resync_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_CACHELINE_READY,
+                                  G_CALLBACK(_event_cacheline_ready_callback), self);
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_UI_PIPE_FINISHED,
                                   G_CALLBACK(_event_process_after_ui_callback), self);
 }
 
 void gui_cleanup(struct dt_iop_module_t *self)
 {
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_event_process_after_preview_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_event_history_resync_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_event_cacheline_ready_callback), self);
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_event_process_after_ui_callback), self);
   dt_iop_set_cache_bypass(self, FALSE);
 

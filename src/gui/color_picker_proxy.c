@@ -307,8 +307,9 @@ static dt_color_picker_resample_status_t _sample_picker_from_cache(dt_develop_t 
 
   void *input = NULL;
   dt_pixel_cache_entry_t *input_entry = NULL;
-  if(!dt_dev_pixelpipe_cache_peek_gui(pipe, previous_piece, &input, &input_entry))
+  if(!dt_dev_pixelpipe_cache_peek_gui(pipe, previous_piece, &input, &input_entry, NULL, NULL, NULL))
   {
+    dev->color_picker.wait_input_hash = previous_piece->global_hash;
     dt_print(DT_DEBUG_DEV, "[picker] input cache miss module=%s prev_hash=%" PRIu64 "\n",
              piece->module->op, previous_piece->global_hash);
     return DT_COLOR_PICKER_RESAMPLE_RETRY;
@@ -316,7 +317,7 @@ static dt_color_picker_resample_status_t _sample_picker_from_cache(dt_develop_t 
 
   void *output = NULL;
   dt_pixel_cache_entry_t *output_entry = NULL;
-  const gboolean have_output = dt_dev_pixelpipe_cache_peek_gui(pipe, piece, &output, &output_entry);
+  const gboolean have_output = dt_dev_pixelpipe_cache_peek_gui(pipe, piece, &output, &output_entry, NULL, NULL, NULL);
   if(!have_output)
   {
     /* Module GUIs such as color equalizer only consume the module-input sample. A missing output
@@ -326,6 +327,7 @@ static dt_color_picker_resample_status_t _sample_picker_from_cache(dt_develop_t 
        input sample. */
     dt_print(DT_DEBUG_DEV, "[picker] output cache miss module=%s hash=%" PRIu64 "\n",
              piece->module->op, piece->global_hash);
+    dev->color_picker.wait_output_hash = piece->global_hash;
 
     for(int k = 0; k < 4; k++)
     {
@@ -393,6 +395,8 @@ static dt_color_picker_resample_status_t _sample_picker_from_cache(dt_develop_t 
   dev->color_picker.piece_hash = piece->global_hash;
   dev->color_picker.pending_module = piece->module;
   dev->color_picker.pending_pipe = pipe;
+  dev->color_picker.wait_input_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+  dev->color_picker.wait_output_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
   dev->color_picker.picker->update_pending = FALSE;
   dev->color_picker.update_pending = FALSE;
 
@@ -673,22 +677,73 @@ gboolean dt_iop_color_picker_force_cache(const dt_develop_t *dev, const dt_dev_p
   return module == dev->color_picker.module || (previous_piece && previous_piece->module == module);
 }
 
-static void _iop_color_picker_preview_pipe_finished_callback(gpointer instance, gpointer user_data)
+static void _track_active_picker_hashes(dt_develop_t *dev)
 {
+  if(!dev)
+    return;
+
+  dev->color_picker.wait_input_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+  dev->color_picker.wait_output_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+
+  if(!dev->preview_pipe || !dev->color_picker.picker || !dev->color_picker.enabled
+     || !dev->color_picker.module || !dev->gui_module || dev->color_picker.module != dev->gui_module
+     || !dev->gui_module->enabled)
+    return;
+
+  const dt_dev_pixelpipe_iop_t *const piece = dt_dev_pixelpipe_get_module_piece(dev->preview_pipe,
+                                                                                 dev->color_picker.module);
+  const dt_dev_pixelpipe_iop_t *const previous_piece
+      = dt_dev_pixelpipe_get_prev_enabled_piece(dev->preview_pipe, piece);
+  if(piece) dev->color_picker.wait_output_hash = piece->global_hash;
+  if(previous_piece) dev->color_picker.wait_input_hash = previous_piece->global_hash;
+}
+
+static void _iop_color_picker_history_resync_callback(gpointer instance, gpointer user_data)
+{
+  (void)instance;
+  (void)user_data;
   dt_develop_t *const dev = darktable.develop;
+  _track_active_picker_hashes(dev);
   _queue_refresh_active_picker(dev);
+}
+
+static void _iop_color_picker_cacheline_ready_callback(gpointer instance, const guint64 hash, gpointer user_data)
+{
+  (void)instance;
+  (void)user_data;
+
+  dt_develop_t *const dev = darktable.develop;
+  if(!dev) return;
+
+  gboolean matched = FALSE;
+  if(dev->color_picker.wait_input_hash == hash)
+  {
+    dev->color_picker.wait_input_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+    matched = TRUE;
+  }
+  if(dev->color_picker.wait_output_hash == hash)
+  {
+    dev->color_picker.wait_output_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+    matched = TRUE;
+  }
+
+  if(matched) _queue_refresh_active_picker(dev);
 }
 
 void dt_iop_color_picker_init(void)
 {
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED,
-                                  G_CALLBACK(_iop_color_picker_preview_pipe_finished_callback), NULL);
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_HISTORY_RESYNC,
+                                  G_CALLBACK(_iop_color_picker_history_resync_callback), NULL);
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_CACHELINE_READY,
+                                  G_CALLBACK(_iop_color_picker_cacheline_ready_callback), NULL);
 }
 
 void dt_iop_color_picker_cleanup(void)
 {
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals,
-                                     G_CALLBACK(_iop_color_picker_preview_pipe_finished_callback), NULL);
+                                     G_CALLBACK(_iop_color_picker_history_resync_callback), NULL);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals,
+                                     G_CALLBACK(_iop_color_picker_cacheline_ready_callback), NULL);
 }
 
 static GtkWidget *_color_picker_new(dt_iop_module_t *module, dt_iop_color_picker_kind_t kind, GtkWidget *w,

@@ -71,6 +71,7 @@ typedef struct dt_signal_description
 
 
 static GType uint_arg[] = { G_TYPE_UINT };
+static GType uint64_arg[] = { G_TYPE_UINT64 };
 static GType int_arg[] = { G_TYPE_INT };
 static GType uint_2arg[] = { G_TYPE_UINT, G_TYPE_UINT };
 static GType pointer_arg[] = { G_TYPE_POINTER };
@@ -170,12 +171,16 @@ static dt_signal_description _signal_description[DT_SIGNAL_COUNT] = {
     FALSE }, // DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED
   { "dt-develop-ui-pipe-finished", NULL, NULL, G_TYPE_NONE, g_cclosure_marshal_VOID__VOID, 0, NULL, NULL,
     FALSE }, // DT_SIGNAL_DEVELOP_UI_PIPE_FINISHED
+  { "dt-cacheline-ready", NULL, NULL, G_TYPE_NONE, g_cclosure_marshal_generic, 1, uint64_arg, NULL,
+    FALSE }, // DT_SIGNAL_CACHELINE_READY
   { "dt-develop-modulegroups-set", NULL, NULL, G_TYPE_NONE, g_cclosure_marshal_VOID__POINTER, 1, pointer_arg, NULL,
     FALSE }, // DT_SIGNAL_DEVELOP_MODULEGROUPS_SET
   { "dt-develop-history-will-change", NULL, NULL, G_TYPE_NONE, g_cclosure_marshal_generic, 3,
     history_will_change_arg, NULL, FALSE }, // DT_SIGNAL_HISTORY_WILL_CHANGE
   { "dt-develop-history-change", NULL, NULL, G_TYPE_NONE, g_cclosure_marshal_VOID__VOID, 0, NULL, NULL,
     FALSE }, // DT_SIGNAL_HISTORY_CHANGE
+  { "dt-history-resync", NULL, NULL, G_TYPE_NONE, g_cclosure_marshal_VOID__VOID, 0, NULL, NULL,
+    FALSE }, // DT_SIGNAL_HISTORY_RESYNC
   { "dt-develop-module-remove", NULL, NULL, G_TYPE_NONE, g_cclosure_marshal_generic, 1, pointer_arg, NULL,
     TRUE }, // DT_SIGNAL_MODULE_REMOVE
   { "dt-develop-module-moved", NULL, NULL, G_TYPE_NONE, g_cclosure_marshal_VOID__VOID, 0, NULL, NULL,
@@ -359,6 +364,9 @@ void dt_control_signal_raise(const dt_control_signal_t *ctlsig, dt_signal_t sign
     {
       case G_TYPE_UINT:
         g_value_set_uint(&instance_and_params[i], va_arg(extra_args, guint));
+        break;
+      case G_TYPE_UINT64:
+        g_value_set_uint64(&instance_and_params[i], va_arg(extra_args, guint64));
         break;
       case G_TYPE_STRING:
         g_value_set_string(&instance_and_params[i], va_arg(extra_args, const char *));

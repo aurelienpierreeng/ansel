@@ -88,7 +88,6 @@
 #include "develop/lightroom.h"
 #include "develop/masks.h"
 #include "develop/pixelpipe_cache.h"
-#include "develop/pixelpipe_gui.h"
 #include "gui/gtk.h"
 #include "gui/gui_throttle.h"
 #include "gui/presets.h"
@@ -178,7 +177,6 @@ void dt_dev_init(dt_develop_t *dev, int32_t gui_attached)
     dev->color_picker.display_samples = dt_conf_get_bool("ui_last/colorpicker_display_samples");
     dev->color_picker.live_samples_enabled = TRUE;
     dev->color_picker.restrict_histogram = dt_conf_get_bool("ui_last/colorpicker_restrict_histogram");
-    dt_dev_pixelpipe_gui_init();
   }
 
   dt_dev_reset_roi(dev);
@@ -211,9 +209,6 @@ void dt_dev_cleanup(dt_develop_t *dev)
     dt_dev_pixelpipe_cleanup(dev->virtual_pipe);
     dt_free(dev->virtual_pipe);
   }
-
-  if(dev->gui_attached)
-    dt_dev_pixelpipe_gui_cleanup();
 
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
   while(dev->history)
@@ -472,8 +467,11 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
     dt_dev_pixelpipe_set_input(dev->preview_pipe, dev, dev->image_storage.id, dev->roi.raw_width, dev->roi.raw_height,
                                1.0f, DT_MIPMAP_FULL);
 
-    // Always service preview first, then the main pipe, so the main pipe can reuse the cache state
-    // just published by preview instead of trying to race it from another thread.
+    gboolean pipe_needs_update[G_N_ELEMENTS(pipes)] = { FALSE };
+    gboolean history_resynced = FALSE;
+
+    // First resynchronize all dirty pipelines from history so GUI listeners can resolve
+    // stable piece->global_hash values before any cacheline starts publishing pixels.
     for(size_t i = 0; i < G_N_ELEMENTS(pipes); i++)
     {
       dt_dev_pixelpipe_t *pipe = pipes[i];
@@ -483,9 +481,42 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
       if(dt_dev_pixelpipe_get_history_hash(pipe) != dt_dev_get_history_hash(dev))
         dt_dev_pixelpipe_or_changed(pipe, DT_DEV_PIPE_TOP_CHANGED);
 
-      // pipe->changed is set by zoom/pan otherwise.
-      // So at this point, if nothing changed, skip.
-      gboolean needs_update = (dt_dev_pixelpipe_get_changed(pipe) != DT_DEV_PIPE_UNCHANGED) && !pipe->pause;
+      pipe_needs_update[i] = (dt_dev_pixelpipe_get_changed(pipe) != DT_DEV_PIPE_UNCHANGED) && !pipe->pause;
+      if(!pipe_needs_update[i]) continue;
+
+      dt_pthread_mutex_lock(&pipe->busy_mutex);
+      pipe->processing = 1;
+
+      // Re-entries are authored by the previous run. They must be resolved into a fresh
+      // pipeline graph before any GUI subscriber caches the next piece hashes.
+      if(dt_dev_pixelpipe_has_reentry(pipe))
+      {
+        dt_dev_pixelpipe_or_changed(pipe, DT_DEV_PIPE_REMOVE);
+        dt_dev_pixelpipe_cache_flush(darktable.pixelpipe_cache, pipe->type);
+      }
+
+      gboolean pipe_resynced = FALSE;
+      while(dt_dev_pixelpipe_get_changed(pipe) != DT_DEV_PIPE_UNCHANGED)
+      {
+        dt_dev_pixelpipe_change(pipe, dev);
+        pipe_resynced = TRUE;
+      }
+      
+      pipe->processing = 0;
+      dt_pthread_mutex_unlock(&pipe->busy_mutex);
+
+      history_resynced = history_resynced || pipe_resynced;
+    }
+
+    if(history_resynced)
+      DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_HISTORY_RESYNC);
+
+    // Always service preview first, then the main pipe, so the main pipe can reuse the cache state
+    // just published by preview instead of trying to race it from another thread.
+    for(size_t i = 0; i < G_N_ELEMENTS(pipes); i++)
+    {
+      dt_dev_pixelpipe_t *pipe = pipes[i];
+      gboolean needs_update = pipe_needs_update[i];
       if(!needs_update) continue;
 
       float scale = 1.f;
@@ -510,9 +541,10 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
         // We are starting fresh, reset the killswitch signal.
         dt_atomic_set_int(&pipe->shutdown, FALSE);
 
+        gboolean pipe_resynced = FALSE;
+
         // In case of re-entry, we will rerun the whole pipe, so we need
         // to resynch it in full too before.
-        // Need to be before dt_dev_pixelpipe_change()
         if(dt_dev_pixelpipe_has_reentry(pipe))
         {
           dt_dev_pixelpipe_or_changed(pipe, DT_DEV_PIPE_REMOVE);
@@ -521,7 +553,13 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
 
         // Resynch history with pipeline. NB: this locks dev->history_mutex.
         while(dt_dev_pixelpipe_get_changed(pipe) != DT_DEV_PIPE_UNCHANGED)
+        {
           dt_dev_pixelpipe_change(pipe, dev);
+          pipe_resynced = TRUE;
+        }
+
+        if(pipe_resynced)
+          DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_HISTORY_RESYNC);
 
         // If user zoomed/panned in darkroom during the previous loop of recomputation,
         // the kill-switch event was sent, which terminated the pipeline before completion in the previous run,

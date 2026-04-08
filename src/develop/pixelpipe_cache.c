@@ -41,6 +41,7 @@
 #include <string.h>
 
 #include "control/control.h"
+#include "control/signal.h"
 #include "develop/pixelpipe_cache.h"
 #include "develop/pixelpipe.h"
 #include "common/darktable.h"
@@ -2428,6 +2429,8 @@ void dt_dev_pixelpipe_cache_wrlock_entry(dt_dev_pixelpipe_cache_t *cache, gboole
   {
     dt_pthread_rwlock_unlock(&cache_entry->lock);
     _pixel_cache_message(cache_entry, "write unlock", TRUE);
+    if(cache_entry && cache_entry->hash != DT_PIXELPIPE_CACHE_HASH_INVALID)
+      DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_CACHELINE_READY, cache_entry->hash);
   }
 }
 

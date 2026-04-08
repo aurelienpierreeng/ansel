@@ -177,6 +177,7 @@ typedef struct dt_iop_colorequal_gui_data_t
   gboolean viewer_lut_dirty;
   gboolean viewer_lut_valid;
   gboolean preview_signal_connected;
+  uint64_t pending_preview_hash;
   gboolean has_focus;
   gboolean picker_valid;
   gboolean cursor_valid;
@@ -1346,8 +1347,9 @@ static gboolean _draw_curve(GtkWidget *widget, cairo_t *crf, gpointer user_data)
   return TRUE;
 }
 
-static void _preview_pipe_finished_callback(gpointer instance, gpointer user_data)
+static void _history_resync_callback(gpointer instance, gpointer user_data)
 {
+  (void)instance;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
   dt_iop_colorequal_global_data_t *gd = (dt_iop_colorequal_global_data_t *)self->global_data;
@@ -1374,6 +1376,19 @@ static void _preview_pipe_finished_callback(gpointer instance, gpointer user_dat
 
   _update_gui_lut_cache(self);
   dt_lut_viewer_queue_draw(g->viewer);
+}
+
+static void _cacheline_ready_callback(gpointer instance, const guint64 hash, gpointer user_data)
+{
+  (void)instance;
+  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
+  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
+  if(!g || g->pending_preview_hash != hash || !_refresh_preview_cursor_sample(self)) return;
+
+  const dt_iop_colorequal_ring_t ring = _active_ring_from_gui(g);
+  const dt_iop_colorequal_channel_t channel = _active_channel_from_gui(g, ring);
+  gtk_widget_queue_draw(GTK_WIDGET(g->area[ring][channel]));
+  dt_control_queue_redraw_center();
 }
 
 static int _find_selected_node(const dt_iop_module_t *self, const dt_iop_colorequal_ring_t ring,
@@ -2011,14 +2026,18 @@ static gboolean _refresh_preview_cursor_sample(dt_iop_module_t *self)
       = piece ? dt_dev_pixelpipe_get_prev_enabled_piece(dev->preview_pipe, piece) : NULL;
   if(!piece || !previous_piece || previous_piece->dsc_out.datatype != TYPE_FLOAT || previous_piece->dsc_out.channels < 3)
   {
+    g->pending_preview_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
     _invalidate_preview_cursor(g);
     return FALSE;
   }
 
+  g->pending_preview_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
   void *input = NULL;
   dt_pixel_cache_entry_t *input_entry = NULL;
-  if(!dt_dev_pixelpipe_cache_peek_gui(dev->preview_pipe, previous_piece, &input, &input_entry) || !input || !input_entry)
+  if(!dt_dev_pixelpipe_cache_peek_gui(dev->preview_pipe, previous_piece, &input, &input_entry, NULL, NULL, NULL) || !input || !input_entry)
   {
+    g->pending_preview_hash = previous_piece->global_hash;
+    if(!dev->preview_pipe->processing) dt_dev_pixelpipe_update_history_preview(dev);
     _invalidate_preview_cursor(g);
     return FALSE;
   }
@@ -2282,8 +2301,10 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
   {
     if(!g->preview_signal_connected)
     {
-      DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED,
-                                      G_CALLBACK(_preview_pipe_finished_callback), self);
+      DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_HISTORY_RESYNC,
+                                      G_CALLBACK(_history_resync_callback), self);
+      DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_CACHELINE_READY,
+                                      G_CALLBACK(_cacheline_ready_callback), self);
       g->preview_signal_connected = TRUE;
     }
 
@@ -2298,8 +2319,10 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
   }
   else if(g->preview_signal_connected)
   {
-    DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_preview_pipe_finished_callback), self);
+    DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_history_resync_callback), self);
+    DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_cacheline_ready_callback), self);
     g->preview_signal_connected = FALSE;
+    g->pending_preview_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
   }
 
   _switch_preview_cursor(self);
@@ -2326,7 +2349,8 @@ void gui_cleanup(dt_iop_module_t *self)
   dt_lut_viewer_destroy(&g->viewer);
   if(g->preview_signal_connected)
   {
-    DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_preview_pipe_finished_callback), self);
+    DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_history_resync_callback), self);
+    DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_cacheline_ready_callback), self);
     g->preview_signal_connected = FALSE;
   }
 
@@ -2346,6 +2370,7 @@ void gui_init(dt_iop_module_t *self)
   g->viewer_lut_valid = FALSE;
   g->viewer_lut_generation = 0;
   g->preview_signal_connected = FALSE;
+  g->pending_preview_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
   g->has_focus = FALSE;
 
   self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
