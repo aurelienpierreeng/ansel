@@ -94,6 +94,22 @@ typedef enum dt_signal_t
    */
   DT_SIGNAL_VIEWMANAGER_THUMBTABLE_ACTIVATE,
 
+  /** \brief This signal is raised when a thumb is single-clicked in the filmstrip.
+    Views that want filmstrip click-to-commit behavior need to opt in explicitly,
+    so thumbtable activation keeps its double-click semantics everywhere else.
+    1 : int the imageid of the thumbnail
+    no returned value
+   */
+  DT_SIGNAL_VIEWMANAGER_FILMSTRIP_ACTIVATE,
+
+  /** \brief This signal is raised when a drag starts from the filmstrip.
+    Views that need filmstrip drags to commit a working image first can opt in
+    explicitly before dt_act_on_get_images() freezes the drag payload.
+    1 : int the imageid of the thumbnail under the pointer
+    no returned value
+   */
+  DT_SIGNAL_VIEWMANAGER_FILMSTRIP_DRAG_BEGIN,
+
   /** \brief This signal is raised when collection changed. To avoid leaking the list,
     dt_collection_t is connected to this event and responsible of that.
     1 : dt_collection_change_t the reason why the collection has changed

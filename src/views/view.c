@@ -1258,10 +1258,10 @@ void dt_view_map_location_action(const dt_view_manager_t *vm, const int action)
     vm->proxy.map.location_action(vm->proxy.map.view, action);
 }
 
-void dt_view_map_drag_set_icon(const dt_view_manager_t *vm, GdkDragContext *context, const int32_t imgid, const int count)
+void dt_view_map_redraw(const dt_view_manager_t *vm)
 {
   if(vm->proxy.map.view)
-    vm->proxy.map.drag_set_icon(vm->proxy.map.view, context, imgid, count);
+    vm->proxy.map.redraw(vm->proxy.map.view);
 }
 
 #endif

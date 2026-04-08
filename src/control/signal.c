@@ -140,6 +140,10 @@ static dt_signal_description _signal_description[DT_SIGNAL_COUNT] = {
     NULL, FALSE }, // DT_SIGNAL_VIEWMANAGER_VIEW_CANNOT_CHANGE
   { "dt-viewmanager-thumbtable-activate", NULL, NULL, G_TYPE_NONE, g_cclosure_marshal_VOID__UINT, 1, uint_arg,
     NULL, FALSE }, // DT_SIGNAL_VIEWMANAGER_THUMBTABLE_ACTIVATE
+  { "dt-viewmanager-filmstrip-activate", NULL, NULL, G_TYPE_NONE, g_cclosure_marshal_VOID__UINT, 1, uint_arg,
+    NULL, FALSE }, // DT_SIGNAL_VIEWMANAGER_FILMSTRIP_ACTIVATE
+  { "dt-viewmanager-filmstrip-drag-begin", NULL, NULL, G_TYPE_NONE, g_cclosure_marshal_VOID__UINT, 1, uint_arg,
+    NULL, FALSE }, // DT_SIGNAL_VIEWMANAGER_FILMSTRIP_DRAG_BEGIN
 
   { "dt-collection-changed", NULL, NULL, G_TYPE_NONE, g_cclosure_marshal_generic, 4, collection_args,
     G_CALLBACK(_collection_changed_destroy_callback), FALSE }, // DT_SIGNAL_COLLECTION_CHANGED

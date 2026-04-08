@@ -777,7 +777,12 @@ static gboolean _event_main_release(GtkWidget *widget, GdkEventButton *event, gp
     // in the thumbtable scope, catching the SELECTION_CHANGED signal.
     return TRUE;
   }
-
+  else if(event->button == 1
+          && thumb->table && thumb->table->mode == DT_THUMBTABLE_MODE_FILMSTRIP)
+  {
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_VIEWMANAGER_FILMSTRIP_ACTIVATE, thumb->info.id);
+    return TRUE;
+  }
   return FALSE;
 }
 

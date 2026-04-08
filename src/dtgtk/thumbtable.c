@@ -1449,23 +1449,50 @@ static void _event_dnd_get(GtkWidget *widget, GdkDragContext *context, GtkSelect
   }
 }
 
+static void _thumbtable_drag_set_icon(dt_thumbtable_t *table, GdkDragContext *context)
+{
+  if(!table || !table->drag_list) return;
+
+  const int32_t imgid = GPOINTER_TO_INT(table->drag_list->data);
+  dt_thumbnail_t *thumb = _find_thumb_by_imgid(table, imgid);
+  if(!thumb) return;
+
+  cairo_surface_t *surface = NULL;
+  int hotspot_x = 0;
+  int hotspot_y = 0;
+
+  dt_pthread_mutex_lock(&thumb->lock);
+  if(thumb->img_surf && cairo_surface_get_reference_count(thumb->img_surf) > 0)
+  {
+    surface = cairo_surface_reference(thumb->img_surf);
+    hotspot_x = thumb->img_width / 2;
+    hotspot_y = thumb->img_height / 2;
+  }
+  dt_pthread_mutex_unlock(&thumb->lock);
+
+  if(!surface) return;
+
+  GtkWidget *image = gtk_image_new_from_surface(surface);
+  cairo_surface_destroy(surface);
+  dt_gui_add_class(image, "dt_transparent_background");
+  gtk_widget_show(image);
+  gtk_drag_set_icon_widget(context, image, hotspot_x, hotspot_y);
+}
+
 static void _event_dnd_begin(GtkWidget *widget, GdkDragContext *context, gpointer user_data)
 {
   dt_thumbtable_t *table = (dt_thumbtable_t *)user_data;
+  const int32_t imgid = dt_control_get_mouse_over_id();
+
+  if(table->mode == DT_THUMBTABLE_MODE_FILMSTRIP && imgid > 0)
+  {
+    /* Views that need drags to commit the hovered image must do it before
+     * dt_act_on_get_images() snapshots the payload. */
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_VIEWMANAGER_FILMSTRIP_DRAG_BEGIN, imgid);
+  }
 
   table->drag_list = dt_act_on_get_images();
-
-#ifdef HAVE_MAP
-  dt_view_manager_t *vm = darktable.view_manager;
-  dt_view_t *view = vm->current_view;
-  if(!strcmp(view->module_name, "map"))
-  {
-    if(table->drag_list)
-      dt_view_map_drag_set_icon(darktable.view_manager, context,
-                                GPOINTER_TO_INT(table->drag_list->data),
-                                g_list_length(table->drag_list));
-  }
-#endif
+  _thumbtable_drag_set_icon(table, context);
 }
 
 GList *_thumbtable_dnd_import_check(GList *files, const char *pathname, int *elements)
