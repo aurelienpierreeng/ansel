@@ -22,6 +22,7 @@
 
 #include "bauhaus/bauhaus.h"
 #include "common/atomic.h"
+#include "common/cache.h"
 #include "common/collection.h"
 #include "common/darktable.h"
 #include "common/file_location.h"
@@ -30,6 +31,7 @@
 #include "common/import.h"
 #include "common/image.h"
 #include "common/image_cache.h"
+#include "common/imageio.h"
 #include "common/metadata.h"
 #include "common/datetime.h"
 #include "common/selection.h"
@@ -315,8 +317,11 @@ static GdkPixbuf *_import_get_thumbnail(const gchar *filename, const int width, 
   int th_width;
   int th_height;
   char *mime_type = NULL;
+  const char *const extension = g_strrstr(filename, ".");
+  const dt_image_flags_t file_type = extension ? dt_imageio_get_type_from_extension(extension + 1) : 0u;
   dt_colorspaces_color_profile_type_t color_space;
-  if(!dt_imageio_large_thumbnail(filename, &buffer, &th_width, &th_height, &color_space, width, height))
+  if(!(file_type & DT_IMAGE_HDR)
+     && !dt_imageio_large_thumbnail(filename, &buffer, &th_width, &th_height, &color_space, width, height))
   {
     const float ratio = ((float)th_height) / ((float)th_width);
 
@@ -326,11 +331,15 @@ static GdkPixbuf *_import_get_thumbnail(const gchar *filename, const int width, 
         0);
     if(rgb)
     {
+#ifdef _OPENMP
+#pragma omp parallel for default(none) dt_omp_firstprivate(th_width, th_height, buffer, rgb) schedule(static)
+#endif
       for(size_t k = 0; k < th_width * th_height; k++)
       {
-        rgb[k * 3] = buffer[k * 4];
-        rgb[k * 3 + 1] = buffer[k * 4 + 1];
-        rgb[k * 3 + 2] = buffer[k * 4 + 2];
+        const float alpha = buffer[k * 4 + 3] > 0 ? buffer[k * 4 + 3] / 255.0f : 1.0f;
+        rgb[k * 3] = CLAMP((int)roundf((buffer[k * 4] / 255.0f * alpha + (1.0f - alpha)) * 255.0f), 0, 255);
+        rgb[k * 3 + 1] = CLAMP((int)roundf((buffer[k * 4 + 1] / 255.0f * alpha + (1.0f - alpha)) * 255.0f), 0, 255);
+        rgb[k * 3 + 2] = CLAMP((int)roundf((buffer[k * 4 + 2] / 255.0f * alpha + (1.0f - alpha)) * 255.0f), 0, 255);
       }
 
       // Build the actual pixbuf object
@@ -346,6 +355,57 @@ static GdkPixbuf *_import_get_thumbnail(const gchar *filename, const int width, 
     dt_pixelpipe_cache_free_align(buffer);
     dt_pixelpipe_cache_free_align(rgb);
     dt_free(mime_type);
+  }
+
+  if(pixbuf == NULL)
+  {
+    const gboolean use_internal_loader = !(file_type & DT_IMAGE_RAW);
+
+    if(use_internal_loader)
+    {
+      dt_cache_entry_t cache_entry = { 0 };
+      dt_mipmap_buffer_t mipbuf = { 0 };
+      mipbuf.size = DT_MIPMAP_FULL;
+      mipbuf.cache_entry = &cache_entry;
+
+      /* If embedded preview extraction failed, non-RAW files should still get a preview by
+       * decoding the real image through Ansel instead of relying on the desktop pixbuf stack.
+       * RAWs stay excluded here because the import dialog only wants a lightweight fallback. */
+      if(dt_imageio_open(img, filename, &mipbuf) == DT_IMAGEIO_OK
+         && mipbuf.buf != NULL && mipbuf.width > 0 && mipbuf.height > 0)
+      {
+        const size_t pixels = (size_t)mipbuf.width * mipbuf.height;
+        uint8_t *rgb = dt_pixelpipe_cache_alloc_align_cache(pixels * 3 * sizeof(uint8_t), 0);
+        if(rgb != NULL)
+        {
+          const float *const in = (const float *const)mipbuf.buf;
+#ifdef _OPENMP
+#pragma omp parallel for default(none) dt_omp_firstprivate(in, pixels, rgb) schedule(static)
+#endif
+          for(size_t k = 0; k < pixels; k++)
+          {
+            const float alpha = in[k * 4 + 3] > 0.0f ? CLAMPF(in[k * 4 + 3], 0.0f, 1.0f) : 1.0f;
+            rgb[k * 3] = CLAMP((int)roundf((CLAMPF(in[k * 4], 0.0f, 1.0f) * alpha + (1.0f - alpha)) * 255.0f), 0, 255);
+            rgb[k * 3 + 1] = CLAMP((int)roundf((CLAMPF(in[k * 4 + 1], 0.0f, 1.0f) * alpha + (1.0f - alpha)) * 255.0f), 0, 255);
+            rgb[k * 3 + 2] = CLAMP((int)roundf((CLAMPF(in[k * 4 + 2], 0.0f, 1.0f) * alpha + (1.0f - alpha)) * 255.0f), 0, 255);
+          }
+
+          GdkPixbuf *tmp = gdk_pixbuf_new_from_data(rgb, 0, FALSE, 8, mipbuf.width, mipbuf.height,
+                                                    mipbuf.width * 3 * sizeof(uint8_t), NULL, NULL);
+          if(tmp != NULL)
+          {
+            const float ratio = (float)mipbuf.height / (float)mipbuf.width;
+            pixbuf = gdk_pixbuf_scale_simple(tmp, roundf((float)width / ratio), height, GDK_INTERP_HYPER);
+            g_object_unref(tmp);
+          }
+
+          dt_pixelpipe_cache_free_align(rgb);
+        }
+      }
+
+      dt_free_align(cache_entry.data);
+      cache_entry.data = NULL;
+    }
   }
 
   // Fallback to whatever Gtk found in the file
@@ -550,12 +610,18 @@ static void update_preview_cb(GtkFileChooser *file_chooser, gpointer userdata)
   int valid_exif = 0;
   if(have_file)
   {
+    const char *const extension = g_strrstr(filename, ".");
+    const dt_image_flags_t file_type = extension ? dt_imageio_get_type_from_extension(extension + 1) : 0u;
+
     dt_free(d->path_file);
     d->path_file = g_strdup(filename);
 
     img = malloc(sizeof(dt_image_t));
     dt_image_init(img);
-    valid_exif = dt_exif_read(img, filename);
+    if(!(file_type & DT_IMAGE_HDR))
+      valid_exif = dt_exif_read(img, filename);
+    else
+      valid_exif = 1;
     _set_test_path(d, img);
   }
   else

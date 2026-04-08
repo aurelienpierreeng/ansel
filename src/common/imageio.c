@@ -131,6 +131,39 @@ static const gchar *_supported_ldr[]
         NULL };
 static const gchar *_supported_hdr[] = { "avif", "exr", "hdr", "heic", "heif", "hif", "pfm", NULL };
 
+/**
+ * @brief Map Exiv2 preview MIME types to decoder format identifiers.
+ *
+ * @details
+ * Embedded previews are handed to GraphicsMagick/ImageMagick as anonymous blobs.
+ * Some camera vendors store TIFF/PNG-style previews whose blob headers are not
+ * sufficient for GraphicsMagick to infer the format on its own, which yields the
+ * "Unrecognized image format ()" path seen in issue #711. When EXIF already gave
+ * us the preview MIME type, pass that format hint explicitly to the blob decoder
+ * instead of relying on autodetection.
+ *
+ * @param mime_type MIME type returned by Exiv2 for the embedded preview.
+ *
+ * @return Decoder format identifier, or NULL when we have no useful hint.
+ */
+static const char *_preview_format_from_mime_type(const char *mime_type)
+{
+  if(mime_type == NULL || mime_type[0] == '\0') return NULL;
+
+  if(!strcmp(mime_type, "image/jpeg")) return "JPEG";
+  if(!strcmp(mime_type, "image/png")) return "PNG";
+  if(!strcmp(mime_type, "image/tiff")) return "TIFF";
+  if(!strcmp(mime_type, "image/x-tiff")) return "TIFF";
+  if(!strcmp(mime_type, "image/gif")) return "GIF";
+  if(!strcmp(mime_type, "image/bmp")) return "BMP";
+  if(!strcmp(mime_type, "image/x-portable-pixmap")) return "PPM";
+  if(!strcmp(mime_type, "image/x-portable-graymap")) return "PGM";
+  if(!strcmp(mime_type, "image/x-portable-bitmap")) return "PBM";
+  if(!strcmp(mime_type, "image/x-portable-anymap")) return "PNM";
+  if(!strcmp(mime_type, "image/webp")) return "WEBP";
+  return NULL;
+}
+
 // get the type of image from its extension
 dt_image_flags_t dt_imageio_get_type_from_extension(const char *extension)
 {
@@ -197,6 +230,7 @@ int dt_imageio_large_thumbnail(const char *filename, uint8_t **buffer, int32_t *
   }
   else
   {
+    const char *const preview_format = _preview_format_from_mime_type(mime_type);
 #if defined(HAVE_GRAPHICSMAGICK)
     ExceptionInfo exception;
     Image *image = NULL;
@@ -204,6 +238,8 @@ int dt_imageio_large_thumbnail(const char *filename, uint8_t **buffer, int32_t *
 
     GetExceptionInfo(&exception);
     image_info = CloneImageInfo((ImageInfo *)NULL);
+    if(preview_format != NULL)
+      g_strlcpy(image_info->magick, preview_format, sizeof(image_info->magick));
 
     image = BlobToImage(image_info, buf, bufsize, &exception);
 
