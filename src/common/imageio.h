@@ -32,6 +32,7 @@
 
 #pragma once
 
+#include "common/atomic.h"
 #include "common/image.h"
 #include "common/imageio_module.h"
 #include "common/mipmap_cache.h"
@@ -106,7 +107,8 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
                                  const gboolean export_masks, dt_colorspaces_color_profile_type_t icc_type,
                                  const gchar *icc_filename, dt_iop_color_intent_t icc_intent,
                                  dt_imageio_module_storage_t *storage, dt_imageio_module_data_t *storage_params,
-                                 int num, int total, dt_export_metadata_t *metadata);
+                                 int num, int total, dt_export_metadata_t *metadata,
+                                 dt_atomic_int *shutdown);
 
 // general, efficient buffer flipping function using memcopies
 void dt_imageio_flip_buffers(char *out, const char *in,

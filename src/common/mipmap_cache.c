@@ -308,7 +308,7 @@ static void _init_f(dt_mipmap_buffer_t *mipmap_buf, float *buf, uint32_t *width,
                     const int32_t imgid);
 static void _init_8(uint8_t *buf, uint32_t *width, uint32_t *height, float *iscale,
                     dt_colorspaces_color_profile_type_t *color_space, const int32_t imgid,
-                    const dt_mipmap_size_t size);
+                    const dt_mipmap_size_t size, dt_atomic_int *shutdown);
 
 /**
  * @file: mipmap_cache.c
@@ -889,9 +889,13 @@ static gboolean _get_image_copy(const int32_t imgid, dt_image_t *buffered_image)
 
 // Actually do the work: produce an image
 static void _generate_blocking(dt_cache_entry_t *entry, dt_mipmap_buffer_t *buf,
-                               const int32_t imgid, const dt_mipmap_size_t mip)
+                               const int32_t imgid, const dt_mipmap_size_t mip, dt_atomic_int *shutdown)
 {
   struct dt_mipmap_buffer_dsc *dsc = _get_dsc_from_entry(entry);
+  const uint32_t original_width = dsc->width;
+  const uint32_t original_height = dsc->height;
+  const float original_iscale = dsc->iscale;
+  const dt_colorspaces_color_profile_type_t original_color_space = dsc->color_space;
 
   if(!(dsc->flags & DT_MIPMAP_BUFFER_DSC_FLAG_GENERATE))
   {
@@ -948,13 +952,29 @@ static void _generate_blocking(dt_cache_entry_t *entry, dt_mipmap_buffer_t *buf,
     dt_print(DT_DEBUG_CACHE,
              "[mipmap_cache] compute mip %d uint8 for image %i (%ix%i) from original file \n", mip,
              imgid, dsc->width, dsc->height);
-    _init_8((uint8_t *)_get_buffer_from_dsc(dsc), &dsc->width, &dsc->height, &dsc->iscale, &dsc->color_space, imgid, mip);
+    _init_8((uint8_t *)_get_buffer_from_dsc(dsc), &dsc->width, &dsc->height, &dsc->iscale, &dsc->color_space, imgid,
+            mip, shutdown);
     if(dsc->width > 0 && dsc->height > 0)
     {
       const uint64_t history_hash = _mipmap_cache_get_history_hash(imgid);
       dt_history_hash_set_mipmap(imgid, history_hash, DT_IMAGE_CACHE_RELAXED);
     }
   }
+
+  if(shutdown && dt_atomic_get_int(shutdown))
+  {
+    /* A stale GUI request stopped its thumbnail/export pipe while this cache entry
+     * was still being produced. Keep the entry marked as "generate" so the next
+     * request can restart from a clean state instead of reusing a poisoned empty
+     * thumbnail for the rest of the session. */
+    dsc->width = original_width;
+    dsc->height = original_height;
+    dsc->iscale = original_iscale;
+    dsc->color_space = original_color_space;
+    _invalidate_buffer(buf);
+    return;
+  }
+
   dsc->flags &= ~DT_MIPMAP_BUFFER_DSC_FLAG_GENERATE;
   _paint_skulls(buf, dsc, mip);
   _validate_buffer(buf, dsc, imgid, mip);
@@ -966,6 +986,14 @@ static void _generate_blocking(dt_cache_entry_t *entry, dt_mipmap_buffer_t *buf,
 void dt_mipmap_cache_get_with_caller(dt_mipmap_cache_t *cache, dt_mipmap_buffer_t *buf, const int32_t imgid,
                                      const dt_mipmap_size_t mip, const dt_mipmap_get_flags_t flags,
                                      const char mode, const char *file, int line)
+{
+  dt_mipmap_cache_get_with_caller_and_shutdown(cache, buf, imgid, mip, flags, mode, NULL, file, line);
+}
+
+void dt_mipmap_cache_get_with_caller_and_shutdown(dt_mipmap_cache_t *cache, dt_mipmap_buffer_t *buf,
+                                                  const int32_t imgid, const dt_mipmap_size_t mip,
+                                                  const dt_mipmap_get_flags_t flags, const char mode,
+                                                  dt_atomic_int *shutdown, const char *file, int line)
 {
   assert(mip <= DT_MIPMAP_NONE && mip >= DT_MIPMAP_0);
 
@@ -992,7 +1020,7 @@ void dt_mipmap_cache_get_with_caller(dt_mipmap_cache_t *cache, dt_mipmap_buffer_
     dt_cache_entry_t *entry =  dt_cache_get_with_caller(&_get_cache(cache, mip)->cache, key, mode, file, line);
     buf->cache_entry = entry;
     __sync_fetch_and_add(&(_get_cache(cache, mip)->stats_fetches), 1);
-    _generate_blocking(entry, buf, imgid, mip);
+    _generate_blocking(entry, buf, imgid, mip, shutdown);
 
     // image cache is leaving the write lock in place in case the image has been newly allocated.
     // this leads to a slight increase in thread contention, so we opt for dropping the write lock
@@ -1275,7 +1303,7 @@ static int _find_sidecar_jpg(const char *filename, const char *ext, char *sideca
 
 static void _init_8(uint8_t *buf, uint32_t *width, uint32_t *height, float *iscale,
                     dt_colorspaces_color_profile_type_t *color_space, const int32_t imgid,
-                    const dt_mipmap_size_t size)
+                    const dt_mipmap_size_t size, dt_atomic_int *shutdown)
 {
   if(size >= DT_MIPMAP_F || *width < 16 || *height < 16) return;
 
@@ -1398,7 +1426,7 @@ static void _init_8(uint8_t *buf, uint32_t *width, uint32_t *height, float *isca
     // no upscaling and signal we want thumbnail export
     res = dt_imageio_export_with_flags(imgid, "unused", &format, (dt_imageio_module_data_t *)&dat, TRUE, FALSE, FALSE,
                                        FALSE, TRUE, NULL, FALSE, FALSE, DT_COLORSPACE_NONE, NULL, DT_INTENT_LAST, NULL,
-                                       NULL, 1, 1, NULL);
+                                       NULL, 1, 1, NULL, shutdown);
     if(!res)
     {
       dt_print(DT_DEBUG_CACHE, "[mipmap_cache] generated mip %d for image %d from scratch\n", size, imgid);

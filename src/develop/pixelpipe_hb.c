@@ -232,7 +232,6 @@ static int _abort_module_shutdown_cleanup(dt_dev_pixelpipe_t *pipe, dt_dev_pixel
   if(*cl_mem_output != NULL)
     dt_dev_pixelpipe_cache_release_cl_buffer(cl_mem_output, NULL, NULL, FALSE);
 
-  dt_iop_nap(5000);
   return 1;
 }
 
@@ -666,20 +665,19 @@ dt_pixelpipe_blend_transform_t dt_dev_pixelpipe_transform_for_blend(const dt_iop
 }
 
 #define KILL_SWITCH_ABORT                                                                                         \
-  if(dt_atomic_get_int(&pipe->shutdown))                                                                          \
+  if(dt_dev_pixelpipe_has_shutdown(pipe))                                                                         \
   {                                                                                                               \
     if(cl_mem_output != NULL)                                                                                     \
     {                                                                                                             \
       dt_dev_pixelpipe_cache_release_cl_buffer(&cl_mem_output, NULL, NULL, FALSE);                                      \
     }                                                                                                             \
-    dt_iop_nap(5000);                                                                                             \
     return 1;                                                                                                     \
   }
 
 // Once we have a cache, stopping computation before full completion
 // has good chances of leaving it corrupted. So we invalidate it.
 #define KILL_SWITCH_AND_FLUSH_CACHE                                                                               \
-  if(dt_atomic_get_int(&pipe->shutdown))                                                                          \
+  if(dt_dev_pixelpipe_has_shutdown(pipe))                                                                         \
   {                                                                                                               \
     return _abort_module_shutdown_cleanup(pipe, piece, module, input_hash, input, input_entry, hash, &output,    \
                                           &cl_mem_output, output_entry);                                          \
@@ -1315,7 +1313,7 @@ void dt_dev_pixelpipe_disable_before(dt_dev_pixelpipe_t *pipe, const char *op)
 }
 
 #define KILL_SWITCH_PIPE                                                                                          \
-  if(dt_atomic_get_int(&pipe->shutdown))                                                                          \
+  if(dt_dev_pixelpipe_has_shutdown(pipe))                                                                         \
   {                                                                                                               \
     if(pipe->devid >= 0)                                                                                          \
     {                                                                                                             \
@@ -1569,7 +1567,7 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop
 
       _print_opencl_errors(opencl_error, pipe);
     }
-    else if(!dt_atomic_get_int(&pipe->shutdown))
+    else if(!dt_dev_pixelpipe_has_shutdown(pipe))
     {
       // No opencl errors, no killswitch triggered: we should have a valid output buffer now.
       dt_pixel_cache_entry_t *final_entry = NULL;

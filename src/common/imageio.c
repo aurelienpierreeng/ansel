@@ -743,7 +743,7 @@ int dt_imageio_export(const int32_t imgid, const char *filename, dt_imageio_modu
 
     return dt_imageio_export_with_flags(imgid, filename, format, format_params, FALSE, FALSE, TRUE, is_scaling,
                                         FALSE, NULL, copy_metadata, export_masks, icc_type, icc_filename, icc_intent,
-                                        storage, storage_params, num, total, metadata);
+                                        storage, storage_params, num, total, metadata, NULL);
   }
 }
 
@@ -969,7 +969,7 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
                                  dt_colorspaces_color_profile_type_t icc_type, const gchar *icc_filename,
                                  dt_iop_color_intent_t icc_intent, dt_imageio_module_storage_t *storage,
                                  dt_imageio_module_data_t *storage_params, int num, int total,
-                                 dt_export_metadata_t *metadata)
+                                 dt_export_metadata_t *metadata, dt_atomic_int *shutdown)
 {
   dt_times_t start;
   dt_get_times(&start);
@@ -1003,6 +1003,8 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
     res = dt_dev_pixelpipe_init_export(&pipe, format->levels(format_params), export_masks);
 
   if(!res) goto error;
+
+  pipe.shutdown_ext = shutdown;
 
   dt_dev_pixelpipe_create_nodes(&pipe, &dev);
 

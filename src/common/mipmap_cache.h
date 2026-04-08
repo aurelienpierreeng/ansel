@@ -28,6 +28,7 @@
 
 #pragma once
 
+#include "common/atomic.h"
 #include "common/cache.h"
 #include "common/colorspaces.h"
 #include "common/image.h"
@@ -125,6 +126,19 @@ void dt_mipmap_cache_get_with_caller(
     const dt_mipmap_size_t mip,
     const dt_mipmap_get_flags_t flags,
     const char mode,
+    const char *file,
+    int line);
+
+#define dt_mipmap_cache_get_with_shutdown(A,B,C,D,E,F,G) \
+  dt_mipmap_cache_get_with_caller_and_shutdown(A,B,C,D,E,F,G,__FILE__,__LINE__)
+void dt_mipmap_cache_get_with_caller_and_shutdown(
+    dt_mipmap_cache_t *cache,
+    dt_mipmap_buffer_t *buf,
+    const int32_t imgid,
+    const dt_mipmap_size_t mip,
+    const dt_mipmap_get_flags_t flags,
+    const char mode,
+    dt_atomic_int *shutdown,
     const char *file,
     int line);
 

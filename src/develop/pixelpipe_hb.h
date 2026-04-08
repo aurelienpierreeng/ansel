@@ -270,6 +270,11 @@ typedef struct dt_dev_pixelpipe_t
   int running;
   // shutting down?
   dt_atomic_int shutdown;
+  /* Optional caller-owned kill switch used by background thumbnail/surface jobs.
+   * The pipe keeps its own shutdown flag for local teardown, but long-running
+   * non-GUI jobs also need a way to stop as soon as their output target changed
+   * size. Callers own the storage and may flip it from another thread. */
+  dt_atomic_int *shutdown_ext;
   // Best-effort processing mode. When TRUE, the processing path bypasses the
   // early-abort shutdown kill-switch checks that normally stop a stale pipeline
   // as soon as parameters changed. This allows long-running interactive
@@ -448,6 +453,11 @@ int dt_dev_pixelpipe_init_cached(dt_dev_pixelpipe_t *pipe);
 void dt_dev_pixelpipe_set_realtime(dt_dev_pixelpipe_t *pipe, gboolean state);
 // return whether best-effort processing mode is currently enabled.
 gboolean dt_dev_pixelpipe_get_realtime(const dt_dev_pixelpipe_t *pipe);
+static inline gboolean dt_dev_pixelpipe_has_shutdown(const dt_dev_pixelpipe_t *pipe)
+{
+  return pipe && (dt_atomic_get_int((dt_atomic_int *)&pipe->shutdown)
+                  || (pipe->shutdown_ext && dt_atomic_get_int(pipe->shutdown_ext)));
+}
 // constructs a new input buffer from given RGB float array.
 void dt_dev_pixelpipe_set_input(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev, int32_t imgid, int width,
                                 int height, float iscale, dt_mipmap_size_t size);
