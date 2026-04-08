@@ -2893,11 +2893,15 @@ float dt_bauhaus_slider_get_step(GtkWidget *widget)
     const float min = d->soft_min;
     const float max = d->soft_max;
 
+    // Derive the automatic keyboard/wheel step from the internal slider domain.
+    // Display formatting may rescale that domain (for example "%" multiplies by 100),
+    // but interaction needs to stay in the unformatted value space to avoid jumping
+    // across the whole range in a single step for small-percent sliders.
     const float top = fminf(max-min, fmaxf(fabsf(min), fabsf(max)));
     if(top >= 100.f)
       step = 1.f;
     else
-      step = top * fabsf(d->factor) / 100.f;
+      step = top / 100.f;
   }
 
   return copysignf(step, d->factor);
