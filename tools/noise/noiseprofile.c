@@ -23,7 +23,9 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <string.h>
-#include "../../src/common/darktable.h"
+#include <glib/gstdio.h>
+
+typedef float dt_aligned_pixel_t[4];
 
 typedef float elem_type;
 #define ELEM_SWAP(a,b) { elem_type t=(a);(a)=(b);(b)=t; }
@@ -158,7 +160,7 @@ write_pfm(const char *filename, float *buf, int wd, int ht)
 static inline float
 clamp(float f, float m, float M)
 {
-  return MAX(MIN(f, M), m);
+  return fmaxf(fminf(f, M), m);
 }
 
 int compare_llhh(const void *a, const void *b)
