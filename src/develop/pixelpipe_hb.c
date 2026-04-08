@@ -915,6 +915,15 @@ static int _init_base_buffer(dt_dev_pixelpipe_t *pipe)
   }
 #endif
 
+  /* `process_rec()` guarantees that child recursion returns with one cache reference already
+   * reserved for its immediate consumer. Exact-hit and processed module outputs satisfy that
+   * contract through their cache acquisition path, but a freshly-created base buffer does not:
+   * `dt_dev_pixelpipe_cache_get()` creates the entry with refcount 0. Reserve the consumer ref
+   * here so the first module can safely reopen this transient input even after we tag it for
+   * auto-destruction below. */
+  if(!err && new_entry)
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, cache_entry);
+
   /* The base buffer is only a thread-safe staging copy of mipmap-cache pixels while the first pipeline stage
    * consumes them. Keeping it in both caches beyond that point duplicates the same image for no benefit, so
    * always reap the pixelpipe cacheline as soon as its immediate consumer releases the input ref. */
