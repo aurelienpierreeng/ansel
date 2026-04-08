@@ -2602,6 +2602,7 @@ static void do_crop(dt_iop_module_t *self, dt_iop_ashift_params_t *p)
       dt_dev_pixelpipe_resync_history_all(self->dev);
     else
       dt_dev_pixelpipe_update_history_all(self->dev);
+    dt_dev_get_thumbnail_size(self->dev);
     return;
   }
 
@@ -2733,6 +2734,7 @@ static void do_crop(dt_iop_module_t *self, dt_iop_ashift_params_t *p)
     dt_dev_pixelpipe_resync_history_all(self->dev);
   else
     dt_dev_pixelpipe_update_history_all(self->dev);
+  dt_dev_get_thumbnail_size(self->dev);
   return;
 
 failed:
@@ -2750,6 +2752,7 @@ failed:
     dt_dev_pixelpipe_resync_history_all(self->dev);
   else
     dt_dev_pixelpipe_update_history_all(self->dev);
+  dt_dev_get_thumbnail_size(self->dev);
   return;
 }
 
@@ -5106,7 +5109,7 @@ void _make_controls_sensitive(dt_iop_module_t *self, const gboolean sensitive)
   gtk_widget_set_sensitive(g->structure_auto, sensitive);
   gtk_widget_set_sensitive(g->structure_lines, sensitive);
   gtk_widget_set_sensitive(g->structure_quad, sensitive);
-  _gui_update_structure_states(self, FALSE);
+  _gui_update_structure_states(self, sensitive && g->lines && g->lines_count > 0);
 }
 
 
@@ -5157,11 +5160,21 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 
 void gui_reset(struct dt_iop_module_t *self)
 {
-  dt_iop_ashift_params_t *p = _get_ashift_params(self);
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
   g->editing = FALSE;
+  g->jobcode = ASHIFT_JOBCODE_NONE;
+  g->jobparams = 0;
+  dt_iop_set_cache_bypass(self, FALSE);
 
+  dt_iop_ashift_params_t *p = (dt_iop_ashift_params_t *)self->params;
   memcpy(p, self->default_params, sizeof(dt_iop_ashift_params_t));
+  memcpy(&g->previous_params, p, sizeof(dt_iop_ashift_params_t));
+  memcpy(&g->new_params, p, sizeof(dt_iop_ashift_params_t));
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->edit_button), FALSE);
+  gtk_button_set_label(GTK_BUTTON(g->edit_button), _("Edit"));
+  gtk_widget_set_sensitive(g->commit_button, FALSE);
+  dt_control_change_cursor(GDK_LEFT_PTR);
+  _make_controls_sensitive(self, FALSE);
 
   /* reset eventual remaining structures */
   _do_clean_structure(self, p, FALSE);
@@ -5541,6 +5554,9 @@ static void _event_process_after_preview_callback(gpointer instance, gpointer us
 
   if(darktable.gui->reset) return;
 
+  if(g->buf == NULL)
+    (void)_sync_private_buffer_from_preview_cache(self, NULL);
+
   switch(jobcode)
   {
     case ASHIFT_JOBCODE_DO_CROP:
@@ -5568,6 +5584,29 @@ static void _event_process_after_preview_callback(gpointer instance, gpointer us
       break;
   }
 
+  dt_control_queue_redraw_center();
+}
+
+/**
+ * @brief Refresh ashift overlay geometry once the displayed pipe published its new output.
+ *
+ * The crop frame and manual guides are drawn in center-view coordinates derived from the virtual
+ * pipe output size. Rotation, lens shift, shear, and auto-crop all change that size, but the
+ * final displayed dimensions are only authoritative after the UI pipe completed. Refreshing the
+ * thumbnail geometry here keeps the overlay aligned with the image the user actually sees.
+ */
+static void _event_process_after_ui_callback(gpointer instance, gpointer user_data)
+{
+  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
+  dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
+  dt_iop_ashift_params_t *p = _get_ashift_params(self);
+
+  (void)instance;
+
+  if(darktable.gui->reset) return;
+  if(!g->editing && p->cropmode == ASHIFT_CROP_OFF) return;
+
+  dt_dev_get_thumbnail_size(self->dev);
   dt_control_queue_redraw_center();
 }
 
@@ -5694,6 +5733,7 @@ void reload_defaults(dt_iop_module_t *module)
     dt_iop_gui_leave_critical_section(module);
 
     g->fitting = 0;
+    g->editing = FALSE;
     dt_free(g->lines);
     g->lines_count =0;
     g->horizontal_count = 0;
@@ -5725,6 +5765,8 @@ void reload_defaults(dt_iop_module_t *module)
     g->draw_line_move = -1;
     g->draw_near_point = -1;
     g->draw_point_move = FALSE;
+    memcpy(&g->previous_params, module->default_params, sizeof(dt_iop_ashift_params_t));
+    memcpy(&g->new_params, module->default_params, sizeof(dt_iop_ashift_params_t));
 
     _gui_update_structure_states(module, FALSE);
   }
@@ -5824,6 +5866,8 @@ void gui_init(struct dt_iop_module_t *self)
   g->jobparams = 0;
   g->lastx = g->lasty = -1.0f;
   g->crop_cx = g->crop_cy = 1.0f;
+  memcpy(&g->previous_params, self->params, sizeof(dt_iop_ashift_params_t));
+  memcpy(&g->new_params, self->params, sizeof(dt_iop_ashift_params_t));
 
   g->draw_near_point = -1;
   g->draw_line_move = -1;
@@ -5995,11 +6039,14 @@ void gui_init(struct dt_iop_module_t *self)
   /* add signal handler for preview pipe finish to redraw the overlay */
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED,
                                   G_CALLBACK(_event_process_after_preview_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_UI_PIPE_FINISHED,
+                                  G_CALLBACK(_event_process_after_ui_callback), self);
 }
 
 void gui_cleanup(struct dt_iop_module_t *self)
 {
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_event_process_after_preview_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_event_process_after_ui_callback), self);
   dt_iop_set_cache_bypass(self, FALSE);
 
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
