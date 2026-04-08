@@ -1234,22 +1234,37 @@ static void _shortcut_edited(GtkCellRenderer *cell, const gchar *path_string, gu
 
   const char *shortcut_path = NULL;
 
+  // In GTK "OTHER" accel mode, clearing from the editor may come through either as
+  // VoidSymbol or as an unmodified Delete/BackSpace key press. Normalize all those
+  // cases to an empty shortcut so the model and the GtkAccelMap stay in sync.
+  if(keyval == GDK_KEY_VoidSymbol
+     || (mods == 0 && (keyval == GDK_KEY_Delete || keyval == GDK_KEY_BackSpace)))
+  {
+    keyval = 0;
+    mods = 0;
+    hardware_key = 0;
+  }
+
   // mods input arg doesn't record states (numlock, capslock), so we need to fetch it
   // directly before decoding full key combinations
-  GdkDisplay *display = gdk_display_get_default();
-  GdkSeat *seat = gdk_display_get_default_seat(display);
-  GdkDevice *pointer = gdk_seat_get_pointer(seat);
-  GdkModifierType state;
-  gdk_device_get_state(pointer, gdk_get_default_root_window(), NULL, &state);
+  if(keyval != 0 || mods != 0)
+  {
+    GdkDisplay *display = gdk_display_get_default();
+    GdkSeat *seat = gdk_display_get_default_seat(display);
+    GdkDevice *pointer = gdk_seat_get_pointer(seat);
+    GdkModifierType state;
+    gdk_device_get_state(pointer, gdk_get_default_root_window(), NULL, &state);
 
-  // Ensure modifiers, language-heuristics and numpad/keypad keys are uniformingly decoded
-  GdkEventKey event = { 0 };
-  event.type = GDK_KEY_PRESS;
-  event.state = mods | state;
-  event.keyval = keyval;
-  event.hardware_keycode = hardware_key;
-  event.group = guess_key_group(accels_global_ref, keyval, hardware_key);
-  _accels_keys_decode(accels_global_ref, (GdkEvent *)&event, &keyval, &mods);
+    // We only decode actual key strokes here. Clearing shortcuts bypasses this path
+    // because there is no hardware key or modifier state to preserve.
+    GdkEventKey event = { 0 };
+    event.type = GDK_KEY_PRESS;
+    event.state = mods | state;
+    event.keyval = keyval;
+    event.hardware_keycode = hardware_key;
+    event.group = guess_key_group(accels_global_ref, keyval, hardware_key);
+    _accels_keys_decode(accels_global_ref, (GdkEvent *)&event, &keyval, &mods);
+  }
 
   if(shortcut)
   {
@@ -1289,6 +1304,11 @@ static void _shortcut_edited(GtkCellRenderer *cell, const gchar *path_string, gu
   }
 
   gtk_tree_path_free(path);
+}
+
+static void _shortcut_cleared(GtkCellRendererAccel *renderer, const gchar *path_string, gpointer user_data)
+{
+  _shortcut_edited(GTK_CELL_RENDERER(renderer), path_string, 0, 0, 0, user_data);
 }
 
 
@@ -1648,6 +1668,7 @@ void dt_accels_window(dt_accels_t *accels, GtkWindow *main_window)
                                                     COL_MODS, NULL);
   gtk_tree_view_column_set_cell_data_func(column, renderer, _make_column_editable, NULL, NULL);
   g_signal_connect(renderer, "accel-edited", G_CALLBACK(_shortcut_edited), filter_model);
+  g_signal_connect(renderer, "accel-cleared", G_CALLBACK(_shortcut_cleared), filter_model);
   gtk_tree_view_column_set_min_width(column, 100);
   gtk_tree_view_column_set_resizable(column, TRUE);
   gtk_tree_view_append_column(GTK_TREE_VIEW(tree_view), column);
