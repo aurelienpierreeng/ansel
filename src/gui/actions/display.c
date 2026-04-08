@@ -23,6 +23,7 @@
 #include "develop/dev_pixelpipe.h"
 #include "gui/actions/menu.h"
 #include "gui/gtk.h"
+#include "views/view.h"
 
 #include "gui/window_manager.h"
 
@@ -127,6 +128,18 @@ void dt_ui_panel_show(dt_ui_t *ui, const dt_ui_panel_t p, gboolean show, gboolea
   {
     gtk_widget_show(ui->panels[p]);
     if(over_panel) gtk_widget_show(over_panel);
+
+    if(p == DT_UI_PANEL_BOTTOM && ui->thumbtable_filmstrip)
+    {
+      const int32_t imgid = dt_view_active_images_get_first();
+      if(imgid > UNKNOWN_IMAGE)
+      {
+        dt_control_set_mouse_over_id(imgid);
+        dt_control_set_keyboard_over_id(imgid);
+        dt_thumbtable_update_parent(ui->thumbtable_filmstrip);
+        g_idle_add((GSourceFunc)dt_thumbtable_scroll_to_selection, ui->thumbtable_filmstrip);
+      }
+    }
   }
   else
   {

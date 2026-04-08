@@ -2263,6 +2263,9 @@ void enter(dt_view_t *self)
 
   const int32_t imgid = _darkroom_pending_imgid;
   _darkroom_pending_imgid = UNKNOWN_IMAGE;
+  dt_control_set_mouse_over_id(imgid);
+  dt_control_set_keyboard_over_id(imgid);
+  g_idle_add((GSourceFunc)dt_thumbtable_scroll_to_selection, darktable.gui->ui->thumbtable_filmstrip);
   int ret = dt_dev_load_image(darktable.develop, imgid);
   _darkroom_image_loaded_callback(NULL, imgid, ret, self);
 }
