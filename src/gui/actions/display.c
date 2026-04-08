@@ -45,8 +45,10 @@ static gboolean full_screen_callback(GtkAccelGroup *group, GObject *acceleratabl
   {
     gtk_window_unfullscreen(GTK_WINDOW(window));
 
+#ifdef GDK_WINDOWING_QUARTZ
     // workaround for GTK Quartz backend bug
     gtk_window_set_title(GTK_WINDOW(window), "Ansel");
+#endif
 
     // Hide window controls
     dt_ui_set_window_buttons_visible(darktable.gui->ui, FALSE);
@@ -55,13 +57,16 @@ static gboolean full_screen_callback(GtkAccelGroup *group, GObject *acceleratabl
   {
     gtk_window_fullscreen(GTK_WINDOW(window));
 
+#ifdef GDK_WINDOWING_QUARTZ
     // workaround for GTK Quartz backend bug
     gtk_window_set_title(GTK_WINDOW(window), "Ansel Preview");
+#endif
 
     // Show window controls
     dt_ui_set_window_buttons_visible(darktable.gui->ui, TRUE);
   }
 
+#ifdef GDK_WINDOWING_QUARTZ
   // Mac OS workaround: always re-anchor the window to the bottom of the screen
   GdkWindow *win = gtk_widget_get_window(window);
   GdkDisplay *display = gtk_widget_get_display(window);
@@ -71,7 +76,8 @@ static gboolean full_screen_callback(GtkAccelGroup *group, GObject *acceleratabl
 
   int w, h;
   gtk_window_get_size(GTK_WINDOW(window), &w, &h);
-  gtk_window_move(GTK_WINDOW(window), geometry.width - geometry.x - w, geometry.height - geometry.y - h);
+  gtk_window_move(GTK_WINDOW(window), geometry.x + geometry.width - w, geometry.y + geometry.height - h);
+#endif
 
   dt_dev_pixelpipe_change_zoom_main(darktable.develop);
 
