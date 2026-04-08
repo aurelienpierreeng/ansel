@@ -2295,6 +2295,19 @@ Details :
   border: 4px solid @thumbnail_bg_color;
 }
 
+/* Filmstrip thumbs are constrained to square cells whose side is the strip height.
+ * Keep the outer frame visible, but reduce fixed spacing so tiny strips still let
+ * the image surface occupy most of the available square. */
+#thumbtable-filmstrip .thumb-main
+{
+  margin: 2px;
+}
+
+#thumbtable-filmstrip .thumb-background
+{
+  border-width: 2px;
+}
+
 /* set hover effect */
 .thumb-main:hover .thumb-background
 {
@@ -2316,6 +2329,11 @@ Details :
 .thumb-image
 {
   margin: 4px; /* needs to be set equal to .thumb-background border to avoid overlap */
+}
+
+#thumbtable-filmstrip .thumb-image
+{
+  margin: 2px; /* keep in sync with #thumbtable-filmstrip .thumb-background border-width */
 }
 
 /* Set top margin on active image in filmstrip */
@@ -2428,6 +2446,12 @@ Details :
   border: 0;
   margin: 0;
   padding: 4px;
+}
+
+#thumbtable-filmstrip .thumb-bottom,
+#thumbtable-filmstrip .thumb-top
+{
+  padding: 2px;
 }
 
 /* Set background on thumbnails hover overlays */
