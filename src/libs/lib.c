@@ -1000,10 +1000,27 @@ static void presets_popup_callback(GtkButton *button, dt_lib_module_t *module)
   if(button) dtgtk_button_set_active(DTGTK_BUTTON(button), FALSE);
 }
 
+static void _lib_module_expander_gone(gpointer user_data, GObject *where_the_object_was)
+{
+  dt_lib_module_t *module = (dt_lib_module_t *)user_data;
+  if(!module) return;
+  if(module->expander == (GtkWidget *)where_the_object_was) module->expander = NULL;
+  if(darktable.gui)
+  {
+    if(darktable.gui->scroll_to[0] == (GtkWidget *)where_the_object_was) darktable.gui->scroll_to[0] = NULL;
+    if(darktable.gui->scroll_to[1] == (GtkWidget *)where_the_object_was) darktable.gui->scroll_to[1] = NULL;
+  }
+}
+
 
 void dt_lib_gui_set_expanded(dt_lib_module_t *module, gboolean expanded)
 {
   if(!module->expander) return;
+  if(!DTGTK_IS_EXPANDER(module->expander))
+  {
+    module->expander = NULL;
+    return;
+  }
 
   dtgtk_expander_set_expanded(DTGTK_EXPANDER(module->expander), expanded);
 
@@ -1036,6 +1053,19 @@ gboolean dt_lib_gui_get_expanded(dt_lib_module_t *module)
 {
   if(!module->expandable(module)) return true;
   if(!module->expander) return true;
+  if(!DTGTK_IS_EXPANDER(module->expander))
+  {
+    module->expander = NULL;
+    if(!module->widget)
+    {
+      char var[1024];
+      const dt_view_t *current_view = dt_view_manager_get_current_view(darktable.view_manager);
+      if(!current_view) return true;
+      snprintf(var, sizeof(var), "plugins/%s/%s/expanded", current_view->module_name, module->plugin_name);
+      return dt_conf_get_bool(var);
+    }
+    return true;
+  }
   if(!module->widget)
   {
     char var[1024];
@@ -1081,19 +1111,20 @@ static gboolean _lib_plugin_header_button_press(GtkWidget *w, GdkEventButton *e,
 
         if(m != module && container == m->container(m) && m->expandable(m) && dt_lib_is_visible_in_view(m, v))
         {
-          all_other_closed = all_other_closed && !dtgtk_expander_get_expanded(DTGTK_EXPANDER(m->expander));
+          if(m->expander && DTGTK_IS_EXPANDER(m->expander))
+            all_other_closed = all_other_closed && !dtgtk_expander_get_expanded(DTGTK_EXPANDER(m->expander));
           dt_lib_gui_set_expanded(m, FALSE);
         }
       }
       if(all_other_closed)
-        dt_lib_gui_set_expanded(module, !dtgtk_expander_get_expanded(DTGTK_EXPANDER(module->expander)));
+        dt_lib_gui_set_expanded(module, !dt_lib_gui_get_expanded(module));
       else
         dt_lib_gui_set_expanded(module, TRUE);
     }
     else
     {
       /* else just toggle */
-      dt_lib_gui_set_expanded(module, !dtgtk_expander_get_expanded(DTGTK_EXPANDER(module->expander)));
+      dt_lib_gui_set_expanded(module, !dt_lib_gui_get_expanded(module));
     }
 
     return TRUE;
@@ -1192,6 +1223,7 @@ GtkWidget *dt_lib_gui_get_expander(dt_lib_module_t *module)
   gtk_widget_show_all(GTK_WIDGET(module->widget));
   dt_gui_add_class(module->widget, "dt_plugin_ui_main");
   module->expander = expander;
+  g_object_weak_ref(G_OBJECT(expander), _lib_module_expander_gone, module);
 
   gtk_widget_set_hexpand(module->widget, FALSE);
   gtk_widget_set_vexpand(module->widget, FALSE);
