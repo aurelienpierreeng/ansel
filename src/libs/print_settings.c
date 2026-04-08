@@ -129,7 +129,6 @@ typedef struct dt_lib_print_settings_t
   int v_icctype, v_picctype;
   char *v_iccprofile, *v_piccprofile, *v_style;
   gboolean v_black_point_compensation;
-  gboolean busy;
 
   // for adding new area
   gboolean creation;
@@ -362,7 +361,7 @@ static int _export_image(dt_job_t *job, dt_image_box *img)
   dt_imageio_export_with_flags
     (img->imgid, "unused", &buf, (dt_imageio_module_data_t *)&dat, TRUE, FALSE,
      TRUE, is_scaling, FALSE, NULL, FALSE, export_masks, params->buf_icc_type,
-     params->buf_icc_profile, params->buf_icc_intent,  NULL, NULL, 1, 1, NULL);
+     params->buf_icc_profile, params->buf_icc_intent,  NULL, NULL, 1, 1, NULL, NULL);
 
   img->exp_width = dat.head.width;
   img->exp_height = dat.head.height;
@@ -779,6 +778,14 @@ static void _set_printer(const dt_lib_module_t *self, const char *printer_name)
   if(!dt_bauhaus_combobox_set_from_text(ps->papers, default_paper))
     dt_bauhaus_combobox_set(ps->papers, 0);
 
+  const gchar *paper_name = dt_bauhaus_combobox_get_text(ps->papers);
+  if(paper_name)
+  {
+    const dt_paper_info_t *paper = dt_get_paper(ps->paper_list, paper_name);
+    if(paper)
+      memcpy(&ps->prt.paper, paper, sizeof(dt_paper_info_t));
+  }
+
   // add corresponding supported media
   dt_bauhaus_combobox_clear(ps->media);
   if(ps->media_list)
@@ -795,6 +802,21 @@ static void _set_printer(const dt_lib_module_t *self, const char *printer_name)
   const char *default_medium = dt_conf_get_string_const("plugins/print/print/medium");
   if(!dt_bauhaus_combobox_set_from_text(ps->media, default_medium))
     dt_bauhaus_combobox_set(ps->media, 0);
+
+  const gchar *medium_name = dt_bauhaus_combobox_get_text(ps->media);
+  if(medium_name)
+  {
+    const dt_medium_info_t *medium = dt_get_medium(ps->media_list, medium_name);
+    if(medium)
+      memcpy(&ps->prt.medium, medium, sizeof(dt_medium_info_t));
+  }
+
+  if(ps->prt.paper.width > 0.0f && ps->prt.paper.height > 0.0f && ps->prt.printer.resolution > 0)
+  {
+    float width, height;
+    _get_page_dimension(&ps->prt, &width, &height);
+    dt_printing_setup_page(&ps->imgs, width, height, ps->prt.printer.resolution);
+  }
 
   dt_view_print_settings(darktable.view_manager, &ps->prt, &ps->imgs);
 }
@@ -1249,23 +1271,6 @@ static void _set_orientation(dt_lib_print_settings_t *ps, int32_t imgid)
   dt_control_queue_redraw_center();
 }
 
-static void _load_image_full_page(dt_lib_print_settings_t *ps, int32_t imgid)
-{
-  _set_orientation(ps, imgid);
-
-  dt_printing_setup_box(&ps->imgs, 0,
-                        ps->imgs.screen.page.x, ps->imgs.screen.page.y,
-                        ps->imgs.screen.page.width, ps->imgs.screen.page.height);
-  float width, height;
-  _get_page_dimension(&ps->prt, &width, &height);
-
-  dt_printing_setup_page(&ps->imgs, width, height, ps->prt.printer.resolution);
-
-  dt_printing_setup_image(&ps->imgs, 0, imgid, 100, 100, ALIGNMENT_CENTER);
-
-  dt_control_queue_redraw_center();
-}
-
 static void _print_settings_activate_or_update_callback(gpointer instance, int32_t imgid, gpointer user_data)
 {
   const dt_lib_module_t *self = (dt_lib_module_t *)user_data;
@@ -1280,8 +1285,10 @@ static void _print_settings_activate_or_update_callback(gpointer instance, int32
     }
     else
     {
-      dt_printing_clear_box(&ps->imgs.box[0]);
-      _load_image_full_page(ps, imgid);
+      _set_orientation(ps, imgid);
+      dt_printing_clear_boxes(&ps->imgs);
+      ps->imgs.imgid_to_load = imgid;
+      dt_control_queue_redraw_center();
     }
   }
 }
@@ -1349,9 +1356,15 @@ static void _new_printer_callback(dt_printer_info_t *printer, void *user_data)
 
 void view_enter(struct dt_lib_module_t *self,struct dt_view_t *old_view,struct dt_view_t *new_view)
 {
+  dt_lib_print_settings_t *ps = (dt_lib_print_settings_t *)self->data;
+
+  // Re-publish the settings payload on each entry so the print view never
+  // keeps a stale or not-yet-initialized images box between switches.
+  dt_view_print_settings(darktable.view_manager, &ps->prt, &ps->imgs);
+
   // user activated a new image via the filmstrip or user entered view
   // mode which activates an image: get image_id and orientation
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_VIEWMANAGER_THUMBTABLE_ACTIVATE,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_VIEWMANAGER_FILMSTRIP_ACTIVATE,
                             G_CALLBACK(_print_settings_activate_or_update_callback), self);
 
   // NOTE: it would be proper to set image_id here to -1, but this seems to make no difference
@@ -1362,20 +1375,6 @@ void view_leave(struct dt_lib_module_t *self,struct dt_view_t *old_view,struct d
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals,
                                G_CALLBACK(_print_settings_activate_or_update_callback),
                                self);
-}
-
-static gboolean _expose_again(gpointer user_data)
-{
-  dt_lib_print_settings_t *ps = (dt_lib_print_settings_t *)user_data;
-
-  if(ps->imgs.imgid_to_load != -1)
-  {
-    _load_image_full_page(ps, ps->imgs.imgid_to_load);
-    ps->imgs.imgid_to_load = -1;
-  }
-
-  dt_control_queue_redraw_center();
-  return FALSE;
 }
 
 void _get_control(dt_lib_print_settings_t *ps, float x, float y)
@@ -1732,14 +1731,6 @@ void gui_post_expose(struct dt_lib_module_t *self, cairo_t *cr, int32_t width, i
 {
   dt_lib_print_settings_t *ps = (dt_lib_print_settings_t *)self->data;
 
-  if(ps->imgs.imgid_to_load != -1)
-  {
-    // we set orientation and delay the reload to ensure the
-    // page is properly set before trying to display the image.
-    _set_orientation(ps, ps->imgs.imgid_to_load);
-    g_timeout_add(250, _expose_again, ps);
-  }
-
   // display grid
 
   // 1mm
@@ -1792,47 +1783,9 @@ void gui_post_expose(struct dt_lib_module_t *self, cairo_t *cr, int32_t width, i
   cairo_set_source_rgba(cr, 1, .2, .2, 0.6);
   cairo_set_dash(cr, NULL, 0, 0);
 
-  const float scaler = 1.0f / darktable.gui->ppd;
-
   for(int k=0; k<ps->imgs.count; k++)
   {
     dt_image_box *img = &ps->imgs.box[k];
-
-    if(img->imgid != UNKNOWN_IMAGE)
-    {
-      cairo_surface_t *surf = NULL;
-
-      // screen coordinate default to current box if there is no image
-      dt_image_pos screen;
-
-      dt_printing_setup_image(&ps->imgs, k, img->imgid, 100, 100, img->alignment);
-
-      dt_printing_get_screen_pos(&ps->imgs, img, &screen);
-
-      const dt_view_surface_value_t res =
-        dt_view_image_get_surface(img->imgid, screen.width, screen.height, &surf, DT_THUMBTABLE_ZOOM_FIT);
-
-      if(res != DT_VIEW_SURFACE_OK)
-      {
-        // if the image is missing, we reload it again
-        g_timeout_add(250, _expose_again, ps);
-        if(!ps->busy) dt_control_log_busy_enter();
-        ps->busy = TRUE;
-      }
-      else
-      {
-        cairo_save(cr);
-        cairo_translate(cr, screen.x, screen.y);
-        cairo_scale(cr, scaler, scaler);
-        cairo_set_source_surface(cr, surf, 0, 0);
-        const double alpha = (ps->dragging || (ps->selected != -1 && ps->selected != k)) ? 0.25 : 1.0;
-        cairo_paint_with_alpha(cr, alpha);
-        cairo_surface_destroy(surf);
-        cairo_restore(cr);
-        if(ps->busy) dt_control_log_busy_leave();
-        ps->busy = FALSE;
-      }
-    }
 
     if(k == ps->selected || img->imgid == UNKNOWN_IMAGE)
     {
