@@ -1976,68 +1976,85 @@ dt_thumbtable_t *dt_thumbtable_new(dt_thumbtable_mode_t mode)
 
   dt_thumbtable_set_parent(table, mode);
 
-  // Keys used by key-pressed event handler when the grid has the focus
-  // FIXME: this will need to be extended for other views
-  GtkAccelGroup *accel_group = (mode == DT_THUMBTABLE_MODE_FILEMANAGER) 
-                                ? darktable.gui->accels->lighttable_accels 
-                                : darktable.gui->accels->darkroom_accels;
+  // The file manager belongs only to lighttable, while the filmstrip widget is
+  // shared by darkroom, print and map. Each owner view needs its own accel
+  // paths so shortcut search, menus and dispatch stay in sync with the
+  // currently active accel group.
+  GtkAccelGroup *accel_groups[] = {
+    darktable.gui->accels->lighttable_accels,
+    darktable.gui->accels->darkroom_accels,
+    darktable.gui->accels->print_accels,
+    darktable.gui->accels->map_accels
+  };
+  const char *path_bases[] = {
+    _("Lighttable/Thumbtable"),
+    _("Darkroom/Filmstrip"),
+    _("Print/Filmstrip"),
+    _("Map/Filmstrip")
+  };
+  const int first_group = (mode == DT_THUMBTABLE_MODE_FILEMANAGER) ? 0 : 1;
+  const int last_group = (mode == DT_THUMBTABLE_MODE_FILEMANAGER) ? 1 : 4;
 
-  const char *path_base = (mode == DT_THUMBTABLE_MODE_FILEMANAGER) 
-                          ? _("Lighttable/Thumbtable")
-                          : _("Darkroom/Filmstrip");
+  gchar *path = NULL;
+  for(int group_index = first_group; group_index < last_group; group_index++)
+  {
+    GtkAccelGroup *accel_group = accel_groups[group_index];
+    const char *path_base = path_bases[group_index];
 
-  gchar *path = dt_accels_build_path(path_base, _("Move up"));
-  dt_accels_new_virtual_shortcut(darktable.gui->accels, accel_group,
-                                 path, table->grid, GDK_KEY_Up, 0);
-  dt_free(path);
-  path = dt_accels_build_path(path_base, _("Move down"));
-  dt_accels_new_virtual_shortcut(darktable.gui->accels, accel_group,
-                                 path, table->grid, GDK_KEY_Down, 0);
-  dt_free(path);
-  path = dt_accels_build_path(path_base, _("Move left"));
-  dt_accels_new_virtual_shortcut(darktable.gui->accels, accel_group,
-                                 path, table->grid, GDK_KEY_Left, 0);
-  dt_free(path);
-  path = dt_accels_build_path(path_base, _("Move right"));
-  dt_accels_new_virtual_shortcut(darktable.gui->accels, accel_group,
-                                 path, table->grid, GDK_KEY_Right, 0);
-  dt_free(path);
-  path = dt_accels_build_path(path_base, _("Go to previous page"));
-  dt_accels_new_virtual_shortcut(darktable.gui->accels, accel_group,
-                                 path, table->grid, GDK_KEY_Page_Up, 0);
-  dt_free(path);
-  path = dt_accels_build_path(path_base, _("Go to next page"));
-  dt_accels_new_virtual_shortcut(darktable.gui->accels, accel_group,
-                                 path, table->grid, GDK_KEY_Page_Down, 0);
-  dt_free(path);
-  path = dt_accels_build_path(path_base, _("Go to the start"));
-  dt_accels_new_virtual_shortcut(darktable.gui->accels, accel_group,
-                                 path, table->grid, GDK_KEY_Home, 0);
-  dt_free(path);
-  path = dt_accels_build_path(path_base, _("Go to the end"));
-  dt_accels_new_virtual_shortcut(darktable.gui->accels, accel_group,
-                                 path, table->grid, GDK_KEY_End, 0);
-  dt_free(path);
-  path = dt_accels_build_path(path_base, _("Select the current thumbnail"));
-  dt_accels_new_virtual_shortcut(darktable.gui->accels, accel_group,
-                                 path, table->grid, GDK_KEY_space, 0);
-  dt_free(path);
-  path = dt_accels_build_path(path_base, _("Toogle the current thumbnail from selection"));
-  dt_accels_new_virtual_shortcut(darktable.gui->accels, accel_group,
-                                 path, table->grid, GDK_KEY_space, GDK_CONTROL_MASK);
-  dt_free(path);
-  path = dt_accels_build_path(path_base, _("Expand the current selection up to the hovered thumbnail"));
-  dt_accels_new_virtual_shortcut(darktable.gui->accels, accel_group,
-                                 path, table->grid, GDK_KEY_space, GDK_SHIFT_MASK);
-  dt_free(path);
-  path = dt_accels_build_path(path_base, _("Open the current thumbnail in darkroom"));
-  dt_accels_new_virtual_shortcut(darktable.gui->accels, accel_group,
-                                 path, table->grid, GDK_KEY_Return, 0);
-  dt_free(path);
-  path = dt_accels_build_path(path_base, _("Enable thumbnail transient alternative view"));
-  dt_accels_new_virtual_shortcut(darktable.gui->accels, accel_group,
-                                 path, table->grid, GDK_KEY_Alt_L, 0);
-  dt_free(path);
+    path = dt_accels_build_path(path_base, _("Move up"));
+    dt_accels_new_virtual_shortcut(darktable.gui->accels, accel_group,
+                                   path, table->grid, GDK_KEY_Up, 0);
+    dt_free(path);
+    path = dt_accels_build_path(path_base, _("Move down"));
+    dt_accels_new_virtual_shortcut(darktable.gui->accels, accel_group,
+                                   path, table->grid, GDK_KEY_Down, 0);
+    dt_free(path);
+    path = dt_accels_build_path(path_base, _("Move left"));
+    dt_accels_new_virtual_shortcut(darktable.gui->accels, accel_group,
+                                   path, table->grid, GDK_KEY_Left, 0);
+    dt_free(path);
+    path = dt_accels_build_path(path_base, _("Move right"));
+    dt_accels_new_virtual_shortcut(darktable.gui->accels, accel_group,
+                                   path, table->grid, GDK_KEY_Right, 0);
+    dt_free(path);
+    path = dt_accels_build_path(path_base, _("Go to previous page"));
+    dt_accels_new_virtual_shortcut(darktable.gui->accels, accel_group,
+                                   path, table->grid, GDK_KEY_Page_Up, 0);
+    dt_free(path);
+    path = dt_accels_build_path(path_base, _("Go to next page"));
+    dt_accels_new_virtual_shortcut(darktable.gui->accels, accel_group,
+                                   path, table->grid, GDK_KEY_Page_Down, 0);
+    dt_free(path);
+    path = dt_accels_build_path(path_base, _("Go to the start"));
+    dt_accels_new_virtual_shortcut(darktable.gui->accels, accel_group,
+                                   path, table->grid, GDK_KEY_Home, 0);
+    dt_free(path);
+    path = dt_accels_build_path(path_base, _("Go to the end"));
+    dt_accels_new_virtual_shortcut(darktable.gui->accels, accel_group,
+                                   path, table->grid, GDK_KEY_End, 0);
+    dt_free(path);
+    path = dt_accels_build_path(path_base, _("Select the current thumbnail"));
+    dt_accels_new_virtual_shortcut(darktable.gui->accels, accel_group,
+                                   path, table->grid, GDK_KEY_space, 0);
+    dt_free(path);
+    path = dt_accels_build_path(path_base, _("Toogle the current thumbnail from selection"));
+    dt_accels_new_virtual_shortcut(darktable.gui->accels, accel_group,
+                                   path, table->grid, GDK_KEY_space, GDK_CONTROL_MASK);
+    dt_free(path);
+    path = dt_accels_build_path(path_base, _("Expand the current selection up to the hovered thumbnail"));
+    dt_accels_new_virtual_shortcut(darktable.gui->accels, accel_group,
+                                   path, table->grid, GDK_KEY_space, GDK_SHIFT_MASK);
+    dt_free(path);
+    path = dt_accels_build_path(path_base, _("Open the current thumbnail in darkroom"));
+    dt_accels_new_virtual_shortcut(darktable.gui->accels, accel_group,
+                                   path, table->grid, GDK_KEY_Return, 0);
+    dt_free(path);
+    path = dt_accels_build_path(path_base, _("Enable thumbnail transient alternative view"));
+    dt_accels_new_virtual_shortcut(darktable.gui->accels, accel_group,
+                                   path, table->grid, GDK_KEY_Alt_L, 0);
+    dt_free(path);
+  }
+
   path = dt_accels_build_path(_("Global/Menu/File"), _("Remove image from library"));
   dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->global_accels,
                                  path, table->grid, GDK_KEY_Delete, 0);

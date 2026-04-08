@@ -314,6 +314,22 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
   }
 }
 
+int key_pressed(dt_view_t *self, GdkEventKey *event)
+{
+  if(!gtk_window_is_active(GTK_WINDOW(darktable.gui->ui->main_window))) return FALSE;
+
+  switch(event->keyval)
+  {
+    case GDK_KEY_Escape:
+      dt_ctl_switch_mode_to("lighttable");
+      return TRUE;
+    default:
+      break;
+  }
+
+  return FALSE;
+}
+
 int try_enter(dt_view_t *self)
 {
   dt_print_t *prt = (dt_print_t*)self->data;
@@ -356,6 +372,9 @@ void enter(dt_view_t *self)
 {
   dt_print_t *prt=(dt_print_t*)self->data;
 
+  dt_accels_connect_accels(darktable.gui->accels);
+  dt_accels_connect_active_group(darktable.gui->accels, "print");
+
   /* scroll filmstrip to the first selected image */
   if(prt->imgs->imgid_to_load >= 0)
   {
@@ -383,6 +402,7 @@ void enter(dt_view_t *self)
 void leave(dt_view_t *self)
 {
   dt_print_t *prt=(dt_print_t*)self->data;
+  dt_accels_disconnect_active_group(darktable.gui->accels);
   dt_view_active_images_reset(FALSE);
 
   /* disconnect from filmstrip image activate */

@@ -933,7 +933,21 @@ static void dt_lib_init_module(void *m)
         accel_group = darktable.gui->accels->lighttable_accels;
         label = g_strdup("Lighttable/Toolboxes");
       }
-      // TODO: handle the other views
+      else if(!g_strcmp0(*view, "map"))
+      {
+        accel_group = darktable.gui->accels->map_accels;
+        label = g_strdup("Map/Toolboxes");
+      }
+      else if(!g_strcmp0(*view, "print"))
+      {
+        accel_group = darktable.gui->accels->print_accels;
+        label = g_strdup("Print/Toolboxes");
+      }
+      else if(!g_strcmp0(*view, "slideshow"))
+      {
+        accel_group = darktable.gui->accels->slideshow_accels;
+        label = g_strdup("Slideshow/Toolboxes");
+      }
 
       if(accel_group && label)
         dt_accels_new_action_shortcut(darktable.gui->accels, _lib_plugin_focus_accel, m,

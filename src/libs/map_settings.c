@@ -103,6 +103,32 @@ static void _map_source_changed(GtkWidget *widget, gpointer data)
   }
 }
 
+/**
+ * @brief Cycle the map thumbnail rendering mode from the map accel group.
+ *
+ * The shortcut owns a map-view behavior, but the preference widget lives in the
+ * settings lib module. Keeping the state update here preserves the existing
+ * enum widget sync and redraw path.
+ */
+static gboolean _thumbnail_change_accel(GtkAccelGroup *accel_group, GObject *accelerable, guint keyval,
+                                        GdkModifierType mods, gpointer user_data)
+{
+  dt_lib_module_t *self = (dt_lib_module_t *)user_data;
+  dt_lib_map_settings_t *d = (dt_lib_map_settings_t *)self->data;
+
+  const char *str = dt_conf_get_string_const("plugins/map/images_thumbnail");
+  if(!g_strcmp0(str, "thumbnail"))
+    dt_conf_set_string("plugins/map/images_thumbnail", "count");
+  else if(!g_strcmp0(str, "count"))
+    dt_conf_set_string("plugins/map/images_thumbnail", "none");
+  else
+    dt_conf_set_string("plugins/map/images_thumbnail", "thumbnail");
+
+  dt_gui_preferences_enum_update(d->images_thumb);
+  _parameter_changed(NULL, self);
+  return TRUE;
+}
+
 void gui_init(dt_lib_module_t *self)
 {
   dt_lib_map_settings_t *d = (dt_lib_map_settings_t *)malloc(sizeof(dt_lib_map_settings_t));
@@ -162,9 +188,9 @@ void gui_init(dt_lib_module_t *self)
   g_signal_connect(G_OBJECT(d->images_thumb), "changed", G_CALLBACK(_parameter_changed), self);
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(grid), FALSE, FALSE, 0);
 
-#if 0
-  dt_action_register(self, N_("thumbnail display"), _thumbnail_change, GDK_KEY_s, GDK_SHIFT_MASK);
-#endif
+  dt_accels_new_map_action(_thumbnail_change_accel, self, N_("Map/Actions"),
+                           N_("Thumbnail display"), GDK_KEY_s, GDK_SHIFT_MASK,
+                           _("Cycles the image display mode on the map"));
 }
 
 void gui_cleanup(dt_lib_module_t *self)
@@ -183,22 +209,6 @@ void gui_reset(dt_lib_module_t *self)
   dt_gui_preferences_int_reset(d->min_images);
   dt_gui_preferences_enum_reset(d->images_thumb);
 }
-
-#if 0
-static void _thumbnail_change(dt_action_t *action)
-{
-  dt_lib_map_settings_t *d = dt_action_lib(action)->data;;
-
-  const char *str = dt_conf_get_string_const("plugins/map/images_thumbnail");
-  if(!g_strcmp0(str, "thumbnail"))
-    dt_conf_set_string("plugins/map/images_thumbnail", "count");
-  else if(!g_strcmp0(str, "count"))
-    dt_conf_set_string("plugins/map/images_thumbnail", "none");
-  else
-    dt_conf_set_string("plugins/map/images_thumbnail", "thumbnail");
-  dt_gui_preferences_enum_update(d->images_thumb);
-}
-#endif
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

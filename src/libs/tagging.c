@@ -125,6 +125,10 @@ typedef enum dt_tag_sort_id
 } dt_tag_sort_id;
 
 static void _save_last_tag_used(const char *tags, dt_lib_tagging_t *d);
+static gboolean _lib_tagging_tag_redo_accel(GtkAccelGroup *accel_group, GObject *accelerable, guint keyval,
+                                            GdkModifierType mods, gpointer user_data);
+static gboolean _lib_tagging_tag_show_accel(GtkAccelGroup *accel_group, GObject *accelerable, guint keyval,
+                                            GdkModifierType mods, gpointer user_data);
 
 const char *name(struct dt_lib_module_t *self)
 {
@@ -2745,7 +2749,6 @@ int position()
   return 3;
 }
 
-#if 0
 static gboolean _match_selected_func(GtkEntryCompletion *completion, GtkTreeModel *model, GtkTreeIter *iter, gpointer user_data)
 {
   const int column = gtk_entry_completion_get_text_column(completion);
@@ -2845,7 +2848,6 @@ static gboolean _completion_match_func(GtkEntryCompletion *completion, const gch
 
   return res;
 }
-#endif
 
 static void _tree_selection_changed(GtkTreeSelection *treeselection, gpointer data)
 {
@@ -3306,10 +3308,22 @@ void gui_init(dt_lib_module_t *self)
   _init_treeview(self, 1);
   _update_atdetach_buttons(self);
 
-#if 0
-  dt_action_register(self, N_("tag"), _lib_tagging_tag_show, GDK_KEY_t, GDK_CONTROL_MASK);
-  dt_action_register(self, N_("redo last tag"), _lib_tagging_tag_redo, GDK_KEY_t, GDK_MOD1_MASK);
-#endif
+  dt_accels_new_action_shortcut(darktable.gui->accels, _lib_tagging_tag_show_accel, self,
+                                darktable.gui->accels->lighttable_accels, N_("Lighttable/Tags"),
+                                N_("Tag"), GDK_KEY_t, GDK_CONTROL_MASK, FALSE,
+                                _("Opens the quick tagging entry"));
+  dt_accels_new_action_shortcut(darktable.gui->accels, _lib_tagging_tag_redo_accel, self,
+                                darktable.gui->accels->lighttable_accels, N_("Lighttable/Tags"),
+                                N_("Redo last tag"), GDK_KEY_t, GDK_MOD1_MASK, FALSE,
+                                _("Re-applies the last used tag"));
+  dt_accels_new_action_shortcut(darktable.gui->accels, _lib_tagging_tag_show_accel, self,
+                                darktable.gui->accels->map_accels, N_("Map/Tags"),
+                                N_("Tag"), GDK_KEY_t, GDK_CONTROL_MASK, FALSE,
+                                _("Opens the quick tagging entry"));
+  dt_accels_new_action_shortcut(darktable.gui->accels, _lib_tagging_tag_redo_accel, self,
+                                darktable.gui->accels->map_accels, N_("Map/Tags"),
+                                N_("Redo last tag"), GDK_KEY_t, GDK_MOD1_MASK, FALSE,
+                                _("Re-applies the last used tag"));
 }
 
 void gui_cleanup(dt_lib_module_t *self)
@@ -3330,7 +3344,6 @@ void gui_cleanup(dt_lib_module_t *self)
   dt_free(self->data);
 }
 
-#if 0
 // http://stackoverflow.com/questions/4631388/transparent-floating-gtkentry
 static gboolean _lib_tagging_tag_key_press(GtkWidget *entry, GdkEventKey *event, dt_lib_module_t *self)
 {
@@ -3376,9 +3389,13 @@ static gboolean _lib_tagging_tag_destroy(GtkWidget *widget, GdkEvent *event, gpo
 }
 
 
-static void _lib_tagging_tag_redo(dt_action_t *action)
+/**
+ * @brief Re-apply the most recent tag expression to the current target images.
+ */
+static gboolean _lib_tagging_tag_redo_accel(GtkAccelGroup *accel_group, GObject *accelerable, guint keyval,
+                                            GdkModifierType mods, gpointer user_data)
 {
-  dt_lib_module_t *self = dt_action_lib(action);
+  dt_lib_module_t *self = (dt_lib_module_t *)user_data;
   dt_lib_tagging_t *d = (dt_lib_tagging_t *)self->data;
 
   if(d->last_tag)
@@ -3392,16 +3409,23 @@ static void _lib_tagging_tag_redo(dt_action_t *action)
     _init_treeview(self, 1);
     if(res) _raise_signal_tag_changed(self);
   }
+
+  return TRUE;
 }
 
-static void _lib_tagging_tag_show(dt_action_t *action)
+/**
+ * @brief Open the floating quick-tag entry used by the historical tagging
+ * shortcut, now registered in the active view accel groups.
+ */
+static gboolean _lib_tagging_tag_show_accel(GtkAccelGroup *accel_group, GObject *accelerable, guint keyval,
+                                            GdkModifierType mods, gpointer user_data)
 {
-  dt_lib_module_t *self = dt_action_lib(action);
+  dt_lib_module_t *self = (dt_lib_module_t *)user_data;
   dt_lib_tagging_t *d = (dt_lib_tagging_t *)self->data;
   if(d->tree_flag)
   {
     dt_control_log(_("tag shortcut is not active with tag tree view. please switch to list view"));
-    return;  // doesn't work properly with tree treeview
+    return TRUE;  // doesn't work properly with tree treeview
   }
 
   d->floating_tag_imgs = dt_act_on_get_images();
@@ -3459,9 +3483,9 @@ static void _lib_tagging_tag_show(dt_action_t *action)
   gtk_widget_show_all(d->floating_tag_window);
   gtk_widget_grab_focus(entry);
   gtk_window_present(GTK_WINDOW(d->floating_tag_window));
-}
 
-#endif
+  return TRUE;
+}
 
 static int _get_recent_tags_list_length()
 {

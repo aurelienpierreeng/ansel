@@ -72,6 +72,7 @@ typedef struct _slideshow_buf_t
   uint32_t *buf;
   uint32_t width;
   uint32_t height;
+  int32_t imgid;
   int32_t rank;
   gboolean invalidated;
 } dt_slideshow_buf_t;
@@ -145,12 +146,14 @@ static void shift_left(dt_slideshow_t *d)
   for(int k=S_LEFT; k<S_RIGHT; k++)
   {
     d->buf[k].buf         = d->buf[k+1].buf;
+    d->buf[k].imgid       = d->buf[k+1].imgid;
     d->buf[k].rank        = d->buf[k+1].rank;
     d->buf[k].width       = d->buf[k+1].width;
     d->buf[k].height      = d->buf[k+1].height;
     d->buf[k].invalidated = d->buf[k+1].invalidated;
   }
   d->buf[S_RIGHT].invalidated = TRUE;
+  d->buf[S_RIGHT].imgid = UNKNOWN_IMAGE;
   d->buf[S_RIGHT].rank = d->buf[S_CURRENT].rank + 1;
   d->buf[S_RIGHT].buf = tmp_buf;
 }
@@ -162,12 +165,14 @@ static void shift_right(dt_slideshow_t *d)
   for(int k=S_RIGHT; k>S_LEFT; k--)
   {
     d->buf[k].buf         = d->buf[k-1].buf;
+    d->buf[k].imgid       = d->buf[k-1].imgid;
     d->buf[k].rank        = d->buf[k-1].rank;
     d->buf[k].width       = d->buf[k-1].width;
     d->buf[k].height      = d->buf[k-1].height;
     d->buf[k].invalidated = d->buf[k-1].invalidated;
   }
   d->buf[S_LEFT].invalidated = TRUE;
+  d->buf[S_LEFT].imgid = UNKNOWN_IMAGE;
   d->buf[S_LEFT].rank = d->buf[S_CURRENT].rank - 1;
   d->buf[S_LEFT].buf = tmp_buf;
 }
@@ -177,12 +182,11 @@ static void requeue_job(dt_slideshow_t *d)
   dt_control_add_job(darktable.control, DT_JOB_QUEUE_USER_BG, process_job_create(d));
 }
 
-/*
 static void _set_delay(dt_slideshow_t *d, int value)
 {
   d->delay = CLAMP(d->delay + value, 1, 60);
   dt_conf_set_int("slideshow_delay", d->delay);
-} */
+}
 
 static int process_image(dt_slideshow_t *d, dt_slideshow_slot_t slot)
 {
@@ -241,6 +245,7 @@ static int process_image(dt_slideshow_t *d, dt_slideshow_slot_t slot)
     if(dat.rank == d->buf[slot].rank)
     {
       memcpy(d->buf[slot].buf, dat.buf.buf, sizeof(uint32_t) * dat.buf.width * dat.buf.height);
+      d->buf[slot].imgid = id;
       d->buf[slot].width = dat.buf.width;
       d->buf[slot].height = dat.buf.height;
       d->buf[slot].invalidated = FALSE;
@@ -322,6 +327,11 @@ static void _step_state(dt_slideshow_t *d, dt_slideshow_event_t event)
     if(d->buf[S_CURRENT].rank < d->col_count - 1)
     {
       shift_left(d);
+      if(d->buf[S_CURRENT].imgid > UNKNOWN_IMAGE)
+      {
+        dt_view_active_images_reset(FALSE);
+        dt_view_active_images_add(d->buf[S_CURRENT].imgid, FALSE);
+      }
       d->buf[S_RIGHT].rank = d->buf[S_CURRENT].rank + 1;
       d->buf[S_RIGHT].invalidated = d->buf[S_RIGHT].rank < d->col_count;
       _refresh_display(d);
@@ -338,6 +348,11 @@ static void _step_state(dt_slideshow_t *d, dt_slideshow_event_t event)
     if(d->buf[S_CURRENT].rank > 0)
     {
       shift_right(d);
+      if(d->buf[S_CURRENT].imgid > UNKNOWN_IMAGE)
+      {
+        dt_view_active_images_reset(FALSE);
+        dt_view_active_images_add(d->buf[S_CURRENT].imgid, FALSE);
+      }
       d->buf[S_LEFT].rank = d->buf[S_CURRENT].rank - 1;
       d->buf[S_LEFT].invalidated = d->buf[S_LEFT].rank >= 0;
       _refresh_display(d);
@@ -404,6 +419,9 @@ void enter(dt_view_t *self)
   d->mouse_timeout = 0;
   d->exporting = 0;
 
+  dt_accels_connect_accels(darktable.gui->accels);
+  dt_accels_connect_active_group(darktable.gui->accels, "slideshow");
+
   dt_ui_panel_show(darktable.gui->ui, DT_UI_PANEL_LEFT, FALSE, TRUE);
   dt_ui_panel_show(darktable.gui->ui, DT_UI_PANEL_RIGHT, FALSE, TRUE);
   dt_ui_panel_show(darktable.gui->ui, DT_UI_PANEL_TOP, FALSE, TRUE);
@@ -430,6 +448,7 @@ void enter(dt_view_t *self)
     d->buf[k].buf = dt_pixelpipe_cache_alloc_align_cache(
         sizeof(uint32_t) * d->width * d->height,
         0);
+    d->buf[k].imgid = UNKNOWN_IMAGE;
     d->buf[k].width =  d->width;
     d->buf[k].height = d->height;
     d->buf[k].invalidated = TRUE;
@@ -453,6 +472,7 @@ void enter(dt_view_t *self)
   }
 
   d->buf[S_CURRENT].rank = selrank;
+  d->buf[S_CURRENT].imgid = imgid;
   d->buf[S_LEFT].rank = d->buf[S_CURRENT].rank - 1;
   d->buf[S_RIGHT].rank = d->buf[S_CURRENT].rank + 1;
 
@@ -462,6 +482,10 @@ void enter(dt_view_t *self)
   d->delay = dt_conf_get_int("slideshow_delay");
   // restart from beginning, will first increment counter by step and then prefetch
   dt_pthread_mutex_unlock(&d->lock);
+
+  dt_view_active_images_reset(FALSE);
+  if(imgid > UNKNOWN_IMAGE) dt_view_active_images_add(imgid, FALSE);
+  dt_selection_clear(darktable.selection);
 
   dt_gui_refocus_center();
 
@@ -478,6 +502,7 @@ void leave(dt_view_t *self)
   d->mouse_timeout = 0;
   dt_control_change_cursor(GDK_LEFT_PTR);
   d->auto_advance = FALSE;
+  dt_accels_disconnect_active_group(darktable.gui->accels);
 
   // exporting could be in action, just wait for the last to finish
   // otherwise we will crash releasing lock and memory.
@@ -489,8 +514,13 @@ void leave(dt_view_t *self)
   {
     dt_pixelpipe_cache_free_align(d->buf[k].buf);
     d->buf[k].buf = NULL;
+    d->buf[k].imgid = UNKNOWN_IMAGE;
   }
   dt_pthread_mutex_unlock(&d->lock);
+
+  const int32_t imgid = dt_view_active_images_get_first();
+  if(imgid > UNKNOWN_IMAGE) dt_selection_select_single(darktable.selection, imgid);
+  dt_view_active_images_reset(FALSE);
 }
 
 void expose(dt_view_t *self, cairo_t *cr, int32_t width, int32_t height, int32_t pointerx, int32_t pointery)
@@ -527,6 +557,105 @@ void expose(dt_view_t *self, cairo_t *cr, int32_t width, int32_t height, int32_t
   d->width = width * darktable.gui->ppd;
   d->height = height * darktable.gui->ppd;
   dt_pthread_mutex_unlock(&d->lock);
+}
+
+int key_pressed(dt_view_t *self, GdkEventKey *event)
+{
+  if(!gtk_window_is_active(GTK_WINDOW(darktable.gui->ui->main_window))) return FALSE;
+  
+  switch(event->keyval)
+  {
+    case GDK_KEY_Escape:
+    {
+      dt_ctl_switch_mode_to("lighttable");
+      return TRUE;
+    }
+  }
+
+  return 0;
+}
+
+/**
+ * @brief Toggle slideshow auto-advance using the same stepping code path as
+ * manual navigation, so pause/resume stays consistent with the current buffer
+ * state.
+ */
+static gboolean _slideshow_start_stop_accel(GtkAccelGroup *accel_group, GObject *accelerable, guint keyval,
+                                            GdkModifierType mods, gpointer user_data)
+{
+  dt_view_t *self = (dt_view_t *)user_data;
+  dt_slideshow_t *d = (dt_slideshow_t *)self->data;
+  if(!d->auto_advance)
+  {
+    d->auto_advance = TRUE;
+    _step_state(d, S_REQUEST_STEP);
+  }
+  else
+  {
+    d->auto_advance = FALSE;
+    dt_control_log(_("slideshow paused"));
+  }
+  return TRUE;
+}
+
+/**
+ * @brief Increase the slideshow delay and store it immediately so repeated
+ * keyboard adjustments persist across view changes.
+ */
+static gboolean _slideshow_slow_down_accel(GtkAccelGroup *accel_group, GObject *accelerable, guint keyval,
+                                           GdkModifierType mods, gpointer user_data)
+{
+  dt_view_t *self = (dt_view_t *)user_data;
+  dt_slideshow_t *d = (dt_slideshow_t *)self->data;
+  _set_delay(d, 1);
+  dt_control_log(ngettext("slideshow delay set to %d second", "slideshow delay set to %d seconds", d->delay),
+                 d->delay);
+  return TRUE;
+}
+
+/**
+ * @brief Decrease the slideshow delay and store it immediately so the current
+ * playback cadence matches the persisted preference.
+ */
+static gboolean _slideshow_speed_up_accel(GtkAccelGroup *accel_group, GObject *accelerable, guint keyval,
+                                          GdkModifierType mods, gpointer user_data)
+{
+  dt_view_t *self = (dt_view_t *)user_data;
+  dt_slideshow_t *d = (dt_slideshow_t *)self->data;
+  _set_delay(d, -1);
+  dt_control_log(ngettext("slideshow delay set to %d second", "slideshow delay set to %d seconds", d->delay),
+                 d->delay);
+  return TRUE;
+}
+
+/**
+ * @brief Advance the slideshow while keeping auto-advance and global actions
+ * synced with the image currently displayed fullscreen.
+ */
+static gboolean _slideshow_step_forward_accel(GtkAccelGroup *accel_group, GObject *accelerable, guint keyval,
+                                              GdkModifierType mods, gpointer user_data)
+{
+  dt_view_t *self = (dt_view_t *)user_data;
+  dt_slideshow_t *d = (dt_slideshow_t *)self->data;
+  if(d->auto_advance) dt_control_log(_("slideshow paused"));
+  d->auto_advance = FALSE;
+  _step_state(d, S_REQUEST_STEP);
+  return TRUE;
+}
+
+/**
+ * @brief Step back in slideshow mode and keep the fullscreen image as the sole
+ * active image when the selection is temporarily cleared.
+ */
+static gboolean _slideshow_step_back_accel(GtkAccelGroup *accel_group, GObject *accelerable, guint keyval,
+                                           GdkModifierType mods, gpointer user_data)
+{
+  dt_view_t *self = (dt_view_t *)user_data;
+  dt_slideshow_t *d = (dt_slideshow_t *)self->data;
+  if(d->auto_advance) dt_control_log(_("slideshow paused"));
+  d->auto_advance = FALSE;
+  _step_state(d, S_REQUEST_STEP_BACK);
+  return TRUE;
 }
 
 static gboolean _hide_mouse(gpointer user_data)
@@ -569,70 +698,35 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
   return 0;
 }
 
-#if 0
-static void _start_stop_callback(dt_action_t *action)
-{
-  dt_slideshow_t *d = dt_action_view(action)->data;
-  if(!d->auto_advance)
-  {
-    d->auto_advance = TRUE;
-    _step_state(d, S_REQUEST_STEP);
-  }
-  else
-  {
-    d->auto_advance = FALSE;
-    dt_control_log(_("slideshow paused"));
-  }
-}
-
-static void _slow_down_callback(dt_action_t *action)
-{
-  dt_slideshow_t *d = dt_action_view(action)->data;
-  _set_delay(d, 1);
-  dt_control_log(ngettext("slideshow delay set to %d second", "slideshow delay set to %d seconds", d->delay), d->delay);
-}
-
-static void _speed_up_callback(dt_action_t *action)
-{
-  dt_slideshow_t *d = dt_action_view(action)->data;
-  _set_delay(d, -1);
-  dt_control_log(ngettext("slideshow delay set to %d second", "slideshow delay set to %d seconds", d->delay), d->delay);
-}
-
-static void _step_back_callback(dt_action_t *action)
-{
-  dt_slideshow_t *d = dt_action_view(action)->data;
-  if (d->auto_advance) dt_control_log(_("slideshow paused"));
-  d->auto_advance = FALSE;
-  _step_state(d, S_REQUEST_STEP_BACK);
-}
-
-static void _step_forward_callback(dt_action_t *action)
-{
-  dt_slideshow_t *d = dt_action_view(action)->data;
-  if (d->auto_advance) dt_control_log(_("slideshow paused"));
-  d->auto_advance = FALSE;
-  _step_state(d, S_REQUEST_STEP);
-}
-
-#endif
-
 void gui_init(dt_view_t *self)
 {
-#if 0
-  dt_action_register(self, N_("start and stop"), _start_stop_callback, GDK_KEY_space, 0);
-
-  dt_action_t *ac;
-  ac = dt_action_register(self, N_("slow down"), _slow_down_callback, GDK_KEY_Up, 0);
-  dt_shortcut_register(ac, 0, 0, GDK_KEY_KP_Add, 0);
-  dt_shortcut_register(ac, 0, 0, GDK_KEY_plus, 0);
-  ac = dt_action_register(self, N_("speed up"), _speed_up_callback, GDK_KEY_Down, 0);
-  dt_shortcut_register(ac, 0, 0, GDK_KEY_KP_Subtract, 0);
-  dt_shortcut_register(ac, 0, 0, GDK_KEY_minus, 0);
-
-  dt_action_register(self, N_("step forward"), _step_forward_callback, GDK_KEY_Right, 0);
-  dt_action_register(self, N_("step back"), _step_back_callback, GDK_KEY_Left, 0);
-#endif
+  dt_accels_new_slideshow_action(_slideshow_start_stop_accel, self, N_("Slideshow/Actions"),
+                                 N_("Start and stop"), GDK_KEY_space, 0,
+                                 _("Toggles slideshow auto-advance"));
+  dt_accels_new_slideshow_action(_slideshow_slow_down_accel, self, N_("Slideshow/Actions"),
+                                 N_("Slow down"), GDK_KEY_Up, 0,
+                                 _("Increases the slideshow delay"));
+  dt_accels_new_slideshow_action(_slideshow_slow_down_accel, self, N_("Slideshow/Actions"),
+                                 N_("Slow down"), GDK_KEY_KP_Add, 0,
+                                 _("Increases the slideshow delay"));
+  dt_accels_new_slideshow_action(_slideshow_slow_down_accel, self, N_("Slideshow/Actions"),
+                                 N_("Slow down"), GDK_KEY_plus, 0,
+                                 _("Increases the slideshow delay"));
+  dt_accels_new_slideshow_action(_slideshow_speed_up_accel, self, N_("Slideshow/Actions"),
+                                 N_("Speed up"), GDK_KEY_Down, 0,
+                                 _("Decreases the slideshow delay"));
+  dt_accels_new_slideshow_action(_slideshow_speed_up_accel, self, N_("Slideshow/Actions"),
+                                 N_("Speed up"), GDK_KEY_KP_Subtract, 0,
+                                 _("Decreases the slideshow delay"));
+  dt_accels_new_slideshow_action(_slideshow_speed_up_accel, self, N_("Slideshow/Actions"),
+                                 N_("Speed up"), GDK_KEY_minus, 0,
+                                 _("Decreases the slideshow delay"));
+  dt_accels_new_slideshow_action(_slideshow_step_back_accel, self, N_("Slideshow/Actions"),
+                                 N_("Step back"), GDK_KEY_Left, 0,
+                                 _("Displays the previous image"));
+  dt_accels_new_slideshow_action(_slideshow_step_forward_accel, self, N_("Slideshow/Actions"),
+                                 N_("Step forward"), GDK_KEY_Right, 0,
+                                 _("Displays the next image"));
 }
 
 // clang-format off

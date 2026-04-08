@@ -331,6 +331,9 @@ dt_accels_t * dt_accels_init(char *config_file, GtkAccelFlags flags)
   accels->global_accels = gtk_accel_group_new();
   accels->darkroom_accels = gtk_accel_group_new();
   accels->lighttable_accels = gtk_accel_group_new();
+  accels->map_accels = gtk_accel_group_new();
+  accels->print_accels = gtk_accel_group_new();
+  accels->slideshow_accels = gtk_accel_group_new();
   accels->acceleratables = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, _clean_shortcut);
   accels->active_group = NULL;
   accels->reset = 1;
@@ -359,9 +362,15 @@ void dt_accels_cleanup(dt_accels_t *accels)
   g_object_unref(accels->global_accels);
   g_object_unref(accels->darkroom_accels);
   g_object_unref(accels->lighttable_accels);
+  g_object_unref(accels->map_accels);
+  g_object_unref(accels->print_accels);
+  g_object_unref(accels->slideshow_accels);
   accels->global_accels = NULL;
   accels->darkroom_accels = NULL;
   accels->lighttable_accels = NULL;
+  accels->map_accels = NULL;
+  accels->print_accels = NULL;
+  accels->slideshow_accels = NULL;
 
   dt_pthread_mutex_lock(&accels->lock);
   g_hash_table_unref(accels->acceleratables);
@@ -387,6 +396,21 @@ void dt_accels_connect_active_group(dt_accels_t *accels, const gchar *group)
   {
     accels->reset--;
     accels->active_group = accels->darkroom_accels;
+  }
+  else if(!g_strcmp0(group, "map") && accels->map_accels)
+  {
+    accels->reset--;
+    accels->active_group = accels->map_accels;
+  }
+  else if(!g_strcmp0(group, "print") && accels->print_accels)
+  {
+    accels->reset--;
+    accels->active_group = accels->print_accels;
+  }
+  else if(!g_strcmp0(group, "slideshow") && accels->slideshow_accels)
+  {
+    accels->reset--;
+    accels->active_group = accels->slideshow_accels;
   }
   else
   {

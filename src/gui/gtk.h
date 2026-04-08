@@ -341,6 +341,12 @@ void dt_capitalize_label(gchar *text);
 
 #define dt_accels_new_lighttable_action(a, b, c, d, e, f, g) dt_accels_new_action_shortcut(darktable.gui->accels, a, b, darktable.gui->accels->lighttable_accels, c, d, e, f, FALSE, g)
 
+#define dt_accels_new_map_action(a, b, c, d, e, f, g) dt_accels_new_action_shortcut(darktable.gui->accels, a, b, darktable.gui->accels->map_accels, c, d, e, f, FALSE, g)
+
+#define dt_accels_new_print_action(a, b, c, d, e, f, g) dt_accels_new_action_shortcut(darktable.gui->accels, a, b, darktable.gui->accels->print_accels, c, d, e, f, FALSE, g)
+
+#define dt_accels_new_slideshow_action(a, b, c, d, e, f, g) dt_accels_new_action_shortcut(darktable.gui->accels, a, b, darktable.gui->accels->slideshow_accels, c, d, e, f, FALSE, g)
+
 #define dt_accels_new_darkroom_locked_action(a, b, c, d, e, f, g) dt_accels_new_action_shortcut(darktable.gui->accels, a, b, darktable.gui->accels->darkroom_accels, c, d, e, f, TRUE, g)
 
 

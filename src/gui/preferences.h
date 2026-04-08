@@ -44,6 +44,9 @@ void dt_gui_preferences_int_reset(GtkWidget *widget);
 void dt_gui_preferences_enum_reset(GtkWidget *widget);
 void dt_gui_preferences_string_reset(GtkWidget *widget);
 
+/** update enum widget to the current preference value. */
+void dt_gui_preferences_enum_update(GtkWidget *widget);
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
