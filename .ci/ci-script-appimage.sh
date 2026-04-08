@@ -16,19 +16,10 @@
 #   You should have received a copy of the GNU General Public License
 #   along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 
-
-
-
-
-
-
-
-
-
 #   
 # Build Ansel within an AppDir directory
 # Then package it as an .AppImage
- #Call this script from the Ansel root folder like `sh .ci/ci-script-appimage.sh`
+# Call this script from the Ansel root folder like `sh .ci/ci-script-appimage.sh`
 # Copyright (c) Aurélien Pierre - 2022
 #   
 # For local builds, purge and clean build pathes if any
@@ -49,7 +40,7 @@ export CFLAGS="$CXXFLAGS"
 
 ## AppImages require us to install everything in /usr, where root is the AppDir
 export DESTDIR=../AppDir
-cmake .. -DCMAKE_INSTALL_PREFIX=/usr -G Ninja -DCMAKE_BUILD_TYPE=Release -DBINARY_PACKAGE_BUILD=1 -DCMAKE_INSTALL_LIBDIR=lib64
+cmake .. -DCMAKE_INSTALL_PREFIX=/usr -G Ninja -DCMAKE_BUILD_TYPE=Release -DBINARY_PACKAGE_BUILD=1 -DBUILD_NOISE_TOOLS=ON -DCMAKE_INSTALL_LIBDIR=lib64
 cmake --build . --target install --parallel $(nproc)
 
 # Grab lensfun database. You should run `sudo lensfun-update-data` before making
@@ -95,5 +86,79 @@ export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:${ANSEL_LIBROOT}/"
   --deploy-deps-only "${ANSEL_LIBDIR}/plugins" \
   --deploy-deps-only "${ANSEL_LIBDIR}/plugins/imageio/format" \
   --deploy-deps-only "${ANSEL_LIBDIR}/plugins/imageio/storage" \
-  --deploy-deps-only "${ANSEL_LIBDIR}/plugins/lighttable" \
+  --deploy-deps-only "${ANSEL_LIBDIR}/plugins/lighttable"
+
+# Keep the AppImage entry point explicit so command-line arguments stay visible.
+# If the AppImage is called through a symlink named like one of our tools, run
+# that tool. Otherwise, if the first argument names one of our installed
+# binaries, route to its applet so argv[0] still points to the selected tool.
+# Fall back to the GUI entry point and forward every other argument to it.
+cat > ../AppDir/AppRun <<'EOF'
+#!/bin/sh
+
+set -eu
+
+APPDIR="${APPDIR:-$(dirname "$(readlink -f "$0")")}"
+BINDIR="${APPDIR}/usr/bin"
+TOOLDIR="${APPDIR}/usr/libexec/ansel/tools"
+APPLET="$(basename "$0")"
+
+if [ "${APPLET}" != "AppRun" ] && [ -x "${BINDIR}/${APPLET}" ]; then
+  exec "${BINDIR}/${APPLET}" "$@"
+fi
+
+if [ "${APPLET}" != "AppRun" ] && [ -x "${TOOLDIR}/${APPLET}" ]; then
+  exec "${TOOLDIR}/${APPLET}" "$@"
+fi
+
+if [ "$#" -gt 0 ] && [ "$1" != "ansel" ] && [ -x "${APPDIR}/$1" ]; then
+  BINARY="$1"
+  shift
+  exec env --argv0="${APPDIR}/${BINARY}" "${APPDIR}/${BINARY}" "$@"
+fi
+
+if [ "$#" -gt 0 ] && [ "$1" != "ansel" ] && [ -x "${TOOLDIR}/$1" ]; then
+  BINARY="$1"
+  shift
+  exec env --argv0="${TOOLDIR}/${BINARY}" "${TOOLDIR}/${BINARY}" "$@"
+fi
+
+if [ "$#" -gt 0 ] && [ "$1" = "ansel" ] && [ -x "${BINDIR}/ansel" ]; then
+  shift
+  exec env --argv0="${BINDIR}/ansel" "${BINDIR}/ansel" "$@"
+fi
+
+exec "${BINDIR}/ansel" "$@"
+EOF
+chmod +x ../AppDir/AppRun
+
+# Map every installed executable to AppRun so AppImage applets can dispatch to
+# the matching binary by argv[0] without hiding the selection logic elsewhere.
+for binary_path in ../AppDir/usr/bin/*; do
+  if [ ! -x "${binary_path}" ] || [ -d "${binary_path}" ]; then
+    continue
+  fi
+
+  binary_name="$(basename "${binary_path}")"
+  if [ "${binary_name}" = "ansel" ]; then
+    continue
+  fi
+
+  ln -sf AppRun "../AppDir/${binary_name}"
+done
+
+# Noise profiling tools are installed in libexec because they are auxiliary
+# binaries and scripts, but the AppImage still needs top-level applets so they
+# can be called directly from the command line.
+for binary_path in ../AppDir/usr/libexec/ansel/tools/*; do
+  if [ ! -x "${binary_path}" ] || [ -d "${binary_path}" ]; then
+    continue
+  fi
+
+  binary_name="$(basename "${binary_path}")"
+  ln -sf AppRun "../AppDir/${binary_name}"
+done
+
+./linuxdeploy-x86_64.AppImage \
+  --appdir ../AppDir \
   --output appimage
