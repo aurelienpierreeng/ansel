@@ -27,12 +27,11 @@
 #endif
 
 #include "common/darktable.h"     // for darktable, darktable_t
-#include "common/file_location.h" // for dt_loc_get_datadir
 #include "common/system_signal_handling.h"
 #include <errno.h>       // for errno
+#include <fcntl.h>       // for O_APPEND, O_CREAT, O_WRONLY, open
 #include <glib.h>        // for g_free, g_printerr, g_strdup_printf
 #include <glib/gstdio.h> // for g_unlink
-#include <limits.h>      // for PATH_MAX
 #include <signal.h>      // for signal, SIGSEGV, SIG_ERR
 #include <stddef.h>      // for NULL
 #include <stdio.h>       // for dprintf, fprintf, stderr
@@ -95,7 +94,6 @@ static void _dt_sigsegv_handler(int param)
   gchar *name_used;
   int fout;
   gboolean delete_file = FALSE;
-  char datadir[PATH_MAX] = { 0 };
 
   if((fout = g_file_open_tmp("ansel_bt_XXXXXX.txt", &name_used, NULL)) == -1)
     fout = STDOUT_FILENO; // just print everything to stdout
@@ -104,10 +102,19 @@ static void _dt_sigsegv_handler(int param)
 
   if(fout != STDOUT_FILENO) close(fout);
 
-  dt_loc_get_datadir(datadir, sizeof(datadir));
   gchar *pid_arg = g_strdup_printf("%d", (int)getpid());
-  gchar *comm_arg = g_strdup_printf("%s/gdb_commands", datadir);
-  gchar *log_arg = g_strdup_printf("set logging on %s", name_used);
+  gchar *exe_arg = g_strdup_printf("/proc/%s/exe", pid_arg);
+  gchar *log_file_arg = g_strdup_printf("set logging file %s", name_used);
+  const char *log_overwrite_arg = "set logging overwrite on";
+  const char *log_redirect_arg = "set logging redirect on";
+  const char *log_enabled_arg = "set logging enabled on";
+  const char *pagination_arg = "set pagination off";
+  const char *confirm_arg = "set confirm off";
+  const char *where_arg = "where";
+  const char *info_threads_arg = "info threads";
+  const char *thread_bt_arg = "thread apply all bt full";
+  const char *separator_a_arg = "echo \\n=========\\n\\n";
+  const char *separator_b_arg = "echo \\n=========\\n";
 
   if((pid = fork()) != -1)
   {
@@ -122,7 +129,21 @@ static void _dt_sigsegv_handler(int param)
     }
     else
     {
-      if(execlp("gdb", "gdb", darktable.progname, pid_arg, "-batch", "-ex", log_arg, "-x", comm_arg, NULL))
+      if(fout != STDOUT_FILENO)
+      {
+        const int log_fd = open(name_used, O_WRONLY | O_APPEND);
+        if(log_fd != -1)
+        {
+          dup2(log_fd, STDOUT_FILENO);
+          dup2(log_fd, STDERR_FILENO);
+          close(log_fd);
+        }
+      }
+
+      if(execlp("gdb", "gdb", exe_arg, pid_arg, "-batch", "-ex", pagination_arg, "-ex", confirm_arg, "-ex",
+                log_file_arg, "-ex", log_overwrite_arg, "-ex", log_redirect_arg, "-ex", log_enabled_arg, "-ex",
+                where_arg, "-ex", separator_a_arg, "-ex", info_threads_arg, "-ex", separator_b_arg, "-ex",
+                thread_bt_arg, NULL))
       {
         delete_file = TRUE;
         g_printerr("an error occurred while trying to execute gdb. please check if gdb is installed on your "
@@ -138,8 +159,8 @@ static void _dt_sigsegv_handler(int param)
 
   if(delete_file) g_unlink(name_used);
   dt_free(pid_arg);
-  dt_free(comm_arg);
-  dt_free(log_arg);
+  dt_free(exe_arg);
+  dt_free(log_file_arg);
   dt_free(name_used);
 
   /* pass it further to the old handler*/
