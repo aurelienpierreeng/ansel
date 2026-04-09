@@ -2278,8 +2278,8 @@ static inline void filmic_v5(const float *const restrict in, float *const restri
     const dt_aligned_pixel_simd_t max_rgb
         = norm_tone_mapping_v4_simd(pix_in, DT_FILMIC_METHOD_MAX_RGB, work_profile, data, spline, norm_min, norm_max);
     // Mix max RGB with naive RGB
-    const dt_aligned_pixel_simd_t pix_out
-        = dt_simd_set1(0.5f - data->saturation) * naive_rgb + dt_simd_set1(0.5f + data->saturation) * max_rgb;
+    dt_aligned_pixel_simd_t pix_out = dt_simd_set1(0.5f + data->saturation) * max_rgb;
+    pix_out = dt_simd_set1(0.5f - data->saturation) * naive_rgb + pix_out;
 
     // Save Ych in Kirk/Filmlight Yrg
     const dt_aligned_pixel_simd_t Ych_original = pipe_RGB_to_Ych_simd(pix_in, simd_matrices.input[0],
