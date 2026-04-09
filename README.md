@@ -38,11 +38,23 @@ Ansel is in alpha version. The GUI is susceptible to change and the application 
 
 ## OS support
 
-Ansel is developped on Ubuntu and Windows.
+Ansel is developped on Ubuntu, Fedora and Windows.
 
 Mac OS and, to a lesser extent, Windows have known GUI issues that come from using Gtk as
 a graphical toolkit. Not much can be done here, as Gtk suffers from a lack of Windows/Mac devs too.
 Go and support these projects so they can have more man-hours put on fixing those.
+
+## Supported compilers & environments
+
+- OpenMP >= 5.1
+- GCC :
+  - >= 12 if building without OpenMP support
+  - >= 14 for full OpenMP support,
+- CLang :
+  - >= 16 if building without OpenMP support
+  - >= 20 for full OpenMP support,
+- XCode >= 15.2
+
 
 ## Useful links
 
