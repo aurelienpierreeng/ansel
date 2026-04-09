@@ -371,6 +371,24 @@ static void _free_image_surface(dt_thumbnail_t *thumb)
   thumb->img_surf = NULL;
 }
 
+static void _thumbnail_free(dt_thumbnail_t *thumb)
+{
+  if(!thumb) return;
+
+  _free_image_surface(thumb);
+  dt_pthread_mutex_destroy(&thumb->lock);
+  dt_free(thumb);
+}
+
+static void _thumbnail_release(void *data)
+{
+  dt_thumbnail_t *thumb = (dt_thumbnail_t *)data;
+  if(!thumb) return;
+
+  if(dt_atomic_sub_int(&thumb->ref_count, 1) == 1)
+    _thumbnail_free(thumb);
+}
+
 static gboolean _main_context_queue_draw(GtkWidget *widget)
 {
   if(GTK_IS_WIDGET(widget))
@@ -601,20 +619,29 @@ int dt_thumbnail_get_image_buffer(dt_thumbnail_t *thumb)
   // can be expensive on large thumbnails. Do it in a background job,
   // so the thumbtable stays responsive.
   dt_job_t *job = dt_control_job_create(&_get_image_buffer, "get image %i", thumb->info.id);
-  dt_control_job_set_params(job, thumb, NULL);
+  if(!job) return 1;
 
   dt_pthread_mutex_lock(&thumb->lock);
   // Re-check now that we are about to publish the job pointer.
-  if(thumb->job)
+  if(thumb->job || dt_atomic_get_int(&thumb->destroying))
   {
     dt_pthread_mutex_unlock(&thumb->lock);
     dt_control_job_dispose(job);
     return 0;
   }
   thumb->job = job;
+  dt_atomic_add_int(&thumb->ref_count, 1);
   dt_pthread_mutex_unlock(&thumb->lock);
 
-  dt_control_add_job(darktable.control, DT_JOB_QUEUE_SYSTEM_FG, job);
+  dt_control_job_set_params(job, thumb, _thumbnail_release);
+  if(dt_control_add_job(darktable.control, DT_JOB_QUEUE_SYSTEM_FG, job) != 0)
+  {
+    dt_pthread_mutex_lock(&thumb->lock);
+    if(thumb->job == job) thumb->job = NULL;
+    dt_pthread_mutex_unlock(&thumb->lock);
+    _thumbnail_release(thumb);
+    return 1;
+  }
 
   return 0;
 }
@@ -1326,6 +1353,7 @@ dt_thumbnail_t *dt_thumbnail_new(int rowid, dt_thumbnail_overlay_t over, dt_thum
   thumb->img_h = 0;
   thumb->img_w = 0;
   dt_atomic_set_int(&thumb->destroying, FALSE);
+  dt_atomic_set_int(&thumb->ref_count, 1);
 
   dt_pthread_mutex_init(&thumb->lock, NULL);
 
@@ -1342,13 +1370,15 @@ dt_thumbnail_t *dt_thumbnail_new(int rowid, dt_thumbnail_overlay_t over, dt_thum
 
 int dt_thumbnail_destroy(dt_thumbnail_t *thumb)
 {
-  thumb_return_if_fails(thumb, 0);
+  if(!thumb) return 0;
 
   dt_atomic_set_int(&thumb->destroying, TRUE);
 
-  // Wait for background jobs to finish before deleting the buffers they write in
+  // Detach the thumbnail from Gtk immediately, but keep it alive until any queued
+  // background rendering job gets cancelled and disposed by the job queue.
   dt_pthread_mutex_lock(&thumb->lock);
 
+  dt_job_t *job = thumb->job;
   thumb->job = NULL;
 
   // remove multiple delayed gtk_widget_queue_draw triggers
@@ -1362,14 +1392,20 @@ int dt_thumbnail_destroy(dt_thumbnail_t *thumb)
   thumb->img_surf = NULL;
 
   if(thumb->widget)
-    gtk_container_remove(GTK_CONTAINER(gtk_widget_get_parent(thumb->widget)), thumb->widget);
+  {
+    GtkWidget *parent = gtk_widget_get_parent(thumb->widget);
+    if(parent && GTK_IS_CONTAINER(parent))
+      gtk_container_remove(GTK_CONTAINER(parent), thumb->widget);
+  }
   thumb->widget = NULL;
+  thumb->w_main = NULL;
+  thumb->w_image = NULL;
 
   dt_pthread_mutex_unlock(&thumb->lock);
 
-  dt_pthread_mutex_destroy(&thumb->lock);
+  if(job) dt_control_job_cancel(job);
 
-  dt_free(thumb);
+  _thumbnail_release(thumb);
 
   return 0;
 }

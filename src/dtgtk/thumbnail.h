@@ -130,6 +130,7 @@ typedef struct
   dt_pthread_mutex_t lock;
   struct _dt_job_t *job;
   dt_atomic_int destroying;
+  dt_atomic_int ref_count;
 
   // Thumbnail actual image sizes (bounding box of GUI widget)
   int img_w;

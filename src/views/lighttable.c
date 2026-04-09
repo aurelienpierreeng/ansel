@@ -263,6 +263,7 @@ void leave(dt_view_t *self)
   // ensure we have no active image remaining
   dt_view_active_images_reset(FALSE);
 
+  dt_thumbtable_stop(darktable.gui->ui->thumbtable_lighttable);
   dt_thumbtable_hide(darktable.gui->ui->thumbtable_lighttable);
   gtk_widget_show(dt_ui_center(darktable.gui->ui));
 

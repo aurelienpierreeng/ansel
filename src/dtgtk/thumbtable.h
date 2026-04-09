@@ -205,6 +205,7 @@ typedef struct dt_thumbtable_t
  */
 dt_thumbtable_t *dt_thumbtable_new(dt_thumbtable_mode_t mode);
 void dt_thumbtable_cleanup(dt_thumbtable_t *table);
+void dt_thumbtable_stop(dt_thumbtable_t *table);
 void dt_thumbtable_configure(dt_thumbtable_t *table);
 void dt_thumbtable_update(dt_thumbtable_t *table);
 void dt_thumbtable_set_parent(dt_thumbtable_t *table, dt_thumbtable_mode_t mode);

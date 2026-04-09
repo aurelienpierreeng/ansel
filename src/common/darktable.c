@@ -1428,6 +1428,10 @@ void dt_cleanup()
     dt_ctl_switch_mode_to("");
     //dt_dbus_destroy(darktable.dbus);
 
+    // Stop control workers before unloading views and libs. They can still be
+    // processing lighttable-side jobs while shutdown is tearing down modules.
+    dt_control_shutdown(darktable.control);
+
     dt_lib_cleanup(darktable.lib);
     dt_free(darktable.lib);
   }
@@ -1441,9 +1445,6 @@ void dt_cleanup()
 
   if(init_gui)
   {
-    // Ensure we stop dangling jobs before deleting GUI stuff that may use them
-    dt_control_shutdown(darktable.control);
-
     dt_imageio_cleanup(darktable.imageio);
     dt_free(darktable.imageio);
 

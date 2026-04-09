@@ -2148,6 +2148,36 @@ void dt_thumbtable_cleanup(dt_thumbtable_t *table)
   dt_free(table);
 }
 
+void dt_thumbtable_stop(dt_thumbtable_t *table)
+{
+  if(!table) return;
+
+  if(table->idle_update_id)
+  {
+    g_source_remove(table->idle_update_id);
+    table->idle_update_id = 0;
+  }
+
+  table->reset_collection = TRUE;
+
+  dt_pthread_mutex_lock(&table->lock);
+  GList *thumbs = g_hash_table_get_values(table->list);
+  thumbs = g_list_sort(thumbs, _thumb_compare_rowid_desc);
+  g_hash_table_remove_all(table->list);
+  dt_pthread_mutex_unlock(&table->lock);
+
+  for(GList *l = thumbs; l; l = g_list_next(l))
+  {
+    dt_thumbnail_t *thumb = (dt_thumbnail_t *)l->data;
+    gtk_widget_hide(thumb->widget);
+    dt_thumbnail_destroy(thumb);
+  }
+  g_list_free(thumbs);
+
+  table->thumb_nb = 0;
+  table->thumbs_inited = FALSE;
+}
+
 void dt_thumbtable_update_parent(dt_thumbtable_t *table)
 {
   g_idle_add((GSourceFunc)_grab_focus, table);
