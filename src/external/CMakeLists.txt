@@ -12,9 +12,21 @@ set(BUILD_FUZZERS OFF CACHE BOOL "" FORCE)
 set(BUILD_BENCHMARKING OFF)
 set(WITH_OPENMP ${USE_OPENMP} CACHE BOOL "" FORCE)
 
+# Feed RawSpeed's own find_package(OpenMP) with the AppleClang/Homebrew libomp hints.
+if(APPLE AND USE_OPENMP AND DEFINED OpenMP_ROOT)
+  set(OpenMP_C_INCLUDE_DIR   "${OpenMP_ROOT}/include" CACHE PATH "" FORCE)
+  set(OpenMP_CXX_INCLUDE_DIR "${OpenMP_ROOT}/include" CACHE PATH "" FORCE)
+
+  set(OpenMP_C_FLAGS   "-Xclang -fopenmp" CACHE STRING "" FORCE)
+  set(OpenMP_CXX_FLAGS "-Xclang -fopenmp" CACHE STRING "" FORCE)
+
+  set(OpenMP_C_LIB_NAMES   "omp" CACHE STRING "" FORCE)
+  set(OpenMP_CXX_LIB_NAMES "omp" CACHE STRING "" FORCE)
+  set(OpenMP_omp_LIBRARY   "${OpenMP_ROOT}/lib/libomp.dylib" CACHE FILEPATH "" FORCE)
+endif()
+
 set(RAWSPEED_PATH "${CMAKE_CURRENT_SOURCE_DIR}/rawspeed")
 set(RAWSPEED_BINARY_PREFIX "ansel")
-
 if(USE_CMARK)
   find_package(CMark QUIET)
   if(CMark_FOUND)
