@@ -109,6 +109,11 @@ void _non_thread_safe_cache_ref_count_entry(dt_dev_pixelpipe_cache_t *cache, gbo
 static void _free_cache_entry(dt_pixel_cache_entry_t *cache_entry);
 static void _pixelpipe_cache_finalize_entry(dt_pixel_cache_entry_t *cache_entry, void **data,
                                             const char *message);
+int _non_thread_safe_cache_remove(dt_dev_pixelpipe_cache_t *cache, const gboolean force,
+                                  dt_pixel_cache_entry_t *cache_entry, GHashTable *table);
+static void _cache_remove_payloadless_entry_locked(dt_dev_pixelpipe_cache_t *cache,
+                                                   dt_pixel_cache_entry_t *cache_entry,
+                                                   const char *message);
 static dt_pixel_cache_entry_t *_pixelpipe_cache_create_entry_locked(dt_dev_pixelpipe_cache_t *cache,
                                                                     const uint64_t hash, const size_t size,
                                                                     const char *name, const int id);
@@ -180,6 +185,25 @@ static void _pixelpipe_cache_finalize_entry(dt_pixel_cache_entry_t *cache_entry,
   if(data)
     *data = cache_entry->data ? __builtin_assume_aligned(cache_entry->data, DT_CACHELINE_BYTES) : NULL;
   _pixel_cache_message(cache_entry, message, FALSE);
+}
+
+static void _cache_remove_payloadless_entry_locked(dt_dev_pixelpipe_cache_t *cache,
+                                                   dt_pixel_cache_entry_t *cache_entry,
+                                                   const char *message)
+{
+  if(!cache || !cache_entry || cache_entry->external_alloc) return;
+  if(_non_threadsafe_cache_get_entry(cache, cache->entries, cache_entry->hash) != cache_entry) return;
+  if(cache_entry->data != NULL) return;
+
+  gboolean has_clmem = FALSE;
+  dt_pthread_mutex_lock(&cache_entry->cl_mem_lock);
+  has_clmem = (cache_entry->cl_mem_list != NULL);
+  dt_pthread_mutex_unlock(&cache_entry->cl_mem_lock);
+
+  if(has_clmem) return;
+
+  _pixel_cache_message(cache_entry, message, FALSE);
+  _non_thread_safe_cache_remove(cache, FALSE, cache_entry, cache->entries);
 }
 
 
@@ -461,6 +485,7 @@ void dt_dev_pixelpipe_cache_flush_clmem(dt_dev_pixelpipe_cache_t *cache, const i
      * allocation fallback can deadlock against in-flight GPU renders that already
      * hold cache entry locks. */
     _cache_entry_clmem_flush_device(entry, devid, keep);
+    _cache_remove_payloadless_entry_locked(cache, entry, "dropping payload-less entry after clmem flush");
   }
   dt_pthread_mutex_unlock(&cache->lock);
 }
@@ -729,6 +754,11 @@ static void _pixel_cache_clmem_remove(dt_pixel_cache_entry_t *entry, void *mem)
     l = next;
   }
   dt_pthread_mutex_unlock(&entry->cl_mem_lock);
+
+  dt_pthread_mutex_lock(&entry->cache->lock);
+  _cache_remove_payloadless_entry_locked(entry->cache, entry,
+                                         "dropping payload-less entry after clmem release");
+  dt_pthread_mutex_unlock(&entry->cache->lock);
 }
 #endif
 
@@ -751,6 +781,11 @@ void dt_dev_pixelpipe_cache_flush_entry_clmem(dt_pixel_cache_entry_t *entry)
     l = next;
   }
   dt_pthread_mutex_unlock(&entry->cl_mem_lock);
+
+  dt_pthread_mutex_lock(&entry->cache->lock);
+  _cache_remove_payloadless_entry_locked(entry->cache, entry,
+                                         "dropping payload-less entry after entry clmem flush");
+  dt_pthread_mutex_unlock(&entry->cache->lock);
 }
 
 #ifdef HAVE_OPENCL
@@ -1839,6 +1874,9 @@ static void _free_cache_entry(dt_pixel_cache_entry_t *cache_entry)
 
 static int garbage_collection = 0;
 
+static gboolean _cache_entry_has_device_payload(dt_pixel_cache_entry_t *cache_entry,
+                                                const int preferred_devid);
+
 dt_dev_pixelpipe_cache_t * dt_dev_pixelpipe_cache_init(size_t max_memory)
 {
   dt_dev_pixelpipe_cache_t *cache = (dt_dev_pixelpipe_cache_t *)malloc(sizeof(dt_dev_pixelpipe_cache_t));
@@ -2063,6 +2101,22 @@ dt_dev_pixelpipe_cache_get_writable(dt_dev_pixelpipe_cache_t *cache, const uint6
     _pixel_cache_message(cache_entry, "dropping auto-destroy entry before writable reuse", FALSE);
     if(_non_thread_safe_cache_remove(cache, FALSE, cache_entry, cache->entries) == 0)
       cache_entry = NULL;
+  }
+
+  if(cache_entry)
+  {
+    /* A hash match alone is not enough to skip recomputation here. Hostless GPU-only intermediates can stay
+     * published in the table after a later VRAM flush has already dropped their last `cl_mem`, which leaves a
+     * metadata-only cacheline under a perfectly valid hash. Returning EXACT_HIT for such an entry makes the
+     * recursion resume at the next module, which then reopens the entry directly and discovers that it has no
+     * RAM buffer and no recoverable device payload anymore. Recompute instead of treating an empty cacheline as
+     * authoritative output. */
+    if(cache_entry->data == NULL && !_cache_entry_has_device_payload(cache_entry, -1))
+    {
+      _pixel_cache_message(cache_entry, "dropping payload-less entry before writable exact-hit", FALSE);
+      if(_non_thread_safe_cache_remove(cache, FALSE, cache_entry, cache->entries) == 0)
+        cache_entry = NULL;
+    }
   }
 
   if(cache_entry)
