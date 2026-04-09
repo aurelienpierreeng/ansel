@@ -754,11 +754,6 @@ static void _pixel_cache_clmem_remove(dt_pixel_cache_entry_t *entry, void *mem)
     l = next;
   }
   dt_pthread_mutex_unlock(&entry->cl_mem_lock);
-
-  dt_pthread_mutex_lock(&entry->cache->lock);
-  _cache_remove_payloadless_entry_locked(entry->cache, entry,
-                                         "dropping payload-less entry after clmem release");
-  dt_pthread_mutex_unlock(&entry->cache->lock);
 }
 #endif
 
@@ -781,11 +776,6 @@ void dt_dev_pixelpipe_cache_flush_entry_clmem(dt_pixel_cache_entry_t *entry)
     l = next;
   }
   dt_pthread_mutex_unlock(&entry->cl_mem_lock);
-
-  dt_pthread_mutex_lock(&entry->cache->lock);
-  _cache_remove_payloadless_entry_locked(entry->cache, entry,
-                                         "dropping payload-less entry after entry clmem flush");
-  dt_pthread_mutex_unlock(&entry->cache->lock);
 }
 
 #ifdef HAVE_OPENCL
