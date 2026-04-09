@@ -109,16 +109,15 @@ jobs:
           sudo add-apt-repository ppa:ubuntu-toolchain-r/test
           sudo add-apt-repository -y universe
           sudo add-apt-repository -y multiverse
-          sudo apt-get install -y wget gnupg lsb-release
-
-          # Get CLang 20 repos
+      - name: Setup LLVM 20
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget gnupg
           wget https://apt.llvm.org/llvm-snapshot.gpg.key
           sudo gpg --dearmor -o /usr/share/keyrings/llvm.gpg llvm-snapshot.gpg.key
-
-          echo "deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/noble/ llvm-toolchain-noble main" | sudo tee /etc/apt/sources.list.d/llvm.list
-          echo "deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/noble/ llvm-toolchain-noble-20 main" | sudo tee -a /etc/apt/sources.list.d/llvm.list
-
+          echo "deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/noble/ llvm-toolchain-noble-20 main" | sudo tee /etc/apt/sources.list.d/llvm.list
           sudo apt-get update
+          sudo apt-get install -y clang-20 libomp-20-dev
       - uses: actions/checkout@v4
         with:
           submodules: true
