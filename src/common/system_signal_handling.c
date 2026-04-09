@@ -111,10 +111,23 @@ static void _dt_sigsegv_handler(int param)
   const char *pagination_arg = "set pagination off";
   const char *confirm_arg = "set confirm off";
   const char *where_arg = "where";
+  const char *current_bt_arg = "bt full";
+  const char *current_thread_arg = "thread";
+  const char *info_registers_arg = "info registers";
+  const char *disassemble_pc_arg = "x/16i $pc";
+  const char *stack_words_arg = "x/16gx $sp";
+  const char *sharedlibrary_arg = "info sharedlibrary";
+  const char *mappings_arg = "info proc mappings";
   const char *info_threads_arg = "info threads";
   const char *thread_bt_arg = "thread apply all bt full";
   const char *separator_a_arg = "echo \\n=========\\n\\n";
   const char *separator_b_arg = "echo \\n=========\\n";
+  const char *separator_c_arg = "echo \\n========= current thread =========\\n";
+  const char *separator_d_arg = "echo \\n========= registers =========\\n";
+  const char *separator_e_arg = "echo \\n========= disassembly =========\\n";
+  const char *separator_f_arg = "echo \\n========= stack =========\\n";
+  const char *separator_g_arg = "echo \\n========= shared libraries =========\\n";
+  const char *separator_h_arg = "echo \\n========= mappings =========\\n";
 
   if((pid = fork()) != -1)
   {
@@ -142,8 +155,11 @@ static void _dt_sigsegv_handler(int param)
 
       if(execlp("gdb", "gdb", exe_arg, pid_arg, "-batch", "-ex", pagination_arg, "-ex", confirm_arg, "-ex",
                 log_file_arg, "-ex", log_overwrite_arg, "-ex", log_redirect_arg, "-ex", log_enabled_arg, "-ex",
-                where_arg, "-ex", separator_a_arg, "-ex", info_threads_arg, "-ex", separator_b_arg, "-ex",
-                thread_bt_arg, NULL))
+                where_arg, "-ex", separator_c_arg, "-ex", current_thread_arg, "-ex", current_bt_arg, "-ex",
+                separator_d_arg, "-ex", info_registers_arg, "-ex", separator_e_arg, "-ex", disassemble_pc_arg,
+                "-ex", separator_f_arg, "-ex", stack_words_arg, "-ex", separator_g_arg, "-ex",
+                sharedlibrary_arg, "-ex", separator_h_arg, "-ex", mappings_arg, "-ex", separator_a_arg, "-ex",
+                info_threads_arg, "-ex", separator_b_arg, "-ex", thread_bt_arg, NULL))
       {
         delete_file = TRUE;
         g_printerr("an error occurred while trying to execute gdb. please check if gdb is installed on your "
