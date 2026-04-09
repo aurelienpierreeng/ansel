@@ -603,9 +603,7 @@ void dt_colorrings_fill_lut_local_field(
     const float inv_sigma_rho, const float inv_sigma_theta, const float rho0)
 {
 #ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) schedule(static) collapse(3) firstprivate(                          \
-        lut, level, anchor_L, anchor_rho, anchor_theta, delta_L, chroma_scale, delta_theta, inv_sigma_L,          \
-        inv_sigma_rho, inv_sigma_theta, rho0)
+#pragma omp parallel for default(firstprivate) schedule(static) collapse(3)
 #endif
   for(int b = 0; b < level; b++)
     for(int g = 0; g < level; g++)
@@ -712,8 +710,7 @@ void dt_colorrings_fill_lut_sparse_local_field(float *lut, const int level,
                                                const float rho0)
 {
 #ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) schedule(static) collapse(3) firstprivate(                          \
-        lut, level, anchors, anchor_count, inv_sigma_L, inv_sigma_rho, inv_sigma_theta, rho0)
+#pragma omp parallel for default(firstprivate) schedule(static) collapse(3)
 #endif
   for(int b = 0; b < level; b++)
     for(int g = 0; g < level; g++)

@@ -974,15 +974,14 @@ static int build_round_stamp(float complex **pstamp,
   // hypotf only for PI / 16 = 0.196 of the stamp area.
   // We don't do octants to avoid false sharing of cache lines between threads.
   // doesn't work for OSX see issue #7349
-  #if defined(_OPENMP) && !defined(__APPLE__)
-  #pragma omp parallel for schedule(static) default(firstprivate)
-  #endif
-
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static) default(firstprivate) firstprivate(LOOKUP_OVERSAMPLE)
+#endif
   for(int y = 0; y <= iradius; y++)
   {
     for(int x = 0; x <= iradius; x++)
     {
-      const float dist = sqrtf(x*x + y*y); // faster than hypotf(), and we know we won't have overflow or denormals
+      const float dist = dt_fast_hypotf(x, y);
       const int idist = round(dist * LOOKUP_OVERSAMPLE);
       if(idist >= table_size)
         // idist will only grow bigger in this row

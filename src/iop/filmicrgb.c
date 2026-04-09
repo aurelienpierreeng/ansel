@@ -1341,7 +1341,7 @@ static inline void init_reconstruct(const float *const restrict in, const float 
 // init the reconstructed buffer with non-clipped and partially clipped pixels
 // Note : it's a simple multiplied alpha blending where mask = alpha weight
 #ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) firstprivate(in, mask, reconstructed, width, height) \
+#pragma omp parallel for default(firstprivate)  \
   schedule(static)
 #endif
   for(size_t k = 0; k < height * width; k++)
@@ -1358,7 +1358,7 @@ static inline void wavelets_detail_level(const float *const restrict detail, con
                                              const size_t width, const size_t height, const size_t ch)
 {
 #ifdef _OPENMP
-#pragma omp parallel for simd default(firstprivate) firstprivate(width, height, HF, LF, detail, texture)           \
+#pragma omp parallel for simd default(firstprivate)            \
     schedule(simd                                                                                                 \
              : static) aligned(HF, LF, detail, texture : 64)
 #endif
@@ -2289,7 +2289,7 @@ static inline void display_mask(const float *const restrict mask, float *const r
                                 const size_t width, const size_t height)
 {
 #ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) firstprivate(width, height, out, mask) schedule(static)
+#pragma omp parallel for default(firstprivate)  schedule(static)
 #endif
   for(size_t k = 0; k < height * width; k++)
   {

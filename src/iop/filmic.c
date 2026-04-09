@@ -1178,7 +1178,7 @@ void compute_curve_lut(dt_iop_filmic_params_t *p, float *table, float *table_tem
 
     // Average both LUT
 #ifdef _OPENMP
-#pragma omp parallel for simd default(firstprivate) firstprivate(table, table_temp, res) schedule(static)
+#pragma omp parallel for simd default(firstprivate)  schedule(static)
 #endif
     for(int k = 0; k < res; k++) table[k] = (table[k] + table_temp[k]) / 2.0f;
   }

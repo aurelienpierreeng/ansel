@@ -452,7 +452,7 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_
   if(gamma == 1.0)
   {
 #ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) firstprivate(d) schedule(static)
+#pragma omp parallel for default(firstprivate)  schedule(static)
 #endif
     for(int k = 0; k < 0x10000; k++) d->table[k] = 1.0 * k / 0x10000;
   }

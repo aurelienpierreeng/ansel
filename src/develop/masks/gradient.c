@@ -1249,7 +1249,7 @@ static int _gradient_get_mask(const dt_iop_module_t *const module, dt_dev_pixelp
 #pragma omp parallel for default(firstprivate) \
   schedule(static) collapse(2) if((size_t)gw * gh > 50000)
 #else
-#pragma omp parallel for firstprivate(points) if((size_t)gw * gh > 50000)
+#pragma omp parallel for  if((size_t)gw * gh > 50000)
 #endif
 #endif
   for(int j = 0; j < gh; j++)
@@ -1432,7 +1432,7 @@ static int _gradient_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pi
 #pragma omp parallel for default(firstprivate) \
   schedule(static) collapse(2) if((size_t)gw * gh > 50000)
 #else
-#pragma omp parallel for firstprivate(points) if((size_t)gw * gh > 50000)
+#pragma omp parallel for  if((size_t)gw * gh > 50000)
 #endif
 #endif
   for(int j = 0; j < gh; j++)

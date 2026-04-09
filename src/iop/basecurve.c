@@ -839,7 +839,7 @@ int process_fusion(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *p
 
     // normalise both gaussian base and laplacians:
 #ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) firstprivate(comb, w, h, k) schedule(static)
+#pragma omp parallel for default(firstprivate)  schedule(static)
 #endif
     for(size_t i = 0; i < (size_t)4 * w * h; i += 4)
       if(comb[k][i + 3] > 1e-8f)

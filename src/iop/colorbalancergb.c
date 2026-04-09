@@ -1220,7 +1220,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
     if(p->saturation_formula == DT_COLORBALANCE_SATURATION_JZAZBZ)
     {
       #ifdef _OPENMP
-      #pragma omp parallel for default(firstprivate) schedule(static) firstprivate(LUT_saturation) \
+      #pragma omp parallel for default(firstprivate) schedule(static)  \
             collapse(3)
       #endif
       for(size_t r = 0; r < STEPS; r++)
@@ -1288,7 +1288,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
       // March the gamut boundary in CIE xyY 1931 by angular steps of 0.02°
       #ifdef _OPENMP
         #pragma omp parallel for default(firstprivate) \
-              schedule(static) firstprivate(dt_UCS_LUT)
+              schedule(static) 
       #endif
       for(int i = 0; i < 50 * 360; i++)
       {

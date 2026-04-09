@@ -62,7 +62,7 @@ static void _color_picker_convert_buffer(const float *const restrict input, floa
   if(image_cst == IOP_CS_LAB && picker_cst == IOP_CS_LCH)
   {
 #ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) firstprivate(input, output, pixels) schedule(static)
+#pragma omp parallel for default(firstprivate)  schedule(static)
 #endif
     for(size_t k = 0; k < pixels; k++)
     {
@@ -74,7 +74,7 @@ static void _color_picker_convert_buffer(const float *const restrict input, floa
   else if(dt_iop_colorspace_is_rgb(image_cst) && picker_cst == IOP_CS_HSL)
   {
 #ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) firstprivate(input, output, pixels) schedule(static)
+#pragma omp parallel for default(firstprivate)  schedule(static)
 #endif
     for(size_t k = 0; k < pixels; k++)
     {
@@ -86,7 +86,7 @@ static void _color_picker_convert_buffer(const float *const restrict input, floa
   else if(image_cst == IOP_CS_LAB && picker_cst == IOP_CS_RGB)
   {
 #ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) firstprivate(input, output, pixels, profile) schedule(static)
+#pragma omp parallel for default(firstprivate)  schedule(static)
 #endif
     for(size_t k = 0; k < pixels; k++)
     {
@@ -100,7 +100,7 @@ static void _color_picker_convert_buffer(const float *const restrict input, floa
   else if(dt_iop_colorspace_is_rgb(image_cst) && picker_cst == IOP_CS_LAB)
   {
 #ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) firstprivate(input, output, pixels, profile) schedule(static)
+#pragma omp parallel for default(firstprivate)  schedule(static)
 #endif
     for(size_t k = 0; k < pixels; k++)
     {
@@ -114,7 +114,7 @@ static void _color_picker_convert_buffer(const float *const restrict input, floa
   else if(dt_iop_colorspace_is_rgb(image_cst) && picker_cst == IOP_CS_JZCZHZ)
   {
 #ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) firstprivate(input, output, pixels, profile) schedule(static)
+#pragma omp parallel for default(firstprivate)  schedule(static)
 #endif
     for(size_t k = 0; k < pixels; k++)
     {

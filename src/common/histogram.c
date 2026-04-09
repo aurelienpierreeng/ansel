@@ -287,7 +287,7 @@ void dt_histogram_helper(dt_dev_histogram_collection_params_t *histogram_params,
     if(converted != NULL)
     {
 #ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) firstprivate(pixel, converted, pixels) schedule(static)
+#pragma omp parallel for default(firstprivate)  schedule(static)
 #endif
       for(size_t k = 0; k < pixels; k++)
       {

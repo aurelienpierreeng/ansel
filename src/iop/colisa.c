@@ -171,7 +171,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   {
 // linear curve for d->contrast below 1
 #ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) firstprivate(d) schedule(static)
+#pragma omp parallel for default(firstprivate)  schedule(static)
 #endif
     for(int k = 0; k < 0x10000; k++) d->ctable[k] = d->contrast * (100.0f * k / 0x10000 - 50.0f) + 50.0f;
   }

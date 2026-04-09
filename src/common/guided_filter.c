@@ -158,7 +158,7 @@ static int guided_filter_tiling(color_image imgg, gray_image img, gray_image img
   }
   int err = 0;
 #ifdef _OPENMP
-#pragma omp parallel for schedule(static) default(firstprivate) firstprivate(img, imgg, mean, variance, img_bak, err, img_bak_sz, img_dimen, w, guide_weight, source)
+#pragma omp parallel for schedule(static) default(firstprivate) 
 #endif
   for(int j_imgg = source.lower; j_imgg < source.upper; j_imgg++)
   {

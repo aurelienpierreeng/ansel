@@ -561,7 +561,7 @@ static int32_t dt_control_merge_hdr_job_run(dt_job_t *job)
 // normalize by white level to make clipping at 1.0 work as expected
 
 #ifdef _OPENMP
-#pragma omp parallel for schedule(static) default(firstprivate) firstprivate(d)
+#pragma omp parallel for schedule(static) default(firstprivate) 
 #endif
   for(size_t k = 0; k < (size_t)d.wd * d.ht; k++)
   {

@@ -1254,7 +1254,7 @@ static int compute_channels_factors(const float factors[PIXEL_CHAN], float out[C
 
   #ifdef _OPENMP
   #pragma omp parallel for simd default(firstprivate) schedule(static) \
-    aligned(factors, out, centers_params:64) firstprivate(factors, out, sigma, centers_params) shared(valid)
+    aligned(factors, out, centers_params:64) shared(valid) firstprivate(centers_params)
   #endif
   for(int i = 0; i < CHANNELS; ++i)
   {

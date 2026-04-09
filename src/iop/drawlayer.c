@@ -2290,7 +2290,7 @@ static gboolean _fill_current_layer(dt_iop_module_t *self, const float value)
   const float gray = _clamp01(value);
   dt_drawlayer_cache_patch_wrlock(&g->process.base_patch);
 #ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) schedule(static) firstprivate(count, gray, pixels) if(count > 4096)
+#pragma omp parallel for default(firstprivate) schedule(static)  if(count > 4096)
 #endif
   for(size_t k = 0; k < count; k++)
   {

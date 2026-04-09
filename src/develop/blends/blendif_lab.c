@@ -232,7 +232,7 @@ void dt_develop_blendif_lab_make_mask(const struct dt_dev_pixelpipe_iop_t *piece
     if(mask_inversed)
     {
 #ifdef _OPENMP
-#pragma omp parallel for simd default(firstprivate) firstprivate(mask, buffsize, global_opacity) schedule(static)
+#pragma omp parallel for simd default(firstprivate)  schedule(static)
 #endif
       for(size_t x = 0; x < buffsize; x++) mask[x] = global_opacity * (1.0f - mask[x]);
     }

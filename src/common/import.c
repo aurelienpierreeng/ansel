@@ -332,7 +332,7 @@ static GdkPixbuf *_import_get_thumbnail(const gchar *filename, const int width, 
     if(rgb)
     {
 #ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) firstprivate(th_width, th_height, buffer, rgb) schedule(static)
+#pragma omp parallel for default(firstprivate)  schedule(static)
 #endif
       for(size_t k = 0; k < th_width * th_height; k++)
       {
@@ -380,7 +380,7 @@ static GdkPixbuf *_import_get_thumbnail(const gchar *filename, const int width, 
         {
           const float *const in = (const float *const)mipbuf.buf;
 #ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) firstprivate(in, pixels, rgb) schedule(static)
+#pragma omp parallel for default(firstprivate)  schedule(static)
 #endif
           for(size_t k = 0; k < pixels; k++)
           {

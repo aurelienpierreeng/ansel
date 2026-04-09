@@ -181,8 +181,8 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     if(weights_buf == NULL) return 1;
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
-    firstprivate(ch, ivoid, ovoid, rad, roi_in, roi_out, wd, weights_buf, padded_weights_size, m, mat, isig2col) \
+#pragma omp parallel for default(firstprivate) \
+     \
     schedule(static)
 #endif
     for(int j = rad; j < roi_out->height - rad; j++)

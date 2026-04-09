@@ -1143,7 +1143,7 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
     {
       uint8_t *thumbnail_buf = (uint8_t *)outbuf;
 #ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) firstprivate(thumbnail_buf, pixels) schedule(static)
+#pragma omp parallel for default(firstprivate)  schedule(static)
 #endif
       for(size_t k = 0; k < pixels / 4; k++) thumbnail_buf[4 * k + 3] = UINT8_MAX;
     }
@@ -1160,7 +1160,7 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
     {
       uint16_t *thumbnail_buf = (uint16_t *)outbuf;
 #ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) firstprivate(thumbnail_buf, pixels) schedule(static)
+#pragma omp parallel for default(firstprivate)  schedule(static)
 #endif
       for(size_t k = 0; k < pixels / 4; k++) thumbnail_buf[4 * k + 3] = UINT16_MAX;
     }
@@ -1177,7 +1177,7 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
     {
       float *thumbnail_buf = (float *)outbuf;
 #ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) firstprivate(thumbnail_buf, pixels) schedule(static)
+#pragma omp parallel for default(firstprivate)  schedule(static)
 #endif
       for(size_t k = 0; k < pixels / 4; k++) thumbnail_buf[4 * k + 3] = 1.0f;
     }

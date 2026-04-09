@@ -608,7 +608,7 @@ static inline void init_reconstruct(float *const restrict reconstructed, const s
 {
 // init the reconstructed buffer with non-clipped and partially clipped pixels
 #ifdef _OPENMP
-#pragma omp parallel for simd default(firstprivate) firstprivate(reconstructed, width, height)                 \
+#pragma omp parallel for simd default(firstprivate)                  \
     schedule(simd:static) aligned(reconstructed:64)
 #endif
   for(size_t k = 0; k < height * width * 4; k++) reconstructed[k] = 0.f;
@@ -1108,7 +1108,7 @@ static inline void build_mask(const float *const restrict input, uint8_t *const 
                               const float threshold, const size_t width, const size_t height)
 {
 #ifdef _OPENMP
-#pragma omp parallel for simd default(firstprivate) firstprivate(input, mask, height, width, threshold)        \
+#pragma omp parallel for simd default(firstprivate)         \
     schedule(simd:static) aligned(mask, input : 64)
 #endif
   for(size_t k = 0; k < height * width * 4; k += 4)
