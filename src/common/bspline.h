@@ -183,7 +183,7 @@ inline static void reduce_2D_Bspline(const float *const restrict in, float *cons
   (void)padded_size;
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(width, height, coarse_width, coarse_height, padded_size, clip_negatives, use_replicated_boundary, in, out, tempbuf, filter) \
   schedule(static)
 #endif
@@ -240,7 +240,7 @@ inline static void expand_2D_Bspline(const float *const restrict in, float *cons
                                                1.0f / 16.0f };
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(width, height, coarse_width, coarse_height, clip_negatives, use_replicated_boundary, in, out, filter) \
   schedule(static) \
   collapse(2)
@@ -342,7 +342,7 @@ inline static void blur_2D_Bspline(const float *const restrict in, float *const 
 {
   // À-trous B-spline interpolation/blur shifted by mult
   #ifdef _OPENMP
-  #pragma omp parallel for default(none) \
+  #pragma omp parallel for dt_omp_default() \
     dt_omp_firstprivate(width, height, mult, out, in, tempbuf, clip_negatives) \
     schedule(static)
   #endif
@@ -369,7 +369,7 @@ inline static void decompose_2D_Bspline(const float *const restrict in,
 {
   // Blur and compute the wavelet at once
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
     dt_omp_firstprivate(width, height, mult, padded_size, in, HF, LF, tempbuf)  \
     schedule(static)
 #endif

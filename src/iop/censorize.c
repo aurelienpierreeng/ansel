@@ -113,7 +113,7 @@ __DT_CLONE_TARGETS__
 static inline void make_noise(float *const output, const float noise, const size_t width, const size_t height)
 {
 #ifdef _OPENMP
-#pragma omp parallel for simd default(none) \
+#pragma omp parallel for simd dt_omp_default() \
   dt_omp_firstprivate(output, width, height, noise) \
   schedule(simd:static) aligned(output:64) collapse(2)
 #endif
@@ -201,7 +201,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     const size_t pixels_y = height / (2 * pixel_radius);
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(width, height, ch, input, output, pixel_radius, pixels_y, pixels_x) \
   schedule(simd:static) collapse(2)
 #endif

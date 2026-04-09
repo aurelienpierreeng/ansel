@@ -575,7 +575,7 @@ static inline float CCT_reverse_lookup(const float x, const float y)
 
 #if !(defined(__apple_build_version__) && __apple_build_version__ < 11030000) //makes Xcode 11.3.1 compiler crash
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(x, y, T_min, T_range, LUT_samples) reduction(pairmin:min_radius)\
   schedule(simd:static)
 #endif

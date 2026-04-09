@@ -258,7 +258,7 @@ static void process_common_cleanup(struct dt_iop_module_t *self, const dt_dev_pi
     if(gauss && tmp)
     {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
       dt_omp_firstprivate(ch, height, width, ivoid, tmp) \
       schedule(static)
 #endif
@@ -269,7 +269,7 @@ static void process_common_cleanup(struct dt_iop_module_t *self, const dt_dev_pi
       /* create zonemap preview for input */
       dt_iop_gui_enter_critical_section(self);
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
       dt_omp_firstprivate(height, size, width, tmp, g) \
       schedule(static)
 #endif
@@ -281,7 +281,7 @@ static void process_common_cleanup(struct dt_iop_module_t *self, const dt_dev_pi
 
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
       dt_omp_firstprivate(ch, height, ovoid, width, tmp) \
       schedule(static)
 #endif
@@ -293,7 +293,7 @@ static void process_common_cleanup(struct dt_iop_module_t *self, const dt_dev_pi
       /* create zonemap preview for output */
       dt_iop_gui_enter_critical_section(self);
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
       dt_omp_firstprivate(height, size, width, tmp, g) \
       schedule(static)
 #endif
@@ -326,7 +326,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const size_t npixels = (size_t)roi_out->width * roi_out->height;
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(d, in, out, npixels, size) \
   schedule(static)
 #endif

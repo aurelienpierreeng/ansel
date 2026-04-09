@@ -507,7 +507,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   if(filters == 9u)
   { // xtrans float mosaiced
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
     dt_omp_firstprivate(d_coeffs, height, in, out, roi_out, width, xtrans) \
     schedule(static)
 #endif
@@ -553,7 +553,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   { // bayer float mosaiced
     const int cfa_x = roi_out->x & 1;
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
     dt_omp_firstprivate(cfa_x, d_coeffs, filters, height, in, out, roi_out, width) \
     schedule(static)
 #endif
@@ -588,7 +588,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     if(ch == 4)
     {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
     dt_omp_firstprivate(npixels, in, out, d) \
     schedule(static)
 #endif
@@ -604,7 +604,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     else
     {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
     dt_omp_firstprivate(ch, d, in, out, npixels) \
     schedule(static)
 #endif

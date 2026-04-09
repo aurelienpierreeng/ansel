@@ -392,7 +392,7 @@ void dt_imageio_flip_buffers(char *out, const char *in, const size_t bpp, const 
   if(!orientation)
   {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
     dt_omp_firstprivate(ht, wd, bpp, stride, in, out) \
     schedule(static)
 #endif
@@ -417,7 +417,7 @@ void dt_imageio_flip_buffers(char *out, const char *in, const size_t bpp, const 
     si = -si;
   }
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(wd, bpp, ht, stride, in, out, jj, ii, sj, si) \
   schedule(static)
 #endif
@@ -443,7 +443,7 @@ void dt_imageio_flip_buffers_ui8_to_float(float *out, const uint8_t *in, const f
   if(!orientation)
   {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
     dt_omp_firstprivate(wd, scale, black, ht, ch, stride, in, out) \
     schedule(static)
 #endif
@@ -471,7 +471,7 @@ void dt_imageio_flip_buffers_ui8_to_float(float *out, const uint8_t *in, const f
     si = -si;
   }
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(wd, ch, scale, black, stride, ht, in, out, jj, ii, sj, si) \
   schedule(static)
 #endif
@@ -926,7 +926,7 @@ void _clamp_float_to_uint8(const float *const inbuf, uint8_t *const outbuf, cons
                            const size_t processed_height)
 {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(processed_width, processed_height, inbuf, outbuf) \
   schedule(static)
 #endif
@@ -940,7 +940,7 @@ void _swap_byteorder_float_to_uint8(const float *const restrict inbuf, uint8_t *
                                     const size_t processed_width, const size_t processed_height)
 {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(processed_width, processed_height, inbuf, outbuf) \
   schedule(static)
 #endif
@@ -958,7 +958,7 @@ void _export_final_buffer_to_uint16(const float *const restrict inbuf, uint16_t 
                                     const size_t processed_width, const size_t processed_height)
 {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(processed_width, processed_height, inbuf, outbuf) \
   schedule(static)
 #endif
@@ -1150,7 +1150,7 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
     {
       uint8_t *thumbnail_buf = (uint8_t *)outbuf;
 #ifdef _OPENMP
-#pragma omp parallel for default(none) dt_omp_firstprivate(thumbnail_buf, pixels) schedule(static)
+#pragma omp parallel for dt_omp_default() dt_omp_firstprivate(thumbnail_buf, pixels) schedule(static)
 #endif
       for(size_t k = 0; k < pixels / 4; k++) thumbnail_buf[4 * k + 3] = UINT8_MAX;
     }
@@ -1167,7 +1167,7 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
     {
       uint16_t *thumbnail_buf = (uint16_t *)outbuf;
 #ifdef _OPENMP
-#pragma omp parallel for default(none) dt_omp_firstprivate(thumbnail_buf, pixels) schedule(static)
+#pragma omp parallel for dt_omp_default() dt_omp_firstprivate(thumbnail_buf, pixels) schedule(static)
 #endif
       for(size_t k = 0; k < pixels / 4; k++) thumbnail_buf[4 * k + 3] = UINT16_MAX;
     }
@@ -1184,7 +1184,7 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
     {
       float *thumbnail_buf = (float *)outbuf;
 #ifdef _OPENMP
-#pragma omp parallel for default(none) dt_omp_firstprivate(thumbnail_buf, pixels) schedule(static)
+#pragma omp parallel for dt_omp_default() dt_omp_firstprivate(thumbnail_buf, pixels) schedule(static)
 #endif
       for(size_t k = 0; k < pixels / 4; k++) thumbnail_buf[4 * k + 3] = 1.0f;
     }

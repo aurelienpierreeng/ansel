@@ -285,7 +285,7 @@ int process(struct dt_iop_module_t *const self, const dt_dev_pixelpipe_t *const 
 
 
 #ifdef _OPENMP
-  #pragma omp parallel for simd default(none) \
+  #pragma omp parallel for simd dt_omp_default() \
     dt_omp_firstprivate(d, in, out, roi_out) \
     aligned(in, out:64) collapse(2)
 #endif

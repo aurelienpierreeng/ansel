@@ -130,7 +130,7 @@ static void dwt_decompose_vert(float *const restrict out, const float *const res
 {
   const size_t vscale = MIN(1 << lev, height-1);
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(height, width, vscale, in, out) \
   schedule(static)
 #endif
@@ -167,7 +167,7 @@ static void dwt_decompose_horiz(float *const restrict out, float *const restrict
 {
   const int hscale = MIN(1 << lev, width);  //(int because we need a signed difference below)
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(height, width, hscale, in, out, temp) \
   schedule(static)
 #endif
@@ -421,7 +421,7 @@ static void dwt_denoise_vert_1ch(float *const restrict out, const float *const r
 {
   const int vscale = MIN(1 << lev, height);
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(height, width, vscale, in, out) \
   schedule(static)
 #endif
@@ -458,7 +458,7 @@ static void dwt_denoise_horiz_1ch(float *const restrict out, float *const restri
 {
   const int hscale = MIN(1 << lev, width);
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(height, width, hscale, thold, last, in, out, accum) \
   schedule(static)
 #endif

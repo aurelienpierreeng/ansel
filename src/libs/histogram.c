@@ -689,7 +689,7 @@ uint32_t _find_max_histogram(const uint32_t *const restrict bins, const size_t b
   uint32_t max_hist = 0;
 
 #ifdef _OPENMP
-#pragma omp parallel for simd default(none) \
+#pragma omp parallel for simd dt_omp_default() \
         aligned(bins: 64) \
         dt_omp_firstprivate(bins, binning_size) \
         reduction(max: max_hist) \
@@ -709,12 +709,12 @@ static inline void _bin_pixels_histogram_in_roi(const float *const restrict imag
   // Process
 #ifdef _OPENMP
 #ifndef _WIN32
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
         dt_omp_firstprivate(image, min_x, min_y, max_x, max_y, width) \
         reduction(+: bins[0: HISTOGRAM_BINS * 4]) \
         schedule(static) collapse(3)
 #else
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
         dt_omp_firstprivate(image, min_x, min_y, max_x, max_y, width) \
         shared(bins) \
         schedule(static) collapse(3)
@@ -842,7 +842,7 @@ static inline void _bin_pixels_waveform_in_roi(const float *const restrict image
 {
   // Process
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
         dt_omp_firstprivate(image, binning_size, vertical, min_x, min_y, max_x, max_y, width) \
         shared(bins) \
         schedule(static) collapse(3)
@@ -889,7 +889,7 @@ static inline void _bin_pixels_waveform(const float *const restrict image, uint3
 {
   // Init
 #ifdef _OPENMP
-#pragma omp parallel for simd default(none) \
+#pragma omp parallel for simd dt_omp_default() \
         aligned(bins: 64) \
         dt_omp_firstprivate(bins, binning_size) \
         schedule(static)
@@ -923,7 +923,7 @@ static void _create_waveform_image(const uint32_t *const restrict bins, uint8_t 
                                    const size_t width, const size_t height)
 {
 #ifdef _OPENMP
-#pragma omp parallel for simd default(none) \
+#pragma omp parallel for simd dt_omp_default() \
         aligned(image, bins: 64) \
         dt_omp_firstprivate(image, height, width, bins, max_hist) \
         schedule(static)
@@ -947,7 +947,7 @@ static void _mask_waveform(const uint8_t *const restrict image, uint8_t *const r
     if(k == channel) mask[k] = 1;
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
         dt_omp_firstprivate(image, masked, height, width, mask) \
         schedule(static)
 #endif
@@ -1094,12 +1094,12 @@ static void _bin_pixels_vectorscope_in_roi(const float *const restrict image, ui
 {
 #ifdef _OPENMP
 #ifndef _WIN32
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
         dt_omp_firstprivate(image, zoom, d, min_x, max_x, min_y, max_y, width) \
         reduction(+: vectorscope[0: HISTOGRAM_BINS * HISTOGRAM_BINS]) \
         schedule(static)
 #else
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
         dt_omp_firstprivate(image, zoom, d, min_x, max_x, min_y, max_y, width) \
         shared(vectorscope) \
         schedule(static)
@@ -1154,7 +1154,7 @@ static void _create_vectorscope_image(const uint32_t *const restrict vectorscope
   const dt_iop_order_iccprofile_info_t *const profile = darktable.develop->preview_pipe->output_profile_info;
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
         dt_omp_firstprivate(image, vectorscope, profile, max_hist, zoom) \
         schedule(static) collapse(2)
 #endif
@@ -1192,7 +1192,7 @@ static void _bin_vectorscope(const float *const restrict image, uint32_t *const 
                              const float zoom, dt_lib_histogram_t *d)
 {
 #ifdef _OPENMP
-#pragma omp parallel for simd default(none) \
+#pragma omp parallel for simd dt_omp_default() \
         aligned(vectorscope: 64) \
         dt_omp_firstprivate(vectorscope) \
         schedule(static)

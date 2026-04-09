@@ -1558,7 +1558,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const _coeffs_table_ptr restrict unbounded_coeffs = d->unbounded_coeffs;
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(autoscale, npixels, work_profile, xm_b, xm_g, xm_L, in, out, table, unbounded_coeffs, d) \
   schedule(static)
 #endif

@@ -306,7 +306,7 @@ int process(struct dt_iop_module_t *module, const dt_dev_pixelpipe_t *pipe, cons
 
   const float use_global_average = MODE_GLOBAL_AVERAGE == d->op_mode;
 #ifdef _OPENMP
-#pragma omp parallel for simd default(none) \
+#pragma omp parallel for simd dt_omp_default() \
   dt_omp_firstprivate(in, out, use_global_average, width, height) \
   reduction(+ : avg_edge_chroma) \
   schedule(simd:static)
@@ -341,7 +341,7 @@ int process(struct dt_iop_module_t *module, const dt_dev_pixelpipe_t *pipe, cons
 #ifdef _OPENMP
 // dynamically/guided scheduled due to possible uneven edge-chroma distribution (thanks to rawtherapee code
 // for this hint!)
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(ch, in, out, samples_avg, samples_small, d, width, height) \
   dt_omp_firstprivate(xy_small, xy_avg) \
   firstprivate(thresh, avg_edge_chroma) \

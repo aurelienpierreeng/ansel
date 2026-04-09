@@ -57,7 +57,7 @@ static void blur_horizontal_1ch(float *const restrict buf, const int height, con
                                 float *const restrict scanlines, const size_t padded_size)
 {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(radius, height, width, padded_size, buf, scanlines) \
   schedule(static)
 #endif
@@ -120,7 +120,7 @@ static void blur_horizontal_2ch(float *const restrict buf, const int height, con
                                 float *const restrict scanlines, const size_t padded_size)
 {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(radius, height, width, padded_size, buf, scanlines) \
   schedule(static)
 #endif
@@ -382,7 +382,7 @@ static void blur_horizontal_4ch(float *const restrict buf, const size_t height, 
                                 float *const restrict scanlines, const size_t padded_size)
 {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(radius, height, width, padded_size, buf, scanlines) \
   schedule(static)
 #endif
@@ -926,7 +926,7 @@ static void blur_vertical_1ch(float *const restrict buf, const size_t height, co
                               float *const restrict scanlines, const size_t padded_size)
 {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(radius, height, width, padded_size, darktable) \
   dt_omp_firstprivate(buf, scanlines) \
   schedule(static)
@@ -1018,7 +1018,7 @@ static int box_mean_vert_1ch_Kahan(float *const buf, const int height, const siz
   if(scratch_buf == NULL) return 1;
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(width, height, radius, padded_size, buf, scratch_buf) \
   schedule(static)
 #endif
@@ -1056,7 +1056,7 @@ static int dt_box_mean_4ch_Kahan(float *const buf, const size_t height, const si
     if(scanlines == NULL) return 1;
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(width, height, radius, padded_size, buf, scanlines) \
   schedule(static)
 #endif
@@ -1280,7 +1280,7 @@ static int box_max_1ch(float *const buf, const size_t height, const size_t width
   if(scratch_buffers == NULL) return 1;
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(w, width, height, buf, allocsize, scratch_buffers) \
   schedule(static)
 #endif
@@ -1291,7 +1291,7 @@ static int box_max_1ch(float *const buf, const size_t height, const size_t width
     box_max_1d(width, scratch, buf + row * width, 1, w);
   }
 #ifdef _OPENMP
-#pragma omp parallel for default(none)           \
+#pragma omp parallel for dt_omp_default()           \
   dt_omp_firstprivate(w, width, height, buf, allocsize, eff_height, scratch_buffers) \
   schedule(static)
 #endif
@@ -1430,7 +1430,7 @@ static int box_min_1ch(float *const buf, const size_t height, const size_t width
   if(scratch_buffers == NULL) return 1;
   
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(w, width, height, buf, allocsize, scratch_buffers) \
   schedule(static)
 #endif
@@ -1441,7 +1441,7 @@ static int box_min_1ch(float *const buf, const size_t height, const size_t width
     box_min_1d(width, scratch, buf + row * width, 1, w);
   }
 #ifdef _OPENMP
-#pragma omp parallel for default(none)           \
+#pragma omp parallel for dt_omp_default()           \
   dt_omp_firstprivate(w, width, height, buf,allocsize, eff_height, scratch_buffers) \
   schedule(static)
 #endif

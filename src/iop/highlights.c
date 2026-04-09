@@ -795,7 +795,7 @@ static void process_lch_bayer(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_
   const uint32_t filters = piece->dsc_in.filters;
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(clip, filters, ivoid, ovoid, roi_out) \
   schedule(static) collapse(2)
 #endif
@@ -897,7 +897,7 @@ static void process_lch_xtrans(dt_iop_module_t *self, const dt_dev_pixelpipe_iop
   const uint8_t(*const xtrans)[6] = (const uint8_t(*const)[6])piece->dsc_in.xtrans;
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(clip, ivoid, ovoid, roi_in, roi_out, xtrans) \
   schedule(static)
 #endif
@@ -1035,7 +1035,7 @@ static void _interpolate_and_mask(const float *const restrict input,
 {
   // Bilinear interpolation
   #ifdef _OPENMP
-  #pragma omp parallel for default(none) \
+  #pragma omp parallel for dt_omp_default() \
     dt_omp_firstprivate(width, height, clips, filters, wb, input, interpolated, clipping_mask) \
     schedule(static)
   #endif
@@ -1184,7 +1184,7 @@ static void _compute_laplacian_normalization(const float *const restrict input,
   const float n_pixels = roi_in->height * roi_in->width;
 
 #ifdef _OPENMP
-#pragma omp parallel for collapse(2) default(none) \
+#pragma omp parallel for collapse(2) dt_omp_default() \
   dt_omp_firstprivate(filters, input, roi_in, xtrans, n_pixels) \
   reduction(+:sum_R, sum_G, sum_B) \
   schedule(static)
@@ -1271,7 +1271,7 @@ static void _interpolate_and_mask_xtrans(const float *const restrict input,
                                          const size_t width, const size_t height)
 {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(width, height, clips, roi_in, wb, xtrans, input, interpolated, clipping_mask, lookup) \
   schedule(static)
 #endif
@@ -1369,7 +1369,7 @@ static void _remosaic_and_replace(const float *const restrict input,
 {
   // Take RGB ratios and norm, reconstruct RGB and remosaic the image
   #ifdef _OPENMP
-  #pragma omp parallel for default(none) \
+  #pragma omp parallel for dt_omp_default() \
     dt_omp_firstprivate(width, height, filters, wb, output, interpolated, input, clipping_mask) \
     schedule(static)
   #endif
@@ -1397,7 +1397,7 @@ static void _remosaic_and_replace_xtrans(const float *const restrict input,
                                          const size_t width, const size_t height)
 {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(width, height, roi_in, wb, xtrans, output, interpolated, input, clipping_mask) \
   schedule(static)
 #endif
@@ -1454,7 +1454,7 @@ static inline void guide_laplacians(const float *const restrict high_freq, const
   const float eps = 1e-12f;
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none)                                                                            \
+#pragma omp parallel for dt_omp_default()                                                                            \
     dt_omp_firstprivate(out, clipping_mask, HF, LF, height, width, mult, noise_level, salt, scale, zero, ones, \
                         inv_patch, scale_multiplier, eps)                                                         \
     schedule(static)
@@ -1630,7 +1630,7 @@ static inline void heat_PDE_diffusion(const float *const restrict high_freq, con
   const float *const restrict HF = DT_IS_ALIGNED(high_freq);
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none)                                                                            \
+#pragma omp parallel for dt_omp_default()                                                                            \
     dt_omp_firstprivate(out, clipping_mask, HF, LF, height, width, mult, scale, first_order_factor, anisotropic_kernel_isophote) \
     schedule(static)
 #endif
@@ -2648,7 +2648,7 @@ static void process_clip(const dt_dev_pixelpipe_iop_t *piece, const void *const 
   if(piece->dsc_in.filters)
   { // raw mosaic
 #ifdef _OPENMP
-#pragma omp parallel for SIMD() default(none) \
+#pragma omp parallel for SIMD() dt_omp_default() \
     dt_omp_firstprivate(clip, in, out, roi_out) \
     schedule(static)
 #endif
@@ -2662,7 +2662,7 @@ static void process_clip(const dt_dev_pixelpipe_iop_t *piece, const void *const 
     const int ch = piece->dsc_in.channels;
 
 #ifdef _OPENMP
-#pragma omp parallel for SIMD() default(none) \
+#pragma omp parallel for SIMD() dt_omp_default() \
     dt_omp_firstprivate(ch, clip, in, out, roi_out) \
     schedule(static)
 #endif
@@ -2688,7 +2688,7 @@ static void process_visualize(const dt_dev_pixelpipe_iop_t *piece, const void *c
                            data->clip};
 
 #ifdef _OPENMP
-  #pragma omp parallel for simd default(none) \
+  #pragma omp parallel for simd dt_omp_default() \
   dt_omp_firstprivate(in, out, height, width, filters, clips) \
   schedule(simd:static) aligned(in, out : 64)
 #endif
@@ -2745,7 +2745,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
       {
         const uint8_t(*const xtrans)[6] = (const uint8_t(*const)[6])piece->dsc_in.xtrans;
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
         dt_omp_firstprivate(clips, filters, ivoid, ovoid, roi_in, roi_out, \
                             xtrans) \
         schedule(static)
@@ -2756,7 +2756,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
           interpolate_color_xtrans(ivoid, ovoid, roi_in, roi_out, 0, -1, j, clips, xtrans, 1);
         }
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
         dt_omp_firstprivate(clips, filters, ivoid, ovoid, roi_in, roi_out, \
                             xtrans) \
         schedule(static)
@@ -2770,7 +2770,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
       else
       {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
         dt_omp_firstprivate(clips, filters, ivoid, ovoid, roi_out, data, piece) \
         schedule(static)
 #endif
@@ -2782,7 +2782,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
 // up/down directions
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
         dt_omp_firstprivate(clips, filters, ivoid, ovoid, roi_out, data, piece) \
         schedule(static)
 #endif

@@ -833,7 +833,7 @@ static void _extract_luminance_kernel(const float *const restrict in, float *con
                                       const dt_iop_order_iccprofile_info_t *const work_profile)
 {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(width, height, in, work_profile, image) \
   schedule(static)
 #endif
@@ -866,7 +866,7 @@ static void _extract_rgb_kernels(const float *const restrict in, float *const re
                                  const int width, const int height)
 {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(width, height, in, image) \
   schedule(static)
 #endif
@@ -904,7 +904,7 @@ static void _apply_mono_grain_kernel(const float *const restrict in, float *cons
                                      const int width, const int height, const float exposure)
 {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(width, height, exposure, in, image, out, result) \
   schedule(static)
 #endif
@@ -939,7 +939,7 @@ static void _finalize_color_grain_kernel(const float *const restrict in, float *
                                          const float exposure_g, const float exposure_b, const float colorfulness)
 {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(width, height, exposure_r, exposure_g, exposure_b, colorfulness, in, out, image, result) \
   schedule(static)
 #endif

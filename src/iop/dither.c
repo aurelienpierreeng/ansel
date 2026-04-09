@@ -483,7 +483,7 @@ static void process_random(struct dt_iop_module_t *self, const dt_dev_pixelpipe_
   unsigned int *const tea_states = alloc_tea_states(darktable.num_openmp_threads);
 
 #ifdef _OPENMP
-#pragma omp parallel default(none) \
+#pragma omp parallel dt_omp_default() \
   dt_omp_firstprivate(dither, height, width, tea_states, ivoid, ovoid)
 #endif
   {

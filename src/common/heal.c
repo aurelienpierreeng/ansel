@@ -65,7 +65,7 @@ static void _heal_sub(const float *const top_buffer, const float *const bottom_b
   const size_t res_stride = 4 * ((width + 1) / 2);
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(top_buffer, bottom_buffer, red_buffer, black_buffer, height, width, res_stride) \
   schedule(static)
 #endif
@@ -115,7 +115,7 @@ static void _heal_add(const float *const restrict red_buffer, const float *const
   const size_t res_stride = 4 * ((width + 1) / 2);
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(red_buffer, black_buffer, second_buffer, height, width, res_stride, result_buffer) \
   schedule(static)
 #endif
@@ -186,7 +186,7 @@ static float _heal_laplace_iteration(float *const restrict active_pixels,
   // if black, they are b(i)(j) and b(i)(j+1).  All of the above holds when colors are swapped.
 #if !(defined(__apple_build_version__) && __apple_build_version__ < 11030000) //makes Xcode 11.3.1 compiler crash
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(active_pixels, neighbor_pixels, runs, num_runs, width, height, start_parity, w) \
   schedule(static) \
   reduction(vsum : err)

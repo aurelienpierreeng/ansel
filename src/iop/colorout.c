@@ -295,7 +295,7 @@ static void process_fastpath_apply_tonecurves(const dt_iop_colorout_data_t *cons
   if(run_lut0 && run_lut1 && run_lut2)
   {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
     dt_omp_firstprivate(out, npixels, lut0, lut1, lut2, coeff0, coeff1, coeff2) \
     schedule(static)
 #endif
@@ -310,7 +310,7 @@ static void process_fastpath_apply_tonecurves(const dt_iop_colorout_data_t *cons
   else
   {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
     dt_omp_firstprivate(out, npixels, run_lut0, run_lut1, run_lut2, lut0, lut1, lut2, coeff0, coeff1, coeff2) \
     schedule(static)
 #endif
@@ -400,7 +400,7 @@ static inline void process_fastpath_matrix(const float *const restrict in, float
                                            const int use_nontemporal)
 {
 #ifdef _OPENMP
-#pragma omp parallel for simd default(none) \
+#pragma omp parallel for simd dt_omp_default() \
     dt_omp_firstprivate(in, out, npixels, cm0, cm1, cm2, use_nontemporal) \
     schedule(static) aligned(in, out:64)
 #endif
@@ -455,7 +455,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
      * explicitly instead of reaching through `d->xform` inside the loop. */
     const cmsHTRANSFORM xform = d->xform;
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
     dt_omp_firstprivate(gamutcheck, ivoid, out, roi_out, xform) \
     schedule(static)
 #endif

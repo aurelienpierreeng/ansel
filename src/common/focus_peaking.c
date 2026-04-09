@@ -59,7 +59,7 @@ int dt_focuspeaking(cairo_t *cr,
   const size_t npixels = (size_t)buf_height * buf_width;
   // Create a luma buffer as the euclidian norm of RGB channels
 #ifdef _OPENMP
-#pragma omp parallel for simd default(none)             \
+#pragma omp parallel for simd dt_omp_default()             \
   dt_omp_firstprivate(image, luma, npixels)             \
   schedule(static) aligned(image, luma:64)
 #endif
@@ -88,7 +88,7 @@ int dt_focuspeaking(cairo_t *cr,
   float y_integral = 0.f;
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
 dt_omp_firstprivate(luma, luma_ds, buf_height, buf_width) \
 schedule(static) collapse(2) reduction(+:mass, x_integral, y_integral)
 #endif
@@ -183,7 +183,7 @@ schedule(static) collapse(2) reduction(+:mass, x_integral, y_integral)
 
   // Dilate the mask to improve connectivity
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
 dt_omp_firstprivate(luma, luma_ds, buf_height, buf_width) \
 schedule(static) collapse(2)
 #endif
@@ -225,7 +225,7 @@ schedule(static) collapse(2)
   float TV_sum = 0.0f;
 
 #ifdef _OPENMP
-#pragma omp parallel for simd default(none) \
+#pragma omp parallel for simd dt_omp_default() \
 dt_omp_firstprivate(luma, buf_height, buf_width) \
 schedule(static) collapse(2) aligned(luma:64) reduction(+:TV_sum)
 #endif
@@ -237,7 +237,7 @@ schedule(static) collapse(2) aligned(luma:64) reduction(+:TV_sum)
   float sigma = 0.0f;
 
 #ifdef _OPENMP
-#pragma omp parallel for simd default(none) \
+#pragma omp parallel for simd dt_omp_default() \
 dt_omp_firstprivate(focus_peaking, luma, buf_height, buf_width, TV_sum) \
 schedule(static) collapse(2) aligned(focus_peaking, luma:64) reduction(+:sigma)
 #endif
@@ -254,7 +254,7 @@ schedule(static) collapse(2) aligned(focus_peaking, luma:64) reduction(+:sigma)
 
   // Prepare the focus-peaking image overlay
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(focus_peaking, luma, buf_height, buf_width, six_sigma, four_sigma, two_sigma) \
   schedule(static) collapse(2)
 #endif

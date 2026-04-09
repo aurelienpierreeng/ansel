@@ -66,7 +66,7 @@ void dt_iop_flip_and_zoom_8(const uint8_t *in, int32_t iw, int32_t ih, uint8_t *
   const int32_t offm = half_pixel * bpp * MIN(MIN(0, si), MIN(sj, si + sj));
   const int32_t offM = half_pixel * bpp * MAX(MAX(0, si), MAX(sj, si + sj));
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(bpp, half_pixel, ht, offM, offm, scale, wd, in, out, jj, ii, sj, si, iw, ih) \
   schedule(static)
 #endif
@@ -210,7 +210,7 @@ void dt_iop_clip_and_zoom_mosaic_half_size(uint16_t *const out, const uint16_t *
     }
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(filters, in, in_stride, out, out_stride, px_footprint, rggbx, rggby, roi_in, roi_out, clut) schedule(static)
 #endif
   for(int y = 0; y < roi_out->height; y++)
@@ -269,7 +269,7 @@ void dt_iop_clip_and_zoom_mosaic_half_size_f(float *const out, const float *cons
   const int rggbx = trggbx, rggby = trggby;
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(in, in_stride, out, out_stride, px_footprint, rggbx, rggby, roi_in, roi_out, samples) \
   schedule(static)
 #endif
@@ -449,7 +449,7 @@ void dt_iop_clip_and_zoom_mosaic_third_size_xtrans(uint16_t *const out, const ui
   // sample (rounded to nearest input pixel) to anti-alias. Higher MP
   // images need larger filters to avoid artifacts.
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(in, in_stride, out, out_stride, px_footprint, roi_in, roi_out, xtrans) \
   schedule(static)
 #endif
@@ -490,7 +490,7 @@ void dt_iop_clip_and_zoom_mosaic_third_size_xtrans_f(float *const out, const flo
 {
   const float px_footprint = 1.f / roi_out->scale;
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(in, in_stride, out, out_stride, px_footprint, roi_in, roi_out, xtrans) \
   schedule(static)
 #endif
@@ -537,7 +537,7 @@ void dt_iop_clip_and_zoom_demosaic_passthrough_monochrome_f(float *out, const fl
   const int samples = round(px_footprint);
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(in, in_stride, out_stride, px_footprint, roi_in, roi_out, samples, out) \
   schedule(static)
 #endif
@@ -689,7 +689,7 @@ void dt_iop_clip_and_zoom_demosaic_half_size_f(float *out, const float *const in
   const int rggbx = trggbx, rggby = trggby;
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(in, in_stride, out_stride, px_footprint, rggbx, rggby, roi_in, roi_out, samples, out) \
   schedule(static)
 #endif
@@ -863,7 +863,7 @@ void dt_iop_clip_and_zoom_demosaic_third_size_xtrans_f(float *out, const float *
   // by non-integer number of samples.
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(in, in_stride, out_stride, px_footprint, roi_in, roi_out, samples, xtrans, out) \
   schedule(static)
 #endif

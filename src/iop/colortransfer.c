@@ -292,7 +292,7 @@ static int kmeans(const float *col, const dt_iop_roi_t *const roi, const int n, 
     for(int k = 0; k < n; k++) cnt[k] = 0;
 // randomly sample col positions inside roi
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
     dt_omp_firstprivate(cnt, mean, n, roi, samples, var, col, mean_out) \
     schedule(static)
 #endif
@@ -399,7 +399,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     int hist[HISTN];
     capture_histogram(in, roi_in, hist);
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
     dt_omp_firstprivate(ch, roi_out, data, in, out, hist) \
     schedule(static)
 #endif
@@ -445,7 +445,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
 // for all pixels: find input cluster, transfer to mapped target cluster
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
     dt_omp_firstprivate(ch, mapio, mean, roi_out, var, data, in, out) \
     schedule(static)
 #endif

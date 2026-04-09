@@ -186,7 +186,7 @@ static inline void dt_iop_alpha_copy(const void *const ivoid,
   float *const __restrict__ out = (float *const)ovoid;
 
 #ifdef _OPENMP
-#pragma omp parallel for simd default(none) aligned(out, in:64)\
+#pragma omp parallel for simd dt_omp_default() aligned(out, in:64)\
   dt_omp_firstprivate(height, width, out, in) \
   schedule(static)
 #endif

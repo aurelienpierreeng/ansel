@@ -341,7 +341,7 @@ static inline void _apply_tonecurves(const float *const image_in, float *const i
   if((lut[0][0] >= 0.0f) && (lut[1][0] >= 0.0f) && (lut[2][0] >= 0.0f))
   {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
     dt_omp_firstprivate(stride, image_in, image_out, lut, lutsize, unbounded_coeffs, ch) \
     schedule(static) collapse(2)
 #endif
@@ -356,7 +356,7 @@ static inline void _apply_tonecurves(const float *const image_in, float *const i
   else if((lut[0][0] >= 0.0f) || (lut[1][0] >= 0.0f) || (lut[2][0] >= 0.0f))
   {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
     dt_omp_firstprivate(stride, image_in, image_out, lut, lutsize, unbounded_coeffs, ch) \
     schedule(static) collapse(2)
 #endif
@@ -395,7 +395,7 @@ static inline void _transform_rgb_to_lab_matrix(const float *const restrict imag
                       profile_info->lutsize);
 
 #ifdef _OPENMP
-#pragma omp parallel for simd default(none) \
+#pragma omp parallel for simd dt_omp_default() \
     dt_omp_firstprivate(image_out, profile_info, stride, ch, m0, m1, m2) \
     schedule(static) aligned(image_out:64)
 #endif
@@ -411,7 +411,7 @@ static inline void _transform_rgb_to_lab_matrix(const float *const restrict imag
   else
   {
 #ifdef _OPENMP
-#pragma omp parallel for simd default(none) \
+#pragma omp parallel for simd dt_omp_default() \
     dt_omp_firstprivate(image_in, image_out, profile_info, stride, ch, m0, m1, m2) \
     schedule(static) aligned(image_in, image_out:64)
 #endif
@@ -443,7 +443,7 @@ static inline void _transform_lab_to_rgb_matrix(const float *const image_in, flo
   const dt_aligned_pixel_simd_t m2 = dt_colormatrix_row_to_simd(*matrix_ptr, 2);
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(image_in, image_out, stride, profile_info, ch, m0, m1, m2, use_nontemporal)   \
   schedule(static)
 #endif
@@ -510,7 +510,7 @@ static inline void _transform_matrix_rgb(const float *const restrict image_in,
                                                   (profile_info_to->lut_out[2][0] >= 0.0f) };
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
     dt_omp_firstprivate(stride, image_in, image_out, profile_info_from, profile_info_to, run_lut_in, run_lut_out, m0, m1, m2, use_nontemporal) \
     schedule(static)
 #endif
@@ -570,7 +570,7 @@ static inline void _transform_matrix_rgb(const float *const restrict image_in,
   else
   {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
     dt_omp_firstprivate(stride, image_in, image_out, profile_info_from, profile_info_to, m0, m1, m2) \
     schedule(static)
 #endif

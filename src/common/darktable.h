@@ -231,6 +231,8 @@ typedef unsigned int u_int;
 #  define dt_omp_firstprivate(...)
 # endif/* HAVE_OMP_FIRSTPRIVATE_WITH_CONST */
 
+#define dt_omp_default(...) default(firstprivate) __VA_ARGS__
+
 #ifndef dt_omp_nontemporal
 // Clang 10+ supports the nontemporal() OpenMP directive
 // GCC 9 recognizes it as valid, but does not do anything with it

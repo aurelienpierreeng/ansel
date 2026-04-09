@@ -27,7 +27,7 @@ static void passthrough_monochrome(float *out, const float *const in, dt_iop_roi
   assert(roi_in->height >= roi_out->height);
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(in, roi_out, roi_in, out) \
   schedule(static) collapse(2)
 #endif
@@ -55,7 +55,7 @@ static void passthrough_color(float *out, const float *const in, dt_iop_roi_t *c
   if(filters != 9u)
   {
     #ifdef _OPENMP
-      #pragma omp parallel for default(none) \
+      #pragma omp parallel for dt_omp_default() \
       dt_omp_firstprivate(in, roi_out, roi_in, filters, out) \
       schedule(static) \
       collapse(2)
@@ -77,7 +77,7 @@ static void passthrough_color(float *out, const float *const in, dt_iop_roi_t *c
   else
   {
     #ifdef _OPENMP
-      #pragma omp parallel for default(none) \
+      #pragma omp parallel for dt_omp_default() \
       dt_omp_firstprivate(in, roi_out, roi_in, xtrans, out) \
       schedule(static) \
       collapse(2)

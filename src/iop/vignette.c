@@ -730,7 +730,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   unsigned int *const tea_states = alloc_tea_states(darktable.num_openmp_threads);
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(ch, dscale, exp1, exp2, fscale, ivoid, ovoid, \
                       roi_center_scaled, roi_out, tea_states, unbound, data, yscale, xscale, dither) \
   schedule(static)

@@ -419,7 +419,7 @@ int write_image(struct dt_imageio_module_data_t *data,
     case 10:
     {
 #ifdef _OPENMP
-#pragma omp parallel for simd default(none) \
+#pragma omp parallel for simd dt_omp_default() \
   dt_omp_firstprivate(in_data, width, height, out, rowbytes, max_channel_f) \
   schedule(simd:static) \
   collapse(2)
@@ -441,7 +441,7 @@ int write_image(struct dt_imageio_module_data_t *data,
     case 8:
     {
 #ifdef _OPENMP
-#pragma omp parallel for simd default(none) \
+#pragma omp parallel for simd dt_omp_default() \
   dt_omp_firstprivate(in_data, width, height, out, rowbytes, max_channel_f) \
   schedule(simd:static) \
   collapse(2)

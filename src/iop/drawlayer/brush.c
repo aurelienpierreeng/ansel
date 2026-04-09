@@ -744,7 +744,7 @@ gboolean dt_drawlayer_brush_rasterize(const dt_drawlayer_cache_patch_t *sample_p
   else
   {
 #if defined(_OPENMP) && !OUTER_LOOP
-#pragma omp parallel for default(none) collapse(2) \
+#pragma omp parallel for dt_omp_default() collapse(2) \
   dt_omp_firstprivate(view, buffer, stroke_mask_pixels, sample_opacity_scale, blur_px, width, height, origin_x, origin_y, scale, stroke_mask_width, stroke_mask_height)
 #endif
     for(int y = view.bounds.nw[1]; y < view.bounds.se[1]; y++)

@@ -489,7 +489,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
       if(buf == NULL) return 1;
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
       dt_omp_firstprivate(padded_bufsize, ch, ch_width, d, interpolation, ivoid, mask_display, ovoid, roi_in, roi_out, modifier, buf, raw_monochrome)	\
       schedule(static)
 #endif
@@ -555,7 +555,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
     if(modflags & LF_MODIFY_VIGNETTING)
     {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
       dt_omp_firstprivate(ch, pixelformat, roi_out, ovoid, modifier) \
       schedule(static)
 #endif
@@ -582,7 +582,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
     if(modflags & LF_MODIFY_VIGNETTING)
     {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
       dt_omp_firstprivate(ch, pixelformat, roi_in, buf, modifier) \
       schedule(static)
 #endif
@@ -609,7 +609,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
       }
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
       dt_omp_firstprivate(padded_buf2size, ch, ch_width, d, interpolation, mask_display, ovoid, roi_in, roi_out, buf2, raw_monochrome, buf, modifier) \
       schedule(static)
 #endif
@@ -775,7 +775,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     if(modflags & (LF_MODIFY_TCA | LF_MODIFY_DISTORTION | LF_MODIFY_GEOMETRY | LF_MODIFY_SCALE))
     {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
       dt_omp_firstprivate(tmpbufwidth, roi_out, raw_monochrome, tmpbuf, d, modifier) \
       schedule(static)
 #endif
@@ -813,7 +813,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     if(modflags & LF_MODIFY_VIGNETTING)
     {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
       dt_omp_firstprivate(ch, pixelformat, roi_out, tmpbuf, modifier, d) \
       schedule(static)
 #endif
@@ -854,7 +854,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     if(modflags & LF_MODIFY_VIGNETTING)
     {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
       dt_omp_firstprivate(ch, pixelformat, roi_in, tmpbuf, modifier, d) \
       schedule(static)
 #endif
@@ -890,7 +890,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     if(modflags & (LF_MODIFY_TCA | LF_MODIFY_DISTORTION | LF_MODIFY_GEOMETRY | LF_MODIFY_SCALE))
     {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
       dt_omp_firstprivate(tmpbufwidth, roi_out, raw_monochrome) \
       dt_omp_firstprivate(tmpbuf, d, modifier) \
       schedule(static)
@@ -977,7 +977,7 @@ int distort_transform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   {
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
     dt_omp_firstprivate(points_count, points, modifier) \
     schedule(static) if(points_count > 100)
 #endif
@@ -1011,7 +1011,7 @@ int distort_backtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
   {
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
     dt_omp_firstprivate(points_count, points, modifier) \
     schedule(static) if(points_count > 100)
 #endif
@@ -1065,7 +1065,7 @@ void distort_mask(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t 
   if(buf == NULL) return;
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(padded_bufsize, d, in, interpolation, out, roi_in, roi_out, buf, modifier) \
   schedule(static)
 #endif
@@ -1138,7 +1138,7 @@ void modify_roi_in(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t
     if(buf == NULL) return;
 
 #ifdef _OPENMP
-#pragma omp parallel default(none) \
+#pragma omp parallel dt_omp_default() \
     dt_omp_firstprivate(aheight, awidth, buf, height, nbpoints, width, xoff, \
                         xstep, yoff, ystep, modifier) \
     reduction(min : xm, ym) reduction(max : xM, yM)

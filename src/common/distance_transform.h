@@ -103,7 +103,7 @@ float dt_image_distance_transform(float *const restrict src, float *const restri
       break;
     case DT_DISTANCE_TRANSFORM_MASK:
 #ifdef _OPENMP
-  #pragma omp parallel for simd default(none) \
+  #pragma omp parallel for simd dt_omp_default() \
   dt_omp_firstprivate(src, out, clip, width, height) \
   schedule(static) aligned(src, out : 64)
 #endif

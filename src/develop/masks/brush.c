@@ -1040,7 +1040,7 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
       dx = pts[0] - (*point_buffer)[2];
       dy = pts[1] - (*point_buffer)[3];
 #ifdef _OPENMP
-#pragma omp parallel for simd default(none) \
+#pragma omp parallel for simd dt_omp_default() \
     dt_omp_firstprivate(point_count, point_buffer, dx, dy)              \
     schedule(static) if(*point_count > 100) aligned(point_buffer:64)
 #endif
@@ -2996,7 +2996,7 @@ static int _brush_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixel
   if(!use_sparse)
   {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(node_count, border_count, roi_width, roi_height, buffer, points, border, payload) \
   if(border_count - node_count * 3 > 1000)
 #endif

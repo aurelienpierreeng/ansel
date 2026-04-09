@@ -152,7 +152,7 @@ static int process_bayer(const dt_iop_hotpixels_data_t *data,
   int fixed = 0;
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(ivoid, markfixed, min_neighbours, multiplier, ovoid, \
                       roi_out, threshold, width, widthx2) \
   reduction(+ : fixed) \
@@ -254,7 +254,7 @@ static int process_xtrans(const dt_iop_hotpixels_data_t *data,
   int fixed = 0;
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(ivoid, markfixed, min_neighbours, multiplier, ovoid, \
                       roi_out, threshold, xtrans, width, offsets) \
   reduction(+ : fixed) \

@@ -656,7 +656,7 @@ static void _blend_layer_over_input(float *output, const float *input, const flo
   const dt_aligned_pixel_simd_t preview_base = { preview_bg, preview_bg, preview_bg, 1.0f };
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) schedule(static)                                                           \
+#pragma omp parallel for dt_omp_default() schedule(static)                                                           \
     dt_omp_firstprivate(input, output, layerbuf, pixels, use_preview_bg, preview_base)
 #endif
   for(size_t kk = 0; kk < pixels; kk++)
@@ -937,7 +937,7 @@ static int _blend_layer_over_input_cl(const int devid, const int kernel_premult_
                                                                  "drawlayer process scratch");
     if(!background) goto cleanup;
 #ifdef _OPENMP
-#pragma omp parallel for default(none) schedule(static)                                                          \
+#pragma omp parallel for dt_omp_default() schedule(static)                                                          \
     dt_omp_firstprivate(background, out_pixels, preview_bg) if(out_pixels > 4096)
 #endif
     for(size_t kk = 0; kk < out_pixels; kk++)
@@ -2292,7 +2292,7 @@ static gboolean _fill_current_layer(dt_iop_module_t *self, const float value)
   const float gray = _clamp01(value);
   dt_drawlayer_cache_patch_wrlock(&g->process.base_patch);
 #ifdef _OPENMP
-#pragma omp parallel for default(none) schedule(static) dt_omp_firstprivate(count, gray, pixels) if(count > 4096)
+#pragma omp parallel for dt_omp_default() schedule(static) dt_omp_firstprivate(count, gray, pixels) if(count > 4096)
 #endif
   for(size_t k = 0; k < count; k++)
   {

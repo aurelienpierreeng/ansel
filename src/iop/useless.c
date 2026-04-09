@@ -358,7 +358,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 // iterate over all output pixels (same coordinates as input)
 #ifdef _OPENMP
 // optional: parallelize it!
-#pragma omp parallel for default(none) schedule(static) dt_omp_firstprivate(d, scale, ivoid, ovoid, roi_in, roi_out, ch, mask)
+#pragma omp parallel for dt_omp_default() schedule(static) dt_omp_firstprivate(d, scale, ivoid, ovoid, roi_in, roi_out, ch, mask)
 #endif
   for(int j = 0; j < roi_out->height; j++)
   {

@@ -817,7 +817,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   if(data->density > 0)
   {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
     dt_omp_firstprivate(ch, cosv, data, filter_hardness, hh_inv, hw_inv, \
                         ivoid, ix, iy, offset, ovoid, height, width, sinv) \
     schedule(static)
@@ -850,7 +850,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   else
   {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
     dt_omp_firstprivate(ch, cosv, data, filter_hardness, hh_inv, hw_inv, \
                         ivoid, ix, iy, offset, ovoid, height, width, sinv)    \
     schedule(static)

@@ -150,7 +150,7 @@ static void pad_by_replication(
     const uint32_t padding)	// number of lines of padding on each side
 {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(buf, padding, h, w) \
   schedule(static)
 #endif
@@ -168,7 +168,7 @@ static inline void gauss_expand(
     const int ht)
 {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(fine, input, wd, ht) \
   schedule(static) \
   collapse(2)
@@ -195,7 +195,7 @@ static inline void gauss_reduce(
 #ifdef _OPENMP
   // DON'T parallelize the very smallest levels of the pyramid, as the threading overhead
   // is greater than the time needed to do it sequentially
-#pragma omp parallel for default(none) if (ch*cw>500)  \
+#pragma omp parallel for dt_omp_default() if (ch*cw>500)  \
   dt_omp_firstprivate(coarse, cw, ch, input, w, wd) \
   schedule(static) \
   collapse(2)
@@ -230,7 +230,7 @@ static inline float *ll_pad_input(
   if(b && b->mode == 2)
   { // pad by preview buffer
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
     dt_omp_firstprivate(ht, input, max_supp, out, wd, stride, wd2, ht2) \
     schedule(static) \
     collapse(2)
@@ -258,7 +258,7 @@ static inline float *ll_pad_input(
       out[*wd2*j+i] = b->pad0[b->pwd*py+px];\
     } } while(0)
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
     dt_omp_firstprivate(input, max_supp, out, wd, stride, wd2, ht2, b) \
     schedule(static) \
     collapse(2)
@@ -266,7 +266,7 @@ static inline float *ll_pad_input(
     for(int j=max_supp;j<*ht2-max_supp;j++) for(int i=0;i<max_supp;i++)
       LL_FILL(input[stride*wd*(j-max_supp)]* 0.01f);
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
     dt_omp_firstprivate(input, max_supp, out, stride, wd, wd2, ht2, b) \
     schedule(static) \
     collapse(2)
@@ -274,7 +274,7 @@ static inline float *ll_pad_input(
     for(int j=max_supp;j<*ht2-max_supp;j++) for(int i=wd+max_supp;i<*wd2;i++)
       LL_FILL(input[stride*((j-max_supp)*wd+wd-1)] * 0.01f);
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
     dt_omp_firstprivate(max_supp, out, wd2, ht2, b) \
     schedule(static) \
     collapse(2)
@@ -282,7 +282,7 @@ static inline float *ll_pad_input(
     for(int j=0;j<max_supp;j++) for(int i=0;i<*wd2;i++)
       LL_FILL(out[*wd2*max_supp+i]);
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
     dt_omp_firstprivate(ht, max_supp, out, wd2, ht2, b) \
     schedule(static) \
     collapse(2)
@@ -294,7 +294,7 @@ static inline float *ll_pad_input(
   else
   { // pad by replication:
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
     dt_omp_firstprivate(input, ht, max_supp, out, wd, stride, wd2, ht2) \
     schedule(static)
 #endif
@@ -378,7 +378,7 @@ void apply_curve(
     const float clarity)
 {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(clarity, g, h, highlights, in, out, padding, sigma, shadows, w) \
   schedule(static)
 #endif
@@ -551,7 +551,7 @@ int local_laplacian_internal(
     gauss_expand(output[l+1], output[l], pw, ph);
     // go through all coefficients in the upsampled gauss buffer:
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
     dt_omp_firstprivate(ph, pw, w,h,buf,output,l,gamma,padded) \
     schedule(static) \
     collapse(2)
@@ -574,7 +574,7 @@ int local_laplacian_internal(
     }
   }
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(ht, input, max_supp, out, wd, w,output,buf) \
   schedule(static) \
   collapse(2)

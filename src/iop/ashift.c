@@ -1003,7 +1003,7 @@ int distort_transform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   const float cy = fullheight * data->ct;
 
 #ifdef _OPENMP
-#pragma omp parallel for simd default(none) \
+#pragma omp parallel for simd dt_omp_default() \
   dt_omp_firstprivate(cx, cy, points_count, points, homograph) \
   schedule(static) if(points_count > 100) aligned(points, homograph:64)
 #endif
@@ -1039,7 +1039,7 @@ int distort_backtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
   const float cy = fullheight * data->ct;
 
 #ifdef _OPENMP
-#pragma omp parallel for simd default(none) \
+#pragma omp parallel for simd dt_omp_default() \
   dt_omp_firstprivate(cx, cy, points, points_count, ihomograph) \
   schedule(static) if(points_count > 100) aligned(ihomograph, points:64)
 #endif
@@ -1082,7 +1082,7 @@ void distort_mask(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t 
   const float cy = roi_out->scale * fullheight * data->ct;
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(cx, cy, in, out, roi_in, roi_out, ihomograph, interpolation) \
   schedule(static)
 #endif
@@ -1259,7 +1259,7 @@ static void rgb2grey256(const float *const in, double *const out, const int widt
   const size_t npixels = (size_t)width * height;
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(npixels, in, out) \
   schedule(static)
 #endif
@@ -1283,7 +1283,7 @@ static void edge_enhance_1d(const double *in, double *out, const int width, cons
   const double *kernel = (dir == ASHIFT_ENHANCE_HORIZONTAL) ? (const double *)hkernel : (const double *)vkernel;
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(height, width, khwidth, kwidth, in, out, kernel) \
   schedule(static)
 #endif
@@ -1309,7 +1309,7 @@ static void edge_enhance_1d(const double *in, double *out, const int width, cons
   }
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(height, width, khwidth, out) \
   schedule(static)
 #endif
@@ -1353,7 +1353,7 @@ static int edge_enhance(const double *in, double *out, const int width, const in
 
 // calculate absolute values
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(height, width, Gx, Gy, out) \
   schedule(static)
 #endif
@@ -1402,7 +1402,7 @@ static int detail_enhance(const float *const in, float *const out, const int wid
 
   // convert RGB input to Lab, use output buffer for intermediate storage
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(npixels, in, out) \
   schedule(static)
 #endif
@@ -1428,7 +1428,7 @@ static int detail_enhance(const float *const in, float *const out, const int wid
 
   // convert resulting Lab to RGB output
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(npixels, out) \
   schedule(static)
 #endif
@@ -1447,7 +1447,7 @@ static void gamma_correct(const float *const in, float *const out, const int wid
 {
   const size_t npixels = (size_t)width * height;
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(npixels, in, out) \
   schedule(static)
 #endif
@@ -3470,7 +3470,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const float cy = roi_out->scale * fullheight * data->ct;
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(ch, ch_width, cx, cy, ivoid, ovoid, roi_in, roi_out, ihomograph, interpolation) \
   schedule(static)
 #endif

@@ -252,7 +252,7 @@ int distort_transform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   const double y = (double)d->y * scale;
 
 #ifdef _OPENMP
-#pragma omp parallel for simd default(none) \
+#pragma omp parallel for simd dt_omp_default() \
     dt_omp_firstprivate(points_count, points, y, x) \
     schedule(static) \
     aligned(points:64) if(points_count > 100)
@@ -281,7 +281,7 @@ int distort_backtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
   const double y = (double)d->y * scale;
 
 #ifdef _OPENMP
-#pragma omp parallel for simd default(none) \
+#pragma omp parallel for simd dt_omp_default() \
     dt_omp_firstprivate(points_count, points, y, x) \
     schedule(static) \
     aligned(points:64) if(points_count > 100)
@@ -397,7 +397,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     for(int k = 0; k < 4; k++) inv_div[k] = 1.0f / d->div[k];
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
     dt_omp_firstprivate(csx, csy, cfa_y, d, height, in, input_width, inv_div, out, width, x_phase) \
     schedule(static)
 #endif
@@ -441,7 +441,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     for(int k = 0; k < 4; k++) inv_div[k] = 1.0f / d->div[k];
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
     dt_omp_firstprivate(csx, csy, cfa_y, d, height, in, input_width, inv_div, out, width, x_phase) \
     schedule(static)
 #endif
@@ -485,7 +485,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     const int ch = piece->dsc_in.channels;
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
     dt_omp_firstprivate(ch, csx, csy, div, height, in, input_width, out, sub, width) \
     schedule(static) collapse(3)
 #endif
@@ -517,7 +517,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     float *const out = (float *const)ovoid;
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
     dt_omp_firstprivate(csx, csy, height, out, im_to_rel_x, im_to_rel_y, rel_to_map_x, rel_to_map_y, \
                         roi_out, roi_x, roi_y, \
                         map_w, map_h, map_origin_h, map_origin_v, width, d) \

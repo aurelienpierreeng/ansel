@@ -167,7 +167,7 @@ static inline void process_reinhard(struct dt_iop_module_t *self, const dt_dev_p
   const int ch = 4;
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(ch, roi_out, in, out, data) \
   schedule(static)
 #endif
@@ -225,7 +225,7 @@ static inline void process_drago(struct dt_iop_module_t *self, const dt_dev_pixe
   {
     lwmax = eps;
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(roi_out, in, ch) reduction(max : lwmax)      \
   schedule(static)
 #endif
@@ -254,7 +254,7 @@ static inline void process_drago(struct dt_iop_module_t *self, const dt_dev_pixe
   const float bl = logf(fmaxf(eps, data->drago.bias)) / logf(0.5);
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(ch, bl, ldc, roi_out, eps, in, out, lwmax) \
   schedule(static)
 #endif
@@ -281,7 +281,7 @@ static inline void process_filmic(struct dt_iop_module_t *self, const dt_dev_pix
   const int ch = 4;
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(ch, roi_out, in, out, data) \
   schedule(static)
 #endif

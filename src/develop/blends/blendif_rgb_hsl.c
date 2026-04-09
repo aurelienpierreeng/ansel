@@ -281,7 +281,7 @@ void dt_develop_blendif_rgb_hsl_make_mask(const struct dt_dev_pixelpipe_t *pipe,
     if(mask_inversed)
     {
 #ifdef _OPENMP
-#pragma omp parallel for simd default(none) dt_omp_firstprivate(mask, buffsize, global_opacity) schedule(static)
+#pragma omp parallel for simd dt_omp_default() dt_omp_firstprivate(mask, buffsize, global_opacity) schedule(static)
 #endif
       for(size_t x = 0; x < buffsize; x++) mask[x] = global_opacity * (1.0f - mask[x]);
     }
@@ -319,7 +319,7 @@ void dt_develop_blendif_rgb_hsl_make_mask(const struct dt_dev_pixelpipe_t *pipe,
     }
 
 #ifdef _OPENMP
-#pragma omp parallel default(none) \
+#pragma omp parallel dt_omp_default() \
   dt_omp_firstprivate(temp_mask, mask, a, b, oheight, owidth, iwidth, yoffs, xoffs, buffsize, \
                       blendif, profile, parameters, mask_inclusive, mask_inversed, global_opacity)
 #endif
@@ -1352,7 +1352,7 @@ void dt_develop_blendif_rgb_hsl_blend(const struct dt_dev_pixelpipe_t *pipe,
     const dt_dev_pixelpipe_display_mask_t channel = request_mask_display & DT_DEV_PIXELPIPE_DISPLAY_ANY;
 
 #ifdef _OPENMP
-#pragma omp parallel for schedule(static) default(none) \
+#pragma omp parallel for schedule(static) dt_omp_default() \
   dt_omp_firstprivate(a, b, mask, channel, oheight, owidth, iwidth, xoffs, yoffs, boost_factors, profile)
 #endif
     for(size_t y = 0; y < oheight; y++)
@@ -1374,7 +1374,7 @@ void dt_develop_blendif_rgb_hsl_blend(const struct dt_dev_pixelpipe_t *pipe,
       if((d->blend_mode & DEVELOP_BLEND_REVERSE) == DEVELOP_BLEND_REVERSE)
       {
 #ifdef _OPENMP
-#pragma omp parallel for schedule(static) default(none) \
+#pragma omp parallel for schedule(static) dt_omp_default() \
   dt_omp_firstprivate(a, b, tmp_buffer, mask, blend, oheight, owidth, iwidth, xoffs, yoffs)
 #endif
         for(size_t y = 0; y < oheight; y++)
@@ -1388,7 +1388,7 @@ void dt_develop_blendif_rgb_hsl_blend(const struct dt_dev_pixelpipe_t *pipe,
       else
       {
 #ifdef _OPENMP
-#pragma omp parallel for schedule(static) default(none) \
+#pragma omp parallel for schedule(static) dt_omp_default() \
   dt_omp_firstprivate(a, b, tmp_buffer, mask, blend, oheight, owidth, iwidth, xoffs, yoffs)
 #endif
         for(size_t y = 0; y < oheight; y++)
@@ -1407,7 +1407,7 @@ void dt_develop_blendif_rgb_hsl_blend(const struct dt_dev_pixelpipe_t *pipe,
   {
     const size_t stride = owidth * DT_BLENDIF_RGB_CH;
 #ifdef _OPENMP
-#pragma omp parallel for schedule(static) default(none) \
+#pragma omp parallel for schedule(static) dt_omp_default() \
   dt_omp_firstprivate(a, b, oheight, stride, iwidth, xoffs, yoffs)
 #endif
     for(size_t y = 0; y < oheight; y++)

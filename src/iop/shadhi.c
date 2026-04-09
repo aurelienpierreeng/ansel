@@ -386,7 +386,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(ch, compress, doublemax, flags, halfmax, height, \
                       highlights, highlights_ccorrect, lmax, lmin, \
                       low_approximation, max, min,  shadows, \

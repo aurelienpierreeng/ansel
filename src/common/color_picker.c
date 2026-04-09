@@ -62,7 +62,7 @@ static void _color_picker_convert_buffer(const float *const restrict input, floa
   if(image_cst == IOP_CS_LAB && picker_cst == IOP_CS_LCH)
   {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) dt_omp_firstprivate(input, output, pixels) schedule(static)
+#pragma omp parallel for dt_omp_default() dt_omp_firstprivate(input, output, pixels) schedule(static)
 #endif
     for(size_t k = 0; k < pixels; k++)
     {
@@ -74,7 +74,7 @@ static void _color_picker_convert_buffer(const float *const restrict input, floa
   else if(dt_iop_colorspace_is_rgb(image_cst) && picker_cst == IOP_CS_HSL)
   {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) dt_omp_firstprivate(input, output, pixels) schedule(static)
+#pragma omp parallel for dt_omp_default() dt_omp_firstprivate(input, output, pixels) schedule(static)
 #endif
     for(size_t k = 0; k < pixels; k++)
     {
@@ -86,7 +86,7 @@ static void _color_picker_convert_buffer(const float *const restrict input, floa
   else if(image_cst == IOP_CS_LAB && picker_cst == IOP_CS_RGB)
   {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) dt_omp_firstprivate(input, output, pixels, profile) schedule(static)
+#pragma omp parallel for dt_omp_default() dt_omp_firstprivate(input, output, pixels, profile) schedule(static)
 #endif
     for(size_t k = 0; k < pixels; k++)
     {
@@ -100,7 +100,7 @@ static void _color_picker_convert_buffer(const float *const restrict input, floa
   else if(dt_iop_colorspace_is_rgb(image_cst) && picker_cst == IOP_CS_LAB)
   {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) dt_omp_firstprivate(input, output, pixels, profile) schedule(static)
+#pragma omp parallel for dt_omp_default() dt_omp_firstprivate(input, output, pixels, profile) schedule(static)
 #endif
     for(size_t k = 0; k < pixels; k++)
     {
@@ -114,7 +114,7 @@ static void _color_picker_convert_buffer(const float *const restrict input, floa
   else if(dt_iop_colorspace_is_rgb(image_cst) && picker_cst == IOP_CS_JZCZHZ)
   {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) dt_omp_firstprivate(input, output, pixels, profile) schedule(static)
+#pragma omp parallel for dt_omp_default() dt_omp_firstprivate(input, output, pixels, profile) schedule(static)
 #endif
     for(size_t k = 0; k < pixels; k++)
     {
@@ -330,7 +330,7 @@ static void color_picker_helper_4ch_parallel(const dt_iop_buffer_dsc_t *const ds
   if(cst_to == IOP_CS_LCH)
   {
 #ifdef _OPENMP
-#pragma omp parallel default(none) \
+#pragma omp parallel dt_omp_default() \
   dt_omp_firstprivate(w, pixel, width, stride, off_mul, off_add, box, mean, mmin, mmax, allocsize)
 #endif
     {
@@ -351,7 +351,7 @@ static void color_picker_helper_4ch_parallel(const dt_iop_buffer_dsc_t *const ds
   else if(cst_to == IOP_CS_HSL)
   {
 #ifdef _OPENMP
-#pragma omp parallel default(none) \
+#pragma omp parallel dt_omp_default() \
   dt_omp_firstprivate(w, pixel, width, stride, off_mul, off_add, box, mean, mmin, mmax, allocsize)
 #endif
     {
@@ -372,7 +372,7 @@ static void color_picker_helper_4ch_parallel(const dt_iop_buffer_dsc_t *const ds
   else if(cst_to == IOP_CS_JZCZHZ)
   {
 #ifdef _OPENMP
-#pragma omp parallel default(none) \
+#pragma omp parallel dt_omp_default() \
   dt_omp_firstprivate(w, pixel, width, stride, off_mul, off_add, box, mean, mmin, mmax, profile, allocsize)
 #endif
     {
@@ -393,7 +393,7 @@ static void color_picker_helper_4ch_parallel(const dt_iop_buffer_dsc_t *const ds
   else
   {
 #ifdef _OPENMP
-#pragma omp parallel default(none) \
+#pragma omp parallel dt_omp_default() \
   dt_omp_firstprivate(w, pixel, width, stride, off_mul, off_add, box, mean, mmin, mmax, allocsize)
 #endif
     {
@@ -499,7 +499,7 @@ static void color_picker_helper_4ch_converted_parallel(const float *const pixel,
   }
 
 #ifdef _OPENMP
-#pragma omp parallel default(none) \
+#pragma omp parallel dt_omp_default() \
   dt_omp_firstprivate(w, pixel, stride, off_mul, off_add, box, mean, mmin, mmax, allocsize, picker_cst)
 #endif
   {
@@ -620,7 +620,7 @@ static void color_picker_helper_bayer_parallel(const dt_iop_buffer_dsc_t *const 
   }
 
 #ifdef _OPENMP
-#pragma omp parallel default(none) \
+#pragma omp parallel dt_omp_default() \
   dt_omp_firstprivate(pixel, width, roi, filters, box, msum, mmin, mmax, cnt)
 #endif
   {
@@ -754,7 +754,7 @@ static void color_picker_helper_xtrans_parallel(const dt_iop_buffer_dsc_t *const
   }
 
 #ifdef _OPENMP
-#pragma omp parallel default(none) \
+#pragma omp parallel dt_omp_default() \
   dt_omp_firstprivate(pixel, width, roi, xtrans, box, cnt, msum, mmin, mmax)
 #endif
   {

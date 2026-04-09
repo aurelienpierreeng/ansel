@@ -167,7 +167,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   dt_Lab_to_XYZ(Lab_sw, XYZ_sw);
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(ch, i, o, roi_out, threshold, c, d, XYZ_sw) \
   schedule(static)
 #endif

@@ -446,7 +446,7 @@ gboolean dt_drawlayer_cache_populate_process_patch_from_base(const dt_drawlayer_
                (size_t)process_patch->width * process_patch->height * 4 * sizeof(float));
       }
 #ifdef _OPENMP
-#pragma omp parallel for default(none) schedule(static)                                                          \
+#pragma omp parallel for dt_omp_default() schedule(static)                                                          \
     dt_omp_firstprivate(base_patch, copy_h, copy_w, dst_x0, dst_y0, process_patch, src_x0, src_y0) if(copy_h > 8)
 #endif
       for(int y = 0; y < copy_h; y++)
@@ -503,7 +503,7 @@ gboolean dt_drawlayer_cache_populate_process_patch_from_base(const dt_drawlayer_
         const int dst_x0 = src_x0 - combined_roi->x;
         const int dst_y0 = src_y0 - combined_roi->y;
 #ifdef _OPENMP
-#pragma omp parallel for default(none) schedule(static)                                                          \
+#pragma omp parallel for dt_omp_default() schedule(static)                                                          \
     dt_omp_firstprivate(base_stroke_mask, copy_h, copy_w, dst_x0, dst_y0, process_stroke_mask, src_x0, src_y0)  \
     if(copy_h > 8)
 #endif
@@ -518,7 +518,7 @@ gboolean dt_drawlayer_cache_populate_process_patch_from_base(const dt_drawlayer_
     else
     {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) schedule(static)                                                          \
+#pragma omp parallel for dt_omp_default() schedule(static)                                                          \
     dt_omp_firstprivate(base_stroke_mask, combined_roi, process_stroke_mask) if(process_stroke_mask->height > 8)
 #endif
       for(int y = 0; y < process_stroke_mask->height; y++)
@@ -610,7 +610,7 @@ gboolean dt_drawlayer_cache_flush_process_patch_to_base(dt_drawlayer_cache_patch
 
   dt_drawlayer_cache_patch_wrlock(base_patch);
 #ifdef _OPENMP
-#pragma omp parallel for default(none) schedule(static)                                                          \
+#pragma omp parallel for dt_omp_default() schedule(static)                                                          \
     dt_omp_firstprivate(base_patch, dst_h, dst_w, src_x0, src_y0, update_buffer) if(dst_h > 8)
 #endif
   for(int yy = 0; yy < dst_h; yy++)
@@ -639,7 +639,7 @@ gboolean dt_drawlayer_cache_flush_process_patch_to_base(dt_drawlayer_cache_patch
                          dst_w, process_stroke_mask->width);
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) schedule(static)                                                          \
+#pragma omp parallel for dt_omp_default() schedule(static)                                                          \
     dt_omp_firstprivate(base_stroke_mask, dst_h, dst_w, mask_update_buffer, src_x0, src_y0) if(dst_h > 8)
 #endif
     for(int yy = 0; yy < dst_h; yy++)

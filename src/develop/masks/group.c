@@ -171,7 +171,7 @@ static int _inverse_mask(const dt_iop_module_t *const module, const dt_dev_pixel
   const float *const src = *buffer;
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(buf, wt, ht, posy_) \
   schedule(static) if(wt * ht > 50000)
 #endif
@@ -182,7 +182,7 @@ static int _inverse_mask(const dt_iop_module_t *const module, const dt_dev_pixel
   }
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(buf, wt, ht, posy_, posx_, width_, height_, src) \
   schedule(static) if(wt * ht > 50000)
 #endif
@@ -199,7 +199,7 @@ static int _inverse_mask(const dt_iop_module_t *const module, const dt_dev_pixel
   }
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(buf, wt, ht, posy_, height_) \
   schedule(static) if(wt * ht > 50000)
 #endif
@@ -330,7 +330,7 @@ static int _group_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe
     if(states[i] & DT_MASKS_STATE_UNION)
     {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(dst, dst_w, ox, oy, wi, hi, opacity, src) \
   schedule(static) if((size_t)wi * hi > 10000)
 #endif
@@ -365,7 +365,7 @@ static int _group_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe
         const int src_y_offset = t - py[i];
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(dst, dst_w, dst_h, wi, opacity, src, row_start, row_end, col_start, col_end, src_x_offset, src_y_offset) \
   schedule(static) if((size_t)dst_w * dst_h > 10000)
 #endif
@@ -400,7 +400,7 @@ static int _group_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe
     else if(states[i] & DT_MASKS_STATE_DIFFERENCE)
     {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(dst, dst_w, ox, oy, wi, hi, opacity, src) \
   schedule(static) if((size_t)wi * hi > 10000)
 #endif
@@ -419,7 +419,7 @@ static int _group_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe
     else if(states[i] & DT_MASKS_STATE_EXCLUSION)
     {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(dst, dst_w, ox, oy, wi, hi, opacity, src) \
   schedule(static) if((size_t)wi * hi > 10000)
 #endif
@@ -458,7 +458,7 @@ static int _group_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe
         const int src_y_offset = t - py[i];
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(dst, dst_w, dst_h, wi, opacity, src, row_start, row_end, col_start, col_end, src_x_offset, src_y_offset) \
   schedule(static) if((size_t)dst_w * dst_h > 10000)
 #endif
@@ -508,7 +508,7 @@ static void _combine_masks_union(float *const restrict dest, float *const restri
   if (inverted)
   {
 #ifdef _OPENMP
-#pragma omp parallel for simd default(none) \
+#pragma omp parallel for simd dt_omp_default() \
   dt_omp_firstprivate(npixels, opacity, dest, newmask) \
   aligned(dest, newmask : 64) schedule(simd:static) if(npixels > 10000)
 #endif
@@ -521,7 +521,7 @@ static void _combine_masks_union(float *const restrict dest, float *const restri
   else
   {
 #ifdef _OPENMP
-#pragma omp parallel for simd default(none) \
+#pragma omp parallel for simd dt_omp_default() \
   dt_omp_firstprivate(npixels, opacity, dest, newmask) \
   aligned(dest, newmask : 64) schedule(simd:static) if(npixels > 10000)
 #endif
@@ -539,7 +539,7 @@ static void _combine_masks_intersect(float *const restrict dest, float *const re
   if (inverted)
   {
 #ifdef _OPENMP
-#pragma omp parallel for simd default(none) \
+#pragma omp parallel for simd dt_omp_default() \
   dt_omp_firstprivate(npixels, opacity, dest, newmask) \
   aligned(dest, newmask : 64) schedule(simd:static) if(npixels > 10000)
 #endif
@@ -552,7 +552,7 @@ static void _combine_masks_intersect(float *const restrict dest, float *const re
   else
   {
 #ifdef _OPENMP
-#pragma omp parallel for simd default(none) \
+#pragma omp parallel for simd dt_omp_default() \
   dt_omp_firstprivate(npixels, opacity, dest, newmask) \
   aligned(dest, newmask : 64) schedule(simd:static) if(npixels > 10000)
 #endif
@@ -579,7 +579,7 @@ static void _combine_masks_difference(float *const restrict dest, float *const r
   if (inverted)
   {
 #ifdef _OPENMP
-#pragma omp parallel for simd default(none) \
+#pragma omp parallel for simd dt_omp_default() \
   dt_omp_firstprivate(npixels, opacity, dest, newmask) \
   aligned(dest, newmask : 64) schedule(simd:static) if(npixels > 10000)
 #endif
@@ -592,7 +592,7 @@ static void _combine_masks_difference(float *const restrict dest, float *const r
   else
   {
 #ifdef _OPENMP
-#pragma omp parallel for simd default(none) \
+#pragma omp parallel for simd dt_omp_default() \
   dt_omp_firstprivate(npixels, opacity, dest, newmask) \
   aligned(dest, newmask : 64) schedule(simd:static) if(npixels > 10000)
 
@@ -611,7 +611,7 @@ static void _combine_masks_exclusion(float *const restrict dest, float *const re
   if (inverted)
   {
 #ifdef _OPENMP
-#pragma omp parallel for simd default(none) \
+#pragma omp parallel for simd dt_omp_default() \
   dt_omp_firstprivate(npixels, opacity, dest, newmask) \
   aligned(dest, newmask : 64) schedule(simd:static) if(npixels > 10000)
 
@@ -628,7 +628,7 @@ static void _combine_masks_exclusion(float *const restrict dest, float *const re
   else
   {
 #ifdef _OPENMP
-#pragma omp parallel for simd default(none) \
+#pragma omp parallel for simd dt_omp_default() \
   dt_omp_firstprivate(npixels, opacity, dest, newmask) \
   aligned(dest, newmask : 64) schedule(simd:static) if(npixels > 10000)
 #endif
@@ -706,7 +706,7 @@ static int _group_get_mask_roi(const dt_iop_module_t *const restrict module, dt_
         else // if we are here, this mean that we just have to copy the shape and null other parts
         {
 #ifdef _OPENMP
-#pragma omp parallel for simd default(none) \
+#pragma omp parallel for simd dt_omp_default() \
           dt_omp_firstprivate(npixels, op, inverted, buffer, bufs) \
           schedule(simd:static) aligned(buffer, bufs : 64) if(npixels > 10000)
 #endif

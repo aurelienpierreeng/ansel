@@ -79,7 +79,7 @@ int dt_apply_printer_profile(void **in, uint32_t width, uint32_t height, int bpp
     uint8_t *ptr_out = (uint8_t *)out;
 
 #ifdef _OPENMP
-#pragma omp parallel for schedule(static) default(none) dt_omp_firstprivate(ptr_in, ptr_out, hTransform, height, width)
+#pragma omp parallel for schedule(static) dt_omp_default() dt_omp_firstprivate(ptr_in, ptr_out, hTransform, height, width)
 #endif
     for (int k=0; k<height; k++)
       cmsDoTransform(hTransform, (const void *)&ptr_in[k*width*3], (void *)&ptr_out[k*width*3], width);
@@ -90,7 +90,7 @@ int dt_apply_printer_profile(void **in, uint32_t width, uint32_t height, int bpp
     uint8_t *ptr_out = (uint8_t *)out;
 
 #ifdef _OPENMP
-#pragma omp parallel for schedule(static) default(none) dt_omp_firstprivate(ptr_in, ptr_out, hTransform, height, width)
+#pragma omp parallel for schedule(static) dt_omp_default() dt_omp_firstprivate(ptr_in, ptr_out, hTransform, height, width)
 #endif
     for (int k=0; k<height; k++)
       cmsDoTransform(hTransform, (const void *)&ptr_in[k*width*3], (void *)&ptr_out[k*width*3], width);

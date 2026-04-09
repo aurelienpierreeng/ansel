@@ -1549,7 +1549,7 @@ void dt_colorspaces_transform_rgba_float_image(const cmsHTRANSFORM transform, co
   /* Share the aliased LCMS transform explicitly. Do not read it indirectly
    * through module state inside the loop body. */
 #ifdef _OPENMP
-#pragma omp parallel for default(none) dt_omp_firstprivate(transform) firstprivate(image_in, image_out, width, height) schedule(static)
+#pragma omp parallel for dt_omp_default() dt_omp_firstprivate(transform) firstprivate(image_in, image_out, width, height) schedule(static)
 #endif
   for(int y = 0; y < height; y++)
   {
@@ -1567,7 +1567,7 @@ void dt_colorspaces_transform_rgba8_to_bgra8(const cmsHTRANSFORM transform, cons
   /* Same threading rule as float transforms: pass an aliased transform handle
    * into the helper and share only that stable local state. */
 #ifdef _OPENMP
-#pragma omp parallel for default(none) dt_omp_firstprivate(transform) firstprivate(image_in, image_out, width, height) schedule(static)
+#pragma omp parallel for dt_omp_default() dt_omp_firstprivate(transform) firstprivate(image_in, image_out, width, height) schedule(static)
 #endif
   for(int y = 0; y < height; y++)
   {
@@ -2682,7 +2682,7 @@ void dt_colorspaces_cygm_apply_coeffs_to_rgb(float *out, const float *in, int nu
     }
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) dt_omp_firstprivate(in, out, num, RGB_to_RGB_WB) schedule(static)
+#pragma omp parallel for dt_omp_default() dt_omp_firstprivate(in, out, num, RGB_to_RGB_WB) schedule(static)
 #endif
   for(int i = 0; i < num; i++)
   {
@@ -2699,7 +2699,7 @@ __DT_CLONE_TARGETS__
 void dt_colorspaces_cygm_to_rgb(float *out, int num, double CAM_to_RGB[3][4])
 {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) dt_omp_firstprivate(out, num, CAM_to_RGB) schedule(static)
+#pragma omp parallel for dt_omp_default() dt_omp_firstprivate(out, num, CAM_to_RGB) schedule(static)
 #endif
   for(int i = 0; i < num; i++)
   {
@@ -2716,7 +2716,7 @@ void dt_colorspaces_cygm_to_rgb(float *out, int num, double CAM_to_RGB[3][4])
 void dt_colorspaces_rgb_to_cygm(float *out, int num, double RGB_to_CAM[4][3])
 {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) dt_omp_firstprivate(out, num, RGB_to_CAM) schedule(static)
+#pragma omp parallel for dt_omp_default() dt_omp_firstprivate(out, num, RGB_to_CAM) schedule(static)
 #endif
   for(int i = 0; i < num; i++)
   {

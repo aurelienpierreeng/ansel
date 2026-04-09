@@ -27,7 +27,7 @@ static void lin_interpolate(float *out, const float *const in, const dt_iop_roi_
 
 // border interpolate
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(colors, filters, in, roi_in, roi_out, xtrans, out) \
   schedule(static)
 #endif
@@ -103,7 +103,7 @@ static void lin_interpolate(float *out, const float *const in, const dt_iop_roi_
     }
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(colors, in, lookup, roi_in, roi_out, size, out) \
   schedule(static)
 #endif
@@ -147,7 +147,7 @@ static void pre_median_b(float *out, const float *const in, const dt_iop_roi_t *
   for(int pass = 0; pass < num_passes; pass++)
   {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
     dt_omp_firstprivate(filters, in, lim, roi, threshold, out) \
     schedule(static)
 #endif
@@ -210,7 +210,7 @@ static void color_smoothing(float *out, const dt_iop_roi_t *const roi_out, const
           for(int i = 0; i < roi_out->width; i++, outp += 4) outp[3] = outp[c];
       }
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
       dt_omp_firstprivate(roi_out, width4, out, c) \
       schedule(static)
 #endif
@@ -268,7 +268,7 @@ static void green_equilibration_lavg(float *out, const float *const in, const in
   dt_iop_image_copy_by_size(out, in, width, height, 1);
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(height, in, thr, width, maximum, out, oi, oj) \
   schedule(static) collapse(2)
 #endif
@@ -318,7 +318,7 @@ static void green_equilibration_favg(float *out, const float *const in, const in
   const int g2_offset = oi ? -1 : 1;
   dt_iop_image_copy_by_size(out, in, width, height, 1);
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(g2_offset, height, in, width) \
   reduction(+ : sum1, sum2) \
   dt_omp_firstprivate(oi, oj) \
@@ -339,7 +339,7 @@ static void green_equilibration_favg(float *out, const float *const in, const in
     return;
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(g2_offset, height, in, width, out, oi, oj, gr_ratio) \
   schedule(static) collapse(2)
 #endif

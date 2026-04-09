@@ -674,7 +674,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     { sinf(d->hue_angle),  cosf(d->hue_angle) },
   };
   #ifdef _OPENMP
-  #pragma omp parallel for default(none) \
+  #pragma omp parallel for dt_omp_default() \
     dt_omp_firstprivate(in, out, roi_out, d, g, mask_display, gamut_LUT, npixels, \
       global, highlights, shadows, midtones, chroma, saturation, brilliance, checker_1, checker_2, out_width, \
       hue_rotation_matrix, L_white, \
@@ -1225,7 +1225,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
     if(p->saturation_formula == DT_COLORBALANCE_SATURATION_JZAZBZ)
     {
       #ifdef _OPENMP
-      #pragma omp parallel for default(none) \
+      #pragma omp parallel for dt_omp_default() \
             dt_omp_firstprivate(input_matrix, p) schedule(static) dt_omp_firstprivate(LUT_saturation) \
             collapse(3)
       #endif
@@ -1293,7 +1293,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
 
       // March the gamut boundary in CIE xyY 1931 by angular steps of 0.02°
       #ifdef _OPENMP
-        #pragma omp parallel for default(none) \
+        #pragma omp parallel for dt_omp_default() \
               dt_omp_firstprivate(input_matrix, xyY_red, xyY_green, xyY_blue, h_red, h_green, h_blue, D65_xyY) \
               schedule(static) dt_omp_firstprivate(dt_UCS_LUT)
       #endif
@@ -1580,7 +1580,7 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
   const size_t checker_2 = 2 * checker_1;
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(data, graph_height, line_height, checker_1, checker_2) \
   schedule(static) collapse(2)
 #endif
@@ -1628,7 +1628,7 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
   for(size_t c = 0; c < 3; c++) LUT[c] = dt_alloc_align_float(LUT_ELEM);
 
 #ifdef _OPENMP
-#pragma omp parallel for simd default(none) \
+#pragma omp parallel for simd dt_omp_default() \
   dt_omp_firstprivate(LUT, shadows_weight, midtones_weight, highlights_weight, mask_grey_fulcrum) \
   schedule(static)
 #endif

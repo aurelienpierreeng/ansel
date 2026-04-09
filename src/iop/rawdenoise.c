@@ -246,7 +246,7 @@ static int wavelet_denoise(const float *const restrict in, float *const restrict
     // collect one of the R/G1/G2/B channels into a monochrome image, applying sqrt() to the values as a
     // variance-stabilizing transform
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
     dt_omp_firstprivate(in, fimg, roi, halfwidth, c) \
     schedule(static)
 #endif
@@ -270,7 +270,7 @@ static int wavelet_denoise(const float *const restrict in, float *const restrict
     // distribute the denoised data back out to the original R/G1/G2/B channel, squaring the resulting values to
     // undo the original transform
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
     dt_omp_firstprivate(fimg, halfwidth, out, roi, size, c) \
     schedule(static)
 #endif
@@ -376,7 +376,7 @@ static int wavelet_denoise_xtrans(const float *const restrict in, float *const r
     const size_t nthreads = darktable.num_openmp_threads; // go direct, darktable.num_openmp_threads always returns numprocs
     const size_t chunksize = (height + nthreads - 1) / nthreads;
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(fimg, height, in, roi, size, width, xtrans, nthreads, chunksize, c) num_threads(nthreads) \
     schedule(static)
 #endif
@@ -499,7 +499,7 @@ static int wavelet_denoise_xtrans(const float *const restrict in, float *const r
     // distribute the denoised data back out to the original R/G/B channel, squaring the resulting values to
     // undo the original transform
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
     dt_omp_firstprivate(height, fimg, roi, width, xtrans, c, out) \
     schedule(static)
 #endif

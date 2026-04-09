@@ -159,7 +159,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   {
     // Any of the RGB channels is out of bounds
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(ch, in, lower, lower_color, out, roi_out, \
                       upper, upper_color) \
   schedule(static)
@@ -185,7 +185,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   {
     // Gamut is out of bounds
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(ch, in, lower, lower_color, out, roi_out, \
                       upper, upper_color, current_profile) \
   schedule(static)
@@ -243,7 +243,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   {
     // Luminance channel is out of bounds
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(ch, in, lower, lower_color, out, roi_out, \
                       upper, upper_color, current_profile) \
   schedule(static)
@@ -275,7 +275,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   {
     // Show saturation out of bounds where luminance is valid
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(ch, in, lower, lower_color, out, roi_out, \
                       upper, upper_color, current_profile) \
   schedule(static)

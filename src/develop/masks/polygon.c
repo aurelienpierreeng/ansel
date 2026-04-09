@@ -934,7 +934,7 @@ static int _polygon_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_
       dy = pts[1] - (*point_buffer)[3];
 
 #ifdef _OPENMP
-#pragma omp parallel for simd default(none) \
+#pragma omp parallel for simd dt_omp_default() \
     dt_omp_firstprivate(point_count, point_buffer, dx, dy) \
     schedule(static) if(*point_count > 100) aligned(point_buffer:64)
 #endif
@@ -3301,7 +3301,7 @@ static int _polygon_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pix
       const int yymax = MIN(ymax, height - 1);
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(xxmin, xxmax, yymin, yymax, width, buffer) \
   schedule(static) \
   if((size_t)(yymax - yymin + 1) * (size_t)(xxmax - xxmin + 1) > 50000)
@@ -3429,7 +3429,7 @@ static int _polygon_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pix
     }
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(width, height, dindex, buffer, dpoints) \
   if(dindex > 4096)
 #endif

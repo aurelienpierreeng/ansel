@@ -854,7 +854,7 @@ static inline void precondition(const float *const in, float *const buf, const i
   const size_t npixels = (size_t)wd * ht;
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(buf, npixels, in, sigma2_plus_3_8, a) \
   schedule(static)
 #endif
@@ -881,7 +881,7 @@ static inline void backtransform(float *const buf, const int wd, const int ht, c
   const float sqrt_3_2 = sqrtf(3.0f / 2.0f);
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(buf, npixels, sigma2_plus_1_8, sqrt_3_2, a) \
   schedule(static)
 #endif
@@ -936,7 +936,7 @@ static inline void precondition_v2(const float *const in, float *const buf, cons
                                      (-p[2] + 2) * sqrtf(a), 1.0f };
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(npixels, buf, in, b, wb, expon, denom) \
   schedule(static)
 #endif
@@ -1019,7 +1019,7 @@ static inline void backtransform_v2(float *const buf, const int wd, const int ht
   const dt_aligned_pixel_t denom = { 4.0f / (sqrtf(a) * (2.0f - p[0])), 4.0f / (sqrtf(a) * (2.0f - p[1])),
                                      4.0f / (sqrtf(a) * (2.0f - p[2])), 1.0f };
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(npixels, buf, b, bias, wb, expon,denom) \
   schedule(static)
 #endif
@@ -1046,7 +1046,7 @@ static inline void precondition_Y0U0V0(const float *const in, float *const buf, 
                                      2.0f / ((-p[2] + 2) * sqrtf(a)),
                                      1.0f };
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(buf, ht, in, wd, b, toY0U0V0, expon, scale) \
   schedule(static)
 #endif
@@ -1085,7 +1085,7 @@ static inline void backtransform_Y0U0V0(float *const buf, const int wd, const in
                                      (sqrtf(a) * (2.0f - p[2])) / 4.0f,
                                      1.0f };
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(buf, ht, wd, b, bias_wb, toRGB, expon, scale)  \
   schedule(static)
 #endif

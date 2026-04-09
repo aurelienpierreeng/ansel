@@ -618,7 +618,7 @@ static void _colorcorrect_pixbuf(GdkPixbuf *pixbuf)
     return;
   }
 
-#pragma omp parallel default(none) \
+#pragma omp parallel dt_omp_default() \
   dt_omp_firstprivate(pixels, rowstride, n_channels, width, height, transform, has_alpha, rows_in, rows_out)
   {
     const int tid = omp_get_thread_num();

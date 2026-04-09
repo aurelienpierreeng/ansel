@@ -855,7 +855,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const float white_level = fmaxf(d->white_level, 1e-6f);
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) schedule(static) dt_omp_firstprivate(ibuf, obuf, width, height, ch, white_level)
+#pragma omp parallel for dt_omp_default() schedule(static) dt_omp_firstprivate(ibuf, obuf, width, height, ch, white_level)
 #endif
   for(size_t k = 0; k < (size_t)width * height; k++)
   {
@@ -876,7 +876,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
                                           "colorprimaries HLG Rec2020 to work");
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) schedule(static) dt_omp_firstprivate(obuf, width, height, ch, white_level)
+#pragma omp parallel for dt_omp_default() schedule(static) dt_omp_firstprivate(obuf, width, height, ch, white_level)
 #endif
   for(size_t k = 0; k < (size_t)width * height; k++)
   {

@@ -348,7 +348,7 @@ static void kmeans(const float *col, const int width, const int height, const in
     for(int k = 0; k < n; k++) cnt[k] = 0;
 // randomly sample col positions inside roi
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
     dt_omp_firstprivate(cnt, height, mean, n, samples, var, width, col, mean_out) \
     schedule(static)
 #endif
@@ -525,7 +525,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     const size_t npixels = (size_t)height * width;
 // first get delta L of equalized L minus original image L, scaled to fit into [0 .. 100]
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
     dt_omp_firstprivate(npixels, in, out, data, equalization)        \
     schedule(static)
 #endif
@@ -564,7 +564,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     }
 
 #ifdef _OPENMP
-#pragma omp parallel default(none) \
+#pragma omp parallel dt_omp_default() \
     dt_omp_firstprivate(npixels, mapio, var_ratio, weight_buf, allocsize, data, in, out, equalization)
 #endif
     {

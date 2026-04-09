@@ -436,7 +436,7 @@ void process_display(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, con
   dt_iop_image_copy_by_size(ovoid, ivoid, roi_out->width, roi_out->height, ch);
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) schedule(static)                                                           \
+#pragma omp parallel for dt_omp_default() schedule(static)                                                           \
     dt_omp_firstprivate(normalize_C, ch, ivoid, ovoid, roi_out, display_channel, d)
 #endif
   for(size_t k = 0; k < (size_t)roi_out->width * roi_out->height; k++)
@@ -482,7 +482,7 @@ void process_v1(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piec
   const float normalize_C = 1.f / (128.0f * sqrtf(2.f));
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) dt_omp_firstprivate(normalize_C, ch, ivoid, ovoid, roi_out, d)      \
+#pragma omp parallel for dt_omp_default() dt_omp_firstprivate(normalize_C, ch, ivoid, ovoid, roi_out, d)      \
     schedule(static)
 #endif
   for(size_t k = 0; k < (size_t)roi_out->width * roi_out->height; k++)
@@ -527,7 +527,7 @@ void process_v3(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piec
   dt_iop_colorzones_data_t *d = (dt_iop_colorzones_data_t *)(piece->data);
   const int ch = piece->dsc_in.channels;
 #ifdef _OPENMP
-#pragma omp parallel for default(none) dt_omp_firstprivate(ch, ivoid, ovoid, roi_out, d) schedule(static)
+#pragma omp parallel for dt_omp_default() dt_omp_firstprivate(ch, ivoid, ovoid, roi_out, d) schedule(static)
 #endif
   for(size_t k = 0; k < (size_t)roi_out->width * roi_out->height; k++)
   {

@@ -158,7 +158,7 @@ static int guided_filter_tiling(color_image imgg, gray_image img, gray_image img
   }
   int err = 0;
 #ifdef _OPENMP
-#pragma omp parallel for schedule(static) default(none) dt_omp_firstprivate(img, imgg, mean, variance, img_bak, err, img_bak_sz, img_dimen, w, guide_weight, source)
+#pragma omp parallel for schedule(static) dt_omp_default() dt_omp_firstprivate(img, imgg, mean, variance, img_bak, err, img_bak_sz, img_dimen, w, guide_weight, source)
 #endif
   for(int j_imgg = source.lower; j_imgg < source.upper; j_imgg++)
   {
@@ -217,7 +217,7 @@ static int guided_filter_tiling(color_image imgg, gray_image img, gray_image img
   #define A_BLUE 2
   #define B 3
 #ifdef _OPENMP
-#pragma omp parallel for schedule(static) default(none) \
+#pragma omp parallel for schedule(static) dt_omp_default() \
   dt_omp_firstprivate(size, eps, mean, variance, a_b)
 #endif
   for(size_t i = 0; i < size; i++)
@@ -282,7 +282,7 @@ static int guided_filter_tiling(color_image imgg, gray_image img, gray_image img
   }
 
 #ifdef _OPENMP
-#pragma omp parallel for schedule(static) default(none) \
+#pragma omp parallel for schedule(static) dt_omp_default() \
   dt_omp_firstprivate(target, imgg, a_b, img_out, source, min, max, width, guide_weight)
 #endif
   for(int j_imgg = target.lower; j_imgg < target.upper; j_imgg++)

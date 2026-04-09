@@ -131,7 +131,7 @@ static int vng_interpolate(float *out, const float *const in,
   for(int row = 2; row < height - 2; row++) /* Do VNG interpolation */
   {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
     dt_omp_firstprivate(colors, pcol, prow, roi_in, width, xtrans, row, code, brow, out, filters4) \
     private(ip) \
     schedule(static)
@@ -199,7 +199,7 @@ static int vng_interpolate(float *out, const float *const in,
   if(filters != 9 && !FILTERS_ARE_4BAYER(filters)) // x-trans or CYGM/RGBE
 // for Bayer mix the two greens to make VNG4
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
     dt_omp_firstprivate(height, width, out) \
     schedule(static)
 #endif

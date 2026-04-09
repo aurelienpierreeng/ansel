@@ -780,7 +780,7 @@ static int _gradient_get_points(dt_develop_t *dev, float x, float y, float rotat
 
 //  gboolean in_frame = FALSE;
 #ifdef _OPENMP
-#pragma omp parallel for default(none)                                                                       \
+#pragma omp parallel for dt_omp_default()                                                                       \
     dt_omp_firstprivate(nthreads, pts, pts_count, count, cosv, sinv, xstart, xdelta, curvature, scale, center_x, \
                         center_y, wd, ht, c_padded_size, points) schedule(static) if(count > 100)
 #endif
@@ -1176,7 +1176,7 @@ static int _gradient_get_mask(const dt_iop_module_t *const module, dt_dev_pixelp
   if(points == NULL) return 1;
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(grid, gh, gw, px, py, points) \
   schedule(static) collapse(2) if((size_t)gw * gh > 50000)
 #endif
@@ -1233,7 +1233,7 @@ static int _gradient_get_mask(const dt_iop_module_t *const module, dt_dev_pixelp
   }
 
 #ifdef _OPENMP
-#pragma omp parallel for simd default(none) \
+#pragma omp parallel for simd dt_omp_default() \
   dt_omp_firstprivate(lutsize, lutmax, hwscale, state, normf, extent, lut) \
   schedule(static) if(lutsize > 1000) aligned(lut : 64)
 #endif
@@ -1250,7 +1250,7 @@ static int _gradient_get_mask(const dt_iop_module_t *const module, dt_dev_pixelp
 
 #ifdef _OPENMP
 #if !defined(__SUNOS__) && !defined(__NetBSD__)
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(gh, gw, sinv, cosv, xoffset, yoffset, hwscale, ihwscale, curvature, extent, points, clut) \
   schedule(static) collapse(2) if((size_t)gw * gh > 50000)
 #else
@@ -1294,7 +1294,7 @@ static int _gradient_get_mask(const dt_iop_module_t *const module, dt_dev_pixelp
 
 // we fill the mask buffer by interpolation
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(h, w, gw, grid, bufptr, points, w0, w1, inv_grid2) \
   schedule(simd:static) if((size_t)w * h > 50000)
 #endif
@@ -1361,7 +1361,7 @@ static int _gradient_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pi
   if(points == NULL) return 1;
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(iscale, gh, gw, py, px, grid, points) \
   schedule(static) collapse(2) if((size_t)gw * gh > 50000)
 #endif
@@ -1421,7 +1421,7 @@ static int _gradient_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pi
   }
 
 #ifdef _OPENMP
-#pragma omp parallel for simd default(none) \
+#pragma omp parallel for simd dt_omp_default() \
   dt_omp_firstprivate(lutsize, lutmax, hwscale, state, normf, extent, lut) \
   schedule(static) if(lutsize > 1000) aligned(lut : 64)
 #endif
@@ -1437,7 +1437,7 @@ static int _gradient_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pi
 
 #ifdef _OPENMP
 #if !defined(__SUNOS__) && !defined(__NetBSD__)
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(gh, gw, sinv, cosv, xoffset, yoffset, hwscale, ihwscale, curvature, extent, points, clut) \
   schedule(static) collapse(2) if((size_t)gw * gh > 50000)
 #else
@@ -1473,7 +1473,7 @@ static int _gradient_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pi
 
 // we fill the mask buffer by interpolation
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(h, w, grid, gw, buffer, points, w0, w1, inv_grid2) \
   schedule(simd:static) if((size_t)w * h > 50000)
 #endif

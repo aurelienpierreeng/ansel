@@ -310,7 +310,7 @@ static int dark_channel(const const_rgb_image img1, const gray_image img2, const
 {
   const size_t size = (size_t)img1.height * img1.width;
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(img1, img2, size) \
   schedule(static)
 #endif
@@ -337,7 +337,7 @@ static int transition_map(const const_rgb_image img1, const gray_image img2, con
 {
   const size_t size = (size_t)img1.height * img1.width;
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(A0, img1, img2, size, strength) \
   schedule(static)
 #endif
@@ -454,7 +454,7 @@ static int ambient_light(const const_rgb_image img, int w1, rgb_pixel *pA0, floa
   size_t N_bright_hazy = 0;
   const float *const data = dark_ch.data;
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(crit_brightness, crit_haze_level, data, img, size) \
   schedule(static) \
   reduction(+ : N_bright_hazy, A0_r, A0_g, A0_b)
@@ -619,7 +619,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const float *const c_A0 = A0;
   const gray_image c_trans_map_filtered = trans_map_filtered;
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for dt_omp_default() \
   dt_omp_firstprivate(c_A0, c_trans_map_filtered, img_in, img_out, size, t_min) \
   schedule(static)
 #endif
