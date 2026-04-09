@@ -206,7 +206,7 @@ static void normalize_manifolds(const float *const restrict blurred_in, float *c
 {
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-dt_omp_firstprivate(blurred_in, blurred_manifold_lower, blurred_manifold_higher, width, height, guide) \
+firstprivate(blurred_in, blurred_manifold_lower, blurred_manifold_higher, width, height, guide) \
   schedule(simd:static)
 #endif
   for(size_t k = 0; k < width * height; k++)
@@ -297,7 +297,7 @@ static int get_manifolds(const float* const restrict in, const size_t width, con
   // we use the guide channel to categorize the pixels as above or below average
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-dt_omp_firstprivate(in, blurred_in, manifold_lower, manifold_higher, width, height, guide) \
+firstprivate(in, blurred_in, manifold_lower, manifold_higher, width, height, guide) \
   schedule(simd:static)
 #endif
   for(size_t k = 0; k < width * height; k++)
@@ -370,7 +370,7 @@ dt_omp_firstprivate(in, blurred_in, manifold_lower, manifold_higher, width, heig
     // we use a blur of normal size for this step
   #ifdef _OPENMP
   #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(in, blurred_in, manifold_lower, manifold_higher, blurred_manifold_lower, blurred_manifold_higher, width, height, guide) \
+  firstprivate(in, blurred_in, manifold_lower, manifold_higher, blurred_manifold_lower, blurred_manifold_higher, width, height, guide) \
     schedule(simd:static)
   #endif
     for(size_t k = 0; k < width * height; k++)
@@ -513,7 +513,7 @@ dt_omp_firstprivate(in, blurred_in, manifold_lower, manifold_higher, width, heig
   // store all manifolds in the same structure to make upscaling faster
 #ifdef _OPENMP
 #pragma omp parallel for simd dt_omp_default() \
-dt_omp_firstprivate(manifolds, blurred_manifold_lower, blurred_manifold_higher, width, height, guide) \
+firstprivate(manifolds, blurred_manifold_lower, blurred_manifold_higher, width, height, guide) \
   schedule(simd:static) aligned(manifolds, blurred_manifold_lower, blurred_manifold_higher:64)
 #endif
   for(size_t k = 0; k < width * height; k++)
@@ -546,7 +546,7 @@ static void apply_correction(const float* const restrict in,
 {
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-dt_omp_firstprivate(in, width, height, guide, manifolds, out, sigma, mode) \
+firstprivate(in, width, height, guide, manifolds, out, sigma, mode) \
   schedule(simd:static)
 #endif
   for(size_t k = 0; k < width * height; k++)
@@ -632,7 +632,7 @@ static int reduce_artifacts(const float* const restrict in,
 
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(in, out, in_out, width, height, guide)        \
+  firstprivate(in, out, in_out, width, height, guide)        \
   schedule(simd:static)
 #endif
   for(size_t k = 0; k < width * height; k++)
@@ -667,7 +667,7 @@ static int reduce_artifacts(const float* const restrict in,
   // introduces artifacts in practice.
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-dt_omp_firstprivate(in, out, blurred_in_out, width, height, guide, safety) \
+firstprivate(in, out, blurred_in_out, width, height, guide, safety) \
   schedule(simd:static)
 #endif
   for(size_t k = 0; k < width * height; k++)

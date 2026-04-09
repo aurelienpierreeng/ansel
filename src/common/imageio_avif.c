@@ -150,7 +150,7 @@ dt_imageio_retval_t dt_imageio_open_avif(dt_image_t *img,
   case 10: {
 #ifdef _OPENMP
 #pragma omp parallel for simd dt_omp_default() \
-  dt_omp_firstprivate(mipbuf, width, height, in, rowbytes, max_channel_f) \
+  firstprivate(mipbuf, width, height, in, rowbytes, max_channel_f) \
   schedule(simd:static) \
   collapse(2)
 #endif
@@ -173,7 +173,7 @@ dt_imageio_retval_t dt_imageio_open_avif(dt_image_t *img,
   case 8: {
 #ifdef _OPENMP
 #pragma omp parallel for simd dt_omp_default() \
-  dt_omp_firstprivate(mipbuf, width, height, in, rowbytes, max_channel_f) \
+  firstprivate(mipbuf, width, height, in, rowbytes, max_channel_f) \
   schedule(simd:static) \
   collapse(2)
 #endif

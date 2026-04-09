@@ -133,7 +133,7 @@ static void rcd_ppg_border(float *const out, const float *const in, const int wi
 
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(filters, out, width, height, border, input) \
+  firstprivate(filters, out, width, height, border, input) \
   schedule(static)
 #endif
   for(int j = 3; j < height - 3; j++)
@@ -201,7 +201,7 @@ static void rcd_ppg_border(float *const out, const float *const in, const int wi
 // for all pixels: interpolate colors into float array
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(filters, out, width, height, margin) \
+  firstprivate(filters, out, width, height, margin) \
   schedule(static)
 #endif
   for(int j = 1; j < height - 1; j++)
@@ -302,7 +302,7 @@ static void rcd_demosaic(const dt_dev_pixelpipe_iop_t *piece, float *const restr
 
 #ifdef _OPENMP
   #pragma omp parallel \
-  dt_omp_firstprivate(width, height, filters, out, in, scaler, revscaler)
+  firstprivate(width, height, filters, out, in, scaler, revscaler)
 #endif
   {
     // FIXME: CRITICAL: need to handle the case where we couldn't alloc the memory,

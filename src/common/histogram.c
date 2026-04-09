@@ -234,7 +234,7 @@ void dt_histogram_worker(dt_dev_histogram_collection_params_t *const histogram_p
 
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(histogram_params, pixel, Worker, profile_info, bins_total, roi) \
+  firstprivate(histogram_params, pixel, Worker, profile_info, bins_total, roi) \
   shared(partial_hists) \
   schedule(static)
 #endif
@@ -250,7 +250,7 @@ void dt_histogram_worker(dt_dev_histogram_collection_params_t *const histogram_p
   uint32_t *hist = *histogram;
 
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(nthreads, bins_total) \
+  firstprivate(nthreads, bins_total) \
   shared(hist, partial_hists) \
   schedule(static)
   for(size_t k = 0; k < bins_total; k++)
@@ -289,7 +289,7 @@ void dt_histogram_helper(dt_dev_histogram_collection_params_t *histogram_params,
     if(converted != NULL)
     {
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() dt_omp_firstprivate(pixel, converted, pixels) schedule(static)
+#pragma omp parallel for dt_omp_default() firstprivate(pixel, converted, pixels) schedule(static)
 #endif
       for(size_t k = 0; k < pixels; k++)
       {

@@ -356,7 +356,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const size_t width = roi_out->width;
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(in, ovoid, mat, rad, width, roi_in, roi_out, tmp, padded_size, data) \
+  firstprivate(in, ovoid, mat, rad, width, roi_in, roi_out, tmp, padded_size, data) \
   schedule(static)
 #endif
   for(int j = 0; j < roi_out->height; j++)

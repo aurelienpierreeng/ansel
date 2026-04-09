@@ -976,7 +976,7 @@ static int build_round_stamp(float complex **pstamp,
   // doesn't work for OSX see issue #7349
   #if defined(_OPENMP) && !defined(__APPLE__)
   #pragma omp parallel for schedule(static) dt_omp_default() \
-    dt_omp_firstprivate(iradius, strength, abs_strength, table_size, center, warp, stamp_extent, lookup_table, LOOKUP_OVERSAMPLE)
+    firstprivate(iradius, strength, abs_strength, table_size, center, warp, stamp_extent, lookup_table, LOOKUP_OVERSAMPLE)
   #endif
 
   for(int y = 0; y <= iradius; y++)
@@ -1373,7 +1373,7 @@ static int _distort_xtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *
 
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-    dt_omp_firstprivate(points_count, points) \
+    firstprivate(points_count, points) \
     schedule(simd:static) if(points_count > 100)          \
     reduction(min:xmin, ymin) reduction(max:xmax, ymax)
 #endif
@@ -1423,7 +1423,7 @@ static int _distort_xtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *
     // apply distortion to all points (this is a simple displacement given by a vector at this same point in the map)
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-    dt_omp_firstprivate(points_count, points, extent, map, map_size, y_last, x_last) \
+    firstprivate(points_count, points, extent, map, map_size, y_last, x_last) \
     schedule(static) if(points_count > 100)
 #endif
     for(size_t i = 0; i < points_count; i++)
@@ -1487,7 +1487,7 @@ void distort_mask(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t 
 
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(in, out, roi_in, roi_out) \
+  firstprivate(in, out, roi_in, roi_out) \
   schedule(static)
 #endif
   for(int i = 0; i < roi_out->height; i++)
@@ -1532,7 +1532,7 @@ int process(struct dt_iop_module_t *module, const dt_dev_pixelpipe_t *pipe, cons
 
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(ch, height, in, out, roi_in, roi_out, width) \
+  firstprivate(ch, height, in, out, roi_in, roi_out, width) \
   schedule(static)
 #endif
   for(int i = 0; i < height; i++)

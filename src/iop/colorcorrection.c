@@ -170,7 +170,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const float b_base = d->b_base;
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(roi_out, saturation, a_scale, a_base, b_scale, b_base, in, out) \
+  firstprivate(roi_out, saturation, a_scale, a_base, b_scale, b_base, in, out) \
   schedule(static)
 #endif
   for(size_t k = 0; k < (size_t)4 * roi_out->width * roi_out->height; k += 4)

@@ -1142,7 +1142,7 @@ static inline gint mask_clipped_pixels(const float *const restrict in, float *co
 
 #ifdef _OPENMP
 #pragma omp parallel for simd dt_omp_default() \
-  dt_omp_firstprivate(in, mask, normalize, feathering, width, height, ch) \
+  firstprivate(in, mask, normalize, feathering, width, height, ch) \
   schedule(simd:static) aligned(mask, in:64) reduction(+:clipped)
 #endif
   for(size_t k = 0; k < height * width * ch; k += ch)
@@ -1177,7 +1177,7 @@ inline static void inpaint_noise(const float *const in, const float *const mask,
 
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(in, mask, inpainted, width, height, noise_level, noise_distribution, threshold) \
+  firstprivate(in, mask, inpainted, width, height, noise_level, noise_distribution, threshold) \
   schedule(simd:static) collapse(2)
 #endif
   for(size_t i = 0; i < height; i++)
@@ -1222,7 +1222,7 @@ inline static void wavelets_reconstruct_RGB(const float *const restrict HF, cons
 {
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default()                                                                       \
-    dt_omp_firstprivate(width, height, ch, HF, LF, texture, mask, reconstructed, gamma, gamma_comp, beta,         \
+    firstprivate(width, height, ch, HF, LF, texture, mask, reconstructed, gamma, gamma_comp, beta,         \
                         beta_comp, delta, s, scales) schedule(simd : static)
 #endif
   for(size_t k = 0; k < height * width * ch; k += 4)
@@ -1295,7 +1295,7 @@ inline static void wavelets_reconstruct_ratios(const float *const restrict HF, c
  */
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default()                                                                       \
-    dt_omp_firstprivate(width, height, ch, HF, LF, texture, mask, reconstructed, gamma, gamma_comp, beta,         \
+    firstprivate(width, height, ch, HF, LF, texture, mask, reconstructed, gamma, gamma_comp, beta,         \
                         beta_comp, delta, s, scales) schedule(simd                                                \
                                                               : static)
 #endif
@@ -1347,7 +1347,7 @@ static inline void init_reconstruct(const float *const restrict in, const float 
 // init the reconstructed buffer with non-clipped and partially clipped pixels
 // Note : it's a simple multiplied alpha blending where mask = alpha weight
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() dt_omp_firstprivate(in, mask, reconstructed, width, height) \
+#pragma omp parallel for dt_omp_default() firstprivate(in, mask, reconstructed, width, height) \
   schedule(static)
 #endif
   for(size_t k = 0; k < height * width; k++)
@@ -1364,7 +1364,7 @@ static inline void wavelets_detail_level(const float *const restrict detail, con
                                              const size_t width, const size_t height, const size_t ch)
 {
 #ifdef _OPENMP
-#pragma omp parallel for simd dt_omp_default() dt_omp_firstprivate(width, height, HF, LF, detail, texture)           \
+#pragma omp parallel for simd dt_omp_default() firstprivate(width, height, HF, LF, detail, texture)           \
     schedule(simd                                                                                                 \
              : static) aligned(HF, LF, detail, texture : 64)
 #endif
@@ -1507,7 +1507,7 @@ static inline void filmic_split_v1(const float *const restrict in, float *const 
 {
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(width, height, data, in, out, work_profile, spline) \
+  firstprivate(width, height, data, in, out, work_profile, spline) \
   schedule(simd : static)
 #endif
   for(size_t k = 0; k < height * width * 4; k += 4)
@@ -1552,7 +1552,7 @@ static inline void filmic_split_v2_v3(const float *const restrict in, float *con
 {
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(width, height, data, in, out, work_profile, spline) \
+  firstprivate(width, height, data, in, out, work_profile, spline) \
   schedule(simd : static)
 #endif
   for(size_t k = 0; k < height * width * 4; k += 4)
@@ -1597,7 +1597,7 @@ static inline void filmic_chroma_v1(const float *const restrict in, float *const
 {
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default()                                                                       \
-    dt_omp_firstprivate(width, height, data, in, out, work_profile, variant, spline) schedule(simd : static)
+    firstprivate(width, height, data, in, out, work_profile, variant, spline) schedule(simd : static)
 #endif
   for(size_t k = 0; k < height * width * 4; k += 4)
   {
@@ -1656,7 +1656,7 @@ static inline void filmic_chroma_v2_v3(const float *const restrict in, float *co
 
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default()                                                                       \
-    dt_omp_firstprivate(width, height, ch, data, in, out, work_profile, variant, spline, colorscience_version)    \
+    firstprivate(width, height, ch, data, in, out, work_profile, variant, spline, colorscience_version)    \
     schedule(simd :static)
 #endif
   for(size_t k = 0; k < height * width * ch; k += ch)
@@ -2159,7 +2159,7 @@ static inline void filmic_chroma_v4(const float *const restrict in, float *const
 
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default()                                                                       \
-    dt_omp_firstprivate(width, height, ch, data, in, out, work_profile, input_matrix, output_matrix, \
+    firstprivate(width, height, ch, data, in, out, work_profile, input_matrix, output_matrix, \
     variant, spline, display_white, display_black, export_input_matrix, export_output_matrix, \
     use_output_profile, norm_min, norm_max, simd_matrices) \
     schedule(static)
@@ -2211,7 +2211,7 @@ static inline void filmic_split_v4(const float *const restrict in, float *const 
   filmic_prepare_simd_matrices(input_matrix, output_matrix, export_input_matrix, export_output_matrix, &simd_matrices);
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default()                                                                       \
-    dt_omp_firstprivate(width, height, ch, data, in, out, work_profile, input_matrix, output_matrix, \
+    firstprivate(width, height, ch, data, in, out, work_profile, input_matrix, output_matrix, \
     variant, spline, display_white, display_black, export_input_matrix, export_output_matrix, \
     use_output_profile, simd_matrices) \
     schedule(static)
@@ -2266,7 +2266,7 @@ static inline void filmic_v5(const float *const restrict in, float *const restri
 
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default()                                                                       \
-    dt_omp_firstprivate(width, height, ch, data, in, out, work_profile, input_matrix, output_matrix, \
+    firstprivate(width, height, ch, data, in, out, work_profile, input_matrix, output_matrix, \
     spline, display_white, display_black, norm_min, norm_max, export_input_matrix, export_output_matrix, \
     use_output_profile, simd_matrices) \
     schedule(static)
@@ -2308,7 +2308,7 @@ static inline void display_mask(const float *const restrict mask, float *const r
                                 const size_t width, const size_t height)
 {
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() dt_omp_firstprivate(width, height, out, mask) schedule(static)
+#pragma omp parallel for dt_omp_default() firstprivate(width, height, out, mask) schedule(static)
 #endif
   for(size_t k = 0; k < height * width; k++)
   {
@@ -2326,7 +2326,7 @@ static inline void compute_ratios(const float *const restrict in, float *const r
 {
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default()                                  \
-  dt_omp_firstprivate(width, height, norms, ratios, in, work_profile, variant) schedule(static)
+  firstprivate(width, height, norms, ratios, in, work_profile, variant) schedule(static)
 #endif
   for(size_t k = 0; k < height * width * 4; k += 4)
   {
@@ -2345,7 +2345,7 @@ static inline void restore_ratios(float *const restrict ratios, const float *con
 {
   #ifdef _OPENMP
   #pragma omp parallel for dt_omp_default() \
-    dt_omp_firstprivate(width, height, norms, ratios) \
+    firstprivate(width, height, norms, ratios) \
     schedule(simd:static)
   #endif
   for(size_t k = 0; k < height * width; k++)

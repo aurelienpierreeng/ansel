@@ -60,7 +60,7 @@ int dt_focuspeaking(cairo_t *cr,
   // Create a luma buffer as the euclidian norm of RGB channels
 #ifdef _OPENMP
 #pragma omp parallel for simd dt_omp_default()             \
-  dt_omp_firstprivate(image, luma, npixels)             \
+  firstprivate(image, luma, npixels)             \
   schedule(static) aligned(image, luma:64)
 #endif
   for(size_t index = 0; index < npixels; index++)
@@ -89,7 +89,7 @@ int dt_focuspeaking(cairo_t *cr,
 
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-dt_omp_firstprivate(luma, luma_ds, buf_height, buf_width) \
+firstprivate(luma, luma_ds, buf_height, buf_width) \
 schedule(static) collapse(2) reduction(+:mass, x_integral, y_integral)
 #endif
   for(size_t i = 0; i < buf_height; ++i)
@@ -184,7 +184,7 @@ schedule(static) collapse(2) reduction(+:mass, x_integral, y_integral)
   // Dilate the mask to improve connectivity
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-dt_omp_firstprivate(luma, luma_ds, buf_height, buf_width) \
+firstprivate(luma, luma_ds, buf_height, buf_width) \
 schedule(static) collapse(2)
 #endif
   for(size_t i = 0; i < buf_height; ++i)
@@ -226,7 +226,7 @@ schedule(static) collapse(2)
 
 #ifdef _OPENMP
 #pragma omp parallel for simd dt_omp_default() \
-dt_omp_firstprivate(luma, buf_height, buf_width) \
+firstprivate(luma, buf_height, buf_width) \
 schedule(static) collapse(2) aligned(luma:64) reduction(+:TV_sum)
 #endif
   for(size_t i = 8; i < buf_height - 8; ++i)
@@ -238,7 +238,7 @@ schedule(static) collapse(2) aligned(luma:64) reduction(+:TV_sum)
 
 #ifdef _OPENMP
 #pragma omp parallel for simd dt_omp_default() \
-dt_omp_firstprivate(focus_peaking, luma, buf_height, buf_width, TV_sum) \
+firstprivate(focus_peaking, luma, buf_height, buf_width, TV_sum) \
 schedule(static) collapse(2) aligned(focus_peaking, luma:64) reduction(+:sigma)
 #endif
   for(size_t i = 8; i < buf_height - 8; ++i)
@@ -255,7 +255,7 @@ schedule(static) collapse(2) aligned(focus_peaking, luma:64) reduction(+:sigma)
   // Prepare the focus-peaking image overlay
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(focus_peaking, luma, buf_height, buf_width, six_sigma, four_sigma, two_sigma) \
+  firstprivate(focus_peaking, luma, buf_height, buf_width, six_sigma, four_sigma, two_sigma) \
   schedule(static) collapse(2)
 #endif
   for(size_t i = 0; i < buf_height; ++i)

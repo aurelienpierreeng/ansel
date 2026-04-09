@@ -97,7 +97,7 @@ static inline int eigf_variance_analysis(const float *const restrict guide, // I
   float maxmg = 0.0f;
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-dt_omp_firstprivate(guide, mask, in, Ndim) \
+firstprivate(guide, mask, in, Ndim) \
   schedule(simd:static) \
   reduction(max:maxg, maxm, maxg2, maxmg)\
   reduction(min:ming, minm, ming2, minmg)
@@ -134,7 +134,7 @@ dt_omp_firstprivate(guide, mask, in, Ndim) \
 
 #ifdef _OPENMP
 #pragma omp parallel for simd dt_omp_default() \
-dt_omp_firstprivate(out, Ndim) \
+firstprivate(out, Ndim) \
   schedule(simd:static) aligned(out:64)
 #endif
   for(size_t k = 0; k < Ndim; k++)
@@ -174,7 +174,7 @@ static inline int eigf_variance_analysis_no_mask(const float *const restrict gui
   float maxg2 = 0.0f;
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-dt_omp_firstprivate(guide, in, Ndim) \
+firstprivate(guide, in, Ndim) \
   schedule(simd:static) \
   reduction(max:maxg, maxg2)\
   reduction(min:ming, ming2)
@@ -203,7 +203,7 @@ dt_omp_firstprivate(guide, in, Ndim) \
 
 #ifdef _OPENMP
 #pragma omp parallel for simd dt_omp_default() \
-dt_omp_firstprivate(out, Ndim) \
+firstprivate(out, Ndim) \
   schedule(simd:static) aligned(out:64)
 #endif
   for(size_t k = 0; k < Ndim; k++)
@@ -225,7 +225,7 @@ static inline void eigf_blending(float *const restrict image, const float *const
 {
 #ifdef _OPENMP
 #pragma omp parallel for simd dt_omp_default() \
-  dt_omp_firstprivate(image, mask, av, Ndim, feathering, filter) \
+  firstprivate(image, mask, av, Ndim, feathering, filter) \
   schedule(simd:static) aligned(image, mask, av:64)
 #endif
   for(size_t k = 0; k < Ndim; k++)
@@ -262,7 +262,7 @@ static inline void eigf_blending_no_mask(float *const restrict image, const floa
 {
 #ifdef _OPENMP
 #pragma omp parallel for simd dt_omp_default() \
-  dt_omp_firstprivate(image, av, Ndim, feathering, filter) \
+  firstprivate(image, av, Ndim, feathering, filter) \
   schedule(simd:static) aligned(image, av:64)
 #endif
   for(size_t k = 0; k < Ndim; k++)

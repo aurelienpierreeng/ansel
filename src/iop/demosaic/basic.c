@@ -28,7 +28,7 @@ static void lin_interpolate(float *out, const float *const in, const dt_iop_roi_
 // border interpolate
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(colors, filters, in, roi_in, roi_out, xtrans, out) \
+  firstprivate(colors, filters, in, roi_in, roi_out, xtrans, out) \
   schedule(static)
 #endif
   for(int row = 0; row < roi_out->height; row++)
@@ -104,7 +104,7 @@ static void lin_interpolate(float *out, const float *const in, const dt_iop_roi_
 
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(colors, in, lookup, roi_in, roi_out, size, out) \
+  firstprivate(colors, in, lookup, roi_in, roi_out, size, out) \
   schedule(static)
 #endif
   for(int row = 1; row < roi_out->height - 1; row++)
@@ -148,7 +148,7 @@ static void pre_median_b(float *out, const float *const in, const dt_iop_roi_t *
   {
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-    dt_omp_firstprivate(filters, in, lim, roi, threshold, out) \
+    firstprivate(filters, in, lim, roi, threshold, out) \
     schedule(static)
 #endif
     for(int row = 3; row < roi->height - 3; row++)
@@ -211,7 +211,7 @@ static void color_smoothing(float *out, const dt_iop_roi_t *const roi_out, const
       }
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-      dt_omp_firstprivate(roi_out, width4, out, c) \
+      firstprivate(roi_out, width4, out, c) \
       schedule(static)
 #endif
       for(int j = 1; j < roi_out->height - 1; j++)
@@ -269,7 +269,7 @@ static void green_equilibration_lavg(float *out, const float *const in, const in
 
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(height, in, thr, width, maximum, out, oi, oj) \
+  firstprivate(height, in, thr, width, maximum, out, oi, oj) \
   schedule(static) collapse(2)
 #endif
   for(size_t j = oj; j < height - 2; j += 2)
@@ -319,9 +319,9 @@ static void green_equilibration_favg(float *out, const float *const in, const in
   dt_iop_image_copy_by_size(out, in, width, height, 1);
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(g2_offset, height, in, width) \
+  firstprivate(g2_offset, height, in, width) \
   reduction(+ : sum1, sum2) \
-  dt_omp_firstprivate(oi, oj) \
+  firstprivate(oi, oj) \
   schedule(static) collapse(2)
 #endif
   for(size_t j = oj; j < (height - 1); j += 2)
@@ -340,7 +340,7 @@ static void green_equilibration_favg(float *out, const float *const in, const in
 
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(g2_offset, height, in, width, out, oi, oj, gr_ratio) \
+  firstprivate(g2_offset, height, in, width, out, oi, oj, gr_ratio) \
   schedule(static) collapse(2)
 #endif
   for(int j = oj; j < (height - 1); j += 2)

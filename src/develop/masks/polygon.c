@@ -935,7 +935,7 @@ static int _polygon_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_
 
 #ifdef _OPENMP
 #pragma omp parallel for simd dt_omp_default() \
-    dt_omp_firstprivate(point_count, point_buffer, dx, dy) \
+    firstprivate(point_count, point_buffer, dx, dy) \
     schedule(static) if(*point_count > 100) aligned(point_buffer:64)
 #endif
       for(int i = 0; i < *point_count; i++)
@@ -2609,7 +2609,7 @@ static int _polygon_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpi
 
 #ifdef _OPENMP
 #pragma omp parallel for \
-  dt_omp_firstprivate(hb, wb, bufptr) \
+  firstprivate(hb, wb, bufptr) \
   schedule(static) if((size_t)hb * wb > 50000)
 #endif
   for(int yy = 0; yy < hb; yy++)
@@ -3302,7 +3302,7 @@ static int _polygon_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pix
 
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(xxmin, xxmax, yymin, yymax, width, buffer) \
+  firstprivate(xxmin, xxmax, yymin, yymax, width, buffer) \
   schedule(static) \
   if((size_t)(yymax - yymin + 1) * (size_t)(xxmax - xxmin + 1) > 50000)
 #endif
@@ -3430,7 +3430,7 @@ static int _polygon_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pix
 
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(width, height, dindex, buffer, dpoints) \
+  firstprivate(width, height, dindex, buffer, dpoints) \
   if(dindex > 4096)
 #endif
     for(int n = 0; n < dindex; n += 4)

@@ -303,7 +303,7 @@ int distort_transform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   if(crop_top == 0 && crop_left == 0) return 1;
 
 #ifdef _OPENMP
-#pragma omp parallel for simd dt_omp_default() dt_omp_firstprivate(points, points_count, crop_left, crop_top)        \
+#pragma omp parallel for simd dt_omp_default() firstprivate(points, points_count, crop_left, crop_top)        \
     schedule(static) if(points_count > 100) aligned(points : 64)
 #endif
   for(size_t i = 0; i < points_count * 2; i += 2)
@@ -327,7 +327,7 @@ int distort_backtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
   if(crop_top == 0 && crop_left == 0) return 1;
 
 #ifdef _OPENMP
-#pragma omp parallel for simd dt_omp_default() dt_omp_firstprivate(points, points_count, crop_left, crop_top)        \
+#pragma omp parallel for simd dt_omp_default() firstprivate(points, points_count, crop_left, crop_top)        \
     schedule(static) if(points_count > 100) aligned(points : 64)
 #endif
   for(size_t i = 0; i < points_count * 2; i += 2)

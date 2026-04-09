@@ -966,7 +966,7 @@ static void _interpolation_resample_plain(const struct dt_interpolation *itor,
 
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() schedule(static) \
-   dt_omp_firstprivate(in, out, x0, y0, roi_out, out_stride_floats, in_stride_floats)
+   firstprivate(in, out, x0, y0, roi_out, out_stride_floats, in_stride_floats)
 #endif
     for(int y = 0; y < roi_out->height; y++)
     {
@@ -998,7 +998,7 @@ static void _interpolation_resample_plain(const struct dt_interpolation *itor,
   // Process each output line
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() schedule(static) \
-  dt_omp_firstprivate(vmeta, vlength, hlength, vindex, in_stride_floats, height, hindex, hkernel, vkernel, in, out, out_stride_floats, width)
+  firstprivate(vmeta, vlength, hlength, vindex, in_stride_floats, height, hindex, hkernel, vkernel, in, out, out_stride_floats, width)
 #endif
   for(size_t oy = 0; oy < height; oy++)
   {
@@ -1362,7 +1362,7 @@ static void _interpolation_resample_1c_plain(const struct dt_interpolation *itor
 
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() schedule(static) \
-  dt_omp_firstprivate(in, out, in_stride, out_stride, roi_out, x0, y0)
+  firstprivate(in, out, in_stride, out_stride, roi_out, x0, y0)
 #endif
     for(int y = 0; y < roi_out->height; y++)
     {
@@ -1390,7 +1390,7 @@ static void _interpolation_resample_1c_plain(const struct dt_interpolation *itor
   // Process each output line
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() schedule(static) \
-  dt_omp_firstprivate(vmeta, vlength, roi_out, hlength, in_stride, out_stride, in, vindex, hindex, hkernel, vkernel, out)
+  firstprivate(vmeta, vlength, roi_out, hlength, in_stride, out_stride, in, vindex, hindex, hkernel, vkernel, out)
 #endif
   for(int oy = 0; oy < roi_out->height; oy++)
   {

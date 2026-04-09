@@ -336,7 +336,7 @@ static void _refine_with_detail_mask(struct dt_iop_module_t *self, const struct 
   const int msize = owidth * oheight;
 #ifdef _OPENMP
   #pragma omp parallel for simd dt_omp_default() \
-  dt_omp_firstprivate(mask, warp_mask, msize) \
+  firstprivate(mask, warp_mask, msize) \
   schedule(simd:static) aligned(mask, warp_mask : 64)
  #endif
   for(int idx =0; idx < msize; idx++)
@@ -412,7 +412,7 @@ static inline float *_develop_blend_process_copy_region(const float *const restr
 
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-        dt_omp_firstprivate(input, output, iwidth, ioffset, owidth, oheight)
+        firstprivate(input, output, iwidth, ioffset, owidth, oheight)
 #endif
   for(size_t y = 0; y < oheight; y++)
   {
@@ -475,7 +475,7 @@ static void _develop_blend_init_raster_mask(const dt_develop_blend_params_t *con
     {
 #ifdef _OPENMP
   #pragma omp parallel for simd dt_omp_default() aligned(mask, raster_mask:64) \
-      dt_omp_firstprivate(mask, raster_mask, owidth, oheight) schedule(static)
+      firstprivate(mask, raster_mask, owidth, oheight) schedule(static)
 #endif
       for(size_t i = 0; i < owidth * oheight; i++)
         mask[i] = 1.0f - raster_mask[i];
@@ -534,7 +534,7 @@ static void _develop_blend_combine_masks(float *const restrict mask,
 {
 #ifdef _OPENMP
 #pragma omp parallel for simd dt_omp_default() aligned(mask, other_mask:64) \
-    dt_omp_firstprivate(mask, other_mask, buffsize) schedule(static)
+    firstprivate(mask, other_mask, buffsize) schedule(static)
 #endif
   for(size_t i = 0; i < buffsize; i++)
     mask[i] *= other_mask[i];
@@ -572,7 +572,7 @@ static void _develop_blend_process_mask_tone_curve(float *const restrict mask, c
   const float e = expf(3.f * contrast);
 #ifdef _OPENMP
 #pragma omp parallel for simd dt_omp_default() schedule(static) aligned(mask:64) \
-    dt_omp_firstprivate(brightness, buffsize, e, mask, mask_epsilon, opacity)
+    firstprivate(brightness, buffsize, e, mask, mask_epsilon, opacity)
 #endif
   for(size_t k = 0; k < buffsize; k++)
   {
@@ -973,7 +973,7 @@ static void _refine_with_detail_mask_cl(struct dt_iop_module_t *self, const stru
   const int msize = owidth * oheight;
 #ifdef _OPENMP
   #pragma omp parallel for simd dt_omp_default() \
-  dt_omp_firstprivate(mask, warp_mask, msize) \
+  firstprivate(mask, warp_mask, msize) \
   schedule(simd:static) aligned(mask, warp_mask : 64)
  #endif
   for(int idx = 0; idx < msize; idx++)

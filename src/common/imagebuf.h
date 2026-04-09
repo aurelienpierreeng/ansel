@@ -74,7 +74,7 @@ static inline void dt_simd_memcpy(const float *const __restrict__ in,
 
 #ifdef _OPENMP
 #pragma omp parallel for simd dt_omp_default() \
-dt_omp_firstprivate(in, out, num_elem) \
+firstprivate(in, out, num_elem) \
 schedule(simd:static) aligned(in, out:64)
 #endif
   for(size_t k = 0; k < num_elem; k++)

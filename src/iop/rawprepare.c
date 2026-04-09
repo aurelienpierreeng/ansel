@@ -253,7 +253,7 @@ int distort_transform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
 
 #ifdef _OPENMP
 #pragma omp parallel for simd dt_omp_default() \
-    dt_omp_firstprivate(points_count, points, y, x) \
+    firstprivate(points_count, points, y, x) \
     schedule(static) \
     aligned(points:64) if(points_count > 100)
 #endif
@@ -282,7 +282,7 @@ int distort_backtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
 
 #ifdef _OPENMP
 #pragma omp parallel for simd dt_omp_default() \
-    dt_omp_firstprivate(points_count, points, y, x) \
+    firstprivate(points_count, points, y, x) \
     schedule(static) \
     aligned(points:64) if(points_count > 100)
 #endif
@@ -398,7 +398,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-    dt_omp_firstprivate(csx, csy, cfa_y, d, height, in, input_width, inv_div, out, width, x_phase) \
+    firstprivate(csx, csy, cfa_y, d, height, in, input_width, inv_div, out, width, x_phase) \
     schedule(static)
 #endif
     for(int j = 0; j < height; j++)
@@ -442,7 +442,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-    dt_omp_firstprivate(csx, csy, cfa_y, d, height, in, input_width, inv_div, out, width, x_phase) \
+    firstprivate(csx, csy, cfa_y, d, height, in, input_width, inv_div, out, width, x_phase) \
     schedule(static)
 #endif
     for(int j = 0; j < height; j++)
@@ -486,7 +486,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-    dt_omp_firstprivate(ch, csx, csy, div, height, in, input_width, out, sub, width) \
+    firstprivate(ch, csx, csy, div, height, in, input_width, out, sub, width) \
     schedule(static) collapse(3)
 #endif
     for(int j = 0; j < height; j++)
@@ -518,7 +518,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-    dt_omp_firstprivate(csx, csy, height, out, im_to_rel_x, im_to_rel_y, rel_to_map_x, rel_to_map_y, \
+    firstprivate(csx, csy, height, out, im_to_rel_x, im_to_rel_y, rel_to_map_x, rel_to_map_y, \
                         roi_out, roi_x, roi_y, \
                         map_w, map_h, map_origin_h, map_origin_v, width, d) \
     schedule(static)

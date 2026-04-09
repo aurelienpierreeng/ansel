@@ -259,7 +259,7 @@ int distort_transform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
 
 #ifdef _OPENMP
 #pragma omp parallel for simd dt_omp_default() \
-  dt_omp_firstprivate(points, points_count, border_size_l, border_size_t)  \
+  firstprivate(points, points_count, border_size_l, border_size_t)  \
   schedule(static) if(points_count > 100) aligned(points:64)
 #endif
   for(size_t i = 0; i < points_count * 2; i += 2)
@@ -285,7 +285,7 @@ int distort_backtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
 
 #ifdef _OPENMP
 #pragma omp parallel for simd dt_omp_default() \
-  dt_omp_firstprivate(points, points_count, border_size_l, border_size_t)  \
+  firstprivate(points, points_count, border_size_l, border_size_t)  \
   schedule(static) if(points_count > 100) aligned(points:64)
 #endif
   for(size_t i = 0; i < points_count * 2; i += 2)
@@ -317,7 +317,7 @@ void distort_mask(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t 
   // blit image inside border and fill the output with previous processed out
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(roi_in, roi_out, border_in_x, border_in_y, in, out)   \
+  firstprivate(roi_in, roi_out, border_in_x, border_in_y, in, out)   \
   schedule(static)
 #endif
   for(int j = 0; j < roi_in->height; j++)
@@ -473,7 +473,7 @@ void copy_image_with_border(float *out, const float *const in, const struct bord
   const int image_width = binfo->image_right - binfo->image_left;
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(in, out, binfo, image_width) \
+  firstprivate(in, out, binfo, image_width) \
   schedule(static)
 #endif
   for (size_t row = 0; row < binfo->height; row++)

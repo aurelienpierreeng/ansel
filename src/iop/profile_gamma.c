@@ -235,7 +235,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
 
 #ifdef _OPENMP
 #pragma omp parallel for SIMD() dt_omp_default() \
-      dt_omp_firstprivate(ch, grey, ivoid, ovoid, roi_out, noise, data) \
+      firstprivate(ch, grey, ivoid, ovoid, roi_out, noise, data) \
       schedule(static)
 #endif
       for(size_t k = 0; k < (size_t)ch * roi_out->width * roi_out->height; k++)
@@ -260,7 +260,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
     {
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-      dt_omp_firstprivate(ch, ivoid, ovoid, roi_out, data) \
+      firstprivate(ch, ivoid, ovoid, roi_out, data) \
       schedule(static)
 #endif
       for(int k = 0; k < roi_out->height; k++)
@@ -454,7 +454,7 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_
   if(gamma == 1.0)
   {
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() dt_omp_firstprivate(d) schedule(static)
+#pragma omp parallel for dt_omp_default() firstprivate(d) schedule(static)
 #endif
     for(int k = 0; k < 0x10000; k++) d->table[k] = 1.0 * k / 0x10000;
   }
@@ -464,7 +464,7 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_
     {
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-      dt_omp_firstprivate(gamma, d) \
+      firstprivate(gamma, d) \
       schedule(static)
 #endif
       for(int k = 0; k < 0x10000; k++) d->table[k] = powf(1.00 * k / 0x10000, gamma);
@@ -485,7 +485,7 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_
       }
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-      dt_omp_firstprivate(linear, d, a, b, c, g) \
+      firstprivate(linear, d, a, b, c, g) \
       schedule(static)
 #endif
       for(int k = 0; k < 0x10000; k++)

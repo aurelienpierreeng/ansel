@@ -114,7 +114,7 @@ static inline void make_noise(float *const output, const float noise, const size
 {
 #ifdef _OPENMP
 #pragma omp parallel for simd dt_omp_default() \
-  dt_omp_firstprivate(output, width, height, noise) \
+  firstprivate(output, width, height, noise) \
   schedule(simd:static) aligned(output:64) collapse(2)
 #endif
   for(size_t i = 0; i < height; i++)
@@ -202,7 +202,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(width, height, ch, input, output, pixel_radius, pixels_y, pixels_x) \
+  firstprivate(width, height, ch, input, output, pixel_radius, pixels_y, pixels_x) \
   schedule(simd:static) collapse(2)
 #endif
     for(size_t j = 0; j < pixels_y + 1; j++)

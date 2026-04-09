@@ -608,7 +608,7 @@ static inline void init_reconstruct(float *const restrict reconstructed, const s
 {
 // init the reconstructed buffer with non-clipped and partially clipped pixels
 #ifdef _OPENMP
-#pragma omp parallel for simd dt_omp_default() dt_omp_firstprivate(reconstructed, width, height)                 \
+#pragma omp parallel for simd dt_omp_default() firstprivate(reconstructed, width, height)                 \
     schedule(simd:static) aligned(reconstructed:64)
 #endif
   for(size_t k = 0; k < height * width * 4; k++) reconstructed[k] = 0.f;
@@ -783,7 +783,7 @@ static inline void heat_PDE_diffusion(const float *const restrict high_freq, con
 
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default()                                                                            \
-    dt_omp_firstprivate(out, mask, HF, LF, height, width, ABCD, has_mask, variance_threshold, anisotropy,         \
+    firstprivate(out, mask, HF, LF, height, width, ABCD, has_mask, variance_threshold, anisotropy,         \
                         normalized_regularization, mult, strength, isotropy_type, zero, flt_min, use_nontemporal, \
                         variance_threshold_v, normalized_regularization_v, strength_v)                             \
     schedule(static)
@@ -1111,7 +1111,7 @@ static inline void build_mask(const float *const restrict input, uint8_t *const 
                               const float threshold, const size_t width, const size_t height)
 {
 #ifdef _OPENMP
-#pragma omp parallel for simd dt_omp_default() dt_omp_firstprivate(input, mask, height, width, threshold)        \
+#pragma omp parallel for simd dt_omp_default() firstprivate(input, mask, height, width, threshold)        \
     schedule(simd:static) aligned(mask, input : 64)
 #endif
   for(size_t k = 0; k < height * width * 4; k += 4)
@@ -1129,7 +1129,7 @@ static inline void inpaint_mask(float *const restrict inpainted, const float *co
   // init the reconstruction with noise inside the masked areas
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(inpainted, original, mask, width, height) schedule(simd:static)
+  firstprivate(inpainted, original, mask, width, height) schedule(simd:static)
 #endif
   for(size_t k = 0; k < height * width * 4; k += 4)
   {

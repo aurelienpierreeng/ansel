@@ -222,15 +222,6 @@ typedef unsigned int u_int;
 #ifdef _OPENMP
 # include <omp.h>
 
-/* See https://redmine.darktable.org/issues/12568#note-14 */
-# ifdef HAVE_OMP_FIRSTPRIVATE_WITH_CONST
-   /* If the compiler correctly supports firstprivate, use it. */
-#  define dt_omp_firstprivate(...) firstprivate(__VA_ARGS__)
-# else /* HAVE_OMP_FIRSTPRIVATE_WITH_CONST */
-   /* This is needed for clang < 7.0 */
-#  define dt_omp_firstprivate(...)
-# endif/* HAVE_OMP_FIRSTPRIVATE_WITH_CONST */
-
 #define dt_omp_default(...) default(firstprivate) __VA_ARGS__
 
 #ifndef dt_omp_nontemporal

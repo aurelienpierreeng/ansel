@@ -246,7 +246,7 @@ static void process_hsl_v1(const dt_dev_pixelpipe_iop_t *piece, const float *con
 
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(ch, pixel_count, hsl_matrix, rgb_matrix, in, out) \
+  firstprivate(ch, pixel_count, hsl_matrix, rgb_matrix, in, out) \
   schedule(static)
 #endif
   for(size_t k = 0; k < pixel_count; k += ch)
@@ -296,7 +296,7 @@ static void process_hsl_v2(const dt_dev_pixelpipe_iop_t *piece, const float *con
 
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(ch, pixel_count, hsl_matrix, rgb_matrix, in, out) \
+  firstprivate(ch, pixel_count, hsl_matrix, rgb_matrix, in, out) \
   schedule(static)
 #endif
   for(size_t k = 0; k < pixel_count; k += ch)
@@ -350,7 +350,7 @@ static void process_rgb(const dt_dev_pixelpipe_iop_t *piece, const float *const 
 
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(ch, pixel_count, rgb_matrix, in, out) \
+  firstprivate(ch, pixel_count, rgb_matrix, in, out) \
   schedule(static)
 #endif
   for(size_t k = 0; k < pixel_count; k += ch)
@@ -375,7 +375,7 @@ static void process_gray(const dt_dev_pixelpipe_iop_t *piece, const float *const
 
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(ch, pixel_count, rgb_matrix, in, out) \
+  firstprivate(ch, pixel_count, rgb_matrix, in, out) \
   schedule(static)
 #endif
   for(size_t k = 0; k < pixel_count; k += ch)

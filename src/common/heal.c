@@ -66,7 +66,7 @@ static void _heal_sub(const float *const top_buffer, const float *const bottom_b
 
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(top_buffer, bottom_buffer, red_buffer, black_buffer, height, width, res_stride) \
+  firstprivate(top_buffer, bottom_buffer, red_buffer, black_buffer, height, width, res_stride) \
   schedule(static)
 #endif
   for(size_t row = 0; row < height; row++)
@@ -116,7 +116,7 @@ static void _heal_add(const float *const restrict red_buffer, const float *const
 
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(red_buffer, black_buffer, second_buffer, height, width, res_stride, result_buffer) \
+  firstprivate(red_buffer, black_buffer, second_buffer, height, width, res_stride, result_buffer) \
   schedule(static)
 #endif
   for(size_t row = 0; row < height; row++)
@@ -187,7 +187,7 @@ static float _heal_laplace_iteration(float *const restrict active_pixels,
 #if !(defined(__apple_build_version__) && __apple_build_version__ < 11030000) //makes Xcode 11.3.1 compiler crash
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(active_pixels, neighbor_pixels, runs, num_runs, width, height, start_parity, w) \
+  firstprivate(active_pixels, neighbor_pixels, runs, num_runs, width, height, start_parity, w) \
   schedule(static) \
   reduction(vsum : err)
 #endif /* _OPENMP */

@@ -756,7 +756,7 @@ static inline void loop_switch(const float *const restrict in, float *const rest
 
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(width, height, ch, in, out, xyz_to_rgb0, xyz_to_rgb1, xyz_to_rgb2, rgb_to_xyz0, rgb_to_xyz1, rgb_to_xyz2, mix0, mix1, mix2, illuminant_v, saturation, lightness, grey, p, gamut, clip, apply_grey, kind, version) \
+  firstprivate(width, height, ch, in, out, xyz_to_rgb0, xyz_to_rgb1, xyz_to_rgb2, rgb_to_xyz0, rgb_to_xyz1, rgb_to_xyz2, mix0, mix1, mix2, illuminant_v, saturation, lightness, grey, p, gamut, clip, apply_grey, kind, version) \
   schedule(simd:static)
 #endif
   for(size_t k = 0; k < height * width * 4; k += 4)
@@ -956,7 +956,7 @@ static inline int auto_detect_WB(const float *const restrict in, dt_illuminant_t
    // Convert RGB to xy
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(width, height, ch, in, temp, RGB_to_XYZ) \
+  firstprivate(width, height, ch, in, temp, RGB_to_XYZ) \
   collapse(2) schedule(simd:static)
 #endif
   for(size_t i = 0; i < height; i++)
@@ -995,7 +995,7 @@ static inline int auto_detect_WB(const float *const restrict in, dt_illuminant_t
   {
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() reduction(+:xyY, elements) \
-  dt_omp_firstprivate(width, height, temp, ch) \
+  firstprivate(width, height, temp, ch) \
   schedule(simd:static)
 #endif
     for(size_t i = 2 * OFF; i < height - 4 * OFF; i += OFF)
@@ -1063,7 +1063,7 @@ static inline int auto_detect_WB(const float *const restrict in, dt_illuminant_t
   {
     #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() reduction(+:xyY, elements) \
-  dt_omp_firstprivate(width, height, temp, ch) \
+  firstprivate(width, height, temp, ch) \
   schedule(simd:static)
 #endif
     for(size_t i = 2 * OFF; i < height - 4 * OFF; i += OFF)

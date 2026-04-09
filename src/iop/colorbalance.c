@@ -379,7 +379,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
 #ifdef _OPENMP
 #pragma omp parallel for SIMD() dt_omp_default() \
-      dt_omp_firstprivate(ch, gain, gamma_inv, lift, ivoid, ovoid, roi_in, \
+      firstprivate(ch, gain, gamma_inv, lift, ivoid, ovoid, roi_in, \
                           roi_out, d) \
       schedule(static)
 #endif
@@ -429,7 +429,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
 #ifdef _OPENMP
 #pragma omp parallel for SIMD() dt_omp_default() \
-      dt_omp_firstprivate(ch, contrast, gain, gamma_inv, grey, ivoid, lift, \
+      firstprivate(ch, contrast, gain, gamma_inv, grey, ivoid, lift, \
                           ovoid, roi_in, roi_out, run_contrast, \
                           run_saturation, run_saturation_out, d) \
       schedule(static)
@@ -497,7 +497,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
 #ifdef _OPENMP
 #pragma omp parallel for SIMD() dt_omp_default() \
-      dt_omp_firstprivate(ch, contrast, gain, gamma, grey, ivoid, lift, ovoid, \
+      firstprivate(ch, contrast, gain, gamma, grey, ivoid, lift, ovoid, \
                           roi_in, roi_out, run_contrast, run_saturation, \
                           run_saturation_out, d) \
       schedule(static)

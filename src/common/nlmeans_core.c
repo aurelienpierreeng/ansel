@@ -348,7 +348,7 @@ void nlmeans_denoise(const float *const inbuf, float *const outbuf,
   const int chk_width = compute_slice_width(roi_out->width);
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() num_threads(darktable.num_openmp_threads) \
-      dt_omp_firstprivate(patches, num_patches, scratch_buf, padded_scratch_size, chk_height, chk_width, radius, params, roi_out, outbuf, inbuf, stride, center_norm, skip_blend, weight, invert) \
+      firstprivate(patches, num_patches, scratch_buf, padded_scratch_size, chk_height, chk_width, radius, params, roi_out, outbuf, inbuf, stride, center_norm, skip_blend, weight, invert) \
       schedule(static) \
       collapse(2)
 #endif

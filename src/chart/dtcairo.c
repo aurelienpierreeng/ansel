@@ -193,7 +193,7 @@ cairo_surface_t *cairo_surface_create_from_xyz_data(const float *const image, co
 
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(height, image, width, rgbbuf) \
+  firstprivate(height, image, width, rgbbuf) \
   schedule(static)
 #endif
   for(int y = 0; y < height; y++)

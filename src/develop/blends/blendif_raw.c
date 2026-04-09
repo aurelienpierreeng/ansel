@@ -62,7 +62,7 @@ void dt_develop_blendif_raw_make_mask(const struct dt_dev_pixelpipe_iop_t *piece
   {
 #ifdef _OPENMP
 #pragma omp parallel for simd schedule(static) dt_omp_default() aligned(mask: 64) \
-    dt_omp_firstprivate(mask, buffsize, global_opacity)
+    firstprivate(mask, buffsize, global_opacity)
 #endif
     for(size_t x = 0; x < buffsize; x++) mask[x] = global_opacity * (1.0f - mask[x]);
   }
@@ -431,7 +431,7 @@ void dt_develop_blendif_raw_blend(const struct dt_dev_pixelpipe_t *pipe,
       {
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static) dt_omp_default() \
-  dt_omp_firstprivate(blend, a, b, tmp_buffer, mask, oheight, owidth, iwidth, xoffs, yoffs)
+  firstprivate(blend, a, b, tmp_buffer, mask, oheight, owidth, iwidth, xoffs, yoffs)
 #endif
         for(size_t y = 0; y < oheight; y++)
         {
@@ -444,7 +444,7 @@ void dt_develop_blendif_raw_blend(const struct dt_dev_pixelpipe_t *pipe,
       {
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static) dt_omp_default() \
-  dt_omp_firstprivate(blend, a, b, tmp_buffer, mask, oheight, owidth, iwidth, xoffs, yoffs)
+  firstprivate(blend, a, b, tmp_buffer, mask, oheight, owidth, iwidth, xoffs, yoffs)
 #endif
         for(size_t y = 0; y < oheight; y++)
         {

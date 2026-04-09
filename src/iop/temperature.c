@@ -508,7 +508,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   { // xtrans float mosaiced
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-    dt_omp_firstprivate(d_coeffs, height, in, out, roi_out, width, xtrans) \
+    firstprivate(d_coeffs, height, in, out, roi_out, width, xtrans) \
     schedule(static)
 #endif
     for(int j = 0; j < height; j++)
@@ -554,7 +554,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     const int cfa_x = roi_out->x & 1;
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-    dt_omp_firstprivate(cfa_x, d_coeffs, filters, height, in, out, roi_out, width) \
+    firstprivate(cfa_x, d_coeffs, filters, height, in, out, roi_out, width) \
     schedule(static)
 #endif
     for(int j = 0; j < height; j++)
@@ -589,7 +589,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     {
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-    dt_omp_firstprivate(npixels, in, out, d) \
+    firstprivate(npixels, in, out, d) \
     schedule(static)
 #endif
       for(size_t k = 0; k < npixels; k++)
@@ -605,7 +605,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     {
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-    dt_omp_firstprivate(ch, d, in, out, npixels) \
+    firstprivate(ch, d, in, out, npixels) \
     schedule(static)
 #endif
       for(size_t k = 0; k < ch * npixels; k += ch)

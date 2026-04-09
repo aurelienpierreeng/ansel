@@ -907,7 +907,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const size_t pixels = width * height;
 
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() dt_omp_firstprivate(in, out, width, height, pixels, d) schedule(simd:static)
+#pragma omp parallel for dt_omp_default() firstprivate(in, out, width, height, pixels, d) schedule(simd:static)
 #endif
   for(size_t k = 0; k < pixels * 4; k += 4)
   {

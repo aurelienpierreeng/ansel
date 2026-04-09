@@ -1343,7 +1343,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(black_point, ch, contrast, gamma, hlcomp, hlrange, in, \
+  firstprivate(black_point, ch, contrast, gamma, hlcomp, hlrange, in, \
                       inv_middle_grey, middle_grey, out, plain_contrast, \
                       preserve_colors, process_hlcompr, process_gamma, \
                       process_saturation_vibrance, saturation, vibrance, \

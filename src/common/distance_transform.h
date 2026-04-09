@@ -104,7 +104,7 @@ float dt_image_distance_transform(float *const restrict src, float *const restri
     case DT_DISTANCE_TRANSFORM_MASK:
 #ifdef _OPENMP
   #pragma omp parallel for simd dt_omp_default() \
-  dt_omp_firstprivate(src, out, clip, width, height) \
+  firstprivate(src, out, clip, width, height) \
   schedule(static) aligned(src, out : 64)
 #endif
       for(size_t i = 0; i < width * height; i++)
@@ -121,7 +121,7 @@ float dt_image_distance_transform(float *const restrict src, float *const restri
 #ifdef _OPENMP
   #pragma omp parallel \
   reduction(max : max_distance) \
-  dt_omp_firstprivate(out, maxdim, width, height)
+  firstprivate(out, maxdim, width, height)
 #endif
   {
     float *f = dt_pixelpipe_cache_alloc_align_float_cache(maxdim, 0);

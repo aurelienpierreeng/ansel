@@ -837,7 +837,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const float opacity = data->opacity / 100.0f;
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(roi_out, in, out, sd, opacity, ch)   \
+  firstprivate(roi_out, in, out, sd, opacity, ch)   \
   schedule(static)
 #endif
   for(int j = 0; j < roi_out->height * roi_out->width; j++)

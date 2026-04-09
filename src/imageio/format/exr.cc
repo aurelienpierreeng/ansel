@@ -277,7 +277,7 @@ icc_end:
 
 #ifdef _OPENMP
 #pragma omp parallel for simd default(none) \
-  dt_omp_firstprivate(in_tmp, out, width, height) \
+  firstprivate(in_tmp, out, width, height) \
   schedule(simd:static) \
   collapse(2)
 #endif

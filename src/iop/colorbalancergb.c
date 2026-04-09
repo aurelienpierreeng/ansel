@@ -675,7 +675,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   };
   #ifdef _OPENMP
   #pragma omp parallel for dt_omp_default() \
-    dt_omp_firstprivate(in, out, roi_out, d, g, mask_display, gamut_LUT, npixels, \
+    firstprivate(in, out, roi_out, d, g, mask_display, gamut_LUT, npixels, \
       global, highlights, shadows, midtones, chroma, saturation, brilliance, checker_1, checker_2, out_width, \
       hue_rotation_matrix, L_white, \
       input0, input1, input2, output0, output1, output2, global_v, highlights_v, shadows_v, midtones_v, \
@@ -1226,7 +1226,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
     {
       #ifdef _OPENMP
       #pragma omp parallel for dt_omp_default() \
-            dt_omp_firstprivate(input_matrix, p) schedule(static) dt_omp_firstprivate(LUT_saturation) \
+            firstprivate(input_matrix, p) schedule(static) firstprivate(LUT_saturation) \
             collapse(3)
       #endif
       for(size_t r = 0; r < STEPS; r++)
@@ -1294,8 +1294,8 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
       // March the gamut boundary in CIE xyY 1931 by angular steps of 0.02°
       #ifdef _OPENMP
         #pragma omp parallel for dt_omp_default() \
-              dt_omp_firstprivate(input_matrix, xyY_red, xyY_green, xyY_blue, h_red, h_green, h_blue, D65_xyY) \
-              schedule(static) dt_omp_firstprivate(dt_UCS_LUT)
+              firstprivate(input_matrix, xyY_red, xyY_green, xyY_blue, h_red, h_green, h_blue, D65_xyY) \
+              schedule(static) firstprivate(dt_UCS_LUT)
       #endif
       for(int i = 0; i < 50 * 360; i++)
       {
@@ -1581,7 +1581,7 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
 
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(data, graph_height, line_height, checker_1, checker_2) \
+  firstprivate(data, graph_height, line_height, checker_1, checker_2) \
   schedule(static) collapse(2)
 #endif
   for(size_t i = 0; i < (size_t)graph_height; i++)
@@ -1629,7 +1629,7 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
 
 #ifdef _OPENMP
 #pragma omp parallel for simd dt_omp_default() \
-  dt_omp_firstprivate(LUT, shadows_weight, midtones_weight, highlights_weight, mask_grey_fulcrum) \
+  firstprivate(LUT, shadows_weight, midtones_weight, highlights_weight, mask_grey_fulcrum) \
   schedule(static)
 #endif
   for(size_t k = 0 ; k < LUT_ELEM; k++)

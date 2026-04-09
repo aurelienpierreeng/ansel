@@ -342,7 +342,7 @@ static inline void _apply_tonecurves(const float *const image_in, float *const i
   {
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-    dt_omp_firstprivate(stride, image_in, image_out, lut, lutsize, unbounded_coeffs, ch) \
+    firstprivate(stride, image_in, image_out, lut, lutsize, unbounded_coeffs, ch) \
     schedule(static) collapse(2)
 #endif
     for(size_t k = 0; k < stride; k += ch)
@@ -357,7 +357,7 @@ static inline void _apply_tonecurves(const float *const image_in, float *const i
   {
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-    dt_omp_firstprivate(stride, image_in, image_out, lut, lutsize, unbounded_coeffs, ch) \
+    firstprivate(stride, image_in, image_out, lut, lutsize, unbounded_coeffs, ch) \
     schedule(static) collapse(2)
 #endif
     for(size_t k = 0; k < stride; k += ch)
@@ -396,7 +396,7 @@ static inline void _transform_rgb_to_lab_matrix(const float *const restrict imag
 
 #ifdef _OPENMP
 #pragma omp parallel for simd dt_omp_default() \
-    dt_omp_firstprivate(image_out, profile_info, stride, ch, m0, m1, m2) \
+    firstprivate(image_out, profile_info, stride, ch, m0, m1, m2) \
     schedule(static) aligned(image_out:64)
 #endif
     for(size_t y = 0; y < stride; y += ch)
@@ -412,7 +412,7 @@ static inline void _transform_rgb_to_lab_matrix(const float *const restrict imag
   {
 #ifdef _OPENMP
 #pragma omp parallel for simd dt_omp_default() \
-    dt_omp_firstprivate(image_in, image_out, profile_info, stride, ch, m0, m1, m2) \
+    firstprivate(image_in, image_out, profile_info, stride, ch, m0, m1, m2) \
     schedule(static) aligned(image_in, image_out:64)
 #endif
     for(size_t y = 0; y < stride; y += ch)
@@ -444,7 +444,7 @@ static inline void _transform_lab_to_rgb_matrix(const float *const image_in, flo
 
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(image_in, image_out, stride, profile_info, ch, m0, m1, m2, use_nontemporal)   \
+  firstprivate(image_in, image_out, stride, profile_info, ch, m0, m1, m2, use_nontemporal)   \
   schedule(static)
 #endif
   for(size_t y = 0; y < stride; y += ch)
@@ -511,7 +511,7 @@ static inline void _transform_matrix_rgb(const float *const restrict image_in,
 
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-    dt_omp_firstprivate(stride, image_in, image_out, profile_info_from, profile_info_to, run_lut_in, run_lut_out, m0, m1, m2, use_nontemporal) \
+    firstprivate(stride, image_in, image_out, profile_info_from, profile_info_to, run_lut_in, run_lut_out, m0, m1, m2, use_nontemporal) \
     schedule(static)
 #endif
     for(size_t y = 0; y < stride; y += 4)
@@ -571,7 +571,7 @@ static inline void _transform_matrix_rgb(const float *const restrict image_in,
   {
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-    dt_omp_firstprivate(stride, image_in, image_out, profile_info_from, profile_info_to, m0, m1, m2) \
+    firstprivate(stride, image_in, image_out, profile_info_from, profile_info_to, m0, m1, m2) \
     schedule(static)
 #endif
     for(size_t y = 0; y < stride; y += 4)

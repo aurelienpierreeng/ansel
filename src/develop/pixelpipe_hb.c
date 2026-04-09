@@ -283,7 +283,7 @@ inline static void _copy_buffer(const char *const restrict input, char *const re
 {
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-          dt_omp_firstprivate(input, output, bpp, o_width, i_width, height, x_offset, y_offset, stride) \
+          firstprivate(input, output, bpp, o_width, i_width, height, x_offset, y_offset, stride) \
           schedule(static)
 #endif
   for(size_t j = 0; j < height; j++)
@@ -300,7 +300,7 @@ inline static void _uint8_to_float(const uint8_t *const input, float *const outp
 #ifdef _OPENMP
 #pragma omp parallel for simd dt_omp_default() \
         aligned(input, output: 64) \
-        dt_omp_firstprivate(input, output, width, height, chan) \
+        firstprivate(input, output, width, height, chan) \
         schedule(static)
 #endif
   for(size_t k = 0; k < height * width; k++)

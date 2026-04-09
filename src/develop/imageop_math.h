@@ -187,7 +187,7 @@ static inline void dt_iop_alpha_copy(const void *const ivoid,
 
 #ifdef _OPENMP
 #pragma omp parallel for simd dt_omp_default() aligned(out, in:64)\
-  dt_omp_firstprivate(height, width, out, in) \
+  firstprivate(height, width, out, in) \
   schedule(static)
 #endif
   for(size_t k = 3; k < width * height * 4; k += 4)

@@ -1559,7 +1559,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(autoscale, npixels, work_profile, xm_b, xm_g, xm_L, in, out, table, unbounded_coeffs, d) \
+  firstprivate(autoscale, npixels, work_profile, xm_b, xm_g, xm_L, in, out, table, unbounded_coeffs, d) \
   schedule(static)
 #endif
   for(int y = 0; y < 4*npixels; y += 4)

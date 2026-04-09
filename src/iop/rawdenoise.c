@@ -247,7 +247,7 @@ static int wavelet_denoise(const float *const restrict in, float *const restrict
     // variance-stabilizing transform
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-    dt_omp_firstprivate(in, fimg, roi, halfwidth, c) \
+    firstprivate(in, fimg, roi, halfwidth, c) \
     schedule(static)
 #endif
     for(int row = c & 1; row < roi->height; row += 2)
@@ -271,7 +271,7 @@ static int wavelet_denoise(const float *const restrict in, float *const restrict
     // undo the original transform
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-    dt_omp_firstprivate(fimg, halfwidth, out, roi, size, c) \
+    firstprivate(fimg, halfwidth, out, roi, size, c) \
     schedule(static)
 #endif
     for(int row = c & 1; row < roi->height; row += 2)
@@ -377,7 +377,7 @@ static int wavelet_denoise_xtrans(const float *const restrict in, float *const r
     const size_t chunksize = (height + nthreads - 1) / nthreads;
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(fimg, height, in, roi, size, width, xtrans, nthreads, chunksize, c) num_threads(nthreads) \
+  firstprivate(fimg, height, in, roi, size, width, xtrans, nthreads, chunksize, c) num_threads(nthreads) \
     schedule(static)
 #endif
     for(size_t chunk = 0; chunk < nthreads; chunk++)
@@ -500,7 +500,7 @@ static int wavelet_denoise_xtrans(const float *const restrict in, float *const r
     // undo the original transform
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-    dt_omp_firstprivate(height, fimg, roi, width, xtrans, c, out) \
+    firstprivate(height, fimg, roi, width, xtrans, c, out) \
     schedule(static)
 #endif
     for(int row = 0; row < height; row++)

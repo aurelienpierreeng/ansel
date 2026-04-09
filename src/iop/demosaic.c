@@ -462,7 +462,7 @@ static void _downsample_bayer_half_size(float *const out, const float *const in,
 {
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(in, filters, is_4bayer, roi_in, roi_out, CAM_to_RGB, out) \
+  firstprivate(in, filters, is_4bayer, roi_in, roi_out, CAM_to_RGB, out) \
   schedule(static) collapse(2)
 #endif
   for(int y = 0; y < roi_out->height; y++)
@@ -610,7 +610,7 @@ static void _downsample_xtrans_half_size(float *const out, const float *const in
 {
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(in, roi_in, roi_out, xtrans, out) \
+  firstprivate(in, roi_in, roi_out, xtrans, out) \
   schedule(static) collapse(2)
 #endif
   for(int y = 0; y < roi_out->height; y++)
@@ -674,7 +674,7 @@ static void _downsample_guided_laplacian_fit(const float *const restrict HF,
 
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(HF, coeff, bias, width, height, eps, zero, inv_patch) \
+  firstprivate(HF, coeff, bias, width, height, eps, zero, inv_patch) \
   schedule(static)
 #endif
   for(size_t row = 0; row < height; ++row)
@@ -767,7 +767,7 @@ static void _downsample_guided_laplacian_apply(const float *const restrict HF,
 {
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(HF, coeff, bias, LF, reconstructed, width, height, reset) \
+  firstprivate(HF, coeff, bias, LF, reconstructed, width, height, reset) \
   schedule(static)
 #endif
   for(size_t row = 0; row < height; ++row)
@@ -857,7 +857,7 @@ static int _downsample_guided_laplacian_postfilter(float *const out,
       // so the linear RGB model follows local chroma ratios instead of absolute amplitudes.
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(HF, buffer_out, width, height) \
+  firstprivate(HF, buffer_out, width, height) \
   schedule(static)
 #endif
       for(size_t row = 0; row < height; ++row)
@@ -893,7 +893,7 @@ static int _downsample_guided_laplacian_postfilter(float *const out,
 
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(out, reconstructed, residual, width, height, last_iteration) \
+  firstprivate(out, reconstructed, residual, width, height, last_iteration) \
   schedule(static)
 #endif
     for(size_t row = 0; row < height; ++row)

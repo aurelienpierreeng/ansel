@@ -89,7 +89,7 @@ void eaw_decompose(float *const restrict out, const float *const restrict in, fl
 
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(detail, filter, height, in, sharpen, mult, boundary, out, width) \
+  firstprivate(detail, filter, height, in, sharpen, mult, boundary, out, width) \
   schedule(static)
 #endif
   for(int rowid = 0; rowid < height; rowid++)
@@ -169,7 +169,7 @@ void eaw_synthesize(float *const out, const float *const in, const float *const 
 {
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(height, width, in, out, detail, threshold, boost) \
+  firstprivate(height, width, in, out, detail, threshold, boost) \
   schedule(simd:static)
 #endif
   for(size_t k = 0; k < (size_t)width * height; k++)
@@ -267,7 +267,7 @@ void eaw_dn_decompose(float *const restrict out, const float *const restrict in,
 #if !(defined(__apple_build_version__) && __apple_build_version__ < 11030000) //makes Xcode 11.3.1 compiler crash
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(detail, filter, height, in, inv_sigma2, mult, boundary, out, width) \
+  firstprivate(detail, filter, height, in, inv_sigma2, mult, boundary, out, width) \
   reduction(vsum: sum_sq) \
   schedule(static)
 #endif

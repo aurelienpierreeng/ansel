@@ -611,7 +611,7 @@ public:
     for(int j = 0; j <= D; j++)
     {
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_firstprivate(j, oldValue, newValue)
+#pragma omp parallel for firstprivate(j, oldValue, newValue)
 #endif
       // For each vertex in the lattice,
       for(int i = 0; i < hashTables[0].size(); i++) // blur point i in dimension j

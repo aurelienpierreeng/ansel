@@ -1084,7 +1084,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
   {
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(npixels, in, out, work_profile, d, mult) \
+  firstprivate(npixels, in, out, work_profile, d, mult) \
   schedule(static)
 #endif
     for(int k = 0; k < 4U*npixels; k += 4)
@@ -1120,7 +1120,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
     const float *const restrict levels = d->params.levels[ch_levels];
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(npixels, in, out, work_profile, d, levels, mult_ch, ch_levels) \
+  firstprivate(npixels, in, out, work_profile, d, levels, mult_ch, ch_levels) \
   schedule(static)
 #endif
     for(int k = 0; k < 4U*npixels; k += 4)

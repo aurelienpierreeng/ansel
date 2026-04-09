@@ -215,7 +215,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const float d_b = d->b;
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(in, out, npixels, sigma2, d_a, d_b) \
+  firstprivate(in, out, npixels, sigma2, d_a, d_b) \
   schedule(static)
 #endif
   for(int k = 0; k < 4*npixels; k += 4)
@@ -241,7 +241,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const float highlights = d->highlights;
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(in, out, npixels, highlights) \
+  firstprivate(in, out, npixels, highlights) \
   schedule(static)
 #endif
   for(int k = 0; k < 4*npixels; k += 4)

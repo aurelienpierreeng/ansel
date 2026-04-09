@@ -96,7 +96,7 @@ int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
     float *out = (float *)output;
 #ifdef _OPENMP
 #pragma omp parallel for simd dt_omp_default() \
-  dt_omp_firstprivate(out, count) schedule(static)
+  firstprivate(out, count) schedule(static)
 #endif
     for(size_t k = 0; k < count; k++)
       out[k] = NAN;

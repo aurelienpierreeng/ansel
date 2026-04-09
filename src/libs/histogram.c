@@ -691,7 +691,7 @@ uint32_t _find_max_histogram(const uint32_t *const restrict bins, const size_t b
 #ifdef _OPENMP
 #pragma omp parallel for simd dt_omp_default() \
         aligned(bins: 64) \
-        dt_omp_firstprivate(bins, binning_size) \
+        firstprivate(bins, binning_size) \
         reduction(max: max_hist) \
         schedule(static)
 #endif
@@ -710,12 +710,12 @@ static inline void _bin_pixels_histogram_in_roi(const float *const restrict imag
 #ifdef _OPENMP
 #ifndef _WIN32
 #pragma omp parallel for dt_omp_default() \
-        dt_omp_firstprivate(image, min_x, min_y, max_x, max_y, width) \
+        firstprivate(image, min_x, min_y, max_x, max_y, width) \
         reduction(+: bins[0: HISTOGRAM_BINS * 4]) \
         schedule(static) collapse(3)
 #else
 #pragma omp parallel for dt_omp_default() \
-        dt_omp_firstprivate(image, min_x, min_y, max_x, max_y, width) \
+        firstprivate(image, min_x, min_y, max_x, max_y, width) \
         shared(bins) \
         schedule(static) collapse(3)
 #endif
@@ -843,7 +843,7 @@ static inline void _bin_pixels_waveform_in_roi(const float *const restrict image
   // Process
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-        dt_omp_firstprivate(image, binning_size, vertical, min_x, min_y, max_x, max_y, width) \
+        firstprivate(image, binning_size, vertical, min_x, min_y, max_x, max_y, width) \
         shared(bins) \
         schedule(static) collapse(3)
 #endif
@@ -891,7 +891,7 @@ static inline void _bin_pixels_waveform(const float *const restrict image, uint3
 #ifdef _OPENMP
 #pragma omp parallel for simd dt_omp_default() \
         aligned(bins: 64) \
-        dt_omp_firstprivate(bins, binning_size) \
+        firstprivate(bins, binning_size) \
         schedule(static)
 #endif
   for(size_t k = 0; k < binning_size; k++) bins[k] = 0;
@@ -925,7 +925,7 @@ static void _create_waveform_image(const uint32_t *const restrict bins, uint8_t 
 #ifdef _OPENMP
 #pragma omp parallel for simd dt_omp_default() \
         aligned(image, bins: 64) \
-        dt_omp_firstprivate(image, height, width, bins, max_hist) \
+        firstprivate(image, height, width, bins, max_hist) \
         schedule(static)
 #endif
   for(size_t k = 0; k < height * width * 4; k += 4)
@@ -948,7 +948,7 @@ static void _mask_waveform(const uint8_t *const restrict image, uint8_t *const r
 
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-        dt_omp_firstprivate(image, masked, height, width, mask) \
+        firstprivate(image, masked, height, width, mask) \
         schedule(static)
 #endif
     for(size_t i = 0; i < height; i++)
@@ -1095,12 +1095,12 @@ static void _bin_pixels_vectorscope_in_roi(const float *const restrict image, ui
 #ifdef _OPENMP
 #ifndef _WIN32
 #pragma omp parallel for dt_omp_default() \
-        dt_omp_firstprivate(image, zoom, d, min_x, max_x, min_y, max_y, width) \
+        firstprivate(image, zoom, d, min_x, max_x, min_y, max_y, width) \
         reduction(+: vectorscope[0: HISTOGRAM_BINS * HISTOGRAM_BINS]) \
         schedule(static)
 #else
 #pragma omp parallel for dt_omp_default() \
-        dt_omp_firstprivate(image, zoom, d, min_x, max_x, min_y, max_y, width) \
+        firstprivate(image, zoom, d, min_x, max_x, min_y, max_y, width) \
         shared(vectorscope) \
         schedule(static)
 #endif
@@ -1155,7 +1155,7 @@ static void _create_vectorscope_image(const uint32_t *const restrict vectorscope
 
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-        dt_omp_firstprivate(image, vectorscope, profile, max_hist, zoom) \
+        firstprivate(image, vectorscope, profile, max_hist, zoom) \
         schedule(static) collapse(2)
 #endif
   for(size_t i = 0; i < HISTOGRAM_BINS; i++)
@@ -1194,7 +1194,7 @@ static void _bin_vectorscope(const float *const restrict image, uint32_t *const 
 #ifdef _OPENMP
 #pragma omp parallel for simd dt_omp_default() \
         aligned(vectorscope: 64) \
-        dt_omp_firstprivate(vectorscope) \
+        firstprivate(vectorscope) \
         schedule(static)
 #endif
   for(size_t k = 0; k < HISTOGRAM_BINS * HISTOGRAM_BINS; k++) vectorscope[k] = 0;

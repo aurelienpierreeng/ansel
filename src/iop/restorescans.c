@@ -154,7 +154,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const float sharpen = d->diffusion / (scale * scale) / d->iterations;
 
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() schedule(static) dt_omp_firstprivate(ivoid, ovoid, roi_in, roi_out, in, out, cmy)
+#pragma omp parallel for dt_omp_default() schedule(static) firstprivate(ivoid, ovoid, roi_in, roi_out, in, out, cmy)
 #endif
   for(int i = 0; i < roi_out->height; i++)
     for(int j = 0; j < roi_out->width; j++)
@@ -185,7 +185,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     }
 
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() schedule(static) dt_omp_firstprivate(d, temp_in, roi_in, roi_out)
+#pragma omp parallel for dt_omp_default() schedule(static) firstprivate(d, temp_in, roi_in, roi_out)
 #endif
     for(int i = 0; i < roi_out->height; i++)
       for(int j = 0; j < roi_out->width; j++)
@@ -198,7 +198,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
       }
 
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() schedule(static) dt_omp_firstprivate(d, temp_in, temp_out, roi_in, roi_out, sharpen)
+#pragma omp parallel for dt_omp_default() schedule(static) firstprivate(d, temp_in, temp_out, roi_in, roi_out, sharpen)
 #endif
     for(int i = 0; i < roi_out->height; i++)
       for(int j = 0; j < roi_out->width; j++)
@@ -225,7 +225,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   }
 
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() schedule(static) dt_omp_firstprivate(roi_in, roi_out, out, temp_out)
+#pragma omp parallel for dt_omp_default() schedule(static) firstprivate(roi_in, roi_out, out, temp_out)
 #endif
   for(int i = 0; i < roi_out->height; i++)
     for(int j = 0; j < roi_out->width; j++)

@@ -263,7 +263,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   { // xtrans float mosaiced
 #ifdef _OPENMP
 #pragma omp parallel for SIMD() dt_omp_default() \
-    dt_omp_firstprivate(film_rgb_f, in, out, roi_out, xtrans) \
+    firstprivate(film_rgb_f, in, out, roi_out, xtrans) \
     schedule(static) \
     collapse(2)
 #endif
@@ -281,7 +281,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
 #ifdef _OPENMP
 #pragma omp parallel for SIMD() dt_omp_default() \
-    dt_omp_firstprivate(film_rgb_f, filters, in, out, roi_out) \
+    firstprivate(film_rgb_f, filters, in, out, roi_out) \
     schedule(static) \
     collapse(2)
 #endif
@@ -300,7 +300,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
 #ifdef _OPENMP
 #pragma omp parallel for SIMD() dt_omp_default() \
-    dt_omp_firstprivate(ch, d, in, out, roi_out) \
+    firstprivate(ch, d, in, out, roi_out) \
     schedule(static) \
     collapse(2)
 #endif

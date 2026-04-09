@@ -484,7 +484,7 @@ static void process_random(struct dt_iop_module_t *self, const dt_dev_pixelpipe_
 
 #ifdef _OPENMP
 #pragma omp parallel dt_omp_default() \
-  dt_omp_firstprivate(dither, height, width, tea_states, ivoid, ovoid)
+  firstprivate(dither, height, width, tea_states, ivoid, ovoid)
 #endif
   {
     // get a pointer to each thread's private buffer *outside* the for loop, to avoid a function call per iteration

@@ -168,7 +168,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
 #ifdef _OPENMP
 #pragma omp parallel for dt_omp_default() \
-  dt_omp_firstprivate(ch, i, o, roi_out, threshold, c, d, XYZ_sw) \
+  firstprivate(ch, i, o, roi_out, threshold, c, d, XYZ_sw) \
   schedule(static)
 #endif
   for(size_t k = 0; k < (size_t)roi_out->width * roi_out->height; k++)
