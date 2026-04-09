@@ -81,6 +81,7 @@ export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:${ANSEL_LIBROOT}/"
 ./linuxdeploy-x86_64.AppImage \
   --appdir ../AppDir \
   --plugin gtk \
+  --exclude-library 'libgomp.so*' \
   --deploy-deps-only "${ANSEL_LIBDIR}" \
   --deploy-deps-only "${ANSEL_LIBDIR}/views" \
   --deploy-deps-only "${ANSEL_LIBDIR}/plugins" \
@@ -159,6 +160,12 @@ for binary_path in ../AppDir/usr/libexec/ansel/tools/*; do
   ln -sf AppRun "../AppDir/${binary_name}"
 done
 
+# Keep using the host OpenMP runtime. linuxdeploy may collect libgomp in either
+# lib or lib64 depending on the host layout, and mixing a bundled OpenMP runtime
+# with host GPU drivers is one of the AppImage-specific crash suspects here.
+find ../AppDir/usr -type f -name 'libgomp.so*' -print -delete
+
 ./linuxdeploy-x86_64.AppImage \
   --appdir ../AppDir \
+  --exclude-library 'libgomp.so*' \
   --output appimage
