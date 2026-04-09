@@ -230,8 +230,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
   const dt_iop_scalepixels_data_t * const d = piece->data;
 
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() \
-  firstprivate(ch_width, d, ivoid, ovoid, roi_in, roi_out, interpolation) \
+#pragma omp parallel for default(firstprivate) \
   schedule(static)
 #endif
   // (slow) point-by-point transformation.

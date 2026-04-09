@@ -240,8 +240,7 @@ static void pixel_rgb_geomean(const float *const restrict image,
 #ifdef _OPENMP
   #define LOOP(fn)                                                        \
     {                                                                     \
-      _Pragma ("omp parallel for simd dt_omp_default() schedule(static)      \
-      firstprivate(num_elem, ch, in, out, exposure_boost, fulcrum, contrast_boost)\
+      _Pragma ("omp parallel for simd default(firstprivate) schedule(static)\
       aligned(in, out:64)" )                                              \
       for(size_t k = 0; k < num_elem; k += ch)                            \
       {                                                                   \

@@ -68,8 +68,7 @@ void dt_lut3d_tetrahedral_interp(const float *const in, float *const out, const 
   const float safe_normalization = fmaxf(normalization, 1e-6f);
 
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() firstprivate(clut, in, out) \
-  firstprivate(level, level2, pixel_nb, safe_normalization) schedule(static)
+#pragma omp parallel for default(firstprivate) firstprivate(clut, in, out) schedule(static)
 #endif
   for(size_t k = 0; k < (size_t)(pixel_nb * 4); k += 4)
   {
@@ -166,8 +165,7 @@ void dt_lut3d_trilinear_interp(const float *const in, float *const out, const si
   const float safe_normalization = fmaxf(normalization, 1e-6f);
 
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() firstprivate(clut, in, out) \
-  firstprivate(level, level2, pixel_nb, safe_normalization) schedule(static)
+#pragma omp parallel for default(firstprivate) firstprivate(clut, in, out) schedule(static)
 #endif
   for(size_t k = 0; k < (size_t)(pixel_nb * 4); k += 4)
   {
@@ -235,8 +233,7 @@ void dt_lut3d_pyramid_interp(const float *const in, float *const out, const size
   const float safe_normalization = fmaxf(normalization, 1e-6f);
 
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() firstprivate(clut, in, out) \
-  firstprivate(level, level2, pixel_nb, safe_normalization) schedule(static)
+#pragma omp parallel for default(firstprivate) firstprivate(clut, in, out) schedule(static)
 #endif
   for(size_t k = 0; k < (size_t)(pixel_nb * 4); k += 4)
   {

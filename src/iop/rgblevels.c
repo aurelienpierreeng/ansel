@@ -1083,8 +1083,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
   if (d->params.autoscale == DT_IOP_RGBLEVELS_INDEPENDENT_CHANNELS || d->params.preserve_colors == DT_RGB_NORM_NONE)
   {
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() \
-  firstprivate(npixels, in, out, work_profile, d, mult) \
+#pragma omp parallel for default(firstprivate) \
   schedule(static)
 #endif
     for(int k = 0; k < 4U*npixels; k += 4)
@@ -1119,8 +1118,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
     const float mult_ch = mult[ch_levels];
     const float *const restrict levels = d->params.levels[ch_levels];
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() \
-  firstprivate(npixels, in, out, work_profile, d, levels, mult_ch, ch_levels) \
+#pragma omp parallel for default(firstprivate) \
   schedule(static)
 #endif
     for(int k = 0; k < 4U*npixels; k += 4)

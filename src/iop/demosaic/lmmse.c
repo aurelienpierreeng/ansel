@@ -166,8 +166,7 @@ static void lmmse_demosaic(const dt_dev_pixelpipe_iop_t *piece, float *const res
   const int num_vertical =   1 + (height - 2 * LMMSE_OVERLAP -1) / LMMSE_TILEVALID;
   const int num_horizontal = 1 + (width  - 2 * LMMSE_OVERLAP -1) / LMMSE_TILEVALID;
 #ifdef _OPENMP
-  #pragma omp parallel \
-  firstprivate(width, height, out, in, scaler, revscaler, filters)
+  #pragma omp parallel
 #endif
   {
     float *qix[6];

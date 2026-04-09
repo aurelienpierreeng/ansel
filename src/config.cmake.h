@@ -11,7 +11,7 @@
     Copyright (C) 2019 Andreas Schneider.
     Copyright (C) 2019 Marcus Rückert.
     Copyright (C) 2020 David-Tillmann Schaefer.
-    Copyright (C) 2022-2023, 2025 Aurélien PIERRE.
+    Copyright (C) 2022-2023, 2025-2026 Aurélien PIERRE.
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2023 Alynx Zhou.
     Copyright (C) 2023 Luca Zulberti.
@@ -81,13 +81,6 @@ static const char *dt_supported_extensions[] __attribute__((unused)) = {"@DT_SUP
 #else
 #define __GNUC_PREREQ(maj, min) 0
 #endif
-#endif
-
-#if defined(_OPENMP) && __GNUC_PREREQ(4, 9)
-#define OPENMP_SIMD_
-#define SIMD() simd
-#else
-#define SIMD()
 #endif
 
 // see http://clang.llvm.org/docs/LanguageExtensions.html

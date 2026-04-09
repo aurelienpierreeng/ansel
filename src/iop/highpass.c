@@ -313,9 +313,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 /* to reduce cache pressure and memory bandwidth during the blur operation */
   const size_t npixels = (size_t)roi_out->height * roi_out->width;
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() \
-  firstprivate(npixels, in) \
-  firstprivate(out) \
+#pragma omp parallel for default(firstprivate) \
   schedule(static)
 #endif
   for(size_t k = 0; k < (size_t)npixels; k++)
@@ -340,9 +338,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   /* We can only do the final 3/4 in parallel here, because updating the first quarter in one thread */
   /* would clobber values still needed by other threads. */
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() \
-  firstprivate(ch, contrast_scale, npixels, in) \
-  firstprivate(out, data) \
+#pragma omp parallel for default(firstprivate) \
   schedule(static)
 #endif
   for(size_t k = npixels - 1; k > npixels/4; k--)

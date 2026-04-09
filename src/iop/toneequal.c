@@ -742,8 +742,7 @@ static inline void apply_toneequalizer(const float *const restrict in,
   const float* restrict lut = d->correction_lut;
 
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() schedule(static) \
-  firstprivate(in, out, num_elem, luminance, lut, min_ev, max_ev, ch)
+#pragma omp parallel for default(firstprivate) schedule(static)
 #endif
   for(size_t k = 0; k < num_elem; ++k)
   {
@@ -776,8 +775,7 @@ static inline void apply_toneequalizer(const float *const restrict in,
   const float gauss_denom = gaussian_denom(sigma);
 
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() schedule(static) \
-  firstprivate(in, out, num_elem, luminance, factors, centers_ops, gauss_denom, ch)
+#pragma omp parallel for default(firstprivate) schedule(static)
 #endif
   for(size_t k = 0; k < num_elem; ++k)
   {
@@ -918,8 +916,7 @@ static inline void display_luminance_mask(const float *const restrict in,
   const size_t out_height = (roi_in->height > roi_out->height) ? roi_out->height : roi_in->height;
 
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() \
-  firstprivate(luminance, out, in, pipe, in_width, out_width, out_height, offset_x, offset_y, ch) \
+#pragma omp parallel for default(firstprivate) \
   schedule(static) collapse(2)
 #endif
   for(size_t i = 0 ; i < out_height; ++i)
@@ -1256,7 +1253,7 @@ static int compute_channels_factors(const float factors[PIXEL_CHAN], float out[C
   int valid = 1;
 
   #ifdef _OPENMP
-  #pragma omp parallel for simd dt_omp_default() schedule(static) \
+  #pragma omp parallel for simd default(firstprivate) schedule(static) \
     aligned(factors, out, centers_params:64) firstprivate(factors, out, sigma, centers_params) shared(valid)
   #endif
   for(int i = 0; i < CHANNELS; ++i)
@@ -1401,8 +1398,7 @@ static inline void compute_log_histogram_and_stats(const float *const restrict l
 
   // Split exposure in bins
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() schedule(simd:static) \
-  firstprivate(luminance, num_elem) \
+#pragma omp parallel for default(firstprivate) schedule(simd:static) \
   reduction(+:temp_hist[:TEMP_SAMPLES])
 #endif
   for(size_t k = 0; k < num_elem; k++)
@@ -1539,8 +1535,7 @@ static inline void compute_lut_correction(struct dt_iop_toneequalizer_gui_data_t
   const float sigma = g->sigma;
 
 #ifdef _OPENMP
-#pragma omp parallel for simd schedule(static) dt_omp_default() \
-  firstprivate(factors, sigma, offset, scaling, LUT) \
+#pragma omp parallel for simd schedule(static) default(firstprivate) \
   aligned(LUT, factors:64)
 #endif
   for(int k = 0; k < UI_SAMPLES; k++)

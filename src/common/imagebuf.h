@@ -73,8 +73,7 @@ static inline void dt_simd_memcpy(const float *const __restrict__ in,
   // contiguous buffers. This is several times faster than the original memcpy
 
 #ifdef _OPENMP
-#pragma omp parallel for simd dt_omp_default() \
-firstprivate(in, out, num_elem) \
+#pragma omp parallel for simd default(firstprivate) \
 schedule(simd:static) aligned(in, out:64)
 #endif
   for(size_t k = 0; k < num_elem; k++)

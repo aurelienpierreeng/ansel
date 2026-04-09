@@ -189,8 +189,7 @@ void dt_gaussian_blur(dt_gaussian_t *g, const float *const in, float *const out)
 
 // vertical blur column by column
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() \
-  firstprivate(in, width, height, ch, temp, Labmin, Labmax, a0, a1, a2, a3, b1, b2, coefp, coefn) \
+#pragma omp parallel for default(firstprivate) \
   schedule(static)
 #endif
   for(int i = 0; i < width; i++)
@@ -261,8 +260,7 @@ void dt_gaussian_blur(dt_gaussian_t *g, const float *const in, float *const out)
 
 // horizontal blur line by line
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() \
-  firstprivate(out, ch, width, height, temp, Labmin, Labmax, a0, a1, a2, a3, b1, b2, coefp, coefn) \
+#pragma omp parallel for default(firstprivate) \
   schedule(static)
 #endif
   for(int j = 0; j < height; j++)

@@ -184,12 +184,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
   }
 
 #ifdef _OPENMP
-#pragma omp parallel for SIMD() dt_omp_default() \
-  firstprivate(ch, color, coordbufsize, d, \
-                      dt_iop_rawoverexposed_colors, filters, iop_order, mode, \
-                      out, raw, roi_in, roi_out, runtime_pipe, xtrans, coordbuf) \
-  firstprivate(self, buf) \
-  schedule(static)
+#pragma omp parallel for simd default(firstprivate) schedule(static) firstprivate(dt_iop_rawoverexposed_colors)
 #endif
   for(int j = 0; j < roi_out->height; j++)
   {
@@ -315,8 +310,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   if(coordbuf == NULL) goto error;
 
 #ifdef _OPENMP
-#pragma omp parallel for SIMD() dt_omp_default() \
-  firstprivate(height, roi_in, roi_out, width, self, coordbuf, buf) \
+#pragma omp parallel for simd default(firstprivate) \
   schedule(static)
 #endif
   for(int j = 0; j < height; j++)

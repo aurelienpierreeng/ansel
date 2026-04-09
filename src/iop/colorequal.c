@@ -913,7 +913,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const float white_level = fmaxf(d->white_level, 1e-6f);
 
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() schedule(static) firstprivate(ibuf, obuf, width, height, ch, white_level)
+#pragma omp parallel for default(firstprivate) schedule(static) firstprivate(ibuf, obuf, width, height, ch, white_level)
 #endif
   for(size_t k = 0; k < (size_t)width * height; k++)
   {
@@ -937,7 +937,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
                                           "colorequal HLG Rec2020 to work");
 
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() schedule(static) firstprivate(obuf, width, height, ch, white_level)
+#pragma omp parallel for default(firstprivate) schedule(static) firstprivate(obuf, width, height, ch, white_level)
 #endif
   for(size_t k = 0; k < (size_t)width * height; k++)
   {
@@ -1096,7 +1096,7 @@ static void _draw_graph_background(cairo_t *cr, const dt_iop_colorequal_channel_
     cairo_pattern_t *gradient = cairo_pattern_create_linear(0.0, 0.0, graph_width, 0.0);
 
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() schedule(static) firstprivate(channel, ring_brightness,          \
+#pragma omp parallel for default(firstprivate) schedule(static) firstprivate(channel, ring_brightness,          \
                                                                             reference_saturation, white, y,     \
                                                                             display_profile, colors)
 #endif

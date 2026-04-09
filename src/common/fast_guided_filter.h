@@ -106,8 +106,7 @@ static inline void interpolate_bilinear(const float *const restrict in, const si
 {
   // Fast vectorized bilinear interpolation on ch channels
 #ifdef _OPENMP
-#pragma omp parallel for collapse(2) dt_omp_default() \
-  firstprivate(in, out, width_out, height_out, width_in, height_in, ch) \
+#pragma omp parallel for collapse(2) default(firstprivate) \
   schedule(simd:static)
 #endif
   for(size_t i = 0; i < height_out; i++)
@@ -184,8 +183,7 @@ static inline int variance_analyse(const float *const restrict guide, // I
 
   // Pre-multiply guide and mask and pack all inputs into an array of 4x1 SIMD struct
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() \
-  firstprivate(guide, mask, Ndim, radius, input) \
+#pragma omp parallel for default(firstprivate) \
   schedule(simd:static)
 #endif
   for(size_t k = 0; k < Ndim; k++)
@@ -206,8 +204,7 @@ static inline int variance_analyse(const float *const restrict guide, // I
 
   // blend the result and store in output buffer
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() \
-  firstprivate(ab, input, width, height, feathering) \
+#pragma omp parallel for default(firstprivate) \
   schedule(static)
 #endif
   for(size_t idx = 0; idx < width*height; idx++)
@@ -230,8 +227,7 @@ static inline void apply_linear_blending(float *const restrict image,
                                          const size_t num_elem)
 {
 #ifdef _OPENMP
-#pragma omp parallel for simd dt_omp_default() \
-firstprivate(image, ab, num_elem) \
+#pragma omp parallel for simd default(firstprivate) \
 schedule(simd:static) aligned(image, ab:64)
 #endif
   for(size_t k = 0; k < num_elem; k++)
@@ -248,8 +244,7 @@ static inline void apply_linear_blending_w_geomean(float *const restrict image,
                                                    const size_t num_elem)
 {
 #ifdef _OPENMP
-#pragma omp parallel for simd dt_omp_default() \
-firstprivate(image, ab, num_elem) \
+#pragma omp parallel for simd default(firstprivate) \
 schedule(simd:static) aligned(image, ab:64)
 #endif
   for(size_t k = 0; k < num_elem; k++)
@@ -277,8 +272,7 @@ static inline void quantize(const float *const restrict image,
   {
     // fast track
 #ifdef _OPENMP
-#pragma omp parallel for simd dt_omp_default() \
-firstprivate(image, out, num_elem, sampling, clip_min, clip_max) \
+#pragma omp parallel for simd default(firstprivate) \
 schedule(simd:static) aligned(image, out:64)
 #endif
     for(size_t k = 0; k < num_elem; k++)
@@ -289,8 +283,7 @@ schedule(simd:static) aligned(image, out:64)
   {
     // slow track
 #ifdef _OPENMP
-#pragma omp parallel for simd dt_omp_default() \
-firstprivate(image, out, num_elem, sampling, clip_min, clip_max) \
+#pragma omp parallel for simd default(firstprivate) \
 schedule(simd:static) aligned(image, out:64)
 #endif
     for(size_t k = 0; k < num_elem; k++)

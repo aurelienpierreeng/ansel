@@ -96,8 +96,7 @@ static inline int eigf_variance_analysis(const float *const restrict guide, // I
   float minmg = 10000000.0f;
   float maxmg = 0.0f;
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() \
-firstprivate(guide, mask, in, Ndim) \
+#pragma omp parallel for default(firstprivate) \
   schedule(simd:static) \
   reduction(max:maxg, maxm, maxg2, maxmg)\
   reduction(min:ming, minm, ming2, minmg)
@@ -133,8 +132,7 @@ firstprivate(guide, mask, in, Ndim) \
   dt_gaussian_blur_4c(g, in, out);
 
 #ifdef _OPENMP
-#pragma omp parallel for simd dt_omp_default() \
-firstprivate(out, Ndim) \
+#pragma omp parallel for simd default(firstprivate) \
   schedule(simd:static) aligned(out:64)
 #endif
   for(size_t k = 0; k < Ndim; k++)
@@ -173,8 +171,7 @@ static inline int eigf_variance_analysis_no_mask(const float *const restrict gui
   float ming2 = 10000000.0f;
   float maxg2 = 0.0f;
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() \
-firstprivate(guide, in, Ndim) \
+#pragma omp parallel for default(firstprivate) \
   schedule(simd:static) \
   reduction(max:maxg, maxg2)\
   reduction(min:ming, ming2)
@@ -202,8 +199,7 @@ firstprivate(guide, in, Ndim) \
   dt_gaussian_blur(g, in, out);
 
 #ifdef _OPENMP
-#pragma omp parallel for simd dt_omp_default() \
-firstprivate(out, Ndim) \
+#pragma omp parallel for simd default(firstprivate) \
   schedule(simd:static) aligned(out:64)
 #endif
   for(size_t k = 0; k < Ndim; k++)
@@ -224,8 +220,7 @@ static inline void eigf_blending(float *const restrict image, const float *const
                                  const dt_iop_guided_filter_blending_t filter, const float feathering)
 {
 #ifdef _OPENMP
-#pragma omp parallel for simd dt_omp_default() \
-  firstprivate(image, mask, av, Ndim, feathering, filter) \
+#pragma omp parallel for simd default(firstprivate) \
   schedule(simd:static) aligned(image, mask, av:64)
 #endif
   for(size_t k = 0; k < Ndim; k++)
@@ -261,8 +256,7 @@ static inline void eigf_blending_no_mask(float *const restrict image, const floa
                                          const float feathering)
 {
 #ifdef _OPENMP
-#pragma omp parallel for simd dt_omp_default() \
-  firstprivate(image, av, Ndim, feathering, filter) \
+#pragma omp parallel for simd default(firstprivate) \
   schedule(simd:static) aligned(image, av:64)
 #endif
   for(size_t k = 0; k < Ndim; k++)

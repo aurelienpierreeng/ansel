@@ -246,8 +246,7 @@ static int wavelet_denoise(const float *const restrict in, float *const restrict
     // collect one of the R/G1/G2/B channels into a monochrome image, applying sqrt() to the values as a
     // variance-stabilizing transform
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() \
-    firstprivate(in, fimg, roi, halfwidth, c) \
+#pragma omp parallel for default(firstprivate) \
     schedule(static)
 #endif
     for(int row = c & 1; row < roi->height; row += 2)
@@ -270,8 +269,7 @@ static int wavelet_denoise(const float *const restrict in, float *const restrict
     // distribute the denoised data back out to the original R/G1/G2/B channel, squaring the resulting values to
     // undo the original transform
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() \
-    firstprivate(fimg, halfwidth, out, roi, size, c) \
+#pragma omp parallel for default(firstprivate) \
     schedule(static)
 #endif
     for(int row = c & 1; row < roi->height; row += 2)
@@ -376,8 +374,7 @@ static int wavelet_denoise_xtrans(const float *const restrict in, float *const r
     const size_t nthreads = darktable.num_openmp_threads; // go direct, darktable.num_openmp_threads always returns numprocs
     const size_t chunksize = (height + nthreads - 1) / nthreads;
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() \
-  firstprivate(fimg, height, in, roi, size, width, xtrans, nthreads, chunksize, c) num_threads(nthreads) \
+#pragma omp parallel for default(firstprivate) num_threads(nthreads) \
     schedule(static)
 #endif
     for(size_t chunk = 0; chunk < nthreads; chunk++)
@@ -499,8 +496,7 @@ static int wavelet_denoise_xtrans(const float *const restrict in, float *const r
     // distribute the denoised data back out to the original R/G/B channel, squaring the resulting values to
     // undo the original transform
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() \
-    firstprivate(height, fimg, roi, width, xtrans, c, out) \
+#pragma omp parallel for default(firstprivate) \
     schedule(static)
 #endif
     for(int row = 0; row < height; row++)

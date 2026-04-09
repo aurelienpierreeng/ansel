@@ -975,8 +975,7 @@ static int build_round_stamp(float complex **pstamp,
   // We don't do octants to avoid false sharing of cache lines between threads.
   // doesn't work for OSX see issue #7349
   #if defined(_OPENMP) && !defined(__APPLE__)
-  #pragma omp parallel for schedule(static) dt_omp_default() \
-    firstprivate(iradius, strength, abs_strength, table_size, center, warp, stamp_extent, lookup_table, LOOKUP_OVERSAMPLE)
+  #pragma omp parallel for schedule(static) default(firstprivate)
   #endif
 
   for(int y = 0; y <= iradius; y++)
@@ -1372,8 +1371,7 @@ static int _distort_xtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *
   float xmin = FLT_MAX, xmax = FLT_MIN, ymin = FLT_MAX, ymax = FLT_MIN;
 
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() \
-    firstprivate(points_count, points) \
+#pragma omp parallel for default(firstprivate) \
     schedule(simd:static) if(points_count > 100)          \
     reduction(min:xmin, ymin) reduction(max:xmax, ymax)
 #endif
@@ -1422,8 +1420,7 @@ static int _distort_xtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *
 
     // apply distortion to all points (this is a simple displacement given by a vector at this same point in the map)
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() \
-    firstprivate(points_count, points, extent, map, map_size, y_last, x_last) \
+#pragma omp parallel for default(firstprivate) \
     schedule(static) if(points_count > 100)
 #endif
     for(size_t i = 0; i < points_count; i++)
@@ -1486,8 +1483,7 @@ void distort_mask(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t 
   // 1. copy the whole image (we'll change only a small part of it)
 
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() \
-  firstprivate(in, out, roi_in, roi_out) \
+#pragma omp parallel for default(firstprivate) \
   schedule(static)
 #endif
   for(int i = 0; i < roi_out->height; i++)
@@ -1531,8 +1527,7 @@ int process(struct dt_iop_module_t *module, const dt_dev_pixelpipe_t *pipe, cons
   const int width = MIN(roi_in->width, roi_out->width);
 
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() \
-  firstprivate(ch, height, in, out, roi_in, roi_out, width) \
+#pragma omp parallel for default(firstprivate) \
   schedule(static)
 #endif
   for(int i = 0; i < height; i++)

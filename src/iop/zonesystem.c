@@ -258,8 +258,7 @@ static void process_common_cleanup(struct dt_iop_module_t *self, const dt_dev_pi
     if(gauss && tmp)
     {
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() \
-      firstprivate(ch, height, width, ivoid, tmp) \
+#pragma omp parallel for default(firstprivate) \
       schedule(static)
 #endif
       for(size_t k = 0; k < (size_t)width * height; k++) tmp[k] = ((float *)ivoid)[ch * k];
@@ -269,8 +268,7 @@ static void process_common_cleanup(struct dt_iop_module_t *self, const dt_dev_pi
       /* create zonemap preview for input */
       dt_iop_gui_enter_critical_section(self);
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() \
-      firstprivate(height, size, width, tmp, g) \
+#pragma omp parallel for default(firstprivate) \
       schedule(static)
 #endif
       for(size_t k = 0; k < (size_t)width * height; k++)
@@ -281,8 +279,7 @@ static void process_common_cleanup(struct dt_iop_module_t *self, const dt_dev_pi
 
 
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() \
-      firstprivate(ch, height, ovoid, width, tmp) \
+#pragma omp parallel for default(firstprivate) \
       schedule(static)
 #endif
       for(size_t k = 0; k < (size_t)width * height; k++) tmp[k] = ((float *)ovoid)[ch * k];
@@ -293,8 +290,7 @@ static void process_common_cleanup(struct dt_iop_module_t *self, const dt_dev_pi
       /* create zonemap preview for output */
       dt_iop_gui_enter_critical_section(self);
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() \
-      firstprivate(height, size, width, tmp, g) \
+#pragma omp parallel for default(firstprivate) \
       schedule(static)
 #endif
       for(size_t k = 0; k < (size_t)width * height; k++)
@@ -326,8 +322,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const size_t npixels = (size_t)roi_out->width * roi_out->height;
 
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() \
-  firstprivate(d, in, out, npixels, size) \
+#pragma omp parallel for default(firstprivate) \
   schedule(static)
 #endif
   for(size_t k = 0; k < (size_t)4 * npixels; k += 4)

@@ -689,9 +689,8 @@ uint32_t _find_max_histogram(const uint32_t *const restrict bins, const size_t b
   uint32_t max_hist = 0;
 
 #ifdef _OPENMP
-#pragma omp parallel for simd dt_omp_default() \
+#pragma omp parallel for simd default(firstprivate) \
         aligned(bins: 64) \
-        firstprivate(bins, binning_size) \
         reduction(max: max_hist) \
         schedule(static)
 #endif
@@ -709,13 +708,11 @@ static inline void _bin_pixels_histogram_in_roi(const float *const restrict imag
   // Process
 #ifdef _OPENMP
 #ifndef _WIN32
-#pragma omp parallel for dt_omp_default() \
-        firstprivate(image, min_x, min_y, max_x, max_y, width) \
+#pragma omp parallel for default(firstprivate) \
         reduction(+: bins[0: HISTOGRAM_BINS * 4]) \
         schedule(static) collapse(3)
 #else
-#pragma omp parallel for dt_omp_default() \
-        firstprivate(image, min_x, min_y, max_x, max_y, width) \
+#pragma omp parallel for default(firstprivate) \
         shared(bins) \
         schedule(static) collapse(3)
 #endif
@@ -842,8 +839,7 @@ static inline void _bin_pixels_waveform_in_roi(const float *const restrict image
 {
   // Process
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() \
-        firstprivate(image, binning_size, vertical, min_x, min_y, max_x, max_y, width) \
+#pragma omp parallel for default(firstprivate) \
         shared(bins) \
         schedule(static) collapse(3)
 #endif
@@ -889,9 +885,8 @@ static inline void _bin_pixels_waveform(const float *const restrict image, uint3
 {
   // Init
 #ifdef _OPENMP
-#pragma omp parallel for simd dt_omp_default() \
+#pragma omp parallel for simd default(firstprivate) \
         aligned(bins: 64) \
-        firstprivate(bins, binning_size) \
         schedule(static)
 #endif
   for(size_t k = 0; k < binning_size; k++) bins[k] = 0;
@@ -923,9 +918,8 @@ static void _create_waveform_image(const uint32_t *const restrict bins, uint8_t 
                                    const size_t width, const size_t height)
 {
 #ifdef _OPENMP
-#pragma omp parallel for simd dt_omp_default() \
+#pragma omp parallel for simd default(firstprivate) \
         aligned(image, bins: 64) \
-        firstprivate(image, height, width, bins, max_hist) \
         schedule(static)
 #endif
   for(size_t k = 0; k < height * width * 4; k += 4)
@@ -947,8 +941,7 @@ static void _mask_waveform(const uint8_t *const restrict image, uint8_t *const r
     if(k == channel) mask[k] = 1;
 
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() \
-        firstprivate(image, masked, height, width, mask) \
+#pragma omp parallel for default(firstprivate) \
         schedule(static)
 #endif
     for(size_t i = 0; i < height; i++)
@@ -1094,13 +1087,11 @@ static void _bin_pixels_vectorscope_in_roi(const float *const restrict image, ui
 {
 #ifdef _OPENMP
 #ifndef _WIN32
-#pragma omp parallel for dt_omp_default() \
-        firstprivate(image, zoom, d, min_x, max_x, min_y, max_y, width) \
+#pragma omp parallel for default(firstprivate) \
         reduction(+: vectorscope[0: HISTOGRAM_BINS * HISTOGRAM_BINS]) \
         schedule(static)
 #else
-#pragma omp parallel for dt_omp_default() \
-        firstprivate(image, zoom, d, min_x, max_x, min_y, max_y, width) \
+#pragma omp parallel for default(firstprivate) \
         shared(vectorscope) \
         schedule(static)
 #endif
@@ -1154,8 +1145,7 @@ static void _create_vectorscope_image(const uint32_t *const restrict vectorscope
   const dt_iop_order_iccprofile_info_t *const profile = darktable.develop->preview_pipe->output_profile_info;
 
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() \
-        firstprivate(image, vectorscope, profile, max_hist, zoom) \
+#pragma omp parallel for default(firstprivate) \
         schedule(static) collapse(2)
 #endif
   for(size_t i = 0; i < HISTOGRAM_BINS; i++)
@@ -1192,9 +1182,8 @@ static void _bin_vectorscope(const float *const restrict image, uint32_t *const 
                              const float zoom, dt_lib_histogram_t *d)
 {
 #ifdef _OPENMP
-#pragma omp parallel for simd dt_omp_default() \
+#pragma omp parallel for simd default(firstprivate) \
         aligned(vectorscope: 64) \
-        firstprivate(vectorscope) \
         schedule(static)
 #endif
   for(size_t k = 0; k < HISTOGRAM_BINS * HISTOGRAM_BINS; k++) vectorscope[k] = 0;

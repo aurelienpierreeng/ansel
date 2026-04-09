@@ -464,7 +464,7 @@ static inline v4sf kerneldist4(const float *x, const float *y)
 
 // thinplate spline kernel \phi(r) = 2 r^2 ln(r)
 #if defined(_OPENMP) && defined(OPENMP_SIMD_)
-#pragma omp declare SIMD()
+#pragma omp declare simd
 #endif
 static inline float kernel(const float *x, const float *y)
 {
@@ -488,8 +488,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const dt_iop_colorchecker_data_t *const data = (dt_iop_colorchecker_data_t *)piece->data;
   const int ch = 4;
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() \
-  firstprivate(ch, data, ivoid, ovoid, roi_in, roi_out) \
+#pragma omp parallel for default(firstprivate) \
   schedule(static) \
   collapse(2)
 #endif
@@ -513,7 +512,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
                 data->coeff_b[data->num_patches+2] * in[1] +
                 data->coeff_b[data->num_patches+3] * in[2];
 #if defined(_OPENMP) && defined(OPENMP_SIMD_) // <== nice try, i don't think this does anything here
-#pragma omp SIMD()
+#pragma omp simd
 #endif
       for(int k=0;k<data->num_patches;k++)
       { // rbf from thin plate spline

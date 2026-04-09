@@ -427,8 +427,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
   const float saturation = data->global_saturation / 100.0f;
 
 #ifdef _OPENMP
-#pragma omp parallel for SIMD() dt_omp_default() \
-  firstprivate(ch, data, desaturate, ivoid, ovoid, preserve_color, roi_out, saturation, EPS) \
+#pragma omp parallel for simd default(firstprivate) \
   schedule(static)
 #endif
   for(size_t k = 0; k < (size_t)roi_out->height * roi_out->width * ch; k += ch)
@@ -1179,7 +1178,7 @@ void compute_curve_lut(dt_iop_filmic_params_t *p, float *table, float *table_tem
 
     // Average both LUT
 #ifdef _OPENMP
-#pragma omp parallel for SIMD() dt_omp_default() firstprivate(table, table_temp, res) schedule(static)
+#pragma omp parallel for simd default(firstprivate) firstprivate(table, table_temp, res) schedule(static)
 #endif
     for(int k = 0; k < res; k++) table[k] = (table[k] + table_temp[k]) / 2.0f;
   }
@@ -1237,8 +1236,7 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_
   const float sigma = saturation * saturation * latitude * latitude;
 
 #ifdef _OPENMP
-#pragma omp parallel for SIMD() dt_omp_default() \
-  firstprivate(center, sigma, d) \
+#pragma omp parallel for simd default(firstprivate) \
   schedule(static)
 #endif
   for(int k = 0; k < 65536; k++)

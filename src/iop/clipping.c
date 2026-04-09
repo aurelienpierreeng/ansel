@@ -524,8 +524,7 @@ int distort_transform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     keystone_get_matrix(k_space, kxa, kxb, kxc, kxd, kya, kyb, kyc, kyd, &ma, &mb, &md, &me, &mg, &mh);
 
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() \
-    firstprivate(points_count, points, d, factor, k_space, ma, mb, md, me, mg, mh, kxa, kya) \
+#pragma omp parallel for default(firstprivate) \
     schedule(static) if(points_count > 100)
 #endif
   for(size_t i = 0; i < points_count * 2; i += 2)
@@ -595,8 +594,7 @@ int distort_backtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
     keystone_get_matrix(k_space, kxa, kxb, kxc, kxd, kya, kyb, kyc, kyd, &ma, &mb, &md, &me, &mg, &mh);
 
 #ifdef _OPENMP
-#pragma omp parallel for simd dt_omp_default() \
-    firstprivate(points_count, points, d, factor, k_space, ma, mb, md, me, mg, mh, kxa, kya) \
+#pragma omp parallel for simd default(firstprivate) \
     schedule(static) if(points_count > 100) aligned(points:64) aligned(k_space:16)
 #endif
   for(size_t i = 0; i < points_count * 2; i += 2)
@@ -664,9 +662,7 @@ void distort_mask(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t 
       keystone_get_matrix(k_space, kxa, kxb, kxc, kxd, kya, kyb, kyc, kyd, &ma, &mb, &md, &me, &mg, &mh);
 
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() \
-    firstprivate(in, kxa, kya, out, roi_in, roi_out, k_space)                             \
-    firstprivate(d, interpolation, ma, mb, md, me, mg, mh) \
+#pragma omp parallel for default(firstprivate) \
     schedule(static)
 #endif
     // (slow) point-by-point transformation.
@@ -1041,9 +1037,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
       keystone_get_matrix(k_space, kxa, kxb, kxc, kxd, kya, kyb, kyc, kyd, &ma, &mb, &md, &me, &mg, &mh);
 
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() \
-    firstprivate(ch, ch_width, ivoid, kxa, kya, ovoid, roi_in, roi_out, k_space) \
-    firstprivate(d, interpolation, ma, mb, md, me, mg, mh) \
+#pragma omp parallel for default(firstprivate) \
     schedule(static)
 #endif
     // (slow) point-by-point transformation.

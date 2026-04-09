@@ -134,7 +134,7 @@ inline static void blur_2D_Bspline(const float *const restrict in, float *const 
                                    const size_t width, const size_t height)
 {
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() firstprivate(width, height, in, out) \
+#pragma omp parallel for default(firstprivate) firstprivate(width, height, in, out) \
     schedule(simd: static)    \
     collapse(2)
 #endif
@@ -169,7 +169,7 @@ static inline void init_kernel(float *const restrict buffer, const size_t width,
 {
   // init an empty kernel with zeros
 #ifdef _OPENMP
-#pragma omp parallel for simd dt_omp_default() firstprivate(width, height, buffer) \
+#pragma omp parallel for simd default(firstprivate) firstprivate(width, height, buffer) \
     schedule(simd: static) aligned(buffer:64)
 #endif
   for(size_t k = 0; k < height * width; k++) buffer[k] = 0.f;
@@ -192,7 +192,7 @@ static inline void create_lens_kernel(float *const restrict buffer, const size_t
   const float radius = (float)(width - 1) / 2.f - 1;
 
 #ifdef _OPENMP
-#pragma omp parallel for simd dt_omp_default() firstprivate(width, height, buffer, n, m, k, rotation, eps, radius) \
+#pragma omp parallel for simd default(firstprivate) firstprivate(width, height, buffer, n, m, k, rotation, eps, radius) \
     schedule(simd: static) aligned(buffer:64) collapse(2)
 #endif
   for(size_t i = 0; i < height; i++)
@@ -239,7 +239,7 @@ static inline void create_motion_kernel(float *const restrict buffer, const size
                           { sinf(corr_angle), cosf(corr_angle) } };
 
 #ifdef _OPENMP
-#pragma omp parallel for simd dt_omp_default() firstprivate(width, height, buffer, A, B, C, radius, offset, M, eps) \
+#pragma omp parallel for simd default(firstprivate) firstprivate(width, height, buffer, A, B, C, radius, offset, M, eps) \
     schedule(simd: static) aligned(buffer:64)
 #endif
   for(size_t i = 0; i < 8 * width; i++)
@@ -287,7 +287,7 @@ static inline void create_gauss_kernel(float *const restrict buffer, const size_
   const float radius = (width - 1) / 2.f - 1;
 
 #ifdef _OPENMP
-#pragma omp parallel for simd dt_omp_default() firstprivate(width, height, buffer, radius) \
+#pragma omp parallel for simd default(firstprivate) firstprivate(width, height, buffer, radius) \
     schedule(simd: static) aligned(buffer:64) collapse(2)
 #endif
   for(size_t i = 0; i < height; i++)
@@ -335,7 +335,7 @@ static inline int build_gui_kernel(unsigned char *const buffer, const size_t wid
 
   // Convert to Gtk/Cairo RGBA 8x4 bits
 #ifdef _OPENMP
-#pragma omp parallel for simd dt_omp_default() firstprivate(width, height, buffer, kernel_2) \
+#pragma omp parallel for simd default(firstprivate) firstprivate(width, height, buffer, kernel_2) \
     schedule(simd: static) aligned(buffer, kernel_2:64)
 #endif
   for(size_t k = 0; k < height * width; k++)
@@ -357,7 +357,7 @@ static inline float compute_norm(float *const buffer, const size_t width, const 
   float norm = 0.f;
 
 #ifdef _OPENMP
-#pragma omp parallel for simd dt_omp_default() firstprivate(width, height, buffer) \
+#pragma omp parallel for simd default(firstprivate) firstprivate(width, height, buffer) \
     schedule(simd: static) aligned(buffer:64) reduction(+:norm)
 #endif
   for(size_t i = 0; i < width * height; i++)
@@ -374,7 +374,7 @@ static inline void normalize(float *const buffer, const size_t width, const size
                              const float norm)
 {
 #ifdef _OPENMP
-#pragma omp parallel for simd dt_omp_default() firstprivate(width, height, buffer, norm) \
+#pragma omp parallel for simd default(firstprivate) firstprivate(width, height, buffer, norm) \
     schedule(simd: static) aligned(buffer:64)
 #endif
   for(size_t i = 0; i < width * height; i++)
@@ -446,7 +446,7 @@ static void process_fft(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *pi
 
   // Write the image in the padded buffer
 #ifdef _OPENMP
-#pragma omp parallel for simd dt_omp_default() firstprivate(padded_width, padded_height, roi_in, in, padded_in) \
+#pragma omp parallel for simd default(firstprivate) firstprivate(padded_width, padded_height, roi_in, in, padded_in) \
     schedule(simd: static) aligned(in, padded_in:64)
 #endif
   for(size_t i = 0; i < roi_in->height; i++)
@@ -461,7 +461,7 @@ static void process_fft(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *pi
   if(padded_width > roi_in->width)
   {
 #ifdef _OPENMP
-#pragma omp parallel for simd dt_omp_default() firstprivate(padded_width, padded_height, roi_in, in, padded_in) \
+#pragma omp parallel for simd default(firstprivate) firstprivate(padded_width, padded_height, roi_in, in, padded_in) \
     schedule(simd: static) aligned(in, padded_in:64)
 #endif
   for(size_t i = 0; i < roi_in->height; i++)
@@ -475,7 +475,7 @@ static void process_fft(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *pi
   if(padded_height > roi_in->height)
   {
 #ifdef _OPENMP
-#pragma omp parallel for simd dt_omp_default() firstprivate(padded_width, padded_height, roi_in, in, padded_in) \
+#pragma omp parallel for simd default(firstprivate) firstprivate(padded_width, padded_height, roi_in, in, padded_in) \
     schedule(simd: static) aligned(in, padded_in:64)
 #endif
   for(size_t j = 0; j < roi_in->width; j++)
@@ -501,8 +501,7 @@ static void process_fft(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *pi
   const size_t j_reach = offset_j + kernel_width;
 
 #ifdef _OPENMP
-#pragma omp parallel for simd dt_omp_default() \
-    firstprivate(padded_width, padded_height, padded_kernel, kernel, offset_i, offset_j, i_reach, j_reach, kernel_width) \
+#pragma omp parallel for simd default(firstprivate) \
     schedule(simd: static) aligned(kernel, padded_kernel:64)
 #endif
   for(size_t i = 0; i < padded_width; i++)
@@ -592,8 +591,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   }
 
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() \
-    firstprivate(roi_out, in, out, kernel, kernel_width, radius) \
+#pragma omp parallel for default(firstprivate) \
     schedule(simd: static) collapse(2)
 #endif
   for(int i = 0; i < roi_out->height; i++)

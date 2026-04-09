@@ -346,8 +346,7 @@ static float *_points_to_transform(float xx, float yy, float radius_a, float rad
   points[9] = y - b * cosv;
 
 #ifdef _OPENMP
-#pragma omp parallel for simd dt_omp_default() \
-    firstprivate(l, points, x, y, a, b, cosv, sinv)  \
+#pragma omp parallel for simd default(firstprivate)  \
     schedule(static) if(l > 100) aligned(points:64)
 #endif
   for(int i = 5; i < l + 5; i++)
@@ -392,8 +391,7 @@ static int _ellipse_get_points_source(dt_develop_t *dev, float xx, float yy, flo
     (*points)[0] = pts[0];
     (*points)[1] = pts[1];
 #ifdef _OPENMP
-#pragma omp parallel for simd dt_omp_default() \
-    firstprivate(points_count, points, dx, dy)              \
+#pragma omp parallel for simd default(firstprivate)              \
     schedule(static) if(*points_count > 100) aligned(points:64)
 #endif
     for(int i = 5; i < *points_count; i++)
@@ -1101,8 +1099,7 @@ static void _fill_mask(const size_t numpoints, float *const bufptr, const float 
   // be rotated, but we can compensate for that by applying a rotation matrix for the same rotation in the opposite
   // direction before projecting the vector.
 #ifdef _OPENMP
-#pragma omp parallel for simd dt_omp_default() \
-  firstprivate(numpoints, bufptr, points, center, alpha, a2, b2, ta2, tb2, cos_alpha, sin_alpha, out_scale) \
+#pragma omp parallel for simd default(firstprivate) \
   schedule(static) if(numpoints > 50000) aligned(points, bufptr : 64)
 #endif
   for(size_t i = 0; i < numpoints; i++)
@@ -1291,8 +1288,7 @@ static int _ellipse_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpi
     return 1;
 
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() \
-  firstprivate(w, h, posx_, posy_, points) \
+#pragma omp parallel for default(firstprivate) \
   schedule(static) collapse(2) if((size_t)w * h > 50000)
 #endif
   for(int i = 0; i < h; i++)
@@ -1423,8 +1419,7 @@ static int _ellipse_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pix
   if(ell == NULL) return 1;
 
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() \
-  firstprivate(ellpts, center, ta, tb, cosa, sina, ell) \
+#pragma omp parallel for default(firstprivate) \
   if(ellpts > 100)
 #endif
   for(int n = 0; n < ellpts; n++)
@@ -1506,8 +1501,7 @@ static int _ellipse_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pix
 
   // we populate the grid points in module coordinates
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() \
-  firstprivate(grid, bbxm, bbym, bbXM, bbYM, bbw, iscale, px, py, points) \
+#pragma omp parallel for default(firstprivate) \
   schedule(static) collapse(2) if((size_t)bbw * bbh > 50000)
 #endif
   for(int j = bbym; j <= bbYM; j++)
@@ -1562,8 +1556,7 @@ static int _ellipse_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pix
     w1[i] = (float)i;
   }
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() \
-  firstprivate(grid, bbxm, bbym, bbw, endx, endy, w, buffer, points, w0, w1, inv_grid2) \
+#pragma omp parallel for default(firstprivate) \
   if((size_t)(endy - bbym * grid) * (size_t)(endx - bbxm * grid) > 50000)
 #endif
   for(int j = bbym * grid; j < endy; j++)

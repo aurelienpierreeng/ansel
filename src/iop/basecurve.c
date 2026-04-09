@@ -477,8 +477,7 @@ static inline void apply_legacy_curve(
 {
   const size_t npixels = (size_t)width * height;
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() \
-  firstprivate(npixels, in, out, mul, table, unbounded_coeffs) \
+#pragma omp parallel for default(firstprivate) \
   schedule(static)
 #endif
   for(size_t k = 0; k < 4*npixels; k += 4)
@@ -511,8 +510,7 @@ static inline void apply_curve(
 {
   const size_t npixels = (size_t)width * height;
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() \
-  firstprivate(npixels, preserve_colors, work_profile, in, out, mul, table, unbounded_coeffs) \
+#pragma omp parallel for default(firstprivate) \
   schedule(static)
 #endif
   for(size_t k = 0; k < 4*npixels; k += 4)
@@ -548,8 +546,7 @@ static inline void compute_features(
   // 3) local contrast (handled in laplacian form later)
   const size_t npixels = (size_t)wd * ht;
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() \
-  firstprivate(col, npixels) \
+#pragma omp parallel for default(firstprivate) \
   schedule(static)
 #endif
   for(size_t x = 0; x < 4*npixels; x += 4)
@@ -581,8 +578,7 @@ static inline int gauss_blur(
 
   memset(tmp, 0, sizeof(float) * 4 * wd * ht);
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() \
-  firstprivate(ht, input, w, wd, tmp) \
+#pragma omp parallel for default(firstprivate) \
   schedule(static)
 #endif
   for(int j=0;j<ht;j++)
@@ -602,8 +598,7 @@ static inline int gauss_blur(
   }
   memset(output, 0, sizeof(float) * 4 * wd * ht);
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() \
-  firstprivate(ht, output, w, wd, tmp) \
+#pragma omp parallel for default(firstprivate) \
   schedule(static)
 #endif
   for(int i=0;i<wd;i++)
@@ -633,8 +628,7 @@ static inline int gauss_expand(
   // fill numbers in even pixels, zero odd ones
   memset(fine, 0, sizeof(float) * 4 * wd * ht);
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() \
-  firstprivate(cw, fine, ht, input, wd) \
+#pragma omp parallel for default(firstprivate) \
   schedule(static) \
   collapse(2)
 #endif
@@ -758,8 +752,7 @@ int process_fusion(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *p
       goto error;
     }
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() \
-    firstprivate(ht, out, wd, col) \
+#pragma omp parallel for default(firstprivate) \
     schedule(static)
 #endif
     for(size_t k = 0; k < 4ul * wd * ht; k += 4)
@@ -807,8 +800,7 @@ int process_fusion(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *p
         }
       }
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() \
-      firstprivate(out, col, comb, w, h, num_levels, k) \
+#pragma omp parallel for default(firstprivate) \
       schedule(static)
 #endif
       for(size_t x = 0; x < (size_t)4 * h * w; x += 4)
@@ -847,7 +839,7 @@ int process_fusion(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *p
 
     // normalise both gaussian base and laplacians:
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() firstprivate(comb, w, h, k) schedule(static)
+#pragma omp parallel for default(firstprivate) firstprivate(comb, w, h, k) schedule(static)
 #endif
     for(size_t i = 0; i < (size_t)4 * w * h; i += 4)
       if(comb[k][i + 3] > 1e-8f)
@@ -861,8 +853,7 @@ int process_fusion(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *p
         goto error;
       }
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() \
-      firstprivate(out, w, h, k, comb) \
+#pragma omp parallel for default(firstprivate) \
       schedule(static)
 #endif
       for(size_t x = 0; x < (size_t)4 * h * w; x += 4)
@@ -875,8 +866,7 @@ int process_fusion(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *p
 #endif
   // copy output buffer
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() \
-  firstprivate(col, in, ht, out, wd, comb) \
+#pragma omp parallel for default(firstprivate) \
   schedule(static)
 #endif
   for(size_t k = 0; k < (size_t)4 * wd * ht; k += 4)

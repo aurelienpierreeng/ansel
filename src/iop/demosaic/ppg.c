@@ -68,8 +68,7 @@ static int demosaic_ppg(float *const out, const float *const in, const dt_iop_ro
 // for all pixels except those in the 3 pixel border:
 // interpolate green from input into out float array, or copy color.
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() \
-  firstprivate(filters, out, roi_in, roi_out, input) \
+#pragma omp parallel for default(firstprivate) \
   schedule(static)
 #endif
   for(int j = 3; j < roi_out->height - 3; j++)
@@ -134,8 +133,7 @@ static int demosaic_ppg(float *const out, const float *const in, const dt_iop_ro
 // for all pixels except the outermost row/column:
 // interpolate colors using out as input into float out array
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() \
-  firstprivate(filters, out, roi_out) \
+#pragma omp parallel for default(firstprivate) \
   schedule(static)
 #endif
   for(int j = 1; j < roi_out->height - 1; j++)

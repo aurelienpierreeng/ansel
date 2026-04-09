@@ -149,9 +149,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const float threshold = data->threshold;
 /* get the thresholded lights into buffer */
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() \
-  firstprivate(npixels, scale, threshold, blurlightness) \
-  firstprivate(in) \
+#pragma omp parallel for default(firstprivate) \
   schedule(static)
 #endif
   for(size_t k = 0; k < npixels; k++)
@@ -172,9 +170,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
 /* screen blend lightness with original */
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() \
-  firstprivate(npixels, blurlightness) \
-  firstprivate(in, out) \
+#pragma omp parallel for default(firstprivate) \
   schedule(static)
 #endif
   for(size_t k = 0; k < npixels; k++)

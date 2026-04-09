@@ -330,7 +330,7 @@ void amaze_demosaic_RT(const dt_dev_pixelpipe_iop_t *piece, const float *const i
 // Main algorithm: Tile loop
 // use collapse(2) to collapse the 2 loops to one large loop, so there is better scaling
 #ifdef _OPENMP
-#pragma omp for SIMD() schedule(static) collapse(2) nowait
+#pragma omp for simd schedule(static) collapse(2) nowait
 #endif
 
     for(int top = winy - 16; top < winy + height; top += ts - 32)

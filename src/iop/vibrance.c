@@ -128,8 +128,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const int npixels = roi_out->height * roi_out->width;
 
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() \
-  firstprivate(amount, npixels, in, out) \
+#pragma omp parallel for default(firstprivate) \
   schedule(static)
 #endif
   for(int k = 0; k < 4 * npixels; k += 4)

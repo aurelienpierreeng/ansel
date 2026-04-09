@@ -150,8 +150,7 @@ int distort_transform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   const float scale = piece->buf_in.scale;
 
 #ifdef _OPENMP
-#pragma omp parallel for simd dt_omp_default() \
-    firstprivate(points_count, points, scale, piece) \
+#pragma omp parallel for simd default(firstprivate) \
     schedule(static) if(points_count > 100) aligned(points:64)
 #endif
   for(size_t i = 0; i < points_count * 2; i += 2)
@@ -176,8 +175,7 @@ int distort_backtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
   const float scale = piece->buf_in.scale;
 
 #ifdef _OPENMP
-#pragma omp parallel for simd dt_omp_default() \
-    firstprivate(points_count, points, scale, piece) \
+#pragma omp parallel for simd default(firstprivate) \
     schedule(static) if(points_count > 100) aligned(points:64)
 #endif
   for(size_t i = 0; i < points_count * 2; i += 2)
@@ -313,8 +311,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
   const struct dt_interpolation *interpolation = dt_interpolation_new(DT_INTERPOLATION_USERPREF);
 
 #ifdef _OPENMP
-#pragma omp parallel for dt_omp_default() \
-  firstprivate(ch, ch_width, ivoid, ovoid, roi_in, roi_out, scale, piece, interpolation) \
+#pragma omp parallel for default(firstprivate) \
   schedule(static)
 #endif
   // (slow) point-by-point transformation.
