@@ -569,6 +569,9 @@ dt_imageio_retval_t dt_imageio_open_rawspeed_sraw(dt_image_t *img,
   void *buf = dt_mipmap_cache_alloc(mbuf, img);
   if(!buf) return DT_IMAGEIO_CACHE_FULL;
 
+  const int height = img->height;
+  const int width = img->width;
+
   if(cpp == 1)
   {
     /*
@@ -579,14 +582,14 @@ dt_imageio_retval_t dt_imageio_open_rawspeed_sraw(dt_image_t *img,
     if(r->getDataType() == TYPE_USHORT16)
     {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) schedule(static) dt_omp_firstprivate(cpp, r, img, buf)
+#pragma omp parallel for default(none) schedule(static) dt_omp_firstprivate(cpp, buf, width, height) shared(r)
 #endif
-      for(int j = 0; j < img->height; j++)
+      for(int j = 0; j < height; j++)
       {
         const Array2DRef<uint16_t> in = r->getU16DataAsUncroppedArray2DRef();
-        float *out = ((float *)buf) + (size_t)4 * j * img->width;
+        float *out = ((float *)buf) + (size_t)4 * j * width;
 
-        for(int i = 0; i < img->width; i++, out += 4)
+        for(int i = 0; i < width; i++, out += 4)
         {
           out[0] = out[1] = out[2] = (float)in(j, cpp * i) / (float)UINT16_MAX;
           out[3] = 0.0f;
@@ -596,14 +599,14 @@ dt_imageio_retval_t dt_imageio_open_rawspeed_sraw(dt_image_t *img,
     else // r->getDataType() == TYPE_FLOAT32
     {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) schedule(static) dt_omp_firstprivate(cpp, r, img, buf)
+#pragma omp parallel for default(none) schedule(static) dt_omp_firstprivate(cpp, buf, width, height) shared(r)
 #endif
-      for(int j = 0; j < img->height; j++)
+      for(int j = 0; j < height; j++)
       {
         const Array2DRef<float> in = r->getF32DataAsUncroppedArray2DRef();
-        float *out = ((float *)buf) + (size_t)4 * j * img->width;
+        float *out = ((float *)buf) + (size_t)4 * j * width;
 
-        for(int i = 0; i < img->width; i++, out += 4)
+        for(int i = 0; i < width; i++, out += 4)
         {
           out[0] = out[1] = out[2] = in(j, cpp * i);
           out[3] = 0.0f;
@@ -621,14 +624,14 @@ dt_imageio_retval_t dt_imageio_open_rawspeed_sraw(dt_image_t *img,
     if(r->getDataType() == TYPE_USHORT16)
     {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) schedule(static) dt_omp_firstprivate(cpp, r, img, buf)
+#pragma omp parallel for default(none) schedule(static) dt_omp_firstprivate(cpp, buf, width, height) shared(r)
 #endif
-      for(int j = 0; j < img->height; j++)
+      for(int j = 0; j < height; j++)
       {
         const Array2DRef<uint16_t> in = r->getU16DataAsUncroppedArray2DRef();
-        float *out = ((float *)buf) + (size_t)4 * j * img->width;
+        float *out = ((float *)buf) + (size_t)4 * j * width;
 
-        for(int i = 0; i < img->width; i++, out += 4)
+        for(int i = 0; i < width; i++, out += 4)
         {
           for(int k = 0; k < 3; k++)
             out[k] = (float)in(j, cpp * i + k) / (float)UINT16_MAX;
@@ -639,14 +642,14 @@ dt_imageio_retval_t dt_imageio_open_rawspeed_sraw(dt_image_t *img,
     else // r->getDataType() == TYPE_FLOAT32
     {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) schedule(static) dt_omp_firstprivate(cpp, r, img, buf)
+#pragma omp parallel for default(none) schedule(static) dt_omp_firstprivate(cpp, buf, width, height) shared(r)
 #endif
-      for(int j = 0; j < img->height; j++)
+      for(int j = 0; j < height; j++)
       {
         const Array2DRef<float> in = r->getF32DataAsUncroppedArray2DRef();
-        float *out = ((float *)buf) + (size_t)4 * j * img->width;
+        float *out = ((float *)buf) + (size_t)4 * j * width;
 
-        for(int i = 0; i < img->width; i++, out += 4)
+        for(int i = 0; i < width; i++, out += 4)
         {
           for(int k = 0; k < 3; k++)
             out[k] = in(j, cpp * i + k);
