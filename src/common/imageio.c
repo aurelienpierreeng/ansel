@@ -146,6 +146,7 @@ static const gchar *_supported_hdr[] = { "avif", "exr", "hdr", "heic", "heif", "
  *
  * @return Decoder format identifier, or NULL when we have no useful hint.
  */
+#if defined(HAVE_GRAPHICSMAGICK)
 static const char *_preview_format_from_mime_type(const char *mime_type)
 {
   if(mime_type == NULL || mime_type[0] == '\0') return NULL;
@@ -163,6 +164,7 @@ static const char *_preview_format_from_mime_type(const char *mime_type)
   if(!strcmp(mime_type, "image/webp")) return "WEBP";
   return NULL;
 }
+#endif
 
 // get the type of image from its extension
 dt_image_flags_t dt_imageio_get_type_from_extension(const char *extension)
@@ -230,8 +232,8 @@ int dt_imageio_large_thumbnail(const char *filename, uint8_t **buffer, int32_t *
   }
   else
   {
-    const char *const preview_format = _preview_format_from_mime_type(mime_type);
 #if defined(HAVE_GRAPHICSMAGICK)
+    const char *const preview_format = _preview_format_from_mime_type(mime_type);
     ExceptionInfo exception;
     Image *image = NULL;
     ImageInfo *image_info = NULL;
