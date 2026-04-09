@@ -251,14 +251,14 @@ static inline void grid_rescale(const dt_iop_colorreconstruct_bilateral_t *const
   *py = (roi->y + j) * scale - b->y;
 }
 
-static void dt_iop_colorreconstruct_bilateral_dump(dt_iop_colorreconstruct_bilateral_frozen_t *bf)
+static inline __attribute__((always_inline)) void dt_iop_colorreconstruct_bilateral_dump(dt_iop_colorreconstruct_bilateral_frozen_t *bf)
 {
   if(!bf) return;
   dt_pixelpipe_cache_free_align(bf->buf);
   dt_free(bf);
 }
 
-static void dt_iop_colorreconstruct_bilateral_free(dt_iop_colorreconstruct_bilateral_t *b)
+static inline __attribute__((always_inline)) void dt_iop_colorreconstruct_bilateral_free(dt_iop_colorreconstruct_bilateral_t *b)
 {
   if(!b) return;
   dt_pixelpipe_cache_free_align(b->buf);
@@ -347,6 +347,7 @@ static dt_iop_colorreconstruct_bilateral_frozen_t *dt_iop_colorreconstruct_bilat
 }
 
 
+__DT_CLONE_TARGETS__
 static void dt_iop_colorreconstruct_bilateral_splat(dt_iop_colorreconstruct_bilateral_t *b, const float *const in, const float threshold,
                                                     dt_iop_colorreconstruct_precedence_t precedence, const float *params)
 {
@@ -421,6 +422,7 @@ static void dt_iop_colorreconstruct_bilateral_splat(dt_iop_colorreconstruct_bila
 }
 
 
+__DT_CLONE_TARGETS__
 static void blur_line(dt_iop_colorreconstruct_Lab_t *buf, const int offset1, const int offset2, const int offset3, const int size1,
                       const int size2, const int size3)
 {
@@ -484,7 +486,7 @@ static void blur_line(dt_iop_colorreconstruct_Lab_t *buf, const int offset1, con
 }
 
 
-static void dt_iop_colorreconstruct_bilateral_blur(dt_iop_colorreconstruct_bilateral_t *b)
+static inline __attribute__((always_inline)) void dt_iop_colorreconstruct_bilateral_blur(dt_iop_colorreconstruct_bilateral_t *b)
 {
   if(!b) return;
 
@@ -496,6 +498,7 @@ static void dt_iop_colorreconstruct_bilateral_blur(dt_iop_colorreconstruct_bilat
   blur_line(b->buf, 1, b->size_x, b->size_x * b->size_y, b->size_x, b->size_y, b->size_z);
 }
 
+__DT_CLONE_TARGETS__
 static void dt_iop_colorreconstruct_bilateral_slice(const dt_iop_colorreconstruct_bilateral_t *const b,
                                                     const float *const in, float *const out,
                                                     const float threshold, const dt_iop_roi_t *const roi,

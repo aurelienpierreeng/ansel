@@ -16,8 +16,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "common/darktable.h"
 #include "common/lut3d.h"
-
 #include "common/extra_optimizations.h"
 
 #include <math.h>
@@ -43,7 +43,7 @@ static inline void _prepare_lut_input(const float *const input, float normalized
     rgbd[c] -= rgbi[c];
 }
 
-static inline void _finish_lut_output(const float *const input, float *const output, const float residual[3],
+static inline __attribute__((always_inline)) void _finish_lut_output(const float *const input, float *const output, const float residual[3],
                                       const float safe_normalization)
 {
   /**
@@ -59,6 +59,7 @@ static inline void _finish_lut_output(const float *const input, float *const out
   output[3] = input[3];
 }
 
+__DT_CLONE_TARGETS__
 void dt_lut3d_tetrahedral_interp(const float *const in, float *const out, const size_t pixel_nb,
                                  const float *const restrict clut, const uint16_t level,
                                  const float normalization)
@@ -156,6 +157,7 @@ void dt_lut3d_tetrahedral_interp(const float *const in, float *const out, const 
   }
 }
 
+__DT_CLONE_TARGETS__
 void dt_lut3d_trilinear_interp(const float *const in, float *const out, const size_t pixel_nb,
                                const float *const restrict clut, const uint16_t level,
                                const float normalization)
@@ -224,6 +226,7 @@ void dt_lut3d_trilinear_interp(const float *const in, float *const out, const si
   }
 }
 
+__DT_CLONE_TARGETS__
 void dt_lut3d_pyramid_interp(const float *const in, float *const out, const size_t pixel_nb,
                              const float *const restrict clut, const uint16_t level,
                              const float normalization)

@@ -236,7 +236,7 @@ typedef struct dt_iop_demosaic_data_t
 } dt_iop_demosaic_data_t;
 
 
-static inline float intp(float a, float b, float c)
+static inline __attribute__((always_inline)) float intp(float a, float b, float c)
 {   // taken from rt code
     // calculate a * b + (1 - a) * c
     // following is valid:
@@ -378,7 +378,7 @@ void output_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixel
   dsc->cst = IOP_CS_RGB;
 }
 
-static const char* method2string(dt_iop_demosaic_method_t method)
+static inline __attribute__((always_inline)) const char* method2string(dt_iop_demosaic_method_t method)
 {
   const char *string;
 
@@ -454,6 +454,7 @@ static inline gboolean _is_downsample_method(const dt_iop_demosaic_method_t meth
  * greens. 4Bayer keeps the four camera primaries, which are converted to RGB right
  * away so the caller stays in the regular RGB pipe.
  */
+__DT_CLONE_TARGETS__
 static void _downsample_bayer_half_size(float *const out, const float *const in,
                                         const dt_iop_roi_t *const roi_out,
                                         const dt_iop_roi_t *const roi_in, const uint32_t filters,
@@ -520,6 +521,7 @@ static void _downsample_bayer_half_size(float *const out, const float *const in,
  * rectangle of same-colour samples and we bilinearly interpolate inside it. If the search hits
  * an image edge, we fall back to averaging the available neighbours instead of extrapolating.
  */
+__DT_CLONE_TARGETS__
 static float _downsample_xtrans_missing_colour(const float *const in, const dt_iop_roi_t *const roi_in,
                                                const int px, const int py,
                                                const uint8_t (*const xtrans)[6], const int colour)
@@ -601,6 +603,7 @@ static float _downsample_xtrans_missing_colour(const float *const in, const dt_i
  * output pixel. When a colour is absent from that block, we reconstruct it from the
  * nearest surrounding same-colour samples so the half-size image keeps all channels.
  */
+__DT_CLONE_TARGETS__
 static void _downsample_xtrans_half_size(float *const out, const float *const in,
                                          const dt_iop_roi_t *const roi_out,
                                          const dt_iop_roi_t *const roi_in,
@@ -661,6 +664,7 @@ static void _downsample_xtrans_half_size(float *const out, const float *const in
  * is kept in a separate RGB image so its three channel-wise components can be blurred
  * just like the slopes before we reconstruct the filtered detail.
  */
+__DT_CLONE_TARGETS__
 static void _downsample_guided_laplacian_fit(const float *const restrict HF,
                                              float *const restrict coeff,
                                              float *const restrict bias,
@@ -754,6 +758,7 @@ static void _downsample_guided_laplacian_fit(const float *const restrict HF,
  * HF vector, add the channel-wise intercept, and accumulate the filtered detail bands
  * for later resynthesis.
  */
+__DT_CLONE_TARGETS__
 static void _downsample_guided_laplacian_apply(const float *const restrict HF,
                                                const float *const restrict coeff,
                                                const float *const restrict bias,
@@ -797,6 +802,7 @@ static void _downsample_guided_laplacian_apply(const float *const restrict HF,
  * iterations. The output is the sum of all filtered high frequencies plus the final
  * low-frequency residual.
  */
+__DT_CLONE_TARGETS__
 static int _downsample_guided_laplacian_postfilter(float *const out,
                                                    const size_t width, const size_t height,
                                                    const int iterations)
@@ -1000,6 +1006,7 @@ void modify_roi_in(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t
 }
 
 
+__DT_CLONE_TARGETS__
 int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
             const void *const i, void *const o)
 {

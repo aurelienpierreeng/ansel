@@ -273,6 +273,7 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_
 }
 
 
+__DT_CLONE_TARGETS__
 int process(struct dt_iop_module_t *const self, const dt_dev_pixelpipe_t *const pipe,
             const dt_dev_pixelpipe_iop_t *const piece, const void *const restrict ivoid,
             void *const restrict ovoid)

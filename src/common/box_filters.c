@@ -52,6 +52,7 @@
 #define PREFETCH_NTA(addr)
 #endif
 
+__DT_CLONE_TARGETS__
 static void blur_horizontal_1ch(float *const restrict buf, const int height, const int width, const int radius,
                                 float *const restrict scanlines, const size_t padded_size)
 {
@@ -115,6 +116,7 @@ static void blur_horizontal_1ch(float *const restrict buf, const int height, con
   return;
 }
 
+__DT_CLONE_TARGETS__
 static void blur_horizontal_2ch(float *const restrict buf, const int height, const int width, const int radius,
                                 float *const restrict scanlines, const size_t padded_size)
 {
@@ -190,7 +192,7 @@ static void blur_horizontal_2ch(float *const restrict buf, const int height, con
 // Put the to-be-vectorized loop into a function by itself to nudge the compiler into actually vectorizing...
 // With optimization enabled, this gets inlined and interleaved with other instructions as though it had been
 // written in place, so we get a net win from better vectorization.
-static void load_add_4wide(float *const restrict out, dt_aligned_pixel_t accum, const float *const restrict values)
+static inline __attribute__((always_inline)) void load_add_4wide(float *const restrict out, dt_aligned_pixel_t accum, const float *const restrict values)
 {
   for_four_channels(c,aligned(accum, out))
   {
@@ -200,7 +202,7 @@ static void load_add_4wide(float *const restrict out, dt_aligned_pixel_t accum, 
   }
 }
 
-static void sub_4wide(float *const restrict accum, const dt_aligned_pixel_t values)
+static inline __attribute__((always_inline)) void sub_4wide(float *const restrict accum, const dt_aligned_pixel_t values)
 {
   for_four_channels(c,aligned(accum))
     accum[c] -= values[c];
@@ -209,7 +211,7 @@ static void sub_4wide(float *const restrict accum, const dt_aligned_pixel_t valu
 // Put the to-be-vectorized loop into a function by itself to nudge the compiler into actually vectorizing...
 // With optimization enabled, this gets inlined and interleaved with other instructions as though it had been
 // written in place, so we get a net win from better vectorization.
-static void load_add_4wide_Kahan(float *const restrict out, dt_aligned_pixel_t accum,
+static inline __attribute__((always_inline)) void load_add_4wide_Kahan(float *const restrict out, dt_aligned_pixel_t accum,
                                  const float *const restrict values, float *const restrict comp)
 {
   for_four_channels(c,aligned(accum, comp, out))
@@ -224,7 +226,7 @@ static void load_add_4wide_Kahan(float *const restrict out, dt_aligned_pixel_t a
   }
 }
 
-static void sub_4wide_Kahan(float *const restrict accum, const dt_aligned_pixel_t values,
+static inline __attribute__((always_inline)) void sub_4wide_Kahan(float *const restrict accum, const dt_aligned_pixel_t values,
                             float *const restrict comp)
 {
   for_four_channels(c,aligned(accum,comp,values))
@@ -237,12 +239,13 @@ static void sub_4wide_Kahan(float *const restrict accum, const dt_aligned_pixel_
   }
 }
 
-static void store_scaled_4wide(float *const restrict out, const dt_aligned_pixel_t in, const float scale)
+static inline __attribute__((always_inline)) void store_scaled_4wide(float *const restrict out, const dt_aligned_pixel_t in, const float scale)
 {
   for_four_channels(c,aligned(in))
     out[c] = in[c] / scale;
 }
 
+__DT_CLONE_TARGETS__
 static void sub_16wide(float *const restrict accum, const float *const restrict values)
 {
 #ifdef _OPENMP
@@ -253,6 +256,7 @@ static void sub_16wide(float *const restrict accum, const float *const restrict 
 }
 
 // copy 16 floats from a possibly-unaligned buffer into aligned temporary space, and also add to accumulator
+__DT_CLONE_TARGETS__
 static void load_add_16wide(float *const restrict out, float *const restrict accum, const float *const restrict in)
 {
 #ifdef _OPENMP
@@ -266,6 +270,7 @@ static void load_add_16wide(float *const restrict out, float *const restrict acc
   }
 }
 
+__DT_CLONE_TARGETS__
 static void sub_16wide_Kahan(float *const restrict accum, const float *const restrict values,
                              float *const restrict comp)
 {
@@ -284,6 +289,7 @@ static void sub_16wide_Kahan(float *const restrict accum, const float *const res
 }
 
 // copy 16 floats from a possibly-unaligned buffer into aligned temporary space, and also add to accumulator
+__DT_CLONE_TARGETS__
 static void load_add_16wide_Kahan(float *const restrict out, float *const restrict accum,
                                   const float *const restrict in, float *const restrict comp)
 {
@@ -303,6 +309,7 @@ static void load_add_16wide_Kahan(float *const restrict out, float *const restri
 }
 
 // copy 16 floats from aligned temporary space back to the possibly-unaligned user buffer
+__DT_CLONE_TARGETS__
 static void store_16wide(float *const restrict out, const float *const restrict in)
 {
 #ifdef _OPENMP
@@ -312,6 +319,7 @@ static void store_16wide(float *const restrict out, const float *const restrict 
     out[c] = in[c];
 }
 
+__DT_CLONE_TARGETS__
 static void store_scaled_16wide(float *const restrict out, const float *const restrict in, const float scale)
 {
 #ifdef _OPENMP
@@ -321,6 +329,7 @@ static void store_scaled_16wide(float *const restrict out, const float *const re
     out[c] = in[c] / scale;
 }
 
+__DT_CLONE_TARGETS__
 static void sub_Nwide_Kahan(const size_t N, float *const restrict accum, const float *const restrict values,
                             float *const restrict comp)
 {
@@ -339,6 +348,7 @@ static void sub_Nwide_Kahan(const size_t N, float *const restrict accum, const f
 }
 
 // copy N (<=16) floats from a possibly-unaligned buffer into aligned temporary space, and also add to accumulator
+__DT_CLONE_TARGETS__
 static void load_add_Nwide_Kahan(const size_t N, float *const restrict out, float *const restrict accum,
                                  const float *const restrict in, float *const restrict comp)
 {
@@ -357,6 +367,7 @@ static void load_add_Nwide_Kahan(const size_t N, float *const restrict out, floa
   }
 }
 
+__DT_CLONE_TARGETS__
 static void store_scaled_Nwide(const size_t N, float *const restrict out, const float *const restrict in,
                                const float scale)
 {
@@ -368,6 +379,7 @@ static void store_scaled_Nwide(const size_t N, float *const restrict out, const 
 }
 
 
+__DT_CLONE_TARGETS__
 static void blur_horizontal_4ch(float *const restrict buf, const size_t height, const size_t width, const size_t radius,
                                 float *const restrict scanlines, const size_t padded_size)
 {
@@ -429,6 +441,7 @@ static void blur_horizontal_4ch(float *const restrict buf, const size_t height, 
 }
 
 // invoked inside an OpenMP parallel for, so no need to parallelize
+__DT_CLONE_TARGETS__
 static void blur_horizontal_4ch_Kahan(float *const restrict buf, const size_t width,
                                       const size_t radius, float *const restrict scratch)
 {
@@ -477,6 +490,7 @@ static void blur_horizontal_4ch_Kahan(float *const restrict buf, const size_t wi
 }
 
 // invoked inside an OpenMP parallel for, so no need to parallelize
+__DT_CLONE_TARGETS__
 static void blur_horizontal_Nch_Kahan(const size_t N, float *const restrict buf, const size_t width,
                                       const size_t radius, float *const restrict scratch)
 {
@@ -528,6 +542,7 @@ static void blur_horizontal_Nch_Kahan(const size_t N, float *const restrict buf,
 }
 
 #ifdef __SSE2__
+__DT_CLONE_TARGETS__
 static void blur_vertical_1ch_sse(float *const restrict buf, const int height, const int width, const int radius,
                                   __m128 *const restrict scratch)
 {
@@ -592,6 +607,7 @@ static void blur_vertical_1ch_sse(float *const restrict buf, const int height, c
 #endif /* __SSE2__ */
 
 #ifdef __SSE2__
+__DT_CLONE_TARGETS__
 static void blur_vertical_4ch_sse(float *const restrict buf, const size_t height, const size_t width,
                                   const size_t radius, __m128 *const restrict scratch)
 {
@@ -668,6 +684,7 @@ static void blur_vertical_4ch_sse(float *const restrict buf, const size_t height
 #endif /* __SSE2__ */
 
 // invoked inside an OpenMP parallel for, so no need to parallelize
+__DT_CLONE_TARGETS__
 static void blur_vertical_1wide(float *const restrict buf, const size_t height, const size_t width,
                                 const size_t radius, float *const restrict scratch)
 {
@@ -735,6 +752,7 @@ static void blur_vertical_1wide(float *const restrict buf, const size_t height, 
 }
 
 // invoked inside an OpenMP parallel for, so no need to parallelize
+__DT_CLONE_TARGETS__
 static void blur_vertical_1wide_Kahan(float *const restrict buf, const size_t height, const size_t width,
                                       const size_t radius, float *const restrict scratch)
 {
@@ -803,6 +821,7 @@ static void blur_vertical_1wide_Kahan(float *const restrict buf, const size_t he
 }
 
 // invoked inside an OpenMP parallel for, so no need to parallelize
+__DT_CLONE_TARGETS__
 static void blur_vertical_4wide(float *const restrict buf, const size_t height, const size_t width, const size_t radius,
                                 float *const restrict scratch)
 {
@@ -870,6 +889,7 @@ static void blur_vertical_4wide(float *const restrict buf, const size_t height, 
 }
 
 // invoked inside an OpenMP parallel for, so no need to parallelize
+__DT_CLONE_TARGETS__
 static void blur_vertical_4wide_Kahan(float *const restrict buf, const size_t height, const size_t width,
                                       const size_t radius, float *const restrict scratch)
 {
@@ -930,6 +950,7 @@ static void blur_vertical_4wide_Kahan(float *const restrict buf, const size_t he
 }
 
 // invoked inside an OpenMP parallel for, so no need to parallelize
+__DT_CLONE_TARGETS__
 static void blur_vertical_16wide(float *const restrict buf, const size_t height, const size_t width,
                                  const size_t radius, float *const restrict scratch)
 {
@@ -999,6 +1020,7 @@ static void blur_vertical_16wide(float *const restrict buf, const size_t height,
 }
 
 // invoked inside an OpenMP parallel for, so no need to parallelize
+__DT_CLONE_TARGETS__
 static void blur_vertical_16wide_Kahan(float *const restrict buf, const size_t height, const size_t width,
                                        const size_t radius, float *const restrict scratch)
 {
@@ -1060,6 +1082,7 @@ static void blur_vertical_16wide_Kahan(float *const restrict buf, const size_t h
   return;
 }
 
+__DT_CLONE_TARGETS__
 static void blur_vertical_1ch(float *const restrict buf, const size_t height, const size_t width, const size_t radius,
                               float *const restrict scanlines, const size_t padded_size)
 {
@@ -1092,6 +1115,7 @@ static void blur_vertical_1ch(float *const restrict buf, const size_t height, co
 
 // determine the size of the scratch buffer needed for vertical passes of the box-mean filter
 // filter_window = 2**ceil(lg2(2*radius+1))
+__DT_CLONE_TARGETS__
 static size_t _compute_effective_height(const size_t height, const size_t radius)
 {
   size_t eff_height = 2;
@@ -1100,6 +1124,7 @@ static size_t _compute_effective_height(const size_t height, const size_t radius
   return eff_height;
 }
 
+__DT_CLONE_TARGETS__
 static int dt_box_mean_1ch(float *const buf, const size_t height, const size_t width, const size_t radius,
                            const unsigned iterations)
 {
@@ -1122,6 +1147,7 @@ static int dt_box_mean_1ch(float *const buf, const size_t height, const size_t w
   return 0;
 }
 
+__DT_CLONE_TARGETS__
 static int dt_box_mean_4ch(float *const buf, const int height, const int width, const int radius,
                            const unsigned iterations)
 {
@@ -1145,6 +1171,7 @@ static int dt_box_mean_4ch(float *const buf, const int height, const int width, 
   return 0;
 }
 
+__DT_CLONE_TARGETS__
 static int box_mean_vert_1ch_Kahan(float *const buf, const int height, const size_t width, const size_t radius)
 {
   const size_t eff_height = _compute_effective_height(height,radius);
@@ -1180,6 +1207,7 @@ static int box_mean_vert_1ch_Kahan(float *const buf, const int height, const siz
   return 0;
 }
 
+__DT_CLONE_TARGETS__
 static int dt_box_mean_4ch_Kahan(float *const buf, const size_t height, const size_t width, const int radius,
                                  const unsigned iterations)
 {
@@ -1331,6 +1359,7 @@ static inline void box_max_1d(int N, const float *const restrict x, float *const
   }
 }
 
+__DT_CLONE_TARGETS__
 static void set_16wide(float *const restrict out, const float value)
 {
 #ifdef _OPENMP
@@ -1405,6 +1434,7 @@ static inline void box_max_vert_16wide(const int N, float *const restrict scratc
 
 // calculate the two-dimensional moving maximum over a box of size (2*w+1) x (2*w+1)
 // does the calculation in-place if input and output images are identical
+__DT_CLONE_TARGETS__
 static int box_max_1ch(float *const buf, const size_t height, const size_t width, const unsigned w)
 {
   const size_t eff_height = _compute_effective_height(height, w);
@@ -1556,6 +1586,7 @@ static inline void box_min_vert_16wide(const int N, float *const restrict scratc
 
 // calculate the two-dimensional moving minimum over a box of size (2*w+1) x (2*w+1)
 // does the calculation in-place if input and output images are identical
+__DT_CLONE_TARGETS__
 static int box_min_1ch(float *const buf, const size_t height, const size_t width, const int w)
 {
   const size_t eff_height = _compute_effective_height(height, w);

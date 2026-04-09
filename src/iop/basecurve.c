@@ -431,7 +431,7 @@ void init_presets(dt_iop_module_so_t *self)
   dt_database_release_transaction(darktable.db);
 }
 
-static float exposure_increment(float stops, int e, float fusion, float bias)
+static inline __attribute__((always_inline)) float exposure_increment(float stops, int e, float fusion, float bias)
 {
   float offset = stops * fusion * (bias - 1.0f) / 2.0f;
   return powf(2.0f, stops * e + offset);
@@ -465,6 +465,7 @@ void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe
 }
 
 // See comments of opencl version in data/kernels/basecurve.cl for description of the meaning of "legacy"
+__DT_CLONE_TARGETS__
 static inline void apply_legacy_curve(
     const float *const in,
     float *const out,
@@ -497,6 +498,7 @@ static inline void apply_legacy_curve(
 }
 
 // See description of the equivalent OpenCL function in data/kernels/basecurve.cl
+__DT_CLONE_TARGETS__
 static inline void apply_curve(
     const float *const in,
     float *const out,
@@ -536,6 +538,7 @@ static inline void apply_curve(
   }
 }
 
+__DT_CLONE_TARGETS__
 static inline void compute_features(
     float *const col,
     const int wd,
@@ -567,6 +570,7 @@ static inline void compute_features(
   }
 }
 
+__DT_CLONE_TARGETS__
 static inline int gauss_blur(
     const float *const input,
     float *const output,
@@ -622,6 +626,7 @@ static inline int gauss_blur(
   return 0;
 }
 
+__DT_CLONE_TARGETS__
 static inline int gauss_expand(
     const float *const input, // coarse input
     float *const fine,        // upsampled, blurry output
@@ -684,6 +689,7 @@ static inline int gauss_reduce(
   return 0;
 }
 
+__DT_CLONE_TARGETS__
 int process_fusion(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
                    void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {

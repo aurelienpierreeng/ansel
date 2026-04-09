@@ -234,6 +234,7 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
   return 1;
 }
 
+__DT_CLONE_TARGETS__
 static void process_hsl_v1(const dt_dev_pixelpipe_iop_t *piece, const float *const restrict in,
                            float *const restrict out, const dt_iop_roi_t *const roi_out)
 {
@@ -283,6 +284,7 @@ static void process_hsl_v1(const dt_dev_pixelpipe_iop_t *piece, const float *con
   }
 }
 
+__DT_CLONE_TARGETS__
 static void process_hsl_v2(const dt_dev_pixelpipe_iop_t *piece, const float *const restrict in,
                            float *const restrict out, const dt_iop_roi_t *const roi_out)
 {
@@ -337,6 +339,7 @@ static void process_hsl_v2(const dt_dev_pixelpipe_iop_t *piece, const float *con
   }
 }
 
+__DT_CLONE_TARGETS__
 static void process_rgb(const dt_dev_pixelpipe_iop_t *piece, const float *const restrict in,
                         float *const restrict out, const dt_iop_roi_t *const roi_out)
 {
@@ -361,6 +364,7 @@ static void process_rgb(const dt_dev_pixelpipe_iop_t *piece, const float *const 
   }
 }
 
+__DT_CLONE_TARGETS__
 static void process_gray(const dt_dev_pixelpipe_iop_t *piece, const float *const restrict in,
                          float *const restrict out, const dt_iop_roi_t *const roi_out)
 {

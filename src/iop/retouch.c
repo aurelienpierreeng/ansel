@@ -938,7 +938,7 @@ static int rt_masks_get_delta_to_destination(dt_iop_module_t *self, const dt_dev
   return res;
 }
 
-static void rt_clamp_minmax(float levels_old[3], float levels_new[3])
+static inline __attribute__((always_inline)) void rt_clamp_minmax(float levels_old[3], float levels_new[3])
 {
   // left or right has changed
   if((levels_old[0] != levels_new[0] || levels_old[2] != levels_new[2]) && levels_old[1] == levels_new[1])
@@ -2892,6 +2892,7 @@ static void image_lab2rgb(float *img_src, const int width, const int height, con
   }
 }
 
+__DT_CLONE_TARGETS__
 static void rt_process_stats(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
                              float *const img_src, const int width, const int height, const int ch, float levels[3])
 {
@@ -2938,6 +2939,7 @@ static void rt_process_stats(struct dt_iop_module_t *self, const dt_dev_pixelpip
   levels[1] = (l_sum / (float)count) / 100.f;
 }
 
+__DT_CLONE_TARGETS__
 static void rt_adjust_levels(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
                              float *img_src, const int width, const int height, const int ch,
                              const float levels[3])
@@ -3035,6 +3037,7 @@ static void rt_intersect_2_rois(dt_iop_roi_t *const roi_1, dt_iop_roi_t *const r
   roi_dest->height = y_to - y_from;
 }
 
+__DT_CLONE_TARGETS__
 static void rt_copy_in_to_out(const float *const in, const struct dt_iop_roi_t *const roi_in, float *const out,
                               const struct dt_iop_roi_t *const roi_out, const int ch, const int dx, const int dy)
 {
@@ -3523,6 +3526,7 @@ static int rt_process_forms(float *layer, dwt_params_t *const wt_p, const int sc
   return 0;
 }
 
+__DT_CLONE_TARGETS__
 static int process_internal(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
                             const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
                             void *const ovoid, const dt_iop_roi_t *const roi_in,

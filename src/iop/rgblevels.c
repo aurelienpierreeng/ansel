@@ -906,6 +906,7 @@ void gui_cleanup(dt_iop_module_t *self)
   IOP_GUI_FREE;
 }
 
+__DT_CLONE_TARGETS__
 static void _get_selected_area(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
                                const dt_dev_pixelpipe_iop_t *piece,
                                dt_iop_rgblevels_gui_data_t *g, const dt_iop_roi_t *const roi_in, int *box_out)
@@ -963,6 +964,7 @@ static void _get_selected_area(struct dt_iop_module_t *self, const dt_dev_pixelp
   }
 }
 
+__DT_CLONE_TARGETS__
 static void _auto_levels(const float *const img, const int width, const int height, int *box_area,
                            dt_iop_rgblevels_params_t *p, const int _channel, const dt_iop_order_iccprofile_info_t *const work_profile)
 {
@@ -1033,6 +1035,7 @@ static void _auto_levels(const float *const img, const int width, const int heig
   p->levels[channel][1] = (p->levels[channel][2] + p->levels[channel][0]) / 2.f;
 }
 
+__DT_CLONE_TARGETS__
 int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
             const void *const ivoid, void *const ovoid)
 {

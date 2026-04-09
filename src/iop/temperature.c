@@ -495,6 +495,7 @@ scaled_copy_4wide(float *const outp, const float *const inp, const dt_aligned_pi
   dt_store_simd_nontemporal(outp, dt_load_simd(inp) * coeffs);
 }
 
+__DT_CLONE_TARGETS__
 int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid)
 {

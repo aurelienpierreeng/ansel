@@ -607,7 +607,7 @@ static void invalidate_luminance_cache(dt_iop_module_t *const self)
 }
 
 
-static int sanity_check(dt_iop_module_t *self)
+static inline __attribute__((always_inline)) int sanity_check(dt_iop_module_t *self)
 {
   // If tone equalizer is put after flip/orientation module,
   // the pixel buffer will be in landscape orientation even for pictures displayed in portrait orientation
@@ -702,7 +702,7 @@ static float get_luminance_from_buffer(const float *const buffer,
 #ifdef _OPENMP
 #pragma omp declare simd
 #endif
-static float gaussian_denom(const float sigma)
+static inline __attribute__((always_inline)) float gaussian_denom(const float sigma)
 {
   // Gaussian function denominator such that y = exp(- radius^2 / denominator)
   // this is the constant factor of the exponential, so we don't need to recompute it
@@ -714,7 +714,7 @@ static float gaussian_denom(const float sigma)
 #ifdef _OPENMP
 #pragma omp declare simd
 #endif
-static float gaussian_func(const float radius, const float denominator)
+static inline __attribute__((always_inline)) float gaussian_func(const float radius, const float denominator)
 {
   // Gaussian function without normalization
   // this is the variable part of the exponential
@@ -944,7 +944,7 @@ static inline void display_luminance_mask(const float *const restrict in,
 }
 
 
-static int toneeq_process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
+static inline __attribute__((always_inline)) int toneeq_process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
                           const dt_dev_pixelpipe_iop_t *piece, const void *const restrict ivoid,
                           void *const restrict ovoid, const dt_iop_roi_t *const roi_in,
                           const dt_iop_roi_t *const roi_out)

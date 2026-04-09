@@ -39,7 +39,7 @@
 
 #define BLOCKSIZE (1 << 6)
 
-static void compute_gauss_params(const float sigma, dt_gaussian_order_t order, float *a0, float *a1,
+static inline __attribute__((always_inline)) void compute_gauss_params(const float sigma, dt_gaussian_order_t order, float *a0, float *a1,
                                  float *a2, float *a3, float *b1, float *b2, float *coefp, float *coefn)
 {
   const float alpha = 1.695f / sigma;
@@ -170,6 +170,7 @@ error:
 }
 
 
+__DT_CLONE_TARGETS__
 void dt_gaussian_blur(dt_gaussian_t *g, const float *const in, float *const out)
 {
 
@@ -337,6 +338,7 @@ void dt_gaussian_blur(dt_gaussian_t *g, const float *const in, float *const out)
 
 
 #if defined(__SSE__)
+__DT_CLONE_TARGETS__
 static void dt_gaussian_blur_4c_sse(dt_gaussian_t *g, const float *const in, float *const out)
 {
 

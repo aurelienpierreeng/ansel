@@ -141,7 +141,7 @@ void input_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelp
   dsc->datatype = TYPE_FLOAT;
 }
 
-static float lookup(const float *lut, const float i)
+static inline __attribute__((always_inline)) float lookup(const float *lut, const float i)
 {
   const int bin0 = MIN(0xffff, MAX(0, DT_IOP_LOWLIGHT_LUT_RES * i));
   const int bin1 = MIN(0xffff, MAX(0, DT_IOP_LOWLIGHT_LUT_RES * i + 1));
@@ -149,6 +149,7 @@ static float lookup(const float *lut, const float i)
   return lut[bin1] * f + lut[bin0] * (1. - f);
 }
 
+__DT_CLONE_TARGETS__
 int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o)
 {
   const dt_iop_roi_t *const roi_out = &piece->roi_out;

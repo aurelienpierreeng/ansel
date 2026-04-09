@@ -407,7 +407,7 @@ static void dt_iop_colorzones_get_params(dt_iop_colorzones_params_t *p, dt_iop_c
   }
 }
 
-static float lookup(const float *lut, const float i)
+static inline __attribute__((always_inline)) float lookup(const float *lut, const float i)
 {
   const int bin0 = MIN(0xffff, MAX(0, (int)(DT_IOP_COLORZONES_LUT_RES * i)));
   const int bin1 = MIN(0xffff, MAX(0, (int)(DT_IOP_COLORZONES_LUT_RES * i) + 1));
@@ -420,6 +420,7 @@ static inline float strength(float value, float strength)
   return value + (value - 0.5f) * (strength / 100.0f);
 }
 
+__DT_CLONE_TARGETS__
 void process_display(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
                      const void *const ivoid, void *const ovoid, const dt_iop_roi_t *const roi_in,
                      const dt_iop_roi_t *const roi_out)
@@ -471,6 +472,7 @@ void process_display(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, con
   pipe->bypass_blendif = 1;
 }
 
+__DT_CLONE_TARGETS__
 void process_v1(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
                 void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
@@ -518,6 +520,7 @@ void process_v1(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piec
   }
 }
 
+__DT_CLONE_TARGETS__
 void process_v3(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
                 void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {

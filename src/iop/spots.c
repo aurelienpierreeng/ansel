@@ -387,7 +387,7 @@ static gboolean _edit_masks(GtkWidget *widget, GdkEventButton *e, dt_iop_module_
   return TRUE;
 }
 
-static gboolean masks_form_is_in_roi(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, 
+static inline __attribute__((always_inline)) gboolean masks_form_is_in_roi(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, 
                                      const dt_dev_pixelpipe_iop_t *piece,
                                      dt_masks_form_t *form, const dt_iop_roi_t *roi_in,
                                      const dt_iop_roi_t *roi_out)
@@ -472,6 +472,7 @@ void modify_roi_in(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t
   roi_in->height = CLAMP(roib - roi_in->y, 1, scheight + .5f - roi_in->y);
 }
 
+__DT_CLONE_TARGETS__
 static void masks_point_denormalize(const dt_dev_pixelpipe_t *pipe, const dt_iop_roi_t *roi,
                                     const float *points, size_t points_count, float *new)
 {
@@ -484,7 +485,7 @@ static void masks_point_denormalize(const dt_dev_pixelpipe_t *pipe, const dt_iop
   }
 }
 
-static int masks_point_calc_delta(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
+static inline __attribute__((always_inline)) int masks_point_calc_delta(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
                                   const dt_iop_roi_t *roi, const float *target, const float *source, int *dx,
                                   int *dy)
 {
@@ -501,7 +502,7 @@ static int masks_point_calc_delta(dt_iop_module_t *self, const dt_dev_pixelpipe_
   return res;
 }
 
-static int masks_get_delta(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
+static inline __attribute__((always_inline)) int masks_get_delta(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
                            const dt_iop_roi_t *roi,
                            dt_masks_form_t *form, int *dx, int *dy)
 {
@@ -529,6 +530,7 @@ static int masks_get_delta(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe
   return res;
 }
 
+__DT_CLONE_TARGETS__
 static int _process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
                     const float *const in,
                     float *const out, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out, const int ch)

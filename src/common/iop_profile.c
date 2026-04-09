@@ -73,7 +73,7 @@
 #endif
 
 
-static void _mark_as_nonmatrix_profile(dt_iop_order_iccprofile_info_t *const profile_info)
+static inline __attribute__((always_inline)) void _mark_as_nonmatrix_profile(dt_iop_order_iccprofile_info_t *const profile_info)
 {
   profile_info->matrix_in[0][0] = NAN;
   profile_info->matrix_in_transposed[0][0] = NAN;
@@ -81,6 +81,7 @@ static void _mark_as_nonmatrix_profile(dt_iop_order_iccprofile_info_t *const pro
   profile_info->matrix_out_transposed[0][0] = NAN;
 }
 
+__DT_CLONE_TARGETS__
 static void _clear_lut_curves(dt_iop_order_iccprofile_info_t *const profile_info)
 {
   for(int i = 0; i < 3; i++)
@@ -164,7 +165,7 @@ static void _transform_from_to_rgb_lab_lcms2(const float *const image_in, float 
   if(xform) cmsDeleteTransform(xform);
 }
 
-static void _transform_rgb_to_rgb_lcms2(const float *const image_in, float *const image_out, const int width,
+static inline __attribute__((always_inline)) void _transform_rgb_to_rgb_lcms2(const float *const image_in, float *const image_out, const int width,
                                         const int height, const dt_colorspaces_color_profile_type_t type_from,
                                         const char *filename_from,
                                         const dt_colorspaces_color_profile_type_t type_to, const char *filename_to,
@@ -281,7 +282,7 @@ static void _transform_lcms2(struct dt_iop_module_t *self, const float *const im
   }
 }
 
-static inline void _transform_lcms2_rgb(const float *const image_in, float *const image_out, const int width,
+static inline __attribute__((always_inline)) void _transform_lcms2_rgb(const float *const image_in, float *const image_out, const int width,
                                         const int height,
                                         const dt_iop_order_iccprofile_info_t *const profile_info_from,
                                         const dt_iop_order_iccprofile_info_t *const profile_info_to)
@@ -621,6 +622,7 @@ static inline void _transform_matrix(struct dt_iop_module_t *self,
 
 #define DT_IOPPR_LUT_SAMPLES 0x10000
 
+__DT_CLONE_TARGETS__
 void dt_ioppr_init_profile_info(dt_iop_order_iccprofile_info_t *profile_info, const int lutsize)
 {
   profile_info->type = DT_COLORSPACE_NONE;
@@ -658,6 +660,7 @@ void dt_ioppr_cleanup_profile_info(dt_iop_order_iccprofile_info_t *profile_info)
  * it can be called multiple time between init and cleanup
  * return 0 if OK, non zero otherwise
  */
+__DT_CLONE_TARGETS__
 static int dt_ioppr_generate_profile_info(dt_iop_order_iccprofile_info_t *profile_info, const int type, const char *filename, const int intent)
 {
   int err_code = 0;
@@ -744,6 +747,7 @@ static int dt_ioppr_generate_profile_info(dt_iop_order_iccprofile_info_t *profil
   return err_code;
 }
 
+__DT_CLONE_TARGETS__
 dt_iop_order_iccprofile_info_t *
 dt_ioppr_get_profile_info_from_list(struct dt_develop_t *dev,
                                     const dt_colorspaces_color_profile_type_t profile_type,

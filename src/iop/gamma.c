@@ -123,12 +123,10 @@ static inline void _write_pixel(const float *const restrict in, uint8_t *const r
     out[2 - c] = (uint8_t)(fminf(fmaxf(value, 0.0f), 255.0f));
   }
 }
-
-
 #ifdef _OPENMP
 #pragma omp declare simd aligned(pixel: 16) uniform(norm)
 #endif
-static void _normalize_color(float *const restrict pixel, const float norm)
+static inline __attribute__((always_inline)) void _normalize_color(float *const restrict pixel, const float norm)
 {
   // color may not be black!
   const float factor = norm / fmaxf(pixel[0], fmaxf(pixel[1], pixel[2]));
@@ -145,10 +143,7 @@ static inline void _XYZ_to_REC_709_normalized(const float *const restrict XYZ, f
   dt_XYZ_to_Rec709_D50(XYZ, sRGB);
   _normalize_color(sRGB, norm);
 }
-
-#ifdef _OPENMP
-#pragma omp declare simd aligned(in, out: 64) uniform(buffsize, alpha)
-#endif
+__DT_CLONE_TARGETS__
 static void _channel_display_monochrome(const float *const restrict in, uint8_t *const restrict out,
                                         const size_t buffsize, const float alpha)
 {
@@ -164,10 +159,7 @@ static void _channel_display_monochrome(const float *const restrict in, uint8_t 
     _write_pixel(pixel, out + j, mask_color, in[j + 3] * alpha);
   }
 }
-
-#ifdef _OPENMP
-#pragma omp declare simd aligned(in, out: 64) uniform(buffsize, alpha, channel)
-#endif
+__DT_CLONE_TARGETS__
 static void _channel_display_false_color(const float *const restrict in, uint8_t *const restrict out,
                                          const size_t buffsize, const float alpha,
                                          dt_dev_pixelpipe_display_mask_t channel)
@@ -310,10 +302,7 @@ static void _channel_display_false_color(const float *const restrict in, uint8_t
       break;
   }
 }
-
-#ifdef _OPENMP
-#pragma omp declare simd aligned(in, out: 64) uniform(buffsize, alpha)
-#endif
+__DT_CLONE_TARGETS__
 static void _mask_display(const float *const restrict in, uint8_t *const restrict out, const size_t buffsize,
                           const float alpha)
 {
@@ -331,10 +320,7 @@ static void _mask_display(const float *const restrict in, uint8_t *const restric
       _write_pixel(pixel, out + j, mask_color, hide);
     }
 }
-
-#ifdef _OPENMP
-#pragma omp declare simd aligned(in, out: 64) uniform(buffsize)
-#endif
+__DT_CLONE_TARGETS__
 static void _copy_output(const float *const restrict in, uint8_t *const restrict out, const size_t buffsize)
 {
 #ifdef _OPENMP

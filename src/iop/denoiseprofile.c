@@ -388,6 +388,7 @@ typedef struct dt_iop_denoiseprofile_global_data_t
 static dt_noiseprofile_t dt_iop_denoiseprofile_get_auto_profile(dt_iop_module_t *self);
 
 #ifdef DEBUG_SCALES
+__DT_CLONE_TARGETS__
 static void debug_dump_PFM(const dt_dev_pixelpipe_iop_t *const piece, const char *const namespec,
                            const float* const restrict buf, const int width, const int height, const int scale)
 {
@@ -841,6 +842,7 @@ void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe
 
 }
 
+__DT_CLONE_TARGETS__
 static inline void precondition(const float *const in, float *const buf, const int wd, const int ht,
                                 const dt_aligned_pixel_t a, const dt_aligned_pixel_t b)
 {
@@ -867,6 +869,7 @@ static inline void precondition(const float *const in, float *const buf, const i
   }
 }
 
+__DT_CLONE_TARGETS__
 static inline void backtransform(float *const buf, const int wd, const int ht, const dt_aligned_pixel_t a,
                                  const dt_aligned_pixel_t b)
 {
@@ -924,6 +927,7 @@ static inline void backtransform(float *const buf, const int wd, const int ht, c
 //            = 2 * (x + b) ^ (1 - p / 2) / (sqrt(a) * (2 - p))
 // is a suitable function.
 // This is the function we use here.
+__DT_CLONE_TARGETS__
 static inline void precondition_v2(const float *const in, float *const buf, const int wd, const int ht,
                                    const float a, const dt_aligned_pixel_t p, const float b,
                                    const dt_aligned_pixel_t wb)
@@ -1007,6 +1011,7 @@ static inline void precondition_v2(const float *const in, float *const buf, cons
 // control the bias:
 // we replace the 2 * p * constant / (2 - p) part of delta by user
 // defined bias controller.
+__DT_CLONE_TARGETS__
 static inline void backtransform_v2(float *const buf, const int wd, const int ht, const float a,
                                     const dt_aligned_pixel_t p, const float b, const float bias,
                                     const dt_aligned_pixel_t wb)
@@ -1034,6 +1039,7 @@ static inline void backtransform_v2(float *const buf, const int wd, const int ht
   }
 }
 
+__DT_CLONE_TARGETS__
 static inline void precondition_Y0U0V0(const float *const in, float *const buf, const int wd, const int ht,
                                        const float a, const dt_aligned_pixel_t p, const float b,
                                        const dt_colormatrix_t toY0U0V0)
@@ -1069,6 +1075,7 @@ static inline void precondition_Y0U0V0(const float *const in, float *const buf, 
   }
 }
 
+__DT_CLONE_TARGETS__
 static inline void backtransform_Y0U0V0(float *const buf, const int wd, const int ht, const float a,
                                         const dt_aligned_pixel_t p, const float b, const float bias,
                                         const dt_aligned_pixel_t wb, const dt_colormatrix_t toRGB)
@@ -1113,6 +1120,7 @@ static inline void backtransform_Y0U0V0(float *const buf, const int wd, const in
 
 // called by: process_wavelets, nlmeans_precondition, nlmeans_precondition_cl, process_variance,
 //     process_wavelets_cl
+__DT_CLONE_TARGETS__
 static void compute_wb_factors(dt_aligned_pixel_t wb,const dt_iop_denoiseprofile_data_t *const d,
                                const dt_dev_pixelpipe_iop_t *const piece, const dt_aligned_pixel_t weights)
 {
@@ -1148,7 +1156,7 @@ static void compute_wb_factors(dt_aligned_pixel_t wb,const dt_iop_denoiseprofile
 
 // =====================================================================================
 
-static gboolean invert_matrix(const dt_colormatrix_t in, dt_colormatrix_t out)
+static inline __attribute__((always_inline)) gboolean invert_matrix(const dt_colormatrix_t in, dt_colormatrix_t out)
 {
   // use same notation as https://en.wikipedia.org/wiki/Invertible_matrix#Inversion_of_3_%C3%97_3_matrices
   const float biga = in[1][1] * in[2][2] - in[1][2] * in[2][1];
@@ -1184,6 +1192,7 @@ static gboolean invert_matrix(const dt_colormatrix_t in, dt_colormatrix_t out)
 
 // create the white balance adaptative conversion matrices
 // supposes toY0U0V0 already contains the "normal" conversion matrix
+__DT_CLONE_TARGETS__
 static void set_up_conversion_matrices(dt_colormatrix_t toY0U0V0, dt_colormatrix_t toRGB,
                                        const dt_aligned_pixel_t wb)
 {
@@ -1237,7 +1246,7 @@ static void set_up_conversion_matrices(dt_colormatrix_t toY0U0V0, dt_colormatrix
   }
 }
 
-static void variance_stabilizing_xform(dt_aligned_pixel_t thrs, const int scale, const int max_scale, const size_t npixels,
+static inline __attribute__((always_inline)) void variance_stabilizing_xform(dt_aligned_pixel_t thrs, const int scale, const int max_scale, const size_t npixels,
                                        const float *const sum_y2, const dt_iop_denoiseprofile_data_t *const d)
 {
   // variance stabilizing transform maps sigma to unity.
@@ -1302,6 +1311,7 @@ static void variance_stabilizing_xform(dt_aligned_pixel_t thrs, const int scale,
     thrs[c] = adjt[c] * sb2 / std_x[c];
 }
 
+__DT_CLONE_TARGETS__
 static int process_wavelets(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
                             const dt_dev_pixelpipe_iop_t *piece,
                             const void *const ivoid, void *const ovoid, const dt_iop_roi_t *const roi_in,
@@ -1472,7 +1482,7 @@ static int sign(int a)
 #endif
 
 // called by: process_nlmeans_cpu, process_nlmeans_cl
-static float nlmeans_norm(const int P, const dt_iop_denoiseprofile_data_t *const d)
+static inline __attribute__((always_inline)) float nlmeans_norm(const int P, const dt_iop_denoiseprofile_data_t *const d)
 {
   // Each patch has a width of 2P+1 and a height of 2P+1
   // thus, divide by (2P+1)^2.
@@ -1490,7 +1500,7 @@ static float nlmeans_norm(const int P, const dt_iop_denoiseprofile_data_t *const
 
 // adjust the user-specified scattering factor and search radius to account for the type of pixelpipe
 // called by: process_nlmeans_cpu, process_nlmeans_cl
-static float nlmeans_scattering(const dt_dev_pixelpipe_t *pipe, int *nbhood,
+static inline __attribute__((always_inline)) float nlmeans_scattering(const dt_dev_pixelpipe_t *pipe, int *nbhood,
                                 const dt_iop_denoiseprofile_data_t *const d,
                                 const dt_dev_pixelpipe_iop_t *const piece, const float scale)
 {
@@ -1518,7 +1528,7 @@ static float nlmeans_scattering(const dt_dev_pixelpipe_t *pipe, int *nbhood,
 
 // called by process_nlmeans_cpu
 // must keep synchronized with nlmeans_precondition_cl below
-static float nlmeans_precondition(const dt_iop_denoiseprofile_data_t *const d,
+static inline __attribute__((always_inline)) float nlmeans_precondition(const dt_iop_denoiseprofile_data_t *const d,
                                   const dt_dev_pixelpipe_iop_t *const piece, dt_aligned_pixel_t wb,
                                   const void *const ivoid, const dt_iop_roi_t *const roi_in,
                                   float scale, float *in, dt_aligned_pixel_t aa,
@@ -1597,7 +1607,7 @@ static float nlmeans_precondition_cl(const dt_iop_denoiseprofile_data_t *const d
 #endif /* HAVE_OPENCL */
 
 // called by process_nlmeans_cpu
-static void nlmeans_backtransform(const dt_iop_denoiseprofile_data_t *const d, float *ovoid,
+static inline __attribute__((always_inline)) void nlmeans_backtransform(const dt_iop_denoiseprofile_data_t *const d, float *ovoid,
                                   const dt_iop_roi_t *const roi_in, const float scale,
                                   const float compensate_p, const dt_aligned_pixel_t wb,
                                   const dt_aligned_pixel_t aa, const dt_aligned_pixel_t bb,
@@ -1614,7 +1624,7 @@ static void nlmeans_backtransform(const dt_iop_denoiseprofile_data_t *const d, f
   return;
 }
 
-static int process_nlmeans_cpu(const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
+static inline __attribute__((always_inline)) int process_nlmeans_cpu(const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
                                const void *const ivoid, void *const ovoid, const dt_iop_roi_t *const roi_in,
                                const dt_iop_roi_t *const roi_out,
                                void (*denoiser)(const float *const inbuf, float *const outbuf,
@@ -1665,7 +1675,7 @@ static int process_nlmeans_cpu(const dt_dev_pixelpipe_t *pipe, const dt_dev_pixe
   return 0;
 }
 
-static int process_nlmeans(const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
+static inline __attribute__((always_inline)) int process_nlmeans(const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
                            const void *const ivoid, void *const ovoid, const dt_iop_roi_t *const roi_in,
                            const dt_iop_roi_t *const roi_out)
 {
@@ -1681,6 +1691,7 @@ static int process_nlmeans_sse(const dt_dev_pixelpipe_t *pipe, const dt_dev_pixe
 }
 #endif
 
+__DT_CLONE_TARGETS__
 static void sum_rec(const size_t npixels, const float *in, float *out)
 {
   if(npixels <= 3)
@@ -1710,6 +1721,7 @@ static void sum_rec(const size_t npixels, const float *in, float *out)
 }
 
 /* this gives (npixels-1)*V[X] */
+__DT_CLONE_TARGETS__
 static void variance_rec(const size_t npixels, const float *in, float *out, const dt_aligned_pixel_t mean)
 {
   if(npixels <= 3)
@@ -1739,7 +1751,7 @@ static void variance_rec(const size_t npixels, const float *in, float *out, cons
   }
 }
 
-static int process_variance(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
+static inline __attribute__((always_inline)) int process_variance(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
                             const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
                             void *const ovoid, const dt_iop_roi_t *const roi_in,
                             const dt_iop_roi_t *const roi_out)

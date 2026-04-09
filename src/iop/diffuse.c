@@ -602,7 +602,9 @@ void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe
   return;
 }
 
-static inline void init_reconstruct(float *const restrict reconstructed, const size_t width, const size_t height)
+__DT_CLONE_TARGETS__
+static inline void init_reconstruct(float *const restrict reconstructed, const size_t width,
+                                    const size_t height)
 {
 // init the reconstructed buffer with non-clipped and partially clipped pixels
 #ifdef _OPENMP
@@ -750,10 +752,12 @@ static inline __attribute__((always_inline)) void compute_kernel(
   }
 }
 
+__DT_CLONE_TARGETS__
 static inline void heat_PDE_diffusion(const float *const restrict high_freq, const float *const restrict low_freq,
                                       const uint8_t *const restrict mask, const int has_mask,
-                                      float *const restrict output, const size_t width, const size_t height,
-                                      const dt_aligned_pixel_simd_t anisotropy, const dt_isotropy_t isotropy_type[4],
+                                      float *const restrict output, const size_t width,
+                                      const size_t height, const dt_aligned_pixel_simd_t anisotropy,
+                                      const dt_isotropy_t isotropy_type[4],
                                       const float variance_threshold, const int mult,
                                       const float normalized_regularization,
                                       const dt_aligned_pixel_simd_t ABCD, const float strength,
@@ -957,6 +961,7 @@ static inline float compute_anisotropy_factor(const float user_param)
 }
 
 #if DEBUG_DUMP_PFM
+__DT_CLONE_TARGETS__
 static void dump_PFM(const char *filename, const float* out, const uint32_t w, const uint32_t h)
 {
   FILE *f = g_fopen(filename, "wb");
@@ -969,6 +974,7 @@ static void dump_PFM(const char *filename, const float* out, const uint32_t w, c
 }
 #endif
 
+__DT_CLONE_TARGETS__
 static inline int wavelets_process(const float *const restrict in, float *const restrict reconstructed,
                                    const uint8_t *const restrict mask, const size_t width,
                                    const size_t height, const dt_iop_diffuse_data_t *const data,
@@ -1099,6 +1105,7 @@ static inline int wavelets_process(const float *const restrict in, float *const 
 }
 
 
+__DT_CLONE_TARGETS__
 static inline void build_mask(const float *const restrict input, uint8_t *const restrict mask,
                               const float threshold, const size_t width, const size_t height)
 {
@@ -1113,9 +1120,10 @@ static inline void build_mask(const float *const restrict input, uint8_t *const 
   }
 }
 
+__DT_CLONE_TARGETS__
 static inline void inpaint_mask(float *const restrict inpainted, const float *const restrict original,
-                                const uint8_t *const restrict mask,
-                                const size_t width, const size_t height)
+                                const uint8_t *const restrict mask, const size_t width,
+                                const size_t height)
 {
   // init the reconstruction with noise inside the masked areas
 #ifdef _OPENMP
@@ -1147,6 +1155,7 @@ static inline void inpaint_mask(float *const restrict inpainted, const float *co
   }
 }
 
+__DT_CLONE_TARGETS__
 int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
             const void *const restrict ivoid, void *const restrict ovoid)
 {

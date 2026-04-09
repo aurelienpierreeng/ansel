@@ -888,7 +888,7 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
   return 1;
 }
 
-static inline float pixel_rgb_norm_power_simd(const dt_aligned_pixel_simd_t pixel)
+static inline __attribute__((always_inline)) float pixel_rgb_norm_power_simd(const dt_aligned_pixel_simd_t pixel)
 {
   // weird norm sort of perceptual. This is black magic really, but it looks good.
   // the full norm is (R^3 + G^3 + B^3) / (R^2 + G^2 + B^2) and it should be in ]0; +infinity[
@@ -908,15 +908,18 @@ static inline float pixel_rgb_norm_power_simd(const dt_aligned_pixel_simd_t pixe
   return numerator / fmaxf(denominator, 1e-12f); // prevent from division-by-0 (note: (1e-6)^2 = 1e-12
 }
 
-static inline float pixel_rgb_norm_power(const dt_aligned_pixel_t pixel)
+#ifdef _OPENMP
+#pragma omp declare simd aligned(pixel:16)
+#endif
+static inline __attribute__((always_inline)) float pixel_rgb_norm_power(const dt_aligned_pixel_t pixel)
 {
   return pixel_rgb_norm_power_simd(dt_load_simd_aligned(pixel));
 }
 
 
-static inline float get_pixel_norm_simd(const dt_aligned_pixel_simd_t pixel,
-                                        const dt_iop_filmicrgb_methods_type_t variant,
-                                        const dt_iop_order_iccprofile_info_t *const work_profile)
+static inline __attribute__((always_inline)) float
+get_pixel_norm_simd(const dt_aligned_pixel_simd_t pixel, const dt_iop_filmicrgb_methods_type_t variant,
+                    const dt_iop_order_iccprofile_info_t *const work_profile)
 {
   // a newly added norm should satisfy the condition that it is linear with respect to grey pixels:
   // norm(R, G, B) = norm(x, x, x) = x
@@ -976,8 +979,12 @@ static inline float get_pixel_norm_simd(const dt_aligned_pixel_simd_t pixel,
   }
 }
 
-static inline float get_pixel_norm(const dt_aligned_pixel_t pixel, const dt_iop_filmicrgb_methods_type_t variant,
-                                   const dt_iop_order_iccprofile_info_t *const work_profile)
+#ifdef _OPENMP
+#pragma omp declare simd aligned(pixel:16) uniform(variant, work_profile)
+#endif
+static inline __attribute__((always_inline)) float
+get_pixel_norm(const dt_aligned_pixel_t pixel, const dt_iop_filmicrgb_methods_type_t variant,
+               const dt_iop_order_iccprofile_info_t *const work_profile)
 {
   return get_pixel_norm_simd(dt_load_simd_aligned(pixel), variant, work_profile);
 }
@@ -1005,10 +1012,11 @@ static inline float exp_tonemapping_v2(const float x, const float grey, const fl
 #ifdef _OPENMP
 #pragma omp declare simd aligned(M1, M2, M3, M4 : 16) uniform(M1, M2, M3, M4, M5, latitude_min, latitude_max)
 #endif
-static inline float filmic_spline(const float x, const dt_aligned_pixel_t M1, const dt_aligned_pixel_t M2,
-                                  const dt_aligned_pixel_t M3, const dt_aligned_pixel_t M4,
-                                  const dt_aligned_pixel_t M5, const float latitude_min,
-                                  const float latitude_max, const dt_iop_filmicrgb_curve_type_t type[2])
+static inline __attribute__((always_inline)) float
+filmic_spline(const float x, const dt_aligned_pixel_t M1, const dt_aligned_pixel_t M2,
+              const dt_aligned_pixel_t M3, const dt_aligned_pixel_t M4,
+              const dt_aligned_pixel_t M5, const float latitude_min,
+              const float latitude_max, const dt_iop_filmicrgb_curve_type_t type[2])
 {
   // if type polynomial :
   // y = M5 * x⁴ + M4 * x³ + M3 * x² + M2 * x¹ + M1 * x⁰
@@ -1072,8 +1080,9 @@ static inline float filmic_spline(const float x, const dt_aligned_pixel_t M1, co
 #ifdef _OPENMP
 #pragma omp declare simd uniform(sigma_toe, sigma_shoulder)
 #endif
-static inline float filmic_desaturate_v1(const float x, const float sigma_toe, const float sigma_shoulder,
-                                         const float saturation)
+static inline __attribute__((always_inline)) float
+filmic_desaturate_v1(const float x, const float sigma_toe, const float sigma_shoulder,
+                     const float saturation)
 {
   const float radius_toe = x;
   const float radius_shoulder = 1.0f - x;
@@ -1088,8 +1097,9 @@ static inline float filmic_desaturate_v1(const float x, const float sigma_toe, c
 #ifdef _OPENMP
 #pragma omp declare simd uniform(sigma_toe, sigma_shoulder)
 #endif
-static inline float filmic_desaturate_v2(const float x, const float sigma_toe, const float sigma_shoulder,
-                                         const float saturation)
+static inline __attribute__((always_inline)) float
+filmic_desaturate_v2(const float x, const float sigma_toe, const float sigma_shoulder,
+                     const float saturation)
 {
   const float radius_toe = x;
   const float radius_shoulder = 1.0f - x;
@@ -1111,11 +1121,6 @@ static inline float linear_saturation(const float x, const float luminance, cons
 
 
 #define MAX_NUM_SCALES 10
-
-
-#ifdef _OPENMP
-#pragma omp declare simd aligned(in, mask : 64) uniform(feathering, normalize, width, height, ch)
-#endif
 __DT_CLONE_TARGETS__
 static inline gint mask_clipped_pixels(const float *const restrict in, float *const restrict mask,
                                        const float normalize, const float feathering, const size_t width,
@@ -1161,11 +1166,6 @@ static inline gint mask_clipped_pixels(const float *const restrict in, float *co
   // If clipped area is < 9 pixels, recovery is not worth the computational cost, so skip it.
   return (clipped > 9);
 }
-
-
-#ifdef _OPENMP
-#pragma omp declare simd aligned(in, mask, inpainted:64) uniform(width, height, noise_level, noise_distribution, threshold)
-#endif
 inline static void inpaint_noise(const float *const in, const float *const mask,
                                  float *const inpainted, const float noise_level, const float threshold,
                                  const dt_noise_distribution_t noise_distribution,
@@ -1339,8 +1339,10 @@ inline static void wavelets_reconstruct_ratios(const float *const restrict HF, c
 }
 
 
+__DT_CLONE_TARGETS__
 static inline void init_reconstruct(const float *const restrict in, const float *const restrict mask,
-                                    float *const restrict reconstructed, const size_t width, const size_t height)
+                                    float *const restrict reconstructed, const size_t width,
+                                    const size_t height)
 {
 // init the reconstructed buffer with non-clipped and partially clipped pixels
 // Note : it's a simple multiplied alpha blending where mask = alpha weight
@@ -1372,6 +1374,7 @@ static inline void wavelets_detail_level(const float *const restrict detail, con
   }
 }
 
+__DT_CLONE_TARGETS__
 static int get_scales(const dt_dev_pixelpipe_t *const pipe, const dt_iop_roi_t *roi_in,
                       const dt_dev_pixelpipe_iop_t *const piece)
 {
@@ -1495,6 +1498,7 @@ error:
 }
 
 
+__DT_CLONE_TARGETS__
 static inline void filmic_split_v1(const float *const restrict in, float *const restrict out,
                                    const dt_iop_order_iccprofile_info_t *const work_profile,
                                    const dt_iop_filmicrgb_data_t *const data,
@@ -1539,6 +1543,7 @@ static inline void filmic_split_v1(const float *const restrict in, float *const 
 }
 
 
+__DT_CLONE_TARGETS__
 static inline void filmic_split_v2_v3(const float *const restrict in, float *const restrict out,
                                       const dt_iop_order_iccprofile_info_t *const work_profile,
                                       const dt_iop_filmicrgb_data_t *const data,
@@ -1583,11 +1588,12 @@ static inline void filmic_split_v2_v3(const float *const restrict in, float *con
 }
 
 
+__DT_CLONE_TARGETS__
 static inline void filmic_chroma_v1(const float *const restrict in, float *const restrict out,
                                     const dt_iop_order_iccprofile_info_t *const work_profile,
                                     const dt_iop_filmicrgb_data_t *const data,
-                                    const dt_iop_filmic_rgb_spline_t spline, const int variant, const size_t width,
-                                    const size_t height)
+                                    const dt_iop_filmic_rgb_spline_t spline, const int variant,
+                                    const size_t width, const size_t height)
 {
 #ifdef _OPENMP
 #pragma omp parallel for default(none)                                                                       \
@@ -1639,6 +1645,7 @@ static inline void filmic_chroma_v1(const float *const restrict in, float *const
 }
 
 
+__DT_CLONE_TARGETS__
 static inline void filmic_chroma_v2_v3(const float *const restrict in, float *const restrict out,
                                        const dt_iop_order_iccprofile_info_t *const work_profile,
                                        const dt_iop_filmicrgb_data_t *const data,
@@ -1800,8 +1807,9 @@ filmic_desaturate_v4(const dt_aligned_pixel_simd_t Ych_original, dt_aligned_pixe
 #define CIE_Y_1931_to_CIE_Y_2006(x) (1.05785528f * (x))
 
 
-static inline float clip_chroma_white_raw(const float coeffs[3], const float target_white, const float Y,
-                                          const float cos_h, const float sin_h)
+static inline __attribute__((always_inline)) float
+clip_chroma_white_raw(const float coeffs[3], const float target_white, const float Y,
+                      const float cos_h, const float sin_h)
 {
   const float denominator_Y_coeff = coeffs[0] * (0.979381443298969f * cos_h + 0.391752577319588f * sin_h)
                                     + coeffs[1] * (0.0206185567010309f * cos_h + 0.608247422680412f * sin_h)
@@ -1830,8 +1838,9 @@ static inline float clip_chroma_white_raw(const float coeffs[3], const float tar
 }
 
 
-static inline float clip_chroma_white(const float coeffs[3], const float target_white, const float Y,
-                                      const float cos_h, const float sin_h)
+static inline __attribute__((always_inline)) float
+clip_chroma_white(const float coeffs[3], const float target_white, const float Y,
+                  const float cos_h, const float sin_h)
 {
   // Due to slight numerical inaccuracies in color matrices,
   // the chroma clipping curves for each RGB channel may be
@@ -1853,7 +1862,8 @@ static inline float clip_chroma_white(const float coeffs[3], const float target_
 }
 
 
-static inline float clip_chroma_black(const float coeffs[3], const float cos_h, const float sin_h)
+static inline __attribute__((always_inline)) float
+clip_chroma_black(const float coeffs[3], const float cos_h, const float sin_h)
 {
   // N.B. this is the same as clip_chroma_white_raw() but with target value = 0.
   // This allows eliminating some computation.
@@ -1875,8 +1885,9 @@ static inline float clip_chroma_black(const float coeffs[3], const float cos_h, 
 }
 
 
-static inline float clip_chroma(const dt_colormatrix_t matrix_out, const float target_white, const float Y,
-                                const float cos_h, const float sin_h, const float chroma)
+static inline __attribute__((always_inline)) float
+clip_chroma(const dt_colormatrix_t matrix_out, const float target_white, const float Y,
+            const float cos_h, const float sin_h, const float chroma)
 {
   // Note: ideally we should figure out in advance which channel is going to clip first
   // (either go negative or over maximum allowed value) and calculate chroma clipping
@@ -2003,7 +2014,7 @@ gamut_mapping_simd(dt_aligned_pixel_simd_t Ych_final, const dt_aligned_pixel_sim
 }
 
 
-static int filmic_v4_prepare_matrices(dt_colormatrix_t input_matrix, dt_colormatrix_t output_matrix,
+static inline __attribute__((always_inline)) int filmic_v4_prepare_matrices(dt_colormatrix_t input_matrix, dt_colormatrix_t output_matrix,
                                        dt_colormatrix_t export_input_matrix, dt_colormatrix_t export_output_matrix,
                                        const dt_iop_order_iccprofile_info_t *const work_profile,
                                        const dt_iop_order_iccprofile_info_t *const export_profile)
@@ -2122,6 +2133,7 @@ RGB_tone_mapping_v4_simd(const dt_aligned_pixel_simd_t pix_in, const dt_iop_film
   return pix_out;
 }
 
+__DT_CLONE_TARGETS__
 static inline void filmic_chroma_v4(const float *const restrict in, float *const restrict out,
                                     const dt_iop_order_iccprofile_info_t *const work_profile,
                                     const dt_iop_order_iccprofile_info_t *const export_profile,
@@ -2176,14 +2188,15 @@ static inline void filmic_chroma_v4(const float *const restrict in, float *const
   dt_omploop_sfence();  // ensure that nontemporal writes complete before we attempt to read output
 }
 
+__DT_CLONE_TARGETS__
 static inline void filmic_split_v4(const float *const restrict in, float *const restrict out,
-                                    const dt_iop_order_iccprofile_info_t *const work_profile,
-                                    const dt_iop_order_iccprofile_info_t *const export_profile,
-                                    const dt_iop_filmicrgb_data_t *const data,
-                                    const dt_iop_filmic_rgb_spline_t spline, const int variant,
-                                    const size_t width, const size_t height, const size_t ch,
-                                    const dt_iop_filmicrgb_colorscience_type_t colorscience_version,
-                                    const float display_black, const float display_white)
+                                   const dt_iop_order_iccprofile_info_t *const work_profile,
+                                   const dt_iop_order_iccprofile_info_t *const export_profile,
+                                   const dt_iop_filmicrgb_data_t *const data,
+                                   const dt_iop_filmic_rgb_spline_t spline, const int variant,
+                                   const size_t width, const size_t height, const size_t ch,
+                                   const dt_iop_filmicrgb_colorscience_type_t colorscience_version,
+                                   const float display_black, const float display_white)
 
 {
   // See colorbalancergb.c for details
@@ -2227,13 +2240,14 @@ static inline void filmic_split_v4(const float *const restrict in, float *const 
 }
 
 
+__DT_CLONE_TARGETS__
 static inline void filmic_v5(const float *const restrict in, float *const restrict out,
-                                    const dt_iop_order_iccprofile_info_t *const work_profile,
-                                    const dt_iop_order_iccprofile_info_t *const export_profile,
-                                    const dt_iop_filmicrgb_data_t *const data,
-                                    const dt_iop_filmic_rgb_spline_t spline,
-                                    const size_t width, const size_t height, const size_t ch,
-                                    const float display_black, const float display_white)
+                             const dt_iop_order_iccprofile_info_t *const work_profile,
+                             const dt_iop_order_iccprofile_info_t *const export_profile,
+                             const dt_iop_filmicrgb_data_t *const data,
+                             const dt_iop_filmic_rgb_spline_t spline, const size_t width,
+                             const size_t height, const size_t ch, const float display_black,
+                             const float display_white)
 
 {
   // See colorbalancergb.c for details
@@ -2289,8 +2303,9 @@ static inline void filmic_v5(const float *const restrict in, float *const restri
 }
 
 
-static inline void display_mask(const float *const restrict mask, float *const restrict out, const size_t width,
-                                const size_t height)
+__DT_CLONE_TARGETS__
+static inline void display_mask(const float *const restrict mask, float *const restrict out,
+                                const size_t width, const size_t height)
 {
 #ifdef _OPENMP
 #pragma omp parallel for default(none) dt_omp_firstprivate(width, height, out, mask) schedule(static)
@@ -2303,10 +2318,11 @@ static inline void display_mask(const float *const restrict mask, float *const r
 }
 
 
+__DT_CLONE_TARGETS__
 static inline void compute_ratios(const float *const restrict in, float *const restrict norms,
                                   float *const restrict ratios,
-                                  const dt_iop_order_iccprofile_info_t *const work_profile, const int variant,
-                                  const size_t width, const size_t height)
+                                  const dt_iop_order_iccprofile_info_t *const work_profile,
+                                  const int variant, const size_t width, const size_t height)
 {
 #ifdef _OPENMP
 #pragma omp parallel for default(none)                                  \
@@ -2323,6 +2339,7 @@ static inline void compute_ratios(const float *const restrict in, float *const r
 }
 
 
+__DT_CLONE_TARGETS__
 static inline void restore_ratios(float *const restrict ratios, const float *const restrict norms,
                                   const size_t width, const size_t height)
 {
@@ -2363,6 +2380,7 @@ void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe
   return;
 }
 
+__DT_CLONE_TARGETS__
 int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
             const void *const restrict ivoid,
              void *const restrict ovoid)

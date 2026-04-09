@@ -222,7 +222,7 @@ static inline float lab_f(const float x)
 static const dt_aligned_pixel_t d50 = { 0.9642f, 1.0f, 0.8249f };
 
 #ifdef _OPENMP
-#pragma omp declare simd aligned(Lab, XYZ:16) uniform(Lab, XYZ)
+#pragma omp declare simd aligned(XYZ, Lab:16)
 #endif
 static inline __attribute__((always_inline)) void dt_XYZ_to_Lab(const dt_aligned_pixel_t XYZ, dt_aligned_pixel_t Lab)
 {
@@ -246,7 +246,7 @@ static inline float lab_f_inv(const float x)
 
 /** uses D50 white point. */
 #ifdef _OPENMP
-#pragma omp declare simd aligned(Lab, XYZ:16) uniform(Lab, XYZ)
+#pragma omp declare simd aligned(Lab, XYZ:16)
 #endif
 static inline __attribute__((always_inline)) void dt_Lab_to_XYZ(const dt_aligned_pixel_t Lab, dt_aligned_pixel_t XYZ)
 {
@@ -424,7 +424,7 @@ static inline __attribute__((always_inline)) void dt_Lch_to_xyY(const dt_aligned
 
 /** Uses D50 **/
 #ifdef _OPENMP
-#pragma omp declare simd
+#pragma omp declare simd aligned(XYZ, sRGB:16)
 #endif
 static inline __attribute__((always_inline)) void dt_XYZ_to_Rec709_D50(const dt_aligned_pixel_t XYZ, dt_aligned_pixel_t sRGB)
 {
@@ -441,7 +441,7 @@ static inline __attribute__((always_inline)) void dt_XYZ_to_Rec709_D50(const dt_
 
 /** Uses D65 **/
 #ifdef _OPENMP
-#pragma omp declare simd
+#pragma omp declare simd aligned(XYZ, sRGB:16)
 #endif
 static inline __attribute__((always_inline)) void dt_XYZ_to_Rec709_D65(const dt_aligned_pixel_t XYZ, dt_aligned_pixel_t sRGB)
 {
@@ -459,7 +459,7 @@ static inline __attribute__((always_inline)) void dt_XYZ_to_Rec709_D65(const dt_
 
 /** uses D50 white point. */
 #ifdef _OPENMP
-#pragma omp declare simd aligned(XYZ, sRGB)
+#pragma omp declare simd aligned(XYZ, sRGB:16)
 #endif
 static inline __attribute__((always_inline)) void dt_XYZ_to_sRGB(const dt_aligned_pixel_t XYZ, dt_aligned_pixel_t sRGB)
 {
@@ -474,7 +474,7 @@ static inline __attribute__((always_inline)) void dt_XYZ_to_sRGB(const dt_aligne
 
 /** uses D50 white point and clips the output to [0..1]. */
 #ifdef _OPENMP
-#pragma omp declare simd aligned(XYZ, sRGB)
+#pragma omp declare simd aligned(XYZ, sRGB:16)
 #endif
 static inline __attribute__((always_inline)) void dt_XYZ_to_sRGB_clipped(const dt_aligned_pixel_t XYZ, dt_aligned_pixel_t sRGB)
 {
@@ -500,10 +500,8 @@ static inline __attribute__((always_inline)) void dt_Rec709_to_XYZ_D50(const dt_
   };
   dt_apply_transposed_color_matrix(sRGB, M, XYZ_D50);
 }
-
-
 #ifdef _OPENMP
-#pragma omp declare simd aligned(sRGB, RGB)
+#pragma omp declare simd aligned(sRGB, RGB:16)
 #endif
 static inline __attribute__((always_inline)) void dt_sRGB_to_linear_sRGB(const dt_aligned_pixel_t sRGB, dt_aligned_pixel_t RGB)
 {
@@ -856,14 +854,15 @@ static inline __attribute__((always_inline)) void dt_LCH_2_Lab(const dt_aligned_
   Lab[2] = sinf(2.0f * DT_M_PI_F * LCH[2]) * LCH[1];
 }
 
-static inline float dt_camera_rgb_luminance(const dt_aligned_pixel_t rgb)
+#ifdef _OPENMP
+#pragma omp declare simd aligned(rgb:16)
+#endif
+static inline __attribute__((always_inline)) float dt_camera_rgb_luminance(const dt_aligned_pixel_t rgb)
 {
   return (rgb[0] * 0.2225045f + rgb[1] * 0.7168786f + rgb[2] * 0.0606169f);
 }
-
-
 #ifdef _OPENMP
-#pragma omp declare simd aligned(XYZ_D50, XYZ_D65: 16)
+#pragma omp declare simd aligned(XYZ_D50, XYZ_D65:16)
 #endif
 static inline __attribute__((always_inline)) void dt_XYZ_D50_2_XYZ_D65(const dt_aligned_pixel_t XYZ_D50, dt_aligned_pixel_t XYZ_D65)
 {
@@ -884,9 +883,8 @@ static inline __attribute__((always_inline)) void dt_XYZ_D50_2_XYZ_D65(const dt_
   for_each_channel(x)
     XYZ_D65[x] = M_transposed[0][x] * XYZ_D50[0] + M_transposed[1][x] * XYZ_D50[1] + M_transposed[2][x] * XYZ_D50[2];
 }
-
 #ifdef _OPENMP
-#pragma omp declare simd aligned(XYZ_D50, XYZ_D65: 16)
+#pragma omp declare simd aligned(XYZ_D65, XYZ_D50:16)
 #endif
 static inline __attribute__((always_inline)) void dt_XYZ_D65_2_XYZ_D50(const dt_aligned_pixel_t XYZ_D65, dt_aligned_pixel_t XYZ_D50)
 {
@@ -1588,7 +1586,7 @@ static inline __attribute__((always_inline)) void xyY_to_dt_UCS_UV(const dt_alig
 
 
 #ifdef _OPENMP
-#pragma omp declare simd aligned(JCH: 16)
+#pragma omp declare simd aligned(JCH: 16) uniform(L_white)
 #endif
 static inline void dt_UCS_LUV_to_JCH(const float L_star, const float L_white, const float UV_star_prime[2], dt_aligned_pixel_t JCH)
 {
@@ -1602,7 +1600,7 @@ static inline void dt_UCS_LUV_to_JCH(const float L_star, const float L_white, co
 
 
 #ifdef _OPENMP
-#pragma omp declare simd aligned(xyY, JCH: 16)
+#pragma omp declare simd aligned(xyY, JCH: 16) uniform(L_white)
 #endif
 static inline __attribute__((always_inline)) void xyY_to_dt_UCS_JCH(const dt_aligned_pixel_t xyY, const float L_white, dt_aligned_pixel_t JCH)
 {
@@ -1631,7 +1629,7 @@ xyY_to_dt_UCS_JCH_simd(const dt_aligned_pixel_simd_t xyY, const float L_white)
 
 
 #ifdef _OPENMP
-#pragma omp declare simd aligned(xyY, JCH: 16)
+#pragma omp declare simd aligned(xyY, JCH: 16) uniform(L_white)
 #endif
 static inline __attribute__((always_inline)) void dt_UCS_JCH_to_xyY(const dt_aligned_pixel_t JCH, const float L_white, dt_aligned_pixel_t xyY)
 {

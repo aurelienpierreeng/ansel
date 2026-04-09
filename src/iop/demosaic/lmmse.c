@@ -131,10 +131,6 @@ static INLINE float calc_gamma(float val, float *table)
   const float p2 = table[idx+1] - p1;
   return (p1 + p2 * diff);
 }
-
-#ifdef _OPENMP
-  #pragma omp declare simd aligned(in, out, gamma_in, gamma_out)
-#endif
 static void lmmse_demosaic(const dt_dev_pixelpipe_iop_t *piece, float *const restrict out, const float *const restrict in, dt_iop_roi_t *const roi_out,
                                    const dt_iop_roi_t *const roi_in, const uint32_t filters, const uint32_t mode, float *const restrict gamma_in, float *const restrict gamma_out)
 {

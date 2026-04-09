@@ -68,6 +68,7 @@ void dt_dwt_free(dwt_params_t *p)
   dt_free(p);
 }
 
+__DT_CLONE_TARGETS__
 static int _get_max_scale(const int width, const int height, const float preview_scale)
 {
   int maxscale = 0;
@@ -93,6 +94,7 @@ int dwt_get_max_scale(dwt_params_t *p)
   return _get_max_scale(p->width / p->preview_scale, p->height / p->preview_scale, p->preview_scale);
 }
 
+__DT_CLONE_TARGETS__
 static int _first_scale_visible(const int num_scales, const float preview_scale)
 {
   int first_scale = 0;
@@ -116,12 +118,13 @@ int dt_dwt_first_scale_visible(dwt_params_t *p)
   return _first_scale_visible(p->scales, p->preview_scale);
 }
 
-static void dwt_get_image_layer(float *const layer, dwt_params_t *const p)
+static inline __attribute__((always_inline)) void dwt_get_image_layer(float *const layer, dwt_params_t *const p)
 {
   if(p->image != layer) memcpy(p->image, layer, sizeof(float) * p->width * p->height * p->ch);
 }
 
 // first, "vertical" pass of wavelet decomposition
+__DT_CLONE_TARGETS__
 static void dwt_decompose_vert(float *const restrict out, const float *const restrict in,
                                const size_t height, const size_t width, const size_t lev)
 {
@@ -159,6 +162,7 @@ static void dwt_decompose_vert(float *const restrict out, const float *const res
 
 // second, horizontal pass of wavelet decomposition; generates 'coarse' into the output buffer and overwrites
 //   the input buffer with 'details'
+__DT_CLONE_TARGETS__
 static void dwt_decompose_horiz(float *const restrict out, float *const restrict in, float *const temp,
                                 const size_t height, const size_t width, const size_t lev)
 {
@@ -219,7 +223,7 @@ static void dwt_decompose_horiz(float *const restrict out, float *const restrict
 }
 
 // split input into 'coarse' and 'details'; put 'details' back into the input buffer
-static void dwt_decompose_layer(float *const restrict out, float *const restrict in, float *const temp, const int lev,
+static inline __attribute__((always_inline)) void dwt_decompose_layer(float *const restrict out, float *const restrict in, float *const temp, const int lev,
                                 const dwt_params_t *const p)
 {
   dwt_decompose_vert(out, in, p->height, p->width, lev);
@@ -228,6 +232,7 @@ static void dwt_decompose_layer(float *const restrict out, float *const restrict
 }
 
 /* actual decomposing algorithm */
+__DT_CLONE_TARGETS__
 static int dwt_wavelet_decompose(float *img, dwt_params_t *const p, _dwt_layer_func layer_func)
 {
   float *temp = NULL;
@@ -412,6 +417,7 @@ int dwt_decompose(dwt_params_t *p, _dwt_layer_func layer_func)
 }
 
 // first, "vertical" pass of wavelet decomposition
+__DT_CLONE_TARGETS__
 static void dwt_denoise_vert_1ch(float *const restrict out, const float *const restrict in,
                                  const size_t height, const size_t width, const size_t lev)
 {
@@ -448,6 +454,7 @@ static void dwt_denoise_vert_1ch(float *const restrict out, const float *const r
 
 // second, horizontal pass of wavelet decomposition; generates 'coarse' into the output buffer and overwrites
 //   the input buffer with 'details'
+__DT_CLONE_TARGETS__
 static void dwt_denoise_horiz_1ch(float *const restrict out, float *const restrict in,
                                   float *const restrict accum, const size_t height, const size_t width,
                                   const size_t lev, const float thold, const int last)
@@ -533,6 +540,7 @@ static void dwt_denoise_horiz_1ch(float *const restrict out, float *const restri
  * recomposing the result from just the portion of each scale which exceeds the magnitude of the given
  * threshold for that scale.
  */
+__DT_CLONE_TARGETS__
 int dwt_denoise(float *const img, const int width, const int height, const int bands, const float *const noise)
 {
   float *const details = dt_pixelpipe_cache_alloc_align_float_cache((size_t)2 * width * height, 0);

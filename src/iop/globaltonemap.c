@@ -156,6 +156,7 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
   return 1;
 }
 
+__DT_CLONE_TARGETS__
 static inline void process_reinhard(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece,
                                     const void *const ivoid, void *const ovoid,
                                     const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out,
@@ -182,10 +183,12 @@ static inline void process_reinhard(struct dt_iop_module_t *self, const dt_dev_p
   }
 }
 
+__DT_CLONE_TARGETS__
 static inline void process_drago(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
                                  const dt_dev_pixelpipe_iop_t *piece,
-                                 const void *const ivoid, void *const ovoid, const dt_iop_roi_t *const roi_in,
-                                 const dt_iop_roi_t *const roi_out, dt_iop_global_tonemap_data_t *data)
+                                 const void *const ivoid, void *const ovoid,
+                                 const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out,
+                                 dt_iop_global_tonemap_data_t *data)
 {
   dt_iop_global_tonemap_gui_data_t *g = (dt_iop_global_tonemap_gui_data_t *)self->gui_data;
   float *in = (float *)ivoid;
@@ -269,6 +272,7 @@ static inline void process_drago(struct dt_iop_module_t *self, const dt_dev_pixe
   }
 }
 
+__DT_CLONE_TARGETS__
 static inline void process_filmic(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece,
                                   const void *const ivoid, void *const ovoid,
                                   const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out,

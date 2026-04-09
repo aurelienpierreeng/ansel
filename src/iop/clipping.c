@@ -402,7 +402,7 @@ static int gui_has_focus(struct dt_iop_module_t *self)
   return (self->dev->gui_module == self);
 }
 
-static void keystone_get_matrix(const dt_boundingbox_t k_space, float kxa, float kxb, float kxc, float kxd, float kya,
+static inline __attribute__((always_inline)) void keystone_get_matrix(const dt_boundingbox_t k_space, float kxa, float kxb, float kxc, float kxd, float kya,
                                 float kyb, float kyc, float kyd, float *a, float *b, float *d, float *e,
                                 float *g, float *h)
 {
@@ -1011,6 +1011,7 @@ void modify_roi_in(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t
 
 // 3rd (final) pass: you get this input region (may be different from what was requested above),
 // do your best to fill the output region!
+__DT_CLONE_TARGETS__
 int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid)
 {

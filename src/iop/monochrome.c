@@ -175,12 +175,12 @@ void init_presets(dt_iop_module_so_t *self)
   // dt_gui_presets_add_generic(_("green filter"), self->op, self->version(), &p, sizeof(p), 1);
 }
 
-static float color_filter(const float ai, const float bi, const float a, const float b, const float size)
+static inline __attribute__((always_inline)) float color_filter(const float ai, const float bi, const float a, const float b, const float size)
 {
   return dt_fast_expf(-CLAMPS(((ai - a) * (ai - a) + (bi - b) * (bi - b)) / (2.0 * size), 0.0f, 1.0f));
 }
 
-static float envelope(const float L)
+static inline __attribute__((always_inline)) float envelope(const float L)
 {
   const float x = CLAMPS(L / 100.0f, 0.0f, 1.0f);
   // const float alpha = 2.0f;
@@ -200,6 +200,7 @@ static float envelope(const float L)
   }
 }
 
+__DT_CLONE_TARGETS__
 int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;

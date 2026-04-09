@@ -747,6 +747,7 @@ static void _clear_shadow_crop_box(dt_iop_ashift_gui_data_t *g)
 
 #define MAT3SWAP(a, b) { float (*tmp)[3] = (a); (a) = (b); (b) = tmp; }
 
+__DT_CLONE_TARGETS__
 static void homography(float *homograph, const float angle, const float shift_v, const float shift_h,
                        const float shear, const float f_length_kb, const float orthocorr, const float aspect,
                        const int width, const int height, dt_iop_ashift_homodir_t dir)
@@ -3374,6 +3375,7 @@ static void do_fit(dt_iop_module_t *module, dt_iop_ashift_params_t *p, dt_iop_as
   --darktable.gui->reset;
 }
 
+__DT_CLONE_TARGETS__
 int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid)
 {

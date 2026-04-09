@@ -18,9 +18,7 @@
 
 
 /** 1:1 demosaic from in to out, in is full buf, out is translated/cropped (scale == 1.0!) */
-#ifdef _OPENMP
-  #pragma omp declare simd aligned(in, out)
-#endif
+__DT_CLONE_TARGETS__
 static int demosaic_ppg(float *const out, const float *const in, const dt_iop_roi_t *const roi_out,
                         const dt_iop_roi_t *const roi_in, const uint32_t filters, const float thrs)
 {

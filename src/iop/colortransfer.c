@@ -150,6 +150,7 @@ int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, const dt
   return IOP_CS_LAB;
 }
 
+__DT_CLONE_TARGETS__
 static void capture_histogram(const float *col, const dt_iop_roi_t *roi, int *hist)
 {
   // build separate histogram
@@ -168,6 +169,7 @@ static void capture_histogram(const float *col, const dt_iop_roi_t *roi, int *hi
   // for(int i=0;i<100;i++) printf("#[%d] %d \n", i, hist[(int)CLAMP(HISTN*i/100.0, 0, HISTN-1)]);
 }
 
+__DT_CLONE_TARGETS__
 static void invert_histogram(const int *hist, float *inv_hist)
 {
 // invert non-normalised accumulated hist
@@ -199,6 +201,7 @@ static void invert_histogram(const int *hist, float *inv_hist)
   // HISTN-1)]/(float)HISTN, inv_hist[(int)CLAMP(HISTN*i/100.0, 0, HISTN-1)]);
 }
 
+__DT_CLONE_TARGETS__
 static void get_cluster_mapping(const int n, float2 *mi, float2 *mo, int *mapio)
 {
   for(int ki = 0; ki < n; ki++)
@@ -219,6 +222,7 @@ static void get_cluster_mapping(const int n, float2 *mi, float2 *mo, int *mapio)
   }
 }
 
+__DT_CLONE_TARGETS__
 static void get_clusters(const float *col, const int n, float2 *mean, float *weight)
 {
   float Mdist = 0.0f, mdist = FLT_MAX;
@@ -238,6 +242,7 @@ static void get_clusters(const float *col, const int n, float2 *mean, float *wei
     for(int k = 0; k < n; k++) weight[k] /= sum;
 }
 
+__DT_CLONE_TARGETS__
 static int get_cluster(const float *col, const int n, float2 *mean)
 {
   float mdist = FLT_MAX;
@@ -255,6 +260,7 @@ static int get_cluster(const float *col, const int n, float2 *mean)
   return cluster;
 }
 
+__DT_CLONE_TARGETS__
 static int kmeans(const float *col, const dt_iop_roi_t *const roi, const int n, float2 *mean_out,
                   float2 *var_out)
 {
@@ -351,6 +357,7 @@ static int kmeans(const float *col, const dt_iop_roi_t *const roi, const int n, 
   return 0;
 }
 
+__DT_CLONE_TARGETS__
 int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid)
 {

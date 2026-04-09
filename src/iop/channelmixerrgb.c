@@ -562,6 +562,7 @@ void init_presets(dt_iop_module_so_t *self)
 }
 
 
+__DT_CLONE_TARGETS__
 static int get_white_balance_coeff(struct dt_iop_module_t *self, dt_aligned_pixel_t custom_wb)
 {
   // Init output with a no-op
@@ -666,14 +667,13 @@ gamut_mapping(const dt_aligned_pixel_simd_t input, const float compression, cons
     return (dt_aligned_pixel_simd_t){ 0.f };
   }
 }
-
-
 #ifdef _OPENMP
-#pragma omp declare simd aligned(input, output, saturation, lightness:16) uniform(saturation, lightness)
+#pragma omp declare simd aligned(input, saturation, lightness, output:16) uniform(version)
 #endif
-static inline void luma_chroma(const dt_aligned_pixel_t input, const dt_aligned_pixel_t saturation,
-                               const dt_aligned_pixel_t lightness, dt_aligned_pixel_t output,
-                               const dt_iop_channelmixer_rgb_version_t version)
+static inline __attribute__((always_inline)) void
+luma_chroma(const dt_aligned_pixel_t input, const dt_aligned_pixel_t saturation,
+            const dt_aligned_pixel_t lightness, dt_aligned_pixel_t output,
+            const dt_iop_channelmixer_rgb_version_t version)
 {
   // Compute euclidean norm
   float norm = euclidean_norm(input);
@@ -727,13 +727,14 @@ static inline void luma_chroma(const dt_aligned_pixel_t input, const dt_aligned_
   }
 }
 
+__DT_CLONE_TARGETS__
 static inline void loop_switch(const float *const restrict in, float *const restrict out,
-                               const size_t width, const size_t height, const size_t ch, const dt_colormatrix_t XYZ_to_RGB,
-                               const dt_colormatrix_t RGB_to_XYZ, const dt_colormatrix_t MIX,
-                               const dt_aligned_pixel_t illuminant, const dt_aligned_pixel_t saturation,
-                               const dt_aligned_pixel_t lightness, const dt_aligned_pixel_t grey,
-                               const float p, const float gamut, const int clip, const int apply_grey,
-                               const dt_adaptation_t kind,
+                               const size_t width, const size_t height, const size_t ch,
+                               const dt_colormatrix_t XYZ_to_RGB, const dt_colormatrix_t RGB_to_XYZ,
+                               const dt_colormatrix_t MIX, const dt_aligned_pixel_t illuminant,
+                               const dt_aligned_pixel_t saturation, const dt_aligned_pixel_t lightness,
+                               const dt_aligned_pixel_t grey, const float p, const float gamut,
+                               const int clip, const int apply_grey, const dt_adaptation_t kind,
                                const dt_iop_channelmixer_rgb_version_t version)
 {
   dt_colormatrix_t RGB_to_XYZ_t;
@@ -931,6 +932,7 @@ static inline void loop_switch(const float *const restrict in, float *const rest
 #define SHF(ii, jj, c) ((i + ii) * width + j + jj) * ch + c
 #define OFF 4
 
+__DT_CLONE_TARGETS__
 static inline int auto_detect_WB(const float *const restrict in, dt_illuminant_t illuminant,
                                  const size_t width, const size_t height, const size_t ch,
                                  const dt_colormatrix_t RGB_to_XYZ, dt_aligned_pixel_t xyz)
@@ -1102,6 +1104,7 @@ static inline int auto_detect_WB(const float *const restrict in, dt_illuminant_t
   return 0;
 }
 
+__DT_CLONE_TARGETS__
 static void declare_cat_on_pipe(struct dt_iop_module_t *self, gboolean preset)
 {
   // Advertise to the pipeline that we are doing chromatic adaptation here
@@ -1152,7 +1155,7 @@ static void update_approx_cct(struct dt_iop_module_t *self);
 static void update_illuminant_color(struct dt_iop_module_t *self);
 
 
-static void check_if_close_to_daylight(const float x, const float y, float *temperature,
+static inline __attribute__((always_inline)) void check_if_close_to_daylight(const float x, const float y, float *temperature,
                                        dt_illuminant_t *illuminant, dt_adaptation_t *adaptation)
 {
   /* Check if a chromaticity x, y is close to daylight within 2.5 % error margin.
@@ -1352,6 +1355,7 @@ typedef struct {
   float exposure;
 } extraction_result_t;
 
+__DT_CLONE_TARGETS__
 static int _extract_patches(const float *const restrict in, const dt_iop_roi_t *const roi_in,
                             dt_iop_channelmixer_rgb_gui_data_t *g,
                             const dt_colormatrix_t RGB_to_XYZ, const dt_colormatrix_t XYZ_to_CAM,
@@ -1553,6 +1557,7 @@ static int _extract_patches(const float *const restrict in, const dt_iop_roi_t *
   return 0;
 }
 
+__DT_CLONE_TARGETS__
 int extract_color_checker(const float *const restrict in, float *const restrict out,
                           const dt_iop_roi_t *const roi_in, dt_iop_channelmixer_rgb_gui_data_t *g,
                           const dt_colormatrix_t RGB_to_XYZ, const dt_colormatrix_t XYZ_to_RGB,

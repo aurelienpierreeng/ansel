@@ -30,6 +30,7 @@
    I've extended the basic idea to work with non-Bayer filter arrays.
    Gradients are numbered clockwise from NW=0 to W=7.
  */
+__DT_CLONE_TARGETS__
 static int vng_interpolate(float *out, const float *const in,
                            const dt_iop_roi_t *const roi_out, const dt_iop_roi_t *const roi_in,
                            const uint32_t filters, const uint8_t (*const xtrans)[6], const int only_vng_linear)

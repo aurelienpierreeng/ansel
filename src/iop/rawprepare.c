@@ -196,7 +196,7 @@ void init_presets(dt_iop_module_so_t *self)
   dt_database_release_transaction(darktable.db);
 }
 
-static int compute_proper_crop(const dt_dev_pixelpipe_iop_t *piece, const dt_iop_roi_t *const roi_in, int value)
+static inline __attribute__((always_inline)) int compute_proper_crop(const dt_dev_pixelpipe_iop_t *piece, const dt_iop_roi_t *const roi_in, int value)
 {
   const double scale = roi_in->scale;
   return (int)roundf((double)value * scale);
@@ -366,6 +366,7 @@ static inline __attribute__((always_inline)) int BL(const dt_iop_roi_t *const ro
    compile generated code vs SSE specific code. This depends slightly on the cpu but it's 1.2 to 3-fold
    better for all tested cases.
 */
+__DT_CLONE_TARGETS__
 int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
             const void *const ivoid, void *const ovoid)
 {

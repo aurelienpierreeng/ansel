@@ -855,8 +855,7 @@ static void process_cmatrix_fastpath_clipping(struct dt_iop_module_t *self, cons
   dt_omploop_sfence();  // ensure that nontemporal writes complete before we attempt to read output
 }
 
-__DT_CLONE_TARGETS__
-static void process_cmatrix_fastpath(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece,
+static inline __attribute__((always_inline)) void process_cmatrix_fastpath(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece,
                                      const void *const ivoid, void *const ovoid, const dt_iop_roi_t *const roi_in,
                                      const dt_iop_roi_t *const roi_out)
 {
@@ -873,6 +872,7 @@ static void process_cmatrix_fastpath(struct dt_iop_module_t *self, const dt_dev_
   }
 }
 
+__DT_CLONE_TARGETS__
 static void process_cmatrix_proper(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece,
                                    const void *const ivoid, void *const ovoid, const dt_iop_roi_t *const roi_in,
                                    const dt_iop_roi_t *const roi_out)
@@ -933,7 +933,7 @@ static void process_cmatrix_proper(struct dt_iop_module_t *self, const dt_dev_pi
   dt_omploop_sfence();  // ensure that nontemporal writes complete before we attempt to read output
 }
 
-static void process_cmatrix(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
+static inline __attribute__((always_inline)) void process_cmatrix(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
                             const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid,
                             const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
@@ -954,6 +954,7 @@ static void process_cmatrix(struct dt_iop_module_t *self, const dt_dev_pixelpipe
   }
 }
 
+__DT_CLONE_TARGETS__
 static void process_lcms2_bm(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
                              void *const ovoid, const dt_iop_roi_t *const roi_in,
                              const dt_iop_roi_t *const roi_out)
@@ -1011,6 +1012,7 @@ static void process_lcms2_bm(struct dt_iop_module_t *self, const dt_dev_pixelpip
   }
 }
 
+__DT_CLONE_TARGETS__
 static void process_lcms2_proper(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece,
                                  const void *const ivoid, void *const ovoid, const dt_iop_roi_t *const roi_in,
                                  const dt_iop_roi_t *const roi_out)
@@ -1060,7 +1062,7 @@ static void process_lcms2_proper(struct dt_iop_module_t *self, const dt_dev_pixe
   }
 }
 
-static void process_lcms2(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
+static inline __attribute__((always_inline)) void process_lcms2(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
                           const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid,
                           const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {

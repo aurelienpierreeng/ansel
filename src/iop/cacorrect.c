@@ -210,6 +210,7 @@ static INLINE float intp(const float a, const float b, const float c)
 //
 ////////////////////////////////////////////////////////////////
 //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+__DT_CLONE_TARGETS__
 static gboolean LinEqSolve(int nDim, double *pfMatr, double *pfVect, double *pfSolution)
 {
   //==============================================================================
@@ -313,6 +314,7 @@ static inline void pixSort(float *a, float *b)
   There is no "maths background" so i chose this after a lot of testing.
 */
 #define CA_SIZE_MINIMUM (1600)
+__DT_CLONE_TARGETS__
 int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;

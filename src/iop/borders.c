@@ -467,6 +467,7 @@ static inline void copy_pixels(float *out, const float *const in, const int npix
   }
 }
 
+__DT_CLONE_TARGETS__
 void copy_image_with_border(float *out, const float *const in, const struct border_positions_t *binfo)
 {
   const int image_width = binfo->image_right - binfo->image_left;

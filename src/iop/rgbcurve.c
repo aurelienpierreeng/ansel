@@ -1443,6 +1443,7 @@ void init(dt_iop_module_t *module)
 
 // this will be called from process*()
 // it must be executed only if profile info has changed
+__DT_CLONE_TARGETS__
 static void _generate_curve_lut(const dt_dev_pixelpipe_t *pipe, dt_iop_rgbcurve_data_t *d)
 {
   const dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_pipe_work_profile_info(pipe);
@@ -1531,6 +1532,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
 }
 
 
+__DT_CLONE_TARGETS__
 int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
             void *const ovoid)
 {

@@ -18,6 +18,7 @@
 
 /* taken from dcraw and demosaic_ppg below */
 
+__DT_CLONE_TARGETS__
 static void lin_interpolate(float *out, const float *const in, const dt_iop_roi_t *const roi_out,
                             const dt_iop_roi_t *const roi_in, const uint32_t filters,
                             const uint8_t (*const xtrans)[6])
@@ -137,10 +138,7 @@ static void lin_interpolate(float *out, const float *const in, const dt_iop_roi_
     (b) = (a);                                                                                               \
     (a) = tmp;                                                                                               \
   }
-
-#ifdef _OPENMP
-  #pragma omp declare simd aligned(in, out)
-#endif
+__DT_CLONE_TARGETS__
 static void pre_median_b(float *out, const float *const in, const dt_iop_roi_t *const roi, const uint32_t filters,
                          const int num_passes, const float threshold)
 {
@@ -200,6 +198,7 @@ static void pre_median(float *out, const float *const in, const dt_iop_roi_t *co
 #define SWAPmed(I, J)                                                                                        \
   if(med[I] > med[J]) SWAP(med[I], med[J])
 
+__DT_CLONE_TARGETS__
 static void color_smoothing(float *out, const dt_iop_roi_t *const roi_out, const int num_passes)
 {
   const int width4 = 4 * roi_out->width;
@@ -259,6 +258,7 @@ static void color_smoothing(float *out, const dt_iop_roi_t *const roi_out, const
 }
 #undef SWAP
 
+__DT_CLONE_TARGETS__
 static void green_equilibration_lavg(float *out, const float *const in, const int width, const int height,
                                      const uint32_t filters, const int x, const int y, const float thr)
 {
@@ -311,6 +311,7 @@ static void green_equilibration_lavg(float *out, const float *const in, const in
   }
 }
 
+__DT_CLONE_TARGETS__
 static void green_equilibration_favg(float *out, const float *const in, const int width, const int height,
                                      const uint32_t filters, const int x, const int y)
 {

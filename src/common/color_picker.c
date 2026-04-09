@@ -150,10 +150,6 @@ static inline void rgb_to_JzCzhz(const dt_aligned_pixel_t rgb, dt_aligned_pixel_
   dt_XYZ_2_JzAzBz(XYZ_D65, JzAzBz);
   dt_JzAzBz_2_JzCzhz(JzAzBz, JzCzhz);
 }
-
-#ifdef _OPENMP
-#pragma omp declare simd aligned(avg, min, max, pixels: 16) uniform(width, w)
-#endif
 static inline void _color_picker_rgb_or_lab(dt_aligned_pixel_t avg, dt_aligned_pixel_t min, dt_aligned_pixel_t max,
                                             const float *const pixels, const float w, const size_t width)
 {
@@ -168,10 +164,6 @@ static inline void _color_picker_rgb_or_lab(dt_aligned_pixel_t avg, dt_aligned_p
     }
   }
 }
-
-#ifdef _OPENMP
-#pragma omp declare simd aligned(avg, min, max, pixels: 16) uniform(width, w)
-#endif
 static inline void _color_picker_direct_hsl(dt_aligned_pixel_t avg, dt_aligned_pixel_t min, dt_aligned_pixel_t max,
                                             const float *const pixels, const float w, const size_t width)
 {
@@ -187,10 +179,6 @@ static inline void _color_picker_direct_hsl(dt_aligned_pixel_t avg, dt_aligned_p
     }
   }
 }
-
-#ifdef _OPENMP
-#pragma omp declare simd aligned(avg, min, max, pixels: 16) uniform(width, w)
-#endif
 static inline void _color_picker_direct_lch_or_jzczhz(dt_aligned_pixel_t avg, dt_aligned_pixel_t min,
                                                        dt_aligned_pixel_t max, const float *const pixels,
                                                        const float w, const size_t width)
@@ -207,10 +195,6 @@ static inline void _color_picker_direct_lch_or_jzczhz(dt_aligned_pixel_t avg, dt
     }
   }
 }
-
-#ifdef _OPENMP
-#pragma omp declare simd aligned(avg, min, max, pixels: 16) uniform(width, w)
-#endif
 static inline void _color_picker_lch(dt_aligned_pixel_t avg, dt_aligned_pixel_t min, dt_aligned_pixel_t max,
                                      const float *const pixels, const float w, const size_t width)
 {
@@ -227,10 +211,6 @@ static inline void _color_picker_lch(dt_aligned_pixel_t avg, dt_aligned_pixel_t 
     }
   }
 }
-
-#ifdef _OPENMP
-#pragma omp declare simd aligned(avg, min, max, pixels: 16) uniform(width, w)
-#endif
 static inline void _color_picker_hsl(dt_aligned_pixel_t avg, dt_aligned_pixel_t min, dt_aligned_pixel_t max,
                                      const float *const pixels, const float w, const size_t width)
 {
@@ -247,10 +227,6 @@ static inline void _color_picker_hsl(dt_aligned_pixel_t avg, dt_aligned_pixel_t 
     }
   }
 }
-
-#ifdef _OPENMP
-#pragma omp declare simd aligned(avg, min, max, pixels: 16) uniform(width, w, profile)
-#endif
 static inline void _color_picker_jzczhz(dt_aligned_pixel_t avg, dt_aligned_pixel_t min, dt_aligned_pixel_t max,
                                         const float *const pixels, const float w, const size_t width,
                                         const dt_iop_order_iccprofile_info_t *const profile)

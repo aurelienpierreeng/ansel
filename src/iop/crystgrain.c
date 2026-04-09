@@ -216,6 +216,7 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
 /**
  * @brief Hash a string into a stable 32-bit seed.
  */
+__DT_CLONE_TARGETS__
 static unsigned int _hash_string(const char *s)
 {
   unsigned int h = 0;
@@ -315,6 +316,7 @@ static inline float _crystal_coverage(const int dx, const int dy, const float ra
  * rasterized to integer pixels, but each tap stores a partial-coverage weight
  * so non-integer radii do not collapse to a binary edge.
  */
+__DT_CLONE_TARGETS__
 static int _create_crystal_kernel(dt_iop_crystgrain_kernel_t *const kernel, const float radius_f,
                                   const float vertices, const float rotation)
 {
@@ -379,7 +381,7 @@ static int _create_crystal_kernel(dt_iop_crystgrain_kernel_t *const kernel, cons
 /**
  * @brief Release one crystal kernel.
  */
-static void _free_crystal_kernel(dt_iop_crystgrain_kernel_t *const kernel)
+static inline __attribute__((always_inline)) void _free_crystal_kernel(dt_iop_crystgrain_kernel_t *const kernel)
 {
   free(kernel->dx);
   free(kernel->dy);
@@ -390,6 +392,7 @@ static void _free_crystal_kernel(dt_iop_crystgrain_kernel_t *const kernel)
 /**
  * @brief Pick one crystal geometry for one bank entry.
  */
+__DT_CLONE_TARGETS__
 static int _pick_layer_kernel(dt_iop_crystgrain_layer_kernel_t *const entry,
                               const dt_iop_crystgrain_runtime_t *const rt, const uint64_t seed)
 {
@@ -460,6 +463,7 @@ static void _free_layer_kernel_bank(dt_iop_crystgrain_layer_kernel_t *const bank
  * discrete footprint area sampled from a few layer banks instead of against a
  * noisier variance proxy.
  */
+__DT_CLONE_TARGETS__
 static float _average_discrete_grain_surface(const dt_iop_crystgrain_runtime_t *const rt)
 {
   const int sampled_layers = MIN(rt->layers, 4);
@@ -495,6 +499,7 @@ static float _average_discrete_grain_surface(const dt_iop_crystgrain_runtime_t *
  * each accepted seed can randomly pick one geometry without paying the kernel
  * construction cost inside the hot pixel loop.
  */
+__DT_CLONE_TARGETS__
 static int _build_layer_kernel_bank(dt_iop_crystgrain_layer_kernel_t *const bank,
                                     const dt_iop_crystgrain_runtime_t *const rt, const uint64_t layer_seed)
 {
@@ -516,6 +521,7 @@ static int _build_layer_kernel_bank(dt_iop_crystgrain_layer_kernel_t *const bank
 /**
  * @brief Release all crystal footprints from one layer bank.
  */
+__DT_CLONE_TARGETS__
 static void _free_layer_kernel_bank(dt_iop_crystgrain_layer_kernel_t *const bank)
 {
   for(int i = 0; i < DT_CRYSTGRAIN_LAYER_KERNELS; i++) _free_crystal_kernel(&bank[i].footprint);
@@ -540,6 +546,7 @@ static void _free_layer_kernel_bank(dt_iop_crystgrain_layer_kernel_t *const bank
  * layer capture that depends only on the grain statistics, not on the image
  * content.
  */
+__DT_CLONE_TARGETS__
 static float _predict_layer_capture(const dt_iop_crystgrain_layer_kernel_t *const bank, const float layer_scale,
                                     const float remaining_fraction)
 {
@@ -596,6 +603,7 @@ static inline size_t _rgb_index(const size_t pixel, const int channel)
  * fast path there with direct indexing and only fall back to reflected
  * coordinates near the edges.
  */
+__DT_CLONE_TARGETS__
 static int _simulate_channel(const dt_iop_crystgrain_runtime_t *const rt, const float *const image, float *const result,
                              float *const remaining, float *const exposure)
 {
@@ -704,6 +712,7 @@ static int _simulate_channel(const dt_iop_crystgrain_runtime_t *const rt, const 
  * order. That keeps the physical "light goes through upper layers first"
  * behavior while avoiding the over-correlated all-channels-at-once look.
  */
+__DT_CLONE_TARGETS__
 static int _simulate_color(const dt_iop_crystgrain_runtime_t *const rt,
                            const dt_iop_crystgrain_color_state_t *const state,
                            float *const exposure)
@@ -818,6 +827,7 @@ static int _simulate_color(const dt_iop_crystgrain_runtime_t *const rt,
  * @details We loop over rows so each OpenMP worker owns whole scanlines and
  * writes to disjoint cache lines in the destination buffer.
  */
+__DT_CLONE_TARGETS__
 static void _extract_luminance_kernel(const float *const restrict in, float *const restrict image,
                                       const int width, const int height,
                                       const dt_iop_order_iccprofile_info_t *const work_profile)
@@ -851,6 +861,7 @@ static void _extract_luminance_kernel(const float *const restrict in, float *con
  * them together in one pass to keep the input image hot in cache and avoid
  * three independent full-frame reads before color synthesis starts.
  */
+__DT_CLONE_TARGETS__
 static void _extract_rgb_kernels(const float *const restrict in, float *const restrict image,
                                  const int width, const int height)
 {
@@ -887,6 +898,7 @@ static void _extract_rgb_kernels(const float *const restrict in, float *const re
  * before filmic RGB, we preserve scene-referred highlights and only clamp
  * negative values away.
  */
+__DT_CLONE_TARGETS__
 static void _apply_mono_grain_kernel(const float *const restrict in, float *const restrict out,
                                      const float *const restrict image, const float *const restrict result,
                                      const int width, const int height, const float exposure)
@@ -920,6 +932,7 @@ static void _apply_mono_grain_kernel(const float *const restrict in, float *cons
  * residual around the original image, mute only its chromatic excursion, and
  * write the final RGBA output without staging intermediate normalized buffers.
  */
+__DT_CLONE_TARGETS__
 static void _finalize_color_grain_kernel(const float *const restrict in, float *const restrict out,
                                          const float *const restrict image, const float *const restrict result,
                                          const int width, const int height, const float exposure_r,

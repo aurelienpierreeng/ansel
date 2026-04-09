@@ -479,6 +479,7 @@ static inline float kernel(const float *x, const float *y)
   return r2*fastlog(MAX(1e-8f,r2));
 }
 
+__DT_CLONE_TARGETS__
 int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid)
 {

@@ -317,10 +317,7 @@ static inline float sign(float x)
 {
   return (x < 0 ? -1.0f : 1.0f);
 }
-
-#ifdef _OPENMP
-#pragma omp declare simd aligned(ivoid, ovoid : 64)
-#endif
+__DT_CLONE_TARGETS__
 int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid)
 {

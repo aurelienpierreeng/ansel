@@ -88,6 +88,7 @@
   hanno@schwalm-brmouseemen.de 21/04/29
 */
 
+__DT_CLONE_TARGETS__
 void dt_masks_extend_border(float *const restrict mask, const int width, const int height, const int border)
 {
   if(border <= 0) return;
@@ -298,6 +299,7 @@ void _masks_blur_13x13_coeff(float *c, const float sigma)
 }
 
 
+__DT_CLONE_TARGETS__
 void dt_masks_calc_rawdetail_mask(float *const restrict src, float *const restrict mask, float *const restrict tmp,
                                   const int width, const int height, const dt_aligned_pixel_t wb)
 {

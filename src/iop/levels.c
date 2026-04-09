@@ -221,6 +221,7 @@ static void dt_iop_levels_compute_levels_manual(const uint32_t *histogram, float
   levels[1] = levels[0] / 2 + levels[2] / 2;
 }
 
+__DT_CLONE_TARGETS__
 static void dt_iop_levels_compute_levels_automatic(dt_iop_module_t *self,
                                                    const dt_dev_pixelpipe_iop_t *piece)
 {
@@ -276,6 +277,7 @@ static void dt_iop_levels_compute_levels_automatic(dt_iop_module_t *self,
     d->levels[1] = (1.0f - center) * d->levels[0] + center * d->levels[2];
 }
 
+__DT_CLONE_TARGETS__
 static void compute_lut(const dt_dev_pixelpipe_iop_t *piece)
 {
   dt_iop_levels_data_t *d = (dt_iop_levels_data_t *)piece->data;
@@ -362,7 +364,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
  * WARNING: unlike commit_params, which is thread safe wrt gui thread and
  * pipes, this function lives in the pipeline thread, and NOT thread safe!
  */
-static void commit_params_late(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
+static inline __attribute__((always_inline)) void commit_params_late(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
                                const dt_dev_pixelpipe_iop_t *piece)
 {
   dt_iop_levels_data_t *d = (dt_iop_levels_data_t *)piece->data;
@@ -414,6 +416,7 @@ static void commit_params_late(dt_iop_module_t *self, const dt_dev_pixelpipe_t *
   }
 }
 
+__DT_CLONE_TARGETS__
 int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
             const void *const ivoid, void *const ovoid)
 {

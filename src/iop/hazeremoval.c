@@ -305,6 +305,7 @@ static inline void pointer_swap_f(float *a, float *b)
 
 
 // calculate the dark channel (minimal color component over a box of size (2*w+1) x (2*w+1) )
+__DT_CLONE_TARGETS__
 static int dark_channel(const const_rgb_image img1, const gray_image img2, const int w)
 {
   const size_t size = (size_t)img1.height * img1.width;
@@ -330,6 +331,7 @@ static int dark_channel(const const_rgb_image img1, const gray_image img2, const
 
 
 // calculate the transition map
+__DT_CLONE_TARGETS__
 static int transition_map(const const_rgb_image img1, const gray_image img2, const int w, const float *const A0,
                           const float strength)
 {
@@ -383,6 +385,7 @@ static float *partition(float *first, float *last, float val)
 // be in that position if the entire range [first, last) had been
 // sorted, additionally, none of the elements in the range [nth, last)
 // is less than any of the elements in the range [first, nth)
+__DT_CLONE_TARGETS__
 void quick_select(float *first, float *nth, float *last)
 {
   if(first == last) return;
@@ -412,6 +415,7 @@ void quick_select(float *first, float *nth, float *last)
 // depth is estimated by the local amount of haze and given in units of the
 // characteristic haze depth, i.e., the distance over which object light is
 // reduced by the factor exp(-1)
+__DT_CLONE_TARGETS__
 static int ambient_light(const const_rgb_image img, int w1, rgb_pixel *pA0, float *max_depth_out)
 {
   const float dark_channel_quantil = 0.95f; // quantil for determining the most hazy pixels
@@ -493,6 +497,7 @@ error:
 }
 
 
+__DT_CLONE_TARGETS__
 int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid)
 {

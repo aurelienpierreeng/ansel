@@ -741,6 +741,7 @@ static inline double igamma2(double x)
   return (x <= 0.03928) ? (x / 12.92) : (exp(log((x + 0.055) / 1.055) * sRGBGammaCurve));
 }
 
+__DT_CLONE_TARGETS__
 static int _get_auto_exp_histogram(const float *const img, const int width, const int height, int *box_area,
                                    uint32_t **_histogram, unsigned int *_hist_size, int *_histcompr)
 {
@@ -822,6 +823,7 @@ cleanup:
   return err;
 }
 
+__DT_CLONE_TARGETS__
 static void _get_sum_and_average(const uint32_t *const histogram, const int hist_size, float *_sum, float *_avg)
 {
   float sum = 0.f;
@@ -870,6 +872,7 @@ static inline float hlcurve(const float level, const float hlcomp, const float h
   }
 }
 
+__DT_CLONE_TARGETS__
 static void _get_auto_exp(const uint32_t *const histogram, const unsigned int hist_size, const int histcompr,
                           const float defgain, const float clip, const float midgray, float *_expcomp,
                           float *_bright, float *_contr, float *_black, float *_hlcompr, float *_hlcomprthresh)
@@ -1188,7 +1191,7 @@ cleanup:
   *_hlcomprthresh = hlcomprthresh;
 }
 
-static int _auto_exposure(const float *const img, const int width, const int height, int *box_area,
+static inline __attribute__((always_inline)) int _auto_exposure(const float *const img, const int width, const int height, int *box_area,
                           const float clip, const float midgray, float *_expcomp, float *_bright, float *_contr,
                           float *_black, float *_hlcompr, float *_hlcomprthresh)
 {
@@ -1210,6 +1213,7 @@ static int _auto_exposure(const float *const img, const int width, const int hei
   return 0;
 }
 
+__DT_CLONE_TARGETS__
 static void _get_selected_area(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
                                const dt_dev_pixelpipe_iop_t *piece,
                                dt_iop_basicadj_gui_data_t *g, const dt_iop_roi_t *const roi_in, int *box_out)
@@ -1267,6 +1271,7 @@ static void _get_selected_area(struct dt_iop_module_t *self, const dt_dev_pixelp
   }
 }
 
+__DT_CLONE_TARGETS__
 int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid)
 {

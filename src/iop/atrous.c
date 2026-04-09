@@ -224,6 +224,7 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
   return 1;
 }
 
+__DT_CLONE_TARGETS__
 static int get_samples(float *t, const dt_iop_atrous_data_t *const d, const dt_iop_roi_t *roi_in,
                        const dt_dev_pixelpipe_iop_t *const piece)
 {
@@ -245,6 +246,7 @@ static int get_samples(float *t, const dt_iop_atrous_data_t *const d, const dt_i
   return i;
 }
 
+__DT_CLONE_TARGETS__
 static int get_scales(float (*thrs)[4], float (*boost)[4], float *sharp, const dt_iop_atrous_data_t *const d,
                       const dt_iop_roi_t *roi_in, const dt_dev_pixelpipe_iop_t *const piece)
 {
@@ -293,6 +295,7 @@ static int get_scales(float (*thrs)[4], float (*boost)[4], float *sharp, const d
 }
 
 /* just process the supplied image buffer, upstream default_process_tiling() does the rest */
+__DT_CLONE_TARGETS__
 static int process_wavelets(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
                             const struct dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o,
                             const dt_iop_roi_t *const roi_in,

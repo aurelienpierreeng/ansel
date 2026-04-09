@@ -384,6 +384,7 @@ gboolean dt_imageio_has_mono_preview(const char *filename)
   return mono;
 }
 
+__DT_CLONE_TARGETS__
 void dt_imageio_flip_buffers(char *out, const char *in, const size_t bpp, const int wd, const int ht,
                              const int fwd, const int fht, const int stride,
                              const dt_image_orientation_t orientation)

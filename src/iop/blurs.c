@@ -164,6 +164,7 @@ inline static void blur_2D_Bspline(const float *const restrict in, float *const 
 }
 
 
+__DT_CLONE_TARGETS__
 static inline void init_kernel(float *const restrict buffer, const size_t width, const size_t height)
 {
   // init an empty kernel with zeros
@@ -175,9 +176,10 @@ static inline void init_kernel(float *const restrict buffer, const size_t width,
 }
 
 
-static inline void create_lens_kernel(float *const restrict buffer,
-                                      const size_t width, const size_t height,
-                                      const float n, const float m, const float k, const float rotation)
+__DT_CLONE_TARGETS__
+static inline void create_lens_kernel(float *const restrict buffer, const size_t width,
+                                      const size_t height, const float n, const float m,
+                                      const float k, const float rotation)
 {
   // n is number of diaphragm blades
   // m is the concavity, aka the number of vertices on straight lines (?)
@@ -213,9 +215,10 @@ static inline void create_lens_kernel(float *const restrict buffer,
 }
 
 
-static inline void create_motion_kernel(float *const restrict buffer,
-                                        const size_t width, const size_t height,
-                                        const float angle, const float curvature, const float offset)
+__DT_CLONE_TARGETS__
+static inline void create_motion_kernel(float *const restrict buffer, const size_t width,
+                                        const size_t height, const float angle,
+                                        const float curvature, const float offset)
 {
   // Compute the polynomial params from user params
   const float A = curvature / 2.f;
@@ -275,8 +278,9 @@ static inline void create_motion_kernel(float *const restrict buffer,
 }
 
 
-static inline void create_gauss_kernel(float *const restrict buffer,
-                                       const size_t width, const size_t height)
+__DT_CLONE_TARGETS__
+static inline void create_gauss_kernel(float *const restrict buffer, const size_t width,
+                                       const size_t height)
 {
   // This is not optimized. Gauss kernel is separable and can be turned into
   // 2 x 1D convolutions.
@@ -301,8 +305,9 @@ static inline void create_gauss_kernel(float *const restrict buffer,
 
 
 
-static inline int build_gui_kernel(unsigned char *const buffer, const size_t width, const size_t height,
-                                   dt_iop_blurs_params_t *p)
+__DT_CLONE_TARGETS__
+static inline int build_gui_kernel(unsigned char *const buffer, const size_t width,
+                                   const size_t height, dt_iop_blurs_params_t *p)
 {
   float *const restrict kernel_1 = dt_alloc_align_float(width * height);
   float *const restrict kernel_2 = dt_alloc_align_float(width * height);
@@ -346,6 +351,7 @@ error:;
 }
 
 
+__DT_CLONE_TARGETS__
 static inline float compute_norm(float *const buffer, const size_t width, const size_t height)
 {
   float norm = 0.f;
@@ -363,7 +369,9 @@ static inline float compute_norm(float *const buffer, const size_t width, const 
 }
 
 
-static inline void normalize(float *const buffer, const size_t width, const size_t height, const float norm)
+__DT_CLONE_TARGETS__
+static inline void normalize(float *const buffer, const size_t width, const size_t height,
+                             const float norm)
 {
 #ifdef _OPENMP
 #pragma omp parallel for simd default(none) dt_omp_firstprivate(width, height, buffer, norm) \
@@ -559,6 +567,7 @@ static void process_fft(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *pi
 // Spatial convolution should be slower for large blurs because it is o(N²) where N is the width of the kernel
 // but code is much simpler and easier to debug
 
+__DT_CLONE_TARGETS__
 int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
                     const void *const restrict ivoid, void *const restrict ovoid)
 {

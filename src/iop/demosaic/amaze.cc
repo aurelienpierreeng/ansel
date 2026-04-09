@@ -334,6 +334,7 @@ template <typename _Tp> static inline const _Tp ULIM(const _Tp a, const _Tp b, c
 ////////////////////////////////////////////////////////////////
 
 
+__DT_CLONE_TARGETS__
 void amaze_demosaic_RT(const dt_dev_pixelpipe_iop_t *piece, const float *const in,
                        float *out, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out,
                        const int filters)

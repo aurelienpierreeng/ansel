@@ -385,6 +385,7 @@ static char *_lens_sanitize(const char *orig_lens)
   }
 }
 
+__DT_CLONE_TARGETS__
 static lfModifier * get_modifier(int *mods_done, int w, int h, const dt_iop_lensfun_data_t *d, int mods_filter, gboolean force_inverse)
 {
   lfModifier *mod;
@@ -440,6 +441,7 @@ static inline void _lens_fill_vignette_row(float *const buf, const int width, co
    As green / Y channel is the most centric i took that as the canonical value instead of taking the mean.
 */
 
+__DT_CLONE_TARGETS__
 int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
             const void *const ivoid, void *const ovoid)
 {

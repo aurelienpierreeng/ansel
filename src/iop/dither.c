@@ -300,7 +300,7 @@ static inline void clipnan_pixel(float *const restrict out, const float *const r
 // clipnan_pixel proves to vectorize just fine, so don't bother implementing a separate SSE version
 #define clipnan_pixel_sse clipnan_pixel
 
-static int get_dither_parameters(const dt_iop_dither_data_t *const data, const dt_dev_pixelpipe_t *const pipe,
+static inline __attribute__((always_inline)) int get_dither_parameters(const dt_iop_dither_data_t *const data, const dt_dev_pixelpipe_t *const pipe,
                                  const dt_dev_pixelpipe_iop_t *const piece,
                                  const float scale, unsigned int *const restrict levels)
 {
@@ -373,10 +373,7 @@ static int get_dither_parameters(const dt_iop_dither_data_t *const data, const d
 #define DOWNRIGHT_WT  (1.0f/16.0f)
 #define DOWN_WT       (5.0f/16.0f)
 #define DOWNLEFT_WT   (3.0f/16.0f)
-
-#ifdef _OPENMP
-#pragma omp declare simd aligned(ivoid, ovoid : 64)
-#endif
+__DT_CLONE_TARGETS__
 static void process_floyd_steinberg(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
                                     const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid,
                                     const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
@@ -502,9 +499,6 @@ static void process_floyd_steinberg(struct dt_iop_module_t *self, const dt_dev_p
 }
 
 #if defined(__SSE2__)
-#ifdef _OPENMP
-#pragma omp declare simd aligned(ivoid, ovoid : 64)
-#endif
 static void process_floyd_steinberg_sse2(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
                                          const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid,
                                          const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
@@ -630,6 +624,7 @@ static void process_floyd_steinberg_sse2(struct dt_iop_module_t *self, const dt_
 }
 #endif
 
+__DT_CLONE_TARGETS__
 static void process_random(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
                            const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid,
                            const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)

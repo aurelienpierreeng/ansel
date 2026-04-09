@@ -204,6 +204,7 @@ static const dt_colorspaces_color_profile_t *_get_profile(dt_colorspaces_t *self
                                                           const char *filename,
                                                           dt_colorspaces_profile_direction_t direction);
 
+__DT_CLONE_TARGETS__
 static int dt_colorspaces_get_matrix_from_profile(cmsHPROFILE prof, dt_colormatrix_t matrix, float *lutr, float *lutg,
                                                   float *lutb, const int lutsize, const int input)
 {
@@ -1436,7 +1437,7 @@ void rgb2hsl(const dt_aligned_pixel_t rgb, float *h, float *s, float *l)
 }
 
 // for efficiency, 'hue' must be pre-scaled to be in 0..6
-static inline float hue2rgb(float m1, float m2, float hue)
+static inline __attribute__((always_inline)) float hue2rgb(float m1, float m2, float hue)
 {
   // compute the value for one of the RGB channels from the hue angle.
   // If 1 <= angle < 3, return m2; if 4 <= angle <= 6, return m1; otherwise, linearly interpolate between m1 and m2.
@@ -1539,6 +1540,7 @@ void dt_colorspaces_transform_rgba_float_row(const cmsHTRANSFORM transform, cons
   cmsDoTransform(transform, in, out, width);
 }
 
+__DT_CLONE_TARGETS__
 void dt_colorspaces_transform_rgba_float_image(const cmsHTRANSFORM transform, const float *image_in, float *image_out,
                                                const int width, const int height)
 {
@@ -2517,6 +2519,7 @@ const dt_colorspaces_color_profile_t *dt_colorspaces_get_profile(dt_colorspaces_
 }
 
 // Copied from dcraw's pseudoinverse()
+__DT_CLONE_TARGETS__
 static void dt_colorspaces_pseudoinverse(double (*in)[3], double (*out)[3], int size)
 {
   double work[3][6];
@@ -2579,6 +2582,7 @@ int dt_colorspaces_conversion_matrices_xyz(const float adobe_XYZ_to_CAM[4][3], f
 
 // Converted from dcraw's cam_xyz_coeff()
 // Build the camera RGB to sRGB conversion matrix
+__DT_CLONE_TARGETS__
 int dt_colorspaces_conversion_matrices_rgb(const float adobe_XYZ_to_CAM[4][3],
                                            double out_RGB_to_CAM[4][3], double out_CAM_to_RGB[3][4],
                                            const float *embedded_matrix,
@@ -2691,6 +2695,7 @@ void dt_colorspaces_cygm_apply_coeffs_to_rgb(float *out, const float *in, int nu
   }
 }
 
+__DT_CLONE_TARGETS__
 void dt_colorspaces_cygm_to_rgb(float *out, int num, double CAM_to_RGB[3][4])
 {
 #ifdef _OPENMP

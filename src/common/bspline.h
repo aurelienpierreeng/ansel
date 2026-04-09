@@ -76,11 +76,6 @@ static inline size_t decimated_bspline_size(const size_t size)
 {
   return (size - 1u) / 2u + 1u;
 }
-
-
-#ifdef _OPENMP
-#pragma omp declare simd aligned(buf, indices, result:64)
-#endif
 static inline void sparse_scalar_product(const dt_aligned_pixel_t buf, const size_t indices[BSPLINE_FSIZE],
                                          dt_aligned_pixel_t result, const gboolean clip_negatives)
 {
@@ -115,10 +110,6 @@ static inline void sparse_scalar_product(const dt_aligned_pixel_t buf, const siz
     }
   }
 }
-
-#ifdef _OPENMP
-#pragma omp declare simd aligned(in, temp)
-#endif
 static inline void _bspline_vertical_pass(const float *const restrict in, float *const restrict temp,
                                           size_t row, size_t width, size_t height, int mult, const gboolean clip_negatives)
 {
@@ -175,10 +166,6 @@ static inline void _bspline_horizontal_decimated(const float *const restrict tem
   indices[4] = 4 * MIN(center + 2, width - 1);
   sparse_scalar_product(temp, indices, out, clip_negatives);
 }
-
-#ifdef _OPENMP
-#pragma omp declare simd aligned(in, out:64) aligned(tempbuf:16)
-#endif
 inline static void reduce_2D_Bspline(const float *const restrict in, float *const restrict out,
                                      const size_t width, const size_t height,
                                      float *const restrict tempbuf, const size_t padded_size,
@@ -240,10 +227,6 @@ inline static void reduce_2D_Bspline(const float *const restrict in, float *cons
     }
   }
 }
-
-#ifdef _OPENMP
-#pragma omp declare simd aligned(in, out:64)
-#endif
 inline static void expand_2D_Bspline(const float *const restrict in, float *const restrict out,
                                      const size_t width, const size_t height,
                                      const gboolean clip_negatives)
@@ -355,10 +338,6 @@ inline static void expand_2D_Bspline(const float *const restrict in, float *cons
       }
     }
 }
-
-#ifdef _OPENMP
-#pragma omp declare simd aligned(in, out:64) aligned(tempbuf:16)
-#endif
 inline static void blur_2D_Bspline(const float *const restrict in, float *const restrict out,
                                    float *const restrict tempbuf,
                                    const size_t width, const size_t height, const int mult, const gboolean clip_negatives)
@@ -385,10 +364,6 @@ inline static void blur_2D_Bspline(const float *const restrict in, float *const 
     }
   }
 }
-
-#ifdef _OPENMP
-#pragma omp declare simd aligned(in, HF, LF:64) aligned(tempbuf:16)
-#endif
 inline static void decompose_2D_Bspline(const float *const restrict in,
                                         float *const restrict HF,
                                         float *const restrict LF,

@@ -138,6 +138,7 @@ void input_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelp
  * the maximum produces fewer artifacts when inadvertently replacing
  * non-hot pixels.
  * This is the Bayer sensor variant. */
+__DT_CLONE_TARGETS__
 static int process_bayer(const dt_iop_hotpixels_data_t *data,
                          const void *const ivoid, void *const ovoid,
                          const dt_iop_roi_t *const roi_out)
@@ -199,6 +200,7 @@ static int process_bayer(const dt_iop_hotpixels_data_t *data,
 }
 
 /* X-Trans sensor equivalent of process_bayer(). */
+__DT_CLONE_TARGETS__
 static int process_xtrans(const dt_iop_hotpixels_data_t *data,
                           const void *const ivoid, void *const ovoid,
                           const dt_iop_roi_t *const roi_out, const uint8_t (*const xtrans)[6])

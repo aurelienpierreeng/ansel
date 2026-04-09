@@ -348,7 +348,7 @@ static drawlayer_process_scratch_t *_get_process_scratch(void)
   return scratch;
 }
 
-static gboolean _resolve_layer_geometry(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
+static inline __attribute__((always_inline)) gboolean _resolve_layer_geometry(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
                                         const dt_dev_pixelpipe_iop_t *piece, int *layer_width,
                                         int *layer_height, int *origin_x, int *origin_y)
 {
@@ -396,7 +396,7 @@ static gboolean _resolve_layer_geometry(dt_iop_module_t *self, const dt_dev_pixe
   return resolved_width > 0 && resolved_height > 0;
 }
 
-static uint64_t _drawlayer_params_cache_hash(const int32_t imgid, const dt_iop_drawlayer_params_t *params,
+static inline __attribute__((always_inline)) uint64_t _drawlayer_params_cache_hash(const int32_t imgid, const dt_iop_drawlayer_params_t *params,
                                              const int layer_width, const int layer_height)
 {
   /* Internal drawlayer base-cache identity must stay stable across transient
@@ -506,7 +506,7 @@ void dt_drawlayer_release_all_base_patch_extra_refs(dt_iop_drawlayer_gui_data_t 
   }
 }
 
-static gboolean _refresh_piece_base_cache(dt_iop_module_t *self, dt_iop_drawlayer_data_t *data,
+static inline __attribute__((always_inline)) gboolean _refresh_piece_base_cache(dt_iop_module_t *self, dt_iop_drawlayer_data_t *data,
                                           const dt_iop_drawlayer_params_t *params, dt_dev_pixelpipe_t *pipe,
                                           dt_dev_pixelpipe_iop_t *piece)
 {
@@ -647,6 +647,7 @@ static gboolean _refresh_piece_base_cache(dt_iop_module_t *self, dt_iop_drawlaye
   return FALSE;
 }
 
+__DT_CLONE_TARGETS__
 static void _blend_layer_over_input(float *output, const float *input, const float *layerbuf, const size_t pixels,
                                     const gboolean use_preview_bg, const float preview_bg)
 {
@@ -1477,7 +1478,7 @@ static void _sanitize_requested_layer_name(const char *requested, char *name, co
 #include "drawlayer/layers.c"
 
 // Find the cached working layer if any
-static gboolean _update_runtime_state(const drawlayer_runtime_request_t *request,
+static inline __attribute__((always_inline)) gboolean _update_runtime_state(const drawlayer_runtime_request_t *request,
                                       dt_drawlayer_runtime_source_t *source)
 {
   if(source) *source = (dt_drawlayer_runtime_source_t){ 0 };
@@ -1523,7 +1524,7 @@ static gboolean _update_runtime_state(const drawlayer_runtime_request_t *request
   return FALSE;
 }
 
-static drawlayer_preview_background_t _resolve_preview_background(const dt_iop_module_t *self,
+static inline __attribute__((always_inline)) drawlayer_preview_background_t _resolve_preview_background(const dt_iop_module_t *self,
                                                                   const dt_iop_drawlayer_gui_data_t *gui)
 {
   const int preview_mode = (gui && self && self->dev && self->dev->gui_module == self)
@@ -3940,6 +3941,7 @@ process_cl_fallback:
 #endif
 
 /** @brief CPU processing path for layer-over-input compositing. */
+__DT_CLONE_TARGETS__
 int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
             const void *const ivoid, void *const ovoid)
 {

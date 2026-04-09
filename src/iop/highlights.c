@@ -90,6 +90,7 @@ static const float DT_ALIGNED_ARRAY anisotropic_kernel_isophote[9]
   = { 0.25f, 0.5f, 0.25f, 0.5f, -3.f, 0.5f, 0.25f, 0.5f, 0.25f };
 
 #if DEBUG_DUMP_PFM
+__DT_CLONE_TARGETS__
 static void dump_PFM(const char *filename, const float* out, const uint32_t w, const uint32_t h)
 {
   FILE *f = g_fopen(filename, "wb");
@@ -786,6 +787,7 @@ static inline void interpolate_color(const void *const ivoid, void *const ovoid,
 #define SQRT3 1.7320508075688772935274463415058723669L
 #define SQRT12 3.4641016151377545870548926830117447339L // 2*SQRT3
 
+__DT_CLONE_TARGETS__
 static void process_lch_bayer(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
                               void *const ovoid, const dt_iop_roi_t *const roi_in,
                               const dt_iop_roi_t *const roi_out, const float clip)
@@ -887,6 +889,7 @@ static void process_lch_bayer(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_
   }
 }
 
+__DT_CLONE_TARGETS__
 static void process_lch_xtrans(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
                                void *const ovoid, const dt_iop_roi_t *const roi_in,
                                const dt_iop_roi_t *const roi_out, const float clip)
@@ -1021,6 +1024,7 @@ static void process_lch_xtrans(dt_iop_module_t *self, const dt_dev_pixelpipe_iop
 #undef SQRT3
 #undef SQRT12
 
+__DT_CLONE_TARGETS__
 static void _interpolate_and_mask(const float *const restrict input,
                                   float *const restrict interpolated,
                                   float *const restrict clipping_mask,
@@ -1168,6 +1172,7 @@ static void _interpolate_and_mask(const float *const restrict input,
  * the current tile keeps the normalization explicit and local to the data being
  * reconstructed, instead of relying on the white balance declared upstream.
  */
+__DT_CLONE_TARGETS__
 static void _compute_laplacian_normalization(const float *const restrict input,
                                              const dt_iop_roi_t *const roi_in,
                                              const uint32_t filters,
@@ -1212,6 +1217,7 @@ static void _compute_laplacian_normalization(const float *const restrict input,
  * the 6x6 X-Trans period so CPU and OpenCL guided-laplacian paths start from the
  * same simple bilinear reconstruction.
  */
+__DT_CLONE_TARGETS__
 static void _build_xtrans_bilinear_lookup(int32_t lookup[6][6][32],
                                           const dt_iop_roi_t *const roi_in,
                                           const uint8_t (*const xtrans)[6])
@@ -1254,6 +1260,7 @@ static void _build_xtrans_bilinear_lookup(int32_t lookup[6][6][32],
  * lightweight bilinear neighbourhood as the linear VNG stage so the diffusion
  * begins from a simple and explicit reconstruction.
  */
+__DT_CLONE_TARGETS__
 static void _interpolate_and_mask_xtrans(const float *const restrict input,
                                          float *const restrict interpolated,
                                          float *const restrict clipping_mask,
@@ -1353,6 +1360,7 @@ static void _interpolate_and_mask_xtrans(const float *const restrict input,
     }
 }
 
+__DT_CLONE_TARGETS__
 static void _remosaic_and_replace(const float *const restrict input,
                                   const float *const restrict interpolated,
                                   const float *const restrict clipping_mask,
@@ -1381,6 +1389,7 @@ static void _remosaic_and_replace(const float *const restrict input,
 }
 
 /** Reproject the reconstructed RGB back onto the X-Trans mosaic. */
+__DT_CLONE_TARGETS__
 static void _remosaic_and_replace_xtrans(const float *const restrict input,
                                          const float *const restrict interpolated,
                                          const float *const restrict clipping_mask,
@@ -1423,7 +1432,7 @@ enum wavelets_scale_t
 };
 
 
-static uint8_t scale_type(const int s, const int scales)
+static inline __attribute__((always_inline)) uint8_t scale_type(const int s, const int scales)
 {
   uint8_t scale = ANY_SCALE;
   if(s == 0) scale |= FIRST_SCALE;
@@ -1432,11 +1441,11 @@ static uint8_t scale_type(const int s, const int scales)
 }
 
 
+__DT_CLONE_TARGETS__
 static inline void guide_laplacians(const float *const restrict high_freq, const float *const restrict low_freq,
                                     const float *const restrict clipping_mask,
-                                    float *const restrict output,
-                                    const size_t width, const size_t height, const int mult,
-                                    const float noise_level, const int salt,
+                                    float *const restrict output, const size_t width, const size_t height,
+                                    const int mult, const float noise_level, const int salt,
                                     const uint8_t scale, const float radius_sq)
 {
   float *const restrict out = DT_IS_ALIGNED(output);
@@ -1604,10 +1613,12 @@ static inline void guide_laplacians(const float *const restrict high_freq, const
   }
 }
 
+__DT_CLONE_TARGETS__
 static inline void heat_PDE_diffusion(const float *const restrict high_freq, const float *const restrict low_freq,
                                       const float *const restrict clipping_mask,
                                       float *const restrict output, const size_t width, const size_t height,
-                                      const int mult, const uint8_t scale, const float first_order_factor)
+                                      const int mult, const uint8_t scale,
+                                      const float first_order_factor)
 {
   // Simultaneous inpainting for image structure and texture using anisotropic heat transfer model
   // https://www.researchgate.net/publication/220663968
@@ -1804,6 +1815,7 @@ static inline int wavelets_process(const float *const restrict in, float
 }
 
 
+__DT_CLONE_TARGETS__
 static int process_laplacian_bayer(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
                                    const dt_dev_pixelpipe_iop_t *piece, const void *const restrict ivoid,
                                    void *const restrict ovoid,
@@ -1902,6 +1914,7 @@ error:;
   return err;
 }
 
+__DT_CLONE_TARGETS__
 static int process_laplacian_xtrans(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
                                     const dt_dev_pixelpipe_iop_t *piece, const void *const restrict ivoid,
                                     void *const restrict ovoid,
@@ -2628,6 +2641,7 @@ error:
 }
 #endif
 
+__DT_CLONE_TARGETS__
 static void process_clip(const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid,
                          const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out,
                          const float clip)
@@ -2663,6 +2677,7 @@ static void process_clip(const dt_dev_pixelpipe_iop_t *piece, const void *const 
   }
 }
 
+__DT_CLONE_TARGETS__
 static void process_visualize(const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid,
                          const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out,
                          const uint32_t filters, dt_iop_highlights_data_t *data)
@@ -2693,6 +2708,7 @@ static void process_visualize(const dt_dev_pixelpipe_iop_t *piece, const void *c
   }
 }
 
+__DT_CLONE_TARGETS__
 int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid)
 {

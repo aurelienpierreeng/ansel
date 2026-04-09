@@ -420,7 +420,7 @@ void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe
   return;
 }
 
-static void process_cpu(const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
+static inline __attribute__((always_inline)) void process_cpu(const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
                         const void *const ivoid,
                         void *const ovoid, const dt_iop_roi_t *const roi_in,
                         const dt_iop_roi_t *const roi_out,

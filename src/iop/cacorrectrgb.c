@@ -201,6 +201,7 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_
   memcpy(piece->data, p1, self->params_size);
 }
 
+__DT_CLONE_TARGETS__
 static void normalize_manifolds(const float *const restrict blurred_in, float *const restrict blurred_manifold_lower, float *const restrict blurred_manifold_higher, const size_t width, const size_t height, const dt_iop_cacorrectrgb_guide_channel_t guide)
 {
 #ifdef _OPENMP
@@ -608,6 +609,7 @@ dt_omp_firstprivate(in, width, height, guide, manifolds, out, sigma, mode) \
   }
 }
 
+__DT_CLONE_TARGETS__
 static int reduce_artifacts(const float* const restrict in,
                             const size_t width, const size_t height, const float sigma,
                             const dt_iop_cacorrectrgb_guide_channel_t guide,
@@ -691,7 +693,7 @@ error:;
   return err;
 }
 
-static int reduce_chromatic_aberrations(const float* const restrict in,
+static inline __attribute__((always_inline)) int reduce_chromatic_aberrations(const float* const restrict in,
                           const size_t width, const size_t height,
                           const size_t ch, const float sigma, const float sigma2,
                           const dt_iop_cacorrectrgb_guide_channel_t guide,

@@ -18,6 +18,7 @@
 
 
 /** 1:1 demosaic from in to out, in is full buf, out is translated/cropped (scale == 1.0!) */
+__DT_CLONE_TARGETS__
 static void passthrough_monochrome(float *out, const float *const in, dt_iop_roi_t *const roi_out,
                                    const dt_iop_roi_t *const roi_in)
 {
@@ -44,6 +45,7 @@ static void passthrough_monochrome(float *out, const float *const in, dt_iop_roi
   }
 }
 
+__DT_CLONE_TARGETS__
 static void passthrough_color(float *out, const float *const in, dt_iop_roi_t *const roi_out, const dt_iop_roi_t *const roi_in,
    const uint32_t filters, const uint8_t (*const xtrans)[6])
 {

@@ -276,6 +276,7 @@ void cleanup_global(dt_iop_module_so_t *module)
   dt_free(module->data);
 }
 
+__DT_CLONE_TARGETS__
 static void process_fastpath_apply_tonecurves(const dt_iop_colorout_data_t *const d,
                                               float *const restrict out, const size_t npixels)
 {
@@ -418,6 +419,7 @@ static inline void process_fastpath_matrix(const float *const restrict in, float
     dt_omploop_sfence();  // ensure that nontemporal writes complete before we attempt to read output
 }
 
+__DT_CLONE_TARGETS__
 int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
             void *const ovoid)
 {

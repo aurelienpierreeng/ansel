@@ -237,6 +237,7 @@ static void invert_histogram(const int *hist, float *inv_hist)
   // HISTN-1)]);
 }
 
+__DT_CLONE_TARGETS__
 static void get_cluster_mapping(const int n, float2 *mi, const float *wi, float2 *mo, const float *wo,
                                 const float dominance, int *mapio)
 {
@@ -269,6 +270,7 @@ static void get_cluster_mapping(const int n, float2 *mi, const float *wi, float2
 
 
 // inverse distant weighting according to D. Shepard's method; with power parameter 2.0
+__DT_CLONE_TARGETS__
 static void get_clusters(const float *col, const int n, float2 *mean, float *weight)
 {
   float mdist = FLT_MAX;
@@ -449,6 +451,7 @@ static void kmeans(const float *col, const int width, const int height, const in
   }
 }
 
+__DT_CLONE_TARGETS__
 int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid)
 {

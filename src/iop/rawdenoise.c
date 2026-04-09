@@ -187,6 +187,7 @@ void input_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelp
 
 #define BIT16 65536.0
 
+__DT_CLONE_TARGETS__
 static void compute_channel_noise(float *const noise, int color, const dt_iop_rawdenoise_data_t *const data)
 {
   // note that these constants are the same for X-Trans and Bayer, as they are proportional to image detail on
@@ -222,6 +223,7 @@ static void compute_channel_noise(float *const noise, int color, const dt_iop_ra
   }
 }
 
+__DT_CLONE_TARGETS__
 static int wavelet_denoise(const float *const restrict in, float *const restrict out, const dt_iop_roi_t *const roi,
                            const dt_iop_rawdenoise_data_t * const data, const uint32_t filters)
 {
@@ -341,6 +343,7 @@ static inline float vstransform(const float value)
   return sqrtf(MAX(0.0f, value));
 }
 
+__DT_CLONE_TARGETS__
 static int wavelet_denoise_xtrans(const float *const restrict in, float *const restrict out,
                                   const dt_iop_roi_t *const restrict roi,
                                   const dt_iop_rawdenoise_data_t *const data, const uint8_t (*const xtrans)[6])

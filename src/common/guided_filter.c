@@ -81,7 +81,7 @@ typedef struct color_image
 } color_image;
 
 // allocate space for n-component image of size width x height
-static inline int new_color_image(color_image *img, int width, int height, int ch)
+static inline __attribute__((always_inline)) int new_color_image(color_image *img, int width, int height, int ch)
 {
   img->data = dt_pixelpipe_cache_alloc_align_float_cache((size_t)width * height * ch, 0);
   if(!img->data) return 1;
@@ -92,7 +92,7 @@ static inline int new_color_image(color_image *img, int width, int height, int c
 }
 
 // free space for n-component image
-static inline void free_color_image(color_image *img_p)
+static inline __attribute__((always_inline)) void free_color_image(color_image *img_p)
 {
   dt_pixelpipe_cache_free_align(img_p->data);
   img_p->data = NULL;
@@ -307,7 +307,7 @@ static int guided_filter_tiling(color_image imgg, gray_image img, gray_image img
   return 0;
 }
 
-static int compute_tile_height(const int height, const int w)
+static inline __attribute__((always_inline)) int compute_tile_height(const int height, const int w)
 {
   int tile_h = max_i(3 * w, GF_TILE_SIZE);
 #if 0 // enabling the below doesn't make any measureable speed difference, but does cause a handful of pixels
@@ -332,7 +332,7 @@ static int compute_tile_height(const int height, const int w)
   return tile_h;
 }
 
-static int compute_tile_width(const int width, const int w)
+static inline __attribute__((always_inline)) int compute_tile_width(const int width, const int w)
 {
   int tile_w = max_i(3 * w, GF_TILE_SIZE);
 #if 0 // enabling the below doesn't make any measureable speed difference, but does cause a handful of pixels
@@ -357,6 +357,7 @@ static int compute_tile_width(const int width, const int w)
   return tile_w;
 }
 
+__DT_CLONE_TARGETS__
 int guided_filter(const float *const guide, const float *const in, float *const out, const int width,
                   const int height, const int ch,
                   const int w,              // window size

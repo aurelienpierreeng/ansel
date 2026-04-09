@@ -80,7 +80,7 @@ enum border_mode
  * @param idx index to filter
  * @param length length of line
  */
-static inline ssize_t _clip(ssize_t i,
+static inline __attribute__((always_inline)) ssize_t _clip(ssize_t i,
                             const ssize_t min,
                             const ssize_t max,
                             enum border_mode mode)
@@ -136,7 +136,7 @@ static inline ssize_t _clip(ssize_t i,
   return i;
 }
 
-static inline void _prepare_tap_boundaries(int *tap_first,
+static inline __attribute__((always_inline)) void _prepare_tap_boundaries(int *tap_first,
                                            int *tap_last,
                                            const enum border_mode mode,
                                            const int filterwidth,
@@ -365,7 +365,7 @@ static const struct dt_interpolation dt_interpolator[] = {
  * Kernel utility methods
  * ------------------------------------------------------------------------*/
 
-static inline float _compute_upsampling_kernel(const struct dt_interpolation *itor,
+static inline __attribute__((always_inline)) float _compute_upsampling_kernel(const struct dt_interpolation *itor,
                                                float *kernel,
                                                int *first,
                                                float t)
@@ -441,6 +441,7 @@ static inline void _compute_downsampling_kernel(const struct dt_interpolation *i
 
 #define MAX_KERNEL_REQ ((2 * (MAX_HALF_FILTER_WIDTH) + 3) & (~3))
 
+__DT_CLONE_TARGETS__
 float dt_interpolation_compute_sample(const struct dt_interpolation *itor,
                                       const float *in,
                                       const float x,
@@ -540,6 +541,7 @@ float dt_interpolation_compute_sample(const struct dt_interpolation *itor,
  * Pixel interpolation function (see usage in iop/lens.c and iop/clipping.c)
  * ------------------------------------------------------------------------*/
 
+__DT_CLONE_TARGETS__
 void dt_interpolation_compute_pixel4c(const struct dt_interpolation *itor,
                                       const float *in,
                                       float *out,
@@ -754,6 +756,7 @@ const struct dt_interpolation *dt_interpolation_new(enum dt_interpolation_type t
  * out position meta[3*out]
  * @return FALSE for success, TRUE for failure
  */
+__DT_CLONE_TARGETS__
 static gboolean _prepare_resampling_plan(const struct dt_interpolation *itor,
                                          const int in,
                                          const int in_x0,
@@ -938,6 +941,7 @@ static gboolean _prepare_resampling_plan(const struct dt_interpolation *itor,
   return FALSE;
 }
 
+__DT_CLONE_TARGETS__
 static void _interpolation_resample_plain(const struct dt_interpolation *itor,
                                           float *const restrict out,
                                           const dt_iop_roi_t *const roi_out,

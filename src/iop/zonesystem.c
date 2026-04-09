@@ -196,7 +196,7 @@ static inline void _iop_zonesystem_calculate_zonemap(struct dt_iop_zonesystem_pa
   }
 }
 
-static void process_common_setup(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
+static inline __attribute__((always_inline)) void process_common_setup(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
                                  const dt_dev_pixelpipe_iop_t *piece,
                                  const void *const ivoid, void *const ovoid, const dt_iop_roi_t *const roi_in,
                                  const dt_iop_roi_t *const roi_out)
@@ -222,6 +222,7 @@ static void process_common_setup(struct dt_iop_module_t *self, const dt_dev_pixe
   }
 }
 
+__DT_CLONE_TARGETS__
 static void process_common_cleanup(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
                                    const dt_dev_pixelpipe_iop_t *piece,
                                    const void *const ivoid, void *const ovoid,
@@ -312,6 +313,7 @@ static void process_common_cleanup(struct dt_iop_module_t *self, const dt_dev_pi
   }
 }
 
+__DT_CLONE_TARGETS__
 int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid)
 {

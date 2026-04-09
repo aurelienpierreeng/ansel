@@ -42,7 +42,8 @@ static inline const short * hexmap(const int row, const int col, short (*const a
 
 /*
    Frank Markesteijn's algorithm for Fuji X-Trans sensors
- */
+*/
+__DT_CLONE_TARGETS__
 static void xtrans_markesteijn_interpolate(float *out, const float *const in,
                                            const dt_iop_roi_t *const roi_out,
                                            const dt_iop_roi_t *const roi_in,
@@ -522,6 +523,7 @@ static void xtrans_markesteijn_interpolate(float *out, const float *const in,
 #undef TS
 
 #define TS 122
+__DT_CLONE_TARGETS__
 static void xtrans_fdc_interpolate(struct dt_iop_module_t *self, float *out, const float *const in,
                                    const dt_iop_roi_t *const roi_out, const dt_iop_roi_t *const roi_in,
                                    const uint8_t (*const xtrans)[6])

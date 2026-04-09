@@ -176,14 +176,14 @@ static void _simplex_noise_init()
 {
   for(int i = 0; i < 512; i++) perm[i] = permutation[i & 255];
 }
-static double dot(int g[], double x, double y, double z)
+static inline __attribute__((always_inline)) double dot(int g[], double x, double y, double z)
 {
   return g[0] * x + g[1] * y + g[2] * z;
 }
 
 #define FASTFLOOR(x) (x > 0 ? (int)(x) : (int)(x)-1)
 
-static double _simplex_noise(double xin, double yin, double zin)
+static inline __attribute__((always_inline)) double _simplex_noise(double xin, double yin, double zin)
 {
   double n0, n1, n2, n3; // Noise contributions from the four corners
                          // Skew the input space to determine which simplex cell we're in
@@ -335,7 +335,7 @@ static double _simplex_noise(double xin, double yin, double zin)
   return ( 1.0 - (( (n * (n * n * 15731 + 789221) +1376312589) & 0x7fffffff) / 1073741824.0));
 }
 
-static double __value_smooth_noise(uint32_t level,double x,double y)
+static inline __attribute__((always_inline)) double __value_smooth_noise(uint32_t level,double x,double y)
 {
   double corners = ( __value_noise(level,x-1, y-1)+__value_noise(level,x+1, y-1)+__value_noise(level,x-1,
 y+1)+__value_noise(level,x+1, y+1) ) / 16;
@@ -345,14 +345,14 @@ y+1)+__value_noise(level,x+1, y+1) ) / 16;
   return corners + sides + center;
 }
 
-static double __preline_cosine_interpolate(double a,double b,double x)
+static inline __attribute__((always_inline)) double __preline_cosine_interpolate(double a,double b,double x)
 {
   double ft = x * 3.1415927;
   double f = (1 - cos(ft)) * .5;
   return  a*(1-f) + b*f;
 }
 
-static double __value_interpolate(uint32_t level,double x,double y)
+static inline __attribute__((always_inline)) double __value_interpolate(uint32_t level,double x,double y)
 {
   double fx = x - (uint32_t)x;
   double fy = y - (uint32_t)y;
@@ -367,6 +367,7 @@ static double __value_interpolate(uint32_t level,double x,double y)
 
   return __preline_cosine_interpolate(i1 , i2 , fy);
 }
+__DT_CLONE_TARGETS__
 static double _perlin_2d_noise(double x,double y,uint32_t octaves,double persistance,double z)
 {
   double f=1,a=1,total=0;
@@ -379,6 +380,7 @@ static double _perlin_2d_noise(double x,double y,uint32_t octaves,double persist
   return total;
 }*/
 
+__DT_CLONE_TARGETS__
 static double _simplex_2d_noise(double x, double y, uint32_t octaves, double persistance, double z)
 {
   double total = 0;
@@ -421,7 +423,7 @@ static void evaluate_grain_lut(float *grain_lut, const float mb)
   }
 }
 
-static float dt_lut_lookup_2d_1c(const float *grain_lut, const float x, const float y)
+static inline __attribute__((always_inline)) float dt_lut_lookup_2d_1c(const float *grain_lut, const float x, const float y)
 {
   const float _x = CLAMPS((x + 0.5) * (GRAIN_LUT_SIZE - 1), 0, GRAIN_LUT_SIZE - 1);
   const float _y = CLAMPS(y * (GRAIN_LUT_SIZE - 1), 0, GRAIN_LUT_SIZE - 1);
@@ -485,6 +487,7 @@ void input_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelp
 
 // see: http://eternallyconfuzzled.com/tuts/algorithms/jsw_tut_hashing.aspx
 // this is the modified bernstein
+__DT_CLONE_TARGETS__
 static unsigned int _hash_string(const char *s)
 {
   unsigned int h = 0;
@@ -492,6 +495,7 @@ static unsigned int _hash_string(const char *s)
   return h;
 }
 
+__DT_CLONE_TARGETS__
 int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid)
 {

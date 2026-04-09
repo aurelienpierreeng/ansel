@@ -35,6 +35,7 @@ static float slider2contrast(float slider)
 {
   return 0.005f * powf(slider, 1.1f);
 }
+__DT_CLONE_TARGETS__
 static int dual_demosaic(const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
                          float *const restrict rgb_data, const float *const restrict raw_data,
                          dt_iop_roi_t *const roi_out, const dt_iop_roi_t *const roi_in,

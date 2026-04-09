@@ -93,6 +93,7 @@ static INLINE float safe_in(float a, float scale)
 }
 
 /** This is basically ppg adopted to only write data to RCD_MARGIN */
+__DT_CLONE_TARGETS__
 static void rcd_ppg_border(float *const out, const float *const in, const int width, const int height, const uint32_t filters, const int margin)
 {
   const int border = margin + 3;
@@ -280,10 +281,6 @@ static void rcd_ppg_border(float *const out, const float *const in, const int wi
     }
   }
 }
-
-#ifdef _OPENMP
-  #pragma omp declare simd aligned(in, out)
-#endif
 static void rcd_demosaic(const dt_dev_pixelpipe_iop_t *piece, float *const restrict out, const float *const restrict in, dt_iop_roi_t *const roi_out,
                                    const dt_iop_roi_t *const roi_in, const uint32_t filters)
 {
