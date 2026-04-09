@@ -157,7 +157,7 @@ if(USE_OPENMP)
 
     # Clang has an option to specify the OpenMP standard to use. Specify it.
     # FIXME: Implement this in FindOpenMP.cmake
-    set(OPENMP_VERSION_SPECIFIER "-fopenmp-version=50")
+    set(OPENMP_VERSION_SPECIFIER "-fopenmp-version=51")
 
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OPENMP_VERSION_SPECIFIER}")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OPENMP_VERSION_SPECIFIER}")
