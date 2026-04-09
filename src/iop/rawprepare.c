@@ -403,37 +403,23 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 #endif
     for(int j = 0; j < height; j++)
     {
-      /* We loop on one mosaic row at a time so the 2-sensel CFA period is explicit to the compiler.
-         This keeps the black/white normalization vectors constant for the whole row. */
+      /* Keep the 2-sensel Bayer period explicit per row, but use scalar
+         normalization so the compiler can choose its own vectorization. */
       const size_t pin = (size_t)input_width * (j + csy) + csx;
       const size_t pout = (size_t)j * width;
-      const int use_stream = dt_is_aligned(out + pout, 16);
       const int row_phase = ((j + cfa_y) & 1) << 1;
       const int id0 = row_phase + x_phase;
       const int id1 = row_phase + (x_phase ^ 1);
-      const dt_aligned_pixel_simd_t sub_v = { d->sub[id0], d->sub[id1], d->sub[id0], d->sub[id1] };
-      const dt_aligned_pixel_simd_t inv_v = { inv_div[id0], inv_div[id1], inv_div[id0], inv_div[id1] };
+      const float sub0 = d->sub[id0];
+      const float sub1 = d->sub[id1];
+      const float inv0 = inv_div[id0];
+      const float inv1 = inv_div[id1];
       int i = 0;
 
-      if(use_stream)
+      for(; i + 1 < width; i += 2)
       {
-        for(; i + 3 < width; i += 4)
-        {
-          const dt_aligned_pixel_simd_t in_v = {
-            (float)in[pin + i + 0], (float)in[pin + i + 1], (float)in[pin + i + 2], (float)in[pin + i + 3]
-          };
-          dt_store_simd_nontemporal(out + pout + i, (in_v - sub_v) * inv_v);
-        }
-      }
-      else
-      {
-        for(; i + 3 < width; i += 4)
-        {
-          const dt_aligned_pixel_simd_t in_v = {
-            (float)in[pin + i + 0], (float)in[pin + i + 1], (float)in[pin + i + 2], (float)in[pin + i + 3]
-          };
-          dt_store_simd(out + pout + i, (in_v - sub_v) * inv_v);
-        }
+        out[pout + i + 0] = ((float)in[pin + i + 0] - sub0) * inv0;
+        out[pout + i + 1] = ((float)in[pin + i + 1] - sub1) * inv1;
       }
 
       for(; i < width; i++)
@@ -442,8 +428,6 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
         out[pout + i] = ((float)in[pin + i] - d->sub[id]) * inv_div[id];
       }
     }
-
-    dt_omploop_sfence();  // ensure the final nontemporal writeback completes before downstream reads
 
   }
   else if(piece->dsc_in.filters && piece->dsc_in.channels == 1
@@ -463,31 +447,23 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 #endif
     for(int j = 0; j < height; j++)
     {
-      /* We loop on one mosaic row at a time so the 2-sensel CFA period is explicit to the compiler.
-         This keeps the black/white normalization vectors constant for the whole row. */
+      /* Keep the 2-sensel Bayer period explicit per row, but use scalar
+         normalization so the compiler can choose its own vectorization. */
       const size_t pin = (size_t)input_width * (j + csy) + csx;
       const size_t pout = (size_t)j * width;
-      const int use_stream = dt_is_aligned(out + pout, 16);
       const int row_phase = ((j + cfa_y) & 1) << 1;
       const int id0 = row_phase + x_phase;
       const int id1 = row_phase + (x_phase ^ 1);
-      const dt_aligned_pixel_simd_t sub_v = { d->sub[id0], d->sub[id1], d->sub[id0], d->sub[id1] };
-      const dt_aligned_pixel_simd_t inv_v = { inv_div[id0], inv_div[id1], inv_div[id0], inv_div[id1] };
+      const float sub0 = d->sub[id0];
+      const float sub1 = d->sub[id1];
+      const float inv0 = inv_div[id0];
+      const float inv1 = inv_div[id1];
       int i = 0;
 
-      if(use_stream)
+      for(; i + 1 < width; i += 2)
       {
-        for(; i + 3 < width; i += 4)
-        {
-          dt_store_simd_nontemporal(out + pout + i, (dt_load_simd(in + pin + i) - sub_v) * inv_v);
-        }
-      }
-      else
-      {
-        for(; i + 3 < width; i += 4)
-        {
-          dt_store_simd(out + pout + i, (dt_load_simd(in + pin + i) - sub_v) * inv_v);
-        }
+        out[pout + i + 0] = (in[pin + i + 0] - sub0) * inv0;
+        out[pout + i + 1] = (in[pin + i + 1] - sub1) * inv1;
       }
 
       for(; i < width; i++)
@@ -496,8 +472,6 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
         out[pout + i] = (in[pin + i] - d->sub[id]) * inv_div[id];
       }
     }
-
-    dt_omploop_sfence();  // ensure the final nontemporal writeback completes before downstream reads
 
   }
   else
@@ -511,7 +485,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     const int ch = piece->dsc_in.channels;
 
 #ifdef _OPENMP
-#pragma omp parallel for SIMD() default(none) \
+#pragma omp parallel for default(none) \
     dt_omp_firstprivate(ch, csx, csy, div, height, in, input_width, out, sub, width) \
     schedule(static) collapse(3)
 #endif

@@ -489,12 +489,6 @@ static void dt_wb_preset_interpolate(const wb_data *const p1, // the smaller tun
   }
 }
 
-static inline __attribute__((always_inline)) void
-scaled_copy_4wide(float *const outp, const float *const inp, const dt_aligned_pixel_simd_t coeffs)
-{
-  dt_store_simd_nontemporal(outp, dt_load_simd(inp) * coeffs);
-}
-
 __DT_CLONE_TARGETS__
 int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid)
@@ -520,40 +514,40 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     for(int j = 0; j < height; j++)
     {
       const size_t row_start = (size_t)j * width;
-      const int use_simd = dt_is_aligned(in + row_start, 16) && dt_is_aligned(out + row_start, 16);
-      const dt_aligned_pixel_simd_t coeffs[3] =
+      const float coeffs[12] =
       {
-        { d_coeffs[FCxtrans(j, 0, roi_out, xtrans)], d_coeffs[FCxtrans(j, 1, roi_out, xtrans)],
-          d_coeffs[FCxtrans(j, 2, roi_out, xtrans)], d_coeffs[FCxtrans(j, 3, roi_out, xtrans)] },
-        { d_coeffs[FCxtrans(j, 4, roi_out, xtrans)], d_coeffs[FCxtrans(j, 5, roi_out, xtrans)],
-          d_coeffs[FCxtrans(j, 6, roi_out, xtrans)], d_coeffs[FCxtrans(j, 7, roi_out, xtrans)] },
-        { d_coeffs[FCxtrans(j, 8, roi_out, xtrans)], d_coeffs[FCxtrans(j, 9, roi_out, xtrans)],
-          d_coeffs[FCxtrans(j, 10, roi_out, xtrans)], d_coeffs[FCxtrans(j, 11, roi_out, xtrans)] },
+        d_coeffs[FCxtrans(j, 0, roi_out, xtrans)], d_coeffs[FCxtrans(j, 1, roi_out, xtrans)],
+        d_coeffs[FCxtrans(j, 2, roi_out, xtrans)], d_coeffs[FCxtrans(j, 3, roi_out, xtrans)],
+        d_coeffs[FCxtrans(j, 4, roi_out, xtrans)], d_coeffs[FCxtrans(j, 5, roi_out, xtrans)],
+        d_coeffs[FCxtrans(j, 6, roi_out, xtrans)], d_coeffs[FCxtrans(j, 7, roi_out, xtrans)],
+        d_coeffs[FCxtrans(j, 8, roi_out, xtrans)], d_coeffs[FCxtrans(j, 9, roi_out, xtrans)],
+        d_coeffs[FCxtrans(j, 10, roi_out, xtrans)], d_coeffs[FCxtrans(j, 11, roi_out, xtrans)],
       };
-      /* We loop on one X-Trans row at a time and keep the 12-sensel horizontal period explicit,
-         so each 4-sensel SIMD block reuses one precomputed coefficient vector. */
+      /* Keep the 12-sensel X-Trans period explicit, but let the compiler pick
+         its own vectorization strategy on the scalar multiplies. */
       int i = 0;
-      if(use_simd)
+      for(; i + 11 < width; i += 12)
       {
-        for(; i + 11 < width; i += 12)
-        {
-          dt_store_simd_nontemporal(out + row_start + i + 0, dt_load_simd(in + row_start + i + 0) * coeffs[0]);
-          dt_store_simd_nontemporal(out + row_start + i + 4, dt_load_simd(in + row_start + i + 4) * coeffs[1]);
-          dt_store_simd_nontemporal(out + row_start + i + 8, dt_load_simd(in + row_start + i + 8) * coeffs[2]);
-        }
-        for(int coeff = 0; i + 3 < width; i += 4, coeff++)
-        {
-          const size_t p = row_start + i;
-          dt_store_simd_nontemporal(out + p, dt_load_simd(in + p) * coeffs[coeff]);
-        }
+        const size_t p = row_start + i;
+        out[p + 0] = in[p + 0] * coeffs[0];
+        out[p + 1] = in[p + 1] * coeffs[1];
+        out[p + 2] = in[p + 2] * coeffs[2];
+        out[p + 3] = in[p + 3] * coeffs[3];
+        out[p + 4] = in[p + 4] * coeffs[4];
+        out[p + 5] = in[p + 5] * coeffs[5];
+        out[p + 6] = in[p + 6] * coeffs[6];
+        out[p + 7] = in[p + 7] * coeffs[7];
+        out[p + 8] = in[p + 8] * coeffs[8];
+        out[p + 9] = in[p + 9] * coeffs[9];
+        out[p + 10] = in[p + 10] * coeffs[10];
+        out[p + 11] = in[p + 11] * coeffs[11];
       }
       for(; i < width; i++)
       {
         const size_t p = row_start + i;
-        out[p] = in[p] * d_coeffs[FCxtrans(j, i, roi_out, xtrans)];
+        out[p] = in[p] * coeffs[i % 12];
       }
     }
-    dt_omploop_sfence();  // ensure that nontemporal writes complete before we attempt to read output
   }
   else if(filters)
   { // bayer float mosaiced
@@ -567,21 +561,17 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     {
       const int offset_j = j + roi_out->y;
       const size_t row_start = (size_t)j * width;
-      const int use_simd = dt_is_aligned(in + row_start, 16) && dt_is_aligned(out + row_start, 16);
       const int id0 = FC(offset_j, cfa_x + 0, filters);
       const int id1 = FC(offset_j, cfa_x + 1, filters);
-      const dt_aligned_pixel_simd_t coeffs = {
-        d_coeffs[id0], d_coeffs[id1], d_coeffs[id0], d_coeffs[id1]
-      };
+      const float coeff0 = d_coeffs[id0];
+      const float coeff1 = d_coeffs[id1];
       int i = 0;
 
-      if(use_simd)
+      for(; i + 1 < width; i += 2)
       {
-        for(; i + 3 < width; i += 4)
-        {
-          const size_t p = row_start + i;
-          scaled_copy_4wide(out + p, in + p, coeffs);
-        }
+        const size_t p = row_start + i;
+        out[p + 0] = in[p + 0] * coeff0;
+        out[p + 1] = in[p + 1] * coeff1;
       }
       for(; i < width; i++)
       {
@@ -589,7 +579,6 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
         out[p] = in[p] * d_coeffs[FC(offset_j, i + roi_out->x, filters)];
       }
     }
-    dt_omploop_sfence();  // ensure that nontemporal writes complete before we attempt to read output
   }
   else
   { // non-mosaiced
@@ -598,23 +587,24 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
     if(ch == 4)
     {
-      const dt_aligned_pixel_simd_t coeffs = { d->coeffs[0], d->coeffs[1], d->coeffs[2], 1.0f };
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-    dt_omp_firstprivate(npixels, in, out, coeffs) \
+    dt_omp_firstprivate(npixels, in, out, d) \
     schedule(static)
 #endif
       for(size_t k = 0; k < npixels; k++)
       {
         const size_t p = 4 * k;
-        dt_store_simd_nontemporal(out + p, dt_load_simd_aligned(in + p) * coeffs);
+        out[p + 0] = in[p + 0] * d->coeffs[0];
+        out[p + 1] = in[p + 1] * d->coeffs[1];
+        out[p + 2] = in[p + 2] * d->coeffs[2];
+        out[p + 3] = in[p + 3];
       }
-      dt_omploop_sfence();  // ensure that nontemporal writes complete before we attempt to read output
     }
     else
     {
 #ifdef _OPENMP
-#pragma omp parallel for SIMD() default(none) \
+#pragma omp parallel for default(none) \
     dt_omp_firstprivate(ch, d, in, out, npixels) \
     schedule(static)
 #endif
