@@ -133,7 +133,7 @@ static int vng_interpolate(float *out, const float *const in,
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
     dt_omp_firstprivate(colors, pcol, prow, roi_in, width, xtrans) \
-    shared(row, code, brow, out, filters4) \
+    dt_omp_firstprivate(row, code, brow, out, filters4) \
     private(ip) \
     schedule(static)
 #endif
@@ -202,7 +202,7 @@ static int vng_interpolate(float *out, const float *const in,
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
     dt_omp_firstprivate(height, width) \
-    shared(out) \
+    dt_omp_firstprivate(out) \
     schedule(static)
 #endif
     for(int i = 0; i < height * width; i++) out[i * 4 + 1] = (out[i * 4 + 1] + out[i * 4 + 3]) / 2.0f;

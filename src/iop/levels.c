@@ -437,7 +437,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(ch, d) \
-  dt_omp_sharedconst(in, out, npixels) \
+  dt_omp_firstprivate(in, out, npixels) \
   schedule(static)
 #endif
   for(int i = 0; i < ch * npixels; i += ch)

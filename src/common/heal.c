@@ -117,7 +117,7 @@ static void _heal_add(const float *const restrict red_buffer, const float *const
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(red_buffer, black_buffer, second_buffer, height, width, res_stride) \
-  dt_omp_sharedconst(result_buffer) \
+  dt_omp_firstprivate(result_buffer) \
   schedule(static)
 #endif
   for(size_t row = 0; row < height; row++)

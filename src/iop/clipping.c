@@ -666,8 +666,8 @@ void distort_mask(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t 
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
     dt_omp_firstprivate(in, kxa, kya, out, roi_in, roi_out) \
-    dt_omp_sharedconst(k_space)                             \
-    shared(d, interpolation, ma, mb, md, me, mg, mh) \
+    dt_omp_firstprivate(k_space)                             \
+    dt_omp_firstprivate(d, interpolation, ma, mb, md, me, mg, mh) \
     schedule(static)
 #endif
     // (slow) point-by-point transformation.
@@ -1044,8 +1044,8 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
     dt_omp_firstprivate(ch, ch_width, ivoid, kxa, kya, ovoid, roi_in, roi_out) \
-    dt_omp_sharedconst(k_space) \
-    shared(d, interpolation, ma, mb, md, me, mg, mh) \
+    dt_omp_firstprivate(k_space) \
+    dt_omp_firstprivate(d, interpolation, ma, mb, md, me, mg, mh) \
     schedule(static)
 #endif
     // (slow) point-by-point transformation.

@@ -63,8 +63,8 @@ static int dt_iop_equalizer_wtf(float *const buf, float **weight_a, const int l,
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(height, l, st, step, tmp_width_buf, scratch_size, wd, width) \
-  dt_omp_sharedconst(buf) \
-  shared(weight_a) \
+  dt_omp_firstprivate(buf) \
+  dt_omp_firstprivate(weight_a) \
   private(ch) \
   schedule(static)
 #endif
@@ -100,8 +100,8 @@ static int dt_iop_equalizer_wtf(float *const buf, float **weight_a, const int l,
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(height, l, st, step, tmp_height_buf, scratch_size, wd, width) \
-  dt_omp_sharedconst(buf) \
-  shared(weight_a) \
+  dt_omp_firstprivate(buf) \
+  dt_omp_firstprivate(weight_a) \
   private(ch) \
   schedule(static)
 #endif
@@ -146,7 +146,7 @@ static int dt_iop_equalizer_iwtf(float *buf, float **weight_a, const int l, cons
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(height, l, st, step, tmp_height_buf, scratch_size, wd, width) \
-  shared(weight_a, buf) \
+  dt_omp_firstprivate(weight_a, buf) \
   schedule(static)
 #endif
   for(int i = 0; i < width; i++)
@@ -180,7 +180,7 @@ static int dt_iop_equalizer_iwtf(float *buf, float **weight_a, const int l, cons
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(height, l, st, step, tmp_width_buf, scratch_size, wd, width) \
-  shared(weight_a, buf) \
+  dt_omp_firstprivate(weight_a, buf) \
   schedule(static)
 #endif
   for(int j = 0; j < height; j++)

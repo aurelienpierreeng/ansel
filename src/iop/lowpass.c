@@ -445,7 +445,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(ch, Labmaxf, Labminf, roi_out) \
-  shared(in, out, data) \
+  dt_omp_firstprivate(in, out, data) \
   schedule(static)
 #endif
   for(size_t k = 0; k < (size_t)roi_out->width * roi_out->height; k++)
@@ -512,7 +512,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
     dt_omp_firstprivate(contrastm1sq, contrastscale) \
-    shared(d) \
+    dt_omp_firstprivate(d) \
     schedule(static)
 #endif
     for(int k = 0; k < 0x10000; k++)
@@ -537,7 +537,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(gamma) \
-  shared(d) \
+  dt_omp_firstprivate(d) \
   schedule(static)
 #endif
   for(int k = 0; k < 0x10000; k++)

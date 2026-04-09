@@ -977,7 +977,7 @@ static int build_round_stamp(float complex **pstamp,
   #if defined(_OPENMP) && !defined(__APPLE__)
   #pragma omp parallel for schedule(static) default(none) \
     dt_omp_firstprivate(iradius, strength, abs_strength, table_size)   \
-    dt_omp_sharedconst(center, warp, stamp_extent, lookup_table, LOOKUP_OVERSAMPLE)
+    dt_omp_firstprivate(center, warp, stamp_extent, lookup_table, LOOKUP_OVERSAMPLE)
   #endif
 
   for(int y = 0; y <= iradius; y++)

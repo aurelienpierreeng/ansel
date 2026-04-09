@@ -151,8 +151,8 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(npixels, scale, threshold) \
-  shared(blurlightness) \
-  dt_omp_sharedconst(in) \
+  dt_omp_firstprivate(blurlightness) \
+  dt_omp_firstprivate(in) \
   schedule(static)
 #endif
   for(size_t k = 0; k < npixels; k++)
@@ -175,8 +175,8 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(npixels) \
-  shared(blurlightness) \
-  dt_omp_sharedconst(in, out) \
+  dt_omp_firstprivate(blurlightness) \
+  dt_omp_firstprivate(in, out) \
   schedule(static)
 #endif
   for(size_t k = 0; k < npixels; k++)

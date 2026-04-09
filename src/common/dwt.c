@@ -132,7 +132,7 @@ static void dwt_decompose_vert(float *const restrict out, const float *const res
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(height, width, vscale) \
-  dt_omp_sharedconst(in, out) \
+  dt_omp_firstprivate(in, out) \
   schedule(static)
 #endif
   for(int rowid = 0; rowid < height ; rowid++)
@@ -170,7 +170,7 @@ static void dwt_decompose_horiz(float *const restrict out, float *const restrict
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(height, width, hscale) \
-  dt_omp_sharedconst(in, out, temp) \
+  dt_omp_firstprivate(in, out, temp) \
   schedule(static)
 #endif
   for(int row = 0; row < height ; row++)
@@ -425,7 +425,7 @@ static void dwt_denoise_vert_1ch(float *const restrict out, const float *const r
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(height, width, vscale) \
-  dt_omp_sharedconst(in, out) \
+  dt_omp_firstprivate(in, out) \
   schedule(static)
 #endif
   for(int rowid = 0; rowid < height ; rowid++)
@@ -463,7 +463,7 @@ static void dwt_denoise_horiz_1ch(float *const restrict out, float *const restri
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(height, width, hscale, thold, last) \
-  dt_omp_sharedconst(in, out, accum) \
+  dt_omp_firstprivate(in, out, accum) \
   schedule(static)
 #endif
   for(int row = 0; row < height ; row++)

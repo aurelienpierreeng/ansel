@@ -421,7 +421,7 @@ void dt_iop_image_linear_blend(float *const restrict buf, const float lambda, co
     // memory won't be able to take advantage of more than four cores).
 #pragma omp parallel for simd aligned(buf:16) default(none) \
   dt_omp_firstprivate(buf, lambda, lambda_1,  nfloats) \
-  dt_omp_sharedconst(other) schedule(simd:static)
+  dt_omp_firstprivate(other) schedule(simd:static)
     for(size_t k = 0; k < nfloats; k++)
       buf[k] = lambda*buf[k] + lambda_1*other[k];
     return;

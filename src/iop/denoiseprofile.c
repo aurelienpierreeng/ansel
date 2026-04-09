@@ -856,7 +856,7 @@ static inline void precondition(const float *const in, float *const buf, const i
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(buf, npixels, in, sigma2_plus_3_8) \
-  shared(a) \
+  dt_omp_firstprivate(a) \
   schedule(static)
 #endif
   for(size_t j = 0; j < 4U * npixels; j += 4)
@@ -884,7 +884,7 @@ static inline void backtransform(float *const buf, const int wd, const int ht, c
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(buf, npixels, sigma2_plus_1_8, sqrt_3_2)   \
-  shared(a) \
+  dt_omp_firstprivate(a) \
   schedule(static)
 #endif
   for(size_t j = 0; j < 4U * npixels; j += 4)
@@ -940,7 +940,7 @@ static inline void precondition_v2(const float *const in, float *const buf, cons
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(npixels, buf, in, b, wb) \
-  dt_omp_sharedconst(expon, denom) \
+  dt_omp_firstprivate(expon, denom) \
   schedule(static)
 #endif
   for(size_t j = 0; j < 4U * npixels; j += 4)
@@ -1024,7 +1024,7 @@ static inline void backtransform_v2(float *const buf, const int wd, const int ht
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(npixels, buf, b, bias, wb)   \
-  dt_omp_sharedconst(expon,denom) \
+  dt_omp_firstprivate(expon,denom) \
   schedule(static)
 #endif
   for(size_t j = 0; j < 4U * npixels; j += 4)
@@ -1052,7 +1052,7 @@ static inline void precondition_Y0U0V0(const float *const in, float *const buf, 
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(buf, ht, in, wd, b, toY0U0V0) \
-  dt_omp_sharedconst(expon, scale) \
+  dt_omp_firstprivate(expon, scale) \
   schedule(static)
 #endif
   for(size_t j = 0; j < (size_t)4 * ht * wd; j += 4)

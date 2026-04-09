@@ -169,7 +169,7 @@ static inline void process_reinhard(struct dt_iop_module_t *self, const dt_dev_p
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(ch, roi_out) \
-  shared(in, out, data) \
+  dt_omp_firstprivate(in, out, data) \
   schedule(static)
 #endif
   for(size_t k = 0; k < (size_t)roi_out->width * roi_out->height; k++)
@@ -257,7 +257,7 @@ static inline void process_drago(struct dt_iop_module_t *self, const dt_dev_pixe
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(ch, bl, ldc, roi_out, eps) \
-  shared(in, out, lwmax) \
+  dt_omp_firstprivate(in, out, lwmax) \
   schedule(static)
 #endif
   for(size_t k = 0; k < (size_t)roi_out->width * roi_out->height; k++)
@@ -285,7 +285,7 @@ static inline void process_filmic(struct dt_iop_module_t *self, const dt_dev_pix
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(ch, roi_out) \
-  shared(in, out, data) \
+  dt_omp_firstprivate(in, out, data) \
   schedule(static)
 #endif
   for(size_t k = 0; k < (size_t)roi_out->width * roi_out->height; k++)

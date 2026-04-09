@@ -308,7 +308,7 @@ int process(struct dt_iop_module_t *module, const dt_dev_pixelpipe_t *pipe, cons
 #ifdef _OPENMP
 #pragma omp parallel for simd default(none) \
   dt_omp_firstprivate(in, out, use_global_average) \
-  dt_omp_sharedconst(width, height) \
+  dt_omp_firstprivate(width, height) \
   reduction(+ : avg_edge_chroma) \
   schedule(simd:static)
 #endif
@@ -344,8 +344,8 @@ int process(struct dt_iop_module_t *module, const dt_dev_pixelpipe_t *pipe, cons
 // for this hint!)
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(ch, in, out, samples_avg, samples_small) \
-  dt_omp_sharedconst(d, width, height) \
-  shared(xy_small, xy_avg) \
+  dt_omp_firstprivate(d, width, height) \
+  dt_omp_firstprivate(xy_small, xy_avg) \
   firstprivate(thresh, avg_edge_chroma) \
   schedule(dynamic,3)
 #endif

@@ -170,7 +170,7 @@ void eaw_synthesize(float *const out, const float *const in, const float *const 
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(height, width) \
-  dt_omp_sharedconst(in, out, detail, threshold, boost) \
+  dt_omp_firstprivate(in, out, detail, threshold, boost) \
   schedule(simd:static)
 #endif
   for(size_t k = 0; k < (size_t)width * height; k++)

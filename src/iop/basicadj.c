@@ -1348,7 +1348,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
                       preserve_colors, process_hlcompr, process_gamma, \
                       process_saturation_vibrance, saturation, vibrance, \
                       scale, stride, work_profile) \
-  shared(d) \
+  dt_omp_firstprivate(d) \
   schedule(static)
 #endif
   for(size_t k = 0; k < stride; k += ch)

@@ -59,7 +59,7 @@ static void blur_horizontal_1ch(float *const restrict buf, const int height, con
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(radius, height, width, padded_size) \
-  dt_omp_sharedconst(buf, scanlines) \
+  dt_omp_firstprivate(buf, scanlines) \
   schedule(static)
 #endif
   for(int y = 0; y < height; y++)
@@ -123,7 +123,7 @@ static void blur_horizontal_2ch(float *const restrict buf, const int height, con
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(radius, height, width, padded_size)   \
-  dt_omp_sharedconst(buf, scanlines) \
+  dt_omp_firstprivate(buf, scanlines) \
   schedule(static)
 #endif
   for(int y = 0; y < height; y++)
@@ -386,7 +386,7 @@ static void blur_horizontal_4ch(float *const restrict buf, const size_t height, 
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(radius, height, width, padded_size) \
-  dt_omp_sharedconst(buf, scanlines) \
+  dt_omp_firstprivate(buf, scanlines) \
   schedule(static)
 #endif
   for(int y = 0; y < height; y++)
@@ -931,8 +931,8 @@ static void blur_vertical_1ch(float *const restrict buf, const size_t height, co
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(radius, height, width, padded_size) \
-  shared(darktable) \
-  dt_omp_sharedconst(buf, scanlines) \
+  dt_omp_firstprivate(darktable) \
+  dt_omp_firstprivate(buf, scanlines) \
   schedule(static)
 #endif
   for(int x = 0; x < width; x += 16)
@@ -1024,7 +1024,7 @@ static int box_mean_vert_1ch_Kahan(float *const buf, const int height, const siz
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(width, height, radius, padded_size) \
-  dt_omp_sharedconst(buf, scratch_buf) \
+  dt_omp_firstprivate(buf, scratch_buf) \
   schedule(static)
 #endif
   for (size_t col = 0; col < width; col += 16)
@@ -1063,7 +1063,7 @@ static int dt_box_mean_4ch_Kahan(float *const buf, const size_t height, const si
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(width, height, radius, padded_size) \
-  dt_omp_sharedconst(buf, scanlines) \
+  dt_omp_firstprivate(buf, scanlines) \
   schedule(static)
 #endif
     for (size_t row = 0; row < height; row++)
@@ -1288,7 +1288,7 @@ static int box_max_1ch(float *const buf, const size_t height, const size_t width
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(w, width, height, buf, allocsize) \
-  dt_omp_sharedconst(scratch_buffers) \
+  dt_omp_firstprivate(scratch_buffers) \
   schedule(static)
 #endif
   for(size_t row = 0; row < height; row++)
@@ -1300,7 +1300,7 @@ static int box_max_1ch(float *const buf, const size_t height, const size_t width
 #ifdef _OPENMP
 #pragma omp parallel for default(none)           \
   dt_omp_firstprivate(w, width, height, buf, allocsize, eff_height) \
-  dt_omp_sharedconst(scratch_buffers) \
+  dt_omp_firstprivate(scratch_buffers) \
   schedule(static)
 #endif
   for(int col = 0; col < (width & ~15); col += 16)
@@ -1440,7 +1440,7 @@ static int box_min_1ch(float *const buf, const size_t height, const size_t width
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(w, width, height, buf, allocsize) \
-  dt_omp_sharedconst(scratch_buffers) \
+  dt_omp_firstprivate(scratch_buffers) \
   schedule(static)
 #endif
   for(size_t row = 0; row < height; row++)
@@ -1452,7 +1452,7 @@ static int box_min_1ch(float *const buf, const size_t height, const size_t width
 #ifdef _OPENMP
 #pragma omp parallel for default(none)           \
   dt_omp_firstprivate(w, width, height, buf,allocsize, eff_height) \
-  dt_omp_sharedconst(scratch_buffers) \
+  dt_omp_firstprivate(scratch_buffers) \
   schedule(static)
 #endif
   for(size_t col = 0; col < (width & ~15); col += 16)

@@ -479,7 +479,7 @@ static inline void apply_legacy_curve(
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(npixels) \
-  dt_omp_sharedconst(in, out, mul, table, unbounded_coeffs) \
+  dt_omp_firstprivate(in, out, mul, table, unbounded_coeffs) \
   schedule(static)
 #endif
   for(size_t k = 0; k < 4*npixels; k += 4)
@@ -514,7 +514,7 @@ static inline void apply_curve(
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(npixels, preserve_colors, work_profile) \
-  dt_omp_sharedconst(in, out, mul, table, unbounded_coeffs) \
+  dt_omp_firstprivate(in, out, mul, table, unbounded_coeffs) \
   schedule(static)
 #endif
   for(size_t k = 0; k < 4*npixels; k += 4)
@@ -585,7 +585,7 @@ static inline int gauss_blur(
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(ht, input, w, wd) \
-  shared(tmp) \
+  dt_omp_firstprivate(tmp) \
   schedule(static)
 #endif
   for(int j=0;j<ht;j++)
@@ -607,7 +607,7 @@ static inline int gauss_blur(
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(ht, output, w, wd) \
-  shared(tmp) \
+  dt_omp_firstprivate(tmp) \
   schedule(static)
 #endif
   for(int i=0;i<wd;i++)
@@ -764,7 +764,7 @@ int process_fusion(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *p
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
     dt_omp_firstprivate(ht, out, wd) \
-    shared(col) \
+    dt_omp_firstprivate(col) \
     schedule(static)
 #endif
     for(size_t k = 0; k < 4ul * wd * ht; k += 4)
@@ -814,7 +814,7 @@ int process_fusion(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *p
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
       dt_omp_firstprivate(out) \
-      shared(col, comb, w, h, num_levels, k) \
+      dt_omp_firstprivate(col, comb, w, h, num_levels, k) \
       schedule(static)
 #endif
       for(size_t x = 0; x < (size_t)4 * h * w; x += 4)
@@ -853,7 +853,7 @@ int process_fusion(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *p
 
     // normalise both gaussian base and laplacians:
 #ifdef _OPENMP
-#pragma omp parallel for default(none) shared(comb, w, h, k) schedule(static)
+#pragma omp parallel for default(none) dt_omp_firstprivate(comb, w, h, k) schedule(static)
 #endif
     for(size_t i = 0; i < (size_t)4 * w * h; i += 4)
       if(comb[k][i + 3] > 1e-8f)
@@ -869,7 +869,7 @@ int process_fusion(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *p
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
       dt_omp_firstprivate(out, w, h, k) \
-      shared(comb) \
+      dt_omp_firstprivate(comb) \
       schedule(static)
 #endif
       for(size_t x = 0; x < (size_t)4 * h * w; x += 4)
@@ -884,7 +884,7 @@ int process_fusion(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *p
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(col, in, ht, out, wd) \
-  shared(comb) \
+  dt_omp_firstprivate(comb) \
   schedule(static)
 #endif
   for(size_t k = 0; k < (size_t)4 * wd * ht; k += 4)

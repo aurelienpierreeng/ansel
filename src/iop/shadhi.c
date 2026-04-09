@@ -391,7 +391,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
                       highlights, highlights_ccorrect, lmax, lmin, \
                       low_approximation, max, min,  shadows, \
                       shadows_ccorrect, unbound_mask, whitepoint, width) \
-  dt_omp_sharedconst(in, out) \
+  dt_omp_firstprivate(in, out) \
   schedule(static)
 #endif
   for(size_t j = 0; j < (size_t)width * height * ch; j += ch)

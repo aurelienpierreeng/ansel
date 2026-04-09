@@ -971,7 +971,7 @@ static void process_lcms2_bm(struct dt_iop_module_t *self, const dt_dev_pixelpip
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(ch, ivoid, ovoid, roi_out) \
-  shared(use_nrgb, xform_cam_lab, xform_cam_nrgb, xform_nrgb_lab) \
+  dt_omp_firstprivate(use_nrgb, xform_cam_lab, xform_cam_nrgb, xform_nrgb_lab) \
   schedule(static)
 #endif
   for(int k = 0; k < roi_out->height; k++)
@@ -1030,7 +1030,7 @@ static void process_lcms2_proper(struct dt_iop_module_t *self, const dt_dev_pixe
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(ch, ivoid, ovoid, roi_out) \
-  shared(use_nrgb, xform_cam_lab, xform_cam_nrgb, xform_nrgb_lab) \
+  dt_omp_firstprivate(use_nrgb, xform_cam_lab, xform_cam_nrgb, xform_nrgb_lab) \
   schedule(static)
 #endif
   for(int k = 0; k < roi_out->height; k++)

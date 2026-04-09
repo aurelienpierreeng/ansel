@@ -457,7 +457,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
     dt_omp_firstprivate(gamutcheck, ivoid, out, roi_out) \
-    shared(xform) \
+    dt_omp_firstprivate(xform) \
     schedule(static)
 #endif
     for(int k = 0; k < roi_out->height; k++)

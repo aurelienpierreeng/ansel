@@ -294,7 +294,7 @@ static int kmeans(const float *col, const dt_iop_roi_t *const roi, const int n, 
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
     dt_omp_firstprivate(cnt, mean, n, roi, samples, var) \
-    shared(col, mean_out) \
+    dt_omp_firstprivate(col, mean_out) \
     schedule(static)
 #endif
     for(int s = 0; s < samples; s++)
@@ -402,7 +402,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
     dt_omp_firstprivate(ch, roi_out) \
-    shared(data, in, out, hist) \
+    dt_omp_firstprivate(data, in, out, hist) \
     schedule(static)
 #endif
     for(int k = 0; k < roi_out->height; k++)
@@ -449,7 +449,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
     dt_omp_firstprivate(ch, mapio, mean, roi_out, var) \
-    shared(data, in, out) \
+    dt_omp_firstprivate(data, in, out) \
     schedule(static)
 #endif
     for(int k = 0; k < roi_out->height; k++)

@@ -232,7 +232,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(ch_width, d, ivoid, ovoid, roi_in, roi_out) \
-  shared(interpolation) \
+  dt_omp_firstprivate(interpolation) \
   schedule(static)
 #endif
   // (slow) point-by-point transformation.

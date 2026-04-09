@@ -260,7 +260,7 @@ static void process_common_cleanup(struct dt_iop_module_t *self, const dt_dev_pi
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
       dt_omp_firstprivate(ch, height, width, ivoid) \
-      shared(tmp) \
+      dt_omp_firstprivate(tmp) \
       schedule(static)
 #endif
       for(size_t k = 0; k < (size_t)width * height; k++) tmp[k] = ((float *)ivoid)[ch * k];
@@ -272,7 +272,7 @@ static void process_common_cleanup(struct dt_iop_module_t *self, const dt_dev_pi
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
       dt_omp_firstprivate(height, size, width) \
-      shared(tmp, g) \
+      dt_omp_firstprivate(tmp, g) \
       schedule(static)
 #endif
       for(size_t k = 0; k < (size_t)width * height; k++)
@@ -285,7 +285,7 @@ static void process_common_cleanup(struct dt_iop_module_t *self, const dt_dev_pi
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
       dt_omp_firstprivate(ch, height, ovoid, width) \
-      shared(tmp) \
+      dt_omp_firstprivate(tmp) \
       schedule(static)
 #endif
       for(size_t k = 0; k < (size_t)width * height; k++) tmp[k] = ((float *)ovoid)[ch * k];
@@ -298,7 +298,7 @@ static void process_common_cleanup(struct dt_iop_module_t *self, const dt_dev_pi
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
       dt_omp_firstprivate(height, size, width) \
-      shared(tmp, g) \
+      dt_omp_firstprivate(tmp, g) \
       schedule(static)
 #endif
       for(size_t k = 0; k < (size_t)width * height; k++)

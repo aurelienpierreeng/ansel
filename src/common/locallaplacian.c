@@ -232,7 +232,7 @@ static inline float *ll_pad_input(
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
     dt_omp_firstprivate(ht, input, max_supp, out, wd, stride) \
-    shared(wd2, ht2) \
+    dt_omp_firstprivate(wd2, ht2) \
     schedule(static) \
     collapse(2)
 #endif // fill regular pixels:
@@ -261,7 +261,7 @@ static inline float *ll_pad_input(
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
     dt_omp_firstprivate(input, max_supp, out, wd, stride) \
-    shared(wd2, ht2, b) \
+    dt_omp_firstprivate(wd2, ht2, b) \
     schedule(static) \
     collapse(2)
 #endif // left border
@@ -270,7 +270,7 @@ static inline float *ll_pad_input(
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
     dt_omp_firstprivate(input, max_supp, out, stride, wd) \
-    shared(wd2, ht2, b) \
+    dt_omp_firstprivate(wd2, ht2, b) \
     schedule(static) \
     collapse(2)
 #endif // right border
@@ -279,7 +279,7 @@ static inline float *ll_pad_input(
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
     dt_omp_firstprivate(max_supp, out) \
-    shared(wd2, ht2, b) \
+    dt_omp_firstprivate(wd2, ht2, b) \
     schedule(static) \
     collapse(2)
 #endif // top border
@@ -288,7 +288,7 @@ static inline float *ll_pad_input(
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
     dt_omp_firstprivate(ht, max_supp, out) \
-    shared(wd2, ht2, b) \
+    dt_omp_firstprivate(wd2, ht2, b) \
     schedule(static) \
     collapse(2)
 #endif // bottom border
@@ -301,7 +301,7 @@ static inline float *ll_pad_input(
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
     dt_omp_firstprivate(input, ht, max_supp, out, wd, stride) \
-    shared(wd2, ht2) \
+    dt_omp_firstprivate(wd2, ht2) \
     schedule(static)
 #endif
     for(int j=0;j<ht;j++)
@@ -559,7 +559,7 @@ int local_laplacian_internal(
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
     dt_omp_firstprivate(ph, pw) \
-    shared(w,h,buf,output,l,gamma,padded) \
+    dt_omp_firstprivate(w,h,buf,output,l,gamma,padded) \
     schedule(static) \
     collapse(2)
 #endif
@@ -583,7 +583,7 @@ int local_laplacian_internal(
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(ht, input, max_supp, out, wd) \
-  shared(w,output,buf) \
+  dt_omp_firstprivate(w,output,buf) \
   schedule(static) \
   collapse(2)
 #endif

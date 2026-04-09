@@ -350,7 +350,7 @@ static void kmeans(const float *col, const int width, const int height, const in
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
     dt_omp_firstprivate(cnt, height, mean, n, samples, var, width) \
-    shared(col, mean_out) \
+    dt_omp_firstprivate(col, mean_out) \
     schedule(static)
 #endif
     for(int s = 0; s < samples; s++)
@@ -528,7 +528,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
     dt_omp_firstprivate(npixels) \
-    dt_omp_sharedconst(in, out, data, equalization)        \
+    dt_omp_firstprivate(in, out, data, equalization)        \
     schedule(static)
 #endif
     for(size_t k = 0; k < npixels * 4; k += 4)
@@ -568,7 +568,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 #ifdef _OPENMP
 #pragma omp parallel default(none) \
     dt_omp_firstprivate(npixels, mapio, var_ratio, weight_buf, allocsize) \
-    dt_omp_sharedconst(data, in, out, equalization)
+    dt_omp_firstprivate(data, in, out, equalization)
 #endif
     {
       // get a thread-private scratch buffer; do this before the actual loop so we don't have to look it up for

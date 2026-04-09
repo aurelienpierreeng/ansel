@@ -834,7 +834,7 @@ static void _extract_luminance_kernel(const float *const restrict in, float *con
 {
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-  dt_omp_firstprivate(width, height, in, work_profile) shared(image) \
+  dt_omp_firstprivate(width, height, in, work_profile) dt_omp_firstprivate(image) \
   schedule(static)
 #endif
   for(int y = 0; y < height; y++)
@@ -867,7 +867,7 @@ static void _extract_rgb_kernels(const float *const restrict in, float *const re
 {
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-  dt_omp_firstprivate(width, height, in) shared(image) \
+  dt_omp_firstprivate(width, height, in) dt_omp_firstprivate(image) \
   schedule(static)
 #endif
   for(int y = 0; y < height; y++)
@@ -905,7 +905,7 @@ static void _apply_mono_grain_kernel(const float *const restrict in, float *cons
 {
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-  dt_omp_firstprivate(width, height, exposure, in) shared(image, out, result) \
+  dt_omp_firstprivate(width, height, exposure, in) dt_omp_firstprivate(image, out, result) \
   schedule(static)
 #endif
   for(int y = 0; y < height; y++)
@@ -941,7 +941,7 @@ static void _finalize_color_grain_kernel(const float *const restrict in, float *
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(width, height, exposure_r, exposure_g, exposure_b, colorfulness, in) \
-  shared(out, image, result) \
+  dt_omp_firstprivate(out, image, result) \
   schedule(static)
 #endif
   for(int y = 0; y < height; y++)

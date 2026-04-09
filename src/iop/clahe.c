@@ -127,7 +127,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(ch, ivoid, roi_out) \
-  shared(luminance) \
+  dt_omp_firstprivate(luminance) \
   schedule(static)
 #endif
   for(int j = 0; j < roi_out->height; j++)
@@ -165,7 +165,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(ch, dest_buf, destbuf_size, ivoid, ovoid, rad, roi_in, \
                       roi_out, slope) \
-  shared(luminance) \
+  dt_omp_firstprivate(luminance) \
   schedule(static)
 #endif
   for(int j = 0; j < roi_out->height; j++)

@@ -70,7 +70,7 @@ static int demosaic_ppg(float *const out, const float *const in, const dt_iop_ro
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(filters, out, roi_in, roi_out) \
-  shared(input) \
+  dt_omp_firstprivate(input) \
   schedule(static)
 #endif
   for(int j = 3; j < roi_out->height - 3; j++)

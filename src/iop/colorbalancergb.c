@@ -1226,7 +1226,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
     {
       #ifdef _OPENMP
       #pragma omp parallel for default(none) \
-            dt_omp_firstprivate(input_matrix, p) schedule(static) dt_omp_sharedconst(LUT_saturation) \
+            dt_omp_firstprivate(input_matrix, p) schedule(static) dt_omp_firstprivate(LUT_saturation) \
             collapse(3)
       #endif
       for(size_t r = 0; r < STEPS; r++)
@@ -1295,7 +1295,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
       #ifdef _OPENMP
         #pragma omp parallel for default(none) \
               dt_omp_firstprivate(input_matrix, xyY_red, xyY_green, xyY_blue, h_red, h_green, h_blue, D65_xyY) \
-              schedule(static) dt_omp_sharedconst(dt_UCS_LUT)
+              schedule(static) dt_omp_firstprivate(dt_UCS_LUT)
       #endif
       for(int i = 0; i < 50 * 360; i++)
       {

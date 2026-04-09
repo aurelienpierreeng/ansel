@@ -104,7 +104,7 @@ static void xtrans_markesteijn_interpolate(float *out, const float *const in,
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(all_buffers, padded_buffer_size, dir, height, in, ndir, pad_tile, passes, roi_in, width, xtrans) \
-  shared(sgrow, sgcol, allhex, out) \
+  dt_omp_firstprivate(sgrow, sgcol, allhex, out) \
   schedule(static)
 #endif
   // step through TSxTS cells of image, each tile overlapping the
@@ -1143,7 +1143,7 @@ static void xtrans_fdc_interpolate(struct dt_iop_module_t *self, float *out, con
 #pragma omp parallel for default(none)                                                                            \
     dt_omp_firstprivate(ndir, all_buffers, dir, directionality, harr, height, in, Minv, modarr, roi_in, width,    \
                         xtrans, pad_tile, padded_buffer_size)                                                     \
-        shared(sgrow, sgcol, allhex, out, rowoffset, coloffset, hybrid_fdc) schedule(static)
+        dt_omp_firstprivate(sgrow, sgcol, allhex, out, rowoffset, coloffset, hybrid_fdc) schedule(static)
 #endif
   // step through TSxTS cells of image, each tile overlapping the
   // prior as interpolation needs a substantial border
