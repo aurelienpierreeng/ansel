@@ -25,15 +25,6 @@
 #   You should have received a copy of the GNU General Public License
 #   along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 
-
-
-
-
-
-
-
-
-
 name: CI
 
 concurrency:
@@ -91,7 +82,7 @@ jobs:
           - { label: ubuntu-24.04, code: noble }
         compiler:
           - { compiler: GNU14,  CC: gcc-14,   CXX: g++-14,   GCC_VER: "14", LLVM_VER: "" }
-          - { compiler: LLVM19, CC: clang-19, CXX: clang++-19, GCC_VER: "", LLVM_VER: "19" }
+          - { compiler: LLVM20, CC: clang-20, CXX: clang++-20, GCC_VER: "", LLVM_VER: "20" }
         btype:
           - Debug
           - Release
@@ -118,6 +109,16 @@ jobs:
           sudo add-apt-repository ppa:ubuntu-toolchain-r/test
           sudo add-apt-repository -y universe
           sudo add-apt-repository -y multiverse
+          sudo apt-get install -y wget gnupg lsb-release
+
+          # Get CLang 20 repos
+          wget https://apt.llvm.org/llvm-snapshot.gpg.key
+          sudo gpg --dearmor -o /usr/share/keyrings/llvm.gpg llvm-snapshot.gpg.key
+
+          echo "deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/noble/ llvm-toolchain-noble main" | sudo tee /etc/apt/sources.list.d/llvm.list
+          echo "deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/noble/ llvm-toolchain-noble-20 main" | sudo tee -a /etc/apt/sources.list.d/llvm.list
+
+          sudo apt-get update
       - uses: actions/checkout@v4
         with:
           submodules: true
@@ -221,7 +222,7 @@ jobs:
       fail-fast: true
       matrix:
         build:
-          - { os: macos-14,    xcode: 15.4,   deployment: 14.0 } # AppleClang 15, arm64
+          - { os: macos-15, xcode: 26.3, deployment: 15.0 } # AppleClang 17, arm64
         compiler:
           - { compiler: XCode,   CC: cc, CXX: c++ }
         btype:
