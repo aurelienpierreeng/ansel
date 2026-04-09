@@ -919,17 +919,18 @@ static inline void heat_PDE_diffusion(const float *const restrict high_freq, con
         _Pragma("unroll")
         for(size_t k = 0; k < 9; k++)
         {
-          derivatives[0] += kern_first[k] * neighbour_pixel_LF[k];
-          derivatives[1] += kern_second[k] * neighbour_pixel_LF[k];
-          derivatives[2] += kern_third[k] * neighbour_pixel_HF[k];
-          derivatives[3] += kern_fourth[k] * neighbour_pixel_HF[k];
+          derivatives[0] = kern_first[k] * neighbour_pixel_LF[k] + derivatives[0];
+          derivatives[1] = kern_second[k] * neighbour_pixel_LF[k] + derivatives[1];
+          derivatives[2] = kern_third[k] * neighbour_pixel_HF[k] + derivatives[2];
+          derivatives[3] = kern_fourth[k] * neighbour_pixel_HF[k] + derivatives[3];
         }
 
         // compute the update
-        const dt_aligned_pixel_simd_t acc
-            = neighbour_pixel_HF[4] * strength_v
-              + (derivatives[0] * ABCD[0] + derivatives[1] * ABCD[1]
-                 + derivatives[2] * ABCD[2] + derivatives[3] * ABCD[3]) / energy;
+        dt_aligned_pixel_simd_t update = derivatives[0] * ABCD[0];
+        update = derivatives[1] * ABCD[1] + update;
+        update = derivatives[2] * ABCD[2] + update;
+        update = derivatives[3] * ABCD[3] + update;
+        const dt_aligned_pixel_simd_t acc = neighbour_pixel_HF[4] * strength_v + update / energy;
 
         if(use_nontemporal)
           dt_store_simd_nontemporal(out + index, dt_simd_max_zero(acc + neighbour_pixel_LF[4]));
