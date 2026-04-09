@@ -73,19 +73,76 @@ static inline void _image_cache_stmt_mutex_ensure(void)
 
 static inline uint64_t _image_cache_self_hash(const dt_image_t *img)
 {
-  dt_image_t tmp = *img;
+  struct
+  {
+    dt_image_orientation_t orientation;
+    float exif_exposure;
+    float exif_exposure_bias;
+    float exif_aperture;
+    float exif_iso;
+    float exif_focal_length;
+    float exif_focus_distance;
+    float exif_crop;
+    char exif_maker[64];
+    char exif_model[64];
+    char exif_lens[128];
+    GTimeSpan exif_datetime_taken;
+    char filename[DT_MAX_FILENAME_LEN];
+    int32_t width, height;
+    int32_t crop_x, crop_y, crop_width, crop_height;
+    int32_t flags, film_id, id, group_id, version;
+    uint64_t history_hash;
+    float d65_color_matrix[9];
+    dt_image_colorspace_t colorspace;
+    dt_image_raw_parameters_t legacy_flip;
+    dt_image_geoloc_t geoloc;
+    uint16_t raw_black_level;
+    uint32_t raw_white_point;
+    int color_labels;
+  } persisted = { 0 };
 
-  // These should be constant with regard to self integrity checks
-  // change_timestamp will be auto-updated if the hash changed,
-  // so it's handled out of the scope of what we do here
-  tmp.self_hash = 0;
-  tmp.mipmap_hash = 0;
-  tmp.change_timestamp = 0;
-  tmp.print_timestamp = 0;
-  tmp.import_timestamp = 0;
-  tmp.export_timestamp = 0;
+  /*
+   * Track only the dt_image_t fields that are explicitly written back to the database
+   * from dt_image_cache_write_release(), plus the history hash and color labels that
+   * are flushed through their own SQL paths right below it. Runtime-only fields such
+   * as cached ICC pointers, DNG gain-map lists, loader state or derived path strings
+   * must stay out of this hash, otherwise merely opening an image can look like an
+   * edit and spuriously bump change_timestamp.
+   */
+  persisted.orientation = img->orientation;
+  persisted.exif_exposure = img->exif_exposure;
+  persisted.exif_exposure_bias = img->exif_exposure_bias;
+  persisted.exif_aperture = img->exif_aperture;
+  persisted.exif_iso = img->exif_iso;
+  persisted.exif_focal_length = img->exif_focal_length;
+  persisted.exif_focus_distance = img->exif_focus_distance;
+  persisted.exif_crop = img->exif_crop;
+  memcpy(persisted.exif_maker, img->exif_maker, sizeof(persisted.exif_maker));
+  memcpy(persisted.exif_model, img->exif_model, sizeof(persisted.exif_model));
+  memcpy(persisted.exif_lens, img->exif_lens, sizeof(persisted.exif_lens));
+  persisted.exif_datetime_taken = img->exif_datetime_taken;
+  memcpy(persisted.filename, img->filename, sizeof(persisted.filename));
+  persisted.width = img->width;
+  persisted.height = img->height;
+  persisted.crop_x = img->crop_x;
+  persisted.crop_y = img->crop_y;
+  persisted.crop_width = img->crop_width;
+  persisted.crop_height = img->crop_height;
+  persisted.flags = img->flags;
+  persisted.film_id = img->film_id;
+  persisted.id = img->id;
+  persisted.group_id = img->group_id;
+  persisted.version = img->version;
+  persisted.history_hash = img->history_hash;
+  memcpy(persisted.d65_color_matrix, img->d65_color_matrix, sizeof(persisted.d65_color_matrix));
+  persisted.colorspace = img->colorspace;
+  persisted.legacy_flip = img->legacy_flip;
+  persisted.geoloc = img->geoloc;
+  persisted.raw_black_level = img->raw_black_level;
+  persisted.raw_white_point = img->raw_white_point;
+  persisted.color_labels = img->color_labels;
 
-  return dt_hash(5381, (const char *)&tmp, sizeof(dt_image_t));
+  return dt_hash(5381, (const char *)&persisted, sizeof(persisted));
 }
 
 static inline void _image_cache_lock_init(dt_image_t *img)
