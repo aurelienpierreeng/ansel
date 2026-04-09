@@ -1036,8 +1036,7 @@ static void _interpolate_and_mask(const float *const restrict input,
   // Bilinear interpolation
   #ifdef _OPENMP
   #pragma omp parallel for default(none) \
-    dt_omp_firstprivate(width, height, clips, filters, wb)  \
-    dt_omp_firstprivate(input, interpolated, clipping_mask) \
+    dt_omp_firstprivate(width, height, clips, filters, wb, input, interpolated, clipping_mask) \
     schedule(static)
   #endif
   for(size_t i = 0; i < height; i++)
@@ -1273,8 +1272,7 @@ static void _interpolate_and_mask_xtrans(const float *const restrict input,
 {
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-  dt_omp_firstprivate(width, height, clips, roi_in, wb, xtrans) \
-  dt_omp_firstprivate(input, interpolated, clipping_mask, lookup) \
+  dt_omp_firstprivate(width, height, clips, roi_in, wb, xtrans, input, interpolated, clipping_mask, lookup) \
   schedule(static)
 #endif
   for(size_t i = 0; i < height; i++)
@@ -1372,8 +1370,7 @@ static void _remosaic_and_replace(const float *const restrict input,
   // Take RGB ratios and norm, reconstruct RGB and remosaic the image
   #ifdef _OPENMP
   #pragma omp parallel for default(none) \
-    dt_omp_firstprivate(width, height, filters, wb)  \
-    dt_omp_firstprivate(output, interpolated, input, clipping_mask) \
+    dt_omp_firstprivate(width, height, filters, wb, output, interpolated, input, clipping_mask) \
     schedule(static)
   #endif
   for(size_t i = 0; i < height; i++)
@@ -1401,8 +1398,7 @@ static void _remosaic_and_replace_xtrans(const float *const restrict input,
 {
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-  dt_omp_firstprivate(width, height, roi_in, wb, xtrans) \
-  dt_omp_firstprivate(output, interpolated, input, clipping_mask) \
+  dt_omp_firstprivate(width, height, roi_in, wb, xtrans, output, interpolated, input, clipping_mask) \
   schedule(static)
 #endif
   for(size_t i = 0; i < height; i++)
@@ -2693,8 +2689,7 @@ static void process_visualize(const dt_dev_pixelpipe_iop_t *piece, const void *c
 
 #ifdef _OPENMP
   #pragma omp parallel for simd default(none) \
-  dt_omp_firstprivate(in, out) \
-  dt_omp_firstprivate(height, width, filters, clips) \
+  dt_omp_firstprivate(in, out, height, width, filters, clips) \
   schedule(simd:static) aligned(in, out : 64)
 #endif
   for(size_t row = 0; row < height; row++)
@@ -2776,8 +2771,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
       {
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-        dt_omp_firstprivate(clips, filters, ivoid, ovoid, roi_out) \
-        dt_omp_firstprivate(data, piece) \
+        dt_omp_firstprivate(clips, filters, ivoid, ovoid, roi_out, data, piece) \
         schedule(static)
 #endif
         for(int j = 0; j < roi_out->height; j++)
@@ -2789,8 +2783,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 // up/down directions
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-        dt_omp_firstprivate(clips, filters, ivoid, ovoid, roi_out) \
-        dt_omp_firstprivate(data, piece) \
+        dt_omp_firstprivate(clips, filters, ivoid, ovoid, roi_out, data, piece) \
         schedule(static)
 #endif
         for(int i = 0; i < roi_out->width; i++)

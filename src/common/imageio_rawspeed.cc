@@ -579,7 +579,7 @@ dt_imageio_retval_t dt_imageio_open_rawspeed_sraw(dt_image_t *img,
     if(r->getDataType() == TYPE_USHORT16)
     {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) schedule(static) dt_omp_firstprivate(cpp) dt_omp_firstprivate(r, img, buf)
+#pragma omp parallel for default(none) schedule(static) dt_omp_firstprivate(cpp, r, img, buf)
 #endif
       for(int j = 0; j < img->height; j++)
       {
@@ -596,7 +596,7 @@ dt_imageio_retval_t dt_imageio_open_rawspeed_sraw(dt_image_t *img,
     else // r->getDataType() == TYPE_FLOAT32
     {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) schedule(static) dt_omp_firstprivate(cpp) dt_omp_firstprivate(r, img, buf)
+#pragma omp parallel for default(none) schedule(static) dt_omp_firstprivate(cpp, r, img, buf)
 #endif
       for(int j = 0; j < img->height; j++)
       {
@@ -621,7 +621,7 @@ dt_imageio_retval_t dt_imageio_open_rawspeed_sraw(dt_image_t *img,
     if(r->getDataType() == TYPE_USHORT16)
     {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) schedule(static) dt_omp_firstprivate(cpp) dt_omp_firstprivate(r, img, buf)
+#pragma omp parallel for default(none) schedule(static) dt_omp_firstprivate(cpp, r, img, buf)
 #endif
       for(int j = 0; j < img->height; j++)
       {
@@ -639,7 +639,7 @@ dt_imageio_retval_t dt_imageio_open_rawspeed_sraw(dt_image_t *img,
     else // r->getDataType() == TYPE_FLOAT32
     {
 #ifdef _OPENMP
-#pragma omp parallel for default(none) schedule(static) dt_omp_firstprivate(cpp) dt_omp_firstprivate(r, img, buf)
+#pragma omp parallel for default(none) schedule(static) dt_omp_firstprivate(cpp, r, img, buf)
 #endif
       for(int j = 0; j < img->height; j++)
       {

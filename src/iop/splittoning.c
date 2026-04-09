@@ -202,8 +202,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-  dt_omp_firstprivate(compress, npixels)  \
-  dt_omp_firstprivate(data, in, out) \
+  dt_omp_firstprivate(compress, npixels, data, in, out) \
   schedule(static)
 #endif
   for(int k = 0; k < 4 * npixels; k += 4)

@@ -256,8 +256,7 @@ static int process_xtrans(const dt_iop_hotpixels_data_t *data,
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(ivoid, markfixed, min_neighbours, multiplier, ovoid, \
-                      roi_out, threshold, xtrans, width) \
-  dt_omp_firstprivate(offsets) \
+                      roi_out, threshold, xtrans, width, offsets) \
   reduction(+ : fixed) \
   schedule(static)
 #endif

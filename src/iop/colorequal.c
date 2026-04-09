@@ -1098,8 +1098,7 @@ static void _draw_graph_background(cairo_t *cr, const dt_iop_colorequal_channel_
 #ifdef _OPENMP
 #pragma omp parallel for default(none) schedule(static) dt_omp_firstprivate(channel, ring_brightness,          \
                                                                             reference_saturation, white, y,     \
-                                                                            display_profile)                    \
-  dt_omp_firstprivate(colors)
+                                                                            display_profile, colors)
 #endif
     for(int k = 0; k < DT_IOP_COLOREQUAL_GRAPH_RES; k++)
     {

@@ -1238,8 +1238,7 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_
 
 #ifdef _OPENMP
 #pragma omp parallel for SIMD() default(none) \
-  dt_omp_firstprivate(center, sigma) \
-  dt_omp_firstprivate(d) \
+  dt_omp_firstprivate(center, sigma, d) \
   schedule(static)
 #endif
   for(int k = 0; k < 65536; k++)

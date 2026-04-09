@@ -520,8 +520,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 #pragma omp parallel for default(none) \
     dt_omp_firstprivate(csx, csy, height, out, im_to_rel_x, im_to_rel_y, rel_to_map_x, rel_to_map_y, \
                         roi_out, roi_x, roi_y, \
-                        map_w, map_h, map_origin_h, map_origin_v, width) \
-    dt_omp_firstprivate(d) \
+                        map_w, map_h, map_origin_h, map_origin_v, width, d) \
     schedule(static)
 #endif
     for(int j = 0; j < height; j++)

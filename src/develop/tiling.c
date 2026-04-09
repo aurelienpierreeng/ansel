@@ -776,8 +776,7 @@ static int _default_process_tiling_ptp(struct dt_iop_module_t *self, const struc
 /* prepare input tile buffer */
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-      dt_omp_firstprivate(ht, in_bpp, ipitch, ivoid, wd) \
-      dt_omp_firstprivate(ioffs) \
+      dt_omp_firstprivate(ht, in_bpp, ipitch, ivoid, wd, ioffs) \
       dt_omp_firstprivate(input, width) \
       schedule(static)
 #endif
@@ -815,8 +814,7 @@ static int _default_process_tiling_ptp(struct dt_iop_module_t *self, const struc
 /* copy "good" part of tile to output buffer */
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-      dt_omp_firstprivate(opitch, out_bpp, ovoid, wd) \
-      dt_omp_firstprivate(ooffs, output, width, origin, region) \
+      dt_omp_firstprivate(opitch, out_bpp, ovoid, wd, ooffs, output, width, origin, region) \
       schedule(static)
 #endif
       for(size_t j = 0; j < region[1]; j++)
@@ -1113,8 +1111,7 @@ static int _default_process_tiling_roi(struct dt_iop_module_t *self, const struc
 
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-      dt_omp_firstprivate(in_bpp, ipitch, ivoid) \
-      dt_omp_firstprivate(ioffs) dt_omp_firstprivate(input, iroi_full) \
+      dt_omp_firstprivate(in_bpp, ipitch, ivoid, ioffs, input, iroi_full) \
       schedule(static)
 #endif
       for(size_t j = 0; j < iroi_full.height; j++)
@@ -1139,8 +1136,7 @@ static int _default_process_tiling_roi(struct dt_iop_module_t *self, const struc
       const int origin_y = oroi_good.y - oroi_full.y;
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-      dt_omp_firstprivate(opitch, origin_x, origin_y, out_bpp, ovoid) \
-      dt_omp_firstprivate(ooffs, output, oroi_good, oroi_full) \
+      dt_omp_firstprivate(opitch, origin_x, origin_y, out_bpp, ovoid, ooffs, output, oroi_good, oroi_full) \
       schedule(static)
 #endif
       for(size_t j = 0; j < oroi_good.height; j++)
@@ -1424,8 +1420,7 @@ static int _default_process_tiling_cl_ptp(struct dt_iop_module_t *self, const st
 /* prepare pinned input tile buffer: copy part of input image */
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-        dt_omp_firstprivate(in_bpp, ipitch, ivoid) \
-        dt_omp_firstprivate(ioffs, wd, ht) dt_omp_firstprivate(input_buffer, width) \
+        dt_omp_firstprivate(in_bpp, ipitch, ivoid, ioffs, wd, ht, input_buffer, width) \
         schedule(static)
 #endif
         for(size_t j = 0; j < ht; j++)
@@ -1877,8 +1872,7 @@ static int _default_process_tiling_cl_roi(struct dt_iop_module_t *self, const st
 /* prepare pinned input tile buffer: copy part of input image */
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-        dt_omp_firstprivate(in_bpp, ipitch, ivoid) \
-        dt_omp_firstprivate(ioffs) dt_omp_firstprivate(input_buffer, width, iroi_full) schedule(static)
+        dt_omp_firstprivate(in_bpp, ipitch, ivoid, ioffs, input_buffer, width, iroi_full) schedule(static)
 #endif
         for(size_t j = 0; j < iroi_full.height; j++)
           memcpy((char *)input_buffer + j * iroi_full.width * in_bpp, (char *)ivoid + ioffs + j * ipitch,
@@ -1920,8 +1914,7 @@ static int _default_process_tiling_cl_roi(struct dt_iop_module_t *self, const st
 /* copy "good" part of tile from pinned output buffer to output image */
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-        dt_omp_firstprivate(ipitch, opitch, ovoid, out_bpp) \
-        dt_omp_firstprivate(ooffs) dt_omp_firstprivate(output_buffer, oroi_full, oorigin, oregion) \
+        dt_omp_firstprivate(ipitch, opitch, ovoid, out_bpp, ooffs, output_buffer, oroi_full, oorigin, oregion) \
         schedule(static)
 #endif
         for(size_t j = 0; j < oregion[1]; j++)

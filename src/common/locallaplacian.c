@@ -231,8 +231,7 @@ static inline float *ll_pad_input(
   { // pad by preview buffer
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-    dt_omp_firstprivate(ht, input, max_supp, out, wd, stride) \
-    dt_omp_firstprivate(wd2, ht2) \
+    dt_omp_firstprivate(ht, input, max_supp, out, wd, stride, wd2, ht2) \
     schedule(static) \
     collapse(2)
 #endif // fill regular pixels:
@@ -260,8 +259,7 @@ static inline float *ll_pad_input(
     } } while(0)
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-    dt_omp_firstprivate(input, max_supp, out, wd, stride) \
-    dt_omp_firstprivate(wd2, ht2, b) \
+    dt_omp_firstprivate(input, max_supp, out, wd, stride, wd2, ht2, b) \
     schedule(static) \
     collapse(2)
 #endif // left border
@@ -269,8 +267,7 @@ static inline float *ll_pad_input(
       LL_FILL(input[stride*wd*(j-max_supp)]* 0.01f);
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-    dt_omp_firstprivate(input, max_supp, out, stride, wd) \
-    dt_omp_firstprivate(wd2, ht2, b) \
+    dt_omp_firstprivate(input, max_supp, out, stride, wd, wd2, ht2, b) \
     schedule(static) \
     collapse(2)
 #endif // right border
@@ -278,8 +275,7 @@ static inline float *ll_pad_input(
       LL_FILL(input[stride*((j-max_supp)*wd+wd-1)] * 0.01f);
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-    dt_omp_firstprivate(max_supp, out) \
-    dt_omp_firstprivate(wd2, ht2, b) \
+    dt_omp_firstprivate(max_supp, out, wd2, ht2, b) \
     schedule(static) \
     collapse(2)
 #endif // top border
@@ -287,8 +283,7 @@ static inline float *ll_pad_input(
       LL_FILL(out[*wd2*max_supp+i]);
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-    dt_omp_firstprivate(ht, max_supp, out) \
-    dt_omp_firstprivate(wd2, ht2, b) \
+    dt_omp_firstprivate(ht, max_supp, out, wd2, ht2, b) \
     schedule(static) \
     collapse(2)
 #endif // bottom border
@@ -300,8 +295,7 @@ static inline float *ll_pad_input(
   { // pad by replication:
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-    dt_omp_firstprivate(input, ht, max_supp, out, wd, stride) \
-    dt_omp_firstprivate(wd2, ht2) \
+    dt_omp_firstprivate(input, ht, max_supp, out, wd, stride, wd2, ht2) \
     schedule(static)
 #endif
     for(int j=0;j<ht;j++)
@@ -558,8 +552,7 @@ int local_laplacian_internal(
     // go through all coefficients in the upsampled gauss buffer:
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-    dt_omp_firstprivate(ph, pw) \
-    dt_omp_firstprivate(w,h,buf,output,l,gamma,padded) \
+    dt_omp_firstprivate(ph, pw, w,h,buf,output,l,gamma,padded) \
     schedule(static) \
     collapse(2)
 #endif
@@ -582,8 +575,7 @@ int local_laplacian_internal(
   }
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-  dt_omp_firstprivate(ht, input, max_supp, out, wd) \
-  dt_omp_firstprivate(w,output,buf) \
+  dt_omp_firstprivate(ht, input, max_supp, out, wd, w,output,buf) \
   schedule(static) \
   collapse(2)
 #endif

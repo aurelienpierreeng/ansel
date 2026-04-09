@@ -462,8 +462,7 @@ static void _downsample_bayer_half_size(float *const out, const float *const in,
 {
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-  dt_omp_firstprivate(in, filters, is_4bayer, roi_in, roi_out, CAM_to_RGB) \
-  dt_omp_firstprivate(out) \
+  dt_omp_firstprivate(in, filters, is_4bayer, roi_in, roi_out, CAM_to_RGB, out) \
   schedule(static) collapse(2)
 #endif
   for(int y = 0; y < roi_out->height; y++)
@@ -611,8 +610,7 @@ static void _downsample_xtrans_half_size(float *const out, const float *const in
 {
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-  dt_omp_firstprivate(in, roi_in, roi_out, xtrans) \
-  dt_omp_firstprivate(out) \
+  dt_omp_firstprivate(in, roi_in, roi_out, xtrans, out) \
   schedule(static) collapse(2)
 #endif
   for(int y = 0; y < roi_out->height; y++)

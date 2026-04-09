@@ -448,8 +448,7 @@ static int dt_control_merge_hdr_process(dt_imageio_module_data_t *datai, const c
   d->whitelevel = fmaxf(d->whitelevel, saturation * cal);
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-  dt_omp_firstprivate(ivoid, cal, photoncnt) \
-  dt_omp_firstprivate(d, saturation) \
+  dt_omp_firstprivate(ivoid, cal, photoncnt, d, saturation) \
   schedule(static) collapse(2)
 #endif
   for(int y = 0; y < d->ht; y++)

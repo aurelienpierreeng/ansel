@@ -523,8 +523,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(ch, filter, filtermul, ivoid, ovoid, roi_out, strength, \
-                      wd, zoom, octaves, fib2, fib1div2) \
-  dt_omp_firstprivate(data, hash)
+                      wd, zoom, octaves, fib2, fib1div2, data, hash)
 #endif
   for(int j = 0; j < roi_out->height; j++)
   {

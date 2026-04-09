@@ -314,8 +314,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const size_t npixels = (size_t)roi_out->height * roi_out->width;
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-  dt_omp_firstprivate(npixels) \
-  dt_omp_firstprivate(in) \
+  dt_omp_firstprivate(npixels, in) \
   dt_omp_firstprivate(out) \
   schedule(static)
 #endif
@@ -342,8 +341,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   /* would clobber values still needed by other threads. */
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-  dt_omp_firstprivate(ch, contrast_scale, npixels) \
-  dt_omp_firstprivate(in) \
+  dt_omp_firstprivate(ch, contrast_scale, npixels, in) \
   dt_omp_firstprivate(out, data) \
   schedule(static)
 #endif

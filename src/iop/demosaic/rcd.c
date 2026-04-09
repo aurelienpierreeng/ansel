@@ -133,8 +133,7 @@ static void rcd_ppg_border(float *const out, const float *const in, const int wi
 
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-  dt_omp_firstprivate(filters, out, width, height, border) \
-  dt_omp_firstprivate(input) \
+  dt_omp_firstprivate(filters, out, width, height, border, input) \
   schedule(static)
 #endif
   for(int j = 3; j < height - 3; j++)
