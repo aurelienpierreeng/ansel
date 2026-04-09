@@ -751,9 +751,14 @@ gboolean dt_thumbtable_get_thumbnail_info(dt_thumbtable_t *table, int32_t imgid,
     {
       if(table->lut[rowid].imgid == imgid && table->lut[rowid].thumb)
       {
-        *out = table->lut[rowid].thumb->info;
-        found = TRUE;
-        break;
+        dt_thumbnail_t *thumb = table->lut[rowid].thumb;
+        if(g_hash_table_lookup(table->list, GINT_TO_POINTER(imgid)) == thumb)
+        {
+          *out = thumb->info;
+          found = TRUE;
+          break;
+        }
+        table->lut[rowid].thumb = NULL;
       }
     }
   }
@@ -839,9 +844,17 @@ void _add_thumbnail_at_rowid(dt_thumbtable_t *table, const size_t rowid, const i
   // Do we already have a thumbnail at the correct postion for the correct imgid ?
   if(table->lut[rowid].thumb && table->lut[rowid].imgid == imgid)
   {
-    // YES : reuse it
-    thumb = table->lut[rowid].thumb;
-    new_position = FALSE;
+    // Reuse the LUT entry only if it still matches the live thumbnail registry.
+    dt_thumbnail_t *mapped_thumb = _find_thumb_by_imgid(table, imgid);
+    if(mapped_thumb == table->lut[rowid].thumb)
+    {
+      thumb = mapped_thumb;
+      new_position = FALSE;
+    }
+    else
+    {
+      table->lut[rowid].thumb = NULL;
+    }
   }
   else
   {
@@ -1014,6 +1027,12 @@ static void _dt_selection_changed_callback(gpointer instance, gpointer user_data
   {
     dt_thumbnail_t *thumb = table->lut[rowid].thumb;
     if(!thumb) continue;
+
+    if(g_hash_table_lookup(table->list, GINT_TO_POINTER(table->lut[rowid].imgid)) != thumb)
+    {
+      table->lut[rowid].thumb = NULL;
+      continue;
+    }
 
     const gboolean selected = thumb->selected;
     dt_thumbnail_update_selection(thumb, dt_selection_is_id_selected(darktable.selection, thumb->info.id));
@@ -2096,6 +2115,9 @@ void _dt_thumbtable_empty_list(dt_thumbtable_t *table)
   const double start = dt_get_wtime();
 
   dt_pthread_mutex_lock(&table->lock);
+  for(int rowid = 0; rowid < table->collection_count; rowid++)
+    table->lut[rowid].thumb = NULL;
+
   // WARNING: we need to detach children from parent starting from the last
   // otherwise, Gtk updates the index of all the next children in sequence
   // and that takes forever when thumb_nb > 1000
@@ -2161,6 +2183,9 @@ void dt_thumbtable_stop(dt_thumbtable_t *table)
   table->reset_collection = TRUE;
 
   dt_pthread_mutex_lock(&table->lock);
+  for(int rowid = 0; rowid < table->collection_count; rowid++)
+    table->lut[rowid].thumb = NULL;
+
   GList *thumbs = g_hash_table_get_values(table->list);
   thumbs = g_list_sort(thumbs, _thumb_compare_rowid_desc);
   g_hash_table_remove_all(table->list);

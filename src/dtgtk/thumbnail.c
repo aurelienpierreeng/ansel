@@ -82,6 +82,8 @@
 
 static void _set_flag(GtkWidget *w, GtkStateFlags flag, gboolean activate)
 {
+  if(!GTK_IS_WIDGET(w)) return;
+
   if(activate)
     gtk_widget_set_state_flags(w, flag, FALSE);
   else
@@ -728,15 +730,24 @@ static void _thumb_update_icons(dt_thumbnail_t *thumb)
 
   gboolean show = (thumb->over > DT_THUMBNAIL_OVERLAYS_NONE);
 
-  gtk_widget_set_visible(thumb->w_local_copy, (thumb->info.has_localcopy && show) || DEBUG);
-  gtk_widget_set_visible(thumb->w_altered, (dt_thumbtable_info_is_altered(thumb->info) && show) || DEBUG);
-  gtk_widget_set_visible(thumb->w_group, (dt_thumbtable_info_is_grouped(thumb->info) && show) || DEBUG);
-  gtk_widget_set_visible(thumb->w_audio, (thumb->info.has_audio && show) || DEBUG);
-  gtk_widget_set_visible(thumb->w_color, show || DEBUG);
-  gtk_widget_set_visible(thumb->w_bottom_eb, show || DEBUG);
-  gtk_widget_set_visible(thumb->w_reject, show || DEBUG);
-  gtk_widget_set_visible(thumb->w_ext, show || DEBUG);
-  gtk_widget_show(thumb->w_cursor);
+  if(GTK_IS_WIDGET(thumb->w_local_copy))
+    gtk_widget_set_visible(thumb->w_local_copy, (thumb->info.has_localcopy && show) || DEBUG);
+  if(GTK_IS_WIDGET(thumb->w_altered))
+    gtk_widget_set_visible(thumb->w_altered, (dt_thumbtable_info_is_altered(thumb->info) && show) || DEBUG);
+  if(GTK_IS_WIDGET(thumb->w_group))
+    gtk_widget_set_visible(thumb->w_group, (dt_thumbtable_info_is_grouped(thumb->info) && show) || DEBUG);
+  if(GTK_IS_WIDGET(thumb->w_audio))
+    gtk_widget_set_visible(thumb->w_audio, (thumb->info.has_audio && show) || DEBUG);
+  if(GTK_IS_WIDGET(thumb->w_color))
+    gtk_widget_set_visible(thumb->w_color, show || DEBUG);
+  if(GTK_IS_WIDGET(thumb->w_bottom_eb))
+    gtk_widget_set_visible(thumb->w_bottom_eb, show || DEBUG);
+  if(GTK_IS_WIDGET(thumb->w_reject))
+    gtk_widget_set_visible(thumb->w_reject, show || DEBUG);
+  if(GTK_IS_WIDGET(thumb->w_ext))
+    gtk_widget_set_visible(thumb->w_ext, show || DEBUG);
+  if(GTK_IS_WIDGET(thumb->w_cursor))
+    gtk_widget_show(thumb->w_cursor);
 
   _set_flag(thumb->w_main, GTK_STATE_FLAG_PRELIGHT, thumb->mouse_over);
   _set_flag(thumb->widget, GTK_STATE_FLAG_PRELIGHT, thumb->mouse_over);
@@ -745,7 +756,8 @@ static void _thumb_update_icons(dt_thumbnail_t *thumb)
 
   for(int i = 0; i < MAX_STARS; i++)
   {
-    gtk_widget_set_visible(thumb->w_stars[i], show || DEBUG);
+    if(GTK_IS_WIDGET(thumb->w_stars[i]))
+      gtk_widget_set_visible(thumb->w_stars[i], show || DEBUG);
     _set_flag(thumb->w_stars[i], GTK_STATE_FLAG_ACTIVE, (thumb->info.rating > i && thumb->info.rating < DT_VIEW_REJECT));
   }
 
@@ -1374,6 +1386,22 @@ int dt_thumbnail_destroy(dt_thumbnail_t *thumb)
 
   dt_atomic_set_int(&thumb->destroying, TRUE);
 
+  // Unregister the thumbnail from the parent table before any callback can
+  // pick it again through the LUT or imgid hash during view/selection updates.
+  if(thumb->table)
+  {
+    dt_pthread_mutex_lock(&thumb->table->lock);
+    if(g_hash_table_lookup(thumb->table->list, GINT_TO_POINTER(thumb->info.id)) == thumb)
+      g_hash_table_remove(thumb->table->list, GINT_TO_POINTER(thumb->info.id));
+
+    if(thumb->table->lut)
+      for(int rowid = 0; rowid < thumb->table->collection_count; rowid++)
+        if(thumb->table->lut[rowid].thumb == thumb)
+          thumb->table->lut[rowid].thumb = NULL;
+
+    dt_pthread_mutex_unlock(&thumb->table->lock);
+  }
+
   // Detach the thumbnail from Gtk immediately, but keep it alive until any queued
   // background rendering job gets cancelled and disposed by the job queue.
   dt_pthread_mutex_lock(&thumb->lock);
@@ -1400,6 +1428,26 @@ int dt_thumbnail_destroy(dt_thumbnail_t *thumb)
   thumb->widget = NULL;
   thumb->w_main = NULL;
   thumb->w_image = NULL;
+  thumb->w_cursor = NULL;
+  thumb->w_bottom_eb = NULL;
+  thumb->w_reject = NULL;
+  thumb->w_color = NULL;
+  thumb->w_ext = NULL;
+  thumb->w_local_copy = NULL;
+  thumb->w_altered = NULL;
+  thumb->w_group = NULL;
+  thumb->w_audio = NULL;
+  thumb->w_top_eb = NULL;
+  thumb->w_alternative = NULL;
+  thumb->w_filename = NULL;
+  thumb->w_datetime = NULL;
+  thumb->w_folder = NULL;
+  thumb->w_exposure = NULL;
+  thumb->w_exposure_bias = NULL;
+  thumb->w_camera = NULL;
+  thumb->w_lens = NULL;
+  thumb->w_focal = NULL;
+  for(int i = 0; i < MAX_STARS; i++) thumb->w_stars[i] = NULL;
 
   dt_pthread_mutex_unlock(&thumb->lock);
 
@@ -1414,8 +1462,11 @@ void dt_thumbnail_update_gui(dt_thumbnail_t *thumb)
 {
   thumb_return_if_fails(thumb);
   _thumb_update_rating_class(thumb);
-  GtkDarktableThumbnailBtn *btn = (GtkDarktableThumbnailBtn *)thumb->w_color;
-  btn->icon_flags = thumb->info.color_labels;
+  if(GTK_IS_WIDGET(thumb->w_color))
+  {
+    GtkDarktableThumbnailBtn *btn = (GtkDarktableThumbnailBtn *)thumb->w_color;
+    btn->icon_flags = thumb->info.color_labels;
+  }
   _thumb_write_extension(thumb);
   _thumb_update_icons(thumb);
   _create_alternative_view(thumb);
