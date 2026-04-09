@@ -471,18 +471,6 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   return 0;
 }
 
-#if defined(__SSE__)
-/** process, all real work is done here. */
-int process_sse2(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
-                  void *const ovoid)
-{
-  const dt_iop_roi_t *const roi_in = &piece->roi_in;
-  const dt_iop_roi_t *const roi_out = &piece->roi_out;
-  process_cpu(pipe, piece, ivoid, ovoid, roi_in, roi_out, nlmeans_denoise_sse2);
-  return 0;
-}
-#endif
-
 void init_global(dt_iop_module_so_t *module)
 {
   const int program = 5; // nlmeans.cl, from programs.conf

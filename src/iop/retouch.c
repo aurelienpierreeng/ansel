@@ -2814,28 +2814,6 @@ static void image_rgb2lab(float *img_src, const int width, const int height, con
 {
   const int stride = width * height * ch;
 
-#if defined(__SSE__)
-  if(ch == 4 && use_sse)
-  {
-#ifdef _OPENMP
-#pragma omp parallel for default(none) \
-    dt_omp_firstprivate(ch, stride) \
-    shared(img_src) \
-    schedule(static)
-#endif
-    for(int i = 0; i < stride; i += ch)
-    {
-      // RGB -> XYZ
-      __m128 rgb = _mm_load_ps(img_src + i);
-      __m128 XYZ = dt_RGB_to_XYZ_sse2(rgb);
-      // XYZ -> Lab
-      _mm_store_ps(img_src + i, dt_XYZ_to_Lab_sse2(XYZ));
-    }
-
-    return;
-  }
-#endif
-
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(ch, stride) \
@@ -2854,28 +2832,6 @@ static void image_rgb2lab(float *img_src, const int width, const int height, con
 static void image_lab2rgb(float *img_src, const int width, const int height, const int ch, const int use_sse)
 {
   const int stride = width * height * ch;
-
-#if defined(__SSE__)
-  if(ch == 4 && use_sse)
-  {
-#ifdef _OPENMP
-#pragma omp parallel for default(none) \
-  dt_omp_firstprivate(ch, stride) \
-  shared(img_src) \
-  schedule(static)
-#endif
-    for(int i = 0; i < stride; i += ch)
-    {
-      // Lab -> XYZ
-      __m128 Lab = _mm_load_ps(img_src + i);
-      __m128 XYZ = dt_Lab_to_XYZ_sse2(Lab);
-      // XYZ -> RGB
-      _mm_store_ps(img_src + i, dt_XYZ_to_RGB_sse2(XYZ));
-    }
-
-    return;
-  }
-#endif
 
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
@@ -3666,16 +3622,6 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
   return process_internal(self, pipe, piece, ivoid, ovoid, roi_in, roi_out, 0);
 }
-
-#if defined(__SSE__)
-int process_sse2(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
-                  void *const ovoid)
-{
-  const dt_iop_roi_t *const roi_in = &piece->roi_in;
-  const dt_iop_roi_t *const roi_out = &piece->roi_out;
-  return process_internal(self, pipe, piece, ivoid, ovoid, roi_in, roi_out, 1);
-}
-#endif
 
 void distort_mask(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe, struct dt_dev_pixelpipe_iop_t *piece,
                   const float *const in, float *const out, const dt_iop_roi_t *const roi_in,

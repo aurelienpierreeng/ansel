@@ -110,17 +110,6 @@ static inline float Kahan_sum(const float m, float *const __restrict__ c, const 
    return t2;
 }
 
-#ifdef __SSE2__
-// vectorized Kahan summation algorithm
-static inline __m128 Kahan_sum_sse(const __m128 m, __m128 *const __restrict__ c, const __m128 add)
-{
-   const __m128 t1 = add - (*c);
-   const __m128 t2 = m + t1;
-   *c = (t2 - m) - t1;
-   return t2;
-}
-#endif /* __SSE2__ */
-
 static inline float Log2(float x)
 {
   return (x > 0.0f) ? (logf(x) / DT_M_LN2f) : x;
@@ -322,29 +311,6 @@ static inline void dt_fast_expf_4wide(const float x[4], float result[4])
     result[c] = u[c].f;
   }
 }
-
-#if defined(__SSE2__)
-#define ALIGNED(a) __attribute__((aligned(a)))
-#define VEC4(a)                                                                                              \
-  {                                                                                                          \
-    (a), (a), (a), (a)                                                                                       \
-  }
-
-/* SSE intrinsics version of dt_fast_expf */
-static const __m128 dt__fone ALIGNED(64) = VEC4(0x3f800000u);
-static const __m128 femo ALIGNED(64) = VEC4(0x00adf880u);
-static inline __m128 dt_fast_expf_sse2(const __m128 x)
-{
-  __m128 f = dt__fone + (x * femo);                 // f(n) = i1 + x(n)*(i2-i1)
-  __m128i i = _mm_cvtps_epi32(f);                   // i(n) = int(f(n))
-  __m128i mask = _mm_srai_epi32(i, 31);             // mask(n) = 0xffffffff if i(n) < 0
-  i = _mm_andnot_si128(mask, i);                    // i(n) = 0 if i(n) < 0
-  return _mm_castsi128_ps(i);                       // return *(float*)&i
-}
-#undef ALIGNED
-#undef VEC4
-
-#endif // __SSE2__
 
 // fast approximation of 2^-x for 0<x<126
 /****** if you change this function, you need to make the same change in data/kernels/{denoiseprofile,nlmeans}.cl ***/

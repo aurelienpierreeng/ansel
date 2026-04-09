@@ -201,13 +201,6 @@ DEFAULT(int, process_tiling, struct dt_iop_module_t *self, const struct dt_dev_p
                                const struct dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o,
                                const int bpp);
 
-#if defined(__SSE__)
-/** a variant process(), that can contain SSE2 intrinsics. */
-/** can be provided by each IOP. */
-OPTIONAL(int, process_sse2, struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
-                             const struct dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o);
-#endif
-
 #ifdef HAVE_OPENCL
 /** the opencl equivalent of process(). */
 OPTIONAL(int, process_cl, struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,

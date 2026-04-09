@@ -60,11 +60,6 @@
 #undef DT_SUPPORTED_ARMv8A
 #undef DT_SUPPORTED_X86
 
-#if !defined(__SSE2__) || !defined(__SSE__)
-#pragma message "Building without SSE2 is highly experimental."
-#pragma message "Expect a LOT of functionality to be broken. You have been warned."
-#endif
-
 // double check for 32-bit architecture
 #if defined(__SIZEOF_POINTER__) && __SIZEOF_POINTER__ < 8
 #error "Unfortunately we only work on the 64-bit architectures amd64, ARMv8-A and PPC64."

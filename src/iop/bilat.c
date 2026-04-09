@@ -324,42 +324,6 @@ void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev
   piece->data = NULL;
 }
 
-
-#if defined(__SSE2__)
-int process_sse2(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o)
-{
-  const dt_iop_roi_t *const roi_in = &piece->roi_in;
-  // this is called for preview and full pipe separately, each with its own pixelpipe piece.
-  // get our data struct:
-  dt_iop_bilat_data_t *d = (dt_iop_bilat_data_t *)piece->data;
-  // the total scale is composed of scale before input to the pipeline (iscale),
-  // and the scale of the roi.
-  // used to adjuste blur level depending on size. Don't amplify noise if magnified > 100%
-  const float scale = fmaxf(dt_dev_get_module_scale(pipe, roi_in), 1.f);
-  const float sigma_r = d->sigma_r; // does not depend on scale
-  const float sigma_s = d->sigma_s / scale;
-
-  if(d->mode == s_mode_bilateral)
-  {
-    dt_bilateral_t *b = dt_bilateral_init(roi_in->width, roi_in->height, sigma_s, sigma_r);
-    if(!b) return 1;
-    dt_bilateral_splat(b, (float *)i);
-    dt_bilateral_blur(b);
-    dt_bilateral_slice(b, (float *)i, (float *)o, d->detail);
-    dt_bilateral_free(b);
-  }
-  else // s_mode_local_laplacian
-  {
-    if(local_laplacian_sse2(i, o, roi_in->width, roi_in->height, d->midtone, d->sigma_s,
-                            d->sigma_r, d->detail, 0) != 0)
-      return 1;
-  }
-
-  if(pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK) dt_iop_alpha_copy(i, o, roi_in->width, roi_in->height);
-  return 0;
-}
-#endif
-
 int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o)
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;

@@ -573,11 +573,6 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
 #else
                "  normal build\n"
 #endif
-#if defined(__SSE2__) && defined(__SSE__)
-               "  SSE2 optimized codepath enabled\n"
-#else
-               "  SSE2 optimized codepath disabled\n"
-#endif
 #ifdef _OPENMP
                "  OpenMP support enabled\n"
 #else

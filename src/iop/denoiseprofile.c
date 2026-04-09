@@ -1682,15 +1682,6 @@ static inline __attribute__((always_inline)) int process_nlmeans(const dt_dev_pi
   return process_nlmeans_cpu(pipe, piece, ivoid, ovoid, roi_in, roi_out, nlmeans_denoise);
 }
 
-#if defined(__SSE2__)
-static int process_nlmeans_sse(const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
-                               const void *const ivoid, void *const ovoid, const dt_iop_roi_t *const roi_in,
-                               const dt_iop_roi_t *const roi_out)
-{
-  return process_nlmeans_cpu(pipe, piece, ivoid, ovoid, roi_in, roi_out, nlmeans_denoise_sse2);
-}
-#endif
-
 __DT_CLONE_TARGETS__
 static void sum_rec(const size_t npixels, const float *in, float *out)
 {
@@ -2695,24 +2686,6 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     err = process_variance(self, pipe, piece, ivoid, ovoid, roi_in, roi_out);
   return err;
 }
-
-#if defined(__SSE2__)
-int process_sse2(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
-                  void *const ovoid)
-{
-  const dt_iop_roi_t *const roi_in = &piece->roi_in;
-  const dt_iop_roi_t *const roi_out = &piece->roi_out;
-  dt_iop_denoiseprofile_params_t *d = (dt_iop_denoiseprofile_params_t *)piece->data;
-  int err = 0;
-  if(d->mode == MODE_NLMEANS || d->mode == MODE_NLMEANS_AUTO)
-    err = process_nlmeans_sse(pipe, piece, ivoid, ovoid, roi_in, roi_out);
-  else if(d->mode == MODE_WAVELETS || d->mode == MODE_WAVELETS_AUTO)
-    err = process_wavelets(self, pipe, piece, ivoid, ovoid, roi_in, roi_out, eaw_dn_decompose_sse, eaw_synthesize_sse2);
-  else
-    err = process_variance(self, pipe, piece, ivoid, ovoid, roi_in, roi_out);
-  return err;
-}
-#endif
 
 static inline unsigned infer_radius_from_profile(const float a)
 {

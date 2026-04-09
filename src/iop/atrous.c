@@ -380,16 +380,6 @@ int process(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
   return process_wavelets(self, pipe, piece, i, o, roi_in, roi_out, eaw_decompose, eaw_synthesize);
 }
 
-#if defined(__SSE2__)
-int process_sse2(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
-                 const struct dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o)
-{
-  const dt_iop_roi_t *const roi_in = &piece->roi_in;
-  const dt_iop_roi_t *const roi_out = &piece->roi_out;
-  return process_wavelets(self, pipe, piece, i, o, roi_in, roi_out, eaw_decompose_sse2, eaw_synthesize_sse2);
-}
-#endif
-
 #ifdef HAVE_OPENCL
 
 #ifdef USE_NEW_CL
