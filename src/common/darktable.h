@@ -669,13 +669,6 @@ typedef enum dt_debug_thread_t
   DT_DEBUG_NOCACHE_REUSE  = 1 << 30
 } dt_debug_thread_t;
 
-typedef struct dt_codepath_t
-{
-  unsigned int SSE2 : 1;
-  unsigned int _no_intrinsics : 1;
-  unsigned int OPENMP_SIMD : 1; // always stays the last one
-} dt_codepath_t;
-
 typedef struct dt_sys_resources_t
 {
   size_t total_memory;     // All RAM on system
@@ -686,7 +679,6 @@ typedef struct dt_sys_resources_t
 
 typedef struct darktable_t
 {
-  dt_codepath_t codepath;
   int32_t num_openmp_threads;
 
   int32_t unmuted;

@@ -176,14 +176,7 @@ inline static void histogram_helper_cs_rgb(const dt_dev_histogram_collection_par
   // process aligned pixels with SSE
   for(int i = 0; i < roi->width - roi->crop_width - roi->crop_x; i++, in += 4)
   {
-    if(darktable.codepath.OPENMP_SIMD)
-      histogram_helper_cs_rgb_helper_process_pixel_float(histogram_params, in, histogram);
-#if defined(__SSE2__)
-    else if(darktable.codepath.SSE2)
-      histogram_helper_cs_rgb_helper_process_pixel_m128(histogram_params, in, histogram);
-#endif
-    else
-      dt_unreachable_codepath();
+    histogram_helper_cs_rgb_helper_process_pixel_float(histogram_params, in, histogram);
   }
 }
 
@@ -197,14 +190,7 @@ inline static void histogram_helper_cs_rgb_compensated(const dt_dev_histogram_co
   // process aligned pixels with SSE
   for(int i = 0; i < roi->width - roi->crop_width - roi->crop_x; i++, in += 4)
   {
-    if(darktable.codepath.OPENMP_SIMD)
-      histogram_helper_cs_rgb_helper_process_pixel_float_compensated(histogram_params, in, histogram, profile_info);
-#if defined(__SSE2__)
-    else if(darktable.codepath.SSE2)
-      histogram_helper_cs_rgb_helper_process_pixel_m128_compensated(histogram_params, in, histogram, profile_info);
-#endif
-    else
-      dt_unreachable_codepath();
+    histogram_helper_cs_rgb_helper_process_pixel_float_compensated(histogram_params, in, histogram, profile_info);
   }
 }
 
@@ -265,14 +251,7 @@ inline static void histogram_helper_cs_Lab(const dt_dev_histogram_collection_par
   // process aligned pixels with SSE
   for(int i = 0; i < roi->width - roi->crop_width - roi->crop_x; i++, in += 4)
   {
-    if(darktable.codepath.OPENMP_SIMD)
-      histogram_helper_cs_Lab_helper_process_pixel_float(histogram_params, in, histogram);
-#if defined(__SSE2__)
-    else if(darktable.codepath.SSE2)
-      histogram_helper_cs_Lab_helper_process_pixel_m128(histogram_params, in, histogram);
-#endif
-    else
-      dt_unreachable_codepath();
+    histogram_helper_cs_Lab_helper_process_pixel_float(histogram_params, in, histogram);
   }
 }
 
@@ -296,17 +275,9 @@ inline static void histogram_helper_cs_Lab_LCh(const dt_dev_histogram_collection
   const dt_histogram_roi_t *roi = histogram_params->roi;
   float *in = (float *)pixel + 4 * (roi->width * j + roi->crop_x);
 
-  // TODO: process aligned pixels with SSE
   for(int i = 0; i < roi->width - roi->crop_width - roi->crop_x; i++, in += 4)
   {
-    //    if(darktable.codepath.OPENMP_SIMD)
     histogram_helper_cs_Lab_LCh_helper_process_pixel_float(histogram_params, in, histogram);
-    //#if defined(__SSE2__)
-    //    else if(darktable.codepath.SSE2)
-    //      histogram_helper_cs_Lab_helper_process_pixel_m128(histogram_params, in, histogram);
-    //#endif
-    //    else
-    //      dt_unreachable_codepath();
   }
 }
 

@@ -287,18 +287,7 @@ static int default_process(struct dt_iop_module_t *self, const struct dt_dev_pix
   const struct dt_iop_roi_t *const roi_in = &piece->roi_in;
   const struct dt_iop_roi_t *const roi_out = &piece->roi_out;
   if(roi_in->width <= 1 || roi_in->height <= 1 || roi_out->width <= 1 || roi_out->height <= 1) return 0;
-
-  if(darktable.codepath.OPENMP_SIMD && self->process_plain)
-    return self->process_plain(self, pipe, piece, i, o);
-#if defined(__SSE__)
-  else if(darktable.codepath.SSE2 && self->process_sse2)
-    return self->process_sse2(self, pipe, piece, i, o);
-#endif
-  else if(self->process_plain)
-    return self->process_plain(self, pipe, piece, i, o);
-  else
-    dt_unreachable_codepath_with_desc(self->op);
-  return 1;
+  return self->process_plain(self, pipe, piece, i, o);
 }
 
 static dt_introspection_field_t *default_get_introspection_linear(void)

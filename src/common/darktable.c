@@ -392,46 +392,6 @@ static void dt_codepaths_init()
 #ifdef HAVE_BUILTIN_CPU_SUPPORTS
   __builtin_cpu_init();
 #endif
-
-  memset(&(darktable.codepath), 0, sizeof(darktable.codepath));
-
-#ifndef __arm64__
-  // first, enable whatever codepath this CPU supports
-  {
-#ifdef HAVE_BUILTIN_CPU_SUPPORTS
-    darktable.codepath.SSE2 = (__builtin_cpu_supports("sse") && __builtin_cpu_supports("sse2"));
-#else
-    dt_cpu_flags_t flags = dt_detect_cpu_features();
-    darktable.codepath.SSE2 = ((flags & (CPU_FLAG_SSE)) && (flags & (CPU_FLAG_SSE2)));
-#endif
-  }
-#endif
-
-  // second, apply overrides from conf
-  // NOTE: all intrinsics sets can only be overridden to OFF
-  if(!dt_conf_get_bool("codepaths/sse2")) darktable.codepath.SSE2 = 0;
-
-  // last: do we have any intrinsics sets enabled?
-  darktable.codepath._no_intrinsics = !(darktable.codepath.SSE2);
-
-// if there is no SSE, we must enable plain codepath by default,
-// else, enable it conditionally.
-#if defined(__SSE__)
-  // disabled by default, needs to be manually enabled if needed.
-  // disabling all optimized codepaths enables it automatically.
-  if(dt_conf_get_bool("codepaths/openmp_simd") || darktable.codepath._no_intrinsics)
-#endif
-  {
-    darktable.codepath.OPENMP_SIMD = 1;
-    fprintf(stderr, "[dt_codepaths_init] will be using experimental plain OpenMP SIMD codepath.\n");
-  }
-
-#if defined(__SSE__)
-  if(darktable.codepath._no_intrinsics)
-  {
-    fprintf(stderr, "[dt_codepaths_init] SSE2-optimized codepath is disabled or unavailable.\n");
-  }
-#endif
 }
 
 // Returns total system memory in kiloBytes
