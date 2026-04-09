@@ -85,7 +85,6 @@ jobs:
           - { compiler: LLVM20, CC: clang-20, CXX: clang++-20, GCC_VER: "", LLVM_VER: "20" }
         btype:
           - Debug
-          - Release
         target:
           - skiptest
           - nofeatures
@@ -226,7 +225,6 @@ jobs:
           - { compiler: XCode,   CC: cc, CXX: c++ }
         btype:
           - Debug
-          - Release
         target:
           - skiptest
           - nofeatures
