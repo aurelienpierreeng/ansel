@@ -12,6 +12,10 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/")
 # These defaults need to be included before the project() call.
 include(DefineCMakeDefaults)
 
+if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Darwin")
+  set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "Build universal Apple binaries")
+endif()
+
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
   message(FATAL_ERROR "In-source builds are not permitted. Make a separate folder for building:\nmkdir build; cd build; cmake ..\nBefore that, remove the files already created:\nrm -rf CMakeCache.txt CMakeFiles")
 endif(CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
@@ -177,6 +181,14 @@ MESSAGE(STATUS "Building SSE2-optimized codepaths: ${BUILD_SSE2_CODEPATHS}")
 #
 if(APPLE)
   message("-- Mac OS X build detected, setting default features")
+  message("-- Apple target architectures: ${CMAKE_OSX_ARCHITECTURES}")
+  if(HAVE_APPLE_X86_TARGET_CLONES)
+    message("-- Apple x86_64 target_clones enabled")
+    add_compile_definitions(DT_APPLE_X86_TARGET_CLONES=1)
+  else()
+    message("-- Apple x86_64 target_clones disabled")
+  endif()
+
   find_program(HOMEBREW_EXISTS "brew")
   if(HOMEBREW_EXISTS)
     execute_process(COMMAND brew --prefix OUTPUT_VARIABLE HOMEBREW_PREFIX)

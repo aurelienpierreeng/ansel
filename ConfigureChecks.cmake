@@ -43,6 +43,26 @@ set(CMAKE_REQUIRED_LIBRARIES)
 set(CMAKE_REQUIRED_INCLUDES)
 endif()
 
+if(APPLE)
+  check_c_source_compiles("
+  #if defined(__x86_64__)
+  __attribute__((target_clones(\"default\",\"arch=x86-64\",\"arch=x86-64-v2\",\"arch=x86-64-v3\",\"arch=x86-64-v4\")))
+  static int dt_target_clones_probe(void)
+  {
+    return 0;
+  }
+  #endif
+
+  int main(void)
+  {
+  #if defined(__x86_64__)
+    return dt_target_clones_probe();
+  #else
+    return 0;
+  #endif
+  }" HAVE_APPLE_X86_TARGET_CLONES)
+endif()
+
 #
 # Check for pthread struct members
 #

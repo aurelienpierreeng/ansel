@@ -266,15 +266,69 @@ static inline int dt_get_thread_num()
 /* Create cloned functions for various CPU SSE generations */
 /* See for instructions https://hannes.hauswedell.net/post/2017/12/09/fmv/ */
 /* TL;DR : use only on SIMD functions containing low-level paralellized/vectorized loops */
-#if __has_attribute(target_clones) && !defined(_WIN32) && !defined(__APPLE__) && !defined(NATIVE_ARCH)
-  # if defined(__amd64__) || defined(__amd64) || defined(__x86_64__) || defined(__x86_64)
-    #define __DT_CLONE_TARGETS__ __attribute__((target_clones("default","arch=x86-64","arch=x86-64-v2","arch=x86-64-v3","arch=x86-64-v4")))
-  # elif defined(__PPC64__)
+#if __has_attribute(target_clones) && !defined(_WIN32) && !defined(NATIVE_ARCH)
+
+  /*
+   * Apple note:
+   * - arm64 vs x86_64 is handled by the universal binary, not target_clones.
+   * - target_clones on Apple is only useful within one slice.
+   * - the x86-64-v2/v3/v4 strings are not accepted by all Apple Clang versions.
+   *
+   * Therefore:
+   * - on Apple arm64: disable clones here,
+   * - on Apple x86_64: require explicit opt-in once the toolchain is validated.
+   */
+
+  #if defined(__APPLE__)
+
+    #if defined(__aarch64__) || defined(__arm64__)
+      #define __DT_CLONE_TARGETS__
+
+    #elif defined(__amd64__) || defined(__amd64) || defined(__x86_64__) || defined(__x86_64)
+
+      /*
+       * Enable this from your build system only after verifying that the local
+       * Apple Clang accepts:
+       *   target_clones("default","arch=x86-64","arch=x86-64-v2","arch=x86-64-v3","arch=x86-64-v4")
+       *
+       * Example:
+       *   -DDT_APPLE_X86_TARGET_CLONES=1
+       */
+      #if defined(DT_APPLE_X86_TARGET_CLONES)
+        #define __DT_CLONE_TARGETS__ \
+          __attribute__((target_clones( \
+            "default", \
+            "arch=x86-64", \
+            "arch=x86-64-v2", \
+            "arch=x86-64-v3", \
+            "arch=x86-64-v4" \
+          )))
+      #else
+        #define __DT_CLONE_TARGETS__
+      #endif
+
+    #else
+      #define __DT_CLONE_TARGETS__
+    #endif
+
+  #elif defined(__amd64__) || defined(__amd64) || defined(__x86_64__) || defined(__x86_64)
+    #define __DT_CLONE_TARGETS__ \
+      __attribute__((target_clones( \
+        "default", \
+        "arch=x86-64", \
+        "arch=x86-64-v2", \
+        "arch=x86-64-v3", \
+        "arch=x86-64-v4" \
+      )))
+
+  #elif defined(__PPC64__)
     /* __PPC64__ is the only macro tested for in is_supported_platform.h, other macros would fail there anyway. */
     #define __DT_CLONE_TARGETS__ __attribute__((target_clones("default","cpu=power9")))
-  # else
+
+  #else
     #define __DT_CLONE_TARGETS__
-  # endif
+  #endif
+
 #else
   #define __DT_CLONE_TARGETS__
 #endif
