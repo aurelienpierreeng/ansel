@@ -489,9 +489,8 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
       if(buf == NULL) return 1;
 
 #ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-      	\
-      schedule(static)
+#pragma omp parallel for default(none) schedule(static) \
+  firstprivate(roi_out, roi_in, padded_bufsize, modifier, ch, d, buf, ovoid, ivoid, ch_width, interpolation, raw_monochrome, mask_display)
 #endif
       for(int y = 0; y < roi_out->height; y++)
       {
@@ -555,9 +554,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
     if(modflags & LF_MODIFY_VIGNETTING)
     {
 #ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-       \
-      schedule(static)
+#pragma omp parallel for default(none) schedule(static) firstprivate(modifier, ovoid, roi_out, ch, pixelformat)
 #endif
       for(int y = 0; y < roi_out->height; y++)
       {
@@ -582,9 +579,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
     if(modflags & LF_MODIFY_VIGNETTING)
     {
 #ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-       \
-      schedule(static)
+#pragma omp parallel for default(none) schedule(static) firstprivate(buf, roi_in, ch, pixelformat, modifier)
 #endif
       for(int y = 0; y < roi_in->height; y++)
       {
@@ -609,9 +604,8 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
       }
 
 #ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-       \
-      schedule(static)
+#pragma omp parallel for default(none) schedule(static) \
+  firstprivate(roi_out, roi_in, ovoid, ch, padded_buf2size, modifier, mask_display, raw_monochrome, interpolation, ch_width, buf, d, buf2)
 #endif
       for(int y = 0; y < roi_out->height; y++)
       {
@@ -775,9 +769,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     if(modflags & (LF_MODIFY_TCA | LF_MODIFY_DISTORTION | LF_MODIFY_GEOMETRY | LF_MODIFY_SCALE))
     {
 #ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-       \
-      schedule(static)
+#pragma omp parallel for default(none) schedule(static) firstprivate(modifier, tmpbuf, roi_out, tmpbufwidth)
 #endif
       for(int y = 0; y < roi_out->height; y++)
       {
@@ -813,9 +805,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     if(modflags & LF_MODIFY_VIGNETTING)
     {
 #ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-       \
-      schedule(static)
+#pragma omp parallel for default(none) schedule(static) firstprivate(modifier, tmpbuf, roi_out, pixelformat, ch)
 #endif
       for(int y = 0; y < roi_out->height; y++)
       {
@@ -854,9 +844,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     if(modflags & LF_MODIFY_VIGNETTING)
     {
 #ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-       \
-      schedule(static)
+#pragma omp parallel for default(none) schedule(static) firstprivate(tmpbuf, ch, roi_in, pixelformat, modifier)
 #endif
       for(int y = 0; y < roi_in->height; y++)
       {
@@ -890,10 +878,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     if(modflags & (LF_MODIFY_TCA | LF_MODIFY_DISTORTION | LF_MODIFY_GEOMETRY | LF_MODIFY_SCALE))
     {
 #ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-       \
-       \
-      schedule(static)
+#pragma omp parallel for default(none) schedule(static) firstprivate(modifier, roi_out, tmpbuf, tmpbufwidth)
 #endif
       for(int y = 0; y < roi_out->height; y++)
       {
@@ -977,9 +962,7 @@ int distort_transform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   {
 
 #ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-     \
-    schedule(static) if(points_count > 100)
+#pragma omp parallel for default(none) schedule(static) firstprivate(points, points_count, modifier) if(points_count > 100)
 #endif
     for(size_t i = 0; i < points_count * 2; i += 2)
     {
@@ -1011,9 +994,8 @@ int distort_backtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
   {
 
 #ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-     \
-    schedule(static) if(points_count > 100)
+#pragma omp parallel for default(none) \
+    schedule(static) firstprivate(points_count, modifier, points) if(points_count > 100)
 #endif
     for(size_t i = 0; i < points_count * 2; i += 2)
     {
@@ -1065,7 +1047,7 @@ void distort_mask(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t 
   if(buf == NULL) return;
 
 #ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) schedule(static)
+#pragma omp parallel for default(none) schedule(static) firstprivate(buf, padded_bufsize, d, modifier, in, out, interpolation, roi_in, roi_out)
 #endif
   for(int y = 0; y < roi_out->height; y++)
   {
@@ -1136,7 +1118,8 @@ void modify_roi_in(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t
     if(buf == NULL) return;
 
 #ifdef _OPENMP
-#pragma omp parallel default(firstprivate) reduction(min : xm, ym) reduction(max : xM, yM)
+#pragma omp parallel default(none) reduction(min : xm, ym) reduction(max : xM, yM) \
+  firstprivate(modifier, xoff, yoff, awidth, aheight, width, height, nbpoints, ystep, xstep, buf)
 #endif
     {
 #ifdef _OPENMP
