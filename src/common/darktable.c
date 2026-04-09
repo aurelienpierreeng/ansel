@@ -966,6 +966,13 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   // get valid directories
   dt_loc_init(datadir_from_command, moduledir_from_command, localedir_from_command, configdir_from_command, cachedir_from_command, tmpdir_from_command, kerneldir_from_command);
 
+  fprintf(stdout, "[build] version: %s\n", darktable_package_string);
+  fprintf(stdout, "[build] type: %s | cpu mode: %s\n", DT_BUILD_TYPE, DT_BUILD_CPU_MODE);
+  fprintf(stdout, "[build] c compiler: %s\n", DT_BUILD_C_COMPILER);
+  fprintf(stdout, "[build] c flags: %s\n", DT_BUILD_C_FLAGS);
+  fprintf(stdout, "[build] c++ compiler: %s\n", DT_BUILD_CXX_COMPILER);
+  fprintf(stdout, "[build] c++ flags: %s\n", DT_BUILD_CXX_FLAGS);
+
   if(darktable.unmuted & DT_DEBUG_MEMORY)
   {
     fprintf(stderr, "[memory] at startup\n");

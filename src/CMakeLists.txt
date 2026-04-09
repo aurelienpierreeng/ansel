@@ -671,6 +671,23 @@ endif(NOT CUSTOM_CFLAGS)
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -D_DEBUG")
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -D_DEBUG")
 
+string(TOUPPER "${CMAKE_BUILD_TYPE}" DT_BUILD_TYPE_UPPER)
+set(DT_BUILD_C_FLAGS "${CMAKE_C_FLAGS} ${CMAKE_C_FLAGS_${DT_BUILD_TYPE_UPPER}}")
+set(DT_BUILD_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_${DT_BUILD_TYPE_UPPER}}")
+
+foreach(_dt_flag_var DT_BUILD_C_FLAGS DT_BUILD_CXX_FLAGS)
+  string(STRIP "${${_dt_flag_var}}" ${_dt_flag_var})
+  string(REGEX REPLACE "[ \t\r\n]+" " " ${_dt_flag_var} "${${_dt_flag_var}}")
+  string(REPLACE "\\" "\\\\" ${_dt_flag_var} "${${_dt_flag_var}}")
+  string(REPLACE "\"" "\\\"" ${_dt_flag_var} "${${_dt_flag_var}}")
+endforeach()
+
+if(BINARY_PACKAGE_BUILD)
+  set(DT_BUILD_CPU_MODE "generic package")
+else()
+  set(DT_BUILD_CPU_MODE "native/local")
+endif()
+
 #
 # Generate config.h
 #

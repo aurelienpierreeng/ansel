@@ -45,6 +45,13 @@ extern const char darktable_package_version[];
 extern const char darktable_package_string[];
 extern const char darktable_last_commit_year[];
 
+#define DT_BUILD_TYPE "@CMAKE_BUILD_TYPE@"
+#define DT_BUILD_CPU_MODE "@DT_BUILD_CPU_MODE@"
+#define DT_BUILD_C_COMPILER "@CMAKE_C_COMPILER_ID@ @CMAKE_C_COMPILER_VERSION@"
+#define DT_BUILD_CXX_COMPILER "@CMAKE_CXX_COMPILER_ID@ @CMAKE_CXX_COMPILER_VERSION@"
+#define DT_BUILD_C_FLAGS "@DT_BUILD_C_FLAGS@"
+#define DT_BUILD_CXX_FLAGS "@DT_BUILD_CXX_FLAGS@"
+
 static const char *dt_supported_extensions[] __attribute__((unused)) = {"@DT_SUPPORTED_EXTENSIONS_STRING@", NULL};
 
 #define GETTEXT_PACKAGE "ansel"
