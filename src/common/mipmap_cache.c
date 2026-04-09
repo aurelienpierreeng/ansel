@@ -124,7 +124,12 @@ static gboolean _mipmap_cache_disk_hash_matches(const int32_t imgid)
     dt_image_cache_read_release(darktable.image_cache, img);
   }
 
-  return history_hash != UINT64_MAX && mipmap_hash != UINT64_MAX && mipmap_hash == history_hash;
+  const gboolean matches
+      = history_hash != UINT64_MAX && mipmap_hash != UINT64_MAX && mipmap_hash == history_hash;
+  dt_print(DT_DEBUG_IMAGEIO,
+           "[mipmap/hash] imgid=%d disk-check current=%" PRIu64 " mipmap=%" PRIu64 " match=%d\n",
+           imgid, history_hash, mipmap_hash, matches);
+  return matches;
 }
 
 static uint64_t _mipmap_cache_get_history_hash(const int32_t imgid)
@@ -137,6 +142,7 @@ static uint64_t _mipmap_cache_get_history_hash(const int32_t imgid)
     dt_image_cache_read_release(darktable.image_cache, img);
   }
 
+  dt_print(DT_DEBUG_IMAGEIO, "[mipmap/hash] imgid=%d read current=%" PRIu64 "\n", imgid, history_hash);
   return history_hash;
 }
 
@@ -529,12 +535,21 @@ void dt_mipmap_cache_allocate_dynamic(void *data, dt_cache_entry_t *entry)
 
     if(!_mipmap_cache_disk_hash_matches(imgid))
     {
+      dt_print(DT_DEBUG_IMAGEIO,
+               "[mipmap/hash] imgid=%d mip=%d reject disk thumbnail due to hash mismatch\n",
+               imgid, mip);
       g_unlink(filename);
       goto finish;
     }
 
     f = g_fopen(filename, "rb");
-    if(f == NULL) goto finish; // file doesn't exist
+    if(f == NULL)
+    {
+      dt_print(DT_DEBUG_IMAGEIO,
+               "[mipmap/hash] imgid=%d mip=%d disk thumbnail missing at `%s'\n",
+               imgid, mip, filename);
+      goto finish; // file doesn't exist
+    }
 
     fseek(f, 0, SEEK_END);
     long len = ftell(f);
@@ -586,6 +601,9 @@ void dt_mipmap_cache_allocate_dynamic(void *data, dt_cache_entry_t *entry)
     dsc->iscale = 1.0f;
     dsc->color_space = color_space;
     dsc->flags = 0;
+    dt_print(DT_DEBUG_IMAGEIO,
+             "[mipmap/hash] imgid=%d mip=%d reuse disk thumbnail from `%s'\n",
+             imgid, mip, filename);
 
 finish:
     if(f && io_error)

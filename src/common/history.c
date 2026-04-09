@@ -796,6 +796,9 @@ void dt_history_hash_set_mipmap(const int32_t imgid, const uint64_t history_hash
 
   dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'w');
   if(!img) return;
+  dt_print(DT_DEBUG_IMAGEIO,
+           "[history/hash] imgid=%d write mipmap=%" PRIu64 " current=%" PRIu64 " mode=%d\n",
+           imgid, history_hash, img->history_hash, mode);
   img->mipmap_hash = history_hash;
   dt_image_cache_write_release(darktable.image_cache, img, mode);
 }

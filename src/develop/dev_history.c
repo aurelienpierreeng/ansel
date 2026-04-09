@@ -876,6 +876,20 @@ void dt_dev_add_history_item_real(dt_develop_t *dev, dt_iop_module_t *module, gb
   // We don't update history hash in dt_dev_add_history_item_ext
   // because it can be called within loops, so that can be expensive.
   dt_dev_set_history_hash(dev, dt_dev_history_compute_hash(dev));
+  if(dev->image_storage.id > 0)
+  {
+    dt_image_t *cache_img = dt_image_cache_get(darktable.image_cache, dev->image_storage.id, 'w');
+    if(cache_img)
+    {
+      cache_img->history_hash = dt_dev_get_history_hash(dev);
+      cache_img->mipmap_hash = UINT64_MAX;
+      dt_print(DT_DEBUG_IMAGEIO,
+               "[history/hash] imgid=%d staged current=%" PRIu64 " mipmap=%" PRIu64
+               " after history edit\n",
+               dev->image_storage.id, cache_img->history_hash, cache_img->mipmap_hash);
+      dt_image_cache_write_release(darktable.image_cache, cache_img, DT_IMAGE_CACHE_RELAXED);
+    }
+  }
 
   // Recompute pipeline last
   const gboolean has_raster = module && dt_iop_module_has_raster_mask(module);
@@ -1209,11 +1223,18 @@ void dt_dev_write_history_ext(dt_develop_t *dev, const int32_t imgid)
   // write the current iop-order-list for this image
   dt_ioppr_write_iop_order_list(dev->iop_order_list, imgid);
 
-  cache_img->history_hash = dt_dev_get_history_hash(dev);
+  const uint64_t history_hash = dt_dev_get_history_hash(dev);
+  const gboolean invalidate_mipmap = (cache_img->mipmap_hash != history_hash);
+  dt_print(DT_DEBUG_IMAGEIO,
+           "[history/hash] imgid=%d commit current=%" PRIu64 " mipmap=%" PRIu64
+           " invalidate_mipmap=%d\n",
+           imgid, history_hash, cache_img->mipmap_hash, invalidate_mipmap);
+  cache_img->history_hash = history_hash;
 
   dt_image_cache_write_release(darktable.image_cache, cache_img, DT_IMAGE_CACHE_SAFE);
-  
-  dt_mipmap_cache_remove(darktable.mipmap_cache, dev->image_storage.id, TRUE);
+
+  if(invalidate_mipmap)
+    dt_mipmap_cache_remove(darktable.mipmap_cache, dev->image_storage.id, TRUE);
 }
 
 // Schedule history write as a background job to avoid blocking the GUI.
