@@ -12,8 +12,10 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/")
 # These defaults need to be included before the project() call.
 include(DefineCMakeDefaults)
 
-if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Darwin")
-  set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "Build universal Apple binaries")
+option(DT_MACOS_UNIVERSAL "Build universal macOS binaries" OFF)
+
+if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Darwin" AND DT_MACOS_UNIVERSAL)
+  set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "Build universal Apple binaries" FORCE)
 endif()
 
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
@@ -127,8 +129,30 @@ else()
   set(RPATH_ORIGIN $ORIGIN)
 endif()
 
+if(APPLE AND USE_OPENMP)
+  find_program(HOMEBREW_EXISTS brew)
+
+  if(HOMEBREW_EXISTS)
+    execute_process(
+      COMMAND ${HOMEBREW_EXISTS} --prefix libomp
+      OUTPUT_VARIABLE HOMEBREW_LIBOMP_PREFIX
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+
+    if(EXISTS "${HOMEBREW_LIBOMP_PREFIX}/include/omp.h")
+      message(STATUS "Using Homebrew libomp from ${HOMEBREW_LIBOMP_PREFIX}")
+      set(OpenMP_ROOT "${HOMEBREW_LIBOMP_PREFIX}" CACHE PATH "Homebrew libomp prefix" FORCE)
+      set(OpenMP_C_FLAGS "-Xclang -fopenmp")
+      set(OpenMP_CXX_FLAGS "-Xclang -fopenmp")
+      set(OpenMP_C_LIB_NAMES "omp")
+      set(OpenMP_CXX_LIB_NAMES "omp")
+      set(OpenMP_omp_LIBRARY "${HOMEBREW_LIBOMP_PREFIX}/lib/libomp.dylib")
+    endif()
+  endif()
+endif()
+
 if(USE_OPENMP)
-  if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR
+  if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR 
       CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
 
     # Clang has an option to specify the OpenMP standard to use. Specify it.
