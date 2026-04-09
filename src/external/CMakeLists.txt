@@ -65,7 +65,20 @@ set(CMAKE_CXX_INCLUDE_WHAT_YOU_USE_SAVE "${CMAKE_CXX_INCLUDE_WHAT_YOU_USE}")
 unset(CMAKE_CXX_CLANG_TIDY)
 unset(CMAKE_CXX_INCLUDE_WHAT_YOU_USE)
 
+# Keep RawSpeed OpenMP setting aligned with the top-level build option
+set(WITH_OPENMP ${USE_OPENMP} CACHE BOOL "Enable OpenMP support in RawSpeed" FORCE)
+
 add_subdirectory(rawspeed)
+
+# Only patch the target when OpenMP is actually enabled
+if(USE_OPENMP AND TARGET rawspeed)
+  target_link_libraries(rawspeed PUBLIC OpenMP::OpenMP_CXX)
+
+  # AppleClang/Homebrew libomp sometimes still needs the header path spelled out
+  if(APPLE AND DEFINED OpenMP_ROOT)
+    target_include_directories(rawspeed SYSTEM PUBLIC "${OpenMP_ROOT}/include")
+  endif()
+endif()
 
 set(CMAKE_INSTALL_DATAROOTDIR "${CMAKE_INSTALL_DATAROOTDIR_SAVE}")
 
