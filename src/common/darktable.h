@@ -266,7 +266,7 @@ static inline int dt_get_thread_num()
 /* Create cloned functions for various CPU SSE generations */
 /* See for instructions https://hannes.hauswedell.net/post/2017/12/09/fmv/ */
 /* TL;DR : use only on SIMD functions containing low-level paralellized/vectorized loops */
-#if __has_attribute(target_clones) && !defined(_WIN32) && !defined(NATIVE_ARCH)
+#if __has_attribute(target_clones) && !defined(_WIN32) && !defined(NATIVE_ARCH) && !defined(_DEBUG)
 
   /*
    * Apple note:
