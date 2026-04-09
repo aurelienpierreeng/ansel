@@ -389,7 +389,6 @@ static inline __attribute__((always_inline)) float _compute_upsampling_kernel(co
   return itor->maketaps(kernel, 2*itor->width, itor->width, t, -1.0f);
 }
 
-
 /** Computes a downsampling filtering kernel (vectorized version, four taps
  * per inner loop iteration)
  *
@@ -1022,29 +1021,30 @@ static void _interpolation_resample_plain(const struct dt_interpolation *itor,
       dt_aligned_pixel_simd_t vs = dt_simd_set1(0.0f);
 
       // Number of horizontal samples contributing to the output
-      int hl = hlength[hlidx++]; // H(orizontal) L(ength)
+      const int hl = hlength[hlidx++]; // H(orizontal) L(ength)
+      const int *const column_hindex = hindex + hkidx;
+      const float *const column_hkernel = hkernel + hkidx;
+      const int *const column_vindex = vindex + viidx;
+      const float *const column_vkernel = vkernel + vkidx;
 
       for(size_t iy = 0; iy < vl; iy++)
       {
         // This is our input line
-        size_t baseidx_vindex = (size_t)vindex[viidx++] * in_stride_floats;
+        const size_t baseidx_vindex = (size_t)column_vindex[iy] * in_stride_floats;
 
         dt_aligned_pixel_simd_t vhs = dt_simd_set1(0.0f);
 
         for(size_t ix = 0; ix < hl; ix++)
         {
           // Apply the precomputed filter kernel
-          const size_t baseidx = baseidx_vindex + (size_t)hindex[hkidx] * 4;
-          const float htap = hkernel[hkidx++];
+          const size_t baseidx = baseidx_vindex + (size_t)column_hindex[ix] * 4;
+          const float htap = column_hkernel[ix];
           vhs += dt_load_simd_aligned(in + baseidx) * dt_simd_set1(htap);
         }
 
         // Accumulate contribution from this line
-        const float vtap = vkernel[vkidx++];
+        const float vtap = column_vkernel[iy];
         vs += vhs * dt_simd_set1(vtap);
-
-        // Reset horizontal resampling context
-        hkidx -= hl;
       }
 
       // Output pixel is ready
@@ -1056,11 +1056,8 @@ static void _interpolation_resample_plain(const struct dt_interpolation *itor,
       dt_store_simd_aligned(pixel, dt_simd_max_zero(vs));
       copy_pixel_nontemporal(out + baseidx, pixel);
 
-      // Reset vertical resampling context
-      viidx -= vl;
-      vkidx -= vl;
-
-      // Progress in horizontal context
+      // The vertical support is fixed for the whole output row. Only the
+      // horizontal plan advances from one output column to the next.
       hkidx += hl;
     }
   }
@@ -1418,7 +1415,6 @@ static void _interpolation_resample_1c_plain(const struct dt_interpolation *itor
 
       // Number of horizontal samples contributing to the output
       const int hl = hlength[hlidx++]; // H(orizontal) L(ength)
-
       for(int iy = 0; iy < vl; iy++)
       {
         // This is our input line

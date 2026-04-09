@@ -546,7 +546,11 @@ static inline __attribute__((always_inline)) dt_aligned_pixel_simd_t
 dt_mat3x4_mul_vec4(const dt_aligned_pixel_simd_t in, const dt_aligned_pixel_simd_t row0,
                    const dt_aligned_pixel_simd_t row1, const dt_aligned_pixel_simd_t row2)
 {
-  return row0 * in[0] + row1 * in[1] + row2 * in[2];
+  // Keep the multiply first in each accumulation step so GCC contracts this
+  // into chained FMA instructions in the multiversioned FMA clones too.
+  dt_aligned_pixel_simd_t out = row0 * in[0];
+  out = row1 * in[1] + out;
+  return row2 * in[2] + out;
 }
 
 // To be able to vectorize per-pixel loops, we need to operate on all four channels, but if the compiler does
