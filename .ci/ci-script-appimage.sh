@@ -40,7 +40,12 @@ export CFLAGS="$CXXFLAGS"
 
 ## AppImages require us to install everything in /usr, where root is the AppDir
 export DESTDIR=../AppDir
-cmake .. -DCMAKE_INSTALL_PREFIX=/usr -G Ninja -DCMAKE_BUILD_TYPE=Release -DBINARY_PACKAGE_BUILD=1 -DBUILD_NOISE_TOOLS=ON -DCMAKE_INSTALL_LIBDIR=lib64
+cmake .. -DCMAKE_INSTALL_PREFIX=/usr -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DBINARY_PACKAGE_BUILD=1 \
+  -DBUILD_NOISE_TOOLS=ON \
+  -DCMAKE_INSTALL_LIBDIR=lib64 \
+  -DCMAKE_INSTALL_RPATH='$ORIGIN/../lib'
 cmake --build . --target install --parallel $(nproc)
 
 # Grab lensfun database. You should run `sudo lensfun-update-data` before making
@@ -62,6 +67,11 @@ glib-compile-schemas ../AppDir/usr/share/glib-2.0/schemas
 
 # Mime database
 cp -r /usr/share/mime ../AppDir/usr/share/
+
+# Import GLib stack
+cp -v /usr/lib/x86_64-linux-gnu/libglib-2.0.so.* ../AppDir/usr/lib/
+cp -v /usr/lib/x86_64-linux-gnu/libgobject-2.0.so.* ../AppDir/usr/lib/
+cp -v /usr/lib/x86_64-linux-gnu/libgio-2.0.so.* ../AppDir/usr/lib/
 
 ## Get the latest Linuxdeploy and its Gtk plugin to package everything
 wget -c "https://raw.githubusercontent.com/linuxdeploy/linuxdeploy-plugin-gtk/master/linuxdeploy-plugin-gtk.sh"
@@ -96,6 +106,10 @@ export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:${ANSEL_LIBROOT}/"
 ./linuxdeploy-x86_64.AppImage \
   --appdir ../AppDir \
   --plugin gtk \
+  --executable ../AppDir/usr/bin/ansel \
+  --executable ../AppDir/usr/bin/ansel-cli \
+  --executable ../AppDir/usr/bin/ansel-cltest \
+  --executable ../AppDir/usr/bin/ansel-cmstest \
   --exclude-library 'libgomp.so*' \
   --deploy-deps-only "${ANSEL_LIBDIR}" \
   --deploy-deps-only "${ANSEL_LIBDIR}/views" \
@@ -124,6 +138,8 @@ BINDIR="${APPDIR}/usr/bin"
 TOOLDIR="${APPDIR}/usr/libexec/ansel/tools"
 APPLET="$(basename "$0")"
 
+# Hard override: NEVER fall back to host first
+export LD_LIBRARY_PATH="$APPDIR/usr/lib:$APPDIR/usr/lib/x86_64-linux-gnu"
 export GDK_PIXBUF_MODULE_FILE="$APPDIR/usr/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache"
 export XDG_DATA_DIRS="$APPDIR/usr/share:$XDG_DATA_DIRS"
 
