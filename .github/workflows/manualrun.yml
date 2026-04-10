@@ -86,7 +86,7 @@ jobs:
           sudo add-apt-repository ppa:ubuntu-toolchain-r/test
           sudo add-apt-repository -y universe
           sudo add-apt-repository -y multiverse
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
         with:
           submodules: true
           path: src
@@ -161,7 +161,7 @@ jobs:
         with:
           msystem: MINGW64
           update: true
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
         with:
           submodules: true
           path: src
@@ -194,7 +194,7 @@ jobs:
           cmake --build "${BUILD_DIR}" --target package
       - name: Package upload
         if: ${{ success() && matrix.btype == 'Release' && matrix.target == 'skiptest' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: Win64.${{ matrix.compiler.compiler }}.${{ matrix.btype}}.${{ github.sha }}
           path: ${{ env.BUILD_DIR }}/ansel-*.exe
@@ -223,7 +223,7 @@ jobs:
       GENERATOR: Ninja
       TARGET: ${{ matrix.target }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
         with:
           submodules: true
           path: src

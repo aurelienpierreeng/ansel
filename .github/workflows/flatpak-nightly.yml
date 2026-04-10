@@ -33,7 +33,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout ansel source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ env.BRANCH }}
           fetch-depth: 1
@@ -50,7 +50,7 @@ jobs:
         run: packaging/flatpak/build-flatpak.sh
 
       - name: Upload Flatpak artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: flatpak
           path: build/flatpak/photos.ansel.app.flatpak

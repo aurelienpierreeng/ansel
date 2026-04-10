@@ -117,7 +117,7 @@ jobs:
           echo "deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/noble/ llvm-toolchain-noble-20 main" | sudo tee /etc/apt/sources.list.d/llvm.list
           sudo apt-get update
           sudo apt-get install -y clang-20 libomp-20-dev
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           submodules: true
           fetch-depth: 1
@@ -183,7 +183,7 @@ jobs:
         with:
           msystem: ${{ matrix.msystem }}
           update: true
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           submodules: true
           fetch-depth: 1
@@ -244,7 +244,7 @@ jobs:
       GENERATOR: ${{ matrix.generator }}
       TARGET: ${{ matrix.target }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           submodules: true
           fetch-depth: 1

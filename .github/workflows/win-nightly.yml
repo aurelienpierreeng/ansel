@@ -75,7 +75,7 @@ jobs:
           msystem: ${{ matrix.msystem }}
           update: true
       - name: Checkout ansel source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ env.BRANCH }}
           fetch-depth: 3000
@@ -86,7 +86,7 @@ jobs:
         run: |
           $(cygpath ${SRC_DIR})/packaging/install-deps-windows-msys2.sh
       - name: Checkout exiv2 source
-        uses: actions/checkout@v3
+        uses: actions/checkout@v6
         with:
           repository: 'Exiv2/exiv2'
           # Exiv2 0.28.0 removes the old `std::wstring` path for Windows, and
@@ -145,7 +145,7 @@ jobs:
           cmake --build "${BUILD_DIR}" --target package
       - name: Package upload
         if: ${{ success() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ansel.${{ env.BUILD_NAME }}.win64
           path: ${{ env.BUILD_DIR }}/ansel-*.exe
@@ -160,7 +160,7 @@ jobs:
       TAG: "v0.0.0"
     steps:
       - name: Checkout ansel source
-        uses: actions/checkout@v3
+        uses: actions/checkout@v6
         with:
           fetch-depth: 1
           submodules: false
