@@ -62,10 +62,10 @@ static inline const char *_cache_debug_module_name(void)
 static void _trace_exact_hit(const char *phase, const uint64_t hash, dt_pixel_cache_entry_t *cache_entry,
                              void *data, void *cl_mem_output, const int preferred_devid, const gboolean verbose)
 {
-  if(!(darktable.unmuted & DT_DEBUG_CACHE)) return;
+  if(!(darktable.unmuted & DT_DEBUG_PIPECACHE)) return;
   if(verbose && !(darktable.unmuted & DT_DEBUG_VERBOSE)) return;
 
-  dt_print(DT_DEBUG_CACHE,
+  dt_print(DT_DEBUG_PIPECACHE,
            "[pixelpipe_cache] exact-hit %s req=%" PRIu64 " entry=%" PRIu64 "/%" PRIu64
            " data=%p cl=%p refs=%i auto=%i dev=%i module=%s name=%s\n",
            phase, hash, cache_entry ? cache_entry->hash : DT_PIXELPIPE_CACHE_HASH_INVALID,
@@ -166,9 +166,9 @@ static size_t _pixel_cache_get_size(dt_pixel_cache_entry_t *cache_entry)
 
 static void _pixel_cache_message(dt_pixel_cache_entry_t *cache_entry, const char *message, gboolean verbose)
 {
-  if(!(darktable.unmuted & DT_DEBUG_CACHE)) return;
+  if(!(darktable.unmuted & DT_DEBUG_PIPECACHE)) return;
   if(verbose && !(darktable.unmuted & DT_DEBUG_VERBOSE)) return;
-  dt_print(DT_DEBUG_CACHE,
+  dt_print(DT_DEBUG_PIPECACHE,
            "[pixelpipe] cache entry %" PRIu64 "/%" PRIu64 ": %s (data=%p - %lu MiB - age %" PRId64
            " - hits %i - refs %i - auto %i - ext %i - id %i - module %s) %s\n",
            cache_entry->hash, cache_entry->serial,
@@ -234,7 +234,7 @@ int _non_thread_safe_cache_remove(dt_dev_pixelpipe_cache_t *cache, const gboolea
   }
   else
   {
-    dt_print(DT_DEBUG_CACHE, "[pixelpipe] cache entry not found, will not be removed\n");
+    dt_print(DT_DEBUG_PIPECACHE, "[pixelpipe] cache entry not found, will not be removed\n");
   }
   return 1;
 }
@@ -555,14 +555,14 @@ static int _non_thread_safe_pixel_pipe_cache_remove_lru(dt_dev_pixelpipe_cache_t
   {
     error = _non_thread_safe_cache_remove(cache, FALSE, lru->cache_entry, cache->entries);
     if(error)
-      dt_print(DT_DEBUG_CACHE, "[pixelpipe] couldn't remove LRU %" PRIu64 "\n", lru->hash);
+      dt_print(DT_DEBUG_PIPECACHE, "[pixelpipe] couldn't remove LRU %" PRIu64 "\n", lru->hash);
     else
-      dt_print(DT_DEBUG_CACHE, "[pixelpipe] LRU %" PRIu64 " removed. Total cache size: %li MiB\n",
+      dt_print(DT_DEBUG_PIPECACHE, "[pixelpipe] LRU %" PRIu64 " removed. Total cache size: %li MiB\n",
                lru->hash, cache->current_memory / (1024 * 1024));
   }
   else
   {
-    dt_print(DT_DEBUG_CACHE, "[pixelpipe] couldn't remove LRU, %i items and all are used\n", g_hash_table_size(cache->entries));
+    dt_print(DT_DEBUG_PIPECACHE, "[pixelpipe] couldn't remove LRU, %i items and all are used\n", g_hash_table_size(cache->entries));
     g_hash_table_foreach(cache->entries, _print_cache_lines, NULL);
   }
 
@@ -1988,7 +1988,7 @@ static dt_pixel_cache_entry_t *_cache_try_rekey_reuse_locked(dt_dev_pixelpipe_ca
   cache_entry->hash = new_hash;
   g_hash_table_insert(cache->entries, stolen_key, cache_entry);
 
-  dt_print(DT_DEBUG_CACHE,
+  dt_print(DT_DEBUG_PIPECACHE,
            "[pixelpipe_cache] writable rekey old=%" PRIu64 " new=%" PRIu64 " entry=%" PRIu64 "/%" PRIu64
            " refs=%i auto=%i data=%p module=%s\n",
            old_hash, new_hash, cache_entry->hash, cache_entry->serial,
@@ -2005,7 +2005,7 @@ int dt_dev_pixelpipe_cache_get(dt_dev_pixelpipe_cache_t *cache, const uint64_t h
 {
   if(hash == DT_PIXELPIPE_CACHE_HASH_INVALID)
   {
-    dt_print(DT_DEBUG_CACHE, "[pixelpipe_cache] refusing invalid hash allocation for %s\n",
+    dt_print(DT_DEBUG_PIPECACHE, "[pixelpipe_cache] refusing invalid hash allocation for %s\n",
              name ? name : "unknown");
     if(data) *data = NULL;
     if(entry) *entry = NULL;
@@ -2047,7 +2047,7 @@ int dt_dev_pixelpipe_cache_get(dt_dev_pixelpipe_cache_t *cache, const uint64_t h
   cache_entry = _pixelpipe_cache_create_entry_locked(cache, hash, size, name, id);
   if(!cache_entry)
   {
-    dt_print(DT_DEBUG_CACHE, "couldn't allocate new cache entry %" PRIu64 "\n", hash);
+    dt_print(DT_DEBUG_PIPECACHE, "couldn't allocate new cache entry %" PRIu64 "\n", hash);
     dt_pthread_mutex_unlock(&cache->lock);
     if(entry) *entry = NULL;
     return 1;
@@ -2059,7 +2059,7 @@ int dt_dev_pixelpipe_cache_get(dt_dev_pixelpipe_cache_t *cache, const uint64_t h
   // Alloc after releasing the lock for better runtimes
   if(alloc) dt_pixel_cache_alloc(cache, cache_entry);
 
-  dt_print(DT_DEBUG_CACHE, "[pixelpipe_cache] Write-lock on entry (new cache entry %" PRIu64 " for %s pipeline)\n",
+  dt_print(DT_DEBUG_PIPECACHE, "[pixelpipe_cache] Write-lock on entry (new cache entry %" PRIu64 " for %s pipeline)\n",
            hash, name);
   _pixelpipe_cache_finalize_entry(cache_entry, data, "created");
 
@@ -2365,7 +2365,7 @@ gboolean dt_dev_pixelpipe_cache_peek(dt_dev_pixelpipe_cache_t *cache, const uint
 
   _trace_exact_hit("drop-invalid", hash, cache_entry, data ? *data : NULL,
                    cl_mem_output ? *cl_mem_output : NULL, preferred_devid, FALSE);
-  dt_print(DT_DEBUG_CACHE,
+  dt_print(DT_DEBUG_PIPECACHE,
            "[pixelpipe] cache entry %" PRIu64 " has no authoritative RAM nor vRAM payload and will be removed\n",
            hash);
   dt_dev_pixelpipe_cache_remove(cache, TRUE, cache_entry);
@@ -2577,7 +2577,7 @@ int dt_dev_pixelpipe_cache_rekey(dt_dev_pixelpipe_cache_t *cache, const uint64_t
   if(!entry) entry = _non_threadsafe_cache_get_entry(cache, cache->entries, old_hash);
   if(!entry)
   {
-    dt_print(DT_DEBUG_CACHE,
+    dt_print(DT_DEBUG_PIPECACHE,
              "[pixelpipe_cache] rekey miss old=%" PRIu64 " new=%" PRIu64 " module=%s\n",
              old_hash, new_hash, _cache_debug_module_name());
     dt_pthread_mutex_unlock(&cache->lock);
@@ -2587,7 +2587,7 @@ int dt_dev_pixelpipe_cache_rekey(dt_dev_pixelpipe_cache_t *cache, const uint64_t
   dt_pixel_cache_entry_t *conflict = _non_threadsafe_cache_get_entry(cache, cache->entries, new_hash);
   if(conflict && conflict != entry)
   {
-    dt_print(DT_DEBUG_CACHE,
+    dt_print(DT_DEBUG_PIPECACHE,
              "[pixelpipe_cache] rekey conflict old=%" PRIu64 " new=%" PRIu64
              " entry=%" PRIu64 "/%" PRIu64 " conflict=%" PRIu64 "/%" PRIu64 " module=%s\n",
              old_hash, new_hash, entry->hash, entry->serial, conflict->hash, conflict->serial,
@@ -2600,7 +2600,7 @@ int dt_dev_pixelpipe_cache_rekey(dt_dev_pixelpipe_cache_t *cache, const uint64_t
   gpointer stolen_value = NULL;
   if(!g_hash_table_steal_extended(cache->entries, &old_hash, &stolen_key, &stolen_value))
   {
-    dt_print(DT_DEBUG_CACHE,
+    dt_print(DT_DEBUG_PIPECACHE,
              "[pixelpipe_cache] rekey steal-miss old=%" PRIu64 " new=%" PRIu64
              " entry=%" PRIu64 "/%" PRIu64 " module=%s\n",
              old_hash, new_hash, entry->hash, entry->serial, _cache_debug_module_name());
@@ -2610,7 +2610,7 @@ int dt_dev_pixelpipe_cache_rekey(dt_dev_pixelpipe_cache_t *cache, const uint64_t
 
   if(stolen_value != entry)
   {
-    dt_print(DT_DEBUG_CACHE,
+    dt_print(DT_DEBUG_PIPECACHE,
              "[pixelpipe_cache] rekey stolen-entry mismatch old=%" PRIu64 " new=%" PRIu64
              " expected=%" PRIu64 "/%" PRIu64 " got=%" PRIu64 "/%" PRIu64 " module=%s\n",
              old_hash, new_hash, entry->hash, entry->serial,
@@ -2642,7 +2642,7 @@ int dt_dev_pixelpipe_cache_rekey(dt_dev_pixelpipe_cache_t *cache, const uint64_t
   *(uint64_t *)stolen_key = new_hash;
   entry->hash = new_hash;
   g_hash_table_insert(cache->entries, stolen_key, stolen_value);
-  dt_print(DT_DEBUG_CACHE,
+  dt_print(DT_DEBUG_PIPECACHE,
            "[pixelpipe_cache] rekey old=%" PRIu64 " new=%" PRIu64 " entry=%" PRIu64 "/%" PRIu64
            " refs=%i auto=%i data=%p module=%s\n",
            old_hash, new_hash, entry->hash, entry->serial, dt_atomic_get_int(&entry->refcount),
@@ -2655,9 +2655,9 @@ int dt_dev_pixelpipe_cache_rekey(dt_dev_pixelpipe_cache_t *cache, const uint64_t
 
 void dt_dev_pixelpipe_cache_print(dt_dev_pixelpipe_cache_t *cache)
 {
-  if(!(darktable.unmuted & DT_DEBUG_CACHE)) return;
+  if(!(darktable.unmuted & DT_DEBUG_PIPECACHE)) return;
 
-  dt_print(DT_DEBUG_CACHE, "[pixelpipe] cache hit rate so far: %.3f%% - size: %lu MiB over %lu MiB - %i items\n", 100. * (cache->hits) / (float)cache->queries, cache->current_memory / (1024 * 1024), cache->max_memory / (1024 * 1024), g_hash_table_size(cache->entries));
+  dt_print(DT_DEBUG_PIPECACHE, "[pixelpipe] cache hit rate so far: %.3f%% - size: %lu MiB over %lu MiB - %i items\n", 100. * (cache->hits) / (float)cache->queries, cache->current_memory / (1024 * 1024), cache->max_memory / (1024 * 1024), g_hash_table_size(cache->entries));
 }
 
 // clang-format off

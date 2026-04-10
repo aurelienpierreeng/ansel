@@ -698,7 +698,7 @@ typedef enum dt_debug_thread_t
   DT_DEBUG_CONTROL        = 1 <<  1,
   DT_DEBUG_DEV            = 1 <<  2,
   DT_DEBUG_PERF           = 1 <<  4,
-  DT_DEBUG_CAMCTL         = 1 <<  5,
+  DT_DEBUG_PIPECACHE         = 1 <<  5,
   DT_DEBUG_PWSTORAGE      = 1 <<  6,
   DT_DEBUG_OPENCL         = 1 <<  7,
   DT_DEBUG_SQL            = 1 <<  8,
@@ -723,7 +723,7 @@ typedef enum dt_debug_thread_t
   DT_DEBUG_IMPORT         = 1 << 27,
   DT_DEBUG_VERBOSE        = 1 << 28,
   DT_DEBUG_COLORPROFILE   = 1 << 29,
-  DT_DEBUG_NOCACHE_REUSE  = 1 << 30
+  DT_DEBUG_NOCACHE_REUSE  = 1 << 30,
 } dt_debug_thread_t;
 
 typedef struct dt_sys_resources_t

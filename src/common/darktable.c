@@ -232,7 +232,7 @@ static int usage(const char *argv0)
   printf("  --configdir <user config directory>\n");
   printf("  -d {all,cache,camctl,camsupport,colorprofile,control,demosaic,dev,history,imageio,import,\n");
   printf("      input,ioporder,lighttable,lua,masks,memory,nan,nocache_reuse,opencl,params,\n");
-  printf("      perf,pipe,print,pwstorage,signal,sql,shortcuts,tiling,undo,verbose}\n");
+  printf("      perf,pipe,pipecache,print,pwstorage,signal,sql,shortcuts,tiling,undo,verbose}\n");
   printf("  --d-signal <signal> \n");
   printf("  --d-signal-act <all,raise,connect,disconnect");
   // clang-format on
@@ -685,8 +685,8 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
           darktable.unmuted |= DT_DEBUG_DEV; // develop module
         else if(!strcmp(argv[k + 1], "input"))
           darktable.unmuted |= DT_DEBUG_INPUT; // input devices
-        else if(!strcmp(argv[k + 1], "camctl"))
-          darktable.unmuted |= DT_DEBUG_CAMCTL; // camera control module
+        else if(!strcmp(argv[k + 1], "pipecache"))
+          darktable.unmuted |= DT_DEBUG_PIPECACHE; // pipeline cache
         else if(!strcmp(argv[k + 1], "perf"))
           darktable.unmuted |= DT_DEBUG_PERF; // performance measurements
         else if(!strcmp(argv[k + 1], "pwstorage"))

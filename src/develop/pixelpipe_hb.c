@@ -94,10 +94,10 @@ static void _trace_cache_owner(const dt_dev_pixelpipe_t *pipe, const dt_iop_modu
                                const void *buffer, const dt_pixel_cache_entry_t *entry,
                                const gboolean verbose)
 {
-  if(!(darktable.unmuted & DT_DEBUG_CACHE)) return;
-  if(verbose && !(darktable.unmuted & DT_DEBUG_VERBOSE)) return;
+  if(!(darktable.unmuted & DT_DEBUG_PIPECACHE)) return;
+  if(!(darktable.unmuted & DT_DEBUG_VERBOSE)) return;
 
-  dt_print(DT_DEBUG_CACHE,
+  dt_print(DT_DEBUG_PIPECACHE,
            "[pixelpipe_owner] pipe=%s module=%s phase=%s slot=%s req=%" PRIu64
            " entry=%" PRIu64 "/%" PRIu64 " refs=%i auto=%i data=%p buf=%p name=%s\n",
            pipe ? dt_pixelpipe_get_pipe_name(pipe->type) : "-",
@@ -119,7 +119,7 @@ static void _trace_buffer_content(const dt_dev_pixelpipe_t *pipe, const dt_iop_m
                                   const char *phase, const void *buffer,
                                   const dt_iop_buffer_dsc_t *format, const dt_iop_roi_t *roi)
 {
-  if(!(darktable.unmuted & DT_DEBUG_CACHE)) return;
+  if(!(darktable.unmuted & DT_DEBUG_PIPECACHE)) return;
   if(!(darktable.unmuted & DT_DEBUG_VERBOSE)) return;
   if(!buffer || !format || !roi) return;
   if(roi->width <= 0 || roi->height <= 0) return;
@@ -160,7 +160,7 @@ static void _trace_buffer_content(const dt_dev_pixelpipe_t *pipe, const dt_iop_m
       if(energy < 1e-6f) near_black++;
     }
 
-    dt_print(DT_DEBUG_CACHE,
+    dt_print(DT_DEBUG_PIPECACHE,
              "[pixelpipe_stats] pipe=%s module=%s phase=%s type=float ch=%u roi=%dx%d "
              "rgb_min=(%g,%g,%g) rgb_max=(%g,%g,%g) a_min=%g a_max=%g near_black=%zu/%zu nonfinite=%zu\n",
              dt_pixelpipe_get_pipe_name(pipe->type), module->op, phase ? phase : "-",
@@ -189,7 +189,7 @@ static void _trace_buffer_content(const dt_dev_pixelpipe_t *pipe, const dt_iop_m
       if(energy == 0) near_black++;
     }
 
-    dt_print(DT_DEBUG_CACHE,
+    dt_print(DT_DEBUG_PIPECACHE,
              "[pixelpipe_stats] pipe=%s module=%s phase=%s type=u8 ch=%u roi=%dx%d "
              "rgb_min=(%d,%d,%d) rgb_max=(%d,%d,%d) a_min=%d a_max=%d near_black=%zu/%zu\n",
              dt_pixelpipe_get_pipe_name(pipe->type), module->op, phase ? phase : "-",
