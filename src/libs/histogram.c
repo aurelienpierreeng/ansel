@@ -919,16 +919,18 @@ static void _mask_waveform(const uint8_t *const restrict image, uint8_t *const r
   uint8_t mask[4] = { 0, 0, 0, 0 };
   for(size_t k = 0; k < 4; k++)
     if(k == channel) mask[k] = 1;
-    __OMP_PARALLEL_FOR__()
-    for(size_t i = 0; i < height; i++)
-      for(size_t j = 0; j < width; j++)
-      {
-        const size_t index = (i * width + j) * 4;
-        const uint8_t *const restrict pixel_in = image + index;
-        uint8_t *const restrict pixel_out = masked + index;
-        __OMP_SIMD__(aligned(mask, pixel_in, pixel_out: 16))
-        for(size_t c = 0; c < 4; c++) pixel_out[c] = pixel_in[c] * mask[c];
-      }
+
+  __OMP_PARALLEL_FOR__(collapse(2))
+  for(size_t i = 0; i < height; i++)
+    for(size_t j = 0; j < width; j++)
+    {
+      const size_t index = (i * width + j) * 4;
+      const uint8_t *const restrict pixel_in = image + index;
+      uint8_t *const restrict pixel_out = masked + index;
+
+      __OMP_SIMD__(aligned(mask, pixel_in, pixel_out: 16))
+      for(size_t c = 0; c < 4; c++) pixel_out[c] = pixel_in[c] * mask[c];
+    }
 }
 
 static void _paint_waveform(cairo_t *cr, uint8_t *const restrict image, const int width, const int height, const size_t img_width, const size_t img_height, const gboolean vertical)
