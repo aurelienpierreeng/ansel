@@ -47,7 +47,6 @@ cmake .. \
     -DUSE_KWALLET=OFF \
     -DBUILD_CMSTEST=OFF \
     -DBUILD_BENCHMARKING=OFF \
-    -DDT_MACOS_UNIVERSAL=ON \
     $ECO 
 
 cmake --build "$BUILD_DIR" --target install
