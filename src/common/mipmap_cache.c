@@ -124,8 +124,7 @@ static gboolean _mipmap_cache_disk_hash_matches(const int32_t imgid, const dt_mi
     dt_image_cache_read_release(darktable.image_cache, img);
   }
 
-  const gboolean matches
-      = history_hash != UINT64_MAX && mipmap_hash != UINT64_MAX && mipmap_hash == history_hash;
+  const gboolean matches = mipmap_hash == history_hash;
   dt_print(DT_DEBUG_CACHE,
            "[mipmap_cache] image %d at mip size %i %s up-to-date cache in database for  (history hash=%" PRIu64 " ; mipmap hash=%" PRIu64 ")\n",
            imgid, mip, (matches) ? "found" : "did not found", history_hash, mipmap_hash);
