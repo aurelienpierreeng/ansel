@@ -377,10 +377,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
                                         (gamma[1] != 0.0) ? 1.0 / gamma[1] : 1000000.0,
                                         (gamma[2] != 0.0) ? 1.0 / gamma[2] : 1000000.0 };
 
-#ifdef _OPENMP
-#pragma omp parallel for simd default(firstprivate) \
-      schedule(static)
-#endif
+__OMP_PARALLEL_FOR_SIMD__()
       for(size_t k = 0; k < (size_t)ch * roi_in->width * roi_out->height; k += ch)
       {
         float *in = ((float *)ivoid) + k;
@@ -425,10 +422,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
                                         (gamma[1] != 0.0) ? 1.0 / gamma[1] : 1000000.0,
                                         (gamma[2] != 0.0) ? 1.0 / gamma[2] : 1000000.0 };
 
-#ifdef _OPENMP
-#pragma omp parallel for simd default(firstprivate) \
-      schedule(static)
-#endif
+__OMP_PARALLEL_FOR_SIMD__()
       for(size_t k = 0; k < (size_t)ch * roi_in->width * roi_out->height; k += ch)
       {
         float *in = ((float *)ivoid) + k;
@@ -490,10 +484,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
                                         (2.0f - d->gamma[CHANNEL_GREEN]) * (2.0f - d->gamma[CHANNEL_FACTOR]),
                                         (2.0f - d->gamma[CHANNEL_BLUE]) * (2.0f - d->gamma[CHANNEL_FACTOR])};
 
-#ifdef _OPENMP
-#pragma omp parallel for simd default(firstprivate) \
-      schedule(static)
-#endif
+__OMP_PARALLEL_FOR_SIMD__()
       for(size_t k = 0; k < (size_t)ch * roi_in->width * roi_out->height; k += ch)
       {
         float *in = ((float *)ivoid) + k;

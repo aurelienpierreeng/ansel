@@ -197,9 +197,7 @@ void dt_bilateral_splat(const dt_bilateral_t *b, const float *const in)
     oz + oy + ox
   };
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate)
-#endif
+__OMP_PARALLEL_FOR__()
   for(int slice = 0; slice < b->numslices; slice++)
   {
     const int firstrow = slice * b->sliceheight;
@@ -229,9 +227,7 @@ void dt_bilateral_splat(const dt_bilateral_t *b, const float *const in)
           (1.0f - xf) * yf * 100.0f / sigma_s,
           xf * yf * 100.0f / sigma_s
         };
-#ifdef _OPENMP
-#pragma omp simd aligned(buf:64)
-#endif
+__OMP_SIMD__(aligned(buf:64))
         for(int k = 0; k < 4; k++)
         {
           buf[grid_index + offsets[k]] += (contrib[k] * (1.0f - zf));
@@ -269,9 +265,7 @@ static void blur_line_z(float *buf, const int offset1, const int offset2, const 
 {
   const float w1 = 4.f / 16.f;
   const float w2 = 2.f / 16.f;
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate)
-#endif
+__OMP_PARALLEL_FOR__()
   for(int k = 0; k < size1; k++)
   {
     size_t index = (size_t)k * offset1;
@@ -307,9 +301,7 @@ static void blur_line(float *buf, const int offset1, const int offset2, const in
   const float w0 = 6.f / 16.f;
   const float w1 = 4.f / 16.f;
   const float w2 = 1.f / 16.f;
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate)
-#endif
+__OMP_PARALLEL_FOR__()
   for(int k = 0; k < size1; k++)
   {
     size_t index = (size_t)k * offset1;
@@ -368,9 +360,7 @@ void dt_bilateral_slice(const dt_bilateral_t *const b, const float *const in, fl
   const int height = b->height;
 
   if (!buf) return;
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) collapse(2)
-#endif
+__OMP_PARALLEL_FOR__(collapse(2))
   for(int j = 0; j < height; j++)
   {
     for(int i = 0; i < width; i++)
@@ -411,9 +401,7 @@ void dt_bilateral_slice_to_output(const dt_bilateral_t *const b, const float *co
   const int height = b->height;
 
   if (!buf) return;
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) collapse(2)
-#endif
+__OMP_PARALLEL_FOR__(collapse(2))
   for(int j = 0; j < height; j++)
   {
     for(int i = 0; i < width; i++)

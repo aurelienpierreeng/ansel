@@ -171,9 +171,7 @@ void reload_defaults(dt_iop_module_t *module)
 }
 
 
-#ifdef _OPENMP
-#pragma omp declare simd simdlen(4)
-#endif
+__OMP_DECLARE_SIMD__(simdlen(4))
 static inline float _quantize(const float val, const float f, const float rf)
 {
   return rf * ceilf((val * f) - 0.5); // round up only if frac(x) strictly greater than 0.5
@@ -183,17 +181,13 @@ static inline float _quantize(const float val, const float f, const float rf)
   //return rf * (itmp + ((tmp - itmp > 0.5f) ? 1.0f : 0.0f));
 }
 
-#ifdef _OPENMP
-#pragma omp declare simd
-#endif
+__OMP_DECLARE_SIMD__()
 static inline float _rgb_to_gray(const float *const restrict val)
 {
   return 0.30f * val[0] + 0.59f * val[1] + 0.11f * val[2]; // RGB -> GRAY
 }
 
-#ifdef _OPENMP
-#pragma omp declare simd
-#endif
+__OMP_DECLARE_SIMD__()
 static inline void nearest_color(float *const restrict val, float *const restrict err, int graymode,
                                  const float f, const float rf)
 {
@@ -203,9 +197,7 @@ static inline void nearest_color(float *const restrict val, float *const restric
     const float in = _rgb_to_gray(val);
     const float new = _quantize(in,f,rf);
 
-#ifdef _OPENMP
-#pragma omp simd aligned(val, err : 16)
-#endif
+__OMP_SIMD__(aligned(val, err : 16))
     for(int c = 0; c < 4; c++)
     {
       err[c] = val[c] - new;
@@ -215,9 +207,7 @@ static inline void nearest_color(float *const restrict val, float *const restric
   else
   {
     // dither pixel into RGB, with f=levels-1 and rf=1/f, return err=old-new
-#ifdef _OPENMP
-#pragma omp simd aligned(val, err : 16)
-#endif
+__OMP_SIMD__(aligned(val, err : 16))
   for(int c = 0; c < 4; c++)
   {
     const float old = val[c];
@@ -230,9 +220,7 @@ static inline void nearest_color(float *const restrict val, float *const restric
 
 static inline void _diffuse_error(float *const restrict val, const float *const restrict err, const float factor)
 {
-#ifdef _OPENMP
-#pragma omp simd aligned(val, err)
-#endif
+__OMP_SIMD__(aligned(val, err))
   for(int c = 0; c < 4; c++)
   {
     val[c] += err[c] * factor;
@@ -246,9 +234,7 @@ static inline void _diffuse_error_sse(float *val, const __m128 err, const float 
 }
 #endif
 
-#ifdef _OPENMP
-#pragma omp declare simd
-#endif
+__OMP_DECLARE_SIMD__()
 static inline float clipnan(const float x)
 {
   // convert NaN to 0.5, otherwise clamp to between 0.0 and 1.0
@@ -261,9 +247,7 @@ static inline float clipnan(const float x)
 
 static inline void clipnan_pixel(float *const restrict out, const float *const restrict in)
 {
-#ifdef _OPENMP
-#pragma omp simd aligned(in, out : 16)
-#endif
+__OMP_SIMD__(aligned(in, out : 16))
   for (int c = 0; c < 4; c++)
     out[c] = clipnan(in[c]);
 }
@@ -420,9 +404,7 @@ static void process_floyd_steinberg(struct dt_iop_module_t *self, const dt_dev_p
 
   // once the FS dithering gets started, we can copy&clip the downright pixel, as that will be the first time
   // it will be accessed.  But to get the process started, we need to prepare the top row of pixels
-#ifdef _OPENMP
-#pragma omp simd aligned(in, out : 64)
-#endif
+__OMP_SIMD__(aligned(in, out : 64))
   for (int j = 0; j < width; j++)
   {
     clipnan_pixel(out + 4*j, in + 4*j);
@@ -482,15 +464,11 @@ static void process_random(struct dt_iop_module_t *self, const dt_dev_pixelpipe_
 
   unsigned int *const tea_states = alloc_tea_states(darktable.num_openmp_threads);
 
-#ifdef _OPENMP
-#pragma omp parallel default(firstprivate)
-#endif
+__OMP_PARALLEL__()
   {
     // get a pointer to each thread's private buffer *outside* the for loop, to avoid a function call per iteration
     unsigned int *const tea_state = get_tea_state(tea_states,dt_get_thread_num());
-#ifdef _OPENMP
-#pragma omp for schedule(static)
-#endif
+__OMP_FOR__()
     for(int j = 0; j < height; j++)
     {
       const size_t k = (size_t)4 * width * j;
@@ -502,9 +480,7 @@ static void process_random(struct dt_iop_module_t *self, const dt_dev_pixelpipe_
         encrypt_tea(tea_state);
         float dith = dither * tpdf(tea_state[0]);
 
-#ifdef _OPENMP
-#pragma omp simd aligned(in, out : 64)
-#endif
+__OMP_SIMD__(aligned(in, out : 64))
         for(int c = 0; c < 4; c++)
         {
           out[4*i+c] = CLIP(in[4*i+c] + dith);

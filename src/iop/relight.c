@@ -147,10 +147,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const float b = -1.0 + (data->center * 2);  // Center of top
   const float c = (data->width / 10.0) / 2.0; // Width
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate)        \
-    schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(int k = 0; k < roi_out->height; k++)
   {
     float *in = ((float *)ivoid) + (size_t)ch * k * roi_out->width;

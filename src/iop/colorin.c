@@ -742,10 +742,7 @@ static void process_cmatrix_bm(struct dt_iop_module_t *self, const dt_dev_pixelp
 
     // fprintf(stderr, "Using cmatrix codepath\n");
     // only color matrix. use our optimized fast path!
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(int j = 0; j < roi_out->height; j++)
   {
     const float *in = (const float *)ivoid + (size_t)ch * j * roi_out->width;
@@ -801,10 +798,7 @@ static void process_cmatrix_fastpath_simple(struct dt_iop_module_t *self, const 
 
 // fprintf(stderr, "Using cmatrix codepath\n");
 // only color matrix. use our optimized fast path!
-#ifdef _OPENMP
-#pragma omp parallel for simd default(firstprivate) \
-  schedule(static) aligned(in, out:64)
-#endif
+__OMP_PARALLEL_FOR_SIMD__(aligned(in, out:64))
   for(size_t k = 0; k < npixels; k++)
   {
     const size_t idx = 4 * k;
@@ -837,10 +831,7 @@ static void process_cmatrix_fastpath_clipping(struct dt_iop_module_t *self, cons
 
 // fprintf(stderr, "Using cmatrix codepath\n");
 // only color matrix. use our optimized fast path!
-#ifdef _OPENMP
-#pragma omp parallel for simd default(firstprivate) \
-  schedule(static) aligned(in, out:64)
-#endif
+__OMP_PARALLEL_FOR_SIMD__(aligned(in, out:64))
   for(size_t k = 0; k < npixels; k++)
   {
     const size_t idx = 4 * k;
@@ -896,10 +887,7 @@ static void process_cmatrix_proper(struct dt_iop_module_t *self, const dt_dev_pi
 
 // fprintf(stderr, "Using cmatrix codepath\n");
 // only color matrix. use our optimized fast path!
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < npixels; k++)
   {
     const float *in = (const float *)ivoid + 4 * k;
@@ -964,10 +952,7 @@ static void process_lcms2_bm(struct dt_iop_module_t *self, const dt_dev_pixelpip
   const gboolean use_nrgb = (d->nrgb != NULL);
   const int ch = 4;
 // use general lcms2 fallback
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(int k = 0; k < roi_out->height; k++)
   {
     const float *in = (const float *)ivoid + (size_t)ch * k * roi_out->width;
@@ -991,9 +976,7 @@ static void process_lcms2_bm(struct dt_iop_module_t *self, const dt_dev_pixelpip
       dt_colorspaces_transform_rgba_float_row(xform_cam_nrgb, out, out, roi_out->width);
 
       float *rgbptr = (float *)out;
-#ifdef _OPENMP
-#pragma omp simd aligned(rgbptr:64)
-#endif
+__OMP_SIMD__(aligned(rgbptr:64))
       for(int j = 0; j < roi_out->width; j++)
       {
         float *const pixel = rgbptr + 4 * j;
@@ -1021,10 +1004,7 @@ static void process_lcms2_proper(struct dt_iop_module_t *self, const dt_dev_pixe
   const int ch = 4;
 
 // use general lcms2 fallback
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(int k = 0; k < roi_out->height; k++)
   {
     const float *in = (const float *)ivoid + (size_t)ch * k * roi_out->width;
@@ -1040,9 +1020,7 @@ static void process_lcms2_proper(struct dt_iop_module_t *self, const dt_dev_pixe
       dt_colorspaces_transform_rgba_float_row(xform_cam_nrgb, in, out, roi_out->width);
 
       float *rgbptr = (float *)out;
-#ifdef _OPENMP
-#pragma omp simd aligned(rgbptr:64)
-#endif
+__OMP_SIMD__(aligned(rgbptr:64))
       for(int j = 0; j < roi_out->width; j++)
       {
         float *const pixel = rgbptr + 4 * j;

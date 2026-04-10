@@ -462,10 +462,7 @@ static float *_points_to_transform(float x, float y, float radius, float wd, flo
   const float center_y = center[1];
   points[0] = center_x;
   points[1] = center_y;
-#ifdef _OPENMP
-#pragma omp parallel for simd default(firstprivate)      \
-    schedule(static) if(l > 100) aligned(points:64)
-#endif
+__OMP_PARALLEL_FOR_SIMD__(if(l > 100) aligned(points:64))
   for(int i = 1; i < l + 1; i++)
   {
     const float alpha = (i - 1) * 2.0f * M_PI / (float)l;
@@ -506,10 +503,7 @@ static int _circle_get_points_source(dt_develop_t *dev, float x, float y, float 
   {
     const float dx = pts[0] - (*points)[0];
     const float dy = pts[1] - (*points)[1];
-#ifdef _OPENMP
-#pragma omp parallel for simd default(firstprivate)              \
-    schedule(static) if(*points_count > 100) aligned(points:64)
-#endif
+__OMP_PARALLEL_FOR_SIMD__(if(*points_count > 100) aligned(points:64))
     for(int i = 0; i < *points_count; i++)
     {
       (*points)[i * 2] += dx;
@@ -744,17 +738,12 @@ static int _circle_get_mask(const dt_iop_module_t *const restrict module, dt_dev
 
   const float pos_x = *posx;
   const float pos_y = *posy;
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static) if(h*w > 50000) num_threads(MIN(darktable.num_openmp_threads,(h*w)/20000))
-#endif
+__OMP_PARALLEL_FOR__(if(h*w > 50000) num_threads(MIN(darktable.num_openmp_threads,(h*w)/20000)))
   for(int i = 0; i < h; i++)
   {
     float *const restrict p = points + 2 * i * w;
     const float y = i + pos_y;
-#ifdef _OPENMP
-#pragma omp simd aligned(points : 64)
-#endif
+__OMP_SIMD__(aligned(points : 64))
     for(int j = 0; j < w; j++)
     {
       p[2*j] = pos_x + j;
@@ -798,11 +787,7 @@ static int _circle_get_mask(const dt_iop_module_t *const restrict module, dt_dev
   const float radius2 = circle->radius * mindim * circle->radius * mindim;
   const float total2 = (circle->radius + circle->border) * mindim * (circle->radius + circle->border) * mindim;
   const float border2 = total2 - radius2;
-#ifdef _OPENMP
-#pragma omp parallel for simd default(firstprivate) \
-  schedule(simd:static) if(h*w > 50000) num_threads(MIN(darktable.num_openmp_threads,(h*w)/20000)) \
-  aligned(points, ptbuffer : 64)
-#endif
+__OMP_PARALLEL_FOR_SIMD__(if(h*w > 50000) num_threads(MIN(darktable.num_openmp_threads,(h*w)/20000))  aligned(points, ptbuffer : 64))
   for(int i = 0 ; i < h*w; i++)
   {
     // find the square of the distance from the center
@@ -875,10 +860,7 @@ static int _circle_get_mask_roi(const dt_iop_module_t *const restrict module, dt
   float *const restrict circ = dt_pixelpipe_cache_alloc_align_float_cache(circpts * 2, 0);
   if(circ == NULL) return 1;
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static) if(circpts/8 > 1000)
-#endif
+__OMP_PARALLEL_FOR__(if(circpts/8 > 1000))
   for(int n = 0; n < circpts / 8; n++)
   {
     const float phi = (2.0f * M_PI * n) / circpts;
@@ -970,11 +952,7 @@ static int _circle_get_mask_roi(const dt_iop_module_t *const restrict module, dt
   if(points == NULL) return 1;
 
   // we populate the grid points in module coordinates
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static) collapse(2) if(bbw*bbh > 50000)
-
-#endif
+__OMP_PARALLEL_FOR__(collapse(2) if(bbw*bbh > 50000))
   for(int j = bbym; j <= bbYM; j++)
     for(int i = bbxm; i <= bbXM; i++)
     {
@@ -1006,10 +984,7 @@ static int _circle_get_mask_roi(const dt_iop_module_t *const restrict module, dt
 
   // we calculate the mask values at the transformed points;
   // for results: re-use the points array
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static) collapse(2) if(bbh*bbw > 50000) num_threads(MIN(darktable.num_openmp_threads,(height*width)/20000))
-#endif
+__OMP_PARALLEL_FOR__(collapse(2) if(bbh*bbw > 50000) num_threads(MIN(darktable.num_openmp_threads,(height*width)/20000)))
   for(int j = 0; j < bbh; j++)
     for(int i = 0; i < bbw; i++)
     {
@@ -1041,11 +1016,7 @@ static int _circle_get_mask_roi(const dt_iop_module_t *const restrict module, dt
     w0[i] = (float)(grid - i);
     w1[i] = (float)i;
   }
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static) if((size_t)(endy - bbym * grid) * (size_t)(endx - bbxm * grid) > 50000)
-
-#endif
+__OMP_PARALLEL_FOR__(if((size_t)(endy - bbym * grid) * (size_t)(endx - bbxm * grid) > 50000))
   for(int j = bbym * grid; j < endy; j++)
   {
     const int jj = j % grid;

@@ -839,8 +839,7 @@ static guint _rasterize_dab_batch_outer_loop(const GArray *dabs, const guint max
     omp_init_lock(&tile_locks[i]);
 
   const double t0 = dt_get_wtime();
-#pragma omp parallel for schedule(static) default(firstprivate) \
-  shared(dabs, sample_patch, patch, stroke_mask, thread_runtime, thread_damage, tile_locks, tile_cols, tile_origin_x, tile_origin_y, max_dabs, distance_percent, scale)
+#pragma omp parallel for default(shared)
   for(guint i = 0; i < max_dabs; i++)
   {
     const int tid = omp_get_thread_num();

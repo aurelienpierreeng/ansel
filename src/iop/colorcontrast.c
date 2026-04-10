@@ -156,9 +156,7 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
   return 1;
 }
 
-#ifdef _OPENMP
-#pragma omp declare simd aligned(in,out:64) aligned(slope,offset,low,high)
-#endif
+__OMP_DECLARE_SIMD__(aligned(in,out:64) aligned(slope,offset,low,high))
 static inline void clamped_scaling(float *const restrict out, const float *const restrict in,
                                    const dt_aligned_pixel_t slope, const dt_aligned_pixel_t offset,
                                    const dt_aligned_pixel_t low, const dt_aligned_pixel_t high)
@@ -190,10 +188,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
   if(d->unbound)
   {
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-    schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
     for(size_t k = 0; k < (size_t)4 * npixels; k += 4)
     {
       for_each_channel(c,dt_omp_nontemporal(out))
@@ -205,10 +200,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   else
   {
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-    schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
     for(size_t k = 0; k < npixels; k ++)
     {
       // the inner per-pixel loop needs to be declared in a separate vectorizable function to convince the

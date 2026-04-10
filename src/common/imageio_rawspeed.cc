@@ -581,9 +581,7 @@ dt_imageio_retval_t dt_imageio_open_rawspeed_sraw(dt_image_t *img,
 
     if(r->getDataType() == TYPE_USHORT16)
     {
-#ifdef _OPENMP
-#pragma omp parallel for default(none) schedule(static) shared(r) firstprivate(height, width, buf, cpp)
-#endif
+__OMP_PARALLEL_FOR_CPP__(shared(r) firstprivate(height, width, buf, cpp))
       for(int j = 0; j < height; j++)
       {
         const Array2DRef<uint16_t> in = r->getU16DataAsUncroppedArray2DRef();
@@ -598,9 +596,7 @@ dt_imageio_retval_t dt_imageio_open_rawspeed_sraw(dt_image_t *img,
     }
     else // r->getDataType() == TYPE_FLOAT32
     {
-#ifdef _OPENMP
-#pragma omp parallel for default(none) schedule(static) shared(r) firstprivate(height, width, buf, cpp)
-#endif
+__OMP_PARALLEL_FOR_CPP__(shared(r) firstprivate(height, width, buf, cpp))
       for(int j = 0; j < height; j++)
       {
         const Array2DRef<float> in = r->getF32DataAsUncroppedArray2DRef();
@@ -623,9 +619,7 @@ dt_imageio_retval_t dt_imageio_open_rawspeed_sraw(dt_image_t *img,
 
     if(r->getDataType() == TYPE_USHORT16)
     {
-#ifdef _OPENMP
-#pragma omp parallel for default(none) schedule(static) shared(r) firstprivate(height, width, buf, cpp)
-#endif
+__OMP_PARALLEL_FOR_CPP__(shared(r) firstprivate(height, width, buf, cpp))
       for(int j = 0; j < height; j++)
       {
         const Array2DRef<uint16_t> in = r->getU16DataAsUncroppedArray2DRef();
@@ -641,9 +635,7 @@ dt_imageio_retval_t dt_imageio_open_rawspeed_sraw(dt_image_t *img,
     }
     else // r->getDataType() == TYPE_FLOAT32
     {
-#ifdef _OPENMP
-#pragma omp parallel for default(none) schedule(static) shared(r) firstprivate(height, width, buf, cpp)
-#endif
+__OMP_PARALLEL_FOR_CPP__(shared(r) firstprivate(height, width, buf, cpp))
       for(int j = 0; j < height; j++)
       {
         const Array2DRef<float> in = r->getF32DataAsUncroppedArray2DRef();

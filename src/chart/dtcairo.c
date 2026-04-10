@@ -191,10 +191,7 @@ cairo_surface_t *cairo_surface_create_from_xyz_data(const float *const image, co
 {
   unsigned char *rgbbuf = (unsigned char *)malloc(sizeof(unsigned char) * height * width * 4);
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(int y = 0; y < height; y++)
   {
     const float *iter = image + y * width * 3;

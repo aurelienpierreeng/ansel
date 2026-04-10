@@ -209,9 +209,7 @@ static inline void _clamp_display_rgb_array_simd(const dt_aligned_pixel_simd_t *
 {
   if(!source_rgb || !display_rgb || count == 0) return;
 
-#ifdef _OPENMP
-#pragma omp simd aligned(source_rgb, display_rgb:16)
-#endif
+__OMP_SIMD__(aligned(source_rgb, display_rgb:16))
   for(size_t k = 0; k < count; k++)
     display_rgb[k] = _clamp01_simd(source_rgb[k]);
 }

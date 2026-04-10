@@ -217,9 +217,7 @@ int dt_ioppr_transform_image_colorspace_rgb_cl(const int devid, cl_mem dev_img_i
 
 /** the following must have the matrix_in and matrix_out generated */
 
-#ifdef _OPENMP
-#pragma omp declare simd aligned(lut:64) uniform(lut)
-#endif
+__OMP_DECLARE_SIMD__(aligned(lut:64) uniform(lut))
 static inline __attribute__((always_inline)) float extrapolate_lut(const float *const lut, const float v, const int lutsize)
 {
   // TODO: check if optimization is worthwhile!
@@ -232,17 +230,13 @@ static inline __attribute__((always_inline)) float extrapolate_lut(const float *
 }
 
 
-#ifdef _OPENMP
-#pragma omp declare simd uniform(coeff)
-#endif
+__OMP_DECLARE_SIMD__(uniform(coeff))
 static inline __attribute__((always_inline)) float eval_exp(const float coeff[3], const float x)
 {
   return coeff[1] * powf(x * coeff[0], coeff[2]);
 }
 
-#ifdef _OPENMP
-#pragma omp declare simd aligned(lut:64) uniform(lut, coeff)
-#endif
+__OMP_DECLARE_SIMD__(aligned(lut:64) uniform(lut, coeff))
 static inline __attribute__((always_inline)) float dt_ioppr_eval_trc(const float x, const float *const lut, const float coeff[3], const int lutsize)
 {
   return (x < 1.0f) ? extrapolate_lut(lut, x, lutsize) : eval_exp(coeff, x);
@@ -366,9 +360,7 @@ static inline float dt_ioppr_get_profile_info_middle_grey(const dt_iop_order_icc
   return profile_info->grey;
 }
 
-#ifdef _OPENMP
-#pragma omp declare simd uniform(profile_info)
-#endif
+__OMP_DECLARE_SIMD__(uniform(profile_info))
 static inline float dt_ioppr_compensate_middle_grey(const float x, const dt_iop_order_iccprofile_info_t *const profile_info)
 {
   // we transform the curve nodes from the image colorspace to lab
@@ -379,9 +371,7 @@ static inline float dt_ioppr_compensate_middle_grey(const float x, const dt_iop_
   return lab[0] * .01f;
 }
 
-#ifdef _OPENMP
-#pragma omp declare simd uniform(profile_info)
-#endif
+__OMP_DECLARE_SIMD__(uniform(profile_info))
 static inline float dt_ioppr_uncompensate_middle_grey(const float x, const dt_iop_order_iccprofile_info_t *const profile_info)
 {
   // we transform the curve nodes from lab to the image colorspace

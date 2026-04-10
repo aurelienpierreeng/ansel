@@ -143,7 +143,7 @@ void dt_iop_image_copy(float *const __restrict__ out, const float *const __restr
     // we can gain a little by using a small number of threads in parallel, but not much since the memory bus
     // quickly saturates (basically, each core can saturate a memory channel, so a system with quad-channel
     // memory won't be able to take advantage of more than four cores).
-#pragma omp parallel for simd aligned(in, out : 16) default(firstprivate) schedule(simd:static)
+#pragma omp parallel for simd aligned(in, out : 16) default(firstprivate) 
     for(size_t k = 0; k < nfloats; k++)
       out[k] = in[k];
     return;
@@ -196,7 +196,7 @@ void dt_iop_image_scaled_copy(float *const restrict buf, const float *const rest
     // we can gain a little by using a small number of threads in parallel, but not much since the memory bus
     // quickly saturates (basically, each core can saturate a memory channel, so a system with quad-channel
     // memory won't be able to take advantage of more than four cores).
-#pragma omp parallel for simd aligned(buf, src : 16) default(firstprivate) schedule(simd:static)
+#pragma omp parallel for simd aligned(buf, src : 16) default(firstprivate) 
     for(size_t k = 0; k < nfloats; k++)
       buf[k] = scale * src[k];
     return;
@@ -221,7 +221,7 @@ void dt_iop_image_fill(float *const buf, const float fill_value, const size_t wi
     const size_t nthreads = MIN(16,darktable.num_openmp_threads);
     // determine the number of 4-float vectors to be processed by each thread
     const size_t chunksize = (((nfloats + nthreads - 1) / nthreads) + 3) / 4;
-#pragma omp parallel for default(firstprivate) schedule(static) num_threads(nthreads)
+#pragma omp parallel for default(firstprivate)  num_threads(nthreads)
     for(size_t chunk = 0; chunk < nthreads; chunk++)
     {
 #pragma omp simd aligned(buf:16)
@@ -258,7 +258,7 @@ void dt_iop_image_add_const(float *const buf, const float add_value, const size_
     // we can gain a little by using a small number of threads in parallel, but not much since the memory bus
     // quickly saturates (basically, each core can saturate a memory channel, so a system with quad-channel
     // memory won't be able to take advantage of more than four cores).
-#pragma omp parallel for simd aligned(buf:16) default(firstprivate) schedule(simd:static)
+#pragma omp parallel for simd aligned(buf:16) default(firstprivate) 
     for(size_t k = 0; k < nfloats; k++)
       buf[k] += add_value;
     return;
@@ -283,7 +283,7 @@ void dt_iop_image_add_image(float *const buf, const float* const other_image,
     // we can gain a little by using a small number of threads in parallel, but not much since the memory bus
     // quickly saturates (basically, each core can saturate a memory channel, so a system with quad-channel
     // memory won't be able to take advantage of more than four cores).
-#pragma omp parallel for simd aligned(buf, other_image : 16) default(firstprivate) schedule(simd:static)
+#pragma omp parallel for simd aligned(buf, other_image : 16) default(firstprivate) 
     for(size_t k = 0; k < nfloats; k++)
       buf[k] += other_image[k];
     return;
@@ -308,7 +308,7 @@ void dt_iop_image_sub_image(float *const buf, const float* const other_image,
     // we can gain a little by using a small number of threads in parallel, but not much since the memory bus
     // quickly saturates (basically, each core can saturate a memory channel, so a system with quad-channel
     // memory won't be able to take advantage of more than four cores).
-#pragma omp parallel for simd aligned(buf, other_image : 16) default(firstprivate) schedule(simd:static)
+#pragma omp parallel for simd aligned(buf, other_image : 16) default(firstprivate) 
     for(size_t k = 0; k < nfloats; k++)
       buf[k] -= other_image[k];
     return;
@@ -333,7 +333,7 @@ void dt_iop_image_invert(float *const buf, const float max_value, const size_t w
     // we can gain a little by using a small number of threads in parallel, but not much since the memory bus
     // quickly saturates (basically, each core can saturate a memory channel, so a system with quad-channel
     // memory won't be able to take advantage of more than four cores).
-#pragma omp parallel for simd aligned(buf:16) default(firstprivate) schedule(simd:static)
+#pragma omp parallel for simd aligned(buf:16) default(firstprivate) 
     for(size_t k = 0; k < nfloats; k++)
       buf[k] = max_value - buf[k];
     return;
@@ -358,7 +358,7 @@ void dt_iop_image_mul_const(float *const buf, const float mul_value, const size_
     // we can gain a little by using a small number of threads in parallel, but not much since the memory bus
     // quickly saturates (basically, each core can saturate a memory channel, so a system with quad-channel
     // memory won't be able to take advantage of more than four cores).
-#pragma omp parallel for simd aligned(buf:16) default(firstprivate) schedule(simd:static)
+#pragma omp parallel for simd aligned(buf:16) default(firstprivate) 
     for(size_t k = 0; k < nfloats; k++)
       buf[k] *= mul_value;
     return;
@@ -383,7 +383,7 @@ void dt_iop_image_div_const(float *const buf, const float div_value, const size_
     // we can gain a little by using a small number of threads in parallel, but not much since the memory bus
     // quickly saturates (basically, each core can saturate a memory channel, so a system with quad-channel
     // memory won't be able to take advantage of more than four cores).
-#pragma omp parallel for simd aligned(buf:16) default(firstprivate) schedule(simd:static)
+#pragma omp parallel for simd aligned(buf:16) default(firstprivate) 
     for(size_t k = 0; k < nfloats; k++)
       buf[k] /= div_value;
     return;
@@ -410,7 +410,7 @@ void dt_iop_image_linear_blend(float *const restrict buf, const float lambda, co
     // we can gain a little by using a small number of threads in parallel, but not much since the memory bus
     // quickly saturates (basically, each core can saturate a memory channel, so a system with quad-channel
     // memory won't be able to take advantage of more than four cores).
-#pragma omp parallel for simd aligned(buf:16) default(firstprivate) schedule(simd:static)
+#pragma omp parallel for simd aligned(buf:16) default(firstprivate) 
     for(size_t k = 0; k < nfloats; k++)
       buf[k] = lambda*buf[k] + lambda_1*other[k];
     return;

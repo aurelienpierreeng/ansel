@@ -397,9 +397,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     }
     memset(oldraw, 0, sizeof(float) * buffsize * 2);
     // copy raw values before ca correction
-#ifdef _OPENMP
-        #pragma omp parallel for
-#endif
+__OMP_PARALLEL_FOR__()
     for(int row = 0; row < height; row++)
     {
       for(int col = (FC(row, 0, filters) & 1); col < width; col += 2)
@@ -516,9 +514,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
     {
 // Main algorithm: Tile loop calculating correction parameters per tile
-#ifdef _OPENMP
-#pragma omp for collapse(2) schedule(static) nowait
-#endif
+__OMP_FOR__(collapse(2)  nowait)
       for(int top = -border; top < height; top += ts - border2)
         for(int left = -border; left < width; left += ts - border2)
         {
@@ -999,9 +995,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     // Main algorithm: Tile loop
     if(processpasstwo)
     {
-#ifdef _OPENMP
-#pragma omp for schedule(static) collapse(2) nowait
-#endif
+__OMP_FOR__(collapse(2) nowait)
 
       for(int top = -border; top < height; top += ts - border2)
         for(int left = -border; left < width; left += ts - border2)
@@ -1290,9 +1284,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 #pragma omp barrier
 #endif
 // copy temporary image matrix back to image matrix
-#ifdef _OPENMP
-#pragma omp for
-#endif
+__OMP_FOR__()
 
       for(int row = 0; row < height; row++)
         for(int col = 0 + (FC(row, 0, filters) & 1), indx = (row * width + col) >> 1; col < width;
@@ -1311,9 +1303,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     // to avoid or at least reduce the colour shift caused by raw ca correction we compute the per pixel difference factors
     // of red and blue channel and apply a gaussian blur to them.
     // Then we apply the resulting factors per pixel on the result of raw ca correction
-#ifdef _OPENMP
-  #pragma omp parallel for
-#endif
+__OMP_PARALLEL_FOR__()
     for(int row = 0; row < height; row++)
     {
       const int firstCol = FC(row, 0, filters) & 1;

@@ -510,10 +510,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   {
     const dt_aligned_pixel_simd_t black_v = dt_simd_set1(black);
     const dt_aligned_pixel_simd_t scale_v = dt_simd_set1(scale);
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
     for(size_t k = 0; k < npixels; k++)
     {
       const size_t p = 4 * k;
@@ -523,10 +520,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   }
   else
   {
-#ifdef _OPENMP
-#pragma omp parallel for simd default(firstprivate) \
-  schedule(simd:static) aligned(in, out : 64)
-#endif
+__OMP_PARALLEL_FOR_SIMD__(aligned(in, out : 64))
     for(size_t k = 0; k < ch * npixels; k++)
     {
       out[k] = (in[k] - black) * scale;

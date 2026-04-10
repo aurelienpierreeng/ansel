@@ -624,7 +624,7 @@ static void _colorcorrect_pixbuf(GdkPixbuf *pixbuf)
     guchar *row_in = rows_in[tid];
     guchar *row_out = rows_out[tid];
 
-#pragma omp for schedule(static)
+#pragma omp for 
     for(int y = 0; y < height; y++)
     {
       guchar *src = pixels + (size_t)y * rowstride;

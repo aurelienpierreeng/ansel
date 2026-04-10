@@ -752,18 +752,14 @@ int scrolled(dt_iop_module_t *self, double x, double y, int up, uint32_t state)
   return 0;
 }
 
-#ifdef _OPENMP
-#pragma omp declare simd simdlen(4)
-#endif
+__OMP_DECLARE_SIMD__(simdlen(4))
 static inline float density_times_length(const float dens, const float length)
 {
 //  return (dens * CLIP(0.5f + length) / 8.0f);
   return (dens * CLAMP(0.5f + length, 0.0f, 1.0f) / 8.0f);
 }
 
-#ifdef _OPENMP
-#pragma omp declare simd simdlen(4)
-#endif
+__OMP_DECLARE_SIMD__(simdlen(4))
 static inline float compute_density(const float dens, const float length)
 {
 #if 1
@@ -816,10 +812,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const int height = roi_out->height;
   if(data->density > 0)
   {
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-    schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
     for(int y = 0; y < height; y++)
     {
       const size_t k = (size_t)width * y * ch;
@@ -833,10 +826,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
       for(int x = 0; x < width; x++)
       {
         const float density = compute_density(data->density, length);
-
-        #ifdef _OPENMP
-        #pragma omp simd aligned(in, out : 16)
-        #endif
+__OMP_SIMD__(aligned(in, out : 16))
         for(int l = 0; l < 4; l++)
         {
           out[ch*x+l] = MAX(0.0f, (in[ch*x+l] / (data->color[l] + data->color1[l] * density)));
@@ -847,10 +837,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   }
   else
   {
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate)    \
-    schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
     for(int y = 0; y < height; y++)
     {
       const size_t k = (size_t)width * y * ch;
@@ -864,10 +851,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
       for(int x = 0; x < width; x++)
       {
         const float density = compute_density(-data->density, -length);
-
-        #ifdef _OPENMP
-        #pragma omp simd aligned(in, out : 16)
-        #endif
+__OMP_SIMD__(aligned(in, out : 16))
         for(int l = 0; l < 4; l++)
         {
           out[ch*x+l] = MAX(0.0f, (in[ch*x+l] * (data->color[l] + data->color1[l] * density)));

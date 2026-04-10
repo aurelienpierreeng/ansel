@@ -102,10 +102,7 @@ float dt_image_distance_transform(float *const restrict src, float *const restri
     case DT_DISTANCE_TRANSFORM_NONE:
       break;
     case DT_DISTANCE_TRANSFORM_MASK:
-#ifdef _OPENMP
-  #pragma omp parallel for simd default(firstprivate) \
-  schedule(static) aligned(src, out : 64)
-#endif
+__OMP_FOR_SIMD__(aligned(src, out : 64))
       for(size_t i = 0; i < width * height; i++)
         out[i] = (src[i] < clip) ? 0.0f : DT_DISTANCE_TRANSFORM_MAX;
       break;
@@ -129,7 +126,7 @@ float dt_image_distance_transform(float *const restrict src, float *const restri
 
     // transform along columns
 #ifdef _OPENMP
-  #pragma omp for schedule(simd:static)
+  #pragma omp for 
 #endif
     for(size_t x = 0; x < width; x++)
     {
@@ -142,7 +139,7 @@ float dt_image_distance_transform(float *const restrict src, float *const restri
     // implicit barrier :-)
     // transform along rows
 #ifdef _OPENMP
-  #pragma omp for schedule(simd:static) nowait
+  #pragma omp for  nowait
 #endif
     for(size_t y = 0; y < height; y++)
     {

@@ -183,9 +183,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
     return 1;
   }
 
-#ifdef _OPENMP
-#pragma omp parallel for simd default(firstprivate) schedule(static) firstprivate(dt_iop_rawoverexposed_colors)
-#endif
+__OMP_PARALLEL_FOR_SIMD__(firstprivate(dt_iop_rawoverexposed_colors))
   for(int j = 0; j < roi_out->height; j++)
   {
     float *const restrict bufptr = dt_get_perthread(coordbuf, coordbufsize);
@@ -309,10 +307,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   coordbuf = dt_pixelpipe_cache_alloc_align_cache(coordbufsize, pipe->type);
   if(coordbuf == NULL) goto error;
 
-#ifdef _OPENMP
-#pragma omp parallel for simd default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR_SIMD__()
   for(int j = 0; j < height; j++)
   {
     float *bufptr = ((float *)coordbuf) + (size_t)2 * j * width;

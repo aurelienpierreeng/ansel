@@ -233,10 +233,7 @@ int distort_transform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   // nothing to be done if parameters are set to neutral values (no flip or swap)
   if (d->orientation == 0) return 1;
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-    schedule(static) if(points_count > 500)
-#endif
+__OMP_PARALLEL_FOR__(if(points_count > 500))
   for(size_t i = 0; i < points_count * 2; i += 2)
   {
     float x = points[i];
@@ -264,10 +261,7 @@ int distort_backtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
   // nothing to be done if parameters are set to neutral values (no flip or swap)
   if (d->orientation == 0) return 1;
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-    schedule(static) if(points_count > 500)
-#endif
+__OMP_PARALLEL_FOR__(if(points_count > 500))
   for(size_t i = 0; i < points_count * 2; i += 2)
   {
     float x, y;

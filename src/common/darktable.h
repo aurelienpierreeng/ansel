@@ -222,8 +222,6 @@ typedef unsigned int u_int;
 #ifdef _OPENMP
 # include <omp.h>
 
-#define dt_omp_default(...) default(firstprivate) __VA_ARGS__
-
 #ifndef dt_omp_nontemporal
 // Clang 10+ supports the nontemporal() OpenMP directive
 // GCC 9 recognizes it as valid, but does not do anything with it
@@ -236,10 +234,34 @@ typedef unsigned int u_int;
 #endif
 #endif /* dt_omp_nontemporal */
 
+#define OMP_PRAGMA(x) _Pragma(#x)
+#define __OMP_PARALLEL__(...) OMP_PRAGMA(omp parallel default(firstprivate) __VA_ARGS__)
+#define __OMP_PARALLEL_FOR__(...) OMP_PRAGMA(omp parallel for default(firstprivate) schedule(static) __VA_ARGS__)
+#define __OMP_PARALLEL_FOR_SIMD__(...) OMP_PRAGMA(omp parallel for simd default(firstprivate) schedule(simd:static) __VA_ARGS__)
+#define __OMP_FOR_SIMD__(...) OMP_PRAGMA(omp for simd schedule(simd:static) __VA_ARGS__)
+#define __OMP_FOR__(...) OMP_PRAGMA(omp for schedule(static) __VA_ARGS__)
+#define __OMP_SIMD__(...) OMP_PRAGMA(omp simd __VA_ARGS__)
+#define __OMP_DECLARE_SIMD__(...) OMP_PRAGMA(omp declare simd __VA_ARGS__)
+
+// CLang 20 supports OpenMP 5.1 default(firstprivate) but only for C files.
+// C++ files still need to use default(none) until further notice.
+// Change that when baseline CLang is upgraded.
+#define __OMP_PARALLEL_FOR_CPP__(...) OMP_PRAGMA(omp parallel for default(none) schedule(static) __VA_ARGS__)
+
 #else /* _OPENMP */
 
 # define omp_get_max_threads() 1
 # define omp_get_thread_num() 0
+
+#define __OMP_PARALLEL__() 
+#define __OMP_PARALLEL_FOR__()
+#define __OMP_PARALLEL_FOR_SIMD__()
+#define __OMP_FOR_SIMD__()
+#define __OMP_FOR__()
+#define __OMP_SIMD__()
+#define __OMP_DECLARE_SIMD__()
+
+#define __OMP_PARALLEL_FOR_CPP__()
 
 #endif /* _OPENMP */
 

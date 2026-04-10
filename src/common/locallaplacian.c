@@ -149,10 +149,7 @@ static void pad_by_replication(
     const uint32_t h,		// total height, including top and bottom padding
     const uint32_t padding)	// number of lines of padding on each side
 {
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(int j=0;j<padding;j++)
   {
     memcpy(buf + w*j, buf+padding*w, sizeof(float)*w);
@@ -166,11 +163,7 @@ static inline void gauss_expand(
     const int wd,             // fine res
     const int ht)
 {
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static) \
-  collapse(2)
-#endif
+__OMP_PARALLEL_FOR__(collapse(2))
   for(int j=1;j<((ht-1)&~1);j++)  // even ht: two px boundary. odd ht: one px.
     for(int i=1;i<((wd-1)&~1);i++)
       fine[j*wd+i] = ll_expand_gaussian(input, i, j, wd, ht);
@@ -193,8 +186,7 @@ static inline void gauss_reduce(
 #ifdef _OPENMP
   // DON'T parallelize the very smallest levels of the pyramid, as the threading overhead
   // is greater than the time needed to do it sequentially
-#pragma omp parallel for default(firstprivate) if (ch*cw>500) \
-  schedule(static) \
+#pragma omp parallel for default(firstprivate) if (ch*cw>500)  \
   collapse(2)
 #endif
   for(int j=1;j<ch-1;j++)
@@ -226,11 +218,7 @@ static inline float *ll_pad_input(
 
   if(b && b->mode == 2)
   { // pad by preview buffer
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-    schedule(static) \
-    collapse(2)
-#endif // fill regular pixels:
+__OMP_PARALLEL_FOR__(collapse(2)) // fill regular pixels:
     for(int j=0;j<ht;j++) for(int i=0;i<wd;i++)
       out[(j+max_supp)**wd2+i+max_supp] = input[stride*(wd*j+i)] * 0.01f; // L -> [0,1]
 
@@ -253,42 +241,23 @@ static inline float *ll_pad_input(
       /* TODO: linear interpolation?*/\
       out[*wd2*j+i] = b->pad0[b->pwd*py+px];\
     } } while(0)
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-    schedule(static) \
-    collapse(2)
-#endif // left border
+__OMP_PARALLEL_FOR__(collapse(2)) // left border
     for(int j=max_supp;j<*ht2-max_supp;j++) for(int i=0;i<max_supp;i++)
       LL_FILL(input[stride*wd*(j-max_supp)]* 0.01f);
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-    schedule(static) \
-    collapse(2)
-#endif // right border
+__OMP_PARALLEL_FOR__(collapse(2)) // right border
     for(int j=max_supp;j<*ht2-max_supp;j++) for(int i=wd+max_supp;i<*wd2;i++)
       LL_FILL(input[stride*((j-max_supp)*wd+wd-1)] * 0.01f);
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-    schedule(static) \
-    collapse(2)
-#endif // top border
+__OMP_PARALLEL_FOR__(collapse(2)) // top border
     for(int j=0;j<max_supp;j++) for(int i=0;i<*wd2;i++)
       LL_FILL(out[*wd2*max_supp+i]);
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-    schedule(static) \
-    collapse(2)
-#endif // bottom border
+__OMP_PARALLEL_FOR__(collapse(2)) // bottom border
     for(int j=max_supp+ht;j<*ht2;j++) for(int i=0;i<*wd2;i++)
       LL_FILL(out[*wd2*(max_supp+ht-1)+i]);
 #undef LL_FILL
   }
   else
   { // pad by replication:
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-    schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
     for(int j=0;j<ht;j++)
     {
       for(int i=0;i<max_supp;i++)
@@ -368,10 +337,7 @@ void apply_curve(
     const float highlights,
     const float clarity)
 {
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(uint32_t j=padding;j<h-padding;j++)
   {
     const float *in2  = in  + j*w + padding;
@@ -494,7 +460,7 @@ int local_laplacian_internal(
     debug_dump_PFM("/tmp/coarse.pfm", b->output[pl0], pw0, ph0);
     debug_dump_PFM("/tmp/oldcoarse.pfm", output[last_level], pw, ph);
 #ifdef _OPENMP
-#pragma omp parallel for schedule(static) collapse(2) default(shared)
+#pragma omp parallel for  collapse(2) default(shared)
 #endif
     for(int j=0;j<ph;j++) for(int i=0;i<pw;i++)
     {
@@ -540,11 +506,7 @@ int local_laplacian_internal(
 
     gauss_expand(output[l+1], output[l], pw, ph);
     // go through all coefficients in the upsampled gauss buffer:
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-    schedule(static) \
-    collapse(2)
-#endif
+__OMP_PARALLEL_FOR__(collapse(2))
     for(int j=0;j<ph;j++) for(int i=0;i<pw;i++)
     {
       const float v = padded[l][j*pw+i];
@@ -562,11 +524,7 @@ int local_laplacian_internal(
       //   output[l][j*pw+i] += ll_laplacian(padded[l+1], padded[l], i, j, pw, ph);
     }
   }
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static) \
-  collapse(2)
-#endif
+__OMP_PARALLEL_FOR__(collapse(2))
   for(int j=0;j<ht;j++) for(int i=0;i<wd;i++)
   {
     out[4*(j*wd+i)+0] = 100.0f * output[0][(j+max_supp)*w+max_supp+i]; // [0,1] -> L

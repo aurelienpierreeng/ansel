@@ -251,11 +251,7 @@ int distort_transform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   const double x = (double)d->x * scale;
   const double y = (double)d->y * scale;
 
-#ifdef _OPENMP
-#pragma omp parallel for simd default(firstprivate) \
-    schedule(static) \
-    aligned(points:64) if(points_count > 100)
-#endif
+__OMP_PARALLEL_FOR_SIMD__(aligned(points:64) if(points_count > 100))
   for(size_t i = 0; i < points_count * 2; i += 2)
   {
     points[i] -= x;
@@ -279,11 +275,7 @@ int distort_backtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
   const double x = (double)d->x * scale;
   const double y = (double)d->y * scale;
 
-#ifdef _OPENMP
-#pragma omp parallel for simd default(firstprivate) \
-    schedule(static) \
-    aligned(points:64) if(points_count > 100)
-#endif
+__OMP_PARALLEL_FOR_SIMD__(aligned(points:64) if(points_count > 100))
   for(size_t i = 0; i < points_count * 2; i += 2)
   {
     points[i] += x;
@@ -394,10 +386,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     float inv_div[4];
     for(int k = 0; k < 4; k++) inv_div[k] = 1.0f / d->div[k];
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-    schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
     for(int j = 0; j < height; j++)
     {
       /* Keep the 2-sensel Bayer period explicit per row, but use scalar
@@ -437,10 +426,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     float inv_div[4];
     for(int k = 0; k < 4; k++) inv_div[k] = 1.0f / d->div[k];
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-    schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
     for(int j = 0; j < height; j++)
     {
       /* Keep the 2-sensel Bayer period explicit per row, but use scalar
@@ -480,10 +466,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
     const int ch = piece->dsc_in.channels;
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-    schedule(static) collapse(3)
-#endif
+__OMP_PARALLEL_FOR__(collapse(3))
     for(int j = 0; j < height; j++)
     {
       for(int i = 0; i < width; i++)
@@ -511,10 +494,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     const float map_origin_v = d->gainmaps[0]->map_origin_v;
     float *const out = (float *const)ovoid;
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-    schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
     for(int j = 0; j < height; j++)
     {
       const float y_map = CLAMP(((roi_y + csy + j) * im_to_rel_y - map_origin_v) * rel_to_map_y, 0, map_h);

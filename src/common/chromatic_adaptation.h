@@ -157,9 +157,7 @@ convert_any_XYZ_to_LMS(const dt_aligned_pixel_simd_t XYZ, const dt_adaptation_t 
 }
 
 
-#ifdef _OPENMP
-#pragma omp declare simd aligned(RGB, LMS:16) uniform(kind)
-#endif
+__OMP_DECLARE_SIMD__(aligned(RGB, LMS:16) uniform(kind))
 static inline void convert_any_LMS_to_RGB(const dt_aligned_pixel_t LMS, dt_aligned_pixel_t RGB, dt_adaptation_t kind)
 {
   // helper function switching internally to the proper conversion
@@ -276,17 +274,13 @@ static const dt_colormatrix_t XYZ_D65_to_D50_CAT16_transposed
         { 4.07086103e-02f, 9.93581926e-01f, -1.14918759e-02f, 0.f },
         { -3.41445825e-02f, 1.15592039e-03f, 7.67964947e-01f, 0.f } };
 
-#ifdef _OPENMP
-#pragma omp declare simd aligned(XYZ_in, XYZ_out:16)
-#endif
+__OMP_DECLARE_SIMD__(aligned(XYZ_in, XYZ_out:16))
 static inline void XYZ_D50_to_D65(const dt_aligned_pixel_t XYZ_in, dt_aligned_pixel_t XYZ_out)
 {
   dt_apply_transposed_color_matrix(XYZ_in, XYZ_D50_to_D65_CAT16_transposed, XYZ_out);
 }
 
-#ifdef _OPENMP
-#pragma omp declare simd aligned(XYZ_in, XYZ_out:16)
-#endif
+__OMP_DECLARE_SIMD__(aligned(XYZ_in, XYZ_out:16))
 static inline void XYZ_D65_to_D50(const dt_aligned_pixel_t XYZ_in, dt_aligned_pixel_t XYZ_out)
 {
   dt_apply_transposed_color_matrix(XYZ_in, XYZ_D65_to_D50_CAT16_transposed, XYZ_out);

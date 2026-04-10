@@ -166,10 +166,7 @@ static inline void process_reinhard(struct dt_iop_module_t *self, const dt_dev_p
   float *out = (float *)ovoid;
   const int ch = 4;
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < (size_t)roi_out->width * roi_out->height; k++)
   {
     float *inp = in + ch * k;
@@ -223,10 +220,7 @@ static inline void process_drago(struct dt_iop_module_t *self, const dt_dev_pixe
   if(isnan(tmp_lwmax))
   {
     lwmax = eps;
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) reduction(max : lwmax)      \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__(reduction(max : lwmax)      )
     for(size_t k = 0; k < (size_t)roi_out->width * roi_out->height; k++)
     {
       const float *inp = in + ch * k;
@@ -251,10 +245,7 @@ static inline void process_drago(struct dt_iop_module_t *self, const dt_dev_pixe
   const float ldc = data->drago.max_light * 0.01 / log10f(lwmax + 1);
   const float bl = logf(fmaxf(eps, data->drago.bias)) / logf(0.5);
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < (size_t)roi_out->width * roi_out->height; k++)
   {
     float *inp = in + ch * k;
@@ -277,10 +268,7 @@ static inline void process_filmic(struct dt_iop_module_t *self, const dt_dev_pix
   float *out = (float *)ovoid;
   const int ch = 4;
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < (size_t)roi_out->width * roi_out->height; k++)
   {
     float *inp = in + ch * k;

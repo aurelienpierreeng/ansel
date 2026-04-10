@@ -2814,10 +2814,7 @@ static void image_rgb2lab(float *img_src, const int width, const int height, con
 {
   const int stride = width * height * ch;
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(int i = 0; i < stride; i += ch)
   {
     dt_aligned_pixel_t XYZ;
@@ -2831,10 +2828,7 @@ static void image_lab2rgb(float *img_src, const int width, const int height, con
 {
   const int stride = width * height * ch;
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(int i = 0; i < stride; i += ch)
   {
     dt_aligned_pixel_t XYZ;
@@ -2855,13 +2849,7 @@ static void rt_process_stats(struct dt_iop_module_t *self, const dt_dev_pixelpip
   int count = 0;
   const dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_pipe_work_profile_info(pipe);
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static) \
-  reduction(+ : count, l_sum) \
-  reduction(max : l_max) \
-  reduction(min : l_min)
-#endif
+__OMP_PARALLEL_FOR__(reduction(+ : count, l_sum) reduction(max : l_max) reduction(min : l_min))
   for(int i = 0; i < size; i += ch)
   {
     dt_aligned_pixel_t Lab = { 0 };
@@ -2909,10 +2897,7 @@ static void rt_adjust_levels(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pi
   const float tmp = (middle - mid) / delta;
   const float in_inv_gamma = powf(10, tmp);
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(int i = 0; i < size; i += ch)
   {
     if(work_profile)
@@ -2995,10 +2980,7 @@ static void rt_copy_in_to_out(const float *const in, const struct dt_iop_roi_t *
   const int yoffs = roi_out->y - roi_in->y - dy;
   const int y_to = MIN(roi_out->height, roi_in->height);
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(int y = 0; y < y_to; y++)
   {
     const size_t iindex = ((size_t)(y + yoffs) * roi_in->width + xoffs) * ch;
@@ -3043,10 +3025,7 @@ static int rt_build_scaled_mask(float *const mask, dt_iop_roi_t *const roi_mask,
   }
   dt_iop_image_fill(mask_tmp, 0.0f, roi_mask_scaled->width, roi_mask_scaled->height, 1);
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(int yy = roi_mask_scaled->y; yy < y_to; yy++)
   {
     const int mask_index = ((int)(yy / roi_in->scale)) - roi_mask->y;
@@ -3076,10 +3055,7 @@ static void rt_copy_image_masked(float *const img_src, float *img_dest, dt_iop_r
                                  float *const mask_scaled, dt_iop_roi_t *const roi_mask_scaled,
                                  const float opacity)
 {
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-    schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(int yy = 0; yy < roi_mask_scaled->height; yy++)
   {
     const int mask_index = yy * roi_mask_scaled->width;
@@ -3108,10 +3084,7 @@ static void rt_copy_mask_to_alpha(float *const img, dt_iop_roi_t *const roi_img,
                                   float *const mask_scaled, dt_iop_roi_t *const roi_mask_scaled,
                                   const float opacity)
 {
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(int yy = 0; yy < roi_mask_scaled->height; yy++)
   {
     const int mask_index = yy * roi_mask_scaled->width;
@@ -3132,10 +3105,7 @@ static void rt_copy_mask_to_alpha(float *const img, dt_iop_roi_t *const roi_img,
 static void _retouch_fill(float *const in, dt_iop_roi_t *const roi_in, float *const mask_scaled,
                           dt_iop_roi_t *const roi_mask_scaled, const float opacity, const float *const fill_color)
 {
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(int yy = 0; yy < roi_mask_scaled->height; yy++)
   {
     const int mask_index = yy * roi_mask_scaled->width;

@@ -172,11 +172,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const float mix = d->mix;
   const float Lmlmix = L - (mix * 100.0f) / 2.0f;
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  private(in, out) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__(private(in, out) )
   for(int k = 0; k < roi_out->height; k++)
   {
 

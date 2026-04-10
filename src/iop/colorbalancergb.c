@@ -501,9 +501,7 @@ void init_presets(dt_iop_module_so_t *self)
 }
 
 
-#ifdef _OPENMP
-#pragma omp declare simd aligned(output, output_comp: 16) uniform(shadows_weight, midtones_weight, highlights_weight)
-#endif
+__OMP_DECLARE_SIMD__(aligned(output, output_comp: 16) uniform(shadows_weight, midtones_weight, highlights_weight))
 static inline void opacity_masks(const float x,
                                  const float shadows_weight, const float highlights_weight,
                                  const float midtones_weight, const float mask_grey_fulcrum,
@@ -673,10 +671,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     { cosf(d->hue_angle), -sinf(d->hue_angle) },
     { sinf(d->hue_angle),  cosf(d->hue_angle) },
   };
-  #ifdef _OPENMP
-  #pragma omp parallel for default(firstprivate) \
-      schedule(static)
-  #endif
+__OMP_PARALLEL_FOR__()
   for(size_t idx = 0; idx < npixels; idx++)
   {
     const size_t k = idx * 4;
@@ -1219,10 +1214,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
     // make RGB values vary between [0; 1] in working space, convert to Ych and get the max(c(h)))
     if(p->saturation_formula == DT_COLORBALANCE_SATURATION_JZAZBZ)
     {
-      #ifdef _OPENMP
-      #pragma omp parallel for default(firstprivate) schedule(static)  \
-            collapse(3)
-      #endif
+__OMP_PARALLEL_FOR__( collapse(3))
       for(size_t r = 0; r < STEPS; r++)
         for(size_t g = 0; g < STEPS; g++)
           for(size_t b = 0; b < STEPS; b++)
@@ -1286,10 +1278,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
        float *const restrict dt_UCS_LUT = d->gamut_LUT;
 
       // March the gamut boundary in CIE xyY 1931 by angular steps of 0.02°
-      #ifdef _OPENMP
-        #pragma omp parallel for default(firstprivate) \
-              schedule(static) 
-      #endif
+__OMP_PARALLEL_FOR__()
       for(int i = 0; i < 50 * 360; i++)
       {
         const float angle = -M_PI_F + ((float)i) / (50.f * 360.f) * 2.f * M_PI_F;
@@ -1572,10 +1561,7 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
   const size_t checker_1 = DT_PIXEL_APPLY_DPI(6);
   const size_t checker_2 = 2 * checker_1;
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static) collapse(2)
-#endif
+__OMP_PARALLEL_FOR__(collapse(2))
   for(size_t i = 0; i < (size_t)graph_height; i++)
     for(size_t j = 0; j < (size_t)line_height; j++)
     {
@@ -1619,10 +1605,7 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
   float *LUT[3];
   for(size_t c = 0; c < 3; c++) LUT[c] = dt_alloc_align_float(LUT_ELEM);
 
-#ifdef _OPENMP
-#pragma omp parallel for simd default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR_SIMD__()
   for(size_t k = 0 ; k < LUT_ELEM; k++)
   {
     const float Y = k / (float)(LUT_ELEM - 1);

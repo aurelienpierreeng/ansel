@@ -667,9 +667,7 @@ gamut_mapping(const dt_aligned_pixel_simd_t input, const float compression, cons
     return (dt_aligned_pixel_simd_t){ 0.f };
   }
 }
-#ifdef _OPENMP
-#pragma omp declare simd aligned(input, saturation, lightness, output:16) uniform(version)
-#endif
+__OMP_DECLARE_SIMD__(aligned(input, saturation, lightness, output:16) uniform(version))
 static inline __attribute__((always_inline)) void
 luma_chroma(const dt_aligned_pixel_t input, const dt_aligned_pixel_t saturation,
             const dt_aligned_pixel_t lightness, dt_aligned_pixel_t output,
@@ -754,10 +752,7 @@ static inline void loop_switch(const float *const restrict in, float *const rest
   const dt_aligned_pixel_simd_t mix2 = dt_colormatrix_row_to_simd(MIX_t, 2);
   const dt_aligned_pixel_simd_t illuminant_v = dt_load_simd_aligned(illuminant);
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(simd:static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < height * width * 4; k += 4)
   {
     const dt_aligned_pixel_simd_t in_v = dt_load_simd_aligned(in + k);
@@ -953,10 +948,7 @@ static inline int auto_detect_WB(const float *const restrict in, dt_illuminant_t
    if(!temp) return 1;
 
    // Convert RGB to xy
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  collapse(2) schedule(simd:static)
-#endif
+__OMP_PARALLEL_FOR__(collapse(2) )
   for(size_t i = 0; i < height; i++)
     for(size_t j = 0; j < width; j++)
     {
@@ -991,10 +983,7 @@ static inline int auto_detect_WB(const float *const restrict in, dt_illuminant_t
 
   if(illuminant == DT_ILLUMINANT_DETECT_SURFACES)
   {
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) reduction(+:xyY, elements) \
-  schedule(simd:static)
-#endif
+__OMP_PARALLEL_FOR__(reduction(+:xyY, elements))
     for(size_t i = 2 * OFF; i < height - 4 * OFF; i += OFF)
       for(size_t j = 2 * OFF; j < width - 4 * OFF; j += OFF)
       {
@@ -1058,10 +1047,7 @@ static inline int auto_detect_WB(const float *const restrict in, dt_illuminant_t
   }
   else if(illuminant == DT_ILLUMINANT_DETECT_EDGES)
   {
-    #ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) reduction(+:xyY, elements) \
-  schedule(simd:static)
-#endif
+__OMP_PARALLEL_FOR__(reduction(+:xyY, elements))
     for(size_t i = 2 * OFF; i < height - 4 * OFF; i += OFF)
       for(size_t j = 2 * OFF; j < width - 4 * OFF; j += OFF)
       {

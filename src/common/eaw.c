@@ -87,10 +87,7 @@ void eaw_decompose(float *const restrict out, const float *const restrict in, fl
   static const float filter[5] = { 1.0f / 16.0f, 4.0f / 16.0f, 6.0f / 16.0f, 4.0f / 16.0f, 1.0f / 16.0f };
   const int boundary = 2 * mult;
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(int rowid = 0; rowid < height; rowid++)
   {
     const size_t j = dwt_interleave_rows(rowid, height, mult);
@@ -166,15 +163,10 @@ void eaw_synthesize(float *const out, const float *const in, const float *const 
                     const float *const restrict threshold, const float *const restrict boost,
                     const int32_t width, const int32_t height)
 {
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(simd:static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < (size_t)width * height; k++)
   {
-#ifdef _OPENMP
-#pragma omp simd simdlen(4) aligned(detail, in, out, threshold, boost)
-#endif
+__OMP_SIMD__(simdlen(4) aligned(detail, in, out, threshold, boost))
     for(size_t c = 0; c < 4; c++)
     {
       // decrease the absolute magnitude of the detail by the threshold; copysignf does not vectorize, but it
@@ -263,11 +255,7 @@ void eaw_dn_decompose(float *const restrict out, const float *const restrict in,
   _aligned_pixel sum_sq = { .v = { 0.0f } };
 
 #if !(defined(__apple_build_version__) && __apple_build_version__ < 11030000) //makes Xcode 11.3.1 compiler crash
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  reduction(vsum: sum_sq) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__(reduction(vsum: sum_sq) )
 #endif
   for(int rowid = 0; rowid < height; rowid++)
   {

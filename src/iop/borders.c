@@ -257,10 +257,7 @@ int distort_transform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   // nothing to be done if parameters are set to neutral values (no top/left border)
   if (border_size_l == 0 && border_size_t == 0) return 1;
 
-#ifdef _OPENMP
-#pragma omp parallel for simd default(firstprivate)  \
-  schedule(static) if(points_count > 100) aligned(points:64)
-#endif
+__OMP_PARALLEL_FOR_SIMD__(if(points_count > 100) aligned(points:64))
   for(size_t i = 0; i < points_count * 2; i += 2)
   {
     points[i] += border_size_l;
@@ -282,10 +279,7 @@ int distort_backtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
   // nothing to be done if parameters are set to neutral values (no top/left border)
   if (border_size_l == 0 && border_size_t == 0) return 1;
 
-#ifdef _OPENMP
-#pragma omp parallel for simd default(firstprivate)  \
-  schedule(static) if(points_count > 100) aligned(points:64)
-#endif
+__OMP_PARALLEL_FOR_SIMD__(if(points_count > 100) aligned(points:64))
   for(size_t i = 0; i < points_count * 2; i += 2)
   {
     points[i] -= border_size_l;
@@ -313,10 +307,7 @@ void distort_mask(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t 
   dt_iop_image_fill(out, 0.0f, roi_out->width, roi_out->height, 1);
 
   // blit image inside border and fill the output with previous processed out
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate)   \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(int j = 0; j < roi_in->height; j++)
   {
     float *outb = out + (size_t)(j + border_in_y) * roi_out->width + border_in_x;
@@ -439,9 +430,7 @@ static inline void set_pixels(float *buf, const dt_aligned_pixel_t color, const 
 {
   for (int i = 0; i < npixels; i++)
   {
-#ifdef _OPENMP
-#pragma omp simd aligned(buf, color : 16)
-#endif
+__OMP_SIMD__(aligned(buf, color : 16))
     for (int c = 0; c < 4; c++)
     {
       buf[4*i+c] = color[c];
@@ -454,9 +443,7 @@ static inline void copy_pixels(float *out, const float *const in, const int npix
 {
   for (int i = 0; i < npixels; i++)
   {
-#ifdef _OPENMP
-#pragma omp simd aligned(in, out : 16)
-#endif
+__OMP_SIMD__(aligned(in, out : 16))
     for (int c = 0; c < 4; c++)
     {
       out[4*i+c] = in[4*i+c];
@@ -468,10 +455,7 @@ __DT_CLONE_TARGETS__
 void copy_image_with_border(float *out, const float *const in, const struct border_positions_t *binfo)
 {
   const int image_width = binfo->image_right - binfo->image_left;
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for (size_t row = 0; row < binfo->height; row++)
   {
     float *outrow = out + 4 * row * binfo->width;

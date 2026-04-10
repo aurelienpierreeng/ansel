@@ -385,10 +385,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const float doublemax = lmax * 2.0;
 
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(size_t j = 0; j < (size_t)width * height * ch; j += ch)
   {
     dt_aligned_pixel_t ta, tb;

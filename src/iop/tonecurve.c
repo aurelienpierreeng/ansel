@@ -347,10 +347,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const float *const restrict in = (float*)i;
   float *const restrict out = (float*)o;
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(int k = 0; k < 4*npixels; k += 4)
   {
     const float L_in = in[k] / 100.0f;

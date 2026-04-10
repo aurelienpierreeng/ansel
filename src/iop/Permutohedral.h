@@ -610,9 +610,7 @@ public:
     // For each of d+1 axes,
     for(int j = 0; j <= D; j++)
     {
-#ifdef _OPENMP
-#pragma omp parallel for 
-#endif
+__OMP_PARALLEL_FOR__()
       // For each vertex in the lattice,
       for(int i = 0; i < hashTables[0].size(); i++) // blur point i in dimension j
       {

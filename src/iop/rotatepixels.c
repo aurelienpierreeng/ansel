@@ -115,9 +115,7 @@ const char **description(struct dt_iop_module_t *self)
 }
 
 
-#ifdef _OPENMP
-#pragma omp declare simd
-#endif
+__OMP_DECLARE_SIMD__()
 static void transform(const dt_dev_pixelpipe_iop_t *const piece, const float scale, const float *const x,
                       float *o)
 {
@@ -129,9 +127,7 @@ static void transform(const dt_dev_pixelpipe_iop_t *const piece, const float sca
 }
 
 
-#ifdef _OPENMP
-#pragma omp declare simd
-#endif
+__OMP_DECLARE_SIMD__()
 static void backtransform(const dt_dev_pixelpipe_iop_t *const piece, const float scale, const float *const x,
                           float *o)
 {
@@ -149,10 +145,7 @@ int distort_transform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
 {
   const float scale = piece->buf_in.scale;
 
-#ifdef _OPENMP
-#pragma omp parallel for simd default(firstprivate) \
-    schedule(static) if(points_count > 100) aligned(points:64)
-#endif
+__OMP_PARALLEL_FOR_SIMD__(if(points_count > 100) aligned(points:64))
   for(size_t i = 0; i < points_count * 2; i += 2)
   {
     float pi[2], po[2];
@@ -174,10 +167,7 @@ int distort_backtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
 {
   const float scale = piece->buf_in.scale;
 
-#ifdef _OPENMP
-#pragma omp parallel for simd default(firstprivate) \
-    schedule(static) if(points_count > 100) aligned(points:64)
-#endif
+__OMP_PARALLEL_FOR_SIMD__(if(points_count > 100) aligned(points:64))
   for(size_t i = 0; i < points_count * 2; i += 2)
   {
     float pi[2], po[2];
@@ -310,10 +300,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
 
   const struct dt_interpolation *interpolation = dt_interpolation_new(DT_INTERPOLATION_USERPREF);
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   // (slow) point-by-point transformation.
   // TODO: optimize with scanlines and linear steps between?
   for(int j = 0; j < roi_out->height; j++)

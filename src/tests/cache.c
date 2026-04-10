@@ -55,9 +55,7 @@ int main(int argc, char *arg[])
   dt_cache_init(&cache, 110000, 16, 64, 100);
   dt_cache_set_allocate_callback(&cache, alloc_dummy, NULL);
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) schedule(guided) shared(cache, stderr) num_threads(16)
-#endif
+__OMP_PARALLEL_FOR__(schedule(guided) shared(cache, stderr) num_threads(16))
   for(int k = 0; k < 100000; k++)
   {
     void *data = (void *)(long int)k;
@@ -98,9 +96,7 @@ int main(int argc, char *arg[])
     dt_cache_init(&cache2, 1, 1, 64, 2);
     dt_cache_set_allocate_callback(&cache2, alloc_dummy, NULL);
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) schedule(guided) shared(cache2, stderr) num_threads(16)
-#endif
+__OMP_PARALLEL_FOR__(schedule(guided) shared(cache2, stderr) num_threads(16))
     for(int k = 0; k < 100000; k++)
     {
       void *data = (void *)(long int)k;

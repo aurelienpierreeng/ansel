@@ -58,10 +58,7 @@ static inline void _dt_focus_cdf22_wtf(uint8_t *buf, const int l, const int widt
   const int step = 1 << l;
   const int st = step / 2;
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(int j = 0; j < height; j++)
   {
     // rows
@@ -79,10 +76,7 @@ static inline void _dt_focus_cdf22_wtf(uint8_t *buf, const int l, const int widt
     if(i < width) /*for(ch=0; ch<3; ch++)*/
       gbuf(buf, i, j) += _from_uint8(gbuf(buf, i - st, j)) / 2;
   }
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(int i = 0; i < width; i++)
   {
     // cols
@@ -154,7 +148,7 @@ static void dt_focus_create_clusters(dt_focus_cluster_t *focus, int frows, int f
   // go through HH1 and detect sharp clusters:
   memset(focus, 0, sizeof(dt_focus_cluster_t) * fcols * frows);
 #ifdef _OPENMP
-#pragma omp parallel for schedule(static) default(shared)
+#pragma omp parallel for  default(shared)
 #endif
   for(int j = 0; j < ht - 1; j += 4)
     for(int i = 0; i < wd - 1; i += 4)
@@ -174,7 +168,7 @@ static void dt_focus_create_clusters(dt_focus_cluster_t *focus, int frows, int f
     memset(focus, 0, sizeof(dt_focus_cluster_t) * fs);
     _dt_focus_cdf22_wtf(buffer, 3, wd, ht);
 #ifdef _OPENMP
-#pragma omp parallel for schedule(static) default(shared)
+#pragma omp parallel for  default(shared)
 #endif
     for(int j = 0; j < ht - 1; j += 8)
     {
@@ -202,7 +196,7 @@ static void dt_focus_create_clusters(dt_focus_cluster_t *focus, int frows, int f
 #if 0 // simple high pass filter, doesn't work on slightly unsharp/high iso images
   memset(focus, 0, sizeof(dt_focus_cluster_t)*fs);
 #ifdef _OPENMP
-#pragma omp parallel for schedule(static) default(shared)
+#pragma omp parallel for  default(shared)
 #endif
   for(int j=1;j<ht-1;j++)
   {

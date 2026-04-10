@@ -175,11 +175,7 @@ dt_imageio_retval_t dt_imageio_open_heif(dt_image_t *img,
 
   const uint8_t *const restrict in = (const uint8_t *)data;
 
-#ifdef _OPENMP
-#pragma omp parallel for simd default(firstprivate) \
-  schedule(simd:static) \
-  collapse(2)
-#endif
+__OMP_PARALLEL_FOR_SIMD__(collapse(2))
   for(size_t y = 0; y < height; y++)
   {
     for(size_t x = 0; x < width; x++)

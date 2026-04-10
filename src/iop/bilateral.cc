@@ -180,9 +180,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     float *const weights_buf = dt_pixelpipe_cache_alloc_perthread_float(weights_size, &padded_weights_size);
     if(weights_buf == NULL) return 1;
 
-#ifdef _OPENMP
-#pragma omp parallel for default(none) schedule(static) firstprivate(isig2col, ivoid, ovoid, roi_in, roi_out, rad, ch, m, wd, weights_buf, padded_weights_size)
-#endif
+__OMP_PARALLEL_FOR_CPP__(firstprivate(isig2col, ivoid, ovoid, roi_in, roi_out, rad, ch, m, wd, weights_buf, padded_weights_size))
     for(int j = rad; j < roi_out->height - rad; j++)
     {
       const float *in = ((float *)ivoid) + ch * ((size_t)j * roi_in->width + rad);
@@ -243,7 +241,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
 // splat into the lattice
 #ifdef _OPENMP
-#pragma omp parallel for schedule(static)
+#pragma omp parallel for 
 #endif
     for(int j = 0; j < roi_in->height; j++)
     {
@@ -266,7 +264,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
 // slice from the lattice
 #ifdef _OPENMP
-#pragma omp parallel for schedule(static)
+#pragma omp parallel for 
 #endif
     for(int j = 0; j < roi_in->height; j++)
     {

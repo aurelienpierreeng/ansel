@@ -128,9 +128,7 @@ static inline void _bspline_vertical_pass(const float *const restrict in, float 
   }
 }
 
-#ifdef _OPENMP
-#pragma omp declare simd aligned(temp, out)
-#endif
+__OMP_DECLARE_SIMD__(aligned(temp, out))
 static inline void _bspline_horizontal(const float *const restrict temp, float *const restrict out,
                                        size_t col, size_t width, int mult, const gboolean clip_negatives)
 {
@@ -147,9 +145,7 @@ static inline void _bspline_horizontal(const float *const restrict temp, float *
   sparse_scalar_product(temp, indices, out, clip_negatives);
 }
 
-#ifdef _OPENMP
-#pragma omp declare simd aligned(temp, out)
-#endif
+__OMP_DECLARE_SIMD__(aligned(temp, out))
 static inline void _bspline_horizontal_decimated(const float *const restrict temp, float *const restrict out,
                                                  const size_t col, const size_t width,
                                                  const gboolean clip_negatives)
@@ -182,10 +178,7 @@ inline static void reduce_2D_Bspline(const float *const restrict in, float *cons
   (void)tempbuf;
   (void)padded_size;
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(size_t row = 0; row < coarse_height; ++row)
   {
     for(size_t col = 0; col < coarse_width; ++col)
@@ -238,11 +231,7 @@ inline static void expand_2D_Bspline(const float *const restrict in, float *cons
                                                4.0f / 16.0f,
                                                1.0f / 16.0f };
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static) \
-  collapse(2)
-#endif
+__OMP_PARALLEL_FOR__(collapse(2))
   for(size_t row = 0; row < height; ++row)
     for(size_t col = 0; col < width; ++col)
     {
@@ -339,10 +328,7 @@ inline static void blur_2D_Bspline(const float *const restrict in, float *const 
                                    const size_t width, const size_t height, const int mult, const gboolean clip_negatives)
 {
   // À-trous B-spline interpolation/blur shifted by mult
-  #ifdef _OPENMP
-  #pragma omp parallel for default(firstprivate) \
-    schedule(static)
-  #endif
+__OMP_PARALLEL_FOR__()
   for(size_t row = 0; row < height; row++)
   {
     // get a thread-private one-row temporary buffer
@@ -365,10 +351,7 @@ inline static void decompose_2D_Bspline(const float *const restrict in,
                                         float *const tempbuf, size_t padded_size)
 {
   // Blur and compute the wavelet at once
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate)  \
-    schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(size_t row = 0; row < height; row++)
   {
     // get a thread-private one-row temporary buffer

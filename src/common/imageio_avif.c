@@ -148,11 +148,7 @@ dt_imageio_retval_t dt_imageio_open_avif(dt_image_t *img,
   switch (bit_depth) {
   case 12:
   case 10: {
-#ifdef _OPENMP
-#pragma omp parallel for simd default(firstprivate) \
-  schedule(simd:static) \
-  collapse(2)
-#endif
+__OMP_PARALLEL_FOR_SIMD__(collapse(2))
     for (size_t y = 0; y < height; y++)
     {
       for (size_t x = 0; x < width; x++)
@@ -170,11 +166,7 @@ dt_imageio_retval_t dt_imageio_open_avif(dt_image_t *img,
     break;
   }
   case 8: {
-#ifdef _OPENMP
-#pragma omp parallel for simd default(firstprivate) \
-  schedule(simd:static) \
-  collapse(2)
-#endif
+__OMP_PARALLEL_FOR_SIMD__(collapse(2))
     for (size_t y = 0; y < height; y++)
     {
       for (size_t x = 0; x < width; x++)

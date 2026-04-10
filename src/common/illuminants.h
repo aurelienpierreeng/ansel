@@ -123,9 +123,7 @@ static float led[DT_ILLUMINANT_LED_LAST][2] = { { 0.4560f, 0.4078f },  // DT_ILL
                                                 { 0.4560f, 0.4548f },  // DT_ILLUMINANT_LED_V1
                                                 { 0.3781f, 0.3775f }}; // DT_ILLUMINANT_LED_V2
 
-#ifdef _OPENMP
-#pragma omp declare simd
-#endif
+__OMP_DECLARE_SIMD__()
 static inline float xy_to_CCT(const float x, const float y)
 {
   // Try to find correlated color temperature from chromaticity
@@ -137,9 +135,7 @@ static inline float xy_to_CCT(const float x, const float y)
 }
 
 
-#ifdef _OPENMP
-#pragma omp declare simd
-#endif
+__OMP_DECLARE_SIMD__()
 static inline void CCT_to_xy_daylight(const float t, float *x, float *y)
 {
   // Take correlated color temperature in K and find the closest daylight illuminant in 4000 K - 250000 K
@@ -158,9 +154,7 @@ static inline void CCT_to_xy_daylight(const float t, float *x, float *y)
 }
 
 
-#ifdef _OPENMP
-#pragma omp declare simd
-#endif
+__OMP_DECLARE_SIMD__()
 static inline void CCT_to_xy_blackbody(const float t, float *x, float *y)
 {
   // Take correlated color temperature in K and find the closest blackbody illuminant in 1667 K - 250000 K
@@ -184,9 +178,7 @@ static inline void CCT_to_xy_blackbody(const float t, float *x, float *y)
 }
 
 
-#ifdef _OPENMP
-#pragma omp declare simd
-#endif
+__OMP_DECLARE_SIMD__()
 static inline void illuminant_xy_to_XYZ(const float x, const float y, dt_aligned_pixel_t XYZ)
 {
   XYZ[0] = x / y;             // X
@@ -195,9 +187,7 @@ static inline void illuminant_xy_to_XYZ(const float x, const float y, dt_aligned
 }
 
 
-#ifdef _OPENMP
-#pragma omp declare simd
-#endif
+__OMP_DECLARE_SIMD__()
 static inline void illuminant_xy_to_RGB(const float x, const float y, dt_aligned_pixel_t RGB)
 {
   // Get an sRGB preview of current illuminant
@@ -214,9 +204,7 @@ static inline void illuminant_xy_to_RGB(const float x, const float y, dt_aligned
 }
 
 
-#ifdef _OPENMP
-#pragma omp declare simd
-#endif
+__OMP_DECLARE_SIMD__()
 static inline void illuminant_CCT_to_RGB(const float t, dt_aligned_pixel_t RGB)
 {
   float x, y;
@@ -467,9 +455,7 @@ static int find_temperature_from_raw_coeffs(const dt_image_t *img, const dt_alig
 }
 
 
-#ifdef _OPENMP
-#pragma omp declare simd
-#endif
+__OMP_DECLARE_SIMD__()
 static inline float planckian_normal(const float x, const float t)
 {
   float n = 0.f;
@@ -486,9 +472,7 @@ static inline float planckian_normal(const float x, const float t)
 }
 
 
-#ifdef _OPENMP
-#pragma omp declare simd
-#endif
+__OMP_DECLARE_SIMD__()
 static inline void blackbody_xy_to_tinted_xy(const float x, const float y, const float t, const float tint,
                                              float *x_out, float *y_out)
 {
@@ -500,9 +484,7 @@ static inline void blackbody_xy_to_tinted_xy(const float x, const float y, const
 }
 
 
-#ifdef _OPENMP
-#pragma omp declare simd
-#endif
+__OMP_DECLARE_SIMD__()
 static inline float get_tint_from_tinted_xy(const float x, const float y, const float t)
 {
   // Find the distance between planckian locus and arbitrary x y chromaticity in the orthogonal direction
@@ -515,9 +497,7 @@ static inline float get_tint_from_tinted_xy(const float x, const float y, const 
 }
 
 
-#ifdef _OPENMP
-#pragma omp declare simd
-#endif
+__OMP_DECLARE_SIMD__()
 static inline void xy_to_uv(const float xy[2], float uv[2])
 {
   // Convert to CIE1960 Yuv color space, usefull to compute CCT
@@ -574,10 +554,7 @@ static inline float CCT_reverse_lookup(const float x, const float y)
   struct pair min_radius = { FLT_MAX, 0.0f };
 
 #if !(defined(__apple_build_version__) && __apple_build_version__ < 11030000) //makes Xcode 11.3.1 compiler crash
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) reduction(pairmin:min_radius)\
-  schedule(simd:static)
-#endif
+__OMP_PARALLEL_FOR__(reduction(pairmin:min_radius))
 #endif
   for(size_t i = 0; i < LUT_samples; i++)
   {

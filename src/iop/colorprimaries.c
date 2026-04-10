@@ -854,9 +854,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
   const float white_level = fmaxf(d->white_level, 1e-6f);
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) schedule(static) 
-#endif
+__OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < (size_t)width * height; k++)
   {
     const float *in = (const float *)ibuf + k * ch;
@@ -875,9 +873,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   dt_ioppr_transform_image_colorspace_rgb((float *)obuf, (float *)obuf, width, height, d->lut_profile, d->work_profile,
                                           "colorprimaries HLG Rec2020 to work");
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) schedule(static) 
-#endif
+__OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < (size_t)width * height; k++)
   {
     float *out = (float *)obuf + k * ch;

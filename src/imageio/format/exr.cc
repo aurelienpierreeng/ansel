@@ -276,7 +276,7 @@ icc_end:
       return 1;
 
 #ifdef _OPENMP
-#pragma omp parallel for simd default(none) schedule(simd:static) collapse(2) firstprivate(height, width, in_tmp, out)
+#pragma omp parallel for simd default(none)  collapse(2) firstprivate(height, width, in_tmp, out)
 #endif
     for(size_t y = 0; y < height; y++)
     {

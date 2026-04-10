@@ -331,9 +331,7 @@ static GdkPixbuf *_import_get_thumbnail(const gchar *filename, const int width, 
         0);
     if(rgb)
     {
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate)  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
       for(size_t k = 0; k < th_width * th_height; k++)
       {
         const float alpha = buffer[k * 4 + 3] > 0 ? buffer[k * 4 + 3] / 255.0f : 1.0f;
@@ -379,9 +377,7 @@ static GdkPixbuf *_import_get_thumbnail(const gchar *filename, const int width, 
         if(rgb != NULL)
         {
           const float *const in = (const float *const)mipbuf.buf;
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate)  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
           for(size_t k = 0; k < pixels; k++)
           {
             const float alpha = in[k * 4 + 3] > 0.0f ? CLAMPF(in[k * 4 + 3], 0.0f, 1.0f) : 1.0f;

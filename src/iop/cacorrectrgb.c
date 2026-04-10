@@ -204,10 +204,7 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_
 __DT_CLONE_TARGETS__
 static void normalize_manifolds(const float *const restrict blurred_in, float *const restrict blurred_manifold_lower, float *const restrict blurred_manifold_higher, const size_t width, const size_t height, const dt_iop_cacorrectrgb_guide_channel_t guide)
 {
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(simd:static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < width * height; k++)
   {
     const float weighth = fmaxf(blurred_manifold_higher[k * 4 + 3], 1E-2f);
@@ -294,10 +291,7 @@ static int get_manifolds(const float* const restrict in, const size_t width, con
   // higher manifold is the blur of all pixels that are above average,
   // lower manifold is the blur of all pixels that are below average
   // we use the guide channel to categorize the pixels as above or below average
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(simd:static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < width * height; k++)
   {
     const float pixelg = fmaxf(in[k * 4 + guide], 1E-6f);
@@ -366,10 +360,7 @@ static int get_manifolds(const float* const restrict in, const size_t width, con
     // refine the manifolds
     // improve result especially on very degraded images
     // we use a blur of normal size for this step
-  #ifdef _OPENMP
-  #pragma omp parallel for default(firstprivate) \
-    schedule(simd:static)
-  #endif
+__OMP_PARALLEL_FOR__()
     for(size_t k = 0; k < width * height; k++)
     {
       // in order to refine the manifolds, we will compute weights
@@ -508,10 +499,7 @@ static int get_manifolds(const float* const restrict in, const size_t width, con
   }
 
   // store all manifolds in the same structure to make upscaling faster
-#ifdef _OPENMP
-#pragma omp parallel for simd default(firstprivate) \
-  schedule(simd:static) aligned(manifolds, blurred_manifold_lower, blurred_manifold_higher:64)
-#endif
+__OMP_PARALLEL_FOR_SIMD__(aligned(manifolds, blurred_manifold_lower, blurred_manifold_higher:64))
   for(size_t k = 0; k < width * height; k++)
   {
     for(size_t c = 0; c < 3; c++)
@@ -540,10 +528,7 @@ static void apply_correction(const float* const restrict in,
                           float* const restrict out)
 
 {
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(simd:static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < width * height; k++)
   {
     const float high_guide = fmaxf(manifolds[k * 6 + guide], 1E-6f);
@@ -625,10 +610,7 @@ static int reduce_artifacts(const float* const restrict in,
     goto error;
   }
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate)        \
-  schedule(simd:static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < width * height; k++)
   {
     for(size_t kc = 0; kc <= 1; kc++)
@@ -659,10 +641,7 @@ static int reduce_artifacts(const float* const restrict in,
   // the local averages are very different.
   // we use the same weight for all channels, as using different weights
   // introduces artifacts in practice.
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(simd:static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < width * height; k++)
   {
     float w = 1.0f;

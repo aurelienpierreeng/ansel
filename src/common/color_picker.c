@@ -61,9 +61,7 @@ static void _color_picker_convert_buffer(const float *const restrict input, floa
 {
   if(image_cst == IOP_CS_LAB && picker_cst == IOP_CS_LCH)
   {
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate)  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
     for(size_t k = 0; k < pixels; k++)
     {
       const size_t offset = 4 * k;
@@ -73,9 +71,7 @@ static void _color_picker_convert_buffer(const float *const restrict input, floa
   }
   else if(dt_iop_colorspace_is_rgb(image_cst) && picker_cst == IOP_CS_HSL)
   {
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate)  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
     for(size_t k = 0; k < pixels; k++)
     {
       const size_t offset = 4 * k;
@@ -85,9 +81,7 @@ static void _color_picker_convert_buffer(const float *const restrict input, floa
   }
   else if(image_cst == IOP_CS_LAB && picker_cst == IOP_CS_RGB)
   {
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate)  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
     for(size_t k = 0; k < pixels; k++)
     {
       const size_t offset = 4 * k;
@@ -99,9 +93,7 @@ static void _color_picker_convert_buffer(const float *const restrict input, floa
   }
   else if(dt_iop_colorspace_is_rgb(image_cst) && picker_cst == IOP_CS_LAB)
   {
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate)  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
     for(size_t k = 0; k < pixels; k++)
     {
       const size_t offset = 4 * k;
@@ -113,9 +105,7 @@ static void _color_picker_convert_buffer(const float *const restrict input, floa
   }
   else if(dt_iop_colorspace_is_rgb(image_cst) && picker_cst == IOP_CS_JZCZHZ)
   {
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate)  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
     for(size_t k = 0; k < pixels; k++)
     {
       const size_t offset = 4 * k;
@@ -125,9 +115,7 @@ static void _color_picker_convert_buffer(const float *const restrict input, floa
   }
 }
 
-#ifdef _OPENMP
-#pragma omp declare simd aligned(rgb, JzCzhz: 16) uniform(profile)
-#endif
+__OMP_DECLARE_SIMD__(aligned(rgb, JzCzhz: 16) uniform(profile))
 static inline void rgb_to_JzCzhz(const dt_aligned_pixel_t rgb, dt_aligned_pixel_t JzCzhz,
                                  const dt_iop_order_iccprofile_info_t *const profile)
 {
@@ -329,17 +317,13 @@ static void color_picker_helper_4ch_parallel(const dt_iop_buffer_dsc_t *const ds
 
   if(cst_to == IOP_CS_LCH)
   {
-#ifdef _OPENMP
-#pragma omp parallel default(firstprivate)
-#endif
+__OMP_PARALLEL__()
     {
       float *const restrict tmean = dt_get_perthread(mean,allocsize);
       float *const restrict tmmin = dt_get_perthread(mmin,allocsize);
       float *const restrict tmmax = dt_get_perthread(mmax,allocsize);
 
-#ifdef _OPENMP
-#pragma omp for schedule(static)
-#endif
+__OMP_FOR__()
       for(size_t j = box[1]; j < box[3]; j++)
       {
         const size_t offset = j * off_mul + off_add;
@@ -349,17 +333,13 @@ static void color_picker_helper_4ch_parallel(const dt_iop_buffer_dsc_t *const ds
   }
   else if(cst_to == IOP_CS_HSL)
   {
-#ifdef _OPENMP
-#pragma omp parallel default(firstprivate)
-#endif
+__OMP_PARALLEL__()
     {
       float *const restrict tmean = dt_get_perthread(mean,allocsize);
       float *const restrict tmmin = dt_get_perthread(mmin,allocsize);
       float *const restrict tmmax = dt_get_perthread(mmax,allocsize);
 
-#ifdef _OPENMP
-#pragma omp for schedule(static)
-#endif
+__OMP_FOR__()
       for(size_t j = box[1]; j < box[3]; j++)
       {
         const size_t offset = j * off_mul + off_add;
@@ -369,17 +349,13 @@ static void color_picker_helper_4ch_parallel(const dt_iop_buffer_dsc_t *const ds
   }
   else if(cst_to == IOP_CS_JZCZHZ)
   {
-#ifdef _OPENMP
-#pragma omp parallel default(firstprivate)
-#endif
+__OMP_PARALLEL__()
     {
       float *const restrict tmean = dt_get_perthread(mean,allocsize);
       float *const restrict tmmin = dt_get_perthread(mmin,allocsize);
       float *const restrict tmmax = dt_get_perthread(mmax,allocsize);
 
-#ifdef _OPENMP
-#pragma omp for schedule(static)
-#endif
+__OMP_FOR__()
       for(size_t j = box[1]; j < box[3]; j++)
       {
         const size_t offset = j * off_mul + off_add;
@@ -389,17 +365,13 @@ static void color_picker_helper_4ch_parallel(const dt_iop_buffer_dsc_t *const ds
   }
   else
   {
-#ifdef _OPENMP
-#pragma omp parallel default(firstprivate)
-#endif
+__OMP_PARALLEL__()
     {
       float *const restrict tmean = dt_get_perthread(mean,allocsize);
       float *const restrict tmmin = dt_get_perthread(mmin,allocsize);
       float *const restrict tmmax = dt_get_perthread(mmax,allocsize);
 
-#ifdef _OPENMP
-#pragma omp for schedule(static)
-#endif
+__OMP_FOR__()
       for(size_t j = box[1]; j < box[3]; j++)
       {
         const size_t offset = j * off_mul + off_add;
@@ -494,17 +466,13 @@ static void color_picker_helper_4ch_converted_parallel(const float *const pixel,
     mmax[n] = -INFINITY;
   }
 
-#ifdef _OPENMP
-#pragma omp parallel default(firstprivate)
-#endif
+__OMP_PARALLEL__()
   {
     float *const restrict tmean = dt_get_perthread(mean,allocsize);
     float *const restrict tmmin = dt_get_perthread(mmin,allocsize);
     float *const restrict tmmax = dt_get_perthread(mmax,allocsize);
 
-#ifdef _OPENMP
-#pragma omp for schedule(static)
-#endif
+__OMP_FOR__()
     for(size_t j = box[1]; j < box[3]; j++)
     {
       const size_t offset = j * off_mul + off_add;
@@ -614,9 +582,7 @@ static void color_picker_helper_bayer_parallel(const dt_iop_buffer_dsc_t *const 
     cnt[n] = 0u;
   }
 
-#ifdef _OPENMP
-#pragma omp parallel default(firstprivate)
-#endif
+__OMP_PARALLEL__()
   {
     const int tnum = dt_get_thread_num();
 
@@ -625,9 +591,7 @@ static void color_picker_helper_bayer_parallel(const dt_iop_buffer_dsc_t *const 
     float *const tmmax = mmax + 4 * tnum;
     uint32_t *const tcnt = cnt + 4 * tnum;
 
-#ifdef _OPENMP
-#pragma omp for schedule(static) collapse(2)
-#endif
+__OMP_FOR__(collapse(2))
     for(size_t j = box[1]; j < box[3]; j++)
     {
       for(size_t i = box[0]; i < box[2]; i++)
@@ -747,9 +711,7 @@ static void color_picker_helper_xtrans_parallel(const dt_iop_buffer_dsc_t *const
     cnt[n] = 0u;
   }
 
-#ifdef _OPENMP
-#pragma omp parallel default(firstprivate)
-#endif
+__OMP_PARALLEL__()
   {
     const int tnum = dt_get_thread_num();
 
@@ -758,9 +720,7 @@ static void color_picker_helper_xtrans_parallel(const dt_iop_buffer_dsc_t *const
     float *const tmmax = mmax + 3 * tnum;
     uint32_t *const tcnt = cnt + 3 * tnum;
 
-#ifdef _OPENMP
-#pragma omp for schedule(static) collapse(2)
-#endif
+__OMP_FOR__(collapse(2))
     for(size_t j = box[1]; j < box[3]; j++)
     {
       for(size_t i = box[0]; i < box[2]; i++)

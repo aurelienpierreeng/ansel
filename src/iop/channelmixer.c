@@ -244,10 +244,7 @@ static void process_hsl_v1(const dt_dev_pixelpipe_iop_t *piece, const float *con
   const int ch = piece->dsc_in.channels;
   const size_t pixel_count = (size_t)ch * roi_out->width * roi_out->height;
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < pixel_count; k += ch)
   {
     float h, s, l, hmix, smix, lmix;
@@ -293,10 +290,7 @@ static void process_hsl_v2(const dt_dev_pixelpipe_iop_t *piece, const float *con
   const int ch = piece->dsc_in.channels;
   const size_t pixel_count = (size_t)ch * roi_out->width * roi_out->height;
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < pixel_count; k += ch)
   {
     dt_aligned_pixel_t rgb = { in[k], in[k + 1], in[k + 2] };
@@ -346,10 +340,7 @@ static void process_rgb(const dt_dev_pixelpipe_iop_t *piece, const float *const 
   const int ch = piece->dsc_in.channels;
   const size_t pixel_count = (size_t)ch * roi_out->width * roi_out->height;
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < pixel_count; k += ch)
   {
     for(int i = 0, j = 0; i < 3; i++, j += 3)
@@ -370,10 +361,7 @@ static void process_gray(const dt_dev_pixelpipe_iop_t *piece, const float *const
   const int ch = piece->dsc_in.channels;
   const size_t pixel_count = (size_t)ch * roi_out->width * roi_out->height;
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < pixel_count; k += ch)
   {
     float gray = fmaxf(rgb_matrix[0] * in[k + 0]

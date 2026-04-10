@@ -357,9 +357,7 @@ static int process_wavelets(struct dt_iop_module_t *self, const struct dt_dev_pi
   }
 
   // add in the final residue
-#ifdef _OPENMP
-#pragma omp simd aligned(buf1, out : 64)
-#endif
+__OMP_SIMD__(aligned(buf1, out : 64))
   for (size_t k = 0; k < (size_t)4 * width * height; k++)
     out[k] += buf1[k];
 

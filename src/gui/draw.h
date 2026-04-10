@@ -182,9 +182,7 @@ static inline void dt_draw_grid_zoomed(cairo_t *cr, const int num, const float l
   }
 }
 
-#ifdef _OPENMP
-#pragma omp declare simd uniform(base)
-#endif
+__OMP_DECLARE_SIMD__(uniform(base))
 static inline float dt_log_scale_axis(const float x, const float base)
 {
   return logf(x * (base - 1.0f) + 1.f) / logf(base);
@@ -357,16 +355,12 @@ static inline void dt_draw_curve_smaple_values(dt_draw_curve_t *c, const float m
 {
   if(x)
   {
-#ifdef _OPENMP
-#pragma omp parallel for simd default(firstprivate)  schedule(static)
-#endif
+__OMP_PARALLEL_FOR_SIMD__()
     for(int k = 0; k < res; k++) x[k] = k * (1.0f / res);
   }
   if(y)
   {
-#ifdef _OPENMP
-#pragma omp parallel for simd default(firstprivate)  schedule(static)
-#endif
+__OMP_PARALLEL_FOR_SIMD__()
     for(int k = 0; k < res; k++) y[k] = min + (max - min) * c->csample.m_Samples[k] * (1.0f / 0x10000);
   }
 }

@@ -127,10 +127,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const float amount = (d->amount * 0.01);
   const int npixels = roi_out->height * roi_out->width;
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(int k = 0; k < 4 * npixels; k += 4)
   {
     /* saturation weight 0 - 1 */
@@ -138,9 +135,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     const float ls = 1.0f - ((amount * sw) * .25f);
     const float ss = 1.0f + (amount * sw);
     const dt_aligned_pixel_t weights = { ls, ss, ss, 1.0f };
-#ifdef _OPENMP
-#pragma omp simd aligned(in, out : 16)
-#endif
+__OMP_SIMD__(aligned(in, out : 16))
     for (int c = 0; c < 4; c++)
     {
       out[k + c] = in[k + c] * weights[c];

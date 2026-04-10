@@ -316,9 +316,7 @@ static void _overlay_patch_row_rgba(uint16_t *dst_row, const uint32_t width, con
 
   const float *patch_row = patch->pixels + 4 * (size_t)(raw_y - patch->y) * patch->width;
 
-#ifdef _OPENMP
-  #pragma omp parallel for simd default(firstprivate) schedule(static)  
-#endif
+__OMP_FOR_SIMD__()
   for(int dst_x = dst_x0; dst_x < dst_x1; dst_x++)
   {
     const float *src_pixel = patch_row + 4 * (size_t)(dst_x + offset_x - patch->x);

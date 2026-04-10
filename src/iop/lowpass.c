@@ -442,10 +442,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   // some aliased pointers for compilers that don't yet understand operators on __m128
   const float *const Labminf = (float *)&Labmin;
   const float *const Labmaxf = (float *)&Labmax;
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < (size_t)roi_out->width * roi_out->height; k++)
   {
     out[k * ch + 0] = (out[k * ch + 0] < 100.0f)
@@ -507,10 +504,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
     const float boost = 5.0f;
     const float contrastm1sq = boost * (fabs(d->contrast) - 1.0f) * (fabs(d->contrast) - 1.0f);
     const float contrastscale = copysign(sqrtf(1.0f + contrastm1sq), d->contrast);
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-    schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
     for(int k = 0; k < 0x10000; k++)
     {
       float kx2m1 = 2.0f * (float)k / 0x10000 - 1.0f;
@@ -530,10 +524,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   // generate precomputed brightness curve
   const float gamma = (d->brightness >= 0.0f) ? 1.0f / (1.0f + d->brightness) : (1.0f - d->brightness);
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(int k = 0; k < 0x10000; k++)
   {
     d->ltable[k] = 100.0f * powf((float)k / 0x10000, gamma);

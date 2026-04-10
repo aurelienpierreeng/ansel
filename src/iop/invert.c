@@ -261,11 +261,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
   if(filters == 9u)
   { // xtrans float mosaiced
-#ifdef _OPENMP
-#pragma omp parallel for simd default(firstprivate) \
-    schedule(static) \
-    collapse(2)
-#endif
+__OMP_PARALLEL_FOR_SIMD__(collapse(2))
     for(int j = 0; j < roi_out->height; j++)
     {
       for(int i = 0; i < roi_out->width; i++)
@@ -278,11 +274,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   else if(filters)
   { // bayer float mosaiced
 
-#ifdef _OPENMP
-#pragma omp parallel for simd default(firstprivate) \
-    schedule(static) \
-    collapse(2)
-#endif
+__OMP_PARALLEL_FOR_SIMD__(collapse(2))
     for(int j = 0; j < roi_out->height; j++)
     {
       for(int i = 0; i < roi_out->width; i++)
@@ -296,11 +288,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   { // non-mosaiced
     const int ch = piece->dsc_in.channels;
 
-#ifdef _OPENMP
-#pragma omp parallel for simd default(firstprivate) \
-    schedule(static) \
-    collapse(2)
-#endif
+__OMP_PARALLEL_FOR_SIMD__(collapse(2))
     for(size_t k = 0; k < (size_t)ch * roi_out->width * roi_out->height; k += ch)
     {
       for(int c = 0; c < 3; c++)

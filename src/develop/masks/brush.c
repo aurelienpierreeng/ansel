@@ -1039,10 +1039,7 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
 
       dx = pts[0] - (*point_buffer)[2];
       dy = pts[1] - (*point_buffer)[3];
-#ifdef _OPENMP
-#pragma omp parallel for simd default(firstprivate)              \
-    schedule(static) if(*point_count > 100) aligned(point_buffer:64)
-#endif
+__OMP_PARALLEL_FOR_SIMD__(if(*point_count > 100) aligned(point_buffer:64))
       for(int i = 0; i < *point_count; i++)
       {
         (*point_buffer)[i * 2] += dx;
@@ -2591,10 +2588,7 @@ static void _brush_bounding_box_raw(const float *const restrict points, const fl
 {
   // now we want to find the area, so we search min/max points
   float min_x = FLT_MAX, max_x = FLT_MIN, min_y = FLT_MAX, max_y = FLT_MIN;
-#ifdef _OPENMP
-#pragma omp parallel for reduction(min : min_x, min_y) reduction(max : max_x, max_y) \
-  schedule(static) if(total_points > 1000)
-#endif
+__OMP_PARALLEL_FOR__(reduction(min : min_x, min_y) reduction(max : max_x, max_y)  if(total_points > 1000))
   // Skip control points and only consider actual polyline samples.
   for(int point_index = node_count * 3; point_index < total_points; point_index++)
   {
@@ -2994,10 +2988,7 @@ static int _brush_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixel
   // now we fill the falloff
   if(!use_sparse)
   {
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  if(border_count - node_count * 3 > 1000)
-#endif
+__OMP_PARALLEL_FOR__(if(border_count - node_count * 3 > 1000))
     // Stamp each border segment directly (full sampling).
     for(int border_index = node_count * 3; border_index < border_count; border_index++)
     {

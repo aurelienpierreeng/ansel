@@ -506,10 +506,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
   if(filters == 9u)
   { // xtrans float mosaiced
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-    schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
     for(int j = 0; j < height; j++)
     {
       const size_t row_start = (size_t)j * width;
@@ -551,10 +548,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   else if(filters)
   { // bayer float mosaiced
     const int cfa_x = roi_out->x & 1;
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-    schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
     for(int j = 0; j < height; j++)
     {
       const int offset_j = j + roi_out->y;
@@ -585,10 +579,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
     if(ch == 4)
     {
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-    schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
       for(size_t k = 0; k < npixels; k++)
       {
         const size_t p = 4 * k;
@@ -600,10 +591,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     }
     else
     {
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-    schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
       for(size_t k = 0; k < ch * npixels; k += ch)
       {
         for(ptrdiff_t c = 0; c < 3; c++)

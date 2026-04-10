@@ -151,9 +151,7 @@ typedef enum dt_isotropy_t
 } dt_isotropy_t;
 
 
-#ifdef _OPENMP
-#pragma omp declare simd
-#endif
+__OMP_DECLARE_SIMD__()
 static inline dt_isotropy_t check_isotropy_mode(const float anisotropy)
 {
   // user param is negative, positive or zero. The sign encodes the direction of diffusion, the magnitude encodes the ratio of anisotropy
@@ -607,10 +605,7 @@ static inline void init_reconstruct(float *const restrict reconstructed, const s
                                     const size_t height)
 {
 // init the reconstructed buffer with non-clipped and partially clipped pixels
-#ifdef _OPENMP
-#pragma omp parallel for simd default(firstprivate)                  \
-    schedule(simd:static) aligned(reconstructed:64)
-#endif
+__OMP_PARALLEL_FOR_SIMD__(aligned(reconstructed:64))
   for(size_t k = 0; k < height * width * 4; k++) reconstructed[k] = 0.f;
 }
 
@@ -781,10 +776,7 @@ static inline void heat_PDE_diffusion(const float *const restrict high_freq, con
   const dt_aligned_pixel_simd_t normalized_regularization_v = dt_simd_set1(normalized_regularization);
   const dt_aligned_pixel_simd_t strength_v = dt_simd_set1(strength);
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate)                             \
-    schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(size_t row = 0; row < height; ++row)
   {
     // interleave the order in which we process the rows so that we minimize cache misses
@@ -1107,10 +1099,7 @@ __DT_CLONE_TARGETS__
 static inline void build_mask(const float *const restrict input, uint8_t *const restrict mask,
                               const float threshold, const size_t width, const size_t height)
 {
-#ifdef _OPENMP
-#pragma omp parallel for simd default(firstprivate)         \
-    schedule(simd:static) aligned(mask, input : 64)
-#endif
+__OMP_PARALLEL_FOR_SIMD__(aligned(mask, input : 64))
   for(size_t k = 0; k < height * width * 4; k += 4)
   {
     // TRUE if any channel is above threshold
@@ -1124,9 +1113,7 @@ static inline void inpaint_mask(float *const restrict inpainted, const float *co
                                 const size_t height)
 {
   // init the reconstruction with noise inside the masked areas
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) schedule(simd:static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < height * width * 4; k += 4)
   {
     if(mask[k / 4])

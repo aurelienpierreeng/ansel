@@ -460,10 +460,7 @@ static void _downsample_bayer_half_size(float *const out, const float *const in,
                                         const dt_iop_roi_t *const roi_in, const uint32_t filters,
                                         const gboolean is_4bayer, const double CAM_to_RGB[3][4])
 {
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static) collapse(2)
-#endif
+__OMP_PARALLEL_FOR__(collapse(2))
   for(int y = 0; y < roi_out->height; y++)
   {
     for(int x = 0; x < roi_out->width; x++)
@@ -607,10 +604,7 @@ static void _downsample_xtrans_half_size(float *const out, const float *const in
                                          const dt_iop_roi_t *const roi_in,
                                          const uint8_t (*const xtrans)[6])
 {
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static) collapse(2)
-#endif
+__OMP_PARALLEL_FOR__(collapse(2))
   for(int y = 0; y < roi_out->height; y++)
   {
     for(int x = 0; x < roi_out->width; x++)
@@ -670,10 +664,7 @@ static void _downsample_guided_laplacian_fit(const float *const restrict HF,
   const dt_aligned_pixel_simd_t zero = dt_simd_set1(0.f);
   const dt_aligned_pixel_simd_t inv_patch = dt_simd_set1(1.f / 25.f);
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(size_t row = 0; row < height; ++row)
   {
     const float *const row0 = HF + 4 * ((size_t)CLAMP((int)row - 2, 0, (int)height - 1) * width);
@@ -762,10 +753,7 @@ static void _downsample_guided_laplacian_apply(const float *const restrict HF,
                                                const size_t width, const size_t height,
                                                const gboolean reset)
 {
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(size_t row = 0; row < height; ++row)
   {
     for(size_t col = 0; col < width; ++col)
@@ -851,10 +839,7 @@ static int _downsample_guided_laplacian_postfilter(float *const out,
       decompose_2D_Bspline(buffer_in, HF, buffer_out, width, height, mult, tempbuf, padded_size);
       // Express the current wavelet band as relative detail over the blur that created it
       // so the linear RGB model follows local chroma ratios instead of absolute amplitudes.
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
       for(size_t row = 0; row < height; ++row)
       {
         for(size_t col = 0; col < width; ++col)
@@ -886,10 +871,7 @@ static int _downsample_guided_laplacian_postfilter(float *const out,
 
     const gboolean last_iteration = (iteration == iterations - 1);
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
     for(size_t row = 0; row < height; ++row)
     {
       for(size_t col = 0; col < width; ++col)

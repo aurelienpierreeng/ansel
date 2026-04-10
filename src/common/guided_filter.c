@@ -157,9 +157,7 @@ static int guided_filter_tiling(color_image imgg, gray_image img, gray_image img
     return 1;
   }
   int err = 0;
-#ifdef _OPENMP
-#pragma omp parallel for schedule(static) default(firstprivate) 
-#endif
+__OMP_PARALLEL_FOR__()
   for(int j_imgg = source.lower; j_imgg < source.upper; j_imgg++)
   {
     int j = j_imgg - source.lower;
@@ -216,9 +214,7 @@ static int guided_filter_tiling(color_image imgg, gray_image img, gray_image img
   #define A_GREEN 1
   #define A_BLUE 2
   #define B 3
-#ifdef _OPENMP
-#pragma omp parallel for schedule(static) default(firstprivate)
-#endif
+__OMP_PARALLEL_FOR__()
   for(size_t i = 0; i < size; i++)
   {
     const float *meanpx = get_color_pixel(mean, i);
@@ -280,9 +276,7 @@ static int guided_filter_tiling(color_image imgg, gray_image img, gray_image img
     return 1;
   }
 
-#ifdef _OPENMP
-#pragma omp parallel for schedule(static) default(firstprivate)
-#endif
+__OMP_PARALLEL_FOR__()
   for(int j_imgg = target.lower; j_imgg < target.upper; j_imgg++)
   {
     // index of the left most target pixel in the current row

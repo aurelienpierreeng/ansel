@@ -181,9 +181,7 @@ static inline void dt_colormatrix_mul(dt_colormatrix_t dst, const dt_colormatrix
 // dest needs to be different from m1 and m2
 // dest = m1 * m2 in this order
 // TODO: see if that refactors with the previous
-#ifdef _OPENMP
-#pragma omp declare simd
-#endif
+__OMP_DECLARE_SIMD__()
 static inline void mat3SSEmul(dt_colormatrix_t dest, const dt_colormatrix_t m1, const dt_colormatrix_t m2)
 {
   for(int k = 0; k < 3; k++)
@@ -198,15 +196,11 @@ static inline void mat3SSEmul(dt_colormatrix_t dest, const dt_colormatrix_t m1, 
   }
 }
 
-#ifdef _OPENMP
-#pragma omp declare simd uniform(M) aligned(M:64) aligned(v_in, v_out:16)
-#endif
+__OMP_DECLARE_SIMD__(uniform(M) aligned(M:64) aligned(v_in, v_out:16))
 static inline void dot_product(const dt_aligned_pixel_t v_in, const dt_colormatrix_t M, dt_aligned_pixel_t v_out)
 {
   // specialized 3x4 dot products of 4x1 RGB-alpha pixels
-  #ifdef _OPENMP
-  #pragma omp simd aligned(M:64) aligned(v_in, v_out:16)
-  #endif
+__OMP_SIMD__(aligned(M:64) aligned(v_in, v_out:16))
   for(size_t i = 0; i < 3; ++i) v_out[i] = scalar_product(v_in, M[i]);
 }
 

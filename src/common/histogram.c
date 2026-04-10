@@ -232,11 +232,7 @@ void dt_histogram_worker(dt_dev_histogram_collection_params_t *const histogram_p
 
   const dt_histogram_roi_t *const roi = histogram_params->roi;
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  shared(partial_hists) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__(shared(partial_hists) )
   for(int j = roi->crop_y; j < roi->height - roi->crop_height; j++)
   {
     uint32_t *thread_hist = (uint32_t *)partial_hists + bins_total * omp_get_thread_num();
@@ -249,8 +245,7 @@ void dt_histogram_worker(dt_dev_histogram_collection_params_t *const histogram_p
   uint32_t *hist = *histogram;
 
 #pragma omp parallel for default(firstprivate) \
-  shared(hist, partial_hists) \
-  schedule(static)
+  shared(hist, partial_hists) 
   for(size_t k = 0; k < bins_total; k++)
   {
     for(size_t n = 0; n < nthreads; n++)
@@ -286,9 +281,7 @@ void dt_histogram_helper(dt_dev_histogram_collection_params_t *histogram_params,
 
     if(converted != NULL)
     {
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate)  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
       for(size_t k = 0; k < pixels; k++)
       {
         const size_t offset = 4 * k;

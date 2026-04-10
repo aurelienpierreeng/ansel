@@ -133,11 +133,7 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_
 inline static void blur_2D_Bspline(const float *const restrict in, float *const restrict out,
                                    const size_t width, const size_t height)
 {
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate)  \
-    schedule(simd: static)    \
-    collapse(2)
-#endif
+__OMP_PARALLEL_FOR__( collapse(2))
   for(size_t i = 0; i < height; i++)
   {
     for(size_t j = 0; j < width; j++)
@@ -168,10 +164,7 @@ __DT_CLONE_TARGETS__
 static inline void init_kernel(float *const restrict buffer, const size_t width, const size_t height)
 {
   // init an empty kernel with zeros
-#ifdef _OPENMP
-#pragma omp parallel for simd default(firstprivate)  \
-    schedule(simd: static) aligned(buffer:64)
-#endif
+__OMP_PARALLEL_FOR_SIMD__(aligned(buffer:64))
   for(size_t k = 0; k < height * width; k++) buffer[k] = 0.f;
 }
 
@@ -191,10 +184,7 @@ static inline void create_lens_kernel(float *const restrict buffer, const size_t
   const float eps = 1.f / (float)width;
   const float radius = (float)(width - 1) / 2.f - 1;
 
-#ifdef _OPENMP
-#pragma omp parallel for simd default(firstprivate)  \
-    schedule(simd: static) aligned(buffer:64) collapse(2)
-#endif
+__OMP_PARALLEL_FOR_SIMD__(aligned(buffer:64) collapse(2))
   for(size_t i = 0; i < height; i++)
     for(size_t j = 0; j < width; j++)
     {
@@ -238,10 +228,7 @@ static inline void create_motion_kernel(float *const restrict buffer, const size
   const float M[2][2] = { { cosf(corr_angle), -sinf(corr_angle) },
                           { sinf(corr_angle), cosf(corr_angle) } };
 
-#ifdef _OPENMP
-#pragma omp parallel for simd default(firstprivate)  \
-    schedule(simd: static) aligned(buffer:64)
-#endif
+__OMP_PARALLEL_FOR_SIMD__(aligned(buffer:64))
   for(size_t i = 0; i < 8 * width; i++)
   {
     // Note : for better smoothness of the polynomial discretization,
@@ -286,10 +273,7 @@ static inline void create_gauss_kernel(float *const restrict buffer, const size_
   // 2 x 1D convolutions.
   const float radius = (width - 1) / 2.f - 1;
 
-#ifdef _OPENMP
-#pragma omp parallel for simd default(firstprivate)  \
-    schedule(simd: static) aligned(buffer:64) collapse(2)
-#endif
+__OMP_PARALLEL_FOR_SIMD__(aligned(buffer:64) collapse(2))
   for(size_t i = 0; i < height; i++)
     for(size_t j = 0; j < width; j++)
     {
@@ -334,10 +318,7 @@ static inline int build_gui_kernel(unsigned char *const buffer, const size_t wid
   }
 
   // Convert to Gtk/Cairo RGBA 8x4 bits
-#ifdef _OPENMP
-#pragma omp parallel for simd default(firstprivate)  \
-    schedule(simd: static) aligned(buffer, kernel_2:64)
-#endif
+__OMP_PARALLEL_FOR_SIMD__(aligned(buffer, kernel_2:64))
   for(size_t k = 0; k < height * width; k++)
   {
     buffer[k * 4] = buffer[k * 4 + 1] = buffer[k * 4 + 2] = buffer[k * 4 + 3] = roundf(255.f * kernel_2[k]);
@@ -356,10 +337,7 @@ static inline float compute_norm(float *const buffer, const size_t width, const 
 {
   float norm = 0.f;
 
-#ifdef _OPENMP
-#pragma omp parallel for simd default(firstprivate)  \
-    schedule(simd: static) aligned(buffer:64) reduction(+:norm)
-#endif
+__OMP_PARALLEL_FOR_SIMD__(aligned(buffer:64) reduction(+:norm))
   for(size_t i = 0; i < width * height; i++)
   {
     norm += buffer[i];
@@ -373,10 +351,7 @@ __DT_CLONE_TARGETS__
 static inline void normalize(float *const buffer, const size_t width, const size_t height,
                              const float norm)
 {
-#ifdef _OPENMP
-#pragma omp parallel for simd default(firstprivate)  \
-    schedule(simd: static) aligned(buffer:64)
-#endif
+__OMP_PARALLEL_FOR_SIMD__(aligned(buffer:64))
   for(size_t i = 0; i < width * height; i++)
   {
     buffer[i] /= norm;
@@ -445,10 +420,7 @@ static void process_fft(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *pi
   float *const restrict padded_out = dt_alloc_align_float(padded_width * padded_height * 4);
 
   // Write the image in the padded buffer
-#ifdef _OPENMP
-#pragma omp parallel for simd default(firstprivate)  \
-    schedule(simd: static) aligned(in, padded_in:64)
-#endif
+__OMP_PARALLEL_FOR_SIMD__(aligned(in, padded_in:64))
   for(size_t i = 0; i < roi_in->height; i++)
     for(size_t j = 0; j < roi_in->width; j++)
     {
@@ -460,10 +432,7 @@ static void process_fft(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *pi
   // Write the padding if needed
   if(padded_width > roi_in->width)
   {
-#ifdef _OPENMP
-#pragma omp parallel for simd default(firstprivate)  \
-    schedule(simd: static) aligned(in, padded_in:64)
-#endif
+__OMP_PARALLEL_FOR_SIMD__(aligned(in, padded_in:64))
   for(size_t i = 0; i < roi_in->height; i++)
     {
       const size_t index_in = (i * (roi_in->width - 1)) * 4;
@@ -474,10 +443,7 @@ static void process_fft(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *pi
 
   if(padded_height > roi_in->height)
   {
-#ifdef _OPENMP
-#pragma omp parallel for simd default(firstprivate)  \
-    schedule(simd: static) aligned(in, padded_in:64)
-#endif
+__OMP_PARALLEL_FOR_SIMD__(aligned(in, padded_in:64))
   for(size_t j = 0; j < roi_in->width; j++)
     {
       const size_t index_in = ((roi_in->height - 1) * roi_in->width + j) * 4;
@@ -500,10 +466,7 @@ static void process_fft(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *pi
   const size_t i_reach = offset_i + kernel_width;
   const size_t j_reach = offset_j + kernel_width;
 
-#ifdef _OPENMP
-#pragma omp parallel for simd default(firstprivate) \
-    schedule(simd: static) aligned(kernel, padded_kernel:64)
-#endif
+__OMP_PARALLEL_FOR_SIMD__(aligned(kernel, padded_kernel:64))
   for(size_t i = 0; i < padded_width; i++)
     for(size_t j = 0; j < padded_width; j++)
     {
@@ -590,10 +553,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     return 1;
   }
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-    schedule(simd: static) collapse(2)
-#endif
+__OMP_PARALLEL_FOR__(collapse(2))
   for(int i = 0; i < roi_out->height; i++)
     for(int j = 0; j < roi_out->width; j++)
     {

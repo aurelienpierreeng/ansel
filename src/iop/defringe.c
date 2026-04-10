@@ -305,11 +305,7 @@ int process(struct dt_iop_module_t *module, const dt_dev_pixelpipe_t *pipe, cons
   }
 
   const float use_global_average = MODE_GLOBAL_AVERAGE == d->op_mode;
-#ifdef _OPENMP
-#pragma omp parallel for simd default(firstprivate) \
-  reduction(+ : avg_edge_chroma) \
-  schedule(simd:static)
-#endif
+__OMP_PARALLEL_FOR_SIMD__(reduction(+ : avg_edge_chroma))
   for(size_t j = 0; j < (size_t)height * width * 4; j += 4)
   {
     // edge-detect on color channels
@@ -417,9 +413,7 @@ int process(struct dt_iop_module_t *module, const dt_dev_pixelpipe_t *pipe, cons
       }
       else
       {
-        #ifdef _OPENMP
-        #pragma omp simd aligned(in, out)
-        #endif
+__OMP_SIMD__(aligned(in, out))
         // we can't copy the alpha channel here because it contains info needed by neighboring pixels!
         for(int c = 0; c < 3; c++)
         {

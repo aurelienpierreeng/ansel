@@ -103,9 +103,7 @@ void output_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixel
 }
 
 
-#ifdef _OPENMP
-#pragma omp declare simd aligned(in, out, mask_color: 16) uniform(mask_color, alpha)
-#endif
+__OMP_DECLARE_SIMD__(aligned(in, out, mask_color: 16) uniform(mask_color, alpha))
 static inline void _write_pixel(const float *const restrict in, uint8_t *const restrict out,
                                 const float *const restrict mask_color, const float alpha)
 {
@@ -123,9 +121,7 @@ static inline void _write_pixel(const float *const restrict in, uint8_t *const r
     out[2 - c] = (uint8_t)(fminf(fmaxf(value, 0.0f), 255.0f));
   }
 }
-#ifdef _OPENMP
-#pragma omp declare simd aligned(pixel: 16) uniform(norm)
-#endif
+__OMP_DECLARE_SIMD__(aligned(pixel: 16) uniform(norm))
 static inline __attribute__((always_inline)) void _normalize_color(float *const restrict pixel, const float norm)
 {
   // color may not be black!
@@ -134,9 +130,7 @@ static inline __attribute__((always_inline)) void _normalize_color(float *const 
     pixel[x] *= factor;
 }
 
-#ifdef _OPENMP
-#pragma omp declare simd aligned(XYZ, sRGB: 16) uniform(norm)
-#endif
+__OMP_DECLARE_SIMD__(aligned(XYZ, sRGB: 16) uniform(norm))
 static inline void _XYZ_to_REC_709_normalized(const float *const restrict XYZ, float *const restrict sRGB,
                                                   const float norm)
 {
@@ -149,10 +143,7 @@ static void _channel_display_monochrome(const float *const restrict in, uint8_t 
 {
   const dt_aligned_pixel_t mask_color = { 1.0f, 1.0f, 0.0f }; // yellow; "unused" element enables vectorization
 
-#ifdef _OPENMP
-#pragma omp parallel for simd  \
-  schedule(simd:static) aligned(in, out: 64) aligned(mask_color: 16)
-#endif
+__OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64) aligned(mask_color: 16))
   for(size_t j = 0; j < buffsize; j += 4)
   {
     dt_aligned_pixel_t pixel = { in[j + 1], in[j + 1], in[j + 1], in[j + 1] };
@@ -169,10 +160,7 @@ static void _channel_display_false_color(const float *const restrict in, uint8_t
   switch(channel & DT_DEV_PIXELPIPE_DISPLAY_ANY & ~DT_DEV_PIXELPIPE_DISPLAY_OUTPUT)
   {
     case DT_DEV_PIXELPIPE_DISPLAY_a:
-#ifdef _OPENMP
-#pragma omp parallel for simd  \
-  schedule(simd:static) aligned(in, out: 64) aligned(mask_color: 16)
-#endif
+__OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64) aligned(mask_color: 16))
       for(size_t j = 0; j < buffsize; j += 4)
       {
         dt_aligned_pixel_t xyz;
@@ -186,10 +174,7 @@ static void _channel_display_false_color(const float *const restrict in, uint8_t
       }
       break;
     case DT_DEV_PIXELPIPE_DISPLAY_b:
-#ifdef _OPENMP
-#pragma omp parallel for simd  \
-  schedule(simd:static) aligned(in, out: 64) aligned(mask_color: 16)
-#endif
+__OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64) aligned(mask_color: 16))
       for(size_t j = 0; j < buffsize; j += 4)
       {
         dt_aligned_pixel_t xyz, pixel;
@@ -202,10 +187,7 @@ static void _channel_display_false_color(const float *const restrict in, uint8_t
       }
       break;
     case DT_DEV_PIXELPIPE_DISPLAY_R:
-#ifdef _OPENMP
-#pragma omp parallel for simd  \
-  schedule(simd:static) aligned(in, out: 64) aligned(mask_color: 16)
-#endif
+__OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64) aligned(mask_color: 16))
       for(size_t j = 0; j < buffsize; j += 4)
       {
         const dt_aligned_pixel_t pixel = { in[j + 1], 0.0f, 0.0f, 0.0f };
@@ -213,10 +195,7 @@ static void _channel_display_false_color(const float *const restrict in, uint8_t
       }
       break;
     case DT_DEV_PIXELPIPE_DISPLAY_G:
-#ifdef _OPENMP
-#pragma omp parallel for simd  \
-  schedule(simd:static) aligned(in, out: 64) aligned(mask_color: 16)
-#endif
+__OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64) aligned(mask_color: 16))
       for(size_t j = 0; j < buffsize; j += 4)
       {
         const dt_aligned_pixel_t pixel = { 0.0f, in[j + 1], 0.0f, 0.0f };
@@ -224,10 +203,7 @@ static void _channel_display_false_color(const float *const restrict in, uint8_t
       }
       break;
     case DT_DEV_PIXELPIPE_DISPLAY_B:
-#ifdef _OPENMP
-#pragma omp parallel for simd  \
-  schedule(simd:static) aligned(in, out: 64) aligned(mask_color: 16)
-#endif
+__OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64) aligned(mask_color: 16))
       for(size_t j = 0; j < buffsize; j += 4)
       {
         const dt_aligned_pixel_t pixel = { 0.0f, 0.0f, in[j + 1], 0.0f };
@@ -237,10 +213,7 @@ static void _channel_display_false_color(const float *const restrict in, uint8_t
     case DT_DEV_PIXELPIPE_DISPLAY_LCH_C:
     case DT_DEV_PIXELPIPE_DISPLAY_HSL_S:
     case DT_DEV_PIXELPIPE_DISPLAY_JzCzhz_Cz:
-#ifdef _OPENMP
-#pragma omp parallel for simd  \
-  schedule(simd:static) aligned(in, out: 64) aligned(mask_color: 16)
-#endif
+__OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64) aligned(mask_color: 16))
       for(size_t j = 0; j < buffsize; j += 4)
       {
         const dt_aligned_pixel_t pixel = { 0.5f, 0.5f * (1.0f - in[j + 1]), 0.5f, 0.0f };
@@ -248,10 +221,7 @@ static void _channel_display_false_color(const float *const restrict in, uint8_t
       }
       break;
     case DT_DEV_PIXELPIPE_DISPLAY_LCH_h:
-#ifdef _OPENMP
-#pragma omp parallel for simd  \
-  schedule(simd:static) aligned(in, out: 64) aligned(mask_color: 16)
-#endif
+__OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64) aligned(mask_color: 16))
       for(size_t j = 0; j < buffsize; j += 4)
       {
         dt_aligned_pixel_t lch = { 65.0f, 37.0f, in[j + 1], 0.0f };
@@ -264,9 +234,7 @@ static void _channel_display_false_color(const float *const restrict in, uint8_t
       }
       break;
     case DT_DEV_PIXELPIPE_DISPLAY_HSL_H:
-#ifdef _OPENMP
-#pragma omp parallel for  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
       for(size_t j = 0; j < buffsize; j += 4)
       {
         dt_aligned_pixel_t hsl = { in[j + 1], 0.5f, 0.5f, 0.0f };
@@ -277,9 +245,7 @@ static void _channel_display_false_color(const float *const restrict in, uint8_t
       }
       break;
     case DT_DEV_PIXELPIPE_DISPLAY_JzCzhz_hz:
-#ifdef _OPENMP
-#pragma omp parallel for  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
       for(size_t j = 0; j < buffsize; j += 4)
       {
         const dt_aligned_pixel_t JzCzhz = { 0.011f, 0.01f, in[j + 1] };
@@ -308,10 +274,7 @@ static void _mask_display(const float *const restrict in, uint8_t *const restric
 {
   const dt_aligned_pixel_t mask_color = { 1.0f, 1.0f, 0.0f, 0.0f };
 
-  #ifdef _OPENMP
-  #pragma omp parallel for simd  \
-    schedule(simd:static) aligned(in, out: 64) aligned(mask_color: 16)
-  #endif
+__OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64) aligned(mask_color: 16))
     for(size_t j = 0; j < buffsize; j+= 4)
     {
       const float gray = 0.3f * in[j + 0] + 0.59f * in[j + 1] + 0.11f * in[j + 2];
@@ -323,10 +286,7 @@ static void _mask_display(const float *const restrict in, uint8_t *const restric
 __DT_CLONE_TARGETS__
 static void _copy_output(const float *const restrict in, uint8_t *const restrict out, const size_t buffsize)
 {
-#ifdef _OPENMP
-#pragma omp parallel for simd  \
-  schedule(simd:static) aligned(in, out: 64)
-#endif
+__OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64))
   for(size_t j = 0; j < buffsize; j += 4)
   {
     // the output of this module is BGR(A) instead of RGBA, so we can't use for_each_channel

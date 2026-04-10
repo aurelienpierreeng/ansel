@@ -391,10 +391,7 @@ void dt_imageio_flip_buffers(char *out, const char *in, const size_t bpp, const 
 {
   if(!orientation)
   {
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-    schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
     for(int j = 0; j < ht; j++) memcpy(out + (size_t)j * bpp * wd, in + (size_t)j * stride, bpp * wd);
     return;
   }
@@ -415,10 +412,7 @@ void dt_imageio_flip_buffers(char *out, const char *in, const size_t bpp, const 
     ii = (int)fwd - ii - 1;
     si = -si;
   }
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(int j = 0; j < ht; j++)
   {
     char *out2 = out + (size_t)labs(sj) * jj + (size_t)labs(si) * ii + (size_t)sj * j;
@@ -440,10 +434,7 @@ void dt_imageio_flip_buffers_ui8_to_float(float *out, const uint8_t *in, const f
   const float scale = 1.0f / (white - black);
   if(!orientation)
   {
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-    schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
     for(int j = 0; j < ht; j++)
       for(int i = 0; i < wd; i++)
         for(int k = 0; k < ch; k++)
@@ -467,10 +458,7 @@ void dt_imageio_flip_buffers_ui8_to_float(float *out, const uint8_t *in, const f
     ii = (int)fwd - ii - 1;
     si = -si;
   }
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(int j = 0; j < ht; j++)
   {
     float *out2 = out + (size_t)labs(sj) * jj + (size_t)labs(si) * ii + sj * j;
@@ -921,10 +909,7 @@ gboolean _get_export_size(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe,
 void _clamp_float_to_uint8(const float *const inbuf, uint8_t *const outbuf, const size_t processed_width,
                            const size_t processed_height)
 {
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < processed_width * processed_height; k++)
     for_four_channels(c)
       outbuf[4 * k + c] = (uint8_t)CLAMPF(roundf(inbuf[4 * k + c] * 255.f), 0.f, 255.f);
@@ -934,10 +919,7 @@ void _clamp_float_to_uint8(const float *const inbuf, uint8_t *const outbuf, cons
 void _swap_byteorder_float_to_uint8(const float *const restrict inbuf, uint8_t *const outbuf,
                                     const size_t processed_width, const size_t processed_height)
 {
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < processed_width * processed_height; k++)
   {
     outbuf[4 * k + 0] = (uint8_t)CLAMPF(roundf(inbuf[4 * k + 2] * 255.f), 0.f, 255.f);
@@ -951,10 +933,7 @@ void _swap_byteorder_float_to_uint8(const float *const restrict inbuf, uint8_t *
 void _export_final_buffer_to_uint16(const float *const restrict inbuf, uint16_t *const outbuf,
                                     const size_t processed_width, const size_t processed_height)
 {
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < processed_width * processed_height; k++)
     for_four_channels(c)
       outbuf[4 * k + c] = (uint16_t)CLAMP(roundf(inbuf[4 * k + c] * 65535.f), 0.f, 65535.f);
@@ -1142,9 +1121,7 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
     if(outbuf && thumbnail_export)
     {
       uint8_t *thumbnail_buf = (uint8_t *)outbuf;
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate)  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
       for(size_t k = 0; k < pixels / 4; k++) thumbnail_buf[4 * k + 3] = UINT8_MAX;
     }
   }
@@ -1159,9 +1136,7 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
     if(outbuf && thumbnail_export)
     {
       uint16_t *thumbnail_buf = (uint16_t *)outbuf;
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate)  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
       for(size_t k = 0; k < pixels / 4; k++) thumbnail_buf[4 * k + 3] = UINT16_MAX;
     }
   }
@@ -1176,9 +1151,7 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
     if(outbuf && thumbnail_export)
     {
       float *thumbnail_buf = (float *)outbuf;
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate)  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
       for(size_t k = 0; k < pixels / 4; k++) thumbnail_buf[4 * k + 3] = 1.0f;
     }
   }

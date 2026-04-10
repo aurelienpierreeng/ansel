@@ -906,9 +906,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const size_t height = piece->roi_out.height;
   const size_t pixels = width * height;
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate)  schedule(simd:static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < pixels * 4; k += 4)
   {
     dt_aligned_pixel_t input = { in[k + 0], in[k + 1], in[k + 2], in[k + 3] };

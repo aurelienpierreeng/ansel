@@ -974,9 +974,7 @@ static int build_round_stamp(float complex **pstamp,
   // hypotf only for PI / 16 = 0.196 of the stamp area.
   // We don't do octants to avoid false sharing of cache lines between threads.
   // doesn't work for OSX see issue #7349
-#ifdef _OPENMP
-#pragma omp parallel for schedule(static) default(firstprivate) firstprivate(LOOKUP_OVERSAMPLE)
-#endif
+__OMP_PARALLEL_FOR__(firstprivate(LOOKUP_OVERSAMPLE))
   for(int y = 0; y <= iradius; y++)
   {
     for(int x = 0; x <= iradius; x++)
@@ -1369,11 +1367,7 @@ static int _distort_xtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *
   // compute the extent of all points (all computations are done in RAW coordinate)
   float xmin = FLT_MAX, xmax = FLT_MIN, ymin = FLT_MAX, ymax = FLT_MIN;
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-    schedule(simd:static) if(points_count > 100)          \
-    reduction(min:xmin, ymin) reduction(max:xmax, ymax)
-#endif
+__OMP_PARALLEL_FOR__(if(points_count > 100) reduction(min:xmin, ymin) reduction(max:xmax, ymax))
   for(size_t i = 0; i < points_count * 2; i += 2)
   {
     const float x = points[i];
@@ -1418,10 +1412,7 @@ static int _distort_xtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *
     const int y_last = extent.y + extent.height;
 
     // apply distortion to all points (this is a simple displacement given by a vector at this same point in the map)
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-    schedule(static) if(points_count > 100)
-#endif
+__OMP_PARALLEL_FOR__(if(points_count > 100))
     for(size_t i = 0; i < points_count; i++)
     {
       float *px = &points[i*2];
@@ -1481,10 +1472,7 @@ void distort_mask(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t 
   (void)pipe;
   // 1. copy the whole image (we'll change only a small part of it)
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(int i = 0; i < roi_out->height; i++)
   {
     float *destrow = out + (size_t) i * roi_out->width;
@@ -1525,10 +1513,7 @@ int process(struct dt_iop_module_t *module, const dt_dev_pixelpipe_t *pipe, cons
   const int height = MIN(roi_in->height, roi_out->height);
   const int width = MIN(roi_in->width, roi_out->width);
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(int i = 0; i < height; i++)
   {
     float *destrow = (float *)out + (size_t)ch * i * roi_out->width;

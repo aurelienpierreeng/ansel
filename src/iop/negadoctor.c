@@ -284,10 +284,7 @@ int process(struct dt_iop_module_t *const self, const dt_dev_pixelpipe_t *const 
   float *const restrict out = (float *)ovoid;
 
 
-#ifdef _OPENMP
-  #pragma omp parallel for simd default(firstprivate) \
-    aligned(in, out:64) collapse(2)
-#endif
+__OMP_FOR_SIMD__(aligned(in, out:64) collapse(2))
   for(size_t k = 0; k < (size_t)roi_out->height * roi_out->width * 4; k += 4)
   {
     for(size_t c = 0; c < 4; c++)

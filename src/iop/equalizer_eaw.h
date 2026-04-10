@@ -60,11 +60,7 @@ static int dt_iop_equalizer_wtf(float *const buf, float **weight_a, const int l,
   float *const restrict tmp_width_buf = dt_pixelpipe_cache_alloc_perthread_float(width, &scratch_size);
   if(tmp_width_buf == NULL) return 1;
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  private(ch) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__(private(ch) )
   for(int j = 0; j < height; j++)
   {
     // rows
@@ -94,11 +90,7 @@ static int dt_iop_equalizer_wtf(float *const buf, float **weight_a, const int l,
   float *const restrict tmp_height_buf = dt_pixelpipe_cache_alloc_perthread_float(height, &scratch_size);
   if(tmp_height_buf == NULL) return 1;
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  private(ch) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__(private(ch) )
   for(int i = 0; i < width; i++)
   {
     // cols
@@ -137,10 +129,7 @@ static int dt_iop_equalizer_iwtf(float *buf, float **weight_a, const int l, cons
   float *const restrict tmp_height_buf = dt_pixelpipe_cache_alloc_perthread_float(height, &scratch_size);
   if(tmp_height_buf == NULL) return 1;
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(int i = 0; i < width; i++)
   {
     // cols
@@ -169,10 +158,7 @@ static int dt_iop_equalizer_iwtf(float *buf, float **weight_a, const int l, cons
   float *const restrict tmp_width_buf = dt_pixelpipe_cache_alloc_perthread_float(width, &scratch_size);
   if(tmp_width_buf == NULL) return 1;
   
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(int j = 0; j < height; j++)
   {
     // rows

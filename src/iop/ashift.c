@@ -1002,10 +1002,7 @@ int distort_transform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   const float cx = fullwidth * data->cl;
   const float cy = fullheight * data->ct;
 
-#ifdef _OPENMP
-#pragma omp parallel for simd default(firstprivate) \
-  schedule(static) if(points_count > 100) aligned(points, homograph:64)
-#endif
+__OMP_PARALLEL_FOR_SIMD__(if(points_count > 100) aligned(points, homograph:64))
   for(size_t i = 0; i < points_count * 2; i += 2)
   {
     float DT_ALIGNED_PIXEL pi[3] = { points[i], points[i + 1], 1.0f };
@@ -1037,10 +1034,7 @@ int distort_backtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
   const float cx = fullwidth * data->cl;
   const float cy = fullheight * data->ct;
 
-#ifdef _OPENMP
-#pragma omp parallel for simd default(firstprivate) \
-  schedule(static) if(points_count > 100) aligned(ihomograph, points:64)
-#endif
+__OMP_PARALLEL_FOR_SIMD__(if(points_count > 100) aligned(ihomograph, points:64))
   for(size_t i = 0; i < points_count * 2; i += 2)
   {
     float DT_ALIGNED_PIXEL pi[3] = { points[i] + cx, points[i + 1] + cy, 1.0f };
@@ -1079,10 +1073,7 @@ void distort_mask(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t 
   const float cx = roi_out->scale * fullwidth * data->cl;
   const float cy = roi_out->scale * fullheight * data->ct;
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   // go over all pixels of output image
   for(int j = 0; j < roi_out->height; j++)
   {
@@ -1255,10 +1246,7 @@ static void rgb2grey256(const float *const in, double *const out, const int widt
 {
   const size_t npixels = (size_t)width * height;
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(int index = 0; index < npixels; index++)
   {
     out[index] = (0.3f * in[4*index+0] + 0.59f * in[4*index+1] + 0.11f * in[4*index+2]) * 256.0;
@@ -1278,10 +1266,7 @@ static void edge_enhance_1d(const double *in, double *out, const int width, cons
   // select kernel
   const double *kernel = (dir == ASHIFT_ENHANCE_HORIZONTAL) ? (const double *)hkernel : (const double *)vkernel;
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   // loop over image pixels and perform sobel convolution
   for(int j = khwidth; j < height - khwidth; j++)
   {
@@ -1303,10 +1288,7 @@ static void edge_enhance_1d(const double *in, double *out, const int width, cons
     }
   }
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   // border fill in output buffer, so we don't get pseudo lines at image frame
   for(int j = 0; j < height; j++)
     for(int i = 0; i < width; i++)
@@ -1346,10 +1328,7 @@ static int edge_enhance(const double *in, double *out, const int width, const in
   edge_enhance_1d(in, Gy, width, height, ASHIFT_ENHANCE_VERTICAL);
 
 // calculate absolute values
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < (size_t)width * height; k++)
   {
     out[k] = sqrt(Gx[k] * Gx[k] + Gy[k] * Gy[k]);
@@ -1394,10 +1373,7 @@ static int detail_enhance(const float *const in, float *const out, const int wid
   // as colors don't matter we are safe to assume data to be sRGB
 
   // convert RGB input to Lab, use output buffer for intermediate storage
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(size_t index = 0; index < 4*npixels; index += 4)
   {
     dt_aligned_pixel_t XYZ;
@@ -1419,10 +1395,7 @@ static int detail_enhance(const float *const in, float *const out, const int wid
     success = FALSE;
 
   // convert resulting Lab to RGB output
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(size_t index = 0; index < 4*npixels; index += 4)
   {
     dt_aligned_pixel_t XYZ;
@@ -1437,10 +1410,7 @@ static int detail_enhance(const float *const in, float *const out, const int wid
 static void gamma_correct(const float *const in, float *const out, const int width, const int height)
 {
   const size_t npixels = (size_t)width * height;
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(int index = 0; index < 4*npixels; index += 4)
   {
     for(int c = 0; c < 3; c++)
@@ -3459,10 +3429,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const float cx = roi_out->scale * fullwidth * data->cl;
   const float cy = roi_out->scale * fullheight * data->ct;
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   // go over all pixels of output image
   for(int j = 0; j < roi_out->height; j++)
   {

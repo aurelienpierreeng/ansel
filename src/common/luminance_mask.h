@@ -70,9 +70,7 @@ typedef enum dt_iop_luminance_mask_method_t
  * backfire in the exposure computations.
  **/
 
-#ifdef _OPENMP
-#pragma omp declare simd
-#endif
+__OMP_DECLARE_SIMD__()
 static float linear_contrast(const float pixel, const float fulcrum, const float contrast)
 {
   // Increase the slope of the value around a fulcrum value
@@ -80,9 +78,7 @@ static float linear_contrast(const float pixel, const float fulcrum, const float
 }
 
 
-#ifdef _OPENMP
-#pragma omp declare simd aligned(image, luminance:64) uniform(image, luminance)
-#endif
+__OMP_DECLARE_SIMD__(aligned(image, luminance:64) uniform(image, luminance))
 static void pixel_rgb_mean(const float *const restrict image,
                            float *const restrict luminance,
                            const size_t k, const size_t ch,
@@ -93,9 +89,7 @@ static void pixel_rgb_mean(const float *const restrict image,
 
   float lum = 0.0f;
 
-#ifdef _OPENMP
-#pragma omp simd reduction(+:lum) aligned(image:64)
-#endif
+__OMP_SIMD__(reduction(+:lum) aligned(image:64))
   for(int c = 0; c < 3; ++c)
     lum += image[k + c];
 
@@ -103,9 +97,7 @@ static void pixel_rgb_mean(const float *const restrict image,
 }
 
 
-#ifdef _OPENMP
-#pragma omp declare simd aligned(image, luminance:64) uniform(image, luminance)
-#endif
+__OMP_DECLARE_SIMD__(aligned(image, luminance:64) uniform(image, luminance))
 static void pixel_rgb_value(const float *const restrict image,
                             float *const restrict luminance,
                             const size_t k, const size_t ch,
@@ -119,9 +111,7 @@ static void pixel_rgb_value(const float *const restrict image,
 }
 
 
-#ifdef _OPENMP
-#pragma omp declare simd aligned(image, luminance:64) uniform(image, luminance)
-#endif
+__OMP_DECLARE_SIMD__(aligned(image, luminance:64) uniform(image, luminance))
 static void pixel_rgb_lightness(const float *const restrict image,
                                 float *const restrict luminance,
                                 const size_t k, const size_t ch,
@@ -135,9 +125,7 @@ static void pixel_rgb_lightness(const float *const restrict image,
   luminance[k / ch] = linear_contrast(exposure_boost * (max_rgb + min_rgb) / 2.0f, fulcrum, contrast_boost);
 }
 
-#ifdef _OPENMP
-#pragma omp declare simd aligned(image, luminance:64) uniform(image, luminance)
-#endif
+__OMP_DECLARE_SIMD__(aligned(image, luminance:64) uniform(image, luminance))
 static void pixel_rgb_norm_1(const float *const restrict image,
                              float *const restrict luminance,
                              const size_t k, const size_t ch,
@@ -147,10 +135,7 @@ static void pixel_rgb_norm_1(const float *const restrict image,
   // vector norm L1
 
   float lum = 0.0f;
-
-  #ifdef _OPENMP
-  #pragma omp simd reduction(+:lum) aligned(image:64)
-  #endif
+__OMP_SIMD__(reduction(+:lum) aligned(image:64))
     for(int c = 0; c < 3; ++c)
       lum += fabsf(image[k + c]);
 
@@ -158,9 +143,7 @@ static void pixel_rgb_norm_1(const float *const restrict image,
 }
 
 
-#ifdef _OPENMP
-#pragma omp declare simd aligned(image, luminance:64) uniform(image, luminance)
-#endif
+__OMP_DECLARE_SIMD__(aligned(image, luminance:64) uniform(image, luminance))
 static void pixel_rgb_norm_2(const float *const restrict image,
                              float *const restrict luminance,
                              const size_t k, const size_t ch,
@@ -171,18 +154,14 @@ static void pixel_rgb_norm_2(const float *const restrict image,
 
   float result = 0.0f;
 
-#ifdef _OPENMP
-#pragma omp simd aligned(image:64) reduction(+: result)
-#endif
+__OMP_SIMD__(aligned(image:64) reduction(+: result))
   for(int c = 0; c < 3; ++c) result += image[k + c] * image[k + c];
 
   luminance[k / ch] = linear_contrast(exposure_boost * sqrtf(result), fulcrum, contrast_boost);
 }
 
 
-#ifdef _OPENMP
-#pragma omp declare simd aligned(image, luminance:64) uniform(image, luminance)
-#endif
+__OMP_DECLARE_SIMD__(aligned(image, luminance:64) uniform(image, luminance))
 static void pixel_rgb_norm_power(const float *const restrict image,
                                  float *const restrict luminance,
                                  const size_t k, const size_t ch,
@@ -194,9 +173,7 @@ static void pixel_rgb_norm_power(const float *const restrict image,
   float numerator = 0.0f;
   float denominator = 0.0f;
 
-#ifdef _OPENMP
-#pragma omp simd aligned(image:64) reduction(+:numerator, denominator)
-#endif
+__OMP_SIMD__(aligned(image:64) reduction(+:numerator, denominator))
   for(int c = 0; c < 3; ++c)
   {
     const float value = fabsf(image[k + c]);
@@ -209,9 +186,7 @@ static void pixel_rgb_norm_power(const float *const restrict image,
   luminance[k / ch] = linear_contrast(exposure_boost * numerator / denominator, fulcrum, contrast_boost);
 }
 
-#ifdef _OPENMP
-#pragma omp declare simd aligned(image, luminance:64) uniform(image, luminance)
-#endif
+__OMP_DECLARE_SIMD__(aligned(image, luminance:64) uniform(image, luminance))
 static void pixel_rgb_geomean(const float *const restrict image,
                               float *const restrict luminance,
                               const size_t k, const size_t ch,
@@ -222,9 +197,7 @@ static void pixel_rgb_geomean(const float *const restrict image,
 
   float lum = 1.0f;
 
-#ifdef _OPENMP
-#pragma omp simd aligned(image:64) reduction(*:lum)
-#endif
+__OMP_SIMD__(aligned(image:64) reduction(*:lum))
   for(int c = 0; c < 3; ++c)
   {
     lum *= fabsf(image[k + c]);
@@ -240,7 +213,7 @@ static void pixel_rgb_geomean(const float *const restrict image,
 #ifdef _OPENMP
   #define LOOP(fn)                                                        \
     {                                                                     \
-      _Pragma ("omp parallel for simd default(firstprivate) schedule(static)\
+      _Pragma ("omp parallel for simd default(firstprivate) \
       aligned(in, out:64)" )                                              \
       for(size_t k = 0; k < num_elem; k += ch)                            \
       {                                                                   \

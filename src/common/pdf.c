@@ -808,9 +808,7 @@ float * read_ppm(const char * filename, int * wd, int * ht)
       return NULL;
     }
     // and transform it into 0..1 range
-    #ifdef _OPENMP
-    #pragma omp parallel for schedule(static) default(firstprivate) 
-    #endif
+__OMP_PARALLEL_FOR__()
     for(int i = 0; i < width * height * 3; i++)
       image[i] = (float)tmp[i] / max;
     dt_free(tmp);
@@ -829,15 +827,11 @@ float * read_ppm(const char * filename, int * wd, int * ht)
       return NULL;
     }
     // swap byte order
-    #ifdef _OPENMP
-    #pragma omp parallel for schedule(static) default(firstprivate) 
-    #endif
+__OMP_PARALLEL_FOR__()
     for(int k = 0; k < 3 * width * height; k++)
       tmp[k] = ((tmp[k] & 0xff) << 8) | (tmp[k] >> 8);
     // and transform it into 0..1 range
-    #ifdef _OPENMP
-    #pragma omp parallel for schedule(static) default(firstprivate) 
-    #endif
+__OMP_PARALLEL_FOR__()
     for(int i = 0; i < width * height * 3; i++)
       image[i] = (float)tmp[i] / max;
     dt_free(tmp);
@@ -891,9 +885,7 @@ int main(int argc, char *argv[])
       exit(1);
     }
 
-#ifdef _OPENMP
-  #pragma omp parallel for schedule(static) default(firstprivate) 
-#endif
+__OMP_PARALLEL_FOR__()
     for(int i = 0; i < width * height * 3; i++)
       data[i] = CLIP(image[i]) * 65535;
 

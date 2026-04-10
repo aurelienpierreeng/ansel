@@ -476,10 +476,7 @@ static inline void apply_legacy_curve(
     const float *const unbounded_coeffs)
 {
   const size_t npixels = (size_t)width * height;
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < 4*npixels; k += 4)
   {
     for(int i = 0; i < 3; i++)
@@ -509,10 +506,7 @@ static inline void apply_curve(
     const dt_iop_order_iccprofile_info_t *const work_profile)
 {
   const size_t npixels = (size_t)width * height;
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < 4*npixels; k += 4)
   {
     float ratio = 1.f;
@@ -545,10 +539,7 @@ static inline void compute_features(
   // 2) saturation
   // 3) local contrast (handled in laplacian form later)
   const size_t npixels = (size_t)wd * ht;
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(size_t x = 0; x < 4*npixels; x += 4)
   {
     const float max = MAX(col[x], MAX(col[x+1], col[x+2]));
@@ -577,10 +568,7 @@ static inline int gauss_blur(
   if(tmp == NULL) return 1;
 
   memset(tmp, 0, sizeof(float) * 4 * wd * ht);
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(int j=0;j<ht;j++)
   { // horizontal pass
     // left borders
@@ -597,10 +585,7 @@ static inline int gauss_blur(
         tmp[4*(j*wd+i)+c] += input[4*(j*wd+MIN(i+ii, wd-(i+ii-wd+1) ))+c] * w[ii+2];
   }
   memset(output, 0, sizeof(float) * 4 * wd * ht);
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(int i=0;i<wd;i++)
   { // vertical pass
     for(int j=0;j<2;j++) for(int c=0;c<4;c++)
@@ -627,11 +612,7 @@ static inline int gauss_expand(
   const size_t cw = (wd-1)/2+1;
   // fill numbers in even pixels, zero odd ones
   memset(fine, 0, sizeof(float) * 4 * wd * ht);
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static) \
-  collapse(2)
-#endif
+__OMP_PARALLEL_FOR__(collapse(2))
   for(int j=0;j<ht;j+=2)
     for(int i=0;i<wd;i+=2)
       for(int c=0;c<4;c++)
@@ -751,10 +732,7 @@ int process_fusion(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *p
       err = 1;
       goto error;
     }
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-    schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
     for(size_t k = 0; k < 4ul * wd * ht; k += 4)
       col[0][k + 3] *= .1f + sqrtf(out[k] * out[k] + out[k + 1] * out[k + 1] + out[k + 2] * out[k + 2]);
 
@@ -799,10 +777,7 @@ int process_fusion(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *p
           goto error;
         }
       }
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-      schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
       for(size_t x = 0; x < (size_t)4 * h * w; x += 4)
       {
         // blend images into output pyramid
@@ -838,9 +813,7 @@ int process_fusion(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *p
     }
 
     // normalise both gaussian base and laplacians:
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate)  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
     for(size_t i = 0; i < (size_t)4 * w * h; i += 4)
       if(comb[k][i + 3] > 1e-8f)
         for(int c = 0; c < 3; c++) comb[k][i + c] /= comb[k][i + 3];
@@ -852,10 +825,7 @@ int process_fusion(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *p
         err = 1;
         goto error;
       }
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-      schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
       for(size_t x = 0; x < (size_t)4 * h * w; x += 4)
         {
         for(int c = 0; c < 3; c++)
@@ -865,10 +835,7 @@ int process_fusion(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *p
   }
 #endif
   // copy output buffer
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate) \
-  schedule(static)
-#endif
+__OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < (size_t)4 * wd * ht; k += 4)
   {
     out[k + 0] = fmaxf(comb[0][k + 0], 0.f);

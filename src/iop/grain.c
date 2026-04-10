@@ -520,9 +520,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const float fib1div2 = fib1 / fib2;
 
 
-#ifdef _OPENMP
-#pragma omp parallel for default(firstprivate)
-#endif
+__OMP_PARALLEL_FOR__()
   for(int j = 0; j < roi_out->height; j++)
   {
     float *in = ((float *)ivoid) + (size_t)roi_out->width * j * ch;
