@@ -94,7 +94,7 @@ jobs:
       - name: Build and Install
         run: |
           cd src
-          sh .ci/ci-script-appimage.sh
+          bash .ci/ci-script-appimage.sh
       - name: Package upload
         if: ${{ success() }}
         uses: actions/upload-artifact@v6

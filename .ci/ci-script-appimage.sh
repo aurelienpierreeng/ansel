@@ -19,13 +19,17 @@
 #   
 # Build Ansel within an AppDir directory
 # Then package it as an .AppImage
-# Call this script from the Ansel root folder like `sh .ci/ci-script-appimage.sh`
+# Call this script from the Ansel root folder like `bash .ci/ci-script-appimage.sh`
 # Copyright (c) Aurélien Pierre - 2022
 #   
 # For local builds, purge and clean build pathes if any
 #if [ -d "build" ];
 #then yes | rm -R build;
 #fi;
+
+if [ -z "${BASH_VERSION:-}" ]; then
+  exec bash "$0" "$@"
+fi
 
 if [ -d "AppDir" ];
 then yes | rm -R AppDir;
