@@ -882,7 +882,7 @@ void dt_dev_add_history_item_real(dt_develop_t *dev, dt_iop_module_t *module, gb
     if(cache_img)
     {
       cache_img->history_hash = dt_dev_get_history_hash(dev);
-      cache_img->mipmap_hash = UINT64_MAX;
+      cache_img->mipmap_hash = 0;
       dt_print(DT_DEBUG_IMAGEIO,
                "[history/hash] imgid=%d staged current=%" PRIu64 " mipmap=%" PRIu64
                " after history edit\n",

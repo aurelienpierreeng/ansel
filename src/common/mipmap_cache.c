@@ -115,7 +115,7 @@ static const int dt_mipmap_cache_exif_data_adobergb_length
 static gboolean _mipmap_cache_disk_hash_matches(const int32_t imgid, const dt_mipmap_size_t mip)
 {
   uint64_t history_hash = UINT64_MAX;
-  uint64_t mipmap_hash = UINT64_MAX;
+  uint64_t mipmap_hash = 0;
   const dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
   if(img)
   {
