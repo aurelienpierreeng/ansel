@@ -253,15 +253,15 @@ typedef unsigned int u_int;
 # define omp_get_max_threads() 1
 # define omp_get_thread_num() 0
 
-#define __OMP_PARALLEL__() 
-#define __OMP_PARALLEL_FOR__()
-#define __OMP_PARALLEL_FOR_SIMD__()
-#define __OMP_FOR_SIMD__()
-#define __OMP_FOR__()
-#define __OMP_SIMD__()
-#define __OMP_DECLARE_SIMD__()
+#define __OMP_PARALLEL__(...) 
+#define __OMP_PARALLEL_FOR__(...)
+#define __OMP_PARALLEL_FOR_SIMD__(...)
+#define __OMP_FOR_SIMD__(...)
+#define __OMP_FOR__(...)
+#define __OMP_SIMD__(...)
+#define __OMP_DECLARE_SIMD__(...)
 
-#define __OMP_PARALLEL_FOR_CPP__()
+#define __OMP_PARALLEL_FOR_CPP__(...)
 
 #endif /* _OPENMP */
 
