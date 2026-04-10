@@ -126,8 +126,8 @@ static gboolean _mipmap_cache_disk_hash_matches(const int32_t imgid)
 
   const gboolean matches
       = history_hash != UINT64_MAX && mipmap_hash != UINT64_MAX && mipmap_hash == history_hash;
-  dt_print(DT_DEBUG_IMAGEIO,
-           "[mipmap/hash] imgid=%d disk-check current=%" PRIu64 " mipmap=%" PRIu64 " match=%d\n",
+  dt_print(DT_DEBUG_CACHE,
+           "[mipmap/hash] imgid=%d disk-check history=%" PRIu64 " mipmap=%" PRIu64 " match=%d\n",
            imgid, history_hash, mipmap_hash, matches);
   return matches;
 }
@@ -142,7 +142,7 @@ static uint64_t _mipmap_cache_get_history_hash(const int32_t imgid)
     dt_image_cache_read_release(darktable.image_cache, img);
   }
 
-  dt_print(DT_DEBUG_IMAGEIO, "[mipmap/hash] imgid=%d read current=%" PRIu64 "\n", imgid, history_hash);
+  dt_print(DT_DEBUG_CACHE, "[mipmap/hash] imgid=%d read current=%" PRIu64 "\n", imgid, history_hash);
   return history_hash;
 }
 
@@ -183,8 +183,14 @@ static inline void *dead_image_8(struct dt_mipmap_buffer_dsc *dsc)
   const uint32_t X = 0xffffffffu;
   const uint32_t o = 0u;
   const uint32_t image[]
-      = { o, o, o, o, o, o, o, o, o, o, X, X, X, X, o, o, o, X, o, X, X, o, X, o, o, X, X, X, X, X, X, o,
-          o, o, X, o, o, X, o, o, o, o, o, o, o, o, o, o, o, o, X, X, X, X, o, o, o, o, o, o, o, o, o, o };
+      = { o, o, o, o, o, o, o, o, 
+          o, o, X, X, X, X, o, o, 
+          o, X, o, X, X, o, X, o, 
+          o, X, X, X, X, X, X, o,
+          o, o, X, o, o, X, o, o, 
+          o, o, o, o, o, o, o, o, 
+          o, o, X, X, X, X, o, o, 
+          o, o, o, o, o, o, o, o };
   memcpy(_get_buffer_from_dsc(dsc), image, sizeof(uint32_t) * 64);
   return _get_buffer_from_dsc(dsc);
 }
@@ -535,7 +541,7 @@ void dt_mipmap_cache_allocate_dynamic(void *data, dt_cache_entry_t *entry)
 
     if(!_mipmap_cache_disk_hash_matches(imgid))
     {
-      dt_print(DT_DEBUG_IMAGEIO,
+      dt_print(DT_DEBUG_CACHE,
                "[mipmap/hash] imgid=%d mip=%d reject disk thumbnail due to hash mismatch\n",
                imgid, mip);
       g_unlink(filename);
@@ -545,7 +551,7 @@ void dt_mipmap_cache_allocate_dynamic(void *data, dt_cache_entry_t *entry)
     f = g_fopen(filename, "rb");
     if(f == NULL)
     {
-      dt_print(DT_DEBUG_IMAGEIO,
+      dt_print(DT_DEBUG_CACHE,
                "[mipmap/hash] imgid=%d mip=%d disk thumbnail missing at `%s'\n",
                imgid, mip, filename);
       goto finish; // file doesn't exist
@@ -601,7 +607,7 @@ void dt_mipmap_cache_allocate_dynamic(void *data, dt_cache_entry_t *entry)
     dsc->iscale = 1.0f;
     dsc->color_space = color_space;
     dsc->flags = 0;
-    dt_print(DT_DEBUG_IMAGEIO,
+    dt_print(DT_DEBUG_CACHE,
              "[mipmap/hash] imgid=%d mip=%d reuse disk thumbnail from `%s'\n",
              imgid, mip, filename);
 
@@ -713,6 +719,7 @@ write_error:
             else
             {
               wrote_to_disk = TRUE;
+              dt_print(DT_DEBUG_CACHE, "image %i for size %i was written to cache at %s\n", imgid, mip, filename);
             }
           }
           if(f) fclose(f);
@@ -780,12 +787,12 @@ void dt_mipmap_cache_init(dt_mipmap_cache_t *cache)
   dt_cache_set_allocate_callback(&cache->mip_thumbs.cache, dt_mipmap_cache_allocate_dynamic, cache);
   dt_cache_set_cleanup_callback(&cache->mip_thumbs.cache, dt_mipmap_cache_deallocate_dynamic, cache);
 
-  dt_cache_init(&cache->mip_full.cache, 0, darktable.num_openmp_threads + DT_CTL_WORKER_RESERVED);
+  dt_cache_init(&cache->mip_full.cache, 0, DT_CTL_WORKER_RESERVED);
   dt_cache_set_allocate_callback(&cache->mip_full.cache, dt_mipmap_cache_allocate_dynamic, cache);
   dt_cache_set_cleanup_callback(&cache->mip_full.cache, dt_mipmap_cache_deallocate_dynamic, cache);
   cache->buffer_size[DT_MIPMAP_FULL] = 0;
 
-  dt_cache_init(&cache->mip_f.cache, 0, darktable.num_openmp_threads + DT_CTL_WORKER_RESERVED);
+  dt_cache_init(&cache->mip_f.cache, 0, DT_CTL_WORKER_RESERVED);
   dt_cache_set_allocate_callback(&cache->mip_f.cache, dt_mipmap_cache_allocate_dynamic, cache);
   dt_cache_set_cleanup_callback(&cache->mip_f.cache, dt_mipmap_cache_deallocate_dynamic, cache);
   cache->buffer_size[DT_MIPMAP_F]
@@ -972,11 +979,6 @@ static void _generate_blocking(dt_cache_entry_t *entry, dt_mipmap_buffer_t *buf,
              imgid, dsc->width, dsc->height);
     _init_8((uint8_t *)_get_buffer_from_dsc(dsc), &dsc->width, &dsc->height, &dsc->iscale, &dsc->color_space, imgid,
             mip, shutdown);
-    if(dsc->width > 0 && dsc->height > 0)
-    {
-      const uint64_t history_hash = _mipmap_cache_get_history_hash(imgid);
-      dt_history_hash_set_mipmap(imgid, history_hash, DT_IMAGE_CACHE_RELAXED);
-    }
   }
 
   if(shutdown && dt_atomic_get_int(shutdown))
@@ -1104,7 +1106,7 @@ dt_mipmap_size_t dt_mipmap_cache_get_matching_size(const dt_mipmap_cache_t *cach
   {
     if((cache->max_width[k] >= width) && (cache->max_height[k] >= height))
     {
-      dt_print(DT_DEBUG_IMAGEIO, "[dt_mipmap_cache_get_matching_size] will load a mipmap of size %lux%lu px\n", cache->max_width[k], cache->max_height[k]);
+      dt_print(DT_DEBUG_CACHE, "[dt_mipmap_cache_get_matching_size] will load a mipmap of size %lux%lu px\n", cache->max_width[k], cache->max_height[k]);
       return k;
     }
   }

@@ -1085,9 +1085,6 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
     goto error;
   }
 
-  if(thumbnail_export)
-    dt_history_hash_set_mipmap(imgid, dt_dev_get_history_hash(&dev), DT_IMAGE_CACHE_RELAXED);
-
   struct dt_pixel_cache_entry_t *cache_entry;
   void *data = NULL;
   if(!dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, dt_dev_backbuf_get_hash(&pipe.backbuf), &data,
