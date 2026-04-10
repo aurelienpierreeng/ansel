@@ -90,6 +90,14 @@ jobs:
         if: matrix.rosetta
         run: |
           softwareupdate --install-rosetta --agree-to-license || true
+      # For non-native x86 build, we need to install the x86 Homebrew first
+      - name: Install Intel Homebrew
+        if: matrix.arch == 'x86_64'
+        run: |
+          if [ ! -x /usr/local/bin/brew ]; then
+            arch -x86_64 /bin/bash -c \
+              "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+          fi
       - name: Install Base Dependencies
         run: |
           "${SRC_DIR}"/packaging/install-deps-macos.sh ${{ matrix.arch }}
