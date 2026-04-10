@@ -1221,9 +1221,12 @@ static void _darkroom_image_loaded_callback(gpointer instance, guint request_id,
 
   dt_image_check_camera_missing_sample(&dev->image_storage);
 
+  // clear selection, we don't want selections in darkroom
+  dt_selection_clear(darktable.selection);
+
   // change active image for global actions (menu)
   dt_view_active_images_reset(FALSE);
-  dt_view_active_images_add(dev->image_storage.id, FALSE);
+  dt_view_active_images_add(dev->image_storage.id, TRUE);
 
   dt_control_queue_redraw_center();
 
@@ -2251,9 +2254,6 @@ void enter(dt_view_t *self)
   dt_thumbtable_show(darktable.gui->ui->thumbtable_filmstrip);
   gtk_widget_show(dt_ui_center(darktable.gui->ui));
   dt_thumbtable_update_parent(darktable.gui->ui->thumbtable_filmstrip);
-
-  // clear selection, we don't want selections in darkroom
-  dt_selection_clear(darktable.selection);
 
   /* connect signal for filmstrip image activate */
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_VIEWMANAGER_THUMBTABLE_ACTIVATE,
