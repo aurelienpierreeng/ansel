@@ -917,8 +917,7 @@ static void _mask_waveform(const uint8_t *const restrict image, uint8_t *const r
 {
   // Channel masking, aka extract the desired channel out of the RGBa image
   uint8_t mask[4] = { 0, 0, 0, 0 };
-  for(size_t k = 0; k < 4; k++)
-    if(k == channel) mask[k] = 1;
+  mask[channel] = 1;
 
   __OMP_PARALLEL_FOR__(collapse(2))
   for(size_t i = 0; i < height; i++)
