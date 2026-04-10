@@ -43,12 +43,14 @@ jobs:
       fail-fast: false
       matrix:
         build:
-          - { os: macos-15, xcode: 26.3, deployment: 15.0 } # AppleClang 17, arm64
+          - { os: macos-15, xcode: 26.3, deployment: 15.0, tag: "arm64" } # AppleClang 17, arm64
+          - { os: macos-15-intel, xcode: 26.3, deployment: 15.0, tag: "intel64" } # AppleClang 17, arm64
         btype:
           - Release
         compiler:
           - { compiler: XCode,   CC: cc, CXX: c++ }
-        eco: [-DBINARY_PACKAGE_BUILD=OFF -DUSE_GRAPHICSMAGICK=ON -DUSE_IMAGEMAGICK=OFF]
+        # Note: target_clones are disabled in the source code for ARM64, so enable the build flag unconditionnaly
+        eco: [-DBINARY_PACKAGE_BUILD=OFF -DUSE_GRAPHICSMAGICK=ON -DUSE_IMAGEMAGICK=OFF -DDT_APPLE_X86_TARGET_CLONES=1]
         target:
           - skiptest # In the case the generic .ci/ci-script.sh script is used.
                      # But in our case, we invoke the more specific .ci/ci-script-mac.sh script
@@ -101,7 +103,7 @@ jobs:
         if: ${{ success() }}
         uses: actions/upload-artifact@v4
         with:
-          name: ansel.${{ env.BUILD_NAME }}.mac
+          name: ansel.${{ env.BUILD_NAME }}-${{ matrix.build.tag }}.mac
           path: ${{ env.INSTALL_PREFIX }}/Ansel-*.dmg
           retention-days: 90
 
@@ -121,7 +123,11 @@ jobs:
       - name: Download artifact
         uses: actions/download-artifact@v4
         with:
-          name: ansel.stable.mac
+          name: ansel.stable-intel64.mac
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ansel.stable-arm64.mac
       - name: Update nightly release
         uses: aurelienpierreeng/tip@master
         with:
