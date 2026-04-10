@@ -107,7 +107,7 @@ jobs:
           lensfun-update-data
       - name: Build and Install
         run: |
-          if [[ "${TARGET_ARCH}" == "x86_64" ]]; then
+          if [[ "${{ matrix.arch }}" == "x86_64" ]]; then
             CMAKE_BIN="/usr/local/bin/cmake"
             NINJA_BIN="/usr/local/bin/ninja"
             ARCH_CMD="arch -x86_64"
