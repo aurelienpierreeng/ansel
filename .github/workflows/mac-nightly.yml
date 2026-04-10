@@ -120,7 +120,7 @@ jobs:
           ${CMAKE_BIN} -E make_directory "${BUILD_DIR}";
           ${CMAKE_BIN} -E make_directory "${INSTALL_PREFIX}";
           cd "${BUILD_DIR}"
-          ${ARCH_CMD} ${CMAKE_BIN}} cmake .. \
+          ${ARCH_CMD} ${CMAKE_BIN} cmake .. \
           -G "${GENERATOR}" \
           -DCMAKE_INSTALL_PREFIX="${INSTALL_PREFIX}"\
           -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
