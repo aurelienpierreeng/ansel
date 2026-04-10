@@ -1,59 +1,29 @@
 #!/usr/bin/env bash
-# This file is part of the Ansel project.
-# Copyright (C) 2026 Aurélien PIERRE.
+#   This file is part of the Ansel project.
+#   Copyright (C) 2026 Aurélien PIERRE.
+#   
+#   Ansel is free software: you can redistribute it and/or modify
+#   it under the terms of the GNU General Public License as published by
+#   the Free Software Foundation, either version 3 of the License, or
+#   (at your option) any later version.
+#   
+#   Ansel is distributed in the hope that it will be useful,
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#   GNU General Public License for more details.
+#   
+#   You should have received a copy of the GNU General Public License
+#   along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 
+# Created: 2026-02-16
 set -euo pipefail
 
-TARGET_ARCH="${1:-native}"
-
-resolve_brew() {
-  case "${TARGET_ARCH}" in
-    arm64)
-      if [[ -x /opt/homebrew/bin/brew ]]; then
-        printf '%s\n' /opt/homebrew/bin/brew
-      else
-        command -v brew || true
-      fi
-      ;;
-    x86_64)
-      if [[ -x /usr/local/bin/brew ]]; then
-        printf '%s\n' /usr/local/bin/brew
-      else
-        command -v brew || true
-      fi
-      ;;
-    native)
-      command -v brew || true
-      ;;
-  esac
-}
-
-BREW_BIN="${BREW_BIN:-$(resolve_brew)}"
-
-if [[ -z "${BREW_BIN}" || ! -x "${BREW_BIN}" ]]; then
-  echo "Homebrew not found for TARGET_ARCH=${TARGET_ARCH}." >&2
-  echo "Expected one of:" >&2
-  echo "  /opt/homebrew/bin/brew  (Apple Silicon)" >&2
-  echo "  /usr/local/bin/brew     (Intel / Rosetta)" >&2
+if ! command -v brew >/dev/null 2>&1; then
+  echo 'Homebrew not found. Install it from https://brew.sh/.' >&2
   exit 1
 fi
 
-BREW_CMD=("${BREW_BIN}")
-
-# If an Apple Silicon machine is explicitly asked to use Intel Homebrew,
-# run brew itself under Rosetta.
-if [[ "$(uname -m)" == "arm64" && "${TARGET_ARCH}" == "x86_64" ]]; then
-  BREW_CMD=(arch -x86_64 "${BREW_BIN}")
-fi
-
-# Force native arm execution when requested on Apple Silicon.
-if [[ "$(uname -m)" == "arm64" && "${TARGET_ARCH}" == "arm64" ]]; then
-  BREW_CMD=(arch -arm64 "${BREW_BIN}")
-fi
-
-echo "Using Homebrew: ${BREW_BIN}"
-"${BREW_CMD[@]}" --prefix
-"${BREW_CMD[@]}" update
+brew update
 
 HB_PACKAGES=(
   adwaita-icon-theme
@@ -100,15 +70,18 @@ HB_PACKAGES=(
 )
 
 brew_install_status=0
-if "${BREW_CMD[@]}" install "${HB_PACKAGES[@]}"; then
+if brew install "${HB_PACKAGES[@]}"; then
   :
 else
   brew_install_status=$?
 fi
 
+# Homebrew may return a non-zero status when a formula post-install hook fails even if
+# the formula itself was installed. We only continue when every requested dependency is
+# present, because the build only needs the packages to exist in the Cellar.
 missing_packages=()
 for package in "${HB_PACKAGES[@]}"; do
-  if ! "${BREW_CMD[@]}" list --formula "${package}" >/dev/null 2>&1; then
+  if ! brew list --formula "${package}" >/dev/null 2>&1; then
     missing_packages+=("${package}")
   fi
 done
@@ -123,6 +96,4 @@ if (( brew_install_status != 0 )); then
 fi
 
 # Handle keg-only libs.
-"${BREW_CMD[@]}" link --force libomp libsoup@2
-
-echo "Dependency installation complete for ${TARGET_ARCH}"
+brew link --force libomp libsoup@2
