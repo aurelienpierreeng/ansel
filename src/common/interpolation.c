@@ -963,8 +963,7 @@ static void _interpolation_resample_plain(const struct dt_interpolation *itor,
   {
     const size_t x0 = (roi_out->x - roi_in->x) * 4 * sizeof(float);
     const size_t y0 = (roi_out->y - roi_in->y);
-
-__OMP_PARALLEL_FOR__()
+    __OMP_PARALLEL_FOR__()
     for(int y = 0; y < roi_out->height; y++)
     {
       memcpy((char *)__builtin_assume_aligned(out, 64) + (size_t)out_stride_floats * sizeof(float) * y,
@@ -993,7 +992,7 @@ __OMP_PARALLEL_FOR__()
   const size_t width = roi_out->width;
 
   // Process each output line
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t oy = 0; oy < height; oy++)
   {
     // Initialize column resampling indexes
@@ -1353,8 +1352,7 @@ static void _interpolation_resample_1c_plain(const struct dt_interpolation *itor
   {
     const size_t x0 = (roi_out->x - roi_in->x) * sizeof(float);
     const size_t y0 = (roi_out->y - roi_in->y); 
-
-__OMP_PARALLEL_FOR__()
+    __OMP_PARALLEL_FOR__()
     for(int y = 0; y < roi_out->height; y++)
     {
       float *i = (float *)((char *)in + in_stride * (y + y0) + x0);
@@ -1379,7 +1377,7 @@ __OMP_PARALLEL_FOR__()
     goto exit;
 
   // Process each output line
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(int oy = 0; oy < roi_out->height; oy++)
   {
     // Initialize column resampling indexes

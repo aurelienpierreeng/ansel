@@ -334,7 +334,7 @@ static void _refine_with_detail_mask(struct dt_iop_module_t *self, const struct 
   if(warp_mask == NULL) goto error;
 
   const int msize = owidth * oheight;
-__OMP_PARALLEL_FOR_SIMD__(aligned(mask, warp_mask : 64))
+  __OMP_PARALLEL_FOR_SIMD__(aligned(mask, warp_mask : 64))
   for(int idx =0; idx < msize; idx++)
   {
     mask[idx] = mask[idx] * warp_mask[idx];
@@ -405,8 +405,7 @@ static inline float *_develop_blend_process_copy_region(const float *const restr
   {
     return NULL;
   }
-
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t y = 0; y < oheight; y++)
   {
     const size_t iindex = y * iwidth + ioffset;
@@ -466,7 +465,7 @@ static void _develop_blend_init_raster_mask(const dt_develop_blend_params_t *con
   {
     if(params->raster_mask_invert)
     {
-__OMP_FOR_SIMD__(aligned(mask, raster_mask:64) )
+      __OMP_FOR_SIMD__(aligned(mask, raster_mask:64) )
       for(size_t i = 0; i < owidth * oheight; i++)
         mask[i] = 1.0f - raster_mask[i];
     }
@@ -522,7 +521,7 @@ static void _develop_blend_combine_masks(float *const restrict mask,
                                          const float *const restrict other_mask,
                                          const size_t buffsize)
 {
-__OMP_FOR_SIMD__(aligned(mask, other_mask:64) )
+  __OMP_FOR_SIMD__(aligned(mask, other_mask:64) )
   for(size_t i = 0; i < buffsize; i++)
     mask[i] *= other_mask[i];
 }
@@ -557,7 +556,7 @@ static void _develop_blend_process_mask_tone_curve(float *const restrict mask, c
 {
   const float mask_epsilon = 16 * FLT_EPSILON;  // empirical mask threshold for fully transparent masks
   const float e = expf(3.f * contrast);
-__OMP_PARALLEL_FOR_SIMD__(aligned(mask:64))
+  __OMP_PARALLEL_FOR_SIMD__(aligned(mask:64))
   for(size_t k = 0; k < buffsize; k++)
   {
     float x = mask[k] / opacity;
@@ -955,7 +954,7 @@ static void _refine_with_detail_mask_cl(struct dt_iop_module_t *self, const stru
   lum = NULL;
 
   const int msize = owidth * oheight;
-__OMP_PARALLEL_FOR_SIMD__(aligned(mask, warp_mask : 64))
+  __OMP_PARALLEL_FOR_SIMD__(aligned(mask, warp_mask : 64))
   for(int idx = 0; idx < msize; idx++)
   {
     mask[idx] = mask[idx] * warp_mask[idx];

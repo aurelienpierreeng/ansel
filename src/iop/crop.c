@@ -301,8 +301,7 @@ int distort_transform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
 
   // nothing to be done if parameters are set to neutral values (no top/left border)
   if(crop_top == 0 && crop_left == 0) return 1;
-
-__OMP_PARALLEL_FOR_SIMD__(if(points_count > 100) aligned(points : 64))
+  __OMP_PARALLEL_FOR_SIMD__(if(points_count > 100) aligned(points : 64))
   for(size_t i = 0; i < points_count * 2; i += 2)
   {
     points[i] -= crop_left;
@@ -322,8 +321,7 @@ int distort_backtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
 
   // nothing to be done if parameters are set to neutral values (no top/left border)
   if(crop_top == 0 && crop_left == 0) return 1;
-
-__OMP_PARALLEL_FOR_SIMD__(if(points_count > 100) aligned(points : 64))
+  __OMP_PARALLEL_FOR_SIMD__(if(points_count > 100) aligned(points : 64))
   for(size_t i = 0; i < points_count * 2; i += 2)
   {
     points[i] += crop_left;

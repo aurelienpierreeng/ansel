@@ -56,7 +56,7 @@ int dt_focuspeaking(cairo_t *cr,
 
   const size_t npixels = (size_t)buf_height * buf_width;
   // Create a luma buffer as the euclidian norm of RGB channels
-__OMP_PARALLEL_FOR_SIMD__(aligned(image, luma:64))
+  __OMP_PARALLEL_FOR_SIMD__(aligned(image, luma:64))
   for(size_t index = 0; index < npixels; index++)
     {
       const size_t index_RGB = index * 4;
@@ -80,8 +80,7 @@ __OMP_PARALLEL_FOR_SIMD__(aligned(image, luma:64))
   float mass = 0.f;
   float x_integral = 0.f;
   float y_integral = 0.f;
-
-__OMP_PARALLEL_FOR__(collapse(2) reduction(+:mass, x_integral, y_integral))
+  __OMP_PARALLEL_FOR__(collapse(2) reduction(+:mass, x_integral, y_integral))
   for(size_t i = 0; i < buf_height; ++i)
     for(size_t j = 0; j < buf_width; ++j)
     {
@@ -172,7 +171,7 @@ __OMP_PARALLEL_FOR__(collapse(2) reduction(+:mass, x_integral, y_integral))
   }
 
   // Dilate the mask to improve connectivity
-__OMP_PARALLEL_FOR__(collapse(2))
+  __OMP_PARALLEL_FOR__(collapse(2))
   for(size_t i = 0; i < buf_height; ++i)
     for(size_t j = 0; j < buf_width; ++j)
     {
@@ -209,16 +208,14 @@ __OMP_PARALLEL_FOR__(collapse(2))
 
   // Compute the laplacian mean over the picture
   float TV_sum = 0.0f;
-
-__OMP_PARALLEL_FOR_SIMD__(collapse(2) aligned(luma:64) reduction(+:TV_sum))
+  __OMP_PARALLEL_FOR_SIMD__(collapse(2) aligned(luma:64) reduction(+:TV_sum))
   for(size_t i = 8; i < buf_height - 8; ++i)
     for(size_t j = 8; j < buf_width - 8; ++j)
       TV_sum += luma[i * buf_width + j] / ((float)(buf_height - 16) * (float)(buf_width - 16));
 
   // Compute the standard deviation
   float sigma = 0.0f;
-
-__OMP_PARALLEL_FOR_SIMD__(collapse(2) aligned(focus_peaking, luma:64) reduction(+:sigma))
+  __OMP_PARALLEL_FOR_SIMD__(collapse(2) aligned(focus_peaking, luma:64) reduction(+:sigma))
   for(size_t i = 8; i < buf_height - 8; ++i)
     for(size_t j = 8; j < buf_width - 8; ++j)
        sigma += sqf(luma[i * buf_width + j] - TV_sum) / ((float)(buf_height - 16) * (float)(buf_width - 16));
@@ -231,7 +228,7 @@ __OMP_PARALLEL_FOR_SIMD__(collapse(2) aligned(focus_peaking, luma:64) reduction(
   const float two_sigma = TV_sum + 2.f * sigma;
 
   // Prepare the focus-peaking image overlay
-__OMP_PARALLEL_FOR__(collapse(2))
+  __OMP_PARALLEL_FOR__(collapse(2))
   for(size_t i = 0; i < buf_height; ++i)
     for(size_t j = 0; j < buf_width; ++j)
     {

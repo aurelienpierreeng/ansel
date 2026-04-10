@@ -281,7 +281,7 @@ inline static void _copy_buffer(const char *const restrict input, char *const re
                                 const size_t x_offset, const size_t y_offset,
                                 const size_t stride, const size_t bpp)
 {
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t j = 0; j < height; j++)
     // Since we crop 1-channel RAW arbitrarily here, alignment is never guaranteed
     memcpy(output + bpp * j * o_width,
@@ -293,7 +293,7 @@ __OMP_PARALLEL_FOR__()
 inline static void _uint8_to_float(const uint8_t *const input, float *const output,
                                    const size_t width, const size_t height, const size_t chan)
 {
-__OMP_FOR_SIMD__(aligned(input, output: 64) )
+  __OMP_FOR_SIMD__(aligned(input, output: 64) )
   for(size_t k = 0; k < height * width; k++)
   {
     const size_t index = k * chan;

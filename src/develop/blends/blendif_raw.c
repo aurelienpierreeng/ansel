@@ -60,7 +60,7 @@ void dt_develop_blendif_raw_make_mask(const struct dt_dev_pixelpipe_iop_t *piece
   // get parametric mask (if any) and apply global opacity
   if(d->mask_combine & DEVELOP_COMBINE_INV)
   {
-__OMP_FOR_SIMD__(aligned(mask: 64))
+    __OMP_FOR_SIMD__(aligned(mask: 64))
     for(size_t x = 0; x < buffsize; x++) mask[x] = global_opacity * (1.0f - mask[x]);
   }
   else
@@ -394,7 +394,7 @@ void dt_develop_blendif_raw_blend(const struct dt_dev_pixelpipe_t *pipe,
       dt_iop_image_copy(tmp_buffer, b, (size_t)owidth * oheight);
       if((d->blend_mode & DEVELOP_BLEND_REVERSE) == DEVELOP_BLEND_REVERSE)
       {
-__OMP_PARALLEL_FOR__()
+        __OMP_PARALLEL_FOR__()
         for(size_t y = 0; y < oheight; y++)
         {
           const size_t a_start = (y + yoffs) * iwidth + xoffs;
@@ -404,7 +404,7 @@ __OMP_PARALLEL_FOR__()
       }
       else
       {
-__OMP_PARALLEL_FOR__()
+        __OMP_PARALLEL_FOR__()
         for(size_t y = 0; y < oheight; y++)
         {
           const size_t a_start = (y + yoffs) * iwidth + xoffs;

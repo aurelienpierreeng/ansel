@@ -157,7 +157,7 @@ static int guided_filter_tiling(color_image imgg, gray_image img, gray_image img
     return 1;
   }
   int err = 0;
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(int j_imgg = source.lower; j_imgg < source.upper; j_imgg++)
   {
     int j = j_imgg - source.lower;
@@ -214,7 +214,7 @@ __OMP_PARALLEL_FOR__()
   #define A_GREEN 1
   #define A_BLUE 2
   #define B 3
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t i = 0; i < size; i++)
   {
     const float *meanpx = get_color_pixel(mean, i);
@@ -275,8 +275,7 @@ __OMP_PARALLEL_FOR__()
     free_color_image(&mean);
     return 1;
   }
-
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(int j_imgg = target.lower; j_imgg < target.upper; j_imgg++)
   {
     // index of the left most target pixel in the current row

@@ -282,9 +282,7 @@ int process(struct dt_iop_module_t *const self, const dt_dev_pixelpipe_t *const 
   const dt_iop_negadoctor_data_t *const d = piece->data;
   const float *const restrict in = (float *)ivoid;
   float *const restrict out = (float *)ovoid;
-
-
-__OMP_FOR_SIMD__(aligned(in, out:64) collapse(2))
+  __OMP_FOR_SIMD__(aligned(in, out:64) collapse(2))
   for(size_t k = 0; k < (size_t)roi_out->height * roi_out->width * 4; k += 4)
   {
     for(size_t c = 0; c < 4; c++)

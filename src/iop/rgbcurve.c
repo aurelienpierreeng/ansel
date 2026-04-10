@@ -1556,8 +1556,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const int autoscale = d->params.curve_autoscale;
   const _curve_table_ptr restrict table = d->table;
   const _coeffs_table_ptr restrict unbounded_coeffs = d->unbounded_coeffs;
-
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(int y = 0; y < 4*npixels; y += 4)
   {
     if(autoscale == DT_S_SCALE_MANUAL_RGB)

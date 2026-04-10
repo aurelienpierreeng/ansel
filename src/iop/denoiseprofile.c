@@ -852,8 +852,7 @@ static inline void precondition(const float *const in, float *const buf, const i
           (b[2] / a[2]) * (b[2] / a[2]) + 3.f / 8.f,
           0.0f };
   const size_t npixels = (size_t)wd * ht;
-
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t j = 0; j < 4U * npixels; j += 4)
   {
     for_each_channel(c,aligned(in,buf,a,sigma2_plus_3_8))
@@ -875,8 +874,7 @@ static inline void backtransform(float *const buf, const int wd, const int ht, c
           0.0f };
   const size_t npixels = (size_t)wd * ht;
   const float sqrt_3_2 = sqrtf(3.0f / 2.0f);
-
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t j = 0; j < 4U * npixels; j += 4)
   {
     for_each_channel(c,aligned(buf,sigma2_plus_1_8))
@@ -926,8 +924,7 @@ static inline void precondition_v2(const float *const in, float *const buf, cons
   const dt_aligned_pixel_t expon = { -p[0] / 2 + 1, -p[1] / 2 + 1, -p[2] / 2 + 1, 1.0f };
   const dt_aligned_pixel_t denom = { (-p[0] + 2) * sqrtf(a), (-p[1] + 2) * sqrtf(a),
                                      (-p[2] + 2) * sqrtf(a), 1.0f };
-
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t j = 0; j < 4U * npixels; j += 4)
   {
     for_each_channel(c,aligned(in,buf,wb))
@@ -1006,7 +1003,7 @@ static inline void backtransform_v2(float *const buf, const int wd, const int ht
                                      1.0f / (1.0f - p[2] / 2.0f), 1.0f };
   const dt_aligned_pixel_t denom = { 4.0f / (sqrtf(a) * (2.0f - p[0])), 4.0f / (sqrtf(a) * (2.0f - p[1])),
                                      4.0f / (sqrtf(a) * (2.0f - p[2])), 1.0f };
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t j = 0; j < 4U * npixels; j += 4)
   {
     for_each_channel(c,aligned(buf,wb))
@@ -1029,7 +1026,7 @@ static inline void precondition_Y0U0V0(const float *const in, float *const buf, 
                                      2.0f / ((-p[1] + 2) * sqrtf(a)),
                                      2.0f / ((-p[2] + 2) * sqrtf(a)),
                                      1.0f };
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t j = 0; j < (size_t)4 * ht * wd; j += 4)
   {
     dt_aligned_pixel_t tmp; // "unused" fourth element enables vectorization
@@ -1064,7 +1061,7 @@ static inline void backtransform_Y0U0V0(float *const buf, const int wd, const in
                                      (sqrtf(a) * (2.0f - p[1])) / 4.0f,
                                      (sqrtf(a) * (2.0f - p[2])) / 4.0f,
                                      1.0f };
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t j = 0; j < (size_t)4 * ht * wd; j += 4)
   {
     dt_aligned_pixel_t rgb = { 0.0f }; // "unused" fourth element enables vectorization
@@ -1416,7 +1413,7 @@ static int process_wavelets(struct dt_iop_module_t *self, const dt_dev_pixelpipe
   }
 
   // add in the final residue
-__OMP_SIMD__(aligned(buf1, out : 64))
+  __OMP_SIMD__(aligned(buf1, out : 64))
   for (size_t k = 0; k < 4U * npixels; k++)
     out[k] += buf1[k];
 

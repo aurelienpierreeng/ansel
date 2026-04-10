@@ -346,7 +346,7 @@ void nlmeans_denoise(const float *const inbuf, float *const outbuf,
 
   const int chk_height = compute_slice_height(roi_out->height);
   const int chk_width = compute_slice_width(roi_out->width);
-__OMP_PARALLEL_FOR__(num_threads(darktable.num_openmp_threads) collapse(2))
+  __OMP_PARALLEL_FOR__(num_threads(darktable.num_openmp_threads) collapse(2))
   for (int chunk_top = 0 ; chunk_top < roi_out->height; chunk_top += chk_height)
   {
     for (int chunk_left = 0; chunk_left < roi_out->width; chunk_left += chk_width)

@@ -136,8 +136,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const int width = roi_in->width;
   const int height = roi_in->height;
   const int ch = 4;
-
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < (size_t)width * height; k++)
   {
     float L = (in[k * ch + 0] < 100.0f)
@@ -167,7 +166,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   if(d->contrast <= 1.0f)
   {
 // linear curve for d->contrast below 1
-__OMP_PARALLEL_FOR__()
+    __OMP_PARALLEL_FOR__()
     for(int k = 0; k < 0x10000; k++) d->ctable[k] = d->contrast * (100.0f * k / 0x10000 - 50.0f) + 50.0f;
   }
   else
@@ -176,7 +175,7 @@ __OMP_PARALLEL_FOR__()
     const float boost = 20.0f;
     const float contrastm1sq = boost * (d->contrast - 1.0f) * (d->contrast - 1.0f);
     const float contrastscale = sqrtf(1.0f + contrastm1sq);
-__OMP_PARALLEL_FOR__()
+    __OMP_PARALLEL_FOR__()
     for(int k = 0; k < 0x10000; k++)
     {
       float kx2m1 = 2.0f * (float)k / 0x10000 - 1.0f;
@@ -195,8 +194,7 @@ __OMP_PARALLEL_FOR__()
 
   // generate precomputed brightness curve
   const float gamma = (d->brightness >= 0.0f) ? 1.0f / (1.0f + d->brightness) : (1.0f - d->brightness);
-
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(int k = 0; k < 0x10000; k++)
   {
     d->ltable[k] = 100.0f * powf((float)k / 0x10000, gamma);

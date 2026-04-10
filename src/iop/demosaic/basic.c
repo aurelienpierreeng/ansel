@@ -26,7 +26,7 @@ static void lin_interpolate(float *out, const float *const in, const dt_iop_roi_
   const int colors = (filters == 9) ? 3 : 4;
 
 // border interpolate
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(int row = 0; row < roi_out->height; row++)
     for(int col = 0; col < roi_out->width; col++)
     {
@@ -97,8 +97,7 @@ __OMP_PARALLEL_FOR__()
         }
       *ip = f;
     }
-
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(int row = 1; row < roi_out->height - 1; row++)
   {
     float *buf = out + 4 * roi_out->width * row + 4;
@@ -138,7 +137,7 @@ static void pre_median_b(float *out, const float *const in, const dt_iop_roi_t *
   const int lim[5] = { 0, 1, 2, 1, 0 };
   for(int pass = 0; pass < num_passes; pass++)
   {
-__OMP_PARALLEL_FOR__()
+    __OMP_PARALLEL_FOR__()
     for(int row = 3; row < roi->height - 3; row++)
     {
       float med[9];
@@ -197,7 +196,7 @@ static void color_smoothing(float *out, const dt_iop_roi_t *const roi_out, const
         for(int j = 0; j < roi_out->height; j++)
           for(int i = 0; i < roi_out->width; i++, outp += 4) outp[3] = outp[c];
       }
-__OMP_PARALLEL_FOR__()
+      __OMP_PARALLEL_FOR__()
       for(int j = 1; j < roi_out->height - 1; j++)
       {
         float *outp = out + (size_t)4 * j * roi_out->width + 4;
@@ -250,8 +249,7 @@ static void green_equilibration_lavg(float *out, const float *const in, const in
   if(FC(oj + y, oi + x, filters) != 1) oj--;
 
   dt_iop_image_copy_by_size(out, in, width, height, 1);
-
-__OMP_PARALLEL_FOR__(collapse(2))
+  __OMP_PARALLEL_FOR__(collapse(2))
   for(size_t j = oj; j < height - 2; j += 2)
   {
     for(size_t i = oi; i < width - 2; i += 2)
@@ -297,7 +295,7 @@ static void green_equilibration_favg(float *out, const float *const in, const in
   if((FC(oj + y, oi + x, filters) & 1) != 1) oi++;
   const int g2_offset = oi ? -1 : 1;
   dt_iop_image_copy_by_size(out, in, width, height, 1);
-__OMP_PARALLEL_FOR__(reduction(+ : sum1, sum2)  collapse(2))
+  __OMP_PARALLEL_FOR__(reduction(+ : sum1, sum2)  collapse(2))
   for(size_t j = oj; j < (height - 1); j += 2)
   {
     for(size_t i = oi; i < (width - 1 - g2_offset); i += 2)
@@ -311,8 +309,7 @@ __OMP_PARALLEL_FOR__(reduction(+ : sum1, sum2)  collapse(2))
     gr_ratio = sum2 / sum1;
   else
     return;
-
-__OMP_PARALLEL_FOR__(collapse(2))
+  __OMP_PARALLEL_FOR__(collapse(2))
   for(int j = oj; j < (height - 1); j += 2)
   {
     for(int i = oi; i < (width - 1 - g2_offset); i += 2)

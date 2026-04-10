@@ -152,8 +152,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   if(!cmy) return 1;
 
   const float sharpen = d->diffusion / (scale * scale) / d->iterations;
-
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(int i = 0; i < roi_out->height; i++)
     for(int j = 0; j < roi_out->width; j++)
     {
@@ -181,8 +180,7 @@ __OMP_PARALLEL_FOR__()
       temp_in = cmy;
       temp_out = out;
     }
-
-__OMP_PARALLEL_FOR__()
+    __OMP_PARALLEL_FOR__()
     for(int i = 0; i < roi_out->height; i++)
       for(int j = 0; j < roi_out->width; j++)
       {
@@ -192,8 +190,7 @@ __OMP_PARALLEL_FOR__()
         dot_product(temp1, d->CMY, temp2);
         for_four_channels(c, aligned(temp2, temp_in)) temp_in[index + c] = CLAMP(((d->iterations - 1) * temp_in[index + c] + temp2[c]) / (d->iterations), 0.f, 1.f);
       }
-
-__OMP_PARALLEL_FOR__()
+    __OMP_PARALLEL_FOR__()
     for(int i = 0; i < roi_out->height; i++)
       for(int j = 0; j < roi_out->width; j++)
       {
@@ -217,8 +214,7 @@ __OMP_PARALLEL_FOR__()
         for_each_channel(c) temp_out[index + c] = CLAMP(temp_in[index + c] - laplacian[c] * sharpen, 0.f, 1.f);
       }
   }
-
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(int i = 0; i < roi_out->height; i++)
     for(int j = 0; j < roi_out->width; j++)
     {

@@ -602,7 +602,7 @@ void dt_colorrings_fill_lut_local_field(
     const float delta_theta[DT_COLORRINGS_LOCAL_FIELD_RINGS][DT_COLORRINGS_HUE_SAMPLES], const float inv_sigma_L,
     const float inv_sigma_rho, const float inv_sigma_theta, const float rho0)
 {
-__OMP_PARALLEL_FOR__(collapse(3))
+  __OMP_PARALLEL_FOR__(collapse(3))
   for(int b = 0; b < level; b++)
     for(int g = 0; g < level; g++)
       for(int r = 0; r < level; r++)
@@ -707,7 +707,7 @@ void dt_colorrings_fill_lut_sparse_local_field(float *lut, const int level,
                                                const float inv_sigma_rho, const float inv_sigma_theta,
                                                const float rho0)
 {
-__OMP_PARALLEL_FOR__(collapse(3))
+  __OMP_PARALLEL_FOR__(collapse(3))
   for(int b = 0; b < level; b++)
     for(int g = 0; g < level; g++)
       for(int r = 0; r < level; r++)

@@ -199,8 +199,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const float *const restrict in = DT_IS_ALIGNED((float*)ivoid);
   float *const restrict out = DT_IS_ALIGNED((float*)ovoid);
   const int npixels = roi_out->width * roi_out->height;
-
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(int k = 0; k < 4 * npixels; k += 4)
   {
     float h, s, l;

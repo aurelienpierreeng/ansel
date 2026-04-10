@@ -512,8 +512,7 @@ int distort_transform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   float ma = 0, mb = 0, md = 0, me = 0, mg = 0, mh = 0;
   if(d->k_apply == 1)
     keystone_get_matrix(k_space, kxa, kxb, kxc, kxd, kya, kyb, kyc, kyd, &ma, &mb, &md, &me, &mg, &mh);
-
-__OMP_PARALLEL_FOR__(if(points_count > 100))
+  __OMP_PARALLEL_FOR__(if(points_count > 100))
   for(size_t i = 0; i < points_count * 2; i += 2)
   {
     float pi[2], po[2];
@@ -579,8 +578,7 @@ int distort_backtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
   float ma, mb, md, me, mg, mh;
   if(d->k_apply == 1)
     keystone_get_matrix(k_space, kxa, kxb, kxc, kxd, kya, kyb, kyc, kyd, &ma, &mb, &md, &me, &mg, &mh);
-
-__OMP_PARALLEL_FOR_SIMD__(if(points_count > 100) aligned(points:64) aligned(k_space:16))
+  __OMP_PARALLEL_FOR_SIMD__(if(points_count > 100) aligned(points:64) aligned(k_space:16))
   for(size_t i = 0; i < points_count * 2; i += 2)
   {
     float pi[2], po[2];
@@ -644,8 +642,7 @@ void distort_mask(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t 
     float ma, mb, md, me, mg, mh;
     if(d->k_apply == 1)
       keystone_get_matrix(k_space, kxa, kxb, kxc, kxd, kya, kyb, kyc, kyd, &ma, &mb, &md, &me, &mg, &mh);
-
-__OMP_PARALLEL_FOR__()
+    __OMP_PARALLEL_FOR__()
     // (slow) point-by-point transformation.
     // TODO: optimize with scanlines and linear steps between?
     for(int j = 0; j < roi_out->height; j++)
@@ -1016,8 +1013,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     float ma, mb, md, me, mg, mh;
     if(d->k_apply == 1)
       keystone_get_matrix(k_space, kxa, kxb, kxc, kxd, kya, kyb, kyc, kyd, &ma, &mb, &md, &me, &mg, &mh);
-
-__OMP_PARALLEL_FOR__()
+    __OMP_PARALLEL_FOR__()
     // (slow) point-by-point transformation.
     // TODO: optimize with scanlines and linear steps between?
     for(int j = 0; j < roi_out->height; j++)

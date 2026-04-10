@@ -188,7 +188,7 @@ void dt_gaussian_blur(dt_gaussian_t *g, const float *const in, float *const out)
   float *Labmin = g->min;
 
 // vertical blur column by column
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(int i = 0; i < width; i++)
   {
     dt_aligned_pixel_t xp = {0.0f};
@@ -256,7 +256,7 @@ __OMP_PARALLEL_FOR__()
   }
 
 // horizontal blur line by line
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(int j = 0; j < height; j++)
   {
     dt_aligned_pixel_t xp = {0.0f};

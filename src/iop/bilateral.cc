@@ -179,8 +179,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     size_t padded_weights_size;
     float *const weights_buf = dt_pixelpipe_cache_alloc_perthread_float(weights_size, &padded_weights_size);
     if(weights_buf == NULL) return 1;
-
-__OMP_PARALLEL_FOR_CPP__(firstprivate(isig2col, ivoid, ovoid, roi_in, roi_out, rad, ch, m, wd, weights_buf, padded_weights_size))
+    __OMP_PARALLEL_FOR_CPP__(firstprivate(isig2col, ivoid, ovoid, roi_in, roi_out, rad, ch, m, wd, weights_buf, padded_weights_size))
     for(int j = rad; j < roi_out->height - rad; j++)
     {
       const float *in = ((float *)ivoid) + ch * ((size_t)j * roi_in->width + rad);

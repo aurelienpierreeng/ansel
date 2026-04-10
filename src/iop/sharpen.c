@@ -354,7 +354,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
   const float *const restrict in = (float*)ivoid;
   const size_t width = roi_out->width;
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(int j = 0; j < roi_out->height; j++)
   {
     // We skip the top and bottom 'rad' rows because the kernel would extend beyond the edge of the image, resulting

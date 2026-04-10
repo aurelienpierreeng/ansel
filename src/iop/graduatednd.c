@@ -812,7 +812,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const int height = roi_out->height;
   if(data->density > 0)
   {
-__OMP_PARALLEL_FOR__()
+    __OMP_PARALLEL_FOR__()
     for(int y = 0; y < height; y++)
     {
       const size_t k = (size_t)width * y * ch;
@@ -826,7 +826,7 @@ __OMP_PARALLEL_FOR__()
       for(int x = 0; x < width; x++)
       {
         const float density = compute_density(data->density, length);
-__OMP_SIMD__(aligned(in, out : 16))
+        __OMP_SIMD__(aligned(in, out : 16))
         for(int l = 0; l < 4; l++)
         {
           out[ch*x+l] = MAX(0.0f, (in[ch*x+l] / (data->color[l] + data->color1[l] * density)));
@@ -837,7 +837,7 @@ __OMP_SIMD__(aligned(in, out : 16))
   }
   else
   {
-__OMP_PARALLEL_FOR__()
+    __OMP_PARALLEL_FOR__()
     for(int y = 0; y < height; y++)
     {
       const size_t k = (size_t)width * y * ch;
@@ -851,7 +851,7 @@ __OMP_PARALLEL_FOR__()
       for(int x = 0; x < width; x++)
       {
         const float density = compute_density(-data->density, -length);
-__OMP_SIMD__(aligned(in, out : 16))
+        __OMP_SIMD__(aligned(in, out : 16))
         for(int l = 0; l < 4; l++)
         {
           out[ch*x+l] = MAX(0.0f, (in[ch*x+l] * (data->color[l] + data->color1[l] * density)));

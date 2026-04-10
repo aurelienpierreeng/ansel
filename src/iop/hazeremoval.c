@@ -309,7 +309,7 @@ __DT_CLONE_TARGETS__
 static int dark_channel(const const_rgb_image img1, const gray_image img2, const int w)
 {
   const size_t size = (size_t)img1.height * img1.width;
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t i = 0; i < size; i++)
   {
     const float *pixel = img1.data + i * img1.stride;
@@ -332,7 +332,7 @@ static int transition_map(const const_rgb_image img1, const gray_image img2, con
                           const float strength)
 {
   const size_t size = (size_t)img1.height * img1.width;
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t i = 0; i < size; i++)
   {
     const float *pixel = img1.data + i * img1.stride;
@@ -445,7 +445,7 @@ static int ambient_light(const const_rgb_image img, int w1, rgb_pixel *pA0, floa
   float A0_r = 0, A0_g = 0, A0_b = 0;
   size_t N_bright_hazy = 0;
   const float *const data = dark_ch.data;
-__OMP_PARALLEL_FOR__(reduction(+ : N_bright_hazy, A0_r, A0_g, A0_b))
+  __OMP_PARALLEL_FOR__(reduction(+ : N_bright_hazy, A0_r, A0_g, A0_b))
   for(size_t i = 0; i < size; i++)
   {
     const float *pixel_in = img.data + i * img.stride;
@@ -605,7 +605,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
       = fminf(fmaxf(expf(-distance * distance_max), 1.f / 1024), 1.f); // minimum allowed value for transition map
   const float *const c_A0 = A0;
   const gray_image c_trans_map_filtered = trans_map_filtered;
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t i = 0; i < size; i++)
   {
     float t = fmaxf(c_trans_map_filtered.data[i], t_min);

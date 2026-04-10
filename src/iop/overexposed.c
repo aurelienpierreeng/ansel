@@ -158,7 +158,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   if(dev->overexposed.mode == DT_CLIPPING_PREVIEW_ANYRGB)
   {
     // Any of the RGB channels is out of bounds
-__OMP_PARALLEL_FOR__()
+    __OMP_PARALLEL_FOR__()
     for(size_t k = 0; k < (size_t)ch * roi_out->width * roi_out->height; k += ch)
     {
       if(in[k + 0] >= upper || in[k + 1] >= upper || in[k + 2] >= upper)
@@ -179,7 +179,7 @@ __OMP_PARALLEL_FOR__()
   else if(dev->overexposed.mode == DT_CLIPPING_PREVIEW_GAMUT && current_profile)
   {
     // Gamut is out of bounds
-__OMP_PARALLEL_FOR__()
+    __OMP_PARALLEL_FOR__()
     for(size_t k = 0; k < (size_t)ch * roi_out->width * roi_out->height; k += ch)
     {
       const float luminance = dt_ioppr_get_rgb_matrix_luminance(in + k,
@@ -232,7 +232,7 @@ __OMP_PARALLEL_FOR__()
   else if(dev->overexposed.mode == DT_CLIPPING_PREVIEW_LUMINANCE && current_profile)
   {
     // Luminance channel is out of bounds
-__OMP_PARALLEL_FOR__()
+    __OMP_PARALLEL_FOR__()
     for(size_t k = 0; k < (size_t)ch * roi_out->width * roi_out->height; k += ch)
     {
       const float luminance = dt_ioppr_get_rgb_matrix_luminance(in + k,
@@ -259,7 +259,7 @@ __OMP_PARALLEL_FOR__()
   else if(dev->overexposed.mode == DT_CLIPPING_PREVIEW_SATURATION && current_profile)
   {
     // Show saturation out of bounds where luminance is valid
-__OMP_PARALLEL_FOR__()
+    __OMP_PARALLEL_FOR__()
     for(size_t k = 0; k < (size_t)ch * roi_out->width * roi_out->height; k += ch)
     {
       const float luminance = dt_ioppr_get_rgb_matrix_luminance(in + k,

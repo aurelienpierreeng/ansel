@@ -294,7 +294,7 @@ static void process_fastpath_apply_tonecurves(const dt_iop_colorout_data_t *cons
 
   if(run_lut0 && run_lut1 && run_lut2)
   {
-__OMP_PARALLEL_FOR__()
+    __OMP_PARALLEL_FOR__()
     for(size_t k = 0; k < npixels; k++)
     {
       const size_t idx = 4 * k;
@@ -305,7 +305,7 @@ __OMP_PARALLEL_FOR__()
   }
   else
   {
-__OMP_PARALLEL_FOR__()
+    __OMP_PARALLEL_FOR__()
     for(size_t k = 0; k < npixels; k++)
     {
       const size_t idx = 4 * k;
@@ -391,7 +391,7 @@ static inline void process_fastpath_matrix(const float *const restrict in, float
                                            const dt_aligned_pixel_simd_t cm2,
                                            const int use_nontemporal)
 {
-__OMP_PARALLEL_FOR_SIMD__(aligned(in, out:64))
+  __OMP_PARALLEL_FOR_SIMD__(aligned(in, out:64))
   for(size_t k = 0; k < npixels; k++)
   {
     const size_t idx = 4 * k;
@@ -442,7 +442,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     /* Alias the LCMS transform before the OpenMP region and share that alias
      * explicitly instead of reaching through `d->xform` inside the loop. */
     const cmsHTRANSFORM xform = d->xform;
-__OMP_PARALLEL_FOR__()
+    __OMP_PARALLEL_FOR__()
     for(int k = 0; k < roi_out->height; k++)
     {
       const float *in = ((float *)ivoid) + (size_t)4 * k * roi_out->width;

@@ -1123,8 +1123,7 @@ static inline gint mask_clipped_pixels(const float *const restrict in, float *co
     const unsigned int oldMode = _MM_GET_FLUSH_ZERO_MODE();
     _MM_SET_FLUSH_ZERO_MODE(_MM_FLUSH_ZERO_ON);
   #endif
-
-__OMP_PARALLEL_FOR_SIMD__(aligned(mask, in:64) reduction(+:clipped))
+  __OMP_PARALLEL_FOR_SIMD__(aligned(mask, in:64) reduction(+:clipped))
   for(size_t k = 0; k < height * width * ch; k += ch)
   {
     const float pix_max = fmaxf(sqrtf(sqf(in[k]) + sqf(in[k + 1]) + sqf(in[k + 2])), 0.f);
@@ -1154,8 +1153,7 @@ inline static void inpaint_noise(const float *const in, const float *const mask,
   // add statistical noise in highlights to fill-in texture
   // this creates "particules" in highlights, that will help the implicit partial derivative equation
   // solver used in wavelets reconstruction to generate texture
-
-__OMP_PARALLEL_FOR__(collapse(2))
+  __OMP_PARALLEL_FOR__(collapse(2))
   for(size_t i = 0; i < height; i++)
     for(size_t j = 0; j < width; j++)
     {
@@ -1196,7 +1194,7 @@ inline static void wavelets_reconstruct_RGB(const float *const restrict HF, cons
                                             const float gamma_comp, const float beta, const float beta_comp,
                                             const float delta, const size_t s, const size_t scales)
 {
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < height * width * ch; k += 4)
   {
     const float alpha = mask[k / ch];
@@ -1223,7 +1221,7 @@ __OMP_PARALLEL_FOR__()
     // synthesize the min of all low-frequency RGB channels as a flat structure term for the whole pixel
     // when beta_comp ~= 1.0, we force the reconstruction to be achromatic, which may help with gamut issues or magenta highlights.
     const float grey_residual = beta_comp * (LF_c[0] + LF_c[1] + LF_c[2]) / 3.f;
-__OMP_SIMD__(aligned(reconstructed:64) aligned(HF_c, LF_c, TT_c:16))
+    __OMP_SIMD__(aligned(reconstructed:64) aligned(HF_c, LF_c, TT_c:16))
     for(size_t c = 0; c < 4; c++)
     {
       // synthesize interpolated/inpainted RGB channels color details residuals and weigh them
@@ -1262,7 +1260,7 @@ inline static void wavelets_reconstruct_ratios(const float *const restrict HF, c
  * Note : ratios close to 1 mean higher spectral purity (more white). Ratios close to 0 mean lower spectral purity
  * (more colorful)
  */
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < height * width * ch; k += 4)
   {
     const float alpha = mask[k / ch];
@@ -1285,7 +1283,7 @@ __OMP_PARALLEL_FOR__()
     // when beta_comp ~= 1.0, we force the reconstruction to be achromatic, which may help with gamut issues or
     // magenta highlights.
     const float grey_HF = (gamma_comp * grey_details + gamma * grey_texture);
-__OMP_SIMD__(aligned(reconstructed:64) aligned(HF_c, TT_c, LF_c:16) linear(k:4))
+    __OMP_SIMD__(aligned(reconstructed:64) aligned(HF_c, TT_c, LF_c:16) linear(k:4))
     for(size_t c = 0; c < 4; c++)
     {
       // synthesize interpolated/inpainted RGB channels color details residuals and weigh them
@@ -1307,7 +1305,7 @@ static inline void init_reconstruct(const float *const restrict in, const float 
 {
 // init the reconstructed buffer with non-clipped and partially clipped pixels
 // Note : it's a simple multiplied alpha blending where mask = alpha weight
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < height * width; k++)
   {
     for_each_channel(c,aligned(in,mask,reconstructed))
@@ -1321,7 +1319,7 @@ static inline void wavelets_detail_level(const float *const restrict detail, con
                                              float *const restrict HF, float *const restrict texture,
                                              const size_t width, const size_t height, const size_t ch)
 {
-__OMP_PARALLEL_FOR_SIMD__(aligned(HF, LF, detail, texture : 64) collapse(2))
+  __OMP_PARALLEL_FOR_SIMD__(aligned(HF, LF, detail, texture : 64) collapse(2))
   for(size_t k = 0; k < height * width; k++)
     for(size_t c = 0; c < 4; ++c) HF[4*k + c] = texture[4*k + c] = detail[4*k + c] - LF[4*k + c];
 }
@@ -1457,7 +1455,7 @@ static inline void filmic_split_v1(const float *const restrict in, float *const 
                                    const dt_iop_filmic_rgb_spline_t spline, const size_t width,
                                    const size_t height)
 {
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < height * width * 4; k += 4)
   {
     const float *const restrict pix_in = in + k;
@@ -1498,7 +1496,7 @@ static inline void filmic_split_v2_v3(const float *const restrict in, float *con
                                       const dt_iop_filmic_rgb_spline_t spline, const size_t width,
                                       const size_t height)
 {
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < height * width * 4; k += 4)
   {
     const float *const restrict pix_in = in + k;
@@ -1539,7 +1537,7 @@ static inline void filmic_chroma_v1(const float *const restrict in, float *const
                                     const dt_iop_filmic_rgb_spline_t spline, const int variant,
                                     const size_t width, const size_t height)
 {
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < height * width * 4; k += 4)
   {
     const float *const restrict pix_in = in + k;
@@ -1594,8 +1592,7 @@ static inline void filmic_chroma_v2_v3(const float *const restrict in, float *co
                                        const size_t width, const size_t height, const size_t ch,
                                        const dt_iop_filmicrgb_colorscience_type_t colorscience_version)
 {
-
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < height * width * ch; k += ch)
   {
     const float *const restrict pix_in = in + k;
@@ -2093,8 +2090,7 @@ static inline void filmic_chroma_v4(const float *const restrict in, float *const
 
   const float norm_min = exp_tonemapping_v2(0.f, data->grey_source, data->black_source, data->dynamic_range);
   const float norm_max = exp_tonemapping_v2(1.f, data->grey_source, data->black_source, data->dynamic_range);
-
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < height * width * ch; k += ch)
   {
     const dt_aligned_pixel_simd_t pix_in = dt_load_simd_aligned(in + k);
@@ -2140,7 +2136,7 @@ static inline void filmic_split_v4(const float *const restrict in, float *const 
                                                             export_output_matrix, work_profile, export_profile);
   dt_iop_filmicrgb_simd_matrices_t simd_matrices;
   filmic_prepare_simd_matrices(input_matrix, output_matrix, export_input_matrix, export_output_matrix, &simd_matrices);
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < height * width * ch; k += ch)
   {
     const dt_aligned_pixel_simd_t pix_in = dt_load_simd_aligned(in + k);
@@ -2188,8 +2184,7 @@ static inline void filmic_v5(const float *const restrict in, float *const restri
 
   const float norm_min = exp_tonemapping_v2(0.f, data->grey_source, data->black_source, data->dynamic_range);
   const float norm_max = exp_tonemapping_v2(1.f, data->grey_source, data->black_source, data->dynamic_range);
-
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < height * width * ch; k += ch)
   {
     const dt_aligned_pixel_simd_t pix_in = dt_load_simd_aligned(in + k);
@@ -2226,7 +2221,7 @@ __DT_CLONE_TARGETS__
 static inline void display_mask(const float *const restrict mask, float *const restrict out,
                                 const size_t width, const size_t height)
 {
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < height * width; k++)
   {
     dt_store_simd_nontemporal(out + 4 * k, dt_simd_set1(mask[k]));
@@ -2241,7 +2236,7 @@ static inline void compute_ratios(const float *const restrict in, float *const r
                                   const dt_iop_order_iccprofile_info_t *const work_profile,
                                   const int variant, const size_t width, const size_t height)
 {
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < height * width * 4; k += 4)
   {
     const dt_aligned_pixel_simd_t pix_in = dt_load_simd_aligned(in + k);
@@ -2257,7 +2252,7 @@ __DT_CLONE_TARGETS__
 static inline void restore_ratios(float *const restrict ratios, const float *const restrict norms,
                                   const size_t width, const size_t height)
 {
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < height * width; k++)
   {
     dt_aligned_pixel_simd_t ratio = dt_load_simd_aligned(ratios + 4 * k);

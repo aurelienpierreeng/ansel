@@ -148,7 +148,7 @@ dt_imageio_retval_t dt_imageio_open_avif(dt_image_t *img,
   switch (bit_depth) {
   case 12:
   case 10: {
-__OMP_PARALLEL_FOR_SIMD__(collapse(2))
+    __OMP_PARALLEL_FOR_SIMD__(collapse(2))
     for (size_t y = 0; y < height; y++)
     {
       for (size_t x = 0; x < width; x++)
@@ -166,7 +166,7 @@ __OMP_PARALLEL_FOR_SIMD__(collapse(2))
     break;
   }
   case 8: {
-__OMP_PARALLEL_FOR_SIMD__(collapse(2))
+    __OMP_PARALLEL_FOR_SIMD__(collapse(2))
     for (size_t y = 0; y < height; y++)
     {
       for (size_t x = 0; x < width; x++)

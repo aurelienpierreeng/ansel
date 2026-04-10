@@ -180,8 +180,7 @@ static inline void dt_iop_alpha_copy(const void *const ivoid,
 {
   const float *const __restrict__ in = (const float *const)ivoid;
   float *const __restrict__ out = (float *const)ovoid;
-
-__OMP_FOR_SIMD__(aligned(out, in:64) )
+  __OMP_FOR_SIMD__(aligned(out, in:64) )
   for(size_t k = 3; k < width * height * 4; k += 4)
     out[k] = in[k];
 }

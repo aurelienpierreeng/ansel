@@ -66,8 +66,7 @@ void dt_lut3d_tetrahedral_interp(const float *const in, float *const out, const 
 {
   const int level2 = level * level;
   const float safe_normalization = fmaxf(normalization, 1e-6f);
-
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < (size_t)(pixel_nb * 4); k += 4)
   {
     const float *const input = in + k;
@@ -161,8 +160,7 @@ void dt_lut3d_trilinear_interp(const float *const in, float *const out, const si
 {
   const int level2 = level * level;
   const float safe_normalization = fmaxf(normalization, 1e-6f);
-
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < (size_t)(pixel_nb * 4); k += 4)
   {
     const float *const input = in + k;
@@ -227,8 +225,7 @@ void dt_lut3d_pyramid_interp(const float *const in, float *const out, const size
 {
   const int level2 = level * level;
   const float safe_normalization = fmaxf(normalization, 1e-6f);
-
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < (size_t)(pixel_nb * 4); k += 4)
   {
     const float *const input = in + k;

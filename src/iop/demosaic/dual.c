@@ -83,7 +83,7 @@ static int dual_demosaic(const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_
   if(dual_mask)
   {
     ((dt_dev_pixelpipe_t *)pipe)->mask_display = DT_DEV_PIXELPIPE_DISPLAY_PASSTHRU;
-__OMP_FOR_SIMD__(aligned(blend, vng_image, rgb_data : 64))
+    __OMP_FOR_SIMD__(aligned(blend, vng_image, rgb_data : 64))
     for(int idx = 0; idx < width * height; idx++)
     {
       for(int c = 0; c < 4; c++)
@@ -92,7 +92,7 @@ __OMP_FOR_SIMD__(aligned(blend, vng_image, rgb_data : 64))
   }
   else
   {
-__OMP_FOR_SIMD__(aligned(blend, vng_image, rgb_data : 64))
+    __OMP_FOR_SIMD__(aligned(blend, vng_image, rgb_data : 64))
     for(int idx = 0; idx < width * height; idx++)
     {
       const int oidx = 4 * idx;

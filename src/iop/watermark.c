@@ -835,7 +835,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   /* render surface on output */
   guint8 *sd = image;
   const float opacity = data->opacity / 100.0f;
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(int j = 0; j < roi_out->height * roi_out->width; j++)
   {
     float *const i = in + ch*j;

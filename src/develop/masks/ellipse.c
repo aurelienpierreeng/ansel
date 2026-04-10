@@ -344,8 +344,7 @@ static float *_points_to_transform(float xx, float yy, float radius_a, float rad
   points[7] = y + b * cosv;
   points[8] = x + b * sinv;
   points[9] = y - b * cosv;
-
-__OMP_PARALLEL_FOR_SIMD__(if(l > 100) aligned(points:64))
+  __OMP_PARALLEL_FOR_SIMD__(if(l > 100) aligned(points:64))
   for(int i = 5; i < l + 5; i++)
   {
     const float alpha = (i - 5) * 2.0 * M_PI / (float)l;
@@ -387,7 +386,7 @@ static int _ellipse_get_points_source(dt_develop_t *dev, float xx, float yy, flo
     const float dy = pts[1] - (*points)[1];
     (*points)[0] = pts[0];
     (*points)[1] = pts[1];
-__OMP_PARALLEL_FOR_SIMD__(if(*points_count > 100) aligned(points:64))
+    __OMP_PARALLEL_FOR_SIMD__(if(*points_count > 100) aligned(points:64))
     for(int i = 5; i < *points_count; i++)
     {
       (*points)[i * 2] += dx;
@@ -1092,7 +1091,7 @@ static void _fill_mask(const size_t numpoints, float *const bufptr, const float 
   // given point until it intersect the ellipse and the outer edge of the falloff, respectively.  The ellipse can
   // be rotated, but we can compensate for that by applying a rotation matrix for the same rotation in the opposite
   // direction before projecting the vector.
-__OMP_PARALLEL_FOR_SIMD__(if(numpoints > 50000) aligned(points, bufptr : 64))
+  __OMP_PARALLEL_FOR_SIMD__(if(numpoints > 50000) aligned(points, bufptr : 64))
   for(size_t i = 0; i < numpoints; i++)
     {
       const float x = points[2 * i] - center[0];
@@ -1277,8 +1276,7 @@ static int _ellipse_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpi
   float *points = dt_pixelpipe_cache_alloc_align_float_cache((size_t)2 * w * h, 0);
   if(points == NULL)
     return 1;
-
-__OMP_PARALLEL_FOR__(collapse(2) if((size_t)w * h > 50000))
+  __OMP_PARALLEL_FOR__(collapse(2) if((size_t)w * h > 50000))
   for(int i = 0; i < h; i++)
     for(int j = 0; j < w; j++)
     {
@@ -1405,8 +1403,7 @@ static int _ellipse_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pix
   const size_t ellpts = MIN(360, l);
   float *ell = dt_pixelpipe_cache_alloc_align_float_cache(ellpts * 2, 0);
   if(ell == NULL) return 1;
-
-__OMP_PARALLEL_FOR__(if(ellpts > 100))
+  __OMP_PARALLEL_FOR__(if(ellpts > 100))
   for(int n = 0; n < ellpts; n++)
   {
     const float phi = (2.0f * M_PI * n) / ellpts;
@@ -1485,7 +1482,7 @@ __OMP_PARALLEL_FOR__(if(ellpts > 100))
   if(points == NULL) return 1;
 
   // we populate the grid points in module coordinates
-__OMP_PARALLEL_FOR__(collapse(2) if((size_t)bbw * bbh > 50000))
+  __OMP_PARALLEL_FOR__(collapse(2) if((size_t)bbw * bbh > 50000))
   for(int j = bbym; j <= bbYM; j++)
     for(int i = bbxm; i <= bbXM; i++)
     {
@@ -1537,7 +1534,7 @@ __OMP_PARALLEL_FOR__(collapse(2) if((size_t)bbw * bbh > 50000))
     w0[i] = (float)(grid - i);
     w1[i] = (float)i;
   }
-__OMP_PARALLEL_FOR__(if((size_t)(endy - bbym * grid) * (size_t)(endx - bbxm * grid) > 50000))
+  __OMP_PARALLEL_FOR__(if((size_t)(endy - bbym * grid) * (size_t)(endx - bbxm * grid) > 50000))
   for(int j = bbym * grid; j < endy; j++)
   {
     const int jj = j % grid;

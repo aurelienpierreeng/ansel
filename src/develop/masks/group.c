@@ -169,15 +169,13 @@ static int _inverse_mask(const dt_iop_module_t *const module, const dt_dev_pixel
   const int width_ = *width;
   const int height_ = *height;
   const float *const src = *buffer;
-
-__OMP_PARALLEL_FOR__(if(wt * ht > 50000))
+  __OMP_PARALLEL_FOR__(if(wt * ht > 50000))
   for(int yy = 0; yy < MIN(posy_, ht); yy++)
   {
     float *const row = buf + (size_t)yy * wt;
     for(int xx = 0; xx < wt; xx++) row[xx] = 1.0f;
   }
-
-__OMP_PARALLEL_FOR__(if(wt * ht > 50000))
+  __OMP_PARALLEL_FOR__(if(wt * ht > 50000))
   for(int yy = MAX(posy_, 0); yy < MIN(ht, posy_ + height_); yy++)
   {
     float *const row = buf + (size_t)yy * wt;
@@ -189,8 +187,7 @@ __OMP_PARALLEL_FOR__(if(wt * ht > 50000))
       row[xx] = 1.0f - src_row[xx - posx_];
     for(int xx = MAX(posx_ + width_, 0); xx < wt; xx++) row[xx] = 1.0f;
   }
-
-__OMP_PARALLEL_FOR__(if(wt * ht > 50000))
+  __OMP_PARALLEL_FOR__(if(wt * ht > 50000))
   for(int yy = MAX(posy_ + height_, 0); yy < ht; yy++)
   {
     float *const row = buf + (size_t)yy * wt;
@@ -317,7 +314,7 @@ static int _group_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe
     const float *const src = bufs[i];
     if(states[i] & DT_MASKS_STATE_UNION)
     {
-__OMP_PARALLEL_FOR__(if((size_t)wi * hi > 10000))
+      __OMP_PARALLEL_FOR__(if((size_t)wi * hi > 10000))
       for(int y = 0; y < hi; y++)
       {
         float *const dst_row = dst + (size_t)(oy + y) * dst_w + ox;
@@ -347,8 +344,7 @@ __OMP_PARALLEL_FOR__(if((size_t)wi * hi > 10000))
         const int col_end = x1 - l;
         const int src_x_offset = x0 - px[i];
         const int src_y_offset = t - py[i];
-
-__OMP_PARALLEL_FOR__(if((size_t)dst_w * dst_h > 10000))
+        __OMP_PARALLEL_FOR__(if((size_t)dst_w * dst_h > 10000))
         for(int y = 0; y < dst_h; y++)
         {
           float *const dst_row = dst + (size_t)y * dst_w;
@@ -379,7 +375,7 @@ __OMP_PARALLEL_FOR__(if((size_t)dst_w * dst_h > 10000))
     }
     else if(states[i] & DT_MASKS_STATE_DIFFERENCE)
     {
-__OMP_PARALLEL_FOR__(if((size_t)wi * hi > 10000))
+      __OMP_PARALLEL_FOR__(if((size_t)wi * hi > 10000))
       for(int y = 0; y < hi; y++)
       {
         float *const dst_row = dst + (size_t)(oy + y) * dst_w + ox;
@@ -394,7 +390,7 @@ __OMP_PARALLEL_FOR__(if((size_t)wi * hi > 10000))
     }
     else if(states[i] & DT_MASKS_STATE_EXCLUSION)
     {
-__OMP_PARALLEL_FOR__(if((size_t)wi * hi > 10000))
+      __OMP_PARALLEL_FOR__(if((size_t)wi * hi > 10000))
       for(int y = 0; y < hi; y++)
       {
         float *const dst_row = dst + (size_t)(oy + y) * dst_w + ox;
@@ -428,8 +424,7 @@ __OMP_PARALLEL_FOR__(if((size_t)wi * hi > 10000))
         const int col_end = x1 - l;
         const int src_x_offset = x0 - px[i];
         const int src_y_offset = t - py[i];
-
-__OMP_PARALLEL_FOR__(if((size_t)dst_w * dst_h > 10000))
+        __OMP_PARALLEL_FOR__(if((size_t)dst_w * dst_h > 10000))
         for(int y = 0; y < dst_h; y++)
         {
           float *const dst_row = dst + (size_t)y * dst_w;
@@ -475,7 +470,7 @@ static void _combine_masks_union(float *const restrict dest, float *const restri
 {
   if (inverted)
   {
-__OMP_FOR_SIMD__(aligned(dest, newmask : 64)  if(npixels > 10000))
+    __OMP_FOR_SIMD__(aligned(dest, newmask : 64)  if(npixels > 10000))
     for(int index = 0; index < npixels; index++)
     {
       const float mask = opacity * (1.0f - newmask[index]);
@@ -484,7 +479,7 @@ __OMP_FOR_SIMD__(aligned(dest, newmask : 64)  if(npixels > 10000))
   }
   else
   {
-__OMP_FOR_SIMD__(aligned(dest, newmask : 64)  if(npixels > 10000))
+    __OMP_FOR_SIMD__(aligned(dest, newmask : 64)  if(npixels > 10000))
     for(int index = 0; index < npixels; index++)
     {
       const float mask = opacity * newmask[index];
@@ -498,7 +493,7 @@ static void _combine_masks_intersect(float *const restrict dest, float *const re
 {
   if (inverted)
   {
-__OMP_FOR_SIMD__(aligned(dest, newmask : 64)  if(npixels > 10000))
+    __OMP_FOR_SIMD__(aligned(dest, newmask : 64)  if(npixels > 10000))
     for(int index = 0; index < npixels; index++)
     {
       const float mask = opacity * (1.0f - newmask[index]);
@@ -507,7 +502,7 @@ __OMP_FOR_SIMD__(aligned(dest, newmask : 64)  if(npixels > 10000))
   }
   else
   {
-__OMP_FOR_SIMD__(aligned(dest, newmask : 64)  if(npixels > 10000))
+    __OMP_FOR_SIMD__(aligned(dest, newmask : 64)  if(npixels > 10000))
     for(int index = 0; index < npixels; index++)
     {
       const float mask = opacity * newmask[index];
@@ -528,7 +523,7 @@ static void _combine_masks_difference(float *const restrict dest, float *const r
 {
   if (inverted)
   {
-__OMP_FOR_SIMD__(aligned(dest, newmask : 64)  if(npixels > 10000))
+    __OMP_FOR_SIMD__(aligned(dest, newmask : 64)  if(npixels > 10000))
     for(int index = 0; index < npixels; index++)
     {
       const float mask = opacity * (1.0f - newmask[index]);
@@ -565,7 +560,7 @@ __OMP_FOR_SIMD__(aligned(dest, newmask : 64)  if(npixels > 10000)
   }
   else
   {
-__OMP_FOR_SIMD__(aligned(dest, newmask : 64)  if(npixels > 10000))
+    __OMP_FOR_SIMD__(aligned(dest, newmask : 64)  if(npixels > 10000))
     for(int index = 0; index < npixels; index++)
     {
       const float mask = opacity * newmask[index];
@@ -639,7 +634,7 @@ static int _group_get_mask_roi(const dt_iop_module_t *const restrict module, dt_
         }
         else // if we are here, this mean that we just have to copy the shape and null other parts
         {
-__OMP_PARALLEL_FOR_SIMD__(aligned(buffer, bufs : 64) if(npixels > 10000))
+          __OMP_PARALLEL_FOR_SIMD__(aligned(buffer, bufs : 64) if(npixels > 10000))
           for(int index = 0; index < npixels; index++)
           {
             buffer[index] = op * (inverted ? (1.0f - bufs[index]) : bufs[index]);

@@ -487,7 +487,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
   const dt_iop_colorchecker_data_t *const data = (dt_iop_colorchecker_data_t *)piece->data;
   const int ch = 4;
-__OMP_PARALLEL_FOR__(collapse(2))
+  __OMP_PARALLEL_FOR__(collapse(2))
   for(int j=0;j<roi_out->height;j++)
   {
     for(int i=0;i<roi_out->width;i++)

@@ -257,22 +257,20 @@ static void process_common_cleanup(struct dt_iop_module_t *self, const dt_dev_pi
 
     if(gauss && tmp)
     {
-__OMP_PARALLEL_FOR__()
+      __OMP_PARALLEL_FOR__()
       for(size_t k = 0; k < (size_t)width * height; k++) tmp[k] = ((float *)ivoid)[ch * k];
 
       dt_gaussian_blur(gauss, tmp, tmp);
 
       /* create zonemap preview for input */
       dt_iop_gui_enter_critical_section(self);
-__OMP_PARALLEL_FOR__()
+      __OMP_PARALLEL_FOR__()
       for(size_t k = 0; k < (size_t)width * height; k++)
       {
         g->in_preview_buffer[k] = CLAMPS(tmp[k] * (size - 1) / 100.0f, 0, size - 2);
       }
       dt_iop_gui_leave_critical_section(self);
-
-
-__OMP_PARALLEL_FOR__()
+      __OMP_PARALLEL_FOR__()
       for(size_t k = 0; k < (size_t)width * height; k++) tmp[k] = ((float *)ovoid)[ch * k];
 
       dt_gaussian_blur(gauss, tmp, tmp);
@@ -280,7 +278,7 @@ __OMP_PARALLEL_FOR__()
 
       /* create zonemap preview for output */
       dt_iop_gui_enter_critical_section(self);
-__OMP_PARALLEL_FOR__()
+      __OMP_PARALLEL_FOR__()
       for(size_t k = 0; k < (size_t)width * height; k++)
       {
         g->out_preview_buffer[k] = CLAMPS(tmp[k] * (size - 1) / 100.0f, 0, size - 2);
@@ -308,8 +306,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const float *const restrict in = (const float *const)ivoid;
   float *const restrict out = (float *const)ovoid;
   const size_t npixels = (size_t)roi_out->width * roi_out->height;
-
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < (size_t)4 * npixels; k += 4)
   {
     /* remap lightness into zonemap and apply lightness */

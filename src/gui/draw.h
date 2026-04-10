@@ -355,12 +355,12 @@ static inline void dt_draw_curve_smaple_values(dt_draw_curve_t *c, const float m
 {
   if(x)
   {
-__OMP_PARALLEL_FOR_SIMD__()
+    __OMP_PARALLEL_FOR_SIMD__()
     for(int k = 0; k < res; k++) x[k] = k * (1.0f / res);
   }
   if(y)
   {
-__OMP_PARALLEL_FOR_SIMD__()
+    __OMP_PARALLEL_FOR_SIMD__()
     for(int k = 0; k < res; k++) y[k] = min + (max - min) * c->csample.m_Samples[k] * (1.0f / 0x10000);
   }
 }

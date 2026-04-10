@@ -397,7 +397,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     }
     memset(oldraw, 0, sizeof(float) * buffsize * 2);
     // copy raw values before ca correction
-__OMP_PARALLEL_FOR__()
+    __OMP_PARALLEL_FOR__()
     for(int row = 0; row < height; row++)
     {
       for(int col = (FC(row, 0, filters) & 1); col < width; col += 2)
@@ -514,7 +514,7 @@ __OMP_PARALLEL_FOR__()
 
     {
 // Main algorithm: Tile loop calculating correction parameters per tile
-__OMP_FOR__(collapse(2)  nowait)
+      __OMP_FOR__(collapse(2)  nowait)
       for(int top = -border; top < height; top += ts - border2)
         for(int left = -border; left < width; left += ts - border2)
         {
@@ -995,7 +995,8 @@ __OMP_FOR__(collapse(2)  nowait)
     // Main algorithm: Tile loop
     if(processpasstwo)
     {
-__OMP_FOR__(collapse(2) nowait)
+
+      __OMP_FOR__(collapse(2) nowait)
 
       for(int top = -border; top < height; top += ts - border2)
         for(int left = -border; left < width; left += ts - border2)
@@ -1284,7 +1285,8 @@ __OMP_FOR__(collapse(2) nowait)
 #pragma omp barrier
 #endif
 // copy temporary image matrix back to image matrix
-__OMP_FOR__()
+
+      __OMP_FOR__()
 
       for(int row = 0; row < height; row++)
         for(int col = 0 + (FC(row, 0, filters) & 1), indx = (row * width + col) >> 1; col < width;
@@ -1303,7 +1305,7 @@ __OMP_FOR__()
     // to avoid or at least reduce the colour shift caused by raw ca correction we compute the per pixel difference factors
     // of red and blue channel and apply a gaussian blur to them.
     // Then we apply the resulting factors per pixel on the result of raw ca correction
-__OMP_PARALLEL_FOR__()
+    __OMP_PARALLEL_FOR__()
     for(int row = 0; row < height; row++)
     {
       const int firstCol = FC(row, 0, filters) & 1;

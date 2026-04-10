@@ -832,7 +832,7 @@ static void _extract_luminance_kernel(const float *const restrict in, float *con
                                       const int width, const int height,
                                       const dt_iop_order_iccprofile_info_t *const work_profile)
 {
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(int y = 0; y < height; y++)
   {
     const size_t row = (size_t)y * width;
@@ -861,7 +861,7 @@ __DT_CLONE_TARGETS__
 static void _extract_rgb_kernels(const float *const restrict in, float *const restrict image,
                                  const int width, const int height)
 {
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(int y = 0; y < height; y++)
   {
     const size_t row = (size_t)y * width;
@@ -895,7 +895,7 @@ static void _apply_mono_grain_kernel(const float *const restrict in, float *cons
                                      const float *const restrict image, const float *const restrict result,
                                      const int width, const int height, const float exposure)
 {
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(int y = 0; y < height; y++)
   {
     const size_t row = (size_t)y * width;
@@ -926,7 +926,7 @@ static void _finalize_color_grain_kernel(const float *const restrict in, float *
                                          const int width, const int height, const float exposure_r,
                                          const float exposure_g, const float exposure_b, const float colorfulness)
 {
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(int y = 0; y < height; y++)
   {
     const size_t row = (size_t)y * width;

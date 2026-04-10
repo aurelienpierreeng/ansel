@@ -56,7 +56,7 @@ __DT_CLONE_TARGETS__
 static void blur_horizontal_1ch(float *const restrict buf, const int height, const int width, const int radius,
                                 float *const restrict scanlines, const size_t padded_size)
 {
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(int y = 0; y < height; y++)
   {
     float L = 0;
@@ -115,7 +115,7 @@ __DT_CLONE_TARGETS__
 static void blur_horizontal_2ch(float *const restrict buf, const int height, const int width, const int radius,
                                 float *const restrict scanlines, const size_t padded_size)
 {
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(int y = 0; y < height; y++)
   {
     float *const restrict scanline = dt_get_perthread(scanlines, padded_size);
@@ -238,7 +238,7 @@ static inline __attribute__((always_inline)) void store_scaled_4wide(float *cons
 __DT_CLONE_TARGETS__
 static void sub_16wide(float *const restrict accum, const float *const restrict values)
 {
-__OMP_SIMD__(aligned(accum : 64) aligned(values : 16))
+  __OMP_SIMD__(aligned(accum : 64) aligned(values : 16))
   for(size_t c = 0; c < 16; c++)
     accum[c] -= values[c];
 }
@@ -247,7 +247,7 @@ __OMP_SIMD__(aligned(accum : 64) aligned(values : 16))
 __DT_CLONE_TARGETS__
 static void load_add_16wide(float *const restrict out, float *const restrict accum, const float *const restrict in)
 {
-__OMP_SIMD__(aligned(accum, out : 64))
+  __OMP_SIMD__(aligned(accum, out : 64))
   for (size_t c = 0; c < 16; c++)
   {
     const float v = in[c];
@@ -260,7 +260,7 @@ __DT_CLONE_TARGETS__
 static void sub_16wide_Kahan(float *const restrict accum, const float *const restrict values,
                              float *const restrict comp)
 {
-__OMP_SIMD__(aligned(accum,comp : 64) aligned(values : 16))
+  __OMP_SIMD__(aligned(accum,comp : 64) aligned(values : 16))
   for(size_t c = 0; c < 16; c++)
   {
     const float v = -values[c];
@@ -277,7 +277,7 @@ __DT_CLONE_TARGETS__
 static void load_add_16wide_Kahan(float *const restrict out, float *const restrict accum,
                                   const float *const restrict in, float *const restrict comp)
 {
-__OMP_SIMD__(aligned(accum, comp, out : 64))
+  __OMP_SIMD__(aligned(accum, comp, out : 64))
   for (size_t c = 0; c < 16; c++)
   {
     const float v = in[c];
@@ -294,7 +294,7 @@ __OMP_SIMD__(aligned(accum, comp, out : 64))
 __DT_CLONE_TARGETS__
 static void store_16wide(float *const restrict out, const float *const restrict in)
 {
-__OMP_SIMD__(aligned(in : 64))
+  __OMP_SIMD__(aligned(in : 64))
   for (size_t c = 0; c < 16; c++)
     out[c] = in[c];
 }
@@ -302,7 +302,7 @@ __OMP_SIMD__(aligned(in : 64))
 __DT_CLONE_TARGETS__
 static void store_scaled_16wide(float *const restrict out, const float *const restrict in, const float scale)
 {
-__OMP_SIMD__(aligned(in : 64))
+  __OMP_SIMD__(aligned(in : 64))
   for(size_t c = 0; c < 16; c++)
     out[c] = in[c] / scale;
 }
@@ -311,7 +311,7 @@ __DT_CLONE_TARGETS__
 static void sub_Nwide_Kahan(const size_t N, float *const restrict accum, const float *const restrict values,
                             float *const restrict comp)
 {
-__OMP_SIMD__(aligned(accum,comp : 64))
+  __OMP_SIMD__(aligned(accum,comp : 64))
   for(size_t c = 0; c < N; c++)
   {
     const float v = -values[c];
@@ -328,7 +328,7 @@ __DT_CLONE_TARGETS__
 static void load_add_Nwide_Kahan(const size_t N, float *const restrict out, float *const restrict accum,
                                  const float *const restrict in, float *const restrict comp)
 {
-__OMP_SIMD__(aligned(accum, comp : 64))
+  __OMP_SIMD__(aligned(accum, comp : 64))
   for (size_t c = 0; c < N; c++)
   {
     const float v = in[c];
@@ -345,7 +345,7 @@ __DT_CLONE_TARGETS__
 static void store_scaled_Nwide(const size_t N, float *const restrict out, const float *const restrict in,
                                const float scale)
 {
-__OMP_SIMD__(aligned(in : 64))
+  __OMP_SIMD__(aligned(in : 64))
   for(size_t c = 0; c < N; c++)
     out[c] = in[c] / scale;
 }
@@ -355,7 +355,7 @@ __DT_CLONE_TARGETS__
 static void blur_horizontal_4ch(float *const restrict buf, const size_t height, const size_t width, const size_t radius,
                                 float *const restrict scanlines, const size_t padded_size)
 {
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(int y = 0; y < height; y++)
   {
     float *const restrict scratch = dt_get_perthread(scanlines,padded_size);
@@ -895,7 +895,7 @@ __DT_CLONE_TARGETS__
 static void blur_vertical_1ch(float *const restrict buf, const size_t height, const size_t width, const size_t radius,
                               float *const restrict scanlines, const size_t padded_size)
 {
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(int x = 0; x < width; x += 16)
   {
     float *const restrict scratch = dt_get_perthread(scanlines,padded_size);
@@ -981,8 +981,7 @@ static int box_mean_vert_1ch_Kahan(float *const buf, const int height, const siz
   size_t padded_size;
   float *const restrict scratch_buf = dt_pixelpipe_cache_alloc_perthread_float(16*eff_height,&padded_size);
   if(scratch_buf == NULL) return 1;
-
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for (size_t col = 0; col < width; col += 16)
   {
     float *const restrict scratch = dt_get_perthread(scratch_buf,padded_size);
@@ -1015,8 +1014,7 @@ static int dt_box_mean_4ch_Kahan(float *const buf, const size_t height, const si
     size_t padded_size;
     float *const restrict scanlines = dt_pixelpipe_cache_alloc_perthread_float(4*width,&padded_size);
     if(scanlines == NULL) return 1;
-
-__OMP_PARALLEL_FOR__()
+    __OMP_PARALLEL_FOR__()
     for (size_t row = 0; row < height; row++)
     {
       float *const restrict scratch = dt_get_perthread(scanlines,padded_size);
@@ -1122,7 +1120,7 @@ int dt_box_mean_vertical(float *const buf, const size_t height, const size_t wid
 static inline float window_max(const float *x, int n)
 {
   float m = -(FLT_MAX);
-__OMP_SIMD__(reduction(max : m))
+  __OMP_SIMD__(reduction(max : m))
   for(int j = 0; j < n; j++)
     m = MAX(m, x[j]);
   return m;
@@ -1153,14 +1151,14 @@ static inline void box_max_1d(int N, const float *const restrict x, float *const
 __DT_CLONE_TARGETS__
 static void set_16wide(float *const restrict out, const float value)
 {
-__OMP_SIMD__(aligned(out : 64))
+  __OMP_SIMD__(aligned(out : 64))
   for (size_t c = 0; c < 16; c++)
     out[c] = value;
 }
 
 static inline void update_max_16wide(float m[16], const float *const restrict base)
 {
-__OMP_SIMD__(aligned(m, base : 64))
+  __OMP_SIMD__(aligned(m, base : 64))
   for (size_t c = 0; c < 16; c++)
   {
     m[c] = fmaxf(m[c], base[c]);
@@ -1169,7 +1167,7 @@ __OMP_SIMD__(aligned(m, base : 64))
 
 static inline void load_update_max_16wide(float *const restrict out, float m[16], const float *const restrict base)
 {
-__OMP_SIMD__(aligned(out, m : 64))
+  __OMP_SIMD__(aligned(out, m : 64))
   for (size_t c = 0; c < 16; c++)
   {
     const float v = base[c];
@@ -1227,15 +1225,14 @@ static int box_max_1ch(float *const buf, const size_t height, const size_t width
   size_t allocsize;
   float *const restrict scratch_buffers = dt_pixelpipe_cache_alloc_perthread_float(scratch_size,&allocsize);
   if(scratch_buffers == NULL) return 1;
-
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t row = 0; row < height; row++)
   {
     float *const restrict scratch = dt_get_perthread(scratch_buffers,allocsize);
     memcpy(scratch, buf + row * width, sizeof(float) * width);
     box_max_1d(width, scratch, buf + row * width, 1, w);
   }
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(int col = 0; col < (width & ~15); col += 16)
   {
     float *const restrict scratch = dt_get_perthread(scratch_buffers,allocsize);
@@ -1268,7 +1265,7 @@ int dt_box_max(float *const buf, const size_t height, const size_t width, const 
 static inline float window_min(const float *x, int n)
 {
   float m = FLT_MAX;
-__OMP_SIMD__(reduction(min : m))
+  __OMP_SIMD__(reduction(min : m))
   for(int j = 0; j < n; j++)
     m = MIN(m, x[j]);
   return m;
@@ -1295,7 +1292,7 @@ static inline void box_min_1d(int N, const float *x, float *y, size_t stride_y, 
 
 static inline void update_min_16wide(float m[16], const float *const restrict base)
 {
-__OMP_SIMD__(aligned(m, base : 64))
+  __OMP_SIMD__(aligned(m, base : 64))
   for (size_t c = 0; c < 16; c++)
   {
     m[c] = fminf(m[c], base[c]);
@@ -1304,7 +1301,7 @@ __OMP_SIMD__(aligned(m, base : 64))
 
 static inline void load_update_min_16wide(float *const restrict out, float m[16], const float *const restrict base)
 {
-__OMP_SIMD__(aligned(out, m : 64))
+  __OMP_SIMD__(aligned(out, m : 64))
   for (size_t c = 0; c < 16; c++)
   {
     const float v = base[c];
@@ -1363,15 +1360,14 @@ static int box_min_1ch(float *const buf, const size_t height, const size_t width
   size_t allocsize;
   float *const restrict scratch_buffers = dt_pixelpipe_cache_alloc_perthread_float(scratch_size,&allocsize);
   if(scratch_buffers == NULL) return 1;
-  
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t row = 0; row < height; row++)
   {
     float *const restrict scratch = dt_get_perthread(scratch_buffers,allocsize);
     memcpy(scratch, buf + row * width, sizeof(float) * width);
     box_min_1d(width, scratch, buf + row * width, 1, w);
   }
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t col = 0; col < (width & ~15); col += 16)
   {
     float *const restrict scratch = dt_get_perthread(scratch_buffers,allocsize);

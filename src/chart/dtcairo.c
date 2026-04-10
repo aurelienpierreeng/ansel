@@ -190,8 +190,7 @@ static cairo_user_data_key_t source_data_buffer_key;
 cairo_surface_t *cairo_surface_create_from_xyz_data(const float *const image, const int width, const int height)
 {
   unsigned char *rgbbuf = (unsigned char *)malloc(sizeof(unsigned char) * height * width * 4);
-
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(int y = 0; y < height; y++)
   {
     const float *iter = image + y * width * 3;

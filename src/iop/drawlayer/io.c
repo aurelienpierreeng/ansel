@@ -315,8 +315,7 @@ static void _overlay_patch_row_rgba(uint16_t *dst_row, const uint32_t width, con
   if(dst_x0 >= dst_x1) return;
 
   const float *patch_row = patch->pixels + 4 * (size_t)(raw_y - patch->y) * patch->width;
-
-__OMP_FOR_SIMD__()
+  __OMP_FOR_SIMD__()
   for(int dst_x = dst_x0; dst_x < dst_x1; dst_x++)
   {
     const float *src_pixel = patch_row + 4 * (size_t)(dst_x + offset_x - patch->x);

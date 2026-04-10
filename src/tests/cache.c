@@ -54,8 +54,7 @@ int main(int argc, char *arg[])
   // really hammer it, make quota insanely low:
   dt_cache_init(&cache, 110000, 16, 64, 100);
   dt_cache_set_allocate_callback(&cache, alloc_dummy, NULL);
-
-__OMP_PARALLEL_FOR__(schedule(guided) shared(cache, stderr) num_threads(16))
+  __OMP_PARALLEL_FOR__(schedule(guided) shared(cache, stderr) num_threads(16))
   for(int k = 0; k < 100000; k++)
   {
     void *data = (void *)(long int)k;
@@ -95,8 +94,7 @@ __OMP_PARALLEL_FOR__(schedule(guided) shared(cache, stderr) num_threads(16))
     // capacity 1 num threads 1 cache line size 64 ignored, quota 2 (80% => 1)
     dt_cache_init(&cache2, 1, 1, 64, 2);
     dt_cache_set_allocate_callback(&cache2, alloc_dummy, NULL);
-
-__OMP_PARALLEL_FOR__(schedule(guided) shared(cache2, stderr) num_threads(16))
+    __OMP_PARALLEL_FOR__(schedule(guided) shared(cache2, stderr) num_threads(16))
     for(int k = 0; k < 100000; k++)
     {
       void *data = (void *)(long int)k;

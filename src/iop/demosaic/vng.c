@@ -130,7 +130,7 @@ static int vng_interpolate(float *out, const float *const in,
 
   for(int row = 2; row < height - 2; row++) /* Do VNG interpolation */
   {
-__OMP_PARALLEL_FOR__(private(ip) )
+    __OMP_PARALLEL_FOR__(private(ip) )
     for(int col = 2; col < width - 2; col++)
     {
       int g;
@@ -193,7 +193,7 @@ __OMP_PARALLEL_FOR__(private(ip) )
 
   if(filters != 9 && !FILTERS_ARE_4BAYER(filters)) // x-trans or CYGM/RGBE
 // for Bayer mix the two greens to make VNG4
-__OMP_PARALLEL_FOR__()
+    __OMP_PARALLEL_FOR__()
     for(int i = 0; i < height * width; i++) out[i * 4 + 1] = (out[i * 4 + 1] + out[i * 4 + 3]) / 2.0f;
   return 0;
 }

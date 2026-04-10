@@ -347,7 +347,7 @@ static void kmeans(const float *col, const int width, const int height, const in
   {
     for(int k = 0; k < n; k++) cnt[k] = 0;
 // randomly sample col positions inside roi
-__OMP_PARALLEL_FOR__()
+    __OMP_PARALLEL_FOR__()
     for(int s = 0; s < samples; s++)
     {
       const int j = CLAMP(dt_points_get() * height, 0, height - 1);
@@ -520,7 +520,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
     const size_t npixels = (size_t)height * width;
 // first get delta L of equalized L minus original image L, scaled to fit into [0 .. 100]
-__OMP_PARALLEL_FOR__()
+    __OMP_PARALLEL_FOR__()
     for(size_t k = 0; k < npixels * 4; k += 4)
     {
       const float L = in[k];
@@ -554,13 +554,12 @@ __OMP_PARALLEL_FOR__()
       dt_free(mapio);
       return 1;
     }
-
-__OMP_PARALLEL__()
+    __OMP_PARALLEL__()
     {
       // get a thread-private scratch buffer; do this before the actual loop so we don't have to look it up for
       // every single pixel
       float *const restrict weight = dt_get_perthread(weight_buf,allocsize);
-__OMP_FOR__()
+      __OMP_FOR__()
       for(size_t j = 0; j < 4*npixels; j += 4)
       {
         const float L = in[j];

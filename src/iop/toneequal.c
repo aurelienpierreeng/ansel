@@ -736,8 +736,7 @@ static inline void apply_toneequalizer(const float *const restrict in,
   const int min_ev = -8;
   const int max_ev = 0;
   const float* restrict lut = d->correction_lut;
-
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < num_elem; ++k)
   {
     // The radial-basis interpolation is valid in [-8; 0] EV and can quickely diverge outside
@@ -767,8 +766,7 @@ static inline void apply_toneequalizer(const float *const restrict in,
   const float *const restrict factors = d->factors;
   const float sigma = d->smoothing;
   const float gauss_denom = gaussian_denom(sigma);
-
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < num_elem; ++k)
   {
     // build the correction for the current pixel
@@ -777,8 +775,7 @@ __OMP_PARALLEL_FOR__()
 
     // The radial-basis interpolation is valid in [-8; 0] EV and can quickely diverge outside
     const float exposure = fast_clamp(log2f(luminance[k]), -8.0f, 0.0f);
-
-__OMP_SIMD__(aligned(luminance, centers_ops, factors:64) safelen(PIXEL_CHAN) reduction(+:result))
+    __OMP_SIMD__(aligned(luminance, centers_ops, factors:64) safelen(PIXEL_CHAN) reduction(+:result))
     for(int i = 0; i < PIXEL_CHAN; ++i)
       result += gaussian_func(exposure - centers_ops[i], gauss_denom) * factors[i];
 
@@ -802,8 +799,7 @@ static inline float pixel_correction(const float exposure,
   float result = 0.0f;
   const float gauss_denom = gaussian_denom(sigma);
   const float expo = fast_clamp(exposure, -8.0f, 0.0f);
-
-__OMP_SIMD__(aligned(centers_ops, factors:64) safelen(PIXEL_CHAN) reduction(+:result))
+  __OMP_SIMD__(aligned(centers_ops, factors:64) safelen(PIXEL_CHAN) reduction(+:result))
   for(int i = 0; i < PIXEL_CHAN; ++i)
     result += gaussian_func(expo - centers_ops[i], gauss_denom) * factors[i];
 
@@ -902,8 +898,7 @@ static inline void display_luminance_mask(const float *const restrict in,
   const size_t in_width = roi_in->width;
   const size_t out_width = (roi_in->width > roi_out->width) ? roi_out->width : roi_in->width;
   const size_t out_height = (roi_in->height > roi_out->height) ? roi_out->height : roi_in->height;
-
-__OMP_PARALLEL_FOR__(collapse(2))
+  __OMP_PARALLEL_FOR__(collapse(2))
   for(size_t i = 0 ; i < out_height; ++i)
     for(size_t j = 0; j < out_width; ++j)
     {
@@ -1220,7 +1215,7 @@ static void get_channels_factors(float factors[CHANNELS], const dt_iop_toneequal
   get_channels_gains(factors, p);
 
   // Convert from EV offsets to linear factors
-__OMP_SIMD__(aligned(factors:64))
+  __OMP_SIMD__(aligned(factors:64))
   for(int c = 0; c < CHANNELS; ++c)
     factors[c] = exp2f(factors[c]);
 }
@@ -1234,8 +1229,7 @@ static int compute_channels_factors(const float factors[PIXEL_CHAN], float out[C
   assert(PIXEL_CHAN == 8);
 
   int valid = 1;
-
-__OMP_PARALLEL_FOR_SIMD__(aligned(factors, out, centers_params:64) shared(valid) firstprivate(centers_params))
+  __OMP_PARALLEL_FOR_SIMD__(aligned(factors, out, centers_params:64) shared(valid) firstprivate(centers_params))
   for(int i = 0; i < CHANNELS; ++i)
   {
      // Compute the new channels factors
@@ -1351,8 +1345,7 @@ static inline void build_interpolation_matrix(float A[CHANNELS * PIXEL_CHAN],
   // of the radial-basis interpolation weights
 
   const float gauss_denom = gaussian_denom(sigma);
-
-__OMP_SIMD__(aligned(A, centers_ops, centers_params:64) collapse(2))
+  __OMP_SIMD__(aligned(A, centers_ops, centers_params:64) collapse(2))
   for(int i = 0; i < CHANNELS; ++i)
     for(int j = 0; j < PIXEL_CHAN; ++j)
       A[i * PIXEL_CHAN + j] = gaussian_func(centers_params[i] - centers_ops[j], gauss_denom);
@@ -1375,7 +1368,7 @@ static inline void compute_log_histogram_and_stats(const float *const restrict l
   memset(temp_hist, 0, sizeof(int) * TEMP_SAMPLES);
 
   // Split exposure in bins
-__OMP_PARALLEL_FOR__(reduction(+:temp_hist[:TEMP_SAMPLES]))
+  __OMP_PARALLEL_FOR__(reduction(+:temp_hist[:TEMP_SAMPLES]))
   for(size_t k = 0; k < num_elem; k++)
   {
     // extended histogram bins between [-10; +6] EV remapped between [0 ; 2 * UI_SAMPLES]
@@ -1508,8 +1501,7 @@ static inline void compute_lut_correction(struct dt_iop_toneequalizer_gui_data_t
   float *const restrict LUT = g->gui_lut;
   const float *const restrict factors = g->factors;
   const float sigma = g->sigma;
-
-__OMP_FOR_SIMD__(aligned(LUT, factors:64))
+  __OMP_FOR_SIMD__(aligned(LUT, factors:64))
   for(int k = 0; k < UI_SAMPLES; k++)
   {
     // build the inset graph curve LUT

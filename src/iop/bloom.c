@@ -148,7 +148,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
   const float threshold = data->threshold;
 /* get the thresholded lights into buffer */
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < npixels; k++)
   {
     const float L = in[4*k] * scale;
@@ -166,7 +166,7 @@ __OMP_PARALLEL_FOR__()
   }
 
 /* screen blend lightness with original */
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < npixels; k++)
   {
     out[4*k+0] = 100.0f - (((100.0f - in[4*k]) * (100.0f - blurlightness[k])) / 100.0f); // Screen blend

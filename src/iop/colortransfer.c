@@ -291,7 +291,7 @@ static int kmeans(const float *col, const dt_iop_roi_t *const roi, const int n, 
   {
     for(int k = 0; k < n; k++) cnt[k] = 0;
 // randomly sample col positions inside roi
-__OMP_PARALLEL_FOR__()
+    __OMP_PARALLEL_FOR__()
     for(int s = 0; s < samples; s++)
     {
       const int j = dt_points_get() * roi->height;
@@ -394,7 +394,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     // apply histogram of L and clustering of (a,b)
     int hist[HISTN];
     capture_histogram(in, roi_in, hist);
-__OMP_PARALLEL_FOR__()
+    __OMP_PARALLEL_FOR__()
     for(int k = 0; k < roi_out->height; k++)
     {
       size_t j = (size_t)ch * roi_out->width * k;
@@ -436,7 +436,7 @@ __OMP_PARALLEL_FOR__()
     get_cluster_mapping(data->n, mean, data->mean, mapio);
 
 // for all pixels: find input cluster, transfer to mapped target cluster
-__OMP_PARALLEL_FOR__()
+    __OMP_PARALLEL_FOR__()
     for(int k = 0; k < roi_out->height; k++)
     {
       float weight[MAXN];

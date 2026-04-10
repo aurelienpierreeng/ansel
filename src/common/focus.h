@@ -57,8 +57,7 @@ static inline void _dt_focus_cdf22_wtf(uint8_t *buf, const int l, const int widt
 
   const int step = 1 << l;
   const int st = step / 2;
-
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(int j = 0; j < height; j++)
   {
     // rows
@@ -76,7 +75,7 @@ __OMP_PARALLEL_FOR__()
     if(i < width) /*for(ch=0; ch<3; ch++)*/
       gbuf(buf, i, j) += _from_uint8(gbuf(buf, i - st, j)) / 2;
   }
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(int i = 0; i < width; i++)
   {
     // cols

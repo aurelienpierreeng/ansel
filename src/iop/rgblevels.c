@@ -1082,7 +1082,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
   float *const restrict out = (float*)ovoid;
   if (d->params.autoscale == DT_IOP_RGBLEVELS_INDEPENDENT_CHANNELS || d->params.preserve_colors == DT_RGB_NORM_NONE)
   {
-__OMP_PARALLEL_FOR__()
+    __OMP_PARALLEL_FOR__()
     for(int k = 0; k < 4U*npixels; k += 4)
     {
       for(int c = 0; c < 3; c++)
@@ -1114,7 +1114,7 @@ __OMP_PARALLEL_FOR__()
     const int ch_levels = 0;
     const float mult_ch = mult[ch_levels];
     const float *const restrict levels = d->params.levels[ch_levels];
-__OMP_PARALLEL_FOR__()
+    __OMP_PARALLEL_FOR__()
     for(int k = 0; k < 4U*npixels; k += 4)
     {
       const float lum = dt_rgb_norm(in+k, d->params.preserve_colors, work_profile);

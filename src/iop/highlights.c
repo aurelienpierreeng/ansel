@@ -793,8 +793,7 @@ static void process_lch_bayer(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_
                               const dt_iop_roi_t *const roi_out, const float clip)
 {
   const uint32_t filters = piece->dsc_in.filters;
-
-__OMP_PARALLEL_FOR__(collapse(2))
+  __OMP_PARALLEL_FOR__(collapse(2))
   for(int j = 0; j < roi_out->height; j++)
   {
     for(int i = 0; i < roi_out->width; i++)
@@ -891,8 +890,7 @@ static void process_lch_xtrans(dt_iop_module_t *self, const dt_dev_pixelpipe_iop
                                const dt_iop_roi_t *const roi_out, const float clip)
 {
   const uint8_t(*const xtrans)[6] = (const uint8_t(*const)[6])piece->dsc_in.xtrans;
-
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(int j = 0; j < roi_out->height; j++)
   {
     float *out = (float *)ovoid + (size_t)roi_out->width * j;
@@ -1026,7 +1024,7 @@ static void _interpolate_and_mask(const float *const restrict input,
                                   const size_t width, const size_t height)
 {
   // Bilinear interpolation
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t i = 0; i < height; i++)
     for(size_t j = 0; j < width; j++)
     {
@@ -1170,7 +1168,7 @@ static void _compute_laplacian_normalization(const float *const restrict input,
   float sum_G = 0.f;
   float sum_B = 0.f;
   const float n_pixels = roi_in->height * roi_in->width;
-__OMP_PARALLEL_FOR__(collapse(2) reduction(+:sum_R, sum_G, sum_B) )
+  __OMP_PARALLEL_FOR__(collapse(2) reduction(+:sum_R, sum_G, sum_B) )
   for(size_t i = 0; i < roi_in->height; i++)
     for(size_t j = 0; j < roi_in->width; j++)
     {
@@ -1252,7 +1250,7 @@ static void _interpolate_and_mask_xtrans(const float *const restrict input,
                                          const uint8_t (*const xtrans)[6],
                                          const size_t width, const size_t height)
 {
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t i = 0; i < height; i++)
     for(size_t j = 0; j < width; j++)
     {
@@ -1346,7 +1344,7 @@ static void _remosaic_and_replace(const float *const restrict input,
                                   const size_t width, const size_t height)
 {
   // Take RGB ratios and norm, reconstruct RGB and remosaic the image
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t i = 0; i < height; i++)
     for(size_t j = 0; j < width; j++)
     {
@@ -1370,7 +1368,7 @@ static void _remosaic_and_replace_xtrans(const float *const restrict input,
                                          const uint8_t (*const xtrans)[6],
                                          const size_t width, const size_t height)
 {
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t i = 0; i < height; i++)
     for(size_t j = 0; j < width; j++)
     {
@@ -1422,8 +1420,7 @@ static inline void guide_laplacians(const float *const restrict high_freq, const
   const dt_aligned_pixel_simd_t inv_patch = dt_simd_set1(1.f / 9.f);
   const dt_aligned_pixel_simd_t scale_multiplier = dt_simd_set1(1.f / radius_sq);
   const float eps = 1e-12f;
-
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t row = 0; row < height; ++row)
   {
     // interleave the order in which we process the rows so that we minimize cache misses
@@ -1593,8 +1590,7 @@ static inline void heat_PDE_diffusion(const float *const restrict high_freq, con
   float *const restrict out = DT_IS_ALIGNED(output);
   const float *const restrict LF = DT_IS_ALIGNED(low_freq);
   const float *const restrict HF = DT_IS_ALIGNED(high_freq);
-
-__OMP_PARALLEL_FOR__(firstprivate(anisotropic_kernel_isophote))
+  __OMP_PARALLEL_FOR__(firstprivate(anisotropic_kernel_isophote))
   for(size_t row = 0; row < height; ++row)
   {
     // interleave the order in which we process the rows so that we minimize cache misses
@@ -2608,7 +2604,7 @@ static void process_clip(const dt_dev_pixelpipe_iop_t *piece, const void *const 
 
   if(piece->dsc_in.filters)
   { // raw mosaic
-__OMP_PARALLEL_FOR_SIMD__()
+    __OMP_PARALLEL_FOR_SIMD__()
     for(size_t k = 0; k < (size_t)roi_out->width * roi_out->height; k++)
     {
       out[k] = MIN(clip, in[k]);
@@ -2617,8 +2613,7 @@ __OMP_PARALLEL_FOR_SIMD__()
   else
   {
     const int ch = piece->dsc_in.channels;
-
-__OMP_PARALLEL_FOR_SIMD__()
+    __OMP_PARALLEL_FOR_SIMD__()
     for(size_t k = 0; k < (size_t)ch * roi_out->width * roi_out->height; k++)
     {
       out[k] = MIN(clip, in[k]);
@@ -2639,8 +2634,7 @@ static void process_visualize(const dt_dev_pixelpipe_iop_t *piece, const void *c
                            0.995f * data->clip * piece->dsc_in.processed_maximum[1],
                            0.995f * data->clip * piece->dsc_in.processed_maximum[2],
                            data->clip};
-
-__OMP_FOR_SIMD__(aligned(in, out : 64))
+  __OMP_FOR_SIMD__(aligned(in, out : 64))
   for(size_t row = 0; row < height; row++)
   {
     for(size_t col = 0, i = row*width; col < width; col++, i++)
@@ -2693,13 +2687,13 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
       if(filters == 9u)
       {
         const uint8_t(*const xtrans)[6] = (const uint8_t(*const)[6])piece->dsc_in.xtrans;
-__OMP_PARALLEL_FOR__()
+        __OMP_PARALLEL_FOR__()
         for(int j = 0; j < roi_out->height; j++)
         {
           interpolate_color_xtrans(ivoid, ovoid, roi_in, roi_out, 0, 1, j, clips, xtrans, 0);
           interpolate_color_xtrans(ivoid, ovoid, roi_in, roi_out, 0, -1, j, clips, xtrans, 1);
         }
-__OMP_PARALLEL_FOR__()
+        __OMP_PARALLEL_FOR__()
         for(int i = 0; i < roi_out->width; i++)
         {
           interpolate_color_xtrans(ivoid, ovoid, roi_in, roi_out, 1, 1, i, clips, xtrans, 2);
@@ -2708,7 +2702,7 @@ __OMP_PARALLEL_FOR__()
       }
       else
       {
-__OMP_PARALLEL_FOR__()
+        __OMP_PARALLEL_FOR__()
         for(int j = 0; j < roi_out->height; j++)
         {
           interpolate_color(ivoid, ovoid, roi_out, 0, 1, j, clips, filters, 0);
@@ -2716,7 +2710,7 @@ __OMP_PARALLEL_FOR__()
         }
 
 // up/down directions
-__OMP_PARALLEL_FOR__()
+        __OMP_PARALLEL_FOR__()
         for(int i = 0; i < roi_out->width; i++)
         {
           interpolate_color(ivoid, ovoid, roi_out, 1, 1, i, clips, filters, 2);

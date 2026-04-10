@@ -581,7 +581,7 @@ dt_imageio_retval_t dt_imageio_open_rawspeed_sraw(dt_image_t *img,
 
     if(r->getDataType() == TYPE_USHORT16)
     {
-__OMP_PARALLEL_FOR_CPP__(shared(r) firstprivate(height, width, buf, cpp))
+      __OMP_PARALLEL_FOR_CPP__(shared(r) firstprivate(height, width, buf, cpp))
       for(int j = 0; j < height; j++)
       {
         const Array2DRef<uint16_t> in = r->getU16DataAsUncroppedArray2DRef();
@@ -596,7 +596,7 @@ __OMP_PARALLEL_FOR_CPP__(shared(r) firstprivate(height, width, buf, cpp))
     }
     else // r->getDataType() == TYPE_FLOAT32
     {
-__OMP_PARALLEL_FOR_CPP__(shared(r) firstprivate(height, width, buf, cpp))
+      __OMP_PARALLEL_FOR_CPP__(shared(r) firstprivate(height, width, buf, cpp))
       for(int j = 0; j < height; j++)
       {
         const Array2DRef<float> in = r->getF32DataAsUncroppedArray2DRef();
@@ -619,7 +619,7 @@ __OMP_PARALLEL_FOR_CPP__(shared(r) firstprivate(height, width, buf, cpp))
 
     if(r->getDataType() == TYPE_USHORT16)
     {
-__OMP_PARALLEL_FOR_CPP__(shared(r) firstprivate(height, width, buf, cpp))
+      __OMP_PARALLEL_FOR_CPP__(shared(r) firstprivate(height, width, buf, cpp))
       for(int j = 0; j < height; j++)
       {
         const Array2DRef<uint16_t> in = r->getU16DataAsUncroppedArray2DRef();
@@ -635,7 +635,7 @@ __OMP_PARALLEL_FOR_CPP__(shared(r) firstprivate(height, width, buf, cpp))
     }
     else // r->getDataType() == TYPE_FLOAT32
     {
-__OMP_PARALLEL_FOR_CPP__(shared(r) firstprivate(height, width, buf, cpp))
+      __OMP_PARALLEL_FOR_CPP__(shared(r) firstprivate(height, width, buf, cpp))
       for(int j = 0; j < height; j++)
       {
         const Array2DRef<float> in = r->getF32DataAsUncroppedArray2DRef();

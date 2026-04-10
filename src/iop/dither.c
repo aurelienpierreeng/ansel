@@ -196,8 +196,7 @@ static inline void nearest_color(float *const restrict val, float *const restric
     // dither pixel into gray, with f=levels-1 and rf=1/f, return err=old-new
     const float in = _rgb_to_gray(val);
     const float new = _quantize(in,f,rf);
-
-__OMP_SIMD__(aligned(val, err : 16))
+    __OMP_SIMD__(aligned(val, err : 16))
     for(int c = 0; c < 4; c++)
     {
       err[c] = val[c] - new;
@@ -207,7 +206,7 @@ __OMP_SIMD__(aligned(val, err : 16))
   else
   {
     // dither pixel into RGB, with f=levels-1 and rf=1/f, return err=old-new
-__OMP_SIMD__(aligned(val, err : 16))
+  __OMP_SIMD__(aligned(val, err : 16))
   for(int c = 0; c < 4; c++)
   {
     const float old = val[c];
@@ -220,7 +219,7 @@ __OMP_SIMD__(aligned(val, err : 16))
 
 static inline void _diffuse_error(float *const restrict val, const float *const restrict err, const float factor)
 {
-__OMP_SIMD__(aligned(val, err))
+  __OMP_SIMD__(aligned(val, err))
   for(int c = 0; c < 4; c++)
   {
     val[c] += err[c] * factor;
@@ -247,7 +246,7 @@ static inline float clipnan(const float x)
 
 static inline void clipnan_pixel(float *const restrict out, const float *const restrict in)
 {
-__OMP_SIMD__(aligned(in, out : 16))
+  __OMP_SIMD__(aligned(in, out : 16))
   for (int c = 0; c < 4; c++)
     out[c] = clipnan(in[c]);
 }
@@ -404,7 +403,7 @@ static void process_floyd_steinberg(struct dt_iop_module_t *self, const dt_dev_p
 
   // once the FS dithering gets started, we can copy&clip the downright pixel, as that will be the first time
   // it will be accessed.  But to get the process started, we need to prepare the top row of pixels
-__OMP_SIMD__(aligned(in, out : 64))
+  __OMP_SIMD__(aligned(in, out : 64))
   for (int j = 0; j < width; j++)
   {
     clipnan_pixel(out + 4*j, in + 4*j);
@@ -463,12 +462,11 @@ static void process_random(struct dt_iop_module_t *self, const dt_dev_pixelpipe_
   const float dither = powf(2.0f, data->random.damping / 10.0f);
 
   unsigned int *const tea_states = alloc_tea_states(darktable.num_openmp_threads);
-
-__OMP_PARALLEL__()
+  __OMP_PARALLEL__()
   {
     // get a pointer to each thread's private buffer *outside* the for loop, to avoid a function call per iteration
     unsigned int *const tea_state = get_tea_state(tea_states,dt_get_thread_num());
-__OMP_FOR__()
+    __OMP_FOR__()
     for(int j = 0; j < height; j++)
     {
       const size_t k = (size_t)4 * width * j;
@@ -479,8 +477,7 @@ __OMP_FOR__()
       {
         encrypt_tea(tea_state);
         float dith = dither * tpdf(tea_state[0]);
-
-__OMP_SIMD__(aligned(in, out : 64))
+        __OMP_SIMD__(aligned(in, out : 64))
         for(int c = 0; c < 4; c++)
         {
           out[4*i+c] = CLIP(in[4*i+c] + dith);

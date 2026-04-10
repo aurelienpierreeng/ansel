@@ -142,8 +142,7 @@ static void _channel_display_monochrome(const float *const restrict in, uint8_t 
                                         const size_t buffsize, const float alpha)
 {
   const dt_aligned_pixel_t mask_color = { 1.0f, 1.0f, 0.0f }; // yellow; "unused" element enables vectorization
-
-__OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64) aligned(mask_color: 16))
+  __OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64) aligned(mask_color: 16))
   for(size_t j = 0; j < buffsize; j += 4)
   {
     dt_aligned_pixel_t pixel = { in[j + 1], in[j + 1], in[j + 1], in[j + 1] };
@@ -160,7 +159,7 @@ static void _channel_display_false_color(const float *const restrict in, uint8_t
   switch(channel & DT_DEV_PIXELPIPE_DISPLAY_ANY & ~DT_DEV_PIXELPIPE_DISPLAY_OUTPUT)
   {
     case DT_DEV_PIXELPIPE_DISPLAY_a:
-__OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64) aligned(mask_color: 16))
+      __OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64) aligned(mask_color: 16))
       for(size_t j = 0; j < buffsize; j += 4)
       {
         dt_aligned_pixel_t xyz;
@@ -174,7 +173,7 @@ __OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64) aligned(mask_color: 16))
       }
       break;
     case DT_DEV_PIXELPIPE_DISPLAY_b:
-__OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64) aligned(mask_color: 16))
+      __OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64) aligned(mask_color: 16))
       for(size_t j = 0; j < buffsize; j += 4)
       {
         dt_aligned_pixel_t xyz, pixel;
@@ -187,7 +186,7 @@ __OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64) aligned(mask_color: 16))
       }
       break;
     case DT_DEV_PIXELPIPE_DISPLAY_R:
-__OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64) aligned(mask_color: 16))
+      __OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64) aligned(mask_color: 16))
       for(size_t j = 0; j < buffsize; j += 4)
       {
         const dt_aligned_pixel_t pixel = { in[j + 1], 0.0f, 0.0f, 0.0f };
@@ -195,7 +194,7 @@ __OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64) aligned(mask_color: 16))
       }
       break;
     case DT_DEV_PIXELPIPE_DISPLAY_G:
-__OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64) aligned(mask_color: 16))
+      __OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64) aligned(mask_color: 16))
       for(size_t j = 0; j < buffsize; j += 4)
       {
         const dt_aligned_pixel_t pixel = { 0.0f, in[j + 1], 0.0f, 0.0f };
@@ -203,7 +202,7 @@ __OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64) aligned(mask_color: 16))
       }
       break;
     case DT_DEV_PIXELPIPE_DISPLAY_B:
-__OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64) aligned(mask_color: 16))
+      __OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64) aligned(mask_color: 16))
       for(size_t j = 0; j < buffsize; j += 4)
       {
         const dt_aligned_pixel_t pixel = { 0.0f, 0.0f, in[j + 1], 0.0f };
@@ -213,7 +212,7 @@ __OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64) aligned(mask_color: 16))
     case DT_DEV_PIXELPIPE_DISPLAY_LCH_C:
     case DT_DEV_PIXELPIPE_DISPLAY_HSL_S:
     case DT_DEV_PIXELPIPE_DISPLAY_JzCzhz_Cz:
-__OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64) aligned(mask_color: 16))
+      __OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64) aligned(mask_color: 16))
       for(size_t j = 0; j < buffsize; j += 4)
       {
         const dt_aligned_pixel_t pixel = { 0.5f, 0.5f * (1.0f - in[j + 1]), 0.5f, 0.0f };
@@ -221,7 +220,7 @@ __OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64) aligned(mask_color: 16))
       }
       break;
     case DT_DEV_PIXELPIPE_DISPLAY_LCH_h:
-__OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64) aligned(mask_color: 16))
+      __OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64) aligned(mask_color: 16))
       for(size_t j = 0; j < buffsize; j += 4)
       {
         dt_aligned_pixel_t lch = { 65.0f, 37.0f, in[j + 1], 0.0f };
@@ -234,7 +233,7 @@ __OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64) aligned(mask_color: 16))
       }
       break;
     case DT_DEV_PIXELPIPE_DISPLAY_HSL_H:
-__OMP_PARALLEL_FOR__()
+      __OMP_PARALLEL_FOR__()
       for(size_t j = 0; j < buffsize; j += 4)
       {
         dt_aligned_pixel_t hsl = { in[j + 1], 0.5f, 0.5f, 0.0f };
@@ -245,7 +244,7 @@ __OMP_PARALLEL_FOR__()
       }
       break;
     case DT_DEV_PIXELPIPE_DISPLAY_JzCzhz_hz:
-__OMP_PARALLEL_FOR__()
+      __OMP_PARALLEL_FOR__()
       for(size_t j = 0; j < buffsize; j += 4)
       {
         const dt_aligned_pixel_t JzCzhz = { 0.011f, 0.01f, in[j + 1] };
@@ -273,8 +272,7 @@ static void _mask_display(const float *const restrict in, uint8_t *const restric
                           const float alpha)
 {
   const dt_aligned_pixel_t mask_color = { 1.0f, 1.0f, 0.0f, 0.0f };
-
-__OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64) aligned(mask_color: 16))
+    __OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64) aligned(mask_color: 16))
     for(size_t j = 0; j < buffsize; j+= 4)
     {
       const float gray = 0.3f * in[j + 0] + 0.59f * in[j + 1] + 0.11f * in[j + 2];
@@ -286,7 +284,7 @@ __OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64) aligned(mask_color: 16))
 __DT_CLONE_TARGETS__
 static void _copy_output(const float *const restrict in, uint8_t *const restrict out, const size_t buffsize)
 {
-__OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64))
+  __OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64))
   for(size_t j = 0; j < buffsize; j += 4)
   {
     // the output of this module is BGR(A) instead of RGBA, so we can't use for_each_channel

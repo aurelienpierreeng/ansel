@@ -124,7 +124,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   if(luminance == NULL) return 1;
 
 // double lsmax=0.0,lsmin=1.0;
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(int j = 0; j < roi_out->height; j++)
   {
     float *in = (float *)ivoid + (size_t)j * roi_out->width * ch;
@@ -156,7 +156,7 @@ __OMP_PARALLEL_FOR__()
   }
 
 // CLAHE
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(int j = 0; j < roi_out->height; j++)
   {
     int yMin = fmax(0, j - rad);

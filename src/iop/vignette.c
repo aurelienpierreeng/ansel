@@ -728,8 +728,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   }
 
   unsigned int *const tea_states = alloc_tea_states(darktable.num_openmp_threads);
-
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(int j = 0; j < roi_out->height; j++)
   {
     const size_t k = (size_t)ch * roi_out->width * j;

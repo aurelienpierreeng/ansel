@@ -383,9 +383,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const float lmax = max[0] + fabsf(min[0]);
   const float halfmax = lmax / 2.0;
   const float doublemax = lmax * 2.0;
-
-
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t j = 0; j < (size_t)width * height * ch; j += ch)
   {
     dt_aligned_pixel_t ta, tb;

@@ -231,8 +231,7 @@ void dt_histogram_worker(dt_dev_histogram_collection_params_t *const histogram_p
   if(histogram_params->mul == 0) histogram_params->mul = (double)(histogram_params->bins_count - 1);
 
   const dt_histogram_roi_t *const roi = histogram_params->roi;
-
-__OMP_PARALLEL_FOR__(shared(partial_hists) )
+  __OMP_PARALLEL_FOR__(shared(partial_hists) )
   for(int j = roi->crop_y; j < roi->height - roi->crop_height; j++)
   {
     uint32_t *thread_hist = (uint32_t *)partial_hists + bins_total * omp_get_thread_num();
@@ -281,7 +280,7 @@ void dt_histogram_helper(dt_dev_histogram_collection_params_t *histogram_params,
 
     if(converted != NULL)
     {
-__OMP_PARALLEL_FOR__()
+      __OMP_PARALLEL_FOR__()
       for(size_t k = 0; k < pixels; k++)
       {
         const size_t offset = 4 * k;

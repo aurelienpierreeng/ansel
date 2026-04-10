@@ -506,7 +506,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
   if(filters == 9u)
   { // xtrans float mosaiced
-__OMP_PARALLEL_FOR__()
+    __OMP_PARALLEL_FOR__()
     for(int j = 0; j < height; j++)
     {
       const size_t row_start = (size_t)j * width;
@@ -548,7 +548,7 @@ __OMP_PARALLEL_FOR__()
   else if(filters)
   { // bayer float mosaiced
     const int cfa_x = roi_out->x & 1;
-__OMP_PARALLEL_FOR__()
+    __OMP_PARALLEL_FOR__()
     for(int j = 0; j < height; j++)
     {
       const int offset_j = j + roi_out->y;
@@ -579,7 +579,7 @@ __OMP_PARALLEL_FOR__()
 
     if(ch == 4)
     {
-__OMP_PARALLEL_FOR__()
+      __OMP_PARALLEL_FOR__()
       for(size_t k = 0; k < npixels; k++)
       {
         const size_t p = 4 * k;
@@ -591,7 +591,7 @@ __OMP_PARALLEL_FOR__()
     }
     else
     {
-__OMP_PARALLEL_FOR__()
+      __OMP_PARALLEL_FOR__()
       for(size_t k = 0; k < ch * npixels; k += ch)
       {
         for(ptrdiff_t c = 0; c < 3; c++)

@@ -228,8 +228,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
   const int ch_width = ch * roi_in->width;
   const struct dt_interpolation *interpolation = dt_interpolation_new(DT_INTERPOLATION_USERPREF);
   const dt_iop_scalepixels_data_t * const d = piece->data;
-
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   // (slow) point-by-point transformation.
   // TODO: optimize with scanlines and linear steps between?
   for(int j = 0; j < roi_out->height; j++)

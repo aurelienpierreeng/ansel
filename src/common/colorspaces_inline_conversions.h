@@ -706,7 +706,7 @@ static inline __attribute__((always_inline)) void dt_XYZ_2_JzAzBz(const dt_align
   XYZ[2] = XYZ_D65[2];
 
   // X'Y'Z -> L'M'S'
-__OMP_SIMD__(aligned(LMS, XYZ:16) aligned(M:64))
+  __OMP_SIMD__(aligned(LMS, XYZ:16) aligned(M:64))
   for(int i = 0; i < 3; i++)
   {
     LMS[i] = M[i][0] * XYZ[0] + M[i][1] * XYZ[1] + M[i][2] * XYZ[2];
@@ -820,7 +820,7 @@ static inline __attribute__((always_inline)) void dt_JzAzBz_2_XYZ(const dt_align
   IzAzBz[2] = JzAzBz[2];
 
   // IzAzBz -> LMS
-__OMP_SIMD__(aligned(LMS, IzAzBz:16) aligned(AI:64))
+  __OMP_SIMD__(aligned(LMS, IzAzBz:16) aligned(AI:64))
   for(int i = 0; i < 3; i++)
   {
     LMS[i] = AI[i][0] * IzAzBz[0] + AI[i][1] * IzAzBz[1] + AI[i][2] * IzAzBz[2];
@@ -829,7 +829,7 @@ __OMP_SIMD__(aligned(LMS, IzAzBz:16) aligned(AI:64))
   }
 
   // LMS -> X'Y'Z
-__OMP_SIMD__(aligned(LMS, XYZ:16) aligned(MI:64))
+  __OMP_SIMD__(aligned(LMS, XYZ:16) aligned(MI:64))
   for(int i = 0; i < 3; i++) XYZ[i] = MI[i][0] * LMS[0] + MI[i][1] * LMS[1] + MI[i][2] * LMS[2];
 
   // X'Y'Z -> XYZ_D65

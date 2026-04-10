@@ -182,8 +182,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
     dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
     return 1;
   }
-
-__OMP_PARALLEL_FOR_SIMD__(firstprivate(dt_iop_rawoverexposed_colors))
+  __OMP_PARALLEL_FOR_SIMD__(firstprivate(dt_iop_rawoverexposed_colors))
   for(int j = 0; j < roi_out->height; j++)
   {
     float *const restrict bufptr = dt_get_perthread(coordbuf, coordbufsize);
@@ -306,8 +305,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
 
   coordbuf = dt_pixelpipe_cache_alloc_align_cache(coordbufsize, pipe->type);
   if(coordbuf == NULL) goto error;
-
-__OMP_PARALLEL_FOR_SIMD__()
+  __OMP_PARALLEL_FOR_SIMD__()
   for(int j = 0; j < height; j++)
   {
     float *bufptr = ((float *)coordbuf) + (size_t)2 * j * width;

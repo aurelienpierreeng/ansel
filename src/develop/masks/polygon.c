@@ -932,8 +932,7 @@ static int _polygon_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_
 
       dx = pts[0] - (*point_buffer)[2];
       dy = pts[1] - (*point_buffer)[3];
-
-__OMP_PARALLEL_FOR_SIMD__(if(*point_count > 100) aligned(point_buffer:64))
+      __OMP_PARALLEL_FOR_SIMD__(if(*point_count > 100) aligned(point_buffer:64))
       for(int i = 0; i < *point_count; i++)
       {
         (*point_buffer)[i * 2]     += dx;
@@ -2602,7 +2601,7 @@ static int _polygon_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpi
              dt_get_wtime() - start2);
     start2 = dt_get_wtime();
   }
-__OMP_PARALLEL_FOR__(if((size_t)hb * wb > 50000))
+  __OMP_PARALLEL_FOR__(if((size_t)hb * wb > 50000))
   for(int yy = 0; yy < hb; yy++)
   {
     float *const restrict row = bufptr + (size_t)yy * wb;
@@ -3290,8 +3289,7 @@ static int _polygon_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pix
       const int xxmax = MIN(xmax, width - 1);
       const int yymin = MAX(ymin, 0);
       const int yymax = MIN(ymax, height - 1);
-
-__OMP_PARALLEL_FOR__(if((size_t)(yymax - yymin + 1) * (size_t)(xxmax - xxmin + 1) > 50000))
+      __OMP_PARALLEL_FOR__(if((size_t)(yymax - yymin + 1) * (size_t)(xxmax - xxmin + 1) > 50000))
       for(int yy = yymin; yy <= yymax; yy++)
       {
         float *const restrict row = buffer + (size_t)yy * width;
@@ -3413,8 +3411,7 @@ __OMP_PARALLEL_FOR__(if((size_t)(yymax - yymin + 1) * (size_t)(xxmax - xxmin + 1
         have_prev = FALSE;
       }
     }
-
-__OMP_PARALLEL_FOR__(if(dindex > 4096))
+    __OMP_PARALLEL_FOR__(if(dindex > 4096))
     for(int n = 0; n < dindex; n += 4)
       _polygon_falloff_roi(buffer, dpoints + n, dpoints + n + 2, width, height);
 

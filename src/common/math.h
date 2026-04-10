@@ -186,8 +186,7 @@ static inline float scalar_product(const dt_aligned_pixel_t v_1, const dt_aligne
   // v_2 needs to be uniform along loop increments, e.g. independent from current pixel values
   // we force an order of computation similar to SSE4 _mm_dp_ps() hoping the compiler will get the clue
   float acc = 0.f;
-
-__OMP_SIMD__(aligned(v_1, v_2:16) reduction(+:acc))
+  __OMP_SIMD__(aligned(v_1, v_2:16) reduction(+:acc))
   for(size_t c = 0; c < 3; c++) acc += v_1[c] * v_2[c];
 
   return acc;
@@ -275,7 +274,7 @@ static inline void dt_fast_expf_4wide(const float x[4], float result[4])
   // const int k = CLAMPS(i1 + x * (i2 - i1), 0x0u, 0x7fffffffu);
   // without max clamping (doesn't work for large x, but is faster):
   union float_int u[4];
-__OMP_SIMD__(aligned(x, result))
+  __OMP_SIMD__(aligned(x, result))
   for(size_t c = 0; c < 4; c++)
   {
     const int k0 = i1 + (int)(x[c] * (i2 - i1));

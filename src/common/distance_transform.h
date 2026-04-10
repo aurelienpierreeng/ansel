@@ -102,7 +102,7 @@ float dt_image_distance_transform(float *const restrict src, float *const restri
     case DT_DISTANCE_TRANSFORM_NONE:
       break;
     case DT_DISTANCE_TRANSFORM_MASK:
-__OMP_FOR_SIMD__(aligned(src, out : 64))
+      __OMP_FOR_SIMD__(aligned(src, out : 64))
       for(size_t i = 0; i < width * height; i++)
         out[i] = (src[i] < clip) ? 0.0f : DT_DISTANCE_TRANSFORM_MAX;
       break;

@@ -150,8 +150,7 @@ static int process_bayer(const dt_iop_hotpixels_data_t *data,
   const int width = roi_out->width;
   const int widthx2 = width * 2;
   int fixed = 0;
-
-__OMP_PARALLEL_FOR__(reduction(+ : fixed) )
+  __OMP_PARALLEL_FOR__(reduction(+ : fixed) )
   for(int row = 2; row < roi_out->height - 2; row++)
   {
     const float *in = (float *)ivoid + (size_t)width * row + 2;
@@ -246,8 +245,7 @@ static int process_xtrans(const dt_iop_hotpixels_data_t *data,
   const int min_neighbours = data->permissive ? 3 : 4;
   const int width = roi_out->width;
   int fixed = 0;
-
-__OMP_PARALLEL_FOR__(reduction(+ : fixed) )
+  __OMP_PARALLEL_FOR__(reduction(+ : fixed) )
   for(int row = 2; row < roi_out->height - 2; row++)
   {
     const float *in = (float *)ivoid + (size_t)width * row + 2;

@@ -93,7 +93,7 @@ void dt_masks_extend_border(float *const restrict mask, const int width, const i
 {
   if(border <= 0) return;
   const int max_col = width - border - 1;
-__OMP_PARALLEL_FOR_SIMD__(aligned(mask : 64) if((size_t)width * height > 10000))
+  __OMP_PARALLEL_FOR_SIMD__(aligned(mask : 64) if((size_t)width * height > 10000))
   for(int row = border; row < height - border; row++)
   {
     float *const rowptr = mask + (size_t)(row * width);
@@ -105,7 +105,7 @@ __OMP_PARALLEL_FOR_SIMD__(aligned(mask : 64) if((size_t)width * height > 10000))
   }
   const float *const top_row = mask + (size_t)(border * width);
   const float *const bot_row = mask + (size_t)(height - border - 1) * width;
-__OMP_FOR_SIMD__(aligned(mask : 64) if((size_t)width * height > 10000))
+  __OMP_FOR_SIMD__(aligned(mask : 64) if((size_t)width * height > 10000))
   for(int col = 0; col < width; col++)
   {
     const int c = MIN(max_col, MAX(col, border));
@@ -225,7 +225,7 @@ void dt_masks_blur_9x9(float *const restrict src, float *const restrict out, con
   const int w2 = 2*width;
   const int w3 = 3*width;
   const int w4 = 4*width;
-__OMP_FOR_SIMD__(aligned(src, out : 64) if((size_t)width * height > 50000))
+  __OMP_FOR_SIMD__(aligned(src, out : 64) if((size_t)width * height > 50000))
   for(int row = 4; row < height - 4; row++)
   {
     const int row_off = row * width;
@@ -292,7 +292,7 @@ void dt_masks_calc_rawdetail_mask(float *const restrict src, float *const restri
                                   const int width, const int height, const dt_aligned_pixel_t wb)
 {
   const int msize = width * height;
-__OMP_FOR_SIMD__(aligned(tmp, src : 64) if(msize > 50000))
+  __OMP_FOR_SIMD__(aligned(tmp, src : 64) if(msize > 50000))
   for(int idx =0; idx < msize; idx++)
   {
     const float val = 0.333333333f * (fmaxf(src[4 * idx], 0.0f) / wb[0] + fmaxf(src[4 * idx + 1], 0.0f) / wb[1] + fmaxf(src[4 * idx + 2], 0.0f) / wb[2]);
@@ -300,7 +300,7 @@ __OMP_FOR_SIMD__(aligned(tmp, src : 64) if(msize > 50000))
   }
 
   const float scale = 1.0f / 16.0f;
-__OMP_PARALLEL_FOR_SIMD__(aligned(mask, tmp : 64) if((size_t)width * height > 50000))
+  __OMP_PARALLEL_FOR_SIMD__(aligned(mask, tmp : 64) if((size_t)width * height > 50000))
   for(int row = 1; row < height - 1; row++)
   {
     for(int col = 1, idx = row * width + col; col < width - 1; col++, idx++)
@@ -333,7 +333,7 @@ static inline float calcBlendFactor(float val, float threshold)
 void dt_masks_calc_detail_mask(float *const restrict src, float *const restrict out, float *const restrict tmp, const int width, const int height, const float threshold, const gboolean detail)
 {
   const int msize = width * height;
-__OMP_FOR_SIMD__(aligned(src, tmp, out : 64) if(msize > 50000))
+  __OMP_FOR_SIMD__(aligned(src, tmp, out : 64) if(msize > 50000))
   for(int idx = 0; idx < msize; idx++)
   {
     const float blend = calcBlendFactor(src[idx], threshold);

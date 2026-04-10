@@ -174,8 +174,7 @@ dt_imageio_retval_t dt_imageio_open_heif(dt_image_t *img,
   float max_channel_f = (float)((1 << decoded_values_bit_depth) - 1);
 
   const uint8_t *const restrict in = (const uint8_t *)data;
-
-__OMP_PARALLEL_FOR_SIMD__(collapse(2))
+  __OMP_PARALLEL_FOR_SIMD__(collapse(2))
   for(size_t y = 0; y < height; y++)
   {
     for(size_t x = 0; x < width; x++)

@@ -687,8 +687,7 @@ static void _redraw_scopes(dt_lib_histogram_t *d)
 uint32_t _find_max_histogram(const uint32_t *const restrict bins, const size_t binning_size)
 {
   uint32_t max_hist = 0;
-
-__OMP_PARALLEL_FOR_SIMD__(aligned(bins: 64)  reduction(max: max_hist) )
+  __OMP_PARALLEL_FOR_SIMD__(aligned(bins: 64)  reduction(max: max_hist) )
   for(size_t k = 0; k < binning_size; k++) if(bins[k] > max_hist) max_hist = bins[k];
 
   return max_hist;
@@ -831,7 +830,7 @@ static inline void _bin_pixels_waveform_in_roi(const float *const restrict image
                                                const gboolean vertical)
 {
   // Process
-__OMP_PARALLEL_FOR__(shared(bins)  collapse(3))
+  __OMP_PARALLEL_FOR__(shared(bins)  collapse(3))
   for(size_t i = min_y; i < max_y; i++)
     for(size_t j = min_x; j < max_x; j++)
       for(size_t c = 0; c < 3; c++)
@@ -873,7 +872,7 @@ static inline void _bin_pixels_waveform(const float *const restrict image, uint3
                                         const gboolean vertical)
 {
   // Init
-__OMP_FOR_SIMD__(aligned(bins: 64) )
+  __OMP_FOR_SIMD__(aligned(bins: 64) )
   for(size_t k = 0; k < binning_size; k++) bins[k] = 0;
 
   if(dt_conf_get_bool("ui_last/colorpicker_restrict_histogram"))
@@ -902,7 +901,7 @@ static void _create_waveform_image(const uint32_t *const restrict bins, uint8_t 
                                    const uint32_t max_hist,
                                    const size_t width, const size_t height)
 {
-__OMP_FOR_SIMD__(aligned(image, bins: 64) )
+  __OMP_FOR_SIMD__(aligned(image, bins: 64) )
   for(size_t k = 0; k < height * width * 4; k += 4)
   {
     image[k + 3] = 255; // alpha
@@ -920,16 +919,14 @@ static void _mask_waveform(const uint8_t *const restrict image, uint8_t *const r
   uint8_t mask[4] = { 0, 0, 0, 0 };
   for(size_t k = 0; k < 4; k++)
     if(k == channel) mask[k] = 1;
-
-__OMP_PARALLEL_FOR__()
+    __OMP_PARALLEL_FOR__()
     for(size_t i = 0; i < height; i++)
       for(size_t j = 0; j < width; j++)
       {
         const size_t index = (i * width + j) * 4;
         const uint8_t *const restrict pixel_in = image + index;
         uint8_t *const restrict pixel_out = masked + index;
-
-__OMP_SIMD__(aligned(mask, pixel_in, pixel_out: 16))
+        __OMP_SIMD__(aligned(mask, pixel_in, pixel_out: 16))
         for(size_t c = 0; c < 4; c++) pixel_out[c] = pixel_in[c] * mask[c];
       }
 }
@@ -1117,8 +1114,7 @@ static void _create_vectorscope_image(const uint32_t *const restrict vectorscope
                                       const uint32_t max_hist, const float zoom)
 {
   const dt_iop_order_iccprofile_info_t *const profile = darktable.develop->preview_pipe->output_profile_info;
-
-__OMP_PARALLEL_FOR__(collapse(2))
+  __OMP_PARALLEL_FOR__(collapse(2))
   for(size_t i = 0; i < HISTOGRAM_BINS; i++)
     for(size_t j = 0; j < HISTOGRAM_BINS; j++)
     {
@@ -1152,7 +1148,7 @@ static void _bin_vectorscope(const float *const restrict image, uint32_t *const 
                              const size_t width, const size_t height,
                              const float zoom, dt_lib_histogram_t *d)
 {
-__OMP_FOR_SIMD__(aligned(vectorscope: 64) )
+  __OMP_FOR_SIMD__(aligned(vectorscope: 64) )
   for(size_t k = 0; k < HISTOGRAM_BINS * HISTOGRAM_BINS; k++) vectorscope[k] = 0;
 
   if(dt_conf_get_bool("ui_last/colorpicker_restrict_histogram"))

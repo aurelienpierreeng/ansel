@@ -1340,8 +1340,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const float *const in = (const float *const)ivoid;
   float *const out = (float *const)ovoid;
   const size_t stride = (size_t)roi_out->height * roi_out->width * ch;
-
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < stride; k += ch)
   {
     for(size_t c = 0; c < 3; c++)

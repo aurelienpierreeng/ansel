@@ -188,7 +188,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
   if(d->unbound)
   {
-__OMP_PARALLEL_FOR__()
+    __OMP_PARALLEL_FOR__()
     for(size_t k = 0; k < (size_t)4 * npixels; k += 4)
     {
       for_each_channel(c,dt_omp_nontemporal(out))
@@ -199,8 +199,7 @@ __OMP_PARALLEL_FOR__()
   }
   else
   {
-
-__OMP_PARALLEL_FOR__()
+    __OMP_PARALLEL_FOR__()
     for(size_t k = 0; k < npixels; k ++)
     {
       // the inner per-pixel loop needs to be declared in a separate vectorizable function to convince the

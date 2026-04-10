@@ -1542,7 +1542,7 @@ static void get_xyz_sample_from_image(const image_t *const image, float shrink, 
 
   double sample_x = 0.0, sample_y = 0.0, sample_z = 0.0;
   size_t n_samples = 0;
-__OMP_PARALLEL_FOR__(reduction(+ : n_samples, sample_x, sample_y, sample_z) )
+  __OMP_PARALLEL_FOR__(reduction(+ : n_samples, sample_x, sample_y, sample_z) )
   for(int y = y_start; y < y_end; y++)
     for(int x = x_start; x < x_end; x++)
     {
@@ -1655,7 +1655,7 @@ static void free_image(image_t *image)
 
 static void image_lab_to_xyz(float *image, const int width, const int height)
 {
-__OMP_PARALLEL_FOR__(shared(image) )
+  __OMP_PARALLEL_FOR__(shared(image) )
   for(int y = 0; y < height; y++)
     for(int x = 0; x < width; x++)
     {

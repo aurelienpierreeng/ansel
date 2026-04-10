@@ -168,7 +168,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const float a_base = d->a_base;
   const float b_scale = d->b_scale;
   const float b_base = d->b_base;
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < (size_t)4 * roi_out->width * roi_out->height; k += 4)
   {
     out[k] = in[k];

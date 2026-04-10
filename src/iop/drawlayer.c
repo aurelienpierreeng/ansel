@@ -654,8 +654,7 @@ static void _blend_layer_over_input(float *output, const float *input, const flo
   if(!output || !input || !layerbuf || pixels == 0) return;
 
   const dt_aligned_pixel_simd_t preview_base = { preview_bg, preview_bg, preview_bg, 1.0f };
-
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t kk = 0; kk < pixels; kk++)
   {
     const float *base = input + 4 * kk;
@@ -933,7 +932,7 @@ static int _blend_layer_over_input_cl(const int devid, const int kernel_premult_
                                                                  &scratch->cl_background_rgba_pixels, out_pixels,
                                                                  "drawlayer process scratch");
     if(!background) goto cleanup;
-__OMP_PARALLEL_FOR__(if(out_pixels > 4096))
+    __OMP_PARALLEL_FOR__(if(out_pixels > 4096))
     for(size_t kk = 0; kk < out_pixels; kk++)
     {
       float *pixel = background + 4 * kk;
@@ -2285,7 +2284,7 @@ static gboolean _fill_current_layer(dt_iop_module_t *self, const float value)
   float *const pixels = g->process.base_patch.pixels;
   const float gray = _clamp01(value);
   dt_drawlayer_cache_patch_wrlock(&g->process.base_patch);
-__OMP_PARALLEL_FOR__( if(count > 4096))
+  __OMP_PARALLEL_FOR__( if(count > 4096))
   for(size_t k = 0; k < count; k++)
   {
     float *pixel = pixels + 4 * k;

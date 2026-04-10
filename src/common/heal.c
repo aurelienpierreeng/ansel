@@ -63,8 +63,7 @@ static void _heal_sub(const float *const top_buffer, const float *const bottom_b
 {
   // how many red or black pixels per line?  For consistency, we need the larger of the two, so round up
   const size_t res_stride = 4 * ((width + 1) / 2);
-
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t row = 0; row < height; row++)
   {
     const int parity = row & 1;
@@ -109,8 +108,7 @@ static void _heal_add(const float *const restrict red_buffer, const float *const
   // how many red or black pixels per line?  For consistency, we need the larger of the two, so round up, then
   // add one to ensure a padding pixel on the right
   const size_t res_stride = 4 * ((width + 1) / 2);
-
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t row = 0; row < height; row++)
   {
     const int parity = row & 1;

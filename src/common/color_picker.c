@@ -61,7 +61,7 @@ static void _color_picker_convert_buffer(const float *const restrict input, floa
 {
   if(image_cst == IOP_CS_LAB && picker_cst == IOP_CS_LCH)
   {
-__OMP_PARALLEL_FOR__()
+    __OMP_PARALLEL_FOR__()
     for(size_t k = 0; k < pixels; k++)
     {
       const size_t offset = 4 * k;
@@ -71,7 +71,7 @@ __OMP_PARALLEL_FOR__()
   }
   else if(dt_iop_colorspace_is_rgb(image_cst) && picker_cst == IOP_CS_HSL)
   {
-__OMP_PARALLEL_FOR__()
+    __OMP_PARALLEL_FOR__()
     for(size_t k = 0; k < pixels; k++)
     {
       const size_t offset = 4 * k;
@@ -81,7 +81,7 @@ __OMP_PARALLEL_FOR__()
   }
   else if(image_cst == IOP_CS_LAB && picker_cst == IOP_CS_RGB)
   {
-__OMP_PARALLEL_FOR__()
+    __OMP_PARALLEL_FOR__()
     for(size_t k = 0; k < pixels; k++)
     {
       const size_t offset = 4 * k;
@@ -93,7 +93,7 @@ __OMP_PARALLEL_FOR__()
   }
   else if(dt_iop_colorspace_is_rgb(image_cst) && picker_cst == IOP_CS_LAB)
   {
-__OMP_PARALLEL_FOR__()
+    __OMP_PARALLEL_FOR__()
     for(size_t k = 0; k < pixels; k++)
     {
       const size_t offset = 4 * k;
@@ -105,7 +105,7 @@ __OMP_PARALLEL_FOR__()
   }
   else if(dt_iop_colorspace_is_rgb(image_cst) && picker_cst == IOP_CS_JZCZHZ)
   {
-__OMP_PARALLEL_FOR__()
+    __OMP_PARALLEL_FOR__()
     for(size_t k = 0; k < pixels; k++)
     {
       const size_t offset = 4 * k;
@@ -317,13 +317,12 @@ static void color_picker_helper_4ch_parallel(const dt_iop_buffer_dsc_t *const ds
 
   if(cst_to == IOP_CS_LCH)
   {
-__OMP_PARALLEL__()
+    __OMP_PARALLEL__()
     {
       float *const restrict tmean = dt_get_perthread(mean,allocsize);
       float *const restrict tmmin = dt_get_perthread(mmin,allocsize);
       float *const restrict tmmax = dt_get_perthread(mmax,allocsize);
-
-__OMP_FOR__()
+      __OMP_FOR__()
       for(size_t j = box[1]; j < box[3]; j++)
       {
         const size_t offset = j * off_mul + off_add;
@@ -333,13 +332,12 @@ __OMP_FOR__()
   }
   else if(cst_to == IOP_CS_HSL)
   {
-__OMP_PARALLEL__()
+    __OMP_PARALLEL__()
     {
       float *const restrict tmean = dt_get_perthread(mean,allocsize);
       float *const restrict tmmin = dt_get_perthread(mmin,allocsize);
       float *const restrict tmmax = dt_get_perthread(mmax,allocsize);
-
-__OMP_FOR__()
+      __OMP_FOR__()
       for(size_t j = box[1]; j < box[3]; j++)
       {
         const size_t offset = j * off_mul + off_add;
@@ -349,13 +347,12 @@ __OMP_FOR__()
   }
   else if(cst_to == IOP_CS_JZCZHZ)
   {
-__OMP_PARALLEL__()
+    __OMP_PARALLEL__()
     {
       float *const restrict tmean = dt_get_perthread(mean,allocsize);
       float *const restrict tmmin = dt_get_perthread(mmin,allocsize);
       float *const restrict tmmax = dt_get_perthread(mmax,allocsize);
-
-__OMP_FOR__()
+      __OMP_FOR__()
       for(size_t j = box[1]; j < box[3]; j++)
       {
         const size_t offset = j * off_mul + off_add;
@@ -365,13 +362,12 @@ __OMP_FOR__()
   }
   else
   {
-__OMP_PARALLEL__()
+    __OMP_PARALLEL__()
     {
       float *const restrict tmean = dt_get_perthread(mean,allocsize);
       float *const restrict tmmin = dt_get_perthread(mmin,allocsize);
       float *const restrict tmmax = dt_get_perthread(mmax,allocsize);
-
-__OMP_FOR__()
+      __OMP_FOR__()
       for(size_t j = box[1]; j < box[3]; j++)
       {
         const size_t offset = j * off_mul + off_add;
@@ -465,14 +461,12 @@ static void color_picker_helper_4ch_converted_parallel(const float *const pixel,
     mmin[n] = INFINITY;
     mmax[n] = -INFINITY;
   }
-
-__OMP_PARALLEL__()
+  __OMP_PARALLEL__()
   {
     float *const restrict tmean = dt_get_perthread(mean,allocsize);
     float *const restrict tmmin = dt_get_perthread(mmin,allocsize);
     float *const restrict tmmax = dt_get_perthread(mmax,allocsize);
-
-__OMP_FOR__()
+    __OMP_FOR__()
     for(size_t j = box[1]; j < box[3]; j++)
     {
       const size_t offset = j * off_mul + off_add;
@@ -581,8 +575,7 @@ static void color_picker_helper_bayer_parallel(const dt_iop_buffer_dsc_t *const 
     mmax[n] = -INFINITY;
     cnt[n] = 0u;
   }
-
-__OMP_PARALLEL__()
+  __OMP_PARALLEL__()
   {
     const int tnum = dt_get_thread_num();
 
@@ -590,8 +583,7 @@ __OMP_PARALLEL__()
     float *const tmmin = mmin + 4 * tnum;
     float *const tmmax = mmax + 4 * tnum;
     uint32_t *const tcnt = cnt + 4 * tnum;
-
-__OMP_FOR__(collapse(2))
+    __OMP_FOR__(collapse(2))
     for(size_t j = box[1]; j < box[3]; j++)
     {
       for(size_t i = box[0]; i < box[2]; i++)
@@ -710,8 +702,7 @@ static void color_picker_helper_xtrans_parallel(const dt_iop_buffer_dsc_t *const
     mmax[n] = -INFINITY;
     cnt[n] = 0u;
   }
-
-__OMP_PARALLEL__()
+  __OMP_PARALLEL__()
   {
     const int tnum = dt_get_thread_num();
 
@@ -719,8 +710,7 @@ __OMP_PARALLEL__()
     float *const tmmin = mmin + 3 * tnum;
     float *const tmmax = mmax + 3 * tnum;
     uint32_t *const tcnt = cnt + 3 * tnum;
-
-__OMP_FOR__(collapse(2))
+    __OMP_FOR__(collapse(2))
     for(size_t j = box[1]; j < box[3]; j++)
     {
       for(size_t i = box[0]; i < box[2]; i++)

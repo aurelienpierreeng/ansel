@@ -177,8 +177,7 @@ inline static void reduce_2D_Bspline(const float *const restrict in, float *cons
                                                1.0f / 16.0f };
   (void)tempbuf;
   (void)padded_size;
-
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t row = 0; row < coarse_height; ++row)
   {
     for(size_t col = 0; col < coarse_width; ++col)
@@ -230,8 +229,7 @@ inline static void expand_2D_Bspline(const float *const restrict in, float *cons
                                                6.0f / 16.0f,
                                                4.0f / 16.0f,
                                                1.0f / 16.0f };
-
-__OMP_PARALLEL_FOR__(collapse(2))
+  __OMP_PARALLEL_FOR__(collapse(2))
   for(size_t row = 0; row < height; ++row)
     for(size_t col = 0; col < width; ++col)
     {
@@ -328,7 +326,7 @@ inline static void blur_2D_Bspline(const float *const restrict in, float *const 
                                    const size_t width, const size_t height, const int mult, const gboolean clip_negatives)
 {
   // À-trous B-spline interpolation/blur shifted by mult
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t row = 0; row < height; row++)
   {
     // get a thread-private one-row temporary buffer
@@ -351,7 +349,7 @@ inline static void decompose_2D_Bspline(const float *const restrict in,
                                         float *const tempbuf, size_t padded_size)
 {
   // Blur and compute the wavelet at once
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t row = 0; row < height; row++)
   {
     // get a thread-private one-row temporary buffer

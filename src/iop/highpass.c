@@ -312,7 +312,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 /* since we use only the L channel, pack the values together instead of every fourth float */
 /* to reduce cache pressure and memory bandwidth during the blur operation */
   const size_t npixels = (size_t)roi_out->height * roi_out->width;
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < (size_t)npixels; k++)
     out[k] = 100.0f - LCLIP(in[4 * k]); // only L in Lab space
 
@@ -334,7 +334,7 @@ __OMP_PARALLEL_FOR__()
   /* reverse order */
   /* We can only do the final 3/4 in parallel here, because updating the first quarter in one thread */
   /* would clobber values still needed by other threads. */
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t k = npixels - 1; k > npixels/4; k--)
   {
     size_t index = ch * k;

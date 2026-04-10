@@ -779,7 +779,7 @@ static int _gradient_get_points(dt_develop_t *dev, float x, float y, float rotat
   const float xdelta = -2.0f * xstart / (count - 3);
 
 //  gboolean in_frame = FALSE;
-__OMP_PARALLEL_FOR__(if(count > 100))
+  __OMP_PARALLEL_FOR__(if(count > 100))
   for(int i = 3; i < count; i++)
   {
     const float xi = xstart + (i - 3) * xdelta;
@@ -1170,8 +1170,7 @@ static int _gradient_get_mask(const dt_iop_module_t *const module, dt_dev_pixelp
 
   float *points = dt_pixelpipe_cache_alloc_align_float_cache((size_t)2 * gw * gh, 0);
   if(points == NULL) return 1;
-
-__OMP_PARALLEL_FOR__(collapse(2) if((size_t)gw * gh > 50000))
+  __OMP_PARALLEL_FOR__(collapse(2) if((size_t)gw * gh > 50000))
   for(int j = 0; j < gh; j++)
     for(int i = 0; i < gw; i++)
     {
@@ -1223,8 +1222,7 @@ __OMP_PARALLEL_FOR__(collapse(2) if((size_t)gw * gh > 50000))
     dt_pixelpipe_cache_free_align(points);
     return 1;
   }
-
-__OMP_PARALLEL_FOR_SIMD__(if(lutsize > 1000) aligned(lut : 64))
+  __OMP_PARALLEL_FOR_SIMD__(if(lutsize > 1000) aligned(lut : 64))
   for(int n = 0; n < lutsize; n++)
   {
     const float distance = (n - lutmax) * hwscale;
@@ -1279,7 +1277,7 @@ __OMP_PARALLEL_FOR_SIMD__(if(lutsize > 1000) aligned(lut : 64))
   }
 
 // we fill the mask buffer by interpolation
-__OMP_PARALLEL_FOR__(if((size_t)w * h > 50000))
+  __OMP_PARALLEL_FOR__(if((size_t)w * h > 50000))
   for(int j = 0; j < h; j++)
   {
     const int jj = j % grid;
@@ -1341,8 +1339,7 @@ static int _gradient_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pi
 
   float *points = dt_pixelpipe_cache_alloc_align_float_cache((size_t)2 * gw * gh, 0);
   if(points == NULL) return 1;
-
-__OMP_PARALLEL_FOR__(collapse(2) if((size_t)gw * gh > 50000))
+  __OMP_PARALLEL_FOR__(collapse(2) if((size_t)gw * gh > 50000))
   for(int j = 0; j < gh; j++)
     for(int i = 0; i < gw; i++)
     {
@@ -1397,8 +1394,7 @@ __OMP_PARALLEL_FOR__(collapse(2) if((size_t)gw * gh > 50000))
     dt_pixelpipe_cache_free_align(points);
     return 1;
   }
-
-__OMP_PARALLEL_FOR_SIMD__(if(lutsize > 1000) aligned(lut : 64))
+  __OMP_PARALLEL_FOR_SIMD__(if(lutsize > 1000) aligned(lut : 64))
   for(int n = 0; n < lutsize; n++)
   {
     const float distance = (n - lutmax) * hwscale;
@@ -1444,7 +1440,7 @@ __OMP_PARALLEL_FOR_SIMD__(if(lutsize > 1000) aligned(lut : 64))
   }
 
 // we fill the mask buffer by interpolation
-__OMP_PARALLEL_FOR__(if((size_t)w * h > 50000))
+  __OMP_PARALLEL_FOR__(if((size_t)w * h > 50000))
   for(int j = 0; j < h; j++)
   {
     const int jj = j % grid;

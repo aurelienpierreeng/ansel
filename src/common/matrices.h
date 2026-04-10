@@ -200,7 +200,7 @@ __OMP_DECLARE_SIMD__(uniform(M) aligned(M:64) aligned(v_in, v_out:16))
 static inline void dot_product(const dt_aligned_pixel_t v_in, const dt_colormatrix_t M, dt_aligned_pixel_t v_out)
 {
   // specialized 3x4 dot products of 4x1 RGB-alpha pixels
-__OMP_SIMD__(aligned(M:64) aligned(v_in, v_out:16))
+  __OMP_SIMD__(aligned(M:64) aligned(v_in, v_out:16))
   for(size_t i = 0; i < 3; ++i) v_out[i] = scalar_product(v_in, M[i]);
 }
 

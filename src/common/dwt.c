@@ -129,7 +129,7 @@ static void dwt_decompose_vert(float *const restrict out, const float *const res
                                const size_t height, const size_t width, const size_t lev)
 {
   const size_t vscale = MIN(1 << lev, height-1);
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(int rowid = 0; rowid < height ; rowid++)
   {
     const size_t row = dwt_interleave_rows(rowid,height,vscale);
@@ -162,7 +162,7 @@ static void dwt_decompose_horiz(float *const restrict out, float *const restrict
                                 const size_t height, const size_t width, const size_t lev)
 {
   const int hscale = MIN(1 << lev, width);  //(int because we need a signed difference below)
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(int row = 0; row < height ; row++)
   {
     // perform a weighted sum of the current pixel with the ones 'scale' pixels to the left and right, using
@@ -412,7 +412,7 @@ static void dwt_denoise_vert_1ch(float *const restrict out, const float *const r
                                  const size_t height, const size_t width, const size_t lev)
 {
   const int vscale = MIN(1 << lev, height);
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(int rowid = 0; rowid < height ; rowid++)
   {
     const int row = dwt_interleave_rows(rowid,height,vscale);
@@ -427,7 +427,7 @@ __OMP_PARALLEL_FOR__()
     const float *const restrict above =  in + abs(row - vscale) * width;
     const float *const restrict below = in + below_row * width;
     float* const restrict outrow = out + rowstart;
-__OMP_SIMD__()
+    __OMP_SIMD__()
     for (int col= 0; col < width; col++)
     {
       outrow[col] = 2.f * center[col] + above[col] + below[col];
@@ -443,7 +443,7 @@ static void dwt_denoise_horiz_1ch(float *const restrict out, float *const restri
                                   const size_t lev, const float thold, const int last)
 {
   const int hscale = MIN(1 << lev, width);
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(int row = 0; row < height ; row++)
   {
     // perform a weighted sum of the current pixel with the ones 'scale' pixels to the left and right, using
@@ -456,7 +456,7 @@ __OMP_PARALLEL_FOR__()
     float *const restrict coarse = out + rowindex;
     float *const restrict accum_row = accum + rowindex;
     // handle reflection at left edge
-__OMP_SIMD__()
+    __OMP_SIMD__()
     for (int col = 0; col < hscale; col++)
     {
       // add up left/center/right, and renormalize by dividing by the total weight of all numbers added together
@@ -470,7 +470,7 @@ __OMP_SIMD__()
       //const float excess = diff < 0.0 ? MIN(diff + thold, 0.0f) : MAX(diff - thold, 0.0f);
       accum_row[col] += MAX(diff - thold,0.0f) + MIN(diff + thold, 0.0f);
     }
-__OMP_SIMD__()
+    __OMP_SIMD__()
     for (int col = hscale; col < width - hscale; col++)
     {
       // add up left/center/right, and renormalize by dividing by the total weight of all numbers added together
@@ -485,7 +485,7 @@ __OMP_SIMD__()
       accum_row[col] += MAX(diff - thold,0.0f) + MIN(diff + thold, 0.0f);
     }
     // handle reflection at right edge
-__OMP_SIMD__()
+    __OMP_SIMD__()
     for (int col = width - hscale; col < width; col++)
     {
       const float right = coarse[2*width - 2 - (col+hscale)];

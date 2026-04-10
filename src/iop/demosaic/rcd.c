@@ -130,8 +130,7 @@ static void rcd_ppg_border(float *const out, const float *const in, const int wi
   }
 
   const float *input = in;
-
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(int j = 3; j < height - 3; j++)
   {
     float *buf = out + (size_t)4 * width * j + 4 * 3;
@@ -195,7 +194,7 @@ __OMP_PARALLEL_FOR__()
     }
   }
 // for all pixels: interpolate colors into float array
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(int j = 1; j < height - 1; j++)
   {
     float *buf = out + (size_t)4 * width * j + 4;

@@ -340,7 +340,7 @@ static inline void _apply_tonecurves(const float *const image_in, float *const i
   // do we have any lut to apply, or is this a linear profile?
   if((lut[0][0] >= 0.0f) && (lut[1][0] >= 0.0f) && (lut[2][0] >= 0.0f))
   {
-__OMP_PARALLEL_FOR__(collapse(2))
+    __OMP_PARALLEL_FOR__(collapse(2))
     for(size_t k = 0; k < stride; k += ch)
     {
       for(int c = 0; c < 3; c++) // for_each_channel doesn't vectorize, and some code needs image_out[3] preserved
@@ -351,7 +351,7 @@ __OMP_PARALLEL_FOR__(collapse(2))
   }
   else if((lut[0][0] >= 0.0f) || (lut[1][0] >= 0.0f) || (lut[2][0] >= 0.0f))
   {
-__OMP_PARALLEL_FOR__(collapse(2))
+    __OMP_PARALLEL_FOR__(collapse(2))
     for(size_t k = 0; k < stride; k += ch)
     {
       for(int c = 0; c < 3; c++) // for_each_channel doesn't vectorize, and some code needs image_out[3] preserved
@@ -385,8 +385,7 @@ static inline void _transform_rgb_to_lab_matrix(const float *const restrict imag
                       profile_info->lut_in[2], profile_info->unbounded_coeffs_in[0],
                       profile_info->unbounded_coeffs_in[1], profile_info->unbounded_coeffs_in[2],
                       profile_info->lutsize);
-
-__OMP_PARALLEL_FOR_SIMD__(aligned(image_out:64))
+    __OMP_PARALLEL_FOR_SIMD__(aligned(image_out:64))
     for(size_t y = 0; y < stride; y += ch)
     {
       float *const restrict in = __builtin_assume_aligned(image_out + y, 16);
@@ -398,7 +397,7 @@ __OMP_PARALLEL_FOR_SIMD__(aligned(image_out:64))
   }
   else
   {
-__OMP_PARALLEL_FOR_SIMD__(aligned(image_in, image_out:64))
+    __OMP_PARALLEL_FOR_SIMD__(aligned(image_in, image_out:64))
     for(size_t y = 0; y < stride; y += ch)
     {
       const float *const restrict in = __builtin_assume_aligned(image_in + y, 16);
@@ -425,8 +424,7 @@ static inline void _transform_lab_to_rgb_matrix(const float *const image_in, flo
   const dt_aligned_pixel_simd_t m0 = dt_colormatrix_row_to_simd(*matrix_ptr, 0);
   const dt_aligned_pixel_simd_t m1 = dt_colormatrix_row_to_simd(*matrix_ptr, 1);
   const dt_aligned_pixel_simd_t m2 = dt_colormatrix_row_to_simd(*matrix_ptr, 2);
-
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t y = 0; y < stride; y += ch)
   {
     const float *const restrict in = __builtin_assume_aligned(image_in + y, 16);
@@ -488,8 +486,7 @@ static inline void _transform_matrix_rgb(const float *const restrict image_in,
     const int run_lut_out[3] DT_ALIGNED_PIXEL = { (profile_info_to->lut_out[0][0] >= 0.0f),
                                                   (profile_info_to->lut_out[1][0] >= 0.0f),
                                                   (profile_info_to->lut_out[2][0] >= 0.0f) };
-
-__OMP_PARALLEL_FOR__()
+    __OMP_PARALLEL_FOR__()
     for(size_t y = 0; y < stride; y += 4)
     {
       const float *const restrict in = __builtin_assume_aligned(image_in + y, 16);
@@ -545,7 +542,7 @@ __OMP_PARALLEL_FOR__()
   }
   else
   {
-__OMP_PARALLEL_FOR__()
+    __OMP_PARALLEL_FOR__()
     for(size_t y = 0; y < stride; y += 4)
     {
       const float *const restrict in = __builtin_assume_aligned(image_in + y, 16);

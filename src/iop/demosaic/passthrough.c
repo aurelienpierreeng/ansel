@@ -25,8 +25,7 @@ static void passthrough_monochrome(float *out, const float *const in, dt_iop_roi
   // we never want to access the input out of bounds though:
   assert(roi_in->width >= roi_out->width);
   assert(roi_in->height >= roi_out->height);
-
-__OMP_PARALLEL_FOR__(collapse(2))
+  __OMP_PARALLEL_FOR__(collapse(2))
   for(int j = 0; j < roi_out->height; j++)
   {
     for(int i = 0; i < roi_out->width; i++)
@@ -50,7 +49,8 @@ static void passthrough_color(float *out, const float *const in, dt_iop_roi_t *c
 
   if(filters != 9u)
   {
-__OMP_PARALLEL_FOR__( collapse(2))
+
+    __OMP_PARALLEL_FOR__( collapse(2))
 
     for(int row = 0; row < (roi_out->height); row++)
     {
@@ -67,7 +67,8 @@ __OMP_PARALLEL_FOR__( collapse(2))
   }
   else
   {
-__OMP_PARALLEL_FOR__( collapse(2))
+
+    __OMP_PARALLEL_FOR__( collapse(2))
 
     for(int row = 0; row < (roi_out->height); row++)
     {

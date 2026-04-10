@@ -88,8 +88,7 @@ static void pixel_rgb_mean(const float *const restrict image,
   // mean(RGB) is the intensity
 
   float lum = 0.0f;
-
-__OMP_SIMD__(reduction(+:lum) aligned(image:64))
+  __OMP_SIMD__(reduction(+:lum) aligned(image:64))
   for(int c = 0; c < 3; ++c)
     lum += image[k + c];
 
@@ -135,7 +134,7 @@ static void pixel_rgb_norm_1(const float *const restrict image,
   // vector norm L1
 
   float lum = 0.0f;
-__OMP_SIMD__(reduction(+:lum) aligned(image:64))
+    __OMP_SIMD__(reduction(+:lum) aligned(image:64))
     for(int c = 0; c < 3; ++c)
       lum += fabsf(image[k + c]);
 
@@ -153,8 +152,7 @@ static void pixel_rgb_norm_2(const float *const restrict image,
   // vector norm L2 : euclidean norm
 
   float result = 0.0f;
-
-__OMP_SIMD__(aligned(image:64) reduction(+: result))
+  __OMP_SIMD__(aligned(image:64) reduction(+: result))
   for(int c = 0; c < 3; ++c) result += image[k + c] * image[k + c];
 
   luminance[k / ch] = linear_contrast(exposure_boost * sqrtf(result), fulcrum, contrast_boost);
@@ -172,8 +170,7 @@ static void pixel_rgb_norm_power(const float *const restrict image,
 
   float numerator = 0.0f;
   float denominator = 0.0f;
-
-__OMP_SIMD__(aligned(image:64) reduction(+:numerator, denominator))
+  __OMP_SIMD__(aligned(image:64) reduction(+:numerator, denominator))
   for(int c = 0; c < 3; ++c)
   {
     const float value = fabsf(image[k + c]);
@@ -196,8 +193,7 @@ static void pixel_rgb_geomean(const float *const restrict image,
   // geometric_mean(RGB). Kind of interesting for saturated colours (maps them to shadows)
 
   float lum = 1.0f;
-
-__OMP_SIMD__(aligned(image:64) reduction(*:lum))
+  __OMP_SIMD__(aligned(image:64) reduction(*:lum))
   for(int c = 0; c < 3; ++c)
   {
     lum *= fabsf(image[k + c]);

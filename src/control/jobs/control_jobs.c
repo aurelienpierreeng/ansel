@@ -446,7 +446,7 @@ static int dt_control_merge_hdr_process(dt_imageio_module_data_t *datai, const c
   const float photoncnt = 100.0f * aperture * exp / iso;
   float saturation = 1.0f;
   d->whitelevel = fmaxf(d->whitelevel, saturation * cal);
-__OMP_PARALLEL_FOR__(collapse(2))
+  __OMP_PARALLEL_FOR__(collapse(2))
   for(int y = 0; y < d->ht; y++)
     for(int x = 0; x < d->wd; x++)
     {
@@ -556,8 +556,7 @@ static int32_t dt_control_merge_hdr_job_run(dt_job_t *job)
   if(d.abort) goto end;
 
 // normalize by white level to make clipping at 1.0 work as expected
-
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < (size_t)d.wd * d.ht; k++)
   {
     if(d.weight[k] > 0.0) d.pixels[k] = fmaxf(0.0f, d.pixels[k] / (d.whitelevel * d.weight[k]));

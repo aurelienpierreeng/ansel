@@ -95,7 +95,7 @@ static inline int eigf_variance_analysis(const float *const restrict guide, // I
   float maxg2 = 0.0f;
   float minmg = 10000000.0f;
   float maxmg = 0.0f;
-__OMP_PARALLEL_FOR__(reduction(max:maxg, maxm, maxg2, maxmg) reduction(min:ming, minm, ming2, minmg))
+  __OMP_PARALLEL_FOR__(reduction(max:maxg, maxm, maxg2, maxmg) reduction(min:ming, minm, ming2, minmg))
   for(size_t k = 0; k < Ndim; k++)
   {
     const float pixelg = guide[k];
@@ -125,8 +125,7 @@ __OMP_PARALLEL_FOR__(reduction(max:maxg, maxm, maxg2, maxmg) reduction(min:ming,
     goto error;
   }
   dt_gaussian_blur_4c(g, in, out);
-
-__OMP_PARALLEL_FOR_SIMD__(aligned(out:64))
+  __OMP_PARALLEL_FOR_SIMD__(aligned(out:64))
   for(size_t k = 0; k < Ndim; k++)
   {
     out[4 * k + 1] -= out[4 * k] * out[4 * k];
@@ -162,7 +161,7 @@ static inline int eigf_variance_analysis_no_mask(const float *const restrict gui
   float maxg = 0.0f;
   float ming2 = 10000000.0f;
   float maxg2 = 0.0f;
-__OMP_PARALLEL_FOR__(reduction(max:maxg, maxg2) reduction(min:ming, ming2))
+  __OMP_PARALLEL_FOR__(reduction(max:maxg, maxg2) reduction(min:ming, ming2))
   for(size_t k = 0; k < Ndim; k++)
   {
     const float pixelg = guide[k];
@@ -184,8 +183,7 @@ __OMP_PARALLEL_FOR__(reduction(max:maxg, maxg2) reduction(min:ming, ming2))
     goto error;
   }
   dt_gaussian_blur(g, in, out);
-
-__OMP_PARALLEL_FOR_SIMD__(aligned(out:64))
+  __OMP_PARALLEL_FOR_SIMD__(aligned(out:64))
   for(size_t k = 0; k < Ndim; k++)
   {
     const float avg = out[2 * k];
@@ -203,7 +201,7 @@ static inline void eigf_blending(float *const restrict image, const float *const
                                  const float *const restrict av, const size_t Ndim,
                                  const dt_iop_guided_filter_blending_t filter, const float feathering)
 {
-__OMP_PARALLEL_FOR_SIMD__(aligned(image, mask, av:64))
+  __OMP_PARALLEL_FOR_SIMD__(aligned(image, mask, av:64))
   for(size_t k = 0; k < Ndim; k++)
   {
     const float avg_g = av[k * 4];
@@ -236,7 +234,7 @@ static inline void eigf_blending_no_mask(float *const restrict image, const floa
                                          const size_t Ndim, const dt_iop_guided_filter_blending_t filter,
                                          const float feathering)
 {
-__OMP_PARALLEL_FOR_SIMD__(aligned(image, av:64))
+  __OMP_PARALLEL_FOR_SIMD__(aligned(image, av:64))
   for(size_t k = 0; k < Ndim; k++)
   {
     const float avg_g = av[k * 2];

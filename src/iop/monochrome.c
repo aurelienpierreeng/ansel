@@ -213,7 +213,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   float *const restrict out = (float *)o;
   const float d_a = d->a;
   const float d_b = d->b;
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(int k = 0; k < 4*npixels; k += 4)
   {
     out[k+0] = 100.0f * color_filter(in[k+1], in[k+2], d_a, d_b, sigma2);
@@ -235,7 +235,7 @@ __OMP_PARALLEL_FOR__()
   dt_bilateral_free(b);
 
   const float highlights = d->highlights;
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(int k = 0; k < 4*npixels; k += 4)
   {
     const float tt = envelope(in[k]);

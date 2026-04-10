@@ -911,8 +911,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   }
 
   const float white_level = fmaxf(d->white_level, 1e-6f);
-
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < (size_t)width * height; k++)
   {
     const float *const in = (const float *)ibuf + k * ch;
@@ -933,8 +932,7 @@ __OMP_PARALLEL_FOR__()
 
   dt_ioppr_transform_image_colorspace_rgb((float *)obuf, (float *)obuf, width, height, d->lut_profile, d->work_profile,
                                           "colorequal HLG Rec2020 to work");
-
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < (size_t)width * height; k++)
   {
     float *const out = (float *)obuf + k * ch;
@@ -1090,8 +1088,7 @@ static void _draw_graph_background(cairo_t *cr, const dt_iop_colorequal_channel_
     const float y = (float)(DT_IOP_COLOREQUAL_GRAPH_GRADIENTS - slice) / (float)DT_IOP_COLOREQUAL_GRAPH_GRADIENTS;
     dt_aligned_pixel_t colors[DT_IOP_COLOREQUAL_GRAPH_RES];
     cairo_pattern_t *gradient = cairo_pattern_create_linear(0.0, 0.0, graph_width, 0.0);
-
-__OMP_PARALLEL_FOR__()
+    __OMP_PARALLEL_FOR__()
     for(int k = 0; k < DT_IOP_COLOREQUAL_GRAPH_RES; k++)
     {
       const float x = (float)k / (float)(DT_IOP_COLOREQUAL_GRAPH_RES - 1);

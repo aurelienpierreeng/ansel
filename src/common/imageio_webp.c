@@ -101,7 +101,7 @@ dt_imageio_retval_t dt_imageio_open_webp(dt_image_t *img, const char *filename, 
 
   uint8_t intval;
   float floatval;
-__OMP_PARALLEL_FOR__(private(intval, floatval))
+  __OMP_PARALLEL_FOR__(private(intval, floatval))
   for(int i=0; i < w*h*4; i++)
   {
     intval = *(int_RGBA_buf+i);

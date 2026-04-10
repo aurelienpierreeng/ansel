@@ -751,8 +751,7 @@ static inline void loop_switch(const float *const restrict in, float *const rest
   const dt_aligned_pixel_simd_t mix1 = dt_colormatrix_row_to_simd(MIX_t, 1);
   const dt_aligned_pixel_simd_t mix2 = dt_colormatrix_row_to_simd(MIX_t, 2);
   const dt_aligned_pixel_simd_t illuminant_v = dt_load_simd_aligned(illuminant);
-
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < height * width * 4; k += 4)
   {
     const dt_aligned_pixel_simd_t in_v = dt_load_simd_aligned(in + k);
@@ -948,7 +947,7 @@ static inline int auto_detect_WB(const float *const restrict in, dt_illuminant_t
    if(!temp) return 1;
 
    // Convert RGB to xy
-__OMP_PARALLEL_FOR__(collapse(2) )
+  __OMP_PARALLEL_FOR__(collapse(2) )
   for(size_t i = 0; i < height; i++)
     for(size_t j = 0; j < width; j++)
     {
@@ -983,7 +982,7 @@ __OMP_PARALLEL_FOR__(collapse(2) )
 
   if(illuminant == DT_ILLUMINANT_DETECT_SURFACES)
   {
-__OMP_PARALLEL_FOR__(reduction(+:xyY, elements))
+    __OMP_PARALLEL_FOR__(reduction(+:xyY, elements))
     for(size_t i = 2 * OFF; i < height - 4 * OFF; i += OFF)
       for(size_t j = 2 * OFF; j < width - 4 * OFF; j += OFF)
       {
@@ -1047,7 +1046,7 @@ __OMP_PARALLEL_FOR__(reduction(+:xyY, elements))
   }
   else if(illuminant == DT_ILLUMINANT_DETECT_EDGES)
   {
-__OMP_PARALLEL_FOR__(reduction(+:xyY, elements))
+    __OMP_PARALLEL_FOR__(reduction(+:xyY, elements))
     for(size_t i = 2 * OFF; i < height - 4 * OFF; i += OFF)
       for(size_t j = 2 * OFF; j < width - 4 * OFF; j += OFF)
       {

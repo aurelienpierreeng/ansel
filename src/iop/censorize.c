@@ -112,7 +112,7 @@ int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, const dt
 __DT_CLONE_TARGETS__
 static inline void make_noise(float *const output, const float noise, const size_t width, const size_t height)
 {
-__OMP_PARALLEL_FOR_SIMD__(aligned(output:64) collapse(2))
+  __OMP_PARALLEL_FOR_SIMD__(aligned(output:64) collapse(2))
   for(size_t i = 0; i < height; i++)
     for(size_t j = 0; j < width; j++)
     {
@@ -195,8 +195,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   {
     const size_t pixels_x = width / (2 * pixel_radius);
     const size_t pixels_y = height / (2 * pixel_radius);
-
-__OMP_PARALLEL_FOR__(collapse(2))
+    __OMP_PARALLEL_FOR__(collapse(2))
     for(size_t j = 0; j < pixels_y + 1; j++)
       for(size_t i = 0; i < pixels_x + 1; i++)
       {

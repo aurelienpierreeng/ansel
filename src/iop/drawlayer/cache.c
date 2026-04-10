@@ -445,7 +445,7 @@ gboolean dt_drawlayer_cache_populate_process_patch_from_base(const dt_drawlayer_
         memset(process_patch->pixels, 0,
                (size_t)process_patch->width * process_patch->height * 4 * sizeof(float));
       }
-__OMP_PARALLEL_FOR__(if(copy_h > 8))
+      __OMP_PARALLEL_FOR__(if(copy_h > 8))
       for(int y = 0; y < copy_h; y++)
       {
         const float *src = base_patch->pixels + 4 * ((size_t)(src_y0 + y) * base_patch->width + src_x0);
@@ -499,7 +499,7 @@ __OMP_PARALLEL_FOR__(if(copy_h > 8))
       {
         const int dst_x0 = src_x0 - combined_roi->x;
         const int dst_y0 = src_y0 - combined_roi->y;
-__OMP_PARALLEL_FOR__(if(copy_h > 8))
+        __OMP_PARALLEL_FOR__(if(copy_h > 8))
         for(int y = 0; y < copy_h; y++)
         {
           const float *src = base_stroke_mask->pixels + (size_t)(src_y0 + y) * base_stroke_mask->width + src_x0;
@@ -510,7 +510,7 @@ __OMP_PARALLEL_FOR__(if(copy_h > 8))
     }
     else
     {
-__OMP_PARALLEL_FOR__(if(process_stroke_mask->height > 8))
+      __OMP_PARALLEL_FOR__(if(process_stroke_mask->height > 8))
       for(int y = 0; y < process_stroke_mask->height; y++)
       {
         const float src_y = ((float)y + 0.5f) / combined_roi->scale + (float)combined_roi->y - 0.5f;
@@ -599,7 +599,7 @@ gboolean dt_drawlayer_cache_flush_process_patch_to_base(dt_drawlayer_cache_patch
   dt_iop_clip_and_zoom(update_buffer, process_patch->pixels, &inverse_roi, &process_roi, dst_w, process_patch->width);
 
   dt_drawlayer_cache_patch_wrlock(base_patch);
-__OMP_PARALLEL_FOR__(if(dst_h > 8))
+  __OMP_PARALLEL_FOR__(if(dst_h > 8))
   for(int yy = 0; yy < dst_h; yy++)
   {
     memcpy(base_patch->pixels + 4 * ((size_t)(src_y0 + yy) * base_patch->width + src_x0),
@@ -624,8 +624,7 @@ __OMP_PARALLEL_FOR__(if(dst_h > 8))
 
     dt_iop_clip_and_zoom(mask_update_buffer, process_stroke_mask->pixels, &inverse_roi, &process_roi,
                          dst_w, process_stroke_mask->width);
-
-__OMP_PARALLEL_FOR__(if(dst_h > 8))
+    __OMP_PARALLEL_FOR__(if(dst_h > 8))
     for(int yy = 0; yy < dst_h; yy++)
     {
       memcpy(base_stroke_mask->pixels + (size_t)(src_y0 + yy) * base_stroke_mask->width + src_x0,

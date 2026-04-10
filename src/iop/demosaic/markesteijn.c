@@ -101,7 +101,7 @@ static void xtrans_markesteijn_interpolate(float *out, const float *const in,
 
   // extra passes propagates out errors at edges, hence need more padding
   const int pad_tile = (passes == 1) ? 12 : 17;
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   // step through TSxTS cells of image, each tile overlapping the
   // prior as interpolation needs a substantial border
   for(int top = -pad_tile; top < height - pad_tile; top += TS - (pad_tile*2))
@@ -1133,8 +1133,7 @@ static void xtrans_fdc_interpolate(struct dt_iop_module_t *self, float *out, con
     hybrid_fdc[0] = 0.0f;
     hybrid_fdc[1] = 1.0f;
   }
-
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   // step through TSxTS cells of image, each tile overlapping the
   // prior as interpolation needs a substantial border
   for(int top = -pad_tile; top < height - pad_tile; top += TS - (pad_tile * 2))

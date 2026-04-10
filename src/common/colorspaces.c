@@ -1548,7 +1548,7 @@ void dt_colorspaces_transform_rgba_float_image(const cmsHTRANSFORM transform, co
 
   /* Share the aliased LCMS transform explicitly. Do not read it indirectly
    * through module state inside the loop body. */
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(int y = 0; y < height; y++)
   {
     const float *const in = image_in + (size_t)y * width * 4;
@@ -1564,7 +1564,7 @@ void dt_colorspaces_transform_rgba8_to_bgra8(const cmsHTRANSFORM transform, cons
 
   /* Same threading rule as float transforms: pass an aliased transform handle
    * into the helper and share only that stable local state. */
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(int y = 0; y < height; y++)
   {
     const uint8_t *const restrict in = image_in + (size_t)y * width * 4u;
@@ -2676,8 +2676,7 @@ void dt_colorspaces_cygm_apply_coeffs_to_rgb(float *out, const float *in, int nu
       for (int c=0; c<4; c++)
         RGB_to_RGB_WB[a][b] += CAM_to_RGB_WB[a][c] * RGB_to_CAM[c][b];
     }
-
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(int i = 0; i < num; i++)
   {
     const float *inpos = &in[i*4];
@@ -2692,7 +2691,7 @@ __OMP_PARALLEL_FOR__()
 __DT_CLONE_TARGETS__
 void dt_colorspaces_cygm_to_rgb(float *out, int num, double CAM_to_RGB[3][4])
 {
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(int i = 0; i < num; i++)
   {
     float *in = &out[i*4];
@@ -2707,7 +2706,7 @@ __OMP_PARALLEL_FOR__()
 
 void dt_colorspaces_rgb_to_cygm(float *out, int num, double RGB_to_CAM[4][3])
 {
-__OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR__()
   for(int i = 0; i < num; i++)
   {
     float *in = &out[i*3];

@@ -238,7 +238,7 @@ void dt_develop_blendif_rgb_jzczhz_make_mask(const struct dt_dev_pixelpipe_t *pi
     // mask is not conditional, invert the mask if required
     if(mask_inversed)
     {
-__OMP_PARALLEL_FOR_SIMD__()
+      __OMP_PARALLEL_FOR_SIMD__()
       for(size_t x = 0; x < buffsize; x++) mask[x] = global_opacity * (1.0f - mask[x]);
     }
     else
@@ -275,8 +275,7 @@ __OMP_PARALLEL_FOR_SIMD__()
     {
       return;
     }
-
-__OMP_PARALLEL__()
+    __OMP_PARALLEL__()
     {
 #ifdef __SSE2__
       // flush denormals to zero to avoid performance penalty if there are a lot of zero values in the mask
@@ -285,17 +284,17 @@ __OMP_PARALLEL__()
 #endif
 
       // initialize the parametric mask
-__OMP_FOR_SIMD__(aligned(temp_mask:64))
+      __OMP_FOR_SIMD__(aligned(temp_mask:64))
       for(size_t x = 0; x < buffsize; x++) temp_mask[x] = 1.0f;
 
       // combine channels
-__OMP_FOR__()
+      __OMP_FOR__()
       for(size_t y = 0; y < oheight; y++)
       {
         const size_t start = ((y + yoffs) * iwidth + xoffs) * DT_BLENDIF_RGB_CH;
         _blendif_combine_channels(a + start, temp_mask + (y * owidth), owidth, blendif, parameters, profile);
       }
-__OMP_FOR__()
+      __OMP_FOR__()
       for(size_t y = 0; y < oheight; y++)
       {
         const size_t start = (y * owidth) * DT_BLENDIF_RGB_CH;
@@ -309,12 +308,12 @@ __OMP_FOR__()
       {
         if(mask_inversed)
         {
-__OMP_FOR_SIMD__(aligned(mask, temp_mask:64))
+          __OMP_FOR_SIMD__(aligned(mask, temp_mask:64))
           for(size_t x = 0; x < buffsize; x++) mask[x] = global_opacity * (1.0f - mask[x]) * temp_mask[x];
         }
         else
         {
-__OMP_FOR_SIMD__(aligned(mask, temp_mask:64))
+          __OMP_FOR_SIMD__(aligned(mask, temp_mask:64))
           for(size_t x = 0; x < buffsize; x++) mask[x] = global_opacity * (1.0f - (1.0f - mask[x]) * temp_mask[x]);
         }
       }
@@ -322,12 +321,12 @@ __OMP_FOR_SIMD__(aligned(mask, temp_mask:64))
       {
         if(mask_inversed)
         {
-__OMP_FOR_SIMD__(aligned(mask, temp_mask:64))
+          __OMP_FOR_SIMD__(aligned(mask, temp_mask:64))
           for(size_t x = 0; x < buffsize; x++) mask[x] = global_opacity * (1.0f - mask[x] * temp_mask[x]);
         }
         else
         {
-__OMP_FOR_SIMD__(aligned(mask, temp_mask:64))
+          __OMP_FOR_SIMD__(aligned(mask, temp_mask:64))
           for(size_t x = 0; x < buffsize; x++) mask[x] = global_opacity * mask[x] * temp_mask[x];
         }
       }
@@ -890,7 +889,7 @@ static void _display_channel(const float *const restrict a, float *const restric
 __OMP_DECLARE_SIMD__(aligned(a, b:16) uniform(stride))
 static inline void _copy_mask(const float *const restrict a, float *const restrict b, const size_t stride)
 {
-__OMP_SIMD__(aligned(a, b: 16))
+  __OMP_SIMD__(aligned(a, b: 16))
   for(size_t x = DT_BLENDIF_RGB_BCH; x < stride; x += DT_BLENDIF_RGB_CH) b[x] = a[x];
 }
 
@@ -924,8 +923,7 @@ void dt_develop_blendif_rgb_jzczhz_blend(const struct dt_dev_pixelpipe_t *pipe,
     const dt_iop_order_iccprofile_info_t *profile = use_profile ? &blend_profile : NULL;
     const float *const restrict boost_factors = d->blendif_boost_factors;
     const dt_dev_pixelpipe_display_mask_t channel = request_mask_display & DT_DEV_PIXELPIPE_DISPLAY_ANY;
-
-__OMP_PARALLEL_FOR__()
+    __OMP_PARALLEL_FOR__()
     for(size_t y = 0; y < oheight; y++)
     {
       const size_t a_start = ((y + yoffs) * iwidth + xoffs) * DT_BLENDIF_RGB_CH;
@@ -945,7 +943,7 @@ __OMP_PARALLEL_FOR__()
       dt_iop_image_copy(tmp_buffer, b, (size_t)owidth * oheight * DT_BLENDIF_RGB_CH);
       if((d->blend_mode & DEVELOP_BLEND_REVERSE) == DEVELOP_BLEND_REVERSE)
       {
-__OMP_PARALLEL_FOR__()
+        __OMP_PARALLEL_FOR__()
         for(size_t y = 0; y < oheight; y++)
         {
           const size_t a_start = ((y + yoffs) * iwidth + xoffs) * DT_BLENDIF_RGB_CH;
@@ -956,7 +954,7 @@ __OMP_PARALLEL_FOR__()
       }
       else
       {
-__OMP_PARALLEL_FOR__()
+        __OMP_PARALLEL_FOR__()
         for(size_t y = 0; y < oheight; y++)
         {
           const size_t a_start = ((y + yoffs) * iwidth + xoffs) * DT_BLENDIF_RGB_CH;
@@ -972,7 +970,7 @@ __OMP_PARALLEL_FOR__()
   if(mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
   {
     const size_t stride = owidth * DT_BLENDIF_RGB_CH;
-__OMP_PARALLEL_FOR__()
+    __OMP_PARALLEL_FOR__()
     for(size_t y = 0; y < oheight; y++)
     {
       const size_t a_start = ((y + yoffs) * iwidth + xoffs) * DT_BLENDIF_RGB_CH;
