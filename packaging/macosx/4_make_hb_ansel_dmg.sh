@@ -75,7 +75,7 @@ else
 	tools_script="${scriptDir}/../../tools/get_git_version_string.sh"
 fi
 OUTPUT_VERSION=$(sh "${tools_script}")
-DMG="${PROGN}-${OUTPUT_VERSION})-$(arch)"
+DMG="${PROGN}-${OUTPUT_VERSION}-$(arch)"
 echo "Create DMG $DMG"
 hdiutil convert "pack.temp.dmg" -format UDZO -imagekey zlib-level=9 -o "${DMG}"
 rm -f pack.temp.dmg
