@@ -66,6 +66,7 @@ HB_PACKAGES=(
   po4a
   pugixml
   sdl2
+  shared-mime-info
   webp
 )
 
