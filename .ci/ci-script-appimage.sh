@@ -58,20 +58,16 @@ cp -a /var/lib/lensfun-updates/* ../AppDir/usr/share/lensfun
 # pixbuf loaders or the mime database could not be found
 mkdir -p ../AppDir/usr/lib/gdk-pixbuf-2.0/2.10.0/loaders
 cp /usr/lib/x86_64-linux-gnu/gdk-pixbuf-2.0/2.10.0/loaders/* \
-   AppDir/usr/lib/gdk-pixbuf-2.0/2.10.0/loaders/
+   ../AppDir/usr/lib/gdk-pixbuf-2.0/2.10.0/loaders/
 
 # Import theme assets
 cp -r /usr/share/icons/Adwaita ../AppDir/usr/share/icons/
-cp -r /usr/share/glib-2.0/schemas ../AppDir/usr/share/
+mkdir -p ../AppDir/usr/share/glib-2.0
+cp -r /usr/share/glib-2.0/schemas ../AppDir/usr/share/glib-2.0/
 glib-compile-schemas ../AppDir/usr/share/glib-2.0/schemas
 
 # Mime database
 cp -r /usr/share/mime ../AppDir/usr/share/
-
-# Import GLib stack
-cp -v /usr/lib/x86_64-linux-gnu/libglib-2.0.so.* ../AppDir/usr/lib/
-cp -v /usr/lib/x86_64-linux-gnu/libgobject-2.0.so.* ../AppDir/usr/lib/
-cp -v /usr/lib/x86_64-linux-gnu/libgio-2.0.so.* ../AppDir/usr/lib/
 
 ## Get the latest Linuxdeploy and its Gtk plugin to package everything
 wget -c "https://raw.githubusercontent.com/linuxdeploy/linuxdeploy-plugin-gtk/master/linuxdeploy-plugin-gtk.sh"
@@ -89,7 +85,13 @@ export NO_STRIP=true
 # Our plugins link against libansel, it's not in system, so tell linuxdeploy
 # where to find it. Don't use LD_PRELOAD here, linuxdeploy cannot see preloaded
 # libraries.
-ANSEL_LIBDIR="$(find ../AppDir/usr -type d -name ansel -path "../AppDir/usr/lib*" | head -n 1)"
+ANSEL_LIBDIR=""
+for candidate in ../AppDir/usr/lib64/ansel ../AppDir/usr/lib/ansel ../AppDir/usr/lib/x86_64-linux-gnu/ansel; do
+  if [ -d "${candidate}" ]; then
+    ANSEL_LIBDIR="${candidate}"
+    break
+  fi
+done
 if [ -z "${ANSEL_LIBDIR}" ]; then
   echo "ERROR: Could not locate installed ansel libraries in AppDir." >&2
   find ../AppDir/usr -maxdepth 4 -type d -name ansel >&2
@@ -97,6 +99,7 @@ if [ -z "${ANSEL_LIBDIR}" ]; then
 fi
 ANSEL_LIBROOT="$(dirname "${ANSEL_LIBDIR}")"
 export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:${ANSEL_LIBROOT}/"
+
 # Using `--deploy-deps-only` to tell linuxdeploy also collect dependencies for
 # libraries in this dir, but don't copy those libraries. On the contrary,
 # `--library` will copy both libraries and their dependencies, which is not what
@@ -116,12 +119,114 @@ export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:${ANSEL_LIBROOT}/"
   --deploy-deps-only "${ANSEL_LIBDIR}/plugins" \
   --deploy-deps-only "${ANSEL_LIBDIR}/plugins/imageio/format" \
   --deploy-deps-only "${ANSEL_LIBDIR}/plugins/imageio/storage" \
-  --deploy-deps-only "${ANSEL_LIBDIR}/plugins/lighttable" \
-  --library /usr/lib/x86_64-linux-gnu/libglib-2.0.so.0 \
-  --library /usr/lib/x86_64-linux-gnu/libgobject-2.0.so.0 \
-  --library /usr/lib/x86_64-linux-gnu/libgio-2.0.so.0 \
-  --library /usr/lib/x86_64-linux-gnu/libgmic.so.1 \
-  --library /usr/lib/x86_64-linux-gnu/libcmark.so.0
+  --deploy-deps-only "${ANSEL_LIBDIR}/plugins/lighttable"
+
+# Keep the exact runtime SONAMEs that the staged executables and modules
+# request inside AppDir. This stays generic across distro SONAME revisions:
+# compare plugin-only DT_NEEDED entries against the core binaries and what
+# linuxdeploy already bundled, then add only the remaining libraries
+# explicitly.
+RUNTIME_LIBDIR="../AppDir/usr/lib"
+mkdir -p "${RUNTIME_LIBDIR}"
+APPDIR_LIBDIRS=( ../AppDir/usr/lib ../AppDir/usr/lib64 ../AppDir/usr/lib/x86_64-linux-gnu )
+RUNTIME_LIBRARY_ARGS=()
+
+ANSEL_CORELIB=""
+for candidate in ../AppDir/usr/lib64/libansel.so ../AppDir/usr/lib/libansel.so ../AppDir/usr/lib/x86_64-linux-gnu/libansel.so; do
+  if [ -f "${candidate}" ]; then
+    ANSEL_CORELIB="${candidate}"
+    break
+  fi
+done
+
+mapfile -t CORE_NEEDED_LIBRARIES < <(
+  {
+    readelf -d \
+      ../AppDir/usr/bin/ansel \
+      ../AppDir/usr/bin/ansel-cli \
+      ../AppDir/usr/bin/ansel-cltest \
+      ../AppDir/usr/bin/ansel-cmstest 2>/dev/null
+    if [ -n "${ANSEL_CORELIB}" ]; then
+      readelf -d "${ANSEL_CORELIB}" 2>/dev/null
+    fi
+  } | awk -F'[][]' '/\(NEEDED\)/ { print $2 }' | sort -u
+)
+
+mapfile -t PLUGIN_NEEDED_LIBRARIES < <(
+  find "${ANSEL_LIBDIR}" -type f -name '*.so' -exec readelf -d {} + 2>/dev/null \
+    | awk -F'[][]' '/\(NEEDED\)/ { print $2 }' | sort -u
+)
+
+for soname in "${PLUGIN_NEEDED_LIBRARIES[@]}"; do
+  if [ -z "${soname}" ]; then
+    continue
+  fi
+
+  case "${soname}" in
+    libgomp.so.*)
+      continue
+      ;;
+  esac
+
+  if printf '%s\n' "${CORE_NEEDED_LIBRARIES[@]}" | grep -Fxq -- "${soname}"; then
+    continue
+  fi
+
+  APPDIR_LIBRARY=""
+  for appdir_lib in "${APPDIR_LIBDIRS[@]}"; do
+    if [ -e "${appdir_lib}/${soname}" ]; then
+      APPDIR_LIBRARY="${appdir_lib}/${soname}"
+      break
+    fi
+  done
+
+  if [ -n "${APPDIR_LIBRARY}" ]; then
+    continue
+  fi
+
+  HOST_LIBRARY="$(ldconfig -p | awk -v so="${soname}" '$1 == so { print $NF; exit }')"
+  if [ -z "${HOST_LIBRARY}" ]; then
+    HOST_LIBRARY="$(find /lib /lib64 /usr/lib /usr/lib64 /usr/lib/x86_64-linux-gnu -name "${soname}" -print 2>/dev/null | head -n 1)"
+  fi
+  if [ -z "${HOST_LIBRARY}" ]; then
+    echo "ERROR: Could not resolve ${soname} on the build host." >&2
+    exit 1
+  fi
+
+  cp -avL "${HOST_LIBRARY}" "${RUNTIME_LIBDIR}/"
+  RUNTIME_LIBRARY_ARGS+=( --library "${HOST_LIBRARY}" )
+done
+
+if [ "${#RUNTIME_LIBRARY_ARGS[@]}" -gt 0 ]; then
+  ./linuxdeploy-x86_64.AppImage \
+    --appdir ../AppDir \
+    --exclude-library 'libgomp.so*' \
+    "${RUNTIME_LIBRARY_ARGS[@]}"
+fi
+
+# The GTK plugin forces Adwaita inside the AppImage. Keep the bundled theme as
+# a fallback, but let the host session pick the actual GTK and icon themes so
+# toolbar and symbolic icons match the desktop where possible.
+if [ -f ../AppDir/apprun-hooks/linuxdeploy-plugin-gtk.sh ]; then
+  cat >> ../AppDir/apprun-hooks/linuxdeploy-plugin-gtk.sh <<'EOF'
+
+# Ansel AppImage runtime overrides.
+if [ -z "${ANSEL_APPIMAGE_FORCE_GTK_THEME:-}" ]; then
+  unset GTK_THEME
+fi
+
+# Keep host theme and icon search paths first, and leave the AppImage assets as
+# a fallback for icons that the desktop theme does not provide.
+export XDG_DATA_DIRS="/usr/local/share:/usr/share${XDG_DATA_DIRS:+:$XDG_DATA_DIRS}:$APPDIR/usr/share"
+EOF
+fi
+
+# Keep the accessibility bridge on the host side. The AppImage talks to the
+# host AT-SPI session bus, and mixing that bus with bundled bridge libraries is
+# a recurrent source of runtime warnings and mismatched accessibility behavior.
+find ../AppDir/usr -type f \
+  \( -name 'libatk-bridge-2.0.so*' -o -name 'libatspi.so*' \) \
+  -print -delete
 
 # Keep the AppImage entry point explicit so command-line arguments stay visible.
 # If the AppImage is called through a symlink named like one of our tools, run
@@ -139,9 +244,10 @@ TOOLDIR="${APPDIR}/usr/libexec/ansel/tools"
 APPLET="$(basename "$0")"
 
 # Hard override: NEVER fall back to host first
-export LD_LIBRARY_PATH="$APPDIR/usr/lib:$APPDIR/usr/lib/x86_64-linux-gnu"
+export LD_LIBRARY_PATH="$APPDIR/usr/lib:$APPDIR/usr/lib64:$APPDIR/usr/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 export GDK_PIXBUF_MODULE_FILE="$APPDIR/usr/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache"
-export XDG_DATA_DIRS="$APPDIR/usr/share:$XDG_DATA_DIRS"
+export GSETTINGS_SCHEMA_DIR="$APPDIR/usr/share/glib-2.0/schemas"
+export XDG_DATA_DIRS="$APPDIR/usr/share${XDG_DATA_DIRS:+:$XDG_DATA_DIRS}"
 
 if [ "${APPLET}" != "AppRun" ] && [ -x "${BINDIR}/${APPLET}" ]; then
   exec "${BINDIR}/${APPLET}" "$@"
