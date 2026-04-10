@@ -652,6 +652,11 @@ void dt_mipmap_cache_deallocate_dynamic(void *data, dt_cache_entry_t *entry)
     _write_mipmap_to_disk(imgid, NULL, NULL, NULL, NULL, NULL, &write_to_disk);
 
     struct dt_mipmap_buffer_dsc *dsc = _get_dsc_from_entry(entry);
+
+    // If the mipmap hash doesn't match the history hash, update the file cache
+    if(!_mipmap_cache_disk_hash_matches(imgid, mip))
+      dsc->flags |= DT_MIPMAP_BUFFER_DSC_FLAG_INVALIDATE;
+
     // don't write skulls:
     if(dsc->width > 8 && dsc->height > 8)
     {
@@ -672,7 +677,7 @@ void dt_mipmap_cache_deallocate_dynamic(void *data, dt_cache_entry_t *entry)
                    get_imgid(entry->key));
           // Don't write existing files as both performance and quality (lossy jpg) suffer
           FILE *f = NULL;
-          if (!g_file_test(filename, G_FILE_TEST_EXISTS) && (f = g_fopen(filename, "wb")))
+          if(!g_file_test(filename, G_FILE_TEST_EXISTS) && (f = g_fopen(filename, "wb")))
           {
             // first check the disk isn't full
             struct statvfs vfsbuf;
