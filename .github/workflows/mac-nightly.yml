@@ -92,7 +92,7 @@ jobs:
           softwareupdate --install-rosetta --agree-to-license || true
       - name: Install Base Dependencies
         run: |
-          "${SRC_DIR}/packaging/install-deps-macos.sh" "${{ matrix.arch }}"
+          "${SRC_DIR}"/packaging/install-deps-macos.sh ${{ matrix.arch }}
       - name: Update lensfun data
         if: ${{ success() }}
         run: |
