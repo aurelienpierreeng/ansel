@@ -64,7 +64,8 @@ echo '
 chmod -Rf go-w /Volumes/"${PROGN}"
 sync
 hdiutil detach ${device}
-DMG="${PROGN}-$(git describe --tags | sed 's/^release-//;s/-/+/;s/-/~/;s/rc/~rc/')-$(arch)"
+OUTPUT_VERSION=$(sh ../../tools/get_git_version_string.sh)
+DMG="${PROGN}-${OUTPUT_VERSION})-$(arch)"
 echo "Create DMG $DMG"
 hdiutil convert "pack.temp.dmg" -format UDZO -imagekey zlib-level=9 -o "${DMG}"
 rm -f pack.temp.dmg
