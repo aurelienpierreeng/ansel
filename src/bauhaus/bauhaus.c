@@ -2577,8 +2577,9 @@ void dt_bauhaus_show_popup(GtkWidget *widget)
   /* Bind to CSS rules from parent widget */
   GtkStyleContext *context = gtk_widget_get_style_context(w->bauhaus->popup_area);
   gtk_style_context_add_class(context, "dt_bauhaus_popup");
-  GtkWidget *relative = dt_gui_get_popup_relative_widget(widget, NULL);
-  gtk_window_set_attached_to(GTK_WINDOW(w->bauhaus->popup_window), relative ? relative : widget);
+  gtk_window_set_attached_to(GTK_WINDOW(w->bauhaus->popup_window), widget);
+  GtkWidget *toplevel = gtk_widget_get_toplevel(widget);
+  gtk_window_set_transient_for(GTK_WINDOW(w->bauhaus->popup_window), GTK_WINDOW(toplevel));
 
   // The popup window stays transient for the main application window, so the anchor
   // rectangle needs to remain expressed in that coordinate space even when the popup is
