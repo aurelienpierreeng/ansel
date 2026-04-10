@@ -107,10 +107,20 @@ jobs:
           lensfun-update-data
       - name: Build and Install
         run: |
-          cmake -E make_directory "${BUILD_DIR}";
-          cmake -E make_directory "${INSTALL_PREFIX}";
+          if [[ "${TARGET_ARCH}" == "x86_64" ]]; then
+            CMAKE_BIN="/usr/local/bin/cmake"
+            NINJA_BIN="/usr/local/bin/ninja"
+            ARCH_CMD="arch -x86_64"
+          else
+            CMAKE_BIN="/opt/homebrew/bin/cmake"
+            NINJA_BIN="/opt/homebrew/bin/ninja"
+            ARCH_CMD=""
+          fi
+
+          ${CMAKE_BIN} -E make_directory "${BUILD_DIR}";
+          ${CMAKE_BIN} -E make_directory "${INSTALL_PREFIX}";
           cd "${BUILD_DIR}"
-          arch -${{ matrix.arch }} cmake .. \
+          ${ARCH_CMD} ${CMAKE_BIN}} cmake .. \
           -G "${GENERATOR}" \
           -DCMAKE_INSTALL_PREFIX="${INSTALL_PREFIX}"\
           -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
@@ -127,12 +137,12 @@ jobs:
           -DUSE_KWALLET=OFF \
           -DBUILD_CMSTEST=OFF \
           -DBUILD_BENCHMARKING=OFF \
-          -DCMAKE_BUILD_TYPE=Release
-          -DUSE_OPENMP=ON
-          -DDT_MACOS_UNIVERSAL=OFF
-          -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }}
+          -DCMAKE_BUILD_TYPE=Release \
+          -DUSE_OPENMP=ON \
+          -DDT_MACOS_UNIVERSAL=OFF \
+          -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }} \
           ${ECO};
-          arch -${{ matrix.arch }} cmake --build "$BUILD_DIR" --target install;
+          ${ARCH_CMD} ${CMAKE_BIN} --build "$BUILD_DIR" --target install;
       - name: Upload build
         uses: actions/upload-artifact@v4
         with:
