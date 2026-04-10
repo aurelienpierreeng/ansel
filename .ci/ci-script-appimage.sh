@@ -48,6 +48,21 @@ cmake --build . --target install --parallel $(nproc)
 mkdir -p ../AppDir/usr/share/lensfun
 cp -a /var/lib/lensfun-updates/* ../AppDir/usr/share/lensfun
 
+# Deal with errors like:
+# Could not load a pixbuf ...
+# pixbuf loaders or the mime database could not be found
+mkdir -p ../AppDir/usr/lib/gdk-pixbuf-2.0/2.10.0/loaders
+cp /usr/lib/x86_64-linux-gnu/gdk-pixbuf-2.0/2.10.0/loaders/* \
+   AppDir/usr/lib/gdk-pixbuf-2.0/2.10.0/loaders/
+
+# Import theme assets
+cp -r /usr/share/icons/Adwaita ../AppDir/usr/share/icons/
+cp -r /usr/share/glib-2.0/schemas ../AppDir/usr/share/
+glib-compile-schemas ../AppDir/usr/share/glib-2.0/schemas
+
+# Mime database
+cp -r /usr/share/mime ../AppDir/usr/share/
+
 ## Get the latest Linuxdeploy and its Gtk plugin to package everything
 wget -c "https://raw.githubusercontent.com/linuxdeploy/linuxdeploy-plugin-gtk/master/linuxdeploy-plugin-gtk.sh"
 wget -c "https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage"
@@ -87,7 +102,12 @@ export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:${ANSEL_LIBROOT}/"
   --deploy-deps-only "${ANSEL_LIBDIR}/plugins" \
   --deploy-deps-only "${ANSEL_LIBDIR}/plugins/imageio/format" \
   --deploy-deps-only "${ANSEL_LIBDIR}/plugins/imageio/storage" \
-  --deploy-deps-only "${ANSEL_LIBDIR}/plugins/lighttable"
+  --deploy-deps-only "${ANSEL_LIBDIR}/plugins/lighttable" \
+  --library /usr/lib/x86_64-linux-gnu/libglib-2.0.so.0 \
+  --library /usr/lib/x86_64-linux-gnu/libgobject-2.0.so.0 \
+  --library /usr/lib/x86_64-linux-gnu/libgio-2.0.so.0 \
+  --library /usr/lib/x86_64-linux-gnu/libgmic.so.1 \
+  --library /usr/lib/x86_64-linux-gnu/libcmark.so.0
 
 # Keep the AppImage entry point explicit so command-line arguments stay visible.
 # If the AppImage is called through a symlink named like one of our tools, run
@@ -103,6 +123,9 @@ APPDIR="${APPDIR:-$(dirname "$(readlink -f "$0")")}"
 BINDIR="${APPDIR}/usr/bin"
 TOOLDIR="${APPDIR}/usr/libexec/ansel/tools"
 APPLET="$(basename "$0")"
+
+export GDK_PIXBUF_MODULE_FILE="$APPDIR/usr/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache"
+export XDG_DATA_DIRS="$APPDIR/usr/share:$XDG_DATA_DIRS"
 
 if [ "${APPLET}" != "AppRun" ] && [ -x "${BINDIR}/${APPLET}" ]; then
   exec "${BINDIR}/${APPLET}" "$@"
