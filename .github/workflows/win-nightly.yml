@@ -85,37 +85,6 @@ jobs:
       - name: Install Base Dependencies
         run: |
           $(cygpath ${SRC_DIR})/packaging/install-deps-windows-msys2.sh
-      - name: Checkout exiv2 source
-        uses: actions/checkout@v6
-        with:
-          repository: 'Exiv2/exiv2'
-          # Exiv2 0.28.0 removes the old `std::wstring` path for Windows, and
-          # breaks non-ASCII path handling. We stick to 0.27 until fixes in
-          # <https://github.com/Exiv2/exiv2/pull/2800> get merged.
-          ref: '0.27-maintenance'
-          path: 'exiv2-src'
-          fetch-depth: 1
-      # Install manually compiled dependencies into MingW's prefix, so ansel
-      # will link against it and CPack will grab it.
-      #
-      # Exiv2 uses `CURL_LIBRARIES` which is only set by `FindCURL.cmake` module
-      # so we fix compatibility with `CURLConfig.cmake`.
-      - name: Manually build and install exiv2
-        run: |
-          cd exiv2-src
-          sed -i 's/find_package(CURL REQUIRED)/find_package(CURL REQUIRED)\nif(TARGET CURL::libcurl)\nset(CURL_LIBRARIES CURL::libcurl)\nendif()/g' cmake/findDependencies.cmake
-          cmake -B build -G Ninja \
-          -DCMAKE_INSTALL_PREFIX=${MINGW_PREFIX} \
-          -DEXIV2_ENABLE_VIDEO=OFF \
-          -DEXIV2_ENABLE_NLS=ON \
-          -DEXIV2_ENABLE_XMP=ON \
-          -DEXIV2_ENABLE_CURL=ON \
-          -DEXIV2_ENABLE_WEBREADY=ON \
-          -DEXIV2_ENABLE_WIN_UNICODE=ON \
-          -DEXIV2_ENABLE_BMFF=ON
-          ninja -C build
-          ninja -C build install
-          cd ..
       - name: Update lensfun data
         run: |
           python --version
