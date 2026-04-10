@@ -28,7 +28,7 @@ trap 'echo "${BASH_SOURCE[0]}{${FUNCNAME[0]}}:${LINENO}: Error: command \`${BASH
 PROGN=Ansel
 
 # Go to directory of script
-scriptDir=$(dirname "$0")
+scriptDir=$(cd "$(dirname "$0")" && pwd)
 buildDir="${scriptDir}/../../install"
 cd "$buildDir"/
 
@@ -64,7 +64,17 @@ echo '
 chmod -Rf go-w /Volumes/"${PROGN}"
 sync
 hdiutil detach ${device}
-OUTPUT_VERSION=$(sh "${scriptDir}/../../tools/get_git_version_string.sh")
+# Find repo root (a parent directory that contains `tools`) and use its script.
+search_dir="${scriptDir}"
+while [ ! -d "${search_dir}/tools" ] && [ "${search_dir}" != "/" ]; do
+	search_dir=$(dirname "${search_dir}")
+done
+if [ -d "${search_dir}/tools" ]; then
+	tools_script="${search_dir}/tools/get_git_version_string.sh"
+else
+	tools_script="${scriptDir}/../../tools/get_git_version_string.sh"
+fi
+OUTPUT_VERSION=$(sh "${tools_script}")
 DMG="${PROGN}-${OUTPUT_VERSION})-$(arch)"
 echo "Create DMG $DMG"
 hdiutil convert "pack.temp.dmg" -format UDZO -imagekey zlib-level=9 -o "${DMG}"
