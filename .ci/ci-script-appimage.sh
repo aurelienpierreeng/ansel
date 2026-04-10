@@ -219,11 +219,33 @@ if [ -z "${ANSEL_APPIMAGE_FORCE_GTK_THEME:-}" ]; then
   unset GTK_THEME
 fi
 
+# Host sessions often export GTK_MODULES for optional desktop integrations.
+# Those modules are not required for Ansel itself and regularly trigger
+# warnings when an AppImage built on one distro runs on another.
+if [ -z "${ANSEL_APPIMAGE_ALLOW_GTK_MODULES:-}" ]; then
+  unset GTK_MODULES
+fi
+
+# The ATK bridge talks to the host accessibility bus. In AppImages this often
+# produces ABI mismatches with the bundled GLib/DBus stack, so disable it by
+# default and let users opt back in explicitly when they need accessibility
+# tooling.
+if [ -z "${ANSEL_APPIMAGE_ENABLE_AT_BRIDGE:-}" ]; then
+  export NO_AT_BRIDGE=1
+fi
+
 # Keep host theme and icon search paths first, and leave the AppImage assets as
 # a fallback for icons that the desktop theme does not provide.
 export XDG_DATA_DIRS="/usr/local/share:/usr/share${XDG_DATA_DIRS:+:$XDG_DATA_DIRS}:$APPDIR/usr/share"
 EOF
 fi
+
+# Drop optional desktop-integration GTK modules from the bundle. They are not
+# part of Ansel's feature set and are the main source of cross-distro startup
+# warnings such as missing colorreload/unity integrations.
+find ../AppDir/usr/lib/gtk-3.0/modules -type f \
+  \( -name 'libunity-gtk-module.so' -o -name 'libwindow-decorations-gtk-module.so' \) \
+  -print -delete 2>/dev/null || true
 
 # Keep the accessibility bridge on the host side. The AppImage talks to the
 # host AT-SPI session bus, and mixing that bus with bundled bridge libraries is
@@ -237,7 +259,8 @@ find ../AppDir/usr -type f \
 # that tool. Otherwise, if the first argument names one of our installed
 # binaries, route to its applet so argv[0] still points to the selected tool.
 # Fall back to the GUI entry point and forward every other argument to it.
-cat > ../AppDir/AppRun <<'EOF'
+CUSTOM_APPRUN_TEMPLATE="${PWD}/AppRun.ansel"
+cat > "${CUSTOM_APPRUN_TEMPLATE}" <<'EOF'
 #!/bin/sh
 
 set -eu
@@ -246,6 +269,14 @@ APPDIR="${APPDIR:-$(dirname "$(readlink -f "$0")")}"
 BINDIR="${APPDIR}/usr/bin"
 TOOLDIR="${APPDIR}/usr/libexec/ansel/tools"
 APPLET="$(basename "$0")"
+
+if [ -f "${APPDIR}/apprun-hooks/linuxdeploy-plugin-gtk.sh" ]; then
+  # linuxdeploy's GTK hook prepares loader, immodule and GTK search paths.
+  # Source it here so the final AppImage can keep Ansel's custom AppRun rather
+  # than being replaced by linuxdeploy's generated wrapper.
+  # shellcheck disable=SC1091
+  . "${APPDIR}/apprun-hooks/linuxdeploy-plugin-gtk.sh"
+fi
 
 # Hard override: NEVER fall back to host first
 export LD_LIBRARY_PATH="$APPDIR/usr/lib:$APPDIR/usr/lib64:$APPDIR/usr/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
@@ -280,7 +311,8 @@ fi
 
 exec "${BINDIR}/ansel" "$@"
 EOF
-chmod +x ../AppDir/AppRun
+chmod +x "${CUSTOM_APPRUN_TEMPLATE}"
+install -m 0755 "${CUSTOM_APPRUN_TEMPLATE}" ../AppDir/AppRun
 
 # Map every installed executable to AppRun so AppImage applets can dispatch to
 # the matching binary by argv[0] without hiding the selection logic elsewhere.
@@ -316,5 +348,6 @@ find ../AppDir/usr -type f -name 'libgomp.so*' -print -delete
 
 ./linuxdeploy-x86_64.AppImage \
   --appdir ../AppDir \
+  --custom-apprun "${CUSTOM_APPRUN_TEMPLATE}" \
   --exclude-library 'libgomp.so*' \
   --output appimage
