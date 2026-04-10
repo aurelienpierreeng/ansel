@@ -170,10 +170,8 @@ void dt_mimap_cache_evict(dt_mipmap_cache_t *cache, const int32_t imgid);
 // depending on the user parameter for the maximum thumbnail dimensions.
 // actual resolution depends on the image and is only known after
 // the thumbnail is loaded.
-dt_mipmap_size_t dt_mipmap_cache_get_matching_size(
-    const dt_mipmap_cache_t *cache,
-    const int32_t width,
-    const int32_t height);
+dt_mipmap_size_t dt_mipmap_cache_get_matching_size( const dt_mipmap_cache_t *cache,
+    const int32_t width, const int32_t height, const uint32_t imgid);
 
 // copy over thumbnails. used by file operation that copies raw files, to speed up thumbnail generation.
 // only copies over the jpg backend on disk, doesn't directly affect the in-memory cache.

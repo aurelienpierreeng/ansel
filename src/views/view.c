@@ -940,7 +940,7 @@ static dt_view_surface_value_t _view_image_get_surface_internal(int32_t imgid, i
 
   if(zoom == DT_THUMBTABLE_ZOOM_FIT)
   {
-    mip = dt_mipmap_cache_get_matching_size(cache, ceilf(width * darktable.gui->ppd), ceilf(height * darktable.gui->ppd));
+    mip = dt_mipmap_cache_get_matching_size(cache, ceilf(width * darktable.gui->ppd), ceilf(height * darktable.gui->ppd), imgid);
   }
   else
   {
@@ -950,9 +950,9 @@ static dt_view_surface_value_t _view_image_get_surface_internal(int32_t imgid, i
     dt_image_cache_read_release(darktable.image_cache, image);
 
     if(zoom == DT_THUMBTABLE_ZOOM_HALF)
-      mip = dt_mipmap_cache_get_matching_size(cache, ceilf(full_width / 2.f ), ceilf(full_height / 2.f));
+      mip = dt_mipmap_cache_get_matching_size(cache, ceilf(full_width / 2.f ), ceilf(full_height / 2.f), imgid);
     else if(zoom >= DT_THUMBTABLE_ZOOM_FULL)
-      mip = dt_mipmap_cache_get_matching_size(cache, full_width, full_height);
+      mip = dt_mipmap_cache_get_matching_size(cache, full_width, full_height, imgid);
   }
 
   // Can't have float32 types here
