@@ -43,7 +43,7 @@ jobs:
       fail-fast: false
       matrix:
         build:
-          - { os: macos-14,    xcode: 15.4,   deployment: 14.0 }
+          - { os: macos-15, xcode: 26.3, deployment: 15.0 } # AppleClang 17, arm64
         btype:
           - Release
         compiler:
@@ -91,19 +91,6 @@ jobs:
           cmake -E make_directory "${INSTALL_PREFIX}";
           cd ${SRC_DIR}
           .ci/ci-script-mac.sh;
-      - name: Check if it runs
-        run: |
-          ${INSTALL_PREFIX}/bin/ansel --version || true
-          ${INSTALL_PREFIX}/bin/ansel-cli \
-                 --width 2048 --height 2048 \
-                 --apply-custom-presets false \
-                 "${SRC_DIR}/src/tests/integration/images/mire1.cr2" \
-                 "${SRC_DIR}/src/tests/integration/0000-nop/nop.xmp" \
-                 output.png \
-                 --core --disable-opencl --conf host_memory_limit=8192 \
-                 --conf worker_threads=4 -t 4 \
-                 --conf plugins/lighttable/export/force_lcms2=FALSE \
-                 --conf plugins/lighttable/export/iccintent=0 || true # OpenMP builds crash for most configs
       - name: Build macOS package
         run: |
           ./src/packaging/macosx/3_make_hb_ansel_package.sh
