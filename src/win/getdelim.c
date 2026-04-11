@@ -37,6 +37,8 @@
     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
 */
 
+#include "common/darktable.h"
+
 /* Ported from glibc by Simon Josefsson. */
 
 #include <config.h>
