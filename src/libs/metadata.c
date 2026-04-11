@@ -923,7 +923,7 @@ void *get_params(dt_lib_module_t *self, int *size)
 // WARNING: also change src/libs/import.c when changing this!
 int set_params(dt_lib_module_t *self, const void *params, int size)
 {
-  if(!params) return 1;
+  if(IS_NULL_PTR(params)) return 1;
   dt_lib_metadata_t *d = (dt_lib_metadata_t *)self->data;
 
   char *buf = (char *)params;
@@ -935,7 +935,7 @@ int set_params(dt_lib_module_t *self, const void *params, int size)
     if(dt_metadata_get_type_by_display_order(i) == DT_METADATA_TYPE_INTERNAL)
       continue;
     metadata[i] = buf;
-    if(!metadata[i]) return 1;
+    if(IS_NULL_PTR(metadata[i])) return 1;
     metadata_len[i] = strlen(metadata[i]) + 1;
     buf += metadata_len[i];
     total_len +=  metadata_len[i];

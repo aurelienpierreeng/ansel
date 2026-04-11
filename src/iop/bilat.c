@@ -340,7 +340,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   if(d->mode == s_mode_bilateral)
   {
     dt_bilateral_t *b = dt_bilateral_init(roi_in->width, roi_in->height, sigma_s, sigma_r);
-    if(!b) return 1;
+    if(IS_NULL_PTR(b)) return 1;
     dt_bilateral_splat(b, (float *)i);
     dt_bilateral_blur(b);
     dt_bilateral_slice(b, (float *)i, (float *)o, d->detail);

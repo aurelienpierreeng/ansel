@@ -1529,7 +1529,7 @@ static void update_profile_list(dt_iop_module_t *self)
 {
   dt_iop_colorin_gui_data_t *g = (dt_iop_colorin_gui_data_t *)self->gui_data;
 
-  if(!g) return;
+  if(IS_NULL_PTR(g)) return;
 
   // clear and refill the image profile list
   g_list_free_full(g->image_profiles, dt_free_gpointer);

@@ -436,7 +436,7 @@ void dt_mipmap_cache_update_buffer_addresses(dt_cache_entry_t *entry, struct dt_
 void *dt_mipmap_cache_alloc(dt_mipmap_buffer_t *buf, const dt_image_t *img)
 {
   assert(buf);
-  if(!buf) return NULL;
+  if(IS_NULL_PTR(buf)) return NULL;
 
   assert(buf->size == DT_MIPMAP_FULL);
 
@@ -519,7 +519,7 @@ void dt_mipmap_cache_allocate_dynamic(void *data, dt_cache_entry_t *entry)
 
   assert(entry->data == dsc);
 
-  if(!dsc) return;
+  if(IS_NULL_PTR(dsc)) return;
 
   gboolean write_to_disk;
   _write_mipmap_to_disk(imgid, NULL, NULL, NULL, NULL, NULL, &write_to_disk);

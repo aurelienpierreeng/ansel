@@ -71,7 +71,7 @@ dt_job_t *dt_image_import_job_create(uint32_t filmid, const char *filename)
 {
   dt_image_import_t *params;
   dt_job_t *job = dt_control_job_create(&dt_image_import_job_run, "import image");
-  if(!job) return NULL;
+  if(IS_NULL_PTR(job)) return NULL;
   params = (dt_image_import_t *)calloc(1, sizeof(dt_image_import_t));
   if(!params)
   {

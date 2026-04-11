@@ -84,7 +84,7 @@ typedef struct color_image
 static inline __attribute__((always_inline)) int new_color_image(color_image *img, int width, int height, int ch)
 {
   img->data = dt_pixelpipe_cache_alloc_align_float_cache((size_t)width * height * ch, 0);
-  if(!img->data) return 1;
+  if(IS_NULL_PTR(img->data)) return 1;
   img->width = width;
   img->height = height;
   img->stride = ch;
@@ -398,7 +398,7 @@ dt_guided_filter_cl_global_t *dt_guided_filter_init_cl_global()
 
 void dt_guided_filter_free_cl_global(dt_guided_filter_cl_global_t *g)
 {
-  if(!g) return;
+  if(IS_NULL_PTR(g)) return;
   // destroy kernels
   dt_opencl_free_kernel(g->kernel_guided_filter_split_rgb);
   dt_opencl_free_kernel(g->kernel_guided_filter_box_mean_x);

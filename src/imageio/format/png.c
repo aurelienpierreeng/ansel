@@ -147,7 +147,7 @@ int write_image(dt_imageio_module_data_t *p_tmp, const char *filename, const voi
   dt_imageio_png_t *p = (dt_imageio_png_t *)p_tmp;
   const int width = p->global.width, height = p->global.height;
   FILE *f = g_fopen(filename, "wb");
-  if(!f) return 1;
+  if(IS_NULL_PTR(f)) return 1;
 
   png_structp png_ptr;
   png_infop info_ptr;
@@ -263,7 +263,7 @@ static int __attribute__((__unused__)) read_header(const char *filename, dt_imag
   dt_imageio_png_t *png = (dt_imageio_png_t *)p_tmp;
   png->f = g_fopen(filename, "rb");
 
-  if(!png->f) return 1;
+  if(IS_NULL_PTR(png->f)) return 1;
 
 #define NUM_BYTES_CHECK (8)
 

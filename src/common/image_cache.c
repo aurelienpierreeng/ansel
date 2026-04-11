@@ -417,7 +417,7 @@ dt_image_t *dt_image_cache_testget(dt_image_cache_t *cache, const int32_t imgid,
 {
   if(imgid <= 0) return NULL;
   dt_cache_entry_t *entry = dt_cache_testget(&cache->cache, (uint32_t)imgid, mode);
-  if(!entry) return 0;
+  if(IS_NULL_PTR(entry)) return 0;
   ASAN_UNPOISON_MEMORY_REGION(entry->data, sizeof(dt_image_t));
   dt_image_t *img = (dt_image_t *)entry->data;
   img->cache_entry = entry;
@@ -674,7 +674,7 @@ void dt_image_cache_set_export_timestamp(dt_image_cache_t *cache, const int32_t 
 {
   if(imgid <= 0) return;
   dt_image_t *img = dt_image_cache_get(cache, imgid, 'w');
-  if(!img) return;
+  if(IS_NULL_PTR(img)) return;
   img->export_timestamp = dt_datetime_now_to_gtimespan();
   dt_image_cache_write_release(cache, img, DT_IMAGE_CACHE_SAFE);
 }
@@ -683,7 +683,7 @@ void dt_image_cache_set_print_timestamp(dt_image_cache_t *cache, const int32_t i
 {
   if(imgid <= 0) return;
   dt_image_t *img = dt_image_cache_get(cache, imgid, 'w');
-  if(!img) return;
+  if(IS_NULL_PTR(img)) return;
   img->print_timestamp = dt_datetime_now_to_gtimespan();
   dt_image_cache_write_release(cache, img, DT_IMAGE_CACHE_SAFE);
 }

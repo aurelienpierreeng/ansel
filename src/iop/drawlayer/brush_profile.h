@@ -120,7 +120,7 @@ static inline float dt_drawlayer_brush_profile_eval(const dt_drawlayer_brush_dab
  */
 static inline float dt_drawlayer_brush_mass_primitive_eval(const dt_drawlayer_brush_dab_t *dab, const float u_in)
 {
-  if(!dab) return 0.0f;
+  if(IS_NULL_PTR(dab)) return 0.0f;
   const float u = dt_drawlayer_brush_profile_clamp01(u_in);
   if(u <= 0.0f) return 0.0f;
 

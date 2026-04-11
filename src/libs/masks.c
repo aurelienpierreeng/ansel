@@ -186,7 +186,7 @@ static gboolean _lib_masks_can_host_blending(const dt_iop_module_t *module)
 
 static void _lib_masks_release_blending(dt_lib_masks_t *lm)
 {
-  if(!lm) return;
+  if(IS_NULL_PTR(lm)) return;
 
   dt_iop_module_t *hosted_module = lm->hosted_module;
   lm->hosted_module = NULL;
@@ -486,7 +486,7 @@ static int _tree_format_form_usage_label(char *str, const size_t str_size,
 static void _set_iter_name(dt_lib_masks_t *lm, dt_masks_form_t *form, int state, float opacity,
                            GtkTreeModel *model, GtkTreeIter *iter, int index)
 {
-  if(!form) return;
+  if(IS_NULL_PTR(form)) return;
 
   char str[256] = "";
   g_strlcat(str, form->name, sizeof(str));
@@ -915,7 +915,7 @@ static void _tree_duplicate_shape(GtkButton *button, dt_lib_module_t *self)
   GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(lm->treeview));
   GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(lm->treeview));
   GList *items = gtk_tree_selection_get_selected_rows(selection, NULL);
-  if(!items) return;
+  if(IS_NULL_PTR(items)) return;
   GtkTreePath *item = (GtkTreePath *)items->data;
   GtkTreeIter iter;
   if(gtk_tree_model_get_iter(model, &iter, item))
@@ -945,7 +945,7 @@ static void _tree_cell_edited(GtkCellRendererText *cell, gchar *path_string, gch
   int id = -1;
   _lib_masks_get_values(model, &iter, NULL, NULL, &id);
   dt_masks_form_t *form = dt_masks_get_from_id(darktable.develop, id);
-  if(!form) return;
+  if(IS_NULL_PTR(form)) return;
 
   // we want to make sure that the new name is not an empty string. else this would convert
   // in the xmp file into "<rdf:li/>" which produces problems. we use a single whitespace
@@ -1523,7 +1523,7 @@ static void _lib_masks_recreate_list(dt_lib_module_t *self)
 {
   /* first destroy all buttons in list */
   dt_lib_masks_t *lm = (dt_lib_masks_t *)self->data;
-  if(!lm) return;
+  if(IS_NULL_PTR(lm)) return;
   if(lm->gui_reset) return;
 
   const int gui_reset = lm->gui_reset;
@@ -1605,7 +1605,7 @@ static void _lib_masks_update_item(dt_lib_module_t *self, int formid, int parent
 {
   // we retrieve the forms
   dt_masks_form_t *form = dt_masks_get_from_id(darktable.develop, formid);
-  if(!form) return;
+  if(IS_NULL_PTR(form)) return;
   dt_masks_form_t *grp = dt_masks_get_from_id(darktable.develop, parentid);
 
   // and the values
@@ -1634,7 +1634,7 @@ static void _lib_masks_update_item(dt_lib_module_t *self, int formid, int parent
 
 static gboolean _update_foreach(GtkTreeModel *model, GtkTreePath *path, GtkTreeIter *iter, gpointer data)
 {
-  if(!iter) return 0;
+  if(IS_NULL_PTR(iter)) return 0;
 
   // we retrieve the ids
   int grid = -1;
@@ -1643,7 +1643,7 @@ static gboolean _update_foreach(GtkTreeModel *model, GtkTreePath *path, GtkTreeI
 
   // we retrieve the forms
   dt_masks_form_t *form = dt_masks_get_from_id(darktable.develop, id);
-  if(!form) return 0;
+  if(IS_NULL_PTR(form)) return 0;
   dt_masks_form_t *grp = dt_masks_get_from_id(darktable.develop, grid);
 
   // and the values
@@ -1681,7 +1681,7 @@ static void _lib_masks_update_list(dt_lib_module_t *self)
 
 static gboolean _remove_foreach(GtkTreeModel *model, GtkTreePath *path, GtkTreeIter *iter, gpointer data)
 {
-  if(!iter) return 0;
+  if(IS_NULL_PTR(iter)) return 0;
   GList **rl = (GList **)data;
   const int refid = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(model), "formid"));
   const int refgid = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(model), "groupid"));
@@ -1767,7 +1767,7 @@ static gboolean _lib_masks_selection_change_r(GtkTreeModel *model, GtkTreeSelect
 static void _lib_masks_selection_change(dt_lib_module_t *self, struct dt_iop_module_t *module, const int selectid, const int throw_event)
 {
   dt_lib_masks_t *lm = (dt_lib_masks_t *)self->data;
-  if(!lm->treeview) return;
+  if(IS_NULL_PTR(lm->treeview)) return;
 
   // we first unselect all
   GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(lm->treeview));
@@ -1847,10 +1847,10 @@ static gboolean _find_iter_by_parentid_and_formid(GtkTreeModel *model, int paren
 
 static void _lib_masks_handler_callback(gpointer instance, const int formid, const int parentid, const dt_masks_event_t event, dt_lib_module_t *self)
 {
-  if(!self) return;
+  if(IS_NULL_PTR(self)) return;
 
   dt_lib_masks_t *lm = (dt_lib_masks_t *)self->data;
-  if(!lm) return;
+  if(IS_NULL_PTR(lm)) return;
   GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(lm->treeview));
   if(!GTK_IS_TREE_MODEL(model)) return;
   GtkTreeIter iter;

@@ -361,7 +361,7 @@ const GList* dt_exif_get_exiv2_taglist()
 
 static const char *_exif_get_exiv2_tag_type(const char *tagname)
 {
-  if(!tagname) return NULL;
+  if(IS_NULL_PTR(tagname)) return NULL;
   for(GList *tag = exiv2_taglist; tag; tag = g_list_next(tag))
   {
     char *t = (char *)tag->data;
@@ -2285,7 +2285,7 @@ char *dt_exif_xmp_encode_internal(const unsigned char *input, const int len, int
 
     char *buffer2 = (char *)g_base64_encode(buffer1, destLen);
     dt_free(buffer1);
-    if(!buffer2) return NULL;
+    if(IS_NULL_PTR(buffer2)) return NULL;
 
     int outlen = strlen(buffer2) + 5; // leading "gz" + compression factor + base64 string + trailing '\0'
     output = (char *)malloc(outlen);
@@ -2309,7 +2309,7 @@ char *dt_exif_xmp_encode_internal(const unsigned char *input, const int len, int
     const char hex[16] = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f' };
 
     output = (char *)malloc(2 * len + 1);
-    if(!output) return NULL;
+    if(IS_NULL_PTR(output)) return NULL;
 
     if(output_len) *output_len = 2 * len + 1;
 
@@ -2341,7 +2341,7 @@ unsigned char *dt_exif_xmp_decode(const char *input, const int len, int *output_
 
     // get a rw copy of input buffer omitting leading "gz" and compression factor
     unsigned char *buffer = (unsigned char *)strdup(input + 4);
-    if(!buffer) return NULL;
+    if(IS_NULL_PTR(buffer)) return NULL;
 
     // decode from base64 to compressed binary
     gsize compressed_size;
@@ -2398,7 +2398,7 @@ unsigned char *dt_exif_xmp_decode(const char *input, const int len, int *output_
     if(strspn(input, "0123456789abcdef") != strlen(input)) return NULL;
 
     output = (unsigned char *)malloc(len / 2);
-    if(!output) return NULL;
+    if(IS_NULL_PTR(output)) return NULL;
 
     if(output_len) *output_len = len / 2;
 
@@ -3060,7 +3060,7 @@ static void add_mask_entries_to_db(int32_t imgid, GHashTable *mask_entries, int 
   // look for mask_id in the hash table
   mask_entry_t *entry = (mask_entry_t *)g_hash_table_lookup(mask_entries, &mask_id);
 
-  if(!entry) return;
+  if(IS_NULL_PTR(entry)) return;
 
   // if it's a group: recurse into the children first
   if(entry->mask_type & DT_MASKS_GROUP)

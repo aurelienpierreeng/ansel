@@ -421,7 +421,7 @@ dt_heal_cl_global_t *dt_heal_init_cl_global()
 
 void dt_heal_free_cl_global(dt_heal_cl_global_t *g)
 {
-  if(!g) return;
+  if(IS_NULL_PTR(g)) return;
 
   dt_free(g);
 }
@@ -430,7 +430,7 @@ heal_params_cl_t *dt_heal_init_cl(const int devid)
 {
 
   heal_params_cl_t *p = (heal_params_cl_t *)malloc(sizeof(heal_params_cl_t));
-  if(!p) return NULL;
+  if(IS_NULL_PTR(p)) return NULL;
 
   p->global = darktable.opencl->heal;
   p->devid = devid;
@@ -440,7 +440,7 @@ heal_params_cl_t *dt_heal_init_cl(const int devid)
 
 void dt_heal_free_cl(heal_params_cl_t *p)
 {
-  if(!p) return;
+  if(IS_NULL_PTR(p)) return;
 
   // be sure we're done with the memory:
   dt_opencl_finish(p->devid);

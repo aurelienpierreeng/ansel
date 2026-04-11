@@ -207,7 +207,7 @@ static void _params_to_gui(dt_iop_crop_params_t *p, dt_iop_crop_gui_data_t *g)
 static void _commit_box(dt_iop_module_t *self, dt_iop_crop_gui_data_t *g, dt_iop_crop_params_t *p)
 {
   dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->virtual_pipe, self);
-  if(!piece) return;
+  if(IS_NULL_PTR(piece)) return;
   // we want value in iop space
   const float wd = (float)piece->buf_out.width; //self->dev->roi.preview_width;
   const float ht = (float)piece->buf_out.height; //self->dev->roi.preview_height;
@@ -267,7 +267,7 @@ static gboolean _set_max_clip(struct dt_iop_module_t *self)
 
   // we want to know the size of the actual buffer
   dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->virtual_pipe, self);
-  if(!piece) return FALSE;
+  if(IS_NULL_PTR(piece)) return FALSE;
 
   float wp = piece->buf_out.width;
   float hp = piece->buf_out.height;
@@ -474,7 +474,7 @@ static float _aspect_ratio_get(dt_iop_module_t *self, GtkWidget *combo)
 
   // we want to know the size of the actual buffer
   dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->virtual_pipe, self);
-  if(!piece) return 0.0f;
+  if(IS_NULL_PTR(piece)) return 0.0f;
 
   const int iwd = piece->buf_in.width, iht = piece->buf_in.height;
 

@@ -2310,7 +2310,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
   float *restrict in = (float *)ivoid;
   float *const restrict out = (float *)ovoid;
   float *const restrict mask = dt_pixelpipe_cache_alloc_align_float((size_t)roi_out->width * roi_out->height, pipe);
-  if(!mask) return 1;
+  if(IS_NULL_PTR(mask)) return 1;
 
   // used to adjuste noise level depending on size. Don't amplify noise if magnified > 100%
   const float scale = fmaxf(dt_dev_get_module_scale(pipe, roi_in), 1.f);

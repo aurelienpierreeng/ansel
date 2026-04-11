@@ -998,7 +998,7 @@ static inline void *dt_pixelpipe_cache_alloc_perthread_impl(const size_t n, cons
   *padded_size = DT_CACHELINE_BYTES * cache_lines / objsize;
   const size_t total_bytes = DT_CACHELINE_BYTES * cache_lines * darktable.num_openmp_threads;
   void *buf = dt_pixelpipe_cache_alloc_align_cache_impl(darktable.pixelpipe_cache, total_bytes, 0, message);
-  if(!buf) return NULL;
+  if(IS_NULL_PTR(buf)) return NULL;
   return __builtin_assume_aligned(buf, DT_CACHELINE_BYTES);
 }
 
@@ -1010,7 +1010,7 @@ static inline void *dt_pixelpipe_cache_alloc_perthread_impl(const size_t n, cons
 static inline void *dt_pixelpipe_cache_calloc_perthread_impl(const size_t n, const size_t objsize, size_t* padded_size, const char *message)
 {
   void *const buf = (float*)dt_pixelpipe_cache_alloc_perthread_impl(n, objsize, padded_size, message);
-  if(!buf) return NULL;
+  if(IS_NULL_PTR(buf)) return NULL;
   memset(buf, 0, *padded_size * darktable.num_openmp_threads * objsize);
   return buf;
 }
@@ -1094,7 +1094,7 @@ static inline gchar *delete_underscore(const char *s)
  */
 static inline gchar *strip_markup(const char *s)
 {
-  if(!s) return g_strdup("");
+  if(IS_NULL_PTR(s)) return g_strdup("");
 
   PangoAttrList *attrs = NULL;
   gchar *plain = NULL;

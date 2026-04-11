@@ -253,14 +253,14 @@ static inline void grid_rescale(const dt_iop_colorreconstruct_bilateral_t *const
 
 static inline __attribute__((always_inline)) void dt_iop_colorreconstruct_bilateral_dump(dt_iop_colorreconstruct_bilateral_frozen_t *bf)
 {
-  if(!bf) return;
+  if(IS_NULL_PTR(bf)) return;
   dt_pixelpipe_cache_free_align(bf->buf);
   dt_free(bf);
 }
 
 static inline __attribute__((always_inline)) void dt_iop_colorreconstruct_bilateral_free(dt_iop_colorreconstruct_bilateral_t *b)
 {
-  if(!b) return;
+  if(IS_NULL_PTR(b)) return;
   dt_pixelpipe_cache_free_align(b->buf);
   dt_free(b);
 }
@@ -310,7 +310,7 @@ static dt_iop_colorreconstruct_bilateral_t *dt_iop_colorreconstruct_bilateral_in
 
 static dt_iop_colorreconstruct_bilateral_frozen_t *dt_iop_colorreconstruct_bilateral_freeze(dt_iop_colorreconstruct_bilateral_t *b)
 {
-  if(!b) return NULL;
+  if(IS_NULL_PTR(b)) return NULL;
 
   dt_iop_colorreconstruct_bilateral_frozen_t *bf = (dt_iop_colorreconstruct_bilateral_frozen_t *)malloc(sizeof(dt_iop_colorreconstruct_bilateral_frozen_t));
   if(!bf)
@@ -351,7 +351,7 @@ __DT_CLONE_TARGETS__
 static void dt_iop_colorreconstruct_bilateral_splat(dt_iop_colorreconstruct_bilateral_t *b, const float *const in, const float threshold,
                                                     dt_iop_colorreconstruct_precedence_t precedence, const float *params)
 {
-  if(!b) return;
+  if(IS_NULL_PTR(b)) return;
 
   // splat into downsampled grid
   __OMP_PARALLEL_FOR__()
@@ -422,7 +422,7 @@ __DT_CLONE_TARGETS__
 static void blur_line(dt_iop_colorreconstruct_Lab_t *buf, const int offset1, const int offset2, const int offset3, const int size1,
                       const int size2, const int size3)
 {
-  if(!buf) return;
+  if(IS_NULL_PTR(buf)) return;
 
   const float w0 = 6.f / 16.f;
   const float w1 = 4.f / 16.f;
@@ -480,7 +480,7 @@ static void blur_line(dt_iop_colorreconstruct_Lab_t *buf, const int offset1, con
 
 static inline __attribute__((always_inline)) void dt_iop_colorreconstruct_bilateral_blur(dt_iop_colorreconstruct_bilateral_t *b)
 {
-  if(!b) return;
+  if(IS_NULL_PTR(b)) return;
 
   // gaussian up to 3 sigma
   blur_line(b->buf, b->size_x * b->size_y, b->size_x, 1, b->size_z, b->size_y, b->size_x);
@@ -496,7 +496,7 @@ static void dt_iop_colorreconstruct_bilateral_slice(const dt_iop_colorreconstruc
                                                     const float threshold, const dt_iop_roi_t *const roi,
                                                     const float iscale)
 {
-  if(!b) return;
+  if(IS_NULL_PTR(b)) return;
 
   const float rescale = iscale / (roi->scale * b->scale);
   const int ox = 1;
@@ -638,7 +638,7 @@ typedef struct dt_iop_colorreconstruct_bilateral_cl_t
 
 static void dt_iop_colorreconstruct_bilateral_free_cl(dt_iop_colorreconstruct_bilateral_cl_t *b)
 {
-  if(!b) return;
+  if(IS_NULL_PTR(b)) return;
   // be sure we're done with the memory:
   dt_opencl_finish(b->devid);
   // free device mem
@@ -750,7 +750,7 @@ static dt_iop_colorreconstruct_bilateral_cl_t *dt_iop_colorreconstruct_bilateral
 
 static dt_iop_colorreconstruct_bilateral_frozen_t *dt_iop_colorreconstruct_bilateral_freeze_cl(dt_iop_colorreconstruct_bilateral_cl_t *b)
 {
-  if(!b) return NULL;
+  if(IS_NULL_PTR(b)) return NULL;
 
   dt_iop_colorreconstruct_bilateral_frozen_t *bf = (dt_iop_colorreconstruct_bilateral_frozen_t *)malloc(sizeof(dt_iop_colorreconstruct_bilateral_frozen_t));
   if(!bf)
@@ -800,7 +800,7 @@ static cl_int dt_iop_colorreconstruct_bilateral_splat_cl(dt_iop_colorreconstruct
                                                          dt_iop_colorreconstruct_precedence_t precedence, const float *params)
 {
   cl_int err = -666;
-  if(!b) return err;
+  if(IS_NULL_PTR(b)) return err;
   int pref = precedence;
   size_t sizes[] = { ROUNDUP(b->width, b->blocksizex), ROUNDUP(b->height, b->blocksizey), 1 };
   size_t local[] = { b->blocksizex, b->blocksizey, 1 };
@@ -827,7 +827,7 @@ static cl_int dt_iop_colorreconstruct_bilateral_splat_cl(dt_iop_colorreconstruct
 static cl_int dt_iop_colorreconstruct_bilateral_blur_cl(dt_iop_colorreconstruct_bilateral_cl_t *b)
 {
   cl_int err = -666;
-  if(!b) return err;
+  if(IS_NULL_PTR(b)) return err;
   size_t sizes[3] = { 0, 0, 1 };
 
   err = dt_opencl_enqueue_copy_buffer_to_buffer(b->devid, b->dev_grid, b->dev_grid_tmp, 0, 0,
@@ -889,7 +889,7 @@ static cl_int dt_iop_colorreconstruct_bilateral_slice_cl(dt_iop_colorreconstruct
                                                          const float threshold, const dt_iop_roi_t *roi, const float iscale)
 {
   cl_int err = -666;
-  if(!b) return err;
+  if(IS_NULL_PTR(b)) return err;
   const int bxy[2] = { b->x, b->y };
   const int roixy[2] = { roi->x, roi->y };
   const float rescale = iscale / (roi->scale * b->scale);

@@ -342,7 +342,7 @@ static int set_points_from_grad(struct dt_iop_module_t *self, float *xa, float *
   dt_boundingbox_t pts;
 
   dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->virtual_pipe, self);
-  if(!piece) return 0;
+  if(IS_NULL_PTR(piece)) return 0;
   float wp = piece->buf_out.width, hp = piece->buf_out.height;
 
   // if sinv=0 then this is just the offset

@@ -123,10 +123,10 @@ static void give_control_to_form(gpointer instance, void *_s, void *_t, dt_lib_t
   // we try to get the selected form among what we can find
   int group = gui->group_selected;
   dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)g_list_nth_data(form->points, group);
-  if(!fpt) return;
+  if(IS_NULL_PTR(fpt)) return;
 
   dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
-  if(!sel) return;
+  if(IS_NULL_PTR(sel)) return;
 
   //dt_masks_select_form(NULL, sel);
 

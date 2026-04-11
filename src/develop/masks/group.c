@@ -48,7 +48,7 @@ static dt_masks_form_t *_group_get_child_at(dt_masks_form_t *form, const int gro
                                             dt_masks_form_group_t **group_entry)
 {
   dt_masks_form_group_t *entry = (dt_masks_form_group_t *)g_list_nth_data(form->points, group_index);
-  if(!entry) return NULL;
+  if(IS_NULL_PTR(entry)) return NULL;
   if(group_entry) *group_entry = entry;
   return dt_masks_get_from_id(darktable.develop, entry->formid);
 }
@@ -83,7 +83,7 @@ static int _group_events_button_released(struct dt_iop_module_t *module, double 
 
 static int _group_events_key_pressed(struct dt_iop_module_t *module, GdkEventKey *event, dt_masks_form_t *form, int parentid, dt_masks_form_gui_t *gui, int index)
 {
-  if(!form) return 0;
+  if(IS_NULL_PTR(form)) return 0;
 
   gboolean return_value = FALSE;
 
@@ -105,7 +105,7 @@ static int _group_events_key_pressed(struct dt_iop_module_t *module, GdkEventKey
           // Delete shape from current group
           dt_masks_form_group_t *group_entry = NULL;
           dt_masks_form_t *selected_form = _group_get_selected_child(form, gui, &group_entry);
-          if(!selected_form) return 0;
+          if(IS_NULL_PTR(selected_form)) return 0;
           return_value = dt_masks_gui_delete(module, selected_form, gui, group_entry->parentid);
           break;
         }
@@ -578,7 +578,7 @@ static int _group_get_mask_roi(const dt_iop_module_t *const restrict module, dt_
                                float *const restrict buffer)
 {
   double start = dt_get_wtime();
-  if(!form->points) return 0;
+  if(IS_NULL_PTR(form->points)) return 0;
   int nb_ok = 0;
 
   const int width = roi->width;
@@ -664,7 +664,7 @@ int dt_masks_group_render_roi(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe,
                               const dt_iop_roi_t *roi, float *buffer)
 {
   const double start = dt_get_wtime();
-  if(!form) return 0;
+  if(IS_NULL_PTR(form)) return 0;
 
   const int err = dt_masks_get_mask_roi(module, pipe, piece, form, roi, buffer);
 

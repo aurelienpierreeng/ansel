@@ -55,7 +55,7 @@ static gchar *_hm_clean_module_name(const dt_iop_module_t *mod)
 static gchar *_hm_module_label_short(const dt_iop_module_t *mod)
 {
   gchar *name = _hm_clean_module_name(mod);
-  if(!name) return g_strdup("");
+  if(IS_NULL_PTR(name)) return g_strdup("");
   if(mod && mod->multi_name[0] != '\0')
   {
     gchar *out = g_strdup_printf("%s (%s)", name, mod->multi_name);
@@ -68,7 +68,7 @@ static gchar *_hm_module_label_short(const dt_iop_module_t *mod)
 static gchar *_hm_pretty_id(const char *id)
 {
   /* Convert a raw node id ("op|multi_name") to a human-friendly string. */
-  if(!id) return g_strdup("");
+  if(IS_NULL_PTR(id)) return g_strdup("");
 
   char op[sizeof(((dt_dev_history_item_t *)0)->op_name)] = { 0 };
   char name[sizeof(((dt_dev_history_item_t *)0)->multi_name)] = { 0 };
@@ -80,7 +80,7 @@ static gchar *_hm_pretty_id(const char *id)
 static gchar *_hm_pretty_id_from_id_ht(const char *id, GHashTable *id_ht, const gboolean prefer_dest)
 {
   /* Turn a node id into a label suitable for GTK dialogs. */
-  if(!id) return g_strdup("");
+  if(IS_NULL_PTR(id)) return g_strdup("");
 
   const _hm_id_info_t *info = id_ht ? (const _hm_id_info_t *)g_hash_table_lookup(id_ht, id) : NULL;
   const dt_iop_module_t *mod = NULL;
@@ -126,11 +126,11 @@ dt_hm_constraint_choice_t _hm_ask_user_constraints_choice(GHashTable *id_ht, con
                                                           const char *dst_prev, const char *dst_next)
 {
   /* Ask the user how to resolve incompatible adjacency constraints between source and destination. */
-  if(!darktable.gui) return DT_HM_CONSTRAINTS_PREFER_DEST;
+  if(IS_NULL_PTR(darktable.gui)) return DT_HM_CONSTRAINTS_PREFER_DEST;
   if(!g_main_context_is_owner(g_main_context_default())) return DT_HM_CONSTRAINTS_PREFER_DEST;
 
   GtkWidget *window = dt_ui_main_window(darktable.gui->ui);
-  if(!window) return DT_HM_CONSTRAINTS_PREFER_DEST;
+  if(IS_NULL_PTR(window)) return DT_HM_CONSTRAINTS_PREFER_DEST;
 
   gchar *faulty = _hm_pretty_id_from_id_ht(faulty_id, id_ht, TRUE);
   gchar *sp = _hm_pretty_id_from_id_ht(src_prev, id_ht, FALSE);
@@ -181,11 +181,11 @@ dt_hm_constraint_choice_t _hm_ask_user_constraints_choice(GHashTable *id_ht, con
 gboolean _hm_warn_missing_raster_producers(const GList *mod_list)
 {
   /* Warn the user when pasted modules rely on raster masks that will be missing. */
-  if(!darktable.gui) return TRUE;
+  if(IS_NULL_PTR(darktable.gui)) return TRUE;
   if(!g_main_context_is_owner(g_main_context_default())) return TRUE;
 
   GtkWidget *window = dt_ui_main_window(darktable.gui->ui);
-  if(!window) return TRUE;
+  if(IS_NULL_PTR(window)) return TRUE;
 
   GHashTable *mods = g_hash_table_new(g_direct_hash, g_direct_equal);
   for(const GList *l = g_list_first((GList *)mod_list); l; l = g_list_next(l))
@@ -258,12 +258,12 @@ gboolean _hm_warn_missing_raster_producers(const GList *mod_list)
 void _hm_show_toposort_cycle_popup(GList *cycle_nodes, GHashTable *id_ht)
 {
   /* Present a detected ordering cycle as a GTK modal popup. */
-  if(!cycle_nodes) return;
-  if(!darktable.gui) return;
+  if(IS_NULL_PTR(cycle_nodes)) return;
+  if(IS_NULL_PTR(darktable.gui)) return;
   if(!g_main_context_is_owner(g_main_context_default())) return;
 
   GtkWidget *window = dt_ui_main_window(darktable.gui->ui);
-  if(!window) return;
+  if(IS_NULL_PTR(window)) return;
 
   GPtrArray *labels = g_ptr_array_new_with_free_func(g_free);
   for(GList *it = g_list_first(cycle_nodes); it; it = g_list_next(it))
@@ -422,7 +422,7 @@ typedef struct
 
 static gboolean _hm_history_item_uses_masks(const dt_dev_history_item_t *hist)
 {
-  if(!hist) return FALSE;
+  if(IS_NULL_PTR(hist)) return FALSE;
   if(hist->forms) return TRUE;
   if(hist->blend_params && hist->blendop_params_size == sizeof(dt_develop_blend_params_t)
      && hist->blend_params->mask_mode > DEVELOP_MASK_ENABLED)
@@ -509,10 +509,10 @@ static dt_iop_module_t *_hm_module_from_id(dt_develop_t *dev, const char *id)
 static gboolean _hm_module_visible_in_report(const dt_iop_module_t *mod, const GHashTable *mod_list_ids)
 {
   /* Check whether a module appears in the report list and can be reordered. */
-  if(!mod) return FALSE;
+  if(IS_NULL_PTR(mod)) return FALSE;
   if(mod->flags() & IOP_FLAGS_NO_HISTORY_STACK) return FALSE;
   if(mod->enabled) return TRUE;
-  if(!mod_list_ids) return FALSE;
+  if(IS_NULL_PTR(mod_list_ids)) return FALSE;
   gchar *id = _hm_make_node_id(mod->op, mod->multi_name);
   const gboolean keep = g_hash_table_contains((GHashTable *)mod_list_ids, id);
   dt_free(id);
@@ -677,7 +677,7 @@ static gboolean _hm_report_apply_visible_order(dt_develop_t *dev_dest, const GPt
 {
   /* Rebuild iop_order_list by reordering only visible modules, keeping others fixed. */
   GList *ordered = _hm_report_build_ordered_modules(dev_dest, visible_order, mod_list_ids);
-  if(!ordered) return FALSE;
+  if(IS_NULL_PTR(ordered)) return FALSE;
 
   dt_ioppr_rebuild_iop_order_from_modules(dev_dest, ordered);
   g_list_free(ordered);
@@ -690,7 +690,7 @@ static GHashTable *_hm_report_build_moved_set(dt_develop_t *dev_src, GtkTreeMode
 {
   /* Build a set of module ids that changed relative order between source and destination. */
   GHashTable *moved = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, NULL);
-  if(!dev_src) return moved;
+  if(IS_NULL_PTR(dev_src)) return moved;
 
   GPtrArray *dest_ids = _hm_report_collect_dest_ids(model);
   if(!dest_ids || dest_ids->len == 0)
@@ -993,7 +993,7 @@ static void _hm_report_drag_data_get(GtkWidget *widget, GdkDragContext *context,
   if(!path)
     gtk_tree_view_get_cursor(GTK_TREE_VIEW(widget), &path, NULL);
 
-  if(!path) return;
+  if(IS_NULL_PTR(path)) return;
 
   GtkTreeIter iter;
   if(!gtk_tree_model_get_iter(GTK_TREE_MODEL(ctx->store), &iter, path))
@@ -1028,15 +1028,15 @@ static void _hm_report_drag_data_received(GtkWidget *widget, GdkDragContext *con
 {
   _hm_report_reorder_ctx_t *ctx = (_hm_report_reorder_ctx_t *)user_data;
 
-  if(!selection_data) return;
+  if(IS_NULL_PTR(selection_data)) return;
   const guchar *data = gtk_selection_data_get_data(selection_data);
-  if(!data) return;
+  if(IS_NULL_PTR(data)) return;
   gchar *src_path_str = g_strdup((const gchar *)data);
-  if(!src_path_str) return;
+  if(IS_NULL_PTR(src_path_str)) return;
 
   GtkTreePath *src_path = gtk_tree_path_new_from_string(src_path_str);
   dt_free(src_path_str);
-  if(!src_path) return;
+  if(IS_NULL_PTR(src_path)) return;
 
   GtkTreePath *dst_path = NULL;
   GtkTreeViewDropPosition pos;
@@ -1221,11 +1221,11 @@ gboolean _hm_show_merge_report_popup(dt_develop_t *dev_dest, dt_develop_t *dev_s
                                      const GHashTable *mod_list_ids)
 {
   /* Present a merge report with source/destination pipelines and override markers. */
-  if(!darktable.gui) return FALSE;
+  if(IS_NULL_PTR(darktable.gui)) return FALSE;
   if(!g_main_context_is_owner(g_main_context_default())) return FALSE;
 
   GtkWidget *window = dt_ui_main_window(darktable.gui->ui);
-  if(!window) return FALSE;
+  if(IS_NULL_PTR(window)) return FALSE;
 
   const char *merge_mode = merge_iop_order ? _("merge") : _("destination");
   const char *strategy_name

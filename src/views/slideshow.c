@@ -157,7 +157,7 @@ static int32_t _slideshow_get_imgid_from_rank(const dt_slideshow_t *d, const int
   }
 
   const gchar *query = dt_collection_get_query(darktable.collection);
-  if(!query) return UNKNOWN_IMAGE;
+  if(IS_NULL_PTR(query)) return UNKNOWN_IMAGE;
 
   int32_t id = 0;
   sqlite3_stmt *stmt;

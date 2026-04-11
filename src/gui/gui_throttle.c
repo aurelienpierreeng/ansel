@@ -246,7 +246,7 @@ gint64 dt_gui_throttle_get_timeout_us(void)
 
 void dt_gui_throttle_queue(gpointer source, dt_gui_throttle_callback_t callback, gpointer user_data)
 {
-  if(!callback) return;
+  if(IS_NULL_PTR(callback)) return;
   if(!source) source = user_data;
 
   const guint timeout_ms = _effective_timeout_ms();
@@ -278,7 +278,7 @@ void dt_gui_throttle_queue(gpointer source, dt_gui_throttle_callback_t callback,
 
 void dt_gui_throttle_cancel(gpointer source)
 {
-  if(!source) return;
+  if(IS_NULL_PTR(source)) return;
 
   for(GList *iter = _gui_throttle.pending_tasks.head; iter; iter = g_list_next(iter))
   {

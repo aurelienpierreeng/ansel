@@ -61,7 +61,7 @@ static inline float _paint_voronoi_strip_angle_measure(const float rho, const fl
 /** @brief Resolve dab-to-dab center spacing from radius and distance percentage. */
 static inline float _paint_dab_sample_spacing(const dt_drawlayer_brush_dab_t *dab, const float distance_percent)
 {
-  if(!dab) return 1.0f;
+  if(IS_NULL_PTR(dab)) return 1.0f;
   const float radius = fmaxf(0.5f, dab->radius);
   const float diameter = 2.0f * radius;
   return _lerpf(1.0f, diameter, _clamp01(distance_percent));
@@ -192,7 +192,7 @@ static inline float _paint_stroke_sample_opacity_scale(const dt_drawlayer_brush_
 static gboolean _ensure_raw_inputs(dt_drawlayer_paint_stroke_t *state)
 {
   /* Lazily allocate queue storage so idle modules keep a tiny footprint. */
-  if(!state) return FALSE;
+  if(IS_NULL_PTR(state)) return FALSE;
   if(state->raw_inputs) return TRUE;
   state->raw_inputs = g_array_new(FALSE, FALSE, sizeof(dt_drawlayer_paint_raw_input_t));
   return !IS_NULL_PTR(state->raw_inputs);
@@ -201,7 +201,7 @@ static gboolean _ensure_raw_inputs(dt_drawlayer_paint_stroke_t *state)
 /** @brief Lazily allocate pending-dab batch storage for one stroke state. */
 static gboolean _ensure_pending_dabs(dt_drawlayer_paint_stroke_t *state)
 {
-  if(!state) return FALSE;
+  if(IS_NULL_PTR(state)) return FALSE;
   if(state->pending_dabs) return TRUE;
   state->pending_dabs = g_array_new(FALSE, FALSE, sizeof(dt_drawlayer_brush_dab_t));
   return !IS_NULL_PTR(state->pending_dabs);
@@ -400,7 +400,7 @@ static void _emit_dab(dt_drawlayer_paint_stroke_t *state, dt_drawlayer_brush_dab
 /** @brief Freeze raster-time normalization into one emitted dab record. */
 static inline void _freeze_emitted_dab_raster_state(dt_drawlayer_brush_dab_t *dab, const float sample_spacing)
 {
-  if(!dab) return;
+  if(IS_NULL_PTR(dab)) return;
   dab->sample_spacing = fmaxf(sample_spacing, 1e-6f);
   dab->sample_opacity_scale = _paint_stroke_sample_opacity_scale(dab, dab->sample_spacing);
 }
@@ -458,7 +458,7 @@ static void _paint_reset_path_runtime_state(dt_drawlayer_paint_stroke_t *state)
 {
   /* Reset only per-stroke path generation state.
    * Queue storage and reusable allocations are kept by the owner. */
-  if(!state) return;
+  if(IS_NULL_PTR(state)) return;
   if(state->history) g_array_set_size(state->history, 0);
   if(state->pending_dabs) g_array_set_size(state->pending_dabs, 0);
   if(state->dab_window) g_array_set_size(state->dab_window, 0);
@@ -476,7 +476,7 @@ static void _paint_reset_path_runtime_state(dt_drawlayer_paint_stroke_t *state)
 void dt_drawlayer_paint_path_state_reset(dt_drawlayer_paint_stroke_t *state)
 {
   /* Full stroke reset: pending raw events + generated path state. */
-  if(!state) return;
+  if(IS_NULL_PTR(state)) return;
   if(state->raw_inputs) g_array_set_size(state->raw_inputs, 0);
   state->raw_input_cursor = 0;
   _paint_reset_path_runtime_state(state);
@@ -496,7 +496,7 @@ static gboolean _paint_input_starts_new_stroke(const dt_drawlayer_paint_stroke_t
 /** @brief Build deterministic stroke seed from batch/time/coordinates. */
 static uint64_t _paint_make_stroke_seed(const dt_drawlayer_paint_raw_input_t *input)
 {
-  if(!input) return 0u;
+  if(IS_NULL_PTR(input)) return 0u;
   const uint64_t qx = (uint64_t)(int64_t)llrintf((double)input->wx * 256.0);
   const uint64_t qy = (uint64_t)(int64_t)llrintf((double)input->wy * 256.0);
   return ((uint64_t)input->stroke_batch << 32)
@@ -788,7 +788,7 @@ gboolean dt_drawlayer_paint_rasterize_segment_to_buffer(const dt_drawlayer_brush
 dt_drawlayer_damaged_rect_t *dt_drawlayer_paint_runtime_state_create(void)
 {
   dt_drawlayer_damaged_rect_t *state = g_malloc0(sizeof(*state));
-  if(!state) return NULL;
+  if(IS_NULL_PTR(state)) return NULL;
   dt_drawlayer_paint_runtime_state_reset(state);
   return state;
 }
@@ -801,7 +801,7 @@ void dt_drawlayer_paint_runtime_state_destroy(dt_drawlayer_damaged_rect_t **stat
 
 void dt_drawlayer_paint_runtime_state_reset(dt_drawlayer_damaged_rect_t *state)
 {
-  if(!state) return;
+  if(IS_NULL_PTR(state)) return;
   state->valid = FALSE;
   state->nw[0] = 0;
   state->nw[1] = 0;
@@ -812,7 +812,7 @@ void dt_drawlayer_paint_runtime_state_reset(dt_drawlayer_damaged_rect_t *state)
 dt_drawlayer_paint_stroke_t *dt_drawlayer_paint_runtime_private_create(void)
 {
   dt_drawlayer_paint_stroke_t *state = g_malloc0(sizeof(*state));
-  if(!state) return NULL;
+  if(IS_NULL_PTR(state)) return NULL;
   dt_drawlayer_paint_runtime_private_reset(state);
   return state;
 }
@@ -828,7 +828,7 @@ void dt_drawlayer_paint_runtime_private_destroy(dt_drawlayer_paint_stroke_t **st
 void dt_drawlayer_paint_runtime_private_reset(dt_drawlayer_paint_stroke_t *state)
 {
   /* Reset per-stroke transient payload while preserving reusable allocations. */
-  if(!state) return;
+  if(IS_NULL_PTR(state)) return;
   state->smudge_pickup_x = 0.0f;
   state->smudge_pickup_y = 0.0f;
   state->have_smudge_pickup = FALSE;
@@ -838,7 +838,7 @@ void dt_drawlayer_paint_runtime_private_reset(dt_drawlayer_paint_stroke_t *state
 
 void dt_drawlayer_paint_runtime_set_stroke_seed(dt_drawlayer_paint_stroke_t *state, const uint64_t seed)
 {
-  if(!state) return;
+  if(IS_NULL_PTR(state)) return;
   state->stroke_seed = seed;
 }
 
@@ -854,7 +854,7 @@ gboolean dt_drawlayer_paint_runtime_ensure_smudge_pixels(dt_drawlayer_paint_stro
   if(state->smudge_width == width && state->smudge_height == height && state->smudge_pixels) return TRUE;
 
   float *pixels = g_realloc(state->smudge_pixels, (size_t)width * height * 4 * sizeof(float));
-  if(!pixels) return FALSE;
+  if(IS_NULL_PTR(pixels)) return FALSE;
   state->smudge_pixels = pixels;
   state->smudge_width = width;
   state->smudge_height = height;
@@ -892,7 +892,7 @@ void dt_drawlayer_paint_runtime_get_smudge_pickup(const dt_drawlayer_paint_strok
 void dt_drawlayer_paint_runtime_set_smudge_pickup(dt_drawlayer_paint_stroke_t *state,
                                                   const float x, const float y, const gboolean have_pickup)
 {
-  if(!state) return;
+  if(IS_NULL_PTR(state)) return;
   state->smudge_pickup_x = x;
   state->smudge_pickup_y = y;
   state->have_smudge_pickup = have_pickup;
@@ -922,7 +922,7 @@ gboolean dt_drawlayer_paint_runtime_prepare_dab_context(dt_drawlayer_paint_strok
 void dt_drawlayer_paint_runtime_note_dab_damage(dt_drawlayer_damaged_rect_t *state,
                                                 const dt_drawlayer_damaged_rect_t *dab_rect)
 {
-  if(!state) return;
+  if(IS_NULL_PTR(state)) return;
   if(!dab_rect || !dab_rect->valid) return;
   if(dab_rect->se[0] <= dab_rect->nw[0] || dab_rect->se[1] <= dab_rect->nw[1]) return;
   if(!state->valid)
@@ -948,7 +948,7 @@ gboolean dt_drawlayer_paint_runtime_get_stroke_damage(const dt_drawlayer_damaged
 static inline void _paint_union_damage_rect(dt_drawlayer_damaged_rect_t *rect,
                                             const dt_drawlayer_damaged_rect_t *add_rect)
 {
-  if(!rect) return;
+  if(IS_NULL_PTR(rect)) return;
   if(!add_rect || !add_rect->valid) return;
   if(add_rect->se[0] <= add_rect->nw[0] || add_rect->se[1] <= add_rect->nw[1]) return;
 

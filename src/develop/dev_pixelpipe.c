@@ -110,7 +110,7 @@ static void _refresh_pipe_detail_mask_state(dt_dev_pixelpipe_t *pipe)
 
 static void _change_pipe(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_change_t flag)
 {
-  if(!pipe) return;
+  if(IS_NULL_PTR(pipe)) return;
   dt_dev_pixelpipe_or_changed(pipe, flag);
   dt_atomic_set_int(&pipe->shutdown, TRUE);
 }
@@ -138,13 +138,13 @@ static gboolean _sync_realtime_top_history_in_place(dt_dev_pixelpipe_t *pipe, dt
   if(history_end == 0 || !dev->gui_module) return FALSE;
 
   GList *last_item = g_list_nth(dev->history, history_end - 1);
-  if(!last_item) return FALSE;
+  if(IS_NULL_PTR(last_item)) return FALSE;
 
   dt_dev_history_item_t *hist = (dt_dev_history_item_t *)last_item->data;
   if(!hist || !hist->module || hist->module != dev->gui_module) return FALSE;
 
   dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)dt_dev_pixelpipe_get_module_piece(pipe, hist->module);
-  if(!piece) return FALSE;
+  if(IS_NULL_PTR(piece)) return FALSE;
 
   const gboolean previous_want_detail_mask = (pipe->want_detail_mask != DT_DEV_DETAIL_MASK_NONE);
   piece->enabled = hist->enabled;
@@ -523,7 +523,7 @@ const dt_dev_pixelpipe_iop_t *dt_dev_pixelpipe_get_prev_enabled_piece(const dt_d
   if(!pipe || !piece) return NULL;
 
   GList *node = g_list_find(pipe->nodes, (gpointer)piece);
-  if(!node) return NULL;
+  if(IS_NULL_PTR(node)) return NULL;
 
   for(node = g_list_previous(node); node; node = g_list_previous(node))
   {
@@ -543,7 +543,7 @@ gboolean dt_dev_pixelpipe_cache_peek_gui(dt_dev_pixelpipe_t *pipe, const dt_dev_
 {
   if(data) *data = NULL;
   if(cache_entry) *cache_entry = NULL;
-  if(!pipe) return FALSE;
+  if(IS_NULL_PTR(pipe)) return FALSE;
 
   const uint64_t hash = piece ? piece->global_hash : dt_dev_pixelpipe_get_hash(pipe);
   void *buffer = NULL;

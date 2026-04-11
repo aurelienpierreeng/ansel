@@ -187,7 +187,7 @@ dt_iop_colorspace_type_t dt_develop_blend_colorspace(const dt_dev_pixelpipe_iop_
                                                      dt_iop_colorspace_type_t cst)
 {
   const dt_develop_blend_params_t *const bp = (const dt_develop_blend_params_t *)piece->blendop_data;
-  if(!bp) return cst;
+  if(IS_NULL_PTR(bp)) return cst;
   switch(bp->blend_cst)
   {
     case DEVELOP_BLEND_CS_RAW:
@@ -266,7 +266,7 @@ int dt_develop_blendif_init_masking_profile(const struct dt_dev_pixelpipe_t *pip
   const dt_iop_order_iccprofile_info_t *const profile = (cst == DEVELOP_BLEND_CS_RGB_SCENE)
       ? dt_ioppr_get_pipe_current_profile_info(piece->module, pipe)
       : dt_ioppr_get_iop_work_profile_info(piece->module, piece->module->dev->iop);
-  if(!profile) return 0;
+  if(IS_NULL_PTR(profile)) return 0;
 
   memcpy(blending_profile, profile, sizeof(dt_iop_order_iccprofile_info_t));
   for(size_t y = 0; y < 3; y++)
@@ -537,7 +537,7 @@ static int _develop_blend_process_feather(const float *const guide, float *const
 
   float *const restrict mask_bak =
     dt_pixelpipe_cache_alloc_align_float_cache( width * height, 0);
-  if(!mask_bak) return 1;
+  if(IS_NULL_PTR(mask_bak)) return 1;
 
   memcpy(mask_bak, mask, sizeof(float) * width * height);
   if(guided_filter(guide, mask_bak, mask, width, height, ch, w, sqrt_eps, guide_weight, 0.f, 1.f) != 0)
@@ -590,7 +590,7 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *p
   if(pipe->bypass_blendif && self->dev->gui_attached && (self == self->dev->gui_module)) return 0;
 
   const dt_develop_blend_params_t *const d = (const dt_develop_blend_params_t *const)piece->blendop_data;
-  if(!d) return 0;
+  if(IS_NULL_PTR(d)) return 0;
 
   const unsigned int mask_mode = d->mask_mode;
   // check if blend is disabled
@@ -985,7 +985,7 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_t
   if(pipe->bypass_blendif && self->dev->gui_attached && (self == self->dev->gui_module)) return 0;
 
   dt_develop_blend_params_t *const d = (dt_develop_blend_params_t *const)piece->blendop_data;
-  if(!d) return 0;
+  if(IS_NULL_PTR(d)) return 0;
 
   const unsigned int mask_mode = d->mask_mode;
   // check if blend is disabled: just return, output is already in dev_out
@@ -1462,7 +1462,7 @@ dt_blendop_cl_global_t *dt_develop_blend_init_cl_global(void)
 void dt_develop_blend_free_cl_global(dt_blendop_cl_global_t *b)
 {
 #ifdef HAVE_OPENCL
-  if(!b) return;
+  if(IS_NULL_PTR(b)) return;
 
   dt_opencl_free_kernel(b->kernel_blendop_mask_Lab);
   dt_opencl_free_kernel(b->kernel_blendop_mask_RAW);

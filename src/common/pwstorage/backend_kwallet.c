@@ -208,7 +208,7 @@ static gboolean init_kwallet(backend_kwallet_context_t *context)
   GVariant *ret
       = g_dbus_proxy_call_sync(context->proxy, "isEnabled", NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL, &error);
 
-  if(!ret) return FALSE;
+  if(IS_NULL_PTR(ret)) return FALSE;
   GVariant *child = g_variant_get_child_value(ret, 0);
   gboolean is_enabled = g_variant_get_boolean(child);
   g_variant_unref(child);

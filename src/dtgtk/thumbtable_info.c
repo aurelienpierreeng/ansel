@@ -46,7 +46,7 @@ void dt_thumbtable_info_seed_image_cache(const dt_image_t *info)
 {
   if(!info || info->id <= 0) return;
 
-  if(!darktable.image_cache) return;
+  if(IS_NULL_PTR(darktable.image_cache)) return;
 
   dt_image_cache_seed(darktable.image_cache, info);
 }
@@ -112,7 +112,7 @@ void dt_thumbtable_info_debug_assert_matches_cache(const dt_image_t *sql_info)
   if(!sql_info || sql_info->id <= 0) return;
 
   const dt_image_t *img = dt_image_cache_get(darktable.image_cache, sql_info->id, 'r');
-  if(!img) return;
+  if(IS_NULL_PTR(img)) return;
 
   dt_image_t cache_info = {0};
   dt_thumbtable_copy_image(&cache_info, img);

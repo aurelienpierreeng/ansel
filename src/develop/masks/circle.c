@@ -60,7 +60,7 @@ static void _circle_get_distance(float x, float y, float as, dt_masks_form_gui_t
   *dist = FLT_MAX;
 
   dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
-  if(!gpt) return;
+  if(IS_NULL_PTR(gpt)) return;
 
   // we first check if we are inside the source form
   const float pt[2] = { x, y };
@@ -183,7 +183,7 @@ static float _circle_get_interaction_value(const dt_masks_form_t *form, dt_masks
 {
   if(!form || !form->points) return NAN;
   const dt_masks_node_circle_t *circle = (const dt_masks_node_circle_t *)(form->points)->data;
-  if(!circle) return NAN;
+  if(IS_NULL_PTR(circle)) return NAN;
 
   switch(interaction)
   {
@@ -200,7 +200,7 @@ static gboolean _circle_get_gravity_center(const dt_masks_form_t *form, float ce
 {
   if(!form || !form->points || !center || !area) return FALSE;
   const dt_masks_node_circle_t *circle = (const dt_masks_node_circle_t *)(form->points)->data;
-  if(!circle) return FALSE;
+  if(IS_NULL_PTR(circle)) return FALSE;
   center[0] = circle->center[0];
   center[1] = circle->center[1];
   *area = M_PI_F * sqf(circle->radius);
@@ -216,7 +216,7 @@ static float _circle_set_interaction_value(dt_masks_form_t *form, dt_masks_inter
                                            dt_masks_increment_t increment, int flow,
                                            dt_masks_form_gui_t *gui, struct dt_iop_module_t *module)
 {
-  if(!form) return NAN;
+  if(IS_NULL_PTR(form)) return NAN;
   const int index = 0;
 
   switch(interaction)
@@ -236,7 +236,7 @@ static int _change_hardness(dt_masks_form_t *form, dt_masks_form_gui_t *gui, str
 {
   if(!form || !form->points) return 0;
   dt_masks_node_circle_t *circle = (dt_masks_node_circle_t *)(form->points)->data;
-  if(!circle) return 0;
+  if(IS_NULL_PTR(circle)) return 0;
 
   circle->border = CLAMPF(dt_masks_apply_increment(circle->border, amount, increment, flow),
                           HARDNESS_MIN, HARDNESS_MAX);
@@ -253,7 +253,7 @@ static int _change_size(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct 
 {
   if(!form || !form->points) return 0;
   dt_masks_node_circle_t *circle = (dt_masks_node_circle_t *)(form->points)->data;
-  if(!circle) return 0;
+  if(IS_NULL_PTR(circle)) return 0;
 
   // Sanitize
   // do not exceed upper limit of 1.0 and lower limit of 0.004
@@ -326,7 +326,7 @@ static int _circle_events_button_pressed(struct dt_iop_module_t *module, double 
       dt_iop_module_t *crea_module = gui->creation_module;
       // we create the circle
       dt_masks_node_circle_t *circle = (dt_masks_node_circle_t *)(malloc(sizeof(dt_masks_node_circle_t)));
-      if(!circle) return 0;
+      if(IS_NULL_PTR(circle)) return 0;
 
       _circle_init_new(form, gui, circle);
       form->points = g_list_append(form->points, circle);
@@ -337,7 +337,7 @@ static int _circle_events_button_pressed(struct dt_iop_module_t *module, double 
     else // creation is FALSE
     {
       dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
-      if(!gpt) return 0;
+      if(IS_NULL_PTR(gpt)) return 0;
 
       if(gui->source_selected && gui->edit_mode == DT_MASKS_EDIT_FULL)
       {
@@ -415,7 +415,7 @@ static int _circle_events_mouse_moved(struct dt_iop_module_t *module, double x, 
     if(gui->form_dragging)
     {
       dt_masks_node_circle_t *circle = (dt_masks_node_circle_t *)((form->points)->data);
-      if(!circle) return 0;
+      if(IS_NULL_PTR(circle)) return 0;
       circle->center[0] = pts[0];
       circle->center[1] = pts[1];
     }
@@ -484,7 +484,7 @@ static int _circle_get_points_source(dt_develop_t *dev, float x, float y, float 
   // compute the points of the target (center and circumference of circle)
   // we get the point in RAW image reference
   *points = _points_to_transform(x, y, radius, wd, ht, points_count);
-  if(!*points) return 1;
+  if(IS_NULL_PTR(*points)) return 1;
 
   // we transform with all distortion that happen *before* the module
   // so we have now the TARGET points in module input reference
@@ -537,7 +537,7 @@ static int _circle_get_points(dt_develop_t *dev, float x, float y, float radius,
 
   // compute the points we need to transform (center and circumference of circle)
   *points = _points_to_transform(x, y, radius, wd, ht, points_count);
-  if(!*points) return 1;
+  if(IS_NULL_PTR(*points)) return 1;
 
   // and transform them with all distorted modules
   if(!dt_dev_coordinates_raw_abs_to_image_abs(dev, *points, *points_count))
@@ -577,7 +577,7 @@ static void _circle_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_f
   } // creation
 
   dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
-  if(!gpt) return;
+  if(IS_NULL_PTR(gpt)) return;
   
   // we draw the main shape
   const gboolean selected = (gui->group_selected == index) && (gui->form_selected || gui->form_dragging);
@@ -626,7 +626,7 @@ static int _circle_get_points_border(dt_develop_t *dev, struct dt_masks_form_t *
 {
   if(!form || !form->points) return 0;
   dt_masks_node_circle_t *circle = (dt_masks_node_circle_t *)((form->points)->data);
-  if(!circle) return 0;
+  if(IS_NULL_PTR(circle)) return 0;
   float x = circle->center[0];
   float y = circle->center[1];
   if(source)
@@ -656,7 +656,7 @@ static int _circle_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_t *
   // we get the circle values
   if(!form || !form->points) return 0;
   dt_masks_node_circle_t *circle = (dt_masks_node_circle_t *)((form->points)->data);
-  if(!circle) return 0;
+  if(IS_NULL_PTR(circle)) return 0;
   float wd = pipe->iwidth, ht = pipe->iheight;
 
   // compute the points we need to transform (center and circumference of circle)
@@ -687,7 +687,7 @@ static int _circle_get_area(const dt_iop_module_t *const restrict module, dt_dev
   if(!form || !form->points) return 0;
   // we get the circle values
   dt_masks_node_circle_t *circle = (dt_masks_node_circle_t *)((form->points)->data);
-  if(!circle) return 0;
+  if(IS_NULL_PTR(circle)) return 0;
   float wd = pipe->iwidth, ht = pipe->iheight;
 
   // compute the points we need to transform (center and circumference of circle)
@@ -814,7 +814,7 @@ static int _circle_get_mask_roi(const dt_iop_module_t *const restrict module, dt
                                 float *const restrict buffer)
 {
   if(!form || !form->points) return 1;
-  if(!module) return 1;
+  if(IS_NULL_PTR(module)) return 1;
   double start1 = 0.0;
   double start2 = start1;
   
@@ -822,7 +822,7 @@ static int _circle_get_mask_roi(const dt_iop_module_t *const restrict module, dt
 
   // we get the circle parameters
   dt_masks_node_circle_t *circle = (dt_masks_node_circle_t *)((form->points)->data);
-  if(!circle) return 1;
+  if(IS_NULL_PTR(circle)) return 1;
   const int wi = pipe->iwidth, hi = pipe->iheight;
   const float centerx = circle->center[0] * wi;
   const float centery = circle->center[1] * hi;

@@ -172,7 +172,7 @@ void stroke_boxes(cairo_t *cr, float line_width)
 
 void set_offset_and_scale(image_t *image, float width, float height)
 {
-  if(!image->image) return;
+  if(IS_NULL_PTR(image->image)) return;
 
   cairo_matrix_t matrix;
   const float s_w = (float)image->width / width;

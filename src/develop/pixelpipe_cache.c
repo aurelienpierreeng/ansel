@@ -253,7 +253,7 @@ int dt_dev_pixelpipe_cache_remove(dt_dev_pixelpipe_cache_t *cache, const gboolea
 static gboolean _cache_entry_materialize_host_data_locked(dt_pixel_cache_entry_t *entry, int preferred_devid,
                                                           gboolean prefer_device_payload)
 {
-  if(!entry) return FALSE;
+  if(IS_NULL_PTR(entry)) return FALSE;
   dt_cache_clmem_t *source = NULL;
   gboolean ok = FALSE;
   dt_pthread_mutex_lock(&entry->cl_mem_lock);
@@ -805,7 +805,7 @@ void *dt_dev_pixelpipe_cache_get_pinned_image(dt_dev_pixelpipe_cache_t *cache, v
   if(!mem)
   {
     mem = dt_opencl_alloc_device_use_host_pointer(devid, width, height, bpp, host_ptr, flags);
-    if(!mem) return NULL;
+    if(IS_NULL_PTR(mem)) return NULL;
     return mem;
   }
 
@@ -883,7 +883,7 @@ gboolean dt_dev_pixelpipe_cache_flush_host_pinned_image(dt_dev_pixelpipe_cache_t
     dt_pthread_mutex_unlock(&cache->lock);
   }
 
-  if(!entry) return FALSE;
+  if(IS_NULL_PTR(entry)) return FALSE;
   if(!_cache_entry_clmem_has_host_pinned_locked(entry, host_ptr, devid)) return FALSE;
 
   if(devid >= 0) dt_opencl_events_wait_for(devid);
@@ -957,7 +957,7 @@ static gboolean _cl_is_zero_copy_image(const int devid, cl_mem mem, void *host_p
   if(devid < 0 || !mem || !host_ptr || !roi || roi->width <= 0 || roi->height <= 0 || bpp == 0) return FALSE;
 
   void *mapped = dt_opencl_map_image(devid, mem, TRUE, CL_MAP_READ, roi->width, roi->height, (int)bpp);
-  if(!mapped) return FALSE;
+  if(IS_NULL_PTR(mapped)) return FALSE;
 
   const gboolean ptr_matches = (mapped == host_ptr);
   const gboolean is_zero_copy = ptr_matches;
@@ -1269,7 +1269,7 @@ float *dt_dev_pixelpipe_cache_restore_cl_buffer(dt_dev_pixelpipe_t *pipe, float 
                                                 const size_t in_bpp, dt_pixel_cache_entry_t *input_entry,
                                                 const char *message)
 {
-  if(!cl_mem_input) return input;
+  if(IS_NULL_PTR(cl_mem_input)) return input;
   dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, TRUE, input_entry);
 
   const int fail = dt_dev_pixelpipe_cache_sync_cl_buffer(pipe->devid, input, cl_mem_input, roi_in,
@@ -1311,7 +1311,7 @@ int dt_dev_pixelpipe_cache_prepare_cl_input(dt_dev_pixelpipe_t *pipe, dt_iop_mod
                                             dt_pixel_cache_entry_t *input_entry,
                                             dt_pixel_cache_entry_t **locked_input_entry, void *keep)
 {
-  if(!locked_input_entry) return 1;
+  if(IS_NULL_PTR(locked_input_entry)) return 1;
   *locked_input_entry = NULL;
 
   if(!IS_NULL_PTR(*cl_mem_input))
@@ -1773,7 +1773,7 @@ static dt_pixel_cache_entry_t *dt_pixel_cache_new_entry(const uint64_t hash, con
   if(error) return NULL;
 
   dt_pixel_cache_entry_t *cache_entry = (dt_pixel_cache_entry_t *)malloc(sizeof(dt_pixel_cache_entry_t));
-  if(!cache_entry) return NULL;
+  if(IS_NULL_PTR(cache_entry)) return NULL;
 
   // Metadata, easy to free in batch if need be
   cache_entry->size = rounded_size;
@@ -1923,7 +1923,7 @@ static dt_pixel_cache_entry_t *_pixelpipe_cache_create_entry_locked(dt_dev_pixel
                                                                     const char *name, const int id)
 {
   dt_pixel_cache_entry_t *cache_entry = dt_pixel_cache_new_entry(hash, size, name, id, cache, FALSE, cache->entries);
-  if(!cache_entry) return NULL;
+  if(IS_NULL_PTR(cache_entry)) return NULL;
 
   // Increase ref_count, consumer will have to decrease it
   _non_thread_safe_cache_ref_count_entry(cache, TRUE, cache_entry);
@@ -1945,7 +1945,7 @@ static dt_pixel_cache_entry_t *_cache_try_rekey_reuse_locked(dt_dev_pixelpipe_ca
   if(reuse_hint->size < size) return NULL;
 
   dt_pixel_cache_entry_t *cache_entry = _non_threadsafe_cache_get_entry(cache, cache->entries, old_hash);
-  if(!cache_entry) return NULL;
+  if(IS_NULL_PTR(cache_entry)) return NULL;
   if(cache_entry->serial != reuse_hint->serial) return NULL;
   if(cache_entry->auto_destroy) return NULL;
   if(cache_entry->size < size) return NULL;
@@ -2150,7 +2150,7 @@ dt_dev_pixelpipe_cache_get_writable(dt_dev_pixelpipe_cache_t *cache, const uint6
 static gboolean _cache_entry_has_device_payload(dt_pixel_cache_entry_t *cache_entry,
                                                 const int preferred_devid)
 {
-  if(!cache_entry) return FALSE;
+  if(IS_NULL_PTR(cache_entry)) return FALSE;
 
 #ifdef HAVE_OPENCL
   gboolean has_payload = FALSE;
@@ -2284,7 +2284,7 @@ gboolean dt_dev_pixelpipe_cache_peek(dt_dev_pixelpipe_cache_t *cache, const uint
     return FALSE;
 
   dt_pixel_cache_entry_t *cache_entry = _cache_lookup_existing(cache, hash, data);
-  if(!cache_entry) return FALSE;
+  if(IS_NULL_PTR(cache_entry)) return FALSE;
 
   if(data) *data = dt_pixel_cache_entry_get_data(cache_entry);
 
@@ -2569,7 +2569,7 @@ void dt_dev_pixelpipe_cache_unref_hash(dt_dev_pixelpipe_cache_t *cache, const ui
 int dt_dev_pixelpipe_cache_rekey(dt_dev_pixelpipe_cache_t *cache, const uint64_t old_hash,
                                  const uint64_t new_hash, dt_pixel_cache_entry_t *entry)
 {
-  if(!cache) return 1;
+  if(IS_NULL_PTR(cache)) return 1;
   if(old_hash == new_hash) return 0;
 
   dt_pthread_mutex_lock(&cache->lock);

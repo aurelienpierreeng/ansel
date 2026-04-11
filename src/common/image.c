@@ -325,7 +325,7 @@ static const char *_image_colorspace_to_string(const dt_image_colorspace_t color
 
 void dt_image_print_debug_info(const dt_image_t *img, const char *context)
 {
-  if(!img) return;
+  if(IS_NULL_PTR(img)) return;
 
   const char *ctx = context ? context : "image";
   const dt_iop_buffer_dsc_t *dsc = &img->dsc;
@@ -609,7 +609,7 @@ void dt_image_local_copy_paths_from_fullpath(const char *fullpath, int32_t imgid
   if(!fullpath || !*fullpath || imgid <= 0 || !local_copy_path || !local_copy_legacy_path) return;
 
   char *md5_filename = g_compute_checksum_for_string(G_CHECKSUM_MD5, fullpath, strlen(fullpath));
-  if(!md5_filename) return;
+  if(IS_NULL_PTR(md5_filename)) return;
 
   char cachedir[PATH_MAX] = { 0 };
   dt_loc_get_user_cache_dir(cachedir, sizeof(cachedir));
@@ -2569,7 +2569,7 @@ static gboolean _sidecar_is_up_to_date(const dt_image_t *img)
   if(write_timestamp <= 0) return FALSE;
 
   GDateTime *gdt = dt_datetime_gtimespan_to_gdatetime(img->change_timestamp);
-  if(!gdt) return FALSE;
+  if(IS_NULL_PTR(gdt)) return FALSE;
   const int64_t change_timestamp_unix = g_date_time_to_unix(gdt);
   g_date_time_unref(gdt);
   dt_print(DT_DEBUG_CONTROL,
@@ -2633,7 +2633,7 @@ int dt_image_write_sidecar_file(const int32_t imgid)
 
 void dt_image_synch_xmps(const GList *img)
 {
-  if(!img) return;
+  if(IS_NULL_PTR(img)) return;
   if(dt_image_get_xmp_mode())
   {
     dt_control_save_xmps(img, FALSE);
@@ -2712,10 +2712,10 @@ void dt_image_local_copy_synch()
 
 void dt_image_get_datetime(const int32_t imgid, char *datetime)
 {
-  if(!datetime) return;
+  if(IS_NULL_PTR(datetime)) return;
   datetime[0] = '\0';
   const dt_image_t *cimg = dt_image_cache_get(darktable.image_cache, imgid, 'r');
-  if(!cimg) return;
+  if(IS_NULL_PTR(cimg)) return;
   dt_datetime_img_to_exif(datetime, DT_DATETIME_LENGTH, cimg);
   dt_image_cache_read_release(darktable.image_cache, cimg);
 }
@@ -2881,14 +2881,14 @@ static char *_text_path_legacy_build(const char *image_path)
 
 char *dt_image_get_text_path_from_path(const char *image_path)
 {
-  if(!image_path) return NULL;
+  if(IS_NULL_PTR(image_path)) return NULL;
 
   return _text_path_legacy_if_exists(image_path);
 }
 
 char *dt_image_build_text_path_from_path(const char *image_path)
 {
-  if(!image_path) return NULL;
+  if(IS_NULL_PTR(image_path)) return NULL;
 
   return _text_path_legacy_build(image_path);
 }
@@ -2898,7 +2898,7 @@ static void _copy_text_sidecar_if_present(const char *src_image_path, const char
   if(!src_image_path || !dest_image_path) return;
 
   char *src_txt = dt_image_get_text_path_from_path(src_image_path);
-  if(!src_txt) return;
+  if(IS_NULL_PTR(src_txt)) return;
 
   char *dest_txt = _text_path_legacy_build(dest_image_path);
   if(dest_txt)
@@ -2929,7 +2929,7 @@ static void _move_text_sidecar_if_present(const char *src_image_path, const char
   if(!src_image_path || !dest_image_path) return;
 
   char *src_txt = dt_image_get_text_path_from_path(src_image_path);
-  if(!src_txt) return;
+  if(IS_NULL_PTR(src_txt)) return;
 
   char *dest_txt = _text_path_legacy_build(dest_image_path);
   if(dest_txt)

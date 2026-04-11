@@ -147,7 +147,7 @@ static gboolean _lib_duplicate_thumb_press_callback(GtkWidget *widget, GdkEventB
     if(event->type == GDK_BUTTON_PRESS)
     {
       dt_develop_t *dev = darktable.develop;
-      if(!dev) return FALSE;
+      if(IS_NULL_PTR(dev)) return FALSE;
       return TRUE;
     }
   }

@@ -351,7 +351,7 @@ static inline dt_colorspaces_color_profile_type_t _gamut_to_profile_type(const d
 static inline gboolean _gamut_matches_lut_profile(const dt_lut_viewer_t *viewer,
                                                   const dt_lut_viewer_gamut_t gamut)
 {
-  if(!viewer->lut_profile) return FALSE;
+  if(IS_NULL_PTR(viewer->lut_profile)) return FALSE;
 
   switch(gamut)
   {
@@ -676,7 +676,7 @@ static void _draw_samples(cairo_t *cr, const dt_lut_viewer_t *viewer,
                           const dt_lut_viewer_projection_t *projection, const dt_lut_viewer_gamut_t gamut)
 {
   const gboolean show_control_nodes = _show_control_nodes(viewer);
-  if(!viewer->lut_profile) return;
+  if(IS_NULL_PTR(viewer->lut_profile)) return;
   if(show_control_nodes)
   {
     if(!viewer->control_nodes || viewer->control_node_count == 0) return;
@@ -1275,7 +1275,7 @@ static void _save_clut_callback(GtkWidget *widget, gpointer user_data)
 dt_lut_viewer_t *dt_lut_viewer_new(dt_gui_module_t *module)
 {
   dt_lut_viewer_t *viewer = calloc(1, sizeof(*viewer));
-  if(!viewer) return NULL;
+  if(IS_NULL_PTR(viewer)) return NULL;
 
   viewer->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
   viewer->controls = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
@@ -1399,7 +1399,7 @@ void dt_lut_viewer_set_lut(dt_lut_viewer_t *viewer, const float *clut, uint16_t 
                            const dt_iop_order_iccprofile_info_t *lut_profile,
                            const dt_iop_order_iccprofile_info_t *display_profile)
 {
-  if(!viewer) return;
+  if(IS_NULL_PTR(viewer)) return;
 
   viewer->clut = clut;
   viewer->clut_level = level;
@@ -1414,7 +1414,7 @@ void dt_lut_viewer_set_control_nodes(dt_lut_viewer_t *viewer,
                                      const dt_lut_viewer_control_node_t *control_nodes,
                                      size_t control_node_count)
 {
-  if(!viewer) return;
+  if(IS_NULL_PTR(viewer)) return;
 
   viewer->control_nodes = control_nodes;
   viewer->control_node_count = control_node_count;

@@ -86,7 +86,7 @@ char *get_profile_description(unsigned char *data, long data_size)
   if(!data || data_size == 0) return NULL;
 
   cmsHPROFILE p = cmsOpenProfileFromMem(data, data_size);
-  if(!p) return NULL;
+  if(IS_NULL_PTR(p)) return NULL;
 
   size = cmsGetProfileInfoASCII(p, cmsInfoDescription, "en", "US", NULL, 0);
   if(size == 0) goto error;

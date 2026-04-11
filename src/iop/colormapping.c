@@ -498,7 +498,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
     // get mapping from input clusters to target clusters
     int *const mapio = malloc(sizeof(int) * data->n);
-    if(!mapio) return 1;
+    if(IS_NULL_PTR(mapio)) return 1;
 
     get_cluster_mapping(data->n, data->target_mean, data->target_weight, data->source_mean,
                         data->source_weight, dominance, mapio);

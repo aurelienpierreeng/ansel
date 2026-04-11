@@ -944,7 +944,7 @@ static inline int auto_detect_WB(const float *const restrict in, dt_illuminant_t
   */
 
    float *const restrict temp = dt_pixelpipe_cache_alloc_align_float_cache(width * height * ch, 0);
-   if(!temp) return 1;
+   if(IS_NULL_PTR(temp)) return 1;
 
    // Convert RGB to xy
   __OMP_PARALLEL_FOR__(collapse(2) )
@@ -1126,7 +1126,7 @@ static void declare_cat_on_pipe(struct dt_iop_module_t *self, gboolean preset)
 static inline gboolean _is_another_module_cat_on_pipe(struct dt_iop_module_t *self)
 {
   dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
-  if(!g) return FALSE;
+  if(IS_NULL_PTR(g)) return FALSE;
   return self->dev->proxy.chroma_adaptation && self->dev->proxy.chroma_adaptation != self;
 }
 

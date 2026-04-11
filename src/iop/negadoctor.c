@@ -404,7 +404,7 @@ void init_global(dt_iop_module_so_t *module)
 {
   dt_iop_negadoctor_global_data_t *gd
       = (dt_iop_negadoctor_global_data_t *)calloc(1, sizeof(dt_iop_negadoctor_global_data_t));
-  if(!gd) return;
+  if(IS_NULL_PTR(gd)) return;
 
   module->data = gd;
   const int program = 30; // negadoctor.cl, from programs.conf

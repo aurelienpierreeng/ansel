@@ -1179,7 +1179,7 @@ static float complex *create_global_distortion_map(const cairo_rectangle_int_t *
 
   // allocate distortion map big enough to contain all paths
   float complex *map = dt_pixelpipe_cache_alloc_align_cache(sizeof(float complex) * mapsize, 0);
-  if(!map) return NULL;
+  if(IS_NULL_PTR(map)) return NULL;
   memset(map, 0, sizeof(float complex) * mapsize);
 
   // build map

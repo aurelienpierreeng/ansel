@@ -417,7 +417,7 @@ static gboolean _refresh_active_picker_idle(gpointer user_data)
 
 static void _queue_refresh_active_picker(dt_develop_t *dev)
 {
-  if(!dev) return;
+  if(IS_NULL_PTR(dev)) return;
   if(dev->color_picker.refresh_idle_source) return;
   dev->color_picker.refresh_idle_source = g_idle_add(_refresh_active_picker_idle, dev);
 }
@@ -713,7 +713,7 @@ static void _iop_color_picker_cacheline_ready_callback(gpointer instance, const 
   (void)user_data;
 
   dt_develop_t *const dev = darktable.develop;
-  if(!dev) return;
+  if(IS_NULL_PTR(dev)) return;
 
   gboolean matched = FALSE;
   if(dev->color_picker.wait_input_hash == hash)

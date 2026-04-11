@@ -51,7 +51,7 @@ dt_bilateral_cl_global_t *dt_bilateral_init_cl_global()
 
 void dt_bilateral_free_cl(dt_bilateral_cl_t *b)
 {
-  if(!b) return;
+  if(IS_NULL_PTR(b)) return;
   // be sure we're done with the memory:
   dt_opencl_finish(b->devid);
   // free device mem
@@ -109,7 +109,7 @@ dt_bilateral_cl_t *dt_bilateral_init_cl(const int devid,
   }
 
   dt_bilateral_cl_t *b = (dt_bilateral_cl_t *)malloc(sizeof(dt_bilateral_cl_t));
-  if(!b) return NULL;
+  if(IS_NULL_PTR(b)) return NULL;
 
   b->global = darktable.opencl->bilateral;
   b->width = width;
@@ -306,7 +306,7 @@ cl_int dt_bilateral_slice_cl(dt_bilateral_cl_t *b, cl_mem in, cl_mem out, const 
 
 void dt_bilateral_free_cl_global(dt_bilateral_cl_global_t *b)
 {
-  if(!b) return;
+  if(IS_NULL_PTR(b)) return;
   // destroy kernels
   dt_opencl_free_kernel(b->kernel_zero);
   dt_opencl_free_kernel(b->kernel_splat);

@@ -252,7 +252,7 @@ static void _build_cat16_rgb_matrix(const dt_iop_order_iccprofile_info_t *work_p
     for(int col = 0; col < 3; col++)
       CAT[row][col] = row == col ? 1.f : 0.f;
 
-  if(!work_profile) return;
+  if(IS_NULL_PTR(work_profile)) return;
 
   float x = 0.f;
   float y = 0.f;
@@ -1024,7 +1024,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
       = pipe ? dt_ioppr_get_pipe_current_profile_info(self, pipe)
              : dt_ioppr_get_iop_work_profile_info(self, self->dev->iop);
 
-  if(!g) return;
+  if(IS_NULL_PTR(g)) return;
   if(sampled_module->picked_color_max[0] < sampled_module->picked_color_min[0]) return;
 
   const int point = picker == g->point[DT_SPLITTONING_RGB_POINT_DARK].ev

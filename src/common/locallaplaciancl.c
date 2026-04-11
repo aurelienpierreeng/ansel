@@ -54,7 +54,7 @@ dt_local_laplacian_cl_global_t *dt_local_laplacian_init_cl_global()
 
 void dt_local_laplacian_free_cl(dt_local_laplacian_cl_t *g)
 {
-  if(!g) return;
+  if(IS_NULL_PTR(g)) return;
   // be sure we're done with the memory:
   dt_opencl_finish(g->devid);
 
@@ -85,7 +85,7 @@ dt_local_laplacian_cl_t *dt_local_laplacian_init_cl(
     const float clarity)        // user param: increase clarity/local contrast
 {
   dt_local_laplacian_cl_t *g = malloc(sizeof(dt_local_laplacian_cl_t));
-  if(!g) return NULL;
+  if(IS_NULL_PTR(g)) return NULL;
 
   g->global = darktable.opencl->local_laplacian;
   g->devid = devid;

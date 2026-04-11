@@ -146,7 +146,7 @@ static float *const init_gaussian_kernel(const int rad, const size_t mat_size, c
 {
   float weight = 0.0f;
   float *const mat = dt_pixelpipe_cache_alloc_align_float_cache(mat_size, 0);
-  if(!mat) return NULL;
+  if(IS_NULL_PTR(mat)) return NULL;
   memset(mat, 0, sizeof(float) * mat_size);
   for(int l = -rad; l <= rad; l++) weight += mat[l + rad] = expf(-l * l / (2.f * sigma2));
   for(int l = -rad; l <= rad; l++) mat[l + rad] /= weight;
@@ -463,7 +463,7 @@ void init_global(dt_iop_module_so_t *module)
   const int program = 7; // sharpen.cl, from programs.conf
   dt_iop_sharpen_global_data_t *gd
       = (dt_iop_sharpen_global_data_t *)calloc(1, sizeof(dt_iop_sharpen_global_data_t));
-  if(!gd) return;
+  if(IS_NULL_PTR(gd)) return;
   module->data = gd;
   gd->kernel_sharpen_hblur = dt_opencl_create_kernel(program, "sharpen_hblur");
   gd->kernel_sharpen_vblur = dt_opencl_create_kernel(program, "sharpen_vblur");

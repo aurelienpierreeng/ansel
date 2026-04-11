@@ -519,7 +519,7 @@ static void _edit_preset_response(GtkDialog *dialog, gint response_id, dt_gui_pr
 
 void dt_gui_presets_confirm_and_delete(GtkWidget *parent_dialog, const char *name, const char *module_name, int rowid)
 {
-  if(!module_name) return;
+  if(IS_NULL_PTR(module_name)) return;
 
   // This means with want to remove the preset
   GtkWidget *dialog = gtk_message_dialog_new(GTK_WINDOW(parent_dialog), GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL,

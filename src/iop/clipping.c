@@ -691,7 +691,7 @@ static int _iop_clipping_set_max_clip(struct dt_iop_module_t *self)
 
   // we want to know the size of the actual buffer
   dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->virtual_pipe, self);
-  if(!piece) return 0;
+  if(IS_NULL_PTR(piece)) return 0;
 
   float wp = piece->buf_out.width, hp = piece->buf_out.height;
   const float cx = CLAMPF(p->cx, 0.0f, 0.9f);
@@ -1318,7 +1318,7 @@ static float _ratio_get_aspect(dt_iop_module_t *self, GtkWidget *combo)
 
   // we want to know the size of the actual buffer
   dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->virtual_pipe, self);
-  if(!piece) return 0.0f;
+  if(IS_NULL_PTR(piece)) return 0.0f;
 
   const int iwd = piece->buf_in.width, iht = piece->buf_in.height;
 
@@ -2406,7 +2406,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   {
     // points in screen space
     dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->virtual_pipe, self);
-    if(!piece) return;
+    if(IS_NULL_PTR(piece)) return;
 
     const float wp = piece->buf_out.width, hp = piece->buf_out.height;
     float pts[8] = { p->kxa * wp, p->kya * hp, p->kxb * wp, p->kyb * hp,

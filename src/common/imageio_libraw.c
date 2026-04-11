@@ -247,7 +247,7 @@ dt_imageio_retval_t dt_imageio_open_libraw(dt_image_t *img, const char *filename
   if(!img->exif_inited) (void)dt_exif_read(img, filename);
 
   libraw_data_t *raw = libraw_init(0);
-  if(!raw) return DT_IMAGEIO_FILE_CORRUPTED;
+  if(IS_NULL_PTR(raw)) return DT_IMAGEIO_FILE_CORRUPTED;
 
 #if defined(_WIN32) && (defined(UNICODE) || defined(_UNICODE))
   wchar_t *wfilename = g_utf8_to_utf16(filename, -1, NULL, NULL, NULL);

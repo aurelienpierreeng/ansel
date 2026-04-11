@@ -524,7 +524,7 @@ int dt_imageio_jpeg_write_with_icc_profile(const char *filename, const uint8_t *
   }
   jpeg_create_compress(&(jpg.cinfo));
   FILE *f = g_fopen(filename, "wb");
-  if(!f) return 1;
+  if(IS_NULL_PTR(f)) return 1;
   jpeg_stdio_dest(&(jpg.cinfo), f);
 
   jpg.cinfo.image_width = width;
@@ -581,7 +581,7 @@ int dt_imageio_jpeg_write(const char *filename, const uint8_t *in, const int wid
 int dt_imageio_jpeg_read_header(const char *filename, dt_imageio_jpeg_t *jpg)
 {
   jpg->f = g_fopen(filename, "rb");
-  if(!jpg->f) return 1;
+  if(IS_NULL_PTR(jpg->f)) return 1;
 
   struct dt_imageio_jpeg_error_mgr jerr;
   jpg->dinfo.err = jpeg_std_error(&jerr.pub);

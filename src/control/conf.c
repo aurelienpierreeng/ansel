@@ -408,7 +408,7 @@ static char *_sanitize_confgen(const char *name, const char *value)
 {
   const dt_confgen_value_t *item = g_hash_table_lookup(darktable.conf->x_confgen, name);
 
-  if(!item) return g_strdup(value);
+  if(IS_NULL_PTR(item)) return g_strdup(value);
 
   char *result = NULL;
 

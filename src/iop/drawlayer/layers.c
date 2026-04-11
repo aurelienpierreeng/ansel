@@ -36,7 +36,7 @@ static void _layerio_append_error(GString *errors, const char *message)
 
 static void _layerio_log_errors(GString *errors)
 {
-  if(!errors) return;
+  if(IS_NULL_PTR(errors)) return;
   if(errors->len > 0) dt_control_log("%s", errors->str);
 }
 
@@ -44,7 +44,7 @@ static void _populate_layer_list(dt_iop_module_t *self)
 {
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
   dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
-  if(!g) return;
+  if(IS_NULL_PTR(g)) return;
   if(darktable.gui) ++darktable.gui->reset;
 
   while(dt_bauhaus_combobox_length(g->controls.layer_select) > 0)
@@ -88,7 +88,7 @@ static void _populate_layer_list(dt_iop_module_t *self)
 
 static void _reset_stroke_session(dt_iop_drawlayer_gui_data_t *g)
 {
-  if(!g) return;
+  if(IS_NULL_PTR(g)) return;
   g->stroke.stroke_sample_count = 0;
   g->stroke.stroke_event_index = 0;
   g->stroke.last_dab_valid = FALSE;
@@ -454,7 +454,7 @@ void dt_drawlayer_set_pipeline_realtime_mode(dt_iop_module_t *self, const gboole
   dt_dev_pixelpipe_set_realtime(self->dev->pipe, state);
   if(was_realtime != state)
     dt_dev_pixelpipe_resync_history_main(self->dev);
-  if(!self->dev->preview_pipe) return;
+  if(IS_NULL_PTR(self->dev->preview_pipe)) return;
 
   self->dev->preview_pipe->pause = state;
   if(state)

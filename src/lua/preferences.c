@@ -833,7 +833,7 @@ static int register_pref(lua_State *L)
 
 GtkGrid* init_tab_lua(GtkWidget *dialog, GtkWidget *stack)
 {
-  if(!pref_list) return NULL; // no option registered => don't create the tab
+  if(IS_NULL_PTR(pref_list)) return NULL; // no option registered => don't create the tab
   GtkWidget *label, *labelev, *viewport;
   GtkWidget *grid = gtk_grid_new();
   int line = 0;
@@ -872,7 +872,7 @@ GtkGrid* init_tab_lua(GtkWidget *dialog, GtkWidget *stack)
 
 void destroy_tab_lua(GtkGrid *grid)
 {
-  if(!grid) return;
+  if(IS_NULL_PTR(grid)) return;
   gtk_grid_remove_column(grid, 1); // detach all special widgets to avoid having them destroyed
 }
 

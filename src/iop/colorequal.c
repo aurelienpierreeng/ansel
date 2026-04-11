@@ -375,7 +375,7 @@ static inline dt_iop_colorequal_channel_t _active_channel_from_gui(const dt_iop_
 
 static inline void _invalidate_preview_cursor(dt_iop_colorequal_gui_data_t *g)
 {
-  if(!g) return;
+  if(IS_NULL_PTR(g)) return;
   g->cursor_sample_valid = FALSE;
   g->cursor_hue = 0.f;
   memset(g->cursor_input_display, 0, sizeof(g->cursor_input_display));
@@ -428,7 +428,7 @@ static inline void _clamp_display_rgb(dt_aligned_pixel_t RGB)
 static void _work_rgb_to_display_rgb(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, const dt_aligned_pixel_t work_rgb,
                                      dt_aligned_pixel_t display_rgb)
 {
-  if(!display_rgb) return;
+  if(IS_NULL_PTR(display_rgb)) return;
 
   memcpy(display_rgb, work_rgb, sizeof(dt_aligned_pixel_t));
   _clamp_display_rgb(display_rgb);
@@ -1355,7 +1355,7 @@ static void _history_resync_callback(gpointer instance, gpointer user_data)
   }
 
   _switch_preview_cursor(self);
-  if(!g->viewer) return;
+  if(IS_NULL_PTR(g->viewer)) return;
 
   dt_pthread_rwlock_rdlock(&gd->lock);
   cache_generation = gd->cache_generation;
@@ -1754,7 +1754,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
 int mouse_leave(struct dt_iop_module_t *self)
 {
   dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
-  if(!g) return 0;
+  if(IS_NULL_PTR(g)) return 0;
 
   g->cursor_valid = FALSE;
   _invalidate_preview_cursor(g);
@@ -1949,7 +1949,7 @@ static void _pipe_rgb_to_Ych(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, co
                              dt_aligned_pixel_t Ych)
 {
   const dt_iop_order_iccprofile_info_t *work_profile = dt_ioppr_get_pipe_current_profile_info(self, pipe);
-  if(!work_profile) return;
+  if(IS_NULL_PTR(work_profile)) return;
   dt_colorrings_profile_rgb_to_Ych(RGB, work_profile, Ych);
 }
 
@@ -1957,7 +1957,7 @@ static void _pipe_rgb_to_dt_ucs_hsb(dt_iop_module_t *self, dt_dev_pixelpipe_t *p
                                     dt_aligned_pixel_t HSB)
 {
   const dt_iop_order_iccprofile_info_t *work_profile = dt_ioppr_get_pipe_current_profile_info(self, pipe);
-  if(!work_profile) return;
+  if(IS_NULL_PTR(work_profile)) return;
   dt_colorrings_profile_rgb_to_dt_ucs_hsb(RGB, dt_colorrings_graph_white(), work_profile, HSB);
 }
 
@@ -2133,7 +2133,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
   dt_iop_colorequal_params_t *p = (dt_iop_colorequal_params_t *)self->params;
   const dt_iop_module_t *sampled_module = piece && piece->module ? piece->module : self;
 
-  if(!g) return;
+  if(IS_NULL_PTR(g)) return;
 
   if(picker == g->white_level)
   {
@@ -2282,7 +2282,7 @@ void gui_update(dt_iop_module_t *self)
 void gui_focus(struct dt_iop_module_t *self, gboolean in)
 {
   dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
-  if(!g) return;
+  if(IS_NULL_PTR(g)) return;
 
   g->has_focus = in;
 

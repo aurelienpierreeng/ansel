@@ -79,7 +79,7 @@ static void dt_film_import1_cleanup(void *p)
 dt_job_t *dt_film_import1_create(dt_film_t *film)
 {
   dt_job_t *job = dt_control_job_create(&dt_film_import1_run, "cache load raw images for preview");
-  if(!job) return NULL;
+  if(IS_NULL_PTR(job)) return NULL;
   dt_film_import1_t *params = (dt_film_import1_t *)calloc(1, sizeof(dt_film_import1_t));
   if(!params)
   {
@@ -115,7 +115,7 @@ static void _pathlist_import_cleanup(void *p)
 dt_job_t *dt_pathlist_import_create(int argc, char *argv[])
 {
   dt_job_t *job = dt_control_job_create(&_pathlist_import_run, "import commandline images");
-  if(!job) return NULL;
+  if(IS_NULL_PTR(job)) return NULL;
   dt_film_import1_t *params = (dt_film_import1_t *)calloc(1, sizeof(dt_film_import1_t));
   if(!params)
   {
@@ -167,7 +167,7 @@ static GList *_film_recursive_get_files(const gchar *path, gboolean recursive, G
 
   /* let's try open current dir */
   GDir *cdir = g_dir_open(path, 0, NULL);
-  if(!cdir) return *result;
+  if(IS_NULL_PTR(cdir)) return *result;
 
   /* lets read all files in current dir, recurse
      into directories if we should import recursive.

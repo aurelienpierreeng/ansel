@@ -163,7 +163,7 @@ static gboolean _ioporder_module_in_history(const dt_iop_module_t *module)
  */
 static gboolean _ioporder_module_is_graph_visible(const dt_iop_module_t *module)
 {
-  if(!module) return FALSE;
+  if(IS_NULL_PTR(module)) return FALSE;
   if(dt_iop_is_hidden((dt_iop_module_t *)module)) return FALSE;
   return _ioporder_module_in_history(module) || module->enabled;
 }
@@ -252,7 +252,7 @@ static const char *_ioporder_colorspace_to_string(const dt_iop_colorspace_type_t
  */
 static gchar *_ioporder_raw_flags_to_string(const dt_iop_buffer_dsc_t *dsc)
 {
-  if(!dsc) return g_strdup(_("no runtime descriptor"));
+  if(IS_NULL_PTR(dsc)) return g_strdup(_("no runtime descriptor"));
 
   if(dsc->cst != IOP_CS_RAW)
   {
@@ -371,7 +371,7 @@ static const char *_ioporder_runtime_band_label(const dt_ioporder_runtime_band_k
  */
 static void _ioporder_runtime_band_color(const dt_ioporder_runtime_band_kind_t kind, GdkRGBA *color)
 {
-  if(!color) return;
+  if(IS_NULL_PTR(color)) return;
 
   switch(kind)
   {
@@ -467,7 +467,7 @@ static const dt_iop_order_iccprofile_info_t *_ioporder_runtime_band_profile_info
 static gchar *_ioporder_runtime_band_text(const char *label,
                                           const dt_iop_order_iccprofile_info_t *profile_info)
 {
-  if(!label) return g_strdup(_("runtime unavailable"));
+  if(IS_NULL_PTR(label)) return g_strdup(_("runtime unavailable"));
   if(!profile_info || profile_info->type == DT_COLORSPACE_NONE) return g_strdup(label);
 
   const char *profile_name = dt_colorspaces_get_name(profile_info->type, profile_info->filename);
@@ -639,7 +639,7 @@ static void _ioporder_clear_graph(dt_lib_ioporder_t *d)
 static void _ioporder_popup_destroy(GtkWidget *widget, gpointer user_data)
 {
   dt_lib_ioporder_t *d = (dt_lib_ioporder_t *)user_data;
-  if(!d) return;
+  if(IS_NULL_PTR(d)) return;
 
   g_list_free_full(d->nodes, _ioporder_free_graph_node);
   d->nodes = NULL;
@@ -666,7 +666,7 @@ static void _ioporder_popup_destroy(GtkWidget *widget, gpointer user_data)
 static void _ioporder_free_graph_node(gpointer data)
 {
   dt_ioporder_graph_node_t *node = (dt_ioporder_graph_node_t *)data;
-  if(!node) return;
+  if(IS_NULL_PTR(node)) return;
 
   dt_free(node->endpoint_label);
   dt_free(node);
@@ -1178,7 +1178,7 @@ static gboolean _ioporder_graph_draw(GtkWidget *widget, cairo_t *cr, gpointer us
 {
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
   dt_lib_ioporder_t *d = (dt_lib_ioporder_t *)self->data;
-  if(!d) return FALSE;
+  if(IS_NULL_PTR(d)) return FALSE;
 
   GtkAllocation area = { 0 };
   gtk_widget_get_allocation(widget, &area);
@@ -1775,7 +1775,7 @@ void gui_init(dt_lib_module_t *self)
 void gui_cleanup(dt_lib_module_t *self)
 {
   dt_lib_ioporder_t *d = (dt_lib_ioporder_t *)self->data;
-  if(!d) return;
+  if(IS_NULL_PTR(d)) return;
 
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_ioporder_refresh_callback), self);
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_ioporder_presets_changed_callback), self);
@@ -1790,7 +1790,7 @@ void gui_reset(dt_lib_module_t *self)
 {
   dt_lib_ioporder_t *d = (dt_lib_ioporder_t *)self->data;
   GList *iop_order_list = dt_ioppr_get_iop_order_list_version(DT_IOP_ORDER_V30);
-  if(!iop_order_list) return;
+  if(IS_NULL_PTR(iop_order_list)) return;
 
   const int32_t imgid = darktable.develop->image_storage.id;
   dt_ioppr_change_iop_order(darktable.develop, imgid, iop_order_list);
@@ -1829,10 +1829,10 @@ void init_presets(dt_lib_module_t *self)
 
 int set_params(dt_lib_module_t *self, const void *params, int size)
 {
-  if(!params) return 1;
+  if(IS_NULL_PTR(params)) return 1;
 
   GList *iop_order_list = dt_ioppr_deserialize_iop_order_list(params, (size_t)size);
-  if(!iop_order_list) return 1;
+  if(IS_NULL_PTR(iop_order_list)) return 1;
 
   const int32_t imgid = darktable.develop->image_storage.id;
   dt_ioppr_change_iop_order(darktable.develop, imgid, iop_order_list);

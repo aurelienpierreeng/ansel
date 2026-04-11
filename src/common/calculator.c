@@ -76,7 +76,7 @@ static float read_number(parser_state_t *self)
 
 static dt_calc_token_t *get_token(parser_state_t *self)
 {
-  if(!self->p) return NULL;
+  if(IS_NULL_PTR(self->p)) return NULL;
 
   dt_calc_token_t *token = (dt_calc_token_t *)malloc(sizeof(dt_calc_token_t));
 
@@ -193,7 +193,7 @@ static float parse_expression(parser_state_t *self)
 
 static float parse_additive_expression(parser_state_t *self)
 {
-  if(!self->token) return NAN;
+  if(IS_NULL_PTR(self->token)) return NAN;
 
   float left = parse_multiplicative_expression(self);
 
@@ -219,7 +219,7 @@ static float parse_additive_expression(parser_state_t *self)
 
 static float parse_multiplicative_expression(parser_state_t *self)
 {
-  if(!self->token) return NAN;
+  if(IS_NULL_PTR(self->token)) return NAN;
 
   float left = parse_power_expression(self);
 
@@ -247,7 +247,7 @@ static float parse_multiplicative_expression(parser_state_t *self)
 
 static float parse_power_expression(parser_state_t *self)
 {
-  if(!self->token) return NAN;
+  if(IS_NULL_PTR(self->token)) return NAN;
 
   float left = parse_unary_expression(self);
 
@@ -268,7 +268,7 @@ static float parse_power_expression(parser_state_t *self)
 
 static float parse_unary_expression(parser_state_t *self)
 {
-  if(!self->token) return NAN;
+  if(IS_NULL_PTR(self->token)) return NAN;
 
   if(self->token->type == T_OPERATOR)
   {
@@ -293,7 +293,7 @@ static float parse_unary_expression(parser_state_t *self)
 
 static float parse_primary_expression(parser_state_t *self)
 {
-  if(!self->token) return NAN;
+  if(IS_NULL_PTR(self->token)) return NAN;
 
   if(self->token->type == T_NUMBER)
   {

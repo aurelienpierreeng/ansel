@@ -1727,7 +1727,7 @@ static void camera_menusearch_clicked(GtkWidget *button, gpointer user_data)
   dt_pthread_mutex_lock(&darktable.plugin_threadsafe);
   camlist = dt_iop_lensfun_db->GetCameras();
   dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
-  if(!camlist) return;
+  if(IS_NULL_PTR(camlist)) return;
   camera_menu_fill(self, camlist);
 
   dt_gui_menu_popup(GTK_MENU(g->camera_menu), button, GDK_GRAVITY_SOUTH, GDK_GRAVITY_NORTH);
@@ -1750,7 +1750,7 @@ static void camera_autosearch_clicked(GtkWidget *button, gpointer user_data)
     dt_pthread_mutex_lock(&darktable.plugin_threadsafe);
     camlist = dt_iop_lensfun_db->GetCameras();
     dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
-    if(!camlist) return;
+    if(IS_NULL_PTR(camlist)) return;
     camera_menu_fill(self, camlist);
   }
   else
@@ -1759,7 +1759,7 @@ static void camera_autosearch_clicked(GtkWidget *button, gpointer user_data)
     dt_pthread_mutex_lock(&darktable.plugin_threadsafe);
     const lfCamera **camlist = dt_iop_lensfun_db->FindCamerasExt(make, model, 0);
     dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
-    if(!camlist) return;
+    if(IS_NULL_PTR(camlist)) return;
     camera_menu_fill(self, camlist);
     lf_free(camlist);
   }
@@ -2072,7 +2072,7 @@ static void lens_menusearch_clicked(GtkWidget *button, gpointer user_data)
   dt_pthread_mutex_lock(&darktable.plugin_threadsafe);
   lenslist = dt_iop_lensfun_db->FindLenses(g->camera, NULL, NULL, LF_SEARCH_SORT_AND_UNIQUIFY);
   dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
-  if(!lenslist) return;
+  if(IS_NULL_PTR(lenslist)) return;
   lens_menu_fill(self, lenslist);
   lf_free(lenslist);
 
@@ -2096,7 +2096,7 @@ static void lens_autosearch_clicked(GtkWidget *button, gpointer user_data)
   lenslist = dt_iop_lensfun_db->FindLenses(g->camera, NULL,
                                            model[0] ? model : NULL, LF_SEARCH_SORT_AND_UNIQUIFY);
   dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
-  if(!lenslist) return;
+  if(IS_NULL_PTR(lenslist)) return;
   lens_menu_fill(self, lenslist);
   lf_free(lenslist);
 

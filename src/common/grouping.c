@@ -169,7 +169,7 @@ GList *dt_grouping_get_group_images(const int32_t imgid)
 /** add grouped images to images list */
 void dt_grouping_add_grouped_images(GList **images)
 {
-  if(!*images) return;
+  if(IS_NULL_PTR(*images)) return;
   GList *gimgs = NULL;
   for(GList *imgs = *images; imgs; imgs = g_list_next(imgs))
   {

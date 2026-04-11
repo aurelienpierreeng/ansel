@@ -85,7 +85,7 @@ gboolean dt_pixelpipe_raster_remove(GHashTable *raster_masks)
 
 float *dt_pixelpipe_raster_get(GHashTable *raster_masks, const int raster_mask_id)
 {
-  if(!raster_masks) return NULL;
+  if(IS_NULL_PTR(raster_masks)) return NULL;
   
   return g_hash_table_lookup(raster_masks, GINT_TO_POINTER(raster_mask_id));
 }

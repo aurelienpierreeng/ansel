@@ -186,7 +186,7 @@ void dt_dev_init(dt_develop_t *dev, int32_t gui_attached)
 
 void dt_dev_cleanup(dt_develop_t *dev)
 {
-  if(!dev) return;
+  if(IS_NULL_PTR(dev)) return;
   // image_cache does not have to be unref'd, this is done outside develop module.
 
   dt_gui_throttle_cancel(dev);
@@ -282,7 +282,7 @@ static gboolean _update_darkroom_roi(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe
 
 static gboolean _darkroom_pipeline_inputs_ready(const dt_develop_t *dev)
 {
-  if(!dev) return FALSE;
+  if(IS_NULL_PTR(dev)) return FALSE;
 
   return dev->image_storage.id > 0
          && dev->roi.width >= 32
@@ -647,7 +647,7 @@ static int32_t dt_dev_process_job_run(dt_job_t *job)
 dt_job_t *dt_dev_process_job_create(dt_develop_t *dev)
 {
   dt_job_t *job = dt_control_job_create(&dt_dev_process_job_run, "develop process image");
-  if(!job) return NULL;
+  if(IS_NULL_PTR(job)) return NULL;
   dt_control_job_set_params(job, dev, NULL);
   return job;
 }
@@ -681,7 +681,7 @@ static gboolean _dt_dev_mipmap_prefetch_full(dt_develop_t *dev, const int32_t im
 static gboolean _dt_dev_refresh_image_storage(dt_develop_t *dev, const int32_t imgid)
 {
   const dt_image_t *image = dt_image_cache_get(darktable.image_cache, imgid, 'r');
-  if(!image) return FALSE;
+  if(IS_NULL_PTR(image)) return FALSE;
   dev->image_storage = *image;
   dt_image_cache_read_release(darktable.image_cache, image);
   dt_iop_buffer_dsc_update_bpp(&dev->image_storage.dsc);
@@ -822,7 +822,7 @@ void dt_dev_check_zoom_pos_bounds(dt_develop_t *dev, float *dev_x, float *dev_y,
 
 void dt_dev_get_processed_size(const dt_develop_t *dev, int *procw, int *proch)
 {
-  if(!dev) return;
+  if(IS_NULL_PTR(dev)) return;
   *procw = dev->roi.processed_width;
   *proch = dev->roi.processed_height;
  }
@@ -1433,7 +1433,7 @@ dt_dev_pixelpipe_iop_t *dt_dev_distort_get_iop_pipe(dt_develop_t *dev, struct dt
 // set the module list order
 void dt_dev_reorder_gui_module_list(dt_develop_t *dev)
 {
-  if(!dev) return;
+  if(IS_NULL_PTR(dev)) return;
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_MODULE_MOVED);
 }
 
@@ -1531,7 +1531,7 @@ float dt_dev_get_natural_scale(dt_develop_t *dev)
 
 float dt_dev_get_fit_scale(dt_develop_t *dev)
 {
-  if(!dev) return 1.0f;
+  if(IS_NULL_PTR(dev)) return 1.0f;
   return dev->roi.scaling / darktable.gui->ppd;
 }
 
@@ -1542,7 +1542,7 @@ float dt_dev_get_overlay_scale(dt_develop_t *dev)
 
 float dt_dev_get_widget_zoom_scale(const dt_develop_t *dev, const float scaling)
 {
-  if(!dev) return 1.0f;
+  if(IS_NULL_PTR(dev)) return 1.0f;
   return scaling * dev->roi.natural_scale / darktable.gui->ppd;
 }
 
@@ -1570,7 +1570,7 @@ void dt_dev_get_image_box_in_widget(const dt_develop_t *dev, const int32_t width
 
 float dt_dev_get_zoom_level(const dt_develop_t *dev)
 {
-  if(!dev) return 1.f;
+  if(IS_NULL_PTR(dev)) return 1.f;
   return dev->roi.scaling * dev->roi.natural_scale;
 }
 

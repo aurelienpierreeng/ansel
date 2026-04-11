@@ -103,12 +103,12 @@ static gboolean _styles_open_popup_callback(GtkAccelGroup *group, GObject *accel
   }
 
   dt_lib_module_t *module = dt_lib_get_module("styles");
-  if(!module) return TRUE;
+  if(IS_NULL_PTR(module)) return TRUE;
 
   GtkWidget *w = darktable.gui->styles_popup.module
                   ? darktable.gui->styles_popup.module
                   : dt_lib_gui_get_expander(module);
-  if(!w) return TRUE;
+  if(IS_NULL_PTR(w)) return TRUE;
 
   darktable.gui->styles_popup.module = w;
 

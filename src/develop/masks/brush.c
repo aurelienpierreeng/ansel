@@ -1102,7 +1102,7 @@ static void _brush_get_distance(float point_x, float point_y, float radius,
                                 int corner_count, int *inside, int *inside_border,
                                 int *near, int *inside_source, float *distance)
 {
-  if(!mask_gui) return;
+  if(IS_NULL_PTR(mask_gui)) return;
 
   // initialise returned values
   *inside_source = 0;
@@ -1113,7 +1113,7 @@ static void _brush_get_distance(float point_x, float point_y, float radius,
 
   dt_masks_form_gui_points_t *gui_points
       = (dt_masks_form_gui_points_t *)g_list_nth_data(mask_gui->points, form_index);
-  if(!gui_points) return;
+  if(IS_NULL_PTR(gui_points)) return;
 
   float min_dist = FLT_MAX;
 
@@ -1394,7 +1394,7 @@ static gboolean _brush_get_gravity_center(const dt_masks_form_t *mask_form, floa
   if(points_count <= 0) return FALSE;
 
   float *point_buffer = dt_alloc_align_float((size_t)points_count * 2);
-  if(!point_buffer) return FALSE;
+  if(IS_NULL_PTR(point_buffer)) return FALSE;
 
   int i = 0;
   for(const GList *l = mask_form->points; l; l = g_list_next(l))
@@ -1422,7 +1422,7 @@ static float _brush_set_interaction_value(dt_masks_form_t *mask_form, dt_masks_i
                                           dt_masks_increment_t increment, int flow,
                                           dt_masks_form_gui_t *mask_gui, struct dt_iop_module_t *module)
 {
-  if(!mask_form) return NAN;
+  if(IS_NULL_PTR(mask_form)) return NAN;
   const int index = 0;
 
   switch(interaction)
@@ -1583,7 +1583,7 @@ static void _add_node_to_segment(struct dt_iop_module_t *module, dt_masks_form_t
 
   // we add a new node to the brush
   dt_masks_node_brush_t *new_node = (dt_masks_node_brush_t *)(malloc(sizeof(dt_masks_node_brush_t)));
-  if(!new_node) return;
+  if(IS_NULL_PTR(new_node)) return;
 
   // set coordinates
   dt_masks_gui_cursor_to_raw_norm(darktable.develop, mask_gui, new_node->node);
@@ -1668,10 +1668,10 @@ static int _brush_events_button_pressed(struct dt_iop_module_t *module, double w
       }
 
       if(!mask_gui->guipoints) mask_gui->guipoints = dt_masks_dynbuf_init(200000, "brush guipoints");
-      if(!mask_gui->guipoints) return 1;
+      if(IS_NULL_PTR(mask_gui->guipoints)) return 1;
       if(!mask_gui->guipoints_payload)
         mask_gui->guipoints_payload = dt_masks_dynbuf_init(400000, "brush guipoints_payload");
-      if(!mask_gui->guipoints_payload) return 1;
+      if(IS_NULL_PTR(mask_gui->guipoints_payload)) return 1;
       dt_masks_dynbuf_add_2(mask_gui->guipoints, mask_gui->pos[0], mask_gui->pos[1]);
       dt_masks_dynbuf_add_2(mask_gui->guipoints_payload, masks_border, masks_hardness);
       dt_masks_dynbuf_add_2(mask_gui->guipoints_payload, masks_density, pressure);
@@ -1693,7 +1693,7 @@ static int _brush_events_button_pressed(struct dt_iop_module_t *module, double w
 
   dt_masks_form_gui_points_t *gui_points
       = (dt_masks_form_gui_points_t *)g_list_nth_data(mask_gui->points, index);
-  if(!gui_points) return 0;
+  if(IS_NULL_PTR(gui_points)) return 0;
   const guint node_count = g_list_length(mask_form->points);
 
   if(which == 1)
@@ -1707,7 +1707,7 @@ static int _brush_events_button_pressed(struct dt_iop_module_t *module, double w
       {
         dt_masks_node_brush_t *node
             = (dt_masks_node_brush_t *)g_list_nth_data(mask_form->points, mask_gui->node_hovered);
-        if(!node) return 0;
+        if(IS_NULL_PTR(node)) return 0;
         dt_masks_toggle_bezier_node_type(module, mask_form, mask_gui, index, gui_points,
                                          mask_gui->node_hovered, node->node, node->ctrl1, node->ctrl2,
                                          &node->state);
@@ -1841,10 +1841,10 @@ static int _brush_events_button_released(struct dt_iop_module_t *module, double 
 {
   
   
-  if(!mask_gui) return 0;
+  if(IS_NULL_PTR(mask_gui)) return 0;
   dt_masks_form_gui_points_t *gui_points
       = (dt_masks_form_gui_points_t *)g_list_nth_data(mask_gui->points, index);
-  if(!gui_points) return 0;
+  if(IS_NULL_PTR(gui_points)) return 0;
 
   // The trick is to use the incremental setting, set to 1.0 to re-use the generic getter/setter without changing value
   float masks_border = dt_masks_get_set_conf_value(mask_form, "border", 1.0f,
@@ -1926,7 +1926,7 @@ static int _brush_events_button_released(struct dt_iop_module_t *module, double 
         }
         if(selected_index < 0) return 1;
         dt_masks_form_gui_t *visible_gui = darktable.develop->form_gui;
-        if(!visible_gui) return 1;
+        if(IS_NULL_PTR(visible_gui)) return 1;
         visible_gui->group_selected = selected_index;
 
         dt_masks_select_form(creation_module, dt_masks_get_from_id(darktable.develop, mask_form->formid));
@@ -1998,17 +1998,17 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, double widg
     return 1;
   }
 
-  if(!mask_form->points) return 0;
+  if(IS_NULL_PTR(mask_form->points)) return 0;
   dt_masks_form_gui_points_t *gui_points
       = (dt_masks_form_gui_points_t *)g_list_nth_data(mask_gui->points, index);
-  if(!gui_points) return 0;
+  if(IS_NULL_PTR(gui_points)) return 0;
   const guint node_count = g_list_length(mask_form->points);
 
   if(mask_gui->node_dragging >= 0)
   {
     dt_masks_node_brush_t *dragged_node
         = (dt_masks_node_brush_t *)g_list_nth_data(mask_form->points, mask_gui->node_dragging);
-    if(!dragged_node) return 0;
+    if(IS_NULL_PTR(dragged_node)) return 0;
 
     float delta_x = 0.0f;
     float delta_y = 0.0f;
@@ -2049,7 +2049,7 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, double widg
   {
     dt_masks_node_brush_t *node
         = (dt_masks_node_brush_t *)g_list_nth_data(mask_form->points, mask_gui->handle_dragging);
-    if(!node) return 0;
+    if(IS_NULL_PTR(node)) return 0;
 
     float cursor_pos[2];
     dt_masks_gui_delta_to_image_abs(mask_gui, cursor_pos);
@@ -2077,7 +2077,7 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, double widg
     const int node_index = mask_gui->handle_border_dragging;
     dt_masks_node_brush_t *node
         = (dt_masks_node_brush_t *)g_list_nth_data(mask_form->points, node_index);
-    if(!node) return 0;
+    if(IS_NULL_PTR(node)) return 0;
 
     float handle_x = NAN, handle_y = NAN;
     if(!_brush_get_border_handle_mirrored(gui_points, node_count, node_index, &handle_x, &handle_y))
@@ -2103,7 +2103,7 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, double widg
   else if(mask_gui->form_dragging || mask_gui->source_dragging)
   {
     dt_masks_node_brush_t *dragging_shape = (dt_masks_node_brush_t *)(mask_form->points)->data;
-    if(!dragging_shape) return 0;
+    if(IS_NULL_PTR(dragging_shape)) return 0;
 
     if(mask_gui->form_dragging)
     {
@@ -2274,7 +2274,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
     if(mask_gui->guipoints_count == 0)
     {
       dt_masks_form_t *mask_form = dt_masks_get_visible_form(darktable.develop);
-      if(!mask_form) return;
+      if(IS_NULL_PTR(mask_form)) return;
 
       const float masks_border = dt_masks_get_set_conf_value(mask_form, "border", 1.0f, BORDER_MIN, BORDER_MAX,
                                                              DT_MASKS_INCREMENT_SCALE, 1);
@@ -2433,8 +2433,8 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
 
   dt_masks_form_gui_points_t *gui_points
       = (dt_masks_form_gui_points_t *)g_list_nth_data(mask_gui->points, index);
-  if(!gui_points) return;
-  if(!gui_points->points) return;
+  if(IS_NULL_PTR(gui_points)) return;
+  if(IS_NULL_PTR(gui_points->points)) return;
 
   const int selected_node = dt_masks_gui_selected_node_index(mask_gui);
   const int selected_handle = dt_masks_gui_selected_handle_index(mask_gui);
@@ -2639,7 +2639,7 @@ static int _get_area(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pi
                      dt_masks_form_t *const mask_form, int *width, int *height, int *offset_x, int *offset_y,
                      int include_source)
 {
-  if(!module) return 1;
+  if(IS_NULL_PTR(module)) return 1;
   // we get buffers for all points
   float *points = NULL, *border = NULL;
   int points_count, border_count;
@@ -2722,7 +2722,7 @@ static int _brush_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe
                            dt_masks_form_t *const mask_form,
                            float **buffer, int *width, int *height, int *offset_x, int *offset_y)
 {
-  if(!module) return 1;
+  if(IS_NULL_PTR(module)) return 1;
   double timer_start = 0.0;
   double timer_step_start = 0.0;
   if(darktable.unmuted & DT_DEBUG_PERF) timer_start = timer_step_start = dt_get_wtime();
@@ -2901,7 +2901,7 @@ static int _brush_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixel
                                const dt_dev_pixelpipe_iop_t *const piece,
                                dt_masks_form_t *const mask_form, const dt_iop_roi_t *roi, float *buffer)
 {
-  if(!module) return 1;
+  if(IS_NULL_PTR(module)) return 1;
   double timer_start = 0.0;
   double timer_step_start = 0.0;
   if(darktable.unmuted & DT_DEBUG_PERF) timer_start = timer_step_start = dt_get_wtime();
@@ -3111,17 +3111,17 @@ static void _brush_initial_source_pos(const float iwd, const float iht, float *x
 static void _brush_switch_node_callback(GtkWidget *widget, gpointer user_data)
 {
   dt_masks_form_gui_t *mask_gui = (dt_masks_form_gui_t *)user_data;
-  if(!mask_gui) return;
+  if(IS_NULL_PTR(mask_gui)) return;
 
   dt_iop_module_t *module = darktable.develop->gui_module;
-  if(!module) return;
+  if(IS_NULL_PTR(module)) return;
 
   mask_gui->node_selected = TRUE;
   mask_gui->node_selected_idx = mask_gui->node_hovered;
 
   const int form_id = mask_gui->formid;
   dt_masks_form_t *selected_form = dt_masks_get_from_id(darktable.develop, form_id);
-  if(!selected_form) return;
+  if(IS_NULL_PTR(selected_form)) return;
   dt_masks_form_gui_points_t *gui_points
       = (dt_masks_form_gui_points_t *)g_list_nth_data(mask_gui->points, mask_gui->group_selected);
   const int node_index = dt_masks_gui_selected_node_index(mask_gui);
@@ -3135,17 +3135,17 @@ static void _brush_switch_node_callback(GtkWidget *widget, gpointer user_data)
 static void _brush_reset_round_node_callback(GtkWidget *widget, gpointer user_data)
 {
   dt_masks_form_gui_t *mask_gui = (dt_masks_form_gui_t *)user_data;
-  if(!mask_gui) return;
+  if(IS_NULL_PTR(mask_gui)) return;
 
   dt_iop_module_t *module = darktable.develop->gui_module;
-  if(!module) return;
+  if(IS_NULL_PTR(module)) return;
 
   mask_gui->node_selected = TRUE;
   mask_gui->node_selected_idx = mask_gui->node_hovered;
 
   const int form_id = mask_gui->formid;
   dt_masks_form_t *selected_form = dt_masks_get_from_id(darktable.develop, form_id);
-  if(!selected_form) return;
+  if(IS_NULL_PTR(selected_form)) return;
   dt_masks_form_gui_points_t *gui_points
       = (dt_masks_form_gui_points_t *)g_list_nth_data(mask_gui->points, mask_gui->group_selected);
   const int selected_handle = dt_masks_gui_selected_handle_index(mask_gui);
@@ -3160,15 +3160,15 @@ static void _brush_reset_round_node_callback(GtkWidget *widget, gpointer user_da
 static void _brush_add_node_callback(GtkWidget *menu, gpointer user_data)
 {
   dt_masks_form_gui_t *mask_gui = (dt_masks_form_gui_t *)user_data;
-  if(!mask_gui) return;
+  if(IS_NULL_PTR(mask_gui)) return;
   dt_masks_form_t *visible_forms = dt_masks_get_visible_form(darktable.develop);
-  if(!visible_forms) return;
+  if(IS_NULL_PTR(visible_forms)) return;
 
   dt_iop_module_t *module = darktable.develop->gui_module;
-  if(!module) return;
+  if(IS_NULL_PTR(module)) return;
 
   dt_masks_form_group_t *group_entry = dt_masks_form_get_selected_group(visible_forms, mask_gui);
-  if(!group_entry) return;
+  if(IS_NULL_PTR(group_entry)) return;
   dt_masks_form_t *selected_form = dt_masks_get_from_id(darktable.develop, group_entry->formid);
   if(selected_form)
   {

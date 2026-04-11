@@ -439,7 +439,7 @@ static gboolean _prepare_blur_context(dt_aligned_pixel_simd_t *blur_px, const fl
                                       const int patch_origin_x, const int patch_origin_y,
                                       const dt_drawlayer_brush_runtime_view_t *view)
 {
-  if(!blur_px) return FALSE;
+  if(IS_NULL_PTR(blur_px)) return FALSE;
   float blur_weight_sum = 0.0f;
   dt_aligned_pixel_simd_t blur_sum = dt_simd_set1(0.0f);
   const dt_drawlayer_brush_dab_t *dab = view->dab;

@@ -462,7 +462,7 @@ static gboolean _tag_execute(const GList *tags, const GList *imgs, GList **undo,
 
 gboolean dt_tag_attach_images(const guint tagid, const GList *img, const gboolean undo_on)
 {
-  if(!img) return FALSE;
+  if(IS_NULL_PTR(img)) return FALSE;
   GList *undo = NULL;
   GList *tags = NULL;
 
@@ -1257,7 +1257,7 @@ void dt_tag_count_tags_images(const gchar *keyword, int *tag_count, int *img_cou
   *tag_count = 0;
   *img_count = 0;
 
-  if(!keyword) return;
+  if(IS_NULL_PTR(keyword)) return;
   gchar *keyword_expr = g_strdup_printf("%s|", keyword);
 
   /* Only select tags that are equal or child to the one we are looking for once. */
@@ -1303,7 +1303,7 @@ void dt_tag_get_tags_images(const gchar *keyword, GList **tag_list, GList **img_
 {
   sqlite3_stmt *stmt;
 
-  if(!keyword) return;
+  if(IS_NULL_PTR(keyword)) return;
   gchar *keyword_expr = g_strdup_printf("%s|", keyword);
 
 /* Only select tags that are equal or child to the one we are looking for once. */
@@ -1581,7 +1581,7 @@ uint32_t dt_tag_get_recent_used(GList **result)
 ssize_t dt_tag_import(const char *filename)
 {
   FILE *fd = g_fopen(filename, "r");
-  if(!fd) return -1;
+  if(IS_NULL_PTR(fd)) return -1;
 
   GList * hierarchy = NULL;
   char *line = NULL;
@@ -1717,7 +1717,7 @@ ssize_t dt_tag_export(const char *filename)
 {
   FILE *fd = g_fopen(filename, "w");
 
-  if(!fd) return -1;
+  if(IS_NULL_PTR(fd)) return -1;
 
   GList *tags = NULL;
   gint count = 0;
@@ -1857,7 +1857,7 @@ gboolean dt_tag_get_tag_order_by_id(const uint32_t tagid, uint32_t *sort,
 
 uint32_t dt_tag_get_tag_id_by_name(const char * const name)
 {
-  if(!name) return 0;
+  if(IS_NULL_PTR(name)) return 0;
   uint32_t tagid = 0;
   // clang-format off
   const char *query = "SELECT T.id, T.flags FROM data.tags AS T "

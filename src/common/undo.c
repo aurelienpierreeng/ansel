@@ -91,7 +91,7 @@ static void _undo_record(dt_undo_t *self, gpointer user_data, dt_undo_type_t typ
                          void (*undo)(gpointer user_data, dt_undo_type_t type, dt_undo_data_t item, dt_undo_action_t action, GList **imgs),
                          void (*free_data)(gpointer data))
 {
-  if(!self) return;
+  if(IS_NULL_PTR(self)) return;
 
   if(self->disable_next)
   {
@@ -133,7 +133,7 @@ static void _undo_record(dt_undo_t *self, gpointer user_data, dt_undo_type_t typ
 
 void dt_undo_start_group(dt_undo_t *self, dt_undo_type_t type)
 {
-  if(!self) return;
+  if(IS_NULL_PTR(self)) return;
 
   if(self->group == DT_UNDO_NONE)
   {
@@ -148,7 +148,7 @@ void dt_undo_start_group(dt_undo_t *self, dt_undo_type_t type)
 
 void dt_undo_end_group(dt_undo_t *self)
 {
-  if(!self) return;
+  if(IS_NULL_PTR(self)) return;
 
   assert(self->group_indent>0);
   self->group_indent--;
@@ -174,7 +174,7 @@ gint _images_list_cmp(gconstpointer a, gconstpointer b)
 
 static void _undo_do_undo_redo(dt_undo_t *self, uint32_t filter, dt_undo_action_t action)
 {
-  if(!self) return;
+  if(IS_NULL_PTR(self)) return;
 
   LOCK;
 
@@ -281,7 +281,7 @@ void dt_undo_do_undo(dt_undo_t *self, uint32_t filter)
 
 static gboolean _is_do_undo_list_populated(dt_undo_t *self, uint32_t filter, dt_undo_action_t action)
 {
-  if(!self) return FALSE;
+  if(IS_NULL_PTR(self)) return FALSE;
   gboolean found_something = FALSE;
 
   LOCK;
@@ -336,7 +336,7 @@ static void _undo_clear_list(GList **list, uint32_t filter)
 
 void dt_undo_clear(dt_undo_t *self, uint32_t filter)
 {
-  if(!self) return;
+  if(IS_NULL_PTR(self)) return;
 
   LOCK;
   _undo_clear_list(&self->undo_list, filter);
@@ -364,7 +364,7 @@ static void _undo_iterate(GList *list, uint32_t filter, gpointer user_data,
 void dt_undo_iterate_internal(dt_undo_t *self, uint32_t filter, gpointer user_data,
                               void (*apply)(gpointer user_data, dt_undo_type_t type, dt_undo_data_t item))
 {
-  if(!self) return;
+  if(IS_NULL_PTR(self)) return;
 
   _undo_iterate(self->undo_list, filter, user_data, apply);
   _undo_iterate(self->redo_list, filter, user_data, apply);
@@ -374,7 +374,7 @@ void dt_undo_iterate_internal(dt_undo_t *self, uint32_t filter, gpointer user_da
 void dt_undo_iterate(dt_undo_t *self, uint32_t filter, gpointer user_data,
                      void (*apply)(gpointer user_data, dt_undo_type_t type, dt_undo_data_t item))
 {
-  if(!self) return;
+  if(IS_NULL_PTR(self)) return;
 
   LOCK;
   dt_undo_iterate_internal(self, filter, user_data, apply);

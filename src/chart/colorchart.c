@@ -49,7 +49,7 @@ typedef enum parser_state_t {
 
 void free_chart(chart_t *chart)
 {
-  if(!chart) return;
+  if(IS_NULL_PTR(chart)) return;
   g_list_free_full(chart->f_list, dt_free_gpointer);
   chart->f_list = NULL;
   if(chart->d_table) g_hash_table_unref(chart->d_table);

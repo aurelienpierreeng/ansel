@@ -544,7 +544,7 @@ cmsHPROFILE dt_colorspaces_create_alternate_profile(const char *makermodel)
       break;
     }
   }
-  if(!preset) return NULL;
+  if(IS_NULL_PTR(preset)) return NULL;
 
   const float wxyz = preset->white[0] + preset->white[1] + preset->white[2];
   const float rxyz = preset->rXYZ[0] + preset->rXYZ[1] + preset->rXYZ[2];
@@ -594,7 +594,7 @@ cmsHPROFILE dt_colorspaces_create_vendor_profile(const char *makermodel)
       break;
     }
   }
-  if(!preset) return NULL;
+  if(IS_NULL_PTR(preset)) return NULL;
 
   const float wxyz = preset->white[0] + preset->white[1] + preset->white[2];
   const float rxyz = preset->rXYZ[0] + preset->rXYZ[1] + preset->rXYZ[2];
@@ -644,7 +644,7 @@ cmsHPROFILE dt_colorspaces_create_darktable_profile(const char *makermodel)
       break;
     }
   }
-  if(!preset) return NULL;
+  if(IS_NULL_PTR(preset)) return NULL;
 
   const float wxyz = preset->white[0] + preset->white[1] + preset->white[2];
   const float rxyz = preset->rXYZ[0] + preset->rXYZ[1] + preset->rXYZ[2];
@@ -1079,7 +1079,7 @@ dt_colorspaces_color_profile_type_t dt_colorspaces_get_input_profile_from_image(
     return DT_COLORSPACE_NONE;
 
   const dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
-  if(!img) return DT_COLORSPACE_NONE;
+  if(IS_NULL_PTR(img)) return DT_COLORSPACE_NONE;
 
   if(!dt_image_is_matrix_correction_supported(img))
   {
@@ -1098,7 +1098,7 @@ dt_colorspaces_color_profile_type_t dt_colorspaces_get_input_profile_from_image(
   }
 
   img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
-  if(!img) return DT_COLORSPACE_NONE;
+  if(IS_NULL_PTR(img)) return DT_COLORSPACE_NONE;
 
   cmsHPROFILE profile = NULL;
   dt_colorspaces_color_profile_type_t type = requested;
@@ -1358,7 +1358,7 @@ cmsHPROFILE dt_colorspaces_get_rgb_profile_from_mem(uint8_t *data, uint32_t size
 
 void dt_colorspaces_cleanup_profile(cmsHPROFILE p)
 {
-  if(!p) return;
+  if(IS_NULL_PTR(p)) return;
   cmsCloseProfile(p);
 }
 
@@ -1498,9 +1498,9 @@ static void _update_display_transforms(dt_colorspaces_t *self)
   const dt_colorspaces_color_profile_t *display_dt_profile = _get_profile(self, self->display_type,
                                                                           self->display_filename,
                                                                           DT_PROFILE_DIRECTION_DISPLAY);
-  if(!display_dt_profile) return;
+  if(IS_NULL_PTR(display_dt_profile)) return;
   cmsHPROFILE display_profile = display_dt_profile->profile;
-  if(!display_profile) return;
+  if(IS_NULL_PTR(display_profile)) return;
 
   self->transform_srgb_to_display = cmsCreateTransform(_get_profile(self, DT_COLORSPACE_SRGB, "",
                                                                     DT_PROFILE_DIRECTION_DISPLAY)->profile,

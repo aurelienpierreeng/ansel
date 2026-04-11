@@ -145,7 +145,7 @@ static gboolean draw_image_callback(GtkWidget *widget, cairo_t *cr, gpointer use
   draw_image(cr, image);
 
   // done when no chart was loaded
-  if(!chart) return FALSE;
+  if(IS_NULL_PTR(chart)) return FALSE;
 
   // draw overlay
   point_t bb[4];
@@ -368,7 +368,7 @@ static gboolean open_image(image_t *image, const char *filename)
 
   free_image(image);
 
-  if(!filename) return FALSE;
+  if(IS_NULL_PTR(filename)) return FALSE;
 
   float *pfm = read_pfm(filename, &width, &height);
 
@@ -656,7 +656,7 @@ static void export_style(dt_lut_t *self, const char *filename, const char *name,
   int num = 0;
 
   FILE *fd = g_fopen(filename, "w");
-  if(!fd) return;
+  if(IS_NULL_PTR(fd)) return;
 
   fprintf(fd, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
   fprintf(fd, "<darktable_style version=\"1.0\">\n");
@@ -703,7 +703,7 @@ static void export_raw(dt_lut_t *self, char *filename, char *name, char *descrip
   gpointer key, value;
 
   FILE *fd = g_fopen(filename, "w");
-  if(!fd) return;
+  if(IS_NULL_PTR(fd)) return;
 
   GList *patch_names = NULL;
 
@@ -725,7 +725,7 @@ static void export_raw(dt_lut_t *self, char *filename, char *name, char *descrip
 static void export_raw_button_clicked_callback(GtkButton *button, gpointer user_data)
 {
   dt_lut_t *self = (dt_lut_t *)user_data;
-  if(!self->chart) return;
+  if(IS_NULL_PTR(self->chart)) return;
 
   char *name = NULL, *description = NULL;
   char *filename = get_export_filename(self, ".csv", &name, &description, NULL, NULL, NULL, NULL);
@@ -1112,7 +1112,7 @@ static void process_button_clicked_callback(GtkButton *button, gpointer user_dat
   self->tonecurve_encoded = NULL;
   self->colorchecker_encoded = NULL;
 
-  if(!self->chart) return;
+  if(IS_NULL_PTR(self->chart)) return;
 
   int i = 0;
   int N = g_hash_table_size(self->chart->box_table);
@@ -1452,7 +1452,7 @@ static void init_table(dt_lut_t *self)
 
   gtk_list_store_clear(GTK_LIST_STORE(self->model));
 
-  if(!self->chart) return;
+  if(IS_NULL_PTR(self->chart)) return;
 
   GList *patch_names = g_hash_table_get_keys(self->chart->box_table);
   patch_names = g_list_sort(patch_names, (GCompareFunc)g_strcmp0);
@@ -1523,7 +1523,7 @@ static void get_xyz_sample_from_image(const image_t *const image, float shrink, 
 
   xyz[0] = xyz[1] = xyz[2] = 0.0;
 
-  if(!box) return;
+  if(IS_NULL_PTR(box)) return;
 
   get_boundingbox(image, bb);
   get_homography(bb_ref, bb, homography);
@@ -1643,7 +1643,7 @@ static void init_image(dt_lut_t *self, image_t *image, GCallback motion_cb)
 
 static void free_image(image_t *image)
 {
-  if(!image) return;
+  if(IS_NULL_PTR(image)) return;
   reset_bb(image);
   if(image->image) cairo_pattern_destroy(image->image);
   if(image->surface) cairo_surface_destroy(image->surface);
@@ -1745,7 +1745,7 @@ static int parse_csv(dt_lut_t *self, const char *filename, double **target_L_ptr
   *description = NULL;
 
   FILE *f = g_fopen(filename, "rb");
-  if(!f) return 0;
+  if(IS_NULL_PTR(f)) return 0;
   int N = 0;
   while(fscanf(f, "%*[^\n]\n") != EOF) N++;
   fseek(f, 0, SEEK_SET);

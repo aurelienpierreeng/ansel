@@ -1331,7 +1331,7 @@ void *get_params(dt_lib_module_t *self, int *size)
 
 int set_params(dt_lib_module_t *self, const void *params, int size)
 {
-  if(!params) return 1;
+  if(IS_NULL_PTR(params)) return 1;
 
   _apply_preferences(params, self);
   _save_preferences(self);

@@ -447,7 +447,7 @@ dt_l10n_t *dt_l10n_init(gboolean init_list)
 
 const char *dt_l10n_get_name(const dt_l10n_language_t *language)
 {
-  if(!language) return NULL;
+  if(IS_NULL_PTR(language)) return NULL;
 
   return language->name ? language->name : language->code;
 }

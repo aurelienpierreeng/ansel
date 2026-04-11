@@ -399,7 +399,7 @@ static inline size_t _get_total_memory()
 {
 #if defined(__linux__)
   FILE *f = g_fopen("/proc/meminfo", "rb");
-  if(!f) return 0;
+  if(IS_NULL_PTR(f)) return 0;
   size_t mem = 0;
   char *line = NULL;
   size_t len = 0;
@@ -1642,7 +1642,7 @@ size_t get_usable_memory_bytes()
 size_t get_usable_memory_bytes()
 {
   FILE *f = g_fopen("/proc/meminfo", "r");
-  if(!f) return 0;
+  if(IS_NULL_PTR(f)) return 0;
 
   char line[256];
   size_t available_kb = 0;
@@ -1809,7 +1809,7 @@ void dt_print_mem_usage()
   snprintf(pidstatus, sizeof(pidstatus), "/proc/%u/status", (uint32_t)getpid());
 
   f = g_fopen(pidstatus, "r");
-  if(!f) return;
+  if(IS_NULL_PTR(f)) return;
 
   /* read memory size data from /proc/pid/status */
   while(getline(&line, &len, f) != -1)

@@ -97,7 +97,7 @@ static int _guides_get_value(gchar *name)
 
 static gchar *_conf_get_path(gchar *module_name, gchar *property_1, gchar *property_2)
 {
-  if(!darktable.view_manager) return NULL;
+  if(IS_NULL_PTR(darktable.view_manager)) return NULL;
   const dt_view_t *cv = dt_view_manager_get_current_view(darktable.view_manager);
   // in lighttable, we store panels states per layout
   char lay[32] = "";
@@ -764,7 +764,7 @@ GtkWidget *dt_guides_popover(dt_view_t *self, GtkWidget *button)
 
 void dt_guides_update_button_state()
 {
-  if(!darktable.view_manager) return;
+  if(IS_NULL_PTR(darktable.view_manager)) return;
   GtkWidget *bt = darktable.view_manager->guides_toggle;
 
   gchar *key = _conf_get_path("global", "show", NULL);
@@ -792,7 +792,7 @@ void dt_guides_draw(cairo_t *cr, const float left, const float top, const float 
 
   // let's get the guide to show
   dt_guides_t *guide = _conf_get_guide("global");
-  if(!guide) return;
+  if(IS_NULL_PTR(guide)) return;
 
   int flip = 0;
   // retrieve guide flip

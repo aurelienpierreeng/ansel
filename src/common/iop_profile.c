@@ -1138,7 +1138,7 @@ dt_colorspaces_cl_global_t *dt_colorspaces_init_cl_global()
 
 void dt_colorspaces_free_cl_global(dt_colorspaces_cl_global_t *g)
 {
-  if(!g) return;
+  if(IS_NULL_PTR(g)) return;
 
   // destroy kernels
   dt_opencl_free_kernel(g->kernel_colorspaces_transform_lab_to_rgb_matrix);

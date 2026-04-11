@@ -406,7 +406,7 @@ static dt_masks_form_group_t *rt_get_mask_point_group(dt_iop_module_t *self, int
   dt_masks_form_group_t *form_point_group = NULL;
 
   const dt_develop_blend_params_t *bp = self->blend_params;
-  if(!bp) return form_point_group;
+  if(IS_NULL_PTR(bp)) return form_point_group;
 
   const dt_masks_form_t *grp = dt_masks_get_from_id(self->dev, bp->mask_id);
   if(grp && (grp->type & DT_MASKS_GROUP))
@@ -736,7 +736,7 @@ static void rt_resynch_params(struct dt_iop_module_t *self)
   for(GList *forms = grp->points; (new_form_index < RETOUCH_NO_FORMS) && forms; forms = g_list_next(forms))
   {
     dt_masks_form_group_t *grpt = (dt_masks_form_group_t *)forms->data;
-    if(!grpt) return;
+    if(IS_NULL_PTR(grpt)) return;
     
     const int formid = grpt->formid;
 
@@ -909,28 +909,28 @@ static int rt_masks_get_delta_to_destination(dt_iop_module_t *self, const dt_dev
   if(form->type & DT_MASKS_POLYGON)
   {
     const dt_masks_node_polygon_t *pt = (dt_masks_node_polygon_t *)form->points->data;
-    if(!pt) return 0;
+    if(IS_NULL_PTR(pt)) return 0;
 
     res = rt_masks_point_calc_delta(self, pipe, piece, roi, pt->node, form->source, dx, dy, distort_mode);
   }
   else if(form->type & DT_MASKS_CIRCLE)
   {
     const dt_masks_node_circle_t *pt = (dt_masks_node_circle_t *)form->points->data;
-    if(!pt) return 0;
+    if(IS_NULL_PTR(pt)) return 0;
 
     res = rt_masks_point_calc_delta(self, pipe, piece, roi, pt->center, form->source, dx, dy, distort_mode);
   }
   else if(form->type & DT_MASKS_ELLIPSE)
   {
     const dt_masks_node_ellipse_t *pt = (dt_masks_node_ellipse_t *)form->points->data;
-    if(!pt) return 0;
+    if(IS_NULL_PTR(pt)) return 0;
 
     res = rt_masks_point_calc_delta(self, pipe, piece, roi, pt->center, form->source, dx, dy, distort_mode);
   }
   else if(form->type & DT_MASKS_BRUSH)
   {
     const dt_masks_node_brush_t *pt = (dt_masks_node_brush_t *)form->points->data;
-    if(!pt) return 0;
+    if(IS_NULL_PTR(pt)) return 0;
 
     res = rt_masks_point_calc_delta(self, pipe, piece, roi, pt->node, form->source, dx, dy, distort_mode);
   }
@@ -1977,7 +1977,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 void masks_selection_changed(struct dt_iop_module_t *self, const int form_selected_id)
 {
   dt_iop_retouch_gui_data_t *g = (dt_iop_retouch_gui_data_t *)self->gui_data;
-  if(!g) return;
+  if(IS_NULL_PTR(g)) return;
 
   dt_iop_gui_enter_critical_section(self);
   rt_shape_selection_changed(self);
@@ -4432,7 +4432,7 @@ static void rt_menu_select_algorithm_callback(GtkWidget *widget, gpointer user_d
   if(algo < DT_IOP_RETOUCH_CLONE || algo > DT_IOP_RETOUCH_FILL) return;
   if(p->rt_forms[index].algorithm == algo) return;
   dt_masks_form_t *form = dt_masks_get_from_id(self->dev, formid);
-  if(!form) return;
+  if(IS_NULL_PTR(form)) return;
 
   // Apply the new algorithm to the form
   p->rt_forms[index].algorithm = algo;

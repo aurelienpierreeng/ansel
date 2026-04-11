@@ -807,7 +807,7 @@ static gboolean _prepare_resampling_plan(const struct dt_interpolation *itor,
 
   const size_t totalreq = kernelreq + lengthreq + indexreq + scratchreq + metareq;
   void *blob = dt_pixelpipe_cache_alloc_align_cache(totalreq, 0);
-  if(!blob) return TRUE;
+  if(IS_NULL_PTR(blob)) return TRUE;
 
   int *lengths = (int *)blob;
   blob = (char *)blob + lengthreq;
@@ -1110,7 +1110,7 @@ dt_interpolation_cl_global_t *dt_interpolation_init_cl_global()
 
 void dt_interpolation_free_cl_global(dt_interpolation_cl_global_t *g)
 {
-  if(!g) return;
+  if(IS_NULL_PTR(g)) return;
   // destroy kernels
   dt_opencl_free_kernel(g->kernel_interpolation_resample);
   dt_free(g);

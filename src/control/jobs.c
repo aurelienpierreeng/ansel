@@ -87,7 +87,7 @@ static inline int dt_control_job_equal(_dt_job_t *j1, _dt_job_t *j2)
 
 static void dt_control_job_set_state(_dt_job_t *job, dt_job_state_t state)
 {
-  if(!job) return;
+  if(IS_NULL_PTR(job)) return;
   dt_pthread_mutex_lock(&job->state_mutex);
   if(state >= DT_JOB_STATE_FINISHED  && job->state != DT_JOB_STATE_RUNNING && job->progress)
   {
@@ -102,7 +102,7 @@ static void dt_control_job_set_state(_dt_job_t *job, dt_job_state_t state)
 
 dt_job_state_t dt_control_job_get_state(_dt_job_t *job)
 {
-  if(!job) return DT_JOB_STATE_DISPOSED;
+  if(IS_NULL_PTR(job)) return DT_JOB_STATE_DISPOSED;
   dt_pthread_mutex_lock(&job->state_mutex);
   dt_job_state_t state = job->state;
   dt_pthread_mutex_unlock(&job->state_mutex);
@@ -128,14 +128,14 @@ void dt_control_job_set_params_with_size(dt_job_t *job, void *params, size_t par
 
 void *dt_control_job_get_params(const _dt_job_t *job)
 {
-  if(!job) return NULL;
+  if(IS_NULL_PTR(job)) return NULL;
   return job->params;
 }
 
 dt_job_t *dt_control_job_create(dt_job_execute_callback execute, const char *msg, ...)
 {
   _dt_job_t *job = (_dt_job_t *)calloc(1, sizeof(_dt_job_t));
-  if(!job) return NULL;
+  if(IS_NULL_PTR(job)) return NULL;
 
   va_list ap;
   va_start(ap, msg);
@@ -152,7 +152,7 @@ dt_job_t *dt_control_job_create(dt_job_execute_callback execute, const char *msg
 
 void dt_control_job_dispose(_dt_job_t *job)
 {
-  if(!job) return;
+  if(IS_NULL_PTR(job)) return;
   if(job->progress) dt_control_progress_destroy(darktable.control, job->progress);
   job->progress = NULL;
   dt_control_job_set_state(job, DT_JOB_STATE_DISPOSED);
@@ -173,7 +173,7 @@ void dt_control_job_set_state_callback(_dt_job_t *job, dt_job_state_change_callb
 
 static void dt_control_job_print(_dt_job_t *job)
 {
-  if(!job) return;
+  if(IS_NULL_PTR(job)) return;
   dt_print(DT_DEBUG_CONTROL, "%s | queue: %d | priority: %d", job->description, job->queue, job->priority);
 }
 
@@ -184,7 +184,7 @@ void dt_control_job_cancel(_dt_job_t *job)
 
 void dt_control_job_wait(_dt_job_t *job)
 {
-  if(!job) return;
+  if(IS_NULL_PTR(job)) return;
   dt_job_state_t state = dt_control_job_get_state(job);
 
   // NOTE: could also use signals.
@@ -214,7 +214,7 @@ static int32_t dt_control_run_job_res(dt_control_t *control, int32_t res)
   }
   control->new_res[res] = 0;
   dt_pthread_mutex_unlock(&control->res_mutex);
-  if(!job) return -1;
+  if(IS_NULL_PTR(job)) return -1;
 
   /* change state to running */
   dt_pthread_mutex_lock(&job->wait_mutex);
@@ -325,7 +325,7 @@ static int32_t dt_control_run_job(dt_control_t *control)
 {
   _dt_job_t *job = dt_control_schedule_job(control);
 
-  if(!job) return -1;
+  if(IS_NULL_PTR(job)) return -1;
 
   /* change state to running */
   dt_pthread_mutex_lock(&job->wait_mutex);
@@ -611,7 +611,7 @@ static void *dt_control_work(void *ptr)
 // this allows to show the gui indicator of the job even before it got scheduled
 void dt_control_job_add_progress(dt_job_t *job, const char *message, gboolean cancellable)
 {
-  if(!job) return;
+  if(IS_NULL_PTR(job)) return;
   job->progress = dt_control_progress_create(darktable.control, TRUE, message);
   if(cancellable)
     dt_control_progress_attach_job(darktable.control, job->progress, job);

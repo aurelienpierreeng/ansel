@@ -219,10 +219,10 @@ static void _preview_window_open(GtkWidget *widget, dt_thumbnail_t *thumb)
 static void _active_modules_popup(GtkWidget *widget, dt_thumbnail_t *thumb)
 {
   (void)widget;
-  if(!thumb) return;
+  if(IS_NULL_PTR(thumb)) return;
 
   sqlite3 *handle = dt_database_get(darktable.db);
-  if(!handle) return;
+  if(IS_NULL_PTR(handle)) return;
 
   static const char *sql =
       "SELECT MIN(num) AS num, operation, multi_name "
@@ -375,7 +375,7 @@ static void _free_image_surface(dt_thumbnail_t *thumb)
 
 static void _thumbnail_free(dt_thumbnail_t *thumb)
 {
-  if(!thumb) return;
+  if(IS_NULL_PTR(thumb)) return;
 
   _free_image_surface(thumb);
   dt_pthread_mutex_destroy(&thumb->lock);
@@ -385,7 +385,7 @@ static void _thumbnail_free(dt_thumbnail_t *thumb)
 static void _thumbnail_release(void *data)
 {
   dt_thumbnail_t *thumb = (dt_thumbnail_t *)data;
-  if(!thumb) return;
+  if(IS_NULL_PTR(thumb)) return;
 
   if(dt_atomic_sub_int(&thumb->ref_count, 1) == 1)
     _thumbnail_free(thumb);
@@ -621,7 +621,7 @@ int dt_thumbnail_get_image_buffer(dt_thumbnail_t *thumb)
   // can be expensive on large thumbnails. Do it in a background job,
   // so the thumbtable stays responsive.
   dt_job_t *job = dt_control_job_create(&_get_image_buffer, "get image %i", thumb->info.id);
-  if(!job) return 1;
+  if(IS_NULL_PTR(job)) return 1;
 
   dt_pthread_mutex_lock(&thumb->lock);
   // Re-check now that we are about to publish the job pointer.
@@ -726,7 +726,7 @@ _thumb_draw_image(GtkWidget *widget, cairo_t *cr, gpointer user_data)
 static void _thumb_update_icons(dt_thumbnail_t *thumb)
 {
   thumb_return_if_fails(thumb);
-  if(!thumb->widget) return;
+  if(IS_NULL_PTR(thumb->widget)) return;
 
   gboolean show = (thumb->over > DT_THUMBNAIL_OVERLAYS_NONE);
 
@@ -1382,7 +1382,7 @@ dt_thumbnail_t *dt_thumbnail_new(int rowid, dt_thumbnail_overlay_t over, dt_thum
 
 int dt_thumbnail_destroy(dt_thumbnail_t *thumb)
 {
-  if(!thumb) return 0;
+  if(IS_NULL_PTR(thumb)) return 0;
 
   dt_atomic_set_int(&thumb->destroying, TRUE);
 

@@ -1003,7 +1003,7 @@ static void presets_popup_callback(GtkButton *button, dt_lib_module_t *module)
 static void _lib_module_expander_gone(gpointer user_data, GObject *where_the_object_was)
 {
   dt_lib_module_t *module = (dt_lib_module_t *)user_data;
-  if(!module) return;
+  if(IS_NULL_PTR(module)) return;
   if(module->expander == (GtkWidget *)where_the_object_was) module->expander = NULL;
   if(darktable.gui)
   {
@@ -1015,7 +1015,7 @@ static void _lib_module_expander_gone(gpointer user_data, GObject *where_the_obj
 
 void dt_lib_gui_set_expanded(dt_lib_module_t *module, gboolean expanded)
 {
-  if(!module->expander) return;
+  if(IS_NULL_PTR(module->expander)) return;
   if(!DTGTK_IS_EXPANDER(module->expander))
   {
     module->expander = NULL;
@@ -1052,7 +1052,7 @@ void dt_lib_gui_set_expanded(dt_lib_module_t *module, gboolean expanded)
 gboolean dt_lib_gui_get_expanded(dt_lib_module_t *module)
 {
   if(!module->expandable(module)) return true;
-  if(!module->expander) return true;
+  if(IS_NULL_PTR(module->expander)) return true;
   if(!DTGTK_IS_EXPANDER(module->expander))
   {
     module->expander = NULL;
@@ -1060,7 +1060,7 @@ gboolean dt_lib_gui_get_expanded(dt_lib_module_t *module)
     {
       char var[1024];
       const dt_view_t *current_view = dt_view_manager_get_current_view(darktable.view_manager);
-      if(!current_view) return true;
+      if(IS_NULL_PTR(current_view)) return true;
       snprintf(var, sizeof(var), "plugins/%s/%s/expanded", current_view->module_name, module->plugin_name);
       return dt_conf_get_bool(var);
     }
@@ -1367,7 +1367,7 @@ void dt_lib_colorpicker_set_box_area(dt_lib_t *lib, const dt_boundingbox_t box)
 {
   dt_develop_t *const dev = darktable.develop;
   dt_colorpicker_sample_t *const sample = dev ? dev->color_picker.primary_sample : NULL;
-  if(!sample) return;
+  if(IS_NULL_PTR(sample)) return;
 
   gboolean changed = (sample->size != DT_LIB_COLORPICKER_SIZE_BOX);
   sample->size = DT_LIB_COLORPICKER_SIZE_BOX;
@@ -1386,7 +1386,7 @@ void dt_lib_colorpicker_set_point(dt_lib_t *lib, const float pos[2])
 {
   dt_develop_t *const dev = darktable.develop;
   dt_colorpicker_sample_t *const sample = dev ? dev->color_picker.primary_sample : NULL;
-  if(!sample) return;
+  if(IS_NULL_PTR(sample)) return;
 
   const gboolean changed = sample->size != DT_LIB_COLORPICKER_SIZE_POINT
                         || sample->point[0] != pos[0]

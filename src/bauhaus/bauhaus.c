@@ -1496,7 +1496,7 @@ void dt_bauhaus_combobox_from_widget(dt_bauhaus_t *bh, dt_bauhaus_widget_t* w,dt
 
 static dt_bauhaus_combobox_data_t *_combobox_data(GtkWidget *widget)
 {
-  if(!widget) return NULL;
+  if(IS_NULL_PTR(widget)) return NULL;
   struct dt_bauhaus_widget_t *w = DT_BAUHAUS_WIDGET(widget);
   if(w->type != DT_BAUHAUS_COMBOBOX) return NULL;
   dt_bauhaus_combobox_data_t *d = &w->data.combobox;
@@ -1508,7 +1508,7 @@ static dt_bauhaus_combobox_data_t *_combobox_data(GtkWidget *widget)
 
 void dt_bauhaus_combobox_add_populate_fct(GtkWidget *widget, void (*fct)(GtkWidget *w, void *module))
 {
-  if(!widget) return;
+  if(IS_NULL_PTR(widget)) return;
   struct dt_bauhaus_widget_t *w = DT_BAUHAUS_WIDGET(widget);
   if(w->type == DT_BAUHAUS_COMBOBOX)
     w->data.combobox.populate = fct;
@@ -1533,7 +1533,7 @@ void dt_bauhaus_combobox_add_aligned(GtkWidget *widget, const char *text, dt_bau
 void dt_bauhaus_combobox_add_full(GtkWidget *widget, const char *text, dt_bauhaus_combobox_alignment_t align,
                                   gpointer data, void (free_func)(void *data), gboolean sensitive)
 {
-  if(!widget) return;
+  if(IS_NULL_PTR(widget)) return;
   struct dt_bauhaus_widget_t *w = DT_BAUHAUS_WIDGET(widget);
   if(w->type != DT_BAUHAUS_COMBOBOX) return;
   dt_bauhaus_combobox_data_t *d = &w->data.combobox;
@@ -1544,7 +1544,7 @@ void dt_bauhaus_combobox_add_full(GtkWidget *widget, const char *text, dt_bauhau
 
 void dt_bauhaus_combobox_set_entries_ellipsis(GtkWidget *widget, PangoEllipsizeMode ellipis)
 {
-  if(!widget) return;
+  if(IS_NULL_PTR(widget)) return;
   struct dt_bauhaus_widget_t *w = DT_BAUHAUS_WIDGET(widget);
   if(w->type != DT_BAUHAUS_COMBOBOX) return;
   dt_bauhaus_combobox_data_t *d = &w->data.combobox;
@@ -1554,7 +1554,7 @@ void dt_bauhaus_combobox_set_entries_ellipsis(GtkWidget *widget, PangoEllipsizeM
 
 void dt_bauhaus_combobox_set_editable(GtkWidget *widget, int editable)
 {
-  if(!widget) return;
+  if(IS_NULL_PTR(widget)) return;
   struct dt_bauhaus_widget_t *w = DT_BAUHAUS_WIDGET(widget);
   if(w->type != DT_BAUHAUS_COMBOBOX) return;
   dt_bauhaus_combobox_data_t *d = &w->data.combobox;
@@ -1572,7 +1572,7 @@ int dt_bauhaus_combobox_get_editable(GtkWidget *widget)
 
 void dt_bauhaus_combobox_set_selected_text_align(GtkWidget *widget, const dt_bauhaus_combobox_alignment_t text_align)
 {
-  if(!widget) return;
+  if(IS_NULL_PTR(widget)) return;
   struct dt_bauhaus_widget_t *w = DT_BAUHAUS_WIDGET(widget);
   if(w->type != DT_BAUHAUS_COMBOBOX) return;
   dt_bauhaus_combobox_data_t *d = &w->data.combobox;
@@ -1619,7 +1619,7 @@ int dt_bauhaus_combobox_length(GtkWidget *widget)
 const char *dt_bauhaus_combobox_get_text(GtkWidget *widget)
 {
   const dt_bauhaus_combobox_data_t *d = _combobox_data(widget);
-  if(!d) return NULL;
+  if(IS_NULL_PTR(d)) return NULL;
 
   if(d->active < 0)
   {
@@ -1643,7 +1643,7 @@ gpointer dt_bauhaus_combobox_get_data(GtkWidget *widget)
 
 void dt_bauhaus_combobox_clear(GtkWidget *widget)
 {
-  if(!widget) return;
+  if(IS_NULL_PTR(widget)) return;
   struct dt_bauhaus_widget_t *w = DT_BAUHAUS_WIDGET(widget);
   if(w->type != DT_BAUHAUS_COMBOBOX) return;
   dt_bauhaus_combobox_data_t *d = &w->data.combobox;
@@ -1709,7 +1709,7 @@ static void _delayed_combobox_commit(gpointer data)
  */
 void _combobox_set(GtkWidget *widget, const int pos, gboolean timeout)
 {
-  if(!widget) return;
+  if(IS_NULL_PTR(widget)) return;
   struct dt_bauhaus_widget_t *w = DT_BAUHAUS_WIDGET(widget);
   dt_bauhaus_combobox_data_t *d = &w->data.combobox;
   const int old_pos = d->active;
@@ -1754,7 +1754,7 @@ void dt_bauhaus_combobox_set(GtkWidget *widget, const int pos)
 
 gboolean dt_bauhaus_combobox_set_from_text(GtkWidget *widget, const char *text)
 {
-  if(!text) return FALSE;
+  if(IS_NULL_PTR(text)) return FALSE;
 
   const dt_bauhaus_combobox_data_t *d = _combobox_data(widget);
 

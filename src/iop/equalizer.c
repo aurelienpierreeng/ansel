@@ -166,7 +166,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
   // TODO: fixed alloc for data piece at capped resolution?
   float **tmp = (float **)calloc(numl_cap, sizeof(float *));
-  if(!tmp) return 1;
+  if(IS_NULL_PTR(tmp)) return 1;
   for(int k = 1; k < numl_cap; k++)
   {
     const int wd = (int)(1 + (width >> (k - 1))), ht = (int)(1 + (height >> (k - 1)));

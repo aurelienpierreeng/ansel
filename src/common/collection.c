@@ -204,7 +204,7 @@ void dt_collection_memory_update()
 
   /* check if we can get a query from collection */
   gchar *query = g_strdup(dt_collection_get_query(darktable.collection));
-  if(!query) return;
+  if(IS_NULL_PTR(query)) return;
 
   // Handle culling mode across re-queryings : re-restrict collection to selection
   if(darktable.gui && darktable.gui->culling_mode)

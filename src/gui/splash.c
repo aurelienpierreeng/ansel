@@ -59,7 +59,7 @@ static dt_splash_t *splash = NULL;
 
 static gboolean _splash_env_is_truthy(const char *value)
 {
-  if(!value) return FALSE;
+  if(IS_NULL_PTR(value)) return FALSE;
   if(value[0] == '\0') return TRUE;
   if(g_ascii_strcasecmp(value, "0") == 0) return FALSE;
   if(g_ascii_strcasecmp(value, "false") == 0) return FALSE;
@@ -101,7 +101,7 @@ static void _splash_force_show(void)
 
 static void _splash_clear_slide_cache(void)
 {
-  if(!splash) return;
+  if(IS_NULL_PTR(splash)) return;
   if(splash->slide_pixbuf)
   {
     g_object_unref(splash->slide_pixbuf);
@@ -197,7 +197,7 @@ static GtkWidget *_splash_shadow_label_new(const gchar *text, const gchar *name,
 
 static void _splash_shadow_label_set_text(GtkWidget *label, const gchar *text)
 {
-  if(!label) return;
+  if(IS_NULL_PTR(label)) return;
   gtk_label_set_text(GTK_LABEL(label), text);
   GList *shadows = (GList *)g_object_get_data(G_OBJECT(label), "splash-shadow-labels");
   for(GList *iter = shadows; iter; iter = g_list_next(iter))
@@ -215,7 +215,7 @@ static dt_splash_slide_t *_splash_slide_new(const gchar *path, const gchar *auth
 static void _splash_slide_free(gpointer data)
 {
   dt_splash_slide_t *slide = (dt_splash_slide_t *)data;
-  if(!slide) return;
+  if(IS_NULL_PTR(slide)) return;
   dt_free(slide->path);
   dt_free(slide->author);
   dt_free(slide);
@@ -434,7 +434,7 @@ static gboolean _splash_logo_set_from_path(GtkWidget *logo, const char *path, in
 
   cairo_surface_t *surface = gdk_cairo_surface_create_from_pixbuf(pixbuf, scale_factor, NULL);
   g_object_unref(pixbuf);
-  if(!surface) return FALSE;
+  if(IS_NULL_PTR(surface)) return FALSE;
 
   gtk_image_set_from_surface(GTK_IMAGE(logo), surface);
   cairo_surface_destroy(surface);
@@ -694,7 +694,7 @@ void dt_gui_splash_updatef(const char *format, ...)
 
 void dt_gui_splash_close(void)
 {
-  if(!splash) return;
+  if(IS_NULL_PTR(splash)) return;
 
   if(splash->slide_timeout_id) g_source_remove(splash->slide_timeout_id);
 

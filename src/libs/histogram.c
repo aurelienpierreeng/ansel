@@ -221,7 +221,7 @@ static dt_backbuf_t *_get_histogram_backbuf(dt_develop_t *dev, const char *op)
 
 static void _clear_histogram_backbuf(dt_backbuf_t *backbuf)
 {
-  if(!backbuf) return;
+  if(IS_NULL_PTR(backbuf)) return;
 
   /* Global histogram backbuffers keep one structural ref on top of the module-output lifetime.
    * Clearing that published view therefore means releasing the extra GUI-side keepalive ref here. */
@@ -618,10 +618,10 @@ static uint64_t _get_live_histogram_hash(const char *op)
   if(!dev || !pipe || !op) return DT_PIXELPIPE_CACHE_HASH_INVALID;
 
   dt_iop_module_t *const module = dt_iop_get_module_by_op_priority(dev->iop, op, 0);
-  if(!module) return DT_PIXELPIPE_CACHE_HASH_INVALID;
+  if(IS_NULL_PTR(module)) return DT_PIXELPIPE_CACHE_HASH_INVALID;
 
   const dt_dev_pixelpipe_iop_t *piece = dt_dev_pixelpipe_get_module_piece(pipe, module);
-  if(!piece) return DT_PIXELPIPE_CACHE_HASH_INVALID;
+  if(IS_NULL_PTR(piece)) return DT_PIXELPIPE_CACHE_HASH_INVALID;
 
   if(!strcmp(op, "gamma"))
     piece = dt_dev_pixelpipe_get_prev_enabled_piece(pipe, piece);
@@ -633,7 +633,7 @@ static gboolean _histogram_refresh_idle(gpointer user_data)
 {
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
   dt_lib_histogram_t *d = self ? self->data : NULL;
-  if(!d) return G_SOURCE_REMOVE;
+  if(IS_NULL_PTR(d)) return G_SOURCE_REMOVE;
 
   d->refresh_idle_source = 0;
   d->backbuf = _get_histogram_backbuf(darktable.develop, d->op);
@@ -651,7 +651,7 @@ static void _schedule_histogram_refresh(dt_lib_module_t *self)
 static void _sync_pending_histogram_hashes(dt_lib_module_t *self)
 {
   dt_lib_histogram_t *d = (dt_lib_histogram_t *)self->data;
-  if(!d) return;
+  if(IS_NULL_PTR(d)) return;
 
   _clear_pending_hashes(d);
   _add_pending_hash(d, _get_live_histogram_hash(d->op));
@@ -1479,15 +1479,15 @@ static const dt_dev_pixelpipe_iop_t *_get_backbuf_source_piece(const dt_backbuf_
   if(!dev || !pipe || !op || !backbuf) return NULL;
 
   dt_iop_module_t *const module = dt_iop_get_module_by_op_priority(dev->iop, op, 0);
-  if(!module) return NULL;
+  if(IS_NULL_PTR(module)) return NULL;
 
   const dt_dev_pixelpipe_iop_t *piece = dt_dev_pixelpipe_get_module_piece(pipe, module);
-  if(!piece) return NULL;
+  if(IS_NULL_PTR(piece)) return NULL;
 
   if(!strcmp(op, "gamma"))
     piece = dt_dev_pixelpipe_get_prev_enabled_piece(pipe, piece);
 
-  if(!piece) return NULL;
+  if(IS_NULL_PTR(piece)) return NULL;
   if(piece->global_hash != dt_dev_backbuf_get_hash(backbuf)) return NULL;
 
   return piece;
@@ -1524,10 +1524,10 @@ static gboolean _resolve_backbuf_sampling_source(const char *const op, const dt_
   if(!dev || !pipe || !op || !backbuf || !roi || !dsc || !iop_order || !direction) return FALSE;
 
   dt_iop_module_t *const module = dt_iop_get_module_by_op_priority(dev->iop, op, 0);
-  if(!module) return FALSE;
+  if(IS_NULL_PTR(module)) return FALSE;
 
   const dt_dev_pixelpipe_iop_t *const piece = dt_dev_pixelpipe_get_module_piece(pipe, module);
-  if(!piece) return FALSE;
+  if(IS_NULL_PTR(piece)) return FALSE;
 
   uint64_t hash = piece->global_hash;
   *roi = piece->roi_out;
@@ -1538,7 +1538,7 @@ static gboolean _resolve_backbuf_sampling_source(const char *const op, const dt_
   if(!strcmp(op, "gamma"))
   {
     const dt_dev_pixelpipe_iop_t *const previous_piece = dt_dev_pixelpipe_get_prev_enabled_piece(pipe, piece);
-    if(!previous_piece) return FALSE;
+    if(IS_NULL_PTR(previous_piece)) return FALSE;
 
     hash = previous_piece->global_hash;
     *roi = previous_piece->roi_out;
@@ -2115,7 +2115,7 @@ static gboolean _live_sample_button(GtkWidget *widget, GdkEventButton *event, dt
     dt_iop_color_picker_t *picker = darktable.develop->color_picker.picker;
 
     // no active picker, too much iffy GTK work to activate a default
-    if(!picker) return FALSE;
+    if(IS_NULL_PTR(picker)) return FALSE;
 
     if(sample->size == DT_LIB_COLORPICKER_SIZE_POINT)
       _set_sample_point(self, sample->point);
@@ -2137,7 +2137,7 @@ static void _add_sample(GtkButton *widget, dt_lib_module_t *self)
     return;
 
   dt_colorpicker_sample_t *sample = (dt_colorpicker_sample_t *)malloc(sizeof(dt_colorpicker_sample_t));
-  if(!sample) return;
+  if(IS_NULL_PTR(sample)) return;
 
   memcpy(sample, darktable.develop->color_picker.primary_sample, sizeof(dt_colorpicker_sample_t));
   sample->locked = FALSE;

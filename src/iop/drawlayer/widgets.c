@@ -93,7 +93,7 @@ static gboolean _display_rgb_equal(const float a[3], const float b[3])
 /** @brief Update hue/chroma from current U/V components. */
 static void _picker_update_polar_from_uv(dt_drawlayer_widgets_t *widgets)
 {
-  if(!widgets) return;
+  if(IS_NULL_PTR(widgets)) return;
   widgets->picker_hue = atan2f(widgets->picker_v, widgets->picker_u);
   widgets->picker_chroma = hypotf(widgets->picker_u, widgets->picker_v);
 }
@@ -101,7 +101,7 @@ static void _picker_update_polar_from_uv(dt_drawlayer_widgets_t *widgets)
 /** @brief Update U/V from current hue/chroma components. */
 static void _picker_update_uv_from_polar(dt_drawlayer_widgets_t *widgets)
 {
-  if(!widgets) return;
+  if(IS_NULL_PTR(widgets)) return;
   widgets->picker_u = widgets->picker_chroma * cosf(widgets->picker_hue);
   widgets->picker_v = widgets->picker_chroma * sinf(widgets->picker_hue);
 }
@@ -151,7 +151,7 @@ static float _picker_max_chroma_for_m_hue(const float m, const float hue)
 /** @brief Clamp picker state so projected display RGB always remains valid. */
 static void _picker_clamp_state_to_gamut(dt_drawlayer_widgets_t *widgets)
 {
-  if(!widgets) return;
+  if(IS_NULL_PTR(widgets)) return;
 
   widgets->picker_m = CLAMP(widgets->picker_m, 0.0f, 1.0f);
   _picker_update_polar_from_uv(widgets);
@@ -177,7 +177,7 @@ static void _sync_picker_from_display_rgb(dt_drawlayer_widgets_t *widgets, const
 /** @brief Destroy cached picker surface and reset cache metadata. */
 static void _clear_color_picker_surface(dt_drawlayer_widgets_t *widgets)
 {
-  if(!widgets) return;
+  if(IS_NULL_PTR(widgets)) return;
   if(widgets->color_surface)
   {
     cairo_surface_destroy(widgets->color_surface);
@@ -192,7 +192,7 @@ static void _clear_color_picker_surface(dt_drawlayer_widgets_t *widgets)
 /** @brief Destroy cached brush-profile preview surface and reset cache metadata. */
 static void _clear_profile_surface(dt_drawlayer_widgets_t *widgets)
 {
-  if(!widgets) return;
+  if(IS_NULL_PTR(widgets)) return;
   if(widgets->profile_surface)
   {
     cairo_surface_destroy(widgets->profile_surface);
@@ -383,7 +383,7 @@ gboolean dt_drawlayer_widgets_get_display_color(const dt_drawlayer_widgets_t *wi
 /** @brief Mark picker surface dirty for regeneration on next draw. */
 void dt_drawlayer_widgets_mark_picker_dirty(dt_drawlayer_widgets_t *widgets)
 {
-  if(!widgets) return;
+  if(IS_NULL_PTR(widgets)) return;
   widgets->color_surface_dirty = TRUE;
 }
 
@@ -501,9 +501,9 @@ gboolean dt_drawlayer_widgets_update_from_picker_position(dt_drawlayer_widgets_t
 /** @brief End picker drag mode and optionally output current color. */
 gboolean dt_drawlayer_widgets_finish_picker_drag(dt_drawlayer_widgets_t *widgets, float display_rgb[3])
 {
-  if(!widgets) return FALSE;
+  if(IS_NULL_PTR(widgets)) return FALSE;
   widgets->picker_drag_mode = DT_DRAWLAYER_COLOR_DRAG_NONE;
-  if(!display_rgb) return FALSE;
+  if(IS_NULL_PTR(display_rgb)) return FALSE;
   return !_picker_project_opponent_to_display_rgb(widgets->picker_m, widgets->picker_u, widgets->picker_v, display_rgb);
 }
 
@@ -702,7 +702,7 @@ void dt_drawlayer_widgets_set_brush_profile_preview(dt_drawlayer_widgets_t *widg
                                                     const float sprinkle_coarseness,
                                                     const int selected_shape)
 {
-  if(!widgets) return;
+  if(IS_NULL_PTR(widgets)) return;
 
   const float new_opacity = _clamp01(opacity);
   const float new_hardness = _clamp01(hardness);

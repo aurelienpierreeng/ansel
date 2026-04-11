@@ -259,7 +259,7 @@ static void _darkroom_pickers_draw(dt_view_t *self, cairo_t *cri,
                                    int32_t width, int32_t height, int32_t pozx, int32_t pozy,
                                    GSList *samples, gboolean is_primary_sample)
 {
-  if(!samples) return;
+  if(IS_NULL_PTR(samples)) return;
 
   dt_develop_t *dev = (dt_develop_t *)self->data;
 
@@ -503,7 +503,7 @@ static int _darkroom_preview_fallback_height = 0;
 
 static void _release_locked_surface(darkroom_locked_surface_t *locked)
 {
-  if(!locked) return;
+  if(IS_NULL_PTR(locked)) return;
 
   if(locked->surface)
   {
@@ -655,7 +655,7 @@ static gboolean _render_main_locked_surface(cairo_t *cr, dt_develop_t *dev, dark
 static gboolean _build_preview_fallback_surface(dt_develop_t *dev, const int width, const int height, const int border,
                                                 const dt_aligned_pixel_t bg_color, const uint64_t zoom_hash)
 {
-  if(!_darkroom_preview_locked.surface) return FALSE;
+  if(IS_NULL_PTR(_darkroom_preview_locked.surface)) return FALSE;
   if(!_darkroom_preview_locked.entry || _darkroom_preview_locked.hash == (uint64_t)-1) return FALSE;
   if(width <= 0 || height <= 0) return FALSE;
 
@@ -665,7 +665,7 @@ static gboolean _build_preview_fallback_surface(dt_develop_t *dev, const int wid
   {
     _release_preview_fallback_surface();
     _darkroom_preview_fallback_surface = dt_cairo_image_surface_create(CAIRO_FORMAT_RGB24, width, height);
-    if(!_darkroom_preview_fallback_surface) return FALSE;
+    if(IS_NULL_PTR(_darkroom_preview_fallback_surface)) return FALSE;
     _darkroom_preview_fallback_width = width;
     _darkroom_preview_fallback_height = height;
   }
@@ -744,7 +744,7 @@ static inline gboolean _darkroom_gui_module_requests_uncropped_full_image(const 
 static void _paint_all(cairo_t *cri, cairo_t *cr, cairo_surface_t *image_surface)
 {
   cairo_destroy(cr);
-  if(!image_surface) return;
+  if(IS_NULL_PTR(image_surface)) return;
   cairo_set_source_surface(cri, image_surface, 0, 0);
   cairo_paint(cri);
 }
@@ -781,7 +781,7 @@ static inline gboolean _darkroom_locked_main_valid_for_zoom(const darkroom_expos
 
 static inline void _darkroom_reset_expose_state(darkroom_expose_state_t *state)
 {
-  if(!state) return;
+  if(IS_NULL_PTR(state)) return;
   state->image_surface_imgid = UNKNOWN_IMAGE;
   state->image_surface_has_main = FALSE;
   state->main_zoom_hash = 0;
@@ -1151,7 +1151,7 @@ static void _darkroom_log_image_load_error(const int ret)
 
 static gboolean _darkroom_attach_missing_iop_guis(dt_develop_t *dev)
 {
-  if(!dev) return FALSE;
+  if(IS_NULL_PTR(dev)) return FALSE;
 
   gboolean attached = FALSE;
 

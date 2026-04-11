@@ -359,7 +359,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     }
 
     dt_gaussian_t *g = dt_gaussian_init(width, height, ch, Labmax, Labmin, sigma, order);
-    if(!g) return 1;
+    if(IS_NULL_PTR(g)) return 1;
     dt_gaussian_blur_4c(g, in, out);
     dt_gaussian_free(g);
   }
@@ -370,7 +370,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     const float detail = -1.0f; // we want the bilateral base layer
 
     dt_bilateral_t *b = dt_bilateral_init(width, height, sigma_s, sigma_r);
-    if(!b) return 1;
+    if(IS_NULL_PTR(b)) return 1;
     dt_bilateral_splat(b, in);
     dt_bilateral_blur(b);
     dt_bilateral_slice(b, in, out, detail);

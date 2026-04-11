@@ -679,7 +679,7 @@ static gchar* str_time_delta(const int time_delta)
 // show a popup window with a list of updated images/xmp files and allow the user to tell dt what to do about them
 void dt_control_crawler_show_image_list(GList *images)
 {
-  if(!images) return;
+  if(IS_NULL_PTR(images)) return;
 
   dt_control_crawler_gui_t *gui =
     (dt_control_crawler_gui_t *)malloc(sizeof(dt_control_crawler_gui_t));

@@ -34,9 +34,9 @@ MAKE_ACCEL_WRAPPER(dt_gui_preferences_show)
 
 static gboolean undo_sensitive_callback()
 {
-  if(!darktable.view_manager) return FALSE;
+  if(IS_NULL_PTR(darktable.view_manager)) return FALSE;
   const dt_view_t *cv = dt_view_manager_get_current_view(darktable.view_manager);
-  if(!cv) return FALSE;
+  if(IS_NULL_PTR(cv)) return FALSE;
 
   gboolean sensitive = FALSE;
 
@@ -54,7 +54,7 @@ static gboolean undo_callback(GtkAccelGroup *group, GObject *acceleratable, guin
 {
   if(!darktable.view_manager || !undo_sensitive_callback()) return FALSE;
   const dt_view_t *cv = dt_view_manager_get_current_view(darktable.view_manager);
-  if(!cv) return FALSE;
+  if(IS_NULL_PTR(cv)) return FALSE;
 
   if(!strcmp(cv->module_name, "lighttable"))
     dt_undo_do_undo(darktable.undo, DT_UNDO_LIGHTTABLE);
@@ -73,9 +73,9 @@ static gboolean undo_callback(GtkAccelGroup *group, GObject *acceleratable, guin
 
 static gboolean redo_sensitive_callback()
 {
-  if(!darktable.view_manager) return FALSE;
+  if(IS_NULL_PTR(darktable.view_manager)) return FALSE;
   const dt_view_t *cv = dt_view_manager_get_current_view(darktable.view_manager);
-  if(!cv) return FALSE;
+  if(IS_NULL_PTR(cv)) return FALSE;
 
   gboolean sensitive = FALSE;
 
@@ -94,7 +94,7 @@ static gboolean redo_callback(GtkAccelGroup *group, GObject *acceleratable, guin
 {
   if(!darktable.view_manager || !redo_sensitive_callback()) return FALSE;
   const dt_view_t *cv = dt_view_manager_get_current_view(darktable.view_manager);
-  if(!cv) return FALSE;
+  if(IS_NULL_PTR(cv)) return FALSE;
 
   if(!strcmp(cv->module_name, "lighttable"))
     dt_undo_do_redo(darktable.undo, DT_UNDO_LIGHTTABLE);
@@ -110,7 +110,7 @@ static gboolean redo_callback(GtkAccelGroup *group, GObject *acceleratable, guin
 static gboolean compress_history_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
   GList *imgs = dt_act_on_get_images();
-  if(!imgs) return FALSE;
+  if(IS_NULL_PTR(imgs)) return FALSE;
 
   gboolean is_darkroom_image_in_list = dt_menu_is_image_in_dev(imgs);
 
@@ -139,7 +139,7 @@ static gboolean delete_history_callback(GtkAccelGroup *group, GObject *accelerat
   if(!has_active_images()) return FALSE;
 
   GList *imgs = dt_act_on_get_images();
-  if(!imgs) return FALSE;
+  if(IS_NULL_PTR(imgs)) return FALSE;
 
   gboolean is_darkroom_image_in_list = dt_menu_is_image_in_dev(imgs);
 
@@ -275,7 +275,7 @@ static gboolean paste_parts_callback(GtkAccelGroup *group, GObject *acceleratabl
 static gboolean load_xmp_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
   GList *imgs = dt_selection_get_list(darktable.selection);
-  if(!imgs) return FALSE;
+  if(IS_NULL_PTR(imgs)) return FALSE;
 
   const int act_on_one = g_list_is_singleton(imgs); // list length == 1?
   GtkWidget *win = dt_ui_main_window(darktable.gui->ui);

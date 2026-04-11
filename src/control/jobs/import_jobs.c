@@ -218,7 +218,7 @@ int _import_copy_xmp(const char *const filename, gchar *dest_file_path)
 int _import_copy_txt(const char *const filename, const char *dest_file_path)
 {
   char *txt_source = dt_image_get_text_path_from_path(filename);
-  if(!txt_source) return 0;
+  if(IS_NULL_PTR(txt_source)) return 0;
 
   char *txt_dest = dt_image_build_text_path_from_path(dest_file_path);
   int success = 0;
@@ -560,7 +560,7 @@ static void _control_import_job_cleanup(void *p)
 static void *_control_import_alloc()
 {
   dt_control_image_enumerator_t *params = dt_control_image_enumerator_alloc();
-  if(!params) return NULL;
+  if(IS_NULL_PTR(params)) return NULL;
 
   params->data = g_malloc0(sizeof(dt_control_import_t));
   if(!params->data)
@@ -574,7 +574,7 @@ static void *_control_import_alloc()
 static dt_job_t *_control_import_job_create(dt_control_import_t data)
 {
   dt_job_t *job = dt_control_job_create(&_control_import_job_run, "import");
-  if(!job) return NULL;
+  if(IS_NULL_PTR(job)) return NULL;
   dt_control_image_enumerator_t *params = _control_import_alloc();
   if(!params)
   {

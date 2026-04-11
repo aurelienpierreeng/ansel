@@ -71,7 +71,7 @@ static gboolean _masks_gui_menu_item_forward_event(GtkWidget *widget, GdkEvent *
   if(!data || !data->slider) return FALSE;
 
   GdkEvent *copy = gdk_event_copy(event);
-  if(!copy) return FALSE;
+  if(IS_NULL_PTR(copy)) return FALSE;
 
   double x = 0.0, y = 0.0;
   gboolean has_coords = FALSE;
@@ -231,7 +231,7 @@ static int _masks_gui_confirm_remove_form_dialog(const char *form_name)
 
 static int _masks_gui_form_group_use_count(const dt_develop_t *dev, const int formid)
 {
-  if(!dev) return 0;
+  if(IS_NULL_PTR(dev)) return 0;
 
   int count = 0;
   for(GList *form_node = dev->forms; form_node; form_node = g_list_next(form_node))
@@ -258,19 +258,19 @@ done:
 static void _masks_gui_remove_form_callback(GtkWidget *menu, gpointer user_data)
 {
   dt_masks_form_gui_t *gui = (dt_masks_form_gui_t *)user_data;
-  if(!gui) return;
+  if(IS_NULL_PTR(gui)) return;
   dt_masks_form_t *forms = dt_masks_get_visible_form(darktable.develop);
-  if(!forms) return;
+  if(IS_NULL_PTR(forms)) return;
 
   if(gui->group_selected >= 0)
   {
     // Delete shape from current group
     dt_masks_form_group_t *fpt = dt_masks_form_get_selected_group(forms, gui);
-    if(!fpt) return;
+    if(IS_NULL_PTR(fpt)) return;
     dt_iop_module_t *module = darktable.develop->gui_module;
-    if(!module) return;
+    if(IS_NULL_PTR(module)) return;
     dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
-    if(!sel) return;
+    if(IS_NULL_PTR(sel)) return;
 
     const int parentid = fpt->parentid;
     const int formid = fpt->formid;
@@ -300,12 +300,12 @@ static void _masks_gui_remove_form_callback(GtkWidget *menu, gpointer user_data)
 void _masks_gui_delete_node_callback(GtkWidget *menu, gpointer user_data)
 {
   dt_masks_form_gui_t *gui = (dt_masks_form_gui_t *)user_data;
-  if(!gui) return;
+  if(IS_NULL_PTR(gui)) return;
   dt_masks_form_t *forms = dt_masks_get_visible_form(darktable.develop);
-  if(!forms) return;
+  if(IS_NULL_PTR(forms)) return;
 
   dt_iop_module_t *module = darktable.develop->gui_module;
-  if(!module) return;
+  if(IS_NULL_PTR(module)) return;
 
   if(gui->creation)
   {
@@ -325,7 +325,7 @@ void _masks_gui_delete_node_callback(GtkWidget *menu, gpointer user_data)
     // Delete shape from current group
 
     dt_masks_form_group_t *fpt = dt_masks_form_get_selected_group(forms, gui);
-    if(!fpt) return;
+    if(IS_NULL_PTR(fpt)) return;
     dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
     if(sel)
       dt_masks_remove_node(module, sel, fpt->parentid, gui, gui->group_selected, gui->node_hovered);
@@ -344,16 +344,16 @@ static void _masks_gui_cancel_creation_callback(GtkWidget *menu, gpointer user_d
 static void _masks_move_up_down_callback(gpointer user_data, const int up)
 {
   dt_masks_form_gui_t *gui = (dt_masks_form_gui_t *)user_data;
-  if(!gui) return;
+  if(IS_NULL_PTR(gui)) return;
   if(gui->group_selected < 0) return;
 
   dt_iop_module_t *module = darktable.develop->gui_module;
-  if(!module) return;
+  if(IS_NULL_PTR(module)) return;
 
   dt_masks_form_t *forms = dt_masks_get_visible_form(darktable.develop);
-  if(!forms) return;
+  if(IS_NULL_PTR(forms)) return;
   dt_masks_form_group_t *fpt = dt_masks_form_get_selected_group(forms, gui);
-  if(!fpt) return;
+  if(IS_NULL_PTR(fpt)) return;
   dt_masks_form_t *grp = dt_masks_get_from_id(darktable.develop, fpt->parentid);
   if(!grp || !(grp->type & DT_MASKS_GROUP)) return;
 
@@ -389,7 +389,7 @@ static void _masks_operation_callback(GtkWidget *menu, gpointer user_data)
   }
 
   dt_masks_form_group_t *form_op = (dt_masks_form_group_t *)g_object_get_data(G_OBJECT(menu), "op_form");
-  if(!form_op) return;
+  if(IS_NULL_PTR(form_op)) return;
 
   apply_operation(form_op, state_op);
 
@@ -436,7 +436,7 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
   dt_masks_form_t *grp = formgroup ? dt_masks_get_from_id(darktable.develop, formgroup->parentid) : NULL;
   if(grp && (grp->type & DT_MASKS_GROUP))
     op_form = dt_masks_form_group_from_parentid(grp->formid, form->formid);
-  if(!op_form) return NULL;
+  if(IS_NULL_PTR(op_form)) return NULL;
 
   // Find the position of the current form in the group
   guint form_pos = 0;

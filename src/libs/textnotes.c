@@ -158,7 +158,7 @@ void *get_params(dt_lib_module_t *self, int *size)
   if(!d || !d->edit_view) return NULL;
 
   gchar *text = _get_edit_text(d);
-  if(!text) return NULL;
+  if(IS_NULL_PTR(text)) return NULL;
 
   if(size) *size = strlen(text) + 1;
   return text;
@@ -213,14 +213,14 @@ static int _preview_text_window_width_px(dt_lib_textnotes_t *d)
 
   GtkTextView *tv = d->preview_view;
   GdkWindow *tw = gtk_text_view_get_window(tv, GTK_TEXT_WINDOW_TEXT);
-  if(!tw) return 0;
+  if(IS_NULL_PTR(tw)) return 0;
 
   return gdk_window_get_width(tw);
 }
 
 static void _render_preview_from_edit(dt_lib_textnotes_t *d)
 {
-  if(!d) return;
+  if(IS_NULL_PTR(d)) return;
   gchar *text = _get_edit_text(d);
   _render_preview(d, text);
   dt_free(text);
@@ -228,7 +228,7 @@ static void _render_preview_from_edit(dt_lib_textnotes_t *d)
 
 static void _completion_hide(dt_lib_textnotes_t *d)
 {
-  if(!d) return;
+  if(IS_NULL_PTR(d)) return;
   if(d->completion_popover)
     gtk_widget_hide(d->completion_popover);
   if(d->completion_mark && d->edit_view)
@@ -242,7 +242,7 @@ static void _completion_hide(dt_lib_textnotes_t *d)
 static gboolean _completion_match(const char *item, const char *prefix)
 {
   if(!prefix || !*prefix) return TRUE;
-  if(!item) return FALSE;
+  if(IS_NULL_PTR(item)) return FALSE;
 
   gchar *norm_item = g_utf8_normalize(item, -1, G_NORMALIZE_ALL);
   gchar *norm_prefix = g_utf8_normalize(prefix, -1, G_NORMALIZE_ALL);
@@ -289,7 +289,7 @@ static gboolean _completion_find_prefix(dt_lib_textnotes_t *d, GtkTextIter *curs
   gtk_text_iter_set_line_offset(&line_start, 0);
 
   gchar *line = gtk_text_buffer_get_text(buffer, &line_start, cursor, FALSE);
-  if(!line) return FALSE;
+  if(IS_NULL_PTR(line)) return FALSE;
 
   gchar *match = g_strrstr(line, "$(");
   if(!match)
@@ -336,7 +336,7 @@ static gboolean _completion_apply_selected(dt_lib_module_t *self)
 
   gchar *varname = NULL;
   gtk_tree_model_get(model, &iter, COMPL_VARNAME, &varname, -1);
-  if(!varname) return FALSE;
+  if(IS_NULL_PTR(varname)) return FALSE;
 
   GtkTextBuffer *buffer = gtk_text_view_get_buffer(d->edit_view);
   GtkTextIter start, end;
@@ -418,7 +418,7 @@ static gboolean _completion_focus_out_idle(gpointer user_data)
 {
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
   dt_lib_textnotes_t *d = self ? (dt_lib_textnotes_t *)self->data : NULL;
-  if(!d) return G_SOURCE_REMOVE;
+  if(IS_NULL_PTR(d)) return G_SOURCE_REMOVE;
 
   if(d->completion_popover && gtk_widget_get_visible(d->completion_popover))
   {
@@ -563,7 +563,7 @@ static void _colorcorrect_row(cmsHTRANSFORM transform, guchar *src, const int wi
 
 static void _colorcorrect_pixbuf(GdkPixbuf *pixbuf)
 {
-  if(!pixbuf) return;
+  if(IS_NULL_PTR(pixbuf)) return;
 
   cmsHTRANSFORM transform = NULL;
   pthread_rwlock_rdlock(&darktable.color_profiles->xprofile_lock);
@@ -943,7 +943,7 @@ static gchar *_remote_cache_path(const char *url)
   if(!url || !*url) return NULL;
 
   gchar *hash = g_compute_checksum_for_string(G_CHECKSUM_SHA1, url, -1);
-  if(!hash) return NULL;
+  if(IS_NULL_PTR(hash)) return NULL;
 
   const char *end = strchr(url, '?');
   if(!end) end = url + strlen(url);
@@ -1063,10 +1063,10 @@ static void _queue_remote_download(dt_lib_module_t *self, dt_lib_textnotes_t *d,
   dt_free(cache_dir);
 
   SoupSession *session = _textnotes_soup_session();
-  if(!session) return;
+  if(IS_NULL_PTR(session)) return;
 
   SoupMessage *msg = soup_message_new("GET", url);
-  if(!msg) return;
+  if(IS_NULL_PTR(msg)) return;
 
   dt_textnotes_fetch_t *fetch = g_new0(dt_textnotes_fetch_t, 1);
   fetch->self = self;
@@ -1220,7 +1220,7 @@ static gboolean _insert_markdown_image(dt_lib_textnotes_t *d, GtkTextBuffer *buf
     if(!path && fallback_url && (!url || g_strcmp0(url, fallback_url) != 0))
       path = _resolve_image_path(fallback_url, base_dir);
   }
-  if(!path) return FALSE;
+  if(IS_NULL_PTR(path)) return FALSE;
 
   if(!g_file_test(path, G_FILE_TEST_EXISTS))
   {
@@ -1260,7 +1260,7 @@ static GArray *_build_line_offsets(const char *text)
   GArray *offsets = g_array_new(FALSE, FALSE, sizeof(gsize));
   gsize off = 0;
   g_array_append_val(offsets, off);
-  if(!text) return offsets;
+  if(IS_NULL_PTR(text)) return offsets;
   for(const char *p = text; *p; p++, off++)
   {
     if(*p == '\n')
@@ -1274,7 +1274,7 @@ static GArray *_build_line_offsets(const char *text)
 
 static gchar *_normalize_markdown_images(const char *text)
 {
-  if(!text) return g_strdup("");
+  if(IS_NULL_PTR(text)) return g_strdup("");
 
   GString *out = g_string_sized_new(strlen(text) + 16);
   const char *p = text;
@@ -1379,7 +1379,7 @@ static gchar *_extract_image_dest_from_source(const char *text, const GArray *of
   if(!dest_end || dest_end <= dest_start) return NULL;
 
   gchar *raw = g_strndup(dest_start, dest_end - dest_start);
-  if(!raw) return NULL;
+  if(IS_NULL_PTR(raw)) return NULL;
 
   gchar *trimmed = g_strstrip(raw);
   if(trimmed[0] == '<' && trimmed[strlen(trimmed) - 1] == '>')
@@ -1605,7 +1605,7 @@ static void _clear_mtime_label(dt_lib_textnotes_t *d)
 static void _update_mtime_label(dt_lib_module_t *self)
 {
   dt_lib_textnotes_t *d = (dt_lib_textnotes_t *)self->data;
-  if(!d->mtime_label) return;
+  if(IS_NULL_PTR(d->mtime_label)) return;
   if(!dt_lib_gui_get_expanded(self)) return;
   if(!d->path || !_image_has_txt_flag(d->imgid))
   {
@@ -1768,7 +1768,7 @@ static gboolean _preview_button_press(GtkWidget *widget, GdkEventButton *event, 
 static gboolean _refresh_preview_idle(gpointer user_data)
 {
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
-  if(!self) return G_SOURCE_REMOVE;
+  if(IS_NULL_PTR(self)) return G_SOURCE_REMOVE;
   dt_lib_textnotes_t *d = (dt_lib_textnotes_t *)self->data;
   if(!d || !d->edit_view) return G_SOURCE_REMOVE;
   if(d->mode_toggle && !gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d->mode_toggle)))
@@ -1797,7 +1797,7 @@ static gboolean _initial_load_idle(gpointer user_data)
 {
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
   dt_lib_textnotes_t *d = (dt_lib_textnotes_t *)self->data;
-  if(!d) return G_SOURCE_REMOVE;
+  if(IS_NULL_PTR(d)) return G_SOURCE_REMOVE;
   if(d->imgid > 0) return G_SOURCE_REMOVE;
   _update_for_current_image(self);
   return G_SOURCE_REMOVE;
@@ -1808,7 +1808,7 @@ static void _ensure_has_txt_flag(const int32_t imgid)
   if(imgid <= 0) return;
 
   dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'w');
-  if(!img) return;
+  if(IS_NULL_PTR(img)) return;
 
   if(!(img->flags & DT_IMAGE_HAS_TXT))
     img->flags |= DT_IMAGE_HAS_TXT;
@@ -1821,7 +1821,7 @@ static gboolean _image_has_txt_flag(const int32_t imgid)
   if(imgid <= 0) return FALSE;
 
   dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
-  if(!img) return FALSE;
+  if(IS_NULL_PTR(img)) return FALSE;
   const gboolean has_txt = (img->flags & DT_IMAGE_HAS_TXT);
   dt_image_cache_read_release(darktable.image_cache, img);
   return has_txt;
@@ -1836,7 +1836,7 @@ static void _clear_variables_cache(dt_lib_textnotes_t *d)
 
 static gboolean _set_image_paths(dt_lib_textnotes_t *d, const int32_t imgid)
 {
-  if(!d) return FALSE;
+  if(IS_NULL_PTR(d)) return FALSE;
 
   if(imgid <= 0) return FALSE;
   if(d->image_path && d->image_dir) return TRUE;
@@ -1873,7 +1873,7 @@ static char *_text_sidecar_save_path(dt_lib_textnotes_t *d, const int32_t imgid)
 static int32_t _textnotes_load_job_run(dt_job_t *job)
 {
   dt_textnotes_load_job_t *params = dt_control_job_get_params(job);
-  if(!params) return 1;
+  if(IS_NULL_PTR(params)) return 1;
 
   if(params->path && g_file_get_contents(params->path, &params->text, NULL, NULL))
     params->loaded = TRUE;
@@ -1885,7 +1885,7 @@ static int32_t _textnotes_load_job_run(dt_job_t *job)
 static void _textnotes_load_job_cleanup(void *data)
 {
   dt_textnotes_load_job_t *params = data;
-  if(!params) return;
+  if(IS_NULL_PTR(params)) return;
   dt_free(params->path);
   dt_free(params->text);
   dt_free(params);
@@ -1895,7 +1895,7 @@ static void _textnotes_load_job_state(dt_job_t *job, dt_job_state_t state)
 {
   if(state != DT_JOB_STATE_FINISHED) return;
   dt_textnotes_load_job_t *params = dt_control_job_get_params(job);
-  if(!params) return;
+  if(IS_NULL_PTR(params)) return;
 
   dt_textnotes_load_result_t *result = g_new0(dt_textnotes_load_result_t, 1);
   result->self = params->self;
@@ -1997,7 +1997,7 @@ static void _toggle_mode(GtkToggleButton *button, dt_lib_module_t *self)
 static gboolean _textnotes_load_finish_idle(gpointer user_data)
 {
   dt_textnotes_load_result_t *result = (dt_textnotes_load_result_t *)user_data;
-  if(!result) return G_SOURCE_REMOVE;
+  if(IS_NULL_PTR(result)) return G_SOURCE_REMOVE;
 
   dt_lib_module_t *self = result->self;
   if(!self || !self->data) goto cleanup;
@@ -2104,7 +2104,7 @@ static void _mouse_over_image_callback(gpointer instance, gpointer user_data)
 static void _update_for_current_image(dt_lib_module_t *self)
 {
   dt_lib_textnotes_t *d = (dt_lib_textnotes_t *)self->data;
-  if(!d) return;
+  if(IS_NULL_PTR(d)) return;
 
   int32_t img_id = dt_control_get_mouse_over_id();
   if(img_id > -1)

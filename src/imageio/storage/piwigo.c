@@ -232,7 +232,7 @@ static void _piwigo_load_account(dt_storage_piwigo_gui_data_t *ui)
 
 static _piwigo_account_t *_piwigo_get_account(dt_storage_piwigo_gui_data_t *ui, const gchar *server)
 {
-  if(!server) return NULL;
+  if(IS_NULL_PTR(server)) return NULL;
 
   for(const GList *a = ui->accounts; a; a = g_list_next(a))
   {
@@ -1133,10 +1133,10 @@ static uint64_t _piwigo_album_id(const gchar *name, GList *albums)
 void *get_params(dt_imageio_module_storage_t *self)
 {
   dt_storage_piwigo_gui_data_t *ui = (dt_storage_piwigo_gui_data_t *)self->gui_data;
-  if(!ui) return NULL; // gui not initialized, CLI mode
+  if(IS_NULL_PTR(ui)) return NULL; // gui not initialized, CLI mode
   dt_storage_piwigo_params_t *p = (dt_storage_piwigo_params_t *)g_malloc0(sizeof(dt_storage_piwigo_params_t));
 
-  if(!p) return NULL;
+  if(IS_NULL_PTR(p)) return NULL;
 
   // fill d from controls in ui
   if(ui->api && ui->api->authenticated == TRUE)

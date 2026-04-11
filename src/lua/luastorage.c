@@ -267,7 +267,7 @@ typedef struct
 
 static void free_param_wrapper_destroy(void * data)
 {
-  if(!data) return;
+  if(IS_NULL_PTR(data)) return;
   free_param_wrapper_data *params = data;
   lua_storage_t *d = params->data;
   if(d->data_created)
@@ -304,7 +304,7 @@ static int32_t free_param_wrapper_job(dt_job_t *job)
 static void free_params_wrapper(struct dt_imageio_module_storage_t *self, dt_imageio_module_data_t *data)
 {
   dt_job_t *job = dt_control_job_create(&free_param_wrapper_job, "lua: destroy storage param");
-  if(!job) return;
+  if(IS_NULL_PTR(job)) return;
   free_param_wrapper_data *t = (free_param_wrapper_data *)calloc(1, sizeof(free_param_wrapper_data));
   if(!t)
   {

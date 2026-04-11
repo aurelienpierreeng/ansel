@@ -112,7 +112,7 @@ int dt_map_location_get_images_count(const guint locid)
 GList *dt_map_location_get_locations_by_path(const gchar *path,
                                              const gboolean remove_root)
 {
-  if(!path) return NULL;
+  if(IS_NULL_PTR(path)) return NULL;
 
   gchar *path1, *path2;
   if(!path[0])

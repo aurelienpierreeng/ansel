@@ -68,7 +68,7 @@ static gboolean
 _thumb_draw_image(GtkWidget *widget, cairo_t *cr, gpointer user_data)
 {
   dt_preview_window_t *preview = (dt_preview_window_t *)user_data;
-  if(!preview) return TRUE;
+  if(IS_NULL_PTR(preview)) return TRUE;
 
   const double start = dt_get_wtime();
 

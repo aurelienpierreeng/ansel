@@ -745,7 +745,7 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
   if(!g->img_cached)
   {
     g->img = dt_alloc_align(sizeof(unsigned char) * 4 * allocation.width * allocation.width);
-    if(!g->img) return FALSE;
+    if(IS_NULL_PTR(g->img)) return FALSE;
     g->img_width = allocation.width;
     g->img_cached = TRUE;
     if(build_gui_kernel(g->img, g->img_width, g->img_width, p)) 

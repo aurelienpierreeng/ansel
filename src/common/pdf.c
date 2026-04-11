@@ -218,7 +218,7 @@ static void _pdf_set_offset(dt_pdf_t *pdf, int id, size_t offset)
 dt_pdf_t *dt_pdf_start(const char *filename, float width, float height, float dpi, dt_pdf_stream_encoder_t default_encoder)
 {
   dt_pdf_t *pdf = calloc(1, sizeof(dt_pdf_t));
-  if(!pdf) return NULL;
+  if(IS_NULL_PTR(pdf)) return NULL;
 
   pdf->fd = g_fopen(filename, "wb");
   if(!pdf->fd)
@@ -379,7 +379,7 @@ dt_pdf_image_t *dt_pdf_add_image(dt_pdf_t *pdf, const unsigned char *image, int 
   size_t bytes_written = 0;
 
   dt_pdf_image_t *pdf_image = calloc(1, sizeof(dt_pdf_image_t));
-  if(!pdf_image) return NULL;
+  if(IS_NULL_PTR(pdf_image)) return NULL;
 
   pdf_image->width = width;
   pdf_image->height = height;
@@ -458,7 +458,7 @@ dt_pdf_image_t *dt_pdf_add_image(dt_pdf_t *pdf, const unsigned char *image, int 
 dt_pdf_page_t *dt_pdf_add_page(dt_pdf_t *pdf, dt_pdf_image_t **images, int n_images)
 {
   dt_pdf_page_t *pdf_page = calloc(1, sizeof(dt_pdf_page_t));
-  if(!pdf_page) return NULL;
+  if(IS_NULL_PTR(pdf_page)) return NULL;
   pdf_page->object_id = pdf->next_id++;
   int content_id = pdf->next_id++;
   int length_id = pdf->next_id++;

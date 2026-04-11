@@ -198,7 +198,7 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
 
 static void dt_iop_levels_compute_levels_manual(const uint32_t *histogram, float *levels)
 {
-  if(!histogram) return;
+  if(IS_NULL_PTR(histogram)) return;
 
   // search histogram for min (search from bottom)
   for(int k = 0; k <= 4 * 255; k += 4)

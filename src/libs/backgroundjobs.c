@@ -160,7 +160,7 @@ static void *_lib_backgroundjobs_added(dt_lib_module_t *self, gboolean has_progr
   // add a new gui thingy
   dt_lib_backgroundjob_element_t *instance
       = (dt_lib_backgroundjob_element_t *)calloc(1, sizeof(dt_lib_backgroundjob_element_t));
-  if(!instance) return NULL;
+  if(IS_NULL_PTR(instance)) return NULL;
   _added_gui_thread_t *params = (_added_gui_thread_t *)malloc(sizeof(_added_gui_thread_t));
   if(!params)
   {
@@ -229,7 +229,7 @@ static gboolean _destroyed_gui_thread(gpointer user_data)
 static void _lib_backgroundjobs_destroyed(dt_lib_module_t *self, dt_lib_backgroundjob_element_t *instance)
 {
   _destroyed_gui_thread_t *params = (_destroyed_gui_thread_t *)malloc(sizeof(_destroyed_gui_thread_t));
-  if(!params) return;
+  if(IS_NULL_PTR(params)) return;
   params->self = self;
   params->instance = instance;
   g_main_context_invoke(NULL, _destroyed_gui_thread, params);
@@ -269,7 +269,7 @@ static void _lib_backgroundjobs_cancellable(dt_lib_module_t *self, dt_lib_backgr
   if(!darktable.control->running) return;
 
   _cancellable_gui_thread_t *params = (_cancellable_gui_thread_t *)malloc(sizeof(_cancellable_gui_thread_t));
-  if(!params) return;
+  if(IS_NULL_PTR(params)) return;
   params->instance = instance;
   params->progress = progress;
   g_main_context_invoke(NULL, _cancellable_gui_thread, params);
@@ -298,7 +298,7 @@ static void _lib_backgroundjobs_updated(dt_lib_module_t *self, dt_lib_background
   if(!darktable.control->running) return;
 
   _update_gui_thread_t *params = (_update_gui_thread_t *)malloc(sizeof(_update_gui_thread_t));
-  if(!params) return;
+  if(IS_NULL_PTR(params)) return;
   params->instance = instance;
   params->value = value;
   g_main_context_invoke(NULL, _update_gui_thread, params);
@@ -328,7 +328,7 @@ static void _lib_backgroundjobs_message_updated(dt_lib_module_t *self, dt_lib_ba
   if(!darktable.control->running) return;
 
   _update_label_gui_thread_t *params = (_update_label_gui_thread_t *)malloc(sizeof(_update_label_gui_thread_t));
-  if(!params) return;
+  if(IS_NULL_PTR(params)) return;
   params->instance = instance;
   params->message = g_strdup(message);
   g_main_context_invoke(NULL, _update_message_gui_thread, params);

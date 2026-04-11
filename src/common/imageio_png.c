@@ -46,7 +46,7 @@ int read_header(const char *filename, dt_imageio_png_t *png)
 {
   png->f = g_fopen(filename, "rb");
 
-  if(!png->f) return 1;
+  if(IS_NULL_PTR(png->f)) return 1;
 
 #define NUM_BYTES_CHECK (8)
 

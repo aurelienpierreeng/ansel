@@ -85,7 +85,7 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
                               const int raster_mask_id, const dt_iop_module_t *target_module,
                               gboolean *free_mask, int *error)
 {
-  if(!error) return NULL;
+  if(IS_NULL_PTR(error)) return NULL;
   *error = 0;
 
   gchar *clean_target_name = delete_underscore(target_module->name());

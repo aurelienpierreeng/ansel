@@ -490,7 +490,7 @@ static gboolean _lib_navigation_motion_notify_callback(GtkWidget *widget, GdkEve
 static void _zoom_preset_change(dt_lib_zoom_t zoom)
 {
   dt_develop_t *dev = darktable.develop;
-  if(!dev) return;
+  if(IS_NULL_PTR(dev)) return;
 
   switch(zoom)
   {

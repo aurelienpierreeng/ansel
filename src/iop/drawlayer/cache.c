@@ -47,7 +47,7 @@ float *dt_drawlayer_cache_ensure_scratch_buffer(float **buffer, size_t *capacity
   {
     dt_drawlayer_cache_free_temp_buffer((void **)buffer, name);
     float *new_buffer = dt_drawlayer_cache_alloc_temp_buffer(needed_pixels * 4 * sizeof(float), name);
-    if(!new_buffer) return NULL;
+    if(IS_NULL_PTR(new_buffer)) return NULL;
     *buffer = new_buffer;
     *capacity_pixels = needed_pixels;
   }
@@ -57,14 +57,14 @@ float *dt_drawlayer_cache_ensure_scratch_buffer(float **buffer, size_t *capacity
 /** @brief Fill float RGBA buffer with transparent black. */
 void dt_drawlayer_cache_clear_transparent_float(float *pixels, const size_t pixel_count)
 {
-  if(!pixels) return;
+  if(IS_NULL_PTR(pixels)) return;
   memset(pixels, 0, pixel_count * 4 * sizeof(float));
 }
 
 /** @brief Release patch storage and reset patch metadata. */
 void dt_drawlayer_cache_patch_clear(dt_drawlayer_cache_patch_t *patch, const char *external_alloc_name)
 {
-  if(!patch) return;
+  if(IS_NULL_PTR(patch)) return;
   if(patch->external_alloc)
   {
     if(patch->cache_entry)
@@ -218,12 +218,12 @@ gboolean dt_drawlayer_cache_ensure_process_patch_buffer(dt_drawlayer_cache_patch
     process_patch->pixels = dt_drawlayer_cache_alloc_temp_buffer((gsize)width * height * 4 * sizeof(float),
                                                                  patch_buffer_name);
     process_patch->external_alloc = TRUE;
-    if(!process_patch->pixels) return FALSE;
+    if(IS_NULL_PTR(process_patch->pixels)) return FALSE;
     process_patch->cache_entry
         = dt_dev_pixelpipe_cache_ref_entry_for_host_ptr(darktable.pixelpipe_cache, process_patch->pixels);
     process_patch->cache_hash = process_patch->cache_entry ? process_patch->cache_entry->hash
                                                            : DT_PIXELPIPE_CACHE_HASH_INVALID;
-    if(!process_patch->cache_entry) return FALSE;
+    if(IS_NULL_PTR(process_patch->cache_entry)) return FALSE;
   }
 
   const size_t mask_count = (size_t)width * height;
@@ -620,7 +620,7 @@ gboolean dt_drawlayer_cache_flush_process_patch_to_base(dt_drawlayer_cache_patch
                                                                          process_update_capacity_pixels,
                                                                          needed_pixels,
                                                                          update_buffer_name);
-    if(!mask_update_buffer) return FALSE;
+    if(IS_NULL_PTR(mask_update_buffer)) return FALSE;
 
     dt_iop_clip_and_zoom(mask_update_buffer, process_stroke_mask->pixels, &inverse_roi, &process_roi,
                          dst_w, process_stroke_mask->width);

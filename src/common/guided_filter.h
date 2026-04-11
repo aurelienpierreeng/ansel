@@ -64,7 +64,7 @@ typedef struct gray_image
 static inline int new_gray_image(gray_image *img, int width, int height)
 {
   img->data = dt_pixelpipe_cache_alloc_align_float_cache(width * height, 0);
-  if(!img->data) return 1;
+  if(IS_NULL_PTR(img->data)) return 1;
   img->width = width;
   img->height = height;
   return 0;

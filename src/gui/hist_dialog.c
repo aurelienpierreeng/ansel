@@ -132,7 +132,7 @@ static void _gui_hist_item_toggled(GtkCellRendererToggle *cell, gchar *path_str,
 static gboolean _gui_is_set(GList *selops, unsigned int num)
 {
   /* nothing to filter */
-  if(!selops) return TRUE;
+  if(IS_NULL_PTR(selops)) return TRUE;
 
   for(GList *l = selops; l; l = g_list_next(l))
   {

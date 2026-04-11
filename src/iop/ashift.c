@@ -2145,7 +2145,7 @@ static dt_iop_ashift_nmsresult_t nmsfit(dt_iop_module_t *module, dt_iop_ashift_p
 {
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)module->gui_data;
 
-  if(!g->lines) return NMS_NOT_ENOUGH_LINES;
+  if(IS_NULL_PTR(g->lines)) return NMS_NOT_ENOUGH_LINES;
   if(dir == ASHIFT_FIT_NONE) return NMS_SUCCESS;
 
   double params[4];
@@ -2333,7 +2333,7 @@ static void model_probe(dt_iop_module_t *module, dt_iop_ashift_params_t *p, dt_i
 {
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)module->gui_data;
 
-  if(!g->lines) return;
+  if(IS_NULL_PTR(g->lines)) return;
   if(dir == ASHIFT_FIT_NONE) return;
 
   double params[4];
@@ -3919,7 +3919,7 @@ static int call_distort_transform(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, s
 {
   int ret = 0;
   dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->virtual_pipe, self);
-  if(!piece) return ret;
+  if(IS_NULL_PTR(piece)) return ret;
   if(piece->module == self && /*piece->enabled && */  //see note below
      !dt_dev_pixelpipe_activemodule_disables_currentmodule(dev, piece->module))
   {
@@ -4405,7 +4405,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   float pzy = pzxpy[1];
 
   // if visibility of lines is switched off or no lines available, we have nothing to do
-  if(!g->lines) return FALSE;
+  if(IS_NULL_PTR(g->lines)) return FALSE;
 
   // if we are moving a drawn line extrema, we do the change here
   if(g->draw_point_move)
@@ -4997,7 +4997,7 @@ int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t 
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
 
   // do nothing if visibility of lines is switched off or no lines available
-  if(!g->lines) return FALSE;
+  if(IS_NULL_PTR(g->lines)) return FALSE;
 
   if(g->near_delta > 0 && (g->isdeselecting || g->isselecting))
   {

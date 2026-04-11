@@ -548,7 +548,7 @@ static inline int dt_masks_gui_selected_segment_index(const dt_masks_form_gui_t 
 static inline gboolean dt_masks_gui_change_affects_selected_node_or_all(const dt_masks_form_gui_t *gui,
                                                                         const int index)
 {
-  if(!gui) return TRUE;
+  if(IS_NULL_PTR(gui)) return TRUE;
 
   const int selected_node = dt_masks_gui_selected_node_index(gui);
   return selected_node < 0 || selected_node == index;

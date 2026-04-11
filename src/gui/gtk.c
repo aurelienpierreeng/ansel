@@ -501,7 +501,7 @@ static inline double _clamp01d(const double value)
 
 static const gdouble *_event_axes(const GdkEvent *event)
 {
-  if(!event) return NULL;
+  if(IS_NULL_PTR(event)) return NULL;
   switch(event->type)
   {
     case GDK_MOTION_NOTIFY:
@@ -520,7 +520,7 @@ static gboolean _get_axis_value_for_source(const GdkEvent *event, GdkDevice *sou
                                            const GdkAxisUse axis, double *value, gboolean *from_source_map)
 {
   if(from_source_map) *from_source_map = FALSE;
-  if(!value) return FALSE;
+  if(IS_NULL_PTR(value)) return FALSE;
 
   const gdouble *axes = _event_axes(event);
   if(source_device && axes)
@@ -570,10 +570,10 @@ static gboolean _sample_tablet_state_from_devices(const GdkEvent *event,
   if(have_tilt) *have_tilt = FALSE;
   if(picked_device_name) *picked_device_name = NULL;
 
-  if(!darktable.gui) return FALSE;
+  if(IS_NULL_PTR(darktable.gui)) return FALSE;
   GdkWindow *window = gdk_event_get_window((GdkEvent *)event);
   if(!window) window = gtk_widget_get_window(dt_ui_center(darktable.gui->ui));
-  if(!window) return FALSE;
+  if(IS_NULL_PTR(window)) return FALSE;
 
   int best_score = -1;
   double best_p = 0.0;
@@ -2209,7 +2209,7 @@ static void dt_gui_widget_update_list_height(GtkWidget *widget, int rows, int mi
 
 static void _widget_auto_disconnect_model(dt_gui_widget_auto_height_t *state, GtkWidget *treeview)
 {
-  if(!state) return;
+  if(IS_NULL_PTR(state)) return;
 
   GtkTreeModel *model = state->model;
   if(model)
@@ -2238,7 +2238,7 @@ static void _widget_auto_disconnect_model(dt_gui_widget_auto_height_t *state, Gt
 
 static void _widget_auto_disconnect_buffer(dt_gui_widget_auto_height_t *state)
 {
-  if(!state) return;
+  if(IS_NULL_PTR(state)) return;
 
   GtkTextBuffer *buffer = state->buffer;
   if(buffer)
@@ -2254,7 +2254,7 @@ static void _widget_auto_disconnect_buffer(dt_gui_widget_auto_height_t *state)
 static void _widget_auto_update(GtkWidget *widget)
 {
   const dt_gui_widget_auto_height_t *state = g_object_get_data(G_OBJECT(widget), DT_GUI_WIDGET_AUTO_HEIGHT_KEY);
-  if(!state) return;
+  if(IS_NULL_PTR(state)) return;
 
   int rows = 0;
   if(GTK_IS_TREE_VIEW(widget))
@@ -2334,7 +2334,7 @@ static void _widget_auto_connect_model(GtkWidget *treeview)
   if(!GTK_IS_TREE_VIEW(treeview)) return;
 
   dt_gui_widget_auto_height_t *state = g_object_get_data(G_OBJECT(treeview), DT_GUI_WIDGET_AUTO_HEIGHT_KEY);
-  if(!state) return;
+  if(IS_NULL_PTR(state)) return;
 
   GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(treeview));
   if(model == state->model) return;
@@ -2363,7 +2363,7 @@ static void _widget_auto_connect_buffer(GtkWidget *textview)
   if(!GTK_IS_TEXT_VIEW(textview)) return;
 
   dt_gui_widget_auto_height_t *state = g_object_get_data(G_OBJECT(textview), DT_GUI_WIDGET_AUTO_HEIGHT_KEY);
-  if(!state) return;
+  if(IS_NULL_PTR(state)) return;
 
   GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(textview));
   if(buffer == state->buffer) return;
@@ -2396,7 +2396,7 @@ static void _widget_auto_on_buffer_changed(GObject *textview, GParamSpec *pspec,
 static void _widget_auto_height_free(gpointer data)
 {
   dt_gui_widget_auto_height_t *state = (dt_gui_widget_auto_height_t *)data;
-  if(!state) return;
+  if(IS_NULL_PTR(state)) return;
   _widget_auto_disconnect_model(state, NULL);
   _widget_auto_disconnect_buffer(state);
   dt_free(state);
@@ -2500,7 +2500,7 @@ void dt_gui_container_destroy_children(GtkContainer *container)
 
 GtkWidget *dt_gui_get_popup_relative_widget(GtkWidget *widget, GdkRectangle *rect)
 {
-  if(!widget) return NULL;
+  if(IS_NULL_PTR(widget)) return NULL;
 
   GtkWidget *relative = widget;
 

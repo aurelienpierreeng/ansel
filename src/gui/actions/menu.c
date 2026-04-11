@@ -658,7 +658,7 @@ gboolean dt_menu_is_image_in_dev(GList *imgs)
 
 void dt_menu_apply_dev_history_update(dt_develop_t *dev, const gboolean history_inited)
 {
-  if(!dev) return;
+  if(IS_NULL_PTR(dev)) return;
 
   dt_dev_reload_history_items(dev, dev->image_storage.id);
   dt_dev_history_gui_update(dev);

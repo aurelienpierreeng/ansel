@@ -587,7 +587,7 @@ static void invalidate_luminance_cache(dt_iop_module_t *const self)
   // This is one of the cases that used to go wrong when tone equalizer stored
   // ad-hoc GUI buffers outside the pixelpipe cache.
   dt_iop_toneequalizer_gui_data_t *const restrict g = (dt_iop_toneequalizer_gui_data_t *)self->gui_data;
-  if(!g) return;
+  if(IS_NULL_PTR(g)) return;
 
   dt_pixel_cache_entry_t *preview_entry = NULL;
   dt_iop_gui_enter_critical_section(self);
@@ -1038,7 +1038,7 @@ static inline __attribute__((always_inline)) int toneeq_process(struct dt_iop_mo
   {
     // Export/thumbnail pipes don't need persistent GUI sampling, so a local temp buffer is enough.
     luminance = dt_pixelpipe_cache_alloc_align_float(num_elem, pipe);
-    if(!luminance) return 1;
+    if(IS_NULL_PTR(luminance)) return 1;
 
     if(compute_luminance_mask(in, luminance, width, height, ch, d) != 0)
     {

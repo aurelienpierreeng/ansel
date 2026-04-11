@@ -199,7 +199,7 @@ static int _grab_focus(dt_thumbtable_t *table)
 static gboolean _thumbtable_idle_update(gpointer user_data)
 {
   dt_thumbtable_t *table = (dt_thumbtable_t *)user_data;
-  if(!table) return G_SOURCE_REMOVE;
+  if(IS_NULL_PTR(table)) return G_SOURCE_REMOVE;
 
   table->idle_update_id = 0;
   dt_thumbtable_configure(table);
@@ -210,7 +210,7 @@ static gboolean _thumbtable_idle_update(gpointer user_data)
 
 static void _thumbtable_schedule_update(dt_thumbtable_t *table)
 {
-  if(!table) return;
+  if(IS_NULL_PTR(table)) return;
   if(table->scroll_window && !gtk_widget_is_visible(table->scroll_window)) return;
   if(table->idle_update_id) return;
   table->idle_update_id = g_idle_add_full(G_PRIORITY_LOW, (GSourceFunc)_thumbtable_idle_update, table, NULL);
@@ -224,7 +224,7 @@ void dt_thumbtable_queue_update(dt_thumbtable_t *table)
 static void _scrollbar_value_changed(GtkAdjustment *adjustment, gpointer user_data)
 {
   dt_thumbtable_t *table = (dt_thumbtable_t *)user_data;
-  if(!table) return;
+  if(IS_NULL_PTR(table)) return;
 
   // Only react to the adjustment that is meaningful in the current mode.
   if(table->mode == DT_THUMBTABLE_MODE_FILEMANAGER && adjustment != table->v_scrollbar) return;
@@ -236,7 +236,7 @@ static void _scrollbar_value_changed(GtkAdjustment *adjustment, gpointer user_da
 static void _scrollbar_page_size_notify(GObject *object, GParamSpec *pspec, gpointer user_data)
 {
   dt_thumbtable_t *table = (dt_thumbtable_t *)user_data;
-  if(!table) return;
+  if(IS_NULL_PTR(table)) return;
 
   // Page size is only used to size the filemanager/grid. Filmstrip uses its parent allocation.
   if(table->mode != DT_THUMBTABLE_MODE_FILEMANAGER) return;
@@ -287,7 +287,7 @@ static void _scrollbar_widget_size_allocate(GtkWidget *widget, GtkAllocation *al
 // update active thumbnail styling, so we need to catch the signal here and update the whole list.
 void _mouse_over_image_callback(gpointer instance, gpointer user_data)
 {
-  if(!user_data) return;
+  if(IS_NULL_PTR(user_data)) return;
   dt_thumbtable_t *table = (dt_thumbtable_t *)user_data;
   if(!table->lut || table->collection_count == 0) return;
 
@@ -831,7 +831,7 @@ void _add_thumbnail_at_rowid(dt_thumbtable_t *table, const size_t rowid, const i
   const int32_t imgid = table->lut[rowid].imgid;
   dt_image_t info;
   dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
-  if(!img) return;
+  if(IS_NULL_PTR(img)) return;
 
   // Take a private copy
   info = *img;
@@ -874,7 +874,7 @@ void _add_thumbnail_at_rowid(dt_thumbtable_t *table, const size_t rowid, const i
   else
   {
     thumb = dt_thumbnail_new(rowid, table->overlays, table, &info);
-    if(!thumb) return;
+    if(IS_NULL_PTR(thumb)) return;
     g_hash_table_insert(table->list, GINT_TO_POINTER(thumb->info.id), thumb);
     table->thumb_nb += 1;
   }
@@ -1005,14 +1005,14 @@ void dt_thumbtable_update(dt_thumbtable_t *table)
 
 static void _dt_profile_change_callback(gpointer instance, int type, gpointer user_data)
 {
-  if(!user_data) return;
+  if(IS_NULL_PTR(user_data)) return;
   dt_thumbtable_t *table = (dt_thumbtable_t *)user_data;
   dt_thumbtable_refresh_thumbnail(table, UNKNOWN_IMAGE, TRUE);
 }
 
 static void _dt_selection_changed_callback(gpointer instance, gpointer user_data)
 {
-  if(!user_data) return;
+  if(IS_NULL_PTR(user_data)) return;
   dt_thumbtable_t *table = (dt_thumbtable_t *)user_data;
   gboolean first = TRUE;
 
@@ -1158,7 +1158,7 @@ static void _dt_image_info_changed_callback(gpointer instance, gpointer imgs, gp
 {
   if(!user_data || !imgs) return;
   dt_thumbtable_t *table = (dt_thumbtable_t *)user_data;
-  if(!table->lut) return;
+  if(IS_NULL_PTR(table->lut)) return;
 
   dt_pthread_mutex_lock(&table->lock);
 
@@ -1309,7 +1309,7 @@ static void _dt_collection_changed_callback(gpointer instance, dt_collection_cha
                                             dt_collection_properties_t changed_property, gpointer imgs,
                                             const int next, gpointer user_data)
 {
-  if(!user_data) return;
+  if(IS_NULL_PTR(user_data)) return;
   dt_thumbtable_t *table = (dt_thumbtable_t *)user_data;
 
   gboolean collapse_groups = dt_conf_get_bool("ui_last/grouping");
@@ -1381,7 +1381,7 @@ static void _thumbs_update_overlays_mode(dt_thumbtable_t *table)
 // change the type of overlays that should be shown
 void dt_thumbtable_set_overlays_mode(dt_thumbtable_t *table, dt_thumbnail_overlay_t over)
 {
-  if(!table) return;
+  if(IS_NULL_PTR(table)) return;
   if(over == table->overlays) return;
 
   // Cleanup old Darktable stupid modes
@@ -1474,7 +1474,7 @@ static void _thumbtable_drag_set_icon(dt_thumbtable_t *table, GdkDragContext *co
 
   const int32_t imgid = GPOINTER_TO_INT(table->drag_list->data);
   dt_thumbnail_t *thumb = _find_thumb_by_imgid(table, imgid);
-  if(!thumb) return;
+  if(IS_NULL_PTR(thumb)) return;
 
   cairo_surface_t *surface = NULL;
   int hotspot_x = 0;
@@ -1489,7 +1489,7 @@ static void _thumbtable_drag_set_icon(dt_thumbtable_t *table, GdkDragContext *co
   }
   dt_pthread_mutex_unlock(&thumb->lock);
 
-  if(!surface) return;
+  if(IS_NULL_PTR(surface)) return;
 
   GtkWidget *image = gtk_image_new_from_surface(surface);
   cairo_surface_destroy(surface);
@@ -1620,7 +1620,7 @@ static void _event_dnd_end(GtkWidget *widget, GdkDragContext *context, gpointer 
 
 int _imgid_to_rowid(dt_thumbtable_t *table, int32_t imgid)
 {
-  if(!table->lut) return UNKNOWN_IMAGE;
+  if(IS_NULL_PTR(table->lut)) return UNKNOWN_IMAGE;
 
   int rowid = UNKNOWN_IMAGE;
 
@@ -1653,7 +1653,7 @@ typedef enum dt_thumbtable_direction_t
 
 void _move_in_grid(dt_thumbtable_t *table, GdkEventKey *event, dt_thumbtable_direction_t direction, int origin_imgid)
 {
-  if(!table->lut) return;
+  if(IS_NULL_PTR(table->lut)) return;
   if(!gtk_widget_is_visible(table->scroll_window)) return;
 
   int current_rowid = _imgid_to_rowid(table, origin_imgid);
@@ -1729,9 +1729,9 @@ void _alternative_mode(dt_thumbtable_t *table, gboolean enable)
 gboolean dt_thumbtable_key_pressed_grid(GtkWidget *self, GdkEventKey *event, gpointer user_data)
 {
   if(!gtk_window_is_active(GTK_WINDOW(darktable.gui->ui->main_window))) return FALSE;
-  if(!user_data) return FALSE;
+  if(IS_NULL_PTR(user_data)) return FALSE;
   dt_thumbtable_t *table = (dt_thumbtable_t *)user_data;
-  if(!table->lut) return FALSE;
+  if(IS_NULL_PTR(table->lut)) return FALSE;
 
   // Find out the current image
   // NOTE: when moving into the grid from key arrow events,
@@ -1879,7 +1879,7 @@ gboolean dt_thumbtable_key_released_grid(GtkWidget *self, GdkEventKey *event, gp
 {
   if(!gtk_window_is_active(GTK_WINDOW(darktable.gui->ui->main_window))) return FALSE;
 
-  if(!user_data) return FALSE;
+  if(IS_NULL_PTR(user_data)) return FALSE;
   dt_thumbtable_t *table = (dt_thumbtable_t *)user_data;
 
   //fprintf(stdout, "%s\n", gtk_accelerator_name(event->keyval, event->state));
@@ -1890,7 +1890,7 @@ gboolean dt_thumbtable_key_released_grid(GtkWidget *self, GdkEventKey *event, gp
 
 static gboolean _draw_callback(GtkWidget *widget, cairo_t *cr, gpointer user_data)
 {
-  if(!user_data) return TRUE;
+  if(IS_NULL_PTR(user_data)) return TRUE;
 
   // Ensure the background color is painted
   GtkStyleContext *context = gtk_widget_get_style_context(widget);
@@ -1909,7 +1909,7 @@ void dt_thumbtable_reset_collection(dt_thumbtable_t *table)
 
 gboolean _event_main_leave(GtkWidget *widget, GdkEventCrossing *event, gpointer user_data)
 {
-  if(!user_data) return TRUE;
+  if(IS_NULL_PTR(user_data)) return TRUE;
   dt_control_set_mouse_over_id(UNKNOWN_IMAGE);
   return TRUE;
 }
@@ -2172,7 +2172,7 @@ void dt_thumbtable_cleanup(dt_thumbtable_t *table)
 
 void dt_thumbtable_stop(dt_thumbtable_t *table)
 {
-  if(!table) return;
+  if(IS_NULL_PTR(table)) return;
 
   if(table->idle_update_id)
   {

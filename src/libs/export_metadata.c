@@ -72,7 +72,7 @@ const GList *dt_exif_get_exiv2_taglist();
 // find a string on the list
 static gboolean _find_metadata_iter_per_text(GtkTreeModel *model, GtkTreeIter *iter, gint col, const char *text)
 {
-  if(!text) return FALSE;
+  if(IS_NULL_PTR(text)) return FALSE;
   GtkTreeIter it;
   gboolean valid = gtk_tree_model_get_iter_first(model, &it);
   char *name;

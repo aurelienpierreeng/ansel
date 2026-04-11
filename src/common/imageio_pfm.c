@@ -47,7 +47,7 @@ dt_imageio_retval_t dt_imageio_open_pfm(dt_image_t *img, const char *filename, d
   while(*ext != '.' && ext > filename) ext--;
   if(strcasecmp(ext, ".pfm")) return DT_IMAGEIO_FILE_CORRUPTED;
   FILE *f = g_fopen(filename, "rb");
-  if(!f) return DT_IMAGEIO_FILE_CORRUPTED;
+  if(IS_NULL_PTR(f)) return DT_IMAGEIO_FILE_CORRUPTED;
   int ret = 0;
   int cols = 3;
   float scale_factor;

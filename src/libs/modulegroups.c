@@ -130,7 +130,7 @@ static gboolean _modulegroups_reorder_target(GtkWidget *target);
  */
 static void _modulegroups_hide_pages(const dt_lib_modulegroups_t *d)
 {
-  if(!d) return;
+  if(IS_NULL_PTR(d)) return;
   if(d->page_pipeline) gtk_widget_hide(d->page_pipeline);
   if(d->page_basic) gtk_widget_hide(d->page_basic);
   if(d->page_repair) gtk_widget_hide(d->page_repair);
@@ -164,7 +164,7 @@ static void _modulegroups_sync_section_label_margins(dt_lib_modulegroups_t *d)
       break;
     }
   }
-  if(!reference) return;
+  if(IS_NULL_PTR(reference)) return;
 
   GtkBorder margin = { 0 };
   GtkStyleContext *context = gtk_widget_get_style_context(reference);
@@ -196,7 +196,7 @@ static void _modulegroups_clear_drop_state(dt_lib_modulegroups_t *d)
     d->drag_highlight = NULL;
   }
 
-  if(!darktable.develop) return;
+  if(IS_NULL_PTR(darktable.develop)) return;
 
   /* Walk every module and clear the before/after classes that motion handlers add. */
   for(const GList *modules = g_list_last(darktable.develop->iop); modules; modules = g_list_previous(modules))
@@ -332,7 +332,7 @@ static void _modulegroups_ensure_page_widgets(dt_lib_module_t *self)
     return;
 
   GtkBox *root = dt_ui_get_container(darktable.gui->ui, DT_UI_CONTAINER_PANEL_RIGHT_CENTER);
-  if(!root) return;
+  if(IS_NULL_PTR(root)) return;
 
   _modulegroups_track_widget(&d->page_pipeline, gtk_box_new(GTK_ORIENTATION_VERTICAL, 0));
   gtk_box_pack_start(root, d->page_pipeline, FALSE, FALSE, 0);
@@ -506,7 +506,7 @@ static void _modulegroups_drag_begin(GtkWidget *widget, GdkDragContext *context,
   if(!module_src || !module_src->header) return;
 
   GdkWindow *window = gtk_widget_get_parent_window(module_src->header);
-  if(!window) return;
+  if(IS_NULL_PTR(window)) return;
 
   GtkAllocation allocation = { 0 };
   gtk_widget_get_allocation(module_src->header, &allocation);
@@ -556,7 +556,7 @@ static gboolean _modulegroups_drag_motion(GtkWidget *widget, GdkDragContext *dc,
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
   dt_lib_modulegroups_t *d = (dt_lib_modulegroups_t *)self->data;
   dt_iop_module_t *module_src = d->drag_source;
-  if(!module_src) return FALSE;
+  if(IS_NULL_PTR(module_src)) return FALSE;
 
   dt_iop_module_t *module_dest = _modulegroups_get_dnd_dest_module(widget, y, module_src);
   gboolean can_move = FALSE;
@@ -595,21 +595,18 @@ static void _modulegroups_drag_data_received(GtkWidget *widget, GdkDragContext *
   dt_lib_modulegroups_t *d = (dt_lib_modulegroups_t *)self->data;
   dt_iop_module_t *module_src = d->drag_source;
   dt_iop_module_t *module_dest = _modulegroups_get_dnd_dest_module(widget, y, module_src);
-  gboolean moved = FALSE;
 
   if(module_src && module_dest && module_src != module_dest)
   {
     if(module_src->iop_order < module_dest->iop_order)
-      moved = dt_iop_gui_move_module_after(module_src, module_dest, "_modulegroups_drag_data_received");
+      dt_iop_gui_move_module_after(module_src, module_dest, "_modulegroups_drag_data_received");
     else
-      moved = dt_iop_gui_move_module_before(module_src, module_dest, "_modulegroups_drag_data_received");
+      dt_iop_gui_move_module_before(module_src, module_dest, "_modulegroups_drag_data_received");
   }
 
   gtk_drag_finish(dc, TRUE, FALSE, time);
   _modulegroups_clear_drop_state(d);
   d->drag_source = NULL;
-
-  if(!moved) return;
 }
 
 static void _modulegroups_drag_leave(GtkWidget *widget, GdkDragContext *dc, guint time, gpointer user_data)
@@ -720,7 +717,7 @@ static gboolean _modulegroups_switch_tab_next(GtkAccelGroup *accel_group, GObjec
                                               GdkModifierType modifier, gpointer data)
 {
   dt_develop_t *dev = (dt_develop_t *)data;
-  if(!dev) return FALSE;
+  if(IS_NULL_PTR(dev)) return FALSE;
 
   dt_iop_module_t *focused = dev->gui_module;
   if(focused) dt_iop_gui_set_expanded(focused, FALSE, TRUE);
@@ -735,7 +732,7 @@ static gboolean _modulegroups_switch_tab_previous(GtkAccelGroup *accel_group, GO
                                                   GdkModifierType modifier, gpointer data)
 {
   dt_develop_t *dev = (dt_develop_t *)data;
-  if(!dev) return FALSE;
+  if(IS_NULL_PTR(dev)) return FALSE;
 
   dt_iop_module_t *focused = dev->gui_module;
   if(focused) dt_iop_gui_set_expanded(focused, FALSE, TRUE);
@@ -804,7 +801,7 @@ static void _focus_module(dt_iop_module_t *module)
 
 static dt_iop_module_t *_module_from_active_group(dt_iop_module_t *mod, uint32_t current_group)
 {
-  if(!mod) return NULL; // that should never happen
+  if(IS_NULL_PTR(mod)) return NULL; // that should never happen
 
   if(dt_iop_gui_module_is_visible(mod) &&
     (dt_is_module_in_group(mod, current_group) || _is_module_in_history(mod)))

@@ -205,7 +205,7 @@ dt_imageio_retval_t dt_imageio_open_pnm(dt_image_t *img, const char *filename, d
   while(*ext != '.' && ext > filename) ext--;
   if(strcasecmp(ext, ".pbm") && strcasecmp(ext, ".pgm") && strcasecmp(ext, ".ppm")) return DT_IMAGEIO_FILE_CORRUPTED;
   FILE *f = g_fopen(filename, "rb");
-  if(!f) return DT_IMAGEIO_FILE_CORRUPTED;
+  if(IS_NULL_PTR(f)) return DT_IMAGEIO_FILE_CORRUPTED;
   int ret = 0;
   dt_imageio_retval_t result = DT_IMAGEIO_FILE_CORRUPTED;
 

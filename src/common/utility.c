@@ -192,7 +192,7 @@ gchar *dt_util_glist_to_str(const gchar *separator, GList *items)
 
 GList *dt_util_glist_uniq(GList *items)
 {
-  if(!items) return NULL;
+  if(IS_NULL_PTR(items)) return NULL;
 
   gchar *last = NULL;
   GList *last_item = NULL;
@@ -625,7 +625,7 @@ gboolean dt_util_gps_rationale_to_number(const double r0_1, const double r0_2, c
                                          const double r1_2, const double r2_1, const double r2_2, char sign,
                                          double *result)
 {
-  if(!result) return FALSE;
+  if(IS_NULL_PTR(result)) return FALSE;
   double res = 0.0;
   // Latitude decoding from Exif.
   double num, den, min, sec;
@@ -661,7 +661,7 @@ gboolean dt_util_gps_rationale_to_number(const double r0_1, const double r0_2, c
 
 gboolean dt_util_gps_elevation_to_number(const double r_1, const double r_2, char sign, double *result)
 {
-  if(!result) return FALSE;
+  if(IS_NULL_PTR(result)) return FALSE;
   double res = 0.0;
   // Altitude decoding from Exif.
   const double num = r_1;
@@ -686,7 +686,7 @@ gchar *dt_util_normalize_path(const gchar *_input)
   else
   {
     input = g_locale_to_utf8(_input, -1, NULL, NULL, NULL);
-    if(!input) return NULL;
+    if(IS_NULL_PTR(input)) return NULL;
   }
 #else
   const gchar *input = _input;
@@ -894,14 +894,14 @@ char *dt_read_file(const char *const filename, size_t *filesize)
 {
   if (filesize) *filesize = 0;
   FILE *fd = g_fopen(filename, "rb");
-  if(!fd) return NULL;
+  if(IS_NULL_PTR(fd)) return NULL;
 
   fseek(fd, 0, SEEK_END);
   const size_t end = ftell(fd);
   rewind(fd);
 
   char *content = (char *)malloc(sizeof(char) * end);
-  if(!content) return NULL;
+  if(IS_NULL_PTR(content)) return NULL;
 
   const size_t count = fread(content, sizeof(char), end, fd);
   fclose(fd);
@@ -1002,9 +1002,9 @@ gboolean dt_has_same_path_basename(const char *filename1, const char *filename2)
   // assume both filenames have an extension
   if(!filename1 || !filename2) return FALSE;
   const char *dot1 = strrchr(filename1, '.');
-  if(!dot1) return FALSE;
+  if(IS_NULL_PTR(dot1)) return FALSE;
   const char *dot2 = strrchr(filename2, '.');
-  if(!dot2) return FALSE;
+  if(IS_NULL_PTR(dot2)) return FALSE;
   const int length1 = dot1 - filename1;
   const int length2 = dot2 - filename2;
   if(length1 != length2)
@@ -1021,9 +1021,9 @@ char *dt_copy_filename_extension(const char *filename1, const char *filename2)
   // assume both filenames have an extension
   if(!filename1 || !filename2) return NULL;
   const char *dot1 = strrchr(filename1, '.');
-  if(!dot1) return NULL;
+  if(IS_NULL_PTR(dot1)) return NULL;
   const char *dot2 = strrchr(filename2, '.');
-  if(!dot2) return NULL;
+  if(IS_NULL_PTR(dot2)) return NULL;
   const int name_lgth = dot1 - filename1;
   const int ext_lgth = strlen(dot2);
   char *output = g_malloc(name_lgth + ext_lgth + 1);

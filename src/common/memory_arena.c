@@ -18,6 +18,7 @@
 
 #define _GNU_SOURCE
 
+#include "common/darktable.h"
 #include "common/memory_arena.h"
 
 #include <errno.h>
@@ -239,7 +240,7 @@ void dt_cache_arena_stats(dt_cache_arena_t *a,
 
 void dt_cache_arena_cleanup(dt_cache_arena_t *a)
 {
-  if(!a) return;
+  if(IS_NULL_PTR(a)) return;
 
   dt_pthread_mutex_lock(&a->lock);
   g_array_free(a->free_runs, TRUE);

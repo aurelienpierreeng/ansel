@@ -84,7 +84,7 @@ static int widget_gc(lua_State *L)
 {
   lua_widget lwidget;
   luaA_to(L, lua_widget, &lwidget, 1);
-  if(!lwidget) return 0; // object has been destroyed
+  if(IS_NULL_PTR(lwidget)) return 0; // object has been destroyed
   if(gtk_widget_get_parent(lwidget->widget)) {
     luaL_error(L, "Destroying a widget which is still parented, this should never happen (%s at %p)\n", lwidget->type->name, lwidget);
   }

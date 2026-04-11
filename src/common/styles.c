@@ -714,7 +714,7 @@ static dt_iop_module_t *_dt_styles_get_or_create_module_instance(dt_develop_t *d
 static dt_iop_module_t *_dt_styles_tmp_module_from_style_item(dt_develop_t *dev, const dt_style_item_t *style_item)
 {
   dt_iop_module_t *mod_src = dt_iop_get_module_by_op_priority(dev->iop, style_item->operation, -1);
-  if(!mod_src) return NULL;
+  if(IS_NULL_PTR(mod_src)) return NULL;
 
   dt_iop_module_t *module = (dt_iop_module_t *)calloc(1, sizeof(dt_iop_module_t));
   if(dt_iop_load_module(module, mod_src->so, dev))
@@ -807,7 +807,7 @@ static GList *_dt_styles_build_mod_list_from_history(dt_develop_t *dev, GHashTab
 
 static void _dt_styles_tmp_module_free(dt_iop_module_t *module)
 {
-  if(!module) return;
+  if(IS_NULL_PTR(module)) return;
   dt_iop_cleanup_module(module);
   dt_free(module);
 }
@@ -888,7 +888,7 @@ static int _styles_rebuild_history_from_items(dt_develop_t *dev_src, GList *appl
     if(!module) continue;
 
     dt_dev_history_item_t *hist = (dt_dev_history_item_t *)calloc(1, sizeof(dt_dev_history_item_t));
-    if(!hist) return 1;
+    if(IS_NULL_PTR(hist)) return 1;
 
     dev_src->history = g_list_append(dev_src->history, hist);
     if(!dt_dev_history_item_update_from_params(dev_src, hist, module, module->enabled, NULL, 0, NULL, NULL))

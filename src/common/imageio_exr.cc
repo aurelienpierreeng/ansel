@@ -142,7 +142,7 @@ dt_imageio_retval_t dt_imageio_open_exr(dt_image_t *img, const char *filename, d
   img->flags |= DT_IMAGE_HDR;
   img->loader = LOADER_EXR;
 
-  if(!mbuf) return DT_IMAGEIO_OK;
+  if(IS_NULL_PTR(mbuf)) return DT_IMAGEIO_OK;
 
   float *buf = (float *)dt_mipmap_cache_alloc(mbuf, img);
   if(!buf)

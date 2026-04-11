@@ -1059,7 +1059,7 @@ static void _update_gui_lut_cache(dt_iop_module_t *self)
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
   dt_iop_colorprimaries_gui_data_t *g = (dt_iop_colorprimaries_gui_data_t *)self->gui_data;
-  if(!g) return;
+  if(IS_NULL_PTR(g)) return;
 
   g->viewer_lut_dirty = TRUE;
   _refresh_slider_gradients(self);
@@ -1074,7 +1074,7 @@ void gui_update(dt_iop_module_t *self)
 {
   const dt_iop_colorprimaries_params_t *p = (const dt_iop_colorprimaries_params_t *)self->params;
   dt_iop_colorprimaries_gui_data_t *g = (dt_iop_colorprimaries_gui_data_t *)self->gui_data;
-  if(!g) return;
+  if(IS_NULL_PTR(g)) return;
 
   ++darktable.gui->reset;
   dt_bauhaus_slider_set(g->white_level, p->white_level);
@@ -1105,7 +1105,7 @@ void gui_update(dt_iop_module_t *self)
 void gui_focus(dt_iop_module_t *self, gboolean in)
 {
   dt_iop_colorprimaries_gui_data_t *g = (dt_iop_colorprimaries_gui_data_t *)self->gui_data;
-  if(!g) return;
+  if(IS_NULL_PTR(g)) return;
 
   if(in)
   {

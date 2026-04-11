@@ -222,7 +222,7 @@ static int32_t _generic_dt_control_fileop_images_job_run(dt_job_t *job,
 void *dt_control_image_enumerator_alloc()
 {
   dt_control_image_enumerator_t *params = calloc(1, sizeof(dt_control_image_enumerator_t));
-  if(!params) return NULL;
+  if(IS_NULL_PTR(params)) return NULL;
   return params;
 }
 
@@ -247,7 +247,7 @@ static dt_job_t *dt_control_generic_images_job_create(dt_job_execute_callback ex
                                                       gboolean only_visible)
 {
   dt_job_t *job = dt_control_job_create(execute, "%s", message);
-  if(!job) return NULL;
+  if(IS_NULL_PTR(job)) return NULL;
   dt_control_image_enumerator_t *params = dt_control_image_enumerator_alloc();
   if(!params)
   {
@@ -270,7 +270,7 @@ static dt_job_t *dt_control_generic_image_job_create(dt_job_execute_callback exe
                                                      int32_t imgid)
 {
   dt_job_t *job = dt_control_job_create(execute, "%s", message);
-  if(!job) return NULL;
+  if(IS_NULL_PTR(job)) return NULL;
   dt_control_image_enumerator_t *params = dt_control_image_enumerator_alloc();
   if(!params)
   {
@@ -310,7 +310,7 @@ static int32_t dt_control_save_xmps_job_run(dt_job_t *job)
 void dt_control_write_sidecar_files()
 {
   GList *imgs = dt_act_on_get_images();
-  if(!imgs) return;
+  if(IS_NULL_PTR(imgs)) return;
   dt_control_save_xmps(imgs, FALSE);
   g_list_free(imgs);
   imgs = NULL;
@@ -1484,7 +1484,7 @@ end:
 static dt_control_image_enumerator_t *dt_control_gpx_apply_alloc()
 {
   dt_control_image_enumerator_t *params = dt_control_image_enumerator_alloc();
-  if(!params) return NULL;
+  if(IS_NULL_PTR(params)) return NULL;
 
   params->data = calloc(1, sizeof(dt_control_gpx_apply_t));
   if(!params->data)
@@ -1514,7 +1514,7 @@ static dt_job_t *_control_gpx_apply_job_create(const gchar *filename, int32_t fi
                                                const gchar *tz, GList *imgs)
 {
   dt_job_t *job = dt_control_job_create(&dt_control_gpx_apply_job_run, "gpx apply");
-  if(!job) return NULL;
+  if(IS_NULL_PTR(job)) return NULL;
   dt_control_image_enumerator_t *params = dt_control_gpx_apply_alloc();
   if(!params)
   {
@@ -1547,10 +1547,10 @@ void dt_control_save_xmp(const int32_t imgid)
 void dt_control_save_xmps(const GList *imgids, const gboolean check_history)
 {
   (void)check_history;
-  if(!imgids) return;
+  if(IS_NULL_PTR(imgids)) return;
 
   dt_job_t *job = dt_control_job_create(&dt_control_save_xmps_job_run, "save xmp");
-  if(!job) return;
+  if(IS_NULL_PTR(job)) return;
 
   dt_control_image_enumerator_t *params = dt_control_image_enumerator_alloc();
   if(!params)
@@ -1884,7 +1884,7 @@ void dt_control_refresh_exif()
 static dt_control_image_enumerator_t *dt_control_export_alloc()
 {
   dt_control_image_enumerator_t *params = dt_control_image_enumerator_alloc();
-  if(!params) return NULL;
+  if(IS_NULL_PTR(params)) return NULL;
 
   params->data = calloc(1, sizeof(dt_control_export_t));
   if(!params->data)
@@ -1919,7 +1919,7 @@ void dt_control_export(GList *imgid_list, int max_width, int max_height, int for
                        dt_iop_color_intent_t icc_intent, const gchar *metadata_export)
 {
   dt_job_t *job = dt_control_job_create(&dt_control_export_job_run, "export");
-  if(!job) return;
+  if(IS_NULL_PTR(job)) return;
   dt_control_image_enumerator_t *params = dt_control_export_alloc();
   if(!params)
   {
@@ -2052,7 +2052,7 @@ static int32_t dt_control_datetime_job_run(dt_job_t *job)
 static void *dt_control_datetime_alloc()
 {
   dt_control_image_enumerator_t *params = dt_control_image_enumerator_alloc();
-  if(!params) return NULL;
+  if(IS_NULL_PTR(params)) return NULL;
 
   params->data = calloc(1, sizeof(dt_control_datetime_t));
   if(!params->data)
@@ -2076,7 +2076,7 @@ static void dt_control_datetime_job_cleanup(void *p)
 static dt_job_t *dt_control_datetime_job_create(const GTimeSpan offset, const char *datetime, GList *imgs)
 {
   dt_job_t *job = dt_control_job_create(&dt_control_datetime_job_run, "time offset");
-  if(!job) return NULL;
+  if(IS_NULL_PTR(job)) return NULL;
   dt_control_image_enumerator_t *params = dt_control_datetime_alloc();
   if(!params)
   {

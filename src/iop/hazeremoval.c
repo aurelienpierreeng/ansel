@@ -231,7 +231,7 @@ static void _history_resync_callback(gpointer instance, gpointer user_data)
   (void)instance;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_hazeremoval_gui_data_t *g = (dt_iop_hazeremoval_gui_data_t *)self->gui_data;
-  if(!g) return;
+  if(IS_NULL_PTR(g)) return;
 
   const uint64_t preview_hash = _current_preview_hash(self);
   dt_iop_gui_enter_critical_section(self);

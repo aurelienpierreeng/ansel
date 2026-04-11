@@ -171,7 +171,7 @@ static void _add_id_link(dt_selection_t *selection, int32_t imgid)
 
 GList *dt_selection_get_list(struct dt_selection_t *selection)
 {
-  if(!selection->ids) return NULL;
+  if(IS_NULL_PTR(selection->ids)) return NULL;
 
   return g_list_copy(selection->ids);
 }
@@ -319,7 +319,7 @@ static int32_t _list_iterate(struct dt_selection_t *selection, GList **list, int
 
 void dt_selection_select_list(struct dt_selection_t *selection, const GList *const l)
 {
-  if(!l) return;
+  if(IS_NULL_PTR(l)) return;
   GList *list = (GList *)l;
 
   // Send SQL queries by batches of 400 imgids for performance
@@ -342,7 +342,7 @@ void dt_selection_select_list(struct dt_selection_t *selection, const GList *con
 
 void dt_selection_deselect_list(struct dt_selection_t *selection, const GList *const l)
 {
-  if(!l) return;
+  if(IS_NULL_PTR(l)) return;
   GList *list = (GList *)l;
 
   // Send SQL queries by batches of 400 imgids for performance
@@ -367,7 +367,7 @@ void dt_selection_deselect_list(struct dt_selection_t *selection, const GList *c
 gchar *dt_selection_ids_to_string(struct dt_selection_t *selection)
 {
   // There is no selection even after init, abort
-  if(!selection->ids) return NULL;
+  if(IS_NULL_PTR(selection->ids)) return NULL;
 
   gchar **ids = g_malloc0_n(selection->length + 1, 9 * sizeof(char *));
   uint32_t i = 0;

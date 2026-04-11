@@ -154,7 +154,7 @@ dt_bilateral_t *dt_bilateral_init(const int width,     // width of input image
                                   const float sigma_r) // range sigma (blur luma values)
 {
   dt_bilateral_t *b = (dt_bilateral_t *)malloc(sizeof(dt_bilateral_t));
-  if(!b) return NULL;
+  if(IS_NULL_PTR(b)) return NULL;
   dt_bilateral_grid_size(b,width,height,100.0f,sigma_s,sigma_r);
   b->width = width;
   b->height = height;
@@ -425,7 +425,7 @@ void dt_bilateral_slice_to_output(const dt_bilateral_t *const b, const float *co
 
 void dt_bilateral_free(dt_bilateral_t *b)
 {
-  if(!b) return;
+  if(IS_NULL_PTR(b)) return;
   dt_pixelpipe_cache_free_align(b->buf);
   dt_free(b);
 }

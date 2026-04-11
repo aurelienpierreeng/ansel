@@ -324,7 +324,7 @@ static char *_variables_get_iso_timestamp(const GTimeSpan gts)
   if(gts <= 0) return NULL;
 
   GDateTime *gdt = g_date_time_add(darktable.origin_gdt, gts);
-  if(!gdt) return NULL;
+  if(IS_NULL_PTR(gdt)) return NULL;
 
   char *result = g_date_time_format(gdt, "%Y-%m-%d %H:%M:%S");
   g_date_time_unref(gdt);
@@ -1103,7 +1103,7 @@ static void _grow_buffer(char **result, char **result_iter, size_t *result_lengt
 static char *_expand_source(dt_variables_params_t *params, char **source, char extra_stop)
 {
   char *result = g_strdup("");
-  if(!*source) return result;
+  if(IS_NULL_PTR(*source)) return result;
   char *result_iter = result;
   size_t result_length = 0;
   char *source_iter = *source;

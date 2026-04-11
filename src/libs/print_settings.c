@@ -697,7 +697,7 @@ static void _print_button_clicked(GtkWidget *widget, gpointer user_data)
   }
 
   dt_job_t *job = dt_control_job_create(&_print_job_run, "print image %d", imgid);
-  if(!job) return;
+  if(IS_NULL_PTR(job)) return;
 
   dt_lib_print_job_t *params = calloc(1, sizeof(dt_lib_print_job_t));
   dt_control_job_set_params(job, params, _print_job_cleanup);
@@ -837,7 +837,7 @@ _paper_changed(GtkWidget *combo, const dt_lib_module_t *self)
 
   const gchar *paper_name = dt_bauhaus_combobox_get_text(combo);
 
-  if(!paper_name) return;
+  if(IS_NULL_PTR(paper_name)) return;
 
   const dt_paper_info_t *paper = dt_get_paper(ps->paper_list, paper_name);
 
@@ -862,7 +862,7 @@ _media_changed(GtkWidget *combo, const dt_lib_module_t *self)
 
   const gchar *medium_name = dt_bauhaus_combobox_get_text(combo);
 
-  if(!medium_name) return;
+  if(IS_NULL_PTR(medium_name)) return;
 
   const dt_medium_info_t *medium = dt_get_medium(ps->media_list, medium_name);
 
@@ -2861,19 +2861,19 @@ int set_params(dt_lib_module_t *self, const void *params, int size)
 {
   dt_lib_print_settings_t *ps = (dt_lib_print_settings_t *)self->data;
 
-  if(!params) return 1;
+  if(IS_NULL_PTR(params)) return 1;
 
   // get the parameters buffer
   const char *buf = (char *)params;
 
   // get individual items
   const char *printer = buf;
-  if(!printer) return 1;
+  if(IS_NULL_PTR(printer)) return 1;
   const int32_t printer_len = strlen(printer) + 1;
   buf += printer_len;
 
   const char *paper = buf;
-  if(!paper) return 1;
+  if(IS_NULL_PTR(paper)) return 1;
   const int32_t paper_len = strlen(paper) + 1;
   buf += paper_len;
 
@@ -2884,7 +2884,7 @@ int set_params(dt_lib_module_t *self, const void *params, int size)
   buf +=  sizeof(int32_t);
 
   const char *f_profile = buf;
-  if(!f_profile) return 1;
+  if(IS_NULL_PTR(f_profile)) return 1;
   const int32_t profile_len = strlen(f_profile) + 1;
   buf += profile_len;
 
@@ -2895,7 +2895,7 @@ int set_params(dt_lib_module_t *self, const void *params, int size)
   buf +=  sizeof(int32_t);
 
   const char *f_pprofile = buf;
-  if(!f_pprofile) return 1;
+  if(IS_NULL_PTR(f_pprofile)) return 1;
   const int32_t pprofile_len = strlen(f_pprofile) + 1;
   buf += pprofile_len;
 
@@ -2906,7 +2906,7 @@ int set_params(dt_lib_module_t *self, const void *params, int size)
   buf += sizeof(int32_t);
 
   const char *style = buf;
-  if(!style) return 1;
+  if(IS_NULL_PTR(style)) return 1;
   const int32_t style_len = strlen(style) + 1;
   buf += style_len;
 
@@ -2929,7 +2929,7 @@ int set_params(dt_lib_module_t *self, const void *params, int size)
   buf += sizeof(int32_t);
 
   const char *media = buf;
-  if(!media) return 1;
+  if(IS_NULL_PTR(media)) return 1;
   const int32_t media_len = strlen(media) + 1;
   buf += media_len;
 

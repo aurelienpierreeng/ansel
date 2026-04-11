@@ -55,7 +55,7 @@ static gboolean _supported_image(const gchar *filename)
                                          "miff", "mng",  "pbm", "pnm", "ppm", "pgm", "webp", NULL };
   gboolean supported = FALSE;
   char *ext = g_strrstr(filename, ".");
-  if(!ext) return FALSE;
+  if(IS_NULL_PTR(ext)) return FALSE;
   ext++;
   for(const char **i = extensions_whitelist; !IS_NULL_PTR(*i); i++)
     if(!g_ascii_strncasecmp(ext, *i, strlen(*i)))

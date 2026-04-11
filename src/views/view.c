@@ -252,7 +252,7 @@ int dt_view_manager_switch(dt_view_manager_t *vm, const char *view_name)
         break;
       }
     }
-    if(!new_view) return 1; // the requested view doesn't exist
+    if(IS_NULL_PTR(new_view)) return 1; // the requested view doesn't exist
   }
 
   return dt_view_manager_switch_by_view(vm, new_view);
@@ -435,7 +435,7 @@ int dt_view_manager_switch_by_view(dt_view_manager_t *vm, const dt_view_t *nv)
 
 const char *dt_view_manager_name(dt_view_manager_t *vm)
 {
-  if(!vm->current_view) return "";
+  if(IS_NULL_PTR(vm->current_view)) return "";
   if(vm->current_view->name)
     return vm->current_view->name(vm->current_view);
   else
@@ -485,13 +485,13 @@ void dt_view_manager_expose(dt_view_manager_t *vm, cairo_t *cr, int32_t width, i
 
 void dt_view_manager_reset(dt_view_manager_t *vm)
 {
-  if(!vm->current_view) return;
+  if(IS_NULL_PTR(vm->current_view)) return;
   if(vm->current_view->reset) vm->current_view->reset(vm->current_view);
 }
 
 void dt_view_manager_mouse_leave(dt_view_manager_t *vm)
 {
-  if(!vm->current_view) return;
+  if(IS_NULL_PTR(vm->current_view)) return;
   dt_view_t *v = vm->current_view;
 
   /* lets check if any plugins want to handle mouse move */
@@ -513,13 +513,13 @@ void dt_view_manager_mouse_leave(dt_view_manager_t *vm)
 
 void dt_view_manager_mouse_enter(dt_view_manager_t *vm)
 {
-  if(!vm->current_view) return;
+  if(IS_NULL_PTR(vm->current_view)) return;
   if(vm->current_view->mouse_enter) vm->current_view->mouse_enter(vm->current_view);
 }
 
 void dt_view_manager_mouse_moved(dt_view_manager_t *vm, double x, double y, double pressure, int which)
 {
-  if(!vm->current_view) return;
+  if(IS_NULL_PTR(vm->current_view)) return;
   dt_view_t *v = vm->current_view;
 
   /* lets check if any plugins want to handle mouse move */
@@ -541,7 +541,7 @@ void dt_view_manager_mouse_moved(dt_view_manager_t *vm, double x, double y, doub
 
 int dt_view_manager_key_pressed(dt_view_manager_t *vm, GdkEventKey *event)
 {
-  if(!vm->current_view) return 0;
+  if(IS_NULL_PTR(vm->current_view)) return 0;
   dt_view_t *v = vm->current_view;
 
   /* lets check if any plugins want to handle button press */
@@ -568,7 +568,7 @@ int dt_view_manager_key_pressed(dt_view_manager_t *vm, GdkEventKey *event)
 
 int dt_view_manager_button_released(dt_view_manager_t *vm, double x, double y, int which, uint32_t state)
 {
-  if(!vm->current_view) return 0;
+  if(IS_NULL_PTR(vm->current_view)) return 0;
   dt_view_t *v = vm->current_view;
 
   /* lets check if any plugins want to handle button press */
@@ -596,7 +596,7 @@ int dt_view_manager_button_released(dt_view_manager_t *vm, double x, double y, i
 int dt_view_manager_button_pressed(dt_view_manager_t *vm, double x, double y, double pressure, int which,
                                    int type, uint32_t state)
 {
-  if(!vm->current_view) return 0;
+  if(IS_NULL_PTR(vm->current_view)) return 0;
   dt_view_t *v = vm->current_view;
 
   /* Reset Gtk focus */
@@ -639,7 +639,7 @@ void dt_view_manager_configure(dt_view_manager_t *vm, int width, int height)
 
 int dt_view_manager_scrolled(dt_view_manager_t *vm, double x, double y, int up, int state, int delta_y)
 {
-  if(!vm->current_view) return FALSE;
+  if(IS_NULL_PTR(vm->current_view)) return FALSE;
   if(vm->current_view->scrolled)
     return vm->current_view->scrolled(vm->current_view, x, y, up, state, delta_y);
   return 0;
@@ -1143,7 +1143,7 @@ char* dt_view_extend_modes_str(const char * name, const gboolean is_hdr, const g
 
 void dt_view_active_images_reset(gboolean raise)
 {
-  if(!darktable.view_manager->active_images) return;
+  if(IS_NULL_PTR(darktable.view_manager->active_images)) return;
   g_list_free(darktable.view_manager->active_images);
   darktable.view_manager->active_images = NULL;
 
@@ -1182,7 +1182,7 @@ GList *dt_view_active_images_get_all()
 
 int32_t dt_view_active_images_get_first()
 {
-  if(!darktable.view_manager->active_images) return -1;
+  if(IS_NULL_PTR(darktable.view_manager->active_images)) return -1;
   return GPOINTER_TO_INT(darktable.view_manager->active_images->data);
 }
 

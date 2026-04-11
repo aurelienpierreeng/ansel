@@ -203,7 +203,7 @@ gboolean dt_datetime_unix_to_exif(char *exif, const size_t exif_size, const time
 
 void dt_datetime_now_to_exif(char *exif)
 {
-  if(!exif) return;
+  if(IS_NULL_PTR(exif)) return;
   exif[0] = '\0';
   GDateTime *gdt = g_date_time_new_now_local();
   if(gdt)
@@ -221,7 +221,7 @@ GTimeSpan dt_datetime_now_to_gtimespan()
 
 void dt_datetime_exif_to_img(dt_image_t *img, const char *exif)
 {
-  if(!exif) return;
+  if(IS_NULL_PTR(exif)) return;
   GDateTime *gdt = dt_datetime_exif_to_gdatetime(exif, darktable.utc_tz);
   if(gdt)
   {
@@ -281,7 +281,7 @@ gboolean dt_datetime_gdatetime_to_exif(char *exif, const size_t exif_size, GDate
 GDateTime *dt_datetime_img_to_gdatetime(const dt_image_t *img, const GTimeZone *tz)
 {
   // GTimeSpan is UTC based. Therefore we have to cheat a little bit to get image datetime
-  if(!tz) return NULL;
+  if(IS_NULL_PTR(tz)) return NULL;
   GDateTime *gdt = g_date_time_add(darktable.origin_gdt, img->exif_datetime_taken);
   if(gdt)
   {
@@ -399,7 +399,7 @@ gboolean dt_datetime_gtimespan_to_exif(char *sdt, const size_t sdt_size, const G
 GTimeSpan dt_datetime_exif_to_gtimespan(const char *sdt)
 {
   GTimeSpan gts = 0;
-  if(!sdt) return gts;
+  if(IS_NULL_PTR(sdt)) return gts;
   GDateTime *gdt = dt_datetime_exif_to_gdatetime(sdt, darktable.utc_tz);
   if(gdt)
   {
@@ -428,7 +428,7 @@ GDateTime *dt_datetime_gtimespan_to_gdatetime(const GTimeSpan gts)
 
 GTimeSpan dt_datetime_numbers_to_gtimespan(const dt_datetime_t *dt)
 {
-  if(!dt) return 0;
+  if(IS_NULL_PTR(dt)) return 0;
   GDateTime *gdt = g_date_time_new(darktable.utc_tz,
                                    dt->year, dt->month, dt->day,
                                    dt->hour, dt->minute, (double)dt->second);
@@ -475,7 +475,7 @@ gboolean dt_datetime_exif_add_numbers(const gchar *exif, const dt_datetime_t num
                                       gchar **result)
 {
   GDateTime *dte = dt_datetime_exif_to_gdatetime(exif, darktable.utc_tz);
-  if(!dte) return FALSE;
+  if(IS_NULL_PTR(dte)) return FALSE;
   GDateTime *dt2 = dt_datetime_gdatetime_add_numbers(dte, numbers, add);
   char txt[DT_DATETIME_EXIF_LENGTH];
   dt_datetime_gdatetime_to_exif(txt, DT_DATETIME_EXIF_LENGTH, dt2);

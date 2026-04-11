@@ -149,7 +149,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const float *const restrict in = (const float *const restrict)ivoid;
   float *const restrict out = (float *const restrict)ovoid;
   float *const restrict cmy = dt_pixelpipe_cache_alloc_align_float_cache(roi_in->width * roi_in->height * 4, 0);
-  if(!cmy) return 1;
+  if(IS_NULL_PTR(cmy)) return 1;
 
   const float sharpen = d->diffusion / (scale * scale) / d->iterations;
   __OMP_PARALLEL_FOR__()

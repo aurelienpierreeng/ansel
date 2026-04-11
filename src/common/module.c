@@ -44,7 +44,7 @@ GList *dt_module_load_modules(const char *subdir, size_t module_size,
   dt_loc_get_moduledir(moduledir, sizeof(moduledir));
   g_strlcat(moduledir, subdir, sizeof(moduledir));
   GDir *dir = g_dir_open(moduledir, 0, NULL);
-  if(!dir) return NULL;
+  if(IS_NULL_PTR(dir)) return NULL;
   const int name_offset = strlen(SHARED_MODULE_PREFIX),
             name_end = strlen(SHARED_MODULE_PREFIX) + strlen(SHARED_MODULE_SUFFIX);
   while((dir_name = g_dir_read_name(dir)))

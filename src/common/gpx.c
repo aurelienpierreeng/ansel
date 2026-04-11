@@ -412,7 +412,7 @@ void _gpx_parser_text(GMarkupParseContext *context, const gchar *text, gsize tex
     gpx->seg_name =  g_strdup(text);
   }
 
-  if(!gpx->current_track_point) return;
+  if(IS_NULL_PTR(gpx->current_track_point)) return;
 
   if(gpx->current_parser_element == GPX_PARSER_ELEMENT_TIME)
   {
@@ -447,10 +447,10 @@ GList *dt_gpx_get_trkpts(struct dt_gpx_t *gpx, const guint segid)
 {
   GList *pts = NULL;
   GList *ts = g_list_nth(gpx->trksegs, segid);
-  if(!ts) return pts;
+  if(IS_NULL_PTR(ts)) return pts;
   dt_gpx_track_segment_t *tsd = (dt_gpx_track_segment_t *)ts->data;
   GList *tps = g_list_find(gpx->trkpts, tsd->trkpt);
-  if(!tps) return pts;
+  if(IS_NULL_PTR(tps)) return pts;
   for(GList *tp = tps; tp; tp = g_list_next(tp))
   {
     dt_gpx_track_point_t *tpd = (dt_gpx_track_point_t *)tp->data;

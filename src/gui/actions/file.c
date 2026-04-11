@@ -150,14 +150,14 @@ static gboolean export_files_callback(GtkAccelGroup *group, GObject *acceleratab
   }
 
   dt_lib_module_t *module = dt_lib_get_module("export");
-  if(!module) return TRUE;
+  if(IS_NULL_PTR(module)) return TRUE;
 
   // get_expander actually builds the expander, it's not a getter despite what the name suggests.
   // On first run we need to build, an the following runs, just fetch it
   GtkWidget *w = darktable.gui->export_popup.module
                   ? darktable.gui->export_popup.module
                   : dt_lib_gui_get_expander(module);
-  if(!w) return TRUE;
+  if(IS_NULL_PTR(w)) return TRUE;
 
   // Save the module
   darktable.gui->export_popup.module = w;

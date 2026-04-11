@@ -160,7 +160,7 @@ static gboolean _ignore_image(const gchar *filename)
 {
   const char *extensions_whitelist[] = { "cr3", NULL };
   char *ext = g_strrstr(filename, ".");
-  if(!ext) return FALSE;
+  if(IS_NULL_PTR(ext)) return FALSE;
   ext++;
   for(const char **i = extensions_whitelist; !IS_NULL_PTR(*i); i++)
     if(!g_ascii_strncasecmp(ext, *i, strlen(*i)))
@@ -436,7 +436,7 @@ dt_imageio_retval_t dt_imageio_open_rawspeed(dt_image_t *img,
     }
 
     void *buf = dt_mipmap_cache_alloc(mbuf, img);
-    if(!buf) return DT_IMAGEIO_CACHE_FULL;
+    if(IS_NULL_PTR(buf)) return DT_IMAGEIO_CACHE_FULL;
 
     /*
      * since we do not want to crop black borders at this stage,
@@ -567,7 +567,7 @@ dt_imageio_retval_t dt_imageio_open_rawspeed_sraw(dt_image_t *img,
   if(cpp == 1) img->flags |= DT_IMAGE_MONOCHROME;
 
   void *buf = dt_mipmap_cache_alloc(mbuf, img);
-  if(!buf) return DT_IMAGEIO_CACHE_FULL;
+  if(IS_NULL_PTR(buf)) return DT_IMAGEIO_CACHE_FULL;
 
   const int height = img->height;
   const int width = img->width;

@@ -168,13 +168,13 @@ gboolean dt_dev_history_item_update_from_params(dt_develop_t *dev, dt_dev_histor
   if(!hist->params)
   {
     hist->params = g_malloc0(module->params_size);
-    if(!hist->params) return FALSE;
+    if(IS_NULL_PTR(hist->params)) return FALSE;
   }
 
   if(!hist->blend_params)
   {
     hist->blend_params = g_malloc0(sizeof(dt_develop_blend_params_t));
-    if(!hist->blend_params) return FALSE;
+    if(IS_NULL_PTR(hist->blend_params)) return FALSE;
   }
 
   if(hist->forms)
@@ -244,13 +244,13 @@ dt_iop_module_t *dt_dev_create_module_instance(dt_develop_t *dev, const char *op
 {
   dt_iop_module_t *base = dt_iop_get_module_by_op_priority(dev->iop, op, 0);
   if(!base) base = dt_iop_get_module_by_op_priority(dev->iop, op, -1);
-  if(!base) return NULL;
+  if(IS_NULL_PTR(base)) return NULL;
 
   if((base->flags() & IOP_FLAGS_ONE_INSTANCE) == IOP_FLAGS_ONE_INSTANCE)
     return base;
 
   dt_iop_module_t *module = (dt_iop_module_t *)calloc(1, sizeof(dt_iop_module_t));
-  if(!module) return NULL;
+  if(IS_NULL_PTR(module)) return NULL;
 
   if(dt_iop_load_module(module, base->so, dev))
   {
@@ -296,7 +296,7 @@ int dt_dev_history_item_from_source_history_item(dt_develop_t *dev_dest, dt_deve
   if(!hist_src || !hist_src->module || !mod_dest || !out_hist) return 1;
 
   dt_dev_history_item_t *hist = (dt_dev_history_item_t *)calloc(1, sizeof(dt_dev_history_item_t));
-  if(!hist) return 1;
+  if(IS_NULL_PTR(hist)) return 1;
 
   if(dt_masks_copy_used_forms_for_module(dev_dest, dev_src, hist_src->module))
   {
@@ -330,7 +330,7 @@ int dt_dev_merge_history_into_image(dt_develop_t *dev_src, int32_t dest_imgid, c
                                     const gboolean paste_instances)
 {
   if(dest_imgid <= 0) return 1;
-  if(!mod_list) return 0;
+  if(IS_NULL_PTR(mod_list)) return 0;
 
   dt_develop_t dev_dest = { 0 };
   dt_dev_init(&dev_dest, FALSE);
@@ -420,7 +420,7 @@ int dt_history_merge_module_into_history(dt_develop_t *dev_dest, dt_develop_t *d
   gboolean created = FALSE;
   gboolean reused_base = FALSE;
   dt_iop_module_t *module = _history_merge_resolve_dest_instance(dev_dest, mod_src, &created, &reused_base);
-  if(!module) return 0;
+  if(IS_NULL_PTR(module)) return 0;
 
   if(mod_src->flags() & IOP_FLAGS_ONE_INSTANCE)
   {
@@ -521,7 +521,7 @@ static void _history_invalidate_cb(gpointer user_data, dt_undo_type_t type, dt_u
 
 void dt_dev_history_undo_invalidate_module(dt_iop_module_t *module)
 {
-  if(!module) return;
+  if(IS_NULL_PTR(module)) return;
   dt_undo_iterate_internal(darktable.undo, DT_UNDO_HISTORY, module, &_history_invalidate_cb);
 }
 
@@ -533,7 +533,7 @@ void dt_dev_history_undo_invalidate_module(dt_iop_module_t *module)
 static void _history_undo_data_free(gpointer data)
 {
   dt_undo_history_t *hist = (dt_undo_history_t *)data;
-  if(!hist) return;
+  if(IS_NULL_PTR(hist)) return;
   g_list_free_full(hist->before_snapshot, dt_dev_free_history_item);
   hist->before_snapshot = NULL;
   g_list_free_full(hist->after_snapshot, dt_dev_free_history_item);
@@ -606,7 +606,7 @@ static void _pop_undo(gpointer user_data, dt_undo_type_t type, dt_undo_data_t da
 
 void dt_dev_history_undo_start_record(dt_develop_t *dev)
 {
-  if(!dev) return;
+  if(IS_NULL_PTR(dev)) return;
   dt_pthread_rwlock_rdlock(&dev->history_mutex);
   dt_dev_history_undo_start_record_locked(dev);
   dt_pthread_rwlock_unlock(&dev->history_mutex);
@@ -614,7 +614,7 @@ void dt_dev_history_undo_start_record(dt_develop_t *dev)
 
 void dt_dev_history_undo_start_record_locked(dt_develop_t *dev)
 {
-  if(!dev) return;
+  if(IS_NULL_PTR(dev)) return;
 
   if(dev->undo_history_depth == 0)
   {
@@ -634,7 +634,7 @@ void dt_dev_history_undo_start_record_locked(dt_develop_t *dev)
 
 void dt_dev_history_undo_end_record(dt_develop_t *dev)
 {
-  if(!dev) return;
+  if(IS_NULL_PTR(dev)) return;
   dt_pthread_rwlock_rdlock(&dev->history_mutex);
   dt_dev_history_undo_end_record_locked(dev);
   dt_pthread_rwlock_unlock(&dev->history_mutex);
@@ -647,7 +647,7 @@ void dt_dev_history_undo_end_record_locked(dt_develop_t *dev)
   dev->undo_history_depth--;
   if(dev->undo_history_depth != 0) return;
 
-  if(!dev->undo_history_before_snapshot) return;
+  if(IS_NULL_PTR(dev->undo_history_before_snapshot)) return;
 
   dt_undo_history_t *hist = malloc(sizeof(dt_undo_history_t));
   hist->before_snapshot = dev->undo_history_before_snapshot;
@@ -964,7 +964,7 @@ void dt_dev_add_history_item_real(dt_develop_t *dev, dt_iop_module_t *module, gb
 void dt_dev_free_history_item(gpointer data)
 {
   dt_dev_history_item_t *item = (dt_dev_history_item_t *)data;
-  if(!item) return; // nothing to free
+  if(IS_NULL_PTR(item)) return; // nothing to free
 
   dt_free(item->params);
   dt_free(item->blend_params);
@@ -975,7 +975,7 @@ void dt_dev_free_history_item(gpointer data)
 
 void dt_dev_history_free_history(dt_develop_t *dev)
 {
-  if(!dev->history) return;
+  if(IS_NULL_PTR(dev->history)) return;
   g_list_free_full(g_steal_pointer(&dev->history), dt_dev_free_history_item);
   dev->history = NULL;
 }
@@ -1191,7 +1191,7 @@ void dt_dev_history_notify_change(dt_develop_t *dev, const int32_t imgid)
 // helper used to synch a single history item with db
 int dt_dev_write_history_item(const int32_t imgid, dt_dev_history_item_t *h, int32_t num)
 {
-  if(!h) return 1;
+  if(IS_NULL_PTR(h)) return 1;
 
   dt_print(DT_DEBUG_HISTORY, "[dt_dev_write_history_item] writing history for module %s (%s) (enabled %i) at pipe position %i for image %i\n", 
                                                     h->op_name, h->multi_name, h->enabled, h->iop_order, imgid);
@@ -1231,7 +1231,7 @@ void dt_dev_history_cleanup(void)
 void dt_dev_write_history_ext(dt_develop_t *dev, const int32_t imgid)
 {
   dt_image_t *cache_img = dt_image_cache_get(darktable.image_cache, imgid, 'w');
-  if(!cache_img) return;
+  if(IS_NULL_PTR(cache_img)) return;
 
   dt_print(DT_DEBUG_HISTORY, "[dt_dev_write_history_ext] writing history for image %i...\n", imgid);
 
@@ -1272,7 +1272,7 @@ void dt_dev_write_history_ext(dt_develop_t *dev, const int32_t imgid)
 static int _dt_dev_write_history_job_run(dt_job_t *job)
 {
   dt_develop_t *d = dt_control_job_get_params(job);
-  if(!d) return 1;
+  if(IS_NULL_PTR(d)) return 1;
   dt_pthread_rwlock_rdlock(&d->history_mutex);
   dt_dev_write_history_ext(d, d->image_storage.id);
   dt_pthread_rwlock_unlock(&d->history_mutex);
@@ -1817,7 +1817,7 @@ gboolean dt_dev_read_history_ext(dt_develop_t *dev, const int32_t imgid)
   // Protect history DB reads with a cache read lock.
   // Release it before applying history to modules to avoid deadlocks.
   dt_image_t *read_lock_img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
-  if(!read_lock_img) return FALSE;
+  if(IS_NULL_PTR(read_lock_img)) return FALSE;
 
   // Load DB history into dev->history
   dt_dev_history_db_ctx_t ctx = { .dev = dev, .imgid = imgid, .legacy_params = &legacy_params, .presets = FALSE };

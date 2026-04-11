@@ -113,7 +113,7 @@ dt_metadata_t dt_metadata_get_keyid_by_display_order(const uint32_t order)
 
 dt_metadata_t dt_metadata_get_keyid_by_name(const char* name)
 {
-  if(!name) return -1;
+  if(IS_NULL_PTR(name)) return -1;
   for(unsigned int i = 0; i < DT_METADATA_NUMBER; i++)
   {
     if(strncmp(name, dt_metadata_def[i].name, strlen(dt_metadata_def[i].name)) == 0)
@@ -145,7 +145,7 @@ const char *dt_metadata_get_name(const uint32_t keyid)
 
 dt_metadata_t dt_metadata_get_keyid(const char* key)
 {
-  if(!key) return -1;
+  if(IS_NULL_PTR(key)) return -1;
   for(unsigned int i = 0; i < DT_METADATA_NUMBER; i++)
   {
     if(strncmp(key, dt_metadata_def[i].key, strlen(dt_metadata_def[i].key)) == 0)

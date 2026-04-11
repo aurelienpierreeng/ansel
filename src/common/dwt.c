@@ -45,7 +45,7 @@ dwt_params_t *dt_dwt_init(float *image, const int width, const int height, const
                           const float preview_scale, const int use_sse)
 {
   dwt_params_t *p = (dwt_params_t *)malloc(sizeof(dwt_params_t));
-  if(!p) return NULL;
+  if(IS_NULL_PTR(p)) return NULL;
 
   p->image = image;
   p->ch = ch;
@@ -63,7 +63,7 @@ dwt_params_t *dt_dwt_init(float *image, const int width, const int height, const
 
 void dt_dwt_free(dwt_params_t *p)
 {
-  if(!p) return;
+  if(IS_NULL_PTR(p)) return;
 
   dt_free(p);
 }
@@ -553,7 +553,7 @@ dt_dwt_cl_global_t *dt_dwt_init_cl_global()
 
 void dt_dwt_free_cl_global(dt_dwt_cl_global_t *g)
 {
-  if(!g) return;
+  if(IS_NULL_PTR(g)) return;
 
   // destroy kernels
   dt_opencl_free_kernel(g->kernel_dwt_add_img_to_layer);
@@ -570,7 +570,7 @@ dwt_params_cl_t *dt_dwt_init_cl(const int devid, cl_mem image, const int width, 
                                 const float preview_scale)
 {
   dwt_params_cl_t *p = (dwt_params_cl_t *)malloc(sizeof(dwt_params_cl_t));
-  if(!p) return NULL;
+  if(IS_NULL_PTR(p)) return NULL;
 
   p->global = darktable.opencl->dwt;
   p->devid = devid;
@@ -589,7 +589,7 @@ dwt_params_cl_t *dt_dwt_init_cl(const int devid, cl_mem image, const int width, 
 
 void dt_dwt_free_cl(dwt_params_cl_t *p)
 {
-  if(!p) return;
+  if(IS_NULL_PTR(p)) return;
 
   // be sure we're done with the memory:
   dt_opencl_finish(p->devid);

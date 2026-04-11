@@ -82,13 +82,13 @@ static dt_control_pointer_input_t _pointer_input = { 0 };
 
 void dt_control_set_pointer_input(const dt_control_pointer_input_t *input)
 {
-  if(!input) return;
+  if(IS_NULL_PTR(input)) return;
   _pointer_input = *input;
 }
 
 void dt_control_get_pointer_input(dt_control_pointer_input_t *input)
 {
-  if(!input) return;
+  if(IS_NULL_PTR(input)) return;
   *input = _pointer_input;
 }
 
@@ -138,7 +138,7 @@ void dt_control_allow_change_cursor()
 
 static void _control_set_cursor_on_widget(GtkWidget *widget, GdkCursor *cursor)
 {
-  if(!widget) return;
+  if(IS_NULL_PTR(widget)) return;
 
   GdkWindow *window = gtk_widget_get_window(widget);
   if(window) gdk_window_set_cursor(window, cursor);
@@ -303,7 +303,7 @@ void dt_control_draw_busy_msg(cairo_t *cr, int width, int height)
 void *dt_control_expose(void *voidptr)
 {
   int pointerx, pointery;
-  if(!darktable.gui->surface) return NULL;
+  if(IS_NULL_PTR(darktable.gui->surface)) return NULL;
   const int width = dt_cairo_image_surface_get_width(darktable.gui->surface);
   const int height = dt_cairo_image_surface_get_height(darktable.gui->surface);
   GtkWidget *widget = dt_ui_center(darktable.gui->ui);

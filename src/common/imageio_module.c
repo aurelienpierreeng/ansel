@@ -144,7 +144,7 @@ static int dt_imageio_load_modules_format(dt_imageio_t *iio)
   dt_loc_get_moduledir(moduledir, sizeof(moduledir));
   g_strlcat(moduledir, "/plugins/imageio/format", sizeof(moduledir));
   GDir *dir = g_dir_open(moduledir, 0, NULL);
-  if(!dir) return 1;
+  if(IS_NULL_PTR(dir)) return 1;
   const int name_offset = strlen(SHARED_MODULE_PREFIX),
             name_end = strlen(SHARED_MODULE_PREFIX) + strlen(SHARED_MODULE_SUFFIX);
   while((d_name = g_dir_read_name(dir)))
@@ -244,7 +244,7 @@ static int dt_imageio_load_modules_storage(dt_imageio_t *iio)
   dt_loc_get_moduledir(moduledir, sizeof(moduledir));
   g_strlcat(moduledir, "/plugins/imageio/storage", sizeof(moduledir));
   GDir *dir = g_dir_open(moduledir, 0, NULL);
-  if(!dir) return 1;
+  if(IS_NULL_PTR(dir)) return 1;
   const int name_offset = strlen(SHARED_MODULE_PREFIX),
             name_end = strlen(SHARED_MODULE_PREFIX) + strlen(SHARED_MODULE_SUFFIX);
   while((d_name = g_dir_read_name(dir)))
@@ -328,7 +328,7 @@ dt_imageio_module_storage_t *dt_imageio_get_storage()
 
 dt_imageio_module_format_t *dt_imageio_get_format_by_name(const char *name)
 {
-  if(!name) return NULL;
+  if(IS_NULL_PTR(name)) return NULL;
   dt_imageio_t *iio = darktable.imageio;
   for(GList *it = iio->plugins_format; it; it = g_list_next(it))
   {
@@ -340,7 +340,7 @@ dt_imageio_module_format_t *dt_imageio_get_format_by_name(const char *name)
 
 dt_imageio_module_storage_t *dt_imageio_get_storage_by_name(const char *name)
 {
-  if(!name) return NULL;
+  if(IS_NULL_PTR(name)) return NULL;
   dt_imageio_t *iio = darktable.imageio;
   for(GList *it = iio->plugins_storage; it; it = g_list_next(it))
   {

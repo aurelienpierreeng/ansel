@@ -651,7 +651,7 @@ static void _images_preview_toggled(GtkToggleButton *button, dt_lib_module_t *se
 static void _refresh_track_list(dt_lib_module_t *self)
 {
   dt_lib_geotagging_t *d = (dt_lib_geotagging_t *)self->data;
-  if(!d->map.gpx) return;
+  if(IS_NULL_PTR(d->map.gpx)) return;
 
   GList *trkseg = dt_gpx_get_trkseg(d->map.gpx);
   _remove_images_from_map(self);
@@ -1091,7 +1091,7 @@ static GList *_lib_geotagging_get_timezones(void)
   fp = g_fopen(zone_tab, "r");
   dt_free(zone_tab);
 
-  if(!fp) return NULL;
+  if(IS_NULL_PTR(fp)) return NULL;
 
   while(fgets(line, MAX_LINE_LENGTH, fp))
   {

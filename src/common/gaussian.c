@@ -131,7 +131,7 @@ dt_gaussian_t *dt_gaussian_init(const int width,    // width of input image
                                 const int order)    // order of gaussian blur
 {
   dt_gaussian_t *g = (dt_gaussian_t *)malloc(sizeof(dt_gaussian_t));
-  if(!g) return NULL;
+  if(IS_NULL_PTR(g)) return NULL;
 
   g->width = width;
   g->height = height;
@@ -332,7 +332,7 @@ void dt_gaussian_blur_4c(dt_gaussian_t *g, const float *const in, float *const o
 
 void dt_gaussian_free(dt_gaussian_t *g)
 {
-  if(!g) return;
+  if(IS_NULL_PTR(g)) return;
   dt_pixelpipe_cache_free_align(g->buf);
   dt_free(g->min);
   dt_free(g->max);
@@ -355,7 +355,7 @@ dt_gaussian_cl_global_t *dt_gaussian_init_cl_global()
 
 void dt_gaussian_free_cl(dt_gaussian_cl_t *g)
 {
-  if(!g) return;
+  if(IS_NULL_PTR(g)) return;
   // be sure we're done with the memory:
   dt_opencl_finish(g->devid);
 
@@ -381,7 +381,7 @@ dt_gaussian_cl_t *dt_gaussian_init_cl(const int devid,
   if(!(channels == 1 || channels == 4)) return NULL;
 
   dt_gaussian_cl_t *g = (dt_gaussian_cl_t *)malloc(sizeof(dt_gaussian_cl_t));
-  if(!g) return NULL;
+  if(IS_NULL_PTR(g)) return NULL;
 
   g->global = darktable.opencl->gaussian;
   g->devid = devid;
@@ -579,7 +579,7 @@ cl_int dt_gaussian_blur_cl(dt_gaussian_cl_t *g, cl_mem dev_in, cl_mem dev_out)
 
 void dt_gaussian_free_cl_global(dt_gaussian_cl_global_t *g)
 {
-  if(!g) return;
+  if(IS_NULL_PTR(g)) return;
   // destroy kernels
   dt_opencl_free_kernel(g->kernel_gaussian_column_1c);
   dt_opencl_free_kernel(g->kernel_gaussian_transpose_1c);

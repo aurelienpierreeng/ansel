@@ -462,7 +462,7 @@ int dt_dev_pixelpipe_init_cached(dt_dev_pixelpipe_t *pipe)
 
 void dt_dev_pixelpipe_set_realtime(dt_dev_pixelpipe_t *pipe, gboolean state)
 {
-  if(!pipe) return;
+  if(IS_NULL_PTR(pipe)) return;
   dt_atomic_set_int(&pipe->realtime, state ? TRUE : FALSE);
 }
 
@@ -639,7 +639,7 @@ dt_pixelpipe_blend_transform_t dt_dev_pixelpipe_transform_for_blend(const dt_iop
                                                                     const dt_iop_buffer_dsc_t *const output_dsc)
 {
   const dt_develop_blend_params_t *const d = (const dt_develop_blend_params_t *)piece->blendop_data;
-  if(!d) return DT_DEV_PIXELPIPE_BLEND_TRANSFORM_NONE;
+  if(IS_NULL_PTR(d)) return DT_DEV_PIXELPIPE_BLEND_TRANSFORM_NONE;
   if(!(self->flags() & IOP_FLAGS_SUPPORTS_BLENDING)) return DT_DEV_PIXELPIPE_BLEND_TRANSFORM_NONE;
   if(d->mask_mode == DEVELOP_MASK_DISABLED) return DT_DEV_PIXELPIPE_BLEND_TRANSFORM_NONE;
 

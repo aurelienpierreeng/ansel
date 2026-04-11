@@ -268,11 +268,11 @@ static void _fill_input_brush_settings(dt_iop_module_t *self, dt_drawlayer_paint
 
 static void _fill_input_layer_coords(dt_iop_module_t *self, dt_drawlayer_paint_raw_input_t *input)
 {
-  if(!input) return;
+  if(IS_NULL_PTR(input)) return;
   input->have_layer_coords = FALSE;
   input->lx = 0.0f;
   input->ly = 0.0f;
-  if(!self) return;
+  if(IS_NULL_PTR(self)) return;
 
   float lx = 0.0f;
   float ly = 0.0f;
@@ -292,7 +292,7 @@ static void _fill_input_layer_coords(dt_iop_module_t *self, dt_drawlayer_paint_r
 
 static gboolean _layer_name_non_empty(const char *name)
 {
-  if(!name) return FALSE;
+  if(IS_NULL_PTR(name)) return FALSE;
   char tmp[DRAWLAYER_NAME_SIZE] = { 0 };
   g_strlcpy(tmp, name, sizeof(tmp));
   g_strstrip(tmp);
@@ -307,7 +307,7 @@ static gboolean _get_current_work_profile_key(dt_iop_module_t *self, GList *iop_
   if(!self || !pipe || !iop_list) return FALSE;
 
   const dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_iop_work_profile_info(self, iop_list);
-  if(!work_profile) return FALSE;
+  if(IS_NULL_PTR(work_profile)) return FALSE;
 
   g_snprintf(key, key_size, "%d|%d|%s", (int)work_profile->type, (int)work_profile->intent,
              work_profile->filename);
@@ -327,7 +327,7 @@ typedef struct drawlayer_process_scratch_t
 static void _destroy_process_scratch(gpointer data)
 {
   drawlayer_process_scratch_t *scratch = (drawlayer_process_scratch_t *)data;
-  if(!scratch) return;
+  if(IS_NULL_PTR(scratch)) return;
   dt_drawlayer_cache_free_temp_buffer((void **)&scratch->layerbuf, "drawlayer process scratch");
   dt_drawlayer_cache_free_temp_buffer((void **)&scratch->cl_background_rgba, "drawlayer process scratch");
   dt_drawlayer_cache_free_temp_buffer((void **)&scratch->flush_update_rgba, "drawlayer process update scratch");
@@ -343,7 +343,7 @@ static drawlayer_process_scratch_t *_get_process_scratch(void)
   if(scratch) return scratch;
 
   scratch = g_malloc0(sizeof(*scratch));
-  if(!scratch) return NULL;
+  if(IS_NULL_PTR(scratch)) return NULL;
   g_private_set(&_drawlayer_process_scratch_key, scratch);
   return scratch;
 }
@@ -482,7 +482,7 @@ static void _retain_base_patch_stroke_ref(dt_iop_drawlayer_gui_data_t *g)
 
 void dt_drawlayer_release_all_base_patch_extra_refs(dt_iop_drawlayer_gui_data_t *g)
 {
-  if(!g) return;
+  if(IS_NULL_PTR(g)) return;
   if(!g->process.base_patch.cache_entry)
   {
     /* Keep refcount bookkeeping state coherent even if the cache entry has
@@ -1083,11 +1083,11 @@ void dt_drawlayer_set_os_cursor_hidden(const gboolean hidden)
   GtkWidget *center = dt_ui_center(darktable.gui->ui);
   GtkWidget *main = dt_ui_main_window(darktable.gui->ui);
   GdkDisplay *display = gdk_display_get_default();
-  if(!display) return;
+  if(IS_NULL_PTR(display)) return;
 
   const dt_cursor_t cursor_id = hidden ? GDK_BLANK_CURSOR : GDK_LEFT_PTR;
   GdkCursor *cursor = gdk_cursor_new_for_display(display, cursor_id);
-  if(!cursor) return;
+  if(IS_NULL_PTR(cursor)) return;
 
   if(center && gtk_widget_get_window(center)) gdk_window_set_cursor(gtk_widget_get_window(center), cursor);
   if(main && gtk_widget_get_window(main)) gdk_window_set_cursor(gtk_widget_get_window(main), cursor);
@@ -1394,7 +1394,7 @@ static gboolean _color_picker_motion(GtkWidget *widget, GdkEventMotion *event, g
 
 static void _sanitize_params(dt_iop_module_t *self, dt_iop_drawlayer_params_t *params)
 {
-  if(!params) return;
+  if(IS_NULL_PTR(params)) return;
 
   if(memchr(params->layer_name, '\0', sizeof(params->layer_name)) == NULL)
     memset(params->layer_name, 0, sizeof(params->layer_name));
@@ -1535,7 +1535,7 @@ void dt_drawlayer_touch_stroke_commit_hash(dt_iop_drawlayer_params_t *params, co
                                            const gboolean have_last_dab, const float last_dab_x,
                                            const float last_dab_y, const uint32_t publish_serial)
 {
-  if(!params) return;
+  if(IS_NULL_PTR(params)) return;
 
   uint32_t x_bits = 0u;
   uint32_t y_bits = 0u;
@@ -1618,7 +1618,7 @@ static void _sync_layer_controls(dt_iop_module_t *self)
 static void _sync_preview_bg_buttons(dt_iop_module_t *self)
 {
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
-  if(!g) return;
+  if(IS_NULL_PTR(g)) return;
 
   if(GTK_IS_TOGGLE_BUTTON(g->controls.preview_bg_image))
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->controls.preview_bg_image),
@@ -1766,7 +1766,7 @@ static void _sync_mode_sensitive_widgets(dt_iop_module_t *self)
 
 static gboolean _delete_current_layer(dt_iop_module_t *self)
 {
-  if(!self->dev) return FALSE;
+  if(IS_NULL_PTR(self->dev)) return FALSE;
 
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
   dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
@@ -1826,7 +1826,7 @@ static gboolean _delete_current_layer(dt_iop_module_t *self)
 
 static gboolean _confirm_delete_layer(dt_iop_module_t *self, const gboolean removing_module)
 {
-  if(!self->dev) return FALSE;
+  if(IS_NULL_PTR(self->dev)) return FALSE;
 
   dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
   if(!_layer_name_non_empty(params->layer_name)) return removing_module;
@@ -2027,7 +2027,7 @@ static void _build_pre_module_filter_string(dt_iop_module_t *self, char *filter,
 static gboolean _background_layer_job_done_idle(gpointer user_data)
 {
   dt_drawlayer_io_background_job_result_t *result = (dt_drawlayer_io_background_job_result_t *)user_data;
-  if(!result) return G_SOURCE_REMOVE;
+  if(IS_NULL_PTR(result)) return G_SOURCE_REMOVE;
 
   dt_control_log("%s", result->message[0] ? result->message : _("background layer job finished"));
 
@@ -2209,7 +2209,7 @@ static void _layer_selected(GtkWidget *widget, gpointer user_data)
   if(active < 0) return;
 
   const char *text = dt_bauhaus_combobox_get_text(g->controls.layer_select);
-  if(!text) return;
+  if(IS_NULL_PTR(text)) return;
 
   if(!_layer_name_non_empty(params->layer_name))
   {
@@ -2259,7 +2259,7 @@ static void _delete_layer_clicked(GtkButton *button, gpointer user_data)
 {
   (void)button;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(!self->dev) return;
+  if(IS_NULL_PTR(self->dev)) return;
   if(!_commit_dabs(self, FALSE)) return;
   if(!_confirm_delete_layer(self, FALSE)) return;
 
@@ -2278,7 +2278,7 @@ static gboolean _fill_current_layer(dt_iop_module_t *self, const float value)
 
   if(!_commit_dabs(self, FALSE)) return FALSE;
   if(!_update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_SYNC_TEMP_BUFFERS, FALSE).ok) return FALSE;
-  if(!g->process.base_patch.pixels) return FALSE;
+  if(IS_NULL_PTR(g->process.base_patch.pixels)) return FALSE;
 
   const size_t count = (size_t)g->process.base_patch.width * g->process.base_patch.height;
   float *const pixels = g->process.base_patch.pixels;
@@ -2316,7 +2316,7 @@ static gboolean _clear_current_layer(dt_iop_module_t *self)
 
   if(!_commit_dabs(self, FALSE)) return FALSE;
   if(!_update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_SYNC_TEMP_BUFFERS, FALSE).ok) return FALSE;
-  if(!g->process.base_patch.pixels) return FALSE;
+  if(IS_NULL_PTR(g->process.base_patch.pixels)) return FALSE;
 
   dt_drawlayer_cache_patch_wrlock(&g->process.base_patch);
   dt_drawlayer_cache_clear_transparent_float(g->process.base_patch.pixels,
@@ -2433,7 +2433,7 @@ static void _create_layer_clicked(GtkButton *button, gpointer user_data)
 {
   (void)button;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(!self) return;
+  if(IS_NULL_PTR(self)) return;
 
   char requested_name[DRAWLAYER_NAME_SIZE] = { 0 };
   if(!_prompt_layer_name_dialog(_("Create drawing layer"),
@@ -2529,7 +2529,7 @@ void dt_drawlayer_begin_gui_stroke_capture(dt_iop_module_t *self, const dt_drawl
 void dt_drawlayer_end_gui_stroke_capture(dt_iop_module_t *self)
 {
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
-  if(!g) return;
+  if(IS_NULL_PTR(g)) return;
 }
 
 static dt_drawlayer_runtime_result_t _update_gui_runtime_manager(dt_iop_module_t *self,
@@ -2570,7 +2570,7 @@ static dt_drawlayer_runtime_result_t _update_gui_runtime_manager(dt_iop_module_t
 void dt_drawlayer_show_runtime_feedback(const dt_iop_drawlayer_gui_data_t *g,
                                         const dt_drawlayer_runtime_feedback_t feedback)
 {
-  if(!g) return;
+  if(IS_NULL_PTR(g)) return;
 
   switch(feedback)
   {
@@ -2610,7 +2610,7 @@ void init_global(dt_iop_module_so_t *module)
 {
   const int program = 3; // blendop.cl, from programs.conf
   dt_iop_drawlayer_global_data_t *gd = calloc(1, sizeof(*gd));
-  if(!gd) return;
+  if(IS_NULL_PTR(gd)) return;
   module->data = gd;
   gd->kernel_premult_over = -1;
 
@@ -2624,7 +2624,7 @@ void init_global(dt_iop_module_so_t *module)
 void cleanup_global(dt_iop_module_so_t *module)
 {
   dt_iop_drawlayer_global_data_t *gd = (dt_iop_drawlayer_global_data_t *)module->data;
-  if(!gd) return;
+  if(IS_NULL_PTR(gd)) return;
   dt_opencl_free_kernel(gd->kernel_premult_over);
   dt_free(gd);
   module->data = NULL;
@@ -2664,7 +2664,7 @@ void init(dt_iop_module_t *module)
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
   piece->data = calloc(1, sizeof(dt_iop_drawlayer_data_t));
-  if(!piece->data) return;
+  if(IS_NULL_PTR(piece->data)) return;
   piece->data_size = sizeof(dt_iop_drawlayer_params_t);
   dt_iop_drawlayer_data_t *data = (dt_iop_drawlayer_data_t *)piece->data;
   data->params.layer_order = -1;
@@ -2756,7 +2756,7 @@ void gui_reset(dt_iop_module_t *self)
 /** @brief Hook called before module removal from history stack. */
 gboolean module_will_remove(dt_iop_module_t *self)
 {
-  if(!self->dev) return TRUE;
+  if(IS_NULL_PTR(self->dev)) return TRUE;
   if(!_commit_dabs(self, FALSE)) return FALSE;
   _flush_layer_cache(self);
   return _confirm_delete_layer(self, TRUE);
@@ -3100,7 +3100,7 @@ void gui_update(dt_iop_module_t *self)
 {
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
   dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
-  if(!g) return;
+  if(IS_NULL_PTR(g)) return;
 
   _sanitize_params(self, params);
 
@@ -3333,7 +3333,7 @@ typedef struct drawlayer_hud_brush_state_t
 static void _compute_hud_brush_state(const dt_control_pointer_input_t *pointer_input,
                                      drawlayer_hud_brush_state_t *state)
 {
-  if(!state) return;
+  if(IS_NULL_PTR(state)) return;
 
   const float pressure_norm
       = _clamp01((pointer_input && pointer_input->has_pressure) ? pointer_input->pressure : 1.0f);
@@ -3510,7 +3510,7 @@ void gui_post_expose(dt_iop_module_t *self, cairo_t *cr, int32_t width, int32_t 
 int mouse_leave(dt_iop_module_t *self)
 {
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
-  if(!g) return 0;
+  if(IS_NULL_PTR(g)) return 0;
   drawlayer_runtime_host_context_t runtime_host = {
     .runtime = {
       .self = self,

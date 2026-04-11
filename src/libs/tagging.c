@@ -275,7 +275,7 @@ static gboolean _find_tag_iter_tagname(GtkTreeModel *model, GtkTreeIter *iter,
                                        const char *tagname, const gboolean needle)
 {
   gboolean found = FALSE;
-  if(!tagname) return found;
+  if(IS_NULL_PTR(tagname)) return found;
   char *path;
   do
   {
@@ -1138,7 +1138,7 @@ static void _detach_selected_tag(GtkTreeView *view, dt_lib_module_t *self)
   if(tagid <= 0) return;
 
   GList *imgs = dt_act_on_get_images();
-  if(!imgs) return;
+  if(IS_NULL_PTR(imgs)) return;
 
   GList *affected_images = dt_tag_get_images_from_list(imgs, tagid);
   if(affected_images)

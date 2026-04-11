@@ -521,7 +521,7 @@ void dt_accels_disconnect_on_text_input(GtkWidget *widget);
 // This is a dynamic get that takes into account destroyed widgets and such.
 static inline GtkWindow *dt_gtk_get_window(GtkWidget *widget)
 {
-  if(!widget) return NULL;
+  if(IS_NULL_PTR(widget)) return NULL;
   GtkWidget *toplevel = gtk_widget_get_toplevel(widget);
   if(toplevel && gtk_widget_is_toplevel(toplevel)) return GTK_WINDOW(toplevel);
   return NULL;

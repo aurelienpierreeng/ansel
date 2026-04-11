@@ -39,7 +39,7 @@ void tonecurve_create(tonecurve_t *c, double *Lin, double *Lout, const int32_t n
 
 void tonecurve_delete(tonecurve_t *c)
 {
-  if(!c) return;
+  if(IS_NULL_PTR(c)) return;
 
   dt_free(c->y);
   dt_free(c->x);

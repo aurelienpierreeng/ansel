@@ -77,7 +77,7 @@ static void _g_list_closure_unref(gpointer data)
 
 static inline void _shortcut_set_widget_data(GtkWidget *widget, dt_shortcut_t *shortcut)
 {
-  if(!widget) return;
+  if(IS_NULL_PTR(widget)) return;
   g_object_set_data(G_OBJECT(widget), DT_ACCELS_WIDGET_SHORTCUT_KEY, shortcut);
   if(!g_object_get_data(G_OBJECT(widget), DT_ACCELS_WIDGET_TOOLTIP_DISABLED_KEY))
     gtk_widget_set_has_tooltip(widget, TRUE);
@@ -91,7 +91,7 @@ static gboolean _accels_tooltip_query_hook(GSignalInvocationHint *hint, guint n_
   if(n_param_values < 5) return TRUE;
 
   GtkWidget *widget = g_value_get_object(&param_values[0]);
-  if(!widget) return TRUE;
+  if(IS_NULL_PTR(widget)) return TRUE;
 
   if(!gtk_widget_get_has_tooltip(widget)) return TRUE;
   if(g_object_get_data(G_OBJECT(widget), DT_ACCELS_WIDGET_TOOLTIP_DISABLED_KEY)) return TRUE;
@@ -231,7 +231,7 @@ GClosure *dt_shortcut_get_closure(dt_shortcut_t *shortcut)
 // attached to all its children.
 void dt_shortcut_remove_closure(dt_shortcut_t *shortcut, gpointer data)
 {
-  if(!shortcut->closure) return;
+  if(IS_NULL_PTR(shortcut->closure)) return;
 
   PayloadClosure *cl = NULL;
   GList *link = NULL;
@@ -385,7 +385,7 @@ void dt_accels_cleanup(dt_accels_t *accels)
 
 void dt_accels_connect_active_group(dt_accels_t *accels, const gchar *group)
 {
-  if(!accels) return;
+  if(IS_NULL_PTR(accels)) return;
 
   if(!g_strcmp0(group, "lighttable") && accels->lighttable_accels)
   {
@@ -421,7 +421,7 @@ void dt_accels_connect_active_group(dt_accels_t *accels, const gchar *group)
 
 void dt_accels_disconnect_active_group(dt_accels_t *accels)
 {
-  if(!accels) return;
+  if(IS_NULL_PTR(accels)) return;
   accels->active_group = NULL;
   accels->reset++;
 }
@@ -515,7 +515,7 @@ static void _remove_generic_accel(dt_shortcut_t *shortcut)
 {
   // Need to increase the number of references to avoid loosing the closure just yet.
   GClosure *cl = dt_shortcut_get_closure(shortcut);
-  if(!cl) return;
+  if(IS_NULL_PTR(cl)) return;
   g_closure_ref(cl);
   g_closure_sink(cl);
   gtk_accel_group_disconnect(shortcut->accel_group, cl);
@@ -544,7 +544,7 @@ static gboolean _virtual_shortcut_callback(GtkAccelGroup *group, GObject *accele
                                        GdkModifierType mods, gpointer user_data)
 {
   dt_shortcut_t *shortcut = (dt_shortcut_t *)user_data;
-  if(!shortcut->widget) return FALSE;
+  if(IS_NULL_PTR(shortcut->widget)) return FALSE;
 
   // Focus the target widget
   gtk_widget_grab_focus(shortcut->widget);
@@ -1221,7 +1221,7 @@ static void _shortcut_edited(GtkCellRenderer *cell, const gchar *path_string, gu
   // We will need to access its underlying store (full, unfiltered)
   GtkTreeModel *filter = GTK_TREE_MODEL(user_data);
   GtkTreeModel *store = gtk_tree_model_filter_get_model(GTK_TREE_MODEL_FILTER(filter));
-  if(!store) return;
+  if(IS_NULL_PTR(store)) return;
 
   GtkTreePath *path = gtk_tree_path_new_from_string(path_string);
   dt_shortcut_t *shortcut = NULL;
@@ -1338,7 +1338,7 @@ void _for_each_accel_create_treeview_row(gpointer key, gpointer value, gpointer 
 {
   // Extract HashTable key/value
   dt_shortcut_t *shortcut = (dt_shortcut_t *)value;
-  if(!shortcut) return;
+  if(IS_NULL_PTR(shortcut)) return;
   const gchar *path = (const gchar *)key;
 
   // Extract user_data
@@ -1409,11 +1409,11 @@ void _for_each_path_create_treeview_row(gpointer key, gpointer value, gpointer u
 {
   // Extract HashTable key/value
   dt_shortcut_t *shortcut = (dt_shortcut_t *)value;
-  if(!shortcut) return;
+  if(IS_NULL_PTR(shortcut)) return;
   const gchar *path = (const gchar *)key;
 
   GtkListStore *store = (GtkListStore *)user_data;
-  if(!store) return;
+  if(IS_NULL_PTR(store)) return;
 
   dt_accels_t *accels = shortcut->accels;
   //g_print("My object is a <%s>\n", G_OBJECT_TYPE_NAME(store));
@@ -1847,7 +1847,7 @@ static void _call_shortcut_cclosure(dt_shortcut_t *shortcut, GtkWindow *main_win
 
 static void _dispatch_selected_shortcut(dt_accels_dispatch_state_t *state)
 {
-  if(!state->shortcut) return;
+  if(IS_NULL_PTR(state->shortcut)) return;
 
   dt_gui_refocus_center();
 

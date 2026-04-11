@@ -122,7 +122,7 @@ void dt_colorlabels_set_labels(const int32_t imgid, const int colors)
 static void _pop_undo_execute(const int32_t imgid, const int before, const int after)
 {
   dt_image_t *image = dt_image_cache_get(darktable.image_cache, imgid, 'w');
-  if(!image) return;
+  if(IS_NULL_PTR(image)) return;
 
   // Write to image
   for(int color = 0; color < 5; color++)

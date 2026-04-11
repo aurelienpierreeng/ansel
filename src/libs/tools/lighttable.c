@@ -119,7 +119,7 @@ static void _dt_collection_changed_callback(gpointer instance, dt_collection_cha
                                             dt_collection_properties_t changed_property, gpointer imgs,
                                             const int next, gpointer user_data)
 {
-  if(!user_data) return;
+  if(IS_NULL_PTR(user_data)) return;
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
 
   if(darktable.gui->culling_mode)

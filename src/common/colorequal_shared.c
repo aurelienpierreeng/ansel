@@ -178,7 +178,7 @@ gboolean dt_colorrings_apply_rgb_lut(const dt_aligned_pixel_t input_rgb, const f
                                      const uint16_t clut_level, dt_pthread_rwlock_t *clut_lock,
                                      const dt_lut3d_interpolation_t interpolation, dt_aligned_pixel_t output_rgb)
 {
-  if(!output_rgb) return FALSE;
+  if(IS_NULL_PTR(output_rgb)) return FALSE;
 
   memcpy(output_rgb, input_rgb, sizeof(dt_aligned_pixel_t));
 

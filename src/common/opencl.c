@@ -87,8 +87,8 @@ static gboolean _opencl_splash_active = FALSE;
 
 static inline void _opencl_splash_update_compile(const char *programname)
 {
-  if(!programname) return;
-  if(!darktable.gui) return;
+  if(IS_NULL_PTR(programname)) return;
+  if(IS_NULL_PTR(darktable.gui)) return;
 
   if(!_opencl_splash_active)
   {
@@ -1557,7 +1557,7 @@ int dt_opencl_load_program(const int dev, const int prog, const char *filename, 
   }
 
   FILE *f = fopen_stat(filename, &filestat);
-  if(!f) return 0;
+  if(IS_NULL_PTR(f)) return 0;
 
   size_t filesize = filestat.st_size;
   char *file = (char *)malloc(filesize + 2048);

@@ -660,7 +660,7 @@ static gboolean image_set_rawcrops(const int32_t imgid, int dx, int dy)
 
   dt_image_t *img = NULL;
   img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
-  if(!img) return FALSE;
+  if(IS_NULL_PTR(img)) return FALSE;
   const gboolean test = (img->p_width == img->width - dx)
                      && (img->p_height == img->height - dy);
 
@@ -668,7 +668,7 @@ static gboolean image_set_rawcrops(const int32_t imgid, int dx, int dy)
   if(test) return FALSE;
 
   img = dt_image_cache_get(darktable.image_cache, imgid, 'w');
-  if(!img) return FALSE;
+  if(IS_NULL_PTR(img)) return FALSE;
   img->p_width = img->width - dx;
   img->p_height = img->height - dy;
   dt_image_cache_write_release(darktable.image_cache, img, DT_IMAGE_CACHE_RELAXED);

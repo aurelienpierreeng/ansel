@@ -98,7 +98,7 @@ static const char **view_wrapper(struct dt_lib_module_t *self)
 
 static position_description_t *get_position_description(lua_lib_data_t *gui_data, const dt_view_t *cur_view)
 {
-  if(!gui_data) return NULL;
+  if(IS_NULL_PTR(gui_data)) return NULL;
   for(GList *iter = gui_data->position_descriptions; iter; iter = g_list_next(iter))
   {
     position_description_t *position_description = (position_description_t *)iter->data;

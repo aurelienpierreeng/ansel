@@ -221,7 +221,7 @@ static void _view_map_remove_location(dt_map_t *lib, dt_location_draw_t *ld);
 static void _free_map_image(gpointer data)
 {
   dt_map_image_t *entry = (dt_map_image_t *)data;
-  if(!entry) return;
+  if(IS_NULL_PTR(entry)) return;
   dt_view_image_surface_fetcher_cleanup(&entry->fetcher);
   dt_free(entry);
 }
@@ -1689,7 +1689,7 @@ gint _find_image_in_images(gconstpointer a, gconstpointer b)
 static gboolean _display_next_image(dt_view_t *self, dt_map_image_t *entry, const gboolean next)
 {
   dt_map_t *lib = (dt_map_t *)self->data;
-  if(!entry) return FALSE;
+  if(IS_NULL_PTR(entry)) return FALSE;
 
   if(entry->group_count == 1)
   {

@@ -414,14 +414,14 @@ static inline void dt_dev_pixelpipe_set_cache_request(dt_dev_pixelpipe_t *pipe,
                                                       const dt_dev_pixelpipe_cache_request_t request,
                                                       const struct dt_iop_module_t *module)
 {
-  if(!pipe) return;
+  if(IS_NULL_PTR(pipe)) return;
   dt_atomic_set_ptr(&pipe->cache_request_module, (void *)module);
   dt_atomic_set_int((dt_atomic_int *)&pipe->cache_request, (int)request);
 }
 
 static inline void dt_dev_pixelpipe_reset_cache_request(dt_dev_pixelpipe_t *pipe)
 {
-  if(!pipe) return;
+  if(IS_NULL_PTR(pipe)) return;
   dt_atomic_set_int((dt_atomic_int *)&pipe->cache_request, DT_DEV_PIXELPIPE_CACHE_REQUEST_NONE);
   dt_atomic_set_ptr(&pipe->cache_request_module, NULL);
 }

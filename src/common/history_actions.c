@@ -50,7 +50,7 @@ typedef gboolean (*dt_history_action_fn)(const int32_t imgid, void *user_data);
 static gboolean _history_action_on_list_with_undo(const GList *list, dt_history_action_fn action, void *user_data,
                                                   const gboolean use_undo)
 {
-  if(!list) return FALSE;
+  if(IS_NULL_PTR(list)) return FALSE;
 
   if(use_undo) dt_undo_start_group(darktable.undo, DT_UNDO_LT_HISTORY);
   gboolean changed = FALSE;
@@ -281,7 +281,7 @@ static gboolean _history_paste_parts_apply(const int32_t imgid, void *user_data)
 {
   (void)user_data;
   if(darktable.view_manager->copy_paste.copied_imageid <= 0) return FALSE;
-  if(!darktable.view_manager->copy_paste.selops) return FALSE;
+  if(IS_NULL_PTR(darktable.view_manager->copy_paste.selops)) return FALSE;
   if(imgid <= 0) return FALSE;
 
   const gboolean pasted = dt_history_copy_and_paste_on_image(darktable.view_manager->copy_paste.copied_imageid,
@@ -341,7 +341,7 @@ static gboolean _history_load_and_apply_apply(const int32_t imgid, void *user_da
 {
   dt_history_load_params_t *params = (dt_history_load_params_t *)user_data;
   dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'w');
-  if(!img) return FALSE;
+  if(IS_NULL_PTR(img)) return FALSE;
 
   dt_undo_lt_history_t *hist = dt_history_snapshot_item_init();
   hist->imgid = imgid;

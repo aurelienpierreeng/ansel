@@ -46,9 +46,9 @@ const char *_ui_panel_config_names[]
 gchar * panels_get_view_path(char *suffix)
 {
 
-  if(!darktable.view_manager) return NULL;
+  if(IS_NULL_PTR(darktable.view_manager)) return NULL;
   const dt_view_t *cv = dt_view_manager_get_current_view(darktable.view_manager);
-  if(!cv) return NULL;
+  if(IS_NULL_PTR(cv)) return NULL;
   char lay[32] = "";
 
   if(!strcmp(cv->module_name, "lighttable"))
@@ -62,7 +62,7 @@ gchar * panels_get_view_path(char *suffix)
 gchar * panels_get_panel_path(dt_ui_panel_t panel, char *suffix)
 {
   gchar *v = panels_get_view_path("");
-  if(!v) return NULL;
+  if(IS_NULL_PTR(v)) return NULL;
   return dt_util_dstrcat(v, "%s%s", _ui_panel_config_names[panel], suffix);
 }
 
@@ -316,7 +316,7 @@ static void _ui_panel_size_changed(GtkAdjustment *adjustment, GParamSpec *pspec,
   if(height == last_height[side]) return;
   last_height[side] = height;
 
-  if(!darktable.gui->scroll_to[side]) return;
+  if(IS_NULL_PTR(darktable.gui->scroll_to[side])) return;
 
   if(GTK_IS_WIDGET(darktable.gui->scroll_to[side]))
   {
