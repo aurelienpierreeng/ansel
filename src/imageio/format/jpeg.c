@@ -288,7 +288,7 @@ read_icc_profile (j_decompress_ptr cinfo,
 
   /* Allocate space for assembled data */
   JOCTET *icc_data = (JOCTET *)calloc(total_length, sizeof(JOCTET));
-  if(icc_data == NULL)
+  if(IS_NULL_PTR(icc_data))
     return FALSE;   /* oops, out of memory */
 
   /* and fill it in */

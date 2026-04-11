@@ -1095,7 +1095,7 @@ static void declare_cat_on_pipe(struct dt_iop_module_t *self, gboolean preset)
   if((self->enabled && !(p->adaptation == DT_ADAPTATION_RGB || p->illuminant == DT_ILLUMINANT_PIPE)) || preset)
   {
     // We do CAT here so we need to register this instance as CAT-handler.
-    if(self->dev->proxy.chroma_adaptation == NULL)
+    if(IS_NULL_PTR(self->dev->proxy.chroma_adaptation))
     {
       // We are the first to try to register, let's go !
       self->dev->proxy.chroma_adaptation = self;
@@ -1349,10 +1349,10 @@ static int _extract_patches(const float *const restrict in, const dt_iop_roi_t *
   const float radius_x = g->checker->radius * hypotf(1.f, g->checker->ratio) * g->safety_margin;
   const float radius_y = radius_x / g->checker->ratio;
 
-  if(g->delta_E_in == NULL)
+  if(IS_NULL_PTR(g->delta_E_in))
   {
     g->delta_E_in = dt_alloc_align_float(g->checker->patches);
-    if(g->delta_E_in == NULL) return 1;
+    if(IS_NULL_PTR(g->delta_E_in)) return 1;
   }
 
   /* Get the average color over each patch */
@@ -1546,7 +1546,7 @@ int extract_color_checker(const float *const restrict in, float *const restrict 
                           const dt_adaptation_t kind)
 {
   float *const restrict patches = dt_alloc_align_float(g->checker->patches * 4);
-  if(patches == NULL) return 1;
+  if(IS_NULL_PTR(patches)) return 1;
 
   dt_simd_memcpy(in, out, (size_t)roi_in->width * roi_in->height * 4);
 
@@ -1670,7 +1670,7 @@ int extract_color_checker(const float *const restrict in, float *const restrict 
   /* Compute the matrix of mix */
   double *const restrict Y = dt_alloc_align(g->checker->patches * 3 * sizeof(double));
   double *const restrict A = dt_alloc_align(g->checker->patches * 3 * 9 * sizeof(double));
-  if(Y == NULL || A == NULL)
+  if(IS_NULL_PTR(Y) || IS_NULL_PTR(A))
   {
     dt_free_align(Y);
     dt_free_align(A);
@@ -1848,7 +1848,7 @@ int validate_color_checker(const float *const restrict in,
                            const dt_colormatrix_t RGB_to_XYZ, const dt_colormatrix_t XYZ_to_RGB, const dt_colormatrix_t XYZ_to_CAM)
 {
   float *const restrict patches = dt_alloc_align_float(4 * g->checker->patches);
-  if(patches == NULL) return 1;
+  if(IS_NULL_PTR(patches)) return 1;
   extraction_result_t extraction_result = { 0 };
   if(_extract_patches(in, roi_in, g, RGB_to_XYZ, XYZ_to_CAM, patches, FALSE, &extraction_result))
   {
@@ -2255,7 +2255,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   if(!self->enabled) return 0;
 
   dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
-  if(g == NULL || !g->is_profiling_started) return 0;
+  if(IS_NULL_PTR(g) || !g->is_profiling_started) return 0;
   if(g->box[0].x == -1.0f || g->box[1].y == -1.0f) return 0;
 
   dt_develop_t *dev = self->dev;
@@ -2328,7 +2328,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
   if(!self->enabled) return 0;
 
   dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
-  if(g == NULL || !g->is_profiling_started) return 0;
+  if(IS_NULL_PTR(g) || !g->is_profiling_started) return 0;
 
   dt_develop_t *dev = self->dev;
   const float wd = dev->roi.preview_width;
@@ -2376,7 +2376,7 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
   if(!self->enabled) return 0;
 
   dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
-  if(g == NULL || !g->is_profiling_started) return 0;
+  if(IS_NULL_PTR(g) || !g->is_profiling_started) return 0;
   if(g->box[0].x == -1.0f || g->box[1].y == -1.0f) return 0;
   if(!g->is_cursor_close || !g->drag_drop) return 0;
 
@@ -2407,7 +2407,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
                      int32_t pointerx, int32_t pointery)
 {
   const dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_pipe_output_profile_info(self->dev->pipe);
-  if(work_profile == NULL) return;
+  if(IS_NULL_PTR(work_profile)) return;
 
   const dt_iop_channelmixer_rgb_gui_data_t *g = (const dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
   if(!g->is_profiling_started) return;
@@ -2716,7 +2716,7 @@ static void _develop_ui_pipe_finished_callback(gpointer instance, gpointer user_
   dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
 
-  if(g == NULL) return;
+  if(IS_NULL_PTR(g)) return;
   if(p->illuminant != DT_ILLUMINANT_DETECT_EDGES && p->illuminant != DT_ILLUMINANT_DETECT_SURFACES)
     return;
 
@@ -4141,7 +4141,7 @@ void _auto_set_illuminant(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe)
   // Get the module-stage profile matching the sampled buffer.
   const dt_iop_order_iccprofile_info_t *const current_profile
       = dt_ioppr_get_pipe_current_profile_info(self, pipe);
-  if(current_profile == NULL)
+  if(IS_NULL_PTR(current_profile))
   {
     dt_print(DT_DEBUG_DEV, "[picker/channelmixerrgb] missing current profile\n");
     return;

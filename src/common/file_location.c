@@ -91,7 +91,7 @@ void dt_loc_init(const char *datadir, const char *moduledir, const char *localed
 
 gchar *dt_loc_get_home_dir(const gchar *user)
 {
-  if(user == NULL || g_strcmp0(user, g_get_user_name()) == 0)
+  if(IS_NULL_PTR(user) || g_strcmp0(user, g_get_user_name()) == 0)
   {
     const char *home_dir = g_getenv("HOME");
     return g_strdup((home_dir != NULL) ? home_dir : g_get_home_dir());
@@ -113,13 +113,13 @@ gchar *dt_loc_get_home_dir(const gchar *user)
 #endif
 
   gchar *buffer = g_malloc0_n(bufsize, sizeof(gchar));
-  if(buffer == NULL)
+  if(IS_NULL_PTR(buffer))
   {
     return NULL;
   }
 
   getpwnam_r(user, &pwd, buffer, bufsize, &result);
-  if(result == NULL)
+  if(IS_NULL_PTR(result))
   {
     dt_free(buffer);
     return NULL;

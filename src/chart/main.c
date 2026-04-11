@@ -338,7 +338,7 @@ static char *get_filename_base(const char *filename)
 
 static gboolean open_reference_image(dt_lut_t *self, const char *filename)
 {
-  const gboolean initial_loading = (self->reference.xyz == NULL);
+  const gboolean initial_loading = (IS_NULL_PTR(self->reference.xyz));
   const gboolean res = open_image(&self->reference, filename);
   gtk_widget_set_sensitive(self->process_button, res);
   gtk_widget_set_sensitive(self->export_button, FALSE);

@@ -308,7 +308,7 @@ char *strptime(const char *buf, const char *fmt, struct tm *tm)
         }
 
         tm = localtime(&sse);
-        if(tm == NULL) bp = NULL;
+        if(IS_NULL_PTR(tm)) bp = NULL;
       }
         continue;
 

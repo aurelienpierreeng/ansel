@@ -214,10 +214,10 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   size_t local[3];
 
   dev_tmp = dt_opencl_alloc_device(devid, width, height, sizeof(float) * 4);
-  if(dev_tmp == NULL) goto error;
+  if(IS_NULL_PTR(dev_tmp)) goto error;
 
   dev_m = dt_opencl_copy_host_to_device_constant(devid, mat_size, mat);
-  if(dev_m == NULL) goto error;
+  if(IS_NULL_PTR(dev_m)) goto error;
 
   /* invert image */
   sizes[0] = ROUNDUPDWD(width, devid);

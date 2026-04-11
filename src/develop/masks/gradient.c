@@ -738,7 +738,7 @@ static int _gradient_get_points(dt_develop_t *dev, float x, float y, float rotat
 
   const int count = sqrtf(wd * wd + ht * ht) + 3;
   *points = dt_pixelpipe_cache_alloc_align_float_cache((size_t)2 * count, 0);
-  if(*points == NULL) return 1;
+  if(IS_NULL_PTR(*points)) return 1;
 
   // we set the anchor point
   float center[2] = { x, y };
@@ -764,7 +764,7 @@ static int _gradient_get_points(dt_develop_t *dev, float x, float y, float rotat
   size_t c_padded_size;
   uint32_t *pts_count = dt_pixelpipe_cache_calloc_perthread(nthreads, sizeof(uint32_t), &c_padded_size);
   float *const restrict pts = dt_pixelpipe_cache_alloc_align_float_cache((size_t)2 * count * nthreads, 0);
-  if(pts_count == NULL || pts == NULL)
+  if(IS_NULL_PTR(pts_count) || IS_NULL_PTR(pts))
   {
     dt_pixelpipe_cache_free_align(pts_count);
     dt_pixelpipe_cache_free_align(pts);
@@ -883,7 +883,7 @@ static int _gradient_get_pts_border(dt_develop_t *dev, float x, float y, float r
     // Both curves valid - combine them with INFINITY separator
     const int total_points = (points_count1 - 3) + (points_count2 - 3) + 1;
     *points = dt_pixelpipe_cache_alloc_align_float_cache((size_t)2 * total_points, 0);
-    if(*points == NULL) goto cleanup;
+    if(IS_NULL_PTR(*points)) goto cleanup;
     
     *points_count = total_points;
     int k = 0;
@@ -899,7 +899,7 @@ static int _gradient_get_pts_border(dt_develop_t *dev, float x, float y, float r
     // Only first curve valid
     *points_count = points_count1 - 3;
     *points = dt_pixelpipe_cache_alloc_align_float_cache((size_t)2 * (*points_count), 0);
-    if(*points == NULL) goto cleanup;
+    if(IS_NULL_PTR(*points)) goto cleanup;
     
     int k = 0;
     _copy_points(*points, points1, points_count1, &k);
@@ -910,7 +910,7 @@ static int _gradient_get_pts_border(dt_develop_t *dev, float x, float y, float r
     // Only second curve valid
     *points_count = points_count2 - 3;
     *points = dt_pixelpipe_cache_alloc_align_float_cache((size_t)2 * (*points_count), 0);
-    if(*points == NULL) goto cleanup;
+    if(IS_NULL_PTR(*points)) goto cleanup;
     
     int k = 0;
     _copy_points(*points, points2, points_count2, &k);
@@ -1169,7 +1169,7 @@ static int _gradient_get_mask(const dt_iop_module_t *const module, dt_dev_pixelp
   const int gh = (h + grid - 1) / grid + 1;
 
   float *points = dt_pixelpipe_cache_alloc_align_float_cache((size_t)2 * gw * gh, 0);
-  if(points == NULL) return 1;
+  if(IS_NULL_PTR(points)) return 1;
   __OMP_PARALLEL_FOR__(collapse(2) if((size_t)gw * gh > 50000))
   for(int j = 0; j < gh; j++)
     for(int i = 0; i < gw; i++)
@@ -1217,7 +1217,7 @@ static int _gradient_get_mask(const dt_iop_module_t *const module, dt_dev_pixelp
   const int lutmax = ceilf(4 * extent * ihwscale);
   const int lutsize = 2 * lutmax + 2;
   float *lut = dt_pixelpipe_cache_alloc_align_float_cache((size_t)lutsize, 0);
-  if(lut == NULL)
+  if(IS_NULL_PTR(lut))
   {
     dt_pixelpipe_cache_free_align(points);
     return 1;
@@ -1262,7 +1262,7 @@ static int _gradient_get_mask(const dt_iop_module_t *const module, dt_dev_pixelp
 
   // we allocate the buffer
   float *const bufptr = *buffer = dt_pixelpipe_cache_alloc_align_float_cache((size_t)w * h, 0);
-  if(*buffer == NULL)
+  if(IS_NULL_PTR(*buffer))
   {
     dt_pixelpipe_cache_free_align(points);
     return 1;
@@ -1338,7 +1338,7 @@ static int _gradient_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pi
   const int gh = (h + grid - 1) / grid + 1;
 
   float *points = dt_pixelpipe_cache_alloc_align_float_cache((size_t)2 * gw * gh, 0);
-  if(points == NULL) return 1;
+  if(IS_NULL_PTR(points)) return 1;
   __OMP_PARALLEL_FOR__(collapse(2) if((size_t)gw * gh > 50000))
   for(int j = 0; j < gh; j++)
     for(int i = 0; i < gw; i++)
@@ -1389,7 +1389,7 @@ static int _gradient_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pi
   const int lutmax = ceilf(4 * extent * ihwscale);
   const int lutsize = 2 * lutmax + 2;
   float *lut = dt_pixelpipe_cache_alloc_align_float_cache((size_t)lutsize, 0);
-  if(lut == NULL)
+  if(IS_NULL_PTR(lut))
   {
     dt_pixelpipe_cache_free_align(points);
     return 1;

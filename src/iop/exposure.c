@@ -393,7 +393,7 @@ static void _compute_correction(dt_iop_module_t *self, dt_iop_params_t *p1,
 
   *correction = NAN;
 
-  if(histogram == NULL) return;
+  if(IS_NULL_PTR(histogram)) return;
 
   const size_t total = (size_t)histogram_stats->ch * histogram_stats->pixels;
 
@@ -730,7 +730,7 @@ static void _auto_set_exposure(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe)
 
   // Get input profile, assuming we are before colorin
   const dt_iop_order_iccprofile_info_t *const input_profile = dt_ioppr_get_pipe_input_profile_info(pipe);
-  if(input_profile == NULL)
+  if(IS_NULL_PTR(input_profile))
   {
     dt_print(DT_DEBUG_DEV, "[picker/exposure] missing input profile\n");
     return;

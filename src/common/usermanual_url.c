@@ -247,7 +247,7 @@ dt_help_url urls_db[] =
 
 char *dt_get_help_url(char *name)
 {
-  if(name == NULL) return NULL;
+  if(IS_NULL_PTR(name)) return NULL;
 
   for(int k=0; k< sizeof(urls_db)/2/sizeof(char *); k++)
     if(!strcmp(urls_db[k].name, name))

@@ -561,7 +561,7 @@ cmsHPROFILE dt_colorspaces_create_alternate_profile(const char *makermodel)
 
   hp = cmsCreateRGBProfile(&WP, &XYZPrimaries, Gamma);
   cmsFreeToneCurve(Gamma[0]);
-  if(hp == NULL) return NULL;
+  if(IS_NULL_PTR(hp)) return NULL;
 
   char name[512];
   snprintf(name, sizeof(name), "darktable alternate %s", makermodel);
@@ -611,7 +611,7 @@ cmsHPROFILE dt_colorspaces_create_vendor_profile(const char *makermodel)
 
   hp = cmsCreateRGBProfile(&WP, &XYZPrimaries, Gamma);
   cmsFreeToneCurve(Gamma[0]);
-  if(hp == NULL) return NULL;
+  if(IS_NULL_PTR(hp)) return NULL;
 
   char name[512];
   snprintf(name, sizeof(name), "darktable vendor %s", makermodel);
@@ -661,7 +661,7 @@ cmsHPROFILE dt_colorspaces_create_darktable_profile(const char *makermodel)
 
   hp = cmsCreateRGBProfile(&WP, &XYZPrimaries, Gamma);
   cmsFreeToneCurve(Gamma[0]);
-  if(hp == NULL) return NULL;
+  if(IS_NULL_PTR(hp)) return NULL;
 
   char name[512];
   snprintf(name, sizeof(name), "darktable profiled %s", makermodel);
@@ -689,7 +689,7 @@ static cmsHPROFILE dt_colorspaces_create_xyz_profile(void)
   cmsSetPCS(hXYZ, cmsSigXYZData);
   cmsSetHeaderRenderingIntent(hXYZ, INTENT_PERCEPTUAL);
 
-  if(hXYZ == NULL) return NULL;
+  if(IS_NULL_PTR(hXYZ)) return NULL;
 
   cmsSetProfileVersion(hXYZ, 2.1);
   cmsMLU *mlu0 = cmsMLUalloc(NULL, 1);
@@ -825,7 +825,7 @@ const dt_colorspaces_color_profile_t *dt_colorspaces_get_work_profile(const int3
 {
   // find the colorin module -- the pointer stays valid until darktable shuts down
   static const dt_iop_module_so_t *colorin = NULL;
-  if(colorin == NULL)
+  if(IS_NULL_PTR(colorin))
   {
     for(const GList *modules = darktable.iop; modules; modules = g_list_next(modules))
     {
@@ -1273,7 +1273,7 @@ static cmsHPROFILE dt_colorspaces_create_xyzmatrix_profile(const float mat[3][3]
   Gamma[0] = Gamma[1] = Gamma[2] = cmsBuildGamma(NULL, 1.0);
   profile = cmsCreateRGBProfile(&D65, &CameraPrimaries, Gamma);
   cmsFreeToneCurve(Gamma[0]);
-  if(profile == NULL) return NULL;
+  if(IS_NULL_PTR(profile)) return NULL;
 
   cmsSetProfileVersion(profile, 2.1);
   cmsMLU *mlu0 = cmsMLUalloc(NULL, 1);
@@ -2006,7 +2006,7 @@ static void dt_colorspaces_get_display_profile_colord_callback(GObject *source, 
   CdWindow *window = CD_WINDOW(source);
   GError *error = NULL;
   CdProfile *profile = cd_window_get_profile_finish(window, res, &error);
-  if(error == NULL && profile != NULL)
+  if(IS_NULL_PTR(error) && profile != NULL)
   {
     const gchar *filename = cd_profile_get_filename(profile);
     if(filename)
@@ -2106,7 +2106,7 @@ void dt_colorspaces_set_display_profile(const dt_colorspaces_color_profile_type_
     GtkWidget *widget = dt_ui_center(darktable.gui->ui);
     GdkWindow *window = gtk_widget_get_window(widget);
     GdkScreen *screen = gtk_widget_get_screen(widget);
-    if(screen == NULL) screen = gdk_screen_get_default();
+    if(IS_NULL_PTR(screen)) screen = gdk_screen_get_default();
 
     GdkDisplay *display = gtk_widget_get_display(widget);
     int monitor = _gtk_get_monitor_num(gdk_display_get_monitor_at_window(display, window));
@@ -2141,7 +2141,7 @@ void dt_colorspaces_set_display_profile(const dt_colorspaces_color_profile_type_
 #if 0
   GtkWidget *widget = (profile_type == DT_COLORSPACE_DISPLAY2) ? darktable.develop->second_window.second_wnd : dt_ui_center(darktable.gui->ui);
   GdkScreen *screen = gtk_widget_get_screen(widget);
-  if(screen == NULL) screen = gdk_screen_get_default();
+  if(IS_NULL_PTR(screen)) screen = gdk_screen_get_default();
   int monitor = gdk_screen_get_monitor_at_window(screen, gtk_widget_get_window(widget));
 
   CGDirectDisplayID ids[monitor + 1];
@@ -2589,7 +2589,7 @@ int dt_colorspaces_conversion_matrices_rgb(const float adobe_XYZ_to_CAM[4][3],
   float XYZ_to_CAM[4][3];
   XYZ_to_CAM[0][0] = NAN;
 
-  if(embedded_matrix == NULL || isnan(embedded_matrix[0]))
+  if(IS_NULL_PTR(embedded_matrix) || isnan(embedded_matrix[0]))
   {
     for(int k=0; k<4; k++)
       for(int i=0; i<3; i++)

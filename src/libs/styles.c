@@ -271,7 +271,7 @@ static void apply_clicked(GtkWidget *w, gpointer user_data)
   g_list_free_full(selected_styles, (GDestroyNotify) gtk_tree_path_free);
   selected_styles = NULL;
 
-  if(style_names == NULL) return;
+  if(IS_NULL_PTR(style_names)) return;
 
   GList *list = dt_act_on_get_images();
 
@@ -362,7 +362,7 @@ static void delete_clicked(GtkWidget *w, gpointer user_data)
   g_list_free_full(selected_styles, (GDestroyNotify) gtk_tree_path_free);
   selected_styles = NULL;
 
-  if(style_names == NULL) return;
+  if(IS_NULL_PTR(style_names)) return;
 
   const gint select_cnt = g_list_length(style_names);
   const gboolean single_raise = (select_cnt == 1);
@@ -403,7 +403,7 @@ static void export_clicked(GtkWidget *w, gpointer user_data)
   g_list_free_full(selected_styles, (GDestroyNotify) gtk_tree_path_free);
   selected_styles = NULL;
 
-  if(style_names == NULL) return;
+  if(IS_NULL_PTR(style_names)) return;
 
   /* variables for overwrite dialog */
   gint overwrite_check_button = 0;
@@ -579,7 +579,7 @@ static void import_clicked(GtkWidget *w, gpointer user_data)
       if(document != NULL)
         root = xmlDocGetRootElement(document);
 
-      if(document == NULL || root == NULL || xmlStrcmp(root->name, BAD_CAST "darktable_style"))
+      if(IS_NULL_PTR(document) || IS_NULL_PTR(root) || xmlStrcmp(root->name, BAD_CAST "darktable_style"))
       {
         dt_print(DT_DEBUG_CONTROL,
                  "[styles] file %s is not a style file\n", (char*)filename->data);
@@ -927,7 +927,7 @@ void gui_reset(dt_lib_module_t *self)
 
   GList *all_styles = dt_styles_get_list("");
 
-  if(all_styles == NULL)
+  if(IS_NULL_PTR(all_styles))
   {
     dt_database_release_transaction(darktable.db);
     return;

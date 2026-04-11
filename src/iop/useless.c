@@ -464,7 +464,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
   dt_iop_useless_gui_data_t *g = (dt_iop_useless_gui_data_t *)self->gui_data;
 
   // Test which widget was changed.
-  // If allowing w == NULL, this can be called from gui_update, so that
+  // If allowing IS_NULL_PTR(w), this can be called from gui_update, so that
   // gui configuration adjustments only need to be dealt with once, here.
   if(!w || w == g->method)
   {
@@ -522,7 +522,7 @@ void gui_update(dt_iop_module_t *self)
   dt_bauhaus_combobox_set_from_value(g->method, p->method);
 
   // Any configuration changes to the gui that depend on field values should be done here,
-  // or can be done in gui_changed which can then be called from here with widget == NULL.
+  // or can be done in gui_changed which can then be called from here with IS_NULL_PTR(widget).
   gui_changed(self, NULL, NULL);
 }
 

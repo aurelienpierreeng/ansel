@@ -3013,7 +3013,7 @@ dt_database_t *dt_database_init(const char *alternative, const gboolean load_dat
   sqlite3_initialize();
 
 start:
-  if(alternative == NULL)
+  if(IS_NULL_PTR(alternative))
   {
     /* migrate default database location to new default */
     _database_migrate_to_xdg_structure();
@@ -3029,7 +3029,7 @@ start:
 
   dt_loc_get_user_config_dir(datadir, sizeof(datadir));
 
-  if(alternative == NULL)
+  if(IS_NULL_PTR(alternative))
   {
     dbname = dt_conf_get_string("database");
     if(!dbname)
@@ -4071,7 +4071,7 @@ gboolean dt_database_maybe_snapshot(const struct dt_database_t *db)
   GFile *library = g_file_parse_name(db->dbfilename_library);
   GFile *parent = g_file_get_parent(library);
 
-  if(parent == NULL)
+  if(IS_NULL_PTR(parent))
   {
     dt_print(DT_DEBUG_SQL, "[db backup] couldn't get library parent!.\n");
     g_object_unref(library);
@@ -4081,7 +4081,7 @@ gboolean dt_database_maybe_snapshot(const struct dt_database_t *db)
   GError *error = NULL;
   GFileEnumerator *library_dir_files = g_file_enumerate_children(parent, G_FILE_ATTRIBUTE_STANDARD_NAME "," G_FILE_ATTRIBUTE_TIME_MODIFIED, G_FILE_QUERY_INFO_NONE, NULL, &error);
 
-  if(library_dir_files == NULL)
+  if(IS_NULL_PTR(library_dir_files))
   {
     dt_print(DT_DEBUG_SQL, "[db backup] couldn't enumerate library parent: %s.\n", error->message);
     g_object_unref(parent);
@@ -4243,7 +4243,7 @@ char **dt_database_snaps_to_remove(const struct dt_database_t *db)
   GFile *lib_file = g_file_parse_name(db->dbfilename_library);
   GFile *lib_parent = g_file_get_parent(lib_file);
 
-  if(lib_parent == NULL)
+  if(IS_NULL_PTR(lib_parent))
   {
     dt_print(DT_DEBUG_SQL, "[db backup] couldn't get library parent!.\n");
     g_object_unref(lib_file);
@@ -4253,7 +4253,7 @@ char **dt_database_snaps_to_remove(const struct dt_database_t *db)
   GFile *dat_file = g_file_parse_name(db->dbfilename_data);
   GFile *dat_parent = g_file_get_parent(dat_file);
 
-  if(dat_parent == NULL)
+  if(IS_NULL_PTR(dat_parent))
   {
     dt_print(DT_DEBUG_SQL, "[db backup] couldn't get data parent!.\n");
     g_object_unref(dat_file);
@@ -4284,7 +4284,7 @@ char **dt_database_snaps_to_remove(const struct dt_database_t *db)
     GError *error = NULL;
     GFileEnumerator *library_dir_files = g_file_enumerate_children(lib_parent, G_FILE_ATTRIBUTE_STANDARD_NAME, G_FILE_QUERY_INFO_NONE, NULL, &error);
 
-    if(library_dir_files == NULL)
+    if(IS_NULL_PTR(library_dir_files))
     {
       dt_print(DT_DEBUG_SQL, "[db backup] couldn't enumerate library parent: %s.\n", error->message);
       g_object_unref(lib_parent);
@@ -4351,7 +4351,7 @@ char **dt_database_snaps_to_remove(const struct dt_database_t *db)
 
     GError *error = NULL;
     GFileEnumerator *library_dir_files = g_file_enumerate_children(lib_parent, G_FILE_ATTRIBUTE_STANDARD_NAME, G_FILE_QUERY_INFO_NONE, NULL, &error);
-    if(library_dir_files == NULL)
+    if(IS_NULL_PTR(library_dir_files))
     {
       dt_print(DT_DEBUG_SQL, "[db backup] couldn't enumerate library parent: %s.\n", error->message);
       g_object_unref(lib_parent);
@@ -4369,7 +4369,7 @@ char **dt_database_snaps_to_remove(const struct dt_database_t *db)
     }
 
     GFileEnumerator *data_dir_files = g_file_enumerate_children(dat_parent, G_FILE_ATTRIBUTE_STANDARD_NAME, G_FILE_QUERY_INFO_NONE, NULL, &error);
-    if(data_dir_files == NULL)
+    if(IS_NULL_PTR(data_dir_files))
     {
       dt_print(DT_DEBUG_SQL, "[db backup] couldn't enumerate data parent: %s.\n", error->message);
       g_object_unref(lib_parent);
@@ -4523,7 +4523,7 @@ gchar *dt_database_get_most_recent_snap(const char* db_filename)
   GFile *db_file = g_file_parse_name(db_filename);
   GFile *parent = g_file_get_parent(db_file);
 
-  if(parent == NULL)
+  if(IS_NULL_PTR(parent))
   {
     dt_print(DT_DEBUG_SQL, "[db backup] couldn't get database parent!.\n");
     g_object_unref(db_file);
@@ -4533,7 +4533,7 @@ gchar *dt_database_get_most_recent_snap(const char* db_filename)
   GError *error = NULL;
   GFileEnumerator *db_dir_files = g_file_enumerate_children(parent, G_FILE_ATTRIBUTE_STANDARD_NAME "," G_FILE_ATTRIBUTE_TIME_MODIFIED, G_FILE_QUERY_INFO_NONE, NULL, &error);
 
-  if(db_dir_files == NULL)
+  if(IS_NULL_PTR(db_dir_files))
   {
     dt_print(DT_DEBUG_SQL, "[db backup] couldn't enumerate database parent: %s.\n", error->message);
     g_object_unref(parent);

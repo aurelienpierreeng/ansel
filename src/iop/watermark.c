@@ -569,7 +569,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
   /* create a cairo memory surface that is later used for reading watermark overlay data */
   guint8 *image = (guint8 *)g_try_malloc0_n(roi_out->height, stride);
-  if(image == NULL)
+  if(IS_NULL_PTR(image))
   {
     dt_iop_image_copy_by_size(ovoid, ivoid, roi_out->width, roi_out->height, ch);
     return 1;
@@ -733,7 +733,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
     const int stride_two = cairo_format_stride_for_width(CAIRO_FORMAT_ARGB32, watermark_width);
     image_two = (guint8 *)g_try_malloc0_n(watermark_height, stride_two);
-    if(image_two == NULL)
+    if(IS_NULL_PTR(image_two))
     {
       cairo_surface_destroy(surface);
       g_object_unref(svg);

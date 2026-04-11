@@ -58,7 +58,7 @@ dt_imageio_retval_t dt_imageio_open_avif(dt_image_t *img,
   avifResult result;
 
   decoder = avifDecoderCreate();
-  if(decoder == NULL)
+  if(IS_NULL_PTR(decoder))
   {
     dt_print(DT_DEBUG_IMAGEIO, "[avif_open] failed to create decoder for `%s'\n", filename);
     ret = DT_IMAGEIO_FILE_CORRUPTED;
@@ -132,7 +132,7 @@ dt_imageio_retval_t dt_imageio_open_avif(dt_image_t *img,
   }
 
   float *mipbuf = (float *)dt_mipmap_cache_alloc(mbuf, img);
-  if(mipbuf == NULL)
+  if(IS_NULL_PTR(mipbuf))
   {
     dt_print(DT_DEBUG_IMAGEIO, "[avif_open] failed to allocate mipmap buffer for `%s'\n", filename);
     ret = DT_IMAGEIO_CACHE_FULL;
@@ -219,7 +219,7 @@ int dt_imageio_avif_read_profile(const char *filename, uint8_t **out, dt_colorsp
   avifResult result;
 
   decoder = avifDecoderCreate();
-  if(decoder == NULL)
+  if(IS_NULL_PTR(decoder))
   {
     dt_print(DT_DEBUG_IMAGEIO, "[avif_open] failed to create decoder for `%s'\n", filename);
     goto out;
@@ -236,7 +236,7 @@ int dt_imageio_avif_read_profile(const char *filename, uint8_t **out, dt_colorsp
   {
     avifRWData *icc = &avif_image.icc;
 
-    if(icc->data == NULL) goto out;
+    if(IS_NULL_PTR(icc->data)) goto out;
 
     *out = (uint8_t *)g_malloc0(icc->size);
     memcpy(*out, icc->data, icc->size);

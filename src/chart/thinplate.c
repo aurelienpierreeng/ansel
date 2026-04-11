@@ -132,7 +132,7 @@ static inline int solve(double *As, double *w, double *v, const double *b, doubl
     return 1;
     
   double *tmp = malloc(sizeof(double) * S);
-  if(tmp == NULL) return 1;
+  if(IS_NULL_PTR(tmp)) return 1;
 
   for(int i = 0; i <= s; i++) // compute tmp = u^t * b
   {

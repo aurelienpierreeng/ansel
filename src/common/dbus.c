@@ -148,7 +148,7 @@ static GVariant *_handle_get_property(GDBusConnection *connection, const gchar *
 //                      GError          **error,
 //                      gpointer          user_data)
 // {
-//   return *error == NULL;
+//   return IS_NULL_PTR(*error);
 // }
 
 static const GDBusInterfaceVTable interface_vtable = { _handle_method_call, _handle_get_property,
@@ -189,7 +189,7 @@ struct dt_dbus_t *dt_dbus_init()
 
   dbus->introspection_data = g_dbus_node_info_new_for_xml(introspection_xml, NULL);
 
-  if(dbus->introspection_data == NULL) return dbus;
+  if(IS_NULL_PTR(dbus->introspection_data)) return dbus;
 
   dbus->owner_id = g_bus_own_name(G_BUS_TYPE_SESSION,
                                   "org.darktable.service", // FIXME

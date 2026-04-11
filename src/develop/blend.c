@@ -308,7 +308,7 @@ static void _refine_with_detail_mask(struct dt_iop_module_t *self, const struct 
 
   const dt_dev_pixelpipe_t *p = pipe;
   rawdetail_mask = dt_dev_retrieve_rawdetail_mask(pipe, self);
-  if(rawdetail_mask == NULL) return;
+  if(IS_NULL_PTR(rawdetail_mask)) return;
 
   const int iwidth  = p->rawdetail_mask_roi.width;
   const int iheight = p->rawdetail_mask_roi.height;
@@ -320,7 +320,7 @@ static void _refine_with_detail_mask(struct dt_iop_module_t *self, const struct 
 
   tmp = dt_pixelpipe_cache_alloc_align_float(bufsize, pipe);
   lum = dt_pixelpipe_cache_alloc_align_float(bufsize, pipe);
-  if((tmp == NULL) || (lum == NULL)) goto error;
+  if((IS_NULL_PTR(tmp)) || (IS_NULL_PTR(lum))) goto error;
 
   dt_masks_calc_detail_mask(rawdetail_mask, lum, tmp, iwidth, iheight, threshold, detail);
   dt_pixelpipe_cache_free_align(tmp);
@@ -331,7 +331,7 @@ static void _refine_with_detail_mask(struct dt_iop_module_t *self, const struct 
   dt_pixelpipe_cache_free_align(lum);
   lum = NULL;
 
-  if(warp_mask == NULL) goto error;
+  if(IS_NULL_PTR(warp_mask)) goto error;
 
   const int msize = owidth * oheight;
   __OMP_PARALLEL_FOR_SIMD__(aligned(mask, warp_mask : 64))
@@ -401,7 +401,7 @@ static inline float *_develop_blend_process_copy_region(const float *const restr
   const size_t ioffset = yoffs * iwidth + xoffs;
   float *const restrict output =
     dt_pixelpipe_cache_alloc_align_float_cache(owidth * oheight, 0);
-  if(output == NULL)
+  if(IS_NULL_PTR(output))
   {
     return NULL;
   }
@@ -855,7 +855,7 @@ static void _refine_with_detail_mask_cl(struct dt_iop_module_t *self, const stru
 
   const dt_dev_pixelpipe_t *p = pipe;
   rawdetail_mask = dt_dev_retrieve_rawdetail_mask(pipe, self);
-  if(rawdetail_mask == NULL) return;
+  if(IS_NULL_PTR(rawdetail_mask)) return;
 
   const int iwidth  = p->rawdetail_mask_roi.width;
   const int iheight = p->rawdetail_mask_roi.height;
@@ -864,13 +864,13 @@ static void _refine_with_detail_mask_cl(struct dt_iop_module_t *self, const stru
   if(info) fprintf(stderr, "[_refine_with_detail_mask_cl] in module %s %ix%i --> %ix%i\n", self->op, iwidth, iheight, owidth, oheight);
 
   lum = dt_pixelpipe_cache_alloc_align_float((size_t)iwidth * iheight, pipe);
-  if(lum == NULL) goto error;
+  if(IS_NULL_PTR(lum)) goto error;
   tmp = dt_opencl_alloc_device(devid, iwidth, iheight, sizeof(float));
-  if(tmp == NULL) goto error;
+  if(IS_NULL_PTR(tmp)) goto error;
   out = dt_opencl_alloc_device_buffer(devid, sizeof(float) * iwidth * iheight);
-  if(out == NULL) goto error;
+  if(IS_NULL_PTR(out)) goto error;
   blur = dt_opencl_alloc_device_buffer(devid, sizeof(float) * iwidth * iheight);
-  if(blur == NULL) goto error;
+  if(IS_NULL_PTR(blur)) goto error;
 
   {
     const int err = dt_opencl_write_host_to_device(devid, rawdetail_mask, tmp, iwidth, iheight, sizeof(float));
@@ -949,7 +949,7 @@ static void _refine_with_detail_mask_cl(struct dt_iop_module_t *self, const stru
 
   // here we have the slightly blurred full detail available
   float *warp_mask = dt_dev_distort_detail_mask(p, lum, self);
-  if(warp_mask == NULL) goto error;
+  if(IS_NULL_PTR(warp_mask)) goto error;
   dt_pixelpipe_cache_free_align(lum);
   lum = NULL;
 
@@ -1116,10 +1116,10 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_t
 
   // copy blend parameters to constant device memory
   dev_blendif_params = dt_opencl_copy_host_to_device_constant(devid, sizeof(parameters), parameters);
-  if(dev_blendif_params == NULL) goto error;
+  if(IS_NULL_PTR(dev_blendif_params)) goto error;
 
   dev_mask_1 = dt_opencl_alloc_device(devid, owidth, oheight, sizeof(float));
-  if(dev_mask_1 == NULL) goto error;
+  if(IS_NULL_PTR(dev_mask_1)) goto error;
 
   dt_iop_order_iccprofile_info_t profile;
   const int use_profile = dt_develop_blendif_init_masking_profile(pipe, piece, &profile, blend_csp);
@@ -1184,7 +1184,7 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_t
 
     // write mask from host to device
     dev_mask_2 = dt_opencl_alloc_device(devid, owidth, oheight, sizeof(float));
-    if(dev_mask_2 == NULL) goto error;
+    if(IS_NULL_PTR(dev_mask_2)) goto error;
     err = dt_opencl_write_host_to_device(devid, mask, dev_mask_1, owidth, oheight, sizeof(float));
     if(err != CL_SUCCESS) goto error;
 
@@ -1239,7 +1239,7 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_t
         if(!rois_equal)
         {
           dev_guide = dt_opencl_alloc_device(devid, owidth, oheight, sizeof(float) * 4);
-          if(dev_guide == NULL) goto error;
+          if(IS_NULL_PTR(dev_guide)) goto error;
           guide = dev_guide;
           size_t origin_1[] = { xoffs, yoffs, 0 };
           size_t origin_2[] = { 0, 0, 0 };
@@ -1305,7 +1305,7 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_t
 
   // get temporary buffer for output image to overcome readonly/writeonly limitation
   dev_tmp = dt_opencl_alloc_device(devid, owidth, oheight, sizeof(float) * 4);
-  if(dev_tmp == NULL) goto error;
+  if(IS_NULL_PTR(dev_tmp)) goto error;
 
   err = dt_opencl_enqueue_copy_image(devid, dev_out, dev_tmp, origin, origin, region);
   if(err != CL_SUCCESS) goto error;
@@ -1315,7 +1315,7 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_t
     // load the boost factors in the device memory
     dev_boost_factors = dt_opencl_copy_host_to_device_constant(devid, sizeof(d->blendif_boost_factors),
                                                                d->blendif_boost_factors);
-    if(dev_boost_factors == NULL) goto error;
+    if(IS_NULL_PTR(dev_boost_factors)) goto error;
 
     // the display channel of Lab blending is generated in RGB and should be transformed to Lab
     // the transformation in the pipeline is currently always using the work profile

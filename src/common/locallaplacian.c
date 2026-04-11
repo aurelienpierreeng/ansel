@@ -214,7 +214,7 @@ static inline float *ll_pad_input(
   *wd2 = 2*max_supp + wd;
   *ht2 = 2*max_supp + ht;
   float *const out = dt_pixelpipe_cache_alloc_align_float_cache((size_t) *wd2 * *ht2, 0);
-  if(out == NULL) return NULL;
+  if(IS_NULL_PTR(out)) return NULL;
 
   if(b && b->mode == 2)
   { // pad by preview buffer

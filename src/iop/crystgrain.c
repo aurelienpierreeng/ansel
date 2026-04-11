@@ -345,7 +345,7 @@ static int _create_crystal_kernel(dt_iop_crystgrain_kernel_t *const kernel, cons
   kernel->dx = malloc(sizeof(int) * count);
   kernel->dy = malloc(sizeof(int) * count);
   kernel->alpha = malloc(sizeof(float) * count);
-  if(kernel->dx == NULL || kernel->dy == NULL || kernel->alpha == NULL)
+  if(IS_NULL_PTR(kernel->dx) || IS_NULL_PTR(kernel->dy) || IS_NULL_PTR(kernel->alpha))
   {
     free(kernel->dx);
     free(kernel->dy);
@@ -1014,7 +1014,7 @@ static int _simulate_channel_cl(const int devid, dt_iop_crystgrain_global_data_t
 
     dev_kernel_bank = dt_opencl_copy_host_to_device_constant(devid, sizeof(kernel_bank_cl), kernel_bank_cl);
     _free_layer_kernel_bank(kernel_bank);
-    if(dev_kernel_bank == NULL) return CL_MEM_OBJECT_ALLOCATION_FAILURE;
+    if(IS_NULL_PTR(dev_kernel_bank)) return CL_MEM_OBJECT_ALLOCATION_FAILURE;
 
     dt_opencl_set_kernel_arg(devid, gd->kernel_simulate_layer, 0, sizeof(cl_mem), &dev_image);
     dt_opencl_set_kernel_arg(devid, gd->kernel_simulate_layer, 1, sizeof(cl_mem), &dev_remaining);
@@ -1107,7 +1107,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   dev_image = dt_opencl_alloc_device_buffer(devid, sizeof(float) * (size_t)width * height);
   dev_result = dt_opencl_alloc_device_buffer(devid, sizeof(float) * (size_t)width * height);
   dev_remaining = dt_opencl_alloc_device_buffer(devid, sizeof(float) * (size_t)width * height);
-  if(dev_image == NULL || dev_result == NULL || dev_remaining == NULL)
+  if(IS_NULL_PTR(dev_image) || IS_NULL_PTR(dev_result) || IS_NULL_PTR(dev_remaining))
   {
     err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
     goto error;
@@ -1176,7 +1176,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   dev_image_rgb = dt_opencl_alloc_device_buffer(devid, sizeof(float) * (size_t)width * height * 4);
   dev_result_rgb = dt_opencl_alloc_device_buffer(devid, sizeof(float) * (size_t)width * height * 4);
   dev_remaining_rgb = dt_opencl_alloc_device_buffer(devid, sizeof(float) * (size_t)width * height * 4);
-  if(dev_image_rgb == NULL || dev_result_rgb == NULL || dev_remaining_rgb == NULL)
+  if(IS_NULL_PTR(dev_image_rgb) || IS_NULL_PTR(dev_result_rgb) || IS_NULL_PTR(dev_remaining_rgb))
   {
     err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
     goto error;
@@ -1244,7 +1244,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
 
     dev_kernel_bank = dt_opencl_copy_host_to_device_constant(devid, sizeof(kernel_bank_cl), kernel_bank_cl);
     _free_layer_kernel_bank(kernel_bank);
-    if(dev_kernel_bank == NULL)
+    if(IS_NULL_PTR(dev_kernel_bank))
     {
       err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
       goto error;

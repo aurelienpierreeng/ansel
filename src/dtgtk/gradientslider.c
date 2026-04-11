@@ -900,7 +900,7 @@ void dtgtk_gradient_slider_multivalue_set_increment(GtkDarktableGradientSlider *
 void dtgtk_gradient_slider_multivalue_set_scale_callback(GtkDarktableGradientSlider *gslider, float (*callback)(GtkWidget *self, float value, int dir))
 {
   float (*old_callback)(GtkWidget*, float, int) = gslider->scale_callback;
-  float (*new_callback)(GtkWidget*, float, int) = (callback == NULL ? _default_linear_scale_callback : callback);
+  float (*new_callback)(GtkWidget*, float, int) = (IS_NULL_PTR(callback) ? _default_linear_scale_callback : callback);
   GtkWidget *self = (GtkWidget *)gslider;
 
   if(old_callback == new_callback) return;

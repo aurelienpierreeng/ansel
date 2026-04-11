@@ -967,7 +967,7 @@ static void dt_ioppr_resync_iop_list(dt_develop_t *dev)
     GList *next = g_list_next(l); // need to get next pointer now, as we may be deleting this node
     const dt_iop_order_entry_t *const restrict e = (dt_iop_order_entry_t *)l->data;
     const dt_iop_module_t *const restrict mod = dt_iop_get_module_by_op_priority(dev->iop, e->operation, e->instance);
-    if(mod == NULL)
+    if(IS_NULL_PTR(mod))
     {
       dev->iop_order_list = g_list_remove_link(dev->iop_order_list, l);
     }
@@ -1658,7 +1658,7 @@ int dt_ioppr_check_so_iop_order(GList *iop_list, GList *iop_order_list)
     const dt_iop_module_so_t *const restrict mod = (dt_iop_module_so_t *)(modules->data);
     const dt_iop_order_entry_t *const restrict entry =
       dt_ioppr_get_iop_order_entry(iop_order_list, mod->op, 0); // mod->multi_priority);
-    if(entry == NULL)
+    if(IS_NULL_PTR(entry))
     {
       iop_order_missing = 1;
       fprintf(stderr, "[dt_ioppr_check_so_iop_order] missing iop_order for module %s\n", mod->op);
@@ -1908,7 +1908,7 @@ gboolean dt_ioppr_check_can_move_after_iop(GList *iop_list, dt_iop_module_t *mod
 
     module_next = mod;
   }
-  if(module_next == NULL)
+  if(IS_NULL_PTR(module_next))
   {
     fprintf(
         stderr,
@@ -2028,7 +2028,7 @@ static void _ioppr_check_rules(GList *iop_list, const int32_t imgid, const char 
       // mod should be before this fence
       if(mod->iop_order < mod_fence->iop_order)
       {
-        if(fence_next == NULL)
+        if(IS_NULL_PTR(fence_next))
           fence_next = mod_fence;
         else if(mod_fence->iop_order < fence_next->iop_order)
           fence_next = mod_fence;
@@ -2036,7 +2036,7 @@ static void _ioppr_check_rules(GList *iop_list, const int32_t imgid, const char 
       // mod should be after this fence
       else if(mod->iop_order > mod_fence->iop_order)
       {
-        if(fence_prev == NULL)
+        if(IS_NULL_PTR(fence_prev))
           fence_prev = mod_fence;
         else if(mod_fence->iop_order > fence_prev->iop_order)
           fence_prev = mod_fence;

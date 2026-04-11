@@ -193,7 +193,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   // allocate a buffer to receive the denoised image
   const int devid = pipe->devid;
   cl_mem dev_U2 = dt_opencl_alloc_device_buffer(devid, sizeof(float) * 4 * width * height);
-  if(dev_U2 == NULL)
+  if(IS_NULL_PTR(dev_U2))
   {
     dt_print(DT_DEBUG_OPENCL, "[opencl_nlmeans] couldn't allocate GPU buffer\n");
     return FALSE;
@@ -258,7 +258,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
 
   const int devid = pipe->devid;
   cl_mem dev_U2 = dt_opencl_alloc_device_buffer(devid, sizeof(float) * 4 * width * height);
-  if(dev_U2 == NULL) goto error;
+  if(IS_NULL_PTR(dev_U2)) goto error;
 
   cl_mem buckets[NUM_BUCKETS] = { NULL };
   unsigned int state = 0;

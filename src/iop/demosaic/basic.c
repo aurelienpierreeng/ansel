@@ -335,7 +335,7 @@ static int color_smoothing_cl(struct dt_iop_module_t *self, const dt_dev_pixelpi
   cl_int err = -999;
 
   cl_mem dev_tmp = dt_opencl_alloc_device(devid, width, height, sizeof(float) * 4);
-  if(dev_tmp == NULL) goto error;
+  if(IS_NULL_PTR(dev_tmp)) goto error;
 
   dt_opencl_local_buffer_t locopt
     = (dt_opencl_local_buffer_t){ .xoffset = 2*1, .xfactor = 1, .yoffset = 2*1, .yfactor = 1,
@@ -413,7 +413,7 @@ static int green_equilibration_cl(struct dt_iop_module_t *self, const dt_dev_pix
   if(data->green_eq == DT_IOP_GREEN_EQ_BOTH)
   {
     dev_tmp = dt_opencl_alloc_device(devid, width, height, sizeof(float));
-    if(dev_tmp == NULL) goto error;
+    if(IS_NULL_PTR(dev_tmp)) goto error;
   }
 
   switch(data->green_eq)
@@ -453,7 +453,7 @@ static int green_equilibration_cl(struct dt_iop_module_t *self, const dt_dev_pix
     const int bufsize = (bwidth / flocopt.sizex) * (bheight / flocopt.sizey);
 
     dev_m = dt_opencl_alloc_device_buffer(devid, sizeof(float) * 2 * bufsize);
-    if(dev_m == NULL) goto error;
+    if(IS_NULL_PTR(dev_m)) goto error;
 
     size_t fsizes[3] = { bwidth, bheight, 1 };
     size_t flocal[3] = { flocopt.sizex, flocopt.sizey, 1 };
@@ -481,7 +481,7 @@ static int green_equilibration_cl(struct dt_iop_module_t *self, const dt_dev_pix
     const int reducesize = MIN(REDUCESIZE, ROUNDUP(bufsize, slocopt.sizex) / slocopt.sizex);
 
     dev_r = dt_opencl_alloc_device_buffer(devid, sizeof(float) * 2 * reducesize);
-    if(dev_r == NULL) goto error;
+    if(IS_NULL_PTR(dev_r)) goto error;
 
     size_t ssizes[3] = { (size_t)reducesize * slocopt.sizex, 1, 1 };
     size_t slocal[3] = { slocopt.sizex, 1, 1 };
@@ -494,7 +494,7 @@ static int green_equilibration_cl(struct dt_iop_module_t *self, const dt_dev_pix
     if(err != CL_SUCCESS) goto error;
 
     sumsum = dt_pixelpipe_cache_alloc_align_float((size_t)2 * reducesize, pipe);
-    if(sumsum == NULL) goto error;
+    if(IS_NULL_PTR(sumsum)) goto error;
     err = dt_opencl_read_buffer_from_device(devid, (void *)sumsum, dev_r, 0,
                                             sizeof(float) * 2 * reducesize, CL_TRUE);
     if(err != CL_SUCCESS) goto error;

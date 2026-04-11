@@ -280,7 +280,7 @@ static void _menuitem_delete_preset(GtkMenuItem *menuitem, dt_iop_module_t *modu
 {
   int writeprotect = -1;
   gchar *name = _get_active_preset_name(module, &writeprotect);
-  if(name == NULL) return;
+  if(IS_NULL_PTR(name)) return;
 
   if(writeprotect)
   {
@@ -326,7 +326,7 @@ static void _edit_preset_response(GtkDialog *dialog, gint response_id, dt_gui_pr
     const gchar *name = gtk_entry_get_text(g->name);
     if(((g->old_id >= 0) && (strcmp(g->original_name, name) != 0)) || (g->old_id < 0))
     {
-      if(name == NULL || *name == '\0' || strcmp(_("new preset"), name) == 0)
+      if(IS_NULL_PTR(name) || *name == '\0' || strcmp(_("new preset"), name) == 0)
       {
         // show error dialog
         GtkWidget *dlg_changename
@@ -878,11 +878,11 @@ void dt_gui_presets_show_edit_dialog(const char *name_in, const char *module_nam
 static void _edit_preset(const char *name_in, dt_iop_module_t *module)
 {
   gchar *name = NULL;
-  if(name_in == NULL)
+  if(IS_NULL_PTR(name_in))
   {
     int writeprotect = -1;
     name = _get_active_preset_name(module, &writeprotect);
-    if(name == NULL) return;
+    if(IS_NULL_PTR(name)) return;
     if(writeprotect)
     {
       dt_control_log(_("preset `%s' is write-protected! can't edit it!"), name);

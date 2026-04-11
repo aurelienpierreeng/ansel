@@ -565,7 +565,7 @@ static inline int gauss_blur(
 {
   const float w[5] = { 1.f / 16.f, 4.f / 16.f, 6.f / 16.f, 4.f / 16.f, 1.f / 16.f };
   float *tmp = dt_pixelpipe_cache_alloc_align_float_cache((size_t)4 * wd * ht, 0);
-  if(tmp == NULL) return 1;
+  if(IS_NULL_PTR(tmp)) return 1;
 
   memset(tmp, 0, sizeof(float) * 4 * wd * ht);
   __OMP_PARALLEL_FOR__()
@@ -638,7 +638,7 @@ static inline int gauss_reduce(
   const size_t cw = (wd-1)/2+1, ch = (ht-1)/2+1;
 
   float *blurred = dt_pixelpipe_cache_alloc_align_float_cache((size_t)4 * wd * ht, 0);
-  if(blurred == NULL) return 1;
+  if(IS_NULL_PTR(blurred)) return 1;
 
   if(gauss_blur(input, blurred, wd, ht))
   {
@@ -675,7 +675,7 @@ int process_fusion(struct dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *p
   int num_levels = 8;
   float **col = calloc(num_levels, sizeof(float *));
   float **comb = calloc(num_levels, sizeof(float *));
-  if(col == NULL || comb == NULL)
+  if(IS_NULL_PTR(col) || IS_NULL_PTR(comb))
   {
     err = 1;
     goto error;

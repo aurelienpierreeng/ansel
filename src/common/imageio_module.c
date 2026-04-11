@@ -405,7 +405,7 @@ gchar *dt_imageio_resizing_factor_get_and_parsing(double *num, double *denum)
 
   gchar *pdiv = strchr(scale_str, '/');
 
-  if (pdiv == NULL)
+  if (IS_NULL_PTR(pdiv))
   {
     _num = atof(scale_str);
     _denum = 1;

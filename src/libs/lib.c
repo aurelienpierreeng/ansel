@@ -181,10 +181,10 @@ static void edit_preset(const char *name_in, dt_lib_module_info_t *minfo)
 {
   // get the original name of the preset
   gchar *name = NULL;
-  if(name_in == NULL)
+  if(IS_NULL_PTR(name_in))
   {
     name = get_active_preset_name(minfo);
-    if(name == NULL) return;
+    if(IS_NULL_PTR(name)) return;
   }
   else
     name = g_strdup(name_in);
@@ -303,7 +303,7 @@ static void menuitem_manage_presets(GtkMenuItem *menuitem, dt_lib_module_info_t 
 static void menuitem_delete_preset(GtkMenuItem *menuitem, dt_lib_module_info_t *minfo)
 {
   gchar *name = get_active_preset_name(minfo);
-  if(name == NULL) return;
+  if(IS_NULL_PTR(name)) return;
 
   gint res = GTK_RESPONSE_YES;
 
@@ -756,7 +756,7 @@ static void *_update_params(dt_lib_module_t *module,
 {
   // make a copy of the old params so we can free it in the loop
   void *params = malloc(old_params_size);
-  if(params == NULL) return NULL;
+  if(IS_NULL_PTR(params)) return NULL;
   memcpy(params, old_params, old_params_size);
   while(old_version < target_version)
   {
@@ -764,7 +764,7 @@ static void *_update_params(dt_lib_module_t *module,
     int version;
     void *new_params = module->legacy_params(module, params, old_params_size, old_version, &version, &size);
     dt_free(params);
-    if(new_params == NULL) return NULL;
+    if(IS_NULL_PTR(new_params)) return NULL;
     params = new_params;
     old_version = version;
     old_params_size = size;
@@ -785,7 +785,7 @@ void dt_lib_init_presets(dt_lib_module_t *module)
   //   - module has legacy_params -> try to update
   //   - module doesn't have legacy_params -> delete it
 
-  if(module->set_params == NULL)
+  if(IS_NULL_PTR(module->set_params))
   {
     if(!_lib_presets_delete_operation_stmt)
     {
@@ -1350,7 +1350,7 @@ gchar *dt_lib_get_localized_name(const gchar *plugin_name)
 {
   // Prepare mapping op -> localized name
   static GHashTable *module_names = NULL;
-  if(module_names == NULL)
+  if(IS_NULL_PTR(module_names))
   {
     module_names = g_hash_table_new(g_str_hash, g_str_equal);
     for(const GList *lib = darktable.lib->plugins; lib; lib = g_list_next(lib))

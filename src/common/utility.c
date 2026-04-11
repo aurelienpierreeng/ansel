@@ -103,7 +103,7 @@ gchar *dt_util_dstrcat(gchar *str, const gchar *format, ...)
 
   /* realloc for new string */
   ns = g_realloc(str, nsize);
-  if(str == NULL) ns[0] = '\0';
+  if(IS_NULL_PTR(str)) ns[0] = '\0';
   va_end(args);
 
   /* append string */
@@ -165,7 +165,7 @@ gchar *dt_util_str_replace(const gchar *string, const gchar *pattern, const gcha
 
 gchar *dt_util_glist_to_str(const gchar *separator, GList *items)
 {
-  if(items == NULL) return NULL;
+  if(IS_NULL_PTR(items)) return NULL;
 
   const unsigned int count = g_list_length(items);
   gchar *result = NULL;
@@ -221,7 +221,7 @@ GList *dt_util_glist_uniq(GList *items)
 
 gchar *dt_util_fix_path(const gchar *path)
 {
-  if(path == NULL || *path == '\0')
+  if(IS_NULL_PTR(path) || *path == '\0')
   {
     return NULL;
   }
@@ -255,7 +255,7 @@ gchar *dt_util_fix_path(const gchar *path)
     gchar *home_path = dt_loc_get_home_dir(user);
     dt_free(user);
 
-    if(home_path == NULL)
+    if(IS_NULL_PTR(home_path))
     {
       return g_strdup(path);
     }
@@ -343,7 +343,7 @@ gboolean dt_util_test_image_file(const char *filename)
 
 gboolean dt_util_test_writable_dir(const char *path)
 {
-  if(path == NULL) return FALSE;
+  if(IS_NULL_PTR(path)) return FALSE;
 #ifdef _WIN32
   struct _stati64 stats;
 
@@ -376,7 +376,7 @@ gboolean dt_util_is_dir_empty(const char *dirname)
 {
   int n = 0;
   GDir *dir = g_dir_open(dirname, 0, NULL);
-  if(dir == NULL) // Not a directory or doesn't exist
+  if(IS_NULL_PTR(dir)) // Not a directory or doesn't exist
     return TRUE;
   while(g_dir_read_name(dir) != NULL)
   {
@@ -716,7 +716,7 @@ gchar *dt_util_normalize_path(const gchar *_input)
     char *tmp_filename = g_build_filename(current_dir, filename, NULL);
     dt_free(filename);
     filename = g_realpath(tmp_filename);
-    if(filename == NULL)
+    if(IS_NULL_PTR(filename))
     {
       dt_free(current_dir);
       dt_free(tmp_filename);
@@ -788,7 +788,7 @@ gchar *dt_util_path_get_dirname(const gchar *filename)
 
 GDateTime *dt_util_get_file_datetime(const char *const path)
 {
-  if(path == NULL) return NULL;
+  if(IS_NULL_PTR(path)) return NULL;
 
   GFile *file = g_file_new_for_path(path);
   GError *error = NULL;
@@ -829,7 +829,7 @@ void dt_util_str_to_loc_numbers_format(char *data)
 
 GList *dt_util_str_to_glist(const gchar *separator, const gchar *text)
 {
-  if(text == NULL) return NULL;
+  if(IS_NULL_PTR(text)) return NULL;
   GList *list = NULL;
   gchar *item = NULL;
   gchar *entry = g_strdup(text);
@@ -926,7 +926,7 @@ void dt_copy_file(const char *const sourcefile, const char *dst)
     const size_t end = ftell(fin);
     rewind(fin);
     content = (char *)g_malloc_n(end, sizeof(char));
-    if(content == NULL) goto END;
+    if(IS_NULL_PTR(content)) goto END;
     if(fread(content, sizeof(char), end, fin) != end) goto END;
     if(fwrite(content, sizeof(char), end, fout) != end) goto END;
   }

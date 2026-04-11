@@ -844,7 +844,7 @@ static dt_iop_module_t *_find_last_visible_module()
 static gboolean _focus_previous_module()
 {
   dt_iop_module_t *focused = darktable.develop->gui_module;
-  if(focused == NULL)
+  if(IS_NULL_PTR(focused))
   {
     _focus_module(_find_first_visible_module());
   }
@@ -860,7 +860,7 @@ static gboolean _focus_previous_module()
 static gboolean _focus_next_module()
 {
   dt_iop_module_t *focused = darktable.develop->gui_module;
-  if(focused == NULL)
+  if(IS_NULL_PTR(focused))
   {
     _focus_module(_find_last_visible_module());
   }

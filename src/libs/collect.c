@@ -1574,7 +1574,7 @@ static void tree_view(dt_lib_collect_rule_t *dr)
       else
       {
         const char* sqlite_name = (const char *)sqlite3_column_text(stmt, 0);
-        name = sqlite_name == NULL ? g_strdup("") : g_strdup(sqlite_name);
+        name = IS_NULL_PTR(sqlite_name) ? g_strdup("") : g_strdup(sqlite_name);
       }
       gchar *collate_key = NULL;
 
@@ -1616,7 +1616,7 @@ static void tree_view(dt_lib_collect_rule_t *dr)
       char *name = tuple->name;
       const int count = tuple->count;
       const int status = tuple->status;
-      if(name == NULL) continue; // safeguard against degenerated db entries
+      if(IS_NULL_PTR(name)) continue; // safeguard against degenerated db entries
 
       // this is just for tags
       gboolean uncategorized_found = FALSE;
@@ -2129,7 +2129,7 @@ static void list_view(dt_lib_collect_rule_t *dr)
       while(sqlite3_step(stmt) == SQLITE_ROW)
       {
         const char *folder = (const char *)sqlite3_column_text(stmt, 0);
-        if(folder == NULL) continue; // safeguard against degenerated db entries
+        if(IS_NULL_PTR(folder)) continue; // safeguard against degenerated db entries
 
         gtk_list_store_append(GTK_LIST_STORE(model), &iter);
         int status = 0;

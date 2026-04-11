@@ -990,8 +990,8 @@ static enum _dt_delete_status delete_file_from_disk(const char *filename, gboole
 
       gint res = _dt_delete_file_display_modal_dialog(
           send_to_trash,
-          filename_display == NULL ? filename : filename_display,
-          gerror == NULL ? NULL : gerror->message);
+          IS_NULL_PTR(filename_display) ? filename : filename_display,
+          IS_NULL_PTR(gerror) ? NULL : gerror->message);
       g_object_unref(gfileinfo);
       if(send_to_trash && res == _DT_DELETE_DIALOG_CHOICE_DELETE)
       {
@@ -1175,7 +1175,7 @@ static int32_t dt_control_gpx_apply_job_run(dt_job_t *job)
     goto bail_out;
   }
 
-  GTimeZone *tz_camera = (tz == NULL) ? g_time_zone_new_utc() : g_time_zone_new(tz);
+  GTimeZone *tz_camera = (IS_NULL_PTR(tz)) ? g_time_zone_new_utc() : g_time_zone_new(tz);
   if(!tz_camera) goto bail_out;
 
   GList *imgs = NULL;
@@ -1939,7 +1939,7 @@ void dt_control_export(GList *imgid_list, int max_width, int max_height, int for
   g_assert(mstorage);
   // get shared storage param struct (global sequence counter, one picasa connection etc)
   dt_imageio_module_data_t *sdata = mstorage->get_params(mstorage);
-  if(sdata == NULL)
+  if(IS_NULL_PTR(sdata))
   {
     dt_control_log(_("failed to get parameters from storage module `%s', aborting export.."),
                    mstorage->name(mstorage));

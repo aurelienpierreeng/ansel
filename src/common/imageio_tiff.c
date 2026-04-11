@@ -379,7 +379,7 @@ dt_imageio_retval_t dt_imageio_open_tiff(dt_image_t *img, const char *filename, 
   t.tiff = TIFFOpen(filename, "rb");
 #endif
 
-  if(t.tiff == NULL) return DT_IMAGEIO_FILE_CORRUPTED;
+  if(IS_NULL_PTR(t.tiff)) return DT_IMAGEIO_FILE_CORRUPTED;
 
   TIFFGetField(t.tiff, TIFFTAG_IMAGEWIDTH, &t.width);
   TIFFGetField(t.tiff, TIFFTAG_IMAGELENGTH, &t.height);
@@ -530,7 +530,7 @@ int dt_imageio_tiff_read_profile(const char *filename, uint8_t **out)
   tiff = TIFFOpen(filename, "rb");
 #endif
 
-  if(tiff == NULL) return 0;
+  if(IS_NULL_PTR(tiff)) return 0;
 
   TIFFGetField(tiff, TIFFTAG_PHOTOMETRIC, &photometric);
 

@@ -1789,8 +1789,8 @@ void dt_collection_deserialize(const char *buf)
 /* Store the n most recent collections in config for re-use in menu */
 static void _update_recentcollections()
 {
-  if(darktable.gui == NULL) return;
-  if(darktable.gui->ui == NULL) return;
+  if(IS_NULL_PTR(darktable.gui)) return;
+  if(IS_NULL_PTR(darktable.gui->ui)) return;
 
   // Serialize current request
   char confname[200] = { 0 };

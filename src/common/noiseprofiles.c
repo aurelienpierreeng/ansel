@@ -41,7 +41,7 @@ JsonParser *dt_noiseprofile_init(const char *alternative)
   GError *error = NULL;
   char filename[PATH_MAX] = { 0 };
 
-  if(alternative == NULL)
+  if(IS_NULL_PTR(alternative))
   {
     char dir[PATH_MAX] = { 0 };
 

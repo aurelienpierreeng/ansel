@@ -556,11 +556,11 @@ static int _polygon_find_self_intersection(dt_masks_dynbuf_t *intersections,
   }
 
   int *intersection_grid = dt_pixelpipe_cache_alloc_align_cache(sizeof(int) * grid_size, 0);
-  if(intersection_grid == NULL) return 1;
+  if(IS_NULL_PTR(intersection_grid)) return 1;
   memset(intersection_grid, 0, sizeof(int) * grid_size);
 
   dt_masks_dynbuf_t *gap_points = dt_masks_dynbuf_init(100000, "polygon extra");
-  if(gap_points == NULL)
+  if(IS_NULL_PTR(gap_points))
   {
     dt_pixelpipe_cache_free_align(intersection_grid);
     return 1;
@@ -709,12 +709,12 @@ static int _polygon_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_
   dt_masks_dynbuf_t *dpoints = NULL, *dborder = NULL, *intersections = NULL;
 
   dpoints = dt_masks_dynbuf_init(1000000, "polygon dpoints");
-  if(dpoints == NULL) return 1;
+  if(IS_NULL_PTR(dpoints)) return 1;
 
   if(border_buffer)
   {
     dborder = dt_masks_dynbuf_init(1000000, "polygon dborder");
-    if(dborder == NULL)
+    if(IS_NULL_PTR(dborder))
     {
       dt_masks_dynbuf_free(dpoints);
       return 1;
@@ -722,7 +722,7 @@ static int _polygon_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_
   }
 
   intersections = dt_masks_dynbuf_init(10 * MAX(node_count, 1), "polygon intersections");
-  if(intersections == NULL)
+  if(IS_NULL_PTR(intersections))
   {
     dt_masks_dynbuf_free(dpoints);
     dt_masks_dynbuf_free(dborder);
@@ -761,7 +761,7 @@ static int _polygon_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_
   }
 
   float *border_init = dt_pixelpipe_cache_alloc_align_float_cache((size_t)6 * node_count, 0);
-  if(border_init == NULL)
+  if(IS_NULL_PTR(border_init))
   {
     dt_masks_dynbuf_free(intersections);
     dt_masks_dynbuf_free(dpoints);
@@ -2486,7 +2486,7 @@ static int _polygon_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpi
   // ensure that the buffer is zeroed, as the following code only actually sets the polygon+falloff pixels
   float *const restrict bufptr = *buffer = dt_pixelpipe_cache_alloc_align_float_cache(bufsize, 0);
   if(bufptr) memset(bufptr, 0, sizeof(float) * bufsize);
-  if(*buffer == NULL)
+  if(IS_NULL_PTR(*buffer))
   {
     dt_pixelpipe_cache_free_align(point_buffer);
     dt_pixelpipe_cache_free_align(border_buffer);
@@ -3205,7 +3205,7 @@ static int _polygon_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pix
   {
     // second copy of polygon which we can modify when cropping to roi
     float *cpoints = dt_pixelpipe_cache_alloc_align_float_cache((size_t)2 * points_count, 0);
-    if(cpoints == NULL)
+    if(IS_NULL_PTR(cpoints))
     {
       dt_pixelpipe_cache_free_align(points);
       dt_pixelpipe_cache_free_align(border);
@@ -3317,7 +3317,7 @@ static int _polygon_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pix
   {
     const int dpoints_capacity = 4 * border_count * (sparse ? sparse_factor : 1);
     int *dpoints = dt_pixelpipe_cache_alloc_align_cache(sizeof(int) * dpoints_capacity, 0);
-    if(dpoints == NULL)
+    if(IS_NULL_PTR(dpoints))
     {
       dt_pixelpipe_cache_free_align(points);
       dt_pixelpipe_cache_free_align(border);

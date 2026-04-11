@@ -347,7 +347,7 @@ static void  _dt_style_update_iop_order(const gchar *name, const int id, const i
   // if we update or if the style does not contains an order then the
   // copy must be done using the imgid iop-order.
 
-  if(update_iop_order || iop_list == NULL)
+  if(update_iop_order || IS_NULL_PTR(iop_list))
     iop_list = dt_ioppr_get_iop_order_list(imgid, FALSE);
 
   gchar *iop_list_txt = dt_ioppr_serialize_text_iop_order_list(iop_list);
@@ -1180,7 +1180,7 @@ GList *dt_styles_get_item_list(const char *name, gboolean params, int32_t imgid)
 char *dt_styles_get_item_list_as_string(const char *name)
 {
   GList *items = dt_styles_get_item_list(name, FALSE, -1);
-  if(items == NULL) return NULL;
+  if(IS_NULL_PTR(items)) return NULL;
 
   GList *names = NULL;
   for(GList *items_iter = items; items_iter; items_iter = g_list_next(items_iter))
@@ -1275,7 +1275,7 @@ void dt_styles_save_to_file(const char *style_name, const char *filedir, gboolea
   if(!dt_styles_exists(style_name)) return;
 
   xmlTextWriterPtr writer = xmlNewTextWriterFilename(stylename, 0);
-  if(writer == NULL)
+  if(IS_NULL_PTR(writer))
   {
     fprintf(stderr, "[dt_styles_save_to_file] Error creating the xml writer\n, path: %s", stylename);
     return;
@@ -1514,7 +1514,7 @@ static void dt_style_plugin_save(StylePluginData *plugin, gpointer styleId)
 static void dt_style_save(StyleData *style)
 {
   int id = 0;
-  if(style == NULL) return;
+  if(IS_NULL_PTR(style)) return;
 
   /* first create the style header */
   if(!dt_styles_create_style_header(style->info->name->str, style->info->description->str, style->info->iop_list)) return;

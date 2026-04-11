@@ -467,7 +467,7 @@ void *dt_mipmap_cache_alloc(dt_mipmap_buffer_t *buf, const dt_image_t *img)
   const size_t buffer_size = wd * ht * bpp;
   const size_t min_buffer_size = 64 * 4 * sizeof(float);
   entry->data = dt_alloc_align(_get_entry_size(MAX(buffer_size, min_buffer_size)));
-  if(entry->data == NULL) return NULL;
+  if(IS_NULL_PTR(entry->data)) return NULL;
 
   // Update the references
   struct dt_mipmap_buffer_dsc *dsc = NULL;
@@ -508,7 +508,7 @@ void dt_mipmap_cache_allocate_dynamic(void *data, dt_cache_entry_t *entry)
   // Get a new allocation
   const size_t buffer_size = (mip <= DT_MIPMAP_F) ? cache->buffer_size[mip] : _get_entry_size(sizeof(float) * 4 * 64);
   entry->data = dt_alloc_align(buffer_size);
-  if(entry->data == NULL) return;
+  if(IS_NULL_PTR(entry->data)) return;
 
   // Update the references
   struct dt_mipmap_buffer_dsc *dsc = NULL;
@@ -545,7 +545,7 @@ void dt_mipmap_cache_allocate_dynamic(void *data, dt_cache_entry_t *entry)
     }
 
     f = g_fopen(filename, "rb");
-    if(f == NULL)
+    if(IS_NULL_PTR(f))
     {
       dt_print(DT_DEBUG_CACHE,
                "[mipmap_cache] cached file for image %d at mip size %i does not exist\n",
@@ -563,7 +563,7 @@ void dt_mipmap_cache_allocate_dynamic(void *data, dt_cache_entry_t *entry)
     }
 
     blob = (uint8_t *)dt_alloc_align(len);
-    if(blob == NULL)
+    if(IS_NULL_PTR(blob))
     {
       error = "out of memory";
       io_error = TRUE;
@@ -1355,7 +1355,7 @@ static void _init_8(uint8_t *buf, uint32_t *width, uint32_t *height, float *isca
     {
       dt_mipmap_buffer_t tmp;
       dt_mipmap_cache_get(darktable.mipmap_cache, &tmp, imgid, k, DT_MIPMAP_TESTLOCK, 'r');
-      if(tmp.buf == NULL) continue;
+      if(IS_NULL_PTR(tmp.buf)) continue;
 
       dt_print(DT_DEBUG_CACHE, "[mipmap_cache] generate mip size %d for image %d from mip size %d\n", size, imgid, k);
       *color_space = tmp.color_space;

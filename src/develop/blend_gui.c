@@ -362,7 +362,7 @@ static void _blendif_scale(dt_iop_gui_blend_data_t *data, dt_iop_colorspace_type
       break;
     case IOP_CS_RGB:
     case IOP_CS_RGB_DISPLAY:
-      if(work_profile == NULL)
+      if(IS_NULL_PTR(work_profile))
         out[CHANNEL_INDEX_g] = 0.3f * in[0] + 0.59f * in[1] + 0.11f * in[2];
       else
         out[CHANNEL_INDEX_g] = dt_ioppr_get_rgb_matrix_luminance(in, work_profile->matrix_in,
@@ -408,7 +408,7 @@ static void _blendif_cook(dt_iop_colorspace_type_t cst, const float *in, float *
       break;
     case IOP_CS_RGB:
     case IOP_CS_RGB_DISPLAY:
-      if(work_profile == NULL)
+      if(IS_NULL_PTR(work_profile))
         out[CHANNEL_INDEX_g] = (0.3f * in[0] + 0.59f * in[1] + 0.11f * in[2]) * 100.0f;
       else
         out[CHANNEL_INDEX_g] = dt_ioppr_get_rgb_matrix_luminance(in, work_profile->matrix_in,

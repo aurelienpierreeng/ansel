@@ -101,7 +101,7 @@ static inline int dt_pthread_mutex_init_with_caller(dt_pthread_mutex_t *mutex,
   memset(mutex, 0x0, sizeof(dt_pthread_mutex_t));
   snprintf(mutex->name, sizeof(mutex->name), "%s:%d (%s)", file, line, function);
 #if defined(__OpenBSD__)
-  if(attr == NULL)
+  if(IS_NULL_PTR(attr))
   {
     pthread_mutexattr_t a;
     pthread_mutexattr_init(&a);

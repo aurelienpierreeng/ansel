@@ -729,7 +729,7 @@ static int _default_process_tiling_ptp(struct dt_iop_module_t *self, const struc
   input = dt_pixelpipe_cache_alloc_align_cache(
       (size_t)width * height * in_bpp,
       pipe->type);
-  if(input == NULL)
+  if(IS_NULL_PTR(input))
   {
     dt_print(DT_DEBUG_TILING, "[default_process_tiling_ptp] could not alloc input buffer for module '%s'\n",
              self->op);
@@ -738,7 +738,7 @@ static int _default_process_tiling_ptp(struct dt_iop_module_t *self, const struc
   output = dt_pixelpipe_cache_alloc_align_cache(
       (size_t)width * height * out_bpp,
       pipe->type);
-  if(output == NULL)
+  if(IS_NULL_PTR(output))
   {
     dt_print(DT_DEBUG_TILING, "[default_process_tiling_ptp] could not alloc output buffer for module '%s'\n",
              self->op);
@@ -1084,7 +1084,7 @@ static int _default_process_tiling_roi(struct dt_iop_module_t *self, const struc
       input = dt_pixelpipe_cache_alloc_align_cache(
           (size_t)iroi_full.width * iroi_full.height * in_bpp,
           pipe->type);
-      if(input == NULL)
+      if(IS_NULL_PTR(input))
       {
         dt_print(DT_DEBUG_TILING, "[default_process_tiling_roi] could not alloc input buffer for module '%s'\n",
                  self->op);
@@ -1093,7 +1093,7 @@ static int _default_process_tiling_roi(struct dt_iop_module_t *self, const struc
       output = dt_pixelpipe_cache_alloc_align_cache(
           (size_t)oroi_full.width * oroi_full.height * out_bpp,
           pipe->type);
-      if(output == NULL)
+      if(IS_NULL_PTR(output))
       {
         dt_print(DT_DEBUG_TILING, "[default_process_tiling_roi] could not alloc output buffer for module '%s'\n",
                  self->op);
@@ -1315,7 +1315,7 @@ static int _default_process_tiling_cl_ptp(struct dt_iop_module_t *self, const st
   {
     pinned_input = dt_opencl_alloc_device_buffer_with_flags(devid, (size_t)width * height * in_bpp,
                                                             CL_MEM_READ_ONLY | CL_MEM_ALLOC_HOST_PTR);
-    if(pinned_input == NULL)
+    if(IS_NULL_PTR(pinned_input))
     {
       dt_print(DT_DEBUG_OPENCL | DT_DEBUG_TILING,
                "[default_process_tiling_cl_ptp] could not alloc pinned input buffer for module '%s'\n", self->op);
@@ -1328,7 +1328,7 @@ static int _default_process_tiling_cl_ptp(struct dt_iop_module_t *self, const st
 
     input_buffer = dt_opencl_map_buffer(devid, pinned_input, CL_TRUE, CL_MAP_WRITE, 0,
                                         (size_t)width * height * in_bpp);
-    if(input_buffer == NULL)
+    if(IS_NULL_PTR(input_buffer))
     {
       dt_print(DT_DEBUG_OPENCL | DT_DEBUG_TILING, "[default_process_tiling_cl_ptp] could not map pinned input buffer to host "
                                 "memory for module '%s'\n", self->op);
@@ -1341,7 +1341,7 @@ static int _default_process_tiling_cl_ptp(struct dt_iop_module_t *self, const st
 
     pinned_output = dt_opencl_alloc_device_buffer_with_flags(devid, (size_t)width * height * out_bpp,
                                                              CL_MEM_WRITE_ONLY | CL_MEM_ALLOC_HOST_PTR);
-    if(pinned_output == NULL)
+    if(IS_NULL_PTR(pinned_output))
     {
       dt_print(DT_DEBUG_OPENCL | DT_DEBUG_TILING,
                "[default_process_tiling_cl_ptp] could not alloc pinned output buffer for module '%s'\n", self->op);
@@ -1354,7 +1354,7 @@ static int _default_process_tiling_cl_ptp(struct dt_iop_module_t *self, const st
 
     output_buffer = dt_opencl_map_buffer(devid, pinned_output, CL_TRUE, CL_MAP_READ, 0,
                                          (size_t)width * height * out_bpp);
-    if(output_buffer == NULL)
+    if(IS_NULL_PTR(output_buffer))
     {
       dt_print(DT_DEBUG_OPENCL | DT_DEBUG_TILING, "[default_process_tiling_cl_ptp] could not map pinned output buffer to host "
                                 "memory for module '%s'\n", self->op);
@@ -1393,9 +1393,9 @@ static int _default_process_tiling_cl_ptp(struct dt_iop_module_t *self, const st
 
       /* get input and output buffers */
       input = dt_opencl_alloc_device(devid, wd, ht, in_bpp);
-      if(input == NULL) goto error;
+      if(IS_NULL_PTR(input)) goto error;
       output = dt_opencl_alloc_device(devid, wd, ht, out_bpp);
-      if(output == NULL) goto error;
+      if(IS_NULL_PTR(output)) goto error;
 
       if(use_pinned_memory)
       {
@@ -1677,7 +1677,7 @@ static int _default_process_tiling_cl_roi(struct dt_iop_module_t *self, const st
   {
     pinned_input = dt_opencl_alloc_device_buffer_with_flags(devid, (size_t)width * height * in_bpp,
                                                             CL_MEM_READ_ONLY | CL_MEM_ALLOC_HOST_PTR);
-    if(pinned_input == NULL)
+    if(IS_NULL_PTR(pinned_input))
     {
       dt_print(DT_DEBUG_OPENCL | DT_DEBUG_TILING,
                "[default_process_tiling_cl_roi] could not alloc pinned input buffer for module '%s'\n", self->op);
@@ -1690,7 +1690,7 @@ static int _default_process_tiling_cl_roi(struct dt_iop_module_t *self, const st
 
     input_buffer = dt_opencl_map_buffer(devid, pinned_input, CL_TRUE, CL_MAP_WRITE, 0,
                                         (size_t)width * height * in_bpp);
-    if(input_buffer == NULL)
+    if(IS_NULL_PTR(input_buffer))
     {
       dt_print(DT_DEBUG_OPENCL | DT_DEBUG_TILING, "[default_process_tiling_cl_roi] could not map pinned input buffer to host "
                                 "memory for module '%s'\n", self->op);
@@ -1703,7 +1703,7 @@ static int _default_process_tiling_cl_roi(struct dt_iop_module_t *self, const st
 
     pinned_output = dt_opencl_alloc_device_buffer_with_flags(devid, (size_t)width * height * out_bpp,
                                                              CL_MEM_WRITE_ONLY | CL_MEM_ALLOC_HOST_PTR);
-    if(pinned_output == NULL)
+    if(IS_NULL_PTR(pinned_output))
     {
       dt_print(DT_DEBUG_OPENCL | DT_DEBUG_TILING,
                "[default_process_tiling_cl_roi] could not alloc pinned output buffer for module '%s'\n", self->op);
@@ -1716,7 +1716,7 @@ static int _default_process_tiling_cl_roi(struct dt_iop_module_t *self, const st
 
     output_buffer = dt_opencl_map_buffer(devid, pinned_output, CL_TRUE, CL_MAP_READ, 0,
                                          (size_t)width * height * out_bpp);
-    if(output_buffer == NULL)
+    if(IS_NULL_PTR(output_buffer))
     {
       dt_print(DT_DEBUG_OPENCL | DT_DEBUG_TILING, "[default_process_tiling_cl_roi] could not map pinned output buffer to host "
                                 "memory for module '%s'\n", self->op);
@@ -1839,10 +1839,10 @@ static int _default_process_tiling_cl_roi(struct dt_iop_module_t *self, const st
 
       /* get opencl input and output buffers */
       input = dt_opencl_alloc_device(devid, iroi_full.width, iroi_full.height, in_bpp);
-      if(input == NULL) goto error;
+      if(IS_NULL_PTR(input)) goto error;
 
       output = dt_opencl_alloc_device(devid, oroi_full.width, oroi_full.height, out_bpp);
-      if(output == NULL) goto error;
+      if(IS_NULL_PTR(output)) goto error;
 
       if(use_pinned_memory)
       {

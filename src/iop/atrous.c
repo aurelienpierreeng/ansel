@@ -416,18 +416,18 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     for(int i = 0; i < 5; i++) mm[j][i] = m[i] * m[j];
 
   dev_filter = dt_opencl_copy_host_to_device_constant(devid, sizeof(float) * 25, mm);
-  if(dev_filter == NULL) goto error;
+  if(IS_NULL_PTR(dev_filter)) goto error;
 
   /* allocate space for two temporary buffer to participate_in in the buffer ping-pong below.  We need dev_out
      to accumulate the result and dev_in needs to stay unchanged for blendops */
   dev_tmp = dt_opencl_alloc_device(devid, roi_out->width, roi_out->height, sizeof(float) * 4);
-  if(dev_tmp == NULL) goto error;
+  if(IS_NULL_PTR(dev_tmp)) goto error;
   dev_tmp2 = dt_opencl_alloc_device(devid, roi_out->width, roi_out->height, sizeof(float) * 4);
-  if(dev_tmp2 == NULL) goto error;
+  if(IS_NULL_PTR(dev_tmp2)) goto error;
 
   /* allocate a buffer for storing the detail information. */
   dev_detail = dt_opencl_alloc_device(devid, roi_out->width, roi_out->height, sizeof(float) * 4);
-  if(dev_detail == NULL) goto error;
+  if(IS_NULL_PTR(dev_detail)) goto error;
 
   const int width = roi_out->width;
   const int height = roi_out->height;
@@ -553,12 +553,12 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
       mm[j][i] = m[i] * m[j];
 
   dev_filter = dt_opencl_copy_host_to_device_constant(devid, sizeof(float) * 25, mm);
-  if(dev_filter == NULL) goto error;
+  if(IS_NULL_PTR(dev_filter)) goto error;
 
   /* allocate space for a temporary buffer. we don't want to use dev_in in the buffer ping-pong below, as we
      need to keep it for blendops */
   dev_tmp = dt_opencl_alloc_device(devid, roi_out->width, roi_out->height, sizeof(float) * 4);
-  if(dev_tmp == NULL) goto error;
+  if(IS_NULL_PTR(dev_tmp)) goto error;
 
   /* allocate space to store detail information. Requires a number of additional buffers, each with full image
    * size */

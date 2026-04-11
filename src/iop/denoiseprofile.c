@@ -1720,7 +1720,7 @@ static inline __attribute__((always_inline)) int process_variance(struct dt_iop_
   size_t npixels = (size_t)width * height;
 
   memcpy(ovoid, ivoid, sizeof(float) * 4 * npixels);
-  if(dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out) || (g == NULL))
+  if(dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out) || (IS_NULL_PTR(g)))
   {
     return 0;
   }
@@ -1809,7 +1809,7 @@ static int process_nlmeans_cl(struct dt_iop_module_t *self, const dt_dev_pixelpi
   // allocate a buffer for a preconditioned copy of the image
   const int devid = pipe->devid;
   cl_mem dev_tmp = dt_opencl_alloc_device(devid, width, height, sizeof(float) * 4);
-  if(dev_tmp == NULL)
+  if(IS_NULL_PTR(dev_tmp))
   {
     dt_print(DT_DEBUG_OPENCL, "[opencl_denoiseprofile] couldn't allocate GPU buffer\n");
     return FALSE;
@@ -1844,7 +1844,7 @@ static int process_nlmeans_cl(struct dt_iop_module_t *self, const dt_dev_pixelpi
 
   // allocate a buffer to receive the denoised image
   cl_mem dev_U2 = dt_opencl_alloc_device_buffer(devid, sizeof(float) * 4 * width * height);
-  if(dev_U2 == NULL) err = -999;
+  if(IS_NULL_PTR(dev_U2)) err = -999;
 
   if (err == CL_SUCCESS)
   {
@@ -1930,10 +1930,10 @@ static int process_nlmeans_cl(struct dt_iop_module_t *self, const dt_dev_pixelpi
 
   const int devid = pipe->devid;
   cl_mem dev_tmp = dt_opencl_alloc_device(devid, width, height, sizeof(float) * 4);
-  if(dev_tmp == NULL) goto error;
+  if(IS_NULL_PTR(dev_tmp)) goto error;
 
   cl_mem dev_U2 = dt_opencl_alloc_device_buffer(devid, sizeof(float) * 4 * width * height);
-  if(dev_U2 == NULL) goto error;
+  if(IS_NULL_PTR(dev_U2)) goto error;
 
   cl_mem buckets[NUM_BUCKETS] = { NULL };
   unsigned int state = 0;
@@ -2213,17 +2213,17 @@ static int process_wavelets_cl(struct dt_iop_module_t *self, const dt_dev_pixelp
   const int reducesize = MIN(REDUCESIZE, ROUNDUP(bufsize, slocopt.sizex) / slocopt.sizex);
 
   dev_m = dt_opencl_alloc_device_buffer(devid, sizeof(float) * 4 * bufsize);
-  if(dev_m == NULL) goto error;
+  if(IS_NULL_PTR(dev_m)) goto error;
 
   dev_r = dt_opencl_alloc_device_buffer(devid, sizeof(float) * 4 * reducesize);
-  if(dev_r == NULL) goto error;
+  if(IS_NULL_PTR(dev_r)) goto error;
 
   sumsum = (float *)dt_pixelpipe_cache_alloc_align(sizeof(float) * 4 * (size_t)reducesize, pipe);
-  if(sumsum == NULL) goto error;
+  if(IS_NULL_PTR(sumsum)) goto error;
   sumsum = (float *)__builtin_assume_aligned(sumsum, DT_CACHELINE_BYTES);
 
   dev_tmp = dt_opencl_alloc_device(devid, width, height, sizeof(float) * 4);
-  if(dev_tmp == NULL) goto error;
+  if(IS_NULL_PTR(dev_tmp)) goto error;
 
   float m[] = { 0.0625f, 0.25f, 0.375f, 0.25f, 0.0625f }; // 1/16, 4/16, 6/16, 4/16, 1/16
   float mm[5][5];
@@ -2231,7 +2231,7 @@ static int process_wavelets_cl(struct dt_iop_module_t *self, const dt_dev_pixelp
     for(int i = 0; i < 5; i++) mm[j][i] = m[i] * m[j];
 
   dev_filter = dt_opencl_copy_host_to_device_constant(devid, sizeof(float) * 25, mm);
-  if(dev_filter == NULL) goto error;
+  if(IS_NULL_PTR(dev_filter)) goto error;
 
   for(int k = 0; k < max_scale; k++)
   {

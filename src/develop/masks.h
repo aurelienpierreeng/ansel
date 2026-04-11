@@ -1155,7 +1155,7 @@ static inline dt_masks_dynbuf_t *dt_masks_dynbuf_init(size_t size, const char *t
     if(_dt_masks_dynbuf_growto(a, size))
       dt_print(DT_DEBUG_MASKS, "[masks dynbuf '%s'] with initial size %lu (is %p)\n", a->tag,
                (unsigned long)a->size, a->buffer);
-    if(a->buffer == NULL)
+    if(IS_NULL_PTR(a->buffer))
     {
       dt_free(a);
     }
@@ -1328,7 +1328,7 @@ static inline void dt_masks_dynbuf_reset(dt_masks_dynbuf_t *a)
 static inline float *dt_masks_dynbuf_harvest(dt_masks_dynbuf_t *a)
 {
   // take out data buffer and make dynamic buffer obsolete
-  if(a == NULL) return NULL;
+  if(IS_NULL_PTR(a)) return NULL;
   float *r = a->buffer;
   a->buffer = NULL;
   a->pos = a->size = 0;
@@ -1337,7 +1337,7 @@ static inline float *dt_masks_dynbuf_harvest(dt_masks_dynbuf_t *a)
 
 static inline void dt_masks_dynbuf_free(dt_masks_dynbuf_t *a)
 {
-  if(a == NULL) return;
+  if(IS_NULL_PTR(a)) return;
   dt_print(DT_DEBUG_MASKS, "[masks dynbuf '%s'] freed (was %p)\n", a->tag,
           a->buffer);
   dt_pixelpipe_cache_free_align(a->buffer);

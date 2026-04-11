@@ -326,7 +326,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
 
 
     cl_mem dev_clips = dt_opencl_copy_host_to_device_constant(devid, 4 * sizeof(float), clips);
-    if(dev_clips == NULL) goto error;
+    if(IS_NULL_PTR(dev_clips)) goto error;
 
     // bayer sensor raws with LCH mode
     size_t sizes[] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
@@ -415,7 +415,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
 
     dev_xtrans
         = dt_opencl_copy_host_to_device_constant(devid, sizeof(piece->dsc_in.xtrans), (void *)piece->dsc_in.xtrans);
-    if(dev_xtrans == NULL) goto error;
+    if(IS_NULL_PTR(dev_xtrans)) goto error;
 
     size_t sizes[] = { ROUNDUP(width, blocksizex), ROUNDUP(height, blocksizey), 1 };
     size_t local[] = { blocksizex, blocksizey, 1 };
@@ -1717,7 +1717,7 @@ static inline int wavelets_process(const float *const restrict in, float
   // allocate a one-row temporary buffer for the decomposition
   size_t padded_size;
   float *const tempbuf = dt_pixelpipe_cache_alloc_perthread_float(4 * width, &padded_size); //TODO: alloc in caller
-  if(tempbuf == NULL) return 1;
+  if(IS_NULL_PTR(tempbuf)) return 1;
 
   for(int s = 0; s < scales; ++s)
   {

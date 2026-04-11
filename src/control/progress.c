@@ -338,7 +338,7 @@ void dt_control_progress_attach_job(dt_control_t *control, dt_progress_t *progre
 void dt_control_progress_cancel(dt_control_t *control, dt_progress_t *progress)
 {
   dt_pthread_mutex_lock(&progress->mutex);
-  if(progress->cancel == NULL)
+  if(IS_NULL_PTR(progress->cancel))
   {
     dt_pthread_mutex_unlock(&progress->mutex);
     return;

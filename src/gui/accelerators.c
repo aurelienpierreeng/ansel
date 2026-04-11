@@ -889,7 +889,7 @@ gchar *dt_accels_build_path(const gchar *scope, const gchar *feature)
 
 static void _accels_keys_decode(dt_accels_t *accels, GdkEvent *event, guint *keyval, GdkModifierType *mods)
 {
-  if(accels == NULL) return;
+  if(IS_NULL_PTR(accels)) return;
 
   // Get modifiers
   gdk_event_get_state(event, mods);
@@ -1073,7 +1073,7 @@ gboolean dt_accels_dispatch(GtkWidget *w, GdkEvent *event, gpointer user_data)
 
   // Ditch everything that is not a key stroke or key strokes that are modifiers alone
   // Abort early for performance.
-  if(event->key.is_modifier || accels->active_group == NULL || accels->reset > 0 || !gtk_window_is_active(GTK_WINDOW(w)))
+  if(event->key.is_modifier || IS_NULL_PTR(accels->active_group) || accels->reset > 0 || !gtk_window_is_active(GTK_WINDOW(w)))
     return FALSE;
 
   if(!(event->type == GDK_KEY_PRESS || event->type == GDK_KEY_RELEASE || event->type == GDK_SCROLL))
@@ -1492,8 +1492,8 @@ static gboolean filter_callback(GtkTreeModel *model, GtkTreeIter *iter, gpointer
   const gchar *needle_path = gtk_entry_get_text(GTK_ENTRY(params->path_search));
   const gchar *needle_keys = gtk_entry_get_text(GTK_ENTRY(params->keys_search));
 
-  if((needle_path == NULL || needle_path[0] == '\0') &&
-     (needle_keys == NULL || needle_keys[0] == '\0'))
+  if((IS_NULL_PTR(needle_path) || needle_path[0] == '\0') &&
+     (IS_NULL_PTR(needle_keys) || needle_keys[0] == '\0'))
     return TRUE;
 
   gboolean show = TRUE;
@@ -1575,8 +1575,8 @@ static void search_changed(GtkEntry *entry, gpointer user_data)
   const gchar *needle_path = gtk_entry_get_text(GTK_ENTRY(params->path_search));
   const gchar *needle_keys = gtk_entry_get_text(GTK_ENTRY(params->keys_search));
 
-  if((needle_path == NULL || needle_path[0] == '\0') &&
-      (needle_keys == NULL || needle_keys[0] == '\0'))
+  if((IS_NULL_PTR(needle_path) || needle_path[0] == '\0') &&
+      (IS_NULL_PTR(needle_keys) || needle_keys[0] == '\0'))
     gtk_tree_view_collapse_all(GTK_TREE_VIEW(params->tree_view));
   else
     gtk_tree_view_expand_all(GTK_TREE_VIEW(params->tree_view));
@@ -1716,12 +1716,12 @@ void dt_accels_window(dt_accels_t *accels, GtkWindow *main_window)
 static int _match_text(GtkTreeModel *model, GtkTreeIter *iter, const char *needle)
 {
   int ret = -1;
-  if(needle == NULL || needle[0] == '\0') return 0;
+  if(IS_NULL_PTR(needle) || needle[0] == '\0') return 0;
 
   // Get row entry
   gchar *label;
   gtk_tree_model_get(model, iter, 0, &label, -1);
-  if(label == NULL || label[0] == '\0') return -1;
+  if(IS_NULL_PTR(label) || label[0] == '\0') return -1;
 
   // Convert to lowercase
   gchar *label_ci = g_utf8_casefold(label, -1);

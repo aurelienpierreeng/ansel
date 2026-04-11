@@ -71,7 +71,7 @@ const dt_pwstorage_t *dt_pwstorage_new()
   dt_pwstorage_t *pwstorage = g_malloc(sizeof(dt_pwstorage_t));
   dt_print(DT_DEBUG_PWSTORAGE, "[pwstorage_new] Creating new context %p\n", pwstorage);
 
-  if(pwstorage == NULL) return NULL;
+  if(IS_NULL_PTR(pwstorage)) return NULL;
 
   const char *_backend_str = dt_conf_get_string_const("plugins/pwstorage/pwstorage_backend");
   gint _backend = PW_STORAGE_BACKEND_NONE;
@@ -121,7 +121,7 @@ const dt_pwstorage_t *dt_pwstorage_new()
 #ifdef HAVE_LIBSECRET
       dt_print(DT_DEBUG_PWSTORAGE, "[pwstorage_new] using libsecret backend for username/password storage.\n");
       pwstorage->backend_context = (void *)dt_pwstorage_libsecret_new();
-      if(pwstorage->backend_context == NULL)
+      if(IS_NULL_PTR(pwstorage->backend_context))
       {
         dt_print(DT_DEBUG_PWSTORAGE, "[pwstorage_new] error starting libsecret. using no storage backend.\n");
         pwstorage->backend_context = NULL;
@@ -142,7 +142,7 @@ const dt_pwstorage_t *dt_pwstorage_new()
 #ifdef HAVE_KWALLET
       dt_print(DT_DEBUG_PWSTORAGE, "[pwstorage_new] using kwallet backend for username/password storage.\n");
       pwstorage->backend_context = (void *)dt_pwstorage_kwallet_new();
-      if(pwstorage->backend_context == NULL)
+      if(IS_NULL_PTR(pwstorage->backend_context))
       {
         dt_print(DT_DEBUG_PWSTORAGE, "[pwstorage_new] error starting kwallet. using no storage backend.\n");
         pwstorage->backend_context = NULL;

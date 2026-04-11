@@ -305,7 +305,7 @@ static void color_picker_helper_4ch_parallel(const dt_iop_buffer_dsc_t *const ds
   float *const restrict mmin = dt_pixelpipe_cache_alloc_perthread_float(4, &allocsize);
   float *const restrict mmax = dt_pixelpipe_cache_alloc_perthread_float(4, &allocsize);
 
-  if(mean == NULL || mmax == NULL || mmin == NULL)
+  if(IS_NULL_PTR(mean) || IS_NULL_PTR(mmax) || IS_NULL_PTR(mmin))
     goto error;
 
   for(int n = 0; n < allocsize * numthreads; n++)
@@ -452,7 +452,7 @@ static void color_picker_helper_4ch_converted_parallel(const float *const pixel,
   float *const restrict mmin = dt_pixelpipe_cache_alloc_perthread_float(4, &allocsize);
   float *const restrict mmax = dt_pixelpipe_cache_alloc_perthread_float(4, &allocsize);
 
-  if(mean == NULL || mmax == NULL || mmin == NULL)
+  if(IS_NULL_PTR(mean) || IS_NULL_PTR(mmax) || IS_NULL_PTR(mmin))
     goto error;
 
   for(int n = 0; n < allocsize * numthreads; n++)
@@ -565,7 +565,7 @@ static void color_picker_helper_bayer_parallel(const dt_iop_buffer_dsc_t *const 
   float *const mmax = malloc(sizeof(float) * numthreads * 4);
   uint32_t *const cnt = malloc(sizeof(uint32_t) * numthreads * 4);
 
-  if(msum == NULL || mmin == NULL || mmax == NULL || cnt == NULL)
+  if(IS_NULL_PTR(msum) || IS_NULL_PTR(mmin) || IS_NULL_PTR(mmax) || IS_NULL_PTR(cnt))
     goto error;
 
   for(int n = 0; n < 4 * numthreads; n++)
@@ -691,7 +691,7 @@ static void color_picker_helper_xtrans_parallel(const dt_iop_buffer_dsc_t *const
   float *const mmax = malloc(sizeof(float) * numthreads * 3);
   uint32_t *const cnt = malloc(sizeof(uint32_t) * numthreads * 3);
 
-  if(mmin == NULL || msum == NULL || mmax == NULL || cnt == NULL)
+  if(IS_NULL_PTR(mmin) || IS_NULL_PTR(msum) || IS_NULL_PTR(mmax) || IS_NULL_PTR(cnt))
     goto error;
 
 
@@ -783,7 +783,7 @@ void dt_color_picker_helper(const dt_iop_buffer_dsc_t *dsc, const float *const p
     float *const restrict denoised = dt_pixelpipe_cache_alloc_align_float_cache(4 * roi->width * roi->height, 0);
     float *converted = NULL;
     float *const DT_ALIGNED_ARRAY tempbuf = dt_pixelpipe_cache_alloc_perthread_float(4 * roi->width, &padded_size); // TODO: alloc in caller
-    if(tempbuf == NULL || denoised == NULL)
+    if(IS_NULL_PTR(tempbuf) || IS_NULL_PTR(denoised))
       goto error;
 
     // blur without clipping negatives because Lab a and b channels can be legitimately negative
@@ -801,7 +801,7 @@ void dt_color_picker_helper(const dt_iop_buffer_dsc_t *dsc, const float *const p
          conversion before averaging. Falling back to raw channel statistics would silently report
          Lab values as RGB (or the other way around), which makes module-side picker feedback wrong. */
       converted = dt_pixelpipe_cache_alloc_align_float_cache(4 * roi->width * roi->height, 0);
-      if(converted == NULL)
+      if(IS_NULL_PTR(converted))
         goto error;
 
       _color_picker_convert_buffer(denoised, converted, (size_t)roi->width * roi->height, image_cst, picker_cst, profile);

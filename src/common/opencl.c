@@ -1223,11 +1223,11 @@ static int _device_by_cname(const char *name)
 
 static char *_ascii_str_canonical(const char *in, char *out, int maxlen)
 {
-  if(out == NULL)
+  if(IS_NULL_PTR(out))
   {
     maxlen = strlen(in) + 1;
     out = malloc(maxlen);
-    if(out == NULL) return NULL;
+    if(IS_NULL_PTR(out)) return NULL;
   }
 
   int len = 0;
@@ -1255,7 +1255,7 @@ static void dt_opencl_priority_parse(dt_opencl_t *cl, char *configstr, int *prio
   int mnd = 0;
 
   // NULL or empty configstring?
-  if(configstr == NULL || *configstr == '\0')
+  if(IS_NULL_PTR(configstr) || *configstr == '\0')
   {
     priority_list[0] = -1;
     *mandatory = 0;
@@ -2193,7 +2193,7 @@ void dt_opencl_release_mem_object(cl_mem mem)
 
   // the OpenCL specs are not absolutely clear if clReleaseMemObject(NULL) is a no-op. we take care of the
   // case in a centralized way at this place
-  if(mem == NULL) return;
+  if(IS_NULL_PTR(mem)) return;
 
   dt_opencl_memory_statistics(-1, mem, OPENCL_MEMORY_SUB);
 
@@ -2357,7 +2357,7 @@ void *dt_opencl_alloc_device_buffer(const int devid, const size_t size)
 size_t dt_opencl_get_mem_object_size(cl_mem mem)
 {
   size_t size;
-  if(mem == NULL) return 0;
+  if(IS_NULL_PTR(mem)) return 0;
 
   cl_int err = (darktable.opencl->dlocl->symbols->dt_clGetMemObjectInfo)(mem, CL_MEM_SIZE, sizeof(size), &size, NULL);
 
@@ -2367,7 +2367,7 @@ size_t dt_opencl_get_mem_object_size(cl_mem mem)
 int dt_opencl_get_mem_context_id(cl_mem mem)
 {
   cl_context context;
-  if(mem == NULL) return -1;
+  if(IS_NULL_PTR(mem)) return -1;
 
   cl_int err = (darktable.opencl->dlocl->symbols->dt_clGetMemObjectInfo)(mem, CL_MEM_CONTEXT, sizeof(context), &context, NULL);
   if(err != CL_SUCCESS)
@@ -2384,7 +2384,7 @@ int dt_opencl_get_mem_context_id(cl_mem mem)
 
 cl_mem_flags dt_opencl_get_mem_flags(cl_mem mem)
 {
-  if(!darktable.opencl->inited || mem == NULL) return 0;
+  if(!darktable.opencl->inited || IS_NULL_PTR(mem)) return 0;
   cl_mem_flags flags = 0;
   cl_int err = (darktable.opencl->dlocl->symbols->dt_clGetMemObjectInfo)(mem, CL_MEM_FLAGS, sizeof(flags), &flags, NULL);
   if(err != CL_SUCCESS) return 0;
@@ -2394,7 +2394,7 @@ cl_mem_flags dt_opencl_get_mem_flags(cl_mem mem)
 int dt_opencl_get_image_width(cl_mem mem)
 {
   size_t size;
-  if(mem == NULL) return 0;
+  if(IS_NULL_PTR(mem)) return 0;
 
   cl_int err = (darktable.opencl->dlocl->symbols->dt_clGetImageInfo)(mem, CL_IMAGE_WIDTH, sizeof(size), &size, NULL);
   if(size > INT_MAX) size = 0;
@@ -2405,7 +2405,7 @@ int dt_opencl_get_image_width(cl_mem mem)
 int dt_opencl_get_image_height(cl_mem mem)
 {
   size_t size;
-  if(mem == NULL) return 0;
+  if(IS_NULL_PTR(mem)) return 0;
 
   cl_int err = (darktable.opencl->dlocl->symbols->dt_clGetImageInfo)(mem, CL_IMAGE_HEIGHT, sizeof(size), &size, NULL);
   if(size > INT_MAX) size = 0;
@@ -2416,7 +2416,7 @@ int dt_opencl_get_image_height(cl_mem mem)
 int dt_opencl_get_image_element_size(cl_mem mem)
 {
   size_t size;
-  if(mem == NULL) return 0;
+  if(IS_NULL_PTR(mem)) return 0;
 
   cl_int err = (darktable.opencl->dlocl->symbols->dt_clGetImageInfo)(mem, CL_IMAGE_ELEMENT_SIZE, sizeof(size), &size,
                                                               NULL);
@@ -2613,7 +2613,7 @@ cl_event *dt_opencl_events_get_slot(const int devid, const char *tag)
   int *totallost = &(cl->dev[devid].totallost);
   int *maxeventslot = &(cl->dev[devid].maxeventslot);
   // if first time called: allocate initial buffers
-  if(*eventlist == NULL)
+  if(IS_NULL_PTR(*eventlist))
   {
     int newevents = DT_OPENCL_EVENTLISTSIZE;
     *eventlist = calloc(newevents, sizeof(cl_event));
@@ -2708,7 +2708,7 @@ void dt_opencl_events_reset(const int devid)
   int *lostevents = &(cl->dev[devid].lostevents);
   cl_int *summary = &(cl->dev[devid].summary);
 
-  if(*eventlist == NULL || *numevents == 0) return; // nothing to do
+  if(IS_NULL_PTR(*eventlist) || *numevents == 0) return; // nothing to do
 
   // release all remaining events in eventlist, not to waste resources
   for(int k = *eventsconsolidated; k < *numevents; k++)
@@ -2740,7 +2740,7 @@ void dt_opencl_events_wait_for(const int devid)
   int *totallost = &(cl->dev[devid].totallost);
   int *eventsconsolidated = &(cl->dev[devid].eventsconsolidated);
 
-  if(*eventlist == NULL || *numevents == 0) return; // nothing to do
+  if(IS_NULL_PTR(*eventlist) || *numevents == 0) return; // nothing to do
 
   // check if last event slot was actually used and correct numevents if needed
   if(!memcmp((*eventlist) + *numevents - 1, zeroevent, sizeof(cl_event)))
@@ -2786,7 +2786,7 @@ cl_int dt_opencl_events_flush(const int devid, const int reset)
 
   cl_int *summary = &(cl->dev[devid].summary);
 
-  if(*eventlist == NULL || *numevents == 0) return CL_COMPLETE; // nothing to do, no news is good news
+  if(IS_NULL_PTR(*eventlist) || *numevents == 0) return CL_COMPLETE; // nothing to do, no news is good news
 
   // Wait for command queue to terminate (side effect: might adjust *numevents)
   dt_opencl_events_wait_for(devid);
@@ -2872,7 +2872,7 @@ void dt_opencl_events_profiling(const int devid, const int aggregated)
   int *eventsconsolidated = &(cl->dev[devid].eventsconsolidated);
   int *lostevents = &(cl->dev[devid].lostevents);
 
-  if(*eventlist == NULL || *numevents == 0 || *eventtags == NULL || *eventsconsolidated == 0)
+  if(IS_NULL_PTR(*eventlist) || *numevents == 0 || IS_NULL_PTR(*eventtags) || *eventsconsolidated == 0)
     return; // nothing to do
 
   char **tags = malloc(sizeof(char *) * (*eventsconsolidated + 1));

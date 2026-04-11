@@ -597,7 +597,7 @@ static int _process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe
         const int fw = 2 * rad, fh = 2 * rad;
 
         float *filter = malloc(sizeof(float) * (2 * rad + 1));
-        if(filter == NULL) return 1;
+        if(IS_NULL_PTR(filter)) return 1;
 
         if(rad > 0)
         {

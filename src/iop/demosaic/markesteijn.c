@@ -1664,7 +1664,7 @@ static int process_markesteijn_cl(struct dt_iop_module_t *self, const dt_dev_pix
   cl_mem *dev_rgb = dev_rgbv;
 
   dev_xtrans = dt_opencl_copy_host_to_device_constant(devid, sizeof(piece->dsc_in.xtrans), (void *)piece->dsc_in.xtrans);
-  if(dev_xtrans == NULL) goto error;
+  if(IS_NULL_PTR(dev_xtrans)) goto error;
 
   int width = roi_in->width;
   int height = roi_in->height;
@@ -1712,7 +1712,7 @@ static int process_markesteijn_cl(struct dt_iop_module_t *self, const dt_dev_pix
       }
 
   dev_allhex = dt_opencl_copy_host_to_device_constant(devid, sizeof(allhex), allhex);
-  if(dev_allhex == NULL) goto error;
+  if(IS_NULL_PTR(dev_allhex)) goto error;
 
   for(int n = 0; n < ndir; n++)
   {
@@ -1721,10 +1721,10 @@ static int process_markesteijn_cl(struct dt_iop_module_t *self, const dt_dev_pix
   }
 
   dev_gminmax = dt_opencl_alloc_device_buffer(devid, sizeof(float) * 2 * width * height);
-  if(dev_gminmax == NULL) goto error;
+  if(IS_NULL_PTR(dev_gminmax)) goto error;
 
   dev_aux = dt_opencl_alloc_device_buffer(devid, sizeof(float) * 4 * width * height);
-  if(dev_aux == NULL) goto error;
+  if(IS_NULL_PTR(dev_aux)) goto error;
 
   dev_tmp = dev_out;
 
@@ -2136,7 +2136,7 @@ static int process_markesteijn_cl(struct dt_iop_module_t *self, const dt_dev_pix
 
   // need to get another temp buffer for the output image (may use the space of dev_drv[] freed earlier)
   dev_tmptmp = dt_opencl_alloc_device(devid, (size_t)width, height, sizeof(float) * 4);
-  if(dev_tmptmp == NULL) goto error;
+  if(IS_NULL_PTR(dev_tmptmp)) goto error;
 
   cl_mem dev_t1 = dev_tmp;
   cl_mem dev_t2 = dev_tmptmp;
@@ -2248,11 +2248,11 @@ static int process_markesteijn_cl(struct dt_iop_module_t *self, const dt_dev_pix
 
     // reserve input buffer for image edge
     dev_edge_in = dt_opencl_alloc_device(devid, edges[n][2], edges[n][3], sizeof(float));
-    if(dev_edge_in == NULL) goto error;
+    if(IS_NULL_PTR(dev_edge_in)) goto error;
 
     // reserve output buffer for VNG processing of edge
     dev_edge_out = dt_opencl_alloc_device(devid, edges[n][2], edges[n][3], sizeof(float) * 4);
-    if(dev_edge_out == NULL) goto error;
+    if(IS_NULL_PTR(dev_edge_out)) goto error;
 
     // copy edge to input buffer
     err = dt_opencl_enqueue_copy_image(devid, dev_in, dev_edge_in, iorigin, oorigin, region);

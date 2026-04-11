@@ -435,7 +435,7 @@ static void _init_treeview(dt_lib_module_t *self, const int which)
       for(GList *taglist = tags; taglist; taglist = g_list_next(taglist))
       {
         const gchar *tag = ((dt_tag_t *)taglist->data)->tag;
-        if(tag == NULL) continue;
+        if(IS_NULL_PTR(tag)) continue;
         char **tokens;
         tokens = g_strsplit(tag, "|", -1);
         if(tokens)
@@ -1025,7 +1025,7 @@ void *get_params(dt_lib_module_t *self, int *size)
       params = dt_util_dstrcat(params, "%d,", ((dt_tag_t *)taglist->data)->id);
     }
     dt_tag_free_result(&tags);
-    if(params == NULL)
+    if(IS_NULL_PTR(params))
       return NULL;
     *size = strlen(params);
     params[*size-1]='\0';
@@ -2668,8 +2668,8 @@ static gint _sort_tree_tag_func(GtkTreeModel *model, GtkTreeIter *a, GtkTreeIter
   char *tag_b = NULL;
   gtk_tree_model_get(model, a, DT_LIB_TAGGING_COL_TAG, &tag_a, -1);
   gtk_tree_model_get(model, b, DT_LIB_TAGGING_COL_TAG, &tag_b, -1);
-  if(tag_a == NULL) tag_a = g_strdup("");
-  if(tag_b == NULL) tag_b = g_strdup("");
+  if(IS_NULL_PTR(tag_a)) tag_a = g_strdup("");
+  if(IS_NULL_PTR(tag_b)) tag_b = g_strdup("");
   const gboolean sort = g_strcmp0(tag_a, tag_b);
   dt_free(tag_a);
   dt_free(tag_b);
@@ -2768,7 +2768,7 @@ static gboolean _match_selected_func(GtkEntryCompletion *completion, GtkTreeMode
 
   gchar *currentText = gtk_editable_get_chars(e, 0, -1);
   const gchar *lastTag = g_strrstr(currentText, ",");
-  if(lastTag == NULL)
+  if(IS_NULL_PTR(lastTag))
   {
     cut_off = 0;
   }

@@ -548,7 +548,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
     size_t allocsize;
     float *const weight_buf = dt_pixelpipe_cache_alloc_perthread(data->n, sizeof(float), &allocsize);
-    if(weight_buf == NULL)
+    if(IS_NULL_PTR(weight_buf))
     {
       dt_free(var_ratio);
       dt_free(mapio);

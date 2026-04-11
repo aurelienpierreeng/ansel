@@ -149,7 +149,7 @@ static const gchar *_supported_hdr[] = { "avif", "exr", "hdr", "heic", "heif", "
 #if defined(HAVE_GRAPHICSMAGICK)
 static const char *_preview_format_from_mime_type(const char *mime_type)
 {
-  if(mime_type == NULL || mime_type[0] == '\0') return NULL;
+  if(IS_NULL_PTR(mime_type) || mime_type[0] == '\0') return NULL;
 
   if(!strcmp(mime_type, "image/jpeg")) return "JPEG";
   if(!strcmp(mime_type, "image/png")) return "PNG";
@@ -312,7 +312,7 @@ int dt_imageio_large_thumbnail(const char *filename, uint8_t **buffer, int32_t *
     }
 
     *buffer = malloc(sizeof(uint8_t) * (*th_width) * (*th_height) * 4);
-    if(*buffer == NULL) goto error_im;
+    if(IS_NULL_PTR(*buffer)) goto error_im;
 
     mret = MagickExportImagePixels(image, 0, 0, *th_width, *th_height, "RGBP", CharPixel, *buffer);
     if(mret != MagickTrue) {
@@ -360,7 +360,7 @@ gboolean dt_imageio_has_mono_preview(const char *filename)
 
   if(dt_imageio_large_thumbnail(filename, &tmp, &thumb_width, &thumb_height, &color_space, -1, -1))
     goto cleanup;
-  if((thumb_width < 32) || (thumb_height < 32) || (tmp == NULL))
+  if((thumb_width < 32) || (thumb_height < 32) || (IS_NULL_PTR(tmp)))
     goto cleanup;
 
   mono = TRUE;
@@ -1157,7 +1157,7 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
   dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, cache_entry);
   dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, cache_entry);
 
-  if(outbuf == NULL) goto error;
+  if(IS_NULL_PTR(outbuf)) goto error;
 
   format_params->width = pipe.backbuf.width;
   format_params->height = pipe.backbuf.height;

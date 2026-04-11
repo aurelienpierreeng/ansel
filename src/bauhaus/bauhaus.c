@@ -529,7 +529,7 @@ static void show_pango_text(struct dt_bauhaus_widget_t *w, GtkStyleContext *cont
                             GdkRGBA *bg_color, float *width, float *height,
                             GtkStateFlags state)
 {
-  if(text == NULL) return;
+  if(IS_NULL_PTR(text)) return;
 
   // Prepare context and font properties
   PangoLayout *layout = pango_cairo_create_layout(cr);

@@ -463,7 +463,7 @@ dt_image_t *dt_image_cache_get_reload(dt_image_cache_t *cache, const int32_t img
 
 int dt_image_invalid(const dt_image_t *img)
 {
-  return (img == NULL || img->id <= 0);
+  return (IS_NULL_PTR(img) || img->id <= 0);
 }
 
 int dt_image_cache_seed(dt_image_cache_t *cache, const dt_image_t *img)

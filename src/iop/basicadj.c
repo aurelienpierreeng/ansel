@@ -269,7 +269,7 @@ static void _develop_ui_pipe_finished_callback(gpointer instance, gpointer user_
   dt_iop_basicadj_params_t *p = (dt_iop_basicadj_params_t *)self->params;
   dt_iop_basicadj_gui_data_t *g = (dt_iop_basicadj_gui_data_t *)self->gui_data;
 
-  if(g == NULL) return;
+  if(IS_NULL_PTR(g)) return;
 
   // FIXME: this doesn't seems the right place to update params and GUI ...
   // update auto levels
@@ -414,7 +414,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
                      int32_t pointery)
 {
   dt_iop_basicadj_gui_data_t *g = (dt_iop_basicadj_gui_data_t *)self->gui_data;
-  if(g == NULL || !self->enabled) return;
+  if(IS_NULL_PTR(g) || !self->enabled) return;
   if(!g->draw_selected_region || !g->button_down) return;
   if(g->posx_from == g->posx_to && g->posy_from == g->posy_to) return;
 
@@ -755,7 +755,7 @@ static int _get_auto_exp_histogram(const float *const img, const int width, cons
   histogram = dt_pixelpipe_cache_alloc_align_cache(
       sizeof(uint32_t) * hist_size,
       0);
-  if(histogram == NULL)
+  if(IS_NULL_PTR(histogram))
   {
     err = 1;
     goto cleanup;

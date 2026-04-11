@@ -589,12 +589,12 @@ static int guided_filter_cl_impl(int devid, cl_mem guide, cl_mem in, cl_mem out,
   void *b = temp2;
 
   int err = CL_SUCCESS;
-  if(temp1 == NULL || temp2 == NULL ||                                                        //
-     imgg_mean_r == NULL || imgg_mean_g == NULL || imgg_mean_b == NULL || img_mean == NULL || //
-     cov_imgg_img_r == NULL || cov_imgg_img_g == NULL || cov_imgg_img_b == NULL ||            //
-     var_imgg_rr == NULL || var_imgg_gg == NULL || var_imgg_bb == NULL ||                     //
-     var_imgg_rg == NULL || var_imgg_rb == NULL || var_imgg_gb == NULL ||                     //
-     a_r == NULL || a_g == NULL || a_b == NULL)
+  if(IS_NULL_PTR(temp1) || IS_NULL_PTR(temp2) ||                                                        //
+     IS_NULL_PTR(imgg_mean_r) || IS_NULL_PTR(imgg_mean_g) || IS_NULL_PTR(imgg_mean_b) || IS_NULL_PTR(img_mean) || //
+     IS_NULL_PTR(cov_imgg_img_r) || IS_NULL_PTR(cov_imgg_img_g) || IS_NULL_PTR(cov_imgg_img_b) ||            //
+     IS_NULL_PTR(var_imgg_rr) || IS_NULL_PTR(var_imgg_gg) || IS_NULL_PTR(var_imgg_bb) ||                     //
+     IS_NULL_PTR(var_imgg_rg) || IS_NULL_PTR(var_imgg_rb) || IS_NULL_PTR(var_imgg_gb) ||                     //
+     IS_NULL_PTR(a_r) || IS_NULL_PTR(a_g) || IS_NULL_PTR(a_b))
   {
     err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
     goto error;

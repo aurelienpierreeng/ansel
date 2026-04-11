@@ -166,7 +166,7 @@ void dt_control_job_set_state_callback(_dt_job_t *job, dt_job_state_change_callb
 {
   // once the job got added to the queue it may not be changed from the outside
   if(dt_control_job_get_state(job) != DT_JOB_STATE_INITIALIZED)
-    return; // get_state returns DISPOSED when job == NULL
+    return; // get_state returns DISPOSED when IS_NULL_PTR(job)
   job->state_changed_cb = cb;
 }
 

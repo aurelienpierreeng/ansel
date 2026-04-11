@@ -94,10 +94,10 @@ static CameraMetaData *meta = NULL;
 static void dt_rawspeed_load_meta()
 {
   /* Load rawspeed cameras.xml meta file once */
-  if(meta == NULL)
+  if(IS_NULL_PTR(meta))
   {
     dt_pthread_mutex_lock(&darktable.plugin_threadsafe);
-    if(meta == NULL)
+    if(IS_NULL_PTR(meta))
     {
       char datadir[PATH_MAX] = { 0 }, camfile[PATH_MAX] = { 0 };
       dt_loc_get_datadir(datadir, sizeof(datadir));

@@ -718,7 +718,7 @@ int CurveDataSample(CurveData *curve, CurveSample *sample)
   // The settings currently calculate the natural spline, which closely matches
   // camera curve output in raw files.
   float *ypp = interpolate_set(n, x, y, curve->m_spline_type);
-  if(ypp == NULL) return CT_ERROR;
+  if(IS_NULL_PTR(ypp)) return CT_ERROR;
 
   for(int i = 0; i < (int)sample->m_samplingRes; i++)
   {

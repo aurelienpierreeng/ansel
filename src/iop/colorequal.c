@@ -851,7 +851,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   clut_cl = dt_opencl_copy_host_to_device_constant(devid, sizeof(float) * 3 * d->clut_level * d->clut_level * d->clut_level,
                                                    gd->cache.clut);
   dt_pthread_rwlock_unlock(&gd->lock);
-  if(clut_cl == NULL)
+  if(IS_NULL_PTR(clut_cl))
   {
     err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
     goto cleanup;

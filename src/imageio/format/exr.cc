@@ -272,7 +272,7 @@ icc_end:
     const size_t height = exr->global.height;
     stride = 3 * sizeof(unsigned short);
     unsigned short *out = (unsigned short *)malloc(stride * width * height);
-    if(out == NULL)
+    if(IS_NULL_PTR(out))
       return 1;
 
 #ifdef _OPENMP

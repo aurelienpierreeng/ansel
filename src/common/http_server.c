@@ -181,7 +181,7 @@ dt_http_server_t *dt_http_server_create(const int *ports, const int n_ports, con
   dt_print(DT_DEBUG_CONTROL, "[http server] using libsoup2\n");
 
   httpserver = soup_server_new(SOUP_SERVER_SERVER_HEADER, "ansel internal server", NULL);
-  if(httpserver == NULL)
+  if(IS_NULL_PTR(httpserver))
   {
     fprintf(stderr, "error: couldn't create libsoup httpserver\n");
     return NULL;
@@ -217,7 +217,7 @@ soup_server_run(httpserver);
   dt_print(DT_DEBUG_CONTROL, "[http server] using libsoup3\n");
 
   httpserver = soup_server_new("server-header", "ansel internal server", NULL);
-  if(httpserver == NULL)
+  if(IS_NULL_PTR(httpserver))
   {
     fprintf(stderr, "error: couldn't create libsoup httpserver\n");
     return NULL;

@@ -185,7 +185,7 @@ static void _refresh_module_histogram(const dt_dev_pixelpipe_t *pipe, const dt_d
   dt_dev_histogram_collection_params_t histogram_params = piece->histogram_params;
   dt_histogram_roi_t histogram_roi;
 
-  if(histogram_params.roi == NULL)
+  if(IS_NULL_PTR(histogram_params.roi))
   {
     histogram_roi = (dt_histogram_roi_t){
       .width = piece->roi_in.width, .height = piece->roi_in.height,
@@ -758,7 +758,7 @@ static void _process_histogram(dt_backbuf_t *backbuf, const char *op, cairo_t *c
   dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, entry);
 
   uint32_t *bins = calloc(4 * HISTOGRAM_BINS, sizeof(uint32_t));
-  if(bins == NULL) 
+  if(IS_NULL_PTR(bins)) 
   {
     dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, entry);
     return;
@@ -1000,7 +1000,7 @@ static void _process_waveform(dt_backbuf_t *backbuf, const char *op, cairo_t *cr
   uint8_t *const restrict image = dt_pixelpipe_cache_alloc_align_cache(
       binning_size * sizeof(uint8_t),
       0);
-  if(image == NULL || bins == NULL) goto error;
+  if(IS_NULL_PTR(image) || IS_NULL_PTR(bins)) goto error;
 
   // 1. Pixel binning along columns/rows, aka compute a column/row-wise histogram
   _bin_pixels_waveform(data, bins, backbuf->width, backbuf->height, binning_size, vertical);
@@ -1179,7 +1179,7 @@ static void _process_vectorscope(dt_backbuf_t *backbuf, const char *op, cairo_t 
                                  const int height, const float zoom, dt_lib_histogram_t *d)
 {
   dt_iop_order_iccprofile_info_t *profile = darktable.develop->preview_pipe->output_profile_info;
-  if(profile == NULL) return;
+  if(IS_NULL_PTR(profile)) return;
 
   struct dt_pixel_cache_entry_t *entry = NULL;
   void *data = NULL;
@@ -1195,7 +1195,7 @@ static void _process_vectorscope(dt_backbuf_t *backbuf, const char *op, cairo_t 
   uint8_t *const restrict image = dt_pixelpipe_cache_alloc_align_cache(
       4 * HISTOGRAM_BINS * HISTOGRAM_BINS * sizeof(uint8_t),
       0);
-  if(vectorscope == NULL || image == NULL) goto error;
+  if(IS_NULL_PTR(vectorscope) || IS_NULL_PTR(image)) goto error;
 
   _bin_vectorscope(data, vectorscope, backbuf->width, backbuf->height, zoom, d);
 
@@ -1367,7 +1367,7 @@ static gboolean _draw_callback(GtkWidget *widget, cairo_t *crf, gpointer user_da
   // Note: the draw callback is called from our own callback (mapped to "preview pipe finished recomputing" signal)
   // but is also called by Gtk when the main window is resized, exposed, etc.
   dt_lib_histogram_t *d = (dt_lib_histogram_t *)user_data;
-  if(d->cst == NULL) return 1;
+  if(IS_NULL_PTR(d->cst)) return 1;
   cairo_set_source_surface(crf, d->cst, 0, 0);
   cairo_paint(crf);
   return 0;
@@ -1384,7 +1384,7 @@ void _get_allocation_size(dt_lib_histogram_t *d, int *width, int *height)
 
 gboolean _redraw_surface(dt_lib_histogram_t *d)
 {
-  if(d->cst == NULL) return 1;
+  if(IS_NULL_PTR(d->cst)) return 1;
 
   dt_times_t start;
   dt_get_times(&start);

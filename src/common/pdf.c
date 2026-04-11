@@ -72,7 +72,7 @@ int dt_pdf_parse_length(const char *str, float *length)
   int res = 0;
   char *nptr, *endptr;
 
-  if(str == NULL || length == NULL)
+  if(IS_NULL_PTR(str) || IS_NULL_PTR(length))
     return 0;
 
   SKIP_SPACES(str);
@@ -81,7 +81,7 @@ int dt_pdf_parse_length(const char *str, float *length)
 
   *length =  g_ascii_strtod(nptr, &endptr);
 
-  if(endptr == NULL || errno == ERANGE)
+  if(IS_NULL_PTR(endptr) || errno == ERANGE)
     goto end;
 
   // 0 is 0 is 0, why should we care about the unit?
@@ -121,7 +121,7 @@ int dt_pdf_parse_paper_size(const char *str, float *width, float *height)
   gboolean width_has_unit = FALSE;
   char *ptr, *nptr, *endptr;
 
-  if(str == NULL || width == NULL || height == NULL)
+  if(IS_NULL_PTR(str) || IS_NULL_PTR(width) || IS_NULL_PTR(height))
     return 0;
 
   // first check if this is a well known size
@@ -142,7 +142,7 @@ int dt_pdf_parse_paper_size(const char *str, float *width, float *height)
 
   *width =  g_ascii_strtod(nptr, &endptr);
 
-  if(endptr == NULL || *endptr == '\0' || errno == ERANGE || !isnormal(*width))
+  if(IS_NULL_PTR(endptr) || *endptr == '\0' || errno == ERANGE || !isnormal(*width))
     goto end;
 
   nptr = endptr;
@@ -174,7 +174,7 @@ int dt_pdf_parse_paper_size(const char *str, float *width, float *height)
 
   *height =  g_ascii_strtod(nptr, &endptr);
 
-  if(endptr == NULL || *endptr == '\0' || errno == ERANGE || !isnormal(*height))
+  if(IS_NULL_PTR(endptr) || *endptr == '\0' || errno == ERANGE || !isnormal(*height))
     goto end;
 
   nptr = endptr;
@@ -372,7 +372,7 @@ int dt_pdf_add_icc_from_data(dt_pdf_t *pdf, const unsigned char *data, size_t si
 
 // this adds an image to the pdf file and returns the info needed to reference it later.
 // if icc_id is 0 then we suppose the pixel data to be in output device space, otherwise the ICC profile object is referenced.
-// if image == NULL only the outline can be shown later
+// if IS_NULL_PTR(image) only the outline can be shown later
 dt_pdf_image_t *dt_pdf_add_image(dt_pdf_t *pdf, const unsigned char *image, int width, int height, int bpp, int icc_id, float border)
 {
   size_t stream_size = 0;
@@ -383,7 +383,7 @@ dt_pdf_image_t *dt_pdf_add_image(dt_pdf_t *pdf, const unsigned char *image, int 
 
   pdf_image->width = width;
   pdf_image->height = height;
-  pdf_image->outline_mode = (image == NULL);
+  pdf_image->outline_mode = (IS_NULL_PTR(image));
   // no need to do fancy math here:
   pdf_image->bb_x = border;
   pdf_image->bb_y = border;

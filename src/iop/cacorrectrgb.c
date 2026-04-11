@@ -267,8 +267,8 @@ static int get_manifolds(const float* const restrict in, const size_t width, con
   float *const restrict blurred_manifold_higher = dt_pixelpipe_cache_alloc_align_float_cache(width * height * 4, 0);
   float *const restrict blurred_manifold_lower = dt_pixelpipe_cache_alloc_align_float_cache(width * height * 4, 0);
 
-  if(blurred_in == NULL || manifold_higher == NULL || manifold_lower == NULL ||
-     blurred_manifold_higher == NULL || blurred_manifold_lower == NULL)
+  if(IS_NULL_PTR(blurred_in) || IS_NULL_PTR(manifold_higher) || IS_NULL_PTR(manifold_lower) ||
+     IS_NULL_PTR(blurred_manifold_higher) || IS_NULL_PTR(blurred_manifold_lower))
   {
     err = 1;
     goto error;
@@ -604,7 +604,7 @@ static int reduce_artifacts(const float* const restrict in,
   // it allows to blur all channels in one 4-channel gaussian blur instead of 2
   float *const restrict DT_ALIGNED_PIXEL in_out = dt_pixelpipe_cache_alloc_align_float_cache(width * height * 4, 0);
   float *const restrict blurred_in_out = dt_pixelpipe_cache_alloc_align_float_cache(width * height * 4, 0);
-  if(blurred_in_out == NULL || in_out == NULL)
+  if(IS_NULL_PTR(blurred_in_out) || IS_NULL_PTR(in_out))
   {
     err = 1;
     goto error;
@@ -684,7 +684,7 @@ static inline __attribute__((always_inline)) int reduce_chromatic_aberrations(co
   // we use only one variable for both higher and lower manifolds in order
   // to save time by doing only one bilinear interpolation instead of 2.
   float *const restrict ds_manifolds = dt_pixelpipe_cache_alloc_align_float_cache(ds_width * ds_height * 6, 0);
-  if(ds_manifolds == NULL || ds_in == NULL || manifolds == NULL)
+  if(IS_NULL_PTR(ds_manifolds) || IS_NULL_PTR(ds_in) || IS_NULL_PTR(manifolds))
   {
     err = 1;
     goto error;

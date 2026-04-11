@@ -325,7 +325,7 @@ void dt_histogram_max_helper(const dt_dev_histogram_stats_t *const histogram_sta
                              const dt_iop_colorspace_type_t cst, const dt_iop_colorspace_type_t cst_to,
                              uint32_t **histogram, uint32_t *histogram_max)
 {
-  if(*histogram == NULL) return;
+  if(IS_NULL_PTR(*histogram)) return;
   histogram_max[0] = histogram_max[1] = histogram_max[2] = histogram_max[3] = 0;
   uint32_t *hist = *histogram;
   switch(cst)

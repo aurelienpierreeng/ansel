@@ -378,7 +378,7 @@ static gboolean _hm_history_items_match(const dt_dev_history_item_t *a, const dt
     if(memcmp(a->params, b->params, size_a) != 0) return FALSE;
   }
 
-  if((a->blend_params == NULL) != (b->blend_params == NULL)) return FALSE;
+  if((IS_NULL_PTR(a->blend_params)) != (IS_NULL_PTR(b->blend_params))) return FALSE;
   if(a->blend_params && b->blend_params
      && memcmp(a->blend_params, b->blend_params, sizeof(dt_develop_blend_params_t)) != 0)
     return FALSE;

@@ -549,7 +549,7 @@ static void _piwigo_album_changed(GtkComboBox *cb, gpointer data)
   const gchar *value = dt_bauhaus_combobox_get_text(ui->album_list);
 
   // early return if the combo is not yet populated
-  if(value == NULL) return;
+  if(IS_NULL_PTR(value)) return;
 
   if(strcmp(value, _("create new album")) == 0)
   {
@@ -584,17 +584,17 @@ static void _piwigo_refresh_albums(dt_storage_piwigo_gui_data_t *ui, const gchar
   gtk_widget_set_sensitive(GTK_WIDGET(ui->album_list), FALSE);
   gtk_widget_set_sensitive(GTK_WIDGET(ui->parent_album_list), FALSE);
 
-  if(ui->api == NULL || ui->api->authenticated == FALSE)
+  if(IS_NULL_PTR(ui->api) || ui->api->authenticated == FALSE)
   {
     _piwigo_authenticate(ui);
-    if(ui->api == NULL || !ui->api->authenticated) return;
+    if(IS_NULL_PTR(ui->api) || !ui->api->authenticated) return;
   }
 
   gchar *to_select;
   int index = 0;
 
   // get the new album name, it will be checked in the
-  if(select_album == NULL)
+  if(IS_NULL_PTR(select_album))
   {
     to_select = g_strdup(dt_bauhaus_combobox_get_text(ui->album_list));
     if(to_select)
@@ -1187,7 +1187,7 @@ void *get_params(dt_imageio_module_storage_t *self)
           p->album = g_strdup(dt_bauhaus_combobox_get_text(ui->album_list));
           p->new_album = FALSE;
 
-          if(p->album == NULL)
+          if(IS_NULL_PTR(p->album))
           {
             // Something went wrong...
             fprintf(stderr, "Something went wrong.. album index %d = NULL\n", index - 2);

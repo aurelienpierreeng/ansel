@@ -58,7 +58,7 @@ static int dt_iop_equalizer_wtf(float *const buf, float **weight_a, const int l,
 
   size_t scratch_size;
   float *const restrict tmp_width_buf = dt_pixelpipe_cache_alloc_perthread_float(width, &scratch_size);
-  if(tmp_width_buf == NULL) return 1;
+  if(IS_NULL_PTR(tmp_width_buf)) return 1;
   __OMP_PARALLEL_FOR__(private(ch) )
   for(int j = 0; j < height; j++)
   {
@@ -87,7 +87,7 @@ static int dt_iop_equalizer_wtf(float *const buf, float **weight_a, const int l,
   dt_pixelpipe_cache_free_align(tmp_width_buf);
 
   float *const restrict tmp_height_buf = dt_pixelpipe_cache_alloc_perthread_float(height, &scratch_size);
-  if(tmp_height_buf == NULL) return 1;
+  if(IS_NULL_PTR(tmp_height_buf)) return 1;
   __OMP_PARALLEL_FOR__(private(ch) )
   for(int i = 0; i < width; i++)
   {
@@ -125,7 +125,7 @@ static int dt_iop_equalizer_iwtf(float *buf, float **weight_a, const int l, cons
 
   size_t scratch_size;
   float *const restrict tmp_height_buf = dt_pixelpipe_cache_alloc_perthread_float(height, &scratch_size);
-  if(tmp_height_buf == NULL) return 1;
+  if(IS_NULL_PTR(tmp_height_buf)) return 1;
   __OMP_PARALLEL_FOR__()
   for(int i = 0; i < width; i++)
   {
@@ -153,7 +153,7 @@ static int dt_iop_equalizer_iwtf(float *buf, float **weight_a, const int l, cons
   dt_pixelpipe_cache_free_align(tmp_height_buf);
 
   float *const restrict tmp_width_buf = dt_pixelpipe_cache_alloc_perthread_float(width, &scratch_size);
-  if(tmp_width_buf == NULL) return 1;
+  if(IS_NULL_PTR(tmp_width_buf)) return 1;
   __OMP_PARALLEL_FOR__()
   for(int j = 0; j < height; j++)
   {

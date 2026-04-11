@@ -321,7 +321,7 @@ static float parse_primary_expression(parser_state_t *self)
 
 float dt_calculator_solve(const float x, const char *formula)
 {
-  if(formula == NULL || *formula == '\0') return NAN;
+  if(IS_NULL_PTR(formula) || *formula == '\0') return NAN;
 
   gchar *dotformula = g_strdup(formula);
   parser_state_t *self = (parser_state_t *)malloc(sizeof(parser_state_t));

@@ -459,7 +459,7 @@ static void _set_paper_size(dt_imageio_module_format_t *self, const char *text)
 {
   pdf_t *d = (pdf_t *)self->gui_data;
 
-  if(text == NULL || *text == '\0')
+  if(IS_NULL_PTR(text) || *text == '\0')
   {
     _set_paper_size(self, dt_pdf_paper_sizes[0].name);
     return;

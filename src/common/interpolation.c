@@ -1241,37 +1241,37 @@ int dt_interpolation_resample_cl(const struct dt_interpolation *itor,
 
   dev_hindex = dt_opencl_copy_host_to_device_constant
     (devid, sizeof(int) * width * (hmaxtaps + 1), hindex);
-  if(dev_hindex == NULL) goto error;
+  if(IS_NULL_PTR(dev_hindex)) goto error;
 
   dev_hlength = dt_opencl_copy_host_to_device_constant
     (devid, sizeof(int) * width, hlength);
-  if(dev_hlength == NULL) goto error;
+  if(IS_NULL_PTR(dev_hlength)) goto error;
 
   dev_hkernel
       = dt_opencl_copy_host_to_device_constant
     (devid, sizeof(float) * width * (hmaxtaps + 1), hkernel);
-  if(dev_hkernel == NULL) goto error;
+  if(IS_NULL_PTR(dev_hkernel)) goto error;
 
   dev_hmeta = dt_opencl_copy_host_to_device_constant
     (devid, sizeof(int) * width * 3, hmeta);
-  if(dev_hmeta == NULL) goto error;
+  if(IS_NULL_PTR(dev_hmeta)) goto error;
 
   dev_vindex = dt_opencl_copy_host_to_device_constant
     (devid, sizeof(int) * height * (vmaxtaps + 1), vindex);
-  if(dev_vindex == NULL) goto error;
+  if(IS_NULL_PTR(dev_vindex)) goto error;
 
   dev_vlength = dt_opencl_copy_host_to_device_constant
     (devid, sizeof(int) * height, vlength);
-  if(dev_vlength == NULL) goto error;
+  if(IS_NULL_PTR(dev_vlength)) goto error;
 
   dev_vkernel
       = dt_opencl_copy_host_to_device_constant
     (devid, sizeof(float) * height * (vmaxtaps + 1), vkernel);
-  if(dev_vkernel == NULL) goto error;
+  if(IS_NULL_PTR(dev_vkernel)) goto error;
 
   dev_vmeta = dt_opencl_copy_host_to_device_constant
     (devid, sizeof(int) * height * 3, vmeta);
-  if(dev_vmeta == NULL) goto error;
+  if(IS_NULL_PTR(dev_vmeta)) goto error;
 
   dt_opencl_set_kernel_arg(devid, kernel, 0, sizeof(cl_mem), (void *)&dev_in);
   dt_opencl_set_kernel_arg(devid, kernel, 1, sizeof(cl_mem), (void *)&dev_out);

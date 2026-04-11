@@ -167,7 +167,7 @@ static inline int pseudo_solve_gaussian(double *const restrict A,
   double *const restrict A_square = dt_pixelpipe_cache_alloc_align_cache(n * n * sizeof(double), 0);
   double *const restrict y_square = dt_pixelpipe_cache_alloc_align_cache(n * sizeof(double), 0);
   
-  if(y_square == NULL || A_square == NULL)
+  if(IS_NULL_PTR(y_square) || IS_NULL_PTR(A_square))
   {
     err = 1;
     goto error;

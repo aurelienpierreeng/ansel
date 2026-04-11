@@ -561,7 +561,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   }
 
   dev_params = dt_opencl_copy_host_to_device_constant(devid, params_size, params);
-  if(dev_params == NULL) goto error;
+  if(IS_NULL_PTR(dev_params)) goto error;
 
   size_t sizes[3] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
   dt_opencl_set_kernel_arg(devid, gd->kernel_colorchecker, 0, sizeof(cl_mem), (void *)&dev_in);

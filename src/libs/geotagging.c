@@ -1814,7 +1814,7 @@ void gui_init(dt_lib_module_t *self)
   gtk_cell_layout_set_attributes(GTK_CELL_LAYOUT(tz_selection), renderer, "text", 0, NULL);
 
   gchar *tz = dt_conf_get_string("plugins/lighttable/geotagging/tz");
-  d->tz_camera = (tz == NULL) ? g_time_zone_new_utc() : g_time_zone_new(tz);
+  d->tz_camera = (IS_NULL_PTR(tz)) ? g_time_zone_new_utc() : g_time_zone_new(tz);
   for(GList *iter = d->timezones; iter; iter = g_list_next(iter))
   {
     tz_tuple_t *tz_tuple = (tz_tuple_t *)iter->data;

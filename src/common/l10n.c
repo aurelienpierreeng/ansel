@@ -382,7 +382,7 @@ dt_l10n_t *dt_l10n_init(gboolean init_list)
           }
 
           // check if this is the system default
-          if(sys_default == NULL)
+          if(IS_NULL_PTR(sys_default))
           {
             for(const gchar * const * iter = default_languages; *iter; iter++)
             {
@@ -434,7 +434,7 @@ dt_l10n_t *dt_l10n_init(gboolean init_list)
       i++;
     }
 
-    if(selected == NULL)
+    if(IS_NULL_PTR(selected))
       result->selected = result->sys_default;
   }
   else

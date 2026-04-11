@@ -382,7 +382,7 @@ const char *dt_conf_get_string_const(const char *name)
 gboolean dt_conf_key_not_empty(const char *name)
 {
   const char *val = dt_conf_get_string_const(name);
-  if(val == NULL)      return FALSE;
+  if(IS_NULL_PTR(val))      return FALSE;
   if(strlen(val) == 0) return FALSE;
   return TRUE;
 }
@@ -613,7 +613,7 @@ dt_confgen_type_t dt_confgen_type(const char *name)
 gboolean dt_confgen_value_exists(const char *name, dt_confgen_value_kind_t kind)
 {
   const dt_confgen_value_t *item = g_hash_table_lookup(darktable.conf->x_confgen, name);
-  if(item == NULL)
+  if(IS_NULL_PTR(item))
     return FALSE;
 
   switch(kind)

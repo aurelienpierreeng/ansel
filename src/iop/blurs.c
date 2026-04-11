@@ -292,7 +292,7 @@ static inline int build_gui_kernel(unsigned char *const buffer, const size_t wid
 {
   float *const restrict kernel_1 = dt_alloc_align_float(width * height);
   float *const restrict kernel_2 = dt_alloc_align_float(width * height);
-  if(kernel_1 == NULL || kernel_2 == NULL) goto error;
+  if(IS_NULL_PTR(kernel_1) || IS_NULL_PTR(kernel_2)) goto error;
 
   if(p->type == DT_BLUR_LENS)
   {
@@ -322,7 +322,7 @@ static inline int build_gui_kernel(unsigned char *const buffer, const size_t wid
   }
 
 error:;
-  int err = (kernel_1 == NULL || kernel_2 == NULL);
+  int err = (IS_NULL_PTR(kernel_1) || IS_NULL_PTR(kernel_2));
   dt_free_align(kernel_1);
   dt_free_align(kernel_2);
   return err;
@@ -359,7 +359,7 @@ static inline int build_pixel_kernel(float *const buffer, const size_t width, co
                                      dt_iop_blurs_params_t *p)
 {
   float *const restrict kernel_1 = dt_alloc_align_float(width * height);
-  if(kernel_1 == NULL) return 1;
+  if(IS_NULL_PTR(kernel_1)) return 1;
 
   if(p->type == DT_BLUR_LENS)
   {
@@ -541,7 +541,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const size_t kernel_width = 2 * radius + 1;
 
   float *restrict kernel = dt_alloc_align_float(kernel_width * kernel_width);
-  if(kernel == NULL) return 1;
+  if(IS_NULL_PTR(kernel)) return 1;
   if(build_pixel_kernel(kernel, kernel_width, kernel_width, p))
   {
     dt_free_align(kernel);
@@ -624,7 +624,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   const size_t kernel_width = 2 * radius + 1;
 
   float *const restrict kernel = dt_alloc_align_float(kernel_width * kernel_width);
-  if(kernel == NULL) return FALSE;
+  if(IS_NULL_PTR(kernel)) return FALSE;
   if(build_pixel_kernel(kernel, kernel_width, kernel_width, p))
   {
     dt_free_align(kernel);

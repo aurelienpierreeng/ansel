@@ -640,11 +640,11 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   if(filters == 9u)
   {
     dev_xtrans = dt_opencl_copy_host_to_device_constant(devid, sizeof(piece->dsc_in.xtrans), (void *)piece->dsc_in.xtrans);
-    if(dev_xtrans == NULL) goto error;
+    if(IS_NULL_PTR(dev_xtrans)) goto error;
   }
 
   dev_coeffs = dt_opencl_copy_host_to_device_constant(devid, sizeof(float) * 3, d->coeffs);
-  if(dev_coeffs == NULL) goto error;
+  if(IS_NULL_PTR(dev_coeffs)) goto error;
 
   const int width = roi_in->width;
   const int height = roi_in->height;

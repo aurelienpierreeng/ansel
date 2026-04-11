@@ -31,7 +31,7 @@ float *dt_dev_retrieve_rawdetail_mask(const dt_dev_pixelpipe_t *pipe, const dt_i
   if(pipe->rawdetail_mask_hash != mask_hash)
   {
     dt_pixel_cache_entry_t *entry = dt_dev_pixelpipe_cache_get_entry(darktable.pixelpipe_cache, mask_hash);
-    if(entry == NULL) return NULL;
+    if(IS_NULL_PTR(entry)) return NULL;
 
     dt_dev_clear_rawdetail_mask(mutable_pipe);
     dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, entry);
@@ -57,7 +57,7 @@ float *dt_dev_distort_detail_mask(const dt_dev_pixelpipe_t *pipe, float *src,
   {
     const dt_dev_pixelpipe_iop_t *candidate = (dt_dev_pixelpipe_iop_t *)iter->data;
     if(candidate->module == target_module) target_piece = candidate;
-    if((source_iter == NULL) && (!strcmp(candidate->module->op, "detailmask")) && candidate->enabled)
+    if((IS_NULL_PTR(source_iter)) && (!strcmp(candidate->module->op, "detailmask")) && candidate->enabled)
     {
       valid = TRUE;
       source_iter = iter;

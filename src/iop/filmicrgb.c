@@ -2701,7 +2701,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   // fetch working color profile
   const dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_pipe_work_profile_info(pipe);
   const dt_iop_order_iccprofile_info_t *const export_profile = dt_ioppr_get_pipe_output_profile_info(pipe);
-  const int use_work_profile = (work_profile == NULL) ? 0 : 1;
+  const int use_work_profile = (IS_NULL_PTR(work_profile)) ? 0 : 1;
 
   // See colorbalancergb.c for details
   dt_colormatrix_t input_matrix;         // pipeline RGB -> LMS 2006

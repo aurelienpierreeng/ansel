@@ -430,9 +430,9 @@ static gchar *_create_tooltip_text(const dt_dev_history_item_t *hitem)
 
   const dt_dev_history_item_t *hprev = _find_previous_history_step(hitem);
   dt_iop_params_t *old_params
-      = (hprev == hitem || hprev == NULL) ? hitem->module->default_params : hprev->module->params;
+      = (hprev == hitem || IS_NULL_PTR(hprev)) ? hitem->module->default_params : hprev->module->params;
   dt_develop_blend_params_t *old_blend
-      = (hprev == hitem || hprev == NULL) ? hitem->module->default_blendop_params : hprev->module->blend_params;
+      = (hprev == hitem || IS_NULL_PTR(hprev)) ? hitem->module->default_blendop_params : hprev->module->blend_params;
 
   gchar **change_parts = g_malloc0_n(sizeof(dt_develop_blend_params_t) / (sizeof(float)) + 24, sizeof(char*));
   int num_parts = 0;

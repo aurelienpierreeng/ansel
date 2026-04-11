@@ -171,7 +171,7 @@ static void _locations_tree_update(dt_lib_module_t *self, const guint locid)
     {
       GtkTreeIter iter;
       const gchar *tag = ((dt_map_location_t *)stag->data)->tag;
-      if(tag == NULL) continue;
+      if(IS_NULL_PTR(tag)) continue;
       char **tokens;
       tokens = g_strsplit(tag, "|", -1);
       if(tokens)
@@ -670,8 +670,8 @@ static gint _sort_position_names_func(GtkTreeModel *model,
   char *tag_b = NULL;
   gtk_tree_model_get(model, a, DT_MAP_LOCATION_COL_PATH, &tag_a, -1);
   gtk_tree_model_get(model, b, DT_MAP_LOCATION_COL_PATH, &tag_b, -1);
-  if(tag_a == NULL) tag_a = g_strdup("");
-  if(tag_b == NULL) tag_b = g_strdup("");
+  if(IS_NULL_PTR(tag_a)) tag_a = g_strdup("");
+  if(IS_NULL_PTR(tag_b)) tag_b = g_strdup("");
   const gboolean sort = g_ascii_strncasecmp(tag_a, tag_b, -1);
   dt_free(tag_a);
   dt_free(tag_b);

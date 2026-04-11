@@ -664,7 +664,7 @@ static int _circle_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_t *
   int num_points;
   float *const restrict points =
     _points_to_transform(form->source[0], form->source[1], outer_radius, wd, ht, &num_points);
-  if(points == NULL)
+  if(IS_NULL_PTR(points))
     return 1;
 
   // and transform them with all distorted modules
@@ -695,7 +695,7 @@ static int _circle_get_area(const dt_iop_module_t *const restrict module, dt_dev
   int num_points;
   float *const restrict points =
     _points_to_transform(circle->center[0], circle->center[1], outer_radius, wd, ht, &num_points);
-  if(points == NULL)
+  if(IS_NULL_PTR(points))
     return 1;
 
   // and transform them with all distorted modules
@@ -733,7 +733,7 @@ static int _circle_get_mask(const dt_iop_module_t *const restrict module, dt_dev
   // we create a buffer of points with all points in the area
   const int w = *width, h = *height;
   float *const restrict points = dt_pixelpipe_cache_alloc_align_float_cache((size_t)w * h * 2, 0);
-  if(points == NULL)
+  if(IS_NULL_PTR(points))
     return 1;
 
   const float pos_x = *posx;
@@ -772,7 +772,7 @@ static int _circle_get_mask(const dt_iop_module_t *const restrict module, dt_dev
 
   // we allocate the buffer
   *buffer = dt_pixelpipe_cache_alloc_align_float_cache((size_t)w * h, 0);
-  if(*buffer == NULL)
+  if(IS_NULL_PTR(*buffer))
   {
     dt_pixelpipe_cache_free_align(points);
     return 1;
@@ -858,7 +858,7 @@ static int _circle_get_mask_roi(const dt_iop_module_t *const restrict module, dt
   // we need many points as we do not know how the circle might get distorted in the pixelpipe
   const size_t circpts = dt_masks_roundup(MIN(360, 2 * M_PI * sqr_total), 8);
   float *const restrict circ = dt_pixelpipe_cache_alloc_align_float_cache(circpts * 2, 0);
-  if(circ == NULL) return 1;
+  if(IS_NULL_PTR(circ)) return 1;
   __OMP_PARALLEL_FOR__(if(circpts/8 > 1000))
   for(int n = 0; n < circpts / 8; n++)
   {
@@ -948,7 +948,7 @@ static int _circle_get_mask_roi(const dt_iop_module_t *const restrict module, dt
     return 0;
 
   float *const restrict points = dt_pixelpipe_cache_alloc_align_float_cache((size_t)bbw * bbh * 2, 0);
-  if(points == NULL) return 1;
+  if(IS_NULL_PTR(points)) return 1;
 
   // we populate the grid points in module coordinates
   __OMP_PARALLEL_FOR__(collapse(2) if(bbw*bbh > 50000))

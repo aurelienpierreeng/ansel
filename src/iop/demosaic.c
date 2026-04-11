@@ -1109,7 +1109,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     }
     else if(demosaicing_method == DT_IOP_DEMOSAIC_LMMSE)
     {
-      if(gd->lmmse_gamma_in == NULL)
+      if(IS_NULL_PTR(gd->lmmse_gamma_in))
       {
         gd->lmmse_gamma_in = dt_pixelpipe_cache_alloc_align_float_cache(65536, 0);
         gd->lmmse_gamma_out = dt_pixelpipe_cache_alloc_align_float_cache(65536, 0);
@@ -1197,7 +1197,7 @@ static int process_default_cl(struct dt_iop_module_t *self, const dt_dev_pixelpi
   if(data->green_eq != DT_IOP_GREEN_EQ_NO)
   {
     dev_green_eq = dt_opencl_alloc_device(devid, roi_in->width, roi_in->height, sizeof(float));
-    if(dev_green_eq == NULL) goto error;
+    if(IS_NULL_PTR(dev_green_eq)) goto error;
 
     if(!green_equilibration_cl(self, pipe, piece, dev_in, dev_green_eq, roi_in))
       goto error;
@@ -1235,7 +1235,7 @@ static int process_default_cl(struct dt_iop_module_t *self, const dt_dev_pixelpi
   else if(demosaicing_method == DT_IOP_DEMOSAIC_PPG)
   {
     dev_tmp = dt_opencl_alloc_device(devid, roi_in->width, roi_in->height, sizeof(float) * 4);
-    if(dev_tmp == NULL) goto error;
+    if(IS_NULL_PTR(dev_tmp)) goto error;
 
     {
       const int myborder = 3;
@@ -1254,7 +1254,7 @@ static int process_default_cl(struct dt_iop_module_t *self, const dt_dev_pixelpi
     if(data->median_thrs > 0.0f)
     {
       dev_med = dt_opencl_alloc_device(devid, roi_in->width, roi_in->height, sizeof(float) * 4);
-      if(dev_med == NULL) goto error;
+      if(IS_NULL_PTR(dev_med)) goto error;
 
       dt_opencl_local_buffer_t locopt
         = (dt_opencl_local_buffer_t){ .xoffset = 2*2, .xfactor = 1, .yoffset = 2*2, .yfactor = 1,
@@ -1659,7 +1659,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     {
       dev_xtrans = dt_opencl_copy_host_to_device_constant(devid, sizeof(piece->dsc_in.xtrans),
                                                           (void *)piece->dsc_in.xtrans);
-      if(dev_xtrans == NULL) goto finish;
+      if(IS_NULL_PTR(dev_xtrans)) goto finish;
 
       dt_opencl_set_kernel_arg(devid, gd->kernel_zoom_half_size_xtrans, 0, sizeof(cl_mem), &dev_in);
       dt_opencl_set_kernel_arg(devid, gd->kernel_zoom_half_size_xtrans, 1, sizeof(cl_mem), &dev_out);
@@ -1712,7 +1712,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     if(dual)
     {
       high_image = dt_opencl_alloc_device(devid, roi_in->width, roi_in->height, sizeof(float) * 4);
-      if(high_image == NULL) return FALSE;
+      if(IS_NULL_PTR(high_image)) return FALSE;
       if(!process_rcd_cl(self, pipe, piece, dev_in, high_image, roi_in, roi_in, FALSE)) goto finish;
     }
     else
@@ -1730,7 +1730,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     if(dual)
     {
       high_image = dt_opencl_alloc_device(devid, roi_in->width, roi_in->height, sizeof(float) * 4);
-      if(high_image == NULL) return FALSE;
+      if(IS_NULL_PTR(high_image)) return FALSE;
       if(!process_markesteijn_cl(self, pipe, piece, dev_in, high_image, roi_in, roi_in, FALSE)) return FALSE;
     }
     else
@@ -1768,7 +1768,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   if(scaled)
   {
     dev_aux = dt_opencl_alloc_device(devid, roi_in->width, roi_in->height, sizeof(float) * 4);
-    if(dev_aux == NULL) goto finish;
+    if(IS_NULL_PTR(dev_aux)) goto finish;
     width = roi_in->width;
     height = roi_in->height;
   }
@@ -1779,7 +1779,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   blend = dt_opencl_alloc_device_buffer(devid, sizeof(float) * width * height);
   details = dt_opencl_alloc_device_buffer(devid, sizeof(float) * width * height);
   low_image = dt_opencl_alloc_device(devid, width, height, sizeof(float) * 4);
-  if((blend == NULL) || (low_image == NULL) || (details == NULL)) goto finish;
+  if((IS_NULL_PTR(blend)) || (IS_NULL_PTR(low_image)) || (IS_NULL_PTR(details))) goto finish;
 
   if(info) dt_get_times(&start_time);
   if(process_vng_cl(self, pipe, piece, dev_in, low_image, roi_in, roi_in, FALSE, FALSE))

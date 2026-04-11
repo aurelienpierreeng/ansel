@@ -61,7 +61,7 @@ static int demosaic_ppg(float *const out, const float *const in, const dt_iop_ro
   if(median)
   {
     float *med_in = (float *)dt_pixelpipe_cache_alloc_align_float_cache((size_t)roi_in->height * roi_in->width, 0);
-    if(med_in == NULL) return 1;
+    if(IS_NULL_PTR(med_in)) return 1;
     pre_median(med_in, in, roi_in, filters, 1, thrs);
     input = med_in;
   }

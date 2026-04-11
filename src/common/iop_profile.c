@@ -122,7 +122,7 @@ static void _transform_from_to_rgb_lab_lcms2(const float *const image_in, float 
         rgb_profile = NULL;
     }
   }
-  if(rgb_profile == NULL)
+  if(IS_NULL_PTR(rgb_profile))
   {
     rgb_profile = dt_colorspaces_get_profile(DT_COLORSPACE_LIN_REC2020, "", DT_PROFILE_DIRECTION_WORK)->profile;
     fprintf(stderr, _("unsupported working profile %s has been replaced by Rec2020 RGB!\n"), filename);
@@ -744,7 +744,7 @@ dt_ioppr_add_profile_info_to_list(struct dt_develop_t *dev,
                                   const int intent)
 {
   dt_iop_order_iccprofile_info_t *profile_info = dt_ioppr_get_profile_info_from_list(dev, profile_type, profile_filename);
-  if(profile_info == NULL)
+  if(IS_NULL_PTR(profile_info))
   {
     profile_info = dt_alloc_align(sizeof(dt_iop_order_iccprofile_info_t));
     dt_ioppr_init_profile_info(profile_info, 0);
@@ -813,7 +813,7 @@ dt_ioppr_set_pipe_work_profile_info(struct dt_develop_t *dev,
 {
   dt_iop_order_iccprofile_info_t *profile_info = dt_ioppr_add_profile_info_to_list(dev, type, filename, intent);
 
-  if(profile_info == NULL || isnan(profile_info->matrix_in[0][0]) || isnan(profile_info->matrix_out[0][0]))
+  if(IS_NULL_PTR(profile_info) || isnan(profile_info->matrix_in[0][0]) || isnan(profile_info->matrix_out[0][0]))
   {
     fprintf(stderr, "[dt_ioppr_set_pipe_work_profile_info] unsupported working profile %i %s, it will be replaced with linear Rec2020\n", type, filename);
     profile_info = dt_ioppr_add_profile_info_to_list(dev, DT_COLORSPACE_LIN_REC2020, "", intent);
@@ -833,7 +833,7 @@ dt_ioppr_set_pipe_input_profile_info(struct dt_develop_t *dev,
 {
   dt_iop_order_iccprofile_info_t *profile_info = dt_ioppr_add_profile_info_to_list(dev, type, filename, intent);
 
-  if(profile_info == NULL)
+  if(IS_NULL_PTR(profile_info))
   {
     fprintf(stderr,
             "[dt_ioppr_set_pipe_input_profile_info] unsupported input profile %i %s, it will be replaced with "
@@ -866,7 +866,7 @@ dt_ioppr_set_pipe_output_profile_info(struct dt_develop_t *dev,
 {
   dt_iop_order_iccprofile_info_t *profile_info = dt_ioppr_add_profile_info_to_list(dev, type, filename, intent);
 
-  if(profile_info == NULL || isnan(profile_info->matrix_in[0][0]) || isnan(profile_info->matrix_out[0][0]))
+  if(IS_NULL_PTR(profile_info) || isnan(profile_info->matrix_in[0][0]) || isnan(profile_info->matrix_out[0][0]))
   {
     if (type != DT_COLORSPACE_DISPLAY)
     {
@@ -1029,7 +1029,7 @@ void dt_ioppr_transform_image_colorspace(struct dt_iop_module_t *self, const flo
     *converted_cst = cst_to;
     return;
   }
-  if(profile_info == NULL)
+  if(IS_NULL_PTR(profile_info))
   {
     *converted_cst = cst_from;
     return;
@@ -1202,7 +1202,7 @@ cl_int dt_ioppr_build_iccprofile_params_cl(const dt_iop_order_iccprofile_info_t 
     profile_lut_cl = dt_ioppr_get_trc_cl(profile_info);
 
     dev_profile_info = dt_opencl_copy_host_to_device_constant(devid, sizeof(*profile_info_cl), profile_info_cl);
-    if(dev_profile_info == NULL)
+    if(IS_NULL_PTR(dev_profile_info))
     {
       fprintf(stderr, "[dt_ioppr_build_iccprofile_params_cl] error allocating memory 5\n");
       err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
@@ -1210,7 +1210,7 @@ cl_int dt_ioppr_build_iccprofile_params_cl(const dt_iop_order_iccprofile_info_t 
     }
 
     dev_profile_lut = dt_opencl_copy_host_to_device(devid, profile_lut_cl, 256, 256 * 6, sizeof(float));
-    if(dev_profile_lut == NULL)
+    if(IS_NULL_PTR(dev_profile_lut))
     {
       fprintf(stderr, "[dt_ioppr_build_iccprofile_params_cl] error allocating memory 6\n");
       err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
@@ -1222,7 +1222,7 @@ cl_int dt_ioppr_build_iccprofile_params_cl(const dt_iop_order_iccprofile_info_t 
     profile_lut_cl = malloc(sizeof(cl_float) * 1 * 6);
 
     dev_profile_lut = dt_opencl_copy_host_to_device(devid, profile_lut_cl, 1, 1 * 6, sizeof(float));
-    if(dev_profile_lut == NULL)
+    if(IS_NULL_PTR(dev_profile_lut))
     {
       fprintf(stderr, "[dt_ioppr_build_iccprofile_params_cl] error allocating memory 7\n");
       err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
@@ -1283,7 +1283,7 @@ int dt_ioppr_transform_image_colorspace_cl(struct dt_iop_module_t *self, const i
     *converted_cst = cst_to;
     return TRUE;
   }
-  if(profile_info == NULL)
+  if(IS_NULL_PTR(profile_info))
   {
     *converted_cst = cst_from;
     return FALSE;
@@ -1331,14 +1331,14 @@ int dt_ioppr_transform_image_colorspace_cl(struct dt_iop_module_t *self, const i
     lut_cl = dt_ioppr_get_trc_cl(profile_info);
 
     dev_profile_info = dt_opencl_copy_host_to_device_constant(devid, sizeof(profile_info_cl), &profile_info_cl);
-    if(dev_profile_info == NULL)
+    if(IS_NULL_PTR(dev_profile_info))
     {
       fprintf(stderr, "[dt_ioppr_transform_image_colorspace_cl] error allocating memory for color transformation 5\n");
       err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
       goto cleanup;
     }
     dev_lut = dt_opencl_copy_host_to_device(devid, lut_cl, 256, 256 * 6, sizeof(float));
-    if(dev_lut == NULL)
+    if(IS_NULL_PTR(dev_lut))
     {
       fprintf(stderr, "[dt_ioppr_transform_image_colorspace_cl] error allocating memory for color transformation 6\n");
       err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
@@ -1375,7 +1375,7 @@ int dt_ioppr_transform_image_colorspace_cl(struct dt_iop_module_t *self, const i
   {
     // no matrix, call lcms2
     src_buffer = dt_pixelpipe_cache_alloc_align_float_cache(ch * width * height, 0);
-    if(src_buffer == NULL)
+    if(IS_NULL_PTR(src_buffer))
     {
       fprintf(stderr, "[dt_ioppr_transform_image_colorspace_cl] error allocating memory for color transformation 1\n");
       err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
@@ -1486,7 +1486,7 @@ int dt_ioppr_transform_image_colorspace_rgb_cl(const int devid, cl_mem dev_img_i
     if(in_place)
     {
       dev_tmp = dt_opencl_alloc_device(devid, width, height, sizeof(float) * 4);
-      if(dev_tmp == NULL)
+      if(IS_NULL_PTR(dev_tmp))
       {
         fprintf(
             stderr,
@@ -1510,7 +1510,7 @@ int dt_ioppr_transform_image_colorspace_rgb_cl(const int devid, cl_mem dev_img_i
 
     dev_profile_info_from
         = dt_opencl_copy_host_to_device_constant(devid, sizeof(profile_info_from_cl), &profile_info_from_cl);
-    if(dev_profile_info_from == NULL)
+    if(IS_NULL_PTR(dev_profile_info_from))
     {
       fprintf(stderr,
               "[dt_ioppr_transform_image_colorspace_rgb_cl] error allocating memory for color transformation 5\n");
@@ -1518,7 +1518,7 @@ int dt_ioppr_transform_image_colorspace_rgb_cl(const int devid, cl_mem dev_img_i
       goto cleanup;
     }
     dev_lut_from = dt_opencl_copy_host_to_device(devid, lut_from_cl, 256, 256 * 6, sizeof(float));
-    if(dev_lut_from == NULL)
+    if(IS_NULL_PTR(dev_lut_from))
     {
       fprintf(stderr,
               "[dt_ioppr_transform_image_colorspace_rgb_cl] error allocating memory for color transformation 6\n");
@@ -1528,7 +1528,7 @@ int dt_ioppr_transform_image_colorspace_rgb_cl(const int devid, cl_mem dev_img_i
 
     dev_profile_info_to
         = dt_opencl_copy_host_to_device_constant(devid, sizeof(profile_info_to_cl), &profile_info_to_cl);
-    if(dev_profile_info_to == NULL)
+    if(IS_NULL_PTR(dev_profile_info_to))
     {
       fprintf(stderr,
               "[dt_ioppr_transform_image_colorspace_rgb_cl] error allocating memory for color transformation 7\n");
@@ -1536,7 +1536,7 @@ int dt_ioppr_transform_image_colorspace_rgb_cl(const int devid, cl_mem dev_img_i
       goto cleanup;
     }
     dev_lut_to = dt_opencl_copy_host_to_device(devid, lut_to_cl, 256, 256 * 6, sizeof(float));
-    if(dev_lut_to == NULL)
+    if(IS_NULL_PTR(dev_lut_to))
     {
       fprintf(stderr,
               "[dt_ioppr_transform_image_colorspace_rgb_cl] error allocating memory for color transformation 8\n");
@@ -1546,7 +1546,7 @@ int dt_ioppr_transform_image_colorspace_rgb_cl(const int devid, cl_mem dev_img_i
     float matrix3x4[12];
     pack_3xSSE_to_3x4(matrix, matrix3x4);
     matrix_cl = dt_opencl_copy_host_to_device_constant(devid, sizeof(matrix3x4), matrix3x4);
-    if(matrix_cl == NULL)
+    if(IS_NULL_PTR(matrix_cl))
     {
       fprintf(stderr,
               "[dt_ioppr_transform_image_colorspace_rgb_cl] error allocating memory for color transformation 7\n");
@@ -1586,7 +1586,7 @@ int dt_ioppr_transform_image_colorspace_rgb_cl(const int devid, cl_mem dev_img_i
     // no matrix, call lcms2
     src_buffer_in  = dt_pixelpipe_cache_alloc_align_float_cache(ch * width * height, 0);
     src_buffer_out = dt_pixelpipe_cache_alloc_align_float_cache(ch * width * height, 0);
-    if(src_buffer_in == NULL || src_buffer_out == NULL)
+    if(IS_NULL_PTR(src_buffer_in) || IS_NULL_PTR(src_buffer_out))
     {
       fprintf(stderr,
               "[dt_ioppr_transform_image_colorspace_rgb_cl] error allocating memory for color transformation 1\n");

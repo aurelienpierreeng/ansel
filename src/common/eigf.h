@@ -81,7 +81,7 @@ static inline int eigf_variance_analysis(const float *const restrict guide, // I
   float *const restrict in = dt_pixelpipe_cache_alloc_align_float_cache(Ndim * 4, 0);
   dt_gaussian_t *g = NULL;
   int err = 0;
-  if(in == NULL)
+  if(IS_NULL_PTR(in))
   {
     err = 1;
     goto error;
@@ -119,7 +119,7 @@ static inline int eigf_variance_analysis(const float *const restrict guide, // I
   dt_aligned_pixel_t max = {maxg, maxg2, maxm, maxmg};
   dt_aligned_pixel_t min = {ming, ming2, minm, minmg};
   g = dt_gaussian_init(width, height, 4, max, min, sigma, 0);
-  if(g == NULL)
+  if(IS_NULL_PTR(g))
   {
     err = 1;
     goto error;
@@ -151,7 +151,7 @@ static inline int eigf_variance_analysis_no_mask(const float *const restrict gui
   float *const restrict in = dt_pixelpipe_cache_alloc_align_float_cache(Ndim * 2, 0);
   dt_gaussian_t *g = NULL;
   int err = 0;
-  if(in == NULL)
+  if(IS_NULL_PTR(in))
   {
     err = 1;
     goto error;

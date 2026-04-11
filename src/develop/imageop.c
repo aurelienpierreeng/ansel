@@ -621,7 +621,7 @@ static void _gui_delete_callback(GtkButton *button, dt_iop_module_t *module)
       }
       history = g_list_next(history);
     }
-    if(first == NULL) first = next;
+    if(IS_NULL_PTR(first)) first = next;
 
     // we set priority of first to 0
     dt_iop_update_multi_priority(first, 0);
@@ -1126,7 +1126,7 @@ void dt_iop_gui_set_enable_button_icon(GtkWidget *w, dt_iop_module_t *module)
 
 void dt_iop_gui_set_enable_button(dt_iop_module_t *module)
 {
-  if(module == NULL) return;
+  if(IS_NULL_PTR(module)) return;
 
   if(module->off)
   {
@@ -2695,7 +2695,7 @@ const gchar *dt_iop_get_localized_name(const gchar *op)
 {
   // Prepare mapping op -> localized name
   static GHashTable *module_names = NULL;
-  if(module_names == NULL)
+  if(IS_NULL_PTR(module_names))
   {
     module_names = g_hash_table_new(g_str_hash, g_str_equal);
     for(GList *iop = darktable.iop; iop; iop = g_list_next(iop))
@@ -2717,7 +2717,7 @@ const gchar *dt_iop_get_localized_aliases(const gchar *op)
 {
   // Prepare mapping op -> localized name
   static GHashTable *module_aliases = NULL;
-  if(module_aliases == NULL)
+  if(IS_NULL_PTR(module_aliases))
   {
     module_aliases = g_hash_table_new(g_str_hash, g_str_equal);
     for(GList *iop = darktable.iop; iop; iop = g_list_next(iop))
@@ -2800,7 +2800,7 @@ dt_iop_module_t *dt_iop_get_module_by_instance_name(GList *modules, const char *
     dt_iop_module_t *mod = (dt_iop_module_t *)m->data;
 
     if((strcmp(mod->op, operation) == 0)
-       && ((multi_name == NULL) || (strcmp(mod->multi_name, multi_name) == 0)))
+       && ((IS_NULL_PTR(multi_name)) || (strcmp(mod->multi_name, multi_name) == 0)))
     {
       mod_ret = mod;
       break;

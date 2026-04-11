@@ -161,7 +161,7 @@ static int _inverse_mask(const dt_iop_module_t *const module, const dt_dev_pixel
   const int wt = piece->iwidth;
   const int ht = piece->iheight;
   float *buf = dt_pixelpipe_cache_alloc_align_float_cache((size_t)ht * wt, 0);
-  if(buf == NULL) return 1;
+  if(IS_NULL_PTR(buf)) return 1;
 
   // we fill this buffer
   const int posx_ = *posx;
@@ -293,7 +293,7 @@ static int _group_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe
 
   // we allocate the buffer
   *buffer = dt_pixelpipe_cache_alloc_align_float_cache((size_t)(r - l) * (b - t), 0);
-  if(*buffer == NULL)
+  if(IS_NULL_PTR(*buffer))
   {
     err = 1;
     goto cleanup;
@@ -587,7 +587,7 @@ static int _group_get_mask_roi(const dt_iop_module_t *const restrict module, dt_
 
   // we need to allocate a zeroed temporary buffer for intermediate creation of individual shapes
   float *const restrict bufs = dt_pixelpipe_cache_alloc_align_float_cache(npixels, 0);
-  if(bufs == NULL) return 1;
+  if(IS_NULL_PTR(bufs)) return 1;
   int err = 0;
 
   int i = 0;

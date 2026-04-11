@@ -1153,7 +1153,7 @@ static float *const _ellipse_points_to_transform(const float center_x, const flo
 
   // buffer allocation
   float *points = dt_pixelpipe_cache_alloc_align_float_cache((size_t) 2 * (l + 5), 0);
-  if(points == NULL)
+  if(IS_NULL_PTR(points))
     return NULL;
   *point_count = l + 5;
 
@@ -1274,7 +1274,7 @@ static int _ellipse_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpi
   const int posx_ = *posx;
   const int posy_ = *posy;
   float *points = dt_pixelpipe_cache_alloc_align_float_cache((size_t)2 * w * h, 0);
-  if(points == NULL)
+  if(IS_NULL_PTR(points))
     return 1;
   __OMP_PARALLEL_FOR__(collapse(2) if((size_t)w * h > 50000))
   for(int i = 0; i < h; i++)
@@ -1306,7 +1306,7 @@ static int _ellipse_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpi
 
   // we allocate the buffer
   *buffer = dt_pixelpipe_cache_alloc_align_float_cache((size_t)w * h, 0);
-  if(*buffer == NULL)
+  if(IS_NULL_PTR(*buffer))
   {
     dt_pixelpipe_cache_free_align(points);
     return 1;
@@ -1402,7 +1402,7 @@ static int _ellipse_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pix
   const int l = (int)(M_PI * (ta + tb) * (1.0f + (3.0f * lambda * lambda) / (10.0f + sqrtf(4.0f - 3.0f * lambda * lambda))));
   const size_t ellpts = MIN(360, l);
   float *ell = dt_pixelpipe_cache_alloc_align_float_cache(ellpts * 2, 0);
-  if(ell == NULL) return 1;
+  if(IS_NULL_PTR(ell)) return 1;
   __OMP_PARALLEL_FOR__(if(ellpts > 100))
   for(int n = 0; n < ellpts; n++)
   {
@@ -1479,7 +1479,7 @@ static int _ellipse_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pix
     return 0;
 
   float *points = dt_pixelpipe_cache_alloc_align_float_cache((size_t)2 * bbw * bbh, 0);
-  if(points == NULL) return 1;
+  if(IS_NULL_PTR(points)) return 1;
 
   // we populate the grid points in module coordinates
   __OMP_PARALLEL_FOR__(collapse(2) if((size_t)bbw * bbh > 50000))

@@ -322,11 +322,11 @@ gboolean dt_supported_image(const gchar *filename)
 int dt_load_from_string(const gchar *input, gboolean open_image_in_dr, gboolean *single_image)
 {
   int32_t id = 0;
-  if(input == NULL || input[0] == '\0') return 0;
+  if(IS_NULL_PTR(input) || input[0] == '\0') return 0;
 
   char *filename = dt_util_normalize_path(input);
 
-  if(filename == NULL)
+  if(IS_NULL_PTR(filename))
   {
     dt_control_log(_("found strange path `%s'"), input);
     return 0;
@@ -1056,7 +1056,7 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   while (recheck_needed)
   {
     darktable.db = dt_database_init(dbfilename_from_command, load_data, init_gui);
-    if(darktable.db == NULL)
+    if(IS_NULL_PTR(darktable.db))
     {
       printf("ERROR : cannot open database\n");
       dt_gui_splash_close();
@@ -1081,7 +1081,7 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
             // make the filename absolute ...
             if(argv[i] == NULL || *argv[i] == '\0') continue;
             gchar *filename = dt_util_normalize_path(argv[i]);
-            if(filename == NULL) continue;
+            if(IS_NULL_PTR(filename)) continue;
             if(!connection) connection = g_bus_get_sync(G_BUS_TYPE_SESSION, NULL, NULL);
             // ... and send it to the running instance of darktable
             image_loaded_elsewhere = g_dbus_connection_call_sync(connection, "org.darktable.service", "/darktable",

@@ -269,6 +269,24 @@ typedef unsigned int u_int;
 extern "C" {
 #endif
 
+/**
+ * @brief C is way too permissive with `!=`, `==` and `if(var)` checks, which can mean 
+ * too many things depending on what we compare. We force here a semantic NULL check
+ * for pointers types that will fail for anything else than pointers,
+ * and make the code more explicit about what is checked.
+ * This will fail at compile time on function pointers and anything that is not a pointer.
+ * 
+ */
+#define IS_NULL_PTR(p)                                            \
+  ({                                                              \
+    __typeof__(p) _tmp = (p);                                     \
+    (void)sizeof(char[                                            \
+      (__builtin_classify_type(_tmp) == 5) ? 1 : -1               \
+    ]);                                                           \
+    _tmp == NULL;                                                 \
+  })
+
+
 static inline int dt_get_thread_num()
 {
 #ifdef _OPENMP

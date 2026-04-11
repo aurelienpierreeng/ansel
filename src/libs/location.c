@@ -676,7 +676,7 @@ void *get_params(dt_lib_module_t *self, int *size)
   _lib_location_result_t *location = lib->selected_location;
 
   // we have nothing to store when the user hasn't picked a search result
-  if(location == NULL) return NULL;
+  if(IS_NULL_PTR(location)) return NULL;
 
   const size_t size_fixed = sizeof(struct params_fixed_t);
   const size_t size_name = strlen(location->name) + 1;

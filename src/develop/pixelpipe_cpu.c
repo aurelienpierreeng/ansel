@@ -35,15 +35,15 @@ int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
 
   assert(input == dt_pixel_cache_entry_get_data(input_entry));
 
-  if(input == NULL)
+  if(IS_NULL_PTR(input))
   {
     fprintf(stdout, "[dev_pixelpipe] %s got a NULL input, report that to developers\n", module->name());
     return 1;
   }
-  if(output == NULL)
+  if(IS_NULL_PTR(output))
     output = dt_pixel_cache_alloc(darktable.pixelpipe_cache, output_entry);
 
-  if(output == NULL)
+  if(IS_NULL_PTR(output))
   {
     fprintf(stdout, "[dev_pixelpipe] %s got a NULL output, report that to developers\n", module->name());
     return 1;
@@ -60,7 +60,7 @@ int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
   {
     process_input_temp
         = dt_pixelpipe_cache_alloc_align_float((size_t)piece->roi_in.width * piece->roi_in.height * 4, pipe);
-    if(process_input_temp == NULL)
+    if(IS_NULL_PTR(process_input_temp))
       return 1;
 
     dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, input_entry);
@@ -148,7 +148,7 @@ int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
       {
         blend_input_temp
             = dt_pixelpipe_cache_alloc_align_float((size_t)piece->roi_in.width * piece->roi_in.height * 4, pipe);
-        if(blend_input_temp == NULL)
+        if(IS_NULL_PTR(blend_input_temp))
         {
           if(input_locked)
             dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, input_entry);
@@ -178,7 +178,7 @@ int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
       {
         blend_output_temp
             = dt_pixelpipe_cache_alloc_align_float((size_t)piece->roi_out.width * piece->roi_out.height * 4, pipe);
-        if(blend_output_temp == NULL)
+        if(IS_NULL_PTR(blend_output_temp))
         {
           if(input_locked)
             dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, input_entry);

@@ -30,20 +30,20 @@ static gboolean _dt_dev_raster_mask_check(dt_dev_pixelpipe_iop_t *source_piece,
   gchar *clean_target_name = delete_underscore(target_module->name());
   gchar *target_name = g_strdup_printf("%s (%s)", clean_target_name, target_module->multi_name);
 
-  if(source_piece == NULL || current_piece == NULL)
+  if(IS_NULL_PTR(source_piece) || IS_NULL_PTR(current_piece))
   {
     fprintf(stderr,"[raster masks] ERROR: source: %s, current: %s\n",
             (source_piece != NULL) ? "is defined" : "is undefined",
             (current_piece != NULL) ? "is definded" : "is undefined");
 
     gchar *hint = NULL;
-    if(source_piece == NULL)
+    if(IS_NULL_PTR(source_piece))
     {
       hint = g_strdup_printf(
             _("- Check if the module providing the masks for the module %s has not been deleted.\n"),
             target_name);
     }
-    else if(current_piece == NULL)
+    else if(IS_NULL_PTR(current_piece))
     {
       hint = g_strdup_printf(_("- Check if the module %s (%s) providing the masks has not been moved above %s.\n"),
                              delete_underscore(source_piece->module->name()),

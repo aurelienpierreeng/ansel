@@ -121,7 +121,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
   // PASS1: Get a luminance map of image...
   float *luminance = (float *)malloc(sizeof(float) * ((size_t)roi_out->width * roi_out->height));
-  if(luminance == NULL) return 1;
+  if(IS_NULL_PTR(luminance)) return 1;
 
 // double lsmax=0.0,lsmin=1.0;
   __OMP_PARALLEL_FOR__()
@@ -149,7 +149,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
   size_t destbuf_size;
   float *const restrict dest_buf = dt_pixelpipe_cache_alloc_perthread_float(roi_out->width, &destbuf_size);
-  if(dest_buf == NULL)
+  if(IS_NULL_PTR(dest_buf))
   {
     dt_free(luminance);
     return 1;

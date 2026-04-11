@@ -936,7 +936,7 @@ static inline __attribute__((always_inline)) int toneeq_process(struct dt_iop_mo
   gboolean created_luminance_entry = FALSE;
   uint64_t luminance_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
 
-  if(in == NULL || out == NULL)
+  if(IS_NULL_PTR(in) || IS_NULL_PTR(out))
   {
     // Pointers are not 64-bits aligned, and SSE code will segfault
     dt_control_log(_("tone equalizer in/out buffer are ill-aligned, please report the bug to the developers"));
@@ -1281,7 +1281,7 @@ static int commit_channels_gains(const float factors[CHANNELS], dt_iop_toneequal
 static void gui_cache_init(struct dt_iop_module_t *self)
 {
   dt_iop_toneequalizer_gui_data_t *g = (dt_iop_toneequalizer_gui_data_t *)self->gui_data;
-  if(g == NULL) return;
+  if(IS_NULL_PTR(g)) return;
 
   dt_iop_gui_enter_critical_section(self);
   g->thumb_preview_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
@@ -1426,7 +1426,7 @@ static inline void compute_log_histogram_and_stats(const float *const restrict l
 static inline void update_histogram(struct dt_iop_module_t *const self)
 {
   dt_iop_toneequalizer_gui_data_t *const g = (dt_iop_toneequalizer_gui_data_t *)self->gui_data;
-  if(g == NULL) return;
+  if(IS_NULL_PTR(g)) return;
 
   dt_pixel_cache_entry_t *preview_entry = NULL;
   size_t width = 0;
@@ -1518,7 +1518,7 @@ static inline gboolean update_curve_lut(struct dt_iop_module_t *self)
   dt_iop_toneequalizer_params_t *p = (dt_iop_toneequalizer_params_t *)self->params;
   dt_iop_toneequalizer_gui_data_t *g = (dt_iop_toneequalizer_gui_data_t *)self->gui_data;
 
-  if(g == NULL) return FALSE;
+  if(IS_NULL_PTR(g)) return FALSE;
 
   gboolean valid = TRUE;
 
@@ -1909,7 +1909,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   const int wd = dev->roi.preview_width;
   const int ht = dev->roi.preview_height;
 
-  if(g == NULL) return 0;
+  if(IS_NULL_PTR(g)) return 0;
   if(wd < 1 || ht < 1) return 0;
 
   float pzxpy[2] = { (float)x, (float)y };
@@ -1982,7 +1982,7 @@ int mouse_leave(struct dt_iop_module_t *self)
 {
   dt_iop_toneequalizer_gui_data_t *g = (dt_iop_toneequalizer_gui_data_t *)self->gui_data;
 
-  if(g == NULL) return 0;
+  if(IS_NULL_PTR(g)) return 0;
 
   dt_iop_gui_enter_critical_section(self);
   g->cursor_valid = FALSE;
@@ -2062,7 +2062,7 @@ int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t 
 
   if(!sanity_check(self)) return 0;
   if(darktable.gui->reset) return 1;
-  if(g == NULL) return 0;
+  if(IS_NULL_PTR(g)) return 0;
   if(!g->has_focus) return 0;
   if(dt_iop_color_picker_is_visible(dev)) return 0;
 
@@ -2621,7 +2621,7 @@ static inline gboolean _init_drawing(dt_iop_module_t *const restrict self, GtkWi
 // must be called while holding self->gui_lock
 static inline void init_nodes_x(dt_iop_toneequalizer_gui_data_t *g)
 {
-  if(g == NULL) return;
+  if(IS_NULL_PTR(g)) return;
 
   if(!g->valid_nodes_x && g->graph_width > 0)
   {
@@ -2635,7 +2635,7 @@ static inline void init_nodes_x(dt_iop_toneequalizer_gui_data_t *g)
 // must be called while holding self->gui_lock
 static inline void init_nodes_y(dt_iop_toneequalizer_gui_data_t *g)
 {
-  if(g == NULL) return;
+  if(IS_NULL_PTR(g)) return;
 
   if(g->user_param_valid && g->graph_height > 0)
   {
@@ -2651,7 +2651,7 @@ static gboolean area_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
   // Draw the widget equalizer view
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_toneequalizer_gui_data_t *g = (dt_iop_toneequalizer_gui_data_t *)self->gui_data;
-  if(g == NULL) return FALSE;
+  if(IS_NULL_PTR(g)) return FALSE;
 
   // Init or refresh the drawing cache
   //if(!g->graph_valid)
@@ -3035,7 +3035,7 @@ static void _develop_ui_pipe_started_callback(gpointer instance, gpointer user_d
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_toneequalizer_gui_data_t *g = (dt_iop_toneequalizer_gui_data_t *)self->gui_data;
-  if(g == NULL) return;
+  if(IS_NULL_PTR(g)) return;
   _switch_cursors(self);
 
   if(!self->expanded || !self->enabled)
@@ -3060,7 +3060,7 @@ static void _develop_history_resync_callback(gpointer instance, gpointer user_da
   (void)instance;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_toneequalizer_gui_data_t *g = (dt_iop_toneequalizer_gui_data_t *)self->gui_data;
-  if(g == NULL || !self->dev || !self->dev->preview_pipe) return;
+  if(IS_NULL_PTR(g) || !self->dev || !self->dev->preview_pipe) return;
 
   const uint64_t preview_hash = _current_preview_luminance_hash(self, NULL, NULL);
   if(preview_hash == DT_PIXELPIPE_CACHE_HASH_INVALID)
@@ -3138,7 +3138,7 @@ static void _develop_cacheline_ready_callback(gpointer instance, const guint64 h
   (void)instance;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_toneequalizer_gui_data_t *g = (dt_iop_toneequalizer_gui_data_t *)self->gui_data;
-  if(g == NULL || !self->dev || !self->dev->preview_pipe) return;
+  if(IS_NULL_PTR(g) || !self->dev || !self->dev->preview_pipe) return;
 
   dt_iop_gui_enter_critical_section(self);
   const gboolean matched = (g->pending_preview_hash == hash);
@@ -3192,7 +3192,7 @@ static void _develop_ui_pipe_finished_callback(gpointer instance, gpointer user_
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_toneequalizer_gui_data_t *g = (dt_iop_toneequalizer_gui_data_t *)self->gui_data;
-  if(g == NULL) return;
+  if(IS_NULL_PTR(g)) return;
   _switch_cursors(self);
 }
 
@@ -3200,7 +3200,7 @@ static void _develop_ui_pipe_finished_callback(gpointer instance, gpointer user_
 void gui_reset(struct dt_iop_module_t *self)
 {
   dt_iop_toneequalizer_gui_data_t *g = (dt_iop_toneequalizer_gui_data_t *)self->gui_data;
-  if(g == NULL) return;
+  if(IS_NULL_PTR(g)) return;
   dt_iop_request_focus(self);
   dt_bauhaus_widget_set_quad_active(g->exposure_boost, FALSE);
   dt_bauhaus_widget_set_quad_active(g->contrast_boost, FALSE);

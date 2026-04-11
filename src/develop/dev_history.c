@@ -787,7 +787,7 @@ gboolean dt_dev_add_history_item_ext(dt_develop_t *dev, struct dt_iop_module_t *
       dt_dev_history_get_last_item_by_module(dev->history, module, g_list_length(dev->history));
     // check if NULL first or prevous_item->module will segfault
     // We need to add a new pipeline node if:
-    add_new_pipe_node = (previous_item == NULL)                         // it's the first history entry for this module
+    add_new_pipe_node = (IS_NULL_PTR(previous_item))                         // it's the first history entry for this module
                         || (previous_item->enabled != module->enabled); // the previous history entry is disabled
     // if previous history entry is disabled and we don't have any other entry,
     // it is possible the pipeline will not have this node.
@@ -2110,7 +2110,7 @@ static int _check_deleted_instances(dt_develop_t *dev, GList **_iop_list, GList 
   while(modules)
   {
     dt_iop_module_t *mod = (dt_iop_module_t *)modules->data;
-    if(mod == NULL) continue;
+    if(IS_NULL_PTR(mod)) continue;
 
     int delete_module = 0;
 
@@ -2294,12 +2294,12 @@ static int _create_deleted_modules(GList **_iop_list, GList *history_list)
     dt_dev_history_item_t *hitem = (dt_dev_history_item_t *)l->data;
 
     // this fixes the duplicate module when undo: hitem->multi_priority = 0;
-    if(hitem->module == NULL)
+    if(IS_NULL_PTR(hitem->module))
     {
       changed = 1;
 
       const dt_iop_module_t *base_module = dt_iop_get_module_from_list(iop_list, hitem->op_name);
-      if(base_module == NULL)
+      if(IS_NULL_PTR(base_module))
       {
         fprintf(stderr, "[_create_deleted_modules] can't find base module for %s\n", hitem->op_name);
         return changed;

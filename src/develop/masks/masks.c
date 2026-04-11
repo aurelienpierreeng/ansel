@@ -307,7 +307,7 @@ static void *_dup_masks_form_cb(const void *formdata, gpointer user_data)
   dt_masks_form_t *source_form = (dt_masks_form_t *)formdata;
   dt_masks_form_t *override_form = (dt_masks_form_t *)user_data;
   const dt_masks_form_t *form_to_copy
-      = (override_form == NULL || source_form->formid != override_form->formid) ? source_form : override_form;
+      = (IS_NULL_PTR(override_form) || source_form->formid != override_form->formid) ? source_form : override_form;
   return (void *)dt_masks_dup_masks_form(form_to_copy);
 }
 
@@ -1337,7 +1337,7 @@ static int dt_masks_legacy_params_v1_to_v2(dt_develop_t *develop, void *params)
   }
   else
   {
-    if(develop->iop == NULL) return 1;
+    if(IS_NULL_PTR(develop->iop)) return 1;
 
     const char *opname = "flip";
     dt_iop_module_t *module = NULL;
@@ -1352,7 +1352,7 @@ static int dt_masks_legacy_params_v1_to_v2(dt_develop_t *develop, void *params)
       }
     }
 
-    if(module == NULL) return 1;
+    if(IS_NULL_PTR(module)) return 1;
 
     dt_dev_pixelpipe_iop_t piece = { 0 };
 
@@ -3112,7 +3112,7 @@ void dt_masks_form_remove(struct dt_iop_module_t *module, dt_masks_form_t *group
 
     }
     if(removed) dt_masks_form_update_gravity_center(group_form);
-    if(removed && group_form->points == NULL) dt_masks_form_remove(module, NULL, group_form);
+    if(removed && IS_NULL_PTR(group_form->points)) dt_masks_form_remove(module, NULL, group_form);
     return;
   }
 
@@ -3166,7 +3166,7 @@ void dt_masks_form_remove(struct dt_iop_module_t *module, dt_masks_form_t *group
           {
             dt_masks_iop_update(iop_module);
 
-            if(iop_group->points == NULL) dt_masks_form_remove(iop_module, NULL, iop_group);
+            if(IS_NULL_PTR(iop_group->points)) dt_masks_form_remove(iop_module, NULL, iop_group);
           }
         }
       }

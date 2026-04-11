@@ -585,7 +585,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   dt_iop_colorbalancergb_gui_data_t *g = (dt_iop_colorbalancergb_gui_data_t *)self->gui_data;
   const struct dt_iop_order_iccprofile_info_t *const work_profile
       = dt_ioppr_get_pipe_current_profile_info(self, pipe);
-  if(work_profile == NULL) return 0; // no point
+  if(IS_NULL_PTR(work_profile)) return 0; // no point
 
   // work profile can't be fetched in commit_params since it is not yet initialised
   // work_profile->matrix_in === RGB_to_XYZ
@@ -939,7 +939,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   // Get working color profile
   const struct dt_iop_order_iccprofile_info_t *const work_profile
       = dt_ioppr_get_pipe_current_profile_info(self, pipe);
-  if(work_profile == NULL) return err; // no point
+  if(IS_NULL_PTR(work_profile)) return err; // no point
 
   cl_mem dev_profile_info = NULL;
   cl_mem dev_profile_lut = NULL;
@@ -1189,7 +1189,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   // WARNING: this function is not triggered upon working profile change,
   // so the gamut boundaries are wrong until we change some param in this module
   struct dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_pipe_current_profile_info(self, pipe);
-  if(work_profile == NULL) return;
+  if(IS_NULL_PTR(work_profile)) return;
   if(work_profile != d->work_profile)
   {
     d->lut_inited = FALSE;
@@ -1201,7 +1201,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   if(!d->lut_inited)
   {
     float *const restrict LUT_saturation = dt_alloc_align_float(LUT_ELEM);
-    if(LUT_saturation == NULL) return;
+    if(IS_NULL_PTR(LUT_saturation)) return;
 
     // init the LUT between -pi and pi by increments of 1°
     for(size_t k = 0; k < LUT_ELEM; k++) LUT_saturation[k] = 0.f;
@@ -1360,7 +1360,7 @@ void pipe_RGB_to_Ych(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, const dt_a
                      dt_aligned_pixel_t Ych)
 {
   const struct dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_pipe_current_profile_info(self, pipe);
-  if(work_profile == NULL) return; // no point
+  if(IS_NULL_PTR(work_profile)) return; // no point
 
   dt_aligned_pixel_t XYZ_D50 = { 0.f };
   dt_aligned_pixel_t XYZ_D65 = { 0.f };

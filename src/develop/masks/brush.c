@@ -390,28 +390,28 @@ static void _brush_init_ctrl_points(dt_masks_form_t *mask_form)
       dt_masks_node_brush_t *point5 = nextnext ? nextnext->data : NULL;
 
       // deal with end points: make both extending points mirror their neighborhood
-      if(point1 == NULL && point2 == NULL)
+      if(IS_NULL_PTR(point1) && IS_NULL_PTR(point2))
       {
         start_point[0].node[0] = start_point[1].node[0] = 2 * point3->node[0] - point4->node[0];
         start_point[0].node[1] = start_point[1].node[1] = 2 * point3->node[1] - point4->node[1];
         point1 = &(start_point[0]);
         point2 = &(start_point[1]);
       }
-      else if(point1 == NULL)
+      else if(IS_NULL_PTR(point1))
       {
         start_point[0].node[0] = 2 * point2->node[0] - point3->node[0];
         start_point[0].node[1] = 2 * point2->node[1] - point3->node[1];
         point1 = &(start_point[0]);
       }
 
-      if(point4 == NULL && point5 == NULL)
+      if(IS_NULL_PTR(point4) && IS_NULL_PTR(point5))
       {
         end_point[0].node[0] = end_point[1].node[0] = 2 * point3->node[0] - point2->node[0];
         end_point[0].node[1] = end_point[1].node[1] = 2 * point3->node[1] - point2->node[1];
         point4 = &(end_point[0]);
         point5 = &(end_point[1]);
       }
-      else if(point5 == NULL)
+      else if(IS_NULL_PTR(point5))
       {
         end_point[0].node[0] = 2 * point4->node[0] - point3->node[0];
         end_point[0].node[1] = 2 * point4->node[1] - point3->node[1];
@@ -736,12 +736,12 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
   dt_masks_dynbuf_t *dpoints = NULL, *dborder = NULL, *dpayload = NULL;
 
   dpoints = dt_masks_dynbuf_init(1000000, "brush dpoints");
-  if(dpoints == NULL) return 1;
+  if(IS_NULL_PTR(dpoints)) return 1;
 
   if(border_buffer)
   {
     dborder = dt_masks_dynbuf_init(1000000, "brush dborder");
-    if(dborder == NULL)
+    if(IS_NULL_PTR(dborder))
     {
       dt_masks_dynbuf_free(dpoints);
       return 1;
@@ -751,7 +751,7 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
   if(payload_buffer)
   {
     dpayload = dt_masks_dynbuf_init(1000000, "brush dpayload");
-    if(dpayload == NULL)
+    if(IS_NULL_PTR(dpayload))
     {
       dt_masks_dynbuf_free(dpoints);
       dt_masks_dynbuf_free(dborder);
@@ -2771,7 +2771,7 @@ static int _brush_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe
   const size_t buffer_size = (size_t)(*width) * (*height);
   // ensure that the buffer is zeroed, as the below code only fills in pixels in the falloff region
   *buffer = dt_pixelpipe_cache_alloc_align_float_cache(buffer_size, 0);
-  if(*buffer == NULL)
+  if(IS_NULL_PTR(*buffer))
   {
     dt_pixelpipe_cache_free_align(points);
     dt_pixelpipe_cache_free_align(border);

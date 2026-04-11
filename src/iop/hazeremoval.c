@@ -646,7 +646,7 @@ static int ambient_light_cl(struct dt_iop_module_t *self, int devid, cl_mem img,
   float *in = dt_pixelpipe_cache_alloc_align_float_cache(
       (size_t)width * height * element_size,
       0);
-  if(in == NULL) goto error;
+  if(IS_NULL_PTR(in)) goto error;
 
   int err = dt_opencl_read_host_from_device(devid, in, img, width, height, element_size);
   if(err != CL_SUCCESS) goto error;

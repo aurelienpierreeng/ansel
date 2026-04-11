@@ -248,7 +248,7 @@ static void dt_iop_levels_compute_levels_automatic(dt_iop_module_t *self,
     d->levels[k] = NAN;
   }
 
-  if(histogram == NULL) return;
+  if(IS_NULL_PTR(histogram)) return;
 
   // find min and max levels
   size_t n = 0;
@@ -826,7 +826,7 @@ static void dt_iop_levels_move_handle(dt_iop_module_t *self, int handle_move, fl
 
   if((handle_move < 0) || handle_move > 2) return;
 
-  if(levels == NULL) return;
+  if(IS_NULL_PTR(levels)) return;
 
   // Determining the minimum and maximum bounds for the drag handles
   switch(handle_move)

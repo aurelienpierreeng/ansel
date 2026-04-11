@@ -870,13 +870,13 @@ static float complex point_at_arc_length(const float complex points[], const int
 static float *build_lookup_table(const int distance, const float control1, const float control2)
 {
   float complex *clookup = dt_pixelpipe_cache_alloc_align_cache(sizeof(float complex) * (distance + 2), 0);
-  if(clookup == NULL) return NULL;
+  if(IS_NULL_PTR(clookup)) return NULL;
 
   interpolate_cubic_bezier(I, control1 + I, control2, 1.0, clookup, distance + 2);
 
   // reparameterize bezier by x and keep only y values
   float *lookup = dt_pixelpipe_cache_alloc_align_float_cache((size_t)(distance + 2), 0);
-  if(lookup == NULL)
+  if(IS_NULL_PTR(lookup))
   {
     dt_pixelpipe_cache_free_align(clookup);
     return NULL;
@@ -955,12 +955,12 @@ static int build_round_stamp(float complex **pstamp,
 
   float complex *restrict stamp =
     calloc(sizeof(float complex), (size_t)stamp_extent->width * stamp_extent->height);
-  if(stamp == NULL) return 1;
+  if(IS_NULL_PTR(stamp)) return 1;
 
   // lookup table: map of distance from center point => warp
   const int table_size = iradius * LOOKUP_OVERSAMPLE;
   const float *restrict lookup_table = build_lookup_table(table_size, warp->control1, warp->control2);
-  if(lookup_table == NULL)
+  if(IS_NULL_PTR(lookup_table))
   {
     dt_free(stamp);
     return 1;
@@ -1404,7 +1404,7 @@ static int _distort_xtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *
     g_list_free_full(interpolated, dt_free_gpointer);
     interpolated = NULL;
 
-    if(map == NULL) return 0;
+    if(IS_NULL_PTR(map)) return 0;
 
     const int map_size =  extent.width * extent.height;
     const int x_last = extent.x + extent.width;
@@ -1483,7 +1483,7 @@ void distort_mask(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t 
 
   cairo_rectangle_int_t map_extent;
   float complex *map = build_global_distortion_map(self, pipe, piece, roi_in, roi_out, &map_extent);
-  if(map == NULL)
+  if(IS_NULL_PTR(map))
   {
     if(map_extent.width != 0 && map_extent.height != 0) return;
     return;
@@ -1524,7 +1524,7 @@ int process(struct dt_iop_module_t *module, const dt_dev_pixelpipe_t *pipe, cons
 
   cairo_rectangle_int_t map_extent;
   float complex *map = build_global_distortion_map(module, pipe, piece, roi_in, roi_out, &map_extent);
-  if(map == NULL)
+  if(IS_NULL_PTR(map))
   {
     if(map_extent.width != 0 && map_extent.height != 0) return 1;
     return 0;
@@ -1645,8 +1645,8 @@ static cl_int_t apply_global_distortion_map_cl(struct dt_iop_module_t *module,
   cl_mem_t dev_kernel = dt_opencl_copy_host_to_device_constant
     (devid, sizeof(float) * (kdesc.size * kdesc.resolution  + 1), (void *) k);
 
-  if(dev_roi_in == NULL || dev_roi_out == NULL || dev_map == NULL || dev_map_extent == NULL
-      || dev_kdesc == NULL || dev_kernel == NULL || k == NULL)
+  if(IS_NULL_PTR(dev_roi_in) || IS_NULL_PTR(dev_roi_out) || IS_NULL_PTR(dev_map) || IS_NULL_PTR(dev_map_extent)
+      || IS_NULL_PTR(dev_kdesc) || IS_NULL_PTR(dev_kernel) || IS_NULL_PTR(k))
     goto error;
 
   dt_opencl_set_kernel_arg(devid, gd->warp_kernel, 0, sizeof(cl_mem), &dev_in);
@@ -1699,7 +1699,7 @@ int process_cl(struct dt_iop_module_t *module, const dt_dev_pixelpipe_t *pipe,
   // 2. build the distortion map
   cairo_rectangle_int_t map_extent;
   const float complex *map = build_global_distortion_map(module, pipe, piece, roi_in, roi_out, &map_extent);
-  if(map == NULL)
+  if(IS_NULL_PTR(map))
   {
     if(map_extent.width != 0 && map_extent.height != 0) return FALSE;
     return TRUE;

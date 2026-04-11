@@ -177,7 +177,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
   // acquire temp memory for distorted pixel coords
   size_t coordbufsize;
   float *const restrict coordbuf = dt_pixelpipe_cache_alloc_perthread_float(2*roi_out->width, &coordbufsize);
-  if(coordbuf == NULL)
+  if(IS_NULL_PTR(coordbuf))
   {
     dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
     return 1;
@@ -299,12 +299,12 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   const int raw_height = buf.height;
 
   dev_raw = dt_opencl_copy_host_to_device(devid, buf.buf, raw_width, raw_height, sizeof(uint16_t));
-  if(dev_raw == NULL) goto error;
+  if(IS_NULL_PTR(dev_raw)) goto error;
 
   const size_t coordbufsize = (size_t)height * width * 2 * sizeof(float);
 
   coordbuf = dt_pixelpipe_cache_alloc_align_cache(coordbufsize, pipe->type);
-  if(coordbuf == NULL) goto error;
+  if(IS_NULL_PTR(coordbuf)) goto error;
   __OMP_PARALLEL_FOR_SIMD__()
   for(int j = 0; j < height; j++)
   {
@@ -322,7 +322,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   }
 
   dev_coord = dt_opencl_alloc_device_buffer(devid, coordbufsize);
-  if(dev_coord == NULL) goto error;
+  if(IS_NULL_PTR(dev_coord)) goto error;
 
   /* _blocking_ memory transfer: host coordbuf buffer -> opencl dev_coordbuf */
   err = dt_opencl_write_buffer_to_device(devid, coordbuf, dev_coord, 0, coordbufsize, CL_TRUE);
@@ -335,7 +335,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
       kernel = gd->kernel_rawoverexposed_mark_cfa;
 
       dev_colors = dt_opencl_alloc_device_buffer(devid, sizeof(dt_iop_rawoverexposed_colors));
-      if(dev_colors == NULL) goto error;
+      if(IS_NULL_PTR(dev_colors)) goto error;
 
       /* _blocking_ memory transfer: host coordbuf buffer -> opencl dev_colors */
       err = dt_opencl_write_buffer_to_device(devid, (void *)dt_iop_rawoverexposed_colors, dev_colors, 0,
@@ -356,11 +356,11 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   {
     dev_xtrans
         = dt_opencl_copy_host_to_device_constant(devid, sizeof(image->dsc.xtrans), (void *)image->dsc.xtrans);
-    if(dev_xtrans == NULL) goto error;
+    if(IS_NULL_PTR(dev_xtrans)) goto error;
   }
 
   dev_thresholds = dt_opencl_copy_host_to_device_constant(devid, sizeof(unsigned int) * 4, (void *)d->threshold);
-  if(dev_thresholds == NULL) goto error;
+  if(IS_NULL_PTR(dev_thresholds)) goto error;
 
   size_t sizes[2] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid) };
   dt_opencl_set_kernel_arg(devid, kernel, 0, sizeof(cl_mem), &dev_in);

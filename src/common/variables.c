@@ -476,7 +476,7 @@ static char *_get_base_value(dt_variables_params_t *params, char **variable)
     const dt_image_t *img = params->img ? (dt_image_t *)params->img
                                         : dt_image_cache_get(darktable.image_cache, params->imgid, 'r');
     dt_image_print_exif(img, buffer, sizeof(buffer));
-    if(params->img == NULL) dt_image_cache_read_release(darktable.image_cache, img);
+    if(IS_NULL_PTR(params->img)) dt_image_cache_read_release(darktable.image_cache, img);
     result = g_strdup(buffer);
   }
   else if(_has_prefix(variable, "VERSION.NAME") || _has_prefix(variable, "VERSION_NAME"))

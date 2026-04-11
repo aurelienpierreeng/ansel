@@ -3301,7 +3301,7 @@ void gui_focus(dt_iop_module_t *self, gboolean in)
 void gui_cleanup(dt_iop_module_t *self)
 {
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
-  if(g == NULL) return;
+  if(IS_NULL_PTR(g)) return;
 
   _set_drawlayer_os_cursor_hidden(FALSE);
   _update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_FOCUS_LOSS, FALSE);

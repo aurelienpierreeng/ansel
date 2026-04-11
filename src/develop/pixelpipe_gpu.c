@@ -48,14 +48,14 @@ static int _gpu_init_input(dt_dev_pixelpipe_t *pipe,
 {
   dt_iop_module_t *module = piece->module;
 
-  if(*input == NULL)
+  if(IS_NULL_PTR(*input))
   {
     dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, TRUE, input_entry);
     *input = dt_pixel_cache_alloc(darktable.pixelpipe_cache, input_entry);
     dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, FALSE, input_entry);
   }
 
-  if(*input == NULL)
+  if(IS_NULL_PTR(*input))
   {
     dt_print(DT_DEBUG_OPENCL,
              "[dev_pixelpipe] %s CPU fallback has no input buffer (cache allocation failed?)\n",
@@ -105,14 +105,14 @@ static int _gpu_early_cpu_fallback_if_unsupported(dt_dev_pixelpipe_t *pipe, floa
   }
   else if(cl_mem_input && *cl_mem_input != NULL)
   {
-    if(input && *input == NULL)
+    if(input && IS_NULL_PTR(*input))
     {
       dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, TRUE, input_entry);
       *input = dt_pixel_cache_alloc(darktable.pixelpipe_cache, input_entry);
       dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, FALSE, input_entry);
     }
 
-    if(!input || *input == NULL)
+    if(!input || IS_NULL_PTR(*input))
     {
       dt_print(DT_DEBUG_OPENCL,
                "[dev_pixelpipe] %s CPU fallback has no input buffer (cache allocation failed?)\n",
@@ -132,7 +132,7 @@ static int _gpu_early_cpu_fallback_if_unsupported(dt_dev_pixelpipe_t *pipe, floa
     *input = dt_dev_pixelpipe_cache_restore_cl_buffer(pipe, *input, *cl_mem_input, &piece->roi_in, module,
                                         piece->dsc_in.bpp, input_entry,
                                         "cpu fallback input copy to cache");
-    if(*input == NULL)
+    if(IS_NULL_PTR(*input))
     {
       dt_print(DT_DEBUG_OPENCL,
                "[dev_pixelpipe] %s couldn't resync GPU input to cache for CPU fallback\n",
@@ -149,7 +149,7 @@ static int _gpu_early_cpu_fallback_if_unsupported(dt_dev_pixelpipe_t *pipe, floa
       return 1;
     }
   }
-  else if(!input || *input == NULL)
+  else if(!input || IS_NULL_PTR(*input))
   {
     dt_print(DT_DEBUG_OPENCL,
              "[dev_pixelpipe] %s CPU fallback has no input buffer (cache allocation failed?)\n",
@@ -220,7 +220,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
     borrowed_cl_mem_input = (cl_mem_input != NULL);
   }
 
-  if(cl_mem_input == NULL && input == NULL && pipe->devid >= 0)
+  if(IS_NULL_PTR(cl_mem_input) && IS_NULL_PTR(input) && pipe->devid >= 0)
   {
     /* Hostless cachelines only carry the previous stage device payload, so match that published layout here too. */
     cl_mem_input = dt_dev_pixelpipe_cache_borrow_cl_payload(input_entry, NULL, pipe->devid,
@@ -229,7 +229,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
     borrowed_cl_mem_input = (cl_mem_input != NULL);
   }
 
-  if(input == NULL && cl_mem_input == NULL)
+  if(IS_NULL_PTR(input) && IS_NULL_PTR(cl_mem_input))
   {
     dt_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] %s has no RAM nor vRAM input... aborting.\n", module->name());
     return 1;
@@ -272,10 +272,10 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
                          && (fits_on_device || piece->process_tiling_ready);
 
   if(!possible_cl || !fits_on_device) *cache_output = TRUE;
-  if(*cache_output && output == NULL)
+  if(*cache_output && IS_NULL_PTR(output))
   {
     output = dt_pixel_cache_alloc(darktable.pixelpipe_cache, output_entry);
-    if(output == NULL) goto error;
+    if(IS_NULL_PTR(output)) goto error;
   }
 
   if(possible_cl && !fits_on_device)
@@ -310,7 +310,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
       goto error;
     cl_mem_process_input = cl_mem_input;
 
-    if(cl_mem_output == NULL)
+    if(IS_NULL_PTR(cl_mem_output))
     {
       const gboolean reuse_output_cacheline = _requests_cache(pipe, piece)
                                               && (pipe->realtime || !(*cache_output));
@@ -318,7 +318,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
       cl_mem_output = dt_dev_pixelpipe_cache_get_cl_buffer(pipe->devid, output, &piece->roi_out, piece->dsc_out.bpp, module,
                                        "output", output_entry, reuse_output_pinned, reuse_output_cacheline,
                                        NULL, cl_mem_input);
-      if(cl_mem_output == NULL) goto error;
+      if(IS_NULL_PTR(cl_mem_output)) goto error;
     }
 
     const int cst_before_cl = process_input_dsc.cst;
@@ -328,7 +328,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
       cl_mem_process_input_temp = dt_dev_pixelpipe_cache_alloc_cl_device_buffer(pipe->devid, &piece->roi_in, piece->dsc_in.bpp,
                                                                module, "module input colorspace temp",
                                                                cl_mem_input);
-      if(cl_mem_process_input_temp == NULL)
+      if(IS_NULL_PTR(cl_mem_process_input_temp))
         goto error;
 
       if(!dt_ioppr_transform_image_colorspace_cl(module, pipe->devid, cl_mem_input, cl_mem_process_input_temp,
@@ -377,7 +377,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
           cl_mem_blend_input_temp = dt_dev_pixelpipe_cache_alloc_cl_device_buffer(pipe->devid, &piece->roi_in, piece->dsc_in.bpp,
                                                                  module, "blend input colorspace temp",
                                                                  cl_mem_process_input);
-          if(cl_mem_blend_input_temp == NULL)
+          if(IS_NULL_PTR(cl_mem_blend_input_temp))
             goto error;
 
           success &= dt_ioppr_transform_image_colorspace_cl(module, pipe->devid,
@@ -399,7 +399,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
           cl_mem_blend_output_temp = dt_dev_pixelpipe_cache_alloc_cl_device_buffer(pipe->devid, &piece->roi_out,
                                                                   piece->dsc_out.bpp, module,
                                                                   "blend output colorspace temp", cl_mem_output);
-          if(cl_mem_blend_output_temp == NULL)
+          if(IS_NULL_PTR(cl_mem_blend_output_temp))
             goto error;
 
           success &= dt_ioppr_transform_image_colorspace_cl(module, pipe->devid, cl_mem_output,
@@ -479,7 +479,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
     {
       module_input_temp
           = dt_pixelpipe_cache_alloc_align_float((size_t)piece->roi_in.width * piece->roi_in.height * 4, pipe);
-      if(module_input_temp == NULL)
+      if(IS_NULL_PTR(module_input_temp))
         goto error;
 
       dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, input_entry);
@@ -536,7 +536,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
       {
         blend_input_temp
             = dt_pixelpipe_cache_alloc_align_float((size_t)piece->roi_in.width * piece->roi_in.height * 4, pipe);
-        if(blend_input_temp == NULL)
+        if(IS_NULL_PTR(blend_input_temp))
         {
           if(input_locked)
             dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, input_entry);
@@ -559,7 +559,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
       {
         float *blend_output_temp
             = dt_pixelpipe_cache_alloc_align_float((size_t)piece->roi_out.width * piece->roi_out.height * 4, pipe);
-        if(blend_output_temp == NULL)
+        if(IS_NULL_PTR(blend_output_temp))
         {
           if(input_locked)
             dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, input_entry);
@@ -676,7 +676,7 @@ error:
       return 1;
     }
   }
-  else if(input == NULL)
+  else if(IS_NULL_PTR(input))
   {
     dt_print(DT_DEBUG_OPENCL,
              "[dev_pixelpipe] %s CPU fallback has no input buffer (cache allocation failed?)\n",

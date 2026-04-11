@@ -995,7 +995,7 @@ static inline int wavelets_process(const float *const restrict in, float *const 
   // allocate a one-row temporary buffer for the decomposition
   size_t padded_size;
   float *const tempbuf = dt_pixelpipe_cache_alloc_perthread_float(4 * width, &padded_size); //TODO: alloc in caller
-  if(tempbuf == NULL) return 1;
+  if(IS_NULL_PTR(tempbuf)) return 1;
 
   for(int s = 0; s < scales; ++s)
   {
@@ -1170,7 +1170,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
   const int diffusion_scales = num_steps_to_reach_equivalent_sigma(B_SPLINE_SIGMA, final_radius);
   const int scales = CLAMP(diffusion_scales, 1, MAX_NUM_SCALES);
 
-  gboolean out_of_memory = (temp1 == NULL) || (temp2 == NULL);
+  gboolean out_of_memory = (IS_NULL_PTR(temp1)) || (IS_NULL_PTR(temp2));
   // One full-resolution buffer per stored wavelet band.
   float *restrict HF[MAX_NUM_SCALES] = { NULL };
   for(int s = 0; s < scales; s++)

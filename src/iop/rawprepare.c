@@ -573,10 +573,10 @@ int process_cl(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_d
   const int csx = compute_proper_crop(piece, roi_in, d->x), csy = compute_proper_crop(piece, roi_in, d->y);
 
   dev_sub = dt_opencl_copy_host_to_device_constant(devid, sizeof(float) * 4, d->sub);
-  if(dev_sub == NULL) goto error;
+  if(IS_NULL_PTR(dev_sub)) goto error;
 
   dev_div = dt_opencl_copy_host_to_device_constant(devid, sizeof(float) * 4, d->div);
-  if(dev_div == NULL) goto error;
+  if(IS_NULL_PTR(dev_div)) goto error;
 
   const int width = roi_out->width;
   const int height = roi_out->height;
@@ -690,7 +690,7 @@ gboolean check_gain_maps(dt_iop_module_t *self, dt_dng_gain_map_t **gainmaps_out
     // check that each GainMap applies to one filter of a Bayer image,
     // covers the entire image, and is not a 1x1 no-op
     dt_dng_gain_map_t *g = (dt_dng_gain_map_t *)g_list_nth_data(image->dng_gain_maps, i);
-    if(g == NULL ||
+    if(IS_NULL_PTR(g) ||
       g->plane != 0 || g->planes != 1 || g->map_planes != 1 ||
       g->row_pitch != 2 || g->col_pitch != 2 ||
       g->map_points_v < 2 || g->map_points_h < 2 ||

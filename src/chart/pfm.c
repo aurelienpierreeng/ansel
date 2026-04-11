@@ -140,7 +140,7 @@ void write_pfm(const char *filename, int width, int height, float *data)
     // INFO: per-line fwrite call seems to perform best. LebedevRI, 18.04.2014
     (void)fprintf(f, "PF\n%d %d\n-1.0\n", width, height);
     void *buf_line = dt_pixelpipe_cache_alloc_align_float_cache((size_t)3 * width, 0);
-    if(buf_line == NULL) goto error;
+    if(IS_NULL_PTR(buf_line)) goto error;
     
     for(int j = 0; j < height; j++)
     {

@@ -253,7 +253,7 @@ static void _scale_optim()
   gchar *pdiv = strchr(scale_str, '/');
 
   gchar scale_buf[64] = "";
-  if(pdiv == NULL)
+  if(IS_NULL_PTR(pdiv))
   {
     if(_is_int(num) && num > 0.0)
     {
@@ -392,7 +392,7 @@ static void _scale_changed(GtkEntry *spin, dt_lib_export_t *d)
   for (i = 0; i < len; i++)
   {
     char *val = strchr(validSign, value[i]);
-    if(val == NULL)
+    if(IS_NULL_PTR(val))
     {
       if(idiv==0)
       {
@@ -776,7 +776,7 @@ static void set_storage_by_name(dt_lib_export_t *d, const char *name)
   const char *format_name = dt_conf_get_string_const(CONFIG_PREFIX "format_name");
   const dt_imageio_module_format_t *format = dt_imageio_get_format_by_name(format_name);
 
-  if(format == NULL
+  if(IS_NULL_PTR(format)
      || dt_bauhaus_combobox_set_from_text(d->format, format->name()) == FALSE)
     dt_bauhaus_combobox_set(d->format, 0);
 }

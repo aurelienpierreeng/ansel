@@ -665,7 +665,7 @@ int main(int argc, char *arg[])
   dt_imageio_module_data_t *sdata, *fdata;
 
   storage = dt_imageio_get_storage_by_name("disk"); // only exporting to disk makes sense
-  if(storage == NULL)
+  if(IS_NULL_PTR(storage))
   {
     fprintf(
         stderr, "%s\n",
@@ -677,7 +677,7 @@ int main(int argc, char *arg[])
   }
 
   sdata = storage->get_params(storage);
-  if(sdata == NULL)
+  if(IS_NULL_PTR(sdata))
   {
     fprintf(stderr, "%s\n", _("failed to get parameters from storage module, aborting export ..."));
     dt_free(m_arg);
@@ -693,7 +693,7 @@ int main(int argc, char *arg[])
   dt_free(output_filename);
 
   format = dt_imageio_get_format_by_name(output_ext);
-  if(format == NULL)
+  if(IS_NULL_PTR(format))
   {
     fprintf(stderr, _("unknown extension '.%s'"), output_ext);
     fprintf(stderr, "\n");
@@ -703,7 +703,7 @@ int main(int argc, char *arg[])
   }
 
   fdata = format->get_params(format);
-  if(fdata == NULL)
+  if(IS_NULL_PTR(fdata))
   {
     fprintf(stderr, "%s\n", _("failed to get parameters from format module, aborting export ..."));
     dt_free(m_arg);

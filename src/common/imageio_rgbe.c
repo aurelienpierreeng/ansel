@@ -372,7 +372,7 @@ int RGBE_WritePixels_RLE(FILE *fp, float *data, int scanline_width,
     /* run length encoding is not allowed so write flat*/
     return RGBE_WritePixels(fp,data,scanline_width*num_scanlines);
   buffer = (unsigned char *)malloc(sizeof(unsigned char)*4*scanline_width);
-  if (buffer == NULL)
+  if (IS_NULL_PTR(buffer))
     /* no buffer space so write flat */
     return RGBE_WritePixels(fp,data,scanline_width*num_scanlines);
   while(num_scanlines-- > 0)
@@ -443,9 +443,9 @@ int RGBE_ReadPixels_RLE(FILE *fp, float *data, int scanline_width, int num_scanl
       dt_free(scanline_buffer);
       return rgbe_error(rgbe_format_error, "wrong scanline width");
     }
-    if(scanline_buffer == NULL)
+    if(IS_NULL_PTR(scanline_buffer))
       scanline_buffer = (unsigned char *)malloc(sizeof(unsigned char) * 4 * scanline_width);
-    if(scanline_buffer == NULL) return rgbe_error(rgbe_memory_error, "unable to allocate buffer space");
+    if(IS_NULL_PTR(scanline_buffer)) return rgbe_error(rgbe_memory_error, "unable to allocate buffer space");
 
     unsigned char *ptr = &scanline_buffer[0];
     /* read each of the four channels for the scanline into the buffer */

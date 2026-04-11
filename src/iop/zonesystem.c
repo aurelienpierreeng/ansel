@@ -208,7 +208,7 @@ static inline __attribute__((always_inline)) void process_common_setup(struct dt
   {
     dt_iop_zonesystem_gui_data_t *g = (dt_iop_zonesystem_gui_data_t *)self->gui_data;
     dt_iop_gui_enter_critical_section(self);
-    if(g->in_preview_buffer == NULL || g->out_preview_buffer == NULL || g->preview_width != width
+    if(IS_NULL_PTR(g->in_preview_buffer) || IS_NULL_PTR(g->out_preview_buffer) || g->preview_width != width
        || g->preview_height != height)
     {
       dt_free(g->in_preview_buffer);

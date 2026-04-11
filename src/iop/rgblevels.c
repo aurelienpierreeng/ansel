@@ -160,7 +160,7 @@ static void _develop_ui_pipe_finished_callback(gpointer instance, dt_iop_module_
   dt_iop_rgblevels_params_t *p = (dt_iop_rgblevels_params_t *)self->params;
   dt_iop_rgblevels_gui_data_t *g = (dt_iop_rgblevels_gui_data_t *)self->gui_data;
 
-  if(g == NULL) return;
+  if(IS_NULL_PTR(g)) return;
 
   // FIXME: this doesn't seems the right place to update params and GUI ...
   // update auto levels
@@ -395,7 +395,7 @@ static void _rgblevels_move_handle(dt_iop_module_t *self, const int handle_move,
 
   if((handle_move < 0) || handle_move > 2) return;
 
-  if(levels == NULL) return;
+  if(IS_NULL_PTR(levels)) return;
 
   // Determining the minimum and maximum bounds for the drag handles
   switch(handle_move)

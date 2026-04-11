@@ -1516,7 +1516,7 @@ static void _event_dnd_begin(GtkWidget *widget, GdkDragContext *context, gpointe
 
 GList *_thumbtable_dnd_import_check(GList *files, const char *pathname, int *elements)
 {
-  if (!pathname || pathname == NULL)
+  if (!pathname || IS_NULL_PTR(pathname))
   {
     fprintf(stdout,"DND check: no pathname.\n");
     return files;

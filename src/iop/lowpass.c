@@ -293,19 +293,19 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   }
 
   dev_tmp = dt_opencl_alloc_device(devid, width, height, sizeof(float) * 4);
-  if(dev_tmp == NULL) goto error;
+  if(IS_NULL_PTR(dev_tmp)) goto error;
 
   dev_cm = dt_opencl_copy_host_to_device(devid, d->ctable, 256, 256, sizeof(float));
-  if(dev_cm == NULL) goto error;
+  if(IS_NULL_PTR(dev_cm)) goto error;
 
   dev_ccoeffs = dt_opencl_copy_host_to_device_constant(devid, sizeof(float) * 3, d->cunbounded_coeffs);
-  if(dev_ccoeffs == NULL) goto error;
+  if(IS_NULL_PTR(dev_ccoeffs)) goto error;
 
   dev_lm = dt_opencl_copy_host_to_device(devid, d->ltable, 256, 256, sizeof(float));
-  if(dev_lm == NULL) goto error;
+  if(IS_NULL_PTR(dev_lm)) goto error;
 
   dev_lcoeffs = dt_opencl_copy_host_to_device_constant(devid, sizeof(float) * 3, d->lunbounded_coeffs);
-  if(dev_lcoeffs == NULL) goto error;
+  if(IS_NULL_PTR(dev_lcoeffs)) goto error;
 
   size_t origin[] = { 0, 0, 0 };
   size_t region[] = { width, height, 1 };

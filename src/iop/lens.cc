@@ -486,7 +486,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
 
       size_t padded_bufsize;
       float *const buf = dt_pixelpipe_cache_alloc_perthread_float(bufsize, &padded_bufsize);
-      if(buf == NULL) return 1;
+      if(IS_NULL_PTR(buf)) return 1;
 
 #ifdef _OPENMP
 #pragma omp parallel for default(none)  \
@@ -571,7 +571,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
     void *buf = dt_pixelpipe_cache_alloc_align_cache(
         bufsize,
         pipe->type);
-    if(buf == NULL) return 1;
+    if(IS_NULL_PTR(buf)) return 1;
     memcpy(buf, ivoid, bufsize);
 
     if(modflags & LF_MODIFY_VIGNETTING)
@@ -593,7 +593,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
       const size_t buf2size = (size_t)roi_out->width * 2 * 3;
       size_t padded_buf2size;
       float *const buf2 = dt_pixelpipe_cache_alloc_perthread_float(buf2size, &padded_buf2size);
-      if(buf2 == NULL)
+      if(IS_NULL_PTR(buf2))
       {
         dt_pixelpipe_cache_free_align(buf);
         return 1;
@@ -747,13 +747,13 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   tmpbuf = (float *)dt_pixelpipe_cache_alloc_align_cache(
       tmpbuflen,
       pipe->type);
-  if(tmpbuf == NULL) goto error;
+  if(IS_NULL_PTR(tmpbuf)) goto error;
 
   dev_tmp = (cl_mem)dt_opencl_alloc_device(devid, width, height, sizeof(float) * 4);
-  if(dev_tmp == NULL) goto error;
+  if(IS_NULL_PTR(dev_tmp)) goto error;
 
   dev_tmpbuf = (cl_mem)dt_opencl_alloc_device_buffer(devid, tmpbuflen);
-  if(dev_tmpbuf == NULL) goto error;
+  if(IS_NULL_PTR(dev_tmpbuf)) goto error;
 
   dt_pthread_mutex_lock(&darktable.plugin_threadsafe);
   modifier = get_modifier(&modflags, orig_w, orig_h, d, used_lf_mask, FALSE);
@@ -1025,7 +1025,7 @@ void distort_mask(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t 
   const size_t bufsize = (size_t)roi_out->width * 2 * 3;
   size_t padded_bufsize;
   float *const buf = dt_pixelpipe_cache_alloc_perthread_float(bufsize, &padded_bufsize);
-  if(buf == NULL) return;
+  if(IS_NULL_PTR(buf)) return;
   __OMP_PARALLEL_FOR_CPP__(firstprivate(buf, padded_bufsize, d, modifier, in, out, interpolation, roi_in, roi_out))
   for(int y = 0; y < roi_out->height; y++)
   {
@@ -1093,7 +1093,7 @@ void modify_roi_in(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t
   // allocator bucket id, so use a stable generic bucket.
     float *const buf = (float *)dt_pixelpipe_cache_alloc_align_cache(sizeof(float) * nbpoints * 2 * 3,
                                                                      DT_DEV_PIXELPIPE_FULL);
-    if(buf == NULL) return;
+    if(IS_NULL_PTR(buf)) return;
 
 #ifdef _OPENMP
 #pragma omp parallel default(none) reduction(min : xm, ym) reduction(max : xM, yM) \

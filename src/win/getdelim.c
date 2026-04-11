@@ -42,7 +42,7 @@
 #include <config.h>
 
 /* Don't use __attribute__ __nonnull__ in this compilation unit.  Otherwise gcc
-   optimizes away the lineptr == NULL || n == NULL || fp == NULL tests below. */
+   optimizes away the IS_NULL_PTR(lineptr) || IS_NULL_PTR(n) || IS_NULL_PTR(fp) tests below. */
 #define _GL_ARG_NONNULL(params)
 
 #include <stdio.h>
@@ -80,7 +80,7 @@ ssize_t getdelim(char **lineptr, size_t *n, int delimiter, FILE *fp)
   ssize_t result;
   size_t cur_len = 0;
 
-  if(lineptr == NULL || n == NULL || fp == NULL)
+  if(IS_NULL_PTR(lineptr) || IS_NULL_PTR(n) || IS_NULL_PTR(fp))
   {
     errno = EINVAL;
     return -1;
@@ -88,12 +88,12 @@ ssize_t getdelim(char **lineptr, size_t *n, int delimiter, FILE *fp)
 
   flockfile(fp);
 
-  if(*lineptr == NULL || *n == 0)
+  if(IS_NULL_PTR(*lineptr) || *n == 0)
   {
     char *new_lineptr;
     *n = 120;
     new_lineptr = (char *)realloc(*lineptr, *n);
-    if(new_lineptr == NULL)
+    if(IS_NULL_PTR(new_lineptr))
     {
       result = -1;
       goto unlock_return;
@@ -128,7 +128,7 @@ ssize_t getdelim(char **lineptr, size_t *n, int delimiter, FILE *fp)
       }
 
       new_lineptr = (char *)realloc(*lineptr, needed);
-      if(new_lineptr == NULL)
+      if(IS_NULL_PTR(new_lineptr))
       {
         result = -1;
         goto unlock_return;

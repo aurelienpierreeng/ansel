@@ -191,7 +191,7 @@ int main(int argc __attribute__((unused)), char *arg[] __attribute__((unused)))
     g_strlcpy(disp_name, ":0.0", sizeof(disp_name));
 
   Display *display = XOpenDisplay(disp_name);
-  if(display == NULL)
+  if(IS_NULL_PTR(display))
   {
     fprintf(stderr, "can't open display `%s'\n", XDisplayName(disp_name));
     return EXIT_FAILURE;
@@ -420,7 +420,7 @@ end:
 #else // HAVE_COLORD
     char *colord_filename = monitor->colord_filename ? monitor->colord_filename : "(none)",
          *colord_description;
-    if(monitor->colord_filename == NULL
+    if(IS_NULL_PTR(monitor->colord_filename)
        || g_file_test(monitor->colord_filename, G_FILE_TEST_IS_REGULAR) == FALSE)
     {
       colord_description = g_strdup("(file not found)");

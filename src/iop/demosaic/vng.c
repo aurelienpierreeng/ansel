@@ -245,7 +245,7 @@ static int process_vng_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t
   if(piece->dsc_in.filters == 9u)
   {
     dev_xtrans = dt_opencl_copy_host_to_device_constant(devid, sizeof(piece->dsc_in.xtrans), (void *)piece->dsc_in.xtrans);
-    if(dev_xtrans == NULL) goto error;
+    if(IS_NULL_PTR(dev_xtrans)) goto error;
   }
 
   // build interpolation lookup table for linear interpolation which for a given offset in the sensor
@@ -365,19 +365,19 @@ static int process_vng_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t
 
 
   dev_lookup = dt_opencl_copy_host_to_device_constant(devid, lookup_size, lookup);
-  if(dev_lookup == NULL) goto error;
+  if(IS_NULL_PTR(dev_lookup)) goto error;
 
   dev_code = dt_opencl_copy_host_to_device_constant(devid, sizeof(code), code);
-  if(dev_code == NULL) goto error;
+  if(IS_NULL_PTR(dev_code)) goto error;
 
   dev_ips = dt_opencl_copy_host_to_device_constant(devid, ips_size, ips);
-  if(dev_ips == NULL) goto error;
+  if(IS_NULL_PTR(dev_ips)) goto error;
 
   // green equilibration for Bayer sensors
   if(piece->dsc_in.filters != 9u && data->green_eq != DT_IOP_GREEN_EQ_NO)
   {
     dev_green_eq = dt_opencl_alloc_device(devid, roi_in->width, roi_in->height, sizeof(float));
-    if(dev_green_eq == NULL) goto error;
+    if(IS_NULL_PTR(dev_green_eq)) goto error;
 
     if(!green_equilibration_cl(self, pipe, piece, dev_in, dev_green_eq, roi_in))
       goto error;
@@ -391,7 +391,7 @@ static int process_vng_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t
   dev_aux = dev_out;
 
   dev_tmp = dt_opencl_alloc_device(devid, roi_in->width, roi_in->height, sizeof(float) * 4);
-  if(dev_tmp == NULL) goto error;
+  if(IS_NULL_PTR(dev_tmp)) goto error;
 
   {
     // manage borders for linear interpolation part

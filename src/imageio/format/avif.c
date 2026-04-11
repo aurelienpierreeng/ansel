@@ -152,7 +152,7 @@ void init(dt_imageio_module_format_t *self)
 {
   const char *codecName = avifCodecName(AVIF_CODEC_CHOICE_AUTO,
                                         AVIF_CODEC_FLAG_CAN_ENCODE);
-  if(codecName == NULL)
+  if(IS_NULL_PTR(codecName))
   {
     dt_print(DT_DEBUG_IMAGEIO,
              "libavif doesn't offer encoding support!\n");
@@ -274,7 +274,7 @@ int write_image(struct dt_imageio_module_data_t *data,
   }
 
   image = avifImageCreate(width, height, bit_depth, format);
-  if(image == NULL)
+  if(IS_NULL_PTR(image))
   {
     dt_print(DT_DEBUG_IMAGEIO,
              "Failed to create AVIF image for writing [%s]\n",
@@ -374,7 +374,7 @@ int write_image(struct dt_imageio_module_data_t *data,
       if(icc_profile_len > 0)
       {
         icc_profile_data = malloc(sizeof(uint8_t) * icc_profile_len);
-        if(icc_profile_data == NULL)
+        if(IS_NULL_PTR(icc_profile_data))
         {
           rc = 1;
           goto out;
@@ -471,7 +471,7 @@ int write_image(struct dt_imageio_module_data_t *data,
   }
 
   encoder = avifEncoderCreate();
-  if(encoder == NULL)
+  if(IS_NULL_PTR(encoder))
   {
     dt_print(DT_DEBUG_IMAGEIO,
              "Failed to create AVIF encoder for image [%s]\n",
@@ -568,7 +568,7 @@ int write_image(struct dt_imageio_module_data_t *data,
     goto out;
   }
 
-  if(output.size == 0 || output.data == NULL)
+  if(output.size == 0 || IS_NULL_PTR(output.data))
   {
     dt_print(DT_DEBUG_IMAGEIO,
              "AVIF encoder returned empty data for [%s]\n",
@@ -584,7 +584,7 @@ int write_image(struct dt_imageio_module_data_t *data,
   size_t cnt = 0;
 
   f = g_fopen(filename, "wb");
-  if(f == NULL)
+  if(IS_NULL_PTR(f))
   {
     rc = 1;
     goto out;
@@ -620,7 +620,7 @@ void *get_params(dt_imageio_module_format_t *self)
 {
   dt_imageio_avif_t *d = (dt_imageio_avif_t *)calloc(1, sizeof(dt_imageio_avif_t));
 
-  if(d == NULL)
+  if(IS_NULL_PTR(d))
   {
     return NULL;
   }

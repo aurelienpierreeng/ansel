@@ -116,14 +116,14 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   created = dt_dev_pixelpipe_cache_get(darktable.pixelpipe_cache, mask_hash, sizeof(float) * (size_t)width * height,
                                        "detailmask rawdetail", pipe->type, TRUE, &cache_data, &entry);
   mask = (float *)cache_data;
-  if(mask == NULL || entry == NULL) goto error;
+  if(IS_NULL_PTR(mask) || IS_NULL_PTR(entry)) goto error;
 
   mutable_pipe->rawdetail_mask_hash = mask_hash;
   memcpy(&mutable_pipe->rawdetail_mask_roi, roi_out, sizeof(dt_iop_roi_t));
   if(!created) return 0;
 
   tmp = dt_pixelpipe_cache_alloc_align_float_cache((size_t)width * height, 0);
-  if(tmp == NULL) goto error;
+  if(IS_NULL_PTR(tmp)) goto error;
 
   dt_aligned_pixel_t wb = { 1.0f, 1.0f, 1.0f };
   if(piece->dsc_in.temperature.enabled)
@@ -183,16 +183,16 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   created = dt_dev_pixelpipe_cache_get(darktable.pixelpipe_cache, mask_hash, sizeof(float) * (size_t)width * height,
                                        "detailmask rawdetail", pipe->type, TRUE, &cache_data, &entry);
   mask = (float *)cache_data;
-  if(mask == NULL || entry == NULL) goto error;
+  if(IS_NULL_PTR(mask) || IS_NULL_PTR(entry)) goto error;
 
   mutable_pipe->rawdetail_mask_hash = mask_hash;
   memcpy(&mutable_pipe->rawdetail_mask_roi, roi_out, sizeof(dt_iop_roi_t));
   if(!created) return TRUE;
 
   detail = dt_opencl_alloc_device_buffer(devid, sizeof(float) * width * height);
-  if(detail == NULL) goto error;
+  if(IS_NULL_PTR(detail)) goto error;
   mask_dev = dt_opencl_alloc_device_buffer(devid, sizeof(float) * width * height);
-  if(mask_dev == NULL) goto error;
+  if(IS_NULL_PTR(mask_dev)) goto error;
 
   {
     const int kernel = darktable.opencl->blendop->kernel_calc_Y0_mask;

@@ -593,7 +593,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   dev_L = dt_opencl_copy_host_to_device(devid, d->lut[0], 256, 256, sizeof(float));
   dev_a = dt_opencl_copy_host_to_device(devid, d->lut[1], 256, 256, sizeof(float));
   dev_b = dt_opencl_copy_host_to_device(devid, d->lut[2], 256, 256, sizeof(float));
-  if(dev_L == NULL || dev_a == NULL || dev_b == NULL) goto error;
+  if(IS_NULL_PTR(dev_L) || IS_NULL_PTR(dev_a) || IS_NULL_PTR(dev_b)) goto error;
 
   dt_opencl_set_kernel_arg(devid, kernel_colorzones, 0, sizeof(cl_mem), &dev_in);
   dt_opencl_set_kernel_arg(devid, kernel_colorzones, 1, sizeof(cl_mem), &dev_out);

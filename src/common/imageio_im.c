@@ -78,7 +78,7 @@ dt_imageio_retval_t dt_imageio_open_im(dt_image_t *img, const char *filename, dt
   if(!img->exif_inited) (void)dt_exif_read(img, filename);
 
   image = NewMagickWand();
-  if (image == NULL) goto error;
+  if (IS_NULL_PTR(image)) goto error;
 
   ret = MagickReadImage(image, filename);
   if (ret != MagickTrue) {
@@ -121,7 +121,7 @@ dt_imageio_retval_t dt_imageio_open_im(dt_image_t *img, const char *filename, dt
   }
 
   float *mipbuf = dt_mipmap_cache_alloc(mbuf, img);
-  if (mipbuf == NULL) {
+  if (IS_NULL_PTR(mipbuf)) {
     fprintf(stderr,
         "[ImageMagick_open] could not alloc full buffer for image `%s'\n",
         img->filename);
@@ -139,7 +139,7 @@ dt_imageio_retval_t dt_imageio_open_im(dt_image_t *img, const char *filename, dt
   size_t profile_length;
   uint8_t *profile_data = (uint8_t *)MagickGetImageProfile(image, "icc", &profile_length);
   /* no alias support like GraphicsMagick, have to check both locations */
-  if(profile_data == NULL)
+  if(IS_NULL_PTR(profile_data))
     profile_data = (uint8_t *)MagickGetImageProfile(image, "icm", &profile_length);
   if(profile_data)
   {

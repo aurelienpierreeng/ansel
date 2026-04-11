@@ -582,7 +582,7 @@ void dt_dev_pixelpipe_cleanup_nodes(dt_dev_pixelpipe_t *pipe)
   for(GList *nodes = g_list_first(pipe->nodes); nodes; nodes = g_list_next(nodes))
   {
     dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)nodes->data;
-    if(piece == NULL) continue;
+    if(IS_NULL_PTR(piece)) continue;
     // printf("cleanup module `%s'\n", piece->module->name());
     if(piece->module) dt_iop_cleanup_pipe(piece->module, pipe, piece);
     dt_pixelpipe_raster_cleanup(piece->raster_masks);
@@ -599,8 +599,8 @@ void dt_dev_pixelpipe_cleanup_nodes(dt_dev_pixelpipe_t *pipe)
 void dt_dev_pixelpipe_create_nodes(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
 {
   // check that the pipe was actually properly cleaned up after the last run
-  g_assert(pipe->nodes == NULL);
-  g_assert(pipe->iop_order_list == NULL);
+  g_assert(IS_NULL_PTR(pipe->nodes));
+  g_assert(IS_NULL_PTR(pipe->iop_order_list));
   pipe->iop_order_list = dt_ioppr_iop_order_copy_deep(dev->iop_order_list);
 
   // for all modules in dev:
@@ -808,7 +808,7 @@ static int _init_base_buffer(dt_dev_pixelpipe_t *pipe)
   void *output;
   int new_entry = dt_dev_pixelpipe_cache_get(darktable.pixelpipe_cache, hash, bufsize, "base buffer", pipe->type,
                                              TRUE, &output, &cache_entry);
-  if(cache_entry == NULL) return 1;
+  if(IS_NULL_PTR(cache_entry)) return 1;
 
   int err = 0;
 #ifdef HAVE_OPENCL
@@ -930,7 +930,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
 
   KILL_SWITCH_ABORT;
 
-  if(pieces == NULL)
+  if(IS_NULL_PTR(pieces))
   {
     // No pieces means step 0 : init the base buffer
     dt_times_t start;
@@ -1022,7 +1022,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   _trace_cache_owner(pipe, module, "acquire", "input", input_hash, input, input_entry, FALSE);
   _trace_buffer_content(pipe, module, "input-acquire", input, &piece->dsc_in, &piece->roi_in);
   const size_t bufsize = (size_t)piece->dsc_out.bpp * piece->roi_out.width * piece->roi_out.height;
-  // Note: input == NULL is valid if we are on a GPU-only path, aka previous module ran on GPU
+  // Note: IS_NULL_PTR(input) is valid if we are on a GPU-only path, aka previous module ran on GPU
   // without leaving its output on a RAM cache copy, and current module will also run on GPU.
   // In this case, we rely on cl_mem_input for best performance (avoid memcpy between RAM and GPU).
   // Should the GPU path fail at process time, we will init input and flush cl_mem_input into it.

@@ -390,7 +390,7 @@ static inline void matrice_pseudoinverse(float (*in)[3], float (*out)[3], int si
 static int find_temperature_from_raw_coeffs(const dt_image_t *img, const dt_aligned_pixel_t custom_wb,
                                             float *chroma_x, float *chroma_y)
 {
-  if(img == NULL) return FALSE;
+  if(IS_NULL_PTR(img)) return FALSE;
   if(!dt_image_is_matrix_correction_supported(img)) return FALSE;
 
   int has_valid_coeffs = TRUE;

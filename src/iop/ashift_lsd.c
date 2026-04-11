@@ -291,7 +291,7 @@ typedef struct ntuple_list_s
  */
 static void free_ntuple_list(ntuple_list in)
 {
-  if( in == NULL || in->values == NULL )
+  if( IS_NULL_PTR(in) || IS_NULL_PTR(in->values) )
     error("free_ntuple_list: invalid n-tuple input.");
   dt_free(in->values);
   dt_free(in);
@@ -310,7 +310,7 @@ static ntuple_list new_ntuple_list(unsigned int dim)
 
   /* get memory for list structure */
   n_tuple = (ntuple_list) malloc( sizeof(struct ntuple_list_s) );
-  if( n_tuple == NULL ) error("not enough memory.");
+  if( IS_NULL_PTR(n_tuple) ) error("not enough memory.");
 
   /* initialize list */
   n_tuple->size = 0;
@@ -319,7 +319,7 @@ static ntuple_list new_ntuple_list(unsigned int dim)
 
   /* get memory for tuples */
   n_tuple->values = (double *) malloc(sizeof(double) * dim * n_tuple->max_size);
-  if( n_tuple->values == NULL ) error("not enough memory.");
+  if( IS_NULL_PTR(n_tuple->values) ) error("not enough memory.");
 
   return n_tuple;
 }
@@ -330,7 +330,7 @@ static ntuple_list new_ntuple_list(unsigned int dim)
 static void enlarge_ntuple_list(ntuple_list n_tuple)
 {
   /* check parameters */
-  if( n_tuple == NULL || n_tuple->values == NULL || n_tuple->max_size == 0 )
+  if( IS_NULL_PTR(n_tuple) || IS_NULL_PTR(n_tuple->values) || n_tuple->max_size == 0 )
     error("enlarge_ntuple_list: invalid n-tuple.");
 
   /* duplicate number of tuples */
@@ -339,7 +339,7 @@ static void enlarge_ntuple_list(ntuple_list n_tuple)
   /* realloc memory */
   n_tuple->values = (double *) realloc( (void *) n_tuple->values,
                       sizeof(double) * n_tuple->dim * n_tuple->max_size );
-  if( n_tuple->values == NULL ) error("not enough memory.");
+  if( IS_NULL_PTR(n_tuple->values) ) error("not enough memory.");
 }
 
 /*----------------------------------------------------------------------------*/
@@ -349,12 +349,12 @@ static void add_7tuple( ntuple_list out, double v1, double v2, double v3,
                         double v4, double v5, double v6, double v7 )
 {
   /* check parameters */
-  if( out == NULL ) error("add_7tuple: invalid n-tuple input.");
+  if( IS_NULL_PTR(out) ) error("add_7tuple: invalid n-tuple input.");
   if( out->dim != 7 ) error("add_7tuple: the n-tuple must be a 7-tuple.");
 
   /* if needed, alloc more tuples to 'out' */
   if( out->size == out->max_size ) enlarge_ntuple_list(out);
-  if( out->values == NULL ) error("add_7tuple: invalid n-tuple input.");
+  if( IS_NULL_PTR(out->values) ) error("add_7tuple: invalid n-tuple input.");
 
   /* add new 7-tuple */
   out->values[ out->size * out->dim + 0 ] = v1;
@@ -394,7 +394,7 @@ typedef struct image_char_s
  */
 static void free_image_char(image_char i)
 {
-  if( i == NULL || i->data == NULL )
+  if( IS_NULL_PTR(i) || IS_NULL_PTR(i->data) )
     error("free_image_char: invalid input image.");
   dt_free(i->data);
   dt_free(i);
@@ -412,10 +412,10 @@ static image_char new_image_char(unsigned int xsize, unsigned int ysize)
 
   /* get memory */
   image = (image_char) malloc( sizeof(struct image_char_s) );
-  if( image == NULL ) error("not enough memory.");
+  if( IS_NULL_PTR(image) ) error("not enough memory.");
   image->data = (unsigned char *) calloc( (size_t) (xsize*ysize),
                                           sizeof(unsigned char) );
-  if( image->data == NULL ) error("not enough memory.");
+  if( IS_NULL_PTR(image->data) ) error("not enough memory.");
 
   /* set image size */
   image->xsize = xsize;
@@ -436,7 +436,7 @@ static image_char new_image_char_ini( unsigned int xsize, unsigned int ysize,
   unsigned int i;
 
   /* check parameters */
-  if( image == NULL || image->data == NULL )
+  if( IS_NULL_PTR(image) || IS_NULL_PTR(image->data) )
     error("new_image_char_ini: invalid image.");
 
   /* initialize */
@@ -472,9 +472,9 @@ static image_int new_image_int(unsigned int xsize, unsigned int ysize)
 
   /* get memory */
   image = (image_int) malloc( sizeof(struct image_int_s) );
-  if( image == NULL ) error("not enough memory.");
+  if( IS_NULL_PTR(image) ) error("not enough memory.");
   image->data = (int *) calloc( (size_t) (xsize*ysize), sizeof(int) );
-  if( image->data == NULL ) error("not enough memory.");
+  if( IS_NULL_PTR(image->data) ) error("not enough memory.");
 
   /* set image size */
   image->xsize = xsize;
@@ -520,7 +520,7 @@ typedef struct image_double_s
  */
 static void free_image_double(image_double i)
 {
-  if( i == NULL || i->data == NULL )
+  if( IS_NULL_PTR(i) || IS_NULL_PTR(i->data) )
     error("free_image_double: invalid input image.");
   dt_free(i->data);
   dt_free(i);
@@ -538,9 +538,9 @@ static image_double new_image_double(unsigned int xsize, unsigned int ysize)
 
   /* get memory */
   image = (image_double) malloc( sizeof(struct image_double_s) );
-  if( image == NULL ) error("not enough memory.");
+  if( IS_NULL_PTR(image) ) error("not enough memory.");
   image->data = (double *) calloc( (size_t) (xsize*ysize), sizeof(double) );
-  if( image->data == NULL ) error("not enough memory.");
+  if( IS_NULL_PTR(image->data) ) error("not enough memory.");
 
   /* set image size */
   image->xsize = xsize;
@@ -561,11 +561,11 @@ static image_double new_image_double_ptr( unsigned int xsize,
   /* check parameters */
   if( xsize == 0 || ysize == 0 )
     error("new_image_double_ptr: invalid image size.");
-  if( data == NULL ) error("new_image_double_ptr: NULL data pointer.");
+  if( IS_NULL_PTR(data) ) error("new_image_double_ptr: NULL data pointer.");
 
   /* get memory */
   image = (image_double) malloc( sizeof(struct image_double_s) );
-  if( image == NULL ) error("not enough memory.");
+  if( IS_NULL_PTR(image) ) error("not enough memory.");
 
   /* set image */
   image->xsize = xsize;
@@ -595,7 +595,7 @@ static void gaussian_kernel(ntuple_list kernel, double sigma, double mean)
   unsigned int i;
 
   /* check parameters */
-  if( kernel == NULL || kernel->values == NULL )
+  if( IS_NULL_PTR(kernel) || IS_NULL_PTR(kernel->values) )
     error("gaussian_kernel: invalid n-tuple 'kernel'.");
   if( sigma <= 0.0 ) error("gaussian_kernel: 'sigma' must be positive.");
 
@@ -661,7 +661,7 @@ static image_double gaussian_sampler( image_double in, double scale,
   double sigma,xx,yy,sum,prec;
 
   /* check parameters */
-  if( in == NULL || in->data == NULL || in->xsize == 0 || in->ysize == 0 )
+  if( IS_NULL_PTR(in) || IS_NULL_PTR(in->data) || in->xsize == 0 || in->ysize == 0 )
     error("gaussian_sampler: invalid image.");
   if( scale <= 0.0 ) error("gaussian_sampler: 'scale' must be positive.");
   if( sigma_scale <= 0.0 )
@@ -810,12 +810,12 @@ static image_double ll_angle( image_double in, double threshold,
   double max_grad = 0.0;
 
   /* check parameters */
-  if( in == NULL || in->data == NULL || in->xsize == 0 || in->ysize == 0 )
+  if( IS_NULL_PTR(in) || IS_NULL_PTR(in->data) || in->xsize == 0 || in->ysize == 0 )
     error("ll_angle: invalid image.");
   if( threshold < 0.0 ) error("ll_angle: 'threshold' must be positive.");
-  if( list_p == NULL ) error("ll_angle: NULL pointer 'list_p'.");
-  if( mem_p == NULL ) error("ll_angle: NULL pointer 'mem_p'.");
-  if( modgrad == NULL ) error("ll_angle: NULL pointer 'modgrad'.");
+  if( IS_NULL_PTR(list_p) ) error("ll_angle: NULL pointer 'list_p'.");
+  if( IS_NULL_PTR(mem_p) ) error("ll_angle: NULL pointer 'mem_p'.");
+  if( IS_NULL_PTR(modgrad) ) error("ll_angle: NULL pointer 'modgrad'.");
   if( n_bins == 0 ) error("ll_angle: 'n_bins' must be positive.");
 
   /* image size shortcuts */
@@ -835,7 +835,7 @@ static image_double ll_angle( image_double in, double threshold,
                                            sizeof(struct coorlist *) );
   range_l_e = (struct coorlist **) calloc( (size_t) n_bins,
                                            sizeof(struct coorlist *) );
-  if( list == NULL || range_l_s == NULL || range_l_e == NULL )
+  if( IS_NULL_PTR(list) || IS_NULL_PTR(range_l_s) || IS_NULL_PTR(range_l_e) )
     error("not enough memory.");
   for(i=0;i<n_bins;i++) range_l_s[i] = range_l_e[i] = NULL;
 
@@ -939,7 +939,7 @@ static int isaligned( int x, int y, image_double angles, double theta,
   double a;
 
   /* check parameters */
-  if( angles == NULL || angles->data == NULL )
+  if( IS_NULL_PTR(angles) || IS_NULL_PTR(angles->data) )
     error("isaligned: invalid image 'angles'.");
   if( x < 0 || y < 0 || x >= (int) angles->xsize || y >= (int) angles->ysize )
     error("isaligned: (x,y) out of the image.");
@@ -1242,7 +1242,7 @@ struct rect
 static void rect_copy(struct rect * in, struct rect * out)
 {
   /* check parameters */
-  if( in == NULL || out == NULL ) error("rect_copy: invalid 'in' or 'out'.");
+  if( IS_NULL_PTR(in) || IS_NULL_PTR(out) ) error("rect_copy: invalid 'in' or 'out'.");
 
   /* copy values */
   out->x1 = in->x1;
@@ -1372,7 +1372,7 @@ static double inter_hi(double x, double x1, double y1, double x2, double y2)
  */
 static void ri_del(rect_iter * iter)
 {
-  if( iter == NULL ) error("ri_del: NULL iterator.");
+  if( IS_NULL_PTR(iter) ) error("ri_del: NULL iterator.");
   dt_free(iter);
 }
 
@@ -1384,7 +1384,7 @@ static void ri_del(rect_iter * iter)
 static int ri_end(rect_iter * i)
 {
   /* check input */
-  if( i == NULL ) error("ri_end: NULL iterator.");
+  if( IS_NULL_PTR(i) ) error("ri_end: NULL iterator.");
 
   /* if the current x value is larger than the largest
      x value in the rectangle (vx[2]), we know the full
@@ -1400,7 +1400,7 @@ static int ri_end(rect_iter * i)
 static void ri_inc(rect_iter * i)
 {
   /* check input */
-  if( i == NULL ) error("ri_inc: NULL iterator.");
+  if( IS_NULL_PTR(i) ) error("ri_inc: NULL iterator.");
 
   /* if not at end of exploration,
      increase y value for next pixel in the 'column' */
@@ -1474,11 +1474,11 @@ static rect_iter * ri_ini(struct rect * r)
   rect_iter * i;
 
   /* check parameters */
-  if( r == NULL ) error("ri_ini: invalid rectangle.");
+  if( IS_NULL_PTR(r) ) error("ri_ini: invalid rectangle.");
 
   /* get memory */
   i = (rect_iter *) malloc(sizeof(rect_iter));
-  if( i == NULL ) error("ri_ini: Not enough memory.");
+  if( IS_NULL_PTR(i) ) error("ri_ini: Not enough memory.");
 
   /* build list of rectangle corners ordered
      in a circular way around the rectangle */
@@ -1545,8 +1545,8 @@ static double rect_nfa(struct rect * rec, image_double angles, double logNT)
   int alg = 0;
 
   /* check parameters */
-  if( rec == NULL ) error("rect_nfa: invalid rectangle.");
-  if( angles == NULL ) error("rect_nfa: invalid 'angles'.");
+  if( IS_NULL_PTR(rec) ) error("rect_nfa: invalid rectangle.");
+  if( IS_NULL_PTR(angles) ) error("rect_nfa: invalid 'angles'.");
 
   /* compute the total number of pixels and of aligned points in 'rec' */
   for(i=ri_ini(rec); !ri_end(i); ri_inc(i)) /* rectangle iterator */
@@ -1634,9 +1634,9 @@ static double get_theta( struct point * reg, int reg_size, double x, double y,
   int i;
 
   /* check parameters */
-  if( reg == NULL ) error("get_theta: invalid region.");
+  if( IS_NULL_PTR(reg) ) error("get_theta: invalid region.");
   if( reg_size <= 1 ) error("get_theta: region size <= 1.");
-  if( modgrad == NULL || modgrad->data == NULL )
+  if( IS_NULL_PTR(modgrad) || IS_NULL_PTR(modgrad->data) )
     error("get_theta: invalid 'modgrad'.");
   if( prec < 0.0 ) error("get_theta: 'prec' must be positive.");
 
@@ -1675,11 +1675,11 @@ static void region2rect( struct point * reg, int reg_size,
   int i;
 
   /* check parameters */
-  if( reg == NULL ) error("region2rect: invalid region.");
+  if( IS_NULL_PTR(reg) ) error("region2rect: invalid region.");
   if( reg_size <= 1 ) error("region2rect: region size <= 1.");
-  if( modgrad == NULL || modgrad->data == NULL )
+  if( IS_NULL_PTR(modgrad) || IS_NULL_PTR(modgrad->data) )
     error("region2rect: invalid image 'modgrad'.");
-  if( rec == NULL ) error("region2rect: invalid 'rec'.");
+  if( IS_NULL_PTR(rec) ) error("region2rect: invalid 'rec'.");
 
   /* center of the region:
 
@@ -1770,12 +1770,12 @@ static void region_grow( int x, int y, image_double angles, struct point * reg,
   /* check parameters */
   if( x < 0 || y < 0 || x >= (int) angles->xsize || y >= (int) angles->ysize )
     error("region_grow: (x,y) out of the image.");
-  if( angles == NULL || angles->data == NULL )
+  if( IS_NULL_PTR(angles) || IS_NULL_PTR(angles->data) )
     error("region_grow: invalid image 'angles'.");
-  if( reg == NULL ) error("region_grow: invalid 'reg'.");
-  if( reg_size == NULL ) error("region_grow: invalid pointer 'reg_size'.");
-  if( reg_angle == NULL ) error("region_grow: invalid pointer 'reg_angle'.");
-  if( used == NULL || used->data == NULL )
+  if( IS_NULL_PTR(reg) ) error("region_grow: invalid 'reg'.");
+  if( IS_NULL_PTR(reg_size) ) error("region_grow: invalid pointer 'reg_size'.");
+  if( IS_NULL_PTR(reg_angle) ) error("region_grow: invalid pointer 'reg_angle'.");
+  if( IS_NULL_PTR(used) || IS_NULL_PTR(used->data) )
     error("region_grow: invalid image 'used'.");
 
   /* first point of the region */
@@ -1935,14 +1935,14 @@ static int reduce_region_radius( struct point * reg, int * reg_size,
   int i;
 
   /* check parameters */
-  if( reg == NULL ) error("reduce_region_radius: invalid pointer 'reg'.");
-  if( reg_size == NULL )
+  if( IS_NULL_PTR(reg) ) error("reduce_region_radius: invalid pointer 'reg'.");
+  if( IS_NULL_PTR(reg_size) )
     error("reduce_region_radius: invalid pointer 'reg_size'.");
   if( prec < 0.0 ) error("reduce_region_radius: 'prec' must be positive.");
-  if( rec == NULL ) error("reduce_region_radius: invalid pointer 'rec'.");
-  if( used == NULL || used->data == NULL )
+  if( IS_NULL_PTR(rec) ) error("reduce_region_radius: invalid pointer 'rec'.");
+  if( IS_NULL_PTR(used) || IS_NULL_PTR(used->data) )
     error("reduce_region_radius: invalid image 'used'.");
-  if( angles == NULL || angles->data == NULL )
+  if( IS_NULL_PTR(angles) || IS_NULL_PTR(angles->data) )
     error("reduce_region_radius: invalid image 'angles'.");
 
   /* compute region points density */
@@ -2011,13 +2011,13 @@ static int refine( struct point * reg, int * reg_size, image_double modgrad,
   int i,n;
 
   /* check parameters */
-  if( reg == NULL ) error("refine: invalid pointer 'reg'.");
-  if( reg_size == NULL ) error("refine: invalid pointer 'reg_size'.");
+  if( IS_NULL_PTR(reg) ) error("refine: invalid pointer 'reg'.");
+  if( IS_NULL_PTR(reg_size) ) error("refine: invalid pointer 'reg_size'.");
   if( prec < 0.0 ) error("refine: 'prec' must be positive.");
-  if( rec == NULL ) error("refine: invalid pointer 'rec'.");
-  if( used == NULL || used->data == NULL )
+  if( IS_NULL_PTR(rec) ) error("refine: invalid pointer 'rec'.");
+  if( IS_NULL_PTR(used) || IS_NULL_PTR(used->data) )
     error("refine: invalid image 'used'.");
-  if( angles == NULL || angles->data == NULL )
+  if( IS_NULL_PTR(angles) || IS_NULL_PTR(angles->data) )
     error("refine: invalid image 'angles'.");
 
   /* compute region points density */
@@ -2109,7 +2109,7 @@ static double * LineSegmentDetection( int * n_out,
 
 
   /* check parameters */
-  if( img == NULL || X <= 0 || Y <= 0 ) error("invalid image input.");
+  if( IS_NULL_PTR(img) || X <= 0 || Y <= 0 ) error("invalid image input.");
   if( scale <= 0.0 ) error("'scale' value must be positive.");
   if( sigma_scale <= 0.0 ) error("'sigma_scale' value must be positive.");
   if( quant < 0.0 ) error("'quant' value must be positive.");
@@ -2165,7 +2165,7 @@ static double * LineSegmentDetection( int * n_out,
     region = new_image_int_ini(angles->xsize,angles->ysize,0);
   used = new_image_char_ini(xsize,ysize,NOTUSED);
   reg = (struct point *) calloc( (size_t) (xsize*ysize), sizeof(struct point) );
-  if( reg == NULL ) error("not enough memory!");
+  if( IS_NULL_PTR(reg) ) error("not enough memory!");
 
 
   /* search for line segments */
@@ -2244,7 +2244,7 @@ static double * LineSegmentDetection( int * n_out,
   /* return the result */
   if( reg_img != NULL && reg_x != NULL && reg_y != NULL )
     {
-      if( region == NULL ) error("'region' should be a valid image.");
+      if( IS_NULL_PTR(region) ) error("'region' should be a valid image.");
       *reg_img = region->data;
       if( region->xsize > (unsigned int) INT_MAX ||
           region->ysize > (unsigned int) INT_MAX )

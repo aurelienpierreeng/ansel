@@ -50,7 +50,7 @@ static void _free_raster_mask(void *mask)
 uint64_t dt_dev_pixelpipe_rawdetail_mask_hash(const dt_dev_pixelpipe_iop_t *piece)
 {
   static const char cache_tag[] = "detailmask:rawdetail";
-  if(piece == NULL || piece->global_hash == DT_PIXELPIPE_CACHE_HASH_INVALID)
+  if(IS_NULL_PTR(piece) || piece->global_hash == DT_PIXELPIPE_CACHE_HASH_INVALID)
     return DT_PIXELPIPE_CACHE_HASH_INVALID;
   return dt_hash(piece->global_hash, cache_tag, sizeof(cache_tag));
 }

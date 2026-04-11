@@ -307,7 +307,7 @@ const wchar_t *dtwin_get_locale()
   }
 
   /* Deal with exceptions */
-  if(posix == NULL)
+  if(IS_NULL_PTR(posix))
   {
     switch(lcid)
     {

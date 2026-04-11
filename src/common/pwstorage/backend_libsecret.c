@@ -56,7 +56,7 @@ const backend_libsecret_context_t *dt_pwstorage_libsecret_new()
 {
   GError *error = NULL;
   backend_libsecret_context_t *context = calloc(1, sizeof(backend_libsecret_context_t));
-  if(context == NULL)
+  if(IS_NULL_PTR(context))
   {
     return NULL;
   }
@@ -86,14 +86,14 @@ gboolean dt_pwstorage_libsecret_set(const backend_libsecret_context_t *context, 
                                     GHashTable *attributes)
 {
   GError *error = NULL;
-  if(context == NULL || slot == NULL || EMPTY_STRING(slot) || attributes == NULL)
+  if(IS_NULL_PTR(context) || IS_NULL_PTR(slot) || EMPTY_STRING(slot) || IS_NULL_PTR(attributes))
   {
     return FALSE;
   }
 
   /* Convert attributes to secret */
   char *secret_value = attributes_to_secret(attributes);
-  if(secret_value == NULL)
+  if(IS_NULL_PTR(secret_value))
   {
     return FALSE;
   }
@@ -132,7 +132,7 @@ GHashTable *dt_pwstorage_libsecret_get(const backend_libsecret_context_t *contex
   GHashTable *attributes;
   gchar *secret_value = NULL;
 
-  if(context == NULL || slot == NULL || EMPTY_STRING(slot))
+  if(IS_NULL_PTR(context) || IS_NULL_PTR(slot) || EMPTY_STRING(slot))
   {
     goto error;
   }
@@ -152,7 +152,7 @@ GHashTable *dt_pwstorage_libsecret_get(const backend_libsecret_context_t *contex
 
   attributes = secret_to_attributes(secret_value);
 
-  if(attributes == NULL)
+  if(IS_NULL_PTR(attributes))
   {
     goto error;
   }
@@ -196,7 +196,7 @@ static gchar *attributes_to_secret(GHashTable *attributes)
 
 static GHashTable *secret_to_attributes(gchar *secret)
 {
-  if(secret == NULL || EMPTY_STRING(secret))
+  if(IS_NULL_PTR(secret) || EMPTY_STRING(secret))
   {
     return NULL;
   }

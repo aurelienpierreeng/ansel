@@ -323,7 +323,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
 
   const dt_iop_order_iccprofile_info_t *const current_profile = dt_ioppr_get_pipe_current_profile_info(self, pipe);
 
-  const int use_work_profile = (current_profile == NULL) ? 0 : 1;
+  const int use_work_profile = (IS_NULL_PTR(current_profile)) ? 0 : 1;
   cl_mem dev_profile_info = NULL;
   cl_mem dev_profile_lut = NULL;
   dt_colorspaces_iccprofile_info_cl_t *profile_info_cl;

@@ -461,7 +461,7 @@ static void _pipe_finished_callback(gpointer instance, gpointer user_data)
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)self->gui_data;
 
-  if(g == NULL) return;
+  if(IS_NULL_PTR(g)) return;
 
   for(int point = 0; point < DT_SPLITTONING_RGB_POINT_COUNT; point++) _update_point_slider_colors(self, point);
 
@@ -680,7 +680,7 @@ static gboolean _preview_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data
   {
     if(g->preview_surface) cairo_surface_destroy(g->preview_surface);
     g->preview_surface = cairo_image_surface_create(CAIRO_FORMAT_RGB24, allocation.width, allocation.height);
-    if(g->preview_surface == NULL) return FALSE;
+    if(IS_NULL_PTR(g->preview_surface)) return FALSE;
     g->preview_width = allocation.width;
     g->preview_height = allocation.height;
     _render_preview_surface(self, g->preview_surface);

@@ -160,7 +160,7 @@ dt_imageio_retval_t dt_imageio_open_heif(dt_image_t *img,
   }
 
   float *mipbuf = (float *)dt_mipmap_cache_alloc(mbuf, img);
-  if(mipbuf == NULL)
+  if(IS_NULL_PTR(mipbuf))
   {
     dt_print(DT_DEBUG_IMAGEIO,
              "Failed to allocate mipmap buffer for HEIF image [%s]\n",

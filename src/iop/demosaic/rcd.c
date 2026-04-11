@@ -595,7 +595,7 @@ static int process_rcd_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t
   if(data->green_eq != DT_IOP_GREEN_EQ_NO)
   {
     dev_green_eq = dt_opencl_alloc_device(devid, roi_in->width, roi_in->height, sizeof(float));
-    if(dev_green_eq == NULL) goto error;
+    if(IS_NULL_PTR(dev_green_eq)) goto error;
     if(!green_equilibration_cl(self, pipe, piece, dev_in, dev_green_eq, roi_in)) goto error;
     dev_in = dev_green_eq;
   }
@@ -604,7 +604,7 @@ static int process_rcd_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t
   dev_aux = dev_out;
 
   dev_tmp = dt_opencl_alloc_device(devid, roi_in->width, roi_in->height, sizeof(float) * 4);
-  if(dev_tmp == NULL) goto error;
+  if(IS_NULL_PTR(dev_tmp)) goto error;
 
   {
     const int myborder = 3;
@@ -664,21 +664,21 @@ static int process_rcd_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t
   dev_tmp = NULL;
 
   cfa = dt_opencl_alloc_device_buffer(devid, sizeof(float) * roi_in->width * roi_in->height);
-  if(cfa == NULL) goto error;
+  if(IS_NULL_PTR(cfa)) goto error;
   VH_dir = dt_opencl_alloc_device_buffer(devid, sizeof(float) * roi_in->width * roi_in->height);
-  if(VH_dir == NULL) goto error;
+  if(IS_NULL_PTR(VH_dir)) goto error;
   PQ_dir = dt_opencl_alloc_device_buffer(devid, sizeof(float) * roi_in->width * roi_in->height);
-  if(PQ_dir == NULL) goto error;
+  if(IS_NULL_PTR(PQ_dir)) goto error;
   VP_diff = dt_opencl_alloc_device_buffer(devid, sizeof(float) * roi_in->width * roi_in->height);
-  if(VP_diff == NULL) goto error;
+  if(IS_NULL_PTR(VP_diff)) goto error;
   HQ_diff = dt_opencl_alloc_device_buffer(devid, sizeof(float) * roi_in->width * roi_in->height);
-  if(HQ_diff == NULL) goto error;
+  if(IS_NULL_PTR(HQ_diff)) goto error;
   rgb0 = dt_opencl_alloc_device_buffer(devid, sizeof(float) * roi_in->width * roi_in->height);
-  if(rgb0 == NULL) goto error;
+  if(IS_NULL_PTR(rgb0)) goto error;
   rgb1 = dt_opencl_alloc_device_buffer(devid, sizeof(float) * roi_in->width * roi_in->height);
-  if(rgb1 == NULL) goto error;
+  if(IS_NULL_PTR(rgb1)) goto error;
   rgb2 = dt_opencl_alloc_device_buffer(devid, sizeof(float) * roi_in->width * roi_in->height);
-  if(rgb2 == NULL) goto error;
+  if(IS_NULL_PTR(rgb2)) goto error;
 
   {
     // populate data

@@ -48,7 +48,7 @@ int dt_focuspeaking(cairo_t *cr,
   float *const restrict luma_ds = dt_pixelpipe_cache_alloc_align_float_cache((size_t)buf_width * buf_height, 0);
   uint8_t *restrict focus_peaking = NULL;
   int err = 0;
-  if(luma_ds == NULL || luma == NULL)
+  if(IS_NULL_PTR(luma_ds) || IS_NULL_PTR(luma))
   {
     err = 1;
     goto error_early;
@@ -164,7 +164,7 @@ int dt_focuspeaking(cairo_t *cr,
   focus_peaking = dt_pixelpipe_cache_alloc_align_cache(
       sizeof(uint8_t) * buf_width * buf_height * 4,
       0);
-  if(focus_peaking == NULL)
+  if(IS_NULL_PTR(focus_peaking))
   {
     err = 1;
     goto error;

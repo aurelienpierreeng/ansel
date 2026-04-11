@@ -131,7 +131,7 @@ typedef enum dt_signal_t
 
   /** \brief This signal is raised when a geotag is added/deleted/changed  */
   // when imgs <> NULL these images have some geotag changes
-  // when imgs == NULL locations have changed
+  // when IS_NULL_PTR(imgs) locations have changed
   // if locid <> 0 it the new selected location on map
   DT_SIGNAL_GEOTAG_CHANGED,
 

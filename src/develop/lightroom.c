@@ -270,7 +270,7 @@ char *dt_get_lightroom_xmp(int32_t imgid)
   // Look for extension
   char *pos = strrchr(pathname, '.');
 
-  if(pos == NULL)
+  if(IS_NULL_PTR(pos))
     return NULL;
 
   // If found, replace extension with xmp
@@ -829,7 +829,7 @@ static void _lrop(const dt_develop_t *dev, const xmlDocPtr doc, const int32_t im
       dt_free(v);
     }
   }
-  if(dev == NULL && (!xmlStrcmp(name, (const xmlChar *)"subject")
+  if(IS_NULL_PTR(dev) && (!xmlStrcmp(name, (const xmlChar *)"subject")
                      || !xmlStrcmp(name, (const xmlChar *)"hierarchicalSubject")))
   {
     xmlNodePtr tagNode = node;
@@ -907,7 +907,7 @@ static void _lrop(const dt_develop_t *dev, const xmlDocPtr doc, const int32_t im
       tcNode = tcNode->next;
     }
   }
-  else if(dev == NULL && !xmlStrcmp(name, (const xmlChar *)"title"))
+  else if(IS_NULL_PTR(dev) && !xmlStrcmp(name, (const xmlChar *)"title"))
   {
     xmlNodePtr ttlNode = node;
     while(ttlNode)
@@ -921,7 +921,7 @@ static void _lrop(const dt_develop_t *dev, const xmlDocPtr doc, const int32_t im
       ttlNode = ttlNode->next;
     }
   }
-  else if(dev == NULL && !xmlStrcmp(name, (const xmlChar *)"description"))
+  else if(IS_NULL_PTR(dev) && !xmlStrcmp(name, (const xmlChar *)"description"))
   {
     xmlNodePtr desNode = node;
     while(desNode)
@@ -935,7 +935,7 @@ static void _lrop(const dt_develop_t *dev, const xmlDocPtr doc, const int32_t im
       desNode = desNode->next;
     }
   }
-  else if(dev == NULL && !xmlStrcmp(name, (const xmlChar *)"creator"))
+  else if(IS_NULL_PTR(dev) && !xmlStrcmp(name, (const xmlChar *)"creator"))
   {
     xmlNodePtr creNode = node;
     while(creNode)
@@ -949,7 +949,7 @@ static void _lrop(const dt_develop_t *dev, const xmlDocPtr doc, const int32_t im
       creNode = creNode->next;
     }
   }
-  else if(dev == NULL && !xmlStrcmp(name, (const xmlChar *)"rights"))
+  else if(IS_NULL_PTR(dev) && !xmlStrcmp(name, (const xmlChar *)"rights"))
   {
     xmlNodePtr rigNode = node;
     while(rigNode)
@@ -1073,7 +1073,7 @@ gboolean dt_lightroom_import(int32_t imgid, dt_develop_t *dev, gboolean iauto)
 
   doc = xmlReadFile(pathname, NULL, 0);
 
-  if(doc == NULL)
+  if(IS_NULL_PTR(doc))
   {
     dt_free(pathname);
     return FALSE ;
@@ -1083,7 +1083,7 @@ gboolean dt_lightroom_import(int32_t imgid, dt_develop_t *dev, gboolean iauto)
 
   entryNode = xmlDocGetRootElement(doc);
 
-  if(entryNode == NULL)
+  if(IS_NULL_PTR(entryNode))
   {
     dt_free(pathname);
     xmlFreeDoc(doc);
@@ -1101,7 +1101,7 @@ gboolean dt_lightroom_import(int32_t imgid, dt_develop_t *dev, gboolean iauto)
 
   xmlXPathContextPtr xpathCtx = xmlXPathNewContext(doc);
 
-  if(xpathCtx == NULL)
+  if(IS_NULL_PTR(xpathCtx))
   {
     dt_free(pathname);
     xmlFreeDoc(doc);
@@ -1112,7 +1112,7 @@ gboolean dt_lightroom_import(int32_t imgid, dt_develop_t *dev, gboolean iauto)
 
   xmlXPathObjectPtr xpathObj = xmlXPathEvalExpression((const xmlChar *)"//@stEvt:softwareAgent", xpathCtx);
 
-  if(xpathObj == NULL)
+  if(IS_NULL_PTR(xpathObj))
   {
     if(!iauto) dt_control_log(_("`%s' not a lightroom XMP!"), pathname);
     xmlXPathFreeContext(xpathCtx);
@@ -1497,7 +1497,7 @@ gboolean dt_lightroom_import(int32_t imgid, dt_develop_t *dev, gboolean iauto)
     n_import++;
   }
 
-  if(dev == NULL && data.has_rating)
+  if(IS_NULL_PTR(dev) && data.has_rating)
   {
     dt_ratings_apply_on_image(imgid, data.rating, FALSE, FALSE, FALSE);
 
@@ -1506,7 +1506,7 @@ gboolean dt_lightroom_import(int32_t imgid, dt_develop_t *dev, gboolean iauto)
     n_import++;
   }
 
-  if(dev == NULL && data.has_gps)
+  if(IS_NULL_PTR(dev) && data.has_gps)
   {
     dt_image_geoloc_t geoloc;
     geoloc.longitude = data.lon;
@@ -1522,7 +1522,7 @@ gboolean dt_lightroom_import(int32_t imgid, dt_develop_t *dev, gboolean iauto)
     n_import++;
   }
 
-  if(dev == NULL && data.has_colorlabel)
+  if(IS_NULL_PTR(dev) && data.has_colorlabel)
   {
     dt_colorlabels_set_label(imgid, data.color);
 

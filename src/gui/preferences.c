@@ -655,8 +655,8 @@ static void tree_insert_presets(GtkTreeStore *tree_model)
     int min, max;
 
     gchar *module = g_strdup(dt_iop_get_localized_name(operation));
-    if(module == NULL) module = g_strdup(dt_lib_get_localized_name(operation));
-    if(module == NULL) module = g_strdup(operation);
+    if(IS_NULL_PTR(module)) module = g_strdup(dt_lib_get_localized_name(operation));
+    if(IS_NULL_PTR(module)) module = g_strdup(operation);
 
     if(!dt_presets_module_can_autoapply(operation))
     {
@@ -928,7 +928,7 @@ static void tree_row_activated_presets(GtkTreeView *tree, GtkTreePath *path, Gtk
     GdkPixbuf *editable;
     gtk_tree_model_get(model, &iter, P_ROWID_COLUMN, &rowid, P_NAME_COLUMN, &name, P_OPERATION_COLUMN,
                        &operation, P_EDITABLE_COLUMN, &editable, -1);
-    if(editable == NULL)
+    if(IS_NULL_PTR(editable))
       edit_preset(tree, rowid, name, operation);
     else
       g_object_unref(editable);
@@ -964,7 +964,7 @@ static gboolean tree_key_press_presets(GtkWidget *widget, GdkEventKey *event, gp
     GdkPixbuf *editable;
     gtk_tree_model_get(model, &iter, P_ROWID_COLUMN, &rowid, P_NAME_COLUMN, &name,
                        P_EDITABLE_COLUMN, &editable, -1);
-    if(editable == NULL)
+    if(IS_NULL_PTR(editable))
     {
       sqlite3_stmt *stmt;
       gchar* operation = NULL;

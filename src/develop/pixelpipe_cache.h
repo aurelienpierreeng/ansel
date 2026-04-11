@@ -327,7 +327,7 @@ gboolean dt_dev_pixelpipe_cache_flush_host_pinned_image(dt_dev_pixelpipe_cache_t
  * This is the cache-owned buffer acquisition helper used by the OpenCL pixelpipe backend:
  *
  * - if `host_ptr != NULL`, it may reuse or allocate a pinned `CL_MEM_USE_HOST_PTR` image,
- * - if `host_ptr == NULL`, it may reuse or allocate a device-only scratch image,
+ * - if `IS_NULL_PTR(host_ptr)`, it may reuse or allocate a device-only scratch image,
  * - allocation failures may trigger a cache-side `cl_mem` flush and one retry.
  *
  * @param devid OpenCL device id.

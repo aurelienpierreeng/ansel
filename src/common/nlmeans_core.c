@@ -120,7 +120,7 @@ define_patches(const dt_nlmeans_param_t *const params, const int stride, int *nu
   *num_patches = n_patches ;
   // allocate a cacheline-aligned buffer
   struct patch_t *patches = dt_pixelpipe_cache_alloc_align_cache(sizeof(struct patch_t) * n_patches, 0);
-  if(patches == NULL) return NULL;
+  if(IS_NULL_PTR(patches)) return NULL;
 
   // set up the patch offsets
   int patch_num = 0;
@@ -342,7 +342,7 @@ void nlmeans_denoise(const float *const inbuf, float *const outbuf,
 #endif /* CACHE_PIXDIFFS */
   size_t padded_scratch_size;
   float *const restrict scratch_buf = dt_pixelpipe_cache_alloc_perthread_float(scratch_size, &padded_scratch_size);
-  if(scratch_buf == NULL) return;
+  if(IS_NULL_PTR(scratch_buf)) return;
 
   const int chk_height = compute_slice_height(roi_out->height);
   const int chk_width = compute_slice_width(roi_out->width);

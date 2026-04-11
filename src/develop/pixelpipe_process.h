@@ -72,7 +72,7 @@ static inline gboolean _requests_cache(const dt_dev_pixelpipe_t *pipe, const dt_
  */
 static inline void _reset_piece_cache_entry(dt_dev_pixelpipe_iop_t *piece)
 {
-  if(piece == NULL) return;
+  if(IS_NULL_PTR(piece)) return;
 
   memset(&piece->cache_entry, 0, sizeof(piece->cache_entry));
   piece->cache_entry.hash = DT_PIXELPIPE_CACHE_HASH_INVALID;

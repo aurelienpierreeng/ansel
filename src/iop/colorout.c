@@ -343,16 +343,16 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   float cmatrix[12];
   pack_3xSSE_to_3x4(d->cmatrix, cmatrix);
   dev_m = dt_opencl_copy_host_to_device_constant(devid, sizeof(float) * 12, cmatrix);
-  if(dev_m == NULL) goto error;
+  if(IS_NULL_PTR(dev_m)) goto error;
   dev_r = dt_opencl_copy_host_to_device(devid, d->lut[0], 256, 256, sizeof(float));
-  if(dev_r == NULL) goto error;
+  if(IS_NULL_PTR(dev_r)) goto error;
   dev_g = dt_opencl_copy_host_to_device(devid, d->lut[1], 256, 256, sizeof(float));
-  if(dev_g == NULL) goto error;
+  if(IS_NULL_PTR(dev_g)) goto error;
   dev_b = dt_opencl_copy_host_to_device(devid, d->lut[2], 256, 256, sizeof(float));
-  if(dev_b == NULL) goto error;
+  if(IS_NULL_PTR(dev_b)) goto error;
   dev_coeffs
       = dt_opencl_copy_host_to_device_constant(devid, sizeof(float) * 3 * 3, (float *)d->unbounded_coeffs);
-  if(dev_coeffs == NULL) goto error;
+  if(IS_NULL_PTR(dev_coeffs)) goto error;
   dt_opencl_set_kernel_arg(devid, gd->kernel_colorout, 0, sizeof(cl_mem), (void *)&dev_in);
   dt_opencl_set_kernel_arg(devid, gd->kernel_colorout, 1, sizeof(cl_mem), (void *)&dev_out);
   dt_opencl_set_kernel_arg(devid, gd->kernel_colorout, 2, sizeof(int), (void *)&width);

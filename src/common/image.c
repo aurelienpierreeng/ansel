@@ -920,7 +920,7 @@ dt_image_orientation_t dt_image_get_orientation(const int32_t imgid)
 {
   // find the flip module -- the pointer stays valid until darktable shuts down
   static dt_iop_module_so_t *flip = NULL;
-  if(flip == NULL)
+  if(IS_NULL_PTR(flip))
   {
     for(const GList *modules = darktable.iop; modules; modules = g_list_next(modules))
     {

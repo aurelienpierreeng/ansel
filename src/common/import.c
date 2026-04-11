@@ -210,7 +210,7 @@ static void _recurse_selection(GSList *selection, dt_import_t *const import)
   // GtkFileChooser gives us a GSList for selection, so we can't directly recurse from here
   // since the import job expects a GList.
 
-  if(*(import->shutdown) || selection == NULL) return;
+  if(*(import->shutdown) || IS_NULL_PTR(selection)) return;
 
   GVfs *vfs = g_vfs_get_default();
   for(GSList *uri = selection; uri; uri = g_slist_next(uri))
@@ -355,7 +355,7 @@ static GdkPixbuf *_import_get_thumbnail(const gchar *filename, const int width, 
     dt_free(mime_type);
   }
 
-  if(pixbuf == NULL)
+  if(IS_NULL_PTR(pixbuf))
   {
     const gboolean use_internal_loader = !(file_type & DT_IMAGE_RAW);
 
@@ -405,10 +405,10 @@ static GdkPixbuf *_import_get_thumbnail(const gchar *filename, const int width, 
   }
 
   // Fallback to whatever Gtk found in the file
-  if(pixbuf == NULL)
+  if(IS_NULL_PTR(pixbuf))
     pixbuf = gdk_pixbuf_new_from_file_at_size(filename, width, height, NULL);
 
-  if(pixbuf == NULL) return NULL;
+  if(IS_NULL_PTR(pixbuf)) return NULL;
 
   // Rotate the image to the correct orientation
   GdkPixbuf *tmp = pixbuf;
@@ -589,7 +589,7 @@ static void update_preview_cb(GtkFileChooser *file_chooser, gpointer userdata)
 {
   dt_lib_import_t *d = (dt_lib_import_t *)userdata;
   char *uri = gtk_file_chooser_get_preview_uri(file_chooser);
-  if(uri == NULL)
+  if(IS_NULL_PTR(uri))
   {
     gtk_file_chooser_set_preview_widget_active(file_chooser, FALSE);
     return; // nothing to do, nothing to free.
@@ -720,7 +720,7 @@ static void _set_help_string(dt_lib_import_t *d, gboolean copy)
 
 static void _set_test_path(dt_lib_import_t *d, dt_image_t *img)
 {
-  if(!d->path_file || d->path_file == NULL)
+  if(!d->path_file || IS_NULL_PTR(d->path_file))
     return;
 
   const gboolean duplicate = dt_conf_get_bool("ui_last/import_copy");
@@ -761,7 +761,7 @@ static void _set_test_path(dt_lib_import_t *d, dt_image_t *img)
                                 };
 
     gboolean free_after = FALSE;
-    if(img == NULL)
+    if(IS_NULL_PTR(img))
     {
       img = malloc(sizeof(dt_image_t));
       dt_image_init(img);

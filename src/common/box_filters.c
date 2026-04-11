@@ -938,7 +938,7 @@ static int dt_box_mean_1ch(float *const buf, const size_t height, const size_t w
   const size_t size = MAX(width,16*eff_height);
   size_t padded_size;
   float *const restrict scanlines = dt_pixelpipe_cache_alloc_perthread_float(size, &padded_size);
-  if(scanlines == NULL) return 1;
+  if(IS_NULL_PTR(scanlines)) return 1;
 
   for(unsigned iteration = 0; iteration < iterations; iteration++)
   {
@@ -961,7 +961,7 @@ static int dt_box_mean_4ch(float *const buf, const int height, const int width, 
   const size_t size = MAX(4*width,16*eff_height);
   size_t padded_size;
   float *const restrict scanlines = dt_pixelpipe_cache_alloc_perthread_float(size, &padded_size);
-  if(scanlines == NULL) return 1;
+  if(IS_NULL_PTR(scanlines)) return 1;
 
   for(unsigned iteration = 0; iteration < iterations; iteration++)
   {
@@ -980,7 +980,7 @@ static int box_mean_vert_1ch_Kahan(float *const buf, const int height, const siz
   const size_t eff_height = _compute_effective_height(height,radius);
   size_t padded_size;
   float *const restrict scratch_buf = dt_pixelpipe_cache_alloc_perthread_float(16*eff_height,&padded_size);
-  if(scratch_buf == NULL) return 1;
+  if(IS_NULL_PTR(scratch_buf)) return 1;
   __OMP_PARALLEL_FOR__()
   for (size_t col = 0; col < width; col += 16)
   {
@@ -1013,7 +1013,7 @@ static int dt_box_mean_4ch_Kahan(float *const buf, const size_t height, const si
   {
     size_t padded_size;
     float *const restrict scanlines = dt_pixelpipe_cache_alloc_perthread_float(4*width,&padded_size);
-    if(scanlines == NULL) return 1;
+    if(IS_NULL_PTR(scanlines)) return 1;
     __OMP_PARALLEL_FOR__()
     for (size_t row = 0; row < height; row++)
     {
@@ -1040,7 +1040,7 @@ static inline int box_mean_2ch(float *const restrict in, const size_t height, co
   const size_t Ndim = MAX(4*width,16*eff_height);
   size_t padded_size;
   float *const restrict temp = dt_pixelpipe_cache_alloc_perthread_float(Ndim, &padded_size);
-  if (temp == NULL) return 1;
+  if (IS_NULL_PTR(temp)) return 1;
 
   for (unsigned iteration = 0; iteration < iterations; iteration++)
   {
@@ -1082,7 +1082,7 @@ int dt_box_mean_horizontal(float *const restrict buf, const size_t width, const 
   {
     float *const restrict scratch = user_scratch ? user_scratch
                                                  : dt_pixelpipe_cache_alloc_align_float_cache(4 * width, 0);
-    if(scratch == NULL) return 1;
+    if(IS_NULL_PTR(scratch)) return 1;
 
     blur_horizontal_4ch_Kahan(buf, width, radius, scratch);
     if (!user_scratch)
@@ -1093,7 +1093,7 @@ int dt_box_mean_horizontal(float *const restrict buf, const size_t width, const 
   {
     float *const restrict scratch = user_scratch ? user_scratch
                                                  : dt_pixelpipe_cache_alloc_align_float_cache(9 * width, 0);
-    if(scratch == NULL) return 1;
+    if(IS_NULL_PTR(scratch)) return 1;
 
     blur_horizontal_Nch_Kahan(9, buf, width, radius, scratch);
     if (!user_scratch)
@@ -1224,7 +1224,7 @@ static int box_max_1ch(float *const buf, const size_t height, const size_t width
   const size_t scratch_size = MAX(width,MAX(height,16*eff_height));
   size_t allocsize;
   float *const restrict scratch_buffers = dt_pixelpipe_cache_alloc_perthread_float(scratch_size,&allocsize);
-  if(scratch_buffers == NULL) return 1;
+  if(IS_NULL_PTR(scratch_buffers)) return 1;
   __OMP_PARALLEL_FOR__()
   for(size_t row = 0; row < height; row++)
   {
@@ -1359,7 +1359,7 @@ static int box_min_1ch(float *const buf, const size_t height, const size_t width
   const size_t scratch_size = MAX(width,MAX(height,16*eff_height));
   size_t allocsize;
   float *const restrict scratch_buffers = dt_pixelpipe_cache_alloc_perthread_float(scratch_size,&allocsize);
-  if(scratch_buffers == NULL) return 1;
+  if(IS_NULL_PTR(scratch_buffers)) return 1;
   __OMP_PARALLEL_FOR__()
   for(size_t row = 0; row < height; row++)
   {

@@ -539,10 +539,10 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   cl_mem diff_table = NULL;
 
   dev_table = dt_opencl_copy_host_to_device(devid, d->table, 256, 256, sizeof(float));
-  if(dev_table == NULL) goto error;
+  if(IS_NULL_PTR(dev_table)) goto error;
 
   diff_table = dt_opencl_copy_host_to_device(devid, d->grad_2, 256, 256, sizeof(float));
-  if(diff_table == NULL) goto error;
+  if(IS_NULL_PTR(diff_table)) goto error;
 
   const float dynamic_range = d->dynamic_range;
   const float shadows_range = d->black_source;

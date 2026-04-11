@@ -411,7 +411,7 @@ static gboolean _osx_quit_callback(GtkosxApplication *OSXapp, gpointer user_data
   for(window = windows; window != NULL; window = g_list_next(window))
     if(gtk_window_get_modal(GTK_WINDOW(window->data)) && gtk_widget_get_visible(GTK_WIDGET(window->data)))
       break;
-  if(window == NULL) dt_control_quit();
+  if(IS_NULL_PTR(window)) dt_control_quit();
   g_list_free(windows);
   windows = NULL;
   return TRUE;
@@ -1747,11 +1747,11 @@ void dt_gui_load_theme(const char *theme)
   usercsspath = g_build_filename(configdir, "user.css", NULL);
 
   gchar *path_uri = g_filename_to_uri(path, NULL, &error);
-  if(path_uri == NULL)
+  if(IS_NULL_PTR(path_uri))
     fprintf(stderr, "%s: could not convert path %s to URI. Error: %s\n", G_STRFUNC, path, error->message);
 
   gchar *usercsspath_uri = g_filename_to_uri(usercsspath, NULL, &error);
-  if(usercsspath_uri == NULL)
+  if(IS_NULL_PTR(usercsspath_uri))
     fprintf(stderr, "%s: could not convert path %s to URI. Error: %s\n", G_STRFUNC, usercsspath, error->message);
 
   gchar *themecss = NULL;

@@ -174,7 +174,7 @@ static inline int variance_analyse(const float *const restrict guide, // I
   * input is array of struct : { { guide , mask, guide * guide, guide * mask } }
   */
   float *const restrict input = dt_pixelpipe_cache_alloc_align_float_cache(Ndimch, 0);
-  if(input == NULL) return 1;
+  if(IS_NULL_PTR(input)) return 1;
 
   // Pre-multiply guide and mask and pack all inputs into an array of 4x1 SIMD struct
   __OMP_PARALLEL_FOR__()

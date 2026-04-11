@@ -384,7 +384,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
   {
     const dt_iop_order_iccprofile_info_t *const work_profile
         = dt_ioppr_get_iop_work_profile_info(self, self->dev->iop);
-    if(work_profile == NULL) return;
+    if(IS_NULL_PTR(work_profile)) return;
 
     for(int ch = 0; ch < DT_IOP_RGBCURVE_MAX_CHANNELS; ch++)
     {

@@ -1312,10 +1312,10 @@ static int edge_enhance(const double *in, double *out, const int width, const in
   double *Gy = NULL;
 
   Gx = malloc(sizeof(double) * width * height);
-  if(Gx == NULL) goto error;
+  if(IS_NULL_PTR(Gx)) goto error;
 
   Gy = malloc(sizeof(double) * width * height);
-  if(Gy == NULL) goto error;
+  if(IS_NULL_PTR(Gy)) goto error;
 
   // perform edge enhancement in both directions
   edge_enhance_1d(in, Gx, width, height, ASHIFT_ENHANCE_HORIZONTAL);
@@ -1441,7 +1441,7 @@ static int line_detect(float *in, const int width, const int height, const int x
 
   // allocate intermediate buffers
   greyscale = malloc(sizeof(double) * width * height);
-  if(greyscale == NULL) goto error;
+  if(IS_NULL_PTR(greyscale)) goto error;
 
   // convert to greyscale image
   rgb2grey256(in, greyscale, width, height);
@@ -1468,7 +1468,7 @@ static int line_detect(float *in, const int width, const int height, const int x
   {
     // aggregate lines data into our own structures
     ashift_lines = (dt_iop_ashift_line_t *)malloc(sizeof(dt_iop_ashift_line_t) * lines_count);
-    if(ashift_lines == NULL) goto error;
+    if(IS_NULL_PTR(ashift_lines)) goto error;
 
     for(int n = 0; n < lines_count; n++)
     {
@@ -1616,7 +1616,7 @@ static int _get_structure(dt_iop_module_t *module, dt_iop_ashift_enhance_t enhan
   }
   dt_iop_gui_leave_critical_section(module);
 
-  if(buffer == NULL) goto error;
+  if(IS_NULL_PTR(buffer)) goto error;
 
   // get rid of old structural data
   g->lines_count = 0;
@@ -1913,7 +1913,7 @@ static int _remove_outliers(dt_iop_module_t *module)
   int hnb = 0, hcount = 0;
 
   // just to be on the safe side
-  if(g->lines == NULL) goto error;
+  if(IS_NULL_PTR(g->lines)) goto error;
 
   // generate index list for the vertical lines
   for(int n = 0; n < g->lines_count; n++)
@@ -2979,7 +2979,7 @@ static gboolean _sync_private_buffer_from_preview_cache(dt_iop_module_t *self,
   // it stays correct even if ROI bookkeeping changes around the GUI boundary.
   const float buffer_scale = 0.5f * (scale_x + scale_y);
   dt_iop_gui_enter_critical_section(self);
-  if(g->buf == NULL || (size_t)g->buf_width * g->buf_height < (size_t)width * height)
+  if(IS_NULL_PTR(g->buf) || (size_t)g->buf_width * g->buf_height < (size_t)width * height)
   {
     dt_free(g->buf);
     g->buf = malloc(sizeof(float) * 4 * (size_t)width * height);
@@ -3033,12 +3033,12 @@ static int _do_get_structure_auto(dt_iop_module_t *self, dt_iop_ashift_params_t 
   float *b = g->buf;
   dt_iop_gui_leave_critical_section(self);
 
-  if(b == NULL)
+  if(IS_NULL_PTR(b))
   {
     dt_dev_pixelpipe_iop_t *preview_piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->preview_pipe, self);
     if(_sync_private_buffer_from_preview_cache(self, &preview_piece)) b = g->buf;
 
-    if(b == NULL)
+    if(IS_NULL_PTR(b))
     {
       dt_control_log(_("Data pending - Please repeat"));
       // If preview is already valid here, the GUI state was lost while the pipe can still exact-hit
@@ -3109,12 +3109,12 @@ static void _do_get_structure_lines(dt_iop_module_t *self)
   float *b = g->buf;
   dt_iop_gui_leave_critical_section(self);
 
-  if(b == NULL)
+  if(IS_NULL_PTR(b))
   {
     dt_dev_pixelpipe_iop_t *preview_piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->preview_pipe, self);
     if(_sync_private_buffer_from_preview_cache(self, &preview_piece)) b = g->buf;
 
-    if(b == NULL)
+    if(IS_NULL_PTR(b))
     {
       dt_control_log(_("Data pending - Please repeat"));
       if(dt_dev_pixelpipe_is_backbufer_valid(self->dev->preview_pipe, self->dev) && preview_piece)
@@ -3167,12 +3167,12 @@ static void _do_get_structure_quad(dt_iop_module_t *self)
   float *b = g->buf;
   dt_iop_gui_leave_critical_section(self);
 
-  if(b == NULL)
+  if(IS_NULL_PTR(b))
   {
     dt_dev_pixelpipe_iop_t *preview_piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->preview_pipe, self);
     if(_sync_private_buffer_from_preview_cache(self, &preview_piece)) b = g->buf;
 
-    if(b == NULL)
+    if(IS_NULL_PTR(b))
     {
       dt_control_log(_("Data pending - Please repeat"));
       if(dt_dev_pixelpipe_is_backbufer_valid(self->dev->preview_pipe, self->dev) && preview_piece)
@@ -3255,7 +3255,7 @@ static void do_fit(dt_iop_module_t *module, dt_iop_ashift_params_t *p, dt_iop_as
   if(g->fitting) return;
 
   // if no structure available get it
-  if(g->lines == NULL)
+  if(IS_NULL_PTR(g->lines))
     if(!_do_get_structure_auto(module, p, ASHIFT_ENHANCE_NONE)) return;
 
   if(g->lines_in_width > 0 && g->lines_in_height > 0)
@@ -3375,7 +3375,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     g->isflipped = isflipped;
 
     // save a copy of preview input buffer for parameter fitting
-    if(g->buf == NULL || (size_t)g->buf_width * g->buf_height < (size_t)width * height)
+    if(IS_NULL_PTR(g->buf) || (size_t)g->buf_width * g->buf_height < (size_t)width * height)
     {
       // if needed allocate buffer
       dt_free(g->buf); // a no-op if g->buf is NULL
@@ -3515,7 +3515,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     g->isflipped = isflipped;
 
     // save a copy of preview input buffer for parameter fitting
-    if(g->buf == NULL || (size_t)g->buf_width * g->buf_height < (size_t)iwidth * iheight)
+    if(IS_NULL_PTR(g->buf) || (size_t)g->buf_width * g->buf_height < (size_t)iwidth * iheight)
     {
       // if needed allocate buffer
       dt_free(g->buf); // a no-op if g->buf is NULL
@@ -3560,7 +3560,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   const float cy = roi_out->scale * fullheight * d->ct;
 
   dev_homo = dt_opencl_copy_host_to_device_constant(devid, sizeof(float) * 9, ihomograph);
-  if(dev_homo == NULL) goto error;
+  if(IS_NULL_PTR(dev_homo)) goto error;
 
   const int iroi[2] = { roi_in->x, roi_in->y };
   const int oroi[2] = { roi_out->x, roi_out->y };
@@ -3771,7 +3771,7 @@ static int get_points(struct dt_iop_module_t *self, const dt_iop_ashift_line_t *
 
   // allocate new index array
   my_points_idx = (dt_iop_ashift_points_idx_t *)malloc(sizeof(dt_iop_ashift_points_idx_t) * lines_count);
-  if(my_points_idx == NULL) goto error;
+  if(IS_NULL_PTR(my_points_idx)) goto error;
 
   // account for total number of points
   size_t total_points = 0;
@@ -3808,7 +3808,7 @@ static int get_points(struct dt_iop_module_t *self, const dt_iop_ashift_line_t *
   // now allocate new points buffer
   my_points = (float *)malloc(sizeof(float) * 2 * total_points);
   my_extremas = (float *)malloc(sizeof(float) * 2 * 2 * lines_count);
-  if(my_points == NULL) goto error;
+  if(IS_NULL_PTR(my_points)) goto error;
 
   // second step: generate points for each line
   for(int n = 0, offset = 0; n < lines_count; n++)
@@ -4170,7 +4170,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
 
   // structural data are currently being collected or fit procedure is running? -> skip
   // no structural data or visibility switched off? -> stop here
-  if(g->fitting || g->lines == NULL || !g->buf || !self->enabled) return;
+  if(g->fitting || IS_NULL_PTR(g->lines) || !g->buf || !self->enabled) return;
 
   // ensure virtual pipe params are in sync so distortions use current settings
   if(dt_dev_pixelpipe_get_history_hash(dev->virtual_pipe) != dt_dev_get_history_hash(dev))
@@ -4183,7 +4183,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   const uint64_t lines_hash = _get_lines_hash(g->lines, g->lines_count);
 
   // points data are missing or outdated, or distortion has changed?
-  if(g->points == NULL || g->points_idx == NULL || hash != g->grid_hash
+  if(IS_NULL_PTR(g->points) || IS_NULL_PTR(g->points_idx) || hash != g->grid_hash
      || (g->lines_version > g->points_version
          && g->lines_hash != lines_hash))
   {
@@ -4217,7 +4217,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   }
 
   // a final check
-  if(g->points == NULL || g->points_idx == NULL) return;
+  if(IS_NULL_PTR(g->points) || IS_NULL_PTR(g->points_idx)) return;
 
   cairo_save(cr);
   dt_dev_rescale_roi(dev, cr, width, height);
@@ -5551,7 +5551,7 @@ static void _event_history_resync_callback(gpointer instance, gpointer user_data
   const uint64_t preview_input_hash = _current_preview_input_hash(self);
   if(preview_input_hash == DT_PIXELPIPE_CACHE_HASH_INVALID) return;
 
-  if((g->buf == NULL || g->buf_hash != preview_input_hash)
+  if((IS_NULL_PTR(g->buf) || g->buf_hash != preview_input_hash)
      && !_sync_private_buffer_from_preview_cache(self, NULL))
   {
     g->pending_preview_input_hash = preview_input_hash;

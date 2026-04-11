@@ -574,7 +574,7 @@ static void workicc_changed(GtkWidget *widget, gpointer user_data)
     g_strlcpy(p->filename_work, filename_work, sizeof(p->filename_work));
 
     const dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_add_profile_info_to_list(self->dev, p->type_work, p->filename_work, DT_INTENT_PERCEPTUAL);
-    if(work_profile == NULL || isnan(work_profile->matrix_in[0][0]) || isnan(work_profile->matrix_out[0][0]))
+    if(IS_NULL_PTR(work_profile) || isnan(work_profile->matrix_in[0][0]) || isnan(work_profile->matrix_out[0][0]))
     {
       dt_print(DT_DEBUG_COLORPROFILE,
                "[colorin] can't extract matrix from colorspace `%s', it will be replaced by Rec2020 RGB!\n",
@@ -638,18 +638,18 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
 
   size_t sizes[] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
   dev_m = dt_opencl_copy_host_to_device_constant(devid, sizeof(float) * 12, cmat);
-  if(dev_m == NULL) goto error;
+  if(IS_NULL_PTR(dev_m)) goto error;
   dev_l = dt_opencl_copy_host_to_device_constant(devid, sizeof(float) * 12, lmat);
-  if(dev_l == NULL) goto error;
+  if(IS_NULL_PTR(dev_l)) goto error;
   dev_r = dt_opencl_copy_host_to_device(devid, d->lut[0], 256, 256, sizeof(float));
-  if(dev_r == NULL) goto error;
+  if(IS_NULL_PTR(dev_r)) goto error;
   dev_g = dt_opencl_copy_host_to_device(devid, d->lut[1], 256, 256, sizeof(float));
-  if(dev_g == NULL) goto error;
+  if(IS_NULL_PTR(dev_g)) goto error;
   dev_b = dt_opencl_copy_host_to_device(devid, d->lut[2], 256, 256, sizeof(float));
-  if(dev_b == NULL) goto error;
+  if(IS_NULL_PTR(dev_b)) goto error;
   dev_coeffs
       = dt_opencl_copy_host_to_device_constant(devid, sizeof(float) * 3 * 3, (float *)d->unbounded_coeffs);
-  if(dev_coeffs == NULL) goto error;
+  if(IS_NULL_PTR(dev_coeffs)) goto error;
   dt_opencl_set_kernel_arg(devid, kernel, 0, sizeof(cl_mem), (void *)&dev_in);
   dt_opencl_set_kernel_arg(devid, kernel, 1, sizeof(cl_mem), (void *)&dev_out);
   dt_opencl_set_kernel_arg(devid, kernel, 2, sizeof(int), (void *)&width);

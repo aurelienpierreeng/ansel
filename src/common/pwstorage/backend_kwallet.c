@@ -388,7 +388,7 @@ gboolean dt_pwstorage_kwallet_set(const backend_kwallet_context_t *context, cons
     dt_print(DT_DEBUG_PWSTORAGE, "[pwstorage_kwallet_set] storing (%s, %s)\n", (gchar *)key, (gchar *)value);
     gsize length;
     gchar *new_key = char2qstring(key, &length);
-    if(new_key == NULL)
+    if(IS_NULL_PTR(new_key))
     {
       gchar *byte_array_data = g_array_free(byte_array, FALSE);
       dt_free(byte_array_data);
@@ -398,7 +398,7 @@ gboolean dt_pwstorage_kwallet_set(const backend_kwallet_context_t *context, cons
     dt_free(new_key);
 
     gchar *new_value = char2qstring(value, &length);
-    if(new_value == NULL)
+    if(IS_NULL_PTR(new_value))
     {
       gchar *byte_array_data = g_array_free(byte_array, FALSE);
       dt_free(byte_array_data);

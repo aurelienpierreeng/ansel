@@ -751,7 +751,7 @@ static GtkWidget *_color_picker_new(dt_iop_module_t *module, dt_iop_color_picker
 {
   dt_iop_color_picker_t *color_picker = (dt_iop_color_picker_t *)g_malloc(sizeof(dt_iop_color_picker_t));
 
-  if(w == NULL || GTK_IS_BOX(w))
+  if(IS_NULL_PTR(w) || GTK_IS_BOX(w))
   {
     GtkWidget *button = dtgtk_togglebutton_new(dtgtk_cairo_paint_colorpicker, 0, NULL);
     dt_gui_add_class(button, "dt_transparent_background");
@@ -765,7 +765,7 @@ static GtkWidget *_color_picker_new(dt_iop_module_t *module, dt_iop_color_picker
 
     dt_develop_t *const dev = darktable.develop;
     if(dev && dev->color_picker.enabled && dev->color_picker.module == module
-       && dev->color_picker.widget == NULL
+       && IS_NULL_PTR(dev->color_picker.widget)
        && dev->color_picker.kind == kind
        && dev->color_picker.picker_cst == color_picker->picker_cst)
     {
@@ -792,7 +792,7 @@ static GtkWidget *_color_picker_new(dt_iop_module_t *module, dt_iop_color_picker
 
     dt_develop_t *const dev = darktable.develop;
     if(dev && dev->color_picker.enabled && dev->color_picker.module == module
-       && dev->color_picker.widget == NULL
+       && IS_NULL_PTR(dev->color_picker.widget)
        && dev->color_picker.kind == kind
        && dev->color_picker.picker_cst == color_picker->picker_cst)
     {
