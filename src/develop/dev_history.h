@@ -50,7 +50,11 @@ typedef struct dt_dev_history_item_t
   struct dt_iop_module_t *module; // pointer to image operation module
   gboolean enabled;               // switched respective module on/off
   dt_iop_params_t *params;        // parameters for this operation
+  int params_size;                // serialized params size
+  int module_version;             // serialized module version
   struct dt_develop_blend_params_t *blend_params;
+  int blendop_params_size;        // serialized blend params size
+  int blendop_version;            // serialized blend version
   char op_name[32];
   int iop_order;
   int multi_priority;

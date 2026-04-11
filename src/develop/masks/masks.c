@@ -3575,7 +3575,10 @@ static int _masks_cleanup_unused(GList **forms_list, GList *history_list, const 
       history_node = g_list_next(history_node))
   {
     dt_dev_history_item_t *history_item = (dt_dev_history_item_t *)history_node->data;
-    dt_develop_blend_params_t *blend_params = history_item->blend_params;
+    dt_develop_blend_params_t *blend_params
+        = history_item && history_item->blendop_params_size == sizeof(dt_develop_blend_params_t)
+              ? history_item->blend_params
+              : NULL;
     if(blend_params)
     {
       if(blend_params->mask_id > 0)

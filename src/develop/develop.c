@@ -1138,7 +1138,7 @@ void dt_dev_module_remove(dt_develop_t *dev, dt_iop_module_t *module)
       if(module == hist->module)
       {
         dt_print(DT_DEBUG_HISTORY, "[dt_module_remode] removing obsoleted history item: %s %s %p %p\n",
-                 hist->module->op, hist->module->multi_name, module, hist->module);
+                 hist->op_name, hist->multi_name, module, hist->module);
         dt_dev_free_history_item(hist);
         dev->history = g_list_delete_link(dev->history, elem);
         if(history_pos < history_end) removed_before_end++;

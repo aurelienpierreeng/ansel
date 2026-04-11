@@ -609,6 +609,11 @@ static void _gui_delete_callback(GtkButton *button, dt_iop_module_t *module)
     while(history)
     {
       dt_dev_history_item_t *hist = (dt_dev_history_item_t *)(history->data);
+      if(!hist || !hist->module)
+      {
+        history = g_list_next(history);
+        continue;
+      }
       if(hist->module->instance == module->instance && hist->module != module)
       {
         first = hist->module;

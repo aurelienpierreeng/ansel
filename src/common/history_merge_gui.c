@@ -424,7 +424,9 @@ static gboolean _hm_history_item_uses_masks(const dt_dev_history_item_t *hist)
 {
   if(!hist) return FALSE;
   if(hist->forms) return TRUE;
-  if(hist->blend_params && hist->blend_params->mask_mode > DEVELOP_MASK_ENABLED) return TRUE;
+  if(hist->blend_params && hist->blendop_params_size == sizeof(dt_develop_blend_params_t)
+     && hist->blend_params->mask_mode > DEVELOP_MASK_ENABLED)
+    return TRUE;
   return FALSE;
 }
 

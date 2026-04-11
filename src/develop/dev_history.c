@@ -187,6 +187,10 @@ gboolean dt_dev_history_item_update_from_params(dt_develop_t *dev, dt_dev_histor
   module->enabled = enabled;
   hist->enabled = enabled;
   hist->module = module;
+  hist->params_size = module->params_size;
+  hist->module_version = module->version();
+  hist->blendop_params_size = sizeof(dt_develop_blend_params_t);
+  hist->blendop_version = dt_develop_blend_version();
   hist->iop_order = module->iop_order;
   hist->multi_priority = module->multi_priority;
   g_strlcpy(hist->op_name, module->op, sizeof(hist->op_name));
@@ -289,6 +293,8 @@ int dt_dev_history_item_from_source_history_item(dt_develop_t *dev_dest, dt_deve
                                                  const dt_dev_history_item_t *hist_src, dt_iop_module_t *mod_dest,
                                                  dt_dev_history_item_t **out_hist)
 {
+  if(!hist_src || !hist_src->module || !mod_dest || !out_hist) return 1;
+
   dt_dev_history_item_t *hist = (dt_dev_history_item_t *)calloc(1, sizeof(dt_dev_history_item_t));
   if(!hist) return 1;
 
@@ -355,6 +361,7 @@ static dt_dev_history_item_t *_search_history_by_op(dt_develop_t *dev, const dt_
   for(GList *history = g_list_first(dev->history); history; history = g_list_next(history))
   {
     dt_dev_history_item_t *hist = (dt_dev_history_item_t *)(history->data);
+    if(!hist || !hist->module) continue;
 
     if(strcmp(hist->module->op, module->op) == 0)
     {
@@ -459,17 +466,20 @@ GList *dt_history_duplicate(GList *hist)
 
     dt_iop_module_t *module = (old->module) ? old->module : dt_iop_get_module(old->op_name);
 
-    if(module && module->params_size > 0)
+    if(old->params && old->params_size > 0)
     {
-      new->params = malloc(module->params_size);
-      memcpy(new->params, old->params, module->params_size);
+      new->params = malloc(old->params_size);
+      memcpy(new->params, old->params, old->params_size);
     }
 
     if(!module)
       fprintf(stderr, "[_duplicate_history] can't find base module for %s\n", old->op_name);
 
-    new->blend_params = malloc(sizeof(dt_develop_blend_params_t));
-    memcpy(new->blend_params, old->blend_params, sizeof(dt_develop_blend_params_t));
+    if(old->blend_params && old->blendop_params_size > 0)
+    {
+      new->blend_params = malloc(old->blendop_params_size);
+      memcpy(new->blend_params, old->blend_params, old->blendop_params_size);
+    }
 
     if(old->forms) new->forms = dt_masks_dup_forms_deep(old->forms, NULL);
 
@@ -681,7 +691,17 @@ static void _remove_history_leaks(dt_develop_t *dev)
     // We need to use a while because we are going to dynamically remove entries at the end
     // of the list, so we can't know the number of iterations
     dt_dev_history_item_t *hist = (dt_dev_history_item_t *)(history->data);
-    dt_print(DT_DEBUG_HISTORY, "[dt_dev_add_history_item_ext] history item %s at %i is past history limit (%i)\n", hist->module->op, g_list_index(dev->history, hist), dt_dev_get_history_end_ext(dev) - 1);
+    if(!hist || !hist->module)
+    {
+      dt_print(DT_DEBUG_HISTORY,
+               "[dt_dev_add_history_item_ext] archival history item %s at %i is past history limit (%i) and will be kept\n",
+               hist ? hist->op_name : "(null)", g_list_index(dev->history, hist), dt_dev_get_history_end_ext(dev) - 1);
+      history = g_list_next(history);
+      continue;
+    }
+
+    dt_print(DT_DEBUG_HISTORY, "[dt_dev_add_history_item_ext] history item %s at %i is past history limit (%i)\n",
+             hist->module->op, g_list_index(dev->history, hist), dt_dev_get_history_end_ext(dev) - 1);
 
     // In case user wants to insert new history items before auto-enabled or mandatory modules,
     // we forbid it, unless we already have at least one lower history entry.
@@ -694,6 +714,7 @@ static void _remove_history_leaks(dt_develop_t *dev)
           prior_history = g_list_previous(prior_history))
       {
         dt_dev_history_item_t *prior_hist = (dt_dev_history_item_t *)(prior_history->data);
+        if(!prior_hist || !prior_hist->module) continue;
         if(prior_hist->module->so == hist->module->so)
         {
           earlier_entry = TRUE;
@@ -1060,7 +1081,7 @@ void dt_dev_pop_history_items_ext(dt_develop_t *dev)
   {
     dt_dev_history_item_t *hist = (dt_dev_history_item_t *)(history->data);
     dt_iop_module_t *module = hist->module;
-    _history_to_module(hist, module);
+    if(module) _history_to_module(hist, module);
     if(hist->forms) forms = hist->forms;
 
     history = g_list_next(history);
@@ -1170,12 +1191,21 @@ void dt_dev_history_notify_change(dt_develop_t *dev, const int32_t imgid)
 // helper used to synch a single history item with db
 int dt_dev_write_history_item(const int32_t imgid, dt_dev_history_item_t *h, int32_t num)
 {
+  if(!h) return 1;
+
   dt_print(DT_DEBUG_HISTORY, "[dt_dev_write_history_item] writing history for module %s (%s) (enabled %i) at pipe position %i for image %i\n", 
                                                     h->op_name, h->multi_name, h->enabled, h->iop_order, imgid);
 
-  dt_history_db_write_history_item(imgid, num, h->module->op, h->params, h->module->params_size, h->module->version(),
-                                   h->enabled != 0, h->blend_params, sizeof(dt_develop_blend_params_t),
-                                   dt_develop_blend_version(), h->multi_priority, h->multi_name);
+  const char *operation = h->module ? h->module->op : h->op_name;
+  const int params_size = h->module ? h->module->params_size : h->params_size;
+  const int module_version = h->module ? h->module->version() : h->module_version;
+  const int blendop_params_size
+      = h->blend_params ? (h->blendop_params_size > 0 ? h->blendop_params_size : (int)sizeof(dt_develop_blend_params_t)) : 0;
+  const int blendop_version
+      = h->blend_params ? (h->blendop_version > 0 ? h->blendop_version : dt_develop_blend_version()) : 0;
+
+  dt_history_db_write_history_item(imgid, num, operation, h->params, params_size, module_version, h->enabled != 0,
+                                   h->blend_params, blendop_params_size, blendop_version, h->multi_priority, h->multi_name);
 
   // write masks (if any)
   if(h->forms)
@@ -1519,6 +1549,8 @@ static void _sync_blendop_params(dt_dev_history_item_t *hist, const void *blendo
   const gboolean is_valid_blendop_size = (bl_length == sizeof(dt_develop_blend_params_t));
 
   hist->blend_params = malloc(sizeof(dt_develop_blend_params_t));
+  hist->blendop_params_size = sizeof(dt_develop_blend_params_t);
+  hist->blendop_version = dt_develop_blend_version();
 
   if(blendop_params && is_valid_blendop_version && is_valid_blendop_size)
   {
@@ -1553,6 +1585,8 @@ static void _sync_blendop_params(dt_dev_history_item_t *hist, const void *blendo
 static int _sync_params(dt_dev_history_item_t *hist, const void *module_params, const int param_length,
                         const int modversion, int *legacy_params, const char *preset_name)
 {
+  hist->params_size = hist->module->params_size;
+  hist->module_version = hist->module->version();
   const gboolean is_valid_module_version = (modversion == hist->module->version());
   const gboolean is_valid_params_size = (param_length == hist->module->params_size);
 
@@ -1678,12 +1712,27 @@ static void _process_history_db_entry(dt_develop_t *dev, const int32_t imgid, co
 
   if(!hist->module)
   {
-    // History will be lost forever for this module
+    // Keep the serialized history entry even though no live module can consume it.
+    hist->params_size = MAX(param_length, 0);
+    hist->module_version = modversion;
+    hist->blendop_params_size = MAX(bl_length, 0);
+    hist->blendop_version = blendop_version;
+    if(module_params && param_length > 0)
+    {
+      hist->params = malloc(param_length);
+      memcpy(hist->params, module_params, param_length);
+    }
+    if(blendop_params && bl_length > 0)
+    {
+      hist->blend_params = malloc(bl_length);
+      memcpy(hist->blend_params, blendop_params, bl_length);
+    }
+
     fprintf(
         stderr,
         "[dev_read_history] the module `%s' requested by image `%s' is not installed on this computer!\n",
         operation, dev->image_storage.filename);
-    dt_free(hist);
+    dev->history = g_list_append(dev->history, hist);
     return;
   }
 
@@ -1811,7 +1860,8 @@ gboolean dt_dev_read_history_ext(dt_develop_t *dev, const int32_t imgid)
     }
     else if(!hist->module)
     {
-      fprintf(stderr, "[dt_dev_read_history_ext] we have no module for history item %s. This is not normal.\n", hist->op_name);
+      dt_print(DT_DEBUG_HISTORY, "[history] keeping archival history item %s (%s) without live module binding\n",
+               hist->op_name, hist->multi_name);
       continue;
     }
 

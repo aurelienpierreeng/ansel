@@ -1029,6 +1029,7 @@ void dt_dev_pixelpipe_synch_top(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
     for(GList *history = first_item; history && history != fence_item; history = g_list_next(history))
     {
       dt_dev_history_item_t *hist = (dt_dev_history_item_t *)history->data;
+      if(!hist || !hist->module) continue;
       dt_print(DT_DEBUG_PARAMS, "[pixelpipe] synch top history module `%s` (%s) for pipe %s\n",
                hist->module->op, hist->module->multi_name, type);
       for(GList *nodes = g_list_last(pipe->nodes); nodes; nodes = g_list_previous(nodes))

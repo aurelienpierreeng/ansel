@@ -710,6 +710,32 @@ static gchar *_history_tooltip_with_hint(const dt_dev_history_item_t *hitem)
 static void _history_store_prepend_item(dt_lib_history_t *d, const dt_dev_history_item_t *hitem, const int history_end)
 {
   const gboolean enabled = (hitem->enabled || (strcmp(hitem->op_name, "mask_manager") == 0));
+  if(!hitem->module)
+  {
+    gchar *label = NULL;
+    if(!hitem->multi_name[0] || strcmp(hitem->multi_name, "0") == 0)
+      label = g_strdup(hitem->op_name);
+    else
+      label = g_strdup_printf("%s %s", hitem->op_name, hitem->multi_name);
+
+    gchar number[10];
+    g_snprintf(number, sizeof(number), "%2d", history_end);
+
+    gchar *tooltip_text = _history_tooltip_with_hint(hitem);
+
+    GtkTreeIter iter;
+    gtk_list_store_insert(d->history_store, &iter, 0);
+    gtk_list_store_set(d->history_store, &iter, DT_HISTORY_VIEW_COL_HISTORY_END, history_end,
+                       DT_HISTORY_VIEW_COL_NUMBER, number, DT_HISTORY_VIEW_COL_LABEL, label,
+                       DT_HISTORY_VIEW_COL_ICON_NAME, _history_icon_name(enabled, FALSE, FALSE, FALSE),
+                       DT_HISTORY_VIEW_COL_ENABLED, enabled, DT_HISTORY_VIEW_COL_TOOLTIP,
+                       tooltip_text ? tooltip_text : "", -1);
+
+    dt_free(tooltip_text);
+    dt_free(label);
+    return;
+  }
+
   const gboolean deprecated = (hitem->module->flags() & IOP_FLAGS_DEPRECATED);
   const char *icon_name = _history_icon_name(enabled, hitem->module->default_enabled, hitem->module->hide_enable_button,
                                              deprecated);
