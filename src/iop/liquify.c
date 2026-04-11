@@ -451,7 +451,7 @@ static void node_delete(dt_iop_liquify_params_t *p, dt_liquify_path_data_t *this
   dt_liquify_path_data_t *prev = node_prev(p, this);
   dt_liquify_path_data_t *next = node_next(p, this);
 
-  if(!prev && next)
+  if(IS_NULL_PTR(prev) && next)
   {
     next->header.prev = -1;
     next->header.type = DT_LIQUIFY_PATH_MOVE_TO_V1;
@@ -1200,7 +1200,7 @@ static float complex *create_global_distortion_map(const cairo_rectangle_int_t *
   if(inverted)
   {
     float complex * const imap = dt_pixelpipe_cache_alloc_align_cache(sizeof(float complex) * mapsize, 0);
-    if(!imap)
+    if(IS_NULL_PTR(imap))
     {
       dt_pixelpipe_cache_free_align(map);
       return NULL;
@@ -2833,7 +2833,7 @@ void gui_post_expose(struct dt_iop_module_t *module,
 {
   dt_develop_t *develop = module->dev;
   dt_iop_liquify_gui_data_t *g = (dt_iop_liquify_gui_data_t *) module->gui_data;
-  if(!g)
+  if(IS_NULL_PTR(g))
     return;
 
   const float bb_width = develop->roi.processed_width;
@@ -3231,7 +3231,7 @@ int button_pressed(struct dt_iop_module_t *module,
     // dangling pointers
     end_drag(g);
 
-    if(!g->temp) goto done;
+    if(IS_NULL_PTR(g->temp)) goto done;
     g->status |= DT_LIQUIFY_STATUS_NEW;
     g->status &= ~DT_LIQUIFY_STATUS_PREVIEW;
 
@@ -3249,7 +3249,7 @@ int button_pressed(struct dt_iop_module_t *module,
     // always end dragging before manipulating the path list to avoid
     // dangling pointers
     end_drag(g);
-    if(!g->temp)
+    if(IS_NULL_PTR(g->temp))
     {
       if(g->last_hit.layer == DT_LIQUIFY_LAYER_CENTERPOINT)
       {
@@ -3258,7 +3258,7 @@ int button_pressed(struct dt_iop_module_t *module,
       }
       else
       {
-        if(!g->temp) goto done;
+        if(IS_NULL_PTR(g->temp)) goto done;
       }
     }
     g->last_hit = NOWHERE;
@@ -3362,7 +3362,7 @@ int button_released(struct dt_iop_module_t *module,
       const float complex strength = (g->temp->warp.strength - g->temp->warp.point);
       const float radius = cabsf(g->temp->warp.radius - g->temp->warp.point);
       g->temp = alloc_line_to(module, pt);
-      if(!g->temp) goto done;
+      if(IS_NULL_PTR(g->temp)) goto done;
       g->temp->warp.radius = pt + radius;
       g->temp->warp.strength = pt + strength;
       // links
@@ -3378,7 +3378,7 @@ int button_released(struct dt_iop_module_t *module,
       const float complex strength = (g->temp->warp.strength - g->temp->warp.point);
       const float radius = cabsf(g->temp->warp.radius - g->temp->warp.point);
       g->temp = alloc_curve_to(module, pt);
-      if(!g->temp) goto done;
+      if(IS_NULL_PTR(g->temp)) goto done;
       g->temp->warp.radius = pt + radius;
       g->temp->warp.strength = pt + strength;
       // links
@@ -3490,7 +3490,7 @@ int button_released(struct dt_iop_module_t *module,
           dt_liquify_path_data_t *curve1 = (dt_liquify_path_data_t *) e;
 
           dt_liquify_path_data_t *curve2 = (dt_liquify_path_data_t *)alloc_curve_to(module, 0);
-          if(!curve2) goto done;
+          if(IS_NULL_PTR(curve2)) goto done;
 
           curve2->node.ctrl1 = curve1->node.ctrl1;
           curve2->node.ctrl2 = curve1->node.ctrl2;
@@ -3522,7 +3522,7 @@ int button_released(struct dt_iop_module_t *module,
           const float t = find_nearest_on_line_t(warp1->point, warp3->point, pt);
 
           dt_liquify_path_data_t *tmp = alloc_line_to(module, e->warp.point);
-          if(!tmp) goto done;
+          if(IS_NULL_PTR(tmp)) goto done;
 
           dt_liquify_warp_t *warp2 = &tmp->warp;
           const float complex midpoint = cmix(warp1->point, warp3->point, t);
@@ -3620,7 +3620,7 @@ static gboolean btn_make_radio_callback(GtkToggleButton *btn, GdkEventButton *ev
   }
 
   // now, let's enable and start a new form safely
-  if(!btn || !gtk_toggle_button_get_active(btn))
+  if(IS_NULL_PTR(btn) || !gtk_toggle_button_get_active(btn))
   {
     gtk_toggle_button_set_active(g->btn_point_tool, btn == g->btn_point_tool);
     gtk_toggle_button_set_active(g->btn_line_tool,  btn == g->btn_line_tool);

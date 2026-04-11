@@ -112,7 +112,7 @@ static int _gpu_early_cpu_fallback_if_unsupported(dt_dev_pixelpipe_t *pipe, floa
       dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, FALSE, input_entry);
     }
 
-    if(!input || IS_NULL_PTR(*input))
+    if(IS_NULL_PTR(input) || IS_NULL_PTR(*input))
     {
       dt_print(DT_DEBUG_OPENCL,
                "[dev_pixelpipe] %s CPU fallback has no input buffer (cache allocation failed?)\n",

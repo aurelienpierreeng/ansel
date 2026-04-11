@@ -166,7 +166,7 @@ static gboolean _lib_masks_module_is_current(const dt_iop_module_t *module)
 
 static void _lib_masks_clear_blending_box(dt_lib_masks_t *lm)
 {
-  if(!lm || !lm->blending_box) return;
+  if(IS_NULL_PTR(lm) || !lm->blending_box) return;
 
   GList *children = gtk_container_get_children(GTK_CONTAINER(lm->blending_box));
   for(GList *iter = children; iter; iter = g_list_next(iter))
@@ -199,7 +199,7 @@ static void _lib_masks_release_blending(dt_lib_masks_t *lm)
 
 static void _lib_masks_show_blending_message(dt_lib_masks_t *lm, gchar *markup)
 {
-  if(!lm || !lm->blending_box || !markup) return;
+  if(IS_NULL_PTR(lm) || !lm->blending_box || IS_NULL_PTR(markup)) return;
 
   GtkWidget *label = gtk_label_new(NULL);
   gtk_label_set_markup(GTK_LABEL(label), markup);
@@ -229,12 +229,12 @@ static void _lib_masks_reveal(dt_lib_module_t *self)
 
 static void _lib_masks_blending_gui_changed_callback(gpointer instance, dt_lib_module_t *self)
 {
-  if(!self || !self->data) return;
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->data)) return;
 
   dt_lib_masks_t *lm = (dt_lib_masks_t *)self->data;
   dt_iop_module_t *module = darktable.develop ? darktable.develop->gui_module : NULL;
 
-  if(!darktable.develop || !darktable.develop->history || !module)
+  if(IS_NULL_PTR(darktable.develop) || !darktable.develop->history || !module)
   {
     _lib_masks_release_blending(lm);
     _lib_masks_clear_blending_box(lm);
@@ -383,7 +383,7 @@ static void _bt_add_brush(GtkWidget *widget, GdkEventButton *event, dt_lib_modul
 
 static void _tree_add_exist(GtkButton *button, dt_masks_form_t *grp)
 {
-  if(!grp || !(grp->type & DT_MASKS_GROUP)) return;
+  if(IS_NULL_PTR(grp) || !(grp->type & DT_MASKS_GROUP)) return;
   // we get the new formid
   const int id = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "formid"));
   dt_iop_module_t *module = g_object_get_data(G_OBJECT(button), "module");
@@ -449,7 +449,7 @@ static void _tree_group(GtkButton *button, dt_lib_module_t *self)
 static int _tree_format_form_usage_label(char *str, const size_t str_size,
                                          const dt_masks_form_t *form, const dt_iop_module_t *module)
 {
-  if(!str || !form) return -1;
+  if(IS_NULL_PTR(str) || IS_NULL_PTR(form)) return -1;
 
   str[0] = '\0';
   g_strlcat(str, form->name, str_size);
@@ -1349,7 +1349,7 @@ static gboolean _tree_query_tooltip(GtkWidget *widget, gint x, gint y, gboolean 
 
 static void _is_form_used(int formid, dt_masks_form_t *grp, char *text, size_t text_length, int *nb)
 {
-  if(!grp)
+  if(IS_NULL_PTR(grp))
   {
     for(const GList *forms = darktable.develop->forms; forms; forms = g_list_next(forms))
     {

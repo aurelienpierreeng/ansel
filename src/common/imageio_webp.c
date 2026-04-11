@@ -34,7 +34,7 @@ dt_imageio_retval_t dt_imageio_open_webp(dt_image_t *img, const char *filename, 
   WebPData icc_profile;
 
   FILE *f = g_fopen(filename, "rb");
-  if(!f)
+  if(IS_NULL_PTR(f))
   {
     dt_print(DT_DEBUG_IMAGEIO, "[webp_open] cannot open file for read: %s\n", filename);
     return DT_IMAGEIO_FILE_CORRUPTED;
@@ -77,14 +77,14 @@ dt_imageio_retval_t dt_imageio_open_webp(dt_image_t *img, const char *filename, 
   img->flags |= DT_IMAGE_LDR;
   img->loader = LOADER_WEBP;
 
-  if(!mbuf)
+  if(IS_NULL_PTR(mbuf))
   {
     dt_free(read_buffer);
     return DT_IMAGEIO_OK;
   }
 
   float *mipbuf = (float *)dt_mipmap_cache_alloc(mbuf, img);
-  if(!mipbuf)
+  if(IS_NULL_PTR(mipbuf))
   {
     dt_free(read_buffer);
     dt_print(DT_DEBUG_IMAGEIO, "[webp_open] could not alloc full buffer for image: %s\n", img->filename);
@@ -92,7 +92,7 @@ dt_imageio_retval_t dt_imageio_open_webp(dt_image_t *img, const char *filename, 
   }
 
   uint8_t *int_RGBA_buf = WebPDecodeRGBA(read_buffer, filesize, &w, &h);
-  if(!int_RGBA_buf)
+  if(IS_NULL_PTR(int_RGBA_buf))
   {
     dt_free(read_buffer);
     dt_print(DT_DEBUG_IMAGEIO,"[webp_open] failed to decode file: %s\n", filename);

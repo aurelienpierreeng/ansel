@@ -1068,7 +1068,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
   dt_iop_negadoctor_params_t *p = (dt_iop_negadoctor_params_t *)self->params;
   dt_iop_negadoctor_gui_data_t *g = (dt_iop_negadoctor_gui_data_t *)self->gui_data;
-  if(!w || w == g->film_stock)
+  if(IS_NULL_PTR(w) || w == g->film_stock)
   {
     toggle_stock_controls(self);
     Dmin_picker_update(self);
@@ -1087,12 +1087,12 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
     p->exposure = powf(2.0f, p->exposure);
   }
 
-  if(!w || w == g->wb_high_R || w == g->wb_high_G || w == g->wb_high_B)
+  if(IS_NULL_PTR(w) || w == g->wb_high_R || w == g->wb_high_G || w == g->wb_high_B)
   {
     WB_high_picker_update(self);
   }
 
-  if(!w || w == g->wb_low_R || w == g->wb_low_G || w == g->wb_low_B)
+  if(IS_NULL_PTR(w) || w == g->wb_low_R || w == g->wb_low_G || w == g->wb_low_B)
   {
     WB_low_picker_update(self);
   }

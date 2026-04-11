@@ -189,7 +189,7 @@ static void _recurse_folder(GVfs *vfs, GFile *folder, dt_import_t *const import)
   {
     // g_file_enumerator_iterate returns FALSE only on errors, not on end of enumeration.
     // We need an ugly break here else infinite loop.
-    if(!file) break;
+    if(IS_NULL_PTR(file)) break;
 
     // Shutdown ASAP
     if((*import->shutdown))
@@ -566,7 +566,7 @@ static int _is_in_library_by_metadata(GFile *file)
                             G_FILE_ATTRIBUTE_STANDARD_NAME ","
                             G_FILE_ATTRIBUTE_TIME_MODIFIED,
                             G_FILE_QUERY_INFO_NONE, NULL, &error);
-  if(!info)
+  if(IS_NULL_PTR(info))
   {
     if(error) g_error_free(error);
     return 0;
@@ -720,7 +720,7 @@ static void _set_help_string(dt_lib_import_t *d, gboolean copy)
 
 static void _set_test_path(dt_lib_import_t *d, dt_image_t *img)
 {
-  if(!d->path_file || IS_NULL_PTR(d->path_file))
+  if(IS_NULL_PTR(d->path_file) || IS_NULL_PTR(d->path_file))
     return;
 
   const gboolean duplicate = dt_conf_get_bool("ui_last/import_copy");
@@ -740,7 +740,7 @@ static void _set_test_path(dt_lib_import_t *d, dt_image_t *img)
     return;
   }
 
-  if(!file->data || !dt_supported_image(file->data))
+  if(IS_NULL_PTR(file->data) || !dt_supported_image(file->data))
   {
     gtk_label_set_text(GTK_LABEL(d->test_path), _("Result of the pattern : please select a picture file"));
     return;
@@ -800,7 +800,7 @@ static void _set_test_path(dt_lib_import_t *d, dt_image_t *img)
 static void _filelist_changed_callback(gpointer instance, GList *files, guint elements, guint finished, gpointer user_data)
 {
   dt_lib_import_t *d = (dt_lib_import_t *)user_data;
-  if(!d || !d->selected_files) return;
+  if(IS_NULL_PTR(d) || IS_NULL_PTR(d->selected_files)) return;
 
   if(finished)
   {
@@ -1296,7 +1296,7 @@ static void _do_select_new(dt_lib_import_t *d)
   {
     // g_file_enumerator_iterate returns FALSE only on errors, not on end of enumeration.
     // We need an ugly break here else infinite loop.
-    if(!file) break;
+    if(IS_NULL_PTR(file)) break;
 
     GtkFileFilterInfo filter_info = { gtk_file_filter_get_needed(filter),
                                       g_file_get_parse_name(file),

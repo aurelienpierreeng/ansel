@@ -327,7 +327,7 @@ static void _heal_laplace_loop(float *const restrict red_pixels, float *const re
   unsigned *const restrict black_runs = dt_pixelpipe_cache_alloc_align_cache(
       sizeof(unsigned) * subwidth * (height + 2),
       0);
-  if(!red_runs || !black_runs)
+  if(IS_NULL_PTR(red_runs) || IS_NULL_PTR(black_runs))
   {
     fprintf(stderr, "_heal_laplace_loop: error allocating memory for healing\n");
     goto cleanup;

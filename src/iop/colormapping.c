@@ -477,7 +477,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     g->height = height;
     g->ch = 4;
 
-    if(!g->buffer)
+    if(IS_NULL_PTR(g->buffer))
     {
       dt_iop_gui_leave_critical_section(self);
       return 1;
@@ -504,7 +504,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
                         data->source_weight, dominance, mapio);
 
     float2 *const var_ratio = malloc(sizeof(float2) * data->n);
-    if(!var_ratio)
+    if(IS_NULL_PTR(var_ratio))
     {
       dt_free(mapio);
       return 1;
@@ -534,7 +534,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     {
       // bilateral blur of delta L to avoid artifacts caused by limited histogram resolution
       dt_bilateral_t *b = dt_bilateral_init(width, height, sigma_s, sigma_r);
-      if(!b)
+      if(IS_NULL_PTR(b))
       {
         dt_free(var_ratio);
         dt_free(mapio);
@@ -774,7 +774,7 @@ static void process_clusters(gpointer instance, gpointer user_data)
   dt_iop_colormapping_gui_data_t *g = (dt_iop_colormapping_gui_data_t *)self->gui_data;
   int new_source_clusters = 0;
 
-  if(!g || !g->buffer) return;
+  if(IS_NULL_PTR(g) || IS_NULL_PTR(g->buffer)) return;
   if(!(p->flag & ACQUIRE)) return;
 
   ++darktable.gui->reset;
@@ -784,7 +784,7 @@ static void process_clusters(gpointer instance, gpointer user_data)
   const int height = g->height;
   const int ch = g->ch;
   float *const restrict buffer = dt_iop_image_alloc(width, height, ch);
-  if(!buffer)
+  if(IS_NULL_PTR(buffer))
   {
     dt_iop_gui_leave_critical_section(self);
     return;

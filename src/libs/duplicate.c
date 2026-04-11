@@ -122,7 +122,7 @@ static void _lib_duplicate_delete(GtkButton *button, dt_lib_module_t *self)
       if(thumb->info.id == imgid)
       {
         GList *l2 = g_list_next(l);
-        if(!l2) l2 = g_list_previous(l);
+        if(IS_NULL_PTR(l2)) l2 = g_list_previous(l);
         if(l2)
         {
           dt_thumbnail_t *th2 = (dt_thumbnail_t *)l2->data;
@@ -215,7 +215,7 @@ static void _lib_duplicate_init_callback(gpointer instance, dt_lib_module_t *sel
 
   // we get a summarize of all versions of the image
   // clang-format off
-  if(!_duplicate_versions_stmt)
+  if(IS_NULL_PTR(_duplicate_versions_stmt))
   {
     DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
                                 "SELECT i.version, i.id, m.value"

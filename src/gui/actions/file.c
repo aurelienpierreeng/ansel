@@ -31,7 +31,7 @@ static void pretty_print_collection(const char *buf, char *out, size_t outsize)
 {
   memset(out, 0, outsize);
 
-  if(!buf || buf[0] == '\0') return;
+  if(IS_NULL_PTR(buf) || buf[0] == '\0') return;
 
   int num_rules = 0;
   char str[400] = { 0 };

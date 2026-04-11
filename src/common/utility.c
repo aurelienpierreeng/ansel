@@ -366,7 +366,7 @@ gboolean dt_util_test_writable_dir(const char *path)
 
 gboolean dt_util_dir_exist(const char *dir)
 {
-  if(!dir)
+  if(IS_NULL_PTR(dir))
     return 1;
 
   return g_file_test(dir, G_FILE_TEST_IS_DIR);
@@ -398,7 +398,7 @@ gchar *dt_util_foo_to_utf8(const char *string)
   else
     tag = g_convert(string, -1, "UTF-8", "LATIN1", NULL, NULL, NULL); // let's try latin1
 
-  if(!tag) // hmm, neither utf8 nor latin1, let's fall back to ascii and just remove everything that isn't
+  if(IS_NULL_PTR(tag)) // hmm, neither utf8 nor latin1, let's fall back to ascii and just remove everything that isn't
   {
     tag = g_strdup(string);
     char *c = tag;
@@ -737,7 +737,7 @@ gchar *dt_util_normalize_path(const gchar *_input)
 
   GFile *gfile = g_file_new_for_path(filename);
   dt_free(filename);
-  if(!gfile)
+  if(IS_NULL_PTR(gfile))
     return NULL;
   filename = g_file_get_path(gfile);
   g_object_unref(gfile);
@@ -794,7 +794,7 @@ GDateTime *dt_util_get_file_datetime(const char *const path)
   GError *error = NULL;
   GFileInfo *info = g_file_query_info(file, G_FILE_ATTRIBUTE_STANDARD_NAME "," G_FILE_ATTRIBUTE_TIME_MODIFIED,
                                       G_FILE_QUERY_INFO_NONE, NULL, &error);
-  if(!info)
+  if(IS_NULL_PTR(info))
   {
     if(error) g_error_free(error);
     g_object_unref(file);

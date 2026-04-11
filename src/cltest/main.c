@@ -46,7 +46,7 @@ int main(int argc, char *arg[])
   char *m_arg[] = { "-d", "opencl", "--library", ":memory:"};
   const int m_argc = sizeof(m_arg) / sizeof(m_arg[0]);
   char **argv = malloc(sizeof(arg[0]) * argc + sizeof(m_arg));
-  if(!argv) goto end;
+  if(IS_NULL_PTR(argv)) goto end;
   for(int i = 0; i < argc; i++)
     argv[i] = arg[i];
   for(int i = 0; i < m_argc; i++)

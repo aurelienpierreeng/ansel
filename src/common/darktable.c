@@ -307,7 +307,7 @@ gboolean dt_supported_image(const gchar *filename)
 {
   gboolean supported = FALSE;
   char *ext = g_strrstr(filename, ".");
-  if(!ext)
+  if(IS_NULL_PTR(ext))
     return FALSE;
   ext++;
   for(const char **i = dt_supported_extensions; !IS_NULL_PTR(*i); i++)
@@ -408,7 +408,7 @@ static inline size_t _get_total_memory()
   while(!found && getline(&line, &len, f) != -1)
   {
     char *colon = strchr(line, ':');
-    if(!colon) continue;
+    if(IS_NULL_PTR(colon)) continue;
     found = !strncmp(line, "MemTotal:", 9);
     if(found || first) mem = atol(colon + 1);
     first = 0;
@@ -1082,7 +1082,7 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
             if(argv[i] == NULL || *argv[i] == '\0') continue;
             gchar *filename = dt_util_normalize_path(argv[i]);
             if(IS_NULL_PTR(filename)) continue;
-            if(!connection) connection = g_bus_get_sync(G_BUS_TYPE_SESSION, NULL, NULL);
+            if(IS_NULL_PTR(connection)) connection = g_bus_get_sync(G_BUS_TYPE_SESSION, NULL, NULL);
             // ... and send it to the running instance of darktable
             image_loaded_elsewhere = g_dbus_connection_call_sync(connection, "org.darktable.service", "/darktable",
                                                                 "org.darktable.service.Remote", "Open",
@@ -1215,7 +1215,7 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   dt_view_manager_init(darktable.view_manager);
 
   // check whether we were able to load darkroom view. if we failed, we'll crash everywhere later on.
-  if(!darktable.develop)
+  if(IS_NULL_PTR(darktable.develop))
   {
     fprintf(stderr, "ERROR: can't init develop system, aborting.\n");
     dt_gui_splash_close();
@@ -1223,7 +1223,7 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   }
 
   darktable.pixelpipe_cache = dt_dev_pixelpipe_cache_init(darktable.dtresources.pixelpipe_memory);
-  if(!darktable.pixelpipe_cache)
+  if(IS_NULL_PTR(darktable.pixelpipe_cache))
   {
     fprintf(stderr, "ERROR: can't init pixelpipe cache, aborting.\n");
     dt_gui_splash_close();

@@ -1135,19 +1135,19 @@ static dt_colorspaces_color_profile_type_t _resolve_input_profile(const dt_iop_c
   if(type == DT_COLORSPACE_ENHANCED_MATRIX)
   {
     d->input = dt_colorspaces_create_darktable_profile(pipe->image.camera_makermodel);
-    if(!d->input) type = DT_COLORSPACE_EMBEDDED_ICC;
+    if(IS_NULL_PTR(d->input)) type = DT_COLORSPACE_EMBEDDED_ICC;
     else d->clear_input = 1;
   }
   if(type == DT_COLORSPACE_VENDOR_MATRIX)
   {
     d->input = dt_colorspaces_create_vendor_profile(pipe->image.camera_makermodel);
-    if(!d->input) type = DT_COLORSPACE_EMBEDDED_ICC;
+    if(IS_NULL_PTR(d->input)) type = DT_COLORSPACE_EMBEDDED_ICC;
     else d->clear_input = 1;
   }
   if(type == DT_COLORSPACE_ALTERNATE_MATRIX)
   {
     d->input = dt_colorspaces_create_alternate_profile(pipe->image.camera_makermodel);
-    if(!d->input) type = DT_COLORSPACE_EMBEDDED_ICC;
+    if(IS_NULL_PTR(d->input)) type = DT_COLORSPACE_EMBEDDED_ICC;
     else d->clear_input = 1;
   }
 
@@ -1173,13 +1173,13 @@ static dt_colorspaces_color_profile_type_t _resolve_input_profile(const dt_iop_c
     dt_control_log(_("`%s' color matrix not found!"), pipe->image.camera_makermodel);
   }
 
-  if(!d->input)
+  if(IS_NULL_PTR(d->input))
   {
     const dt_colorspaces_color_profile_t *profile = dt_colorspaces_get_profile(type, p->filename, DT_PROFILE_DIRECTION_IN);
     if(profile) d->input = profile->profile;
   }
 
-  if(!d->input && type != DT_COLORSPACE_SRGB)
+  if(IS_NULL_PTR(d->input) && type != DT_COLORSPACE_SRGB)
   {
     // use linear_rec709_rgb as fallback for missing non-sRGB profiles:
     d->input = dt_colorspaces_get_profile(DT_COLORSPACE_LIN_REC709, "", DT_PROFILE_DIRECTION_IN)->profile;
@@ -1187,7 +1187,7 @@ static dt_colorspaces_color_profile_type_t _resolve_input_profile(const dt_iop_c
   }
 
   // final resort: sRGB
-  if(!d->input)
+  if(IS_NULL_PTR(d->input))
   {
     d->input = dt_colorspaces_get_profile(DT_COLORSPACE_SRGB, "", DT_PROFILE_DIRECTION_IN)->profile;
     d->clear_input = 0;
@@ -1254,7 +1254,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   type = _resolve_input_profile(p, pipe, d);
 
   // should never happen, but catch that case to avoid a crash
-  if(!d->input)
+  if(IS_NULL_PTR(d->input))
   {
     dt_print(DT_DEBUG_COLORPROFILE, "[colorin] input profile could not be generated!\n");
     dt_control_log(_("input profile could not be generated!"));
@@ -1338,7 +1338,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   }
 
   // we might have failed generating the clipping transformations, check that:
-  if(d->nrgb && ((!d->xform_cam_nrgb && isnan(d->nmatrix[0][0])) || (!d->xform_nrgb_Lab && isnan(d->lmatrix[0][0]))))
+  if(d->nrgb && ((IS_NULL_PTR(d->xform_cam_nrgb) && isnan(d->nmatrix[0][0])) || (IS_NULL_PTR(d->xform_nrgb_Lab) && isnan(d->lmatrix[0][0]))))
   {
     if(d->xform_cam_nrgb)
     {
@@ -1354,7 +1354,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   }
 
   // user selected a non-supported input profile, check that:
-  if(!d->xform_cam_Lab && isnan(d->cmatrix[0][0]))
+  if(IS_NULL_PTR(d->xform_cam_Lab) && isnan(d->cmatrix[0][0]))
   {
     if(p->type == DT_COLORSPACE_FILE)
       dt_print(DT_DEBUG_COLORPROFILE,

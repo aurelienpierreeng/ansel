@@ -71,7 +71,7 @@ int write_image(dt_imageio_module_data_t *data, const char *filename, const void
     if(profile_len > 0)
     {
       profile = malloc(profile_len);
-      if(!profile)
+      if(IS_NULL_PTR(profile))
       {
         fprintf(stderr, "[xcf] error: can't allocate %u bytes of memory\n", profile_len);
         return 1;
@@ -97,7 +97,7 @@ int write_image(dt_imageio_module_data_t *data, const char *filename, const void
 
   XCF *xcf = xcf_open(filename);
 
-  if(!xcf)
+  if(IS_NULL_PTR(xcf))
   {
     fprintf(stderr, "[xcf] error: can't open `%s'\n", filename);
     goto exit;
@@ -169,7 +169,7 @@ int write_image(dt_imageio_module_data_t *data, const char *filename, const void
         gboolean free_mask = TRUE;
         float *raster_mask = dt_dev_get_raster_mask(pipe, piece->module, GPOINTER_TO_INT(key), NULL, &free_mask, NULL);
 
-        if(!raster_mask)
+        if(IS_NULL_PTR(raster_mask))
         {
           // this should never happen
           fprintf(stderr, "error: can't get raster mask from `%s'\n", piece->module->name());

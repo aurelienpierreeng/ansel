@@ -1058,7 +1058,7 @@ gboolean dt_lightroom_import(int32_t imgid, dt_develop_t *dev, gboolean iauto)
   // Get full pathname
   char *pathname = dt_get_lightroom_xmp(imgid);
 
-  if(!pathname)
+  if(IS_NULL_PTR(pathname))
   {
     if(!iauto) dt_control_log(_("cannot find lightroom XMP!"));
     return FALSE;

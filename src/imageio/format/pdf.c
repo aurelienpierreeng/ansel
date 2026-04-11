@@ -262,7 +262,7 @@ int write_image(dt_imageio_module_data_t *data, const char *filename, const void
 
 
     dt_pdf_t *pdf = dt_pdf_start(filename, page_width, page_height, page_dpi, compression);
-    if(!pdf)
+    if(IS_NULL_PTR(pdf))
     {
       fprintf(stderr, "[imageio_format_pdf] could not export to file: `%s'!\n", filename);
       dt_control_log(_("could not export to file `%s'!"), filename);

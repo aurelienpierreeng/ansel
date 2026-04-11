@@ -159,7 +159,7 @@ float dt_colorrings_curve_periodic_sample(const dt_colorrings_node_t *curve, con
    * the underlying C++ spline code while a module is still repairing its
    * params.
    */
-  if(!curve || nodes < 2) return 0.5f;
+  if(IS_NULL_PTR(curve) || nodes < 2) return 0.5f;
 
   CurveAnchorPoint anchors[DT_COLORRINGS_MAXNODES];
 
@@ -182,7 +182,7 @@ gboolean dt_colorrings_apply_rgb_lut(const dt_aligned_pixel_t input_rgb, const f
 
   memcpy(output_rgb, input_rgb, sizeof(dt_aligned_pixel_t));
 
-  if(!work_profile || !lut_profile || !clut || clut_level == 0) return FALSE;
+  if(IS_NULL_PTR(work_profile) || IS_NULL_PTR(lut_profile) || IS_NULL_PTR(clut) || clut_level == 0) return FALSE;
 
   const float normalized_white = fmaxf(white_level, 1e-6f);
   output_rgb[0] = input_rgb[0] / normalized_white;
@@ -248,7 +248,7 @@ void dt_colorrings_profile_rgb_to_dt_ucs_jch(const dt_aligned_pixel_t RGB, const
   dt_aligned_pixel_t XYZ_D65 = { 0.f };
   dt_aligned_pixel_t xyY = { 0.f };
 
-  if(!profile)
+  if(IS_NULL_PTR(profile))
   {
     memset(JCH, 0, sizeof(dt_aligned_pixel_t));
     return;
@@ -283,7 +283,7 @@ void dt_colorrings_profile_rgb_to_Ych(const dt_aligned_pixel_t RGB, const dt_iop
   dt_aligned_pixel_t XYZ_D50 = { 0.f };
   dt_aligned_pixel_t XYZ_D65 = { 0.f };
 
-  if(!profile)
+  if(IS_NULL_PTR(profile))
   {
     memset(Ych, 0, sizeof(dt_aligned_pixel_t));
     return;
@@ -628,7 +628,7 @@ void dt_colorrings_eval_sparse_local_field(const float x[3], const dt_colorrings
   float Lx, rhox, thetax;
   dt_colorrings_rgb_to_gray_cyl(x, &Lx, &rhox, &thetax);
 
-  if(rhox <= 1e-6f || !anchors || anchor_count <= 0)
+  if(rhox <= 1e-6f || IS_NULL_PTR(anchors) || anchor_count <= 0)
   {
     out[0] = 0.f;
     out[1] = 0.f;

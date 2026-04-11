@@ -241,7 +241,7 @@ int write_image(dt_imageio_module_data_t *webp, const char *filename, const void
   }
 
   out = g_fopen(filename, "w+b");
-  if(!out)
+  if(IS_NULL_PTR(out))
   {
     fprintf(stderr, "[webp export] error creating file %s\n", filename);
     goto out;

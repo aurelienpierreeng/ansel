@@ -1010,7 +1010,7 @@ static inline __attribute__((always_inline)) int toneeq_process(struct dt_iop_mo
                                                          pipe->type, TRUE, &cache_data,
                                                          &luminance_entry);
     luminance = (float *)cache_data;
-    if(!luminance || !luminance_entry)
+    if(IS_NULL_PTR(luminance) || IS_NULL_PTR(luminance_entry))
     {
       if(luminance_entry)
       {
@@ -1324,10 +1324,10 @@ static uint64_t _current_preview_luminance_hash(dt_iop_module_t *self, size_t *w
 {
   if(width) *width = 0;
   if(height) *height = 0;
-  if(!self || !self->dev || !self->dev->preview_pipe) return DT_PIXELPIPE_CACHE_HASH_INVALID;
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(self->dev->preview_pipe)) return DT_PIXELPIPE_CACHE_HASH_INVALID;
 
   dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->preview_pipe, self);
-  if(!piece || !piece->enabled || piece->roi_in.width <= 0 || piece->roi_in.height <= 0)
+  if(IS_NULL_PTR(piece) || !piece->enabled || piece->roi_in.width <= 0 || piece->roi_in.height <= 0)
     return DT_PIXELPIPE_CACHE_HASH_INVALID;
 
   if(width) *width = piece->roi_in.width;
@@ -1468,7 +1468,7 @@ static inline void update_histogram(struct dt_iop_module_t *const self)
                                     &last_decile);
   dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
 
-  if(!preview_buf)
+  if(IS_NULL_PTR(preview_buf))
   {
     dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
     return;
@@ -1810,7 +1810,7 @@ static void show_luminance_mask_callback(GtkWidget *togglebutton, GdkEventButton
 static void _switch_cursors(struct dt_iop_module_t *self)
 {
   dt_iop_toneequalizer_gui_data_t *g = (dt_iop_toneequalizer_gui_data_t *)self->gui_data;
-  if(!g || !self->dev->gui_attached) return;
+  if(IS_NULL_PTR(g) || !self->dev->gui_attached) return;
 
   GtkWidget *widget = dt_ui_main_window(darktable.gui->ui);
 
@@ -3060,7 +3060,7 @@ static void _develop_history_resync_callback(gpointer instance, gpointer user_da
   (void)instance;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_toneequalizer_gui_data_t *g = (dt_iop_toneequalizer_gui_data_t *)self->gui_data;
-  if(IS_NULL_PTR(g) || !self->dev || !self->dev->preview_pipe) return;
+  if(IS_NULL_PTR(g) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(self->dev->preview_pipe)) return;
 
   const uint64_t preview_hash = _current_preview_luminance_hash(self, NULL, NULL);
   if(preview_hash == DT_PIXELPIPE_CACHE_HASH_INVALID)
@@ -3138,7 +3138,7 @@ static void _develop_cacheline_ready_callback(gpointer instance, const guint64 h
   (void)instance;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_toneequalizer_gui_data_t *g = (dt_iop_toneequalizer_gui_data_t *)self->gui_data;
-  if(IS_NULL_PTR(g) || !self->dev || !self->dev->preview_pipe) return;
+  if(IS_NULL_PTR(g) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(self->dev->preview_pipe)) return;
 
   dt_iop_gui_enter_critical_section(self);
   const gboolean matched = (g->pending_preview_hash == hash);
@@ -3215,7 +3215,7 @@ static gboolean _sample_picker_luminance_mask(const float *const buffer, const s
 {
   const dt_develop_t *const dev = darktable.develop;
   const dt_colorpicker_sample_t *const sample = dev ? dev->color_picker.primary_sample : NULL;
-  if(!buffer || !sample || width < 1 || height < 1 || !picked || !picked_min || !picked_max) return FALSE;
+  if(IS_NULL_PTR(buffer) || IS_NULL_PTR(sample) || width < 1 || height < 1 || IS_NULL_PTR(picked) || IS_NULL_PTR(picked_min) || IS_NULL_PTR(picked_max)) return FALSE;
 
   if(sample->size == DT_LIB_COLORPICKER_SIZE_BOX)
   {
@@ -3295,7 +3295,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
   size_t preview_width = 0;
   size_t preview_height = 0;
 
-  if(!g || (picker != g->exposure_boost && picker != g->contrast_boost))
+  if(IS_NULL_PTR(g) || (picker != g->exposure_boost && picker != g->contrast_boost))
   {
     dt_print(DT_DEBUG_DEV, "[picker/toneequal] passthrough picker=%p pipe=%p hash=%" PRIu64 "\n",
              (void *)picker, (void *)pipe, piece ? piece->global_hash : 0);
@@ -3312,7 +3312,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
     dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, preview_entry);
   dt_iop_gui_leave_critical_section(self);
 
-  if(!preview_entry || preview_width < 1 || preview_height < 1)
+  if(IS_NULL_PTR(preview_entry) || preview_width < 1 || preview_height < 1)
   {
     if(preview_entry)
       dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, preview_entry);

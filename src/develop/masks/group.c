@@ -225,7 +225,7 @@ static int _group_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe
   int *py = malloc(sizeof(int) * nb);
   int *states = malloc(sizeof(int) * nb);
   float *op = malloc(sizeof(float) * nb);
-  if(!bufs || !w || !h || !px || !py || !states || !op)
+  if(IS_NULL_PTR(bufs) || IS_NULL_PTR(w) || IS_NULL_PTR(h) || IS_NULL_PTR(px) || IS_NULL_PTR(py) || IS_NULL_PTR(states) || IS_NULL_PTR(op))
   {
     dt_free(op);
     dt_free(states);
@@ -691,7 +691,7 @@ static void _group_duplicate_points(dt_develop_t *const dev, dt_masks_form_t *co
 
 static gboolean _group_get_gravity_center(const dt_masks_form_t *form, float center[2], float *area)
 {
-  if(!form || !form->points || !center || !area) return FALSE;
+  if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points) || IS_NULL_PTR(center) || IS_NULL_PTR(area)) return FALSE;
 
   float sum_x = 0.0f;
   float sum_y = 0.0f;
@@ -701,9 +701,9 @@ static gboolean _group_get_gravity_center(const dt_masks_form_t *form, float cen
   for(const GList *l = form->points; l; l = g_list_next(l))
   {
     const dt_masks_form_group_t *pt = (const dt_masks_form_group_t *)l->data;
-    if(!pt) continue;
+    if(IS_NULL_PTR(pt)) continue;
     dt_masks_form_t *child = dt_masks_get_from_id(darktable.develop, pt->formid);
-    if(!child) continue;
+    if(IS_NULL_PTR(child)) continue;
 
     float child_center[2] = { 0.0f, 0.0f };
     float child_area = 0.0f;

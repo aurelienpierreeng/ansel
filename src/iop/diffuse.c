@@ -1185,7 +1185,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
   // PAUSE !
   // check that all buffers exist before processing,
   // because we use a lot of memory here.
-  if(!mask || !temp1 || !temp2 || !LF_odd || !LF_even || out_of_memory)
+  if(IS_NULL_PTR(mask) || IS_NULL_PTR(temp1) || IS_NULL_PTR(temp2) || IS_NULL_PTR(LF_odd) || IS_NULL_PTR(LF_even) || out_of_memory)
   {
     err = 1;
     goto error;
@@ -1519,7 +1519,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   // PAUSE !
   // check that all buffers exist before processing,
   // because we use a lot of memory here.
-  if(!mask || !temp1 || !temp2 || !LF_odd || !LF_even || out_of_memory)
+  if(IS_NULL_PTR(mask) || IS_NULL_PTR(temp1) || IS_NULL_PTR(temp2) || IS_NULL_PTR(LF_odd) || IS_NULL_PTR(LF_even) || out_of_memory)
   {
     err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
     goto error;

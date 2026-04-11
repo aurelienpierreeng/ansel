@@ -376,21 +376,21 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   {
     const size_t buffsize = (size_t)h_width * h_height;
     redfactor = dt_pixelpipe_cache_alloc_align_float(buffsize, pipe);
-    if(!redfactor)
+    if(IS_NULL_PTR(redfactor))
     {
       err = 1;
       goto cleanup;
     }
     memset(redfactor, 0, sizeof(float) * buffsize);
     bluefactor = dt_pixelpipe_cache_alloc_align_float(buffsize, pipe);
-    if(!bluefactor)
+    if(IS_NULL_PTR(bluefactor))
     {
       err = 1;
       goto cleanup;
     }
     memset(bluefactor, 0, sizeof(float) * buffsize);
     oldraw = dt_pixelpipe_cache_alloc_align_float(buffsize * 2, pipe);
-    if(!oldraw)
+    if(IS_NULL_PTR(oldraw))
     {
       err = 1;
       goto cleanup;
@@ -409,7 +409,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
   // temporary array to store simple interpolation of G
   Gtmp = dt_pixelpipe_cache_alloc_align_float((size_t)height * width, pipe);
-  if(!Gtmp)
+  if(IS_NULL_PTR(Gtmp))
   {
     err = 1;
     goto cleanup;
@@ -418,7 +418,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
   // temporary array to avoid race conflicts, only every second pixel needs to be saved here
   RawDataTmp = dt_pixelpipe_cache_alloc_align_float(height * width / 2 + 4, pipe);
-  if(!RawDataTmp)
+  if(IS_NULL_PTR(RawDataTmp))
   {
     err = 1;
     goto cleanup;
@@ -433,7 +433,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const int hblsz = ceil((float)(width + border2) / (ts - border2) + 2 + hz1);
 
   buffer1 = (char *)calloc((size_t)vblsz * hblsz * (2 * 2 + 1), sizeof(float));
-  if(!buffer1)
+  if(IS_NULL_PTR(buffer1))
   {
     err = 1;
     goto cleanup;
@@ -441,7 +441,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
   const size_t buffersize = sizeof(float) * 3 * ts * ts + 6 * sizeof(float) * ts * tsh + 8 * 64 + 63;
   thread_buffers = (char *)dt_pixelpipe_cache_alloc_perthread(buffersize + 63, sizeof(char), &padded_buffersize);
-  if(!thread_buffers)
+  if(IS_NULL_PTR(thread_buffers))
   {
     err = 1;
     goto cleanup;
@@ -1346,7 +1346,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     float valmin[] = { 0.1f };
     dt_gaussian_t *red  = dt_gaussian_init(h_width, h_height, 1, valmax, valmin, 30.0f, 0);
     dt_gaussian_t *blue = dt_gaussian_init(h_width, h_height, 1, valmax, valmin, 30.0f, 0);
-    if(!red || !blue)
+    if(IS_NULL_PTR(red) || IS_NULL_PTR(blue))
     {
       err = 1;
       if(red)  dt_gaussian_free(red);

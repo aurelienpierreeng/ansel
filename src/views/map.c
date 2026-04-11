@@ -1040,7 +1040,7 @@ static OsmGpsMapImage *_view_map_draw_location(dt_map_t *lib, dt_location_draw_t
   }
   else
   {
-    if(!ld->data.polygons && ld == &lib->loc.main)
+    if(IS_NULL_PTR(ld->data.polygons) && ld == &lib->loc.main)
     {
       dt_location_draw_t *d = _others_location_draw(lib, lib->loc.main.id);
       if(d)
@@ -1049,7 +1049,7 @@ static OsmGpsMapImage *_view_map_draw_location(dt_map_t *lib, dt_location_draw_t
         ld->data.plg_pts = d->data.plg_pts;
       }
     }
-    if(!ld->data.polygons)
+    if(IS_NULL_PTR(ld->data.polygons))
       dt_map_location_get_polygons(ld);
     OsmGpsMapPolygon *location = _view_map_add_polygon_location(lib, ld);
     return (OsmGpsMapImage *)location;
@@ -1085,7 +1085,7 @@ static void _view_map_draw_main_location(dt_map_t *lib, dt_location_draw_t *ld)
   {
     // save the data to others locations (including polygons)
     dt_location_draw_t *d = _others_location_draw(lib, lib->loc.main.id);
-    if(!d)
+    if(IS_NULL_PTR(d))
     {
       d = g_malloc0(sizeof(dt_location_draw_t));
       lib->loc.others = g_list_append(lib->loc.others, d);
@@ -1130,7 +1130,7 @@ static void _view_map_draw_other_locations(dt_map_t *lib, dt_map_box_t *bbox)
       dt_location_draw_t *d = (dt_location_draw_t *)other->data;
       GList *other2 = _others_location(lib->loc.others, d->id);
       // add the new ones
-      if(!other2)
+      if(IS_NULL_PTR(other2))
       {
         d = (dt_location_draw_t *)other->data;
         lib->loc.others = g_list_append(lib->loc.others, other->data);
@@ -1142,14 +1142,14 @@ static void _view_map_draw_other_locations(dt_map_t *lib, dt_map_box_t *bbox)
             d->data.polygons = lib->loc.main.data.polygons;
             d->data.plg_pts = lib->loc.main.data.plg_pts;
           }
-          if(!d->data.polygons)
+          if(IS_NULL_PTR(d->data.polygons))
             dt_map_location_get_polygons(d);
         }
       }
       else
         d = (dt_location_draw_t *)other2->data;
       // display again location except polygons and the selected one
-      if((!lib->loc.main.id || lib->loc.main.id != d->id) && !d->location)
+      if((!lib->loc.main.id || lib->loc.main.id != d->id) && IS_NULL_PTR(d->location))
         d->location = _view_map_draw_location(lib, d, FALSE);
     }
     // free the new list
@@ -1185,7 +1185,7 @@ static GdkPixbuf *_draw_image(dt_map_image_t *entry, int *width, int *height,
     const dt_view_surface_value_t res =
         dt_view_image_get_surface_async(&entry->fetcher, entry->imgid, thumb_size, thumb_size,
                                         &entry->surface, GTK_WIDGET(lib->map), DT_THUMBTABLE_ZOOM_FIT);
-    if(res != DT_VIEW_SURFACE_OK || !entry->surface) return NULL;
+    if(res != DT_VIEW_SURFACE_OK || IS_NULL_PTR(entry->surface)) return NULL;
 
     const int raw_w = cairo_image_surface_get_width(entry->surface);
     const int raw_h = cairo_image_surface_get_height(entry->surface);
@@ -1200,7 +1200,7 @@ static GdkPixbuf *_draw_image(dt_map_image_t *entry, int *width, int *height,
     if(raw_w == w && raw_h == h)
     {
       source = gdk_pixbuf_get_from_surface(entry->surface, 0, 0, w, h);
-      if(!source) goto map_changed_failure;
+      if(IS_NULL_PTR(source)) goto map_changed_failure;
     }
     else
     {
@@ -1212,12 +1212,12 @@ static GdkPixbuf *_draw_image(dt_map_image_t *entry, int *width, int *height,
       cairo_destroy(cr);
       source = gdk_pixbuf_get_from_surface(logical, 0, 0, w, h);
       cairo_surface_destroy(logical);
-      if(!source) goto map_changed_failure;
+      if(IS_NULL_PTR(source)) goto map_changed_failure;
     }
 
     thumb = gdk_pixbuf_new(GDK_COLORSPACE_RGB, TRUE, 8, w + 2 * _thumb_border,
                            h + 2 * _thumb_border + _pin_size);
-    if(!thumb) goto map_changed_failure;
+    if(IS_NULL_PTR(thumb)) goto map_changed_failure;
     gdk_pixbuf_fill(thumb, frame);
     gdk_pixbuf_copy_area(source, 0, 0, w, h, thumb, _thumb_border, _thumb_border);
     gdk_pixbuf_copy_area(lib->image_pin, 0, 0, w + 2 * _thumb_border,
@@ -1241,7 +1241,7 @@ static GdkPixbuf *_draw_image(dt_map_image_t *entry, int *width, int *height,
     const int w = count_width + 2 * _thumb_border;
     const int h = count_height + 2 * _thumb_border + _pin_size;
     thumb = gdk_pixbuf_new(GDK_COLORSPACE_RGB, TRUE, 8, w, h);
-    if(!thumb) goto map_changed_failure;
+    if(IS_NULL_PTR(thumb)) goto map_changed_failure;
     gdk_pixbuf_fill(thumb, frame);
     gdk_pixbuf_copy_area(count, 0, 0, count_width, count_height, thumb,
                        _thumb_border, _thumb_border);
@@ -1270,7 +1270,7 @@ static GdkPixbuf *_draw_transient_image(const int32_t imgid, int *width, int *he
   {
     const dt_view_surface_value_t res =
         dt_view_image_get_surface(imgid, thumb_size, thumb_size, &surface, DT_THUMBTABLE_ZOOM_FIT);
-    if(res != DT_VIEW_SURFACE_OK || !surface) goto map_changed_failure;
+    if(res != DT_VIEW_SURFACE_OK || IS_NULL_PTR(surface)) goto map_changed_failure;
 
     const int raw_w = cairo_image_surface_get_width(surface);
     const int raw_h = cairo_image_surface_get_height(surface);
@@ -1281,7 +1281,7 @@ static GdkPixbuf *_draw_transient_image(const int32_t imgid, int *width, int *he
     if(raw_w == w && raw_h == h)
     {
       source = gdk_pixbuf_get_from_surface(surface, 0, 0, w, h);
-      if(!source) goto map_changed_failure;
+      if(IS_NULL_PTR(source)) goto map_changed_failure;
     }
     else
     {
@@ -1293,12 +1293,12 @@ static GdkPixbuf *_draw_transient_image(const int32_t imgid, int *width, int *he
       cairo_destroy(cr);
       source = gdk_pixbuf_get_from_surface(logical, 0, 0, w, h);
       cairo_surface_destroy(logical);
-      if(!source) goto map_changed_failure;
+      if(IS_NULL_PTR(source)) goto map_changed_failure;
     }
 
     thumb = gdk_pixbuf_new(GDK_COLORSPACE_RGB, TRUE, 8, w + 2 * _thumb_border,
                            h + 2 * _thumb_border + _pin_size);
-    if(!thumb) goto map_changed_failure;
+    if(IS_NULL_PTR(thumb)) goto map_changed_failure;
     gdk_pixbuf_fill(thumb, frame);
     gdk_pixbuf_copy_area(source, 0, 0, w, h, thumb, _thumb_border, _thumb_border);
     gdk_pixbuf_copy_area(lib->image_pin, 0, 0, w + 2 * _thumb_border,
@@ -1321,7 +1321,7 @@ static GdkPixbuf *_draw_transient_image(const int32_t imgid, int *width, int *he
     const int w = count_width + 2 * _thumb_border;
     const int h = count_height + 2 * _thumb_border + _pin_size;
     thumb = gdk_pixbuf_new(GDK_COLORSPACE_RGB, TRUE, 8, w, h);
-    if(!thumb) goto map_changed_failure;
+    if(IS_NULL_PTR(thumb)) goto map_changed_failure;
     gdk_pixbuf_fill(thumb, frame);
     gdk_pixbuf_copy_area(count, 0, 0, count_width, count_height, thumb, _thumb_border, _thumb_border);
     gdk_pixbuf_copy_area(lib->image_pin, 0, 0, w, _pin_size, thumb, 0, count_height + 2 * _thumb_border);
@@ -1345,7 +1345,7 @@ static gboolean _view_map_draw_image(dt_map_image_t *entry, const int thumbnail,
     osm_gps_map_image_remove(lib->map, entry->image);
     entry->image = NULL;
   }
-  if(!entry->image)
+  if(IS_NULL_PTR(entry->image))
   {
     GdkPixbuf *thumb = _draw_image(entry, &entry->width, &entry->height,
                                    entry->group_count, entry->group_same_loc,

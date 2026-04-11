@@ -92,7 +92,7 @@ static inline float dt_drawlayer_brush_transition_mass_primitive_eval(const int 
  */
 static inline float dt_drawlayer_brush_profile_eval(const dt_drawlayer_brush_dab_t *dab, const float norm2)
 {
-  if(!dab || norm2 >= 1.0f) return 0.0f;
+  if(IS_NULL_PTR(dab) || norm2 >= 1.0f) return 0.0f;
 
   if(dab->shape == DT_DRAWLAYER_BRUSH_SHAPE_GAUSSIAN)
   {

@@ -692,7 +692,7 @@ const struct dt_interpolation *dt_interpolation_new(enum dt_interpolation_type t
      * prepare later search pass with default fallback */
     type = DT_INTERPOLATION_DEFAULT_WARP;
   }
-  if(!itor)
+  if(IS_NULL_PTR(itor))
   {
     // Did not find the userpref one or we've been asked for a specific one
     for(int i = DT_INTERPOLATION_FIRST; i < DT_INTERPOLATION_LAST; i++)

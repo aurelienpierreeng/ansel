@@ -514,7 +514,7 @@ gboolean dt_image_safe_remove(const int32_t imgid)
 dt_image_path_source_t dt_image_choose_input_path(const dt_image_t *img, char *pathname,
                                                   size_t pathname_len, gboolean force_cache)
 {
-  if(!img || !pathname) return DT_IMAGE_PATH_NONE;
+  if(IS_NULL_PTR(img) || IS_NULL_PTR(pathname)) return DT_IMAGE_PATH_NONE;
   pathname[0] = '\0';
 
   // Start with local copies as file I/O will be better if we have a choice
@@ -606,7 +606,7 @@ void dt_image_local_copy_paths_from_fullpath(const char *fullpath, int32_t imgid
 {
   if(local_copy_path) local_copy_path[0] = '\0';
   if(local_copy_legacy_path) local_copy_legacy_path[0] = '\0';
-  if(!fullpath || !*fullpath || imgid <= 0 || !local_copy_path || !local_copy_legacy_path) return;
+  if(IS_NULL_PTR(fullpath) || !*fullpath || imgid <= 0 || IS_NULL_PTR(local_copy_path) || IS_NULL_PTR(local_copy_legacy_path)) return;
 
   char *md5_filename = g_compute_checksum_for_string(G_CHECKSUM_MD5, fullpath, strlen(fullpath));
   if(IS_NULL_PTR(md5_filename)) return;
@@ -882,7 +882,7 @@ static void _image_set_images_locations(const GList *img, const GArray *gloc,
 
 void dt_image_set_images_locations(const GList *imgs, const GArray *gloc, const gboolean undo_on)
 {
-  if(!imgs || !gloc || (g_list_length((GList *)imgs) != gloc->len))
+  if(IS_NULL_PTR(imgs) || IS_NULL_PTR(gloc) || (g_list_length((GList *)imgs) != gloc->len))
     return;
   GList *undo = NULL;
   if(undo_on) dt_undo_start_group(darktable.undo, DT_UNDO_GEOTAG);
@@ -1236,7 +1236,7 @@ uint32_t dt_image_altered(const int32_t imgid)
 
   _image_stmt_mutex_ensure();
   dt_pthread_mutex_lock(&_image_stmt_mutex);
-  if(!_image_altered_stmt)
+  if(IS_NULL_PTR(_image_altered_stmt))
   {
     DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
                                 "SELECT COUNT(imgid) FROM main.history WHERE imgid = ?1", -1,
@@ -1294,7 +1294,7 @@ GList* dt_image_find_xmps(const char* filename)
   // start by locating the extension, which we'll be referencing multiple times
   const size_t fn_len = strlen(filename);
   const char* ext = strrchr(filename,'.');  // find last dot
-  if(!ext) ext = filename;
+  if(IS_NULL_PTR(ext)) ext = filename;
   const size_t ext_offset = ext - filename;
 
   gchar pattern[PATH_MAX] = { 0 };
@@ -2514,13 +2514,13 @@ static int64_t _write_timestamp_get(const int32_t imgid)
 
   _write_timestamp_stmt_ensure();
   dt_pthread_mutex_lock(&_write_timestamp_stmt_mutex);
-  if(!_write_timestamp_select_stmt)
+  if(IS_NULL_PTR(_write_timestamp_select_stmt))
   {
     DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
                                 "SELECT write_timestamp FROM main.images WHERE id = ?1",
                                 -1, &_write_timestamp_select_stmt, NULL);
   }
-  if(!_write_timestamp_select_stmt)
+  if(IS_NULL_PTR(_write_timestamp_select_stmt))
   {
     dt_pthread_mutex_unlock(&_write_timestamp_stmt_mutex);
     return 0;
@@ -2562,7 +2562,7 @@ static void _write_timestamp_set_now(const int32_t imgid)
 
 static gboolean _sidecar_is_up_to_date(const dt_image_t *img)
 {
-  if(!img || img->id <= 0) return FALSE;
+  if(IS_NULL_PTR(img) || img->id <= 0) return FALSE;
   if(img->change_timestamp <= 0) return FALSE;
 
   const int64_t write_timestamp = _write_timestamp_get(img->id);
@@ -2580,7 +2580,7 @@ static gboolean _sidecar_is_up_to_date(const dt_image_t *img)
 
 static int _write_sidecar_file_from_image_locked(const dt_image_t *img)
 {
-  if(!img || img->id <= 0) return 1;
+  if(IS_NULL_PTR(img) || img->id <= 0) return 1;
 
   char imgpath[PATH_MAX] = { 0 };
   if(dt_image_choose_input_path(img, imgpath, sizeof(imgpath), FALSE) == DT_IMAGE_PATH_NONE)
@@ -2618,7 +2618,7 @@ int dt_image_write_sidecar_file(const int32_t imgid)
 
   dt_print(DT_DEBUG_CONTROL, "[xmp] imgid %d write start\n", imgid);
   dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'w');
-  if(!img)
+  if(IS_NULL_PTR(img))
   {
     dt_print(DT_DEBUG_CONTROL, "[xmp] imgid %d cache lock failed\n", imgid);
     return 1;
@@ -2759,7 +2759,7 @@ static void _image_set_datetimes(const GList *img, const GArray *dtime,
 
 void dt_image_set_datetimes(const GList *imgs, const GArray *dtime, const gboolean undo_on)
 {
-  if(!imgs || !dtime || (g_list_length((GList *)imgs) != dtime->len))
+  if(IS_NULL_PTR(imgs) || IS_NULL_PTR(dtime) || (g_list_length((GList *)imgs) != dtime->len))
     return;
   GList *undo = NULL;
   if(undo_on) dt_undo_start_group(darktable.undo, DT_UNDO_DATETIME);
@@ -2796,7 +2796,7 @@ static void _image_set_datetime(const GList *img, const char *datetime,
 
 void dt_image_set_datetime(const GList *imgs, const char *datetime, const gboolean undo_on)
 {
-  if(!imgs)
+  if(IS_NULL_PTR(imgs))
     return;
   GList *undo = NULL;
   if(undo_on) dt_undo_start_group(darktable.undo, DT_UNDO_DATETIME);
@@ -2895,7 +2895,7 @@ char *dt_image_build_text_path_from_path(const char *image_path)
 
 static void _copy_text_sidecar_if_present(const char *src_image_path, const char *dest_image_path)
 {
-  if(!src_image_path || !dest_image_path) return;
+  if(IS_NULL_PTR(src_image_path) || IS_NULL_PTR(dest_image_path)) return;
 
   char *src_txt = dt_image_get_text_path_from_path(src_image_path);
   if(IS_NULL_PTR(src_txt)) return;
@@ -2926,7 +2926,7 @@ static void _copy_text_sidecar_if_present(const char *src_image_path, const char
 
 static void _move_text_sidecar_if_present(const char *src_image_path, const char *dest_image_path, const gboolean overwrite)
 {
-  if(!src_image_path || !dest_image_path) return;
+  if(IS_NULL_PTR(src_image_path) || IS_NULL_PTR(dest_image_path)) return;
 
   char *src_txt = dt_image_get_text_path_from_path(src_image_path);
   if(IS_NULL_PTR(src_txt)) return;

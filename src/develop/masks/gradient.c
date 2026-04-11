@@ -388,7 +388,7 @@ static int _init_rotation(dt_masks_form_t *form, const float amount, const dt_ma
 
 static float _gradient_get_interaction_value(const dt_masks_form_t *form, dt_masks_interaction_t interaction)
 {
-  if(!form || !form->points) return NAN;
+  if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return NAN;
   const dt_masks_anchor_gradient_t *gradient = (const dt_masks_anchor_gradient_t *)(form->points)->data;
   if(IS_NULL_PTR(gradient)) return NAN;
 
@@ -405,7 +405,7 @@ static float _gradient_get_interaction_value(const dt_masks_form_t *form, dt_mas
 
 static gboolean _gradient_get_gravity_center(const dt_masks_form_t *form, float center[2], float *area)
 {
-  if(!form || !form->points || !center || !area) return FALSE;
+  if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points) || IS_NULL_PTR(center) || IS_NULL_PTR(area)) return FALSE;
   const dt_masks_anchor_gradient_t *gradient = (const dt_masks_anchor_gradient_t *)(form->points)->data;
   if(IS_NULL_PTR(gradient)) return FALSE;
   center[0] = gradient->center[0];
@@ -441,7 +441,7 @@ static float _gradient_set_interaction_value(dt_masks_form_t *form, dt_masks_int
 
 static int _change_extent(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module, int index, const float amount, const dt_masks_increment_t increment, const int flow)
 {
-  if(!form || !form->points) return 0;
+  if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return 0;
   dt_masks_anchor_gradient_t *gradient = (dt_masks_anchor_gradient_t *)(form->points)->data;
   if(IS_NULL_PTR(gradient)) return 0;
 
@@ -458,7 +458,7 @@ static int _change_extent(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struc
 
 static int _change_curvature(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module, int index, const float amount, const dt_masks_increment_t increment, const int flow)
 {
-  if(!form || !form->points) return 0;
+  if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return 0;
   dt_masks_anchor_gradient_t *gradient = (dt_masks_anchor_gradient_t *)(form->points)->data;
   if(IS_NULL_PTR(gradient)) return 0;
 
@@ -485,7 +485,7 @@ static int _change_curvature(dt_masks_form_t *form, dt_masks_form_gui_t *gui, st
 
 static int _change_rotation(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module, int index, const float amount, const dt_masks_increment_t increment, const int flow)
 {
-  if(!form || !form->points) return 0;
+  if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return 0;
   dt_masks_anchor_gradient_t *gradient = (dt_masks_anchor_gradient_t *)(form->points)->data;
   if(IS_NULL_PTR(gradient)) return 0;
 
@@ -619,7 +619,7 @@ static int _gradient_events_button_released(struct dt_iop_module_t *module, doub
   
   
   
-  if(!form || !form->points) return 0;
+  if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return 0;
 
   if(gui->form_dragging && gui->edit_mode == DT_MASKS_EDIT_FULL)
   {
@@ -675,7 +675,7 @@ static int _gradient_events_mouse_moved(struct dt_iop_module_t *module, double x
     return 1;
   }
 
-  if(!form || !form->points) return 0;
+  if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return 0;
 
   // we get the gradient
   dt_masks_anchor_gradient_t *gradient = (dt_masks_anchor_gradient_t *)((form->points)->data);
@@ -1083,7 +1083,7 @@ static int _gradient_get_points_border(dt_develop_t *dev, dt_masks_form_t *form,
                                        const dt_iop_module_t *module)
 {
     // unused arg, keep compiler from complaining
-  if(!form || !form->points) return 0;
+  if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return 0;
   dt_masks_anchor_gradient_t *gradient = (dt_masks_anchor_gradient_t *)form->points->data;
   if(IS_NULL_PTR(gradient)) return 0;
   if(_gradient_get_points(dev, gradient->center[0], gradient->center[1], gradient->rotation, gradient->curvature,
@@ -1143,7 +1143,7 @@ static int _gradient_get_mask(const dt_iop_module_t *const module, dt_dev_pixelp
                               dt_masks_form_t *const form,
                               float **buffer, int *width, int *height, int *posx, int *posy)
 {
-  if(!form || !form->points) return 0;
+  if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return 0;
   double start2 = 0.0;
   if(darktable.unmuted & DT_DEBUG_PERF) start2 = dt_get_wtime();
   // we get the area
@@ -1320,7 +1320,7 @@ static int _gradient_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pi
                                   const dt_dev_pixelpipe_iop_t *const piece,
                                   dt_masks_form_t *const form, const dt_iop_roi_t *roi, float *buffer)
 {
-  if(!form || !form->points) return 0;
+  if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return 0;
   double start2 = 0.0;
   if(darktable.unmuted & DT_DEBUG_PERF) start2 = dt_get_wtime();
   // we get the gradient values

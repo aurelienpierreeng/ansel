@@ -739,7 +739,7 @@ int generate_preset_combo(struct dt_iop_module_t *self)
       if(!strcmp(wb_preset[i].make, self->dev->image_storage.camera_maker)
          && !strcmp(wb_preset[i].model, self->dev->image_storage.camera_model))
       {
-        if(!wb_name || strcmp(wb_name, wb_preset[i].name))
+        if(IS_NULL_PTR(wb_name) || strcmp(wb_name, wb_preset[i].name))
         {
           // new preset found
           dt_iop_temperature_preset_data_t *preset = malloc(sizeof(dt_iop_temperature_preset_data_t));

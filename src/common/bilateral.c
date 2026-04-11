@@ -163,7 +163,7 @@ dt_bilateral_t *dt_bilateral_init(const int width,     // width of input image
   b->slicerows = (b->size_y + b->numslices - 1) / b->numslices + 2;
   b->buf = dt_pixelpipe_cache_alloc_align_float_cache(b->size_x * b->size_z * b->numslices * b->slicerows, 0);
   if(b->buf) memset(b->buf, 0, sizeof(float) * b->size_x * b->size_z * b->numslices * b->slicerows);
-  if (!b->buf)
+  if (IS_NULL_PTR(b->buf))
   {
     fprintf(stderr,"[bilateral] unable to allocate buffer for %zux%zux%zu grid\n",b->size_x,b->size_y,b->size_z);
     dt_free(b);
@@ -182,7 +182,7 @@ void dt_bilateral_splat(const dt_bilateral_t *b, const float *const in)
   const float sigma_s = b->sigma_s * b->sigma_s;
   float *const buf = b->buf;
 
-  if (!buf) return;
+  if (IS_NULL_PTR(buf)) return;
   // splat into downsampled grid
   const int nthreads = darktable.num_openmp_threads;
   const size_t offsets[8] =
@@ -334,7 +334,7 @@ static void blur_line(float *buf, const int offset1, const int offset2, const in
 
 void dt_bilateral_blur(const dt_bilateral_t *b)
 {
-  if (!b || !b->buf)
+  if (IS_NULL_PTR(b) || IS_NULL_PTR(b->buf))
     return;
   const int ox = b->size_z;
   const int oy = b->size_x * b->size_z;
@@ -358,7 +358,7 @@ void dt_bilateral_slice(const dt_bilateral_t *const b, const float *const in, fl
   const int width = b->width;
   const int height = b->height;
 
-  if (!buf) return;
+  if (IS_NULL_PTR(buf)) return;
   __OMP_PARALLEL_FOR__(collapse(2))
   for(int j = 0; j < height; j++)
   {
@@ -399,7 +399,7 @@ void dt_bilateral_slice_to_output(const dt_bilateral_t *const b, const float *co
   const int width = b->width;
   const int height = b->height;
 
-  if (!buf) return;
+  if (IS_NULL_PTR(buf)) return;
   __OMP_PARALLEL_FOR__(collapse(2))
   for(int j = 0; j < height; j++)
   {

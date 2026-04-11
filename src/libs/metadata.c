@@ -175,7 +175,7 @@ static void _update(dt_lib_module_t *self)
 
   // first we want to make sure the list of images to act on has changed
   // this is not the case if mouse hover change but still stay in selection for ex.
-  if(!imgs && !d->last_act_on) return;
+  if(IS_NULL_PTR(imgs) && IS_NULL_PTR(d->last_act_on)) return;
   if(imgs && d->last_act_on)
   {
     gboolean changed = FALSE;
@@ -447,7 +447,7 @@ static void _update_layout(dt_lib_module_t *self)
 
     if(!hidden)
     {
-      if(!first) first = previous = current;
+      if(IS_NULL_PTR(first)) first = previous = current;
 
       g_object_set_data(G_OBJECT(previous), "meta_next", current);
       g_object_set_data(G_OBJECT(current), "meta_prev", previous);

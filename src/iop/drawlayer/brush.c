@@ -142,7 +142,7 @@ static inline void _prepare_sprinkle_preview(const dt_drawlayer_brush_dab_t *dab
                                              const float radius,
                                              dt_drawlayer_sprinkle_preview_t *preview)
 {
-  if(!preview)
+  if(IS_NULL_PTR(preview))
     return;
 
   *preview = (dt_drawlayer_sprinkle_preview_t){
@@ -158,7 +158,7 @@ static inline void _prepare_sprinkle_preview(const dt_drawlayer_brush_dab_t *dab
     .enabled = FALSE,
   };
 
-  if(!dab || dab->sprinkles <= 1e-6f)
+  if(IS_NULL_PTR(dab) || dab->sprinkles <= 1e-6f)
     return;
 
   preview->scale = 1.0f / fmaxf(dab->sprinkle_size, 1.0f);
@@ -198,7 +198,7 @@ static inline void _prepare_sprinkle_preview(const dt_drawlayer_brush_dab_t *dab
 static inline float _sample_sprinkle_preview(const dt_drawlayer_sprinkle_preview_t *preview,
                                              const float px, const float py)
 {
-  if(!preview || !preview->enabled) return 1.0f;
+  if(IS_NULL_PTR(preview) || !preview->enabled) return 1.0f;
   return _sprinkle_noise_at_pixel_precomputed(px, py,
                                               preview->scale, preview->strength,
                                               preview->w0, preview->w1, preview->w2,
@@ -252,7 +252,7 @@ static gboolean _brush_runtime_view_from_state(const dt_drawlayer_paint_stroke_t
                                                const float scale,
                                                dt_drawlayer_brush_runtime_view_t *view)
 {
-  if(!stroke || !dab || !view || !stroke->bounds.valid) return FALSE;
+  if(!stroke || IS_NULL_PTR(dab) || IS_NULL_PTR(view) || !stroke->bounds.valid) return FALSE;
   if(stroke->bounds.se[0] <= stroke->bounds.nw[0]
      || stroke->bounds.se[1] <= stroke->bounds.nw[1])
     return FALSE;
@@ -320,7 +320,7 @@ static inline float _sample_alpha_noise_raw(const dt_drawlayer_brush_dab_t *dab,
 static inline float _estimate_alpha_noise_gain(const dt_drawlayer_brush_dab_t *dab,
                                                const dt_drawlayer_brush_runtime_view_t *view)
 {
-  if(!dab || !view || !view->have_sprinkles) return 1.0f;
+  if(IS_NULL_PTR(dab) || IS_NULL_PTR(view) || !view->have_sprinkles) return 1.0f;
 
   float noise_sum = 0.0f;
   int noise_count = 0;
@@ -397,7 +397,7 @@ static gboolean _prepare_analytic_pixel_context(const dt_drawlayer_brush_runtime
                                                 const int x, const int y, const float old_alpha,
                                                 dt_drawlayer_brush_pixel_eval_t *pixel_eval)
 {
-  if(!view || !pixel_eval) return FALSE;
+  if(IS_NULL_PTR(view) || IS_NULL_PTR(pixel_eval)) return FALSE;
   const dt_drawlayer_brush_dab_t *dab = view->dab;
 
   const float dy = ((float)y + 0.5f - view->center_y) * view->inv_radius;
@@ -487,7 +487,7 @@ static inline __attribute__((always_inline)) dt_aligned_pixel_simd_t
 _sample_rgba_float_bilinear(const float *buffer, const int width, const int height, const float x,
                             const float y)
 {
-  if(!buffer || width <= 0 || height <= 0) return dt_simd_set1(0.0f);
+  if(IS_NULL_PTR(buffer) || width <= 0 || height <= 0) return dt_simd_set1(0.0f);
 
   const float fx = CLAMP(x, 0.0f, (float)(width - 1));
   const float fy = CLAMP(y, 0.0f, (float)(height - 1));
@@ -524,7 +524,7 @@ _sample_smudge_source_float(const float *buffer, const int width, const int heig
                             const int jitter_x, const int jitter_y)
 {
   dt_aligned_pixel_simd_t rgba_sum = dt_simd_set1(0.0f);
-  if(!buffer || width <= 0 || height <= 0) return rgba_sum;
+  if(IS_NULL_PTR(buffer) || width <= 0 || height <= 0) return rgba_sum;
 
   float dir_x = motion_dx;
   float dir_y = motion_dy;
@@ -625,7 +625,7 @@ static dt_aligned_pixel_simd_t _apply_smudge_stroke_mode(const float *source_buf
                                     motion_dx, motion_dy,
                                     x - view->bounds.nw[0], y - view->bounds.nw[1]);
 
-  if(!smudge_pixels || smudge_width <= 0) return old_px;
+  if(IS_NULL_PTR(smudge_pixels) || smudge_width <= 0) return old_px;
   float *carry = smudge_pixels + 4 * ((size_t)(y - view->bounds.nw[1]) * smudge_width + (x - view->bounds.nw[0]));
   const dt_aligned_pixel_simd_t carried_px = dt_load_simd(carry);
   const float pickup_blend = _clamp01(dab->opacity);
@@ -657,7 +657,7 @@ gboolean dt_drawlayer_brush_rasterize(const dt_drawlayer_cache_patch_t *sample_p
    * 1) precompute dab bounds and orientation,
    * 2) resolve per-pixel alpha (profile/noise/flow),
    * 3) blend into target buffer and update stroke-local alpha mask. */
-  if(!patch || !patch->pixels || !dab || !runtime_private) return FALSE;
+  if(IS_NULL_PTR(patch) || IS_NULL_PTR(patch->pixels) || IS_NULL_PTR(dab) || !runtime_private) return FALSE;
   if(dab->radius <= 0.0f || dab->opacity <= 0.0f || scale <= 0.0f) return FALSE;
 
   float *const buffer = patch->pixels;
@@ -800,7 +800,7 @@ gboolean dt_drawlayer_brush_rasterize_dab_argb8(const dt_drawlayer_brush_dab_t *
                                                  const float opacity_multiplier)
 {
   /* Lightweight GUI preview dab renderer (ARGB8), independent from stroke logic. */
-  if(!dab || !argb || width <= 0 || height <= 0 || stride < 4 * width) return FALSE;
+  if(IS_NULL_PTR(dab) || IS_NULL_PTR(argb) || width <= 0 || height <= 0 || stride < 4 * width) return FALSE;
 
   memset(argb, 0, (size_t)stride * height);
   if(dab->radius <= 0.0f) return FALSE;
@@ -853,7 +853,7 @@ gboolean dt_drawlayer_brush_rasterize_dab_rgbaf(const dt_drawlayer_brush_dab_t *
                                                 const float opacity_multiplier,
                                                 const float background_rgb[3])
 {
-  if(!dab || !rgba || width <= 0 || height <= 0) return FALSE;
+  if(IS_NULL_PTR(dab) || IS_NULL_PTR(rgba) || width <= 0 || height <= 0) return FALSE;
 
   const float bg_r = background_rgb ? _clamp01(background_rgb[0]) : 1.0f;
   const float bg_g = background_rgb ? _clamp01(background_rgb[1]) : 1.0f;

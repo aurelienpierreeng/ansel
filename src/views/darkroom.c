@@ -423,7 +423,7 @@ static void _render_iso12646(cairo_t *cr, int width, int height, int border)
 static gboolean _render_main_direct_debug(cairo_t *cr, dt_develop_t *dev, const int width, const int height,
                                           const int border, const dt_aligned_pixel_t bg_color)
 {
-  if(!cr || !dev || !dev->pipe) return FALSE;
+  if(IS_NULL_PTR(cr) || IS_NULL_PTR(dev) || IS_NULL_PTR(dev->pipe)) return FALSE;
 
   cairo_set_source_rgb(cr, bg_color[0], bg_color[1], bg_color[2]);
   cairo_paint(cr);
@@ -458,7 +458,7 @@ static gboolean _render_main_direct_debug(cairo_t *cr, dt_develop_t *dev, const 
 
   cairo_surface_t *surface = cairo_image_surface_create_for_data((unsigned char *)data, CAIRO_FORMAT_RGB24,
                                                                   bw, bh, stride);
-  if(!surface || cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS)
+  if(IS_NULL_PTR(surface) || cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS)
   {
     if(surface) cairo_surface_destroy(surface);
     dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, entry);
@@ -546,7 +546,7 @@ static void _release_expose_source_caches(void)
 static gboolean _lock_pipe_surface(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, darkroom_locked_surface_t *locked,
                                    const gboolean keep_previous_on_fail, const gboolean lock_read)
 {
-  if(!dev || !pipe || !locked) return FALSE;
+  if(IS_NULL_PTR(dev) || IS_NULL_PTR(pipe) || !locked) return FALSE;
   (void)lock_read;
 
   const uint64_t hash = dt_dev_backbuf_get_hash(&pipe->backbuf);
@@ -572,7 +572,7 @@ static gboolean _lock_pipe_surface(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, 
   void *data = NULL;
   if(!dt_dev_pixelpipe_cache_peek_gui(pipe, NULL, &data, &entry, NULL, NULL, NULL))
     data = NULL;
-  if(!data)
+  if(IS_NULL_PTR(data))
   {
     /* Keep previous frame only while waiting for a *different* target hash.
      * If requested hash equals the currently locked one but cache lookup fails,
@@ -604,7 +604,7 @@ static gboolean _lock_pipe_surface(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, 
   }
 
   cairo_surface_t *surface = cairo_image_surface_create_for_data(data, CAIRO_FORMAT_RGB24, width, height, stride);
-  if(!surface || cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS)
+  if(IS_NULL_PTR(surface) || cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS)
   {
     if(surface) cairo_surface_destroy(surface);
     if(keep_previous_on_fail && locked->surface) return TRUE;
@@ -626,7 +626,7 @@ static gboolean _render_main_locked_surface(cairo_t *cr, dt_develop_t *dev, dark
                                             const int width, const int height, const int border,
                                             const dt_aligned_pixel_t bg_color)
 {
-  if(!cr || !dev || !locked || !locked->surface) return FALSE;
+  if(IS_NULL_PTR(cr) || IS_NULL_PTR(dev) || !locked || !locked->surface) return FALSE;
   if(!locked->entry || locked->hash == (uint64_t)-1) return FALSE;
 
   cairo_set_source_rgb(cr, bg_color[0], bg_color[1], bg_color[2]);
@@ -730,7 +730,7 @@ static gboolean _build_preview_fallback_surface(dt_develop_t *dev, const int wid
 
 static gboolean _render_preview_fallback_surface(cairo_t *cr)
 {
-  if(!cr || !_darkroom_preview_fallback_surface) return FALSE;
+  if(IS_NULL_PTR(cr) || !_darkroom_preview_fallback_surface) return FALSE;
   cairo_set_source_surface(cr, _darkroom_preview_fallback_surface, 0, 0);
   cairo_paint(cr);
   return TRUE;
@@ -791,7 +791,7 @@ static inline void _darkroom_reset_expose_state(darkroom_expose_state_t *state)
 static void _darkroom_prepare_image_surface(dt_develop_t *dev, const int width, const int height,
                                             darkroom_expose_state_t *state)
 {
-  if(!dev || !state) return;
+  if(IS_NULL_PTR(dev) || !state) return;
 
   if(state->image_surface_imgid != dev->image_storage.id
      && state->image_surface_imgid != UNKNOWN_IMAGE)
@@ -1355,7 +1355,7 @@ static gboolean _darkroom_toolbox_button_activate_accel(GtkAccelGroup *accel_gro
                                                         gpointer data)
 {
   GtkWidget *button = GTK_WIDGET(data);
-  if(!button || !gtk_widget_is_visible(button) || !gtk_widget_is_sensitive(button)) return FALSE;
+  if(IS_NULL_PTR(button) || !gtk_widget_is_visible(button) || !gtk_widget_is_sensitive(button)) return FALSE;
 
   gtk_button_clicked(GTK_BUTTON(button));
   return TRUE;
@@ -1366,10 +1366,10 @@ static gboolean _darkroom_toolbox_button_focus_accel(GtkAccelGroup *accel_group,
                                                      gpointer data)
 {
   GtkWidget *button = GTK_WIDGET(data);
-  if(!button || !gtk_widget_is_visible(button) || !gtk_widget_is_sensitive(button)) return FALSE;
+  if(IS_NULL_PTR(button) || !gtk_widget_is_visible(button) || !gtk_widget_is_sensitive(button)) return FALSE;
 
   GtkWidget *popover = g_object_get_data(G_OBJECT(button), "dt-darkroom-toolbox-popover");
-  if(!popover || !gtk_widget_is_sensitive(popover)) return FALSE;
+  if(IS_NULL_PTR(popover) || !gtk_widget_is_sensitive(popover)) return FALSE;
 
   gtk_widget_grab_focus(button);
   gtk_popover_set_relative_to(GTK_POPOVER(popover), button);
@@ -2204,7 +2204,7 @@ void enter(dt_view_t *self)
   dt_masks_gui_init(dev);
   dev->gui_module = NULL;
 
-  if(!dev->iop)
+  if(IS_NULL_PTR(dev->iop))
     dev->iop = dt_dev_load_modules(dev);
 
   // Add IOP modules to the plugin list

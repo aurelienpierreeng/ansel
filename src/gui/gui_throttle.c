@@ -154,7 +154,7 @@ void dt_gui_throttle_cleanup(void)
 
 void dt_gui_throttle_record_runtime(const dt_dev_pixelpipe_t *pipe, const gint64 runtime_us)
 {
-  if(!pipe || runtime_us <= 0) return;
+  if(IS_NULL_PTR(pipe) || runtime_us <= 0) return;
   if(pipe->type != DT_DEV_PIXELPIPE_FULL && pipe->type != DT_DEV_PIXELPIPE_PREVIEW) return;
 
   const uint32_t clamped_runtime_us = (uint32_t)MIN(runtime_us, (gint64)G_MAXUINT32);
@@ -247,7 +247,7 @@ gint64 dt_gui_throttle_get_timeout_us(void)
 void dt_gui_throttle_queue(gpointer source, dt_gui_throttle_callback_t callback, gpointer user_data)
 {
   if(IS_NULL_PTR(callback)) return;
-  if(!source) source = user_data;
+  if(IS_NULL_PTR(source)) source = user_data;
 
   const guint timeout_ms = _effective_timeout_ms();
   if(timeout_ms == 0)

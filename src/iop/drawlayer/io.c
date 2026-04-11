@@ -157,7 +157,7 @@ static gboolean _layer_name_non_empty(const char *name)
 
 static int64_t _sidecar_timestamp_from_path(const char *path)
 {
-  if(!path || path[0] == '\0' || !g_file_test(path, G_FILE_TEST_EXISTS)) return 0;
+  if(IS_NULL_PTR(path) || path[0] == '\0' || !g_file_test(path, G_FILE_TEST_EXISTS)) return 0;
 
   GStatBuf st = { 0 };
   if(g_stat(path, &st) != 0) return 0;
@@ -166,7 +166,7 @@ static int64_t _sidecar_timestamp_from_path(const char *path)
 
 static gboolean _export_pre_module_fullres_to_tiff(const int32_t imgid, const char *filter, const char *path)
 {
-  if(imgid <= 0 || !path || path[0] == '\0') return FALSE;
+  if(imgid <= 0 || IS_NULL_PTR(path) || path[0] == '\0') return FALSE;
 
   dt_imageio_module_format_t *format = dt_imageio_get_format_by_name("tiff");
   if(IS_NULL_PTR(format)) return FALSE;
@@ -202,7 +202,7 @@ static gboolean _icc_blob_from_profile_key(const char *work_profile, uint8_t **i
 {
   if(icc_data) *icc_data = NULL;
   if(icc_len) *icc_len = 0;
-  if(!work_profile || work_profile[0] == '\0' || !icc_data || !icc_len) return FALSE;
+  if(IS_NULL_PTR(work_profile) || work_profile[0] == '\0' || IS_NULL_PTR(icc_data) || !icc_len) return FALSE;
 
   const char *sep0 = strchr(work_profile, '|');
   if(IS_NULL_PTR(sep0)) return FALSE;
@@ -216,7 +216,7 @@ static gboolean _icc_blob_from_profile_key(const char *work_profile, uint8_t **i
   const dt_colorspaces_color_profile_type_t type = (dt_colorspaces_color_profile_type_t)type_long;
   const char *filename = sep1 + 1;
   const dt_colorspaces_color_profile_t *profile = dt_colorspaces_get_profile(type, filename, DT_PROFILE_DIRECTION_ANY);
-  if(!profile || !profile->profile) return FALSE;
+  if(IS_NULL_PTR(profile) || IS_NULL_PTR(profile->profile)) return FALSE;
 
   cmsUInt32Number len = 0;
   cmsSaveProfileToMem(profile->profile, NULL, &len);
@@ -308,7 +308,7 @@ static gboolean _write_scanline_rgba(TIFF *tiff, const uint32_t row, const uint1
 static void _overlay_patch_row_rgba(uint16_t *dst_row, const uint32_t width, const int offset_x,
                                     const int raw_y, const dt_drawlayer_io_patch_t *patch)
 {
-  if(!dst_row || !patch || !patch->pixels || raw_y < patch->y || raw_y >= patch->y + patch->height) return;
+  if(IS_NULL_PTR(dst_row) || IS_NULL_PTR(patch) || IS_NULL_PTR(patch->pixels) || raw_y < patch->y || raw_y >= patch->y + patch->height) return;
 
   const int dst_x0 = MAX(0, patch->x - offset_x);
   const int dst_x1 = MIN((int)width, patch->x + patch->width - offset_x);
@@ -445,18 +445,18 @@ static gboolean _write_page(TIFF *dst, TIFF *src, const int src_dir, const char 
   if(src)
   {
     if(!TIFFSetDirectory(src, (tdir_t)src_dir)) return FALSE;
-    if(!patch)
+    if(IS_NULL_PTR(patch))
     {
       TIFFGetField(src, TIFFTAG_IMAGEWIDTH, &width);
       TIFFGetField(src, TIFFTAG_IMAGELENGTH, &height);
     }
-    if(!name)
+    if(IS_NULL_PTR(name))
     {
       char *src_name = NULL;
       TIFFGetField(src, TIFFTAG_PAGENAME, &src_name);
       name = src_name;
     }
-    if(!page_profile)
+    if(IS_NULL_PTR(page_profile))
     {
       char *src_profile = NULL;
       TIFFGetField(src, TIFFTAG_IMAGEDESCRIPTION, &src_profile);
@@ -470,7 +470,7 @@ static gboolean _write_page(TIFF *dst, TIFF *src, const int src_dir, const char 
 
   uint16_t *src_row = g_malloc_n((gsize)width * 4, sizeof(uint16_t));
   uint16_t *dst_row = g_malloc_n((gsize)width * 4, sizeof(uint16_t));
-  if(!src_row || !dst_row)
+  if(IS_NULL_PTR(src_row) || IS_NULL_PTR(dst_row))
   {
     dt_free(icc_profile);
     dt_free(src_row);
@@ -538,7 +538,7 @@ static gboolean _rewrite_sidecar(const char *path, const char *target_name, cons
     _scan_directories(src, target_name, target_order, &info);
   }
 
-  if(delete_target && (!src || !info.found))
+  if(delete_target && (IS_NULL_PTR(src) || !info.found))
   {
     if(src) TIFFClose(src);
     return TRUE;
@@ -552,7 +552,7 @@ static gboolean _rewrite_sidecar(const char *path, const char *target_name, cons
 
   gchar *tmp_path = g_strdup_printf("%s.tmp", path);
   TIFF *dst = TIFFOpen(tmp_path, "wb");
-  if(!dst)
+  if(IS_NULL_PTR(dst))
   {
     if(src) TIFFClose(src);
     dt_free(tmp_path);
@@ -611,7 +611,7 @@ static gboolean _rewrite_sidecar(const char *path, const char *target_name, cons
 /** @brief Test if a layer name already exists in sidecar TIFF. */
 gboolean dt_drawlayer_io_layer_name_exists(const char *path, const char *candidate, const int ignore_index)
 {
-  if(!path || !candidate || candidate[0] == '\0' || !g_file_test(path, G_FILE_TEST_EXISTS)) return FALSE;
+  if(IS_NULL_PTR(path) || !candidate || candidate[0] == '\0' || !g_file_test(path, G_FILE_TEST_EXISTS)) return FALSE;
 
   TIFF *tiff = TIFFOpen(path, "rb");
   if(IS_NULL_PTR(tiff)) return FALSE;
@@ -641,7 +641,7 @@ gboolean dt_drawlayer_io_layer_name_exists(const char *path, const char *candida
 static void _sanitize_requested_layer_name(const char *requested, const char *fallback_name, char *name,
                                            const size_t name_size)
 {
-  if(!name || name_size == 0) return;
+  if(IS_NULL_PTR(name) || name_size == 0) return;
   name[0] = '\0';
   if(requested && requested[0])
   {
@@ -673,7 +673,7 @@ static void _sanitize_requested_layer_name(const char *requested, const char *fa
 gboolean dt_drawlayer_io_sidecar_path(const int32_t imgid, char *path, const size_t path_size)
 {
   gboolean from_cache = FALSE;
-  if(!path || path_size == 0) return FALSE;
+  if(IS_NULL_PTR(path) || path_size == 0) return FALSE;
   dt_image_full_path(imgid, path, path_size, &from_cache, __FUNCTION__);
   if(path[0] == '\0') return FALSE;
   g_strlcat(path, ".ansel.tiff", path_size);
@@ -685,7 +685,7 @@ gboolean dt_drawlayer_io_find_layer(const char *path, const char *target_name, c
                                     dt_drawlayer_io_layer_info_t *info)
 {
   if(info) memset(info, 0, sizeof(*info));
-  if(!path || !g_file_test(path, G_FILE_TEST_EXISTS)) return FALSE;
+  if(IS_NULL_PTR(path) || !g_file_test(path, G_FILE_TEST_EXISTS)) return FALSE;
 
   TIFF *tiff = TIFFOpen(path, "rb");
   if(IS_NULL_PTR(tiff)) return FALSE;
@@ -698,7 +698,7 @@ gboolean dt_drawlayer_io_find_layer(const char *path, const char *target_name, c
 gboolean dt_drawlayer_io_load_layer(const char *path, const char *target_name, const int target_order,
                                     const int layer_width, const int layer_height, dt_drawlayer_io_patch_t *patch)
 {
-  if(!patch || !patch->pixels || patch->width <= 0 || patch->height <= 0) return FALSE;
+  if(IS_NULL_PTR(patch) || IS_NULL_PTR(patch->pixels) || patch->width <= 0 || patch->height <= 0) return FALSE;
   dt_drawlayer_cache_clear_transparent_float(patch->pixels, (size_t)patch->width * patch->height);
 
   if(!g_file_test(path, G_FILE_TEST_EXISTS)) return TRUE;
@@ -721,7 +721,7 @@ gboolean dt_drawlayer_io_load_layer(const char *path, const char *target_name, c
   }
 
   uint16_t *row = g_malloc_n((gsize)info.width * 4, sizeof(uint16_t));
-  if(!row)
+  if(IS_NULL_PTR(row))
   {
     TIFFClose(tiff);
     return FALSE;
@@ -763,7 +763,7 @@ gboolean dt_drawlayer_io_load_flat_rgba(const char *path, float **pixels, int *w
   if(pixels) *pixels = NULL;
   if(width) *width = 0;
   if(height) *height = 0;
-  if(!path || !pixels || !width || !height || !g_file_test(path, G_FILE_TEST_EXISTS)) return FALSE;
+  if(IS_NULL_PTR(path) || IS_NULL_PTR(pixels) || !width || IS_NULL_PTR(height) || !g_file_test(path, G_FILE_TEST_EXISTS)) return FALSE;
 
   TIFF *tiff = TIFFOpen(path, "rb");
   if(IS_NULL_PTR(tiff)) return FALSE;
@@ -783,7 +783,7 @@ gboolean dt_drawlayer_io_load_flat_rgba(const char *path, float **pixels, int *w
   }
 
   float *out = g_malloc_n((size_t)w * h * 4, sizeof(float));
-  if(!out)
+  if(IS_NULL_PTR(out))
   {
     TIFFClose(tiff);
     return FALSE;
@@ -792,7 +792,7 @@ gboolean dt_drawlayer_io_load_flat_rgba(const char *path, float **pixels, int *w
 
   const tsize_t scanline = TIFFScanlineSize(tiff);
   tdata_t row = _TIFFmalloc((tsize_t)scanline);
-  if(!row)
+  if(IS_NULL_PTR(row))
   {
     dt_free(out);
     TIFFClose(tiff);
@@ -906,7 +906,7 @@ gboolean dt_drawlayer_io_store_layer(const char *path, const char *target_name, 
                                      const int layer_width, const int layer_height, const gboolean delete_target,
                                      int *final_order)
 {
-  if(!target_name || target_name[0] == '\0') return FALSE;
+  if(IS_NULL_PTR(target_name) || target_name[0] == '\0') return FALSE;
   return _rewrite_sidecar(path, target_name, target_order, work_profile, patch, layer_width, layer_height,
                           delete_target, -1, final_order);
 }
@@ -916,7 +916,7 @@ gboolean dt_drawlayer_io_insert_layer(const char *path, const char *target_name,
                                       const char *work_profile, const dt_drawlayer_io_patch_t *patch,
                                       const int layer_width, const int layer_height, int *final_order)
 {
-  if(!target_name || target_name[0] == '\0') return FALSE;
+  if(IS_NULL_PTR(target_name) || target_name[0] == '\0') return FALSE;
   const int insert_order = (insert_after_order >= 0) ? (insert_after_order + 1) : -1;
   return _rewrite_sidecar(path, target_name, -1, work_profile, patch, layer_width, layer_height, FALSE, insert_order,
                           final_order);
@@ -928,7 +928,7 @@ gboolean dt_drawlayer_io_rename_layer(const char *path, const char *current_name
                                       dt_drawlayer_io_layer_info_t *info)
 {
   if(info) memset(info, 0, sizeof(*info));
-  if(!path || !current_name || current_name[0] == '\0' || !new_name || new_name[0] == '\0') return FALSE;
+  if(IS_NULL_PTR(path) || IS_NULL_PTR(current_name) || current_name[0] == '\0' || IS_NULL_PTR(new_name) || new_name[0] == '\0') return FALSE;
   if(!g_file_test(path, G_FILE_TEST_EXISTS)) return FALSE;
 
   dt_drawlayer_io_layer_info_t current = { 0 };
@@ -956,7 +956,7 @@ gboolean dt_drawlayer_io_rename_layer(const char *path, const char *current_name
 gboolean dt_drawlayer_io_delete_layer(const char *path, const char *target_name, const int layer_width,
                                       const int layer_height)
 {
-  if(!path || !target_name || target_name[0] == '\0') return FALSE;
+  if(IS_NULL_PTR(path) || IS_NULL_PTR(target_name) || target_name[0] == '\0') return FALSE;
   if(!g_file_test(path, G_FILE_TEST_EXISTS)) return FALSE;
 
   dt_drawlayer_io_layer_info_t info = { 0 };
@@ -987,7 +987,7 @@ void dt_drawlayer_io_make_unique_name(const char *path, const char *requested, c
 /** @brief Create unique layer name without fallback source. */
 void dt_drawlayer_io_make_unique_name_plain(const char *path, const char *requested, char *name, const size_t name_size)
 {
-  if(!name || name_size == 0) return;
+  if(IS_NULL_PTR(name) || name_size == 0) return;
   name[0] = '\0';
   if(requested) g_strlcpy(name, requested, name_size);
   g_strstrip(name);
@@ -1009,7 +1009,7 @@ gboolean dt_drawlayer_io_list_layer_names(const char *path, char ***names, int *
 {
   if(names) *names = NULL;
   if(count) *count = 0;
-  if(!path || !names || !count || !g_file_test(path, G_FILE_TEST_EXISTS)) return FALSE;
+  if(IS_NULL_PTR(path) || IS_NULL_PTR(names) || !count || !g_file_test(path, G_FILE_TEST_EXISTS)) return FALSE;
 
   TIFF *tiff = TIFFOpen(path, "rb");
   if(IS_NULL_PTR(tiff)) return FALSE;
@@ -1045,7 +1045,7 @@ gboolean dt_drawlayer_io_list_layer_names(const char *path, char ***names, int *
 /** @brief Free array returned by `dt_drawlayer_io_list_layer_names`. */
 void dt_drawlayer_io_free_layer_names(char ***names, int *count)
 {
-  if(!names || !*names) return;
+  if(IS_NULL_PTR(names) || !*names) return;
   const int n = (count && *count > 0) ? *count : 0;
   for(int i = 0; i < n; i++) dt_free((*names)[i]);
   dt_free(*names);
@@ -1075,10 +1075,10 @@ int32_t dt_drawlayer_io_background_layer_job_run(dt_job_t *job)
 
   do
   {
-    if(tmp_fd < 0 || !tmp_path) break;
+    if(tmp_fd < 0 || IS_NULL_PTR(tmp_path)) break;
     if(!_export_pre_module_fullres_to_tiff(params->imgid, params->filter, tmp_path)) break;
     if(!dt_drawlayer_io_load_flat_rgba(tmp_path, &export_pixels, &export_w, &export_h)) break;
-    if(!export_pixels || export_w <= 0 || export_h <= 0) break;
+    if(IS_NULL_PTR(export_pixels) || export_w <= 0 || export_h <= 0) break;
 
     bg_patch.width = params->layer_width;
     bg_patch.height = params->layer_height;
@@ -1086,7 +1086,7 @@ int32_t dt_drawlayer_io_background_layer_job_run(dt_job_t *job)
     bg_patch.y = 0;
     bg_patch.pixels = dt_drawlayer_cache_alloc_temp_buffer(
         (size_t)params->layer_width * params->layer_height * 4 * sizeof(float), "drawlayer bg layer");
-    if(!bg_patch.pixels) break;
+    if(IS_NULL_PTR(bg_patch.pixels)) break;
     dt_drawlayer_cache_clear_transparent_float(bg_patch.pixels, (size_t)params->layer_width * params->layer_height);
 
     const int clip_x0 = MAX(params->dst_x, 0);

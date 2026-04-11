@@ -621,14 +621,14 @@ dt_imageio_retval_t dt_imageio_open_rgbe(dt_image_t *img, const char *filename, 
   img->flags |= DT_IMAGE_HDR;
   img->loader = LOADER_RGBE;
 
-  if(!mbuf)
+  if(IS_NULL_PTR(mbuf))
   {
     fclose(f);
     return DT_IMAGEIO_OK;
   }
 
   float *buf = (float *)dt_mipmap_cache_alloc(mbuf, img);
-  if(!buf) goto error_cache_full;
+  if(IS_NULL_PTR(buf)) goto error_cache_full;
   if(RGBE_ReadPixels_RLE(f, buf, img->width, img->height))
   {
     goto error_corrupt;

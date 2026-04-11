@@ -1734,7 +1734,7 @@ int dt_exif_get_thumbnail(const char *path, uint8_t **buffer, size_t *size, char
     *height = preview.height();
     *mime_type = strdup(preview.mimeType().c_str());
     *buffer = (uint8_t *)malloc(_size);
-    if(!*buffer) {
+    if(IS_NULL_PTR(*buffer)) {
       std::cerr << "[exiv2 dt_exif_get_thumbnail] couldn't allocate memory for thumbnail for " << path << std::endl;
       return 1;
     }
@@ -2218,7 +2218,7 @@ int dt_exif_read_blob(uint8_t **buf, const char *path, const int32_t imgid, cons
     Exiv2::ExifParser::encode(blob, Exiv2::bigEndian, exifData);
     const size_t length = blob.size();
     *buf = (uint8_t *)malloc(length);
-    if (!*buf)
+    if (IS_NULL_PTR(*buf))
     {
       return 0;
     }
@@ -2289,7 +2289,7 @@ char *dt_exif_xmp_encode_internal(const unsigned char *input, const int len, int
 
     int outlen = strlen(buffer2) + 5; // leading "gz" + compression factor + base64 string + trailing '\0'
     output = (char *)malloc(outlen);
-    if(!output)
+    if(IS_NULL_PTR(output))
     {
       dt_free(buffer2);
       return NULL;
@@ -2361,7 +2361,7 @@ unsigned char *dt_exif_xmp_decode(const char *input, const int len, int *output_
         dt_free(output);
       }
       output = (unsigned char *)malloc(bufLen);
-      if(!output) break;
+      if(IS_NULL_PTR(output)) break;
 
       destLen = bufLen;
 
@@ -2515,7 +2515,7 @@ typedef struct mask_entry_t
 static void print_history_entry(history_entry_t *entry) __attribute__((unused));
 static void print_history_entry(history_entry_t *entry)
 {
-  if(!entry || !entry->operation)
+  if(IS_NULL_PTR(entry) || IS_NULL_PTR(entry->operation))
   {
     std::cout << "malformed entry" << std::endl;
     return;
@@ -3581,7 +3581,7 @@ static void dt_set_xmp_dt_history(Exiv2::XmpData &xmpData, const int32_t imgid, 
     const char *multi_name = (const char *)sqlite3_column_text(stmt, 7);
     int32_t hist_num = sqlite3_column_int(stmt, 8);
 
-    if(!operation) continue; // no op is fatal.
+    if(IS_NULL_PTR(operation)) continue; // no op is fatal.
 
     char *params = dt_exif_xmp_encode((const unsigned char *)params_blob, params_len, NULL);
 
@@ -3804,7 +3804,7 @@ static void _exif_xmp_append_history_hash(Exiv2::XmpData &xmpData, const int32_t
                                           const dt_image_t *image)
 {
   const dt_image_t *cached = image;
-  if(!cached)
+  if(IS_NULL_PTR(cached))
     cached = dt_image_cache_get(darktable.image_cache, imgid, 'r');
 
   if(cached)
@@ -3819,7 +3819,7 @@ static void _exif_xmp_append_history_hash(Exiv2::XmpData &xmpData, const int32_t
         dt_free(value);
       }
     }
-    if(!image)
+    if(IS_NULL_PTR(image))
       dt_image_cache_read_release(darktable.image_cache, cached);
   }
 }
@@ -4283,7 +4283,7 @@ int dt_exif_xmp_attach_export(const int32_t imgid, const char *filename, void *m
       {
         gchar *tagname = (gchar *)tags->data;
         tags = g_list_next(tags);
-        if (!tags) break;
+        if (IS_NULL_PTR(tags)) break;
         gchar *formula = (gchar *)tags->data;
         if (formula[0])
         {
@@ -4432,8 +4432,8 @@ int dt_exif_xmp_write_with_imgpath(const dt_image_t *image, const char *filename
                                    const char *imgpath)
 {
   // refuse to write sidecar for non-existent image:
-  if(!image || image->id <= 0) return 1;
-  if(!imgpath || !*imgpath) return 1;
+  if(IS_NULL_PTR(image) || image->id <= 0) return 1;
+  if(IS_NULL_PTR(imgpath) || !*imgpath) return 1;
   if(!g_file_test(imgpath, G_FILE_TEST_IS_REGULAR)) return 1;
   const int32_t imgid = image->id;
 

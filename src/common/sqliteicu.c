@@ -46,6 +46,8 @@
 **     provide case-independent matching.
 */
 
+#include "darktable.h"
+
 #if !defined(SQLITE_CORE)                  \
  || defined(SQLITE_ENABLE_ICU)             \
  || defined(SQLITE_ENABLE_ICU_COLLATIONS)
@@ -307,14 +309,14 @@ static void icuRegexpFunc(sqlite3_context *p, int nArg, sqlite3_value **apArg){
   /* If the left hand side of the regexp operator is NULL,
   ** then the result is also NULL.
   */
-  if( !zString ){
+  if( IS_NULL_PTR(zString) ){
     return;
   }
 
   pExpr = sqlite3_get_auxdata(p, 0);
-  if( !pExpr ){
+  if( IS_NULL_PTR(pExpr) ){
     const UChar *zPattern = sqlite3_value_text16(apArg[0]);
-    if( !zPattern ){
+    if( IS_NULL_PTR(zPattern) ){
       return;
     }
     pExpr = uregex_open(zPattern, -1, 0, 0, &status);
@@ -396,7 +398,7 @@ static void icuCaseFunc16(sqlite3_context *p, int nArg, sqlite3_value **apArg){
   }
 
   zInput = sqlite3_value_text16(apArg[0]);
-  if( !zInput ){
+  if( IS_NULL_PTR(zInput) ){
     return;
   }
   nOut = nInput = sqlite3_value_bytes16(apArg[0]);
@@ -497,7 +499,7 @@ static void icuLoadCollation(
   zLocale = (const char *)sqlite3_value_text(apArg[0]);
   zName = (const char *)sqlite3_value_text(apArg[1]);
 
-  if( !zLocale || !zName ){
+  if( IS_NULL_PTR(zLocale) || IS_NULL_PTR(zName) ){
     return;
   }
 

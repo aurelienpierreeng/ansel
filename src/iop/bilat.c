@@ -216,7 +216,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
 
     dt_bilateral_cl_t *b
       = dt_bilateral_init_cl(pipe->devid, roi_in->width, roi_in->height, sigma_s, sigma_r);
-    if(!b) goto error;
+    if(IS_NULL_PTR(b)) goto error;
     err = dt_bilateral_splat_cl(b, dev_in);
     if(err != CL_SUCCESS) goto error;
     err = dt_bilateral_blur_cl(b);
@@ -234,7 +234,7 @@ error:
   {
     dt_local_laplacian_cl_t *b = dt_local_laplacian_init_cl(pipe->devid, roi_in->width, roi_in->height,
         d->midtone, d->sigma_s, d->sigma_r, d->detail);
-    if(!b) goto error_ll;
+    if(IS_NULL_PTR(b)) goto error_ll;
     if(dt_local_laplacian_cl(b, dev_in, dev_out) != CL_SUCCESS) goto error_ll;
     dt_local_laplacian_free_cl(b);
     return TRUE;
@@ -383,7 +383,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
     }
   }
 
-  if(!w || w == g->mode)
+  if(IS_NULL_PTR(w) || w == g->mode)
   {
     gtk_widget_set_visible(g->highlights, p->mode == s_mode_local_laplacian);
     gtk_widget_set_visible(g->shadows, p->mode == s_mode_local_laplacian);

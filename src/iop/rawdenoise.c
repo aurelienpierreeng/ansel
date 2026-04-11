@@ -229,7 +229,7 @@ static int wavelet_denoise(const float *const restrict in, float *const restrict
 {
   const size_t size = (size_t)(roi->width / 2 + 1) * (roi->height / 2 + 1);
   float *const restrict fimg = dt_pixelpipe_cache_alloc_align_float_cache(size, 0);
-  if (!fimg)
+  if (IS_NULL_PTR(fimg))
     return 1;
 
   const int nc = 4;
@@ -344,7 +344,7 @@ static int wavelet_denoise_xtrans(const float *const restrict in, float *const r
   // allocate a buffer for the particular color channel to be denoise; we add two rows to simplify the
   // channel-extraction code (no special case for top/bottom row)
   float *const img = dt_pixelpipe_cache_alloc_align_float_cache((size_t)width * (height+2), 0);
-  if (!img)
+  if (IS_NULL_PTR(img))
   {
     // we ran out of memory, so just pass through the image without denoising
     memcpy(out, in, sizeof(float) * size);

@@ -445,7 +445,7 @@ int32_t _get_image_buffer(dt_job_t *job)
   if(dt_atomic_get_int(&thumb->destroying)) return 1;
 
   // The job was cancelled on the queue. Good chances of having thumb destroyed anytime soon.
-  if(!thumb->job || thumb->job != job || dt_control_job_get_state(job) == DT_JOB_STATE_CANCELLED) return 1;
+  if(IS_NULL_PTR(thumb->job) || thumb->job != job || dt_control_job_get_state(job) == DT_JOB_STATE_CANCELLED) return 1;
 
   // Read and cache the thumb data now, while we have it. And lock it.
   dt_pthread_mutex_lock(&thumb->lock);
@@ -540,7 +540,7 @@ int32_t _get_image_buffer(dt_job_t *job)
   }
 
   // The job was cancelled on the queue. Good chances of having thumb destroyed anytime soon.
-  if(!thumb->job || thumb->job != job 
+  if(IS_NULL_PTR(thumb->job) || thumb->job != job 
      || dt_control_job_get_state(job) == DT_JOB_STATE_CANCELLED 
      || dt_atomic_get_int(&thumb->destroying))
   {
@@ -1334,11 +1334,11 @@ GtkWidget *dt_thumbnail_create_widget(dt_thumbnail_t *thumb)
 
 void dt_thumbnail_resync_info(dt_thumbnail_t *thumb, const dt_image_t *const info)
 {
-  if(!thumb || !info) return;
+  if(IS_NULL_PTR(thumb) || IS_NULL_PTR(info)) return;
 
   dt_thumbtable_copy_image(&thumb->info, info);
 
-  if(!thumb->widget || !thumb->w_main) return;
+  if(!thumb->widget || IS_NULL_PTR(thumb->w_main)) return;
 
   _thumb_update_rating_class(thumb);
   _thumb_update_icons(thumb);

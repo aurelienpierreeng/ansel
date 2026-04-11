@@ -78,14 +78,14 @@ static gboolean _splash_is_disabled(void)
 
 void dt_gui_splash_set_transient_for(GtkWidget *parent)
 {
-  if(!splash || !splash->window || !parent) return;
+  if(IS_NULL_PTR(splash) || IS_NULL_PTR(splash->window) || IS_NULL_PTR(parent)) return;
   gtk_window_set_transient_for(GTK_WINDOW(splash->window), GTK_WINDOW(parent));
   gtk_window_set_keep_above(GTK_WINDOW(splash->window), TRUE);
 }
 
 static void _splash_force_show(void)
 {
-  if(!splash || !splash->window || splash->shown) return;
+  if(IS_NULL_PTR(splash) || IS_NULL_PTR(splash->window) || splash->shown) return;
 
   gtk_widget_show_all(splash->window);
   gtk_window_present(GTK_WINDOW(splash->window));
@@ -115,7 +115,7 @@ static void _splash_clear_slide_cache(void)
 
 static void _splash_add_css(const char *data)
 {
-  if(!splash || !splash->css) return;
+  if(IS_NULL_PTR(splash) || IS_NULL_PTR(splash->css)) return;
   gtk_css_provider_load_from_data(splash->css, data, -1, NULL);
 }
 
@@ -128,7 +128,7 @@ static gchar *_splash_build_data_path(const char *subpath)
 
 static gchar *_splash_build_author_list(guint max_names)
 {
-  if(!splash || !splash->authors || splash->authors->len == 0)
+  if(IS_NULL_PTR(splash) || IS_NULL_PTR(splash->authors) || splash->authors->len == 0)
     return g_strdup(_("Contributors"));
 
   GString *buf = g_string_new(NULL);
@@ -138,7 +138,7 @@ static gchar *_splash_build_author_list(guint max_names)
   for(guint i = 0; i < splash->authors->len && used < max_names; i++)
   {
     const gchar *name = (const gchar *)splash->authors->pdata[i];
-    if(!name || !name[0]) continue;
+    if(IS_NULL_PTR(name) || !name[0]) continue;
     used++;
 
     g_string_append(buf, name);
@@ -223,7 +223,7 @@ static void _splash_slide_free(gpointer data)
 
 static gboolean _splash_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
 {
-  if(!splash || !splash->slides || splash->slides->len == 0) return FALSE;
+  if(IS_NULL_PTR(splash) || !splash->slides || splash->slides->len == 0) return FALSE;
 
   GtkAllocation alloc;
   gtk_widget_get_allocation(widget, &alloc);
@@ -251,7 +251,7 @@ static gboolean _splash_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
 
     GError *error = NULL;
     GdkPixbuf *pixbuf = gdk_pixbuf_new_from_file(slide->path, &error);
-    if(!pixbuf)
+    if(IS_NULL_PTR(pixbuf))
     {
       if(error) g_error_free(error);
       return FALSE;
@@ -325,7 +325,7 @@ static gboolean _splash_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
 
 static gboolean _splash_slide_advance(gpointer user_data)
 {
-  if(!splash || !splash->drawing) return G_SOURCE_REMOVE;
+  if(IS_NULL_PTR(splash) || !splash->drawing) return G_SOURCE_REMOVE;
   if(!splash->slides || splash->slides->len == 0) return G_SOURCE_CONTINUE;
   splash->current_slide = (splash->current_slide + 1) % splash->slides->len;
   _splash_clear_slide_cache();
@@ -401,7 +401,7 @@ static void _splash_load_slides(void)
 
 static void _splash_update_message(const gchar *message)
 {
-  if(!splash || !splash->label_message) return;
+  if(IS_NULL_PTR(splash) || IS_NULL_PTR(splash->label_message)) return;
   _splash_force_show();
   _splash_shadow_label_set_text(splash->label_message, message);
   gtk_widget_queue_draw(splash->label_message);
@@ -412,7 +412,7 @@ static void _splash_update_message(const gchar *message)
 
 static gchar *_splash_capitalize_name(const char *name)
 {
-  if(!name || !name[0]) return g_strdup("");
+  if(IS_NULL_PTR(name) || !name[0]) return g_strdup("");
   gchar *out = g_strdup(name);
   out[0] = g_ascii_toupper(out[0]);
   return out;
@@ -420,13 +420,13 @@ static gchar *_splash_capitalize_name(const char *name)
 
 static gboolean _splash_logo_set_from_path(GtkWidget *logo, const char *path, int target_size, int scale_factor)
 {
-  if(!logo || !path) return FALSE;
+  if(IS_NULL_PTR(logo) || IS_NULL_PTR(path)) return FALSE;
   if(scale_factor < 1) scale_factor = 1;
 
   const int target_px = target_size * scale_factor;
   GError *error = NULL;
   GdkPixbuf *pixbuf = gdk_pixbuf_new_from_file_at_scale(path, target_px, target_px, TRUE, &error);
-  if(!pixbuf)
+  if(IS_NULL_PTR(pixbuf))
   {
     if(error) g_error_free(error);
     return FALSE;
@@ -486,7 +486,7 @@ static GtkWidget *_splash_create_logo(int target_size, int scale_factor, gchar *
 
 static void _splash_update_logo_for_scale(void)
 {
-  if(!splash || !splash->logo || !splash->logo_path) return;
+  if(IS_NULL_PTR(splash) || IS_NULL_PTR(splash->logo) || IS_NULL_PTR(splash->logo_path)) return;
 
   GtkWidget *scale_widget = splash->window ? splash->window : splash->logo;
   int scale_factor = gtk_widget_get_scale_factor(scale_widget);
@@ -677,13 +677,13 @@ void dt_gui_splash_init(void)
 
 void dt_gui_splash_update(const char *message)
 {
-  if(!splash || !message) return;
+  if(IS_NULL_PTR(splash) || IS_NULL_PTR(message)) return;
   _splash_update_message(message);
 }
 
 void dt_gui_splash_updatef(const char *format, ...)
 {
-  if(!splash || !format) return;
+  if(IS_NULL_PTR(splash) || IS_NULL_PTR(format)) return;
   va_list ap;
   va_start(ap, format);
   gchar *buf = g_strdup_vprintf(format, ap);

@@ -280,7 +280,7 @@ static int get_manifolds(const float* const restrict in, const size_t width, con
   // later on
   const float blur_size = refine_manifolds ? sigma2 : sigma;
   dt_gaussian_t *g = dt_gaussian_init(width, height, 4, max, min, blur_size, 0);
-  if(!g)
+  if(IS_NULL_PTR(g))
   {
     err = 1;
     goto error;
@@ -350,7 +350,7 @@ static int get_manifolds(const float* const restrict in, const size_t width, con
   if(refine_manifolds)
   {
     g = dt_gaussian_init(width, height, 4, max, min, sigma, 0);
-    if(!g)
+    if(IS_NULL_PTR(g))
     {
       err = 1;
       goto error;
@@ -624,7 +624,7 @@ static int reduce_artifacts(const float* const restrict in,
   dt_aligned_pixel_t max = { INFINITY, INFINITY, INFINITY, INFINITY };
   dt_aligned_pixel_t min = {0.0f, 0.0f, 0.0f, 0.0f};
   g = dt_gaussian_init(width, height, 4, max, min, sigma, 0);
-  if(!g)
+  if(IS_NULL_PTR(g))
   {
     err = 1;
     goto error;

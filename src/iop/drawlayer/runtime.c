@@ -67,7 +67,7 @@ static void _sync_buffer_state(dt_drawlayer_runtime_manager_t *state, const dt_d
                                const gboolean resident, const gboolean valid, const gboolean dirty)
 {
   dt_drawlayer_runtime_private_t *priv = _runtime_private(state);
-  if(!priv || buffer >= DT_DRAWLAYER_RUNTIME_BUFFER_COUNT) return;
+  if(IS_NULL_PTR(priv) || buffer >= DT_DRAWLAYER_RUNTIME_BUFFER_COUNT) return;
   priv->buffers[buffer].resident = resident;
   priv->buffers[buffer].valid = valid;
   priv->buffers[buffer].dirty = dirty;
@@ -99,7 +99,7 @@ void dt_drawlayer_runtime_manager_note_buffer_lock(dt_drawlayer_runtime_manager_
                                                    const gboolean acquire)
 {
   dt_drawlayer_runtime_private_t *priv = _runtime_private(state);
-  if(!priv || buffer >= DT_DRAWLAYER_RUNTIME_BUFFER_COUNT) return;
+  if(IS_NULL_PTR(priv) || buffer >= DT_DRAWLAYER_RUNTIME_BUFFER_COUNT) return;
   dt_pthread_mutex_lock(&priv->mutex);
   dt_drawlayer_runtime_buffer_state_t *entry = &priv->buffers[buffer];
 
@@ -139,7 +139,7 @@ void dt_drawlayer_runtime_manager_note_thread(dt_drawlayer_runtime_manager_t *st
                                               const guint queued)
 {
   dt_drawlayer_runtime_private_t *priv = _runtime_private(state);
-  if(!priv || actor <= DT_DRAWLAYER_RUNTIME_ACTOR_NONE || actor >= DT_DRAWLAYER_RUNTIME_ACTOR_COUNT) return;
+  if(IS_NULL_PTR(priv) || actor <= DT_DRAWLAYER_RUNTIME_ACTOR_NONE || actor >= DT_DRAWLAYER_RUNTIME_ACTOR_COUNT) return;
   dt_pthread_mutex_lock(&priv->mutex);
   priv->threads[actor].active = active;
   priv->threads[actor].waiting = waiting;
@@ -152,7 +152,7 @@ static void _fill_runtime_inputs(const dt_drawlayer_runtime_context_t *runtime,
                                  dt_drawlayer_runtime_inputs_t *inputs)
 {
   if(inputs) *inputs = (dt_drawlayer_runtime_inputs_t){ 0 };
-  if(!runtime || !inputs) return;
+  if(!runtime || IS_NULL_PTR(inputs)) return;
 
   const dt_drawlayer_runtime_request_t *const request = &runtime->runtime;
   dt_iop_module_t *const self = request->self;
@@ -251,7 +251,7 @@ static void _apply_runtime_event(dt_drawlayer_runtime_manager_t *state,
                                  const dt_drawlayer_runtime_inputs_t *inputs)
 {
   dt_drawlayer_runtime_private_t *priv = _runtime_private(state);
-  if(!state || !request) return;
+  if(IS_NULL_PTR(state) || IS_NULL_PTR(request)) return;
   if(IS_NULL_PTR(priv)) return;
 
   priv->last_event = request->event;
@@ -444,7 +444,7 @@ static gboolean _perform_runtime_commit_sequence(dt_drawlayer_runtime_manager_t 
   if(commit_mode == DT_DRAWLAYER_RUNTIME_COMMIT_NONE) return TRUE;
   const dt_drawlayer_runtime_context_t *const context
       = host ? (const dt_drawlayer_runtime_context_t *)host->user_data : NULL;
-  if(!context || !context->runtime.self || !context->runtime.gui) return FALSE;
+  if(IS_NULL_PTR(context) || !context->runtime.self || !context->runtime.gui) return FALSE;
 
   const dt_drawlayer_runtime_update_request_t begin = {
     .event = DT_DRAWLAYER_RUNTIME_EVENT_COMMIT_BEGIN,
@@ -471,7 +471,7 @@ static gboolean _perform_runtime_widget_cache_sync(const dt_drawlayer_runtime_ho
   const dt_drawlayer_runtime_context_t *const context
       = host ? (const dt_drawlayer_runtime_context_t *)host->user_data : NULL;
   (void)result;
-  if(!context || !context->runtime.self) return FALSE;
+  if(IS_NULL_PTR(context) || !context->runtime.self) return FALSE;
   if(!dt_drawlayer_ensure_layer_cache(context->runtime.self)) return FALSE;
   return dt_drawlayer_sync_widget_cache(context->runtime.self);
 }
@@ -493,7 +493,7 @@ static void _build_runtime_schedule(dt_drawlayer_runtime_manager_t *state,
     };
   const dt_drawlayer_process_state_t *process = inputs ? inputs->process : NULL;
   const dt_drawlayer_stroke_state_t *stroke = inputs ? inputs->stroke : NULL;
-  if(!schedule || !inputs || !request || !priv) return;
+  if(IS_NULL_PTR(schedule) || IS_NULL_PTR(inputs) || IS_NULL_PTR(request) || IS_NULL_PTR(priv)) return;
 
   const gboolean layer_selection_changed
       = inputs->have_layer_selection && process
@@ -685,7 +685,7 @@ dt_drawlayer_runtime_result_t dt_drawlayer_runtime_manager_update(dt_drawlayer_r
     .ok = TRUE,
     .raw_input_ok = TRUE,
   };
-  if(!state || !request || !host) return result;
+  if(IS_NULL_PTR(state) || IS_NULL_PTR(request) || IS_NULL_PTR(host)) return result;
   const dt_drawlayer_runtime_context_t *const context
       = (const dt_drawlayer_runtime_context_t *)host->user_data;
   if(IS_NULL_PTR(context)) return result;
@@ -849,7 +849,7 @@ dt_drawlayer_runtime_result_t dt_drawlayer_runtime_manager_update(dt_drawlayer_r
       if(schedule.queue_raw_input && g)
       {
         gboolean ok = TRUE;
-        if(!context->raw_input)
+        if(IS_NULL_PTR(context->raw_input))
           ok = FALSE;
         else if(request->raw_input_kind == DT_DRAWLAYER_RUNTIME_RAW_INPUT_STROKE_END)
           ok = dt_drawlayer_worker_enqueue_stroke_end(g->stroke.worker, context->raw_input);

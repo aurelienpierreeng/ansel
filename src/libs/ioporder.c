@@ -140,7 +140,7 @@ static void _ioporder_popup_destroy(GtkWidget *widget, gpointer user_data);
  */
 static gboolean _ioporder_module_in_history(const dt_iop_module_t *module)
 {
-  if(!darktable.develop || !module) return FALSE;
+  if(IS_NULL_PTR(darktable.develop) || !module) return FALSE;
 
   /* Walk the whole history stack and look for the exact module instance. */
   for(GList *history = g_list_last(darktable.develop->history); history; history = g_list_previous(history))
@@ -179,7 +179,7 @@ static gboolean _ioporder_module_is_graph_visible(const dt_iop_module_t *module)
  */
 static dt_dev_pixelpipe_iop_t *_ioporder_get_preview_piece(dt_iop_module_t *module)
 {
-  if(!darktable.develop || !darktable.develop->preview_pipe || !module) return NULL;
+  if(IS_NULL_PTR(darktable.develop) || IS_NULL_PTR(darktable.develop->preview_pipe) || !module) return NULL;
 
   /* Search the preview pipe nodes for the piece instantiated from this module. */
   for(GList *nodes = darktable.develop->preview_pipe->nodes; nodes; nodes = g_list_next(nodes))
@@ -280,7 +280,7 @@ static gchar *_ioporder_raw_flags_to_string(const dt_iop_buffer_dsc_t *dsc)
 static gchar *_ioporder_descriptor_to_text(const char *prefix, const dt_iop_buffer_dsc_t *dsc,
                                            const char *display_colorspace)
 {
-  if(!dsc)
+  if(IS_NULL_PTR(dsc))
     return g_strdup_printf(_("%s:\n- runtime descriptor unavailable"), prefix);
 
   gchar *raw_flags = _ioporder_raw_flags_to_string(dsc);
@@ -314,7 +314,7 @@ static dt_ioporder_runtime_band_kind_t _ioporder_runtime_band_kind(const gboolea
                                                                    const dt_iop_buffer_dsc_t *dsc,
                                                                    const gboolean after_module)
 {
-  if(!dsc || !module) return DT_IOPORDER_RUNTIME_BAND_UNAVAILABLE;
+  if(IS_NULL_PTR(dsc) || IS_NULL_PTR(module)) return DT_IOPORDER_RUNTIME_BAND_UNAVAILABLE;
 
   if(dsc->cst == IOP_CS_RAW) return DT_IOPORDER_RUNTIME_BAND_RAW;
   if(dsc->cst == IOP_CS_LAB) return DT_IOPORDER_RUNTIME_BAND_LAB;
@@ -414,7 +414,7 @@ static gboolean _ioporder_same_runtime_profile(const dt_iop_order_iccprofile_inf
                                                const dt_iop_order_iccprofile_info_t *profile_b)
 {
   if(profile_a == profile_b) return TRUE;
-  if(!profile_a || !profile_b) return FALSE;
+  if(IS_NULL_PTR(profile_a) || IS_NULL_PTR(profile_b)) return FALSE;
 
   return profile_a->type == profile_b->type && !strcmp(profile_a->filename, profile_b->filename);
 }
@@ -439,7 +439,7 @@ static const dt_iop_order_iccprofile_info_t *_ioporder_runtime_band_profile_info
                                                                                  const dt_iop_buffer_dsc_t *dsc,
                                                                                  const gboolean after_module)
 {
-  if(!darktable.develop || !darktable.develop->preview_pipe || !module || !dsc) return NULL;
+  if(IS_NULL_PTR(darktable.develop) || IS_NULL_PTR(darktable.develop->preview_pipe) || !module || IS_NULL_PTR(dsc)) return NULL;
   if(!dt_iop_colorspace_is_rgb(dsc->cst)) return NULL;
 
   if(dsc->cst == IOP_CS_RGB_DISPLAY)
@@ -468,10 +468,10 @@ static gchar *_ioporder_runtime_band_text(const char *label,
                                           const dt_iop_order_iccprofile_info_t *profile_info)
 {
   if(IS_NULL_PTR(label)) return g_strdup(_("runtime unavailable"));
-  if(!profile_info || profile_info->type == DT_COLORSPACE_NONE) return g_strdup(label);
+  if(IS_NULL_PTR(profile_info) || profile_info->type == DT_COLORSPACE_NONE) return g_strdup(label);
 
   const char *profile_name = dt_colorspaces_get_name(profile_info->type, profile_info->filename);
-  if(!profile_name || profile_name[0] == '\0') return g_strdup(label);
+  if(IS_NULL_PTR(profile_name) || profile_name[0] == '\0') return g_strdup(label);
 
   return g_strdup_printf("%s - %s", label, profile_name);
 }
@@ -489,7 +489,7 @@ static gchar *_ioporder_get_current_order_name(dt_lib_module_t *self)
 {
   dt_lib_ioporder_t *d = (dt_lib_ioporder_t *)self->data;
 
-  if(!darktable.develop || !darktable.develop->iop_order_list)
+  if(IS_NULL_PTR(darktable.develop) || !darktable.develop->iop_order_list)
   {
     d->current_mode = DT_IOP_ORDER_V30;
     return g_strdup(_(dt_iop_order_string(DT_IOP_ORDER_V30)));
@@ -561,7 +561,7 @@ static gchar *_ioporder_get_current_order_name(dt_lib_module_t *self)
 static void _ioporder_refresh_toolbar(dt_lib_module_t *self)
 {
   dt_lib_ioporder_t *d = (dt_lib_ioporder_t *)self->data;
-  if(!d->preset_combo || !d->toolbar_label) return;
+  if(!d->preset_combo || IS_NULL_PTR(d->toolbar_label)) return;
 
   gchar *current_name = _ioporder_get_current_order_name(self);
 
@@ -610,7 +610,7 @@ static void _ioporder_refresh_toolbar(dt_lib_module_t *self)
  */
 static void _ioporder_clear_graph(dt_lib_ioporder_t *d)
 {
-  if(!d || !d->graph_fixed) return;
+  if(IS_NULL_PTR(d) || IS_NULL_PTR(d->graph_fixed)) return;
 
   GList *children = gtk_container_get_children(GTK_CONTAINER(d->graph_fixed));
   for(GList *iter = children; iter; iter = g_list_next(iter))
@@ -930,7 +930,7 @@ static dt_ioporder_graph_node_t *_ioporder_create_endpoint_node(const char *labe
 static void _ioporder_rebuild_graph(dt_lib_module_t *self)
 {
   dt_lib_ioporder_t *d = (dt_lib_ioporder_t *)self->data;
-  if(!d || !d->graph_fixed || !d->graph_overlay) return;
+  if(IS_NULL_PTR(d) || IS_NULL_PTR(d->graph_fixed) || IS_NULL_PTR(d->graph_overlay)) return;
 
   _ioporder_refresh_toolbar(self);
   _ioporder_clear_graph(d);
@@ -1018,14 +1018,14 @@ static void _ioporder_rebuild_graph(dt_lib_module_t *self)
   {
     GdkDisplay *display = gtk_widget_get_display(d->window);
     GdkWindow *window = gtk_widget_get_window(d->window);
-    if(!window)
+    if(IS_NULL_PTR(window))
       window = gtk_widget_get_window(dt_ui_main_window(darktable.gui->ui));
 
     GdkMonitor *monitor = (display && window) ? gdk_display_get_monitor_at_window(display, window) : NULL;
-    if(!monitor && display)
+    if(IS_NULL_PTR(monitor) && display)
     {
       monitor = gdk_display_get_primary_monitor(display);
-      if(!monitor && gdk_display_get_n_monitors(display) > 0)
+      if(IS_NULL_PTR(monitor) && gdk_display_get_n_monitors(display) > 0)
         monitor = gdk_display_get_monitor(display, 0);
     }
 
@@ -1080,7 +1080,7 @@ static void _ioporder_draw_rounded_rect(cairo_t *cr, const double x, const doubl
  */
 static void _ioporder_draw_label(GtkWidget *widget, cairo_t *cr, const double x, const double y, const char *text)
 {
-  if(!text || !widget) return;
+  if(IS_NULL_PTR(text) || !widget) return;
 
   PangoLayout *layout = gtk_widget_create_pango_layout(widget, text);
   cairo_move_to(cr, x, y);
@@ -1224,7 +1224,7 @@ static gboolean _ioporder_graph_draw(GtkWidget *widget, cairo_t *cr, gpointer us
     GdkRGBA band_color = { 0 };
     _ioporder_runtime_band_color(band_kind, &band_color);
 
-    if(!segment_label || segment_kind != band_kind || segment_cst != (dsc_out ? dsc_out->cst : IOP_CS_NONE)
+    if(IS_NULL_PTR(segment_label) || segment_kind != band_kind || segment_cst != (dsc_out ? dsc_out->cst : IOP_CS_NONE)
        || !_ioporder_same_runtime_profile(segment_profile, profile_info))
     {
       if(segment_label)

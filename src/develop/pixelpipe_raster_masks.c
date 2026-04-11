@@ -91,7 +91,7 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
   gchar *clean_target_name = delete_underscore(target_module->name());
   gchar *target_name = g_strdup_printf("%s (%s)", clean_target_name, target_module->multi_name);
 
-  if(!raster_mask_source)
+  if(IS_NULL_PTR(raster_mask_source))
   {
     fprintf(stderr, "[raster masks] The source module of the mask for %s was not found\n", target_name);
     dt_free(clean_target_name);
@@ -166,7 +166,7 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
         {
           float *transformed_mask = dt_pixelpipe_cache_alloc_align_float_cache(
               (size_t)module->roi_out.width * module->roi_out.height, 0);
-          if(!transformed_mask)
+          if(IS_NULL_PTR(transformed_mask))
           {
             fprintf(stderr, "[raster masks] could not allocate memory for transformed mask\n");
             if(error) *error = 1;

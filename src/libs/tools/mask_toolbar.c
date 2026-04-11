@@ -118,7 +118,7 @@ static void give_control_to_form(gpointer instance, void *_s, void *_t, dt_lib_t
 {
   dt_masks_form_t *form = dt_masks_get_visible_form(darktable.develop);
   dt_masks_form_gui_t *gui = darktable.develop->form_gui;
-  if(!darktable.develop->form_gui || !form) return;
+  if(IS_NULL_PTR(darktable.develop->form_gui) || IS_NULL_PTR(form)) return;
 
   // we try to get the selected form among what we can find
   int group = gui->group_selected;

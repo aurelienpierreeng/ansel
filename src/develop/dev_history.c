@@ -163,7 +163,7 @@ gboolean dt_dev_history_item_update_from_params(dt_develop_t *dev, dt_dev_histor
                                                const gboolean enabled, const void *params, const int32_t params_size,
                                                const dt_develop_blend_params_t *blend_params, GList *forms)
 {
-  if(!hist || !module) return FALSE;
+  if(!hist || IS_NULL_PTR(module)) return FALSE;
 
   if(!hist->params)
   {
@@ -232,9 +232,9 @@ dt_iop_module_t *dt_dev_get_module_instance(dt_develop_t *dev, const char *op, c
 {
   const char *name = (multi_name && *multi_name) ? multi_name : NULL;
   dt_iop_module_t *module = dt_iop_get_module_by_instance_name(dev->iop, op, name);
-  if(!module && (!name || *name == '\0'))
+  if(IS_NULL_PTR(module) && (IS_NULL_PTR(name) || *name == '\0'))
     module = dt_iop_get_module_by_op_priority(dev->iop, op, multi_priority);
-  if(!module && (!name || *name == '\0'))
+  if(IS_NULL_PTR(module) && (IS_NULL_PTR(name) || *name == '\0'))
     module = dt_iop_get_module_by_op_priority(dev->iop, op, 0);
   return module;
 }
@@ -243,7 +243,7 @@ dt_iop_module_t *dt_dev_create_module_instance(dt_develop_t *dev, const char *op
                                                const int multi_priority, gboolean use_next_priority)
 {
   dt_iop_module_t *base = dt_iop_get_module_by_op_priority(dev->iop, op, 0);
-  if(!base) base = dt_iop_get_module_by_op_priority(dev->iop, op, -1);
+  if(IS_NULL_PTR(base)) base = dt_iop_get_module_by_op_priority(dev->iop, op, -1);
   if(IS_NULL_PTR(base)) return NULL;
 
   if((base->flags() & IOP_FLAGS_ONE_INSTANCE) == IOP_FLAGS_ONE_INSTANCE)
@@ -293,7 +293,7 @@ int dt_dev_history_item_from_source_history_item(dt_develop_t *dev_dest, dt_deve
                                                  const dt_dev_history_item_t *hist_src, dt_iop_module_t *mod_dest,
                                                  dt_dev_history_item_t **out_hist)
 {
-  if(!hist_src || !hist_src->module || !mod_dest || !out_hist) return 1;
+  if(!hist_src || !hist_src->module || IS_NULL_PTR(mod_dest) || !out_hist) return 1;
 
   dt_dev_history_item_t *hist = (dt_dev_history_item_t *)calloc(1, sizeof(dt_dev_history_item_t));
   if(IS_NULL_PTR(hist)) return 1;
@@ -307,7 +307,7 @@ int dt_dev_history_item_from_source_history_item(dt_develop_t *dev_dest, dt_deve
   if(dt_iop_module_needs_mask_history(hist_src->module))
   {
     forms_snapshot = dt_masks_snapshot_current_forms(dev_dest, FALSE);
-    if(!forms_snapshot)
+    if(IS_NULL_PTR(forms_snapshot))
     {
       dt_dev_free_history_item(hist);
       return 1;
@@ -472,7 +472,7 @@ GList *dt_history_duplicate(GList *hist)
       memcpy(new->params, old->params, old->params_size);
     }
 
-    if(!module)
+    if(IS_NULL_PTR(module))
       fprintf(stderr, "[_duplicate_history] can't find base module for %s\n", old->op_name);
 
     if(old->blend_params && old->blendop_params_size > 0)
@@ -562,7 +562,7 @@ static void _pop_undo(gpointer user_data, dt_undo_type_t type, dt_undo_data_t da
 
   dt_develop_t *dev = (dt_develop_t *)user_data;
   dt_undo_history_t *hist = (dt_undo_history_t *)data;
-  if(!dev || !hist) return;
+  if(IS_NULL_PTR(dev) || !hist) return;
 
   GList *snapshot = (action == DT_ACTION_UNDO) ? hist->before_snapshot : hist->after_snapshot;
   const int history_end = (action == DT_ACTION_UNDO) ? hist->before_end : hist->after_end;
@@ -642,7 +642,7 @@ void dt_dev_history_undo_end_record(dt_develop_t *dev)
 
 void dt_dev_history_undo_end_record_locked(dt_develop_t *dev)
 {
-  if(!dev || dev->undo_history_depth <= 0) return;
+  if(IS_NULL_PTR(dev) || dev->undo_history_depth <= 0) return;
 
   dev->undo_history_depth--;
   if(dev->undo_history_depth != 0) return;
@@ -751,7 +751,7 @@ gboolean dt_dev_add_history_item_ext(dt_develop_t *dev, struct dt_iop_module_t *
   // Since changing topology is expensive, we want to do it only when needed.
   gboolean add_new_pipe_node = FALSE;
 
-  if(!module)
+  if(IS_NULL_PTR(module))
   {
     // module = NULL means a mask was changed from the mask manager and that's where this function is called.
     // Find it now, even though it is not enabled and won't be.
@@ -1170,7 +1170,7 @@ guint dt_dev_mask_history_overload(GList *dev_history, guint threshold)
 
 void dt_dev_history_notify_change(dt_develop_t *dev, const int32_t imgid)
 {
-  if(!dev || imgid <= 0) return;
+  if(IS_NULL_PTR(dev) || imgid <= 0) return;
 
   if(darktable.gui && dev->gui_attached)
   {
@@ -1785,7 +1785,7 @@ gboolean dt_dev_read_history_ext(dt_develop_t *dev, const int32_t imgid)
 {
   if(imgid == UNKNOWN_IMAGE) return FALSE;
 
-  if(!dev->iop)
+  if(IS_NULL_PTR(dev->iop))
     dev->iop = dt_dev_load_modules(dev);
 
   // Ensure raw metadata (WB coeffs, matrices, etc.) is available for modules that
@@ -2250,7 +2250,7 @@ static void _reset_module_instance(GList *hist, dt_iop_module_t *module, int mul
   {
     dt_dev_history_item_t *hit = (dt_dev_history_item_t *)hist->data;
 
-    if(!hit->module && strcmp(hit->op_name, module->op) == 0 && hit->multi_priority == multi_priority)
+    if(IS_NULL_PTR(hit->module) && strcmp(hit->op_name, module->op) == 0 && hit->multi_priority == multi_priority)
     {
       hit->module = module;
     }

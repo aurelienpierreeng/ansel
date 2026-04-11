@@ -249,7 +249,7 @@ static dt_job_t *dt_control_generic_images_job_create(dt_job_execute_callback ex
   dt_job_t *job = dt_control_job_create(execute, "%s", message);
   if(IS_NULL_PTR(job)) return NULL;
   dt_control_image_enumerator_t *params = dt_control_image_enumerator_alloc();
-  if(!params)
+  if(IS_NULL_PTR(params))
   {
     dt_control_job_dispose(job);
     return NULL;
@@ -272,7 +272,7 @@ static dt_job_t *dt_control_generic_image_job_create(dt_job_execute_callback exe
   dt_job_t *job = dt_control_job_create(execute, "%s", message);
   if(IS_NULL_PTR(job)) return NULL;
   dt_control_image_enumerator_t *params = dt_control_image_enumerator_alloc();
-  if(!params)
+  if(IS_NULL_PTR(params))
   {
     dt_control_job_dispose(job);
     return NULL;
@@ -393,7 +393,7 @@ static int dt_control_merge_hdr_process(dt_imageio_module_data_t *datai, const c
   const dt_image_t image = *img;
   dt_image_cache_read_release(darktable.image_cache, img);
 
-  if(!d->pixels)
+  if(IS_NULL_PTR(d->pixels))
   {
     d->first_imgid = imgid;
     d->first_filter = image.dsc.filters;
@@ -1165,18 +1165,18 @@ static int32_t dt_control_gpx_apply_job_run(dt_job_t *job)
   const gchar *filename = d->filename;
   const gchar *tz = d->tz;
   /* do we have any selected images */
-  if(!t) goto bail_out;
+  if(IS_NULL_PTR(t)) goto bail_out;
 
   /* try parse the gpx data */
   gpx = dt_gpx_new(filename);
-  if(!gpx)
+  if(IS_NULL_PTR(gpx))
   {
     dt_control_log(_("failed to parse GPX file"));
     goto bail_out;
   }
 
   GTimeZone *tz_camera = (IS_NULL_PTR(tz)) ? g_time_zone_new_utc() : g_time_zone_new(tz);
-  if(!tz_camera) goto bail_out;
+  if(IS_NULL_PTR(tz_camera)) goto bail_out;
 
   GList *imgs = NULL;
   GArray *gloc = g_array_new(FALSE, FALSE, sizeof(dt_image_geoloc_t));
@@ -1188,16 +1188,16 @@ static int32_t dt_control_gpx_apply_job_run(dt_job_t *job)
 
     /* get image */
     const dt_image_t *cimg = dt_image_cache_get(darktable.image_cache, imgid, 'r');
-    if(!cimg) continue;
+    if(IS_NULL_PTR(cimg)) continue;
 
     GDateTime *exif_time = dt_datetime_img_to_gdatetime(cimg, tz_camera);
 
     /* release the lock */
     dt_image_cache_read_release(darktable.image_cache, cimg);
-    if(!exif_time) continue;
+    if(IS_NULL_PTR(exif_time)) continue;
     GDateTime *utc_time = g_date_time_to_timezone(exif_time, darktable.utc_tz);
     g_date_time_unref(exif_time);
-    if(!utc_time) continue;
+    if(IS_NULL_PTR(utc_time)) continue;
 
     /* only update image location if time is within gpx tack range */
     if(dt_gpx_get_location(gpx, utc_time, &geoloc))
@@ -1487,7 +1487,7 @@ static dt_control_image_enumerator_t *dt_control_gpx_apply_alloc()
   if(IS_NULL_PTR(params)) return NULL;
 
   params->data = calloc(1, sizeof(dt_control_gpx_apply_t));
-  if(!params->data)
+  if(IS_NULL_PTR(params->data))
   {
     dt_control_image_enumerator_cleanup(params);
     return NULL;
@@ -1516,7 +1516,7 @@ static dt_job_t *_control_gpx_apply_job_create(const gchar *filename, int32_t fi
   dt_job_t *job = dt_control_job_create(&dt_control_gpx_apply_job_run, "gpx apply");
   if(IS_NULL_PTR(job)) return NULL;
   dt_control_image_enumerator_t *params = dt_control_gpx_apply_alloc();
-  if(!params)
+  if(IS_NULL_PTR(params))
   {
     dt_control_job_dispose(job);
     return NULL;
@@ -1553,7 +1553,7 @@ void dt_control_save_xmps(const GList *imgids, const gboolean check_history)
   if(IS_NULL_PTR(job)) return;
 
   dt_control_image_enumerator_t *params = dt_control_image_enumerator_alloc();
-  if(!params)
+  if(IS_NULL_PTR(params))
   {
     dt_control_job_dispose(job);
     return;
@@ -1764,7 +1764,7 @@ void dt_control_move_images()
   }
   g_object_unref(filechooser);
 
-  if(!dir || !g_file_test(dir, G_FILE_TEST_IS_DIR)) goto abort;
+  if(IS_NULL_PTR(dir) || !g_file_test(dir, G_FILE_TEST_IS_DIR)) goto abort;
 
   // ugly, but we need to set this after constructing the job:
   ((dt_control_image_enumerator_t *)dt_control_job_get_params(job))->data = dir;
@@ -1826,7 +1826,7 @@ void dt_control_copy_images()
   }
   g_object_unref(filechooser);
 
-  if(!dir || !g_file_test(dir, G_FILE_TEST_IS_DIR)) goto abort;
+  if(IS_NULL_PTR(dir) || !g_file_test(dir, G_FILE_TEST_IS_DIR)) goto abort;
 
   // ugly, but we need to set this after constructing the job:
   ((dt_control_image_enumerator_t *)dt_control_job_get_params(job))->data = dir;
@@ -1887,7 +1887,7 @@ static dt_control_image_enumerator_t *dt_control_export_alloc()
   if(IS_NULL_PTR(params)) return NULL;
 
   params->data = calloc(1, sizeof(dt_control_export_t));
-  if(!params->data)
+  if(IS_NULL_PTR(params->data))
   {
     dt_control_image_enumerator_cleanup(params);
     return NULL;
@@ -1921,7 +1921,7 @@ void dt_control_export(GList *imgid_list, int max_width, int max_height, int for
   dt_job_t *job = dt_control_job_create(&dt_control_export_job_run, "export");
   if(IS_NULL_PTR(job)) return;
   dt_control_image_enumerator_t *params = dt_control_export_alloc();
-  if(!params)
+  if(IS_NULL_PTR(params))
   {
     dt_control_job_dispose(job);
     return;
@@ -1965,14 +1965,14 @@ static void _add_datetime_offset(const char *odt, const long int offset, char *n
 {
   // get the datetime_taken and calculate the new time
   GDateTime *datetime_original = dt_datetime_exif_to_gdatetime(odt, darktable.utc_tz);
-  if(!datetime_original)
+  if(IS_NULL_PTR(datetime_original))
     return;
 
   // let's add our offset
   GDateTime *datetime_new = g_date_time_add(datetime_original, offset);
   g_date_time_unref(datetime_original);
 
-  if(!datetime_new)
+  if(IS_NULL_PTR(datetime_new))
     return;
   gchar *datetime = g_date_time_format(datetime_new, "%Y:%m:%d %H:%M:%S,%f");
   datetime[DT_DATETIME_LENGTH - 1] = '\0';  // limit to milliseconds
@@ -1993,7 +1993,7 @@ static int32_t dt_control_datetime_job_run(dt_job_t *job)
   char message[512] = { 0 };
 
   /* do we have any selected images and is offset != 0 */
-  if(!t || (offset == 0 && !datetime[0]))
+  if(IS_NULL_PTR(t) || (offset == 0 && !datetime[0]))
   {
     return 1;
   }
@@ -2055,7 +2055,7 @@ static void *dt_control_datetime_alloc()
   if(IS_NULL_PTR(params)) return NULL;
 
   params->data = calloc(1, sizeof(dt_control_datetime_t));
-  if(!params->data)
+  if(IS_NULL_PTR(params->data))
   {
     dt_control_image_enumerator_cleanup(params);
     return NULL;
@@ -2078,7 +2078,7 @@ static dt_job_t *dt_control_datetime_job_create(const GTimeSpan offset, const ch
   dt_job_t *job = dt_control_job_create(&dt_control_datetime_job_run, "time offset");
   if(IS_NULL_PTR(job)) return NULL;
   dt_control_image_enumerator_t *params = dt_control_datetime_alloc();
-  if(!params)
+  if(IS_NULL_PTR(params))
   {
     dt_control_job_dispose(job);
     return NULL;

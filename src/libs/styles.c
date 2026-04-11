@@ -603,7 +603,7 @@ static void import_clicked(GtkWidget *w, gpointer user_data)
       // xml doc is not necessary after this point
       xmlFreeDoc(document);
 
-      if(!bname){
+      if(IS_NULL_PTR(bname)){
         dt_print(DT_DEBUG_CONTROL,
                  "[styles] file %s is malformed style file\n", (char*)filename->data);
         continue;

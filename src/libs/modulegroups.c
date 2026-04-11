@@ -151,8 +151,8 @@ static void _modulegroups_hide_pages(const dt_lib_modulegroups_t *d)
  */
 static void _modulegroups_sync_section_label_margins(dt_lib_modulegroups_t *d)
 {
-  if(!d || !darktable.develop) return;
-  if(!d->section_color || !d->section_film || !d->section_tones) return;
+  if(IS_NULL_PTR(d) || IS_NULL_PTR(darktable.develop)) return;
+  if(IS_NULL_PTR(d->section_color) || IS_NULL_PTR(d->section_film) || IS_NULL_PTR(d->section_tones)) return;
 
   GtkWidget *reference = NULL;
   for(const GList *modules = g_list_first(darktable.develop->iop); modules; modules = g_list_next(modules))
@@ -322,7 +322,7 @@ static void _modulegroups_track_widget(GtkWidget **slot, GtkWidget *widget)
 
 static void _modulegroups_ensure_page_widgets(dt_lib_module_t *self)
 {
-  if(!self || !self->data || !darktable.gui || !darktable.gui->ui) return;
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->data) || IS_NULL_PTR(darktable.gui) || IS_NULL_PTR(darktable.gui->ui)) return;
 
   dt_lib_modulegroups_t *d = (dt_lib_modulegroups_t *)self->data;
   if(d->page_pipeline && d->page_basic && d->page_repair && d->page_sharpness
@@ -404,7 +404,7 @@ static void _modulegroups_ensure_page_widgets(dt_lib_module_t *self)
  */
 static GtkWidget *_modulegroups_target_container(const dt_lib_modulegroups_t *d, const dt_iop_module_t *module)
 {
-  if(!d || !module) return NULL;
+  if(IS_NULL_PTR(d) || !module) return NULL;
 
   switch(d->current)
   {
@@ -448,7 +448,7 @@ static GtkWidget *_modulegroups_target_container(const dt_lib_modulegroups_t *d,
  */
 static void _modulegroups_setup_drag_source(dt_lib_module_t *self, dt_iop_module_t *module)
 {
-  if(!self || !module || !module->expander) return;
+  if(IS_NULL_PTR(self) || !module || !module->expander) return;
 
   GtkWidget *widget = module->expander;
   g_object_set_data(G_OBJECT(widget), "dt-module", module);
@@ -474,7 +474,7 @@ static void _modulegroups_setup_drag_source(dt_lib_module_t *self, dt_iop_module
  */
 static gboolean _modulegroups_reorder_target(GtkWidget *target)
 {
-  if(!GTK_IS_WIDGET(target) || !darktable.develop) return FALSE;
+  if(!GTK_IS_WIDGET(target) || IS_NULL_PTR(darktable.develop)) return FALSE;
 
   gboolean has_visible = FALSE;
   int position = 0;
@@ -1140,7 +1140,7 @@ static gboolean _is_module_in_history(const dt_iop_module_t *module)
 
 static gboolean _modulegroups_module_visible_in_current(const dt_lib_modulegroups_t *d, const dt_iop_module_t *module)
 {
-  if(!d || !module) return FALSE;
+  if(IS_NULL_PTR(d) || !module) return FALSE;
 
   switch(d->current)
   {
@@ -1162,12 +1162,12 @@ static gboolean _modulegroups_module_visible_in_current(const dt_lib_modulegroup
 
 static void _lib_modulegroups_update_iop_visibility(dt_lib_module_t *self)
 {
-  if(!self || !self->data || !darktable.develop) return;
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->data) || IS_NULL_PTR(darktable.develop)) return;
   if(darktable.develop->image_storage.id <= 0) return;
   _modulegroups_ensure_page_widgets(self);
   dt_lib_modulegroups_t *d = (dt_lib_modulegroups_t *)self->data;
 
-  if(!d->page_pipeline || !d->page_basic || !d->page_repair || !d->page_sharpness
+  if(IS_NULL_PTR(d->page_pipeline) || IS_NULL_PTR(d->page_basic) || IS_NULL_PTR(d->page_repair) || !d->page_sharpness
      || !d->page_effects || !d->page_technical || !d->page_all) return;
   _modulegroups_sync_section_label_margins(d);
   _modulegroups_hide_pages(d);
@@ -1240,7 +1240,7 @@ static void _lib_modulegroups_update_iop_visibility(dt_lib_module_t *self)
 static void _lib_modulegroups_toggle(GtkNotebook *notebook, GtkWidget *page, guint page_num, gpointer user_data)
 {
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
-  if(!self || !self->data) return;
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->data)) return;
   dt_lib_modulegroups_t *d = (dt_lib_modulegroups_t *)self->data;
   const uint32_t group = _modulegroups_group_from_page(page_num);
 
@@ -1256,7 +1256,7 @@ static void _lib_modulegroups_toggle(GtkNotebook *notebook, GtkWidget *page, gui
 static void _lib_modulegroups_signal_set(gpointer instance, gpointer module, gpointer user_data)
 {
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
-  if(!self || !self->data) return;
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->data)) return;
   dt_lib_modulegroups_t *d = (dt_lib_modulegroups_t *)self->data;
   dt_iop_module_t *iop_module = (dt_iop_module_t *)module;
 
@@ -1277,14 +1277,14 @@ static void _lib_modulegroups_signal_set(gpointer instance, gpointer module, gpo
 static void _lib_modulegroups_module_moved(gpointer instance, gpointer user_data)
 {
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
-  if(!self || !self->data) return;
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->data)) return;
   _lib_modulegroups_update_iop_visibility(self);
 }
 
 static void _lib_modulegroups_refresh(gpointer instance, gpointer user_data)
 {
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
-  if(!self || !self->data) return;
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->data)) return;
   _lib_modulegroups_update_iop_visibility(self);
 }
 

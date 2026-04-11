@@ -352,7 +352,7 @@ static void _shape_button_clicked(GtkButton *button, dt_lib_module_t *self)
   int shape = dt_conf_get_int("plugins/map/locationshape");
   shape++;
   if((shape > G_N_ELEMENTS(location_shapes) - 1) ||
-     (!d->polygons && shape == MAP_LOCATION_SHAPE_POLYGONS))
+     (IS_NULL_PTR(d->polygons) && shape == MAP_LOCATION_SHAPE_POLYGONS))
     shape = 0;
   dt_conf_set_int("plugins/map/locationshape", shape);
 
@@ -480,7 +480,7 @@ static void _view_map_location_changed(gpointer instance, GList *polygons, dt_li
 {
   dt_lib_map_locations_t *d = (dt_lib_map_locations_t *)self->data;
   const int shape = dt_conf_get_int("plugins/map/locationshape");
-  if((shape == MAP_LOCATION_SHAPE_POLYGONS) && !polygons)
+  if((shape == MAP_LOCATION_SHAPE_POLYGONS) && IS_NULL_PTR(polygons))
   {
     g_signal_handler_block (d->shape_button, d->shape_button_handler);
     dtgtk_togglebutton_set_paint((GtkDarktableToggleButton *)d->shape_button,

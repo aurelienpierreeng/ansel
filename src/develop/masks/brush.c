@@ -273,7 +273,7 @@ static void _brush_ctrl2_to_handle(float point_x, float point_y, float ctrl_x, f
 static gboolean _brush_get_border_handle_resampled(const dt_masks_form_gui_points_t *gui_points, int node_count,
                                                    int node_index, float *handle_x, float *handle_y)
 {
-  if(!gui_points || node_count <= 0 || node_index < 0 || node_index >= node_count) return FALSE;
+  if(IS_NULL_PTR(gui_points) || node_count <= 0 || node_index < 0 || node_index >= node_count) return FALSE;
 
   const int start = node_count * 3;
   const int max_points = MIN(gui_points->points_count, gui_points->border_count);
@@ -365,7 +365,7 @@ static void _brush_catmull_to_bezier(float x1, float y1, float x2, float y2, flo
  */
 static void _brush_init_ctrl_points(dt_masks_form_t *mask_form)
 {
-  if(!mask_form || !mask_form->points) return;
+  if(IS_NULL_PTR(mask_form) || IS_NULL_PTR(mask_form->points)) return;
   // if we have less than 2 points, what to do ??
   if(g_list_shorter_than(mask_form->points, 2)) return;
 
@@ -375,7 +375,7 @@ static void _brush_init_ctrl_points(dt_masks_form_t *mask_form)
   for(GList *form_points = mask_form->points; form_points; form_points = g_list_next(form_points))
   {
     dt_masks_node_brush_t *point3 = (dt_masks_node_brush_t *)form_points->data;
-    if(!point3) continue;
+    if(IS_NULL_PTR(point3)) continue;
     // if the point has not been set manually, we redefine it
     if(point3->state == DT_MASKS_POINT_STATE_NORMAL)
     {
@@ -724,7 +724,7 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
   if(payload_buffer) *payload_buffer = NULL;
   if(payload_buffer) *payload_count = 0;
 
-  if(!mask_form || !mask_form->points) return 0;
+  if(IS_NULL_PTR(mask_form) || IS_NULL_PTR(mask_form->points)) return 0;
   double start2 = 0.0;
   if(darktable.unmuted & DT_DEBUG_PERF) start2 = dt_get_wtime();
 
@@ -1234,7 +1234,7 @@ static int _brush_get_points_border(dt_develop_t *develop, dt_masks_form_t *mask
                                     float **border_buffer, int *border_count,
                                     int use_source, const dt_iop_module_t *module)
 {
-  if(use_source && !module) return 1;
+  if(use_source && IS_NULL_PTR(module)) return 1;
   const double ioporder = (module) ? module->iop_order : 0.0f;
   return _brush_get_pts_border(develop, mask_form, ioporder, DT_DEV_TRANSFORM_DIR_ALL,
                                develop->virtual_pipe, point_buffer, point_count, border_buffer,
@@ -1247,7 +1247,7 @@ static int _brush_get_points_border(dt_develop_t *develop, dt_masks_form_t *mask
 static float _brush_get_position_in_segment(float point_x, float point_y,
                                             dt_masks_form_t *mask_form, int segment_index)
 {
-  if(!mask_form || !mask_form->points) return 0;
+  if(IS_NULL_PTR(mask_form) || IS_NULL_PTR(mask_form->points)) return 0;
   GList *first_node_entry = g_list_nth(mask_form->points, segment_index);
   dt_masks_node_brush_t *point0 = (dt_masks_node_brush_t *)first_node_entry->data;
   // advance to next node in list, if not already on the last
@@ -1356,7 +1356,7 @@ static int _init_opacity(dt_masks_form_t *mask_form, int parentid, dt_masks_form
 
 static float _brush_get_interaction_value(const dt_masks_form_t *mask_form, dt_masks_interaction_t interaction)
 {
-  if(!mask_form || !mask_form->points) return NAN;
+  if(IS_NULL_PTR(mask_form) || IS_NULL_PTR(mask_form->points)) return NAN;
 
   switch(interaction)
   {
@@ -1388,7 +1388,7 @@ static float _brush_get_interaction_value(const dt_masks_form_t *mask_form, dt_m
 
 static gboolean _brush_get_gravity_center(const dt_masks_form_t *mask_form, float center[2], float *area)
 {
-  if(!mask_form || !mask_form->points) return FALSE;
+  if(IS_NULL_PTR(mask_form) || IS_NULL_PTR(mask_form->points)) return FALSE;
 
   const int points_count = g_list_length(mask_form->points);
   if(points_count <= 0) return FALSE;
@@ -1400,7 +1400,7 @@ static gboolean _brush_get_gravity_center(const dt_masks_form_t *mask_form, floa
   for(const GList *l = mask_form->points; l; l = g_list_next(l))
   {
     const dt_masks_node_brush_t *point = (const dt_masks_node_brush_t *)l->data;
-    if(!point) continue;
+    if(IS_NULL_PTR(point)) continue;
     point_buffer[2 * i] = point->node[0];
     point_buffer[2 * i + 1] = point->node[1];
     i++;
@@ -1442,7 +1442,7 @@ static int _change_hardness(dt_masks_form_t *mask_form, int parentid, dt_masks_f
                             struct dt_iop_module_t *module, int index, const float amount,
                             const dt_masks_increment_t increment, const int flow)
 {
-  if(!mask_form || !mask_form->points) return 0;
+  if(IS_NULL_PTR(mask_form) || IS_NULL_PTR(mask_form->points)) return 0;
   int node_index = 0;
   const float scale_amount = 1.f / powf(amount, (float)flow);
   const float offset_amount = -amount * (float)flow;
@@ -1471,7 +1471,7 @@ static int _change_size(dt_masks_form_t *mask_form, int parentid, dt_masks_form_
                         struct dt_iop_module_t *module, int index, const float amount,
                         const dt_masks_increment_t increment, const int flow)
 {
-  if(!mask_form || !mask_form->points) return 0;
+  if(IS_NULL_PTR(mask_form) || IS_NULL_PTR(mask_form->points)) return 0;
   // Sanitize loop
   // do not exceed upper limit of 1.0 and lower limit of 0.004
   int node_index = 0;
@@ -1576,7 +1576,7 @@ static void _get_pressure_sensitivity(dt_masks_form_gui_t *mask_gui)
 static void _add_node_to_segment(struct dt_iop_module_t *module, dt_masks_form_t *mask_form, int parentid,
                                  dt_masks_form_gui_t *mask_gui, int index)
 {
-  if(!mask_form || !mask_form->points || !mask_gui) return;
+  if(IS_NULL_PTR(mask_form) || IS_NULL_PTR(mask_form->points) || IS_NULL_PTR(mask_gui)) return;
   const guint node_count = g_list_length(mask_form->points);
   const int selected_segment = dt_masks_gui_selected_segment_index(mask_gui);
   if(selected_segment < 0 || selected_segment >= (int)node_count) return;
@@ -1596,14 +1596,14 @@ static void _add_node_to_segment(struct dt_iop_module_t *module, dt_masks_form_t
                                                  mask_form, selected_segment);
   // start and end node of the segment
   GList *pt = g_list_nth(mask_form->points, selected_segment);
-  if(!pt || !pt->data)
+  if(IS_NULL_PTR(pt) || IS_NULL_PTR(pt->data))
   {
     dt_free(new_node);
     return;
   }
   dt_masks_node_brush_t *point0 = (dt_masks_node_brush_t *)pt->data;
   const GList *const next_pt = g_list_next_wraparound(pt, mask_form->points);
-  if(!next_pt || !next_pt->data)
+  if(IS_NULL_PTR(next_pt) || IS_NULL_PTR(next_pt->data))
   {
     dt_free(new_node);
     return;
@@ -1667,9 +1667,9 @@ static int _brush_events_button_pressed(struct dt_iop_module_t *module, double w
         return 1;
       }
 
-      if(!mask_gui->guipoints) mask_gui->guipoints = dt_masks_dynbuf_init(200000, "brush guipoints");
+      if(IS_NULL_PTR(mask_gui->guipoints)) mask_gui->guipoints = dt_masks_dynbuf_init(200000, "brush guipoints");
       if(IS_NULL_PTR(mask_gui->guipoints)) return 1;
-      if(!mask_gui->guipoints_payload)
+      if(IS_NULL_PTR(mask_gui->guipoints_payload))
         mask_gui->guipoints_payload = dt_masks_dynbuf_init(400000, "brush guipoints_payload");
       if(IS_NULL_PTR(mask_gui->guipoints_payload)) return 1;
       dt_masks_dynbuf_add_2(mask_gui->guipoints, mask_gui->pos[0], mask_gui->pos[1]);
@@ -1911,7 +1911,7 @@ static int _brush_events_button_released(struct dt_iop_module_t *module, double 
       if(mask_form->type & (DT_MASKS_CLONE | DT_MASKS_NON_CLONE))
       {
         dt_masks_form_t *grp = dt_masks_get_visible_form(darktable.develop);
-        if(!grp || !(grp->type & DT_MASKS_GROUP)) return 1;
+        if(IS_NULL_PTR(grp) || !(grp->type & DT_MASKS_GROUP)) return 1;
         int group_index = 0;
         int selected_index = -1;
         for(GList *group_entry = grp->points; group_entry; group_entry = g_list_next(group_entry))
@@ -2180,7 +2180,7 @@ static float _brush_line_length(const float *line, const int first_pt, const int
 static gboolean _brush_line_point_at_length(const float *line, const int first_pt, const int last_pt,
                                             const float target_len, float *x, float *y)
 {
-  if(!line || !x || !y) return FALSE;
+  if(IS_NULL_PTR(line) || IS_NULL_PTR(x) || IS_NULL_PTR(y)) return FALSE;
   if(last_pt <= first_pt) return FALSE;
 
   float acc = 0.0f;
@@ -2225,7 +2225,7 @@ static gboolean _brush_line_point_at_length(const float *line, const int first_p
 static gboolean _brush_get_line_midpoint(const float *line, const int first_pt, const int last_pt,
                                          float *mx, float *my)
 {
-  if(!line || !mx || !my) return FALSE;
+  if(IS_NULL_PTR(line) || IS_NULL_PTR(mx) || IS_NULL_PTR(my)) return FALSE;
   const float total_len = _brush_line_length(line, first_pt, last_pt);
   if(total_len <= 1e-6f) return FALSE;
 
@@ -2236,7 +2236,7 @@ static gboolean _brush_get_line_midpoint(const float *line, const int first_pt, 
 static gboolean _brush_get_source_center(const dt_masks_form_gui_points_t *gui_points, const int node_count,
                                          dt_masks_gui_center_point_t *center_pt)
 {
-  if(!gui_points || !center_pt) return FALSE;
+  if(IS_NULL_PTR(gui_points) || IS_NULL_PTR(center_pt)) return FALSE;
 
   // Work on the exact centerline span that is actually drawn (non-border path):
   // [node_count * 3, 0.5 * points_count)
@@ -2652,7 +2652,7 @@ static int _get_area(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pi
   }
 
   const guint node_count = g_list_length(mask_form->points);
-  if(!points || !border || points_count <= (int)(node_count * 3) || border_count <= (int)(node_count * 3))
+  if(IS_NULL_PTR(points) || !border || points_count <= (int)(node_count * 3) || border_count <= (int)(node_count * 3))
   {
     dt_pixelpipe_cache_free_align(points);
     dt_pixelpipe_cache_free_align(border);
@@ -2748,7 +2748,7 @@ static int _brush_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe
   }
 
   const guint node_count = g_list_length(mask_form->points);
-  if(!points || !border || !payload || points_count <= (int)(node_count * 3)
+  if(IS_NULL_PTR(points) || !border || IS_NULL_PTR(payload) || points_count <= (int)(node_count * 3)
      || border_count <= (int)(node_count * 3))
   {
     dt_pixelpipe_cache_free_align(points);
@@ -2937,7 +2937,7 @@ static int _brush_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixel
   }
 
   const guint node_count = g_list_length(mask_form->points);
-  if(!points || !border || !payload || points_count <= (int)(node_count * 3)
+  if(IS_NULL_PTR(points) || !border || IS_NULL_PTR(payload) || points_count <= (int)(node_count * 3)
      || border_count <= (int)(node_count * 3))
   {
     dt_pixelpipe_cache_free_align(points);
@@ -3127,7 +3127,7 @@ static void _brush_switch_node_callback(GtkWidget *widget, gpointer user_data)
   const int node_index = dt_masks_gui_selected_node_index(mask_gui);
   dt_masks_node_brush_t *node
       = (dt_masks_node_brush_t *)g_list_nth_data(selected_form->points, node_index);
-  if(!gui_points || !node) return;
+  if(IS_NULL_PTR(gui_points) || !node) return;
   dt_masks_toggle_bezier_node_type(module, selected_form, mask_gui, mask_gui->group_selected, gui_points,
                                    node_index, node->node, node->ctrl1, node->ctrl2, &node->state);
 }
@@ -3152,7 +3152,7 @@ static void _brush_reset_round_node_callback(GtkWidget *widget, gpointer user_da
   const int node_index = MAX(mask_gui->node_hovered, selected_handle);
   dt_masks_node_brush_t *node
       = (dt_masks_node_brush_t *)g_list_nth_data(selected_form->points, node_index);
-  if(!gui_points || !node) return;
+  if(IS_NULL_PTR(gui_points) || !node) return;
   dt_masks_reset_bezier_ctrl_points(module, selected_form, mask_gui, mask_gui->group_selected, gui_points,
                                     node_index, &node->state);
 }
@@ -3193,7 +3193,7 @@ static int _brush_populate_context_menu(GtkWidget *menu, struct dt_masks_form_t 
   {
     dt_masks_form_gui_points_t *gui_points
         = (dt_masks_form_gui_points_t *)g_list_nth_data(mask_gui->points, mask_gui->group_selected);
-    if(!gui_points) goto end;
+    if(IS_NULL_PTR(gui_points)) goto end;
     dt_masks_node_brush_t *node
         = (dt_masks_node_brush_t *)g_list_nth_data(mask_form->points, mask_gui->node_hovered);
     if(!node) goto end;

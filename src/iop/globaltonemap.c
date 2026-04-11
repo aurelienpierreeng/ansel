@@ -383,7 +383,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
   dt_iop_global_tonemap_gui_data_t *g = (dt_iop_global_tonemap_gui_data_t *)self->gui_data;
   dt_iop_global_tonemap_params_t *p = (dt_iop_global_tonemap_params_t *)self->params;
 
-  if(!w || w == g->operator)
+  if(IS_NULL_PTR(w) || w == g->operator)
   {
     gtk_widget_set_visible(g->drago.bias, p->operator == OPERATOR_DRAGO);
     gtk_widget_set_visible(g->drago.max_light, p->operator == OPERATOR_DRAGO);

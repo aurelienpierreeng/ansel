@@ -66,7 +66,7 @@ void dt_map_location_delete(const guint locid)
 // rename a location
 void dt_map_location_rename(const guint locid, const char *const name)
 {
-  if(locid == -1 || !name || !name[0]) return;
+  if(locid == -1 || IS_NULL_PTR(name) || !name[0]) return;
   char *old_name = dt_tag_get_name(locid);
   if(old_name)
   {

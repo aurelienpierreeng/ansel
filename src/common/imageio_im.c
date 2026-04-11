@@ -114,7 +114,7 @@ dt_imageio_retval_t dt_imageio_open_im(dt_image_t *img, const char *filename, dt
 
   img->loader = LOADER_IM;
 
-  if(!mbuf)
+  if(IS_NULL_PTR(mbuf))
   {
     DestroyMagickWand(image);
     return DT_IMAGEIO_OK;

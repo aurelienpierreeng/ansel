@@ -597,7 +597,7 @@ static int _build_viewer_control_nodes(const dt_iop_colorprimaries_params_t *con
 {
   int count = 0;
 
-  if(!control_nodes || !lut_profile) return 0;
+  if(!control_nodes || IS_NULL_PTR(lut_profile)) return 0;
 
   for(int node = 0; node < DT_IOP_COLORPRIMARIES_NODE_COUNT; node++)
   {
@@ -700,7 +700,7 @@ static void _build_clut(dt_iop_colorprimaries_data_t *d, const dt_iop_colorprima
   dt_colorrings_sparse_anchor_t anchors[DT_IOP_COLORPRIMARIES_MAX_ANCHORS] = { 0 };
   int anchor_count = 0;
 
-  if(!d->clut) d->clut = dt_alloc_align_float(clut_size);
+  if(IS_NULL_PTR(d->clut)) d->clut = dt_alloc_align_float(clut_size);
   d->lut_profile = (dt_iop_order_iccprofile_info_t *)lut_profile;
 
   /**
@@ -785,12 +785,12 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
                   : NULL;
   const dt_iop_order_iccprofile_info_t *work_profile = dt_ioppr_get_pipe_current_profile_info(self, pipe);
 
-  if(!d)
+  if(IS_NULL_PTR(d))
   {
     return;
   }
 
-  if(!gd || !lut_profile || !work_profile)
+  if(IS_NULL_PTR(gd) || IS_NULL_PTR(lut_profile) || IS_NULL_PTR(work_profile))
   {
     d->clut = NULL;
     d->clut_level = 0;
@@ -846,7 +846,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const int height = piece->roi_in.height;
   const int ch = piece->dsc_in.channels;
 
-  if(!d || !gd || !d->clut || d->clut_level == 0 || !d->lut_profile || !d->work_profile)
+  if(IS_NULL_PTR(d) || IS_NULL_PTR(gd) || IS_NULL_PTR(d->clut) || d->clut_level == 0 || IS_NULL_PTR(d->lut_profile) || IS_NULL_PTR(d->work_profile))
   {
     dt_iop_image_copy_by_size(obuf, ibuf, width, height, ch);
     return 0;
@@ -887,7 +887,7 @@ static void _pipe_rgb_to_Ych(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, co
                              dt_aligned_pixel_t Ych)
 {
   const dt_iop_order_iccprofile_info_t *work_profile = dt_ioppr_get_pipe_current_profile_info(self, pipe);
-  if(!work_profile)
+  if(IS_NULL_PTR(work_profile))
   {
     memset(Ych, 0, sizeof(dt_aligned_pixel_t));
     return;
@@ -924,7 +924,7 @@ static void _refresh_slider_gradients(dt_iop_module_t *self)
       = (self->dev && self->dev->preview_pipe) ? dt_ioppr_get_pipe_output_profile_info(self->dev->preview_pipe)
                                                : NULL;
 
-  if(!g || !lut_profile || !p) return;
+  if(IS_NULL_PTR(g) || IS_NULL_PTR(lut_profile) || IS_NULL_PTR(p)) return;
 
   /**
    * The slider stops are purely visual guides. Convert every dt UCS HSB stop
@@ -988,7 +988,7 @@ static void _preview_pipe_finished_callback(gpointer instance, gpointer user_dat
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_colorprimaries_gui_data_t *g = (dt_iop_colorprimaries_gui_data_t *)self->gui_data;
-  if(!g || !g->viewer) return;
+  if(IS_NULL_PTR(g) || IS_NULL_PTR(g->viewer)) return;
 
   _refresh_slider_gradients(self);
   _update_gui_lut_cache(self);
@@ -1008,7 +1008,7 @@ static void _update_gui_lut_cache(dt_iop_module_t *self)
                                                : NULL;
   uint64_t cache_generation = 0;
 
-  if(!g || !g->viewer || !gd) return;
+  if(IS_NULL_PTR(g) || IS_NULL_PTR(g->viewer) || IS_NULL_PTR(gd)) return;
 
   dt_pthread_rwlock_rdlock(&gd->lock);
   cache_generation = gd->cache_generation;
@@ -1018,7 +1018,7 @@ static void _update_gui_lut_cache(dt_iop_module_t *self)
      && g->viewer_display_profile == display_profile)
     return;
 
-  if(!lut_profile)
+  if(IS_NULL_PTR(lut_profile))
   {
     dt_lut_viewer_set_lut(g->viewer, NULL, 0, NULL, NULL, NULL);
     dt_lut_viewer_set_control_nodes(g->viewer, NULL, 0);
@@ -1159,7 +1159,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
   dt_iop_colorprimaries_params_t *p = (dt_iop_colorprimaries_params_t *)self->params;
   const dt_iop_module_t *sampled_module = piece && piece->module ? piece->module : self;
 
-  if(!g || picker != g->white_level) return;
+  if(IS_NULL_PTR(g) || picker != g->white_level) return;
   if(sampled_module->picked_color_max[0] < sampled_module->picked_color_min[0]) return;
 
   dt_aligned_pixel_t max_Ych = { 0.f };

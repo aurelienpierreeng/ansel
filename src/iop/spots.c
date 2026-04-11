@@ -558,7 +558,7 @@ static int _process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe
       dt_masks_form_group_t *grpt = (dt_masks_form_group_t *)forms->data;
       // we get the spot
       dt_masks_form_t *form = dt_masks_get_from_id(self->dev, grpt->formid);
-      if(!form)
+      if(IS_NULL_PTR(form))
       {
         continue;
       }

@@ -88,7 +88,7 @@ static sqlite3_stmt *_colorlabels_remove_label_stmt = NULL;
 
 int dt_colorlabels_get_labels(const int32_t imgid)
 {
-  if(!_colorlabels_get_labels_stmt)
+  if(IS_NULL_PTR(_colorlabels_get_labels_stmt))
   {
     // clang-format off
     DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
@@ -167,7 +167,7 @@ static void _colorlabels_undo_data_free(gpointer data)
 
 void dt_colorlabels_remove_labels(const int32_t imgid)
 {
-  if(!_colorlabels_remove_labels_stmt)
+  if(IS_NULL_PTR(_colorlabels_remove_labels_stmt))
   {
     DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
                                 "DELETE FROM main.color_labels WHERE imgid=?1",
@@ -182,7 +182,7 @@ void dt_colorlabels_remove_labels(const int32_t imgid)
 
 void dt_colorlabels_set_label(const int32_t imgid, const int color)
 {
-  if(!_colorlabels_set_label_stmt)
+  if(IS_NULL_PTR(_colorlabels_set_label_stmt))
   {
     // clang-format off
     DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
@@ -200,7 +200,7 @@ void dt_colorlabels_set_label(const int32_t imgid, const int color)
 
 void dt_colorlabels_remove_label(const int32_t imgid, const int color)
 {
-  if(!_colorlabels_remove_label_stmt)
+  if(IS_NULL_PTR(_colorlabels_remove_label_stmt))
   {
     // clang-format off
     DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
@@ -258,7 +258,7 @@ static void _colorlabels_execute(GList *imgs, const int labels, GList **undo, co
       const int32_t image_id = GPOINTER_TO_INT(image->data);
 
       dt_image_t *img = dt_image_cache_get(darktable.image_cache, image_id, 'r');
-      if(!img) continue;
+      if(IS_NULL_PTR(img)) continue;
 
       const int before = img->color_labels;
       dt_image_cache_read_release(darktable.image_cache, img);
@@ -278,7 +278,7 @@ static void _colorlabels_execute(GList *imgs, const int labels, GList **undo, co
     const int32_t image_id = GPOINTER_TO_INT(image->data);
 
     dt_image_t *img = dt_image_cache_get(darktable.image_cache, image_id, 'w');
-    if(!img) continue;
+    if(IS_NULL_PTR(img)) continue;
 
     const int before = img->color_labels;
     int after = 0;

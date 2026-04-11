@@ -83,7 +83,7 @@ char *get_profile_description(unsigned char *data, long data_size)
   gchar *utf8 = NULL;
   char *result = NULL;
 
-  if(!data || data_size == 0) return NULL;
+  if(IS_NULL_PTR(data) || data_size == 0) return NULL;
 
   cmsHPROFILE p = cmsOpenProfileFromMem(data, data_size);
   if(IS_NULL_PTR(p)) return NULL;
@@ -104,7 +104,7 @@ char *get_profile_description(unsigned char *data, long data_size)
     size = cmsGetProfileInfo(p, cmsInfoDescription, "en", "US", wbuf, sizeof(wchar_t) * size);
     if(size == 0) goto error;
     utf8 = g_ucs4_to_utf8((gunichar *)wbuf, -1, NULL, NULL, NULL);
-    if(!utf8) goto error;
+    if(IS_NULL_PTR(utf8)) goto error;
     result = g_strdup(utf8);
   }
 
@@ -214,7 +214,7 @@ int main(int argc __attribute__((unused)), char *arg[] __attribute__((unused)))
       for(int crtc = 0; crtc < rsrc->ncrtc; crtc++)
       {
         XRRCrtcInfo *crtc_info = XRRGetCrtcInfo(display, rsrc, rsrc->crtcs[crtc]);
-        if(!crtc_info)
+        if(IS_NULL_PTR(crtc_info))
           continue;
 
         if(crtc_info->mode != None && crtc_info->noutput > 0)
@@ -247,7 +247,7 @@ int main(int argc __attribute__((unused)), char *arg[] __attribute__((unused)))
       {
         XRROutputInfo *output_info = NULL;
         XRRCrtcInfo *crtc_info = XRRGetCrtcInfo(display, rsrc, rsrc->crtcs[crtc]);
-        if(!crtc_info)
+        if(IS_NULL_PTR(crtc_info))
         {
           printf("can't get CRTC info for screen %d CRTC %d\n", screen, crtc);
           goto end;
@@ -277,7 +277,7 @@ int main(int argc __attribute__((unused)), char *arg[] __attribute__((unused)))
         }
 
         output_info = XRRGetOutputInfo(display, rsrc, crtc_info->outputs[output]);
-        if(!output_info)
+        if(IS_NULL_PTR(output_info))
         {
           printf("can't get output info for screen %d CRTC %d output %d\n", screen, crtc, output);
           goto end;
@@ -365,7 +365,7 @@ end:
 #ifdef HAVE_COLORD
   // and also the profile from colord
   CdClient *client = cd_client_new();
-  if(!client || !cd_client_connect_sync(client, NULL, NULL))
+  if(IS_NULL_PTR(client) || !cd_client_connect_sync(client, NULL, NULL))
   {
     fprintf(stderr, "error connecting to colord\n");
   }

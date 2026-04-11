@@ -52,7 +52,7 @@ static gboolean undo_sensitive_callback()
 
 static gboolean undo_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
-  if(!darktable.view_manager || !undo_sensitive_callback()) return FALSE;
+  if(IS_NULL_PTR(darktable.view_manager) || !undo_sensitive_callback()) return FALSE;
   const dt_view_t *cv = dt_view_manager_get_current_view(darktable.view_manager);
   if(IS_NULL_PTR(cv)) return FALSE;
 
@@ -92,7 +92,7 @@ static gboolean redo_sensitive_callback()
 
 static gboolean redo_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
-  if(!darktable.view_manager || !redo_sensitive_callback()) return FALSE;
+  if(IS_NULL_PTR(darktable.view_manager) || !redo_sensitive_callback()) return FALSE;
   const dt_view_t *cv = dt_view_manager_get_current_view(darktable.view_manager);
   if(IS_NULL_PTR(cv)) return FALSE;
 

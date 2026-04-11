@@ -406,7 +406,7 @@ int main(int argc, char *arg[])
   for(; k < argc; k++) m_arg[m_argc++] = arg[k];
   m_arg[m_argc] = NULL;
 
-  if( (inputs && file_counter < 1) || (!inputs && file_counter < 2) || file_counter > 3)
+  if( (inputs && file_counter < 1) || (IS_NULL_PTR(inputs) && file_counter < 2) || file_counter > 3)
   {
     usage(arg[0]);
     dt_free(m_arg);
@@ -468,7 +468,7 @@ int main(int argc, char *arg[])
     xmp_filename = NULL;
   }
 
-  if(!inputs && input_filename)
+  if(IS_NULL_PTR(inputs) && input_filename)
   {
     // input is present as param
     inputs = g_list_prepend(inputs, g_strdup(input_filename));
@@ -478,7 +478,7 @@ int main(int argc, char *arg[])
   if(g_file_test(output_filename, G_FILE_TEST_IS_DIR))
   {
     output_to_dir = TRUE;
-    if(!output_ext)
+    if(IS_NULL_PTR(output_ext))
     {
       output_ext = g_strdup("jpg");
     }
@@ -495,7 +495,7 @@ int main(int argc, char *arg[])
   // the output file already exists, so there will be a sequence number added
   if(g_file_test(output_filename, G_FILE_TEST_EXISTS) && !output_to_dir)
   {
-    if(!output_ext || (output_ext && g_str_has_suffix(output_filename, output_ext) && !g_strcmp0(output_ext,strrchr(output_filename, '.')+1))){
+    if(IS_NULL_PTR(output_ext) || (output_ext && g_str_has_suffix(output_filename, output_ext) && !g_strcmp0(output_ext,strrchr(output_filename, '.')+1))){
       //output file exists or there's output ext specified and it's same as file...
       fprintf(stderr, "%s\n", _("output file already exists, it will get renamed"));
     }
@@ -613,7 +613,7 @@ int main(int argc, char *arg[])
       printf("[%s]\n", _("empty history stack"));
   }
 
-  if(!output_ext)
+  if(IS_NULL_PTR(output_ext))
   {
     // by this point we're sure output is not dir, there's no output ext specified
     // so only place to look for it is in filename

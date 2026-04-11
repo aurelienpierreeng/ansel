@@ -51,7 +51,7 @@ int dt_apply_printer_profile(void **in, uint32_t width, uint32_t height, int bpp
   cmsUInt32Number wInput, wOutput;
   int OutputColorSpace;
 
-  if(!hOutProfile || !hInProfile)
+  if(IS_NULL_PTR(hOutProfile) || IS_NULL_PTR(hInProfile))
     return 1;
 
   wInput = ComputeFormatDescriptor (PT_RGB, (bpp==8?1:2));
@@ -65,7 +65,7 @@ int dt_apply_printer_profile(void **in, uint32_t width, uint32_t height, int bpp
      intent,
      black_point_compensation ? cmsFLAGS_BLACKPOINTCOMPENSATION : 0);
 
-  if (!hTransform)
+  if (IS_NULL_PTR(hTransform))
   {
     fprintf(stderr, "error printer profile may be corrupted\n");
     return 1;

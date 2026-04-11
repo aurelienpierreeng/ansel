@@ -1693,19 +1693,19 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 
    ++darktable.gui->reset;
 
-  if(!w || w == g->global_H)
+  if(IS_NULL_PTR(w) || w == g->global_H)
     paint_chroma_slider(g->global_C, p->global_H);
 
-  if(!w || w == g->shadows_H)
+  if(IS_NULL_PTR(w) || w == g->shadows_H)
     paint_chroma_slider(g->shadows_C, p->shadows_H);
 
-  if(!w || w == g->midtones_H)
+  if(IS_NULL_PTR(w) || w == g->midtones_H)
     paint_chroma_slider(g->midtones_C, p->midtones_H);
 
-  if(!w || w == g->highlights_H)
+  if(IS_NULL_PTR(w) || w == g->highlights_H)
     paint_chroma_slider(g->highlights_C, p->highlights_H);
 
-  if(!w || w == g->shadows_weight || w == g->highlights_weight || w == g->mask_grey_fulcrum)
+  if(IS_NULL_PTR(w) || w == g->shadows_weight || w == g->highlights_weight || w == g->mask_grey_fulcrum)
     gtk_widget_queue_draw(GTK_WIDGET(g->area));
 
   --darktable.gui->reset;

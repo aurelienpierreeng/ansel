@@ -159,7 +159,7 @@ static int _picker_sample_box(const dt_iop_module_t *module, const dt_iop_roi_t 
 {
   dt_develop_t *const dev = darktable.develop;
   const dt_colorpicker_sample_t *const sample = dev ? dev->color_picker.primary_sample : NULL;
-  if(!dev || !module || !roi || !sample) return 1;
+  if(IS_NULL_PTR(dev) || IS_NULL_PTR(module) || IS_NULL_PTR(roi) || IS_NULL_PTR(sample)) return 1;
 
   dt_boundingbox_t fbox = { 0.0f };
 
@@ -243,7 +243,7 @@ int dt_iop_color_picker_get_ready_data(const dt_iop_module_t *module, GtkWidget 
                                        const dt_dev_pixelpipe_iop_t **piece)
 {
   dt_develop_t *const dev = darktable.develop;
-  if(!dev || !module || dev->color_picker.pending_module != module || !dev->color_picker.pending_pipe)
+  if(IS_NULL_PTR(dev) || IS_NULL_PTR(module) || dev->color_picker.pending_module != module || IS_NULL_PTR(dev->color_picker.pending_pipe))
     return 1;
 
   dt_dev_pixelpipe_t *const current_pipe = dev->color_picker.pending_pipe;
@@ -261,7 +261,7 @@ int dt_iop_color_picker_get_ready_data(const dt_iop_module_t *module, GtkWidget 
     }
   }
 
-  if(!current_piece)
+  if(IS_NULL_PTR(current_piece))
   {
     dt_print(DT_DEBUG_DEV,
              "[picker] ready-data miss module=%s pending_hash=%" PRIu64 " pipe=%p\n",
@@ -280,7 +280,7 @@ int dt_iop_color_picker_get_ready_data(const dt_iop_module_t *module, GtkWidget 
 
 static dt_color_picker_resample_status_t _sample_picker_from_cache(dt_develop_t *dev)
 {
-  if(!dev || !dev->preview_pipe || !dev->color_picker.picker || !dev->color_picker.enabled
+  if(IS_NULL_PTR(dev) || IS_NULL_PTR(dev->preview_pipe) || IS_NULL_PTR(dev->color_picker.picker) || !dev->color_picker.enabled
      || !dev->color_picker.module || !dev->gui_module || dev->color_picker.module != dev->gui_module
      || !dev->gui_module->enabled)
     return DT_COLOR_PICKER_RESAMPLE_CONSUMED;
@@ -289,7 +289,7 @@ static dt_color_picker_resample_status_t _sample_picker_from_cache(dt_develop_t 
   dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)dt_dev_pixelpipe_get_module_piece(pipe, dev->color_picker.module);
   const dt_dev_pixelpipe_iop_t *const previous_piece
       = dt_dev_pixelpipe_get_prev_enabled_piece(pipe, piece);
-  if(!piece || !previous_piece)
+  if(IS_NULL_PTR(piece) || IS_NULL_PTR(previous_piece))
   {
     dt_print(DT_DEBUG_DEV, "[picker] sample retry module=%s piece=%p prev=%p\n",
              dev->color_picker.module ? dev->color_picker.module->op : "-", (void *)piece, (void *)previous_piece);
@@ -424,7 +424,7 @@ static void _queue_refresh_active_picker(dt_develop_t *dev)
 
 static void _refresh_active_picker(dt_develop_t *dev)
 {
-  if(!dev || !dev->color_picker.picker || !dev->color_picker.enabled) return;
+  if(IS_NULL_PTR(dev) || IS_NULL_PTR(dev->color_picker.picker) || !dev->color_picker.enabled) return;
   if(!dev->color_picker.picker->update_pending && !dev->color_picker.update_pending) return;
 
   dt_print(DT_DEBUG_DEV,
@@ -440,7 +440,7 @@ static void _refresh_active_picker(dt_develop_t *dev)
      loops and prevents the current run from ever publishing the cacheline we are waiting for. */
   if(dev->preview_pipe && dev->preview_pipe->processing) return;
 
-  if(!dev->color_picker.module)
+  if(IS_NULL_PTR(dev->color_picker.module))
   {
     /* The global picker already samples from histogram backbuffers published by preview updates.
        Refresh it directly from that GUI-owned cache when possible so dragging the picker updates
@@ -485,7 +485,7 @@ static void _color_picker_widget_destroy(GtkWidget *widget, dt_iop_color_picker_
 {
   (void)widget;
   dt_develop_t *const dev = darktable.develop;
-  if(!dev || dev->color_picker.picker != picker) return;
+  if(IS_NULL_PTR(dev) || dev->color_picker.picker != picker) return;
 
   dev->color_picker.picker = NULL;
   dev->color_picker.widget = NULL;
@@ -665,7 +665,7 @@ void dt_iop_color_picker_request_update(void)
 gboolean dt_iop_color_picker_force_cache(const dt_develop_t *dev, const dt_dev_pixelpipe_t *pipe,
                                          const dt_iop_module_t *module)
 {
-  if(!dev || !pipe || !module || pipe != dev->preview_pipe || !dev->color_picker.enabled
+  if(IS_NULL_PTR(dev) || IS_NULL_PTR(pipe) || IS_NULL_PTR(module) || pipe != dev->preview_pipe || !dev->color_picker.enabled
      || !dev->color_picker.module || !dev->gui_module || dev->color_picker.module != dev->gui_module
      || !dev->gui_module->enabled)
     return FALSE;
@@ -679,13 +679,13 @@ gboolean dt_iop_color_picker_force_cache(const dt_develop_t *dev, const dt_dev_p
 
 static void _track_active_picker_hashes(dt_develop_t *dev)
 {
-  if(!dev)
+  if(IS_NULL_PTR(dev))
     return;
 
   dev->color_picker.wait_input_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
   dev->color_picker.wait_output_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
 
-  if(!dev->preview_pipe || !dev->color_picker.picker || !dev->color_picker.enabled
+  if(IS_NULL_PTR(dev->preview_pipe) || IS_NULL_PTR(dev->color_picker.picker) || !dev->color_picker.enabled
      || !dev->color_picker.module || !dev->gui_module || dev->color_picker.module != dev->gui_module
      || !dev->gui_module->enabled)
     return;

@@ -177,7 +177,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   if(sigma_1 != 0.f)
   {
     dt_gaussian_t *g = dt_gaussian_init(width, height, ch, RGBmax, RGBmin, sigma_1, 0);
-    if(!g)
+    if(IS_NULL_PTR(g))
     {
       dt_pixelpipe_cache_free_align(temp);
       return 1;
@@ -243,7 +243,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
       make_noise(output, noise, width, height);
 
     dt_gaussian_t *g = dt_gaussian_init(width, height, ch, RGBmax, RGBmin, sigma_2, 0);
-    if(!g)
+    if(IS_NULL_PTR(g))
     {
       dt_pixelpipe_cache_free_align(temp);
       return 1;
@@ -311,7 +311,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   if(d->lowpass_algo == LOWPASS_ALGO_GAUSSIAN)
   {
     g = dt_gaussian_init_cl(devid, width, height, channels, RGBmax, RGBmin, sigma, order);
-    if(!g) goto error;
+    if(IS_NULL_PTR(g)) goto error;
     err = dt_gaussian_blur_cl(g, dev_in, dev_out);
     if(err != CL_SUCCESS) goto error;
     dt_gaussian_free_cl(g);
@@ -324,7 +324,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     const float detail = -1.0f; // we want the bilateral base layer
 
     b = dt_bilateral_init_cl(devid, width, height, sigma_s, sigma_r);
-    if(!b) goto error;
+    if(IS_NULL_PTR(b)) goto error;
     err = dt_bilateral_splat_cl(b, dev_in);
     if(err != CL_SUCCESS) goto error;
     err = dt_bilateral_blur_cl(b);

@@ -424,14 +424,14 @@ static inline void _develop_blend_process_free_region(float *const restrict inpu
 static const dt_iop_module_t *_develop_blend_get_raster_source_module(const dt_develop_blend_params_t *const params,
                                                                       const dt_iop_module_t *const self)
 {
-  if(!params || !self) return NULL;
+  if(IS_NULL_PTR(params) || IS_NULL_PTR(self)) return NULL;
 
   const dt_iop_module_t *source = self->raster_mask.sink.source;
   if(source && !strcmp(source->op, params->raster_mask_source)
      && source->multi_priority == params->raster_mask_instance)
     return source;
 
-  if(!self->dev || params->raster_mask_source[0] == '\0') return NULL;
+  if(IS_NULL_PTR(self->dev) || params->raster_mask_source[0] == '\0') return NULL;
 
   for(GList *iter = g_list_first(self->dev->iop); iter; iter = g_list_next(iter))
   {
@@ -648,7 +648,7 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *p
 
   // allocate space for blend mask
   float *const restrict _mask = dt_pixelpipe_cache_alloc_align_float(buffsize, pipe);
-  if(!_mask)
+  if(IS_NULL_PTR(_mask))
   {
     dt_control_log(_("could not allocate buffer for blending"));
     return 1;
@@ -680,7 +680,7 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *p
       if(use_drawn_mask)
       {
         float *const restrict drawn_mask = dt_pixelpipe_cache_alloc_align_float(buffsize, pipe);
-        if(!drawn_mask)
+        if(IS_NULL_PTR(drawn_mask))
         {
           dt_control_log(_("could not allocate buffer for blending"));
           dt_pixelpipe_cache_free_align(_mask);
@@ -1048,7 +1048,7 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_t
 
   // allocate space for blend mask
   float *_mask = dt_pixelpipe_cache_alloc_align_float(buffsize, pipe);
-  if(!_mask)
+  if(IS_NULL_PTR(_mask))
   {
     dt_control_log(_("could not allocate buffer for blending"));
     return 1;
@@ -1164,7 +1164,7 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_t
       if(use_drawn_mask)
       {
         float *const restrict drawn_mask = dt_pixelpipe_cache_alloc_align_float(buffsize, pipe);
-        if(!drawn_mask) goto error;
+        if(IS_NULL_PTR(drawn_mask)) goto error;
 
         if(_develop_blend_init_drawn_mask(d, self, pipe, piece, roi_out, drawn_mask, owidth, oheight) != 0)
         {
@@ -1275,7 +1275,7 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_t
         const float mmin[] = { 0.0f };
 
         dt_gaussian_cl_t *g = dt_gaussian_init_cl(devid, owidth, oheight, 1, mmax, mmin, sigma, 0);
-        if(!g) goto error;
+        if(IS_NULL_PTR(g)) goto error;
         err = dt_gaussian_blur_cl(g, dev_mask_1, dev_mask_2);
         dt_gaussian_free_cl(g);
         if(err != CL_SUCCESS) goto error;

@@ -43,7 +43,7 @@
 
   dt_print(DT_DEBUG_CONTROL, "[" INCLUDE_API_FROM_MODULE_LOAD "] loading `%s' from %s\n", module_name, libname);
   module->module = g_module_open(libname, G_MODULE_BIND_LAZY | G_MODULE_BIND_LOCAL);
-  if(!module->module) goto api_h_error;
+  if(IS_NULL_PTR(module->module)) goto api_h_error;
   int (*version)();
   if(!g_module_symbol(module->module, "dt_module_dt_version", (gpointer) & (version))) goto api_h_error;
   if(version() != dt_version())

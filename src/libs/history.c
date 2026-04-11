@@ -426,7 +426,7 @@ static const dt_dev_history_item_t * _find_previous_history_step(const dt_dev_hi
 
 static gchar *_create_tooltip_text(const dt_dev_history_item_t *hitem)
 {
-  if(!hitem || !hitem->module) return NULL;
+  if(IS_NULL_PTR(hitem) || !hitem->module) return NULL;
 
   const dt_dev_history_item_t *hprev = _find_previous_history_step(hitem);
   dt_iop_params_t *old_params
@@ -548,10 +548,10 @@ static gboolean _changes_tooltip_callback(GtkWidget *widget, gint x, gint y, gbo
                                           GtkTooltip *tooltip)
 {
   const gchar *tooltip_text = g_object_get_data(G_OBJECT(widget), "tooltip-text");
-  if(!tooltip_text || !tooltip_text[0]) return FALSE;
+  if(IS_NULL_PTR(tooltip_text) || !tooltip_text[0]) return FALSE;
 
   static GtkWidget *view = NULL;
-  if(!view)
+  if(IS_NULL_PTR(view))
   {
     view = gtk_text_view_new();
     dt_gui_add_class(view, "dt_transparent_background");
@@ -568,7 +568,7 @@ static gboolean _changes_tooltip_callback(GtkWidget *widget, gint x, gint y, gbo
   for(gchar *line = (gchar *)tooltip_text; *line;)
   {
     gchar *endline = g_strstr_len(line, -1, "\n");
-    if(!endline) endline = line + strlen(line);
+    if(IS_NULL_PTR(endline)) endline = line + strlen(line);
 
     gchar *found_tab1 = g_strstr_len(line, endline - line, "\t");
     if(found_tab1)
@@ -817,7 +817,7 @@ static void _lib_history_view_selection_changed(GtkTreeSelection *selection, gpo
 {
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
   dt_lib_history_t *d = (dt_lib_history_t *)self->data;
-  if(!d || d->selection_reset || darktable.gui->reset) return;
+  if(IS_NULL_PTR(d) || d->selection_reset || darktable.gui->reset) return;
 
   GtkTreeModel *model = NULL;
   GtkTreeIter iter;

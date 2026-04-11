@@ -551,7 +551,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   if(type == DT_WTM_SVG)
   {
     svgdoc = _watermark_get_svgdoc(self, data, &pipe->image, filename);
-    if(!svgdoc)
+    if(IS_NULL_PTR(svgdoc))
     {
       dt_iop_image_copy_by_size(ovoid, ivoid, roi_out->width, roi_out->height, ch);
       return 0;
@@ -595,7 +595,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     GError *error = NULL;
     svg = rsvg_handle_new_from_data((const guint8 *)svgdoc, strlen(svgdoc), &error);
     dt_free(svgdoc);
-    if(!svg || error)
+    if(IS_NULL_PTR(svg) || error)
     {
       cairo_surface_destroy(surface);
       dt_free(image);

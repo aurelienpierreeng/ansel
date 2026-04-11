@@ -4020,12 +4020,12 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 
   ++darktable.gui->reset;
 
-  if(!w || w == g->hue_spot || w == g->chroma_spot || w == g->lightness_spot || w == g->spot_settings)
+  if(IS_NULL_PTR(w) || w == g->hue_spot || w == g->chroma_spot || w == g->lightness_spot || w == g->spot_settings)
   {
     paint_hue(self);
   }
 
-  if(!w || w == g->illuminant || w == g->illum_fluo || w == g->illum_led || w == g->temperature)
+  if(IS_NULL_PTR(w) || w == g->illuminant || w == g->illum_fluo || w == g->illum_led || w == g->temperature)
   {
     update_illuminants(self);
     update_approx_cct(self);
@@ -4052,14 +4052,14 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
   if(w == g->adaptation)
     update_illuminants(self);
 
-  if(!w || w == g->adaptation || primaries_widget || w == g->scale_red_R   || w == g->scale_red_G   || w == g->scale_red_B   || w == g->normalize_R)
+  if(IS_NULL_PTR(w) || w == g->adaptation || primaries_widget || w == g->scale_red_R   || w == g->scale_red_G   || w == g->scale_red_B   || w == g->normalize_R)
     _update_RGB_colors(self, 1, 0, 0, p->normalize_R, p->red, g->scale_red_R, g->scale_red_G, g->scale_red_B);
-  if(!w || w == g->adaptation || primaries_widget || w == g->scale_green_R || w == g->scale_green_G || w == g->scale_green_B || w == g->normalize_G)
+  if(IS_NULL_PTR(w) || w == g->adaptation || primaries_widget || w == g->scale_green_R || w == g->scale_green_G || w == g->scale_green_B || w == g->normalize_G)
     _update_RGB_colors(self, 0, 1, 0, p->normalize_G, p->green, g->scale_green_R, g->scale_green_G, g->scale_green_B);
-  if(!w || w == g->adaptation || primaries_widget || w == g->scale_blue_R  || w == g->scale_blue_G  || w == g->scale_blue_B  || w == g->normalize_B)
+  if(IS_NULL_PTR(w) || w == g->adaptation || primaries_widget || w == g->scale_blue_R  || w == g->scale_blue_G  || w == g->scale_blue_B  || w == g->normalize_B)
     _update_RGB_colors(self, 0, 0, 1, p->normalize_B, p->blue, g->scale_blue_R, g->scale_blue_G, g->scale_blue_B);
 
-  if(rows_are_normalized && !simple_widget && (!w || complete_widget))
+  if(rows_are_normalized && !simple_widget && (IS_NULL_PTR(w) || complete_widget))
   {
     float error = INFINITY;
     if(!_channelmixerrgb_sync_simple_from_params(self, &error))
@@ -4078,7 +4078,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
     }
   }
 
-  if(!primaries_widget && (!w || complete_widget || simple_widget || w == g->adaptation))
+  if(!primaries_widget && (IS_NULL_PTR(w) || complete_widget || simple_widget || w == g->adaptation))
   {
     float error = INFINITY;
     if(!_channelmixerrgb_sync_primaries_from_params(self, &error))
@@ -4093,10 +4093,10 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
     }
   }
 
-  if(!w || w == g->adaptation || complete_widget || simple_widget || primaries_widget)
+  if(IS_NULL_PTR(w) || w == g->adaptation || complete_widget || simple_widget || primaries_widget)
     _channelmixerrgb_update_simple_colors(self);
 
-  if(!w || w == g->adaptation || complete_widget || simple_widget || primaries_widget)
+  if(IS_NULL_PTR(w) || w == g->adaptation || complete_widget || simple_widget || primaries_widget)
     _channelmixerrgb_update_primaries_colors(self);
 
   // if grey channel is used and norm = 0 and normalization = ON, we are going to have a division by zero

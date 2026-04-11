@@ -199,7 +199,7 @@ static char * or_operator(int *term)
 
 void dt_collection_memory_update()
 {
-  if(!darktable.collection || !darktable.db) return;
+  if(IS_NULL_PTR(darktable.collection) || IS_NULL_PTR(darktable.db)) return;
   sqlite3_stmt *stmt;
 
   /* check if we can get a query from collection */
@@ -551,7 +551,7 @@ void dt_collection_reset(const dt_collection_t *collection)
 const gchar *dt_collection_get_query(const dt_collection_t *collection)
 {
   /* ensure there is a query string for collection */
-  if(!collection->query) dt_collection_update(collection);
+  if(IS_NULL_PTR(collection->query)) dt_collection_update(collection);
 
   return collection->query;
 }
@@ -817,7 +817,7 @@ static int _dt_collection_store(const dt_collection_t *collection, gchar *query)
 static uint32_t _dt_collection_compute_count(dt_collection_t *collection)
 {
   uint32_t count = 1;
-  if(!_collection_count_stmt)
+  if(IS_NULL_PTR(_collection_count_stmt))
   {
     DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
                                 "SELECT COUNT(DISTINCT imgid) from memory.collected_images",
@@ -844,7 +844,7 @@ GList *dt_collection_get(const dt_collection_t *collection, int limit)
   {
     if(collection->params.query_flags & COLLECTION_QUERY_USE_LIMIT)
     {
-      if(!_collection_get_limit_stmt)
+      if(IS_NULL_PTR(_collection_get_limit_stmt))
       {
         DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
                                     "SELECT imgid FROM memory.collected_images LIMIT -1, ?1",
@@ -863,7 +863,7 @@ GList *dt_collection_get(const dt_collection_t *collection, int limit)
     }
     else
     {
-      if(!_collection_get_stmt)
+      if(IS_NULL_PTR(_collection_get_stmt))
       {
         DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
                                     "SELECT imgid FROM memory.collected_images",
@@ -1042,7 +1042,7 @@ void dt_collection_split_operator_datetime(const gchar *input, char **number1, c
   }
 
   // ensure operator is not null
-  if(!*operator) *operator= g_strdup("");
+  if(IS_NULL_PTR(*operator)) *operator= g_strdup("");
 
   g_match_info_free(match_info);
   g_regex_unref(regex);
@@ -1127,7 +1127,7 @@ void dt_collection_get_makermodels(const gchar *filter, GList **sanitized, GList
       needle[strlen(needle) - 1] = '\0';
   }
 
-  if(!_collection_get_makermodels_stmt)
+  if(IS_NULL_PTR(_collection_get_makermodels_stmt))
   {
     DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
                                 "SELECT maker, model FROM main.images GROUP BY maker, model",
@@ -1144,7 +1144,7 @@ void dt_collection_get_makermodels(const gchar *filter, GList **sanitized, GList
     gchar *makermodel =  dt_collection_get_makermodel(exif_maker, exif_model);
 
     gchar *haystack = g_utf8_strdown(makermodel, -1);
-    if (!needle || (wildcard && g_strrstr(haystack, needle) != NULL)
+    if (IS_NULL_PTR(needle) || (wildcard && g_strrstr(haystack, needle) != NULL)
                 || (!wildcard && !g_strcmp0(haystack, needle)))
     {
       if (exif)
@@ -1696,7 +1696,7 @@ static gchar *get_query_string(const dt_collection_properties_t property, const 
   }
   sqlite3_free(escaped_text);
 
-  if(!query) // We've screwed up and not done a query string, send a placeholder
+  if(IS_NULL_PTR(query)) // We've screwed up and not done a query string, send a placeholder
     query = g_strdup_printf("(1=1)");
 
   return query;
@@ -1806,7 +1806,7 @@ static void _update_recentcollections()
   {
     snprintf(confname, sizeof(confname), "plugins/lighttable/recentcollect/line%1d", k);
     const char *line = dt_conf_get_string_const(confname);
-    if(!line) continue;
+    if(IS_NULL_PTR(line)) continue;
     if(!strcmp(line, buf))
     {
       snprintf(confname, sizeof(confname), "plugins/lighttable/recentcollect/pos%1d", k);
@@ -1934,7 +1934,7 @@ void dt_collection_update_query(const dt_collection_t *collection, dt_collection
     snprintf(confname, sizeof(confname), "plugins/lighttable/collect/mode%1d", i);
     const int mode = dt_conf_get_int(confname);
 
-    if(!text || text[0] == '\0')
+    if(IS_NULL_PTR(text) || text[0] == '\0')
     {
       if (mode == 1) // for OR show all
         query_parts[i] = g_strdup(" OR 1=1");
@@ -2064,7 +2064,7 @@ static int dt_collection_image_offset_with_collection(const dt_collection_t *col
 {
   if(imgid == UNKNOWN_IMAGE) return 0;
   int offset = 0;
-  if(!_collection_image_offset_stmt)
+  if(IS_NULL_PTR(_collection_image_offset_stmt))
   {
     DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
                                 "SELECT imgid FROM memory.collected_images",

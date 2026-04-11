@@ -82,7 +82,7 @@ dt_imageio_retval_t dt_imageio_open_gm(dt_image_t *img, const char *filename, dt
 
   image = ReadImage(image_info, &exception);
   if(exception.severity != UndefinedException) CatchException(&exception);
-  if(!image)
+  if(IS_NULL_PTR(image))
   {
     fprintf(stderr, "[GraphicsMagick_open] image `%s' not found\n", img->filename);
     err = DT_IMAGEIO_FILE_NOT_FOUND;
@@ -116,7 +116,7 @@ dt_imageio_retval_t dt_imageio_open_gm(dt_image_t *img, const char *filename, dt
 
   img->loader = LOADER_GM;
 
-  if(!mbuf)
+  if(IS_NULL_PTR(mbuf))
   {
     if(image) DestroyImage(image);
     if(image_info) DestroyImageInfo(image_info);
@@ -125,7 +125,7 @@ dt_imageio_retval_t dt_imageio_open_gm(dt_image_t *img, const char *filename, dt
   }
 
   float *mipbuf = (float *)dt_mipmap_cache_alloc(mbuf, img);
-  if(!mipbuf)
+  if(IS_NULL_PTR(mipbuf))
   {
     fprintf(stderr, "[GraphicsMagick_open] could not alloc full buffer for image `%s'\n", img->filename);
     err = DT_IMAGEIO_CACHE_FULL;

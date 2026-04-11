@@ -189,7 +189,7 @@ static void get_language_names(GList *languages)
 
   // go over the json
   JsonNode *root = json_parser_get_root(parser);
-  if(!root)
+  if(IS_NULL_PTR(root))
   {
     fprintf(stderr, "[l10n] error: can't get root node of `%s'\n", filename);
     goto end;
@@ -319,7 +319,7 @@ dt_l10n_t *dt_l10n_init(gboolean init_list)
 
 #if defined(_WIN32)
   // get the default locale if no language preference was specified in the config file
-  if(!ui_lang || !*ui_lang)
+  if(IS_NULL_PTR(ui_lang) || !*ui_lang)
   {
     const wchar_t *wcLocaleName = NULL;
     wcLocaleName = dtwin_get_locale();
@@ -409,7 +409,7 @@ dt_l10n_t *dt_l10n_init(gboolean init_list)
       fprintf(stderr, "[l10n] error: can't open directory `%s'\n", localedir);
 
     // default to English if no other language matched
-    if(!sys_default)
+    if(IS_NULL_PTR(sys_default))
     {
       sys_default = g_list_last(result->languages)->data;
       sys_default->is_default = TRUE;

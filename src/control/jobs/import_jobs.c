@@ -563,7 +563,7 @@ static void *_control_import_alloc()
   if(IS_NULL_PTR(params)) return NULL;
 
   params->data = g_malloc0(sizeof(dt_control_import_t));
-  if(!params->data)
+  if(IS_NULL_PTR(params->data))
   {
     _control_import_job_cleanup(params);
     return NULL;
@@ -576,7 +576,7 @@ static dt_job_t *_control_import_job_create(dt_control_import_t data)
   dt_job_t *job = dt_control_job_create(&_control_import_job_run, "import");
   if(IS_NULL_PTR(job)) return NULL;
   dt_control_image_enumerator_t *params = _control_import_alloc();
-  if(!params)
+  if(IS_NULL_PTR(params))
   {
     dt_control_job_dispose(job);
     return NULL;

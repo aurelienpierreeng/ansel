@@ -80,7 +80,7 @@ static int vng_interpolate(float *out, const float *const in,
   char *buffer = (char *)dt_pixelpipe_cache_alloc_align_cache(
       sizeof(**brow) * width * 3 + sizeof(*ip) * prow * pcol * 320,
       0);
-  if(!buffer)
+  if(IS_NULL_PTR(buffer))
   {
     fprintf(stderr, "[demosaic] not able to allocate VNG buffer\n");
     return 1;

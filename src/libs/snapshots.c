@@ -522,7 +522,7 @@ static int direction_member(lua_State *L)
   if(lua_gettop(L) != 3)
   {
     snapshot_direction_t result;
-    if(!d->vertical && !d->inverted)
+    if(IS_NULL_PTR(d->vertical) && IS_NULL_PTR(d->inverted))
     {
       result = SNS_TOP;
     }
@@ -575,7 +575,7 @@ static int ratio_member(lua_State *L)
   dt_lib_snapshots_t *d = (dt_lib_snapshots_t *)self->data;
   if(lua_gettop(L) != 3)
   {
-    if(!d->vertical && !d->inverted)
+    if(IS_NULL_PTR(d->vertical) && IS_NULL_PTR(d->inverted))
     {
       lua_pushnumber(L, d->vp_ypointer);
     }
@@ -599,7 +599,7 @@ static int ratio_member(lua_State *L)
     luaA_to(L, double, &ratio, 3);
     if(ratio < 0.0) ratio = 0.0;
     if(ratio > 1.0) ratio = 1.0;
-    if(!d->vertical && !d->inverted)
+    if(IS_NULL_PTR(d->vertical) && IS_NULL_PTR(d->inverted))
     {
       d->vp_ypointer = ratio;
     }

@@ -56,7 +56,7 @@ dt_imageio_retval_t dt_imageio_open_heif(dt_image_t *img,
   struct heif_image* heif_img = NULL;
 
   struct heif_context* ctx = heif_context_alloc();
-  if(!ctx)
+  if(IS_NULL_PTR(ctx))
   {
     dt_print(DT_DEBUG_IMAGEIO,
              "Unable to allocate HEIF context\n");
@@ -153,7 +153,7 @@ dt_imageio_retval_t dt_imageio_open_heif(dt_image_t *img,
 
   img->loader = LOADER_HEIF;
 
-  if(!mbuf)
+  if(IS_NULL_PTR(mbuf))
   {
     ret = DT_IMAGEIO_OK;
     goto out;
@@ -234,7 +234,7 @@ int dt_imageio_heif_read_profile(const char *filename,
   uint8_t *icc_data = NULL;
 
   struct heif_context* ctx = heif_context_alloc();
-  if(!ctx)
+  if(IS_NULL_PTR(ctx))
   {
     dt_print(DT_DEBUG_IMAGEIO,
              "Unable to allocate HEIF context\n");

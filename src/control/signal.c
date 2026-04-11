@@ -340,7 +340,7 @@ void dt_control_signal_raise(const dt_control_signal_t *ctlsig, dt_signal_t sign
   if(IS_NULL_PTR(params)) return;
 
   GValue *instance_and_params = calloc(1 + signal_description->n_params, sizeof(GValue));
-  if(!instance_and_params)
+  if(IS_NULL_PTR(instance_and_params))
   {
     dt_free(params);
     return;

@@ -196,7 +196,7 @@ int write_image(dt_imageio_module_data_t *tmp, const char *filename, const void 
     green_color = (cmsCIEXYZ *)cmsReadTag(out_profile, cmsSigGreenColorantTag);
     blue_color = (cmsCIEXYZ *)cmsReadTag(out_profile, cmsSigBlueColorantTag);
 
-    if(!red_curve || !green_curve || !blue_curve || !red_color || !green_color || !blue_color)
+    if(IS_NULL_PTR(red_curve) || IS_NULL_PTR(green_curve) || IS_NULL_PTR(blue_curve) || IS_NULL_PTR(red_color) || IS_NULL_PTR(green_color) || IS_NULL_PTR(blue_color))
       goto icc_error;
 
     if(!cmsIsToneCurveLinear(red_curve) || !cmsIsToneCurveLinear(green_curve) || !cmsIsToneCurveLinear(blue_curve))

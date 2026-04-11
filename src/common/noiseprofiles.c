@@ -117,7 +117,7 @@ static gboolean dt_noiseprofile_verify(JsonParser *parser)
   dt_print(DT_DEBUG_CONTROL, "[noiseprofile] verifying noiseprofile file\n");
 
   JsonNode *root = json_parser_get_root(parser);
-  if(!root) _ERROR("can't get the root node");
+  if(IS_NULL_PTR(root)) _ERROR("can't get the root node");
 
   reader = json_reader_new(root);
 
@@ -235,7 +235,7 @@ GList *dt_noiseprofile_get_matching(const dt_image_t *cimg)
   JsonReader *reader = NULL;
   GList *result = NULL;
 
-  if(!parser) goto end;
+  if(IS_NULL_PTR(parser)) goto end;
 
   JsonNode *root = json_parser_get_root(parser);
 

@@ -42,7 +42,7 @@ int dt_iop_alloc_image_buffers(struct dt_iop_module_t *const module,
     float **bufptr = va_arg(args,float**);
     if (size & DT_IMGSZ_PERTHREAD)
       (void)va_arg(args,size_t*);    // skip the extra pointer for per-thread allocations
-    if (size == 0 || !bufptr)        // end of arg list?
+    if (size == 0 || IS_NULL_PTR(bufptr))        // end of arg list?
       break;
     *bufptr = NULL;
   }
@@ -55,7 +55,7 @@ int dt_iop_alloc_image_buffers(struct dt_iop_module_t *const module,
     const int size = va_arg(args,int);
     float **bufptr = va_arg(args,float**);
     size_t *paddedsize = (size & DT_IMGSZ_PERTHREAD) ? va_arg(args,size_t*) : NULL;
-    if (size == 0 || !bufptr)
+    if (size == 0 || IS_NULL_PTR(bufptr))
       break;
     const size_t channels = size & DT_IMGSZ_CH_MASK;
     size_t nfloats;
@@ -119,7 +119,7 @@ int dt_iop_alloc_image_buffers(struct dt_iop_module_t *const module,
       float **bufptr = va_arg(args,float**);
       if (size & DT_IMGSZ_PERTHREAD)
         (void)va_arg(args,size_t*);  // skip the extra pointer for per-thread allocations
-      if (size == 0 || !bufptr || !*bufptr)
+      if (size == 0 || IS_NULL_PTR(bufptr) || !*bufptr)
         break;  // end of arg list or this attempted allocation failed
       dt_pixelpipe_cache_free_align(*bufptr);
       *bufptr = NULL;

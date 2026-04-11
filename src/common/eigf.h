@@ -177,7 +177,7 @@ static inline int eigf_variance_analysis_no_mask(const float *const restrict gui
   float max[2] = {maxg, maxg2};
   float min[2] = {ming, ming2};
   g = dt_gaussian_init(width, height, 2, max, min, sigma, 0);
-  if(!g)
+  if(IS_NULL_PTR(g))
   {
     err = 1;
     goto error;
@@ -286,7 +286,7 @@ static inline int fast_eigf_surface_blur(float *const restrict image,
   float *const restrict ds_av = dt_pixelpipe_cache_alloc_align_float_cache(dt_round_size_sse(num_elem_ds * 4), 0);
   float *const restrict av = dt_pixelpipe_cache_alloc_align_float_cache(dt_round_size_sse(num_elem * 4), 0);
 
-  if(!ds_image || !ds_mask || !ds_av || !av || !mask)
+  if(IS_NULL_PTR(ds_image) || IS_NULL_PTR(ds_mask) || IS_NULL_PTR(ds_av) || IS_NULL_PTR(av) || IS_NULL_PTR(mask))
   {
     err = 1;
     goto error;

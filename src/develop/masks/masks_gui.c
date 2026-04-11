@@ -40,7 +40,7 @@ typedef struct dt_masks_gui_interaction_slider_t
 
 static void _masks_gui_interaction_apply_value(dt_masks_gui_interaction_slider_t *data, float value)
 {
-  if(!data || !data->form_group) return;
+  if(IS_NULL_PTR(data) || IS_NULL_PTR(data->form_group)) return;
 
   if(data->increment == DT_MASKS_INCREMENT_ABSOLUTE) // aka opacity
   {
@@ -68,7 +68,7 @@ static void _masks_gui_menu_item_block_activate(GtkWidget *widget, gpointer user
 static gboolean _masks_gui_menu_item_forward_event(GtkWidget *widget, GdkEvent *event, gpointer user_data)
 {
   dt_masks_gui_interaction_slider_t *data = (dt_masks_gui_interaction_slider_t *)user_data;
-  if(!data || !data->slider) return FALSE;
+  if(IS_NULL_PTR(data) || !data->slider) return FALSE;
 
   GdkEvent *copy = gdk_event_copy(event);
   if(IS_NULL_PTR(copy)) return FALSE;
@@ -143,7 +143,7 @@ static gboolean _masks_gui_menu_item_forward_event(GtkWidget *widget, GdkEvent *
 static void _masks_gui_interaction_slider_changed(GtkWidget *widget, gpointer user_data)
 {
   dt_masks_gui_interaction_slider_t *data = (dt_masks_gui_interaction_slider_t *)user_data;
-  if(!data || !data->form_group) return;
+  if(IS_NULL_PTR(data) || IS_NULL_PTR(data->form_group)) return;
 
   _masks_gui_interaction_apply_value(data, dt_bauhaus_slider_get(widget));
 }
@@ -207,7 +207,7 @@ static GtkWidget *_masks_gui_add_interaction_slider(GtkWidget *menu, const char 
 
 static int _masks_gui_confirm_remove_form_dialog(const char *form_name)
 {
-  if(!darktable.gui || !darktable.gui->ui) return GTK_RESPONSE_NO;
+  if(IS_NULL_PTR(darktable.gui) || IS_NULL_PTR(darktable.gui->ui)) return GTK_RESPONSE_NO;
 
   GtkWidget *dialog = gtk_message_dialog_new(
       GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)),
@@ -237,7 +237,7 @@ static int _masks_gui_form_group_use_count(const dt_develop_t *dev, const int fo
   for(GList *form_node = dev->forms; form_node; form_node = g_list_next(form_node))
   {
     dt_masks_form_t *group_form = (dt_masks_form_t *)form_node->data;
-    if(!group_form || !(group_form->type & DT_MASKS_GROUP)) continue;
+    if(IS_NULL_PTR(group_form) || !(group_form->type & DT_MASKS_GROUP)) continue;
 
     for(GList *group_node = group_form->points; group_node; group_node = g_list_next(group_node))
     {
@@ -355,7 +355,7 @@ static void _masks_move_up_down_callback(gpointer user_data, const int up)
   dt_masks_form_group_t *fpt = dt_masks_form_get_selected_group(forms, gui);
   if(IS_NULL_PTR(fpt)) return;
   dt_masks_form_t *grp = dt_masks_get_from_id(darktable.develop, fpt->parentid);
-  if(!grp || !(grp->type & DT_MASKS_GROUP)) return;
+  if(IS_NULL_PTR(grp) || !(grp->type & DT_MASKS_GROUP)) return;
 
   dt_masks_form_move(grp, fpt->formid, up);
 
@@ -377,7 +377,7 @@ static void _masks_movedown_callback(GtkWidget *menu, gpointer user_data)
 static void _masks_operation_callback(GtkWidget *menu, gpointer user_data)
 {
   dt_masks_form_gui_t *gui = (dt_masks_form_gui_t *)user_data;
-  if(!gui || !menu) return;
+  if(IS_NULL_PTR(gui) || IS_NULL_PTR(menu)) return;
 
   const guint form_pos = GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(menu), "form_pos"));
   const dt_masks_state_t state_op = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(menu), "state_op"));

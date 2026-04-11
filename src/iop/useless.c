@@ -466,7 +466,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
   // Test which widget was changed.
   // If allowing IS_NULL_PTR(w), this can be called from gui_update, so that
   // gui configuration adjustments only need to be dealt with once, here.
-  if(!w || w == g->method)
+  if(IS_NULL_PTR(w) || w == g->method)
   {
     gtk_widget_set_visible(g->check, p->method == DT_USELESS_SECOND);
   }

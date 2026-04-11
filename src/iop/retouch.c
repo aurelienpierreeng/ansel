@@ -390,11 +390,11 @@ static int rt_get_index_from_formid(dt_iop_retouch_params_t *p, const int formid
 
 static int rt_get_selected_shape_id(const dt_iop_module_t *self)
 {
-  if(!self || !self->dev) return 0;
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev)) return 0;
 
   const dt_masks_form_gui_t *gui = self->dev->form_gui;
   const dt_masks_form_t *visible_form = dt_masks_get_visible_form(self->dev);
-  if(!gui || !visible_form || !(visible_form->type & DT_MASKS_GROUP)) return 0;
+  if(IS_NULL_PTR(gui) || !visible_form || !(visible_form->type & DT_MASKS_GROUP)) return 0;
 
   const dt_masks_form_group_t *selected_group_entry
       = dt_masks_form_get_selected_group_live(visible_form, gui);
@@ -691,7 +691,7 @@ static void rt_show_forms_for_current_scale(dt_iop_module_t *self)
     {
       const int formid = p->rt_forms[i].formid;
       dt_masks_form_t *form = dt_masks_get_from_id(darktable.develop, formid);
-      if(!form) continue;
+      if(IS_NULL_PTR(form)) continue;
       
       dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)malloc(sizeof(dt_masks_form_group_t));
       fpt->formid = formid;
@@ -727,7 +727,7 @@ static void rt_resynch_params(struct dt_iop_module_t *self)
 
   // we go through all forms in blend params
   dt_masks_form_t *grp = dt_masks_get_from_id(darktable.develop, bp->mask_id);
-  if(!grp || !(grp->type & DT_MASKS_GROUP))
+  if(IS_NULL_PTR(grp) || !(grp->type & DT_MASKS_GROUP))
     return;
   
   int new_form_index = 0;
@@ -752,7 +752,7 @@ static void rt_resynch_params(struct dt_iop_module_t *self)
     {
       // if it does not exists, add it to the new array
       const dt_masks_form_t *parent_form = dt_masks_get_from_id(darktable.develop, formid);
-      if(!parent_form) continue;
+      if(IS_NULL_PTR(parent_form)) continue;
       
       forms_d[new_form_index].formid = formid;
       forms_d[new_form_index].scale = p->curr_scale;
@@ -903,7 +903,7 @@ static int rt_masks_get_delta_to_destination(dt_iop_module_t *self, const dt_dev
                                              const dt_iop_roi_t *roi, dt_masks_form_t *form, float *dx, float *dy,
                                              const int distort_mode)
 {
-  if(!form || !form->points) return 0;
+  if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return 0;
   int res = 0;
 
   if(form->type & DT_MASKS_POLYGON)
@@ -992,10 +992,10 @@ static int rt_shape_is_being_added(dt_iop_module_t *self, const int shape_type)
     if(dt_masks_get_visible_form(self->dev)->type & DT_MASKS_GROUP)
     {
       GList *forms = dt_masks_get_visible_form(self->dev)->points;
-      if(!forms) goto end;
+      if(IS_NULL_PTR(forms)) goto end;
       
       dt_masks_form_group_t *grpt = (dt_masks_form_group_t *)forms->data;
-      if(!grpt) goto end;
+      if(IS_NULL_PTR(grpt)) goto end;
       
       const dt_masks_form_t *form = dt_masks_get_from_id(darktable.develop, grpt->formid);
       if(form) being_added = (form->type & shape_type);
@@ -2549,7 +2549,7 @@ static void rt_compute_roi_in(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *
     for(const GList *forms = grp->points; forms; forms = g_list_next(forms))
     {
       const dt_masks_form_group_t *grpt = (dt_masks_form_group_t *)forms->data;
-      if(!grpt) continue;
+      if(IS_NULL_PTR(grpt)) continue;
       
       const int formid = grpt->formid;
       const int index = rt_get_index_from_formid(p, formid);
@@ -2560,7 +2560,7 @@ static void rt_compute_roi_in(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *
 
       // we get the spot
       dt_masks_form_t *form = dt_masks_get_from_id(self->dev, formid);
-      if(!form) continue;
+      if(IS_NULL_PTR(form)) continue;
         
       // if the form is outside the roi, we just skip it
       // we get the area for the form
@@ -2642,7 +2642,7 @@ static void rt_extend_roi_in_from_source_clones(struct dt_iop_module_t *self, dt
     for(const GList *forms = grp->points; forms; forms = g_list_next(forms))
     {
       const dt_masks_form_group_t *grpt = (dt_masks_form_group_t *)forms->data;
-      if(!grpt) continue;
+      if(IS_NULL_PTR(grpt)) continue;
       
       const int formid = grpt->formid;
 
@@ -2660,7 +2660,7 @@ static void rt_extend_roi_in_from_source_clones(struct dt_iop_module_t *self, dt
 
       // we get the spot
       dt_masks_form_t *form = dt_masks_get_from_id(self->dev, formid);
-      if(!form) continue;
+      if(IS_NULL_PTR(form)) continue;
       
       // we get the source area
       int fl, ft, fw, fh;
@@ -2729,7 +2729,7 @@ static void rt_extend_roi_in_for_clone(struct dt_iop_module_t *self, dt_dev_pixe
     for(const GList *forms = grp->points; forms; forms = g_list_next(forms))
     {
       dt_masks_form_group_t *grpt = (dt_masks_form_group_t *)forms->data;
-      if(!grpt) continue;
+      if(IS_NULL_PTR(grpt)) continue;
       
       const int formid = grpt->formid;
       const int index = rt_get_index_from_formid(p, formid);
@@ -3279,7 +3279,7 @@ static int rt_process_forms(float *layer, dwt_params_t *const wt_p, const int sc
 
   // iterate through all forms
   const dt_masks_form_t *grp = dt_masks_get_from_id(self->dev, bp->mask_id);
-  if(!grp || !(grp->type & DT_MASKS_GROUP)) return 0;
+  if(IS_NULL_PTR(grp) || !(grp->type & DT_MASKS_GROUP)) return 0;
   
   for(const GList *forms = grp->points; forms; forms = g_list_next(forms))
   {
@@ -4102,7 +4102,7 @@ static cl_int rt_process_forms_cl(cl_mem dev_layer, dwt_params_cl_t *const wt_p,
   if(!usr_d->suppress_mask)
   {
     dt_masks_form_t *grp = dt_masks_get_from_id(self->dev, bp->mask_id);
-    if(!grp || !(grp->type & DT_MASKS_GROUP)) return err;
+    if(IS_NULL_PTR(grp) || !(grp->type & DT_MASKS_GROUP)) return err;
 
     for(const GList *forms = grp->points; forms && err == CL_SUCCESS; forms = g_list_next(forms))
     {

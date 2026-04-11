@@ -139,7 +139,7 @@ int dt_opencl_get_device_info(dt_opencl_t *cl, cl_device_id device, cl_device_in
   // 3. make sure that *param_value points to big-enough memory block
   {
     void *ptr = realloc(*param_value, *param_value_size);
-    if(!ptr)
+    if(IS_NULL_PTR(ptr))
     {
       dt_print(DT_DEBUG_OPENCL,
                "[dt_opencl_get_device_info] memory allocation failed! tried to allocate %zu bytes for data %d: %i",
@@ -754,7 +754,7 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
 
       prog = programnumber ? strtol(programnumber, NULL, 10) : -1;
 
-      if(!programname || programname[0] == '\0' || prog < 0)
+      if(IS_NULL_PTR(programname) || programname[0] == '\0' || prog < 0)
       {
         dt_print(DT_DEBUG_OPENCL, "[dt_opencl_device_init] malformed entry in programs.conf `%s'; ignoring it!\n", confentry);
         continue;
@@ -942,7 +942,7 @@ void dt_opencl_init(dt_opencl_t *cl, const gboolean exclude_opencl, const gboole
   {
     cl->dev = (dt_opencl_device_t *)malloc(sizeof(dt_opencl_device_t) * num_devices);
     devices = (cl_device_id *)malloc(sizeof(cl_device_id) * num_devices);
-    if(!cl->dev || !devices)
+    if(IS_NULL_PTR(cl->dev) || IS_NULL_PTR(devices))
     {
       dt_free(cl->dev);
       dt_free(devices);
@@ -1463,7 +1463,7 @@ void dt_opencl_unlock_device(const int dev)
 static FILE *fopen_stat(const char *filename, struct stat *st)
 {
   FILE *f = g_fopen(filename, "rb");
-  if(!f)
+  if(IS_NULL_PTR(f))
   {
     dt_print(DT_DEBUG_OPENCL, "[opencl_fopen_stat] could not open file `%s'!\n", filename);
     return NULL;
@@ -1497,7 +1497,7 @@ void dt_opencl_md5sum(const char **files, char **md5sums)
     struct stat filestat;
     FILE *f = fopen_stat(filename, &filestat);
 
-    if(!f)
+    if(IS_NULL_PTR(f))
     {
       dt_print(DT_DEBUG_OPENCL, "[opencl_md5sums] could not open file `%s'!\n", filename);
       *md5sums = NULL;
@@ -1507,7 +1507,7 @@ void dt_opencl_md5sum(const char **files, char **md5sums)
     size_t filesize = filestat.st_size;
     char *file = (char *)malloc(filesize);
 
-    if(!file)
+    if(IS_NULL_PTR(file))
     {
       dt_print(DT_DEBUG_OPENCL, "[opencl_md5sums] could not allocate buffer for file `%s'!\n", filename);
       *md5sums = NULL;
@@ -1800,7 +1800,7 @@ int dt_opencl_build_program(const int dev, const int prog, const char *binname, 
           char link_dest[PATH_MAX] = { 0 };
           snprintf(link_dest, sizeof(link_dest), "%s" G_DIR_SEPARATOR_S "%s", cachedir, md5sum);
           FILE *f = g_fopen(link_dest, "wb");
-          if(!f) goto ret;
+          if(IS_NULL_PTR(f)) goto ret;
           size_t bytes_written = fwrite(binaries[i], sizeof(char), binary_sizes[i], f);
           if(bytes_written != binary_sizes[i]) goto ret;
           fclose(f);
@@ -2658,7 +2658,7 @@ cl_event *dt_opencl_events_get_slot(const int devid, const char *tag)
     int newevents = *maxevents + DT_OPENCL_EVENTLISTSIZE;
     cl_event *neweventlist = calloc(newevents, sizeof(cl_event));
     dt_opencl_eventtag_t *neweventtags = calloc(newevents, sizeof(dt_opencl_eventtag_t));
-    if(!neweventlist || !neweventtags)
+    if(!neweventlist || IS_NULL_PTR(neweventtags))
     {
       dt_print(DT_DEBUG_OPENCL, "[dt_opencl_events_get_slot] NO new eventlist with size %i for device %i\n",
          newevents, devid);

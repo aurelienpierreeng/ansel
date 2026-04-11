@@ -60,7 +60,7 @@ static void _activate_callback_to_action_callback(GtkMenuItem* menu_item, gpoint
 static gboolean _menu_icon_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
 {
   dt_menu_icon_data_t *data = (dt_menu_icon_data_t *)user_data;
-  if(!data || data->shape == DT_MENU_ICON_NONE) return FALSE;
+  if(IS_NULL_PTR(data) || data->shape == DT_MENU_ICON_NONE) return FALSE;
 
   GtkStyleContext *context = gtk_widget_get_style_context(widget);
   GdkRGBA color;
@@ -331,7 +331,7 @@ dt_menu_entry_t *set_menu_entry(GtkWidget **menus, GList **items_list,
                                 gboolean (*sensitive_callback)(GtkWidget *widget), guint key_val,
                                 GdkModifierType mods, GtkAccelGroup *accel_group)
 {
-  if(!label) label = "";
+  if(IS_NULL_PTR(label)) label = "";
 
   // Alloc and set to 0
   dt_menu_entry_t *entry = calloc(1, sizeof(dt_menu_entry_t));

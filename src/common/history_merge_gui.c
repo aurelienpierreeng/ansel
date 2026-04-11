@@ -92,7 +92,7 @@ static gchar *_hm_pretty_id_from_id_ht(const char *id, GHashTable *id_ht, const 
     else if(!prefer_dest && info->src_iop)
       mod = info->src_iop;
 
-    if(!mod) mod = info->dst_iop ? info->dst_iop : (info->src_iop ? info->src_iop : info->mod_list);
+    if(IS_NULL_PTR(mod)) mod = info->dst_iop ? info->dst_iop : (info->src_iop ? info->src_iop : info->mod_list);
   }
 
   if(mod)
@@ -198,9 +198,9 @@ gboolean _hm_warn_missing_raster_producers(const GList *mod_list)
   for(const GList *l = g_list_first((GList *)mod_list); l; l = g_list_next(l))
   {
     const dt_iop_module_t *mod = (const dt_iop_module_t *)l->data;
-    if(!mod) continue;
+    if(IS_NULL_PTR(mod)) continue;
     const dt_iop_module_t *producer = mod->raster_mask.sink.source;
-    if(!producer) continue;
+    if(IS_NULL_PTR(producer)) continue;
 
     const gboolean missing = !producer || !g_hash_table_contains(mods, producer);
     if(missing)
@@ -337,7 +337,7 @@ static gchar *_hm_module_row_label(const dt_iop_module_t *mod)
 
 static gboolean _hm_history_masks_match(const dt_dev_history_item_t *a, const dt_dev_history_item_t *b)
 {
-  if(!a || !b) return FALSE;
+  if(IS_NULL_PTR(a) || IS_NULL_PTR(b)) return FALSE;
 
   const gboolean a_has_forms = (!IS_NULL_PTR(a->forms));
   const gboolean b_has_forms = (!IS_NULL_PTR(b->forms));
@@ -361,7 +361,7 @@ static gboolean _hm_history_masks_match(const dt_dev_history_item_t *a, const dt
 
 static gboolean _hm_history_items_match(const dt_dev_history_item_t *a, const dt_dev_history_item_t *b)
 {
-  if(!a || !b) return FALSE;
+  if(IS_NULL_PTR(a) || IS_NULL_PTR(b)) return FALSE;
 
   if(strcmp(a->op_name, b->op_name) != 0) return FALSE;
   if(strcmp(a->multi_name, b->multi_name) != 0) return FALSE;
@@ -374,7 +374,7 @@ static gboolean _hm_history_items_match(const dt_dev_history_item_t *a, const dt
   if(size_a != size_b) return FALSE;
   if(size_a > 0)
   {
-    if(!a->params || !b->params) return FALSE;
+    if(IS_NULL_PTR(a->params) || IS_NULL_PTR(b->params)) return FALSE;
     if(memcmp(a->params, b->params, size_a) != 0) return FALSE;
   }
 
@@ -501,8 +501,8 @@ static dt_iop_module_t *_hm_module_from_id(dt_develop_t *dev, const char *id)
   _hm_id_to_op_name(id, op, name);
 
   dt_iop_module_t *mod = dt_iop_get_module_by_instance_name(dev->iop, op, name);
-  if(!mod && name[0] == '\0') mod = dt_iop_get_module_by_op_priority(dev->iop, op, 0);
-  if(!mod && name[0] == '\0') mod = dt_iop_get_module_by_op_priority(dev->iop, op, -1);
+  if(IS_NULL_PTR(mod) && name[0] == '\0') mod = dt_iop_get_module_by_op_priority(dev->iop, op, 0);
+  if(IS_NULL_PTR(mod) && name[0] == '\0') mod = dt_iop_get_module_by_op_priority(dev->iop, op, -1);
   return mod;
 }
 
@@ -559,7 +559,7 @@ static GPtrArray *_hm_collect_enabled_modules_gui_order(const dt_develop_t *dev,
   for(GList *modules = g_list_last(dev->iop); modules; modules = g_list_previous(modules))
   {
     dt_iop_module_t *mod = (dt_iop_module_t *)modules->data;
-    if(!mod) continue;
+    if(IS_NULL_PTR(mod)) continue;
     if(!_hm_module_visible_in_report(mod, mod_list_ids)) continue;
     g_ptr_array_add(mods, mod);
   }
@@ -634,7 +634,7 @@ static GList *_hm_report_build_ordered_modules(dt_develop_t *dev_dest, const GPt
                                                const GHashTable *mod_list_ids)
 {
   /* Build a full ordered module list by reordering only visible modules. */
-  if(!dev_dest || !visible_order) return NULL;
+  if(IS_NULL_PTR(dev_dest) || !visible_order) return NULL;
 
   int visible_count = 0;
   for(const GList *l = g_list_first(dev_dest->iop); l; l = g_list_next(l))
@@ -707,7 +707,7 @@ static GHashTable *_hm_report_build_moved_set(dt_develop_t *dev_src, GtkTreeMode
   for(const GList *l = g_list_first(dev_src->iop); l; l = g_list_next(l))
   {
     const dt_iop_module_t *mod = (const dt_iop_module_t *)l->data;
-    if(!mod || !_hm_module_visible_in_report(mod, mod_list_ids)) continue;
+    if(IS_NULL_PTR(mod) || !_hm_module_visible_in_report(mod, mod_list_ids)) continue;
     gchar *id = _hm_make_node_id(mod->op, mod->multi_name);
     if(g_hash_table_contains(dest_id_set, id))
       g_ptr_array_add(src_common, id);
@@ -990,7 +990,7 @@ static void _hm_report_drag_data_get(GtkWidget *widget, GdkDragContext *context,
   _hm_report_reorder_ctx_t *ctx = (_hm_report_reorder_ctx_t *)user_data;
   GtkTreePath *path = ctx->drag_path;
 
-  if(!path)
+  if(IS_NULL_PTR(path))
     gtk_tree_view_get_cursor(GTK_TREE_VIEW(widget), &path, NULL);
 
   if(IS_NULL_PTR(path)) return;

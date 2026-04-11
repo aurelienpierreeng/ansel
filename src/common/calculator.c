@@ -307,7 +307,7 @@ static float parse_primary_expression(parser_state_t *self)
     dt_free(self->token);
     self->token = get_token(self);
     const float result = parse_expression(self);
-    if(!self->token || self->token->type != T_OPERATOR || self->token->data.operator!= O_RIGHTROUND)
+    if(IS_NULL_PTR(self->token) || self->token->type != T_OPERATOR || self->token->data.operator!= O_RIGHTROUND)
       return NAN;
     dt_free(self->token);
     self->token = get_token(self);

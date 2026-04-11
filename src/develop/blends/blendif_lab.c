@@ -247,7 +247,7 @@ void dt_develop_blendif_lab_make_mask(const struct dt_dev_pixelpipe_iop_t *piece
 
     // allocate space for a temporary mask buffer to split the computation of every channel
     float *const restrict temp_mask = dt_pixelpipe_cache_alloc_align_float_cache(buffsize, 0);
-    if(!temp_mask)
+    if(IS_NULL_PTR(temp_mask))
     {
       return;
     }

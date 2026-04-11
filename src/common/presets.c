@@ -205,11 +205,11 @@ static int get_preset_element_float(xmlDocPtr doc, gchar *name)
 int dt_presets_import_from_file(const char *preset_path)
 {
   xmlDocPtr doc = xmlParseFile(preset_path);
-  if(!doc)
+  if(IS_NULL_PTR(doc))
     return FALSE;
 
   xmlNodePtr root = xmlDocGetRootElement(doc);
-  if(!root || xmlStrcmp(root->name, BAD_CAST "darktable_preset") != 0)
+  if(IS_NULL_PTR(root) || xmlStrcmp(root->name, BAD_CAST "darktable_preset") != 0)
   {
     xmlFreeDoc(doc);
     return FALSE;

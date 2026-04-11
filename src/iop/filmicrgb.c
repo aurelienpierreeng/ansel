@@ -1366,7 +1366,7 @@ static inline int reconstruct_highlights(const dt_dev_pixelpipe_t *const pipe,
   // alloc a permanent reusable buffer for intermediate computations - avoid multiple alloc/free
   float *const restrict temp = dt_pixelpipe_cache_alloc_align_float_cache(darktable.num_openmp_threads * ch * roi_out->width, 0);
 
-  if(!LF_even || !LF_odd || !HF_RGB || !HF_grey || !temp)
+  if(IS_NULL_PTR(LF_even) || IS_NULL_PTR(LF_odd) || IS_NULL_PTR(HF_RGB) || IS_NULL_PTR(HF_grey) || IS_NULL_PTR(temp))
   {
     err = 1;
     goto error;
@@ -2332,7 +2332,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
   }
 
   float *const restrict reconstructed = dt_pixelpipe_cache_alloc_align_float((size_t)roi_out->width * roi_out->height * 4, pipe);
-  if(recover_highlights && !reconstructed)
+  if(recover_highlights && IS_NULL_PTR(reconstructed))
   {
     dt_pixelpipe_cache_free_align(mask);
     return 1;
@@ -2343,7 +2343,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
   {
     // init the blown areas with noise to create particles
     float *const restrict inpainted =  dt_pixelpipe_cache_alloc_align_float((size_t)roi_out->width * roi_out->height * 4, pipe);
-    if(!inpainted)
+    if(IS_NULL_PTR(inpainted))
     {
       dt_pixelpipe_cache_free_align(mask);
       dt_pixelpipe_cache_free_align(reconstructed);
@@ -2370,7 +2370,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
     {
       float *const restrict norms = dt_pixelpipe_cache_alloc_align_float((size_t)roi_out->width * roi_out->height, pipe);
       float *const restrict ratios = dt_pixelpipe_cache_alloc_align_float((size_t)roi_out->width * roi_out->height * 4, pipe);
-      if(!norms || !ratios)
+      if(!norms || IS_NULL_PTR(ratios))
       {
         dt_pixelpipe_cache_free_align(norms);
         dt_pixelpipe_cache_free_align(ratios);
@@ -2479,7 +2479,7 @@ static inline cl_int reconstruct_highlights_cl(const dt_dev_pixelpipe_t *pipe, c
   // alloc a permanent reusable buffer for intermediate computations - avoid multiple alloc/free
   cl_mem temp = dt_opencl_alloc_device(devid, sizes[0], sizes[1], sizeof(float) * 4);;
 
-  if(!LF_even || !LF_odd || !HF_RGB || !HF_grey || !temp)
+  if(IS_NULL_PTR(LF_even) || IS_NULL_PTR(LF_odd) || IS_NULL_PTR(HF_RGB) || IS_NULL_PTR(HF_grey) || IS_NULL_PTR(temp))
   {
     err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
     goto error;
@@ -5044,7 +5044,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
   dt_iop_filmicrgb_params_t *p = (dt_iop_filmicrgb_params_t *)self->params;
   dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)self->gui_data;
 
-  if(!w || w == g->auto_hardness || w == g->security_factor || w == g->grey_point_source
+  if(IS_NULL_PTR(w) || w == g->auto_hardness || w == g->security_factor || w == g->grey_point_source
      || w == g->black_point_source || w == g->white_point_source)
   {
     ++darktable.gui->reset;
@@ -5086,7 +5086,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
     --darktable.gui->reset;
   }
 
-  if(!w || w == g->version)
+  if(IS_NULL_PTR(w) || w == g->version)
   {
     if(p->version == DT_FILMIC_COLORSCIENCE_V1 || p->version == DT_FILMIC_COLORSCIENCE_V4)
     {
@@ -5116,7 +5116,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 
   }
 
-  if(!w || w == g->reconstruct_bloom_vs_details)
+  if(IS_NULL_PTR(w) || w == g->reconstruct_bloom_vs_details)
   {
     if(p->reconstruct_bloom_vs_details == -100.f)
     {
@@ -5131,7 +5131,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
     }
   }
 
-  if(!w || w == g->custom_grey)
+  if(IS_NULL_PTR(w) || w == g->custom_grey)
   {
     gtk_widget_set_visible(g->grey_point_source, p->custom_grey);
     gtk_widget_set_visible(g->grey_point_target, p->custom_grey);

@@ -178,7 +178,7 @@ GList *dt_selection_get_list(struct dt_selection_t *selection)
 
 int dt_selection_get_length(struct dt_selection_t *selection)
 {
-  if(!selection || !selection->ids) return 0;
+  if(IS_NULL_PTR(selection) || !selection->ids) return 0;
 
   return selection->length;
 }
@@ -392,7 +392,7 @@ gchar *dt_selection_ids_to_string(struct dt_selection_t *selection)
 
 gboolean dt_selection_is_id_selected(struct dt_selection_t *selection, int32_t imgid)
 {
-  if(!selection || !selection->ids) return FALSE;
+  if(IS_NULL_PTR(selection) || !selection->ids) return FALSE;
   return (g_list_find(selection->ids, GINT_TO_POINTER(imgid)) != NULL);
 }
 

@@ -42,7 +42,7 @@ gboolean dt_cache_arena_calc(const dt_cache_arena_t *a,
                              uint32_t *out_pages,
                              size_t *out_size)
 {
-  if(!a || !a->base || !out_pages || a->page_size == 0 || a->num_pages == 0) return FALSE;
+  if(IS_NULL_PTR(a) || IS_NULL_PTR(a->base) || IS_NULL_PTR(out_pages) || a->page_size == 0 || a->num_pages == 0) return FALSE;
   if(size == 0) return FALSE;
   if(size > SIZE_MAX - (a->page_size - 1)) return FALSE;
 
@@ -68,7 +68,7 @@ void *dt_cache_arena_alloc(dt_cache_arena_t *a,
                            size_t size,
                            size_t *out_size)
 {
-  if(!a || !a->base || !out_size) return NULL;
+  if(IS_NULL_PTR(a) || IS_NULL_PTR(a->base) || !out_size) return NULL;
 
   uint32_t pages_needed = 0;
   size_t rounded_size = 0;
@@ -123,9 +123,9 @@ void dt_cache_arena_free(dt_cache_arena_t *a,
                          void *ptr,
                          size_t size)
 {
-  if(!a || !a->base || !a->free_runs || a->page_size == 0 || a->num_pages == 0)
+  if(IS_NULL_PTR(a) || IS_NULL_PTR(a->base) || !a->free_runs || a->page_size == 0 || a->num_pages == 0)
     return;
-  if(!ptr || size == 0) return;
+  if(IS_NULL_PTR(ptr) || size == 0) return;
 
   const uintptr_t base = (uintptr_t)a->base;
   const uintptr_t addr = (uintptr_t)ptr;
@@ -221,7 +221,7 @@ void dt_cache_arena_stats(dt_cache_arena_t *a,
 {
   if(out_total_free_pages) *out_total_free_pages = 0;
   if(out_largest_free_run_pages) *out_largest_free_run_pages = 0;
-  if(!a || !a->free_runs) return;
+  if(IS_NULL_PTR(a) || !a->free_runs) return;
 
   dt_pthread_mutex_lock(&a->lock);
   uint32_t total = 0;
@@ -275,7 +275,7 @@ int dt_cache_arena_init(dt_cache_arena_t *a, size_t total_size)
   a->base = (uint8_t *)VirtualAlloc(NULL, total_size,
                                     MEM_RESERVE | MEM_COMMIT,
                                     PAGE_READWRITE);
-  if(!a->base)
+  if(IS_NULL_PTR(a->base))
   {
     const DWORD err = GetLastError();
     fprintf(stderr, "couldn't alloc map (VirtualAlloc error %lu)\n", (unsigned long)err);
@@ -329,7 +329,7 @@ int dt_cache_arena_init(dt_cache_arena_t *a, size_t total_size)
 
 gboolean dt_cache_arena_ptr_in(const dt_cache_arena_t *a, const void *ptr)
 {
-  if(!a || !a->base || !ptr) return FALSE;
+  if(IS_NULL_PTR(a) || IS_NULL_PTR(a->base) || IS_NULL_PTR(ptr)) return FALSE;
   const uintptr_t base = (uintptr_t)a->base;
   const uintptr_t addr = (uintptr_t)ptr;
   return addr >= base && addr < base + a->size;

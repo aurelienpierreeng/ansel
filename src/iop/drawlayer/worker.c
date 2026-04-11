@@ -154,7 +154,7 @@ gboolean dt_drawlayer_build_worker_input_dab(dt_iop_module_t *self, dt_drawlayer
                                              const dt_drawlayer_paint_raw_input_t *input,
                                              dt_drawlayer_brush_dab_t *dab)
 {
-  if(!self || !state || !input || !dab) return FALSE;
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(state) || IS_NULL_PTR(input) || IS_NULL_PTR(dab)) return FALSE;
 
   float lx = input->lx;
   float ly = input->ly;
@@ -295,13 +295,13 @@ static void _paint_stroke_seed_cb(void *user_data, uint64_t stroke_seed)
 
 static void _publish_backend_progress(drawlayer_paint_backend_ctx_t *ctx, gboolean flush_pending)
 {
-  if(!ctx || !ctx->self || !flush_pending) return;
+  if(IS_NULL_PTR(ctx) || IS_NULL_PTR(ctx->self) || !flush_pending) return;
 
   dt_iop_module_t *self = ctx->self;
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)ctx->self->gui_data;
   dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
   dt_develop_t *dev = self->dev;
-  if(!ctx->worker || !g || !params || !dev || !ctx->worker->live_publish_damage.valid) return;
+  if(IS_NULL_PTR(ctx->worker) || IS_NULL_PTR(g) || IS_NULL_PTR(params) || IS_NULL_PTR(dev) || !ctx->worker->live_publish_damage.valid) return;
 
   ctx->worker->live_publish_serial++;
   dt_drawlayer_paint_runtime_state_reset(&ctx->worker->live_publish_damage);
@@ -326,7 +326,7 @@ static void _process_backend_input(dt_iop_module_t *self, const dt_drawlayer_pai
                                    dt_drawlayer_paint_stroke_t *stroke)
 {
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
-  if(!g || !input || !stroke) return;
+  if(IS_NULL_PTR(g) || IS_NULL_PTR(input) || !stroke) return;
 
   drawlayer_paint_backend_ctx_t ctx = _make_backend_ctx(self, g->stroke.worker, stroke);
   const dt_drawlayer_paint_callbacks_t callbacks = {
@@ -372,7 +372,7 @@ static gboolean _process_backend_dab(const dt_drawlayer_brush_dab_t *dab, drawla
                                      dt_drawlayer_damaged_rect_t *batch_damage)
 {
   dt_drawlayer_paint_stroke_t *stroke = ctx ? ctx->stroke : NULL;
-  if(!ctx || !stroke || !stroke->dab_window || !dab || !patch || !patch->pixels || !stroke_mask
+  if(IS_NULL_PTR(ctx) || !stroke || !stroke->dab_window || IS_NULL_PTR(dab) || IS_NULL_PTR(patch) || IS_NULL_PTR(patch->pixels) || !stroke_mask
      || !stroke_mask->pixels)
     return FALSE;
 
@@ -504,7 +504,7 @@ static guint _worker_batch_min_size(void)
 #if defined(_OPENMP) && OUTER_LOOP
 static gboolean _dab_batch_supports_outer_loop(const GArray *dabs, const guint count)
 {
-  if(!dabs || count == 0) return FALSE;
+  if(IS_NULL_PTR(dabs) || count == 0) return FALSE;
   for(guint i = 0; i < count; i++)
   {
     const dt_drawlayer_brush_dab_t *dab = &g_array_index(dabs, dt_drawlayer_brush_dab_t, i);
@@ -542,7 +542,7 @@ static gboolean _dab_bounds_in_patch(const dt_drawlayer_cache_patch_t *patch, co
                                      const dt_drawlayer_brush_dab_t *dab, dt_drawlayer_damaged_rect_t *bounds)
 {
   if(bounds) *bounds = (dt_drawlayer_damaged_rect_t){ 0 };
-  if(!patch || !dab || !bounds || !patch->pixels || patch->width <= 0 || patch->height <= 0
+  if(IS_NULL_PTR(patch) || IS_NULL_PTR(dab) || IS_NULL_PTR(bounds) || IS_NULL_PTR(patch->pixels) || patch->width <= 0 || patch->height <= 0
      || dab->radius <= 0.0f || dab->opacity <= 0.0f || scale <= 0.0f)
     return FALSE;
 
@@ -561,7 +561,7 @@ static gboolean _collect_batch_bounds(const GArray *dabs, const guint max_dabs,
                                       dt_drawlayer_damaged_rect_t *batch_bounds)
 {
   if(batch_bounds) *batch_bounds = (dt_drawlayer_damaged_rect_t){ 0 };
-  if(!dabs || max_dabs == 0 || !patch || !batch_bounds) return FALSE;
+  if(IS_NULL_PTR(dabs) || max_dabs == 0 || IS_NULL_PTR(patch) || IS_NULL_PTR(batch_bounds)) return FALSE;
 
   /* Walk the upcoming batch in FIFO order and union every dab footprint that
    * can touch the destination patch. This keeps the worker scratch patch as
@@ -581,7 +581,7 @@ static gboolean _collect_batch_bounds(const GArray *dabs, const guint max_dabs,
 static gboolean _ensure_heartbeat_batch_buffers(dt_drawlayer_worker_t *rt,
                                                 const dt_drawlayer_damaged_rect_t *batch_bounds)
 {
-  if(!rt || !batch_bounds || !batch_bounds->valid) return FALSE;
+  if(IS_NULL_PTR(rt) || IS_NULL_PTR(batch_bounds) || !batch_bounds->valid) return FALSE;
 
   const int width = batch_bounds->se[0] - batch_bounds->nw[0];
   const int height = batch_bounds->se[1] - batch_bounds->nw[1];
@@ -602,7 +602,7 @@ static gboolean _ensure_heartbeat_batch_buffers(dt_drawlayer_worker_t *rt,
 static void _copy_rgba_batch_from_locked_patch(const dt_drawlayer_cache_patch_t *src,
                                                dt_drawlayer_cache_patch_t *dst)
 {
-  if(!src || !dst || !src->pixels || !dst->pixels || dst->width <= 0 || dst->height <= 0) return;
+  if(IS_NULL_PTR(src) || IS_NULL_PTR(dst) || IS_NULL_PTR(src->pixels) || IS_NULL_PTR(dst->pixels) || dst->width <= 0 || dst->height <= 0) return;
 
   const int src_x0 = dst->x - src->x;
   const int src_y0 = dst->y - src->y;
@@ -620,8 +620,8 @@ static void _copy_rgba_batch_from_locked_patch(const dt_drawlayer_cache_patch_t 
 static void _copy_mask_batch_from_locked_patch(const dt_drawlayer_cache_patch_t *src,
                                                dt_drawlayer_cache_patch_t *dst)
 {
-  if(!dst || !dst->pixels || dst->width <= 0 || dst->height <= 0) return;
-  if(!src || !src->pixels)
+  if(IS_NULL_PTR(dst) || IS_NULL_PTR(dst->pixels) || dst->width <= 0 || dst->height <= 0) return;
+  if(IS_NULL_PTR(src) || IS_NULL_PTR(src->pixels))
   {
     memset(dst->pixels, 0, (size_t)dst->width * dst->height * sizeof(float));
     return;
@@ -649,7 +649,7 @@ static gboolean _translate_batch_damage(const dt_drawlayer_cache_patch_t *patch,
                                         dt_drawlayer_damaged_rect_t *absolute_damage)
 {
   if(absolute_damage) *absolute_damage = (dt_drawlayer_damaged_rect_t){ 0 };
-  if(!patch || !local_damage || !local_damage->valid || !absolute_damage) return FALSE;
+  if(IS_NULL_PTR(patch) || IS_NULL_PTR(local_damage) || !local_damage->valid || IS_NULL_PTR(absolute_damage)) return FALSE;
 
   *absolute_damage = *local_damage;
   absolute_damage->nw[0] += patch->x;
@@ -664,7 +664,7 @@ static void _copy_rgba_damage_to_locked_patch(const dt_drawlayer_cache_patch_t *
                                               const dt_drawlayer_damaged_rect_t *local_damage,
                                               dt_drawlayer_cache_patch_t *dst)
 {
-  if(!src || !dst || !local_damage || !local_damage->valid || !src->pixels || !dst->pixels) return;
+  if(IS_NULL_PTR(src) || IS_NULL_PTR(dst) || IS_NULL_PTR(local_damage) || !local_damage->valid || IS_NULL_PTR(src->pixels) || IS_NULL_PTR(dst->pixels)) return;
 
   const int copy_w = local_damage->se[0] - local_damage->nw[0];
   const int copy_h = local_damage->se[1] - local_damage->nw[1];
@@ -687,7 +687,7 @@ static void _copy_mask_damage_to_locked_patch(const dt_drawlayer_cache_patch_t *
                                               const dt_drawlayer_damaged_rect_t *local_damage,
                                               dt_drawlayer_cache_patch_t *dst)
 {
-  if(!src || !dst || !local_damage || !local_damage->valid || !src->pixels || !dst->pixels) return;
+  if(IS_NULL_PTR(src) || IS_NULL_PTR(dst) || IS_NULL_PTR(local_damage) || !local_damage->valid || IS_NULL_PTR(src->pixels) || IS_NULL_PTR(dst->pixels)) return;
 
   const int copy_w = local_damage->se[0] - local_damage->nw[0];
   const int copy_h = local_damage->se[1] - local_damage->nw[1];
@@ -709,7 +709,7 @@ static void _copy_mask_damage_to_locked_patch(const dt_drawlayer_cache_patch_t *
 static void _clear_rgba_damage_in_patch(dt_drawlayer_cache_patch_t *patch,
                                         const dt_drawlayer_damaged_rect_t *local_damage)
 {
-  if(!patch || !local_damage || !local_damage->valid || !patch->pixels) return;
+  if(IS_NULL_PTR(patch) || IS_NULL_PTR(local_damage) || !local_damage->valid || IS_NULL_PTR(patch->pixels)) return;
 
   const int clear_w = local_damage->se[0] - local_damage->nw[0];
   const int clear_h = local_damage->se[1] - local_damage->nw[1];
@@ -726,7 +726,7 @@ static void _clear_rgba_damage_in_patch(dt_drawlayer_cache_patch_t *patch,
 static void _clear_mask_damage_in_patch(dt_drawlayer_cache_patch_t *patch,
                                         const dt_drawlayer_damaged_rect_t *local_damage)
 {
-  if(!patch || !local_damage || !local_damage->valid || !patch->pixels) return;
+  if(IS_NULL_PTR(patch) || IS_NULL_PTR(local_damage) || !local_damage->valid || IS_NULL_PTR(patch->pixels)) return;
 
   const int clear_w = local_damage->se[0] - local_damage->nw[0];
   const int clear_h = local_damage->se[1] - local_damage->nw[1];
@@ -764,7 +764,7 @@ static void _destroy_batch_runtime(dt_drawlayer_paint_stroke_t **runtime)
 static void _lock_batch_tiles(omp_lock_t *locks, const int tile_cols, const int tile_origin_x,
                               const int tile_origin_y, const dt_drawlayer_damaged_rect_t *bounds)
 {
-  if(!locks || tile_cols <= 0 || !bounds || !bounds->valid) return;
+  if(!locks || tile_cols <= 0 || IS_NULL_PTR(bounds) || !bounds->valid) return;
   const int tx0 = bounds->nw[0] / DRAWLAYER_BATCH_TILE_SIZE - tile_origin_x;
   const int ty0 = bounds->nw[1] / DRAWLAYER_BATCH_TILE_SIZE - tile_origin_y;
   const int tx1 = MAX(tx0, (bounds->se[0] - 1) / DRAWLAYER_BATCH_TILE_SIZE - tile_origin_x);
@@ -777,7 +777,7 @@ static void _lock_batch_tiles(omp_lock_t *locks, const int tile_cols, const int 
 static void _unlock_batch_tiles(omp_lock_t *locks, const int tile_cols, const int tile_origin_x,
                                 const int tile_origin_y, const dt_drawlayer_damaged_rect_t *bounds)
 {
-  if(!locks || tile_cols <= 0 || !bounds || !bounds->valid) return;
+  if(!locks || tile_cols <= 0 || IS_NULL_PTR(bounds) || !bounds->valid) return;
   const int tx0 = bounds->nw[0] / DRAWLAYER_BATCH_TILE_SIZE - tile_origin_x;
   const int ty0 = bounds->nw[1] / DRAWLAYER_BATCH_TILE_SIZE - tile_origin_y;
   const int tx1 = MAX(tx0, (bounds->se[0] - 1) / DRAWLAYER_BATCH_TILE_SIZE - tile_origin_x);
@@ -794,7 +794,7 @@ static guint _rasterize_dab_batch_outer_loop(const GArray *dabs, const guint max
                                              dt_drawlayer_damaged_rect_t *batch_damage,
                                              const char *tag)
 {
-  if(!dabs || max_dabs == 0 || !patch || !patch->pixels || patch->width <= 0 || patch->height <= 0) return 0;
+  if(IS_NULL_PTR(dabs) || max_dabs == 0 || IS_NULL_PTR(patch) || IS_NULL_PTR(patch->pixels) || patch->width <= 0 || patch->height <= 0) return 0;
 
   const guint thread_count = _worker_batch_min_size();
   dt_drawlayer_damaged_rect_t batch_bounds = { 0 };
@@ -814,7 +814,7 @@ static guint _rasterize_dab_batch_outer_loop(const GArray *dabs, const guint max
   dt_drawlayer_paint_stroke_t **thread_runtime = g_malloc0((size_t)thread_count * sizeof(*thread_runtime));
   dt_drawlayer_damaged_rect_t *thread_damage = g_malloc0((size_t)thread_count * sizeof(*thread_damage));
   omp_lock_t *tile_locks = g_malloc0((size_t)tile_cols * tile_rows * sizeof(*tile_locks));
-  if(!thread_runtime || !thread_damage || !tile_locks)
+  if(!thread_runtime || IS_NULL_PTR(thread_damage) || !tile_locks)
   {
     g_free(thread_runtime);
     g_free(thread_damage);
@@ -888,8 +888,8 @@ static guint _rasterize_pending_dab_batch(drawlayer_paint_backend_ctx_t *ctx, gi
   dt_iop_drawlayer_gui_data_t *g = (ctx && ctx->self) ? (dt_iop_drawlayer_gui_data_t *)ctx->self->gui_data : NULL;
   dt_drawlayer_paint_stroke_t *stroke = ctx ? ctx->stroke : NULL;
   dt_drawlayer_worker_t *worker = ctx ? ctx->worker : NULL;
-  if(!g || !stroke || !worker || !stroke->pending_dabs || stroke->pending_dabs->len == 0) return 0;
-  if(!g->process.base_patch.pixels || g->process.base_patch.width <= 0 || g->process.base_patch.height <= 0)
+  if(IS_NULL_PTR(g) || !stroke || IS_NULL_PTR(worker) || !stroke->pending_dabs || stroke->pending_dabs->len == 0) return 0;
+  if(IS_NULL_PTR(g->process.base_patch.pixels) || g->process.base_patch.width <= 0 || g->process.base_patch.height <= 0)
     return 0;
 
   const guint min_batch = _worker_batch_min_size();
@@ -1013,7 +1013,7 @@ static gboolean _rt_queue_push_locked(dt_drawlayer_worker_t *rt,
                                       const dt_drawlayer_paint_raw_input_t *event)
 {
   drawlayer_rt_worker_t *worker = _backend_worker(rt);
-  if(!worker || !event || !worker->ring || worker->ring_capacity == 0 || _rt_queue_full(rt)) return FALSE;
+  if(IS_NULL_PTR(worker) || IS_NULL_PTR(event) || IS_NULL_PTR(worker->ring) || worker->ring_capacity == 0 || _rt_queue_full(rt)) return FALSE;
   worker->ring[worker->ring_tail] = *event;
   worker->ring_tail = (worker->ring_tail + 1) % worker->ring_capacity;
   worker->ring_count++;
@@ -1025,7 +1025,7 @@ static gboolean _rt_queue_pop_locked(dt_drawlayer_worker_t *rt,
                                      dt_drawlayer_paint_raw_input_t *event)
 {
   drawlayer_rt_worker_t *worker = _backend_worker(rt);
-  if(!worker || !event || !worker->ring || worker->ring_capacity == 0 || _rt_queue_empty(rt)) return FALSE;
+  if(IS_NULL_PTR(worker) || IS_NULL_PTR(event) || IS_NULL_PTR(worker->ring) || worker->ring_capacity == 0 || _rt_queue_empty(rt)) return FALSE;
   *event = worker->ring[worker->ring_head];
   worker->ring_head = (worker->ring_head + 1) % worker->ring_capacity;
   worker->ring_count--;
@@ -1161,7 +1161,7 @@ static void _backend_worker_on_idle(dt_iop_module_t *self, dt_drawlayer_worker_t
 static void _backend_worker_process_sample(dt_iop_module_t *self, dt_drawlayer_worker_t *rt,
                                            const dt_drawlayer_paint_raw_input_t *input)
 {
-  if(!rt || !input) return;
+  if(IS_NULL_PTR(rt) || IS_NULL_PTR(input)) return;
   if(rt && input && input->stroke_pos == DT_DRAWLAYER_PAINT_STROKE_FIRST)
   {
     _stroke_begin(rt);
@@ -1203,7 +1203,7 @@ static const drawlayer_rt_callbacks_t _rt_callbacks[] = {
 /** @brief Stop and free an existing worker state object. */
 static void _rt_destroy_state(dt_iop_module_t *self, dt_drawlayer_worker_t **rt_out)
 {
-  if(!rt_out || !*rt_out) return;
+  if(IS_NULL_PTR(rt_out) || !*rt_out) return;
   dt_drawlayer_worker_t *rt = *rt_out;
   drawlayer_rt_worker_t *worker = _backend_worker(rt);
   _stop_worker(self ? self : rt->self, rt);
@@ -1261,7 +1261,7 @@ static gboolean _wait_worker_idle(dt_iop_module_t *self, dt_drawlayer_worker_t *
 {
   (void)self;
   const drawlayer_rt_worker_t *worker = _backend_worker_const(rt);
-  if(!rt || !worker || !_worker_is_started(worker)) return TRUE;
+  if(IS_NULL_PTR(rt) || IS_NULL_PTR(worker) || !_worker_is_started(worker)) return TRUE;
 
   dt_pthread_mutex_lock(&rt->worker_mutex);
   while(_worker_is_busy(worker) || worker->ring_count > 0)
@@ -1288,7 +1288,7 @@ static void *_drawlayer_worker_main(void *user_data)
   dt_iop_module_t *self = rt ? rt->self : NULL;
   drawlayer_rt_worker_t *worker = _backend_worker(rt);
   const drawlayer_rt_callbacks_t *cb = &_rt_callbacks[DRAWLAYER_RT_WORKER_BACKEND];
-  if(!self || !rt || !worker || !cb) return NULL;
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(rt) || IS_NULL_PTR(worker) || IS_NULL_PTR(cb)) return NULL;
 
   dt_pthread_setname(cb->thread_name);
   _set_current_thread_realtime_best_effort();
@@ -1364,7 +1364,7 @@ static void *_drawlayer_worker_main(void *user_data)
 static gboolean _start_worker(dt_iop_module_t *self, dt_drawlayer_worker_t *rt)
 {
   drawlayer_rt_worker_t *worker = _backend_worker(rt);
-  if(!self || !rt || !worker) return FALSE;
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(rt) || IS_NULL_PTR(worker)) return FALSE;
   if(_worker_is_started(worker))
     return TRUE;
 
@@ -1430,7 +1430,7 @@ static void _pause_worker(dt_iop_module_t *self, dt_drawlayer_worker_t *rt)
 {
   (void)self;
   drawlayer_rt_worker_t *worker = _backend_worker(rt);
-  if(!rt || !worker || !_worker_is_started(worker)) return;
+  if(IS_NULL_PTR(rt) || IS_NULL_PTR(worker) || !_worker_is_started(worker)) return;
 
   dt_pthread_mutex_lock(&rt->worker_mutex);
   worker->state = _worker_is_busy(worker) ? DT_DRAWLAYER_WORKER_STATE_PAUSING
@@ -1445,7 +1445,7 @@ static void _resume_worker(dt_iop_module_t *self, dt_drawlayer_worker_t *rt)
 {
   (void)self;
   drawlayer_rt_worker_t *worker = _backend_worker(rt);
-  if(!rt || !worker || !_worker_is_started(worker)) return;
+  if(IS_NULL_PTR(rt) || IS_NULL_PTR(worker) || !_worker_is_started(worker)) return;
 
   dt_pthread_mutex_lock(&rt->worker_mutex);
   worker->state = DT_DRAWLAYER_WORKER_STATE_IDLE;
@@ -1457,7 +1457,7 @@ static void _resume_worker(dt_iop_module_t *self, dt_drawlayer_worker_t *rt)
 static gboolean _enqueue_event(dt_iop_module_t *self, dt_drawlayer_worker_t *rt,
                                const dt_drawlayer_paint_raw_input_t *event)
 {
-  if(!rt || !event) return FALSE;
+  if(IS_NULL_PTR(rt) || IS_NULL_PTR(event)) return FALSE;
   if(!_start_worker(self, rt)) return FALSE;
 
   dt_pthread_mutex_lock(&rt->worker_mutex);
@@ -1471,7 +1471,7 @@ static gboolean _enqueue_event(dt_iop_module_t *self, dt_drawlayer_worker_t *rt,
 static gboolean _enqueue_input(dt_iop_module_t *self, dt_drawlayer_worker_t *rt,
                                const dt_drawlayer_paint_raw_input_t *input)
 {
-  if(!rt || !input) return FALSE;
+  if(IS_NULL_PTR(rt) || IS_NULL_PTR(input)) return FALSE;
   if(!_start_worker(self, rt)) return FALSE;
 
   const dt_drawlayer_paint_raw_input_t event = *input;
@@ -1568,7 +1568,7 @@ void dt_drawlayer_worker_get_snapshot(const dt_drawlayer_worker_t *worker,
 {
   if(snapshot) *snapshot = (dt_drawlayer_worker_snapshot_t){ 0 };
   dt_drawlayer_worker_t *rt = (dt_drawlayer_worker_t *)worker;
-  if(!rt || !snapshot) return;
+  if(IS_NULL_PTR(rt) || IS_NULL_PTR(snapshot)) return;
 
   dt_pthread_mutex_lock(&rt->worker_mutex);
   const drawlayer_rt_worker_t *backend = _backend_worker_const(rt);
@@ -1591,7 +1591,7 @@ void dt_drawlayer_worker_request_commit(dt_drawlayer_worker_t *worker)
 /** @brief Flush pending backend stroke inputs synchronously. */
 void dt_drawlayer_worker_flush_pending(dt_drawlayer_worker_t *worker)
 {
-  if(!worker || !worker->self) return;
+  if(IS_NULL_PTR(worker) || IS_NULL_PTR(worker->self)) return;
   _wait_worker_idle(worker->self, worker);
 }
 

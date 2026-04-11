@@ -114,7 +114,7 @@ void dt_gui_presets_init()
   // Avoid regenerating all auto-presets on every startup when the build and UI language are unchanged.
   // This cuts a large number of INSERTs during module load without altering behavior across upgrades.
   gchar *lang = dt_conf_get_string("ui_last/gui_language");
-  if(!lang) lang = g_strdup("");
+  if(IS_NULL_PTR(lang)) lang = g_strdup("");
   gchar *sig = g_strdup_printf("%d|%s", dt_version(), lang);
   gchar *prev = dt_conf_get_string("ui_last/presets_autogen_signature");
   _gui_presets_autogen_enabled = !(prev && !g_strcmp0(prev, sig));
@@ -603,7 +603,7 @@ static void _presets_show_edit_dialog(dt_gui_presets_edit_dialog_t *g, gboolean 
   gtk_widget_set_tooltip_text(GTK_WIDGET(g->filter), _("be very careful with this option. "
                                                            "this might be the last time you see your preset."));
   gtk_box_pack_start(box, GTK_WIDGET(g->filter), FALSE, FALSE, 0);
-  if(!g->iop)
+  if(IS_NULL_PTR(g->iop))
   {
     // lib usually don't support autoapply
     gtk_widget_set_no_show_all(GTK_WIDGET(g->autoapply), !dt_presets_module_can_autoapply(g->module_name));

@@ -40,7 +40,7 @@ static void _dt_dev_pixelpipe_cache_wait_ready_callback(gpointer instance, const
 static gboolean _module_requires_global_histogram_output_cache(const dt_dev_pixelpipe_t *pipe,
                                                                const dt_iop_module_t *module)
 {
-  if(!pipe || !module) return FALSE;
+  if(IS_NULL_PTR(pipe) || IS_NULL_PTR(module)) return FALSE;
   if(pipe->type != DT_DEV_PIXELPIPE_PREVIEW) return FALSE;
   if(dt_dev_pixelpipe_get_realtime(pipe)) return FALSE;
   if(!pipe->gui_observable_source) return FALSE;
@@ -51,7 +51,7 @@ static gboolean _module_requires_global_histogram_output_cache(const dt_dev_pixe
 static gboolean _module_requires_global_histogram_input_cache(const dt_dev_pixelpipe_t *pipe,
                                                               const dt_iop_module_t *module)
 {
-  if(!pipe || !module) return FALSE;
+  if(IS_NULL_PTR(pipe) || IS_NULL_PTR(module)) return FALSE;
   if(pipe->type != DT_DEV_PIXELPIPE_PREVIEW) return FALSE;
   if(dt_dev_pixelpipe_get_realtime(pipe)) return FALSE;
   if(!pipe->gui_observable_source) return FALSE;
@@ -86,7 +86,7 @@ static void _refresh_pipe_detail_mask_state(dt_dev_pixelpipe_t *pipe)
   for(GList *nodes = g_list_first(pipe->nodes); nodes; nodes = g_list_next(nodes))
   {
     dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)nodes->data;
-    if(!piece) continue;
+    if(IS_NULL_PTR(piece)) continue;
 
     if(!strcmp(piece->module->op, "detailmask")) detailmask_piece = piece;
     if(piece->detail_mask)
@@ -131,11 +131,11 @@ static void _change_pipe(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_change_t fla
  */
 static gboolean _sync_realtime_top_history_in_place(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
 {
-  if(!pipe || !dev || !dt_dev_pixelpipe_get_realtime(pipe))
+  if(IS_NULL_PTR(pipe) || IS_NULL_PTR(dev) || !dt_dev_pixelpipe_get_realtime(pipe))
     return FALSE;
 
   const uint32_t history_end = dt_dev_get_history_end_ext(dev);
-  if(history_end == 0 || !dev->gui_module) return FALSE;
+  if(history_end == 0 || IS_NULL_PTR(dev->gui_module)) return FALSE;
 
   GList *last_item = g_list_nth(dev->history, history_end - 1);
   if(IS_NULL_PTR(last_item)) return FALSE;
@@ -193,7 +193,7 @@ static gboolean _sync_realtime_top_history_in_place(dt_dev_pixelpipe_t *pipe, dt
  */
 static void _seal_opencl_cache_policy(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
 {
-  if(!pipe || !pipe->nodes) return;
+  if(IS_NULL_PTR(pipe) || !pipe->nodes) return;
 
   gboolean current_output_must_cache_host = TRUE;
 
@@ -201,7 +201,7 @@ static void _seal_opencl_cache_policy(dt_dev_pixelpipe_t *pipe, dt_develop_t *de
   {
     dt_dev_pixelpipe_iop_t *piece = pieces->data;
     dt_iop_module_t *module = piece ? piece->module : NULL;
-    if(!piece || !module || !piece->enabled) continue;
+    if(IS_NULL_PTR(piece) || IS_NULL_PTR(module) || !piece->enabled) continue;
 
     gboolean supports_opencl = FALSE;
 #ifdef HAVE_OPENCL
@@ -241,7 +241,7 @@ static void _seal_opencl_cache_policy(dt_dev_pixelpipe_t *pipe, dt_develop_t *de
 
 void dt_dev_pixelpipe_rebuild_all_real(dt_develop_t *dev)
 {
-  if(!dev || !dev->gui_attached) return;
+  if(IS_NULL_PTR(dev) || !dev->gui_attached) return;
   _change_pipe(dev->preview_pipe, DT_DEV_PIPE_REMOVE);
   _change_pipe(dev->pipe, DT_DEV_PIPE_REMOVE);
   _sync_virtual_pipe(dev, DT_DEV_PIPE_REMOVE);
@@ -249,13 +249,13 @@ void dt_dev_pixelpipe_rebuild_all_real(dt_develop_t *dev)
 
 void dt_dev_pixelpipe_resync_history_main_real(dt_develop_t *dev)
 {
-  if(!dev || !dev->gui_attached) return;
+  if(IS_NULL_PTR(dev) || !dev->gui_attached) return;
   _change_pipe(dev->pipe, DT_DEV_PIPE_SYNCH);
 }
 
 void dt_dev_pixelpipe_resync_history_preview_real(dt_develop_t *dev)
 {
-  if(!dev || !dev->gui_attached) return;
+  if(IS_NULL_PTR(dev) || !dev->gui_attached) return;
   _change_pipe(dev->preview_pipe, DT_DEV_PIPE_SYNCH);
   // Virtual pipe mirrors preview history for GUI coordinate transforms.
   _sync_virtual_pipe(dev, DT_DEV_PIPE_SYNCH);
@@ -263,20 +263,20 @@ void dt_dev_pixelpipe_resync_history_preview_real(dt_develop_t *dev)
 
 void dt_dev_pixelpipe_resync_history_all_real(dt_develop_t *dev)
 {
-  if(!dev || !dev->gui_attached) return;
+  if(IS_NULL_PTR(dev) || !dev->gui_attached) return;
   dt_dev_pixelpipe_resync_history_preview(dev);
   dt_dev_pixelpipe_resync_history_main(dev);
 }
 
 void dt_dev_pixelpipe_update_history_main_real(dt_develop_t *dev)
 {
-  if(!dev || !dev->gui_attached) return;
+  if(IS_NULL_PTR(dev) || !dev->gui_attached) return;
   _change_pipe(dev->pipe, DT_DEV_PIPE_TOP_CHANGED);
 }
 
 void dt_dev_pixelpipe_update_history_preview_real(dt_develop_t *dev)
 {
-  if(!dev || !dev->gui_attached) return;
+  if(IS_NULL_PTR(dev) || !dev->gui_attached) return;
   _change_pipe(dev->preview_pipe, DT_DEV_PIPE_TOP_CHANGED);
   // Virtual pipe mirrors preview history for GUI coordinate transforms.
   _sync_virtual_pipe(dev, DT_DEV_PIPE_TOP_CHANGED);
@@ -284,14 +284,14 @@ void dt_dev_pixelpipe_update_history_preview_real(dt_develop_t *dev)
 
 void dt_dev_pixelpipe_update_history_all_real(dt_develop_t *dev)
 {
-  if(!dev || !dev->gui_attached) return;
+  if(IS_NULL_PTR(dev) || !dev->gui_attached) return;
   dt_dev_pixelpipe_update_history_preview(dev);
   dt_dev_pixelpipe_update_history_main(dev);
 }
 
 void dt_dev_pixelpipe_update_zoom_preview_real(dt_develop_t *dev)
 {
-  if(!dev || !dev->gui_attached) return;
+  if(IS_NULL_PTR(dev) || !dev->gui_attached) return;
   _change_pipe(dev->preview_pipe, DT_DEV_PIPE_ZOOMED);
   // Keep the virtual pipe aligned with preview ROI/zoom changes for GUI transforms.
   _sync_virtual_pipe(dev, DT_DEV_PIPE_ZOOMED);
@@ -299,7 +299,7 @@ void dt_dev_pixelpipe_update_zoom_preview_real(dt_develop_t *dev)
 
 void dt_dev_pixelpipe_update_zoom_main_real(dt_develop_t *dev)
 {
-  if(!dev || !dev->gui_attached) return;
+  if(IS_NULL_PTR(dev) || !dev->gui_attached) return;
   /* Zoom/pan updates must run through the normal validity/ROI flow.
    * If a module left the main pipe in realtime mode, force it back to
    * standard mode here so zoom changes cannot get visually stuck on a
@@ -312,13 +312,13 @@ void dt_dev_pixelpipe_update_zoom_main_real(dt_develop_t *dev)
 void dt_dev_pixelpipe_reset_all(dt_develop_t *dev)
 {
   dt_dev_pixelpipe_cache_flush(darktable.pixelpipe_cache, -1);
-  if(darktable.gui->reset || !dev || !dev->gui_attached) return;
+  if(darktable.gui->reset || IS_NULL_PTR(dev) || !dev->gui_attached) return;
   dt_dev_pixelpipe_rebuild_all(dev);
 }
 
 void dt_dev_pixelpipe_change_zoom_main(dt_develop_t *dev)
 {
-  if (!dev || !dev->gui_attached) return;
+  if (IS_NULL_PTR(dev) || !dev->gui_attached) return;
   /* Entering a zoom/pan change always exits realtime rendering policy.
    * Realtime is stroke-scoped and should never control darkroom navigation. */
   dt_dev_pixelpipe_set_realtime(dev->pipe, FALSE);
@@ -505,7 +505,7 @@ uint64_t dt_dev_pixelpipe_node_hash(dt_dev_pixelpipe_t *pipe, const dt_dev_pixel
 const dt_dev_pixelpipe_iop_t *dt_dev_pixelpipe_get_module_piece(const dt_dev_pixelpipe_t *pipe,
                                                                 const dt_iop_module_t *module)
 {
-  if(!pipe || !module) return NULL;
+  if(IS_NULL_PTR(pipe) || IS_NULL_PTR(module)) return NULL;
 
   for(GList *node = g_list_first(pipe->nodes); node; node = g_list_next(node))
   {
@@ -520,7 +520,7 @@ const dt_dev_pixelpipe_iop_t *dt_dev_pixelpipe_get_module_piece(const dt_dev_pix
 const dt_dev_pixelpipe_iop_t *dt_dev_pixelpipe_get_prev_enabled_piece(const dt_dev_pixelpipe_t *pipe,
                                                                       const dt_dev_pixelpipe_iop_t *piece)
 {
-  if(!pipe || !piece) return NULL;
+  if(IS_NULL_PTR(pipe) || IS_NULL_PTR(piece)) return NULL;
 
   GList *node = g_list_find(pipe->nodes, (gpointer)piece);
   if(IS_NULL_PTR(node)) return NULL;
@@ -604,7 +604,7 @@ static void _dt_dev_pixelpipe_cache_wait_ready_callback(gpointer instance, const
                                                         dt_dev_pixelpipe_cache_wait_t *wait)
 {
   (void)instance;
-  if(!wait || !wait->connected || wait->hash != hash) return;
+  if(IS_NULL_PTR(wait) || !wait->connected || wait->hash != hash) return;
 
   dt_dev_pixelpipe_cache_ready_callback_t restart = wait->restart;
   gpointer user_data = wait->user_data;
@@ -614,7 +614,7 @@ static void _dt_dev_pixelpipe_cache_wait_ready_callback(gpointer instance, const
 
 void dt_dev_pixelpipe_cache_wait_cleanup(dt_dev_pixelpipe_cache_wait_t *wait)
 {
-  if(!wait || !wait->connected) return;
+  if(IS_NULL_PTR(wait) || !wait->connected) return;
 
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals,
                                      G_CALLBACK(_dt_dev_pixelpipe_cache_wait_ready_callback), wait);
@@ -735,7 +735,7 @@ static void _sync_pipe_nodes_from_history(dt_dev_pixelpipe_t *pipe, dt_develop_t
   for(GList *nodes = g_list_first(pipe->nodes); nodes; nodes = g_list_next(nodes))
   {
     dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)nodes->data;
-    if(!piece) continue;
+    if(IS_NULL_PTR(piece)) continue;
 
     piece->hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
     piece->blendop_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
@@ -786,14 +786,14 @@ static void _sync_pipe_nodes_from_history_from_node(dt_dev_pixelpipe_t *pipe, dt
                                                     const uint32_t history_end, GList *start_node,
                                                     const char *debug_label)
 {
-  if(!pipe || !start_node) return;
+  if(IS_NULL_PTR(pipe) || !start_node) return;
 
   dt_iop_buffer_dsc_t upstream_dsc = pipe->image.dsc;
   const gboolean previous_want_detail_mask = (pipe->want_detail_mask != DT_DEV_DETAIL_MASK_NONE);
   for(GList *node = g_list_first(pipe->nodes); node && node != start_node; node = g_list_next(node))
   {
     dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)node->data;
-    if(!piece) continue;
+    if(IS_NULL_PTR(piece)) continue;
 
     upstream_dsc = piece->dsc_out;
   }
@@ -801,7 +801,7 @@ static void _sync_pipe_nodes_from_history_from_node(dt_dev_pixelpipe_t *pipe, dt
   for(GList *nodes = start_node; nodes; nodes = g_list_next(nodes))
   {
     dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)nodes->data;
-    if(!piece) continue;
+    if(IS_NULL_PTR(piece)) continue;
 
     piece->hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
     piece->blendop_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
@@ -1035,7 +1035,7 @@ void dt_dev_pixelpipe_synch_top(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
       for(GList *nodes = g_list_last(pipe->nodes); nodes; nodes = g_list_previous(nodes))
       {
         dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)nodes->data;
-        if(!piece || piece->module != hist->module) continue;
+        if(IS_NULL_PTR(piece) || piece->module != hist->module) continue;
 
         _sync_pipe_nodes_from_history_from_node(pipe, dev, history_end, nodes, type);
         break;
@@ -1136,7 +1136,7 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
 static void _sync_virtual_pipe(dt_develop_t *dev, dt_dev_pixelpipe_change_t flag)
 {
   // Virtual pipe exists only for GUI geometry (ROI/mask transforms) and never processes pixels.
-  if(!dev || !dev->gui_attached || !dev->virtual_pipe) return;
+  if(IS_NULL_PTR(dev) || !dev->gui_attached || IS_NULL_PTR(dev->virtual_pipe)) return;
   if(!dev->roi.raw_inited || dev->image_storage.id <= 0) return;
 
   // Ensure its input image metadata matches the current dev state.

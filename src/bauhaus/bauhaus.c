@@ -115,8 +115,8 @@ static void _combobox_set(GtkWidget *widget, const int pos, gboolean timeout);
  */
 static void _margins_retrieve(struct dt_bauhaus_widget_t *w)
 {
-  if(!w->margin) w->margin = gtk_border_new();
-  if(!w->padding) w->padding = gtk_border_new();
+  if(IS_NULL_PTR(w->margin)) w->margin = gtk_border_new();
+  if(IS_NULL_PTR(w->padding)) w->padding = gtk_border_new();
   GtkStyleContext *context = gtk_widget_get_style_context(GTK_WIDGET(w));
   const GtkStateFlags state = gtk_widget_get_state_flags(GTK_WIDGET(w));
   gtk_style_context_get_margin(context, state, w->margin);
@@ -423,7 +423,7 @@ gboolean dt_bauhaus_focus_callback(GtkWidget *widget, GtkDirectionType direction
 gboolean _action_request_focus(GtkAccelGroup *accel_group, GObject *accelerable, guint keyval,
                                GdkModifierType modifier, gpointer data)
 {
-  if(!data || !accelerable)
+  if(IS_NULL_PTR(data) || IS_NULL_PTR(accelerable))
   {
     dt_toast_log(_("The target widget of the action does not exist anymore"));
     fprintf(stderr, "The target widget of the action does not exist anymore");
@@ -1559,7 +1559,7 @@ void dt_bauhaus_combobox_set_editable(GtkWidget *widget, int editable)
   if(w->type != DT_BAUHAUS_COMBOBOX) return;
   dt_bauhaus_combobox_data_t *d = &w->data.combobox;
   d->editable = editable ? 1 : 0;
-  if(d->editable && !d->text)
+  if(d->editable && IS_NULL_PTR(d->text))
     d->text = calloc(1, DT_BAUHAUS_COMBO_MAX_TEXT);
 }
 
@@ -1583,7 +1583,7 @@ void dt_bauhaus_combobox_remove_at(GtkWidget *widget, int pos)
 {
   dt_bauhaus_combobox_data_t *d = _combobox_data(widget);
 
-  if(!d || pos < 0 || pos >= d->entries->len) return;
+  if(IS_NULL_PTR(d) || pos < 0 || pos >= d->entries->len) return;
 
   // move active position up if removing anything before it
   // or when removing last position that is currently active.
@@ -1635,7 +1635,7 @@ const char *dt_bauhaus_combobox_get_text(GtkWidget *widget)
 gpointer dt_bauhaus_combobox_get_data(GtkWidget *widget)
 {
   const dt_bauhaus_combobox_data_t *d = _combobox_data(widget);
-  if(!d || d->active < 0) return NULL;
+  if(IS_NULL_PTR(d) || d->active < 0) return NULL;
 
   const dt_bauhaus_combobox_entry_t *entry = g_ptr_array_index(d->entries, d->active);
   return entry->data;
@@ -1654,7 +1654,7 @@ void dt_bauhaus_combobox_clear(GtkWidget *widget)
 const char *dt_bauhaus_combobox_get_entry(GtkWidget *widget, int pos)
 {
   const dt_bauhaus_combobox_data_t *d = _combobox_data(widget);
-  if(!d || pos < 0 || pos >= d->entries->len) return NULL;
+  if(IS_NULL_PTR(d) || pos < 0 || pos >= d->entries->len) return NULL;
 
   const dt_bauhaus_combobox_entry_t *entry = g_ptr_array_index(d->entries, pos);
   return entry->label;
@@ -1663,7 +1663,7 @@ const char *dt_bauhaus_combobox_get_entry(GtkWidget *widget, int pos)
 void dt_bauhaus_combobox_set_text(GtkWidget *widget, const char *text)
 {
   const dt_bauhaus_combobox_data_t *d = _combobox_data(widget);
-  if(!d || !d->editable) return;
+  if(IS_NULL_PTR(d) || !d->editable) return;
 
   g_strlcpy(d->text, text, DT_BAUHAUS_COMBO_MAX_TEXT);
 }
@@ -1796,7 +1796,7 @@ int dt_bauhaus_combobox_get(GtkWidget *widget)
 void dt_bauhaus_combobox_entry_set_sensitive(GtkWidget *widget, int pos, gboolean sensitive)
 {
   const dt_bauhaus_combobox_data_t *d = _combobox_data(widget);
-  if(!d || pos < 0 || pos >= d->entries->len) return;
+  if(IS_NULL_PTR(d) || pos < 0 || pos >= d->entries->len) return;
 
   dt_bauhaus_combobox_entry_t *entry = (dt_bauhaus_combobox_entry_t *)g_ptr_array_index(d->entries, pos);
   entry->sensitive = sensitive;
@@ -1816,7 +1816,7 @@ void dt_bauhaus_slider_set_stop(GtkWidget *widget, float stop, float r, float g,
   if(w->type != DT_BAUHAUS_SLIDER) return;
   dt_bauhaus_slider_data_t *d = &w->data.slider;
 
-  if(!d->grad_col)
+  if(IS_NULL_PTR(d->grad_col))
   {
     d->grad_col = malloc(DT_BAUHAUS_SLIDER_MAX_STOPS * sizeof(*d->grad_col));
     d->grad_pos = malloc(DT_BAUHAUS_SLIDER_MAX_STOPS * sizeof(*d->grad_pos));

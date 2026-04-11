@@ -234,7 +234,7 @@ restart:
   else
     entry->data = dt_alloc_align(entry->data_size);
 
-  if(!entry->data)
+  if(IS_NULL_PTR(entry->data))
   {
     dt_free(entry);
     dt_pthread_mutex_unlock(&cache->lock);
@@ -413,7 +413,7 @@ void dt_cache_release_with_caller(dt_cache_t *cache, dt_cache_entry_t *entry, co
 int dt_cache_seed(dt_cache_t *cache, const uint32_t key, const void *data, size_t data_size, size_t cost,
                   gboolean aligned_alloc)
 {
-  if(!cache || !data || data_size == 0) return -1;
+  if(IS_NULL_PTR(cache) || IS_NULL_PTR(data) || data_size == 0) return -1;
 
   dt_pthread_mutex_lock(&cache->lock);
   if(g_hash_table_contains(cache->hashtable, GINT_TO_POINTER(key)))
@@ -434,7 +434,7 @@ int dt_cache_seed(dt_cache_t *cache, const uint32_t key, const void *data, size_
   entry->_lock_demoting = 0;
 
   entry->data = aligned_alloc ? dt_alloc_align(entry->data_size) : g_malloc(entry->data_size);
-  if(!entry->data)
+  if(IS_NULL_PTR(entry->data))
   {
     g_slice_free1(sizeof(*entry), entry);
     dt_pthread_mutex_unlock(&cache->lock);

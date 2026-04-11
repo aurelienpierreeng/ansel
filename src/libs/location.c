@@ -374,7 +374,7 @@ static gboolean _lib_location_search(gpointer user_data)
   query = g_strdup_printf(search_url, text, LIMIT_RESULT);
   /* load url */
   curl = curl_easy_init();
-  if(!curl) goto bail_out;
+  if(IS_NULL_PTR(curl)) goto bail_out;
 
   dt_curl_init(curl, FALSE);
 
@@ -396,7 +396,7 @@ static gboolean _lib_location_search(gpointer user_data)
 
   /* add the places into the result list */
   GList *item = lib->places;
-  if(!item) goto bail_out;
+  if(IS_NULL_PTR(item)) goto bail_out;
 
 //   while(item)
 //   {
@@ -441,7 +441,7 @@ void _lib_location_entry_activated(GtkButton *button, gpointer user_data)
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
   dt_lib_location_t *lib = (dt_lib_location_t *)self->data;
   const gchar *text = gtk_entry_get_text(lib->search);
-  if(!text || text[0] == '\0') return;
+  if(IS_NULL_PTR(text) || text[0] == '\0') return;
 
   /* lock the widget while search job is performing */
   gtk_widget_set_sensitive(GTK_WIDGET(lib->search), FALSE);

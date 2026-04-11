@@ -93,7 +93,7 @@ void dt_lib_export_metadata_set_conf(const char *metadata_presets)
       {
         const char *tagname = (char *)tags->data;
         tags = g_list_next(tags);
-        if (!tags) break;
+        if (IS_NULL_PTR(tags)) break;
         const char *formula = (char *)tags->data;
         nameformula = g_strdup_printf("%s;%s", tagname, formula);
         conf_keyword = g_strdup_printf("%s%d", formula_keyword, i);

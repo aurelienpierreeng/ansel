@@ -540,7 +540,7 @@ static gboolean _get_axis_value_for_source(const GdkEvent *event, GdkDevice *sou
 static gboolean _sample_axis_from_device_state(GdkWindow *window, GdkDevice *device,
                                                 const GdkAxisUse axis, double *value)
 {
-  if(!window || !device || !value) return FALSE;
+  if(IS_NULL_PTR(window) || IS_NULL_PTR(device) || IS_NULL_PTR(value)) return FALSE;
   if(gdk_device_get_source(device) == GDK_SOURCE_KEYBOARD) return FALSE;
   if(gdk_device_get_device_type(device) == GDK_DEVICE_TYPE_SLAVE)
   {
@@ -572,7 +572,7 @@ static gboolean _sample_tablet_state_from_devices(const GdkEvent *event,
 
   if(IS_NULL_PTR(darktable.gui)) return FALSE;
   GdkWindow *window = gdk_event_get_window((GdkEvent *)event);
-  if(!window) window = gtk_widget_get_window(dt_ui_center(darktable.gui->ui));
+  if(IS_NULL_PTR(window)) window = gtk_widget_get_window(dt_ui_center(darktable.gui->ui));
   if(IS_NULL_PTR(window)) return FALSE;
 
   int best_score = -1;
@@ -589,7 +589,7 @@ static gboolean _sample_tablet_state_from_devices(const GdkEvent *event,
   for(GList *l = runtime_devices; l; l = g_list_next(l))
   {
     GdkDevice *device = (GdkDevice *)l->data;
-    if(!device) continue;
+    if(IS_NULL_PTR(device)) continue;
     const GdkInputSource source = gdk_device_get_source(device);
     if(source == GDK_SOURCE_KEYBOARD) continue;
     if(gdk_device_get_device_type(device) == GDK_DEVICE_TYPE_SLAVE)
@@ -707,7 +707,7 @@ static dt_control_pointer_input_t _extract_pointer_input(const GdkEvent *event, 
                  || tool_type == GDK_DEVICE_TOOL_TYPE_AIRBRUSH);
   gboolean is_tablet_like = supports_pressure || supports_x_tilt || supports_y_tilt || tool_is_stylus;
   GdkWindow *window = gdk_event_get_window((GdkEvent *)event);
-  if(!window && darktable.gui) window = gtk_widget_get_window(dt_ui_center(darktable.gui->ui));
+  if(IS_NULL_PTR(window) && darktable.gui) window = gtk_widget_get_window(dt_ui_center(darktable.gui->ui));
 
   {
     double pressure = 0.0;
@@ -1120,7 +1120,7 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   for(GList *l = stylus_devices; !IS_NULL_PTR(l); l = g_list_next(l))
   {
     GdkDevice *device = (GdkDevice *)l->data;
-    if(!device) continue;
+    if(IS_NULL_PTR(device)) continue;
     dt_print(DT_DEBUG_INPUT, "  [tablet seat] %s source=%s axes_flags=%u n_axes=%d\n",
              gdk_device_get_name(device), _get_source_name(gdk_device_get_source(device)),
              (unsigned int)gdk_device_get_axes(device), gdk_device_get_n_axes(device));
@@ -1133,7 +1133,7 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   for(GList *l = input_devices; !IS_NULL_PTR(l); l = g_list_next(l))
   {
     GdkDevice *device = (GdkDevice *)l->data;
-    if(!device) continue;
+    if(IS_NULL_PTR(device)) continue;
     const GdkInputSource source = gdk_device_get_source(device);
     const gint n_axes = (source == GDK_SOURCE_KEYBOARD ? 0 : gdk_device_get_n_axes(device));
 
@@ -2409,7 +2409,7 @@ void dt_gui_widget_init_auto_height(GtkWidget *w, const int min_rows, const int 
   _widget_auto_ensure_scrolled_window(w);
 
   dt_gui_widget_auto_height_t *state = g_object_get_data(G_OBJECT(w), DT_GUI_WIDGET_AUTO_HEIGHT_KEY);
-  if(!state)
+  if(IS_NULL_PTR(state))
   {
     state = calloc(1, sizeof(*state));
     g_object_set_data_full(G_OBJECT(w), DT_GUI_WIDGET_AUTO_HEIGHT_KEY, state,
@@ -2543,7 +2543,7 @@ void dt_gui_menu_popup(GtkMenu *menu, GtkWidget *button, GdkGravity widget_ancho
   }
   else
   {
-    if(!event)
+    if(IS_NULL_PTR(event))
     {
       event = gdk_event_new(GDK_BUTTON_PRESS);
       event->button.device = gdk_seat_get_pointer(gdk_display_get_default_seat(gdk_display_get_default()));

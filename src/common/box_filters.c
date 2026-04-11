@@ -1085,7 +1085,7 @@ int dt_box_mean_horizontal(float *const restrict buf, const size_t width, const 
     if(IS_NULL_PTR(scratch)) return 1;
 
     blur_horizontal_4ch_Kahan(buf, width, radius, scratch);
-    if (!user_scratch)
+    if (IS_NULL_PTR(user_scratch))
       dt_pixelpipe_cache_free_align(scratch);
     return 0;
   }
@@ -1096,7 +1096,7 @@ int dt_box_mean_horizontal(float *const restrict buf, const size_t width, const 
     if(IS_NULL_PTR(scratch)) return 1;
 
     blur_horizontal_Nch_Kahan(9, buf, width, radius, scratch);
-    if (!user_scratch)
+    if (IS_NULL_PTR(user_scratch))
       dt_pixelpipe_cache_free_align(scratch);
     return 0;
   }

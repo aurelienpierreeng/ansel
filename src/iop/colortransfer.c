@@ -271,7 +271,7 @@ static int kmeans(const float *col, const dt_iop_roi_t *const roi, const int n, 
   float2 *const mean = malloc(sizeof(float2) * n);
   float2 *const var = malloc(sizeof(float2) * n);
   int *const cnt = malloc(sizeof(int) * n);
-  if(!mean || !var || !cnt)
+  if(IS_NULL_PTR(mean) || IS_NULL_PTR(var) || IS_NULL_PTR(cnt))
   {
     dt_free(cnt);
     dt_free(var);
@@ -410,7 +410,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     // cluster input buffer
     float2 *const mean = malloc(sizeof(float2) * data->n);
     float2 *const var = malloc(sizeof(float2) * data->n);
-    if(!mean || !var)
+    if(IS_NULL_PTR(mean) || IS_NULL_PTR(var))
     {
       dt_free(mean);
       dt_free(var);
@@ -426,7 +426,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
     // get mapping from input clusters to target clusters
     int *const mapio = malloc(sizeof(int) * data->n);
-    if(!mapio)
+    if(IS_NULL_PTR(mapio))
     {
       dt_free(var);
       dt_free(mean);

@@ -251,7 +251,7 @@ static void _render_brush_profile_cell(unsigned char *dst, const int stride, con
                                        float *rgba_scratch,
                                        const dt_drawlayer_widgets_t *widgets, const int shape)
 {
-  if(!dst || !rgba_scratch || width <= 0 || height <= 0 || !widgets) return;
+  if(IS_NULL_PTR(dst) || IS_NULL_PTR(rgba_scratch) || width <= 0 || height <= 0 || !widgets) return;
 
   memset(dst, 0, (size_t)stride * height);
   for(int py = 0; py < height; py++)
@@ -540,7 +540,7 @@ gboolean dt_drawlayer_widgets_pick_history_color(const dt_drawlayer_widgets_t *w
 gboolean dt_drawlayer_widgets_draw_picker(dt_drawlayer_widgets_t *widgets, GtkWidget *widget, cairo_t *cr,
                                           double pixels_per_dip)
 {
-  if(!widgets || !widget || !cr) return FALSE;
+  if(!widgets || !widget || IS_NULL_PTR(cr)) return FALSE;
 
   const int width = gtk_widget_get_allocated_width(widget);
   const int height = gtk_widget_get_allocated_height(widget);
@@ -662,7 +662,7 @@ gboolean dt_drawlayer_widgets_draw_picker(dt_drawlayer_widgets_t *widgets, GtkWi
 /** @brief Draw compact color-history swatch grid. */
 gboolean dt_drawlayer_widgets_draw_swatch(const dt_drawlayer_widgets_t *widgets, GtkWidget *widget, cairo_t *cr)
 {
-  if(!widgets || !widget || !cr) return FALSE;
+  if(!widgets || !widget || IS_NULL_PTR(cr)) return FALSE;
 
   const int width = gtk_widget_get_allocated_width(widget);
   const int height = gtk_widget_get_allocated_height(widget);
@@ -735,7 +735,7 @@ int dt_drawlayer_widgets_get_brush_profile_selection(const dt_drawlayer_widgets_
 gboolean dt_drawlayer_widgets_draw_brush_profiles(dt_drawlayer_widgets_t *widgets, GtkWidget *widget,
                                                   cairo_t *cr, const double pixels_per_dip)
 {
-  if(!widgets || !widget || !cr) return FALSE;
+  if(!widgets || !widget || IS_NULL_PTR(cr)) return FALSE;
 
   const int width = gtk_widget_get_allocated_width(widget);
   const int height = gtk_widget_get_allocated_height(widget);

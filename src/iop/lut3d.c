@@ -247,7 +247,7 @@ uint8_t calculate_clut_compressed(dt_iop_lut3d_params_t *const p, const char *co
   get_cache_filename(p->lutname, cache_filename);
   buf_size_lut = (size_t)(level * level * level * 3);
   lclut = dt_pixelpipe_cache_alloc_align_cache(sizeof(float) * buf_size_lut, 0);
-  if(!lclut)
+  if(IS_NULL_PTR(lclut))
   {
     fprintf(stderr, "[lut3d] error allocating buffer for gmz lut\n");
     dt_control_log(_("error allocating buffer for gmz lut"));
@@ -329,7 +329,7 @@ uint16_t calculate_clut_haldclut(dt_iop_lut3d_params_t *const p, const char *con
   dt_print(DT_DEBUG_DEV, "[lut3d] allocating %zu bytes for png file\n", buf_size);
   uint8_t *buf = NULL;
   buf = dt_pixelpipe_cache_alloc_align_cache(buf_size, 0);
-  if(!buf)
+  if(IS_NULL_PTR(buf))
   {
     fprintf(stderr, "[lut3d] error allocating buffer for png lut\n");
     dt_control_log(_("error allocating buffer for png lut"));
@@ -347,7 +347,7 @@ uint16_t calculate_clut_haldclut(dt_iop_lut3d_params_t *const p, const char *con
   const size_t buf_size_lut = (size_t)png.height * png.height * 3;
   dt_print(DT_DEBUG_DEV, "[lut3d] allocating %zu floats for png lut - level %d\n", buf_size_lut, level);
   float *lclut = dt_pixelpipe_cache_alloc_align_cache(sizeof(float) * buf_size_lut, 0);
-  if(!lclut)
+  if(IS_NULL_PTR(lclut))
   {
     fprintf(stderr, "[lut3d] error - allocating buffer for png lut\n");
     dt_control_log(_("error - allocating buffer for png lut"));
@@ -577,7 +577,7 @@ uint16_t calculate_clut_cube(const char *const filepath, float **clut)
         buf_size = level * level * level * 3;
         dt_print(DT_DEBUG_DEV, "[lut3d] allocating %zu bytes for cube lut - level %d\n", buf_size, level);
         lclut = dt_pixelpipe_cache_alloc_align_cache(sizeof(float) * buf_size, 0);
-        if(!lclut)
+        if(IS_NULL_PTR(lclut))
         {
           fprintf(stderr, "[lut3d] error - allocating buffer for cube lut\n");
           dt_control_log(_("error - allocating buffer for cube lut"));
@@ -681,7 +681,7 @@ uint16_t calculate_clut_3dl(const char *const filepath, float **clut)
             buf_size = level * level * level * 3;
             dt_print(DT_DEBUG_DEV, "[lut3d] allocating %zu bytes for cube lut - level %d\n", buf_size, level);
             lclut = dt_pixelpipe_cache_alloc_align_cache(sizeof(float) * buf_size, 0);
-            if(!lclut)
+            if(IS_NULL_PTR(lclut))
             {
               fprintf(stderr, "[lut3d] error - allocating buffer for cube lut\n");
               dt_control_log(_("error - allocating buffer for cube lut"));
@@ -1260,7 +1260,7 @@ gboolean check_extension(char *filename)
   gboolean res = FALSE;
   if (!filename || !filename[0]) return res;
   char *p = g_strrstr(filename,".");
-  if (!p) return res;
+  if (IS_NULL_PTR(p)) return res;
   char *fext = g_ascii_strdown(g_strdup(p), -1);
 #ifdef HAVE_GMIC
   if (!g_strcmp0(fext, ".png") || !g_strcmp0(fext, ".cube") || !g_strcmp0(fext, ".3dl")

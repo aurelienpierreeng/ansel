@@ -187,7 +187,7 @@ static void _piwigo_free_account(void *data)
 
 static void _piwigo_load_account(dt_storage_piwigo_gui_data_t *ui)
 {
-  if(!ui->accounts)
+  if(IS_NULL_PTR(ui->accounts))
   {
     g_list_free_full(ui->accounts, _piwigo_free_account);
     ui->accounts = NULL;
@@ -278,7 +278,7 @@ static void _piwigo_set_account(dt_storage_piwigo_gui_data_t *ui)
 /** Set status connection text */
 static void _piwigo_set_status(dt_storage_piwigo_gui_data_t *ui, gchar *message, gchar *color)
 {
-  if(!color) color = "#ffffff";
+  if(IS_NULL_PTR(color)) color = "#ffffff";
   gchar mup[512] = { 0 };
   snprintf(mup, sizeof(mup), "<span foreground=\"%s\" ><small>%s</small></span>", color, message);
   gtk_label_set_markup(ui->status_label, mup);
@@ -471,7 +471,7 @@ static void _piwigo_api_post(_piwigo_api_context_t *ctx, GList *args, char *file
 
 static void _piwigo_authenticate(dt_storage_piwigo_gui_data_t *ui)
 {
-  if(!ui->api) ui->api = _piwigo_ctx_init();
+  if(IS_NULL_PTR(ui->api)) ui->api = _piwigo_ctx_init();
 
   ui->api->server = g_strdup(gtk_entry_get_text(ui->server_entry));
   ui->api->username = g_uri_escape_string(gtk_entry_get_text(ui->user_entry), NULL, FALSE);

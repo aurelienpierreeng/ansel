@@ -152,7 +152,7 @@ static inline void _image_cache_lock_init(dt_image_t *img)
 
 static void _image_cache_write_history_hash(const dt_image_t *img)
 {
-  if(!img || img->id <= 0) return;
+  if(IS_NULL_PTR(img) || img->id <= 0) return;
 
   _image_cache_stmt_mutex_ensure();
   dt_pthread_mutex_lock(&_image_cache_stmt_mutex);
@@ -180,7 +180,7 @@ static void _image_cache_write_history_hash(const dt_image_t *img)
 
 static sqlite3_stmt *_image_cache_get_stmt(void)
 {
-  if(!_image_cache_load_stmt)
+  if(IS_NULL_PTR(_image_cache_load_stmt))
   {
     // clang-format off
     DT_DEBUG_SQLITE3_PREPARE_V2(
@@ -468,7 +468,7 @@ int dt_image_invalid(const dt_image_t *img)
 
 int dt_image_cache_seed(dt_image_cache_t *cache, const dt_image_t *img)
 {
-  if(!cache || dt_image_invalid(img)) return -1;
+  if(IS_NULL_PTR(cache) || dt_image_invalid(img)) return -1;
 
   dt_image_t seeded = *img;
 
@@ -507,7 +507,7 @@ void dt_image_cache_connect_info_changed_first(const struct dt_control_signal_t 
 // drops the read lock on an image struct
 void dt_image_cache_read_release(dt_image_cache_t *cache, const dt_image_t *img)
 {
-  if(!img || img->id <= 0) return;
+  if(IS_NULL_PTR(img) || img->id <= 0) return;
   const uint64_t self_hash = _image_cache_self_hash(img);
   if(self_hash != img->self_hash)
     g_error("[image_cache] read lock modified image %d, you need to use a write lock\n", img->id);

@@ -348,7 +348,7 @@ int dt_dev_get_thumbnail_size(dt_develop_t *dev)
 gboolean dt_dev_pixelpipe_has_preview_output(const dt_develop_t *dev, const dt_dev_pixelpipe_t *pipe,
                                              const dt_iop_roi_t *roi)
 {
-  if(!dev || !pipe || !dev->gui_attached || !dev->roi.output_inited) return FALSE;
+  if(IS_NULL_PTR(dev) || IS_NULL_PTR(pipe) || !dev->gui_attached || !dev->roi.output_inited) return FALSE;
 
   int x = 0;
   int y = 0;
@@ -420,7 +420,7 @@ static gboolean _update_darkroom_roi(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe
 
 gboolean dt_dev_pipelines_share_preview_output(dt_develop_t *dev)
 {
-  if(!dev || !dev->gui_attached || !dev->pipe || !dev->preview_pipe || !dev->roi.output_inited) return FALSE;
+  if(IS_NULL_PTR(dev) || !dev->gui_attached || IS_NULL_PTR(dev->pipe) || IS_NULL_PTR(dev->preview_pipe) || !dev->roi.output_inited) return FALSE;
 
   float preview_scale = 1.0f;
   float main_scale = 1.0f;
@@ -690,7 +690,7 @@ static gboolean _dt_dev_refresh_image_storage(dt_develop_t *dev, const int32_t i
 
 dt_dev_image_storage_t dt_dev_ensure_image_storage(dt_develop_t *dev, const int32_t imgid)
 {
-  if(!dev || imgid <= 0 || !darktable.image_cache)
+  if(IS_NULL_PTR(dev) || imgid <= 0 || IS_NULL_PTR(darktable.image_cache))
     return DT_DEV_IMAGE_STORAGE_DB_NOT_READ;
 
   if(!_dt_dev_mipmap_prefetch_full(dev, imgid))
@@ -829,7 +829,7 @@ void dt_dev_get_processed_size(const dt_develop_t *dev, int *procw, int *proch)
 
 void dt_dev_coordinates_widget_delta_to_image_delta(dt_develop_t *dev, float *points, size_t num_points)
 {
-  if(!dev || !points || num_points == 0) return;
+  if(IS_NULL_PTR(dev) || IS_NULL_PTR(points) || num_points == 0) return;
 
   const float scale = dt_dev_get_zoom_level(dev) / darktable.gui->ppd;
   if(scale == 0.0f) return;
@@ -846,7 +846,7 @@ void dt_dev_coordinates_widget_delta_to_image_delta(dt_develop_t *dev, float *po
 
 void dt_dev_coordinates_widget_to_image_norm(dt_develop_t *dev, float *points, size_t num_points)
 {
-  if(!dev || !points || num_points == 0) return;
+  if(IS_NULL_PTR(dev) || IS_NULL_PTR(points) || num_points == 0) return;
   const float processed_width = dev->roi.processed_width;
   const float processed_height = dev->roi.processed_height;
   if(processed_width == 0.0f || processed_height == 0.0f) return;
@@ -874,7 +874,7 @@ void dt_dev_coordinates_widget_to_image_norm(dt_develop_t *dev, float *points, s
 
 void dt_dev_coordinates_image_norm_to_widget(dt_develop_t *dev, float *points, size_t num_points)
 {
-  if(!dev || !points || num_points == 0) return;
+  if(IS_NULL_PTR(dev) || IS_NULL_PTR(points) || num_points == 0) return;
   const float processed_width = dev->roi.processed_width;
   const float processed_height = dev->roi.processed_height;
   if(processed_width == 0.0f || processed_height == 0.0f) return;
@@ -903,7 +903,7 @@ void dt_dev_coordinates_image_norm_to_widget(dt_develop_t *dev, float *points, s
 
 void dt_dev_coordinates_image_norm_to_image_abs(dt_develop_t *dev, float *points, size_t num_points)
 {
-  if(!dev || !points || num_points == 0) return;
+  if(IS_NULL_PTR(dev) || IS_NULL_PTR(points) || num_points == 0) return;
   const float processed_width = dev->roi.processed_width;
   const float processed_height = dev->roi.processed_height;
   if(processed_width == 0.0f || processed_height == 0.0f) return;
@@ -918,7 +918,7 @@ void dt_dev_coordinates_image_norm_to_image_abs(dt_develop_t *dev, float *points
 
 void dt_dev_coordinates_image_abs_to_image_norm(dt_develop_t *dev, float *points, size_t num_points)
 {
-  if(!dev || !points || num_points == 0) return;
+  if(IS_NULL_PTR(dev) || IS_NULL_PTR(points) || num_points == 0) return;
   const float processed_width = dev->roi.processed_width;
   const float processed_height = dev->roi.processed_height;
   if(processed_width == 0.0f || processed_height == 0.0f) return;
@@ -935,7 +935,7 @@ void dt_dev_coordinates_image_abs_to_image_norm(dt_develop_t *dev, float *points
 
 void dt_dev_coordinates_raw_abs_to_raw_norm(dt_develop_t *dev, float *points, size_t num_points)
 {
-  if(!dev || !points || num_points == 0) return;
+  if(IS_NULL_PTR(dev) || IS_NULL_PTR(points) || num_points == 0) return;
   const float raw_width = dev->roi.raw_width;
   const float raw_height = dev->roi.raw_height;
   if(raw_width == 0.0f || raw_height == 0.0f) return;
@@ -952,7 +952,7 @@ void dt_dev_coordinates_raw_abs_to_raw_norm(dt_develop_t *dev, float *points, si
 
 void dt_dev_coordinates_raw_norm_to_raw_abs(dt_develop_t *dev, float *points, size_t num_points)
 {
-  if(!dev || !points || num_points == 0) return;
+  if(IS_NULL_PTR(dev) || IS_NULL_PTR(points) || num_points == 0) return;
   const float raw_width = dev->roi.raw_width;
   const float raw_height = dev->roi.raw_height;
   if(raw_width == 0.0f || raw_height == 0.0f) return;
@@ -973,7 +973,7 @@ void dt_dev_coordinates_image_abs_to_raw_norm(dt_develop_t *dev, float *points, 
 
 void dt_dev_coordinates_image_norm_to_preview_abs(dt_develop_t *dev, float *points, size_t num_points)
 {
-  if(!dev || !points || num_points == 0) return;
+  if(IS_NULL_PTR(dev) || IS_NULL_PTR(points) || num_points == 0) return;
   const float preview_width = dev->roi.preview_width;
   const float preview_height = dev->roi.preview_height;
   if(preview_width == 0.0f || preview_height == 0.0f) return;
@@ -988,7 +988,7 @@ void dt_dev_coordinates_image_norm_to_preview_abs(dt_develop_t *dev, float *poin
 
 void dt_dev_coordinates_preview_abs_to_image_norm(dt_develop_t *dev, float *points, size_t num_points)
 {
-  if(!dev || !points || num_points == 0) return;
+  if(IS_NULL_PTR(dev) || IS_NULL_PTR(points) || num_points == 0) return;
   const float preview_width = dev->roi.preview_width;
   const float preview_height = dev->roi.preview_height;
   if(preview_width == 0.0f || preview_height == 0.0f) return;
@@ -1010,7 +1010,7 @@ int dt_dev_is_current_image(dt_develop_t *dev, int32_t imgid)
 
 void dt_dev_modulegroups_switch(dt_develop_t *dev, dt_iop_module_t *module)
 {
-  if(!dev || !module) return;
+  if(IS_NULL_PTR(dev) || IS_NULL_PTR(module)) return;
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_MODULEGROUPS_SET, module);
 }
 
@@ -1548,14 +1548,14 @@ float dt_dev_get_widget_zoom_scale(const dt_develop_t *dev, const float scaling)
 
 void dt_dev_get_widget_center(const dt_develop_t *dev, float *point)
 {
-  if(!dev || !point) return;
+  if(IS_NULL_PTR(dev) || IS_NULL_PTR(point)) return;
   point[0] = 0.5f * dev->roi.orig_width;
   point[1] = 0.5f * dev->roi.orig_height;
 }
 
 void dt_dev_get_image_box_in_widget(const dt_develop_t *dev, const int32_t width, const int32_t height, float *box)
 {
-  if(!dev || !box) return;
+  if(IS_NULL_PTR(dev) || IS_NULL_PTR(box)) return;
 
   const float scale = dev->roi.scaling / darktable.gui->ppd;
   const float roi_width = fminf(width, dev->roi.preview_width * scale);
@@ -1585,7 +1585,7 @@ void dt_dev_reset_roi(dt_develop_t *dev)
 void dt_dev_convert_roi(const dt_develop_t *dev, const dt_iop_roi_t *roi_in, dt_iop_roi_t *roi_out,
                         const dt_dev_roi_space_t from, const dt_dev_roi_space_t to)
 {
-  if(!dev || !roi_in || !roi_out) return;
+  if(IS_NULL_PTR(dev) || IS_NULL_PTR(roi_in) || IS_NULL_PTR(roi_out)) return;
 
   *roi_out = *roi_in;
   if(from == to) return;

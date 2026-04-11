@@ -331,7 +331,7 @@ static gboolean _migrate_schema(dt_database_t *db, int version)
     const int op_version = sqlite3_column_int(stmt, 3);
 
     // is it still the same (name, operation, op_version) triple?
-    if(!last_name || strcmp(last_name, name) || !last_operation || strcmp(last_operation, operation)
+    if(IS_NULL_PTR(last_name) || strcmp(last_name, name) || IS_NULL_PTR(last_operation) || strcmp(last_operation, operation)
        || last_op_version != op_version)
     {
       dt_free(last_name);
@@ -1331,7 +1331,7 @@ static int _upgrade_library_schema_step(dt_database_t *db, int version)
             do
             {
               n = g_list_next(n);
-              if(!n) break;
+              if(IS_NULL_PTR(n)) break;
               n_entry = (dt_iop_order_entry_t *)n->data;
             } while(!strcmp(n_entry->operation, e_entry->operation));
             e = n;
@@ -3032,7 +3032,7 @@ start:
   if(IS_NULL_PTR(alternative))
   {
     dbname = dt_conf_get_string("database");
-    if(!dbname)
+    if(IS_NULL_PTR(dbname))
       snprintf(dbfilename_library, sizeof(dbfilename_library), "%s/library.db", datadir);
     else if(!strcmp(dbname, ":memory:"))
       g_strlcpy(dbfilename_library, dbname, sizeof(dbfilename_library));
@@ -4186,7 +4186,7 @@ static gint _db_snap_sort(gconstpointer a, gconstpointer b, gpointer user_data)
 
   gchar *datepos1 = g_strrstr(e1, "-snp-");
   gchar *datepos2 = g_strrstr(e2, "-snp-");
-  if(!datepos1 || !datepos2)
+  if(IS_NULL_PTR(datepos1) || IS_NULL_PTR(datepos2))
     return 0;
 
   datepos1 +=5; //skip "-snp-"
@@ -4592,7 +4592,7 @@ gchar *dt_database_get_most_recent_snap(const char* db_filename)
   g_file_enumerator_close(db_dir_files, NULL, NULL);
   g_object_unref(db_dir_files);
 
-  if(!last_snap_name)
+  if(IS_NULL_PTR(last_snap_name))
   {
     g_object_unref(parent);
     return NULL;

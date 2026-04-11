@@ -534,7 +534,7 @@ static void view_popup_menu_onSearchFilmroll(GtkWidget *menuitem, gpointer userd
       gchar *old = NULL;
 
       gchar *q_tree_path = g_strdup_printf("%s%%", tree_path);
-      if(!_collect_filmrolls_select_like_stmt)
+      if(IS_NULL_PTR(_collect_filmrolls_select_like_stmt))
       {
         DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
                                     "SELECT id, folder FROM main.film_rolls WHERE folder LIKE ?1",
@@ -1241,7 +1241,7 @@ static GtkTreeModel *_create_filtered_model(GtkTreeModel *model, dt_lib_collect_
         int id = -1;
         // Check if this path also matches a filmroll
         gtk_tree_model_get(model, &iter, DT_LIB_COLLECT_COL_PATH, &pth, -1);
-        if(!_collect_filmrolls_select_like_stmt)
+        if(IS_NULL_PTR(_collect_filmrolls_select_like_stmt))
         {
           DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
                                       "SELECT id, folder FROM main.film_rolls WHERE folder LIKE ?1",
@@ -1303,7 +1303,7 @@ static int string_array_length(char **list)
 // returns a NULL terminated array of path components
 static char **split_path(const char *path)
 {
-  if(!path || !*path) return NULL;
+  if(IS_NULL_PTR(path) || !*path) return NULL;
 
   char **result;
   char **tokens = g_strsplit(path, G_DIR_SEPARATOR_S, -1);

@@ -456,14 +456,14 @@ dt_imageio_retval_t dt_imageio_open_tiff(dt_image_t *img, const char *filename, 
   t.image->flags &= ~DT_IMAGE_S_RAW;
   t.image->loader = LOADER_TIFF;
 
-  if(!mbuf)
+  if(IS_NULL_PTR(mbuf))
   {
     TIFFClose(t.tiff);
     return DT_IMAGEIO_OK;
   }
 
   t.mipbuf = (float *)dt_mipmap_cache_alloc(mbuf, t.image);
-  if(!t.mipbuf)
+  if(IS_NULL_PTR(t.mipbuf))
   {
     fprintf(stderr, "[tiff_open] error: could not alloc full buffer for image `%s'\n", t.image->filename);
     TIFFClose(t.tiff);

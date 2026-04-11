@@ -924,7 +924,7 @@ static void _set_keyword(dt_lib_module_t *self)
   dt_lib_tagging_t *d = (dt_lib_tagging_t *)self->data;
   const gchar *beg = g_strrstr(gtk_entry_get_text(d->entry), ",");
 
-  if(!beg)
+  if(IS_NULL_PTR(beg))
     beg = gtk_entry_get_text(d->entry);
   else
   {
@@ -1035,7 +1035,7 @@ void *get_params(dt_lib_module_t *self, int *size)
 
 int set_params(dt_lib_module_t *self, const void *params, int size)
 {
-  if(!params || !size) return 1;
+  if(IS_NULL_PTR(params) || !size) return 1;
   dt_lib_tagging_t *d = (dt_lib_tagging_t *)self->data;
 
   const char *buf = (char *)params;
@@ -1382,7 +1382,7 @@ static void _new_button_clicked(GtkButton *button, dt_lib_module_t *self)
 {
   dt_lib_tagging_t *d = (dt_lib_tagging_t *)self->data;
   const gchar *tag = gtk_entry_get_text(d->entry);
-  if(!tag || tag[0] == '\0') return;
+  if(IS_NULL_PTR(tag) || tag[0] == '\0') return;
 
   GList *imgs = dt_selection_get_list(darktable.selection);
   const gboolean res = dt_tag_attach_string_list(tag, imgs, TRUE);
@@ -2019,7 +2019,7 @@ static gboolean _apply_rename_path(GtkWidget *dialog, const char *tagname,
     if(tagname_exists)
     {
       GtkWidget *win;
-      if(!dialog)
+      if(IS_NULL_PTR(dialog))
         win = dt_ui_main_window(darktable.gui->ui);
       else
         win = dialog;
@@ -2508,7 +2508,7 @@ static gboolean _row_tooltip_setup(GtkWidget *treeview, gint x, gint y, gboolean
 static void _import_button_clicked(GtkButton *button, dt_lib_module_t *self)
 {
   const char *last_dirname = dt_conf_get_string_const("plugins/lighttable/tagging/last_import_export_location");
-  if(!last_dirname || !*last_dirname)
+  if(IS_NULL_PTR(last_dirname) || !*last_dirname)
   {
     last_dirname = g_get_home_dir();
   }
@@ -2544,7 +2544,7 @@ static void _export_button_clicked(GtkButton *button, dt_lib_module_t *self)
   GDateTime *now = g_date_time_new_now_local();
   char *export_filename = g_date_time_format(now, "darktable_tags_%F_%H-%M.txt");
   const char *last_dirname = dt_conf_get_string_const("plugins/lighttable/tagging/last_import_export_location");
-  if(!last_dirname || !*last_dirname)
+  if(IS_NULL_PTR(last_dirname) || !*last_dirname)
   {
     last_dirname = g_get_home_dir();
   }
@@ -3026,7 +3026,7 @@ static gboolean _event_dnd_motion(GtkWidget *widget, GdkDragContext *context,
 
   if(gtk_tree_view_get_path_at_pos(tree, x, y, &path, NULL, NULL, NULL))
   {
-    if(!d->drag.lastpath || ((d->drag.lastpath) && gtk_tree_path_compare(d->drag.lastpath, path) != 0))
+    if(IS_NULL_PTR(d->drag.lastpath) || ((d->drag.lastpath) && gtk_tree_path_compare(d->drag.lastpath, path) != 0))
     {
       GtkTreeViewColumn *col = gtk_tree_view_get_column(d->dictionary_view, 0);
       const int sel_width = gtk_tree_view_column_get_width(col);

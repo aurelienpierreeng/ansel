@@ -987,7 +987,7 @@ static void presets_popup_callback(GtkButton *button, dt_lib_module_t *module)
   mi->version = module->version();
   mi->module = module;
   mi->params = module->get_params ? module->get_params(module, &mi->params_size) : NULL;
-  if(!mi->params)
+  if(IS_NULL_PTR(mi->params))
   {
     // this is a valid case, for example in location.c when nothing got selected
     // fprintf(stderr, "something went wrong: &params=%p, size=%i\n", mi->params, mi->params_size);
@@ -1295,9 +1295,9 @@ void dt_lib_presets_add(const char *name, const char *plugin_name, const int32_t
 
 static gchar *_get_lib_view_path(dt_lib_module_t *module, char *suffix)
 {
-  if(!darktable.view_manager || !module || !suffix || module->plugin_name[0] == '\0') return NULL;
+  if(IS_NULL_PTR(darktable.view_manager) || !module || IS_NULL_PTR(suffix) || module->plugin_name[0] == '\0') return NULL;
   const dt_view_t *cv = dt_view_manager_get_current_view(darktable.view_manager);
-  if(!cv || cv->module_name[0] == '\0') return NULL;
+  if(IS_NULL_PTR(cv) || cv->module_name[0] == '\0') return NULL;
   // in lighttable, we store panels states per layout
   char lay[32] = "";
   if(g_strcmp0(cv->module_name, "lighttable") == 0)

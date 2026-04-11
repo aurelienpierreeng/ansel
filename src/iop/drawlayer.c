@@ -156,7 +156,7 @@ typedef struct drawlayer_wait_dialog_t
 /** @brief Convert one display-space brush color snapshot to pipeline space. */
 static void _brush_pipeline_color_from_display(dt_iop_module_t *self, const float display_rgb[3], float pipeline_rgb[3])
 {
-  if(!display_rgb || !pipeline_rgb) return;
+  if(!display_rgb || IS_NULL_PTR(pipeline_rgb)) return;
 
   pipeline_rgb[0] = _clamp01(display_rgb[0]);
   pipeline_rgb[1] = _clamp01(display_rgb[1]);
@@ -190,7 +190,7 @@ static void _brush_pipeline_color_from_display(dt_iop_module_t *self, const floa
 static void _sync_cached_brush_colors(dt_iop_module_t *self, const float display_rgb[3])
 {
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
-  if(!g || !display_rgb) return;
+  if(IS_NULL_PTR(g) || !display_rgb) return;
 
   g->ui.brush_display_color[0] = _clamp01(display_rgb[0]);
   g->ui.brush_display_color[1] = _clamp01(display_rgb[1]);
@@ -201,7 +201,7 @@ static void _sync_cached_brush_colors(dt_iop_module_t *self, const float display
 
 static void _fill_input_brush_settings(dt_iop_module_t *self, dt_drawlayer_paint_raw_input_t *input)
 {
-  if(!self || !input) return;
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(input)) return;
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
 
   uint32_t map_flags = 0u;
@@ -302,9 +302,9 @@ static gboolean _layer_name_non_empty(const char *name)
 static gboolean _get_current_work_profile_key(dt_iop_module_t *self, GList *iop_list, dt_dev_pixelpipe_t *pipe,
                                               char *key, const size_t key_size)
 {
-  if(!key || key_size == 0) return FALSE;
+  if(IS_NULL_PTR(key) || key_size == 0) return FALSE;
   key[0] = '\0';
-  if(!self || !pipe || !iop_list) return FALSE;
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(pipe) || !iop_list) return FALSE;
 
   const dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_iop_work_profile_info(self, iop_list);
   if(IS_NULL_PTR(work_profile)) return FALSE;
@@ -356,7 +356,7 @@ static inline __attribute__((always_inline)) gboolean _resolve_layer_geometry(dt
   if(layer_height) *layer_height = 0;
   if(origin_x) *origin_x = 0;
   if(origin_y) *origin_y = 0;
-  if(!self || !self->dev) return FALSE;
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev)) return FALSE;
   /* Layer geometry must follow authored image-space pixels at the current
    * module stage, not merely the size of the working buffer currently attached
    * to the pipe. Thumbnail/export pipes may start from a downscaled mipmap, so
@@ -425,7 +425,7 @@ static gboolean _rekey_shared_base_patch(drawlayer_patch_t *patch, const int32_t
    * current in-memory pixels while the serialized module hash advances to a new
    * history snapshot. This is the central piece that lets other pipelines find
    * the newest base patch through the cache instead of through GUI internals. */
-  if(!patch || !patch->cache_entry || !params) return FALSE;
+  if(IS_NULL_PTR(patch) || IS_NULL_PTR(patch->cache_entry) || IS_NULL_PTR(params)) return FALSE;
   const uint64_t new_hash = _drawlayer_params_cache_hash(imgid, params, patch->width, patch->height);
   if(new_hash == patch->cache_hash) return TRUE;
   if(dt_dev_pixelpipe_cache_rekey(darktable.pixelpipe_cache, patch->cache_hash, new_hash, patch->cache_entry) == 0)
@@ -443,7 +443,7 @@ static gboolean _rekey_shared_base_patch(drawlayer_patch_t *patch, const int32_t
    * because this module may hold additional explicit refs on that entry
    * (`base_patch_loaded_ref`, stroke refs). Rebinding `patch` would desynchronize
    * those ref counters. */
-  if(!patch->pixels || patch->width <= 0 || patch->height <= 0) return FALSE;
+  if(IS_NULL_PTR(patch->pixels) || patch->width <= 0 || patch->height <= 0) return FALSE;
 
   drawlayer_patch_t published = { 0 };
   int created = 0;
@@ -468,14 +468,14 @@ static gboolean _rekey_shared_base_patch(drawlayer_patch_t *patch, const int32_t
 
 static void _retain_base_patch_loaded_ref(dt_iop_drawlayer_gui_data_t *g)
 {
-  if(!g || !g->process.base_patch.cache_entry || g->process.base_patch_loaded_ref) return;
+  if(IS_NULL_PTR(g) || IS_NULL_PTR(g->process.base_patch.cache_entry) || g->process.base_patch_loaded_ref) return;
   dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, g->process.base_patch.cache_entry);
   g->process.base_patch_loaded_ref = TRUE;
 }
 
 static void _retain_base_patch_stroke_ref(dt_iop_drawlayer_gui_data_t *g)
 {
-  if(!g || !g->process.base_patch.cache_entry) return;
+  if(IS_NULL_PTR(g) || IS_NULL_PTR(g->process.base_patch.cache_entry)) return;
   dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, g->process.base_patch.cache_entry);
   g->process.base_patch_stroke_refs++;
 }
@@ -483,7 +483,7 @@ static void _retain_base_patch_stroke_ref(dt_iop_drawlayer_gui_data_t *g)
 void dt_drawlayer_release_all_base_patch_extra_refs(dt_iop_drawlayer_gui_data_t *g)
 {
   if(IS_NULL_PTR(g)) return;
-  if(!g->process.base_patch.cache_entry)
+  if(IS_NULL_PTR(g->process.base_patch.cache_entry))
   {
     /* Keep refcount bookkeeping state coherent even if the cache entry has
      * already been detached/cleared. This prevents stale counters from being
@@ -510,7 +510,7 @@ static inline __attribute__((always_inline)) gboolean _refresh_piece_base_cache(
                                           const dt_iop_drawlayer_params_t *params, dt_dev_pixelpipe_t *pipe,
                                           dt_dev_pixelpipe_iop_t *piece)
 {
-  if(!self || !data || !params || !piece) return FALSE;
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(data) || IS_NULL_PTR(params) || IS_NULL_PTR(piece)) return FALSE;
   if(params->layer_name[0] == '\0')
   {
     dt_drawlayer_cache_patch_clear(&data->process.base_patch, "drawlayer patch");
@@ -651,7 +651,7 @@ __DT_CLONE_TARGETS__
 static void _blend_layer_over_input(float *output, const float *input, const float *layerbuf, const size_t pixels,
                                     const gboolean use_preview_bg, const float preview_bg)
 {
-  if(!output || !input || !layerbuf || pixels == 0) return;
+  if(IS_NULL_PTR(output) || IS_NULL_PTR(input) || IS_NULL_PTR(layerbuf) || pixels == 0) return;
 
   const dt_aligned_pixel_simd_t preview_base = { preview_bg, preview_bg, preview_bg, 1.0f };
   __OMP_PARALLEL_FOR__()
@@ -690,7 +690,7 @@ static gboolean _drawlayer_sync_host_image_to_device(const int devid, cl_mem dev
                                                      const int width, const int height, const int bpp,
                                                      const dt_drawlayer_damaged_rect_t *dirty_rect)
 {
-  if(!device_image || !host_pixels || width <= 0 || height <= 0 || bpp <= 0) return FALSE;
+  if(IS_NULL_PTR(device_image) || IS_NULL_PTR(host_pixels) || width <= 0 || height <= 0 || bpp <= 0) return FALSE;
 
   if(dirty_rect && dirty_rect->valid)
   {
@@ -736,7 +736,7 @@ static gboolean _drawlayer_acquire_source_image(const int devid, const float *la
                                                 dt_drawlayer_process_state_t *process,
                                                 drawlayer_cl_image_handle_t *source)
 {
-  if(!source || !layer_pixels || source_w <= 0 || source_h <= 0) return FALSE;
+  if(IS_NULL_PTR(source) || IS_NULL_PTR(layer_pixels) || source_w <= 0 || source_h <= 0) return FALSE;
   *source = (drawlayer_cl_image_handle_t){ 0 };
 
   if(force_device_copy)
@@ -829,7 +829,7 @@ static gboolean _drawlayer_acquire_layer_image(const int devid, dt_pixel_cache_e
                                                const dt_iop_roi_t *const source_roi,
                                                drawlayer_cl_image_handle_t *layer, int *err)
 {
-  if(!layer || !err || !target_roi || !source_roi) return FALSE;
+  if(IS_NULL_PTR(layer) || !err || IS_NULL_PTR(target_roi) || IS_NULL_PTR(source_roi)) return FALSE;
   *layer = (drawlayer_cl_image_handle_t){ 0 };
 
   if(direct_copy)
@@ -846,17 +846,17 @@ static gboolean _drawlayer_acquire_layer_image(const int devid, dt_pixel_cache_e
     layer->is_cached_device = (!IS_NULL_PTR(layer->mem));
   }
 
-  if(!layer->mem)
+  if(IS_NULL_PTR(layer->mem))
   {
     layer->mem = dt_opencl_alloc_device(devid, target_roi->width, target_roi->height, 4 * sizeof(float));
-    if(!layer->mem)
+    if(IS_NULL_PTR(layer->mem))
     {
       dt_dev_pixelpipe_cache_flush_clmem(darktable.pixelpipe_cache, devid, dev_source_rgba);
       layer->mem = dt_opencl_alloc_device(devid, target_roi->width, target_roi->height, 4 * sizeof(float));
     }
   }
 
-  if(!layer->mem)
+  if(IS_NULL_PTR(layer->mem))
   {
     *err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
     return FALSE;
@@ -896,7 +896,7 @@ static int _blend_layer_over_input_cl(const int devid, const int kernel_premult_
                                       const float preview_bg, const gboolean realtime_reuse,
                                       const gboolean force_device_copy)
 {
-  if(devid < 0 || !dev_out || !dev_in || !scratch || (!layer_pixels && !source_mem_override) || source_w <= 0
+  if(devid < 0 || IS_NULL_PTR(dev_out) || IS_NULL_PTR(dev_in) || IS_NULL_PTR(scratch) || (IS_NULL_PTR(layer_pixels) && !source_mem_override) || source_w <= 0
      || source_h <= 0 || !target_roi || target_roi->width <= 0 || target_roi->height <= 0)
     return FALSE;
   if(kernel_premult_over < 0) return FALSE;
@@ -931,7 +931,7 @@ static int _blend_layer_over_input_cl(const int devid, const int kernel_premult_
     float *background = dt_drawlayer_cache_ensure_scratch_buffer(&scratch->cl_background_rgba,
                                                                  &scratch->cl_background_rgba_pixels, out_pixels,
                                                                  "drawlayer process scratch");
-    if(!background) goto cleanup;
+    if(IS_NULL_PTR(background)) goto cleanup;
     __OMP_PARALLEL_FOR__(if(out_pixels > 4096))
     for(size_t kk = 0; kk < out_pixels; kk++)
     {
@@ -944,7 +944,7 @@ static int _blend_layer_over_input_cl(const int devid, const int kernel_premult_
     dev_background = dt_dev_pixelpipe_cache_get_pinned_image(
         darktable.pixelpipe_cache, background, NULL, devid, target_roi->width, target_roi->height,
         4 * sizeof(float), CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR, NULL);
-    if(!dev_background) goto cleanup;
+    if(IS_NULL_PTR(dev_background)) goto cleanup;
   }
   else
     dev_background = dev_in;
@@ -997,7 +997,7 @@ cleanup:
 
 static gboolean _profile_key_is_sane(const char *value)
 {
-  if(!value || value[0] == '\0') return FALSE;
+  if(IS_NULL_PTR(value) || value[0] == '\0') return FALSE;
 
   int separators = 0;
   for(const unsigned char *c = (const unsigned char *)value; *c; c++)
@@ -1013,7 +1013,7 @@ static gboolean _profile_key_is_sane(const char *value)
 
 static int64_t _sidecar_timestamp_from_path(const char *path)
 {
-  if(!path || path[0] == '\0' || !g_file_test(path, G_FILE_TEST_EXISTS)) return 0;
+  if(IS_NULL_PTR(path) || path[0] == '\0' || !g_file_test(path, G_FILE_TEST_EXISTS)) return 0;
 
   GStatBuf st = { 0 };
   if(g_stat(path, &st) != 0) return 0;
@@ -1024,7 +1024,7 @@ static void _ensure_cursor_stamp_surface(dt_iop_module_t *self, const float widg
                                          const float hardness)
 {
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
-  if(!g || widget_radius <= 0.0f) return;
+  if(IS_NULL_PTR(g) || widget_radius <= 0.0f) return;
 
   const double ppd = (darktable.gui && darktable.gui->ppd > 0.0) ? darktable.gui->ppd : 1.0;
   float display_rgb[3] = { 0.0f };
@@ -1078,7 +1078,7 @@ static void _ensure_cursor_stamp_surface(dt_iop_module_t *self, const float widg
 
 void dt_drawlayer_set_os_cursor_hidden(const gboolean hidden)
 {
-  if(!darktable.gui || !darktable.gui->ui) return;
+  if(IS_NULL_PTR(darktable.gui) || IS_NULL_PTR(darktable.gui->ui)) return;
 
   GtkWidget *center = dt_ui_center(darktable.gui->ui);
   GtkWidget *main = dt_ui_main_window(darktable.gui->ui);
@@ -1099,7 +1099,7 @@ void dt_drawlayer_set_os_cursor_hidden(const gboolean hidden)
 static drawlayer_wait_dialog_t _show_drawlayer_wait_dialog(const char *title, const char *message)
 {
   drawlayer_wait_dialog_t wait = { 0 };
-  if(!darktable.gui || !darktable.gui->ui || !title || !title[0] || !message || !message[0]) return wait;
+  if(IS_NULL_PTR(darktable.gui) || IS_NULL_PTR(darktable.gui->ui) || IS_NULL_PTR(title) || !title[0] || IS_NULL_PTR(message) || !message[0]) return wait;
 
   GtkWidget *dialog = gtk_dialog_new();
   GtkWidget *main = dt_ui_main_window(darktable.gui->ui);
@@ -1145,7 +1145,7 @@ typedef struct drawlayer_modal_wait_state_t
 static gboolean _drawlayer_modal_wait_tick(gpointer user_data)
 {
   drawlayer_modal_wait_state_t *state = (drawlayer_modal_wait_state_t *)user_data;
-  if(!state || !state->loop) return G_SOURCE_REMOVE;
+  if(IS_NULL_PTR(state) || IS_NULL_PTR(state->loop)) return G_SOURCE_REMOVE;
   if(!(state->g && dt_drawlayer_worker_any_active(state->g->stroke.worker)))
   {
     g_main_loop_quit(state->loop);
@@ -1182,7 +1182,7 @@ void dt_drawlayer_wait_for_rasterization_modal(const dt_iop_drawlayer_gui_data_t
 
 static void _show_drawlayer_modal_message(const GtkMessageType type, const char *primary, const char *secondary)
 {
-  if(!darktable.gui || !darktable.gui->ui || !primary || primary[0] == '\0') return;
+  if(IS_NULL_PTR(darktable.gui) || IS_NULL_PTR(darktable.gui->ui) || IS_NULL_PTR(primary) || primary[0] == '\0') return;
 
   GtkWidget *dialog = gtk_message_dialog_new(GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)),
                                              GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL,
@@ -1196,7 +1196,7 @@ static void _show_drawlayer_modal_message(const GtkMessageType type, const char 
 static gboolean _prompt_layer_name_dialog(const char *title, const char *message, const char *initial_name,
                                           char *name, const size_t name_size)
 {
-  if(!darktable.gui || !darktable.gui->ui || !title || title[0] == '\0' || !name || name_size == 0) return FALSE;
+  if(IS_NULL_PTR(darktable.gui) || IS_NULL_PTR(darktable.gui->ui) || IS_NULL_PTR(title) || title[0] == '\0' || IS_NULL_PTR(name) || name_size == 0) return FALSE;
 
   GtkWidget *dialog = gtk_dialog_new_with_buttons(
       title, GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)),
@@ -1234,7 +1234,7 @@ static gboolean _prompt_layer_name_dialog(const char *title, const char *message
 static gboolean _color_picker_set_from_position(dt_iop_module_t *self, const float x, const float y)
 {
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
-  if(!g || !g->ui.widgets || !g->controls.color) return FALSE;
+  if(IS_NULL_PTR(g) || !g->ui.widgets || IS_NULL_PTR(g->controls.color)) return FALSE;
 
   float display_rgb[3] = { 0.0f };
   if(!dt_drawlayer_widgets_update_from_picker_position(g->ui.widgets, g->controls.color, x, y, display_rgb)) return FALSE;
@@ -1246,7 +1246,7 @@ static gboolean _color_picker_draw(GtkWidget *widget, cairo_t *cr, gpointer user
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
-  if(!g || !g->ui.widgets) return FALSE;
+  if(IS_NULL_PTR(g) || !g->ui.widgets) return FALSE;
   const double ppd = (darktable.gui && darktable.gui->ppd > 0.0) ? darktable.gui->ppd : 1.0;
   return dt_drawlayer_widgets_draw_picker(g->ui.widgets, widget, cr, ppd);
 }
@@ -1255,7 +1255,7 @@ static gboolean _color_swatch_draw(GtkWidget *widget, cairo_t *cr, gpointer user
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
-  if(!g || !g->ui.widgets) return FALSE;
+  if(IS_NULL_PTR(g) || !g->ui.widgets) return FALSE;
   return dt_drawlayer_widgets_draw_swatch(g->ui.widgets, widget, cr);
 }
 
@@ -1263,7 +1263,7 @@ static gboolean _color_swatch_button_press(GtkWidget *widget, GdkEventButton *ev
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
-  if(!g || !g->ui.widgets || !widget || !event || event->button != 1) return FALSE;
+  if(IS_NULL_PTR(g) || !g->ui.widgets || !widget || IS_NULL_PTR(event) || event->button != 1) return FALSE;
 
   float display_rgb[3] = { 0.0f };
   if(!dt_drawlayer_widgets_pick_history_color(g->ui.widgets, widget, event->x, event->y, display_rgb)) return FALSE;
@@ -1274,7 +1274,7 @@ static gboolean _color_swatch_button_press(GtkWidget *widget, GdkEventButton *ev
 static void _sync_brush_profile_preview_widget(dt_iop_module_t *self)
 {
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
-  if(!g || !g->ui.widgets || !g->controls.brush_shape) return;
+  if(IS_NULL_PTR(g) || !g->ui.widgets || IS_NULL_PTR(g->controls.brush_shape)) return;
 
   dt_drawlayer_widgets_set_brush_profile_preview(g->ui.widgets, _conf_opacity() / 100.0f, _conf_hardness(),
                                                  _conf_sprinkles() / 100.0f, _conf_sprinkle_size(),
@@ -1286,7 +1286,7 @@ static gboolean _brush_profile_draw(GtkWidget *widget, cairo_t *cr, gpointer use
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
-  if(!g || !g->ui.widgets) return FALSE;
+  if(IS_NULL_PTR(g) || !g->ui.widgets) return FALSE;
   const double ppd = (darktable.gui && darktable.gui->ppd > 0.0) ? darktable.gui->ppd : 1.0;
   return dt_drawlayer_widgets_draw_brush_profiles(g->ui.widgets, widget, cr, ppd);
 }
@@ -1295,7 +1295,7 @@ static gboolean _brush_profile_button_press(GtkWidget *widget, GdkEventButton *e
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
-  if(!g || !g->ui.widgets || !widget || !event || event->button != 1) return FALSE;
+  if(IS_NULL_PTR(g) || !g->ui.widgets || !widget || IS_NULL_PTR(event) || event->button != 1) return FALSE;
 
   int shape = DT_DRAWLAYER_BRUSH_SHAPE_LINEAR;
   if(!dt_drawlayer_widgets_pick_brush_profile(g->ui.widgets, widget, event->x, event->y, &shape)) return FALSE;
@@ -1311,7 +1311,7 @@ static gboolean _brush_profile_button_press(GtkWidget *widget, GdkEventButton *e
 static gboolean _working_rgb_to_display_rgb(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
                                             const float working_rgb[3], float display_rgb[3])
 {
-  if(!working_rgb || !display_rgb) return FALSE;
+  if(IS_NULL_PTR(working_rgb) || !display_rgb) return FALSE;
 
   const float gain = exp2f(_conf_hdr_exposure());
   const float inv_gain = (gain > 0.0f) ? 1.0f / gain : 1.0f;
@@ -1325,12 +1325,12 @@ static gboolean _working_rgb_to_display_rgb(dt_iop_module_t *self, dt_dev_pixelp
   display_rgb[1] = _clamp01(preview_rgb[1]);
   display_rgb[2] = _clamp01(preview_rgb[2]);
 
-  if(!self || !pipe) return TRUE;
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(pipe)) return TRUE;
 
   const dt_iop_order_iccprofile_info_t *const work_profile
       = self->dev ? dt_ioppr_get_iop_work_profile_info(self, self->dev->iop) : NULL;
   const dt_iop_order_iccprofile_info_t *const display_profile = dt_ioppr_get_pipe_output_profile_info(pipe);
-  if(!work_profile || !display_profile) return TRUE;
+  if(IS_NULL_PTR(work_profile) || !display_profile) return TRUE;
 
   float in[4] = { preview_rgb[0], preview_rgb[1], preview_rgb[2], 0.0f };
   float out[4] = { preview_rgb[0], preview_rgb[1], preview_rgb[2], 0.0f };
@@ -1346,7 +1346,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
 {
   (void)picker;
   (void)piece;
-  if(!self || darktable.gui->reset) return;
+  if(IS_NULL_PTR(self) || darktable.gui->reset) return;
   const drawlayer_pick_source_t source = _conf_pick_source();
   const float *picked = (source == DRAWLAYER_PICK_SOURCE_OUTPUT) ? self->picked_output_color : self->picked_color;
   const float *picked_min
@@ -1363,7 +1363,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
 static gboolean _color_picker_button_press(GtkWidget *widget, GdkEventButton *event, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(!event || event->button != 1) return FALSE;
+  if(IS_NULL_PTR(event) || event->button != 1) return FALSE;
   (void)widget;
   return _color_picker_set_from_position(self, event->x, event->y);
 }
@@ -1388,7 +1388,7 @@ static gboolean _color_picker_motion(GtkWidget *widget, GdkEventMotion *event, g
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
   (void)widget;
-  if(!g || !g->ui.widgets || !event || !dt_drawlayer_widgets_is_picker_dragging(g->ui.widgets)) return FALSE;
+  if(IS_NULL_PTR(g) || !g->ui.widgets || IS_NULL_PTR(event) || !dt_drawlayer_widgets_is_picker_dragging(g->ui.widgets)) return FALSE;
   return _color_picker_set_from_position(self, event->x, event->y);
 }
 
@@ -1436,7 +1436,7 @@ static void _sanitize_params(dt_iop_module_t *self, dt_iop_drawlayer_params_t *p
 
 static void _sanitize_requested_layer_name(const char *requested, char *name, const size_t name_size)
 {
-  if(!name || name_size == 0) return;
+  if(IS_NULL_PTR(name) || name_size == 0) return;
   name[0] = '\0';
   if(!(requested && requested[0])) return;
 
@@ -1475,7 +1475,7 @@ static inline __attribute__((always_inline)) gboolean _update_runtime_state(cons
                                       dt_drawlayer_runtime_source_t *source)
 {
   if(source) *source = (dt_drawlayer_runtime_source_t){ 0 };
-  if(!request || !request->self || !request->piece || !request->pipe || !request->roi_out
+  if(IS_NULL_PTR(request) || IS_NULL_PTR(request->self) || IS_NULL_PTR(request->piece) || IS_NULL_PTR(request->pipe) || IS_NULL_PTR(request->roi_out)
      || !request->runtime_params || !source)
     return FALSE;
 
@@ -1560,7 +1560,7 @@ static void _refresh_layer_widgets(dt_iop_module_t *self)
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
   dt_iop_drawlayer_params_t *params = self ? (dt_iop_drawlayer_params_t *)self->params : NULL;
   GMainContext *const ui_ctx = g_main_context_default();
-  if(!g || !params || !(ui_ctx && g_main_context_is_owner(ui_ctx))) return;
+  if(IS_NULL_PTR(g) || IS_NULL_PTR(params) || !(ui_ctx && g_main_context_is_owner(ui_ctx))) return;
 
   g->manager.background_job_running = g->session.background_job_running;
 
@@ -1572,7 +1572,7 @@ static void _sync_layer_controls(dt_iop_module_t *self)
 {
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
   dt_iop_drawlayer_params_t *params = self ? (dt_iop_drawlayer_params_t *)self->params : NULL;
-  if(!g || !params) return;
+  if(IS_NULL_PTR(g) || IS_NULL_PTR(params)) return;
 
   const gboolean attached = _layer_name_non_empty(params->layer_name);
   const gboolean missing = (g->session.missing_layer_error[0] != '\0');
@@ -1638,7 +1638,7 @@ gboolean dt_drawlayer_commit_dabs(dt_iop_module_t *self, const gboolean record_h
 {
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
   dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
-  if(!g || !self->dev) return TRUE;
+  if(IS_NULL_PTR(g) || IS_NULL_PTR(self->dev)) return TRUE;
   if(record_history && g->manager.painting_active)
   {
     dt_drawlayer_worker_request_commit(g->stroke.worker);
@@ -1725,7 +1725,7 @@ static void _develop_ui_pipe_finished_callback(gpointer instance, gpointer user_
   (void)instance;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
-  if(!g || !self->dev) return;
+  if(IS_NULL_PTR(g) || IS_NULL_PTR(self->dev)) return;
   drawlayer_runtime_host_context_t runtime_host = {
     .runtime = {
       .self = self,
@@ -1752,7 +1752,7 @@ static void _develop_ui_pipe_finished_callback(gpointer instance, gpointer user_
 static void _sync_mode_sensitive_widgets(dt_iop_module_t *self)
 {
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
-  if(!g || !g->controls.color || !g->controls.softness) return;
+  if(IS_NULL_PTR(g) || IS_NULL_PTR(g->controls.color) || IS_NULL_PTR(g->controls.softness)) return;
 
   const gboolean paint_mode = (_conf_brush_mode() == DT_DRAWLAYER_BRUSH_MODE_PAINT);
   const gboolean show_hardness = (_conf_brush_shape() != DT_DRAWLAYER_BRUSH_SHAPE_GAUSSIAN);
@@ -1866,7 +1866,7 @@ static gboolean _rename_current_layer_from_gui(dt_iop_module_t *self, const char
 {
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
   dt_iop_drawlayer_params_t *params = self ? (dt_iop_drawlayer_params_t *)self->params : NULL;
-  if(!self || !self->dev || !g || !params) return FALSE;
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(g) || IS_NULL_PTR(params)) return FALSE;
   if(!_layer_name_non_empty(params->layer_name)) return FALSE;
 
   char new_name[DRAWLAYER_NAME_SIZE] = { 0 };
@@ -1938,7 +1938,7 @@ static gboolean _create_new_layer(dt_iop_module_t *self, const char *requested_n
 {
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
   dt_iop_drawlayer_params_t *params = self ? (dt_iop_drawlayer_params_t *)self->params : NULL;
-  if(!self || !self->dev || !g || !params) return FALSE;
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(g) || IS_NULL_PTR(params)) return FALSE;
 
   char new_name[DRAWLAYER_NAME_SIZE] = { 0 };
   char stripped_requested[DRAWLAYER_NAME_SIZE] = { 0 };
@@ -1978,7 +1978,7 @@ static gboolean _create_new_layer(dt_iop_module_t *self, const char *requested_n
   /* Creating a layer must materialize it in the TIFF immediately so the
    * shared combobox only ever lists real on-disk layers and drawing can start
    * on the same authoritative cache line without a later bootstrap step. */
-  if(!g->process.cache_valid || !g->process.base_patch.pixels)
+  if(!g->process.cache_valid || IS_NULL_PTR(g->process.base_patch.pixels))
   {
     *params = previous;
     gui_update(self);
@@ -2006,9 +2006,9 @@ static gboolean _create_new_layer(dt_iop_module_t *self, const char *requested_n
 
 static void _build_pre_module_filter_string(dt_iop_module_t *self, char *filter, const size_t filter_size)
 {
-  if(!filter || filter_size == 0) return;
+  if(IS_NULL_PTR(filter) || filter_size == 0) return;
   filter[0] = '\0';
-  if(!self || !self->dev || !self->dev->pipe) return;
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(self->dev->pipe)) return;
 
   dt_dev_pixelpipe_iop_t *self_piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->pipe, self);
   const char *prev_op = NULL;
@@ -2064,7 +2064,7 @@ static gboolean _background_layer_job_done_idle(gpointer user_data)
       dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
       if(!module || g_strcmp0(module->op, "drawlayer")) continue;
       dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)module->gui_data;
-      if(!g || !g->session.background_job_running) continue;
+      if(IS_NULL_PTR(g) || !g->session.background_job_running) continue;
       g->session.background_job_running = FALSE;
       if(g->controls.create_background) gtk_widget_set_sensitive(g->controls.create_background, TRUE);
     }
@@ -2078,7 +2078,7 @@ static gboolean _create_background_layer_from_input(dt_iop_module_t *self)
 {
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
   dt_iop_drawlayer_params_t *params = self ? (dt_iop_drawlayer_params_t *)self->params : NULL;
-  if(!self || !self->dev || !g || !params) return FALSE;
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(g) || IS_NULL_PTR(params)) return FALSE;
   if(g->session.background_job_running) return FALSE;
   if(!_layer_name_non_empty(params->layer_name)) return FALSE;
 
@@ -2122,7 +2122,7 @@ static gboolean _create_background_layer_from_input(dt_iop_module_t *self)
 
   dt_job_t *job = dt_control_job_create(dt_drawlayer_io_background_layer_job_run,
                                         "drawlayer create background layer");
-  if(!job)
+  if(IS_NULL_PTR(job))
   {
     dt_free(job_params);
     return FALSE;
@@ -2145,7 +2145,7 @@ static void _widget_changed(GtkWidget *widget, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
-  if(!g || (darktable.gui && darktable.gui->reset)) return;
+  if(IS_NULL_PTR(g) || (darktable.gui && darktable.gui->reset)) return;
 
   _sync_params_from_gui(self, FALSE);
 
@@ -2171,7 +2171,7 @@ static gboolean _apply_selected_layer_attachment(dt_iop_module_t *self, dt_iop_d
                                                  dt_iop_drawlayer_params_t *params, const char *layer_name,
                                                  const int layer_order)
 {
-  if(!self || !g || !params || layer_order < 0 || !_layer_name_non_empty(layer_name)) return FALSE;
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(g) || IS_NULL_PTR(params) || layer_order < 0 || !_layer_name_non_empty(layer_name)) return FALSE;
 
   char previous_name[DRAWLAYER_NAME_SIZE] = { 0 };
   g_strlcpy(previous_name, params->layer_name, sizeof(previous_name));
@@ -2203,7 +2203,7 @@ static void _layer_selected(GtkWidget *widget, gpointer user_data)
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
   dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
-  if(!g || (darktable.gui && darktable.gui->reset)) return;
+  if(IS_NULL_PTR(g) || (darktable.gui && darktable.gui->reset)) return;
 
   const int active = dt_bauhaus_combobox_get(widget);
   if(active < 0) return;
@@ -2225,7 +2225,7 @@ static void _attach_selected_layer_clicked(GtkButton *button, gpointer user_data
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
   dt_iop_drawlayer_params_t *params = self ? (dt_iop_drawlayer_params_t *)self->params : NULL;
-  if(!self || !self->dev || !g || !params) return;
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(g) || IS_NULL_PTR(params)) return;
   if(_layer_name_non_empty(params->layer_name)) return;
 
   const int active = dt_bauhaus_combobox_get(g->controls.layer_select);
@@ -2242,7 +2242,7 @@ static void _rename_layer_clicked(GtkButton *button, gpointer user_data)
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
   dt_iop_drawlayer_params_t *params = self ? (dt_iop_drawlayer_params_t *)self->params : NULL;
-  if(!self || !self->dev || !g || !params) return;
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(g) || IS_NULL_PTR(params)) return;
   if(!_layer_name_non_empty(params->layer_name)) return;
 
   char requested_name[DRAWLAYER_NAME_SIZE] = { 0 };
@@ -2274,7 +2274,7 @@ static gboolean _fill_current_layer(dt_iop_module_t *self, const float value)
 {
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
   dt_iop_drawlayer_params_t *params = self ? (dt_iop_drawlayer_params_t *)self->params : NULL;
-  if(!self || !self->dev || !g || !params) return FALSE;
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(g) || IS_NULL_PTR(params)) return FALSE;
 
   if(!_commit_dabs(self, FALSE)) return FALSE;
   if(!_update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_SYNC_TEMP_BUFFERS, FALSE).ok) return FALSE;
@@ -2312,7 +2312,7 @@ static gboolean _clear_current_layer(dt_iop_module_t *self)
 {
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
   dt_iop_drawlayer_params_t *params = self ? (dt_iop_drawlayer_params_t *)self->params : NULL;
-  if(!self || !self->dev || !g || !params) return FALSE;
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(g) || IS_NULL_PTR(params)) return FALSE;
 
   if(!_commit_dabs(self, FALSE)) return FALSE;
   if(!_update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_SYNC_TEMP_BUFFERS, FALSE).ok) return FALSE;
@@ -2362,9 +2362,9 @@ static void _save_layer_clicked(GtkButton *button, gpointer user_data)
   (void)button;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
-  if(!self || !self->dev || !g) return;
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(g)) return;
 
-  if(!g->process.cache_valid || !g->process.base_patch.pixels)
+  if(!g->process.cache_valid || IS_NULL_PTR(g->process.base_patch.pixels))
   {
     _show_drawlayer_modal_message(GTK_MESSAGE_ERROR,
                                   _("No drawing layer is loaded in memory."),
@@ -2457,7 +2457,7 @@ static void _preview_bg_toggled(GtkToggleButton *button, gpointer user_data)
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
   dt_iop_drawlayer_params_t *params = self ? (dt_iop_drawlayer_params_t *)self->params : NULL;
-  if(!self || !self->dev || !g || (darktable.gui && darktable.gui->reset) || !gtk_toggle_button_get_active(button))
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(g) || (darktable.gui && darktable.gui->reset) || !gtk_toggle_button_get_active(button))
     return;
 
   if(GTK_WIDGET(button) == g->controls.preview_bg_white)
@@ -2480,7 +2480,7 @@ static gboolean _build_raw_input_event(dt_iop_module_t *self, const double wx, c
                                        dt_drawlayer_paint_raw_input_t *input)
 {
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
-  if(!g || !input) return FALSE;
+  if(IS_NULL_PTR(g) || IS_NULL_PTR(input)) return FALSE;
 
   dt_control_pointer_input_t pointer_input = { 0 };
   dt_control_get_pointer_input(&pointer_input);
@@ -2506,7 +2506,7 @@ static gboolean _build_raw_input_event(dt_iop_module_t *self, const double wx, c
 void dt_drawlayer_begin_gui_stroke_capture(dt_iop_module_t *self, const dt_drawlayer_paint_raw_input_t *first_input)
 {
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
-  if(!self || !g) return;
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(g)) return;
 
   uint32_t stroke_batch = g->stroke.current_stroke_batch + 1u;
   if(stroke_batch == 0u) stroke_batch++;
@@ -2541,7 +2541,7 @@ static dt_drawlayer_runtime_result_t _update_gui_runtime_manager(dt_iop_module_t
     .ok = TRUE,
     .raw_input_ok = TRUE,
   };
-  if(!self || !g) return result;
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(g)) return result;
 
   const drawlayer_runtime_host_context_t runtime_host = {
     .runtime = {
@@ -2680,7 +2680,7 @@ void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev
 {
   (void)self;
   (void)pipe;
-  if(!piece || !piece->data) return;
+  if(IS_NULL_PTR(piece) || IS_NULL_PTR(piece->data)) return;
   dt_iop_drawlayer_data_t *data = (dt_iop_drawlayer_data_t *)piece->data;
   dt_drawlayer_process_state_cleanup(&data->process);
   dt_drawlayer_runtime_manager_cleanup(&data->headless_manager);
@@ -2712,7 +2712,7 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelp
 /** @brief Reset GUI/session state for current drawlayer instance. */
 void gui_reset(dt_iop_module_t *self)
 {
-  if(!self || !self->dev) return;
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev)) return;
   if(!_commit_dabs(self, FALSE)) return;
   if(!_confirm_delete_layer(self, FALSE)) return;
 
@@ -3377,7 +3377,7 @@ static void _compute_hud_brush_state(const dt_control_pointer_input_t *pointer_i
 
 static void _draw_brush_hud(cairo_t *cr, const drawlayer_hud_brush_state_t *state)
 {
-  if(!cr || !state) return;
+  if(IS_NULL_PTR(cr) || IS_NULL_PTR(state)) return;
 
   char lines[3][128] = { { 0 } };
   g_snprintf(lines[0], sizeof(lines[0]), _("size %.1f px  hardness %.2f%%"), state->radius * 2.0f,
@@ -3425,7 +3425,7 @@ void gui_post_expose(dt_iop_module_t *self, cairo_t *cr, int32_t width, int32_t 
                      int32_t pointery)
 {
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
-  if(!g || !self->dev) return;
+  if(IS_NULL_PTR(g) || IS_NULL_PTR(self->dev)) return;
 
   cairo_save(cr);
   cairo_set_line_width(cr, 1.0);
@@ -3537,7 +3537,7 @@ int mouse_leave(dt_iop_module_t *self)
 int mouse_moved(dt_iop_module_t *self, double x, double y, double pressure, int which)
 {
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
-  if(!g || !self->dev) return 0;
+  if(IS_NULL_PTR(g) || IS_NULL_PTR(self->dev)) return 0;
 
   if(self->request_color_pick != DT_REQUEST_COLORPICK_OFF)
   {
@@ -3667,7 +3667,7 @@ int button_pressed(dt_iop_module_t *self, double x, double y, double pressure, i
 {
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
   dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
-  if(!g || !self->dev || which != 1) return 0;
+  if(IS_NULL_PTR(g) || IS_NULL_PTR(self->dev) || which != 1) return 0;
   if(!_layer_name_non_empty(params ? params->layer_name : NULL)) return 0;
 
   if(self->dev->gui_module != self)
@@ -3729,7 +3729,7 @@ int button_pressed(dt_iop_module_t *self, double x, double y, double pressure, i
 int button_released(dt_iop_module_t *self, double x, double y, int which, uint32_t state)
 {
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
-  if(!g || !self->dev || which != 1) return 0;
+  if(IS_NULL_PTR(g) || IS_NULL_PTR(self->dev) || which != 1) return 0;
 
   if(g->manager.painting_active)
   {
@@ -3783,7 +3783,7 @@ int button_released(dt_iop_module_t *self, double x, double y, int which, uint32
 /** @brief Scroll handler used for interactive brush-size changes. */
 int scrolled(dt_iop_module_t *self, double x, double y, int up, uint32_t state)
 {
-  if(!self->dev || self->dev->gui_module != self) return 0;
+  if(IS_NULL_PTR(self->dev) || self->dev->gui_module != self) return 0;
 
   const gboolean increase = dt_mask_scroll_increases(up);
   const float factor = increase ? 1.1f : 0.9f;
@@ -3871,7 +3871,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   };
   dt_drawlayer_runtime_manager_t *const manager = runtime_request.manager;
   dt_drawlayer_runtime_manager_update(manager, &process_pre, &runtime_manager);
-  if(!global || global->kernel_premult_over < 0)
+  if(IS_NULL_PTR(global) || global->kernel_premult_over < 0)
   {
     dt_drawlayer_runtime_manager_update(manager, &process_post, &runtime_manager);
     return FALSE;
@@ -3880,7 +3880,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
 
   const drawlayer_preview_background_t preview_bg = _resolve_preview_background(self, gui);
   drawlayer_process_scratch_t *scratch = _get_process_scratch();
-  if(!scratch)
+  if(IS_NULL_PTR(scratch))
   {
     dt_drawlayer_runtime_manager_update(manager, &process_post, &runtime_manager);
     return FALSE;
@@ -4003,13 +4003,13 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
     if(!source.direct_copy)
     {
       drawlayer_process_scratch_t *scratch = _get_process_scratch();
-      if(!scratch) fallback = TRUE;
+      if(IS_NULL_PTR(scratch)) fallback = TRUE;
 
       float *layerbuf = NULL;
       if(!fallback)
         layerbuf = dt_drawlayer_cache_ensure_scratch_buffer(&scratch->layerbuf, &scratch->layerbuf_pixels, pixels,
                                                             "drawlayer process scratch");
-      if(!fallback && !layerbuf) fallback = TRUE;
+      if(!fallback && IS_NULL_PTR(layerbuf)) fallback = TRUE;
       if(fallback)
       {
         process_post.release = (dt_drawlayer_runtime_release_t){

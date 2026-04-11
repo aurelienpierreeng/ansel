@@ -193,7 +193,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   const float sigma2 = (1.0f / (2.5 * 2.5)) * (d->radius * roi_in->scale)
                        * (d->radius * roi_in->scale);
   mat = init_gaussian_kernel(rad, wd, sigma2);
-  if(!mat) goto error;
+  if(IS_NULL_PTR(mat)) goto error;
 
   int hblocksize;
   dt_opencl_local_buffer_t hlocopt
@@ -345,7 +345,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const float sigma2 = (1.0f / (2.5 * 2.5)) * (data->radius * roi_in->scale)
                        * (data->radius * roi_in->scale);
   float *const mat = init_gaussian_kernel(rad, mat_size, sigma2);
-  if(!mat)
+  if(IS_NULL_PTR(mat))
   {
     dt_pixelpipe_cache_free_align(tmp);
     dt_iop_copy_image_roi(ovoid, ivoid, 4, roi_in, roi_out, TRUE);

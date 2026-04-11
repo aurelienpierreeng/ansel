@@ -765,7 +765,7 @@ dt_imageio_retval_t dt_imageio_open_jpeg(dt_image_t *img, const char *filename, 
   img->flags |= DT_IMAGE_LDR;
   img->loader = LOADER_JPEG;
 
-  if(!mbuf)
+  if(IS_NULL_PTR(mbuf))
   {
     jpeg_destroy_decompress(&(jpg.dinfo));
     fclose(jpg.f);
@@ -782,7 +782,7 @@ dt_imageio_retval_t dt_imageio_open_jpeg(dt_image_t *img, const char *filename, 
   }
 
   void *buf = dt_mipmap_cache_alloc(mbuf, img);
-  if(!buf)
+  if(IS_NULL_PTR(buf))
   {
     dt_pixelpipe_cache_free_align(tmp);
     return DT_IMAGEIO_CACHE_FULL;

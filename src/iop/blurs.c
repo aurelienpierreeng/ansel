@@ -678,7 +678,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
   dt_iop_blurs_params_t *p = (dt_iop_blurs_params_t *)self->params;
   dt_iop_blurs_gui_data_t *g = (dt_iop_blurs_gui_data_t *)self->gui_data;
 
-  if(!w || w == g->type)
+  if(IS_NULL_PTR(w) || w == g->type)
   {
     if(p->type == DT_BLUR_LENS)
     {

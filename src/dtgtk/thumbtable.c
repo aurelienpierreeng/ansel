@@ -70,7 +70,7 @@
 
 static gboolean _thumbtable_clone_lut(dt_thumbtable_t *dst)
 {
-  if(!dst || !darktable.gui || !darktable.gui->ui) return FALSE;
+  if(IS_NULL_PTR(dst) || IS_NULL_PTR(darktable.gui) || IS_NULL_PTR(darktable.gui->ui)) return FALSE;
 
   dt_thumbtable_t *src = NULL;
   if(darktable.gui->ui->thumbtable_lighttable == dst)
@@ -78,7 +78,7 @@ static gboolean _thumbtable_clone_lut(dt_thumbtable_t *dst)
   else if(darktable.gui->ui->thumbtable_filmstrip == dst)
     src = darktable.gui->ui->thumbtable_lighttable;
 
-  if(!src || src == dst) return FALSE;
+  if(IS_NULL_PTR(src) || src == dst) return FALSE;
 
   dt_pthread_mutex_lock(&src->lock);
   const gboolean can_clone = (src->lut
@@ -94,7 +94,7 @@ static gboolean _thumbtable_clone_lut(dt_thumbtable_t *dst)
 
   const uint32_t count = src->collection_count;
   dt_thumbtable_cache_t *cloned_lut = malloc(count * sizeof(dt_thumbtable_cache_t));
-  if(!cloned_lut)
+  if(IS_NULL_PTR(cloned_lut))
   {
     dt_pthread_mutex_unlock(&src->lock);
     return FALSE;
@@ -247,7 +247,7 @@ static void _scrollbar_page_size_notify(GObject *object, GParamSpec *pspec, gpoi
 static void _parent_overlay_size_allocate(GtkWidget *widget, GtkAllocation *allocation, gpointer user_data)
 {
   dt_thumbtable_t *table = (dt_thumbtable_t *)user_data;
-  if(!table || !allocation) return;
+  if(IS_NULL_PTR(table) || IS_NULL_PTR(allocation)) return;
 
   if(allocation->width == table->last_parent_width && allocation->height == table->last_parent_height)
     return;
@@ -260,7 +260,7 @@ static void _parent_overlay_size_allocate(GtkWidget *widget, GtkAllocation *allo
 static void _scrollbar_widget_size_allocate(GtkWidget *widget, GtkAllocation *allocation, gpointer user_data)
 {
   dt_thumbtable_t *table = (dt_thumbtable_t *)user_data;
-  if(!table || !allocation || !table->scroll_window) return;
+  if(IS_NULL_PTR(table) || IS_NULL_PTR(allocation) || IS_NULL_PTR(table->scroll_window)) return;
 
   GtkWidget *h_scroll = gtk_scrolled_window_get_hscrollbar(GTK_SCROLLED_WINDOW(table->scroll_window));
   GtkWidget *v_scroll = gtk_scrolled_window_get_vscrollbar(GTK_SCROLLED_WINDOW(table->scroll_window));
@@ -289,7 +289,7 @@ void _mouse_over_image_callback(gpointer instance, gpointer user_data)
 {
   if(IS_NULL_PTR(user_data)) return;
   dt_thumbtable_t *table = (dt_thumbtable_t *)user_data;
-  if(!table->lut || table->collection_count == 0) return;
+  if(IS_NULL_PTR(table->lut) || table->collection_count == 0) return;
 
   const int32_t imgid = dt_control_get_mouse_over_id();
 
@@ -303,7 +303,7 @@ void _mouse_over_image_callback(gpointer instance, gpointer user_data)
   for(int rowid = row_start; rowid <= row_end; rowid++)
   {
     dt_thumbnail_t *thumb = table->lut[rowid].thumb;
-    if(!thumb) continue; // thumb object not inited
+    if(IS_NULL_PTR(thumb)) continue; // thumb object not inited
 
     const gboolean mouse_over = thumb->mouse_over;
     dt_thumbnail_set_mouseover(thumb, thumb->info.id == imgid);
@@ -321,7 +321,7 @@ void _mouse_over_image_callback(gpointer instance, gpointer user_data)
     for(int rowid = row_start; rowid <= row_end; rowid++)
     {
       dt_thumbnail_t *thumb = table->lut[rowid].thumb;
-      if(!thumb) continue; // thumb object not inited
+      if(IS_NULL_PTR(thumb)) continue; // thumb object not inited
 
       // In CSS:
       // images borders from non-grouped images are transparent (default),
@@ -488,7 +488,7 @@ int dt_thumbtable_scroll_to_selection(dt_thumbtable_t *table)
 // Find the row ids (as in SQLite indices) of the images contained within viewport at current scrolling stage
 static gboolean _get_row_ids(dt_thumbtable_t *table, int *rowid_min, int *rowid_max)
 {
-  if(!table->configured || !table->v_scrollbar || !table->h_scrollbar) return FALSE;
+  if(!table->configured || IS_NULL_PTR(table->v_scrollbar) || IS_NULL_PTR(table->h_scrollbar)) return FALSE;
 
   if(table->mode == DT_THUMBTABLE_MODE_FILEMANAGER)
   {
@@ -526,7 +526,7 @@ static gboolean _get_row_ids(dt_thumbtable_t *table, int *rowid_min, int *rowid_
 // Find out if a given row id is visible at current scroll step
 gboolean _is_rowid_visible(dt_thumbtable_t *table, int rowid)
 {
-  if(!table->configured || !table->v_scrollbar || !table->h_scrollbar) return FALSE;
+  if(!table->configured || IS_NULL_PTR(table->v_scrollbar) || IS_NULL_PTR(table->h_scrollbar)) return FALSE;
 
   if(table->mode == DT_THUMBTABLE_MODE_FILEMANAGER)
   {    // Pixel coordinates of the viewport:
@@ -734,13 +734,13 @@ void dt_thumbtable_configure(dt_thumbtable_t *table)
 
 dt_thumbnail_t *_find_thumb_by_imgid(dt_thumbtable_t *table, const int32_t imgid)
 {
-  if(!table || imgid <= 0) return NULL;
+  if(IS_NULL_PTR(table) || imgid <= 0) return NULL;
   return (dt_thumbnail_t *)g_hash_table_lookup(table->list, GINT_TO_POINTER(imgid));
 }
 
 gboolean dt_thumbtable_get_thumbnail_info(dt_thumbtable_t *table, int32_t imgid, dt_image_t *out)
 {
-  if(!table || !out || imgid <= 0) return FALSE;
+  if(IS_NULL_PTR(table) || IS_NULL_PTR(out) || imgid <= 0) return FALSE;
 
   // Prefer LUT-backed metadata to avoid touching the image cache for read-only UI needs.
   gboolean found = FALSE;
@@ -971,7 +971,7 @@ void dt_thumbtable_update(dt_thumbtable_t *table)
 {
   _update_row_ids(table);
 
-  if(!gtk_widget_is_visible(table->scroll_window) || !table->lut || !table->configured || !table->collection_inited
+  if(!gtk_widget_is_visible(table->scroll_window) || IS_NULL_PTR(table->lut) || !table->configured || !table->collection_inited
      || table->thumbs_inited || table->collection_count == 0)
     return;
 
@@ -1017,7 +1017,7 @@ static void _dt_selection_changed_callback(gpointer instance, gpointer user_data
   gboolean first = TRUE;
 
   dt_pthread_mutex_lock(&table->lock);
-  if(!table->lut || !table->collection_inited || table->collection_count == 0)
+  if(IS_NULL_PTR(table->lut) || !table->collection_inited || table->collection_count == 0)
   {
     dt_pthread_mutex_unlock(&table->lock);
     return;
@@ -1026,7 +1026,7 @@ static void _dt_selection_changed_callback(gpointer instance, gpointer user_data
   for(int rowid = 0; rowid < table->collection_count; rowid++)
   {
     dt_thumbnail_t *thumb = table->lut[rowid].thumb;
-    if(!thumb) continue;
+    if(IS_NULL_PTR(thumb)) continue;
 
     if(g_hash_table_lookup(table->list, GINT_TO_POINTER(table->lut[rowid].imgid)) != thumb)
     {
@@ -1156,7 +1156,7 @@ void dt_thumbtable_refresh_thumbnail_real(dt_thumbtable_t *table, int32_t imgid,
 // Otherwise, fresh info will be read when initing new thumbnails objects.
 static void _dt_image_info_changed_callback(gpointer instance, gpointer imgs, gpointer user_data)
 {
-  if(!user_data || !imgs) return;
+  if(!user_data || IS_NULL_PTR(imgs)) return;
   dt_thumbtable_t *table = (dt_thumbtable_t *)user_data;
   if(IS_NULL_PTR(table->lut)) return;
 
@@ -1240,7 +1240,7 @@ static void _dt_collection_lut(dt_thumbtable_t *table)
   }
   sqlite3_reset(stmt);
 
-  if(!collection || collection->len == 0)
+  if(IS_NULL_PTR(collection) || collection->len == 0)
   {
     dt_thumbtable_cache_t *old_lut = NULL;
     dt_pthread_mutex_lock(&table->lock);
@@ -1262,7 +1262,7 @@ static void _dt_collection_lut(dt_thumbtable_t *table)
   // everytime a collection changes (meaning filters OR sorting changed).
   dt_thumbtable_cache_t *new_lut = malloc(collection->len * sizeof(dt_thumbtable_cache_t));
 
-  if(!new_lut)
+  if(IS_NULL_PTR(new_lut))
   {
     g_array_free(collection, TRUE);
     return;
@@ -1470,7 +1470,7 @@ static void _event_dnd_get(GtkWidget *widget, GdkDragContext *context, GtkSelect
 
 static void _thumbtable_drag_set_icon(dt_thumbtable_t *table, GdkDragContext *context)
 {
-  if(!table || !table->drag_list) return;
+  if(IS_NULL_PTR(table) || !table->drag_list) return;
 
   const int32_t imgid = GPOINTER_TO_INT(table->drag_list->data);
   dt_thumbnail_t *thumb = _find_thumb_by_imgid(table, imgid);
@@ -1516,7 +1516,7 @@ static void _event_dnd_begin(GtkWidget *widget, GdkDragContext *context, gpointe
 
 GList *_thumbtable_dnd_import_check(GList *files, const char *pathname, int *elements)
 {
-  if (!pathname || IS_NULL_PTR(pathname))
+  if (IS_NULL_PTR(pathname) || IS_NULL_PTR(pathname))
   {
     fprintf(stdout,"DND check: no pathname.\n");
     return files;

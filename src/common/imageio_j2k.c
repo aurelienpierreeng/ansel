@@ -121,7 +121,7 @@ dt_imageio_retval_t dt_imageio_open_j2k(dt_image_t *img, const char *filename, d
   if(!img->exif_inited) (void)dt_exif_read(img, filename);
 
   fsrc = g_fopen(filename, "rb");
-  if(!fsrc)
+  if(IS_NULL_PTR(fsrc))
   {
     fprintf(stderr, "[j2k_open] Error: failed to open `%s' for reading\n", filename);
     return DT_IMAGEIO_FILE_NOT_FOUND;
@@ -163,7 +163,7 @@ dt_imageio_retval_t dt_imageio_open_j2k(dt_image_t *img, const char *filename, d
   }
 
   d_codec = opj_create_decompress(codec);
-  if(!d_codec)
+  if(IS_NULL_PTR(d_codec))
   {
     fprintf(stderr, "[j2k_open] Error: failed to create the decoder\n");
     return DT_IMAGEIO_FILE_CORRUPTED;
@@ -193,7 +193,7 @@ dt_imageio_retval_t dt_imageio_open_j2k(dt_image_t *img, const char *filename, d
   }
 
   d_stream = opj_stream_create_default_file_stream(parameters.infile, 1);
-  if(!d_stream)
+  if(IS_NULL_PTR(d_stream))
   {
     fprintf(stderr, "[j2k_open] Error: failed to create the stream from the file %s\n", parameters.infile);
     opj_destroy_codec(d_codec);
@@ -223,7 +223,7 @@ dt_imageio_retval_t dt_imageio_open_j2k(dt_image_t *img, const char *filename, d
   /* Close the byte stream */
   opj_stream_destroy(d_stream);
 
-  if(!image)
+  if(IS_NULL_PTR(image))
   {
     fprintf(stderr, "[j2k_open] Error: failed to decode image `%s'\n", filename);
     ret = DT_IMAGEIO_FILE_CORRUPTED;
@@ -289,14 +289,14 @@ dt_imageio_retval_t dt_imageio_open_j2k(dt_image_t *img, const char *filename, d
   img->flags |= DT_IMAGE_LDR;
   img->loader = LOADER_J2K;
 
-  if(!mbuf)
+  if(IS_NULL_PTR(mbuf))
   {
     ret = DT_IMAGEIO_OK;
     goto end_of_the_world;
   }
 
   float *buf = (float *)dt_mipmap_cache_alloc(mbuf, img);
-  if(!buf)
+  if(IS_NULL_PTR(buf))
   {
     ret = DT_IMAGEIO_CACHE_FULL;
     goto end_of_the_world;
@@ -365,7 +365,7 @@ int dt_imageio_j2k_read_profile(const char *filename, uint8_t **out)
   /* read the input file and put it in memory */
   /* ---------------------------------------- */
   fsrc = g_fopen(filename, "rb");
-  if(!fsrc)
+  if(IS_NULL_PTR(fsrc))
   {
     fprintf(stderr, "[j2k_read_profile] Error: failed to open `%s' for reading\n", filename);
     goto another_end_of_the_world;
@@ -398,7 +398,7 @@ int dt_imageio_j2k_read_profile(const char *filename, uint8_t **out)
 
   /* get a decoder handle */
   d_codec = opj_create_decompress(codec);
-  if(!d_codec)
+  if(IS_NULL_PTR(d_codec))
   {
     fprintf(stderr, "[j2k_read_profile] Error: failed to create the decoder\n");
     return DT_IMAGEIO_FILE_CORRUPTED;
@@ -412,7 +412,7 @@ int dt_imageio_j2k_read_profile(const char *filename, uint8_t **out)
   }
 
   d_stream = opj_stream_create_default_file_stream(parameters.infile, 1);
-  if(!d_stream)
+  if(IS_NULL_PTR(d_stream))
   {
     fprintf(stderr, "[j2k_read_profile] Error: failed to create the stream from the file %s\n", parameters.infile);
     return DT_IMAGEIO_FILE_CORRUPTED;
@@ -446,7 +446,7 @@ int dt_imageio_j2k_read_profile(const char *filename, uint8_t **out)
   /* Close the byte stream */
   opj_stream_destroy(d_stream);
 
-  if(!image)
+  if(IS_NULL_PTR(image))
   {
     fprintf(stderr, "[j2k_read_profile] Error: failed to decode image `%s'\n", filename);
     goto another_end_of_the_world;

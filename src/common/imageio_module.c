@@ -92,15 +92,15 @@ static int dt_imageio_load_module_format(dt_imageio_module_format_t *module, con
 
   if(darktable.gui)
   {
-    if(!module->gui_init) goto api_h_error;
+    if(IS_NULL_PTR(module->gui_init)) goto api_h_error;
   }
   else
   {
     module->gui_init = _default_format_gui_init;
   }
-  if(!module->dimension) module->dimension = _default_format_dimension;
-  if(!module->flags) module->flags = _default_format_flags;
-  if(!module->levels) module->levels = _default_format_levels;
+  if(IS_NULL_PTR(module->dimension)) module->dimension = _default_format_dimension;
+  if(IS_NULL_PTR(module->flags)) module->flags = _default_format_flags;
+  if(IS_NULL_PTR(module->levels)) module->levels = _default_format_levels;
 
   module->widget = NULL;
   module->parameter_lua_type = LUAA_INVALID_TYPE;
@@ -201,14 +201,14 @@ static int dt_imageio_load_module_storage(dt_imageio_module_storage_t *module, c
 
   if(darktable.gui)
   {
-    if(!module->gui_init) goto api_h_error;
+    if(IS_NULL_PTR(module->gui_init)) goto api_h_error;
   }
   else
   {
     module->gui_init = _default_storage_nop;
   }
-  if(!module->dimension) module->dimension = _default_storage_dimension;
-  if(!module->recommended_dimension) module->recommended_dimension = _default_storage_dimension;
+  if(IS_NULL_PTR(module->dimension)) module->dimension = _default_storage_dimension;
+  if(IS_NULL_PTR(module->recommended_dimension)) module->recommended_dimension = _default_storage_dimension;
   if(!module->export_dispatched) module->export_dispatched = _default_storage_nop;
 
   module->widget = NULL;
@@ -309,8 +309,8 @@ dt_imageio_module_format_t *dt_imageio_get_format()
   dt_imageio_module_format_t *format = dt_imageio_get_format_by_name(format_name);
   // if the format from the config isn't available default to jpeg, if that's not available either just use
   // the first we have
-  if(!format) format = dt_imageio_get_format_by_name("jpeg");
-  if(!format) format = iio->plugins_format->data;
+  if(IS_NULL_PTR(format)) format = dt_imageio_get_format_by_name("jpeg");
+  if(IS_NULL_PTR(format)) format = iio->plugins_format->data;
   return format;
 }
 
@@ -321,8 +321,8 @@ dt_imageio_module_storage_t *dt_imageio_get_storage()
   dt_imageio_module_storage_t *storage = dt_imageio_get_storage_by_name(storage_name);
   // if the storage from the config isn't available default to disk, if that's not available either just use
   // the first we have
-  if(!storage) storage = dt_imageio_get_storage_by_name("disk");
-  if(!storage) storage = iio->plugins_storage->data;
+  if(IS_NULL_PTR(storage)) storage = dt_imageio_get_storage_by_name("disk");
+  if(IS_NULL_PTR(storage)) storage = iio->plugins_storage->data;
   return storage;
 }
 
@@ -354,7 +354,7 @@ dt_imageio_module_format_t *dt_imageio_get_format_by_index(int index)
 {
   dt_imageio_t *iio = darktable.imageio;
   GList *it = g_list_nth(iio->plugins_format, index);
-  if(!it) it = iio->plugins_format;
+  if(IS_NULL_PTR(it)) it = iio->plugins_format;
   return (dt_imageio_module_format_t *)it->data;
 }
 
@@ -362,7 +362,7 @@ dt_imageio_module_storage_t *dt_imageio_get_storage_by_index(int index)
 {
   dt_imageio_t *iio = darktable.imageio;
   GList *it = g_list_nth(iio->plugins_storage, index);
-  if(!it) it = iio->plugins_storage;
+  if(IS_NULL_PTR(it)) it = iio->plugins_storage;
   return (dt_imageio_module_storage_t *)it->data;
 }
 

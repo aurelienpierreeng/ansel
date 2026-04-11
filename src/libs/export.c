@@ -1824,7 +1824,7 @@ void *get_params(dt_lib_module_t *self, int *size)
   // concat storage and format, size is max + header
   dt_imageio_module_format_t *mformat = dt_imageio_get_format();
   dt_imageio_module_storage_t *mstorage = dt_imageio_get_storage();
-  if(!mformat || !mstorage) return NULL;
+  if(IS_NULL_PTR(mformat) || IS_NULL_PTR(mstorage)) return NULL;
 
   // size will be only as large as needed to remove random pointers from params (stored at the end).
   size_t fsize = mformat->params_size(mformat);
@@ -1835,8 +1835,8 @@ void *get_params(dt_lib_module_t *self, int *size)
   const int32_t sversion = mstorage->version();
   // we allow null pointers (plugin not ready for export in current state), and just don't copy back the
   // settings later:
-  if(!sdata) ssize = 0;
-  if(!fdata) fsize = 0;
+  if(IS_NULL_PTR(sdata)) ssize = 0;
+  if(IS_NULL_PTR(fdata)) fsize = 0;
   if(fdata)
   {
     // clean up format global params (need to set all bytes to reliably detect which preset is active).
@@ -1871,7 +1871,7 @@ void *get_params(dt_lib_module_t *self, int *size)
   }
 
   if(!iccfilename) iccfilename = g_strdup("");
-  if(!metadata_export) metadata_export = g_strdup("");
+  if(IS_NULL_PTR(metadata_export)) metadata_export = g_strdup("");
 
   const char *fname = mformat->plugin_name;
   const char *sname = mstorage->plugin_name;

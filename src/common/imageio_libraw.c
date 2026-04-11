@@ -265,7 +265,7 @@ dt_imageio_retval_t dt_imageio_open_libraw(dt_image_t *img, const char *filename
   // but seems to be the best available. LibRaw crx decoder can actually
   // decode the raw data, but internal metadata like wb_coeffs, crops etc.
   // are not populated into libraw structure, or image is not of CFA type.
-  if(raw->rawdata.color.cam_mul[0] == 0.0f || isnan(raw->rawdata.color.cam_mul[0]) || !raw->rawdata.raw_image)
+  if(raw->rawdata.color.cam_mul[0] == 0.0f || isnan(raw->rawdata.color.cam_mul[0]) || IS_NULL_PTR(raw->rawdata.raw_image))
   {
     fprintf(stderr, "[libraw_open] detected unsupported image `%s'\n", img->filename);
     goto error;
@@ -336,7 +336,7 @@ dt_imageio_retval_t dt_imageio_open_libraw(dt_image_t *img, const char *filename
 
   img->loader = LOADER_LIBRAW;
 
-  if(!mbuf)
+  if(IS_NULL_PTR(mbuf))
   {
     err = DT_IMAGEIO_OK;
     goto error;
@@ -344,7 +344,7 @@ dt_imageio_retval_t dt_imageio_open_libraw(dt_image_t *img, const char *filename
 
   // Allocate and copy image from libraw buffer to dt
   void *buf = dt_mipmap_cache_alloc(mbuf, img);
-  if(!buf)
+  if(IS_NULL_PTR(buf))
   {
     fprintf(stderr, "[libraw_open] could not alloc full buffer for image `%s'\n", img->filename);
     err = DT_IMAGEIO_CACHE_FULL;

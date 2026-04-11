@@ -246,7 +246,7 @@ static void _iop_color_picker_data_ready_callback(gpointer instance, gpointer us
   GtkWidget *picker = NULL;
   dt_dev_pixelpipe_t *pipe = NULL;
   const dt_dev_pixelpipe_iop_t *piece = NULL;
-  if(!module || !module->color_picker_apply) return;
+  if(IS_NULL_PTR(module) || IS_NULL_PTR(module->color_picker_apply)) return;
   if(dt_iop_color_picker_get_ready_data(module, &picker, &pipe, &piece)) return;
 
   dt_print(DT_DEBUG_DEV, "[picker] dispatch module=%s picker=%p pipe=%p hash=%" PRIu64 "\n",
@@ -412,12 +412,12 @@ int dt_iop_load_module_so(void *m, const char *libname, const char *module_name)
 #define INCLUDE_API_FROM_MODULE_LOAD "iop_load_module"
 #include "iop/iop_api.h"
 
-  if(!module->init) module->init = dt_iop_default_init;
-  if(!module->modify_roi_in) module->modify_roi_in = _iop_modify_roi_in;
-  if(!module->modify_roi_out) module->modify_roi_out = _iop_modify_roi_out;
+  if(IS_NULL_PTR(module->init)) module->init = dt_iop_default_init;
+  if(IS_NULL_PTR(module->modify_roi_in)) module->modify_roi_in = _iop_modify_roi_in;
+  if(IS_NULL_PTR(module->modify_roi_out)) module->modify_roi_out = _iop_modify_roi_out;
 
   #ifdef HAVE_OPENCL
-  if(!module->process_tiling_cl) module->process_tiling_cl = darktable.opencl->inited ? default_process_tiling_cl : NULL;
+  if(IS_NULL_PTR(module->process_tiling_cl)) module->process_tiling_cl = darktable.opencl->inited ? default_process_tiling_cl : NULL;
   if(!darktable.opencl->inited) module->process_cl = NULL;
   #endif // HAVE_OPENCL
 
@@ -1041,7 +1041,7 @@ gboolean dt_iop_so_is_hidden(dt_iop_module_so_t *module)
   gboolean is_hidden = TRUE;
   if(!(module->flags() & IOP_FLAGS_HIDDEN))
   {
-    if(!module->gui_init)
+    if(IS_NULL_PTR(module->gui_init))
       g_debug("Module '%s' is not hidden and lacks implementation of gui_init()...", module->op);
     else if(!module->gui_cleanup)
       g_debug("Module '%s' is not hidden and lacks implementation of gui_cleanup()...", module->op);
@@ -1098,7 +1098,7 @@ static void _iop_panel_label(dt_iop_module_t *module)
 
 void dt_iop_gui_update_header(dt_iop_module_t *module)
 {
-  if (!module->header)                  /* some modules such as overexposed don't actually have a header */
+  if (IS_NULL_PTR(module->header))                  /* some modules such as overexposed don't actually have a header */
     return;
 
   // set panel name to display correct multi-instance
@@ -2120,7 +2120,7 @@ void _iop_dim_all_but(dt_iop_module_t *module, gboolean dim)
     dt_iop_module_t *m = (dt_iop_module_t *)iop->data;
 
     // Handle invisible modules
-    if(!m || !m->expander) continue;
+    if(IS_NULL_PTR(m) || !m->expander) continue;
 
     if(dim && m != module)
       dt_gui_add_class(gtk_widget_get_parent(dt_iop_gui_get_pluginui(m)), "module-dimmed");
@@ -2131,7 +2131,7 @@ void _iop_dim_all_but(dt_iop_module_t *module, gboolean dim)
 
 void dt_iop_gui_set_expanded(dt_iop_module_t *module, gboolean expanded, gboolean collapse_others)
 {
-  if(!module || !module->expander) return;
+  if(IS_NULL_PTR(module) || !module->expander) return;
   if(collapse_others)
   {
     for(GList *iop = g_list_first(darktable.develop->iop); iop; iop = g_list_next(iop))
@@ -2181,7 +2181,7 @@ static gboolean _iop_plugin_body_button_press(GtkWidget *w, GdkEventButton *e, g
 static gboolean _iop_plugin_header_activate(GtkWidget* self, gboolean group_cycling, gpointer user_data)
 {
   dt_gui_module_t *module = (dt_gui_module_t *)user_data;
-  if(!module || !module->focus) return FALSE;
+  if(IS_NULL_PTR(module) || !module->focus) return FALSE;
   return module->focus(module, TRUE);
 }
 
@@ -2198,7 +2198,7 @@ static gboolean _iop_plugin_focus_accel(GtkAccelGroup *accel_group, GObject *acc
                                         GdkModifierType modifier, gpointer data)
 {
   dt_gui_module_t *module = (dt_gui_module_t *)data;
-  if(!module || !module->focus) return FALSE;
+  if(IS_NULL_PTR(module) || !module->focus) return FALSE;
   return module->focus(module, FALSE);
 }
 
@@ -2240,7 +2240,7 @@ static gboolean _iop_plugin_header_button_release(GtkWidget *w, GdkEventButton *
   if(e->button != 1 || e->type != GDK_BUTTON_RELEASE) return FALSE;
 
   dt_iop_module_t *module = (dt_iop_module_t *)user_data;
-  if(!module || !module->expander) return FALSE;
+  if(IS_NULL_PTR(module) || !module->expander) return FALSE;
 
   if(g_object_get_data(G_OBJECT(module->expander), "dt-module-header-child-click"))
   {
@@ -2342,7 +2342,7 @@ static gboolean _mask_indicator_tooltip(GtkWidget *treeview, gint x, gint y, gbo
 
 void dt_iop_add_remove_mask_indicator(dt_iop_module_t *module)
 {
-  if(!module || !module->mask_indicator) return;
+  if(IS_NULL_PTR(module) || IS_NULL_PTR(module->mask_indicator)) return;
 
   const gboolean support_blending = (module->flags() & IOP_FLAGS_SUPPORTS_BLENDING) == IOP_FLAGS_SUPPORTS_BLENDING;
 
@@ -2870,7 +2870,7 @@ void dt_bauhaus_update_module(dt_iop_module_t *self)
   {
     GtkWidget *widget = (GtkWidget *)w->data;
     struct dt_bauhaus_widget_t *bhw = DT_BAUHAUS_WIDGET(widget);
-    if(!bhw) continue;
+    if(IS_NULL_PTR(bhw)) continue;
 
     switch(bhw->type)
     {
@@ -2919,7 +2919,7 @@ void dt_bauhaus_value_changed_default_callback(GtkWidget *widget)
 {
   dt_bauhaus_widget_t *w = DT_BAUHAUS_WIDGET(widget);
   dt_iop_module_t *module = (dt_iop_module_t *)w->module;
-  if(!w->field || !module) return;
+  if(IS_NULL_PTR(w->field) || IS_NULL_PTR(module)) return;
 
   switch(w->type)
   {

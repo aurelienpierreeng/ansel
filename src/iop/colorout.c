@@ -625,7 +625,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
 
   // We don't have an internal, embedded or external file profile,
   // just fall back to sRGB
-  if(!output)
+  if(IS_NULL_PTR(output))
   {
     output = dt_colorspaces_get_profile(DT_COLORSPACE_SRGB, "",
                                         DT_PROFILE_DIRECTION_OUT
@@ -642,7 +642,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
         = dt_colorspaces_get_profile(work_type, work_filename ? work_filename : "", DT_PROFILE_DIRECTION_ANY);
     if(in_profile) input = in_profile->profile;
   }
-  if(!input)
+  if(IS_NULL_PTR(input))
   {
     input = output;
     dt_print(DT_DEBUG_DEV,
@@ -720,7 +720,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   }
 
   // user selected a non-supported output profile, check that:
-  if(!d->xform && isnan(d->cmatrix[0][0]))
+  if(IS_NULL_PTR(d->xform) && isnan(d->cmatrix[0][0]))
   {
     const char *const unsupported_name
         = out_profile ? out_profile->name : dt_colorspaces_get_name(out_type, out_filename);

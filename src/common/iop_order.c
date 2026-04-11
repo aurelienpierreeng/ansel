@@ -1009,7 +1009,7 @@ void dt_ioppr_resync_modules_order(dt_develop_t *dev)
 
 void dt_ioppr_rebuild_iop_order_from_modules(struct dt_develop_t *dev, GList *ordered_modules)
 {
-  if(!dev || !ordered_modules) return;
+  if(IS_NULL_PTR(dev) || !ordered_modules) return;
 
   GList *new_iop_order_list = NULL;
   int order = 1;
@@ -1017,7 +1017,7 @@ void dt_ioppr_rebuild_iop_order_from_modules(struct dt_develop_t *dev, GList *or
   for(const GList *l = ordered_modules; l; l = g_list_next(l))
   {
     const dt_iop_module_t *mod = (const dt_iop_module_t *)l->data;
-    if(!mod) continue;
+    if(IS_NULL_PTR(mod)) continue;
 
     dt_iop_order_entry_t *entry = (dt_iop_order_entry_t *)calloc(1, sizeof(dt_iop_order_entry_t));
     g_strlcpy(entry->operation, mod->op, sizeof(entry->operation));
@@ -1930,7 +1930,7 @@ gboolean dt_ioppr_move_iop_before(struct dt_develop_t *dev, dt_iop_module_t *mod
   GList *next = dt_ioppr_get_iop_order_link(dev->iop_order_list, module_next->op, module_next->multi_priority);
   GList *current = dt_ioppr_get_iop_order_link(dev->iop_order_list, module->op, module->multi_priority);
 
-  if(!next || !current) return FALSE;
+  if(IS_NULL_PTR(next) || IS_NULL_PTR(current)) return FALSE;
 
   dev->iop_order_list = g_list_remove_link(dev->iop_order_list, current);
   dev->iop_order_list = g_list_insert_before(dev->iop_order_list, next, current->data);
@@ -1951,7 +1951,7 @@ gboolean dt_ioppr_move_iop_after(struct dt_develop_t *dev, dt_iop_module_t *modu
   GList *prev = dt_ioppr_get_iop_order_link(dev->iop_order_list, module_prev->op, module_prev->multi_priority);
   GList *current = dt_ioppr_get_iop_order_link(dev->iop_order_list, module->op, module->multi_priority);
 
-  if(!prev || !current) return FALSE;
+  if(IS_NULL_PTR(prev) || IS_NULL_PTR(current)) return FALSE;
 
   dev->iop_order_list = g_list_remove_link(dev->iop_order_list, current);
 
@@ -2372,7 +2372,7 @@ GList *dt_ioppr_deserialize_text_iop_order_list(const char *buf)
     // then operation instance
 
     l = g_list_next(l);
-    if(!l) goto error;
+    if(IS_NULL_PTR(l)) goto error;
 
     const char *data = (char *)l->data;
     int inst = 0;

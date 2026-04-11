@@ -2756,7 +2756,7 @@ static void _draw_save_lines_to_params(dt_iop_module_t *self)
 
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
   dt_iop_ashift_params_t *p = _get_ashift_params(self);
-  if(!g || !p) return;
+  if(IS_NULL_PTR(g) || IS_NULL_PTR(p)) return;
 
   // save quad lines (we only handle the 2 vertical lines)
   if(g->current_structure_method == ASHIFT_METHOD_QUAD && g->lines && g->lines_count >= 4)
@@ -2803,7 +2803,7 @@ static gboolean _draw_retrieve_lines_from_params(dt_iop_module_t *self, dt_iop_a
 
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
   dt_iop_ashift_params_t *p = _get_ashift_params(self);
-  if(!g || !p) return FALSE;
+  if(IS_NULL_PTR(g) || IS_NULL_PTR(p)) return FALSE;
 
   dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->virtual_pipe, self);
 
@@ -2943,7 +2943,7 @@ static gboolean _sync_private_buffer_from_preview_cache(dt_iop_module_t *self,
   dt_dev_pixelpipe_iop_t *preview_piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->preview_pipe, self);
   if(preview_piece_out) *preview_piece_out = preview_piece;
 
-  if(!preview_piece || !preview_piece->enabled || preview_piece->roi_in.width <= 0 || preview_piece->roi_in.height <= 0)
+  if(IS_NULL_PTR(preview_piece) || !preview_piece->enabled || preview_piece->roi_in.width <= 0 || preview_piece->roi_in.height <= 0)
     return FALSE;
 
   const dt_dev_pixelpipe_iop_t *previous_piece = NULL;
@@ -3002,10 +3002,10 @@ static gboolean _sync_private_buffer_from_preview_cache(dt_iop_module_t *self,
 
 static uint64_t _current_preview_input_hash(dt_iop_module_t *self)
 {
-  if(!self || !self->dev || !self->dev->preview_pipe) return DT_PIXELPIPE_CACHE_HASH_INVALID;
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(self->dev->preview_pipe)) return DT_PIXELPIPE_CACHE_HASH_INVALID;
 
   dt_dev_pixelpipe_iop_t *preview_piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->preview_pipe, self);
-  if(!preview_piece || !preview_piece->enabled || preview_piece->roi_in.width <= 0 || preview_piece->roi_in.height <= 0)
+  if(IS_NULL_PTR(preview_piece) || !preview_piece->enabled || preview_piece->roi_in.width <= 0 || preview_piece->roi_in.height <= 0)
     return DT_PIXELPIPE_CACHE_HASH_INVALID;
 
   const dt_dev_pixelpipe_iop_t *previous_piece = NULL;
@@ -3381,7 +3381,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
       dt_free(g->buf); // a no-op if g->buf is NULL
       // only get new buffer if no old buffer available or old buffer does not fit in terms of size
       g->buf = malloc(sizeof(float) * 4 * width * height);
-      if(!g->buf)
+      if(IS_NULL_PTR(g->buf))
       {
         dt_iop_gui_leave_critical_section(self);
         return 1;
@@ -4040,7 +4040,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
 
   // we draw the cropping area; use the input ROI from the virtual pipe piece
   dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(dev, dev->virtual_pipe, self);
-  if(!piece)
+  if(IS_NULL_PTR(piece))
   {
     cairo_restore(cr);
     return;
@@ -4170,7 +4170,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
 
   // structural data are currently being collected or fit procedure is running? -> skip
   // no structural data or visibility switched off? -> stop here
-  if(g->fitting || IS_NULL_PTR(g->lines) || !g->buf || !self->enabled) return;
+  if(g->fitting || IS_NULL_PTR(g->lines) || IS_NULL_PTR(g->buf) || !self->enabled) return;
 
   // ensure virtual pipe params are in sync so distortions use current settings
   if(dt_dev_pixelpipe_get_history_hash(dev->virtual_pipe) != dt_dev_get_history_hash(dev))
@@ -4626,7 +4626,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
   if(wd < 1.0 || ht < 1.0) return 1;
 
   // if we start to draw a straightening line
-  if(!g->lines && which == 3 && !g->editing)
+  if(IS_NULL_PTR(g->lines) && which == 3 && !g->editing)
   {
     dt_control_change_cursor(GDK_CROSSHAIR);
     g->straightening = TRUE;
@@ -5546,7 +5546,7 @@ static void _event_history_resync_callback(gpointer instance, gpointer user_data
   (void)instance;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
-  if(!g || g->jobcode == ASHIFT_JOBCODE_NONE || darktable.gui->reset) return;
+  if(IS_NULL_PTR(g) || g->jobcode == ASHIFT_JOBCODE_NONE || darktable.gui->reset) return;
 
   const uint64_t preview_input_hash = _current_preview_input_hash(self);
   if(preview_input_hash == DT_PIXELPIPE_CACHE_HASH_INVALID) return;
@@ -5568,7 +5568,7 @@ static void _event_cacheline_ready_callback(gpointer instance, const guint64 has
   (void)instance;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
-  if(!g || g->pending_preview_input_hash != hash || darktable.gui->reset) return;
+  if(IS_NULL_PTR(g) || g->pending_preview_input_hash != hash || darktable.gui->reset) return;
 
   if(!_sync_private_buffer_from_preview_cache(self, NULL)) return;
 

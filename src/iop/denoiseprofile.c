@@ -440,7 +440,7 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
       }
     }
     // autodetect current profile:
-    if(!self->dev)
+    if(IS_NULL_PTR(self->dev))
     {
       // we are probably handling a style or preset, do nothing for them, we can't do anything to detect if
       // autodetection was used or not

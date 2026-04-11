@@ -1072,7 +1072,7 @@ static inline uint64_t dt_hash(uint64_t hash, const char *str, size_t size)
 
 static inline gchar *dt_string_replace(const char *string, const char *to_replace)
 {
-  if(!string || !to_replace) return NULL;
+  if(IS_NULL_PTR(string) || IS_NULL_PTR(to_replace)) return NULL;
   gchar **split = g_strsplit(string, to_replace, -1);
   gchar *text = g_strjoinv("", split);
   g_strfreev(split);

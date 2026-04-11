@@ -34,7 +34,7 @@ void *dt_drawlayer_cache_alloc_temp_buffer(const size_t bytes, const char *name)
 /** @brief Free temporary aligned cache buffer. */
 void dt_drawlayer_cache_free_temp_buffer(void **buffer, const char *name)
 {
-  if(!buffer || !*buffer) return;
+  if(IS_NULL_PTR(buffer) || !*buffer) return;
   dt_pixelpipe_cache_free_align_cache(darktable.pixelpipe_cache, buffer, name);
 }
 
@@ -42,7 +42,7 @@ void dt_drawlayer_cache_free_temp_buffer(void **buffer, const char *name)
 float *dt_drawlayer_cache_ensure_scratch_buffer(float **buffer, size_t *capacity_pixels, const size_t needed_pixels,
                                                 const char *name)
 {
-  if(!buffer || !capacity_pixels || needed_pixels == 0) return NULL;
+  if(IS_NULL_PTR(buffer) || IS_NULL_PTR(capacity_pixels) || needed_pixels == 0) return NULL;
   if(*capacity_pixels < needed_pixels)
   {
     dt_drawlayer_cache_free_temp_buffer((void **)buffer, name);
@@ -88,14 +88,14 @@ gboolean dt_drawlayer_cache_patch_alloc_shared(dt_drawlayer_cache_patch_t *patch
                                                const size_t pixel_count, const int width, const int height,
                                                const char *name, int *created_out)
 {
-  if(!patch || pixel_count == 0 || width <= 0 || height <= 0) return FALSE;
+  if(IS_NULL_PTR(patch) || pixel_count == 0 || width <= 0 || height <= 0) return FALSE;
 
   void *data = NULL;
   dt_pixel_cache_entry_t *entry = NULL;
   const int created = dt_dev_pixelpipe_cache_get(darktable.pixelpipe_cache, hash, pixel_count * 4 * sizeof(float),
                                                  name, DT_DEV_PIXELPIPE_NONE, TRUE, &data, &entry);
   if(created_out) *created_out = created;
-  if(!data || !entry)
+  if(IS_NULL_PTR(data) || IS_NULL_PTR(entry))
   {
     if(entry)
     {
@@ -123,7 +123,7 @@ gboolean dt_drawlayer_cache_patch_alloc_shared(dt_drawlayer_cache_patch_t *patch
 gboolean dt_drawlayer_cache_ensure_mask_buffer(dt_drawlayer_cache_patch_t *mask, const int width,
                                                const int height, const char *name)
 {
-  if(!mask || width <= 0 || height <= 0) return FALSE;
+  if(IS_NULL_PTR(mask) || width <= 0 || height <= 0) return FALSE;
 
   const gboolean size_changed = (mask->width != width || mask->height != height || !mask->pixels);
   if(size_changed)
@@ -135,7 +135,7 @@ gboolean dt_drawlayer_cache_ensure_mask_buffer(dt_drawlayer_cache_patch_t *mask,
     mask->y = 0;
     mask->pixels = dt_drawlayer_cache_alloc_temp_buffer((size_t)width * height * sizeof(float), name);
     mask->external_alloc = TRUE;
-    if(!mask->pixels)
+    if(IS_NULL_PTR(mask->pixels))
     {
       mask->width = 0;
       mask->height = 0;
@@ -144,7 +144,7 @@ gboolean dt_drawlayer_cache_ensure_mask_buffer(dt_drawlayer_cache_patch_t *mask,
 
     mask->cache_entry = dt_dev_pixelpipe_cache_ref_entry_for_host_ptr(darktable.pixelpipe_cache, mask->pixels);
     mask->cache_hash = mask->cache_entry ? mask->cache_entry->hash : DT_PIXELPIPE_CACHE_HASH_INVALID;
-    if(!mask->cache_entry)
+    if(IS_NULL_PTR(mask->cache_entry))
     {
       dt_drawlayer_cache_patch_clear(mask, name);
       return FALSE;
@@ -158,28 +158,28 @@ gboolean dt_drawlayer_cache_ensure_mask_buffer(dt_drawlayer_cache_patch_t *mask,
 /** @brief Acquire read lock on shared patch cache entry. */
 void dt_drawlayer_cache_patch_rdlock(const dt_drawlayer_cache_patch_t *patch)
 {
-  if(!patch || !patch->cache_entry) return;
+  if(IS_NULL_PTR(patch) || IS_NULL_PTR(patch->cache_entry)) return;
   dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, patch->cache_entry);
 }
 
 /** @brief Release read lock on shared patch cache entry. */
 void dt_drawlayer_cache_patch_rdunlock(const dt_drawlayer_cache_patch_t *patch)
 {
-  if(!patch || !patch->cache_entry) return;
+  if(IS_NULL_PTR(patch) || IS_NULL_PTR(patch->cache_entry)) return;
   dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, patch->cache_entry);
 }
 
 /** @brief Acquire write lock on shared patch cache entry. */
 void dt_drawlayer_cache_patch_wrlock(const dt_drawlayer_cache_patch_t *patch)
 {
-  if(!patch || !patch->cache_entry) return;
+  if(IS_NULL_PTR(patch) || IS_NULL_PTR(patch->cache_entry)) return;
   dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, TRUE, patch->cache_entry);
 }
 
 /** @brief Release write lock on shared patch cache entry. */
 void dt_drawlayer_cache_patch_wrunlock(const dt_drawlayer_cache_patch_t *patch)
 {
-  if(!patch || !patch->cache_entry) return;
+  if(IS_NULL_PTR(patch) || IS_NULL_PTR(patch->cache_entry)) return;
   dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, FALSE, patch->cache_entry);
 }
 
@@ -203,7 +203,7 @@ gboolean dt_drawlayer_cache_ensure_process_patch_buffer(dt_drawlayer_cache_patch
                                                         const int height, const char *patch_buffer_name,
                                                         const char *mask_buffer_name)
 {
-  if(!process_patch || !process_stroke_mask || width <= 0 || height <= 0)
+  if(IS_NULL_PTR(process_patch) || !process_stroke_mask || width <= 0 || height <= 0)
     return FALSE;
 
   const gboolean size_changed = (process_patch->width != width || process_patch->height != height
@@ -266,7 +266,7 @@ void dt_drawlayer_cache_build_combined_process_roi(const dt_dev_pixelpipe_iop_t 
                                                    const int module_origin_x, const int module_origin_y,
                                                    dt_iop_roi_t *combined_roi)
 {
-  if(!piece || !process_roi || !combined_roi || current_full_w <= 0 || current_full_h <= 0
+  if(IS_NULL_PTR(piece) || IS_NULL_PTR(process_roi) || IS_NULL_PTR(combined_roi) || current_full_w <= 0 || current_full_h <= 0
      || src_w <= 0 || src_h <= 0)
   {
     if(combined_roi) memset(combined_roi, 0, sizeof(*combined_roi));
@@ -321,7 +321,7 @@ void dt_drawlayer_cache_build_combined_process_roi_for_piece(const dt_dev_pixelp
                                                              const int src_w, const int src_h,
                                                              dt_iop_roi_t *combined_roi)
 {
-  if(!piece || !process_roi || !combined_roi || current_full_w <= 0 || current_full_h <= 0
+  if(IS_NULL_PTR(piece) || IS_NULL_PTR(process_roi) || IS_NULL_PTR(combined_roi) || current_full_w <= 0 || current_full_h <= 0
      || src_w <= 0 || src_h <= 0)
   {
     if(combined_roi) memset(combined_roi, 0, sizeof(*combined_roi));
@@ -345,7 +345,7 @@ gboolean dt_drawlayer_cache_build_process_blend_rois(const dt_drawlayer_cache_pa
                                                      dt_iop_roi_t *source_process_roi,
                                                      gboolean *direct_copy)
 {
-  if(!process_patch || !roi_out || !direct_copy) return FALSE;
+  if(IS_NULL_PTR(process_patch) || IS_NULL_PTR(roi_out) || IS_NULL_PTR(direct_copy)) return FALSE;
   if(process_patch->width <= 0 || process_patch->height <= 0 || roi_out->width <= 0 || roi_out->height <= 0)
     return FALSE;
 
@@ -379,7 +379,7 @@ gboolean dt_drawlayer_cache_resample_process_patch_to_output(const dt_drawlayer_
                                                              float *layerbuf,
                                                              const int layerbuf_width)
 {
-  if(!process_patch || !roi_out || !layerbuf || !process_patch->pixels || layerbuf_width <= 0) return FALSE;
+  if(IS_NULL_PTR(process_patch) || IS_NULL_PTR(roi_out) || IS_NULL_PTR(layerbuf) || IS_NULL_PTR(process_patch->pixels) || layerbuf_width <= 0) return FALSE;
 
   dt_iop_roi_t target_roi = { 0 };
   dt_iop_roi_t source_process_roi = { 0 };
@@ -414,7 +414,7 @@ gboolean dt_drawlayer_cache_populate_process_patch_from_base(const dt_drawlayer_
                                                              const char *patch_buffer_name,
                                                              const char *mask_buffer_name)
 {
-  if(!base_patch || !process_patch || !combined_roi || !base_patch->pixels || base_patch->width <= 0
+  if(IS_NULL_PTR(base_patch) || IS_NULL_PTR(process_patch) || IS_NULL_PTR(combined_roi) || IS_NULL_PTR(base_patch->pixels) || base_patch->width <= 0
      || base_patch->height <= 0 || patch_width <= 0 || patch_height <= 0 || combined_roi->scale <= 1e-6f)
     return FALSE;
 
@@ -543,10 +543,10 @@ gboolean dt_drawlayer_cache_flush_process_patch_to_base(dt_drawlayer_cache_patch
                                                         dt_drawlayer_damaged_rect_t *process_dirty_rect,
                                                         const char *update_buffer_name)
 {
-  if(!base_patch || !process_combined_roi || !process_patch
-     || !process_update_pixels || !process_update_capacity_pixels)
+  if(IS_NULL_PTR(base_patch) || IS_NULL_PTR(process_combined_roi) || IS_NULL_PTR(process_patch)
+     || IS_NULL_PTR(process_update_pixels) || IS_NULL_PTR(process_update_capacity_pixels))
     return FALSE;
-  if(!process_patch->pixels || !base_patch->pixels || !process_patch_dirty || !*process_patch_dirty) return TRUE;
+  if(IS_NULL_PTR(process_patch->pixels) || IS_NULL_PTR(base_patch->pixels) || IS_NULL_PTR(process_patch_dirty) || !*process_patch_dirty) return TRUE;
   if(process_patch->width <= 0 || process_patch->height <= 0 || base_patch->width <= 0 || base_patch->height <= 0)
     return TRUE;
   if(process_combined_roi->scale <= 1e-6f) return TRUE;

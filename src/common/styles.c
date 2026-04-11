@@ -590,7 +590,7 @@ void dt_multiple_styles_apply_to_list(GList *styles, const GList *list, gboolean
      do that only in the darkroom as there is nothing to be saved
      when in the lighttable (and it would write over current history stack) */
 
-  if(!styles && !list)
+  if(IS_NULL_PTR(styles) && !list)
   {
     dt_control_log(_("no images nor styles selected!"));
     return;
@@ -638,7 +638,7 @@ void dt_styles_create_from_list(const GList *list)
 
 static const char *_dt_styles_normalize_multi_name(const char *multi_name)
 {
-  if(!multi_name || !*multi_name || !strcmp(multi_name, "0")) return "";
+  if(IS_NULL_PTR(multi_name) || !*multi_name || !strcmp(multi_name, "0")) return "";
   return multi_name;
 }
 
@@ -741,7 +741,7 @@ static dt_iop_module_t *_dt_styles_tmp_module_from_style_item(dt_develop_t *dev,
 
 static GList *_dt_styles_get_apply_items(const int style_id)
 {
-  if(!_styles_apply_items_stmt)
+  if(IS_NULL_PTR(_styles_apply_items_stmt))
   {
     // clang-format off
     DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
@@ -840,7 +840,7 @@ static GList *_styles_collect_applied_items(dt_develop_t *dev_src, GList *si_lis
   {
     dt_style_item_t *style_item = (dt_style_item_t *)l->data;
     dt_iop_module_t *module = _dt_styles_get_or_create_module_instance(dev_src, style_item);
-    if(!module) continue;
+    if(IS_NULL_PTR(module)) continue;
 
     const char *multi_name = _dt_styles_normalize_multi_name(style_item->multi_name);
     module->multi_priority = style_item->multi_priority;
@@ -885,7 +885,7 @@ static int _styles_rebuild_history_from_items(dt_develop_t *dev_src, GList *appl
     const char *multi_name = _dt_styles_normalize_multi_name(style_item->multi_name);
     dt_iop_module_t *module
         = dt_dev_get_module_instance(dev_src, style_item->operation, multi_name, style_item->multi_priority);
-    if(!module) continue;
+    if(IS_NULL_PTR(module)) continue;
 
     dt_dev_history_item_t *hist = (dt_dev_history_item_t *)calloc(1, sizeof(dt_dev_history_item_t));
     if(IS_NULL_PTR(hist)) return 1;
@@ -916,7 +916,7 @@ static int _styles_prepare_source_dev(dt_develop_t *dev_src, const char *name, c
   GHashTable *style_ids = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, NULL);
   GList *applied_items = _styles_collect_applied_items(dev_src, si_list, style_ids);
 
-  if(!applied_items)
+  if(IS_NULL_PTR(applied_items))
   {
     g_hash_table_destroy(style_ids);
     g_list_free_full(si_list, dt_style_item_free);
@@ -1236,7 +1236,7 @@ static char *dt_style_encode(sqlite3_stmt *stmt, int row)
 void dt_styles_save_to_file(const char *style_name, const char *filedir, gboolean overwrite)
 {
   char stylesdir[PATH_MAX] = { 0 };
-  if(!filedir)
+  if(IS_NULL_PTR(filedir))
   {
     dt_loc_get_user_config_dir(stylesdir, sizeof(stylesdir));
     g_strlcat(stylesdir, "/styles", sizeof(stylesdir));

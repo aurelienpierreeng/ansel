@@ -207,7 +207,7 @@ static inline dt_aligned_pixel_simd_t _clamp01_simd(const dt_aligned_pixel_simd_
 static inline void _clamp_display_rgb_array_simd(const dt_aligned_pixel_simd_t *source_rgb,
                                                  dt_aligned_pixel_simd_t *display_rgb, const size_t count)
 {
-  if(!source_rgb || !display_rgb || count == 0) return;
+  if(IS_NULL_PTR(source_rgb) || !display_rgb || count == 0) return;
   __OMP_SIMD__(aligned(source_rgb, display_rgb:16))
   for(size_t k = 0; k < count; k++)
     display_rgb[k] = _clamp01_simd(source_rgb[k]);
@@ -249,7 +249,7 @@ static inline dt_aligned_pixel_simd_t _to_display_rgb(const dt_lut_viewer_t *vie
 {
   dt_aligned_pixel_simd_t display_rgb = _clamp01_simd(work_rgb);
 
-  if(!viewer->lut_profile || !viewer->display_profile) return display_rgb;
+  if(IS_NULL_PTR(viewer->lut_profile) || !viewer->display_profile) return display_rgb;
 
   if(!isnan(viewer->lut_profile->matrix_in[0][0]) && !isnan(viewer->lut_profile->matrix_out[0][0])
      && !isnan(viewer->display_profile->matrix_in[0][0]) && !isnan(viewer->display_profile->matrix_out[0][0]))
@@ -266,10 +266,10 @@ static inline dt_aligned_pixel_simd_t _to_display_rgb(const dt_lut_viewer_t *vie
 static inline void _to_display_rgb_array(const dt_lut_viewer_t *viewer, const dt_aligned_pixel_simd_t *work_rgb,
                                          dt_aligned_pixel_simd_t *display_rgb, const size_t count, const char *message)
 {
-  if(!work_rgb || !display_rgb || count == 0) return;
+  if(IS_NULL_PTR(work_rgb) || !display_rgb || count == 0) return;
 
   _clamp_display_rgb_array_simd(work_rgb, display_rgb, count);
-  if(!viewer->lut_profile || !viewer->display_profile) return;
+  if(IS_NULL_PTR(viewer->lut_profile) || !viewer->display_profile) return;
 
   dt_ioppr_transform_image_colorspace_rgb((float *)work_rgb, (float *)display_rgb, (int)count, 1,
                                           viewer->lut_profile, viewer->display_profile, message);
@@ -312,7 +312,7 @@ static int _ensure_sample_cache_capacity(dt_lut_viewer_t *viewer, const size_t c
   viewer->sample_input_display = dt_calloc_align(capacity * sizeof(dt_aligned_pixel_simd_t));
   viewer->sample_output_display = dt_calloc_align(capacity * sizeof(dt_aligned_pixel_simd_t));
 
-  if(!viewer->sample_input_work || !viewer->sample_output_work || !viewer->sample_input_display
+  if(IS_NULL_PTR(viewer->sample_input_work) || IS_NULL_PTR(viewer->sample_output_work) || !viewer->sample_input_display
      || !viewer->sample_output_display)
   {
     dt_free_align(viewer->sample_input_work);
@@ -385,12 +385,12 @@ static int _get_xyz_to_rgb_matrix(const dt_lut_viewer_gamut_t gamut, dt_colormat
 {
   const dt_colorspaces_color_profile_t *profile
       = dt_colorspaces_get_profile(_gamut_to_profile_type(gamut), "", DT_PROFILE_DIRECTION_ANY);
-  if(!profile || !profile->profile) return 1;
+  if(IS_NULL_PTR(profile)|| IS_NULL_PTR(profile->profile)) return 1;
 
   const cmsCIEXYZ *red = cmsReadTag(profile->profile, cmsSigRedColorantTag);
   const cmsCIEXYZ *green = cmsReadTag(profile->profile, cmsSigGreenColorantTag);
   const cmsCIEXYZ *blue = cmsReadTag(profile->profile, cmsSigBlueColorantTag);
-  if(!red || !green || !blue) return 1;
+  if(IS_NULL_PTR(red) || IS_NULL_PTR(green) || IS_NULL_PTR(blue)) return 1;
 
   dt_colormatrix_t rgb_to_xyz = { { 0.f } };
   rgb_to_xyz[0][0] = red->X;
@@ -955,7 +955,7 @@ static void _render_surface(dt_lut_viewer_t *viewer, const int width, const int 
   gtk_render_background(context, cr, 0, 0, width, height);
   gtk_render_frame(context, cr, 0, 0, width, height);
 
-  if(!viewer->lut_profile)
+  if(IS_NULL_PTR(viewer->lut_profile))
   {
     _draw_placeholder(cr, width, height, _("no LUT to display"));
     cairo_destroy(cr);
@@ -1196,7 +1196,7 @@ static gboolean _button_release_callback(GtkWidget *widget, GdkEventButton *even
 static void _save_clut_callback(GtkWidget *widget, gpointer user_data)
 {
   dt_lut_viewer_t *viewer = (dt_lut_viewer_t *)user_data;
-  if(!viewer || !viewer->clut || viewer->clut_level < 2)
+  if(IS_NULL_PTR(viewer) || IS_NULL_PTR(viewer->clut) || viewer->clut_level < 2)
   {
     dt_control_log(_("no LUT to save"));
     return;
@@ -1233,7 +1233,7 @@ static void _save_clut_callback(GtkWidget *widget, gpointer user_data)
       path = g_strconcat(filename, ".cube", NULL);
 
     cube_file = g_fopen(path, "wb");
-    if(!cube_file)
+    if(IS_NULL_PTR(cube_file))
     {
       dt_control_log(_("failed to save LUT file"));
     }
@@ -1378,7 +1378,7 @@ dt_lut_viewer_t *dt_lut_viewer_new(dt_gui_module_t *module)
 
 void dt_lut_viewer_destroy(dt_lut_viewer_t **viewer)
 {
-  if(!viewer || !*viewer) return;
+  if(IS_NULL_PTR(viewer) || !*viewer) return;
 
   _invalidate_surface(*viewer);
   dt_free_align((*viewer)->sample_input_work);

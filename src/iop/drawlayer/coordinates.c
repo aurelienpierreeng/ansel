@@ -22,7 +22,7 @@ static gboolean _virtual_piece_layer_geometry(dt_iop_module_t *self, int *layer_
 {
   if(layer_width) *layer_width = 0;
   if(layer_height) *layer_height = 0;
-  if(!self || !self->dev) return FALSE;
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev)) return FALSE;
 
   /* GUI coordinate mapping should prefer the virtual pipe geometry because it
    * tracks the currently committed distortion stack even before the global
@@ -49,7 +49,7 @@ static gboolean _virtual_piece_layer_geometry(dt_iop_module_t *self, int *layer_
 
 gboolean dt_drawlayer_widget_points_to_layer_coords(dt_iop_module_t *self, float *pts, const int count)
 {
-  if(!self || !self->dev || !self->dev->virtual_pipe || !pts || count <= 0) return FALSE;
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(self->dev->virtual_pipe) || IS_NULL_PTR(pts) || count <= 0) return FALSE;
 
   dt_dev_coordinates_widget_to_image_norm(self->dev, pts, count);
   dt_dev_coordinates_image_norm_to_preview_abs(self->dev, pts, count);
@@ -65,7 +65,7 @@ gboolean dt_drawlayer_widget_points_to_layer_coords(dt_iop_module_t *self, float
 
 gboolean dt_drawlayer_layer_points_to_widget_coords(dt_iop_module_t *self, float *pts, const int count)
 {
-  if(!self || !self->dev || !self->dev->virtual_pipe || !pts || count <= 0) return FALSE;
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(self->dev->virtual_pipe) || IS_NULL_PTR(pts) || count <= 0) return FALSE;
   dt_dev_coordinates_image_abs_to_image_norm(self->dev, pts, count);
   dt_dev_coordinates_image_norm_to_preview_abs(self->dev, pts, count);
 
@@ -81,7 +81,7 @@ gboolean dt_drawlayer_layer_points_to_widget_coords(dt_iop_module_t *self, float
 gboolean dt_drawlayer_widget_to_layer_coords(dt_iop_module_t *self, const double wx, const double wy,
                                              float *lx, float *ly)
 {
-  if(!self || !self->dev || !self->dev->virtual_pipe || !lx || !ly) return FALSE;
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(self->dev->virtual_pipe) || IS_NULL_PTR(lx) || IS_NULL_PTR(ly)) return FALSE;
 
   float pt[2] = { (float)wx, (float)wy };
   if(!dt_drawlayer_widget_points_to_layer_coords(self, pt, 1)) return FALSE;
@@ -94,7 +94,7 @@ gboolean dt_drawlayer_widget_to_layer_coords(dt_iop_module_t *self, const double
 gboolean dt_drawlayer_layer_to_widget_coords(dt_iop_module_t *self, const float x, const float y,
                                              float *wx, float *wy)
 {
-  if(!self || !self->dev || !self->dev->virtual_pipe || !wx || !wy) return FALSE;
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(self->dev->virtual_pipe) || IS_NULL_PTR(wx) || IS_NULL_PTR(wy)) return FALSE;
 
   float pt[2] = { x, y };
   if(!dt_drawlayer_layer_points_to_widget_coords(self, pt, 1)) return FALSE;
@@ -108,7 +108,7 @@ gboolean dt_drawlayer_layer_bounds_to_widget_bounds(dt_iop_module_t *self, const
                                                     float *left, float *top,
                                                     float *right, float *bottom)
 {
-  if(!self || !self->dev || !self->dev->virtual_pipe) return FALSE;
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(self->dev->virtual_pipe)) return FALSE;
 
   float pts[8] = {
     x0, y0, x1, y0, x0, y1, x1, y1,
@@ -138,7 +138,7 @@ gboolean dt_drawlayer_layer_bounds_to_widget_bounds(dt_iop_module_t *self, const
 float dt_drawlayer_widget_brush_radius(dt_iop_module_t *self, const dt_drawlayer_brush_dab_t *dab,
                                        const float fallback)
 {
-  if(!self || !self->dev || !self->dev->virtual_pipe || !dab) return fallback;
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(self->dev->virtual_pipe) || IS_NULL_PTR(dab)) return fallback;
 
   float pts[6] = {
     dab->x, dab->y, dab->x + dab->radius, dab->y, dab->x, dab->y + dab->radius,
@@ -164,7 +164,7 @@ float dt_drawlayer_current_live_padding(dt_iop_module_t *self)
 
 gboolean dt_drawlayer_compute_view_patch(dt_iop_module_t *self, const float padding, drawlayer_view_patch_info_t *view)
 {
-  if(!self || !self->dev || !view) return FALSE;
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(view)) return FALSE;
 
   int layer_width = 0;
   int layer_height = 0;

@@ -1807,7 +1807,7 @@ static int process_laplacian_bayer(struct dt_iop_module_t *self, const dt_dev_pi
   float *restrict ds_interpolated = dt_pixelpipe_cache_alloc_align_float(ds_size * 4, pipe);
   float *restrict ds_clipping_mask = dt_pixelpipe_cache_alloc_align_float(ds_size * 4, pipe);
 
-  if(!interpolated || !clipping_mask || !LF_odd || !LF_even || !temp || !HF || !ds_interpolated || !ds_clipping_mask)
+  if(IS_NULL_PTR(interpolated) || !clipping_mask || IS_NULL_PTR(LF_odd) || IS_NULL_PTR(LF_even) || IS_NULL_PTR(temp) || IS_NULL_PTR(HF) || IS_NULL_PTR(ds_interpolated) || !ds_clipping_mask)
   {
     err = 1;
     goto error;
@@ -1903,7 +1903,7 @@ static int process_laplacian_xtrans(struct dt_iop_module_t *self, const dt_dev_p
   float *restrict ds_interpolated = dt_pixelpipe_cache_alloc_align_float(ds_size * 4, pipe);
   float *restrict ds_clipping_mask = dt_pixelpipe_cache_alloc_align_float(ds_size * 4, pipe);
 
-  if(!interpolated || !clipping_mask || !LF_odd || !LF_even || !temp || !HF || !ds_interpolated || !ds_clipping_mask)
+  if(IS_NULL_PTR(interpolated) || !clipping_mask || IS_NULL_PTR(LF_odd) || IS_NULL_PTR(LF_even) || IS_NULL_PTR(temp) || IS_NULL_PTR(HF) || IS_NULL_PTR(ds_interpolated) || !ds_clipping_mask)
   {
     err = 1;
     goto error;
@@ -2173,8 +2173,9 @@ static cl_int process_laplacian_bayer_cl(struct dt_iop_module_t *self, const dt_
   cl_mem reconstructed_scratch = dt_opencl_alloc_device(devid, ds_sizes[0], ds_sizes[1], sizeof(float) * 4);
   cl_mem clips_cl = dt_opencl_copy_host_to_device_constant(devid, 4 * sizeof(float), (float*)clips);
 
-  if(!interpolated || !clipping_mask || !LF_odd || !LF_even || !temp || !HF || !ds_interpolated
-     || !ds_clipping_mask || !reconstructed_scratch || !clips_cl)
+  if(IS_NULL_PTR(interpolated) || IS_NULL_PTR(clipping_mask) || IS_NULL_PTR(LF_odd) 
+     || IS_NULL_PTR(LF_even) || IS_NULL_PTR(temp) || IS_NULL_PTR(HF) || IS_NULL_PTR(ds_interpolated)
+     || IS_NULL_PTR(ds_clipping_mask) || IS_NULL_PTR(reconstructed_scratch) || IS_NULL_PTR(clips_cl))
     goto error;
 
   {
@@ -2405,8 +2406,10 @@ static cl_int process_laplacian_xtrans_cl(struct dt_iop_module_t *self, const dt
   _build_xtrans_bilinear_lookup(lookup, roi_in, xtrans);
   cl_mem lookup_cl = dt_opencl_copy_host_to_device_constant(devid, sizeof(lookup), lookup);
 
-  if(!interpolated || !clipping_mask || !LF_odd || !LF_even || !temp || !HF || !ds_interpolated
-     || !ds_clipping_mask || !reconstructed_scratch || !clips_cl || !dev_xtrans || !lookup_cl)
+  if(IS_NULL_PTR(interpolated) || IS_NULL_PTR(clipping_mask) || IS_NULL_PTR(LF_odd) 
+     || IS_NULL_PTR(LF_even) || IS_NULL_PTR(temp) || IS_NULL_PTR(HF) || IS_NULL_PTR(ds_interpolated)
+     || IS_NULL_PTR(ds_clipping_mask) || IS_NULL_PTR(reconstructed_scratch) || IS_NULL_PTR(clips_cl) 
+     || IS_NULL_PTR(dev_xtrans) || IS_NULL_PTR(lookup_cl))
     goto error;
 
   {

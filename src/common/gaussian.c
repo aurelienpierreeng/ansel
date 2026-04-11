@@ -142,7 +142,7 @@ dt_gaussian_t *dt_gaussian_init(const int width,    // width of input image
   g->max = (float *)calloc(channels, sizeof(float));
   g->min = (float *)calloc(channels, sizeof(float));
 
-  if(!g->min || !g->max) goto error;
+  if(IS_NULL_PTR(g->min) || IS_NULL_PTR(g->max)) goto error;
 
   for(int k = 0; k < channels; k++)
   {
@@ -151,7 +151,7 @@ dt_gaussian_t *dt_gaussian_init(const int width,    // width of input image
   }
 
   g->buf = dt_pixelpipe_cache_alloc_align_float_cache((size_t)channels * width * height, 0);
-  if(!g->buf) goto error;
+  if(IS_NULL_PTR(g->buf)) goto error;
 
   return g;
 
@@ -395,7 +395,7 @@ dt_gaussian_cl_t *dt_gaussian_init_cl(const int devid,
   g->max = (float *)calloc(channels, sizeof(float));
   g->min = (float *)calloc(channels, sizeof(float));
 
-  if(!g->min || !g->max) goto error;
+  if(IS_NULL_PTR(g->min) || IS_NULL_PTR(g->max)) goto error;
 
   for(int k = 0; k < channels; k++)
   {
@@ -427,9 +427,9 @@ dt_gaussian_cl_t *dt_gaussian_init_cl(const int devid,
 
   // get intermediate vector buffers with read-write access
   g->dev_temp1 = dt_opencl_alloc_device_buffer(devid, sizeof(float) * channels * bwidth * bheight);
-  if(!g->dev_temp1) goto error;
+  if(IS_NULL_PTR(g->dev_temp1)) goto error;
   g->dev_temp2 = dt_opencl_alloc_device_buffer(devid, sizeof(float) * channels * bwidth * bheight);
-  if(!g->dev_temp2) goto error;
+  if(IS_NULL_PTR(g->dev_temp2)) goto error;
 
   return g;
 

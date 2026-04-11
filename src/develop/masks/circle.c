@@ -79,7 +79,7 @@ static void _circle_get_distance(float x, float y, float as, dt_masks_form_gui_t
     return;
   }
 
-  if(!gpt->points || gpt->points_count <= 0 || !gpt->border || gpt->border_count <= 0) return;
+  if(IS_NULL_PTR(gpt->points) || gpt->points_count <= 0 || !gpt->border || gpt->border_count <= 0) return;
 
   // distance from center
   const float center_dx = x - gpt->points[0];
@@ -181,7 +181,7 @@ static int _init_opacity(dt_masks_form_t *form, const float amount, const dt_mas
 
 static float _circle_get_interaction_value(const dt_masks_form_t *form, dt_masks_interaction_t interaction)
 {
-  if(!form || !form->points) return NAN;
+  if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return NAN;
   const dt_masks_node_circle_t *circle = (const dt_masks_node_circle_t *)(form->points)->data;
   if(IS_NULL_PTR(circle)) return NAN;
 
@@ -198,7 +198,7 @@ static float _circle_get_interaction_value(const dt_masks_form_t *form, dt_masks
 
 static gboolean _circle_get_gravity_center(const dt_masks_form_t *form, float center[2], float *area)
 {
-  if(!form || !form->points || !center || !area) return FALSE;
+  if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points) || IS_NULL_PTR(center) || IS_NULL_PTR(area)) return FALSE;
   const dt_masks_node_circle_t *circle = (const dt_masks_node_circle_t *)(form->points)->data;
   if(IS_NULL_PTR(circle)) return FALSE;
   center[0] = circle->center[0];
@@ -234,7 +234,7 @@ static float _circle_set_interaction_value(dt_masks_form_t *form, dt_masks_inter
 
 static int _change_hardness(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module, int index, const float amount, const dt_masks_increment_t increment, const int flow)
 {
-  if(!form || !form->points) return 0;
+  if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return 0;
   dt_masks_node_circle_t *circle = (dt_masks_node_circle_t *)(form->points)->data;
   if(IS_NULL_PTR(circle)) return 0;
 
@@ -251,7 +251,7 @@ static int _change_hardness(dt_masks_form_t *form, dt_masks_form_gui_t *gui, str
 
 static int _change_size(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module, int index, const float amount, const dt_masks_increment_t increment, const int flow)
 {
-  if(!form || !form->points) return 0;
+  if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return 0;
   dt_masks_node_circle_t *circle = (dt_masks_node_circle_t *)(form->points)->data;
   if(IS_NULL_PTR(circle)) return 0;
 
@@ -402,7 +402,7 @@ static int _circle_events_mouse_moved(struct dt_iop_module_t *module, double x, 
     return 1;
   }
 
-  if(!form || !form->points) return 0;
+  if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return 0;
 
   if(gui->form_dragging || gui->source_dragging)
   {
@@ -448,7 +448,7 @@ static float *_points_to_transform(float x, float y, float radius, float wd, flo
   const size_t l = (size_t)(2.0f * M_PI * r);
   // allocate buffer
   float *const restrict points = dt_pixelpipe_cache_alloc_align_float_cache((l + 1) * 2, 0);
-  if(!points)
+  if(IS_NULL_PTR(points))
   {
     *points_count = 0;
     return NULL;
@@ -624,7 +624,7 @@ static int _circle_get_points_border(dt_develop_t *dev, struct dt_masks_form_t *
                                      int *points_count, float **border, int *border_count, int source,
                                      const dt_iop_module_t *module)
 {
-  if(!form || !form->points) return 0;
+  if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return 0;
   dt_masks_node_circle_t *circle = (dt_masks_node_circle_t *)((form->points)->data);
   if(IS_NULL_PTR(circle)) return 0;
   float x = circle->center[0];
@@ -654,7 +654,7 @@ static int _circle_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_t *
                                    dt_masks_form_t *form, int *width, int *height, int *posx, int *posy)
 {
   // we get the circle values
-  if(!form || !form->points) return 0;
+  if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return 0;
   dt_masks_node_circle_t *circle = (dt_masks_node_circle_t *)((form->points)->data);
   if(IS_NULL_PTR(circle)) return 0;
   float wd = pipe->iwidth, ht = pipe->iheight;
@@ -684,7 +684,7 @@ static int _circle_get_area(const dt_iop_module_t *const restrict module, dt_dev
                             dt_masks_form_t *const restrict form,
                             int *width, int *height, int *posx, int *posy)
 {
-  if(!form || !form->points) return 0;
+  if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return 0;
   // we get the circle values
   dt_masks_node_circle_t *circle = (dt_masks_node_circle_t *)((form->points)->data);
   if(IS_NULL_PTR(circle)) return 0;
@@ -813,7 +813,7 @@ static int _circle_get_mask_roi(const dt_iop_module_t *const restrict module, dt
                                 dt_masks_form_t *const form, const dt_iop_roi_t *const roi,
                                 float *const restrict buffer)
 {
-  if(!form || !form->points) return 1;
+  if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return 1;
   if(IS_NULL_PTR(module)) return 1;
   double start1 = 0.0;
   double start2 = start1;

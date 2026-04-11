@@ -29,7 +29,7 @@ typedef struct drawlayer_layer_cache_key_t
 
 static void _layerio_append_error(GString *errors, const char *message)
 {
-  if(!errors || !message || message[0] == '\0') return;
+  if(!errors || IS_NULL_PTR(message) || message[0] == '\0') return;
   if(errors->len > 0) g_string_append(errors, "; ");
   g_string_append(errors, message);
 }
@@ -50,7 +50,7 @@ static void _populate_layer_list(dt_iop_module_t *self)
   while(dt_bauhaus_combobox_length(g->controls.layer_select) > 0)
     dt_bauhaus_combobox_remove_at(g->controls.layer_select, dt_bauhaus_combobox_length(g->controls.layer_select) - 1);
 
-  if(!self->dev)
+  if(IS_NULL_PTR(self->dev))
   {
     dt_bauhaus_combobox_set(g->controls.layer_select, -1);
     if(darktable.gui) --darktable.gui->reset;
@@ -103,7 +103,7 @@ static gboolean _layer_cache_matches(const dt_iop_drawlayer_gui_data_t *g, const
    * combines sidecar identity with GUI/module state (active image, selected
    * layer, in-memory patch ownership). The low-level TIFF primitives stay in
    * drawlayer/io.c. */
-  if(!g || !key || !g->process.cache_valid || !g->process.base_patch.pixels) return FALSE;
+  if(IS_NULL_PTR(g) || IS_NULL_PTR(key) || !g->process.cache_valid || IS_NULL_PTR(g->process.base_patch.pixels)) return FALSE;
   if(g->process.cache_imgid != key->imgid || g->process.base_patch.width != key->layer_width
      || g->process.base_patch.height != key->layer_height)
     return FALSE;
@@ -131,7 +131,7 @@ gboolean dt_drawlayer_ensure_layer_cache(dt_iop_module_t *self)
    * prompting, and history/UI side effects around those I/O operations. */
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
   dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
-  if(!g || !self->dev) return FALSE;
+  if(IS_NULL_PTR(g) || IS_NULL_PTR(self->dev)) return FALSE;
 
   _sanitize_params(self, params);
   int layer_width = 0;
@@ -359,7 +359,7 @@ gboolean dt_drawlayer_flush_layer_cache(dt_iop_module_t *self)
 {
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
   const dt_iop_drawlayer_params_t *params = (const dt_iop_drawlayer_params_t *)self->params;
-  if(!g || !self->dev || !g->process.cache_valid || !g->process.cache_dirty || !g->process.base_patch.pixels) return TRUE;
+  if(IS_NULL_PTR(g) || IS_NULL_PTR(self->dev) || !g->process.cache_valid || !g->process.cache_dirty || IS_NULL_PTR(g->process.base_patch.pixels)) return TRUE;
   if(!_layer_name_non_empty(params ? params->layer_name : NULL)) return TRUE;
   if(!_layer_name_non_empty(g->process.cache_layer_name)) return FALSE;
   if(dt_drawlayer_worker_any_active(g->stroke.worker)) _wait_worker_idle(self, g->stroke.worker);
@@ -403,7 +403,7 @@ gboolean dt_drawlayer_flush_layer_cache(dt_iop_module_t *self)
 static gboolean _ensure_widget_cache(dt_iop_module_t *self)
 {
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
-  if(!g || !self->dev) return FALSE;
+  if(IS_NULL_PTR(g) || IS_NULL_PTR(self->dev)) return FALSE;
 
   drawlayer_view_patch_info_t view = { 0 };
   if(!dt_drawlayer_compute_view_patch(self, 0.0f, &view)) return FALSE;
@@ -449,7 +449,7 @@ static gboolean _ensure_widget_cache(dt_iop_module_t *self)
 
 void dt_drawlayer_set_pipeline_realtime_mode(dt_iop_module_t *self, const gboolean state)
 {
-  if(!self || !self->dev || !self->dev->pipe) return;
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(self->dev->pipe)) return;
   const gboolean was_realtime = dt_dev_pixelpipe_get_realtime(self->dev->pipe);
   dt_dev_pixelpipe_set_realtime(self->dev->pipe, state);
   if(was_realtime != state)
@@ -464,7 +464,7 @@ void dt_drawlayer_set_pipeline_realtime_mode(dt_iop_module_t *self, const gboole
 gboolean dt_drawlayer_sync_widget_cache(dt_iop_module_t *self)
 {
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
-  if(!g || !self->dev) return FALSE;
+  if(IS_NULL_PTR(g) || IS_NULL_PTR(self->dev)) return FALSE;
 
   _pause_worker(self, g->stroke.worker);
   if(!_ensure_widget_cache(self))

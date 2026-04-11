@@ -344,7 +344,7 @@ static void _refresh_images_displayed_on_track(const int segid, const gboolean a
       count++;
       dt_sel_img_t *next = i->next ? (dt_sel_img_t *)i->next->data
                                    : NULL;
-      if(!im->image && (!next
+      if(IS_NULL_PTR(im->image) && (IS_NULL_PTR(next)
                         || !((next->gl.latitude == im->gl.latitude)
                              && (next->gl.longitude == im->gl.longitude))))
       {
@@ -793,7 +793,7 @@ static void _refresh_selected_images_datetime(dt_lib_module_t *self)
   {
     dt_sel_img_t *img = i->data;
     const dt_image_t *cimg = dt_image_cache_get(darktable.image_cache, img->imgid, 'r');
-    if(!cimg) continue;
+    if(IS_NULL_PTR(cimg)) continue;
     dt_datetime_img_to_exif(img->dt, sizeof(img->dt), cimg);
     dt_image_cache_read_release(darktable.image_cache, cimg);
   }
@@ -932,12 +932,12 @@ static void _setup_selected_images_list(dt_lib_module_t *self)
     const int32_t imgid = sqlite3_column_int(stmt, 0);
     const dt_image_t *cimg = dt_image_cache_get(darktable.image_cache, imgid, 'r');
     char dt[DT_DATETIME_LENGTH];
-    if(!cimg) continue;
+    if(IS_NULL_PTR(cimg)) continue;
     dt_datetime_img_to_exif(dt, sizeof(dt), cimg);
     dt_image_cache_read_release(darktable.image_cache, cimg);
 
     dt_sel_img_t *img = g_malloc0(sizeof(dt_sel_img_t));
-    if(!img) continue;
+    if(IS_NULL_PTR(img)) continue;
     memcpy(img->dt, dt, DT_DATETIME_LENGTH);
     img->imgid = imgid;
     d->imgs = g_list_prepend(d->imgs, img);
@@ -974,7 +974,7 @@ static void _choose_gpx_callback(GtkWidget *widget, dt_lib_module_t *self)
   gtk_file_filter_set_name(filter, _("all files"));
   gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(filechooser), filter);
 
-  if(!d->imgs)
+  if(IS_NULL_PTR(d->imgs))
     _setup_selected_images_list(self);
 
   int res = gtk_dialog_run(GTK_DIALOG(filechooser));
@@ -1501,7 +1501,7 @@ static GtkWidget *_gui_init_datetime(dt_lib_datetime_t *dt, const int type, dt_l
   GtkBox *box = NULL;
   for(int i = 0; i < DT_GEOTAG_PARTS_NB; i++)
   {
-    if(!box) box = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0));
+    if(IS_NULL_PTR(box)) box = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0));
 
     if(i == 0 && type == 2)
     {

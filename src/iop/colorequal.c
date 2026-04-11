@@ -386,11 +386,11 @@ static inline gboolean _cursor_curve_state(const dt_iop_colorequal_params_t *p, 
                                            const dt_iop_colorequal_channel_t channel, const float hue,
                                            float *curve_x, float *curve_y, float *offset_normalized)
 {
-  if(!p || !isfinite(hue)) return FALSE;
+  if(IS_NULL_PTR(p) || !isfinite(hue)) return FALSE;
 
   const int nodes = _curve_nodes_count_const(p, ring, channel);
   const dt_iop_colorequal_node_t *curve = _curve_nodes_const(p, ring, channel);
-  if(nodes < 1 || !curve) return FALSE;
+  if(nodes < 1 || IS_NULL_PTR(curve)) return FALSE;
 
   const float x = dt_colorrings_hue_to_curve_x(hue);
   const float y = dt_colorrings_curve_periodic_sample((const dt_colorrings_node_t *)curve, nodes, x);
@@ -433,11 +433,11 @@ static void _work_rgb_to_display_rgb(dt_iop_module_t *self, dt_dev_pixelpipe_t *
   memcpy(display_rgb, work_rgb, sizeof(dt_aligned_pixel_t));
   _clamp_display_rgb(display_rgb);
 
-  if(!self || !pipe) return;
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(pipe)) return;
 
   const dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_pipe_current_profile_info(self, pipe);
   const dt_iop_order_iccprofile_info_t *const display_profile = dt_ioppr_get_pipe_output_profile_info(pipe);
-  if(!work_profile || !display_profile) return;
+  if(IS_NULL_PTR(work_profile) || !display_profile) return;
 
   float in[4] = { work_rgb[0], work_rgb[1], work_rgb[2], 0.f };
   float out[4] = { work_rgb[0], work_rgb[1], work_rgb[2], 0.f };
@@ -546,7 +546,7 @@ static void _build_clut(dt_iop_colorequal_data_t *d, const dt_iop_colorequal_par
   const size_t clut_size
       = (size_t)DT_IOP_COLOREQUAL_CLUT_LEVEL * DT_IOP_COLOREQUAL_CLUT_LEVEL * DT_IOP_COLOREQUAL_CLUT_LEVEL * 3;
 
-  if(!d->clut) d->clut = dt_alloc_align_float(clut_size);
+  if(IS_NULL_PTR(d->clut)) d->clut = dt_alloc_align_float(clut_size);
   d->lut_profile = (dt_iop_order_iccprofile_info_t *)lut_profile;
 
   dt_colorrings_compute_reference_saturations(white, d->reference_saturation);
@@ -681,7 +681,7 @@ static size_t _build_viewer_control_nodes(const dt_iop_colorequal_params_t *p,
                                           const dt_iop_order_iccprofile_info_t *lut_profile,
                                           dt_lut_viewer_control_node_t *control_nodes)
 {
-  if(!p || !lut_profile || !control_nodes) return 0;
+  if(IS_NULL_PTR(p) || IS_NULL_PTR(lut_profile) || !control_nodes) return 0;
 
   const float white = dt_colorrings_graph_white();
   float reference_saturation[DT_IOP_COLOREQUAL_NUM_RINGS] = { 0.f };
@@ -758,7 +758,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
                   : NULL;
   const dt_iop_order_iccprofile_info_t *work_profile = dt_ioppr_get_pipe_current_profile_info(self, pipe);
 
-  if(!work_profile || !lut_profile || !gd)
+  if(IS_NULL_PTR(work_profile) || IS_NULL_PTR(lut_profile) || IS_NULL_PTR(gd))
   {
     d->clut = NULL;
     d->clut_level = 0;
@@ -829,7 +829,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
                      : (d->interpolation == DT_LUT3D_INTERP_PYRAMID) ? gd->kernel_lut3d_pyramid
                      : gd->kernel_lut3d_tetrahedral;
 
-  if(!gd || !d->clut || d->clut_level == 0 || !d->lut_profile || !d->work_profile) return FALSE;
+  if(IS_NULL_PTR(gd) || IS_NULL_PTR(d->clut) || d->clut_level == 0 || IS_NULL_PTR(d->lut_profile) || IS_NULL_PTR(d->work_profile)) return FALSE;
 
   dt_opencl_set_kernel_arg(devid, gd->kernel_exposure, 0, sizeof(cl_mem), &dev_in);
   dt_opencl_set_kernel_arg(devid, gd->kernel_exposure, 1, sizeof(cl_mem), &dev_out);
@@ -898,13 +898,13 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const int height = piece->roi_in.height;
   const int ch = piece->dsc_in.channels;
 
-  if(!gd || !d->clut || d->clut_level == 0)
+  if(IS_NULL_PTR(gd) || IS_NULL_PTR(d->clut) || d->clut_level == 0)
   {
     dt_iop_image_copy_by_size(obuf, ibuf, width, height, ch);
     return 0;
   }
 
-  if(!d->lut_profile || !d->work_profile)
+  if(IS_NULL_PTR(d->lut_profile) || IS_NULL_PTR(d->work_profile))
   {
     dt_iop_image_copy_by_size(obuf, ibuf, width, height, ch);
     return 0;
@@ -958,7 +958,7 @@ static void _update_gui_lut_cache(dt_iop_module_t *self)
   const double start = log_perf ? dt_get_wtime() : 0.0;
   uint64_t cache_generation = 0;
 
-  if(!g || !g->viewer || !gd) return;
+  if(IS_NULL_PTR(g) || IS_NULL_PTR(g->viewer) || IS_NULL_PTR(gd)) return;
 
   dt_pthread_rwlock_rdlock(&gd->lock);
   cache_generation = gd->cache_generation;
@@ -973,7 +973,7 @@ static void _update_gui_lut_cache(dt_iop_module_t *self)
       = (self->dev && self->dev->preview_pipe) ? dt_ioppr_get_pipe_output_profile_info(self->dev->preview_pipe)
                                                : NULL;
 
-  if(!lut_profile)
+  if(IS_NULL_PTR(lut_profile))
   {
     dt_lut_viewer_set_lut(g->viewer, NULL, 0, NULL, NULL, NULL);
     dt_lut_viewer_set_control_nodes(g->viewer, NULL, 0);
@@ -1343,7 +1343,7 @@ static void _history_resync_callback(gpointer instance, gpointer user_data)
   dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
   dt_iop_colorequal_global_data_t *gd = (dt_iop_colorequal_global_data_t *)self->global_data;
   uint64_t cache_generation = 0;
-  if(!g || !gd) return;
+  if(IS_NULL_PTR(g) || IS_NULL_PTR(gd)) return;
 
   if(g->has_focus && g->cursor_valid && self->enabled)
   {
@@ -1372,7 +1372,7 @@ static void _cacheline_ready_callback(gpointer instance, const guint64 hash, gpo
   (void)instance;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
-  if(!g || g->pending_preview_hash != hash || !_refresh_preview_cursor_sample(self)) return;
+  if(IS_NULL_PTR(g) || g->pending_preview_hash != hash || !_refresh_preview_cursor_sample(self)) return;
 
   const dt_iop_colorequal_ring_t ring = _active_ring_from_gui(g);
   const dt_iop_colorequal_channel_t channel = _active_channel_from_gui(g, ring);
@@ -1707,7 +1707,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
 {
   dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
   dt_develop_t *dev = self ? self->dev : NULL;
-  if(!self || !g || !dev || !g->has_focus) return 0;
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(g) || IS_NULL_PTR(dev) || !g->has_focus) return 0;
 
   if(dt_iop_color_picker_is_visible(dev))
   {
@@ -1771,7 +1771,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
                    uint32_t state)
 {
   dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
-  if(!self || !g || !g->has_focus || which != 3 || !g->cursor_valid || !g->cursor_sample_valid
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(g) || !g->has_focus || which != 3 || !g->cursor_valid || !g->cursor_sample_valid
      || dt_iop_color_picker_is_visible(self->dev))
     return 0;
 
@@ -1808,7 +1808,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
 int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t state)
 {
   dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
-  if(!self || !g || !g->has_focus || !g->cursor_valid || !g->cursor_sample_valid || dt_iop_color_picker_is_visible(self->dev))
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(g) || !g->has_focus || !g->cursor_valid || !g->cursor_sample_valid || dt_iop_color_picker_is_visible(self->dev))
     return 0;
 
   if(!self->enabled)
@@ -1873,7 +1873,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
 {
   dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
   dt_develop_t *dev = self ? self->dev : NULL;
-  if(!self || !g || !dev || !g->has_focus || !self->enabled || !g->cursor_valid || dt_iop_color_picker_is_visible(dev))
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(g) || IS_NULL_PTR(dev) || !g->has_focus || !self->enabled || !g->cursor_valid || dt_iop_color_picker_is_visible(dev))
     return;
 
   if((dev->preview_pipe && dev->preview_pipe->processing) || !g->cursor_sample_valid)
@@ -1966,7 +1966,7 @@ static void _switch_preview_cursor(dt_iop_module_t *self)
   dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
   GtkWidget *widget = dt_ui_main_window(darktable.gui->ui);
 
-  if(!g || !widget || !gtk_widget_get_window(widget)) return;
+  if(IS_NULL_PTR(g) || !widget || !gtk_widget_get_window(widget)) return;
 
   if(!g->has_focus || dt_iop_color_picker_is_visible(self->dev))
   {
@@ -2004,7 +2004,7 @@ static gboolean _refresh_preview_cursor_sample(dt_iop_module_t *self)
   dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
   dt_iop_colorequal_global_data_t *gd = (dt_iop_colorequal_global_data_t *)self->global_data;
   dt_develop_t *dev = self ? self->dev : NULL;
-  if(!self || !g || !gd || !dev || !dev->preview_pipe || !self->enabled || !g->cursor_valid)
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(g) || IS_NULL_PTR(gd) || IS_NULL_PTR(dev) || IS_NULL_PTR(dev->preview_pipe) || !self->enabled || !g->cursor_valid)
   {
     _invalidate_preview_cursor(g);
     return FALSE;
@@ -2013,7 +2013,7 @@ static gboolean _refresh_preview_cursor_sample(dt_iop_module_t *self)
   const dt_dev_pixelpipe_iop_t *const piece = dt_dev_pixelpipe_get_module_piece(dev->preview_pipe, self);
   const dt_dev_pixelpipe_iop_t *const previous_piece
       = piece ? dt_dev_pixelpipe_get_prev_enabled_piece(dev->preview_pipe, piece) : NULL;
-  if(!piece || !previous_piece || previous_piece->dsc_out.datatype != TYPE_FLOAT || previous_piece->dsc_out.channels < 3)
+  if(IS_NULL_PTR(piece) || IS_NULL_PTR(previous_piece) || previous_piece->dsc_out.datatype != TYPE_FLOAT || previous_piece->dsc_out.channels < 3)
   {
     g->pending_preview_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
     _invalidate_preview_cursor(g);
@@ -2023,7 +2023,7 @@ static gboolean _refresh_preview_cursor_sample(dt_iop_module_t *self)
   g->pending_preview_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
   void *input = NULL;
   dt_pixel_cache_entry_t *input_entry = NULL;
-  if(!dt_dev_pixelpipe_cache_peek_gui(dev->preview_pipe, previous_piece, &input, &input_entry, NULL, NULL, NULL) || !input || !input_entry)
+  if(!dt_dev_pixelpipe_cache_peek_gui(dev->preview_pipe, previous_piece, &input, &input_entry, NULL, NULL, NULL) || IS_NULL_PTR(input) || IS_NULL_PTR(input_entry))
   {
     g->pending_preview_hash = previous_piece->global_hash;
     if(!dev->preview_pipe->processing) dt_dev_pixelpipe_update_history_preview(dev);

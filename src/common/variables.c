@@ -139,7 +139,7 @@ static char *_expand_source(dt_variables_params_t *params, char **source, char e
 
 gboolean dt_get_user_pictures_dir(const gchar *homedir, gchar *picdir, size_t picdir_size)
 {
-  if(!homedir || picdir_size == 0 || !picdir)
+  if(IS_NULL_PTR(homedir) || picdir_size == 0 || IS_NULL_PTR(picdir))
     return 0;
 
   gchar dir[PATH_MAX] = { 0 };

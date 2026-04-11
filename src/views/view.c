@@ -282,7 +282,7 @@ int dt_view_manager_switch_by_view(dt_view_manager_t *vm, const dt_view_t *nv)
   dt_undo_clear(darktable.undo, DT_UNDO_ALL);
 
   /* Special case when entering nothing (just before leaving dt) */
-  if(!new_view)
+  if(IS_NULL_PTR(new_view))
   {
     if(old_view)
     {
@@ -368,7 +368,7 @@ int dt_view_manager_switch_by_view(dt_view_manager_t *vm, const dt_view_t *nv)
       GtkWidget *w = dt_lib_gui_get_expander(plugin);
 
       /* if we didn't get an expander let's add the widget */
-      if(!w) w = plugin->widget;
+      if(IS_NULL_PTR(w)) w = plugin->widget;
 
       dt_gui_add_help_link(w, dt_get_help_url(plugin->plugin_name));
       // some plugins help links depend on the view
@@ -445,7 +445,7 @@ const char *dt_view_manager_name(dt_view_manager_t *vm)
 void dt_view_manager_expose(dt_view_manager_t *vm, cairo_t *cr, int32_t width, int32_t height,
                             int32_t pointerx, int32_t pointery)
 {
-  if(!vm->current_view)
+  if(IS_NULL_PTR(vm->current_view))
   {
     dt_gui_gtk_set_source_rgb(cr, DT_GUI_COLOR_BG);
     cairo_paint(cr);
@@ -696,7 +696,7 @@ static void _enqueue_surface_fetch(dt_view_image_surface_fetcher_t *fetcher)
   params->zoom = fetcher->zoom;
 
   dt_job_t *job = dt_control_job_create(&_view_surface_fetch_job_run, "fetch image surface %i", params->imgid);
-  if(!job)
+  if(IS_NULL_PTR(job))
   {
     g_free(params);
     return;
@@ -882,7 +882,7 @@ dt_view_surface_value_t dt_view_image_get_surface_async(dt_view_image_surface_fe
                                                         int width, int height, cairo_surface_t **target,
                                                         GtkWidget *widget, int zoom)
 {
-  if(!fetcher || !target || !widget || width < 2 || height < 2 || imgid <= UNKNOWN_IMAGE)
+  if(IS_NULL_PTR(fetcher) || !target || !widget || width < 2 || height < 2 || imgid <= UNKNOWN_IMAGE)
     return DT_VIEW_SURFACE_KO;
 
   dt_view_surface_value_t ret = DT_VIEW_SURFACE_KO;
@@ -965,7 +965,7 @@ static dt_view_surface_value_t _view_image_get_surface_internal(int32_t imgid, i
   const int buf_ht = buf.height;
 
   // if we don't get buffer, no image is available at the moment
-  if(!buf.buf)
+  if(IS_NULL_PTR(buf.buf))
   {
     dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
     return DT_VIEW_SURFACE_KO;
@@ -998,7 +998,7 @@ static dt_view_surface_value_t _view_image_get_surface_internal(int32_t imgid, i
 
   // we transfer cached image on a cairo_surface (with colorspace transform if needed)
   uint8_t *rgbbuf = (uint8_t *)calloc((size_t)buf_wd * buf_ht * 4, sizeof(uint8_t));
-  if(!rgbbuf)
+  if(IS_NULL_PTR(rgbbuf))
   {
     dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
     return ret;
@@ -1033,7 +1033,7 @@ static dt_view_surface_value_t _view_image_get_surface_internal(int32_t imgid, i
 
   const int32_t stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, buf_wd);
   cairo_surface_t *tmp_surface = cairo_image_surface_create_for_data(rgbbuf, CAIRO_FORMAT_RGB24, buf_wd, buf_ht, stride);
-  if(!tmp_surface)
+  if(IS_NULL_PTR(tmp_surface))
   {
     dt_free(rgbbuf);
     return ret;

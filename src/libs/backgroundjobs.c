@@ -162,7 +162,7 @@ static void *_lib_backgroundjobs_added(dt_lib_module_t *self, gboolean has_progr
       = (dt_lib_backgroundjob_element_t *)calloc(1, sizeof(dt_lib_backgroundjob_element_t));
   if(IS_NULL_PTR(instance)) return NULL;
   _added_gui_thread_t *params = (_added_gui_thread_t *)malloc(sizeof(_added_gui_thread_t));
-  if(!params)
+  if(IS_NULL_PTR(params))
   {
     dt_free(instance);
     return NULL;

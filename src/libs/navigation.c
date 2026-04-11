@@ -143,7 +143,7 @@ static void _lib_navigation_history_resync_callback(gpointer instance, gpointer 
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
   dt_lib_navigation_t *d = (dt_lib_navigation_t *)self->data;
   dt_develop_t *dev = darktable.develop;
-  if(!d || !dev || !dev->preview_pipe) return;
+  if(IS_NULL_PTR(d) || IS_NULL_PTR(dev) || IS_NULL_PTR(dev->preview_pipe)) return;
 
   d->pending_hash = dt_dev_pixelpipe_get_hash(dev->preview_pipe);
   if(d->pending_hash == DT_PIXELPIPE_CACHE_HASH_INVALID) return;
@@ -161,7 +161,7 @@ static void _lib_navigation_cacheline_ready_callback(gpointer instance, const gu
 
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
   dt_lib_navigation_t *d = (dt_lib_navigation_t *)self->data;
-  if(!d || d->pending_hash != hash) return;
+  if(IS_NULL_PTR(d) || d->pending_hash != hash) return;
 
   d->pending_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
   dt_control_queue_redraw_widget(self->widget);

@@ -279,7 +279,7 @@ static void expose_print_page(dt_view_t *self, cairo_t *cr,
 
 static void _print_setup_initial_image(dt_print_t *prt)
 {
-  if(!prt->pinfo || !prt->imgs) return;
+  if(IS_NULL_PTR(prt->pinfo) || IS_NULL_PTR(prt->imgs)) return;
 
   int32_t imgid = prt->pending_imgid;
   if(imgid <= UNKNOWN_IMAGE) imgid = prt->imgs->imgid_to_load;
@@ -368,7 +368,7 @@ void expose(dt_view_t *self, cairo_t *cri, int32_t width_i, int32_t height_i, in
     }
 
     cairo_surface_t *surf = prt->screen_surfaces[k];
-    if(!surf) continue;
+    if(IS_NULL_PTR(surf)) continue;
 
     const int surf_width = cairo_image_surface_get_width(surf);
     const int surf_height = cairo_image_surface_get_height(surf);

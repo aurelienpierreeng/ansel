@@ -221,7 +221,7 @@ dt_pdf_t *dt_pdf_start(const char *filename, float width, float height, float dp
   if(IS_NULL_PTR(pdf)) return NULL;
 
   pdf->fd = g_fopen(filename, "wb");
-  if(!pdf->fd)
+  if(IS_NULL_PTR(pdf->fd))
   {
     dt_free(pdf);
     return NULL;
@@ -776,7 +776,7 @@ float * read_ppm(const char * filename, int * wd, int * ht)
 {
   FILE *f = g_fopen(filename, "rb");
 
-  if(!f)
+  if(IS_NULL_PTR(f))
   {
     fprintf(stderr, "can't open input file\n");
     return NULL;
@@ -877,9 +877,9 @@ int main(int argc, char *argv[])
   {
     int width, height;
     float *image = read_ppm(argv[i + 1], &width, &height);
-    if(!image) exit(1);
+    if(IS_NULL_PTR(image)) exit(1);
     uint16_t *data = (uint16_t *)malloc(sizeof(uint16_t) * 3 * width * height);
-    if(!data)
+    if(IS_NULL_PTR(data))
     {
       dt_free(image);
       exit(1);

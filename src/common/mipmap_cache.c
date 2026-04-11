@@ -230,7 +230,7 @@ static int dt_mipmap_cache_get_filename(gchar *mipmapfilename, size_t size)
   }
 
   abspath = g_realpath(dbfilename);
-  if(!abspath) abspath = g_strdup(dbfilename);
+  if(IS_NULL_PTR(abspath)) abspath = g_strdup(dbfilename);
 
   GChecksum *chk = g_checksum_new(G_CHECKSUM_SHA1);
   g_checksum_update(chk, (guchar *)abspath, strlen(abspath));
@@ -409,7 +409,7 @@ void dt_mipmap_cache_update_buffer_addresses(dt_cache_entry_t *entry, struct dt_
                                              const size_t width, const size_t height,
                                              const size_t buffer_size)
 {
-  if(!entry->data)
+  if(IS_NULL_PTR(entry->data))
   {
     entry->data_size = 0;
     *dsc = NULL;
@@ -449,7 +449,7 @@ void *dt_mipmap_cache_alloc(dt_mipmap_buffer_t *buf, const dt_image_t *img)
   dt_cache_entry_t *entry = buf->cache_entry;
   assert(entry);
 
-  if(!entry)
+  if(IS_NULL_PTR(entry))
   {
     fprintf(stderr, "trying to alloc a buffer entry that has no back-reference to cache entry\n");
     return NULL;
@@ -1086,7 +1086,7 @@ void dt_mipmap_cache_write_get_with_caller(dt_mipmap_cache_t *cache, dt_mipmap_b
 void dt_mipmap_cache_release_with_caller(dt_mipmap_cache_t *cache, dt_mipmap_buffer_t *buf, const char *file,
                                          int line)
 {
-  if(buf->size == DT_MIPMAP_NONE || !buf->cache_entry) return;
+  if(buf->size == DT_MIPMAP_NONE || IS_NULL_PTR(buf->cache_entry)) return;
   assert(buf->imgid > 0);
   assert(buf->size >= DT_MIPMAP_0);
   assert(buf->size < DT_MIPMAP_NONE);
@@ -1193,7 +1193,7 @@ static void _init_f(dt_mipmap_buffer_t *mipmap_buf, float *out, uint32_t *width,
   roi_out.width = roi_out.scale * roi_in.width;
   roi_out.height = roi_out.scale * roi_in.height;
 
-  if(!buf.buf || buf.width == 0 || buf.height == 0)
+  if(IS_NULL_PTR(buf.buf) || buf.width == 0 || buf.height == 0)
   {
     dt_image_cache_read_release(darktable.image_cache, image);
     *width = *height = 0;

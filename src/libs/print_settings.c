@@ -377,7 +377,7 @@ static int _export_image(dt_job_t *job, dt_image_box *img)
     const dt_colorspaces_color_profile_t *pprof =
       dt_colorspaces_get_profile(params->p_icc_type, params->p_icc_profile,
                                  DT_PROFILE_DIRECTION_OUT);
-    if(!pprof)
+    if(IS_NULL_PTR(pprof))
     {
       dt_control_log(_("cannot open printer profile `%s'"), params->p_icc_profile);
       fprintf(stderr, "cannot open printer profile `%s'\n", params->p_icc_profile);
@@ -386,7 +386,7 @@ static int _export_image(dt_job_t *job, dt_image_box *img)
     }
     else
     {
-      if(!buf_profile || !buf_profile->profile)
+      if(IS_NULL_PTR(buf_profile) || IS_NULL_PTR(buf_profile->profile))
       {
         dt_control_log(_("error getting output profile for image %d"), img->imgid);
         fprintf(stderr, "error getting output profile for image %d\n", img->imgid);
@@ -717,7 +717,7 @@ static void _print_button_clicked(GtkWidget *widget, gpointer user_data)
   else
   {
     const dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
-    if(!img)
+    if(IS_NULL_PTR(img))
     {
       // in this case no need to release from cache what we couldn't get
       dt_control_log(_("cannot get image %d for printing"), imgid);
@@ -3047,9 +3047,9 @@ void *get_params(dt_lib_module_t *self, int *size)
   }
 
   // these will be NULL when no printer is connected/found
-  if(!printer) printer = "";
-  if(!paper) paper = "";
-  if(!media) media = "";
+  if(IS_NULL_PTR(printer)) printer = "";
+  if(IS_NULL_PTR(paper)) paper = "";
+  if(IS_NULL_PTR(media)) media = "";
 
   // compute the size of individual items, always get the \0 for strings
   const int32_t printer_len = strlen (printer) + 1;

@@ -803,7 +803,7 @@ static int _downsample_guided_laplacian_postfilter(float *const out,
   const float *restrict residual = out;
   int err = 0;
 
-  if(!LF_even || !LF_odd || !HF || !reconstructed || !coeff || !bias || !coeff_tmp || !tempbuf)
+  if(IS_NULL_PTR(LF_even) || IS_NULL_PTR(LF_odd) || IS_NULL_PTR(HF) || IS_NULL_PTR(reconstructed) || IS_NULL_PTR(coeff) || IS_NULL_PTR(bias) || IS_NULL_PTR(coeff_tmp) || IS_NULL_PTR(tempbuf))
   {
     err = 1;
     goto cleanup;
@@ -1072,7 +1072,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
             break;
           case DT_IOP_GREEN_EQ_BOTH:
             aux = dt_pixelpipe_cache_alloc_align_float((size_t)roi_in->height * roi_in->width, pipe);
-            if(!aux)
+            if(IS_NULL_PTR(aux))
             {
               dt_pixelpipe_cache_free_align(in);
               return 1;
@@ -1113,7 +1113,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
       {
         gd->lmmse_gamma_in = dt_pixelpipe_cache_alloc_align_float_cache(65536, 0);
         gd->lmmse_gamma_out = dt_pixelpipe_cache_alloc_align_float_cache(65536, 0);
-        if(!gd->lmmse_gamma_in || !gd->lmmse_gamma_out)
+        if(IS_NULL_PTR(gd->lmmse_gamma_in) || IS_NULL_PTR(gd->lmmse_gamma_out))
         {
           dt_pixelpipe_cache_free_align(gd->lmmse_gamma_in);
           dt_pixelpipe_cache_free_align(gd->lmmse_gamma_out);
@@ -1394,8 +1394,8 @@ static gboolean _downsample_guided_laplacian_postfilter_cl(struct dt_iop_module_
   coeff_tmp = dt_opencl_alloc_device(devid, width, height, sizeof(float) * 4);
   reconstructed_a = dt_opencl_alloc_device(devid, width, height, sizeof(float) * 4);
   reconstructed_b = dt_opencl_alloc_device(devid, width, height, sizeof(float) * 4);
-  if(!LF_even || !LF_odd || !temp || !coeff || !bias || !coeff_tmp
-     || !reconstructed_a || !reconstructed_b)
+  if(IS_NULL_PTR(LF_even) || IS_NULL_PTR(LF_odd) || IS_NULL_PTR(temp) || IS_NULL_PTR(coeff) || IS_NULL_PTR(bias) || IS_NULL_PTR(coeff_tmp)
+     || IS_NULL_PTR(reconstructed_a) || IS_NULL_PTR(reconstructed_b))
     goto error;
 
   for(int iteration = 0; iteration < iterations; ++iteration)

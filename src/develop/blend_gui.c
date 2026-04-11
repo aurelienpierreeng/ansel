@@ -492,7 +492,7 @@ static gboolean _blendif_are_output_channels_used(const dt_develop_blend_params_
 static gboolean _blendif_clean_output_channels(dt_iop_module_t *module)
 {
   const dt_iop_gui_blend_data_t *const bd = (dt_iop_gui_blend_data_t *)module->blend_data;
-  if(!bd || !bd->blendif_support || !bd->blendif_inited) return FALSE;
+  if(IS_NULL_PTR(bd) || !bd->blendif_support || !bd->blendif_inited) return FALSE;
 
   gboolean changed = FALSE;
   if(!bd->output_channels_shown)
@@ -989,7 +989,7 @@ static void _blendop_blendif_update_tab(dt_iop_module_t *module, const int tab)
 static void _blendop_blendif_tab_switch(GtkNotebook *notebook, GtkWidget *page, guint page_num,
                                         dt_iop_gui_blend_data_t *data)
 {
-  if(darktable.gui->reset || !data || !data->blendif_inited) return;
+  if(darktable.gui->reset || IS_NULL_PTR(data) || !data->blendif_inited) return;
   const int cst_old = _blendop_blendif_get_picker_colorspace(data);
   dt_iop_color_picker_reset(data->module, FALSE);
 
@@ -1024,7 +1024,7 @@ static void _blendop_blending_notebook_switch(GtkNotebook *notebook, GtkWidget *
 
 static void _blendop_blendif_boost_factor_callback(GtkWidget *slider, dt_iop_gui_blend_data_t *data)
 {
-  if(darktable.gui->reset || !data || !data->blendif_inited) return;
+  if(darktable.gui->reset || IS_NULL_PTR(data) || !data->blendif_inited) return;
   dt_develop_blend_params_t *bp = data->module->blend_params;
   const int tab = data->tab;
 
@@ -1057,7 +1057,7 @@ static void _blendop_blendif_boost_factor_callback(GtkWidget *slider, dt_iop_gui
 
 static void _blendop_blendif_details_callback(GtkWidget *slider, dt_iop_gui_blend_data_t *data)
 {
-  if(darktable.gui->reset || !data || !data->blendif_inited) return;
+  if(darktable.gui->reset || IS_NULL_PTR(data) || !data->blendif_inited) return;
   dt_develop_blend_params_t *bp = data->module->blend_params;
   const float oldval = bp->details;
   bp->details = dt_bauhaus_slider_get(slider);
@@ -1461,22 +1461,22 @@ static void _blendop_masks_init_icons(dt_iop_gui_blend_data_t *bd)
     return;
 
   const int icon_size = DT_PIXEL_APPLY_DPI(13);
-  if(!bd->masks_ic_inverse)
+  if(IS_NULL_PTR(bd->masks_ic_inverse))
     bd->masks_ic_inverse = dt_draw_get_pixbuf_from_cairo(dtgtk_cairo_paint_masks_inverse, icon_size, icon_size);
-  if(!bd->masks_ic_union)
+  if(IS_NULL_PTR(bd->masks_ic_union))
     bd->masks_ic_union = dt_draw_get_pixbuf_from_cairo(dtgtk_cairo_paint_masks_union, icon_size * 2, icon_size);
-  if(!bd->masks_ic_intersection)
+  if(IS_NULL_PTR(bd->masks_ic_intersection))
     bd->masks_ic_intersection = dt_draw_get_pixbuf_from_cairo(dtgtk_cairo_paint_masks_intersection, icon_size * 2, icon_size);
-  if(!bd->masks_ic_difference)
+  if(IS_NULL_PTR(bd->masks_ic_difference))
     bd->masks_ic_difference = dt_draw_get_pixbuf_from_cairo(dtgtk_cairo_paint_masks_difference, icon_size * 2, icon_size);
-  if(!bd->masks_ic_exclusion)
+  if(IS_NULL_PTR(bd->masks_ic_exclusion))
     bd->masks_ic_exclusion = dt_draw_get_pixbuf_from_cairo(dtgtk_cairo_paint_masks_exclusion, icon_size * 2, icon_size);
 }
 
 static const GdkPixbuf *_blendop_masks_get_op_icon(const dt_iop_gui_blend_data_t *bd, const int state,
                                                    const int index)
 {
-  if(!bd || index == 0) return NULL;
+  if(IS_NULL_PTR(bd) || index == 0) return NULL;
 
   if(state & DT_MASKS_STATE_UNION) return bd->masks_ic_union;
   if(state & DT_MASKS_STATE_INTERSECTION) return bd->masks_ic_intersection;
@@ -1524,10 +1524,10 @@ static gboolean _blendop_masks_is_group_with_shapes(const dt_masks_form_t *mask_
   for(const GList *group_node = mask_form->points; group_node; group_node = g_list_next(group_node))
   {
     const dt_masks_form_group_t *group_entry = (const dt_masks_form_group_t *)group_node->data;
-    if(!group_entry) continue;
+    if(IS_NULL_PTR(group_entry)) continue;
 
     const dt_masks_form_t *child_form = dt_masks_get_from_id(darktable.develop, group_entry->formid);
-    if(!child_form) continue;
+    if(IS_NULL_PTR(child_form)) continue;
     if(!(child_form->type & DT_MASKS_GROUP)) return TRUE;
     if(_blendop_masks_is_group_with_shapes(child_form)) return TRUE;
   }
@@ -1540,7 +1540,7 @@ static int _blendop_masks_group_tree_append_entry(const dt_iop_gui_blend_data_t 
                                                   const dt_masks_form_group_t *group_entry,
                                                   const dt_masks_form_t *mask_form, const int index)
 {
-  if(!bd || !tree_store || !group_entry || !mask_form) return 0;
+  if(IS_NULL_PTR(bd) || IS_NULL_PTR(tree_store) || IS_NULL_PTR(group_entry) || IS_NULL_PTR(mask_form)) return 0;
 
   GtkTreeIter iter;
   gtk_tree_store_append(tree_store, &iter, parent_iter);
@@ -1607,7 +1607,7 @@ static int _blendop_masks_group_tree_append(const dt_iop_gui_blend_data_t *bd, G
 static gboolean _blendop_masks_find_iter_by_formid(GtkTreeModel *model, GtkTreeIter *iter,
                                                     const int formid_col, const int formid)
 {
-  if(!model || !iter) return FALSE;
+  if(IS_NULL_PTR(model) || IS_NULL_PTR(iter)) return FALSE;
 
   gboolean valid = gtk_tree_model_get_iter_first(model, iter);
   while(valid)
@@ -1662,7 +1662,7 @@ static void _blendop_masks_refresh_lists(dt_iop_module_t *module)
   for(const GList *form_node = darktable.develop->forms; form_node; form_node = g_list_next(form_node))
   {
     dt_masks_form_t *mask_form = (dt_masks_form_t *)form_node->data;
-    if(!mask_form) continue;
+    if(IS_NULL_PTR(mask_form)) continue;
     if(mask_form->type & (DT_MASKS_CLONE | DT_MASKS_NON_CLONE)) continue;
     if(group_form && mask_form->formid == group_form->formid) continue;
     if(!_blendop_masks_is_group_with_shapes(mask_form)) continue;
@@ -1686,7 +1686,7 @@ static void _blendop_masks_refresh_lists(dt_iop_module_t *module)
   for(const GList *form_node = darktable.develop->forms; form_node; form_node = g_list_next(form_node))
   {
     dt_masks_form_t *mask_form = (dt_masks_form_t *)form_node->data;
-    if(!mask_form) continue;
+    if(IS_NULL_PTR(mask_form)) continue;
     if(mask_form->type & (DT_MASKS_CLONE | DT_MASKS_NON_CLONE)) continue;
     if(group_form && mask_form->formid == group_form->formid) continue;
     if(_blendop_masks_is_group_with_shapes(mask_form)) continue;
@@ -1699,7 +1699,7 @@ static void _blendop_masks_refresh_lists(dt_iop_module_t *module)
     for(const GList *parent_node = darktable.develop->forms; parent_node; parent_node = g_list_next(parent_node))
     {
       dt_masks_form_t *parent_form = (dt_masks_form_t *)parent_node->data;
-      if(!parent_form || !_blendop_masks_is_group_with_shapes(parent_form)) continue;
+      if(IS_NULL_PTR(parent_form) || !_blendop_masks_is_group_with_shapes(parent_form)) continue;
       
       const gboolean parent_active = _blendop_masks_find_group_entry(group_form, parent_form->formid, NULL) != NULL;
       if(parent_active && _blendop_masks_find_group_entry(parent_form, mask_form->formid, NULL))
@@ -1969,10 +1969,10 @@ static gboolean _blendop_masks_all_handle_left_click(GtkWidget *treeview, GtkTre
                                                         GtkTreeViewColumn *column, dt_iop_module_t *module)
 {
   if(IS_NULL_PTR(module)) return FALSE;
-  if(!path || !column) return FALSE;
+  if(IS_NULL_PTR(path) || IS_NULL_PTR(column)) return FALSE;
 
   dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
-  if(!bd || column != bd->all_shapes_col) return FALSE;
+  if(IS_NULL_PTR(bd) || column != bd->all_shapes_col) return FALSE;
 
   GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(treeview));
   GtkTreeIter iter;
@@ -2002,7 +2002,7 @@ static gboolean _blendop_masks_all_handle_left_click(GtkWidget *treeview, GtkTre
 static gboolean _blendop_masks_all_button_pressed(GtkWidget *treeview, GdkEventButton *event,
                                                   dt_iop_module_t *module)
 {
-  if(!event || event->type != GDK_BUTTON_PRESS) return FALSE;
+  if(IS_NULL_PTR(event) || event->type != GDK_BUTTON_PRESS) return FALSE;
 
   GtkTreePath *path = NULL;
   GtkTreeViewColumn *column = NULL;
@@ -2185,7 +2185,7 @@ static void _blendop_masks_edit_list_toggle(GtkToggleButton *togglebutton, dt_io
 
 static GtkWidget *_blendop_masks_shape_buttons(dt_iop_module_t *module, dt_iop_gui_blend_data_t *bd)
 {
-  if(!module || !bd) return NULL;
+  if(IS_NULL_PTR(module) || IS_NULL_PTR(bd)) return NULL;
 
   GtkWidget *all_shapes_buttons = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
   gtk_widget_set_halign(all_shapes_buttons, GTK_ALIGN_END);
@@ -2238,7 +2238,7 @@ static GtkWidget *_blendop_masks_group_ctx_menu(dt_iop_gui_blend_data_t *bd, dt_
                                                 const int formid, const int parentid, const int state,
                                                 const int index, const int list_length)
 {
-  if(!bd || !module) return NULL;
+  if(IS_NULL_PTR(bd) || IS_NULL_PTR(module)) return NULL;
 
   // Initialize mask operation icons if needed
   _blendop_masks_init_icons(bd);
@@ -2318,7 +2318,7 @@ static GtkWidget *_blendop_masks_group_ctx_menu(dt_iop_gui_blend_data_t *bd, dt_
 static gboolean _blendop_masks_group_button_pressed(GtkWidget *treeview, GdkEventButton *event,
                                                     dt_iop_module_t *module)
 {
-  if(!event || event->type != GDK_BUTTON_PRESS || event->button != GDK_BUTTON_SECONDARY) return FALSE;
+  if(IS_NULL_PTR(event) || event->type != GDK_BUTTON_PRESS || event->button != GDK_BUTTON_SECONDARY) return FALSE;
 
   GtkTreePath *path = NULL;
   if(!gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(treeview), (gint)event->x, (gint)event->y, &path,
@@ -2580,7 +2580,7 @@ static void _blendif_select_colorspace(GtkMenuItem *menuitem, dt_iop_module_t *m
 static void _blendif_show_output_channels(GtkMenuItem *menuitem, dt_iop_module_t *module)
 {
   dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
-  if(!bd || !bd->blendif_support || !bd->blendif_inited) return;
+  if(IS_NULL_PTR(bd) || !bd->blendif_support || !bd->blendif_inited) return;
   if(!bd->output_channels_shown)
   {
     bd->output_channels_shown = TRUE;
@@ -2591,7 +2591,7 @@ static void _blendif_show_output_channels(GtkMenuItem *menuitem, dt_iop_module_t
 static void _blendif_hide_output_channels(GtkMenuItem *menuitem, dt_iop_module_t *module)
 {
   dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
-  if(!bd || !bd->blendif_support || !bd->blendif_inited) return;
+  if(IS_NULL_PTR(bd) || !bd->blendif_support || !bd->blendif_inited) return;
   if(bd->output_channels_shown)
   {
     bd->output_channels_shown = FALSE;
@@ -2607,7 +2607,7 @@ static void _blendif_options_callback(GtkButton *button, GdkEventButton *event, 
 {
   if(event->button != 1 && event->button != 2) return;
   const dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
-  if(!bd || !bd->blendif_support || !bd->blendif_inited) return;
+  if(IS_NULL_PTR(bd) || !bd->blendif_support || !bd->blendif_inited) return;
 
   GtkWidget *mi;
   GtkMenu *menu = darktable.gui->presets_popup_menu;
@@ -3063,7 +3063,7 @@ void dt_iop_gui_update_blendif(dt_iop_module_t *module)
   // which flushed lines that could be reused later and were only temporarily not needed.
   dt_iop_gui_blend_data_t *bd = module->blend_data;
 
-  if(!bd || !bd->blendif_support || !bd->blendif_inited) return;
+  if(IS_NULL_PTR(bd) || !bd->blendif_support || !bd->blendif_inited) return;
 
   ++darktable.gui->reset;
 
@@ -3269,7 +3269,7 @@ void dt_masks_iop_update(dt_iop_module_t *module)
   dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
   dt_develop_blend_params_t *bp = module->blend_params;
 
-  if(!bd || !bd->masks_support || !bd->masks_inited) return;
+  if(IS_NULL_PTR(bd) || !bd->masks_support || !bd->masks_inited) return;
 
   ++darktable.gui->reset;
 
@@ -3594,7 +3594,7 @@ void dt_iop_gui_update_raster(dt_iop_module_t *module)
   dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
   dt_develop_blend_params_t *bp = module->blend_params;
 
-  if(!bd || !bd->masks_support || !bd->raster_inited) return;
+  if(IS_NULL_PTR(bd) || !bd->masks_support || !bd->raster_inited) return;
 
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->raster_polarity), bp->raster_mask_invert);
 
@@ -3723,7 +3723,7 @@ static GtkWidget *_blendop_create_enable_toggle(dt_iop_module_t *module, const u
 
 static void _blendop_update_top_enable_label(dt_iop_module_t *module)
 {
-  if(!module || !module->blend_data) return;
+  if(IS_NULL_PTR(module) || !module->blend_data) return;
 
   dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
   if(!GTK_IS_BUTTON(bd->top_enable)) return;
@@ -3786,7 +3786,7 @@ void dt_iop_gui_update_blending(dt_iop_module_t *module)
 {
   dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
 
-  if(!(module->flags() & IOP_FLAGS_SUPPORTS_BLENDING) || !bd) return;
+  if(!(module->flags() & IOP_FLAGS_SUPPORTS_BLENDING) || IS_NULL_PTR(bd)) return;
 
   ++darktable.gui->reset;
 
@@ -4122,13 +4122,13 @@ void dt_iop_gui_blending_reload_defaults(dt_iop_module_t *module)
 {
   if(IS_NULL_PTR(module)) return;
   dt_iop_gui_blend_data_t *bd = module->blend_data;
-  if(!bd || !bd->blendif_support || !bd->blendif_inited) return;
+  if(IS_NULL_PTR(bd) || !bd->blendif_support || !bd->blendif_inited) return;
   bd->output_channels_shown = FALSE;
 }
 
 void dt_iop_gui_cleanup_blending_body(dt_iop_module_t *module)
 {
-  if(!module || !module->blend_data) return;
+  if(IS_NULL_PTR(module) || !module->blend_data) return;
 
   dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
   if(IS_NULL_PTR(bd->blending_body_box)) return;

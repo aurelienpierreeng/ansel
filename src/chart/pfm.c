@@ -34,7 +34,7 @@ float *read_pfm(const char *filename, int *wd, int *ht)
 {
   FILE *f = g_fopen(filename, "rb");
 
-  if(!f)
+  if(IS_NULL_PTR(f))
   {
     fprintf(stderr, "can't open input file\n");
     return NULL;
@@ -66,7 +66,7 @@ float *read_pfm(const char *filename, int *wd, int *ht)
   int swap_byte_order = (scale_factor >= 0.0) ^ (G_BYTE_ORDER == G_BIG_ENDIAN);
 
   float *image = (float *)dt_pixelpipe_cache_alloc_align_float_cache((size_t)3 * width * height, 0);
-  if(!image)
+  if(IS_NULL_PTR(image))
   {
     fprintf(stderr, "error allocating memory\n");
     fclose(f);

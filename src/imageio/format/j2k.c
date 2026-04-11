@@ -394,7 +394,7 @@ int write_image(dt_imageio_module_data_t *j2k_tmp, const char *filename, const v
       cmptparm[i].h = h;
     }
     image = opj_image_create(numcomps, &cmptparm[0], OPJ_CLRSPC_SRGB);
-    if(!image)
+    if(IS_NULL_PTR(image))
     {
       fprintf(stderr, "Error: opj_image_create() failed\n");
       dt_free(rates);
@@ -475,7 +475,7 @@ int write_image(dt_imageio_module_data_t *j2k_tmp, const char *filename, const v
   /* open a byte stream for writing */
   /* allocate memory for all tiles */
   cstream = opj_stream_create_default_file_stream(parameters.outfile, OPJ_FALSE);
-  if(!cstream)
+  if(IS_NULL_PTR(cstream))
   {
     opj_destroy_codec(ccodec);
     opj_image_destroy(image);

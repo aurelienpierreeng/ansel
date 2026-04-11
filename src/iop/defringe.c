@@ -233,7 +233,7 @@ int process(struct dt_iop_module_t *module, const dt_dev_pixelpipe_t *pipe, cons
 
   dt_gaussian_t *gauss = NULL;
   gauss = dt_gaussian_init(width, height, 4, Labmax, Labmin, sigma, order);
-  if(!gauss)
+  if(IS_NULL_PTR(gauss))
   {
     fprintf(stderr, "Error allocating memory for gaussian blur in: defringe module\n");
     err = 1;
@@ -281,7 +281,7 @@ int process(struct dt_iop_module_t *module, const dt_dev_pixelpipe_t *pipe, cons
 
   xy_avg = malloc(sizeof(int) * 2 * samples_avg);
   xy_small = malloc(sizeof(int) * 2 * samples_small);
-  if(!xy_avg || !xy_small)
+  if(IS_NULL_PTR(xy_avg) || IS_NULL_PTR(xy_small))
   {
     fprintf(stderr, "Error allocating memory for fibonacci lattice in: defringe module\n");
     err = 1;

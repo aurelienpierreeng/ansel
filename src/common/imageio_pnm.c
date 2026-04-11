@@ -234,14 +234,14 @@ dt_imageio_retval_t dt_imageio_open_pnm(dt_image_t *img, const char *filename, d
   img->flags |= DT_IMAGE_LDR;
   img->loader = LOADER_PNM;
 
-  if(!mbuf)
+  if(IS_NULL_PTR(mbuf))
   {
     result = DT_IMAGEIO_OK;
     goto end;
   }
 
   float *buf = (float *)dt_mipmap_cache_alloc(mbuf, img);
-  if(!buf)
+  if(IS_NULL_PTR(buf))
   {
     result = DT_IMAGEIO_CACHE_FULL;
     goto end;

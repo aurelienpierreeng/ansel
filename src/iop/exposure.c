@@ -341,7 +341,7 @@ static void _deflicker_prepare_histogram(dt_iop_module_t *self, uint32_t **histo
   dt_mipmap_buffer_t buf;
   dt_mipmap_cache_get(darktable.mipmap_cache, &buf, self->dev->image_storage.id, DT_MIPMAP_FULL,
                       DT_MIPMAP_BLOCKING, 'r');
-  if(!buf.buf)
+  if(IS_NULL_PTR(buf.buf))
   {
     dt_control_log(_("failed to get raw buffer from image `%s'"), image.filename);
     dt_mipmap_cache_release(darktable.mipmap_cache, &buf);

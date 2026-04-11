@@ -271,7 +271,7 @@ static dt_iop_colorreconstruct_bilateral_t *dt_iop_colorreconstruct_bilateral_in
                                                                                    const float sigma_r)     // range sigma (blur luma values)
 {
   dt_iop_colorreconstruct_bilateral_t *b = (dt_iop_colorreconstruct_bilateral_t *)malloc(sizeof(dt_iop_colorreconstruct_bilateral_t));
-  if(!b)
+  if(IS_NULL_PTR(b))
   {
     fprintf(stderr, "[color reconstruction] not able to allocate buffer (a)\n");
     return NULL;
@@ -292,7 +292,7 @@ static dt_iop_colorreconstruct_bilateral_t *dt_iop_colorreconstruct_bilateral_in
   b->buf = dt_pixelpipe_cache_alloc_align_cache(
       sizeof(dt_iop_colorreconstruct_Lab_t) * b->size_x * b->size_y * b->size_z,
       0);
-  if(!b->buf)
+  if(IS_NULL_PTR(b->buf))
   {
     fprintf(stderr, "[color reconstruction] not able to allocate buffer (b)\n");
     dt_iop_colorreconstruct_bilateral_free(b);
@@ -313,7 +313,7 @@ static dt_iop_colorreconstruct_bilateral_frozen_t *dt_iop_colorreconstruct_bilat
   if(IS_NULL_PTR(b)) return NULL;
 
   dt_iop_colorreconstruct_bilateral_frozen_t *bf = (dt_iop_colorreconstruct_bilateral_frozen_t *)malloc(sizeof(dt_iop_colorreconstruct_bilateral_frozen_t));
-  if(!bf)
+  if(IS_NULL_PTR(bf))
   {
     fprintf(stderr, "[color reconstruction] not able to allocate buffer (c)\n");
     return NULL;
@@ -592,7 +592,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   dt_iop_colorreconstruct_bilateral_t *b;
 
   b = dt_iop_colorreconstruct_bilateral_init(roi_in, pipe->iscale, sigma_s, sigma_r);
-  if(!b) goto error;
+  if(IS_NULL_PTR(b)) goto error;
   dt_iop_colorreconstruct_bilateral_splat(b, in, data->threshold, data->precedence, params);
   dt_iop_colorreconstruct_bilateral_blur(b);
 
@@ -679,7 +679,7 @@ static dt_iop_colorreconstruct_bilateral_cl_t *dt_iop_colorreconstruct_bilateral
   }
 
   dt_iop_colorreconstruct_bilateral_cl_t *b = (dt_iop_colorreconstruct_bilateral_cl_t *)malloc(sizeof(dt_iop_colorreconstruct_bilateral_cl_t));
-  if(!b)
+  if(IS_NULL_PTR(b))
   {
     dt_print(DT_DEBUG_OPENCL, "[opencl_colorreconstruction] not able to allocate host buffer (a)\n");
     return NULL;
@@ -753,7 +753,7 @@ static dt_iop_colorreconstruct_bilateral_frozen_t *dt_iop_colorreconstruct_bilat
   if(IS_NULL_PTR(b)) return NULL;
 
   dt_iop_colorreconstruct_bilateral_frozen_t *bf = (dt_iop_colorreconstruct_bilateral_frozen_t *)malloc(sizeof(dt_iop_colorreconstruct_bilateral_frozen_t));
-  if(!bf)
+  if(IS_NULL_PTR(bf))
   {
     dt_print(DT_DEBUG_OPENCL, "[opencl_colorreconstruction] not able to allocate host buffer (d)\n");
     return NULL;
@@ -933,7 +933,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   dt_iop_colorreconstruct_bilateral_cl_t *b;
 
   b = dt_iop_colorreconstruct_bilateral_init_cl(pipe->devid, gd, roi_in, pipe->iscale, sigma_s, sigma_r);
-  if(!b) goto error;
+  if(IS_NULL_PTR(b)) goto error;
   err = dt_iop_colorreconstruct_bilateral_splat_cl(b, dev_in, d->threshold, d->precedence, params);
   if(err != CL_SUCCESS) goto error;
   err = dt_iop_colorreconstruct_bilateral_blur_cl(b);

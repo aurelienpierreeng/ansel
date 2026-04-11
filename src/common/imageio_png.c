@@ -62,14 +62,14 @@ int read_header(const char *filename, dt_imageio_png_t *png)
 
   png->png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
 
-  if(!png->png_ptr)
+  if(IS_NULL_PTR(png->png_ptr))
   {
     fclose(png->f);
     return 1;
   }
 
   png->info_ptr = png_create_info_struct(png->png_ptr);
-  if(!png->info_ptr)
+  if(IS_NULL_PTR(png->info_ptr))
   {
     fclose(png->f);
     png_destroy_read_struct(&png->png_ptr, NULL, NULL);
@@ -187,7 +187,7 @@ dt_imageio_retval_t dt_imageio_open_png(dt_image_t *img, const char *filename, d
   img->flags |= DT_IMAGE_LDR;
   img->loader = LOADER_PNG;
 
-  if(!mbuf)
+  if(IS_NULL_PTR(mbuf))
   {
     png_destroy_read_struct(&image.png_ptr, &image.info_ptr, NULL);
     fclose(image.f);
@@ -195,7 +195,7 @@ dt_imageio_retval_t dt_imageio_open_png(dt_image_t *img, const char *filename, d
   }
 
   float *mipbuf = (float *)dt_mipmap_cache_alloc(mbuf, img);
-  if(!mipbuf)
+  if(IS_NULL_PTR(mipbuf))
   {
     fclose(image.f);
     png_destroy_read_struct(&image.png_ptr, &image.info_ptr, NULL);
@@ -207,7 +207,7 @@ dt_imageio_retval_t dt_imageio_open_png(dt_image_t *img, const char *filename, d
       (size_t)image.height * png_get_rowbytes(image.png_ptr, image.info_ptr),
       0);
 
-  if(!buf)
+  if(IS_NULL_PTR(buf))
   {
     fclose(image.f);
     png_destroy_read_struct(&image.png_ptr, &image.info_ptr, NULL);

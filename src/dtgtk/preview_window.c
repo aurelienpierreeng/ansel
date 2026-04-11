@@ -50,7 +50,7 @@ static void _close_preview_popup(GtkWidget *dialog, gint response_id, gpointer d
 static void _preview_window_size_allocate(GtkWidget *widget, GtkAllocation *allocation, gpointer user_data)
 {
   dt_preview_window_t *preview = (dt_preview_window_t *)user_data;
-  if(!preview || !allocation) return;
+  if(IS_NULL_PTR(preview) || IS_NULL_PTR(allocation)) return;
   if(allocation->width < 2 || allocation->height < 2) return;
   if(preview->width == allocation->width && preview->height == allocation->height) return;
 

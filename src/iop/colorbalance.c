@@ -1349,7 +1349,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
   dt_iop_colorbalance_params_t *p = (dt_iop_colorbalance_params_t *)self->params;
   dt_iop_colorbalance_gui_data_t *g = (dt_iop_colorbalance_gui_data_t *)self->gui_data;
 
-  if(!w || w == g->mode)
+  if(IS_NULL_PTR(w) || w == g->mode)
   {
     set_visible_widgets(g);
     _configure_slider_blocks(NULL, self);
@@ -1357,11 +1357,11 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 
   ++darktable.gui->reset;
 
-  if(!w || w == g->lift_r  || w == g->lift_g  || w == g->lift_b)
+  if(IS_NULL_PTR(w) || w == g->lift_r  || w == g->lift_g  || w == g->lift_b)
     set_HSL_sliders(g->hue_lift, g->sat_lift, p->lift);
-  if(!w || w == g->gamma_r || w == g->gamma_g || w == g->gamma_b)
+  if(IS_NULL_PTR(w) || w == g->gamma_r || w == g->gamma_g || w == g->gamma_b)
     set_HSL_sliders(g->hue_gamma, g->sat_gamma, p->gamma);
-  if(!w || w == g->gain_r  || w == g->gain_g  || w == g->gain_b)
+  if(IS_NULL_PTR(w) || w == g->gain_r  || w == g->gain_g  || w == g->gain_b)
     set_HSL_sliders(g->hue_gain, g->sat_gain, p->gain);
 
   --darktable.gui->reset;

@@ -294,7 +294,7 @@ GtkWidget *dt_iop_togglebutton_new(dt_iop_module_t *self, const char *section, c
   GtkWidget *w = dtgtk_togglebutton_new(paint, 0, NULL);
   g_signal_connect(G_OBJECT(w), "button-press-event", callback, self);
 
-  if(!ctrl_label)
+  if(IS_NULL_PTR(ctrl_label))
     gtk_widget_set_tooltip_text(w, _(label));
   else
   {
@@ -319,7 +319,7 @@ GtkWidget *dt_iop_togglebutton_new_no_register(dt_iop_module_t *self, const char
   GtkWidget *w = dtgtk_togglebutton_new(paint, 0, NULL);
   g_signal_connect(G_OBJECT(w), "button-press-event", callback, self);
 
-  if(!ctrl_label)
+  if(IS_NULL_PTR(ctrl_label))
     gtk_widget_set_tooltip_text(w, _(label));
   else
   {

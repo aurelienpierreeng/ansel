@@ -97,7 +97,7 @@ static int strinc(char *label, size_t buffer_size)
       default:
         (*c)++;
     }
-    if(!carry_over)
+    if(IS_NULL_PTR(carry_over))
       break;
     else if(c == label)
     {
@@ -158,7 +158,7 @@ chart_t *parse_cht(const char *filename)
   int lineno = 0;
 
   FILE *fp = g_fopen(filename, "rb");
-  if(!fp)
+  if(IS_NULL_PTR(fp))
   {
     fprintf(stderr, "error opening `%s'\n", filename);
     ERROR;
@@ -337,7 +337,7 @@ chart_t *parse_cht(const char *filename)
                   label = g_strconcat(x_label, y_label, NULL);
               }
 
-              if(!first_label) first_label = label;
+              if(IS_NULL_PTR(first_label)) first_label = label;
               dt_free(last_label);
               last_label = label;
 
@@ -489,7 +489,7 @@ chart_t *parse_cht(const char *filename)
 
         char *label = parse_string(&c);
         box_t *box = (box_t *)g_hash_table_lookup(result->box_table, label);
-        if(!box) ERROR;
+        if(IS_NULL_PTR(box)) ERROR;
 
         if(c - line >= len) ERROR;
         float c0 = parse_double(&c);
@@ -526,7 +526,7 @@ int parse_it8(const char *filename, chart_t *chart)
 {
   int result = 1;
   cmsHANDLE hIT8 = cmsIT8LoadFromFile(NULL, filename);
-  if(!hIT8)
+  if(IS_NULL_PTR(hIT8))
   {
     fprintf(stderr, "error loading IT8 file `%s'\n", filename);
     goto error;

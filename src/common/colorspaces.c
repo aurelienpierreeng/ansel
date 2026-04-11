@@ -213,7 +213,7 @@ static int dt_colorspaces_get_matrix_from_profile(cmsHPROFILE prof, dt_colormatr
   // out if the profile can be created at all.
 
   // check this first:
-  if(!prof || !cmsIsMatrixShaper(prof)) return 1;
+  if(IS_NULL_PTR(prof) || !cmsIsMatrixShaper(prof)) return 1;
 
   // there are some profiles that contain both a color LUT for some specific
   // intent and a generic matrix. in some cases the matrix might be
@@ -237,7 +237,7 @@ static int dt_colorspaces_get_matrix_from_profile(cmsHPROFILE prof, dt_colormatr
   cmsCIEXYZ *green_color = cmsReadTag(prof, cmsSigGreenColorantTag);
   cmsCIEXYZ *blue_color = cmsReadTag(prof, cmsSigBlueColorantTag);
 
-  if(!red_curve || !green_curve || !blue_curve || !red_color || !green_color || !blue_color) return 2;
+  if(IS_NULL_PTR(red_curve) || IS_NULL_PTR(green_curve) || IS_NULL_PTR(blue_curve) || IS_NULL_PTR(red_color) || IS_NULL_PTR(green_color) || IS_NULL_PTR(blue_color)) return 2;
 
   dt_colormatrix_t matrix_tmp = { { red_color->X, green_color->X, blue_color->X },
                                   { red_color->Y, green_color->Y, blue_color->Y },
@@ -278,7 +278,7 @@ static int dt_colorspaces_get_matrix_from_profile(cmsHPROFILE prof, dt_colormatr
     cmsToneCurve *rev_red = cmsReverseToneCurveEx(0x8000, red_curve);
     cmsToneCurve *rev_green = cmsReverseToneCurveEx(0x8000, green_curve);
     cmsToneCurve *rev_blue = cmsReverseToneCurveEx(0x8000, blue_curve);
-    if(!rev_red || !rev_green || !rev_blue)
+    if(IS_NULL_PTR(rev_red) || IS_NULL_PTR(rev_green) || IS_NULL_PTR(rev_blue))
     {
       cmsFreeToneCurve(rev_red);
       cmsFreeToneCurve(rev_green);
@@ -866,7 +866,7 @@ const dt_colorspaces_color_profile_t *dt_colorspaces_get_work_profile(const int3
   }
 
   // if all else fails -> fall back to linear Rec2020 RGB
-  if(!p) p = dt_colorspaces_get_profile(DT_COLORSPACE_LIN_REC2020, "", DT_PROFILE_DIRECTION_WORK);
+  if(IS_NULL_PTR(p)) p = dt_colorspaces_get_profile(DT_COLORSPACE_LIN_REC2020, "", DT_PROFILE_DIRECTION_WORK);
 
   return p;
 }
@@ -891,7 +891,7 @@ dt_colorspaces_color_profile_type_t dt_image_find_best_color_profile(int32_t img
 
   // Fetch actual image
   dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'w');
-  if(!img) goto finish;
+  if(IS_NULL_PTR(img)) goto finish;
 
   // Image codecs doing their own colorspace detection should set this to TRUE
   gboolean already_set = FALSE;
@@ -1186,7 +1186,7 @@ const dt_colorspaces_color_profile_t *_build_embedded_profile(const int32_t imgi
   {
     // Set the name string for the profile
     char *lang = getenv("LANG");
-    if(!lang) lang = "en_US";
+    if(IS_NULL_PTR(lang)) lang = "en_US";
     dt_colorspaces_get_profile_name(profile, lang, lang + 3, container->name, sizeof(container->name));
 
     // add it to the stack of dt profiles so it gets freed properly when we don't need it anymore
@@ -1222,7 +1222,7 @@ const dt_colorspaces_color_profile_t *dt_colorspaces_get_output_profile(const in
   }
 
   // if all else fails -> fall back to sRGB
-  if(!p)
+  if(IS_NULL_PTR(p))
   {
     p = dt_colorspaces_get_profile(DT_COLORSPACE_SRGB, "", DT_PROFILE_DIRECTION_OUT);
     *over_type = DT_COLORSPACE_SRGB;
@@ -1386,7 +1386,7 @@ void dt_colorspaces_get_profile_name(cmsHPROFILE p, const char *language, const 
     size = cmsGetProfileInfo(p, cmsInfoDescription, language, country, wbuf, sizeof(wchar_t) * size);
     if(size == 0) goto error;
     utf8 = g_ucs4_to_utf8((gunichar *)wbuf, -1, NULL, NULL, NULL);
-    if(!utf8) goto error;
+    if(IS_NULL_PTR(utf8)) goto error;
     g_strlcpy(name, utf8, len);
   }
 
@@ -1544,7 +1544,7 @@ __DT_CLONE_TARGETS__
 void dt_colorspaces_transform_rgba_float_image(const cmsHTRANSFORM transform, const float *image_in, float *image_out,
                                                const int width, const int height)
 {
-  if(!transform || !image_in || !image_out || width <= 0 || height <= 0) return;
+  if(IS_NULL_PTR(transform) || IS_NULL_PTR(image_in) || IS_NULL_PTR(image_out) || width <= 0 || height <= 0) return;
 
   /* Share the aliased LCMS transform explicitly. Do not read it indirectly
    * through module state inside the loop body. */
@@ -1560,7 +1560,7 @@ void dt_colorspaces_transform_rgba_float_image(const cmsHTRANSFORM transform, co
 void dt_colorspaces_transform_rgba8_to_bgra8(const cmsHTRANSFORM transform, const uint8_t *image_in, uint8_t *image_out,
                                              const int width, const int height)
 {
-  if(!image_in || !image_out || width <= 0 || height <= 0) return;
+  if(IS_NULL_PTR(image_in) || IS_NULL_PTR(image_out) || width <= 0 || height <= 0) return;
 
   /* Same threading rule as float transforms: pass an aliased transform handle
    * into the helper and share only that stable local state. */
@@ -1647,7 +1647,7 @@ static GList *load_profile_from_dir(const char *subdir)
   dt_loc_get_user_config_dir(confdir, sizeof(confdir));
   dt_loc_get_datadir(datadir, sizeof(datadir));
   char *lang = getenv("LANG");
-  if(!lang) lang = "en_US";
+  if(IS_NULL_PTR(lang)) lang = "en_US";
 
   char *dirname = g_build_filename(confdir, "color", subdir, NULL);
   if(!g_file_test(dirname, G_FILE_TEST_IS_DIR))
@@ -1668,7 +1668,7 @@ static GList *load_profile_from_dir(const char *subdir)
       {
         size_t end;
         char *icc_content = dt_read_file(filename, &end);
-        if(!icc_content) goto icc_loading_done;
+        if(IS_NULL_PTR(icc_content)) goto icc_loading_done;
 
         // TODO: add support for grayscale profiles, then remove _ensure_rgb_profile() from here
         cmsHPROFILE tmpprof = _ensure_rgb_profile(cmsOpenProfileFromMem(icc_content, sizeof(char) * end));
@@ -2171,7 +2171,7 @@ void dt_colorspaces_set_display_profile(const dt_colorspaces_color_profile_type_
   GdkWindow *window = gtk_widget_get_window(widget);
   HWND hwnd = (HWND)gdk_win32_window_get_handle(window);  // get window handle
   HMONITOR hMonitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST); // get monitor handle
-  if(!hMonitor){  return;} //TODO log error
+  if(IS_NULL_PTR(hMonitor)){  return;} //TODO log error
   MONITORINFOEX monitorInfo;
   monitorInfo.cbSize = sizeof(MONITORINFOEX);
   if(!GetMonitorInfoW(hMonitor,(LPMONITORINFO) &monitorInfo)) { return;} //get monitor info , TODO log error

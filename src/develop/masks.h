@@ -556,7 +556,7 @@ static inline gboolean dt_masks_gui_change_affects_selected_node_or_all(const dt
 
 static inline float dt_masks_get_form_size_from_nodes(const GList *points)
 {
-  if(!points || !points->data) return 0.0f;
+  if(IS_NULL_PTR(points) || IS_NULL_PTR(points->data)) return 0.0f;
 
   // Brush and polygon node payloads both start with `float node[2]`.
   const float *first = (const float *)points->data;
@@ -682,7 +682,7 @@ static inline gboolean dt_masks_toggle_bezier_node_type(struct dt_iop_module_t *
                                                         float node[2], float ctrl1[2], float ctrl2[2],
                                                         dt_masks_points_states_t *state)
 {
-  if(!mask_form || !mask_gui || !gui_points || !state || node_index < 0) return FALSE;
+  if(IS_NULL_PTR(mask_form) || IS_NULL_PTR(mask_gui) || IS_NULL_PTR(gui_points) || IS_NULL_PTR(state) || node_index < 0) return FALSE;
 
   if(dt_masks_node_is_cusp(gui_points, node_index))
   {
@@ -709,7 +709,7 @@ static inline gboolean dt_masks_reset_bezier_ctrl_points(struct dt_iop_module_t 
                                                          const int node_index,
                                                          dt_masks_points_states_t *state)
 {
-  if(!mask_form || !mask_gui || !gui_points || !state || node_index < 0) return FALSE;
+  if(IS_NULL_PTR(mask_form) || IS_NULL_PTR(mask_gui) || IS_NULL_PTR(gui_points) || IS_NULL_PTR(state) || node_index < 0) return FALSE;
 
   if(*state != DT_MASKS_POINT_STATE_NORMAL && !dt_masks_node_is_cusp(gui_points, node_index))
   {
@@ -1125,7 +1125,7 @@ static inline gboolean _dt_masks_dynbuf_growto(dt_masks_dynbuf_t *a, size_t size
 {
   const size_t newsize = dt_round_size_sse(sizeof(float) * size) / sizeof(float);
   float *newbuf = dt_pixelpipe_cache_alloc_align_float_cache(newsize, 0);
-  if (!newbuf)
+  if (IS_NULL_PTR(newbuf))
   {
     // not much we can do here except emit an error message
     fprintf(stderr, "critical: out of memory for dynbuf '%s' with size request %zu!\n", a->tag, size);
@@ -1245,7 +1245,7 @@ static inline float *dt_masks_dynbuf_buffer(dt_masks_dynbuf_t *a)
 static inline gboolean dt_masks_center_of_gravity_from_points(const float *points, const int points_count,
                                                               float center[2], float *area)
 {
-  if(!points || !center || !area || points_count <= 0)
+  if(IS_NULL_PTR(points) || IS_NULL_PTR(center) || IS_NULL_PTR(area) || points_count <= 0)
   {
     if(center)
     {

@@ -37,14 +37,14 @@ static sqlite3_stmt *_thumbtable_collection_stmt = NULL;
 
 void dt_thumbtable_copy_image(dt_image_t *info, const dt_image_t *const img)
 {
-  if(!info || !img) return;
+  if(IS_NULL_PTR(info) || IS_NULL_PTR(img)) return;
 
   memcpy(info, img, sizeof(dt_image_t));
 }
 
 void dt_thumbtable_info_seed_image_cache(const dt_image_t *info)
 {
-  if(!info || info->id <= 0) return;
+  if(IS_NULL_PTR(info) || info->id <= 0) return;
 
   if(IS_NULL_PTR(darktable.image_cache)) return;
 
@@ -53,7 +53,7 @@ void dt_thumbtable_info_seed_image_cache(const dt_image_t *info)
 
 sqlite3_stmt *dt_thumbtable_info_get_collection_stmt(void)
 {
-  if(!_thumbtable_collection_stmt)
+  if(IS_NULL_PTR(_thumbtable_collection_stmt))
   {
     DT_DEBUG_SQLITE3_PREPARE_V2(
         dt_database_get(darktable.db),
@@ -109,7 +109,7 @@ static gboolean _thumbtable_double_equal(const double a, const double b)
 
 void dt_thumbtable_info_debug_assert_matches_cache(const dt_image_t *sql_info)
 {
-  if(!sql_info || sql_info->id <= 0) return;
+  if(IS_NULL_PTR(sql_info) || sql_info->id <= 0) return;
 
   const dt_image_t *img = dt_image_cache_get(darktable.image_cache, sql_info->id, 'r');
   if(IS_NULL_PTR(img)) return;

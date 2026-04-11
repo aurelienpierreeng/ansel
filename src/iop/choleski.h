@@ -284,7 +284,7 @@ static inline int solve_hermitian(const float *const restrict A,
   float *const restrict x = dt_alloc_align_float(n);
   float *const restrict L = dt_alloc_align_float(n * n);
 
-  if(!x || !L)
+  if(IS_NULL_PTR(x) || IS_NULL_PTR(L))
   {
     dt_control_log(_("Choleski decomposition failed to allocate memory, check your RAM settings"));
     fprintf(stdout, "Choleski decomposition failed to allocate memory, check your RAM settings\n");
@@ -382,7 +382,7 @@ static inline int pseudo_solve(float *const restrict A,
   float *const restrict A_square = dt_alloc_align_float(n * n);
   float *const restrict y_square = dt_alloc_align_float(n);
 
-  if(!A_square || !y_square)
+  if(IS_NULL_PTR(A_square) || IS_NULL_PTR(y_square))
   {
     dt_control_log(_("Choleski decomposition failed to allocate memory, check your RAM settings"));
     err = 1;

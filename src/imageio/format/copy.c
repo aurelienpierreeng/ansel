@@ -67,7 +67,7 @@ int write_image(dt_imageio_module_data_t *data, const char *filename, const void
   // we got a copy of the file, now write the xmp data
   xmpfile = g_strconcat(targetfile, ".xmp", NULL);
   dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'w');
-  if(!img || dt_exif_xmp_write_with_imgpath(img, xmpfile, sourcefile) != 0)
+  if(IS_NULL_PTR(img) || dt_exif_xmp_write_with_imgpath(img, xmpfile, sourcefile) != 0)
   {
     if(img) dt_image_cache_write_release(darktable.image_cache, img, DT_IMAGE_CACHE_MINIMAL);
     // something went wrong, unlink the copied image.

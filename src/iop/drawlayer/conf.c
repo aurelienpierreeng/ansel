@@ -236,7 +236,7 @@ static void _color_history_valid_key(const int index, char *key, const size_t ke
 /** @brief Load persisted color-history stack from config into widgets state. */
 static void _load_color_history(dt_iop_drawlayer_gui_data_t *g)
 {
-  if(!g || !g->ui.widgets) return;
+  if(IS_NULL_PTR(g) || !g->ui.widgets) return;
 
   float history[DT_DRAWLAYER_COLOR_HISTORY_COUNT][3] = { { 0.0f } };
   gboolean valid[DT_DRAWLAYER_COLOR_HISTORY_COUNT] = { FALSE };
@@ -260,7 +260,7 @@ static void _load_color_history(dt_iop_drawlayer_gui_data_t *g)
 /** @brief Persist current widget color-history stack into config. */
 static void _store_color_history(const dt_iop_drawlayer_gui_data_t *g)
 {
-  if(!g || !g->ui.widgets) return;
+  if(IS_NULL_PTR(g) || !g->ui.widgets) return;
 
   float history[DT_DRAWLAYER_COLOR_HISTORY_COUNT][3] = { { 0.0f } };
   gboolean valid[DT_DRAWLAYER_COLOR_HISTORY_COUNT] = { FALSE };
@@ -285,7 +285,7 @@ static void _store_color_history(const dt_iop_drawlayer_gui_data_t *g)
 static void _remember_display_color(dt_iop_module_t *self, const float display_rgb[3])
 {
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
-  if(!g || !g->ui.widgets || !display_rgb) return;
+  if(IS_NULL_PTR(g) || !g->ui.widgets || !display_rgb) return;
 
   if(!dt_drawlayer_widgets_push_color_history(g->ui.widgets, display_rgb)) return;
   _store_color_history(g);
@@ -296,7 +296,7 @@ static void _remember_display_color(dt_iop_module_t *self, const float display_r
 static void _apply_display_brush_color(dt_iop_module_t *self, const float display_rgb[3], const gboolean remember)
 {
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
-  if(!self || !g || !g->ui.widgets || !display_rgb) return;
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(g) || !g->ui.widgets || !display_rgb) return;
 
   dt_conf_set_float(DRAWLAYER_CONF_COLOR_R, _clamp01(display_rgb[0]));
   dt_conf_set_float(DRAWLAYER_CONF_COLOR_G, _clamp01(display_rgb[1]));
@@ -317,7 +317,7 @@ static void _apply_display_brush_color(dt_iop_module_t *self, const float displa
 static void _sync_color_picker_from_conf(dt_iop_module_t *self)
 {
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
-  if(!g || !g->ui.widgets) return;
+  if(IS_NULL_PTR(g) || !g->ui.widgets) return;
 
   float display_rgb[3] = { 0.0f };
   _conf_display_color(display_rgb);
@@ -332,7 +332,7 @@ static void _sync_params_from_gui(dt_iop_module_t *self, const gboolean record_h
 {
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
   (void)record_history;
-  if(!g || (darktable.gui && darktable.gui->reset)) return;
+  if(IS_NULL_PTR(g) || (darktable.gui && darktable.gui->reset)) return;
 
   dt_conf_set_int(DRAWLAYER_CONF_BRUSH_SHAPE, dt_drawlayer_widgets_get_brush_profile_selection(g->ui.widgets));
   dt_conf_set_int(DRAWLAYER_CONF_BRUSH_MODE, dt_bauhaus_combobox_get(g->controls.brush_mode));

@@ -247,7 +247,7 @@ int dt_imageio_large_thumbnail(const char *filename, uint8_t **buffer, int32_t *
 
     if(exception.severity != UndefinedException) CatchException(&exception);
 
-    if(!image)
+    if(IS_NULL_PTR(image))
     {
       fprintf(stderr, "[dt_imageio_large_thumbnail GM] thumbnail not found?\n");
       goto error_gm;
@@ -475,7 +475,7 @@ void dt_imageio_flip_buffers_ui8_to_float(float *out, const uint8_t *in, const f
 dt_imageio_retval_t dt_imageio_open_hdr(dt_image_t *img, const char *filename, dt_mipmap_buffer_t *buf)
 {
   // if buf is NULL, don't proceed
-  if(!buf)
+  if(IS_NULL_PTR(buf))
     return DT_IMAGEIO_OK;
 
   dt_imageio_retval_t ret;
@@ -646,7 +646,7 @@ gboolean dt_imageio_is_handled_by_libraw(dt_image_t *img, const char *filename)
 dt_imageio_retval_t dt_imageio_open_raster(dt_image_t *img, const char *filename, dt_mipmap_buffer_t *buf)
 {
   // if buf is NULL, don't proceed
-  if(!buf)
+  if(IS_NULL_PTR(buf))
     return DT_IMAGEIO_OK;
 
   dt_imageio_retval_t ret;
@@ -689,7 +689,7 @@ dt_imageio_retval_t dt_imageio_open_raster(dt_image_t *img, const char *filename
 dt_imageio_retval_t dt_imageio_open_raw(dt_image_t *img, const char *filename, dt_mipmap_buffer_t *buf)
 {
   // if buf is NULL, don't proceed
-  if(!buf)
+  if(IS_NULL_PTR(buf))
     return DT_IMAGEIO_OK;
 
   dt_imageio_retval_t ret;
@@ -769,7 +769,7 @@ int dt_imageio_export(const int32_t imgid, const char *filename, dt_imageio_modu
 gboolean _apply_style_before_export(dt_develop_t *dev, dt_imageio_module_data_t *format_params, const int32_t imgid)
 {
   GList *style_items = dt_styles_get_item_list(format_params->style, TRUE, -1);
-  if(!style_items)
+  if(IS_NULL_PTR(style_items))
   {
     dt_control_log(_("cannot find the style '%s' to apply during export."), format_params->style);
     return TRUE;
@@ -1026,7 +1026,7 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
   // Take a local copy of the input buffer so we can release the mipmap cache lock immediately
   dt_mipmap_cache_get(cache, &buf, imgid, size, DT_MIPMAP_BLOCKING, 'r');
 
-  if(!buf.buf || buf.width == 0 || buf.height == 0)
+  if(IS_NULL_PTR(buf.buf) || buf.width == 0 || buf.height == 0)
   {
     dt_mipmap_cache_release(cache, &buf);
     goto error;
@@ -1218,7 +1218,7 @@ dt_imageio_retval_t dt_imageio_open_exotic(dt_image_t *img, const char *filename
                                            dt_mipmap_buffer_t *buf)
 {
   // if buf is NULL, don't proceed
-  if(!buf)
+  if(IS_NULL_PTR(buf))
     return DT_IMAGEIO_OK;
 
   dt_imageio_retval_t ret;

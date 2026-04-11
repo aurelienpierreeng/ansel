@@ -121,7 +121,7 @@ static void _trace_buffer_content(const dt_dev_pixelpipe_t *pipe, const dt_iop_m
 {
   if(!(darktable.unmuted & DT_DEBUG_PIPECACHE)) return;
   if(!(darktable.unmuted & DT_DEBUG_VERBOSE)) return;
-  if(!buffer || !format || !roi) return;
+  if(IS_NULL_PTR(buffer) || IS_NULL_PTR(format) || IS_NULL_PTR(roi)) return;
   if(roi->width <= 0 || roi->height <= 0) return;
 
   const size_t pixels = (size_t)roi->width * (size_t)roi->height;
@@ -608,7 +608,7 @@ void dt_dev_pixelpipe_create_nodes(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
   {
     dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
     dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)calloc(1, sizeof(dt_dev_pixelpipe_iop_t));
-    if(!piece) continue;
+    if(IS_NULL_PTR(piece)) continue;
     piece->enabled = module->enabled;
     piece->request_histogram = DT_REQUEST_ONLY_IN_GUI;
     piece->histogram_params.bins_count = 256;
@@ -828,7 +828,7 @@ static int _init_base_buffer(dt_dev_pixelpipe_t *pipe)
     // Cache size has changed since we inited pipe input ?
     // Note: we know pipe->iwidth/iheight are non-zero or we would have not launched a pipe.
     // Note 2: there is no valid reason for a cacheline to change size during runtime.
-    if(!buf.buf || buf.height != pipe->iheight || buf.width != pipe->iwidth || !output)
+    if(IS_NULL_PTR(buf.buf) || buf.height != pipe->iheight || buf.width != pipe->iwidth || IS_NULL_PTR(output))
     {
       // Nothing we can do, we need to recompute roi_in and roi_out from scratch
       // for all modules with new sizes. Exit on error and catch that in develop.
@@ -860,7 +860,7 @@ static int _init_base_buffer(dt_dev_pixelpipe_t *pipe)
           for(GList *node = g_list_first(pipe->nodes); node; node = g_list_next(node))
           {
             dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)node->data;
-            if(!piece || !piece->enabled) continue;
+            if(IS_NULL_PTR(piece) || !piece->enabled) continue;
 
             preload_base_pinned = piece->module && piece->process_cl_ready && piece->module->process_cl;
             break;
@@ -1007,7 +1007,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   // still needs to consume transient outputs in the same run.
   dt_pixel_cache_entry_t *input_entry
       = dt_dev_pixelpipe_cache_get_entry(darktable.pixelpipe_cache, input_hash);
-  if(!input_entry)
+  if(IS_NULL_PTR(input_entry))
   {
     dt_print(DT_DEBUG_DEV,
              "[pipeline] module=%s input cache entry missing input_hash=%" PRIu64 " output_hash=%" PRIu64
@@ -1088,7 +1088,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
      * publication to complete instead of aborting the whole recursion. */
     dt_pixel_cache_entry_t *exact_entry
         = dt_dev_pixelpipe_cache_get_entry(darktable.pixelpipe_cache, hash);
-    if(!exact_entry)
+    if(IS_NULL_PTR(exact_entry))
     {
       dt_print(DT_DEBUG_DEV,
                "[pipeline] module=%s exact-hit entry missing output_hash=%" PRIu64 "\n",
@@ -1111,7 +1111,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
     *out_piece = piece;
     return 0;
   }
-  if(!output_entry)
+  if(IS_NULL_PTR(output_entry))
   {
     dt_print(DT_DEBUG_DEV,
              "[pipeline] module=%s writable output acquisition failed output_hash=%" PRIu64
@@ -1381,7 +1381,7 @@ static void _update_backbuf_cache_reference(dt_dev_pixelpipe_t *pipe, dt_iop_roi
 static GList *_get_requested_piece_node(const dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *module, int *pos)
 {
   if(pos) *pos = 0;
-  if(!pipe || !module) return NULL;
+  if(IS_NULL_PTR(pipe) || IS_NULL_PTR(module)) return NULL;
 
   int current_pos = 1;
   for(GList *node = g_list_first(pipe->nodes); node; node = g_list_next(node), current_pos++)

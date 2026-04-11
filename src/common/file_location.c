@@ -229,7 +229,7 @@ void dt_loc_init_moduledir(const char* application_directory, const char *module
 
 void dt_check_opendir(const char* context, const char* directory)
 {
-  if (!directory)
+  if (IS_NULL_PTR(directory))
   {
     fprintf(stderr, "directory for %s has not been set.\n", context);
     exit(EXIT_FAILURE);

@@ -508,7 +508,7 @@ static void _metadata_get_flags(const dt_image_t *const img, char *const text, c
 
 static gboolean _metadata_view_get_thumb_info(const int32_t imgid, dt_image_t *info)
 {
-  if(imgid <= 0 || !info || !darktable.gui || !darktable.gui->ui) return FALSE;
+  if(imgid <= 0 || IS_NULL_PTR(info) || IS_NULL_PTR(darktable.gui) || IS_NULL_PTR(darktable.gui->ui)) return FALSE;
 
   if(dt_thumbtable_get_thumbnail_info(darktable.gui->ui->thumbtable_lighttable, imgid, info))
     return TRUE;

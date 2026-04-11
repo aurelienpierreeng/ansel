@@ -81,7 +81,7 @@ dt_job_t *dt_film_import1_create(dt_film_t *film)
   dt_job_t *job = dt_control_job_create(&dt_film_import1_run, "cache load raw images for preview");
   if(IS_NULL_PTR(job)) return NULL;
   dt_film_import1_t *params = (dt_film_import1_t *)calloc(1, sizeof(dt_film_import1_t));
-  if(!params)
+  if(IS_NULL_PTR(params))
   {
     dt_control_job_dispose(job);
     return NULL;
@@ -117,7 +117,7 @@ dt_job_t *dt_pathlist_import_create(int argc, char *argv[])
   dt_job_t *job = dt_control_job_create(&_pathlist_import_run, "import commandline images");
   if(IS_NULL_PTR(job)) return NULL;
   dt_film_import1_t *params = (dt_film_import1_t *)calloc(1, sizeof(dt_film_import1_t));
-  if(!params)
+  if(IS_NULL_PTR(params))
   {
     dt_control_job_dispose(job);
     return NULL;
@@ -144,7 +144,7 @@ dt_job_t *dt_pathlist_import_create(int argc, char *argv[])
         while(TRUE)
         {
           const gchar *fname = g_dir_read_name(cdir);
-          if(!fname) break;  			// no more files in directory
+          if(IS_NULL_PTR(fname)) break;  			// no more files in directory
           if(fname[0] == '.') continue; 	// skip hidden files
           gchar *fullname = g_build_filename(path, fname, NULL);
           if(!g_file_test(fullname, G_FILE_TEST_IS_DIR) && dt_supported_image(fname))
@@ -245,7 +245,7 @@ static int _film_filename_cmp(gchar *a, gchar *b)
 static void _film_import1(dt_job_t *job, dt_film_t *film, GList *images)
 {
   // first, gather all images to import if not already given
-  if (!images)
+  if (IS_NULL_PTR(images))
   {
     const gboolean recursive = dt_conf_get_bool("ui_last/import_recursive");
 
@@ -326,7 +326,7 @@ static void _film_import1(dt_job_t *job, dt_film_t *film, GList *images)
     gchar *cdn = g_path_get_dirname((const gchar *)image->data);
 
     /* check if we need to initialize a new filmroll */
-    if(!cfr || g_strcmp0(cfr->dirname, cdn) != 0)
+    if(IS_NULL_PTR(cfr) || g_strcmp0(cfr->dirname, cdn) != 0)
     {
       _apply_filmroll_gpx(cfr);
 

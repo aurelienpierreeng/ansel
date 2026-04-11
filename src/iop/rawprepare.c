@@ -207,7 +207,7 @@ static void _update_output_cfa_descriptor(const dt_dev_pixelpipe_t *pipe,
                                           const dt_iop_roi_t *const roi_in,
                                           dt_iop_buffer_dsc_t *dsc)
 {
-  if(!pipe || !piece || !roi_in || !dsc) return;
+  if(IS_NULL_PTR(pipe) || IS_NULL_PTR(piece) || IS_NULL_PTR(roi_in) || IS_NULL_PTR(dsc)) return;
 
   dsc->filters = pipe->image.dsc.filters;
   memcpy(dsc->xtrans, pipe->image.dsc.xtrans, sizeof(dsc->xtrans));

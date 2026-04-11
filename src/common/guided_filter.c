@@ -150,7 +150,7 @@ static int guided_filter_tiling(color_image imgg, gray_image img, gray_image img
   const size_t img_dimen = mean.width;
   size_t img_bak_sz;
   float *img_bak = dt_pixelpipe_cache_alloc_perthread_float(9*img_dimen, &img_bak_sz);
-  if(!img_bak)
+  if(IS_NULL_PTR(img_bak))
   {
     free_color_image(&variance);
     free_color_image(&mean);
@@ -186,7 +186,7 @@ static int guided_filter_tiling(color_image imgg, gray_image img, gray_image img
     }
     // apply horizontal pass of box mean filter while the cache is still hot
     float *const restrict scratch = dt_get_perthread(img_bak, img_bak_sz);
-    if(!scratch
+    if(IS_NULL_PTR(scratch)
        || dt_box_mean_horizontal(meanpx, mean.width, 4|BOXFILTER_KAHAN_SUM, w, scratch) != 0
        || dt_box_mean_horizontal(varpx, variance.width, 9|BOXFILTER_KAHAN_SUM, w, scratch) != 0)
     {
@@ -716,7 +716,7 @@ static int guided_filter_cl_fallback(int devid, cl_mem guide, cl_mem in, cl_mem 
   float *out_host = dt_pixelpipe_cache_alloc_align_float_cache(
       width * height,
       0);
-  if(!guide_host || !in_host || !out_host)
+  if(!guide_host || IS_NULL_PTR(in_host) || IS_NULL_PTR(out_host))
   {
     dt_pixelpipe_cache_free_align(guide_host);
     dt_pixelpipe_cache_free_align(in_host);

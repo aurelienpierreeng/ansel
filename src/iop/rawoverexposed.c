@@ -151,7 +151,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
 
   dt_mipmap_buffer_t buf;
   dt_mipmap_cache_get(darktable.mipmap_cache, &buf, image->id, DT_MIPMAP_FULL, DT_MIPMAP_BLOCKING, 'r');
-  if(!buf.buf)
+  if(IS_NULL_PTR(buf.buf))
   {
     dt_control_log(_("failed to get raw buffer from image `%s'"), image->filename);
     dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
@@ -269,7 +269,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
 
   dt_mipmap_buffer_t buf;
   dt_mipmap_cache_get(darktable.mipmap_cache, &buf, image->id, DT_MIPMAP_FULL, DT_MIPMAP_BLOCKING, 'r');
-  if(!buf.buf)
+  if(IS_NULL_PTR(buf.buf))
   {
     dt_control_log(_("failed to get raw buffer from image `%s'"), image->filename);
     dt_mipmap_cache_release(darktable.mipmap_cache, &buf);

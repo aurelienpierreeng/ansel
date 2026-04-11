@@ -100,7 +100,7 @@ static gboolean _accels_tooltip_query_hook(GSignalInvocationHint *hint, guint n_
   const char *base_text = base_markup ? NULL : g_object_get_data(G_OBJECT(widget), "dt-accel-tooltip-base-text");
   const gboolean base_none = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "dt-accel-tooltip-base-none"));
 
-  if(!base_markup && !base_text && !base_none)
+  if(IS_NULL_PTR(base_markup) && IS_NULL_PTR(base_text) && !base_none)
   {
     gchar *current_markup = gtk_widget_get_tooltip_markup(widget);
     if(current_markup && current_markup[0])
@@ -126,7 +126,7 @@ static gboolean _accels_tooltip_query_hook(GSignalInvocationHint *hint, guint n_
   }
 
   dt_shortcut_t *shortcut = g_object_get_data(G_OBJECT(widget), DT_ACCELS_WIDGET_SHORTCUT_KEY);
-  if(!shortcut)
+  if(IS_NULL_PTR(shortcut))
   {
     const char *accel_path = g_object_get_data(G_OBJECT(widget), "accel-path");
     if(accel_path && darktable.gui && darktable.gui->accels)
@@ -138,7 +138,7 @@ static gboolean _accels_tooltip_query_hook(GSignalInvocationHint *hint, guint n_
     }
   }
 
-  if(!shortcut || shortcut->key == 0)
+  if(IS_NULL_PTR(shortcut) || shortcut->key == 0)
   {
     if(base_markup)
       gtk_widget_set_tooltip_markup(widget, base_markup);
@@ -148,7 +148,7 @@ static gboolean _accels_tooltip_query_hook(GSignalInvocationHint *hint, guint n_
   }
 
   gchar *shortcut_label = gtk_accelerator_get_label(shortcut->key, shortcut->mods);
-  if(!shortcut_label || !shortcut_label[0])
+  if(IS_NULL_PTR(shortcut_label) || !shortcut_label[0])
   {
     dt_free(shortcut_label);
     return TRUE;
@@ -593,7 +593,7 @@ void dt_accels_new_virtual_shortcut(dt_accels_t *accels, GtkAccelGroup *accel_gr
     return;
   }
 
-  if(!shortcut)
+  if(IS_NULL_PTR(shortcut))
   {
     shortcut = malloc(sizeof(dt_shortcut_t));
     shortcut->accel_group = accel_group;
@@ -628,7 +628,7 @@ void dt_accels_new_virtual_instance_shortcut(dt_accels_t *accels,
   dt_shortcut_t *shortcut = (dt_shortcut_t *)g_hash_table_lookup(accels->acceleratables, accel_path);
   dt_pthread_mutex_unlock(&accels->lock);
 
-  if(!shortcut)
+  if(IS_NULL_PTR(shortcut))
   {
     shortcut = malloc(sizeof(dt_shortcut_t));
     shortcut->accel_group = accel_group;
@@ -858,7 +858,7 @@ _remove_accel_hashtable(gpointer _key, gpointer value, gpointer user_data)
 // For all shortcuts matching path (fully or partially), remove the closure instance referencing data
 void dt_accels_remove_accel(dt_accels_t *accels, const char *path, gpointer data)
 {
-  if(!accels || !accels->acceleratables) return;
+  if(IS_NULL_PTR(accels) || IS_NULL_PTR(accels->acceleratables)) return;
 
   _accel_removal_t *params = malloc(sizeof(_accel_removal_t));
   params->path = path;
@@ -1273,7 +1273,7 @@ static void _shortcut_edited(GtkCellRenderer *cell, const gchar *path_string, gu
       shortcut_path = _find_path_for_keys(shortcut->accels, keyval, mods, shortcut->accel_group);
 
     // Try to update the GtkAccelMap with new keys
-    if(!shortcut_path && gtk_accel_map_change_entry(shortcut->path, keyval, mods, FALSE))
+    if(IS_NULL_PTR(shortcut_path) && gtk_accel_map_change_entry(shortcut->path, keyval, mods, FALSE))
     {
       // Success:
       // Resync our internal shortcut object and its GtkAccelGroup to GtkAccelMap
@@ -1372,7 +1372,7 @@ void _for_each_accel_create_treeview_row(gpointer key, gpointer value, gpointer 
     iter = g_hash_table_lookup(node_cache, accum);
 
     // If current node is not already in tree, add it.
-    if(!iter)
+    if(IS_NULL_PTR(iter))
     {
       // We need a heap-allocated iter to pass it along to the hashtable.
       // This will be freed when cleaning up the hashtable.

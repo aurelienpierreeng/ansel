@@ -1390,7 +1390,7 @@ void reload_defaults(dt_iop_module_t *module)
     dt_iop_lensfun_global_data_t *gd = (dt_iop_lensfun_global_data_t *)module->global_data;
 
     // just to be sure
-    if(!gd || !gd->db) return;
+    if(IS_NULL_PTR(gd) || IS_NULL_PTR(gd->db)) return;
 
     dt_pthread_mutex_lock(&darktable.plugin_threadsafe);
     const lfCamera **cam = gd->db->FindCamerasExt(img->exif_maker, img->exif_model, 0);
@@ -1597,7 +1597,7 @@ static void camera_set(dt_iop_module_t *self, const lfCamera *cam)
   const char *maker, *model, *variant;
   char _variant[100];
 
-  if(!cam)
+  if(IS_NULL_PTR(cam))
   {
     gtk_label_set_text(GTK_LABEL(gtk_bin_get_child(GTK_BIN(g->camera_model))), "");
     gtk_widget_set_tooltip_text(GTK_WIDGET(g->camera_model), "");
@@ -2143,7 +2143,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
   const gboolean raw_monochrome = dt_image_is_monochrome(&self->dev->image_storage);
   gtk_widget_set_visible(g->tca_override, !raw_monochrome);
   // update gui to show/hide tca sliders if tca_override was changed
-  if(!w || w == g->tca_override)
+  if(IS_NULL_PTR(w) || w == g->tca_override)
   {
     // show tca sliders only iff tca_overwrite is set
     gtk_widget_set_visible(g->tca_r, p->tca_override && !raw_monochrome);

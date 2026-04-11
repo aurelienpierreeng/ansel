@@ -46,7 +46,7 @@ static gboolean _styles_apply_callback(GtkAccelGroup *group, GObject *accelerata
                                        GdkModifierType mods, gpointer user_data)
 {
   const char *style_name = get_custom_data(GTK_WIDGET(user_data));
-  if(!style_name || !*style_name) return FALSE;
+  if(IS_NULL_PTR(style_name) || !*style_name) return FALSE;
 
   GList *imgs = dt_act_on_get_images();
   const gboolean duplicate = dt_conf_get_bool("ui_last/styles_create_duplicate");
@@ -138,7 +138,7 @@ static gboolean _styles_open_popup_callback(GtkAccelGroup *group, GObject *accel
 
 static gchar *_styles_build_label(gchar **split)
 {
-  if(!split || !split[0]) return g_strdup("");
+  if(IS_NULL_PTR(split) || !split[0]) return g_strdup("");
 
   if(split[1])
   {
@@ -187,13 +187,13 @@ static gchar *_styles_build_tooltip(const dt_style_t *style)
 static GtkWidget *_styles_get_submenu(GtkWidget **menus, GList **lists, GHashTable *submenus,
                                       const gchar *group, const dt_menus_t index)
 {
-  if(!group || !*group) return menus[index];
+  if(IS_NULL_PTR(group) || !*group) return menus[index];
 
   GtkWidget *submenu = g_hash_table_lookup(submenus, group);
   if(submenu) return submenu;
 
   gchar *group_label = g_markup_escape_text(group, -1);
-  if(!group_label) group_label = g_strdup("");
+  if(IS_NULL_PTR(group_label)) group_label = g_strdup("");
   add_top_submenu_entry(menus, lists, group_label, index);
   dt_free(group_label);
 
@@ -221,7 +221,7 @@ static void _styles_add_menu_entry(GtkWidget **menus, GList **lists, GtkWidget *
 
 static void _styles_menu_clear(void)
 {
-  if(!_styles_menus || !_styles_lists) return;
+  if(IS_NULL_PTR(_styles_menus) || !_styles_lists) return;
 
   GtkWidget *menu = _styles_menus[_styles_index];
   GList *children = gtk_container_get_children(GTK_CONTAINER(menu));
@@ -239,7 +239,7 @@ static void _styles_menu_clear(void)
 
 static gboolean _styles_menu_rebuild_idle(gpointer user_data)
 {
-  if(!_styles_menus || !_styles_lists)
+  if(IS_NULL_PTR(_styles_menus) || !_styles_lists)
   {
     _styles_menu_rebuild_source = 0;
     return G_SOURCE_REMOVE;
@@ -275,7 +275,7 @@ void append_styles(GtkWidget **menus, GList **lists, const dt_menus_t index)
 
   GList *styles = dt_styles_get_list("");
 
-  if(!styles)
+  if(IS_NULL_PTR(styles))
   {
     add_sub_menu_entry(menus, lists, _("No styles available"), index, NULL, NULL, NULL, NULL,
                        _styles_menu_disabled, 0, 0);
@@ -287,7 +287,7 @@ void append_styles(GtkWidget **menus, GList **lists, const dt_menus_t index)
     for(GList *iter = styles; iter; iter = g_list_next(iter))
     {
       dt_style_t *style = (dt_style_t *)iter->data;
-      if(!style || !style->name) continue;
+      if(IS_NULL_PTR(style) || IS_NULL_PTR(style->name)) continue;
 
       gchar **split = g_strsplit(style->name, "|", 0);
       gchar *label = _styles_build_label(split);

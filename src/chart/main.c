@@ -134,7 +134,7 @@ static gboolean draw_image_callback(GtkWidget *widget, cairo_t *cr, gpointer use
   clear_background(cr);
 
   // done when no image is loaded
-  if(!image->image)
+  if(IS_NULL_PTR(image->image))
   {
     draw_no_image(cr, widget);
     return FALSE;
@@ -208,7 +208,7 @@ static gboolean motion_notify_callback_reference(GtkWidget *widget, GdkEventMoti
 
 static gboolean handle_motion(GtkWidget *widget, GdkEventMotion *event, dt_lut_t *self, image_t *image)
 {
-  if(!(event->state & GDK_BUTTON1_MASK) || !image->image) return FALSE;
+  if(!(event->state & GDK_BUTTON1_MASK) || IS_NULL_PTR(image->image)) return FALSE;
 
   // mouse -> 0..1
   float x, y;
@@ -313,7 +313,7 @@ static gboolean open_source_image(dt_lut_t *self, const char *filename)
 {
   gboolean res = open_image(&self->source, filename);
   gtk_widget_set_sensitive(self->cht_button, res);
-  if(!res) gtk_file_chooser_unselect_all(GTK_FILE_CHOOSER(self->image_button));
+  if(IS_NULL_PTR(res)) gtk_file_chooser_unselect_all(GTK_FILE_CHOOSER(self->image_button));
   gtk_widget_queue_draw(self->source.drawing_area);
 
   return res;
@@ -343,7 +343,7 @@ static gboolean open_reference_image(dt_lut_t *self, const char *filename)
   gtk_widget_set_sensitive(self->process_button, res);
   gtk_widget_set_sensitive(self->export_button, FALSE);
   gtk_widget_set_sensitive(self->export_raw_button, FALSE);
-  if(!res)
+  if(IS_NULL_PTR(res))
     gtk_file_chooser_unselect_all(GTK_FILE_CHOOSER(self->reference_image_button));
   else
   {
@@ -372,7 +372,7 @@ static gboolean open_image(image_t *image, const char *filename)
 
   float *pfm = read_pfm(filename, &width, &height);
 
-  if(!pfm)
+  if(IS_NULL_PTR(pfm))
   {
     fprintf(stderr, "error reading image `%s'\n", filename);
     return FALSE;
@@ -428,7 +428,7 @@ static gboolean open_cht(dt_lut_t *self, const char *filename)
   init_table(self);
 
   // reset it8/reference entry
-  if(!res) gtk_file_chooser_unselect_all(GTK_FILE_CHOOSER(self->cht_button));
+  if(IS_NULL_PTR(res)) gtk_file_chooser_unselect_all(GTK_FILE_CHOOSER(self->cht_button));
   gtk_file_chooser_unselect_all(GTK_FILE_CHOOSER(self->it8_button));
   gtk_file_chooser_unselect_all(GTK_FILE_CHOOSER(self->reference_image_button));
 
@@ -487,7 +487,7 @@ static void it8_changed_callback(GtkFileChooserButton *widget, gpointer user_dat
 
 static gboolean open_it8(dt_lut_t *self, const char *filename)
 {
-  if(!self->chart || !filename) return FALSE;
+  if(IS_NULL_PTR(self->chart) || !filename) return FALSE;
   const gboolean res = parse_it8(filename, self->chart);
   collect_source_patches(self);
   update_table(self);
@@ -495,7 +495,7 @@ static gboolean open_it8(dt_lut_t *self, const char *filename)
   gtk_widget_set_sensitive(self->process_button, FALSE);
   gtk_widget_set_sensitive(self->export_button, FALSE);
   gtk_widget_set_sensitive(self->export_raw_button, FALSE);
-  if(!res)
+  if(IS_NULL_PTR(res))
     gtk_file_chooser_unselect_all(GTK_FILE_CHOOSER(self->it8_button));
   else
   {
@@ -616,7 +616,7 @@ static void print_patches(dt_lut_t *self, FILE *fd, GList *patch_names)
     char *key = (char *)iter->data;
     box_t *source_patch = (box_t *)g_hash_table_lookup(self->picked_source_patches, key);
     box_t *reference_patch = (box_t *)g_hash_table_lookup(self->chart->box_table, key);
-    if(!source_patch || !reference_patch)
+    if(IS_NULL_PTR(source_patch) || IS_NULL_PTR(reference_patch))
     {
       fprintf(stderr, "error: missing patch `%s'\n", key);
       continue;
@@ -738,7 +738,7 @@ static void export_raw_button_clicked_callback(GtkButton *button, gpointer user_
 static void export_button_clicked_callback(GtkButton *button, gpointer user_data)
 {
   dt_lut_t *self = (dt_lut_t *)user_data;
-  if(!self->tonecurve_encoded || !self->colorchecker_encoded) return;
+  if(!self->tonecurve_encoded || IS_NULL_PTR(self->colorchecker_encoded)) return;
 
   char *name = NULL, *description = NULL;
   gboolean include_basecurve, include_colorchecker, include_colorin, include_tonecurve;
@@ -760,7 +760,7 @@ static void add_patches_to_array(dt_lut_t *self, GList *patch_names, int *N, int
     const char *key = (char *)iter->data;
     box_t *source_patch = (box_t *)g_hash_table_lookup(self->picked_source_patches, key);
     box_t *reference_patch = (box_t *)g_hash_table_lookup(self->chart->box_table, key);
-    if(!source_patch || !reference_patch)
+    if(IS_NULL_PTR(source_patch) || IS_NULL_PTR(reference_patch))
     {
       fprintf(stderr, "error: missing patch `%s'\n", key);
       continue;
@@ -1504,7 +1504,7 @@ static void collect_reference_patches_foreach(gpointer key, gpointer value, gpoi
 static box_t *find_patch(GHashTable *table, gpointer key)
 {
   box_t *patch = (box_t *)g_hash_table_lookup(table, key);
-  if(!patch)
+  if(IS_NULL_PTR(patch))
   {
     // the patch won't be found in the first pass
     patch = (box_t *)calloc(1, sizeof(box_t));

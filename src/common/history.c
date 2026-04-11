@@ -541,7 +541,7 @@ gboolean dt_history_db_write_history_item(const int32_t imgid, const int num, co
                                          const void *blendop_params, const int blendop_params_size,
                                          const int blendop_version, const int multi_priority, const char *multi_name)
 {
-  if(imgid <= 0 || num < 0 || !operation) return FALSE;
+  if(imgid <= 0 || num < 0 || IS_NULL_PTR(operation)) return FALSE;
 
   gboolean ok = TRUE;
 
@@ -601,7 +601,7 @@ gboolean dt_history_db_write_history_item(const int32_t imgid, const int num, co
 
 void dt_history_db_foreach_history_row(const int32_t imgid, dt_history_db_row_cb cb, void *user_data)
 {
-  if(imgid <= 0 || !cb) return;
+  if(imgid <= 0 || IS_NULL_PTR(cb)) return;
 
   _history_stmt_mutex_ensure();
   dt_pthread_mutex_lock(&_history_stmt_mutex);
@@ -649,7 +649,7 @@ void dt_history_db_foreach_history_row(const int32_t imgid, dt_history_db_row_cb
 void dt_history_db_foreach_auto_preset_row(const int32_t imgid, const dt_image_t *image, const char *workflow_preset,
                                           const int iformat, const int excluded, dt_history_db_row_cb cb, void *user_data)
 {
-  if(imgid <= 0 || !image || !workflow_preset || !cb) return;
+  if(imgid <= 0 || IS_NULL_PTR(image) || !workflow_preset || IS_NULL_PTR(cb)) return;
 
   _history_stmt_mutex_ensure();
   dt_pthread_mutex_lock(&_history_stmt_mutex);
@@ -727,7 +727,7 @@ gboolean dt_history_db_get_autoapply_ioporder_params(const int32_t imgid, const 
                                                     const int iformat, const int excluded, void **params,
                                                     int32_t *params_len)
 {
-  if(imgid <= 0 || !image || !params || !params_len) return FALSE;
+  if(imgid <= 0 || IS_NULL_PTR(image) || IS_NULL_PTR(params) || !params_len) return FALSE;
   *params = NULL;
   *params_len = 0;
 
