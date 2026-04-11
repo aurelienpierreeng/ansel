@@ -891,7 +891,7 @@ void dt_dev_add_history_item_real(dt_develop_t *dev, dt_iop_module_t *module, gb
   if(last_history)
   {
     hist = (dt_dev_history_item_t *)last_history->data;
-    has_forms = (hist->forms != NULL);
+    has_forms = (!IS_NULL_PTR(hist->forms));
   }
 
   // We don't update history hash in dt_dev_add_history_item_ext
@@ -1679,7 +1679,7 @@ static void _process_history_db_entry(dt_develop_t *dev, const int32_t imgid, co
 {
   // Sanity checks
   const gboolean is_valid_id = (id == imgid);
-  const gboolean has_operation = (operation != NULL);
+  const gboolean has_operation = (!IS_NULL_PTR(operation));
 
   if(!(has_operation && is_valid_id))
   {

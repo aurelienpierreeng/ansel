@@ -160,7 +160,7 @@ static void _main_do_event_help(GdkEvent *event, gpointer data)
             else
             {
               dt_control_log(_("error while opening help url in web browser"));
-              if (error != NULL) // uri_success being FALSE should guarantee that
+              if (!IS_NULL_PTR(error)) // uri_success being FALSE should guarantee that
               {
                 fprintf (stderr, "unable to read file: %s\n", error->message);
                 g_error_free(error);

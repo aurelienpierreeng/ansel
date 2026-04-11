@@ -1283,7 +1283,7 @@ static void _init_presets(dt_iop_module_so_t *module_so)
       sqlite3_finalize(stmt2);
     }
 
-    if(module_version > old_params_version && module_so->legacy_params != NULL)
+    if(module_version > old_params_version && !IS_NULL_PTR(module_so->legacy_params))
     {
       // we need a dt_iop_module_t for legacy_params()
       dt_iop_module_t *module;
@@ -1536,7 +1536,7 @@ gboolean dt_iop_module_has_raster_mask(const dt_iop_module_t *module)
 
   const gboolean mask_mode_raster = module->blend_params
                                     && ((module->blend_params->mask_mode & DEVELOP_MASK_RASTER) == DEVELOP_MASK_RASTER);
-  const gboolean has_raster_sink = (module->raster_mask.sink.source != NULL);
+  const gboolean has_raster_sink = (!IS_NULL_PTR(module->raster_mask.sink.source));
 
   return mask_mode_raster || has_raster_sink;
 }
@@ -2704,7 +2704,7 @@ const gchar *dt_iop_get_localized_name(const gchar *op)
       g_hash_table_insert(module_names, module->op, g_strdup(module->name()));
     }
   }
-  if(op != NULL)
+  if(!IS_NULL_PTR(op))
   {
     return (gchar *)g_hash_table_lookup(module_names, op);
   }
@@ -2726,7 +2726,7 @@ const gchar *dt_iop_get_localized_aliases(const gchar *op)
       g_hash_table_insert(module_aliases, module->op, g_strdup(module->aliases()));
     }
   }
-  if(op != NULL)
+  if(!IS_NULL_PTR(op))
   {
     return (gchar *)g_hash_table_lookup(module_aliases, op);
   }

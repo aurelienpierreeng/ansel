@@ -1965,7 +1965,7 @@ static inline __attribute__((always_inline)) int filmic_v4_prepare_matrices(dt_c
   dt_colormatrix_mul(output_matrix, work_profile->matrix_out, temp_matrix);
 
   // If the pipeline output profile is supported (matrix profile), we gamut map against it
-  const int use_output_profile = (export_profile != NULL);
+  const int use_output_profile = (!IS_NULL_PTR(export_profile));
   if(use_output_profile)
   {
     // Prepare the LMS 2006 -> XYZ D65 -> XYZ D50 -> output RGB (D50) matrix

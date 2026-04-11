@@ -97,13 +97,13 @@ static int _gpu_early_cpu_fallback_if_unsupported(dt_dev_pixelpipe_t *pipe, floa
   /* CPU fallback only needs a valid host buffer. If `input` already exists here, the upstream
    * hand-off has already materialized authoritative RAM and re-reading the same pixels back out
    * of the cached OpenCL image is redundant. */
-  if(input && *input != NULL)
+  if(input && !IS_NULL_PTR(*input))
   {
     dt_print(DT_DEBUG_OPENCL,
              "[dev_pixelpipe] %s CPU fallback will reuse host input\n",
              module->name());
   }
-  else if(cl_mem_input && *cl_mem_input != NULL)
+  else if(cl_mem_input && !IS_NULL_PTR(*cl_mem_input))
   {
     if(input && IS_NULL_PTR(*input))
     {
@@ -206,7 +206,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
    * When the cacheline already carries a host-backed pinned image, reopen that payload first so
    * GPU-to-GPU stages can keep flowing through the cached OpenCL image instead of rebuilding it
    * from host RAM. Base-buffer initialization also seeds this path for the first OpenCL stage. */
-  if(input != NULL && pipe->devid >= 0)
+  if(!IS_NULL_PTR(input) && pipe->devid >= 0)
   {
     /* The cache entry still owns the previous stage payload at this point. Reopen the cached OpenCL image
      * using the descriptor that was actually published by the upstream stage, not the descriptor this module
@@ -217,7 +217,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
                                             piece->roi_in.width, piece->roi_in.height,
                                             actual_input_dsc.bpp,
                                             CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR);
-    borrowed_cl_mem_input = (cl_mem_input != NULL);
+    borrowed_cl_mem_input = (!IS_NULL_PTR(cl_mem_input));
   }
 
   if(IS_NULL_PTR(cl_mem_input) && IS_NULL_PTR(input) && pipe->devid >= 0)
@@ -226,7 +226,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
     cl_mem_input = dt_dev_pixelpipe_cache_borrow_cl_payload(input_entry, NULL, pipe->devid,
                                             piece->roi_in.width, piece->roi_in.height,
                                             actual_input_dsc.bpp, CL_MEM_READ_WRITE);
-    borrowed_cl_mem_input = (cl_mem_input != NULL);
+    borrowed_cl_mem_input = (!IS_NULL_PTR(cl_mem_input));
   }
 
   if(IS_NULL_PTR(input) && IS_NULL_PTR(cl_mem_input))
@@ -249,7 +249,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
             : NULL;
 
   const float required_factor_cl
-      = fmaxf(1.0f, (cl_mem_input != NULL) ? tiling->factor_cl - 1.0f : tiling->factor_cl);
+      = fmaxf(1.0f, (!IS_NULL_PTR(cl_mem_input)) ? tiling->factor_cl - 1.0f : tiling->factor_cl);
 
   const size_t precheck_width = ROUNDUPDWD(MAX(piece->roi_in.width, piece->roi_out.width), pipe->devid);
   const size_t precheck_height = ROUNDUPDHT(MAX(piece->roi_in.height, piece->roi_out.height), pipe->devid);
@@ -456,7 +456,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
       dt_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] output memory was copied to cache for %s\n", module->name());
     }
   }
-  else if(piece->process_tiling_ready && input != NULL)
+  else if(piece->process_tiling_ready && !IS_NULL_PTR(input))
   {
     const float *module_input = input;
     const float *blend_input = input;
@@ -653,13 +653,13 @@ error:
 
   dt_dev_pixelpipe_cache_release_cl_buffer(&cl_mem_output, output_entry, NULL, FALSE);
 
-  if(input != NULL)
+  if(!IS_NULL_PTR(input))
   {
     dt_print(DT_DEBUG_OPENCL,
              "[dev_pixelpipe] %s GPU error fallback will reuse host input\n",
              module->name());
   }
-  else if(cl_mem_input != NULL)
+  else if(!IS_NULL_PTR(cl_mem_input))
   {
     if(_gpu_init_input(pipe, &input, &cl_mem_input, piece, tiling,
                        cpu_input_entry, output_entry))

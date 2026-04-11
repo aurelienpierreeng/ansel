@@ -219,15 +219,15 @@ static void _sync_runtime_state_from_inputs(dt_drawlayer_runtime_manager_t *stat
   if(process)
   {
     priv->layer_cache_valid = process->cache_valid;
-    _sync_buffer_state(state, DT_DRAWLAYER_RUNTIME_BUFFER_BASE_PATCH, process->base_patch.pixels != NULL,
+    _sync_buffer_state(state, DT_DRAWLAYER_RUNTIME_BUFFER_BASE_PATCH, !IS_NULL_PTR(process->base_patch.pixels),
                        process->cache_valid, process->cache_dirty);
-    _sync_buffer_state(state, DT_DRAWLAYER_RUNTIME_BUFFER_STROKE_MASK, process->stroke_mask.pixels != NULL,
-                       process->stroke_mask.pixels != NULL, FALSE);
+    _sync_buffer_state(state, DT_DRAWLAYER_RUNTIME_BUFFER_STROKE_MASK, !IS_NULL_PTR(process->stroke_mask.pixels),
+                       !IS_NULL_PTR(process->stroke_mask.pixels), FALSE);
   }
   else if(base_patch)
   {
     priv->layer_cache_valid = inputs->base_patch_valid;
-    _sync_buffer_state(state, DT_DRAWLAYER_RUNTIME_BUFFER_BASE_PATCH, base_patch->pixels != NULL,
+    _sync_buffer_state(state, DT_DRAWLAYER_RUNTIME_BUFFER_BASE_PATCH, !IS_NULL_PTR(base_patch->pixels),
                        inputs->base_patch_valid, inputs->base_patch_dirty);
   }
 

@@ -278,7 +278,7 @@ void dt_histogram_helper(dt_dev_histogram_collection_params_t *histogram_params,
     const size_t pixels = (size_t)roi->width * roi->height;
     converted = dt_pixelpipe_cache_alloc_align_float_cache(4 * pixels, 0);
 
-    if(converted != NULL)
+    if(!IS_NULL_PTR(converted))
     {
       __OMP_PARALLEL_FOR__()
       for(size_t k = 0; k < pixels; k++)
@@ -310,7 +310,7 @@ void dt_histogram_helper(dt_dev_histogram_collection_params_t *histogram_params,
     default:
       if(cst_to != IOP_CS_LCH)
         dt_histogram_worker(histogram_params, histogram_stats, pixel, histogram, histogram_helper_cs_Lab, profile_info);
-      else if(converted != NULL)
+      else if(!IS_NULL_PTR(converted))
         dt_histogram_worker(histogram_params, histogram_stats, converted, histogram, histogram_helper_cs_LCh, profile_info);
       else
         dt_histogram_worker(histogram_params, histogram_stats, pixel, histogram, histogram_helper_cs_Lab_LCh, profile_info);

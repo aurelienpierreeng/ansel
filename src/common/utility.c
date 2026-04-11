@@ -172,7 +172,7 @@ gchar *dt_util_glist_to_str(const gchar *separator, GList *items)
 
   // add the entries to an char* array
   gchar **strings = g_malloc0_n(count + 1, sizeof(gchar *));
-  if(items != NULL)
+  if(!IS_NULL_PTR(items))
   {
     int i = 0;
     for(; items; items = g_list_next(items))
@@ -932,8 +932,8 @@ void dt_copy_file(const char *const sourcefile, const char *dst)
   }
 
 END:
-  if(fout != NULL) fclose(fout);
-  if(fin != NULL) fclose(fin);
+  if(!IS_NULL_PTR(fout)) fclose(fout);
+  if(!IS_NULL_PTR(fin)) fclose(fin);
 
   dt_free(content);
 }

@@ -193,11 +193,11 @@ static void _cache_remove_payloadless_entry_locked(dt_dev_pixelpipe_cache_t *cac
 {
   if(!cache || !cache_entry || cache_entry->external_alloc) return;
   if(_non_threadsafe_cache_get_entry(cache, cache->entries, cache_entry->hash) != cache_entry) return;
-  if(cache_entry->data != NULL) return;
+  if(!IS_NULL_PTR(cache_entry->data)) return;
 
   gboolean has_clmem = FALSE;
   dt_pthread_mutex_lock(&cache_entry->cl_mem_lock);
-  has_clmem = (cache_entry->cl_mem_list != NULL);
+  has_clmem = (!IS_NULL_PTR(cache_entry->cl_mem_list));
   dt_pthread_mutex_unlock(&cache_entry->cl_mem_lock);
 
   if(has_clmem) return;
@@ -382,7 +382,7 @@ static gboolean _cache_entry_materialize_host_data_locked(dt_pixel_cache_entry_t
 {
   (void)preferred_devid;
   (void)prefer_device_payload;
-  return entry && entry->data != NULL;
+  return entry && !IS_NULL_PTR(entry->data);
 }
 #endif
 
@@ -1020,7 +1020,7 @@ void *dt_dev_pixelpipe_cache_alloc_cl_device_buffer(int devid, const dt_iop_roi_
  *
  * @details
  * If `IS_NULL_PTR(host_ptr)`, we allocate a plain device image and rely on explicit copies when needed.
- * If `host_ptr != NULL`, we allocate a pinned host-backed image, enabling (potentially) true zero-copy.
+ * If `!IS_NULL_PTR(host_ptr)`, we allocate a pinned host-backed image, enabling (potentially) true zero-copy.
  */
 void *dt_dev_pixelpipe_cache_get_cl_buffer(int devid, void *const host_ptr, const dt_iop_roi_t *roi,
                                            const size_t bpp, dt_iop_module_t *module,
@@ -1044,7 +1044,7 @@ void *dt_dev_pixelpipe_cache_get_cl_buffer(int devid, void *const host_ptr, cons
     {
       cl_mem_input = _pixel_cache_clmem_get(cache_entry, host_ptr, devid, roi->width, roi->height,
                                             (int)bpp, flags);
-      reused_from_cache = (cl_mem_input != NULL);
+      reused_from_cache = (!IS_NULL_PTR(cl_mem_input));
     }
 
     if(!cl_mem_input)
@@ -1058,7 +1058,7 @@ void *dt_dev_pixelpipe_cache_get_cl_buffer(int devid, void *const host_ptr, cons
       {
         cl_mem_input = _pixel_cache_clmem_get(cache_entry, host_ptr, devid, roi->width, roi->height,
                                               (int)bpp, flags);
-        reused_from_cache = (cl_mem_input != NULL);
+        reused_from_cache = (!IS_NULL_PTR(cl_mem_input));
       }
       if(!cl_mem_input)
         cl_mem_input = dt_opencl_alloc_device_use_host_pointer(devid, roi->width, roi->height, cl_bpp,
@@ -1073,7 +1073,7 @@ void *dt_dev_pixelpipe_cache_get_cl_buffer(int devid, void *const host_ptr, cons
        * flag so scratch buffers can be reused deterministically across drivers. */
       cl_mem_input = _pixel_cache_clmem_get(cache_entry, NULL, devid, roi->width, roi->height,
                                             (int)bpp, CL_MEM_READ_WRITE);
-      reused_from_cache = (cl_mem_input != NULL);
+      reused_from_cache = (!IS_NULL_PTR(cl_mem_input));
     }
 
     if(!cl_mem_input)
@@ -1138,7 +1138,7 @@ void *dt_dev_pixelpipe_cache_get_cl_buffer(int devid, void *const host_ptr, cons
 void dt_dev_pixelpipe_cache_release_cl_buffer(void **cl_mem_buffer, dt_pixel_cache_entry_t *cache_entry,
                                               void *host_ptr, const gboolean cache_device)
 {
-  if(cl_mem_buffer && *cl_mem_buffer != NULL)
+  if(cl_mem_buffer && !IS_NULL_PTR(*cl_mem_buffer))
   {
     cl_mem mem = *cl_mem_buffer;
     const cl_mem_flags flags = dt_opencl_get_mem_flags(mem);
@@ -1296,7 +1296,7 @@ float *dt_dev_pixelpipe_cache_restore_cl_buffer(dt_dev_pixelpipe_t *pipe, float 
  * @details
  * There are two major cases:
  *
- * 1) `*cl_mem_input != NULL`:
+ * 1) `!IS_NULL_PTR(*cl_mem_input)`:
  *    The previous module already produced an OpenCL buffer and we are continuing on GPU. We may still need to
  *    keep the cache entry write-locked if it is a true zero-copy pinned image, because in-place OpenCL
  *    colorspace transforms can mutate the host-backed buffer before the current module runs.
@@ -1314,7 +1314,7 @@ int dt_dev_pixelpipe_cache_prepare_cl_input(dt_dev_pixelpipe_t *pipe, dt_iop_mod
   if(!locked_input_entry) return 1;
   *locked_input_entry = NULL;
 
-  if(*cl_mem_input != NULL)
+  if(!IS_NULL_PTR(*cl_mem_input))
   {
     // We passed the OpenCL memory buffer through directly on vRAM from previous module.
     // This is fast and efficient.
@@ -1664,7 +1664,7 @@ static int _free_space_to_alloc(dt_dev_pixelpipe_cache_t *cache, const size_t si
   if(cache->current_memory + size > cache->max_memory)
   {
     const char *module = dt_pixelpipe_cache_current_module;
-    const gboolean name_is_file = (name != NULL) && (strchr(name, '/') != NULL) && (strchr(name, ':') != NULL);
+    const gboolean name_is_file = (!IS_NULL_PTR(name)) && (strchr(name, '/') != NULL) && (strchr(name, ':') != NULL);
     if(!name) name = g_strdup("unknown");
     
     if(hash)
@@ -2210,7 +2210,7 @@ static dt_pixel_cache_entry_t *_cache_lookup_existing(dt_dev_pixelpipe_cache_t *
 static gboolean _cache_try_restore_device_payload(dt_pixel_cache_entry_t *cache_entry,
                                                   const int preferred_devid, void **cl_mem_output)
 {
-  if(!cache_entry || !cl_mem_output || *cl_mem_output != NULL || preferred_devid < 0)
+  if(!cache_entry || !cl_mem_output || !IS_NULL_PTR(*cl_mem_output) || preferred_devid < 0)
     return FALSE;
 
   dt_pthread_mutex_lock(&cache_entry->cl_mem_lock);
@@ -2242,7 +2242,7 @@ static gboolean _cache_try_restore_device_payload(dt_pixel_cache_entry_t *cache_
   }
   dt_pthread_mutex_unlock(&cache_entry->cl_mem_lock);
 
-  return *cl_mem_output != NULL;
+  return !IS_NULL_PTR(*cl_mem_output);
 }
 #else
 static gboolean _cache_try_restore_device_payload(dt_pixel_cache_entry_t *cache_entry,

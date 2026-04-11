@@ -584,7 +584,7 @@ void gui_reset(dt_lib_module_t *self)
   // set it to none if the var is not set or the style doesn't exist anymore
   gboolean rc = FALSE;
   const char *style = dt_confgen_get(CONFIG_PREFIX "style", DT_DEFAULT);
-  if(style != NULL && strlen(style) > 0)
+  if(!IS_NULL_PTR(style) && strlen(style) > 0)
   {
     rc = dt_bauhaus_combobox_set_from_text(d->style, style);
     if(rc == FALSE) dt_bauhaus_combobox_set(d->style, 0);
@@ -1395,7 +1395,7 @@ void gui_init(dt_lib_module_t *self)
   // set it to none if the var is not set or the style doesn't exist anymore
   gboolean rc = FALSE;
   setting = dt_conf_get_string_const(CONFIG_PREFIX "style");
-  if(setting != NULL && strlen(setting) > 0)
+  if(!IS_NULL_PTR(setting) && strlen(setting) > 0)
   {
     rc = dt_bauhaus_combobox_set_from_text(d->style, setting);
     if(rc == FALSE)
@@ -1913,12 +1913,12 @@ void *get_params(dt_lib_module_t *self, int *size)
   pos += sizeof(int32_t);
   memcpy(params + pos, &ssize, sizeof(int32_t));
   pos += sizeof(int32_t);
-  if(fdata != NULL) // otherwise fsize == 0, but clang doesn't like it ...
+  if(!IS_NULL_PTR(fdata)) // otherwise fsize == 0, but clang doesn't like it ...
   {
     memcpy(params + pos, fdata, fsize);
     pos += fsize;
   }
-  if(sdata != NULL) // see above
+  if(!IS_NULL_PTR(sdata)) // see above
   {
     memcpy(params + pos, sdata, ssize);
     pos += ssize;

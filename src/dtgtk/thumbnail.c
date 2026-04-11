@@ -583,7 +583,7 @@ int dt_thumbnail_get_image_buffer(dt_thumbnail_t *thumb)
   // previously queued/running jobs exit early (thumb->job != job), which can lead to endless
   // "busy" redraws without ever painting an image.
   dt_pthread_mutex_lock(&thumb->lock);
-  const gboolean job_running = (thumb->job != NULL);
+  const gboolean job_running = (!IS_NULL_PTR(thumb->job));
   dt_pthread_mutex_unlock(&thumb->lock);
   if(job_running) return 0;
 

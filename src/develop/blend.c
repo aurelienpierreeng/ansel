@@ -906,7 +906,7 @@ static void _refine_with_detail_mask_cl(struct dt_iop_module_t *self, const stru
     dt_masks_blur_9x9_coeff(blurmat, 2.0f);
     cl_mem dev_blurmat = NULL;
     dev_blurmat = dt_opencl_copy_host_to_device_constant(devid, sizeof(float) * 13, blurmat);
-    if(dev_blurmat != NULL)
+    if(!IS_NULL_PTR(dev_blurmat))
     {
       size_t sizes[3] = { ROUNDUPDWD(iwidth, devid), ROUNDUPDHT(iheight, devid), 1 };
       const int clkernel = darktable.opencl->blendop->kernel_mask_blur;
@@ -1320,7 +1320,7 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_t
     // the display channel of Lab blending is generated in RGB and should be transformed to Lab
     // the transformation in the pipeline is currently always using the work profile
     dt_iop_order_iccprofile_info_t *work_profile = dt_ioppr_get_pipe_work_profile_info(pipe);
-    const int use_work_profile = work_profile != NULL;
+    const int use_work_profile = !IS_NULL_PTR(work_profile);
 
     err = dt_ioppr_build_iccprofile_params_cl(work_profile, devid, &work_profile_info_cl, &work_profile_lut_cl,
                                               &dev_work_profile_info, &dev_work_profile_lut);

@@ -1331,7 +1331,7 @@ static void _new_datetime(GDateTime *datetime, dt_lib_module_t *self)
       g_date_time_unref(d->datetime);
     d->datetime = datetime;
     d->offset = g_date_time_difference(d->datetime, d->datetime0);
-    _display_offset(d->offset, d->datetime != NULL, self);
+    _display_offset(d->offset, !IS_NULL_PTR(d->datetime), self);
 #ifdef HAVE_MAP
       if(dt_conf_get_bool("/views/map/enable") && d->map.view)
       _refresh_track_list(self);
@@ -1385,7 +1385,7 @@ static void _refresh_image_datetime(dt_lib_module_t *self)
   }
   else
   {
-    _display_offset(d->offset = 0, datetime != NULL, self);
+    _display_offset(d->offset = 0, !IS_NULL_PTR(datetime), self);
     if(datetime)
     {
       g_date_time_ref(datetime);

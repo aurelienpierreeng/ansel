@@ -36,7 +36,7 @@ dt_timer_t *dt_timer_start_with_name(const char *file, const char *function, con
 
 void dt_timer_stop_with_name(dt_timer_t *t)
 {
-  g_assert(t != NULL);
+  g_assert(!IS_NULL_PTR(t));
   g_timer_stop(t->timer);
   gulong ms = 0;
   fprintf(stderr, "Timer %s in function %s took %.3f seconds to execute.\n", t->description, t->function,

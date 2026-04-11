@@ -29,7 +29,7 @@
 
 /* Import some lightroom develop options
    When called from lightable : IS_NULL_PTR(dev), in this case only the tags are imported
-   When called from darkroom  : dev != NULL, in this case only develop data are imported
+   When called from darkroom  : !IS_NULL_PTR(dev), in this case only develop data are imported
 */
 gboolean dt_lightroom_import(int32_t imgid, struct dt_develop_t *dev, gboolean iauto);
 

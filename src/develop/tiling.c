@@ -271,7 +271,7 @@ static int _simplex(double (*objfunc)(double[], void *[]), double start[], int n
     }
   }
 
-  if(constrain != NULL)
+  if(!IS_NULL_PTR(constrain))
   {
     constrain(v[j], n);
   }
@@ -346,7 +346,7 @@ static int _simplex(double (*objfunc)(double[], void *[]), double start[], int n
       /*vr[j] = (1+ALPHA)*vm[j] - ALPHA*v[vg][j]; */
       vr[j] = vm[j] + ALPHA * (vm[j] - v[vg][j]);
     }
-    if(constrain != NULL)
+    if(!IS_NULL_PTR(constrain))
     {
       constrain(vr, n);
     }
@@ -369,7 +369,7 @@ static int _simplex(double (*objfunc)(double[], void *[]), double start[], int n
         /*ve[j] = GAMMA*vr[j] + (1-GAMMA)*vm[j]; */
         ve[j] = vm[j] + GAMMA * (vr[j] - vm[j]);
       }
-      if(constrain != NULL)
+      if(!IS_NULL_PTR(constrain))
       {
         constrain(ve, n);
       }
@@ -408,7 +408,7 @@ static int _simplex(double (*objfunc)(double[], void *[]), double start[], int n
           /*vc[j] = BETA*v[vg][j] + (1-BETA)*vm[j]; */
           vc[j] = vm[j] + BETA * (vr[j] - vm[j]);
         }
-        if(constrain != NULL)
+        if(!IS_NULL_PTR(constrain))
         {
           constrain(vc, n);
         }
@@ -422,7 +422,7 @@ static int _simplex(double (*objfunc)(double[], void *[]), double start[], int n
           /*vc[j] = BETA*v[vg][j] + (1-BETA)*vm[j]; */
           vc[j] = vm[j] - BETA * (vm[j] - v[vg][j]);
         }
-        if(constrain != NULL)
+        if(!IS_NULL_PTR(constrain))
         {
           constrain(vc, n);
         }
@@ -455,12 +455,12 @@ static int _simplex(double (*objfunc)(double[], void *[]), double start[], int n
             }
           }
         }
-        if(constrain != NULL)
+        if(!IS_NULL_PTR(constrain))
         {
           constrain(v[vg], n);
         }
         f[vg] = objfunc(v[vg], rest);
-        if(constrain != NULL)
+        if(!IS_NULL_PTR(constrain))
         {
           constrain(v[vh], n);
         }
@@ -1484,9 +1484,9 @@ static int _default_process_tiling_cl_ptp(struct dt_iop_module_t *self, const st
       dt_opencl_finish(devid);
     }
 
-  if(input_buffer != NULL) dt_opencl_unmap_mem_object(devid, pinned_input, input_buffer);
+  if(!IS_NULL_PTR(input_buffer)) dt_opencl_unmap_mem_object(devid, pinned_input, input_buffer);
   dt_opencl_release_mem_object(pinned_input);
-  if(output_buffer != NULL) dt_opencl_unmap_mem_object(devid, pinned_output, output_buffer);
+  if(!IS_NULL_PTR(output_buffer)) dt_opencl_unmap_mem_object(devid, pinned_output, output_buffer);
   dt_opencl_release_mem_object(pinned_output);
   dt_opencl_release_mem_object(input);
   dt_opencl_release_mem_object(output);
@@ -1494,9 +1494,9 @@ static int _default_process_tiling_cl_ptp(struct dt_iop_module_t *self, const st
   return TRUE;
 
 error:
-  if(input_buffer != NULL) dt_opencl_unmap_mem_object(devid, pinned_input, input_buffer);
+  if(!IS_NULL_PTR(input_buffer)) dt_opencl_unmap_mem_object(devid, pinned_input, input_buffer);
   dt_opencl_release_mem_object(pinned_input);
-  if(output_buffer != NULL) dt_opencl_unmap_mem_object(devid, pinned_output, output_buffer);
+  if(!IS_NULL_PTR(output_buffer)) dt_opencl_unmap_mem_object(devid, pinned_output, output_buffer);
   dt_opencl_release_mem_object(pinned_output);
   dt_opencl_release_mem_object(input);
   dt_opencl_release_mem_object(output);
@@ -1910,9 +1910,9 @@ static int _default_process_tiling_cl_roi(struct dt_iop_module_t *self, const st
       dt_opencl_finish(devid);
     }
 
-  if(input_buffer != NULL) dt_opencl_unmap_mem_object(devid, pinned_input, input_buffer);
+  if(!IS_NULL_PTR(input_buffer)) dt_opencl_unmap_mem_object(devid, pinned_input, input_buffer);
   dt_opencl_release_mem_object(pinned_input);
-  if(output_buffer != NULL) dt_opencl_unmap_mem_object(devid, pinned_output, output_buffer);
+  if(!IS_NULL_PTR(output_buffer)) dt_opencl_unmap_mem_object(devid, pinned_output, output_buffer);
   dt_opencl_release_mem_object(pinned_output);
   dt_opencl_release_mem_object(input);
   dt_opencl_release_mem_object(output);
@@ -1920,9 +1920,9 @@ static int _default_process_tiling_cl_roi(struct dt_iop_module_t *self, const st
   return TRUE;
 
 error:
-  if(input_buffer != NULL) dt_opencl_unmap_mem_object(devid, pinned_input, input_buffer);
+  if(!IS_NULL_PTR(input_buffer)) dt_opencl_unmap_mem_object(devid, pinned_input, input_buffer);
   dt_opencl_release_mem_object(pinned_input);
-  if(output_buffer != NULL) dt_opencl_unmap_mem_object(devid, pinned_output, output_buffer);
+  if(!IS_NULL_PTR(output_buffer)) dt_opencl_unmap_mem_object(devid, pinned_output, output_buffer);
   dt_opencl_release_mem_object(pinned_output);
   dt_opencl_release_mem_object(input);
   dt_opencl_release_mem_object(output);

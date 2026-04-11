@@ -619,13 +619,13 @@ gboolean dt_confgen_value_exists(const char *name, dt_confgen_value_kind_t kind)
   switch(kind)
   {
      case DT_DEFAULT:
-       return item->def != NULL;
+       return !IS_NULL_PTR(item->def);
      case DT_MIN:
-       return item->min != NULL;
+       return !IS_NULL_PTR(item->min);
      case DT_MAX:
-       return item->max != NULL;
+       return !IS_NULL_PTR(item->max);
      case DT_VALUES:
-       return item->enum_values != NULL;
+       return !IS_NULL_PTR(item->enum_values);
   }
   return FALSE;
 }

@@ -1406,7 +1406,7 @@ static void _event_dnd_get(GtkWidget *widget, GdkDragContext *context, GtkSelect
                            const guint target_type, const guint time, gpointer user_data)
 {
   dt_thumbtable_t *table = (dt_thumbtable_t *)user_data;
-  g_assert(selection_data != NULL);
+  g_assert(!IS_NULL_PTR(selection_data));
 
   switch(target_type)
   {
@@ -1555,7 +1555,7 @@ static gboolean _thumbtable_dnd_import(GtkSelectionData *selection_data)
   if(uris)
   {
     GVfs *vfs = g_vfs_get_default();
-    for (int i = 0; uris[i] != NULL; i++)
+    for (int i = 0; !IS_NULL_PTR(uris[i]); i++)
     {
       GFile *filepath = g_vfs_get_file_for_uri(vfs, uris[i]);
       const gchar *pathname = g_strdup(g_file_get_path(filepath));
@@ -1597,7 +1597,7 @@ void dt_thumbtable_event_dnd_received(GtkWidget *widget, GdkDragContext *context
 {
   gboolean success = FALSE;
 
-  if((target_type == DND_TARGET_URI) && (selection_data != NULL)
+  if((target_type == DND_TARGET_URI) && (!IS_NULL_PTR(selection_data))
      && (gtk_selection_data_get_length(selection_data) >= 0))
   {
     success = _thumbtable_dnd_import(selection_data);

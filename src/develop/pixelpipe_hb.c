@@ -229,7 +229,7 @@ static int _abort_module_shutdown_cleanup(dt_dev_pixelpipe_t *pipe, dt_dev_pixel
 
   if(output) *output = NULL;
 
-  if(*cl_mem_output != NULL)
+  if(!IS_NULL_PTR(*cl_mem_output))
     dt_dev_pixelpipe_cache_release_cl_buffer(cl_mem_output, NULL, NULL, FALSE);
 
   return 1;
@@ -658,7 +658,7 @@ dt_pixelpipe_blend_transform_t dt_dev_pixelpipe_transform_for_blend(const dt_iop
 #define KILL_SWITCH_ABORT                                                                                         \
   if(dt_dev_pixelpipe_has_shutdown(pipe))                                                                         \
   {                                                                                                               \
-    if(cl_mem_output != NULL)                                                                                     \
+    if(!IS_NULL_PTR(cl_mem_output))                                                                                     \
     {                                                                                                             \
       dt_dev_pixelpipe_cache_release_cl_buffer(&cl_mem_output, NULL, NULL, FALSE);                                      \
     }                                                                                                             \
@@ -895,7 +895,7 @@ static int _init_base_buffer(dt_dev_pixelpipe_t *pipe)
                                                                 roi.height, (int)bpp,
                                                                 CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
                                                                 NULL);
-    if(cl_mem_base != NULL)
+    if(!IS_NULL_PTR(cl_mem_base))
     {
       if(dt_dev_pixelpipe_cache_sync_cl_buffer(pipe->devid, output, cl_mem_base, &roi, CL_MAP_WRITE,
                                                bpp, NULL, "base input preload to device") == 0)
@@ -972,7 +972,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
       = _requests_cache(pipe, piece)
         && dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, hash, &existing_output, &existing_cache,
                                        pipe->devid, NULL)
-        && existing_output != NULL;
+        && !IS_NULL_PTR(existing_output);
 
   if(exact_output_cache_hit)
   {
@@ -1214,7 +1214,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   else
     _reset_piece_cache_entry(piece);
 
-  if(output_entry && output != NULL
+  if(output_entry && !IS_NULL_PTR(output)
      && ((pixelpipe_flow & PIXELPIPE_FLOW_PROCESSED_ON_CPU)
          || (pixelpipe_flow & PIXELPIPE_FLOW_PROCESSED_WITH_TILING)))
   {
@@ -1225,7 +1225,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
     dt_dev_pixelpipe_cache_flush_entry_clmem(output_entry);
   }
 
-  if(cl_mem_output != NULL)
+  if(!IS_NULL_PTR(cl_mem_output))
     dt_dev_pixelpipe_cache_release_cl_buffer(&cl_mem_output, output_entry, output,
                                       dt_dev_pixelpipe_cache_gpu_device_buffer(pipe, output_entry));
 
@@ -1462,7 +1462,7 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop
      && requested_hash != DT_PIXELPIPE_CACHE_HASH_INVALID
      && dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, requested_hash, &buf, &entry,
                                     pipe->devid, NULL)
-     && buf != NULL)
+     && !IS_NULL_PTR(buf))
   {
     if(requested_backbuf)
       _update_backbuf_cache_reference(pipe, roi, entry);
@@ -1569,7 +1569,7 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop
       }
       else if(dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, dt_dev_pixelpipe_get_hash(pipe), &final_buf,
                                           &final_entry, pipe->devid, NULL)
-              && final_buf != NULL)
+              && !IS_NULL_PTR(final_buf))
       {
         _update_backbuf_cache_reference(pipe, roi, final_entry);
         dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, final_hash);

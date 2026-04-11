@@ -488,7 +488,7 @@ GList *dt_metadata_get(const int id, const char *key, uint32_t *count)
       }
       sqlite3_finalize(stmt);
     }
-    if(count != NULL) *count = local_count;
+    if(!IS_NULL_PTR(count)) *count = local_count;
     return g_list_reverse(result);
   }
 
@@ -529,7 +529,7 @@ GList *dt_metadata_get(const int id, const char *key, uint32_t *count)
     char *value = (char *)sqlite3_column_text(stmt, 0);
     result = g_list_prepend(result, g_strdup(value ? value : "")); // to avoid NULL value
   }
-  if(count != NULL) *count = local_count;
+  if(!IS_NULL_PTR(count)) *count = local_count;
   return g_list_reverse(result);  // list was built in reverse order, so un-reverse it
 }
 

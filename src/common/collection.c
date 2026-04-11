@@ -166,7 +166,7 @@ const dt_collection_params_t *dt_collection_params(const dt_collection_t *collec
 #define and_operator_initial() (0)
 static char * and_operator(int *term)
 {
-  assert(term != NULL);
+  assert(!IS_NULL_PTR(term));
   if(*term == 0)
   {
     *term = 1;
@@ -183,7 +183,7 @@ static char * and_operator(int *term)
 #define or_operator_initial() (0)
 static char * or_operator(int *term)
 {
-  assert(term != NULL);
+  assert(!IS_NULL_PTR(term));
   if(*term == 0)
   {
     *term = 1;
@@ -602,7 +602,7 @@ gchar *dt_collection_get_extended_where(const dt_collection_t *collection, int e
     const int mode = dt_conf_get_int(confname);
     if (mode != 1) // don't limit the collection for OR
     {
-      for(int i = 0; collection->where_ext[i] != NULL; i++)
+      for(int i = 0; !IS_NULL_PTR(collection->where_ext[i]); i++)
       {
         // exclude the one rule from extended where
         if (i != exclude)

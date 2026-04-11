@@ -145,10 +145,10 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
 error:
   fprintf(stderr, "[detailmask process] couldn't write detail mask\n");
-  if(created && entry != NULL)
+  if(created && !IS_NULL_PTR(entry))
     dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, FALSE, entry);
   dt_dev_clear_rawdetail_mask(mutable_pipe);
-  if(entry != NULL)
+  if(!IS_NULL_PTR(entry))
   {
     if(created) dt_dev_pixelpipe_cache_remove(darktable.pixelpipe_cache, TRUE, entry);
   }
@@ -239,10 +239,10 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
 
 error:
   fprintf(stderr, "[detailmask process_cl] couldn't write detail mask: %i\n", err);
-  if(created && entry != NULL)
+  if(created && !IS_NULL_PTR(entry))
     dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, FALSE, entry);
   dt_dev_clear_rawdetail_mask(mutable_pipe);
-  if(entry != NULL)
+  if(!IS_NULL_PTR(entry))
   {
     if(created) dt_dev_pixelpipe_cache_remove(darktable.pixelpipe_cache, TRUE, entry);
   }

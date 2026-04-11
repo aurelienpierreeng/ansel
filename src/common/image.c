@@ -1452,7 +1452,7 @@ static int32_t _image_import_internal(const int32_t film_id, const char *filenam
   }
   char *ext = g_ascii_strdown(cc + 1, -1);
   int supported = 0;
-  for(const char **i = dt_supported_extensions; *i != NULL; i++)
+  for(const char **i = dt_supported_extensions; !IS_NULL_PTR(*i); i++)
     if(!strcmp(ext, *i))
     {
       supported = 1;

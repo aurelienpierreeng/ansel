@@ -94,7 +94,7 @@ gchar *dt_loc_get_home_dir(const gchar *user)
   if(IS_NULL_PTR(user) || g_strcmp0(user, g_get_user_name()) == 0)
   {
     const char *home_dir = g_getenv("HOME");
-    return g_strdup((home_dir != NULL) ? home_dir : g_get_home_dir());
+    return g_strdup((!IS_NULL_PTR(home_dir)) ? home_dir : g_get_home_dir());
   }
 
 #if defined HAVE_GETPWNAM_R

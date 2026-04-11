@@ -550,7 +550,7 @@ static gboolean _lock_pipe_surface(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, 
   (void)lock_read;
 
   const uint64_t hash = dt_dev_backbuf_get_hash(&pipe->backbuf);
-  if(hash == (uint64_t)-1) return keep_previous_on_fail && (locked->surface != NULL);
+  if(hash == (uint64_t)-1) return keep_previous_on_fail && (!IS_NULL_PTR(locked->surface));
 
   /* Fast-path reuse is only valid if the cacheline identity/data pointer are
    * still the same behind the hash key. This avoids reusing stale cairo views
@@ -802,7 +802,7 @@ static void _darkroom_prepare_image_surface(dt_develop_t *dev, const int width, 
 
   if(state->image_surface_width == width
      && state->image_surface_height == height
-     && dev->image_surface != NULL)
+     && !IS_NULL_PTR(dev->image_surface))
     return;
 
   state->image_surface_width = width;
@@ -1040,7 +1040,7 @@ void expose(
     darktable.develop->proxy.snapshot.request = FALSE;
 
     /* validation of snapshot filename */
-    g_assert(darktable.develop->proxy.snapshot.filename != NULL);
+    g_assert(!IS_NULL_PTR(darktable.develop->proxy.snapshot.filename));
 
     /* Store current image surface to snapshot file.
        FIXME: add checks so that we don't make snapshots of preview pipe image surface.

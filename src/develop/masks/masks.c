@@ -147,7 +147,7 @@ int dt_masks_find_closest_handle_common(dt_masks_form_t *mask_form,
                                                     : (int)g_list_length(mask_form->points);
 
   const gboolean has_bezier_layout = mask_form->uses_bezier_points_layout;
-  const gboolean can_test_nodes = (node_position_cb != NULL) || has_bezier_layout;
+  const gboolean can_test_nodes = (!IS_NULL_PTR(node_position_cb)) || has_bezier_layout;
   const gboolean has_selected_node = (node_count > 0) && can_test_nodes
                                      && (mask_gui->group_selected == form_index)
                                      && selected_node >= 0 && selected_node < node_count;

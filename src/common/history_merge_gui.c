@@ -339,8 +339,8 @@ static gboolean _hm_history_masks_match(const dt_dev_history_item_t *a, const dt
 {
   if(!a || !b) return FALSE;
 
-  const gboolean a_has_forms = (a->forms != NULL);
-  const gboolean b_has_forms = (b->forms != NULL);
+  const gboolean a_has_forms = (!IS_NULL_PTR(a->forms));
+  const gboolean b_has_forms = (!IS_NULL_PTR(b->forms));
   if(a_has_forms != b_has_forms) return FALSE;
 
   const int a_mask_id = a->blend_params ? a->blend_params->mask_id : 0;

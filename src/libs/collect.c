@@ -423,7 +423,7 @@ static void _lib_collect_update_params(dt_lib_collect_t *d)
     /* get string */
     snprintf(confname, sizeof(confname), "plugins/lighttable/collect/string%1d", i);
     const char *string = dt_conf_get_string_const(confname);
-    if(string != NULL) g_strlcpy(p->rule[i].string, string, PARAM_STRING_SIZE);
+    if(!IS_NULL_PTR(string)) g_strlcpy(p->rule[i].string, string, PARAM_STRING_SIZE);
     // fprintf(stdout,"[%i] %d,%d,%s\n",i, p->rule[i].item, p->rule[i].mode,  p->rule[i].string);
   }
 
@@ -514,7 +514,7 @@ static void view_popup_menu_onSearchFilmroll(GtkWidget *menuitem, gpointer userd
           _("search filmroll"), GTK_WINDOW(win), GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER,
           _("_open"), _("_cancel"));
 
-  if(tree_path != NULL)
+  if(!IS_NULL_PTR(tree_path))
     gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(filechooser), tree_path);
   else
     goto error;
@@ -1662,7 +1662,7 @@ static void tree_view(dt_lib_collect_rule_t *dr)
         else
           tokens = g_strsplit(name, "|", -1);
 
-        if(tokens != NULL)
+        if(!IS_NULL_PTR(tokens))
         {
           // find the number of common parts at the beginning of tokens and last_tokens
           GtkTreeIter parent = last_parent;

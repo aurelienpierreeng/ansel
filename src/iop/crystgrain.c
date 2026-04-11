@@ -1148,7 +1148,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
                                               &dev_profile_info, &dev_profile_lut);
     if(err != CL_SUCCESS) goto error;
 
-    const int use_work_profile = (work_profile != NULL) ? 1 : 0;
+    const int use_work_profile = (!IS_NULL_PTR(work_profile)) ? 1 : 0;
     dt_opencl_set_kernel_arg(devid, gd->kernel_extract_luminance, 0, sizeof(cl_mem), &dev_in);
     dt_opencl_set_kernel_arg(devid, gd->kernel_extract_luminance, 1, sizeof(cl_mem), &dev_image);
     dt_opencl_set_kernel_arg(devid, gd->kernel_extract_luminance, 2, sizeof(int), &width);

@@ -326,7 +326,7 @@ gboolean dt_dev_pixelpipe_cache_flush_host_pinned_image(dt_dev_pixelpipe_cache_t
  * @details
  * This is the cache-owned buffer acquisition helper used by the OpenCL pixelpipe backend:
  *
- * - if `host_ptr != NULL`, it may reuse or allocate a pinned `CL_MEM_USE_HOST_PTR` image,
+ * - if `!IS_NULL_PTR(host_ptr)`, it may reuse or allocate a pinned `CL_MEM_USE_HOST_PTR` image,
  * - if `IS_NULL_PTR(host_ptr)`, it may reuse or allocate a device-only scratch image,
  * - allocation failures may trigger a cache-side `cl_mem` flush and one retry.
  *
@@ -519,7 +519,7 @@ void dt_pixelpipe_cache_free_align_cache(dt_dev_pixelpipe_cache_t *cache, void *
  * Callers that need lifetime guarantees must retain the entry explicitly with
  * `dt_dev_pixelpipe_cache_ref_count_entry()` and/or `dt_dev_pixelpipe_cache_rdlock_entry()`.
  *
- * If `cl_mem_output != NULL`, the lookup becomes authoritative for exact-hit consumers:
+ * If `!IS_NULL_PTR(cl_mem_output)`, the lookup becomes authoritative for exact-hit consumers:
  * - write-locked / auto-destroy entries are rejected,
  * - host data is restored from cached device state when possible,
  * - device data is restored into `cl_mem_output` when requested,

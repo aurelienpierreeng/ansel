@@ -776,7 +776,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     = dt_ioppr_add_profile_info_to_list(self->dev, colorspace, "", INTENT_PERCEPTUAL);
   const dt_iop_order_iccprofile_info_t *const work_profile
     = dt_ioppr_get_iop_work_profile_info(self, self->dev->iop);
-  gboolean transform = (work_profile != NULL && lut_profile != NULL) ? TRUE : FALSE;
+  gboolean transform = (!IS_NULL_PTR(work_profile) && !IS_NULL_PTR(lut_profile)) ? TRUE : FALSE;
   cl_mem clut_cl = NULL;
   const int devid = pipe->devid;
   const int width = roi_in->width;
@@ -856,7 +856,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     = dt_ioppr_add_profile_info_to_list(self->dev, colorspace, "", INTENT_PERCEPTUAL);
   const dt_iop_order_iccprofile_info_t *const work_profile
     = dt_ioppr_get_iop_work_profile_info(self, self->dev->iop);
-  const gboolean transform = (work_profile != NULL && lut_profile != NULL) ? TRUE : FALSE;
+  const gboolean transform = (!IS_NULL_PTR(work_profile) && !IS_NULL_PTR(lut_profile)) ? TRUE : FALSE;
   if (clut)
   {
     if (transform)

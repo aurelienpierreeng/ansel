@@ -496,7 +496,7 @@ static gchar *_create_tooltip_text(const dt_dev_history_item_t *hitem)
       gboolean first = TRUE;
 
       for(const dt_iop_gui_blendif_channel_t *b = bd ? bd->channel : NULL;
-          b && b->label != NULL;
+          b && !IS_NULL_PTR(b->label);
           b++)
       {
         const dt_develop_blendif_channels_t ch = b->param_channels[in_out];

@@ -576,7 +576,7 @@ static void import_clicked(GtkWidget *w, gpointer user_data)
       gchar *bname = NULL;
       xmlDoc *document = xmlReadFile((char*)filename->data, NULL, XML_PARSE_NOBLANKS);
       xmlNode *root = NULL;
-      if(document != NULL)
+      if(!IS_NULL_PTR(document))
         root = xmlDocGetRootElement(document);
 
       if(IS_NULL_PTR(document) || IS_NULL_PTR(root) || xmlStrcmp(root->name, BAD_CAST "darktable_style"))

@@ -664,7 +664,7 @@ static gboolean _dt_dev_mipmap_prefetch_full(dt_develop_t *dev, const int32_t im
   dt_mipmap_buffer_t buf;
   dt_mipmap_cache_get(darktable.mipmap_cache, &buf, imgid, DT_MIPMAP_FULL, DT_MIPMAP_BLOCKING, 'r');
 
-  const gboolean ok = (buf.buf != NULL) && buf.width != 0 && buf.height != 0;
+  const gboolean ok = (!IS_NULL_PTR(buf.buf)) && buf.width != 0 && buf.height != 0;
 
   if(dev->gui_attached)
   {
@@ -1130,7 +1130,7 @@ void dt_dev_module_remove(dt_develop_t *dev, dt_iop_module_t *module)
     int removed_before_end = 0;
     int history_pos = 0;
     GList *elem = dev->history;
-    while(elem != NULL)
+    while(!IS_NULL_PTR(elem))
     {
       GList *next = g_list_next(elem);
       dt_dev_history_item_t *hist = (dt_dev_history_item_t *)(elem->data);

@@ -408,7 +408,7 @@ static gboolean _osx_quit_callback(GtkosxApplication *OSXapp, gpointer user_data
 {
   GList *windows, *window;
   windows = gtk_window_list_toplevels();
-  for(window = windows; window != NULL; window = g_list_next(window))
+  for(window = windows; !IS_NULL_PTR(window); window = g_list_next(window))
     if(gtk_window_get_modal(GTK_WINDOW(window->data)) && gtk_widget_get_visible(GTK_WIDGET(window->data)))
       break;
   if(IS_NULL_PTR(window)) dt_control_quit();
@@ -1117,7 +1117,7 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   dt_print(DT_DEBUG_INPUT, "[input device] stylus-capable devices reported by seat: %d\n", g_list_length(stylus_devices));
   dt_print(DT_DEBUG_INPUT, "[input device] manager fallback devices: slave=%d floating=%d merged_total=%d\n",
            manager_slave_count, manager_floating_count, g_list_length(input_devices));
-  for(GList *l = stylus_devices; l != NULL; l = g_list_next(l))
+  for(GList *l = stylus_devices; !IS_NULL_PTR(l); l = g_list_next(l))
   {
     GdkDevice *device = (GdkDevice *)l->data;
     if(!device) continue;
@@ -1130,7 +1130,7 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
     g_list_free(stylus_devices);
     stylus_devices = NULL;
   }
-  for(GList *l = input_devices; l != NULL; l = g_list_next(l))
+  for(GList *l = input_devices; !IS_NULL_PTR(l); l = g_list_next(l))
   {
     GdkDevice *device = (GdkDevice *)l->data;
     if(!device) continue;
@@ -2439,7 +2439,7 @@ gboolean dt_gui_container_has_children(GtkContainer *container)
 {
   g_return_val_if_fail(GTK_IS_CONTAINER(container), FALSE);
   GList *children = gtk_container_get_children(container);
-  gboolean has_children = children != NULL;
+  gboolean has_children = !IS_NULL_PTR(children);
   g_list_free(children);
   children = NULL;
   return has_children;

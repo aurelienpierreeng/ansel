@@ -53,7 +53,7 @@ static gboolean _supported_image(const gchar *filename)
   char *ext = g_strrstr(filename, ".");
   if(!ext) return FALSE;
   ext++;
-  for(const char **i = extensions_whitelist; *i != NULL; i++)
+  for(const char **i = extensions_whitelist; !IS_NULL_PTR(*i); i++)
     if(!g_ascii_strncasecmp(ext, *i, strlen(*i)))
     {
       supported = TRUE;

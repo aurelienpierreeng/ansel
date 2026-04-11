@@ -54,7 +54,7 @@ static void _button_init(GtkDarktableButton *button)
 
 static gboolean _button_draw(GtkWidget *widget, cairo_t *cr)
 {
-  g_return_val_if_fail(widget != NULL, FALSE);
+  g_return_val_if_fail(!IS_NULL_PTR(widget), FALSE);
   g_return_val_if_fail(DTGTK_IS_BUTTON(widget), FALSE);
 
   GtkStateFlags state = gtk_widget_get_state_flags(widget);
@@ -161,7 +161,7 @@ GType dtgtk_button_get_type()
 
 void dtgtk_button_set_paint(GtkDarktableButton *button, DTGTKCairoPaintIconFunc paint, gint paintflags, void *paintdata)
 {
-  g_return_if_fail(button != NULL);
+  g_return_if_fail(!IS_NULL_PTR(button));
   button->icon = paint;
   button->icon_flags = paintflags;
   button->icon_data = paintdata;
@@ -169,7 +169,7 @@ void dtgtk_button_set_paint(GtkDarktableButton *button, DTGTKCairoPaintIconFunc 
 
 void dtgtk_button_set_active(GtkDarktableButton *button, gboolean active)
 {
-  g_return_if_fail(button != NULL);
+  g_return_if_fail(!IS_NULL_PTR(button));
   if(active)
     button->icon_flags |= CPF_ACTIVE;
   else
@@ -178,7 +178,7 @@ void dtgtk_button_set_active(GtkDarktableButton *button, gboolean active)
 
 gboolean dtgtk_button_get_active(GtkDarktableButton *button)
 {
-  g_return_val_if_fail(button != NULL, FALSE);
+  g_return_val_if_fail(!IS_NULL_PTR(button), FALSE);
   return button->icon_flags & CPF_ACTIVE;
 }
 

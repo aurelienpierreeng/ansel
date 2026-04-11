@@ -1821,7 +1821,7 @@ gboolean dt_ioppr_check_can_move_before_iop(GList *iop_list, dt_iop_module_t *mo
         dt_iop_module_t *mod = (dt_iop_module_t *)modules->data;
 
         // we reach the module next to module_next, everything is OK
-        if(mod2 != NULL)
+        if(!IS_NULL_PTR(mod2))
         {
           mod1 = mod;
           break;
@@ -2260,8 +2260,8 @@ int dt_ioppr_check_iop_order(dt_develop_t *dev, const int32_t imgid, const char 
 
 void *dt_ioppr_serialize_iop_order_list(GList *iop_order_list, size_t *size)
 {
-  g_return_val_if_fail(iop_order_list != NULL, NULL);
-  g_return_val_if_fail(size != NULL, NULL);
+  g_return_val_if_fail(!IS_NULL_PTR(iop_order_list), NULL);
+  g_return_val_if_fail(!IS_NULL_PTR(size), NULL);
   // compute size of all modules
   *size = 0;
 

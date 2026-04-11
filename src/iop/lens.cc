@@ -910,14 +910,14 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   dt_opencl_release_mem_object(dev_tmpbuf);
   dt_opencl_release_mem_object(dev_tmp);
   dt_pixelpipe_cache_free_align(tmpbuf);
-  if(modifier != NULL) delete modifier;
+  if(!IS_NULL_PTR(modifier)) delete modifier;
   return TRUE;
 
 error:
   dt_opencl_release_mem_object(dev_tmp);
   dt_opencl_release_mem_object(dev_tmpbuf);
   dt_pixelpipe_cache_free_align(tmpbuf);
-  if(modifier != NULL) delete modifier;
+  if(!IS_NULL_PTR(modifier)) delete modifier;
   dt_print(DT_DEBUG_OPENCL, "[opencl_lens] couldn't enqueue kernel! %d\n", err);
   return FALSE;
 }

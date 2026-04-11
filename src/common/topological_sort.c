@@ -154,7 +154,7 @@ int flatten_nodes(GList *input_nodes, GList **out_nodes)
 /*
   Constraint semantics used here (common with this structure):
     - Each dt_digraph_node_constraints_t is stored in node->constraints, so "self" is the owner.
-    - If c->previous != NULL: edge (c->previous -> self)
+    - If !IS_NULL_PTR(c->previous): edge (c->previous -> self)
     - If c->next     != NULL: edge (self -> c->next)
 
   Returns 0 on success, 1 on cycle / unsatisfiable.

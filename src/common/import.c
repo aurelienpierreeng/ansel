@@ -370,11 +370,11 @@ static GdkPixbuf *_import_get_thumbnail(const gchar *filename, const int width, 
        * decoding the real image through Ansel instead of relying on the desktop pixbuf stack.
        * RAWs stay excluded here because the import dialog only wants a lightweight fallback. */
       if(dt_imageio_open(img, filename, &mipbuf) == DT_IMAGEIO_OK
-         && mipbuf.buf != NULL && mipbuf.width > 0 && mipbuf.height > 0)
+         && !IS_NULL_PTR(mipbuf.buf) && mipbuf.width > 0 && mipbuf.height > 0)
       {
         const size_t pixels = (size_t)mipbuf.width * mipbuf.height;
         uint8_t *rgb = dt_pixelpipe_cache_alloc_align_cache(pixels * 3 * sizeof(uint8_t), 0);
-        if(rgb != NULL)
+        if(!IS_NULL_PTR(rgb))
         {
           const float *const in = (const float *const)mipbuf.buf;
           __OMP_PARALLEL_FOR__()
@@ -388,7 +388,7 @@ static GdkPixbuf *_import_get_thumbnail(const gchar *filename, const int width, 
 
           GdkPixbuf *tmp = gdk_pixbuf_new_from_data(rgb, 0, FALSE, 8, mipbuf.width, mipbuf.height,
                                                     mipbuf.width * 3 * sizeof(uint8_t), NULL, NULL);
-          if(tmp != NULL)
+          if(!IS_NULL_PTR(tmp))
           {
             const float ratio = (float)mipbuf.height / (float)mipbuf.width;
             pixbuf = gdk_pixbuf_scale_simple(tmp, roundf((float)width / ratio), height, GDK_INTERP_HYPER);
@@ -599,7 +599,7 @@ static void update_preview_cb(GtkFileChooser *file_chooser, gpointer userdata)
   GFile *in = g_vfs_get_file_for_uri(vfs, (const char *)uri);
   char *filename = g_file_get_path(in);
 
-  gboolean have_file = (filename != NULL) && g_file_test(filename, G_FILE_TEST_IS_REGULAR);
+  gboolean have_file = (!IS_NULL_PTR(filename)) && g_file_test(filename, G_FILE_TEST_IS_REGULAR);
   gtk_file_chooser_set_preview_widget_active(file_chooser, have_file);
 
   dt_image_t *img = NULL;

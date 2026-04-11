@@ -938,7 +938,7 @@ void dt_develop_blendif_rgb_jzczhz_blend(const struct dt_dev_pixelpipe_t *pipe,
     _blend_row_func *const blend = _choose_blend_func(d->blend_mode);
 
     float *tmp_buffer = dt_pixelpipe_cache_alloc_align_float_cache((size_t)owidth * oheight * DT_BLENDIF_RGB_CH, 0);
-    if (tmp_buffer != NULL)
+    if (!IS_NULL_PTR(tmp_buffer))
     {
       dt_iop_image_copy(tmp_buffer, b, (size_t)owidth * oheight * DT_BLENDIF_RGB_CH);
       if((d->blend_mode & DEVELOP_BLEND_REVERSE) == DEVELOP_BLEND_REVERSE)

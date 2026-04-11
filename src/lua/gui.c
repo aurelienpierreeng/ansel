@@ -328,7 +328,7 @@ static void _on_mouse_over_image_changed(gpointer instance, gpointer user_data)
 int dt_lua_init_gui(lua_State *L)
 {
 
-  if(darktable.gui != NULL)
+  if(!IS_NULL_PTR(darktable.gui))
   {
     /* images */
     dt_lua_push_darktable_lib(L);

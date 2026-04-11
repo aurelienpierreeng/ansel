@@ -625,8 +625,8 @@ static void _brush_points_recurs(float *p1, float *p2, double tmin, double tmax,
                                  float *rborder, float *rpayload, dt_masks_dynbuf_t *dpoints, dt_masks_dynbuf_t *dborder,
                                  dt_masks_dynbuf_t *dpayload, const int pixel_threshold)
 {
-  const gboolean withborder = (dborder != NULL);
-  const gboolean withpayload = (dpayload != NULL);
+  const gboolean withborder = (!IS_NULL_PTR(dborder));
+  const gboolean withpayload = (!IS_NULL_PTR(dpayload));
 
   // we calculate points if needed
   if(isnan(points_min[0]))

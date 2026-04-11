@@ -1297,7 +1297,7 @@ static int _upgrade_library_schema_step(dt_database_t *db, int version)
       if(imgid != current_imgid || !has_row)
       {
         // new image, let's handle it
-        if(item_list != NULL)
+        if(!IS_NULL_PTR(item_list))
         {
           // we keep legacy, everything else is migrated to v3.0
           const dt_iop_order_t new_order_version = current_order_version == 2 ? DT_IOP_ORDER_LEGACY : DT_IOP_ORDER_V30;
@@ -2658,7 +2658,7 @@ gboolean dt_database_show_error(const dt_database_t *db)
     snprintf(lck_pathname, sizeof(lck_pathname), "%s.lock", db->error_dbfilename);
     char *lck_dirname = g_strdup(lck_pathname);
     char *slash_pos = g_strrstr(lck_dirname, "/");
-    if(slash_pos != NULL) *slash_pos = '\0';
+    if(!IS_NULL_PTR(slash_pos)) *slash_pos = '\0';
     // clang-format off
     char *label_text = g_markup_printf_escaped(
         _("\n"

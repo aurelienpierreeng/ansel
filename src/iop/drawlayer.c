@@ -743,7 +743,7 @@ static gboolean _drawlayer_acquire_source_image(const int devid, const float *la
   {
     source->mem
         = dt_opencl_copy_host_to_device(devid, (void *)layer_pixels, source_w, source_h, 4 * sizeof(float));
-    return source->mem != NULL;
+    return !IS_NULL_PTR(source->mem);
   }
 
   /* Realtime redraws keep revisiting the same host-backed layer cache. Prefer a
@@ -797,7 +797,7 @@ static gboolean _drawlayer_acquire_source_image(const int devid, const float *la
   }
 
   source->mem = dt_opencl_copy_host_to_device(devid, (void *)layer_pixels, source_w, source_h, 4 * sizeof(float));
-  return source->mem != NULL;
+  return !IS_NULL_PTR(source->mem);
 }
 
 static int _drawlayer_copy_or_resample_layer_roi(const int devid, cl_mem dev_source_rgba, cl_mem dev_layer_rgba,
@@ -843,7 +843,7 @@ static gboolean _drawlayer_acquire_layer_image(const int devid, dt_pixel_cache_e
     layer->mem = dt_dev_pixelpipe_cache_get_cl_buffer(devid, NULL, target_roi, 4 * sizeof(float), NULL,
                                                       "drawlayer layer", resolved_entry, FALSE, TRUE, NULL,
                                                       dev_source_rgba);
-    layer->is_cached_device = (layer->mem != NULL);
+    layer->is_cached_device = (!IS_NULL_PTR(layer->mem));
   }
 
   if(!layer->mem)
@@ -907,7 +907,7 @@ static int _blend_layer_over_input_cl(const int devid, const int kernel_premult_
   {
     resolved_entry
         = dt_dev_pixelpipe_cache_ref_entry_for_host_ptr(darktable.pixelpipe_cache, (void *)layer_pixels);
-    resolved_entry_ref = (resolved_entry != NULL);
+    resolved_entry_ref = (!IS_NULL_PTR(resolved_entry));
   }
 
   drawlayer_cl_image_handle_t source = { 0 };
@@ -3826,7 +3826,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   const gint64 process_t0 = g_get_monotonic_time();
   const dt_iop_drawlayer_global_data_t *global = (const dt_iop_drawlayer_global_data_t *)self->global_data;
   dt_iop_drawlayer_gui_data_t *gui = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
-  const gboolean have_gui = (gui != NULL);
+  const gboolean have_gui = (!IS_NULL_PTR(gui));
   {
     const gboolean display_pipe = have_gui && (pipe == self->dev->pipe || pipe == self->dev->preview_pipe);
     dt_iop_drawlayer_data_t *data = (dt_iop_drawlayer_data_t *)piece->data;
@@ -3939,7 +3939,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_drawlayer_gui_data_t *gui = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
-  const gboolean have_gui = (gui != NULL);
+  const gboolean have_gui = (!IS_NULL_PTR(gui));
   {
     const gboolean display_pipe = have_gui && (pipe == self->dev->pipe || pipe == self->dev->preview_pipe);
     dt_iop_drawlayer_data_t *data = (dt_iop_drawlayer_data_t *)piece->data;

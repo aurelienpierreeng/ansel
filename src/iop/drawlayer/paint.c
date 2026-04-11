@@ -195,7 +195,7 @@ static gboolean _ensure_raw_inputs(dt_drawlayer_paint_stroke_t *state)
   if(!state) return FALSE;
   if(state->raw_inputs) return TRUE;
   state->raw_inputs = g_array_new(FALSE, FALSE, sizeof(dt_drawlayer_paint_raw_input_t));
-  return state->raw_inputs != NULL;
+  return !IS_NULL_PTR(state->raw_inputs);
 }
 
 /** @brief Lazily allocate pending-dab batch storage for one stroke state. */
@@ -204,7 +204,7 @@ static gboolean _ensure_pending_dabs(dt_drawlayer_paint_stroke_t *state)
   if(!state) return FALSE;
   if(state->pending_dabs) return TRUE;
   state->pending_dabs = g_array_new(FALSE, FALSE, sizeof(dt_drawlayer_brush_dab_t));
-  return state->pending_dabs != NULL;
+  return !IS_NULL_PTR(state->pending_dabs);
 }
 
 /** @brief Sample the current raw segment at parametric position `t`. */

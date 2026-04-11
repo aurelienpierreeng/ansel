@@ -851,7 +851,7 @@ static void dt_iop_levels_move_handle(dt_iop_module_t *self, int handle_move, fl
 
   if(handle_move != 1) levels[1] = levels[0] + (drag_start_percentage * (levels[2] - levels[0]));
 
-  if(c->activeToggleButton != NULL) gtk_toggle_button_set_active(c->activeToggleButton, FALSE);
+  if(!IS_NULL_PTR(c->activeToggleButton)) gtk_toggle_button_set_active(c->activeToggleButton, FALSE);
   c->last_picked_color = -1;
 }
 
@@ -995,7 +995,7 @@ static void dt_iop_levels_autoadjust_callback(GtkRange *range, dt_iop_module_t *
 
   dt_iop_levels_compute_levels_manual(self->histogram, p->levels);
 
-  if(c->activeToggleButton != NULL) gtk_toggle_button_set_active(c->activeToggleButton, FALSE);
+  if(!IS_NULL_PTR(c->activeToggleButton)) gtk_toggle_button_set_active(c->activeToggleButton, FALSE);
   c->last_picked_color = -1;
 
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);

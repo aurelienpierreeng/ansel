@@ -911,11 +911,11 @@ static image_double ll_angle( image_double in, double threshold,
   for(i=n_bins-1; i>0 && range_l_s[i]==NULL; i--);
   start = range_l_s[i];
   end = range_l_e[i];
-  if( start != NULL )
+  if( !IS_NULL_PTR(start) )
     while(i>0)
       {
         --i;
-        if( range_l_s[i] != NULL )
+        if( !IS_NULL_PTR(range_l_s[i]) )
           {
             end->next = range_l_s[i];
             end = range_l_e[i];
@@ -2161,7 +2161,7 @@ static double * LineSegmentDetection( int * n_out,
 
 
   /* initialize some structures */
-  if( reg_img != NULL && reg_x != NULL && reg_y != NULL ) /* save region data */
+  if( !IS_NULL_PTR(reg_img) && !IS_NULL_PTR(reg_x) && !IS_NULL_PTR(reg_y) ) /* save region data */
     region = new_image_int_ini(angles->xsize,angles->ysize,0);
   used = new_image_char_ini(xsize,ysize,NOTUSED);
   reg = (struct point *) calloc( (size_t) (xsize*ysize), sizeof(struct point) );
@@ -2169,7 +2169,7 @@ static double * LineSegmentDetection( int * n_out,
 
 
   /* search for line segments */
-  for(; list_p != NULL; list_p = list_p->next )
+  for(; !IS_NULL_PTR(list_p); list_p = list_p->next )
     if( used->data[ list_p->x + list_p->y * used->xsize ] == NOTUSED &&
         angles->data[ list_p->x + list_p->y * angles->xsize ] != NOTDEF )
        /* there is no risk of double comparison problems here
@@ -2225,7 +2225,7 @@ static double * LineSegmentDetection( int * n_out,
                          rec.width, rec.p, log_nfa );
 
         /* add region number to 'region' image if needed */
-        if( region != NULL )
+        if( !IS_NULL_PTR(region) )
           for(i=0; i<reg_size; i++)
             region->data[ reg[i].x + reg[i].y * region->xsize ] = ls_count;
       }
@@ -2242,7 +2242,7 @@ static double * LineSegmentDetection( int * n_out,
   dt_free(mem_p);
 
   /* return the result */
-  if( reg_img != NULL && reg_x != NULL && reg_y != NULL )
+  if( !IS_NULL_PTR(reg_img) && !IS_NULL_PTR(reg_x) && !IS_NULL_PTR(reg_y) )
     {
       if( IS_NULL_PTR(region) ) error("'region' should be a valid image.");
       *reg_img = region->data;

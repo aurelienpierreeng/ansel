@@ -43,7 +43,7 @@ static void _icon_init(GtkDarktableIcon *icon)
 
 static gboolean _icon_draw(GtkWidget *widget, cairo_t *cr)
 {
-  g_return_val_if_fail(widget != NULL, FALSE);
+  g_return_val_if_fail(!IS_NULL_PTR(widget), FALSE);
   g_return_val_if_fail(DTGTK_IS_ICON(widget), FALSE);
 
   /* begin cairo drawing */
@@ -98,7 +98,7 @@ GType dtgtk_icon_get_type()
 
 void dtgtk_icon_set_paint(GtkWidget *icon, DTGTKCairoPaintIconFunc paint, gint paintflags, void *paintdata)
 {
-  g_return_if_fail(icon != NULL);
+  g_return_if_fail(!IS_NULL_PTR(icon));
   DTGTK_ICON(icon)->icon = paint;
   DTGTK_ICON(icon)->icon_flags = paintflags;
   DTGTK_ICON(icon)->icon_data = paintdata;

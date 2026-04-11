@@ -231,7 +231,7 @@ static size_t _lib_location_curl_write_data(void *buffer, size_t size, size_t nm
   dt_lib_location_t *lib = (dt_lib_location_t *)userp;
 
   char *newdata = g_malloc0(lib->response_size + nmemb + 1);
-  if(lib->response != NULL) memcpy(newdata, lib->response, lib->response_size);
+  if(!IS_NULL_PTR(lib->response)) memcpy(newdata, lib->response, lib->response_size);
   memcpy(newdata + lib->response_size, buffer, nmemb);
   dt_free(lib->response);
   lib->response = newdata;

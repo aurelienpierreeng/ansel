@@ -111,7 +111,7 @@ gchar *dt_build_filename_from_pattern(const char *const filename, const int inde
  */
 gboolean _file_exist(const char *dest_file_path)
 {
-  return dest_file_path != NULL && dest_file_path[0] && g_file_test(dest_file_path, G_FILE_TEST_EXISTS);
+  return !IS_NULL_PTR(dest_file_path) && dest_file_path[0] && g_file_test(dest_file_path, G_FILE_TEST_EXISTS);
 }
 
 /**
@@ -308,7 +308,7 @@ int _import_copy_file(const char *const filename, const int index, dt_control_im
 void _write_xmp_id(const char *filename, int32_t imgid)
 {
   GList *res = dt_metadata_get(imgid, "Xmp.darktable.image_id", NULL);
-  if(res != NULL)
+  if(!IS_NULL_PTR(res))
   {
     // Image ID is already set in metadata, don't overwrite it
     g_list_free_full(res, dt_free_gpointer);

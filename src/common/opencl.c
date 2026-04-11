@@ -1003,8 +1003,8 @@ void dt_opencl_init(dt_opencl_t *cl, const gboolean exclude_opencl, const gboole
 
     // only check successful malloc in debug mode; darktable will crash anyhow sooner or later if mallocs that
     // small would fail
-    assert(cl->dev_priority_image != NULL && cl->dev_priority_preview != NULL
-           && cl->dev_priority_export != NULL && cl->dev_priority_thumbnail != NULL);
+    assert(!IS_NULL_PTR(cl->dev_priority_image) && !IS_NULL_PTR(cl->dev_priority_preview)
+           && !IS_NULL_PTR(cl->dev_priority_export) && !IS_NULL_PTR(cl->dev_priority_thumbnail));
 
     dt_print_nts(DT_DEBUG_OPENCL, "[opencl_init] OpenCL successfully initialized.\n");
     dt_print_nts(DT_DEBUG_OPENCL, "[opencl_init] here are the internal numbers and names of OpenCL devices available to Ansel:\n");
@@ -1277,7 +1277,7 @@ static void dt_opencl_priority_parse(dt_opencl_t *cl, char *configstr, int *prio
   gchar **tokens = g_strsplit(configstr, ",", 0);
   gchar **tokens_ptr = tokens;
 
-  while(tokens != NULL && *tokens_ptr != NULL && count < devs + 1 && full[0] != -1)
+  while(!IS_NULL_PTR(tokens) && !IS_NULL_PTR(*tokens_ptr) && count < devs + 1 && full[0] != -1)
   {
     gchar *str = *tokens_ptr;
     int not = 0;
@@ -2635,7 +2635,7 @@ cl_event *dt_opencl_events_get_slot(const int devid, const char *tag)
   {
     (*lostevents)++;
     (*totallost)++;
-    if(tag != NULL)
+    if(!IS_NULL_PTR(tag))
     {
       g_strlcpy((*eventtags)[*numevents - 1].tag, tag, DT_OPENCL_EVENTNAMELENGTH);
     }
@@ -2678,7 +2678,7 @@ cl_event *dt_opencl_events_get_slot(const int devid, const char *tag)
   // init next event slot and return it
   (*numevents)++;
   memcpy((*eventlist) + *numevents - 1, zeroevent, sizeof(cl_event));
-  if(tag != NULL)
+  if(!IS_NULL_PTR(tag))
   {
     g_strlcpy((*eventtags)[*numevents - 1].tag, tag, DT_OPENCL_EVENTNAMELENGTH);
   }

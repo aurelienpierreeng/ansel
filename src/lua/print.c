@@ -26,7 +26,7 @@
 
 static int lua_print(lua_State *L)
 {
-  const int init_gui = (darktable.gui != NULL);
+  const int init_gui = (!IS_NULL_PTR(darktable.gui));
   if(init_gui)
     dt_control_log("%s", luaL_checkstring(L, -1));
   else
@@ -38,7 +38,7 @@ static int lua_print(lua_State *L)
 static int lua_print_toast(lua_State *L)
 {
 
-  const int init_gui = (darktable.gui != NULL);
+  const int init_gui = (!IS_NULL_PTR(darktable.gui));
   if(init_gui)
     dt_toast_log("%s", luaL_checkstring(L, -1));
   else
@@ -50,7 +50,7 @@ static int lua_print_toast(lua_State *L)
 static int lua_print_hinter(lua_State *L)
 {
 
-  const int init_gui = (darktable.gui != NULL);
+  const int init_gui = (!IS_NULL_PTR(darktable.gui));
   if(init_gui)
   {
 

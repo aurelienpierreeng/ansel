@@ -1378,7 +1378,7 @@ static int detail_enhance(const float *const in, float *const out, const int wid
   // bilateral grid detail enhancement
   dt_bilateral_t *b = dt_bilateral_init(width, height, sigma_s, sigma_r);
 
-  if(b != NULL)
+  if(!IS_NULL_PTR(b))
   {
     dt_bilateral_splat(b, out);
     dt_bilateral_blur(b);
@@ -1601,7 +1601,7 @@ static int _get_structure(dt_iop_module_t *module, dt_iop_ashift_enhance_t enhan
 
   dt_iop_gui_enter_critical_section(module);
   // read buffer data if they are available
-  if(g->buf != NULL)
+  if(!IS_NULL_PTR(g->buf))
   {
     width = g->buf_width;
     height = g->buf_height;
@@ -1611,7 +1611,7 @@ static int _get_structure(dt_iop_module_t *module, dt_iop_ashift_enhance_t enhan
 
     // create a temporary buffer to hold image data
     buffer = malloc(sizeof(float) * 4 * (size_t)width * height);
-    if(buffer != NULL)
+    if(!IS_NULL_PTR(buffer))
       dt_iop_image_copy_by_size(buffer, g->buf, width, height, 4);
   }
   dt_iop_gui_leave_critical_section(module);
@@ -2997,7 +2997,7 @@ static gboolean _sync_private_buffer_from_preview_cache(dt_iop_module_t *self,
   dt_iop_gui_leave_critical_section(self);
 
   dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
-  return g->buf != NULL;
+  return !IS_NULL_PTR(g->buf);
 }
 
 static uint64_t _current_preview_input_hash(dt_iop_module_t *self)

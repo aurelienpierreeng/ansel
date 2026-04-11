@@ -51,14 +51,14 @@ const char *get_lang()
   int lang_index = 0;
   gboolean is_language_supported = FALSE;
 
-  if(darktable.l10n != NULL)
+  if(!IS_NULL_PTR(darktable.l10n))
   {
     dt_l10n_language_t *language = NULL;
 
     if(darktable.l10n->selected != -1)
         language = (dt_l10n_language_t *)g_list_nth(darktable.l10n->languages, darktable.l10n->selected)->data;
 
-    if (language != NULL)
+    if (!IS_NULL_PTR(language))
       lang = language->code;
 
     while(supported_languages[lang_index])

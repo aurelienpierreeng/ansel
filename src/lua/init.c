@@ -122,7 +122,7 @@ static int run_early_script(lua_State* L)
   char *luarc = g_build_filename(basedir, "luarc", NULL);
   dt_lua_check_print_error(L, luaL_dofile(L, luarc));
   dt_free(luarc);
-  if(darktable.gui != NULL)
+  if(!IS_NULL_PTR(darktable.gui))
   {
     // run user init script
     dt_loc_get_user_config_dir(basedir, sizeof(basedir));

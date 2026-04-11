@@ -90,7 +90,7 @@ static int expandable_member(lua_State *L)
 static int on_screen_member(lua_State *L)
 {
   dt_lib_module_t *module = *(dt_lib_module_t **)lua_touserdata(L, 1);
-  lua_pushboolean(L, module->widget != NULL);
+  lua_pushboolean(L, !IS_NULL_PTR(module->widget));
   return 1;
 }
 

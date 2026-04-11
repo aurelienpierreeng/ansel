@@ -423,7 +423,7 @@ static void dt_strlcpy_to_utf8(char *dest, size_t dest_max, Exiv2::ExifData::con
   std::string str = pos->print(&exifData);
 
   char *s = g_locale_to_utf8(str.c_str(), str.length(), NULL, NULL, NULL);
-  if(s != NULL)
+  if(!IS_NULL_PTR(s))
   {
     g_strlcpy(dest, s, dest_max);
     dt_free(s);
@@ -630,7 +630,7 @@ static bool _exif_decode_xmp_data(dt_image_t *img, Exiv2::XmpData &xmpData, int 
       if(strncmp(lens, "lang=", 5) == 0)
       {
         lens = strchr(lens, ' ');
-        if(lens != NULL) lens++;
+        if(!IS_NULL_PTR(lens)) lens++;
       }
       // no need to do any Unicode<->locale conversion, the field is specified as ASCII
       g_strlcpy(img->exif_lens, lens, sizeof(img->exif_lens));
@@ -2117,7 +2117,7 @@ int dt_exif_read_blob(uint8_t **buf, const char *path, const int32_t imgid, cons
       dt_remove_exif_keys(exifData, keys, n_keys);
 
       GList *res = dt_metadata_get(imgid, "Xmp.dc.creator", NULL);
-      if(res != NULL)
+      if(!IS_NULL_PTR(res))
       {
         exifData["Exif.Image.Artist"] = (char *)res->data;
         g_list_free_full(res, dt_free_gpointer);
@@ -2125,7 +2125,7 @@ int dt_exif_read_blob(uint8_t **buf, const char *path, const int32_t imgid, cons
       }
 
       res = dt_metadata_get(imgid, "Xmp.dc.description", NULL);
-      if(res != NULL)
+      if(!IS_NULL_PTR(res))
       {
         char *desc = (char *)res->data;
         if(g_str_is_ascii(desc))
@@ -2143,7 +2143,7 @@ int dt_exif_read_blob(uint8_t **buf, const char *path, const int32_t imgid, cons
 #endif
 
       res = dt_metadata_get(imgid, "Xmp.dc.rights", NULL);
-      if(res != NULL)
+      if(!IS_NULL_PTR(res))
       {
         exifData["Exif.Image.Copyright"] = (char *)res->data;
         g_list_free_full(res, dt_free_gpointer);
@@ -2157,7 +2157,7 @@ int dt_exif_read_blob(uint8_t **buf, const char *path, const int32_t imgid, cons
 #endif
 
       res = dt_metadata_get(imgid, "Xmp.xmp.Rating", NULL);
-      if(res != NULL)
+      if(!IS_NULL_PTR(res))
       {
         const int rating = GPOINTER_TO_INT(res->data) + 1;
         exifData["Exif.Image.Rating"] = rating;

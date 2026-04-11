@@ -903,7 +903,7 @@ dt_colorspaces_color_profile_type_t dt_image_find_best_color_profile(int32_t img
   {
     // Fast path : we already extracted ICC before. ICC profile is already inside.
     color_profile = DT_COLORSPACE_EMBEDDED_ICC;
-    if(output != NULL)
+    if(!IS_NULL_PTR(output))
     {
       *output = dt_colorspaces_get_rgb_profile_from_mem(img->profile, img->profile_size);
       *new_profile = TRUE;
@@ -915,7 +915,7 @@ dt_colorspaces_color_profile_type_t dt_image_find_best_color_profile(int32_t img
   {
     // DNG and others : matrix inside EXIF
     color_profile = DT_COLORSPACE_EMBEDDED_MATRIX;
-    if(output != NULL)
+    if(!IS_NULL_PTR(output))
     {
       *output = dt_colorspaces_create_xyzimatrix_profile((float(*)[3])img->d65_color_matrix);
       *new_profile = TRUE;
@@ -926,7 +926,7 @@ dt_colorspaces_color_profile_type_t dt_image_find_best_color_profile(int32_t img
   {
     // Monochrome RAW - colorspace doesn't matter
     color_profile = DT_COLORSPACE_LIN_REC709;
-    if(output != NULL)
+    if(!IS_NULL_PTR(output))
       *output = dt_colorspaces_get_profile(DT_COLORSPACE_LIN_REC709, "", DT_PROFILE_DIRECTION_IN)->profile;
     dt_print(DT_DEBUG_COLORPROFILE, "Monochrome RAW\n");
   }
@@ -934,7 +934,7 @@ dt_colorspaces_color_profile_type_t dt_image_find_best_color_profile(int32_t img
   {
     // Color RAW
     color_profile = DT_COLORSPACE_STANDARD_MATRIX;
-    if(output != NULL)
+    if(!IS_NULL_PTR(output))
     {
       *output = dt_colorspaces_create_xyzimatrix_profile((float(*)[3])img->adobe_XYZ_to_CAM);
       *new_profile = TRUE;
@@ -945,7 +945,7 @@ dt_colorspaces_color_profile_type_t dt_image_find_best_color_profile(int32_t img
   {
     // 4Bayer images have been pre-converted to rec2020
     color_profile = DT_COLORSPACE_LIN_REC2020;
-    if(output != NULL)
+    if(!IS_NULL_PTR(output))
       *output = dt_colorspaces_get_profile(DT_COLORSPACE_LIN_REC2020, "", DT_PROFILE_DIRECTION_IN)->profile;
     dt_print(DT_DEBUG_COLORPROFILE, "4Bayer RAW\n");
   }
@@ -959,7 +959,7 @@ dt_colorspaces_color_profile_type_t dt_image_find_best_color_profile(int32_t img
   {
     // Images tagged explicitely with Adobe RGB flag
     color_profile = DT_COLORSPACE_ADOBERGB;
-    if(output != NULL)
+    if(!IS_NULL_PTR(output))
       *output = dt_colorspaces_get_profile(DT_COLORSPACE_ADOBERGB, "", DT_PROFILE_DIRECTION_IN)->profile;
     dt_print(DT_DEBUG_COLORPROFILE, "Raster image tagged with Adobe RGB\n");
   }
@@ -968,7 +968,7 @@ dt_colorspaces_color_profile_type_t dt_image_find_best_color_profile(int32_t img
     // PFM have no embedded color profile nor ICC tag, we can't know the color space
     // but we can assume the are linear since it's a floating point format
     color_profile = DT_COLORSPACE_LIN_REC709;
-    if(output != NULL)
+    if(!IS_NULL_PTR(output))
       *output = dt_colorspaces_get_profile(DT_COLORSPACE_LIN_REC709, "", DT_PROFILE_DIRECTION_IN)->profile;
     dt_print(DT_DEBUG_COLORPROFILE, "PFM untagged image\n");
   }
@@ -1034,7 +1034,7 @@ dt_colorspaces_color_profile_type_t dt_image_find_best_color_profile(int32_t img
        && dt_colorspaces_get_rgb_profile_from_mem(img->profile, img->profile_size))
     {
       color_profile = DT_COLORSPACE_EMBEDDED_ICC;
-      if(output != NULL)
+      if(!IS_NULL_PTR(output))
       {
         *output = dt_colorspaces_get_rgb_profile_from_mem(img->profile, img->profile_size);
         *new_profile = TRUE;
@@ -1044,7 +1044,7 @@ dt_colorspaces_color_profile_type_t dt_image_find_best_color_profile(int32_t img
     else if(already_set && img->profile && img->profile_size > 0)
     {
       // This happens when AVIF/HEIF found a basic color profile into CICP fields
-      if(output != NULL)
+      if(!IS_NULL_PTR(output))
         *output = dt_colorspaces_get_profile(color_profile, "", DT_PROFILE_DIRECTION_IN)->profile;
       dt_print(DT_DEBUG_COLORPROFILE, "Embedded ICC (extracted)\n");
     }
@@ -1052,7 +1052,7 @@ dt_colorspaces_color_profile_type_t dt_image_find_best_color_profile(int32_t img
 
   // Handle the fallback to sRGB space
   if(color_profile == DT_COLORSPACE_NONE) color_profile = DT_COLORSPACE_SRGB;
-  if(color_profile == DT_COLORSPACE_SRGB && output != NULL)
+  if(color_profile == DT_COLORSPACE_SRGB && !IS_NULL_PTR(output))
     *output = dt_colorspaces_get_profile(DT_COLORSPACE_SRGB, "", DT_PROFILE_DIRECTION_IN)->profile;
 
 finish:
@@ -2006,7 +2006,7 @@ static void dt_colorspaces_get_display_profile_colord_callback(GObject *source, 
   CdWindow *window = CD_WINDOW(source);
   GError *error = NULL;
   CdProfile *profile = cd_window_get_profile_finish(window, res, &error);
-  if(IS_NULL_PTR(error) && profile != NULL)
+  if(IS_NULL_PTR(error) && !IS_NULL_PTR(profile))
   {
     const gchar *filename = cd_profile_get_filename(profile);
     if(filename)
@@ -2149,7 +2149,7 @@ void dt_colorspaces_set_display_profile(const dt_colorspaces_color_profile_type_
   CMProfileRef prof = NULL;
   if(CGGetOnlineDisplayList(monitor + 1, &ids[0], &total_ids) == kCGErrorSuccess && total_ids == monitor + 1)
     CMGetProfileByAVID(ids[monitor], &prof);
-  if(prof != NULL)
+  if(!IS_NULL_PTR(prof))
   {
     CFDataRef data;
     data = CMProfileCopyICCData(NULL, prof);
@@ -2176,7 +2176,7 @@ void dt_colorspaces_set_display_profile(const dt_colorspaces_color_profile_type_
   monitorInfo.cbSize = sizeof(MONITORINFOEX);
   if(!GetMonitorInfoW(hMonitor,(LPMONITORINFO) &monitorInfo)) { return;} //get monitor info , TODO log error
   HDC hdc = CreateIC(L"MONITOR",monitorInfo.szDevice,NULL,NULL); // get device-info context of the monitor
-  if(hdc != NULL)
+  if(!IS_NULL_PTR(hdc))
   {
     DWORD len = 0;
     GetICMProfile(hdc, &len, NULL);
@@ -2478,7 +2478,7 @@ dt_colorspaces_color_profile_type_t dt_colorspaces_cicp_to_type(const dt_colorsp
       break;
   }
 
-  if(filename != NULL)
+  if(!IS_NULL_PTR(filename))
     dt_print(DT_DEBUG_IMAGEIO, "[colorin] unsupported CICP color profile for `%s': %d/%d/%d\n", filename,
              cicp->color_primaries, cicp->transfer_characteristics, cicp->matrix_coefficients);
 

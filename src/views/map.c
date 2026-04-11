@@ -2824,7 +2824,7 @@ static void _drag_and_drop_received(GtkWidget *widget, GdkDragContext *context, 
   dt_view_t *self = (dt_view_t *)data;
   dt_map_t *lib = (dt_map_t *)self->data;
   gboolean success = FALSE;
-  if(selection_data != NULL && target_type == DND_TARGET_IMGID)
+  if(!IS_NULL_PTR(selection_data) && target_type == DND_TARGET_IMGID)
   {
     const int imgs_nb = gtk_selection_data_get_length(selection_data) / sizeof(uint32_t);
     if(imgs_nb)
@@ -2881,7 +2881,7 @@ static void _view_map_dnd_get_callback(GtkWidget *widget, GdkDragContext *contex
                                        dt_view_t *self)
 {
   dt_map_t *lib = (dt_map_t *)self->data;
-  g_assert(selection_data != NULL);
+  g_assert(!IS_NULL_PTR(selection_data));
   switch(target_type)
   {
     case DND_TARGET_IMGID:

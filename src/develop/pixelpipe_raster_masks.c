@@ -33,8 +33,8 @@ static gboolean _dt_dev_raster_mask_check(dt_dev_pixelpipe_iop_t *source_piece,
   if(IS_NULL_PTR(source_piece) || IS_NULL_PTR(current_piece))
   {
     fprintf(stderr,"[raster masks] ERROR: source: %s, current: %s\n",
-            (source_piece != NULL) ? "is defined" : "is undefined",
-            (current_piece != NULL) ? "is definded" : "is undefined");
+            (!IS_NULL_PTR(source_piece)) ? "is defined" : "is undefined",
+            (!IS_NULL_PTR(current_piece)) ? "is definded" : "is undefined");
 
     gchar *hint = NULL;
     if(IS_NULL_PTR(source_piece))

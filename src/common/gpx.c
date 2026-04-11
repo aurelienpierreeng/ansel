@@ -151,7 +151,7 @@ void _track_pts_free(dt_gpx_track_point_t *trkpt)
 
 void dt_gpx_destroy(struct dt_gpx_t *gpx)
 {
-  g_assert(gpx != NULL);
+  g_assert(!IS_NULL_PTR(gpx));
 
   if(gpx->trkpts)
   {
@@ -169,7 +169,7 @@ void dt_gpx_destroy(struct dt_gpx_t *gpx)
 
 gboolean dt_gpx_get_location(struct dt_gpx_t *gpx, GDateTime *timestamp, dt_image_geoloc_t *geoloc)
 {
-  g_assert(gpx != NULL);
+  g_assert(!IS_NULL_PTR(gpx));
 
   /* verify that we got at least 2 trackpoints */
   if(g_list_shorter_than(gpx->trkpts,2)) return FALSE;

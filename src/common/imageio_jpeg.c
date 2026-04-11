@@ -442,7 +442,7 @@ static boolean read_icc_profile(j_decompress_ptr dinfo, JOCTET **icc_data_ptr, u
 
   for(seq_no = 1; seq_no <= MAX_SEQ_NO; seq_no++) marker_present[seq_no] = 0;
 
-  for(marker = dinfo->marker_list; marker != NULL; marker = marker->next)
+  for(marker = dinfo->marker_list; !IS_NULL_PTR(marker); marker = marker->next)
   {
     if(marker_is_icc(marker))
     {
@@ -478,7 +478,7 @@ static boolean read_icc_profile(j_decompress_ptr dinfo, JOCTET **icc_data_ptr, u
   icc_data = (JOCTET *)g_malloc(total_length * sizeof(JOCTET));
 
   /* and fill it in */
-  for(marker = dinfo->marker_list; marker != NULL; marker = marker->next)
+  for(marker = dinfo->marker_list; !IS_NULL_PTR(marker); marker = marker->next)
   {
     if(marker_is_icc(marker))
     {
@@ -730,7 +730,7 @@ int dt_imageio_jpeg_read_profile(dt_imageio_jpeg_t *jpg, uint8_t **out)
 
 dt_colorspaces_color_profile_type_t dt_imageio_jpeg_read_color_space(dt_imageio_jpeg_t *jpg)
 {
-  for(jpeg_saved_marker_ptr marker = jpg->dinfo.marker_list; marker != NULL; marker = marker->next)
+  for(jpeg_saved_marker_ptr marker = jpg->dinfo.marker_list; !IS_NULL_PTR(marker); marker = marker->next)
   {
     if(marker->marker == EXIF_MARKER && marker->data_length > 6)
       return dt_exif_get_color_space(marker->data + 6, marker->data_length - 6);

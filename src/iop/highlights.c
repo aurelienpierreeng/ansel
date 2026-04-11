@@ -311,7 +311,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   const int height = roi_in->height;
 
   const gboolean fullpipe = !dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out);
-  const gboolean visualizing = (g != NULL) ? g->show_visualize && fullpipe : FALSE;
+  const gboolean visualizing = (!IS_NULL_PTR(g)) ? g->show_visualize && fullpipe : FALSE;
 
   cl_int err = DT_OPENCL_DEFAULT_ERROR;
   cl_mem dev_xtrans = NULL;
@@ -2657,7 +2657,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   dt_iop_highlights_gui_data_t *g = (dt_iop_highlights_gui_data_t *)self->gui_data;
 
   const gboolean fullpipe = !dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out);
-  const gboolean visualizing = (g != NULL) ? g->show_visualize && fullpipe : FALSE;
+  const gboolean visualizing = (!IS_NULL_PTR(g)) ? g->show_visualize && fullpipe : FALSE;
 
   if(visualizing)
   {

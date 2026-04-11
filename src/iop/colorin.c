@@ -722,7 +722,7 @@ static void process_cmatrix_bm(struct dt_iop_module_t *self, const dt_dev_pixelp
 {
   const dt_iop_colorin_data_t *const d = (dt_iop_colorin_data_t *)piece->data;
   const int ch = 4;
-  const int clipping = (d->nrgb != NULL);
+  const int clipping = (!IS_NULL_PTR(d->nrgb));
 
   dt_colormatrix_t cmatrix;
   transpose_3xSSE(d->cmatrix, cmatrix);
@@ -848,7 +848,7 @@ static inline __attribute__((always_inline)) void process_cmatrix_fastpath(struc
                                      const dt_iop_roi_t *const roi_out)
 {
   const dt_iop_colorin_data_t *const d = (dt_iop_colorin_data_t *)piece->data;
-  const int clipping = (d->nrgb != NULL);
+  const int clipping = (!IS_NULL_PTR(d->nrgb));
 
   if(!clipping)
   {
@@ -866,7 +866,7 @@ static void process_cmatrix_proper(struct dt_iop_module_t *self, const dt_dev_pi
                                    const dt_iop_roi_t *const roi_out)
 {
   const dt_iop_colorin_data_t *const d = (dt_iop_colorin_data_t *)piece->data;
-  const int clipping = (d->nrgb != NULL);
+  const int clipping = (!IS_NULL_PTR(d->nrgb));
   const size_t npixels = (size_t)roi_out->width * roi_out->height;
 
   dt_colormatrix_t cmatrix;
@@ -949,7 +949,7 @@ static void process_lcms2_bm(struct dt_iop_module_t *self, const dt_dev_pixelpip
   const cmsHTRANSFORM xform_cam_lab = d->xform_cam_Lab;
   const cmsHTRANSFORM xform_cam_nrgb = d->xform_cam_nrgb;
   const cmsHTRANSFORM xform_nrgb_lab = d->xform_nrgb_Lab;
-  const gboolean use_nrgb = (d->nrgb != NULL);
+  const gboolean use_nrgb = (!IS_NULL_PTR(d->nrgb));
   const int ch = 4;
 // use general lcms2 fallback
   __OMP_PARALLEL_FOR__()
@@ -1000,7 +1000,7 @@ static void process_lcms2_proper(struct dt_iop_module_t *self, const dt_dev_pixe
   const cmsHTRANSFORM xform_cam_lab = d->xform_cam_Lab;
   const cmsHTRANSFORM xform_cam_nrgb = d->xform_cam_nrgb;
   const cmsHTRANSFORM xform_nrgb_lab = d->xform_nrgb_Lab;
-  const gboolean use_nrgb = (d->nrgb != NULL);
+  const gboolean use_nrgb = (!IS_NULL_PTR(d->nrgb));
   const int ch = 4;
 
 // use general lcms2 fallback

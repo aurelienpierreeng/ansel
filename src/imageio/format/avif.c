@@ -780,7 +780,7 @@ void gui_init(dt_imageio_module_format_t *self)
 
   dt_bauhaus_widget_set_label(gui->bit_depth, N_("bit depth"));
   size_t idx = 0;
-  for(size_t i = 0; avif_bit_depth[i].name != NULL; i++)
+  for(size_t i = 0; !IS_NULL_PTR(avif_bit_depth[i].name); i++)
   {
     dt_bauhaus_combobox_add(gui->bit_depth,  _(avif_bit_depth[i].name));
     if(avif_bit_depth[i].bit_depth == bit_depth)

@@ -2320,7 +2320,7 @@ static int process_wavelets_cl(struct dt_iop_module_t *self, const dt_dev_pixelp
   {
     cl_mem dev_Y0U0V0 = NULL;
     dev_Y0U0V0 = dt_opencl_copy_host_to_device_constant(devid, sizeof(float) * 9, toY0U0V0);
-    if(dev_Y0U0V0 != NULL)
+    if(!IS_NULL_PTR(dev_Y0U0V0))
     {
       dt_opencl_set_kernel_arg(devid, gd->kernel_denoiseprofile_precondition_Y0U0V0, 0, sizeof(cl_mem), (void *)&dev_in);
       dt_opencl_set_kernel_arg(devid, gd->kernel_denoiseprofile_precondition_Y0U0V0, 1, sizeof(cl_mem), (void *)&dev_out);
@@ -2566,7 +2566,7 @@ static int process_wavelets_cl(struct dt_iop_module_t *self, const dt_dev_pixelp
   {
     cl_mem dev_RGB = NULL;
     dev_RGB = dt_opencl_copy_host_to_device_constant(devid, sizeof(float) * 9, toRGB);
-    if(dev_RGB != NULL)
+    if(!IS_NULL_PTR(dev_RGB))
     {
       const float bias = d->bias - 0.5 * logf(scale);
       dt_opencl_set_kernel_arg(devid, gd->kernel_denoiseprofile_backtransform_Y0U0V0, 0, sizeof(cl_mem), (void *)&dev_tmp);

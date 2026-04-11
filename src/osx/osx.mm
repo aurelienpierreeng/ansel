@@ -122,12 +122,12 @@ gboolean dt_osx_file_trash(const char *filename, GError **error)
 
     if ([fm respondsToSelector:@selector(trashItemAtURL:resultingItemURL:error:)]) {
       if (![fm trashItemAtURL:url resultingItemURL:nil error:&err]) {
-        if (error != NULL)
+        if (!IS_NULL_PTR(error))
           *error = g_error_new_literal(G_IO_ERROR, err.code == NSFileNoSuchFileError ? G_IO_ERROR_NOT_FOUND : G_IO_ERROR_FAILED, err.localizedDescription.UTF8String);
         return FALSE;
       }
     } else {
-      if (error != NULL)
+      if (!IS_NULL_PTR(error))
         *error = g_error_new_literal(G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED, "trash not supported on OS X versions < 10.8");
       return FALSE;
     }

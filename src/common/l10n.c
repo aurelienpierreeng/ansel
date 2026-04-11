@@ -323,11 +323,11 @@ dt_l10n_t *dt_l10n_init(gboolean init_list)
   {
     const wchar_t *wcLocaleName = NULL;
     wcLocaleName = dtwin_get_locale();
-    if(wcLocaleName != NULL)
+    if(!IS_NULL_PTR(wcLocaleName))
     {
       gchar *langLocale;
       langLocale = g_utf16_to_utf8(wcLocaleName, -1, NULL, NULL, NULL);
-      if(langLocale != NULL)
+      if(!IS_NULL_PTR(langLocale))
       {
         dt_free(ui_lang);
         ui_lang = g_strdup(langLocale);

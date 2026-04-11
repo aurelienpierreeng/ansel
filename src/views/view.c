@@ -314,8 +314,8 @@ int dt_view_manager_switch_by_view(dt_view_manager_t *vm, const dt_view_t *nv)
     return 0;
   }
 
-  // invariant: new_view != NULL after this point
-  assert(new_view != NULL);
+  // invariant: !IS_NULL_PTR(new_view) after this point
+  assert(!IS_NULL_PTR(new_view));
 
   if(new_view->try_enter)
   {

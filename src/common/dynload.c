@@ -66,7 +66,7 @@ dt_gmodule_t *dt_gmodule_open(const char *library)
 
   gmodule = g_module_open(name, G_MODULE_BIND_LAZY | G_MODULE_BIND_LOCAL);
 
-  if(gmodule != NULL)
+  if(!IS_NULL_PTR(gmodule))
   {
     module = (dt_gmodule_t *)malloc(sizeof(dt_gmodule_t));
     module->gmodule = gmodule;
@@ -100,7 +100,7 @@ dt_gmodule_t *dt_gmodule_open(const char *library)
   dt_gmodule_t *module = NULL;
   void *gmodule = dlopen(library, RTLD_LAZY | RTLD_LOCAL);
 
-  if(gmodule != NULL)
+  if(!IS_NULL_PTR(gmodule))
   {
     module = (dt_gmodule_t *)malloc(sizeof(dt_gmodule_t));
     module->gmodule = gmodule;
@@ -115,7 +115,7 @@ int dt_gmodule_symbol(dt_gmodule_t *module, const char *name, void (**pointer)(v
 {
   *pointer = dlsym(module->gmodule, name);
 
-  return *pointer != NULL ? TRUE : FALSE;
+  return !IS_NULL_PTR(*pointer) ? TRUE : FALSE;
 }
 #endif //!__APPLE__
 #endif //HAVE_OPENCL

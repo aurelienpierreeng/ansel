@@ -57,7 +57,7 @@ static void _togglebutton_init(GtkDarktableToggleButton *slider)
 
 static gboolean _togglebutton_draw(GtkWidget *widget, cairo_t *cr)
 {
-  g_return_val_if_fail(widget != NULL, FALSE);
+  g_return_val_if_fail(!IS_NULL_PTR(widget), FALSE);
   g_return_val_if_fail(DTGTK_IS_TOGGLEBUTTON(widget), FALSE);
 
   GtkStateFlags state = gtk_widget_get_state_flags(widget);
@@ -185,7 +185,7 @@ GType dtgtk_togglebutton_get_type()
 void dtgtk_togglebutton_set_paint(GtkDarktableToggleButton *button, DTGTKCairoPaintIconFunc paint,
                                   gint paintflags, void *paintdata)
 {
-  g_return_if_fail(button != NULL);
+  g_return_if_fail(!IS_NULL_PTR(button));
   button->icon = paint;
   button->icon_flags = paintflags;
   button->icon_data = paintdata;

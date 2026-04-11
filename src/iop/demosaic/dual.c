@@ -171,7 +171,7 @@ gboolean dual_demosaic_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t
     dt_masks_blur_9x9_coeff(blurmat, 2.0f);
     cl_mem dev_blurmat = NULL;
     dev_blurmat = dt_opencl_copy_host_to_device_constant(devid, sizeof(float) * 13, blurmat);
-    if(dev_blurmat != NULL)
+    if(!IS_NULL_PTR(dev_blurmat))
     {
       size_t sizes[3] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
       const int clkernel = darktable.opencl->blendop->kernel_mask_blur;

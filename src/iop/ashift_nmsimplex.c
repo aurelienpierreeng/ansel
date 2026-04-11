@@ -149,7 +149,7 @@ static int simplex(double (*objfunc)(double[], void *params), double start[], in
     }
   }
 
-  if(constrain != NULL)
+  if(!IS_NULL_PTR(constrain))
   {
     constrain(v[j], n);
   }
@@ -224,7 +224,7 @@ static int simplex(double (*objfunc)(double[], void *params), double start[], in
       /*vr[j] = (1+NMS_ALPHA)*vm[j] - NMS_ALPHA*v[vg][j];*/
       vr[j] = vm[j] + NMS_ALPHA * (vm[j] - v[vg][j]);
     }
-    if(constrain != NULL)
+    if(!IS_NULL_PTR(constrain))
     {
       constrain(vr, n);
     }
@@ -247,7 +247,7 @@ static int simplex(double (*objfunc)(double[], void *params), double start[], in
         /*ve[j] = NMS_GAMMA*vr[j] + (1-NMS_GAMMA)*vm[j];*/
         ve[j] = vm[j] + NMS_GAMMA * (vr[j] - vm[j]);
       }
-      if(constrain != NULL)
+      if(!IS_NULL_PTR(constrain))
       {
         constrain(ve, n);
       }
@@ -286,7 +286,7 @@ static int simplex(double (*objfunc)(double[], void *params), double start[], in
           /*vc[j] = NMS_BETA*v[vg][j] + (1-NMS_BETA)*vm[j];*/
           vc[j] = vm[j] + NMS_BETA * (vr[j] - vm[j]);
         }
-        if(constrain != NULL)
+        if(!IS_NULL_PTR(constrain))
         {
           constrain(vc, n);
         }
@@ -300,7 +300,7 @@ static int simplex(double (*objfunc)(double[], void *params), double start[], in
           /*vc[j] = NMS_BETA*v[vg][j] + (1-NMS_BETA)*vm[j];*/
           vc[j] = vm[j] - NMS_BETA * (vm[j] - v[vg][j]);
         }
-        if(constrain != NULL)
+        if(!IS_NULL_PTR(constrain))
         {
           constrain(vc, n);
         }
@@ -333,12 +333,12 @@ static int simplex(double (*objfunc)(double[], void *params), double start[], in
             }
           }
         }
-        if(constrain != NULL)
+        if(!IS_NULL_PTR(constrain))
         {
           constrain(v[vg], n);
         }
         f[vg] = objfunc(v[vg], params);
-        if(constrain != NULL)
+        if(!IS_NULL_PTR(constrain))
         {
           constrain(v[vh], n);
         }

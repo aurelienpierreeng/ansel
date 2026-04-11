@@ -72,7 +72,7 @@ dt_dlopencl_t *dt_dlopencl_init(const char *name)
   if(!success) return NULL;
 
   /* try to load library. if a name is given check only that library - else iterate over default names. */
-  if(name != NULL && name[0] != '\0')
+  if(!IS_NULL_PTR(name) && name[0] != '\0')
   {
     library = name;
     module = dt_gmodule_open(library);

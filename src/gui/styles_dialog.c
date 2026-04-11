@@ -139,7 +139,7 @@ void _gui_styles_get_active_items(dt_gui_styles_dialog_t *sd, GList **enabled, G
       if((active || uactive) && num >= 0)
       {
         *enabled = g_list_append(*enabled, GINT_TO_POINTER(num));
-        if(update != NULL)
+        if(!IS_NULL_PTR(update))
         {
           if(uactive)
             *update = g_list_append(*update, GINT_TO_POINTER(update_num));

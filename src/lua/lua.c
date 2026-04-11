@@ -175,7 +175,7 @@ static gboolean async_redraw(gpointer data)
 
 void dt_lua_redraw_screen()
 {
-  if(darktable.gui != NULL)
+  if(!IS_NULL_PTR(darktable.gui))
   {
     g_idle_add(async_redraw,NULL);
   }

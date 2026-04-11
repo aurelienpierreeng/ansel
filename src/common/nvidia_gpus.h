@@ -272,7 +272,7 @@ static int dt_nvidia_gpu_supports_sm_20(const char *model)
   return 0;
 #else
   int i = 0;
-  while(nvidia_gpus[2 * i] != NULL)
+  while(!IS_NULL_PTR(nvidia_gpus[2 * i]))
   {
     if(!strcasecmp(model, nvidia_gpus[2 * i]))
     {

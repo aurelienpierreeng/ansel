@@ -880,8 +880,8 @@ static gboolean _dt_delete_dialog_main_thread(gpointer user_data)
         ? _("could not send %s to trash.%s%s")
         : _("could not physically delete %s.%s%s"),
       modal_dialog->filename,
-      modal_dialog->error_message != NULL ? "\n" : "",
-      modal_dialog->error_message != NULL ? modal_dialog->error_message : "");
+      !IS_NULL_PTR(modal_dialog->error_message) ? "\n" : "",
+      !IS_NULL_PTR(modal_dialog->error_message) ? modal_dialog->error_message : "");
 #ifdef GDK_WINDOWING_QUARTZ
   dt_osx_disallow_fullscreen(dialog);
 #endif
@@ -983,7 +983,7 @@ static enum _dt_delete_status delete_file_from_disk(const char *filename, gboole
           G_FILE_QUERY_INFO_NONE,
           NULL /*cancellable*/,
           NULL /*error*/);
-      if(gfileinfo != NULL)
+      if(!IS_NULL_PTR(gfileinfo))
         filename_display = g_file_info_get_attribute_string(
             gfileinfo,
             G_FILE_ATTRIBUTE_STANDARD_DISPLAY_NAME);
@@ -1019,11 +1019,11 @@ static enum _dt_delete_status delete_file_from_disk(const char *filename, gboole
         delete_status = _DT_DELETE_STATUS_STOP_PROCESSING;
       }
     }
-    if(gerror != NULL)
+    if(!IS_NULL_PTR(gerror))
       g_error_free(gerror);
   }
 
-  if(gfile != NULL)
+  if(!IS_NULL_PTR(gfile))
     g_object_unref(gfile);
 
   return delete_status;

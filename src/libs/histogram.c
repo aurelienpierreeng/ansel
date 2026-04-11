@@ -1357,7 +1357,7 @@ gboolean _needs_recompute(dt_lib_histogram_t *d, const int width, const int heig
   gboolean size_match = (d->cache.width == width && d->cache.height == height);
   gboolean zoom_match = (d->cache.zoom == d->zoom);
   gboolean view_match = (d->cache.view == view);
-  gboolean has_surface = (d->cst != NULL);
+  gboolean has_surface = (!IS_NULL_PTR(d->cst));
   return !(hash_match && size_match && zoom_match && view_match && has_surface);
 }
 
@@ -1701,7 +1701,7 @@ static void _update_everything(dt_lib_module_t *self)
 
   // allow live sample button to work for iop samples
   gtk_widget_set_sensitive(GTK_WIDGET(d->add_sample_button),
-                           darktable.develop->color_picker.picker != NULL);
+                           !IS_NULL_PTR(darktable.develop->color_picker.picker));
 }
 
 static gboolean _refresh_global_picker(dt_lib_module_t *self)

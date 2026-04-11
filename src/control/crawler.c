@@ -212,7 +212,7 @@ GList *dt_control_crawler_run(void)
     len = c - image_path + 1;
 
     char *txt_path = dt_image_get_text_path_from_path(image_path);
-    gboolean has_txt = txt_path != NULL;
+    gboolean has_txt = !IS_NULL_PTR(txt_path);
     dt_free(txt_path);
 
     char *extra_path = (char *)calloc(len + 3 + 1, sizeof(char));
@@ -292,7 +292,7 @@ static void _delete_selected_rows(dt_control_crawler_gui_t *gui)
   GtkTreeModel *model = gui->model;
 
   // Remove TreeView rows from rr_list. It needs to be populated before
-  for(GList *node = rr_list; node != NULL; node = g_list_next(node))
+  for(GList *node = rr_list; !IS_NULL_PTR(node); node = g_list_next(node))
   {
     GtkTreePath *path = gtk_tree_row_reference_get_path((GtkTreeRowReference*)node->data);
 

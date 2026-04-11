@@ -1007,7 +1007,7 @@ int store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t *sdata, co
     const dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
   // If title is not existing, then use the filename without extension. If not, then use title instead
     GList *title = dt_metadata_get(img->id, "Xmp.dc.title", NULL);
-    if(title != NULL)
+    if(!IS_NULL_PTR(title))
     {
       caption = g_strdup(title->data);
       g_list_free_full(title, dt_free_gpointer);
@@ -1021,7 +1021,7 @@ int store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t *sdata, co
     }
 
     GList *desc = dt_metadata_get(img->id, "Xmp.dc.description", NULL);
-    if(desc != NULL)
+    if(!IS_NULL_PTR(desc))
     {
       description = g_strdup(desc->data);
       g_list_free_full(desc, dt_free_gpointer);
@@ -1030,7 +1030,7 @@ int store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t *sdata, co
     dt_image_cache_read_release(darktable.image_cache, img);
 
     GList *auth = dt_metadata_get(img->id, "Xmp.dc.creator", NULL);
-    if(auth != NULL)
+    if(!IS_NULL_PTR(auth))
     {
       author = g_strdup(auth->data);
       g_list_free_full(auth, dt_free_gpointer);

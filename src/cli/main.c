@@ -522,7 +522,7 @@ int main(int argc, char *arg[])
 
   GList *id_list = NULL;
 
-  for(GList *l = inputs; l != NULL; l=g_list_next(l))
+  for(GList *l = inputs; !IS_NULL_PTR(l); l=g_list_next(l))
   {
     gchar* input = l->data;
 

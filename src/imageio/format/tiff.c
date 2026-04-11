@@ -173,7 +173,7 @@ int write_image(dt_imageio_module_data_t *d_tmp, const char *filename, const voi
     TIFFSetField(tif, TIFFTAG_ZIPQUALITY, (uint16_t)d->compresslevel);
   }
 
-  if(profile != NULL)
+  if(!IS_NULL_PTR(profile))
   {
     TIFFSetField(tif, TIFFTAG_ICCPROFILE, (uint32_t)profile_len, profile);
   }

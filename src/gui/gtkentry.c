@@ -136,13 +136,13 @@ static gboolean on_match_func(GtkEntryCompletion *completion, const gchar *key, 
     gchar *item = NULL;
     gtk_tree_model_get(model, iter, COMPL_VARNAME, &item, -1);
 
-    if(item != NULL)
+    if(!IS_NULL_PTR(item))
     {
       // Do utf8-safe case insensitive string compare.
       // Shamelessly stolen from GtkEntryCompletion.
       gchar *normalized_string = g_utf8_normalize(item, -1, G_NORMALIZE_ALL);
 
-      if(normalized_string != NULL)
+      if(!IS_NULL_PTR(normalized_string))
       {
         gchar *case_normalized_string = g_utf8_casefold(normalized_string, -1);
 
@@ -294,12 +294,12 @@ gchar *dt_gtkentry_build_completion_tooltip_text(const gchar *header,
                                                  const dt_gtkentry_completion_spec *compl_list)
 {
   size_t array_len = 0;
-  for(dt_gtkentry_completion_spec const *p = compl_list; p->description != NULL; p++) array_len++;
+  for(dt_gtkentry_completion_spec const *p = compl_list; !IS_NULL_PTR(p->description); p++) array_len++;
   const gchar **lines = malloc(sizeof(gchar *) * (array_len + 2));
   const gchar **l = lines;
   *l++ = header;
 
-  for(dt_gtkentry_completion_spec const *p = compl_list; p->description != NULL; p++, l++)
+  for(dt_gtkentry_completion_spec const *p = compl_list; !IS_NULL_PTR(p->description); p++, l++)
     *l = _(p->description);
 
   *l = NULL;

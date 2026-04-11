@@ -190,7 +190,7 @@ gboolean dt_tag_new(const char *name, guint *tagid)
   if(rt == SQLITE_ROW)
   {
     // tagid already exists.
-    if(tagid != NULL) *tagid = sqlite3_column_int64(stmt, 0);
+    if(!IS_NULL_PTR(tagid)) *tagid = sqlite3_column_int64(stmt, 0);
     sqlite3_finalize(stmt);
     return TRUE;
   }
@@ -219,7 +219,7 @@ gboolean dt_tag_new(const char *name, guint *tagid)
     sqlite3_finalize(stmt);
   }
 
-  if(tagid != NULL)
+  if(!IS_NULL_PTR(tagid))
     *tagid = id;
 
   return TRUE;
@@ -364,12 +364,12 @@ gboolean dt_tag_exists(const char *name, guint *tagid)
 
   if(rt == SQLITE_ROW)
   {
-    if(tagid != NULL) *tagid = sqlite3_column_int64(stmt, 0);
+    if(!IS_NULL_PTR(tagid)) *tagid = sqlite3_column_int64(stmt, 0);
     sqlite3_finalize(stmt);
     return TRUE;
   }
 
-  if(tagid != NULL) *tagid = -1;
+  if(!IS_NULL_PTR(tagid)) *tagid = -1;
   sqlite3_finalize(stmt);
   return FALSE;
 }
@@ -865,7 +865,7 @@ GList *dt_tag_get_list(int32_t imgid)
 
     gchar **pch = g_strsplit(value, "|", -1);
 
-    if(pch != NULL)
+    if(!IS_NULL_PTR(pch))
     {
       if(omit_tag_hierarchy)
       {
@@ -876,7 +876,7 @@ GList *dt_tag_get_list(int32_t imgid)
       else
       {
         size_t j = 0;
-        while(pch[j] != NULL)
+        while(!IS_NULL_PTR(pch[j]))
         {
           tags = g_list_prepend(tags, g_strdup(pch[j]));
           j++;

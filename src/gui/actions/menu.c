@@ -367,10 +367,10 @@ dt_menu_entry_t *set_menu_entry(GtkWidget **menus, GList **items_list,
 
   // Wire the accelerator
   // Publish a new accel to the global map and attach it to the menu entry widget
-  if(action_callback != NULL)
+  if(!IS_NULL_PTR(action_callback))
   {    
     // Register accel only if requested
-    if(accel_group != NULL)
+    if(!IS_NULL_PTR(accel_group))
     {
       gchar *clean_label = strip_markup(label);
       // Slash is not allowed in control names because that makes accel paths fail.
@@ -386,7 +386,7 @@ dt_menu_entry_t *set_menu_entry(GtkWidget **menus, GList **items_list,
           key_val, mods, FALSE, _("Triggers the action"));
 
       gchar *path = dt_accels_build_path(parent_path, clean_label);
-      gtk_widget_set_accel_path(entry->widget, path, (action_callback != NULL) ? accel_group : NULL);
+      gtk_widget_set_accel_path(entry->widget, path, (!IS_NULL_PTR(action_callback)) ? accel_group : NULL);
       dt_free(path);
       dt_free(clean_label);
     }
@@ -652,7 +652,7 @@ gboolean has_active_image_in_lighttable()
 
 gboolean dt_menu_is_image_in_dev(GList *imgs)
 {
-  return darktable.develop != NULL
+  return !IS_NULL_PTR(darktable.develop)
     && g_list_find(imgs, GINT_TO_POINTER(darktable.develop->image_storage.id));
 }
 

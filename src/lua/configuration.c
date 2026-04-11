@@ -125,7 +125,7 @@ int dt_lua_init_configuration(lua_State *L)
   lua_settable(L, -3);
 
   lua_pushstring(L, "has_gui");
-  lua_pushboolean(L, darktable.gui != NULL);
+  lua_pushboolean(L, !IS_NULL_PTR(darktable.gui));
   lua_settable(L, -3);
 
   lua_pushstring(L, "api_version_major");

@@ -2814,7 +2814,7 @@ static gboolean _completion_match_func(GtkEntryCompletion *completion, const gch
   }
 
   const gchar *lastTag = g_strrstr(key, ",");
-  if(lastTag != NULL)
+  if(!IS_NULL_PTR(lastTag))
   {
     lastTag++;
   }
@@ -2932,7 +2932,7 @@ static void _event_dnd_received(GtkWidget *widget, GdkDragContext *context, gint
       success = TRUE;
     }
   }
-  else if((target_type == DND_TARGET_IMGID) && (selection_data != NULL))
+  else if((target_type == DND_TARGET_IMGID) && (!IS_NULL_PTR(selection_data)))
   {
     GtkTreePath *path = NULL;
     const int imgs_nb = gtk_selection_data_get_length(selection_data) / sizeof(uint32_t);

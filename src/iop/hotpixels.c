@@ -319,7 +319,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     fixed = process_bayer(data, ivoid, ovoid, roi_out);
   }
 
-  if(g != NULL && self->dev->gui_attached && pipe->type == DT_DEV_PIXELPIPE_FULL)
+  if(!IS_NULL_PTR(g) && self->dev->gui_attached && pipe->type == DT_DEV_PIXELPIPE_FULL)
   {
     g->pixels_fixed = fixed;
   }

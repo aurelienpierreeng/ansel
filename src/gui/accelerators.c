@@ -1032,7 +1032,7 @@ static gboolean _has_shortcut(dt_accels_t *accels, GtkAccelGroup *group, guint k
   g_hash_table_foreach(accels->acceleratables, _for_each_non_virtual_accel, &result);
   dt_pthread_mutex_unlock(&accels->lock);
 
-  const gboolean has_accel = (result.results != NULL);
+  const gboolean has_accel = (!IS_NULL_PTR(result.results));
   g_list_free(result.results);
   result.results = NULL;
   return has_accel;
@@ -1170,8 +1170,8 @@ static void _make_column_editable(GtkTreeViewColumn *col, GtkCellRenderer *rende
   dt_shortcut_t *shortcut;
   gtk_tree_model_get(model, iter, COL_SHORTCUT, &shortcut, -1);
   g_object_set(renderer,
-               "visible", (shortcut != NULL),
-               "editable", (shortcut != NULL && !shortcut->locked),
+               "visible", (!IS_NULL_PTR(shortcut)),
+               "editable", (!IS_NULL_PTR(shortcut) && !shortcut->locked),
                "accel-mode", GTK_CELL_RENDERER_ACCEL_MODE_OTHER,
                NULL);
 }
@@ -1182,9 +1182,9 @@ static void _make_column_clearable(GtkTreeViewColumn *col, GtkCellRenderer *rend
   dt_shortcut_t *shortcut;
   gtk_tree_model_get(model, iter, COL_SHORTCUT, &shortcut, -1);
   g_object_set (renderer,
-                "icon-name", (shortcut != NULL && !shortcut->locked) ? "edit-delete-symbolic" : "lock",
-                "visible",   (shortcut != NULL),
-                "sensitive", (shortcut != NULL && !shortcut->locked && shortcut->key),
+                "icon-name", (!IS_NULL_PTR(shortcut) && !shortcut->locked) ? "edit-delete-symbolic" : "lock",
+                "visible",   (!IS_NULL_PTR(shortcut)),
+                "sensitive", (!IS_NULL_PTR(shortcut) && !shortcut->locked && shortcut->key),
                 NULL);
 }
 
@@ -1728,7 +1728,7 @@ static int _match_text(GtkTreeModel *model, GtkTreeIter *iter, const char *needl
 
   // Find match
   const char *match = g_strrstr(label_ci, needle);
-  if(match != NULL)
+  if(!IS_NULL_PTR(match))
   {
     // Index results by relevance.
     // Since pathes start generic and end specific, we posit that

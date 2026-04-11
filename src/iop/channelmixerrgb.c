@@ -1113,7 +1113,7 @@ static void declare_cat_on_pipe(struct dt_iop_module_t *self, gboolean preset)
   }
   else
   {
-    if(self->dev->proxy.chroma_adaptation != NULL)
+    if(!IS_NULL_PTR(self->dev->proxy.chroma_adaptation))
     {
       // We do NOT do CAT here.
       // Deregister this instance as CAT-handler if it previously registered
@@ -3651,7 +3651,7 @@ void reload_defaults(dt_iop_module_t *module)
 
   // check if we could register
   gboolean CAT_already_applied =
-    (module->dev->proxy.chroma_adaptation != NULL)      // CAT exists
+    (!IS_NULL_PTR(module->dev->proxy.chroma_adaptation))      // CAT exists
     && (module->dev->proxy.chroma_adaptation != module) // and it is not us
     && (!dt_image_is_monochrome(img));
 

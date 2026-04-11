@@ -84,7 +84,7 @@ static gboolean ungroup_images_callback(GtkAccelGroup *group, GObject *accelerat
     }
   }
   sqlite3_finalize(stmt);
-  if(imgs != NULL)
+  if(!IS_NULL_PTR(imgs))
   {
     dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_GROUPING,
                                g_list_reverse(imgs));

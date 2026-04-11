@@ -170,21 +170,21 @@ static const char *_preview_format_from_mime_type(const char *mime_type)
 dt_image_flags_t dt_imageio_get_type_from_extension(const char *extension)
 {
   const char *ext = g_str_has_prefix(extension, ".") ? extension + 1 : extension;
-  for(const char **i = _supported_raw; *i != NULL; i++)
+  for(const char **i = _supported_raw; !IS_NULL_PTR(*i); i++)
   {
     if(!g_ascii_strncasecmp(ext, *i, strlen(*i)))
     {
       return DT_IMAGE_RAW;
     }
   }
-  for(const char **i = _supported_hdr; *i != NULL; i++)
+  for(const char **i = _supported_hdr; !IS_NULL_PTR(*i); i++)
   {
     if(!g_ascii_strncasecmp(ext, *i, strlen(*i)))
     {
       return DT_IMAGE_HDR;
     }
   }
-  for(const char **i = _supported_ldr; *i != NULL; i++)
+  for(const char **i = _supported_ldr; !IS_NULL_PTR(*i); i++)
   {
     if(!g_ascii_strncasecmp(ext, *i, strlen(*i)))
     {
@@ -240,7 +240,7 @@ int dt_imageio_large_thumbnail(const char *filename, uint8_t **buffer, int32_t *
 
     GetExceptionInfo(&exception);
     image_info = CloneImageInfo((ImageInfo *)NULL);
-    if(preview_format != NULL)
+    if(!IS_NULL_PTR(preview_format))
       g_strlcpy(image_info->magick, preview_format, sizeof(image_info->magick));
 
     image = BlobToImage(image_info, buf, bufsize, &exception);
@@ -615,7 +615,7 @@ static gboolean _is_in_list(char *elem, char *list)
   gboolean success = FALSE;
   if(elem && list)
   {
-    while(list != NULL && !success)
+    while(!IS_NULL_PTR(list) && !success)
     {
       success = !g_ascii_strncasecmp(list, elem, strlen(elem));
       list = strtok(NULL, ",");

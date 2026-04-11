@@ -1148,7 +1148,7 @@ static inline dt_masks_dynbuf_t *dt_masks_dynbuf_init(size_t size, const char *t
   assert(size > 0);
   dt_masks_dynbuf_t *a = (dt_masks_dynbuf_t *)calloc(1, sizeof(dt_masks_dynbuf_t));
 
-  if(a != NULL)
+  if(!IS_NULL_PTR(a))
   {
     g_strlcpy(a->tag, tag, sizeof(a->tag)); //only for debugging purposes
     a->pos = 0;
@@ -1165,7 +1165,7 @@ static inline dt_masks_dynbuf_t *dt_masks_dynbuf_init(size_t size, const char *t
 
 static inline void dt_masks_dynbuf_add_2(dt_masks_dynbuf_t *a, float value1, float value2)
 {
-  assert(a != NULL);
+  assert(!IS_NULL_PTR(a));
   assert(a->pos <= a->size);
   if(__builtin_expect(a->pos + 2 >= a->size, 0))
   {
@@ -1180,7 +1180,7 @@ static inline void dt_masks_dynbuf_add_2(dt_masks_dynbuf_t *a, float value1, flo
 // The caller should then fill in the reserved elements using the returned pointer.
 static inline float *dt_masks_dynbuf_reserve_n(dt_masks_dynbuf_t *a, const int n)
 {
-  assert(a != NULL);
+  assert(!IS_NULL_PTR(a));
   assert(a->pos <= a->size);
   if(__builtin_expect(a->pos + n >= a->size, 0))
   {
@@ -1200,7 +1200,7 @@ static inline float *dt_masks_dynbuf_reserve_n(dt_masks_dynbuf_t *a, const int n
 
 static inline void dt_masks_dynbuf_add_zeros(dt_masks_dynbuf_t *a, const int n)
 {
-  assert(a != NULL);
+  assert(!IS_NULL_PTR(a));
   assert(a->pos <= a->size);
   if(__builtin_expect(a->pos + n >= a->size, 0))
   {
@@ -1220,7 +1220,7 @@ static inline void dt_masks_dynbuf_add_zeros(dt_masks_dynbuf_t *a, const int n)
 
 static inline float dt_masks_dynbuf_get(dt_masks_dynbuf_t *a, int offset)
 {
-  assert(a != NULL);
+  assert(!IS_NULL_PTR(a));
   // offset: must be negative distance relative to end of buffer
   assert(offset < 0);
   assert((long)a->pos + offset >= 0);
@@ -1229,7 +1229,7 @@ static inline float dt_masks_dynbuf_get(dt_masks_dynbuf_t *a, int offset)
 
 static inline void dt_masks_dynbuf_set(dt_masks_dynbuf_t *a, int offset, float value)
 {
-  assert(a != NULL);
+  assert(!IS_NULL_PTR(a));
   // offset: must be negative distance relative to end of buffer
   assert(offset < 0);
   assert((long)a->pos + offset >= 0);
@@ -1238,7 +1238,7 @@ static inline void dt_masks_dynbuf_set(dt_masks_dynbuf_t *a, int offset, float v
 
 static inline float *dt_masks_dynbuf_buffer(dt_masks_dynbuf_t *a)
 {
-  assert(a != NULL);
+  assert(!IS_NULL_PTR(a));
   return a->buffer;
 }
 
@@ -1315,13 +1315,13 @@ static inline gboolean dt_masks_center_of_gravity_from_points(const float *point
 
 static inline size_t dt_masks_dynbuf_position(dt_masks_dynbuf_t *a)
 {
-  assert(a != NULL);
+  assert(!IS_NULL_PTR(a));
   return a->pos;
 }
 
 static inline void dt_masks_dynbuf_reset(dt_masks_dynbuf_t *a)
 {
-  assert(a != NULL);
+  assert(!IS_NULL_PTR(a));
   a->pos = 0;
 }
 

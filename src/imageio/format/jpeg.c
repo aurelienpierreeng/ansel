@@ -249,7 +249,7 @@ read_icc_profile (j_decompress_ptr cinfo,
   for(int seq_no = 1; seq_no <= MAX_SEQ_NO; seq_no++)
     marker_present[seq_no] = 0;
 
-  for(jpeg_saved_marker_ptr marker = cinfo->marker_list; marker != NULL; marker = marker->next)
+  for(jpeg_saved_marker_ptr marker = cinfo->marker_list; !IS_NULL_PTR(marker); marker = marker->next)
   {
     if(marker_is_icc(marker))
     {
@@ -292,7 +292,7 @@ read_icc_profile (j_decompress_ptr cinfo,
     return FALSE;   /* oops, out of memory */
 
   /* and fill it in */
-  for(jpeg_saved_marker_ptr marker = cinfo->marker_list; marker != NULL; marker = marker->next)
+  for(jpeg_saved_marker_ptr marker = cinfo->marker_list; !IS_NULL_PTR(marker); marker = marker->next)
   {
     if(marker_is_icc(marker))
     {

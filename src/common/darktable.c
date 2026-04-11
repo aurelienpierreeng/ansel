@@ -310,7 +310,7 @@ gboolean dt_supported_image(const gchar *filename)
   if(!ext)
     return FALSE;
   ext++;
-  for(const char **i = dt_supported_extensions; *i != NULL; i++)
+  for(const char **i = dt_supported_extensions; !IS_NULL_PTR(*i); i++)
     if(!g_ascii_strncasecmp(ext, *i, strlen(*i)))
     {
       supported = TRUE;
@@ -361,7 +361,7 @@ int dt_load_from_string(const gchar *input, gboolean open_image_in_dr, gboolean 
       // make sure buffers are loaded (load full for testing)
       dt_mipmap_buffer_t buf;
       dt_mipmap_cache_get(darktable.mipmap_cache, &buf, id, DT_MIPMAP_FULL, DT_MIPMAP_BLOCKING, 'r');
-      gboolean loaded = (buf.buf != NULL);
+      gboolean loaded = (!IS_NULL_PTR(buf.buf));
       dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
       if(!loaded)
       {
@@ -904,7 +904,7 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   {
     int k;
     for(k = i; k < argc; k++)
-      if(argv[k] != NULL) break;
+      if(!IS_NULL_PTR(argv[k])) break;
 
     if(k > i)
     {
@@ -943,13 +943,13 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
     const gchar *xdg_data_dirs = g_getenv("XDG_DATA_DIRS");
     gchar *new_xdg_data_dirs = NULL;
     gboolean set_env = TRUE;
-    if(xdg_data_dirs != NULL && *xdg_data_dirs != '\0')
+    if(!IS_NULL_PTR(xdg_data_dirs) && *xdg_data_dirs != '\0')
     {
       // check if sharedir is already in there
       gboolean found = FALSE;
       gchar **tokens = g_strsplit(xdg_data_dirs, G_SEARCHPATH_SEPARATOR_S, 0);
-      // xdg_data_dirs is neither NULL nor empty => tokens != NULL
-      for(char **iter = tokens; *iter != NULL; iter++)
+      // xdg_data_dirs is neither NULL nor empty => !IS_NULL_PTR(tokens)
+      for(char **iter = tokens; !IS_NULL_PTR(*iter); iter++)
         if(!strcmp(sharedir, *iter))
         {
           found = TRUE;
@@ -1353,7 +1353,7 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
 
 void dt_cleanup()
 {
-  const int init_gui = (darktable.gui != NULL);
+  const int init_gui = (!IS_NULL_PTR(darktable.gui));
 
   // Restore selection if exiting on culling mode to be sure it's saved in DB
   if(darktable.gui && darktable.gui->culling_mode)

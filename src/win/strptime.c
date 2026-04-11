@@ -112,7 +112,7 @@ char *strptime(const char *buf, const char *fmt, struct tm *tm)
 
   bp = (const u_char *)buf;
 
-  while(bp != NULL && (c = *fmt++) != '\0')
+  while(!IS_NULL_PTR(bp) && (c = *fmt++) != '\0')
   {
     /* Clear `alternate' modifier prior to new conversion. */
     alt_format = 0;
@@ -393,7 +393,7 @@ char *strptime(const char *buf, const char *fmt, struct tm *tm)
         else
         {
           ep = find_string(bp, &i, (const char *const *)_tzname, NULL, 2);
-          if(ep != NULL)
+          if(!IS_NULL_PTR(ep))
           {
             tm->tm_isdst = i;
 #ifdef TM_GMTOFF
@@ -453,7 +453,7 @@ char *strptime(const char *buf, const char *fmt, struct tm *tm)
           default:
             --bp;
             ep = find_string(bp, &i, nast, NULL, 4);
-            if(ep != NULL)
+            if(!IS_NULL_PTR(ep))
             {
 #ifdef TM_GMTOFF
               tm->TM_GMTOFF = -5 - i;
@@ -465,7 +465,7 @@ char *strptime(const char *buf, const char *fmt, struct tm *tm)
               continue;
             }
             ep = find_string(bp, &i, nadt, NULL, 4);
-            if(ep != NULL)
+            if(!IS_NULL_PTR(ep))
             {
               tm->tm_isdst = 1;
 #ifdef TM_GMTOFF
@@ -587,7 +587,7 @@ static const u_char *find_string(const u_char *bp, int *tgt, const char *const *
   size_t len;
 
   /* check full name - then abbreviated ones */
-  for(; n1 != NULL; n1 = n2, n2 = NULL)
+  for(; !IS_NULL_PTR(n1); n1 = n2, n2 = NULL)
   {
     for(i = 0; i < c; i++, n1++)
     {

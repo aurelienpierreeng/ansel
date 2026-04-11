@@ -4182,7 +4182,7 @@ static cl_int rt_process_forms_cl(cl_mem dev_layer, dwt_params_cl_t *const wt_p,
                                     roi_layer, dx, dy, algo);
 
       // only heal needs mask scaled
-      if(algo != DT_IOP_RETOUCH_HEAL && mask_scaled != NULL)
+      if(algo != DT_IOP_RETOUCH_HEAL && !IS_NULL_PTR(mask_scaled))
       {
         dt_pixelpipe_cache_free_align(mask_scaled);
         mask_scaled = NULL;

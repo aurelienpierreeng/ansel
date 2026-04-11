@@ -426,7 +426,7 @@ static gboolean _prepare_analytic_pixel_context(const dt_drawlayer_brush_runtime
   pixel_eval->src_alpha
       = _stroke_flow_alpha(dab, dab->opacity, dab->flow, sample_opacity_scale,
                            pixel_eval->profile, pixel_eval->brush_alpha, old_alpha,
-                           pixel_eval->stroke_old_alpha, pixel_eval->stroke_alpha != NULL);
+                           pixel_eval->stroke_old_alpha, !IS_NULL_PTR(pixel_eval->stroke_alpha));
   return pixel_eval->src_alpha > 0.0f;
 }
 

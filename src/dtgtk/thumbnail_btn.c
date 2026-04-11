@@ -116,7 +116,7 @@ static gboolean _thumbnail_btn_draw(GtkWidget *widget, cairo_t *cr)
 
 static gboolean _thumbnail_btn_enter_leave_notify_callback(GtkWidget *widget, GdkEventCrossing *event)
 {
-  g_return_val_if_fail(widget != NULL, FALSE);
+  g_return_val_if_fail(!IS_NULL_PTR(widget), FALSE);
 
   if(event->type == GDK_ENTER_NOTIFY)
     gtk_widget_set_state_flags(widget, GTK_STATE_FLAG_PRELIGHT, FALSE);
