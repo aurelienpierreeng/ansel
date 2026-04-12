@@ -48,14 +48,14 @@ jobs:
             xcode: 26.3, 
             deployment: 15.0, 
             tag: "arm64",
-            eco: [-DBINARY_PACKAGE_BUILD=OFF -DUSE_GRAPHICSMAGICK=ON -DUSE_IMAGEMAGICK=OFF -DDT_APPLE_X86_TARGET_CLONES=0 -DBUILD_SSE2_CODEPATHS=OFF],
+            eco: "-DBINARY_PACKAGE_BUILD=OFF -DUSE_GRAPHICSMAGICK=ON -DUSE_IMAGEMAGICK=OFF -DDT_APPLE_X86_TARGET_CLONES=0 -DBUILD_SSE2_CODEPATHS=OFF",
             } # AppleClang 17, arm64
           - { 
             os: macos-15-intel, 
             xcode: 26.3, 
             deployment: 15.0, 
             tag: "intel64",
-            eco: [-DBINARY_PACKAGE_BUILD=ON -DUSE_GRAPHICSMAGICK=ON -DUSE_IMAGEMAGICK=OFF -DDT_APPLE_X86_TARGET_CLONES=1 -DBUILD_SSE2_CODEPATHS=ON],
+            eco: "-DBINARY_PACKAGE_BUILD=ON -DUSE_GRAPHICSMAGICK=ON -DUSE_IMAGEMAGICK=OFF -DDT_APPLE_X86_TARGET_CLONES=1 -DBUILD_SSE2_CODEPATHS=ON",
              } # AppleClang 17, intel64
         btype:
           - Release
