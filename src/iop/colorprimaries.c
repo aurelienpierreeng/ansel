@@ -785,12 +785,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
                   : NULL;
   const dt_iop_order_iccprofile_info_t *work_profile = dt_ioppr_get_pipe_current_profile_info(self, pipe);
 
-  if(IS_NULL_PTR(d))
-  {
-    return;
-  }
-
-  if(IS_NULL_PTR(gd) || IS_NULL_PTR(lut_profile) || IS_NULL_PTR(work_profile))
+  if(IS_NULL_PTR(lut_profile) || IS_NULL_PTR(work_profile))
   {
     d->clut = NULL;
     d->clut_level = 0;
@@ -817,6 +812,9 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   d->work_profile = (dt_iop_order_iccprofile_info_t *)work_profile;
   d->interpolation = (dt_lut3d_interpolation_t)p->interpolation;
   dt_pthread_rwlock_unlock(&gd->lock);
+
+  dt_iop_colorprimaries_gui_data_t *g = (dt_iop_colorprimaries_gui_data_t *)self->gui_data;
+  if(!IS_NULL_PTR(g)) _update_gui_lut_cache(self);
 }
 
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
@@ -846,7 +844,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const int height = piece->roi_in.height;
   const int ch = piece->dsc_in.channels;
 
-  if(IS_NULL_PTR(d) || IS_NULL_PTR(gd) || IS_NULL_PTR(d->clut) || d->clut_level == 0 || IS_NULL_PTR(d->lut_profile) || IS_NULL_PTR(d->work_profile))
+  if(IS_NULL_PTR(d->clut) || d->clut_level == 0 || IS_NULL_PTR(d->lut_profile) || IS_NULL_PTR(d->work_profile))
   {
     dt_iop_image_copy_by_size(obuf, ibuf, width, height, ch);
     return 0;
@@ -924,7 +922,7 @@ static void _refresh_slider_gradients(dt_iop_module_t *self)
       = (self->dev && self->dev->preview_pipe) ? dt_ioppr_get_pipe_output_profile_info(self->dev->preview_pipe)
                                                : NULL;
 
-  if(IS_NULL_PTR(g) || IS_NULL_PTR(lut_profile) || IS_NULL_PTR(p)) return;
+  if(IS_NULL_PTR(lut_profile)) return;
 
   /**
    * The slider stops are purely visual guides. Convert every dt UCS HSB stop
@@ -984,17 +982,6 @@ static void _refresh_slider_gradients(dt_iop_module_t *self)
   }
 }
 
-static void _preview_pipe_finished_callback(gpointer instance, gpointer user_data)
-{
-  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_colorprimaries_gui_data_t *g = (dt_iop_colorprimaries_gui_data_t *)self->gui_data;
-  if(IS_NULL_PTR(g) || IS_NULL_PTR(g->viewer)) return;
-
-  _refresh_slider_gradients(self);
-  _update_gui_lut_cache(self);
-  dt_lut_viewer_queue_draw(g->viewer);
-}
-
 static void _update_gui_lut_cache(dt_iop_module_t *self)
 {
   dt_iop_colorprimaries_gui_data_t *g = (dt_iop_colorprimaries_gui_data_t *)self->gui_data;
@@ -1008,7 +995,7 @@ static void _update_gui_lut_cache(dt_iop_module_t *self)
                                                : NULL;
   uint64_t cache_generation = 0;
 
-  if(IS_NULL_PTR(g) || IS_NULL_PTR(g->viewer) || IS_NULL_PTR(gd)) return;
+  if(IS_NULL_PTR(g->viewer)) return;
 
   dt_pthread_rwlock_rdlock(&gd->lock);
   cache_generation = gd->cache_generation;
@@ -1031,7 +1018,7 @@ static void _update_gui_lut_cache(dt_iop_module_t *self)
   }
 
   dt_pthread_rwlock_wrlock(&gd->lock);
-  if(!gd->cache_valid || !_lut_fields_equal(&gd->params, p))
+  if(!gd->cache_valid || !_lut_fields_equal(&gd->params, p) || IS_NULL_PTR((&gd->cache)->clut))
   {
     _build_clut(&gd->cache, p, lut_profile);
     memcpy(&gd->params, p, sizeof(*p));
@@ -1054,27 +1041,21 @@ static void _update_gui_lut_cache(dt_iop_module_t *self)
   g->viewer_lut_valid = TRUE;
   g->viewer_lut_generation = cache_generation;
   g->viewer_display_profile = display_profile;
+
+  dt_lut_viewer_queue_draw(g->viewer);
 }
 
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
   dt_iop_colorprimaries_gui_data_t *g = (dt_iop_colorprimaries_gui_data_t *)self->gui_data;
   if(IS_NULL_PTR(g)) return;
-
-  g->viewer_lut_dirty = TRUE;
   _refresh_slider_gradients(self);
-  if(g->viewer)
-  {
-    _update_gui_lut_cache(self);
-    dt_lut_viewer_queue_draw(g->viewer);
-  }
 }
 
 void gui_update(dt_iop_module_t *self)
 {
   const dt_iop_colorprimaries_params_t *p = (const dt_iop_colorprimaries_params_t *)self->params;
   dt_iop_colorprimaries_gui_data_t *g = (dt_iop_colorprimaries_gui_data_t *)self->gui_data;
-  if(IS_NULL_PTR(g)) return;
 
   ++darktable.gui->reset;
   dt_bauhaus_slider_set(g->white_level, p->white_level);
@@ -1093,52 +1074,12 @@ void gui_update(dt_iop_module_t *self)
   }
   --darktable.gui->reset;
 
-  _refresh_slider_gradients(self);
-  g->viewer_lut_dirty = TRUE;
-  if(g->viewer)
-  {
-    _update_gui_lut_cache(self);
-    dt_lut_viewer_queue_draw(g->viewer);
-  }
-}
-
-void gui_focus(dt_iop_module_t *self, gboolean in)
-{
-  dt_iop_colorprimaries_gui_data_t *g = (dt_iop_colorprimaries_gui_data_t *)self->gui_data;
-  if(IS_NULL_PTR(g)) return;
-
-  if(in)
-  {
-    if(!g->preview_signal_connected)
-    {
-      DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED,
-                                      G_CALLBACK(_preview_pipe_finished_callback), self);
-      g->preview_signal_connected = TRUE;
-    }
-
-    if(g->viewer)
-    {
-      _refresh_slider_gradients(self);
-      _update_gui_lut_cache(self);
-      dt_lut_viewer_queue_draw(g->viewer);
-    }
-  }
-  else if(g->preview_signal_connected)
-  {
-    DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_preview_pipe_finished_callback), self);
-    g->preview_signal_connected = FALSE;
-  }
+  gui_changed(self, NULL, NULL);
 }
 
 void gui_cleanup(dt_iop_module_t *self)
 {
   dt_iop_colorprimaries_gui_data_t *g = (dt_iop_colorprimaries_gui_data_t *)self->gui_data;
-  if(g->preview_signal_connected)
-  {
-    DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_preview_pipe_finished_callback), self);
-    g->preview_signal_connected = FALSE;
-  }
-
   g->viewer_lut.clut = NULL;
   dt_lut_viewer_destroy(&g->viewer);
   IOP_GUI_FREE;
@@ -1159,7 +1100,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
   dt_iop_colorprimaries_params_t *p = (dt_iop_colorprimaries_params_t *)self->params;
   const dt_iop_module_t *sampled_module = piece && piece->module ? piece->module : self;
 
-  if(IS_NULL_PTR(g) || picker != g->white_level) return;
+  if(picker != g->white_level) return;
   if(sampled_module->picked_color_max[0] < sampled_module->picked_color_min[0]) return;
 
   dt_aligned_pixel_t max_Ych = { 0.f };
@@ -1168,9 +1109,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
   p->white_level = log2f(fmaxf(max_Ych[0], 1e-6f));
   dt_bauhaus_slider_set(g->white_level, p->white_level);
   --darktable.gui->reset;
-  g->viewer_lut_dirty = TRUE;
-  _update_gui_lut_cache(self);
-  if(g->viewer) dt_lut_viewer_queue_draw(g->viewer);
+
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
