@@ -375,7 +375,6 @@ static inline dt_iop_colorequal_channel_t _active_channel_from_gui(const dt_iop_
 
 static inline void _invalidate_preview_cursor(dt_iop_colorequal_gui_data_t *g)
 {
-  if(IS_NULL_PTR(g)) return;
   g->cursor_sample_valid = FALSE;
   g->cursor_hue = 0.f;
   memset(g->cursor_input_display, 0, sizeof(g->cursor_input_display));
@@ -758,7 +757,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
                   : NULL;
   const dt_iop_order_iccprofile_info_t *work_profile = dt_ioppr_get_pipe_current_profile_info(self, pipe);
 
-  if(IS_NULL_PTR(work_profile) || IS_NULL_PTR(lut_profile) || IS_NULL_PTR(gd))
+  if(IS_NULL_PTR(work_profile) || IS_NULL_PTR(lut_profile))
   {
     d->clut = NULL;
     d->clut_level = 0;
@@ -829,7 +828,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
                      : (d->interpolation == DT_LUT3D_INTERP_PYRAMID) ? gd->kernel_lut3d_pyramid
                      : gd->kernel_lut3d_tetrahedral;
 
-  if(IS_NULL_PTR(gd) || IS_NULL_PTR(d->clut) || d->clut_level == 0 || IS_NULL_PTR(d->lut_profile) || IS_NULL_PTR(d->work_profile)) return FALSE;
+  if(IS_NULL_PTR(d->clut) || d->clut_level == 0 || IS_NULL_PTR(d->lut_profile) || IS_NULL_PTR(d->work_profile)) return FALSE;
 
   dt_opencl_set_kernel_arg(devid, gd->kernel_exposure, 0, sizeof(cl_mem), &dev_in);
   dt_opencl_set_kernel_arg(devid, gd->kernel_exposure, 1, sizeof(cl_mem), &dev_out);
@@ -898,7 +897,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const int height = piece->roi_in.height;
   const int ch = piece->dsc_in.channels;
 
-  if(IS_NULL_PTR(gd) || IS_NULL_PTR(d->clut) || d->clut_level == 0)
+  if(IS_NULL_PTR(d->clut) || d->clut_level == 0)
   {
     dt_iop_image_copy_by_size(obuf, ibuf, width, height, ch);
     return 0;
@@ -951,6 +950,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
  */
 static void _update_gui_lut_cache(dt_iop_module_t *self)
 {
+  if(!self->enabled) return;
   dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
   dt_iop_colorequal_global_data_t *gd = (dt_iop_colorequal_global_data_t *)self->global_data;
   const dt_iop_colorequal_params_t *p = g ? &g->gui_params : (const dt_iop_colorequal_params_t *)self->params;
@@ -958,7 +958,7 @@ static void _update_gui_lut_cache(dt_iop_module_t *self)
   const double start = log_perf ? dt_get_wtime() : 0.0;
   uint64_t cache_generation = 0;
 
-  if(IS_NULL_PTR(g) || IS_NULL_PTR(g->viewer) || IS_NULL_PTR(gd)) return;
+  if(IS_NULL_PTR(g->viewer)) return;
 
   dt_pthread_rwlock_rdlock(&gd->lock);
   cache_generation = gd->cache_generation;
@@ -985,7 +985,7 @@ static void _update_gui_lut_cache(dt_iop_module_t *self)
   }
 
   dt_pthread_rwlock_wrlock(&gd->lock);
-  if(!gd->cache_valid || !_lut_fields_equal(&gd->params, p))
+  if(!gd->cache_valid || !_lut_fields_equal(&gd->params, p) || IS_NULL_PTR((&gd->cache)->clut))
   {
     _build_clut(&gd->cache, p, lut_profile);
     memcpy(&gd->params, p, sizeof(*p));
@@ -1341,14 +1341,13 @@ static gboolean _draw_curve(GtkWidget *widget, cairo_t *crf, gpointer user_data)
 
 static void _history_resync_callback(gpointer instance, gpointer user_data)
 {
-  (void)instance;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
   dt_iop_colorequal_global_data_t *gd = (dt_iop_colorequal_global_data_t *)self->global_data;
   uint64_t cache_generation = 0;
-  if(IS_NULL_PTR(g) || IS_NULL_PTR(gd)) return;
+  if(!self->enabled) return;
 
-  if(g->has_focus && g->cursor_valid && self->enabled)
+  if(g->has_focus && g->cursor_valid)
   {
     _refresh_preview_cursor_sample(self);
     const dt_iop_colorequal_ring_t ring = _active_ring_from_gui(g);
@@ -1375,7 +1374,7 @@ static void _cacheline_ready_callback(gpointer instance, const guint64 hash, gpo
   (void)instance;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
-  if(IS_NULL_PTR(g) || g->pending_preview_hash != hash || !_refresh_preview_cursor_sample(self)) return;
+  if(g->pending_preview_hash != hash || !_refresh_preview_cursor_sample(self)) return;
 
   const dt_iop_colorequal_ring_t ring = _active_ring_from_gui(g);
   const dt_iop_colorequal_channel_t channel = _active_channel_from_gui(g, ring);
@@ -1710,7 +1709,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
 {
   dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
   dt_develop_t *dev = self ? self->dev : NULL;
-  if(IS_NULL_PTR(self) || IS_NULL_PTR(g) || IS_NULL_PTR(dev) || !g->has_focus) return 0;
+  if(!g->has_focus) return 0;
 
   if(dt_iop_color_picker_is_visible(dev))
   {
@@ -1757,8 +1756,6 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
 int mouse_leave(struct dt_iop_module_t *self)
 {
   dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
-  if(IS_NULL_PTR(g)) return 0;
-
   g->cursor_valid = FALSE;
   _invalidate_preview_cursor(g);
   _switch_preview_cursor(self);
@@ -1774,7 +1771,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
                    uint32_t state)
 {
   dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
-  if(IS_NULL_PTR(self) || IS_NULL_PTR(g) || !g->has_focus || which != 3 || !g->cursor_valid || !g->cursor_sample_valid
+  if(!g->has_focus || which != 3 || !g->cursor_valid || !g->cursor_sample_valid
      || dt_iop_color_picker_is_visible(self->dev))
     return 0;
 
@@ -1811,7 +1808,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
 int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t state)
 {
   dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
-  if(IS_NULL_PTR(self) || IS_NULL_PTR(g) || !g->has_focus || !g->cursor_valid || !g->cursor_sample_valid || dt_iop_color_picker_is_visible(self->dev))
+  if(!g->has_focus || !g->cursor_valid || !g->cursor_sample_valid || dt_iop_color_picker_is_visible(self->dev))
     return 0;
 
   if(!self->enabled)
@@ -1876,7 +1873,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
 {
   dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
   dt_develop_t *dev = self ? self->dev : NULL;
-  if(IS_NULL_PTR(self) || IS_NULL_PTR(g) || IS_NULL_PTR(dev) || !g->has_focus || !self->enabled || !g->cursor_valid || dt_iop_color_picker_is_visible(dev))
+  if(!g->has_focus || !self->enabled || !g->cursor_valid || dt_iop_color_picker_is_visible(dev))
     return;
 
   if((dev->preview_pipe && dev->preview_pipe->processing) || !g->cursor_sample_valid)
@@ -1969,7 +1966,7 @@ static void _switch_preview_cursor(dt_iop_module_t *self)
   dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
   GtkWidget *widget = dt_ui_main_window(darktable.gui->ui);
 
-  if(IS_NULL_PTR(g) || !widget || !gtk_widget_get_window(widget)) return;
+  if(!widget || !gtk_widget_get_window(widget)) return;
 
   if(!g->has_focus || dt_iop_color_picker_is_visible(self->dev))
   {
@@ -2007,7 +2004,7 @@ static gboolean _refresh_preview_cursor_sample(dt_iop_module_t *self)
   dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
   dt_iop_colorequal_global_data_t *gd = (dt_iop_colorequal_global_data_t *)self->global_data;
   dt_develop_t *dev = self ? self->dev : NULL;
-  if(IS_NULL_PTR(self) || IS_NULL_PTR(g) || IS_NULL_PTR(gd) || IS_NULL_PTR(dev) || IS_NULL_PTR(dev->preview_pipe) || !self->enabled || !g->cursor_valid)
+  if(!self->enabled || !g->cursor_valid)
   {
     _invalidate_preview_cursor(g);
     return FALSE;
@@ -2136,8 +2133,6 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
   dt_iop_colorequal_params_t *p = (dt_iop_colorequal_params_t *)self->params;
   const dt_iop_module_t *sampled_module = piece && piece->module ? piece->module : self;
 
-  if(IS_NULL_PTR(g)) return;
-
   if(picker == g->white_level)
   {
     dt_aligned_pixel_t max_Ych = { 0.f };
@@ -2202,32 +2197,29 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
   dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
-  if(!IS_NULL_PTR(g))
+  const dt_iop_colorequal_params_t *p = (const dt_iop_colorequal_params_t *)self->params;
+  const gboolean curves_changed = !_curve_fields_equal(&g->gui_params, p);
+  const gboolean lut_changed = !_lut_fields_equal(&g->gui_params, p);
+  memcpy(&g->gui_params, self->params, sizeof(dt_iop_colorequal_params_t));
+  if(curves_changed)
   {
-    const dt_iop_colorequal_params_t *p = (const dt_iop_colorequal_params_t *)self->params;
-    const gboolean curves_changed = !_curve_fields_equal(&g->gui_params, p);
-    const gboolean lut_changed = !_lut_fields_equal(&g->gui_params, p);
-    memcpy(&g->gui_params, self->params, sizeof(dt_iop_colorequal_params_t));
-    if(curves_changed)
-    {
-      g->curve_cache_valid = FALSE;
-      for(int ring = 0; ring < DT_IOP_COLOREQUAL_NUM_RINGS; ring++)
-        for(int ch = 0; ch < DT_IOP_COLOREQUAL_NUM_CHANNELS; ch++)
-          gtk_widget_queue_draw(GTK_WIDGET(g->area[ring][ch]));
+    g->curve_cache_valid = FALSE;
+    for(int ring = 0; ring < DT_IOP_COLOREQUAL_NUM_RINGS; ring++)
+      for(int ch = 0; ch < DT_IOP_COLOREQUAL_NUM_CHANNELS; ch++)
+        gtk_widget_queue_draw(GTK_WIDGET(g->area[ring][ch]));
 
+    if(g->cursor_valid && g->has_focus) dt_control_queue_redraw_center();
+  }
+
+  if(lut_changed)
+  {
+    g->viewer_lut_dirty = TRUE;
+    if(self->dev->gui_module == self)
+    {
+      _update_gui_lut_cache(self);
+      if(g->cursor_valid && g->has_focus) _refresh_preview_cursor_sample(self);
+      dt_lut_viewer_queue_draw(g->viewer);
       if(g->cursor_valid && g->has_focus) dt_control_queue_redraw_center();
-    }
-
-    if(lut_changed)
-    {
-      g->viewer_lut_dirty = TRUE;
-      if(self->dev && self->dev->gui_module == self && self->dev->preview_pipe && !self->dev->preview_pipe->processing)
-      {
-        _update_gui_lut_cache(self);
-        if(g->cursor_valid && g->has_focus) _refresh_preview_cursor_sample(self);
-        dt_lut_viewer_queue_draw(g->viewer);
-        if(g->cursor_valid && g->has_focus) dt_control_queue_redraw_center();
-      }
     }
   }
 }
@@ -2236,57 +2228,19 @@ void gui_update(dt_iop_module_t *self)
 {
   const dt_iop_colorequal_params_t *p = (const dt_iop_colorequal_params_t *)self->params;
   dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
-
-  if(!IS_NULL_PTR(g))
-  {
-    /**
-     * History navigation and fast module toggles can reload a newer parameter
-     * state into the module while an older throttled graph edit is still
-     * queued. Once GUI update sees that the history-backed module params no
-     * longer match the live graph cache, that delayed local commit is stale and
-     * must be dropped or it may replay obsolete parameters after the history
-     * stack already moved on.
-     */
-    if(!_lut_fields_equal(&g->gui_params, p)) dt_gui_throttle_cancel(self);
-
-    const gboolean curves_changed = !_curve_fields_equal(&g->gui_params, p);
-    const gboolean lut_changed = !_lut_fields_equal(&g->gui_params, p);
-    memcpy(&g->gui_params, p, sizeof(dt_iop_colorequal_params_t));
-    dt_bauhaus_slider_set(g->white_level, p->white_level);
-    dt_bauhaus_slider_set(g->sigma_L, p->sigma_L);
-    dt_bauhaus_slider_set(g->sigma_rho, p->sigma_rho);
-    dt_bauhaus_slider_set(g->sigma_theta, p->sigma_theta);
-    dt_bauhaus_slider_set(g->neutral_protection, p->neutral_protection);
-    dt_bauhaus_combobox_set(g->interpolation, p->interpolation);
-    if(curves_changed)
-    {
-      g->curve_cache_valid = FALSE;
-      for(int ring = 0; ring < DT_IOP_COLOREQUAL_NUM_RINGS; ring++)
-        for(int ch = 0; ch < DT_IOP_COLOREQUAL_NUM_CHANNELS; ch++)
-          gtk_widget_queue_draw(GTK_WIDGET(g->area[ring][ch]));
-
-      if(g->cursor_valid && g->has_focus) dt_control_queue_redraw_center();
-    }
-
-    if(lut_changed)
-    {
-      g->viewer_lut_dirty = TRUE;
-      if(self->dev && self->dev->gui_module == self && self->dev->preview_pipe && !self->dev->preview_pipe->processing)
-      {
-        _update_gui_lut_cache(self);
-        if(g->cursor_valid && g->has_focus) _refresh_preview_cursor_sample(self);
-        dt_lut_viewer_queue_draw(g->viewer);
-        if(g->cursor_valid && g->has_focus) dt_control_queue_redraw_center();
-      }
-    }
-  }
+  memcpy(&g->gui_params, p, sizeof(dt_iop_colorequal_params_t));
+  dt_bauhaus_slider_set(g->white_level, p->white_level);
+  dt_bauhaus_slider_set(g->sigma_L, p->sigma_L);
+  dt_bauhaus_slider_set(g->sigma_rho, p->sigma_rho);
+  dt_bauhaus_slider_set(g->sigma_theta, p->sigma_theta);
+  dt_bauhaus_slider_set(g->neutral_protection, p->neutral_protection);
+  dt_bauhaus_combobox_set(g->interpolation, p->interpolation);
+  gui_changed(self, NULL, NULL);
 }
 
 void gui_focus(struct dt_iop_module_t *self, gboolean in)
 {
   dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
-  if(IS_NULL_PTR(g)) return;
-
   g->has_focus = in;
 
   if(in)
