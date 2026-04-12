@@ -140,8 +140,6 @@ static uint64_t _mipmap_cache_get_history_hash(const int32_t imgid)
     history_hash = img->history_hash;
     dt_image_cache_read_release(darktable.image_cache, img);
   }
-
-  dt_print(DT_DEBUG_CACHE, "[mipmap/hash] imgid=%d read current=%" PRIu64 "\n", imgid, history_hash);
   return history_hash;
 }
 
@@ -637,6 +635,7 @@ static void dt_mipmap_cache_unlink_ondisk_thumbnail(void *data, int32_t imgid, d
     char filename[PATH_MAX] = { 0 };
     snprintf(filename, sizeof(filename), "%s.d/%d/%"PRIu32".jpg", cache->cachedir, (int)mip, imgid);
     g_unlink(filename);
+    dt_print(DT_DEBUG_CACHE, "[mipmap_cache] image %i for size %i was deleted from disk cache\n", imgid, mip);
   }
 }
 
@@ -659,12 +658,14 @@ void dt_mipmap_cache_deallocate_dynamic(void *data, dt_cache_entry_t *entry)
     // So for now, we unconditionnally write all mipmap sizes, which triggers undue I/O.
     // The fix will need to create new database entries (meaning: upgrade database layout and break compatibility) 
     // to manage one mipmap (integrity) hash per mipmap size.
-    if(!_mipmap_cache_disk_hash_matches(imgid, mip) || TRUE)
+    /*
+    if(!_mipmap_cache_disk_hash_matches(imgid, mip))
     {
       dsc->flags |= DT_MIPMAP_BUFFER_DSC_FLAG_INVALIDATE;
       dt_print(DT_DEBUG_CACHE, "[mipmap_cache] image %i for size %i is %s for (over)writing to cache\n", imgid, mip, 
         write_to_disk ? "planned" : "not planned");
     }
+    */
 
     // don't write skulls:
     if(dsc->width > 8 && dsc->height > 8)
@@ -684,8 +685,9 @@ void dt_mipmap_cache_deallocate_dynamic(void *data, dt_cache_entry_t *entry)
           snprintf(filename, sizeof(filename), "%s.d/%d/%" PRIu32 ".jpg", cache->cachedir, (int)mip,
                    get_imgid(entry->key));
           // Don't write existing files as both performance and quality (lossy jpg) suffer
+          // FIXME: actually, yes, we write existing files too. See FIXME above.
           FILE *f = NULL;
-          if(!g_file_test(filename, G_FILE_TEST_EXISTS) && (f = g_fopen(filename, "wb")))
+          if((f = g_fopen(filename, "wb"))) // !g_file_test(filename, G_FILE_TEST_EXISTS)
           {
             // first check the disk isn't full
             struct statvfs vfsbuf;
@@ -1132,7 +1134,7 @@ void dt_mipmap_cache_remove_at_size(dt_mipmap_cache_t *cache, const int32_t imgi
     dt_cache_release(&_get_cache(cache, mip)->cache, entry);
     dt_cache_remove(&_get_cache(cache, mip)->cache, key);
   }
-  else
+  if(flush_disk)
   {
     // directly remove the file on disk cache even if we don't have a memory entry
     dt_mipmap_cache_unlink_ondisk_thumbnail(cache, imgid, mip);
