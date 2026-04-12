@@ -654,7 +654,11 @@ void dt_mipmap_cache_deallocate_dynamic(void *data, dt_cache_entry_t *entry)
 
     // If the mipmap hash doesn't match the history hash, update the file cache
     if(!_mipmap_cache_disk_hash_matches(imgid, mip))
+    {
       dsc->flags |= DT_MIPMAP_BUFFER_DSC_FLAG_INVALIDATE;
+      dt_print(DT_DEBUG_CACHE, "[mipmap_cache] image %i for size %i is %s for (over)writing to cache\n", imgid, mip, 
+        write_to_disk ? "planned" : "not planned");
+    }
 
     // don't write skulls:
     if(dsc->width > 8 && dsc->height > 8)
@@ -663,9 +667,8 @@ void dt_mipmap_cache_deallocate_dynamic(void *data, dt_cache_entry_t *entry)
       {
         dt_mipmap_cache_unlink_ondisk_thumbnail(data, get_imgid(entry->key), mip);
       }
-      else if(cache->cachedir[0] && write_to_disk && mip < DT_MIPMAP_F)
+      if(cache->cachedir[0] && write_to_disk && mip < DT_MIPMAP_F)
       {
-        gboolean wrote_to_disk = FALSE;
         // serialize to disk
         char filename[PATH_MAX] = {0};
         snprintf(filename, sizeof(filename), "%s.d/%d", cache->cachedir, mip);
@@ -716,16 +719,12 @@ write_error:
             }
             else
             {
-              wrote_to_disk = TRUE;
-              dt_print(DT_DEBUG_CACHE, "image %i for size %i was written to cache at %s\n", imgid, mip, filename);
+              const uint64_t history_hash = _mipmap_cache_get_history_hash(imgid);
+              dt_history_hash_set_mipmap(imgid, history_hash, DT_IMAGE_CACHE_RELAXED);
+              dt_print(DT_DEBUG_CACHE, "[mipmap_cache] image %i for size %i was written to cache at %s\n", imgid, mip, filename);
             }
           }
           if(f) fclose(f);
-          if(wrote_to_disk)
-          {
-            const uint64_t history_hash = _mipmap_cache_get_history_hash(imgid);
-            dt_history_hash_set_mipmap(imgid, history_hash, DT_IMAGE_CACHE_RELAXED);
-          }
         }
       }
     }
