@@ -1082,30 +1082,32 @@ static void _draw_graph_background(cairo_t *cr, const dt_iop_colorequal_channel_
                                    const dt_iop_order_iccprofile_info_t *display_profile)
 {
   const float ring_brightness = dt_colorrings_ring_brightness((dt_colorrings_ring_t)ring);
+  float *const bg = dt_alloc_align_float(DT_IOP_COLOREQUAL_GRAPH_GRADIENTS * DT_IOP_COLOREQUAL_GRAPH_RES * 4);
 
+  // Fast loop
+  __OMP_PARALLEL_FOR__()
   for(int slice = 0; slice < DT_IOP_COLOREQUAL_GRAPH_GRADIENTS; slice++)
   {
     const float y = (float)(DT_IOP_COLOREQUAL_GRAPH_GRADIENTS - slice) / (float)DT_IOP_COLOREQUAL_GRAPH_GRADIENTS;
-    dt_aligned_pixel_t colors[DT_IOP_COLOREQUAL_GRAPH_RES];
-    cairo_pattern_t *gradient = cairo_pattern_create_linear(0.0, 0.0, graph_width, 0.0);
-    __OMP_PARALLEL_FOR__()
     for(int k = 0; k < DT_IOP_COLOREQUAL_GRAPH_RES; k++)
     {
       const float x = (float)k / (float)(DT_IOP_COLOREQUAL_GRAPH_RES - 1);
+      float *const colors = bg + (slice * DT_IOP_COLOREQUAL_GRAPH_RES + k) * 4;
       dt_aligned_pixel_t HSB = { 0.f };
       _graph_background_hsb(channel, x, y, ring_brightness, reference_saturation, HSB);
-      dt_colorrings_hsb_to_display_rgb(HSB, white, display_profile, colors[k]);
+      dt_colorrings_hsb_to_display_rgb(HSB, white, display_profile, colors);
     }
+  }
 
-    /**
-     * Cairo pattern construction is not thread-safe, so the expensive color
-     * conversions are prepared in parallel above and the color stops are
-     * submitted here in one visible serial pass.
-     */
+  // Slow loop
+  for(int slice = 0; slice < DT_IOP_COLOREQUAL_GRAPH_GRADIENTS; slice++)
+  {
+    cairo_pattern_t *gradient = cairo_pattern_create_linear(0.0, 0.0, graph_width, 0.0);
     for(int k = 0; k < DT_IOP_COLOREQUAL_GRAPH_RES; k++)
     {
       const float x = (float)k / (float)(DT_IOP_COLOREQUAL_GRAPH_RES - 1);
-      cairo_pattern_add_color_stop_rgba(gradient, x, colors[k][0], colors[k][1], colors[k][2], 1.0);
+      float *const colors = bg + (slice * DT_IOP_COLOREQUAL_GRAPH_RES + k) * 4;
+      cairo_pattern_add_color_stop_rgba(gradient, x, colors[0], colors[1], colors[2], 1.0);
     }
 
     cairo_rectangle(cr, 0.f, graph_height / (float)DT_IOP_COLOREQUAL_GRAPH_GRADIENTS * (float)slice, graph_width,
@@ -1114,6 +1116,7 @@ static void _draw_graph_background(cairo_t *cr, const dt_iop_colorequal_channel_
     cairo_fill(cr);
     cairo_pattern_destroy(gradient);
   }
+  dt_free(bg);
 }
 
 static gboolean _draw_curve(GtkWidget *widget, cairo_t *crf, gpointer user_data)
