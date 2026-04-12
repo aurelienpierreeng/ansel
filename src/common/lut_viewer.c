@@ -1280,7 +1280,7 @@ dt_lut_viewer_t *dt_lut_viewer_new(dt_gui_module_t *module)
   viewer->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
   viewer->controls = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
   viewer->area = GTK_DRAWING_AREA(dtgtk_drawing_area_new_with_aspect_ratio(1.f));
-  gtk_widget_set_size_request(GTK_WIDGET(viewer->area), -1, DT_PIXEL_APPLY_DPI(260));
+  gtk_widget_set_size_request(GTK_WIDGET(viewer->area), -1, DT_PIXEL_APPLY_DPI(180));
   gtk_widget_add_events(GTK_WIDGET(viewer->area),
                         GDK_SCROLL_MASK | GDK_SMOOTH_SCROLL_MASK | GDK_BUTTON_PRESS_MASK
                           | GDK_BUTTON_RELEASE_MASK | GDK_POINTER_MOTION_MASK);

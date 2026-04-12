@@ -784,6 +784,9 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   d->interpolation = (dt_lut3d_interpolation_t)p->interpolation;
   memcpy(d->reference_saturation, gd->cache.reference_saturation, sizeof(d->reference_saturation));
   dt_pthread_rwlock_unlock(&gd->lock);
+
+  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
+  if(!IS_NULL_PTR(g)) _update_gui_lut_cache(self);
 }
 
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
@@ -1006,6 +1009,8 @@ static void _update_gui_lut_cache(dt_iop_module_t *self)
   g->viewer_lut_dirty = FALSE;
   g->viewer_lut_valid = TRUE;
   g->viewer_lut_generation = cache_generation;
+
+  dt_lut_viewer_queue_draw(g->viewer);
 
   if(log_perf)
     dt_print(DT_DEBUG_PERF, "[colorequal] gui LUT cache sync level=%u total=%.3fms\n", g->viewer_lut.clut_level,
@@ -1339,36 +1344,6 @@ static gboolean _draw_curve(GtkWidget *widget, cairo_t *crf, gpointer user_data)
   return TRUE;
 }
 
-static void _history_resync_callback(gpointer instance, gpointer user_data)
-{
-  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
-  dt_iop_colorequal_global_data_t *gd = (dt_iop_colorequal_global_data_t *)self->global_data;
-  uint64_t cache_generation = 0;
-  if(!self->enabled) return;
-
-  if(g->has_focus && g->cursor_valid)
-  {
-    _refresh_preview_cursor_sample(self);
-    const dt_iop_colorequal_ring_t ring = _active_ring_from_gui(g);
-    const dt_iop_colorequal_channel_t channel = _active_channel_from_gui(g, ring);
-    gtk_widget_queue_draw(GTK_WIDGET(g->area[ring][channel]));
-    dt_control_queue_redraw_center();
-  }
-
-  _switch_preview_cursor(self);
-  if(IS_NULL_PTR(g->viewer)) return;
-
-  dt_pthread_rwlock_rdlock(&gd->lock);
-  cache_generation = gd->cache_generation;
-  dt_pthread_rwlock_unlock(&gd->lock);
-
-  if(!g->viewer_lut_dirty && g->viewer_lut_valid && g->viewer_lut_generation == cache_generation) return;
-
-  _update_gui_lut_cache(self);
-  dt_lut_viewer_queue_draw(g->viewer);
-}
-
 static void _cacheline_ready_callback(gpointer instance, const guint64 hash, gpointer user_data)
 {
   (void)instance;
@@ -1505,7 +1480,6 @@ static gboolean _area_motion_notify_callback(GtkWidget *widget, GdkEventMotion *
       g->viewer_lut_dirty = TRUE;
       if(g->cursor_valid && g->has_focus)
       {
-        _update_gui_lut_cache(self);
         _refresh_preview_cursor_sample(self);
         dt_control_queue_redraw_center();
       }
@@ -1556,7 +1530,6 @@ static gboolean _area_button_press_callback(GtkWidget *widget, GdkEventButton *e
     g->viewer_lut_dirty = TRUE;
     if(g->cursor_valid && g->has_focus)
     {
-      _update_gui_lut_cache(self);
       _refresh_preview_cursor_sample(self);
       dt_control_queue_redraw_center();
     }
@@ -1579,7 +1552,6 @@ static gboolean _area_button_press_callback(GtkWidget *widget, GdkEventButton *e
       g->viewer_lut_dirty = TRUE;
       if(g->cursor_valid && g->has_focus)
       {
-        _update_gui_lut_cache(self);
         _refresh_preview_cursor_sample(self);
         dt_control_queue_redraw_center();
       }
@@ -1609,7 +1581,6 @@ static gboolean _area_button_press_callback(GtkWidget *widget, GdkEventButton *e
     g->viewer_lut_dirty = TRUE;
     if(g->cursor_valid && g->has_focus)
     {
-      _update_gui_lut_cache(self);
       _refresh_preview_cursor_sample(self);
       dt_control_queue_redraw_center();
     }
@@ -1797,7 +1768,6 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
   memcpy(self->params, &g->gui_params, sizeof(dt_iop_colorequal_params_t));
   g->curve_cache_valid = FALSE;
   g->viewer_lut_dirty = TRUE;
-  _update_gui_lut_cache(self);
   _refresh_preview_cursor_sample(self);
   gtk_widget_queue_draw(GTK_WIDGET(g->area[ring][channel]));
   dt_control_queue_redraw_center();
@@ -1860,7 +1830,6 @@ int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t 
   memcpy(self->params, &g->gui_params, sizeof(dt_iop_colorequal_params_t));
   g->curve_cache_valid = FALSE;
   g->viewer_lut_dirty = TRUE;
-  _update_gui_lut_cache(self);
   _refresh_preview_cursor_sample(self);
   gtk_widget_queue_draw(GTK_WIDGET(g->area[ring][channel]));
   dt_control_queue_redraw_center();
@@ -2062,8 +2031,6 @@ static gboolean _refresh_preview_cursor_sample(dt_iop_module_t *self)
   dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, input_entry);
   dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, input_entry);
 
-  if(g->viewer && (g->viewer_lut_dirty || !g->viewer_lut_valid)) _update_gui_lut_cache(self);
-
   const dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_pipe_current_profile_info(self, dev->preview_pipe);
   const dt_iop_order_iccprofile_info_t *const lut_profile = g->viewer_lut.lut_profile;
   dt_aligned_pixel_t output_rgb = { input_rgb[0], input_rgb[1], input_rgb[2], 0.f };
@@ -2199,7 +2166,6 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
   dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
   const dt_iop_colorequal_params_t *p = (const dt_iop_colorequal_params_t *)self->params;
   const gboolean curves_changed = !_curve_fields_equal(&g->gui_params, p);
-  const gboolean lut_changed = !_lut_fields_equal(&g->gui_params, p);
   memcpy(&g->gui_params, self->params, sizeof(dt_iop_colorequal_params_t));
   if(curves_changed)
   {
@@ -2209,18 +2175,6 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
         gtk_widget_queue_draw(GTK_WIDGET(g->area[ring][ch]));
 
     if(g->cursor_valid && g->has_focus) dt_control_queue_redraw_center();
-  }
-
-  if(lut_changed)
-  {
-    g->viewer_lut_dirty = TRUE;
-    if(self->dev->gui_module == self)
-    {
-      _update_gui_lut_cache(self);
-      if(g->cursor_valid && g->has_focus) _refresh_preview_cursor_sample(self);
-      dt_lut_viewer_queue_draw(g->viewer);
-      if(g->cursor_valid && g->has_focus) dt_control_queue_redraw_center();
-    }
   }
 }
 
@@ -2247,17 +2201,9 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
   {
     if(!g->preview_signal_connected)
     {
-      DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_HISTORY_RESYNC,
-                                      G_CALLBACK(_history_resync_callback), self);
       DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_CACHELINE_READY,
                                       G_CALLBACK(_cacheline_ready_callback), self);
       g->preview_signal_connected = TRUE;
-    }
-
-    if(g->viewer && (g->viewer_lut_dirty || !g->viewer_lut_valid))
-    {
-      _update_gui_lut_cache(self);
-      dt_lut_viewer_queue_draw(g->viewer);
     }
 
     if(g->cursor_valid && self->dev && self->dev->preview_pipe && !self->dev->preview_pipe->processing)
@@ -2265,7 +2211,6 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
   }
   else if(g->preview_signal_connected)
   {
-    DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_history_resync_callback), self);
     DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_cacheline_ready_callback), self);
     g->preview_signal_connected = FALSE;
     g->pending_preview_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
@@ -2295,7 +2240,6 @@ void gui_cleanup(dt_iop_module_t *self)
   dt_lut_viewer_destroy(&g->viewer);
   if(g->preview_signal_connected)
   {
-    DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_history_resync_callback), self);
     DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_cacheline_ready_callback), self);
     g->preview_signal_connected = FALSE;
   }
