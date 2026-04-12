@@ -76,6 +76,9 @@
 #include <strings.h>
 
 #include <pango/pangocairo.h>
+#ifdef GDK_WINDOWING_WAYLAND
+#include <gdk/gdkwayland.h>
+#endif
 
 G_DEFINE_TYPE(DtBauhausWidget, dt_bh, GTK_TYPE_DRAWING_AREA)
 
@@ -2578,8 +2581,12 @@ void dt_bauhaus_show_popup(GtkWidget *widget)
   GtkStyleContext *context = gtk_widget_get_style_context(w->bauhaus->popup_area);
   gtk_style_context_add_class(context, "dt_bauhaus_popup");
   gtk_window_set_attached_to(GTK_WINDOW(w->bauhaus->popup_window), widget);
-  GtkWidget *toplevel = gtk_widget_get_toplevel(widget);
-  gtk_window_set_transient_for(GTK_WINDOW(w->bauhaus->popup_window), GTK_WINDOW(toplevel));
+  #ifdef GDK_WINDOWING_WAYLAND
+  if (GDK_IS_WAYLAND_DISPLAY(gdk_display_get_default())) {
+    GtkWidget *toplevel = gtk_widget_get_toplevel(widget);
+    gtk_window_set_transient_for(GTK_WINDOW(w->bauhaus->popup_window), GTK_WINDOW(toplevel));
+  }
+  #endif
 
   // The popup window stays transient for the main application window, so the anchor
   // rectangle needs to remain expressed in that coordinate space even when the popup is
