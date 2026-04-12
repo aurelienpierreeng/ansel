@@ -43,14 +43,24 @@ jobs:
       fail-fast: false
       matrix:
         build:
-          - { os: macos-15, xcode: 26.3, deployment: 15.0, tag: "arm64" } # AppleClang 17, arm64
-          - { os: macos-15-intel, xcode: 26.3, deployment: 15.0, tag: "intel64" } # AppleClang 17, arm64
+          - { 
+            os: macos-15, 
+            xcode: 26.3, 
+            deployment: 15.0, 
+            tag: "arm64",
+            eco: [-DBINARY_PACKAGE_BUILD=OFF -DUSE_GRAPHICSMAGICK=ON -DUSE_IMAGEMAGICK=OFF -DDT_APPLE_X86_TARGET_CLONES=0 -DBUILD_SSE2_CODEPATHS=OFF],
+            } # AppleClang 17, arm64
+          - { 
+            os: macos-15-intel, 
+            xcode: 26.3, 
+            deployment: 15.0, 
+            tag: "intel64",
+            eco: [-DBINARY_PACKAGE_BUILD=ON -DUSE_GRAPHICSMAGICK=ON -DUSE_IMAGEMAGICK=OFF -DDT_APPLE_X86_TARGET_CLONES=1 -DBUILD_SSE2_CODEPATHS=ON],
+             } # AppleClang 17, intel64
         btype:
           - Release
         compiler:
           - { compiler: XCode,   CC: cc, CXX: c++ }
-        # Note: target_clones are disabled in the source code for ARM64, so enable the build flag unconditionnaly
-        eco: [-DBINARY_PACKAGE_BUILD=OFF -DUSE_GRAPHICSMAGICK=ON -DUSE_IMAGEMAGICK=OFF -DDT_APPLE_X86_TARGET_CLONES=1]
         target:
           - skiptest # In the case the generic .ci/ci-script.sh script is used.
                      # But in our case, we invoke the more specific .ci/ci-script-mac.sh script
@@ -66,7 +76,7 @@ jobs:
       SRC_DIR: ${{ github.workspace }}/src
       BUILD_DIR: ${{ github.workspace }}/src/build
       INSTALL_PREFIX: ${{ github.workspace }}/src/install
-      ECO: ${{ matrix.eco }}
+      ECO: ${{ matrix.build.eco }}
       CMAKE_BUILD_TYPE: ${{ matrix.btype }}
       GENERATOR: ${{ matrix.generator }}
       TARGET: ${{ matrix.target }}
@@ -143,8 +153,9 @@ jobs:
       - name: Notify Matrix
         if: ${{ success() }}
         run: |
-          FILENAME=$(tr '~' '.' <<< "$(find . -type f -iname "Ansel-*.dmg")")
-          MESSAGE="New dmg package [${FILENAME}](${{ env.REPO }}/releases/download/${{ env.TAG }}/${FILENAME}) built"
+          FILENAME1=$(tr '~' '.' <<< "$(find . -type f -iname "Ansel-*arm64.dmg")")
+          FILENAME2=$(tr '~' '.' <<< "$(find . -type f -iname "Ansel-*i386.dmg")")
+          MESSAGE="New dmg packages [${FILENAME1}](${{ env.REPO }}/releases/download/${{ env.TAG }}/${FILENAME1}) and [${FILENAME2}](${{ env.REPO }}/releases/download/${{ env.TAG }}/${FILENAME2}) built"
           python .ci/matrix.py \
           -m "$MESSAGE" \
           -s ${{ secrets.MATRIX_SERVER }} \
