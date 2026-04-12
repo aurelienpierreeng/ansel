@@ -451,7 +451,7 @@ static int _ellipse_get_points_border(dt_develop_t *dev, struct dt_masks_form_t 
   {
     if(_ellipse_get_points(dev, x, y, a, b, ellipse->rotation, points, points_count) != 0)
       return 1;
-    if(border)
+    if(!IS_NULL_PTR(border))
     {
       const int prop = ellipse->flags & DT_MASKS_ELLIPSE_PROPORTIONAL;
       return _ellipse_get_points(dev, x, y, (prop ? a * (1.0f + ellipse->border) : a + ellipse->border),

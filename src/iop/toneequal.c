@@ -966,7 +966,7 @@ static inline __attribute__((always_inline)) int toneeq_process(struct dt_iop_mo
   if(self->dev->gui_attached)
   {
     // If the module instance has changed order in the pipe, invalidate the caches
-    if(g && g->pipe_order != position)
+    if(!IS_NULL_PTR(g) && g->pipe_order != position)
     {
       dt_pixel_cache_entry_t *preview_entry = NULL;
       dt_iop_gui_enter_critical_section(self);
@@ -1064,7 +1064,7 @@ static inline __attribute__((always_inline)) int toneeq_process(struct dt_iop_mo
     apply_toneequalizer(in, luminance, out, roi_in, roi_out, ch, d);
   }
 
-  if(preview_output && self->dev->gui_attached && g && luminance_entry)
+  if(preview_output && self->dev->gui_attached && !IS_NULL_PTR(g) && luminance_entry)
   {
     dt_pixel_cache_entry_t *old_entry = NULL;
     gboolean keep_process_ref = FALSE;
@@ -1611,7 +1611,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   /*
    * Perform a radial-based interpolation using a series gaussian functions
    */
-  if(self->dev->gui_attached && g)
+  if(self->dev->gui_attached && !IS_NULL_PTR(g))
   {
     dt_iop_gui_enter_critical_section(self);
     if(g->sigma != p->smoothing) g->interpolation_valid = FALSE;
@@ -2275,7 +2275,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   {
     dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, preview_entry);
     const float *const preview_buf = (const float *const)dt_pixel_cache_entry_get_data(preview_entry);
-    if(preview_buf)
+    if(!IS_NULL_PTR(preview_buf))
     {
       exposure_in = log2f(get_luminance_from_buffer(preview_buf, preview_width, preview_height,
                                                     (size_t)x_pointer, (size_t)y_pointer));
@@ -2428,7 +2428,7 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
     if(self->enabled && self->dev && self->dev->preview_pipe && !self->dev->preview_pipe->processing)
     {
       dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->preview_pipe, self);
-      if(piece && piece->enabled && piece->roi_in.width > 0 && piece->roi_in.height > 0)
+      if(!IS_NULL_PTR(piece) && piece->enabled && piece->roi_in.width > 0 && piece->roi_in.height > 0)
       {
         // Opening the module can happen after preview processing already finished.
         // In that case the preview pipe may stay idle because darkroom can reuse an

@@ -451,16 +451,16 @@ static void node_delete(dt_iop_liquify_params_t *p, dt_liquify_path_data_t *this
   dt_liquify_path_data_t *prev = node_prev(p, this);
   dt_liquify_path_data_t *next = node_next(p, this);
 
-  if(IS_NULL_PTR(prev) && next)
+  if(IS_NULL_PTR(prev) && !IS_NULL_PTR(next))
   {
     next->header.prev = -1;
     next->header.type = DT_LIQUIFY_PATH_MOVE_TO_V1;
   }
-  else if(prev)
+  else if(!IS_NULL_PTR(prev))
   {
     prev->header.next = this->header.next;
 
-    if(next)
+    if(!IS_NULL_PTR(next))
       next->header.prev = prev->header.idx;
   }
 
@@ -824,7 +824,7 @@ static float complex point_at_arc_length(const float complex points[], const int
     if(length >= arc_length)
     {
       const float t = (arc_length - prev_length) / (length - prev_length);
-      if(restart)
+      if(!IS_NULL_PTR(restart))
       {
         restart->i = i;
         restart->length = prev_length;
@@ -1979,7 +1979,7 @@ static void _draw_paths(dt_iop_module_t *module,
         continue;
 
       if((dt_liquify_layers[layer].flags & DT_LIQUIFY_LAYER_FLAG_PREV_SELECTED)
-         && (!prev || !prev->header.selected))
+         && (IS_NULL_PTR(prev) || !prev->header.selected))
         continue;
 
       fg_color = dt_liquify_layers[layer].fg;
@@ -2109,7 +2109,7 @@ static void _draw_paths(dt_iop_module_t *module,
       if(data->header.type == DT_LIQUIFY_PATH_CURVE_TO_V1)
       {
         if(layer == DT_LIQUIFY_LAYER_CTRLPOINT1_HANDLE &&
-            !(prev && prev->header.node_type == DT_LIQUIFY_NODE_TYPE_AUTOSMOOTH))
+            !(!IS_NULL_PTR(prev) && prev->header.node_type == DT_LIQUIFY_NODE_TYPE_AUTOSMOOTH))
         {
           THINLINE; FG_COLOR;
           cairo_move_to(cr, crealf(prev->warp.point), cimagf(prev->warp.point));
@@ -2125,7 +2125,7 @@ static void _draw_paths(dt_iop_module_t *module,
           cairo_stroke(cr);
         }
         if(layer == DT_LIQUIFY_LAYER_CTRLPOINT1 &&
-            !(prev && prev->header.node_type == DT_LIQUIFY_NODE_TYPE_AUTOSMOOTH))
+            !(!IS_NULL_PTR(prev) && prev->header.node_type == DT_LIQUIFY_NODE_TYPE_AUTOSMOOTH))
         {
           THINLINE; BG_COLOR;
           draw_circle(cr, data->node.ctrl1, GET_UI_WIDTH(GIZMO_SMALL));
@@ -2358,7 +2358,7 @@ static dt_liquify_hit_t _hit_paths(dt_iop_module_t *module,
         continue;
 
       if((dt_liquify_layers[layer].flags & DT_LIQUIFY_LAYER_FLAG_PREV_SELECTED)
-          && (!prev || !prev->header.selected))
+          && (IS_NULL_PTR(prev) || !prev->header.selected))
         continue;
 
       const dt_liquify_warp_t *warp  = &data->warp;
@@ -2445,7 +2445,7 @@ static dt_liquify_hit_t _hit_paths(dt_iop_module_t *module,
       if(data->header.type == DT_LIQUIFY_PATH_CURVE_TO_V1)
       {
         if(layer == DT_LIQUIFY_LAYER_CTRLPOINT1 &&
-            !(prev && prev->header.node_type == DT_LIQUIFY_NODE_TYPE_AUTOSMOOTH))
+            !(!IS_NULL_PTR(prev) && prev->header.node_type == DT_LIQUIFY_NODE_TYPE_AUTOSMOOTH))
         {
           CHECK_HIT_PT(data->node.ctrl1);
         }
@@ -2787,7 +2787,7 @@ static dt_liquify_path_data_t *alloc_line_to(dt_iop_module_t *module, float comp
 {
   dt_iop_liquify_gui_data_t *g = (dt_iop_liquify_gui_data_t *) module->gui_data;
   dt_liquify_path_data_t* l = (dt_liquify_path_data_t*)node_alloc(&g->params, &g->node_index);
-  if(l)
+  if(!IS_NULL_PTR(l))
   {
     l->header.type = DT_LIQUIFY_PATH_LINE_TO_V1;
     l->header.node_type = DT_LIQUIFY_NODE_TYPE_AUTOSMOOTH;
@@ -2800,7 +2800,7 @@ static dt_liquify_path_data_t *alloc_curve_to(dt_iop_module_t *module, float com
 {
   dt_iop_liquify_gui_data_t *g = (dt_iop_liquify_gui_data_t *) module->gui_data;
   dt_liquify_path_data_t* c = (dt_liquify_path_data_t*)node_alloc(&g->params, &g->node_index);
-  if(c)
+  if(!IS_NULL_PTR(c))
   {
     c->header.type = DT_LIQUIFY_PATH_CURVE_TO_V1;
     c->header.node_type = DT_LIQUIFY_NODE_TYPE_AUTOSMOOTH;
@@ -2943,12 +2943,12 @@ int mouse_moved(struct dt_iop_module_t *module,
     dt_liquify_hit_t hit = _hit_test_paths(module, &g->params, pt);
     dt_liquify_path_data_t *last_hovered = find_hovered(&g->params);
     if(hit.elem != last_hovered
-       || (last_hovered && hit.elem
+       || (!IS_NULL_PTR(last_hovered) && hit.elem
            && hit.elem->header.hovered != last_hovered->header.hovered))
     {
       if(hit.elem)
         hit.elem->header.hovered = hit.layer;
-      if(last_hovered)
+      if(!IS_NULL_PTR(last_hovered))
         last_hovered->header.hovered = 0;
       // change in hover display
       dt_control_hinter_message(darktable.control, dt_liquify_layers[hit.layer].hint);
@@ -2993,9 +2993,9 @@ int mouse_moved(struct dt_iop_module_t *module,
               // fall thru
             case DT_LIQUIFY_PATH_MOVE_TO_V1:
             case DT_LIQUIFY_PATH_LINE_TO_V1:
-              if(n && n->header.type == DT_LIQUIFY_PATH_CURVE_TO_V1)
+              if(!IS_NULL_PTR(n) && n->header.type == DT_LIQUIFY_PATH_CURVE_TO_V1)
                 n->node.ctrl1 += pt - d->warp.point;
-              if(p && p->header.type == DT_LIQUIFY_PATH_CURVE_TO_V1)
+              if(!IS_NULL_PTR(p) && p->header.type == DT_LIQUIFY_PATH_CURVE_TO_V1)
                 p->node.ctrl2 += pt - d->warp.point;
               d->warp.radius   += pt - d->warp.point;
               d->warp.strength += pt - d->warp.point;
@@ -3011,7 +3011,7 @@ int mouse_moved(struct dt_iop_module_t *module,
          {
             case DT_LIQUIFY_PATH_CURVE_TO_V1:
               d->node.ctrl1 = pt;
-              if(p && p->header.type == DT_LIQUIFY_PATH_CURVE_TO_V1)
+              if(!IS_NULL_PTR(p) && p->header.type == DT_LIQUIFY_PATH_CURVE_TO_V1)
               {
                 switch (p->header.node_type)
                 {
@@ -3038,7 +3038,7 @@ int mouse_moved(struct dt_iop_module_t *module,
          {
             case DT_LIQUIFY_PATH_CURVE_TO_V1:
               d->node.ctrl2 = pt;
-              if(n && n->header.type == DT_LIQUIFY_PATH_CURVE_TO_V1)
+              if(!IS_NULL_PTR(n) && n->header.type == DT_LIQUIFY_PATH_CURVE_TO_V1)
               {
                 switch (d->header.node_type)
                 {
@@ -3484,7 +3484,7 @@ int button_released(struct dt_iop_module_t *module,
       {
         dt_liquify_path_data_t *e = g->last_hit.elem;
         dt_liquify_path_data_t *prev = node_prev(&g->params, e);
-        if(prev && e->header.type == DT_LIQUIFY_PATH_CURVE_TO_V1)
+        if(!IS_NULL_PTR(prev) && e->header.type == DT_LIQUIFY_PATH_CURVE_TO_V1)
         {
           // add node to curve
           dt_liquify_path_data_t *curve1 = (dt_liquify_path_data_t *) e;
@@ -3514,7 +3514,7 @@ int button_released(struct dt_iop_module_t *module,
           handled = 2;
           goto done;
         }
-        if(prev && e->header.type == DT_LIQUIFY_PATH_LINE_TO_V1)
+        if(!IS_NULL_PTR(prev) && e->header.type == DT_LIQUIFY_PATH_LINE_TO_V1)
         {
           // add node to line
           dt_liquify_warp_t *warp1 = &prev->warp;
@@ -3544,7 +3544,7 @@ int button_released(struct dt_iop_module_t *module,
         // change segment
         dt_liquify_path_data_t *e = g->last_hit.elem;
         dt_liquify_path_data_t *prev = node_prev(&g->params, e);
-        if(prev && e->header.type == DT_LIQUIFY_PATH_CURVE_TO_V1)
+        if(!IS_NULL_PTR(prev) && e->header.type == DT_LIQUIFY_PATH_CURVE_TO_V1)
         {
           // curve -> line
           e->header.type = DT_LIQUIFY_PATH_LINE_TO_V1;
@@ -3553,7 +3553,7 @@ int button_released(struct dt_iop_module_t *module,
           handled = 2;
           goto done;
         }
-        if(prev && e->header.type == DT_LIQUIFY_PATH_LINE_TO_V1)
+        if(!IS_NULL_PTR(prev) && e->header.type == DT_LIQUIFY_PATH_LINE_TO_V1)
         {
           // line -> curve
           const float complex p0 = prev->warp.point;
@@ -3649,7 +3649,7 @@ static gboolean btn_make_radio_callback(GtkToggleButton *btn, GdkEventButton *ev
       _start_new_shape(module);
     }
 
-    if(btn) dt_iop_request_focus(module);
+    if(!IS_NULL_PTR(btn)) dt_iop_request_focus(module);
   }
   else
   {

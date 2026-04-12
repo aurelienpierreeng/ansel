@@ -197,7 +197,7 @@ static inline void process_drago(struct dt_iop_module_t *self, const dt_dev_pixe
   // Drago needs the absolute Lmax value of the image. In pixelpipe FULL we can not reliably get this value
   // as the pixelpipe might only see part of the image (region of interest). Therefore we try to get lwmax from
   // the PREVIEW pixelpipe which luckily stores it for us.
-  if(self->dev->gui_attached && g && !dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
+  if(self->dev->gui_attached && !IS_NULL_PTR(g) && !dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
   {
     dt_iop_gui_enter_critical_section(self);
     const uint64_t hash = g->hash;
@@ -232,7 +232,7 @@ static inline void process_drago(struct dt_iop_module_t *self, const dt_dev_pixe
   }
 
   // PREVIEW pixelpipe stores lwmax
-  if(self->dev->gui_attached && g && dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
+  if(self->dev->gui_attached && !IS_NULL_PTR(g) && dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
   {
     uint64_t hash = piece->global_hash;
     dt_iop_gui_enter_critical_section(self);

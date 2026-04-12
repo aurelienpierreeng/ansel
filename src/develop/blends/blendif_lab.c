@@ -1358,7 +1358,7 @@ void dt_develop_blendif_lab_blend(const struct dt_dev_pixelpipe_t *pipe,
     // convert between Lab and the gamma module (which works in RGB), we need to use use that profile for the
     // conversion.
     const size_t buffsize = (size_t)owidth * oheight * DT_BLENDIF_LAB_CH;
-    if(profile)
+    if(!IS_NULL_PTR(profile))
     {
       __OMP_PARALLEL_FOR__()
       for(size_t j = 0; j < buffsize; j += DT_BLENDIF_LAB_CH)

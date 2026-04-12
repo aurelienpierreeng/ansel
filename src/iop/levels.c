@@ -235,7 +235,7 @@ static void dt_iop_levels_compute_levels_automatic(dt_iop_module_t *self,
   {
     const size_t histogram_size = 4 * histogram_stats.bins_count * sizeof(uint32_t);
     histogram = dt_alloc_align(histogram_size);
-    if(histogram) memcpy(histogram, self->histogram, histogram_size);
+    if(!IS_NULL_PTR(histogram)) memcpy(histogram, self->histogram, histogram_size);
   }
   dt_iop_gui_leave_critical_section(self);
 
@@ -372,7 +372,7 @@ static inline __attribute__((always_inline)) void commit_params_late(dt_iop_modu
 
   if(d->mode == LEVELS_MODE_AUTOMATIC)
   {
-    if(g && !dt_dev_pixelpipe_has_preview_output(self->dev, pipe, &piece->roi_out))
+    if(!IS_NULL_PTR(g) && !dt_dev_pixelpipe_has_preview_output(self->dev, pipe, &piece->roi_out))
     {
       dt_iop_gui_enter_critical_section(self);
       const uint64_t hash = g->hash;
@@ -402,7 +402,7 @@ static inline __attribute__((always_inline)) void commit_params_late(dt_iop_modu
       compute_lut(piece);
     }
 
-    if(g && dt_dev_pixelpipe_has_preview_output(self->dev, pipe, &piece->roi_out)
+    if(!IS_NULL_PTR(g) && dt_dev_pixelpipe_has_preview_output(self->dev, pipe, &piece->roi_out)
        && d->mode == LEVELS_MODE_AUTOMATIC)
     {
       uint64_t hash = piece->global_hash;
@@ -786,7 +786,7 @@ static gboolean dt_iop_levels_area_draw(GtkWidget *widget, cairo_t *crf, gpointe
     uint32_t *hist = self->histogram;
     const gboolean is_linear = FALSE;
     float hist_max = is_linear ? self->histogram_max[0] : logf(1.0 + self->histogram_max[0]);
-    if(hist && hist_max > 0.0f)
+    if(!IS_NULL_PTR(hist) && hist_max > 0.0f)
     {
       cairo_save(cr);
       cairo_scale(cr, width / 255.0, -(height - DT_PIXEL_APPLY_DPI(5)) / hist_max);

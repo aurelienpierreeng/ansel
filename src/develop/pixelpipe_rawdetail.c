@@ -116,7 +116,7 @@ float *dt_dev_distort_detail_mask(const dt_dev_pixelpipe_t *pipe, float *src,
     }
   }
 
-  if(target_piece
+  if(!IS_NULL_PTR(target_piece)
      && (current_roi.scale != target_piece->roi_out.scale
          || current_roi.width != target_piece->roi_out.width
          || current_roi.height != target_piece->roi_out.height

@@ -94,7 +94,7 @@ gboolean dt_drawlayer_cache_patch_alloc_shared(dt_drawlayer_cache_patch_t *patch
   dt_pixel_cache_entry_t *entry = NULL;
   const int created = dt_dev_pixelpipe_cache_get(darktable.pixelpipe_cache, hash, pixel_count * 4 * sizeof(float),
                                                  name, DT_DEV_PIXELPIPE_NONE, TRUE, &data, &entry);
-  if(created_out) *created_out = created;
+  if(!IS_NULL_PTR(created_out)) *created_out = created;
   if(IS_NULL_PTR(data) || IS_NULL_PTR(entry))
   {
     if(entry)
@@ -191,9 +191,9 @@ void dt_drawlayer_cache_invalidate_process_patch_state(gboolean *process_patch_v
 {
   if(process_patch_valid) *process_patch_valid = FALSE;
   if(process_patch_dirty) *process_patch_dirty = FALSE;
-  if(process_dirty_rect) dt_drawlayer_paint_runtime_state_reset(process_dirty_rect);
-  if(process_patch_padding) *process_patch_padding = 0;
-  if(process_combined_roi) memset(process_combined_roi, 0, sizeof(*process_combined_roi));
+  if(!IS_NULL_PTR(process_dirty_rect)) dt_drawlayer_paint_runtime_state_reset(process_dirty_rect);
+  if(!IS_NULL_PTR(process_patch_padding)) *process_patch_padding = 0;
+  if(!IS_NULL_PTR(process_combined_roi)) memset(process_combined_roi, 0, sizeof(*process_combined_roi));
 }
 
 /** @brief Ensure process patch and process-stroke-mask backing buffers exist. */
@@ -269,7 +269,7 @@ void dt_drawlayer_cache_build_combined_process_roi(const dt_dev_pixelpipe_iop_t 
   if(IS_NULL_PTR(piece) || IS_NULL_PTR(process_roi) || IS_NULL_PTR(combined_roi) || current_full_w <= 0 || current_full_h <= 0
      || src_w <= 0 || src_h <= 0)
   {
-    if(combined_roi) memset(combined_roi, 0, sizeof(*combined_roi));
+    if(!IS_NULL_PTR(combined_roi)) memset(combined_roi, 0, sizeof(*combined_roi));
     return;
   }
 
@@ -298,7 +298,7 @@ void dt_drawlayer_cache_resolve_piece_input_origin(const dt_dev_pixelpipe_iop_t 
   int origin_x = 0;
   int origin_y = 0;
 
-  if(piece)
+  if(!IS_NULL_PTR(piece))
   {
     origin_x = piece->buf_in.x;
     origin_y = piece->buf_in.y;
@@ -324,7 +324,7 @@ void dt_drawlayer_cache_build_combined_process_roi_for_piece(const dt_dev_pixelp
   if(IS_NULL_PTR(piece) || IS_NULL_PTR(process_roi) || IS_NULL_PTR(combined_roi) || current_full_w <= 0 || current_full_h <= 0
      || src_w <= 0 || src_h <= 0)
   {
-    if(combined_roi) memset(combined_roi, 0, sizeof(*combined_roi));
+    if(!IS_NULL_PTR(combined_roi)) memset(combined_roi, 0, sizeof(*combined_roi));
     return;
   }
 
@@ -349,7 +349,7 @@ gboolean dt_drawlayer_cache_build_process_blend_rois(const dt_drawlayer_cache_pa
   if(process_patch->width <= 0 || process_patch->height <= 0 || roi_out->width <= 0 || roi_out->height <= 0)
     return FALSE;
 
-  if(source_process_roi)
+  if(!IS_NULL_PTR(source_process_roi))
   {
     source_process_roi->x = 0;
     source_process_roi->y = 0;
@@ -359,7 +359,7 @@ gboolean dt_drawlayer_cache_build_process_blend_rois(const dt_drawlayer_cache_pa
   }
 
   const int process_pad = MAX(process_patch_padding, 0);
-  if(blend_target_roi)
+  if(!IS_NULL_PTR(blend_target_roi))
   {
     blend_target_roi->x = process_pad;
     blend_target_roi->y = process_pad;
@@ -420,8 +420,8 @@ gboolean dt_drawlayer_cache_populate_process_patch_from_base(const dt_drawlayer_
 
   process_patch->x = 0;
   process_patch->y = 0;
-  if(process_patch_padding) *process_patch_padding = process_pad;
-  if(process_combined_roi) *process_combined_roi = *combined_roi;
+  if(!IS_NULL_PTR(process_patch_padding)) *process_patch_padding = process_pad;
+  if(!IS_NULL_PTR(process_combined_roi)) *process_combined_roi = *combined_roi;
 
   dt_drawlayer_cache_patch_rdlock(base_patch);
   if(fabs(combined_roi->scale - 1.0) <= 1e-6f)
@@ -474,9 +474,9 @@ gboolean dt_drawlayer_cache_populate_process_patch_from_base(const dt_drawlayer_
 
   if(process_patch_valid) *process_patch_valid = TRUE;
   if(process_patch_dirty) *process_patch_dirty = FALSE;
-  if(process_dirty_rect) dt_drawlayer_paint_runtime_state_reset(process_dirty_rect);
+  if(!IS_NULL_PTR(process_dirty_rect)) dt_drawlayer_paint_runtime_state_reset(process_dirty_rect);
 
-  if(process_stroke_mask && process_stroke_mask->pixels
+  if(!IS_NULL_PTR(process_stroke_mask) && process_stroke_mask->pixels
      && process_stroke_mask->width == process_patch->width
      && process_stroke_mask->height == process_patch->height)
   {
@@ -611,7 +611,7 @@ gboolean dt_drawlayer_cache_flush_process_patch_to_base(dt_drawlayer_cache_patch
 #endif
   dt_drawlayer_cache_patch_wrunlock(base_patch);
 
-  if(base_stroke_mask && process_stroke_mask && base_stroke_mask->pixels && process_stroke_mask->pixels
+  if(!IS_NULL_PTR(base_stroke_mask) && !IS_NULL_PTR(process_stroke_mask) && base_stroke_mask->pixels && process_stroke_mask->pixels
      && base_stroke_mask->width > 0 && base_stroke_mask->height > 0
      && process_stroke_mask->width == process_patch->width
      && process_stroke_mask->height == process_patch->height)
@@ -635,6 +635,6 @@ gboolean dt_drawlayer_cache_flush_process_patch_to_base(dt_drawlayer_cache_patch
 
   if(cache_dirty) *cache_dirty = TRUE;
   *process_patch_dirty = FALSE;
-  if(process_dirty_rect) dt_drawlayer_paint_runtime_state_reset(process_dirty_rect);
+  if(!IS_NULL_PTR(process_dirty_rect)) dt_drawlayer_paint_runtime_state_reset(process_dirty_rect);
   return TRUE;
 }

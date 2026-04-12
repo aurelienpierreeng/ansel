@@ -587,7 +587,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
     return;
 
   // Resolve the working profile currently carried by the pipe.
-  if(work_profile)
+  if(!IS_NULL_PTR(work_profile))
   {
     work_type = work_profile->type;
     work_filename = work_profile->filename;
@@ -610,7 +610,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
       = dt_colorspaces_get_profile(out_type, out_filename,
                                    DT_PROFILE_DIRECTION_OUT
                                    | DT_PROFILE_DIRECTION_DISPLAY);
-  if(out_profile)
+  if(!IS_NULL_PTR(out_profile))
   {
     // Path for internal profile or external ICC file
     output = out_profile->profile;
@@ -657,7 +657,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
        darktable.color_profiles->softproof_filename,
        DT_PROFILE_DIRECTION_OUT | DT_PROFILE_DIRECTION_DISPLAY);
 
-    if(prof)
+    if(!IS_NULL_PTR(prof))
       softproof = prof->profile;
     else
     {

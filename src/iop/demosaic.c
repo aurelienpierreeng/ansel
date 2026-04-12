@@ -1058,7 +1058,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     if(!(img->flags & DT_IMAGE_4BAYER) && data->green_eq != DT_IOP_GREEN_EQ_NO)
     {
       in = dt_pixelpipe_cache_alloc_align_float((size_t)roi_in->height * roi_in->width, pipe);
-      if(in)
+      if(!IS_NULL_PTR(in))
       {
         switch(data->green_eq)
         {

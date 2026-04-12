@@ -213,7 +213,7 @@ static void _cache_remove_payloadless_entry_locked(dt_dev_pixelpipe_cache_t *cac
 int _non_thread_safe_cache_remove(dt_dev_pixelpipe_cache_t *cache, const gboolean force,
                                   dt_pixel_cache_entry_t *cache_entry, GHashTable *table)
 {
-  if(cache_entry)
+  if(!IS_NULL_PTR(cache_entry))
   {
     // Returns 1 if the lock is captured by another thread
     // 0 if WE capture the lock, and then need to release it
@@ -1504,7 +1504,7 @@ static inline void *_arena_alloc_with_defrag(dt_dev_pixelpipe_cache_t *cache, si
                                              size_t *actual_size)
 {
   void *buf = dt_cache_arena_alloc(&cache->arena, request_size, actual_size);
-  if(buf) return buf;
+  if(!IS_NULL_PTR(buf)) return buf;
 
   uint32_t pages_needed = 0;
   if(dt_cache_arena_calc(&cache->arena, request_size, &pages_needed, NULL))
@@ -1556,13 +1556,13 @@ static inline void _log_arena_allocation_failure(dt_dev_pixelpipe_cache_t *cache
             largest_free_bytes / (1024 * 1024), total_free_bytes / (1024 * 1024),
             cache->current_memory / (1024 * 1024), cache->max_memory / (1024 * 1024));
 
-  if(entry_name && module)
+  if(!IS_NULL_PTR(entry_name) && !IS_NULL_PTR(module))
     dt_control_log(_("The pipeline cache is full while allocating `%s` (module `%s`). Either your RAM settings are too frugal or your RAM is too small."),
                    entry_name, module);
-  else if(entry_name)
+  else if(!IS_NULL_PTR(entry_name))
     dt_control_log(_("The pipeline cache is full while allocating `%s`. Either your RAM settings are too frugal or your RAM is too small."),
                    entry_name);
-  else if(module)
+  else if(!IS_NULL_PTR(module))
     dt_control_log(_("The pipeline cache is full while processing module `%s`. Either your RAM settings are too frugal or your RAM is too small."),
                    module);
   else
@@ -1671,11 +1671,11 @@ static int _free_space_to_alloc(dt_dev_pixelpipe_cache_t *cache, const size_t si
       fprintf(stdout, "[pixelpipe] cache is full, cannot allocate new entry %" PRIu64 " (%s)\n", hash, name);
     else
       fprintf(stdout, "[pixelpipe] cache is full, cannot allocate new entry (%s)\n", name);
-    if(name && module && name_is_file)
+    if(!IS_NULL_PTR(name) && !IS_NULL_PTR(module) && name_is_file)
       dt_control_log(_("The pipeline cache is full while allocating `%s` (module `%s`). Either your RAM settings are too frugal or your RAM is too small."), name, module);
-    else if(name)
+    else if(!IS_NULL_PTR(name))
       dt_control_log(_("The pipeline cache is full while allocating `%s`. Either your RAM settings are too frugal or your RAM is too small."), name);
-    else if(module)
+    else if(!IS_NULL_PTR(module))
       dt_control_log(_("The pipeline cache is full while processing module `%s`. Either your RAM settings are too frugal or your RAM is too small."), module);
     else
       dt_control_log(_("The pipeline cache is full. Either your RAM settings are too frugal or your RAM is too small."));
@@ -2017,14 +2017,14 @@ int dt_dev_pixelpipe_cache_get(dt_dev_pixelpipe_cache_t *cache, const uint64_t h
   cache->queries++;
 
   dt_pixel_cache_entry_t *cache_entry = _non_threadsafe_cache_get_entry(cache, cache->entries, hash);
-  if(cache_entry && cache_entry->auto_destroy)
+  if(!IS_NULL_PTR(cache_entry) && cache_entry->auto_destroy)
   {
     _pixel_cache_message(cache_entry, "dropping auto-destroy entry before cache_get reuse", FALSE);
     if(_non_thread_safe_cache_remove(cache, FALSE, cache_entry, cache->entries) == 0)
       cache_entry = NULL;
   }
 
-  if(cache_entry)
+  if(!IS_NULL_PTR(cache_entry))
   {
     cache->hits++;
     cache_entry->hits++;
@@ -2086,14 +2086,14 @@ dt_dev_pixelpipe_cache_get_writable(dt_dev_pixelpipe_cache_t *cache, const uint6
   cache->queries++;
 
   dt_pixel_cache_entry_t *cache_entry = _non_threadsafe_cache_get_entry(cache, cache->entries, hash);
-  if(cache_entry && cache_entry->auto_destroy)
+  if(!IS_NULL_PTR(cache_entry) && cache_entry->auto_destroy)
   {
     _pixel_cache_message(cache_entry, "dropping auto-destroy entry before writable reuse", FALSE);
     if(_non_thread_safe_cache_remove(cache, FALSE, cache_entry, cache->entries) == 0)
       cache_entry = NULL;
   }
 
-  if(cache_entry)
+  if(!IS_NULL_PTR(cache_entry))
   {
     /* A hash match alone is not enough to skip recomputation here. Hostless GPU-only intermediates can stay
      * published in the table after a later VRAM flush has already dropped their last `cl_mem`, which leaves a
@@ -2109,7 +2109,7 @@ dt_dev_pixelpipe_cache_get_writable(dt_dev_pixelpipe_cache_t *cache, const uint6
     }
   }
 
-  if(cache_entry)
+  if(!IS_NULL_PTR(cache_entry))
   {
     dt_pthread_mutex_unlock(&cache->lock);
     if(data) *data = NULL;
@@ -2120,7 +2120,7 @@ dt_dev_pixelpipe_cache_get_writable(dt_dev_pixelpipe_cache_t *cache, const uint6
   if(allow_rekey_reuse)
   {
     cache_entry = _cache_try_rekey_reuse_locked(cache, hash, size, reuse_hint);
-    if(cache_entry)
+    if(!IS_NULL_PTR(cache_entry))
     {
       dt_pthread_mutex_unlock(&cache->lock);
       if(alloc && IS_NULL_PTR(cache_entry->data)) dt_pixel_cache_alloc(cache, cache_entry);
@@ -2195,7 +2195,7 @@ static dt_pixel_cache_entry_t *_cache_lookup_existing(dt_dev_pixelpipe_cache_t *
   cache->queries++;
   dt_pixel_cache_entry_t *cache_entry = _non_threadsafe_cache_get_entry(cache, cache->entries, hash);
 
-  if(cache_entry)
+  if(!IS_NULL_PTR(cache_entry))
   {
     cache->hits++;
     cache_entry->hits++;
@@ -2261,14 +2261,14 @@ gboolean dt_dev_pixelpipe_cache_restore_host_payload(dt_dev_pixelpipe_cache_t *c
 
   if(dt_pixel_cache_entry_get_data(cache_entry) != NULL)
   {
-    if(data) *data = dt_pixel_cache_entry_get_data(cache_entry);
+    if(!IS_NULL_PTR(data)) *data = dt_pixel_cache_entry_get_data(cache_entry);
     return TRUE;
   }
 
   if(!_cache_entry_materialize_host_data(cache, preferred_devid, cache_entry))
     return FALSE;
 
-  if(data) *data = dt_pixel_cache_entry_get_data(cache_entry);
+  if(!IS_NULL_PTR(data)) *data = dt_pixel_cache_entry_get_data(cache_entry);
   return dt_pixel_cache_entry_get_data(cache_entry) != NULL;
 }
 
@@ -2356,7 +2356,7 @@ gboolean dt_dev_pixelpipe_cache_peek(dt_dev_pixelpipe_cache_t *cache, const uint
     return TRUE;
   }
 
-  if(data && _cache_entry_has_device_payload(cache_entry, preferred_devid))
+  if(!IS_NULL_PTR(data) && _cache_entry_has_device_payload(cache_entry, preferred_devid))
   {
     if(data) *data = NULL;
     _trace_exact_hit("device-only", hash, cache_entry, NULL, NULL, preferred_devid, FALSE);

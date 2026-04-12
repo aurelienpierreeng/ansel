@@ -383,7 +383,7 @@ static gboolean _sync_simple_from_params(dt_iop_module_t *self, const int point,
   float roundtrip[3][3] = { { 0.f } };
   dt_iop_channelmixer_shared_simple_params_t simple;
 
-  if(error) *error = INFINITY;
+  if(!IS_NULL_PTR(error)) *error = INFINITY;
 
   _get_point_rows(p, point, rows, normalize);
   if(!dt_iop_channelmixer_shared_rows_are_normalized(normalize)) return FALSE;
@@ -393,7 +393,7 @@ static gboolean _sync_simple_from_params(dt_iop_module_t *self, const int point,
   dt_iop_channelmixer_shared_simple_to_matrix(&simple, roundtrip);
 
   const float roundtrip_error = dt_iop_channelmixer_shared_roundtrip_error(M, roundtrip);
-  if(error) *error = roundtrip_error;
+  if(!IS_NULL_PTR(error)) *error = roundtrip_error;
 
   ++darktable.gui->reset;
   dt_iop_channelmixer_shared_simple_to_sliders(&simple, widgets);
@@ -418,7 +418,7 @@ static gboolean _sync_primaries_from_params(dt_iop_module_t *self, const int poi
   float roundtrip[3][3] = { { 0.f } };
   dt_iop_channelmixer_shared_primaries_params_t primaries;
 
-  if(error) *error = INFINITY;
+  if(!IS_NULL_PTR(error)) *error = INFINITY;
 
   _get_point_rows(p, point, rows, normalize);
   if(!dt_iop_channelmixer_shared_get_matrix(rows, normalize, FALSE, M)) return FALSE;
@@ -430,7 +430,7 @@ static gboolean _sync_primaries_from_params(dt_iop_module_t *self, const int poi
     return FALSE;
 
   const float roundtrip_error = dt_iop_channelmixer_shared_roundtrip_error(M, roundtrip);
-  if(error) *error = roundtrip_error;
+  if(!IS_NULL_PTR(error)) *error = roundtrip_error;
 
   ++darktable.gui->reset;
   dt_iop_channelmixer_shared_primaries_to_sliders(&primaries, widgets);
@@ -545,7 +545,7 @@ static void _update_point_gui(dt_iop_module_t *self, const int point, GtkWidget 
     for(int col = 0; col < 3; col++) complete_widget = complete_widget || changed == g->point[point].complete[row][col];
   }
 
-  if(!changed || complete_widget)
+  if(IS_NULL_PTR(changed) || complete_widget)
   {
     float simple_error = INFINITY;
     float primaries_error = INFINITY;
@@ -613,7 +613,7 @@ static void _render_preview_surface(dt_iop_module_t *self, cairo_surface_t *surf
   dt_iop_splittoning_rgb_params_t *p = (dt_iop_splittoning_rgb_params_t *)self->params;
   const dt_iop_order_iccprofile_info_t *work_profile = dt_ioppr_get_pipe_work_profile_info(self->dev->preview_pipe);
   const dt_iop_order_iccprofile_info_t *display_profile = dt_ioppr_get_pipe_output_profile_info(self->dev->preview_pipe);
-  if(IS_NULL_PTR(work_profile) || !display_profile) return;
+  if(IS_NULL_PTR(work_profile) || IS_NULL_PTR(display_profile)) return;
 
   dt_iop_splittoning_rgb_data_t state = { 0 };
   cairo_t *cr = cairo_create(surface);
@@ -628,7 +628,7 @@ static void _render_preview_surface(dt_iop_module_t *self, cairo_surface_t *surf
     for(int i = 0; i < 3; i++) state.point_matrix[DT_SPLITTONING_RGB_POINT_BRIGHT][i][i] = 1.f;
 
   memset(state.rgb_to_xyz_transposed, 0, sizeof(dt_colormatrix_t));
-  if(work_profile)
+  if(!IS_NULL_PTR(work_profile))
     memcpy(state.rgb_to_xyz_transposed, work_profile->matrix_in_transposed, sizeof(dt_colormatrix_t));
   else
   {
@@ -861,7 +861,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *params, dt_dev
     for(int i = 0; i < 3; i++) d->point_matrix[DT_SPLITTONING_RGB_POINT_BRIGHT][i][i] = 1.f;
 
   memset(d->rgb_to_xyz_transposed, 0, sizeof(dt_colormatrix_t));
-  if(work_profile)
+  if(!IS_NULL_PTR(work_profile))
     memcpy(d->rgb_to_xyz_transposed, work_profile->matrix_in_transposed, sizeof(dt_colormatrix_t));
   else
   {

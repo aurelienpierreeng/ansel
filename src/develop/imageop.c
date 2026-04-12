@@ -670,7 +670,7 @@ gboolean dt_iop_gui_commit_iop_order_change(dt_develop_t *dev, dt_iop_module_t *
   dt_dev_pixelpipe_rebuild_all(dev);
   if(write_history) dt_dev_add_history_item(dev, module, enable, TRUE);
 
-  if(reason) dt_ioppr_check_iop_order(dev, 0, reason);
+  if(!IS_NULL_PTR(reason)) dt_ioppr_check_iop_order(dev, 0, reason);
 
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_MODULE_MOVED);
   return TRUE;
@@ -922,12 +922,12 @@ static gboolean _gui_multiinstance_callback(GtkButton *button, GdkEventButton *e
 {
   dt_iop_module_t *module = (dt_iop_module_t *)user_data;
 
-  if(event && event->button == 3)
+  if(!IS_NULL_PTR(event) && event->button == 3)
   {
     if(!(module->flags() & IOP_FLAGS_ONE_INSTANCE)) _gui_copy_callback(button, user_data);
     return TRUE;
   }
-  else if(event && event->button == 2)
+  else if(!IS_NULL_PTR(event) && event->button == 2)
   {
     return FALSE;
   }
@@ -1216,7 +1216,7 @@ static void _init_presets(dt_iop_module_so_t *module_so)
   // presets.
 
   const int32_t module_version = module_so->version();
-  if(!_iop_presets_select_stmt)
+  if(IS_NULL_PTR(_iop_presets_select_stmt))
   {
     DT_DEBUG_SQLITE3_PREPARE_V2(
         dt_database_get(darktable.db),
@@ -1348,7 +1348,7 @@ static void _init_presets(dt_iop_module_so_t *module_so)
               module_so->op, name, old_params_version, module_version);
     }
 
-    if(!old_blend_params || dt_develop_blend_version() > old_blend_params_version)
+    if(IS_NULL_PTR(old_blend_params) || dt_develop_blend_version() > old_blend_params_version)
     {
       fprintf(stderr,
               "[imageop_init_presets] updating '%s' preset '%s' from blendop version %d to version %d\n",
@@ -1500,7 +1500,7 @@ void dt_iop_cleanup_module(dt_iop_module_t *module)
 
 void dt_iop_unload_modules_so()
 {
-  if(_iop_presets_select_stmt)
+  if(!IS_NULL_PTR(_iop_presets_select_stmt))
   {
     sqlite3_finalize(_iop_presets_select_stmt);
     _iop_presets_select_stmt = NULL;
@@ -1742,7 +1742,7 @@ void dt_iop_compute_blendop_hash(dt_iop_module_t *module, uint64_t hash, GList *
   if(module->flags() & IOP_FLAGS_SUPPORTS_BLENDING)
   {
     // Drawn masks from dev for this module
-    if(masks)
+    if(!IS_NULL_PTR(masks))
     {
       dt_masks_form_t *grp = dt_masks_get_from_id_ext(masks, module->blend_params->mask_id);
       hash = dt_masks_group_get_hash(hash, grp);
@@ -1767,7 +1767,7 @@ void dt_iop_compute_blendop_hash(dt_iop_module_t *module, uint64_t hash, GList *
     if(raster_source)
     {
       // Drawn masks
-      if(masks)
+      if(!IS_NULL_PTR(masks))
       {
         dt_masks_form_t *raster_grp = dt_masks_get_from_id_ext(masks, raster_source->blend_params->mask_id);
         hash = dt_masks_group_get_hash(hash, raster_grp);
@@ -2037,7 +2037,7 @@ void dt_iop_request_focus(dt_iop_module_t *module)
   }
 
   /* set the focus on module */
-  if(module)
+  if(!IS_NULL_PTR(module))
   {
     gtk_widget_set_state_flags(dt_iop_gui_get_pluginui(module), GTK_STATE_FLAG_SELECTED, TRUE);
 

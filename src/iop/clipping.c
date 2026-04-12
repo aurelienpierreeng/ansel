@@ -1601,7 +1601,7 @@ static void aspect_presets_changed(GtkWidget *combo, dt_iop_module_t *self)
   const char *text = dt_bauhaus_combobox_get_text(combo);
   if(which < 0)
   {
-    if(text)
+    if(!IS_NULL_PTR(text))
     {
       const char *c = text;
       const char *end = text + strlen(text);
@@ -2880,7 +2880,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
       if(dt_dev_distort_backtransform_plus(self->dev, self->dev->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, points, 2))
       {
         dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->virtual_pipe, self);
-        if(piece)
+        if(!IS_NULL_PTR(piece))
         {
           // only update the sliders, not the dt_iop_clipping_params_t structure, so that the call to
           // dt_control_queue_redraw_center below doesn't go rerun the pixelpipe because it thinks that
@@ -3019,7 +3019,7 @@ static void commit_box(dt_iop_module_t *self, dt_iop_clipping_gui_data_t *g, dt_
   if(dt_dev_distort_backtransform_plus(self->dev, self->dev->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, points, 2))
   {
     dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->virtual_pipe, self);
-    if(piece)
+    if(!IS_NULL_PTR(piece))
     {
       p->cx = CLAMPF(points[0] / (float)piece->buf_out.width, 0.0f, 0.9f);
       p->cy = CLAMPF(points[1] / (float)piece->buf_out.height, 0.0f, 0.9f);

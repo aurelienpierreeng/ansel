@@ -661,7 +661,7 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
 dt_iop_ashift_params_t * _get_ashift_params(dt_iop_module_t *self)
 {
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
-  if(g && g->editing)
+  if(!IS_NULL_PTR(g) && g->editing)
     return &g->new_params;
   else
     return (dt_iop_ashift_params_t *)self->params;
@@ -2515,7 +2515,7 @@ static float _get_crop_aspect_angle(dt_iop_module_t *self, const dt_iop_ashift_g
 {
   int isflipped = 0;
 
-  if(g && g->isflipped != -1)
+  if(!IS_NULL_PTR(g) && g->isflipped != -1)
   {
     isflipped = g->isflipped;
   }
@@ -3334,7 +3334,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const int ch_width = ch * roi_in->width;
 
   // only for preview pipe: collect input buffer data and do some other evaluations
-  if(g && self->dev->gui_attached
+  if(!IS_NULL_PTR(g) && self->dev->gui_attached
      && pipe == self->dev->preview_pipe
      && dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
   {
@@ -5607,7 +5607,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   dt_iop_ashift_data_t *d = (dt_iop_ashift_data_t *)piece->data;
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
 
-  if(g && g->editing)
+  if(!IS_NULL_PTR(g) && g->editing)
   {
     p = (dt_iop_ashift_params_t *)&g->new_params;
   }
@@ -5695,7 +5695,7 @@ void reload_defaults(dt_iop_module_t *module)
 
   // reset gui elements
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)module->gui_data;
-  if(g)
+  if(!IS_NULL_PTR(g))
   {
 
     char string_v[256];

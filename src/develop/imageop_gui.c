@@ -70,7 +70,7 @@ static void _iop_toggle_callback(GtkWidget *togglebutton, dt_module_param_t *dat
 // Note: Bauhaus widgets do it internally upon setting label
 static void _add_widget_to_module_list(dt_iop_module_t *self, GtkWidget *widget)
 {
-  if(self && widget)
+  if(!IS_NULL_PTR(self) && !IS_NULL_PTR(widget))
   {
     dt_gui_module_t *mod = (dt_gui_module_t *)self;
     mod->widget_list = g_list_append(mod->widget_list, widget);
@@ -104,7 +104,7 @@ GtkWidget *dt_bauhaus_slider_from_params(dt_iop_module_t *self, const char *para
   GtkWidget *slider = NULL;
   size_t offset = 0;
 
-  if(f)
+  if(!IS_NULL_PTR(f))
   {
     if(f->header.type == DT_INTROSPECTION_TYPE_FLOAT)
     {
@@ -139,7 +139,7 @@ GtkWidget *dt_bauhaus_slider_from_params(dt_iop_module_t *self, const char *para
     else f = NULL;
   }
 
-  if(f)
+  if(!IS_NULL_PTR(f))
   {
     dt_bauhaus_widget_set_field(slider, (uint8_t *)p + offset, f->header.type);
 
@@ -190,7 +190,7 @@ GtkWidget *dt_bauhaus_combobox_from_params(dt_iop_module_t *self, const char *pa
   GtkWidget *combobox = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
   gchar *str = NULL;
 
-  if (f && (f->header.type == DT_INTROSPECTION_TYPE_ENUM ||
+  if (!IS_NULL_PTR(f) && (f->header.type == DT_INTROSPECTION_TYPE_ENUM ||
             f->header.type == DT_INTROSPECTION_TYPE_INT  ||
             f->header.type == DT_INTROSPECTION_TYPE_UINT ||
             f->header.type == DT_INTROSPECTION_TYPE_BOOL ))
@@ -254,7 +254,7 @@ GtkWidget *dt_bauhaus_toggle_from_params(dt_iop_module_t *self, const char *para
   GtkWidget *button = NULL;
   gchar *str = NULL;
 
-  if(f && f->header.type == DT_INTROSPECTION_TYPE_BOOL)
+  if(!IS_NULL_PTR(f) && f->header.type == DT_INTROSPECTION_TYPE_BOOL)
   {
     // we do not want to support a context as it break all translations see #5498
     // button = gtk_check_button_new_with_label(g_dpgettext2(NULL, "introspection description", f->header.description));

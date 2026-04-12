@@ -378,13 +378,13 @@ static void _polygon_points_recurs_border_gaps(float *center_max, float *border_
   float *border_ptr = draw_border ? dt_masks_dynbuf_reserve_n(draw_border, 2 * (step_count - 1)) : NULL;
   // and fill them in: the same center pos for each point in dpoints, and the corresponding border point at
   //  successive angular positions for dborder
-  if(points_ptr)
+  if(!IS_NULL_PTR(points_ptr))
   {
     for(int step_index = 1; step_index < step_count; step_index++)
     {
       *points_ptr++ = center_max[0];
       *points_ptr++ = center_max[1];
-      if(border_ptr)
+      if(!IS_NULL_PTR(border_ptr))
       {
         *border_ptr++ = center_max[0] + current_radius * cosf(current_angle);
         *border_ptr++ = center_max[1] + current_radius * sinf(current_angle);
@@ -692,8 +692,8 @@ static int _polygon_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_
 {
   *point_buffer = NULL;
   *point_count = 0;
-  if(border_buffer) *border_buffer = NULL;
-  if(border_buffer) *border_count = 0;
+  if(!IS_NULL_PTR(border_buffer)) *border_buffer = NULL;
+  if(!IS_NULL_PTR(border_buffer)) *border_count = 0;
 
   if(IS_NULL_PTR(mask_form) || IS_NULL_PTR(mask_form->points)) return 0;
 
@@ -711,7 +711,7 @@ static int _polygon_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_
   dpoints = dt_masks_dynbuf_init(1000000, "polygon dpoints");
   if(IS_NULL_PTR(dpoints)) return 1;
 
-  if(border_buffer)
+  if(!IS_NULL_PTR(border_buffer))
   {
     dborder = dt_masks_dynbuf_init(1000000, "polygon dborder");
     if(IS_NULL_PTR(dborder))
@@ -744,7 +744,7 @@ static int _polygon_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_
   {
     const dt_masks_node_polygon_t *const node = (dt_masks_node_polygon_t *)point_node->data;
     float *const buf = dt_masks_dynbuf_reserve_n(dpoints, 6);
-    if(buf)
+    if(!IS_NULL_PTR(buf))
     {
       buf[0] = node->ctrl1[0] * input_width - dx;
       buf[1] = node->ctrl1[1] * input_height - dy;
@@ -897,7 +897,7 @@ static int _polygon_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_
 
   // we don't want the border to self-intersect
   int inter_count = 0;
-  if(border_buffer)
+  if(!IS_NULL_PTR(border_buffer))
   {
     if(_polygon_find_self_intersection(intersections, node_count, *border_buffer, *border_count,
                                        &inter_count) != 0)
@@ -968,7 +968,7 @@ static int _polygon_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_
         start2 = dt_get_wtime();
       }
 
-      if(border_buffer)
+      if(!IS_NULL_PTR(border_buffer))
       {
         // we don't want to copy the falloff points
         for(int node_index = 0; node_index < node_count; node_index++)
@@ -1021,7 +1021,7 @@ fail:
   dt_pixelpipe_cache_free_align(*point_buffer);
   *point_buffer = NULL;
   *point_count = 0;
-  if(border_buffer)
+  if(!IS_NULL_PTR(border_buffer))
   {
     dt_pixelpipe_cache_free_align(*border_buffer);
     *border_buffer = NULL;
@@ -1174,7 +1174,7 @@ static void _polygon_get_sizes(struct dt_iop_module_t *module, dt_masks_form_t *
     p1[1] = fminf(p1[1], y);
     p2[1] = fmaxf(p2[1], y);
 
-    if(border_size)
+    if(!IS_NULL_PTR(border_size))
     {
       // border
       const float fx = gui_points->border[i * 2];
@@ -1196,7 +1196,7 @@ static void _polygon_get_sizes(struct dt_iop_module_t *module, dt_masks_form_t *
   dt_dev_coordinates_preview_abs_to_image_norm(darktable.develop, mask_span, 1);
   *mask_size = fmaxf(mask_span[0], mask_span[1]);
 
-  if(border_size)
+  if(!IS_NULL_PTR(border_size))
   {
     float border_span[2] = { fp2[0] - fp1[0], fp2[1] - fp1[1] };
     dt_dev_coordinates_preview_abs_to_image_norm(darktable.develop, border_span, 1);
@@ -1228,7 +1228,7 @@ static float _polygon_get_interaction_value(const dt_masks_form_t *mask_form,
       for(const GList *point_node = mask_form->points; point_node; point_node = g_list_next(point_node))
       {
         const dt_masks_node_polygon_t *node = (const dt_masks_node_polygon_t *)point_node->data;
-        if(!node) continue;
+        if(IS_NULL_PTR(node)) continue;
         hardness_sum += node->border[0] + node->border[1];
         hardness_count += 2;
       }
@@ -1255,7 +1255,7 @@ static gboolean _polygon_get_gravity_center(const dt_masks_form_t *mask_form,
   for(const GList *point_node = mask_form->points; point_node; point_node = g_list_next(point_node))
   {
     const dt_masks_node_polygon_t *node = (const dt_masks_node_polygon_t *)point_node->data;
-    if(!node) continue;
+    if(IS_NULL_PTR(node)) continue;
     point_buffer[2 * i] = node->node[0];
     point_buffer[2 * i + 1] = node->node[1];
     i++;
@@ -1486,10 +1486,10 @@ static void _polygon_gui_gravity_center(const float *point_buffer, int point_cou
   if(fabsf(signed_area) > 1e-8f)
   {
     const float inv_divisor = 1.0f / (3.0f * signed_area);
-    if(center_x) *center_x = centroid_x * inv_divisor;
-    if(center_y) *center_y = centroid_y * inv_divisor;
+    if(!IS_NULL_PTR(center_x)) *center_x = centroid_x * inv_divisor;
+    if(!IS_NULL_PTR(center_y)) *center_y = centroid_y * inv_divisor;
   }
-  if(area) *area = signed_area;
+  if(!IS_NULL_PTR(area)) *area = signed_area;
 }
 
 /**
@@ -1517,12 +1517,12 @@ static gboolean _polygon_form_gravity_center(const dt_masks_form_t *mask_form,
     centroid_y += (node0->node[1] + node1->node[1]) * cross;
   }
 
-  if(area) *area = signed_area;
+  if(!IS_NULL_PTR(area)) *area = signed_area;
   if(fabsf(signed_area) <= 1e-8f) return FALSE;
 
   const float inv_divisor = 1.0f / (3.0f * signed_area);
-  if(center_x) *center_x = centroid_x * inv_divisor;
-  if(center_y) *center_y = centroid_y * inv_divisor;
+  if(!IS_NULL_PTR(center_x)) *center_x = centroid_x * inv_divisor;
+  if(!IS_NULL_PTR(center_y)) *center_y = centroid_y * inv_divisor;
   return TRUE;
 }
 
@@ -2485,7 +2485,7 @@ static int _polygon_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpi
   const size_t bufsize = (size_t)(*width) * (*height);
   // ensure that the buffer is zeroed, as the following code only actually sets the polygon+falloff pixels
   float *const restrict bufptr = *buffer = dt_pixelpipe_cache_alloc_align_float_cache(bufsize, 0);
-  if(bufptr) memset(bufptr, 0, sizeof(float) * bufsize);
+  if(!IS_NULL_PTR(bufptr)) memset(bufptr, 0, sizeof(float) * bufsize);
   if(IS_NULL_PTR(*buffer))
   {
     dt_pixelpipe_cache_free_align(point_buffer);
@@ -3519,7 +3519,7 @@ static void _polygon_switch_node_callback(GtkWidget *widget, gpointer user_data)
   const int node_index = dt_masks_gui_selected_node_index(mask_gui);
   dt_masks_node_polygon_t *node
       = (dt_masks_node_polygon_t *)g_list_nth_data(selected_form->points, node_index);
-  if(IS_NULL_PTR(gui_points) || !node) return;
+  if(IS_NULL_PTR(gui_points) || IS_NULL_PTR(node)) return;
   dt_masks_toggle_bezier_node_type(module, selected_form, mask_gui, mask_gui->group_selected, gui_points,
                                    node_index, node->node, node->ctrl1, node->ctrl2, &node->state);
 }
@@ -3542,7 +3542,7 @@ static void _polygon_reset_round_node_callback(GtkWidget *widget, gpointer user_
   const int node_index = MAX(mask_gui->node_hovered, selected_handle);
   dt_masks_node_polygon_t *node
       = (dt_masks_node_polygon_t *)g_list_nth_data(selected_form->points, node_index);
-  if(IS_NULL_PTR(gui_points) || !node) return;
+  if(IS_NULL_PTR(gui_points) || IS_NULL_PTR(node)) return;
   if(dt_masks_reset_bezier_ctrl_points(module, selected_form, mask_gui, mask_gui->group_selected, gui_points,
                                        node_index, &node->state))
     gui_points->clockwise = _polygon_is_clockwise(selected_form);
@@ -3601,7 +3601,7 @@ static int _polygon_populate_context_menu(GtkWidget *menu, struct dt_masks_form_
         = (dt_masks_form_gui_points_t *)g_list_nth_data(mask_gui->points, mask_gui->group_selected);
     if(IS_NULL_PTR(gui_points)) goto end;
     dt_masks_node_polygon_t *node = (dt_masks_node_polygon_t *)g_list_nth_data(mask_form->points, mask_gui->node_hovered);
-    if(!node) goto end;
+    if(IS_NULL_PTR(node)) goto end;
     const gboolean is_corner = dt_masks_node_is_cusp(gui_points, mask_gui->node_hovered);
 
     {

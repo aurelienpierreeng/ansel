@@ -61,7 +61,7 @@ static gboolean _module_requires_global_histogram_input_cache(const dt_dev_pixel
 
 static gchar *_get_debug_pipe_name(const dt_dev_pixelpipe_t *pipe, const dt_develop_t *dev)
 {
-  if(dev && pipe && dev->virtual_pipe == pipe)
+  if(!IS_NULL_PTR(dev) && !IS_NULL_PTR(pipe) && dev->virtual_pipe == pipe)
     return g_strdup("virtual-preview");
 
   return g_strdup(dt_pixelpipe_get_pipe_name(pipe ? pipe->type : DT_DEV_PIXELPIPE_NONE));
@@ -490,7 +490,7 @@ uint64_t dt_dev_pixelpipe_node_hash(dt_dev_pixelpipe_t *pipe, const dt_dev_pixel
   // to be called at runtime, not at pipe init.
 
   // Only at the first step of pipe, we don't have a module because we init the base buffer.
-  if(piece)
+  if(!IS_NULL_PTR(piece))
     return piece->global_hash;
   else
   {
@@ -553,7 +553,7 @@ gboolean dt_dev_pixelpipe_cache_peek_gui(dt_dev_pixelpipe_t *pipe, const dt_dev_
      && buffer && entry)
   {
     dt_dev_pixelpipe_cache_wait_cleanup(wait);
-    if(data) *data = buffer;
+    if(!IS_NULL_PTR(data)) *data = buffer;
     if(cache_entry) *cache_entry = entry;
     return TRUE;
   }
@@ -566,7 +566,7 @@ gboolean dt_dev_pixelpipe_cache_peek_gui(dt_dev_pixelpipe_t *pipe, const dt_dev_
          || piece->bypass_cache))
     return FALSE;
 
-  if(wait && restart && hash != DT_PIXELPIPE_CACHE_HASH_INVALID)
+  if(!IS_NULL_PTR(wait) && restart && hash != DT_PIXELPIPE_CACHE_HASH_INVALID)
   {
     const gboolean changed_target = !wait->connected
                                     || wait->pipe != pipe
@@ -786,7 +786,7 @@ static void _sync_pipe_nodes_from_history_from_node(dt_dev_pixelpipe_t *pipe, dt
                                                     const uint32_t history_end, GList *start_node,
                                                     const char *debug_label)
 {
-  if(IS_NULL_PTR(pipe) || !start_node) return;
+  if(IS_NULL_PTR(pipe) || IS_NULL_PTR(start_node)) return;
 
   dt_iop_buffer_dsc_t upstream_dsc = pipe->image.dsc;
   const gboolean previous_want_detail_mask = (pipe->want_detail_mask != DT_DEV_DETAIL_MASK_NONE);

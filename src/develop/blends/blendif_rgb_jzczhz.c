@@ -671,7 +671,7 @@ static inline float _rgb_luminance(const float *const restrict rgb,
                                    const dt_iop_order_iccprofile_info_t *const restrict profile)
 {
   float value = 0.0f;
-  if(profile)
+  if(!IS_NULL_PTR(profile))
     value = dt_ioppr_get_rgb_matrix_luminance(rgb, profile->matrix_in, profile->lut_in,
                                               profile->unbounded_coeffs_in, profile->lutsize,
                                               profile->nonlinearlut);
@@ -686,7 +686,7 @@ static inline void _rgb_to_JzCzhz(const dt_aligned_pixel_t rgb, dt_aligned_pixel
 {
   dt_aligned_pixel_t JzAzBz = { 0.0f, 0.0f, 0.0f };
 
-  if(profile)
+  if(!IS_NULL_PTR(profile))
   {
     dt_aligned_pixel_t XYZ_D65 = { 0.0f, 0.0f, 0.0f };
     // use the matrix_out of the hacked profile for blending to use the

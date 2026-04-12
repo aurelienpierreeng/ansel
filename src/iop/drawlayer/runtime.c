@@ -152,7 +152,7 @@ static void _fill_runtime_inputs(const dt_drawlayer_runtime_context_t *runtime,
                                  dt_drawlayer_runtime_inputs_t *inputs)
 {
   if(inputs) *inputs = (dt_drawlayer_runtime_inputs_t){ 0 };
-  if(!runtime || IS_NULL_PTR(inputs)) return;
+  if(IS_NULL_PTR(runtime) || IS_NULL_PTR(inputs)) return;
 
   const dt_drawlayer_runtime_request_t *const request = &runtime->runtime;
   dt_iop_module_t *const self = request->self;
@@ -193,12 +193,12 @@ static void _collect_runtime_inputs(const dt_drawlayer_runtime_update_request_t 
 {
   if(inputs) *inputs = (dt_drawlayer_runtime_inputs_t){ 0 };
   if(worker_snapshot) *worker_snapshot = (dt_drawlayer_worker_snapshot_t){ 0 };
-  if(request && request->inputs)
+  if(!IS_NULL_PTR(request) && request->inputs)
   {
-    if(inputs) *inputs = *request->inputs;
+    if(!IS_NULL_PTR(inputs)) *inputs = *request->inputs;
     return;
   }
-  if(context && context->runtime.gui && context->runtime.gui->stroke.worker && worker_snapshot)
+  if(!IS_NULL_PTR(context) && context->runtime.gui && context->runtime.gui->stroke.worker && !IS_NULL_PTR(worker_snapshot))
     dt_drawlayer_worker_get_snapshot(context->runtime.gui->stroke.worker, worker_snapshot);
   _fill_runtime_inputs(context, worker_snapshot, inputs);
 }
@@ -216,7 +216,7 @@ static void _sync_runtime_state_from_inputs(dt_drawlayer_runtime_manager_t *stat
   state->painting_active = inputs && inputs->painting_active;
   state->background_job_running = session && session->background_job_running;
 
-  if(process)
+  if(!IS_NULL_PTR(process))
   {
     priv->layer_cache_valid = process->cache_valid;
     _sync_buffer_state(state, DT_DRAWLAYER_RUNTIME_BUFFER_BASE_PATCH, !IS_NULL_PTR(process->base_patch.pixels),
@@ -224,14 +224,14 @@ static void _sync_runtime_state_from_inputs(dt_drawlayer_runtime_manager_t *stat
     _sync_buffer_state(state, DT_DRAWLAYER_RUNTIME_BUFFER_STROKE_MASK, !IS_NULL_PTR(process->stroke_mask.pixels),
                        !IS_NULL_PTR(process->stroke_mask.pixels), FALSE);
   }
-  else if(base_patch)
+  else if(!IS_NULL_PTR(base_patch))
   {
     priv->layer_cache_valid = inputs->base_patch_valid;
     _sync_buffer_state(state, DT_DRAWLAYER_RUNTIME_BUFFER_BASE_PATCH, !IS_NULL_PTR(base_patch->pixels),
                        inputs->base_patch_valid, inputs->base_patch_dirty);
   }
 
-  if(worker)
+  if(!IS_NULL_PTR(worker))
   {
     const gboolean backend_started = worker->backend_state != DT_DRAWLAYER_WORKER_STATE_STOPPED;
     const gboolean backend_busy = worker->backend_state == DT_DRAWLAYER_WORKER_STATE_BUSY;
@@ -368,7 +368,7 @@ static void _update_realtime_state(dt_drawlayer_runtime_manager_t *state,
   gboolean realtime_active = priv->gui_focused && inputs && inputs->gui_attached
                              && state->painting_active;
 
-  if(request)
+  if(!IS_NULL_PTR(request))
   {
     switch(request->event)
     {
@@ -912,9 +912,9 @@ void dt_drawlayer_runtime_manager_bind_piece(dt_drawlayer_runtime_manager_t *hea
                                              dt_drawlayer_process_state_t **runtime_process,
                                              gboolean *runtime_display_pipe)
 {
-  if(runtime_manager) *runtime_manager = display_pipe ? gui_manager : headless_manager;
-  if(runtime_process) *runtime_process = display_pipe ? gui_process : headless_process;
-  if(runtime_display_pipe) *runtime_display_pipe = display_pipe;
+  if(!IS_NULL_PTR(runtime_manager)) *runtime_manager = display_pipe ? gui_manager : headless_manager;
+  if(!IS_NULL_PTR(runtime_process)) *runtime_process = display_pipe ? gui_process : headless_process;
+  if(!IS_NULL_PTR(runtime_display_pipe)) *runtime_display_pipe = display_pipe;
 }
 
 void dt_drawlayer_process_state_init(dt_drawlayer_process_state_t *state)
@@ -961,7 +961,7 @@ static void _release_runtime_source(dt_drawlayer_runtime_manager_t *state,
   switch(source->kind)
   {
     case DT_DRAWLAYER_SOURCE_BASE_PATCH:
-      if(process) dt_drawlayer_cache_patch_rdunlock(&process->base_patch);
+      if(!IS_NULL_PTR(process)) dt_drawlayer_cache_patch_rdunlock(&process->base_patch);
       break;
 
     case DT_DRAWLAYER_SOURCE_NONE:

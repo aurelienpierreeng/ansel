@@ -1807,7 +1807,7 @@ static int process_laplacian_bayer(struct dt_iop_module_t *self, const dt_dev_pi
   float *restrict ds_interpolated = dt_pixelpipe_cache_alloc_align_float(ds_size * 4, pipe);
   float *restrict ds_clipping_mask = dt_pixelpipe_cache_alloc_align_float(ds_size * 4, pipe);
 
-  if(IS_NULL_PTR(interpolated) || !clipping_mask || IS_NULL_PTR(LF_odd) || IS_NULL_PTR(LF_even) || IS_NULL_PTR(temp) || IS_NULL_PTR(HF) || IS_NULL_PTR(ds_interpolated) || !ds_clipping_mask)
+  if(IS_NULL_PTR(interpolated) || IS_NULL_PTR(clipping_mask) || IS_NULL_PTR(LF_odd) || IS_NULL_PTR(LF_even) || IS_NULL_PTR(temp) || IS_NULL_PTR(HF) || IS_NULL_PTR(ds_interpolated) || IS_NULL_PTR(ds_clipping_mask))
   {
     err = 1;
     goto error;
@@ -1903,7 +1903,7 @@ static int process_laplacian_xtrans(struct dt_iop_module_t *self, const dt_dev_p
   float *restrict ds_interpolated = dt_pixelpipe_cache_alloc_align_float(ds_size * 4, pipe);
   float *restrict ds_clipping_mask = dt_pixelpipe_cache_alloc_align_float(ds_size * 4, pipe);
 
-  if(IS_NULL_PTR(interpolated) || !clipping_mask || IS_NULL_PTR(LF_odd) || IS_NULL_PTR(LF_even) || IS_NULL_PTR(temp) || IS_NULL_PTR(HF) || IS_NULL_PTR(ds_interpolated) || !ds_clipping_mask)
+  if(IS_NULL_PTR(interpolated) || IS_NULL_PTR(clipping_mask) || IS_NULL_PTR(LF_odd) || IS_NULL_PTR(LF_even) || IS_NULL_PTR(temp) || IS_NULL_PTR(HF) || IS_NULL_PTR(ds_interpolated) || IS_NULL_PTR(ds_clipping_mask))
   {
     err = 1;
     goto error;

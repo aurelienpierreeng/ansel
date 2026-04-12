@@ -241,7 +241,7 @@ static void process_common_cleanup(struct dt_iop_module_t *self, const dt_dev_pi
   /* if gui and have buffer lets gaussblur and fill buffer with zone indexes */
   if(self->dev->gui_attached
      && dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out)
-     && g && g->in_preview_buffer
+     && !IS_NULL_PTR(g) && g->in_preview_buffer
      && g->out_preview_buffer)
   {
     float Lmax[] = { 100.0f };
@@ -255,7 +255,7 @@ static void process_common_cleanup(struct dt_iop_module_t *self, const dt_dev_pi
 
     float *tmp = g_malloc_n((size_t)width * height, sizeof(float));
 
-    if(gauss && tmp)
+    if(gauss && !IS_NULL_PTR(tmp))
     {
       __OMP_PARALLEL_FOR__()
       for(size_t k = 0; k < (size_t)width * height; k++) tmp[k] = ((float *)ivoid)[ch * k];

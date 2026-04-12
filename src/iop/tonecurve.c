@@ -1337,7 +1337,7 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
 
     const uint32_t *hist = self->histogram;
     const float hist_max = is_linear ? self->histogram_max[ch] : logf(1.0 + self->histogram_max[ch]);
-    if(hist && hist_max > 0.0f)
+    if(!IS_NULL_PTR(hist) && hist_max > 0.0f)
     {
       cairo_save(cr);
       cairo_scale(cr, width / 255.0, -(height - DT_PIXEL_APPLY_DPI(5)) / hist_max);

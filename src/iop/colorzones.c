@@ -564,7 +564,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   dt_iop_colorzones_gui_data_t *g = (dt_iop_colorzones_gui_data_t *)self->gui_data;
 
   // display selection if requested
-  if(pipe->type == DT_DEV_PIXELPIPE_FULL && g && g->display_mask && self->dev->gui_attached
+  if(pipe->type == DT_DEV_PIXELPIPE_FULL && !IS_NULL_PTR(g) && g->display_mask && self->dev->gui_attached
      && (self == self->dev->gui_module) && (pipe == self->dev->pipe))
     process_display(self, (dt_dev_pixelpipe_t *)pipe, piece, ivoid, ovoid, roi_in, roi_out);
   else if(d->mode == DT_IOP_COLORZONES_MODE_SMOOTH)
@@ -871,7 +871,7 @@ static void _draw_color_picker(dt_iop_module_t *self, cairo_t *cr, dt_iop_colorz
       dt_aligned_pixel_t pick_mean, pick_min, pick_max;
       int converted_cst;
 
-      if(work_profile && display_profile)
+      if(!IS_NULL_PTR(work_profile) && !IS_NULL_PTR(display_profile))
       {
         dt_colorpicker_sample_t *sample = NULL;
         for(; samples; samples = g_slist_next(samples))
@@ -1225,7 +1225,7 @@ static gboolean _area_draw_callback(GtkWidget *widget, cairo_t *crf, dt_iop_modu
       const gboolean is_linear = FALSE;
       const float hist_max = is_linear ? self->histogram_max[ch_hist]
                                        : logf(1.0f + self->histogram_max[ch_hist]);
-      if(hist && hist_max > 0.0f)
+      if(!IS_NULL_PTR(hist) && hist_max > 0.0f)
       {
         cairo_save(cr);
         cairo_translate(cr, 0, height);

@@ -600,7 +600,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
   // here is where we generate the canned bilateral grid of the preview pipe for later use
   int err = 0;
-  if(self->dev->gui_attached && g && dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
+  if(self->dev->gui_attached && !IS_NULL_PTR(g) && dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
   {
     uint64_t hash = piece->global_hash;
     dt_iop_gui_enter_critical_section(self);

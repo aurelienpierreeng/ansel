@@ -568,7 +568,7 @@ static inline float dt_masks_get_form_size_from_nodes(const GList *points)
   for(const GList *point_node = points; point_node; point_node = g_list_next(point_node))
   {
     const float *node = (const float *)point_node->data;
-    if(!node) continue;
+    if(IS_NULL_PTR(node)) continue;
     min_x = fminf(min_x, node[0]);
     max_x = fmaxf(max_x, node[0]);
     min_y = fminf(min_y, node[1]);
@@ -1252,7 +1252,7 @@ static inline gboolean dt_masks_center_of_gravity_from_points(const float *point
       center[0] = 0.0f;
       center[1] = 0.0f;
     }
-    if(area) *area = 0.0f;
+    if(!IS_NULL_PTR(area)) *area = 0.0f;
     return FALSE;
   }
 

@@ -465,7 +465,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const float sigma_r = 8.0f; // does not depend on scale
 
   // save a copy of preview input buffer so we can get histogram and color statistics out of it
-  if(self->dev->gui_attached && g && dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out)
+  if(self->dev->gui_attached && !IS_NULL_PTR(g) && dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out)
      && (data->flag & ACQUIRE))
   {
     dt_iop_gui_enter_critical_section(self);
@@ -690,7 +690,7 @@ void reload_defaults(dt_iop_module_t *module)
   dt_iop_colormapping_params_t *d = module->default_params;
 
   dt_iop_colormapping_gui_data_t *g = (dt_iop_colormapping_gui_data_t *)module->gui_data;
-  if(module->dev->gui_attached && g && g->flowback_set)
+  if(module->dev->gui_attached && !IS_NULL_PTR(g) && g->flowback_set)
   {
     memcpy(d->source_ihist, g->flowback.hist, sizeof(float) * HISTN);
     memcpy(d->source_mean, g->flowback.mean, sizeof(float) * MAXN * 2);

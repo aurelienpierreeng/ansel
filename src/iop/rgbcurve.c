@@ -303,7 +303,7 @@ static void picker_scale(const float *const in, float *out, dt_iop_rgbcurve_para
   switch(p->curve_autoscale)
   {
     case DT_S_SCALE_MANUAL_RGB:
-      if(p->compensate_middle_grey && work_profile)
+      if(p->compensate_middle_grey && !IS_NULL_PTR(work_profile))
       {
         for(int c = 0; c < 3; c++) out[c] = dt_ioppr_compensate_middle_grey(in[c], work_profile);
       }
@@ -322,7 +322,7 @@ static void picker_scale(const float *const in, float *out, dt_iop_rgbcurve_para
                                                                work_profile->lutsize,
                                                                work_profile->nonlinearlut)
                            : dt_camera_rgb_luminance(in);
-      if(p->compensate_middle_grey && work_profile)
+      if(p->compensate_middle_grey && !IS_NULL_PTR(work_profile))
       {
         out[0] = dt_ioppr_compensate_middle_grey(val, work_profile);
       }
@@ -500,7 +500,7 @@ static inline int _add_node_from_picker(dt_iop_rgbcurve_params_t *p, const float
   else
     val = in[ch];
 
-  if(p->compensate_middle_grey && work_profile)
+  if(p->compensate_middle_grey && !IS_NULL_PTR(work_profile))
     y = x = dt_ioppr_compensate_middle_grey(val, work_profile);
   else
     y = x = val;
@@ -815,7 +815,7 @@ static gboolean _area_draw_callback(GtkWidget *widget, cairo_t *crf, dt_iop_modu
     if (!is_linear)
       hist_max = logf(1.0 + hist_max);
 
-    if(hist && hist_max > 0.0f)
+    if(!IS_NULL_PTR(hist) && hist_max > 0.0f)
     {
       cairo_push_group_with_content(cr, CAIRO_CONTENT_COLOR);
       cairo_scale(cr, width / 255.0, -(height - DT_PIXEL_APPLY_DPI(5)) / hist_max);
@@ -853,7 +853,7 @@ static gboolean _area_draw_callback(GtkWidget *widget, cairo_t *crf, dt_iop_modu
       if(samples)
       {
         const dt_iop_order_iccprofile_info_t *const display_profile = dt_ioppr_get_pipe_output_profile_info(dev->pipe);
-        if(work_profile && display_profile)
+        if(!IS_NULL_PTR(work_profile) && !IS_NULL_PTR(display_profile))
         {
           for(; samples; samples = g_slist_next(samples))
           {
@@ -1260,7 +1260,7 @@ void gui_reset(struct dt_iop_module_t *self)
 void change_image(struct dt_iop_module_t *self)
 {
   dt_iop_rgbcurve_gui_data_t *g = (dt_iop_rgbcurve_gui_data_t *)self->gui_data;
-  if(g)
+  if(!IS_NULL_PTR(g))
   {
     if(!g->channel)
       g->channel = DT_IOP_RGBCURVE_R;
@@ -1450,12 +1450,12 @@ static void _generate_curve_lut(const dt_dev_pixelpipe_t *pipe, dt_iop_rgbcurve_
 
   dt_iop_rgbcurve_node_t curve_nodes[3][DT_IOP_RGBCURVE_MAXNODES];
 
-  if(work_profile)
+  if(!IS_NULL_PTR(work_profile))
   {
     if(d->type_work == work_profile->type && strcmp(d->filename_work, work_profile->filename) == 0) return;
   }
 
-  if(work_profile && d->params.compensate_middle_grey)
+  if(!IS_NULL_PTR(work_profile) && d->params.compensate_middle_grey)
   {
     d->type_work = work_profile->type;
     g_strlcpy(d->filename_work, work_profile->filename, sizeof(d->filename_work));

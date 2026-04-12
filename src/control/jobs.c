@@ -77,7 +77,7 @@ typedef struct _dt_job_t
  */
 static inline int dt_control_job_equal(_dt_job_t *j1, _dt_job_t *j2)
 {
-  if(!j1 || IS_NULL_PTR(j2)) return 0;
+  if(IS_NULL_PTR(j1) || IS_NULL_PTR(j2)) return 0;
   if(j1->params_size != 0 && j1->params_size == j2->params_size)
     return (j1->execute == j2->execute && j1->state_changed_cb == j2->state_changed_cb
             && j1->queue == j2->queue && (memcmp(j1->params, j2->params, j1->params_size) == 0));
@@ -390,7 +390,7 @@ void dt_control_flush_jobs_queue(dt_control_t *control, dt_job_queue_t queue_id)
   for(int k = 0; k < control->num_threads; k++)
   {
     _dt_job_t *job = (_dt_job_t *)control->job[k];
-    if(job)
+    if(!IS_NULL_PTR(job))
     {
       dt_control_job_cancel(job);
       count++;

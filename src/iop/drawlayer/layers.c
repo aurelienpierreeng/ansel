@@ -29,7 +29,7 @@ typedef struct drawlayer_layer_cache_key_t
 
 static void _layerio_append_error(GString *errors, const char *message)
 {
-  if(!errors || IS_NULL_PTR(message) || message[0] == '\0') return;
+  if(IS_NULL_PTR(errors) || IS_NULL_PTR(message) || message[0] == '\0') return;
   if(errors->len > 0) g_string_append(errors, "; ");
   g_string_append(errors, message);
 }

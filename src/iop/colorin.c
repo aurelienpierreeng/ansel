@@ -1158,7 +1158,7 @@ static dt_colorspaces_color_profile_type_t _resolve_input_profile(const dt_iop_c
     gboolean new_profile = FALSE;
     cmsHPROFILE profile = NULL;
     type = dt_colorspaces_get_input_profile_from_image(pipe->image.id, type, &profile, &new_profile);
-    if(profile)
+    if(!IS_NULL_PTR(profile))
     {
       d->input = profile;
       d->clear_input = new_profile;
@@ -1176,7 +1176,7 @@ static dt_colorspaces_color_profile_type_t _resolve_input_profile(const dt_iop_c
   if(IS_NULL_PTR(d->input))
   {
     const dt_colorspaces_color_profile_t *profile = dt_colorspaces_get_profile(type, p->filename, DT_PROFILE_DIRECTION_IN);
-    if(profile) d->input = profile->profile;
+    if(!IS_NULL_PTR(profile)) d->input = profile->profile;
   }
 
   if(IS_NULL_PTR(d->input) && type != DT_COLORSPACE_SRGB)

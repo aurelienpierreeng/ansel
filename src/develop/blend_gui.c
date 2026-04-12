@@ -1432,7 +1432,7 @@ static dt_masks_form_t *_blendop_masks_group_create(dt_iop_module_t *module)
 
 static dt_masks_form_group_t *_blendop_masks_find_group_entry(dt_masks_form_t *group_form, const int formid, int *index)
 {
-  if(index) *index = -1;
+  if(!IS_NULL_PTR(index)) *index = -1;
   if(IS_NULL_PTR(group_form)) return NULL;
   if(!(group_form->type & DT_MASKS_GROUP)) return NULL;
 
@@ -1664,7 +1664,7 @@ static void _blendop_masks_refresh_lists(dt_iop_module_t *module)
     dt_masks_form_t *mask_form = (dt_masks_form_t *)form_node->data;
     if(IS_NULL_PTR(mask_form)) continue;
     if(mask_form->type & (DT_MASKS_CLONE | DT_MASKS_NON_CLONE)) continue;
-    if(group_form && mask_form->formid == group_form->formid) continue;
+    if(!IS_NULL_PTR(group_form) && mask_form->formid == group_form->formid) continue;
     if(!_blendop_masks_is_group_with_shapes(mask_form)) continue;
     // Skip groups containing only a single group
     if(_blendop_masks_is_single_group_wrapper(mask_form)) continue;
@@ -1688,7 +1688,7 @@ static void _blendop_masks_refresh_lists(dt_iop_module_t *module)
     dt_masks_form_t *mask_form = (dt_masks_form_t *)form_node->data;
     if(IS_NULL_PTR(mask_form)) continue;
     if(mask_form->type & (DT_MASKS_CLONE | DT_MASKS_NON_CLONE)) continue;
-    if(group_form && mask_form->formid == group_form->formid) continue;
+    if(!IS_NULL_PTR(group_form) && mask_form->formid == group_form->formid) continue;
     if(_blendop_masks_is_group_with_shapes(mask_form)) continue;
 
     const gboolean active = _blendop_masks_find_group_entry(group_form, mask_form->formid, NULL) != NULL;
@@ -1715,7 +1715,7 @@ static void _blendop_masks_refresh_lists(dt_iop_module_t *module)
     gchar *status_markup = NULL;
     display_markup = g_markup_printf_escaped("%s", mask_form->name);
 
-    if(!sensitive && locked_group_name && *locked_group_name)
+    if(!sensitive && !IS_NULL_PTR(locked_group_name) && *locked_group_name)
     {
       gchar *already_in = g_strdup_printf(_("Already in '%s'"), locked_group_name);
       status_markup = g_markup_printf_escaped("<i>%s</i>", already_in);
@@ -1735,7 +1735,7 @@ static void _blendop_masks_refresh_lists(dt_iop_module_t *module)
     g_free(status_markup);
   }
 
-  if(group_form && (group_form->type & DT_MASKS_GROUP))
+  if(!IS_NULL_PTR(group_form) && (group_form->type & DT_MASKS_GROUP))
   {
     if(GTK_IS_ENTRY(bd->group_shapes_label))
       gtk_entry_set_text(GTK_ENTRY(bd->group_shapes_label), group_form->name);
@@ -2011,7 +2011,7 @@ static gboolean _blendop_masks_all_button_pressed(GtkWidget *treeview, GdkEventB
     return FALSE;
 
   // Handle left click on checkbox column - toggle directly without requiring selection
-  if(event->button == GDK_BUTTON_PRIMARY && column)
+  if(event->button == GDK_BUTTON_PRIMARY && !IS_NULL_PTR(column))
   {
     if(_blendop_masks_all_handle_left_click(treeview, path, column, module))
       return TRUE;

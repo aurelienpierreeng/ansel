@@ -1078,7 +1078,7 @@ static double *inv = NULL; /* table to keep computed inverse values */
 
 __attribute__((constructor)) static void invConstructor()
 {
-  if(inv) return;
+  if(!IS_NULL_PTR(inv)) return;
   inv = malloc(sizeof(double) * TABSIZE);
 }
 

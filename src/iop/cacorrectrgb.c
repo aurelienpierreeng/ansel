@@ -758,7 +758,7 @@ void reload_defaults(dt_iop_module_t *module)
   d->refine_manifolds = FALSE;
 
   dt_iop_cacorrectrgb_gui_data_t *g = (dt_iop_cacorrectrgb_gui_data_t *)module->gui_data;
-  if(g)
+  if(!IS_NULL_PTR(g))
   {
     dt_bauhaus_combobox_set_default(g->guide_channel, d->guide_channel);
     dt_bauhaus_slider_set_default(g->radius, d->radius);

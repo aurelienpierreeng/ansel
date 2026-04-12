@@ -1229,7 +1229,7 @@ static int32_t dt_control_gpx_apply_job_run(dt_job_t *job)
   return 0;
 
 bail_out:
-  if(gpx) dt_gpx_destroy(gpx);
+  if(!IS_NULL_PTR(gpx)) dt_gpx_destroy(gpx);
 
   return 1;
 }
@@ -1319,7 +1319,7 @@ static int32_t dt_control_refresh_exif_run(dt_job_t *job)
       dt_image_full_path(imgid,  sourcefile,  sizeof(sourcefile),  &from_cache, __FUNCTION__);
 
       dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'w');
-      if(img)
+      if(!IS_NULL_PTR(img))
       {
         // Overwrite EXIF flags with our own, to preserve user-defined star ratings over EXIF.
         // All the rest should be synced with EXIF.
@@ -2093,7 +2093,7 @@ static dt_job_t *dt_control_datetime_job_create(const GTimeSpan offset, const ch
 
   dt_control_datetime_t *data = params->data;
   data->offset = offset;
-  if(datetime)
+  if(!IS_NULL_PTR(datetime))
     memcpy(data->datetime, datetime, sizeof(data->datetime));
   else
     data->datetime[0] = '\0';

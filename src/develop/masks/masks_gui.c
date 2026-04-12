@@ -565,7 +565,7 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
   }
 
   // Shape specific menu items
-  if(form && form->functions && form->functions->populate_context_menu)
+  if(!IS_NULL_PTR(form) && form->functions && form->functions->populate_context_menu)
     if(form->functions->populate_context_menu(menu, form, gui, pzx, pzy))
     {
       gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
@@ -575,7 +575,7 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
   /* Module specific */
   {
     dt_iop_module_t *module = darktable.develop->gui_module;
-    if(module && module->populate_masks_context_menu)
+    if(!IS_NULL_PTR(module) && module->populate_masks_context_menu)
       if(module->populate_masks_context_menu(module, menu, form->formid, pzx, pzy))
       {
         gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());

@@ -394,7 +394,7 @@ static int rt_get_selected_shape_id(const dt_iop_module_t *self)
 
   const dt_masks_form_gui_t *gui = self->dev->form_gui;
   const dt_masks_form_t *visible_form = dt_masks_get_visible_form(self->dev);
-  if(IS_NULL_PTR(gui) || !visible_form || !(visible_form->type & DT_MASKS_GROUP)) return 0;
+  if(IS_NULL_PTR(gui) || IS_NULL_PTR(visible_form) || !(visible_form->type & DT_MASKS_GROUP)) return 0;
 
   const dt_masks_form_group_t *selected_group_entry
       = dt_masks_form_get_selected_group_live(visible_form, gui);
@@ -409,7 +409,7 @@ static dt_masks_form_group_t *rt_get_mask_point_group(dt_iop_module_t *self, int
   if(IS_NULL_PTR(bp)) return form_point_group;
 
   const dt_masks_form_t *grp = dt_masks_get_from_id(self->dev, bp->mask_id);
-  if(grp && (grp->type & DT_MASKS_GROUP))
+  if(!IS_NULL_PTR(grp) && (grp->type & DT_MASKS_GROUP))
   {
     for(const GList *forms = grp->points; forms; forms = g_list_next(forms))
     {
@@ -481,7 +481,7 @@ static void rt_show_hide_controls(const dt_iop_module_t *self)
   const int selected_formid = rt_get_selected_shape_id(self);
   if(selected_formid > 0)
     form = dt_masks_get_from_id(self->dev, selected_formid);
-  if(form)
+  if(!IS_NULL_PTR(form))
     gtk_widget_show(GTK_WIDGET(g->sl_mask_opacity));
   else
     gtk_widget_hide(GTK_WIDGET(g->sl_mask_opacity));
@@ -493,7 +493,7 @@ static void rt_display_selected_shapes_lbl(dt_iop_retouch_gui_data_t *g)
   const dt_masks_form_t *form = selected_formid > 0
                                 ? dt_masks_get_from_id(darktable.develop, selected_formid)
                                 : NULL;
-  if(form)
+  if(!IS_NULL_PTR(form))
     gtk_label_set_text(g->label_form_selected, form->name);
   else
     gtk_label_set_text(g->label_form_selected, _("none"));
@@ -580,7 +580,7 @@ static void rt_shape_selection_changed(dt_iop_module_t *self)
 static void rt_masks_form_change_opacity(dt_iop_module_t *self, int formid, float opacity)
 {
   dt_masks_form_group_t *grpt = rt_get_mask_point_group(self, formid);
-  if(grpt)
+  if(!IS_NULL_PTR(grpt))
   {
     grpt->opacity = CLAMP(opacity, 0.05f, 1.0f);
     dt_conf_set_float("plugins/darkroom/masks/opacity", grpt->opacity);
@@ -592,7 +592,7 @@ static void rt_masks_form_change_opacity(dt_iop_module_t *self, int formid, floa
 static float rt_masks_form_get_opacity(dt_iop_module_t *self, int formid)
 {
   dt_masks_form_group_t *grpt = rt_get_mask_point_group(self, formid);
-  if(grpt)
+  if(!IS_NULL_PTR(grpt))
     return grpt->opacity;
   else
     return 1.0f;
@@ -614,7 +614,7 @@ static int rt_allow_create_form(dt_iop_module_t *self)
   int allow = 1;
 
   dt_iop_retouch_params_t *p = (dt_iop_retouch_params_t *)self->params;
-  if(p)
+  if(!IS_NULL_PTR(p))
   {
     allow = (p->rt_forms[RETOUCH_NO_FORMS - 1].formid == 0);
   }
@@ -814,7 +814,7 @@ void post_history_commit(dt_iop_module_t *self)
   dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)self->blend_data;
 
   //only toggle shape show button if shapes exist
-  if(grp && (grp->type & DT_MASKS_GROUP) && grp->points)
+  if(!IS_NULL_PTR(grp) && (grp->type & DT_MASKS_GROUP) && grp->points)
   {
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_edit_masks),
                                  (bd->masks_shown != DT_MASKS_EDIT_OFF) && (self->dev->gui_module == self));
@@ -998,7 +998,7 @@ static int rt_shape_is_being_added(dt_iop_module_t *self, const int shape_type)
       if(IS_NULL_PTR(grpt)) goto end;
       
       const dt_masks_form_t *form = dt_masks_get_from_id(darktable.develop, grpt->formid);
-      if(form) being_added = (form->type & shape_type);
+      if(!IS_NULL_PTR(form)) being_added = (form->type & shape_type);
     }
     else
       being_added = (dt_masks_get_visible_form(self->dev)->type & shape_type);
@@ -1734,7 +1734,7 @@ static gboolean rt_edit_masks_callback(GtkWidget *widget, GdkEventButton *event,
     dt_iop_color_picker_reset(self, TRUE);
 
     dt_masks_form_t *grp = dt_masks_get_from_id(darktable.develop, self->blend_params->mask_id);
-    if(grp && (grp->type & DT_MASKS_GROUP) && grp->points)
+    if(!IS_NULL_PTR(grp) && (grp->type & DT_MASKS_GROUP) && grp->points)
     {
       const gboolean control_button_pressed = dt_modifier_is(event->state, GDK_CONTROL_MASK);
 
@@ -2044,7 +2044,7 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
       dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)self->blend_data;
       //only show shapes if shapes exist
       dt_masks_form_t *grp = dt_masks_get_from_id(darktable.develop, self->blend_params->mask_id);
-      if(grp && (grp->type & DT_MASKS_GROUP) && grp->points)
+      if(!IS_NULL_PTR(grp) && (grp->type & DT_MASKS_GROUP) && grp->points)
       {
         // got focus, show all shapes
         if(bd->masks_shown == DT_MASKS_EDIT_OFF)
@@ -2175,7 +2175,7 @@ void gui_update(dt_iop_module_t *self)
   dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)self->blend_data;
 
   //only toggle shape show button if shapes exist
-  if(grp && (grp->type & DT_MASKS_GROUP) && grp->points)
+  if(!IS_NULL_PTR(grp) && (grp->type & DT_MASKS_GROUP) && grp->points)
   {
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_edit_masks),
                                  (bd->masks_shown != DT_MASKS_EDIT_OFF) && (self->dev->gui_module == self));
@@ -2194,7 +2194,7 @@ void gui_update(dt_iop_module_t *self)
 void change_image(struct dt_iop_module_t *self)
 {
   dt_iop_retouch_gui_data_t *g = (dt_iop_retouch_gui_data_t *)self->gui_data;
-  if(g)
+  if(!IS_NULL_PTR(g))
   {
     g->copied_scale = -1;
     g->mask_display = 0;
@@ -2544,7 +2544,7 @@ static void rt_compute_roi_in(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *
 
   // We iterate through all forms
   const dt_masks_form_t *grp = dt_masks_get_from_id(self->dev, bp->mask_id);
-  if(grp && (grp->type & DT_MASKS_GROUP))
+  if(!IS_NULL_PTR(grp) && (grp->type & DT_MASKS_GROUP))
   {
     for(const GList *forms = grp->points; forms; forms = g_list_next(forms))
     {
@@ -2637,7 +2637,7 @@ static void rt_extend_roi_in_from_source_clones(struct dt_iop_module_t *self, dt
 
   // We iterate through all forms
   const dt_masks_form_t *grp = dt_masks_get_from_id(self->dev, bp->mask_id);
-  if(grp && (grp->type & DT_MASKS_GROUP))
+  if(!IS_NULL_PTR(grp) && (grp->type & DT_MASKS_GROUP))
   {
     for(const GList *forms = grp->points; forms; forms = g_list_next(forms))
     {
@@ -2724,7 +2724,7 @@ static void rt_extend_roi_in_for_clone(struct dt_iop_module_t *self, dt_dev_pixe
 
   // go through all clone and heal forms
   const dt_masks_form_t *grp = dt_masks_get_from_id(self->dev, bp->mask_id);
-  if(grp && (grp->type & DT_MASKS_GROUP))
+  if(!IS_NULL_PTR(grp) && (grp->type & DT_MASKS_GROUP))
   {
     for(const GList *forms = grp->points; forms; forms = g_list_next(forms))
     {
@@ -2896,7 +2896,7 @@ static void rt_adjust_levels(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pi
   __OMP_PARALLEL_FOR__()
   for(int i = 0; i < size; i += ch)
   {
-    if(work_profile)
+    if(!IS_NULL_PTR(work_profile))
     {
       dt_ioppr_rgb_matrix_to_lab(img_src + i, img_src + i, work_profile->matrix_in_transposed,
                                   work_profile->lut_in, work_profile->unbounded_coeffs_in,
@@ -2925,7 +2925,7 @@ static void rt_adjust_levels(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pi
       }
     }
 
-    if(work_profile)
+    if(!IS_NULL_PTR(work_profile))
     {
       dt_ioppr_lab_to_rgb_matrix(img_src + i, img_src + i, work_profile->matrix_out_transposed,
                                  work_profile->lut_out, work_profile->unbounded_coeffs_out,
@@ -3169,7 +3169,7 @@ static int _retouch_blur(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, 
 
     dt_gaussian_t *g = dt_gaussian_init(roi_mask_scaled->width, roi_mask_scaled->height, 4, Labmax, Labmin, sigma,
                                         DT_IOP_GAUSSIAN_ZERO);
-    if(g)
+    if(!IS_NULL_PTR(g))
     {
       dt_gaussian_blur_4c(g, img_dest, img_dest);
       dt_gaussian_free(g);
@@ -3187,7 +3187,7 @@ static int _retouch_blur(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, 
       int converted_cst;
       const dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_pipe_work_profile_info(pipe);
 
-      if(work_profile)
+      if(!IS_NULL_PTR(work_profile))
         dt_ioppr_transform_image_colorspace(self, img_dest, img_dest, roi_mask_scaled->width,
                                             roi_mask_scaled->height, IOP_CS_RGB, IOP_CS_LAB, &converted_cst,
                                             work_profile);
@@ -3199,7 +3199,7 @@ static int _retouch_blur(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, 
       dt_bilateral_slice(b, img_dest, img_dest, detail);
       dt_bilateral_free(b);
 
-      if(work_profile)
+      if(!IS_NULL_PTR(work_profile))
         dt_ioppr_transform_image_colorspace(self, img_dest, img_dest, roi_mask_scaled->width,
                                             roi_mask_scaled->height, IOP_CS_LAB, IOP_CS_RGB, &converted_cst,
                                             work_profile);
@@ -3360,7 +3360,7 @@ static int rt_process_forms(float *layer, dwt_params_t *const wt_p, const int sc
     }
 
     // we don't need the original mask anymore
-    if(mask)
+    if(!IS_NULL_PTR(mask))
     {
       dt_pixelpipe_cache_free_align(mask);
       mask = NULL;
@@ -3486,7 +3486,7 @@ static int process_internal(struct dt_iop_module_t *self, const dt_dev_pixelpipe
   }
 
   // check if this module should expose mask.
-  if(pipe->type == DT_DEV_PIXELPIPE_FULL && g
+  if(pipe->type == DT_DEV_PIXELPIPE_FULL && !IS_NULL_PTR(g)
      && (g->mask_display || display_wavelet_scale) && self->dev->gui_attached
      && (self == self->dev->gui_module) && (pipe == self->dev->pipe))
   {
@@ -3522,7 +3522,7 @@ static int process_internal(struct dt_iop_module_t *self, const dt_dev_pixelpipe
   dt_aligned_pixel_t levels = { p->preview_levels[0], p->preview_levels[1], p->preview_levels[2] };
 
   // process auto levels
-  if(g && pipe->type == DT_DEV_PIXELPIPE_FULL)
+  if(!IS_NULL_PTR(g) && pipe->type == DT_DEV_PIXELPIPE_FULL)
   {
     dt_iop_gui_enter_critical_section(self);
     if(g->preview_auto_levels == 1 && !darktable.gui->reset)
@@ -3550,7 +3550,7 @@ static int process_internal(struct dt_iop_module_t *self, const dt_dev_pixelpipe
   }
 
   // copy alpha channel if needed
-  if((pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK) && g && !g->mask_display)
+  if((pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK) && !IS_NULL_PTR(g) && !g->mask_display)
   {
     dt_iop_alpha_copy(ivoid, in_retouch, roi_rt->width, roi_rt->height);
   }

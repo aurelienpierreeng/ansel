@@ -52,7 +52,7 @@ static int dual_demosaic(const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_
   float *blend = dt_pixelpipe_cache_alloc_align_float((size_t) width * height, pipe);
   float *tmp = dt_pixelpipe_cache_alloc_align_float((size_t) width * height, pipe);
   float *vng_image = dt_pixelpipe_cache_alloc_align_float((size_t) 4 * width * height, pipe);
-  if(!blend || IS_NULL_PTR(tmp) || IS_NULL_PTR(vng_image))
+  if(IS_NULL_PTR(blend) || IS_NULL_PTR(tmp) || IS_NULL_PTR(vng_image))
   {
     dt_pixelpipe_cache_free_align(tmp);
     dt_pixelpipe_cache_free_align(blend);

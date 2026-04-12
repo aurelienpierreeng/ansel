@@ -2692,7 +2692,7 @@ void init(dt_iop_module_t *module)
 void reload_defaults(dt_iop_module_t *module)
 {
   dt_iop_denoiseprofile_gui_data_t *g = (dt_iop_denoiseprofile_gui_data_t *)module->gui_data;
-  if(g)
+  if(!IS_NULL_PTR(g))
   {
     dt_bauhaus_combobox_clear(g->profile);
 

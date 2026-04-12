@@ -375,7 +375,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
       {
         for_each_channel(c, aligned(in,out))  // vectorize if possible
           out[c] = in[c] * (1.0 - d->factor); // does this for c=0..2 or c=0..3, whichever is faster
-        if(out_mask) out_mask[i] = 1.0;
+        if(!IS_NULL_PTR(out_mask)) out_mask[i] = 1.0;
       }
       else
       {
@@ -387,7 +387,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   }
 
   // now that the mask is generated we can publish it
-  if(mask)
+  if(!IS_NULL_PTR(mask))
     g_hash_table_replace(piece->raster_masks, GINT_TO_POINTER(mask_id), mask);
 }
 
@@ -553,7 +553,7 @@ void reload_defaults(dt_iop_module_t *module)
   // default values in widgets. Resetting the individual widgets will then have the same
   // effect as resetting the whole module at once.
   dt_iop_useless_gui_data_t *g = (dt_iop_useless_gui_data_t *)module->gui_data;
-  if(g)
+  if(!IS_NULL_PTR(g))
   {
     dt_bauhaus_slider_set_default(g->scale, d->checker_scale);
   }

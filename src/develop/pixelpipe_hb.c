@@ -213,13 +213,13 @@ static int _abort_module_shutdown_cleanup(dt_dev_pixelpipe_t *pipe, dt_dev_pixel
 
   _reset_piece_cache_entry(piece);
 
-  if(input_entry)
+  if(!IS_NULL_PTR(input_entry))
   {
     dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, input_entry);
     dt_dev_pixelpipe_cache_auto_destroy_apply(darktable.pixelpipe_cache, input_entry);
   }
 
-  if(output_entry)
+  if(!IS_NULL_PTR(output_entry))
   {
     dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, output_entry);
 
@@ -359,7 +359,7 @@ void dt_dev_pixelpipe_debug_dump_module_io(dt_dev_pixelpipe_t *pipe, dt_iop_modu
   const char *pipe_name = dt_pixelpipe_get_pipe_name(pipe->type);
   const char *stage_name = stage ? stage : "process";
 
-  if(in_dsc && out_dsc)
+  if(!IS_NULL_PTR(in_dsc) && !IS_NULL_PTR(out_dsc))
   {
     dt_print(DT_DEBUG_PIPE,
              "[pixelpipe] %s %s %s %s: in cst=%s->%s ch=%d type=%s bpp=%zu roi=%dx%d | "
@@ -371,7 +371,7 @@ void dt_dev_pixelpipe_debug_dump_module_io(dt_dev_pixelpipe_t *pipe, dt_iop_modu
              _debug_cst_to_string(out_dsc->cst), out_dsc->channels, _debug_type_to_string(out_dsc->datatype),
              out_bpp, roi_out ? roi_out->width : 0, roi_out ? roi_out->height : 0);
   }
-  else if(out_dsc)
+  else if(!IS_NULL_PTR(out_dsc))
   {
     dt_print(DT_DEBUG_PIPE,
              "[pixelpipe] %s %s %s %s: out cst=%s ch=%d type=%s bpp=%zu roi=%dx%d\n",
@@ -1207,14 +1207,14 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   _trace_cache_owner(pipe, module, "publish", "output", hash, output, output_entry, FALSE);
   _trace_buffer_content(pipe, module, "publish", output, &piece->dsc_out, &piece->roi_out);
 
-  if(piece && allow_rekey_reuse && output_entry && !cache_output)
+  if(!IS_NULL_PTR(piece) && allow_rekey_reuse && !IS_NULL_PTR(output_entry) && !cache_output)
   {
     piece->cache_entry = *output_entry;
   }
   else
     _reset_piece_cache_entry(piece);
 
-  if(output_entry && !IS_NULL_PTR(output)
+  if(!IS_NULL_PTR(output_entry) && !IS_NULL_PTR(output)
      && ((pixelpipe_flow & PIXELPIPE_FLOW_PROCESSED_ON_CPU)
          || (pixelpipe_flow & PIXELPIPE_FLOW_PROCESSED_WITH_TILING)))
   {
@@ -1261,7 +1261,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   dt_dev_pixelpipe_cache_auto_destroy_apply(darktable.pixelpipe_cache, input_entry);
 
   // Print min/max/Nan in debug mode only
-  if((darktable.unmuted & DT_DEBUG_NAN) && strcmp(module->op, "gamma") != 0 && output)
+  if((darktable.unmuted & DT_DEBUG_NAN) && strcmp(module->op, "gamma") != 0 && !IS_NULL_PTR(output))
   {
     dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, output_entry);
     _print_nan_debug(pipe, cl_mem_output, output, &piece->roi_out, &piece->dsc_out, module);
@@ -1434,7 +1434,7 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop
   dt_dev_pixelpipe_iop_t *requested_piece = NULL;
   gboolean requested_backbuf = TRUE;
 
-  if(cache_request == DT_DEV_PIXELPIPE_CACHE_REQUEST_MODULE && requested_module)
+  if(cache_request == DT_DEV_PIXELPIPE_CACHE_REQUEST_MODULE && !IS_NULL_PTR(requested_module))
   {
     requested_pieces = _get_requested_piece_node(pipe, requested_module, &requested_pos);
     if(requested_pieces)

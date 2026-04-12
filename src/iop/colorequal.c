@@ -396,10 +396,10 @@ static inline gboolean _cursor_curve_state(const dt_iop_colorequal_params_t *p, 
   const float y = dt_colorrings_curve_periodic_sample((const dt_colorrings_node_t *)curve, nodes, x);
   const float value = _channel_value_from_y(channel, y);
 
-  if(curve_x) *curve_x = x;
-  if(curve_y) *curve_y = y;
+  if(!IS_NULL_PTR(curve_x)) *curve_x = x;
+  if(!IS_NULL_PTR(curve_y)) *curve_y = y;
 
-  if(offset_normalized)
+  if(!IS_NULL_PTR(offset_normalized))
   {
     switch(channel)
     {
@@ -437,7 +437,7 @@ static void _work_rgb_to_display_rgb(dt_iop_module_t *self, dt_dev_pixelpipe_t *
 
   const dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_pipe_current_profile_info(self, pipe);
   const dt_iop_order_iccprofile_info_t *const display_profile = dt_ioppr_get_pipe_output_profile_info(pipe);
-  if(IS_NULL_PTR(work_profile) || !display_profile) return;
+  if(IS_NULL_PTR(work_profile) || IS_NULL_PTR(display_profile)) return;
 
   float in[4] = { work_rgb[0], work_rgb[1], work_rgb[2], 0.f };
   float out[4] = { work_rgb[0], work_rgb[1], work_rgb[2], 0.f };
@@ -681,7 +681,7 @@ static size_t _build_viewer_control_nodes(const dt_iop_colorequal_params_t *p,
                                           const dt_iop_order_iccprofile_info_t *lut_profile,
                                           dt_lut_viewer_control_node_t *control_nodes)
 {
-  if(IS_NULL_PTR(p) || IS_NULL_PTR(lut_profile) || !control_nodes) return 0;
+  if(IS_NULL_PTR(p) || IS_NULL_PTR(lut_profile) || IS_NULL_PTR(control_nodes)) return 0;
 
   const float white = dt_colorrings_graph_white();
   float reference_saturation[DT_IOP_COLOREQUAL_NUM_RINGS] = { 0.f };
@@ -2199,7 +2199,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
   dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
-  if(g)
+  if(!IS_NULL_PTR(g))
   {
     const dt_iop_colorequal_params_t *p = (const dt_iop_colorequal_params_t *)self->params;
     const gboolean curves_changed = !_curve_fields_equal(&g->gui_params, p);
@@ -2234,7 +2234,7 @@ void gui_update(dt_iop_module_t *self)
   const dt_iop_colorequal_params_t *p = (const dt_iop_colorequal_params_t *)self->params;
   dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
 
-  if(g)
+  if(!IS_NULL_PTR(g))
   {
     /**
      * History navigation and fast module toggles can reload a newer parameter

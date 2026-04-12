@@ -1061,7 +1061,7 @@ void compute_curve_lut(dt_iop_filmic_params_t *p, float *table, float *table_tem
     nodes_data->y[2] = grey_display;
     nodes_data->y[3] = white_display;
 
-    if(d)
+    if(!IS_NULL_PTR(d))
     {
       d->latitude_min = toe_log;
       d->latitude_max = white_log;
@@ -1085,7 +1085,7 @@ void compute_curve_lut(dt_iop_filmic_params_t *p, float *table, float *table_tem
     nodes_data->y[2] = shoulder_display;
     nodes_data->y[3] = white_display;
 
-    if(d)
+    if(!IS_NULL_PTR(d))
     {
       d->latitude_min = black_log;
       d->latitude_max = shoulder_log;
@@ -1107,7 +1107,7 @@ void compute_curve_lut(dt_iop_filmic_params_t *p, float *table, float *table_tem
     nodes_data->y[1] = grey_display;
     nodes_data->y[2] = white_display;
 
-    if(d)
+    if(!IS_NULL_PTR(d))
     {
       d->latitude_min = black_log;
       d->latitude_max = white_log;
@@ -1133,7 +1133,7 @@ void compute_curve_lut(dt_iop_filmic_params_t *p, float *table, float *table_tem
     nodes_data->y[2] = shoulder_display;
     nodes_data->y[3] = white_display;
 
-    if(d)
+    if(!IS_NULL_PTR(d))
     {
       d->latitude_min = toe_log;
       d->latitude_max = shoulder_log;

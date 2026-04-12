@@ -373,7 +373,7 @@ void input_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelp
 static void _text_color_font_set_sensitive(dt_iop_watermark_gui_data_t *g, gchar *filename)
 {
   const gchar *extension = strrchr(filename, '.');
-  if(extension)
+  if(!IS_NULL_PTR(extension))
   {
     const gboolean active = !g_ascii_strcasecmp(extension, ".svg");
     gtk_widget_set_sensitive(GTK_WIDGET(g->colorpick), active);
@@ -528,7 +528,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   // find out the watermark type
   dt_iop_watermark_type_t type;
   const gchar *extension = strrchr(data->filename, '.');
-  if(extension)
+  if(!IS_NULL_PTR(extension))
   {
     if(!g_ascii_strcasecmp(extension, ".svg"))
       type = DT_WTM_SVG;

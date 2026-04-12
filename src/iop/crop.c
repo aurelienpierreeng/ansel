@@ -414,7 +414,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   dt_iop_crop_data_t *d = (dt_iop_crop_data_t *)piece->data;
   dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)self->gui_data;
 
-  if(g && g->editing)
+  if(!IS_NULL_PTR(g) && g->editing)
   {
     // In editing mode, we need to see the full uncropped image
     // to setup the frame.
@@ -757,7 +757,7 @@ static void _event_aspect_presets_changed(GtkWidget *combo, dt_iop_module_t *sel
   const char *text = dt_bauhaus_combobox_get_text(combo);
   if(which < 0)
   {
-    if(text)
+    if(!IS_NULL_PTR(text))
     {
       const char *c = text;
       const char *end = text + strlen(text);

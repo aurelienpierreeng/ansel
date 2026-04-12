@@ -931,7 +931,7 @@ get_pixel_norm_simd(const dt_aligned_pixel_simd_t pixel, const dt_iop_filmicrgb_
       return fmaxf(fmaxf(pixel[0], pixel[1]), pixel[2]);
 
     case(DT_FILMIC_METHOD_LUMINANCE):
-      if(work_profile)
+      if(!IS_NULL_PTR(work_profile))
       {
         if(work_profile->nonlinearlut)
         {
@@ -958,7 +958,7 @@ get_pixel_norm_simd(const dt_aligned_pixel_simd_t pixel, const dt_iop_filmicrgb_
       return sqrtf(sqf(pixel[0]) + sqf(pixel[1]) + sqf(pixel[2])) * INVERSE_SQRT_3;
 
     default:
-      if(work_profile)
+      if(!IS_NULL_PTR(work_profile))
       {
         if(work_profile->nonlinearlut)
         {
@@ -2319,7 +2319,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
   const int recover_highlights = mask_clipped_pixels(in, mask, data->normalize, data->reconstruct_feather, roi_out->width, roi_out->height, 4);
 
   // display mask and exit
-  if(self->dev->gui_attached && pipe->type == DT_DEV_PIXELPIPE_FULL && mask)
+  if(self->dev->gui_attached && pipe->type == DT_DEV_PIXELPIPE_FULL && !IS_NULL_PTR(mask))
   {
     dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)self->gui_data;
 
@@ -2339,7 +2339,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
   }
 
   // if fast mode is not in use
-  if(recover_highlights && mask && reconstructed)
+  if(recover_highlights && !IS_NULL_PTR(mask) && !IS_NULL_PTR(reconstructed))
   {
     // init the blown areas with noise to create particles
     float *const restrict inpainted =  dt_pixelpipe_cache_alloc_align_float((size_t)roi_out->width * roi_out->height * 4, pipe);
@@ -2370,7 +2370,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
     {
       float *const restrict norms = dt_pixelpipe_cache_alloc_align_float((size_t)roi_out->width * roi_out->height, pipe);
       float *const restrict ratios = dt_pixelpipe_cache_alloc_align_float((size_t)roi_out->width * roi_out->height * 4, pipe);
-      if(!norms || IS_NULL_PTR(ratios))
+      if(IS_NULL_PTR(norms) || IS_NULL_PTR(ratios))
       {
         dt_pixelpipe_cache_free_align(norms);
         dt_pixelpipe_cache_free_align(ratios);
@@ -2380,7 +2380,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
       }
 
       // reconstruct highlights PASS 2 on ratios
-      if(norms && ratios)
+      if(!IS_NULL_PTR(norms) && ratios)
       {
         for(int i = 0; i < data->high_quality_reconstruction; i++)
         {

@@ -199,7 +199,7 @@ gboolean dt_dev_history_item_update_from_params(dt_develop_t *dev, dt_dev_histor
   const void *src_params = params ? params : module->params;
   const int32_t src_size = params ? params_size : module->params_size;
   const int32_t sz = MIN(module->params_size, src_size);
-  if(src_params && hist->params && sz > 0) memcpy(hist->params, src_params, sz);
+  if(!IS_NULL_PTR(src_params) && hist->params && sz > 0) memcpy(hist->params, src_params, sz);
 
   const dt_develop_blend_params_t *src_blend = blend_params ? blend_params : module->blend_params;
   if(src_blend && hist->blend_params) memcpy(hist->blend_params, src_blend, sizeof(dt_develop_blend_params_t));
@@ -293,7 +293,7 @@ int dt_dev_history_item_from_source_history_item(dt_develop_t *dev_dest, dt_deve
                                                  const dt_dev_history_item_t *hist_src, dt_iop_module_t *mod_dest,
                                                  dt_dev_history_item_t **out_hist)
 {
-  if(!hist_src || !hist_src->module || IS_NULL_PTR(mod_dest) || !out_hist) return 1;
+  if(IS_NULL_PTR(hist_src) || IS_NULL_PTR(hist_src->module) || IS_NULL_PTR(mod_dest) || IS_NULL_PTR(out_hist)) return 1;
 
   dt_dev_history_item_t *hist = (dt_dev_history_item_t *)calloc(1, sizeof(dt_dev_history_item_t));
   if(IS_NULL_PTR(hist)) return 1;
@@ -401,7 +401,7 @@ static dt_iop_module_t *_history_merge_resolve_dest_instance(dt_develop_t *dev_d
   if(_search_history_by_op(dev_dest, mod_src) == NULL)
   {
     module = dt_iop_get_module_by_op_priority(dev_dest->iop, mod_src->op, -1);
-    if(module)
+    if(!IS_NULL_PTR(module))
     {
       *reused_base = TRUE;
       return module;
@@ -562,7 +562,7 @@ static void _pop_undo(gpointer user_data, dt_undo_type_t type, dt_undo_data_t da
 
   dt_develop_t *dev = (dt_develop_t *)user_data;
   dt_undo_history_t *hist = (dt_undo_history_t *)data;
-  if(IS_NULL_PTR(dev) || !hist) return;
+  if(IS_NULL_PTR(dev) || IS_NULL_PTR(hist)) return;
 
   GList *snapshot = (action == DT_ACTION_UNDO) ? hist->before_snapshot : hist->after_snapshot;
   const int history_end = (action == DT_ACTION_UNDO) ? hist->before_end : hist->after_end;
@@ -691,7 +691,7 @@ static void _remove_history_leaks(dt_develop_t *dev)
     // We need to use a while because we are going to dynamically remove entries at the end
     // of the list, so we can't know the number of iterations
     dt_dev_history_item_t *hist = (dt_dev_history_item_t *)(history->data);
-    if(!hist || !hist->module)
+    if(IS_NULL_PTR(hist) || IS_NULL_PTR(hist->module))
     {
       dt_print(DT_DEBUG_HISTORY,
                "[dt_dev_add_history_item_ext] archival history item %s at %i is past history limit (%i) and will be kept\n",
@@ -756,7 +756,7 @@ gboolean dt_dev_add_history_item_ext(dt_develop_t *dev, struct dt_iop_module_t *
     // module = NULL means a mask was changed from the mask manager and that's where this function is called.
     // Find it now, even though it is not enabled and won't be.
     module = dt_masks_get_mask_manager(dev);
-    if(module)
+    if(!IS_NULL_PTR(module))
     {
       // Mask manager is an IOP that never processes pixel aka it's an ugly hack to record mask history
       force_new_item = FALSE;
@@ -882,7 +882,7 @@ void dt_dev_add_history_item_real(dt_develop_t *dev, dt_iop_module_t *module, gb
   dt_dev_undo_end_record(dev);
 
   // Run the delayed post-commit actions if implemented
-  if(module && module->post_history_commit) module->post_history_commit(module);
+  if(!IS_NULL_PTR(module) && !IS_NULL_PTR(module->post_history_commit)) module->post_history_commit(module);
 
   // Figure out if the current history item includes masks/forms
   GList *last_history = g_list_nth(dev->history, dt_dev_get_history_end_ext(dev) - 1);
@@ -914,7 +914,7 @@ void dt_dev_add_history_item_real(dt_develop_t *dev, dt_iop_module_t *module, gb
 
   // Recompute pipeline last
   const gboolean has_raster = module && dt_iop_module_has_raster_mask(module);
-  if(module && !(has_forms || has_raster) && !add_new_pipe_node)
+  if(!IS_NULL_PTR(module) && !(has_forms || has_raster) && !add_new_pipe_node)
   {
     // If we have a module and it doesn't use drawn or raster masks,
     // we only need to resync the top-most history item with pipeline
@@ -939,7 +939,7 @@ void dt_dev_add_history_item_real(dt_develop_t *dev, dt_iop_module_t *module, gb
 
   dt_dev_masks_list_update(dev);
 
-  if(darktable.gui && dev->gui_attached && module)
+  if(!IS_NULL_PTR(darktable.gui) && dev->gui_attached && !IS_NULL_PTR(module))
   {
     // If module params change the geometry of the ROI,
     // update immediately so we avoid drawing glitches.
@@ -1552,7 +1552,7 @@ static void _sync_blendop_params(dt_dev_history_item_t *hist, const void *blendo
   hist->blendop_params_size = sizeof(dt_develop_blend_params_t);
   hist->blendop_version = dt_develop_blend_version();
 
-  if(blendop_params && is_valid_blendop_version && is_valid_blendop_size)
+  if(!IS_NULL_PTR(blendop_params) && is_valid_blendop_version && is_valid_blendop_size)
   {
     memcpy(hist->blend_params, blendop_params, sizeof(dt_develop_blend_params_t));
   }
@@ -1717,12 +1717,12 @@ static void _process_history_db_entry(dt_develop_t *dev, const int32_t imgid, co
     hist->module_version = modversion;
     hist->blendop_params_size = MAX(bl_length, 0);
     hist->blendop_version = blendop_version;
-    if(module_params && param_length > 0)
+    if(!IS_NULL_PTR(module_params) && param_length > 0)
     {
       hist->params = malloc(param_length);
       memcpy(hist->params, module_params, param_length);
     }
-    if(blendop_params && bl_length > 0)
+    if(!IS_NULL_PTR(blendop_params) && bl_length > 0)
     {
       hist->blend_params = malloc(bl_length);
       memcpy(hist->blend_params, blendop_params, bl_length);

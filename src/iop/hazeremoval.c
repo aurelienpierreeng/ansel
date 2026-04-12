@@ -524,7 +524,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   // only see part of the image (region of interest).  Therefore, we
   // try to get A0 and distance_max from the PREVIEW pixelpipe which
   // luckily stores it for us.
-  if(self->dev->gui_attached && g && !dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
+  if(self->dev->gui_attached && !IS_NULL_PTR(g) && !dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
   {
     dt_iop_gui_enter_critical_section(self);
     const uint64_t hash = g->hash;
@@ -556,7 +556,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     }
   }
   // PREVIEW pixelpipe stores values.
-  if(self->dev->gui_attached && g && dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
+  if(self->dev->gui_attached && !IS_NULL_PTR(g) && dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
   {
     uint64_t hash = piece->global_hash;
     dt_iop_gui_enter_critical_section(self);

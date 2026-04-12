@@ -649,7 +649,7 @@ static inline int gauss_reduce(
     for(int c=0;c<4;c++) coarse[4*(j*cw+i)+c] = blurred[4*(2*j*wd+2*i)+c];
   dt_pixelpipe_cache_free_align(blurred);
 
-  if(detail)
+  if(!IS_NULL_PTR(detail))
   {
     // compute laplacian/details: expand coarse buffer into detail
     // buffer subtract expanded buffer from input in place

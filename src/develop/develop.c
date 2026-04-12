@@ -356,7 +356,7 @@ gboolean dt_dev_pixelpipe_has_preview_output(const dt_develop_t *dev, const dt_d
   int height = 0;
   float scale = dev->roi.natural_scale;
 
-  if(roi)
+  if(!IS_NULL_PTR(roi))
   {
     x = roi->x;
     y = roi->y;
@@ -743,7 +743,7 @@ dt_dev_image_storage_t dt_dev_load_image(dt_develop_t *dev, const int32_t imgid)
     // Resync our private copy of image image with DB,
     // mostly for DT_IMAGE_AUTO_PRESETS_APPLIED flag.
     dt_image_t *image = dt_image_cache_get(darktable.image_cache, imgid, 'w');
-    if(image)
+    if(!IS_NULL_PTR(image))
     {
       *image = dev->image_storage;
       dt_image_cache_write_release(darktable.image_cache, image, DT_IMAGE_CACHE_SAFE);
@@ -807,8 +807,8 @@ void dt_dev_check_zoom_pos_bounds(dt_develop_t *dev, float *dev_x, float *dev_y,
   *dev_x = (bw > 1.0f || dev->roi.scaling <= 1.0f) ? 0.5f : CLAMPF(*dev_x, half_bw, 1.0f - half_bw);
   *dev_y = (bh > 1.0f || dev->roi.scaling <= 1.0f) ? 0.5f : CLAMPF(*dev_y, half_bh, 1.0f - half_bh);
   // return box size
-  if(box_w) *box_w = bw;
-  if(box_h) *box_h = bh;
+  if(!IS_NULL_PTR(box_w)) *box_w = bw;
+  if(!IS_NULL_PTR(box_h)) *box_h = bh;
 
   /*
   fprintf(stdout, "BOUNDS: box size: %2.2f x %2.2f\n", bw, bh);
@@ -1196,11 +1196,11 @@ void _dev_module_update_multishow(dt_develop_t *dev, struct dt_iop_module_t *mod
   // Never allow deleting the base instance (multi_priority == 0) nor modules limited to one instance.
   module->multi_show_close =
       (nb_instances > 1 && module->multi_priority > 0 && !(module->flags() & IOP_FLAGS_ONE_INSTANCE));
-  if(mod_next)
+  if(!IS_NULL_PTR(mod_next))
     module->multi_show_up = move_next;
   else
     module->multi_show_up = 0;
-  if(mod_prev)
+  if(!IS_NULL_PTR(mod_prev))
     module->multi_show_down = move_prev;
   else
     module->multi_show_down = 0;

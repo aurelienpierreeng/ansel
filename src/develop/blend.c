@@ -461,7 +461,7 @@ static void _develop_blend_init_raster_mask(const dt_develop_blend_params_t *con
                                self, &free_mask, &local_raster_error)
       : NULL;
 
-  if(raster_mask)
+  if(!IS_NULL_PTR(raster_mask))
   {
     if(params->raster_mask_invert)
     {
@@ -482,7 +482,7 @@ static void _develop_blend_init_raster_mask(const dt_develop_blend_params_t *con
     dt_iop_image_fill(mask, value, owidth, oheight, 1);
   }
 
-  if(raster_error) *raster_error = local_raster_error;
+  if(!IS_NULL_PTR(raster_error)) *raster_error = local_raster_error;
 }
 
 static int _develop_blend_init_drawn_mask(const dt_develop_blend_params_t *const params,
@@ -1503,7 +1503,7 @@ void tiling_callback_blendop(struct dt_iop_module_t *self, const struct dt_dev_p
   tiling->yalign = 1;
 
   dt_develop_blend_params_t *const bldata = (dt_develop_blend_params_t *const)piece->blendop_data;
-  if(bldata)
+  if(!IS_NULL_PTR(bldata))
   {
     if(bldata->details != 0.0f)
       tiling->factor += 0.75f; // details mask requires 3 additional quarter buffers

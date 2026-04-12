@@ -392,7 +392,7 @@ static void _log_synchronization(dt_control_crawler_gui_t *gui,
   gchar *message = pattern;
   gboolean to_free = FALSE;
 
-  if(filepath)
+  if(!IS_NULL_PTR(filepath))
   {
     message = g_strdup_printf(pattern, filepath);
     to_free = TRUE;

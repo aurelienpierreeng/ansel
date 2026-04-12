@@ -215,7 +215,7 @@ static dt_drawlayer_brush_dab_t _sample_raw_segment_cubic_param(const dt_drawlay
 {
   dt_drawlayer_brush_dab_t window[3] = { 0 };
   int count = 2;
-  if(state && state->have_prev_raw_dab)
+  if(!IS_NULL_PTR(state) && state->have_prev_raw_dab)
   {
     window[0] = state->prev_raw_dab;
     window[1] = *segment_start;
@@ -241,7 +241,7 @@ static void _build_raw_segment_cubic_arclen_lut(const dt_drawlayer_paint_stroke_
 {
   /* Build a short arc-length LUT for cubic interpolation, then sample by
    * distance instead of parameter t to keep spacing uniform at high speed. */
-  if(IS_NULL_PTR(cumulative) || segments <= 0 || !total_len) return;
+  if(IS_NULL_PTR(cumulative) || segments <= 0 || IS_NULL_PTR(total_len)) return;
   cumulative[0] = 0.0f;
   *total_len = 0.0f;
   dt_drawlayer_brush_dab_t prev = _sample_raw_segment_cubic_param(state, segment_start, segment_end, 0.0f);
@@ -746,11 +746,11 @@ gboolean dt_drawlayer_paint_rasterize_segment_to_buffer(const dt_drawlayer_brush
   if(count == 1 && runtime_private)
     dt_drawlayer_paint_runtime_set_smudge_pickup(runtime_private, 0.0f, 0.0f, FALSE);
 
-  if(runtime_private)
+  if(!IS_NULL_PTR(runtime_private))
   {
     if(dab->mode == DT_DRAWLAYER_BRUSH_MODE_SMUDGE)
     {
-      if(previous_sample) _advance_smudge_pickup_state(runtime_private, sample, previous_sample);
+      if(!IS_NULL_PTR(previous_sample)) _advance_smudge_pickup_state(runtime_private, sample, previous_sample);
     }
     else
       dt_drawlayer_paint_runtime_set_smudge_pickup(runtime_private, 0.0f, 0.0f, FALSE);
@@ -761,12 +761,12 @@ gboolean dt_drawlayer_paint_rasterize_segment_to_buffer(const dt_drawlayer_brush
       = dt_drawlayer_brush_rasterize(sample_patch, patch, scale, sample, sample_opacity_scale, stroke_mask,
                                      runtime_private);
   const double t1 = dt_get_wtime();
-  if(rasterized && runtime_state && runtime_private && runtime_private->bounds.valid)
+  if(rasterized && !IS_NULL_PTR(runtime_state) && !IS_NULL_PTR(runtime_private) && runtime_private->bounds.valid)
     dt_drawlayer_paint_runtime_note_dab_damage(runtime_state, &runtime_private->bounds);
 
   if(darktable.unmuted & DT_DEBUG_VERBOSE)
   {
-    if(runtime_private && runtime_private->bounds.valid)
+    if(!IS_NULL_PTR(runtime_private) && runtime_private->bounds.valid)
     {
       const int bounds_w = runtime_private->bounds.se[0] - runtime_private->bounds.nw[0];
       const int bounds_h = runtime_private->bounds.se[1] - runtime_private->bounds.nw[1];
@@ -885,8 +885,8 @@ gboolean dt_drawlayer_paint_runtime_have_smudge_pickup(const dt_drawlayer_paint_
 void dt_drawlayer_paint_runtime_get_smudge_pickup(const dt_drawlayer_paint_stroke_t *state,
                                                   float *x, float *y)
 {
-  if(x) *x = state ? state->smudge_pickup_x : 0.0f;
-  if(y) *y = state ? state->smudge_pickup_y : 0.0f;
+  if(!IS_NULL_PTR(x)) *x = state ? state->smudge_pickup_x : 0.0f;
+  if(!IS_NULL_PTR(y)) *y = state ? state->smudge_pickup_y : 0.0f;
 }
 
 void dt_drawlayer_paint_runtime_set_smudge_pickup(dt_drawlayer_paint_stroke_t *state,
@@ -941,7 +941,7 @@ gboolean dt_drawlayer_paint_runtime_get_stroke_damage(const dt_drawlayer_damaged
                                                       dt_drawlayer_damaged_rect_t *out_rect)
 {
   if(IS_NULL_PTR(state) || !state->valid) return FALSE;
-  if(out_rect) *out_rect = *state;
+  if(!IS_NULL_PTR(out_rect)) *out_rect = *state;
   return TRUE;
 }
 

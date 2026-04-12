@@ -857,7 +857,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const dt_iop_order_iccprofile_info_t *const work_profile
     = dt_ioppr_get_iop_work_profile_info(self, self->dev->iop);
   const gboolean transform = (!IS_NULL_PTR(work_profile) && !IS_NULL_PTR(lut_profile)) ? TRUE : FALSE;
-  if (clut)
+  if (!IS_NULL_PTR(clut))
   {
     if (transform)
     {
@@ -1289,7 +1289,7 @@ static void update_filepath_combobox(dt_iop_lut3d_gui_data_t *g, char *filepath,
     char *folder = g_build_filename(lutfolder, relativepath, NULL);
     struct dirent *dir;
     DIR *d = opendir(folder);
-    if(d)
+    if(!IS_NULL_PTR(d))
     {
       dt_bauhaus_combobox_clear(g->filepath);
       while ((dir = readdir(d)) != NULL)

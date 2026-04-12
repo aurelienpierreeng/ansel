@@ -89,7 +89,7 @@ int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
                                         &piece->roi_in, &piece->roi_out,
                                         process_input_dsc.bpp, piece->dsc_out.bpp, cst_before, cst_after);
 
-  if((darktable.unmuted & DT_DEBUG_NAN) && output && piece->dsc_out.datatype == TYPE_FLOAT)
+  if((darktable.unmuted & DT_DEBUG_NAN) && !IS_NULL_PTR(output) && piece->dsc_out.datatype == TYPE_FLOAT)
   {
     const size_t ch = piece->dsc_out.channels;
     const size_t count = (size_t)piece->roi_out.width * (size_t)piece->roi_out.height * ch;

@@ -51,7 +51,7 @@
 static int _find_border_separator(const float *border, int count)
 {
 
-  if(!border || count <= 0) return -1;
+  if(IS_NULL_PTR(border) || count <= 0) return -1;
 
 #ifdef _OPENMP
   int found = count;

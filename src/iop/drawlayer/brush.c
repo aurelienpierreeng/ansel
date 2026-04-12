@@ -93,16 +93,16 @@ static inline void _sprinkle_octave_weights(const float coarseness, float *w0, f
   if(c <= 0.5f)
   {
     const float t = c * 2.0f;
-    if(w0) *w0 = _lerpf(1.0f, 1.0f / 3.0f, t);
-    if(w1) *w1 = _lerpf(0.0f, 1.0f / 3.0f, t);
-    if(w2) *w2 = _lerpf(0.0f, 1.0f / 3.0f, t);
+    if(!IS_NULL_PTR(w0)) *w0 = _lerpf(1.0f, 1.0f / 3.0f, t);
+    if(!IS_NULL_PTR(w1)) *w1 = _lerpf(0.0f, 1.0f / 3.0f, t);
+    if(!IS_NULL_PTR(w2)) *w2 = _lerpf(0.0f, 1.0f / 3.0f, t);
   }
   else
   {
     const float t = (c - 0.5f) * 2.0f;
-    if(w0) *w0 = _lerpf(1.0f / 3.0f, 0.0f, t);
-    if(w1) *w1 = _lerpf(1.0f / 3.0f, 0.0f, t);
-    if(w2) *w2 = _lerpf(1.0f / 3.0f, 1.0f, t);
+    if(!IS_NULL_PTR(w0)) *w0 = _lerpf(1.0f / 3.0f, 0.0f, t);
+    if(!IS_NULL_PTR(w1)) *w1 = _lerpf(1.0f / 3.0f, 0.0f, t);
+    if(!IS_NULL_PTR(w2)) *w2 = _lerpf(1.0f / 3.0f, 1.0f, t);
   }
 }
 
@@ -299,7 +299,7 @@ static inline float _sample_alpha_noise_raw(const dt_drawlayer_brush_dab_t *dab,
                                             const int pixel_x, const int pixel_y)
 {
   float alpha_noise = 1.0f;
-  if(view && view->have_sprinkles)
+  if(!IS_NULL_PTR(view) && view->have_sprinkles)
   {
     const float layer_x = ((float)pixel_x + 0.5f) * view->sprinkle_coord_scale;
     const float layer_y = ((float)pixel_y + 0.5f) * view->sprinkle_coord_scale;

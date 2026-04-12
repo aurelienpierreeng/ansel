@@ -305,7 +305,7 @@ void reload_defaults(dt_iop_module_t *self)
 {
   dt_iop_invert_gui_data_t *const g = (dt_iop_invert_gui_data_t*)self->gui_data;
 
-  if (g)
+  if (!IS_NULL_PTR(g))
   {
     if(dt_image_is_monochrome(&self->dev->image_storage))
     {

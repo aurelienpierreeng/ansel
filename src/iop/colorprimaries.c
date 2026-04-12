@@ -597,7 +597,7 @@ static int _build_viewer_control_nodes(const dt_iop_colorprimaries_params_t *con
 {
   int count = 0;
 
-  if(!control_nodes || IS_NULL_PTR(lut_profile)) return 0;
+  if(IS_NULL_PTR(control_nodes) || IS_NULL_PTR(lut_profile)) return 0;
 
   for(int node = 0; node < DT_IOP_COLORPRIMARIES_NODE_COUNT; node++)
   {

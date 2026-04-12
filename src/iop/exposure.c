@@ -433,7 +433,7 @@ static void _process_common_setup(dt_iop_module_t *self, const dt_dev_pixelpipe_
 
   if(d->deflicker)
   {
-    if(g)
+    if(!IS_NULL_PTR(g))
     {
       // histogram is precomputed and cached
       _compute_correction(self, &d->params, piece, g->deflicker_histogram, &g->deflicker_histogram_stats,
@@ -449,7 +449,7 @@ static void _process_common_setup(dt_iop_module_t *self, const dt_dev_pixelpipe_
     }
 
     // second, show computed correction in UI.
-    if(g && dt_dev_pixelpipe_has_preview_output(self->dev, pipe, NULL))
+    if(!IS_NULL_PTR(g) && dt_dev_pixelpipe_has_preview_output(self->dev, pipe, NULL))
     {
       dt_iop_gui_enter_critical_section(self);
       g->deflicker_computed_exposure = exposure;

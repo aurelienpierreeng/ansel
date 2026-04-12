@@ -178,7 +178,7 @@ static void _blendif_combine_channels(const float *const restrict pixels, float 
   if(blendif & (1 << DEVELOP_BLENDIF_GRAY_in))
   {
     const unsigned int invert_mask = (blendif >> 16) & (1 << DEVELOP_BLENDIF_GRAY_in);
-    if(profile)
+    if(!IS_NULL_PTR(profile))
     {
       _blendif_gray(pixels, mask, stride, parameters + DEVELOP_BLENDIF_PARAMETER_ITEMS * DEVELOP_BLENDIF_GRAY_in,
                     invert_mask, profile);
@@ -1030,7 +1030,7 @@ static inline float _rgb_luminance(const float *const restrict rgb,
                                    const dt_iop_order_iccprofile_info_t *const restrict profile)
 {
   float value = 0.0f;
-  if(profile)
+  if(!IS_NULL_PTR(profile))
     value = dt_ioppr_get_rgb_matrix_luminance(rgb, profile->matrix_in, profile->lut_in,
                                               profile->unbounded_coeffs_in, profile->lutsize,
                                               profile->nonlinearlut);

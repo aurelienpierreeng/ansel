@@ -142,7 +142,7 @@ const char **description(struct dt_iop_module_t *self)
 static void _turn_select_region_off(struct dt_iop_module_t *self)
 {
   dt_iop_rgblevels_gui_data_t *g = (dt_iop_rgblevels_gui_data_t *)self->gui_data;
-  if(g)
+  if(!IS_NULL_PTR(g))
   {
     g->button_down = g->draw_selected_region = 0;
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_select_region), g->draw_selected_region);
@@ -353,7 +353,7 @@ static gboolean _area_draw_callback(GtkWidget *widget, cairo_t *crf, dt_iop_modu
     if (!is_linear)
       hist_max = logf(1.0 + hist_max);
 
-    if(hist && hist_max > 0.0f)
+    if(!IS_NULL_PTR(hist) && hist_max > 0.0f)
     {
       cairo_push_group_with_content(cr, CAIRO_CONTENT_COLOR);
       cairo_scale(cr, width / 255.0, -(height - DT_PIXEL_APPLY_DPI(5)) / hist_max);
@@ -913,7 +913,7 @@ static void _get_selected_area(struct dt_iop_module_t *self, const dt_dev_pixelp
 {
   box_out[0] = box_out[1] = box_out[2] = box_out[3] = 0;
 
-  if(g)
+  if(!IS_NULL_PTR(g))
   {
     const int width = roi_in->width;
     const int height = roi_in->height;
@@ -1048,7 +1048,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
   const dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_pipe_work_profile_info(pipe);
 
   // process auto levels
-  if(g && dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
+  if(!IS_NULL_PTR(g) && dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
   {
     dt_iop_gui_enter_critical_section(self);
     if(g->call_auto_levels == 1 && !darktable.gui->reset)

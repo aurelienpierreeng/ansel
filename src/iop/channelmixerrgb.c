@@ -1154,7 +1154,7 @@ static inline __attribute__((always_inline)) void check_if_close_to_daylight(con
   if(t < 3000.f && t > 1667.f)
     t = CCT_reverse_lookup(x, y);
 
-  if(temperature)
+  if(!IS_NULL_PTR(temperature))
     *temperature = t;
 
   // Convert to CIE 1960 Yuv space
@@ -1902,7 +1902,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   dt_colormatrix_t XYZ_to_CAM;
 
   // repack the matrices as flat AVX2-compliant matrice
-  if(work_profile)
+  if(!IS_NULL_PTR(work_profile))
   {
     // work profile can't be fetched in commit_params since it is not yet initialised
     memcpy(RGB_to_XYZ, work_profile->matrix_in, sizeof(RGB_to_XYZ));
@@ -3119,7 +3119,7 @@ static gboolean _channelmixerrgb_sync_primaries_from_params(dt_iop_module_t *sel
   if(!dt_iop_channelmixer_shared_primaries_to_matrix(basis, &primaries, roundtrip)) return FALSE;
 
   const float roundtrip_error = dt_iop_channelmixer_shared_roundtrip_error(M, roundtrip);
-  if(error) *error = roundtrip_error;
+  if(!IS_NULL_PTR(error)) *error = roundtrip_error;
 
   ++darktable.gui->reset;
   dt_iop_channelmixer_shared_primaries_to_sliders(&primaries, widgets);
@@ -3236,7 +3236,7 @@ static gboolean _channelmixerrgb_sync_simple_from_params(dt_iop_module_t *self, 
   float roundtrip[3][3] = { { 0.f } };
   dt_iop_channelmixer_rgb_simple_params_t simple;
 
-  if(error) *error = INFINITY;
+  if(!IS_NULL_PTR(error)) *error = INFINITY;
   if(!dt_iop_channelmixer_shared_rows_are_normalized(normalize)) return FALSE;
   if(!dt_iop_channelmixer_shared_get_matrix(rows, normalize, FALSE, M)) return FALSE;
 
@@ -3244,7 +3244,7 @@ static gboolean _channelmixerrgb_sync_simple_from_params(dt_iop_module_t *self, 
   dt_iop_channelmixer_shared_simple_to_matrix(&simple, roundtrip);
 
   const float roundtrip_error = dt_iop_channelmixer_shared_roundtrip_error(M, roundtrip);
-  if(error) *error = roundtrip_error;
+  if(!IS_NULL_PTR(error)) *error = roundtrip_error;
 
   ++darktable.gui->reset;
   dt_iop_channelmixer_shared_simple_to_sliders(&simple, widgets);
@@ -3966,7 +3966,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 
   if(w == g->illuminant)
   {
-    if(previous)
+    if(!IS_NULL_PTR(previous))
     {
       dt_illuminant_t *prev_illuminant = (dt_illuminant_t *)previous;
       if(*prev_illuminant == DT_ILLUMINANT_CAMERA)

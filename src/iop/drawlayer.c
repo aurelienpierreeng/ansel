@@ -162,13 +162,13 @@ static void _brush_pipeline_color_from_display(dt_iop_module_t *self, const floa
   pipeline_rgb[1] = _clamp01(display_rgb[1]);
   pipeline_rgb[2] = _clamp01(display_rgb[2]);
 
-  if(self && self->dev && self->dev->pipe)
+  if(!IS_NULL_PTR(self) && self->dev && self->dev->pipe)
   {
     const dt_iop_order_iccprofile_info_t *const display_profile
         = dt_ioppr_get_pipe_output_profile_info(self->dev->pipe);
     const dt_iop_order_iccprofile_info_t *const work_profile
         = dt_ioppr_get_iop_work_profile_info(self, self->dev->iop);
-    if(display_profile && work_profile)
+    if(!IS_NULL_PTR(display_profile) && !IS_NULL_PTR(work_profile))
     {
       float in[4] = { pipeline_rgb[0], pipeline_rgb[1], pipeline_rgb[2], 0.0f };
       float out[4] = { pipeline_rgb[0], pipeline_rgb[1], pipeline_rgb[2], 0.0f };
@@ -220,7 +220,7 @@ static void _fill_input_brush_settings(dt_iop_module_t *self, dt_drawlayer_paint
 
   float display_rgb[3] = { 0.0f };
   float pipeline_rgb[3] = { 0.0f };
-  if(g && g->ui.brush_color_valid)
+  if(!IS_NULL_PTR(g) && g->ui.brush_color_valid)
   {
     memcpy(display_rgb, g->ui.brush_display_color, sizeof(display_rgb));
     memcpy(pipeline_rgb, g->ui.brush_pipeline_color, sizeof(pipeline_rgb));
@@ -228,8 +228,8 @@ static void _fill_input_brush_settings(dt_iop_module_t *self, dt_drawlayer_paint
   else
   {
     _conf_display_color(display_rgb);
-    if(g) _sync_cached_brush_colors(self, display_rgb);
-    if(g && g->ui.brush_color_valid)
+    if(!IS_NULL_PTR(g)) _sync_cached_brush_colors(self, display_rgb);
+    if(!IS_NULL_PTR(g) && g->ui.brush_color_valid)
     {
       memcpy(display_rgb, g->ui.brush_display_color, sizeof(display_rgb));
       memcpy(pipeline_rgb, g->ui.brush_pipeline_color, sizeof(pipeline_rgb));
@@ -340,7 +340,7 @@ static drawlayer_process_scratch_t *_get_process_scratch(void)
 {
   drawlayer_process_scratch_t *scratch
       = (drawlayer_process_scratch_t *)g_private_get(&_drawlayer_process_scratch_key);
-  if(scratch) return scratch;
+  if(!IS_NULL_PTR(scratch)) return scratch;
 
   scratch = g_malloc0(sizeof(*scratch));
   if(IS_NULL_PTR(scratch)) return NULL;
@@ -352,10 +352,10 @@ static inline __attribute__((always_inline)) gboolean _resolve_layer_geometry(dt
                                         const dt_dev_pixelpipe_iop_t *piece, int *layer_width,
                                         int *layer_height, int *origin_x, int *origin_y)
 {
-  if(layer_width) *layer_width = 0;
-  if(layer_height) *layer_height = 0;
-  if(origin_x) *origin_x = 0;
-  if(origin_y) *origin_y = 0;
+  if(!IS_NULL_PTR(layer_width)) *layer_width = 0;
+  if(!IS_NULL_PTR(layer_height)) *layer_height = 0;
+  if(!IS_NULL_PTR(origin_x)) *origin_x = 0;
+  if(!IS_NULL_PTR(origin_y)) *origin_y = 0;
   if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev)) return FALSE;
   /* Layer geometry must follow authored image-space pixels at the current
    * module stage, not merely the size of the working buffer currently attached
@@ -365,17 +365,17 @@ static inline __attribute__((always_inline)) gboolean _resolve_layer_geometry(dt
   int resolved_width = 0;
   int resolved_height = 0;
 
-  if(piece && piece->buf_out.width > 0 && piece->buf_out.height > 0 && piece->roi_out.scale > 0.0)
+  if(!IS_NULL_PTR(piece) && piece->buf_out.width > 0 && piece->buf_out.height > 0 && piece->roi_out.scale > 0.0)
   {
     resolved_width = (int)lround((double)piece->buf_out.width * piece->roi_out.scale);
     resolved_height = (int)lround((double)piece->buf_out.height * piece->roi_out.scale);
   }
-  else if(pipe && pipe->processed_width > 0 && pipe->processed_height > 0)
+  else if(!IS_NULL_PTR(pipe) && pipe->processed_width > 0 && pipe->processed_height > 0)
   {
     resolved_width = pipe->processed_width;
     resolved_height = pipe->processed_height;
   }
-  else if(pipe || piece)
+  else if(!IS_NULL_PTR(pipe) || !IS_NULL_PTR(piece))
   {
     return FALSE;
   }
@@ -391,8 +391,8 @@ static inline __attribute__((always_inline)) gboolean _resolve_layer_geometry(dt
     resolved_height = self->dev->roi.processed_height;
   }
 
-  if(layer_width) *layer_width = resolved_width;
-  if(layer_height) *layer_height = resolved_height;
+  if(!IS_NULL_PTR(layer_width)) *layer_width = resolved_width;
+  if(!IS_NULL_PTR(layer_height)) *layer_height = resolved_height;
   return resolved_width > 0 && resolved_height > 0;
 }
 
@@ -409,7 +409,7 @@ static inline __attribute__((always_inline)) uint64_t _drawlayer_params_cache_ha
   hash = dt_hash(hash, (const char *)&imgid, sizeof(imgid));
   hash = dt_hash(hash, (const char *)&layer_width, sizeof(layer_width));
   hash = dt_hash(hash, (const char *)&layer_height, sizeof(layer_height));
-  if(params)
+  if(!IS_NULL_PTR(params))
   {
     hash = dt_hash(hash, params->layer_name, sizeof(params->layer_name));
     hash = dt_hash(hash, (const char *)&params->layer_order, sizeof(params->layer_order));
@@ -1205,7 +1205,7 @@ static gboolean _prompt_layer_name_dialog(const char *title, const char *message
   GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
   GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_PIXEL_APPLY_DPI(8));
   GtkWidget *entry = gtk_entry_new();
-  if(message && message[0] != '\0')
+  if(!IS_NULL_PTR(message) && message[0] != '\0')
   {
     GtkWidget *label = gtk_label_new(message);
     gtk_label_set_xalign(GTK_LABEL(label), 0.0f);
@@ -1374,7 +1374,7 @@ static gboolean _color_picker_button_release(GtkWidget *widget, GdkEventButton *
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
   (void)widget;
   (void)event;
-  if(g && g->ui.widgets)
+  if(!IS_NULL_PTR(g) && g->ui.widgets)
   {
     float display_rgb[3] = { 0.0f };
     if(dt_drawlayer_widgets_finish_picker_drag(g->ui.widgets, display_rgb))
@@ -1425,7 +1425,7 @@ static void _sanitize_params(dt_iop_module_t *self, dt_iop_drawlayer_params_t *p
   if(params->layer_order < 0 && params->stroke_commit_hash == 0u)
     memset(params->work_profile, 0, sizeof(params->work_profile));
 
-  if(params->work_profile[0] == '\0' && self && self->dev)
+  if(params->work_profile[0] == '\0' && !IS_NULL_PTR(self) && self->dev)
   {
     char current_profile[DRAWLAYER_PROFILE_SIZE] = { 0 };
     if(_get_current_work_profile_key(self, self->dev->iop, self->dev->pipe, current_profile,
@@ -1438,7 +1438,7 @@ static void _sanitize_requested_layer_name(const char *requested, char *name, co
 {
   if(IS_NULL_PTR(name) || name_size == 0) return;
   name[0] = '\0';
-  if(!(requested && requested[0])) return;
+  if(!(!IS_NULL_PTR(requested) && requested[0])) return;
 
   gboolean last_was_space = FALSE;
   size_t out = 0;
@@ -1803,7 +1803,7 @@ static gboolean _delete_current_layer(dt_iop_module_t *self)
       params->sidecar_timestamp = 0;
       memset(params->work_profile, 0, sizeof(params->work_profile));
       if(g) g->session.missing_layer_error[0] = '\0';
-      if(g)
+      if(!IS_NULL_PTR(g))
       {
         _release_all_base_patch_extra_refs(g);
         dt_drawlayer_cache_patch_clear(&g->process.base_patch, "drawlayer patch");
@@ -1871,7 +1871,7 @@ static gboolean _rename_current_layer_from_gui(dt_iop_module_t *self, const char
 
   char new_name[DRAWLAYER_NAME_SIZE] = { 0 };
   char stripped_requested[DRAWLAYER_NAME_SIZE] = { 0 };
-  if(requested_name) g_strlcpy(stripped_requested, requested_name, sizeof(stripped_requested));
+  if(!IS_NULL_PTR(requested_name)) g_strlcpy(stripped_requested, requested_name, sizeof(stripped_requested));
   g_strstrip(stripped_requested);
   if(stripped_requested[0] == '\0') return FALSE;
   _sanitize_requested_layer_name(requested_name, new_name, sizeof(new_name));
@@ -1942,7 +1942,7 @@ static gboolean _create_new_layer(dt_iop_module_t *self, const char *requested_n
 
   char new_name[DRAWLAYER_NAME_SIZE] = { 0 };
   char stripped_requested[DRAWLAYER_NAME_SIZE] = { 0 };
-  if(requested_name) g_strlcpy(stripped_requested, requested_name, sizeof(stripped_requested));
+  if(!IS_NULL_PTR(requested_name)) g_strlcpy(stripped_requested, requested_name, sizeof(stripped_requested));
   g_strstrip(stripped_requested);
   if(stripped_requested[0] == '\0') return FALSE;
   _sanitize_requested_layer_name(requested_name, new_name, sizeof(new_name));
@@ -2021,7 +2021,7 @@ static void _build_pre_module_filter_string(dt_iop_module_t *self, char *filter,
       if(piece->enabled && piece->module && piece->module->op[0]) prev_op = piece->module->op;
     }
   }
-  if(prev_op && prev_op[0]) g_snprintf(filter, filter_size, "pre:%s", prev_op);
+  if(!IS_NULL_PTR(prev_op) && prev_op[0]) g_snprintf(filter, filter_size, "pre:%s", prev_op);
 }
 
 static gboolean _background_layer_job_done_idle(gpointer user_data)
@@ -2511,7 +2511,7 @@ void dt_drawlayer_begin_gui_stroke_capture(dt_iop_module_t *self, const dt_drawl
   uint32_t stroke_batch = g->stroke.current_stroke_batch + 1u;
   if(stroke_batch == 0u) stroke_batch++;
   const uint32_t event_index = first_input ? first_input->event_index : 0u;
-  if(first_input && first_input->stroke_batch != 0u) stroke_batch = first_input->stroke_batch;
+  if(!IS_NULL_PTR(first_input) && first_input->stroke_batch != 0u) stroke_batch = first_input->stroke_batch;
 
   dt_iop_gui_enter_critical_section(self);
   g->session.pointer_valid = TRUE;
@@ -2723,7 +2723,7 @@ void gui_reset(dt_iop_module_t *self)
   memset(params->work_profile, 0, sizeof(params->work_profile));
   _touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f, 0u);
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
-  if(g)
+  if(!IS_NULL_PTR(g))
   {
     g->session.missing_layer_error[0] = '\0';
     drawlayer_runtime_host_context_t runtime_host = {
@@ -3259,7 +3259,7 @@ void gui_focus(dt_iop_module_t *self, gboolean in)
     if(had_pending_edits && params)
       _touch_stroke_commit_hash(params, pending_samples, g->stroke.last_dab_valid, g->stroke.last_dab_x,
                                 g->stroke.last_dab_y, 0u);
-    if(had_pending_edits && self->dev && params)
+    if(had_pending_edits && self->dev && !IS_NULL_PTR(params))
     {
       dt_dev_undo_start_record(self->dev);
       dt_pthread_rwlock_wrlock(&self->dev->history_mutex);

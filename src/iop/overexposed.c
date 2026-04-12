@@ -176,7 +176,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     }
   }
 
-  else if(dev->overexposed.mode == DT_CLIPPING_PREVIEW_GAMUT && current_profile)
+  else if(dev->overexposed.mode == DT_CLIPPING_PREVIEW_GAMUT && !IS_NULL_PTR(current_profile))
   {
     // Gamut is out of bounds
     __OMP_PARALLEL_FOR__()
@@ -229,7 +229,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     }
   }
 
-  else if(dev->overexposed.mode == DT_CLIPPING_PREVIEW_LUMINANCE && current_profile)
+  else if(dev->overexposed.mode == DT_CLIPPING_PREVIEW_LUMINANCE && !IS_NULL_PTR(current_profile))
   {
     // Luminance channel is out of bounds
     __OMP_PARALLEL_FOR__()
@@ -256,7 +256,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     }
   }
 
-  else if(dev->overexposed.mode == DT_CLIPPING_PREVIEW_SATURATION && current_profile)
+  else if(dev->overexposed.mode == DT_CLIPPING_PREVIEW_SATURATION && !IS_NULL_PTR(current_profile))
   {
     // Show saturation out of bounds where luminance is valid
     __OMP_PARALLEL_FOR__()

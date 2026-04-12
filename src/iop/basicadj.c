@@ -187,7 +187,7 @@ int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, const dt
 static void _turn_select_region_off(struct dt_iop_module_t *self)
 {
   dt_iop_basicadj_gui_data_t *g = (dt_iop_basicadj_gui_data_t *)self->gui_data;
-  if(g)
+  if(!IS_NULL_PTR(g))
   {
     g->button_down = g->draw_selected_region = 0;
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_select_region), g->draw_selected_region);
@@ -318,7 +318,7 @@ static void _signal_profile_user_changed(gpointer instance, uint8_t profile_type
     {
       def->middle_grey = def_middle_grey;
 
-      if(g)
+      if(!IS_NULL_PTR(g))
       {
         ++darktable.gui->reset;
 
@@ -334,7 +334,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
 {
   int handled = 0;
   dt_iop_basicadj_gui_data_t *g = (dt_iop_basicadj_gui_data_t *)self->gui_data;
-  if(g && g->draw_selected_region && g->button_down && self->enabled)
+  if(!IS_NULL_PTR(g) && g->draw_selected_region && g->button_down && self->enabled)
   {
     float point[2] = { (float)x, (float)y };
     dt_dev_coordinates_widget_to_image_norm(darktable.develop, point, 1);
@@ -355,7 +355,7 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
 {
   int handled = 0;
   dt_iop_basicadj_gui_data_t *g = (dt_iop_basicadj_gui_data_t *)self->gui_data;
-  if(g && g->draw_selected_region && self->enabled)
+  if(!IS_NULL_PTR(g) && g->draw_selected_region && self->enabled)
   {
     if(fabsf(g->posx_from - g->posx_to) > 1 && fabsf(g->posy_from - g->posy_to) > 1)
     {
@@ -384,7 +384,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
 {
   int handled = 0;
   dt_iop_basicadj_gui_data_t *g = (dt_iop_basicadj_gui_data_t *)self->gui_data;
-  if(g && g->draw_selected_region && self->enabled)
+  if(!IS_NULL_PTR(g) && g->draw_selected_region && self->enabled)
   {
     if((which == 3) || (which == 1 && type == GDK_2BUTTON_PRESS))
     {
@@ -1220,7 +1220,7 @@ static void _get_selected_area(struct dt_iop_module_t *self, const dt_dev_pixelp
 {
   box_out[0] = box_out[1] = box_out[2] = box_out[3] = 0;
 
-  if(g)
+  if(!IS_NULL_PTR(g))
   {
     const int width = roi_in->width;
     const int height = roi_in->height;
@@ -1285,7 +1285,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   dt_iop_basicadj_gui_data_t *g = (dt_iop_basicadj_gui_data_t *)self->gui_data;
 
   // process auto levels
-  if(g && dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
+  if(!IS_NULL_PTR(g) && dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
   {
     dt_iop_gui_enter_critical_section(self);
     if(g->call_auto_exposure == 1 && !darktable.gui->reset)

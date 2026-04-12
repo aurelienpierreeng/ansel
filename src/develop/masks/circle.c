@@ -639,7 +639,7 @@ static int _circle_get_points_border(dt_develop_t *dev, struct dt_masks_form_t *
   {
     if(form->functions->get_points(dev, x, y, circle->radius, circle->radius, 0, points, points_count) != 0)
       return 1;
-    if(border)
+    if(!IS_NULL_PTR(border))
     {
       float outer_radius = circle->radius + circle->border;
       return form->functions->get_points(dev, x, y, outer_radius, outer_radius, 0, border, border_count);

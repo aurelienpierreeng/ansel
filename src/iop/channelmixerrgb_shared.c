@@ -586,7 +586,7 @@ void dt_iop_channelmixer_shared_work_rgb_to_display(const dt_aligned_pixel_t wor
                                                     const dt_iop_order_iccprofile_info_t *const display_profile,
                                                     dt_aligned_pixel_t display_rgb)
 {
-  if(work_profile && display_profile)
+  if(!IS_NULL_PTR(work_profile) && !IS_NULL_PTR(display_profile))
   {
     dt_aligned_pixel_t XYZ = { 0.f };
     dt_aligned_pixel_t linear_display_rgb = { 0.f };

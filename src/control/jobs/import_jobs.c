@@ -223,7 +223,7 @@ int _import_copy_txt(const char *const filename, const char *dest_file_path)
   char *txt_dest = dt_image_build_text_path_from_path(dest_file_path);
   int success = 0;
 
-  if(txt_dest)
+  if(!IS_NULL_PTR(txt_dest))
   {
     success = _copy_file(txt_source, txt_dest);
     dt_print(DT_DEBUG_IMPORT, "[Import] copying %s to %s %s\n", txt_source, txt_dest,

@@ -178,7 +178,7 @@ static GList *_film_recursive_get_files(const gchar *path, gboolean recursive, G
     const gchar *filename = g_dir_read_name(cdir);
 
     /* return if no more files are in current dir */
-    if(!filename) break;
+    if(IS_NULL_PTR(filename)) break;
     if(filename[0] == '.') continue;
 
     /* build full path for filename */
@@ -209,7 +209,7 @@ static GList *_film_recursive_get_files(const gchar *path, gboolean recursive, G
 */
 static void _apply_filmroll_gpx(dt_film_t *cfr)
 {
-  if(cfr && cfr->dir)
+  if(!IS_NULL_PTR(cfr) && cfr->dir)
   {
     g_dir_rewind(cfr->dir);
     const gchar *dfn = NULL;
@@ -387,7 +387,7 @@ static void _film_import1(dt_job_t *job, dt_film_t *film, GList *images)
   _apply_filmroll_gpx(cfr);
 
   /* cleanup previously imported filmroll*/
-  if(cfr && cfr != film)
+  if(!IS_NULL_PTR(cfr) && cfr != film)
   {
     dt_film_cleanup(cfr);
     dt_free(cfr);

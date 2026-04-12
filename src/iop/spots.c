@@ -274,13 +274,13 @@ static int _shape_is_being_added(dt_iop_module_t *self, const int shape_type)
     if(dt_masks_get_visible_form(self->dev)->type & DT_MASKS_GROUP)
     {
       GList *forms = dt_masks_get_visible_form(self->dev)->points;
-      if(forms)
+      if(!IS_NULL_PTR(forms))
       {
         dt_masks_form_group_t *grpt = (dt_masks_form_group_t *)forms->data;
         if(grpt)
         {
           const dt_masks_form_t *form = dt_masks_get_from_id(darktable.develop, grpt->formid);
-          if(form) being_added = (form->type & shape_type);
+          if(!IS_NULL_PTR(form)) being_added = (form->type & shape_type);
         }
       }
     }
@@ -438,7 +438,7 @@ void modify_roi_in(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t
       dt_masks_form_group_t *grpt = (dt_masks_form_group_t *)forms->data;
       // we get the spot
       dt_masks_form_t *form = dt_masks_get_from_id(self->dev, grpt->formid);
-      if(form)
+      if(!IS_NULL_PTR(form))
       {
         // if the form is outside the roi, we just skip it
         if(!masks_form_is_in_roi(self, processing_pipe, piece, form, roi_in, roi_out))

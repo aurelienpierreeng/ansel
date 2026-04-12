@@ -20,8 +20,8 @@
 
 static gboolean _virtual_piece_layer_geometry(dt_iop_module_t *self, int *layer_width, int *layer_height)
 {
-  if(layer_width) *layer_width = 0;
-  if(layer_height) *layer_height = 0;
+  if(!IS_NULL_PTR(layer_width)) *layer_width = 0;
+  if(!IS_NULL_PTR(layer_height)) *layer_height = 0;
   if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev)) return FALSE;
 
   /* GUI coordinate mapping should prefer the virtual pipe geometry because it
@@ -42,8 +42,8 @@ static gboolean _virtual_piece_layer_geometry(dt_iop_module_t *self, int *layer_
     resolved_width = self->dev->roi.processed_width;
     resolved_height = self->dev->roi.processed_height;
   }
-  if(layer_width) *layer_width = resolved_width;
-  if(layer_height) *layer_height = resolved_height;
+  if(!IS_NULL_PTR(layer_width)) *layer_width = resolved_width;
+  if(!IS_NULL_PTR(layer_height)) *layer_height = resolved_height;
   return resolved_width > 0 && resolved_height > 0;
 }
 
@@ -128,10 +128,10 @@ gboolean dt_drawlayer_layer_bounds_to_widget_bounds(dt_iop_module_t *self, const
     max_y = fmaxf(max_y, pts[2 * i + 1]);
   }
 
-  if(left) *left = min_x;
-  if(top) *top = min_y;
-  if(right) *right = max_x;
-  if(bottom) *bottom = max_y;
+  if(!IS_NULL_PTR(left)) *left = min_x;
+  if(!IS_NULL_PTR(top)) *top = min_y;
+  if(!IS_NULL_PTR(right)) *right = max_x;
+  if(!IS_NULL_PTR(bottom)) *bottom = max_y;
   return TRUE;
 }
 

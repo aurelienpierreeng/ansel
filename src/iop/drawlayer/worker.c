@@ -326,7 +326,7 @@ static void _process_backend_input(dt_iop_module_t *self, const dt_drawlayer_pai
                                    dt_drawlayer_paint_stroke_t *stroke)
 {
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
-  if(IS_NULL_PTR(g) || IS_NULL_PTR(input) || !stroke) return;
+  if(IS_NULL_PTR(g) || IS_NULL_PTR(input) || IS_NULL_PTR(stroke)) return;
 
   drawlayer_paint_backend_ctx_t ctx = _make_backend_ctx(self, g->stroke.worker, stroke);
   const dt_drawlayer_paint_callbacks_t callbacks = {
@@ -466,7 +466,7 @@ static void _stroke_clear(dt_drawlayer_worker_t *rt)
 
 static void _reset_backend_path(dt_drawlayer_worker_t *rt)
 {
-  if(rt && rt->backend_path) dt_drawlayer_paint_runtime_state_reset(rt->backend_path);
+  if(!IS_NULL_PTR(rt) && rt->backend_path) dt_drawlayer_paint_runtime_state_reset(rt->backend_path);
 }
 
 static void _reset_live_publish(dt_drawlayer_worker_t *rt)
@@ -888,7 +888,7 @@ static guint _rasterize_pending_dab_batch(drawlayer_paint_backend_ctx_t *ctx, gi
   dt_iop_drawlayer_gui_data_t *g = (ctx && ctx->self) ? (dt_iop_drawlayer_gui_data_t *)ctx->self->gui_data : NULL;
   dt_drawlayer_paint_stroke_t *stroke = ctx ? ctx->stroke : NULL;
   dt_drawlayer_worker_t *worker = ctx ? ctx->worker : NULL;
-  if(IS_NULL_PTR(g) || !stroke || IS_NULL_PTR(worker) || !stroke->pending_dabs || stroke->pending_dabs->len == 0) return 0;
+  if(IS_NULL_PTR(g) || IS_NULL_PTR(stroke) || IS_NULL_PTR(worker) || !stroke->pending_dabs || stroke->pending_dabs->len == 0) return 0;
   if(IS_NULL_PTR(g->process.base_patch.pixels) || g->process.base_patch.width <= 0 || g->process.base_patch.height <= 0)
     return 0;
 
@@ -1058,7 +1058,7 @@ static inline gboolean _backend_pending_dabs_locked(const dt_drawlayer_worker_t 
 static void _rt_set_worker_state(dt_drawlayer_worker_t *rt, const dt_drawlayer_worker_state_t state)
 {
   drawlayer_rt_worker_t *worker = _backend_worker(rt);
-  if(worker) worker->state = state;
+  if(!IS_NULL_PTR(worker)) worker->state = state;
 }
 
 /** @brief Try elevating current thread scheduling policy for lower-latency input. */
@@ -1127,7 +1127,7 @@ static void _backend_worker_on_idle(dt_iop_module_t *self, dt_drawlayer_worker_t
 {
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
   drawlayer_paint_backend_ctx_t ctx = _make_backend_ctx(self, rt, rt ? rt->stroke : NULL);
-  if(self && g && rt && rt->stroke && rt->stroke->pending_dabs && rt->stroke->pending_dabs->len > 0)
+  if(!IS_NULL_PTR(self) && g && !IS_NULL_PTR(rt) && rt->stroke && rt->stroke->pending_dabs && rt->stroke->pending_dabs->len > 0)
   {
     /* Once a stroke has emitted dabs, keep draining the heartbeat backlog in
      * this same idle phase instead of returning to the outer loop after each
@@ -1162,7 +1162,7 @@ static void _backend_worker_process_sample(dt_iop_module_t *self, dt_drawlayer_w
                                            const dt_drawlayer_paint_raw_input_t *input)
 {
   if(IS_NULL_PTR(rt) || IS_NULL_PTR(input)) return;
-  if(rt && input && input->stroke_pos == DT_DRAWLAYER_PAINT_STROKE_FIRST)
+  if(!IS_NULL_PTR(rt) && !IS_NULL_PTR(input) && input->stroke_pos == DT_DRAWLAYER_PAINT_STROKE_FIRST)
   {
     _stroke_begin(rt);
   }

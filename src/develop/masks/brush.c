@@ -485,7 +485,7 @@ static void _brush_points_recurs_border_gaps(float *cmax, float *bmin, float *bm
   float *dborder_ptr = dt_masks_dynbuf_reserve_n(dborder, 2*(l-1));
   // and fill them in: the same center pos for each point in dpoints, and the corresponding border point at
   //  successive angular positions for dborder
-  if (dpoints_ptr && dborder_ptr)
+  if (!IS_NULL_PTR(dpoints_ptr) && !IS_NULL_PTR(dborder_ptr))
   {
     for(int i = 1; i < l; i++)
     {
@@ -544,7 +544,7 @@ static void _brush_points_recurs_border_small_gaps(float *cmax, float *bmin, flo
   float *dborder_ptr = dt_masks_dynbuf_reserve_n(dborder, 2*(l-1));
   // and fill them in: the same center pos for each point in dpoints, and the corresponding border point at
   //  successive angular positions for dborder
-  if (dpoints_ptr && dborder_ptr)
+  if (!IS_NULL_PTR(dpoints_ptr) && !IS_NULL_PTR(dborder_ptr))
   {
     for(int i = 1; i < l; i++)
     {
@@ -587,7 +587,7 @@ static void _brush_points_stamp(float *cmax, float *bmin, dt_masks_dynbuf_t *dpo
   float *dborder_ptr = dt_masks_dynbuf_reserve_n(dborder, 2*(l-1));
   // and fill them in: the same center pos for each point in dpoints, and the corresponding border point at
   //  successive angular positions for dborder
-  if (dpoints_ptr && dborder_ptr)
+  if (!IS_NULL_PTR(dpoints_ptr) && !IS_NULL_PTR(dborder_ptr))
   {
     for(int i = 0; i < l; i++)
     {
@@ -720,9 +720,9 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
   *point_buffer = NULL;
   *point_count = 0;
   if(border_buffer) *border_buffer = NULL;
-  if(border_buffer) *border_count = 0;
+  if(!IS_NULL_PTR(border_buffer)) *border_count = 0;
   if(payload_buffer) *payload_buffer = NULL;
-  if(payload_buffer) *payload_count = 0;
+  if(!IS_NULL_PTR(payload_buffer)) *payload_count = 0;
 
   if(IS_NULL_PTR(mask_form) || IS_NULL_PTR(mask_form->points)) return 0;
   double start2 = 0.0;
@@ -738,7 +738,7 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
   dpoints = dt_masks_dynbuf_init(1000000, "brush dpoints");
   if(IS_NULL_PTR(dpoints)) return 1;
 
-  if(border_buffer)
+  if(!IS_NULL_PTR(border_buffer))
   {
     dborder = dt_masks_dynbuf_init(1000000, "brush dborder");
     if(IS_NULL_PTR(dborder))
@@ -748,7 +748,7 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
     }
   }
 
-  if(payload_buffer)
+  if(!IS_NULL_PTR(payload_buffer))
   {
     dpayload = dt_masks_dynbuf_init(1000000, "brush dpayload");
     if(IS_NULL_PTR(dpayload))
@@ -798,13 +798,13 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
   }
 
   // for the border, we store value too
-  if(dborder)
+  if(!IS_NULL_PTR(dborder))
   {
     dt_masks_dynbuf_add_zeros(dborder, 6 * node_count);  // we need six zeros for each border point
   }
 
   // for the payload, we reserve an equivalent number of cells to keep it in sync
-  if(dpayload)
+  if(!IS_NULL_PTR(dpayload))
   {
     dt_masks_dynbuf_add_zeros(dpayload, 6 * node_count); // we need six zeros for each border point
   }
@@ -880,14 +880,14 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
       }
       else
       {
-        if(dborder)
+        if(!IS_NULL_PTR(dborder))
         {
           float bmin[2] = { dt_masks_dynbuf_get(dborder, -2), dt_masks_dynbuf_get(dborder, -1) };
           float cmax[2] = { dt_masks_dynbuf_get(dpoints, -2), dt_masks_dynbuf_get(dpoints, -1) };
           _brush_points_stamp(cmax, bmin, dpoints, dborder, TRUE);
         }
 
-        if(dpayload)
+        if(!IS_NULL_PTR(dpayload))
         {
           _brush_payload_sync(dpayload, dpoints, p1[5], p1[6]);
         }
@@ -897,7 +897,7 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
     // 2nd. special case: render transition point between different brush sizes
     if(fabsf(p1[4] - p2[4]) > 0.0001f && n > 0)
     {
-      if(dborder)
+      if(!IS_NULL_PTR(dborder))
       {
         float bmin[2] = { dt_masks_dynbuf_get(dborder, -2), dt_masks_dynbuf_get(dborder, -1) };
         float cmax[2] = { dt_masks_dynbuf_get(dpoints, -2), dt_masks_dynbuf_get(dpoints, -1) };
@@ -906,7 +906,7 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
           _brush_points_recurs_border_gaps(cmax, bmin, NULL, bmax, dpoints, dborder, TRUE);
       }
 
-      if(dpayload)
+      if(!IS_NULL_PTR(dpayload))
       {
         _brush_payload_sync(dpayload, dpoints, p1[5], p1[6]);
       }
@@ -915,7 +915,7 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
     // 3rd. special case: render endpoints
     if(k == k1)
     {
-      if(dborder)
+      if(!IS_NULL_PTR(dborder))
       {
         float bmin[2] = { dt_masks_dynbuf_get(dborder, -2), dt_masks_dynbuf_get(dborder, -1) };
         float cmax[2] = { dt_masks_dynbuf_get(dpoints, -2), dt_masks_dynbuf_get(dpoints, -1) };
@@ -923,7 +923,7 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
         _brush_points_recurs_border_gaps(cmax, bmin, NULL, bmax, dpoints, dborder, TRUE);
       }
 
-      if(dpayload)
+      if(!IS_NULL_PTR(dpayload))
       {
         _brush_payload_sync(dpayload, dpoints, p1[5], p1[6]);
       }
@@ -944,12 +944,12 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
 
     dt_masks_dynbuf_add_2(dpoints, rc[0], rc[1]);
 
-    if(dpayload)
+    if(!IS_NULL_PTR(dpayload))
     {
       dt_masks_dynbuf_add_2(dpayload, rp[0], rp[1]);
     }
 
-    if(dborder)
+    if(!IS_NULL_PTR(dborder))
     {
       if(isnan(rb[0]))
       {
@@ -969,7 +969,7 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
     }
 
     // we first want to be sure that there are no gaps in border
-    if(dborder && node_count >= 3)
+    if(!IS_NULL_PTR(dborder) && node_count >= 3)
     {
       // we get the next point (start of the next segment)
       _brush_border_get_XY(p3[0], p3[1], p3[2], p3[3], p4[2], p4[3], p4[0], p4[1], 0, p3[4], cmin, cmin + 1,
@@ -987,7 +987,7 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
       }
     }
 
-    if(dpayload)
+    if(!IS_NULL_PTR(dpayload))
     {
       _brush_payload_sync(dpayload, dpoints, rp[0], rp[1]);
     }
@@ -999,14 +999,14 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
   *point_buffer = dt_masks_dynbuf_harvest(dpoints);
   dt_masks_dynbuf_free(dpoints);
 
-  if(dborder)
+  if(!IS_NULL_PTR(dborder))
   {
     *border_count = dt_masks_dynbuf_position(dborder) / 2;
     *border_buffer = dt_masks_dynbuf_harvest(dborder);
     dt_masks_dynbuf_free(dborder);
   }
 
-  if(dpayload)
+  if(!IS_NULL_PTR(dpayload))
   {
     *payload_count = dt_masks_dynbuf_position(dpayload) / 2;
     *payload_buffer = dt_masks_dynbuf_harvest(dpayload);
@@ -1079,13 +1079,13 @@ fail:
   dt_pixelpipe_cache_free_align(*point_buffer);
   *point_buffer = NULL;
   *point_count = 0;
-  if(border_buffer)
+  if(!IS_NULL_PTR(border_buffer))
   {
     dt_pixelpipe_cache_free_align(*border_buffer);
     *border_buffer = NULL;
     *border_count = 0;
   }
-  if(payload_buffer)
+  if(!IS_NULL_PTR(payload_buffer))
   {
     dt_pixelpipe_cache_free_align(*payload_buffer);
     *payload_buffer = NULL;
@@ -1374,7 +1374,7 @@ static float _brush_get_interaction_value(const dt_masks_form_t *mask_form, dt_m
       for(const GList *point_node = mask_form->points; point_node; point_node = g_list_next(point_node))
       {
         const dt_masks_node_brush_t *node = (const dt_masks_node_brush_t *)point_node->data;
-        if(!node) continue;
+        if(IS_NULL_PTR(node)) continue;
         hardness_sum += node->hardness;
         hardness_count++;
       }
@@ -1506,7 +1506,7 @@ static int _change_size(dt_masks_form_t *mask_form, int parentid, dt_masks_form_
   dt_masks_get_set_conf_value(mask_form, "border", amount, HARDNESS_MIN, HARDNESS_MAX, increment, flow);
 
   // we recreate the form points
-  if(mask_gui && module) dt_masks_gui_form_create(mask_form, mask_gui, index, module);
+  if(!IS_NULL_PTR(mask_gui) && !IS_NULL_PTR(module)) dt_masks_gui_form_create(mask_form, mask_gui, index, module);
 
   return 1;
 }
@@ -1558,7 +1558,7 @@ static void _get_pressure_sensitivity(dt_masks_form_gui_t *mask_gui)
 {
   mask_gui->pressure_sensitivity = DT_MASKS_PRESSURE_OFF;
   const char *psens = dt_conf_get_string_const("pressure_sensitivity");
-  if(psens)
+  if(!IS_NULL_PTR(psens))
   {
     if(!strcmp(psens, "hardness (absolute)"))
       mask_gui->pressure_sensitivity = DT_MASKS_PRESSURE_HARDNESS_ABS;
@@ -2652,7 +2652,7 @@ static int _get_area(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pi
   }
 
   const guint node_count = g_list_length(mask_form->points);
-  if(IS_NULL_PTR(points) || !border || points_count <= (int)(node_count * 3) || border_count <= (int)(node_count * 3))
+  if(IS_NULL_PTR(points) || IS_NULL_PTR(border) || points_count <= (int)(node_count * 3) || border_count <= (int)(node_count * 3))
   {
     dt_pixelpipe_cache_free_align(points);
     dt_pixelpipe_cache_free_align(border);
@@ -2748,7 +2748,7 @@ static int _brush_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe
   }
 
   const guint node_count = g_list_length(mask_form->points);
-  if(IS_NULL_PTR(points) || !border || IS_NULL_PTR(payload) || points_count <= (int)(node_count * 3)
+  if(IS_NULL_PTR(points) || IS_NULL_PTR(border) || IS_NULL_PTR(payload) || points_count <= (int)(node_count * 3)
      || border_count <= (int)(node_count * 3))
   {
     dt_pixelpipe_cache_free_align(points);
@@ -2937,7 +2937,7 @@ static int _brush_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixel
   }
 
   const guint node_count = g_list_length(mask_form->points);
-  if(IS_NULL_PTR(points) || !border || IS_NULL_PTR(payload) || points_count <= (int)(node_count * 3)
+  if(IS_NULL_PTR(points) || IS_NULL_PTR(border) || IS_NULL_PTR(payload) || points_count <= (int)(node_count * 3)
      || border_count <= (int)(node_count * 3))
   {
     dt_pixelpipe_cache_free_align(points);
@@ -3127,7 +3127,7 @@ static void _brush_switch_node_callback(GtkWidget *widget, gpointer user_data)
   const int node_index = dt_masks_gui_selected_node_index(mask_gui);
   dt_masks_node_brush_t *node
       = (dt_masks_node_brush_t *)g_list_nth_data(selected_form->points, node_index);
-  if(IS_NULL_PTR(gui_points) || !node) return;
+  if(IS_NULL_PTR(gui_points) || IS_NULL_PTR(node)) return;
   dt_masks_toggle_bezier_node_type(module, selected_form, mask_gui, mask_gui->group_selected, gui_points,
                                    node_index, node->node, node->ctrl1, node->ctrl2, &node->state);
 }
@@ -3152,7 +3152,7 @@ static void _brush_reset_round_node_callback(GtkWidget *widget, gpointer user_da
   const int node_index = MAX(mask_gui->node_hovered, selected_handle);
   dt_masks_node_brush_t *node
       = (dt_masks_node_brush_t *)g_list_nth_data(selected_form->points, node_index);
-  if(IS_NULL_PTR(gui_points) || !node) return;
+  if(IS_NULL_PTR(gui_points) || IS_NULL_PTR(node)) return;
   dt_masks_reset_bezier_ctrl_points(module, selected_form, mask_gui, mask_gui->group_selected, gui_points,
                                     node_index, &node->state);
 }
@@ -3196,7 +3196,7 @@ static int _brush_populate_context_menu(GtkWidget *menu, struct dt_masks_form_t 
     if(IS_NULL_PTR(gui_points)) goto end;
     dt_masks_node_brush_t *node
         = (dt_masks_node_brush_t *)g_list_nth_data(mask_form->points, mask_gui->node_hovered);
-    if(!node) goto end;
+    if(IS_NULL_PTR(node)) goto end;
     const gboolean is_corner = dt_masks_node_is_cusp(gui_points, mask_gui->node_hovered);
 
     {

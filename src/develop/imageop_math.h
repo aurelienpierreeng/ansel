@@ -208,7 +208,7 @@ static inline int FCxtrans(const int row, const int col, const dt_iop_roi_t *con
   int icol = col + 600;
   assert(irow >= 0 && icol >= 0);
 
-  if(roi)
+  if(!IS_NULL_PTR(roi))
   {
     irow += roi->y;
     icol += roi->x;

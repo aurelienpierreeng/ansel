@@ -129,7 +129,7 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
     raster_mask = dt_pixelpipe_raster_get(source_piece->raster_masks, raster_mask_id);
 
     gchar *type = dt_pixelpipe_get_pipe_name(pipe->type);
-    if(raster_mask)
+    if(!IS_NULL_PTR(raster_mask))
     {
       dt_print(DT_DEBUG_MASKS,
                "[raster masks] found in %s mask id %i from %s for module %s in pipe %s with hash %" PRIu64 "\n",
@@ -145,7 +145,7 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
       if(dt_dev_pixelpipe_set_reentry(pipe, raster_hash))
         pipe->flush_cache = TRUE;
 
-      if(error) *error = 1;
+      if(!IS_NULL_PTR(error)) *error = 1;
 
       dt_free(clean_target_name);
       dt_free(target_name);

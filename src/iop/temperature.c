@@ -703,7 +703,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   // 4Bayer images not implemented in OpenCL yet
   if(self->dev->image_storage.flags & DT_IMAGE_4BAYER) piece->process_cl_ready = 0;
 
-  if(g)
+  if(!IS_NULL_PTR(g))
   {
     // advertise on the pipe if coeffs are D65 for validity check
     gboolean is_D65 = TRUE;
@@ -1437,7 +1437,7 @@ void reload_defaults(dt_iop_module_t *module)
   // remember daylight wb used for temperature/tint conversion,
   // assuming it corresponds to CIE daylight (D65)
   dt_iop_temperature_gui_data_t *g = (dt_iop_temperature_gui_data_t *)module->gui_data;
-  if(g)
+  if(!IS_NULL_PTR(g))
   {
     gtk_stack_set_visible_child_name(GTK_STACK(module->widget), module->hide_enable_button ? "disabled" : "enabled");
 
