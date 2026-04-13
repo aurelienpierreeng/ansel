@@ -284,7 +284,7 @@ void dtgtk_cairo_paint_modulegroup_technical(cairo_t *cr, gint x, gint y, gint w
 void dtgtk_cairo_paint_map_pin(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
 
 /** Paint an eye icon for masks */
-void dtgtk_cairo_paint_masks_eye(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
+void dtgtk_cairo_paint_masks_edit(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
 /** Paint a circle icon for masks */
 void dtgtk_cairo_paint_masks_circle(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
 /** Paint an ellipse icon for masks */

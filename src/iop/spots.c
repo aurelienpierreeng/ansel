@@ -839,7 +839,7 @@ void gui_init(dt_iop_module_t *self)
 
   g->bt_edit_masks = dt_iop_togglebutton_new(self, NULL, N_("show and edit shapes"), NULL,
                                              G_CALLBACK(_edit_masks), TRUE, 0, 0,
-                                             dtgtk_cairo_paint_masks_eye, hbox);
+                                             dtgtk_cairo_paint_masks_edit, hbox);
 
   g->bt_path = dt_iop_togglebutton_new(self, N_("shapes"), N_("add path"), N_("add multiple paths"),
                                        G_CALLBACK(_add_shape_callback), TRUE, 0, 0,

@@ -3378,7 +3378,7 @@ void dt_iop_gui_init_masks(GtkBox *blendw, dt_iop_module_t *module)
     bd->masks_edit = dt_iop_togglebutton_new_no_register(module, "blend`tools", N_("show and edit mask elements"),
                                                          N_("show and edit in restricted mode"),
                                                          G_CALLBACK(_blendop_masks_show_and_edit),
-                                                         FALSE, 0, 0, dtgtk_cairo_paint_masks_eye, group_shapes_header);
+                                                         FALSE, 0, 0, dtgtk_cairo_paint_masks_edit, group_shapes_header);
 
     gtk_box_pack_start(GTK_BOX(bd->lists_box), group_shapes_header, FALSE, FALSE, 0);
 

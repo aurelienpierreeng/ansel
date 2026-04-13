@@ -2236,7 +2236,7 @@ void gui_init(dt_iop_module_t *self)
   g->bt_edit_masks = dt_iop_togglebutton_new(self, N_("editing"), N_("show and edit shapes on the current scale"),
                                                                   N_("show and edit shapes in restricted mode"),
                                              G_CALLBACK(rt_edit_masks_callback), TRUE, 0, 0,
-                                             dtgtk_cairo_paint_masks_eye, hbox_shapes);
+                                             dtgtk_cairo_paint_masks_edit, hbox_shapes);
 
   g->bt_brush = dt_iop_togglebutton_new(self, N_("shapes"), N_("add brush"), N_("add multiple brush strokes"),
                                         G_CALLBACK(rt_add_shape_callback), TRUE, 0, 0,
