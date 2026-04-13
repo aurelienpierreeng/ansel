@@ -67,7 +67,7 @@ static GTimeSpan _gdatetime_to_gtimespan(GDateTime *gdt)
 
 gboolean dt_datetime_exif_to_numbers(dt_datetime_t *dt, const char *exif)
 {
-  if(IS_NULL_PTR(exif) || *exif || IS_NULL_PTR(dt)) return FALSE;
+  if(IS_NULL_PTR(exif) || !*exif || IS_NULL_PTR(dt)) return FALSE;
 
   // fast-path for ISO-8601 (handles timezone offsets and 'T' separator)
   GDateTime *gdt = g_date_time_new_from_iso8601(exif, darktable.utc_tz);
