@@ -700,22 +700,6 @@ static gboolean _scroll_event(GtkWidget *widget, GdkEventScroll *event, gpointer
     else if(delta_x < 0. || delta_y < 0.)
       future = current - 1;
 
-    if(future < 0 || future > MOD_TAB_LAST - 1)
-    {
-      // We reached the end of tabs. Allow cycling through, but add a little inertia to fight.
-      // This is to ensure user really wants to cycle through.
-      if(scrolls > 4)
-      {
-        scrolls = 0;
-      }
-      else
-      {
-        // Do nothing but increment
-        scrolls++;
-        return FALSE;
-      }
-    }
-
     _set_current_tab(self, _modulegroups_cycle_tabs(future));
     dt_iop_request_focus(NULL);
   }
