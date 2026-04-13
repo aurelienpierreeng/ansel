@@ -140,10 +140,6 @@ static gboolean _update_iop_visibility(gpointer user_data);
 static void _lib_modulegroups_signal_set(gpointer instance, gpointer module, gpointer user_data);
 static void _lib_modulegroups_refresh(gpointer instance, gpointer user_data);
 
-static gboolean _focus_next_module();
-static gboolean _focus_previous_module();
-static gboolean _focus_next_control();
-static gboolean _focus_previous_control();
 static gboolean _is_module_in_history(const dt_iop_module_t *module);
 static void _modulegroups_setup_drag_source(dt_lib_module_t *self, dt_iop_module_t *module);
 static gboolean _modulegroups_reorder_target(GtkWidget *target);
