@@ -685,12 +685,8 @@ static gboolean _modulegroups_switch_tab_previous(GtkAccelGroup *accel_group, GO
 
 static gboolean _scroll_event(GtkWidget *widget, GdkEventScroll *event, gpointer user_data)
 {
-  int delta_x, delta_y;
-
-  // We will accumulate scrolls here
-  static int scrolls = 0;
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
-
+  int delta_x, delta_y;
   if(dt_gui_get_scroll_unit_deltas(event, &delta_x, &delta_y))
   {
     const dt_modulesgroups_tabs_t current = _get_current_tab(self);
