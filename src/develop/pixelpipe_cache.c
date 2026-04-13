@@ -111,9 +111,7 @@ static void _pixelpipe_cache_finalize_entry(dt_pixel_cache_entry_t *cache_entry,
                                             const char *message);
 int _non_thread_safe_cache_remove(dt_dev_pixelpipe_cache_t *cache, const gboolean force,
                                   dt_pixel_cache_entry_t *cache_entry, GHashTable *table);
-static void _cache_remove_payloadless_entry_locked(dt_dev_pixelpipe_cache_t *cache,
-                                                   dt_pixel_cache_entry_t *cache_entry,
-                                                   const char *message);
+
 static dt_pixel_cache_entry_t *_pixelpipe_cache_create_entry_locked(dt_dev_pixelpipe_cache_t *cache,
                                                                     const uint64_t hash, const size_t size,
                                                                     const char *name, const int id);
@@ -185,25 +183,6 @@ static void _pixelpipe_cache_finalize_entry(dt_pixel_cache_entry_t *cache_entry,
   if(data)
     *data = cache_entry->data ? __builtin_assume_aligned(cache_entry->data, DT_CACHELINE_BYTES) : NULL;
   _pixel_cache_message(cache_entry, message, FALSE);
-}
-
-static void _cache_remove_payloadless_entry_locked(dt_dev_pixelpipe_cache_t *cache,
-                                                   dt_pixel_cache_entry_t *cache_entry,
-                                                   const char *message)
-{
-  if(IS_NULL_PTR(cache) || IS_NULL_PTR(cache_entry) || cache_entry->external_alloc) return;
-  if(_non_threadsafe_cache_get_entry(cache, cache->entries, cache_entry->hash) != cache_entry) return;
-  if(!IS_NULL_PTR(cache_entry->data)) return;
-
-  gboolean has_clmem = FALSE;
-  dt_pthread_mutex_lock(&cache_entry->cl_mem_lock);
-  has_clmem = (!IS_NULL_PTR(cache_entry->cl_mem_list));
-  dt_pthread_mutex_unlock(&cache_entry->cl_mem_lock);
-
-  if(has_clmem) return;
-
-  _pixel_cache_message(cache_entry, message, FALSE);
-  _non_thread_safe_cache_remove(cache, FALSE, cache_entry, cache->entries);
 }
 
 
@@ -485,7 +464,6 @@ void dt_dev_pixelpipe_cache_flush_clmem(dt_dev_pixelpipe_cache_t *cache, const i
      * allocation fallback can deadlock against in-flight GPU renders that already
      * hold cache entry locks. */
     _cache_entry_clmem_flush_device(entry, devid, keep);
-    _cache_remove_payloadless_entry_locked(cache, entry, "dropping payload-less entry after clmem flush");
   }
   dt_pthread_mutex_unlock(&cache->lock);
 }
