@@ -93,7 +93,6 @@
 #include "gui/gtk.h"
 #include "gui/gui_throttle.h"
 #include "gui/presets.h"
-#include "libs/modulegroups.h"
 #ifdef GDK_WINDOWING_QUARTZ
 #include "osx/osx.h"
 #endif
@@ -644,8 +643,6 @@ static void _gui_delete_callback(GtkButton *button, dt_iop_module_t *module)
   // don't delete the module, a pipe may still need it
   dev->alliop = g_list_append(dev->alliop, module);
 
-  // we update show params for multi-instances for each other instances
-  dt_dev_modules_update_multishow(dev);
   dt_dev_modulegroups_switch(dev, next);
 
   /* redraw */
@@ -666,7 +663,6 @@ gboolean dt_iop_gui_commit_iop_order_change(dt_develop_t *dev, dt_iop_module_t *
 {
   if(IS_NULL_PTR(dev)) return FALSE;
 
-  dt_dev_modules_update_multishow(dev);
   dt_dev_pixelpipe_rebuild_all(dev);
   if(write_history) dt_dev_add_history_item(dev, module, enable, TRUE);
 
@@ -718,28 +714,6 @@ dt_iop_module_t *dt_iop_gui_get_next_visible_module(dt_iop_module_t *module)
   return next;
 }
 
-static void _gui_movedown_callback(GtkButton *button, dt_iop_module_t *module)
-{
-  dt_ioppr_check_iop_order(module->dev, 0, "dt_iop_gui_movedown_callback begin");
-
-  // we need to place this module right before the previous
-  dt_iop_module_t *prev = dt_iop_gui_get_previous_visible_module(module);
-  if(IS_NULL_PTR(prev)) return;
-
-  dt_iop_gui_move_module_before(module, prev, "dt_iop_gui_movedown_callback end");
-}
-
-static void _gui_moveup_callback(GtkButton *button, dt_iop_module_t *module)
-{
-  dt_ioppr_check_iop_order(module->dev, 0, "dt_iop_gui_moveup_callback begin");
-
-  // we need to place this module right after the next one
-  dt_iop_module_t *next = dt_iop_gui_get_next_visible_module(module);
-  if(IS_NULL_PTR(next)) return;
-
-  dt_iop_gui_move_module_after(module, next, "dt_iop_gui_moveup_callback end");
-}
-
 dt_iop_module_t *dt_iop_gui_duplicate(dt_iop_module_t *base, gboolean copy_params)
 {
   // make sure the duplicated module appears in the history
@@ -789,9 +763,6 @@ dt_iop_module_t *dt_iop_gui_duplicate(dt_iop_module_t *base, gboolean copy_param
     // we save the new instance creation
     dt_dev_add_history_item(module->dev, module, TRUE, TRUE);
   }
-
-  // we update show params for multi-instances for each other instances
-  dt_dev_modules_update_multishow(module->dev);
 
   // and we refresh the pipe
   dt_iop_request_focus(module);
@@ -945,18 +916,6 @@ static gboolean _gui_multiinstance_callback(GtkButton *button, GdkEventButton *e
   // gtk_widget_set_tooltip_text(item, _("add a copy of this instance to the pipe"));
   g_signal_connect(G_OBJECT(item), "activate", G_CALLBACK(_gui_duplicate_callback), module);
   gtk_widget_set_sensitive(item, module->multi_show_new);
-  gtk_menu_shell_append(menu, item);
-
-  item = gtk_menu_item_new_with_label(_("move up"));
-  // gtk_widget_set_tooltip_text(item, _("move this instance up"));
-  g_signal_connect(G_OBJECT(item), "activate", G_CALLBACK(_gui_moveup_callback), module);
-  gtk_widget_set_sensitive(item, module->multi_show_up);
-  gtk_menu_shell_append(menu, item);
-
-  item = gtk_menu_item_new_with_label(_("move down"));
-  // gtk_widget_set_tooltip_text(item, _("move this instance down"));
-  g_signal_connect(G_OBJECT(item), "activate", G_CALLBACK(_gui_movedown_callback), module);
-  gtk_widget_set_sensitive(item, module->multi_show_down);
   gtk_menu_shell_append(menu, item);
 
   item = gtk_menu_item_new_with_label(_("delete"));

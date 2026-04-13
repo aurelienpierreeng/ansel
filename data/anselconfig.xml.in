@@ -1907,9 +1907,9 @@
     <longdescription>if non-negative, this overrides the per-image output color profile rendering intent on export.</longdescription>
   </dtconfig>
   <dtconfig>
-    <name>plugins/darkroom/groups</name>
+    <name>plugins/darkroom/moduletab</name>
     <type>int</type>
-    <default>2</default>
+    <default>1</default>
     <shortdescription/>
     <longdescription/>
   </dtconfig>

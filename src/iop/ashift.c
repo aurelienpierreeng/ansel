@@ -71,7 +71,7 @@
 #include "gui/gtk.h"
 #include "gui/presets.h"
 #include "iop/iop_api.h"
-#include "libs/modulegroups.h"
+
 #include "gui/guides.h"
 
 #include <assert.h>

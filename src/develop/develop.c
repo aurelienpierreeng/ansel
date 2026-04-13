@@ -1214,6 +1214,9 @@ void _dev_module_update_multishow(dt_develop_t *dev, struct dt_iop_module_t *mod
     gtk_widget_hide(module->expander);
 }
 
+// FIXME: this function should just disappear, as it mixes concepts from multi-instances from before
+// pipeline reordering and pipeline reordering. 
+// Multi-instances concept should just be ditched entirely.
 void dt_dev_modules_update_multishow(dt_develop_t *dev)
 {
   dt_ioppr_check_iop_order(dev, 0, "dt_dev_modules_update_multishow");

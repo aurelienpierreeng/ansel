@@ -116,7 +116,6 @@
 #include "gui/presets.h"
 #include "libs/colorpicker.h"
 #include "libs/lib.h"
-#include "libs/modulegroups.h"
 #include "views/view.h"
 #include "views/view_api.h"
 #ifdef GDK_WINDOWING_QUARTZ
