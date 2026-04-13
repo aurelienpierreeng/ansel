@@ -119,6 +119,8 @@ typedef struct dt_iop_gui_simple_callback_t
 
 static gboolean _iop_plugin_focus_accel(GtkAccelGroup *accel_group, GObject *accelerable, guint keyval,
                                         GdkModifierType modifier, gpointer data);
+static gboolean _iop_plugin_enable_accel(GtkAccelGroup *accel_group, GObject *accelerable, guint keyval,
+                                        GdkModifierType modifier, gpointer data);
 static gboolean _iop_plugin_header_button_release(GtkWidget *w, GdkEventButton *e, gpointer user_data);
 
 float dt_dev_get_module_scale(const dt_dev_pixelpipe_t *const pipe, const dt_iop_roi_t *const roi_in)
@@ -1015,6 +1017,11 @@ gboolean dt_iop_is_hidden(dt_iop_module_t *module)
   return dt_iop_so_is_hidden(module->so);
 }
 
+gboolean dt_iop_is_visible(dt_iop_module_t *module)
+{
+  return !dt_iop_is_hidden(module) && !IS_NULL_PTR(module->expander) && gtk_widget_is_visible(module->expander);
+}
+
 static void _iop_panel_label(dt_iop_module_t *module)
 {
   GtkWidget *lab = dt_gui_container_nth_child(GTK_CONTAINER(module->header), IOP_MODULE_LABEL);
@@ -1120,10 +1127,17 @@ void dt_iop_gui_init(dt_iop_module_t *module)
     // slash is not allowed in module names because that makes accel pathes fail
     assert(g_strrstr(clean_name, "/") == NULL);
 
-    dt_accels_new_darkroom_action(_iop_plugin_focus_accel, module, _("Darkroom/Modules"), clean_name, 0, 0, _("Focuses the module"));
-
     dt_gui_module_t *mod = (dt_gui_module_t *)module;
-    mod->accel_path =  dt_accels_build_path(_("Darkroom/Modules"), clean_name);
+    const gchar *const main_scope = _("Darkroom/Modules");
+    mod->accel_path =  dt_accels_build_path(main_scope, clean_name);
+    
+    dt_accels_new_darkroom_action(_iop_plugin_focus_accel, module, main_scope, clean_name, 0, 0, _("Focuses the module"));
+
+    // NOTE: we should enable the accel only if the module is disable-able, but this property is set at runtime
+    // in reload_defaults(), which depends on the image metadata for each pipeline.
+    // We have no way of knowing here at init time.
+    // if(!module->hide_enable_button)
+    dt_accels_new_darkroom_action(_iop_plugin_enable_accel, module, mod->accel_path, _("Enable"), 0, 0, _("Enables the module"));
 
     dt_free(clean_name);
   }
@@ -1998,6 +2012,9 @@ void dt_iop_request_focus(dt_iop_module_t *module)
   /* set the focus on module */
   if(!IS_NULL_PTR(module))
   {
+    // In case we tried giving focus to a module that is not in the visible tab
+    dt_dev_modulegroups_switch(module->dev, module);
+
     gtk_widget_set_state_flags(dt_iop_gui_get_pluginui(module), GTK_STATE_FLAG_SELECTED, TRUE);
 
     if(module->gui_focus) module->gui_focus(module, TRUE);
@@ -2159,6 +2176,26 @@ static gboolean _iop_plugin_focus_accel(GtkAccelGroup *accel_group, GObject *acc
   dt_gui_module_t *module = (dt_gui_module_t *)data;
   if(IS_NULL_PTR(module) || !module->focus) return FALSE;
   return module->focus(module, FALSE);
+}
+
+static gboolean _iop_plugin_enable_accel(GtkAccelGroup *accel_group, GObject *accelerable, guint keyval,
+                                         GdkModifierType modifier, gpointer data)
+{
+  dt_iop_module_t *module = (dt_iop_module_t *)data;
+  if(IS_NULL_PTR(module)) return FALSE;
+
+  // Kind of ugly to go through history to change module GUI state
+  // FIXME: we should have a GUI callback that enables module and dispatches history instead, 
+  // history should not care about module GUI. This is a wrong, reversed inheritance.
+  if(!module->hide_enable_button)
+  {
+    module->enabled = TRUE;
+    dt_dev_add_history_item(module->dev, module, TRUE, TRUE);
+  }
+
+  dt_iop_request_focus(module);
+  dt_iop_gui_set_expanded(module, TRUE, TRUE);
+  return TRUE;
 }
 
 static gboolean _iop_plugin_header_button_press(GtkWidget *w, GdkEventButton *e, gpointer user_data)

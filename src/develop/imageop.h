@@ -399,6 +399,10 @@ void dt_iop_cleanup_pipe(struct dt_iop_module_t *module, struct dt_dev_pixelpipe
 /** checks if iop do have an ui */
 gboolean dt_iop_so_is_hidden(dt_iop_module_so_t *module);
 gboolean dt_iop_is_hidden(dt_iop_module_t *module);
+
+/** Check if the module is currently visible in GUI */
+gboolean dt_iop_is_visible(dt_iop_module_t *module);
+
 /** enter a GUI critical section by acquiring gui_data->lock **/
 static inline void dt_iop_gui_enter_critical_section(dt_iop_module_t *const module)
   ACQUIRE(&module->gui_lock)

@@ -1185,10 +1185,16 @@ static void _lib_modulegroups_signal_set(gpointer instance, gpointer module, gpo
 {
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
   dt_iop_module_t *iop_module = (dt_iop_module_t *)module;
-  const dt_modulesgroups_tabs_t tab = _get_current_tab(self);
+  if(IS_NULL_PTR(iop_module)) return;
 
-  if(!IS_NULL_PTR(iop_module) && !_is_module_in_tab(iop_module, tab))
+  // If module not in current tab: switch tab
+  if(!_is_module_in_tab(iop_module, _get_current_tab(self)))
     _set_current_tab_from_module_group(self, iop_module->default_group());
+
+  // If module in current tab but not visible: refresh tab
+  // This happens when adding new instances or enabling modules through shortcuts
+  else if(!dt_iop_is_visible(module))
+    _lib_modulegroups_refresh(instance, user_data);
 }
 
 static void _lib_modulegroups_refresh(gpointer instance, gpointer user_data)
