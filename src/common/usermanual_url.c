@@ -178,7 +178,6 @@ dt_help_url urls_db[] =
   {"censorize",                  "modules/processing-modules/censorize/"},
   {"channelmixer",               "modules/processing-modules/channel-mixer/"},
   {"channelmixerrgb",            "modules/processing-modules/color-calibration/"},
-  {"clahe",                      NULL}, // deprecated, replaced by bilat.
   {"clipping",                   "modules/processing-modules/crop-rotate/"},
   {"colisa",                     "modules/processing-modules/contrast-brightness-saturation/"},
   {"colorbalance",               "modules/processing-modules/color-balance/"},
@@ -191,14 +190,12 @@ dt_help_url urls_db[] =
   {"colormapping",               "modules/processing-modules/color-mapping/"},
   {"colorout",                   "modules/processing-modules/output-color-profile/"},
   {"colorreconstruct",           "modules/processing-modules/color-reconstruction/"},
-  {"colortransfer",              NULL}, // deprecate
   {"colorzones",                 "modules/processing-modules/color-zones/"},
   {"crop",                       "modules/processing-modules/crop/"},
   {"defringe",                   "modules/processing-modules/defringe/"},
   {"demosaic",                   "modules/processing-modules/demosaic/"},
   {"denoiseprofile",             "modules/processing-modules/denoise-profiled/"},
   {"dither",                     "modules/processing-modules/dithering/"},
-  {"equalizer",                  NULL}, // deprecated, replaced by atrous
   {"exposure",                   "modules/processing-modules/exposure/"},
   {"filmic",                     "modules/processing-modules/filmic-rgb/"},
   {"filmicrgb",                  "modules/processing-modules/filmic-rgb/"},

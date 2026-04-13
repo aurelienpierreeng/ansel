@@ -145,7 +145,9 @@ typedef enum dt_iop_order_t
   DT_IOP_ORDER_LEGACY  = 1, // up to dt 2.6.3
   DT_IOP_ORDER_V30     = 2, // starts with dt 3.0
   DT_IOP_ORDER_V30_JPG = 3, // same as previous but tuned for non-linear input
-  DT_IOP_ORDER_LAST    = 4
+  DT_IOP_ORDER_ANSEL_RAW = 4,
+  DT_IOP_ORDER_ANSEL_JPG = 5,
+  DT_IOP_ORDER_LAST    = 6
 } dt_iop_order_t;
 
 typedef struct dt_iop_order_entry_t
@@ -180,7 +182,7 @@ const char *dt_iop_order_string(const dt_iop_order_t order);
  * @brief Fetch the IOP order version stored for an image.
  *
  * If the image has no stored order, this falls back to the default
- * (currently DT_IOP_ORDER_V30).
+ * (currently DT_IOP_ORDER_ANSEL_RAW).
  *
  * @param imgid Image id.
  * @return Stored order version or the default built-in order.

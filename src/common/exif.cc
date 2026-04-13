@@ -109,6 +109,7 @@
 
 #include "common/colorlabels.h"
 #include "common/darktable.h"
+#include "common/deprecations.h"
 #include "common/debug.h"
 #include "common/dng_opcode.h"
 #include "common/image_cache.h"
@@ -3187,7 +3188,7 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
       {
         //  All iop-order version before 3 are legacy one. Starting with version 3 we have the first
         //  attempts to propose the final v3 iop-order.
-        iop_order_version = pos->toLong() < 3 ? DT_IOP_ORDER_LEGACY : DT_IOP_ORDER_V30;
+        iop_order_version = pos->toLong() < 3 ? DT_IOP_ORDER_LEGACY : DT_IOP_ORDER_ANSEL_RAW;
         iop_order_list = dt_ioppr_get_iop_order_list_version(iop_order_version);
       }
       else
@@ -3318,7 +3319,7 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
           if(base_order)
             e->o.iop_order_f = ((dt_iop_order_entry_t *)(base_order->data))->o.iop_order_f
               - entry->multi_priority / 100.0f;
-          else
+          else if(!dt_deprecated(entry->operation))
           {
             fprintf(stderr,
                     "[exif] cannot get iop-order for module '%s', XMP may be corrupted\n",

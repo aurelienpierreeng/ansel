@@ -491,8 +491,8 @@ static gchar *_ioporder_get_current_order_name(dt_lib_module_t *self)
 
   if(IS_NULL_PTR(darktable.develop) || !darktable.develop->iop_order_list)
   {
-    d->current_mode = DT_IOP_ORDER_V30;
-    return g_strdup(_(dt_iop_order_string(DT_IOP_ORDER_V30)));
+    d->current_mode = DT_IOP_ORDER_ANSEL_RAW;
+    return g_strdup(_(dt_iop_order_string(DT_IOP_ORDER_ANSEL_RAW)));
   }
 
   const dt_iop_order_t kind = dt_ioppr_get_iop_order_list_kind(darktable.develop->iop_order_list);
@@ -1273,7 +1273,6 @@ static gboolean _ioporder_graph_draw(GtkWidget *widget, cairo_t *cr, gpointer us
   {
     const dt_ioporder_graph_node_t *node = (const dt_ioporder_graph_node_t *)iter->data;
     if(node->is_endpoint || !node->module) continue;
-    if(!(node->module->flags() & IOP_FLAGS_FENCE)) continue;
 
     GtkAllocation alloc = { 0 };
     gtk_widget_get_allocation(node->event_box, &alloc);
@@ -1789,14 +1788,14 @@ void gui_cleanup(dt_lib_module_t *self)
 void gui_reset(dt_lib_module_t *self)
 {
   dt_lib_ioporder_t *d = (dt_lib_ioporder_t *)self->data;
-  GList *iop_order_list = dt_ioppr_get_iop_order_list_version(DT_IOP_ORDER_V30);
+  GList *iop_order_list = dt_ioppr_get_iop_order_list_version(DT_IOP_ORDER_ANSEL_RAW);
   if(IS_NULL_PTR(iop_order_list)) return;
 
   const int32_t imgid = darktable.develop->image_storage.id;
   dt_ioppr_change_iop_order(darktable.develop, imgid, iop_order_list);
   dt_iop_gui_commit_iop_order_change(darktable.develop, NULL, FALSE, FALSE, "dt_lib_ioporder_gui_reset");
 
-  d->current_mode = DT_IOP_ORDER_V30;
+  d->current_mode = DT_IOP_ORDER_ANSEL_RAW;
   g_list_free_full(iop_order_list, dt_free_gpointer);
 }
 
@@ -1822,6 +1821,20 @@ void init_presets(dt_lib_module_t *self)
   list = dt_ioppr_get_iop_order_list_version(DT_IOP_ORDER_V30_JPG);
   params = dt_ioppr_serialize_iop_order_list(list, &size);
   dt_lib_presets_add(_("v3.0 for JPEG/non-RAW input"), self->plugin_name, self->version(), params,
+                     (int32_t)size, TRUE);
+  dt_free(params);
+  g_list_free_full(list, dt_free_gpointer);
+
+  list = dt_ioppr_get_iop_order_list_version(DT_IOP_ORDER_ANSEL_RAW);
+  params = dt_ioppr_serialize_iop_order_list(list, &size);
+  dt_lib_presets_add(_("Ansel v0.1 for RAW input (default)"), self->plugin_name, self->version(), params,
+                     (int32_t)size, TRUE);
+  dt_free(params);
+  g_list_free_full(list, dt_free_gpointer);
+
+  list = dt_ioppr_get_iop_order_list_version(DT_IOP_ORDER_ANSEL_JPG);
+  params = dt_ioppr_serialize_iop_order_list(list, &size);
+  dt_lib_presets_add(_("Ansel v0.1 for JPEG/non-RAW input"), self->plugin_name, self->version(), params,
                      (int32_t)size, TRUE);
   dt_free(params);
   g_list_free_full(list, dt_free_gpointer);

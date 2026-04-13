@@ -173,7 +173,6 @@ typedef enum dt_iop_flags_t
   IOP_FLAGS_PREVIEW_NON_OPENCL = 1 << 7, // Preview pixelpipe of this module must not run on GPU but always on CPU
   IOP_FLAGS_NO_HISTORY_STACK = 1 << 8,   // This iop will never show up in the history stack
   IOP_FLAGS_NO_MASKS = 1 << 9,          // The module doesn't support masks (used with SUPPORT_BLENDING)
-  IOP_FLAGS_FENCE = 1 << 10,             // No module can be moved pass this one
   IOP_FLAGS_UNSAFE_COPY = 1 << 11,       // Unsafe to copy as part of history
   IOP_FLAGS_GUIDES_SPECIAL_DRAW = 1 << 12, // handle the grid drawing directly
   IOP_FLAGS_INTERNAL_MASKS = 1 << 13     // Module uses masks internally, outside of blendops. This advertises the need to commit them to history unconditionnaly.

@@ -1354,7 +1354,7 @@ static gboolean _dev_auto_apply_presets(dt_develop_t *dev, int32_t imgid)
     else
     {
       // we have no auto-apply order, so apply iop order, depending of the workflow
-      GList *iop_list = dt_ioppr_get_iop_order_list_version(DT_IOP_ORDER_V30);
+      GList *iop_list = dt_ioppr_get_iop_order_list_version(DT_IOP_ORDER_ANSEL_RAW);
       dt_ioppr_write_iop_order_list(iop_list, imgid);
       g_list_free_full(iop_list, dt_free_gpointer);
       iop_list = NULL;
