@@ -208,7 +208,7 @@ static inline dt_mipmap_size_t get_size(const uint32_t key)
   return (dt_mipmap_size_t)(key >> 28);
 }
 
-static void _get_cache_filename(char path[PATH_MAX], dt_mipmap_cache_t *cache, dt_mipmap_size_t mip, const int32_t imgid)
+static void _get_cache_filename(char path[PATH_MAX], const dt_mipmap_cache_t *cache, dt_mipmap_size_t mip, const int32_t imgid)
 {
   snprintf(path, sizeof(char) * PATH_MAX, "%s.d/%d/%"PRIu32".jpg", cache->cachedir, (int)mip, imgid);
 }
