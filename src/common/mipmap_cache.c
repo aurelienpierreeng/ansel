@@ -208,6 +208,11 @@ static inline dt_mipmap_size_t get_size(const uint32_t key)
   return (dt_mipmap_size_t)(key >> 28);
 }
 
+static void _get_cache_filename(char path[PATH_MAX], dt_mipmap_cache_t *cache, dt_mipmap_size_t mip, const int32_t imgid)
+{
+  snprintf(path, sizeof(char) * PATH_MAX, "%s.d/%d/%"PRIu32".jpg", cache->cachedir, (int)mip, imgid);
+}
+
 static int dt_mipmap_cache_get_filename(gchar *mipmapfilename, size_t size)
 {
   int r = -1;
@@ -526,8 +531,7 @@ void dt_mipmap_cache_allocate_dynamic(void *data, dt_cache_entry_t *entry)
   {
     // try and load from disk, if successful set flag
     char filename[PATH_MAX] = {0};
-    snprintf(filename, sizeof(filename), "%s.d/%d/%" PRIu32 ".jpg", cache->cachedir, (int)mip,
-             get_imgid(entry->key));
+    _get_cache_filename(filename, cache, mip, get_imgid(entry->key));
 
     gboolean io_error = FALSE;
     gchar *error = NULL;
@@ -633,7 +637,7 @@ static void dt_mipmap_cache_unlink_ondisk_thumbnail(void *data, int32_t imgid, d
   if(cache->cachedir[0])
   {
     char filename[PATH_MAX] = { 0 };
-    snprintf(filename, sizeof(filename), "%s.d/%d/%"PRIu32".jpg", cache->cachedir, (int)mip, imgid);
+    _get_cache_filename(filename, cache, mip, imgid);
     g_unlink(filename);
     dt_print(DT_DEBUG_CACHE, "[mipmap_cache] image %i for size %i was deleted from disk cache\n", imgid, mip);
   }
@@ -682,8 +686,7 @@ void dt_mipmap_cache_deallocate_dynamic(void *data, dt_cache_entry_t *entry)
         const int mkd = g_mkdir_with_parents(filename, 0750);
         if(!mkd)
         {
-          snprintf(filename, sizeof(filename), "%s.d/%d/%" PRIu32 ".jpg", cache->cachedir, (int)mip,
-                   get_imgid(entry->key));
+          _get_cache_filename(filename, cache, mip, get_imgid(entry->key));
           // Don't write existing files as both performance and quality (lossy jpg) suffer
           // FIXME: actually, yes, we write existing files too. See FIXME above.
           FILE *f = NULL;
@@ -1557,8 +1560,8 @@ void dt_mipmap_cache_copy_thumbnails(const dt_mipmap_cache_t *cache, const uint3
       // try and load from disk, if successful set flag
       char srcpath[PATH_MAX] = {0};
       char dstpath[PATH_MAX] = {0};
-      snprintf(srcpath, sizeof(srcpath), "%s.d/%d/%"PRIu32".jpg", cache->cachedir, (int)mip, src_imgid);
-      snprintf(dstpath, sizeof(dstpath), "%s.d/%d/%"PRIu32".jpg", cache->cachedir, (int)mip, dst_imgid);
+      _get_cache_filename(srcpath, cache, mip, src_imgid);
+      _get_cache_filename(dstpath, cache, mip, dst_imgid);
       GFile *src = g_file_new_for_path(srcpath);
       GFile *dst = g_file_new_for_path(dstpath);
       GError *gerror = NULL;
