@@ -966,21 +966,37 @@ void dt_bauhaus_load_theme(dt_bauhaus_t *bauhaus)
   gtk_style_context_lookup_color(ctx, "colorlabel_purple",
                                  &bauhaus->colorlabels[DT_COLORLABELS_PURPLE]);
 
-  PangoFontDescription *pfont = 0;
-  gtk_style_context_get(ctx, GTK_STATE_FLAG_NORMAL, "font", &pfont, NULL);
 
   // make sure we release previously loaded font
   if(bauhaus->pango_font_desc)
     pango_font_description_free(bauhaus->pango_font_desc);
 
-  bauhaus->pango_font_desc = pfont;
-
+  // Create a scratch Cairo surface to draw on
   cairo_surface_t *cst = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 128, 128);
   cairo_t *cr = cairo_create(cst);
-  PangoLayout *layout = pango_cairo_create_layout(cr);
+
+  // Let Gtk create a fake label and grab its font description
+  GtkWidget *ref = gtk_label_new(NULL);
+  ctx = gtk_widget_get_style_context(ref);
+  gtk_style_context_get(ctx, GTK_STATE_FLAG_NORMAL, "font", &bauhaus->pango_font_desc, NULL);
+  
+  PangoContext *context = gtk_widget_get_pango_context(ref);
+  PangoLayout *layout = pango_layout_new(context);
   pango_layout_set_text(layout, "XMp", -1);
   pango_layout_set_font_description(layout, bauhaus->pango_font_desc);
+  //double dpi = pango_cairo_context_get_resolution(context);
+  //double scale = gtk_widget_get_scale_factor(ref);
+  //pango_cairo_context_set_resolution(context, dpi * scale);
 
+  // Get advanced font options
+  const cairo_font_options_t *opts = gdk_screen_get_font_options(gtk_widget_get_screen(ref));
+  cairo_set_font_options(cr, opts);
+
+  // Render
+  pango_cairo_update_layout(cr, layout);
+  pango_cairo_show_layout(cr, layout);
+
+  // Measure the text line height
   int pango_width;
   int pango_height;
   pango_layout_get_size(layout, &pango_width, &pango_height);
