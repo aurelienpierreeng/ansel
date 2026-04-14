@@ -440,9 +440,6 @@ static void dt_dev_resync_mipmap_cache(dt_develop_t *dev, dt_dev_pixelpipe_t *pi
   dt_mipmap_cache_t *cache = darktable.mipmap_cache;
   const int32_t imgid = pipe->image.id;
 
-  // Remove all old images
-  dt_mipmap_cache_remove(cache, imgid, TRUE);
-
   // Get the mip size that is at most as big as our pipeline backbuf
   dt_mipmap_size_t mip = dt_mipmap_cache_get_fitting_size(cache, pipe->backbuf.width, pipe->backbuf.height, imgid);
   
@@ -635,6 +632,13 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
           needs_update = FALSE;
         }
 
+        // Use the full-frame (uncropped) preview backbuffer to init the mipmap cache without extra computations
+        // Note: this will resample non-linear uint8 at the end of the pipeline, so it is low-quality resampling.
+        if(!dt_dev_pixelpipe_get_realtime(pipe) && !needs_update && pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
+        {
+          dt_dev_resync_mipmap_cache(dev, pipe, roi);
+        }
+
         if(pipe->type == DT_DEV_PIXELPIPE_FULL)
         {
           DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_UI_PIPE_FINISHED);
@@ -644,11 +648,6 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
         {
           DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED);
           dt_control_queue_redraw();
-        }
-
-        if(!dt_dev_pixelpipe_get_realtime(pipe) && !needs_update && pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
-        {
-          dt_dev_resync_mipmap_cache(dev, pipe, roi);
         }
 
         // Allow some breathing room to the OS and GPU

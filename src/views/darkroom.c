@@ -1750,10 +1750,36 @@ gboolean _switch_to_prev_picture(GtkAccelGroup *accel_group, GObject *accelerabl
   return TRUE;
 }
 
+static void _preview_pipe_finished(gpointer instance, gpointer user_data)
+{
+  // Get the mip size that is at most as big as our pipeline backbuf
+  dt_dev_pixelpipe_t *pipe = darktable.develop->preview_pipe;
+  const int32_t imgid = darktable.develop->image_storage.id;
+  dt_mipmap_size_t mip = dt_mipmap_cache_get_fitting_size(darktable.mipmap_cache, pipe->backbuf.width, pipe->backbuf.height, imgid);
+
+  // Check if the cache is ready for that mipmap size.
+  dt_mipmap_buffer_t tmp;
+  dt_mipmap_cache_get(darktable.mipmap_cache, &tmp, imgid, mip, DT_MIPMAP_TESTLOCK, 'r');
+  gboolean cache_ready = !IS_NULL_PTR(tmp.buf);
+  dt_mipmap_cache_release(darktable.mipmap_cache, &tmp);
+
+  // Only refresh thumbnails once the cache is ready, to avoid spawning extra
+  // thumbnail rendering threads. We populate the mipmap cache inside the preview pipe 
+  // background rendering thread.
+  if(cache_ready)
+  {
+    dt_thumbtable_refresh_thumbnail(darktable.gui->ui->thumbtable_lighttable, imgid, TRUE);
+    dt_thumbtable_refresh_thumbnail(darktable.gui->ui->thumbtable_filmstrip, imgid, TRUE);
+  }
+}
+
 
 void gui_init(dt_view_t *self)
 {
   dt_develop_t *dev = (dt_develop_t *)self->data;
+
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED,
+                                  G_CALLBACK(_preview_pipe_finished), self);
 
   dt_accels_new_darkroom_action(_switch_to_next_picture, self, N_("Darkroom/Actions"),
                                 N_("Switch to the next picture"), GDK_KEY_Right, GDK_MOD1_MASK, _("Triggers the action"));
