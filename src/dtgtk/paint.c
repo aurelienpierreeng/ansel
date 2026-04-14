@@ -86,6 +86,73 @@ static void _rounded_rectangle(cairo_t *cr)  // create rounded rectangle to use 
 }
 
 /**
+ * @brief Paint the cursor arrow using the arrow tip position and a uniform size.
+ *
+ * The geometry is defined in unit space relative to the arrow tip, then scaled
+ * and translated so the tip lands at (tip_x, tip_y). This keeps the call site
+ * explicit about ownership of positioning while keeping the shape definition in
+ * one place.
+ *
+ * @param cr Cairo context.
+ * @param tip_x Arrow tip x position in normalized widget coordinates.
+ * @param tip_y Arrow tip y position in normalized widget coordinates.
+ * @param size Arrow height in normalized widget coordinates. A size of 1.0 fills
+ *             the unit height from the tip to the top of the arrow.
+ */
+static void _paint_cursor_arrow(cairo_t *cr, const double tip_x, const double tip_y, const double size)
+{
+  // Unit geometry: tip at (0, 0), total height 1.0.
+  const double axis_len = sqrt(0.39 * 0.39 + 0.75 * 0.75);
+  const double axis_x = 0.39 / axis_len;
+  const double axis_y = 0.75 / axis_len;
+  // Place control points symmetrically about the central axis through the tip and curve center.
+  const double curve_ctrl_axis_offset = -0.2;
+  const double curve_ctrl_0_x = 0.39 + axis_x * curve_ctrl_axis_offset;
+  const double curve_ctrl_0_y = 0.75 + axis_y * curve_ctrl_axis_offset;
+  const double curve_ctrl_1_x = 0.39 - axis_x * curve_ctrl_axis_offset;
+  const double curve_ctrl_1_y = 0.75 - axis_y * curve_ctrl_axis_offset;
+  // Keep the tail centered on the arrow axis so the center line crosses it.
+  const double base_axis_offset = 0.33 * axis_x + 0.49 * axis_y;
+  const double tail_axis_offset = 0.3;
+  const double base_center_x = axis_x * (base_axis_offset + tail_axis_offset);
+  const double base_center_y = axis_y * (base_axis_offset + tail_axis_offset);
+  const double tail_length = 0.47;
+  const double tail_half_width = 0.09;
+  const double tail_dir_x = axis_x;
+  const double tail_dir_y = axis_y;
+  const double tail_half_length = tail_length * 0.5;
+  const double tail_start_x = base_center_x - tail_dir_x * tail_half_length;
+  const double tail_start_y = base_center_y - tail_dir_y * tail_half_length;
+  const double tail_perp_x = -tail_dir_y * tail_half_width;
+  const double tail_perp_y = tail_dir_x * tail_half_width;
+  const double tail_end_x = base_center_x + tail_dir_x * tail_half_length;
+  const double tail_end_y = base_center_y + tail_dir_y * tail_half_length;
+
+  cairo_save(cr);
+  cairo_translate(cr, tip_x, tip_y);
+  cairo_scale(cr, size, size);
+
+  // Arrow body: start at the tip, then sweep around the triangular head.
+  cairo_move_to(cr, 0.0, 0.0);
+  cairo_line_to(cr, 0.78, 0.60);
+  cairo_curve_to(cr, curve_ctrl_0_x, curve_ctrl_0_y, curve_ctrl_0_x, curve_ctrl_0_y,
+                 0.0, 0.89);
+  cairo_line_to(cr, 0.0, 1.0);
+  cairo_close_path(cr);
+  cairo_fill(cr);
+
+  // Rectangular tail from the center of the arrow base.
+  cairo_move_to(cr, tail_start_x + tail_perp_x, tail_start_y + tail_perp_y);
+  cairo_line_to(cr, tail_end_x + tail_perp_x, tail_end_y + tail_perp_y);
+  cairo_line_to(cr, tail_end_x - tail_perp_x, tail_end_y - tail_perp_y);
+  cairo_line_to(cr, tail_start_x - tail_perp_x, tail_start_y - tail_perp_y);
+  cairo_close_path(cr);
+  cairo_fill(cr);
+
+  cairo_restore(cr);
+}
+
+/**
  * @brief Draw a plus sign centered at the given position.
  *
  * The line width scale is applied to the current Cairo line width so the
@@ -611,22 +678,24 @@ void dtgtk_cairo_paint_masks_edit(cairo_t *cr, gint x, gint y, gint w, gint h, g
 {
   PREAMBLE(1, 1, 0, 0)
 
-  double dashed[] = { 0.2, 0.2 };
-  int len = sizeof(dashed) / sizeof(dashed[0]);
-  cairo_set_dash(cr, dashed, len, 0);
+  // Draw in a SOURCE group so overlapping strokes don't accumulate alpha.
+  const cairo_operator_t prev_operator = cairo_get_operator(cr);
+  cairo_push_group(cr);
+  cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
 
-  cairo_arc(cr, 0.75, 0.75, 0.75, 2.8, 4.7124);
+  // Curve line
+  cairo_move_to(cr, 1., 0.4);
+  cairo_curve_to(cr, 0.9, -0.1, 0.4, 0.1, 0., 0.5);
   cairo_stroke(cr);
-
-  cairo_move_to(cr, 0.4, 0.1);
-  cairo_line_to(cr, 0.3, 0.8);
-  cairo_line_to(cr, 0.55, 0.716667);
-  cairo_line_to(cr, 0.65, 1.016667);
-  cairo_line_to(cr, 0.75, 0.983333);
-  cairo_line_to(cr, 0.65, 0.683333);
-  cairo_line_to(cr, 0.9, 0.6);
-  cairo_line_to(cr, 0.4, 0.1);
+  // Node
+  cairo_arc(cr, 0.35, 0.20, 0.1, 0, 2 * M_PI);
   cairo_fill(cr);
+  // Cursor arrow
+  _paint_cursor_arrow(cr, 0.4, 0.35, 0.7);
+
+  cairo_pop_group_to_source(cr);
+  cairo_set_operator(cr, prev_operator);
+  cairo_paint(cr);
 
   FINISH
 }
