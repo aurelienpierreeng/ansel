@@ -555,6 +555,7 @@ int32_t _get_image_buffer(dt_job_t *job)
     cairo_surface_get_device_scale(surface, &sx, &sy);
 
     dt_pthread_mutex_lock(&thumb->lock);
+    _free_image_surface(thumb);
     thumb->img_width = roundf(img_width / sx);
     thumb->img_height = roundf(img_height / sy);
     thumb->zoomx = zoomx / sx;
@@ -592,12 +593,6 @@ int dt_thumbnail_get_image_buffer(dt_thumbnail_t *thumb)
   // - a rendering job has already been started
   if((thumb->image_inited && thumb->img_surf && cairo_surface_get_reference_count(thumb->img_surf) > 0))
     return 0;
-
-  // Nuke the image surface in GUI mainthread.
-  // Note: if background thumbnail thread gets ditched, this may never be recreated.
-  dt_pthread_mutex_lock(&thumb->lock);
-  _free_image_surface(thumb);
-  dt_pthread_mutex_unlock(&thumb->lock);
 
   // Get thumbnail GUI allocated size now (in GUI mainthread).
   // Size requests may be unset (-1) during initial layout while allocations are already valid.
@@ -648,6 +643,8 @@ int dt_thumbnail_get_image_buffer(dt_thumbnail_t *thumb)
   return 0;
 }
 
+
+
 static gboolean
 _thumb_draw_image(GtkWidget *widget, cairo_t *cr, gpointer user_data)
 {
@@ -672,16 +669,27 @@ _thumb_draw_image(GtkWidget *widget, cairo_t *cr, gpointer user_data)
     const int req_w = w;
     const int req_h = h;
     if(thumb->img_width + 1 < req_w && thumb->img_height + 1 < req_h)
+    {
       thumb->image_inited = FALSE;
+      cairo_surface_t *surface = dt_cairo_rescale_surface(thumb->img_surf, req_w, req_h);
+      dt_cairo_sharpen_surface_rgb24(surface);
+      _free_image_surface(thumb);
+      thumb->img_surf = surface;
+    }
   }
   dt_pthread_mutex_unlock(&thumb->lock);
 
+  /**
+   * thumb->image_inited is the validity flag for the image surface. While it is FALSE,
+   * pending a new thumbnail, we may still hold an outdated thumbnail that can be painted
+   * into the widget, pending the new one.
+   */
   dt_thumbnail_get_image_buffer(thumb);
 
   dt_print(DT_DEBUG_LIGHTTABLE, "[lighttable] redrawing thumbnail %i\n", thumb->info.id);
 
   dt_pthread_mutex_lock(&thumb->lock);
-  if(thumb->image_inited && thumb->img_surf && cairo_surface_get_reference_count(thumb->img_surf) > 0)
+  if(thumb->img_surf && cairo_surface_get_reference_count(thumb->img_surf) > 0)
   {
     // we draw the image
     cairo_save(cr);
@@ -712,7 +720,8 @@ _thumb_draw_image(GtkWidget *widget, cairo_t *cr, gpointer user_data)
     gtk_render_frame(context, cr, 0, 0, w, h);
     cairo_restore(cr);
   }
-  else
+  
+  if(!thumb->image_inited || IS_NULL_PTR(thumb->img_surf))
   {
     dt_control_draw_busy_msg(cr, w, h);
   }

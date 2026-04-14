@@ -919,6 +919,119 @@ dt_view_surface_value_t dt_view_image_get_surface_async(dt_view_image_surface_fe
   return ret;
 }
 
+cairo_surface_t *dt_cairo_rescale_surface(cairo_surface_t *src, int dst_w, int dst_h)
+{
+  if(!src || dst_w <= 0 || dst_h <= 0)
+      return NULL;
+
+  const int src_w = cairo_image_surface_get_width(src);
+  const int src_h = cairo_image_surface_get_height(src);
+
+  cairo_surface_t *dst =
+      cairo_image_surface_create(CAIRO_FORMAT_RGB24, dst_w, dst_h);
+
+  cairo_t *cr = cairo_create(dst);
+
+  // clear (important if aspect ratio leaves borders)
+  cairo_set_source_rgba(cr, 0, 0, 0, 0);
+  cairo_paint(cr);
+
+  double scale_x = (double)dst_w / src_w;
+  double scale_y = (double)dst_h / src_h;
+
+  double sx = scale_x;
+  double sy = scale_y;
+  double tx = 0.0;
+  double ty = 0.0;
+
+
+  double s = MIN(scale_x, scale_y);
+  sx = sy = s;
+
+  tx = (dst_w - src_w * s) * 0.5;
+  ty = (dst_h - src_h * s) * 0.5;
+  
+
+  cairo_translate(cr, tx, ty);
+  cairo_scale(cr, sx, sy);
+
+  cairo_set_source_surface(cr, src, 0, 0);
+
+  cairo_pattern_t *pat = cairo_get_source(cr);
+  cairo_pattern_set_filter(pat, CAIRO_FILTER_BEST);
+  cairo_pattern_set_extend(pat, CAIRO_EXTEND_PAD);
+
+  cairo_paint(cr);
+
+  cairo_destroy(cr);
+
+  return dst;
+}
+
+void dt_cairo_sharpen_surface_rgb24(cairo_surface_t *surface)
+{
+  if(!surface) return;
+
+  cairo_surface_flush(surface);
+
+  unsigned char *data = cairo_image_surface_get_data(surface);
+  int width  = cairo_image_surface_get_width(surface);
+  int height = cairo_image_surface_get_height(surface);
+  int stride = cairo_image_surface_get_stride(surface);
+
+  // Copy original buffer
+  unsigned char *copy = dt_alloc_align(stride * height);
+  memcpy(copy, data, stride * height);
+
+  // Kernel weights
+  const float k_center =  4.0f;
+  const float k_edge   = -0.5f;
+  const float k_corner = -0.25f;
+
+  // Unsharp mask coeffs
+  const float amount = 0.2f;
+  const float amount_inv = 1.f - amount;
+
+  __OMP_PARALLEL_FOR__(collapse(2))
+  for(int y = 1; y < height - 1; y++)
+    for(int x = 1; x < width - 1; x++)
+    {
+      int idx = y * stride + x * 4;
+
+      #pragma unroll
+      for(int c = 0; c < 3; c++) // B, G, R
+      {
+        int i = idx + c;
+
+        float v =
+          k_center * copy[i]
+
+          + k_edge * (
+              copy[i - 4] +                 // left
+              copy[i + 4] +                 // right
+              copy[i - stride] +            // top
+              copy[i + stride]              // bottom
+          )
+
+          + k_corner * (
+              copy[i - stride - 4] +        // top-left
+              copy[i - stride + 4] +        // top-right
+              copy[i + stride - 4] +        // bottom-left
+              copy[i + stride + 4]          // bottom-right
+          );
+
+        // Unsharp-style recombination
+        const float out = amount_inv * copy[i] + amount * v;
+        data[i] = (unsigned char)(CLAMP(roundf(out), 0.f, 255.f));
+      }
+
+      data[idx + 3] = copy[idx + 3];
+    }
+
+  dt_free(copy);
+  cairo_surface_mark_dirty(surface);
+}
+
 static dt_view_surface_value_t _view_image_get_surface_internal(int32_t imgid, int width, int height,
                                                                 cairo_surface_t **surface, int zoom,
                                                                 dt_atomic_int *shutdown)
@@ -1059,7 +1172,7 @@ static dt_view_surface_value_t _view_image_get_surface_internal(int32_t imgid, i
       || zoom == DT_THUMBTABLE_ZOOM_TWICE)
     cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
   else
-    cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_GOOD);
+    cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_BEST);
 
   cairo_paint(cr);
   cairo_surface_destroy(tmp_surface);
@@ -1072,9 +1185,14 @@ static dt_view_surface_value_t _view_image_get_surface_internal(int32_t imgid, i
 
   // we consider skull as ok as the image hasn't to be reloaded
   if(buf_wd <= 8 && buf_ht <= 8)
+  {
     ret = DT_VIEW_SURFACE_OK;
+  }
   else
+  {
     ret = DT_VIEW_SURFACE_OK;
+    dt_cairo_sharpen_surface_rgb24(*surface);
+  }
 
   dt_free(rgbbuf);
 

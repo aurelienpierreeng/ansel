@@ -324,6 +324,10 @@ gboolean dt_view_active_images_has_imgid(int32_t imgid);
 GList *dt_view_active_images_get_all();
 int32_t dt_view_active_images_get_first();
 
+/** rescale the image surface pending the real updated image availability */
+cairo_surface_t *dt_cairo_rescale_surface(cairo_surface_t *src, int dst_w, int dst_h);
+void dt_cairo_sharpen_surface_rgb24(cairo_surface_t *surface);
+
 /** get the darkroom current layout */
 dt_darkroom_layout_t dt_view_darkroom_get_layout(dt_view_manager_t *vm);
 
