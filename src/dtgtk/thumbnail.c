@@ -672,7 +672,7 @@ _thumb_draw_image(GtkWidget *widget, cairo_t *cr, gpointer user_data)
     {
       thumb->image_inited = FALSE;
       cairo_surface_t *surface = dt_cairo_rescale_surface(thumb->img_surf, req_w, req_h);
-      dt_cairo_sharpen_surface_rgb24(surface);
+      //dt_cairo_sharpen_surface_rgb24(surface);
       _free_image_surface(thumb);
       thumb->img_surf = surface;
     }
