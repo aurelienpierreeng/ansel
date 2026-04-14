@@ -173,6 +173,16 @@ void dt_mimap_cache_evict(dt_mipmap_cache_t *cache, const int32_t imgid);
 dt_mipmap_size_t dt_mipmap_cache_get_matching_size( const dt_mipmap_cache_t *cache,
     const int32_t width, const int32_t height, const uint32_t imgid);
 
+// return the closest mipmap size fitting within the width × height boundary box.
+// Use that to flush a darkroom pipeline output into a cache line
+dt_mipmap_size_t dt_mipmap_cache_get_fitting_size(const dt_mipmap_cache_t *cache, const int32_t width,
+                                                   const int32_t height, const uint32_t imgid);
+
+// Manually swap the image buffer of a mipmap cacheline from an existing uint8_t image
+void dt_mipmap_cache_swap_at_size(dt_mipmap_cache_t *cache, const int32_t imgid, 
+                                  const dt_mipmap_size_t mip, const uint8_t *const buffer, 
+                                  const int32_t width, const int32_t height, dt_colorspaces_color_profile_type_t profile);
+
 // copy over thumbnails. used by file operation that copies raw files, to speed up thumbnail generation.
 // only copies over the jpg backend on disk, doesn't directly affect the in-memory cache.
 void dt_mipmap_cache_copy_thumbnails(const dt_mipmap_cache_t *cache, const uint32_t dst_imgid, const uint32_t src_imgid);

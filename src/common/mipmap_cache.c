@@ -873,11 +873,11 @@ static dt_mipmap_cache_one_t *_get_cache(dt_mipmap_cache_t *cache, const dt_mipm
 }
 
 // if we get a zero-sized image, paint skulls to signal a missing image
-static void _paint_skulls(dt_mipmap_buffer_t *buf, struct dt_mipmap_buffer_dsc *dsc, const dt_mipmap_size_t mip)
+static void _paint_skulls(dt_mipmap_buffer_t *buf, struct dt_mipmap_buffer_dsc *dsc, const int32_t imgid, const dt_mipmap_size_t mip)
 {
   if(dsc->width == 0 || dsc->height == 0)
   {
-    // fprintf(stderr, "[mipmap cache get] got a zero-sized image for img %u mip %d!\n", imgid, mip);
+    dt_print(DT_DEBUG_CACHE, "[mipmap cache get] got a zero-sized image for img %u mip %d!\n", imgid, mip);
     if(mip < DT_MIPMAP_F)
       buf->buf = dead_image_8(dsc);
     else
@@ -1001,7 +1001,7 @@ static void _generate_blocking(dt_cache_entry_t *entry, dt_mipmap_buffer_t *buf,
   }
 
   dsc->flags &= ~DT_MIPMAP_BUFFER_DSC_FLAG_GENERATE;
-  _paint_skulls(buf, dsc, mip);
+  _paint_skulls(buf, dsc, imgid, mip);
   _validate_buffer(buf, dsc, imgid, mip);
 
   dt_print(DT_DEBUG_CACHE, "[mipmap_cache] image %d at mip size %d got a new cache entry (%ix%i / %ix%i) at %p\n", imgid, mip, 
@@ -1110,7 +1110,9 @@ dt_mipmap_size_t dt_mipmap_cache_get_matching_size(const dt_mipmap_cache_t *cach
 {
   for(int k = DT_MIPMAP_0; k < DT_MIPMAP_F; k++)
   {
-    if((cache->max_width[k] >= width) && (cache->max_height[k] >= height))
+    // We assume a "fit" situation, typically rectangle within square
+    // so we don't need both dimensions to be greater than requested
+    if((cache->max_width[k] >= width) || (cache->max_height[k] >= height))
     {
       dt_print(DT_DEBUG_CACHE, "[mipmap_cache] image %d will load a mip size %i (%lux%lu)\n", imgid, k, cache->max_width[k], cache->max_height[k]);
       return k;
@@ -1118,6 +1120,73 @@ dt_mipmap_size_t dt_mipmap_cache_get_matching_size(const dt_mipmap_cache_t *cach
   }
   return DT_MIPMAP_F - 1;
 }
+
+dt_mipmap_size_t dt_mipmap_cache_get_fitting_size(const dt_mipmap_cache_t *cache, const int32_t width,
+                                                   const int32_t height, const uint32_t imgid)
+{
+  for(int k = DT_MIPMAP_F - 1; k >= DT_MIPMAP_0; k--)
+  {
+    if((cache->max_width[k] <= width) && (cache->max_height[k] <= height))
+    {
+      dt_print(DT_DEBUG_CACHE, "[mipmap_cache] image %d will fit a mip size %i (%lux%lu)\n", imgid, k, cache->max_width[k], cache->max_height[k]);
+      return k;
+    }
+  }
+  return DT_MIPMAP_0;
+}
+
+void dt_mipmap_cache_swap_at_size(dt_mipmap_cache_t *cache, const int32_t imgid, const dt_mipmap_size_t mip, const uint8_t *const in,
+  const int32_t width, const int32_t height, dt_colorspaces_color_profile_type_t profile)
+{
+  if(mip >= DT_MIPMAP_F || mip < DT_MIPMAP_0) return;
+
+  const uint32_t key = get_key(imgid, mip);
+  dt_cache_entry_t *entry = dt_cache_get_with_caller(&_get_cache(cache, mip)->cache, key, 'w', __FILE__, __LINE__);
+  if(entry)
+  {
+    struct dt_mipmap_buffer_dsc *dsc = _get_dsc_from_entry(entry);
+    dt_print(DT_DEBUG_CACHE, "[mipmap_cache] image %d is synchronized from pipeline at size %i (%ix%i->%ix%i)\n", 
+      imgid, mip, width, height, dsc->width, dsc->height);
+
+    // Downscale
+    dsc->iscale = 1.f;
+    const int32_t wd = dsc->width;
+    const int32_t ht = dsc->height;
+    uint8_t *buf =(uint8_t *)_get_buffer_from_dsc(dsc);
+    dt_iop_flip_and_zoom_8(in, width, height, buf, wd, ht,
+                           ORIENTATION_NONE, &dsc->width, &dsc->height);
+
+    // Color convert
+    cmsHTRANSFORM transform = NULL;
+    pthread_rwlock_rdlock(&darktable.color_profiles->xprofile_lock);
+    gboolean alloc = FALSE;
+
+    if(profile == DT_COLORSPACE_DISPLAY)
+    { 
+      // Convert to whatever display space to save thumbnails into Adobe RGB
+      transform = darktable.color_profiles->transform_display_to_adobe_rgb;
+    }
+    else 
+    {
+      alloc = TRUE;
+      transform = cmsCreateTransform(
+          dt_colorspaces_get_profile(profile, "", DT_PROFILE_DIRECTION_DISPLAY)->profile, TYPE_BGRA_8,
+          dt_colorspaces_get_profile(DT_COLORSPACE_ADOBERGB, "", DT_PROFILE_DIRECTION_DISPLAY)->profile, TYPE_RGBA_8, 
+          INTENT_PERCEPTUAL, 0);
+    }
+
+    // Need to save BGRA back to RGBA. The function name is misleading, 
+    // it's still only swapping R <-> B.
+    dt_colorspaces_transform_rgba8_to_bgra8(transform, buf, buf, dsc->width, dsc->height);
+    if(alloc) cmsDeleteTransform(transform);
+    pthread_rwlock_unlock(&darktable.color_profiles->xprofile_lock);
+
+    dsc->color_space = DT_COLORSPACE_ADOBERGB;
+    dsc->flags &= ~DT_MIPMAP_BUFFER_DSC_FLAG_GENERATE;
+    dt_cache_release(&_get_cache(cache, mip)->cache, entry);
+  }
+}
+
 
 void dt_mipmap_cache_remove_at_size(dt_mipmap_cache_t *cache, const int32_t imgid, const dt_mipmap_size_t mip, const gboolean flush_disk)
 {
@@ -1364,10 +1433,11 @@ static void _init_8(uint8_t *buf, uint32_t *width, uint32_t *height, float *isca
       dt_mipmap_cache_get(darktable.mipmap_cache, &tmp, imgid, k, DT_MIPMAP_TESTLOCK, 'r');
       if(IS_NULL_PTR(tmp.buf)) continue;
 
-      dt_print(DT_DEBUG_CACHE, "[mipmap_cache] generate mip size %d for image %d from mip size %d\n", size, imgid, k);
       *color_space = tmp.color_space;
       // downsample
       dt_iop_flip_and_zoom_8(tmp.buf, tmp.width, tmp.height, buf, wd, ht, ORIENTATION_NONE, width, height);
+      dt_print(DT_DEBUG_CACHE, "[mipmap_cache] generate mip size %d for image %d from mip size %d (%ix%i->%ix%i)\n", 
+        size, imgid, k, tmp.width, tmp.height, *width, *height);
 
       dt_mipmap_cache_release(darktable.mipmap_cache, &tmp);
       res = 0;
@@ -1451,7 +1521,7 @@ static void _init_8(uint8_t *buf, uint32_t *width, uint32_t *height, float *isca
     // export with flags: ignore exif (don't load from disk), don't swap byte order, don't do hq processing,
     // no upscaling and signal we want thumbnail export
     res = dt_imageio_export_with_flags(imgid, "unused", &format, (dt_imageio_module_data_t *)&dat, TRUE, FALSE, FALSE,
-                                       FALSE, TRUE, NULL, FALSE, FALSE, DT_COLORSPACE_NONE, NULL, DT_INTENT_LAST, NULL,
+                                       FALSE, TRUE, NULL, FALSE, FALSE, DT_COLORSPACE_ADOBERGB, NULL, DT_INTENT_LAST, NULL,
                                        NULL, 1, 1, NULL, shutdown);
     if(!res)
     {
@@ -1467,7 +1537,7 @@ static void _init_8(uint8_t *buf, uint32_t *width, uint32_t *height, float *isca
   // any errors?
   if(res)
   {
-    // fprintf(stderr, "[mipmap_cache] could not process thumbnail!\n");
+    fprintf(stderr, "[mipmap_cache] could not process thumbnail!\n");
     *width = *height = 0;
     *iscale = 0.0f;
     *color_space = DT_COLORSPACE_NONE;

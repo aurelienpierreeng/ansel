@@ -188,7 +188,7 @@ typedef struct dt_colorspaces_t
 
   dt_colorspaces_color_mode_t mode;
 
-  cmsHTRANSFORM transform_srgb_to_display, transform_adobe_rgb_to_display, transform_xyz_to_display;
+  cmsHTRANSFORM transform_srgb_to_display, transform_adobe_rgb_to_display, transform_xyz_to_display, transform_display_to_adobe_rgb;
 
 } dt_colorspaces_t;
 

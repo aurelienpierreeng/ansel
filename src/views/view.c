@@ -1006,28 +1006,34 @@ static dt_view_surface_value_t _view_image_get_surface_internal(int32_t imgid, i
 
   cmsHTRANSFORM transform = NULL;
   pthread_rwlock_rdlock(&darktable.color_profiles->xprofile_lock);
+  gboolean alloc = FALSE;
 
   // we only color manage when a thumbnail is sRGB or AdobeRGB. everything else just gets dumped to the
   // screen
-  if(buf.color_space == DT_COLORSPACE_SRGB
-      && darktable.color_profiles->transform_srgb_to_display)
+  if(buf.color_space == DT_COLORSPACE_SRGB)
   {
     transform = darktable.color_profiles->transform_srgb_to_display;
   }
-  else if(buf.color_space == DT_COLORSPACE_ADOBERGB
-          && darktable.color_profiles->transform_adobe_rgb_to_display)
+  else if(buf.color_space == DT_COLORSPACE_ADOBERGB)
   {
     transform = darktable.color_profiles->transform_adobe_rgb_to_display;
   }
-  // else if(buf.color_space == DT_COLORSPACE_DISPLAY)
-  // no-op, buffer is already in display space, pass pixels through
-  // which happens because transform = NULL
+  else if(buf.color_space == DT_COLORSPACE_DISPLAY)
+  {
+    // no-op, buffer is already in display space, pass pixels through
+    // and simply swap R <-> B, which happens because transform = NULL
+  }
   else
   {
-    assert(buf.color_space == DT_COLORSPACE_DISPLAY);
+    alloc = TRUE;
+    transform = cmsCreateTransform(
+        dt_colorspaces_get_profile(buf.color_space, "", DT_PROFILE_DIRECTION_DISPLAY)->profile, TYPE_RGBA_8, 
+        dt_colorspaces_get_profile(DT_COLORSPACE_DISPLAY, "", DT_PROFILE_DIRECTION_DISPLAY)->profile, TYPE_BGRA_8,
+        INTENT_PERCEPTUAL, 0);
   }
 
   dt_colorspaces_transform_rgba8_to_bgra8(transform, buf.buf, rgbbuf, buf.width, buf.height);
+  if(alloc) cmsDeleteTransform(transform);
   pthread_rwlock_unlock(&darktable.color_profiles->xprofile_lock);
   dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
 
