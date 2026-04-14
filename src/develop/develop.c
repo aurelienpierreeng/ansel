@@ -1036,7 +1036,7 @@ int dt_dev_is_current_image(dt_develop_t *dev, int32_t imgid)
   return (dev->image_storage.id == imgid) ? 1 : 0;
 }
 
-void dt_dev_modulegroups_switch(dt_develop_t *dev, dt_iop_module_t *module)
+void dt_dev_modulegroups_switch_tab(dt_develop_t *dev, dt_iop_module_t *module)
 {
   if(IS_NULL_PTR(dev) || IS_NULL_PTR(module)) return;
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_MODULEGROUPS_SET, module);
@@ -1462,7 +1462,7 @@ dt_dev_pixelpipe_iop_t *dt_dev_distort_get_iop_pipe(dt_develop_t *dev, struct dt
 }
 
 // set the module list order
-void dt_dev_reorder_gui_module_list(dt_develop_t *dev)
+void dt_dev_signal_modules_moved(dt_develop_t *dev)
 {
   if(IS_NULL_PTR(dev)) return;
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_MODULE_MOVED);

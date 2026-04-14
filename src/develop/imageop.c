@@ -385,15 +385,11 @@ int default_iop_focus(dt_gui_module_t *m, gboolean toggle)
 {
   dt_iop_module_t *module = (dt_iop_module_t *) m;
 
-  // Showing the module, if it isn't already visible
-  dt_dev_modulegroups_switch(darktable.develop, module);
-
   // Expand and scroll
   if(darktable.develop->gui_module != module)
   {
     dt_iop_request_focus(module);
     dt_iop_gui_set_expanded(module, TRUE, TRUE);
-    darktable.gui->scroll_to[1] = module->expander;
   }
   else if(toggle)
   {
@@ -641,8 +637,6 @@ static void _gui_delete_callback(GtkButton *button, dt_iop_module_t *module)
   // don't delete the module, a pipe may still need it
   dev->alliop = g_list_append(dev->alliop, module);
 
-  dt_dev_modulegroups_switch(dev, next);
-
   /* redraw */
   dt_dev_pixelpipe_rebuild_all(dev);
   dt_control_queue_redraw_center();
@@ -666,7 +660,7 @@ gboolean dt_iop_gui_commit_iop_order_change(dt_develop_t *dev, dt_iop_module_t *
 
   if(!IS_NULL_PTR(reason)) dt_ioppr_check_iop_order(dev, 0, reason);
 
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_MODULE_MOVED);
+  dt_dev_signal_modules_moved(dev);
   return TRUE;
 }
 
@@ -749,8 +743,8 @@ dt_iop_module_t *dt_iop_gui_duplicate(dt_iop_module_t *base, gboolean copy_param
       }
     }
 
+    dt_iop_request_focus(module);
     dt_iop_gui_set_expanded(module, TRUE, FALSE);
-
     dt_iop_gui_update_blending(module);
 
     if(module->dev->gui_attached)
@@ -760,13 +754,8 @@ dt_iop_module_t *dt_iop_gui_duplicate(dt_iop_module_t *base, gboolean copy_param
     dt_dev_add_history_item(module->dev, module, TRUE, TRUE);
   }
 
-  // and we refresh the pipe
-  dt_iop_request_focus(module);
-
   /* update ui to new parameters */
   dt_iop_gui_update(module);
-
-  dt_dev_modulegroups_switch(darktable.develop, module);
 
   return module;
 }
@@ -933,17 +922,6 @@ static gboolean _gui_multiinstance_callback(GtkButton *button, GdkEventButton *e
   return TRUE;
 }
 
-static gboolean _gui_off_button_press(GtkWidget *w, GdkEventButton *e, gpointer user_data)
-{
-  dt_iop_module_t *module = (dt_iop_module_t *)user_data;
-  if(!darktable.gui->reset && dt_modifier_is(e->state, GDK_CONTROL_MASK))
-  {
-    dt_iop_request_focus(darktable.develop->gui_module == module ? NULL : module);
-    return TRUE;
-  }
-  return FALSE;
-}
-
 static void _gui_off_callback(GtkToggleButton *togglebutton, gpointer user_data)
 {
   dt_iop_module_t *module = (dt_iop_module_t *)user_data;
@@ -962,9 +940,6 @@ static void _gui_off_callback(GtkToggleButton *togglebutton, gpointer user_data)
     if(gtk_toggle_button_get_active(togglebutton))
     {
       module->enabled = 1;
-
-      darktable.gui->scroll_to[1] = module->expander;
-
       dt_dev_add_history_item(module->dev, module, FALSE, TRUE);
     }
     else
@@ -986,9 +961,6 @@ static void _gui_off_callback(GtkToggleButton *togglebutton, gpointer user_data)
   dt_free(module_label);
   gtk_widget_set_tooltip_text(GTK_WIDGET(togglebutton), tooltip);
   gtk_widget_queue_draw(GTK_WIDGET(togglebutton));
-
-  if(module->enabled && !gtk_widget_is_visible(module->header))
-    dt_dev_modulegroups_switch(darktable.develop, module);
 }
 
 gboolean dt_iop_so_is_hidden(dt_iop_module_so_t *module)
@@ -1966,6 +1938,7 @@ void dt_iop_request_focus(dt_iop_module_t *module)
   if(darktable.gui->reset || (out_focus_module == module)) return;
 
   darktable.develop->gui_module = module;
+  if(!IS_NULL_PTR(module)) darktable.gui->scroll_to[1] = module->expander;
 
   /* lets lose the focus of previous focus module*/
   if(out_focus_module)
@@ -2007,7 +1980,7 @@ void dt_iop_request_focus(dt_iop_module_t *module)
   if(!IS_NULL_PTR(module))
   {
     // In case we tried giving focus to a module that is not in the visible tab
-    dt_dev_modulegroups_switch(module->dev, module);
+    dt_dev_modulegroups_switch_tab(module->dev, module);
 
     gtk_widget_set_state_flags(dt_iop_gui_get_pluginui(module), GTK_STATE_FLAG_SELECTED, TRUE);
 
@@ -2244,11 +2217,9 @@ static gboolean _iop_plugin_header_button_release(GtkWidget *w, GdkEventButton *
     return TRUE;
   }
 
-  dt_iop_request_focus(module);
-
   // make gtk scroll to the module once it updated its allocation size
-  darktable.gui->scroll_to[1] = module->expander;
   const gboolean collapse_others = dt_modifier_is(e->state, GDK_SHIFT_MASK) ? FALSE : TRUE;
+  dt_iop_request_focus(module);
   dt_iop_gui_set_expanded(module, !module->expanded, collapse_others);
 
   return TRUE;
@@ -2523,7 +2494,6 @@ void dt_iop_gui_set_expander(dt_iop_module_t *module)
   g_signal_connect(G_OBJECT(hw[IOP_MODULE_SWITCH]), "button-press-event",
                    G_CALLBACK(_iop_plugin_header_child_button_press), module);
   g_signal_connect(G_OBJECT(hw[IOP_MODULE_SWITCH]), "toggled", G_CALLBACK(_gui_off_callback), module);
-  g_signal_connect(G_OBJECT(hw[IOP_MODULE_SWITCH]), "button-press-event", G_CALLBACK(_gui_off_button_press), module);
 
   module->off = DTGTK_TOGGLEBUTTON(hw[IOP_MODULE_SWITCH]);
   gtk_widget_set_sensitive(GTK_WIDGET(hw[IOP_MODULE_SWITCH]), !module->hide_enable_button);

@@ -582,9 +582,9 @@ void dt_dev_check_zoom_pos_bounds(dt_develop_t *dev, float *dev_x, float *dev_y,
  * modulegroups helpers
  */
 /** request modulegroups to show the group of the given module */
-void dt_dev_modulegroups_switch(dt_develop_t *dev, struct dt_iop_module_t *module);
+void dt_dev_modulegroups_switch_tab(dt_develop_t *dev, struct dt_iop_module_t *module);
 /** reorder the module list */
-void dt_dev_reorder_gui_module_list(dt_develop_t *dev);
+void dt_dev_signal_modules_moved(dt_develop_t *dev);
 
 /** request snapshot */
 void dt_dev_snapshot_request(dt_develop_t *dev, const char *filename);

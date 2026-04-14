@@ -660,8 +660,13 @@ static void _history_apply_history_end(const int history_end)
   dt_dev_undo_end_record(dev);
 
   dt_dev_write_history(dev, FALSE);
+
+  // We have no way of knowing if moving the history end conceptually added
+  // or removed new pipeline nodes ("modules"), so we need to nuke the pipe all the time
+  // and rebuild from scratch
+  dt_dev_history_pixelpipe_update(dev, TRUE);
+
   dt_dev_history_gui_update(dev);
-  dt_dev_history_pixelpipe_update(dev, FALSE);
   dt_dev_history_notify_change(dev, dev->image_storage.id);
 }
 
@@ -676,7 +681,7 @@ static void _history_show_module_for_end(const int history_end)
   dt_pthread_rwlock_unlock(&darktable.develop->history_mutex);
   if(module)
   {
-    dt_dev_modulegroups_switch(darktable.develop, module);
+    dt_iop_request_focus(module);
     dt_iop_gui_set_expanded(module, TRUE, TRUE);
   }
 }
@@ -832,8 +837,8 @@ static void _lib_history_view_selection_changed(GtkTreeSelection *selection, gpo
 
 static gboolean _lib_history_view_button_press_callback(GtkWidget *widget, GdkEventButton *e, gpointer user_data)
 {
-  // shift-click just shows the corresponding module in modulegroups
-  if(e->button == 1 && dt_modifier_is(e->state, GDK_SHIFT_MASK))
+  // Ctrl-click just shows the corresponding module in modulegroups
+  if(e->button == 1 && dt_modifier_is(e->state, GDK_CONTROL_MASK))
   {
     GtkTreePath *path = NULL;
     if(gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(widget), (gint)e->x, (gint)e->y, &path, NULL, NULL, NULL))

@@ -706,7 +706,6 @@ static void _focus_module(dt_iop_module_t *module)
   {
     dt_iop_request_focus(module);
     dt_iop_gui_set_expanded(module, TRUE, TRUE);
-    darktable.gui->scroll_to[1] = module->expander;
   }
   else
   {

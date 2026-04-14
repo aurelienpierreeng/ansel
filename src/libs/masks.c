@@ -212,6 +212,7 @@ static void _lib_masks_show_blending_message(dt_lib_masks_t *lm, gchar *markup)
   gtk_widget_show_all(lm->blending_box);
 }
 
+/*
 static void _lib_masks_reveal(dt_lib_module_t *self)
 {
   if(!dt_ui_panel_visible(darktable.gui->ui, DT_UI_PANEL_LEFT))
@@ -226,6 +227,7 @@ static void _lib_masks_reveal(dt_lib_module_t *self)
     gtk_widget_grab_focus(self->expander);
   }
 }
+*/
 
 static void _lib_masks_blending_gui_changed_callback(gpointer instance, dt_lib_module_t *self)
 {
@@ -275,7 +277,7 @@ static void _lib_masks_blending_gui_changed_callback(gpointer instance, dt_lib_m
 
   dt_iop_gui_update_blending(module);
 
-  if(module_changed) _lib_masks_reveal(self);
+  //if(module_changed) _lib_masks_reveal(self);
 }
 
 static void _tree_add_circle(GtkButton *button, dt_iop_module_t *module)

@@ -1127,11 +1127,10 @@ void dt_dev_history_gui_update(dt_develop_t *dev)
     dt_iop_gui_update(mod);
   }
 
-  dt_dev_reorder_gui_module_list(dev);
-  dt_dev_modules_update_multishow(dev);
   dt_dev_masks_list_change(dev);
-
   --darktable.gui->reset;
+
+  dt_dev_signal_modules_moved(dev);
 }
 
 void dt_dev_history_pixelpipe_update(dt_develop_t *dev, gboolean rebuild)
@@ -2374,7 +2373,7 @@ int dt_dev_history_refresh_nodes_ext(dt_develop_t *dev, GList **iop, GList *hist
   *iop = iop_list;
 
   // if topology has changed, we need to reorder modules in GUI
-  if(pipe_remove) dt_dev_reorder_gui_module_list(dev);
+  if(pipe_remove) dt_dev_signal_modules_moved(dev);
 
   return pipe_remove;
 }

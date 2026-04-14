@@ -445,7 +445,12 @@ GtkWidget *dt_iop_gui_get_widget(dt_iop_module_t *module);
 /** get the eventbox of plugin ui in expander */
 GtkWidget *dt_iop_gui_get_pluginui(dt_iop_module_t *module);
 
-/** requests the focus for this plugin (to draw overlays over the center image) */
+/** requests the focus for this plugin (to draw overlays over the center image)
+ * NOTE: this sets the current module expander as the scroll reference,
+ * which is handled when the parent panel changes size, which happens when
+ * uncollapsing the module. So dt_iop_request_focus() needs to be called
+ * before expanding modules (dt_iop_set_expanded) for auto-scroll to work properly.
+ */
 void dt_iop_request_focus(dt_iop_module_t *module);
 /** allocate and load default settings from introspection. */
 void dt_iop_default_init(dt_iop_module_t *module);
