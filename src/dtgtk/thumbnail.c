@@ -655,6 +655,8 @@ _thumb_draw_image(GtkWidget *widget, cairo_t *cr, gpointer user_data)
   int h = gtk_widget_get_allocated_height(widget);
   if(w < 2 || h < 2) return TRUE;
 
+  gboolean can_draw = TRUE;
+
   dt_pthread_mutex_lock(&thumb->lock);
   if(thumb->img_surf && cairo_surface_get_reference_count(thumb->img_surf) > 0)
   {
@@ -668,13 +670,10 @@ _thumb_draw_image(GtkWidget *widget, cairo_t *cr, gpointer user_data)
     // Only invalidate cached buffers when the surface is too small in *both* dimensions.
     const int req_w = w;
     const int req_h = h;
-    if(thumb->img_width + 1 < req_w && thumb->img_height + 1 < req_h)
+    if(!(abs(thumb->img_width - req_w) < 2 || abs(thumb->img_height - req_h) < 2))
     {
       thumb->image_inited = FALSE;
-      cairo_surface_t *surface = dt_cairo_rescale_surface(thumb->img_surf, req_w, req_h);
-      //dt_cairo_sharpen_surface_rgb24(surface);
-      _free_image_surface(thumb);
-      thumb->img_surf = surface;
+      can_draw = FALSE;
     }
   }
   dt_pthread_mutex_unlock(&thumb->lock);
@@ -683,13 +682,15 @@ _thumb_draw_image(GtkWidget *widget, cairo_t *cr, gpointer user_data)
    * thumb->image_inited is the validity flag for the image surface. While it is FALSE,
    * pending a new thumbnail, we may still hold an outdated thumbnail that can be painted
    * into the widget, pending the new one.
+   * 
+   * can_draw means we have a size mismatch between the surface and the widget.
    */
   dt_thumbnail_get_image_buffer(thumb);
 
   dt_print(DT_DEBUG_LIGHTTABLE, "[lighttable] redrawing thumbnail %i\n", thumb->info.id);
 
   dt_pthread_mutex_lock(&thumb->lock);
-  if(thumb->img_surf && cairo_surface_get_reference_count(thumb->img_surf) > 0)
+  if(can_draw && thumb->img_surf && cairo_surface_get_reference_count(thumb->img_surf) > 0)
   {
     // we draw the image
     cairo_save(cr);
