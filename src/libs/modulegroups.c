@@ -1067,8 +1067,8 @@ static gboolean _update_iop_visibility(gpointer user_data)
   _ensure_page_widgets(self);
   _modulegroups_sync_section_label_margins(d);
 
-  // We need both the target and destination parents to be visible while reparenting  
-  gtk_widget_show(d->pages[tab]);
+  // Update notebook pages visibility
+  for(int i = 0; i < MOD_TAB_LAST; i++) gtk_widget_set_visible(d->pages[i], i == tab);
 
   /* Walk every develop module and decide whether it belongs to the active tab and which box should host it. */
   const int history_end = dt_dev_get_history_end_ext(darktable.develop);
@@ -1119,6 +1119,11 @@ static gboolean _update_iop_visibility(gpointer user_data)
   // FIXME: ditch that
   dt_dev_modules_update_multishow(darktable.develop);
 
+  // Ensure the module is visible
+  dt_iop_module_t *active = darktable.develop->gui_module;
+  if(!IS_NULL_PTR(active) && !IS_NULL_PTR(active->expander)) 
+    darktable.gui->scroll_to[1] = active->expander;
+
   if(tab == MOD_TAB_BASIC)
   {
     for(int i = 0; i < TAB_BASIC_LAST; i++)
@@ -1133,15 +1138,9 @@ static gboolean _update_iop_visibility(gpointer user_data)
     _modulegroups_reorder_target(d->pages[tab]);
   }
 
-  // Update notebook pages visibility
-  for(int i = 0; i < MOD_TAB_LAST; i++) gtk_widget_set_visible(d->pages[i], i == tab);
-
   // Ensure the parent get refreshed
   gtk_widget_queue_resize(d->pages[tab]);
   gtk_widget_queue_draw(d->pages[tab]);
-
-  // Ensure the module is visible
-  if(darktable.develop->gui_module) darktable.gui->scroll_to[1] = darktable.develop->gui_module->expander;
 
   return G_SOURCE_REMOVE;
 }
@@ -1150,11 +1149,8 @@ static void _switch_page(GtkNotebook *notebook, GtkWidget *page, guint page_num,
 {
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
   if(IS_NULL_PTR(self) || IS_NULL_PTR(self->data)) return;
-  if(_get_current_tab(self) != page_num)
-  {
-    g_idle_add((GSourceFunc)_update_iop_visibility, self);
-    dt_conf_set_int("plugins/darkroom/moduletab", page_num);
-  }
+  g_idle_add((GSourceFunc)_update_iop_visibility, self);
+  dt_conf_set_int("plugins/darkroom/moduletab", page_num);
 }
 
 static void _lib_modulegroups_signal_set(gpointer instance, gpointer module, gpointer user_data)
@@ -1169,8 +1165,7 @@ static void _lib_modulegroups_signal_set(gpointer instance, gpointer module, gpo
 
   // If module in current tab but not visible: refresh tab
   // This happens when adding new instances or enabling modules through shortcuts
-  else if(!dt_iop_is_visible(module))
-    _lib_modulegroups_refresh(instance, user_data);
+  g_idle_add((GSourceFunc)_update_iop_visibility, self);
 }
 
 static void _lib_modulegroups_refresh(gpointer instance, gpointer user_data)

@@ -578,10 +578,6 @@ static void _gui_delete_callback(GtkButton *button, dt_iop_module_t *module)
   // we must pay attention if priority is 0
   const gboolean is_zero = (module->multi_priority == 0);
 
-  // we set the focus to the other instance
-  dt_iop_gui_set_expanded(next, TRUE, FALSE);
-  dt_iop_request_focus(next);
-
   ++darktable.gui->reset;
 
   // we remove the plugin effectively
@@ -754,8 +750,6 @@ dt_iop_module_t *dt_iop_gui_duplicate(dt_iop_module_t *base, gboolean copy_param
     }
 
     dt_iop_gui_set_expanded(module, TRUE, FALSE);
-
-    darktable.gui->scroll_to[1] = module->expander;
 
     dt_iop_gui_update_blending(module);
 
