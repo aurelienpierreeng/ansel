@@ -436,13 +436,19 @@ spinbutton button
 /* Buttons in modules header, path-bar on filechooser dialog window and all text-button and related */
 .dt_module_btn,
 .path-bar button,
-header button,
 .text-button,
 .text-button radio, /* this line and following one are needed to set good margin inside some buttons, especially in header buttons in about dialog window and on radio button and label inside star icon overlay menu */
 .text-button label
 {
-  min-height: 1.1em;
-  min-width: 1.1em;
+  min-height: 1.5em;
+  min-width: 1.5em;
+}
+
+#module-header button,
+header button
+{
+  min-height: 1.3em;
+  min-width: 1.3em;
 }
 
 .dt_module_btn,
@@ -2798,10 +2804,10 @@ togglebutton,
 spinbutton,
 #non-flat
 {
-  margin: 1px 2px;
-  padding: 4px 8px;
+  margin: 0.2em;
+  padding: 0.3em;
   border: none;
-  border-radius: 2px;
+  border-radius: 3px;
   box-shadow: none;
   background-image: none;
   background-color: @button_bg;
@@ -2872,13 +2878,20 @@ spinbutton button
   min-height: 1em;
 }
 
-.quick_filter_box button,
-.quick_filter_box togglebutton,
-.quick_filter_box .dt_module_btn,
 #module-header button,
 #module-header togglebutton,
 #module-header .dt_module_btn
 {
+  padding: 3px;
+  background-color: transparent;
+  background-image: none;
+}
+
+.quick_filter_box button,
+.quick_filter_box togglebutton,
+.quick_filter_box .dt_module_btn
+{
+  margin: 0.05em;
   padding: 3px;
   background-color: transparent;
   background-image: none;
