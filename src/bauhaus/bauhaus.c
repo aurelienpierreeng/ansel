@@ -926,10 +926,8 @@ void dt_bauhaus_load_theme(dt_bauhaus_t *bauhaus)
   bauhaus->marker_size = 0.25f;
 
   GtkWidget *root_window = dt_ui_main_window(darktable.gui->ui);
-  GtkStyleContext *ctx = gtk_style_context_new();
-  GtkWidgetPath *path = gtk_widget_path_new();
-  gtk_style_context_set_path(ctx, path);
-  gtk_style_context_set_screen (ctx, gtk_widget_get_screen(root_window));
+  GtkStyleContext *ctx = gtk_widget_get_style_context(root_window);
+  gtk_style_context_set_screen(ctx, gtk_widget_get_screen(root_window));
 
   gtk_style_context_lookup_color(ctx, "bauhaus_fg", &bauhaus->color_fg);
   gtk_style_context_lookup_color(ctx, "bauhaus_fg_insensitive", &bauhaus->color_fg_insensitive);
@@ -976,7 +974,6 @@ void dt_bauhaus_load_theme(dt_bauhaus_t *bauhaus)
     pango_font_description_free(bauhaus->pango_font_desc);
 
   bauhaus->pango_font_desc = pfont;
-  gtk_widget_path_free(path);
 
   cairo_surface_t *cst = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 128, 128);
   cairo_t *cr = cairo_create(cst);
