@@ -536,9 +536,7 @@ static void show_pango_text(struct dt_bauhaus_widget_t *w, GtkStyleContext *cont
 
   // Prepare context and font properties
   PangoLayout *layout = pango_cairo_create_layout(cr);
-  PangoFontDescription *font_desc = NULL;
-  gtk_style_context_get(context, state, GTK_STYLE_PROPERTY_FONT, &font_desc, NULL);
-  pango_layout_set_font_description(layout, font_desc);
+  pango_layout_set_font_description(layout, w->bauhaus->pango_font_desc);
 
   // Set the actual text
   pango_layout_set_text(layout, text, -1);
@@ -608,7 +606,6 @@ static void show_pango_text(struct dt_bauhaus_widget_t *w, GtkStyleContext *cont
   pango_cairo_show_layout(cr, layout);
 
   // Cleanup
-  pango_font_description_free(font_desc);
   g_object_unref(layout);
 }
 
