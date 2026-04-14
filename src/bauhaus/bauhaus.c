@@ -535,11 +535,30 @@ static void show_pango_text(struct dt_bauhaus_widget_t *w, GtkStyleContext *cont
   if(IS_NULL_PTR(text)) return;
 
   // Prepare context and font properties
-  PangoLayout *layout = pango_cairo_create_layout(cr);
-  pango_layout_set_font_description(layout, w->bauhaus->pango_font_desc);
+  PangoFontDescription *css_font = NULL;
+  gtk_style_context_get(context, state, GTK_STYLE_PROPERTY_FONT, &css_font, NULL);
+  PangoFontDescription *resolved = pango_font_description_copy(w->bauhaus->pango_font_desc);
+
+  if(css_font)
+  {
+    // Apply only style-related fields, NOT size
+    pango_font_description_set_weight(resolved, pango_font_description_get_weight(css_font));
+    pango_font_description_set_style(resolved, pango_font_description_get_style(css_font));
+    pango_font_description_set_variant(resolved, pango_font_description_get_variant(css_font));
+    pango_font_description_set_stretch(resolved, pango_font_description_get_stretch(css_font));
+    pango_font_description_set_family(resolved, pango_font_description_get_family(css_font));
+    pango_font_description_free(css_font);
+  }
+
+  PangoLayout *layout = pango_layout_new(gtk_widget_get_pango_context(GTK_WIDGET(w)));
+  pango_layout_set_font_description(layout, resolved);
 
   // Set the actual text
   pango_layout_set_text(layout, text, -1);
+  
+  // Get advanced font options
+  const cairo_font_options_t *opts = gdk_screen_get_font_options(gtk_widget_get_screen(GTK_WIDGET(w)));
+  cairo_set_font_options(cr, opts);
 
   // Record Pango sizes, convert them to Cairo units and return them
   int pango_width;
@@ -607,6 +626,7 @@ static void show_pango_text(struct dt_bauhaus_widget_t *w, GtkStyleContext *cont
 
   // Cleanup
   g_object_unref(layout);
+  pango_font_description_free(resolved);
 }
 
 static void dt_bauhaus_slider_set_normalized(struct dt_bauhaus_widget_t *w, float pos, gboolean raise, gboolean timeout);
