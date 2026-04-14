@@ -989,7 +989,7 @@ void dt_cairo_sharpen_surface_rgb24(cairo_surface_t *surface)
   const float k_corner = -0.25f;
 
   // Unsharp mask coeffs
-  const float amount = 0.2f;
+  const float amount = 0.15f;
   const float amount_inv = 1.f - amount;
 
   __OMP_PARALLEL_FOR__(collapse(2))
