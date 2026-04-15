@@ -447,8 +447,8 @@ spinbutton button
 #module-header button,
 header button
 {
-  min-height: 1.3em;
-  min-width: 1.3em;
+  min-height: 1.1em;
+  min-width: 1.1em;
 }
 
 .dt_module_btn,
