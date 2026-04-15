@@ -15,7 +15,7 @@ msgstr ""
 "Project-Id-Version: darktable 3.6.0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2025-05-21 17:44+0200\n"
-"PO-Revision-Date: 2025-02-19 09:36+0800\n"
+"PO-Revision-Date: 2026-04-15 14:35+0800\n"
 "Last-Translator: Alynx Zhou <alynx.zhou@gmail.com>\n"
 "Language-Team: Chinese - China <>\n"
 "Language: zh_CN\n"
@@ -23,7 +23,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
-"X-Generator: Poedit 3.5\n"
+"X-Generator: Poedit 3.9\n"
 "X-Poedit-SourceCharset: UTF-8\n"
 
 #: ../build/src/conf_gen.h:182 ../build/src/conf_gen.h:202
@@ -84,48 +84,48 @@ msgstr "每天一次"
 #: ../build/src/conf_gen.h:297 ../build/src/preferences_gen.h:3546
 msgctxt "preferences"
 msgid "12 Mpx"
-msgstr ""
+msgstr "12 Mpx"
 
 #: ../build/src/conf_gen.h:298 ../build/src/preferences_gen.h:3551
 msgctxt "preferences"
 msgid "16 Mpx"
-msgstr ""
+msgstr "16 Mpx"
 
 #: ../build/src/conf_gen.h:299 ../build/src/preferences_gen.h:3556
 msgctxt "preferences"
 msgid "24 Mpx"
-msgstr ""
+msgstr "24 Mpx"
 
 #: ../build/src/conf_gen.h:300 ../build/src/preferences_gen.h:3561
 #: ../build/src/preferences_gen.h:3605
 msgctxt "preferences"
 msgid "36 Mpx"
-msgstr ""
+msgstr "36 Mpx"
 
 #: ../build/src/conf_gen.h:301 ../build/src/preferences_gen.h:3566
 msgctxt "preferences"
 msgid "46 Mpx"
-msgstr ""
+msgstr "46 Mpx"
 
 #: ../build/src/conf_gen.h:302 ../build/src/preferences_gen.h:3571
 msgctxt "preferences"
 msgid "52 Mpx"
-msgstr ""
+msgstr "52 Mpx"
 
 #: ../build/src/conf_gen.h:303 ../build/src/preferences_gen.h:3576
 msgctxt "preferences"
 msgid "72 Mpx"
-msgstr ""
+msgstr "72 Mpx"
 
 #: ../build/src/conf_gen.h:304 ../build/src/preferences_gen.h:3581
 msgctxt "preferences"
 msgid "100 Mpx"
-msgstr ""
+msgstr "100 Mpx"
 
 #: ../build/src/conf_gen.h:305 ../build/src/preferences_gen.h:3586
 msgctxt "preferences"
 msgid "150 Mpx"
-msgstr ""
+msgstr "150 Mpx"
 
 #: ../build/src/conf_gen.h:365 ../build/src/preferences_gen.h:2583
 #: ../build/src/preferences_gen.h:2619 ../build/src/preferences_gen.h:2911
@@ -506,9 +506,8 @@ msgid "this setting has been modified"
 msgstr "此设定已被更改。"
 
 #: ../build/src/preferences_gen.h:2549 ../tools/generate_prefs.xsl:192
-#, fuzzy
 msgid "views"
-msgstr "预览"
+msgstr "查看"
 
 #. TODO: look for active view. Do we know it at init time ?
 #: ../build/src/preferences_gen.h:2552 ../src/libs/lib.c:826
@@ -626,7 +625,6 @@ msgid ""
 msgstr "在预设配置菜单和收藏夹菜单中都隐藏内建的处理模块预设配置。"
 
 #: ../build/src/preferences_gen.h:2924 ../tools/generate_prefs.xsl:224
-#, fuzzy
 msgid "Other views"
 msgstr "其他视图"
 
@@ -682,9 +680,8 @@ msgid ""
 msgstr "在图像的信息模块中显示更具可读性的位置标示。"
 
 #: ../build/src/preferences_gen.h:3084 ../tools/generate_prefs.xsl:253
-#, fuzzy
 msgid "Slideshow"
-msgstr "幻灯片放映"
+msgstr "幻灯片"
 
 #: ../build/src/preferences_gen.h:3110 ../tools/generate_prefs.xsl:270
 msgid "processing"
@@ -748,7 +745,7 @@ msgstr "中央处理器/显卡处理器/内存"
 
 #: ../build/src/preferences_gen.h:3355
 msgid "CPU cores"
-msgstr ""
+msgstr "CPU 核心"
 
 #: ../build/src/preferences_gen.h:3375 ../build/src/preferences_gen.h:3420
 #: ../build/src/preferences_gen.h:3465 ../build/src/preferences_gen.h:3510
@@ -766,9 +763,10 @@ msgid ""
 "Number of CPU cores to use for image processing, including virtual cores "
 "(hyperthreading). -1 or 0 uses all available/detected cores."
 msgstr ""
+"用于图像处理的 CPU 核心数，包括虚拟核心（超线程）。-1 或 0 表示使用所有可用/"
+"检测到的核心。"
 
 #: ../build/src/preferences_gen.h:3400
-#, fuzzy
 msgid "Background workers"
 msgstr "后台作业"
 
@@ -778,42 +776,42 @@ msgid ""
 "example to export images, resynchronize XMP, fetch thumbnails, etc. "
 "Increasing this number will increase the memory consumption."
 msgstr ""
+"可以并行运行的并发后台线程数，例如导出图像、重新同步 XMP、获取缩略图等。增加"
+"此数字将增加内存消耗。"
 
 #: ../build/src/preferences_gen.h:3445
 msgid "Memory headrom for OS/application (MiB)"
-msgstr ""
+msgstr "操作系统/应用程序内存头（MiB）"
 
 #: ../build/src/preferences_gen.h:3468
 msgid ""
 "This is the amount of memory that Ansel will leave to the operating system "
 "and other applications"
-msgstr ""
+msgstr "这是 Ansel 将留给操作系统和其他应用程序的内存量。"
 
 #: ../build/src/preferences_gen.h:3490
-#, fuzzy
 msgid "Memory reserved for lighttable thumbnail cache (MiB)"
-msgstr "正在创建完整的光台缩略图缓存。\n"
+msgstr "为灯箱缩略图缓存保留的内存（MiB）"
 
 #: ../build/src/preferences_gen.h:3513
 msgid ""
 "This is the amount of memory that Ansel will use to keep lighttable "
 "thumbnails quickly accessible when scrolling back"
-msgstr ""
+msgstr "这是 Ansel 用于在向后滚动时快速访问灯箱缩略图的内存量。"
 
 #: ../build/src/preferences_gen.h:3535
 msgid "Maximum RAW resolution to edit"
-msgstr ""
+msgstr "可编辑的最大 RAW 分辨率"
 
 #: ../build/src/preferences_gen.h:3608
 msgid ""
 "This is the maximum resolution for your RAW images. It will be used to "
 "compute the required pixelpipe memory."
-msgstr ""
+msgstr "这是您的 RAW 图像的最大分辨率。它将被用于计算所需的像素管道内存。"
 
 #: ../build/src/preferences_gen.h:3630
-#, fuzzy
 msgid "Pipe recompute timeout (milliseconds)"
-msgstr "以毫秒为单位显示图像时间"
+msgstr "管道重新计算超时时间（毫秒）"
 
 #: ../build/src/preferences_gen.h:3653
 msgid ""
@@ -821,6 +819,8 @@ msgid ""
 "recompute the pipeline too often. Set to 0 to recompute immediately on "
 "module change."
 msgstr ""
+"设置超时时间可防止中间设置步骤（例如滚动时）过于频繁地重新计算管道。设置为 0 "
+"可在模块更改时立即重新计算。"
 
 #: ../build/src/preferences_gen.h:3675
 msgid "enable disk backend for thumbnail cache"
@@ -866,17 +866,18 @@ msgstr "在此系统不可用"
 
 #: ../build/src/preferences_gen.h:3753
 msgid "GPU vRAM headroom (MiB)"
-msgstr ""
+msgstr "GPU 显存余量（MiB）"
 
 #: ../build/src/preferences_gen.h:3776
 msgid ""
 "This is the amount of GPU memory that Ansel will leave to other GPU-"
 "accelerated applications, OpenGL, X server, etc."
 msgstr ""
+"这是 Ansel 将留给其他 GPU 加速应用程序、OpenGL、X 服务器等使用的 GPU 内存量。"
 
 #: ../build/src/preferences_gen.h:3804
 msgid "system library with OpenCL runtime"
-msgstr ""
+msgstr "带有 OpenCL 运行时的系统库"
 
 #: ../build/src/preferences_gen.h:3822
 msgid ""
@@ -884,6 +885,8 @@ msgid ""
 "OpenCL runtime is at an unusual place and cannot be detected, enter the full "
 "pathname here. leave empty for default behavior."
 msgstr ""
+"Ansel 通常会自动检测 OpenCL 运行时库。如果您的 OpenCL 运行时库位于非常规位置"
+"且无法被检测到，请在此处输入完整路径名。留空则使用默认行为。"
 
 #: ../build/src/preferences_gen.h:3839 ../src/common/image.h:181
 #: ../tools/generate_prefs.xsl:309
@@ -1069,15 +1072,14 @@ msgid "database"
 msgstr "数据库"
 
 #: ../build/src/preferences_gen.h:4555
-#, fuzzy
 msgid "database location"
-msgstr "删除位置"
+msgstr "数据库位置"
 
 #: ../build/src/preferences_gen.h:4573
 msgid ""
 "filename relative to ~/.config/ansel or starting with a slash (needs a "
 "restart)."
-msgstr ""
+msgstr "文件名相对于 ~/.config/ansel 或以斜杠开头（需要重启）。"
 
 #: ../build/src/preferences_gen.h:4595
 msgid "check for database maintenance"
@@ -1194,7 +1196,7 @@ msgstr "界面"
 
 #: ../build/src/preferences_gen.h:5043
 msgid "Invert the direction of the mouse vertical scroll"
-msgstr ""
+msgstr "反转鼠标垂直滚动方向"
 
 #: ../build/src/preferences_gen.h:5057
 msgid ""
@@ -1202,10 +1204,12 @@ msgid ""
 "instead of the content, so scrolling over sliders yields the right value. "
 "This does not affect horizontal scrolling."
 msgstr ""
+"请检查您的操作系统/桌面环境是否配置为滚动视图而非内容，以便在滑块上滚动时能够"
+"显示正确的值。这不会影响水平滚动。"
 
 #: ../build/src/preferences_gen.h:5079
 msgid "Invert the direction of the mouse horizontal scroll"
-msgstr ""
+msgstr "反转鼠标水平滚动方向"
 
 #: ../build/src/preferences_gen.h:5093
 msgid ""
@@ -1213,10 +1217,12 @@ msgid ""
 "instead of the content, so scrolling over sliders yields the right value. "
 "This does not affect vertical scrolling."
 msgstr ""
+"请检查您的操作系统/桌面环境是否配置为滚动视图而非内容，以便在滑块上滚动时能够"
+"显示正确的值。这不会影响垂直滚动。"
 
 #: ../build/src/preferences_gen.h:5115
 msgid "Let the OS mask Ansel shortcuts"
-msgstr ""
+msgstr "让操作系统屏蔽 Ansel 快捷键"
 
 #: ../build/src/preferences_gen.h:5129
 msgid ""
@@ -1225,6 +1231,9 @@ msgid ""
 "all key strokes as long as it is active, which may prevent system-wide "
 "shortcuts from working at all on some OS."
 msgstr ""
+"如果您希望操作系统优先处理键盘快捷键，并将未使用的快捷键发送给 Ansel，请选中"
+"此项。否则，只要 Ansel 处于活动状态，它就会捕获所有按键，这可能会导致某些操作"
+"系统上的系统级快捷键完全失效。"
 
 #: ../build/src/preferences_gen.h:5151
 msgid "sort built-in presets first"
@@ -1237,13 +1246,15 @@ msgstr "是否先显示内置预设，然后在预设菜单中显示用户预设
 
 #: ../build/src/preferences_gen.h:5187
 msgid "Disable thumbnail preview in import popup"
-msgstr ""
+msgstr "禁用导入弹出窗口中的缩略图预览"
 
 #: ../build/src/preferences_gen.h:5201
 msgid ""
 "Check this if you are impacted by extra-slow loading when accessing images "
 "on memory card through camera USB link and PTP/MTP drivers."
 msgstr ""
+"如果您在使用相机 USB 连接和 PTP/MTP 驱动程序访问存储卡上的图像时遇到加载速度"
+"异常慢的问题，请检查此项。"
 
 #: ../build/src/preferences_gen.h:5223
 msgid "method to use for getting the display profile"
@@ -2836,7 +2847,7 @@ msgstr "使用自定义中间灰色值"
 #: ../build/src/iop/introspection_filmicrgb.c:339
 #: ../build/src/iop/introspection_filmicrgb.c:500
 msgid "iterations of color inpainting"
-msgstr ""
+msgstr "颜色修复的迭代"
 
 #: ../build/src/iop/introspection_filmicrgb.c:345
 #: ../build/src/iop/introspection_filmicrgb.c:504
@@ -3185,7 +3196,7 @@ msgstr "伽马 Rec709 RGB"
 
 #: ../build/src/iop/introspection_lut3d.c:207 ../src/common/colorspaces.c:1640
 msgid "ITU-R BT.1886 (gamma 2.4 Rec709)"
-msgstr "ITU-R BT.1886 (gamma 2.4 Rec709)"
+msgstr "ITU-R BT.1886（伽玛 2.4 Rec709）"
 
 #: ../build/src/iop/introspection_lut3d.c:211
 msgid "tetrahedral"
@@ -3482,9 +3493,8 @@ msgstr "平滑直径"
 
 #: ../build/src/iop/introspection_toneequal.c:210
 #: ../build/src/iop/introspection_toneequal.c:333
-#, fuzzy
 msgid "edges refinement (feathering)"
-msgstr "边缘清晰/羽化"
+msgstr "边缘细化（羽化）"
 
 #: ../build/src/iop/introspection_toneequal.c:216
 #: ../build/src/iop/introspection_toneequal.c:337
@@ -3582,9 +3592,8 @@ msgstr "自动比例"
 
 #: ../build/src/iop/introspection_vignette.c:139
 #: ../build/src/iop/introspection_vignette.c:232
-#, fuzzy
 msgid "width vs. height ratio"
-msgstr "宽高比"
+msgstr "宽度与高度比"
 
 #: ../build/src/iop/introspection_vignette.c:145
 #: ../build/src/iop/introspection_vignette.c:236 ../src/iop/vignette.c:991
@@ -3649,21 +3658,18 @@ msgstr "Rawspeed 贡献者"
 
 #: ../build/src/tools/darktable_authors.h:26
 #: ../src/tools/darktable_authors.h:26
-#, fuzzy
 msgid "OpenCL contributors"
-msgstr "贡献者"
+msgstr "OpenCL贡献者"
 
 #: ../build/src/tools/darktable_authors.h:31
 #: ../src/tools/darktable_authors.h:31
-#, fuzzy
 msgid "libxcf contributors"
-msgstr "LibRaw 贡献者"
+msgstr "libxcf 贡献者"
 
 #: ../build/src/tools/darktable_authors.h:36
 #: ../src/tools/darktable_authors.h:36
-#, fuzzy
 msgid "whereami contributors"
-msgstr "Rawspeed 贡献者"
+msgstr "whereami 贡献者"
 
 #: ../build/src/tools/darktable_authors.h:41
 #: ../src/tools/darktable_authors.h:41
@@ -3672,9 +3678,8 @@ msgstr "LibRaw 贡献者"
 
 #: ../build/src/tools/darktable_authors.h:46
 #: ../src/tools/darktable_authors.h:46
-#, fuzzy
 msgid "doxygen-awesome-css contributors"
-msgstr "Rawspeed 贡献者"
+msgstr "doxygen-awesome-css 贡献者"
 
 #: ../build/data/photos.ansel.ansel.desktop.in.h:1
 #: ../data/build/ansel.desktop.in.h:1 ../data/photos.ansel.ansel.desktop.in.h:1
@@ -3692,7 +3697,7 @@ msgstr "组织并冲印来自数码相机的图片。"
 #: ../build/data/photos.ansel.ansel.desktop.in.h:4
 #: ../data/build/ansel.desktop.in.h:4 ../data/photos.ansel.ansel.desktop.in.h:4
 msgid "graphics;photography;raw;"
-msgstr "graphics;photography;raw;图片;图像;摄影;"
+msgstr "graphics;photography;raw;"
 
 #: ../data/photos.ansel.ansel.appdata.xml.in.h:2
 msgid ""
@@ -3707,79 +3712,73 @@ msgstr "虚拟光台，用于展示照片集。"
 
 #: ../src/bauhaus/bauhaus.c:387
 msgid "The target widget of the action does not exist anymore"
-msgstr ""
+msgstr "该操作的目标组件已不存在"
 
 #. Keys used by key-pressed event handler when the Bauhaus widget has the focus
 #: ../src/bauhaus/bauhaus.c:1002 ../src/bauhaus/bauhaus.c:1006
 #: ../src/bauhaus/bauhaus.c:1010 ../src/bauhaus/bauhaus.c:1014
 #: ../src/bauhaus/bauhaus.c:1018 ../src/bauhaus/bauhaus.c:1022
 #: ../src/bauhaus/bauhaus.c:1026
-#, fuzzy
 msgid "Darkroom/Controls/Sliders"
-msgstr "颜色控制滑块"
+msgstr "暗房/控制/滑块"
 
 #: ../src/bauhaus/bauhaus.c:1002
 msgid "Increase value (normal step)"
-msgstr ""
+msgstr "增加值（正常步骤）"
 
 #: ../src/bauhaus/bauhaus.c:1006
 msgid "Decrease value (normal step)"
-msgstr ""
+msgstr "降低值（正常步骤）"
 
 #: ../src/bauhaus/bauhaus.c:1010
 msgid "Increase value (fine step)"
-msgstr ""
+msgstr "增加值（精细步骤）"
 
 #: ../src/bauhaus/bauhaus.c:1014
 msgid "Decrease value (fine step)"
-msgstr ""
+msgstr "降低值（微调）"
 
 #: ../src/bauhaus/bauhaus.c:1018
 msgid "Increase value (coarse step)"
-msgstr ""
+msgstr "增加值（粗略步骤）"
 
 #: ../src/bauhaus/bauhaus.c:1022
 msgid "Decrease value (coarse step)"
-msgstr ""
+msgstr "降低值（粗略步骤）"
 
 #: ../src/bauhaus/bauhaus.c:1026 ../src/bauhaus/bauhaus.c:1051
-#, fuzzy
 msgid "Toggle color-picker"
-msgstr "取色工具"
+msgstr "切换颜色选择器"
 
 #: ../src/bauhaus/bauhaus.c:1031 ../src/bauhaus/bauhaus.c:1035
 #: ../src/bauhaus/bauhaus.c:1039 ../src/bauhaus/bauhaus.c:1043
 #: ../src/bauhaus/bauhaus.c:1047 ../src/bauhaus/bauhaus.c:1051
 msgid "Darkroom/Controls/Comboboxes"
-msgstr ""
+msgstr "暗房/控制/组合盒"
 
 #: ../src/bauhaus/bauhaus.c:1031
-#, fuzzy
 msgid "Open editing mode"
-msgstr "选择混合模式。"
+msgstr "打开编辑模式"
 
 #: ../src/bauhaus/bauhaus.c:1035
-#, fuzzy
 msgid "Exit editing mode"
-msgstr "单击以编辑节点。"
+msgstr "退出编辑模式"
 
 #: ../src/bauhaus/bauhaus.c:1039
 msgid "Select previous (in editing mode)"
-msgstr ""
+msgstr "选择上一个（在编辑模式下）"
 
 #: ../src/bauhaus/bauhaus.c:1043
-#, fuzzy
 msgid "Select next (in editing mode)"
-msgstr "选择插值方法。"
+msgstr "选择下一个（在编辑模式下）"
 
 #: ../src/bauhaus/bauhaus.c:1047
 msgid "Validate result (in editing mode)"
-msgstr ""
+msgstr "验证结果（在编辑模式下）"
 
 #: ../src/bauhaus/bauhaus.c:1262 ../src/libs/tools/filter.c:721
-#, fuzzy
 msgid "Focuses the control"
-msgstr "聚焦到下一个模块控制"
+msgstr "集中控制"
 
 #: ../src/chart/main.c:504 ../src/control/jobs/control_jobs.c:1676
 #: ../src/control/jobs/control_jobs.c:1738 ../src/gui/hist_dialog.c:195
@@ -4562,43 +4561,43 @@ msgstr "载入文件“%s”错误。"
 #: ../src/common/darktable.c:1586
 #, c-format
 msgid "[MEMORY CONFIGURATION] Total system RAM: %lu MiB\n"
-msgstr ""
+msgstr "[MEMORY CONFIGURATION] 系统总内存：%lu MiB\n"
 
 #: ../src/common/darktable.c:1589
 #, c-format
 msgid "[MEMORY CONFIGURATION] OS & Apps RAM headroom: %lu MiB\n"
-msgstr ""
+msgstr "[MEMORY CONFIGURATION] 操作系统和应用程序可用内存：%lu MiB\n"
 
 #: ../src/common/darktable.c:1592
 #, c-format
 msgid "[MEMORY CONFIGURATION] Lightable thumbnails cache size: %lu MiB\n"
-msgstr ""
+msgstr "[MEMORY CONFIGURATION] Lightable 缩略图缓存大小：%lu MiB\n"
 
 #: ../src/common/darktable.c:1595
 #, c-format
 msgid "[MEMORY CONFIGURATION] Pixelpipe cache size: %lu MiB\n"
-msgstr ""
+msgstr "[MEMORY CONFIGURATION] 像素管道缓存大小：%lu MiB\n"
 
 #: ../src/common/darktable.c:1598
 #, c-format
 msgid "[MEMORY CONFIGURATION] Pixelpipe cache lines: %i\n"
-msgstr ""
+msgstr "[MEMORY CONFIGURATION] Pixelpipe 缓存行：%i\n"
 
 #: ../src/common/darktable.c:1601
 #, c-format
 msgid "[MEMORY CONFIGURATION] Available RAM for pixel processing: %lu MiB\n"
-msgstr ""
+msgstr "[MEMORY CONFIGURATION] 可用于像素处理的可用内存：%lu MiB\n"
 
 #: ../src/common/darktable.c:1604
 #, c-format
 msgid ""
 "[MEMORY CONFIGURATION] Max pixel buffer size: %lu MiB (%s RGBA float32)\n"
-msgstr ""
+msgstr "[MEMORY CONFIGURATION] 最大像素缓冲区大小：%lu MiB (%s RGBA float32)\n"
 
 #: ../src/common/darktable.c:1607
 #, c-format
 msgid "[MEMORY CONFIGURATION] Worker threads: %i\n"
-msgstr ""
+msgstr "[MEMORY CONFIGURATION] 工作线程：%i\n"
 
 #: ../src/common/database.c:2716
 #, c-format
@@ -4718,8 +4717,8 @@ msgstr "错误"
 msgid ""
 "\n"
 "at least one file could not be removed.\n"
-"you may try to manually delete the files <i>data.db.lock</i> and <i>library."
-"db.lock</i>\n"
+"you may try to manually delete the files <i>data.db.lock</i> and "
+"<i>library.db.lock</i>\n"
 "in folder <a href=\"file:///%s\">%s</a>.\n"
 msgstr ""
 "\n"
@@ -4778,10 +4777,9 @@ msgstr "升级数据库"
 
 #: ../src/common/database.c:3160
 msgid "Ansel - Database is read-only"
-msgstr ""
+msgstr "Ansel - 数据库为只读"
 
 #: ../src/common/database.c:3162
-#, fuzzy
 msgid "Close Ansel"
 msgstr "关闭 Ansel"
 
@@ -4797,6 +4795,14 @@ msgid ""
 "\n"
 "\t<span style='italic'>%s</span>"
 msgstr ""
+"<span weight='bold'>Ansel 库数据库为只读。</span>\n"
+"\n"
+"如果您没有文件系统写入权限，或者您恢复了受写保护的备份快照，就会出现这种情"
+"况。\n"
+"\n"
+"请更改以下文件系统访问权限：\n"
+"\n"
+"\t<span style='italic'>%s</span>"
 
 #: ../src/common/database.c:3271 ../src/common/database.c:3451
 #, c-format
@@ -4991,7 +4997,7 @@ msgstr "已为 %d 张图像应用时间信息。"
 #: ../src/common/image.c:1259
 #, c-format
 msgid "Image %s is already in library and will not be re-imported.\n"
-msgstr ""
+msgstr "图片 %s 已存在于库中，不会重新导入。\n"
 
 #: ../src/common/image.c:1747
 #, c-format
@@ -5047,8 +5053,8 @@ msgstr "<b>警告</b>：相机缺少样片！"
 
 #: ../src/common/image.c:2535
 msgid ""
-"You must provide samples in <a href='https://raw.pixls.us/'>https://raw."
-"pixls.us/</a>"
+"You must provide samples in <a href='https://raw.pixls.us/'>https://"
+"raw.pixls.us/</a>"
 msgstr ""
 "您需要在 <a href='https://raw.pixls.us/'>https://raw.pixls.us/</a> 提供样片。"
 
@@ -5137,7 +5143,7 @@ msgstr "在导出时无法找到并应用样式“%s”。"
 msgid ""
 "failed to allocate memory for %s, please verify your memory settings or "
 "close some applications on your system."
-msgstr ""
+msgstr "无法为 %s 分配内存，请检查您的内存设置或关闭系统上的一些应用程序。"
 
 #: ../src/common/imageio.c:1104
 msgctxt "noun"
@@ -5153,12 +5159,12 @@ msgstr "导出"
 #: ../src/common/imageio.c:1348
 #, c-format
 msgid "The file `%s` is corrupted."
-msgstr ""
+msgstr "文件`%s`已损坏。"
 
 #: ../src/common/imageio.c:1368
 #, c-format
 msgid "The file `%s` is supported by none of our decoders."
-msgstr ""
+msgstr "我们的解码器均不支持文件“%s”。"
 
 #: ../src/common/import.c:444
 msgid "All image files"
@@ -5442,16 +5448,16 @@ msgstr "噪点描述文件“%s”无效。"
 #: ../src/common/opencl.c:791
 #, c-format
 msgid "Benchmarking CPU @%i×%ipx..."
-msgstr ""
+msgstr "CPU 基准测试 @%i×%ipx..."
 
 #: ../src/common/opencl.c:820
 #, c-format
 msgid "Benchmarking %s %s @%i×%ipx..."
-msgstr ""
+msgstr "对 %s %s @%i×%ipx 进行基准测试..."
 
 #: ../src/common/opencl.c:946
 msgid "Tuning OpenCL parameters..."
-msgstr ""
+msgstr "调整 OpenCL 参数……"
 
 #: ../src/common/opencl.c:958
 msgid ""
@@ -5461,6 +5467,8 @@ msgid ""
 "This happens when a new GPU is connected and when an OpenCL driver is "
 "updated."
 msgstr ""
+"Ansel 正在寻找配置 GPU 的最佳参数。这需要一些时间。\n"
+"当连接新 GPU 或更新 OpenCL 驱动程序时，都会发生这种情况。"
 
 #: ../src/common/pdf.h:88 ../src/iop/lens.cc:1900
 #: ../src/libs/print_settings.c:83
@@ -6164,11 +6172,13 @@ msgid ""
 "Impossible to create directory %s.\n"
 "The target may be full or read-only.\n"
 msgstr ""
+"无法创建目录 %s。\n"
+"目标目录可能已满或为只读目录。\n"
 
 #: ../src/control/jobs/import_jobs.c:324
 #, c-format
 msgid "Error importing file in collection: %s"
-msgstr ""
+msgstr "导入集合中的文件时出错：%s"
 
 #: ../src/control/jobs/import_jobs.c:343
 #, c-format
@@ -7031,6 +7041,8 @@ msgid ""
 "Image #%i history is storing %d mask states. nConsider compressing history "
 "and removing unused masks to keep reads/writes manageable."
 msgstr ""
+"图像 #%i 的历史记录存储了 %d 个掩码状态。请考虑压缩历史记录并删除未使用的掩"
+"码，以保持读写操作的可控性。"
 
 #. Duplicate and alias for auto-apply in develop.c
 #. For scene-referred workflow, since filmic doesn't brighten as base curve does,
@@ -7043,14 +7055,14 @@ msgid "scene-referred default"
 msgstr "场景引用默认值"
 
 #: ../src/develop/dev_history.c:1345
-#, fuzzy, c-format
+#, c-format
 msgid "from preset %s"
-msgstr "预置"
+msgstr "从预设值 %s"
 
 #: ../src/develop/dev_history.c:1351
-#, fuzzy, c-format
+#, c-format
 msgid "module `%s' %s version mismatch: %d != %d"
-msgstr "模块“%s”版本不匹配： %d != %d。"
+msgstr "模块 `%s' %s 的版本不匹配：%d != %d"
 
 #: ../src/develop/imageop.c:880
 msgid "new instance"
@@ -7093,17 +7105,15 @@ msgstr "%s 已关。"
 #: ../src/develop/imageop.c:1009 ../src/develop/imageop.c:1022
 #: ../src/develop/imageop.c:1806
 msgid "Darkroom/Modules/Instances"
-msgstr ""
+msgstr "暗室/模块/实例"
 
 #: ../src/develop/imageop.c:1088 ../src/develop/imageop.c:1091
-#, fuzzy
 msgid "Darkroom/Modules"
-msgstr "暗房/操作"
+msgstr "暗室/模块"
 
 #: ../src/develop/imageop.c:1088 ../src/libs/lib.c:859
-#, fuzzy
 msgid "Focuses the module"
-msgstr "聚焦到下一个模块"
+msgstr "模块重点"
 
 #: ../src/develop/imageop.c:2160
 msgid "unknown mask"
@@ -7116,7 +7126,7 @@ msgstr "绘制 + 参数蒙版"
 #: ../src/develop/imageop.c:2173
 #, c-format
 msgid "this module has a '%s'"
-msgstr ""
+msgstr "此模块包含一个“%s”"
 
 #: ../src/develop/imageop.c:2178
 #, c-format
@@ -7395,6 +7405,8 @@ msgid ""
 "- Check if the module providing the masks for the module %s has not been "
 "deleted.\n"
 msgstr ""
+"\n"
+"- 检查为模块 %s 提供掩码的模块是否已被删除。\n"
 
 #. The loop searching linked modules to the raster masks
 #. has stopped when it finds the source module but before it has
@@ -7407,18 +7419,20 @@ msgid ""
 "- Check if the module %s (%s) providing the masks has not been moved above "
 "%s.\n"
 msgstr ""
+"\n"
+"- 检查提供掩码的模块 %s (%s) 是否尚未被移至 %s 之上。\n"
 
 #: ../src/develop/pixelpipe_hb.c:2673
-#, fuzzy, c-format
+#, c-format
 msgid ""
 "The %s module is trying to reuse a mask from a module but it can't be "
 "found.\n"
 "Masking in %s will be disabled until a mask is available.\n"
 "%s"
 msgstr ""
-"模块“%s”正在尝试复用来自已禁用模块 “%s”的蒙版。\n"
-"已禁用的模块无法为其它模块提供蒙版。\n"
-"模块“%s”的蒙版将被禁用，直到模块“%s”被启用。"
+"%s 模块尝试重用另一个模块中的掩码，但找不到该掩码。\n"
+"在找到可用掩码之前，%s 中的掩码功能将被禁用。\n"
+"%s"
 
 #. there might be stale masks from disabled modules left over. don't use those!
 #: ../src/develop/pixelpipe_hb.c:2688
@@ -7444,7 +7458,7 @@ msgstr "双击以重置。"
 #: ../src/dtgtk/preview_window.c:81
 #, c-format
 msgid "Ansel - Preview : %s"
-msgstr ""
+msgstr "Ansel- 预览：%s"
 
 #: ../src/dtgtk/thumbnail.c:79 ../src/dtgtk/thumbnail.c:109
 msgid "current"
@@ -7469,42 +7483,37 @@ msgstr "分组的图像。"
 
 #. * image info
 #: ../src/dtgtk/thumbnail.c:207
-#, fuzzy
 msgid "Image info"
-msgstr "图片类型提示"
+msgstr "图像信息"
 
 #: ../src/dtgtk/thumbnail.c:211
-#, fuzzy
 msgid "Folder : "
-msgstr "文件夹"
+msgstr "文件夹："
 
 #: ../src/dtgtk/thumbnail.c:212
 msgid "Date : "
-msgstr ""
+msgstr "日期："
 
 #: ../src/dtgtk/thumbnail.c:213
-#, fuzzy
 msgid "Camera : "
 msgstr "相机："
 
 #: ../src/dtgtk/thumbnail.c:214
-#, fuzzy
 msgid "Lens : "
 msgstr "镜头："
 
 #. * color labels
 #: ../src/dtgtk/thumbnail.c:220
-#, fuzzy
 msgid "Assign color labels"
-msgstr "色彩标识"
+msgstr "分配颜色标签"
 
 #: ../src/dtgtk/thumbnail.c:239
 msgid "Open in preview window…"
-msgstr ""
+msgstr "在预览窗口中打开…"
 
 #: ../src/dtgtk/thumbnail.c:1052
 msgid "This picture is locally copied on your disk cache"
-msgstr ""
+msgstr "此图片已复制到您的磁盘缓存中。"
 
 #: ../src/dtgtk/thumbtable.c:1097
 msgid ""
@@ -7515,7 +7524,7 @@ msgstr "集合中没有符合当前过滤器的图像。调整过滤器或选择
 #: ../src/dtgtk/thumbtable.c:1271
 #, c-format
 msgid "'%s': Please use 'File > Import' to import a folder."
-msgstr ""
+msgstr "'%s'：请使用“文件 > 导入”导入文件夹。"
 
 #. Keys used by key-pressed event handler when the grid has the focus
 #: ../src/dtgtk/thumbtable.c:1737 ../src/dtgtk/thumbtable.c:1741
@@ -7525,68 +7534,60 @@ msgstr ""
 #: ../src/dtgtk/thumbtable.c:1769 ../src/dtgtk/thumbtable.c:1773
 #: ../src/dtgtk/thumbtable.c:1777 ../src/dtgtk/thumbtable.c:1781
 #: ../src/dtgtk/thumbtable.c:1785
-#, fuzzy
 msgid "Lighttable/Thumbtable"
-msgstr "光台"
+msgstr "可视桌/拇指桌"
 
 #: ../src/dtgtk/thumbtable.c:1737
-#, fuzzy
 msgid "Move up"
 msgstr "向上移动"
 
 #: ../src/dtgtk/thumbtable.c:1741
-#, fuzzy
 msgid "Move down"
 msgstr "向下移动"
 
 #: ../src/dtgtk/thumbtable.c:1745
-#, fuzzy
 msgid "Move left"
-msgstr "从左边缘裁减"
+msgstr "向左移动"
 
 #: ../src/dtgtk/thumbtable.c:1749
-#, fuzzy
 msgid "Move right"
-msgstr "从右边缘裁减"
+msgstr "向右移动"
 
 #: ../src/dtgtk/thumbtable.c:1753
-#, fuzzy
 msgid "Go to previous page"
-msgstr "切换到上一张图片"
+msgstr "转到上一页"
 
 #: ../src/dtgtk/thumbtable.c:1757
-#, fuzzy
 msgid "Go to next page"
-msgstr "跳到下一个文件"
+msgstr "转到下一页"
 
 #: ../src/dtgtk/thumbtable.c:1761
 msgid "Go to the start"
-msgstr ""
+msgstr "转到开始"
 
 #: ../src/dtgtk/thumbtable.c:1765
 msgid "Go to the end"
-msgstr ""
+msgstr "转到结束"
 
 #: ../src/dtgtk/thumbtable.c:1769
-#, fuzzy
 msgid "Select the current thumbnail"
-msgstr "选择色相的风格。"
+msgstr "选择当前缩略图"
 
 #: ../src/dtgtk/thumbtable.c:1773
 msgid "Toogle the current thumbnail from selection"
-msgstr ""
+msgstr "切换当前缩略图的显示/隐藏"
 
 #: ../src/dtgtk/thumbtable.c:1777
 msgid "Expand the current selection up to the hovered thumbnail"
-msgstr ""
+msgstr "将当前选择范围展开到鼠标悬停的缩略图处"
 
 #: ../src/dtgtk/thumbtable.c:1781
 msgid "Open the current thumbnail in darkroom"
-msgstr ""
+msgstr "在暗室中打开当前缩略图"
 
 #: ../src/dtgtk/thumbtable.c:1785
 msgid "Enable thumbnail transient alternative view"
-msgstr ""
+msgstr "启用缩略图临时替代视图"
 
 #: ../src/dtgtk/thumbtable.c:1870
 msgid ""
@@ -7594,6 +7595,9 @@ msgid ""
 "Selecting all images will only target visible members of image groups.\n"
 "Uncollapse groups to select all their members"
 msgstr ""
+"图像组已折叠显示。\n"
+"选择所有图像只会选中图像组中可见的成员。\n"
+"展开图像组即可选择其所有成员。"
 
 #: ../src/dtgtk/thumbtable.c:1894
 msgid ""
@@ -7602,6 +7606,9 @@ msgid ""
 "groups.\n"
 "Uncollapse groups to select all their members"
 msgstr ""
+"图像组已折叠显示。\n"
+"选择一系列图像只会选中图像组中可见的成员。\n"
+"展开图像组即可选中其所有成员。"
 
 #. Column 1 - "make" of the camera.
 #. * Column 2 - "model" (use the "make" and "model" as provided by DCRaw).
@@ -7780,109 +7787,109 @@ msgstr "错误：请确保 min_mip <= max_mip。\n"
 #: ../src/generate-cache/main.c:242
 #, c-format
 msgid "creating complete lighttable thumbnail cache\n"
-msgstr "正在创建完整的光台缩略图缓存。\n"
+msgstr "创建完整的灯箱缩略图缓存\n"
 
 #: ../src/gui/accelerators.c:412
 msgid "Contextual interaction on focus"
-msgstr ""
+msgstr "聚焦情境互动"
 
 #: ../src/gui/accelerators.c:446
-#, fuzzy
 msgid "Focuses the instance"
-msgstr "焦距"
+msgstr "聚焦实例"
 
 #: ../src/gui/accelerators.c:495
-#, fuzzy
 msgid "Trigger the action"
-msgstr "方向"
+msgstr "触发该操作"
 
 #: ../src/gui/accelerators.c:974
 msgid "The shortcut for"
-msgstr ""
+msgstr "快捷方式"
 
 #: ../src/gui/accelerators.c:975
 msgid "is already using the key combination"
-msgstr ""
+msgstr "已经在使用该组合键"
 
 #: ../src/gui/accelerators.c:976
-#, fuzzy
 msgid "Delete it first."
-msgstr "删除历史记录"
+msgstr "先删除它。"
 
 #: ../src/gui/accelerators.c:1266
 msgid "<Primary> - Decoded as <Control> on Windows/Linux or <Meta> on Mac OS"
 msgstr ""
+"<Primary> - 在 Windows/Linux 上解码为 <Control>，在 Mac OS 上解码为 <Meta>"
 
 #: ../src/gui/accelerators.c:1267
 msgid "<Control>"
-msgstr ""
+msgstr "<Control>"
 
 #: ../src/gui/accelerators.c:1268
 msgid "<Shift>"
-msgstr ""
+msgstr "<Shift>"
 
 #: ../src/gui/accelerators.c:1269
 msgid "<Alt>"
-msgstr ""
+msgstr "<Alt>"
 
 #: ../src/gui/accelerators.c:1270
 msgid "<Super> - The Windows key on PC"
-msgstr ""
+msgstr "<Super> - 电脑上的 Windows 键"
 
 #: ../src/gui/accelerators.c:1271
 msgid "<Hyper>"
-msgstr ""
+msgstr "<Hyper>"
 
 #: ../src/gui/accelerators.c:1272
 msgid "<Meta> - Decoded as <Command> on Mac OS"
-msgstr ""
+msgstr "<Meta> - 在 Mac OS 上解码为 <Command>"
 
 #: ../src/gui/accelerators.c:1275
 msgid ""
 "Look for keys and modifiers codes, as `<Modifier>Key`.\n"
 "Type `<` to start the auto-completion"
 msgstr ""
+"查找按键和修饰键代码，格式为 `<修饰键>按键`。\n"
+"输入 `<` 即可启动自动补全功能。"
 
 #: ../src/gui/accelerators.c:1278
 msgid ""
 "Case-insensitive search for keywords of full pathes.\n"
 "Ex: `darkroom/controls/sliders`"
 msgstr ""
+"对包含完整路径的关键词进行不区分大小写的搜索。\n"
+"例如：`darkroom/controls/sliders`"
 
 #: ../src/gui/accelerators.c:1283
 msgid "Ansel - Keyboard shortcuts"
-msgstr ""
+msgstr "Ansel - 键盘快捷键"
 
 #. Add tree view columns
 #: ../src/gui/accelerators.c:1329
 msgid "View / Scope / Feature / Control"
-msgstr ""
+msgstr "视图 / 范围 / 功能 / 控制"
 
 #: ../src/gui/accelerators.c:1333
 msgid "Keys"
-msgstr ""
+msgstr "键"
 
 #: ../src/gui/accelerators.c:1343
 msgid "Clear"
-msgstr ""
+msgstr "清除"
 
 #: ../src/gui/accelerators.c:1348
-#, fuzzy
 msgid "Description"
-msgstr "描述信息"
+msgstr "描述"
 
 #: ../src/gui/accelerators.c:1356
-#, fuzzy
 msgid "Search by feature : "
-msgstr "搜索一张图片"
+msgstr "按功能搜索："
 
 #: ../src/gui/accelerators.c:1358
 msgid "Search by keys : "
-msgstr ""
+msgstr "按关键词搜索："
 
 #: ../src/gui/accelerators.c:1528
 msgid "Ansel - Search accelerators"
-msgstr ""
+msgstr "Ansel - 搜索加速器"
 
 #: ../src/gui/gtk.c:322
 msgid "closing Ansel..."
@@ -7901,14 +7908,12 @@ msgid "Sans %s"
 msgstr "Sans %s"
 
 #: ../src/gui/gtkentry.c:177
-#, fuzzy
 msgid "$(FOLDER.NAME) - name of the folder containing the input image"
-msgstr "$(FILE.NAME) - 输入图像的基本文件名。"
+msgstr "$(FOLDER.NAME) - 包含输入图像的文件夹名称"
 
 #: ../src/gui/gtkentry.c:178
-#, fuzzy
 msgid "$(FILE.FOLDER) - directory structure containing the input image"
-msgstr "$(FILE.YEAR) - 输入图像的修改时间中的年份。"
+msgstr "$(FILE.FOLDER) - 包含输入图像的目录结构"
 
 #: ../src/gui/gtkentry.c:179
 msgid "$(FILE.NAME) - basename of the input image"
@@ -8213,14 +8218,12 @@ msgid "$(TAGS) - tags as set in metadata settings"
 msgstr "$(TAGS) - 元数据设置中的标签。"
 
 #: ../src/gui/gtkentry.c:253
-#, fuzzy
 msgid "$(ANSEL.NAME) - Ansel name"
-msgstr "$(USERNAME) - 登录用户名。"
+msgstr "$(ANSEL.NAME) - Ansel 名称"
 
 #: ../src/gui/gtkentry.c:254
-#, fuzzy
 msgid "$(ANSEL.VERSION) - current Ansel version"
-msgstr "$(VERSION) - 副本版本号。"
+msgstr "$(ANSEL.VERSION) - 当前 Ansel 版本"
 
 #: ../src/gui/guides.c:32
 msgid "grid"
@@ -8351,7 +8354,7 @@ msgstr "全不选(_N)"
 
 #: ../src/gui/hist_dialog.c:198 ../src/gui/presets.c:446
 msgid "_ok"
-msgstr "好的(_O)"
+msgstr "确定(_O)"
 
 #: ../src/gui/hist_dialog.c:228 ../src/libs/tools/filter.c:563
 msgid "Include"
@@ -8587,7 +8590,7 @@ msgstr "确定要删除预设配置“%s”？"
 
 #: ../src/gui/presets.c:180 ../src/gui/presets.c:409 ../src/libs/lib.c:250
 msgid "delete preset?"
-msgstr "删除预置？"
+msgstr "删除预设吗？"
 
 #. add new preset
 #. then show edit dialog
@@ -8597,7 +8600,7 @@ msgstr "删除预置？"
 #: ../src/gui/presets.c:206 ../src/gui/presets.c:830 ../src/gui/presets.c:833
 #: ../src/libs/lib.c:195 ../src/libs/lib.c:212 ../src/libs/lib.c:221
 msgid "new preset"
-msgstr "新预设"
+msgstr "新建预设"
 
 #: ../src/gui/presets.c:211
 msgid "please give preset a name"
@@ -8616,7 +8619,7 @@ msgstr "预设“%s”已存在。您想覆盖它吗？"
 
 #: ../src/gui/presets.c:250
 msgid "overwrite preset?"
-msgstr "覆盖预设？"
+msgstr "覆盖预设吗？"
 
 #: ../src/gui/presets.c:367 ../src/imageio/storage/disk.c:122
 #: ../src/imageio/storage/gallery.c:109
@@ -8635,7 +8638,7 @@ msgstr "编辑模块“%1$s”中的“%2$s”"
 
 #: ../src/gui/presets.c:445
 msgid "_export..."
-msgstr "导出…(_E)"
+msgstr "导出(_E)…"
 
 #: ../src/gui/presets.c:464
 msgid "name of the preset"
@@ -8886,30 +8889,28 @@ msgstr "总是显示"
 
 #. Submenu embedded JPEG
 #: ../src/gui/actions/display.c:477
-#, fuzzy
 msgid "Show embedded JPEG"
-msgstr "仅限已嵌入的数据"
+msgstr "显示嵌入式 JPEG"
 
 #: ../src/gui/actions/display.c:479
 msgid "Never, always process the raw"
-msgstr ""
+msgstr "从不，始终处理 RAW"
 
 #: ../src/gui/actions/display.c:481
 msgid "For unedited pictures"
-msgstr ""
+msgstr "未经编辑的图片"
 
 #: ../src/gui/actions/display.c:483
 msgid "Always, never process the raw"
-msgstr ""
+msgstr "始终，从不处理 RWA"
 
 #: ../src/gui/actions/display.c:486
 msgid "Collapse grouped images"
 msgstr "折叠分组的图像"
 
 #: ../src/gui/actions/display.c:488
-#, fuzzy
 msgid "Show group borders"
-msgstr "分组首张图像"
+msgstr "显示组边界"
 
 #: ../src/gui/actions/display.c:493
 msgid "Full screen"
@@ -8929,9 +8930,8 @@ msgstr "切换所有面板的可见性"
 #: ../src/libs/modulegroups.c:465 ../src/libs/modulegroups.c:467
 #: ../src/libs/tools/lighttable.c:275 ../src/libs/tools/lighttable.c:277
 #: ../src/views/darkroom.c:1226 ../src/views/darkroom.c:1228
-#, fuzzy
 msgid "Triggers the action"
-msgstr "方向"
+msgstr "触发该动作"
 
 #: ../src/gui/actions/edit.c:156 ../src/gui/actions/edit.c:179
 msgid "Copy is allowed only with exactly one image selected"
@@ -9007,13 +9007,12 @@ msgid "Delete history"
 msgstr "删除历史记录"
 
 #: ../src/gui/actions/edit.c:415
-#, fuzzy
 msgid "Preferences..."
 msgstr "首选项…"
 
 #: ../src/gui/actions/edit.c:416
 msgid "Keyboard shortcuts..."
-msgstr ""
+msgstr "键盘快捷键…"
 
 #: ../src/gui/actions/file.c:32
 msgid " and "
@@ -9152,9 +9151,8 @@ msgid "Open contextual help"
 msgstr "打开交互式帮助"
 
 #: ../src/gui/actions/help.c:223
-#, fuzzy
 msgid "Search actions..."
-msgstr "搜索一个集合…"
+msgstr "搜索操作..."
 
 #: ../src/gui/actions/help.c:226
 msgid "Donate"
@@ -9203,9 +9201,8 @@ msgid "<span foreground='#2222BB'>⬤</span> Blue"
 msgstr "<span foreground='#2222BB'>⬤</span> 蓝色"
 
 #: ../src/gui/actions/image.c:215
-#, fuzzy
 msgid "<span foreground='#BB22BB'>⬤</span> Purple"
-msgstr "<span foreground='#2222BB'>⬤</span> 蓝色"
+msgstr "<span foreground='#2222BB'>⬤</span> 紫色"
 
 #: ../src/gui/actions/image.c:220
 msgid "<span foreground='#BBBBBB'>⬤</span> Clear labels"
@@ -9214,7 +9211,7 @@ msgstr "<span foreground='#BBBBBB'>⬤</span> 清除标签"
 #. Ratings
 #: ../src/gui/actions/image.c:224
 msgid "Ratings"
-msgstr "评分"
+msgstr "评级"
 
 #: ../src/gui/actions/image.c:227
 msgid "Reject"
@@ -9242,7 +9239,7 @@ msgstr "★★★★★"
 
 #: ../src/gui/actions/image.c:247
 msgid "Clear rating"
-msgstr "清除评分"
+msgstr "清除评级"
 
 #. Reload EXIF
 #: ../src/gui/actions/image.c:253
@@ -9264,16 +9261,15 @@ msgstr "正在为当前集合预加载缓存"
 
 #: ../src/gui/actions/run.c:101
 msgid "Clear darkroom pipeline caches"
-msgstr ""
+msgstr "清除暗室管道缓存"
 
 #: ../src/gui/actions/run.c:102
-#, fuzzy
 msgid "Preload selected thumbnails in cache"
-msgstr "为缩略图缓存启用磁盘后端"
+msgstr "预加载缓存中选定的缩略图"
 
 #: ../src/gui/actions/run.c:103
 msgid "Purge selected thumbnails from cache"
-msgstr ""
+msgstr "从缓存中清除选定的缩略图"
 
 #: ../src/gui/actions/run.c:105
 msgid "Defragment the library"
@@ -9293,7 +9289,7 @@ msgstr "将选中的修改保存到 XMP 文件"
 
 #: ../src/gui/actions/run.c:111
 msgid "Resynchronize database with distant XMP for local copies"
-msgstr ""
+msgstr "将数据库与远程 XMP 重新同步，以用于本地副本"
 
 #: ../src/gui/actions/select.c:55
 msgid "Clear selection"
@@ -9304,9 +9300,8 @@ msgid "Invert selection"
 msgstr "反选"
 
 #: ../src/gui/actions/select.c:61
-#, fuzzy
 msgid "Scroll back to selection"
-msgstr "将示波器分析区域限制到选择范围"
+msgstr "返回所选内容"
 
 #: ../src/gui/window_manager.c:631
 msgid "_File"
@@ -9345,9 +9340,8 @@ msgid "_Help"
 msgstr "帮助(_H)"
 
 #: ../src/gui/window_manager.c:668
-#, fuzzy
 msgid "Go back to lighttable"
-msgstr "光台"
+msgstr "返回灯箱"
 
 #: ../src/imageio/format/avif.c:91 ../src/imageio/format/pdf.c:79
 #: ../src/imageio/format/png.c:535 ../src/imageio/format/tiff.c:802
@@ -11224,7 +11218,7 @@ msgstr "目的地"
 #: ../src/iop/channelmixer.c:629
 msgctxt "channelmixer"
 msgid "gray"
-msgstr "灰"
+msgstr "灰色"
 
 #: ../src/iop/channelmixer.c:635
 msgid "amount of red channel in the output channel"
@@ -13812,7 +13806,7 @@ msgstr "锐化"
 
 #: ../src/iop/equalizer.c:323
 msgid "null"
-msgstr "null"
+msgstr "无效"
 
 #: ../src/iop/equalizer.c:343
 msgid "denoise (strong)"
@@ -15632,7 +15626,7 @@ msgstr "保持高亮的数量。"
 
 #: ../src/iop/negadoctor.c:145
 msgid "ne_gadoctor"
-msgstr "负片医生(_G)"
+msgstr "底片矫正(_G)"
 
 #: ../src/iop/negadoctor.c:150
 msgid "film|invert|negative|scan"
@@ -17534,7 +17528,7 @@ msgstr "HSV"
 
 #: ../src/libs/colorpicker.c:51
 msgid "Hex"
-msgstr "Hex"
+msgstr "十六进制"
 
 #: ../src/libs/colorpicker.c:53
 msgid "mean"
@@ -17606,7 +17600,7 @@ msgstr "导出"
 
 #: ../src/libs/export.c:307
 msgid "export to disk"
-msgstr "导出至磁盘"
+msgstr "导出到磁盘"
 
 #: ../src/libs/export.c:466
 #, c-format
@@ -17973,9 +17967,8 @@ msgid "delete metadata tag"
 msgstr "删除元数据标签。"
 
 #: ../src/libs/geotagging.c:141
-#, fuzzy
 msgid "Datetime and GPS"
-msgstr "日期时间 & GPS"
+msgstr "日期时间和 GPS"
 
 #: ../src/libs/geotagging.c:369
 msgid "apply offset and geo-location"
@@ -18654,9 +18647,8 @@ msgid "categories"
 msgstr "类别"
 
 #: ../src/libs/metadata_view.c:176
-#, fuzzy
 msgid "EXIF and IPTC"
-msgstr "EXIF & IPTC"
+msgstr "EXIF 和 IPTC"
 
 #: ../src/libs/metadata_view.c:337
 msgid "unused/deprecated"
@@ -18884,7 +18876,7 @@ msgstr "1600%"
 #. //////////////////////// PRINT SETTINGS
 #: ../src/libs/print_settings.c:46 ../src/libs/print_settings.c:2567
 msgid "print settings"
-msgstr "打印设定"
+msgstr "打印设置"
 
 #. FIXME: ellipsize title/printer as the export completed message is ellipsized
 #: ../src/libs/print_settings.c:335 ../src/libs/print_settings.c:710
@@ -19013,7 +19005,7 @@ msgstr "左边距"
 
 #: ../src/libs/print_settings.c:2391
 msgid "lock"
-msgstr "锁"
+msgstr "锁定"
 
 #: ../src/libs/print_settings.c:2392
 msgid "change all margins uniformly"
@@ -19107,7 +19099,7 @@ msgstr "图像区域高度（以当前单位）。"
 
 #: ../src/libs/print_settings.c:2577 ../src/libs/print_settings.c:2622
 msgid "image settings"
-msgstr "图像设定"
+msgstr "图像设置"
 
 #: ../src/libs/print_settings.c:2611
 #, c-format
@@ -19601,29 +19593,24 @@ msgid "tagging settings"
 msgstr "标签设定"
 
 #: ../src/libs/tools/filter.c:93
-#, fuzzy
 msgid "captured"
-msgstr "光圈"
+msgstr "已捕获"
 
 #: ../src/libs/tools/filter.c:94
-#, fuzzy
 msgid "imported"
-msgstr "导入…"
+msgstr "已导入"
 
 #: ../src/libs/tools/filter.c:95
-#, fuzzy
 msgid "modified"
-msgstr "用户调整"
+msgstr "已修改"
 
 #: ../src/libs/tools/filter.c:96
-#, fuzzy
 msgid "exported"
-msgstr "导出"
+msgstr "已导出"
 
 #: ../src/libs/tools/filter.c:97
-#, fuzzy
 msgid "printed"
-msgstr "打印机"
+msgstr "已打印"
 
 #: ../src/libs/tools/filter.c:99
 msgid "id"
@@ -19643,6 +19630,9 @@ msgid ""
 "which properties have been changed\n"
 "and don't match the current filters anymore."
 msgstr ""
+"刷新当前图片集以移除以下图片：\n"
+"这些图片的属性已更改，\n"
+"不再符合当前筛选条件。"
 
 #: ../src/libs/tools/filter.c:552 ../src/libs/tools/filter.c:648
 #: ../src/libs/tools/filter.c:720 ../src/libs/tools/filter.c:737
@@ -19652,75 +19642,73 @@ msgid "Lighttable/Actions"
 msgstr "光台/操作"
 
 #: ../src/libs/tools/filter.c:552
-#, fuzzy
 msgid "Reload current collection"
-msgstr "最近用过的集合"
+msgstr "重新加载当前集合"
 
 #: ../src/libs/tools/filter.c:592
 msgid "Toggle filtering in/out unrated images (0 star)"
-msgstr ""
+msgstr "切换筛选未评级图片（0 星）的显示/隐藏"
 
 #: ../src/libs/tools/filter.c:593
 msgid "Toggle filtering in/out rejected images"
-msgstr ""
+msgstr "切换筛选已拒绝图像的选项"
 
 #: ../src/libs/tools/filter.c:594
 msgid "Toggle filtering in/out images rated 1 star"
-msgstr ""
+msgstr "切换筛选功能，显示/隐藏评分为 1 星的图片"
 
 #: ../src/libs/tools/filter.c:595
 msgid "Toggle filtering in/out images rated 2 stars"
-msgstr ""
+msgstr "切换筛选功能，显示/隐藏评分为 2 星的图片"
 
 #: ../src/libs/tools/filter.c:596
 msgid "Toggle filtering in/out images rated 3 stars"
-msgstr ""
+msgstr "切换筛选功能，显示/隐藏评分为 3 星的图片"
 
 #: ../src/libs/tools/filter.c:597
 msgid "Toggle filtering in/out images rated 4 stars"
-msgstr ""
+msgstr "切换筛选功能，显示/隐藏评分为 4 星的图片"
 
 #: ../src/libs/tools/filter.c:598
 msgid "Toggle filtering in/out images rated 5 stars"
-msgstr ""
+msgstr "切换筛选功能，显示/隐藏五星好评图片"
 
 #: ../src/libs/tools/filter.c:616
 msgid "Toggle filtering in/out images without color label"
-msgstr ""
+msgstr "切换无颜色标签图像的筛选条件"
 
 #: ../src/libs/tools/filter.c:617
 msgid "Toggle filtering in/out images with red label"
-msgstr ""
+msgstr "切换图像的过滤显示/隐藏（带红色标签）"
 
 #: ../src/libs/tools/filter.c:618
 msgid "Toggle filtering in/out images with yellow label"
-msgstr ""
+msgstr "切换图像的过滤显示/隐藏（黄色标签）"
 
 #: ../src/libs/tools/filter.c:619
 msgid "Toggle filtering in/out images with green label"
-msgstr ""
+msgstr "切换图像的筛选（显示/隐藏）"
 
 #: ../src/libs/tools/filter.c:620
 msgid "Toggle filtering in/out images with blue label"
-msgstr ""
+msgstr "切换图像的筛选（蓝色标签）"
 
 #: ../src/libs/tools/filter.c:621
 msgid "Toggle filtering in/out images with purple label"
-msgstr ""
+msgstr "切换紫色标签的图像筛选功能"
 
 #: ../src/libs/tools/filter.c:631
 msgid "Toggle filtering in/out unedited images"
-msgstr ""
+msgstr "切换筛选未编辑图像的显示/隐藏"
 
 #: ../src/libs/tools/filter.c:636
 msgid "Toggle filtering in/out edited images"
-msgstr ""
+msgstr "切换对已编辑图像的筛选/排除"
 
 #. Culling mode
 #: ../src/libs/tools/filter.c:642
-#, fuzzy
 msgid "Restrict to selection"
-msgstr "将示波器分析区域限制到选择范围"
+msgstr "仅限所选对象"
 
 #: ../src/libs/tools/filter.c:643
 msgid "Restrict the current view to only selected pictures"
@@ -19732,7 +19720,7 @@ msgstr "切换剔除模式"
 
 #: ../src/libs/tools/filter.c:659
 msgid "Sort by"
-msgstr ""
+msgstr "排序方式"
 
 #: ../src/libs/tools/filter.c:700
 msgid "Search an image..."
@@ -19758,14 +19746,12 @@ msgid "Search a picture"
 msgstr "搜索一张图片"
 
 #: ../src/libs/tools/filter.c:734 ../src/libs/tools/filter.c:737
-#, fuzzy
 msgid "Select all filters"
-msgstr "选择 LUT 文件"
+msgstr "选择所有筛选条件"
 
 #: ../src/libs/tools/filter.c:743 ../src/libs/tools/filter.c:746
-#, fuzzy
 msgid "Deselect all filters"
-msgstr "选择 LUT 文件"
+msgstr "取消选择所有筛选条件"
 
 #: ../src/libs/tools/lighttable.c:53
 msgid "lighttable"
@@ -19773,9 +19759,8 @@ msgstr "光台"
 
 #. Focusing options
 #: ../src/libs/tools/lighttable.c:219
-#, fuzzy
 msgid "Overlay focus zones"
-msgstr "叠加焦点峰值"
+msgstr "叠加焦点区域"
 
 #: ../src/libs/tools/lighttable.c:222
 msgid "Overlay focus peaking"
@@ -19784,29 +19769,27 @@ msgstr "叠加焦点峰值"
 #. Zoom
 #: ../src/libs/tools/lighttable.c:227
 msgid "Zoom"
-msgstr ""
+msgstr "缩放"
 
 #: ../src/libs/tools/lighttable.c:229
-#, fuzzy
 msgid "Fit"
-msgstr "拟合于"
+msgstr "适合"
 
 #: ../src/libs/tools/lighttable.c:231
 msgid "50 %"
-msgstr ""
+msgstr "50 %"
 
 #: ../src/libs/tools/lighttable.c:233
 msgid "100 %"
-msgstr ""
+msgstr "100 %"
 
 #: ../src/libs/tools/lighttable.c:235
 msgid "200 %"
-msgstr ""
+msgstr "200 %"
 
 #: ../src/libs/tools/lighttable.c:255
-#, fuzzy
 msgid "_Thumbnails"
-msgstr "缩略图"
+msgstr "缩略图(_T)"
 
 #: ../src/libs/tools/lighttable.c:264
 msgctxt "quickfilter"
@@ -19862,12 +19845,16 @@ msgid ""
 "The current selection contains more than one image, which is ambiguous.\n"
 "Select exactly one image to enter the darkroom."
 msgstr ""
+"当前选中的图片不止一张，这会导致选择错误。\n"
+"请选择一张图片进入暗房。"
 
 #: ../src/views/darkroom.c:570
 msgid ""
 "There is no image selected.\n"
 "Select exactly one image to enter the darkroom."
 msgstr ""
+"当前未选择任何图像。\n"
+"请选择一张图像进入暗房。"
 
 #. fail :(
 #: ../src/views/darkroom.c:585
@@ -20151,7 +20138,7 @@ msgstr "图像放映结束。"
 
 #: ../src/views/slideshow.c:329
 msgid "end of images. press any key to return to lighttable mode"
-msgstr "已播放全部图像。按任意按键回到光台模式。"
+msgstr "图片结束。按任意键返回灯箱模式。"
 
 #: ../src/views/slideshow.c:343
 msgid "slideshow"
@@ -20198,18 +20185,18 @@ msgstr "后退"
 
 #: ../tools/generate_prefs.xsl:480 ../tools/generate_prefs.xsl:493
 msgid "</xsl:text><xsl:value-of select="
-msgstr ""
+msgstr "</xsl:text><xsl:value-of select="
 
 #: ../tools/generate_prefs.xsl:744
 #, c-format
 msgid "double click to reset to `%.03f'"
-msgstr "双击以重置到“%.03f”。"
+msgstr "双击以重置到 `%.03f'。"
 
 #: ../tools/generate_prefs.xsl:758 ../tools/generate_prefs.xsl:775
 #: ../tools/generate_prefs.xsl:802
 msgctxt "preferences"
 msgid "</xsl:text><xsl:value-of select="
-msgstr ""
+msgstr "</xsl:text><xsl:value-of select="
 
 #~ msgctxt "preferences"
 #~ msgid "after edit"
