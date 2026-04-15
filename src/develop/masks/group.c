@@ -102,11 +102,11 @@ static int _group_events_key_pressed(struct dt_iop_module_t *module, GdkEventKey
       {
         if(gui->group_selected >= 0)
         {
-          // Delete shape from current group
+          // Remove shape from current group
           dt_masks_form_group_t *group_entry = NULL;
           dt_masks_form_t *selected_form = _group_get_selected_child(form, gui, &group_entry);
           if(IS_NULL_PTR(selected_form)) return 0;
-          return_value = dt_masks_gui_delete(module, selected_form, gui, group_entry->parentid);
+          return_value = dt_masks_gui_remove(module, selected_form, gui, group_entry->parentid);
           break;
         }
       }

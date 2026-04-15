@@ -1871,7 +1871,7 @@ static void _blendop_masks_all_toggled(GtkCellRendererToggle *cell, gchar *path_
   if(active)
   {
     if(!IS_NULL_PTR(group_form))
-      dt_masks_form_remove(module, group_form, mask_form);
+      dt_masks_form_delete(module, group_form, mask_form);
   }
   else
   {
@@ -1927,7 +1927,7 @@ static void _blendop_masks_all_delete_callback(GtkWidget *menu_item, dt_iop_modu
   if(IS_NULL_PTR(mask_form)) return;
 
   dt_masks_change_form_gui(NULL);
-  dt_masks_form_remove(module, NULL, mask_form);
+  dt_masks_form_delete(module, NULL, mask_form);
   _blendop_masks_apply_and_commit(module);
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, formid, 0, DT_MASKS_EVENT_DELETE);
 }

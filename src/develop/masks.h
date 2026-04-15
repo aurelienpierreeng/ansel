@@ -963,16 +963,16 @@ gboolean dt_masks_gui_form_create_throttled(dt_masks_form_t *form, dt_masks_form
                                             struct dt_iop_module_t *module, float posx, float posy);
 
 /**
- * @brief Delete a mask shape or node form from the GUI.
- * This function is to be used with a popupmenu "Delete" action in the future.
+ * @brief remove a mask shape or node form from the GUI.
+ * This function is used with a popupmenu "Delete" action.
  * 
  * @param module The module owning the mask
- * @param form The form to delete
+ * @param form The form to remove
  * @param gui The GUI state of the form
  * @param parentid The parent ID of the form
- * @return gboolean TRUE if the form was deleted, FALSE otherwise
+ * @return gboolean TRUE if the form was removed, FALSE otherwise
  */
-gboolean dt_masks_gui_delete(struct dt_iop_module_t *module, dt_masks_form_t *form, dt_masks_form_gui_t *gui, const int parentid);
+gboolean dt_masks_gui_remove(struct dt_iop_module_t *module, dt_masks_form_t *form, dt_masks_form_gui_t *gui, const int parentid);
 
 // Remove a mask
 gboolean dt_masks_form_cancel_creation(dt_iop_module_t *module, dt_masks_form_gui_t *gui);
@@ -994,7 +994,7 @@ void dt_masks_iop_combo_populate(GtkWidget *w, void *module);
 void dt_masks_iop_use_same_as(struct dt_iop_module_t *module, struct dt_iop_module_t *src);
 uint64_t dt_masks_group_get_hash(uint64_t hash, dt_masks_form_t *form);
 
-void dt_masks_form_remove(struct dt_iop_module_t *module, dt_masks_form_t *grp, dt_masks_form_t *form);
+void dt_masks_form_delete(struct dt_iop_module_t *module, dt_masks_form_t *grp, dt_masks_form_t *form);
 int dt_masks_form_change_opacity(dt_masks_form_t *form, int parentid, int up, const int flow);
 void dt_masks_form_move(dt_masks_form_t *grp, int formid, int up);
 int dt_masks_form_duplicate(dt_develop_t *dev, int formid);

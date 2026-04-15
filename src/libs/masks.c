@@ -898,7 +898,7 @@ static void _tree_delete_shape(GtkButton *button, dt_lib_module_t *self)
       int id = -1;
       _lib_masks_get_values(model, &iter, &module, &grid, &id);
 
-      dt_masks_form_remove(module, dt_masks_get_from_id(darktable.develop, grid),
+      dt_masks_form_delete(module, dt_masks_get_from_id(darktable.develop, grid),
                            dt_masks_get_from_id(darktable.develop, id));
     }
   }

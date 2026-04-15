@@ -984,7 +984,7 @@ static gboolean _masks_remove_shape(struct dt_iop_module_t *module, dt_masks_for
   // that's how this was called:
   // dt_masks_form_remove(module, NULL, form);
   // Called from shape removal, this is how it was called:
-  dt_masks_form_remove(module, dt_masks_get_from_id(darktable.develop, parent_id), mask_form);
+  dt_masks_form_delete(module, dt_masks_get_from_id(darktable.develop, parent_id), mask_form);
   // Not sure what difference it makes.
 
   return 1;
@@ -1011,7 +1011,7 @@ gboolean dt_masks_form_cancel_creation(dt_iop_module_t *module, dt_masks_form_gu
   return FALSE;
 }
 
-gboolean dt_masks_gui_delete(struct dt_iop_module_t *module, dt_masks_form_t *mask_form,
+gboolean dt_masks_gui_remove(struct dt_iop_module_t *module, dt_masks_form_t *mask_form,
                              dt_masks_form_gui_t *mask_gui, const int parent_id)
 {
   // Just clean temp mask if we are in creation mode
@@ -2332,8 +2332,9 @@ int dt_masks_events_key_pressed(struct dt_iop_module_t *module, GdkEventKey *eve
           dt_masks_form_group_t *selected_group = dt_masks_form_get_selected_group(mask_form, mask_gui);
           if(IS_NULL_PTR(selected_group)) return 0;
           dt_masks_form_t *selected_form = dt_masks_get_from_id(darktable.develop, selected_group->formid);
+          // FIXME: ask the user if he wants to delete the mask, or just unlink them.
           if(selected_form)
-            return_value = dt_masks_gui_delete(module, selected_form, mask_gui, selected_group->parentid);
+            return_value = dt_masks_gui_remove(module, selected_form, mask_gui, selected_group->parentid);
           break;
         }
       }
@@ -2849,7 +2850,7 @@ static void _menu_no_masks(struct dt_iop_module_t *module)
 {
   // we drop all the forms in the iop
   dt_masks_form_t *group_form = _group_from_module(darktable.develop, module);
-  if(group_form) dt_masks_form_remove(module, NULL, group_form);
+  if(group_form) dt_masks_form_delete(module, NULL, group_form);
   module->blend_params->mask_id = 0;
 
   // and we update the iop
@@ -3083,7 +3084,7 @@ void dt_masks_iop_value_changed_callback(GtkWidget *widget, struct dt_iop_module
   dt_dev_add_history_item(module->dev, module, TRUE, TRUE);
 }
 
-void dt_masks_form_remove(struct dt_iop_module_t *module, dt_masks_form_t *group_form,
+void dt_masks_form_delete(struct dt_iop_module_t *module, dt_masks_form_t *group_form,
                           dt_masks_form_t *mask_form)
 {
   if(IS_NULL_PTR(mask_form)) return;
@@ -3112,7 +3113,7 @@ void dt_masks_form_remove(struct dt_iop_module_t *module, dt_masks_form_t *group
 
     }
     if(removed) dt_masks_form_update_gravity_center(group_form);
-    if(removed && IS_NULL_PTR(group_form->points)) dt_masks_form_remove(module, NULL, group_form);
+    if(removed && IS_NULL_PTR(group_form->points)) dt_masks_form_delete(module, NULL, group_form);
     return;
   }
 
@@ -3124,7 +3125,7 @@ void dt_masks_form_remove(struct dt_iop_module_t *module, dt_masks_form_t *group
     {
       dt_masks_form_group_t *group_child = (dt_masks_form_group_t *)mask_form->points->data;
       dt_masks_form_t *child = dt_masks_get_from_id(darktable.develop, group_child->formid);
-      dt_masks_form_remove(module, mask_form, child);
+      dt_masks_form_delete(module, mask_form, child);
       // no need to do anything to mask_form->points, the recursive call will have removed child from the list
     }
   }
@@ -3166,7 +3167,7 @@ void dt_masks_form_remove(struct dt_iop_module_t *module, dt_masks_form_t *group
           {
             dt_masks_iop_update(iop_module);
 
-            if(IS_NULL_PTR(iop_group->points)) dt_masks_form_remove(iop_module, NULL, iop_group);
+            if(IS_NULL_PTR(iop_group->points)) dt_masks_form_delete(iop_module, NULL, iop_group);
           }
         }
       }

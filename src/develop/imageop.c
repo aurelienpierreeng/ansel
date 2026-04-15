@@ -1904,7 +1904,8 @@ static void _gui_reset_callback(GtkButton *button, GdkEventButton *event, dt_iop
     if(module->blend_params->mask_id > 0)
     {
       dt_masks_form_t *grp = dt_masks_get_from_id(darktable.develop, module->blend_params->mask_id);
-      if(grp) dt_masks_form_remove(module, NULL, grp);
+      // FIXME: ask the user if he wants to delete the mask, or just unlink them.
+      if(grp) dt_masks_form_delete(module, NULL, grp);
       DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, -1, -1, DT_MASKS_EVENT_RESET);
     }
     /* reset to default params */
