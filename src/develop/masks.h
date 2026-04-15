@@ -974,6 +974,20 @@ gboolean dt_masks_gui_form_create_throttled(dt_masks_form_t *form, dt_masks_form
  */
 gboolean dt_masks_gui_remove(struct dt_iop_module_t *module, dt_masks_form_t *form, dt_masks_form_gui_t *gui, const int parentid);
 
+/**
+ * @brief If the form to remove is used once, ask to the user if he wants to delete it from the list or just remove and keep for later reuse.
+ * 
+ * @param module The module owning the mask
+ * @param sel The form to remove
+ * @param parent_id The parent ID of the form
+ * @param mask_gui The GUI state of the form
+ * @param form_id The form ID of the form to remove
+ * @return gboolean TRUE if the form was removed, FALSE otherwise
+ */
+gboolean dt_masks_remove_or_delete(struct dt_iop_module_t *module, dt_masks_form_t *sel, int parent_id,
+                                    dt_masks_form_gui_t *mask_gui, int form_id);
+
+
 // Remove a mask
 gboolean dt_masks_form_cancel_creation(dt_iop_module_t *module, dt_masks_form_gui_t *gui);
 
@@ -1438,6 +1452,10 @@ GdkModifierType dt_masks_get_accel_mods(dt_masks_interaction_t interaction);
 
 GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form, const dt_masks_form_group_t *fpt,
                                 const float pzx, const float pzy);
+
+/** Dialogs */
+
+int dt_masks_gui_confirm_delete_form_dialog(const char *form_name);
 
 #ifdef __cplusplus
 }

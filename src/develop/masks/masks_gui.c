@@ -205,7 +205,7 @@ static GtkWidget *_masks_gui_add_interaction_slider(GtkWidget *menu, const char 
   return menu_item;
 }
 
-static int _masks_gui_confirm_delete_form_dialog(const char *form_name)
+int dt_masks_gui_confirm_delete_form_dialog(const char *form_name)
 {
   if(IS_NULL_PTR(darktable.gui) || IS_NULL_PTR(darktable.gui->ui)) return GTK_RESPONSE_NO;
 
@@ -218,8 +218,8 @@ static int _masks_gui_confirm_delete_form_dialog(const char *form_name)
       _("will no longer be used."),
       _("Do you want to permanently delete it, or keep it unused for potential reuse?"));
 
-  gtk_dialog_add_button(GTK_DIALOG(dialog), _("Keep unused shape"), GTK_RESPONSE_NO);
   gtk_dialog_add_button(GTK_DIALOG(dialog), _("Delete shape"), GTK_RESPONSE_YES);
+  gtk_dialog_add_button(GTK_DIALOG(dialog), _("Keep unused shape"), GTK_RESPONSE_NO);
   gtk_dialog_add_button(GTK_DIALOG(dialog), _("Cancel"), GTK_RESPONSE_CANCEL);
   gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_CANCEL);
 
@@ -227,32 +227,6 @@ static int _masks_gui_confirm_delete_form_dialog(const char *form_name)
   gtk_widget_destroy(dialog);
 
   return response;
-}
-
-static int _masks_gui_form_group_use_count(const dt_develop_t *dev, const int formid)
-{
-  if(IS_NULL_PTR(dev)) return 0;
-
-  int count = 0;
-  for(GList *form_node = dev->forms; form_node; form_node = g_list_next(form_node))
-  {
-    dt_masks_form_t *group_form = (dt_masks_form_t *)form_node->data;
-    if(IS_NULL_PTR(group_form) || !(group_form->type & DT_MASKS_GROUP)) continue;
-
-    for(GList *group_node = group_form->points; group_node; group_node = g_list_next(group_node))
-    {
-      dt_masks_form_group_t *group_entry = (dt_masks_form_group_t *)group_node->data;
-      if(group_entry && group_entry->formid == formid)
-      {
-        count++;
-        if(count > 1) goto done;
-        break;
-      }
-    }
-  }
-
-done:
-  return count;
 }
 
 static void _masks_gui_delete_form_callback(GtkWidget *menu, gpointer user_data)
@@ -274,27 +248,9 @@ static void _masks_gui_delete_form_callback(GtkWidget *menu, gpointer user_data)
 
     const int parentid = fpt->parentid;
     const int formid = fpt->formid;
-    const int use_count = _masks_gui_form_group_use_count(darktable.develop, formid);
+  
+    dt_masks_remove_or_delete(module, sel, parentid, gui, formid);
 
-    if(use_count <= 1)
-    {
-      const int response = _masks_gui_confirm_delete_form_dialog(sel->name);
-      if(response == GTK_RESPONSE_CANCEL) return;
-      if(response == GTK_RESPONSE_NO)
-      {
-        // only remove from current group, keep the form itself for potential reuse
-        dt_masks_gui_remove(module, sel, gui, parentid);
-        dt_dev_add_history_item(darktable.develop, module, TRUE, TRUE);
-        DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, formid, parentid, DT_MASKS_EVENT_DELETE);
-        return;
-      }
-    }
-
-    // Default if use count > 1, or responded YES
-    dt_masks_change_form_gui(NULL);
-    dt_masks_form_delete(module, NULL, sel);
-    dt_dev_add_history_item(darktable.develop, module, TRUE, TRUE);
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, formid, 0, DT_MASKS_EVENT_REMOVE);
   }
 }
 

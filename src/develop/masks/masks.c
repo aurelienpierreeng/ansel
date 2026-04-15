@@ -990,6 +990,59 @@ static gboolean _masks_remove_shape(struct dt_iop_module_t *module, dt_masks_for
   return 1;
 }
 
+static int _masks_gui_form_group_use_count(const dt_develop_t *dev, const int formid)
+{
+  if(IS_NULL_PTR(dev)) return 0;
+
+  int count = 0;
+  for(GList *form_node = dev->forms; form_node; form_node = g_list_next(form_node))
+  {
+    dt_masks_form_t *group_form = (dt_masks_form_t *)form_node->data;
+    if(IS_NULL_PTR(group_form) || !(group_form->type & DT_MASKS_GROUP)) continue;
+
+    for(GList *group_node = group_form->points; group_node; group_node = g_list_next(group_node))
+    {
+      dt_masks_form_group_t *group_entry = (dt_masks_form_group_t *)group_node->data;
+      if(group_entry && group_entry->formid == formid)
+      {
+        count++;
+        if(count > 1) goto done;
+        break;
+      }
+    }
+  }
+
+done:
+  return count;
+}
+
+gboolean dt_masks_remove_or_delete(struct dt_iop_module_t *module, dt_masks_form_t *sel, int parent_id,
+                                    dt_masks_form_gui_t *mask_gui, int form_id)
+{
+  const int use_count = _masks_gui_form_group_use_count(darktable.develop, form_id);
+
+  if(use_count <= 1)
+  {
+    const int response = dt_masks_gui_confirm_delete_form_dialog(sel->name);
+    if(response == GTK_RESPONSE_CANCEL) return FALSE;
+    if(response == GTK_RESPONSE_NO)
+    {
+      // only remove from current group, keep the form itself for potential reuse
+      gboolean res = _masks_remove_shape(module, sel, parent_id, mask_gui, mask_gui->group_selected);
+      dt_dev_add_history_item(darktable.develop, module, TRUE, TRUE);
+      DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, form_id, parent_id, DT_MASKS_EVENT_DELETE);
+      return res;
+    }
+  }
+
+  // Default if use count > 1, or responded YES
+  dt_masks_change_form_gui(NULL);
+  dt_masks_form_delete(module, NULL, sel);
+  dt_dev_add_history_item(darktable.develop, module, TRUE, TRUE);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, form_id, 0, DT_MASKS_EVENT_REMOVE);
+  return TRUE;
+}
+
 gboolean dt_masks_form_cancel_creation(dt_iop_module_t *module, dt_masks_form_gui_t *mask_gui)
 {
   if(mask_gui->creation)
@@ -1014,6 +1067,9 @@ gboolean dt_masks_form_cancel_creation(dt_iop_module_t *module, dt_masks_form_gu
 gboolean dt_masks_gui_remove(struct dt_iop_module_t *module, dt_masks_form_t *mask_form,
                              dt_masks_form_gui_t *mask_gui, const int parent_id)
 {
+  if(mask_gui->edit_mode != DT_MASKS_EDIT_FULL)
+    return FALSE;
+
   // Just clean temp mask if we are in creation mode
   if(dt_masks_form_cancel_creation(module, mask_gui))
     return TRUE;
@@ -1030,9 +1086,11 @@ gboolean dt_masks_gui_remove(struct dt_iop_module_t *module, dt_masks_form_t *ma
     return TRUE;
   }
   // we remove the entire shape
-  else if(parent_id > 0 && mask_gui->edit_mode == DT_MASKS_EDIT_FULL)
-    return _masks_remove_shape(module, mask_form, parent_id, mask_gui, mask_gui->group_selected);
-  
+  else if(parent_id > 0)
+  {
+    dt_masks_remove_or_delete(module, mask_form, parent_id, mask_gui, mask_gui->group_selected);
+    return TRUE; // something happened even if the dialog was cancelled.
+  }
   return FALSE;
 }
 
@@ -2332,7 +2390,6 @@ int dt_masks_events_key_pressed(struct dt_iop_module_t *module, GdkEventKey *eve
           dt_masks_form_group_t *selected_group = dt_masks_form_get_selected_group(mask_form, mask_gui);
           if(IS_NULL_PTR(selected_group)) return 0;
           dt_masks_form_t *selected_form = dt_masks_get_from_id(darktable.develop, selected_group->formid);
-          // FIXME: ask the user if he wants to delete the mask, or just unlink them.
           if(selected_form)
             return_value = dt_masks_gui_remove(module, selected_form, mask_gui, selected_group->parentid);
           break;
@@ -3149,19 +3206,20 @@ void dt_masks_form_delete(struct dt_iop_module_t *module, dt_masks_form_t *group
         if(iop_group && (iop_group->type & DT_MASKS_GROUP))
         {
           int removed = 0;
-          GList *group_node = iop_group->points;
-          while(group_node)
+          GList *shapes = iop_group->points;
+          while(shapes)
           {
-            dt_masks_form_group_t *group_entry = (dt_masks_form_group_t *)group_node->data;
+            dt_masks_form_group_t *group_entry = (dt_masks_form_group_t *)shapes->data;
             if(group_entry->formid == form_id)
             {
               removed = 1;
+              // Remove the shape from the list
               iop_group->points = g_list_remove(iop_group->points, group_entry);
               dt_free(group_entry);
-              group_node = iop_group->points; // jump back to start of list
+              shapes = iop_group->points; // jump back to start of list
               continue;
             }
-            group_node = g_list_next(group_node); // advance to next form
+            shapes = g_list_next(shapes); // advance to next form
           }
           if(removed)
           {
