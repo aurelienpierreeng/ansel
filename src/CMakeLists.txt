@@ -646,7 +646,7 @@ if(NOT CUSTOM_CFLAGS)
   # -------------------------------------------------------------------------
   # Base flags (shared across all build types)
   # -------------------------------------------------------------------------
-  set(DT_BASE_C_FLAGS "${MARCH} -Wfatal-errors -std=c11 -Wall -ffast-math -fno-math-errno -fno-signed-zeros -fno-trapping-math -fno-signaling-nans -ffp-contract=fast")
+  set(DT_BASE_C_FLAGS "${MARCH} -Wfatal-errors -std=c11 -Wall -ffast-math -fno-math-errno -fno-signed-zeros -fno-trapping-math -ffp-contract=fast")
 
   # -------------------------------------------------------------------------
   # Build-type-specific flags
@@ -667,7 +667,7 @@ if(NOT CUSTOM_CFLAGS)
   # Compiler-specific tuning
   # -------------------------------------------------------------------------
   if(CMAKE_C_COMPILER_ID MATCHES "GNU")
-    set(DT_BASE_C_FLAGS "${DT_BASE_C_FLAGS} -Wmaybe-uninitialized -Wno-undef -Wimplicit-function-declaration -Winfinite-recursion -fno-semantic-interposition")
+    set(DT_BASE_C_FLAGS "${DT_BASE_C_FLAGS} -Wmaybe-uninitialized -Wno-undef -Wimplicit-function-declaration -Winfinite-recursion -fno-semantic-interposition -fno-signaling-nans")
   elseif(CMAKE_C_COMPILER_ID MATCHES "Clang")
     set(DT_BASE_C_FLAGS "${DT_BASE_C_FLAGS} -fvectorize -fslp-vectorize")
   endif()
