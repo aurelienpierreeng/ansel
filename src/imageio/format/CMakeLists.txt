@@ -27,7 +27,7 @@ if(OpenEXR_FOUND)
   add_library(exr MODULE "exr.cc")
   # Without the following, Windows builds fail with 
   # std::string symbol being defined in two different DLL import libraries
-  set_target_properties(exr PROPERTIES INTERPROCEDURAL_OPTIMIZATION FALSE)
+  target_link_libraries(exr PRIVATE ${OpenEXR_LIBRARIES})
 endif(OpenEXR_FOUND)
 
 if(OpenJPEG_FOUND)
