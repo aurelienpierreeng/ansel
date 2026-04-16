@@ -1,3 +1,6 @@
+# Make Windows behave like Mac and Linux regarding flag support detection
+set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
+
 # -----------------------------------------------------------------------------
 # Detect Apple universal builds (multiple archs)
 # -----------------------------------------------------------------------------
@@ -80,12 +83,8 @@ else()
         set(MARCH "-march=x86-64-v2 -mtune=generic")
       else()
         # Last resort
-        CHECK_C_COMPILER_FLAG("-mtune=generic" HAS_MTUNE_GENERIC)
-        if(HAS_MTUNE_GENERIC)
-          set(MARCH "-mtune=generic")
-        else()
-          message(WARNING "No suitable CPU tuning flags found, using compiler defaults")
-        endif()
+        # mtune=generic is universally supported on GCC/Clang
+        set(MARCH "-march=generic -mtune=generic")
       endif()
     endif()
 
