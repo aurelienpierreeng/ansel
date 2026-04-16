@@ -631,10 +631,10 @@ if(NOT CUSTOM_CFLAGS)
   # -------------------------------------------------------------------------
   # Base flags (shared across all build types)
   # -------------------------------------------------------------------------
-  # We can't enable -ffp-contract=fast because the code uses dt_nan() as a special value meaning "undefined"
+  # The code uses dt_nan() as a special value meaning "undefined"
   # in several places. There is no reason to do so, just use binary flags. 
   # TODO: remove the use of dt_nan() in code as a special "undefined" flag for float values
-  set(DT_BASE_C_FLAGS "${MARCH} -Wfatal-errors -std=c11 -Wall -ffast-math -fno-math-errno -fno-signed-zeros -fno-trapping-math")
+  set(DT_BASE_C_FLAGS "${MARCH} -Wfatal-errors -std=c11 -Wall -ffast-math -fno-math-errno -fno-signed-zeros -fno-trapping-math -ffp-contract=fast")
 
   # -------------------------------------------------------------------------
   # Build-type-specific flags
