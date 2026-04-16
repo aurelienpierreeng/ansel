@@ -2978,9 +2978,7 @@ float dt_image_get_exposure_bias(const struct dt_image_t *image_storage)
   if((image_storage) && (image_storage->exif_exposure_bias))
   {
     // sanity checks because I don't trust exif tags too much
-    if(image_storage->exif_exposure_bias == NAN
-       || image_storage->exif_exposure_bias != image_storage->exif_exposure_bias
-       || isnan(image_storage->exif_exposure_bias)
+    if(isnan(image_storage->exif_exposure_bias)
        || CLAMP(image_storage->exif_exposure_bias, -5.0f, 5.0f) != image_storage->exif_exposure_bias)
       return 0.0f; // isnan
     else

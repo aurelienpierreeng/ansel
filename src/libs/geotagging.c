@@ -339,7 +339,7 @@ static void _refresh_images_displayed_on_track(const int segid, const gboolean a
   for(GList *i = d->imgs; active && i; i = g_list_next(i))
   {
     dt_sel_img_t *im = (dt_sel_img_t *)i->data;
-    if(im->segid == segid && im->gl.latitude != NAN)
+    if(im->segid == segid && !isnan(im->gl.latitude))
     {
       count++;
       dt_sel_img_t *next = i->next ? (dt_sel_img_t *)i->next->data
