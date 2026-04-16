@@ -86,10 +86,10 @@ extern "C" {
 #define DT_OPENCL_BPP_IS_RGBA8(bpp) ((((unsigned int)(bpp)) & DT_OPENCL_BPP_TAG_RGBA8) != 0u)
 #define DT_OPENCL_BPP_DECODE(bpp) ((int)(((unsigned int)(bpp)) & ~DT_OPENCL_BPP_TAG_RGBA8))
 
-#define DT_OPENCL_DEFAULT_COMPILE_INTEL ("-cl-fast-relaxed-math")
-#define DT_OPENCL_DEFAULT_COMPILE_AMD ("-cl-fast-relaxed-math")
-#define DT_OPENCL_DEFAULT_COMPILE_NVIDIA ("-cl-fast-relaxed-math")
-#define DT_OPENCL_DEFAULT_COMPILE ("-cl-fast-relaxed-math")
+#define DT_OPENCL_DEFAULT_COMPILE_INTEL ("-cl-fast-relaxed-math -cl-no-signed-zeros -cl-finite-math-only -cl-unsafe-math-optimizations")
+#define DT_OPENCL_DEFAULT_COMPILE_AMD ("-cl-fast-relaxed-math -cl-no-signed-zeros -cl-finite-math-only -cl-unsafe-math-optimizations")
+#define DT_OPENCL_DEFAULT_COMPILE_NVIDIA ("-cl-fast-relaxed-math -cl-no-signed-zeros -cl-finite-math-only -cl-unsafe-math-optimizations")
+#define DT_OPENCL_DEFAULT_COMPILE ("-cl-fast-relaxed-math -cl-no-signed-zeros -cl-finite-math-only -cl-unsafe-math-optimizations")
 #define DT_CLDEVICE_HEAD ("cldevice_v4")
 
 typedef enum dt_opencl_memory_t
