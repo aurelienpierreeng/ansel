@@ -79,10 +79,6 @@
 #include "gui/presets.h"
 #include "iop/iop_api.h"
 
-#if defined(__SSE__)
-#include <xmmintrin.h>
-#endif
-
 DT_MODULE_INTROSPECTION(1, dt_iop_graduatednd_params_t)
 
 typedef struct dt_iop_graduatednd_params_t

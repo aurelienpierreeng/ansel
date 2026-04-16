@@ -67,9 +67,6 @@
 #include <gtk/gtk.h>
 #include <inttypes.h>
 
-#if defined(__SSE__)
-#include <xmmintrin.h>
-#endif
 
 #define MAX_RADIUS 32
 

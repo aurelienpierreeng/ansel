@@ -39,9 +39,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
-#if defined(__SSE__)
-#include <xmmintrin.h>
-#endif
 #include <time.h>
 
 typedef struct dt_module_param_t

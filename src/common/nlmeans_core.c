@@ -36,10 +36,6 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
-#if defined(__SSE2__)
-#include <xmmintrin.h>
-#endif
-
 // to avoid accumulation of rounding errors, we should do a full recomputation of the patch differences
 //   every so many rows of the image.  We'll also use that interval as the target maximum chunk size for
 //   parallelization
@@ -79,7 +75,7 @@ struct patch_t
 typedef struct patch_t patch_t;
 
 // avoid cluttering the scalar codepath with #ifdefs by hiding the dependency on SSE2
-#ifndef __SSE2__
+#if !(defined(__x86_64__) || defined(__i386__))
 # define _mm_prefetch(where,hint)
 #endif
 

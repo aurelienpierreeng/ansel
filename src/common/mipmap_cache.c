@@ -74,9 +74,6 @@
 #include <string.h>
 #include <strings.h>
 #include <unistd.h>
-#if defined(__SSE__)
-#include <xmmintrin.h>
-#endif
 
 #if !defined(_WIN32)
 #include <sys/statvfs.h>

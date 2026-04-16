@@ -30,9 +30,6 @@
 #include "common/darktable.h"
 #include <assert.h>
 #include <math.h>
-#if defined(__SSE__)
-#include <xmmintrin.h>
-#endif
 #include "common/gaussian.h"
 #include "common/math.h"
 #include "common/opencl.h"

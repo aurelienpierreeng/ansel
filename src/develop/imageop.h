@@ -657,7 +657,7 @@ void dt_iop_set_cache_bypass(dt_iop_module_t *module, gboolean state);
 // fence to ensure proper visibility
 static inline void dt_sfence()
 {
-#if defined(__SSE__)
+#if defined(__x86_64__) || defined(__i386__)
   _mm_sfence();
 #else
   // the following generates an MFENCE instruction on x86/x64.  We

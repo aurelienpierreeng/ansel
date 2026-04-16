@@ -63,7 +63,7 @@
 #endif
 
 // avoid cluttering the scalar codepath with #ifdefs by hiding the dependency on SSE2
-#ifndef __SSE2__
+#if !(defined(__x86_64__) || defined(__i386__))
 # define _mm_prefetch(where,hint)
 #endif
 

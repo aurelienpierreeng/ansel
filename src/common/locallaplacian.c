@@ -38,9 +38,6 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <stdio.h>
-#if defined(__SSE2__)
-#include <xmmintrin.h>
-#endif
 
 // the maximum number of levels for the gaussian pyramid
 #define max_levels 30

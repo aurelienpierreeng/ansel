@@ -26,9 +26,6 @@
 #include "control/control.h"     // needed by dwt.h
 #include "common/dwt.h"          // for dwt_interleave_rows
 #include <math.h>
-#if defined(__SSE__)
-#include <xmmintrin.h>
-#endif
 
 static inline void weight(const float *c1, const float *c2, const float sharpen, dt_aligned_pixel_t weight)
 {

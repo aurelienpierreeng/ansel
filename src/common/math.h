@@ -89,7 +89,7 @@
 #define CLAMPF(a, mn, mx) ((a) >= (mn) ? ((a) <= (mx) ? (a) : (mx)) : (mn))
 //#define CLAMPF(a, mn, mx) ((a) < (mn) ? (mn) : ((a) > (mx) ? (mx) : (a)))
 
-#if defined(__SSE__)
+#if defined(__x86_64__) || defined(__i386__)
 #define MMCLAMPPS(a, mn, mx) (_mm_min_ps((mx), _mm_max_ps((a), (mn))))
 #endif
 
@@ -331,7 +331,7 @@ static inline float ceil_fast(float x)
   }
 }
 
-#if defined(__SSE2__)
+#if defined(__x86_64__) || defined(__i386__)
 /** Compute absolute value
  * @param t Vector of 4 floats
  * @return Vector of their absolute values
@@ -366,7 +366,7 @@ static inline float sinf_fast(float t)
   return t * (p * (fabsf(t) - 1) + 1);
 }
 
-#if defined(__SSE2__)
+#if defined(__x86_64__) || defined(__i386__)
 /** Compute an approximate sine (SSE version, four sines a call).
  * This function behaves correctly for the range [-pi pi] only.
  * It has the following properties:

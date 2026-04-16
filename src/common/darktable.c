@@ -152,7 +152,7 @@
 #include <locale.h>
 #include <limits.h>
 
-#if defined(__SSE__)
+#if defined(__x86_64__) || defined(__i386__)
 #include <xmmintrin.h>
 #endif
 
@@ -463,22 +463,6 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   dt_fp_init(DT_FP_MODE_FAST);
 
   dt_set_signal_handlers();
-
-  int sse2_supported = 0;
-#ifndef __arm64__
-#ifdef HAVE_BUILTIN_CPU_SUPPORTS
-  // NOTE: _may_i_use_cpu_feature() looks better, but only available in ICC
-  __builtin_cpu_init();
-  sse2_supported = __builtin_cpu_supports("sse2");
-#else
-  sse2_supported = dt_detect_cpu_features() & CPU_FLAG_SSE2;
-#endif
-  if(!sse2_supported)
-  {
-    fprintf(stderr, "[dt_init] SSE2 instruction set is unavailable.\n");
-    fprintf(stderr, "[dt_init] expect a LOT of functionality to be broken. you have been warned.\n");
-  }
-#endif
 
 #ifdef M_MMAP_THRESHOLD
   mallopt(M_MMAP_THRESHOLD, 128 * 1024); /* use mmap() for large allocations */

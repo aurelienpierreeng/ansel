@@ -46,9 +46,7 @@
 #endif
 #include <gtk/gtk.h>
 #include <stdlib.h>
-#if defined(__SSE__)
-#include <xmmintrin.h>
-#endif
+
 #include "common/colorspaces.h"
 #include "control/control.h"
 #include "develop/imageop.h"

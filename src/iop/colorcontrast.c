@@ -59,10 +59,6 @@
 #include <gtk/gtk.h>
 #include <stdlib.h>
 
-#if defined(__SSE__)
-#include <xmmintrin.h>
-#endif
-
 DT_MODULE_INTROSPECTION(2, dt_iop_colorcontrast_params_t)
 
 typedef struct dt_iop_colorcontrast_params1_t

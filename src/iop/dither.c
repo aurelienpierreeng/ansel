@@ -62,9 +62,6 @@
 
 #include <gtk/gtk.h>
 #include <inttypes.h>
-#if defined(__SSE__)
-#include <xmmintrin.h>
-#endif
 
 DT_MODULE_INTROSPECTION(1, dt_iop_dither_params_t)
 
@@ -226,7 +223,7 @@ static inline void _diffuse_error(float *const restrict val, const float *const 
   }
 }
 
-#if defined(__SSE__)
+#if defined(__x86_64__) || defined(__i386__)
 static inline void _diffuse_error_sse(float *val, const __m128 err, const float factor)
 {
   _mm_store_ps(val, _mm_load_ps(val) + (err * _mm_set1_ps(factor))); // *val += err * factor

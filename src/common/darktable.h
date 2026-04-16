@@ -597,7 +597,7 @@ dt_store_simd_nontemporal(float *const pixel, const dt_aligned_pixel_simd_t valu
 {
   float *const out = (float *const)__builtin_assume_aligned(pixel, 16);
 
-#if defined(__SSE__)
+#if defined(__x86_64__) || defined(__i386__)
   const union
   {
     dt_aligned_pixel_simd_t simd;

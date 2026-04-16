@@ -33,10 +33,8 @@
 
 #define __STDC_FORMAT_MACROS
 
-#if defined(__SSE__)
 #include "common/darktable.h"
-#include <xmmintrin.h>
-#endif
+
 
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"

@@ -74,9 +74,6 @@
 #include "gui/gtk.h"
 #include "iop/iop_api.h"
 
-#if defined(__SSE__)
-#include <xmmintrin.h>
-#endif
 #include <assert.h>
 #include <gdk/gdkkeysyms.h>
 #include <math.h>
@@ -547,8 +544,8 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
       {
         p->type = icc_input->type;
         g_strlcpy(p->filename, icc_input->filename, sizeof(p->filename));
-  }
-}
+      }
+    }
 
     if((unsigned int)pipe->icc_intent < DT_INTENT_LAST)
     {

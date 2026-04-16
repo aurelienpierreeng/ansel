@@ -64,10 +64,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#ifdef __SSE2__
-#include "common/sse.h"
-#endif
-
 #define DT_GUI_CURVE_EDITOR_INSET DT_PIXEL_APPLY_DPI(1)
 
 

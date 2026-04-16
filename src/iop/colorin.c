@@ -90,9 +90,6 @@
 #include "develop/imageop_gui.h"
 #include "iop/iop_api.h"
 
-#if defined(__SSE__)
-#include <xmmintrin.h>
-#endif
 #include <assert.h>
 #include <math.h>
 #include <stdlib.h>

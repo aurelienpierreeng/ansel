@@ -106,9 +106,6 @@
 static sqlite3_stmt *_iop_presets_select_stmt = NULL;
 #include <string.h>
 #include <strings.h>
-#if defined(__SSE__)
-#include <xmmintrin.h>
-#endif
 #include <time.h>
 
 typedef struct dt_iop_gui_simple_callback_t
