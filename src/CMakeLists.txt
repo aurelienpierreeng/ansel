@@ -601,21 +601,6 @@ if(USE_OPENCL)
   add_definitions(-DHAVE_OPENCL=1)
 endif(USE_OPENCL)
 
-# Check for __builtin_cpu_supports here due to a bug in clang/llvm. LLVM uses
-# libgcc to provide the symbols, so if clang wasn't compiled with libgcc, the
-# compiler will say it's available; however the linker cannot find the symbols.
-# So do a quick test compile to see if it's actually available.
-# See https://llvm.org/bugs/show_bug.cgi?id=25510
-check_c_source_compiles("#include <stdio.h>
-int main() {
-  __builtin_cpu_init();
-  printf(\"%d\", __builtin_cpu_supports(\"sse3\"));
-}" HAVE_BUILTIN_CPU_SUPPORTS)
-if(HAVE_BUILTIN_CPU_SUPPORTS)
-  add_definitions(-DHAVE_BUILTIN_CPU_SUPPORTS=1)
-endif(HAVE_BUILTIN_CPU_SUPPORTS)
-MESSAGE(STATUS "Does the compiler support __builtin_cpu_supports(): ${HAVE_BUILTIN_CPU_SUPPORTS}")
-
 check_c_source_compiles("
 static __thread int tls;
 int main(void)

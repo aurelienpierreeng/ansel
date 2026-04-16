@@ -102,7 +102,6 @@
 #include "gui/presets.h"
 #include "gui/splash.h"
 
-#include "common/cpuid.h"
 #include "common/file_location.h"
 #include "common/film.h"
 #include "common/grealpath.h"
@@ -386,13 +385,6 @@ int dt_load_from_string(const gchar *input, gboolean open_image_in_dr, gboolean 
   }
   dt_free(filename);
   return id;
-}
-
-static void dt_codepaths_init()
-{
-#ifdef HAVE_BUILTIN_CPU_SUPPORTS
-  __builtin_cpu_init();
-#endif
 }
 
 // Returns total system memory in kiloBytes
@@ -1023,9 +1015,6 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
 
     darktable.themes = NULL;
   }
-
-  // detect cpu features and decide which codepaths to enable
-  dt_codepaths_init();
 
   // get the list of color profiles
   darktable.color_profiles = dt_colorspaces_init();
