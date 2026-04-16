@@ -44,7 +44,7 @@
 
 int dt_pthread_create(pthread_t *thread, void *(*start_routine)(void *), void *arg, const gboolean realtime)
 {
-  dt_fp_init(dt_conf_get_int("fp_mode"));
+  dt_fp_init(dt_conf_get_int("cpu_fp_mode"));
 
   int ret;
 
