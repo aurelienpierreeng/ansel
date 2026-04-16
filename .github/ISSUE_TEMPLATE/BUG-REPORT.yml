@@ -208,6 +208,6 @@ body:
     id: files
     attributes:
       label: Upload incriminated image files and XMP developments
-      description: Help reproducing your bug.
+      description: Help reproduce your bug. RAW images and XMP will need to be compressed in `.zip` or `.tar.gz` files to be accepted by Github.
     validations:
       required: false
