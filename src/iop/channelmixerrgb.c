@@ -3124,7 +3124,7 @@ static gboolean _channelmixerrgb_sync_primaries_from_params(dt_iop_module_t *sel
   ++darktable.gui->reset;
   dt_iop_channelmixer_shared_primaries_to_sliders(&primaries, widgets);
   --darktable.gui->reset;
-  return isfinite(roundtrip_error) && roundtrip_error <= DT_CHANNELMIXERRGB_SIMPLE_EPS;
+  return dt_isfinite(roundtrip_error) && roundtrip_error <= DT_CHANNELMIXERRGB_SIMPLE_EPS;
 }
 
 static void _channelmixerrgb_update_primaries_colors(dt_iop_module_t *self)
@@ -3250,7 +3250,7 @@ static gboolean _channelmixerrgb_sync_simple_from_params(dt_iop_module_t *self, 
   dt_iop_channelmixer_shared_simple_to_sliders(&simple, widgets);
   --darktable.gui->reset;
 
-  return isfinite(roundtrip_error) && roundtrip_error <= DT_CHANNELMIXERRGB_SIMPLE_EPS;
+  return dt_isfinite(roundtrip_error) && roundtrip_error <= DT_CHANNELMIXERRGB_SIMPLE_EPS;
 }
 
 /**
@@ -4129,7 +4129,7 @@ void _auto_set_illuminant(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe)
     return;
   }
   const float *RGB = self->picked_color;
-  if(!isfinite(RGB[0]) || !isfinite(RGB[1]) || !isfinite(RGB[2]))
+  if(!dt_isfinite(RGB[0]) || !dt_isfinite(RGB[1]) || !dt_isfinite(RGB[2]))
   {
     dt_print(DT_DEBUG_DEV, "[picker/channelmixerrgb] rejected nonfinite RGB=(%g,%g,%g)\n",
              RGB[0], RGB[1], RGB[2]);
@@ -4151,7 +4151,7 @@ void _auto_set_illuminant(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe)
   // The picker already sampled the live module buffer, so keep the conversion explicit here.
   dt_aligned_pixel_t XYZ = { 0.f };
   dot_product(RGB, current_profile->matrix_in, XYZ);
-  if(!isfinite(XYZ[0]) || !isfinite(XYZ[1]) || !isfinite(XYZ[2])) return;
+  if(!dt_isfinite(XYZ[0]) || !dt_isfinite(XYZ[1]) || !dt_isfinite(XYZ[2])) return;
   dt_XYZ_to_sRGB(XYZ, g->spot_RGB);
 
   // Convert to Lch for GUI feedback (input)

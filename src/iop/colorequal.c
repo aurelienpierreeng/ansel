@@ -385,7 +385,7 @@ static inline gboolean _cursor_curve_state(const dt_iop_colorequal_params_t *p, 
                                            const dt_iop_colorequal_channel_t channel, const float hue,
                                            float *curve_x, float *curve_y, float *offset_normalized)
 {
-  if(IS_NULL_PTR(p) || !isfinite(hue)) return FALSE;
+  if(IS_NULL_PTR(p) || !dt_isfinite(hue)) return FALSE;
 
   const int nodes = _curve_nodes_count_const(p, ring, channel);
   const dt_iop_colorequal_node_t *curve = _curve_nodes_const(p, ring, channel);
@@ -2050,7 +2050,7 @@ static gboolean _refresh_preview_cursor_sample(dt_iop_module_t *self)
 
   dt_aligned_pixel_t HSB = { 0.f };
   _pipe_rgb_to_dt_ucs_hsb(self, dev->preview_pipe, projected_rgb, HSB);
-  if(!isfinite(HSB[0]))
+  if(!dt_isfinite(HSB[0]))
   {
     _invalidate_preview_cursor(g);
     return FALSE;

@@ -699,6 +699,13 @@ static inline int dt_isnan(float x)
           (u & 0x007fffffu) != 0;
 }
 
+static inline int dt_isfinite(float x)
+{
+    uint32_t u;
+    memcpy(&u, &x, sizeof(u));
+    return (u & 0x7f800000u) != 0x7f800000u;
+}
+
 
 /********************************* */
 

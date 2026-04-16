@@ -155,8 +155,8 @@ void dt_printing_setup_box(dt_images_box *imgs, const int idx,
                            const float x, const float y,
                            const float width, const float height)
 {
-  if(!isfinite(imgs->screen.page.width) || !isfinite(imgs->screen.page.height)
-     || !isfinite(imgs->screen.print_area.width) || !isfinite(imgs->screen.print_area.height)
+  if(!dt_isfinite(imgs->screen.page.width) || !dt_isfinite(imgs->screen.page.height)
+     || !dt_isfinite(imgs->screen.print_area.width) || !dt_isfinite(imgs->screen.print_area.height)
      || imgs->screen.page.width <= 0.0f || imgs->screen.page.height <= 0.0f
      || imgs->screen.print_area.width <= 0.0f || imgs->screen.print_area.height <= 0.0f)
   {

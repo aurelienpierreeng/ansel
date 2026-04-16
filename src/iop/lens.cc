@@ -504,7 +504,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
           dt_aligned_pixel_simd_t pixel = { 0.f };
           for(int c = 0; c < 3; c++)
           {
-            if(d->do_nan_checks && (!isfinite(bufptr[c * 2]) || !isfinite(bufptr[c * 2 + 1])))
+            if(d->do_nan_checks && (!dt_isfinite(bufptr[c * 2]) || !dt_isfinite(bufptr[c * 2 + 1])))
             {
               pixel[c] = 0.0f;
               continue;
@@ -521,7 +521,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
 
           if(mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
           {
-            if(d->do_nan_checks && (!isfinite(bufptr[2]) || !isfinite(bufptr[3])))
+            if(d->do_nan_checks && (!dt_isfinite(bufptr[2]) || !dt_isfinite(bufptr[3])))
             {
               pixel[3] = 0.0f;
             }
@@ -615,7 +615,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
           dt_aligned_pixel_simd_t pixel = { 0.f };
           for(int c = 0; c < 3; c++)
           {
-            if(d->do_nan_checks && (!isfinite(buf2ptr[c * 2]) || !isfinite(buf2ptr[c * 2 + 1])))
+            if(d->do_nan_checks && (!dt_isfinite(buf2ptr[c * 2]) || !dt_isfinite(buf2ptr[c * 2 + 1])))
             {
               pixel[c] = 0.0f;
               continue;
@@ -630,7 +630,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
           if(raw_monochrome) pixel[0] = pixel[2] = pixel[1];
           if(mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
           {
-            if(d->do_nan_checks && (!isfinite(buf2ptr[2]) || !isfinite(buf2ptr[3])))
+            if(d->do_nan_checks && (!dt_isfinite(buf2ptr[2]) || !dt_isfinite(buf2ptr[3])))
             {
               pixel[3] = 0.0f;
             }
@@ -1036,7 +1036,7 @@ void distort_mask(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t 
     float *_out = out + (size_t)y * roi_out->width;
     for(int x = 0; x < roi_out->width; x++, bufptr += 6, _out++)
     {
-      if(d->do_nan_checks && (!isfinite(bufptr[2]) || !isfinite(bufptr[3])))
+      if(d->do_nan_checks && (!dt_isfinite(bufptr[2]) || !dt_isfinite(bufptr[3])))
       {
         *_out = 0.0f;
         continue;
@@ -1135,10 +1135,10 @@ void modify_roi_in(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t
   dt_pixelpipe_cache_free_align(buf);
 
     // LensFun can return NAN coords, so we need to handle them carefully.
-    if(!isfinite(xm) || !(0 <= xm && xm < orig_w)) xm = 0;
-    if(!isfinite(xM) || !(1 <= xM && xM < orig_w)) xM = orig_w;
-    if(!isfinite(ym) || !(0 <= ym && ym < orig_h)) ym = 0;
-    if(!isfinite(yM) || !(1 <= yM && yM < orig_h)) yM = orig_h;
+    if(!dt_isfinite(xm) || !(0 <= xm && xm < orig_w)) xm = 0;
+    if(!dt_isfinite(xM) || !(1 <= xM && xM < orig_w)) xM = orig_w;
+    if(!dt_isfinite(ym) || !(0 <= ym && ym < orig_h)) ym = 0;
+    if(!dt_isfinite(yM) || !(1 <= yM && yM < orig_h)) yM = orig_h;
 
     const struct dt_interpolation *interpolation = dt_interpolation_new(DT_INTERPOLATION_USERPREF_WARP);
     roi_in->x = fmaxf(0.0f, roundf(xm - interpolation->width));

@@ -140,7 +140,7 @@ static void _trace_buffer_content(const dt_dev_pixelpipe_t *pipe, const dt_iop_m
       gboolean finite = TRUE;
       for(unsigned int c = 0; c < MIN(channels, 4U); c++)
       {
-        if(!isfinite(in[c]))
+        if(!dt_isfinite(in[c]))
         {
           finite = FALSE;
           continue;

@@ -259,7 +259,7 @@ static gboolean _image_matrix_has_data(const float *matrix, const int count)
   float sum = 0.0f;
   for(int i = 0; i < count; i++)
   {
-    if(!isfinite(matrix[i])) return FALSE;
+    if(!dt_isfinite(matrix[i])) return FALSE;
     sum += fabsf(matrix[i]);
   }
   return sum > 0.0f;

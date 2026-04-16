@@ -3113,7 +3113,7 @@ static gboolean dt_bauhaus_popup_key_press(GtkWidget *widget, GdkEventKey *event
         // unnormalized input, user was typing this:
         const float old_value = dt_bauhaus_slider_get_val(GTK_WIDGET(w));
         const float new_value = dt_calculator_solve(old_value, bh->keys);
-        if(isfinite(new_value)) dt_bauhaus_slider_set_val(GTK_WIDGET(w), new_value);
+        if(dt_isfinite(new_value)) dt_bauhaus_slider_set_val(GTK_WIDGET(w), new_value);
         bh->keys_cnt = 0;
         memset(bh->keys, 0, sizeof(bh->keys));
         dt_bauhaus_hide_popup(bh);

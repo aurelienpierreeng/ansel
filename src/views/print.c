@@ -289,8 +289,8 @@ static void _print_setup_initial_image(dt_print_t *prt)
   if(imgid <= UNKNOWN_IMAGE) return;
   if(prt->pinfo->printer.resolution <= 0 || prt->pinfo->paper.width <= 0.0f || prt->pinfo->paper.height <= 0.0f)
     return;
-  if(!isfinite(prt->imgs->screen.page.width) || !isfinite(prt->imgs->screen.page.height)
-     || !isfinite(prt->imgs->screen.print_area.width) || !isfinite(prt->imgs->screen.print_area.height)
+  if(!dt_isfinite(prt->imgs->screen.page.width) || !dt_isfinite(prt->imgs->screen.page.height)
+     || !dt_isfinite(prt->imgs->screen.print_area.width) || !dt_isfinite(prt->imgs->screen.print_area.height)
      || prt->imgs->screen.page.width <= 1.0f || prt->imgs->screen.page.height <= 1.0f
      || prt->imgs->screen.print_area.width <= 1.0f || prt->imgs->screen.print_area.height <= 1.0f)
     return;
@@ -298,8 +298,8 @@ static void _print_setup_initial_image(dt_print_t *prt)
   if(prt->imgs->count > 0)
   {
     const dt_image_box *box = &prt->imgs->box[0];
-    if(box->imgid > UNKNOWN_IMAGE && isfinite(box->pos.x) && isfinite(box->pos.y)
-       && isfinite(box->pos.width) && isfinite(box->pos.height) && box->pos.width > 0.0f
+    if(box->imgid > UNKNOWN_IMAGE && dt_isfinite(box->pos.x) && dt_isfinite(box->pos.y)
+       && dt_isfinite(box->pos.width) && dt_isfinite(box->pos.height) && box->pos.width > 0.0f
        && box->pos.height > 0.0f)
       return;
 

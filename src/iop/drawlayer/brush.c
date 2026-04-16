@@ -358,7 +358,7 @@ static inline float _stroke_flow_alpha(const dt_drawlayer_brush_dab_t *dab, cons
 {
   (void)profile;
   const float opacity_scale
-      = isfinite(sample_opacity_scale) ? CLAMP(sample_opacity_scale, 1e-6f, 1.0f) : 1.0f;
+      = dt_isfinite(sample_opacity_scale) ? CLAMP(sample_opacity_scale, 1e-6f, 1.0f) : 1.0f;
 
   if(dab->mode == DT_DRAWLAYER_BRUSH_MODE_SMUDGE
      || dab->mode == DT_DRAWLAYER_BRUSH_MODE_BLUR)

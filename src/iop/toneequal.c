@@ -3254,7 +3254,7 @@ static gboolean _sample_picker_luminance_mask(const float *const buffer, const s
     *picked = mean / (float)count;
     *picked_min = minimum;
     *picked_max = maximum;
-    return isfinite(*picked) && isfinite(*picked_min) && isfinite(*picked_max);
+    return dt_isfinite(*picked) && dt_isfinite(*picked_min) && dt_isfinite(*picked_max);
   }
 
   const size_t x = CLAMP((size_t)roundf(sample->point[0] * width), 0, width - 1);
@@ -3263,7 +3263,7 @@ static gboolean _sample_picker_luminance_mask(const float *const buffer, const s
   *picked = value;
   *picked_min = value;
   *picked_max = value;
-  return isfinite(value);
+  return dt_isfinite(value);
 }
 
 /**
@@ -3341,13 +3341,13 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
   }
 
   dt_iop_gui_enter_critical_section(self);
-  g->cursor_valid = isfinite(picked) && picked > 0.0f;
+  g->cursor_valid = dt_isfinite(picked) && picked > 0.0f;
   g->cursor_exposure = g->cursor_valid ? log2f(picked) : 0.0f;
   dt_iop_gui_leave_critical_section(self);
 
   if(picker == g->exposure_boost)
   {
-    if(isfinite(picked) && picked > 0.0f)
+    if(dt_isfinite(picked) && picked > 0.0f)
     {
       p->exposure_boost = log2f(CONTRAST_FULCRUM / picked);
       ++darktable.gui->reset;
@@ -3371,7 +3371,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
     const float fd_old = fminf(picked_min, picked_max);
     const float ld_old = fmaxf(picked_min, picked_max);
 
-    if(isfinite(fd_old) && isfinite(ld_old) && fd_old > 0.0f && ld_old > fd_old)
+    if(dt_isfinite(fd_old) && dt_isfinite(ld_old) && fd_old > 0.0f && ld_old > fd_old)
     {
       const float s1 = CONTRAST_FULCRUM - exp2f(-7.0f);
       const float s2 = exp2f(-1.0f) - CONTRAST_FULCRUM;
