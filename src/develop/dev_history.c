@@ -1082,12 +1082,17 @@ void dt_dev_pop_history_items_ext(dt_develop_t *dev)
     dt_dev_history_item_t *hist = (dt_dev_history_item_t *)(history->data);
     dt_iop_module_t *module = hist->module;
     if(module) _history_to_module(hist, module);
+
+    // Update the reference to the form snapshot that doesn't belong
+    // conceptually to history items
     if(hist->forms) forms = hist->forms;
 
     history = g_list_next(history);
   }
 
+  // Nuke dev->forms and replace it with the last hist->forms in history.
   dt_masks_replace_current_forms(dev, forms);
+
   dt_ioppr_resync_pipeline(dev, 0, "dt_dev_pop_history_items_ext end", TRUE);
 
   // Reloading defaults might have changed the global history hash
@@ -1778,6 +1783,8 @@ gboolean dt_dev_read_history_ext(dt_develop_t *dev, const int32_t imgid)
 {
   if(imgid == UNKNOWN_IMAGE) return FALSE;
 
+  // This should be inited already when creating a pipeline or entering darkroom
+  // but some pathes don't handle it, so make sure we have modules loaded.
   if(IS_NULL_PTR(dev->iop))
     dev->iop = dt_dev_load_modules(dev);
 
@@ -1790,9 +1797,7 @@ gboolean dt_dev_read_history_ext(dt_develop_t *dev, const int32_t imgid)
 
   // Start fresh
   dt_dev_history_free_history(dev);
-
   int legacy_params = 0;
-
   dt_ioppr_set_default_iop_order(dev, imgid);
 
   // Find the new history end from DB now, if defined.
@@ -1833,9 +1838,13 @@ gboolean dt_dev_read_history_ext(dt_develop_t *dev, const int32_t imgid)
   // Sanitize and flatten module order
   dt_ioppr_resync_pipeline(dev, imgid, "dt_dev_read_history_no_image end", FALSE);
 
-  // Update masks history
-  // Note: until there, we had only blendops. No masks
-  // writes hist->forms for each history entry, from DB
+  // Update "masks history"
+  // This design is stupid because `dt_dev_history_item_t *hist->forms` is not read
+  // from the DB history items (`main.history`), but from the `main.masks_history`,
+  // and later on, `dev->forms` is restored at the `history_end` index from dumping
+  // the content of the `dt_dev_history_item_t *hist->forms` snapshot.
+  // This only means that `hist->forms` doesn't belong to the `dt_dev_history_item_t *`
+  // but should live in its own branch. See `dt_dev_pop_history_items_ext()`
   dt_masks_read_masks_history(dev, imgid);
 
   dt_image_cache_read_release(darktable.image_cache, read_lock_img);

@@ -1980,7 +1980,7 @@ void dt_masks_read_masks_history(dt_develop_t *develop, const int32_t image_id)
     if(previous_num != history_num)
     {
       history_item = NULL;
-      for(GList *history_node = develop->history; history_node; history_node = g_list_next(history_node))
+      for(GList *history_node = g_list_first(develop->history); history_node; history_node = g_list_next(history_node))
       {
         dt_dev_history_item_t *history_entry = (dt_dev_history_item_t *)(history_node->data);
         if(history_entry->num == history_num)
@@ -1992,6 +1992,11 @@ void dt_masks_read_masks_history(dt_develop_t *develop, const int32_t image_id)
       previous_num = history_num;
     }
     // add the form to the history entry
+    // FIXME: there is no reason to hack history_item to add a forms snapshot that doesn't
+    // belong to it because dt_dev_write_history_item() doesn't save history_item->forms to the DB.
+    // So this forms snapshot should be attached to its own object, and that object should be
+    // linked by ID to the history_item object. That would allow to share one forms snapshot
+    // between several history items without duplication.
     if(history_item)
     {
       history_item->forms = g_list_append(history_item->forms, mask_form);
