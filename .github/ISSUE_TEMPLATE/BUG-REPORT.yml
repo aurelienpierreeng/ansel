@@ -197,3 +197,17 @@ body:
       label: Backtrace
       description: In case of a crash, please copy and paste the content of the backtrace file, usually stored in `/tmp/ansel_backtrace_xxxx_txt`. If no backtrace is produced, you can try to launch Ansel with `gdb ansel`, then type `run`. When it crashes, type `bt full` and copy-paste the output here. This will be automatically formatted into code, so no need for backticks.
       render: shell
+  - type: upload
+    id: screenshots
+    attributes:
+      label: Upload screenshots
+      description: If applicable, add screenshots to help explain your problem.
+    validations:
+      required: false
+  - type: upload
+    id: files
+    attributes:
+      label: Upload incriminated image files and XMP developments
+      description: Help reproducing your bug.
+    validations:
+      required: false
