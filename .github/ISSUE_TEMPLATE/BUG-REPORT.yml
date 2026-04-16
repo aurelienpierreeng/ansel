@@ -80,10 +80,10 @@ body:
   - type: checkboxes
     id: terms
     attributes:
-      label: Code of Conduct
-      description: Please read [A culture of problem solving in open-source projects](https://community.ansel.photos/view-discussion/a-culture-of-problem-solving-in).
+      label: Issue is actionnable
+      description: Issues are meant to become a programmer task in the project management todo list. Keep discussions [where they belong](https://github.com/aurelienpierreeng/ansel/discussions).
       options:
-        - label: I have read this document and I accept the conditions
+        - label: My issue is not a question but an identified usability problem.
           required: true
   - type: checkboxes
     id: search
@@ -154,9 +154,6 @@ body:
       value: "A bug happened!"
     validations:
       required: true
-  - type: markdown
-    attributes:
-      value: If you need to upload images and XMP files, please zip them together under a meaningful name and drop them above or on [Aurélien Pierre's private cloud](https://cloud.apmlt.net/s/YAdfYajPkE5nLyW). Files uploaded to AP's private cloud remain strictly confidential.
   - type: dropdown
     id: with-opencl
     attributes:

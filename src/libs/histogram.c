@@ -699,6 +699,7 @@ static inline void _bin_pixels_histogram_in_roi(const float *const restrict imag
                                                 const size_t min_y, const size_t max_y,
                                                 const size_t width)
 {
+  fprintf(stdout, "computing histogram from x = [%lu;%lu], y = [%lu;%lu]\n", min_x, max_x, min_y, max_y);
   // Process
 #ifdef _OPENMP
 #ifndef _WIN32
@@ -1466,6 +1467,7 @@ gboolean _trigger_recompute(dt_lib_histogram_t *d)
     d->cst = dt_cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
     _redraw_surface(d);
     // Don't send gtk_queue_redraw event from here, catch the return value and do it in the calling function
+    fprintf(stdout, "recreate histograms\n");
     return 1;
   }
 
