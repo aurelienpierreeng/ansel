@@ -109,8 +109,8 @@ static void _paint_cursor_arrow(cairo_t *cr, const double tip_x, const double ti
   const double curve_ctrl_axis_offset = -0.2;
   const double curve_ctrl_0_x = 0.39 + axis_x * curve_ctrl_axis_offset;
   const double curve_ctrl_0_y = 0.75 + axis_y * curve_ctrl_axis_offset;
-  const double curve_ctrl_1_x = 0.39 - axis_x * curve_ctrl_axis_offset;
-  const double curve_ctrl_1_y = 0.75 - axis_y * curve_ctrl_axis_offset;
+  //const double curve_ctrl_1_x = 0.39 - axis_x * curve_ctrl_axis_offset;
+  //const double curve_ctrl_1_y = 0.75 - axis_y * curve_ctrl_axis_offset;
   // Keep the tail centered on the arrow axis so the center line crosses it.
   const double base_axis_offset = 0.33 * axis_x + 0.49 * axis_y;
   const double tail_axis_offset = 0.3;
