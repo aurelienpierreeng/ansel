@@ -157,11 +157,11 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
       const float x = -1.0 + (lightness * 2.0);
       float gauss = GAUSS(a, b, c, x);
 
-      if(dt_isnan(gauss) || isinf(gauss)) gauss = 0.0;
+      if(dt_isnan(gauss) || !dt_isfinite(gauss)) gauss = 0.0;
 
       float relight = 1.0 / exp2f(-data->ev * CLIP(gauss));
 
-      if(dt_isnan(relight) || isinf(relight)) relight = 1.0;
+      if(dt_isnan(relight) || !dt_isfinite(relight)) relight = 1.0;
 
       out[0] = 100.0 * CLIP(lightness * relight);
       out[1] = in[1];

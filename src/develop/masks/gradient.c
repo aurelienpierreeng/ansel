@@ -58,14 +58,14 @@ static int _find_border_separator(const float *border, int count)
 #pragma omp parallel for reduction(min:found) if(count > 1000)
   for(int i = 0; i < count; i++)
   {
-    if(isinf(border[i * 2]) && isinf(border[i * 2 + 1]))
+    if(!dt_isfinite(border[i * 2]) && !dt_isfinite(border[i * 2 + 1]))
       found = i;
   }
   return (found == count) ? -1 : found;
 #else
   for(int i = 0; i < count; i++)
   {
-    if(isinf(border[i * 2]) && isinf(border[i * 2 + 1]))
+    if(!dt_isfinite(border[i * 2]) && !dt_isfinite(border[i * 2 + 1]))
       return i;
   }
   return -1;

@@ -729,7 +729,7 @@ static void _print_nan_debug(dt_dev_pixelpipe_t *pipe, void *cl_mem_output, void
           float f = ((float *)(output))[k];
           if(dt_isnan(f))
             hasnan = 1;
-          else if(isinf(f))
+          else if(!dt_isfinite(f))
             hasinf = 1;
           else
           {
@@ -758,7 +758,7 @@ static void _print_nan_debug(dt_dev_pixelpipe_t *pipe, void *cl_mem_output, void
         float f = ((float *)(output))[k];
         if(dt_isnan(f))
           hasnan = 1;
-        else if(isinf(f))
+        else if(!dt_isfinite(f))
           hasinf = 1;
         else
         {
