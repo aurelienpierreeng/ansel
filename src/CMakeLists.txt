@@ -696,6 +696,9 @@ else()
   set(DT_BUILD_CPU_MODE "native/local")
 endif()
 
+message(STATUS "CMAKE_C_FLAGS = ${DT_BUILD_C_FLAGS}")
+message(STATUS "CMAKE_CXX_FLAGS = ${DT_BUILD_CXX_FLAGS}")
+
 #
 # Generate config.h
 #
