@@ -1124,10 +1124,10 @@ void modify_roi_in(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t
         {
           const float x = buf[6 * k + c];
           const float y = buf[6 * k + c + 1];
-          xm = isnan(x) ? xm : MIN(xm, x);
-          xM = isnan(x) ? xM : MAX(xM, x);
-          ym = isnan(y) ? ym : MIN(ym, y);
-          yM = isnan(y) ? yM : MAX(yM, y);
+          xm = dt_isnan(x) ? xm : MIN(xm, x);
+          xM = dt_isnan(x) ? xM : MAX(xM, x);
+          ym = dt_isnan(y) ? ym : MIN(ym, y);
+          yM = dt_isnan(y) ? yM : MAX(yM, y);
         }
       }
     }

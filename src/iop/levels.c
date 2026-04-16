@@ -258,7 +258,7 @@ static void dt_iop_levels_compute_levels_automatic(dt_iop_module_t *self,
 
     for(int k = 0; k < 3; k++)
     {
-      if(isnan(d->levels[k]) && (n >= thr[k]))
+      if(dt_isnan(d->levels[k]) && (n >= thr[k]))
       {
         d->levels[k] = (float)i / (float)(histogram_stats.bins_count - 1);
       }
@@ -269,11 +269,11 @@ static void dt_iop_levels_compute_levels_automatic(dt_iop_module_t *self,
 
   // for numerical reasons sometimes the threshold is sharp but in float and n is size_t.
   // in this case we want to make sure we don't keep nan:
-  if(isnan(d->levels[2])) d->levels[2] = 1.0f;
+  if(dt_isnan(d->levels[2])) d->levels[2] = 1.0f;
 
   // compute middle level from min and max levels
   float center = d->percentiles[1] / 100.0f;
-  if(!isnan(d->levels[0]) && !isnan(d->levels[2]))
+  if(!dt_isnan(d->levels[0]) && !dt_isnan(d->levels[2]))
     d->levels[1] = (1.0f - center) * d->levels[0] + center * d->levels[2];
 }
 
@@ -395,8 +395,8 @@ static inline __attribute__((always_inline)) void commit_params_late(dt_iop_modu
     }
 
     if(dt_dev_pixelpipe_has_preview_output(self->dev, pipe, &piece->roi_out)
-       || isnan(d->levels[0]) || isnan(d->levels[1])
-       || isnan(d->levels[2]))
+       || dt_isnan(d->levels[0]) || dt_isnan(d->levels[1])
+       || dt_isnan(d->levels[2]))
     {
       dt_iop_levels_compute_levels_automatic(self, piece);
       compute_lut(piece);

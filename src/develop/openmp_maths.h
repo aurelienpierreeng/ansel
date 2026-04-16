@@ -109,8 +109,8 @@ __OMP_DECLARE_SIMD__()
 static inline float fmaxabsf(const float a, const float b)
 {
   // Find the max in absolute value and return it with its sign
-  return (fabsf(a) > fabsf(b) && !isnan(a)) ? a :
-                                            (isnan(b)) ? 0.f : b;
+  return (fabsf(a) > fabsf(b) && !dt_isnan(a)) ? a :
+                                            (dt_isnan(b)) ? 0.f : b;
 }
 
 
@@ -118,8 +118,8 @@ __OMP_DECLARE_SIMD__()
 static inline float fminabsf(const float a, const float b)
 {
   // Find the min in absolute value and return it with its sign
-  return (fabsf(a) < fabsf(b) && !isnan(a)) ? a :
-                                            (isnan(b)) ? 0.f : b;
+  return (fabsf(a) < fabsf(b) && !dt_isnan(a)) ? a :
+                                            (dt_isnan(b)) ? 0.f : b;
 }
 
 

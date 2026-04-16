@@ -545,7 +545,7 @@ static float _get_exposure_bias(const struct dt_iop_module_t *self)
     bias = self->dev->image_storage.exif_exposure_bias;
 
   // sanity checks, don't trust exif tags too much
-  if(!isnan(bias))
+  if(!dt_isnan(bias))
     return CLAMP(bias, -5.0f, 5.0f);
   else
     return 0.0f;
@@ -878,7 +878,7 @@ static gboolean _draw(GtkWidget *widget, cairo_t *cr, dt_iop_module_t *self)
   dt_iop_exposure_gui_data_t *g = (dt_iop_exposure_gui_data_t *)self->gui_data;
 
   dt_iop_gui_enter_critical_section(self);
-  if(!isnan(g->deflicker_computed_exposure))
+  if(!dt_isnan(g->deflicker_computed_exposure))
   {
     gchar *str = g_strdup_printf(_("%.2f EV"), g->deflicker_computed_exposure);
 

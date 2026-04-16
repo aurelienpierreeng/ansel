@@ -1499,7 +1499,7 @@ static bool _exif_decode_exif_data(dt_image_t *img, Exiv2::ExifData &exifData)
       if(sel_illu == -1)
         for(int i = 0; i < 3; ++i)
         {
-          if((illu[i] == DT_LS_Unknown) && !std::isnan(colmatrix[i][0]))
+          if((illu[i] == DT_LS_Unknown) && !dt_isnan(colmatrix[i][0]))
           {
             sel_illu = i;
             sel_temp = D65temp;
@@ -2169,7 +2169,7 @@ int dt_exif_read_blob(uint8_t **buf, const char *path, const int32_t imgid, cons
       // GPS data
       dt_remove_exif_geotag(exifData);
       const dt_image_t *cimg = dt_image_cache_get(darktable.image_cache, imgid, 'r');
-      if(!std::isnan(cimg->geoloc.longitude) && !std::isnan(cimg->geoloc.latitude))
+      if(!dt_isnan(cimg->geoloc.longitude) && !dt_isnan(cimg->geoloc.latitude))
       {
         exifData["Exif.GPSInfo.GPSVersionID"] = "02 02 00 00";
         exifData["Exif.GPSInfo.GPSLongitudeRef"] = (cimg->geoloc.longitude < 0) ? "W" : "E";
@@ -2186,7 +2186,7 @@ int dt_exif_read_blob(uint8_t **buf, const char *path, const int32_t imgid, cons
         dt_free(long_str);
         dt_free(lat_str);
       }
-      if(!std::isnan(cimg->geoloc.elevation))
+      if(!dt_isnan(cimg->geoloc.elevation))
       {
         exifData["Exif.GPSInfo.GPSVersionID"] = "02 02 00 00";
         exifData["Exif.GPSInfo.GPSAltitudeRef"] = (cimg->geoloc.elevation < 0) ? "1" : "0";
@@ -3720,7 +3720,7 @@ static void dt_remove_xmp_exif_geotag(Exiv2::XmpData &xmpData)
 static void dt_set_xmp_exif_geotag(Exiv2::XmpData &xmpData, double longitude, double latitude, double altitude)
 {
   dt_remove_xmp_exif_geotag(xmpData);
-  if(!std::isnan(longitude) && !std::isnan(latitude))
+  if(!dt_isnan(longitude) && !dt_isnan(latitude))
   {
     char long_dir = 'E', lat_dir = 'N';
     if(longitude < 0) long_dir = 'W';
@@ -3748,7 +3748,7 @@ static void dt_set_xmp_exif_geotag(Exiv2::XmpData &xmpData, double longitude, do
     dt_free(lat_str);
     dt_free(str);
   }
-  if(!std::isnan(altitude))
+  if(!dt_isnan(altitude))
   {
     xmpData["Xmp.exif.GPSAltitudeRef"] = (altitude < 0) ? "1" : "0";
 
@@ -4357,7 +4357,7 @@ int dt_exif_xmp_attach_export(const int32_t imgid, const char *filename, void *m
                    (g_strstr_len(result, strlen(result), "/") == NULL))
                 {
                   float float_value = (float)std::atof(result);
-                  if(!std::isnan(float_value))
+                  if(!dt_isnan(float_value))
                   {
                     dt_free(result);
                     int int_value = (int)float_value;

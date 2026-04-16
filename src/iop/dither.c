@@ -237,7 +237,7 @@ static inline float clipnan(const float x)
   return (x > 0.0f) ? ((x < 1.0f) ? x    // 0 < x < 1
                                   : 1.0f // x >= 1
                        )
-         : isnan(x) ? 0.5f  // x is NaN
+         : dt_isnan(x) ? 0.5f  // x is NaN
                     : 0.0f; // x <= 0
 }
 

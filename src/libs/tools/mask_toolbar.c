@@ -101,7 +101,7 @@ static void _reset_opacity_slider(dt_lib_tool_mask_t *d)
 static void _set_opacity_slider(dt_lib_tool_mask_t *d, dt_masks_form_t *sel, dt_masks_form_group_t *fpt)
 {
   const float opacity = dt_masks_form_get_interaction_value(fpt, DT_MASKS_INTERACTION_OPACITY);
-  if(!isnan(opacity))
+  if(!dt_isnan(opacity))
   {
     dt_bauhaus_slider_set(d->opacity, opacity);
     gtk_widget_set_sensitive(d->opacity, TRUE);

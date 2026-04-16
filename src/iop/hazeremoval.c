@@ -547,7 +547,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     }
   }
   // In all other cases we calculate distance_max and A0 here.
-  if(isnan(distance_max))
+  if(dt_isnan(distance_max))
   {
     if(ambient_light(img_in, w1, &A0, &distance_max) != 0)
     {
@@ -845,7 +845,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     }
   }
   // In all other cases we calculate distance_max and A0 here.
-  if(isnan(distance_max))
+  if(dt_isnan(distance_max))
   {
     float max_depth = 0.f;
     if(ambient_light_cl(self, devid, img_in, w1, &A0, &max_depth)) return FALSE;

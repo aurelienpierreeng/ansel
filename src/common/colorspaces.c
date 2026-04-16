@@ -910,7 +910,7 @@ dt_colorspaces_color_profile_type_t dt_image_find_best_color_profile(int32_t img
     }
     dt_print(DT_DEBUG_COLORPROFILE, "Embedded ICC profile (inline)\n");
   }
-  else if(!isnan(img->d65_color_matrix[0])
+  else if(!dt_isnan(img->d65_color_matrix[0])
            && dt_colorspaces_create_xyzimatrix_profile((float(*)[3])img->d65_color_matrix))
   {
     // DNG and others : matrix inside EXIF
@@ -1119,7 +1119,7 @@ dt_colorspaces_color_profile_type_t dt_colorspaces_get_input_profile_from_image(
 
   if(type == DT_COLORSPACE_EMBEDDED_MATRIX)
   {
-    if(!isnan(img->d65_color_matrix[0]))
+    if(!dt_isnan(img->d65_color_matrix[0]))
     {
       profile = dt_colorspaces_create_xyzimatrix_profile((float(*)[3])img->d65_color_matrix);
       if(profile)
@@ -1133,7 +1133,7 @@ dt_colorspaces_color_profile_type_t dt_colorspaces_get_input_profile_from_image(
 
   if(type == DT_COLORSPACE_STANDARD_MATRIX)
   {
-    if(!isnan(img->adobe_XYZ_to_CAM[0][0]))
+    if(!dt_isnan(img->adobe_XYZ_to_CAM[0][0]))
     {
       profile = dt_colorspaces_create_xyzimatrix_profile((float(*)[3])img->adobe_XYZ_to_CAM);
       if(profile)
@@ -2560,7 +2560,7 @@ static void dt_colorspaces_pseudoinverse(double (*in)[3], double (*out)[3], int 
 
 int dt_colorspaces_conversion_matrices_xyz(const float adobe_XYZ_to_CAM[4][3], float in_XYZ_to_CAM[9], double XYZ_to_CAM[4][3], double CAM_to_XYZ[3][4])
 {
-  if(!isnan(in_XYZ_to_CAM[0]))
+  if(!dt_isnan(in_XYZ_to_CAM[0]))
   {
     for(int i = 0; i < 9; i++)
         XYZ_to_CAM[i/3][i%3] = (double) in_XYZ_to_CAM[i];
@@ -2569,7 +2569,7 @@ int dt_colorspaces_conversion_matrices_xyz(const float adobe_XYZ_to_CAM[4][3], f
   }
   else
   {
-    if(isnan(adobe_XYZ_to_CAM[0][0]))
+    if(dt_isnan(adobe_XYZ_to_CAM[0][0]))
       return FALSE;
 
     for(int i = 0; i < 4; i++)
@@ -2600,7 +2600,7 @@ int dt_colorspaces_conversion_matrices_rgb(const float adobe_XYZ_to_CAM[4][3],
   float XYZ_to_CAM[4][3];
   XYZ_to_CAM[0][0] = NAN;
 
-  if(IS_NULL_PTR(embedded_matrix) || isnan(embedded_matrix[0]))
+  if(IS_NULL_PTR(embedded_matrix) || dt_isnan(embedded_matrix[0]))
   {
     for(int k=0; k<4; k++)
       for(int i=0; i<3; i++)
@@ -2623,7 +2623,7 @@ int dt_colorspaces_conversion_matrices_rgb(const float adobe_XYZ_to_CAM[4][3],
     XYZ_to_CAM[2][2] = embedded_matrix[8];
   }
 
-  if(isnan(XYZ_to_CAM[0][0]))
+  if(dt_isnan(XYZ_to_CAM[0][0]))
     return FALSE;
 
   const double RGB_to_XYZ[3][3] = {

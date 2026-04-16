@@ -769,7 +769,7 @@ static void _metadata_view_update_values(dt_lib_module_t *self)
       case md_exif_exposure_bias:
       {
         g_strlcpy(text, NODATA_STRING, sizeof(text));
-        if(!(isnan(tinfo.exif_exposure_bias)))
+        if(!(dt_isnan(tinfo.exif_exposure_bias)))
         {
           (void)g_snprintf(text, sizeof(text), _("%+.2f EV"), tinfo.exif_exposure_bias);
         }
@@ -785,7 +785,7 @@ static void _metadata_view_update_values(dt_lib_module_t *self)
       case md_exif_focus_distance:
       {
         (void)g_strlcpy(text, NODATA_STRING, sizeof(text));
-        if(!(isnan(tinfo.exif_focus_distance) || (fpclassify(tinfo.exif_focus_distance) == FP_ZERO) ))
+        if(!(dt_isnan(tinfo.exif_focus_distance) || (fpclassify(tinfo.exif_focus_distance) == FP_ZERO) ))
         {
           (void)g_snprintf(text, sizeof(text), _("%.2f m"), tinfo.exif_focus_distance);
         }
@@ -838,7 +838,7 @@ static void _metadata_view_update_values(dt_lib_module_t *self)
 //          break;
 
       case md_geotagging_lat:
-        if(isnan(tinfo.geoloc.latitude))
+        if(dt_isnan(tinfo.geoloc.latitude))
         {
           _metadata_update_value(md_geotagging_lat, NODATA_STRING, self);
         }
@@ -860,7 +860,7 @@ static void _metadata_view_update_values(dt_lib_module_t *self)
         break;
 
       case md_geotagging_lon:
-        if(isnan(tinfo.geoloc.longitude))
+        if(dt_isnan(tinfo.geoloc.longitude))
         {
           _metadata_update_value(md_geotagging_lon, NODATA_STRING, self);
         }
@@ -882,7 +882,7 @@ static void _metadata_view_update_values(dt_lib_module_t *self)
         break;
 
       case md_geotagging_ele:
-        if(isnan(tinfo.geoloc.elevation))
+        if(dt_isnan(tinfo.geoloc.elevation))
         {
           _metadata_update_value(md_geotagging_ele, NODATA_STRING, self);
         }

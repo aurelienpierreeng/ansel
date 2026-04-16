@@ -216,7 +216,7 @@ static inline void process_drago(struct dt_iop_module_t *self, const dt_dev_pixe
   }
 
   // in all other cases we calculate lwmax here
-  if(isnan(tmp_lwmax))
+  if(dt_isnan(tmp_lwmax))
   {
     lwmax = eps;
     __OMP_PARALLEL_FOR__(reduction(max : lwmax)      )

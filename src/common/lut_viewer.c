@@ -251,8 +251,8 @@ static inline dt_aligned_pixel_simd_t _to_display_rgb(const dt_lut_viewer_t *vie
 
   if(IS_NULL_PTR(viewer->lut_profile) || !viewer->display_profile) return display_rgb;
 
-  if(!isnan(viewer->lut_profile->matrix_in[0][0]) && !isnan(viewer->lut_profile->matrix_out[0][0])
-     && !isnan(viewer->display_profile->matrix_in[0][0]) && !isnan(viewer->display_profile->matrix_out[0][0]))
+  if(!dt_isnan(viewer->lut_profile->matrix_in[0][0]) && !dt_isnan(viewer->lut_profile->matrix_out[0][0])
+     && !dt_isnan(viewer->display_profile->matrix_in[0][0]) && !dt_isnan(viewer->display_profile->matrix_out[0][0]))
     return _transform_single_rgb_matrix(work_rgb, viewer->lut_profile, viewer->display_profile);
 
   dt_aligned_pixel_simd_t in = work_rgb;

@@ -64,7 +64,7 @@ static __inline float clampnan(const float x, const float m, const float M)
 
   if(std::isinf(x))
     r = (std::isless(x, m) ? m : (std::isgreater(x, M) ? M : x));
-  else if(std::isnan(x))
+  else if(dt_isnan(x))
     r = (m + M) / 2.0f;
   else // normal number
     r = x;

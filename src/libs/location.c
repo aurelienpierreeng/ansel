@@ -303,7 +303,7 @@ static void clear_search(dt_lib_location_t *lib)
 
 static void _show_location(dt_lib_location_t *lib, _lib_location_result_t *p)
 {
-  if(isnan(p->bbox.lon1) || isnan(p->bbox.lat1) || isnan(p->bbox.lon2) || isnan(p->bbox.lat2))
+  if(dt_isnan(p->bbox.lon1) || dt_isnan(p->bbox.lat1) || dt_isnan(p->bbox.lon2) || dt_isnan(p->bbox.lat2))
   {
     int32_t zoom = _lib_location_place_get_zoom(p);
     dt_view_map_center_on_location(darktable.view_manager, p->lon, p->lat, zoom);
@@ -648,7 +648,7 @@ broken_bbox:
   }
 
   /* check if we got sane data */
-  if(isnan(place->lon) || isnan(place->lat)) goto bail_out;
+  if(dt_isnan(place->lon) || dt_isnan(place->lat)) goto bail_out;
 
   /* add place to result list */
   lib->places = g_list_append(lib->places, place);

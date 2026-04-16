@@ -793,7 +793,7 @@ static void _lrop(const dt_develop_t *dev, const xmlDocPtr doc, const int32_t im
     else if(!xmlStrcmp(name, (const xmlChar *)"GPSLatitude"))
     {
       double latitude = dt_util_gps_string_to_number((const char *)value);
-      if(!isnan(latitude))
+      if(!dt_isnan(latitude))
       {
         data->lat = latitude;
         data->has_gps = TRUE;
@@ -802,7 +802,7 @@ static void _lrop(const dt_develop_t *dev, const xmlDocPtr doc, const int32_t im
     else if(!xmlStrcmp(name, (const xmlChar *)"GPSLongitude"))
     {
       double longitude = dt_util_gps_string_to_number((const char *)value);
-      if(!isnan(longitude))
+      if(!dt_isnan(longitude))
       {
         data->lon = longitude;
         data->has_gps = TRUE;

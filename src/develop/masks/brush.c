@@ -289,7 +289,7 @@ static gboolean _brush_get_border_handle_resampled(const dt_masks_form_gui_point
   {
     const float px = gui_points->points[i * 2];
     const float py = gui_points->points[i * 2 + 1];
-    if(isnan(px) || isnan(py)) continue;
+    if(dt_isnan(px) || dt_isnan(py)) continue;
 
     const float dx = node_x - px;
     const float dy = node_y - py;
@@ -305,7 +305,7 @@ static gboolean _brush_get_border_handle_resampled(const dt_masks_form_gui_point
 
   *handle_x = gui_points->border[best_idx * 2];
   *handle_y = gui_points->border[best_idx * 2 + 1];
-  return !(isnan(*handle_x) || isnan(*handle_y));
+  return !(dt_isnan(*handle_x) || dt_isnan(*handle_y));
 }
 
 static gboolean _brush_get_border_handle_mirrored(const dt_masks_form_gui_points_t *gui_points, int node_count,
@@ -320,7 +320,7 @@ static gboolean _brush_get_border_handle_mirrored(const dt_masks_form_gui_points
 
   *handle_x = node_x - (resampled_x - node_x);
   *handle_y = node_y - (resampled_y - node_y);
-  return !(isnan(*handle_x) || isnan(*handle_y));
+  return !(dt_isnan(*handle_x) || dt_isnan(*handle_y));
 }
 
 /** get bezier control points from feather extremity */
@@ -629,13 +629,13 @@ static void _brush_points_recurs(float *p1, float *p2, double tmin, double tmax,
   const gboolean withpayload = (!IS_NULL_PTR(dpayload));
 
   // we calculate points if needed
-  if(isnan(points_min[0]))
+  if(dt_isnan(points_min[0]))
   {
     _brush_border_get_XY(p1[0], p1[1], p1[2], p1[3], p2[2], p2[3], p2[0], p2[1], tmin,
                          p1[4] + (p2[4] - p1[4]) * tmin * tmin * (3.0 - 2.0 * tmin), points_min,
                          points_min + 1, border_min, border_min + 1);
   }
-  if(isnan(points_max[0]))
+  if(dt_isnan(points_max[0]))
   {
     _brush_border_get_XY(p1[0], p1[1], p1[2], p1[3], p2[2], p2[3], p2[0], p2[1], tmax,
                          p1[4] + (p2[4] - p1[4]) * tmax * tmax * (3.0 - 2.0 * tmax), points_max,
@@ -653,12 +653,12 @@ static void _brush_points_recurs(float *p1, float *p2, double tmin, double tmax,
 
     if(withborder)
     {
-      if(isnan(border_max[0]))
+      if(dt_isnan(border_max[0]))
       {
         border_max[0] = border_min[0];
         border_max[1] = border_min[1];
       }
-      else if(isnan(border_min[0]))
+      else if(dt_isnan(border_min[0]))
       {
         border_min[0] = border_max[0];
         border_min[1] = border_max[1];
@@ -951,11 +951,11 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
 
     if(!IS_NULL_PTR(dborder))
     {
-      if(isnan(rb[0]))
+      if(dt_isnan(rb[0]))
       {
         float lastb0 = dt_masks_dynbuf_get(dborder, -2);
         float lastb1 = dt_masks_dynbuf_get(dborder, -1);
-        if(isnan(lastb0))
+        if(dt_isnan(lastb0))
         {
           lastb0 = dt_masks_dynbuf_get(dborder, -4);
           lastb1 = dt_masks_dynbuf_get(dborder, -3);
@@ -974,7 +974,7 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
       // we get the next point (start of the next segment)
       _brush_border_get_XY(p3[0], p3[1], p3[2], p3[3], p4[2], p4[3], p4[0], p4[1], 0, p3[4], cmin, cmin + 1,
                            bmax, bmax + 1);
-      if(isnan(bmax[0]))
+      if(dt_isnan(bmax[0]))
       {
         _brush_border_get_XY(p3[0], p3[1], p3[2], p3[3], p4[2], p4[3], p4[0], p4[1], 0.0001, p3[4], cmin,
                              cmin + 1, bmax, bmax + 1);
@@ -2134,7 +2134,7 @@ static void _brush_draw_shape(cairo_t *cr, const float *points, const int points
   int start_idx = -1;
   for(int i = node_nb * 3 + border; i < points_count; i++)
   {
-    if(!isnan(points[i * 2]) && !isnan(points[i * 2 + 1]))
+    if(!dt_isnan(points[i * 2]) && !dt_isnan(points[i * 2 + 1]))
     {
       start_idx = i;
       break;
@@ -2151,7 +2151,7 @@ static void _brush_draw_shape(cairo_t *cr, const float *points, const int points
     
     for(int i = start_idx + 1; i < end_idx; i++)
     {
-      if(!isnan(points[i * 2]) && !isnan(points[i * 2 + 1]))
+      if(!dt_isnan(points[i * 2]) && !dt_isnan(points[i * 2 + 1]))
         cairo_line_to(cr, points[i * 2], points[i * 2 + 1]);
     }
   }
@@ -2168,7 +2168,7 @@ static float _brush_line_length(const float *line, const int first_pt, const int
     const float y0 = line[i0 + 1];
     const float x1 = line[i1];
     const float y1 = line[i1 + 1];
-    if(isnan(x0) || isnan(y0) || isnan(x1) || isnan(y1)) continue;
+    if(dt_isnan(x0) || dt_isnan(y0) || dt_isnan(x1) || dt_isnan(y1)) continue;
     const float dx = x1 - x0;
     const float dy = y1 - y0;
     const float len = dx * dx + dy * dy;
@@ -2195,7 +2195,7 @@ static gboolean _brush_line_point_at_length(const float *line, const int first_p
     const float y0 = line[i0 + 1];
     const float x1 = line[i1];
     const float y1 = line[i1 + 1];
-    if(isnan(x0) || isnan(y0) || isnan(x1) || isnan(y1)) continue;
+    if(dt_isnan(x0) || dt_isnan(y0) || dt_isnan(x1) || dt_isnan(y1)) continue;
 
     const float dx = x1 - x0;
     const float dy = y1 - y0;
@@ -2216,7 +2216,7 @@ static gboolean _brush_line_point_at_length(const float *line, const int first_p
     acc += len;
   }
 
-  if(!has_fallback || isnan(fallback_x) || isnan(fallback_y)) return FALSE;
+  if(!has_fallback || dt_isnan(fallback_x) || dt_isnan(fallback_y)) return FALSE;
   *x = fallback_x;
   *y = fallback_y;
   return TRUE;

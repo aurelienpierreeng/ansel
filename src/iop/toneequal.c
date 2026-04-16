@@ -1236,7 +1236,7 @@ static int compute_channels_factors(const float factors[PIXEL_CHAN], float out[C
     out[i] = pixel_correction(centers_params[i], factors, sigma);
 
     // check they are in [-2, 2] EV and not NAN
-    if(isnan(out[i]) || out[i] < 0.25f || out[i] > 4.0f) valid = 0;
+    if(dt_isnan(out[i]) || out[i] < 0.25f || out[i] > 4.0f) valid = 0;
   }
 
   return valid;
@@ -1960,7 +1960,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
                         : NAN;
       dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
 
-      if(!isnan(cursor_exposure))
+      if(!dt_isnan(cursor_exposure))
       {
         dt_iop_gui_enter_critical_section(self);
         g->cursor_exposure = cursor_exposure;
@@ -2102,7 +2102,7 @@ int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t 
                       : NAN;
     dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
 
-    if(!isnan(cursor_exposure))
+    if(!dt_isnan(cursor_exposure))
     {
       dt_iop_gui_enter_critical_section(self);
       g->cursor_exposure = cursor_exposure;
@@ -2291,7 +2291,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
     }
     dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
 
-    if(!isnan(exposure_in))
+    if(!dt_isnan(exposure_in))
     {
       dt_iop_gui_enter_critical_section(self);
       g->cursor_exposure = exposure_in;
@@ -2302,7 +2302,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   if(preview_entry)
     dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
 
-  if(isnan(correction) || isnan(exposure_in)) return; // something went wrong
+  if(dt_isnan(correction) || dt_isnan(exposure_in)) return; // something went wrong
 
   // Rescale and shift Cairo drawing coordinates
   const float zoom_scale = dt_dev_get_overlay_scale(dev);

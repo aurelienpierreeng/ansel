@@ -211,7 +211,7 @@ __OMP_DECLARE_SIMD__(aligned(vector:16))
 static inline void downscale_vector(dt_aligned_pixel_t vector, const float scaling)
 {
   // check zero or NaN
-  const int valid = (scaling > NORM_MIN) && !isnan(scaling);
+  const int valid = (scaling > NORM_MIN) && !dt_isnan(scaling);
   for(size_t c = 0; c < 3; c++) vector[c] = (valid) ? vector[c] / (scaling + NORM_MIN) : vector[c] / NORM_MIN;
 }
 
@@ -219,7 +219,7 @@ static inline void downscale_vector(dt_aligned_pixel_t vector, const float scali
 __OMP_DECLARE_SIMD__(aligned(vector:16))
 static inline void upscale_vector(dt_aligned_pixel_t vector, const float scaling)
 {
-  const int valid = (scaling > NORM_MIN) && !isnan(scaling);
+  const int valid = (scaling > NORM_MIN) && !dt_isnan(scaling);
   for(size_t c = 0; c < 3; c++) vector[c] = (valid) ? vector[c] * (scaling + NORM_MIN) : vector[c] * NORM_MIN;
 }
 

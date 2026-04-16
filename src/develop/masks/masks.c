@@ -188,7 +188,7 @@ int dt_masks_find_closest_handle_common(dt_masks_form_t *mask_form,
       node_x = gui_points->points[selected_node * 6 + 2];
       node_y = gui_points->points[selected_node * 6 + 3];
     }
-    if(!isnan(node_x) && !isnan(node_y)
+    if(!dt_isnan(node_x) && !dt_isnan(node_y)
        && dt_masks_point_is_within_radius(cursor_x, cursor_y, node_x, node_y, cursor_radius2))
     {
       mask_gui->node_hovered = selected_node;
@@ -211,7 +211,7 @@ int dt_masks_find_closest_handle_common(dt_masks_form_t *mask_form,
         node_x = gui_points->points[node_index * 6 + 2];
         node_y = gui_points->points[node_index * 6 + 3];
       }
-      if(!isnan(node_x) && !isnan(node_y)
+      if(!dt_isnan(node_x) && !dt_isnan(node_y)
          && dt_masks_point_is_within_radius(cursor_x, cursor_y, node_x, node_y, cursor_radius2))
       {
         mask_gui->node_hovered = node_index;
@@ -3315,7 +3315,7 @@ float dt_masks_form_set_interaction_value(dt_masks_form_group_t *form_group,
 
   const float result = target_form->functions->set_interaction_value(target_form, interaction, value, increment,
                                                                      flow, mask_gui, module);
-  if(isnan(result)) return NAN;
+  if(dt_isnan(result)) return NAN;
   dt_masks_form_update_gravity_center(target_form);
   dt_dev_add_history_item(darktable.develop, module, TRUE, TRUE);
   return result;
@@ -3447,7 +3447,7 @@ int dt_masks_form_change_opacity(dt_masks_form_t *mask_form, int parent_id, int 
   float amount = scroll_up ? 0.02f : -0.02f;
   const float changed = dt_masks_form_set_interaction_value(form_group, DT_MASKS_INTERACTION_OPACITY,
                                                             amount, DT_MASKS_INCREMENT_OFFSET, flow, NULL, NULL);
-  return !isnan(changed);
+  return !dt_isnan(changed);
 }
 
 void dt_masks_form_move(dt_masks_form_t *group_form, int form_id, int move_up)
@@ -3764,9 +3764,9 @@ int dt_masks_point_in_form_exact(const float *test_points, int test_point_count,
       const float y2 = form_points[next * 2 + 1];
 
       // if we need to skip points (in case of deleted point, because of self-intersection)
-      if(isnan(form_points[next * 2]))
+      if(dt_isnan(form_points[next * 2]))
       {
-        next = isnan(y2) ? start_index : (int)y2;
+        next = dt_isnan(y2) ? start_index : (int)y2;
         continue;
       }
 

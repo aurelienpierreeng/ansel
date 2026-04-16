@@ -1230,7 +1230,7 @@ void gui_update(struct dt_iop_module_t *self)
     }
   }
 
-  if (!found || isnan(g->mod_temp)) // reset or initialize user-defined
+  if (!found || dt_isnan(g->mod_temp)) // reset or initialize user-defined
   {
     g->mod_temp = tempK;
     g->mod_tint = tint;

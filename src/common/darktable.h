@@ -690,6 +690,15 @@ static inline void copy_pixel(float *const __restrict__ out, const float *const 
   for_each_channel(k,aligned(in,out:16)) out[k] = in[k];
 }
 
+// Low-level comparison for NaN float that resists -ffast-math compiler option
+static inline int dt_isnan(float x)
+{
+  uint32_t u;
+  memcpy(&u, &x, sizeof(u));
+  return (u & 0x7f800000u) == 0x7f800000u &&
+          (u & 0x007fffffu) != 0;
+}
+
 
 /********************************* */
 
