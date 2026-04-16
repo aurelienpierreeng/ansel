@@ -25,6 +25,9 @@ endif(WebP_FOUND)
 if(OpenEXR_FOUND)
   list(APPEND MODULES "exr")
   add_library(exr MODULE "exr.cc")
+  # Without the following, Windows builds fail with 
+  # std::string symbol being defined in two different DLL import libraries
+  set_target_properties(exr PROPERTIES INTERPROCEDURAL_OPTIMIZATION FALSE)
 endif(OpenEXR_FOUND)
 
 if(OpenJPEG_FOUND)
