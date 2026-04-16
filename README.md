@@ -67,7 +67,7 @@ Go and support these projects so they can have more man-hours put on fixing thos
     - [Coding style](https://ansel.photos/en/contribute/coding-style/)
 - [Developer documentation](https://dev.ansel.photos)
 - [Project news](https://ansel.photos/en/news/)
-- Community forum - the community forum was hacked, we are looking into setting up a new one
+- [Discussions](https://github.com/aurelienpierreeng/ansel/discussions) - directly on github until we set up a new community forum
 - [Matrix chatrooms](https://app.element.io/#/room/#ansel:matrix.org)
 - [Support](https://ansel.photos/en/support/)
 
