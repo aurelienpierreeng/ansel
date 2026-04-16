@@ -12,7 +12,6 @@ macro(_detach_debuginfo target dest)
     add_custom_command (TARGET ${target} POST_BUILD
       COMMAND ${CMAKE_COMMAND} -E make_directory .debug
       COMMAND objcopy --only-keep-debug $<TARGET_FILE:${target}> $<TARGET_FILE_DIR:${target}>/$<TARGET_FILE_NAME:${target}>.dbg
-      COMMAND objcopy --strip-debug $<TARGET_FILE:${target}>
       COMMAND objcopy --add-gnu-debuglink=$<TARGET_FILE_NAME:${target}>.dbg $<TARGET_FILE:${target}>
       COMMENT "Detaching debug infos for ${target}."
     )
