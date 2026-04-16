@@ -1409,9 +1409,9 @@ static bool _exif_decode_exif_data(dt_image_t *img, Exiv2::ExifData &exifData)
     // read embedded color matrix as used in DNGs
     {
       float colmatrix[3][12];
-      colmatrix[0][0] = colmatrix[1][0] = colmatrix[2][0] = NAN;
+      colmatrix[0][0] = colmatrix[1][0] = colmatrix[2][0] = dt_nan();
       dt_dng_illuminant_t illu[3] = { DT_LS_Unknown, DT_LS_Unknown, DT_LS_Unknown };
-      img->d65_color_matrix[0] = NAN; // make sure for later testing
+      img->d65_color_matrix[0] = dt_nan(); // make sure for later testing
 
       // fallback later via `find_temperature_from_raw_coeffs` if there is no valid illuminant
 
@@ -3829,7 +3829,7 @@ static void _exif_xmp_read_data(Exiv2::XmpData &xmpData, const int32_t imgid, co
 {
   const int xmp_version = DT_XMP_EXIF_VERSION;
   int stars = 1, raw_params = 0, history_end = -1;
-  double longitude = NAN, latitude = NAN, altitude = NAN;
+  double longitude = dt_nan(), latitude = dt_nan(), altitude = dt_nan();
   gchar *filename = NULL;
   gchar *iop_order_list = NULL;
   GTimeSpan gts = 0;
@@ -3937,7 +3937,7 @@ static void _exif_xmp_read_data_export(Exiv2::XmpData &xmpData, const int32_t im
 {
   const int xmp_version = DT_XMP_EXIF_VERSION;
   int stars = 1, raw_params = 0, history_end = -1;
-  double longitude = NAN, latitude = NAN, altitude = NAN;
+  double longitude = dt_nan(), latitude = dt_nan(), altitude = dt_nan();
   gchar *filename = NULL;
   GTimeSpan gts = 0;
   gchar *iop_order_list = NULL;

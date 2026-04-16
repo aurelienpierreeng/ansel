@@ -891,7 +891,7 @@ static void _update_gradient_slider_pickers(GtkWidget *callback_dummy, dt_iop_mo
     }
     else
     {
-      dtgtk_gradient_slider_multivalue_set_picker(data->filter[in_out].slider, NAN);
+      dtgtk_gradient_slider_multivalue_set_picker(data->filter[in_out].slider, dt_nan());
       gtk_label_set_text(data->filter[in_out].picker_label, "");
     }
   }

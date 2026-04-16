@@ -468,12 +468,12 @@ static void _lib_location_parser_start_element(GMarkupParseContext *cxt, const c
   _lib_location_result_t *place = g_malloc0(sizeof(_lib_location_result_t));
   if(IS_NULL_PTR(place)) return;
 
-  place->lon = NAN;
-  place->lat = NAN;
-  place->bbox.lon1 = NAN;
-  place->bbox.lat1 = NAN;
-  place->bbox.lon2 = NAN;
-  place->bbox.lat2 = NAN;
+  place->lon = dt_nan();
+  place->lat = dt_nan();
+  place->bbox.lon1 = dt_nan();
+  place->bbox.lat1 = dt_nan();
+  place->bbox.lon2 = dt_nan();
+  place->bbox.lat2 = dt_nan();
   place->marker_type = MAP_DISPLAY_NONE;
   place->marker_points = NULL;
 

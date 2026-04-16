@@ -75,10 +75,10 @@
 
 static inline __attribute__((always_inline)) void _mark_as_nonmatrix_profile(dt_iop_order_iccprofile_info_t *const profile_info)
 {
-  profile_info->matrix_in[0][0] = NAN;
-  profile_info->matrix_in_transposed[0][0] = NAN;
-  profile_info->matrix_out[0][0] = NAN;
-  profile_info->matrix_out_transposed[0][0] = NAN;
+  profile_info->matrix_in[0][0] = dt_nan();
+  profile_info->matrix_in_transposed[0][0] = dt_nan();
+  profile_info->matrix_out[0][0] = dt_nan();
+  profile_info->matrix_out_transposed[0][0] = dt_nan();
 }
 
 __DT_CLONE_TARGETS__
@@ -1043,7 +1043,7 @@ void dt_ioppr_transform_image_colorspace(struct dt_iop_module_t *self, const flo
   dt_times_t start_time = { 0 }, end_time = { 0 };
   if(darktable.unmuted & DT_DEBUG_PERF) dt_get_times(&start_time);
 
-  // matrix should be never NAN, this is only to test it against lcms2!
+  // matrix should be never dt_nan(), this is only to test it against lcms2!
   if(!dt_isnan(profile_info->matrix_in[0][0]) && !dt_isnan(profile_info->matrix_out[0][0]))
   {
     _transform_matrix(self, image_in, image_out, width, height, cst_from, cst_to, converted_cst, profile_info);

@@ -175,7 +175,7 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
     n->red = o->coeffs[0];
     n->green = o->coeffs[1];
     n->blue = o->coeffs[2];
-    n->g2 = NAN;
+    n->g2 = dt_nan();
 
     return 0;
   }
@@ -1323,7 +1323,7 @@ static void find_coeffs(dt_iop_module_t *module, double coeffs[4])
 
   // the raw should provide wb coeffs:
   int ok = 1;
-  // Only check the first three values, the fourth is usually NAN for RGB
+  // Only check the first three values, the fourth is usually dt_nan() for RGB
   const int num_coeffs = (img->flags & DT_IMAGE_4BAYER) ? 4 : 3;
   for(int k = 0; ok && k < num_coeffs; k++)
   {
@@ -1868,7 +1868,7 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(g->finetune, _("fine tune camera's white balance setting"));
   gtk_box_pack_start(box_enabled, g->finetune, TRUE, TRUE, 0);
 
-  g->mod_temp = NAN;
+  g->mod_temp = dt_nan();
   for(int k = 0; k < 4; k++)
   {
     g->daylight_wb[k] = 1.0;

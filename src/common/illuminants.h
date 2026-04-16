@@ -412,7 +412,7 @@ static int find_temperature_from_raw_coeffs(const dt_image_t *img, const dt_alig
 
   // Get the camera input profile (matrice of primaries)
   float XYZ_to_CAM[4][3];
-  XYZ_to_CAM[0][0] = NAN;
+  XYZ_to_CAM[0][0] = dt_nan();
 
   if(!dt_isnan(img->d65_color_matrix[0]))
   {
@@ -442,7 +442,7 @@ static int find_temperature_from_raw_coeffs(const dt_image_t *img, const dt_alig
   // Bloody input matrices define XYZ -> CAM transform, as if we often needed camera profiles to output
   // So we need to invert them. Here go your CPU cycles again.
   float CAM_to_XYZ[4][3];
-  CAM_to_XYZ[0][0] = NAN;
+  CAM_to_XYZ[0][0] = dt_nan();
   matrice_pseudoinverse(XYZ_to_CAM, CAM_to_XYZ, 3);
   if(dt_isnan(CAM_to_XYZ[0][0])) return FALSE;
 

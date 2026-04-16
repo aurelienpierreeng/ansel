@@ -652,7 +652,7 @@ static float get_luminance_from_buffer(const float *const buffer,
   // Get the weighted average luminance of the 3x3 pixels region centered in (x, y)
   // x and y are ratios in [0, 1] of the width and height
 
-  if(y >= height || x >= width) return NAN;
+  if(y >= height || x >= width) return dt_nan();
 
   const size_t y_abs[4] DT_ALIGNED_PIXEL =
                           { MAX(y, 1) - 1,                  // previous line
@@ -1235,7 +1235,7 @@ static int compute_channels_factors(const float factors[PIXEL_CHAN], float out[C
      // Compute the new channels factors
     out[i] = pixel_correction(centers_params[i], factors, sigma);
 
-    // check they are in [-2, 2] EV and not NAN
+    // check they are in [-2, 2] EV and not dt_nan()
     if(dt_isnan(out[i]) || out[i] < 0.25f || out[i] > 4.0f) valid = 0;
   }
 
@@ -1957,7 +1957,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
       const float cursor_exposure
           = preview_buf ? log2f(get_luminance_from_buffer(preview_buf, preview_width, preview_height,
                                                           (size_t)x_pointer, (size_t)y_pointer))
-                        : NAN;
+                        : dt_nan();
       dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
 
       if(!dt_isnan(cursor_exposure))
@@ -2099,7 +2099,7 @@ int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t 
     const float cursor_exposure
         = preview_buf ? log2f(get_luminance_from_buffer(preview_buf, preview_width, preview_height,
                                                         (size_t)cursor_x, (size_t)cursor_y))
-                      : NAN;
+                      : dt_nan();
     dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
 
     if(!dt_isnan(cursor_exposure))
@@ -2286,8 +2286,8 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
     }
     else
     {
-      exposure_in = NAN;
-      correction = NAN;
+      exposure_in = dt_nan();
+      correction = dt_nan();
     }
     dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
 
@@ -3324,9 +3324,9 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
 
   dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, preview_entry);
   const float *const preview_buf = (const float *const)dt_pixel_cache_entry_get_data(preview_entry);
-  float picked = NAN;
-  float picked_min = NAN;
-  float picked_max = NAN;
+  float picked = dt_nan();
+  float picked_min = dt_nan();
+  float picked_max = dt_nan();
   const gboolean sampled = _sample_picker_luminance_mask(preview_buf, preview_width, preview_height,
                                                          &picked, &picked_min, &picked_max);
   dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, preview_entry);

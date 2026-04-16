@@ -245,7 +245,7 @@ static void dt_iop_levels_compute_levels_automatic(dt_iop_module_t *self,
   for(int k = 0; k < 3; k++)
   {
     thr[k] = (float)total * d->percentiles[k] / 100.0f;
-    d->levels[k] = NAN;
+    d->levels[k] = dt_nan();
   }
 
   if(IS_NULL_PTR(histogram)) return;
@@ -511,9 +511,9 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_
     d->percentiles[1] = p->gray;
     d->percentiles[2] = p->white;
 
-    d->levels[0] = NAN;
-    d->levels[1] = NAN;
-    d->levels[2] = NAN;
+    d->levels[0] = dt_nan();
+    d->levels[1] = dt_nan();
+    d->levels[2] = dt_nan();
 
     // commit_params_late() will compute LUT later
   }
@@ -567,9 +567,9 @@ void gui_update(dt_iop_module_t *self)
   gui_changed(self, g->mode, 0);
 
   dt_iop_gui_enter_critical_section(self);
-  g->auto_levels[0] = NAN;
-  g->auto_levels[1] = NAN;
-  g->auto_levels[2] = NAN;
+  g->auto_levels[0] = dt_nan();
+  g->auto_levels[1] = dt_nan();
+  g->auto_levels[2] = dt_nan();
   g->hash = 0;
   dt_iop_gui_leave_critical_section(self);
 
@@ -594,9 +594,9 @@ void gui_init(dt_iop_module_t *self)
   dt_iop_levels_gui_data_t *c = IOP_GUI_ALLOC(levels);
 
   dt_iop_gui_enter_critical_section(self);
-  c->auto_levels[0] = NAN;
-  c->auto_levels[1] = NAN;
-  c->auto_levels[2] = NAN;
+  c->auto_levels[0] = dt_nan();
+  c->auto_levels[1] = dt_nan();
+  c->auto_levels[2] = dt_nan();
   c->hash = 0;
   dt_iop_gui_leave_critical_section(self);
 

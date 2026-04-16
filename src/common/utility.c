@@ -605,7 +605,7 @@ gchar *dt_util_elevation_str(float elevation)
 
 double dt_util_gps_string_to_number(const gchar *input)
 {
-  double res = NAN;
+  double res = dt_nan();
   gchar dir = toupper(input[strlen(input) - 1]);
   gchar **list = g_strsplit(input, ",", 0);
   if(list)

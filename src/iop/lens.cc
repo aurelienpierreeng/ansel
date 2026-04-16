@@ -1134,7 +1134,7 @@ void modify_roi_in(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t
 
   dt_pixelpipe_cache_free_align(buf);
 
-    // LensFun can return NAN coords, so we need to handle them carefully.
+    // LensFun can return dt_nan() coords, so we need to handle them carefully.
     if(!dt_isfinite(xm) || !(0 <= xm && xm < orig_w)) xm = 0;
     if(!dt_isfinite(xM) || !(1 <= xM && xM < orig_w)) xM = orig_w;
     if(!dt_isfinite(ym) || !(0 <= ym && ym < orig_h)) ym = 0;
@@ -1253,7 +1253,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   d->tca_override = p->tca_override;
 
   /*
-   * there are certain situations when LensFun can return NAN coordinated.
+   * there are certain situations when LensFun can return dt_nan() coordinated.
    * most common case would be when the FOV is increased.
    */
   if(d->target_geom == LF_RECTILINEAR)

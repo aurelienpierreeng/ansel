@@ -256,7 +256,7 @@ gboolean dt_gpx_get_location(struct dt_gpx_t *gpx, GDateTime *timestamp, dt_imag
 
         /* make a simple linear interpolation on elevation */
         if(dt_isnan(tp_next->elevation) || dt_isnan(tp->elevation))
-          geoloc->elevation = NAN;
+          geoloc->elevation = dt_nan();
         else
           geoloc->elevation = tp->elevation + (tp_next->elevation - tp->elevation) * f;
       }
@@ -306,10 +306,10 @@ void _gpx_parser_start_element(GMarkupParseContext *ctx, const gchar *element_na
       gpx->current_track_point = g_malloc0(sizeof(dt_gpx_track_point_t));
       gpx->current_track_point->segid = gpx->segid;
 
-      /* initialize with NAN for validation check */
-      gpx->current_track_point->longitude = NAN;
-      gpx->current_track_point->latitude = NAN;
-      gpx->current_track_point->elevation = NAN;
+      /* initialize with dt_nan() for validation check */
+      gpx->current_track_point->longitude = dt_nan();
+      gpx->current_track_point->latitude = dt_nan();
+      gpx->current_track_point->elevation = dt_nan();
 
       /* go thru the attributes to find and get values of lon / lat*/
       while(*attribute_name)

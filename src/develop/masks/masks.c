@@ -155,8 +155,8 @@ int dt_masks_find_closest_handle_common(dt_masks_form_t *mask_form,
   if(has_selected_node)
   {
     // Current node's border handle (feather handle).
-    float handle_x = NAN;
-    float handle_y = NAN;
+    float handle_x = dt_nan();
+    float handle_y = dt_nan();
     if(border_handle_cb
        && border_handle_cb(gui_points, node_count, selected_node, &handle_x, &handle_y, user_data)
        && dt_masks_point_is_within_radius(cursor_x, cursor_y, handle_x, handle_y, cursor_radius2))
@@ -177,8 +177,8 @@ int dt_masks_find_closest_handle_common(dt_masks_form_t *mask_form,
     }
 
     // Current node itself.
-    float node_x = NAN;
-    float node_y = NAN;
+    float node_x = dt_nan();
+    float node_y = dt_nan();
     if(node_position_cb)
     {
       node_position_cb(gui_points, selected_node, &node_x, &node_y, user_data);
@@ -200,8 +200,8 @@ int dt_masks_find_closest_handle_common(dt_masks_form_t *mask_form,
   {
     for(int node_index = 0; node_index < node_count; node_index++)
     {
-      float node_x = NAN;
-      float node_y = NAN;
+      float node_x = dt_nan();
+      float node_y = dt_nan();
       if(node_position_cb)
       {
         node_position_cb(gui_points, node_index, &node_x, &node_y, user_data);
@@ -3245,7 +3245,7 @@ void dt_masks_form_delete(struct dt_iop_module_t *module, dt_masks_form_t *group
 float dt_masks_form_get_interaction_value(dt_masks_form_group_t *form_group,
                                           dt_masks_interaction_t interaction)
 {
-  if(IS_NULL_PTR(form_group)) return NAN;
+  if(IS_NULL_PTR(form_group)) return dt_nan();
 
   if(interaction == DT_MASKS_INTERACTION_OPACITY)
   {
@@ -3253,7 +3253,7 @@ float dt_masks_form_get_interaction_value(dt_masks_form_group_t *form_group,
   }
 
   dt_masks_form_t *target_form = dt_masks_get_from_id(darktable.develop, form_group->formid);
-  if(IS_NULL_PTR(target_form) || IS_NULL_PTR(target_form->functions) || IS_NULL_PTR(target_form->functions->get_interaction_value)) return NAN;
+  if(IS_NULL_PTR(target_form) || IS_NULL_PTR(target_form->functions) || IS_NULL_PTR(target_form->functions->get_interaction_value)) return dt_nan();
 
   return target_form->functions->get_interaction_value(target_form, interaction);
 }
@@ -3300,7 +3300,7 @@ float dt_masks_form_set_interaction_value(dt_masks_form_group_t *form_group,
                                           float value, dt_masks_increment_t increment, int flow,
                                           dt_masks_form_gui_t *mask_gui, dt_iop_module_t *module)
 {
-  if(IS_NULL_PTR(form_group)) return NAN;
+  if(IS_NULL_PTR(form_group)) return dt_nan();
 
   if(interaction == DT_MASKS_INTERACTION_OPACITY)
   {
@@ -3311,11 +3311,11 @@ float dt_masks_form_set_interaction_value(dt_masks_form_group_t *form_group,
 
   dt_masks_form_t *target_form = dt_masks_get_from_id(darktable.develop, form_group->formid);
   if(IS_NULL_PTR(target_form) || !target_form->functions
-     || !target_form->functions->set_interaction_value) return NAN;
+     || !target_form->functions->set_interaction_value) return dt_nan();
 
   const float result = target_form->functions->set_interaction_value(target_form, interaction, value, increment,
                                                                      flow, mask_gui, module);
-  if(dt_isnan(result)) return NAN;
+  if(dt_isnan(result)) return dt_nan();
   dt_masks_form_update_gravity_center(target_form);
   dt_dev_add_history_item(darktable.develop, module, TRUE, TRUE);
   return result;

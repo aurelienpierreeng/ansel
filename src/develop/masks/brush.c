@@ -229,8 +229,8 @@ static void _brush_border_get_XY(float p0_x, float p0_y, float p1_x, float p1_y,
   // so we can have the resulting point
   if(dx == 0 && dy == 0)
   {
-    *border_x = NAN;
-    *border_y = NAN;
+    *border_x = dt_nan();
+    *border_y = dt_nan();
     return;
   }
   const float l = 1.0f / sqrtf(dx * dx + dy * dy);
@@ -311,8 +311,8 @@ static gboolean _brush_get_border_handle_resampled(const dt_masks_form_gui_point
 static gboolean _brush_get_border_handle_mirrored(const dt_masks_form_gui_points_t *gui_points, int node_count,
                                                   int node_index, float *handle_x, float *handle_y)
 {
-  float resampled_x = NAN;
-  float resampled_y = NAN;
+  float resampled_x = dt_nan();
+  float resampled_y = dt_nan();
   if(!_brush_get_border_handle_resampled(gui_points, node_count, node_index, &resampled_x, &resampled_y)) return FALSE;
 
   const float node_x = gui_points->points[node_index * 6 + 2];
@@ -687,7 +687,7 @@ static void _brush_points_recurs(float *p1, float *p2, double tmin, double tmax,
 
   // we split in two part
   double tx = (tmin + tmax) / 2.0;
-  float c[2] = { NAN, NAN }, b[2] = { NAN, NAN };
+  float c[2] = { dt_nan(), dt_nan() }, b[2] = { dt_nan(), dt_nan() };
   float rc[2], rb[2], rp[2];
   _brush_points_recurs(p1, p2, tmin, tx, points_min, c, border_min, b, rc, rb, rp, dpoints, dborder, dpayload,
                        pixel_threshold);
@@ -934,10 +934,10 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
 
     // and we determine all points by recursion (to be sure the distance between 2 points is <=1)
     float rc[2], rb[2], rp[2];
-    float bmin[2] = { NAN, NAN };
-    float bmax[2] = { NAN, NAN };
-    float cmin[2] = { NAN, NAN };
-    float cmax[2] = { NAN, NAN };
+    float bmin[2] = { dt_nan(), dt_nan() };
+    float bmax[2] = { dt_nan(), dt_nan() };
+    float cmin[2] = { dt_nan(), dt_nan() };
+    float cmax[2] = { dt_nan(), dt_nan() };
 
     _brush_points_recurs(p1, p2, 0.0, 1.0, cmin, cmax, bmin, bmax, rc, rb, rp, dpoints, dborder, dpayload,
                          pixel_threshold);
@@ -1356,14 +1356,14 @@ static int _init_opacity(dt_masks_form_t *mask_form, int parentid, dt_masks_form
 
 static float _brush_get_interaction_value(const dt_masks_form_t *mask_form, dt_masks_interaction_t interaction)
 {
-  if(IS_NULL_PTR(mask_form) || IS_NULL_PTR(mask_form->points)) return NAN;
+  if(IS_NULL_PTR(mask_form) || IS_NULL_PTR(mask_form->points)) return dt_nan();
 
   switch(interaction)
   {
     case DT_MASKS_INTERACTION_SIZE:
     {
       const float size = dt_masks_get_form_size_from_nodes(mask_form->points);
-      if(size <= 0.0f) return NAN;
+      if(size <= 0.0f) return dt_nan();
       return size;
     }
     case DT_MASKS_INTERACTION_HARDNESS:
@@ -1379,10 +1379,10 @@ static float _brush_get_interaction_value(const dt_masks_form_t *mask_form, dt_m
         hardness_count++;
       }
 
-      return hardness_count > 0 ? hardness_sum / (float)hardness_count : NAN;
+      return hardness_count > 0 ? hardness_sum / (float)hardness_count : dt_nan();
     }
     default:
-      return NAN;
+      return dt_nan();
   }
 }
 
@@ -1422,19 +1422,19 @@ static float _brush_set_interaction_value(dt_masks_form_t *mask_form, dt_masks_i
                                           dt_masks_increment_t increment, int flow,
                                           dt_masks_form_gui_t *mask_gui, struct dt_iop_module_t *module)
 {
-  if(IS_NULL_PTR(mask_form)) return NAN;
+  if(IS_NULL_PTR(mask_form)) return dt_nan();
   const int index = 0;
 
   switch(interaction)
   {
     case DT_MASKS_INTERACTION_SIZE:
-      if(!_change_size(mask_form, 0, mask_gui, module, index, value, increment, flow)) return NAN;
+      if(!_change_size(mask_form, 0, mask_gui, module, index, value, increment, flow)) return dt_nan();
       return _brush_get_interaction_value(mask_form, interaction);
     case DT_MASKS_INTERACTION_HARDNESS:
-      if(!_change_hardness(mask_form, 0, mask_gui, module, index, value, increment, flow)) return NAN;
+      if(!_change_hardness(mask_form, 0, mask_gui, module, index, value, increment, flow)) return dt_nan();
       return _brush_get_interaction_value(mask_form, interaction);
     default:
-      return NAN;
+      return dt_nan();
   }
 }
 
@@ -1743,7 +1743,7 @@ static int _brush_events_button_pressed(struct dt_iop_module_t *module, double w
     }
     else if(mask_gui->handle_border_hovered >= 0)
     {
-      float handle_x = NAN, handle_y = NAN;
+      float handle_x = dt_nan(), handle_y = dt_nan();
       if(_brush_get_border_handle_mirrored(gui_points, node_count, mask_gui->handle_border_hovered,
                                            &handle_x, &handle_y))
       {
@@ -2079,7 +2079,7 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, double widg
         = (dt_masks_node_brush_t *)g_list_nth_data(mask_form->points, node_index);
     if(IS_NULL_PTR(node)) return 0;
 
-    float handle_x = NAN, handle_y = NAN;
+    float handle_x = dt_nan(), handle_y = dt_nan();
     if(!_brush_get_border_handle_mirrored(gui_points, node_count, node_index, &handle_x, &handle_y))
       return 0;
 
@@ -2185,7 +2185,7 @@ static gboolean _brush_line_point_at_length(const float *line, const int first_p
 
   float acc = 0.0f;
   gboolean has_fallback = FALSE;
-  float fallback_x = NAN, fallback_y = NAN;
+  float fallback_x = dt_nan(), fallback_y = dt_nan();
 
   for(int i = first_pt; i < last_pt; i++)
   {
@@ -2541,7 +2541,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
       const gboolean selected = (mask_gui->node_hovered == edited
                               || selected_handle_border == edited
                               || mask_gui->handle_border_hovered == edited);
-      float handle[2] = {NAN, NAN};
+      float handle[2] = {dt_nan(), dt_nan()};
       // Show the border handle on the opposite side from the curve handle
       if(_brush_get_border_handle_mirrored(gui_points, node_count, edited, &handle[0], &handle[1]))
       {

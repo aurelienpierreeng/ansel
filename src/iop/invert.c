@@ -96,7 +96,7 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
     n->color[0] = o->color[0];
     n->color[1] = o->color[1];
     n->color[2] = o->color[2];
-    n->color[3] = NAN;
+    n->color[3] = dt_nan();
 
     if(self->dev && self->dev->image_storage.flags & DT_IMAGE_4BAYER)
     {

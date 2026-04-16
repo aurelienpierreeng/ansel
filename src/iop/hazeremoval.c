@@ -206,10 +206,10 @@ void gui_update(struct dt_iop_module_t *self)
   dt_iop_hazeremoval_gui_data_t *g = (dt_iop_hazeremoval_gui_data_t *)self->gui_data;
 
   dt_iop_gui_enter_critical_section(self);
-  g->distance_max = NAN;
-  g->A0[0] = NAN;
-  g->A0[1] = NAN;
-  g->A0[2] = NAN;
+  g->distance_max = dt_nan();
+  g->A0[0] = dt_nan();
+  g->A0[1] = dt_nan();
+  g->A0[2] = dt_nan();
   g->expected_preview_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
   g->hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
   dt_iop_gui_leave_critical_section(self);
@@ -244,10 +244,10 @@ void gui_init(dt_iop_module_t *self)
 {
   dt_iop_hazeremoval_gui_data_t *g = IOP_GUI_ALLOC(hazeremoval);
 
-  g->distance_max = NAN;
-  g->A0[0] = NAN;
-  g->A0[1] = NAN;
-  g->A0[2] = NAN;
+  g->distance_max = dt_nan();
+  g->A0[0] = dt_nan();
+  g->A0[1] = dt_nan();
+  g->A0[2] = dt_nan();
   g->expected_preview_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
   g->hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
 
@@ -513,10 +513,10 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
   // estimate diffusive ambient light and image depth
   rgb_pixel A0;
-  A0[0] = NAN;
-  A0[1] = NAN;
-  A0[2] = NAN;
-  float distance_max = NAN;
+  A0[0] = dt_nan();
+  A0[1] = dt_nan();
+  A0[2] = dt_nan();
+  float distance_max = dt_nan();
 
   // hazeremoval module needs the color and the haziness (which yields
   // distance_max) of the most hazy region of the image.  In pixelpipe
@@ -816,10 +816,10 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
 
   // estimate diffusive ambient light and image depth
   rgb_pixel A0;
-  A0[0] = NAN;
-  A0[1] = NAN;
-  A0[2] = NAN;
-  float distance_max = NAN;
+  A0[0] = dt_nan();
+  A0[1] = dt_nan();
+  A0[2] = dt_nan();
+  float distance_max = dt_nan();
 
   // hazeremoval module needs the color and the haziness (which yields
   // distance_max) of the most hazy region of the image.  In pixelpipe

@@ -1784,27 +1784,27 @@ void dt_image_init(dt_image_t *img)
   g_strlcpy(img->filename, "(unknown)", sizeof(img->filename));
   img->exif_crop = 1.0;
   img->exif_exposure = 0;
-  img->exif_exposure_bias = NAN;
+  img->exif_exposure_bias = dt_nan();
   img->exif_aperture = 0;
   img->exif_iso = 0;
   img->exif_focal_length = 0;
   img->exif_focus_distance = 0;
-  img->geoloc.latitude = NAN;
-  img->geoloc.longitude = NAN;
-  img->geoloc.elevation = NAN;
+  img->geoloc.latitude = dt_nan();
+  img->geoloc.longitude = dt_nan();
+  img->geoloc.elevation = dt_nan();
   img->raw_black_level = 0;
   for(uint8_t i = 0; i < 4; i++) img->raw_black_level_separate[i] = 0;
   img->raw_white_point = 16384; // 2^14
-  img->d65_color_matrix[0] = NAN;
+  img->d65_color_matrix[0] = dt_nan();
   img->profile = NULL;
   img->profile_size = 0;
   img->colorspace = DT_IMAGE_COLORSPACE_NONE;
   img->fuji_rotation_pos = 0;
   img->pixel_aspect_ratio = 1.0f;
-  img->wb_coeffs[0] = NAN;
-  img->wb_coeffs[1] = NAN;
-  img->wb_coeffs[2] = NAN;
-  img->wb_coeffs[3] = NAN;
+  img->wb_coeffs[0] = dt_nan();
+  img->wb_coeffs[1] = dt_nan();
+  img->wb_coeffs[2] = dt_nan();
+  img->wb_coeffs[3] = dt_nan();
   img->usercrop[0] = img->usercrop[1] = 0;
   img->usercrop[2] = img->usercrop[3] = 1;
   img->dng_gain_maps = NULL;
@@ -1819,7 +1819,7 @@ void dt_image_init(dt_image_t *img)
 
   for(int k=0; k<4; k++)
     for(int i=0; i<3; i++)
-      img->adobe_XYZ_to_CAM[k][i] = NAN;
+      img->adobe_XYZ_to_CAM[k][i] = dt_nan();
 }
 
 void dt_image_refresh_makermodel(dt_image_t *img)

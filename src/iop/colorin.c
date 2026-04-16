@@ -1092,7 +1092,7 @@ static void _reset_input_transforms(dt_iop_colorin_data_t *d)
 
 static void _reset_processing_state(dt_iop_colorin_data_t *d, dt_dev_pixelpipe_iop_t *piece)
 {
-  d->cmatrix[0][0] = d->nmatrix[0][0] = d->lmatrix[0][0] = NAN;
+  d->cmatrix[0][0] = d->nmatrix[0][0] = d->lmatrix[0][0] = dt_nan();
   d->lut[0][0] = -1.0f;
   d->lut[1][0] = -1.0f;
   d->lut[2][0] = -1.0f;
@@ -1309,7 +1309,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
     if(!use_matrix)
     {
       piece->process_cl_ready = 0;
-      d->cmatrix[0][0] = NAN;
+      d->cmatrix[0][0] = dt_nan();
       d->xform_cam_Lab = work ? cmsCreateTransform(d->input, input_format, work, TYPE_RGBA_FLT, p->intent, 0) : NULL;
       d->xform_cam_nrgb = cmsCreateTransform(d->input, input_format, d->nrgb, TYPE_RGBA_FLT, p->intent, 0);
       d->xform_nrgb_Lab = work ? cmsCreateTransform(d->nrgb, TYPE_RGBA_FLT, work, TYPE_RGBA_FLT, p->intent, 0) : NULL;
@@ -1329,7 +1329,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
     if(!use_matrix)
     {
       piece->process_cl_ready = 0;
-      d->cmatrix[0][0] = NAN;
+      d->cmatrix[0][0] = dt_nan();
       d->xform_cam_Lab = work ? cmsCreateTransform(d->input, input_format, work, TYPE_RGBA_FLT, p->intent, 0) : NULL;
     }
   }
@@ -1376,7 +1376,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
     if(!use_matrix)
     {
       piece->process_cl_ready = 0;
-      d->cmatrix[0][0] = NAN;
+      d->cmatrix[0][0] = dt_nan();
       d->xform_cam_Lab = work ? cmsCreateTransform(d->input, TYPE_RGBA_FLT, work, TYPE_RGBA_FLT, p->intent, 0) : NULL;
     }
   }
@@ -1406,7 +1406,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   }
 
   // commit input profile metadata to pipeline with the original input RGB -> XYZ matrix
-  dt_colormatrix_t input_matrix_for_pipe = { { NAN } };
+  dt_colormatrix_t input_matrix_for_pipe = { { dt_nan() } };
   if(d->input)
     dt_colorspaces_get_matrix_from_input_profile(d->input, input_matrix_for_pipe, NULL, NULL, NULL, 0);
 

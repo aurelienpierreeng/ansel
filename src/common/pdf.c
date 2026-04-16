@@ -91,7 +91,7 @@ int dt_pdf_parse_length(const char *str, float *length)
     goto end;
   }
 
-  // we don't want NAN, INF or parse errors (== 0.0)
+  // we don't want dt_nan(), INF or parse errors (== 0.0)
   if(!isnormal(*length))
     goto end;
 

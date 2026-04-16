@@ -520,7 +520,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
     cmsDeleteTransform(d->xform);
     d->xform = NULL;
   }
-  d->cmatrix[0][0] = NAN;
+  d->cmatrix[0][0] = dt_nan();
   d->lut[0][0] = -1.0f;
   d->lut[1][0] = -1.0f;
   d->lut[2][0] = -1.0f;
@@ -705,12 +705,12 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
                                                       LUT_SAMPLES))
       dt_colormatrix_mul(d->cmatrix, output_matrix, work_profile->matrix_in);
     else
-      d->cmatrix[0][0] = NAN;
+      d->cmatrix[0][0] = dt_nan();
   }
 
   if(dt_isnan(d->cmatrix[0][0]))
   {
-      d->cmatrix[0][0] = NAN;
+      d->cmatrix[0][0] = dt_nan();
       piece->process_cl_ready = 0;
       d->xform = cmsCreateProofingTransform(input, TYPE_RGBA_FLT, output, output_format, softproof,
                                           out_intent, INTENT_RELATIVE_COLORIMETRIC, transformFlags);
@@ -732,12 +732,12 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
                                                         LUT_SAMPLES))
         dt_colormatrix_mul(d->cmatrix, output_matrix, work_profile->matrix_in);
       else
-        d->cmatrix[0][0] = NAN;
+        d->cmatrix[0][0] = dt_nan();
     }
 
     if(dt_isnan(d->cmatrix[0][0]))
     {
-      d->cmatrix[0][0] = NAN;
+      d->cmatrix[0][0] = dt_nan();
       piece->process_cl_ready = 0;
 
       d->xform = cmsCreateProofingTransform(input, TYPE_RGBA_FLT, output, output_format, softproof,

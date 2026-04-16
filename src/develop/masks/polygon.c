@@ -110,8 +110,8 @@ static void _polygon_border_get_XY(const float p0_x, const float p0_y, const flo
   // so we can have the resulting point
   if(dx == 0 && dy == 0)
   {
-    *border_x = NAN;
-    *border_y = NAN;
+    *border_x = dt_nan();
+    *border_y = dt_nan();
     return;
   }
   const double l = 1.0 / sqrt(dx * dx + dy * dy);
@@ -453,8 +453,8 @@ static void _polygon_points_recurs(float *segment_start, float *segment_end,
 
   // we split in two part
   double t_mid = (t_min + t_max) / 2.0;
-  float polygon_mid[2] = { NAN, NAN };
-  float border_mid[2] = { NAN, NAN };
+  float polygon_mid[2] = { dt_nan(), dt_nan() };
+  float border_mid[2] = { dt_nan(), dt_nan() };
   float polygon_result_left[2] = { 0 };
   float border_result_left[2] = { 0 };
   _polygon_points_recurs(segment_start, segment_end, t_min, t_mid,
@@ -807,10 +807,10 @@ static int _polygon_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_
 
     // and we determine all points by recursion (to be sure the distance between 2 points is <=1)
     float rc[2] = { 0 }, rb[2] = { 0 };
-    float bmin[2] = { NAN, NAN };
-    float bmax[2] = { NAN, NAN };
-    float cmin[2] = { NAN, NAN };
-    float cmax[2] = { NAN, NAN };
+    float bmin[2] = { dt_nan(), dt_nan() };
+    float bmax[2] = { dt_nan(), dt_nan() };
+    float cmin[2] = { dt_nan(), dt_nan() };
+    float cmax[2] = { dt_nan(), dt_nan() };
 
     _polygon_points_recurs(p1, p2, 0.0, 1.0, cmin, cmax, bmin, bmax, rc, rb, dpoints, dborder,
                            border_buffer && (node_count >= 3), pixel_threshold);
@@ -860,7 +860,7 @@ static int _polygon_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_
     {
       // we get the next point (start of the next segment)
       // t=0.00001f to workaround rounding effects with full optimization that result in bmax[0] NOT being set to
-      // NAN when t=0 and the two points in p3 are identical (as is the case on a control node set to sharp corner)
+      // dt_nan() when t=0 and the two points in p3 are identical (as is the case on a control node set to sharp corner)
       _polygon_border_get_XY(p3[0], p3[1], p3[2], p3[3], p4[2], p4[3], p4[0], p4[1], 0.00001f, p3[4], cmin, cmin + 1,
                           bmax, bmax + 1);
       if(dt_isnan(bmax[0]))
@@ -982,7 +982,7 @@ static int _polygon_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_
           const int w = (dt_masks_dynbuf_buffer(intersections))[ i * 2 + 1];
           if(v <= w)
           {
-            (*border_buffer)[v * 2] = NAN;
+            (*border_buffer)[v * 2] = dt_nan();
             (*border_buffer)[v * 2 + 1] = w;
           }
           else
@@ -996,10 +996,10 @@ static int _polygon_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_
                     = MAX((*border_buffer)[node_count * 6 + 1], w);
               else
                 (*border_buffer)[node_count * 6 + 1] = w;
-              (*border_buffer)[node_count * 6] = NAN;
+              (*border_buffer)[node_count * 6] = dt_nan();
             }
-            (*border_buffer)[v * 2] = NAN;
-            (*border_buffer)[v * 2 + 1] = NAN;
+            (*border_buffer)[v * 2] = dt_nan();
+            (*border_buffer)[v * 2 + 1] = dt_nan();
           }
         }
       }
@@ -1210,14 +1210,14 @@ static gboolean _polygon_form_gravity_center(const dt_masks_form_t *mask_form, f
 static float _polygon_get_interaction_value(const dt_masks_form_t *mask_form,
                                             dt_masks_interaction_t interaction)
 {
-  if(IS_NULL_PTR(mask_form) || IS_NULL_PTR(mask_form->points)) return NAN;
+  if(IS_NULL_PTR(mask_form) || IS_NULL_PTR(mask_form->points)) return dt_nan();
 
   switch(interaction)
   {
     case DT_MASKS_INTERACTION_SIZE:
     {
       const float size = dt_masks_get_form_size_from_nodes(mask_form->points);
-      if(size <= 0.0f) return NAN;
+      if(size <= 0.0f) return dt_nan();
       return size;
     }
     case DT_MASKS_INTERACTION_HARDNESS:
@@ -1233,10 +1233,10 @@ static float _polygon_get_interaction_value(const dt_masks_form_t *mask_form,
         hardness_count += 2;
       }
 
-      return hardness_count > 0 ? hardness_sum / (float)hardness_count : NAN;
+      return hardness_count > 0 ? hardness_sum / (float)hardness_count : dt_nan();
     }
     default:
-      return NAN;
+      return dt_nan();
   }
 }
 
@@ -1278,19 +1278,19 @@ static float _polygon_set_interaction_value(dt_masks_form_t *mask_form,
                                             dt_masks_increment_t increment, int flow,
                                             dt_masks_form_gui_t *mask_gui, struct dt_iop_module_t *module)
 {
-  if(IS_NULL_PTR(mask_form)) return NAN;
+  if(IS_NULL_PTR(mask_form)) return dt_nan();
   const int index = 0;
 
   switch(interaction)
   {
     case DT_MASKS_INTERACTION_SIZE:
-      if(!_change_size(mask_form, 0, mask_gui, module, index, value, increment, flow)) return NAN;
+      if(!_change_size(mask_form, 0, mask_gui, module, index, value, increment, flow)) return dt_nan();
       return _polygon_get_interaction_value(mask_form, interaction);
     case DT_MASKS_INTERACTION_HARDNESS:
-      if(!_change_hardness(mask_form, 0, mask_gui, module, index, value, increment, flow)) return NAN;
+      if(!_change_hardness(mask_form, 0, mask_gui, module, index, value, increment, flow)) return dt_nan();
       return _polygon_get_interaction_value(mask_form, interaction);
     default:
-      return NAN;
+      return dt_nan();
   }
 }
 

@@ -689,7 +689,7 @@ static void _gradient_slider_set_defaults(GtkDarktableGradientSlider *gslider)
   gslider->scale_callback = _default_linear_scale_callback;
   gslider->is_resettable = FALSE;
   gslider->is_entered = FALSE;
-  gslider->picker[0] = gslider->picker[1] = gslider->picker[2] = NAN;
+  gslider->picker[0] = gslider->picker[1] = gslider->picker[2] = dt_nan();
   gslider->increment = DTGTK_GRADIENT_SLIDER_DEFAULT_INCREMENT;
   gslider->margin_left = gslider->margin_right = GRADIENT_SLIDER_MARGINS_DEFAULT;
   gslider->markers_type = FREE_MARKERS;

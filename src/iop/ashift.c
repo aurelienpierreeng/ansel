@@ -2190,7 +2190,7 @@ static dt_iop_ashift_nmsresult_t nmsfit(dt_iop_module_t *module, dt_iop_ashift_p
   // prepare fit structure and starting parameters for simplex fit.
   // note: the sequence of parameters in params[] needs to match the
   // respective order in dt_iop_ashift_fit_params_t. Parameters which are
-  // to be fittet are marked with NAN in the fit structure. Non-NAN
+  // to be fittet are marked with dt_nan() in the fit structure. Non-dt_nan()
   // parameters are assumed to be constant.
   if(mdir & ASHIFT_FIT_ROTATION)
   {
@@ -2198,7 +2198,7 @@ static dt_iop_ashift_nmsresult_t nmsfit(dt_iop_module_t *module, dt_iop_ashift_p
     fit.params_count++;
     params[pcount] = logit(fit.rotation, -fit.rotation_range, fit.rotation_range);
     pcount++;
-    fit.rotation = NAN;
+    fit.rotation = dt_nan();
   }
 
   if(mdir & ASHIFT_FIT_LENS_VERT)
@@ -2207,7 +2207,7 @@ static dt_iop_ashift_nmsresult_t nmsfit(dt_iop_module_t *module, dt_iop_ashift_p
     fit.params_count++;
     params[pcount] = logit(fit.lensshift_v, -fit.lensshift_v_range, fit.lensshift_v_range);
     pcount++;
-    fit.lensshift_v = NAN;
+    fit.lensshift_v = dt_nan();
   }
 
   if(mdir & ASHIFT_FIT_LENS_HOR)
@@ -2216,7 +2216,7 @@ static dt_iop_ashift_nmsresult_t nmsfit(dt_iop_module_t *module, dt_iop_ashift_p
     fit.params_count++;
     params[pcount] = logit(fit.lensshift_h, -fit.lensshift_h_range, fit.lensshift_h_range);
     pcount++;
-    fit.lensshift_h = NAN;
+    fit.lensshift_h = dt_nan();
   }
 
   if(mdir & ASHIFT_FIT_SHEAR)
@@ -2225,7 +2225,7 @@ static dt_iop_ashift_nmsresult_t nmsfit(dt_iop_module_t *module, dt_iop_ashift_p
     fit.params_count++;
     params[pcount] = logit(fit.shear, -fit.shear_range, fit.shear_range);
     pcount++;
-    fit.shear = NAN;
+    fit.shear = dt_nan();
   }
 
   if(mdir & ASHIFT_FIT_LINES_VERT)
@@ -2617,17 +2617,17 @@ static void do_crop(dt_iop_module_t *self, dt_iop_ashift_params_t *p)
     params[0] = 0.5;
     params[1] = 0.5;
     params[2] = crop_alpha;
-    cropfit.x = NAN;
-    cropfit.y = NAN;
-    cropfit.alpha = NAN;
+    cropfit.x = dt_nan();
+    cropfit.y = dt_nan();
+    cropfit.alpha = dt_nan();
     pcount = 3;
   }
   else //(p->cropmode == ASHIFT_CROP_ASPECT)
   {
     params[0] = 0.5;
     params[1] = 0.5;
-    cropfit.x = NAN;
-    cropfit.y = NAN;
+    cropfit.x = dt_nan();
+    cropfit.y = dt_nan();
     cropfit.alpha = crop_alpha;
     pcount = 2;
   }

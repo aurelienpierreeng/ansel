@@ -193,7 +193,7 @@ static float parse_expression(parser_state_t *self)
 
 static float parse_additive_expression(parser_state_t *self)
 {
-  if(IS_NULL_PTR(self->token)) return NAN;
+  if(IS_NULL_PTR(self->token)) return dt_nan();
 
   float left = parse_multiplicative_expression(self);
 
@@ -219,7 +219,7 @@ static float parse_additive_expression(parser_state_t *self)
 
 static float parse_multiplicative_expression(parser_state_t *self)
 {
-  if(IS_NULL_PTR(self->token)) return NAN;
+  if(IS_NULL_PTR(self->token)) return dt_nan();
 
   float left = parse_power_expression(self);
 
@@ -247,7 +247,7 @@ static float parse_multiplicative_expression(parser_state_t *self)
 
 static float parse_power_expression(parser_state_t *self)
 {
-  if(IS_NULL_PTR(self->token)) return NAN;
+  if(IS_NULL_PTR(self->token)) return dt_nan();
 
   float left = parse_unary_expression(self);
 
@@ -268,7 +268,7 @@ static float parse_power_expression(parser_state_t *self)
 
 static float parse_unary_expression(parser_state_t *self)
 {
-  if(IS_NULL_PTR(self->token)) return NAN;
+  if(IS_NULL_PTR(self->token)) return dt_nan();
 
   if(self->token->type == T_OPERATOR)
   {
@@ -293,7 +293,7 @@ static float parse_unary_expression(parser_state_t *self)
 
 static float parse_primary_expression(parser_state_t *self)
 {
-  if(IS_NULL_PTR(self->token)) return NAN;
+  if(IS_NULL_PTR(self->token)) return dt_nan();
 
   if(self->token->type == T_NUMBER)
   {
@@ -308,20 +308,20 @@ static float parse_primary_expression(parser_state_t *self)
     self->token = get_token(self);
     const float result = parse_expression(self);
     if(IS_NULL_PTR(self->token) || self->token->type != T_OPERATOR || self->token->data.operator!= O_RIGHTROUND)
-      return NAN;
+      return dt_nan();
     dt_free(self->token);
     self->token = get_token(self);
     return result;
   }
 
-  return NAN;
+  return dt_nan();
 }
 
 /** the public interface **/
 
 float dt_calculator_solve(const float x, const char *formula)
 {
-  if(IS_NULL_PTR(formula) || *formula == '\0') return NAN;
+  if(IS_NULL_PTR(formula) || *formula == '\0') return dt_nan();
 
   gchar *dotformula = g_strdup(formula);
   parser_state_t *self = (parser_state_t *)malloc(sizeof(parser_state_t));
@@ -372,7 +372,7 @@ float dt_calculator_solve(const float x, const char *formula)
   //     default: break;
   //   }
 
-  if(self->token) result = NAN;
+  if(self->token) result = dt_nan();
 
 end:
   dt_free(self->token);

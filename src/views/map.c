@@ -2863,7 +2863,7 @@ static void _drag_and_drop_received(GtkWidget *widget, GdkDragContext *context, 
         osm_gps_map_point_free(pt);
         // TODO redraw the image group
         // it seems that at this time osm_gps_map doesn't answer before dt_image_set_locations(). Locked in some way ?
-        const dt_image_geoloc_t geoloc = { longitude, latitude, NAN };
+        const dt_image_geoloc_t geoloc = { longitude, latitude, dt_nan() };
         dt_control_signal_block_by_func(darktable.signals, G_CALLBACK(_view_map_collection_changed), self);
         dt_image_set_locations(imgs, &geoloc, TRUE);
         dt_control_signal_unblock_by_func(darktable.signals, G_CALLBACK(_view_map_collection_changed), self);

@@ -696,7 +696,7 @@ int dt_confgen_get_int(const char *name, dt_confgen_value_kind_t kind)
   }
   const char *str = dt_confgen_get(name, kind);
 
-  //if str is NULL or empty, dt_calculator_solve will return NAN
+  //if str is NULL or empty, dt_calculator_solve will return dt_nan()
   const float value = dt_calculator_solve(1, str);
 
   switch (kind)
@@ -734,7 +734,7 @@ int64_t dt_confgen_get_int64(const char *name, dt_confgen_value_kind_t kind)
   }
   const char *str = dt_confgen_get(name, kind);
 
-  //if str is NULL or empty, dt_calculator_solve will return NAN
+  //if str is NULL or empty, dt_calculator_solve will return dt_nan()
   const float value = dt_calculator_solve(1, str);
 
   switch (kind)
@@ -779,7 +779,7 @@ float dt_confgen_get_float(const char *name, dt_confgen_value_kind_t kind)
 
   const char *str = dt_confgen_get(name, kind);
 
-  //if str is NULL or empty, dt_calculator_solve will return NAN
+  //if str is NULL or empty, dt_calculator_solve will return dt_nan()
   const float value = dt_calculator_solve(1, str);
 
   switch (kind)

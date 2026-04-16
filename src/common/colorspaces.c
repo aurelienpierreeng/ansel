@@ -2598,7 +2598,7 @@ int dt_colorspaces_conversion_matrices_rgb(const float adobe_XYZ_to_CAM[4][3],
   double RGB_to_CAM[4][3];
 
   float XYZ_to_CAM[4][3];
-  XYZ_to_CAM[0][0] = NAN;
+  XYZ_to_CAM[0][0] = dt_nan();
 
   if(IS_NULL_PTR(embedded_matrix) || dt_isnan(embedded_matrix[0]))
   {

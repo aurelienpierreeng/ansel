@@ -225,7 +225,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
   }
   else
   {
-    mean = min = max = NAN;
+    mean = min = max = dt_nan();
   }
 
   dtgtk_gradient_slider_set_picker_meanminmax(DTGTK_GRADIENT_SLIDER(g->center), mean, min, max);

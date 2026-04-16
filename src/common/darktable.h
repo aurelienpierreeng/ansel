@@ -706,6 +706,20 @@ static inline int dt_isfinite(float x)
     return (u & 0x7f800000u) != 0x7f800000u;
 }
 
+static inline int dt_isinf(float x)
+{
+    uint32_t u;
+    memcpy(&u, &x, sizeof(u));
+    return (u & 0x7fffffffU) == 0x7f800000U;
+}
+
+// FIXME: NAN used as sentinel should be removed entirely
+// see https://github.com/aurelienpierreeng/ansel/issues/768
+static inline float dt_nan(void)
+{
+    union { uint32_t u; float f; } v = { 0x7fc00000u };
+    return v.f;
+}
 
 /********************************* */
 

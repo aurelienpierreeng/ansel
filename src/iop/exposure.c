@@ -391,7 +391,7 @@ static void _compute_correction(dt_iop_module_t *self, dt_iop_params_t *p1,
 {
   const dt_iop_exposure_params_t *const p = (const dt_iop_exposure_params_t *const)p1;
 
-  *correction = NAN;
+  *correction = dt_nan();
 
   if(IS_NULL_PTR(histogram)) return;
 
@@ -640,7 +640,7 @@ void gui_update(struct dt_iop_module_t *self)
 
   gtk_label_set_text(g->deflicker_used_EC, "");
   dt_iop_gui_enter_critical_section(self);
-  g->deflicker_computed_exposure = NAN;
+  g->deflicker_computed_exposure = dt_nan();
   dt_iop_gui_leave_critical_section(self);
 
   switch(p->mode)
@@ -1091,7 +1091,7 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(hbox1), GTK_WIDGET(g->deflicker_used_EC), FALSE, FALSE, 0);
 
   dt_iop_gui_enter_critical_section(self);
-  g->deflicker_computed_exposure = NAN;
+  g->deflicker_computed_exposure = dt_nan();
   dt_iop_gui_leave_critical_section(self);
 
   self->widget = main_widget;

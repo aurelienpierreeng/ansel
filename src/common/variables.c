@@ -185,13 +185,13 @@ static void _init_expansion(dt_variables_params_t *params, gboolean iterate)
   params->data->version = 0;
   params->data->stars = 0;
   params->data->exif_exposure = 0.0f;
-  params->data->exif_exposure_bias = NAN;
+  params->data->exif_exposure_bias = dt_nan();
   params->data->exif_aperture = 0.0f;
   params->data->exif_focal_length = 0.0f;
   params->data->exif_focus_distance = 0.0f;
-  params->data->longitude = NAN;
-  params->data->latitude = NAN;
-  params->data->elevation = NAN;
+  params->data->longitude = dt_nan();
+  params->data->latitude = dt_nan();
+  params->data->elevation = dt_nan();
   params->data->crop_width = 0;
   params->data->crop_height = 0;
   params->data->import_timestamp = 0;

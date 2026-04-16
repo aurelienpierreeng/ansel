@@ -4421,7 +4421,7 @@ void gui_init(struct dt_iop_module_t *self)
   g->delta_E_in = NULL;
   g->delta_E_label_text = NULL;
 
-  g->XYZ[0] = NAN;
+  g->XYZ[0] = dt_nan();
 
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_UI_PIPE_FINISHED,
                             G_CALLBACK(_develop_ui_pipe_finished_callback), self);

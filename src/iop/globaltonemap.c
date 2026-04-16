@@ -192,7 +192,7 @@ static inline void process_drago(struct dt_iop_module_t *self, const dt_dev_pixe
   /* precalcs */
   const float eps = 0.0001f;
   float lwmax;
-  float tmp_lwmax = NAN;
+  float tmp_lwmax = dt_nan();
 
   // Drago needs the absolute Lmax value of the image. In pixelpipe FULL we can not reliably get this value
   // as the pixelpipe might only see part of the image (region of interest). Therefore we try to get lwmax from
@@ -204,7 +204,7 @@ static inline void process_drago(struct dt_iop_module_t *self, const dt_dev_pixe
     dt_iop_gui_leave_critical_section(self);
 
     // note that the case 'hash == 0' on first invocation in a session implies that g->lwmax
-    // is NAN which initiates special handling below to avoid inconsistent results. in all
+    // is dt_nan() which initiates special handling below to avoid inconsistent results. in all
     // other cases we make sure that the preview pipe has left us with proper readings for
     // lwmax. if data are not yet there we need to wait (with timeout).
     if(hash != piece->global_hash)
@@ -397,7 +397,7 @@ void gui_update(struct dt_iop_module_t *self)
   gui_changed(self, NULL, 0);
 
   dt_iop_gui_enter_critical_section(self);
-  g->lwmax = NAN;
+  g->lwmax = dt_nan();
   g->hash = 0;
   dt_iop_gui_leave_critical_section(self);
 }
@@ -406,7 +406,7 @@ void gui_init(struct dt_iop_module_t *self)
 {
   dt_iop_global_tonemap_gui_data_t *g = IOP_GUI_ALLOC(global_tonemap);
 
-  g->lwmax = NAN;
+  g->lwmax = dt_nan();
   g->hash = 0;
 
   g->operator = dt_bauhaus_combobox_from_params(self, N_("operator"));

@@ -1171,13 +1171,13 @@ gboolean dt_lightroom_import(int32_t imgid, dt_develop_t *dev, gboolean iauto)
   data.has_tags = FALSE;
   data.rating = 0;
   data.has_rating = FALSE;
-  data.lat = NAN;
-  data.lon = NAN;
+  data.lat = dt_nan();
+  data.lon = dt_nan();
   data.has_gps = FALSE;
   data.color = 0;
   data.has_colorlabel = FALSE;
-  data.fratio = NAN;                // factor ratio image
-  data.crop_roundness = NAN;        // from lightroom
+  data.fratio = dt_nan();                // factor ratio image
+  data.crop_roundness = dt_nan();        // from lightroom
   data.iwidth = 0;
   data.iheight = 0;                 // image width / height
   data.orientation = EXIF_ORIENTATION_NONE;
@@ -1511,7 +1511,7 @@ gboolean dt_lightroom_import(int32_t imgid, dt_develop_t *dev, gboolean iauto)
     dt_image_geoloc_t geoloc;
     geoloc.longitude = data.lon;
     geoloc.latitude = data.lat;
-    geoloc.elevation = NAN;
+    geoloc.elevation = dt_nan();
     dt_image_set_location(imgid, &geoloc, FALSE, FALSE);
     GList *imgs = NULL;
     imgs = g_list_prepend(imgs, GINT_TO_POINTER(imgid));

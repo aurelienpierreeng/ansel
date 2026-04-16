@@ -17,6 +17,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "common/darktable.h"
 #include "splines.h"
 #include <algorithm>
 #include <cmath>
@@ -722,7 +723,7 @@ float interpolate_val_V2(int n, CurveAnchorPoint Points[], float x, unsigned int
     interpol::monotone_hermite_spline<float> s(Points, Points + n);
     return s(x);
   }
-  return NAN;
+  return dt_nan();
 }
 
 
@@ -744,7 +745,7 @@ float interpolate_val_V2_periodic(int n, CurveAnchorPoint Points[], float x, uns
                                                true);
     return s(x);
   }
-  return NAN;
+  return dt_nan();
 }
 
 
