@@ -75,16 +75,16 @@ else()
     CHECK_C_COMPILER_FLAG("-march=x86-64-v3" HAS_X86_V3)
     if(HAS_X86_V3)
       # Binaries will require CPUs roughly ≥ Haswell (2013).
-      set(MARCH "-march=x86-64-v3 -mtune=generic")
+      set(MARCH "-march=x86-64-v3 -mtune=haswell")
     else()
       # Fallback to slightly older baseline
       CHECK_C_COMPILER_FLAG("-march=x86-64-v2" HAS_X86_V2)
       if(HAS_X86_V2)
-        set(MARCH "-march=x86-64-v2 -mtune=generic")
+        set(MARCH "-march=x86-64-v2 -mtune=haswell")
       else()
         # Last resort
         # mtune=generic is universally supported on GCC/Clang
-        set(MARCH "-march=generic -mtune=generic")
+        set(MARCH "-march=generic -mtune=haswell")
       endif()
     endif()
 
