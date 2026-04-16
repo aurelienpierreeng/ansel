@@ -639,38 +639,57 @@ if(WIN32)
 endif(WIN32)
 
 if(NOT CUSTOM_CFLAGS)
-  if(BUILD_SSE2_CODEPATHS)
-    #we MUST always specify our required instruction set, native might not detect it
-    set(DT_REQ_INSTRUCTIONS "-msse2")
-  endif()
 
   include(march-mtune)
 
-  #if(NOT BUILD_SSE2_CODEPATHS)
-  #  set(MARCH "${MARCH} -mno-sse2 -D__DISABLE_SSE2__ -U__SSE2__ -D__DISABLE_SSE__ -U__SSE__")
-  #endif()
+  # -------------------------------------------------------------------------
+  # Base flags (shared across all build types)
+  # -------------------------------------------------------------------------
+  set(DT_BASE_C_FLAGS "${MARCH} -Wfatal-errors -std=c11 -Wall -ffast-math -fno-math-errno -fno-signed-zeros -fno-trapping-math -fno-signaling-nans -ffp-contract=fast")
 
-  #-g MUST be set for ALL builds, or there will be no support for them when bugs happen
-  # warnings we need to enable (and then fix the warning): -Werror=sign-compare -Wpedantic
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${MARCH} ${DT_REQ_INSTRUCTIONS} -g -Wfatal-errors -std=c11")
-  set(CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO} -O2 -ftree-vectorize")
-  set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -O3 -ffast-math -fno-finite-math-only")
-  set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -Werror -Wuninitialized")
-  if(CMAKE_COMPILER_IS_GNUCC)
-    if(BUILD_SSE2_CODEPATHS)
-      set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mfpmath=sse")
-    endif()
+  # -------------------------------------------------------------------------
+  # Build-type-specific flags
+  # -------------------------------------------------------------------------
 
-    set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -O0 -g3 -ggdb3 -Wall -Wmaybe-uninitialized -Wno-undef -Wimplicit-function-declaration -Wnull-dereference -Wimplicit -Winfinite-recursion")
-    set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -fexpensive-optimizations")
-  else()
-    set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -O0")
+  # Release
+  set(DT_RELEASE_FLAGS "-O3 -g")
+  set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
+
+  # RelWithDebInfo (same perf as release, but keep symbols)
+  set(DT_RELWITHDEBINFO_FLAGS "-O3 -g -fno-omit-frame-pointer")
+  set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO TRUE)
+
+  # Debug
+  set(DT_DEBUG_FLAGS "-O0 -g3 -fno-omit-frame-pointer -Werror -Wuninitialized")
+
+  # -------------------------------------------------------------------------
+  # Compiler-specific tuning
+  # -------------------------------------------------------------------------
+  if(CMAKE_C_COMPILER_ID MATCHES "GNU")
+    set(DT_BASE_C_FLAGS "${DT_BASE_C_FLAGS} -Wmaybe-uninitialized -Wno-undef -Wimplicit-function-declaration -Winfinite-recursion -fno-semantic-interposition")
+  elseif(CMAKE_C_COMPILER_ID MATCHES "Clang")
+    set(DT_BASE_C_FLAGS "${DT_BASE_C_FLAGS} -fvectorize -fslp-vectorize")
   endif()
+
+  # -------------------------------------------------------------------------
+  # Apply to C flags
+  # -------------------------------------------------------------------------
+  set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} ${DT_RELEASE_FLAGS}")
+  set(CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO} ${DT_RELWITHDEBINFO_FLAGS}")
+  set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} ${DT_DEBUG_FLAGS}")
+  set(CMAKE_C_FLAGS "${DT_BASE_C_FLAGS} ${CMAKE_C_FLAGS}")
+
 endif(NOT CUSTOM_CFLAGS)
 
+# ---------------------------------------------------------------------------
+# Debug defines
+# ---------------------------------------------------------------------------
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -D_DEBUG")
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -D_DEBUG")
 
+# ---------------------------------------------------------------------------
+# Final aggregation 
+# ---------------------------------------------------------------------------
 string(TOUPPER "${CMAKE_BUILD_TYPE}" DT_BUILD_TYPE_UPPER)
 set(DT_BUILD_C_FLAGS "${CMAKE_C_FLAGS} ${CMAKE_C_FLAGS_${DT_BUILD_TYPE_UPPER}}")
 set(DT_BUILD_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_${DT_BUILD_TYPE_UPPER}}")

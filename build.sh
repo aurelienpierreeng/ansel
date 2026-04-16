@@ -413,7 +413,7 @@ CPU_ARCHITECTURE=""
 if [[ `uname -a` =~ ^Darwin.* ]] && [[ `uname -a` =~ .*arm64$ ]]
 then
     CPU_ARCHITECTURE="ARM64"
-    CMAKE_MORE_OPTIONS="${CMAKE_MORE_OPTIONS} -DBUILD_SSE2_CODEPATHS=OFF"
+    CMAKE_MORE_OPTIONS="${CMAKE_MORE_OPTIONS}"
 else
 	CPU_ARCHITECTURE="Intel"
 fi

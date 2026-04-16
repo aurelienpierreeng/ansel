@@ -230,7 +230,7 @@ jobs:
           - nofeatures
         generator:
           - Ninja
-        eco: [-DBUILD_SSE2_CODEPATHS=OFF -DUSE_GRAPHICSMAGICK=ON -DUSE_IMAGEMAGICK=OFF]
+        eco: [-DUSE_GRAPHICSMAGICK=ON -DUSE_IMAGEMAGICK=OFF]
     env:
       DEVELOPER_DIR: /Applications/Xcode_${{ matrix.build.xcode }}.app/Contents/Developer
       CC: ${{ matrix.compiler.CC }}

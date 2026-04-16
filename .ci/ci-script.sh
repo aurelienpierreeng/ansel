@@ -137,7 +137,6 @@ case "$TARGET" in
       -DUSE_LENSFUN=OFF \
       -DUSE_GMIC=OFF \
       -DUSE_LIBSECRET=OFF \
-      -DBUILD_SSE2_CODEPATHS=OFF \
       $ECO "$SRC_DIR" || (cat "$BUILD_DIR"/CMakeFiles/CMakeOutput.log; cat "$BUILD_DIR"/CMakeFiles/CMakeError.log)
     target_notest
     ;;
