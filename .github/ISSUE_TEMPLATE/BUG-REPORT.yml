@@ -80,10 +80,10 @@ body:
   - type: checkboxes
     id: terms
     attributes:
-      label: Issue is actionnable
+      label: Issue is actionnable and focused on a single problem
       description: Issues are meant to become a programmer task in the project management todo list. Keep discussions [where they belong](https://github.com/aurelienpierreeng/ansel/discussions).
       options:
-        - label: My issue is not a question but an identified usability problem.
+        - label: My issue is not a question but ONE identified usability problem.
           required: true
   - type: checkboxes
     id: search
@@ -106,7 +106,7 @@ body:
       label: Computer's operating system
       description: What OS are you using ?
       options:
-        - Windows 7, 8, 10, or 11
+        - Windows 10 or 11
         - Linux
         - MacOS Intel x86
         - MacOS ARM64
@@ -170,7 +170,7 @@ body:
     id: without-opencl
     attributes:
       label: Does your problem occur with OpenCL disabled ?
-      description: OpenCL disabled means the software runs on CPU only. Ansel has an option in global menu "Edit" -> "Preferences" -> "Performance" to disable OpenCL. If you don't have a GPU, OpenCL is disabled by default.
+      description: OpenCL disabled means the software runs on CPU only. Ansel has an option in global menu "Edit" -> "Preferences" -> "Performance" to disable OpenCL. If you don't have a GPU, OpenCL is disabled by default.
       options:
         - "Yes"
         - "No"
@@ -195,19 +195,19 @@ body:
     id: backtrace
     attributes:
       label: Backtrace
-      description: In case of a crash, please copy and paste the content of the backtrace file, usually stored in `/tmp/ansel_backtrace_xxxx_txt`. If no backtrace is produced, you can try to launch Ansel with `gdb ansel`, then type `run`. When it crashes, type `bt full` and copy-paste the output here. This will be automatically formatted into code, so no need for backticks.
+      description: In case of a crash, please copy and paste the content of the backtrace file, usually stored in `/tmp/ansel_backtrace_xxxx_txt`. If no backtrace is produced, you can try to launch Ansel with `gdb ansel`, then type `run`. When it crashes, type `bt full` and copy-paste the output here. This will be automatically formatted into code, so no need for backticks. WE CAN'T DEBUG CRASHES WITHOUT BACKTRACES. 
       render: shell
   - type: upload
     id: screenshots
     attributes:
       label: Upload screenshots
-      description: If applicable, add screenshots to help explain your problem.
+      description: If applicable, add screenshots to help explain your problem. SCREENSHOTS DO NOT REMOVE THE NEED FOR EXPLANATIONS REGARDING WHAT YOU EXPECTED VS. WHAT YOU GOT.
     validations:
       required: false
   - type: upload
     id: files
     attributes:
       label: Upload incriminated image files and XMP developments
-      description: Help reproduce your bug. RAW images and XMP will need to be compressed in `.zip` or `.tar.gz` files to be accepted by Github.
+      description: Help reproduce your bug. RAW images and XMP will need to be compressed in `.zip` or `.tar.gz` archive files to be accepted by Github. WE CAN'T DEBUG METADATA AND CAMERA-SPECIFIC ISSUES WITHOUT IMAGE SAMPLES.
     validations:
       required: false
