@@ -297,12 +297,6 @@ void dt_develop_blendif_rgb_hsl_make_mask(const struct dt_dev_pixelpipe_t *pipe,
     }
     __OMP_PARALLEL__()
     {
-#ifdef __SSE2__
-      // flush denormals to zero to avoid performance penalty if there are a lot of zero values in the mask
-      const int oldMode = _MM_GET_FLUSH_ZERO_MODE();
-      _MM_SET_FLUSH_ZERO_MODE(_MM_FLUSH_ZERO_ON);
-#endif
-
       // initialize the parametric mask
       __OMP_FOR_SIMD__(aligned(temp_mask:64))
       for(size_t x = 0; x < buffsize; x++) temp_mask[x] = 1.0f;
@@ -350,10 +344,6 @@ void dt_develop_blendif_rgb_hsl_make_mask(const struct dt_dev_pixelpipe_t *pipe,
           for(size_t x = 0; x < buffsize; x++) mask[x] = global_opacity * mask[x] * temp_mask[x];
         }
       }
-
-#ifdef __SSE2__
-      _MM_SET_FLUSH_ZERO_MODE(oldMode);
-#endif
     }
 
     dt_pixelpipe_cache_free_align(temp_mask);

@@ -28,6 +28,9 @@
 #include "config.h"
 #endif
 
+#include "control/conf.h"
+#include "common/fp_mode.h"
+
 #include <sched.h>
 #include <pthread.h>
 #include <stdint.h>
@@ -41,6 +44,8 @@
 
 int dt_pthread_create(pthread_t *thread, void *(*start_routine)(void *), void *arg, const gboolean realtime)
 {
+  dt_fp_init(dt_conf_get_int("fp_mode"));
+
   int ret;
 
   pthread_attr_t attr;

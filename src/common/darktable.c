@@ -120,6 +120,7 @@
 #include "common/tags.h"
 #include "common/styles.h"
 #include "common/undo.h"
+#include "common/fp_mode.h"
 #include "control/conf.h"
 #include "control/control.h"
 #include "control/crawler.h"
@@ -459,10 +460,7 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
         "WARNING: either your user id or the effective user id are 0. are you running darktable as root?\n");
 #endif
 
-#if defined(__SSE__)
-  // make everything go a lot faster.
-  _MM_SET_FLUSH_ZERO_MODE(_MM_FLUSH_ZERO_ON);
-#endif
+  dt_fp_init(DT_FP_MODE_FAST);
 
   dt_set_signal_handlers();
 

@@ -60,6 +60,7 @@
 
 #pragma once
 
+
 // just to be sure. the build system should set this for us already:
 #if defined __DragonFly__ || defined __FreeBSD__ || defined __NetBSD__ || defined __OpenBSD__
 #define _WITH_DPRINTF
@@ -215,7 +216,7 @@ typedef unsigned int u_int;
 #include <arm_neon.h>
 #endif
 
-#if defined(__SSE__)
+#if defined(__x86_64__) || defined(__i386__)
 #include <xmmintrin.h> // needed for _mm_stream_ps
 #endif
 

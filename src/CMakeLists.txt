@@ -74,6 +74,7 @@ FILE(GLOB SOURCE_FILES
   "common/film.c"
   "common/file_location.c"
   "common/focus_peaking.c"
+  "common/fp_mode.c"
   "common/gaussian.c"
   "common/grouping.c"
   "common/guided_filter.c"

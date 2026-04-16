@@ -1117,12 +1117,6 @@ static inline gint mask_clipped_pixels(const float *const restrict in, float *co
 
   int clipped = 0;
 
-  #ifdef __SSE2__
-    // flush denormals to zero for masking to avoid performance penalty
-    // if there are a lot of zero values in the mask
-    const unsigned int oldMode = _MM_GET_FLUSH_ZERO_MODE();
-    _MM_SET_FLUSH_ZERO_MODE(_MM_FLUSH_ZERO_ON);
-  #endif
   __OMP_PARALLEL_FOR_SIMD__(aligned(mask, in:64) reduction(+:clipped))
   for(size_t k = 0; k < height * width * ch; k += ch)
   {
@@ -1137,10 +1131,6 @@ static inline gint mask_clipped_pixels(const float *const restrict in, float *co
     // so we discard pixels for argument > 4. for they are not worth computing.
     clipped += (4.f > argument);
   }
-
-  #ifdef __SSE2__
-    _MM_SET_FLUSH_ZERO_MODE(oldMode);
-  #endif
 
   // If clipped area is < 9 pixels, recovery is not worth the computational cost, so skip it.
   return (clipped > 9);

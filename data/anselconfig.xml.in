@@ -157,6 +157,13 @@
     <shortdescription>CPU cores</shortdescription>
     <longdescription>Number of CPU cores to use for image processing, including virtual cores (hyperthreading). -1 or 0 uses all available/detected cores.</longdescription>
   </dtconfig>
+  <dtconfig prefs="processing">
+    <name>cpu_fp_mode</name>
+    <type min="0">int</type>
+    <default>1</default>
+    <shortdescription>Floating Point mode</shortdescription>
+    <longdescription>Enable fast floating-point arithmetic. 0 = system default, 1 = fast, 2 = strict (IEEE compliant). This flushes denormals to 0.</longdescription>
+  </dtconfig>
   <dtconfig prefs="processing" section="cpugpu" restart="true">
     <name>worker_threads</name>
     <type min="2">int</type>
