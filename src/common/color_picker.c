@@ -311,8 +311,8 @@ static void color_picker_helper_4ch_parallel(const dt_iop_buffer_dsc_t *const ds
   for(int n = 0; n < allocsize * numthreads; n++)
   {
     mean[n] = 0.0f;
-    mmin[n] = INFINITY;
-    mmax[n] = -INFINITY;
+    mmin[n] = FLT_MAX;
+    mmax[n] = -FLT_MAX;
   }
 
   if(cst_to == IOP_CS_LCH)
@@ -458,8 +458,8 @@ static void color_picker_helper_4ch_converted_parallel(const float *const pixel,
   for(int n = 0; n < allocsize * numthreads; n++)
   {
     mean[n] = 0.0f;
-    mmin[n] = INFINITY;
-    mmax[n] = -INFINITY;
+    mmin[n] = FLT_MAX;
+    mmax[n] = -FLT_MAX;
   }
   __OMP_PARALLEL__()
   {
@@ -571,8 +571,8 @@ static void color_picker_helper_bayer_parallel(const dt_iop_buffer_dsc_t *const 
   for(int n = 0; n < 4 * numthreads; n++)
   {
     msum[n] = 0.0f;
-    mmin[n] = INFINITY;
-    mmax[n] = -INFINITY;
+    mmin[n] = FLT_MAX;
+    mmax[n] = -FLT_MAX;
     cnt[n] = 0u;
   }
   __OMP_PARALLEL__()
@@ -698,8 +698,8 @@ static void color_picker_helper_xtrans_parallel(const dt_iop_buffer_dsc_t *const
   for(int n = 0; n < 3 * numthreads; n++)
   {
     msum[n] = 0.0f;
-    mmin[n] = INFINITY;
-    mmax[n] = -INFINITY;
+    mmin[n] = FLT_MAX;
+    mmax[n] = -FLT_MAX;
     cnt[n] = 0u;
   }
   __OMP_PARALLEL__()

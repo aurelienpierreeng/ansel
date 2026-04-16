@@ -722,9 +722,9 @@ static inline double xlog(double d)
 
   x = x * t + 0.693147180559945286226764 * e;
 
-  if(!dt_isfinite(d)) x = INFINITY;
+  if(!dt_isfinite(d)) x = FLT_MAX;
   if(d < 0)    x = dt_nan();
-  if(d == 0)   x = -INFINITY;
+  if(d == 0)   x = -FLT_MAX;
 
   return x;
 }

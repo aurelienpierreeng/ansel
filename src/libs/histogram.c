@@ -1634,8 +1634,8 @@ static void _pixelpipe_pick_from_image(const dt_backbuf_t *const backbuf,
   }
 
   dt_aligned_pixel_t mean = { 0.0f };
-  dt_aligned_pixel_t min = { INFINITY, INFINITY, INFINITY, INFINITY };
-  dt_aligned_pixel_t max = { -INFINITY, -INFINITY, -INFINITY, -INFINITY };
+  dt_aligned_pixel_t min = { FLT_MAX, FLT_MAX, FLT_MAX, FLT_MAX };
+  dt_aligned_pixel_t max = { -FLT_MAX, -FLT_MAX, -FLT_MAX, -FLT_MAX };
 
   dt_color_picker_helper(&dsc, pixel, &roi, box, mean, min, max, dsc.cst, IOP_CS_RGB, NULL);
 

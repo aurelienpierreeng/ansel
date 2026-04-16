@@ -221,8 +221,8 @@ static gboolean _sample_picker_buffer(dt_dev_pixelpipe_t *pipe, dt_iop_module_t 
   if(_picker_sample_box(module, roi, picker_source, box)) return FALSE;
 
   dt_aligned_pixel_t avg = { 0.0f };
-  dt_aligned_pixel_t min = { INFINITY, INFINITY, INFINITY, INFINITY };
-  dt_aligned_pixel_t max = { -INFINITY, -INFINITY, -INFINITY, -INFINITY };
+  dt_aligned_pixel_t min = { FLT_MAX, FLT_MAX, FLT_MAX, FLT_MAX };
+  dt_aligned_pixel_t max = { -FLT_MAX, -FLT_MAX, -FLT_MAX, -FLT_MAX };
 
   const dt_iop_colorspace_type_t picker_cst = dt_iop_color_picker_get_active_cst(module);
   const dt_iop_order_iccprofile_info_t *const profile = dt_ioppr_get_pipe_current_profile_info(module, pipe);

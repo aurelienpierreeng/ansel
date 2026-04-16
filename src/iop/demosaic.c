@@ -529,13 +529,13 @@ static float _downsample_xtrans_missing_colour(const float *const in, const dt_i
   const int ymax = MIN(roi_in->height - 1, py + 4);
 
   float quadrant_value[4] = { 0.0f };
-  float quadrant_dist[4] = { INFINITY, INFINITY, INFINITY, INFINITY };
+  float quadrant_dist[4] = { FLT_MAX, FLT_MAX, FLT_MAX, FLT_MAX };
   int quadrant_x[4] = { 0 };
   int quadrant_y[4] = { 0 };
   gboolean quadrant_valid[4] = { FALSE, FALSE, FALSE, FALSE };
 
   float nearest_value = 0.0f;
-  float nearest_dist = INFINITY;
+  float nearest_dist = FLT_MAX;
 
   // Search the local 7x7 neighbourhood because X-Trans can place the next sample
   // of a given colour two pixels away from the 2x2 block feeding the output.

@@ -274,8 +274,8 @@ static int get_manifolds(const float* const restrict in, const size_t width, con
     goto error;
   }
 
-  dt_aligned_pixel_t max = {INFINITY, INFINITY, INFINITY, INFINITY};
-  dt_aligned_pixel_t min = {-INFINITY, -INFINITY, -INFINITY, 0.0f};
+  dt_aligned_pixel_t max = {FLT_MAX, FLT_MAX, FLT_MAX, FLT_MAX};
+  dt_aligned_pixel_t min = {-FLT_MAX, -FLT_MAX, -FLT_MAX, 0.0f};
   // start with a larger blur to estimate the manifolds if we refine them
   // later on
   const float blur_size = refine_manifolds ? sigma2 : sigma;
@@ -621,7 +621,7 @@ static int reduce_artifacts(const float* const restrict in,
   }
 
 
-  dt_aligned_pixel_t max = { INFINITY, INFINITY, INFINITY, INFINITY };
+  dt_aligned_pixel_t max = { FLT_MAX, FLT_MAX, FLT_MAX, FLT_MAX };
   dt_aligned_pixel_t min = {0.0f, 0.0f, 0.0f, 0.0f};
   g = dt_gaussian_init(width, height, 4, max, min, sigma, 0);
   if(IS_NULL_PTR(g))

@@ -3236,7 +3236,7 @@ static gboolean _channelmixerrgb_sync_simple_from_params(dt_iop_module_t *self, 
   float roundtrip[3][3] = { { 0.f } };
   dt_iop_channelmixer_rgb_simple_params_t simple;
 
-  if(!IS_NULL_PTR(error)) *error = INFINITY;
+  if(!IS_NULL_PTR(error)) *error = FLT_MAX;
   if(!dt_iop_channelmixer_shared_rows_are_normalized(normalize)) return FALSE;
   if(!dt_iop_channelmixer_shared_get_matrix(rows, normalize, FALSE, M)) return FALSE;
 
@@ -3513,8 +3513,8 @@ void gui_update(struct dt_iop_module_t *self)
   dt_iop_module_t *module = (dt_iop_module_t *)self;
   dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)module->params;
-  float simple_error = INFINITY;
-  float primaries_error = INFINITY;
+  float simple_error = FLT_MAX;
+  float primaries_error = FLT_MAX;
 
   dt_iop_color_picker_reset(self, TRUE);
 
@@ -3769,7 +3769,7 @@ static void _channelmixerrgb_mixer_mode_callback(GtkWidget *combo, gpointer user
 
   if(mode == DT_CHANNELMIXERRGB_MIXER_SIMPLE)
   {
-    float error = INFINITY;
+    float error = FLT_MAX;
     if(!_channelmixerrgb_sync_simple_from_params(self, &error))
     {
       dt_control_log(_("simple mixer mode requires all three output rows to be normalized with non-zero sums."));
@@ -3793,7 +3793,7 @@ static void _channelmixerrgb_mixer_mode_callback(GtkWidget *combo, gpointer user
                                { p->blue[0], p->blue[1], p->blue[2] } };
     const gboolean normalize[3] = { p->normalize_R, p->normalize_G, p->normalize_B };
     float M[3][3] = { { 0.f } };
-    float error = INFINITY;
+    float error = FLT_MAX;
     if(!dt_iop_channelmixer_shared_get_matrix(rows, normalize, FALSE, M)
        || !_channelmixerrgb_sync_primaries_from_params(self, &error))
     {
@@ -4061,7 +4061,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 
   if(rows_are_normalized && !simple_widget && (IS_NULL_PTR(w) || complete_widget))
   {
-    float error = INFINITY;
+    float error = FLT_MAX;
     if(!_channelmixerrgb_sync_simple_from_params(self, &error))
     {
       if(dt_bauhaus_combobox_get(g->mixer_mode) == DT_CHANNELMIXERRGB_MIXER_SIMPLE)
@@ -4080,7 +4080,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 
   if(!primaries_widget && (IS_NULL_PTR(w) || complete_widget || simple_widget || w == g->adaptation))
   {
-    float error = INFINITY;
+    float error = FLT_MAX;
     if(!_channelmixerrgb_sync_primaries_from_params(self, &error))
     {
       if(dt_bauhaus_combobox_get(g->mixer_mode) == DT_CHANNELMIXERRGB_MIXER_PRIMARIES)

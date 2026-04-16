@@ -3231,8 +3231,8 @@ static gboolean _sample_picker_luminance_mask(const float *const buffer, const s
     const size_t y1 = CLAMP(MAX(box[3], y0 + 1), 1, height);
 
     float mean = 0.0f;
-    float minimum = INFINITY;
-    float maximum = -INFINITY;
+    float minimum = FLT_MAX;
+    float maximum = -FLT_MAX;
     size_t count = 0;
 
     // Browse the exact picker box on the preview luminance mask so picker feedback
