@@ -324,7 +324,7 @@ void dt_printing_setup_image(dt_images_box *imgs, const int idx,
   box->print.width  = box->pos.width * imgs->page_width;
   box->print.height = box->pos.height * imgs->page_height;
 
-  dt_image_pos pos;
+  dt_image_pos pos = { .x = 0, .y = 0, .width = 0, .height = 0 };
   _align_pos(&box->print, box->alignment, box->exp_width, box->exp_height, &pos);
 
   box->print.x = pos.x;
