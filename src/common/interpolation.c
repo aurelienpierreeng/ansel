@@ -940,6 +940,8 @@ static gboolean _prepare_resampling_plan(const struct dt_interpolation *itor,
   return FALSE;
 }
 
+#define TILE_ROWS 128
+
 __DT_CLONE_TARGETS__
 static void _interpolation_resample_plain(const struct dt_interpolation *itor,
                                           float *const restrict out,
@@ -963,13 +965,16 @@ static void _interpolation_resample_plain(const struct dt_interpolation *itor,
   {
     const size_t x0 = (roi_out->x - roi_in->x) * 4 * sizeof(float);
     const size_t y0 = (roi_out->y - roi_in->y);
-    __OMP_PARALLEL_FOR__()
-    for(int y = 0; y < roi_out->height; y++)
+    __OMP_PARALLEL_FOR_FP__()
+    for(int yt = 0; yt < roi_out->height; yt += TILE_ROWS)
     {
-      memcpy((char *)__builtin_assume_aligned(out, 64) + (size_t)out_stride_floats * sizeof(float) * y,
-             (char *)__builtin_assume_aligned(in, 64) + (size_t)in_stride_floats * sizeof(float) * (y + y0) + x0,
-             out_stride_floats * sizeof(float));
+      const int y_end = MIN(yt + TILE_ROWS, roi_out->height);
+      for(int y = yt; y < y_end; y++)
+        memcpy((char *)__builtin_assume_aligned(out, 64) + (size_t)out_stride_floats * sizeof(float) * y,
+              (char *)__builtin_assume_aligned(in, 64) + (size_t)in_stride_floats * sizeof(float) * (y + y0) + x0,
+              out_stride_floats * sizeof(float));
     }
+    __OMP_PARALLEL_FOR_FP_END__
 
     // All done, so easy case
     return;
@@ -992,7 +997,7 @@ static void _interpolation_resample_plain(const struct dt_interpolation *itor,
   const size_t width = roi_out->width;
 
   // Process each output line
-  __OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR_FP__()
   for(size_t oy = 0; oy < height; oy++)
   {
     // Initialize column resampling indexes
@@ -1054,6 +1059,8 @@ static void _interpolation_resample_plain(const struct dt_interpolation *itor,
       hkidx += hl;
     }
   }
+  __OMP_PARALLEL_FOR_FP_END__
+  
   dt_omploop_sfence();
 
 exit:
