@@ -353,7 +353,23 @@ foreach(i RANGE ${_last})
          GET "${_ansel_pkgconfig_imports_json}" ${i} version)
 
   # pkg-config lookup (module name ONLY)
-  pkg_check_modules(${_name} REQUIRED IMPORTED_TARGET ${_module})
+  # IMPORTANT: no IMPORTED_TARGET here because old FindPkgConfig.cmake
+  # is bugged on Github runners (old)
+  pkg_check_modules(${_name} REQUIRED ${_module})
+
+  # Create imported target manually (portable)
+  if(${_name}_FOUND AND NOT TARGET PkgConfig::${_name})
+    add_library(PkgConfig::${_name} INTERFACE IMPORTED)
+
+    target_include_directories(PkgConfig::${_name}
+      INTERFACE ${${_name}_INCLUDE_DIRS})
+
+    target_link_libraries(PkgConfig::${_name}
+      INTERFACE ${${_name}_LINK_LIBRARIES})
+
+    target_compile_options(PkgConfig::${_name}
+      INTERFACE ${${_name}_CFLAGS_OTHER})
+  endif()
 
   # Version check (only if present)
   if(NOT _no_version AND _version AND ${_name}_VERSION VERSION_LESS _version)
