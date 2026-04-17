@@ -325,23 +325,43 @@ endif()
 # Find all other required libraries for building
 #
 # GTK3 does pull glib, but this allows us to check for the version
-set(_ansel_pkgconfig_imports
-  "Glib|glib-2.0>=2.64"
-  "GObject|gobject-2.0"
-  "GIO|gio-2.0"
-  "GThread|gthread-2.0"
-  "GModule|gmodule-2.0"
-  "PangoCairo|pangocairo"
-  "Rsvg2|librsvg-2.0"
-  "JsonGlib|json-glib-1.0"
-  "LCMS2|lcms2"
-)
+set(_ansel_pkgconfig_imports_json [[
+[
+  {"name":"Glib",       "module":"glib-2.0",       "version":"2.64"},
+  {"name":"GObject",    "module":"gobject-2.0"},
+  {"name":"GIO",        "module":"gio-2.0"},
+  {"name":"GThread",    "module":"gthread-2.0"},
+  {"name":"GModule",    "module":"gmodule-2.0"},
+  {"name":"PangoCairo", "module":"pangocairo"},
+  {"name":"Rsvg2",      "module":"librsvg-2.0"},
+  {"name":"JsonGlib",   "module":"json-glib-1.0"},
+  {"name":"LCMS2",      "module":"lcms2"}
+]
+]])
 
-foreach(_ansel_dep ${_ansel_pkgconfig_imports})
-  string(REPLACE "|" ";" _ansel_dep_fields "${_ansel_dep}")
-  list(GET _ansel_dep_fields 0 _ansel_dep_name)
-  list(GET _ansel_dep_fields 1 _ansel_dep_module)
-  pkg_check_modules(${_ansel_dep_name} REQUIRED IMPORTED_TARGET ${_ansel_dep_module})
+string(JSON _dep_count LENGTH "${_ansel_pkgconfig_imports_json}")
+math(EXPR _last "${_dep_count} - 1")
+
+foreach(i RANGE ${_last})
+
+  # Extract fields
+  string(JSON _name   GET "${_ansel_pkgconfig_imports_json}" ${i} name)
+  string(JSON _module GET "${_ansel_pkgconfig_imports_json}" ${i} module)
+
+  # version is optional → use ERROR_VARIABLE to detect absence
+  string(JSON _version ERROR_VARIABLE _no_version
+         GET "${_ansel_pkgconfig_imports_json}" ${i} version)
+
+  # pkg-config lookup (module name ONLY)
+  pkg_check_modules(${_name} REQUIRED IMPORTED_TARGET ${_module})
+
+  # Version check (only if present)
+  if(NOT _no_version AND _version AND ${_name}_VERSION VERSION_LESS _version)
+    message(FATAL_ERROR
+      "${_module} >= ${_version} required, found ${${_name}_VERSION}"
+    )
+  endif()
+
 endforeach()
 
 add_definitions("-DGLIB_VERSION_MIN_REQUIRED=GLIB_VERSION_2_64")
