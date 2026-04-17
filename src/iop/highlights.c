@@ -86,9 +86,6 @@
 // Set to one to output intermediate image steps as PFM in /tmp
 #define DEBUG_DUMP_PFM 0
 
-static const float DT_ALIGNED_ARRAY anisotropic_kernel_isophote[9]
-  = { 0.25f, 0.5f, 0.25f, 0.5f, -3.f, 0.5f, 0.25f, 0.5f, 0.25f };
-
 #if DEBUG_DUMP_PFM
 __DT_CLONE_TARGETS__
 static void dump_PFM(const char *filename, const float* out, const uint32_t w, const uint32_t h)
@@ -793,7 +790,7 @@ static void process_lch_bayer(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_
                               const dt_iop_roi_t *const roi_out, const float clip)
 {
   const uint32_t filters = piece->dsc_in.filters;
-  __OMP_PARALLEL_FOR__(collapse(2))
+  __OMP_PARALLEL_FOR_FP__(collapse(2))
   for(int j = 0; j < roi_out->height; j++)
   {
     for(int i = 0; i < roi_out->width; i++)
@@ -882,6 +879,7 @@ static void process_lch_bayer(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_
       }
     }
   }
+  __OMP_PARALLEL_FOR_FP_END__
 }
 
 __DT_CLONE_TARGETS__
@@ -890,7 +888,7 @@ static void process_lch_xtrans(dt_iop_module_t *self, const dt_dev_pixelpipe_iop
                                const dt_iop_roi_t *const roi_out, const float clip)
 {
   const uint8_t(*const xtrans)[6] = (const uint8_t(*const)[6])piece->dsc_in.xtrans;
-  __OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR_FP__()
   for(int j = 0; j < roi_out->height; j++)
   {
     float *out = (float *)ovoid + (size_t)roi_out->width * j;
@@ -1009,6 +1007,7 @@ static void process_lch_xtrans(dt_iop_module_t *self, const dt_dev_pixelpipe_iop
       in++;
     }
   }
+  __OMP_PARALLEL_FOR_FP_END__
 }
 
 #undef SQRT3
@@ -1024,7 +1023,7 @@ static void _interpolate_and_mask(const float *const restrict input,
                                   const size_t width, const size_t height)
 {
   // Bilinear interpolation
-  __OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR_FP__(collapse(2))
   for(size_t i = 0; i < height; i++)
     for(size_t j = 0; j < width; j++)
     {
@@ -1148,7 +1147,8 @@ static void _interpolate_and_mask(const float *const restrict input,
         clipping_mask[idx] = clipped[k];
       }
     }
-}
+  __OMP_PARALLEL_FOR_FP_END__
+  }
 
 /** Compute channel normalization factors from the current raw ROI.
  *
@@ -1168,7 +1168,7 @@ static void _compute_laplacian_normalization(const float *const restrict input,
   float sum_G = 0.f;
   float sum_B = 0.f;
   const float n_pixels = roi_in->height * roi_in->width;
-  __OMP_PARALLEL_FOR__(collapse(2) reduction(+:sum_R, sum_G, sum_B) )
+  __OMP_PARALLEL_FOR__(collapse(2) reduction(+:sum_R, sum_G, sum_B))
   for(size_t i = 0; i < roi_in->height; i++)
     for(size_t j = 0; j < roi_in->width; j++)
     {
@@ -1201,6 +1201,7 @@ static void _build_xtrans_bilinear_lookup(int32_t lookup[6][6][32],
                                           const dt_iop_roi_t *const roi_in,
                                           const uint8_t (*const xtrans)[6])
 {
+  __OMP_PARALLEL_FOR_FP__(collapse(2))
   for(int row = 0; row < 6; row++)
     for(int col = 0; col < 6; col++)
     {
@@ -1231,6 +1232,7 @@ static void _build_xtrans_bilinear_lookup(int32_t lookup[6][6][32],
         }
       *ip = f;
     }
+  __OMP_PARALLEL_FOR_FP_END__
 }
 
 /** Bilinearly demosaic the X-Trans raw mosaic and record clipped colors.
@@ -1250,7 +1252,7 @@ static void _interpolate_and_mask_xtrans(const float *const restrict input,
                                          const uint8_t (*const xtrans)[6],
                                          const size_t width, const size_t height)
 {
-  __OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR_FP__(collapse(2))
   for(size_t i = 0; i < height; i++)
     for(size_t j = 0; j < width; j++)
     {
@@ -1332,6 +1334,7 @@ static void _interpolate_and_mask_xtrans(const float *const restrict input,
         clipping_mask[index] = clipped[k];
       }
     }
+  __OMP_PARALLEL_FOR_FP_END__
 }
 
 __DT_CLONE_TARGETS__
@@ -1344,7 +1347,7 @@ static void _remosaic_and_replace(const float *const restrict input,
                                   const size_t width, const size_t height)
 {
   // Take RGB ratios and norm, reconstruct RGB and remosaic the image
-  __OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR_FP__(collapse(2))
   for(size_t i = 0; i < height; i++)
     for(size_t j = 0; j < width; j++)
     {
@@ -1355,6 +1358,7 @@ static void _remosaic_and_replace(const float *const restrict input,
       output[idx] = opacity * fmaxf(interpolated[index + c] * wb[c], 0.f)
                     + (1.f - opacity) * input[idx];
     }
+  __OMP_PARALLEL_FOR_FP_END__
 }
 
 /** Reproject the reconstructed RGB back onto the X-Trans mosaic. */
@@ -1368,7 +1372,7 @@ static void _remosaic_and_replace_xtrans(const float *const restrict input,
                                          const uint8_t (*const xtrans)[6],
                                          const size_t width, const size_t height)
 {
-  __OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR_FP__(collapse(2))
   for(size_t i = 0; i < height; i++)
     for(size_t j = 0; j < width; j++)
     {
@@ -1379,6 +1383,7 @@ static void _remosaic_and_replace_xtrans(const float *const restrict input,
       output[idx] = opacity * fmaxf(interpolated[index + c] * wb[c], 0.f)
                     + (1.f - opacity) * input[idx];
     }
+  __OMP_PARALLEL_FOR_FP_END__
 }
 
 typedef enum diffuse_reconstruct_variant_t
@@ -1420,7 +1425,7 @@ static inline void guide_laplacians(const float *const restrict high_freq, const
   const dt_aligned_pixel_simd_t inv_patch = dt_simd_set1(1.f / 9.f);
   const dt_aligned_pixel_simd_t scale_multiplier = dt_simd_set1(1.f / radius_sq);
   const float eps = 1e-12f;
-  __OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR_FP__()
   for(size_t row = 0; row < height; ++row)
   {
     // interleave the order in which we process the rows so that we minimize cache misses
@@ -1569,6 +1574,7 @@ static inline void guide_laplacians(const float *const restrict high_freq, const
       dt_store_simd_aligned(out + index, out_pixel);
     }
   }
+  __OMP_PARALLEL_FOR_FP_END__
 }
 
 __DT_CLONE_TARGETS__
@@ -1590,7 +1596,7 @@ static inline void heat_PDE_diffusion(const float *const restrict high_freq, con
   float *const restrict out = DT_IS_ALIGNED(output);
   const float *const restrict LF = DT_IS_ALIGNED(low_freq);
   const float *const restrict HF = DT_IS_ALIGNED(high_freq);
-  __OMP_PARALLEL_FOR__(firstprivate(anisotropic_kernel_isophote))
+  __OMP_PARALLEL_FOR_FP__()
   for(size_t row = 0; row < height; ++row)
   {
     // interleave the order in which we process the rows so that we minimize cache misses
@@ -1600,6 +1606,10 @@ static inline void heat_PDE_diffusion(const float *const restrict high_freq, con
       = { MAX((int)(i - mult), (int)0) * width,            // x - mult
           i * width,                                       // x
           MIN((int)(i + mult), (int)height - 1) * width }; // x + mult
+
+    static const float DT_ALIGNED_ARRAY anisotropic_kernel_isophote[9]
+      = { 0.25f, 0.5f, 0.25f, 0.5f, -3.f, 0.5f, 0.25f, 0.5f, 0.25f };
+
     for(size_t j = 0; j < width; ++j)
     {
       const size_t idx = (i * width + j);
@@ -1696,6 +1706,7 @@ static inline void heat_PDE_diffusion(const float *const restrict high_freq, con
       }
     }
   }
+  __OMP_PARALLEL_FOR_FP_END__
 }
 
 static inline int wavelets_process(const float *const restrict in, float
@@ -2607,20 +2618,22 @@ static void process_clip(const dt_dev_pixelpipe_iop_t *piece, const void *const 
 
   if(piece->dsc_in.filters)
   { // raw mosaic
-    __OMP_PARALLEL_FOR_SIMD__()
+    __OMP_PARALLEL_FOR_SIMD_FP__()
     for(size_t k = 0; k < (size_t)roi_out->width * roi_out->height; k++)
     {
       out[k] = MIN(clip, in[k]);
     }
+    __OMP_PARALLEL_FOR_SIMD_FP_END__
   }
   else
   {
     const int ch = piece->dsc_in.channels;
-    __OMP_PARALLEL_FOR_SIMD__()
+    __OMP_PARALLEL_FOR_SIMD_FP__()
     for(size_t k = 0; k < (size_t)ch * roi_out->width * roi_out->height; k++)
     {
       out[k] = MIN(clip, in[k]);
     }
+    __OMP_PARALLEL_FOR_SIMD_FP_END__
   }
 }
 
@@ -2690,35 +2703,39 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
       if(filters == 9u)
       {
         const uint8_t(*const xtrans)[6] = (const uint8_t(*const)[6])piece->dsc_in.xtrans;
-        __OMP_PARALLEL_FOR__()
+        __OMP_PARALLEL_FOR_FP__()
         for(int j = 0; j < roi_out->height; j++)
         {
           interpolate_color_xtrans(ivoid, ovoid, roi_in, roi_out, 0, 1, j, clips, xtrans, 0);
           interpolate_color_xtrans(ivoid, ovoid, roi_in, roi_out, 0, -1, j, clips, xtrans, 1);
         }
-        __OMP_PARALLEL_FOR__()
+        __OMP_PARALLEL_FOR_FP_END__
+        __OMP_PARALLEL_FOR_FP__()
         for(int i = 0; i < roi_out->width; i++)
         {
           interpolate_color_xtrans(ivoid, ovoid, roi_in, roi_out, 1, 1, i, clips, xtrans, 2);
           interpolate_color_xtrans(ivoid, ovoid, roi_in, roi_out, 1, -1, i, clips, xtrans, 3);
         }
+        __OMP_PARALLEL_FOR_FP_END__
       }
       else
       {
-        __OMP_PARALLEL_FOR__()
+        __OMP_PARALLEL_FOR_FP__()
         for(int j = 0; j < roi_out->height; j++)
         {
           interpolate_color(ivoid, ovoid, roi_out, 0, 1, j, clips, filters, 0);
           interpolate_color(ivoid, ovoid, roi_out, 0, -1, j, clips, filters, 1);
         }
+        __OMP_PARALLEL_FOR_FP_END__
 
 // up/down directions
-        __OMP_PARALLEL_FOR__()
+        __OMP_PARALLEL_FOR_FP__()
         for(int i = 0; i < roi_out->width; i++)
         {
           interpolate_color(ivoid, ovoid, roi_out, 1, 1, i, clips, filters, 2);
           interpolate_color(ivoid, ovoid, roi_out, 1, -1, i, clips, filters, 3);
         }
+        __OMP_PARALLEL_FOR_FP_END__
       }
       break;
     }
