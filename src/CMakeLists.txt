@@ -316,8 +316,6 @@ if(USE_OPENMP)
   if(OpenMP_CXX_INCLUDE_DIRS)
     include_directories(${OpenMP_CXX_INCLUDE_DIRS})
   endif()
-
-  list(APPEND LIBS ${OpenMP_C_LIBRARIES} ${OpenMP_CXX_LIBRARIES})
 endif(USE_OPENMP)
 
 if(USE_DARKTABLE_PROFILING)
@@ -339,8 +337,6 @@ list(APPEND LIBS ${Glib_LIBRARIES})
 find_package(GTK3 3.24 REQUIRED)
 add_definitions("-DGDK_VERSION_MIN_REQUIRED=GDK_VERSION_3_24")
 #add_definitions("-DGDK_VERSION_MAX_ALLOWED=GDK_VERSION_MIN_REQUIRED")
-include_directories(SYSTEM ${GTK3_INCLUDE_DIRS})
-list(APPEND LIBS ${GTK3_LIBRARIES})
 
 # Check for libxml2 / broken cmake module can't be included in the foreach() below
 find_package(LibXml2 2.6 REQUIRED)
@@ -999,6 +995,12 @@ set_target_properties(lib_ansel PROPERTIES LINKER_LANGUAGE C)
 #
 target_link_libraries(lib_ansel PRIVATE ${STATIC_LIBS})
 target_link_libraries(lib_ansel PUBLIC ${LIBS})
+target_link_libraries(lib_ansel PUBLIC OpenMP::OpenMP_C)
+target_link_libraries(lib_ansel PUBLIC GTK3::GTK3)
+
+message(STATUS "Public libs:" ${LIBS})
+message(STATUS "Static libs:" ${STATIC_LIBS})
+
 
 unset(STATIC_LIBS)
 unset(LIBS)
@@ -1055,10 +1057,11 @@ target_include_directories(help_menu PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 #
 add_executable(ansel ${SUBSYSTEM_MACOSX} ${SUBSYSTEM_WIN32} main.c ${RESOURCE_OBJECT})
 set_target_properties(ansel PROPERTIES LINKER_LANGUAGE C)
+target_link_libraries(ansel PRIVATE lib_ansel ${LIBS})
+
 if(APPLE)
   set_target_properties(lib_ansel PROPERTIES LINK_FLAGS "-framework Carbon -framework AppKit")
 endif(APPLE)
-target_link_libraries(ansel PRIVATE lib_ansel ${LIBS})
 
 if(WIN32)
   set_target_properties(ansel PROPERTIES LINK_FLAGS "-mconsole -mwindows -Wl,-subsystem,console")

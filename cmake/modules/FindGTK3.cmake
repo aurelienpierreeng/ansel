@@ -29,21 +29,10 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 find_package(PkgConfig)
-pkg_check_modules(GTK3 gtk+-3.0)
-
-# Mac needs library names to include full path
-if(APPLE)
-	foreach(i ${GTK3_LIBRARIES})
-		find_library(_gtk3_LIBRARY NAMES ${i} HINTS ${GTK3_LIBRARY_DIRS})
-		LIST(APPEND GTK3_LIBRARY ${_gtk3_LIBRARY})
-		unset(_gtk3_LIBRARY CACHE)
-	endforeach(i)
-	set(GTK3_LIBRARIES ${GTK3_LIBRARY})
-	unset(GTK3_LIBRARY CACHE)
-endif(APPLE)
+pkg_check_modules(GTK3 REQUIRED gtk+-3.0)
 
 set(VERSION_OK TRUE)
-if (GTK3_VERSION)
+if(GTK3_VERSION)
     if (GTK3_FIND_VERSION_EXACT)
         if (NOT("${GTK3_FIND_VERSION}" VERSION_EQUAL "${GTK3_VERSION}"))
             set(VERSION_OK FALSE)
@@ -56,3 +45,22 @@ if (GTK3_VERSION)
 endif ()
 include(FindPackageHandleStandardArgs)
 FIND_PACKAGE_HANDLE_STANDARD_ARGS(GTK3 DEFAULT_MSG GTK3_INCLUDE_DIRS GTK3_LIBRARIES VERSION_OK)
+
+if(GTK3_FOUND AND NOT TARGET GTK3::GTK3)
+  add_library(GTK3::GTK3 INTERFACE IMPORTED)
+
+  # Include dirs
+  set_target_properties(GTK3::GTK3 PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES "${GTK3_INCLUDE_DIRS}"
+  )
+
+  # Compiler flags (important for GTK macros, threading, etc.)
+  set_target_properties(GTK3::GTK3 PROPERTIES
+    INTERFACE_COMPILE_OPTIONS "${GTK3_CFLAGS_OTHER}"
+  )
+
+  # Link libraries
+  set_target_properties(GTK3::GTK3 PROPERTIES
+    INTERFACE_LINK_LIBRARIES "${GTK3_LIBRARIES}"
+  )
+endif()
