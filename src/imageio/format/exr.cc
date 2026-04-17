@@ -39,16 +39,6 @@
 // needs to be defined before any system header includes for control/conf.h to work in C++ code
 #define __STDC_FORMAT_MACROS
 
-#include <cstdio>
-#include <cstdlib>
-#include <memory>
-
-#include <OpenEXR/ImfChannelList.h>
-#include <OpenEXR/ImfFrameBuffer.h>
-#include <OpenEXR/ImfStandardAttributes.h>
-#include <OpenEXR/ImfThreading.h>
-#include <OpenEXR/ImfOutputFile.h>
-
 #include "glib.h"
 
 #include "bauhaus/bauhaus.h"
@@ -63,6 +53,12 @@
 #include "imageio/format/imageio_format_api.h"
 
 #include "common/imageio_exr.hh"
+
+#include <OpenEXR/ImfChannelList.h>
+#include <OpenEXR/ImfFrameBuffer.h>
+#include <OpenEXR/ImfStandardAttributes.h>
+#include <OpenEXR/ImfThreading.h>
+#include <OpenEXR/ImfOutputFile.h>
 
 #ifdef __cplusplus
 extern "C" {
