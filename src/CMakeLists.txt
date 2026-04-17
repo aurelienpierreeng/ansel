@@ -665,7 +665,7 @@ if(NOT CUSTOM_CFLAGS)
   if(CMAKE_C_COMPILER_ID MATCHES "GNU")
     set(DT_BASE_C_FLAGS "${DT_BASE_C_FLAGS} -Wmaybe-uninitialized -Wno-undef -Wimplicit-function-declaration -Winfinite-recursion -fno-semantic-interposition -fno-signaling-nans")
   elseif(CMAKE_C_COMPILER_ID MATCHES "Clang")
-    set(DT_BASE_C_FLAGS "${DT_BASE_C_FLAGS} -fvectorize -fslp-vectorize -fuse-ld=lld")
+    set(DT_BASE_C_FLAGS "${DT_BASE_C_FLAGS} -fvectorize -fslp-vectorize")
   endif()
 
   # -------------------------------------------------------------------------
