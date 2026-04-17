@@ -67,7 +67,7 @@ static int demosaic_ppg(float *const out, const float *const in, const dt_iop_ro
   }
 // for all pixels except those in the 3 pixel border:
 // interpolate green from input into out float array, or copy color.
-  __OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR_FP__()
   for(int j = 3; j < roi_out->height - 3; j++)
   {
     float *buf = out + (size_t)4 * roi_out->width * j + 4 * 3;
@@ -126,10 +126,11 @@ static int demosaic_ppg(float *const out, const float *const in, const dt_iop_ro
       buf_in++;
     }
   }
+  __OMP_PARALLEL_FOR_FP_END__
 
 // for all pixels except the outermost row/column:
 // interpolate colors using out as input into float out array
-  __OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR_FP__()
   for(int j = 1; j < roi_out->height - 1; j++)
   {
     float *buf = out + (size_t)4 * roi_out->width * j + 4;
@@ -202,6 +203,8 @@ static int demosaic_ppg(float *const out, const float *const in, const dt_iop_ro
       buf += 4;
     }
   }
+  __OMP_PARALLEL_FOR_FP_END__
+  
   // _mm_sfence();
   if(median) dt_pixelpipe_cache_free_align(input);
   return 0;

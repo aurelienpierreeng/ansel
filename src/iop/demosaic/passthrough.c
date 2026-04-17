@@ -25,7 +25,7 @@ static void passthrough_monochrome(float *out, const float *const in, dt_iop_roi
   // we never want to access the input out of bounds though:
   assert(roi_in->width >= roi_out->width);
   assert(roi_in->height >= roi_out->height);
-  __OMP_PARALLEL_FOR__(collapse(2))
+  __OMP_PARALLEL_FOR_FP__(collapse(2))
   for(int j = 0; j < roi_out->height; j++)
   {
     for(int i = 0; i < roi_out->width; i++)
@@ -37,6 +37,7 @@ static void passthrough_monochrome(float *out, const float *const in, dt_iop_roi
       }
     }
   }
+  __OMP_PARALLEL_FOR_FP_END__
 }
 
 __DT_CLONE_TARGETS__
@@ -50,8 +51,7 @@ static void passthrough_color(float *out, const float *const in, dt_iop_roi_t *c
   if(filters != 9u)
   {
 
-    __OMP_PARALLEL_FOR__( collapse(2))
-
+    __OMP_PARALLEL_FOR_FP__( collapse(2))
     for(int row = 0; row < (roi_out->height); row++)
     {
       for(int col = 0; col < (roi_out->width); col++)
@@ -64,12 +64,12 @@ static void passthrough_color(float *out, const float *const in, dt_iop_roi_t *c
         out[offset + ch] = val;
       }
     }
+    __OMP_PARALLEL_FOR_FP_END__
   }
   else
   {
 
-    __OMP_PARALLEL_FOR__( collapse(2))
-
+    __OMP_PARALLEL_FOR_FP__( collapse(2))
     for(int row = 0; row < (roi_out->height); row++)
     {
       for(int col = 0; col < (roi_out->width); col++)
@@ -82,6 +82,7 @@ static void passthrough_color(float *out, const float *const in, dt_iop_roi_t *c
         out[offset + ch] = val;
       }
     }
+    __OMP_PARALLEL_FOR_FP_END__
   }
 }
 

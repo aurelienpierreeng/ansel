@@ -18,6 +18,8 @@
 
 #pragma once
 
+#include <math.h>
+
 #if defined(__x86_64__) || defined(__i386__)
   #include <xmmintrin.h>
 #endif
@@ -38,13 +40,68 @@ typedef enum {
     DT_FP_MODE_STRICT  // debug/scientific
 } dt_cpu_fp_mode_t;
 
+
+static inline __attribute__((always_inline)) void set_fast_mode(void)
+{
+#if defined(__x86_64__) || defined(__i386__)
+  unsigned int mxcsr = _mm_getcsr();
+
+  // Flush denormals to zero
+  mxcsr |= _MM_FLUSH_ZERO_ON;
+
+  // (optional if available)
+#ifdef _MM_DENORMALS_ZERO_ON
+  mxcsr |= _MM_DENORMALS_ZERO_ON;
+#endif
+
+  _mm_setcsr(mxcsr);
+#endif
+
+#if defined(__aarch64__)
+  // Best-effort: ARM usually already fast for denormals in SIMD paths
+  fesetenv(FE_DFL_ENV);
+#endif
+}
+
+static inline __attribute__((always_inline)) void set_strict_mode(void)
+{
+#if defined(__x86_64__) || defined(__i386__)
+  unsigned int mxcsr = _mm_getcsr();
+
+  // Disable FTZ
+  mxcsr &= ~_MM_FLUSH_ZERO_ON;
+
+  _mm_setcsr(mxcsr);
+#endif
+
+#if defined(__aarch64__)
+  fesetenv(FE_DFL_ENV);
+#endif
+}
+
 /**
  * @brief Enable aggressive floating-point arithmetic optimizations, in
  * denormals handling. Set through user preference `cpu_fp_mode`
  * 
  * @param mode 
  */
-void dt_fp_init(dt_cpu_fp_mode_t mode);
+static inline void __attribute__((always_inline)) dt_fp_init(const dt_cpu_fp_mode_t mode)
+{
+  switch(mode)
+  {
+  case DT_FP_MODE_FAST:
+    set_fast_mode();
+    break;
+
+  case DT_FP_MODE_STRICT:
+    set_strict_mode();
+    break;
+
+  default:
+    // leave defaults unchanged
+    break;
+  }
+}
 
 static inline void dt_fp_print(const char *tag)
 {

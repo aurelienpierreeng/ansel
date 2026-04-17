@@ -99,12 +99,12 @@ static void rcd_ppg_border(float *const out, const float *const in, const int wi
   const int border = margin + 3;
   // write approximatad 3-pixel border region to out
   float sum[8];
+  __OMP_PARALLEL_FOR_FP__(collapse(2))
   for(int j = 0; j < height; j++)
   {
     for(int i = 0; i < width; i++)
     {
       if(i == 3 && j >= 3 && j < height - 3) i = width - 3;
-      if(i == width) break;
       memset(sum, 0, sizeof(float) * 8);
       for(int y = j - 1; y != j + 2; y++)
       {
@@ -128,9 +128,10 @@ static void rcd_ppg_border(float *const out, const float *const in, const int wi
       }
     }
   }
+  __OMP_PARALLEL_FOR_FP_END__
 
   const float *input = in;
-  __OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR_FP__()
   for(int j = 3; j < height - 3; j++)
   {
     float *buf = out + (size_t)4 * width * j + 4 * 3;
@@ -193,8 +194,10 @@ static void rcd_ppg_border(float *const out, const float *const in, const int wi
       buf_in++;
     }
   }
-// for all pixels: interpolate colors into float array
-  __OMP_PARALLEL_FOR__()
+  __OMP_PARALLEL_FOR_FP_END__
+
+  // for all pixels: interpolate colors into float array
+  __OMP_PARALLEL_FOR_FP__()
   for(int j = 1; j < height - 1; j++)
   {
     float *buf = out + (size_t)4 * width * j + 4;
@@ -270,7 +273,9 @@ static void rcd_ppg_border(float *const out, const float *const in, const int wi
       buf += 4;
     }
   }
+  __OMP_PARALLEL_FOR_FP_END__
 }
+
 static void rcd_demosaic(const dt_dev_pixelpipe_iop_t *piece, float *const restrict out, const float *const restrict in, dt_iop_roi_t *const roi_out,
                                    const dt_iop_roi_t *const roi_in, const uint32_t filters)
 {
@@ -297,6 +302,7 @@ static void rcd_demosaic(const dt_dev_pixelpipe_iop_t *piece, float *const restr
   {
     // FIXME: CRITICAL: need to handle the case where we couldn't alloc the memory,
     // but in a parallel section, that's not going to be trivial.
+    dt_fp_init(DT_FP_MODE_FAST);    
 
     float *VH_Dir = dt_pixelpipe_cache_alloc_align_float_cache((size_t) RCD_TILESIZE * RCD_TILESIZE, 0);
     // ensure that border elements which are read but never actually set below are zeroed out
