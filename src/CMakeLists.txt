@@ -642,11 +642,15 @@ if(NOT CUSTOM_CFLAGS)
 
   # Release
   set(DT_RELEASE_FLAGS "-O3 -g")
-  set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
+  if(NOT WIN32)
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
+  endif()
 
   # RelWithDebInfo (same perf as release, but keep symbols)
   set(DT_RELWITHDEBINFO_FLAGS "-O3 -g -fno-omit-frame-pointer")
-  set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO TRUE)
+  if(NOT WIN32)
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO TRUE)
+  endif()
 
   # Debug
   set(DT_DEBUG_FLAGS "-O0 -g3 -fno-omit-frame-pointer -Werror -Wuninitialized")
@@ -978,14 +982,6 @@ endif()
 set_target_properties(lib_ansel PROPERTIES OUTPUT_NAME ansel)
 set_target_properties(lib_ansel PROPERTIES LINKER_LANGUAGE C)
 target_link_libraries(lib_ansel PRIVATE stdc++)
-
-if(WIN32)
-  # Stupid Windows doesn't coalesce redundant imports, which leaks symbols
-  # and fails on "multiple definitions" with C++ stdlib
-  set_target_properties(lib_ansel PROPERTIES INTERPROCEDURAL_OPTIMIZATION FALSE)
-  target_compile_options(lib_ansel PRIVATE -fno-lto)
-  target_link_options(lib_ansel PRIVATE -fno-lto)
-endif(WIN32)
 
 #
 # Link external libs
