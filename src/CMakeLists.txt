@@ -975,12 +975,14 @@ if(APPLE)
   set_target_properties(lib_ansel PROPERTIES MACOSX_RPATH TRUE)
 endif()
 
-set_target_properties(lib_ansel PROPERTIES OUTPUT_NAME ansel)
-set_target_properties(lib_ansel PROPERTIES LINKER_LANGUAGE C)
-
 if(WIN32)
   set_target_properties(lib_ansel PROPERTIES INTERPROCEDURAL_OPTIMIZATION FALSE)
+  target_compile_options(lib_ansel PRIVATE -fno-lto)
+  target_link_options(lib_ansel PRIVATE -fno-lto)
 endif()
+
+set_target_properties(lib_ansel PROPERTIES OUTPUT_NAME ansel)
+set_target_properties(lib_ansel PROPERTIES LINKER_LANGUAGE C)
 
 #
 # Link external libs

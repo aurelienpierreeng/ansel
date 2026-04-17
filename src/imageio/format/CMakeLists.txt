@@ -27,6 +27,8 @@ if(OpenEXR_FOUND)
   add_library(exr MODULE "exr.cc")
   if(WIN32)
     set_target_properties(exr PROPERTIES INTERPROCEDURAL_OPTIMIZATION FALSE)
+    target_compile_options(exr PRIVATE -fno-lto)
+    target_link_options(exr PRIVATE -fno-lto)
   endif()
 endif(OpenEXR_FOUND)
 
