@@ -36,7 +36,7 @@
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2022 Philipp Lutz.
     Copyright (C) 2023 Luca Zulberti.
-    Copyright (C) 2025 Guillaume Stutin.
+    Copyright (C) 2025, 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -151,6 +151,11 @@ void init_presets(dt_iop_module_so_t *self)
   dt_database_release_transaction(darktable.db);
 }
 
+typedef struct grad_point_t
+{
+  float x;
+  float y;
+} grad_point_t;
 typedef struct dt_iop_graduatednd_gui_data_t
 {
   GtkWidget *density, *hardness, *rotation, *hue, *saturation;
@@ -159,7 +164,10 @@ typedef struct dt_iop_graduatednd_gui_data_t
   int dragging;
 
   gboolean define;
-  float xa, ya, xb, yb, oldx, oldy;
+  float oldx;
+  float oldy;
+  grad_point_t a;
+  grad_point_t b;
 } dt_iop_graduatednd_gui_data_t;
 
 typedef struct dt_iop_graduatednd_data_t
@@ -214,34 +222,70 @@ typedef struct dt_iop_vector_2d_t
   double y;
 } dt_iop_vector_2d_t;
 
-// determine the distance between the segment [(xa,ya)(xb,yb)] and the point (xc,yc)
-static float dist_seg(float xa, float ya, float xb, float yb, float xc, float yc)
+// determine the distance between the segment [(ax,ay)(bx,by)] and the point (xc,yc)
+static float _dist_seg(grad_point_t a, grad_point_t b, grad_point_t c)
 {
-  if(xa == xb && ya == yb) return (xc - xa) * (xc - xa) + (yc - ya) * (yc - ya);
+  grad_point_t s = { b.x - a.x, b.y - a.y };
+  grad_point_t u = { c.x - a.x, c.y - a.y };
+  const float sn2 = s.x * s.x + s.y * s.y;
+  if(sn2 <= 0.0f) return u.x * u.x + u.y * u.y;
 
-  const float sx = xb - xa;
-  const float sy = yb - ya;
-
-  const float ux = xc - xa;
-  const float uy = yc - ya;
-
-  const float dp = sx * ux + sy * uy;
-  if(dp < 0) return (xc - xa) * (xc - xa) + (yc - ya) * (yc - ya);
-
-  const float sn2 = sx * sx + sy * sy;
-  if(dp > sn2) return (xc - xb) * (xc - xb) + (yc - yb) * (yc - yb);
-
-  const float ah2 = dp * dp / sn2;
-  const float un2 = ux * ux + uy * uy;
-  return un2 - ah2;
+  const float t = CLAMP((s.x * u.x + s.y * u.y) / sn2, 0.0f, 1.0f);
+  const float dx = u.x - t * s.x;
+  const float dy = u.y - t * s.y;
+  return dx * dx + dy * dy;
 }
 
-static int set_grad_from_points(struct dt_iop_module_t *self, float xa, float ya, float xb, float yb,
+/**
+ * @brief Draw one triangular endpoint marker on the graduated line.
+ *
+ * The marker geometry is built from the active endpoint and the opposite endpoint, then mirrored with
+ * @p normal_sign so the two markers keep opposite winding while sharing the same drawing path.
+ */
+static void _draw_end_marker(cairo_t *cr, const grad_point_t endpoint, const grad_point_t opposite, const float zoom_scale,
+                                  const float normal_sign, const gboolean active)
+{
+  grad_point_t e_1 = { 0.0f, 0.0f };
+  grad_point_t e_2 = { 0.0f, 0.0f };
+  const float dx = opposite.x - endpoint.x;
+  const float dy = opposite.y - endpoint.y;
+  const float length = dt_fast_hypotf(dx, dy);
+  const float x = DT_PIXEL_APPLY_DPI_DPP(15.0f) / zoom_scale;
+  const float inv_len = 1.0f / length;
+  const float ux = dx * inv_len;
+  const float uy = dy * inv_len;
+  const float px = -uy;
+  const float py = ux;
+
+  // e_1 is at distance x from endpoint along [endpoint, opposite].
+  e_1.x = endpoint.x + ux * x;
+  e_1.y = endpoint.y + uy * x;
+  // e_2 is the midpoint of [endpoint, e_1], offset by x * normal_sign on the perpendicular.
+  const float mx = (endpoint.x + e_1.x) * 0.5f;
+  const float my = (endpoint.y + e_1.y) * 0.5f;
+  e_2.x = mx + px * (x * normal_sign);
+  e_2.y = my + py * (x * normal_sign);
+
+  cairo_move_to(cr, endpoint.x, endpoint.y);
+  cairo_line_to(cr, e_1.x, e_1.y);
+  cairo_line_to(cr, e_2.x, e_2.y);
+  cairo_close_path(cr);
+  cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(1.0f) / zoom_scale);
+
+  dt_draw_set_color_overlay(cr, TRUE, active ? 1.0f : 0.5f);
+  cairo_fill_preserve(cr);
+  dt_draw_set_color_overlay(cr, FALSE, active ? 1.0f : 0.5f);
+  cairo_stroke(cr);
+
+  dt_draw_node(cr, TRUE, active, FALSE, zoom_scale, endpoint.x, endpoint.y);
+}
+
+static int set_grad_from_points(struct dt_iop_module_t *self, const grad_point_t *a, const grad_point_t *b,
                                 float *rotation, float *offset)
 {
   // we want absolute preview positions
-  float pts[4] = { xa, ya, xb, yb };
-  dt_dev_coordinates_image_norm_to_preview_abs(self->dev, pts, 2);
+  float pts[4] = { a->x, a->y, b->x, b->y };
+  dt_dev_coordinates_image_norm_to_image_abs(self->dev, pts, 2);
   dt_dev_distort_backtransform_plus(self->dev, self->dev->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 2);
   dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->virtual_pipe, self);
   pts[0] /= (float)piece->buf_out.width;
@@ -249,79 +293,17 @@ static int set_grad_from_points(struct dt_iop_module_t *self, float xa, float ya
   pts[1] /= (float)piece->buf_out.height;
   pts[3] /= (float)piece->buf_out.height;
 
-  // we first need to find the rotation angle
-  // weird dichotomic solution : we may use something more cool ...
-  float v1 = -M_PI_F;
-  float v2 = M_PI_F;
-  float sinv, cosv, r1, r2, v, r;
-
-  sinv = sinf(v1), cosv = cosf(v1);
-  r1 = pts[1] * cosv - pts[0] * sinv + pts[2] * sinv - pts[3] * cosv;
-
-  // we search v2 so r2 as not the same sign as r1
-  const float pas = M_PI_F / 16.0;
-
-  do
-  {
-    v2 += pas;
-    sinv = sinf(v2), cosv = cosf(v2);
-    r2 = pts[1] * cosv - pts[0] * sinv + pts[2] * sinv - pts[3] * cosv;
-    if(r1 * r2 < 0) break;
-  } while(v2 <= M_PI_F);
-
-  if(v2 == M_PI_F) return 9;
-
-  // set precision for the iterative check
+  // directly compute the line angle from segment AB and keep one representative modulo PI
   const float eps = .0001f;
-
-  int iter = 0;
-  do
-  {
-    v = (v1 + v2) / 2.0;
-    sinv = sinf(v), cosv = cosf(v);
-    r = pts[1] * cosv - pts[0] * sinv + pts[2] * sinv - pts[3] * cosv;
-
-    if(r < eps && r > -eps) break;
-
-    if(r * r2 < 0)
-      v1 = v;
-    else
-    {
-      r2 = r;
-      v2 = v;
-    }
-
-  } while(iter++ < 1000);
-
-  if(iter >= 1000) return 8; // generally in less than 20 iterations all is good, so we are over conservative
-
-  // be careful to the gnd direction
-
   const float diff_x = pts[2] - pts[0];
-  const float MPI2 = (M_PI / 2.0f);
-
-  if(diff_x > eps)
-  {
-    if(v >=  MPI2) v -= M_PI;
-    if(v <  -MPI2) v += M_PI;
-  }
-  else if(diff_x < -eps)
-  {
-    if(v <  MPI2 && v >= 0) v -= M_PI;
-    if(v > -MPI2 && v < 0)  v += M_PI;
-  }
-  else // let's pretend that we are at PI/2
-  {
-    const float diff_y = pts[3] - pts[1];
-    if(diff_y <= 0.0f) v = -MPI2;
-    else               v = MPI2;
-  }
-
+  const float diff_y = pts[3] - pts[1];
+  if(fabsf(diff_x) <= eps && fabsf(diff_y) <= eps) return 9;
+  float v = atan2f(diff_y, diff_x);
   *rotation = -v * 180.0f / M_PI;
 
   // and now we go for the offset (more easy)
-  sinv = sinf(v);
-  cosv = cosf(v);
+  const float sinv = sinf(v);
+  const float cosv = cosf(v);
   const float ofs = (-2.0f * sinv * pts[0]) + sinv - cosv + 1.0f + (2.0f * cosv * pts[1]);
 
   *offset = ofs * 50.0f;
@@ -329,135 +311,86 @@ static int set_grad_from_points(struct dt_iop_module_t *self, float xa, float ya
   return 1;
 }
 
-static int set_points_from_grad(struct dt_iop_module_t *self, float *xa, float *ya, float *xb, float *yb,
-                                float rotation, float offset)
+static int set_points_from_grad(struct dt_iop_module_t *self, grad_point_t *a, grad_point_t *b,
+                                const float rotation, const float offset)
 {
   // we get the extremities of the line
   const float v = (-rotation / 180) * M_PI;
   const float sinv = sinf(v);
+  const float cosv = cosf(v);
+  const float eps = 1e-6f;
   dt_boundingbox_t pts;
 
   dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->virtual_pipe, self);
   if(IS_NULL_PTR(piece)) return 0;
   float wp = piece->buf_out.width, hp = piece->buf_out.height;
 
-  // if sinv=0 then this is just the offset
+  const float off = offset / 100.0f;
 
-  if(sinv == 0.0f) // horizontal
+  if(fabsf(sinv) <= eps) // horizontal: swap x ends and y offset sign depending on rotation direction
   {
-    if(rotation == 0.0f)
-    {
-      pts[0] = wp * 0.1f;
-      pts[2] = wp * 0.9f;
-      pts[1] = pts[3] = hp * offset / 100.0f;
-    }
-    else
-    {
-      pts[2] = wp * 0.1f;
-      pts[0] = wp * 0.9f;
-      pts[1] = pts[3] = hp * (1.0f - offset / 100.0f);
-    }
+    const int fwd = (cosv > 0.0f);
+    pts[0] = wp * (fwd ? 0.1f : 0.9f);
+    pts[2] = wp * (fwd ? 0.9f : 0.1f);
+    pts[1] = pts[3] = hp * (fwd ? off : (1.0f - off));
   }
-  else if(fabsf(sinv) == 1) // vertical
+  else if(fabsf(fabsf(sinv) - 1.0f) <= eps) // vertical: swap y ends and x offset sign depending on rotation direction
   {
-    if(rotation == 90)
-    {
-      pts[0] = pts[2] = wp * offset / 100.0f;
-      pts[3] = hp * 0.1f;
-      pts[1] = hp * 0.9f;
-    }
-    else
-    {
-      pts[0] = pts[2] = wp * (1.0 - offset / 100.0f);
-      pts[1] = hp * 0.1f;
-      pts[3] = hp * 0.9f;
-    }
+    const int fwd = (sinv < 0.0f);
+    pts[0] = pts[2] = wp * (fwd ? off : (1.0f - off));
+    pts[1] = hp * (fwd ? 0.9f : 0.1f);
+    pts[3] = hp * (fwd ? 0.1f : 0.9f);
   }
   else
   {
     // otherwise we determine the extremities
-    const float cosv = cosf(v);
     float xx1 = (sinv - cosv + 1.0f - offset / 50.0f) * wp * 0.5f / sinv;
     float xx2 = (sinv + cosv + 1.0f - offset / 50.0f) * wp * 0.5f / sinv;
     float yy1 = 0.0f;
     float yy2 = hp;
-    const float a = hp / (xx2 - xx1);
-    const float b = -xx1 * a;
+    const float aa = hp / (xx2 - xx1);
+    const float bb = -xx1 * aa;
 
-    // now ensure that the line isn't outside image borders
-    if(xx2 > wp)
-    {
-      yy2 = a * wp + b;
-      xx2 = wp;
-    }
-    if(xx2 < 0)
-    {
-      yy2 = b;
-      xx2 = 0;
-    }
-    if(xx1 > wp)
-    {
-      yy1 = a * wp + b;
-      xx1 = wp;
-    }
-    if(xx1 < 0)
-    {
-      yy1 = b;
-      xx1 = 0;
-    }
+    // clamp extremities to image width and recompute y from the line equation y = a*x + b
+    xx1 = CLAMP(xx1, 0.0f, wp);
+    yy1 = aa * xx1 + bb;
+    xx2 = CLAMP(xx2, 0.0f, wp);
+    yy2 = aa * xx2 + bb;
 
-    // we want extremities not to be on image border
-    xx2 -= (xx2 - xx1) * 0.1;
-    xx1 += (xx2 - xx1) * 0.1;
-    yy2 -= (yy2 - yy1) * 0.1;
-    yy1 += (yy2 - yy1) * 0.1;
+    // inset extremities away from image border by 10%
+    const float dx = xx2 - xx1;
+    const float dy = yy2 - yy1;
+    xx1 += dx * 0.1f;
+    yy1 += dy * 0.1f;
+    xx2 -= dx * 0.1f;
+    yy2 -= dy * 0.1f;
 
-    if(rotation < 90.0f && rotation > -90.0f)
+    // near rotation: ax < bx; far rotation: bx < ax — in both cases just pick which end goes first
+    const int first_is_xx1 = (rotation < 90.0f && rotation > -90.0f) ? (xx1 < xx2) : (xx1 > xx2);
+    if(first_is_xx1)
     {
-      // we want xa < xb
-      if(xx1 < xx2)
-      {
-        pts[0] = xx1;
-        pts[1] = yy1;
-        pts[2] = xx2;
-        pts[3] = yy2;
-      }
-      else
-      {
-        pts[2] = xx1;
-        pts[3] = yy1;
-        pts[0] = xx2;
-        pts[1] = yy2;
-      }
+      pts[0] = xx1;
+      pts[1] = yy1;
+      pts[2] = xx2;
+      pts[3] = yy2;
     }
     else
     {
-      // we want xb < xa
-      if(xx2 < xx1)
-      {
-        pts[0] = xx1;
-        pts[1] = yy1;
-        pts[2] = xx2;
-        pts[3] = yy2;
-      }
-      else
-      {
-        pts[2] = xx1;
-        pts[3] = yy1;
-        pts[0] = xx2;
-        pts[1] = yy2;
-      }
+      pts[0] = xx2;
+      pts[1] = yy2;
+      pts[2] = xx1;
+      pts[3] = yy1;
     }
   }
   // now we want that points to take care of distort modules
 
   if(!dt_dev_distort_transform_plus(self->dev, self->dev->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 2))
     return 0;
-  dt_dev_coordinates_preview_abs_to_image_norm(self->dev, pts, 2);
-  *xa = pts[0];
-  *ya = pts[1];
-  *xb = pts[2];
-  *yb = pts[3];
+  dt_dev_coordinates_image_abs_to_image_norm(self->dev, pts, 2);
+  a->x = pts[0];
+  a->y = pts[1];
+  b->x = pts[2];
+  b->y = pts[3];
   return 1;
 }
 
@@ -507,20 +440,22 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   dt_iop_graduatednd_gui_data_t *g = (dt_iop_graduatednd_gui_data_t *)self->gui_data;
   dt_iop_graduatednd_params_t *p = (dt_iop_graduatednd_params_t *)self->params;
 
-  const float wd = dev->roi.preview_width;
   const float zoom_scale = dev->roi.scaling;
   dt_dev_rescale_roi(dev, cr, width, height);
 
   // we get the extremities of the line
   if(g->define == 0)
   {
-    if(!set_points_from_grad(self, &g->xa, &g->ya, &g->xb, &g->yb, p->rotation, p->offset)) return;
+    if(!set_points_from_grad(self, &g->a, &g->b, p->rotation, p->offset))
+      return;
     g->define = 1;
   }
 
-  float line[4] = { g->xa, g->ya, g->xb, g->yb };
+  float line[4] = { g->a.x, g->a.y, g->b.x, g->b.y };
   dt_dev_coordinates_image_norm_to_preview_abs(dev, line, 2);
-  const float xa = line[0], ya = line[1], xb = line[2], yb = line[3];
+  grad_point_t a = { line[0], line[1] };
+  grad_point_t b = { line[2], line[3] };
+
   // the lines
   cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
   if(g->selected == 3 || g->dragging == 3)
@@ -529,8 +464,8 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
     cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(3.0) / zoom_scale);
   dt_draw_set_color_overlay(cr, FALSE, 0.8);
 
-  cairo_move_to(cr, xa, ya);
-  cairo_line_to(cr, xb, yb);
+  cairo_move_to(cr, a.x, a.y);
+  cairo_line_to(cr, b.x, b.y);
   cairo_stroke(cr);
 
   if(g->selected == 3 || g->dragging == 3)
@@ -538,64 +473,18 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   else
     cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(1.0) / zoom_scale);
   dt_draw_set_color_overlay(cr, TRUE, 0.8);
-  cairo_move_to(cr, xa, ya);
-  cairo_line_to(cr, xb, yb);
+  cairo_move_to(cr, a.x, a.y);
+  cairo_line_to(cr, b.x, b.y);
   cairo_stroke(cr);
 
   // the extremities
-  float x1, y1, x2, y2;
-  const float l = sqrtf((xb - xa) * (xb - xa) + (yb - ya) * (yb - ya));
-  const float ext = wd * 0.01f / zoom_scale;
-  x1 = xa + (xb - xa) * ext / l;
-  y1 = ya + (yb - ya) * ext / l;
-  x2 = (xa + x1) / 2.0;
-  y2 = (ya + y1) / 2.0;
-  y2 += (x1 - xa);
-  x2 -= (y1 - ya);
-  cairo_move_to(cr, xa, ya);
-  cairo_line_to(cr, x1, y1);
-  cairo_line_to(cr, x2, y2);
-  cairo_close_path(cr);
-  cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(1.0) / zoom_scale);
-  if(g->selected == 1 || g->dragging == 1)
-    dt_draw_set_color_overlay(cr, TRUE, 1.0);
-  else
-    dt_draw_set_color_overlay(cr, TRUE, 0.5);
-  cairo_fill_preserve(cr);
-  if(g->selected == 1 || g->dragging == 1)
-    dt_draw_set_color_overlay(cr, FALSE, 1.0);
-  else
-    dt_draw_set_color_overlay(cr, FALSE, 0.5);
-  cairo_stroke(cr);
-
-  x1 = xb - (xb - xa) * ext / l;
-  y1 = yb - (yb - ya) * ext / l;
-  x2 = (xb + x1) / 2.0;
-  y2 = (yb + y1) / 2.0;
-  y2 += (xb - x1);
-  x2 -= (yb - y1);
-  cairo_move_to(cr, xb, yb);
-  cairo_line_to(cr, x1, y1);
-  cairo_line_to(cr, x2, y2);
-  cairo_close_path(cr);
-  cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(1.0) / zoom_scale);
-  if(g->selected == 2 || g->dragging == 2)
-    dt_draw_set_color_overlay(cr, TRUE, 1.0);
-  else
-    dt_draw_set_color_overlay(cr, TRUE, 0.5);
-  cairo_fill_preserve(cr);
-  if(g->selected == 2 || g->dragging == 2)
-    dt_draw_set_color_overlay(cr, FALSE, 1.0);
-  else
-    dt_draw_set_color_overlay(cr, FALSE, 0.5);
-  cairo_stroke(cr);
+  _draw_end_marker(cr, a, b, zoom_scale, 1.0f, g->selected == 1 || g->dragging == 1);
+  _draw_end_marker(cr, b, a, zoom_scale, -1.0f, g->selected == 2 || g->dragging == 2);
 }
 
 int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressure, int which)
 {
   dt_iop_graduatednd_gui_data_t *g = (dt_iop_graduatednd_gui_data_t *)self->gui_data;
-  const dt_develop_t *dev = (const dt_develop_t *)self->dev;
-  const float zoom_scale = dev->roi.scaling;
   float pzxpy[2] = { (float)x, (float)y };
   dt_dev_coordinates_widget_to_image_norm(self->dev, pzxpy, 1);
   float pzx = pzxpy[0];
@@ -606,23 +495,23 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   {
     if(g->dragging == 1)
     {
-      // we are dragging xa,ya
-      g->xa = pzx;
-      g->ya = pzy;
+      // we are dragging a
+      g->a.x = pzx;
+      g->a.y = pzy;
     }
     else if(g->dragging == 2)
     {
-      // we are dragging xb,yb
-      g->xb = pzx;
-      g->yb = pzy;
+      // we are dragging b
+      g->b.x = pzx;
+      g->b.y = pzy;
     }
     else if(g->dragging == 3)
     {
       // we are dragging the entire line
-      g->xa += pzx - g->oldx;
-      g->xb += pzx - g->oldx;
-      g->ya += pzy - g->oldy;
-      g->yb += pzy - g->oldy;
+      g->a.x += pzx - g->oldx;
+      g->b.x += pzx - g->oldx;
+      g->a.y += pzy - g->oldy;
+      g->b.y += pzy - g->oldy;
       g->oldx = pzx;
       g->oldy = pzy;
     }
@@ -630,21 +519,33 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   else
   {
     g->selected = 0;
-    const float ext = DT_PIXEL_APPLY_DPI(0.02f) / zoom_scale;
+    float ext[2] = { DT_GUI_MOUSE_EFFECT_RADIUS_SCALED, 0 };
+    dt_dev_coordinates_image_abs_to_image_norm(self->dev, ext, 1);
+
+    const float ext2 = ext[0] * ext[0];
+
+    const grad_point_t pz = { pzx, pzy };
+    const float da_x = pz.x - g->a.x;
+    const float da_y = pz.y - g->a.y;
+    const float db_x = pz.x - g->b.x;
+    const float db_y = pz.y - g->b.y;
+
     // are we near extermity ?
-    if(pzy > g->ya - ext && pzy < g->ya + ext && pzx > g->xa - ext && pzx < g->xa + ext)
+    if(da_x * da_x + da_y * da_y < ext2)
     {
       g->selected = 1;
     }
-    else if(pzy > g->yb - ext && pzy < g->yb + ext && pzx > g->xb - ext && pzx < g->xb + ext)
+    else if(db_x * db_x + db_y * db_y < ext2)
     {
       g->selected = 2;
     }
-    else if(dist_seg(g->xa, g->ya, g->xb, g->yb, pzx, pzy) < ext * ext * 0.5)
+    else if(_dist_seg(g->a, g->b, pz) < ext2 * 0.5f)
       g->selected = 3;
   }
 
-  dt_control_queue_redraw_center();
+  if(g->selected > 0 || g->dragging > 0)
+    dt_control_queue_redraw_center();
+
   return 1;
 }
 
@@ -661,10 +562,10 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
   {
     // creating a line with right click
     g->dragging = 2;
-    g->xa = pzx;
-    g->ya = pzy;
-    g->xb = pzx;
-    g->yb = pzy;
+    g->a.x = pzx;
+    g->a.y = pzy;
+    g->b.x = pzx;
+    g->b.y = pzy;
     g->oldx = pzx;
     g->oldy = pzy;
     return 1;
@@ -686,27 +587,24 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
   dt_iop_graduatednd_params_t *p = (dt_iop_graduatednd_params_t *)self->params;
   if(g->dragging > 0)
   {
-    float pzxpy[2] = { (float)x, (float)y };
-    dt_dev_coordinates_widget_to_image_norm(self->dev, pzxpy, 1);
-    float r = 0.0, o = 0.0;
-    set_grad_from_points(self, g->xa, g->ya, g->xb, g->yb, &r, &o);
+    float rotation = 0.0;
+    float offset = 0.0;
+    set_grad_from_points(self, &g->a, &g->b, &rotation, &offset);
 
     // if this is a "line dragging, we reset extremities, to be sure they are not outside the image
     if(g->dragging == 3)
     {
-      /*
-       * whole line dragging should not change rotation, so we should reuse
-       * old rotation to avoid rounding issues
-       */
+      // whole line dragging should not change rotation, so we should reuse
+      // old rotation to avoid rounding issues
 
-      r = p->rotation;
-      set_points_from_grad(self, &g->xa, &g->ya, &g->xb, &g->yb, r, o);
+      rotation = p->rotation;
+      set_points_from_grad(self, &g->a, &g->b, rotation, offset);
     }
     ++darktable.gui->reset;
-    dt_bauhaus_slider_set(g->rotation, r);
+    dt_bauhaus_slider_set(g->rotation, rotation);
     --darktable.gui->reset;
-    p->rotation = r;
-    p->offset = o;
+    p->rotation = rotation;
+    p->offset = offset;
     g->dragging = 0;
     dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
   }
@@ -951,7 +849,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
   dt_iop_graduatednd_gui_data_t *g = (dt_iop_graduatednd_gui_data_t *)self->gui_data;
   if(w == g->rotation)
   {
-    set_points_from_grad(self, &g->xa, &g->ya, &g->xb, &g->yb, p->rotation, p->offset);
+    set_points_from_grad(self, &g->a, &g->b, p->rotation, p->offset);
   }
   else if(w == g->hue)
   {
