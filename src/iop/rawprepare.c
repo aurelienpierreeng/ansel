@@ -250,12 +250,13 @@ int distort_transform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   const double scale = piece->buf_in.scale;
   const double x = (double)d->x * scale;
   const double y = (double)d->y * scale;
-  __OMP_PARALLEL_FOR_SIMD__(aligned(points:64) if(points_count > 100))
+  __OMP_PARALLEL_FOR_SIMD_FP__(aligned(points:64) if(points_count > 100))
   for(size_t i = 0; i < points_count * 2; i += 2)
   {
     points[i] -= x;
     points[i + 1] -= y;
   }
+  __OMP_PARALLEL_FOR_SIMD_FP_END__
 
   return 1;
 }
@@ -273,12 +274,13 @@ int distort_backtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
   const double scale = piece->buf_in.scale;
   const double x = (double)d->x * scale;
   const double y = (double)d->y * scale;
-  __OMP_PARALLEL_FOR_SIMD__(aligned(points:64) if(points_count > 100))
+  __OMP_PARALLEL_FOR_SIMD_FP__(aligned(points:64) if(points_count > 100))
   for(size_t i = 0; i < points_count * 2; i += 2)
   {
     points[i] += x;
     points[i + 1] += y;
   }
+  __OMP_PARALLEL_FOR_SIMD_FP_END__
 
   return 1;
 }
@@ -383,7 +385,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     const int x_phase = cfa_x & 1;
     float inv_div[4];
     for(int k = 0; k < 4; k++) inv_div[k] = 1.0f / d->div[k];
-    __OMP_PARALLEL_FOR__()
+    __OMP_PARALLEL_FOR_FP__()
     for(int j = 0; j < height; j++)
     {
       /* Keep the 2-sensel Bayer period explicit per row, but use scalar
@@ -411,7 +413,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
         out[pout + i] = ((float)in[pin + i] - d->sub[id]) * inv_div[id];
       }
     }
-
+    __OMP_PARALLEL_FOR_FP_END__
   }
   else if(piece->dsc_in.filters && piece->dsc_in.channels == 1
           && piece->dsc_in.datatype == TYPE_FLOAT)
@@ -422,7 +424,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     const int x_phase = cfa_x & 1;
     float inv_div[4];
     for(int k = 0; k < 4; k++) inv_div[k] = 1.0f / d->div[k];
-    __OMP_PARALLEL_FOR__()
+    __OMP_PARALLEL_FOR_FP__()
     for(int j = 0; j < height; j++)
     {
       /* Keep the 2-sensel Bayer period explicit per row, but use scalar
@@ -450,7 +452,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
         out[pout + i] = (in[pin + i] - d->sub[id]) * inv_div[id];
       }
     }
-
+    __OMP_PARALLEL_FOR_FP_END__
   }
   else
   { // pre-downsampled buffer that needs black/white scaling
@@ -461,7 +463,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     const float sub = d->sub[0], div = d->div[0];
 
     const int ch = piece->dsc_in.channels;
-    __OMP_PARALLEL_FOR__(collapse(3))
+    __OMP_PARALLEL_FOR_FP__(collapse(3))
     for(int j = 0; j < height; j++)
     {
       for(int i = 0; i < width; i++)
@@ -475,6 +477,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
         }
       }
     }
+    __OMP_PARALLEL_FOR_FP_END__
   }
 
   if(piece->dsc_in.filters && piece->dsc_in.channels == 1 && d->apply_gainmaps)
@@ -488,7 +491,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     const float map_origin_h = d->gainmaps[0]->map_origin_h;
     const float map_origin_v = d->gainmaps[0]->map_origin_v;
     float *const out = (float *const)ovoid;
-    __OMP_PARALLEL_FOR__()
+    __OMP_PARALLEL_FOR_FP__()
     for(int j = 0; j < height; j++)
     {
       const float y_map = CLAMP(((roi_y + csy + j) * im_to_rel_y - map_origin_v) * rel_to_map_y, 0, map_h);
@@ -514,6 +517,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
         out[j * width + i] *= (1.0f - y_frac) * gain_top + y_frac * gain_bottom;
       }
     }
+    __OMP_PARALLEL_FOR_FP_END__
   }
 
   return 0;
