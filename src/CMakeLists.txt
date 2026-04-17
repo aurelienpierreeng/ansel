@@ -309,13 +309,9 @@ if(USE_OPENMP)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
   endif()
 
-  if(OpenMP_C_INCLUDE_DIRS)
-    include_directories(${OpenMP_C_INCLUDE_DIRS})
-  endif()
-
-  if(OpenMP_CXX_INCLUDE_DIRS)
-    include_directories(${OpenMP_CXX_INCLUDE_DIRS})
-  endif()
+  message(STATUS "OpenMP found: ${OpenMP_FOUND}")
+  message(STATUS "OpenMP_C_FOUND: ${OpenMP_C_FOUND}")
+  message(STATUS "OpenMP_CXX_FOUND: ${OpenMP_CXX_FOUND}")
 endif(USE_OPENMP)
 
 if(USE_DARKTABLE_PROFILING)
@@ -995,8 +991,15 @@ set_target_properties(lib_ansel PROPERTIES LINKER_LANGUAGE C)
 #
 target_link_libraries(lib_ansel PRIVATE ${STATIC_LIBS})
 target_link_libraries(lib_ansel PUBLIC ${LIBS})
-target_link_libraries(lib_ansel PUBLIC OpenMP::OpenMP_C)
 target_link_libraries(lib_ansel PUBLIC GTK3::GTK3)
+
+if(OpenMP_C_FOUND)
+  target_link_libraries(lib_ansel PUBLIC OpenMP::OpenMP_C)
+endif()
+
+if(OpenMP_CXX_FOUND)
+  target_link_libraries(lib_ansel PUBLIC OpenMP::OpenMP_CXX)
+endif()
 
 message(STATUS "Public libs:" ${LIBS})
 message(STATUS "Static libs:" ${STATIC_LIBS})
