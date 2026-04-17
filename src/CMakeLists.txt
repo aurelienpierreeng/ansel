@@ -981,7 +981,7 @@ endif()
 
 set_target_properties(lib_ansel PROPERTIES OUTPUT_NAME ansel)
 set_target_properties(lib_ansel PROPERTIES LINKER_LANGUAGE C)
-target_link_libraries(lib_ansel PRIVATE stdc++)
+set_target_properties(lib_ansel PROPERTIES INTERPROCEDURAL_OPTIMIZATION FALSE)
 
 #
 # Link external libs
@@ -1047,7 +1047,7 @@ set_target_properties(ansel PROPERTIES LINKER_LANGUAGE C)
 if(APPLE)
   set_target_properties(lib_ansel PROPERTIES LINK_FLAGS "-framework Carbon -framework AppKit")
 endif(APPLE)
-target_link_libraries(ansel lib_ansel)
+target_link_libraries(ansel PRIVATE lib_ansel ${LIBS})
 
 if(WIN32)
   set_target_properties(ansel PROPERTIES LINK_FLAGS "-mconsole -mwindows -Wl,-subsystem,console")
