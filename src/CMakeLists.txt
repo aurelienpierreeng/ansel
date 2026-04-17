@@ -977,7 +977,10 @@ endif()
 
 set_target_properties(lib_ansel PROPERTIES OUTPUT_NAME ansel)
 set_target_properties(lib_ansel PROPERTIES LINKER_LANGUAGE C)
-set_target_properties(lib_ansel PROPERTIES INTERPROCEDURAL_OPTIMIZATION FALSE)
+
+if(WIN32)
+  set_target_properties(lib_ansel PROPERTIES INTERPROCEDURAL_OPTIMIZATION FALSE)
+endif()
 
 #
 # Link external libs
