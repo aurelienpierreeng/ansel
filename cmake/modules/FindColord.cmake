@@ -12,4 +12,5 @@ unset(Colord_LIBRARY CACHE)
 
 if(Colord_FOUND)
   set(Colord ON CACHE BOOL "Build with libcolord support.")
+  libfind_register_imported_target(Colord)
 endif(Colord_FOUND)

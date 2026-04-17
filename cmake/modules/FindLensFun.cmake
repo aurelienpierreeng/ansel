@@ -37,4 +37,5 @@ find_package_handle_standard_args(LensFun DEFAULT_MSG LensFun_LIBRARY LensFun_IN
 IF(LensFun_FOUND)
   SET(LensFun_LIBRARIES ${LensFun_LIBRARY})
   SET(LensFun_INCLUDE_DIRS ${LensFun_INCLUDE_DIR})
+  libfind_register_imported_target(LensFun)
 ENDIF(LensFun_FOUND)

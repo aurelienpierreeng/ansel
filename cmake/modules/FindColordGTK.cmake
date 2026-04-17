@@ -12,4 +12,5 @@ unset(ColordGTK_LIBRARY CACHE)
 
 if(ColordGTK_FOUND)
   set(ColordGTK ON CACHE BOOL "Build with libcolord-gtk support.")
+  libfind_register_imported_target(ColordGTK)
 endif(ColordGTK_FOUND)

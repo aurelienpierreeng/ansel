@@ -54,3 +54,7 @@ endif()
 
 include(FindPackageHandleStandardArgs)
 FIND_PACKAGE_HANDLE_STANDARD_ARGS(Libsecret DEFAULT_MSG Libsecret_INCLUDE_DIRS Libsecret_LIBRARIES VERSION_OK)
+
+if(Libsecret_FOUND)
+  libfind_register_imported_target(Libsecret)
+endif()

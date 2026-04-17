@@ -52,6 +52,7 @@ endif()
 if(LibSoup_FOUND)
   list(APPEND LibSoup_DEFINITIONS -DLIBSOUP_VERSION_MAJOR=${LIBSOUP_VERSION_MAJOR})
   mark_as_advanced(LibSoup_INCLUDE_DIRS LibSoup_LIBRARIES)
+  libfind_register_imported_target(LibSoup)
 endif()
 
 find_package_handle_standard_args(LibSoup

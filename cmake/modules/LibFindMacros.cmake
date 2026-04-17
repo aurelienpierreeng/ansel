@@ -34,6 +34,48 @@ macro (libfind_pkg_search_module)
   endif()
 endmacro()
 
+function(libfind_register_imported_target PREFIX)
+  if(NOT ${PREFIX}_FOUND)
+    return()
+  endif()
+
+  if(ARGC GREATER 1)
+    set(_libfind_target_name "${ARGV1}")
+  else()
+    set(_libfind_target_name "${PREFIX}::${PREFIX}")
+  endif()
+
+  if(TARGET "${_libfind_target_name}")
+    return()
+  endif()
+
+  add_library("${_libfind_target_name}" INTERFACE IMPORTED)
+
+  if(DEFINED ${PREFIX}_INCLUDE_DIRS AND NOT "${${PREFIX}_INCLUDE_DIRS}" STREQUAL "")
+    set_target_properties("${_libfind_target_name}" PROPERTIES
+      INTERFACE_INCLUDE_DIRECTORIES "${${PREFIX}_INCLUDE_DIRS}"
+    )
+  endif()
+
+  if(DEFINED ${PREFIX}_LIBRARIES AND NOT "${${PREFIX}_LIBRARIES}" STREQUAL "")
+    set_target_properties("${_libfind_target_name}" PROPERTIES
+      INTERFACE_LINK_LIBRARIES "${${PREFIX}_LIBRARIES}"
+    )
+  endif()
+
+  if(DEFINED ${PREFIX}_DEFINITIONS AND NOT "${${PREFIX}_DEFINITIONS}" STREQUAL "")
+    set_target_properties("${_libfind_target_name}" PROPERTIES
+      INTERFACE_COMPILE_DEFINITIONS "${${PREFIX}_DEFINITIONS}"
+    )
+  endif()
+
+  if(DEFINED ${PREFIX}_CFLAGS_OTHER AND NOT "${${PREFIX}_CFLAGS_OTHER}" STREQUAL "")
+    set_target_properties("${_libfind_target_name}" PROPERTIES
+      INTERFACE_COMPILE_OPTIONS "${${PREFIX}_CFLAGS_OTHER}"
+    )
+  endif()
+endfunction()
+
 # Avoid useless copy&pasta by doing what most simple libraries do anyway:
 # pkg-config, find headers, find library.
 # Usage: libfind_pkg_detect(<prefix> <pkg-config args> FIND_PATH <name> [other args] FIND_LIBRARY <name> [other args])
@@ -228,6 +270,10 @@ function (libfind_process PREFIX)
     set (${PREFIX}_INCLUDE_DIRS ${includes} PARENT_SCOPE)
     set (${PREFIX}_LIBRARIES ${libs} PARENT_SCOPE)
     set (${PREFIX}_FOUND TRUE PARENT_SCOPE)
+    set(${PREFIX}_INCLUDE_DIRS "${includes}")
+    set(${PREFIX}_LIBRARIES "${libs}")
+    set(${PREFIX}_FOUND TRUE)
+    libfind_register_imported_target(${PREFIX})
     return()
   endif()
 

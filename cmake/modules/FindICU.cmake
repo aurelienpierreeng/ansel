@@ -15,7 +15,7 @@ libfind_pkg_check_modules(ICU_PKGCONF icu-i18n icu-uc)
 # Find include dir
 find_path(ICU_INCLUDE_DIR
   NAMES unicode/utypes.h
-  HINTS ${IUC_PKGCONF_INCLUDE_DIRS}
+  HINTS ${ICU_PKGCONF_INCLUDE_DIRS}
 )
 
 # Find the libraries

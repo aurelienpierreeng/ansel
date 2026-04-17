@@ -365,14 +365,6 @@ endif()
 # used to launch a tiny http server, which could be used by OAuth services (libsoup2/3)
 find_package(LibSoup)
 if(LibSoup_FOUND)
-  if(NOT TARGET LibSoup::LibSoup)
-    add_library(LibSoup::LibSoup INTERFACE IMPORTED)
-    set_target_properties(LibSoup::LibSoup PROPERTIES
-      INTERFACE_INCLUDE_DIRECTORIES "${LibSoup_INCLUDE_DIRS}"
-      INTERFACE_COMPILE_DEFINITIONS "${LibSoup_DEFINITIONS}"
-      INTERFACE_LINK_LIBRARIES "${LibSoup_LIBRARIES}"
-    )
-  endif()
   target_link_libraries(ansel_deps INTERFACE LibSoup::LibSoup)
   add_definitions(-DHAVE_HTTP_SERVER=1 -DLIBSOUP_VERSION_MAJOR=${LIBSOUP_VERSION_MAJOR})
   list(APPEND SOURCES "common/http_server.c")
@@ -390,14 +382,6 @@ if(USE_OPENEXR)
     find_package(OpenEXR)
   endif()
   if(OpenEXR_FOUND)
-    if(NOT TARGET OpenEXR::OpenEXR)
-      add_library(OpenEXR::OpenEXR INTERFACE IMPORTED)
-      set_target_properties(OpenEXR::OpenEXR PROPERTIES
-        INTERFACE_INCLUDE_DIRECTORIES "${OpenEXR_INCLUDE_DIRS}"
-        INTERFACE_COMPILE_DEFINITIONS "${OpenEXR_DEFINITIONS}"
-        INTERFACE_LINK_LIBRARIES "${OpenEXR_LIBRARIES}"
-      )
-    endif()
     target_link_libraries(ansel_deps INTERFACE OpenEXR::OpenEXR)
     add_definitions(${OpenEXR_DEFINITIONS})
     add_definitions(-DHAVE_OPENEXR=1)
@@ -409,14 +393,6 @@ endif(USE_OPENEXR)
 if(USE_WEBP)
   find_package(WebP 0.3.0)
   if(WebP_FOUND)
-    if(NOT TARGET WebP::WebP)
-      add_library(WebP::WebP INTERFACE IMPORTED)
-      set_target_properties(WebP::WebP PROPERTIES
-        INTERFACE_INCLUDE_DIRECTORIES "${WebP_INCLUDE_DIRS}"
-        INTERFACE_COMPILE_DEFINITIONS "${WebP_DEFINITIONS}"
-        INTERFACE_LINK_LIBRARIES "${WebP_LIBRARIES}"
-      )
-    endif()
     target_link_libraries(ansel_deps INTERFACE WebP::WebP)
     add_definitions(${WebP_DEFINITIONS})
     add_definitions(-DHAVE_WEBP=1)
@@ -466,14 +442,6 @@ endif()
 if(USE_LENSFUN)
   find_package(LensFun)
   if(LensFun_FOUND)
-    if(NOT TARGET LensFun::LensFun)
-      add_library(LensFun::LensFun INTERFACE IMPORTED)
-      set_target_properties(LensFun::LensFun PROPERTIES
-        INTERFACE_INCLUDE_DIRECTORIES "${LensFun_INCLUDE_DIRS}"
-        INTERFACE_COMPILE_DEFINITIONS "${LensFun_DEFINITIONS}"
-        INTERFACE_LINK_LIBRARIES "${LensFun_LIBRARIES}"
-      )
-    endif()
     target_link_libraries(ansel_deps INTERFACE LensFun::LensFun)
     add_definitions(-DHAVE_LENSFUN=1)
     add_definitions(${LensFun_DEFINITIONS})
@@ -481,14 +449,6 @@ if(USE_LENSFUN)
 endif()
 
 find_package(Sqlite3 3.24 REQUIRED)
-if(NOT TARGET Sqlite3::Sqlite3)
-  add_library(Sqlite3::Sqlite3 INTERFACE IMPORTED)
-  set_target_properties(Sqlite3::Sqlite3 PROPERTIES
-    INTERFACE_INCLUDE_DIRECTORIES "${Sqlite3_INCLUDE_DIRS}"
-    INTERFACE_COMPILE_DEFINITIONS "${Sqlite3_DEFINITIONS}"
-    INTERFACE_LINK_LIBRARIES "${Sqlite3_LIBRARIES}"
-  )
-endif()
 target_link_libraries(ansel_deps INTERFACE Sqlite3::Sqlite3)
 
 # CMake provides a `FindCURL.cmake` module, which will set `CURL_LIBRARIES`,
@@ -501,16 +461,6 @@ target_link_libraries(ansel_deps INTERFACE Sqlite3::Sqlite3)
 # See <https://cmake.org/cmake/help/latest/module/FindCURL.html#curl-cmake>.
 # See <https://github.com/msys2/MINGW-packages/issues/21028>.
 find_package(CURL REQUIRED)
-if(TARGET CURL::libcurl)
-  set(CURL_LIBRARIES CURL::libcurl)
-else()
-  add_library(CURL::libcurl INTERFACE IMPORTED)
-  set_target_properties(CURL::libcurl PROPERTIES
-    INTERFACE_INCLUDE_DIRECTORIES "${CURL_INCLUDE_DIRS}"
-    INTERFACE_COMPILE_DEFINITIONS "${CURL_DEFINITIONS}"
-    INTERFACE_LINK_LIBRARIES "${CURL_LIBRARIES}"
-  )
-endif()
 target_link_libraries(ansel_deps INTERFACE CURL::libcurl)
 
 set(_ansel_find_packages
@@ -553,24 +503,9 @@ target_link_libraries(ansel_deps INTERFACE LCMS2::LCMS2)
 
 # Require exiv2 >= 0.27 to make sure everything we need is available
 find_package(Exiv2 0.27.4 REQUIRED)
-if(NOT TARGET Exiv2::Exiv2)
-  add_library(Exiv2::Exiv2 INTERFACE IMPORTED)
-  set_target_properties(Exiv2::Exiv2 PROPERTIES
-    INTERFACE_INCLUDE_DIRECTORIES "${Exiv2_INCLUDE_DIRS}"
-    INTERFACE_COMPILE_DEFINITIONS "${Exiv2_DEFINITIONS}"
-    INTERFACE_LINK_LIBRARIES "${Exiv2_LIBRARIES}"
-  )
-endif()
 target_link_libraries(ansel_deps INTERFACE Exiv2::Exiv2)
 
 find_package(Pugixml 1.2 REQUIRED)
-if(NOT TARGET Pugixml::Pugixml)
-  add_library(Pugixml::Pugixml INTERFACE IMPORTED)
-  set_target_properties(Pugixml::Pugixml PROPERTIES
-    INTERFACE_INCLUDE_DIRECTORIES "${Pugixml_INCLUDE_DIRS}"
-    INTERFACE_LINK_LIBRARIES "${Pugixml_LIBRARIES}"
-  )
-endif()
 target_link_libraries(ansel_deps INTERFACE Pugixml::Pugixml)
 
 # Optionally enable ISOBMFF support in Exiv2
@@ -593,13 +528,6 @@ endif()
 if(USE_OPENJPEG)
   find_package(OpenJPEG)
   if(OpenJPEG_FOUND)
-    if(NOT TARGET OpenJPEG::OpenJPEG)
-      add_library(OpenJPEG::OpenJPEG INTERFACE IMPORTED)
-      set_target_properties(OpenJPEG::OpenJPEG PROPERTIES
-        INTERFACE_INCLUDE_DIRECTORIES "${OpenJPEG_INCLUDE_DIRS}"
-        INTERFACE_LINK_LIBRARIES "${OpenJPEG_LIBRARIES}"
-      )
-    endif()
     target_link_libraries(ansel_deps INTERFACE OpenJPEG::OpenJPEG)
     add_definitions(-DHAVE_OPENJPEG=1)
     list(APPEND SOURCES "common/imageio_j2k.c")
@@ -624,13 +552,6 @@ if(USE_LIBSECRET AND JsonGlib_FOUND)
       message(STATUS "Found libsecret unsupported version ${Libsecret_VERSION}. Please upgrade to version 0.18 or newer.")
       set(Libsecret_FOUND FALSE)
     else()
-      if(NOT TARGET Libsecret::Libsecret)
-        add_library(Libsecret::Libsecret INTERFACE IMPORTED)
-        set_target_properties(Libsecret::Libsecret PROPERTIES
-          INTERFACE_INCLUDE_DIRECTORIES "${Libsecret_INCLUDE_DIRS}"
-          INTERFACE_LINK_LIBRARIES "${Libsecret_LIBRARIES}"
-        )
-      endif()
       target_link_libraries(ansel_deps INTERFACE Libsecret::Libsecret)
       set(SOURCES ${SOURCES} "common/pwstorage/backend_libsecret.c")
       add_definitions(-DHAVE_LIBSECRET=1)
@@ -941,14 +862,6 @@ endif()
 if(USE_MAP)
   find_package(OSMGpsMap)
   if(OSMGpsMap_FOUND)
-    if(NOT TARGET OSMGpsMap::OSMGpsMap)
-      add_library(OSMGpsMap::OSMGpsMap INTERFACE IMPORTED)
-      set_target_properties(OSMGpsMap::OSMGpsMap PROPERTIES
-        INTERFACE_INCLUDE_DIRECTORIES "${OSMGpsMap_INCLUDE_DIRS}"
-        INTERFACE_COMPILE_DEFINITIONS "${OSMGpsMap_DEFINITIONS}"
-        INTERFACE_LINK_LIBRARIES "${OSMGpsMap_LIBRARIES}"
-      )
-    endif()
     target_link_libraries(ansel_deps INTERFACE OSMGpsMap::OSMGpsMap)
     message(STATUS "Map mode: enabled")
     add_definitions(-DHAVE_MAP=1)
@@ -969,27 +882,10 @@ endif(USE_MAP)
 
 # libcolord-gtk:
 if(USE_COLORD)
-  pkg_check_modules(Colord IMPORTED_TARGET colord)
+  find_package(Colord)
   if(Colord_FOUND)
-    if(NOT TARGET Colord::Colord)
-      add_library(Colord::Colord INTERFACE IMPORTED)
-      set_target_properties(Colord::Colord PROPERTIES
-        INTERFACE_INCLUDE_DIRECTORIES "${Colord_INCLUDE_DIRS}"
-        INTERFACE_COMPILE_OPTIONS "${Colord_CFLAGS_OTHER}"
-        INTERFACE_LINK_LIBRARIES "PkgConfig::Colord"
-      )
-    endif()
-
     find_package(ColordGTK)
     if(ColordGTK_FOUND)
-      if(NOT TARGET ColordGTK::ColordGTK)
-        add_library(ColordGTK::ColordGTK INTERFACE IMPORTED)
-        set_target_properties(ColordGTK::ColordGTK PROPERTIES
-          INTERFACE_INCLUDE_DIRECTORIES "${ColordGTK_INCLUDE_DIRS}"
-          INTERFACE_COMPILE_DEFINITIONS "${ColordGTK_DEFINITIONS}"
-          INTERFACE_LINK_LIBRARIES "${ColordGTK_LIBRARIES}"
-        )
-      endif()
       target_link_libraries(ansel_deps INTERFACE Colord::Colord ColordGTK::ColordGTK)
 
       # We might make use of colord directly so link against it explicitly. just in case. move up if it is used without colord-gtk, too.
@@ -1008,13 +904,6 @@ endif(USE_COLORD)
 if(BUILD_PRINT)
   find_package(Cups)
   if(CUPS_FOUND)
-    if(NOT TARGET Cups::Cups)
-      add_library(Cups::Cups INTERFACE IMPORTED)
-      set_target_properties(Cups::Cups PROPERTIES
-        INTERFACE_INCLUDE_DIRECTORIES "${CUPS_INCLUDE_DIR}"
-        INTERFACE_LINK_LIBRARIES "${CUPS_LIBRARIES}"
-      )
-    endif()
     target_link_libraries(ansel_deps INTERFACE Cups::Cups)
     FILE(GLOB SOURCE_FILES_PRINT
       "common/cups_print.h"

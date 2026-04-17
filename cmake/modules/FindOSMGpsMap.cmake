@@ -12,4 +12,5 @@ unset(OSMGpsMap_LIBRARY CACHE)
 
 if(OSMGpsMap_FOUND)
   set(OSMGpsMap ON CACHE BOOL "Build with libosmgpsmap support.")
+  libfind_register_imported_target(OSMGpsMap)
 endif(OSMGpsMap_FOUND)
