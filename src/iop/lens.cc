@@ -562,6 +562,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
         modifier->ApplyColorModification(out, roi_out->x, roi_out->y + y, roi_out->width, 1,
                                          pixelformat, ch * roi_out->width);
       }
+      __OMP_PARALLEL_FOR_CPP_END__
     }
   }
   else // correct distortions:
@@ -585,6 +586,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
         modifier->ApplyColorModification(bufptr, roi_in->x, roi_in->y + y, roi_in->width, 1,
                                          pixelformat, ch * roi_in->width);
       }
+      __OMP_PARALLEL_FOR_CPP_END__
     }
 
     if(modflags & (LF_MODIFY_TCA | LF_MODIFY_DISTORTION | LF_MODIFY_GEOMETRY | LF_MODIFY_SCALE))
@@ -770,6 +772,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
         float *pi = tmpbuf + (size_t)y * tmpbufwidth;
         modifier->ApplySubpixelGeometryDistortion(roi_out->x, roi_out->y + y, roi_out->width, 1, pi);
       }
+      __OMP_PARALLEL_FOR_CPP_END__
 
       /* _blocking_ memory transfer: host tmpbuf buffer -> opencl dev_tmpbuf */
       err = dt_opencl_write_buffer_to_device(devid, tmpbuf, dev_tmpbuf, 0,
@@ -808,6 +811,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
         modifier->ApplyColorModification(buf, roi_out->x, roi_out->y + y, roi_out->width, 1,
                                          pixelformat, ch * roi_out->width);
       }
+      __OMP_PARALLEL_FOR_CPP_END__
 
       /* _blocking_ memory transfer: host tmpbuf buffer -> opencl dev_tmpbuf */
       err = dt_opencl_write_buffer_to_device(devid, tmpbuf, dev_tmpbuf, 0,
@@ -845,6 +849,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
         modifier->ApplyColorModification(buf, roi_in->x, roi_in->y + y, roi_in->width, 1,
                                          pixelformat, ch * roi_in->width);
       }
+      __OMP_PARALLEL_FOR_CPP_END__
 
       /* _blocking_ memory transfer: host tmpbuf buffer -> opencl dev_tmpbuf */
       err = dt_opencl_write_buffer_to_device(
@@ -873,6 +878,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
         float *pi = tmpbuf + (size_t)y * tmpbufwidth;
         modifier->ApplySubpixelGeometryDistortion(roi_out->x, roi_out->y + y, roi_out->width, 1, pi);
       }
+      __OMP_PARALLEL_FOR_CPP_END__
 
       /* _blocking_ memory transfer: host tmpbuf buffer -> opencl dev_tmpbuf */
       err = dt_opencl_write_buffer_to_device(devid, tmpbuf, dev_tmpbuf, 0,
@@ -956,6 +962,7 @@ int distort_transform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
       points[i] = buf[0];
       points[i + 1] = buf[3];
     }
+    __OMP_PARALLEL_FOR_CPP_END__
   }
 
   delete modifier;
@@ -985,6 +992,7 @@ int distort_backtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
       points[i] = buf[0];
       points[i + 1] = buf[3];
     }
+    __OMP_PARALLEL_FOR_CPP_END__
   }
 
   delete modifier;
@@ -1049,6 +1057,8 @@ void distort_mask(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t 
                                               roi_in->width);
     }
   }
+  __OMP_PARALLEL_FOR_CPP_END__
+  
   dt_pixelpipe_cache_free_align(buf);
   delete modifier;
 }
