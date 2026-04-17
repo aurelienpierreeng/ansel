@@ -294,7 +294,7 @@ if(APPLE AND (CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang" OR CMAKE_CXX_COMPILER_
         list(REMOVE_ITEM CMAKE_CXX_IMPLICIT_LINK_LIBRARIES to_library)
 endif()
 
-add_library(ansel_gui_deps INTERFACE)
+add_library(ansel_deps INTERFACE)
 
 # Append thread flags/libraries to LIBS
 list(APPEND LIBS "${CMAKE_THREAD_LIBS_INIT}")
@@ -325,23 +325,33 @@ endif()
 # Find all other required libraries for building
 #
 # GTK3 does pull glib, but this allows us to check for the version
-find_package(Glib 2.64 REQUIRED)
+set(_ansel_pkgconfig_imports
+  "Glib|glib-2.0>=2.64"
+  "GObject|gobject-2.0"
+  "GIO|gio-2.0"
+  "GThread|gthread-2.0"
+  "GModule|gmodule-2.0"
+  "PangoCairo|pangocairo"
+  "Rsvg2|librsvg-2.0"
+  "JsonGlib|json-glib-1.0"
+  "LCMS2|lcms2"
+)
+
+foreach(_ansel_dep ${_ansel_pkgconfig_imports})
+  string(REPLACE "|" ";" _ansel_dep_fields "${_ansel_dep}")
+  list(GET _ansel_dep_fields 0 _ansel_dep_name)
+  list(GET _ansel_dep_fields 1 _ansel_dep_module)
+  pkg_check_modules(${_ansel_dep_name} REQUIRED IMPORTED_TARGET ${_ansel_dep_module})
+endforeach()
+
 add_definitions("-DGLIB_VERSION_MIN_REQUIRED=GLIB_VERSION_2_64")
 add_definitions("-DGLIB_VERSION_MAX_ALLOWED=GLIB_VERSION_MIN_REQUIRED")
-include_directories(SYSTEM ${Glib_INCLUDE_DIRS})
-list(APPEND LIBS ${Glib_LIBRARIES})
 
 # GTK3 pulls in ATK, GDK, GDK-PIXBUF, CAIRO, GLIB, PANGO
 find_package(GTK3 3.24 REQUIRED)
 add_definitions("-DGDK_VERSION_MIN_REQUIRED=GDK_VERSION_3_24")
 #add_definitions("-DGDK_VERSION_MAX_ALLOWED=GDK_VERSION_MIN_REQUIRED")
-target_link_libraries(ansel_gui_deps INTERFACE PkgConfig::GTK3)
-
-# Check for libxml2 / broken cmake module can't be included in the foreach() below
-find_package(LibXml2 2.6 REQUIRED)
-include_directories(SYSTEM ${LIBXML2_INCLUDE_DIR})
-list(APPEND LIBS ${LIBXML2_LIBRARIES})
-add_definitions(${LIBXML2_DEFINITIONS})
+target_link_libraries(ansel_deps INTERFACE PkgConfig::GTK3)
 
 option(WITH_LIBSOUP2 "Use libsoup2 instead of libsoup3" OFF)
 option(WITH_LIBSOUP3 "Force libsoup3 (ignore libsoup2)" OFF)
@@ -355,8 +365,15 @@ endif()
 # used to launch a tiny http server, which could be used by OAuth services (libsoup2/3)
 find_package(LibSoup)
 if(LibSoup_FOUND)
-  include_directories(SYSTEM ${LibSoup_INCLUDE_DIRS})
-  list(APPEND LIBS ${LibSoup_LIBRARIES})
+  if(NOT TARGET LibSoup::LibSoup)
+    add_library(LibSoup::LibSoup INTERFACE IMPORTED)
+    set_target_properties(LibSoup::LibSoup PROPERTIES
+      INTERFACE_INCLUDE_DIRECTORIES "${LibSoup_INCLUDE_DIRS}"
+      INTERFACE_COMPILE_DEFINITIONS "${LibSoup_DEFINITIONS}"
+      INTERFACE_LINK_LIBRARIES "${LibSoup_LIBRARIES}"
+    )
+  endif()
+  target_link_libraries(ansel_deps INTERFACE LibSoup::LibSoup)
   add_definitions(-DHAVE_HTTP_SERVER=1 -DLIBSOUP_VERSION_MAJOR=${LIBSOUP_VERSION_MAJOR})
   list(APPEND SOURCES "common/http_server.c")
   message(STATUS "HTTP server enabled with LibSoup ${LibSoup_VERSION}")
@@ -373,8 +390,15 @@ if(USE_OPENEXR)
     find_package(OpenEXR)
   endif()
   if(OpenEXR_FOUND)
-    include_directories(SYSTEM ${OpenEXR_INCLUDE_DIRS})
-    list(APPEND LIBS ${OpenEXR_LIBRARIES})
+    if(NOT TARGET OpenEXR::OpenEXR)
+      add_library(OpenEXR::OpenEXR INTERFACE IMPORTED)
+      set_target_properties(OpenEXR::OpenEXR PROPERTIES
+        INTERFACE_INCLUDE_DIRECTORIES "${OpenEXR_INCLUDE_DIRS}"
+        INTERFACE_COMPILE_DEFINITIONS "${OpenEXR_DEFINITIONS}"
+        INTERFACE_LINK_LIBRARIES "${OpenEXR_LIBRARIES}"
+      )
+    endif()
+    target_link_libraries(ansel_deps INTERFACE OpenEXR::OpenEXR)
     add_definitions(${OpenEXR_DEFINITIONS})
     add_definitions(-DHAVE_OPENEXR=1)
     list(APPEND SOURCES "common/imageio_exr.cc")
@@ -385,8 +409,15 @@ endif(USE_OPENEXR)
 if(USE_WEBP)
   find_package(WebP 0.3.0)
   if(WebP_FOUND)
-    include_directories(SYSTEM ${WebP_INCLUDE_DIRS})
-    list(APPEND LIBS ${WebP_LIBRARIES})
+    if(NOT TARGET WebP::WebP)
+      add_library(WebP::WebP INTERFACE IMPORTED)
+      set_target_properties(WebP::WebP PROPERTIES
+        INTERFACE_INCLUDE_DIRECTORIES "${WebP_INCLUDE_DIRS}"
+        INTERFACE_COMPILE_DEFINITIONS "${WebP_DEFINITIONS}"
+        INTERFACE_LINK_LIBRARIES "${WebP_LIBRARIES}"
+      )
+    endif()
+    target_link_libraries(ansel_deps INTERFACE WebP::WebP)
     add_definitions(${WebP_DEFINITIONS})
     add_definitions(-DHAVE_WEBP=1)
     list(APPEND SOURCES "common/imageio_webp.c")
@@ -435,17 +466,30 @@ endif()
 if(USE_LENSFUN)
   find_package(LensFun)
   if(LensFun_FOUND)
-    include_directories(SYSTEM ${LensFun_INCLUDE_DIRS})
-    list(APPEND LIBS ${LensFun_LIBRARIES})
+    if(NOT TARGET LensFun::LensFun)
+      add_library(LensFun::LensFun INTERFACE IMPORTED)
+      set_target_properties(LensFun::LensFun PROPERTIES
+        INTERFACE_INCLUDE_DIRECTORIES "${LensFun_INCLUDE_DIRS}"
+        INTERFACE_COMPILE_DEFINITIONS "${LensFun_DEFINITIONS}"
+        INTERFACE_LINK_LIBRARIES "${LensFun_LIBRARIES}"
+      )
+    endif()
+    target_link_libraries(ansel_deps INTERFACE LensFun::LensFun)
     add_definitions(-DHAVE_LENSFUN=1)
     add_definitions(${LensFun_DEFINITIONS})
   endif()
 endif()
 
 find_package(Sqlite3 3.24 REQUIRED)
-include_directories(SYSTEM ${Sqlite3_INCLUDE_DIR})
-list(APPEND LIBS ${Sqlite3_LIBRARIES})
-add_definitions(${Sqlite3_DEFINITIONS})
+if(NOT TARGET Sqlite3::Sqlite3)
+  add_library(Sqlite3::Sqlite3 INTERFACE IMPORTED)
+  set_target_properties(Sqlite3::Sqlite3 PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES "${Sqlite3_INCLUDE_DIRS}"
+    INTERFACE_COMPILE_DEFINITIONS "${Sqlite3_DEFINITIONS}"
+    INTERFACE_LINK_LIBRARIES "${Sqlite3_LIBRARIES}"
+  )
+endif()
+target_link_libraries(ansel_deps INTERFACE Sqlite3::Sqlite3)
 
 # CMake provides a `FindCURL.cmake` module, which will set `CURL_LIBRARIES`,
 # however if cURL is built with CMake, it will generate a `CURLConfig.cmake`
@@ -459,27 +503,75 @@ add_definitions(${Sqlite3_DEFINITIONS})
 find_package(CURL REQUIRED)
 if(TARGET CURL::libcurl)
   set(CURL_LIBRARIES CURL::libcurl)
+else()
+  add_library(CURL::libcurl INTERFACE IMPORTED)
+  set_target_properties(CURL::libcurl PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES "${CURL_INCLUDE_DIRS}"
+    INTERFACE_COMPILE_DEFINITIONS "${CURL_DEFINITIONS}"
+    INTERFACE_LINK_LIBRARIES "${CURL_LIBRARIES}"
+  )
 endif()
-include_directories(SYSTEM ${CURL_INCLUDE_DIRS})
-list(APPEND LIBS ${CURL_LIBRARIES})
-add_definitions(${CURL_DEFINITIONS})
+target_link_libraries(ansel_deps INTERFACE CURL::libcurl)
 
-foreach(lib ${OUR_LIBS} GIO GThread GModule PangoCairo Rsvg2 LibXml2 PNG JPEG TIFF LCMS2 JsonGlib)
-  find_package(${lib} REQUIRED)
-  include_directories(SYSTEM ${${lib}_INCLUDE_DIRS})
-  list(APPEND LIBS ${${lib}_LIBRARIES})
-  add_definitions(${${lib}_DEFINITIONS})
-endforeach(lib)
+set(_ansel_find_packages
+  "LibXml2|2.6|LibXml2::LibXml2"
+  "PNG||PNG::PNG"
+  "JPEG||JPEG::JPEG"
+  "TIFF||TIFF::TIFF"
+)
+
+foreach(_ansel_dep ${_ansel_find_packages})
+  string(REPLACE "|" ";" _ansel_dep_fields "${_ansel_dep}")
+  list(GET _ansel_dep_fields 0 _ansel_dep_name)
+  list(GET _ansel_dep_fields 1 _ansel_dep_version)
+  list(GET _ansel_dep_fields 2 _ansel_dep_target)
+
+  if(_ansel_dep_version)
+    find_package(${_ansel_dep_name} ${_ansel_dep_version} REQUIRED)
+  else()
+    find_package(${_ansel_dep_name} REQUIRED)
+  endif()
+
+  target_link_libraries(ansel_deps INTERFACE ${_ansel_dep_target})
+endforeach()
+
+foreach(_ansel_dep Glib GObject GIO GThread GModule PangoCairo Rsvg2 JsonGlib)
+  target_link_libraries(ansel_deps INTERFACE PkgConfig::${_ansel_dep})
+endforeach()
+
+# LCMS2 doesn't have modern CMake import
+if(NOT TARGET LCMS2::LCMS2)
+  add_library(LCMS2::LCMS2 INTERFACE IMPORTED)
+
+  set_target_properties(LCMS2::LCMS2 PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES "${LCMS2_INCLUDE_DIRS}"
+    INTERFACE_COMPILE_DEFINITIONS "${LCMS2_DEFINITIONS}"
+    INTERFACE_LINK_LIBRARIES "PkgConfig::LCMS2"
+  )
+endif()
+target_link_libraries(ansel_deps INTERFACE LCMS2::LCMS2)
 
 # Require exiv2 >= 0.27 to make sure everything we need is available
 find_package(Exiv2 0.27.4 REQUIRED)
-include_directories(SYSTEM ${Exiv2_INCLUDE_DIRS})
-list(APPEND LIBS ${Exiv2_LIBRARIES})
-add_definitions(${Exiv2_DEFINITIONS})
+if(NOT TARGET Exiv2::Exiv2)
+  add_library(Exiv2::Exiv2 INTERFACE IMPORTED)
+  set_target_properties(Exiv2::Exiv2 PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES "${Exiv2_INCLUDE_DIRS}"
+    INTERFACE_COMPILE_DEFINITIONS "${Exiv2_DEFINITIONS}"
+    INTERFACE_LINK_LIBRARIES "${Exiv2_LIBRARIES}"
+  )
+endif()
+target_link_libraries(ansel_deps INTERFACE Exiv2::Exiv2)
 
 find_package(Pugixml 1.2 REQUIRED)
-include_directories(SYSTEM ${Pugixml_INCLUDE_DIRS})
-list(APPEND LIBS ${Pugixml_LIBRARIES})
+if(NOT TARGET Pugixml::Pugixml)
+  add_library(Pugixml::Pugixml INTERFACE IMPORTED)
+  set_target_properties(Pugixml::Pugixml PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES "${Pugixml_INCLUDE_DIRS}"
+    INTERFACE_LINK_LIBRARIES "${Pugixml_LIBRARIES}"
+  )
+endif()
+target_link_libraries(ansel_deps INTERFACE Pugixml::Pugixml)
 
 # Optionally enable ISOBMFF support in Exiv2
 if(USE_ISOBMFF)
@@ -501,10 +593,16 @@ endif()
 if(USE_OPENJPEG)
   find_package(OpenJPEG)
   if(OpenJPEG_FOUND)
+    if(NOT TARGET OpenJPEG::OpenJPEG)
+      add_library(OpenJPEG::OpenJPEG INTERFACE IMPORTED)
+      set_target_properties(OpenJPEG::OpenJPEG PROPERTIES
+        INTERFACE_INCLUDE_DIRECTORIES "${OpenJPEG_INCLUDE_DIRS}"
+        INTERFACE_LINK_LIBRARIES "${OpenJPEG_LIBRARIES}"
+      )
+    endif()
+    target_link_libraries(ansel_deps INTERFACE OpenJPEG::OpenJPEG)
     add_definitions(-DHAVE_OPENJPEG=1)
     list(APPEND SOURCES "common/imageio_j2k.c")
-    include_directories(SYSTEM ${OpenJPEG_INCLUDE_DIRS})
-    list(APPEND LIBS ${OpenJPEG_LIBRARIES})
     set(DT_SUPPORTED_EXTENSIONS ${DT_SUPPORTED_EXTENSIONS} j2c j2k jp2 jpc CACHE INTERNAL "")
   endif(OpenJPEG_FOUND)
 endif(USE_OPENJPEG)
@@ -526,9 +624,15 @@ if(USE_LIBSECRET AND JsonGlib_FOUND)
       message(STATUS "Found libsecret unsupported version ${Libsecret_VERSION}. Please upgrade to version 0.18 or newer.")
       set(Libsecret_FOUND FALSE)
     else()
+      if(NOT TARGET Libsecret::Libsecret)
+        add_library(Libsecret::Libsecret INTERFACE IMPORTED)
+        set_target_properties(Libsecret::Libsecret PROPERTIES
+          INTERFACE_INCLUDE_DIRECTORIES "${Libsecret_INCLUDE_DIRS}"
+          INTERFACE_LINK_LIBRARIES "${Libsecret_LIBRARIES}"
+        )
+      endif()
+      target_link_libraries(ansel_deps INTERFACE Libsecret::Libsecret)
       set(SOURCES ${SOURCES} "common/pwstorage/backend_libsecret.c")
-      include_directories(SYSTEM ${Libsecret_INCLUDE_DIRS})
-      list(APPEND LIBS ${Libsecret_LIBRARIES})
       add_definitions(-DHAVE_LIBSECRET=1)
     endif()
   endif(Libsecret_FOUND)
@@ -726,7 +830,7 @@ list(APPEND STATIC_LIBS whereami)
 
 add_library(lib_ansel_imageio_rawspeed STATIC common/imageio_rawspeed.cc)
 target_link_libraries(lib_ansel_imageio_rawspeed PRIVATE rawspeed)
-target_link_libraries(lib_ansel_imageio_rawspeed PUBLIC ansel_gui_deps)
+target_link_libraries(lib_ansel_imageio_rawspeed PUBLIC ansel_deps)
 list(APPEND STATIC_LIBS lib_ansel_imageio_rawspeed)
 
 # Don't do too much, if `USE_BUNDLED_LIBRAW=OFF` but `libraw_FOUND=NOTFOUND`,
@@ -837,6 +941,15 @@ endif()
 if(USE_MAP)
   find_package(OSMGpsMap)
   if(OSMGpsMap_FOUND)
+    if(NOT TARGET OSMGpsMap::OSMGpsMap)
+      add_library(OSMGpsMap::OSMGpsMap INTERFACE IMPORTED)
+      set_target_properties(OSMGpsMap::OSMGpsMap PROPERTIES
+        INTERFACE_INCLUDE_DIRECTORIES "${OSMGpsMap_INCLUDE_DIRS}"
+        INTERFACE_COMPILE_DEFINITIONS "${OSMGpsMap_DEFINITIONS}"
+        INTERFACE_LINK_LIBRARIES "${OSMGpsMap_LIBRARIES}"
+      )
+    endif()
+    target_link_libraries(ansel_deps INTERFACE OSMGpsMap::OSMGpsMap)
     message(STATUS "Map mode: enabled")
     add_definitions(-DHAVE_MAP=1)
     if(NOT OSMGpsMap_VERSION VERSION_LESS 1.1.0)
@@ -845,8 +958,6 @@ if(USE_MAP)
     if(OSMGpsMap_VERSION VERSION_GREATER 1.1.0)
       add_definitions(-DHAVE_OSMGPSMAP_NEWER_THAN_110=1)
     endif()
-    include_directories(SYSTEM ${OSMGpsMap_INCLUDE_DIRS})
-    list(APPEND LIBS ${OSMGpsMap_LIBRARIES})
     add_definitions(${OSMGpsMap_DEFINITIONS})
   else(OSMGpsMap_FOUND)
     set(USE_MAP OFF)
@@ -858,18 +969,30 @@ endif(USE_MAP)
 
 # libcolord-gtk:
 if(USE_COLORD)
-  find_package(Colord)
+  pkg_check_modules(Colord IMPORTED_TARGET colord)
   if(Colord_FOUND)
+    if(NOT TARGET Colord::Colord)
+      add_library(Colord::Colord INTERFACE IMPORTED)
+      set_target_properties(Colord::Colord PROPERTIES
+        INTERFACE_INCLUDE_DIRECTORIES "${Colord_INCLUDE_DIRS}"
+        INTERFACE_COMPILE_OPTIONS "${Colord_CFLAGS_OTHER}"
+        INTERFACE_LINK_LIBRARIES "PkgConfig::Colord"
+      )
+    endif()
+
     find_package(ColordGTK)
     if(ColordGTK_FOUND)
-      # We might make use of colord directly so link against it explicitly. just in case. move up if it is used without colord-gtk, too.
-      include_directories(SYSTEM ${Colord_INCLUDE_DIRS})
-      list(APPEND LIBS ${Colord_LIBRARIES})
-      add_definitions(${Colord_DEFINITIONS})
+      if(NOT TARGET ColordGTK::ColordGTK)
+        add_library(ColordGTK::ColordGTK INTERFACE IMPORTED)
+        set_target_properties(ColordGTK::ColordGTK PROPERTIES
+          INTERFACE_INCLUDE_DIRECTORIES "${ColordGTK_INCLUDE_DIRS}"
+          INTERFACE_COMPILE_DEFINITIONS "${ColordGTK_DEFINITIONS}"
+          INTERFACE_LINK_LIBRARIES "${ColordGTK_LIBRARIES}"
+        )
+      endif()
+      target_link_libraries(ansel_deps INTERFACE Colord::Colord ColordGTK::ColordGTK)
 
-      # ... and also against libcolord-gtk to get the display profile
-      include_directories(SYSTEM ${ColordGTK_INCLUDE_DIRS})
-      list(APPEND LIBS ${ColordGTK_LIBRARIES})
+      # We might make use of colord directly so link against it explicitly. just in case. move up if it is used without colord-gtk, too.
       add_definitions(${ColordGTK_DEFINITIONS})
       add_definitions("-DUSE_COLORDGTK")
     else(ColordGTK_FOUND)
@@ -885,7 +1008,14 @@ endif(USE_COLORD)
 if(BUILD_PRINT)
   find_package(Cups)
   if(CUPS_FOUND)
-    include_directories(SYSTEM ${CUPS_INCLUDE_DIR})
+    if(NOT TARGET Cups::Cups)
+      add_library(Cups::Cups INTERFACE IMPORTED)
+      set_target_properties(Cups::Cups PROPERTIES
+        INTERFACE_INCLUDE_DIRECTORIES "${CUPS_INCLUDE_DIR}"
+        INTERFACE_LINK_LIBRARIES "${CUPS_LIBRARIES}"
+      )
+    endif()
+    target_link_libraries(ansel_deps INTERFACE Cups::Cups)
     FILE(GLOB SOURCE_FILES_PRINT
       "common/cups_print.h"
       "common/cups_print.c"
@@ -894,7 +1024,6 @@ if(BUILD_PRINT)
       "common/printing.c"
       )
     set(SOURCES ${SOURCES} ${SOURCE_FILES_PRINT})
-    list(APPEND LIBS ${CUPS_LIBRARIES})
     add_definitions(-DHAVE_PRINT=1)
     message(STATUS "Print mode: enabled")
   else(CUPS_FOUND)
@@ -995,7 +1124,7 @@ set_target_properties(lib_ansel PROPERTIES LINKER_LANGUAGE C)
 #
 target_link_libraries(lib_ansel PRIVATE ${STATIC_LIBS})
 target_link_libraries(lib_ansel PUBLIC ${LIBS})
-target_link_libraries(lib_ansel PUBLIC ansel_gui_deps)
+target_link_libraries(lib_ansel PUBLIC ansel_deps)
 
 if(OpenMP_C_FOUND)
   target_link_libraries(lib_ansel PUBLIC OpenMP::OpenMP_C)
@@ -1008,6 +1137,13 @@ endif()
 message(STATUS "Public libs:" ${LIBS})
 message(STATUS "Static libs:" ${STATIC_LIBS})
 
+get_target_property(_ansel_deps_libs ansel_deps INTERFACE_LINK_LIBRARIES)
+if(_ansel_deps_libs)
+  list(REMOVE_DUPLICATES _ansel_deps_libs)
+  set_property(TARGET ansel_deps PROPERTY INTERFACE_LINK_LIBRARIES "${_ansel_deps_libs}")
+endif()
+
+message(STATUS "Ansel deps:" ${_ansel_deps_libs})
 
 unset(STATIC_LIBS)
 unset(LIBS)
@@ -1058,13 +1194,14 @@ endif(BUILD_TESTING)
 add_library(help_menu "gui/actions/help.c")
 add_dependencies(help_menu generate_authors_h)
 target_include_directories(help_menu PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+target_link_libraries(help_menu PRIVATE ansel_deps)
 
 #
 # build ansel executable
 #
 add_executable(ansel ${SUBSYSTEM_MACOSX} ${SUBSYSTEM_WIN32} main.c ${RESOURCE_OBJECT})
 set_target_properties(ansel PROPERTIES LINKER_LANGUAGE C)
-target_link_libraries(ansel PRIVATE lib_ansel ${LIBS})
+target_link_libraries(ansel PRIVATE lib_ansel)
 
 if(APPLE)
   set_target_properties(lib_ansel PROPERTIES LINK_FLAGS "-framework Carbon -framework AppKit")
