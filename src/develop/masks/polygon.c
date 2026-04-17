@@ -2268,7 +2268,8 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
   if(gui_points->source && gui_points->source_count > node_count * 3 + 2
      && gui_points->points && gui_points->points_count > 0)
   {
-    dt_masks_gui_center_point_t center_pt;
+    dt_masks_gui_center_point_t center_pt = { .main = { gui_points->points[0], gui_points->points[1] },
+                                              .source = { gui_points->source[0], gui_points->source[1] } };
     _polygon_gui_gravity_center(gui_points->points, gui_points->points_count,
                                 &center_pt.main.x, &center_pt.main.y, NULL);
     // project the source's center point from the center of gravity
