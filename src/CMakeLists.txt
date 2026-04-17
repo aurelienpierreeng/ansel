@@ -975,7 +975,9 @@ if(APPLE)
   set_target_properties(lib_ansel PROPERTIES MACOSX_RPATH TRUE)
 endif()
 set_target_properties(lib_ansel PROPERTIES OUTPUT_NAME ansel)
-set_target_properties(lib_ansel PROPERTIES LINKER_LANGUAGE C)
+#set_target_properties(lib_ansel PROPERTIES LINKER_LANGUAGE C)
+set_target_properties(lib_ansel PROPERTIES LINKER_LANGUAGE CXX)
+target_link_libraries(lib_ansel PRIVATE stdc++)
 
 #
 # Link external libs
