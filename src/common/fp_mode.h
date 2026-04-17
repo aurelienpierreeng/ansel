@@ -18,6 +18,16 @@
 
 #pragma once
 
+#if defined(__x86_64__) || defined(__i386__)
+  #include <xmmintrin.h>
+#endif
+
+#if defined(__aarch64__)
+  #include <fenv.h>
+#endif
+
+#include <stdio.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -35,6 +45,23 @@ typedef enum {
  * @param mode 
  */
 void dt_fp_init(dt_cpu_fp_mode_t mode);
+
+static inline void dt_fp_print(const char *tag)
+{
+#if defined(__x86_64__) || defined(__i386__)
+  unsigned int mxcsr = _mm_getcsr();
+
+  fprintf(stdout, "[%s] MXCSR = 0x%08x\n", tag, mxcsr);
+
+  fprintf(stdout, "  FTZ  : %s\n", (mxcsr & _MM_FLUSH_ZERO_ON) ? "ON" : "OFF");
+
+#ifdef _MM_DENORMALS_ZERO_ON
+  fprintf(stdout, "  DAZ  : %s\n", (mxcsr & _MM_DENORMALS_ZERO_ON) ? "ON" : "OFF");
+#endif
+
+  fprintf(stdout, "  exceptions mask: 0x%04x\n", (mxcsr >> 7) & 0x3f);
+#endif
+}
 
 #ifdef __cplusplus
 }

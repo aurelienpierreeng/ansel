@@ -185,6 +185,8 @@ diffuse_pde(read_only image2d_t HF, read_only image2d_t LF,
 
   if(x >= width || y >= height) return;
 
+  const float4 flt_min = (float4)1e-8f;
+
   const char opacity = (has_mask) ? read_imageui(mask, sampleri, (int2)(x, y)).x : 1;
 
   float4 out;
@@ -218,14 +220,14 @@ diffuse_pde(read_only image2d_t HF, read_only image2d_t LF,
         neighbour_pixel_LF[k] = lf_value;
         // Clamp LF to a strictly positive floor to match the CPU path and
         // avoid divide-by-zero in the HF/LF energy estimate.
-        const float4 safe_lf = fmax(lf_value - (float4)(FLT_MIN), (float4)0.f) + (float4)(FLT_MIN);
+        const float4 safe_lf = fmax(lf_value - flt_min, (float4)0.f) + flt_min;
         const float4 ratio = hf_value / safe_lf;
         energy += ratio * ratio;
       }
     // normalized_regularization already folds together the user
     // regularization, the 3x3-support averaging factor, the physical blur
     // radius carried by the current wavelet band and its scale normalization.
-    energy = variance_threshold + energy * normalized_regularization;
+    energy = fmax(variance_threshold + energy * normalized_regularization - flt_min, (float4)0.f) + flt_min;
 
     // build the local anisotropic convolution filters for gradients and laplacians
     float4 gradient[2], laplacian[2];

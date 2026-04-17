@@ -83,6 +83,7 @@
 #include "config.h"
 #endif
 #include "common/database.h"
+#include "common/fp_mode.h"
 #include "common/dtpthread.h"
 #include "common/utility.h"
 #ifdef _WIN32
@@ -237,8 +238,32 @@ typedef unsigned int u_int;
 
 #define OMP_PRAGMA(x) _Pragma(#x)
 #define __OMP_PARALLEL__(...) OMP_PRAGMA(omp parallel default(firstprivate) __VA_ARGS__)
+
+
 #define __OMP_PARALLEL_FOR__(...) OMP_PRAGMA(omp parallel for default(firstprivate) schedule(static) __VA_ARGS__)
+
+#define __OMP_PARALLEL_FOR_FP__(...)                                     \
+  OMP_PRAGMA(omp parallel default(firstprivate))                         \
+  {                                                                      \
+    dt_fp_init(DT_FP_MODE_FAST);                                         \
+    OMP_PRAGMA(omp for schedule(static) __VA_ARGS__)
+
+#define __OMP_PARALLEL_FOR_FP_END__ \
+  }
+
+
 #define __OMP_PARALLEL_FOR_SIMD__(...) OMP_PRAGMA(omp parallel for simd default(firstprivate) schedule(simd:static) __VA_ARGS__)
+
+#define __OMP_PARALLEL_FOR_SIMD_FP__(...)                                \
+  OMP_PRAGMA(omp parallel default(firstprivate))                         \
+  {                                                                      \
+    dt_fp_init(DT_FP_MODE_FAST);                                         \
+    OMP_PRAGMA(omp for simd schedule(simd:static) __VA_ARGS__)
+
+#define __OMP_PARALLEL_FOR_SIMD_FP_END__ \
+  }
+
+
 #define __OMP_FOR_SIMD__(...) OMP_PRAGMA(omp for simd schedule(simd:static) __VA_ARGS__)
 #define __OMP_FOR__(...) OMP_PRAGMA(omp for schedule(static) __VA_ARGS__)
 #define __OMP_SIMD__(...) OMP_PRAGMA(omp simd __VA_ARGS__)
@@ -509,6 +534,37 @@ static inline void * dt_check_sse_aligned(void * pointer)
     return NULL;
 }
 
+// Low-level comparison for NaN float that resists -ffast-math compiler option
+static inline __attribute__((always_inline)) int dt_isnan(float x)
+{
+  uint32_t u;
+  memcpy(&u, &x, sizeof(u));
+  return (u & 0x7f800000u) == 0x7f800000u &&
+          (u & 0x007fffffu) != 0;
+}
+
+static inline __attribute__((always_inline)) int dt_isfinite(float x)
+{
+    uint32_t u;
+    memcpy(&u, &x, sizeof(u));
+    return (u & 0x7f800000u) != 0x7f800000u;
+}
+
+static inline __attribute__((always_inline)) int dt_isinf(float x)
+{
+    uint32_t u;
+    memcpy(&u, &x, sizeof(u));
+    return (u & 0x7fffffffU) == 0x7f800000U;
+}
+
+// FIXME: NAN used as sentinel should be removed entirely
+// see https://github.com/aurelienpierreeng/ansel/issues/768
+static inline __attribute__((always_inline)) float dt_nan(void)
+{
+    union { uint32_t u; float f; } v = { 0x7fc00000u };
+    return v.f;
+}
+
 // Most code in dt assumes that the compiler is capable of auto-vectorization.  In some cases, this will yield
 // suboptimal code if the compiler in fact does NOT auto-vectorize.  Uncomment the following line for such a
 // compiler.
@@ -542,7 +598,7 @@ dt_simd_max_zero(const dt_aligned_pixel_simd_t value)
 {
   dt_aligned_pixel_simd_t out = value;
   for(int c = 0; c < 4; c++)
-    out[c] = MAX(value[c], 0.0f);
+    out[c] = (dt_isfinite(value[c])) ? MAX(value[c], 0.0f) : 0.f;
   return out;
 }
 
@@ -688,37 +744,6 @@ static inline void copy_pixel_nontemporal(
 static inline void copy_pixel(float *const __restrict__ out, const float *const __restrict__ in)
 {
   for_each_channel(k,aligned(in,out:16)) out[k] = in[k];
-}
-
-// Low-level comparison for NaN float that resists -ffast-math compiler option
-static inline int dt_isnan(float x)
-{
-  uint32_t u;
-  memcpy(&u, &x, sizeof(u));
-  return (u & 0x7f800000u) == 0x7f800000u &&
-          (u & 0x007fffffu) != 0;
-}
-
-static inline int dt_isfinite(float x)
-{
-    uint32_t u;
-    memcpy(&u, &x, sizeof(u));
-    return (u & 0x7f800000u) != 0x7f800000u;
-}
-
-static inline int dt_isinf(float x)
-{
-    uint32_t u;
-    memcpy(&u, &x, sizeof(u));
-    return (u & 0x7fffffffU) == 0x7f800000U;
-}
-
-// FIXME: NAN used as sentinel should be removed entirely
-// see https://github.com/aurelienpierreeng/ansel/issues/768
-static inline float dt_nan(void)
-{
-    union { uint32_t u; float f; } v = { 0x7fc00000u };
-    return v.f;
 }
 
 /********************************* */
