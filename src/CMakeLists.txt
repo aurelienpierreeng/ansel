@@ -642,11 +642,27 @@ if(NOT CUSTOM_CFLAGS)
 
   # Release
   set(DT_RELEASE_FLAGS "-O3 -g")
-  set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
 
   # RelWithDebInfo (same perf as release, but keep symbols)
   set(DT_RELWITHDEBINFO_FLAGS "-O3 -g -fno-omit-frame-pointer")
-  set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO TRUE)
+
+  if(NOT WIN32)
+    # This enables LTO (`-flto`): https://gcc.gnu.org/onlinedocs/gccint/LTO-Overview.html
+    # It fails on Windows for exr.cc because std:string objects are defined twice,
+    # once from OpenEXR and one from darktable.h, and there is no way to selectively
+    # disable it there because it's global by nature.
+    # LTO allows to look across DLL boundaries to merge symbols,
+    # possibly allowing to inline functions across libraries for better 
+    # parallel loops. But Linux/MacOS don't import libraries the way Windows does,
+    # they use shared libraries.
+    # Also Ansel inherits from Darktable a messy architecture that pretends to be 
+    # modular, while in fact all libraries are shared globally, so using `-fvisibility=hidden`
+    # breaks the whole project.
+    # So I haven't found a way to fix that and it sucks that one lib is making us drop 
+    # this feature for the whole project.
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO TRUE)
+  endif()
 
   # Debug
   set(DT_DEBUG_FLAGS "-O0 -g3 -fno-omit-frame-pointer -Werror -Wuninitialized")
@@ -973,12 +989,6 @@ add_dependencies(lib_ansel generate_authors_h)
 
 if(APPLE)
   set_target_properties(lib_ansel PROPERTIES MACOSX_RPATH TRUE)
-endif()
-
-if(WIN32)
-  set_target_properties(lib_ansel PROPERTIES INTERPROCEDURAL_OPTIMIZATION FALSE)
-  target_compile_options(lib_ansel PRIVATE -fno-lto)
-  target_link_options(lib_ansel PRIVATE -fno-lto)
 endif()
 
 set_target_properties(lib_ansel PROPERTIES OUTPUT_NAME ansel)
