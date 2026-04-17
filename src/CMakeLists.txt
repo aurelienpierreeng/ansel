@@ -642,15 +642,11 @@ if(NOT CUSTOM_CFLAGS)
 
   # Release
   set(DT_RELEASE_FLAGS "-O3 -g")
-  if(NOT WIN32)
-    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
-  endif()
+  set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
 
   # RelWithDebInfo (same perf as release, but keep symbols)
   set(DT_RELWITHDEBINFO_FLAGS "-O3 -g -fno-omit-frame-pointer")
-  if(NOT WIN32)
-    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO TRUE)
-  endif()
+  set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO TRUE)
 
   # Debug
   set(DT_DEBUG_FLAGS "-O0 -g3 -fno-omit-frame-pointer -Werror -Wuninitialized")
