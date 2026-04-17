@@ -974,10 +974,18 @@ add_dependencies(lib_ansel generate_authors_h)
 if(APPLE)
   set_target_properties(lib_ansel PROPERTIES MACOSX_RPATH TRUE)
 endif()
+
 set_target_properties(lib_ansel PROPERTIES OUTPUT_NAME ansel)
-#set_target_properties(lib_ansel PROPERTIES LINKER_LANGUAGE C)
-set_target_properties(lib_ansel PROPERTIES LINKER_LANGUAGE CXX)
+set_target_properties(lib_ansel PROPERTIES LINKER_LANGUAGE C)
 target_link_libraries(lib_ansel PRIVATE stdc++)
+
+if(WIN32)
+  # Stupid Windows doesn't coalesce redundant imports, which leaks symbols
+  # and fails on "multiple definitions" with C++ stdlib
+  set_target_properties(lib_ansel PROPERTIES INTERPROCEDURAL_OPTIMIZATION FALSE)
+  target_compile_options(lib_ansel PRIVATE -fno-lto)
+  target_link_options(lib_ansel PRIVATE -fno-lto)
+endif(WIN32)
 
 #
 # Link external libs
