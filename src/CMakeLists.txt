@@ -335,7 +335,7 @@ list(APPEND LIBS ${Glib_LIBRARIES})
 find_package(GTK3 3.24 REQUIRED)
 add_definitions("-DGDK_VERSION_MIN_REQUIRED=GDK_VERSION_3_24")
 #add_definitions("-DGDK_VERSION_MAX_ALLOWED=GDK_VERSION_MIN_REQUIRED")
-target_link_libraries(ansel_gui_deps INTERFACE GTK3::GTK3)
+target_link_libraries(ansel_gui_deps INTERFACE PkgConfig::GTK3)
 
 # Check for libxml2 / broken cmake module can't be included in the foreach() below
 find_package(LibXml2 2.6 REQUIRED)
