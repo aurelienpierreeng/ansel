@@ -294,6 +294,8 @@ if(APPLE AND (CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang" OR CMAKE_CXX_COMPILER_
         list(REMOVE_ITEM CMAKE_CXX_IMPLICIT_LINK_LIBRARIES to_library)
 endif()
 
+add_library(ansel_gui_deps INTERFACE)
+
 # Append thread flags/libraries to LIBS
 list(APPEND LIBS "${CMAKE_THREAD_LIBS_INIT}")
 
@@ -333,6 +335,7 @@ list(APPEND LIBS ${Glib_LIBRARIES})
 find_package(GTK3 3.24 REQUIRED)
 add_definitions("-DGDK_VERSION_MIN_REQUIRED=GDK_VERSION_3_24")
 #add_definitions("-DGDK_VERSION_MAX_ALLOWED=GDK_VERSION_MIN_REQUIRED")
+target_link_libraries(ansel_gui_deps INTERFACE GTK3::GTK3)
 
 # Check for libxml2 / broken cmake module can't be included in the foreach() below
 find_package(LibXml2 2.6 REQUIRED)
@@ -723,6 +726,7 @@ list(APPEND STATIC_LIBS whereami)
 
 add_library(lib_ansel_imageio_rawspeed STATIC common/imageio_rawspeed.cc)
 target_link_libraries(lib_ansel_imageio_rawspeed PRIVATE rawspeed)
+target_link_libraries(lib_ansel_imageio_rawspeed PUBLIC ansel_gui_deps)
 list(APPEND STATIC_LIBS lib_ansel_imageio_rawspeed)
 
 # Don't do too much, if `USE_BUNDLED_LIBRAW=OFF` but `libraw_FOUND=NOTFOUND`,
@@ -991,7 +995,7 @@ set_target_properties(lib_ansel PROPERTIES LINKER_LANGUAGE C)
 #
 target_link_libraries(lib_ansel PRIVATE ${STATIC_LIBS})
 target_link_libraries(lib_ansel PUBLIC ${LIBS})
-target_link_libraries(lib_ansel PUBLIC GTK3::GTK3)
+target_link_libraries(lib_ansel PUBLIC ansel_gui_deps)
 
 if(OpenMP_C_FOUND)
   target_link_libraries(lib_ansel PUBLIC OpenMP::OpenMP_C)
