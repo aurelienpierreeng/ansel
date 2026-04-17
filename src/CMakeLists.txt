@@ -355,7 +355,7 @@ foreach(i RANGE ${_last})
   # pkg-config lookup (module name ONLY)
   # IMPORTANT: no IMPORTED_TARGET here because old FindPkgConfig.cmake
   # is bugged on Github runners (old)
-  pkg_check_modules(${_name} REQUIRED ${_module})
+  cmake_language(CALL pkg_check_modules ${_name} REQUIRED ${_module})
 
   # Create imported target manually (portable)
   if(${_name}_FOUND AND NOT TARGET PkgConfig::${_name})
