@@ -325,60 +325,15 @@ endif()
 # Find all other required libraries for building
 #
 # GTK3 does pull glib, but this allows us to check for the version
-set(_ansel_pkgconfig_imports_json [[
-[
-  {"name":"Glib",       "module":"glib-2.0",       "version":"2.64"},
-  {"name":"GObject",    "module":"gobject-2.0"},
-  {"name":"GIO",        "module":"gio-2.0"},
-  {"name":"GThread",    "module":"gthread-2.0"},
-  {"name":"GModule",    "module":"gmodule-2.0"},
-  {"name":"PangoCairo", "module":"pangocairo"},
-  {"name":"Rsvg2",      "module":"librsvg-2.0"},
-  {"name":"JsonGlib",   "module":"json-glib-1.0"},
-  {"name":"LCMS2",      "module":"lcms2"}
-]
-]])
-
-string(JSON _dep_count LENGTH "${_ansel_pkgconfig_imports_json}")
-math(EXPR _last "${_dep_count} - 1")
-
-foreach(i RANGE ${_last})
-
-  # Extract fields
-  string(JSON _name   GET "${_ansel_pkgconfig_imports_json}" ${i} name)
-  string(JSON _module GET "${_ansel_pkgconfig_imports_json}" ${i} module)
-
-  # version is optional → use ERROR_VARIABLE to detect absence
-  string(JSON _version ERROR_VARIABLE _no_version
-         GET "${_ansel_pkgconfig_imports_json}" ${i} version)
-
-  # pkg-config lookup (module name ONLY)
-  # IMPORTANT: no IMPORTED_TARGET here because old FindPkgConfig.cmake
-  # is bugged on Github runners (old)
-  cmake_language(CALL pkg_check_modules ${_name} REQUIRED ${_module})
-
-  # Create imported target manually (portable)
-  if(${_name}_FOUND AND NOT TARGET PkgConfig::${_name})
-    add_library(PkgConfig::${_name} INTERFACE IMPORTED)
-
-    target_include_directories(PkgConfig::${_name}
-      INTERFACE ${${_name}_INCLUDE_DIRS})
-
-    target_link_libraries(PkgConfig::${_name}
-      INTERFACE ${${_name}_LINK_LIBRARIES})
-
-    target_compile_options(PkgConfig::${_name}
-      INTERFACE ${${_name}_CFLAGS_OTHER})
-  endif()
-
-  # Version check (only if present)
-  if(NOT _no_version AND _version AND ${_name}_VERSION VERSION_LESS _version)
-    message(FATAL_ERROR
-      "${_module} >= ${_version} required, found ${${_name}_VERSION}"
-    )
-  endif()
-
-endforeach()
+pkg_check_modules(Glib REQUIRED IMPORTED_TARGET glib-2.0>=2.64)
+pkg_check_modules(GObject REQUIRED IMPORTED_TARGET gobject-2.0)
+pkg_check_modules(GIO REQUIRED IMPORTED_TARGET gio-2.0)
+pkg_check_modules(GThread REQUIRED IMPORTED_TARGET gthread-2.0)
+pkg_check_modules(GModule REQUIRED IMPORTED_TARGET gmodule-2.0)
+pkg_check_modules(PangoCairo REQUIRED IMPORTED_TARGET pangocairo)
+pkg_check_modules(Rsvg2 REQUIRED IMPORTED_TARGET librsvg-2.0)
+pkg_check_modules(JsonGlib REQUIRED IMPORTED_TARGET json-glib-1.0)
+pkg_check_modules(LCMS2 REQUIRED IMPORTED_TARGET lcms2)
 
 add_definitions("-DGLIB_VERSION_MIN_REQUIRED=GLIB_VERSION_2_64")
 add_definitions("-DGLIB_VERSION_MAX_ALLOWED=GLIB_VERSION_MIN_REQUIRED")
