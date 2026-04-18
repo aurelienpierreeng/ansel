@@ -1414,7 +1414,6 @@ int dt_thumbnail_destroy(dt_thumbnail_t *thumb)
   // background rendering job gets cancelled and disposed by the job queue.
   dt_pthread_mutex_lock(&thumb->lock);
 
-  dt_job_t *job = thumb->job;
   thumb->job = NULL;
 
   // remove multiple delayed gtk_widget_queue_draw triggers
@@ -1458,8 +1457,6 @@ int dt_thumbnail_destroy(dt_thumbnail_t *thumb)
   for(int i = 0; i < MAX_STARS; i++) thumb->w_stars[i] = NULL;
 
   dt_pthread_mutex_unlock(&thumb->lock);
-
-  if(job) dt_control_job_cancel(job);
 
   _thumbnail_release(thumb);
 
