@@ -271,16 +271,24 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
   return 1;
 }
 
-static int get_grab(float pointerx, float pointery, float startx, float starty, float endx, float endy,
+static int get_grab(dt_iop_module_t *self, float pointerx, float pointery, float startx, float starty, float endx, float endy,
                     float zoom_scale)
 {
-  const float radius = 5.0 / zoom_scale;
+  // trick to convert the radius from image norm to preview abs
+  const float radius[2] = { DT_GUI_MOUSE_EFFECT_RADIUS_SCALED, 0 };
+  dt_dev_coordinates_image_abs_to_image_norm(self->dev, radius, 1);
+  dt_dev_coordinates_image_norm_to_preview_abs(self->dev, radius, 1);
+  
+  const float radius_sq = radius[0] * radius[0];
 
-  if(powf(pointerx - startx, 2) + powf(pointery, 2) <= powf(radius, 2)) return 2; // x size
-  if(powf(pointerx, 2) + powf(pointery - starty, 2) <= powf(radius, 2)) return 4; // y size
-  if(powf(pointerx, 2) + powf(pointery, 2) <= powf(radius, 2)) return 1;          // center
-  if(powf(pointerx - endx, 2) + powf(pointery, 2) <= powf(radius, 2)) return 8;   // x falloff
-  if(powf(pointerx, 2) + powf(pointery - endy, 2) <= powf(radius, 2)) return 16;  // y falloff
+  fprintf(stderr, "pointer: %f %f, radius: %f\n", pointerx, pointery, radius[0]);
+  
+
+  if((pointerx - startx) * (pointerx - startx) + pointery * pointery <= radius_sq) return 2;  // x size
+  if(pointerx * pointerx + (pointery - starty) * (pointery - starty) <= radius_sq) return 4;  // y size
+  if(pointerx * pointerx + pointery * pointery <= radius_sq)                       return 1;  // center
+  if((pointerx - endx) * (pointerx - endx) + pointery * pointery <= radius_sq)     return 8;  // x falloff
+  if(pointerx * pointerx + (pointery - endy) * (pointery - endy) <= radius_sq)     return 16; // y falloff
 
   return 0;
 }
@@ -436,7 +444,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
     }
   }
 
-  int grab = get_grab(pzx * wd - vignette_x, pzy * ht - vignette_y, vignette_w, -vignette_h, vignette_fx,
+  int grab = get_grab(self, pzx * wd - vignette_x, pzy * ht - vignette_y, vignette_w, -vignette_h, vignette_fx,
                       -vignette_fy, zoom_scale);
   cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
   cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(3.0) / zoom_scale);
@@ -524,7 +532,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
 
   if(grab == 0 || !(darktable.control->button_down && darktable.control->button_down_which == 1))
   {
-    grab = get_grab(pzx * wd - vignette_x, pzy * ht - vignette_y, vignette_w, -vignette_h, vignette_fx,
+    grab = get_grab(self, pzx * wd - vignette_x, pzy * ht - vignette_y, vignette_w, -vignette_h, vignette_fx,
                     -vignette_fy, zoom_scale);
   }
 
