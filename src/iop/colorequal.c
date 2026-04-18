@@ -1121,7 +1121,7 @@ static void _draw_graph_background(cairo_t *cr, const dt_iop_colorequal_channel_
     cairo_fill(cr);
     cairo_pattern_destroy(gradient);
   }
-  dt_free(bg);
+  dt_free_align(bg);
 }
 
 static gboolean _draw_curve(GtkWidget *widget, cairo_t *crf, gpointer user_data)

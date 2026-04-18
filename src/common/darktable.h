@@ -491,12 +491,12 @@ void dt_pixelpipe_cache_free_align_cache(struct dt_dev_pixelpipe_cache_t *cache,
 #define dt_pixelpipe_cache_free_align(mem) \
   dt_pixelpipe_cache_free_align_cache(darktable.pixelpipe_cache, (void **)&(mem), __FILE__ ":" DT_STRINGIFY(__LINE__));
 
-#define dt_free(ptr)    \
-  do                    \
-  {                     \
-    g_free((void *)(ptr)); \
+#define dt_free(ptr)           \
+  if(!IS_NULL_PTR(ptr))        \
+  {                            \
+    g_free((void *)(ptr));     \
     *(void **)(&(ptr)) = NULL; \
-  } while(0)
+  }
 
 static inline void dt_free_gpointer(gpointer ptr)
 {
@@ -516,12 +516,12 @@ static inline void dt_free_gpointer(gpointer ptr)
   }
 #endif
 
-#define dt_free_align(ptr)  \
-  do                        \
-  {                         \
+#define dt_free_align(ptr)            \
+  if(!IS_NULL_PTR(ptr))               \
+  {                                   \
     dt_free_align_ptr((void *)(ptr)); \
-    *(void **)(&(ptr)) = NULL; \
-  } while(0)
+    *(void **)(&(ptr)) = NULL;        \
+  }
 
 static inline void* dt_calloc_align(size_t size)
 {
