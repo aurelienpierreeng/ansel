@@ -612,12 +612,12 @@ set(CMAKE_C_FLAGS_RELEASE "-O3 -DNDEBUG" CACHE STRING "" FORCE)
 set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG" CACHE STRING "" FORCE)
 
 # RelWithDebInfo flags
-set(CMAKE_C_FLAGS_RELWITHDEBINFO "-O3 -g -DNDEBUG" CACHE STRING "" FORCE)
-set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -g -DNDEBUG" CACHE STRING "" FORCE)
+set(CMAKE_C_FLAGS_RELWITHDEBINFO "-O3 -g3 -ggdb3 -DNDEBUG" CACHE STRING "" FORCE)
+set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -g3 -ggdb3 -DNDEBUG" CACHE STRING "" FORCE)
 
 # Debug flags
-set(CMAKE_C_FLAGS_DEBUG "-O0 -g3 -D_DEBUG -fno-omit-frame-pointer -Werror -Wuninitialized" CACHE STRING "" FORCE)
-set(CMAKE_CXX_FLAGS_DEBUG "-O0 -g3 -D_DEBUG -fno-omit-frame-pointer -Werror -Wuninitialized" CACHE STRING "" FORCE)
+set(CMAKE_C_FLAGS_DEBUG "-O0 -g3 -ggdb3 -D_DEBUG -fno-omit-frame-pointer -Werror -Wuninitialized" CACHE STRING "" FORCE)
+set(CMAKE_CXX_FLAGS_DEBUG "-O0 -g3 -ggdb3 -D_DEBUG -fno-omit-frame-pointer -Werror -Wuninitialized" CACHE STRING "" FORCE)
 
 if(NOT CUSTOM_CFLAGS)
 
@@ -641,7 +641,7 @@ if(NOT CUSTOM_CFLAGS)
   set(DT_RELEASE_FLAGS "-ffast-math -ffp-contract=fast -fno-finite-math-only")
 
   # RelWithDebInfo (same perf as release, but no dangerous float arithmetics)
-  set(DT_RELWITHDEBINFO_FLAGS "")
+  set(DT_RELWITHDEBINFO_FLAGS "-ffast-math -ffp-contract=fast -fno-finite-math-only")
 
   # Debug
   set(DT_DEBUG_FLAGS "")
