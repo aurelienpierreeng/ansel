@@ -630,8 +630,8 @@ if(NOT CUSTOM_CFLAGS)
   # in several places. There is no reason to do so, just use binary flags. 
   # TODO: remove the use of dt_nan() in code as a special "undefined" flag for float values
   # TODO: no looping over pixels in place, aka input ptr = output ptr
-  set(DT_BASE_C_FLAGS "${MARCH} -Wfatal-errors -std=c11 -Wall -funroll-loops -fno-strict-aliasing")
-  set(DT_BASE_CXX_FLAGS "${MARCH} -Wfatal-errors -Wall -funroll-loops -fno-strict-aliasing")
+  set(DT_BASE_C_FLAGS "${MARCH} -Wfatal-errors -std=c11 -Wall -funroll-loops -ftree-vectorize -fno-strict-aliasing")
+  set(DT_BASE_CXX_FLAGS "${MARCH} -Wfatal-errors -Wall -funroll-loops -ftree-vectorize -fno-strict-aliasing")
 
   # -------------------------------------------------------------------------
   # Build-type-specific flags
@@ -668,7 +668,7 @@ if(NOT CUSTOM_CFLAGS)
   # Compiler-specific tuning
   # -------------------------------------------------------------------------
   if(CMAKE_C_COMPILER_ID MATCHES "GNU")
-    set(DT_BASE_C_FLAGS "${DT_BASE_C_FLAGS} -Wmaybe-uninitialized -Wno-undef -Wimplicit-function-declaration -Winfinite-recursion -fno-semantic-interposition -fno-signaling-nans -ftree-vectorize -floop-nest-optimize -ftree-loop-im -fvariable-expansion-in-unroller -ftree-loop-im -fira-loop-pressure")
+    set(DT_BASE_C_FLAGS "${DT_BASE_C_FLAGS} -Wmaybe-uninitialized -Wno-undef -Wimplicit-function-declaration -Winfinite-recursion -fno-semantic-interposition -fno-signaling-nans -floop-nest-optimize -ftree-loop-im -fvariable-expansion-in-unroller -ftree-loop-im -fira-loop-pressure")
   elseif(CMAKE_C_COMPILER_ID MATCHES "Clang")
     set(DT_BASE_C_FLAGS "${DT_BASE_C_FLAGS} -fvectorize -fslp-vectorize -ftree-slp-vectorize")
   endif()
