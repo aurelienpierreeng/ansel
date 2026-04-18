@@ -352,7 +352,7 @@ target_include_directories(ansel_deps INTERFACE
   ${LCMS2_INCLUDE_DIRS}
 )
 target_link_libraries(ansel_deps INTERFACE
-  ${RSVG2_LIBRARIES}
+  ${RSVG2_LINK_LIBRARIES}
   ${JSONGLIB_LIBRARIES}
   ${LCMS2_LIBRARIES}
 )
