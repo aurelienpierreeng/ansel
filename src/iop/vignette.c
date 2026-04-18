@@ -275,7 +275,7 @@ static int get_grab(dt_iop_module_t *self, float pointerx, float pointery, float
                     float zoom_scale)
 {
   // trick to convert the radius from image norm to preview abs
-  const float radius[2] = { DT_GUI_MOUSE_EFFECT_RADIUS_SCALED, 0 };
+  float radius[2] = { DT_GUI_MOUSE_EFFECT_RADIUS_SCALED, 0 };
   dt_dev_coordinates_image_abs_to_image_norm(self->dev, radius, 1);
   dt_dev_coordinates_image_norm_to_preview_abs(self->dev, radius, 1); 
   const float radius_sq = radius[0] * radius[0];
