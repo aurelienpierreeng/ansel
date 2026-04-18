@@ -503,6 +503,7 @@ set(_ansel_find_packages
   "PNG||PNG::PNG"
   "JPEG||JPEG::JPEG"
   "TIFF||TIFF::TIFF"
+  "ZLIB||ZLIB::ZLIB"
 )
 
 foreach(_ansel_dep ${_ansel_find_packages})
