@@ -329,19 +329,16 @@ endif()
 # Don't reinvent a worse wheel.
 find_package(PkgConfig)
 pkg_check_modules(GTK3 REQUIRED IMPORTED_TARGET gtk+-3.0>=3.24)
-find_package(Rsvg2 REQUIRED)
-find_package(JsonGlib REQUIRED)
+pkg_check_modules(RSVG2 REQUIRED IMPORTED_TARGET librsvg-2.0)
+pkg_check_modules(JSONGLIB REQUIRED IMPORTED_TARGET json-glib-1.0)
+pkg_check_modules(LIBXML2 REQUIRED IMPORTED_TARGET libxml-2.0)
 find_package(LCMS2 REQUIRED)
-find_package(LibXml2 REQUIRED)
 find_package(JPEG REQUIRED)
 find_package(PNG REQUIRED)
 find_package(TIFF REQUIRED)
 find_package(ZLIB REQUIRED)
 
 target_include_directories(ansel_deps INTERFACE
-  PkgConfig::GTK3
-  Rsvg2::Rsvg2
-  JsonGlib::JsonGlib
   LCMS2::LCMS2
   PNG::PNG
   JPEG::JPEG
@@ -350,8 +347,9 @@ target_include_directories(ansel_deps INTERFACE
 )
 target_link_libraries(ansel_deps INTERFACE
   PkgConfig::GTK3
-  Rsvg2::Rsvg2
-  JsonGlib::JsonGlib
+  PkgConfig::RSVG2
+  PkgConfig::JSONGLIB
+  PkgConfig::LIBXML2
   LCMS2::LCMS2
   PNG::PNG
   JPEG::JPEG
