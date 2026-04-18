@@ -213,7 +213,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
         in += ch;
       }
     }
-    __OMP_PARALLEL_FOR_CPP_END__
+    
 
     dt_pixelpipe_cache_free_align(weights_buf);
 

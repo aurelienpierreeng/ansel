@@ -248,15 +248,7 @@ typedef unsigned int u_int;
 // CLang 20 supports OpenMP 5.1 default(firstprivate) but only for C files.
 // C++ files still need to use default(none) until further notice.
 // Change that when baseline CLang is upgraded.
-#define __OMP_PARALLEL_FOR_CPP__(...) \
-  OMP_PRAGMA(omp parallel __VA_ARGS__) \
-  {  \
-    dt_fp_init(DT_FP_MODE_FAST); \
-    OMP_PRAGMA(for default(none) schedule(static))
-
-#define __OMP_PARALLEL_FOR_CPP_END__ \
-  }
-
+#define __OMP_PARALLEL_FOR_CPP__(...) OMP_PRAGMA(omp parallel for default(none) schedule(static) __VA_ARGS__) 
 
 #else /* _OPENMP */
 
@@ -272,7 +264,6 @@ typedef unsigned int u_int;
 #define __OMP_DECLARE_SIMD__(...)
 
 #define __OMP_PARALLEL_FOR_CPP__(...)
-#define __OMP_PARALLEL_FOR_CPP_END__
 
 #endif /* _OPENMP */
 

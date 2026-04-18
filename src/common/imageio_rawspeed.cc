@@ -593,7 +593,7 @@ dt_imageio_retval_t dt_imageio_open_rawspeed_sraw(dt_image_t *img,
           out[3] = 0.0f;
         }
       }
-      __OMP_PARALLEL_FOR_CPP_END__
+      
     }
     else // r->getDataType() == TYPE_FLOAT32
     {
@@ -609,7 +609,7 @@ dt_imageio_retval_t dt_imageio_open_rawspeed_sraw(dt_image_t *img,
           out[3] = 0.0f;
         }
       }
-      __OMP_PARALLEL_FOR_CPP_END__
+      
     }
   }
   else // case cpp == 3 or 4
@@ -634,7 +634,7 @@ dt_imageio_retval_t dt_imageio_open_rawspeed_sraw(dt_image_t *img,
           out[3] = 0.0f;
         }
       }
-      __OMP_PARALLEL_FOR_CPP_END__
+      
     }
     else // r->getDataType() == TYPE_FLOAT32
     {
@@ -651,7 +651,7 @@ dt_imageio_retval_t dt_imageio_open_rawspeed_sraw(dt_image_t *img,
           out[3] = 0.0f;
         }
       }
-      __OMP_PARALLEL_FOR_CPP_END__
+      
     }
   }
 
