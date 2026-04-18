@@ -99,7 +99,7 @@ static void rcd_ppg_border(float *const out, const float *const in, const int wi
   const int border = margin + 3;
   // write approximatad 3-pixel border region to out
   float sum[8];
-  __OMP_PARALLEL_FOR_FP__(collapse(2))
+  __OMP_PARALLEL_FOR__(collapse(2))
   for(int j = 0; j < height; j++)
   {
     for(int i = 0; i < width; i++)
@@ -128,10 +128,10 @@ static void rcd_ppg_border(float *const out, const float *const in, const int wi
       }
     }
   }
-  __OMP_PARALLEL_FOR_FP_END__
+  
 
   const float *input = in;
-  __OMP_PARALLEL_FOR_FP__()
+  __OMP_PARALLEL_FOR__()
   for(int j = 3; j < height - 3; j++)
   {
     float *buf = out + (size_t)4 * width * j + 4 * 3;
@@ -194,10 +194,10 @@ static void rcd_ppg_border(float *const out, const float *const in, const int wi
       buf_in++;
     }
   }
-  __OMP_PARALLEL_FOR_FP_END__
+  
 
   // for all pixels: interpolate colors into float array
-  __OMP_PARALLEL_FOR_FP__()
+  __OMP_PARALLEL_FOR__()
   for(int j = 1; j < height - 1; j++)
   {
     float *buf = out + (size_t)4 * width * j + 4;
@@ -273,7 +273,7 @@ static void rcd_ppg_border(float *const out, const float *const in, const int wi
       buf += 4;
     }
   }
-  __OMP_PARALLEL_FOR_FP_END__
+  
 }
 
 static void rcd_demosaic(const dt_dev_pixelpipe_iop_t *piece, float *const restrict out, const float *const restrict in, dt_iop_roi_t *const roi_out,

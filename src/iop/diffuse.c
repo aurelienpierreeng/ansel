@@ -605,9 +605,9 @@ static inline void init_reconstruct(float *const restrict reconstructed, const s
                                     const size_t height)
 {
 // init the reconstructed buffer with non-clipped and partially clipped pixels
-  __OMP_PARALLEL_FOR_SIMD_FP__(aligned(reconstructed:64))
+  __OMP_PARALLEL_FOR_SIMD__(aligned(reconstructed:64))
   for(size_t k = 0; k < height * width * 4; k++) reconstructed[k] = 0.f;
-  __OMP_PARALLEL_FOR_SIMD_FP_END__
+  
 }
 
 
@@ -777,7 +777,7 @@ static inline void heat_PDE_diffusion(const float *const restrict high_freq, con
   const dt_aligned_pixel_simd_t normalized_regularization_v = dt_simd_set1(normalized_regularization);
   const dt_aligned_pixel_simd_t strength_v = dt_simd_set1(strength);
 
-  __OMP_PARALLEL_FOR_FP__()
+  __OMP_PARALLEL_FOR__()
   for(size_t row = 0; row < height; ++row)
   {
     // interleave the order in which we process the rows so that we minimize cache misses
@@ -939,7 +939,7 @@ static inline void heat_PDE_diffusion(const float *const restrict high_freq, con
       }
     }
   }
-  __OMP_PARALLEL_FOR_FP_END__
+  
 
   if(use_nontemporal)
     dt_omploop_sfence();  // ensure the final nontemporal writeback completes before the caller reads out
@@ -1102,13 +1102,13 @@ __DT_CLONE_TARGETS__
 static inline void build_mask(const float *const restrict input, uint8_t *const restrict mask,
                               const float threshold, const size_t width, const size_t height)
 {
-  __OMP_PARALLEL_FOR_SIMD_FP__(aligned(mask, input : 64))
+  __OMP_PARALLEL_FOR_SIMD__(aligned(mask, input : 64))
   for(size_t k = 0; k < height * width * 4; k += 4)
   {
     // TRUE if any channel is above threshold
     mask[k / 4] = (input[k] > threshold || input[k + 1] > threshold || input[k + 2] > threshold);
   }
-  __OMP_PARALLEL_FOR_SIMD_FP_END__
+  
 }
 
 __DT_CLONE_TARGETS__
@@ -1117,7 +1117,7 @@ static inline void inpaint_mask(float *const restrict inpainted, const float *co
                                 const size_t height)
 {
   // init the reconstruction with noise inside the masked areas
-  __OMP_PARALLEL_FOR_FP__()
+  __OMP_PARALLEL_FOR__()
   for(size_t k = 0; k < height * width * 4; k += 4)
   {
     if(mask[k / 4])
@@ -1141,7 +1141,7 @@ static inline void inpaint_mask(float *const restrict inpainted, const float *co
         inpainted[k + c] = original[k + c];
     }
   }
-  __OMP_PARALLEL_FOR_FP_END__
+  
 }
 
 __DT_CLONE_TARGETS__

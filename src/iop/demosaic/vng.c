@@ -193,10 +193,10 @@ static int vng_interpolate(float *out, const float *const in,
 
   if(filters != 9 && !FILTERS_ARE_4BAYER(filters)) // x-trans or CYGM/RGBE
 // for Bayer mix the two greens to make VNG4
-    __OMP_PARALLEL_FOR_FP__()
+    __OMP_PARALLEL_FOR__()
     for(int i = 0; i < height * width; i++) 
       out[i * 4 + 1] = (out[i * 4 + 1] + out[i * 4 + 3]) / 2.0f;
-    __OMP_PARALLEL_FOR_FP_END__
+    
     
   return 0;
 }

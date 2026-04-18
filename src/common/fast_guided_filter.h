@@ -103,7 +103,7 @@ static inline void interpolate_bilinear(const float *const restrict in, const si
                                         const size_t ch)
 {
   // Fast vectorized bilinear interpolation on ch channels
-  __OMP_PARALLEL_FOR_FP__(collapse(2))
+  __OMP_PARALLEL_FOR__(collapse(2))
   for(size_t i = 0; i < height_out; i++)
   {
     for(size_t j = 0; j < width_out; j++)
@@ -152,7 +152,7 @@ static inline void interpolate_bilinear(const float *const restrict in, const si
       }
     }
   }
-  __OMP_PARALLEL_FOR_FP_END__
+  
 }
 
 

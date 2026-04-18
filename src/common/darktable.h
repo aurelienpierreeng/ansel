@@ -238,32 +238,8 @@ typedef unsigned int u_int;
 
 #define OMP_PRAGMA(x) _Pragma(#x)
 #define __OMP_PARALLEL__(...) OMP_PRAGMA(omp parallel default(firstprivate) __VA_ARGS__)
-
-
 #define __OMP_PARALLEL_FOR__(...) OMP_PRAGMA(omp parallel for default(firstprivate) schedule(static) __VA_ARGS__)
-
-#define __OMP_PARALLEL_FOR_FP__(...)                                     \
-  OMP_PRAGMA(omp parallel default(firstprivate))                         \
-  {                                                                      \
-    dt_fp_init(DT_FP_MODE_FAST);                                         \
-    OMP_PRAGMA(omp for schedule(static) __VA_ARGS__)
-
-#define __OMP_PARALLEL_FOR_FP_END__ \
-  }
-
-
 #define __OMP_PARALLEL_FOR_SIMD__(...) OMP_PRAGMA(omp parallel for simd default(firstprivate) schedule(simd:static) __VA_ARGS__)
-
-#define __OMP_PARALLEL_FOR_SIMD_FP__(...)                                \
-  OMP_PRAGMA(omp parallel default(firstprivate))                         \
-  {                                                                      \
-    dt_fp_init(DT_FP_MODE_FAST);                                         \
-    OMP_PRAGMA(omp for simd schedule(simd:static) __VA_ARGS__)
-
-#define __OMP_PARALLEL_FOR_SIMD_FP_END__ \
-  }
-
-
 #define __OMP_FOR_SIMD__(...) OMP_PRAGMA(omp for simd schedule(simd:static) __VA_ARGS__)
 #define __OMP_FOR__(...) OMP_PRAGMA(omp for schedule(static) __VA_ARGS__)
 #define __OMP_SIMD__(...) OMP_PRAGMA(omp simd __VA_ARGS__)
@@ -289,11 +265,7 @@ typedef unsigned int u_int;
 
 #define __OMP_PARALLEL__(...) 
 #define __OMP_PARALLEL_FOR__(...)
-#define __OMP_PARALLEL_FOR_FP__(...)
-#define __OMP_PARALLEL_FOR_FP_END__
 #define __OMP_PARALLEL_FOR_SIMD__(...)
-#define __OMP_PARALLEL_FOR_SIMD_FP__(...)
-#define __OMP_PARALLEL_FOR_SIMD_FP_END__
 #define __OMP_FOR_SIMD__(...)
 #define __OMP_FOR__(...)
 #define __OMP_SIMD__(...)
