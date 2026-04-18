@@ -56,7 +56,7 @@ template <typename T> struct limits
   }
 };
 
-template <typename T> constexpr limits<T> bounds()
+template <typename T> constexpr limits<T> infinity()
 {
   return limits<T>{};
 }
@@ -731,17 +731,17 @@ float interpolate_val_V2_periodic(int n, CurveAnchorPoint Points[], float x, uns
 {
   if(type == CUBIC_SPLINE)
   {
-    interpol::smooth_cubic_spline<float> s(Points, Points + n, { 0.f, period }, interpol::bounds<float>(), true);
+    interpol::smooth_cubic_spline<float> s(Points, Points + n, { 0.f, period }, interpol::infinity<float>(), true);
     return s(x);
   }
   else if(type == CATMULL_ROM)
   {
-    interpol::Catmull_Rom_spline<float> s(Points, Points + n, { 0.f, period }, interpol::bounds<float>(), true);
+    interpol::Catmull_Rom_spline<float> s(Points, Points + n, { 0.f, period }, interpol::infinity<float>(), true);
     return s(x);
   }
   else if(type == MONOTONE_HERMITE)
   {
-    interpol::monotone_hermite_spline<float> s(Points, Points + n, { 0.f, period }, interpol::bounds<float>(),
+    interpol::monotone_hermite_spline<float> s(Points, Points + n, { 0.f, period }, interpol::infinity<float>(),
                                                true);
     return s(x);
   }
