@@ -48,8 +48,8 @@ template <typename T> struct base_point
 
 template <typename T> struct limits
 {
-  T min{ -std::numeric_limits<T>::max() };
-  T max{ +std::numeric_limits<T>::max() };
+  T min{ -std::numeric_limits<T>::infinity() };
+  T max{ +std::numeric_limits<T>::infinity() };
   limits() = default;
   limits(T min_, T max_) : min{ std::min(min_, max_) }, max{ std::max(min_, max_) }
   {
