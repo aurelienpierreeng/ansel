@@ -1,3 +1,9 @@
+# We don't control the code under here, so don't turn warnings into errors
+set(_PARENT_C_FLAGS "${CMAKE_C_FLAGS}")
+set(_PARENT_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-error")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error")
+
 if(USE_XCF)
   add_subdirectory(libxcf)
 endif()
@@ -112,3 +118,7 @@ set(CMAKE_CXX_CLANG_TIDY "${CMAKE_CXX_CLANG_TIDY_SAVE}")
 set(CMAKE_CXX_INCLUDE_WHAT_YOU_USE "${CMAKE_CXX_INCLUDE_WHAT_YOU_USE_SAVE}")
 
 set(BUILD_TESTING "${BUILD_TESTING_SAVE}" CACHE BOOL "" FORCE)
+
+# Restore parent C flags
+set(CMAKE_C_FLAGS "${_PARENT_C_FLAGS}")
+set(CMAKE_CXX_FLAGS "${_PARENT_CXX_FLAGS}")
