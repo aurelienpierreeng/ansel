@@ -321,11 +321,14 @@ if(USE_DARKTABLE_PROFILING)
 	set(SOURCES ${SOURCES} "common/profiling.c")
 endif()
 
-#
+##
 # Find all other required libraries for building
-#
+##
 
-find_package(GTK3 3.24 REQUIRED)
+# For GTK3, we grab the PkgConfig definition directly.
+# Don't reinvent a worse wheel.
+find_package(PkgConfig)
+pkg_check_modules(GTK3 REQUIRED IMPORTED_TARGET gtk+-3.0>=3.24)
 find_package(Rsvg2 REQUIRED)
 find_package(JsonGlib REQUIRED)
 find_package(LCMS2 REQUIRED)
@@ -336,7 +339,7 @@ find_package(TIFF REQUIRED)
 find_package(ZLIB REQUIRED)
 
 target_include_directories(ansel_deps INTERFACE
-  GTK3::GTK3
+  PkgConfig::GTK3
   Rsvg2::Rsvg2
   JsonGlib::JsonGlib
   LCMS2::LCMS2
@@ -346,7 +349,7 @@ target_include_directories(ansel_deps INTERFACE
   ZLIB::ZLIB
 )
 target_link_libraries(ansel_deps INTERFACE
-  GTK3::GTK3
+  PkgConfig::GTK3
   Rsvg2::Rsvg2
   JsonGlib::JsonGlib
   LCMS2::LCMS2
@@ -996,11 +999,11 @@ endif()
 message(STATUS "Public libs:" ${LIBS})
 message(STATUS "Static libs:" ${STATIC_LIBS})
 
-get_target_property(_ansel_deps_libs ansel_deps INTERFACE_LINK_LIBRARIES)
-if(_ansel_deps_libs)
-  list(REMOVE_DUPLICATES _ansel_deps_libs)
-  set_property(TARGET ansel_deps PROPERTY INTERFACE_LINK_LIBRARIES "${_ansel_deps_libs}")
-endif()
+#get_target_property(_ansel_deps_libs ansel_deps INTERFACE_LINK_LIBRARIES)
+#if(_ansel_deps_libs)
+#  list(REMOVE_DUPLICATES _ansel_deps_libs)
+#  set_property(TARGET ansel_deps PROPERTY INTERFACE_LINK_LIBRARIES "${_ansel_deps_libs}")
+#endif()
 
 message(STATUS "Ansel deps:" ${_ansel_deps_libs})
 
