@@ -286,6 +286,12 @@ typedef struct dt_image_t
   uint32_t group_members;
   uint32_t history_items;
   uint64_t history_hash;
+
+  // mipmap_hash is stored in database as an attempt to record the validity
+  // of thumbnails stored on the disk cache. But it is actually unusable until we
+  // have one hash per mipmap size. So it's not implemented anywhere for now.
+  // Saving all hashes for all mipmap sizes will change the database structure and
+  // loose compatibility.
   uint64_t mipmap_hash;
   uint64_t self_hash;
 
