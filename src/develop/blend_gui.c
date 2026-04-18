@@ -862,7 +862,7 @@ static void _update_gradient_slider_pickers(GtkWidget *callback_dummy, dt_iop_mo
 
     if((gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(data->colorpicker)) ||
         gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(data->colorpicker_set_values))) &&
-       (raw_min[0] != FLT_MAX))
+       (raw_min[0] != INFINITY))
     {
       float picker_mean[8], picker_min[8], picker_max[8];
       float cooked[8];

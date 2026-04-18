@@ -389,7 +389,7 @@ double dt_atof(const char *str)
     sign = -1;
   }
   if (strncmp(str, "inf", 3) == 0 || strncmp(str, "INF", 3) == 0)
-    return sign * FLT_MAX;
+    return sign * INFINITY;
   // search for end of integral part and parse from
   // right to left for numerical stability
   const char * istr_back = str;

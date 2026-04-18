@@ -47,7 +47,7 @@
 #define BORDER_MIN 0.00005f
 #define BORDER_MAX 0.5f
 
-// Helper function to find the FLT_MAX separator in border array
+// Helper function to find the INFINITY separator in border array
 static int _find_border_separator(const float *border, int count)
 {
 
@@ -880,7 +880,7 @@ static int _gradient_get_pts_border(dt_develop_t *dev, float x, float y, float r
   
   if(valid1 && valid2)
   {
-    // Both curves valid - combine them with FLT_MAX separator
+    // Both curves valid - combine them with INFINITY separator
     const int total_points = (points_count1 - 3) + (points_count2 - 3) + 1;
     *points = dt_pixelpipe_cache_alloc_align_float_cache((size_t)2 * total_points, 0);
     if(IS_NULL_PTR(*points)) goto cleanup;
@@ -889,7 +889,7 @@ static int _gradient_get_pts_border(dt_develop_t *dev, float x, float y, float r
     int k = 0;
     
     _copy_points(*points, points1, points_count1, &k);
-    (*points)[k * 2] = (*points)[k * 2 + 1] = FLT_MAX; // Separator
+    (*points)[k * 2] = (*points)[k * 2 + 1] = INFINITY; // Separator
     k++;
     _copy_points(*points, points2, points_count2, &k);
     err = 0;

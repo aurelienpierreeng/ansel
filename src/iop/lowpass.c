@@ -261,8 +261,8 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
 
   if(unbound)
   {
-    for(int k = 0; k < 4; k++) Labmax[k] = FLT_MAX;
-    for(int k = 0; k < 4; k++) Labmin[k] = -FLT_MAX;
+    for(int k = 0; k < 4; k++) Labmax[k] = INFINITY;
+    for(int k = 0; k < 4; k++) Labmin[k] = -INFINITY;
   }
 
   if(d->lowpass_algo == LOWPASS_ALGO_GAUSSIAN)
@@ -414,8 +414,8 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
   if(unbound)
   {
-    for(int k = 0; k < 4; k++) Labmax[k] = FLT_MAX;
-    for(int k = 0; k < 4; k++) Labmin[k] = -FLT_MAX;
+    for(int k = 0; k < 4; k++) Labmax[k] = INFINITY;
+    for(int k = 0; k < 4; k++) Labmin[k] = -INFINITY;
   }
 
   if(data->lowpass_algo == LOWPASS_ALGO_GAUSSIAN)

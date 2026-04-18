@@ -249,7 +249,7 @@ void modify_roi_in(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, dt_dev
 
   dt_boundingbox_t aabb = { roi_out->x, roi_out->y, roi_out->x + roi_out->width, roi_out->y + roi_out->height };
 
-  dt_boundingbox_t aabb_in = { FLT_MAX, FLT_MAX, -FLT_MAX, -FLT_MAX };
+  dt_boundingbox_t aabb_in = { INFINITY, INFINITY, -INFINITY, -INFINITY };
 
   for(int c = 0; c < 4; c++)
   {

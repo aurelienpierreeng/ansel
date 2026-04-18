@@ -452,12 +452,12 @@ static void _build_projection(dt_lut_viewer_projection_t *projection, const floa
   projection->screen_y = _normalize3(_cross3(projection->screen_x, projection->screen_z));
   projection->screen_z = _normalize3(projection->screen_z);
 
-  projection->min_x = FLT_MAX;
-  projection->max_x = -FLT_MAX;
-  projection->min_y = FLT_MAX;
-  projection->max_y = -FLT_MAX;
-  projection->min_depth = FLT_MAX;
-  projection->max_depth = -FLT_MAX;
+  projection->min_x = INFINITY;
+  projection->max_x = -INFINITY;
+  projection->min_y = INFINITY;
+  projection->max_y = -INFINITY;
+  projection->min_depth = INFINITY;
+  projection->max_depth = -INFINITY;
 
   /**
    * The cube bounds define the orthographic framing for every sampled LUT

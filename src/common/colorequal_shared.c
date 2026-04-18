@@ -365,7 +365,7 @@ void dt_colorrings_brightness_to_axis_rgb(const float brightness, const float wh
 
 float dt_colorrings_distance_to_cube_shell(const dt_aligned_pixel_t axis, const dt_aligned_pixel_t direction)
 {
-  float distance = FLT_MAX;
+  float distance = INFINITY;
 
   for(int c = 0; c < 3; c++)
   {

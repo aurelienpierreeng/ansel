@@ -383,7 +383,7 @@ static gboolean _sync_simple_from_params(dt_iop_module_t *self, const int point,
   float roundtrip[3][3] = { { 0.f } };
   dt_iop_channelmixer_shared_simple_params_t simple;
 
-  if(!IS_NULL_PTR(error)) *error = FLT_MAX;
+  if(!IS_NULL_PTR(error)) *error = INFINITY;
 
   _get_point_rows(p, point, rows, normalize);
   if(!dt_iop_channelmixer_shared_rows_are_normalized(normalize)) return FALSE;
@@ -418,7 +418,7 @@ static gboolean _sync_primaries_from_params(dt_iop_module_t *self, const int poi
   float roundtrip[3][3] = { { 0.f } };
   dt_iop_channelmixer_shared_primaries_params_t primaries;
 
-  if(!IS_NULL_PTR(error)) *error = FLT_MAX;
+  if(!IS_NULL_PTR(error)) *error = INFINITY;
 
   _get_point_rows(p, point, rows, normalize);
   if(!dt_iop_channelmixer_shared_get_matrix(rows, normalize, FALSE, M)) return FALSE;
@@ -547,8 +547,8 @@ static void _update_point_gui(dt_iop_module_t *self, const int point, GtkWidget 
 
   if(IS_NULL_PTR(changed) || complete_widget)
   {
-    float simple_error = FLT_MAX;
-    float primaries_error = FLT_MAX;
+    float simple_error = INFINITY;
+    float primaries_error = INFINITY;
     const gboolean simple_ok = _sync_simple_from_params(self, point, &simple_error);
     const gboolean primaries_ok = _sync_primaries_from_params(self, point, &primaries_error);
 
@@ -744,7 +744,7 @@ static void _mixer_mode_callback(GtkWidget *widget, gpointer user_data)
 
   if(mode == DT_SPLITTONING_RGB_MIXER_SIMPLE)
   {
-    float error = FLT_MAX;
+    float error = INFINITY;
     if(!_sync_simple_from_params(self, point, &error))
     {
       dt_control_log(_("simple mixer mode requires normalized rows with non-zero sums."));
@@ -758,7 +758,7 @@ static void _mixer_mode_callback(GtkWidget *widget, gpointer user_data)
   }
   else if(mode == DT_SPLITTONING_RGB_MIXER_PRIMARIES)
   {
-    float error = FLT_MAX;
+    float error = INFINITY;
     if(!_sync_primaries_from_params(self, point, &error))
     {
       dt_control_log(_("primaries mixer mode requires a non-singular 3x3 matrix with non-zero affine sums."));
@@ -1063,8 +1063,8 @@ void gui_update(struct dt_iop_module_t *self)
     dt_bauhaus_slider_set(g->point[point].temperature, p->temperature[point]);
     _set_point_complete_widgets(g, p, point);
 
-    float simple_error = FLT_MAX;
-    float primaries_error = FLT_MAX;
+    float simple_error = INFINITY;
+    float primaries_error = INFINITY;
     const gboolean simple_ok = _sync_simple_from_params(self, point, &simple_error);
     const gboolean primaries_ok = _sync_primaries_from_params(self, point, &primaries_error);
     const dt_iop_splittoning_rgb_mixer_mode_t requested_mode = dt_conf_key_exists(_mode_conf[point])
