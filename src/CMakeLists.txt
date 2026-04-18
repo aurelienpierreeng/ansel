@@ -324,16 +324,60 @@ endif()
 #
 # Find all other required libraries for building
 #
+
 # GTK3 does pull glib, but this allows us to check for the version
-pkg_check_modules(Glib REQUIRED IMPORTED_TARGET glib-2.0>=2.64)
-pkg_check_modules(GObject REQUIRED IMPORTED_TARGET gobject-2.0)
-pkg_check_modules(GIO REQUIRED IMPORTED_TARGET gio-2.0)
-pkg_check_modules(GThread REQUIRED IMPORTED_TARGET gthread-2.0)
-pkg_check_modules(GModule REQUIRED IMPORTED_TARGET gmodule-2.0)
-pkg_check_modules(PangoCairo REQUIRED IMPORTED_TARGET pangocairo)
-pkg_check_modules(Rsvg2 REQUIRED IMPORTED_TARGET librsvg-2.0)
-pkg_check_modules(JsonGlib REQUIRED IMPORTED_TARGET json-glib-1.0)
-pkg_check_modules(LCMS2 REQUIRED IMPORTED_TARGET lcms2)
+## The following works on CMake 3.28 and 3.30 but fails big time an 3.31 :
+#pkg_check_modules(Glib REQUIRED IMPORTED_TARGET glib-2.0>=2.64)
+#pkg_check_modules(GObject REQUIRED IMPORTED_TARGET gobject-2.0)
+#pkg_check_modules(GIO REQUIRED IMPORTED_TARGET gio-2.0)
+#pkg_check_modules(GThread REQUIRED IMPORTED_TARGET gthread-2.0)
+#pkg_check_modules(GModule REQUIRED IMPORTED_TARGET gmodule-2.0)
+#pkg_check_modules(PangoCairo REQUIRED IMPORTED_TARGET pangocairo)
+#pkg_check_modules(Rsvg2 REQUIRED IMPORTED_TARGET librsvg-2.0)
+#pkg_check_modules(JsonGlib REQUIRED IMPORTED_TARGET json-glib-1.0)
+#pkg_check_modules(LCMS2 REQUIRED IMPORTED_TARGET lcms2)
+
+## <trash>
+
+find_package(PkgConfig REQUIRED)
+
+pkg_check_modules(GLIB REQUIRED glib-2.0>=2.64)
+pkg_check_modules(GOBJECT REQUIRED gobject-2.0)
+pkg_check_modules(GIO REQUIRED gio-2.0)
+pkg_check_modules(GTHREAD REQUIRED gthread-2.0)
+pkg_check_modules(GMODULE REQUIRED gmodule-2.0)
+
+pkg_check_modules(PANGOCAIRO REQUIRED pangocairo)
+pkg_check_modules(RSVG2 REQUIRED librsvg-2.0)
+pkg_check_modules(JSONGLIB REQUIRED json-glib-1.0)
+pkg_check_modules(LCMS2 REQUIRED lcms2)
+
+add_library(ansel_glib INTERFACE)
+target_include_directories(ansel_deps INTERFACE
+  ${GLIB_INCLUDE_DIRS}
+  ${GOBJECT_INCLUDE_DIRS}
+  ${GIO_INCLUDE_DIRS}
+  ${GTHREAD_INCLUDE_DIRS}
+  ${GMODULE_INCLUDE_DIRS}
+  ${PANGOCAIRO_INCLUDE_DIRS}
+  ${RSVG2_INCLUDE_DIRS}
+  ${JSONGLIB_INCLUDE_DIRS}
+  ${LCMS2_INCLUDE_DIRS}
+)
+target_link_libraries(ansel_deps INTERFACE
+  ${GLIB_LIBRARIES}
+  ${GOBJECT_LIBRARIES}
+  ${GIO_LIBRARIES}
+  ${GTHREAD_LIBRARIES}
+  ${GMODULE_LIBRARIES}
+  ${PANGOCAIRO_LIBRARIES}
+  ${RSVG2_LIBRARIES}
+  ${JSONGLIB_LIBRARIES}
+  ${LCMS2_LIBRARIES}
+)
+
+## </trash>
+## Remove the preceding when CMake 3.31 will have fixed its shit
 
 add_definitions("-DGLIB_VERSION_MIN_REQUIRED=GLIB_VERSION_2_64")
 add_definitions("-DGLIB_VERSION_MAX_ALLOWED=GLIB_VERSION_MIN_REQUIRED")
@@ -475,22 +519,6 @@ foreach(_ansel_dep ${_ansel_find_packages})
 
   target_link_libraries(ansel_deps INTERFACE ${_ansel_dep_target})
 endforeach()
-
-foreach(_ansel_dep Glib GObject GIO GThread GModule PangoCairo Rsvg2 JsonGlib)
-  target_link_libraries(ansel_deps INTERFACE PkgConfig::${_ansel_dep})
-endforeach()
-
-# LCMS2 doesn't have modern CMake import
-if(NOT TARGET LCMS2::LCMS2)
-  add_library(LCMS2::LCMS2 INTERFACE IMPORTED)
-
-  set_target_properties(LCMS2::LCMS2 PROPERTIES
-    INTERFACE_INCLUDE_DIRECTORIES "${LCMS2_INCLUDE_DIRS}"
-    INTERFACE_COMPILE_DEFINITIONS "${LCMS2_DEFINITIONS}"
-    INTERFACE_LINK_LIBRARIES "PkgConfig::LCMS2"
-  )
-endif()
-target_link_libraries(ansel_deps INTERFACE LCMS2::LCMS2)
 
 # Require exiv2 >= 0.27 to make sure everything we need is available
 find_package(Exiv2 0.27.4 REQUIRED)
