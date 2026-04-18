@@ -663,6 +663,5 @@ void dt_menu_apply_dev_history_update(dt_develop_t *dev, const gboolean history_
   dt_dev_reload_history_items(dev, dev->image_storage.id);
   dt_dev_history_gui_update(dev);
   dt_dev_history_pixelpipe_update(dev, TRUE);
-  dt_dev_history_notify_change(dev, dev->image_storage.id);
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
 }

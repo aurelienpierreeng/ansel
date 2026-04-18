@@ -585,7 +585,6 @@ static void _pop_undo(gpointer user_data, dt_undo_type_t type, dt_undo_data_t da
   dt_dev_history_gui_update(dev);
   // TODO: check if we need to rebuild the full pipeline and do it only if needed
   dt_dev_history_pixelpipe_update(dev, TRUE);
-  dt_dev_history_notify_change(dev, dev->image_storage.id);
 
   if(dev->gui_module)
   {
@@ -953,7 +952,6 @@ void dt_dev_add_history_item_real(dt_develop_t *dev, dt_iop_module_t *module, gb
   // we accept an asynchronous write because `dev` is the long-lived darkroom
   // context and there is no immediate DB read on the same control path.
   dt_dev_write_history(dev, TRUE);
-  dt_dev_history_notify_change(dev, dev->image_storage.id);
 }
 
 void dt_dev_free_history_item(gpointer data)
@@ -1185,7 +1183,7 @@ void dt_dev_history_notify_change(dt_develop_t *dev, const int32_t imgid)
 
   // Don't refresh the thumbnail if we are in darkroom
   // Spawning another export thread will likely slow-down the current one.
-  if(darktable.gui && dev != darktable.develop)
+  if(darktable.gui)
     dt_thumbtable_refresh_thumbnail(darktable.gui->ui->thumbtable_lighttable, imgid, TRUE);
 }
 
@@ -1269,6 +1267,7 @@ static int _dt_dev_write_history_job_run(dt_job_t *job)
   dt_pthread_rwlock_rdlock(&d->history_mutex);
   dt_dev_write_history_ext(d, d->image_storage.id);
   dt_pthread_rwlock_unlock(&d->history_mutex);
+  dt_dev_history_notify_change(d, d->image_storage.id);
   return 0;
 }
 
@@ -1280,6 +1279,7 @@ void dt_dev_write_history(dt_develop_t *dev, gboolean async)
     dt_pthread_rwlock_rdlock(&dev->history_mutex);
     dt_dev_write_history_ext(dev, dev->image_storage.id);
     dt_pthread_rwlock_unlock(&dev->history_mutex);
+    dt_dev_history_notify_change(dev, dev->image_storage.id);
     return;
   }
 

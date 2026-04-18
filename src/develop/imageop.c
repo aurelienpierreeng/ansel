@@ -629,7 +629,6 @@ static void _gui_delete_callback(GtkButton *button, dt_iop_module_t *module)
 
   // Save history
   dt_dev_write_history(dev, FALSE);
-  dt_dev_history_notify_change(dev, dev->image_storage.id);
 
   // don't delete the module, a pipe may still need it
   dev->alliop = g_list_append(dev->alliop, module);
