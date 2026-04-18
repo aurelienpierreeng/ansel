@@ -341,36 +341,17 @@ endif()
 
 find_package(PkgConfig REQUIRED)
 
-pkg_check_modules(GLIB REQUIRED glib-2.0>=2.64)
-pkg_check_modules(GOBJECT REQUIRED gobject-2.0)
-pkg_check_modules(GIO REQUIRED gio-2.0)
-pkg_check_modules(GTHREAD REQUIRED gthread-2.0)
-pkg_check_modules(GMODULE REQUIRED gmodule-2.0)
-
-pkg_check_modules(PANGOCAIRO REQUIRED pangocairo)
 pkg_check_modules(RSVG2 REQUIRED librsvg-2.0)
 pkg_check_modules(JSONGLIB REQUIRED json-glib-1.0)
 pkg_check_modules(LCMS2 REQUIRED lcms2)
 
 add_library(ansel_glib INTERFACE)
 target_include_directories(ansel_deps INTERFACE
-  ${GLIB_INCLUDE_DIRS}
-  ${GOBJECT_INCLUDE_DIRS}
-  ${GIO_INCLUDE_DIRS}
-  ${GTHREAD_INCLUDE_DIRS}
-  ${GMODULE_INCLUDE_DIRS}
-  ${PANGOCAIRO_INCLUDE_DIRS}
   ${RSVG2_INCLUDE_DIRS}
   ${JSONGLIB_INCLUDE_DIRS}
   ${LCMS2_INCLUDE_DIRS}
 )
 target_link_libraries(ansel_deps INTERFACE
-  ${GLIB_LIBRARIES}
-  ${GOBJECT_LIBRARIES}
-  ${GIO_LIBRARIES}
-  ${GTHREAD_LIBRARIES}
-  ${GMODULE_LIBRARIES}
-  ${PANGOCAIRO_LIBRARIES}
   ${RSVG2_LIBRARIES}
   ${JSONGLIB_LIBRARIES}
   ${LCMS2_LIBRARIES}
