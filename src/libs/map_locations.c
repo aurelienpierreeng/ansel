@@ -555,7 +555,7 @@ static void _name_editing_done(GtkCellEditable *editable, dt_lib_module_t *self)
             // add the location on the map
             dt_map_location_data_t g;
             g.shape = dt_conf_get_int("plugins/map/locationshape");
-            g.lon = g.lat = dt_nan();
+            g.lon = g.lat = NAN;
             g.delta1 = g.delta2 = 0.0;
             g.polygons = d->polygons;
             dt_view_map_add_location(darktable.view_manager, &g, locid);

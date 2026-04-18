@@ -723,7 +723,7 @@ float interpolate_val_V2(int n, CurveAnchorPoint Points[], float x, unsigned int
     interpol::monotone_hermite_spline<float> s(Points, Points + n);
     return s(x);
   }
-  return dt_nan();
+  return NAN;
 }
 
 
@@ -745,7 +745,7 @@ float interpolate_val_V2_periodic(int n, CurveAnchorPoint Points[], float x, uns
                                                true);
     return s(x);
   }
-  return dt_nan();
+  return NAN;
 }
 
 

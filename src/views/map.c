@@ -2141,7 +2141,7 @@ static gboolean _view_map_display_selected(gpointer user_data)
       const int32_t imgid = GPOINTER_TO_INT(iter->data);
       dt_image_geoloc_t geoloc;
       dt_image_get_location(imgid, &geoloc);
-      if(dt_isnan(geoloc.longitude) || dt_isnan(geoloc.latitude)) continue;
+      if(isnan(geoloc.longitude) || isnan(geoloc.latitude)) continue;
 
       max_longitude = fmax(max_longitude, geoloc.longitude);
       min_longitude = fmin(min_longitude, geoloc.longitude);
@@ -2740,7 +2740,7 @@ static void _view_map_center_on_image(dt_view_t *self, const int32_t imgid)
     dt_image_geoloc_t geoloc;
     dt_image_get_location(imgid, &geoloc);
 
-    if(!dt_isnan(geoloc.longitude) && !dt_isnan(geoloc.latitude))
+    if(!isnan(geoloc.longitude) && !isnan(geoloc.latitude))
     {
       int zoom;
       g_object_get(G_OBJECT(lib->map), "zoom", &zoom, NULL);
@@ -2863,7 +2863,7 @@ static void _drag_and_drop_received(GtkWidget *widget, GdkDragContext *context, 
         osm_gps_map_point_free(pt);
         // TODO redraw the image group
         // it seems that at this time osm_gps_map doesn't answer before dt_image_set_locations(). Locked in some way ?
-        const dt_image_geoloc_t geoloc = { longitude, latitude, dt_nan() };
+        const dt_image_geoloc_t geoloc = { longitude, latitude, NAN };
         dt_control_signal_block_by_func(darktable.signals, G_CALLBACK(_view_map_collection_changed), self);
         dt_image_set_locations(imgs, &geoloc, TRUE);
         dt_control_signal_unblock_by_func(darktable.signals, G_CALLBACK(_view_map_collection_changed), self);

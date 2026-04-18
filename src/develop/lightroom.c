@@ -793,7 +793,7 @@ static void _lrop(const dt_develop_t *dev, const xmlDocPtr doc, const int32_t im
     else if(!xmlStrcmp(name, (const xmlChar *)"GPSLatitude"))
     {
       double latitude = dt_util_gps_string_to_number((const char *)value);
-      if(!dt_isnan(latitude))
+      if(!isnan(latitude))
       {
         data->lat = latitude;
         data->has_gps = TRUE;
@@ -802,7 +802,7 @@ static void _lrop(const dt_develop_t *dev, const xmlDocPtr doc, const int32_t im
     else if(!xmlStrcmp(name, (const xmlChar *)"GPSLongitude"))
     {
       double longitude = dt_util_gps_string_to_number((const char *)value);
-      if(!dt_isnan(longitude))
+      if(!isnan(longitude))
       {
         data->lon = longitude;
         data->has_gps = TRUE;
@@ -1171,13 +1171,13 @@ gboolean dt_lightroom_import(int32_t imgid, dt_develop_t *dev, gboolean iauto)
   data.has_tags = FALSE;
   data.rating = 0;
   data.has_rating = FALSE;
-  data.lat = dt_nan();
-  data.lon = dt_nan();
+  data.lat = NAN;
+  data.lon = NAN;
   data.has_gps = FALSE;
   data.color = 0;
   data.has_colorlabel = FALSE;
-  data.fratio = dt_nan();                // factor ratio image
-  data.crop_roundness = dt_nan();        // from lightroom
+  data.fratio = NAN;                // factor ratio image
+  data.crop_roundness = NAN;        // from lightroom
   data.iwidth = 0;
   data.iheight = 0;                 // image width / height
   data.orientation = EXIF_ORIENTATION_NONE;
@@ -1511,7 +1511,7 @@ gboolean dt_lightroom_import(int32_t imgid, dt_develop_t *dev, gboolean iauto)
     dt_image_geoloc_t geoloc;
     geoloc.longitude = data.lon;
     geoloc.latitude = data.lat;
-    geoloc.elevation = dt_nan();
+    geoloc.elevation = NAN;
     dt_image_set_location(imgid, &geoloc, FALSE, FALSE);
     GList *imgs = NULL;
     imgs = g_list_prepend(imgs, GINT_TO_POINTER(imgid));

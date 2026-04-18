@@ -626,9 +626,9 @@ if(NOT CUSTOM_CFLAGS)
   # -------------------------------------------------------------------------
   # Base flags (shared across all build types)
   # -------------------------------------------------------------------------
-  # The code uses dt_nan() as a special value meaning "undefined"
+  # The code uses NAN as a special value meaning "undefined"
   # in several places. There is no reason to do so, just use binary flags. 
-  # TODO: remove the use of dt_nan() in code as a special "undefined" flag for float values
+  # TODO: remove the use of NAN in code as a special "undefined" flag for float values
   # TODO: no looping over pixels in place, aka input ptr = output ptr
   set(DT_BASE_C_FLAGS "${MARCH} -Wfatal-errors -std=c11 -Wall -funroll-loops -ftree-vectorize -fno-strict-aliasing")
   set(DT_BASE_CXX_FLAGS "${MARCH} -Wfatal-errors -Wall -funroll-loops -ftree-vectorize -fno-strict-aliasing")

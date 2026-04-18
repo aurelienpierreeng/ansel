@@ -374,8 +374,8 @@ uint16_t calculate_clut_haldclut(dt_iop_lut3d_params_t *const p, const char *con
 // provided by @rabauke, atof replaces strtod & sccanf which are locale dependent
 double dt_atof(const char *str)
 {
-  if (strncmp(str, "nan", 3) == 0 || strncmp(str, "dt_nan()", 3) == 0)
-    return dt_nan();
+  if (strncmp(str, "nan", 3) == 0 || strncmp(str, "NAN", 3) == 0)
+    return NAN;
   double integral_result = 0;
   double fractional_result = 0;
   double sign = 1;
@@ -599,7 +599,7 @@ uint16_t calculate_clut_cube(const char *const filepath, float **clut)
         for (int j=0; j < 3; j++)
         {
           lclut[i+j] = dt_atof(token[j]);
-          if(dt_isnan(lclut[i+j]))
+          if(isnan(lclut[i+j]))
           {
             fprintf(stderr, "[lut3d] error - invalid number line %d\n", (int)i/3);
             dt_control_log(_("error - cube lut invalid number line %d"), (int)i/3);

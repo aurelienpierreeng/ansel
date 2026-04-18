@@ -571,7 +571,7 @@ static void workicc_changed(GtkWidget *widget, gpointer user_data)
     g_strlcpy(p->filename_work, filename_work, sizeof(p->filename_work));
 
     const dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_add_profile_info_to_list(self->dev, p->type_work, p->filename_work, DT_INTENT_PERCEPTUAL);
-    if(IS_NULL_PTR(work_profile) || dt_isnan(work_profile->matrix_in[0][0]) || dt_isnan(work_profile->matrix_out[0][0]))
+    if(IS_NULL_PTR(work_profile) || isnan(work_profile->matrix_in[0][0]) || isnan(work_profile->matrix_out[0][0]))
     {
       dt_print(DT_DEBUG_COLORPROFILE,
                "[colorin] can't extract matrix from colorspace `%s', it will be replaced by Rec2020 RGB!\n",
@@ -1058,7 +1058,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   {
     dt_iop_image_copy_by_size(ovoid, ivoid, roi_out->width, roi_out->height, 4);
   }
-  else if(!dt_isnan(d->cmatrix[0][0]))
+  else if(!isnan(d->cmatrix[0][0]))
   {
     process_cmatrix(self, pipe, piece, ivoid, ovoid, roi_in, roi_out);
   }
@@ -1092,7 +1092,7 @@ static void _reset_input_transforms(dt_iop_colorin_data_t *d)
 
 static void _reset_processing_state(dt_iop_colorin_data_t *d, dt_dev_pixelpipe_iop_t *piece)
 {
-  d->cmatrix[0][0] = d->nmatrix[0][0] = d->lmatrix[0][0] = dt_nan();
+  d->cmatrix[0][0] = d->nmatrix[0][0] = d->lmatrix[0][0] = NAN;
   d->lut[0][0] = -1.0f;
   d->lut[1][0] = -1.0f;
   d->lut[2][0] = -1.0f;
@@ -1237,7 +1237,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   const cmsHPROFILE work = work_profile ? work_profile->profile : NULL;
   const gboolean can_use_work_matrix = (work_profile_info
                                         && !work_profile_info->nonlinearlut
-                                        && !dt_isnan(work_profile_info->matrix_out[0][0]));
+                                        && !isnan(work_profile_info->matrix_out[0][0]));
 
   dt_colorspaces_color_profile_type_t type = p->type;
   if(type == DT_COLORSPACE_LAB)
@@ -1309,7 +1309,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
     if(!use_matrix)
     {
       piece->process_cl_ready = 0;
-      d->cmatrix[0][0] = dt_nan();
+      d->cmatrix[0][0] = NAN;
       d->xform_cam_Lab = work ? cmsCreateTransform(d->input, input_format, work, TYPE_RGBA_FLT, p->intent, 0) : NULL;
       d->xform_cam_nrgb = cmsCreateTransform(d->input, input_format, d->nrgb, TYPE_RGBA_FLT, p->intent, 0);
       d->xform_nrgb_Lab = work ? cmsCreateTransform(d->nrgb, TYPE_RGBA_FLT, work, TYPE_RGBA_FLT, p->intent, 0) : NULL;
@@ -1329,13 +1329,13 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
     if(!use_matrix)
     {
       piece->process_cl_ready = 0;
-      d->cmatrix[0][0] = dt_nan();
+      d->cmatrix[0][0] = NAN;
       d->xform_cam_Lab = work ? cmsCreateTransform(d->input, input_format, work, TYPE_RGBA_FLT, p->intent, 0) : NULL;
     }
   }
 
   // we might have failed generating the clipping transformations, check that:
-  if(d->nrgb && ((IS_NULL_PTR(d->xform_cam_nrgb) && dt_isnan(d->nmatrix[0][0])) || (IS_NULL_PTR(d->xform_nrgb_Lab) && dt_isnan(d->lmatrix[0][0]))))
+  if(d->nrgb && ((IS_NULL_PTR(d->xform_cam_nrgb) && isnan(d->nmatrix[0][0])) || (IS_NULL_PTR(d->xform_nrgb_Lab) && isnan(d->lmatrix[0][0]))))
   {
     if(d->xform_cam_nrgb)
     {
@@ -1351,7 +1351,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   }
 
   // user selected a non-supported input profile, check that:
-  if(IS_NULL_PTR(d->xform_cam_Lab) && dt_isnan(d->cmatrix[0][0]))
+  if(IS_NULL_PTR(d->xform_cam_Lab) && isnan(d->cmatrix[0][0]))
   {
     if(p->type == DT_COLORSPACE_FILE)
       dt_print(DT_DEBUG_COLORPROFILE,
@@ -1376,7 +1376,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
     if(!use_matrix)
     {
       piece->process_cl_ready = 0;
-      d->cmatrix[0][0] = dt_nan();
+      d->cmatrix[0][0] = NAN;
       d->xform_cam_Lab = work ? cmsCreateTransform(d->input, TYPE_RGBA_FLT, work, TYPE_RGBA_FLT, p->intent, 0) : NULL;
     }
   }
@@ -1406,7 +1406,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   }
 
   // commit input profile metadata to pipeline with the original input RGB -> XYZ matrix
-  dt_colormatrix_t input_matrix_for_pipe = { { dt_nan() } };
+  dt_colormatrix_t input_matrix_for_pipe = { { NAN } };
   if(d->input)
     dt_colorspaces_get_matrix_from_input_profile(d->input, input_matrix_for_pipe, NULL, NULL, NULL, 0);
 
@@ -1548,7 +1548,7 @@ static void update_profile_list(dt_iop_module_t *self)
   }
   dt_image_cache_read_release(darktable.image_cache, cimg);
   // use the matrix embedded in some DNGs and EXRs
-  if(!dt_isnan(self->dev->image_storage.d65_color_matrix[0]))
+  if(!isnan(self->dev->image_storage.d65_color_matrix[0]))
   {
     dt_colorspaces_color_profile_t *prof
         = (dt_colorspaces_color_profile_t *)calloc(1, sizeof(dt_colorspaces_color_profile_t));

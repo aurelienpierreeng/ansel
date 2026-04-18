@@ -376,7 +376,7 @@ float dt_colorrings_distance_to_cube_shell(const dt_aligned_pixel_t axis, const 
     if(candidate > 0.f && candidate < distance) distance = candidate;
   }
 
-  return dt_isfinite(distance) ? distance : 0.f;
+  return isfinite(distance) ? distance : 0.f;
 }
 
 void dt_colorrings_project_to_cube_shell(const dt_aligned_pixel_t axis, dt_aligned_pixel_t RGB)

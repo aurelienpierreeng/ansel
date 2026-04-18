@@ -58,14 +58,14 @@ static int _find_border_separator(const float *border, int count)
 #pragma omp parallel for reduction(min:found) if(count > 1000)
   for(int i = 0; i < count; i++)
   {
-    if(!dt_isfinite(border[i * 2]) && !dt_isfinite(border[i * 2 + 1]))
+    if(!isfinite(border[i * 2]) && !isfinite(border[i * 2 + 1]))
       found = i;
   }
   return (found == count) ? -1 : found;
 #else
   for(int i = 0; i < count; i++)
   {
-    if(!dt_isfinite(border[i * 2]) && !dt_isfinite(border[i * 2 + 1]))
+    if(!isfinite(border[i * 2]) && !isfinite(border[i * 2 + 1]))
       return i;
   }
   return -1;
@@ -323,8 +323,8 @@ static void _gradient_get_distance(float x, float y, float dist_mouse, dt_masks_
 static void _gradient_node_position_cb(const dt_masks_form_gui_points_t *gui_points, int node_index,
                                        float *node_x, float *node_y, void *user_data)
 {
-  if(node_x) *node_x = dt_nan();
-  if(node_y) *node_y = dt_nan();
+  if(node_x) *node_x = NAN;
+  if(node_y) *node_y = NAN;
 }
 
 static void _gradient_distance_cb(float pointer_x, float pointer_y, float cursor_radius,
@@ -388,9 +388,9 @@ static int _init_rotation(dt_masks_form_t *form, const float amount, const dt_ma
 
 static float _gradient_get_interaction_value(const dt_masks_form_t *form, dt_masks_interaction_t interaction)
 {
-  if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return dt_nan();
+  if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return NAN;
   const dt_masks_anchor_gradient_t *gradient = (const dt_masks_anchor_gradient_t *)(form->points)->data;
-  if(IS_NULL_PTR(gradient)) return dt_nan();
+  if(IS_NULL_PTR(gradient)) return NAN;
 
   switch(interaction)
   {
@@ -399,7 +399,7 @@ static float _gradient_get_interaction_value(const dt_masks_form_t *form, dt_mas
     case DT_MASKS_INTERACTION_HARDNESS:
       return gradient->curvature;
     default:
-      return dt_nan();
+      return NAN;
   }
 }
 
@@ -423,19 +423,19 @@ static float _gradient_set_interaction_value(dt_masks_form_t *form, dt_masks_int
                                              dt_masks_increment_t increment, int flow,
                                              dt_masks_form_gui_t *gui, struct dt_iop_module_t *module)
 {
-  if(IS_NULL_PTR(form)) return dt_nan();
+  if(IS_NULL_PTR(form)) return NAN;
   const int index = 0;
 
   switch(interaction)
   {
     case DT_MASKS_INTERACTION_SIZE:
-      if(!_change_extent(form, gui, module, index, value, increment, flow)) return dt_nan();
+      if(!_change_extent(form, gui, module, index, value, increment, flow)) return NAN;
       return _gradient_get_interaction_value(form, interaction);
     case DT_MASKS_INTERACTION_HARDNESS:
-      if(!_change_curvature(form, gui, module, index, value, increment, flow)) return dt_nan();
+      if(!_change_curvature(form, gui, module, index, value, increment, flow)) return NAN;
       return _gradient_get_interaction_value(form, interaction);
     default:
-      return dt_nan();
+      return NAN;
   }
 }
 

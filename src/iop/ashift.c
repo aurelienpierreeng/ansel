@@ -2043,25 +2043,25 @@ static double model_fitness(double *params, void *data)
   int pcount = 0;
 
   // fill in fit parameters from params[]. Attention: order matters!!!
-  if(dt_isnan(rotation))
+  if(isnan(rotation))
   {
     rotation = ilogit(params[pcount], -rotation_range, rotation_range);
     pcount++;
   }
 
-  if(dt_isnan(lensshift_v))
+  if(isnan(lensshift_v))
   {
     lensshift_v = ilogit(params[pcount], -lensshift_v_range, lensshift_v_range);
     pcount++;
   }
 
-  if(dt_isnan(lensshift_h))
+  if(isnan(lensshift_h))
   {
     lensshift_h = ilogit(params[pcount], -lensshift_h_range, lensshift_h_range);
     pcount++;
   }
 
-  if(dt_isnan(shear))
+  if(isnan(shear))
   {
     shear = ilogit(params[pcount], -shear_range, shear_range);
     pcount++;
@@ -2190,7 +2190,7 @@ static dt_iop_ashift_nmsresult_t nmsfit(dt_iop_module_t *module, dt_iop_ashift_p
   // prepare fit structure and starting parameters for simplex fit.
   // note: the sequence of parameters in params[] needs to match the
   // respective order in dt_iop_ashift_fit_params_t. Parameters which are
-  // to be fittet are marked with dt_nan() in the fit structure. Non-dt_nan()
+  // to be fittet are marked with NAN in the fit structure. Non-NAN
   // parameters are assumed to be constant.
   if(mdir & ASHIFT_FIT_ROTATION)
   {
@@ -2198,7 +2198,7 @@ static dt_iop_ashift_nmsresult_t nmsfit(dt_iop_module_t *module, dt_iop_ashift_p
     fit.params_count++;
     params[pcount] = logit(fit.rotation, -fit.rotation_range, fit.rotation_range);
     pcount++;
-    fit.rotation = dt_nan();
+    fit.rotation = NAN;
   }
 
   if(mdir & ASHIFT_FIT_LENS_VERT)
@@ -2207,7 +2207,7 @@ static dt_iop_ashift_nmsresult_t nmsfit(dt_iop_module_t *module, dt_iop_ashift_p
     fit.params_count++;
     params[pcount] = logit(fit.lensshift_v, -fit.lensshift_v_range, fit.lensshift_v_range);
     pcount++;
-    fit.lensshift_v = dt_nan();
+    fit.lensshift_v = NAN;
   }
 
   if(mdir & ASHIFT_FIT_LENS_HOR)
@@ -2216,7 +2216,7 @@ static dt_iop_ashift_nmsresult_t nmsfit(dt_iop_module_t *module, dt_iop_ashift_p
     fit.params_count++;
     params[pcount] = logit(fit.lensshift_h, -fit.lensshift_h_range, fit.lensshift_h_range);
     pcount++;
-    fit.lensshift_h = dt_nan();
+    fit.lensshift_h = NAN;
   }
 
   if(mdir & ASHIFT_FIT_SHEAR)
@@ -2225,7 +2225,7 @@ static dt_iop_ashift_nmsresult_t nmsfit(dt_iop_module_t *module, dt_iop_ashift_p
     fit.params_count++;
     params[pcount] = logit(fit.shear, -fit.shear_range, fit.shear_range);
     pcount++;
-    fit.shear = dt_nan();
+    fit.shear = NAN;
   }
 
   if(mdir & ASHIFT_FIT_LINES_VERT)
@@ -2276,10 +2276,10 @@ static dt_iop_ashift_nmsresult_t nmsfit(dt_iop_module_t *module, dt_iop_ashift_p
 
   // fit was successful: now consolidate the results (order matters!!!)
   pcount = 0;
-  fit.rotation = dt_isnan(fit.rotation) ? ilogit(params[pcount++], -fit.rotation_range, fit.rotation_range) : fit.rotation;
-  fit.lensshift_v = dt_isnan(fit.lensshift_v) ? ilogit(params[pcount++], -fit.lensshift_v_range, fit.lensshift_v_range) : fit.lensshift_v;
-  fit.lensshift_h = dt_isnan(fit.lensshift_h) ? ilogit(params[pcount++], -fit.lensshift_h_range, fit.lensshift_h_range) : fit.lensshift_h;
-  fit.shear = dt_isnan(fit.shear) ? ilogit(params[pcount++], -fit.shear_range, fit.shear_range) : fit.shear;
+  fit.rotation = isnan(fit.rotation) ? ilogit(params[pcount++], -fit.rotation_range, fit.rotation_range) : fit.rotation;
+  fit.lensshift_v = isnan(fit.lensshift_v) ? ilogit(params[pcount++], -fit.lensshift_v_range, fit.lensshift_v_range) : fit.lensshift_v;
+  fit.lensshift_h = isnan(fit.lensshift_h) ? ilogit(params[pcount++], -fit.lensshift_h_range, fit.lensshift_h_range) : fit.lensshift_h;
+  fit.shear = isnan(fit.shear) ? ilogit(params[pcount++], -fit.shear_range, fit.shear_range) : fit.shear;
 #ifdef ASHIFT_DEBUG
   printf("params after optimization (%d iterations): rotation %f, lensshift_v %f, lensshift_h %f, shear %f\n",
          iter, fit.rotation, fit.lensshift_v, fit.lensshift_h, fit.shear);
@@ -2427,9 +2427,9 @@ static double crop_fitness(double *params, void *data)
   const float ht = cropfit->height;
 
   // get variable and constant parameters, respectively
-  const float x = dt_isnan(cropfit->x) ? params[0] : cropfit->x;
-  const float y = dt_isnan(cropfit->y) ? params[1] : cropfit->y;
-  const float alpha = dt_isnan(cropfit->alpha) ? params[2] : cropfit->alpha;
+  const float x = isnan(cropfit->x) ? params[0] : cropfit->x;
+  const float y = isnan(cropfit->y) ? params[1] : cropfit->y;
+  const float alpha = isnan(cropfit->alpha) ? params[2] : cropfit->alpha;
 
   // the center of the rectangle in input image coordinates
   const float Pc[3] = { x * wd, y * ht, 1.0f };
@@ -2617,17 +2617,17 @@ static void do_crop(dt_iop_module_t *self, dt_iop_ashift_params_t *p)
     params[0] = 0.5;
     params[1] = 0.5;
     params[2] = crop_alpha;
-    cropfit.x = dt_nan();
-    cropfit.y = dt_nan();
-    cropfit.alpha = dt_nan();
+    cropfit.x = NAN;
+    cropfit.y = NAN;
+    cropfit.alpha = NAN;
     pcount = 3;
   }
   else //(p->cropmode == ASHIFT_CROP_ASPECT)
   {
     params[0] = 0.5;
     params[1] = 0.5;
-    cropfit.x = dt_nan();
-    cropfit.y = dt_nan();
+    cropfit.x = NAN;
+    cropfit.y = NAN;
     cropfit.alpha = crop_alpha;
     pcount = 2;
   }
@@ -2639,9 +2639,9 @@ static void do_crop(dt_iop_module_t *self, dt_iop_ashift_params_t *p)
   if(iter >= NMS_CROP_ITERATIONS) goto failed;
 
   // the fit did converge -> get clipping margins out of params:
-  cropfit.x = dt_isnan(cropfit.x) ? params[0] : cropfit.x;
-  cropfit.y = dt_isnan(cropfit.y) ? params[1] : cropfit.y;
-  cropfit.alpha = dt_isnan(cropfit.alpha) ? params[2] : cropfit.alpha;
+  cropfit.x = isnan(cropfit.x) ? params[0] : cropfit.x;
+  cropfit.y = isnan(cropfit.y) ? params[1] : cropfit.y;
+  cropfit.alpha = isnan(cropfit.alpha) ? params[2] : cropfit.alpha;
 
   // the area of the best fitting rectangle
   const float A = fabs(crop_fitness(params, (void*)&cropfit));
@@ -5682,9 +5682,9 @@ void reload_defaults(dt_iop_module_t *module)
                  || img->orientation == ORIENTATION_ROTATE_CW_90_DEG) ? 1 : 0;
 
     // focal length should be available in exif data if lens is electronically coupled to the camera
-    f_length = dt_isfinite(img->exif_focal_length) && img->exif_focal_length > 0.0f ? img->exif_focal_length : f_length;
+    f_length = isfinite(img->exif_focal_length) && img->exif_focal_length > 0.0f ? img->exif_focal_length : f_length;
     // crop factor of the camera is often not available and user will need to set it manually in the gui
-    crop_factor = dt_isfinite(img->exif_crop) && img->exif_crop > 0.0f ? img->exif_crop : crop_factor;
+    crop_factor = isfinite(img->exif_crop) && img->exif_crop > 0.0f ? img->exif_crop : crop_factor;
   }
 
   // init defaults:

@@ -149,7 +149,7 @@ float dt_drawlayer_widget_brush_radius(dt_iop_module_t *self, const dt_drawlayer
   const float rx = hypotf(pts[2] - pts[0], pts[3] - pts[1]);
   const float ry = hypotf(pts[4] - pts[0], pts[5] - pts[1]);
   const float radius = 0.5f * (rx + ry);
-  return fmaxf(0.5f, dt_isfinite(radius) ? radius : fallback);
+  return fmaxf(0.5f, isfinite(radius) ? radius : fallback);
 }
 
 float dt_drawlayer_current_live_padding(dt_iop_module_t *self)

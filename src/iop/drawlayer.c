@@ -2484,8 +2484,8 @@ static gboolean _build_raw_input_event(dt_iop_module_t *self, const double wx, c
 
   dt_control_pointer_input_t pointer_input = { 0 };
   dt_control_get_pointer_input(&pointer_input);
-  const float input_wx = dt_isfinite(pointer_input.x) ? (float)pointer_input.x : (float)wx;
-  const float input_wy = dt_isfinite(pointer_input.y) ? (float)pointer_input.y : (float)wy;
+  const float input_wx = isfinite(pointer_input.x) ? (float)pointer_input.x : (float)wx;
+  const float input_wy = isfinite(pointer_input.y) ? (float)pointer_input.y : (float)wy;
   const float pressure_norm = pointer_input.has_pressure ? _clamp01(pointer_input.pressure) : _clamp01(pressure);
   *input = (dt_drawlayer_paint_raw_input_t){
     .wx = input_wx,
@@ -3435,10 +3435,10 @@ void gui_post_expose(dt_iop_module_t *self, cairo_t *cr, int32_t width, int32_t 
   {
     dt_control_pointer_input_t pointer_input = { 0 };
     dt_control_get_pointer_input(&pointer_input);
-    const float widget_x = dt_isfinite(pointer_input.x)
+    const float widget_x = isfinite(pointer_input.x)
                                ? (float)pointer_input.x
                                : ((pointerx >= 0 && pointery >= 0) ? (float)pointerx : -1.0f);
-    const float widget_y = dt_isfinite(pointer_input.y)
+    const float widget_y = isfinite(pointer_input.y)
                                ? (float)pointer_input.y
                                : ((pointerx >= 0 && pointery >= 0) ? (float)pointery : -1.0f);
     if(widget_x < 0.0f || widget_y < 0.0f)
@@ -3678,8 +3678,8 @@ int button_pressed(dt_iop_module_t *self, double x, double y, double pressure, i
 
   dt_control_pointer_input_t pointer_input = { 0 };
   dt_control_get_pointer_input(&pointer_input);
-  const float input_wx = dt_isfinite(pointer_input.x) ? (float)pointer_input.x : (float)x;
-  const float input_wy = dt_isfinite(pointer_input.y) ? (float)pointer_input.y : (float)y;
+  const float input_wx = isfinite(pointer_input.x) ? (float)pointer_input.x : (float)x;
+  const float input_wy = isfinite(pointer_input.y) ? (float)pointer_input.y : (float)y;
   const float pressure_norm = pointer_input.has_pressure ? _clamp01(pointer_input.pressure) : _clamp01(pressure);
   uint32_t stroke_batch = g->stroke.current_stroke_batch + 1u;
   if(stroke_batch == 0u) stroke_batch++;
@@ -3735,8 +3735,8 @@ int button_released(dt_iop_module_t *self, double x, double y, int which, uint32
   {
     dt_control_pointer_input_t pointer_input = { 0 };
     dt_control_get_pointer_input(&pointer_input);
-    const float input_wx = dt_isfinite(pointer_input.x) ? (float)pointer_input.x : (float)x;
-    const float input_wy = dt_isfinite(pointer_input.y) ? (float)pointer_input.y : (float)y;
+    const float input_wx = isfinite(pointer_input.x) ? (float)pointer_input.x : (float)x;
+    const float input_wy = isfinite(pointer_input.y) ? (float)pointer_input.y : (float)y;
     dt_drawlayer_paint_raw_input_t end = {
       .wx = input_wx,
       .wy = input_wy,

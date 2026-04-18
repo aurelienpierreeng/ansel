@@ -418,7 +418,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   {
     dt_iop_image_copy_by_size(ovoid, ivoid, roi_out->width, roi_out->height, 4);
   }
-  else if(!dt_isnan(d->cmatrix[0][0]))
+  else if(!isnan(d->cmatrix[0][0]))
   {
     const float *const restrict in = DT_IS_ALIGNED(ivoid);
     float *const restrict out_aligned = DT_IS_ALIGNED(out);
@@ -520,7 +520,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
     cmsDeleteTransform(d->xform);
     d->xform = NULL;
   }
-  d->cmatrix[0][0] = dt_nan();
+  d->cmatrix[0][0] = NAN;
   d->lut[0][0] = -1.0f;
   d->lut[1][0] = -1.0f;
   d->lut[2][0] = -1.0f;
@@ -695,7 +695,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
                                         && !force_lcms2
                                         && work_profile
                                         && !work_profile->nonlinearlut
-                                        && !dt_isnan(work_profile->matrix_in[0][0]));
+                                        && !isnan(work_profile->matrix_in[0][0]));
 
   // matrix fast path: work RGB -> XYZ from work profile, then XYZ -> output RGB from output profile
   if(can_use_fast_matrix)
@@ -705,19 +705,19 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
                                                       LUT_SAMPLES))
       dt_colormatrix_mul(d->cmatrix, output_matrix, work_profile->matrix_in);
     else
-      d->cmatrix[0][0] = dt_nan();
+      d->cmatrix[0][0] = NAN;
   }
 
-  if(dt_isnan(d->cmatrix[0][0]))
+  if(isnan(d->cmatrix[0][0]))
   {
-      d->cmatrix[0][0] = dt_nan();
+      d->cmatrix[0][0] = NAN;
       piece->process_cl_ready = 0;
       d->xform = cmsCreateProofingTransform(input, TYPE_RGBA_FLT, output, output_format, softproof,
                                           out_intent, INTENT_RELATIVE_COLORIMETRIC, transformFlags);
   }
 
   // user selected a non-supported output profile, check that:
-  if(IS_NULL_PTR(d->xform) && dt_isnan(d->cmatrix[0][0]))
+  if(IS_NULL_PTR(d->xform) && isnan(d->cmatrix[0][0]))
   {
     const char *const unsupported_name
         = out_profile ? out_profile->name : dt_colorspaces_get_name(out_type, out_filename);
@@ -732,12 +732,12 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
                                                         LUT_SAMPLES))
         dt_colormatrix_mul(d->cmatrix, output_matrix, work_profile->matrix_in);
       else
-        d->cmatrix[0][0] = dt_nan();
+        d->cmatrix[0][0] = NAN;
     }
 
-    if(dt_isnan(d->cmatrix[0][0]))
+    if(isnan(d->cmatrix[0][0]))
     {
-      d->cmatrix[0][0] = dt_nan();
+      d->cmatrix[0][0] = NAN;
       piece->process_cl_ready = 0;
 
       d->xform = cmsCreateProofingTransform(input, TYPE_RGBA_FLT, output, output_format, softproof,

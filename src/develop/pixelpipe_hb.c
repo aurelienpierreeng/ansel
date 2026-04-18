@@ -140,7 +140,7 @@ static void _trace_buffer_content(const dt_dev_pixelpipe_t *pipe, const dt_iop_m
       gboolean finite = TRUE;
       for(unsigned int c = 0; c < MIN(channels, 4U); c++)
       {
-        if(!dt_isfinite(in[c]))
+        if(!isfinite(in[c]))
         {
           finite = FALSE;
           continue;
@@ -727,9 +727,9 @@ static void _print_nan_debug(dt_dev_pixelpipe_t *pipe, void *cl_mem_output, void
         if((k & 3) < 3)
         {
           float f = ((float *)(output))[k];
-          if(dt_isnan(f))
+          if(isnan(f))
             hasnan = 1;
-          else if(!dt_isfinite(f))
+          else if(!isfinite(f))
             hasinf = 1;
           else
           {
@@ -756,9 +756,9 @@ static void _print_nan_debug(dt_dev_pixelpipe_t *pipe, void *cl_mem_output, void
       for(int k = 0; k < roi_out->width * roi_out->height; k++)
       {
         float f = ((float *)(output))[k];
-        if(dt_isnan(f))
+        if(isnan(f))
           hasnan = 1;
-        else if(!dt_isfinite(f))
+        else if(!isfinite(f))
           hasinf = 1;
         else
         {

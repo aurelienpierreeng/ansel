@@ -519,37 +519,6 @@ static inline void * dt_check_sse_aligned(void * pointer)
     return NULL;
 }
 
-// Low-level comparison for NaN float that resists -ffast-math compiler option
-static inline __attribute__((always_inline)) int dt_isnan(float x)
-{
-  uint32_t u;
-  memcpy(&u, &x, sizeof(u));
-  return (u & 0x7f800000u) == 0x7f800000u &&
-          (u & 0x007fffffu) != 0;
-}
-
-static inline __attribute__((always_inline)) int dt_isfinite(float x)
-{
-    uint32_t u;
-    memcpy(&u, &x, sizeof(u));
-    return (u & 0x7f800000u) != 0x7f800000u;
-}
-
-static inline __attribute__((always_inline)) int dt_isinf(float x)
-{
-    uint32_t u;
-    memcpy(&u, &x, sizeof(u));
-    return (u & 0x7fffffffU) == 0x7f800000U;
-}
-
-// FIXME: NAN used as sentinel should be removed entirely
-// see https://github.com/aurelienpierreeng/ansel/issues/768
-static inline __attribute__((always_inline)) float dt_nan(void)
-{
-    union { uint32_t u; float f; } v = { 0x7fc00000u };
-    return v.f;
-}
-
 // Most code in dt assumes that the compiler is capable of auto-vectorization.  In some cases, this will yield
 // suboptimal code if the compiler in fact does NOT auto-vectorize.  Uncomment the following line for such a
 // compiler.
@@ -583,7 +552,7 @@ dt_simd_max_zero(const dt_aligned_pixel_simd_t value)
 {
   dt_aligned_pixel_simd_t out = value;
   for(int c = 0; c < 4; c++)
-    out[c] = (dt_isfinite(value[c])) ? MAX(value[c], 0.0f) : 0.f;
+    out[c] = (isfinite(value[c])) ? MAX(value[c], 0.0f) : 0.f;
   return out;
 }
 

@@ -62,9 +62,9 @@ static __inline float clampnan(const float x, const float m, const float M)
 
   // clamp to [m, M] if x is infinite; return average of m and M if x is NaN; else just return x
 
-  if(!dt_isfinite(x))
+  if(!isfinite(x))
     r = (std::isless(x, m) ? m : (std::isgreater(x, M) ? M : x));
-  else if(dt_isnan(x))
+  else if(isnan(x))
     r = (m + M) / 2.0f;
   else // normal number
     r = x;

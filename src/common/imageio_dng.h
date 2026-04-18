@@ -187,7 +187,7 @@ static inline void dt_imageio_dng_write_tiff_header(
   memcpy(buf+400, xtrans, sizeof(uint8_t)*36);
 
   // ColorMatrix1 try to get camera matrix else m[k] like before
-  if(!dt_isnan(adobe_XYZ_to_CAM[0][0]))
+  if(!isnan(adobe_XYZ_to_CAM[0][0]))
   {
     for(int k= 0; k < 3; k++)
       for(int i= 0; i < 3; i++)

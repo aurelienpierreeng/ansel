@@ -325,21 +325,21 @@ static void _refresh_images_displayed_on_track(const int segid, const gboolean a
     {
       GDateTime *dt = _localtime_text_to_utc_timeval(im->dt, d->tz_camera, darktable.utc_tz, d->offset);
       if(!dt_gpx_get_location(d->map.gpx, dt, &im->gl))
-        im->gl.latitude = dt_nan();
+        im->gl.latitude = NAN;
       g_date_time_unref(dt);
     }
     else if(im->segid == segid && !active && im->image)
     {
       dt_view_map_remove_marker(darktable.view_manager, MAP_DISPLAY_THUMB, im->image);
       im->image = NULL;
-      im->gl.latitude = dt_nan();
+      im->gl.latitude = NAN;
     }
   }
   int count = 0;
   for(GList *i = d->imgs; active && i; i = g_list_next(i))
   {
     dt_sel_img_t *im = (dt_sel_img_t *)i->data;
-    if(im->segid == segid && !dt_isnan(im->gl.latitude))
+    if(im->segid == segid && !isnan(im->gl.latitude))
     {
       count++;
       dt_sel_img_t *next = i->next ? (dt_sel_img_t *)i->next->data

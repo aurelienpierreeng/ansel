@@ -511,11 +511,11 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
                                       gui, darktable.develop->gui_module);
     _masks_gui_add_interaction_slider(menu, _("Fading"), op_form, DT_MASKS_INTERACTION_HARDNESS,
                                       DT_MASKS_INCREMENT_ABSOLUTE, 0.f, 1.0f, 0.01f,
-                                      dt_isfinite(hardness) ? hardness : 1.0f, 3, "%", 100.0f,
+                                      isfinite(hardness) ? hardness : 1.0f, 3, "%", 100.0f,
                                       gui, darktable.develop->gui_module);
     _masks_gui_add_interaction_slider(menu, _("Opacity"), op_form, DT_MASKS_INTERACTION_OPACITY,
                                       DT_MASKS_INCREMENT_ABSOLUTE, 0.0f, 1.0f, 0.01f,
-                                      dt_isfinite(opacity) ? opacity : 1.0f, 3, "%", 100.0f,
+                                      isfinite(opacity) ? opacity : 1.0f, 3, "%", 100.0f,
                                       gui, darktable.develop->gui_module);
 
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());

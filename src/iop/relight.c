@@ -157,11 +157,11 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
       const float x = -1.0 + (lightness * 2.0);
       float gauss = GAUSS(a, b, c, x);
 
-      if(dt_isnan(gauss) || !dt_isfinite(gauss)) gauss = 0.0;
+      if(isnan(gauss) || !isfinite(gauss)) gauss = 0.0;
 
       float relight = 1.0 / exp2f(-data->ev * CLIP(gauss));
 
-      if(dt_isnan(relight) || !dt_isfinite(relight)) relight = 1.0;
+      if(isnan(relight) || !isfinite(relight)) relight = 1.0;
 
       out[0] = 100.0 * CLIP(lightness * relight);
       out[1] = in[1];
@@ -225,7 +225,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
   }
   else
   {
-    mean = min = max = dt_nan();
+    mean = min = max = NAN;
   }
 
   dtgtk_gradient_slider_set_picker_meanminmax(DTGTK_GRADIENT_SLIDER(g->center), mean, min, max);

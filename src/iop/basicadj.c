@@ -722,8 +722,8 @@ static inline double xlog(double d)
 
   x = x * t + 0.693147180559945286226764 * e;
 
-  if(!dt_isfinite(d)) x = FLT_MAX;
-  if(d < 0)    x = dt_nan();
+  if(!isfinite(d)) x = FLT_MAX;
+  if(d < 0)    x = NAN;
   if(d == 0)   x = -FLT_MAX;
 
   return x;
@@ -1152,32 +1152,32 @@ cleanup:
   bright /= 100.f;
   contr /= 100.f;
 
-  if(dt_isnan(expcomp))
+  if(isnan(expcomp))
   {
     expcomp = 0.f;
     fprintf(stderr, "[_get_auto_exp] expcomp is NaN!!!\n");
   }
-  if(dt_isnan(black))
+  if(isnan(black))
   {
     black = 0.f;
     fprintf(stderr, "[_get_auto_exp] black is NaN!!!\n");
   }
-  if(dt_isnan(bright))
+  if(isnan(bright))
   {
     bright = 0.f;
     fprintf(stderr, "[_get_auto_exp] bright is NaN!!!\n");
   }
-  if(dt_isnan(contr))
+  if(isnan(contr))
   {
     contr = 0.f;
     fprintf(stderr, "[_get_auto_exp] contr is NaN!!!\n");
   }
-  if(dt_isnan(hlcompr))
+  if(isnan(hlcompr))
   {
     hlcompr = 0.f;
     fprintf(stderr, "[_get_auto_exp] hlcompr is NaN!!!\n");
   }
-  if(dt_isnan(hlcomprthresh))
+  if(isnan(hlcomprthresh))
   {
     hlcomprthresh = 0.f;
     fprintf(stderr, "[_get_auto_exp] hlcomprthresh is NaN!!!\n");

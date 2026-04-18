@@ -138,7 +138,7 @@ static inline int choleski_decompose_safe(const float *const restrict A,
         if(temp < 0.0f)
         {
           valid = 0;
-          L[i * n + j] = dt_nan();
+          L[i * n + j] = NAN;
         }
         else
           L[i * n + j] = sqrtf(A[i * n + i] - sum);
@@ -150,7 +150,7 @@ static inline int choleski_decompose_safe(const float *const restrict A,
         if(temp == 0.0f)
         {
           valid = 0;
-          L[i * n + j] = dt_nan();
+          L[i * n + j] = NAN;
         }
         else
           L[i * n + j] = (A[i * n + j] - sum) / temp;
@@ -202,7 +202,7 @@ static inline int triangular_descent_safe(const float *const restrict L,
       b[i] = sum / temp;
     else
     {
-      b[i] = dt_nan();
+      b[i] = NAN;
       valid = 0;
     }
   }
@@ -251,7 +251,7 @@ static inline int triangular_ascent_safe(const float *const restrict L,
       x[i] = sum / temp;
     else
     {
-      x[i] = dt_nan();
+      x[i] = NAN;
       valid = 0;
     }
   }

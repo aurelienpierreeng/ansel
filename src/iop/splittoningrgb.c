@@ -399,7 +399,7 @@ static gboolean _sync_simple_from_params(dt_iop_module_t *self, const int point,
   dt_iop_channelmixer_shared_simple_to_sliders(&simple, widgets);
   --darktable.gui->reset;
 
-  return dt_isfinite(roundtrip_error) && roundtrip_error <= DT_IOP_CHANNELMIXER_SHARED_SIMPLE_EPS;
+  return isfinite(roundtrip_error) && roundtrip_error <= DT_IOP_CHANNELMIXER_SHARED_SIMPLE_EPS;
 }
 
 static gboolean _sync_primaries_from_params(dt_iop_module_t *self, const int point, float *error)
@@ -436,7 +436,7 @@ static gboolean _sync_primaries_from_params(dt_iop_module_t *self, const int poi
   dt_iop_channelmixer_shared_primaries_to_sliders(&primaries, widgets);
   --darktable.gui->reset;
 
-  return dt_isfinite(roundtrip_error) && roundtrip_error <= DT_IOP_CHANNELMIXER_SHARED_SIMPLE_EPS;
+  return isfinite(roundtrip_error) && roundtrip_error <= DT_IOP_CHANNELMIXER_SHARED_SIMPLE_EPS;
 }
 
 static void _queue_preview_redraw(dt_iop_module_t *self)

@@ -113,7 +113,7 @@ static int _picker_project_opponent_to_display_rgb(const float m, const float u,
   const float g = m - u * 0.70710678f + v * 0.40824829f;
   const float b = m - v * 0.81649658f;
 
-  if(!dt_isfinite(r) || !dt_isfinite(g) || !dt_isfinite(b)) return 1;
+  if(!isfinite(r) || !isfinite(g) || !isfinite(b)) return 1;
   if(r < 0.0f || r > 1.0f || g < 0.0f || g > 1.0f || b < 0.0f || b > 1.0f) return 1;
 
   display_rgb[0] = r;
@@ -144,7 +144,7 @@ static float _picker_max_chroma_for_m_hue(const float m, const float hue)
       limit = fminf(limit, m / -k[c]);
   }
 
-  if(!dt_isfinite(limit) || limit < 0.0f) return 0.0f;
+  if(!isfinite(limit) || limit < 0.0f) return 0.0f;
   return limit;
 }
 

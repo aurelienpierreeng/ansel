@@ -181,9 +181,9 @@ static int _init_opacity(dt_masks_form_t *form, const float amount, const dt_mas
 
 static float _circle_get_interaction_value(const dt_masks_form_t *form, dt_masks_interaction_t interaction)
 {
-  if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return dt_nan();
+  if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return NAN;
   const dt_masks_node_circle_t *circle = (const dt_masks_node_circle_t *)(form->points)->data;
-  if(IS_NULL_PTR(circle)) return dt_nan();
+  if(IS_NULL_PTR(circle)) return NAN;
 
   switch(interaction)
   {
@@ -192,7 +192,7 @@ static float _circle_get_interaction_value(const dt_masks_form_t *form, dt_masks
     case DT_MASKS_INTERACTION_HARDNESS:
       return circle->border;
     default:
-      return dt_nan();
+      return NAN;
   }
 }
 
@@ -216,19 +216,19 @@ static float _circle_set_interaction_value(dt_masks_form_t *form, dt_masks_inter
                                            dt_masks_increment_t increment, int flow,
                                            dt_masks_form_gui_t *gui, struct dt_iop_module_t *module)
 {
-  if(IS_NULL_PTR(form)) return dt_nan();
+  if(IS_NULL_PTR(form)) return NAN;
   const int index = 0;
 
   switch(interaction)
   {
     case DT_MASKS_INTERACTION_SIZE:
-      if(!_change_size(form, gui, module, index, value, increment, flow)) return dt_nan();
+      if(!_change_size(form, gui, module, index, value, increment, flow)) return NAN;
       return _circle_get_interaction_value(form, interaction);
     case DT_MASKS_INTERACTION_HARDNESS:
-      if(!_change_hardness(form, gui, module, index, value, increment, flow)) return dt_nan();
+      if(!_change_hardness(form, gui, module, index, value, increment, flow)) return NAN;
       return _circle_get_interaction_value(form, interaction);
     default:
-      return dt_nan();
+      return NAN;
   }
 }
 

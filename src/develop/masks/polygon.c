@@ -110,8 +110,8 @@ static void _polygon_border_get_XY(const float p0_x, const float p0_y, const flo
   // so we can have the resulting point
   if(dx == 0 && dy == 0)
   {
-    *border_x = dt_nan();
-    *border_y = dt_nan();
+    *border_x = NAN;
+    *border_y = NAN;
     return;
   }
   const double l = 1.0 / sqrt(dx * dx + dy * dy);
@@ -416,7 +416,7 @@ static void _polygon_points_recurs(float *segment_start, float *segment_end,
                                    int with_border, const int pixel_threshold)
 {
   // we calculate points if needed
-  if(dt_isnan(polygon_min[0]))
+  if(isnan(polygon_min[0]))
   {
     _polygon_border_get_XY(segment_start[0], segment_start[1], segment_start[2], segment_start[3],
                            segment_end[2], segment_end[3], segment_end[0], segment_end[1], t_min,
@@ -424,7 +424,7 @@ static void _polygon_points_recurs(float *segment_start, float *segment_end,
                                + (segment_end[4] - segment_start[4]) * t_min * t_min * (3.0 - 2.0 * t_min),
                            polygon_min, polygon_min + 1, border_min, border_min + 1);
   }
-  if(dt_isnan(polygon_max[0]))
+  if(isnan(polygon_max[0]))
   {
     _polygon_border_get_XY(segment_start[0], segment_start[1], segment_start[2], segment_start[3],
                            segment_end[2], segment_end[3], segment_end[0], segment_end[1], t_max,
@@ -453,8 +453,8 @@ static void _polygon_points_recurs(float *segment_start, float *segment_end,
 
   // we split in two part
   double t_mid = (t_min + t_max) / 2.0;
-  float polygon_mid[2] = { dt_nan(), dt_nan() };
-  float border_mid[2] = { dt_nan(), dt_nan() };
+  float polygon_mid[2] = { NAN, NAN };
+  float border_mid[2] = { NAN, NAN };
   float polygon_result_left[2] = { 0 };
   float border_result_left[2] = { 0 };
   _polygon_points_recurs(segment_start, segment_end, t_min, t_mid,
@@ -494,18 +494,18 @@ static int _polygon_find_self_intersection(dt_masks_dynbuf_t *intersections,
 
   for(int i = node_count * 3; i < border_point_count; i++)
   {
-    if(dt_isnan(border_points[i * 2]) || dt_isnan(border_points[i * 2 + 1]))
+    if(isnan(border_points[i * 2]) || isnan(border_points[i * 2 + 1]))
     {
       // find nearest previous valid point; if at start, wrap to last valid point
       int prev = i - 1;
       while(prev >= node_count * 3
-            && (dt_isnan(border_points[prev * 2]) || dt_isnan(border_points[prev * 2 + 1]))) prev--;
+            && (isnan(border_points[prev * 2]) || isnan(border_points[prev * 2 + 1]))) prev--;
       if(prev < node_count * 3)
       {
         // wrap to last valid point in buffer
         prev = border_point_count - 1;
         while(prev >= node_count * 3
-              && (dt_isnan(border_points[prev * 2]) || dt_isnan(border_points[prev * 2 + 1]))) prev--;
+              && (isnan(border_points[prev * 2]) || isnan(border_points[prev * 2 + 1]))) prev--;
       }
       if(prev >= node_count * 3)
       {
@@ -807,10 +807,10 @@ static int _polygon_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_
 
     // and we determine all points by recursion (to be sure the distance between 2 points is <=1)
     float rc[2] = { 0 }, rb[2] = { 0 };
-    float bmin[2] = { dt_nan(), dt_nan() };
-    float bmax[2] = { dt_nan(), dt_nan() };
-    float cmin[2] = { dt_nan(), dt_nan() };
-    float cmax[2] = { dt_nan(), dt_nan() };
+    float bmin[2] = { NAN, NAN };
+    float bmax[2] = { NAN, NAN };
+    float cmin[2] = { NAN, NAN };
+    float cmax[2] = { NAN, NAN };
 
     _polygon_points_recurs(p1, p2, 0.0, 1.0, cmin, cmax, bmin, bmax, rc, rb, dpoints, dborder,
                            border_buffer && (node_count >= 3), pixel_threshold);
@@ -833,11 +833,11 @@ static int _polygon_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_
 
     if(dborder)
     {
-      if(dt_isnan(rb[0]))
+      if(isnan(rb[0]))
       {
         float lastb0 = dt_masks_dynbuf_get(dborder, -2);
         float lastb1 = dt_masks_dynbuf_get(dborder, -1);
-        if(dt_isnan(lastb0))
+        if(isnan(lastb0))
         {
           lastb0 = dt_masks_dynbuf_get(dborder, -4);
           lastb1 = dt_masks_dynbuf_get(dborder, -3);
@@ -860,10 +860,10 @@ static int _polygon_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_
     {
       // we get the next point (start of the next segment)
       // t=0.00001f to workaround rounding effects with full optimization that result in bmax[0] NOT being set to
-      // dt_nan() when t=0 and the two points in p3 are identical (as is the case on a control node set to sharp corner)
+      // NAN when t=0 and the two points in p3 are identical (as is the case on a control node set to sharp corner)
       _polygon_border_get_XY(p3[0], p3[1], p3[2], p3[3], p4[2], p4[3], p4[0], p4[1], 0.00001f, p3[4], cmin, cmin + 1,
                           bmax, bmax + 1);
-      if(dt_isnan(bmax[0]))
+      if(isnan(bmax[0]))
       {
         _polygon_border_get_XY(p3[0], p3[1], p3[2], p3[3], p4[2], p4[3], p4[0], p4[1], 0.00001f, p3[4], cmin,
                             cmin + 1, bmax, bmax + 1);
@@ -982,24 +982,24 @@ static int _polygon_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_
           const int w = (dt_masks_dynbuf_buffer(intersections))[ i * 2 + 1];
           if(v <= w)
           {
-            (*border_buffer)[v * 2] = dt_nan();
+            (*border_buffer)[v * 2] = NAN;
             (*border_buffer)[v * 2 + 1] = w;
           }
           else
           {
             if(w > node_count * 3)
             {
-              if(dt_isnan((*border_buffer)[node_count * 6]) && dt_isnan((*border_buffer)[node_count * 6 + 1]))
+              if(isnan((*border_buffer)[node_count * 6]) && isnan((*border_buffer)[node_count * 6 + 1]))
                 (*border_buffer)[node_count * 6 + 1] = w;
-              else if(dt_isnan((*border_buffer)[node_count * 6]))
+              else if(isnan((*border_buffer)[node_count * 6]))
                 (*border_buffer)[node_count * 6 + 1]
                     = MAX((*border_buffer)[node_count * 6 + 1], w);
               else
                 (*border_buffer)[node_count * 6 + 1] = w;
-              (*border_buffer)[node_count * 6] = dt_nan();
+              (*border_buffer)[node_count * 6] = NAN;
             }
-            (*border_buffer)[v * 2] = dt_nan();
-            (*border_buffer)[v * 2 + 1] = dt_nan();
+            (*border_buffer)[v * 2] = NAN;
+            (*border_buffer)[v * 2 + 1] = NAN;
           }
         }
       }
@@ -1182,7 +1182,7 @@ static void _polygon_get_sizes(struct dt_iop_module_t *module, dt_masks_form_t *
 
       // ??? looks like when x border is nan then y is a point index
       // see draw border in _polygon_events_post_expose.
-      if(!dt_isnan(fx))
+      if(!isnan(fx))
       {
         fp1[0] = fminf(fp1[0], fx);
         fp2[0] = fmaxf(fp2[0], fx);
@@ -1210,14 +1210,14 @@ static gboolean _polygon_form_gravity_center(const dt_masks_form_t *mask_form, f
 static float _polygon_get_interaction_value(const dt_masks_form_t *mask_form,
                                             dt_masks_interaction_t interaction)
 {
-  if(IS_NULL_PTR(mask_form) || IS_NULL_PTR(mask_form->points)) return dt_nan();
+  if(IS_NULL_PTR(mask_form) || IS_NULL_PTR(mask_form->points)) return NAN;
 
   switch(interaction)
   {
     case DT_MASKS_INTERACTION_SIZE:
     {
       const float size = dt_masks_get_form_size_from_nodes(mask_form->points);
-      if(size <= 0.0f) return dt_nan();
+      if(size <= 0.0f) return NAN;
       return size;
     }
     case DT_MASKS_INTERACTION_HARDNESS:
@@ -1233,10 +1233,10 @@ static float _polygon_get_interaction_value(const dt_masks_form_t *mask_form,
         hardness_count += 2;
       }
 
-      return hardness_count > 0 ? hardness_sum / (float)hardness_count : dt_nan();
+      return hardness_count > 0 ? hardness_sum / (float)hardness_count : NAN;
     }
     default:
-      return dt_nan();
+      return NAN;
   }
 }
 
@@ -1278,19 +1278,19 @@ static float _polygon_set_interaction_value(dt_masks_form_t *mask_form,
                                             dt_masks_increment_t increment, int flow,
                                             dt_masks_form_gui_t *mask_gui, struct dt_iop_module_t *module)
 {
-  if(IS_NULL_PTR(mask_form)) return dt_nan();
+  if(IS_NULL_PTR(mask_form)) return NAN;
   const int index = 0;
 
   switch(interaction)
   {
     case DT_MASKS_INTERACTION_SIZE:
-      if(!_change_size(mask_form, 0, mask_gui, module, index, value, increment, flow)) return dt_nan();
+      if(!_change_size(mask_form, 0, mask_gui, module, index, value, increment, flow)) return NAN;
       return _polygon_get_interaction_value(mask_form, interaction);
     case DT_MASKS_INTERACTION_HARDNESS:
-      if(!_change_hardness(mask_form, 0, mask_gui, module, index, value, increment, flow)) return dt_nan();
+      if(!_change_hardness(mask_form, 0, mask_gui, module, index, value, increment, flow)) return NAN;
       return _polygon_get_interaction_value(mask_form, interaction);
     default:
-      return dt_nan();
+      return NAN;
   }
 }
 
@@ -1420,7 +1420,7 @@ static gboolean _polygon_border_handle_cb(const dt_masks_form_gui_points_t *gui_
   if(IS_NULL_PTR(gui_points) || node_index < 0 || node_index >= node_count) return FALSE;
   *handle_x = gui_points->border[node_index * 6];
   *handle_y = gui_points->border[node_index * 6 + 1];
-  return !(dt_isnan(*handle_x) || dt_isnan(*handle_y));
+  return !(isnan(*handle_x) || isnan(*handle_y));
 }
 
 /**
@@ -2134,7 +2134,7 @@ static void _polygon_draw_shape(cairo_t *cr, const float *point_buffer, const in
   int start_idx = -1;
   for(int point_index = node_count * 3 + draw_border; point_index < point_count; point_index++)
   {
-    if(!dt_isnan(point_buffer[point_index * 2]) && !dt_isnan(point_buffer[point_index * 2 + 1]))
+    if(!isnan(point_buffer[point_index * 2]) && !isnan(point_buffer[point_index * 2 + 1]))
     {
       start_idx = point_index;
       break;
@@ -2147,7 +2147,7 @@ static void _polygon_draw_shape(cairo_t *cr, const float *point_buffer, const in
     cairo_move_to(cr, point_buffer[start_idx * 2], point_buffer[start_idx * 2 + 1]);
     for(int point_index = start_idx + 1; point_index < point_count; point_index++)
     {
-      if(!dt_isnan(point_buffer[point_index * 2]) && !dt_isnan(point_buffer[point_index * 2 + 1]))
+      if(!isnan(point_buffer[point_index * 2]) && !isnan(point_buffer[point_index * 2 + 1]))
         cairo_line_to(cr, point_buffer[point_index * 2], point_buffer[point_index * 2 + 1]);
     }
   }
@@ -2314,9 +2314,9 @@ static void _polygon_bounding_box_raw(const float *const point_buffer, const flo
     // we look at the borders
     const float xx = border_buffer[border_index * 2];
     const float yy = border_buffer[border_index * 2 + 1];
-    if(dt_isnan(xx))
+    if(isnan(xx))
     {
-     if(dt_isnan(yy)) break; // that means we have to skip the end of the border polygon
+     if(isnan(yy)) break; // that means we have to skip the end of the border polygon
       border_index = yy - 1;
       continue;
     }
@@ -2640,9 +2640,9 @@ static int _polygon_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpi
 
     // now we check p1 value to know if we have to skip a part
     if(next == i) next = 0;
-    while(dt_isnan(pf1[0]))
+    while(isnan(pf1[0]))
     {
-      if(dt_isnan(pf1[1]))
+      if(isnan(pf1[1]))
         next = i - 1;
       else
         next = p1[1];
@@ -3101,9 +3101,9 @@ static int _polygon_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pix
   {
     const float xx = border[2 * i];
     const float yy = border[2 * i + 1];
-    if(dt_isnan(xx))
+    if(isnan(xx))
     {
-      if(dt_isnan(yy)) break; // that means we have to skip the end of the border polygon
+      if(isnan(yy)) break; // that means we have to skip the end of the border polygon
       i = yy - 1;
       continue;
     }
@@ -3161,9 +3161,9 @@ static int _polygon_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pix
   {
     const float xx = border[i * 2];
     const float yy = border[i * 2 + 1];
-    if(dt_isnan(xx))
+    if(isnan(xx))
     {
-      if(dt_isnan(yy)) break; // that means we have to skip the end of the border polygon
+      if(isnan(yy)) break; // that means we have to skip the end of the border polygon
       i = yy - 1;
       continue;
     }
@@ -3351,9 +3351,9 @@ static int _polygon_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pix
 
       // now we check p1 value to know if we have to skip a part
       if(next_index == i) next_index = 0;
-      while(dt_isnan(pf1[0]))
+      while(isnan(pf1[0]))
       {
-        if(dt_isnan(pf1[1]))
+        if(isnan(pf1[1]))
           next_index = i - 1;
         else
           next_index = p1[1];

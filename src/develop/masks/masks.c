@@ -155,8 +155,8 @@ int dt_masks_find_closest_handle_common(dt_masks_form_t *mask_form,
   if(has_selected_node)
   {
     // Current node's border handle (feather handle).
-    float handle_x = dt_nan();
-    float handle_y = dt_nan();
+    float handle_x = NAN;
+    float handle_y = NAN;
     if(border_handle_cb
        && border_handle_cb(gui_points, node_count, selected_node, &handle_x, &handle_y, user_data)
        && dt_masks_point_is_within_radius(cursor_x, cursor_y, handle_x, handle_y, cursor_radius2))
@@ -177,8 +177,8 @@ int dt_masks_find_closest_handle_common(dt_masks_form_t *mask_form,
     }
 
     // Current node itself.
-    float node_x = dt_nan();
-    float node_y = dt_nan();
+    float node_x = NAN;
+    float node_y = NAN;
     if(node_position_cb)
     {
       node_position_cb(gui_points, selected_node, &node_x, &node_y, user_data);
@@ -188,7 +188,7 @@ int dt_masks_find_closest_handle_common(dt_masks_form_t *mask_form,
       node_x = gui_points->points[selected_node * 6 + 2];
       node_y = gui_points->points[selected_node * 6 + 3];
     }
-    if(!dt_isnan(node_x) && !dt_isnan(node_y)
+    if(!isnan(node_x) && !isnan(node_y)
        && dt_masks_point_is_within_radius(cursor_x, cursor_y, node_x, node_y, cursor_radius2))
     {
       mask_gui->node_hovered = selected_node;
@@ -200,8 +200,8 @@ int dt_masks_find_closest_handle_common(dt_masks_form_t *mask_form,
   {
     for(int node_index = 0; node_index < node_count; node_index++)
     {
-      float node_x = dt_nan();
-      float node_y = dt_nan();
+      float node_x = NAN;
+      float node_y = NAN;
       if(node_position_cb)
       {
         node_position_cb(gui_points, node_index, &node_x, &node_y, user_data);
@@ -211,7 +211,7 @@ int dt_masks_find_closest_handle_common(dt_masks_form_t *mask_form,
         node_x = gui_points->points[node_index * 6 + 2];
         node_y = gui_points->points[node_index * 6 + 3];
       }
-      if(!dt_isnan(node_x) && !dt_isnan(node_y)
+      if(!isnan(node_x) && !isnan(node_y)
          && dt_masks_point_is_within_radius(cursor_x, cursor_y, node_x, node_y, cursor_radius2))
       {
         mask_gui->node_hovered = node_index;
@@ -3245,7 +3245,7 @@ void dt_masks_form_delete(struct dt_iop_module_t *module, dt_masks_form_t *group
 float dt_masks_form_get_interaction_value(dt_masks_form_group_t *form_group,
                                           dt_masks_interaction_t interaction)
 {
-  if(IS_NULL_PTR(form_group)) return dt_nan();
+  if(IS_NULL_PTR(form_group)) return NAN;
 
   if(interaction == DT_MASKS_INTERACTION_OPACITY)
   {
@@ -3253,7 +3253,7 @@ float dt_masks_form_get_interaction_value(dt_masks_form_group_t *form_group,
   }
 
   dt_masks_form_t *target_form = dt_masks_get_from_id(darktable.develop, form_group->formid);
-  if(IS_NULL_PTR(target_form) || IS_NULL_PTR(target_form->functions) || IS_NULL_PTR(target_form->functions->get_interaction_value)) return dt_nan();
+  if(IS_NULL_PTR(target_form) || IS_NULL_PTR(target_form->functions) || IS_NULL_PTR(target_form->functions->get_interaction_value)) return NAN;
 
   return target_form->functions->get_interaction_value(target_form, interaction);
 }
@@ -3300,7 +3300,7 @@ float dt_masks_form_set_interaction_value(dt_masks_form_group_t *form_group,
                                           float value, dt_masks_increment_t increment, int flow,
                                           dt_masks_form_gui_t *mask_gui, dt_iop_module_t *module)
 {
-  if(IS_NULL_PTR(form_group)) return dt_nan();
+  if(IS_NULL_PTR(form_group)) return NAN;
 
   if(interaction == DT_MASKS_INTERACTION_OPACITY)
   {
@@ -3311,11 +3311,11 @@ float dt_masks_form_set_interaction_value(dt_masks_form_group_t *form_group,
 
   dt_masks_form_t *target_form = dt_masks_get_from_id(darktable.develop, form_group->formid);
   if(IS_NULL_PTR(target_form) || !target_form->functions
-     || !target_form->functions->set_interaction_value) return dt_nan();
+     || !target_form->functions->set_interaction_value) return NAN;
 
   const float result = target_form->functions->set_interaction_value(target_form, interaction, value, increment,
                                                                      flow, mask_gui, module);
-  if(dt_isnan(result)) return dt_nan();
+  if(isnan(result)) return NAN;
   dt_masks_form_update_gravity_center(target_form);
   dt_dev_add_history_item(darktable.develop, module, TRUE, TRUE);
   return result;
@@ -3447,7 +3447,7 @@ int dt_masks_form_change_opacity(dt_masks_form_t *mask_form, int parent_id, int 
   float amount = scroll_up ? 0.02f : -0.02f;
   const float changed = dt_masks_form_set_interaction_value(form_group, DT_MASKS_INTERACTION_OPACITY,
                                                             amount, DT_MASKS_INCREMENT_OFFSET, flow, NULL, NULL);
-  return !dt_isnan(changed);
+  return !isnan(changed);
 }
 
 void dt_masks_form_move(dt_masks_form_t *group_form, int form_id, int move_up)
@@ -3764,9 +3764,9 @@ int dt_masks_point_in_form_exact(const float *test_points, int test_point_count,
       const float y2 = form_points[next * 2 + 1];
 
       // if we need to skip points (in case of deleted point, because of self-intersection)
-      if(dt_isnan(form_points[next * 2]))
+      if(isnan(form_points[next * 2]))
       {
-        next = dt_isnan(y2) ? start_index : (int)y2;
+        next = isnan(y2) ? start_index : (int)y2;
         continue;
       }
 

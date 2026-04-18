@@ -255,8 +255,8 @@ gboolean dt_gpx_get_location(struct dt_gpx_t *gpx, GDateTime *timestamp, dt_imag
         geoloc->longitude = lon;
 
         /* make a simple linear interpolation on elevation */
-        if(dt_isnan(tp_next->elevation) || dt_isnan(tp->elevation))
-          geoloc->elevation = dt_nan();
+        if(isnan(tp_next->elevation) || isnan(tp->elevation))
+          geoloc->elevation = NAN;
         else
           geoloc->elevation = tp->elevation + (tp_next->elevation - tp->elevation) * f;
       }
@@ -306,10 +306,10 @@ void _gpx_parser_start_element(GMarkupParseContext *ctx, const gchar *element_na
       gpx->current_track_point = g_malloc0(sizeof(dt_gpx_track_point_t));
       gpx->current_track_point->segid = gpx->segid;
 
-      /* initialize with dt_nan() for validation check */
-      gpx->current_track_point->longitude = dt_nan();
-      gpx->current_track_point->latitude = dt_nan();
-      gpx->current_track_point->elevation = dt_nan();
+      /* initialize with NAN for validation check */
+      gpx->current_track_point->longitude = NAN;
+      gpx->current_track_point->latitude = NAN;
+      gpx->current_track_point->elevation = NAN;
 
       /* go thru the attributes to find and get values of lon / lat*/
       while(*attribute_name)
@@ -324,7 +324,7 @@ void _gpx_parser_start_element(GMarkupParseContext *ctx, const gchar *element_na
       }
 
       /* validate that we actually got lon / lat attribute values */
-      if(dt_isnan(gpx->current_track_point->longitude) || dt_isnan(gpx->current_track_point->latitude))
+      if(isnan(gpx->current_track_point->longitude) || isnan(gpx->current_track_point->latitude))
       {
         fprintf(stderr, "broken GPX file, failed to get lon/lat attribute values for trkpt\n");
         gpx->invalid_track_point = TRUE;

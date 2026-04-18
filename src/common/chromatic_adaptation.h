@@ -291,14 +291,14 @@ static inline void XYZ_D65_to_D50(const dt_aligned_pixel_t XYZ_in, dt_aligned_pi
 static inline __attribute__((always_inline)) dt_aligned_pixel_simd_t
 _downscale_vector_simd(const dt_aligned_pixel_simd_t vector, const float scaling)
 {
-  const int valid = (scaling > NORM_MIN) && !dt_isnan(scaling);
+  const int valid = (scaling > NORM_MIN) && !isnan(scaling);
   return vector / dt_simd_set1(valid ? (scaling + NORM_MIN) : NORM_MIN);
 }
 
 static inline __attribute__((always_inline)) dt_aligned_pixel_simd_t
 _upscale_vector_simd(const dt_aligned_pixel_simd_t vector, const float scaling)
 {
-  const int valid = (scaling > NORM_MIN) && !dt_isnan(scaling);
+  const int valid = (scaling > NORM_MIN) && !isnan(scaling);
   return vector * dt_simd_set1(valid ? (scaling + NORM_MIN) : NORM_MIN);
 }
 

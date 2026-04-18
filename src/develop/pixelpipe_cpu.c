@@ -96,7 +96,7 @@ int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
     float *out = (float *)output;
     __OMP_PARALLEL_FOR_SIMD__()
     for(size_t k = 0; k < count; k++)
-      out[k] = dt_nan();
+      out[k] = NAN;
   }
 
   const gboolean fitting = dt_tiling_piece_fits_host_memory(MAX(piece->roi_in.width, piece->roi_out.width),

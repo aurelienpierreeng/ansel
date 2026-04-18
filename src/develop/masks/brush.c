@@ -229,8 +229,8 @@ static void _brush_border_get_XY(float p0_x, float p0_y, float p1_x, float p1_y,
   // so we can have the resulting point
   if(dx == 0 && dy == 0)
   {
-    *border_x = dt_nan();
-    *border_y = dt_nan();
+    *border_x = NAN;
+    *border_y = NAN;
     return;
   }
   const float l = 1.0f / sqrtf(dx * dx + dy * dy);
@@ -289,7 +289,7 @@ static gboolean _brush_get_border_handle_resampled(const dt_masks_form_gui_point
   {
     const float px = gui_points->points[i * 2];
     const float py = gui_points->points[i * 2 + 1];
-    if(dt_isnan(px) || dt_isnan(py)) continue;
+    if(isnan(px) || isnan(py)) continue;
 
     const float dx = node_x - px;
     const float dy = node_y - py;
@@ -305,14 +305,14 @@ static gboolean _brush_get_border_handle_resampled(const dt_masks_form_gui_point
 
   *handle_x = gui_points->border[best_idx * 2];
   *handle_y = gui_points->border[best_idx * 2 + 1];
-  return !(dt_isnan(*handle_x) || dt_isnan(*handle_y));
+  return !(isnan(*handle_x) || isnan(*handle_y));
 }
 
 static gboolean _brush_get_border_handle_mirrored(const dt_masks_form_gui_points_t *gui_points, int node_count,
                                                   int node_index, float *handle_x, float *handle_y)
 {
-  float resampled_x = dt_nan();
-  float resampled_y = dt_nan();
+  float resampled_x = NAN;
+  float resampled_y = NAN;
   if(!_brush_get_border_handle_resampled(gui_points, node_count, node_index, &resampled_x, &resampled_y)) return FALSE;
 
   const float node_x = gui_points->points[node_index * 6 + 2];
@@ -320,7 +320,7 @@ static gboolean _brush_get_border_handle_mirrored(const dt_masks_form_gui_points
 
   *handle_x = node_x - (resampled_x - node_x);
   *handle_y = node_y - (resampled_y - node_y);
-  return !(dt_isnan(*handle_x) || dt_isnan(*handle_y));
+  return !(isnan(*handle_x) || isnan(*handle_y));
 }
 
 /** get bezier control points from feather extremity */
@@ -629,13 +629,13 @@ static void _brush_points_recurs(float *p1, float *p2, double tmin, double tmax,
   const gboolean withpayload = (!IS_NULL_PTR(dpayload));
 
   // we calculate points if needed
-  if(dt_isnan(points_min[0]))
+  if(isnan(points_min[0]))
   {
     _brush_border_get_XY(p1[0], p1[1], p1[2], p1[3], p2[2], p2[3], p2[0], p2[1], tmin,
                          p1[4] + (p2[4] - p1[4]) * tmin * tmin * (3.0 - 2.0 * tmin), points_min,
                          points_min + 1, border_min, border_min + 1);
   }
-  if(dt_isnan(points_max[0]))
+  if(isnan(points_max[0]))
   {
     _brush_border_get_XY(p1[0], p1[1], p1[2], p1[3], p2[2], p2[3], p2[0], p2[1], tmax,
                          p1[4] + (p2[4] - p1[4]) * tmax * tmax * (3.0 - 2.0 * tmax), points_max,
@@ -653,12 +653,12 @@ static void _brush_points_recurs(float *p1, float *p2, double tmin, double tmax,
 
     if(withborder)
     {
-      if(dt_isnan(border_max[0]))
+      if(isnan(border_max[0]))
       {
         border_max[0] = border_min[0];
         border_max[1] = border_min[1];
       }
-      else if(dt_isnan(border_min[0]))
+      else if(isnan(border_min[0]))
       {
         border_min[0] = border_max[0];
         border_min[1] = border_max[1];
@@ -687,7 +687,7 @@ static void _brush_points_recurs(float *p1, float *p2, double tmin, double tmax,
 
   // we split in two part
   double tx = (tmin + tmax) / 2.0;
-  float c[2] = { dt_nan(), dt_nan() }, b[2] = { dt_nan(), dt_nan() };
+  float c[2] = { NAN, NAN }, b[2] = { NAN, NAN };
   float rc[2], rb[2], rp[2];
   _brush_points_recurs(p1, p2, tmin, tx, points_min, c, border_min, b, rc, rb, rp, dpoints, dborder, dpayload,
                        pixel_threshold);
@@ -934,10 +934,10 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
 
     // and we determine all points by recursion (to be sure the distance between 2 points is <=1)
     float rc[2], rb[2], rp[2];
-    float bmin[2] = { dt_nan(), dt_nan() };
-    float bmax[2] = { dt_nan(), dt_nan() };
-    float cmin[2] = { dt_nan(), dt_nan() };
-    float cmax[2] = { dt_nan(), dt_nan() };
+    float bmin[2] = { NAN, NAN };
+    float bmax[2] = { NAN, NAN };
+    float cmin[2] = { NAN, NAN };
+    float cmax[2] = { NAN, NAN };
 
     _brush_points_recurs(p1, p2, 0.0, 1.0, cmin, cmax, bmin, bmax, rc, rb, rp, dpoints, dborder, dpayload,
                          pixel_threshold);
@@ -951,11 +951,11 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
 
     if(!IS_NULL_PTR(dborder))
     {
-      if(dt_isnan(rb[0]))
+      if(isnan(rb[0]))
       {
         float lastb0 = dt_masks_dynbuf_get(dborder, -2);
         float lastb1 = dt_masks_dynbuf_get(dborder, -1);
-        if(dt_isnan(lastb0))
+        if(isnan(lastb0))
         {
           lastb0 = dt_masks_dynbuf_get(dborder, -4);
           lastb1 = dt_masks_dynbuf_get(dborder, -3);
@@ -974,7 +974,7 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
       // we get the next point (start of the next segment)
       _brush_border_get_XY(p3[0], p3[1], p3[2], p3[3], p4[2], p4[3], p4[0], p4[1], 0, p3[4], cmin, cmin + 1,
                            bmax, bmax + 1);
-      if(dt_isnan(bmax[0]))
+      if(isnan(bmax[0]))
       {
         _brush_border_get_XY(p3[0], p3[1], p3[2], p3[3], p4[2], p4[3], p4[0], p4[1], 0.0001, p3[4], cmin,
                              cmin + 1, bmax, bmax + 1);
@@ -1356,14 +1356,14 @@ static int _init_opacity(dt_masks_form_t *mask_form, int parentid, dt_masks_form
 
 static float _brush_get_interaction_value(const dt_masks_form_t *mask_form, dt_masks_interaction_t interaction)
 {
-  if(IS_NULL_PTR(mask_form) || IS_NULL_PTR(mask_form->points)) return dt_nan();
+  if(IS_NULL_PTR(mask_form) || IS_NULL_PTR(mask_form->points)) return NAN;
 
   switch(interaction)
   {
     case DT_MASKS_INTERACTION_SIZE:
     {
       const float size = dt_masks_get_form_size_from_nodes(mask_form->points);
-      if(size <= 0.0f) return dt_nan();
+      if(size <= 0.0f) return NAN;
       return size;
     }
     case DT_MASKS_INTERACTION_HARDNESS:
@@ -1379,10 +1379,10 @@ static float _brush_get_interaction_value(const dt_masks_form_t *mask_form, dt_m
         hardness_count++;
       }
 
-      return hardness_count > 0 ? hardness_sum / (float)hardness_count : dt_nan();
+      return hardness_count > 0 ? hardness_sum / (float)hardness_count : NAN;
     }
     default:
-      return dt_nan();
+      return NAN;
   }
 }
 
@@ -1422,19 +1422,19 @@ static float _brush_set_interaction_value(dt_masks_form_t *mask_form, dt_masks_i
                                           dt_masks_increment_t increment, int flow,
                                           dt_masks_form_gui_t *mask_gui, struct dt_iop_module_t *module)
 {
-  if(IS_NULL_PTR(mask_form)) return dt_nan();
+  if(IS_NULL_PTR(mask_form)) return NAN;
   const int index = 0;
 
   switch(interaction)
   {
     case DT_MASKS_INTERACTION_SIZE:
-      if(!_change_size(mask_form, 0, mask_gui, module, index, value, increment, flow)) return dt_nan();
+      if(!_change_size(mask_form, 0, mask_gui, module, index, value, increment, flow)) return NAN;
       return _brush_get_interaction_value(mask_form, interaction);
     case DT_MASKS_INTERACTION_HARDNESS:
-      if(!_change_hardness(mask_form, 0, mask_gui, module, index, value, increment, flow)) return dt_nan();
+      if(!_change_hardness(mask_form, 0, mask_gui, module, index, value, increment, flow)) return NAN;
       return _brush_get_interaction_value(mask_form, interaction);
     default:
-      return dt_nan();
+      return NAN;
   }
 }
 
@@ -1743,7 +1743,7 @@ static int _brush_events_button_pressed(struct dt_iop_module_t *module, double w
     }
     else if(mask_gui->handle_border_hovered >= 0)
     {
-      float handle_x = dt_nan(), handle_y = dt_nan();
+      float handle_x = NAN, handle_y = NAN;
       if(_brush_get_border_handle_mirrored(gui_points, node_count, mask_gui->handle_border_hovered,
                                            &handle_x, &handle_y))
       {
@@ -2079,7 +2079,7 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, double widg
         = (dt_masks_node_brush_t *)g_list_nth_data(mask_form->points, node_index);
     if(IS_NULL_PTR(node)) return 0;
 
-    float handle_x = dt_nan(), handle_y = dt_nan();
+    float handle_x = NAN, handle_y = NAN;
     if(!_brush_get_border_handle_mirrored(gui_points, node_count, node_index, &handle_x, &handle_y))
       return 0;
 
@@ -2134,7 +2134,7 @@ static void _brush_draw_shape(cairo_t *cr, const float *points, const int points
   int start_idx = -1;
   for(int i = node_nb * 3 + border; i < points_count; i++)
   {
-    if(!dt_isnan(points[i * 2]) && !dt_isnan(points[i * 2 + 1]))
+    if(!isnan(points[i * 2]) && !isnan(points[i * 2 + 1]))
     {
       start_idx = i;
       break;
@@ -2151,7 +2151,7 @@ static void _brush_draw_shape(cairo_t *cr, const float *points, const int points
     
     for(int i = start_idx + 1; i < end_idx; i++)
     {
-      if(!dt_isnan(points[i * 2]) && !dt_isnan(points[i * 2 + 1]))
+      if(!isnan(points[i * 2]) && !isnan(points[i * 2 + 1]))
         cairo_line_to(cr, points[i * 2], points[i * 2 + 1]);
     }
   }
@@ -2168,7 +2168,7 @@ static float _brush_line_length(const float *line, const int first_pt, const int
     const float y0 = line[i0 + 1];
     const float x1 = line[i1];
     const float y1 = line[i1 + 1];
-    if(dt_isnan(x0) || dt_isnan(y0) || dt_isnan(x1) || dt_isnan(y1)) continue;
+    if(isnan(x0) || isnan(y0) || isnan(x1) || isnan(y1)) continue;
     const float dx = x1 - x0;
     const float dy = y1 - y0;
     const float len = dx * dx + dy * dy;
@@ -2185,7 +2185,7 @@ static gboolean _brush_line_point_at_length(const float *line, const int first_p
 
   float acc = 0.0f;
   gboolean has_fallback = FALSE;
-  float fallback_x = dt_nan(), fallback_y = dt_nan();
+  float fallback_x = NAN, fallback_y = NAN;
 
   for(int i = first_pt; i < last_pt; i++)
   {
@@ -2195,7 +2195,7 @@ static gboolean _brush_line_point_at_length(const float *line, const int first_p
     const float y0 = line[i0 + 1];
     const float x1 = line[i1];
     const float y1 = line[i1 + 1];
-    if(dt_isnan(x0) || dt_isnan(y0) || dt_isnan(x1) || dt_isnan(y1)) continue;
+    if(isnan(x0) || isnan(y0) || isnan(x1) || isnan(y1)) continue;
 
     const float dx = x1 - x0;
     const float dy = y1 - y0;
@@ -2216,7 +2216,7 @@ static gboolean _brush_line_point_at_length(const float *line, const int first_p
     acc += len;
   }
 
-  if(!has_fallback || dt_isnan(fallback_x) || dt_isnan(fallback_y)) return FALSE;
+  if(!has_fallback || isnan(fallback_x) || isnan(fallback_y)) return FALSE;
   *x = fallback_x;
   *y = fallback_y;
   return TRUE;
@@ -2541,7 +2541,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
       const gboolean selected = (mask_gui->node_hovered == edited
                               || selected_handle_border == edited
                               || mask_gui->handle_border_hovered == edited);
-      float handle[2] = {dt_nan(), dt_nan()};
+      float handle[2] = {NAN, NAN};
       // Show the border handle on the opposite side from the curve handle
       if(_brush_get_border_handle_mirrored(gui_points, node_count, edited, &handle[0], &handle[1]))
       {

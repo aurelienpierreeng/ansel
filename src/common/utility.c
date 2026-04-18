@@ -553,7 +553,7 @@ gchar *dt_util_latitude_str(float latitude)
   gchar *c = OSD_COORDINATES_CHR_N;
   float integral, fractional;
 
-  if(dt_isnan(latitude)) return NULL;
+  if(isnan(latitude)) return NULL;
 
   if(latitude < 0)
   {
@@ -571,7 +571,7 @@ gchar *dt_util_longitude_str(float longitude)
   gchar *c = OSD_COORDINATES_CHR_E;
   float integral, fractional;
 
-  if(dt_isnan(longitude)) return NULL;
+  if(isnan(longitude)) return NULL;
 
   if(longitude < 0)
   {
@@ -588,7 +588,7 @@ gchar *dt_util_elevation_str(float elevation)
 {
   const gchar *c = OSD_ELEVATION_ASL;
 
-  if(dt_isnan(elevation)) return NULL;
+  if(isnan(elevation)) return NULL;
 
   if(elevation < 0)
   {
@@ -605,7 +605,7 @@ gchar *dt_util_elevation_str(float elevation)
 
 double dt_util_gps_string_to_number(const gchar *input)
 {
-  double res = dt_nan();
+  double res = NAN;
   gchar dir = toupper(input[strlen(input) - 1]);
   gchar **list = g_strsplit(input, ",", 0);
   if(list)

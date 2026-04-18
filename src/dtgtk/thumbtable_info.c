@@ -99,12 +99,12 @@ void dt_thumbtable_info_cleanup(void)
 #ifndef NDEBUG
 static gboolean _thumbtable_float_equal(const float a, const float b)
 {
-  return (dt_isnan(a) && dt_isnan(b)) || a == b;
+  return (isnan(a) && isnan(b)) || a == b;
 }
 
 static gboolean _thumbtable_double_equal(const double a, const double b)
 {
-  return (dt_isnan(a) && dt_isnan(b)) || a == b;
+  return (isnan(a) && isnan(b)) || a == b;
 }
 
 void dt_thumbtable_info_debug_assert_matches_cache(const dt_image_t *sql_info)

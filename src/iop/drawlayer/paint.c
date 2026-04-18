@@ -150,7 +150,7 @@ static inline float _paint_stroke_sample_opacity_scale(const dt_drawlayer_brush_
   /* Estimate the fraction of a dab support area covered by one spacing strip.
    * This is used by brush flow logic to normalize per-sample opacity at
    * different sampling distances. */
-  if(IS_NULL_PTR(dab) || !dt_isfinite(sample_step)) return 1.0f;
+  if(IS_NULL_PTR(dab) || !isfinite(sample_step)) return 1.0f;
   const float support_radius = fmaxf(dab->radius, 0.5f);
   const float overlap_span = 2.0f * support_radius;
   if(sample_step <= 1e-6f || overlap_span <= 1e-6f || sample_step >= overlap_span - 1e-6f) return 1.0f;
@@ -170,7 +170,7 @@ static inline float _paint_stroke_sample_opacity_scale(const dt_drawlayer_brush_
 
   const float strip_ratio = _clamp01(half_strip / support_radius);
   const float full_mass = 2.0f * (float)G_PI * dt_drawlayer_brush_mass_primitive_eval(dab, 1.0f);
-  if(!dt_isfinite(full_mass) || full_mass <= 1e-6f) return 1.0f;
+  if(!isfinite(full_mass) || full_mass <= 1e-6f) return 1.0f;
 
   const float weight_samples = 32.f;
   const float dr = 1.0f / weight_samples;
@@ -179,13 +179,13 @@ static inline float _paint_stroke_sample_opacity_scale(const dt_drawlayer_brush_
   {
     const float rho = ((float)ir + 0.5f) * dr;
     const float profile = dt_drawlayer_brush_profile_eval(dab, rho * rho);
-    if(!dt_isfinite(profile) || profile <= 0.0f) continue;
+    if(!isfinite(profile) || profile <= 0.0f) continue;
     const float angle = _paint_voronoi_strip_angle_measure(rho, strip_ratio);
-    if(!dt_isfinite(angle) || angle <= 0.0f) continue;
+    if(!isfinite(angle) || angle <= 0.0f) continue;
     strip_mass += angle * profile * rho * dr;
   }
   const float scale = strip_mass / full_mass;
-  return dt_isfinite(scale) ? _clamp01(scale) : 1.0f;
+  return isfinite(scale) ? _clamp01(scale) : 1.0f;
 }
 
 /** @brief Lazily allocate raw-input queue storage for one stroke state. */

@@ -245,7 +245,7 @@ static void dt_iop_levels_compute_levels_automatic(dt_iop_module_t *self,
   for(int k = 0; k < 3; k++)
   {
     thr[k] = (float)total * d->percentiles[k] / 100.0f;
-    d->levels[k] = dt_nan();
+    d->levels[k] = NAN;
   }
 
   if(IS_NULL_PTR(histogram)) return;
@@ -258,7 +258,7 @@ static void dt_iop_levels_compute_levels_automatic(dt_iop_module_t *self,
 
     for(int k = 0; k < 3; k++)
     {
-      if(dt_isnan(d->levels[k]) && (n >= thr[k]))
+      if(isnan(d->levels[k]) && (n >= thr[k]))
       {
         d->levels[k] = (float)i / (float)(histogram_stats.bins_count - 1);
       }
@@ -269,11 +269,11 @@ static void dt_iop_levels_compute_levels_automatic(dt_iop_module_t *self,
 
   // for numerical reasons sometimes the threshold is sharp but in float and n is size_t.
   // in this case we want to make sure we don't keep nan:
-  if(dt_isnan(d->levels[2])) d->levels[2] = 1.0f;
+  if(isnan(d->levels[2])) d->levels[2] = 1.0f;
 
   // compute middle level from min and max levels
   float center = d->percentiles[1] / 100.0f;
-  if(!dt_isnan(d->levels[0]) && !dt_isnan(d->levels[2]))
+  if(!isnan(d->levels[0]) && !isnan(d->levels[2]))
     d->levels[1] = (1.0f - center) * d->levels[0] + center * d->levels[2];
 }
 
@@ -395,8 +395,8 @@ static inline __attribute__((always_inline)) void commit_params_late(dt_iop_modu
     }
 
     if(dt_dev_pixelpipe_has_preview_output(self->dev, pipe, &piece->roi_out)
-       || dt_isnan(d->levels[0]) || dt_isnan(d->levels[1])
-       || dt_isnan(d->levels[2]))
+       || isnan(d->levels[0]) || isnan(d->levels[1])
+       || isnan(d->levels[2]))
     {
       dt_iop_levels_compute_levels_automatic(self, piece);
       compute_lut(piece);
@@ -511,9 +511,9 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_
     d->percentiles[1] = p->gray;
     d->percentiles[2] = p->white;
 
-    d->levels[0] = dt_nan();
-    d->levels[1] = dt_nan();
-    d->levels[2] = dt_nan();
+    d->levels[0] = NAN;
+    d->levels[1] = NAN;
+    d->levels[2] = NAN;
 
     // commit_params_late() will compute LUT later
   }
@@ -567,9 +567,9 @@ void gui_update(dt_iop_module_t *self)
   gui_changed(self, g->mode, 0);
 
   dt_iop_gui_enter_critical_section(self);
-  g->auto_levels[0] = dt_nan();
-  g->auto_levels[1] = dt_nan();
-  g->auto_levels[2] = dt_nan();
+  g->auto_levels[0] = NAN;
+  g->auto_levels[1] = NAN;
+  g->auto_levels[2] = NAN;
   g->hash = 0;
   dt_iop_gui_leave_critical_section(self);
 
@@ -594,9 +594,9 @@ void gui_init(dt_iop_module_t *self)
   dt_iop_levels_gui_data_t *c = IOP_GUI_ALLOC(levels);
 
   dt_iop_gui_enter_critical_section(self);
-  c->auto_levels[0] = dt_nan();
-  c->auto_levels[1] = dt_nan();
-  c->auto_levels[2] = dt_nan();
+  c->auto_levels[0] = NAN;
+  c->auto_levels[1] = NAN;
+  c->auto_levels[2] = NAN;
   c->hash = 0;
   dt_iop_gui_leave_critical_section(self);
 

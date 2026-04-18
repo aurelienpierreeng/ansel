@@ -1409,9 +1409,9 @@ static bool _exif_decode_exif_data(dt_image_t *img, Exiv2::ExifData &exifData)
     // read embedded color matrix as used in DNGs
     {
       float colmatrix[3][12];
-      colmatrix[0][0] = colmatrix[1][0] = colmatrix[2][0] = dt_nan();
+      colmatrix[0][0] = colmatrix[1][0] = colmatrix[2][0] = NAN;
       dt_dng_illuminant_t illu[3] = { DT_LS_Unknown, DT_LS_Unknown, DT_LS_Unknown };
-      img->d65_color_matrix[0] = dt_nan(); // make sure for later testing
+      img->d65_color_matrix[0] = NAN; // make sure for later testing
 
       // fallback later via `find_temperature_from_raw_coeffs` if there is no valid illuminant
 
@@ -1499,7 +1499,7 @@ static bool _exif_decode_exif_data(dt_image_t *img, Exiv2::ExifData &exifData)
       if(sel_illu == -1)
         for(int i = 0; i < 3; ++i)
         {
-          if((illu[i] == DT_LS_Unknown) && !dt_isnan(colmatrix[i][0]))
+          if((illu[i] == DT_LS_Unknown) && !isnan(colmatrix[i][0]))
           {
             sel_illu = i;
             sel_temp = D65temp;
@@ -2169,7 +2169,7 @@ int dt_exif_read_blob(uint8_t **buf, const char *path, const int32_t imgid, cons
       // GPS data
       dt_remove_exif_geotag(exifData);
       const dt_image_t *cimg = dt_image_cache_get(darktable.image_cache, imgid, 'r');
-      if(!dt_isnan(cimg->geoloc.longitude) && !dt_isnan(cimg->geoloc.latitude))
+      if(!isnan(cimg->geoloc.longitude) && !isnan(cimg->geoloc.latitude))
       {
         exifData["Exif.GPSInfo.GPSVersionID"] = "02 02 00 00";
         exifData["Exif.GPSInfo.GPSLongitudeRef"] = (cimg->geoloc.longitude < 0) ? "W" : "E";
@@ -2186,7 +2186,7 @@ int dt_exif_read_blob(uint8_t **buf, const char *path, const int32_t imgid, cons
         dt_free(long_str);
         dt_free(lat_str);
       }
-      if(!dt_isnan(cimg->geoloc.elevation))
+      if(!isnan(cimg->geoloc.elevation))
       {
         exifData["Exif.GPSInfo.GPSVersionID"] = "02 02 00 00";
         exifData["Exif.GPSInfo.GPSAltitudeRef"] = (cimg->geoloc.elevation < 0) ? "1" : "0";
@@ -3720,7 +3720,7 @@ static void dt_remove_xmp_exif_geotag(Exiv2::XmpData &xmpData)
 static void dt_set_xmp_exif_geotag(Exiv2::XmpData &xmpData, double longitude, double latitude, double altitude)
 {
   dt_remove_xmp_exif_geotag(xmpData);
-  if(!dt_isnan(longitude) && !dt_isnan(latitude))
+  if(!isnan(longitude) && !isnan(latitude))
   {
     char long_dir = 'E', lat_dir = 'N';
     if(longitude < 0) long_dir = 'W';
@@ -3748,7 +3748,7 @@ static void dt_set_xmp_exif_geotag(Exiv2::XmpData &xmpData, double longitude, do
     dt_free(lat_str);
     dt_free(str);
   }
-  if(!dt_isnan(altitude))
+  if(!isnan(altitude))
   {
     xmpData["Xmp.exif.GPSAltitudeRef"] = (altitude < 0) ? "1" : "0";
 
@@ -3829,7 +3829,7 @@ static void _exif_xmp_read_data(Exiv2::XmpData &xmpData, const int32_t imgid, co
 {
   const int xmp_version = DT_XMP_EXIF_VERSION;
   int stars = 1, raw_params = 0, history_end = -1;
-  double longitude = dt_nan(), latitude = dt_nan(), altitude = dt_nan();
+  double longitude = NAN, latitude = NAN, altitude = NAN;
   gchar *filename = NULL;
   gchar *iop_order_list = NULL;
   GTimeSpan gts = 0;
@@ -3937,7 +3937,7 @@ static void _exif_xmp_read_data_export(Exiv2::XmpData &xmpData, const int32_t im
 {
   const int xmp_version = DT_XMP_EXIF_VERSION;
   int stars = 1, raw_params = 0, history_end = -1;
-  double longitude = dt_nan(), latitude = dt_nan(), altitude = dt_nan();
+  double longitude = NAN, latitude = NAN, altitude = NAN;
   gchar *filename = NULL;
   GTimeSpan gts = 0;
   gchar *iop_order_list = NULL;
@@ -4357,7 +4357,7 @@ int dt_exif_xmp_attach_export(const int32_t imgid, const char *filename, void *m
                    (g_strstr_len(result, strlen(result), "/") == NULL))
                 {
                   float float_value = (float)std::atof(result);
-                  if(!dt_isnan(float_value))
+                  if(!isnan(float_value))
                   {
                     dt_free(result);
                     int int_value = (int)float_value;

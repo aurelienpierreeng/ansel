@@ -57,10 +57,10 @@
 
 static inline __attribute__((always_inline)) void _mark_as_nonmatrix_profile(dt_iop_order_iccprofile_info_t *const profile_info)
 {
-  profile_info->matrix_in[0][0] = dt_nan();
-  profile_info->matrix_in_transposed[0][0] = dt_nan();
-  profile_info->matrix_out[0][0] = dt_nan();
-  profile_info->matrix_out_transposed[0][0] = dt_nan();
+  profile_info->matrix_in[0][0] = NAN;
+  profile_info->matrix_in_transposed[0][0] = NAN;
+  profile_info->matrix_out[0][0] = NAN;
+  profile_info->matrix_out_transposed[0][0] = NAN;
 }
 
 __DT_CLONE_TARGETS__
@@ -665,7 +665,7 @@ static int dt_ioppr_generate_profile_info(dt_iop_order_iccprofile_info_t *profil
       _mark_as_nonmatrix_profile(profile_info);
       _clear_lut_curves(profile_info);
     }
-    else if(dt_isnan(profile_info->matrix_in[0][0]) || dt_isnan(profile_info->matrix_out[0][0]))
+    else if(isnan(profile_info->matrix_in[0][0]) || isnan(profile_info->matrix_out[0][0]))
     {
       _mark_as_nonmatrix_profile(profile_info);
       _clear_lut_curves(profile_info);
@@ -681,7 +681,7 @@ static int dt_ioppr_generate_profile_info(dt_iop_order_iccprofile_info_t *profil
   // we do extrapolation for input values above 1.0f.
   // unfortunately we can only do this if we got the computation
   // in our hands, i.e. for the fast builtin-dt-matrix-profile path.
-  if(!dt_isnan(profile_info->matrix_in[0][0]) && !dt_isnan(profile_info->matrix_out[0][0]))
+  if(!isnan(profile_info->matrix_in[0][0]) && !isnan(profile_info->matrix_out[0][0]))
   {
     profile_info->nonlinearlut = _init_unbounded_coeffs(profile_info->lut_in[0], profile_info->lut_in[1], profile_info->lut_in[2],
         profile_info->unbounded_coeffs_in[0], profile_info->unbounded_coeffs_in[1], profile_info->unbounded_coeffs_in[2], profile_info->lutsize);
@@ -689,7 +689,7 @@ static int dt_ioppr_generate_profile_info(dt_iop_order_iccprofile_info_t *profil
         profile_info->unbounded_coeffs_out[0], profile_info->unbounded_coeffs_out[1], profile_info->unbounded_coeffs_out[2], profile_info->lutsize);
   }
 
-  if(!dt_isnan(profile_info->matrix_in[0][0]) && !dt_isnan(profile_info->matrix_out[0][0]) && profile_info->nonlinearlut)
+  if(!isnan(profile_info->matrix_in[0][0]) && !isnan(profile_info->matrix_out[0][0]) && profile_info->nonlinearlut)
   {
     const dt_aligned_pixel_t rgb = { 0.1842f, 0.1842f, 0.1842f };
     profile_info->grey = dt_ioppr_get_rgb_matrix_luminance(rgb, profile_info->matrix_in, profile_info->lut_in, profile_info->unbounded_coeffs_in, profile_info->lutsize, profile_info->nonlinearlut);
@@ -795,7 +795,7 @@ dt_ioppr_set_pipe_work_profile_info(struct dt_develop_t *dev,
 {
   dt_iop_order_iccprofile_info_t *profile_info = dt_ioppr_add_profile_info_to_list(dev, type, filename, intent);
 
-  if(IS_NULL_PTR(profile_info) || dt_isnan(profile_info->matrix_in[0][0]) || dt_isnan(profile_info->matrix_out[0][0]))
+  if(IS_NULL_PTR(profile_info) || isnan(profile_info->matrix_in[0][0]) || isnan(profile_info->matrix_out[0][0]))
   {
     fprintf(stderr, "[dt_ioppr_set_pipe_work_profile_info] unsupported working profile %i %s, it will be replaced with linear Rec2020\n", type, filename);
     profile_info = dt_ioppr_add_profile_info_to_list(dev, DT_COLORSPACE_LIN_REC2020, "", intent);
@@ -848,7 +848,7 @@ dt_ioppr_set_pipe_output_profile_info(struct dt_develop_t *dev,
 {
   dt_iop_order_iccprofile_info_t *profile_info = dt_ioppr_add_profile_info_to_list(dev, type, filename, intent);
 
-  if(IS_NULL_PTR(profile_info) || dt_isnan(profile_info->matrix_in[0][0]) || dt_isnan(profile_info->matrix_out[0][0]))
+  if(IS_NULL_PTR(profile_info) || isnan(profile_info->matrix_in[0][0]) || isnan(profile_info->matrix_out[0][0]))
   {
     if (type != DT_COLORSPACE_DISPLAY)
     {
@@ -1025,8 +1025,8 @@ void dt_ioppr_transform_image_colorspace(struct dt_iop_module_t *self, const flo
   dt_times_t start_time = { 0 }, end_time = { 0 };
   if(darktable.unmuted & DT_DEBUG_PERF) dt_get_times(&start_time);
 
-  // matrix should be never dt_nan(), this is only to test it against lcms2!
-  if(!dt_isnan(profile_info->matrix_in[0][0]) && !dt_isnan(profile_info->matrix_out[0][0]))
+  // matrix should be never NAN, this is only to test it against lcms2!
+  if(!isnan(profile_info->matrix_in[0][0]) && !isnan(profile_info->matrix_out[0][0]))
   {
     _transform_matrix(self, image_in, image_out, width, height, cst_from, cst_to, converted_cst, profile_info);
 
@@ -1080,8 +1080,8 @@ void dt_ioppr_transform_image_colorspace_rgb(const float *const restrict image_i
   dt_times_t start_time = { 0 }, end_time = { 0 };
   if(darktable.unmuted & DT_DEBUG_PERF) dt_get_times(&start_time);
 
-  if(!dt_isnan(profile_info_from->matrix_in[0][0]) && !dt_isnan(profile_info_from->matrix_out[0][0])
-     && !dt_isnan(profile_info_to->matrix_in[0][0]) && !dt_isnan(profile_info_to->matrix_out[0][0]))
+  if(!isnan(profile_info_from->matrix_in[0][0]) && !isnan(profile_info_from->matrix_out[0][0])
+     && !isnan(profile_info_to->matrix_in[0][0]) && !isnan(profile_info_to->matrix_out[0][0]))
   {
     _transform_matrix_rgb(image_in, image_out, width, height, profile_info_from, profile_info_to);
 
@@ -1288,7 +1288,7 @@ int dt_ioppr_transform_image_colorspace_cl(struct dt_iop_module_t *self, const i
   *converted_cst = cst_from;
 
   // if we have a matrix use opencl
-  if(!dt_isnan(profile_info->matrix_in[0][0]) && !dt_isnan(profile_info->matrix_out[0][0]))
+  if(!isnan(profile_info->matrix_in[0][0]) && !isnan(profile_info->matrix_out[0][0]))
   {
     dt_times_t start_time = { 0 }, end_time = { 0 };
     if(darktable.unmuted & DT_DEBUG_PERF) dt_get_times(&start_time);
@@ -1445,8 +1445,8 @@ int dt_ioppr_transform_image_colorspace_rgb_cl(const int devid, cl_mem dev_img_i
   cl_mem matrix_cl = NULL;
 
   // if we have a matrix use opencl
-  if(!dt_isnan(profile_info_from->matrix_in[0][0]) && !dt_isnan(profile_info_from->matrix_out[0][0])
-     && !dt_isnan(profile_info_to->matrix_in[0][0]) && !dt_isnan(profile_info_to->matrix_out[0][0]))
+  if(!isnan(profile_info_from->matrix_in[0][0]) && !isnan(profile_info_from->matrix_out[0][0])
+     && !isnan(profile_info_to->matrix_in[0][0]) && !isnan(profile_info_to->matrix_out[0][0]))
   {
     dt_times_t start_time = { 0 }, end_time = { 0 };
     if(darktable.unmuted & DT_DEBUG_PERF) dt_get_times(&start_time);

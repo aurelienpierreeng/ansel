@@ -618,7 +618,7 @@ static gboolean _gradient_slider_draw(GtkWidget *widget, cairo_t *cr)
   cairo_set_source_rgba(cr, color.red, color.green, color.blue, 1.0);
 
   // do we have a picker value to draw?
-  if(!dt_isnan(gslider->picker[0]))
+  if(!isnan(gslider->picker[0]))
   {
     int vx_min = _scale_to_screen(widget, CLAMP(gslider->picker[1], 0.0, 1.0));
     int vx_max = _scale_to_screen(widget, CLAMP(gslider->picker[2], 0.0, 1.0));
@@ -689,7 +689,7 @@ static void _gradient_slider_set_defaults(GtkDarktableGradientSlider *gslider)
   gslider->scale_callback = _default_linear_scale_callback;
   gslider->is_resettable = FALSE;
   gslider->is_entered = FALSE;
-  gslider->picker[0] = gslider->picker[1] = gslider->picker[2] = dt_nan();
+  gslider->picker[0] = gslider->picker[1] = gslider->picker[2] = NAN;
   gslider->increment = DTGTK_GRADIENT_SLIDER_DEFAULT_INCREMENT;
   gslider->margin_left = gslider->margin_right = GRADIENT_SLIDER_MARGINS_DEFAULT;
   gslider->markers_type = FREE_MARKERS;
