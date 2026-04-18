@@ -332,7 +332,6 @@ pkg_check_modules(GTK3 REQUIRED IMPORTED_TARGET gtk+-3.0>=3.24)
 pkg_check_modules(RSVG2 REQUIRED IMPORTED_TARGET librsvg-2.0)
 pkg_check_modules(JSONGLIB REQUIRED IMPORTED_TARGET json-glib-1.0)
 pkg_check_modules(LIBXML2 REQUIRED IMPORTED_TARGET libxml-2.0)
-pkg_check_modules(ZLIB REQUIRED IMPORTED_TARGET zlib)
 find_package(LCMS2 REQUIRED)
 find_package(JPEG REQUIRED)
 find_package(PNG REQUIRED)
@@ -349,7 +348,6 @@ target_link_libraries(ansel_deps INTERFACE
   PkgConfig::RSVG2
   PkgConfig::JSONGLIB
   PkgConfig::LIBXML2
-  PkgConfig::ZLIB
   LCMS2::LCMS2
   PNG::PNG
   JPEG::JPEG
