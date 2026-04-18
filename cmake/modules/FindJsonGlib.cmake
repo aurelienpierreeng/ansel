@@ -5,33 +5,29 @@
 #  JsonGlib_INCLUDE_DIRS - the Glib include directories
 #  JsonGlib_LIBRARIES - link these to use Glib
 
-include(LibFindMacros)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(PC_JSONGLIB REQUIRED json-glib-1.0)
 
-# Use pkg-config to get hints about paths
-libfind_pkg_check_modules(JsonGlib_PKGCONF json-glib-1.0)
-
-# Main include dir
 find_path(JsonGlib_INCLUDE_DIR
   NAMES json-glib/json-glib.h
-  HINTS ${JsonGlib_PKGCONF_INCLUDE_DIRS}
-  PATH_SUFFIXES json-glib-1.0
+  HINTS ${PC_JSONGLIB_INCLUDE_DIRS}
 )
 
-# Finally the library itself
 find_library(JsonGlib_LIBRARY
   NAMES json-glib-1.0
-  HINTS ${JsonGlib_PKGCONF_LIBRARY_DIRS}
+  HINTS ${PC_JSONGLIB_LIBRARY_DIRS}
 )
 
-# Set the include dir variables and the libraries and let libfind_process do the rest.
-# NOTE: Singular variables for this library, plural for libraries this lib depends on.
-set(JsonGlib_PROCESS_INCLUDES ${JsonGlib_INCLUDE_DIR})
-set(JsonGlib_PROCESS_LIBS ${JsonGlib_LIBRARY})
-libfind_process(JsonGlib)
+include(FindPackageHandleStandardArgs)
+find_package_handle_standard_args(JsonGlib
+  REQUIRED_VARS JsonGlib_LIBRARY JsonGlib_INCLUDE_DIR
+)
 
 if(JsonGlib_FOUND)
-  set(JsonGlib_INCLUDE_DIRS ${JsonGlib_INCLUDE_DIR})
-  set(JsonGlib_LIBRARIES ${JsonGlib_LIBRARY})
-endif(JsonGlib_FOUND)
-
-
+  add_library(JsonGlib::JsonGlib UNKNOWN IMPORTED)
+  set_target_properties(JsonGlib::JsonGlib PROPERTIES
+    IMPORTED_LOCATION "${JsonGlib_LIBRARY}"
+    INTERFACE_INCLUDE_DIRECTORIES "${JsonGlib_INCLUDE_DIR}"
+    INTERFACE_LINK_LIBRARIES "${PC_JSONGLIB_LIBRARIES}"
+  )
+endif()

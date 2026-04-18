@@ -1,41 +1,38 @@
+# - Find LCMS2 (Little CMS 2)
 #
-# Find the native LCMS includes and library
-#
+# This module defines:
+#   LCMS2_FOUND
+#   LCMS2_INCLUDE_DIRS
+#   LCMS2_LIBRARIES
+#   LCMS2::LCMS2 (imported target)
 
-# This module defines
-# LCMS_INCLUDE_DIR, where to find art*.h etc
-# LCMS_LIBRARY, the libraries
-# LCMS_FOUND, If false, do not try to use LCMS.
-# LIBLCMS_LIBS, link information
-# LIBLCMS_CFLAGS, cflags for include information
-
-
-# INCLUDE(UsePkgConfig)
-
-# use pkg-config to get the directories and then use these values
-# in the FIND_PATH() and FIND_LIBRARY() calls
-# PKGCONFIG(lcms _lcmsIncDir _lcmsLinkDir _lcmsLinkFlags _lcmsCflags)
-
-# SET(LCMS2_LIBS ${_lcmsCflags})
-
-FIND_PATH(LCMS2_INCLUDE_DIR lcms2.h
-  PATHS /usr/include
-  /usr/local/include
-  HINTS ENV LCMS2_INCLUDE_DIR
+find_path(LCMS2_INCLUDE_DIR
+  NAMES lcms2.h
+  HINTS
+    ENV LCMS2_INCLUDE_DIR
   PATH_SUFFIXES lcms2
 )
 
-FIND_LIBRARY(LCMS2_LIBRARY
-  NAMES ${LCMS2_NAMES} lcms2 liblcms2 lcms2dll
-  PATHS /usr/lib /usr/local/lib
-  HINTS ENV LCMS2_LIBDIR
+find_library(LCMS2_LIBRARY
+  NAMES lcms2 liblcms2
+  HINTS
+    ENV LCMS2_LIBDIR
 )
 
 include(FindPackageHandleStandardArgs)
-find_package_handle_standard_args(LCMS2 DEFAULT_MSG LCMS2_LIBRARY LCMS2_INCLUDE_DIR)
+find_package_handle_standard_args(LCMS2
+  REQUIRED_VARS LCMS2_LIBRARY LCMS2_INCLUDE_DIR
+)
 
-IF(LCMS2_FOUND)
-  SET(LCMS2_LIBRARIES ${LCMS2_LIBRARY})
-  SET(LCMS2_INCLUDE_DIRS ${LCMS2_INCLUDE_DIR})
-ENDIF(LCMS2_FOUND)
+if(LCMS2_FOUND)
+  set(LCMS2_LIBRARIES ${LCMS2_LIBRARY})
+  set(LCMS2_INCLUDE_DIRS ${LCMS2_INCLUDE_DIR})
 
+  if(NOT TARGET LCMS2::LCMS2)
+    add_library(LCMS2::LCMS2 UNKNOWN IMPORTED)
+    set_target_properties(LCMS2::LCMS2 PROPERTIES
+      IMPORTED_LOCATION "${LCMS2_LIBRARY}"
+      INTERFACE_INCLUDE_DIRECTORIES "${LCMS2_INCLUDE_DIR}"
+    )
+  endif()
+endif()

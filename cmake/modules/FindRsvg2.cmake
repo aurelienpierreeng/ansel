@@ -8,23 +8,29 @@
 #  Rsvg2_LIBRARY, where to find the sqlite3 library.
 
 
-#=============================================================================
-# Copyright 2010 henrik andersson
-#=============================================================================
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(PC_RSVG2 REQUIRED librsvg-2.0)
 
-find_path(Rsvg2_INCLUDE_DIR librsvg/rsvg.h PATH_SUFFIXES librsvg-2.0 librsvg-2 )
-mark_as_advanced(Rsvg2_INCLUDE_DIR)
+find_path(Rsvg2_INCLUDE_DIR
+  NAMES librsvg/rsvg.h
+  HINTS ${PC_RSVG2_INCLUDE_DIRS}
+)
 
-set(Rsvg2_NAMES ${Rsvg2_NAMES} rsvg-2 librsvg-2)
-find_library(Rsvg2_LIBRARY NAMES ${Rsvg2_NAMES} )
-mark_as_advanced(Rsvg2_LIBRARY)
+find_library(Rsvg2_LIBRARY
+  NAMES rsvg-2 librsvg-2
+  HINTS ${PC_RSVG2_LIBRARY_DIRS}
+)
 
-# handle the QUIETLY and REQUIRED arguments and set Rsvg2_FOUND to TRUE if
-# all listed variables are TRUE
 include(FindPackageHandleStandardArgs)
-find_package_handle_standard_args(Rsvg2 DEFAULT_MSG Rsvg2_LIBRARY Rsvg2_INCLUDE_DIR)
+find_package_handle_standard_args(Rsvg2
+  REQUIRED_VARS Rsvg2_LIBRARY Rsvg2_INCLUDE_DIR
+)
 
-IF(Rsvg2_FOUND)
-  SET(Rsvg2_LIBRARIES ${Rsvg2_LIBRARY})
-  SET(Rsvg2_INCLUDE_DIRS ${Rsvg2_INCLUDE_DIR})
-ENDIF(Rsvg2_FOUND)
+if(Rsvg2_FOUND)
+  add_library(Rsvg2::Rsvg2 UNKNOWN IMPORTED)
+  set_target_properties(Rsvg2::Rsvg2 PROPERTIES
+    IMPORTED_LOCATION "${Rsvg2_LIBRARY}"
+    INTERFACE_INCLUDE_DIRECTORIES "${Rsvg2_INCLUDE_DIR}"
+    INTERFACE_LINK_LIBRARIES "${PC_RSVG2_LIBRARIES}"
+  )
+endif()

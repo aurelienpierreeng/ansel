@@ -325,49 +325,41 @@ endif()
 # Find all other required libraries for building
 #
 
-# GTK3 does pull glib, but this allows us to check for the version
-## The following works on CMake 3.28 and 3.30 but fails big time an 3.31 :
-#pkg_check_modules(Glib REQUIRED IMPORTED_TARGET glib-2.0>=2.64)
-#pkg_check_modules(GObject REQUIRED IMPORTED_TARGET gobject-2.0)
-#pkg_check_modules(GIO REQUIRED IMPORTED_TARGET gio-2.0)
-#pkg_check_modules(GThread REQUIRED IMPORTED_TARGET gthread-2.0)
-#pkg_check_modules(GModule REQUIRED IMPORTED_TARGET gmodule-2.0)
-#pkg_check_modules(PangoCairo REQUIRED IMPORTED_TARGET pangocairo)
-#pkg_check_modules(Rsvg2 REQUIRED IMPORTED_TARGET librsvg-2.0)
-#pkg_check_modules(JsonGlib REQUIRED IMPORTED_TARGET json-glib-1.0)
-#pkg_check_modules(LCMS2 REQUIRED IMPORTED_TARGET lcms2)
+find_package(GTK3 3.24 REQUIRED)
+find_package(Rsvg2 REQUIRED)
+find_package(JsonGlib REQUIRED)
+find_package(LCMS2 REQUIRED)
+find_package(LibXml2 REQUIRED)
+find_package(JPEG REQUIRED)
+find_package(PNG REQUIRED)
+find_package(TIFF REQUIRED)
+find_package(ZLIB REQUIRED)
 
-## <trash>
-
-find_package(PkgConfig REQUIRED)
-
-pkg_check_modules(RSVG2 REQUIRED librsvg-2.0)
-pkg_check_modules(JSONGLIB REQUIRED json-glib-1.0)
-pkg_check_modules(LCMS2 REQUIRED lcms2)
-
-add_library(ansel_glib INTERFACE)
 target_include_directories(ansel_deps INTERFACE
-  ${RSVG2_INCLUDE_DIRS}
-  ${JSONGLIB_INCLUDE_DIRS}
-  ${LCMS2_INCLUDE_DIRS}
+  GTK3::GTK3
+  Rsvg2::Rsvg2
+  JsonGlib::JsonGlib
+  LCMS2::LCMS2
+  PNG::PNG
+  JPEG::JPEG
+  TIFF::TIFF
+  ZLIB::ZLIB
 )
 target_link_libraries(ansel_deps INTERFACE
-  ${RSVG2_LINK_LIBRARIES}
-  ${JSONGLIB_LIBRARIES}
-  ${LCMS2_LIBRARIES}
+  GTK3::GTK3
+  Rsvg2::Rsvg2
+  JsonGlib::JsonGlib
+  LCMS2::LCMS2
+  PNG::PNG
+  JPEG::JPEG
+  TIFF::TIFF
+  ZLIB::ZLIB
 )
-
-## </trash>
-## Remove the preceding when CMake 3.31 will have fixed its shit
 
 add_definitions("-DGLIB_VERSION_MIN_REQUIRED=GLIB_VERSION_2_64")
 add_definitions("-DGLIB_VERSION_MAX_ALLOWED=GLIB_VERSION_MIN_REQUIRED")
-
-# GTK3 pulls in ATK, GDK, GDK-PIXBUF, CAIRO, GLIB, PANGO
-find_package(GTK3 3.24 REQUIRED)
 add_definitions("-DGDK_VERSION_MIN_REQUIRED=GDK_VERSION_3_24")
 #add_definitions("-DGDK_VERSION_MAX_ALLOWED=GDK_VERSION_MIN_REQUIRED")
-target_link_libraries(ansel_deps INTERFACE PkgConfig::GTK3)
 
 option(WITH_LIBSOUP2 "Use libsoup2 instead of libsoup3" OFF)
 option(WITH_LIBSOUP3 "Force libsoup3 (ignore libsoup2)" OFF)
@@ -478,29 +470,6 @@ target_link_libraries(ansel_deps INTERFACE Sqlite3::Sqlite3)
 # See <https://github.com/msys2/MINGW-packages/issues/21028>.
 find_package(CURL REQUIRED)
 target_link_libraries(ansel_deps INTERFACE CURL::libcurl)
-
-set(_ansel_find_packages
-  "LibXml2|2.6|LibXml2::LibXml2"
-  "PNG||PNG::PNG"
-  "JPEG||JPEG::JPEG"
-  "TIFF||TIFF::TIFF"
-  "ZLIB||ZLIB::ZLIB"
-)
-
-foreach(_ansel_dep ${_ansel_find_packages})
-  string(REPLACE "|" ";" _ansel_dep_fields "${_ansel_dep}")
-  list(GET _ansel_dep_fields 0 _ansel_dep_name)
-  list(GET _ansel_dep_fields 1 _ansel_dep_version)
-  list(GET _ansel_dep_fields 2 _ansel_dep_target)
-
-  if(_ansel_dep_version)
-    find_package(${_ansel_dep_name} ${_ansel_dep_version} REQUIRED)
-  else()
-    find_package(${_ansel_dep_name} REQUIRED)
-  endif()
-
-  target_link_libraries(ansel_deps INTERFACE ${_ansel_dep_target})
-endforeach()
 
 # Require exiv2 >= 0.27 to make sure everything we need is available
 find_package(Exiv2 0.27.4 REQUIRED)
