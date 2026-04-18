@@ -27,6 +27,7 @@ endif()
 
 set(RAWSPEED_PATH "${CMAKE_CURRENT_SOURCE_DIR}/rawspeed")
 set(RAWSPEED_BINARY_PREFIX "ansel")
+
 if(USE_CMARK)
   find_package(CMark QUIET)
   if(CMark_FOUND)
@@ -80,7 +81,17 @@ unset(CMAKE_CXX_INCLUDE_WHAT_YOU_USE)
 # Keep RawSpeed OpenMP setting aligned with the top-level build option
 set(WITH_OPENMP ${USE_OPENMP} CACHE BOOL "Enable OpenMP support in RawSpeed" FORCE)
 
+# RawSpeed doesn't do RelWithDebInfo builds, so we need to change that
+set(RAWSPEED_BUILD_TYPE ${CMAKE_BUILD_TYPE})
+set(_PARENT_BUILD_TYPE ${CMAKE_BUILD_TYPE})
+
+if(RAWSPEED_BUILD_TYPE STREQUAL "RelWithDebInfo")
+    set(RAWSPEED_BUILD_TYPE "Release")
+endif()
+
+set(CMAKE_BUILD_TYPE ${RAWSPEED_BUILD_TYPE} CACHE STRING "" FORCE)
 add_subdirectory(rawspeed)
+set(CMAKE_BUILD_TYPE ${_PARENT_BUILD_TYPE} CACHE STRING "" FORCE)
 
 # Only patch the target when OpenMP is actually enabled
 if(USE_OPENMP AND TARGET rawspeed)

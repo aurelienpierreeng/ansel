@@ -606,6 +606,19 @@ if(WIN32)
   list(APPEND LIBS exchndl) # Needed for exception handling and backtrace()
 endif(WIN32)
 
+## Override default CMake build flags
+# Release flags
+set(CMAKE_C_FLAGS_RELEASE "-O3 -DNDEBUG" CACHE STRING "" FORCE)
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG" CACHE STRING "" FORCE)
+
+# RelWithDebInfo flags
+set(CMAKE_C_FLAGS_RELWITHDEBINFO "-O3 -g -DNDEBUG" CACHE STRING "" FORCE)
+set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -g -DNDEBUG" CACHE STRING "" FORCE)
+
+# Debug flags
+set(CMAKE_C_FLAGS_DEBUG "-O0 -g3 -D_DEBUG -fno-omit-frame-pointer -Werror -Wuninitialized" CACHE STRING "" FORCE)
+set(CMAKE_CXX_FLAGS_DEBUG "-O0 -g3 -D_DEBUG -fno-omit-frame-pointer -Werror -Wuninitialized" CACHE STRING "" FORCE)
+
 if(NOT CUSTOM_CFLAGS)
 
   include(march-mtune)
@@ -616,18 +629,22 @@ if(NOT CUSTOM_CFLAGS)
   # The code uses dt_nan() as a special value meaning "undefined"
   # in several places. There is no reason to do so, just use binary flags. 
   # TODO: remove the use of dt_nan() in code as a special "undefined" flag for float values
-  set(DT_BASE_C_FLAGS "${MARCH} -Wfatal-errors -std=c11 -Wall -funroll-loops -ffast-math -fno-math-errno -fno-signed-zeros -fno-trapping-math -ffp-contract=fast -fno-strict-aliasing")
-  set(DT_BASE_CXX_FLAGS "${MARCH} -Wfatal-errors -Wall -funroll-loops -ffast-math -fno-math-errno -fno-signed-zeros -fno-trapping-math -ffp-contract=fast -fno-strict-aliasing")
+  # TODO: no looping over pixels in place, aka input ptr = output ptr
+  set(DT_BASE_C_FLAGS "${MARCH} -Wfatal-errors -std=c11 -Wall -funroll-loops -fno-strict-aliasing")
+  set(DT_BASE_CXX_FLAGS "${MARCH} -Wfatal-errors -Wall -funroll-loops -fno-strict-aliasing")
 
   # -------------------------------------------------------------------------
   # Build-type-specific flags
   # -------------------------------------------------------------------------
 
   # Release
-  set(DT_RELEASE_FLAGS "-Ofast -g")
+  set(DT_RELEASE_FLAGS "-ffast-math -ffp-contract=fast -fno-finite-math-only")
 
-  # RelWithDebInfo (same perf as release, but keep symbols)
-  set(DT_RELWITHDEBINFO_FLAGS "-O3 -g -fno-omit-frame-pointer")
+  # RelWithDebInfo (same perf as release, but no dangerous float arithmetics)
+  set(DT_RELWITHDEBINFO_FLAGS "")
+
+  # Debug
+  set(DT_DEBUG_FLAGS "")
 
   if(NOT WIN32)
     # This enables LTO (`-flto`): https://gcc.gnu.org/onlinedocs/gccint/LTO-Overview.html
@@ -647,15 +664,11 @@ if(NOT CUSTOM_CFLAGS)
     set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO TRUE)
   endif()
 
-  # Debug
-  set(DT_DEBUG_FLAGS "-O0 -g3 -fno-omit-frame-pointer -Werror -Wuninitialized")
-
   # -------------------------------------------------------------------------
   # Compiler-specific tuning
   # -------------------------------------------------------------------------
   if(CMAKE_C_COMPILER_ID MATCHES "GNU")
-    set(DT_BASE_C_FLAGS "${DT_BASE_C_FLAGS} -Wmaybe-uninitialized -Wno-undef -Wimplicit-function-declaration -Winfinite-recursion -fno-semantic-interposition -fno-signaling-nans")
-    set(DT_RELEASE_FLAGS "${DT_RELEASE_FLAGS} -floop-nest-optimize -ftree-loop-im -fvariable-expansion-in-unroller -ftree-loop-im -fira-loop-pressure")
+    set(DT_BASE_C_FLAGS "${DT_BASE_C_FLAGS} -Wmaybe-uninitialized -Wno-undef -Wimplicit-function-declaration -Winfinite-recursion -fno-semantic-interposition -fno-signaling-nans -ftree-vectorize -floop-nest-optimize -ftree-loop-im -fvariable-expansion-in-unroller -ftree-loop-im -fira-loop-pressure")
   elseif(CMAKE_C_COMPILER_ID MATCHES "Clang")
     set(DT_BASE_C_FLAGS "${DT_BASE_C_FLAGS} -fvectorize -fslp-vectorize -ftree-slp-vectorize")
   endif()
@@ -679,27 +692,14 @@ if(NOT CUSTOM_CFLAGS)
 endif(NOT CUSTOM_CFLAGS)
 
 # ---------------------------------------------------------------------------
-# Debug defines. Not sure why we need those manually.
-# ---------------------------------------------------------------------------
-set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -D_DEBUG")
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -D_DEBUG")
-
-# ---------------------------------------------------------------------------
 # Final aggregation 
 # ---------------------------------------------------------------------------
 string(TOUPPER "${CMAKE_BUILD_TYPE}" DT_BUILD_TYPE_UPPER)
-set(DT_BUILD_C_FLAGS "${CMAKE_C_FLAGS} ${CMAKE_C_FLAGS_${DT_BUILD_TYPE_UPPER}}")
-set(DT_BUILD_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_${DT_BUILD_TYPE_UPPER}}")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CMAKE_C_FLAGS_${DT_BUILD_TYPE_UPPER}}")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_${DT_BUILD_TYPE_UPPER}}")
 
-foreach(_dt_flag_var DT_BUILD_C_FLAGS DT_BUILD_CXX_FLAGS)
-  string(STRIP "${${_dt_flag_var}}" ${_dt_flag_var})
-  string(REGEX REPLACE "[ \t\r\n]+" " " ${_dt_flag_var} "${${_dt_flag_var}}")
-  string(REPLACE "\\" "\\\\" ${_dt_flag_var} "${${_dt_flag_var}}")
-  string(REPLACE "\"" "\\\"" ${_dt_flag_var} "${${_dt_flag_var}}")
-endforeach()
-
-message(STATUS "CMAKE_C_FLAGS = ${DT_BUILD_C_FLAGS}")
-message(STATUS "CMAKE_CXX_FLAGS = ${DT_BUILD_CXX_FLAGS}")
+message(STATUS "CMAKE_C_FLAGS = ${CMAKE_C_FLAGS}")
+message(STATUS "CMAKE_CXX_FLAGS = ${CMAKE_CXX_FLAGS}")
 
 if(BINARY_PACKAGE_BUILD)
   set(DT_BUILD_CPU_MODE "generic package")
