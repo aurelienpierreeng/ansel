@@ -296,12 +296,6 @@ endif()
 
 add_library(ansel_deps INTERFACE)
 
-# Append thread flags/libraries to LIBS
-list(APPEND LIBS "${CMAKE_THREAD_LIBS_INIT}")
-
-# Need to explicitly link against math library.
-list(APPEND LIBS "-lm")
-
 if(USE_OPENMP)
   if(OpenMP_C_FLAGS)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
@@ -715,12 +709,11 @@ configure_file("${CMAKE_CURRENT_SOURCE_DIR}/config.cmake.h" "${CMAKE_CURRENT_BIN
 #
 
 # Actual defination of the target is in `external/CMakeLists.txt`.
-list(APPEND STATIC_LIBS whereami)
+target_include_directories(whereami PUBLIC external/whereami)
 
 add_library(lib_ansel_imageio_rawspeed STATIC common/imageio_rawspeed.cc)
 target_link_libraries(lib_ansel_imageio_rawspeed PRIVATE rawspeed)
 target_link_libraries(lib_ansel_imageio_rawspeed PUBLIC ansel_deps)
-list(APPEND STATIC_LIBS lib_ansel_imageio_rawspeed)
 
 # Don't do too much, if `USE_BUNDLED_LIBRAW=OFF` but `libraw_FOUND=NOTFOUND`,
 # it's considered as packager's mistake. Instead of using bundled LibRaw as
@@ -728,20 +721,23 @@ list(APPEND STATIC_LIBS lib_ansel_imageio_rawspeed)
 # be easily found.
 if(USE_LIBRAW)
   if(USE_BUNDLED_LIBRAW)
+    add_library(lib_ansel_imageio_libraw STATIC common/imageio_libraw.c)
     add_definitions(-DHAVE_LIBRAW=1)
-    list(APPEND SOURCES "common/imageio_libraw.c")
     set(LIBRAW_PATH "${CMAKE_CURRENT_SOURCE_DIR}/external/LibRaw" CACHE STRING "Relative path to libraw directory (default=CMAKE_CURRENT_SOURCE_DIR)")
     if(NOT USE_OPENMP)
       set(ENABLE_OPENMP OFF CACHE BOOL "")
     endif()
     add_subdirectory(external/LibRaw-cmake)
-    list(APPEND STATIC_LIBS libraw::libraw)
+    target_link_libraries(lib_ansel_imageio_libraw PRIVATE libraw::libraw)
+    target_link_libraries(lib_ansel_imageio_libraw PUBLIC ansel_deps)
+
   else()
-    find_package(libraw 0.21.0)
+    find_package(libraw)
     if(libraw_FOUND)
-      list(APPEND LIBS ${libraw_LIBRARY})
+      add_library(lib_ansel_imageio_libraw STATIC common/imageio_libraw.c)
       add_definitions(-DHAVE_LIBRAW=1)
-      list(APPEND SOURCES "common/imageio_libraw.c")
+      target_link_libraries(lib_ansel_imageio_libraw PRIVATE libraw::libraw)
+      target_link_libraries(lib_ansel_imageio_libraw PUBLIC ansel_deps)
     endif()
   endif()
 endif()
@@ -818,7 +814,6 @@ endif(USE_LUA)
 if(USE_LUA)
   include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/LuaAutoC/)
   add_subdirectory(external/LuaAutoC)
-  list(APPEND STATIC_LIBS lautoc)
 endif(USE_LUA)
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
@@ -979,9 +974,11 @@ set_target_properties(lib_ansel PROPERTIES LINKER_LANGUAGE C)
 #
 # Link external libs
 #
-target_link_libraries(lib_ansel PRIVATE ${STATIC_LIBS})
-target_link_libraries(lib_ansel PUBLIC ${LIBS})
 target_link_libraries(lib_ansel PUBLIC ansel_deps)
+target_link_libraries(lib_ansel PRIVATE lib_ansel_imageio_rawspeed)
+target_link_libraries(lib_ansel PRIVATE lib_ansel_imageio_libraw)
+target_link_libraries(lib_ansel PRIVATE whereami)
+target_link_libraries(lib_ansel PUBLIC ${LIBS})
 
 if(OpenMP_C_FOUND)
   target_link_libraries(lib_ansel PUBLIC OpenMP::OpenMP_C)
@@ -991,8 +988,12 @@ if(OpenMP_CXX_FOUND)
   target_link_libraries(lib_ansel PUBLIC OpenMP::OpenMP_CXX)
 endif()
 
-message(STATUS "Public libs:" ${LIBS})
-message(STATUS "Static libs:" ${STATIC_LIBS})
+#if(LIBS)
+#  message(FATAL_ERROR "LIBS is deprecated and must not be used: ${LIBS}")
+#endif()
+if(STATIC_LIBS)
+  message(FATAL_ERROR "STATIC_LIBS is deprecated and must not be used: ${STATIC_LIBS}")
+endif()
 
 #get_target_property(_ansel_deps_libs ansel_deps INTERFACE_LINK_LIBRARIES)
 #if(_ansel_deps_libs)
@@ -1001,9 +1002,6 @@ message(STATUS "Static libs:" ${STATIC_LIBS})
 #endif()
 
 message(STATUS "Ansel deps:" ${_ansel_deps_libs})
-
-unset(STATIC_LIBS)
-unset(LIBS)
 
 #
 # Install libansel
