@@ -3688,6 +3688,35 @@ void dtgtk_cairo_paint_flowchart(cairo_t *cr, gint x, gint y, gint w, gint h, gi
   FINISH
 }
 
+void dtgtk_liquify_cairo_paint_node_tool(cairo_t *cr, const gint x, const gint y, const gint w, const gint h,
+                                            const gint flags, void *data)
+{
+  PREAMBLE(1, 1, 0, 0);
+  cairo_arc(cr, 0.5, 0.5, 0.2, 0, 2 * M_PI);
+  cairo_stroke(cr);
+  FINISH;
+}
+
+void dtgtk_liquify_cairo_paint_line_tool(cairo_t *cr, const gint x, const gint y, const gint w, const gint h,
+                                            const gint flags, void *data)
+{
+  PREAMBLE(1, 1, 0, 0);
+  cairo_move_to(cr, 0.1, 0.9);
+  cairo_line_to(cr, 0.9, 0.1);
+  cairo_stroke(cr);
+  FINISH;
+}
+
+void dtgtk_liquify_cairo_paint_curve_tool(cairo_t *cr, const gint x, const gint y, const gint w, const gint h,
+                                             const gint flags, void *data)
+{
+  PREAMBLE(1, 1, 0, 0);
+  cairo_move_to(cr, 0.1, 0.9);
+  cairo_curve_to(cr, 0.1, 0.5, 0.5, 0.1, 0.9, 0.1);
+  cairo_stroke(cr);
+  FINISH;
+}
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent

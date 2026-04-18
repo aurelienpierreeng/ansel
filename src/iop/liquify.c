@@ -305,7 +305,7 @@ typedef struct
   dt_liquify_path_data_t *temp;    ///< Points to the element under construction or NULL.
   dt_liquify_status_enum_t status; ///< Various flags.
 
-  GtkLabel *label;
+  GtkLabel *label_warp, *label_node;
   GtkToggleButton *btn_point_tool, *btn_line_tool, *btn_curve_tool, *btn_node_tool;
 
   gboolean just_started;
@@ -1852,9 +1852,11 @@ static void update_warp_count(const dt_iop_liquify_gui_data_t *g)
       if(g->params.nodes[k].header.type == DT_LIQUIFY_PATH_MOVE_TO_V1)
         warp++;
     }
-  char str[10];
-  snprintf(str, sizeof(str), "%d | %d", warp, node);
-  gtk_label_set_text(g->label, str);
+  char str_warp[10], str_node[20];
+  snprintf(str_warp, sizeof(str_warp), "%d", warp);
+  snprintf(str_node, sizeof(str_node), "%d", node);
+  gtk_label_set_text(g->label_warp, str_warp);
+  gtk_label_set_text(g->label_node, str_node);
 }
 
 static GList *interpolate_paths(dt_iop_liquify_params_t *p)
@@ -3584,18 +3586,6 @@ done:
   return handled;
 }
 
-static void _liquify_cairo_paint_point_tool(cairo_t *cr, const gint x, const gint y, const gint w, const gint h,
-                                            const gint flags, void *data);
-
-static void _liquify_cairo_paint_line_tool(cairo_t *cr, const gint x, const gint y, const gint w, const gint h,
-                                           const gint flags, void *data);
-
-static void _liquify_cairo_paint_curve_tool(cairo_t *cr, const gint x, const gint y, const gint w, const gint h,
-                                            const gint flags, void *data);
-
-static void _liquify_cairo_paint_node_tool(cairo_t *cr, const gint x, const gint y, const gint w, const gint h,
-                                           const gint flags, void *data);
-
 // we need this only because darktable has no radiobutton support
 
 static gboolean btn_make_radio_callback(GtkToggleButton *btn, GdkEventButton *event, dt_iop_module_t *module)
@@ -3690,29 +3680,42 @@ void gui_init(dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(hbox, _("use a tool to add warps.\nright-click to remove a warp."));
   gtk_box_pack_start(GTK_BOX(self->widget), hbox, TRUE, TRUE, 0);
 
-  GtkWidget *label = dt_ui_label_new(_("warps|nodes count:"));
-  gtk_box_pack_start(GTK_BOX(hbox), label, FALSE, TRUE, 0);
-  g->label = GTK_LABEL(dt_ui_label_new("-"));
-  gtk_box_pack_start(GTK_BOX(hbox), GTK_WIDGET(g->label), FALSE, TRUE, 0);
+
+  GtkWidget *lbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+  gtk_box_pack_start(GTK_BOX(hbox), lbox, FALSE, TRUE, 0);
+
+  GtkWidget *labelbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *label = dt_ui_label_new(_("Warps: "));
+  gtk_box_pack_start(GTK_BOX(labelbox), label, FALSE, TRUE, 0);
+  g->label_warp = GTK_LABEL(dt_ui_label_new("-"));
+  gtk_box_pack_start(GTK_BOX(labelbox), GTK_WIDGET(g->label_warp), FALSE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(lbox), labelbox, FALSE, TRUE, 0);
+
+  GtkWidget *labelbox2 = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *label2 = dt_ui_label_new(_("Nodes: "));
+  gtk_box_pack_start(GTK_BOX(labelbox2), label2, FALSE, TRUE, 0);
+  g->label_node = GTK_LABEL(dt_ui_label_new("-"));
+  gtk_box_pack_start(GTK_BOX(labelbox2), GTK_WIDGET(g->label_node), FALSE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(lbox), labelbox2, FALSE, TRUE, 0);
 
   hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
   gtk_box_pack_start(GTK_BOX(self->widget), hbox, TRUE, TRUE, 0);
 
   g->btn_node_tool = GTK_TOGGLE_BUTTON(dt_iop_togglebutton_new(self, NULL, N_("edit, add and delete nodes"), NULL,
                                        G_CALLBACK(btn_make_radio_callback), TRUE, 0, 0,
-                                       _liquify_cairo_paint_node_tool, hbox));
+                                       dtgtk_cairo_paint_masks_edit, hbox));
 
   g->btn_curve_tool = GTK_TOGGLE_BUTTON(dt_iop_togglebutton_new(self, N_("shapes"), N_("draw curves"), N_("draw multiple curves"),
                                         G_CALLBACK(btn_make_radio_callback), TRUE, 0, 0,
-                                        _liquify_cairo_paint_curve_tool, hbox));
+                                        dtgtk_liquify_cairo_paint_curve_tool, hbox));
 
   g->btn_line_tool = GTK_TOGGLE_BUTTON(dt_iop_togglebutton_new(self, N_("shapes"), N_("draw lines"), N_("draw multiple lines"),
                                        G_CALLBACK(btn_make_radio_callback), TRUE, 0, 0,
-                                       _liquify_cairo_paint_line_tool, hbox));
+                                       dtgtk_liquify_cairo_paint_line_tool, hbox));
 
   g->btn_point_tool = GTK_TOGGLE_BUTTON(dt_iop_togglebutton_new(self, N_("shapes"), N_("draw points"), N_("draw multiple points"),
                                          G_CALLBACK(btn_make_radio_callback), TRUE, 0, 0,
-                                         _liquify_cairo_paint_point_tool, hbox));
+                                         dtgtk_liquify_cairo_paint_node_tool, hbox));
 
   dt_liquify_layers[DT_LIQUIFY_LAYER_PATH].hint           = _("ctrl+click: add node - right click: remove path\n"
                                                               "ctrl+alt+click: toggle line/curve");
@@ -3742,73 +3745,6 @@ void gui_cleanup(dt_iop_module_t *self)
   IOP_GUI_FREE;
 }
 
-// defgroup Button paint functions
-
-#define PREAMBLE                                       \
-  cairo_save(cr);                                      \
-  const gint s = MIN(w, h);                            \
-  cairo_translate(cr, x + (w / 2.0) - (s / 2.0),       \
-                  y + (h / 2.0) - (s / 2.0));          \
-  cairo_scale(cr, s, s);                               \
-  cairo_push_group(cr);                                \
-  cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 1.0);       \
-  cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);        \
-  cairo_set_line_width(cr, 0.2);
-
-#define POSTAMBLE                                              \
-  cairo_pop_group_to_source(cr);                               \
-  cairo_paint_with_alpha(cr, flags & CPF_ACTIVE ? 1.0 : 0.5);  \
-  cairo_restore(cr);
-
-static void _liquify_cairo_paint_point_tool(cairo_t *cr, const gint x, const gint y, const gint w, const gint h,
-                                             const gint flags, void *data)
-{
-  PREAMBLE;
-  cairo_new_sub_path(cr);
-  cairo_arc(cr, 0.5, 0.5, 0.2, 0.0, 2 * DT_M_PI);
-  cairo_fill(cr);
-  POSTAMBLE;
-}
-
-static void _liquify_cairo_paint_line_tool(cairo_t *cr, const gint x, const gint y, const gint w, const gint h,
-                                            const gint flags, void *data)
-{
-  PREAMBLE;
-  cairo_move_to(cr, 0.1, 0.9);
-  cairo_line_to(cr, 0.9, 0.1);
-  cairo_stroke(cr);
-  POSTAMBLE;
-}
-
-static void _liquify_cairo_paint_curve_tool(cairo_t *cr, const gint x, const gint y, const gint w, const gint h,
-                                             const gint flags, void *data)
-{
-  PREAMBLE;
-  cairo_move_to(cr, 0.1, 0.9);
-  cairo_curve_to(cr, 0.1, 0.5, 0.5, 0.1, 0.9, 0.1);
-  cairo_stroke(cr);
-  POSTAMBLE;
-}
-
-static void _liquify_cairo_paint_node_tool(cairo_t *cr, const gint x, const gint y, const gint w, const gint h,
-                                            const gint flags, void *data)
-{
-  PREAMBLE;
-  const double dashed[] = {0.2, 0.2};
-  cairo_set_dash(cr, dashed, 2, 0);
-  cairo_set_line_width(cr, 0.1);
-
-  cairo_arc(cr, 0.75, 0.75, 0.75, 2.8, 4.7124);
-  cairo_stroke(cr);
-  cairo_rectangle(cr, 0.2, 0.0, 0.4, 0.4);
-  cairo_fill(cr);
-  cairo_move_to(cr, 0.4,  0.2);
-  cairo_line_to(cr, 0.5,  1.0);
-  cairo_line_to(cr, 0.9,  0.7);
-  cairo_close_path(cr);
-  cairo_fill(cr);
-  POSTAMBLE;
-}
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

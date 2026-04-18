@@ -374,6 +374,14 @@ void dtgtk_cairo_paint_pin(cairo_t *cr, gint x, gint y, gint w, gint h, gint fla
 void dtgtk_cairo_paint_link_chain(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
 
 
+/** Paint button for Liquify */
+void dtgtk_liquify_cairo_paint_node_tool(cairo_t *cr, const gint x, const gint y, const gint w, const gint h,
+                                            const gint flags, void *data);
+void dtgtk_liquify_cairo_paint_line_tool(cairo_t *cr, const gint x, const gint y, const gint w, const gint h,
+                                            const gint flags, void *data);
+void dtgtk_liquify_cairo_paint_curve_tool(cairo_t *cr, const gint x, const gint y, const gint w, const gint h,
+                                             const gint flags, void *data);
+
 #ifdef __cplusplus
 }
 #endif
