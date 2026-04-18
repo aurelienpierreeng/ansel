@@ -109,37 +109,6 @@ static const int dt_mipmap_cache_exif_data_srgb_length
 static const int dt_mipmap_cache_exif_data_adobergb_length
                       = sizeof(dt_mipmap_cache_exif_data_adobergb) / sizeof(*dt_mipmap_cache_exif_data_adobergb);
 
-static gboolean _mipmap_cache_disk_hash_matches(const int32_t imgid, const dt_mipmap_size_t mip)
-{
-  uint64_t history_hash = UINT64_MAX;
-  uint64_t mipmap_hash = 0;
-  const dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
-  if(img)
-  {
-    history_hash = img->history_hash;
-    mipmap_hash = img->mipmap_hash;
-    dt_image_cache_read_release(darktable.image_cache, img);
-  }
-
-  const gboolean matches = mipmap_hash == history_hash;
-  dt_print(DT_DEBUG_CACHE,
-           "[mipmap_cache] image %d at mip size %i %s up-to-date cache in database for  (history hash=%" PRIu64 " ; mipmap hash=%" PRIu64 ")\n",
-           imgid, mip, (matches) ? "found" : "did not found", history_hash, mipmap_hash);
-  return matches;
-}
-
-static uint64_t _mipmap_cache_get_history_hash(const int32_t imgid)
-{
-  uint64_t history_hash = UINT64_MAX;
-  const dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
-  if(img)
-  {
-    history_hash = img->history_hash;
-    dt_image_cache_read_release(darktable.image_cache, img);
-  }
-  return history_hash;
-}
-
 struct dt_mipmap_buffer_dsc
 {
   uint32_t width;
@@ -537,12 +506,6 @@ void dt_mipmap_cache_allocate_dynamic(void *data, dt_cache_entry_t *entry)
     dt_imageio_jpeg_t jpg;
     FILE *f = NULL;
 
-    if(!_mipmap_cache_disk_hash_matches(imgid, mip))
-    {
-      g_unlink(filename);
-      goto finish;
-    }
-
     f = g_fopen(filename, "rb");
     if(IS_NULL_PTR(f))
     {
@@ -651,23 +614,6 @@ void dt_mipmap_cache_deallocate_dynamic(void *data, dt_cache_entry_t *entry)
     _write_mipmap_to_disk(imgid, NULL, NULL, NULL, NULL, NULL, &write_to_disk);
 
     struct dt_mipmap_buffer_dsc *dsc = _get_dsc_from_entry(entry);
-
-    // If the mipmap hash doesn't match the history hash, update the file cache
-    // FIXME: because we handle only one mipmap hash per image, and not per mipmap size,
-    // as soon as one size was written to disk cache, it updates the DB hash globally
-    // and the following code will prevent other sizes from being written later.
-    // So for now, we unconditionnally write all mipmap sizes, which triggers undue I/O.
-    // The fix will need to create new database entries (meaning: upgrade database layout and break compatibility) 
-    // to manage one mipmap (integrity) hash per mipmap size.
-    /*
-    if(!_mipmap_cache_disk_hash_matches(imgid, mip))
-    {
-      dsc->flags |= DT_MIPMAP_BUFFER_DSC_FLAG_INVALIDATE;
-      dt_print(DT_DEBUG_CACHE, "[mipmap_cache] image %i for size %i is %s for (over)writing to cache\n", imgid, mip, 
-        write_to_disk ? "planned" : "not planned");
-    }
-    */
-
     // don't write skulls:
     if(dsc->width > 8 && dsc->height > 8)
     {
@@ -727,8 +673,6 @@ write_error:
             }
             else
             {
-              const uint64_t history_hash = _mipmap_cache_get_history_hash(imgid);
-              dt_history_hash_set_mipmap(imgid, history_hash, DT_IMAGE_CACHE_RELAXED);
               dt_print(DT_DEBUG_CACHE, "[mipmap_cache] image %i for size %i was written to cache at %s\n", imgid, mip, filename);
             }
           }

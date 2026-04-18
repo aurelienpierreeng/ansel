@@ -787,22 +787,6 @@ gboolean dt_history_db_get_autoapply_ioporder_params(const int32_t imgid, const 
   return ok;
 }
 
-
-void dt_history_hash_set_mipmap(const int32_t imgid, const uint64_t history_hash,
-                                const dt_image_cache_write_mode_t mode)
-{
-  if(imgid <= 0) return;
-  if(history_hash == UINT64_MAX) return;
-
-  dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'w');
-  if(IS_NULL_PTR(img)) return;
-  dt_print(DT_DEBUG_IMAGEIO,
-           "[history/hash] imgid=%d write mipmap=%" PRIu64 " current=%" PRIu64 " mode=%d\n",
-           imgid, history_hash, img->history_hash, mode);
-  img->mipmap_hash = history_hash;
-  dt_image_cache_write_release(darktable.image_cache, img, mode);
-}
-
 #undef DT_IOP_ORDER_INFO
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
