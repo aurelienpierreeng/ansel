@@ -81,8 +81,6 @@
 */
 /** this is the view for the darkroom module.  */
 
-#include "common/extra_optimizations.h"
-
 #include "bauhaus/bauhaus.h"
 #include "common/collection.h"
 #include "common/colorspaces.h"

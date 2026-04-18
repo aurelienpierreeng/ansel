@@ -27,11 +27,6 @@
 #include "common/eigf.h"
 #include "develop/openmp_maths.h"
 
-/* NOTE: this code complies with the optimizations in "common/extra_optimizations.h".
- * Consider including that at the beginning of a *.c file where you use this
- * header (provided the rest of the code complies).
- **/
-
 __OMP_DECLARE_SIMD__()
 static inline float uint8_to_float(const uint8_t i)
 {

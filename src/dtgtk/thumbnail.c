@@ -38,8 +38,6 @@
 */
 /** this is the thumbnail class for the lighttable module.  */
 
-#include "common/extra_optimizations.h"
-
 #include "dtgtk/thumbnail.h"
 #include "dtgtk/thumbtable.h"
 #include "dtgtk/thumbtable_info.h"

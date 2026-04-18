@@ -70,11 +70,6 @@
    The 'fp-contract=fast' option enables fused multiply&add if available
 */
 
-#ifdef __GNUC__
-  #pragma GCC push_options
-  #pragma GCC optimize ("fast-math", "fp-contract=fast", "finite-math-only", "no-math-errno")
-#endif
-
 #define RCD_BORDER 9          // avoid tile-overlap errors
 #define RCD_MARGIN 6          // for the outermost tiles we can have a smaller outer border
 #define RCD_TILEVALID (RCD_TILESIZE - 2 * RCD_BORDER)
@@ -850,11 +845,6 @@ error:
   return FALSE;
 }
 #endif //HAVE_OPENCL
-
-// revert rcd specific aggressive optimizing
-#ifdef __GNUC__
-  #pragma GCC pop_options
-#endif
 
 #undef RCD_BORDER
 #undef RCD_MARGIN

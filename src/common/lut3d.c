@@ -18,7 +18,6 @@
 
 #include "common/darktable.h"
 #include "common/lut3d.h"
-#include "common/extra_optimizations.h"
 
 #include <math.h>
 

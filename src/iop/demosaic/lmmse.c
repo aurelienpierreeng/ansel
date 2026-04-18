@@ -52,11 +52,6 @@
   #define LMMSE_GRP 136
 #endif
 
-#ifdef __GNUC__
-  #pragma GCC push_options
-  #pragma GCC optimize ("fast-math", "fp-contract=fast", "finite-math-only", "no-math-errno")
-#endif
-
 #define LMMSE_OVERLAP 8
 #define BORDER_AROUND 4
 #define LMMSE_TILESIZE (LMMSE_GRP - 2 * BORDER_AROUND)
@@ -579,11 +574,6 @@ static void lmmse_demosaic(const dt_dev_pixelpipe_iop_t *piece, float *const res
     dt_pixelpipe_cache_free_align(buffer);
   }
 }
-
-// revert specific aggressive optimizing
-#ifdef __GNUC__
-  #pragma GCC pop_options
-#endif
 
 #undef LMMSE_TILESIZE
 #undef LMMSE_OVERLAP

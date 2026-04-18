@@ -121,16 +121,6 @@ DT_MODULE_INTROSPECTION(5, dt_iop_filmicrgb_params_t)
  *
  * */
 
-
-/** Note :
- * we use finite-math-only and fast-math because divisions by zero are manually avoided in the code
- * fp-contract=fast enables hardware-accelerated Fused Multiply-Add
- **/
-#if defined(__GNUC__)
-#pragma GCC optimize("finite-math-only", "fp-contract=fast", "fast-math", "no-math-errno")
-#endif
-
-
 typedef enum dt_iop_filmicrgb_methods_type_t
 {
   DT_FILMIC_METHOD_NONE = 0,              // $DESCRIPTION: "no"

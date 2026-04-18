@@ -96,8 +96,6 @@
  *
 ***/
 
-#include "common/extra_optimizations.h"
-
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif

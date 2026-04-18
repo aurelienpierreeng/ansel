@@ -616,14 +616,15 @@ if(NOT CUSTOM_CFLAGS)
   # The code uses dt_nan() as a special value meaning "undefined"
   # in several places. There is no reason to do so, just use binary flags. 
   # TODO: remove the use of dt_nan() in code as a special "undefined" flag for float values
-  set(DT_BASE_C_FLAGS "${MARCH} -Wfatal-errors -std=c11 -Wall -ffast-math -fno-math-errno -fno-signed-zeros -fno-trapping-math -ffp-contract=fast")
+  set(DT_BASE_C_FLAGS "${MARCH} -Wfatal-errors -std=c11 -Wall -funroll-loops -ffast-math -fno-math-errno -fno-signed-zeros -fno-trapping-math -ffp-contract=fast -fno-strict-aliasing")
+  set(DT_BASE_CXX_FLAGS "${MARCH} -Wfatal-errors -Wall -funroll-loops -ffast-math -fno-math-errno -fno-signed-zeros -fno-trapping-math -ffp-contract=fast -fno-strict-aliasing")
 
   # -------------------------------------------------------------------------
   # Build-type-specific flags
   # -------------------------------------------------------------------------
 
   # Release
-  set(DT_RELEASE_FLAGS "-O3 -g")
+  set(DT_RELEASE_FLAGS "-Ofast -g")
 
   # RelWithDebInfo (same perf as release, but keep symbols)
   set(DT_RELWITHDEBINFO_FLAGS "-O3 -g -fno-omit-frame-pointer")
@@ -654,8 +655,9 @@ if(NOT CUSTOM_CFLAGS)
   # -------------------------------------------------------------------------
   if(CMAKE_C_COMPILER_ID MATCHES "GNU")
     set(DT_BASE_C_FLAGS "${DT_BASE_C_FLAGS} -Wmaybe-uninitialized -Wno-undef -Wimplicit-function-declaration -Winfinite-recursion -fno-semantic-interposition -fno-signaling-nans")
+    set(DT_RELEASE_FLAGS "${DT_RELEASE_FLAGS} -floop-nest-optimize -ftree-loop-im -fvariable-expansion-in-unroller -ftree-loop-im -fira-loop-pressure")
   elseif(CMAKE_C_COMPILER_ID MATCHES "Clang")
-    set(DT_BASE_C_FLAGS "${DT_BASE_C_FLAGS} -fvectorize -fslp-vectorize")
+    set(DT_BASE_C_FLAGS "${DT_BASE_C_FLAGS} -fvectorize -fslp-vectorize -ftree-slp-vectorize")
   endif()
 
   # -------------------------------------------------------------------------
@@ -665,11 +667,19 @@ if(NOT CUSTOM_CFLAGS)
   set(CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO} ${DT_RELWITHDEBINFO_FLAGS}")
   set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} ${DT_DEBUG_FLAGS}")
   set(CMAKE_C_FLAGS "${DT_BASE_C_FLAGS} ${CMAKE_C_FLAGS}")
+  
+  # -------------------------------------------------------------------------
+  # Again to C++ flags
+  # -------------------------------------------------------------------------
+  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} ${DT_RELEASE_FLAGS}")
+  set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} ${DT_RELWITHDEBINFO_FLAGS}")
+  set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} ${DT_DEBUG_FLAGS}")
+  set(CMAKE_CXX_FLAGS "${DT_BASE_CXX_FLAGS} ${CMAKE_CXX_FLAGS}")
 
 endif(NOT CUSTOM_CFLAGS)
 
 # ---------------------------------------------------------------------------
-# Debug defines
+# Debug defines. Not sure why we need those manually.
 # ---------------------------------------------------------------------------
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -D_DEBUG")
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -D_DEBUG")
@@ -688,14 +698,14 @@ foreach(_dt_flag_var DT_BUILD_C_FLAGS DT_BUILD_CXX_FLAGS)
   string(REPLACE "\"" "\\\"" ${_dt_flag_var} "${${_dt_flag_var}}")
 endforeach()
 
+message(STATUS "CMAKE_C_FLAGS = ${DT_BUILD_C_FLAGS}")
+message(STATUS "CMAKE_CXX_FLAGS = ${DT_BUILD_CXX_FLAGS}")
+
 if(BINARY_PACKAGE_BUILD)
   set(DT_BUILD_CPU_MODE "generic package")
 else()
   set(DT_BUILD_CPU_MODE "native/local")
 endif()
-
-message(STATUS "CMAKE_C_FLAGS = ${DT_BUILD_C_FLAGS}")
-message(STATUS "CMAKE_CXX_FLAGS = ${DT_BUILD_CXX_FLAGS}")
 
 #
 # Generate config.h

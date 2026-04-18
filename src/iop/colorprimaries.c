@@ -16,8 +16,6 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/extra_optimizations.h"
-
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif

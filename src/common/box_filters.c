@@ -34,10 +34,6 @@
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 
-#ifdef __GNUC__
-#pragma GCC optimize ("finite-math-only")
-#endif
-
 #if defined(__x86_64__) || defined(__i386__)
 #define DT_PREFETCH(addr) _mm_prefetch(addr, _MM_HINT_T2)
 #define PREFETCH_NTA(addr) _mm_prefetch(addr, _MM_HINT_NTA)
