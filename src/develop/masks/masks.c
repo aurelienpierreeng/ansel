@@ -1911,6 +1911,7 @@ int dt_masks_copy_used_forms_for_module(dt_develop_t *develop_dest, dt_develop_t
 void dt_masks_read_masks_history(dt_develop_t *develop, const int32_t image_id)
 {
   dt_dev_history_item_t *history_item = NULL;
+  dt_dev_history_item_t *last_history_item = NULL;
   int previous_num = -1;
 
   sqlite3_stmt *statement = NULL;
@@ -2004,8 +2005,13 @@ void dt_masks_read_masks_history(dt_develop_t *develop, const int32_t image_id)
       fprintf(stderr,
               "[_dev_read_masks_history] can't find history entry %i while adding mask %s(%i)\n",
               history_num, mask_form->name, form_id);
+
+    if(history_num < dt_dev_get_history_end_ext(develop)) last_history_item = history_item;
   }
   sqlite3_finalize(statement);
+
+  // and we update the current forms snapshot
+  dt_masks_replace_current_forms(develop, (last_history_item) ? last_history_item->forms : NULL);
 }
 
 void dt_masks_write_masks_history_item(const int32_t image_id, const int history_num,
