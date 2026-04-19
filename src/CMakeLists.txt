@@ -646,7 +646,7 @@ if(NOT CUSTOM_CFLAGS)
   # Debug
   set(DT_DEBUG_FLAGS "")
 
-  #if(NOT WIN32)
+  if(NOT WIN32)
     # This enables LTO (`-flto`): https://gcc.gnu.org/onlinedocs/gccint/LTO-Overview.html
     # It fails on Windows for exr.cc because std:string objects are defined twice,
     # once from OpenEXR and one from darktable.h, and there is no way to selectively
@@ -660,10 +660,9 @@ if(NOT CUSTOM_CFLAGS)
     # breaks the whole project.
     # So I haven't found a way to fix that and it sucks that one lib is making us drop 
     # this feature for the whole project.
-  set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
-  set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO TRUE)
-  set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_DEBUG TRUE)
-  #endif()
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO TRUE)
+  endif()
 
   # -------------------------------------------------------------------------
   # Compiler-specific tuning
