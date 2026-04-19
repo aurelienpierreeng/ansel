@@ -122,7 +122,7 @@ How to add a new benchmark
    ansel-bench -v XYZ
 
    to apply your new sidecar to the standard image from the
-   integration test suite (src/tests/integration/images/mire1.cr2).
+   integration test suite (tests/integration/images/mire1.cr2).
 
 
 Comparative Performance
