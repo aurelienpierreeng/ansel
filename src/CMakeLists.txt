@@ -282,17 +282,6 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-if(APPLE AND (CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang"))
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
-        list(REMOVE_ITEM CMAKE_CXX_IMPLICIT_LINK_LIBRARIES stdc++)
-        list(APPEND CMAKE_CXX_IMPLICIT_LINK_LIBRARIES c++)
-        list(REMOVE_DUPLICATES CMAKE_CXX_IMPLICIT_LINK_LIBRARIES)
-        # Also remove incorrectly parsed -lto_library flag
-        # It wasn't present with Xcode 7.2 and appeared before 8.3 release
-        # cmake 3.7.2 doesn't understand this flag and thinks it's a library
-        list(REMOVE_ITEM CMAKE_CXX_IMPLICIT_LINK_LIBRARIES to_library)
-endif()
-
 add_library(ansel_deps INTERFACE)
 
 if(USE_OPENMP)
@@ -630,7 +619,7 @@ if(NOT CUSTOM_CFLAGS)
   # in several places. There is no reason to do so, just use binary flags. 
   # TODO: remove the use of NAN in code as a special "undefined" flag for float values
   # TODO: no looping over pixels in place, aka input ptr = output ptr
-  set(DT_BASE_C_FLAGS "${MARCH} -Wfatal-errors -std=c11 -Wall -funroll-loops -ftree-vectorize -fno-strict-aliasing")
+  set(DT_BASE_C_FLAGS "${MARCH} -Wfatal-errors -Wall -funroll-loops -ftree-vectorize -fno-strict-aliasing")
   set(DT_BASE_CXX_FLAGS "${MARCH} -Wfatal-errors -Wall -funroll-loops -ftree-vectorize -fno-strict-aliasing")
 
   # -------------------------------------------------------------------------
