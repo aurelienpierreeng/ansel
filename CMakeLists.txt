@@ -140,10 +140,6 @@ if(USE_OPENMP)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
   endif()
 
-  message(STATUS "OpenMP found: ${OpenMP_FOUND} ; ${OpenMP_C_FLAGS}")
-  message(STATUS "OpenMP_C_FOUND: ${OpenMP_C_FOUND} ; ${OpenMP_CXX_FLAGS}")
-  message(STATUS "OpenMP_CXX_FOUND: ${OpenMP_CXX_FOUND}")
-
 endif(USE_OPENMP)
 
 # Check for base threading library
