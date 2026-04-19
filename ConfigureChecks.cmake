@@ -98,3 +98,13 @@ if(${BIGENDIAN})
 else()
     message(STATUS "Found little endian system. Good.")
 endif(${BIGENDIAN})
+
+check_c_source_compiles("
+static __thread int tls;
+int main(void)
+{
+  return 0;
+}" HAVE_TLS)
+if(NOT HAVE_TLS)
+  MESSAGE(FATAL_ERROR "The compiler does not support Thread-local storage.")
+endif()
