@@ -593,22 +593,17 @@ if(USE_IMAGEMAGICK AND NOT TARGET GraphicsMagick::GraphicsMagick AND NOT TARGET 
 endif()
 
 if(USE_GMIC)
-  # 1. Try CMake config first
-  find_package(GMIC CONFIG)
-
-  if(TARGET GMIC::GMIC)
-    target_link_libraries(ansel_deps INTERFACE GMIC::GMIC)
+  pkg_check_modules(GMIC IMPORTED_TARGET gmic)
+  if(TARGET PkgConfig::GMIC)
+    target_link_libraries(ansel_deps INTERFACE PkgConfig::GMIC)
     target_compile_definitions(ansel_deps INTERFACE HAVE_GMIC=1)
-
   else()
-    # 2. Only fallback if CONFIG is missing
-    if(PkgConfig_FOUND)
-      pkg_check_modules(GMIC IMPORTED_TARGET gmic)
-
-      if(TARGET PkgConfig::GMIC)
-        target_link_libraries(ansel_deps INTERFACE PkgConfig::GMIC)
-        target_compile_definitions(ansel_deps INTERFACE HAVE_GMIC=1)
-      endif()
+    find_library(GMIC_LIB gmic)
+    if(GMIC_LIB)
+      target_link_libraries(ansel_deps INTERFACE ${GMIC_LIB})
+      target_compile_definitions(ansel_deps INTERFACE HAVE_GMIC=1)
+    else()
+      message(WARNING "GMIC not found (no CONFIG, no pkg-config, no libgmic). GMIC support disabled.")
     endif()
   endif()
 endif()
