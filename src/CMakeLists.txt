@@ -629,16 +629,22 @@ if(USE_OPENCL)
 endif(USE_OPENCL)
 
 if(WIN32)
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--enable-runtime-pseudo-reloc -municode")
-  set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -Wl,--enable-runtime-pseudo-reloc")
-  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,--enable-runtime-pseudo-reloc")
+  # Linker flags (apply to final executable/shared targets, not globally)
+  target_link_options(ansel_deps INTERFACE
+    -Wl,--enable-runtime-pseudo-reloc
+    -Wl,--no-undefined
+    -Wl,-O1
+    -Wl,--as-needed
+    -Wl,--sort-common
+    -municode
+  )
 
-  SET(CMAKE_SHARED_LIBRARY_LINK_C_FLAGS "-Wl,--no-undefined -static-libgcc -Wl,-O1 -Wl,--as-needed -Wl,--sort-common")
-  SET(CMAKE_SHARED_LIBRARY_LINK_CXX_FLAGS "-Wl,--no-undefined -static-libgcc -Wl,-O1 -Wl,--as-needed -Wl,--sort-common")
-
-  list(APPEND LIBS psapi) # Needed for GetProcessMemoryInfo()
-  list(APPEND LIBS exchndl) # Needed for exception handling and backtrace()
-endif(WIN32)
+  # Libraries (proper modern form)
+  target_link_libraries(ansel_deps INTERFACE
+    psapi      # GetProcessMemoryInfo()
+    exchndl    # exception handling / backtrace
+  )
+endif()
 
 #
 # Generate config.h
