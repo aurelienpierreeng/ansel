@@ -782,7 +782,7 @@ void dt_color_picker_helper(const dt_iop_buffer_dsc_t *dsc, const float *const p
     size_t padded_size;
     float *const restrict denoised = dt_pixelpipe_cache_alloc_align_float_cache(4 * roi->width * roi->height, 0);
     float *converted = NULL;
-    float *const DT_ALIGNED_ARRAY tempbuf = dt_pixelpipe_cache_alloc_perthread_float(4 * roi->width, &padded_size); // TODO: alloc in caller
+    float *const tempbuf = dt_pixelpipe_cache_alloc_perthread_float(4 * roi->width, &padded_size); // TODO: alloc in caller
     if(IS_NULL_PTR(tempbuf) || IS_NULL_PTR(denoised))
       goto error;
 
