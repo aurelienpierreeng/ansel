@@ -41,7 +41,7 @@ jobs:
       fail-fast: false
       matrix:
         btype:
-          - Release
+          - RelWithDebInfo
         compiler:
           - { compiler: GNU13, CC: gcc-13, CXX: g++-13, GCC_VER: "13", LLVM_VER: "" }
         eco: [-DBINARY_PACKAGE_BUILD=ON -DUSE_XMLLINT=OFF]

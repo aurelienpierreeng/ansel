@@ -58,7 +58,7 @@ jobs:
             eco: "-DBINARY_PACKAGE_BUILD=ON -DUSE_GRAPHICSMAGICK=ON -DUSE_IMAGEMAGICK=OFF -DDT_APPLE_X86_TARGET_CLONES=1",
              } # AppleClang 17, intel64
         btype:
-          - Release
+          - RelWithDebInfo
         compiler:
           - { compiler: XCode,   CC: cc, CXX: c++ }
         target:

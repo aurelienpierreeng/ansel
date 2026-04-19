@@ -63,7 +63,7 @@ build_darktable() {
     cd "$(cygpath "${APPVEYOR_BUILD_FOLDER}")" || exit "$?"
 
     mkdir build && cd build || exit "$?"
-    cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$(cygpath "${APPVEYOR_BUILD_FOLDER}")"/build "$(cygpath "${APPVEYOR_BUILD_FOLDER}")"
+    cmake -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_INSTALL_PREFIX="$(cygpath "${APPVEYOR_BUILD_FOLDER}")"/build "$(cygpath "${APPVEYOR_BUILD_FOLDER}")"
     cmake --build .
     cmake --build . --target package
 }

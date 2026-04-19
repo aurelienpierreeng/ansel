@@ -46,7 +46,7 @@ jobs:
       fail-fast: false
       matrix:
         btype:
-          - Release
+          - RelWithDebInfo
         eco: [-DBINARY_PACKAGE_BUILD=ON -DUSE_XMLLINT=OFF]
         target:
           - skiptest

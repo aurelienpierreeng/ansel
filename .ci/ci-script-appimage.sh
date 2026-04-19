@@ -45,7 +45,7 @@ export CFLAGS="$CXXFLAGS"
 ## AppImages require us to install everything in /usr, where root is the AppDir
 export DESTDIR=../AppDir
 cmake .. -DCMAKE_INSTALL_PREFIX=/usr -G Ninja \
-  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_BUILD_TYPE=RelWithDebInfo \
   -DBINARY_PACKAGE_BUILD=1 \
   -DBUILD_NOISE_TOOLS=ON \
   -DCMAKE_INSTALL_LIBDIR=lib64 \
