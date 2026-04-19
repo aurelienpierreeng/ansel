@@ -62,7 +62,6 @@ FILE(GLOB SOURCE_FILES
   "common/curve_tools.c"
   "common/splines.cpp"
   "common/curl_tools.c"
-  "common/cpuid.c"
   "common/darktable.c"
   "common/database.c"
   "common/datetime.c"
@@ -507,7 +506,7 @@ endif(IsoCodes_FOUND)
 #
 # Detect compile of optional pwstorage backends
 #
-if(USE_LIBSECRET AND JsonGlib_FOUND)
+if(USE_LIBSECRET)
   find_package(Libsecret)
   if(Libsecret_FOUND)
     if(Libsecret_VERSION VERSION_LESS "0.18")
@@ -519,7 +518,7 @@ if(USE_LIBSECRET AND JsonGlib_FOUND)
       add_definitions(-DHAVE_LIBSECRET=1)
     endif()
   endif(Libsecret_FOUND)
-endif(USE_LIBSECRET AND JsonGlib_FOUND)
+endif()
 
 if(USE_KWALLET)
   add_definitions(-DHAVE_KWALLET=1)

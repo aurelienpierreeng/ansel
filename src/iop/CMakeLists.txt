@@ -153,11 +153,7 @@ add_iop(cacorrectrgb "cacorrectrgb.c")
 add_iop(diffuse "diffuse.c")
 add_iop(blurs "blurs.c")
 add_iop(initialscale "initialscale.c")
-
-
-if(Rsvg2_FOUND)
-  add_iop(watermark "watermark.c")
-endif(Rsvg2_FOUND)
+add_iop(watermark "watermark.c")
 
 if(LensFun_FOUND)
   add_iop(lens "lens.cc" DEFAULT_VISIBLE)
