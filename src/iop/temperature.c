@@ -76,7 +76,6 @@
 #include "develop/imageop_math.h"
 #include "develop/tiling.h"
 #include "dtgtk/expander.h"
-#include "external/wb_presets.c"
 
 #include "gui/gtk.h"
 #include "gui/color_picker_proxy.h"
@@ -118,7 +117,6 @@ typedef struct dt_iop_temperature_gui_data_t
 {
   GtkWidget *scale_k, *scale_tint, *scale_r, *scale_g, *scale_b, *scale_g2;
   GtkWidget *presets;
-  GtkWidget *finetune;
   GtkWidget *buttonbar;
   GtkWidget *colorpicker;
   GtkWidget *btn_asshot; //As Shot
@@ -475,20 +473,6 @@ static void mul2temp(dt_iop_module_t *self, dt_iop_temperature_params_t *p, floa
   XYZ_to_temperature(mul2xyz(self, p), TempK, tint);
 }
 
-/*
- * interpolate values from p1 and p2 into out.
- */
-static void dt_wb_preset_interpolate(const wb_data *const p1, // the smaller tuning
-                                     const wb_data *const p2, // the larger tuning (can't be == p1)
-                                     wb_data *out)            // has tuning initialized
-{
-  const double t = CLAMP((double)(out->tuning - p1->tuning) / (double)(p2->tuning - p1->tuning), 0.0, 1.0);
-  for(int k = 0; k < 3; k++)
-  {
-    out->channel[k] = 1.0 / (((1.0 - t) / p1->channel[k]) + (t / p2->channel[k]));
-  }
-}
-
 __DT_CLONE_TARGETS__
 int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid)
@@ -728,141 +712,6 @@ void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev
 {
   dt_free_align(piece->data);
   piece->data = NULL;
-}
-
-int generate_preset_combo(struct dt_iop_module_t *self)
-{
-  dt_iop_temperature_gui_data_t *g = (dt_iop_temperature_gui_data_t *)self->gui_data;
-  int presets_found = 0;
-
-  const char *wb_name = NULL;
-  if(!dt_image_is_ldr(&self->dev->image_storage))
-    for(int i = 0; i < wb_preset_count; i++)
-    {
-      if(presets_found >= 50) break;
-      if(!strcmp(wb_preset[i].make, self->dev->image_storage.camera_maker)
-         && !strcmp(wb_preset[i].model, self->dev->image_storage.camera_model))
-      {
-        if(IS_NULL_PTR(wb_name) || strcmp(wb_name, wb_preset[i].name))
-        {
-          // new preset found
-          dt_iop_temperature_preset_data_t *preset = malloc(sizeof(dt_iop_temperature_preset_data_t));
-          wb_name = wb_preset[i].name;
-          preset->no_ft_pos = i;
-          preset->max_ft_pos = i;
-          preset->min_ft_pos = i;
-          if(wb_preset[i].tuning != 0)
-          {
-            // finetuning found.
-            // min finetuning is always first, since wb_preset is ordered.
-            int ft_pos = i;
-            int last_ft = wb_preset[i].tuning;
-            preset->min_ft_pos = ft_pos++;
-            while (strcmp(wb_name, wb_preset[ft_pos].name) == 0)
-            {
-              if(wb_preset[ft_pos].tuning == 0)
-              {
-                preset->no_ft_pos = ft_pos;
-              }
-              if(wb_preset[ft_pos].tuning > last_ft)
-              {
-                preset->max_ft_pos = ft_pos;
-                last_ft = wb_preset[ft_pos].tuning;
-              }
-              ft_pos++;
-            }
-
-          }
-          dt_bauhaus_combobox_add_full(g->presets, _(wb_preset[i].name), DT_BAUHAUS_COMBOBOX_ALIGN_RIGHT, preset, free, TRUE);
-          g->preset_num[g->preset_cnt] = i;
-          g->preset_cnt++;
-          presets_found++;
-        }
-      }
-    }
-
-  return presets_found;
-}
-
-void color_finetuning_slider(struct dt_iop_module_t *self)
-{
-  dt_iop_temperature_gui_data_t *g = (dt_iop_temperature_gui_data_t *)self->gui_data;
-
-  dt_bauhaus_slider_clear_stops(g->finetune);
-  dt_bauhaus_slider_set_feedback(g->finetune, !g->colored_sliders);
-
-  if(!g->colored_sliders) return;
-
-  dt_iop_temperature_preset_data_t *preset = dt_bauhaus_combobox_get_data(g->presets);
-  if(!IS_NULL_PTR(preset))
-  {
-    //we can do realistic/exaggerated.
-
-    double min_tune[3] = {0.0};
-    double no_tune[3] = {0.0};
-    double max_tune[3] = {0.0};
-    if(!g->blackbody_is_confusing)
-    {
-      //realistic
-      const double neutral[3] = {
-          1 / wb_preset[preset->no_ft_pos].channel[0],
-          1 / wb_preset[preset->no_ft_pos].channel[1],
-          1 / wb_preset[preset->no_ft_pos].channel[2],
-      };
-      for(int ch=0; ch<3; ch++)
-      {
-        min_tune[ch] = neutral[ch] * wb_preset[preset->min_ft_pos].channel[ch];
-        no_tune[ch]  = neutral[ch] * wb_preset[preset->no_ft_pos].channel[ch];
-        max_tune[ch] = neutral[ch] * wb_preset[preset->max_ft_pos].channel[ch];
-      }
-
-      const float maxsRGBmin_tune = fmaxf(fmaxf(min_tune[0], min_tune[1]), min_tune[2]);
-      const float maxsRGBmax_tune = fmaxf(fmaxf(max_tune[0], max_tune[1]), max_tune[2]);
-
-      for(int ch=0; ch<3; ch++)
-      {
-        min_tune[ch] = min_tune[ch] / maxsRGBmin_tune;
-        no_tune[ch]  = 1.0;
-        max_tune[ch] = max_tune[ch] / maxsRGBmax_tune;
-      }
-    }
-    else
-    {
-      //exaggerated
-
-      for(int ch=0; ch<3; ch++)
-      {
-        min_tune[ch] = 0.5;
-        no_tune[ch]  = 0.9;
-        max_tune[ch] = 0.5;
-      }
-
-      if(wb_preset[preset->min_ft_pos].channel[0] < wb_preset[preset->max_ft_pos].channel[0])
-      {
-        // from blue to red
-        min_tune[0] = 0.1;
-        min_tune[2] = 0.9;
-        max_tune[0] = 0.9;
-        max_tune[2] = 0.1;
-      }
-      else
-      {
-        //from red to blue
-        min_tune[0] = 0.9;
-        min_tune[2] = 0.1;
-        max_tune[0] = 0.1;
-        max_tune[2] = 0.9;
-      }
-    }
-
-    dt_bauhaus_slider_set_stop(g->finetune, 0.0, min_tune[0], min_tune[1], min_tune[2]);
-    dt_bauhaus_slider_set_stop(g->finetune, 0.5, no_tune[0],  no_tune[1],  no_tune[2]);
-    dt_bauhaus_slider_set_stop(g->finetune, 1.0, max_tune[0], max_tune[1], max_tune[2]);
-  }
-  if(gtk_widget_get_visible(GTK_WIDGET(g->finetune)))
-  {
-    gtk_widget_queue_draw(GTK_WIDGET(g->finetune));
-  }
 }
 
 void color_rgb_sliders(struct dt_iop_module_t *self)
@@ -1111,10 +960,7 @@ void gui_update(struct dt_iop_module_t *self)
   dt_bauhaus_slider_set(g->scale_g2, p->g2);
 
   dt_bauhaus_combobox_set(g->presets, -1);
-  dt_bauhaus_slider_set(g->finetune, 0);
-
-  gboolean show_finetune = FALSE;
-
+  
   gboolean found = FALSE;
 
   // is this a "as shot" white balance?
@@ -1136,103 +982,7 @@ void gui_update(struct dt_iop_module_t *self)
   }
 
   if(!found)
-  {
-    // look through all added presets
-    for(int j = DT_IOP_NUM_OF_STD_TEMP_PRESETS; !found && (j < g->preset_cnt); j++)
-    {
-      // look through all variants of this preset, with different tuning
-      for(int i = g->preset_num[j];
-          !found && (i < wb_preset_count) &&
-          !strcmp(wb_preset[i].make, self->dev->image_storage.camera_maker) &&
-          !strcmp(wb_preset[i].model, self->dev->image_storage.camera_model) &&
-          !strcmp(wb_preset[i].name, wb_preset[g->preset_num[j]].name);
-          i++)
-      {
-        if(p->red == (float)wb_preset[i].channel[0] &&
-           p->green == (float)wb_preset[i].channel[1] &&
-           p->blue == (float)wb_preset[i].channel[2])
-        {
-          // got exact match!
-          dt_bauhaus_combobox_set(g->presets, j);
-          dt_iop_temperature_preset_data_t *preset = dt_bauhaus_combobox_get_data(g->presets);
-          if(!IS_NULL_PTR(preset))
-          {
-            show_finetune = preset->min_ft_pos != preset->max_ft_pos;
-            if(show_finetune)
-            {
-              dt_bauhaus_slider_set_hard_min(g->finetune, wb_preset[preset->min_ft_pos].tuning);
-              dt_bauhaus_slider_set_hard_max(g->finetune, wb_preset[preset->max_ft_pos].tuning);
-              dt_bauhaus_slider_set_default(g->finetune, wb_preset[preset->no_ft_pos].tuning);
-            }
-          }
-
-          dt_bauhaus_slider_set(g->finetune, wb_preset[i].tuning);
-          found = TRUE;
-          break;
-        }
-      }
-    }
-
-    if(!found)
-    {
-      // ok, we haven't found exact match, maybe this was interpolated?
-
-      // look through all added presets
-      for(int j = DT_IOP_NUM_OF_STD_TEMP_PRESETS; !found && (j < g->preset_cnt); j++)
-      {
-        // look through all variants of this preset, with different tuning
-        int i = g->preset_num[j] + 1;
-        while(!found && (i < wb_preset_count) && !strcmp(wb_preset[i].make, self->dev->image_storage.camera_maker)
-              && !strcmp(wb_preset[i].model, self->dev->image_storage.camera_model)
-              && !strcmp(wb_preset[i].name, wb_preset[g->preset_num[j]].name))
-        {
-          // let's find gaps
-          if(wb_preset[i - 1].tuning + 1 == wb_preset[i].tuning)
-          {
-            i++;
-            continue;
-          }
-
-          // we have a gap!
-
-          // we do not know what finetuning value was set, we need to bruteforce to find it
-          for(int tune = wb_preset[i - 1].tuning + 1; !found && (tune < wb_preset[i].tuning); tune++)
-          {
-            wb_data interpolated = {.tuning = tune };
-            dt_wb_preset_interpolate(&wb_preset[i - 1], &wb_preset[i], &interpolated);
-
-            if(p->red == (float)interpolated.channel[0] &&
-               p->green == (float)interpolated.channel[1] &&
-               p->blue == (float)interpolated.channel[2])
-            {
-              // got exact match!
-
-              dt_bauhaus_combobox_set(g->presets, j);
-              dt_iop_temperature_preset_data_t *preset = dt_bauhaus_combobox_get_data(g->presets);
-              if(!IS_NULL_PTR(preset))
-              {
-                show_finetune = preset->min_ft_pos != preset->max_ft_pos;
-                if(show_finetune)
-                {
-                  dt_bauhaus_slider_set_hard_min(g->finetune, wb_preset[preset->min_ft_pos].tuning);
-                  dt_bauhaus_slider_set_hard_max(g->finetune, wb_preset[preset->max_ft_pos].tuning);
-                  dt_bauhaus_slider_set_default(g->finetune, wb_preset[preset->no_ft_pos].tuning);
-                }
-              }
-              dt_bauhaus_slider_set(g->finetune, tune);
-              found = TRUE;
-              break;
-            }
-          }
-          i++;
-        }
-      }
-    }
-    if (!found) //since we haven't got a match - it's user-set
-    {
-      dt_bauhaus_combobox_set(g->presets, DT_IOP_TEMP_USER);
-    }
-  }
+    dt_bauhaus_combobox_set(g->presets, DT_IOP_TEMP_USER);
 
   if (!found || isnan(g->mod_temp)) // reset or initialize user-defined
   {
@@ -1241,7 +991,6 @@ void gui_update(struct dt_iop_module_t *self)
     _temp_array_from_params(g->mod_coeff, p);
   }
 
-  gtk_widget_set_visible(GTK_WIDGET(g->finetune), show_finetune);
   gtk_widget_set_visible(g->buttonbar, g->button_bar_visible);
 
   const int preset = dt_bauhaus_combobox_get(g->presets);
@@ -1252,7 +1001,6 @@ void gui_update(struct dt_iop_module_t *self)
 
   color_temptint_sliders(self);
   color_rgb_sliders(self);
-  color_finetuning_slider(self);
 
   dt_gui_update_collapsible_section(&g->cs);
 
@@ -1359,18 +1107,6 @@ static void find_coeffs(dt_iop_module_t *module, double coeffs[4])
     return;
   }
 
-  // no cam matrix??? try presets:
-  for(int i = 0; i < wb_preset_count; i++)
-  {
-    if(!strcmp(wb_preset[i].make, img->camera_maker)
-       && !strcmp(wb_preset[i].model, img->camera_model))
-    {
-      // just take the first preset we find for this camera
-      for(int k = 0; k < 3; k++) coeffs[k] = wb_preset[i].channel[k];
-      return;
-    }
-  }
-
   // did not find preset either?
   // final security net: hardcoded default that fits most cams.
   coeffs[0] = 2.0;
@@ -1453,28 +1189,7 @@ void reload_defaults(dt_iop_module_t *module)
     // to have at least something and definitely not crash
     _temp_array_from_params(g->daylight_wb, d);
 
-    if(!calculate_bogus_daylight_wb(module, g->daylight_wb))
-    {
-      // found camera matrix and used it to calculate bogus daylight wb
-    }
-    else
-    {
-      // if we didn't find anything for daylight wb, look for a wb preset with appropriate name.
-      // we're normalizing that to be D65
-      for(int i = 0; i < wb_preset_count; i++)
-      {
-        if(!strcmp(wb_preset[i].make, module->dev->image_storage.camera_maker)
-           && !strcmp(wb_preset[i].model, module->dev->image_storage.camera_model)
-           && (!strcmp(wb_preset[i].name, Daylight) || !strcmp(wb_preset[i].name, DirectSunlight))
-           && wb_preset[i].tuning == 0)
-        {
-
-          for(int k = 0; k < 4; k++) g->daylight_wb[k] = wb_preset[i].channel[k];
-          break;
-        }
-      }
-
-    }
+    calculate_bogus_daylight_wb(module, g->daylight_wb);
 
     // Store EXIF WB coeffs
     if(is_raw)
@@ -1502,8 +1217,6 @@ void reload_defaults(dt_iop_module_t *module)
 
     g->preset_cnt = DT_IOP_NUM_OF_STD_TEMP_PRESETS;
     memset(g->preset_num, 0, sizeof(g->preset_num));
-
-    generate_preset_combo(module);
 
     gui_sliders_update(module);
   }
@@ -1605,14 +1318,11 @@ static void preset_tune_callback(GtkWidget *widget, dt_iop_module_t *self)
   dt_iop_temperature_params_t *p = (dt_iop_temperature_params_t *)self->params;
 
   const int pos = dt_bauhaus_combobox_get(g->presets);
-  const int tune = dt_bauhaus_slider_get(g->finetune);
 
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->btn_asshot), pos == DT_IOP_TEMP_AS_SHOT);
   if(pos != DT_IOP_TEMP_SPOT) dt_iop_color_picker_reset(self, TRUE);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->btn_user), pos == DT_IOP_TEMP_USER);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->btn_d65), pos == DT_IOP_TEMP_D65);
-
-  gboolean show_finetune = FALSE;
 
   switch(pos)
   {
@@ -1635,73 +1345,8 @@ static void preset_tune_callback(GtkWidget *widget, dt_iop_module_t *self)
       _temp_params_from_array(p, g->daylight_wb);
       break;
     default: // camera WB presets
-    {
-      gboolean found = FALSE;
-      dt_iop_temperature_preset_data_t *preset = dt_bauhaus_combobox_get_data(g->presets);
-      // look through all variants of this preset, with different tuning
-      for(int i = preset->min_ft_pos;
-          (i < (preset->max_ft_pos + 1)) // we can limit search spread thanks to knowing where to look!
-          && !strcmp(wb_preset[i].make, self->dev->image_storage.camera_maker)
-          && !strcmp(wb_preset[i].model, self->dev->image_storage.camera_model)
-          && !strcmp(wb_preset[i].name, wb_preset[preset->no_ft_pos].name);
-          i++)
-      {
-        if(wb_preset[i].tuning == tune)
-        {
-          // got exact match!
-          _temp_params_from_array(p, wb_preset[i].channel);
-          found = TRUE;
-          break;
-        }
-      }
-
-      if(!found)
-      {
-        // ok, we haven't found exact match, need to interpolate
-
-        // let's find 2 most closest tunings with needed_tuning in-between
-        int min_id = INT_MIN, max_id = INT_MIN;
-
-        // look through all variants of this preset, with different tuning, starting from second entry (if
-        // any)
-        int i = preset->min_ft_pos + 1;
-        while((i < preset->max_ft_pos+1) && !strcmp(wb_preset[i].make, self->dev->image_storage.camera_maker)
-              && !strcmp(wb_preset[i].model, self->dev->image_storage.camera_model)
-              && !strcmp(wb_preset[i].name, wb_preset[preset->no_ft_pos].name))
-        {
-          if(wb_preset[i - 1].tuning < tune && wb_preset[i].tuning > tune)
-          {
-            min_id = i - 1;
-            max_id = i;
-            break;
-          }
-
-          i++;
-        }
-
-        // have we found enough good data?
-        if(min_id == INT_MIN || max_id == INT_MIN || min_id == max_id) break; // hysteresis
-
-        found = TRUE;
-        wb_data interpolated = {.tuning = tune };
-        dt_wb_preset_interpolate(&wb_preset[min_id], &wb_preset[max_id], &interpolated);
-        _temp_params_from_array(p, interpolated.channel);
-      }
-
-      show_finetune = preset->min_ft_pos != preset->max_ft_pos;
-      if(show_finetune)
-      {
-        ++darktable.gui->reset;
-        dt_bauhaus_slider_set_hard_min(g->finetune, wb_preset[preset->min_ft_pos].tuning);
-        dt_bauhaus_slider_set_hard_max(g->finetune, wb_preset[preset->max_ft_pos].tuning);
-        dt_bauhaus_slider_set_default(g->finetune, wb_preset[preset->no_ft_pos].tuning);
-        --darktable.gui->reset;
-      }
-    }
-    break;
+      break;
   }
-
-  gtk_widget_set_visible(GTK_WIDGET(g->finetune), show_finetune);
 
   if(self->off) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(self->off), 1);
 
@@ -1728,7 +1373,6 @@ static void preset_tune_callback(GtkWidget *widget, dt_iop_module_t *self)
 
   color_temptint_sliders(self);
   color_rgb_sliders(self);
-  color_finetuning_slider(self);
 
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
@@ -1768,7 +1412,6 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
   dt_bauhaus_slider_set(g->scale_g2, p->g2);
 
   dt_bauhaus_combobox_set(g->presets, -1);
-  dt_bauhaus_slider_set(g->finetune, 0);
   --darktable.gui->reset;
 
   dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
@@ -1866,12 +1509,6 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(g->presets, _("choose white balance setting"));
   gtk_box_pack_start(box_enabled, g->presets, TRUE, TRUE, 0);
 
-  g->finetune = dt_bauhaus_slider_new_with_range_and_feedback(darktable.bauhaus, DT_GUI_MODULE(self), -9.0, 9.0, 0, 0.0, 0, feedback);
-  dt_bauhaus_widget_set_label(g->finetune, N_("finetune"));
-  dt_bauhaus_slider_set_format(g->finetune, " mired");
-  gtk_widget_set_tooltip_text(g->finetune, _("fine tune camera's white balance setting"));
-  gtk_box_pack_start(box_enabled, g->finetune, TRUE, TRUE, 0);
-
   g->mod_temp = NAN;
   for(int k = 0; k < 4; k++)
   {
@@ -1923,7 +1560,6 @@ void gui_init(struct dt_iop_module_t *self)
   g_signal_connect(G_OBJECT(g->scale_tint), "value-changed", G_CALLBACK(temp_tint_callback), self);
 
   g_signal_connect(G_OBJECT(g->presets), "value-changed", G_CALLBACK(preset_tune_callback), self);
-  g_signal_connect(G_OBJECT(g->finetune), "value-changed", G_CALLBACK(preset_tune_callback), self);
 
   // start building top level widget
   self->widget = gtk_stack_new();
@@ -1955,7 +1591,6 @@ void gui_reset(struct dt_iop_module_t *self)
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->btn_user), preset == DT_IOP_TEMP_USER);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->btn_d65), preset == DT_IOP_TEMP_D65);
 
-  color_finetuning_slider(self);
   color_rgb_sliders(self);
   color_temptint_sliders(self);
 }
