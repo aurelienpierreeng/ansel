@@ -806,7 +806,7 @@ static void _filelist_changed_callback(gpointer instance, GList *files, guint el
   {
     // Lock the thread to ensure we have the correct final number
     dt_pthread_mutex_lock(&d->lock);
-    _gtk_label_set_and_free(d->selected_files, g_strdup_printf(_("%u files selected"), elements));
+    _gtk_label_set_and_free(d->selected_files, g_strdup_printf(_("%i files selected"), elements));
 
     // The list of files is not used in GUI. It's not freed in the job either.
     g_list_free_full(g_steal_pointer(&files), dt_free_gpointer);
@@ -816,7 +816,7 @@ static void _filelist_changed_callback(gpointer instance, GList *files, guint el
   else
   {
     // We don't care for correctness, we just want to show user that we are still at it
-    _gtk_label_set_and_free(d->selected_files, g_strdup_printf(_("Detection in progress... (%u files found so far)"), elements));
+    _gtk_label_set_and_free(d->selected_files, g_strdup_printf(_("Detection in progress... (%i files found so far)"), elements));
   }
 }
 

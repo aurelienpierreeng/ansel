@@ -1489,38 +1489,32 @@ void dt_show_times(const dt_times_t *start, const char *prefix)
   {
     dt_times_t end;
     dt_get_times(&end);
-    gchar *msg = g_strdup_printf("%s took %.3f secs (%.3f CPU)", prefix, end.clock - start->clock,
-                                  end.user - start->user);
-    dt_print(DT_DEBUG_PERF, "%s\n", msg);
-    dt_free(msg);
+    char buf[140]; /* Arbitrary size, should be lots big enough for everything used in DT */
+    snprintf(buf, sizeof(buf), "%s took %.3f secs (%.3f CPU)", prefix, end.clock - start->clock,
+             end.user - start->user);
+    dt_print(DT_DEBUG_PERF, "%s\n", buf);
   }
 }
 
 void dt_show_times_f(const dt_times_t *start, const char *prefix, const char *suffix, ...)
 {
-  if(!(darktable.unmuted & DT_DEBUG_PERF)) return;
-
-  dt_times_t end;
-  dt_get_times(&end);
-
-  char buf[160];
-
-  int n = g_snprintf(buf, sizeof(buf), "%s took %.3f secs (%.3f CPU) ", prefix, end.clock - start->clock,
-                     end.user - start->user);
-
-  if(n < 0) return;
-
-  if((size_t)n >= sizeof(buf)) n = sizeof(buf) - 1;
-
-  if(suffix)
+  /* Skip all the calculations an everything if -d perf isn't on */
+  if(darktable.unmuted & DT_DEBUG_PERF)
   {
-    va_list ap;
-    va_start(ap, suffix);
-    g_vsnprintf(buf + n, (size_t)n < sizeof(buf) ? sizeof(buf) - (size_t)n : 0, suffix, ap);
-    va_end(ap);
+    dt_times_t end;
+    dt_get_times(&end);
+    char buf[160]; /* Arbitrary size, should be lots big enough for everything used in DT */
+    const int n = snprintf(buf, sizeof(buf), "%s took %.3f secs (%.3f CPU) ", prefix, end.clock - start->clock,
+                           end.user - start->user);
+    if(n < sizeof(buf) - 1)
+    {
+      va_list ap;
+      va_start(ap, suffix);
+      vsnprintf(buf + n, sizeof(buf) - n, suffix, ap);
+      va_end(ap);
+    }
+    dt_print(DT_DEBUG_PERF, "%s\n", buf);
   }
-
-  dt_print(DT_DEBUG_PERF, "%s\n", buf);
 }
 
 #if defined(_WIN32)

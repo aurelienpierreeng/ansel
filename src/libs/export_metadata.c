@@ -479,7 +479,7 @@ char *dt_lib_export_metadata_configuration_dialog(char *metadata_presets, const 
                     (!ondisk  ? (gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(calculated)) ? DT_META_CALCULATED : 0) : 0)
                     );
 
-    newlist = g_strdup_printf("%i", newflags);
+    newlist = g_strdup_printf("%x", newflags);
     GtkTreeIter iter;
     gboolean valid = gtk_tree_model_get_iter_first(GTK_TREE_MODEL(d->liststore), &iter);
     while(valid)

@@ -510,8 +510,8 @@ static void _size_in_px_update(dt_lib_export_t *d)
 
 void _set_dimensions(dt_lib_export_t *d, uint32_t max_width, uint32_t max_height)
 {
-  gchar *max_width_char = g_strdup_printf("%u", max_width);
-  gchar *max_height_char = g_strdup_printf("%u", max_height);
+  gchar *max_width_char = g_strdup_printf("%d", max_width);
+  gchar *max_height_char = g_strdup_printf("%d", max_height);
 
   ++darktable.gui->reset;
   gtk_entry_set_text(GTK_ENTRY(d->width), max_width_char);

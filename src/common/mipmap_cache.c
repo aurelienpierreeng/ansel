@@ -185,7 +185,7 @@ void dt_mipmap_get_cache_filename(char path[PATH_MAX], const dt_mipmap_cache_t *
   gchar cache_path[PATH_MAX];
   dt_mipmap_get_cache_dir(cache_path, cache, mip);
 
-  gchar *file = g_strdup_printf("%i.jpg", imgid);
+  gchar *file = g_strdup_printf("%u.jpg", imgid);
   dt_concat_path_file(path, cache_path, file);
   dt_free(file);
 }
@@ -422,7 +422,7 @@ void *dt_mipmap_cache_alloc(dt_mipmap_buffer_t *buf, const dt_image_t *img)
 
   if(buf->size != DT_MIPMAP_FULL)
   {
-    fprintf(stderr, "trying to alloc a wrong mipmap size for %s: %u (should be: %i)\n", img->filename, buf->size, DT_MIPMAP_FULL);
+    fprintf(stderr, "trying to alloc a wrong mipmap size for %s: %i (should be: %i)\n", img->filename, buf->size, DT_MIPMAP_FULL);
     return NULL;
   }
 
@@ -521,7 +521,7 @@ void dt_mipmap_cache_allocate_dynamic(void *data, dt_cache_entry_t *entry)
     if(IS_NULL_PTR(f))
     {
       dt_print(DT_DEBUG_CACHE,
-               "[mipmap_cache] cached file for image %d at mip size %u does not exist\n",
+               "[mipmap_cache] cached file for image %d at mip size %i does not exist\n",
                imgid, mip);
       goto finish; // file doesn't exist
     }
@@ -574,7 +574,7 @@ void dt_mipmap_cache_allocate_dynamic(void *data, dt_cache_entry_t *entry)
     dsc->color_space = color_space;
     dsc->flags = 0;
 
-    dt_print(DT_DEBUG_CACHE, "[mipmap_cache] image %d at mip size %u (%ix%i) loaded from disk cache\n",
+    dt_print(DT_DEBUG_CACHE, "[mipmap_cache] image %d at mip size %d (%ix%i) loaded from disk cache\n",
               imgid, mip, jpg.width, jpg.height);
 
 finish:
@@ -582,7 +582,7 @@ finish:
     {
       // Delete the file, we will regenerate it
       g_unlink(filename);
-      fprintf(stderr, "[mipmap_cache] failed to open thumbnail for image %i from `%s'. Reason: %s\n",
+      fprintf(stderr, "[mipmap_cache] failed to open thumbnail for image %" PRIu32 " from `%s'. Reason: %s\n",
               imgid, filename, error);
     }
 
@@ -610,7 +610,7 @@ static void dt_mipmap_cache_unlink_ondisk_thumbnail(void *data, int32_t imgid, d
     char filename[PATH_MAX] = { 0 };
     dt_mipmap_get_cache_filename(filename, cache, mip, imgid);
     g_unlink(filename);
-    dt_print(DT_DEBUG_CACHE, "[mipmap_cache] image %i for size %u was deleted from disk cache\n", imgid, mip);
+    dt_print(DT_DEBUG_CACHE, "[mipmap_cache] image %i for size %i was deleted from disk cache\n", imgid, mip);
   }
 }
 
@@ -686,7 +686,7 @@ write_error:
             }
             else
             {
-              dt_print(DT_DEBUG_CACHE, "[mipmap_cache] image %i for size %u was written to cache at %s\n", imgid, mip, filename);
+              dt_print(DT_DEBUG_CACHE, "[mipmap_cache] image %i for size %i was written to cache at %s\n", imgid, mip, filename);
             }
           }
           if(f) fclose(f);
@@ -834,7 +834,7 @@ static void _paint_skulls(dt_mipmap_buffer_t *buf, struct dt_mipmap_buffer_dsc *
 {
   if(dsc->width == 0 || dsc->height == 0)
   {
-    dt_print(DT_DEBUG_CACHE, "[mipmap cache get] got a zero-sized image for img %i mip %u!\n", imgid, mip);
+    dt_print(DT_DEBUG_CACHE, "[mipmap cache get] got a zero-sized image for img %u mip %d!\n", imgid, mip);
     if(mip < DT_MIPMAP_F)
       buf->buf = dead_image_8(dsc);
     else
@@ -887,7 +887,7 @@ static void _generate_blocking(dt_cache_entry_t *entry, dt_mipmap_buffer_t *buf,
   if(!(dsc->flags & DT_MIPMAP_BUFFER_DSC_FLAG_GENERATE))
   {
     // Already in cache, no I/O needed
-    dt_print(DT_DEBUG_CACHE, "[mipmap_cache] image %d at mip size %u (%ux%u) will skip disk I/O, found in RAM cache.\n", imgid, mip,
+    dt_print(DT_DEBUG_CACHE, "[mipmap_cache] image %d at mip size %i (%ix%i) will skip disk I/O, found in RAM cache.\n", imgid, mip,
              dsc->width, dsc->height);
     _validate_buffer(buf, dsc, imgid, mip);
     return;
@@ -904,7 +904,7 @@ static void _generate_blocking(dt_cache_entry_t *entry, dt_mipmap_buffer_t *buf,
     if(source == DT_IMAGE_PATH_NONE) return;
 
     dt_print(DT_DEBUG_CACHE,
-      "[mipmap_cache] fetch image %i at mip size %u float32 (%ux%u) from original file I/O\n",
+      "[mipmap_cache] fetch image %i at mip size %d float32 (%ix%i) from original file I/O\n",
       imgid, mip, dsc->width, dsc->height);
 
     // will call dt_mipmap_cache_alloc() internally:
@@ -929,7 +929,7 @@ static void _generate_blocking(dt_cache_entry_t *entry, dt_mipmap_buffer_t *buf,
   else if(mip == DT_MIPMAP_F)
   {
     dt_print(DT_DEBUG_CACHE,
-             "[mipmap_cache] compute mip size %u float32 for image %i (%ux%u) from original file \n", mip,
+             "[mipmap_cache] compute mip size %d float32 for image %i (%ix%i) from original file \n", mip,
              imgid, dsc->width, dsc->height);
     _init_f(buf, (float *)_get_buffer_from_dsc(dsc), &dsc->width, &dsc->height, &dsc->iscale, imgid);
   }
@@ -937,7 +937,7 @@ static void _generate_blocking(dt_cache_entry_t *entry, dt_mipmap_buffer_t *buf,
   {
     // 8-bit thumbs
     dt_print(DT_DEBUG_CACHE,
-             "[mipmap_cache] compute mip size %u uint8 for image %i (%ux%u) from original file \n", mip,
+             "[mipmap_cache] compute mip size %d uint8 for image %i (%ix%i) from original file \n", mip,
              imgid, dsc->width, dsc->height);
     _init_8((uint8_t *)_get_buffer_from_dsc(dsc), &dsc->width, &dsc->height, &dsc->iscale, &dsc->color_space, imgid,
             mip, shutdown);
@@ -961,7 +961,7 @@ static void _generate_blocking(dt_cache_entry_t *entry, dt_mipmap_buffer_t *buf,
   _paint_skulls(buf, dsc, imgid, mip);
   _validate_buffer(buf, dsc, imgid, mip);
 
-  dt_print(DT_DEBUG_CACHE, "[mipmap_cache] image %d at mip size %u got a new cache entry (%ix%i / %ux%u) at %p\n", imgid, mip, 
+  dt_print(DT_DEBUG_CACHE, "[mipmap_cache] image %d at mip size %d got a new cache entry (%ix%i / %ix%i) at %p\n", imgid, mip, 
     buf->width, buf->height, dsc->width, dsc->height, buf->buf);
 }
 
@@ -1071,7 +1071,7 @@ dt_mipmap_size_t dt_mipmap_cache_get_matching_size(const dt_mipmap_cache_t *cach
     // so we don't need both dimensions to be greater than requested
     if((cache->max_width[k] >= width) || (cache->max_height[k] >= height))
     {
-      dt_print(DT_DEBUG_CACHE, "[mipmap_cache] image %u will load a mip size %i (%zux%zu)\n", 
+      dt_print(DT_DEBUG_CACHE, "[mipmap_cache] image %d will load a mip size %i (%zux%zu)\n", 
         imgid, k, cache->max_width[k], cache->max_height[k]);
       return k;
     }
@@ -1086,7 +1086,7 @@ dt_mipmap_size_t dt_mipmap_cache_get_fitting_size(const dt_mipmap_cache_t *cache
   {
     if((cache->max_width[k] <= width) && (cache->max_height[k] <= height))
     {
-      dt_print(DT_DEBUG_CACHE, "[mipmap_cache] image %u will fit a mip size %i (%zux%zu)\n", imgid, k, cache->max_width[k], cache->max_height[k]);
+      dt_print(DT_DEBUG_CACHE, "[mipmap_cache] image %d will fit a mip size %i (%zux%zu)\n", imgid, k, cache->max_width[k], cache->max_height[k]);
       return k;
     }
   }

@@ -3283,7 +3283,7 @@ void dt_masks_iop_update(dt_iop_module_t *module)
     {
       char txt[512];
       const guint n = g_list_length(grp->points);
-      snprintf(txt, sizeof(txt), ngettext("%u shape used", "%u shapes used", n), n);
+      snprintf(txt, sizeof(txt), ngettext("%d shape used", "%d shapes used", n), n);
       dt_bauhaus_combobox_add(bd->masks_combo, txt);
     }
     else
@@ -3907,7 +3907,7 @@ void dt_iop_gui_update_blending(dt_iop_module_t *module)
     if(!_add_blendmode_combo(bd->blend_modes_combo, blend_mode))
     {
       // should never happen: unknown blend mode
-      dt_control_log("unknown blend mode '%u' in module '%s'", blend_mode, module->op);
+      dt_control_log("unknown blend mode '%d' in module '%s'", blend_mode, module->op);
       module->blend_params->blend_mode = DEVELOP_BLEND_NORMAL2;
       blend_mode = DEVELOP_BLEND_NORMAL2;
     }

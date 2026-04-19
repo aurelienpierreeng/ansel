@@ -268,7 +268,7 @@ dt_imageio_retval_t dt_imageio_open_j2k(dt_image_t *img, const char *filename, d
     }
     if(image->comps[i].prec > 16)
     {
-      fprintf(stderr, "[j2k_open] Error: precision %u is larger than 16 in `%s'\n", image->comps[1].prec,
+      fprintf(stderr, "[j2k_open] Error: precision %d is larger than 16 in `%s'\n", image->comps[1].prec,
               filename);
       ret = DT_IMAGEIO_FILE_CORRUPTED;
       goto end_of_the_world;

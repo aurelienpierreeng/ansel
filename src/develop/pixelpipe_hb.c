@@ -362,8 +362,8 @@ void dt_dev_pixelpipe_debug_dump_module_io(dt_dev_pixelpipe_t *pipe, dt_iop_modu
   if(!IS_NULL_PTR(in_dsc) && !IS_NULL_PTR(out_dsc))
   {
     dt_print(DT_DEBUG_PIPE,
-             "[pixelpipe] %s %s %s %s: in cst=%s->%s ch=%u type=%s bpp=%zu roi=%dx%d | "
-             "out cst=%s ch=%u type=%s bpp=%zu roi=%dx%d\n",
+             "[pixelpipe] %s %s %s %s: in cst=%s->%s ch=%d type=%s bpp=%zu roi=%dx%d | "
+             "out cst=%s ch=%d type=%s bpp=%zu roi=%dx%d\n",
              pipe_name, module_name, is_cl ? "cl" : "cpu", stage_name,
              _debug_cst_to_string(cst_before), _debug_cst_to_string(cst_after),
              in_dsc->channels, _debug_type_to_string(in_dsc->datatype), in_bpp,
@@ -374,7 +374,7 @@ void dt_dev_pixelpipe_debug_dump_module_io(dt_dev_pixelpipe_t *pipe, dt_iop_modu
   else if(!IS_NULL_PTR(out_dsc))
   {
     dt_print(DT_DEBUG_PIPE,
-             "[pixelpipe] %s %s %s %s: out cst=%s ch=%u type=%s bpp=%zu roi=%dx%d\n",
+             "[pixelpipe] %s %s %s %s: out cst=%s ch=%d type=%s bpp=%zu roi=%dx%d\n",
              pipe_name, module_name, is_cl ? "cl" : "cpu", stage_name,
              _debug_cst_to_string(out_dsc->cst), out_dsc->channels, _debug_type_to_string(out_dsc->datatype),
              out_bpp, roi_out ? roi_out->width : 0, roi_out ? roi_out->height : 0);

@@ -858,7 +858,7 @@ uint64_t dt_dev_history_compute_hash(dt_develop_t *dev)
     dt_dev_history_item_t *item = (dt_dev_history_item_t *)hist->data;
     hash = dt_hash(hash, (const char *)&item->hash, sizeof(uint64_t));
   }
-  dt_print(DT_DEBUG_HISTORY, "[dt_dev_history_get_hash] history hash: %lu, history end: %i, items %u\n", hash, dt_dev_get_history_end_ext(dev), g_list_length(dev->history));
+  dt_print(DT_DEBUG_HISTORY, "[dt_dev_history_get_hash] history hash: %zu, history end: %i, items %i\n", hash, dt_dev_get_history_end_ext(dev), g_list_length(dev->history));
   return hash;
 }
 
@@ -1173,7 +1173,7 @@ void dt_dev_history_notify_change(dt_develop_t *dev, const int32_t imgid)
   {
     const guint states = dt_dev_mask_history_overload(dev->history, 250);
     if(states > 250)
-      dt_toast_log(_("Image #%i history is storing %u mask states. n"
+      dt_toast_log(_("Image #%i history is storing %d mask states. n"
                      "Consider compressing history and removing unused masks to keep reads/writes manageable."),
                      imgid, states);
   }

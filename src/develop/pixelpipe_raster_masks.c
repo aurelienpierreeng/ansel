@@ -132,7 +132,7 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
     if(!IS_NULL_PTR(raster_mask))
     {
       dt_print(DT_DEBUG_MASKS,
-               "[raster masks] found in %s mask id %i from %s for module %s in pipe %s with hash %lu\n",
+               "[raster masks] found in %s mask id %i from %s for module %s in pipe %s with hash %zu\n",
                "internal", raster_mask_id, source_name, target_name, type, raster_hash);
       dt_dev_pixelpipe_unset_reentry(pipe, raster_hash);
     }

@@ -247,7 +247,7 @@ static void _iop_color_picker_data_ready_callback(gpointer instance, gpointer us
   if(IS_NULL_PTR(module) || IS_NULL_PTR(module->color_picker_apply)) return;
   if(dt_iop_color_picker_get_ready_data(module, &picker, &pipe, &piece)) return;
 
-  dt_print(DT_DEBUG_DEV, "[picker] dispatch module=%s picker=%p pipe=%p hash=%lu\n",
+  dt_print(DT_DEBUG_DEV, "[picker] dispatch module=%s picker=%p pipe=%p hash=%zu\n",
            module->op, (void *)picker, (void *)pipe, piece ? piece->global_hash : 0);
 
   if(!module->blend_data || !blend_color_picker_apply(module, picker, pipe, (dt_dev_pixelpipe_iop_t *)piece))
@@ -2263,7 +2263,7 @@ static gboolean _mask_indicator_tooltip(GtkWidget *treeview, gint x, gint y, gbo
     else if(mm & DEVELOP_MASK_RASTER)
       type=_("raster mask");
     else
-      fprintf(stderr, "unknown mask mode '%u' in module '%s'\n", mm, module->op);
+      fprintf(stderr, "unknown mask mode '%d' in module '%s'\n", mm, module->op);
     gchar *part1 = g_strdup_printf(_("this module has a '%s'"), type);
     gchar *part2 = NULL;
     if(raster && module->raster_mask.sink.source)
@@ -2947,7 +2947,7 @@ void dt_bauhaus_value_changed_default_callback(GtkWidget *widget)
       break;
     }
     default:
-      fprintf(stderr, "[dt_bauhaus_value_changed_default_callback] invalid bauhaus widget type encountered for %s %s: %u\n", w->label, w->module->name, w->type);
+      fprintf(stderr, "[dt_bauhaus_value_changed_default_callback] invalid bauhaus widget type encountered for %s %s: %i\n", w->label, w->module->name, w->type);
   }
 }
 

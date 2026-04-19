@@ -822,7 +822,7 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *p
   {
     // The hash table does not survive to a pipeline restart...
     dt_pixelpipe_raster_replace(piece->raster_masks, _mask);
-    dt_print(DT_DEBUG_MASKS, "[raster masks] replacing raster mask id 0 for module %s (%s) for pipe %s with hash %lu\n", piece->module->op,
+    dt_print(DT_DEBUG_MASKS, "[raster masks] replacing raster mask id 0 for module %s (%s) for pipe %s with hash %zu\n", piece->module->op,
              piece->module->multi_name, dt_pipe_type_to_str(pipe->type), piece->global_mask_hash);
   }
   else

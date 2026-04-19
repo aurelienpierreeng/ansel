@@ -593,7 +593,7 @@ gboolean dt_dev_pixelpipe_cache_peek_gui(dt_dev_pixelpipe_t *pipe, const dt_dev_
                                      piece ? piece->module : NULL);
   dt_dev_pixelpipe_or_changed(pipe, DT_DEV_PIPE_CACHE_REQUEST);
 
-  dt_print(DT_DEBUG_DEV, "[pixelpipe/gui] request host cache pipe=%s target=%s hash=%lu\n",
+  dt_print(DT_DEBUG_DEV, "[pixelpipe/gui] request host cache pipe=%s target=%s hash=%zu\n",
            dt_pixelpipe_get_pipe_name(pipe->type),
            piece && piece->module ? piece->module->op : "backbuf", hash);
 
@@ -651,7 +651,7 @@ static gboolean _prepare_piece_input_contract(dt_dev_pixelpipe_t *pipe, dt_dev_p
     gchar *pipe_name = _get_debug_pipe_name(pipe, NULL);
     dt_print(DT_DEBUG_PIPE,
               "[dsc-in] pipe=%s module=%s"
-              " in=(channels=%u bpp=%zu filters=%u)"
+              " in=(channels=%i bpp=%zu filters=%u)"
               " \n",
               pipe_name, piece->module->op, 
               piece->dsc_in.channels, piece->dsc_in.bpp, piece->dsc_in.filters);
@@ -708,7 +708,7 @@ static void _commit_piece_contract(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_io
       gchar *pipe_name = _get_debug_pipe_name(pipe, NULL);
       dt_print(DT_DEBUG_PIPE,
                 "[dsc-out] pipe=%s module=%s"
-                " out=(channels=%u bpp=%zu filters=%u)"
+                " out=(channels=%i bpp=%zu filters=%u)"
                 " \n",
                 pipe_name, piece->module->op, 
                 piece->dsc_out.channels, piece->dsc_out.bpp, piece->dsc_out.filters);

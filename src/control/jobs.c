@@ -174,7 +174,7 @@ void dt_control_job_set_state_callback(_dt_job_t *job, dt_job_state_change_callb
 static void dt_control_job_print(_dt_job_t *job)
 {
   if(IS_NULL_PTR(job)) return;
-  dt_print(DT_DEBUG_CONTROL, "%s | queue: %u | priority: %d", job->description, job->queue, job->priority);
+  dt_print(DT_DEBUG_CONTROL, "%s | queue: %d | priority: %d", job->description, job->queue, job->priority);
 }
 
 void dt_control_job_cancel(_dt_job_t *job)
@@ -397,7 +397,7 @@ void dt_control_flush_jobs_queue(dt_control_t *control, dt_job_queue_t queue_id)
     }
   }
 
-  dt_print(DT_DEBUG_CONTROL, "[jobs] flushed %i pending jobs from queue %u\n", count, queue_id);
+  dt_print(DT_DEBUG_CONTROL, "[jobs] flushed %i pending jobs from queue %i\n", count, queue_id);
 
   dt_pthread_mutex_unlock(&control->queue_mutex);
 }

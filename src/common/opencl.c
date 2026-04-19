@@ -121,7 +121,7 @@ int dt_opencl_get_device_info(dt_opencl_t *cl, cl_device_id device, cl_device_in
   if(err != CL_SUCCESS)
   {
     dt_print(DT_DEBUG_OPENCL,
-             "[dt_opencl_get_device_info] could not query the actual size in bytes of info %u: %i\n", param_name, err);
+             "[dt_opencl_get_device_info] could not query the actual size in bytes of info %d: %i\n", param_name, err);
     goto error;
   }
 
@@ -130,7 +130,7 @@ int dt_opencl_get_device_info(dt_opencl_t *cl, cl_device_id device, cl_device_in
   {
     // both of these sizes make no sense. either i failed to parse spec, or opencl implementation bug?
     dt_print(DT_DEBUG_OPENCL,
-             "[dt_opencl_get_device_info] ERROR: no size returned, or zero size returned for data %u: %zu\n",
+             "[dt_opencl_get_device_info] ERROR: no size returned, or zero size returned for data %d: %zu\n",
              param_name, *param_value_size);
     err = CL_INVALID_VALUE; // FIXME: anything better?
     goto error;
@@ -142,7 +142,7 @@ int dt_opencl_get_device_info(dt_opencl_t *cl, cl_device_id device, cl_device_in
     if(IS_NULL_PTR(ptr))
     {
       dt_print(DT_DEBUG_OPENCL,
-               "[dt_opencl_get_device_info] memory allocation failed! tried to allocate %zu bytes for data %u: %i",
+               "[dt_opencl_get_device_info] memory allocation failed! tried to allocate %zu bytes for data %d: %i",
                *param_value_size, param_name, err);
       err = CL_OUT_OF_HOST_MEMORY;
       goto error;
@@ -156,7 +156,7 @@ int dt_opencl_get_device_info(dt_opencl_t *cl, cl_device_id device, cl_device_in
   err = (cl->dlocl->symbols->dt_clGetDeviceInfo)(device, param_name, *param_value_size, *param_value, NULL);
   if(err != CL_SUCCESS)
   {
-    dt_print(DT_DEBUG_OPENCL, "[dt_opencl_get_device_info] could not query info %u: %i\n", param_name, err);
+    dt_print(DT_DEBUG_OPENCL, "[dt_opencl_get_device_info] could not query info %d: %i\n", param_name, err);
     goto error;
   }
 
@@ -555,7 +555,7 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
 
   dt_print_nts(DT_DEBUG_OPENCL, "   GLOBAL MEM SIZE:          %.0f MB\n", (double)cl->dev[dev].max_global_mem / 1024.0 / 1024.0);
   dt_print_nts(DT_DEBUG_OPENCL, "   MAX MEM ALLOC:            %.0f MB\n", (double)cl->dev[dev].max_mem_alloc / 1024.0 / 1024.0);
-  dt_print_nts(DT_DEBUG_OPENCL, "   MAX IMAGE SIZE:           %zu x %zu\n", cl->dev[dev].max_image_width, cl->dev[dev].max_image_height);
+  dt_print_nts(DT_DEBUG_OPENCL, "   MAX IMAGE SIZE:           %zd x %zd\n", cl->dev[dev].max_image_width, cl->dev[dev].max_image_height);
   (cl->dlocl->symbols->dt_clGetDeviceInfo)(devid, CL_DEVICE_MAX_WORK_GROUP_SIZE, sizeof(infoint), &infoint, NULL);
   dt_print_nts(DT_DEBUG_OPENCL, "   MAX WORK GROUP SIZE:      %zu\n", infoint);
   (cl->dlocl->symbols->dt_clGetDeviceInfo)(devid, CL_DEVICE_MAX_WORK_ITEM_DIMENSIONS, sizeof(infoint), &infoint, NULL);
@@ -893,7 +893,7 @@ void dt_opencl_init(dt_opencl_t *cl, const gboolean exclude_opencl, const gboole
     dt_print_nts(DT_DEBUG_OPENCL, "[opencl_init] no opencl platform available\n");
     goto finally;
   }
-  dt_print_nts(DT_DEBUG_OPENCL, "[opencl_init] found %u platform%s\n", num_platforms,
+  dt_print_nts(DT_DEBUG_OPENCL, "[opencl_init] found %d platform%s\n", num_platforms,
            num_platforms > 1 ? "s" : "");
 
   for(int n = 0; n < num_platforms; n++)
@@ -971,7 +971,7 @@ void dt_opencl_init(dt_opencl_t *cl, const gboolean exclude_opencl, const gboole
   }
   devs = NULL;
 
-  dt_print_nts(DT_DEBUG_OPENCL, "[opencl_init] found %u device%s\n", num_devices, num_devices > 1 ? "s" : "");
+  dt_print_nts(DT_DEBUG_OPENCL, "[opencl_init] found %d device%s\n", num_devices, num_devices > 1 ? "s" : "");
   if(num_devices == 0)
   {
     if(devices)

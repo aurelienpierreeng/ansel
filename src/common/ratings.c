@@ -212,7 +212,7 @@ void dt_ratings_apply_on_list(GList *img, const int rating, const gboolean undo_
       dt_undo_end_group(darktable.undo);
     }
     dt_collection_hint_message(darktable.collection);
-    dt_toast_log(_("Rating set to %s for %u image(s)"), dt_ratings_get_name(rating), g_list_length(img));
+    dt_toast_log(_("Rating set to %s for %i image(s)"), dt_ratings_get_name(rating), g_list_length(img));
   }
 }
 
@@ -234,9 +234,9 @@ void dt_ratings_apply_on_image(const int32_t imgid, const int rating, const gboo
     {
       const guint count = g_list_length(imgs);
       if(new_rating == DT_VIEW_REJECT)
-        dt_control_log(ngettext("rejecting %u image", "rejecting %u images", count), count);
+        dt_control_log(ngettext("rejecting %d image", "rejecting %d images", count), count);
       else
-        dt_control_log(ngettext("applying rating %d to %u image", "applying rating %d to %u images", count),
+        dt_control_log(ngettext("applying rating %d to %d image", "applying rating %d to %d images", count),
                        new_rating, count);
     }
 

@@ -646,7 +646,7 @@ static GList *_hm_report_build_ordered_modules(dt_develop_t *dev_dest, const GPt
   if(visible_count != (int)visible_order->len)
   {
     dt_print(DT_DEBUG_HISTORY,
-             "[dt_history_merge] report reorder: visible modules mismatch (pipe=%d, gui=%u)\n",
+             "[dt_history_merge] report reorder: visible modules mismatch (pipe=%d, gui=%d)\n",
              visible_count, visible_order->len);
   }
 

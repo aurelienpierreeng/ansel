@@ -306,7 +306,7 @@ int dt_imageio_heif_read_profile(const char *filename,
 
         if(over)
         {
-          dt_print(DT_DEBUG_IMAGEIO, "Overriding nclx color profile for HEIF file `%s': 1/%u/%u to 1/%u/%u\n",
+          dt_print(DT_DEBUG_IMAGEIO, "Overriding nclx color profile for HEIF file `%s': 1/%d/%d to 1/%d/%d\n",
                    filename, profile_info_nclx->transfer_characteristics, profile_info_nclx->matrix_coefficients,
                    cicp->transfer_characteristics, cicp->matrix_coefficients);
         }
