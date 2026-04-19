@@ -38,13 +38,6 @@ if(libavif_FOUND)
   set_target_properties(avif_format PROPERTIES OUTPUT_NAME avif)
 endif()
 
-if(TARGET xcf)
-  list(APPEND MODULES "gimp_xcf")
-  add_library(gimp_xcf MODULE "xcf.c")
-  target_link_libraries(gimp_xcf PRIVATE xcf)
-  set_target_properties(gimp_xcf PROPERTIES OUTPUT_NAME xcf)
-endif()
-
 foreach(module ${MODULES})
   target_link_libraries(${module} PUBLIC lib_ansel)
   if(WIN32)

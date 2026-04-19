@@ -1,12 +1,8 @@
 # We don't control the code under here, so don't turn warnings into errors
 set(_PARENT_C_FLAGS "${CMAKE_C_FLAGS}")
 set(_PARENT_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-error -ferror-limit=0")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error -ferror-limit=0")
-
-if(USE_XCF)
-  add_subdirectory(libxcf)
-endif()
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-error")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error")
 
 add_library(whereami STATIC "${CMAKE_CURRENT_SOURCE_DIR}/whereami/src/whereami.c")
 target_include_directories(whereami PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/whereami/src/")

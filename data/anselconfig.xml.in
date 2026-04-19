@@ -1865,19 +1865,6 @@
     <shortdescription/>
     <longdescription/>
   </dtconfig>
-  <dtconfig>
-    <name>plugins/imageio/format/xcf/bpp</name>
-    <type>
-      <enum>
-        <option>8</option>
-        <option>16</option>
-        <option>32</option>
-      </enum>
-    </type>
-    <default>32</default>
-    <shortdescription>XCF bit depth (bpp)</shortdescription>
-    <longdescription/>
-  </dtconfig>
   <dtconfig prefs="security" section="other">
     <name>plugins/pwstorage/pwstorage_backend</name>
     <type>

@@ -106,7 +106,6 @@ case "$TARGET" in
       -DUSE_OPENJPEG=OFF \
       -DUSE_WEBP=OFF \
       -DUSE_AVIF=OFF \
-      -DUSE_XCF=OFF \
       -DBUILD_CMSTEST=OFF \
       -DUSE_OPENEXR=OFF \
       -DBUILD_PRINT=OFF \
@@ -129,7 +128,6 @@ case "$TARGET" in
       -DUSE_OPENJPEG=OFF \
       -DUSE_WEBP=OFF \
       -DUSE_AVIF=OFF \
-      -DUSE_XCF=OFF \
       -DBUILD_CMSTEST=OFF \
       -DUSE_OPENEXR=OFF \
       -DBUILD_PRINT=OFF \
