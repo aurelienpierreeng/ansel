@@ -329,12 +329,14 @@ find_package(LCMS2 REQUIRED)
 find_package(JPEG REQUIRED)
 find_package(PNG REQUIRED)
 find_package(TIFF REQUIRED)
+find_package(LensFun REQUIRED)
 
 target_include_directories(ansel_deps INTERFACE
   LCMS2::LCMS2
   PNG::PNG
   JPEG::JPEG
   TIFF::TIFF
+  LensFun::LensFun
 )
 target_link_libraries(ansel_deps INTERFACE
   PkgConfig::GTK3
@@ -345,6 +347,7 @@ target_link_libraries(ansel_deps INTERFACE
   PNG::PNG
   JPEG::JPEG
   TIFF::TIFF
+  LensFun::LensFun
 )
 
 add_definitions("-DGLIB_VERSION_MIN_REQUIRED=GLIB_VERSION_2_64")
@@ -438,14 +441,6 @@ if(USE_HEIF)
   endif()
 endif()
 
-if(USE_LENSFUN)
-  find_package(LensFun)
-  if(LensFun_FOUND)
-    target_link_libraries(ansel_deps INTERFACE LensFun::LensFun)
-    add_definitions(-DHAVE_LENSFUN=1)
-    add_definitions(${LensFun_DEFINITIONS})
-  endif()
-endif()
 
 find_package(Sqlite3 3.24 REQUIRED)
 target_link_libraries(ansel_deps INTERFACE Sqlite3::Sqlite3)
