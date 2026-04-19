@@ -46,12 +46,12 @@ JsonParser *dt_noiseprofile_init(const char *alternative)
     char dir[PATH_MAX] = { 0 };
 
     dt_loc_get_user_config_dir(dir, sizeof(dir));
-    snprintf(filename, sizeof(filename), "%s/%s", dir, "noiseprofiles.json");
+    dt_concat_path_file(filename, dir, "noiseprofiles.json");
 
     if(!g_file_test(filename, G_FILE_TEST_EXISTS))
     {
       dt_loc_get_datadir(dir, sizeof(dir));
-      snprintf(filename, sizeof(filename), "%s/%s", dir, "noiseprofiles.json");
+      dt_concat_path_file(filename, dir, "noiseprofiles.json");
     }
   }
   else

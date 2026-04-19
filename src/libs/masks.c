@@ -491,13 +491,15 @@ static void _set_iter_name(dt_lib_masks_t *lm, dt_masks_form_t *form, int state,
   if(IS_NULL_PTR(form)) return;
 
   char str[256] = "";
-  g_strlcat(str, form->name, sizeof(str));
 
   if(opacity != 1.0f)
   {
-    char str2[256] = "";
-    g_strlcpy(str2, str, sizeof(str2));
-    snprintf(str, sizeof(str), "%s %d%%", str2, (int)(opacity * 100));
+    g_snprintf(str, sizeof(str), "%s %d%%",
+              form->name, (int)(opacity * 100));
+  }
+  else
+  {
+    g_strlcpy(str, form->name, sizeof(str));
   }
 
   GdkPixbuf *icop = NULL;

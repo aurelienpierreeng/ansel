@@ -1069,9 +1069,9 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   //init overlay colors
   dt_guides_set_overlay_colors();
 
-  snprintf(path, sizeof(path), "%s/icons", datadir);
+  dt_concat_path_file(path, datadir, "icons");
   gtk_icon_theme_append_search_path(gtk_icon_theme_get_default(), path);
-  snprintf(path, sizeof(path), "%s/icons", sharedir);
+  dt_concat_path_file(path, sharedir, "icons");
   gtk_icon_theme_append_search_path(gtk_icon_theme_get_default(), path);
 
   GtkWidget *center = dt_ui_center(darktable.gui->ui);

@@ -64,7 +64,7 @@ static int generate_thumbnail_cache(const dt_mipmap_size_t min_mip, const dt_mip
   for(dt_mipmap_size_t k = min_mip; k <= max_mip; k++)
   {
     char dirname[PATH_MAX] = { 0 };
-    snprintf(dirname, sizeof(dirname), "%s.d/%d", darktable.mipmap_cache->cachedir, k);
+    dt_mipmap_get_cache_dir(dirname, darktable.mipmap_cache, k);
 
     fprintf(stderr, _("creating cache directory '%s'\n"), dirname);
     if(g_mkdir_with_parents(dirname, 0750))
@@ -116,7 +116,7 @@ static int generate_thumbnail_cache(const dt_mipmap_size_t min_mip, const dt_mip
     for(int k = max_mip; k >= min_mip && k >= 0; k--)
     {
       char filename[PATH_MAX] = { 0 };
-      snprintf(filename, sizeof(filename), "%s.d/%d/%d.jpg", darktable.mipmap_cache->cachedir, k, imgid);
+      dt_mipmap_get_cache_filename(filename, darktable.mipmap_cache, k, imgid);
 
       // if a valid thumbnail file is already on disc - do nothing
       if(dt_util_test_image_file(filename)) continue;

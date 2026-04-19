@@ -3033,11 +3033,11 @@ start:
   {
     dbname = dt_conf_get_string("database");
     if(IS_NULL_PTR(dbname))
-      snprintf(dbfilename_library, sizeof(dbfilename_library), "%s/library.db", datadir);
+      dt_concat_path_file(dbfilename_library, datadir, "library.db");
     else if(!strcmp(dbname, ":memory:"))
       g_strlcpy(dbfilename_library, dbname, sizeof(dbfilename_library));
     else if(dbname[0] != '/')
-      snprintf(dbfilename_library, sizeof(dbfilename_library), "%s/%s", datadir, dbname);
+      dt_concat_path_file(dbfilename_library, datadir, dbname);
     else
       g_strlcpy(dbfilename_library, dbname, sizeof(dbfilename_library));
   }
@@ -3053,7 +3053,7 @@ start:
   /* we also need a 2nd db with permanent data like presets, styles and tags */
   char dbfilename_data[PATH_MAX] = { 0 };
   if(load_data)
-    snprintf(dbfilename_data, sizeof(dbfilename_data), "%s/data.db", datadir);
+    dt_concat_path_file(dbfilename_data, datadir, "data.db");
   else
     snprintf(dbfilename_data, sizeof(dbfilename_data), ":memory:");
 
@@ -3668,7 +3668,7 @@ static void _database_migrate_to_xdg_structure()
     if(g_file_test(dbfilename, G_FILE_TEST_EXISTS))
     {
       char destdbname[PATH_MAX] = { 0 };
-      snprintf(destdbname, sizeof(dbfilename), "%s/%s", datadir, "library.db");
+      dt_concat_path_file(destdbname, datadir, "library.db");
       if(!g_file_test(destdbname, G_FILE_TEST_EXISTS))
       {
         fprintf(stderr, "[init] moving database into new XDG directory structure\n");
@@ -3689,15 +3689,13 @@ static void _database_delete_mipmaps_files()
   // Directory
   char cachedir[PATH_MAX] = { 0 }, mipmapfilename[PATH_MAX] = { 0 };
   dt_loc_get_user_cache_dir(cachedir, sizeof(cachedir));
-
-  snprintf(mipmapfilename, sizeof(mipmapfilename), "%s/mipmaps", cachedir);
+  dt_concat_path_file(mipmapfilename, cachedir, "mipmaps");
 
   if(g_access(mipmapfilename, F_OK) != -1)
   {
     fprintf(stderr, "[mipmap_cache] dropping old version file: %s\n", mipmapfilename);
     g_unlink(mipmapfilename);
-
-    snprintf(mipmapfilename, sizeof(mipmapfilename), "%s/mipmaps.fallback", cachedir);
+    dt_concat_path_file(mipmapfilename, cachedir, "mipmaps.fallback");
 
     if(g_access(mipmapfilename, F_OK) != -1) g_unlink(mipmapfilename);
   }

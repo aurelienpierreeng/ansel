@@ -101,7 +101,7 @@ static void dt_rawspeed_load_meta()
     {
       char datadir[PATH_MAX] = { 0 }, camfile[PATH_MAX] = { 0 };
       dt_loc_get_datadir(datadir, sizeof(datadir));
-      snprintf(camfile, sizeof(camfile), "%s/rawspeed/cameras.xml", datadir);
+      dt_concat_path_file(camfile, datadir, "rawspeed/cameras.xml");
       // never cleaned up (only when dt closes)
       meta = new CameraMetaData(camfile);
     }

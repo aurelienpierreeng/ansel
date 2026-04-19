@@ -62,7 +62,7 @@ typedef struct dt_lib_snapshot_t
   GtkWidget *button;
   float zoom_x, zoom_y, zoom_scale;
   int32_t zoom, closeup;
-  char filename[512];
+  char filename[PATH_MAX];
 } dt_lib_snapshot_t;
 
 
@@ -402,8 +402,9 @@ void gui_init(dt_lib_module_t *self)
     g_object_set_data(G_OBJECT(d->snapshot[k].button), "snapshot", GINT_TO_POINTER(k + 1));
 
     /* setup filename for snapshot */
-    snprintf(d->snapshot[k].filename, sizeof(d->snapshot[k].filename),
-             "%s/dt_snapshot_%d.png", localtmpdir, k);
+    gchar *snapshot_file = g_strdup_printf("dt_snapshot_%d.png", k);
+    dt_concat_path_file(d->snapshot[k].filename, localtmpdir, snapshot_file);
+    dt_free(snapshot_file);
 
     /* add button to snapshot box */
     gtk_box_pack_start(GTK_BOX(d->snapshots_box), GTK_WIDGET(d->snapshot[k].button), FALSE, FALSE, 0);

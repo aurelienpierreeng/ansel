@@ -314,9 +314,7 @@ static void _toast_log_lat_lon(const float lat, const float lon)
 static GdkPixbuf *_view_map_images_count(const int nb_images, const gboolean same_loc,
                                          double *count_width, double *count_height)
 {
-  char text[8] = {0};
-  snprintf(text, sizeof(text), "%d", nb_images > 99999 ? 99999 : nb_images);
-
+  gchar *text = g_strdup_printf("%d", nb_images);
   const int w = DT_PIXEL_APPLY_DPI(thumb_size + 2 * thumb_border);
   const int h = DT_PIXEL_APPLY_DPI(image_pin_size);
 
@@ -345,6 +343,7 @@ static GdkPixbuf *_view_map_images_count(const int nb_images, const gboolean sam
   GdkPixbuf *pixbuf = gdk_pixbuf_new_from_data(buf, GDK_COLORSPACE_RGB, TRUE, 8, w, h, w * 4,
                                                (GdkPixbufDestroyNotify)free, NULL);
   cairo_surface_destroy(cst);
+  dt_free(text);
   return pixbuf;
 }
 

@@ -710,7 +710,7 @@ void dt_pdf_finish(dt_pdf_t *pdf, dt_pdf_page_t **pages, int n_pages)
   {
     off_hours = off / 60;
     off_mins = abs(off - off_hours * 60);
-    snprintf(&time_str[size], 9, "%+03d'%02d'", off_hours, off_mins);
+    g_snprintf(&time_str[size], sizeof(time_str) - size, "%+03d'%02d'", off_hours, off_mins);
   }
 
 time_error:

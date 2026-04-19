@@ -1107,6 +1107,16 @@ static inline gchar *strip_markup(const char *s)
   return plain;
 }
 
+/**
+ * @brief Append a constant filename to a variable, stack-based, fixed-sized, directory, 
+ * and add a `/` in-between
+ * 
+ * @param destination 
+ * @param variable 
+ * @param string 
+ */
+void dt_concat_path_file(char destination[PATH_MAX], const char path[PATH_MAX], const char *const file);
+
 #ifdef __cplusplus
 }
 #endif
