@@ -165,11 +165,11 @@ dt_bilateral_t *dt_bilateral_init(const int width,     // width of input image
   if(b->buf) memset(b->buf, 0, sizeof(float) * b->size_x * b->size_z * b->numslices * b->slicerows);
   if (IS_NULL_PTR(b->buf))
   {
-    fprintf(stderr,"[bilateral] unable to allocate buffer for %zux%zux%zu grid\n",b->size_x,b->size_y,b->size_z);
+    fprintf(stderr,"[bilateral] unable to allocate buffer for %" PRIu64 "x%" PRIu64 "x%" PRIu64 " grid\n",b->size_x,b->size_y,b->size_z);
     dt_free(b);
     return NULL;
   }
-  dt_print(DT_DEBUG_DEV, "[bilateral] created grid [%lu %lu %lu] with sigma (%f %f) (%f %f)\n",
+  dt_print(DT_DEBUG_DEV, "[bilateral] created grid [%" PRIu64 " %" PRIu64 " %" PRIu64 "] with sigma (%f %f) (%f %f)\n",
            b->size_x, b->size_y, b->size_z, b->sigma_s, sigma_s, b->sigma_r, sigma_r);
   return b;
 }
