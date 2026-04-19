@@ -169,7 +169,7 @@ dt_bilateral_t *dt_bilateral_init(const int width,     // width of input image
     dt_free(b);
     return NULL;
   }
-  dt_print(DT_DEBUG_DEV, "[bilateral] created grid [%lu %lu %lu] with sigma (%f %f) (%f %f)\n",
+  dt_print(DT_DEBUG_DEV, "[bilateral] created grid [%ld %ld %ld] with sigma (%f %f) (%f %f)\n",
            b->size_x, b->size_y, b->size_z, b->sigma_s, sigma_s, b->sigma_r, sigma_r);
   return b;
 }

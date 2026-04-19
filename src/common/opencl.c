@@ -644,7 +644,7 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
     goto end;
   }
 
-  dt_concat_path_file(filename, kerneldir, "programs.conf");
+  snprintf(filename, PATH_MAX * sizeof(char), "%s" G_DIR_SEPARATOR_S "programs.conf", kerneldir);
 
   char *escapedkerneldir = NULL;
 #ifndef __APPLE__
@@ -759,11 +759,9 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
         dt_print(DT_DEBUG_OPENCL, "[dt_opencl_device_init] malformed entry in programs.conf `%s'; ignoring it!\n", confentry);
         continue;
       }
-      dt_concat_path_file(filename, kerneldir, programname);
-      gchar *program_bin = g_strdup_printf("%s.bin", programname);
-      dt_concat_path_file(binname, cachedir, program_bin);
-      dt_free(program_bin);
 
+      snprintf(filename, PATH_MAX * sizeof(char), "%s" G_DIR_SEPARATOR_S "%s", kerneldir, programname);
+      snprintf(binname, PATH_MAX * sizeof(char), "%s" G_DIR_SEPARATOR_S "%s.bin", cachedir, programname);
       dt_vprint(DT_DEBUG_OPENCL, "[dt_opencl_device_init] testing program `%s' ..\n", programname);
       int loaded_cached;
       char md5sum[33];
@@ -1494,7 +1492,7 @@ void dt_opencl_md5sum(const char **files, char **md5sums)
       continue;
     }
 
-    dt_concat_path_file(filename, kerneldir, *files);
+    snprintf(filename, sizeof(filename), "%s" G_DIR_SEPARATOR_S "%s", kerneldir, *files);
 
     struct stat filestat;
     FILE *f = fopen_stat(filename, &filestat);
@@ -1671,7 +1669,7 @@ int dt_opencl_load_program(const int dev, const int prog, const char *filename, 
     if(linkedfile_len > 0)
     {
       char link_dest[PATH_MAX] = { 0 };
-      dt_concat_path_file(link_dest, cachedir, linkedfile);
+      snprintf(link_dest, sizeof(link_dest), "%s" G_DIR_SEPARATOR_S "%s", cachedir, linkedfile);
       g_unlink(link_dest);
     }
     g_unlink(binname);

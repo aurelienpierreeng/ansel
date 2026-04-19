@@ -187,13 +187,6 @@ void dt_mipmap_cache_swap_at_size(dt_mipmap_cache_t *cache, const int32_t imgid,
 // only copies over the jpg backend on disk, doesn't directly affect the in-memory cache.
 void dt_mipmap_cache_copy_thumbnails(const dt_mipmap_cache_t *cache, const uint32_t dst_imgid, const uint32_t src_imgid);
 
-// get the full path of a cached thumbnail
-void dt_mipmap_get_cache_filename(char path[PATH_MAX], const dt_mipmap_cache_t *cache, dt_mipmap_size_t mip, const int32_t imgid);
-
-// get just the dir
-void dt_mipmap_get_cache_dir(char path[PATH_MAX], const dt_mipmap_cache_t *cache, dt_mipmap_size_t mip);
-
-
 #ifdef __cplusplus
 }
 #endif

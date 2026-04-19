@@ -67,7 +67,7 @@ static int32_t preload_image_cache(dt_job_t *job)
     for(int k = DT_MIPMAP_F - 1; k >= DT_MIPMAP_0 && dt_control_job_get_state(job) != DT_JOB_STATE_CANCELLED; k--)
     {
       char filename[PATH_MAX] = { 0 };
-      dt_mipmap_get_cache_filename(filename, darktable.mipmap_cache, k, imgid);
+      snprintf(filename, sizeof(filename), "%s.d/%d/%d.jpg", darktable.mipmap_cache->cachedir, k, imgid);
 
       // if a valid thumbnail file is already on disc - do nothing
       if(dt_util_test_image_file(filename)) continue;
