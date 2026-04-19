@@ -744,7 +744,7 @@ static gboolean _set_hinter_message(dt_masks_form_gui_t *mask_gui, const dt_mask
   }
 
   dt_print(DT_DEBUG_INPUT,
-           "[masks] hint begin: form=%p type=%d gui=%p group_selected=%d form_selected=%d node_hovered=%d seg_hovered=%d selected_formid=%d\n",
+           "[masks] hint begin: form=%p type=%u gui=%p group_selected=%d form_selected=%d node_hovered=%d seg_hovered=%d selected_formid=%d\n",
            (void *)mask_form, mask_form ? mask_form->type : -1, (void *)mask_gui,
            mask_gui->group_selected, mask_gui->form_selected,
            mask_gui->node_hovered, mask_gui->seg_hovered,
@@ -2019,7 +2019,7 @@ void dt_masks_write_masks_history_item(const int32_t image_id, const int history
 {
   sqlite3_stmt *statement = NULL;
 
-  dt_print(DT_DEBUG_HISTORY, "[dt_masks_write_masks_history_item] writing mask %s of type %i for image %i\n",
+  dt_print(DT_DEBUG_HISTORY, "[dt_masks_write_masks_history_item] writing mask %s of type %u for image %i\n",
            mask_form->name, mask_form->type, image_id);
 
   // write the form into the database
@@ -2449,7 +2449,7 @@ int dt_masks_events_mouse_scrolled(struct dt_iop_module_t *module, double x, dou
   {
     const gboolean hinted = _set_hinter_message(mask_gui, mask_form);
     dt_print(DT_DEBUG_INPUT,
-             "[masks] scroll: ret=%d hinted=%d form=%p type=%d gui=%p group_selected=%d flow=%d state=0x%x\n",
+             "[masks] scroll: ret=%d hinted=%d form=%p type=%u gui=%p group_selected=%d flow=%d state=0x%x\n",
              result, hinted, (void *)mask_form, mask_form ? mask_form->type : -1, (void *)mask_gui,
              mask_gui->group_selected, scroll_flow, key_state);
     if(hinted)

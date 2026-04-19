@@ -1193,12 +1193,12 @@ static dt_view_surface_value_t _view_image_get_surface_internal(int32_t imgid, i
   if((darktable.unmuted & (DT_DEBUG_LIGHTTABLE | DT_DEBUG_PERF)) == (DT_DEBUG_LIGHTTABLE | DT_DEBUG_PERF))
   {
     dt_print(DT_DEBUG_LIGHTTABLE | DT_DEBUG_PERF,
-             "[dt_view_image_get_surface]  id %i, mip code %i, dots %ix%i, mip %ix%i, surf %ix%i created in %0.04f sec\n",
+             "[dt_view_image_get_surface]  id %i, mip code %u, dots %ix%i, mip %ix%i, surf %ix%i created in %0.04f sec\n",
              imgid, mip, width, height, buf_wd, buf_ht, img_width, img_height, dt_get_wtime() - tt);
   }
   else if(darktable.unmuted & DT_DEBUG_IMAGEIO)
   {
-    dt_print(DT_DEBUG_IMAGEIO, "[dt_view_image_get_surface]  id %i, mip code %i, dots %ix%i, mip %ix%i, surf %ix%i\n", imgid, mip,
+    dt_print(DT_DEBUG_IMAGEIO, "[dt_view_image_get_surface]  id %i, mip code %u, dots %ix%i, mip %ix%i, surf %ix%i\n", imgid, mip,
              width, height, buf_wd, buf_ht, img_width, img_height);
   }
 

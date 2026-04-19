@@ -1189,7 +1189,7 @@ GList *dt_ioppr_get_iop_order_list(int32_t imgid, gboolean sorted)
         iop_order_list = _table_to_list(ansel_jpg_order);
       }
       else
-        fprintf(stderr, "[dt_ioppr_get_iop_order_list] invalid iop order version %d for imgid %d\n", version, imgid);
+        fprintf(stderr, "[dt_ioppr_get_iop_order_list] invalid iop order version %u for imgid %d\n", version, imgid);
 
       if(iop_order_list)
       {

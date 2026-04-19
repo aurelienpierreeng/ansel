@@ -356,7 +356,7 @@ void dt_image_print_debug_info(const dt_image_t *img, const char *context)
       break;
   }
 
-  const unsigned int flags = (unsigned int)img->flags;
+  const int flags = img->flags;
 
   dt_print(DT_DEBUG_IMAGEIO,
            "[image debug] %s id=%d filename='%s' fullpath='%s'\n",
@@ -366,8 +366,8 @@ void dt_image_print_debug_info(const dt_image_t *img, const char *context)
            ctx, img->width, img->height, img->crop_width, img->crop_height, img->crop_x, img->crop_y,
            img->orientation, img->p_width, img->p_height, img->pixel_aspect_ratio);
   dt_print(DT_DEBUG_IMAGEIO,
-           "[image debug] %s flags=0x%08x raw=%d non_raw=%d ldr=%d hdr=%d sraw=%d 4bayer=%d mosaic=%d xtrans=%d "
-           "bayer=%d mono=%d mono_flags=0x%x mono_workflow=%d mono_preview=%d mono_bayer=%d bw=%d bw_flow=%d "
+           "[image debug] %s flags=%i raw=%d non_raw=%d ldr=%d hdr=%d sraw=%d 4bayer=%d mosaic=%d xtrans=%d "
+           "bayer=%d mono=%d mono_flags=%i mono_workflow=%d mono_preview=%d mono_bayer=%d bw=%d bw_flow=%d "
            "local_copy=%d has_txt=%d has_wav=%d addl_dng=%d auto_presets=%d no_legacy_presets=%d rejected=%d remove=%d "
            "has_localcopy=%d has_audio=%d is_hdr_field=%d\n",
            ctx, flags, is_raw, !is_raw, is_ldr, is_hdr,
@@ -2556,8 +2556,8 @@ static gboolean _sidecar_is_up_to_date(const dt_image_t *img)
   const int64_t change_timestamp_unix = g_date_time_to_unix(gdt);
   g_date_time_unref(gdt);
   dt_print(DT_DEBUG_CONTROL,
-           "[xmp] imgid %d change_ts=%lld write_ts=%lld\n",
-           img->id, (long long)change_timestamp_unix, (long long)write_timestamp);
+           "[xmp] imgid %d change_ts=%ld write_ts=%ld\n",
+           img->id, change_timestamp_unix, write_timestamp);
   return change_timestamp_unix <= write_timestamp;
 }
 

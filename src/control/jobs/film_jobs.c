@@ -270,7 +270,7 @@ static void _film_import1(dt_job_t *job, dt_film_t *film, GList *images)
   gchar message[512] = { 0 };
   double fraction = 0;
   const guint total = g_list_length(images);
-  g_snprintf(message, sizeof(message) - 1, ngettext("importing %d image", "importing %d images", total), total);
+  g_snprintf(message, sizeof(message) - 1, ngettext("importing %u image", "importing %u images", total), total);
   dt_control_job_set_progress_message(job, message);
 
   GList *imgs = NULL;

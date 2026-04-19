@@ -401,7 +401,7 @@ dt_imageio_retval_t dt_imageio_open_tiff(dt_image_t *img, const char *filename, 
 
   t.scanlinesize = TIFFScanlineSize(t.tiff);
 
-  dt_print(DT_DEBUG_IMAGEIO, "[tiff_open] %dx%d %dbpp, %d samples per pixel.\n", t.width, t.height, t.bpp, t.spp);
+  dt_print(DT_DEBUG_IMAGEIO, "[tiff_open] %ux%u %dbpp, %d samples per pixel.\n", t.width, t.height, t.bpp, t.spp);
 
   // we only support 8/16 and 32 bits per pixel formats.
   if(t.bpp != 8 && t.bpp != 16 && t.bpp != 32)

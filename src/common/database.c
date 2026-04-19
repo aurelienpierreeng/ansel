@@ -3978,8 +3978,8 @@ gboolean dt_database_snapshot(const struct dt_database_t *db)
   gchar *date_suffix = g_date_time_format(date_now, "%Y%m%d%H%M%S");
   g_date_time_unref(date_now);
 
-  const char *file_pattern = "%s-snp-%s";
-  const char *temp_pattern = "%s-tmp-%s";
+  static const char file_pattern[] = "%s-snp-%s";
+  static const char temp_pattern[] = "%s-tmp-%s";
 
   gchar *lib_backup_file = g_strdup_printf(file_pattern, db->dbfilename_library, date_suffix);
   gchar *lib_tmpbackup_file = g_strdup_printf(temp_pattern, db->dbfilename_library, date_suffix);

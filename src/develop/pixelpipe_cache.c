@@ -66,7 +66,7 @@ static void _trace_exact_hit(const char *phase, const uint64_t hash, dt_pixel_ca
   if(verbose && !(darktable.unmuted & DT_DEBUG_VERBOSE)) return;
 
   dt_print(DT_DEBUG_PIPECACHE,
-           "[pixelpipe_cache] exact-hit %s req=%zu entry=%zu/%zu"
+           "[pixelpipe_cache] exact-hit %s req=%lu entry=%lu/%lu"
            " data=%p cl=%p refs=%i auto=%i dev=%i module=%s name=%s\n",
            phase, hash, cache_entry ? cache_entry->hash : DT_PIXELPIPE_CACHE_HASH_INVALID,
            cache_entry ? cache_entry->serial : 0, data, cl_mem_output,
@@ -540,7 +540,7 @@ static int _non_thread_safe_pixel_pipe_cache_remove_lru(dt_dev_pixelpipe_cache_t
   }
   else
   {
-    dt_print(DT_DEBUG_PIPECACHE, "[pixelpipe] couldn't remove LRU, %i items and all are used\n", g_hash_table_size(cache->entries));
+    dt_print(DT_DEBUG_PIPECACHE, "[pixelpipe] couldn't remove LRU, %u items and all are used\n", g_hash_table_size(cache->entries));
     g_hash_table_foreach(cache->entries, _print_cache_lines, NULL);
   }
 
@@ -2635,7 +2635,7 @@ void dt_dev_pixelpipe_cache_print(dt_dev_pixelpipe_cache_t *cache)
 {
   if(!(darktable.unmuted & DT_DEBUG_PIPECACHE)) return;
 
-  dt_print(DT_DEBUG_PIPECACHE, "[pixelpipe] cache hit rate so far: %.3f%% - size: %lu MiB over %lu MiB - %i items\n", 100. * (cache->hits) / (float)cache->queries, cache->current_memory / (1024 * 1024), cache->max_memory / (1024 * 1024), g_hash_table_size(cache->entries));
+  dt_print(DT_DEBUG_PIPECACHE, "[pixelpipe] cache hit rate so far: %.3f%% - size: %lu MiB over %lu MiB - %u items\n", 100. * (cache->hits) / (float)cache->queries, cache->current_memory / (1024 * 1024), cache->max_memory / (1024 * 1024), g_hash_table_size(cache->entries));
 }
 
 // clang-format off

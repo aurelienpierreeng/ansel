@@ -878,9 +878,9 @@ static int _hm_topo_build_constraint_ids(_hm_topo_merge_ctx_t *ctx, dt_develop_t
   if(_hm_ids_from_iop_list(g_list_first(dev_src->iop), ctx->id_ht, ctx->keep_mask, &ctx->src_ids)) return 1;
 
   dt_print(DT_DEBUG_HISTORY,
-           "[dt_history_merge_module_list_into_image_topological] iop-order solve: merge_iop_order=%d mod_list=%d "
-           "src_iop=%d "
-           "dst_iop=%d keep(dst+mod+rules) dest_constraints=%d src_constraints=%d focus=%d\n",
+           "[dt_history_merge_module_list_into_image_topological] iop-order solve: merge_iop_order=%i mod_list=%u "
+           "src_iop=%u "
+           "dst_iop=%u keep(dst+mod+rules) dest_constraints=%u src_constraints=%u focus=%u\n",
            merge_iop_order, g_list_length((GList *)mod_list), g_list_length(dev_src->iop),
            g_list_length(dev_dest->iop), g_list_length(ctx->dest_ids), g_list_length(ctx->src_ids),
            g_hash_table_size(ctx->src_focus_ids));
@@ -1050,7 +1050,7 @@ static int _hm_topo_resolve_incompatible_constraints(GList *flat, GHashTable *id
 
     dt_print(
         DT_DEBUG_HISTORY,
-        "[dt_history_merge_module_list_into_image_topological] incompatible constraints: found %d 2-cycle(s)\n",
+        "[dt_history_merge_module_list_into_image_topological] incompatible constraints: found %u 2-cycle(s)\n",
         g_list_length(_hm_cycles));
 
     const dt_hm_constraint_choice_t choice
@@ -1379,8 +1379,8 @@ int dt_history_merge(dt_develop_t *dev_dest, dt_develop_t *dev_src, const int32_
                                "temporarily unsupported, ignoring\n");
 
   dt_print(DT_DEBUG_HISTORY,
-           "[dt_history_merge] imgid=%d merge_iop_order=%d strategy=%d "
-           "force_new=%d modules=%d\n",
+           "[dt_history_merge] imgid=%d merge_iop_order=%d strategy=%u "
+           "force_new=%d modules=%u\n",
            dest_imgid, merge_iop_order, strategy, force_new_modules, g_list_length((GList *)mod_list));
 
   // If the destination history has an undo/redo tail (history_end < length), any new merge must invalidate
@@ -1440,7 +1440,7 @@ int dt_history_merge(dt_develop_t *dev_dest, dt_develop_t *dev_src, const int32_
   _hm_renumber_history(dev_dest->history);
   dt_dev_set_history_end_ext(dev_dest, g_list_length(dev_dest->history));
 
-  dt_print(DT_DEBUG_HISTORY, "[dt_history_merge] merged history: end=%d len=%d\n",
+  dt_print(DT_DEBUG_HISTORY, "[dt_history_merge] merged history: end=%d len=%u\n",
            dt_dev_get_history_end_ext(dev_dest), g_list_length(dev_dest->history));
 
   revert = _hm_show_merge_report_popup(dev_dest, dev_src, merge_iop_order, used_source_order, strategy,

@@ -1114,8 +1114,8 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
       = gdk_seat_get_slaves(gdk_display_get_default_seat(gdk_display_get_default()), GDK_SEAT_CAPABILITY_TABLET_STYLUS);
   dt_print(DT_DEBUG_INPUT, "[input device] seat capabilities bitmask: %u\n",
            (unsigned int)gdk_seat_get_capabilities(gdk_display_get_default_seat(gdk_display_get_default())));
-  dt_print(DT_DEBUG_INPUT, "[input device] stylus-capable devices reported by seat: %d\n", g_list_length(stylus_devices));
-  dt_print(DT_DEBUG_INPUT, "[input device] manager fallback devices: slave=%d floating=%d merged_total=%d\n",
+  dt_print(DT_DEBUG_INPUT, "[input device] stylus-capable devices reported by seat: %u\n", g_list_length(stylus_devices));
+  dt_print(DT_DEBUG_INPUT, "[input device] manager fallback devices: slave=%d floating=%d merged_total=%u\n",
            manager_slave_count, manager_floating_count, g_list_length(input_devices));
   for(GList *l = stylus_devices; !IS_NULL_PTR(l); l = g_list_next(l))
   {

@@ -364,7 +364,7 @@ void dt_image_cache_init(dt_image_cache_t *cache)
   dt_cache_set_allocate_callback(&cache->cache, &dt_image_cache_allocate, cache);
   dt_cache_set_cleanup_callback(&cache->cache, &dt_image_cache_deallocate, cache);
 
-  dt_print(DT_DEBUG_CACHE, "[image_cache] has %d entries (%u MiB)\n", num, size);
+  dt_print(DT_DEBUG_CACHE, "[image_cache] has %u entries (%u MiB)\n", num, size);
 }
 
 void dt_image_cache_cleanup(dt_image_cache_t *cache)

@@ -1627,7 +1627,7 @@ static void _update_display_profile(guchar *tmp_data, gsize size, char *name, si
 
 static void cms_error_handler(cmsContext ContextID, cmsUInt32Number ErrorCode, const char *text)
 {
-  dt_print(DT_DEBUG_COLORPROFILE, "[lcms2] error %d: %s\n", ErrorCode, text);
+  dt_print(DT_DEBUG_COLORPROFILE, "[lcms2] error %u: %s\n", ErrorCode, text);
 }
 
 static gint _sort_profiles(gconstpointer a, gconstpointer b)
@@ -2490,7 +2490,7 @@ dt_colorspaces_color_profile_type_t dt_colorspaces_cicp_to_type(const dt_colorsp
   }
 
   if(!IS_NULL_PTR(filename))
-    dt_print(DT_DEBUG_IMAGEIO, "[colorin] unsupported CICP color profile for `%s': %d/%d/%d\n", filename,
+    dt_print(DT_DEBUG_IMAGEIO, "[colorin] unsupported CICP color profile for `%s': %u/%u/%u\n", filename,
              cicp->color_primaries, cicp->transfer_characteristics, cicp->matrix_coefficients);
 
   return DT_COLORSPACE_NONE;

@@ -518,7 +518,7 @@ static int32_t dt_control_merge_hdr_job_run(dt_job_t *job)
   const guint total = g_list_length(t);
   char message[512] = { 0 };
   double fraction = 0;
-  snprintf(message, sizeof(message), ngettext("merging %d image", "merging %d images", total), total);
+  snprintf(message, sizeof(message), ngettext("merging %u image", "merging %u images", total), total);
 
   dt_control_job_set_progress_message(job, message);
 
@@ -621,7 +621,7 @@ static int32_t dt_control_duplicate_images_job_run(dt_job_t *job)
 
   dt_undo_start_group(darktable.undo, DT_UNDO_DUPLICATE);
 
-  snprintf(message, sizeof(message), ngettext("duplicating %d image", "duplicating %d images", total), total);
+  snprintf(message, sizeof(message), ngettext("duplicating %u image", "duplicating %u images", total), total);
   dt_control_job_set_progress_message(job, message);
   while(t)
   {
@@ -659,7 +659,7 @@ static int32_t dt_control_flip_images_job_run(dt_job_t *job)
 
   dt_undo_start_group(darktable.undo, DT_UNDO_LT_HISTORY);
 
-  snprintf(message, sizeof(message), ngettext("flipping %d image", "flipping %d images", total), total);
+  snprintf(message, sizeof(message), ngettext("flipping %u image", "flipping %u images", total), total);
   dt_control_job_set_progress_message(job, message);
   while(t)
   {
@@ -686,9 +686,9 @@ static int32_t dt_control_monochrome_images_job_run(dt_job_t *job)
   dt_undo_start_group(darktable.undo, DT_UNDO_FLAGS);
 
   if(mode == 0)
-    snprintf(message, sizeof(message), ngettext("set %d color image", "setting %d color images", total), total);
+    snprintf(message, sizeof(message), ngettext("set %u color image", "setting %u color images", total), total);
   else
-    snprintf(message, sizeof(message), ngettext("set %d monochrome image", "setting %d monochrome images", total), total);
+    snprintf(message, sizeof(message), ngettext("set %u monochrome image", "setting %u monochrome images", total), total);
 
   dt_control_job_set_progress_message(job, message);
   while(t)
@@ -773,7 +773,7 @@ static int32_t dt_control_remove_images_job_run(dt_job_t *job)
   char *imgs = _get_image_list(t);
   const guint total = g_list_length(t);
   char message[512] = { 0 };
-  snprintf(message, sizeof(message), ngettext("removing %d image", "removing %d images", total), total);
+  snprintf(message, sizeof(message), ngettext("removing %u image", "removing %u images", total), total);
   dt_control_job_set_progress_message(job, message);
   sqlite3_stmt *stmt = NULL;
 
@@ -1041,9 +1041,9 @@ static int32_t dt_control_delete_images_job_run(dt_job_t *job)
   char message[512] = { 0 };
   gboolean delete_on_trash_error = FALSE;
   if(dt_conf_get_bool("send_to_trash"))
-    snprintf(message, sizeof(message), ngettext("trashing %d image", "trashing %d images", total), total);
+    snprintf(message, sizeof(message), ngettext("trashing %u image", "trashing %u images", total), total);
   else
-    snprintf(message, sizeof(message), ngettext("deleting %d image", "deleting %d images", total), total);
+    snprintf(message, sizeof(message), ngettext("deleting %u image", "deleting %u images", total), total);
   dt_control_job_set_progress_message(job, message);
 
   sqlite3_stmt *stmt;
@@ -1219,8 +1219,8 @@ static int32_t dt_control_gpx_apply_job_run(dt_job_t *job)
 
   dt_image_set_images_locations(imgs, gloc, TRUE);
 
-  dt_control_log(ngettext("applied matched GPX location onto %d image",
-                          "applied matched GPX location onto %d images", cntr), cntr);
+  dt_control_log(ngettext("applied matched GPX location onto %u image",
+                          "applied matched GPX location onto %u images", cntr), cntr);
 
   g_time_zone_unref(tz_camera);
   dt_gpx_destroy(gpx);
@@ -1258,10 +1258,10 @@ static int32_t dt_control_local_copy_images_job_run(dt_job_t *job)
 
   if(is_copy)
     snprintf(message, sizeof(message),
-             ngettext("creating local copy of %d image", "creating local copies of %d images", total), total);
+             ngettext("creating local copy of %u image", "creating local copies of %u images", total), total);
   else
     snprintf(message, sizeof(message),
-             ngettext("removing local copy of %d image", "removing local copies of %d images", total), total);
+             ngettext("removing local copy of %u image", "removing local copies of %u images", total), total);
 
   dt_control_log("%s", message);
   dt_control_job_set_progress_message(job, message);
@@ -1307,7 +1307,7 @@ static int32_t dt_control_refresh_exif_run(dt_job_t *job)
   const guint total = g_list_length(t);
   double fraction = 0.0f;
   char message[512] = { 0 };
-  snprintf(message, sizeof(message), ngettext("refreshing info for %d image", "refreshing info for %d images", total), total);
+  snprintf(message, sizeof(message), ngettext("refreshing info for %u image", "refreshing info for %u images", total), total);
   dt_control_job_set_progress_message(job, message);
   while(t)
   {
@@ -1393,7 +1393,7 @@ static int32_t dt_control_export_job_run(dt_job_t *job)
 
   const guint total = g_list_length(t);
   if(total > 0)
-    dt_control_log(ngettext("exporting %d image..", "exporting %d images..", total), total);
+    dt_control_log(ngettext("exporting %d image..", "exporting %u images..", total), total);
   else
     dt_control_log(_("no image to export"));
 

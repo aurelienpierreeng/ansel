@@ -264,7 +264,7 @@ int dt_iop_color_picker_get_ready_data(const dt_iop_module_t *module, GtkWidget 
   if(IS_NULL_PTR(current_piece))
   {
     dt_print(DT_DEBUG_DEV,
-             "[picker] ready-data miss module=%s pending_hash=%zu pipe=%p\n",
+             "[picker] ready-data miss module=%s pending_hash=%lu pipe=%p\n",
              module->op, dev->color_picker.piece_hash, (void *)current_pipe);
     return 1;
   }
@@ -340,7 +340,7 @@ static dt_color_picker_resample_status_t _sample_picker_from_cache(dt_develop_t 
   if(previous_piece->dsc_out.datatype != TYPE_FLOAT || (have_output && piece->dsc_out.datatype != TYPE_FLOAT))
   {
     dt_print(DT_DEBUG_DEV,
-             "[picker] non-float buffers module=%s input_type=%d output_type=%d\n",
+             "[picker] non-float buffers module=%s input_type=%u output_type=%u\n",
              piece->module->op, previous_piece->dsc_out.datatype, piece->dsc_out.datatype);
     return DT_COLOR_PICKER_RESAMPLE_CONSUMED;
   }
@@ -590,7 +590,7 @@ static gboolean _color_picker_callback_button_press(GtkWidget *button, GdkEventB
     if(module)
       dt_iop_request_focus(module);
 
-    dt_print(DT_DEBUG_DEV, "[picker] activate module=%s picker=%p widget=%p kind=%d cst=%d\n",
+    dt_print(DT_DEBUG_DEV, "[picker] activate module=%s picker=%p widget=%p kind=%u cst=%d\n",
              module ? module->op : "global", (void *)self, (void *)self->colorpick, kind, self->picker_cst);
 
   }

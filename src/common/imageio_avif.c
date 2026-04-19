@@ -264,7 +264,7 @@ int dt_imageio_avif_read_profile(const char *filename, uint8_t **out, dt_colorsp
 
       if(over)
       {
-        dt_print(DT_DEBUG_IMAGEIO, "[avif_open] overriding nclx color profile for `%s': 1/%d/%d to 1/%d/%d\n",
+        dt_print(DT_DEBUG_IMAGEIO, "[avif_open] overriding nclx color profile for `%s': 1/%d/%d to 1/%u/%u\n",
                  filename, avif_image.transferCharacteristics, avif_image.matrixCoefficients,
                  cicp->transfer_characteristics, cicp->matrix_coefficients);
       }

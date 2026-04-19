@@ -983,7 +983,7 @@ void expose(
      * next requested source is temporarily unavailable. */
     expose_state.image_surface_has_main = drawn_from_main;
     _paint_all(cri, cr, dev->image_surface);
-    dt_print(DT_DEBUG_DEV, "[darkroom] expose drew %s (backbuf hash=%zu)\n",
+    dt_print(DT_DEBUG_DEV, "[darkroom] expose drew %s (backbuf hash=%lu)\n",
              draw_source, draw_hash);
     cairo_restore(cri);
   }
@@ -2588,7 +2588,7 @@ int button_released(dt_view_t *self, double x, double y, int which, uint32_t sta
 {
   dt_develop_t *dev = (dt_develop_t *)self->data;
 
-  dt_print(DT_DEBUG_INPUT, "[darkroom] button released which: %d state: %d x: %.2f y: %.2f\n",
+  dt_print(DT_DEBUG_INPUT, "[darkroom] button released which: %d state: %u x: %.2f y: %.2f\n",
            which, state, x, y);
 
   if(dt_iop_color_picker_is_visible(dev) && which == 1)

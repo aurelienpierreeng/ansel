@@ -997,7 +997,7 @@ void dt_thumbtable_update(dt_thumbtable_t *table)
   dt_pthread_mutex_unlock(&table->lock);
 
   const char *const name = gtk_widget_get_name(table->grid);
-  dt_print(DT_DEBUG_LIGHTTABLE, "[%s] Populated %d thumbs between %i and %i in %0.04f sec \n",
+  dt_print(DT_DEBUG_LIGHTTABLE, "[%s] Populated %u thumbs between %i and %i in %0.04f sec \n",
            name ? name : "thumbtable", table->thumb_nb, table->min_row_id, table->max_row_id,
            dt_get_wtime() - start);
 }
@@ -2134,7 +2134,7 @@ void _dt_thumbtable_empty_list(dt_thumbtable_t *table)
   g_hash_table_remove_all(table->list);
   dt_pthread_mutex_unlock(&table->lock);
 
-  dt_print(DT_DEBUG_LIGHTTABLE, "Cleaning the list of %i elements in %0.04f sec\n", table->thumb_nb,
+  dt_print(DT_DEBUG_LIGHTTABLE, "Cleaning the list of %u elements in %0.04f sec\n", table->thumb_nb,
            dt_get_wtime() - start);
 
   table->thumb_nb = 0;
