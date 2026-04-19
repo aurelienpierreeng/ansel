@@ -131,7 +131,20 @@ endif()
 
 if(USE_OPENMP)
   find_package(OpenMP 4.5 REQUIRED)
-endif()
+
+  if(OpenMP_C_FLAGS)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+  endif()
+
+  if(OpenMP_CXX_FLAGS)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+  endif()
+
+  message(STATUS "OpenMP found: ${OpenMP_FOUND} ; ${OpenMP_C_FLAGS}")
+  message(STATUS "OpenMP_C_FOUND: ${OpenMP_C_FOUND} ; ${OpenMP_CXX_FLAGS}")
+  message(STATUS "OpenMP_CXX_FOUND: ${OpenMP_CXX_FOUND}")
+
+endif(USE_OPENMP)
 
 # Check for base threading library
 set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
@@ -151,6 +164,93 @@ if(NOT EXISTS ${CMAKE_SOURCE_DIR}/.git)
   set(SOURCE_PACKAGE 1)
 else()
   set(SOURCE_PACKAGE 0)
+endif()
+
+#
+# Set build flags
+#
+
+## Override default CMake build flags
+# Release flags
+set(CMAKE_C_FLAGS_RELEASE "-O3 -DNDEBUG" CACHE STRING "" FORCE)
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG" CACHE STRING "" FORCE)
+
+# RelWithDebInfo flags
+set(CMAKE_C_FLAGS_RELWITHDEBINFO "-O3 -g3 -ggdb3 -DNDEBUG" CACHE STRING "" FORCE)
+set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -g3 -ggdb3 -DNDEBUG" CACHE STRING "" FORCE)
+
+# Debug flags
+set(CMAKE_C_FLAGS_DEBUG "-O0 -g3 -ggdb3 -D_DEBUG -fno-omit-frame-pointer -Werror -Wuninitialized" CACHE STRING "" FORCE)
+set(CMAKE_CXX_FLAGS_DEBUG "-O0 -g3 -ggdb3 -D_DEBUG -fno-omit-frame-pointer -Werror -Wuninitialized" CACHE STRING "" FORCE)
+
+if(NOT CUSTOM_CFLAGS)
+
+  include(march-mtune)
+
+  # -------------------------------------------------------------------------
+  # Base flags (shared across all build types)
+  # -------------------------------------------------------------------------
+  # The code uses NAN as a special value meaning "undefined"
+  # in several places. There is no reason to do so, just use binary flags. 
+  # TODO: remove the use of NAN in code as a special "undefined" flag for float values
+  # TODO: no looping over pixels in place, aka input ptr = output ptr
+  set(DT_BASE_C_FLAGS "${MARCH} -Wfatal-errors -Wall -funroll-loops -ftree-vectorize -fno-strict-aliasing")
+  set(DT_BASE_CXX_FLAGS "${MARCH} -Wfatal-errors -Wall -funroll-loops -ftree-vectorize -fno-strict-aliasing")
+
+  # -------------------------------------------------------------------------
+  # Build-type-specific flags
+  # -------------------------------------------------------------------------
+
+  # Release
+  set(DT_RELEASE_FLAGS "-ffast-math -ffp-contract=fast -fno-finite-math-only")
+
+  # RelWithDebInfo (same perf as release, but no dangerous float arithmetics)
+  set(DT_RELWITHDEBINFO_FLAGS "-ffast-math -ffp-contract=fast -fno-finite-math-only")
+
+  # Debug
+  set(DT_DEBUG_FLAGS "")
+
+  # -------------------------------------------------------------------------
+  # Compiler-specific tuning
+  # -------------------------------------------------------------------------
+  if(CMAKE_C_COMPILER_ID MATCHES "GNU")
+    set(DT_BASE_C_FLAGS "${DT_BASE_C_FLAGS} -Wmaybe-uninitialized -Wno-undef -Wimplicit-function-declaration -Winfinite-recursion -fno-semantic-interposition -fno-signaling-nans -floop-nest-optimize -ftree-loop-im -fvariable-expansion-in-unroller -ftree-loop-im -fira-loop-pressure")
+  elseif(CMAKE_C_COMPILER_ID MATCHES "Clang")
+    set(DT_BASE_C_FLAGS "${DT_BASE_C_FLAGS} -fvectorize -fslp-vectorize -ftree-slp-vectorize")
+  endif()
+
+  # -------------------------------------------------------------------------
+  # Apply to C flags
+  # -------------------------------------------------------------------------
+  set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} ${DT_RELEASE_FLAGS}")
+  set(CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO} ${DT_RELWITHDEBINFO_FLAGS}")
+  set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} ${DT_DEBUG_FLAGS}")
+  set(CMAKE_C_FLAGS "${DT_BASE_C_FLAGS} ${CMAKE_C_FLAGS}")
+  
+  # -------------------------------------------------------------------------
+  # Again to C++ flags
+  # -------------------------------------------------------------------------
+  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} ${DT_RELEASE_FLAGS}")
+  set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} ${DT_RELWITHDEBINFO_FLAGS}")
+  set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} ${DT_DEBUG_FLAGS}")
+  set(CMAKE_CXX_FLAGS "${DT_BASE_CXX_FLAGS} ${CMAKE_CXX_FLAGS}")
+
+endif(NOT CUSTOM_CFLAGS)
+
+# ---------------------------------------------------------------------------
+# Final aggregation 
+# ---------------------------------------------------------------------------
+string(TOUPPER "${CMAKE_BUILD_TYPE}" DT_BUILD_TYPE_UPPER)
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CMAKE_C_FLAGS_${DT_BUILD_TYPE_UPPER}}")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_${DT_BUILD_TYPE_UPPER}}")
+
+message(STATUS "CMAKE_C_FLAGS = ${CMAKE_C_FLAGS}")
+message(STATUS "CMAKE_CXX_FLAGS = ${CMAKE_CXX_FLAGS}")
+
+if(BINARY_PACKAGE_BUILD)
+  set(DT_BUILD_CPU_MODE "generic package")
+else()
+  set(DT_BUILD_CPU_MODE "native/local")
 endif()
 
 #

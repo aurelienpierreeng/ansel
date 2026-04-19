@@ -282,21 +282,25 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# This enables LTO (`-flto`): https://gcc.gnu.org/onlinedocs/gccint/LTO-Overview.html
+# It fails on Windows for exr.cc because std:string objects are defined twice,
+# once from OpenEXR and one from darktable.h, and there is no way to selectively
+# disable it there because it's global by nature.
+# LTO allows to look across DLL boundaries to merge symbols,
+# possibly allowing to inline functions across libraries for better 
+# parallel loops. But Linux/MacOS don't import libraries the way Windows does,
+# they use shared libraries.
+# Also Ansel inherits from Darktable a messy architecture that pretends to be 
+# modular, while in fact all libraries are shared globally, so using `-fvisibility=hidden`
+# breaks the whole project.
+# So I haven't found a way to fix that and it sucks that one lib is making us drop 
+# this feature for the whole project.
+if(NOT WIN32)
+  set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
+  set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO TRUE)
+endif()
+
 add_library(ansel_deps INTERFACE)
-
-if(USE_OPENMP)
-  if(OpenMP_C_FLAGS)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
-  endif()
-
-  if(OpenMP_CXX_FLAGS)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
-  endif()
-
-  message(STATUS "OpenMP found: ${OpenMP_FOUND}")
-  message(STATUS "OpenMP_C_FOUND: ${OpenMP_C_FOUND}")
-  message(STATUS "OpenMP_CXX_FOUND: ${OpenMP_CXX_FOUND}")
-endif(USE_OPENMP)
 
 if(USE_DARKTABLE_PROFILING)
 	add_definitions(-DUSE_DARKTABLE_PROFILING)
@@ -595,113 +599,11 @@ if(WIN32)
   list(APPEND LIBS exchndl) # Needed for exception handling and backtrace()
 endif(WIN32)
 
-## Override default CMake build flags
-# Release flags
-set(CMAKE_C_FLAGS_RELEASE "-O3 -DNDEBUG" CACHE STRING "" FORCE)
-set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG" CACHE STRING "" FORCE)
-
-# RelWithDebInfo flags
-set(CMAKE_C_FLAGS_RELWITHDEBINFO "-O3 -g3 -ggdb3 -DNDEBUG" CACHE STRING "" FORCE)
-set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -g3 -ggdb3 -DNDEBUG" CACHE STRING "" FORCE)
-
-# Debug flags
-set(CMAKE_C_FLAGS_DEBUG "-O0 -g3 -ggdb3 -D_DEBUG -fno-omit-frame-pointer -Werror -Wuninitialized" CACHE STRING "" FORCE)
-set(CMAKE_CXX_FLAGS_DEBUG "-O0 -g3 -ggdb3 -D_DEBUG -fno-omit-frame-pointer -Werror -Wuninitialized" CACHE STRING "" FORCE)
-
-if(NOT CUSTOM_CFLAGS)
-
-  include(march-mtune)
-
-  # -------------------------------------------------------------------------
-  # Base flags (shared across all build types)
-  # -------------------------------------------------------------------------
-  # The code uses NAN as a special value meaning "undefined"
-  # in several places. There is no reason to do so, just use binary flags. 
-  # TODO: remove the use of NAN in code as a special "undefined" flag for float values
-  # TODO: no looping over pixels in place, aka input ptr = output ptr
-  set(DT_BASE_C_FLAGS "${MARCH} -Wfatal-errors -Wall -funroll-loops -ftree-vectorize -fno-strict-aliasing")
-  set(DT_BASE_CXX_FLAGS "${MARCH} -Wfatal-errors -Wall -funroll-loops -ftree-vectorize -fno-strict-aliasing")
-
-  # -------------------------------------------------------------------------
-  # Build-type-specific flags
-  # -------------------------------------------------------------------------
-
-  # Release
-  set(DT_RELEASE_FLAGS "-ffast-math -ffp-contract=fast -fno-finite-math-only")
-
-  # RelWithDebInfo (same perf as release, but no dangerous float arithmetics)
-  set(DT_RELWITHDEBINFO_FLAGS "-ffast-math -ffp-contract=fast -fno-finite-math-only")
-
-  # Debug
-  set(DT_DEBUG_FLAGS "")
-
-  if(NOT WIN32)
-    # This enables LTO (`-flto`): https://gcc.gnu.org/onlinedocs/gccint/LTO-Overview.html
-    # It fails on Windows for exr.cc because std:string objects are defined twice,
-    # once from OpenEXR and one from darktable.h, and there is no way to selectively
-    # disable it there because it's global by nature.
-    # LTO allows to look across DLL boundaries to merge symbols,
-    # possibly allowing to inline functions across libraries for better 
-    # parallel loops. But Linux/MacOS don't import libraries the way Windows does,
-    # they use shared libraries.
-    # Also Ansel inherits from Darktable a messy architecture that pretends to be 
-    # modular, while in fact all libraries are shared globally, so using `-fvisibility=hidden`
-    # breaks the whole project.
-    # So I haven't found a way to fix that and it sucks that one lib is making us drop 
-    # this feature for the whole project.
-    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
-    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO TRUE)
-  endif()
-
-  # -------------------------------------------------------------------------
-  # Compiler-specific tuning
-  # -------------------------------------------------------------------------
-  if(CMAKE_C_COMPILER_ID MATCHES "GNU")
-    set(DT_BASE_C_FLAGS "${DT_BASE_C_FLAGS} -Wmaybe-uninitialized -Wno-undef -Wimplicit-function-declaration -Winfinite-recursion -fno-semantic-interposition -fno-signaling-nans -floop-nest-optimize -ftree-loop-im -fvariable-expansion-in-unroller -ftree-loop-im -fira-loop-pressure")
-  elseif(CMAKE_C_COMPILER_ID MATCHES "Clang")
-    set(DT_BASE_C_FLAGS "${DT_BASE_C_FLAGS} -fvectorize -fslp-vectorize -ftree-slp-vectorize")
-  endif()
-
-  # -------------------------------------------------------------------------
-  # Apply to C flags
-  # -------------------------------------------------------------------------
-  set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} ${DT_RELEASE_FLAGS}")
-  set(CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO} ${DT_RELWITHDEBINFO_FLAGS}")
-  set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} ${DT_DEBUG_FLAGS}")
-  set(CMAKE_C_FLAGS "${DT_BASE_C_FLAGS} ${CMAKE_C_FLAGS}")
-  
-  # -------------------------------------------------------------------------
-  # Again to C++ flags
-  # -------------------------------------------------------------------------
-  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} ${DT_RELEASE_FLAGS}")
-  set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} ${DT_RELWITHDEBINFO_FLAGS}")
-  set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} ${DT_DEBUG_FLAGS}")
-  set(CMAKE_CXX_FLAGS "${DT_BASE_CXX_FLAGS} ${CMAKE_CXX_FLAGS}")
-
-endif(NOT CUSTOM_CFLAGS)
-
-# ---------------------------------------------------------------------------
-# Final aggregation 
-# ---------------------------------------------------------------------------
-string(TOUPPER "${CMAKE_BUILD_TYPE}" DT_BUILD_TYPE_UPPER)
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CMAKE_C_FLAGS_${DT_BUILD_TYPE_UPPER}}")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_${DT_BUILD_TYPE_UPPER}}")
-
-message(STATUS "CMAKE_C_FLAGS = ${CMAKE_C_FLAGS}")
-message(STATUS "CMAKE_CXX_FLAGS = ${CMAKE_CXX_FLAGS}")
-
-if(BINARY_PACKAGE_BUILD)
-  set(DT_BUILD_CPU_MODE "generic package")
-else()
-  set(DT_BUILD_CPU_MODE "native/local")
-endif()
-
 #
 # Generate config.h
 #
 string(REPLACE ";" "\", \"" DT_SUPPORTED_EXTENSIONS_STRING "${DT_SUPPORTED_EXTENSIONS}")
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/config.cmake.h" "${CMAKE_CURRENT_BINARY_DIR}/config.h" @ONLY)
-
 
 #
 # Build external deps
