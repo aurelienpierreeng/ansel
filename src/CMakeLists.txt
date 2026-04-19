@@ -599,8 +599,6 @@ if(USE_GMIC)
   endif(GMIC_FOUND)
 endif(USE_GMIC)
 
-endif()
-
 if(USE_ICU)
   find_package(ICU REQUIRED COMPONENTS uc i18n data)
 
