@@ -21,7 +21,7 @@ Usage
 In the simplest invocation, you can run the program directly from the
 top-level directory of your darktable source hierarchy:
 
-   src/tests/benchmark/ansel-bench
+   tests/benchmark/ansel-bench
 
 This will then run the default sidecar (v3.6) on the default image
 (mire1.cr2 from the integration test suite) using the ansel-cli in

@@ -66,16 +66,16 @@ def locate_program(program):
       # no path given, so check the standard locations
       loc = whereami()
       # are we in the source tree?
-      if 'src/tests/benchmark' in loc:
+      if 'tests/benchmark' in loc:
          # check if available in the build directory
-         build, _, __ = loc.partition('src/tests/benchmark')
+         build, _, __ = loc.partition('tests/benchmark')
          build += 'build/bin/'
          if os.path.exists(build+program):
             return build+program
          if VERBOSE:
             print(f'  did not find {program} in build/bin')
       # are we in a sibling of the source tree?
-      if os.path.exists('../ansel/src/tests/benchmark'):
+      if os.path.exists('../ansel/tests/benchmark'):
          build = '../ansel/build/bin/'
          if os.path.exists(build+program):
             return build+program
@@ -118,7 +118,7 @@ def locate_image(image):
       if VERBOSE:
          print(f'  did not find {image} in {loc}')
       # third: script is in source dir, so look in integration tests
-      if 'src/tests/benchmark' in loc:
+      if 'tests/benchmark' in loc:
          integ, _, __ = loc.partition('benchmark')
          integ += 'integration/images/'
          if os.path.exists(integ+image):
@@ -134,11 +134,11 @@ def locate_image(image):
          if VERBOSE:
             print(f'  did not find {image} in {integ}')
       # fifth: script is not in source dir, but current dir is top of source tree
-      img = os.getcwd() + '/src/tests/integration/images/mire1.cr2'
+      img = os.getcwd() + '/tests/integration/images/mire1.cr2'
       if os.path.exists(img):
          return img
       # sixth: we are in a sibling of the darktable source tree
-      candidate = os.getcwd() + '/../ansel/src/tests/integration/images/mire1.cr2'
+      candidate = os.getcwd() + '/../ansel/tests/integration/images/mire1.cr2'
       if os.path.exists(candidate):
          return candidate
    # finally: give up
@@ -176,7 +176,7 @@ def locate_xmp(xmp,version):
       if VERBOSE:
          print(f'  did not find {xmp} in {loc}')
       # third: script is not in source dir, but current dir is top of source tree
-      xmp_path = os.getcwd() + '/src/tests/benchmark/' + xmp
+      xmp_path = os.getcwd() + '/tests/benchmark/' + xmp
       if os.path.exists(xmp_path):
          return xmp_path
       if VERBOSE:
