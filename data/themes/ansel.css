@@ -1228,6 +1228,9 @@ notebook header /* add space between notebook tabs and options below */
 
 #modules-tabs notebook tabs arrow
 {
+  min-width: 1.4em;
+  min-height: 1.4em;
+  padding: 0.1em;
   border: none;
   color: @grey_70;
 }
