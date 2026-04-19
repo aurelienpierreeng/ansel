@@ -375,7 +375,7 @@ static inline int pseudo_solve(float *const restrict A,
   int err = 0;
   if(m < n)
   {
-    fprintf(stdout, "Pseudo solve: cannot cast %" PRIu64 " \303\227 %" PRIu64 " matrice\n", m, n);
+    fprintf(stdout, "Pseudo solve: cannot cast %zu \303\227 %zu matrice\n", m, n);
     return 1;
   }
 

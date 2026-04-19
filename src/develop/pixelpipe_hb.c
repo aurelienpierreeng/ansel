@@ -98,8 +98,8 @@ static void _trace_cache_owner(const dt_dev_pixelpipe_t *pipe, const dt_iop_modu
   if(!(darktable.unmuted & DT_DEBUG_VERBOSE)) return;
 
   dt_print(DT_DEBUG_PIPECACHE,
-           "[pixelpipe_owner] pipe=%s module=%s phase=%s slot=%s req=%" PRIu64
-           " entry=%" PRIu64 "/%" PRIu64 " refs=%i auto=%i data=%p buf=%p name=%s\n",
+           "[pixelpipe_owner] pipe=%s module=%s phase=%s slot=%s req=%zu"
+           " entry=%zu/%zu refs=%i auto=%i data=%p buf=%p name=%s\n",
            pipe ? dt_pixelpipe_get_pipe_name(pipe->type) : "-",
            module ? module->op : "base",
            phase ? phase : "-",
@@ -162,7 +162,7 @@ static void _trace_buffer_content(const dt_dev_pixelpipe_t *pipe, const dt_iop_m
 
     dt_print(DT_DEBUG_PIPECACHE,
              "[pixelpipe_stats] pipe=%s module=%s phase=%s type=float ch=%u roi=%dx%d "
-             "rgb_min=(%g,%g,%g) rgb_max=(%g,%g,%g) a_min=%g a_max=%g near_black=%" PRIu64 "/%" PRIu64 " nonfinite=%" PRIu64 "\n",
+             "rgb_min=(%g,%g,%g) rgb_max=(%g,%g,%g) a_min=%g a_max=%g near_black=%zu/%zu nonfinite=%zu\n",
              dt_pixelpipe_get_pipe_name(pipe->type), module->op, phase ? phase : "-",
              channels, roi->width, roi->height,
              minv[0], (channels > 1) ? minv[1] : 0.0f, (channels > 2) ? minv[2] : 0.0f,
@@ -191,7 +191,7 @@ static void _trace_buffer_content(const dt_dev_pixelpipe_t *pipe, const dt_iop_m
 
     dt_print(DT_DEBUG_PIPECACHE,
              "[pixelpipe_stats] pipe=%s module=%s phase=%s type=u8 ch=%u roi=%dx%d "
-             "rgb_min=(%d,%d,%d) rgb_max=(%d,%d,%d) a_min=%d a_max=%d near_black=%" PRIu64 "/%" PRIu64 "\n",
+             "rgb_min=(%d,%d,%d) rgb_max=(%d,%d,%d) a_min=%d a_max=%d near_black=%zu/%zu\n",
              dt_pixelpipe_get_pipe_name(pipe->type), module->op, phase ? phase : "-",
              channels, roi->width, roi->height,
              minv[0], (channels > 1) ? minv[1] : 0, (channels > 2) ? minv[2] : 0,
@@ -362,8 +362,8 @@ void dt_dev_pixelpipe_debug_dump_module_io(dt_dev_pixelpipe_t *pipe, dt_iop_modu
   if(!IS_NULL_PTR(in_dsc) && !IS_NULL_PTR(out_dsc))
   {
     dt_print(DT_DEBUG_PIPE,
-             "[pixelpipe] %s %s %s %s: in cst=%s->%s ch=%d type=%s bpp=%" PRIu64 " roi=%dx%d | "
-             "out cst=%s ch=%d type=%s bpp=%" PRIu64 " roi=%dx%d\n",
+             "[pixelpipe] %s %s %s %s: in cst=%s->%s ch=%d type=%s bpp=%zu roi=%dx%d | "
+             "out cst=%s ch=%d type=%s bpp=%zu roi=%dx%d\n",
              pipe_name, module_name, is_cl ? "cl" : "cpu", stage_name,
              _debug_cst_to_string(cst_before), _debug_cst_to_string(cst_after),
              in_dsc->channels, _debug_type_to_string(in_dsc->datatype), in_bpp,
@@ -374,7 +374,7 @@ void dt_dev_pixelpipe_debug_dump_module_io(dt_dev_pixelpipe_t *pipe, dt_iop_modu
   else if(!IS_NULL_PTR(out_dsc))
   {
     dt_print(DT_DEBUG_PIPE,
-             "[pixelpipe] %s %s %s %s: out cst=%s ch=%d type=%s bpp=%" PRIu64 " roi=%dx%d\n",
+             "[pixelpipe] %s %s %s %s: out cst=%s ch=%d type=%s bpp=%zu roi=%dx%d\n",
              pipe_name, module_name, is_cl ? "cl" : "cpu", stage_name,
              _debug_cst_to_string(out_dsc->cst), out_dsc->channels, _debug_type_to_string(out_dsc->datatype),
              out_bpp, roi_out ? roi_out->width : 0, roi_out ? roi_out->height : 0);
@@ -543,7 +543,7 @@ gboolean dt_dev_pixelpipe_set_reentry(dt_dev_pixelpipe_t *pipe, uint64_t hash)
   {
     pipe->reentry = TRUE;
     pipe->reentry_hash = hash;
-    dt_print(DT_DEBUG_DEV, "[dev_pixelpipe] re-entry flag set for %" PRIu64 "\n", hash);
+    dt_print(DT_DEBUG_DEV, "[dev_pixelpipe] re-entry flag set for %zu\n", hash);
     return TRUE;
   }
 
@@ -557,7 +557,7 @@ gboolean dt_dev_pixelpipe_unset_reentry(dt_dev_pixelpipe_t *pipe, uint64_t hash)
   {
     pipe->reentry = FALSE;
     pipe->reentry_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
-    dt_print(DT_DEBUG_DEV, "[dev_pixelpipe] re-entry flag unset for %" PRIu64 "\n", hash);
+    dt_print(DT_DEBUG_DEV, "[dev_pixelpipe] re-entry flag unset for %zu\n", hash);
     return TRUE;
   }
 
@@ -994,7 +994,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
     /* Child recursion failed before this module acquired any output cache entry.
      * Dropping `hash` here underflows cached exact-hit outputs during shutdown. */
     dt_print(DT_DEBUG_DEV,
-             "[pipeline] module=%s child recursion failed input_hash=%" PRIu64 " output_hash=%" PRIu64 "\n",
+             "[pipeline] module=%s child recursion failed input_hash=%zu output_hash=%zu\n",
              module->op, input_hash, hash);
     return 1;
   }
@@ -1010,8 +1010,8 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   if(IS_NULL_PTR(input_entry))
   {
     dt_print(DT_DEBUG_DEV,
-             "[pipeline] module=%s input cache entry missing input_hash=%" PRIu64 " output_hash=%" PRIu64
-             " prev_module=%s prev_hash=%" PRIu64 "\n",
+             "[pipeline] module=%s input cache entry missing input_hash=%zu output_hash=%zu"
+             " prev_module=%s prev_hash=%zu\n",
              module->op, input_hash, hash,
              previous_piece ? previous_piece->module->op : "base",
              previous_piece ? previous_piece->global_hash
@@ -1091,7 +1091,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
     if(IS_NULL_PTR(exact_entry))
     {
       dt_print(DT_DEBUG_DEV,
-               "[pipeline] module=%s exact-hit entry missing output_hash=%" PRIu64 "\n",
+               "[pipeline] module=%s exact-hit entry missing output_hash=%zu\n",
                module->op, hash);
       dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, input_entry);
       return 1;
@@ -1114,7 +1114,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   if(IS_NULL_PTR(output_entry))
   {
     dt_print(DT_DEBUG_DEV,
-             "[pipeline] module=%s writable output acquisition failed output_hash=%" PRIu64
+             "[pipeline] module=%s writable output acquisition failed output_hash=%zu"
              " acquire_status=%d\n",
              module->op, hash, acquire_status);
     dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, input_entry);
@@ -1183,7 +1183,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   if(error)
   {
     dt_print(DT_DEBUG_DEV,
-             "[pipeline] module=%s backend processing failed input_hash=%" PRIu64 " output_hash=%" PRIu64
+             "[pipeline] module=%s backend processing failed input_hash=%zu output_hash=%zu"
              " input_cst=%d output_cst=%d roi_in=%dx%d roi_out=%dx%d\n",
              module->op, input_hash, hash, piece->dsc_in.cst, piece->dsc_out.cst,
              piece->roi_in.width, piece->roi_in.height, piece->roi_out.width, piece->roi_out.height);
@@ -1577,7 +1577,7 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop
       else
       {
         dt_print(DT_DEBUG_DEV,
-                 "[picker/rec] final output cache missing pipe=%s hash=%" PRIu64 " history=%" PRIu64
+                 "[picker/rec] final output cache missing pipe=%s hash=%zu history=%zu"
                  " devid=%d err=%d\n",
                  dt_pixelpipe_get_pipe_name(pipe->type), dt_dev_pixelpipe_get_hash(pipe),
                  dt_dev_pixelpipe_get_history_hash(pipe), pipe->devid, err);

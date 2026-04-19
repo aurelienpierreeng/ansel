@@ -379,7 +379,7 @@ void dt_image_print_debug_info(const dt_image_t *img, const char *context)
            (flags & DT_IMAGE_NO_LEGACY_PRESETS) != 0, (flags & DT_IMAGE_REJECTED) != 0, (flags & DT_IMAGE_REMOVE) != 0,
            img->has_localcopy, img->has_audio, img->is_hdr);
   dt_print(DT_DEBUG_IMAGEIO,
-           "[image debug] %s buf: channels=%u datatype=%s bit_depth=%d bpp=%" PRIu64 " filters=%u cst=%d colorspace=%s "
+           "[image debug] %s buf: channels=%u datatype=%s bit_depth=%d bpp=%zu filters=%u cst=%d colorspace=%s "
            "processed_max=[%.4f %.4f %.4f %.4f]\n",
            ctx, dsc->channels, _image_buf_type_to_string(dsc->datatype), bit_depth, bpp, dsc->filters, dsc->cst,
            _image_colorspace_to_string(img->colorspace), dsc->processed_maximum[0], dsc->processed_maximum[1],

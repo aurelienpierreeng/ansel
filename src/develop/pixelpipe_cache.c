@@ -66,7 +66,7 @@ static void _trace_exact_hit(const char *phase, const uint64_t hash, dt_pixel_ca
   if(verbose && !(darktable.unmuted & DT_DEBUG_VERBOSE)) return;
 
   dt_print(DT_DEBUG_PIPECACHE,
-           "[pixelpipe_cache] exact-hit %s req=%" PRIu64 " entry=%" PRIu64 "/%" PRIu64
+           "[pixelpipe_cache] exact-hit %s req=%zu entry=%zu/%zu"
            " data=%p cl=%p refs=%i auto=%i dev=%i module=%s name=%s\n",
            phase, hash, cache_entry ? cache_entry->hash : DT_PIXELPIPE_CACHE_HASH_INVALID,
            cache_entry ? cache_entry->serial : 0, data, cl_mem_output,
@@ -167,7 +167,7 @@ static void _pixel_cache_message(dt_pixel_cache_entry_t *cache_entry, const char
   if(!(darktable.unmuted & DT_DEBUG_PIPECACHE)) return;
   if(verbose && !(darktable.unmuted & DT_DEBUG_VERBOSE)) return;
   dt_print(DT_DEBUG_PIPECACHE,
-           "[pixelpipe] cache entry %" PRIu64 "/%" PRIu64 ": %s (data=%p - %" PRIu64 " MiB - age %" PRId64
+           "[pixelpipe] cache entry %zu/%zu: %s (data=%p - %zu MiB - age %" PRId64
            " - hits %i - refs %i - auto %i - ext %i - id %i - module %s) %s\n",
            cache_entry->hash, cache_entry->serial,
            cache_entry->name ? cache_entry->name : "-", cache_entry->data,
@@ -533,9 +533,9 @@ static int _non_thread_safe_pixel_pipe_cache_remove_lru(dt_dev_pixelpipe_cache_t
   {
     error = _non_thread_safe_cache_remove(cache, FALSE, lru->cache_entry, cache->entries);
     if(error)
-      dt_print(DT_DEBUG_PIPECACHE, "[pixelpipe] couldn't remove LRU %" PRIu64 "\n", lru->hash);
+      dt_print(DT_DEBUG_PIPECACHE, "[pixelpipe] couldn't remove LRU %zu\n", lru->hash);
     else
-      dt_print(DT_DEBUG_PIPECACHE, "[pixelpipe] LRU %" PRIu64 " removed. Total cache size: %li MiB\n",
+      dt_print(DT_DEBUG_PIPECACHE, "[pixelpipe] LRU %zu removed. Total cache size: %zu MiB\n",
                lru->hash, cache->current_memory / (1024 * 1024));
   }
   else
@@ -1521,15 +1521,15 @@ static inline void _log_arena_allocation_failure(dt_dev_pixelpipe_cache_t *cache
 
   if(entry_name)
     fprintf(stdout,
-            "[pixelpipe_cache] failed to allocate %" PRIu64 " bytes for entry %" PRIu64 " (%s, module=%s) "
-            "[arena largest=%" PRIu64 " MiB, total=%" PRIu64 " MiB, cache=%" PRIu64 "/%" PRIu64 " MiB]\n",
+            "[pixelpipe_cache] failed to allocate %zu bytes for entry %zu (%s, module=%s) "
+            "[arena largest=%zu MiB, total=%zu MiB, cache=%zu/%zu MiB]\n",
             request_size, hash, entry_name, module ? module : "unknown",
             largest_free_bytes / (1024 * 1024), total_free_bytes / (1024 * 1024),
             cache->current_memory / (1024 * 1024), cache->max_memory / (1024 * 1024));
   else
     fprintf(stdout,
-            "[pixelpipe_cache] failed to allocate %" PRIu64 " bytes for entry %" PRIu64 " (module=%s) "
-            "[arena largest=%" PRIu64 " MiB, total=%" PRIu64 " MiB, cache=%" PRIu64 "/%" PRIu64 " MiB]\n",
+            "[pixelpipe_cache] failed to allocate %zu bytes for entry %zu (module=%s) "
+            "[arena largest=%zu MiB, total=%zu MiB, cache=%zu/%zu MiB]\n",
             request_size, hash, module ? module : "unknown",
             largest_free_bytes / (1024 * 1024), total_free_bytes / (1024 * 1024),
             cache->current_memory / (1024 * 1024), cache->max_memory / (1024 * 1024));
@@ -1646,7 +1646,7 @@ static int _free_space_to_alloc(dt_dev_pixelpipe_cache_t *cache, const size_t si
     if(IS_NULL_PTR(name)) name = g_strdup("unknown");
     
     if(hash)
-      fprintf(stdout, "[pixelpipe] cache is full, cannot allocate new entry %" PRIu64 " (%s)\n", hash, name);
+      fprintf(stdout, "[pixelpipe] cache is full, cannot allocate new entry %zu (%s)\n", hash, name);
     else
       fprintf(stdout, "[pixelpipe] cache is full, cannot allocate new entry (%s)\n", name);
     if(!IS_NULL_PTR(name) && !IS_NULL_PTR(module) && name_is_file)
@@ -1743,7 +1743,7 @@ static dt_pixel_cache_entry_t *dt_pixel_cache_new_entry(const uint64_t hash, con
   size_t rounded_size = 0;
   if(!dt_cache_arena_calc(&cache->arena, size, &pages_needed, &rounded_size))
   {
-    fprintf(stderr, "[pixelpipe] invalid cache entry size %" PRIu64 " for %s\n", size, name);
+    fprintf(stderr, "[pixelpipe] invalid cache entry size %zu for %s\n", size, name);
     return NULL;
   }
 
@@ -1967,7 +1967,7 @@ static dt_pixel_cache_entry_t *_cache_try_rekey_reuse_locked(dt_dev_pixelpipe_ca
   g_hash_table_insert(cache->entries, stolen_key, cache_entry);
 
   dt_print(DT_DEBUG_PIPECACHE,
-           "[pixelpipe_cache] writable rekey old=%" PRIu64 " new=%" PRIu64 " entry=%" PRIu64 "/%" PRIu64
+           "[pixelpipe_cache] writable rekey old=%zu new=%zu entry=%zu/%zu"
            " refs=%i auto=%i data=%p module=%s\n",
            old_hash, new_hash, cache_entry->hash, cache_entry->serial,
            dt_atomic_get_int(&cache_entry->refcount), cache_entry->auto_destroy, cache_entry->data,
@@ -2025,7 +2025,7 @@ int dt_dev_pixelpipe_cache_get(dt_dev_pixelpipe_cache_t *cache, const uint64_t h
   cache_entry = _pixelpipe_cache_create_entry_locked(cache, hash, size, name, id);
   if(IS_NULL_PTR(cache_entry))
   {
-    dt_print(DT_DEBUG_PIPECACHE, "couldn't allocate new cache entry %" PRIu64 "\n", hash);
+    dt_print(DT_DEBUG_PIPECACHE, "couldn't allocate new cache entry %zu\n", hash);
     dt_pthread_mutex_unlock(&cache->lock);
     if(entry) *entry = NULL;
     return 1;
@@ -2037,7 +2037,7 @@ int dt_dev_pixelpipe_cache_get(dt_dev_pixelpipe_cache_t *cache, const uint64_t h
   // Alloc after releasing the lock for better runtimes
   if(alloc) dt_pixel_cache_alloc(cache, cache_entry);
 
-  dt_print(DT_DEBUG_PIPECACHE, "[pixelpipe_cache] Write-lock on entry (new cache entry %" PRIu64 " for %s pipeline)\n",
+  dt_print(DT_DEBUG_PIPECACHE, "[pixelpipe_cache] Write-lock on entry (new cache entry %zu for %s pipeline)\n",
            hash, name);
   _pixelpipe_cache_finalize_entry(cache_entry, data, "created");
 
@@ -2344,7 +2344,7 @@ gboolean dt_dev_pixelpipe_cache_peek(dt_dev_pixelpipe_cache_t *cache, const uint
   _trace_exact_hit("drop-invalid", hash, cache_entry, data ? *data : NULL,
                    cl_mem_output ? *cl_mem_output : NULL, preferred_devid, FALSE);
   dt_print(DT_DEBUG_PIPECACHE,
-           "[pixelpipe] cache entry %" PRIu64 " has no authoritative RAM nor vRAM payload and will be removed\n",
+           "[pixelpipe] cache entry %zu has no authoritative RAM nor vRAM payload and will be removed\n",
            hash);
   dt_dev_pixelpipe_cache_remove(cache, TRUE, cache_entry);
   if(data) *data = NULL;
@@ -2556,7 +2556,7 @@ int dt_dev_pixelpipe_cache_rekey(dt_dev_pixelpipe_cache_t *cache, const uint64_t
   if(IS_NULL_PTR(entry))
   {
     dt_print(DT_DEBUG_PIPECACHE,
-             "[pixelpipe_cache] rekey miss old=%" PRIu64 " new=%" PRIu64 " module=%s\n",
+             "[pixelpipe_cache] rekey miss old=%zu new=%zu module=%s\n",
              old_hash, new_hash, _cache_debug_module_name());
     dt_pthread_mutex_unlock(&cache->lock);
     return 1;
@@ -2566,8 +2566,8 @@ int dt_dev_pixelpipe_cache_rekey(dt_dev_pixelpipe_cache_t *cache, const uint64_t
   if(conflict && conflict != entry)
   {
     dt_print(DT_DEBUG_PIPECACHE,
-             "[pixelpipe_cache] rekey conflict old=%" PRIu64 " new=%" PRIu64
-             " entry=%" PRIu64 "/%" PRIu64 " conflict=%" PRIu64 "/%" PRIu64 " module=%s\n",
+             "[pixelpipe_cache] rekey conflict old=%zu new=%zu"
+             " entry=%zu/%zu conflict=%zu/%zu module=%s\n",
              old_hash, new_hash, entry->hash, entry->serial, conflict->hash, conflict->serial,
              _cache_debug_module_name());
     dt_pthread_mutex_unlock(&cache->lock);
@@ -2579,8 +2579,8 @@ int dt_dev_pixelpipe_cache_rekey(dt_dev_pixelpipe_cache_t *cache, const uint64_t
   if(!g_hash_table_steal_extended(cache->entries, &old_hash, &stolen_key, &stolen_value))
   {
     dt_print(DT_DEBUG_PIPECACHE,
-             "[pixelpipe_cache] rekey steal-miss old=%" PRIu64 " new=%" PRIu64
-             " entry=%" PRIu64 "/%" PRIu64 " module=%s\n",
+             "[pixelpipe_cache] rekey steal-miss old=%zu new=%zu"
+             " entry=%zu/%zu module=%s\n",
              old_hash, new_hash, entry->hash, entry->serial, _cache_debug_module_name());
     dt_pthread_mutex_unlock(&cache->lock);
     return 1;
@@ -2589,8 +2589,8 @@ int dt_dev_pixelpipe_cache_rekey(dt_dev_pixelpipe_cache_t *cache, const uint64_t
   if(stolen_value != entry)
   {
     dt_print(DT_DEBUG_PIPECACHE,
-             "[pixelpipe_cache] rekey stolen-entry mismatch old=%" PRIu64 " new=%" PRIu64
-             " expected=%" PRIu64 "/%" PRIu64 " got=%" PRIu64 "/%" PRIu64 " module=%s\n",
+             "[pixelpipe_cache] rekey stolen-entry mismatch old=%zu new=%zu"
+             " expected=%zu/%zu got=%zu/%zu module=%s\n",
              old_hash, new_hash, entry->hash, entry->serial,
              ((dt_pixel_cache_entry_t *)stolen_value)->hash, ((dt_pixel_cache_entry_t *)stolen_value)->serial,
              _cache_debug_module_name());
@@ -2621,7 +2621,7 @@ int dt_dev_pixelpipe_cache_rekey(dt_dev_pixelpipe_cache_t *cache, const uint64_t
   entry->hash = new_hash;
   g_hash_table_insert(cache->entries, stolen_key, stolen_value);
   dt_print(DT_DEBUG_PIPECACHE,
-           "[pixelpipe_cache] rekey old=%" PRIu64 " new=%" PRIu64 " entry=%" PRIu64 "/%" PRIu64
+           "[pixelpipe_cache] rekey old=%zu new=%zu entry=%zu/%zu"
            " refs=%i auto=%i data=%p module=%s\n",
            old_hash, new_hash, entry->hash, entry->serial, dt_atomic_get_int(&entry->refcount),
            entry->auto_destroy, entry->data, _cache_debug_module_name());

@@ -70,7 +70,7 @@ int dt_pthread_create(pthread_t *thread, void *(*start_routine)(void *), void *a
   {
     // looks like we need to bump/set it...
 
-    fprintf(stderr, "[dt_pthread_create] info: bumping pthread's stacksize from %" PRIu64 " to %"PRIuMAX"\n", stacksize,
+    fprintf(stderr, "[dt_pthread_create] info: bumping pthread's stacksize from %zu to %"PRIuMAX"\n", stacksize,
             (uintmax_t)WANTED_THREADS_STACK_SIZE);
 
     ret = pthread_attr_setstacksize(&attr, WANTED_THREADS_STACK_SIZE);

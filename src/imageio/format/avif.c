@@ -236,7 +236,7 @@ int write_image(struct dt_imageio_module_data_t *data,
 
   dt_print(DT_DEBUG_IMAGEIO,
            "Exporting AVIF image [%s] "
-           "[width: %" PRIu64 ", height: %" PRIu64 ", bit depth: %" PRIu64 ", comp: %s, quality: %u]\n",
+           "[width: %zu, height: %zu, bit depth: %zu, comp: %s, quality: %u]\n",
            filename,
            width,
            height,

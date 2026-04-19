@@ -3295,7 +3295,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
 
   if(IS_NULL_PTR(g) || (picker != g->exposure_boost && picker != g->contrast_boost))
   {
-    dt_print(DT_DEBUG_DEV, "[picker/toneequal] passthrough picker=%p pipe=%p hash=%" PRIu64 "\n",
+    dt_print(DT_DEBUG_DEV, "[picker/toneequal] passthrough picker=%p pipe=%p hash=%zu\n",
              (void *)picker, (void *)pipe, piece ? piece->global_hash : 0);
     _switch_cursors(self);
     return;
@@ -3314,7 +3314,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
   {
     if(preview_entry)
       dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
-    dt_print(DT_DEBUG_DEV, "[picker/toneequal] no preview mask picker=%p pipe=%p hash=%" PRIu64 "\n",
+    dt_print(DT_DEBUG_DEV, "[picker/toneequal] no preview mask picker=%p pipe=%p hash=%zu\n",
              (void *)picker, (void *)pipe, piece ? piece->global_hash : 0);
     _switch_cursors(self);
     return;
@@ -3332,7 +3332,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
 
   if(!sampled)
   {
-    dt_print(DT_DEBUG_DEV, "[picker/toneequal] mask sample failed picker=%p pipe=%p hash=%" PRIu64 "\n",
+    dt_print(DT_DEBUG_DEV, "[picker/toneequal] mask sample failed picker=%p pipe=%p hash=%zu\n",
              (void *)picker, (void *)pipe, piece ? piece->global_hash : 0);
     _switch_cursors(self);
     return;
@@ -3354,13 +3354,13 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
       invalidate_luminance_cache(self);
       dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
       dt_print(DT_DEBUG_DEV,
-               "[picker/toneequal] exposure picker=%p luminance=%g set=%g pipe=%p hash=%" PRIu64 "\n",
+               "[picker/toneequal] exposure picker=%p luminance=%g set=%g pipe=%p hash=%zu\n",
                (void *)picker, picked, p->exposure_boost, (void *)pipe, piece ? piece->global_hash : 0);
     }
     else
     {
       dt_print(DT_DEBUG_DEV,
-               "[picker/toneequal] exposure picker=%p invalid luminance=%g pipe=%p hash=%" PRIu64 "\n",
+               "[picker/toneequal] exposure picker=%p invalid luminance=%g pipe=%p hash=%zu\n",
                (void *)picker, picked, (void *)pipe, piece ? piece->global_hash : 0);
     }
   }
@@ -3399,14 +3399,14 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
       invalidate_luminance_cache(self);
       dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
       dt_print(DT_DEBUG_DEV,
-               "[picker/toneequal] contrast picker=%p min=%g max=%g set=%g pipe=%p hash=%" PRIu64 "\n",
+               "[picker/toneequal] contrast picker=%p min=%g max=%g set=%g pipe=%p hash=%zu\n",
                (void *)picker, fd_old, ld_old, p->contrast_boost, (void *)pipe,
                piece ? piece->global_hash : 0);
     }
     else
     {
       dt_print(DT_DEBUG_DEV,
-               "[picker/toneequal] contrast picker=%p invalid min=%g max=%g pipe=%p hash=%" PRIu64 "\n",
+               "[picker/toneequal] contrast picker=%p invalid min=%g max=%g pipe=%p hash=%zu\n",
                (void *)picker, fd_old, ld_old, (void *)pipe, piece ? piece->global_hash : 0);
     }
   }

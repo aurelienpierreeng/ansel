@@ -130,7 +130,7 @@ int dt_opencl_get_device_info(dt_opencl_t *cl, cl_device_id device, cl_device_in
   {
     // both of these sizes make no sense. either i failed to parse spec, or opencl implementation bug?
     dt_print(DT_DEBUG_OPENCL,
-             "[dt_opencl_get_device_info] ERROR: no size returned, or zero size returned for data %d: %" PRIu64 "\n",
+             "[dt_opencl_get_device_info] ERROR: no size returned, or zero size returned for data %d: %zu\n",
              param_name, *param_value_size);
     err = CL_INVALID_VALUE; // FIXME: anything better?
     goto error;
@@ -142,7 +142,7 @@ int dt_opencl_get_device_info(dt_opencl_t *cl, cl_device_id device, cl_device_in
     if(IS_NULL_PTR(ptr))
     {
       dt_print(DT_DEBUG_OPENCL,
-               "[dt_opencl_get_device_info] memory allocation failed! tried to allocate %" PRIu64 " bytes for data %d: %i",
+               "[dt_opencl_get_device_info] memory allocation failed! tried to allocate %zu bytes for data %d: %i",
                *param_value_size, param_name, err);
       err = CL_OUT_OF_HOST_MEMORY;
       goto error;
@@ -530,7 +530,7 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
                                            &(cl->dev[dev].max_global_mem), NULL);
   if(cl->dev[dev].max_global_mem < (uint64_t)512ul * 1024ul * 1024ul)
   {
-    dt_print_nts(DT_DEBUG_OPENCL, "   *** insufficient global memory (%" PRIu64 "MB) ***\n",
+    dt_print_nts(DT_DEBUG_OPENCL, "   *** insufficient global memory (%zuMB) ***\n",
                                    cl->dev[dev].max_global_mem / 1024 / 1024);
     res = -1;
     cl->dev[dev].disabled |= 1;
@@ -557,16 +557,16 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
   dt_print_nts(DT_DEBUG_OPENCL, "   MAX MEM ALLOC:            %.0f MB\n", (double)cl->dev[dev].max_mem_alloc / 1024.0 / 1024.0);
   dt_print_nts(DT_DEBUG_OPENCL, "   MAX IMAGE SIZE:           %zd x %zd\n", cl->dev[dev].max_image_width, cl->dev[dev].max_image_height);
   (cl->dlocl->symbols->dt_clGetDeviceInfo)(devid, CL_DEVICE_MAX_WORK_GROUP_SIZE, sizeof(infoint), &infoint, NULL);
-  dt_print_nts(DT_DEBUG_OPENCL, "   MAX WORK GROUP SIZE:      %" PRIu64 "\n", infoint);
+  dt_print_nts(DT_DEBUG_OPENCL, "   MAX WORK GROUP SIZE:      %zu\n", infoint);
   (cl->dlocl->symbols->dt_clGetDeviceInfo)(devid, CL_DEVICE_MAX_WORK_ITEM_DIMENSIONS, sizeof(infoint), &infoint, NULL);
-  dt_print_nts(DT_DEBUG_OPENCL, "   MAX WORK ITEM DIMENSIONS: %" PRIu64 "\n", infoint);
+  dt_print_nts(DT_DEBUG_OPENCL, "   MAX WORK ITEM DIMENSIONS: %zu\n", infoint);
 
   size_t infointtab_size;
   err = dt_opencl_get_device_info(cl, devid, CL_DEVICE_MAX_WORK_ITEM_SIZES, (void **)&infointtab, &infointtab_size);
   if(err == CL_SUCCESS)
   {
     dt_print_nts(DT_DEBUG_OPENCL, "   MAX WORK ITEM SIZES:      [ ");
-    for(size_t i = 0; i < infoint; i++) dt_print_nts(DT_DEBUG_OPENCL, "%" PRIu64 " ", infointtab[i]);
+    for(size_t i = 0; i < infoint; i++) dt_print_nts(DT_DEBUG_OPENCL, "%zu ", infointtab[i]);
     dt_free(infointtab);
     dt_print_nts(DT_DEBUG_OPENCL, "]\n");
   }
@@ -722,7 +722,7 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
     while(!feof(f))
     {
       int prog = -1;
-      gchar *confline_pattern = g_strdup_printf("%%%" PRIu64 "[^\n]\n", PATH_MAX * sizeof(char) - 1);
+      gchar *confline_pattern = g_strdup_printf("%%%zu[^\n]\n", PATH_MAX * sizeof(char) - 1);
       int rd = fscanf(f, confline_pattern, confentry);
       dt_free(confline_pattern);
       if(rd != 1) continue;
@@ -1073,7 +1073,7 @@ void dt_opencl_cleanup_device(dt_opencl_t *cl, int i)
 
   if(cl->print_statistics && (darktable.unmuted & DT_DEBUG_MEMORY))
   {
-    dt_print_nts(DT_DEBUG_OPENCL, " [opencl_summary_statistics] device '%s' (%d): peak memory usage %" PRIu64 " bytes (%.1f MB)\n",
+    dt_print_nts(DT_DEBUG_OPENCL, " [opencl_summary_statistics] device '%s' (%d): peak memory usage %zu bytes (%.1f MB)\n",
                 cl->dev[i].name, i, cl->dev[i].peak_memory, (float)cl->dev[i].peak_memory/(1024*1024));
   }
 
@@ -2449,7 +2449,7 @@ void dt_opencl_memory_statistics(int devid, cl_mem mem, dt_opencl_memory_t actio
 
   if((darktable.unmuted & DT_DEBUG_MEMORY) && (darktable.unmuted & DT_DEBUG_OPENCL))
     dt_print(DT_DEBUG_OPENCL,
-              "[opencl memory] device %d: %" PRIu64 " bytes (%.1f MB) in use\n", devid, darktable.opencl->dev[devid].memory_in_use,
+              "[opencl memory] device %d: %zu bytes (%.1f MB) in use\n", devid, darktable.opencl->dev[devid].memory_in_use,
                                       (float)darktable.opencl->dev[devid].memory_in_use/(1024*1024));
 }
 
@@ -2503,7 +2503,7 @@ gboolean dt_opencl_image_fits_device(const int devid, const size_t width, const 
   if(_opencl_get_device_memalloc(devid) < required)
   {
     dt_print(DT_DEBUG_OPENCL,
-             "[opencl] trying to allocate %" PRIu64 " MiB of memory while the vRAM has %" PRIu64
+             "[opencl] trying to allocate %zu MiB of memory while the vRAM has %zu"
              " MiB total\n",
              (uint64_t)(required / (1024 * 1024)),
              (uint64_t)(_opencl_get_device_memalloc(devid) / (1024 * 1024)));
@@ -2514,7 +2514,7 @@ gboolean dt_opencl_image_fits_device(const int devid, const size_t width, const 
     return TRUE;
 
   dt_print(DT_DEBUG_OPENCL,
-            "[opencl] trying to allocate %" PRIu64 " MiB of memory while the vRAM has %" PRIu64
+            "[opencl] trying to allocate %zu MiB of memory while the vRAM has %zu"
             " MiB left\n",
             (uint64_t)(total / (1024 * 1024)),
             (uint64_t)(dt_opencl_get_device_available(devid) / (1024 * 1024)));

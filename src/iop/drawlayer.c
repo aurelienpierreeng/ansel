@@ -461,7 +461,7 @@ static gboolean _rekey_shared_base_patch(drawlayer_patch_t *patch, const int32_t
   dt_drawlayer_cache_patch_clear(&published, "drawlayer patch");
   if(darktable.unmuted & DT_DEBUG_VERBOSE)
     dt_print(DT_DEBUG_PERF,
-             "[drawlayer] cache rekey conflict old=%" PRIu64 " new=%" PRIu64 " -> published snapshot instead\n",
+             "[drawlayer] cache rekey conflict old=%zu new=%zu -> published snapshot instead\n",
              patch->cache_hash, new_hash);
   return TRUE;
 }

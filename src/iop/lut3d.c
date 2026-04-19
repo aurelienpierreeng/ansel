@@ -326,7 +326,7 @@ uint16_t calculate_clut_haldclut(dt_iop_lut3d_params_t *const p, const char *con
     return 0;
   }
   const size_t buf_size = (size_t)png.height * png_get_rowbytes(png.png_ptr, png.info_ptr);
-  dt_print(DT_DEBUG_DEV, "[lut3d] allocating %" PRIu64 " bytes for png file\n", buf_size);
+  dt_print(DT_DEBUG_DEV, "[lut3d] allocating %zu bytes for png file\n", buf_size);
   uint8_t *buf = NULL;
   buf = dt_pixelpipe_cache_alloc_align_cache(buf_size, 0);
   if(IS_NULL_PTR(buf))
@@ -345,7 +345,7 @@ uint16_t calculate_clut_haldclut(dt_iop_lut3d_params_t *const p, const char *con
     return 0;
   }
   const size_t buf_size_lut = (size_t)png.height * png.height * 3;
-  dt_print(DT_DEBUG_DEV, "[lut3d] allocating %" PRIu64 " floats for png lut - level %d\n", buf_size_lut, level);
+  dt_print(DT_DEBUG_DEV, "[lut3d] allocating %zu floats for png lut - level %d\n", buf_size_lut, level);
   float *lclut = dt_pixelpipe_cache_alloc_align_cache(sizeof(float) * buf_size_lut, 0);
   if(IS_NULL_PTR(lclut))
   {
@@ -575,7 +575,7 @@ uint16_t calculate_clut_cube(const char *const filepath, float **clut)
           return 0;
         }
         buf_size = level * level * level * 3;
-        dt_print(DT_DEBUG_DEV, "[lut3d] allocating %" PRIu64 " bytes for cube lut - level %d\n", buf_size, level);
+        dt_print(DT_DEBUG_DEV, "[lut3d] allocating %zu bytes for cube lut - level %d\n", buf_size, level);
         lclut = dt_pixelpipe_cache_alloc_align_cache(sizeof(float) * buf_size, 0);
         if(IS_NULL_PTR(lclut))
         {
@@ -679,7 +679,7 @@ uint16_t calculate_clut_3dl(const char *const filepath, float **clut)
               return 0;
             }
             buf_size = level * level * level * 3;
-            dt_print(DT_DEBUG_DEV, "[lut3d] allocating %" PRIu64 " bytes for cube lut - level %d\n", buf_size, level);
+            dt_print(DT_DEBUG_DEV, "[lut3d] allocating %zu bytes for cube lut - level %d\n", buf_size, level);
             lclut = dt_pixelpipe_cache_alloc_align_cache(sizeof(float) * buf_size, 0);
             if(IS_NULL_PTR(lclut))
             {

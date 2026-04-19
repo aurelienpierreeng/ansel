@@ -361,7 +361,7 @@ int dt_pdf_add_icc_from_data(dt_pdf_t *pdf, const unsigned char *data, size_t si
   // length of the stream
   _pdf_set_offset(pdf, length_id, pdf->bytes_written + bytes_written);
   bytes_written += fprintf(pdf->fd, "%d 0 obj\n"
-                                    "%" PRIu64 "\n"
+                                    "%zu\n"
                                     "endobj\n",
                            length_id, stream_size);
 
@@ -445,7 +445,7 @@ dt_pdf_image_t *dt_pdf_add_image(dt_pdf_t *pdf, const unsigned char *image, int 
   // length of the last stream
   _pdf_set_offset(pdf, length_id, pdf->bytes_written + bytes_written);
   bytes_written += fprintf(pdf->fd, "%d 0 obj\n"
-                                    "%" PRIu64 "\n"
+                                    "%zu\n"
                                     "endobj\n",
                            length_id, stream_size);
 
@@ -625,7 +625,7 @@ dt_pdf_page_t *dt_pdf_add_page(dt_pdf_t *pdf, dt_pdf_image_t **images, int n_ima
   // length of the last stream
   _pdf_set_offset(pdf, length_id, pdf->bytes_written + bytes_written);
   bytes_written += fprintf(pdf->fd, "%d 0 obj\n"
-                                    "%" PRIu64 "\n"
+                                    "%zu\n"
                                     "endobj\n",
                            length_id, stream_size);
 
@@ -760,7 +760,7 @@ time_error:
 
   // and finally the file footer with the offset of the xref section
   fprintf(pdf->fd, "startxref\n"
-                   "%" PRIu64 "\n"
+                   "%zu\n"
                    "%%%%EOF\n",
           pdf->bytes_written);
 
