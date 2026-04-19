@@ -204,7 +204,7 @@ void dt_iop_image_scaled_copy(float *const restrict buf, const float *const rest
 #endif // _OPENMP
   // no OpenMP, or image too small to bother parallelizing
 #ifdef _OPENMP
-#pragma simd aligned(buf, src : 16)
+#pragma omp simd aligned(buf, src : 16)
 #endif
   for (size_t k = 0; k < nfloats; k++)
     buf[k] = scale * src[k];
@@ -240,7 +240,7 @@ void dt_iop_image_fill(float *const buf, const float fill_value, const size_t wi
   else
   {
 #ifdef _OPENMP
-#pragma simd aligned(buf:16)
+#pragma omp simd aligned(buf:16)
 #endif
     for (size_t k = 0; k < nfloats; k++)
       buf[k] = fill_value;
@@ -266,7 +266,7 @@ void dt_iop_image_add_const(float *const buf, const float add_value, const size_
 #endif // _OPENMP
   // no OpenMP, or image too small to bother parallelizing
 #ifdef _OPENMP
-#pragma simd aligned(buf:16)
+#pragma omp simd aligned(buf:16)
 #endif
   for (size_t k = 0; k < nfloats; k++)
     buf[k] += add_value;
@@ -291,7 +291,7 @@ void dt_iop_image_add_image(float *const buf, const float* const other_image,
 #endif // _OPENMP
   // no OpenMP, or image too small to bother parallelizing
 #ifdef _OPENMP
-#pragma simd aligned(buf, other_image : 16)
+#pragma omp simd aligned(buf, other_image : 16)
 #endif
   for (size_t k = 0; k < nfloats; k++)
     buf[k] += other_image[k];
@@ -316,7 +316,7 @@ void dt_iop_image_sub_image(float *const buf, const float* const other_image,
 #endif // _OPENMP
   // no OpenMP, or image too small to bother parallelizing
 #ifdef _OPENMP
-#pragma simd aligned(buf, other_image : 16)
+#pragma omp simd aligned(buf, other_image : 16)
 #endif
   for (size_t k = 0; k < nfloats; k++)
     buf[k] -= other_image[k];
@@ -341,7 +341,7 @@ void dt_iop_image_invert(float *const buf, const float max_value, const size_t w
 #endif // _OPENMP
   // no OpenMP, or image too small to bother parallelizing
 #ifdef _OPENMP
-#pragma simd aligned(buf:16)
+#pragma omp simd aligned(buf:16)
 #endif
   for (size_t k = 0; k < nfloats; k++)
     buf[k] = max_value - buf[k];
@@ -366,7 +366,7 @@ void dt_iop_image_mul_const(float *const buf, const float mul_value, const size_
 #endif // _OPENMP
   // no OpenMP, or image too small to bother parallelizing
 #ifdef _OPENMP
-#pragma simd aligned(buf:16)
+#pragma omp simd aligned(buf:16)
 #endif
   for (size_t k = 0; k < nfloats; k++)
     buf[k] *= mul_value;
@@ -391,7 +391,7 @@ void dt_iop_image_div_const(float *const buf, const float div_value, const size_
 #endif // _OPENMP
   // no OpenMP, or image too small to bother parallelizing
 #ifdef _OPENMP
-#pragma simd aligned(buf:16)
+#pragma omp simd aligned(buf:16)
 #endif
   for (size_t k = 0; k < nfloats; k++)
     buf[k] /= div_value;
@@ -418,7 +418,7 @@ void dt_iop_image_linear_blend(float *const restrict buf, const float lambda, co
 #endif // _OPENMP
   // no OpenMP, or image too small to bother parallelizing
 #ifdef _OPENMP
-#pragma simd aligned(buf:16)
+#pragma omp simd aligned(buf:16)
 #endif
   for (size_t k = 0; k < nfloats; k++)
     buf[k] = lambda*buf[k] + lambda_1*other[k];
