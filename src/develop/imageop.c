@@ -247,7 +247,7 @@ static void _iop_color_picker_data_ready_callback(gpointer instance, gpointer us
   if(IS_NULL_PTR(module) || IS_NULL_PTR(module->color_picker_apply)) return;
   if(dt_iop_color_picker_get_ready_data(module, &picker, &pipe, &piece)) return;
 
-  dt_print(DT_DEBUG_DEV, "[picker] dispatch module=%s picker=%p pipe=%p hash=%zu\n",
+  dt_print(DT_DEBUG_DEV, "[picker] dispatch module=%s picker=%p pipe=%p hash=%" PRIu64 "\n",
            module->op, (void *)picker, (void *)pipe, piece ? piece->global_hash : 0);
 
   if(!module->blend_data || !blend_color_picker_apply(module, picker, pipe, (dt_dev_pixelpipe_iop_t *)piece))
@@ -1806,7 +1806,7 @@ void dt_iop_commit_params(dt_iop_module_t *module, dt_iop_params_t *params,
   piece->global_hash = piece->hash = hash;
   piece->global_mask_hash = piece->blendop_hash = module->blendop_hash;
 
-  dt_print(DT_DEBUG_PARAMS, "[pixelpipe] params commit for %s (%s) in pipe %s with hash %zu\n", 
+  dt_print(DT_DEBUG_PARAMS, "[pixelpipe] params commit for %s (%s) in pipe %s with hash %" PRIu64 "\n", 
            module->op, module->multi_name, 
            dt_pixelpipe_get_pipe_name(pipe->type), piece->hash);
 }

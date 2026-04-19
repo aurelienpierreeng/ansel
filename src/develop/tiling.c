@@ -770,7 +770,7 @@ static int _default_process_tiling_ptp(struct dt_iop_module_t *self, const struc
       const size_t ioffs = (ty * tile_ht) * ipitch + (tx * tile_wd) * in_bpp;
       size_t ooffs = (ty * tile_ht) * opitch + (tx * tile_wd) * out_bpp;
 
-      dt_print(DT_DEBUG_TILING, "[default_process_tiling_ptp] tile (%zu,%zu) with %zux%zu at origin [%zu,%zu]\n",
+      dt_print(DT_DEBUG_TILING, "[default_process_tiling_ptp] tile (%" PRIu64 ",%" PRIu64 ") with %" PRIu64 "x%" PRIu64 " at origin [%" PRIu64 ",%" PRIu64 "]\n",
                tx, ty, wd, ht, tx * tile_wd, ty * tile_ht);
 
 /* prepare input tile buffer */
@@ -1077,7 +1077,7 @@ static int _default_process_tiling_roi(struct dt_iop_module_t *self, const struc
       const size_t ioffs = ((size_t)iroi_full.y - roi_in->y)  * ipitch + ((size_t)iroi_full.x - roi_in->x) * in_bpp;
             size_t ooffs = ((size_t)oroi_good.y - roi_out->y) * opitch + ((size_t)oroi_good.x - roi_out->x) * out_bpp;
 
-      dt_print(DT_DEBUG_TILING, "[default_process_tiling_roi] process tile (%zu,%zu) size %dx%d at origin [%d,%d]\n",
+      dt_print(DT_DEBUG_TILING, "[default_process_tiling_roi] process tile (%" PRIu64 ",%" PRIu64 ") size %dx%d at origin [%d,%d]\n",
                tx, ty, iroi_full.width, iroi_full.height, iroi_full.x, iroi_full.y);
 
       /* prepare input tile buffer */
@@ -1388,7 +1388,7 @@ static int _default_process_tiling_cl_ptp(struct dt_iop_module_t *self, const st
       size_t ooffs = (ty * tile_ht) * opitch + (tx * tile_wd) * out_bpp;
 
 
-      dt_print(DT_DEBUG_TILING, "[default_process_tiling_cl_ptp] tile (%zu,%zu) size %zux%zu at origin [%zu,%zu]\n",
+      dt_print(DT_DEBUG_TILING, "[default_process_tiling_cl_ptp] tile (%" PRIu64 ",%" PRIu64 ") size %" PRIu64 "x%" PRIu64 " at origin [%" PRIu64 ",%" PRIu64 "]\n",
                tx, ty, wd, ht, tx * tile_wd, ty * tile_ht);
 
       /* get input and output buffers */
@@ -1832,9 +1832,9 @@ static int _default_process_tiling_cl_roi(struct dt_iop_module_t *self, const st
       size_t oorigin[] = { oroi_good.x - oroi_full.x, oroi_good.y - oroi_full.y, 0 };
       size_t oregion[] = { oroi_good.width, oroi_good.height, 1 };
 
-      dt_print(DT_DEBUG_TILING,  "[default_process_tiling_cl_roi] process tile (%zu,%zu) size %dx%d at origin [%d,%d]\n",
+      dt_print(DT_DEBUG_TILING,  "[default_process_tiling_cl_roi] process tile (%" PRIu64 ",%" PRIu64 ") size %dx%d at origin [%d,%d]\n",
                tx, ty, iroi_full.width, iroi_full.height, iroi_full.x, iroi_full.y);
-      dt_vprint(DT_DEBUG_TILING, "[default_process_tiling_cl_roi]    dest [%zu,%zu] at [%zu,%zu], offsets [%i,%i] -> [%i,%i], delta=%i\n\n",
+      dt_vprint(DT_DEBUG_TILING, "[default_process_tiling_cl_roi]    dest [%" PRIu64 ",%" PRIu64 "] at [%" PRIu64 ",%" PRIu64 "], offsets [%i,%i] -> [%i,%i], delta=%i\n\n",
                oregion[0], oregion[1], oorigin[0], oorigin[1], in_dx, in_dy, out_dx, out_dy, delta);
 
       /* get opencl input and output buffers */

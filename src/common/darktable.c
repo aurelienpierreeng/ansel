@@ -519,7 +519,7 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
       else if(!strcmp(argv[k], "--version"))
       {
         printf("this is %s\ncopyright (c) 2009-2022 Johannes Hanika, (c) 2022-%s Aurélien Pierre\n" PACKAGE_BUGREPORT "\n\ncompile options:\n"
-               "  bit depth is %zu bit\n"
+               "  bit depth is %" PRIu64 " bit\n"
 #ifdef _DEBUG
                "  debug build\n"
 #else
@@ -1451,7 +1451,7 @@ void dt_print(dt_debug_thread_t thread, const char *msg, ...)
     printf("%f ", dt_get_wtime() - darktable.start_wtime);
     va_list ap;
     va_start(ap, msg);
-    g_vprintf(msg, ap);
+    vprintf(msg, ap);
     va_end(ap);
     fflush(stdout);
   }
@@ -1463,7 +1463,7 @@ void dt_print_nts(dt_debug_thread_t thread, const char *msg, ...)
   {
     va_list ap;
     va_start(ap, msg);
-    g_vprintf(msg, ap);
+    vprintf(msg, ap);
     va_end(ap);
     fflush(stdout);
   }
@@ -1476,7 +1476,7 @@ void dt_vprint(dt_debug_thread_t thread, const char *msg, ...)
     printf("%f ", dt_get_wtime() - darktable.start_wtime);
     va_list ap;
     va_start(ap, msg);
-    g_vprintf(msg, ap);
+    vprintf(msg, ap);
     va_end(ap);
     fflush(stdout);
   }
@@ -1560,7 +1560,7 @@ size_t get_usable_memory_bytes()
 
   while(fgets(line, sizeof(line), f))
   {
-    if(sscanf(line, "MemAvailable: %zu kB", &available_kb) == 1)
+    if(sscanf(line, "MemAvailable: %" PRIu64 " kB", &available_kb) == 1)
     {
       fclose(f);
       return available_kb * 1024; // kB to bytes
@@ -1603,7 +1603,7 @@ void dt_configure_runtime_performance(dt_sys_resources_t *resources, gboolean in
   const size_t bits = CHAR_BIT * sizeof(void *);
   const gboolean sufficient = (mem >= 4096 && threads >= 2);
 
-  dt_print(DT_DEBUG_MEMORY, "[MEMORY CONFIGURATION] found a %s %zu-bit system with %zu cores\n",
+  dt_print(DT_DEBUG_MEMORY, "[MEMORY CONFIGURATION] found a %s %" PRIu64 "-bit system with %" PRIu64 " cores\n",
     (sufficient) ? "sufficient" : "low performance", bits, threads);
 
   // Override RAM detection with user config
@@ -1643,16 +1643,16 @@ void dt_configure_runtime_performance(dt_sys_resources_t *resources, gboolean in
   }
 
   // Print
-  dt_print(DT_DEBUG_MEMORY | DT_DEBUG_CACHE, _("[MEMORY CONFIGURATION] Total system RAM: %zu MiB\n"),
+  dt_print(DT_DEBUG_MEMORY | DT_DEBUG_CACHE, _("[MEMORY CONFIGURATION] Total system RAM: %" PRIu64" MiB\n"),
            resources->total_memory / (1024 * 1024));
 
-  dt_print(DT_DEBUG_MEMORY | DT_DEBUG_CACHE, _("[MEMORY CONFIGURATION] OS & Apps RAM headroom: %zu MiB\n"),
+  dt_print(DT_DEBUG_MEMORY | DT_DEBUG_CACHE, _("[MEMORY CONFIGURATION] OS & Apps RAM headroom: %" PRIu64" MiB\n"),
            resources->headroom_memory / (1024 * 1024));
 
-  dt_print(DT_DEBUG_MEMORY | DT_DEBUG_CACHE, _("[MEMORY CONFIGURATION] Lightable thumbnails cache size: %zu MiB\n"),
+  dt_print(DT_DEBUG_MEMORY | DT_DEBUG_CACHE, _("[MEMORY CONFIGURATION] Lightable thumbnails cache size: %" PRIu64" MiB\n"),
            resources->mipmap_memory / (1024 * 1024));
 
-  dt_print(DT_DEBUG_MEMORY | DT_DEBUG_CACHE, _("[MEMORY CONFIGURATION] Pixelpipe cache size: %zu MiB\n"),
+  dt_print(DT_DEBUG_MEMORY | DT_DEBUG_CACHE, _("[MEMORY CONFIGURATION] Pixelpipe cache size: %" PRIu64" MiB\n"),
            resources->pixelpipe_memory / (1024 * 1024));
 
   dt_print(DT_DEBUG_MEMORY | DT_DEBUG_CACHE, _("[MEMORY CONFIGURATION] Worker threads: %i\n"), dt_worker_threads());

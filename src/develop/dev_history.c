@@ -858,7 +858,7 @@ uint64_t dt_dev_history_compute_hash(dt_develop_t *dev)
     dt_dev_history_item_t *item = (dt_dev_history_item_t *)hist->data;
     hash = dt_hash(hash, (const char *)&item->hash, sizeof(uint64_t));
   }
-  dt_print(DT_DEBUG_HISTORY, "[dt_dev_history_get_hash] history hash: %zu, history end: %i, items %i\n", hash, dt_dev_get_history_end_ext(dev), g_list_length(dev->history));
+  dt_print(DT_DEBUG_HISTORY, "[dt_dev_history_get_hash] history hash: %" PRIu64 ", history end: %i, items %i\n", hash, dt_dev_get_history_end_ext(dev), g_list_length(dev->history));
   return hash;
 }
 

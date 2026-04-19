@@ -983,7 +983,7 @@ void expose(
      * next requested source is temporarily unavailable. */
     expose_state.image_surface_has_main = drawn_from_main;
     _paint_all(cri, cr, dev->image_surface);
-    dt_print(DT_DEBUG_DEV, "[darkroom] expose drew %s (backbuf hash=%zu)\n",
+    dt_print(DT_DEBUG_DEV, "[darkroom] expose drew %s (backbuf hash=%" PRIu64 ")\n",
              draw_source, draw_hash);
     cairo_restore(cri);
   }
@@ -996,7 +996,7 @@ void expose(
     draw_hash = expose_state.image_surface_has_main ? expose_state.main_hash
                                                     : _darkroom_preview_fallback_backbuf_hash;
     _paint_all(cri, cr, dev->image_surface);
-    dt_print(DT_DEBUG_DEV, "[darkroom] expose drew %s (backbuf hash=%zu)\n",
+    dt_print(DT_DEBUG_DEV, "[darkroom] expose drew %s (backbuf hash=%" PRIu64 ")\n",
              draw_source, draw_hash);
     cairo_restore(cri);
   }
@@ -1006,7 +1006,7 @@ void expose(
     cairo_set_source_rgb(cr, bg_color[0], bg_color[1], bg_color[2]);
     cairo_paint(cr);
     _paint_all(cri, cr, dev->image_surface);
-    dt_print(DT_DEBUG_DEV, "[darkroom] expose drew %s (backbuf hash=%zu)\n",
+    dt_print(DT_DEBUG_DEV, "[darkroom] expose drew %s (backbuf hash=%" PRIu64 ")\n",
              draw_source, draw_hash);
     cairo_restore(cri);
   }

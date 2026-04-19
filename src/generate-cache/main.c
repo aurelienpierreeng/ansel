@@ -111,7 +111,7 @@ static int generate_thumbnail_cache(const dt_mipmap_size_t min_mip, const dt_mip
     const char *imgfilename = (const char*)sqlite3_column_text(stmt, 1);
 
     counter++;
-    fprintf(stderr, "image %zu/%zu (%.02f%%) (id:%d, file=%s)\n", counter, image_count, 100.0 * counter / (float)image_count, imgid, imgfilename);
+    fprintf(stderr, "image %" PRIu64 "/%" PRIu64 " (%.02f%%) (id:%d, file=%s)\n", counter, image_count, 100.0 * counter / (float)image_count, imgid, imgfilename);
 
     for(int k = max_mip; k >= min_mip && k >= 0; k--)
     {

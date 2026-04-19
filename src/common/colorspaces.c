@@ -2041,7 +2041,7 @@ static void dt_colorspaces_get_display_profile_colord_callback(GObject *source, 
         {
           _update_display_profile(tmp_data, size, NULL, 0);
           dt_print(DT_DEBUG_CONTROL,
-                   "[color profile] colord gave us a new screen profile: '%s' (size: %zu)\n", filename, size);
+                   "[color profile] colord gave us a new screen profile: '%s' (size: %" PRIu64 ")\n", filename, size);
         }
         else
         {

@@ -264,7 +264,7 @@ int dt_iop_color_picker_get_ready_data(const dt_iop_module_t *module, GtkWidget 
   if(IS_NULL_PTR(current_piece))
   {
     dt_print(DT_DEBUG_DEV,
-             "[picker] ready-data miss module=%s pending_hash=%zu pipe=%p\n",
+             "[picker] ready-data miss module=%s pending_hash=%" PRIu64 " pipe=%p\n",
              module->op, dev->color_picker.piece_hash, (void *)current_pipe);
     return 1;
   }
@@ -273,7 +273,7 @@ int dt_iop_color_picker_get_ready_data(const dt_iop_module_t *module, GtkWidget 
   if(pipe) *pipe = current_pipe;
   if(piece) *piece = current_piece;
   dt_print(DT_DEBUG_DEV,
-           "[picker] ready-data module=%s hash=%zu pipe=%p picker=%p\n",
+           "[picker] ready-data module=%s hash=%" PRIu64 " pipe=%p picker=%p\n",
            module->op, current_piece->global_hash, (void *)current_pipe, (void *)dev->color_picker.widget);
   return 0;
 }
@@ -300,7 +300,7 @@ static dt_color_picker_resample_status_t _sample_picker_from_cache(dt_develop_t 
      || previous_piece->global_hash == DT_PIXELPIPE_CACHE_HASH_INVALID)
   {
     dt_print(DT_DEBUG_DEV,
-             "[picker] invalid hash module=%s piece=%zu prev=%zu\n",
+             "[picker] invalid hash module=%s piece=%" PRIu64 " prev=%" PRIu64 "\n",
              piece->module->op, piece->global_hash, previous_piece->global_hash);
     return DT_COLOR_PICKER_RESAMPLE_RETRY;
   }
@@ -310,7 +310,7 @@ static dt_color_picker_resample_status_t _sample_picker_from_cache(dt_develop_t 
   if(!dt_dev_pixelpipe_cache_peek_gui(pipe, previous_piece, &input, &input_entry, NULL, NULL, NULL))
   {
     dev->color_picker.wait_input_hash = previous_piece->global_hash;
-    dt_print(DT_DEBUG_DEV, "[picker] input cache miss module=%s prev_hash=%zu\n",
+    dt_print(DT_DEBUG_DEV, "[picker] input cache miss module=%s prev_hash=%" PRIu64 "\n",
              piece->module->op, previous_piece->global_hash);
     return DT_COLOR_PICKER_RESAMPLE_RETRY;
   }
@@ -325,7 +325,7 @@ static dt_color_picker_resample_status_t _sample_picker_from_cache(dt_develop_t 
        cache entry feeds an endless recompute/retry loop. Keep output statistics explicitly invalid
        so output-dependent consumers can detect the missing sample, but still publish the ready
        input sample. */
-    dt_print(DT_DEBUG_DEV, "[picker] output cache miss module=%s hash=%zu\n",
+    dt_print(DT_DEBUG_DEV, "[picker] output cache miss module=%s hash=%" PRIu64 "\n",
              piece->module->op, piece->global_hash);
     dev->color_picker.wait_output_hash = piece->global_hash;
 
@@ -386,7 +386,7 @@ static dt_color_picker_resample_status_t _sample_picker_from_cache(dt_develop_t 
   }
 
   dt_print(DT_DEBUG_DEV,
-           "[picker] sampled module=%s hash=%zu avg=(%g,%g,%g) min=(%g,%g,%g) max=(%g,%g,%g)\n",
+           "[picker] sampled module=%s hash=%" PRIu64 " avg=(%g,%g,%g) min=(%g,%g,%g) max=(%g,%g,%g)\n",
            piece->module->op, piece->global_hash,
            piece->module->picked_color[0], piece->module->picked_color[1], piece->module->picked_color[2],
            piece->module->picked_color_min[0], piece->module->picked_color_min[1], piece->module->picked_color_min[2],
