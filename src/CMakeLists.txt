@@ -325,11 +325,30 @@ pkg_check_modules(GTK3 REQUIRED IMPORTED_TARGET gtk+-3.0>=3.24)
 pkg_check_modules(RSVG2 REQUIRED IMPORTED_TARGET librsvg-2.0)
 pkg_check_modules(JSONGLIB REQUIRED IMPORTED_TARGET json-glib-1.0)
 pkg_check_modules(LIBXML2 REQUIRED IMPORTED_TARGET libxml-2.0)
+
+# TODO: the following find_package() need to be replaced by pkg_check_modules()
+# like above as soon as they will get supported by PkgConfig,
+# and their cmake/modules/FindXXX.cmake modules deleted.
+# We shouldn't have to maintain our own modules, it's brittle and needs to be updated sometimes.
 find_package(LCMS2 REQUIRED)
 find_package(JPEG REQUIRED)
 find_package(PNG REQUIRED)
 find_package(TIFF REQUIRED)
 find_package(LensFun REQUIRED)
+find_package(Sqlite3 3.24 REQUIRED)
+find_package(Exiv2 0.27.4 REQUIRED)
+find_package(Pugixml 1.2 REQUIRED)
+
+# CMake provides a `FindCURL.cmake` module, which will set `CURL_LIBRARIES`, 
+# however if cURL is built with CMake, it will generate a `CURLConfig.cmake` 
+# config, which will not set `CURL_LIBRARIES`. 
+# 
+# MSYS2 currently build cURL with CMake, and if we do `find_package(CURL)` 
+# directly, config will be used, so we need to keep compatibility。 
+# 
+# See <https://cmake.org/cmake/help/latest/module/FindCURL.html#curl-cmake>. 
+# See <https://github.com/msys2/MINGW-packages/issues/21028>.
+find_package(CURL REQUIRED)
 
 target_include_directories(ansel_deps INTERFACE
   LCMS2::LCMS2
@@ -337,6 +356,10 @@ target_include_directories(ansel_deps INTERFACE
   JPEG::JPEG
   TIFF::TIFF
   LensFun::LensFun
+  Sqlite3::Sqlite3
+  Exiv2::Exiv2
+  Pugixml::Pugixml
+  CURL::libcurl
 )
 target_link_libraries(ansel_deps INTERFACE
   PkgConfig::GTK3
@@ -348,12 +371,19 @@ target_link_libraries(ansel_deps INTERFACE
   JPEG::JPEG
   TIFF::TIFF
   LensFun::LensFun
+  Sqlite3::Sqlite3
+  Exiv2::Exiv2
+  Pugixml::Pugixml
+  CURL::libcurl
 )
 
 add_definitions("-DGLIB_VERSION_MIN_REQUIRED=GLIB_VERSION_2_64")
 add_definitions("-DGLIB_VERSION_MAX_ALLOWED=GLIB_VERSION_MIN_REQUIRED")
 add_definitions("-DGDK_VERSION_MIN_REQUIRED=GDK_VERSION_3_24")
 #add_definitions("-DGDK_VERSION_MAX_ALLOWED=GDK_VERSION_MIN_REQUIRED")
+
+
+## Optional deps go here
 
 option(WITH_LIBSOUP2 "Use libsoup2 instead of libsoup3" OFF)
 option(WITH_LIBSOUP3 "Force libsoup3 (ignore libsoup2)" OFF)
@@ -374,7 +404,6 @@ if(LibSoup_FOUND)
 else()
   message(STATUS "HTTP server DISABLED (no libsoup)")
 endif()
-
 
 if(USE_OPENEXR)
   find_package(OpenEXR CONFIG)
@@ -440,29 +469,6 @@ if(USE_HEIF)
     set(libheif_FOUND NOTFOUND)
   endif()
 endif()
-
-
-find_package(Sqlite3 3.24 REQUIRED)
-target_link_libraries(ansel_deps INTERFACE Sqlite3::Sqlite3)
-
-# CMake provides a `FindCURL.cmake` module, which will set `CURL_LIBRARIES`,
-# however if cURL is built with CMake, it will generate a `CURLConfig.cmake`
-# config, which will not set `CURL_LIBRARIES`.
-#
-# MSYS2 currently build cURL with CMake, and if we do `find_package(CURL)`
-# directly, config will be used, so we need to keep compatibility。
-#
-# See <https://cmake.org/cmake/help/latest/module/FindCURL.html#curl-cmake>.
-# See <https://github.com/msys2/MINGW-packages/issues/21028>.
-find_package(CURL REQUIRED)
-target_link_libraries(ansel_deps INTERFACE CURL::libcurl)
-
-# Require exiv2 >= 0.27 to make sure everything we need is available
-find_package(Exiv2 0.27.4 REQUIRED)
-target_link_libraries(ansel_deps INTERFACE Exiv2::Exiv2)
-
-find_package(Pugixml 1.2 REQUIRED)
-target_link_libraries(ansel_deps INTERFACE Pugixml::Pugixml)
 
 # Optionally enable ISOBMFF support in Exiv2
 if(USE_ISOBMFF)
