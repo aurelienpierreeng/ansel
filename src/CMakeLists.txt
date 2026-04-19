@@ -426,39 +426,48 @@ if(USE_WEBP)
 endif(USE_WEBP)
 
 if(USE_AVIF)
-  # libavif released stable version and we support it since 0.8.2, but its
-  # `config-version.cmake` requires exact match of major version, so we have to
-  # check the version manually.
   find_package(libavif CONFIG)
-  if(libavif_FOUND AND libavif_VERSION VERSION_GREATER_EQUAL 0.8.2)
-    list(APPEND LIBS avif)
-    add_definitions(-DHAVE_LIBAVIF=1)
-    list(APPEND SOURCES "common/imageio_avif.c")
+
+  if(libavif_FOUND AND libavif_VERSION VERSION_GREATER_EQUAL 0.8.2 AND TARGET avif)
+    target_link_libraries(ansel_deps INTERFACE avif)
+    target_compile_definitions(ansel_deps INTERFACE HAVE_LIBAVIF=1)
+    list(APPEND SOURCES common/imageio_avif.c)
     set(DT_SUPPORTED_EXTENSIONS ${DT_SUPPORTED_EXTENSIONS} avif CACHE INTERNAL "")
   else()
-    # Version mismatched.
-    set(libavif_FOUND NOTFOUND)
+    # Fallback path (MSYS2 / older distros)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(AVIF REQUIRED IMPORTED_TARGET libavif)
+
+    if(TARGET PkgConfig::AVIF)
+      target_link_libraries(ansel_deps INTERFACE PkgConfig::AVIF)
+      target_compile_definitions(ansel_deps INTERFACE HAVE_LIBAVIF=1)
+      list(APPEND SOURCES common/imageio_avif.c )
+      set(DT_SUPPORTED_EXTENSIONS ${DT_SUPPORTED_EXTENSIONS} avif CACHE INTERNAL "")
+    endif()
   endif()
 endif()
 
 if(USE_HEIF)
-  # libheif's `config-version.cmake` requires exact match of all version, so we
-  # have to check the version manually.
+  # Try modern CMake package first
   find_package(libheif CONFIG)
+
   if(NOT libheif_FOUND)
     find_package(libheif 1.13.0 MODULE)
   endif()
-  if(libheif_FOUND AND libheif_VERSION VERSION_GREATER_EQUAL 1.13.0)
-    list(APPEND LIBS heif)
-    add_definitions(-DHAVE_LIBHEIF=1)
-    list(APPEND SOURCES "common/imageio_heif.c")
+
+  if(libheif_FOUND AND libheif_VERSION VERSION_GREATER_EQUAL 1.13.0 AND TARGET heif)
+    target_link_libraries(ansel_deps INTERFACE heif)
+    target_compile_definitions(ansel_deps INTERFACE HAVE_LIBHEIF=1)
+    list(APPEND SOURCES common/imageio_heif.c )
     set(DT_SUPPORTED_EXTENSIONS ${DT_SUPPORTED_EXTENSIONS} heif heic hif CACHE INTERNAL "")
+
+    # libheif may also support AVIF
     if(NOT libavif_FOUND)
-      # libheif can handle avif, too.
-      set(DT_SUPPORTED_EXTENSIONS ${DT_SUPPORTED_EXTENSIONS} avif CACHE INTERNAL "")
+      list(APPEND DT_SUPPORTED_EXTENSIONS avif)
+      set(DT_SUPPORTED_EXTENSIONS ${DT_SUPPORTED_EXTENSIONS} CACHE INTERNAL "")
     endif()
+
   else()
-    # Version mismatched.
     set(libheif_FOUND NOTFOUND)
   endif()
 endif()
@@ -520,57 +529,105 @@ endif(USE_KWALLET)
 
 if(USE_MAC_INTEGRATION)
   find_package(MacIntegration)
-  if(MacIntegration_FOUND)
-    include_directories(SYSTEM ${MacIntegration_INCLUDE_DIRS})
-    list(APPEND LIBS ${MacIntegration_LIBRARIES})
-    add_definitions("-DMAC_INTEGRATION")
-  endif(MacIntegration_FOUND)
-endif(USE_MAC_INTEGRATION)
+
+  if(TARGET MacIntegration::MacIntegration)
+    target_link_libraries(ansel_deps INTERFACE MacIntegration::MacIntegration)
+    target_compile_definitions(ansel_deps INTERFACE MAC_INTEGRATION)
+
+  elseif(MacIntegration_FOUND)
+    # Fallback for legacy FindMacIntegration.cmake
+    target_include_directories(ansel_deps INTERFACE ${MacIntegration_INCLUDE_DIRS})
+    target_link_libraries(ansel_deps INTERFACE ${MacIntegration_LIBRARIES})
+    target_compile_definitions(ansel_deps INTERFACE MAC_INTEGRATION)
+  endif()
+endif()
 
 if(USE_GRAPHICSMAGICK)
   find_package(GraphicsMagick)
-  if(GraphicsMagick_FOUND)
-    add_definitions(-DHAVE_GRAPHICSMAGICK=1)
-    set(DT_SUPPORTED_EXTENSIONS ${DT_SUPPORTED_EXTENSIONS} gif jpc jp2 bmp dcm jng miff mng pbm pnm ppm pgm webp CACHE INTERNAL "")
-    include_directories(SYSTEM ${GraphicsMagick_INCLUDE_DIRS})
-    list(APPEND LIBS ${GraphicsMagick_LIBRARIES})
-  endif(GraphicsMagick_FOUND)
-endif(USE_GRAPHICSMAGICK)
 
-if(USE_IMAGEMAGICK AND NOT GraphicsMagick_FOUND)
-  # Do not use find_package(): module is not providing needed CFLAGS
-  find_package(PkgConfig)
-  pkg_check_modules(ImageMagick MagickWand>=7)
-  if(ImageMagick_FOUND)
-    add_definitions(-DHAVE_IMAGEMAGICK=1 ${ImageMagick_CFLAGS_OTHER})
-    include_directories(SYSTEM ${ImageMagick_INCLUDE_DIRS})
-    foreach(lib ${ImageMagick_LIBRARIES})
-      find_library(ImageMagick_LIBRARY NAMES ${lib} HINTS ${ImageMagick_LIBRARY_DIRS})
-      list(APPEND LIBS ${ImageMagick_LIBRARY})
-      unset(ImageMagick_LIBRARY CACHE)
-    endforeach()
-    set(DT_SUPPORTED_EXTENSIONS ${DT_SUPPORTED_EXTENSIONS} gif jpc jp2 bmp dcm jng miff mng pam webp CACHE INTERNAL "")
-  endif(ImageMagick_FOUND)
-endif(USE_IMAGEMAGICK AND NOT GraphicsMagick_FOUND)
+  if(TARGET GraphicsMagick::GraphicsMagick)
+    target_link_libraries(ansel_deps INTERFACE GraphicsMagick::GraphicsMagick)
+    target_compile_definitions(ansel_deps INTERFACE HAVE_GRAPHICSMAGICK=1)
+
+  else()
+    # pkg-config fallback
+    pkg_check_modules(GRAPHICSMAGICK QUIET IMPORTED_TARGET GraphicsMagick)
+
+    if(TARGET PkgConfig::GRAPHICSMAGICK)
+      target_link_libraries(ansel_deps INTERFACE PkgConfig::GRAPHICSMAGICK)
+      target_compile_definitions(ansel_deps INTERFACE HAVE_GRAPHICSMAGICK=1)
+
+    elseif(GraphicsMagick_FOUND)
+      # legacy fallback
+      target_include_directories(ansel_deps INTERFACE ${GraphicsMagick_INCLUDE_DIRS})
+      target_link_libraries(ansel_deps INTERFACE ${GraphicsMagick_LIBRARIES})
+      target_compile_definitions(ansel_deps INTERFACE HAVE_GRAPHICSMAGICK=1)
+    endif()
+  endif()
+
+  if(TARGET GraphicsMagick::GraphicsMagick OR TARGET PkgConfig::GRAPHICSMAGICK OR GraphicsMagick_FOUND)
+    set(DT_SUPPORTED_EXTENSIONS
+        ${DT_SUPPORTED_EXTENSIONS}
+        gif jpc jp2 bmp dcm jng miff mng pbm pnm ppm pgm webp
+        CACHE INTERNAL "")
+  endif()
+endif()
+
+if(USE_IMAGEMAGICK AND NOT TARGET GraphicsMagick::GraphicsMagick AND NOT TARGET PkgConfig::GRAPHICSMAGICK)
+  pkg_check_modules(IMAGEMAGICK IMPORTED_TARGET MagickWand>=7)
+
+  if(TARGET PkgConfig::IMAGEMAGICK)
+    target_link_libraries(ansel_deps INTERFACE PkgConfig::IMAGEMAGICK)
+    target_compile_definitions(ansel_deps INTERFACE HAVE_IMAGEMAGICK=1)
+
+    # pkg-config CFLAGS_OTHER (rare but needed for ImageMagick)
+    if(IMAGEMAGICK_CFLAGS_OTHER)
+      target_compile_options(ansel_deps INTERFACE ${IMAGEMAGICK_CFLAGS_OTHER})
+    endif()
+
+    set(DT_SUPPORTED_EXTENSIONS
+        ${DT_SUPPORTED_EXTENSIONS}
+        gif jpc jp2 bmp dcm jng miff mng pam webp
+        CACHE INTERNAL "")
+  endif()
+endif()
 
 if(USE_GMIC)
-  find_package(GMIC)
-  if(GMIC_FOUND)
-    add_definitions(-DHAVE_GMIC=1)
-    include_directories(SYSTEM ${GMIC_INCLUDE_DIRS})
-    list(APPEND LIBS ${GMIC_LIBRARIES})
-  endif(GMIC_FOUND)
-endif(USE_GMIC)
+  # 1. Try CMake config first
+  find_package(GMIC CONFIG)
+
+  if(TARGET GMIC::GMIC)
+    target_link_libraries(ansel_deps INTERFACE GMIC::GMIC)
+    target_compile_definitions(ansel_deps INTERFACE HAVE_GMIC=1)
+
+  else()
+    # 2. Only fallback if CONFIG is missing
+    if(PkgConfig_FOUND)
+      pkg_check_modules(GMIC IMPORTED_TARGET gmic)
+
+      if(TARGET PkgConfig::GMIC)
+        target_link_libraries(ansel_deps INTERFACE PkgConfig::GMIC)
+        target_compile_definitions(ansel_deps INTERFACE HAVE_GMIC=1)
+      endif()
+    endif()
+  endif()
+endif()
 
 if(USE_ICU)
-  find_package(ICU)
-  if(ICU_FOUND)
-    add_definitions(-DHAVE_ICU=1 -DSQLITE_CORE -DSQLITE_ENABLE_ICU)
-    include_directories(SYSTEM ${ICU_INCLUDE_DIRS})
-    list(APPEND LIBS ${ICU_LIBRARIES})
-    set(SOURCES ${SOURCES} "common/sqliteicu.c")
-  endif(ICU_FOUND)
-endif(USE_ICU)
+  find_package(ICU REQUIRED COMPONENTS uc i18n data)
+
+  if(TARGET ICU::uc)
+    target_link_libraries(ansel_deps INTERFACE ICU::uc ICU::i18n ICU::data)
+
+    target_compile_definitions(ansel_deps INTERFACE
+      HAVE_ICU=1
+      SQLITE_CORE
+      SQLITE_ENABLE_ICU
+    )
+
+    list(APPEND SOURCES common/sqliteicu.c)
+  endif()
+endif()
 
 if(USE_OPENCL)
   add_definitions(-DHAVE_OPENCL=1)
@@ -821,7 +878,6 @@ target_link_libraries(lib_ansel PUBLIC ansel_deps)
 target_link_libraries(lib_ansel PRIVATE lib_ansel_imageio_rawspeed)
 target_link_libraries(lib_ansel PRIVATE lib_ansel_imageio_libraw)
 target_link_libraries(lib_ansel PRIVATE whereami)
-target_link_libraries(lib_ansel PUBLIC ${LIBS})
 
 if(OpenMP_C_FOUND)
   target_link_libraries(lib_ansel PUBLIC OpenMP::OpenMP_C)
@@ -831,9 +887,9 @@ if(OpenMP_CXX_FOUND)
   target_link_libraries(lib_ansel PUBLIC OpenMP::OpenMP_CXX)
 endif()
 
-#if(LIBS)
-#  message(FATAL_ERROR "LIBS is deprecated and must not be used: ${LIBS}")
-#endif()
+if(LIBS)
+  message(FATAL_ERROR "LIBS is deprecated and must not be used: ${LIBS}")
+endif()
 if(STATIC_LIBS)
   message(FATAL_ERROR "STATIC_LIBS is deprecated and must not be used: ${STATIC_LIBS}")
 endif()
