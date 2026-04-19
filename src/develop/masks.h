@@ -1142,7 +1142,7 @@ static inline gboolean _dt_masks_dynbuf_growto(dt_masks_dynbuf_t *a, size_t size
   if (IS_NULL_PTR(newbuf))
   {
     // not much we can do here except emit an error message
-    fprintf(stderr, "critical: out of memory for dynbuf '%s' with size request %" PRIu64 "!\n", a->tag, size);
+    fprintf(stderr, "critical: out of memory for dynbuf '%s' with size request %zu!\n", a->tag, size);
     return FALSE;
   }
   if (a->buffer)

@@ -651,7 +651,7 @@ static gboolean _prepare_piece_input_contract(dt_dev_pixelpipe_t *pipe, dt_dev_p
     gchar *pipe_name = _get_debug_pipe_name(pipe, NULL);
     dt_print(DT_DEBUG_PIPE,
               "[dsc-in] pipe=%s module=%s"
-              " in=(channels=%i bpp=%" PRIu64 " filters=%u)"
+              " in=(channels=%i bpp=%zu filters=%u)"
               " \n",
               pipe_name, piece->module->op, 
               piece->dsc_in.channels, piece->dsc_in.bpp, piece->dsc_in.filters);
@@ -668,7 +668,7 @@ static gboolean _prepare_piece_input_contract(dt_dev_pixelpipe_t *pipe, dt_dev_p
     dt_control_log(_("disabled module `%s`: unexpected input buffer format"),
                    piece->module->name());
     fprintf(stdout,
-             "[pixelpipe] disabling module %s because input format expects %" PRIu64 " B/px, %u channels, filters %u but upstream publishes %" PRIu64 " B/px, %u channels, filters %u\n",
+             "[pixelpipe] disabling module %s because input format expects %zu B/px, %u channels, filters %u but upstream publishes %zu B/px, %u channels, filters %u\n",
              piece->module->op, piece->dsc_in.bpp, piece->dsc_in.channels, piece->dsc_in.filters,
              actual_input_dsc.bpp, actual_input_dsc.channels, actual_input_dsc.filters);
   }
@@ -708,7 +708,7 @@ static void _commit_piece_contract(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_io
       gchar *pipe_name = _get_debug_pipe_name(pipe, NULL);
       dt_print(DT_DEBUG_PIPE,
                 "[dsc-out] pipe=%s module=%s"
-                " out=(channels=%i bpp=%" PRIu64 " filters=%u)"
+                " out=(channels=%i bpp=%zu filters=%u)"
                 " \n",
                 pipe_name, piece->module->op, 
                 piece->dsc_out.channels, piece->dsc_out.bpp, piece->dsc_out.filters);

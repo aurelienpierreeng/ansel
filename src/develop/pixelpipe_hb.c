@@ -162,7 +162,7 @@ static void _trace_buffer_content(const dt_dev_pixelpipe_t *pipe, const dt_iop_m
 
     dt_print(DT_DEBUG_PIPECACHE,
              "[pixelpipe_stats] pipe=%s module=%s phase=%s type=float ch=%u roi=%dx%d "
-             "rgb_min=(%g,%g,%g) rgb_max=(%g,%g,%g) a_min=%g a_max=%g near_black=%" PRIu64 "/%" PRIu64 " nonfinite=%" PRIu64 "\n",
+             "rgb_min=(%g,%g,%g) rgb_max=(%g,%g,%g) a_min=%g a_max=%g near_black=%zu/%zu nonfinite=%zu\n",
              dt_pixelpipe_get_pipe_name(pipe->type), module->op, phase ? phase : "-",
              channels, roi->width, roi->height,
              minv[0], (channels > 1) ? minv[1] : 0.0f, (channels > 2) ? minv[2] : 0.0f,
@@ -191,7 +191,7 @@ static void _trace_buffer_content(const dt_dev_pixelpipe_t *pipe, const dt_iop_m
 
     dt_print(DT_DEBUG_PIPECACHE,
              "[pixelpipe_stats] pipe=%s module=%s phase=%s type=u8 ch=%u roi=%dx%d "
-             "rgb_min=(%d,%d,%d) rgb_max=(%d,%d,%d) a_min=%d a_max=%d near_black=%" PRIu64 "/%" PRIu64 "\n",
+             "rgb_min=(%d,%d,%d) rgb_max=(%d,%d,%d) a_min=%d a_max=%d near_black=%zu/%zu\n",
              dt_pixelpipe_get_pipe_name(pipe->type), module->op, phase ? phase : "-",
              channels, roi->width, roi->height,
              minv[0], (channels > 1) ? minv[1] : 0, (channels > 2) ? minv[2] : 0,
@@ -362,8 +362,8 @@ void dt_dev_pixelpipe_debug_dump_module_io(dt_dev_pixelpipe_t *pipe, dt_iop_modu
   if(!IS_NULL_PTR(in_dsc) && !IS_NULL_PTR(out_dsc))
   {
     dt_print(DT_DEBUG_PIPE,
-             "[pixelpipe] %s %s %s %s: in cst=%s->%s ch=%d type=%s bpp=%" PRIu64 " roi=%dx%d | "
-             "out cst=%s ch=%d type=%s bpp=%" PRIu64 " roi=%dx%d\n",
+             "[pixelpipe] %s %s %s %s: in cst=%s->%s ch=%d type=%s bpp=%zu roi=%dx%d | "
+             "out cst=%s ch=%d type=%s bpp=%zu roi=%dx%d\n",
              pipe_name, module_name, is_cl ? "cl" : "cpu", stage_name,
              _debug_cst_to_string(cst_before), _debug_cst_to_string(cst_after),
              in_dsc->channels, _debug_type_to_string(in_dsc->datatype), in_bpp,
@@ -374,7 +374,7 @@ void dt_dev_pixelpipe_debug_dump_module_io(dt_dev_pixelpipe_t *pipe, dt_iop_modu
   else if(!IS_NULL_PTR(out_dsc))
   {
     dt_print(DT_DEBUG_PIPE,
-             "[pixelpipe] %s %s %s %s: out cst=%s ch=%d type=%s bpp=%" PRIu64 " roi=%dx%d\n",
+             "[pixelpipe] %s %s %s %s: out cst=%s ch=%d type=%s bpp=%zu roi=%dx%d\n",
              pipe_name, module_name, is_cl ? "cl" : "cpu", stage_name,
              _debug_cst_to_string(out_dsc->cst), out_dsc->channels, _debug_type_to_string(out_dsc->datatype),
              out_bpp, roi_out ? roi_out->width : 0, roi_out ? roi_out->height : 0);

@@ -1521,15 +1521,15 @@ static inline void _log_arena_allocation_failure(dt_dev_pixelpipe_cache_t *cache
 
   if(entry_name)
     fprintf(stdout,
-            "[pixelpipe_cache] failed to allocate %" PRIu64 " bytes for entry %" PRIu64 " (%s, module=%s) "
-            "[arena largest=%" PRIu64 " MiB, total=%" PRIu64 " MiB, cache=%" PRIu64 "/%" PRIu64 " MiB]\n",
+            "[pixelpipe_cache] failed to allocate %zu bytes for entry %" PRIu64 " (%s, module=%s) "
+            "[arena largest=%zu MiB, total=%zu MiB, cache=%zu/%zu MiB]\n",
             request_size, hash, entry_name, module ? module : "unknown",
             largest_free_bytes / (1024 * 1024), total_free_bytes / (1024 * 1024),
             cache->current_memory / (1024 * 1024), cache->max_memory / (1024 * 1024));
   else
     fprintf(stdout,
-            "[pixelpipe_cache] failed to allocate %" PRIu64 " bytes for entry %" PRIu64 " (module=%s) "
-            "[arena largest=%" PRIu64 " MiB, total=%" PRIu64 " MiB, cache=%" PRIu64 "/%" PRIu64 " MiB]\n",
+            "[pixelpipe_cache] failed to allocate %zu bytes for entry %" PRIu64 " (module=%s) "
+            "[arena largest=%zu MiB, total=%zu MiB, cache=%zu/%zu MiB]\n",
             request_size, hash, module ? module : "unknown",
             largest_free_bytes / (1024 * 1024), total_free_bytes / (1024 * 1024),
             cache->current_memory / (1024 * 1024), cache->max_memory / (1024 * 1024));
@@ -1743,7 +1743,7 @@ static dt_pixel_cache_entry_t *dt_pixel_cache_new_entry(const uint64_t hash, con
   size_t rounded_size = 0;
   if(!dt_cache_arena_calc(&cache->arena, size, &pages_needed, &rounded_size))
   {
-    fprintf(stderr, "[pixelpipe] invalid cache entry size %" PRIu64 " for %s\n", size, name);
+    fprintf(stderr, "[pixelpipe] invalid cache entry size %zu for %s\n", size, name);
     return NULL;
   }
 

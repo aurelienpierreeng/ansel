@@ -917,7 +917,7 @@ static void _draw_samples(cairo_t *cr, const dt_lut_viewer_t *viewer,
   {
     const double total_done = dt_get_wtime();
     dt_print(DT_DEBUG_PERF,
-             "[lut_viewer] draw_samples mode=%s level=%u sparse=%d^3 max=%" PRIu64 " drawn=%" PRIu64 " gamut=%d cache=%s collect=%.3fms convert=%.3fms paint=%.3fms total=%.3fms\n",
+             "[lut_viewer] draw_samples mode=%s level=%u sparse=%d^3 max=%zu drawn=%zu gamut=%d cache=%s collect=%.3fms convert=%.3fms paint=%.3fms total=%.3fms\n",
              show_control_nodes ? "controls" : "lut", viewer->clut_level, samples, max_samples, viewer->sample_count, gamut,
              rebuild_sample_cache ? "rebuild" : "reuse",
              1000.0 * (collect_done - total_start),

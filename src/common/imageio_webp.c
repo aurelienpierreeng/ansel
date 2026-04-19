@@ -50,7 +50,7 @@ dt_imageio_retval_t dt_imageio_open_webp(dt_image_t *img, const char *filename, 
   {
     fclose(f);
     dt_free(read_buffer);
-    dt_print(DT_DEBUG_IMAGEIO, "[webp_open] failed to read %" PRIu64 " bytes from %s\n", filesize, filename);
+    dt_print(DT_DEBUG_IMAGEIO, "[webp_open] failed to read %zu bytes from %s\n", filesize, filename);
     return DT_IMAGEIO_FILE_CORRUPTED;
   }
   fclose(f);
