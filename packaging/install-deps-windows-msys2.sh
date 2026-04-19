@@ -63,7 +63,6 @@ MINGW_PACKAGES=(
   libwebp
   libxml2
   libxslt
-  lua
   ninja
   nsis
   openexr

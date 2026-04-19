@@ -85,7 +85,6 @@ DNF_PACKAGES=(
   libX11-devel
   libxcb-devel
   libxshmfence-devel
-  lua-devel
   make
   ninja-build
   ocl-icd-devel

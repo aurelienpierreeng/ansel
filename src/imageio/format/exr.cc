@@ -108,29 +108,6 @@ typedef struct dt_imageio_exr_gui_t
 
 void init(dt_imageio_module_format_t *self)
 {
-#ifdef USE_LUA
-  luaA_enum(darktable.lua_state.state, dt_imageio_exr_compression_t);
-  luaA_enum_value_name(darktable.lua_state.state, dt_imageio_exr_compression_t, NO_COMPRESSION, "off");
-  luaA_enum_value_name(darktable.lua_state.state, dt_imageio_exr_compression_t, RLE_COMPRESSION, "rle");
-  luaA_enum_value_name(darktable.lua_state.state, dt_imageio_exr_compression_t, ZIPS_COMPRESSION, "zips");
-  luaA_enum_value_name(darktable.lua_state.state, dt_imageio_exr_compression_t, ZIP_COMPRESSION, "zip");
-  luaA_enum_value_name(darktable.lua_state.state, dt_imageio_exr_compression_t, PIZ_COMPRESSION, "piz");
-  luaA_enum_value_name(darktable.lua_state.state, dt_imageio_exr_compression_t, PXR24_COMPRESSION, "pxr24");
-  luaA_enum_value_name(darktable.lua_state.state, dt_imageio_exr_compression_t, B44_COMPRESSION, "b44");
-  luaA_enum_value_name(darktable.lua_state.state, dt_imageio_exr_compression_t, B44A_COMPRESSION, "b44a");
-  luaA_enum_value_name(darktable.lua_state.state, dt_imageio_exr_compression_t, DWAA_COMPRESSION, "dwaa");
-  luaA_enum_value_name(darktable.lua_state.state, dt_imageio_exr_compression_t, DWAB_COMPRESSION, "dwab");
-
-  dt_lua_register_module_member(darktable.lua_state.state, self, dt_imageio_exr_t, compression,
-                                dt_imageio_exr_compression_t);
-
-  luaA_enum(darktable.lua_state.state, dt_imageio_exr_pixeltype_t);
-  luaA_enum_value_name(darktable.lua_state.state, dt_imageio_exr_pixeltype_t, EXR_PT_HALF, "half");
-  luaA_enum_value_name(darktable.lua_state.state, dt_imageio_exr_pixeltype_t, EXR_PT_FLOAT, "float");
-
-  dt_lua_register_module_member(darktable.lua_state.state, self, dt_imageio_exr_t, pixel_type,
-                                dt_imageio_exr_pixeltype_t);
-#endif
   Imf::BlobAttribute::registerAttributeType();
 }
 

@@ -191,10 +191,6 @@ static int dt_view_load_module(void *v, const char *libname, const char *module_
   module->vscroll_pos = module->hscroll_pos = 0.0;
   module->height = module->width = 100; // set to non-insane defaults before first expose/configure.
 
-#ifdef USE_LUA
-  dt_lua_register_view(darktable.lua_state.state, module);
-#endif
-
   if(module->init) module->init(module);
 
   return 0;

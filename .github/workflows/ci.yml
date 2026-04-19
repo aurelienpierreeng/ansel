@@ -43,7 +43,6 @@ on:
         - "po/**"
         - "packaging/**"
         - "data/latex/**"
-        - "data/lua/**"
         - "data/pixmaps/**"
         - "data/pswp/**"
         - "data/style/**"

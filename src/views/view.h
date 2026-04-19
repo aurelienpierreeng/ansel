@@ -66,13 +66,6 @@
 #include <gui/gtk.h>
 #include <inttypes.h>
 #include <sqlite3.h>
-#ifdef USE_LUA
-#include "lua/call.h"
-#include "lua/events.h"
-#include "lua/modules.h"
-#include "lua/types.h"
-#include "lua/view.h"
-#endif
 
 /** available views flags, a view should return its type and
     is also used in modules flags available in src/libs to

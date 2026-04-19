@@ -33,9 +33,7 @@ How to make disk image with ansel application bundle (64 bit Intel only):
     Finally build and install ansel:
      $ mkdir build
      $ cd build
-     $ cmake .. -DCMAKE_OSX_DEPLOYMENT_TARGET=10.14 -DOpenMP_C_INCLUDE_DIR=/opt/local/include/libomp -DOpenMP_CXX_INCLUDE_DIR=/opt/local/include/libomp -DCMAKE_LIBRARY_PATH=/opt/local/lib/libomp -DBINARY_PACKAGE_BUILD=ON -DRAWSPEED_ENABLE_LTO=ON -DBUILD_CURVE_TOOLS=ON -DBUILD_NOISE_TOOLS=ON -DDONT_USE_INTERNAL_LUA=OFF
-     $ make
-     $ sudo cmake --install .
+     $ cmake .. -DCMAKE_OSX_DEPLOYMENT_TARGET=10.14 -DOpenMP_C_INCLUDE_DIR=/opt/local/include/libomp -DOpenMP_CXX_INCLUDE_DIR=/opt/local/include/libomp -DCMAKE_LIBRARY_PATH=/opt/local/lib/libomp -DBINARY_PACKAGE_BUILD=ON -DRAWSPEED_ENABLE_LTO=ON -DBUILD_CURVE_TOOLS=ON -DBUILD_NOISE_TOOLS=ON
     After this ansel will be installed in /usr/local directory and can be started by typing the following command in terminal:
      $ GSETTINGS_SCHEMA_DIR=/opt/local/share/glib-2.0/schemas/ XDG_DATA_DIRS=/opt/local/share ansel
 

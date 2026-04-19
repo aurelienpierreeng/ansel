@@ -102,7 +102,7 @@ int main(int argc, char *argv[])
   g_setenv("GTK_CSD", "0", TRUE);
 #endif
 
-  if(dt_init(argc, argv, TRUE, TRUE, NULL)) exit(1);
+  if(dt_init(argc, argv, TRUE, TRUE)) exit(1);
   dt_gui_gtk_run(darktable.gui);
 
 #ifdef _WIN32

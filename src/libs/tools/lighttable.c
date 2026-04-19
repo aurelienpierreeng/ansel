@@ -338,35 +338,6 @@ static void _lib_lighttable_set_columns(dt_lib_module_t *self, gint columns)
   _set_columns(self, columns);
 }
 
-#ifdef USE_LUA
-
-static int columns_level_cb(lua_State *L)
-{
-  dt_lib_module_t *self = lua_touserdata(L, lua_upvalueindex(1));
-  const gint tmp = dt_conf_get_int("plugins/lighttable/images_in_row");
-  if(lua_gettop(L) > 0){
-    int value;
-    luaA_to(L, int, &value, 1);
-    _lib_lighttable_set_columns(self, value);
-  }
-  luaA_push(L, int, &tmp);
-  return 1;
-}
-
-void init(struct dt_lib_module_t *self)
-{
-  lua_State *L = darktable.lua_state.state;
-  int my_type = dt_lua_module_entry_get_type(L, "lib", self->plugin_name);
-  lua_pushlightuserdata(L, self);
-  dt_lua_gtk_wrap(L);
-  lua_pushcclosure(L, dt_lua_type_member_common, 1);
-  lua_pushlightuserdata(L, self);
-  lua_pushcclosure(L, columns_level_cb, 1);
-  dt_lua_gtk_wrap(L);
-  lua_pushcclosure(L, dt_lua_type_member_common, 1);
-  dt_lua_type_register_const_type(L, my_type, "zoom_level");
-}
-#endif
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent

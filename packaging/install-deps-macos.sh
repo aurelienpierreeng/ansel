@@ -57,7 +57,6 @@ HB_PACKAGES=(
   libsoup@2
   little-cms2
   llvm
-  lua
   ninja
   openexr
   openjpeg

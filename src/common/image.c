@@ -98,9 +98,6 @@
 #include "develop/lightroom.h"
 #include "develop/develop.h"
 #include "win/filepath.h"
-#ifdef USE_LUA
-#include "lua/image.h"
-#endif
 #include <assert.h>
 #include <ctype.h>
 #include <math.h>
@@ -1660,20 +1657,6 @@ static int32_t _image_import_internal(const int32_t film_id, const char *filenam
   dt_free(basename);
   dt_free(sql_pattern);
   dt_free(normalized_filename);
-
-#ifdef USE_LUA
-  //Synchronous calling of lua post-import-image events
-  if(lua_locking)
-    dt_lua_lock();
-
-  lua_State *L = darktable.lua_state.state;
-
-  luaA_push(L, dt_lua_image_t, &id);
-  dt_lua_event_trigger(L, "post-import-image", 1);
-
-  if(lua_locking)
-    dt_lua_unlock();
-#endif
 
   if(raise_signals)
   {

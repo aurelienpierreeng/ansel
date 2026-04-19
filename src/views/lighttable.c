@@ -99,10 +99,6 @@
 #include "views/view.h"
 #include "views/view_api.h"
 
-#ifdef USE_LUA
-#include "lua/image.h"
-#endif
-
 #include <assert.h>
 #include <dirent.h>
 #include <errno.h>
@@ -137,49 +133,6 @@ uint32_t view(const dt_view_t *self)
 {
   return DT_VIEW_LIGHTTABLE;
 }
-
-#ifdef USE_LUA
-
-static int set_image_visible_cb(lua_State *L)
-{
-  dt_lua_image_t imgid = UNKNOWN_IMAGE;
-  dt_view_t *self = lua_touserdata(L, lua_upvalueindex(1));  //check were in lighttable view
-  if(view(self) == DT_VIEW_LIGHTTABLE)
-  {
-    if(luaL_testudata(L, 1, "dt_lua_image_t"))
-    {
-      luaA_to(L, dt_lua_image_t, &imgid, 1);
-      return 0;
-    }
-    else
-      return luaL_error(L, "no image specified");
-
-  }
-  else
-    return luaL_error(L, "must be in lighttable view");
-}
-
-static gboolean is_image_visible_cb(lua_State *L)
-{
-  dt_lua_image_t imgid = UNKNOWN_IMAGE;
-  dt_view_t *self = lua_touserdata(L, lua_upvalueindex(1));  //check were in lighttable view
-  //check we are in file manager or zoomable
-  if(view(self) == DT_VIEW_LIGHTTABLE)
-  {
-    //check we are in file manager or zoomable
-    if(luaL_testudata(L, 1, "dt_lua_image_t"))
-    {
-      luaA_to(L, dt_lua_image_t, &imgid, 1);
-      return 1;
-    }
-    else
-      return luaL_error(L, "no image specified");
-  }
-  else
-    return luaL_error(L, "must be in lighttable view");
-}
-
-#endif
 
 void cleanup(dt_view_t *self)
 {
@@ -234,23 +187,6 @@ void init(dt_view_t *self)
   self->data = calloc(1, sizeof(dt_library_t));
   // ensure the memory table is up to date
   dt_collection_memory_update();
-
-#ifdef USE_LUA
-  lua_State *L = darktable.lua_state.state;
-  const int my_type = dt_lua_module_entry_get_type(L, "view", self->module_name);
-
-  lua_pushlightuserdata(L, self);
-  lua_pushcclosure(L, set_image_visible_cb, 1);
-  dt_lua_gtk_wrap(L);
-  lua_pushcclosure(L, dt_lua_type_member_common, 1);
-  dt_lua_type_register_const_type(L, my_type, "set_image_visible");
-
-  lua_pushlightuserdata(L, self);
-  lua_pushcclosure(L, is_image_visible_cb, 1);
-  dt_lua_gtk_wrap(L);
-  lua_pushcclosure(L, dt_lua_type_member_common, 1);
-  dt_lua_type_register_const_type(L, my_type, "is_image_visible");
-#endif
 }
 
 void leave(dt_view_t *self)

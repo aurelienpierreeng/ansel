@@ -73,10 +73,6 @@
 #ifdef GDK_WINDOWING_QUARTZ
 #include "osx/osx.h"
 #endif
-#ifdef USE_LUA
-#include "lua/call.h"
-#include "lua/image.h"
-#endif
 
 DT_MODULE(1)
 
@@ -517,10 +513,6 @@ static gboolean _metadata_view_get_thumb_info(const int32_t imgid, dt_image_t *i
 
   return FALSE;
 }
-
-#ifdef USE_LUA
-static int lua_update_metadata(lua_State*L);
-#endif
 
 static void _concatenate_multiple_images(gboolean skip[md_size], int count)
 {
@@ -985,27 +977,12 @@ static void _metadata_view_update_values(dt_lib_module_t *self)
       }
     }
   }
-#ifdef USE_LUA
-  if(img_id >= 0)
-  {
-    dt_lua_async_call_alien(lua_update_metadata,
-                            0,NULL,NULL,
-                            LUA_ASYNC_TYPENAME,"void*",self,
-                            LUA_ASYNC_TYPENAME,"int32_t", img_id,LUA_ASYNC_DONE);
-  }
-#endif
 
   return;
 
 /* reset */
 fill_minuses:
   for(int k = 0; k < md_size; k++) _metadata_update_value(k, NODATA_STRING, self);
-#ifdef USE_LUA
-  dt_lua_async_call_alien(lua_update_metadata,
-                          0,NULL,NULL,
-                          LUA_ASYNC_TYPENAME,"void*",self,
-                          LUA_ASYNC_TYPENAME,"int32_t",-1,LUA_ASYNC_DONE);
-#endif
 }
 
 static void _jump_to()
@@ -1418,232 +1395,6 @@ void gui_reset(dt_lib_module_t *self)
   _save_preferences(self);
 }
 
-#ifdef USE_LUA
-static int lua_update_values(lua_State *L)
-{
-  dt_lib_module_t *self = lua_touserdata(L, 1);
-  dt_lua_module_entry_push(L, "lib", self->plugin_name);
-  lua_getiuservalue(L, 2, 1);
-  lua_getfield(L, 3, "values");
-  lua_getfield(L, 3, "indexes");
-  lua_pushnil(L);
-  while(lua_next(L, 4) != 0)
-  {
-    lua_getfield(L, 5, lua_tostring(L,-2));
-    int index = lua_tointeger(L, -1);
-    _metadata_update_value(index, luaL_checkstring(L, 7), self);
-    lua_pop(L, 2);
-  }
-  return 0;
-}
-static int lua_update_metadata(lua_State *L)
-{
-  dt_lib_module_t *self = lua_touserdata(L, 1);
-  int32_t imgid = lua_tointeger(L, 2);
-  gboolean have_updates = false;
-  dt_lua_module_entry_push(L, "lib", self->plugin_name);
-  lua_getiuservalue(L, -1, 1);
-  lua_getfield(L, 4, "callbacks");
-  lua_getfield(L, 4, "values");
-  lua_pushnil(L);
-  while(lua_next(L, 5) != 0)
-  {
-    have_updates = true;
-    if(imgid > 0)
-    {
-      lua_pushvalue(L, -1);
-      luaA_push(L, dt_lua_image_t, &imgid);
-      lua_call(L, 1, 1);
-    }
-    else
-    {
-      lua_pushstring(L, "-");
-    }
-    lua_pushvalue(L, 7);
-    lua_pushvalue(L, 9);
-    lua_settable(L, 6);
-    lua_pop(L, 2);
-  }
-  if(have_updates)
-  {
-    lua_pushcfunction(L, lua_update_values);
-    dt_lua_gtk_wrap(L);
-    lua_pushlightuserdata(L, self);
-    lua_call(L, 1, 0);
-  }
-  return 0;
-}
-
-static int lua_register_info(lua_State *L)
-{
-  dt_lib_module_t *self = lua_touserdata(L, lua_upvalueindex(1));
-  dt_lua_module_entry_push(L, "lib", self->plugin_name);
-  lua_getiuservalue(L, -1, 1);
-  const char* key = luaL_checkstring(L, 1);
-  luaL_checktype(L, 2, LUA_TFUNCTION);
-  {
-    lua_getfield(L, -1, "callbacks");
-    lua_pushstring(L, key);
-    lua_pushvalue(L, 2);
-    lua_settable(L, 5);
-    lua_pop(L, 1);
-  }
-  {
-    lua_getfield(L, -1, "values");
-    lua_pushstring(L, key);
-    lua_pushstring(L, NODATA_STRING);
-    lua_settable(L, 5);
-    lua_pop(L, 1);
-  }
-  {
-    dt_lib_metadata_view_t *d = (dt_lib_metadata_view_t *)self->data;
-    dt_lib_metadata_info_t *m = g_malloc0(sizeof(dt_lib_metadata_info_t));
-    m->name = (char *)key;
-    m->value = g_strdup(NODATA_STRING);
-    const int index = g_list_length(d->metadata);
-    m->index = m->order = index;
-    m->visible = TRUE;
-
-    GtkWidget *w_name = gtk_label_new(_(m->name));
-    gtk_widget_set_halign(w_name, GTK_ALIGN_START);
-    gtk_label_set_xalign(GTK_LABEL(w_name), 0.0f);
-    gtk_label_set_ellipsize(GTK_LABEL(w_name), PANGO_ELLIPSIZE_END);
-    gtk_widget_set_tooltip_text(w_name, _(m->name));
-
-    gboolean validated = g_utf8_validate(m->value, -1, NULL);
-    const gchar *str = validated ? m->value : NODATA_STRING;
-
-    GtkWidget *w_value= gtk_label_new(str);
-    gtk_widget_set_name(w_value, "brightbg");
-    gtk_label_set_selectable(GTK_LABEL(w_value), TRUE);
-    gtk_widget_set_halign(w_value, GTK_ALIGN_FILL);
-    gtk_label_set_xalign(GTK_LABEL(w_value), 0.0f);
-    gtk_label_set_ellipsize(GTK_LABEL(w_value), PANGO_ELLIPSIZE_MIDDLE);
-    gtk_grid_attach(GTK_GRID(d->grid), w_name, 0, index, 1, 1);
-    gtk_grid_attach(GTK_GRID(d->grid), w_value, 1, index, 1, 1);
-
-    d->metadata = g_list_append(d->metadata, m);
-
-    {
-      lua_getfield(L, -1, "indexes");
-      lua_pushstring(L, key);
-      lua_pushinteger(L, index);
-      lua_settable(L, 5);
-      lua_pop(L, 1);
-    }
-    // apply again preferences because it's already done
-    const char *pref = dt_conf_get_string_const("plugins/lighttable/metadata_view/visible");
-    _apply_preferences(pref, self);
-  }
-  return 0;
-}
-
-static int lua_destroy_info(lua_State *L)
-{
-  dt_lib_module_t *self = lua_touserdata(L, lua_upvalueindex(1));
-  dt_lua_module_entry_push(L, "lib", self->plugin_name);
-  lua_getiuservalue(L, -1, 1);
-  const char* key = luaL_checkstring(L, 1);
-  {
-    lua_getfield(L, -1, "callbacks");
-    lua_pushstring(L, key);
-    lua_pushnil(L);
-    lua_settable(L, 4);
-    lua_pop(L, 1);
-  }
-  {
-    lua_getfield(L, -1, "values");
-    lua_pushstring(L, key);
-    lua_pushnil(L);
-    lua_settable(L, 4);
-    lua_pop(L, 1);
-  }
-  lua_getfield(L, -1, "indexes");
-  lua_getfield(L, -1, key);
-  const int index = lua_tointeger(L, -1);
-  lua_pop(L, 1);
-  {
-    lua_pushstring(L, key);
-    lua_pushnil(L);
-    lua_settable(L, 4);
-  }
-  // decrement all indexes > index
-  lua_pushnil(L);
-  while(lua_next(L, -2) != 0) {
-    int i = lua_tointeger(L, -1);
-    if(i > index)
-    {
-      lua_pop(L, 1);
-      lua_pushvalue(L, -1);
-      i--;
-      lua_pushinteger(L, i);
-      lua_settable(L, -4);
-    }
-    else lua_pop(L, 1);
-  }
-
-  {
-    dt_lib_metadata_view_t *d = (dt_lib_metadata_view_t *)self->data;
-    // find metadata key in the list and remove it
-    GList *tbr = NULL;
-    for(GList *meta = d->metadata; meta; meta = g_list_next(meta))
-    {
-      dt_lib_metadata_info_t *m = (dt_lib_metadata_info_t *)meta->data;
-      if(!g_strcmp0(key, m->name))
-      {
-        tbr = meta;
-      }
-      else if(m->index > index)
-      {
-        m->index--;
-      }
-    }
-    if(tbr)
-    {
-      dt_lib_metadata_info_t *m = (dt_lib_metadata_info_t *)tbr->data;
-      d->metadata = g_list_remove_link(d->metadata, tbr);
-      dt_free(m->value);
-      if(m->tooltip)
-      {
-        dt_free(m->tooltip);
-      }
-      dt_free(m);
-      g_list_free(tbr);
-      tbr = NULL;
-      gtk_grid_remove_row(GTK_GRID(d->grid), 0);
-      _lib_metadata_refill_grid(self);
-    }
-  }
-  return 0;
-}
-
-void init(struct dt_lib_module_t *self)
-{
-  lua_State *L = darktable.lua_state.state;
-  int my_type = dt_lua_module_entry_get_type(L, "lib", self->plugin_name);
-  lua_pushlightuserdata(L, self);
-  lua_pushcclosure(L, lua_register_info, 1);
-  dt_lua_gtk_wrap(L);
-  lua_pushcclosure(L, dt_lua_type_member_common, 1);
-  dt_lua_type_register_const_type(L, my_type, "register_info");
-
-  lua_pushlightuserdata(L, self);
-  lua_pushcclosure(L, lua_destroy_info, 1);
-  dt_lua_gtk_wrap(L);
-  lua_pushcclosure(L, dt_lua_type_member_common, 1);
-  dt_lua_type_register_const_type(L, my_type, "destroy_info");
-
-  dt_lua_module_entry_push(L,"lib",self->plugin_name);
-  lua_getiuservalue(L, -1, 1);
-  lua_newtable(L);
-  lua_setfield(L, -2, "callbacks");
-  lua_newtable(L);
-  lua_setfield(L, -2, "values");
-  lua_newtable(L);
-  lua_setfield(L, -2, "indexes");
-  lua_pop(L, 2);
-}
-#endif
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent

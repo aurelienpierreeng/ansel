@@ -77,14 +77,6 @@ typedef struct dt_lib_tool_filter_t
   double last_key_time;
 } dt_lib_tool_filter_t;
 
-#ifdef USE_LUA
-typedef enum dt_collection_sort_order_t
-{
-  DT_COLLECTION_SORT_ORDER_ASCENDING = 0,
-  DT_COLLECTION_SORT_ORDER_DESCENDING
-} dt_collection_sort_order_t;
-#endif
-
 /* callback for sort combobox change */
 static void _lib_filter_sort_combobox_changed(GtkWidget *widget, gpointer user_data);
 /* callback for reverse sort check button change */

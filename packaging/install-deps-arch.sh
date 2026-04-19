@@ -81,7 +81,6 @@ PACMAN_PACKAGES=(
   libxslt
   libxshmfence
   llvm
-  lua
   make
   ninja
   ocl-icd

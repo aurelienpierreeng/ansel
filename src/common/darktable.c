@@ -134,7 +134,6 @@
 #include "gui/guides.h"
 #include "gui/presets.h"
 #include "libs/lib.h"
-#include "lua/init.h"
 #include "views/view.h"
 #include "conf_gen.h"
 
@@ -169,10 +168,6 @@
 
 #ifdef _OPENMP
 #include <omp.h>
-#endif
-
-#ifdef USE_LUA
-#include "lua/configuration.h"
 #endif
 
 darktable_t darktable;
@@ -251,9 +246,6 @@ static int usage(const char *argv0)
   printf("\n");
   printf("  --library <library file>\n");
   printf("  --localedir <locale directory>\n");
-#ifdef USE_LUA
-  printf("  --luacmd <lua command>\n");
-#endif
   printf("  --moduledir <module directory>\n");
   printf("  --noiseprofiles <noiseprofiles json file>\n");
   printf("  -t <num openmp threads>\n");
@@ -442,7 +434,7 @@ void *dt_alloc_align(size_t size)
   return dt_alloc_align_internal(size);
 }
 
-int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load_data, lua_State *L)
+int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load_data)
 {
   double start_wtime = dt_get_wtime();
 
@@ -501,10 +493,6 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   gboolean print_statistics = (strstr(argv[0], "ansel-cltest") == NULL);
 #endif
 
-#ifdef USE_LUA
-  char *lua_command = NULL;
-#endif
-
   darktable.num_openmp_threads = 1;
 #ifdef _OPENMP
   darktable.num_openmp_threads = omp_get_max_threads();
@@ -530,16 +518,6 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
       }
       else if(!strcmp(argv[k], "--version"))
       {
-#ifdef USE_LUA
-        const char *lua_api_version = strcmp(LUA_API_VERSION_SUFFIX, "") ?
-                                      STR(LUA_API_VERSION_MAJOR) "."
-                                      STR(LUA_API_VERSION_MINOR) "."
-                                      STR(LUA_API_VERSION_PATCH) "-"
-                                      LUA_API_VERSION_SUFFIX :
-                                      STR(LUA_API_VERSION_MAJOR) "."
-                                      STR(LUA_API_VERSION_MINOR) "."
-                                      STR(LUA_API_VERSION_PATCH);
-#endif
         printf("this is %s\ncopyright (c) 2009-2022 Johannes Hanika, (c) 2022-%s Aurélien Pierre\n" PACKAGE_BUGREPORT "\n\ncompile options:\n"
                "  bit depth is %zu bit\n"
 #ifdef _DEBUG
@@ -557,12 +535,6 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
                "  OpenCL support enabled\n"
 #else
                "  OpenCL support disabled\n"
-#endif
-
-#ifdef USE_LUA
-               "  Lua support enabled, API version %s\n"
-#else
-               "  Lua support disabled\n"
 #endif
 
 #ifdef USE_COLORDGTK
@@ -592,10 +564,6 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
                darktable_package_string,
                darktable_last_commit_year,
                CHAR_BIT * sizeof(void *)
-#if USE_LUA
-                   ,
-               lua_api_version
-#endif
                );
         return 1;
       }
@@ -834,16 +802,6 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
         argv[k-1] = NULL;
         argv[k] = NULL;
       }
-      else if(!strcmp(argv[k], "--luacmd") && argc > k + 1)
-      {
-#ifdef USE_LUA
-        lua_command = argv[++k];
-#else
-        ++k;
-#endif
-        argv[k-1] = NULL;
-        argv[k] = NULL;
-      }
       else if(!strcmp(argv[k], "--disable-opencl"))
       {
 #ifdef HAVE_OPENCL
@@ -972,10 +930,6 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
     // make sure that we have no stale global progress bar visible. thus it's run as early as possible
     dt_control_progress_init(darktable.control);
   }
-
-#ifdef USE_LUA
-  dt_lua_init_early(L);
-#endif
 
   // thread-safe init:
   dt_exif_init();
@@ -1274,12 +1228,6 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
     dt_print_mem_usage();
   }
 
-
-/* init lua last, since it's user made stuff it must be in the real environment */
-#ifdef USE_LUA
-  dt_lua_init(darktable.lua_state.state, lua_command);
-#endif
-
   if(init_gui)
   {
     // we have to call dt_ctl_switch_mode_to() here already to not run into a lua deadlock.
@@ -1347,10 +1295,6 @@ void dt_cleanup()
   dt_printers_abort_discovery();
 #endif
 
-#ifdef USE_LUA
-  dt_lua_finalize_early();
-#endif
-
   // anything that asks user for input should be placed before this line
 
   if(init_gui)
@@ -1368,10 +1312,6 @@ void dt_cleanup()
     dt_lib_cleanup(darktable.lib);
     dt_free(darktable.lib);
   }
-
-#ifdef USE_LUA
-  dt_lua_finalize();
-#endif
 
   dt_view_manager_cleanup(darktable.view_manager);
   dt_free(darktable.view_manager);

@@ -116,10 +116,6 @@
 #include <string.h>
 #include <strings.h>
 
-#ifdef USE_LUA
-#include "lua/image.h"
-#endif
-
 // note `dng` is not included anywhere as it can be anything. For this images we'll need to open it for "real"
 static const gchar *_supported_raw[]
     = { "3fr", "ari", "arw", "bay", "cr2", "cr3", "crw", "dc2", "dcr", "erf", "fff",
@@ -939,34 +935,6 @@ void _export_final_buffer_to_uint16(const float *const restrict inbuf, uint16_t 
       outbuf[4 * k + c] = (uint16_t)CLAMP(roundf(inbuf[4 * k + c] * 65535.f), 0.f, 65535.f);
 }
 
-void _export_apply_lua_actions(const int32_t imgid, const char *filename, dt_imageio_module_format_t *format,
-                               dt_imageio_module_data_t *format_params, dt_imageio_module_storage_t *storage,
-                               dt_imageio_module_data_t *storage_params)
-{
-#ifdef USE_LUA
-    //Synchronous calling of lua intermediate-export-image events
-    dt_lua_lock();
-
-    lua_State *L = darktable.lua_state.state;
-
-    luaA_push(L, dt_lua_image_t, &imgid);
-
-    lua_pushstring(L, filename);
-
-    luaA_push_type(L, format->parameter_lua_type, format_params);
-
-    if(storage)
-      luaA_push_type(L, storage->parameter_lua_type, storage_params);
-    else
-      lua_pushnil(L);
-
-    dt_lua_event_trigger(L, "intermediate-export-image", 4);
-
-    dt_lua_unlock();
-#endif
-}
-
-
 // internal function: to avoid exif blob reading + 8-bit byteorder flag + high-quality override
 int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
                                  dt_imageio_module_format_t *format, dt_imageio_module_data_t *format_params,
@@ -1196,7 +1164,6 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
   if(!thumbnail_export && strcmp(format->mime(format_params), "memory")
     && !(format->flags(format_params) & FORMAT_FLAGS_NO_TMPFILE))
   {
-    _export_apply_lua_actions(imgid, filename, format, format_params, storage, storage_params);
     DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_IMAGE_EXPORT_TMPFILE, imgid, filename, format,
                             format_params, storage, storage_params);
   }

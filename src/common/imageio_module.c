@@ -103,32 +103,14 @@ static int dt_imageio_load_module_format(dt_imageio_module_format_t *module, con
   if(IS_NULL_PTR(module->levels)) module->levels = _default_format_levels;
 
   module->widget = NULL;
-  module->parameter_lua_type = LUAA_INVALID_TYPE;
   // Can by set by the module function to false if something went wrong.
   module->ready = TRUE;
 
-#ifdef USE_LUA
+  module->init(module);
+  if (!module->ready)
   {
-    char pseudo_type_name[1024];
-    snprintf(pseudo_type_name, sizeof(pseudo_type_name), "dt_imageio_module_format_data_%s",
-             module->plugin_name);
-    luaA_Type my_type
-        = luaA_type_add(darktable.lua_state.state, pseudo_type_name, module->params_size(module));
-    module->parameter_lua_type = dt_lua_init_type_type(darktable.lua_state.state, my_type);
-    luaA_struct_type(darktable.lua_state.state, my_type);
-    dt_lua_register_format_type(darktable.lua_state.state, module, my_type);
-#endif
-    module->init(module);
-    if (!module->ready)
-    {
-      goto api_h_error;
-    }
-
-#ifdef USE_LUA
-    lua_pushcfunction(darktable.lua_state.state, dt_lua_type_member_luaautoc);
-    dt_lua_type_register_struct_type(darktable.lua_state.state, my_type);
+    goto api_h_error;
   }
-#endif
 
   return 0;
 }
@@ -212,26 +194,7 @@ static int dt_imageio_load_module_storage(dt_imageio_module_storage_t *module, c
   if(!module->export_dispatched) module->export_dispatched = _default_storage_nop;
 
   module->widget = NULL;
-  module->parameter_lua_type = LUAA_INVALID_TYPE;
-
-#ifdef USE_LUA
-  {
-    char pseudo_type_name[1024];
-    snprintf(pseudo_type_name, sizeof(pseudo_type_name), "dt_imageio_module_storage_data_%s",
-             module->plugin_name);
-    luaA_Type my_type
-        = luaA_type_add(darktable.lua_state.state, pseudo_type_name, module->params_size(module));
-    module->parameter_lua_type = dt_lua_init_type_type(darktable.lua_state.state, my_type);
-    luaA_struct_type(darktable.lua_state.state, my_type);
-    dt_lua_register_storage_type(darktable.lua_state.state, module, my_type);
-#endif
-    module->init(module);
-#ifdef USE_LUA
-    lua_pushcfunction(darktable.lua_state.state, dt_lua_type_member_luaautoc);
-    dt_lua_type_register_struct_type(darktable.lua_state.state, my_type);
-  }
-#endif
-
+  module->init(module);
   return 0;
 }
 

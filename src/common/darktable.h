@@ -97,7 +97,6 @@
 #include <glib/gi18n.h>
 #include <inttypes.h>
 #include <json-glib/json-glib.h>
-#include <lua/lua.h>
 #include <math.h>
 #include <sqlite3.h>
 #include <stdio.h>
@@ -824,7 +823,6 @@ typedef struct darktable_t
   char *configdir;
   char *cachedir;
   char *kerneldir;
-  dt_lua_state_t lua_state;
   GList *guides;
   double start_wtime;
   GList *themes;
@@ -846,7 +844,7 @@ typedef struct
 
 extern darktable_t darktable;
 
-int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load_data, lua_State *L);
+int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load_data);
 void dt_cleanup();
 void dt_print(dt_debug_thread_t thread, const char *msg, ...) __attribute__((format(printf, 2, 3)));
 /* same as above but without time stamp : nts = no time stamp */

@@ -733,10 +733,7 @@ static int dt_lib_load_module(void *m, const char *libname, const char *module_n
   module->arrow = NULL;
   module->reset_button = NULL;
   module->presets_button = NULL;
-
-#ifdef USE_LUA
-  dt_lua_lib_register(darktable.lua_state.state, module);
-#endif
+  
   if(module->init) module->init(module);
 
   /* pass on the dt_gui_module_t args for bauhaus widgets */

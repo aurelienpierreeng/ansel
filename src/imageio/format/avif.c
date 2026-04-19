@@ -159,55 +159,6 @@ void init(dt_imageio_module_format_t *self)
     self->ready = FALSE;
     return;
   }
-
-#ifdef USE_LUA
-  /* bit depth */
-  dt_lua_register_module_member(darktable.lua_state.state,
-                                self,
-                                dt_imageio_avif_t,
-                                bit_depth,
-                                int);
-  luaA_enum(darktable.lua_state.state,
-            enum avif_color_mode_e);
-  luaA_enum_value(darktable.lua_state.state,
-                  enum avif_color_mode_e,
-                  AVIF_COLOR_MODE_RGB);
-  luaA_enum_value(darktable.lua_state.state,
-                  enum avif_color_mode_e,
-                  AVIF_COLOR_MODE_GRAYSCALE);
-
-  luaA_enum(darktable.lua_state.state,
-            enum avif_tiling_e);
-  luaA_enum_value(darktable.lua_state.state,
-                  enum avif_tiling_e,
-                  AVIF_TILING_ON);
-  luaA_enum_value(darktable.lua_state.state,
-                  enum avif_tiling_e,
-                  AVIF_TILING_OFF);
-
-  /* compression type */
-  luaA_enum(darktable.lua_state.state,
-            enum avif_compression_type_e);
-  luaA_enum_value(darktable.lua_state.state,
-                  enum avif_compression_type_e,
-                  AVIF_COMP_LOSSLESS);
-  luaA_enum_value(darktable.lua_state.state,
-                  enum avif_compression_type_e,
-                  AVIF_COMP_LOSSY);
-
-  dt_lua_register_module_member(darktable.lua_state.state,
-                                self,
-                                dt_imageio_avif_t,
-                                compression_type,
-                                enum avif_compression_type_e);
-
-  /* quality */
-  dt_lua_register_module_member(darktable.lua_state.state,
-                                self,
-                                dt_imageio_avif_t,
-                                quality,
-                                int);
-#endif
 }
 
 void cleanup(dt_imageio_module_format_t *self)

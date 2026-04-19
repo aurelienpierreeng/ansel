@@ -63,10 +63,6 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
-#ifdef USE_LUA
-#include "lua/glist.h"
-#include "lua/lua.h"
-#endif
 #ifdef GDK_WINDOWING_QUARTZ
 #include "osx/osx.h"
 #endif

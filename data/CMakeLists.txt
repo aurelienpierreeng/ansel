@@ -22,14 +22,6 @@ file(GLOB WEB_FILES "latex/*")
 install(FILES ${WEB_FILES} DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ansel/latex COMPONENT DTApplication)
 
 #
-# lua system scripts
-#
-if(USE_LUA)
-  install(DIRECTORY "lua" DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ansel COMPONENT DTApplication)
-  install(FILES luarc DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ansel COMPONENT DTApplication)
-endif(USE_LUA)
-
-#
 # Install (and generate when necessary) other system shares
 #
 if(NOT WIN32)

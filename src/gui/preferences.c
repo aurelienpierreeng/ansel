@@ -70,9 +70,6 @@
 #include "gui/presets.h"
 #include "libs/lib.h"
 #include "preferences_gen.h"
-#ifdef USE_LUA
-#include "lua/preferences.h"
-#endif
 #ifdef GDK_WINDOWING_QUARTZ
 #include "osx/osx.h"
 #endif
@@ -566,15 +563,8 @@ void dt_gui_preferences_show()
   init_tab_misc(_preferences_dialog, stack);
   init_tab_presets(stack);
 
-#ifdef USE_LUA
-  GtkGrid* lua_grid = init_tab_lua(_preferences_dialog, stack);
-#endif
   gtk_widget_show_all(_preferences_dialog);
   (void)gtk_dialog_run(GTK_DIALOG(_preferences_dialog));
-
-#ifdef USE_LUA
-  destroy_tab_lua(lua_grid);
-#endif
 
   dt_free(tweak_widgets);
   gtk_widget_destroy(_preferences_dialog);

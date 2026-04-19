@@ -74,8 +74,6 @@ APT_PACKAGES=(
   liblensfun-data-v1
   liblensfun-dev
   liblensfun1
-  liblua5.2-dev
-  liblua5.3-dev
   libopenexr-dev
   libopenjp2-7-dev
   libosmgpsmap-1.0-dev

@@ -120,10 +120,6 @@
 #include "osx/osx.h"
 #endif
 
-#ifdef USE_LUA
-#include "lua/image.h"
-#endif
-
 #include <gdk/gdkkeysyms.h>
 #include <glib.h>
 #include <math.h>
@@ -185,21 +181,6 @@ void init(dt_view_t *self)
   dt_dev_init((dt_develop_t *)self->data, 1);
   darktable.develop = (dt_develop_t *)self->data;
   darktable.view_manager->proxy.darkroom.view = self;
-
-#ifdef USE_LUA
-  lua_State *L = darktable.lua_state.state;
-  const int my_type = dt_lua_module_entry_get_type(L, "view", self->module_name);
-  lua_pushlightuserdata(L, self);
-  lua_pushcclosure(L, display_image_cb, 1);
-  dt_lua_gtk_wrap(L);
-  lua_pushcclosure(L, dt_lua_type_member_common, 1);
-  dt_lua_type_register_const_type(L, my_type, "display_image");
-
-  lua_pushcfunction(L, dt_lua_event_multiinstance_register);
-  lua_pushcfunction(L, dt_lua_event_multiinstance_destroy);
-  lua_pushcfunction(L, dt_lua_event_multiinstance_trigger);
-  dt_lua_event_add(L, "darkroom-image-loaded");
-#endif
 }
 
 uint32_t view(const dt_view_t *self)
@@ -1182,16 +1163,6 @@ static void _darkroom_image_loaded_callback(gpointer instance, guint request_id,
   }
 
   darktable.develop->proxy.wb_coeffs[0] = 0.f;
-
-#ifdef USE_LUA
-
-  dt_lua_async_call_alien(dt_lua_event_trigger_wrapper,
-      0, NULL, NULL,
-      LUA_ASYNC_TYPENAME, "const char*", "darkroom-image-loaded",
-      LUA_ASYNC_TYPENAME, "dt_lua_image_t", GINT_TO_POINTER(dev->image_storage.id),
-      LUA_ASYNC_DONE);
-
-#endif
 
   // synch gui and flag pipe as dirty
   // this is done here and not in dt_read_history, as it would else be triggered before module->gui_init.

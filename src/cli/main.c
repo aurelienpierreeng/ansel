@@ -504,7 +504,7 @@ int main(int argc, char *arg[])
   }
 
   // init dt without gui and without data.db:
-  if(dt_init(m_argc, m_arg, FALSE, custom_presets, NULL))
+  if(dt_init(m_argc, m_arg, FALSE, custom_presets))
   {
     dt_free(m_arg);
     dt_free(output_filename);

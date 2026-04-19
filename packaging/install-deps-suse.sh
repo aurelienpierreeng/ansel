@@ -83,7 +83,6 @@ ZYPPER_PACKAGES=(
   libxshmfence-devel
   llvm-devel
   libgomp1
-  lua53-devel
   make
   ninja
   ocl-icd-devel
