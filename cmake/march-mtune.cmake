@@ -46,20 +46,8 @@ if(NOT BINARY_PACKAGE_BUILD AND NOT DT_APPLE_UNIVERSAL_BUILD)
   # GCC / Clang (Linux, MinGW, etc.)
   # ---------------------------------------------------------------------------
   else()
-
-    CHECK_C_COMPILER_FLAG("-march=native" HAS_MARCH_NATIVE)
-    if(HAS_MARCH_NATIVE)
-      set(MARCH "-march=native")
-      add_definitions("-DNATIVE_ARCH")
-    else()
-      CHECK_C_COMPILER_FLAG("-mtune=native" HAS_MTUNE_NATIVE)
-      if(HAS_MTUNE_NATIVE)
-        set(MARCH "-mtune=native")
-      else()
-        message(WARNING "No native tuning flags available, using defaults")
-      endif()
-    endif()
-
+    set(MARCH "-march=native -mtune=native")
+    add_definitions("-DNATIVE_ARCH")
   endif()
 
 # -----------------------------------------------------------------------------
@@ -70,24 +58,15 @@ else()
   message(STATUS "Using generic CPU tuning for binary distribution")
 
   if(DT_IS_X86)
-
-    # Prefer modern x86 baseline (AVX2 class)
-    CHECK_C_COMPILER_FLAG("-march=x86-64-v3" HAS_X86_V3)
-    if(HAS_X86_V3)
-      # Binaries will require CPUs roughly ≥ Haswell (2013).
-      set(MARCH "-march=x86-64-v3 -mtune=haswell")
+    # Our baseline is Intel Sandy Bridge / AMD Bulldozer arch (~2011)
+    CHECK_C_COMPILER_FLAG("-march=x86-64-v2" HAS_X86_V2)
+    if(HAS_X86_V2)
+      set(MARCH "-march=x86-64-v2 -mtune=core-avx2")
     else()
-      # Fallback to slightly older baseline
-      CHECK_C_COMPILER_FLAG("-march=x86-64-v2" HAS_X86_V2)
-      if(HAS_X86_V2)
-        set(MARCH "-march=x86-64-v2 -mtune=haswell")
-      else()
-        # Last resort
-        # mtune=generic is universally supported on GCC/Clang
-        set(MARCH "-march=generic -mtune=haswell")
-      endif()
+      # Last resort
+      # mtune=generic is universally supported on GCC/Clang
+      set(MARCH "-march=generic -mtune=core-avx2")
     endif()
-
   else()
     # Non-x86 architectures (ARM, etc.)
     message(STATUS "Non-x86 architecture detected, relying on compiler defaults")
