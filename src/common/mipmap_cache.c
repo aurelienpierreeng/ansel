@@ -1071,8 +1071,7 @@ dt_mipmap_size_t dt_mipmap_cache_get_matching_size(const dt_mipmap_cache_t *cach
     // so we don't need both dimensions to be greater than requested
     if((cache->max_width[k] >= width) || (cache->max_height[k] >= height))
     {
-      dt_print(DT_DEBUG_CACHE, "[mipmap_cache] image %d will load a mip size %i (%" PRIu64 "x%" PRIu64 ")\n", 
-        imgid, k, cache->max_width[k], cache->max_height[k]);
+      dt_print(DT_DEBUG_CACHE, "[mipmap_cache] image %d will load a mip size %i (%lux%lu)\n", imgid, k, cache->max_width[k], cache->max_height[k]);
       return k;
     }
   }
