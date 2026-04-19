@@ -139,13 +139,10 @@ void _masks_blur_5x5_coeff(float *c, const float sigma)
     }
   }
   for(int i = 0; i < 5; i++)
-  {
-#if defined(__GNUC__)
-  #pragma GCC ivdep
-#endif
     for(int j = 0; j < 5; j++)
       kernel[i][j] /= sum;
-  }
+
+  // FIXME: are you for real ? managing arrays with loops and index shift much ?
   /* c21 */ c[0]  = kernel[0][1];
   /* c20 */ c[1]  = kernel[0][2];
   /* c11 */ c[2]  = kernel[1][1];
@@ -179,13 +176,10 @@ void dt_masks_blur_9x9_coeff(float *c, const float sigma)
     }
   }
   for(int i = 0; i < 9; i++)
-  {
-#if defined(__GNUC__)
-  #pragma GCC ivdep
-#endif
     for(int j = 0; j < 9; j++)
       kernel[i][j] /= sum;
-  }
+
+  // FIXME: are you for real ? managing arrays with loops and index shift much ?
   /* c00 */ c[0]  = kernel[4][4];
   /* c10 */ c[1]  = kernel[3][4];
   /* c11 */ c[2]  = kernel[3][3];
@@ -201,6 +195,7 @@ void dt_masks_blur_9x9_coeff(float *c, const float sigma)
   /* c42 */ c[12] = kernel[0][2];
 }
 
+// FIMXE: ever heard about `#pragma unroll` ???
 #define FAST_BLUR_9 ( \
   blurmat[12] * (src[i - w4 - 2] + src[i - w4 + 2] + src[i - w2 - 4] + src[i - w2 + 4] + src[i + w2 - 4] + src[i + w2 + 4] + src[i + w4 - 2] + src[i + w4 + 2]) + \
   blurmat[11] * (src[i - w4 - 1] + src[i - w4 + 1] + src[i - w1 - 4] + src[i - w1 + 4] + src[i + w1 - 4] + src[i + w1 + 4] + src[i + w4 - 1] + src[i + w4 + 1]) + \
@@ -258,13 +253,10 @@ void _masks_blur_13x13_coeff(float *c, const float sigma)
     }
   }
   for(int i = 0; i < 13; i++)
-  {
-#if defined(__GNUC__)
-  #pragma GCC ivdep
-#endif
     for(int j = 0; j < 13; j++)
       kernel[i][j] /= sum;
-  }
+  
+  // FIXME: are you for real ? managing arrays with loops and index shift much ?
   /* c60 */ c[0]  = kernel[0][6];
   /* c53 */ c[1]  = kernel[1][3];
   /* c52 */ c[2]  = kernel[1][4];
