@@ -67,6 +67,11 @@ if(RAWSPEED_BUILD_TYPE STREQUAL "RelWithDebInfo")
     set(RAWSPEED_BUILD_TYPE "Release")
 endif()
 
+if(APPLE)
+  # RawSpeed test build will fail on Release without this
+  set(CMAKE_TRY_COMPILE_CONFIGURATION Debug)
+endif(APPLE)
+
 set(CMAKE_BUILD_TYPE ${RAWSPEED_BUILD_TYPE} CACHE STRING "" FORCE)
 add_subdirectory(rawspeed)
 set(CMAKE_BUILD_TYPE ${_PARENT_BUILD_TYPE} CACHE STRING "" FORCE)
