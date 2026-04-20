@@ -2635,7 +2635,10 @@ void dt_dev_pixelpipe_cache_print(dt_dev_pixelpipe_cache_t *cache)
 {
   if(!(darktable.unmuted & DT_DEBUG_PIPECACHE)) return;
 
-  dt_print(DT_DEBUG_PIPECACHE, "[pixelpipe] cache hit rate so far: %.3f%% - size: %lu MiB over %lu MiB - %i items\n", 100. * (cache->hits) / (float)cache->queries, cache->current_memory / (1024 * 1024), cache->max_memory / (1024 * 1024), g_hash_table_size(cache->entries));
+  dt_print(DT_DEBUG_PIPECACHE, "[pixelpipe] cache hit rate so far: %.3f%% - size: %" PRIu64 " MiB over %" PRIu64 " MiB - %i items\n", 
+    100. * (cache->hits) / (float)cache->queries, cache->current_memory / (1024 * 1024), 
+    cache->max_memory / (1024 * 1024), 
+    g_hash_table_size(cache->entries));
 }
 
 // clang-format off

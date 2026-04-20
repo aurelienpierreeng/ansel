@@ -2563,11 +2563,11 @@ static void _export_button_clicked(GtkButton *button, dt_lib_module_t *self)
     char *filename = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(filechooser));
     char *dirname = g_path_get_dirname(filename);
     dt_conf_set_string("plugins/lighttable/tagging/last_import_export_location", dirname);
-    const ssize_t count = dt_tag_export(filename);
+    const uint32_t count = dt_tag_export(filename);
     if(count < 0)
       dt_control_log(_("error exporting tags"));
     else
-      dt_control_log(_("%zd tags exported"), count);
+      dt_control_log(_("%u tags exported"), count);
     dt_free(filename);
     dt_free(dirname);
   }
