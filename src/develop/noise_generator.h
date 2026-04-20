@@ -175,7 +175,6 @@ static inline void poisson_noise_simd(const dt_aligned_pixel_t mu, const dt_alig
   dt_aligned_pixel_t u1 = { 0.f };
   dt_aligned_pixel_t u2 = { 0.f };
 
-  
   for(size_t c = 0; c < 3; c++)
   {
     u1[c] = fmaxf(xoshiro128plus(state), FLT_MIN);
@@ -193,7 +192,6 @@ static inline void poisson_noise_simd(const dt_aligned_pixel_t mu, const dt_alig
   // now we have gaussian noise, then apply Anscombe transform to get poissonian one
   dt_aligned_pixel_t r = { 0.f };
 
-  
   for_each_channel(c)
   {
     r[c] = noise[c] * sigma[c] + 2.0f * sqrtf(fmaxf(mu[c] + 3.f / 8.f, 0.0f));

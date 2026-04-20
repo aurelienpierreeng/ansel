@@ -1230,28 +1230,43 @@ static void _display_offset(const GTimeSpan offset_int, const gboolean valid, dt
   {
     const gboolean neg = offset_int < 0;
     gtk_label_set_text(GTK_LABEL(d->of.sign), neg ? "- " : "");
-    char text[4];
+
     GTimeSpan off = neg ? -offset_int : offset_int;
-    off2 = off / 1000;  // skip microseconds
-    off = off2;
-    off2 = off / 1000;
-    snprintf(text, sizeof(text), "%03d", (int)(off - off2 * 1000));
+
+    /* normalize to milliseconds */
+    gint64 total_ms = off / 1000;
+
+    /* extract components */
+    gint ms   = total_ms % 1000;
+    gint64 total_s = total_ms / 1000;
+
+    gint s    = total_s % 60;
+    gint64 total_m = total_s / 60;
+
+    gint m    = total_m % 60;
+    gint64 total_h = total_m / 60;
+
+    gint h    = total_h % 24;
+    gint64 total_d = total_h / 24;
+
+    gint D    = total_d % 100;
+
+    /* write fields */
+    char text[8];  // enough for all cases
+
+    g_snprintf(text, sizeof(text), "%03d", ms);
     gtk_entry_set_text(GTK_ENTRY(d->of.widget[6]), text);
-    off = off2;
-    off2 = off / 60;
-    snprintf(text, sizeof(text), "%02d", (int)(off - off2 * 60));
+
+    g_snprintf(text, sizeof(text), "%02d", s);
     gtk_entry_set_text(GTK_ENTRY(d->of.widget[5]), text);
-    off = off2;
-    off2 = off / 60;
-    snprintf(text, sizeof(text), "%02d", (int)(off - off2 * 60));
+
+    g_snprintf(text, sizeof(text), "%02d", m);
     gtk_entry_set_text(GTK_ENTRY(d->of.widget[4]), text);
-    off = off2;
-    off2 = off / 24;
-    snprintf(text, sizeof(text), "%02d", (int)(off - off2 * 24));
+
+    g_snprintf(text, sizeof(text), "%02d", h);
     gtk_entry_set_text(GTK_ENTRY(d->of.widget[3]), text);
-    off = off2;
-    off2 = off / 100;
-    snprintf(text, sizeof(text), "%02d", (int)(off - off2 * 100));
+
+    g_snprintf(text, sizeof(text), "%02d", D);
     gtk_entry_set_text(GTK_ENTRY(d->of.widget[2]), text);
   }
   if(!valid || off2)

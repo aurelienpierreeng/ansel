@@ -992,7 +992,6 @@ void dt_cairo_sharpen_surface_rgb24(cairo_surface_t *surface)
     {
       int idx = y * stride + x * 4;
 
-      
       for(int c = 0; c < 3; c++) // B, G, R
       {
         int i = idx + c;

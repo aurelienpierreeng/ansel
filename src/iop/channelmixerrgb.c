@@ -970,7 +970,6 @@ static inline int auto_detect_WB(const float *const restrict in, dt_illuminant_t
       {
         float DT_ALIGNED_PIXEL central_average[2];
 
-        
         for(size_t c = 0; c < 2; c++)
         {
           // B-spline local average / blur
@@ -984,7 +983,6 @@ static inline int auto_detect_WB(const float *const restrict in, dt_illuminant_t
 
         // compute patch-wise variance
         // If variance = 0, we are on a flat surface and want to discard that patch.
-        
         for(size_t c = 0; c < 2; c++)
         {
           var[c] = (
@@ -1021,7 +1019,6 @@ static inline int auto_detect_WB(const float *const restrict in, dt_illuminant_t
             = powf(powf(fabsf(central_average[0]), p) + powf(fabsf(central_average[1]), p), 1.f / p) + NORM_MIN;
         const float weight = var[0] * var[1] * var[2];
 
-        
         for(size_t c = 0; c < 2; c++) xyY[c] += central_average[c] * weight / p_norm;
         elements += weight / p_norm;
       }
@@ -1035,7 +1032,6 @@ static inline int auto_detect_WB(const float *const restrict in, dt_illuminant_t
         float DT_ALIGNED_PIXEL dd[2];
         float DT_ALIGNED_PIXEL central_average[2];
 
-        
         for(size_t c = 0; c < 2; c++)
         {
           // B-spline local average / blur
@@ -1050,7 +1046,6 @@ static inline int auto_detect_WB(const float *const restrict in, dt_illuminant_t
         // Compute the Minkowski p-norm for regularization
         const float p = 8.f;
         const float p_norm = powf(powf(fabsf(dd[0]), p) + powf(fabsf(dd[1]), p), 1.f / p) + NORM_MIN;
-
 
         for(size_t c = 0; c < 2; c++) xyY[c] -= dd[c] / p_norm;
         elements += 1.f;

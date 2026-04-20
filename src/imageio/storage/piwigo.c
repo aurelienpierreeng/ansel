@@ -664,8 +664,8 @@ static void _piwigo_refresh_albums(dt_storage_piwigo_gui_data_t *ui, const gchar
         while(*p++) if(*p == ',') indent++;
       }
 
-      snprintf(data, sizeof(data), "%*c%s (%"PRId64")", indent * 3, ' ', new_album->name, new_album->size);
-
+      g_snprintf(data, sizeof(data), "%*c%s (%" PRId64 ")", indent * 3, ' ', new_album->name, new_album->size);
+      
       if(to_select && !strcmp(new_album->name, to_select)) index = i + 1;
 
       g_strlcpy(new_album->label, data, sizeof(new_album->label));

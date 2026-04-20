@@ -936,7 +936,7 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   char datadir[PATH_MAX] = { 0 };
   dt_loc_get_user_config_dir(datadir, sizeof(datadir));
   char anselrc[PATH_MAX] = { 0 };
-  snprintf(anselrc, sizeof(anselrc), "%s/anselrc", datadir);
+  dt_concat_path_file(anselrc, datadir, "anselrc");
 
   // initialize the config backend. this needs to be done first...
   darktable.conf = (dt_conf_t *)calloc(1, sizeof(dt_conf_t));
@@ -1789,6 +1789,13 @@ void dt_print_mem_usage()
 #else
   fprintf(stderr, "dt_print_mem_usage() currently unsupported on this platform\n");
 #endif
+}
+
+void dt_concat_path_file(char destination[PATH_MAX], const char path[PATH_MAX], const char *const file)
+{
+  g_strlcpy(destination, path, sizeof(char) * PATH_MAX);
+  g_strlcat(destination, G_DIR_SEPARATOR_S, sizeof(char) * PATH_MAX);
+  g_strlcat(destination, file, sizeof(char) * PATH_MAX);  
 }
 
 // clang-format off
