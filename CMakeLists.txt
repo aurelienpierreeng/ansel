@@ -171,14 +171,6 @@ endif()
 set(CMAKE_C_FLAGS_RELEASE "-O3 -DNDEBUG" CACHE STRING "" FORCE)
 set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG" CACHE STRING "" FORCE)
 
-# MacOS seems to be failing weirdly on RelWithDebInfo, especially with 
-# RawSpeed Zlib deps. RawSpeed anyway explicitely doesn't support RelWithDebInfo builds
-# So we use Release instead but manually build in the debug flags
-if(APPLE)
-  set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -g3 -ggdb3" CACHE STRING "" FORCE)
-  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -g3 -ggdb3" CACHE STRING "" FORCE)
-endif(APPLE)
-
 # RelWithDebInfo flags
 set(CMAKE_C_FLAGS_RELWITHDEBINFO "-O3 -g3 -ggdb3 -DNDEBUG" CACHE STRING "" FORCE)
 set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -g3 -ggdb3 -DNDEBUG" CACHE STRING "" FORCE)
