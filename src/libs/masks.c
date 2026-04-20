@@ -72,6 +72,8 @@ typedef struct dt_lib_masks_t
   dt_iop_module_t *active_module;
   dt_iop_module_t *hosted_module;
 
+  dt_gui_collapsible_section_t shape_manager_expander;
+
   GdkPixbuf *ic_inverse, *ic_union, *ic_intersection, *ic_difference, *ic_exclusion, *ic_wired;
   int gui_reset;
 } dt_lib_masks_t;
@@ -1532,7 +1534,7 @@ static void _lib_masks_recreate_list(dt_lib_module_t *self)
 
   const int gui_reset = lm->gui_reset;
   lm->gui_reset = 1;
-  // if (lm->treeview) gtk_widget_destroy(lm->treeview);
+  gboolean sync_center_view = FALSE;
 
   // if a treeview is already present, let's get the currently selected items
   // as we are going to recreate the tree.
@@ -1600,9 +1602,47 @@ static void _lib_masks_recreate_list(dt_lib_module_t *self)
     selectids = NULL;
   }
 
+  // After list refresh, keep the tree selection aligned with the current GUI module mask group.
+  dt_iop_module_t *const current_module = darktable.develop ? darktable.develop->gui_module : NULL;
+  const int current_group_id
+      = (!IS_NULL_PTR(current_module) && current_module->blend_params
+         && (current_module->flags() & IOP_FLAGS_SUPPORTS_BLENDING)
+         && !(current_module->flags() & IOP_FLAGS_NO_MASKS))
+            ? current_module->blend_params->mask_id
+            : 0;
+
+  if(current_group_id > 0)
+  {
+    GtkTreeModel *model = GTK_TREE_MODEL(treestore);
+    GtkTreeIter iter;
+    if(gtk_tree_model_get_iter_first(model, &iter))
+    {
+      const gboolean found = _find_mask_iter_by_values(model, &iter, current_module, current_group_id, 1);
+      if(found)
+      {
+        GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(lm->treeview));
+        GtkTreePath *path = gtk_tree_model_get_path(model, &iter);
+        gtk_tree_selection_unselect_all(selection);
+        gtk_tree_view_expand_to_path(GTK_TREE_VIEW(lm->treeview), path);
+        gtk_tree_view_scroll_to_cell(GTK_TREE_VIEW(lm->treeview), path, NULL, TRUE, 0.5, 0.5);
+        gtk_tree_selection_select_iter(selection, &iter);
+        gtk_tree_path_free(path);
+        sync_center_view = TRUE;
+      }
+    }
+  }
+
   g_object_unref(treestore);
 
+  dt_gui_update_collapsible_section(&lm->shape_manager_expander);
+
   lm->gui_reset = gui_reset;
+
+  if(sync_center_view)
+  {
+    GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(lm->treeview));
+    _tree_selection_change(selection, lm);
+  }
 }
 
 static void _lib_masks_update_item(dt_lib_module_t *self, int formid, int parentid, dt_lib_masks_t *lm, GtkTreeModel *model, GtkTreeIter *iter)
@@ -1678,9 +1718,14 @@ static gboolean _update_foreach(GtkTreeModel *model, GtkTreePath *path, GtkTreeI
 static void _lib_masks_update_list(dt_lib_module_t *self)
 {
   dt_lib_masks_t *lm = (dt_lib_masks_t *)self->data;
+  if(IS_NULL_PTR(lm)) return;
+  if(IS_NULL_PTR(lm->treeview)) return;
+
   // for each node , we refresh the string
   GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(lm->treeview));
+  if(!GTK_IS_TREE_MODEL(model)) return;
   gtk_tree_model_foreach(model, _update_foreach, lm);
+  dt_gui_update_collapsible_section(&lm->shape_manager_expander);
 }
 
 static gboolean _remove_foreach(GtkTreeModel *model, GtkTreePath *path, GtkTreeIter *iter, gpointer data)
@@ -1903,6 +1948,14 @@ static void _lib_masks_handler_callback(gpointer instance, const int formid, con
     _lib_masks_recreate_list(self);
   }
 
+  else if(event == DT_MASKS_EVENT_DELETE || event == DT_MASKS_EVENT_REMOVE)
+  {
+    // When a shape is deleted from the model, we may no longer find its previous row in the current tree.
+    // In that case, force a full list refresh so stale rows don't remain visible.
+    _lib_masks_recreate_list(self);
+    _lib_masks_update_list(self);
+  }
+
   else if(event == DT_MASKS_EVENT_ADD)
   {
     _lib_masks_recreate_list(self);
@@ -1932,12 +1985,8 @@ void gui_init(dt_lib_module_t *self)
   self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
   GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
 
-  dt_gui_collapsible_section_t *shape_manager_expander = malloc(sizeof(dt_gui_collapsible_section_t));
-
-  dt_gui_new_collapsible_section(shape_manager_expander, "plugins/darkroom/shape_manager/expanded",
+  dt_gui_new_collapsible_section(&d->shape_manager_expander, "plugins/darkroom/shape_manager/expanded",
                                  _("Shape manager"), GTK_BOX(self->widget), GTK_PACK_START);
-  GtkWidget *shape_manager_box = GTK_WIDGET(shape_manager_expander->container); // gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-  //gtk_box_pack_start(GTK_BOX(shape_manager_expander->container), shape_manager_box, TRUE, TRUE, 0);
 
   GtkWidget *label = gtk_label_new(_("created shapes"));
   gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_END);
@@ -1973,7 +2022,7 @@ void gui_init(dt_lib_module_t *self)
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->bt_brush), FALSE);
   gtk_box_pack_end(GTK_BOX(hbox), d->bt_brush, FALSE, FALSE, 0);
 
-  gtk_box_pack_start(GTK_BOX(shape_manager_box), hbox, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(d->shape_manager_expander.container), hbox, TRUE, TRUE, 0);
 
   d->treeview = gtk_tree_view_new();
   GtkTreeViewColumn *col = gtk_tree_view_column_new();
@@ -2008,7 +2057,7 @@ void gui_init(dt_lib_module_t *self)
   g_signal_connect(selection, "changed", G_CALLBACK(_tree_selection_change), d);
   g_signal_connect(d->treeview, "button-press-event", (GCallback)_tree_button_pressed, self);
 
-  gtk_box_pack_start(GTK_BOX(shape_manager_box), d->treeview, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(d->shape_manager_expander.container), d->treeview, TRUE, TRUE, 0);
   dt_gui_widget_init_auto_height(d->treeview, TREE_LIST_MIN_ROWS, TREE_LIST_MAX_ROWS);
 
   
