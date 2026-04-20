@@ -306,7 +306,7 @@ set(CMAKE_C_COMPILE_OPTIONS_IPO -flto -ffat-lto-objects)
 #endif()
 
 if (WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-  target_link_options(ansel_deps PRIVATE
+  add_link_options(
     $<$<CONFIG:Release>:-static-libstdc++>
     $<$<CONFIG:Release>:-static-libgcc>
     $<$<CONFIG:RelWithDebInfo>:-static-libstdc++>
