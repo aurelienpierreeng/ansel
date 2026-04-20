@@ -67,10 +67,8 @@ if(RAWSPEED_BUILD_TYPE STREQUAL "RelWithDebInfo")
     set(RAWSPEED_BUILD_TYPE "Release")
 endif()
 
-if(APPLE)
-  # RawSpeed test build will fail on Release without this
-  set(CMAKE_TRY_COMPILE_CONFIGURATION Debug)
-endif(APPLE)
+# RawSpeed test build will fail on Release without this
+set(HAVE_ZLIB_ULONGF 1 CACHE INTERNAL "Force override for broken CheckZLIB on macOS")
 
 set(CMAKE_BUILD_TYPE ${RAWSPEED_BUILD_TYPE} CACHE STRING "" FORCE)
 add_subdirectory(rawspeed)
