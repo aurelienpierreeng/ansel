@@ -430,7 +430,7 @@ if(USE_AVIF)
 
   if(libavif_FOUND AND libavif_VERSION VERSION_GREATER_EQUAL 0.8.2 AND TARGET avif)
     target_link_libraries(ansel_deps INTERFACE avif)
-    target_compile_definitions(ansel_deps INTERFACE HAVE_LIBAVIF=1)
+    add_definitions(-DHAVE_LIBAVIF=1)
     list(APPEND SOURCES common/imageio_avif.c)
     set(DT_SUPPORTED_EXTENSIONS ${DT_SUPPORTED_EXTENSIONS} avif CACHE INTERNAL "")
   else()
@@ -456,7 +456,7 @@ if(USE_HEIF)
 
   if(libheif_FOUND AND libheif_VERSION VERSION_GREATER_EQUAL 1.13.0 AND TARGET heif)
     target_link_libraries(ansel_deps INTERFACE heif)
-    target_compile_definitions(ansel_deps INTERFACE HAVE_LIBHEIF=1)
+    add_definitions(-DHAVE_LIBHEIF=1)
     list(APPEND SOURCES common/imageio_heif.c )
     set(DT_SUPPORTED_EXTENSIONS ${DT_SUPPORTED_EXTENSIONS} heif heic hif CACHE INTERNAL "")
 
@@ -528,16 +528,14 @@ endif(USE_KWALLET)
 
 if(USE_MAC_INTEGRATION)
   find_package(MacIntegration)
-
   if(TARGET MacIntegration::MacIntegration)
     target_link_libraries(ansel_deps INTERFACE MacIntegration::MacIntegration)
-    target_compile_definitions(ansel_deps INTERFACE MAC_INTEGRATION)
-
+    add_definitions("-DMAC_INTEGRATION")
   elseif(MacIntegration_FOUND)
     # Fallback for legacy FindMacIntegration.cmake
     target_include_directories(ansel_deps INTERFACE ${MacIntegration_INCLUDE_DIRS})
     target_link_libraries(ansel_deps INTERFACE ${MacIntegration_LIBRARIES})
-    target_compile_definitions(ansel_deps INTERFACE MAC_INTEGRATION)
+    add_definitions("-DMAC_INTEGRATION")
   endif()
 endif()
 
@@ -546,21 +544,16 @@ if(USE_GRAPHICSMAGICK)
 
   if(TARGET GraphicsMagick::GraphicsMagick)
     target_link_libraries(ansel_deps INTERFACE GraphicsMagick::GraphicsMagick)
-    target_compile_definitions(ansel_deps INTERFACE HAVE_GRAPHICSMAGICK=1)
-
   else()
     # pkg-config fallback
     pkg_check_modules(GRAPHICSMAGICK QUIET IMPORTED_TARGET GraphicsMagick)
 
     if(TARGET PkgConfig::GRAPHICSMAGICK)
       target_link_libraries(ansel_deps INTERFACE PkgConfig::GRAPHICSMAGICK)
-      target_compile_definitions(ansel_deps INTERFACE HAVE_GRAPHICSMAGICK=1)
-
     elseif(GraphicsMagick_FOUND)
       # legacy fallback
       target_include_directories(ansel_deps INTERFACE ${GraphicsMagick_INCLUDE_DIRS})
       target_link_libraries(ansel_deps INTERFACE ${GraphicsMagick_LIBRARIES})
-      target_compile_definitions(ansel_deps INTERFACE HAVE_GRAPHICSMAGICK=1)
     endif()
   endif()
 
@@ -569,6 +562,7 @@ if(USE_GRAPHICSMAGICK)
         ${DT_SUPPORTED_EXTENSIONS}
         gif jpc jp2 bmp dcm jng miff mng pbm pnm ppm pgm webp
         CACHE INTERNAL "")
+    add_definitions(-DHAVE_GRAPHICSMAGICK=1)
   endif()
 endif()
 
@@ -577,7 +571,7 @@ if(USE_IMAGEMAGICK AND NOT TARGET GraphicsMagick::GraphicsMagick AND NOT TARGET 
 
   if(TARGET PkgConfig::IMAGEMAGICK)
     target_link_libraries(ansel_deps INTERFACE PkgConfig::IMAGEMAGICK)
-    target_compile_definitions(ansel_deps INTERFACE HAVE_IMAGEMAGICK=1)
+    add_definitions(-DHAVE_IMAGEMAGICK=1)
 
     # pkg-config CFLAGS_OTHER (rare but needed for ImageMagick)
     if(IMAGEMAGICK_CFLAGS_OTHER)
@@ -594,7 +588,7 @@ endif()
 if(USE_GMIC)
   find_package(GMIC)
   if(GMIC_FOUND)
-    target_compile_definitions(ansel_deps INTERFACE HAVE_GMIC=1)
+    add_definitions(-DHAVE_GMIC=1)
     target_link_libraries(ansel_deps INTERFACE ${GMIC_LIBRARIES})
   endif(GMIC_FOUND)
 endif(USE_GMIC)
@@ -604,13 +598,7 @@ if(USE_ICU)
 
   if(TARGET ICU::uc)
     target_link_libraries(ansel_deps INTERFACE ICU::uc ICU::i18n ICU::data)
-
-    target_compile_definitions(ansel_deps INTERFACE
-      HAVE_ICU=1
-      SQLITE_CORE
-      SQLITE_ENABLE_ICU
-    )
-
+    add_definitions(-DHAVE_ICU=1 -DSQLITE_CORE -DSQLITE_ENABLE_ICU)
     list(APPEND SOURCES common/sqliteicu.c)
   endif()
 endif()
