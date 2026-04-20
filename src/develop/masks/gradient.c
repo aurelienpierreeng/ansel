@@ -1234,13 +1234,7 @@ static int _gradient_get_mask(const dt_iop_module_t *const module, dt_dev_pixelp
   float *clut = lut + lutmax;
 
 
-#ifdef _OPENMP
-#if !defined(__SUNOS__) && !defined(__NetBSD__)
-#pragma omp parallel for default(firstprivate)  collapse(2) if((size_t)gw * gh > 50000)
-#else
-#pragma omp parallel for  if((size_t)gw * gh > 50000)
-#endif
-#endif
+  __OMP_PARALLEL_FOR__(collapse(2) if((size_t)gw * gh > 50000))
   for(int j = 0; j < gh; j++)
   {
     for(int i = 0; i < gw; i++)
@@ -1405,13 +1399,7 @@ static int _gradient_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pi
   // center lut around zero
   float *clut = lut + lutmax;
 
-#ifdef _OPENMP
-#if !defined(__SUNOS__) && !defined(__NetBSD__)
-#pragma omp parallel for default(firstprivate)  collapse(2) if((size_t)gw * gh > 50000)
-#else
-#pragma omp parallel for  if((size_t)gw * gh > 50000)
-#endif
-#endif
+  __OMP_PARALLEL_FOR__(collapse(2) if((size_t)gw * gh > 50000))
   for(int j = 0; j < gh; j++)
   {
     for(int i = 0; i < gw; i++)
