@@ -33,14 +33,6 @@ add_library(duplicate MODULE "duplicate.c")
 add_library(ioporder MODULE "ioporder.c")
 add_library(textnotes MODULE "textnotes.c")
 
-if(ANSEL_HAVE_CMARK AND ANSEL_CMARK_TARGET AND TARGET ${ANSEL_CMARK_TARGET})
-  target_link_libraries(textnotes ${ANSEL_CMARK_TARGET})
-  if(ANSEL_CMARK_INCLUDE_DIR)
-    target_include_directories(textnotes PRIVATE "${ANSEL_CMARK_INCLUDE_DIR}")
-  endif()
-  target_compile_definitions(textnotes PRIVATE HAVE_CMARK=1)
-endif()
-
 # tools
 add_library(filter MODULE "tools/filter.c")
 add_library(lighttable_mode MODULE "tools/lighttable.c")
