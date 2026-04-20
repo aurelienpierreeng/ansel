@@ -190,8 +190,8 @@ if(NOT CUSTOM_CFLAGS)
   # in several places. There is no reason to do so, just use binary flags. 
   # TODO: remove the use of NAN in code as a special "undefined" flag for float values
   # TODO: no looping over pixels in place, aka input ptr = output ptr
-  set(DT_BASE_C_FLAGS "${MARCH} -Wfatal-errors -Wall -funroll-loops -ftree-vectorize -fno-strict-aliasing")
-  set(DT_BASE_CXX_FLAGS "${MARCH} -Wfatal-errors -Wall -funroll-loops -ftree-vectorize -fno-strict-aliasing")
+  set(DT_BASE_C_FLAGS "${MARCH} -Wall -funroll-loops -ftree-vectorize -fno-strict-aliasing")
+  set(DT_BASE_CXX_FLAGS "${MARCH} -Wall -funroll-loops -ftree-vectorize -fno-strict-aliasing")
 
   # -------------------------------------------------------------------------
   # Build-type-specific flags

@@ -2462,7 +2462,7 @@ void dt_opencl_check_tuning(const int devid)
   cl->dev[devid].used_available = MAX(0ul, cl->dev[devid].max_global_mem - headroom * 1024 * 1024);
 
   dt_print(DT_DEBUG_OPENCL | DT_DEBUG_MEMORY,
-      "[dt_opencl_check_tuning] use %lu MiB on device `%s' id=%i\n",
+      "[dt_opencl_check_tuning] use %" G_GSIZE_FORMAT " MiB on device `%s' id=%i\n",
       cl->dev[devid].used_available / (1024 * 1024),
       cl->dev[devid].name, devid);
 }
