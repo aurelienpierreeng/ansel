@@ -167,7 +167,7 @@ static void _pixel_cache_message(dt_pixel_cache_entry_t *cache_entry, const char
   if(!(darktable.unmuted & DT_DEBUG_PIPECACHE)) return;
   if(verbose && !(darktable.unmuted & DT_DEBUG_VERBOSE)) return;
   dt_print(DT_DEBUG_PIPECACHE,
-           "[pixelpipe] cache entry %" PRIu64 "/%" PRIu64 ": %s (data=%p - %lu MiB - age %" PRId64
+           "[pixelpipe] cache entry %" PRIu64 "/%" PRIu64 ": %s (data=%p - %zu MiB - age %" PRId64
            " - hits %i - refs %i - auto %i - ext %i - id %i - module %s) %s\n",
            cache_entry->hash, cache_entry->serial,
            cache_entry->name ? cache_entry->name : "-", cache_entry->data,
