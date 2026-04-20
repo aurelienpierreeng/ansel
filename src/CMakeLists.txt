@@ -296,6 +296,10 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # breaks the whole project.
 # So I haven't found a way to fix that and it sucks that one lib is making us drop 
 # this feature for the whole project.
+if (WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  set(CMAKE_CXX_COMPILE_OPTIONS_IPO "-flto -ffat-lto-objects")
+  set(CMAKE_C_COMPILE_OPTIONS_IPO "-flto -ffat-lto-objects")
+endif()
 #if(NOT WIN32)
   set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
   set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO TRUE)
