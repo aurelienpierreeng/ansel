@@ -1,5 +1,7 @@
 add_subdirectory(external)
 
+add_library(ansel_deps INTERFACE)
+
 include(CheckCCompilerFlag)
 include(CheckCXXCompilerFlag)
 include(CheckCSourceCompiles)
@@ -312,7 +314,6 @@ if (WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
   )
 endif()
 
-add_library(ansel_deps INTERFACE)
 
 if(USE_DARKTABLE_PROFILING)
 	add_definitions(-DUSE_DARKTABLE_PROFILING)
