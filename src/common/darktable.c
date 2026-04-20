@@ -1451,7 +1451,7 @@ void dt_print(dt_debug_thread_t thread, const char *msg, ...)
     printf("%f ", dt_get_wtime() - darktable.start_wtime);
     va_list ap;
     va_start(ap, msg);
-    vprintf(msg, ap);
+    g_vprintf(msg, ap);
     va_end(ap);
     fflush(stdout);
   }
@@ -1463,7 +1463,7 @@ void dt_print_nts(dt_debug_thread_t thread, const char *msg, ...)
   {
     va_list ap;
     va_start(ap, msg);
-    vprintf(msg, ap);
+    g_vprintf(msg, ap);
     va_end(ap);
     fflush(stdout);
   }
@@ -1476,7 +1476,7 @@ void dt_vprint(dt_debug_thread_t thread, const char *msg, ...)
     printf("%f ", dt_get_wtime() - darktable.start_wtime);
     va_list ap;
     va_start(ap, msg);
-    vprintf(msg, ap);
+    g_vprintf(msg, ap);
     va_end(ap);
     fflush(stdout);
   }

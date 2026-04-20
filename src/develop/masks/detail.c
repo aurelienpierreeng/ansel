@@ -195,7 +195,7 @@ void dt_masks_blur_9x9_coeff(float *c, const float sigma)
   /* c42 */ c[12] = kernel[0][2];
 }
 
-// FIMXE: ever heard about `#pragma unroll` ???
+// FIMXE: ever heard about loop unrolling ???
 #define FAST_BLUR_9 ( \
   blurmat[12] * (src[i - w4 - 2] + src[i - w4 + 2] + src[i - w2 - 4] + src[i - w2 + 4] + src[i + w2 - 4] + src[i + w2 + 4] + src[i + w4 - 2] + src[i + w4 + 2]) + \
   blurmat[11] * (src[i - w4 - 1] + src[i - w4 + 1] + src[i - w1 - 4] + src[i - w1 + 4] + src[i + w1 - 4] + src[i + w1 + 4] + src[i + w4 - 1] + src[i + w4 + 1]) + \

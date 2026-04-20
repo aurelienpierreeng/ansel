@@ -137,7 +137,7 @@ static inline void interpolate_bilinear(const float *const restrict in, const si
       // Interpolate over ch layers
       float *const pixel_out = (float *)out + (i * width_out + j) * ch;
 
-//#pragma unroll //LLVM warns it can't unroll -- presumably because 'ch' is not a constant
+// //LLVM warns it can't unroll -- presumably because 'ch' is not a constant
       for(size_t c = 0; c < ch; c++)
       {
         pixel_out[c] = Dy_prev * (Q_SW[c] * Dx_next + Q_SE[c] * Dx_prev) +

@@ -904,7 +904,6 @@ static inline void heat_PDE_diffusion(const float *const restrict high_freq, con
         // corresponding LF value before squaring it, then normalize the summed
         // ratio by the physical kernel-variance increment of the current
         // wavelet band.
-        _Pragma("unroll")
         for(size_t k = 0; k < 9; k++)
         {
           derivatives[0] = kern_first[k] * neighbour_pixel_LF[k] + derivatives[0];
