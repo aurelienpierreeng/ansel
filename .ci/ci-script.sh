@@ -84,6 +84,7 @@ case "$TARGET" in
       -DVALIDATE_APPDATA_FILE=ON \
       -DBUILD_TESTING=ON \
       -DTESTBUILD_OPENCL_PROGRAMS=ON \
+      -DRAWSPEED_ENABLE_LTO=ON \
       $ECO "$SRC_DIR" || (cat "$BUILD_DIR"/CMakeFiles/CMakeOutput.log; cat "$BUILD_DIR"/CMakeFiles/CMakeError.log)
     target_build
     ;;
