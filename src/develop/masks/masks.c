@@ -1020,8 +1020,14 @@ gboolean dt_masks_remove_or_delete(struct dt_iop_module_t *module, dt_masks_form
                                     dt_masks_form_gui_t *mask_gui, int form_id)
 {
   const int use_count = _masks_gui_form_group_use_count(darktable.develop, form_id);
+  
+  // We don't ask for confirmation if the module uses internal masks,
+  // just delete the form as it won't be visible in the shape manager.
+  const gboolean internal_masks
+      = !IS_NULL_PTR(module)
+        && ((module->flags() & IOP_FLAGS_INTERNAL_MASKS) == IOP_FLAGS_INTERNAL_MASKS);
 
-  if(use_count <= 1)
+  if(use_count <= 1 && !internal_masks)
   {
     const int response = dt_masks_gui_confirm_delete_form_dialog(sel->name);
     if(response == GTK_RESPONSE_CANCEL) return FALSE;
