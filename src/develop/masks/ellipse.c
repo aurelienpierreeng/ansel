@@ -972,7 +972,7 @@ static void _ellipse_draw_shape(cairo_t *cr, const float *points, const int poin
   cairo_close_path(cr);
 }
 
-static void _ellipse_draw_node(const dt_masks_form_gui_t *gui, cairo_t *cr, const float zoom_scale,
+static void _ellipse_draw_handles(const dt_masks_form_gui_t *gui, cairo_t *cr, const float zoom_scale,
                       dt_masks_form_gui_points_t *gpt, const int index)
 {
   if(IS_NULL_PTR(gpt) || IS_NULL_PTR(gpt->points) || gpt->points_count < 5) return;
@@ -990,7 +990,7 @@ static void _ellipse_draw_node(const dt_masks_form_gui_t *gui, cairo_t *cr, cons
     _ellipse_point_transform(nodes[0], nodes[1], nodes[i * 2], nodes[i * 2 + 1], sinr, cosr, &x, &y);
     const gboolean selected = (i == gui->node_hovered || i == gui->node_dragging);
     const gboolean action = (i == selected_node);
-    dt_draw_node(cr, FALSE, action, selected, zoom_scale, x, y);
+    dt_draw_node(cr, TRUE, action, selected, zoom_scale, x, y);
   }
 }
 
@@ -1038,8 +1038,8 @@ static void _ellipse_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
       dt_draw_shape_lines(DT_MASKS_DASH_STICK, FALSE, cr, num_points, (gui->border_selected), zoom_scale, gpt->border,
                           gpt->border_count, &dt_masks_functions_ellipse.draw_shape, CAIRO_LINE_CAP_ROUND);
 
-    // draw node
-    _ellipse_draw_node(gui, cr, zoom_scale, gpt, index);
+    // draw handles
+    _ellipse_draw_handles(gui, cr, zoom_scale, gpt, index);
   }
 
   //draw the center point
