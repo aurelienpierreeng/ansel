@@ -303,6 +303,15 @@ set(CMAKE_C_COMPILE_OPTIONS_IPO -flto -ffat-lto-objects)
   set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO TRUE)
 #endif()
 
+if (WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  target_link_options(ansel_deps PRIVATE
+    $<$<CONFIG:Release>:-static-libstdc++>
+    $<$<CONFIG:Release>:-static-libgcc>
+    $<$<CONFIG:RelWithDebInfo>:-static-libstdc++>
+    $<$<CONFIG:RelWithDebInfo>:-static-libgcc>
+  )
+endif()
+
 add_library(ansel_deps INTERFACE)
 
 if(USE_DARKTABLE_PROFILING)
@@ -378,7 +387,6 @@ add_definitions("-DGLIB_VERSION_MAX_ALLOWED=GLIB_VERSION_MIN_REQUIRED")
 add_definitions("-DGDK_VERSION_MIN_REQUIRED=GDK_VERSION_3_24")
 #add_definitions("-DGDK_VERSION_MAX_ALLOWED=GDK_VERSION_MIN_REQUIRED")
 
-
 ## Optional deps go here
 
 option(WITH_LIBSOUP2 "Use libsoup2 instead of libsoup3" OFF)
@@ -430,7 +438,6 @@ endif(USE_WEBP)
 
 if(USE_AVIF)
   find_package(libavif CONFIG)
-
   if(libavif_FOUND AND libavif_VERSION VERSION_GREATER_EQUAL 0.8.2 AND TARGET avif)
     target_link_libraries(ansel_deps INTERFACE avif)
     add_definitions(-DHAVE_LIBAVIF=1)
@@ -439,7 +446,6 @@ if(USE_AVIF)
   else()
     # Fallback path (MSYS2 / older distros)
     pkg_check_modules(AVIF REQUIRED IMPORTED_TARGET libavif)
-
     if(TARGET PkgConfig::AVIF)
       target_link_libraries(ansel_deps INTERFACE PkgConfig::AVIF)
       target_compile_definitions(ansel_deps INTERFACE HAVE_LIBAVIF=1)
@@ -452,23 +458,19 @@ endif()
 if(USE_HEIF)
   # Try modern CMake package first
   find_package(libheif CONFIG)
-
   if(NOT libheif_FOUND)
     find_package(libheif 1.13.0 MODULE)
   endif()
-
   if(libheif_FOUND AND libheif_VERSION VERSION_GREATER_EQUAL 1.13.0 AND TARGET heif)
     target_link_libraries(ansel_deps INTERFACE heif)
     add_definitions(-DHAVE_LIBHEIF=1)
     list(APPEND SOURCES common/imageio_heif.c )
     set(DT_SUPPORTED_EXTENSIONS ${DT_SUPPORTED_EXTENSIONS} heif heic hif CACHE INTERNAL "")
-
     # libheif may also support AVIF
     if(NOT libavif_FOUND)
       list(APPEND DT_SUPPORTED_EXTENSIONS avif)
       set(DT_SUPPORTED_EXTENSIONS ${DT_SUPPORTED_EXTENSIONS} CACHE INTERNAL "")
     endif()
-
   else()
     set(libheif_FOUND NOTFOUND)
   endif()

@@ -25,7 +25,6 @@ endif(WebP_FOUND)
 if(OpenEXR_FOUND)
   list(APPEND MODULES "exr")
   add_library(exr MODULE "exr.cc")
-  set_property(TARGET exr PROPERTY INTERPROCEDURAL_OPTIMIZATION FALSE)
 endif(OpenEXR_FOUND)
 
 if(OpenJPEG_FOUND)
