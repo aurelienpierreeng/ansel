@@ -281,9 +281,6 @@ if(APPLE)
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -L/usr/lib")
   set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -L/usr/lib")
   set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -L/usr/lib")
-
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_DARWIN_C_SOURCE")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_DARWIN_C_SOURCE")
   add_definitions("-DOS_OBJECT_USE_OBJC=0")
 endif(APPLE)
 
@@ -612,15 +609,24 @@ if(BUILD_TESTING)
   include_directories(${CMOCKA_INCLUDE_DIR} include)
 endif(BUILD_TESTING)
 
-# we need some specific functions:
-if(NOT WIN32)
-  if(CMAKE_SYSTEM MATCHES "SunOS.*")
-    add_definitions("-D_XOPEN_SOURCE=600")
-  else()
-    add_definitions("-D_XOPEN_SOURCE=700")
-  endif(CMAKE_SYSTEM MATCHES "SunOS.*")
-else()
-  add_definitions("-D_USE_MATH_DEFINES")
+# ---- Windows ----
+if(WIN32)
+  add_compile_definitions(_USE_MATH_DEFINES)
+endif()
+
+# ---- Unix (Linux + macOS) ----
+if(UNIX)
+  add_compile_definitions(_DEFAULT_SOURCE)
+endif()
+
+# ---- Linux-only POSIX level ----
+if(UNIX AND NOT APPLE)
+  add_compile_definitions(_POSIX_C_SOURCE=200809L)
+endif()
+
+# ---- macOS extensions ----
+if(APPLE)
+  add_compile_definitions(_DARWIN_C_SOURCE)
 endif()
 
 # Set default component name - that way external modules like RawSpeed will install their
