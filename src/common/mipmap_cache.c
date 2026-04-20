@@ -1072,7 +1072,7 @@ dt_mipmap_size_t dt_mipmap_cache_get_fitting_size(const dt_mipmap_cache_t *cache
   {
     if((cache->max_width[k] <= width) && (cache->max_height[k] <= height))
     {
-      dt_print(DT_DEBUG_CACHE, "[mipmap_cache] image %d will fit a mip size %i (%lux%lu)\n", imgid, k, cache->max_width[k], cache->max_height[k]);
+      dt_print(DT_DEBUG_CACHE, "[mipmap_cache] image %d will fit a mip size %i (%" G_GSIZE_FORMAT "x%" G_GSIZE_FORMAT ")\n", imgid, k, cache->max_width[k], cache->max_height[k]);
       return k;
     }
   }

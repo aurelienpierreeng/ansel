@@ -1578,7 +1578,7 @@ uint32_t dt_tag_get_recent_used(GList **result)
   there is also a ~ prefix for tags that indicate that the tag order has to be kept instead of sorting them. that's
   also not possible at the moment.
 */
-ssize_t dt_tag_import(const char *filename)
+uint32_t dt_tag_import(const char *filename)
 {
   FILE *fd = g_fopen(filename, "r");
   if(IS_NULL_PTR(fd)) return -1;
@@ -1586,7 +1586,7 @@ ssize_t dt_tag_import(const char *filename)
   GList * hierarchy = NULL;
   char *line = NULL;
   size_t len = 0;
-  ssize_t count = 0;
+  uint32_t count = 0;
   guint tagid = 0;
   guint previous_category_depth = 0;
   gboolean previous_category = FALSE;
@@ -1713,7 +1713,7 @@ ssize_t dt_tag_import(const char *filename)
   we are using the first (mostly because it was easier to implement ;)). if this poses problems with other programs
   supporting these files then we should fix that.
 */
-ssize_t dt_tag_export(const char *filename)
+uint32_t dt_tag_export(const char *filename)
 {
   FILE *fd = g_fopen(filename, "w");
 

@@ -535,7 +535,7 @@ static int _non_thread_safe_pixel_pipe_cache_remove_lru(dt_dev_pixelpipe_cache_t
     if(error)
       dt_print(DT_DEBUG_PIPECACHE, "[pixelpipe] couldn't remove LRU %" PRIu64 "\n", lru->hash);
     else
-      dt_print(DT_DEBUG_PIPECACHE, "[pixelpipe] LRU %" PRIu64 " removed. Total cache size: %li MiB\n",
+      dt_print(DT_DEBUG_PIPECACHE, "[pixelpipe] LRU %" PRIu64 " removed. Total cache size: %" G_GSIZE_FORMAT " MiB\n",
                lru->hash, cache->current_memory / (1024 * 1024));
   }
   else

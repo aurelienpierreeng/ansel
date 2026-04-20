@@ -1834,7 +1834,7 @@ static int _default_process_tiling_cl_roi(struct dt_iop_module_t *self, const st
 
       dt_print(DT_DEBUG_TILING,  "[default_process_tiling_cl_roi] process tile (%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT ") size %dx%d at origin [%d,%d]\n",
                tx, ty, iroi_full.width, iroi_full.height, iroi_full.x, iroi_full.y);
-      dt_vprint(DT_DEBUG_TILING, "[default_process_tiling_cl_roi]    dest [%lu,%lu] at [%lu,%lu], offsets [%i,%i] -> [%i,%i], delta=%i\n\n",
+      dt_vprint(DT_DEBUG_TILING, "[default_process_tiling_cl_roi]    dest [%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT "] at [%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT "], offsets [%i,%i] -> [%i,%i], delta=%i\n\n",
                oregion[0], oregion[1], oorigin[0], oorigin[1], in_dx, in_dy, out_dx, out_dy, delta);
 
       /* get opencl input and output buffers */

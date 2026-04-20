@@ -88,11 +88,11 @@ gboolean dt_tag_new_from_gui(const char *name, guint *tagid);
 
 // read/import tags from a txt file as written by Lightroom. returns the number of imported tags
 // or -1 if an error occurred.
-ssize_t dt_tag_import(const char *filename);
+uint32_t dt_tag_import(const char *filename);
 
 // export all tags to a txt file as written by Lightroom. returns the number of exported tags
 // or -1 if an error occurred.
-ssize_t dt_tag_export(const char *filename);
+uint32_t dt_tag_export(const char *filename);
 
 /** get the name of specified id */
 gchar *dt_tag_get_name(const guint tagid);
