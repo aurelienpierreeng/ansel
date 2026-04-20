@@ -667,7 +667,7 @@ static void tree_insert_presets(GtkTreeStore *tree_model)
       if(iso_min == 0.0 && iso_max == FLT_MAX)
         iso = g_strdup("%");
       else
-        iso = g_strdup_printf("%zu - %zu", (size_t)iso_min, (size_t)iso_max);
+        iso = g_strdup_printf("%" G_GSIZE_FORMAT " - %" G_GSIZE_FORMAT "", (size_t)iso_min, (size_t)iso_max);
 
       for(min = 0; min < dt_gui_presets_exposure_value_cnt && exposure_min > dt_gui_presets_exposure_value[min]; min++)
         ;

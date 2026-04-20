@@ -236,7 +236,7 @@ int write_image(struct dt_imageio_module_data_t *data,
 
   dt_print(DT_DEBUG_IMAGEIO,
            "Exporting AVIF image [%s] "
-           "[width: %zu, height: %zu, bit depth: %zu, comp: %s, quality: %u]\n",
+           "[width: %" G_GSIZE_FORMAT ", height: %" G_GSIZE_FORMAT ", bit depth: %" G_GSIZE_FORMAT ", comp: %s, quality: %u]\n",
            filename,
            width,
            height,

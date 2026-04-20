@@ -519,7 +519,7 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
       else if(!strcmp(argv[k], "--version"))
       {
         printf("this is %s\ncopyright (c) 2009-2022 Johannes Hanika, (c) 2022-%s Aurélien Pierre\n" PACKAGE_BUGREPORT "\n\ncompile options:\n"
-               "  bit depth is %zu bit\n"
+               "  bit depth is %" G_GSIZE_FORMAT " bit\n"
 #ifdef _DEBUG
                "  debug build\n"
 #else
@@ -1560,7 +1560,7 @@ size_t get_usable_memory_bytes()
 
   while(fgets(line, sizeof(line), f))
   {
-    if(sscanf(line, "MemAvailable: %zu kB", &available_kb) == 1)
+    if(sscanf(line, "MemAvailable: %" G_GSIZE_FORMAT " kB", &available_kb) == 1)
     {
       fclose(f);
       return available_kb * 1024; // kB to bytes
@@ -1603,7 +1603,7 @@ void dt_configure_runtime_performance(dt_sys_resources_t *resources, gboolean in
   const size_t bits = CHAR_BIT * sizeof(void *);
   const gboolean sufficient = (mem >= 4096 && threads >= 2);
 
-  dt_print(DT_DEBUG_MEMORY, "[MEMORY CONFIGURATION] found a %s %zu-bit system with %zu cores\n",
+  dt_print(DT_DEBUG_MEMORY, "[MEMORY CONFIGURATION] found a %s %" G_GSIZE_FORMAT "-bit system with %" G_GSIZE_FORMAT " cores\n",
     (sufficient) ? "sufficient" : "low performance", bits, threads);
 
   // Override RAM detection with user config

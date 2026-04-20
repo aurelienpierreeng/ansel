@@ -167,7 +167,7 @@ static void _pixel_cache_message(dt_pixel_cache_entry_t *cache_entry, const char
   if(!(darktable.unmuted & DT_DEBUG_PIPECACHE)) return;
   if(verbose && !(darktable.unmuted & DT_DEBUG_VERBOSE)) return;
   dt_print(DT_DEBUG_PIPECACHE,
-           "[pixelpipe] cache entry %" PRIu64 "/%" PRIu64 ": %s (data=%p - %zu MiB - age %" PRId64
+           "[pixelpipe] cache entry %" PRIu64 "/%" PRIu64 ": %s (data=%p - %" G_GSIZE_FORMAT " MiB - age %" PRId64
            " - hits %i - refs %i - auto %i - ext %i - id %i - module %s) %s\n",
            cache_entry->hash, cache_entry->serial,
            cache_entry->name ? cache_entry->name : "-", cache_entry->data,
@@ -1521,15 +1521,15 @@ static inline void _log_arena_allocation_failure(dt_dev_pixelpipe_cache_t *cache
 
   if(entry_name)
     fprintf(stdout,
-            "[pixelpipe_cache] failed to allocate %zu bytes for entry %" PRIu64 " (%s, module=%s) "
-            "[arena largest=%zu MiB, total=%zu MiB, cache=%zu/%zu MiB]\n",
+            "[pixelpipe_cache] failed to allocate %" G_GSIZE_FORMAT " bytes for entry %" PRIu64 " (%s, module=%s) "
+            "[arena largest=%" G_GSIZE_FORMAT " MiB, total=%" G_GSIZE_FORMAT " MiB, cache=%" G_GSIZE_FORMAT "/%" G_GSIZE_FORMAT " MiB]\n",
             request_size, hash, entry_name, module ? module : "unknown",
             largest_free_bytes / (1024 * 1024), total_free_bytes / (1024 * 1024),
             cache->current_memory / (1024 * 1024), cache->max_memory / (1024 * 1024));
   else
     fprintf(stdout,
-            "[pixelpipe_cache] failed to allocate %zu bytes for entry %" PRIu64 " (module=%s) "
-            "[arena largest=%zu MiB, total=%zu MiB, cache=%zu/%zu MiB]\n",
+            "[pixelpipe_cache] failed to allocate %" G_GSIZE_FORMAT " bytes for entry %" PRIu64 " (module=%s) "
+            "[arena largest=%" G_GSIZE_FORMAT " MiB, total=%" G_GSIZE_FORMAT " MiB, cache=%" G_GSIZE_FORMAT "/%" G_GSIZE_FORMAT " MiB]\n",
             request_size, hash, module ? module : "unknown",
             largest_free_bytes / (1024 * 1024), total_free_bytes / (1024 * 1024),
             cache->current_memory / (1024 * 1024), cache->max_memory / (1024 * 1024));
@@ -1743,7 +1743,7 @@ static dt_pixel_cache_entry_t *dt_pixel_cache_new_entry(const uint64_t hash, con
   size_t rounded_size = 0;
   if(!dt_cache_arena_calc(&cache->arena, size, &pages_needed, &rounded_size))
   {
-    fprintf(stderr, "[pixelpipe] invalid cache entry size %zu for %s\n", size, name);
+    fprintf(stderr, "[pixelpipe] invalid cache entry size %" G_GSIZE_FORMAT " for %s\n", size, name);
     return NULL;
   }
 

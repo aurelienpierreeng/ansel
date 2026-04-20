@@ -160,7 +160,7 @@ static inline int pseudo_solve_gaussian(double *const restrict A,
 
   if(m < n)
   {
-    fprintf(stderr, "pseudo solve: cannot cast %zu \303\227 %zu matrix\n", m, n);
+    fprintf(stderr, "pseudo solve: cannot cast %" G_GSIZE_FORMAT " \303\227 %" G_GSIZE_FORMAT " matrix\n", m, n);
     return 1;
   }
 

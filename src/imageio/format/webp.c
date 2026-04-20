@@ -236,7 +236,7 @@ int write_image(dt_imageio_module_data_t *webp, const char *filename, const void
   }
   if(fwrite(assembled_data.bytes, assembled_data.size, 1, out) != 1)
   {
-    fprintf(stderr, "[webp export] error writing %zu bytes to file %s\n", assembled_data.size, filename);
+    fprintf(stderr, "[webp export] error writing %" G_GSIZE_FORMAT " bytes to file %s\n", assembled_data.size, filename);
     goto out;
   }
 
