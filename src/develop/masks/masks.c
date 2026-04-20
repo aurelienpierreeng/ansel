@@ -148,9 +148,10 @@ int dt_masks_find_closest_handle_common(dt_masks_form_t *mask_form,
 
   const gboolean has_bezier_layout = mask_form->uses_bezier_points_layout;
   const gboolean can_test_nodes = (!IS_NULL_PTR(node_position_cb)) || has_bezier_layout;
+  const int first_node_index = has_bezier_layout ? 0 : 1; // skip center node for non-bezier shapes
   const gboolean has_selected_node = (node_count > 0) && can_test_nodes
                                      && (mask_gui->group_selected == form_index)
-                                     && selected_node >= 0 && selected_node < node_count;
+                                     && selected_node >= first_node_index && selected_node < node_count;
 
   if(has_selected_node)
   {
@@ -198,7 +199,7 @@ int dt_masks_find_closest_handle_common(dt_masks_form_t *mask_form,
 
   if(can_test_nodes)
   {
-    for(int node_index = 0; node_index < node_count; node_index++)
+    for(int node_index = first_node_index; node_index < node_count; node_index++)
     {
       float node_x = NAN;
       float node_y = NAN;
