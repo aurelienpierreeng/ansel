@@ -580,7 +580,7 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
 
   const gboolean pinning = (cl->dev[dev].pinned_memory & DT_OPENCL_PINNING_ON);
   dt_print_nts(DT_DEBUG_OPENCL, "   PINNED MEMORY TRANSFER:   %s\n", pinning ? "WANTED" : "NO");
-  dt_print_nts(DT_DEBUG_OPENCL, "   FORCED HEADROOM:          %lu\n", cl->dev[dev].forced_headroom);
+  dt_print_nts(DT_DEBUG_OPENCL, "   FORCED HEADROOM:          %" G_GSIZE_FORMAT "\n", cl->dev[dev].forced_headroom);
   dt_print_nts(DT_DEBUG_OPENCL, "   AVOID ATOMICS:            %s\n", (cl->dev[dev].avoid_atomics) ? "YES" : "NO");
   dt_print_nts(DT_DEBUG_OPENCL, "   MICRO NAP:                %i\n", cl->dev[dev].micro_nap);
   dt_print_nts(DT_DEBUG_OPENCL, "   ROUNDUP WIDTH:            %i\n", cl->dev[dev].clroundup_wd);
