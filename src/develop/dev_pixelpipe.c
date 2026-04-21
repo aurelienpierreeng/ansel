@@ -227,8 +227,11 @@ static void _seal_opencl_cache_policy(dt_dev_pixelpipe_t *pipe, dt_develop_t *de
     const gboolean active_in_gui
         = (pipe->type == DT_DEV_PIXELPIPE_FULL || pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
            && dev->gui_module == module;
+
+    const gboolean has_autoset = pipe->autoset && !IS_NULL_PTR(module->autoset);
+
     const gboolean previous_output_must_cache_host
-        = !supports_opencl || active_in_gui || module_hist_on || global_hist_input_on;
+        = !supports_opencl || active_in_gui || module_hist_on || global_hist_input_on || has_autoset;
 
     piece->force_opencl_cache
         = authored_cache || user_requested_cache || color_picker_on
@@ -545,6 +548,14 @@ gboolean dt_dev_pixelpipe_cache_peek_gui(dt_dev_pixelpipe_t *pipe, const dt_dev_
   if(cache_entry) *cache_entry = NULL;
   if(IS_NULL_PTR(pipe)) return FALSE;
 
+  // Module-output cache requests are not satisfiable while the current pipe run
+  // intentionally bypasses cache retention. Re-queueing them from GUI redraws
+  // would keep transient edit modes in a self-feeding recompute loop.
+  if(piece
+     && (dt_dev_pixelpipe_get_realtime(pipe) || pipe->bypass_cache || pipe->no_cache
+         || piece->bypass_cache))
+    return FALSE;
+
   const uint64_t hash = piece ? piece->global_hash : dt_dev_pixelpipe_get_hash(pipe);
   void *buffer = NULL;
   dt_pixel_cache_entry_t *entry = NULL;
@@ -557,14 +568,6 @@ gboolean dt_dev_pixelpipe_cache_peek_gui(dt_dev_pixelpipe_t *pipe, const dt_dev_
     if(cache_entry) *cache_entry = entry;
     return TRUE;
   }
-
-  // Module-output cache requests are not satisfiable while the current pipe run
-  // intentionally bypasses cache retention. Re-queueing them from GUI redraws
-  // would keep transient edit modes in a self-feeding recompute loop.
-  if(piece
-     && (dt_dev_pixelpipe_get_realtime(pipe) || pipe->bypass_cache || pipe->no_cache
-         || piece->bypass_cache))
-    return FALSE;
 
   if(!IS_NULL_PTR(wait) && restart && hash != DT_PIXELPIPE_CACHE_HASH_INVALID)
   {

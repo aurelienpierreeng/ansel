@@ -362,6 +362,10 @@ typedef struct dt_dev_pixelpipe_t
   // Temporarily pause the infinite loop of pipeline
   gboolean pause;
 
+  // Run a self-setting pipeline that will update history for each module
+  // depending on its input if it implements the autoset() method
+  gboolean autoset;
+
 } dt_dev_pixelpipe_t;
 
 static inline uint64_t dt_dev_pixelpipe_get_hash(const dt_dev_pixelpipe_t *pipe)
