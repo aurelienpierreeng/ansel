@@ -127,9 +127,9 @@ static int _ellipse_point_in_polygon(float x, float y, float *points, int points
 */
 
 // check if point is close to path - segment by segment
-static int _ellipse_point_close_to_path(float x, float y, float as, float *points, int points_count)
+static int _ellipse_point_close_to_path(float x, float y, float mouse_radius, float *points, int points_count)
 {
-  float as2 = as * as;
+  float radius2 = mouse_radius * mouse_radius;
 
   const float lastx = points[2 * (points_count - 1)];
   const float lasty = points[2 * (points_count - 1) + 1];
@@ -169,12 +169,12 @@ static int _ellipse_point_close_to_path(float x, float y, float as, float *point
     const float dx = x - xx;
     const float dy = y - yy;
 
-    if(sqf(dx) + sqf(dy) < as2) return 1;
+    if(sqf(dx) + sqf(dy) < radius2) return 1;
   }
   return 0;
 }
 
-static void _ellipse_get_distance(float x, float y, float as, dt_masks_form_gui_t *gui, int index,
+static void _ellipse_get_distance(float x, float y, float mouse_radius, dt_masks_form_gui_t *gui, int index,
                                   int num_points, int *inside, int *inside_border, int *near,
                                   int *inside_source, float *dist)
 {
@@ -219,12 +219,15 @@ static void _ellipse_get_distance(float x, float y, float as, dt_masks_form_gui_
   const float center_dy = y - gpt->points[1];
   *dist = sqf(center_dx) + sqf(center_dy);
 
+  const gboolean close_to_border = _ellipse_point_close_to_path(x, y, mouse_radius * 1.5, gpt->border + 10, gpt->border_count - 5);
+  const gboolean in_border = dt_masks_point_in_form_exact(pt, 1, gpt->border + 10, 10, gpt->border_count - 5) >= 0;
   // we check if it's inside borders
-  if(dt_masks_point_in_form_exact(pt, 1, gpt->border, 10, gpt->border_count - 5) < 0) return;
+  if(!close_to_border && !in_border) return;  
   *inside = 1;
 
   // and we check if it's inside form
-  *inside_border = !_ellipse_point_close_to_path(x, y, as, gpt->points + 10, gpt->points_count - 5);
+  const int in_form = _ellipse_point_close_to_path(x, y, mouse_radius, gpt->points + 10, gpt->points_count - 5);
+  *inside_border = !in_form;
 }
 
 typedef struct dt_masks_ellipse_creation_values_t

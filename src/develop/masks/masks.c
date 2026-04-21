@@ -232,12 +232,6 @@ int dt_masks_find_closest_handle_common(dt_masks_form_t *mask_form,
   distance_cb(cursor_x, cursor_y, cursor_radius, mask_gui, form_index, node_count, &inside, &inside_border,
               &near_segment, &inside_source, &nearest_distance, user_data);
 
-  if(near_segment >= 0)
-  {
-    if(near_segment < node_count)
-      mask_gui->seg_hovered = near_segment;
-    return 1;
-  }
 
   if(inside_source)
   {
@@ -251,6 +245,12 @@ int dt_masks_find_closest_handle_common(dt_masks_form_t *mask_form,
     mask_gui->form_selected = TRUE;
     mask_gui->border_selected = TRUE;
     if(post_select_cb) post_select_cb(mask_gui, inside, inside_border, inside_source, user_data);
+    return 1;
+  }
+  if(near_segment >= 0)
+  {
+    if(near_segment < node_count)
+      mask_gui->seg_hovered = near_segment;
     return 1;
   }
   if(inside)
