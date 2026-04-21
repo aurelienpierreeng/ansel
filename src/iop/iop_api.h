@@ -253,6 +253,17 @@ OPTIONAL(void, post_history_commit, struct dt_iop_module_t *self);
 
 OPTIONAL(int, populate_masks_context_menu, struct dt_iop_module_t *self, GtkWidget *menu, const int formid,const float pzx, const float pzy);
 
+/**
+ * @brief Used for modules to init their parameters based on actual input reading,
+ * while init_defaults() only reads metadata.
+ * 
+ * @param self 
+ * @param pipe 
+ * @param piece 
+ * @param input
+ */
+OPTIONAL(void, autoset, struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe, const struct dt_dev_pixelpipe_iop_t *piece, const void *i);
+
 #ifdef FULL_API_H
 
 #pragma GCC visibility pop

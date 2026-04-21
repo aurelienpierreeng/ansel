@@ -90,6 +90,7 @@
 #include "common/history.h"
 #include "common/image_cache.h"
 #include "common/imageio.h"
+#include "common/iop-autoset.h"
 #include "common/imageio_module.h"
 #include "common/mipmap_cache.h"
 #include "common/selection.h"
@@ -158,6 +159,7 @@ static void _release_expose_source_caches(void);
 static int32_t _darkroom_pending_imgid = UNKNOWN_IMAGE;
 static dt_iop_module_t *_darkroom_pending_focus_module = NULL;
 static GtkWidget *_darkroom_ioporder_button = NULL;
+static GtkWidget *_darkroom_autoset_button = NULL;
 
 static void _darkroom_ioporder_quickbutton_clicked(GtkButton *button, gpointer user_data)
 {
@@ -1719,6 +1721,8 @@ gboolean _switch_to_prev_picture(GtkAccelGroup *accel_group, GObject *accelerabl
   return TRUE;
 }
 
+static dt_autoset_manager_t *_autoset_manager = NULL;
+
 static void _preview_pipe_finished(gpointer instance, gpointer user_data)
 {
   // Get the mip size that is at most as big as our pipeline backbuf
@@ -1740,8 +1744,29 @@ static void _preview_pipe_finished(gpointer instance, gpointer user_data)
     dt_thumbtable_refresh_thumbnail(darktable.gui->ui->thumbtable_lighttable, imgid, TRUE);
     dt_thumbtable_refresh_thumbnail(darktable.gui->ui->thumbtable_filmstrip, imgid, TRUE);
   }
+
+  if(pipe->autoset)
+    dt_iop_autoset_advance(darktable.develop, _autoset_manager);
 }
 
+/*
+static gboolean _darkroom_toolbox_button_activate_accel(GtkAccelGroup *accel_group, GObject *accelerable,
+                                                        guint keyval, GdkModifierType modifier,
+                                                        gpointer data)
+{
+  GtkWidget *button = GTK_WIDGET(data);
+  if(IS_NULL_PTR(button) || !gtk_widget_is_visible(button) || !gtk_widget_is_sensitive(button)) return FALSE;
+
+  gtk_button_clicked(GTK_BUTTON(button));
+  return TRUE;
+}
+*/
+
+static void _darkroom_autoset_quickbutton_clicked(GtkButton *button, gpointer user_data)
+{
+  dt_iop_autoset_build_list(darktable.develop, _autoset_manager);
+  fprintf(stdout, "lauching autoset\n");
+}
 
 void gui_init(dt_view_t *self)
 {
@@ -1890,6 +1915,19 @@ void gui_init(dt_view_t *self)
                                 N_("Darkroom/Toolbox"),
                                 N_("Show the pipeline node graph"), 0, 0,
                                 _("Triggers the action"));
+
+  _darkroom_autoset_button = gtk_button_new_with_label(_("Autoset"));
+  gtk_widget_set_tooltip_text(_darkroom_autoset_button, _("show the pipeline node graph"));
+  g_signal_connect(G_OBJECT(_darkroom_autoset_button), "clicked",
+                   G_CALLBACK(_darkroom_autoset_quickbutton_clicked), dev);
+  dt_view_manager_module_toolbox_add(darktable.view_manager, _darkroom_autoset_button, DT_VIEW_DARKROOM);
+  /*
+  dt_accels_new_darkroom_action(_darkroom_toolbox_button_activate_accel, _darkroom_autoset_button,
+                                N_("Darkroom/Toolbox"),
+                                N_("Show the pipeline node graph"), 0, 0,
+                                _("Triggers the action"));
+  */
+
 
   GtkWidget *colorscheme, *mode;
 
@@ -2148,6 +2186,8 @@ void gui_init(dt_view_t *self)
 
   darktable.view_manager->proxy.darkroom.get_layout = _lib_darkroom_get_layout;
   dev->roi.border_size = DT_PIXEL_APPLY_DPI(dt_conf_get_int("plugins/darkroom/ui/border_size"));
+
+  _autoset_manager = dt_calloc_align(sizeof(dt_autoset_manager_t));
 }
 
 static gboolean _is_scroll_captured_by_widget()

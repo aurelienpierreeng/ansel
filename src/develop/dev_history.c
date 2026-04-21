@@ -797,11 +797,8 @@ gboolean dt_dev_add_history_item_ext(dt_develop_t *dev, struct dt_iop_module_t *
   {
     // Create a new history entry
     hist = (dt_dev_history_item_t *)calloc(1, sizeof(dt_dev_history_item_t));
-
     dev->history = g_list_append(dev->history, hist);
-
     hist->num = g_list_index(dev->history, hist);
-
     dt_print(DT_DEBUG_HISTORY, "[dt_dev_add_history_item_ext] new history entry added for %s at position %i\n",
             module->name(), hist->num);
   }

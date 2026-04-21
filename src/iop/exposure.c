@@ -535,7 +535,6 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   return 0;
 }
 
-
 static float _get_exposure_bias(const struct dt_iop_module_t *self)
 {
   float bias = 0.0f;
@@ -549,6 +548,32 @@ static float _get_exposure_bias(const struct dt_iop_module_t *self)
     return CLAMP(bias, -5.0f, 5.0f);
   else
     return 0.0f;
+}
+
+void autoset(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe, const struct dt_dev_pixelpipe_iop_t *piece, const void *i)
+{
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
+  dt_iop_exposure_params_t *p = (dt_iop_exposure_params_t *)self->params;
+  if(piece->dsc_in.channels != 4) return;
+
+  const float *const restrict in = (float*)i;
+  float average_exposure = 0.f;
+  const float norm = 1.f / (float)(roi_out->width * roi_out->height);
+
+  __OMP_PARALLEL_FOR__(reduction(+:average_exposure))
+  for(size_t k = 0; k < roi_out->width * roi_out->height * 4; k += 4)
+  {
+    // Don't sample the alpha channel
+    for(size_t c = 0; c < 3; c++)
+      average_exposure += in[k + c] * norm;
+  }
+  float correction = 0.18f / average_exposure;
+  float exposure = exp2f(correction);
+
+  p->exposure = exposure;
+
+  if(p->compensate_exposure_bias)
+    p->exposure += _get_exposure_bias(self);
 }
 
 
