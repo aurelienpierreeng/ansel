@@ -115,7 +115,7 @@ void dt_gui_presets_init()
   // This cuts a large number of INSERTs during module load without altering behavior across upgrades.
   gchar *lang = dt_conf_get_string("ui_last/gui_language");
   if(IS_NULL_PTR(lang)) lang = g_strdup("");
-  gchar *sig = g_strdup_printf("%d|%s", dt_version(), lang);
+  gchar *sig = g_strdup_printf("%s|%s", darktable_package_version, lang);
   gchar *prev = dt_conf_get_string("ui_last/presets_autogen_signature");
   _gui_presets_autogen_enabled = !(prev && !g_strcmp0(prev, sig));
   dt_conf_set_string("ui_last/presets_autogen_signature", sig);

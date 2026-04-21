@@ -304,18 +304,18 @@ void init_presets(dt_iop_module_so_t *self)
   // deblurring presets
   p.sharpness = 0.0f;
   p.threshold = 0.0f;
-  p.variance_threshold = +1.f;
-  p.regularization = 3.f;
+  p.variance_threshold = +0.f;
+  p.regularization = 1.f;
 
-  p.anisotropy_first = +1.f;
+  p.anisotropy_first = +2.f;
   p.anisotropy_second = 0.f;
-  p.anisotropy_third = +1.f;
+  p.anisotropy_third = +2.f;
   p.anisotropy_fourth = 0.f;
 
   p.first = -0.25f;
   p.second = +0.125f;
-  p.third = -0.50f;
-  p.fourth = +0.25f;
+  p.third = -0.125f;
+  p.fourth = +0.0625f;
 
   p.radius = 8;
   p.iterations = 8;
@@ -335,7 +335,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.iterations = 10;
   p.radius = 512;
   p.sharpness = 0.f;
-  p.variance_threshold = 0.25f;
+  p.variance_threshold = 0.f;
   p.regularization = 2.5f;
 
   p.first = -0.20f;
@@ -354,7 +354,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.iterations = 32;
   p.sharpness = 0.f;
   p.threshold = 0.f;
-  p.variance_threshold = -0.25f;
+  p.variance_threshold = -0.f;
   p.regularization = 4.f;
 
   p.anisotropy_first = +2.f;
@@ -489,7 +489,7 @@ void init_presets(dt_iop_module_so_t *self)
   // local contrast
   p.sharpness = 0.0f;
   p.threshold = 0.0f;
-  p.variance_threshold = 1.f;
+  p.variance_threshold = 0.f;
 
   p.anisotropy_first = -2.5f;
   p.anisotropy_second = 0.f;
@@ -502,9 +502,9 @@ void init_presets(dt_iop_module_so_t *self)
   p.fourth = -0.50f;
 
   p.iterations = 10;
-  p.radius = 384;
+  p.radius = 333;
   p.radius_center = 512;
-  p.regularization = 1.f;
+  p.regularization = 0.1f;
   dt_gui_presets_add_generic(_("add local contrast"), self->op, self->version(), &p, sizeof(p), 1,
                              DEVELOP_BLEND_CS_RGB_SCENE);
 
@@ -532,8 +532,8 @@ void init_presets(dt_iop_module_so_t *self)
   p.radius = 128;
   p.sharpness = 0.0f;
   p.threshold = 0.0f;
-  p.variance_threshold = 0.25f;
-  p.regularization = 0.25f;
+  p.variance_threshold = 0.f;
+  p.regularization = 0.f;
 
   p.anisotropy_first = 0.f;
   p.anisotropy_second = 0.f;
@@ -553,8 +553,8 @@ void init_presets(dt_iop_module_so_t *self)
   p.radius = 512;
   p.sharpness = 0.0f;
   p.threshold = 0.0f;
-  p.variance_threshold = 0.05f;
-  p.regularization = 0.01f;
+  p.variance_threshold = 0.f;
+  p.regularization = 0.f;
 
 
   p.anisotropy_first = 0.f;
