@@ -2276,7 +2276,7 @@ int dt_masks_events_button_released(struct dt_iop_module_t *module, double x, do
       = _dt_masks_events_get_dispatch_form(mask_form, mask_gui, &group_entry, &parent_id, &form_index);
 
   int result = 0;
-  if(dispatch_form && dispatch_form->functions && dispatch_form->functions->button_released)
+  if(!IS_NULL_PTR(dispatch_form) && dispatch_form->functions && dispatch_form->functions->button_released)
     result = dispatch_form->functions->button_released(module, x, y, button,
                                                        state, dispatch_form, parent_id, mask_gui, form_index);
 
@@ -2332,10 +2332,13 @@ int dt_masks_events_button_pressed(struct dt_iop_module_t *module, double x, dou
   _dt_masks_events_update_hover(dispatch_form, mask_gui, form_index);
 
   gboolean return_val = FALSE;
-  if(dispatch_form && dispatch_form->functions && dispatch_form->functions->button_pressed)
+  if(!IS_NULL_PTR(dispatch_form) && dispatch_form->functions && dispatch_form->functions->button_pressed)
     return_val = dispatch_form->functions->button_pressed(module, x, y, pressure,
                                                           button, event_type, state,
                                                           dispatch_form, parent_id, mask_gui, form_index);
+  // Throw a selection change event.
+  // `dispatch_form` can pass NULL in case of deselection.
+  dt_masks_select_form(module, dispatch_form);
 
   const gboolean shape_was_selected = (mask_form->type & DT_MASKS_GROUP)
                                           ? (prev_group_selected >= 0 && prev_group_selected == form_index)
@@ -3807,7 +3810,7 @@ int dt_masks_point_in_form_exact(const float *test_points, int test_point_count,
  */
 void dt_masks_select_form(struct dt_iop_module_t *module, dt_masks_form_t *selected_form)
 {
-  const int selected_formid = selected_form ? selected_form->formid : 0;
+  const int selected_formid = IS_NULL_PTR(selected_form) ? 0 : selected_form->formid;
 
   if(IS_NULL_PTR(module) && selected_formid == 0)
     module = darktable.develop->gui_module;

@@ -505,7 +505,7 @@ static int rt_get_selected_shape_index(dt_iop_retouch_params_t *p)
   return rt_get_index_from_formid(p, selected_formid);
 }
 
-static void rt_shape_selection_changed(dt_iop_module_t *self)
+static void rt_load_shape_algo_in_gui(dt_iop_module_t *self, const int form_selected_id)
 {
   dt_iop_retouch_params_t *p = (dt_iop_retouch_params_t *)self->params;
   dt_iop_retouch_gui_data_t *g = (dt_iop_retouch_gui_data_t *)self->gui_data;
@@ -514,7 +514,7 @@ static void rt_shape_selection_changed(dt_iop_module_t *self)
 
   gboolean selection_changed = FALSE;
 
-  const int index = rt_get_selected_shape_index(p);
+  const int index = rt_get_index_from_formid(p, form_selected_id);
   if(index >= 0)
   {
     const dt_iop_retouch_form_data_t *const selected_form = &p->rt_forms[index];
@@ -560,7 +560,6 @@ static void rt_shape_selection_changed(dt_iop_module_t *self)
 
   if(selection_changed) rt_show_hide_controls(self);
 
-
   rt_display_selected_shapes_lbl(g);
 
   if(index >= 0)
@@ -569,8 +568,6 @@ static void rt_shape_selection_changed(dt_iop_module_t *self)
     gtk_widget_hide(GTK_WIDGET(g->sl_mask_opacity));
 
   --darktable.gui->reset;
-
-  if(selection_changed) dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
 //---------------------------------------------------------------------------------
@@ -811,12 +808,11 @@ void post_history_commit(dt_iop_module_t *self)
   gtk_label_set_text(g->label_form, str);
   dt_free(str);
 
-  // update edit shapes status
-  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)self->blend_data;
-  if(IS_NULL_PTR(bd)) return;
   //only toggle shape show button if shapes exist
   if(!IS_NULL_PTR(grp) && (grp->type & DT_MASKS_GROUP) && grp->points)
   {
+    //dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)self->blend_data;
+    //if(IS_NULL_PTR(bd)) return;
     //gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_edit_masks),
     //                             (bd->masks_shown != DT_MASKS_EDIT_OFF) && (self->dev->gui_module == self));
 
@@ -1982,7 +1978,7 @@ void masks_selection_changed(struct dt_iop_module_t *self, const int form_select
   if(IS_NULL_PTR(g)) return;
 
   dt_iop_gui_enter_critical_section(self);
-  rt_shape_selection_changed(self);
+  rt_load_shape_algo_in_gui(self, form_selected_id);
   dt_iop_gui_leave_critical_section(self);
 }
 
@@ -4454,9 +4450,9 @@ static void rt_menu_select_algorithm_callback(GtkWidget *widget, gpointer user_d
   form->type = masks_type;
 
   // Update GUI
-  rt_shape_selection_changed(self);
+  rt_load_shape_algo_in_gui(self, formid);
 
-  //dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
 int populate_masks_context_menu(struct dt_iop_module_t *self, GtkWidget *menu, const int formid,const float pzx, const float pzy)
