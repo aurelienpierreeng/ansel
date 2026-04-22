@@ -811,12 +811,10 @@ void post_history_commit(dt_iop_module_t *self)
   //only toggle shape show button if shapes exist
   if(!IS_NULL_PTR(grp) && (grp->type & DT_MASKS_GROUP) && grp->points)
   {
-    //dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)self->blend_data;
-    //if(IS_NULL_PTR(bd)) return;
-    //gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_edit_masks),
-    //                             (bd->masks_shown != DT_MASKS_EDIT_OFF) && (self->dev->gui_module == self));
-
-    rt_show_forms_for_current_scale(self);
+    dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)self->blend_data;
+    if(IS_NULL_PTR(bd)) return;
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_edit_masks),
+                                 (bd->masks_shown != DT_MASKS_EDIT_OFF) && (self->dev->gui_module == self));
   }
   else
   {

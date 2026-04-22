@@ -1953,7 +1953,6 @@ static void _lib_masks_handler_callback(gpointer instance, const int formid, con
     // When a shape is deleted from the model, we may no longer find its previous row in the current tree.
     // In that case, force a full list refresh so stale rows don't remain visible.
     _lib_masks_recreate_list(self);
-    _lib_masks_update_list(self);
   }
 
   else if(event == DT_MASKS_EVENT_ADD)
