@@ -803,6 +803,7 @@ void post_history_commit(dt_iop_module_t *self)
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_ellipse), rt_shape_is_being_added(self, DT_MASKS_ELLIPSE));
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_brush), rt_shape_is_being_added(self, DT_MASKS_BRUSH));
 
+  // Get the total form count and display it in the module
   const dt_masks_form_t *grp = dt_masks_get_from_id(self->dev, self->blend_params->mask_id);
   guint nb = 0;
   if(grp && (grp->type & DT_MASKS_GROUP)) nb = g_list_length(grp->points);
@@ -812,18 +813,19 @@ void post_history_commit(dt_iop_module_t *self)
 
   // update edit shapes status
   dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)self->blend_data;
-
+  if(IS_NULL_PTR(bd)) return;
   //only toggle shape show button if shapes exist
   if(!IS_NULL_PTR(grp) && (grp->type & DT_MASKS_GROUP) && grp->points)
   {
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_edit_masks),
-                                 (bd->masks_shown != DT_MASKS_EDIT_OFF) && (self->dev->gui_module == self));
+    //gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_edit_masks),
+    //                             (bd->masks_shown != DT_MASKS_EDIT_OFF) && (self->dev->gui_module == self));
+
+    rt_show_forms_for_current_scale(self);
   }
   else
   {
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_edit_masks), FALSE);
   }
-
 }
 
 static gboolean rt_masks_form_is_in_roi(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,

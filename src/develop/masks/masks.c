@@ -1043,7 +1043,8 @@ gboolean dt_masks_remove_or_delete(struct dt_iop_module_t *module, dt_masks_form
   }
 
   // Default if use count > 1, or responded YES
-  dt_masks_change_form_gui(NULL);
+  // there is no gui for internal masks so we don't change it in this case.  
+  if(!internal_masks) dt_masks_change_form_gui(NULL);
   dt_masks_form_delete(module, NULL, sel);
   dt_dev_add_history_item(darktable.develop, module, TRUE, TRUE);
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, form_id, 0, DT_MASKS_EVENT_REMOVE);
