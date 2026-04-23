@@ -619,7 +619,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   }
 
   cl_int err = -999;
-  const int blue_mapping = d->blue_mapping && dt_image_is_matrix_correction_supported(&pipe->image);
+  const int blue_mapping = d->blue_mapping && dt_image_is_matrix_correction_supported(&pipe->dev->image_storage);
   const int devid = pipe->devid;
   const int width = roi_in->width;
   const int height = roi_in->height;
@@ -919,7 +919,7 @@ static inline __attribute__((always_inline)) void process_cmatrix(struct dt_iop_
                             const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   const dt_iop_colorin_data_t *const d = (dt_iop_colorin_data_t *)piece->data;
-  const int blue_mapping = d->blue_mapping && dt_image_is_matrix_correction_supported(&pipe->image);
+  const int blue_mapping = d->blue_mapping && dt_image_is_matrix_correction_supported(&pipe->dev->image_storage);
 
   if(!blue_mapping && d->nonlinearlut == 0)
   {
@@ -1034,7 +1034,7 @@ static inline __attribute__((always_inline)) void process_lcms2(struct dt_iop_mo
                           const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   const dt_iop_colorin_data_t *const d = (dt_iop_colorin_data_t *)piece->data;
-  const int blue_mapping = d->blue_mapping && dt_image_is_matrix_correction_supported(&pipe->image);
+  const int blue_mapping = d->blue_mapping && dt_image_is_matrix_correction_supported(&pipe->dev->image_storage);
 
   // use general lcms2 fallback
   if(blue_mapping)
@@ -1131,19 +1131,19 @@ static dt_colorspaces_color_profile_type_t _resolve_input_profile(const dt_iop_c
 
   if(type == DT_COLORSPACE_ENHANCED_MATRIX)
   {
-    d->input = dt_colorspaces_create_darktable_profile(pipe->image.camera_makermodel);
+    d->input = dt_colorspaces_create_darktable_profile(pipe->dev->image_storage.camera_makermodel);
     if(IS_NULL_PTR(d->input)) type = DT_COLORSPACE_EMBEDDED_ICC;
     else d->clear_input = 1;
   }
   if(type == DT_COLORSPACE_VENDOR_MATRIX)
   {
-    d->input = dt_colorspaces_create_vendor_profile(pipe->image.camera_makermodel);
+    d->input = dt_colorspaces_create_vendor_profile(pipe->dev->image_storage.camera_makermodel);
     if(IS_NULL_PTR(d->input)) type = DT_COLORSPACE_EMBEDDED_ICC;
     else d->clear_input = 1;
   }
   if(type == DT_COLORSPACE_ALTERNATE_MATRIX)
   {
-    d->input = dt_colorspaces_create_alternate_profile(pipe->image.camera_makermodel);
+    d->input = dt_colorspaces_create_alternate_profile(pipe->dev->image_storage.camera_makermodel);
     if(IS_NULL_PTR(d->input)) type = DT_COLORSPACE_EMBEDDED_ICC;
     else d->clear_input = 1;
   }
@@ -1154,7 +1154,7 @@ static dt_colorspaces_color_profile_type_t _resolve_input_profile(const dt_iop_c
   {
     gboolean new_profile = FALSE;
     cmsHPROFILE profile = NULL;
-    type = dt_colorspaces_get_input_profile_from_image(pipe->image.id, type, &profile, &new_profile);
+    type = dt_colorspaces_get_input_profile_from_image(pipe->dev->image_storage.id, type, &profile, &new_profile);
     if(!IS_NULL_PTR(profile))
     {
       d->input = profile;
@@ -1164,10 +1164,10 @@ static dt_colorspaces_color_profile_type_t _resolve_input_profile(const dt_iop_c
 
   if(requested_type == DT_COLORSPACE_STANDARD_MATRIX
      && type == DT_COLORSPACE_LIN_REC709
-     && dt_image_is_matrix_correction_supported(&pipe->image))
+     && dt_image_is_matrix_correction_supported(&pipe->dev->image_storage))
   {
-    dt_print(DT_DEBUG_COLORPROFILE, "[colorin] `%s' color matrix not found!\n", pipe->image.camera_makermodel);
-    dt_control_log(_("`%s' color matrix not found!"), pipe->image.camera_makermodel);
+    dt_print(DT_DEBUG_COLORPROFILE, "[colorin] `%s' color matrix not found!\n", pipe->dev->image_storage.camera_makermodel);
+    dt_control_log(_("`%s' color matrix not found!"), pipe->dev->image_storage.camera_makermodel);
   }
 
   if(IS_NULL_PTR(d->input))

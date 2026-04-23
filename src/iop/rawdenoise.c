@@ -572,7 +572,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *params, dt_dev
     dt_draw_curve_calc_values(d->curve[ch], 0.0, 1.0, DT_IOP_RAWDENOISE_BANDS, NULL, d->force[ch]);
   }
 
-  if (!(dt_image_is_raw(&pipe->image)))
+  if (!(dt_image_is_raw(&pipe->dev->image_storage)))
     piece->enabled = 0;
 }
 

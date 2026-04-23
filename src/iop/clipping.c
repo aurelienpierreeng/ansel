@@ -1221,7 +1221,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
     if(d->cx != p->cx || d->cy != p->cy || d->cw != fabsf(p->cw) || d->ch != fabsf(p->ch))
     {
       fprintf(stderr, "[crop&rotate] invalid crop data for %d : x=%0.04f y=%0.04f w=%0.04f h=%0.04f\n",
-              pipe->image.id, p->cx, p->cy, p->cw, p->ch);
+              pipe->dev->image_storage.id, p->cx, p->cy, p->cw, p->ch);
     }
   }
 }

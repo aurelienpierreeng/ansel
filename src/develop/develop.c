@@ -304,7 +304,7 @@ int dt_dev_get_thumbnail_size(dt_develop_t *dev)
   if(dev->virtual_pipe->imgid != dev->image_storage.id
       || dev->virtual_pipe->iwidth != dev->roi.raw_width
       || dev->virtual_pipe->iheight != dev->roi.raw_height
-      || dev->virtual_pipe->image.id != dev->image_storage.id)
+      || dev->virtual_pipe->dev->image_storage.id != dev->image_storage.id)
     dt_dev_pixelpipe_set_input(dev->virtual_pipe, dev->image_storage.id,
                                 dev->roi.raw_width, dev->roi.raw_height, 1.0f, DT_MIPMAP_FULL);
 
@@ -438,7 +438,7 @@ gboolean dt_dev_pipelines_share_preview_output(dt_develop_t *dev)
 static void dt_dev_resync_mipmap_cache(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, dt_iop_roi_t roi)
 {
   dt_mipmap_cache_t *cache = darktable.mipmap_cache;
-  const int32_t imgid = pipe->image.id;
+  const int32_t imgid = pipe->dev->image_storage.id;
 
   // Get the mip size that is at most as big as our pipeline backbuf
   dt_mipmap_size_t mip = dt_mipmap_cache_get_fitting_size(cache, pipe->backbuf.width, pipe->backbuf.height, imgid);

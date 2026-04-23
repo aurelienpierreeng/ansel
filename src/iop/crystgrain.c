@@ -1126,7 +1126,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     .kernel_scale = kernel_scale,
     .inv_scale = 1.0f / kernel_scale,
     .channel_correlation = d->channel_correlation,
-    .base_seed = ((uint64_t)_hash_string(pipe->image.filename) << 32)
+    .base_seed = ((uint64_t)_hash_string(pipe->dev->image_storage.filename) << 32)
                  ^ ((uint64_t)width << 16) ^ (uint64_t)height
   };
   const float current_surface = _average_discrete_grain_surface(&rt);
@@ -1366,7 +1366,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     .kernel_scale = kernel_scale,
     .inv_scale = 1.0f / kernel_scale,
     .channel_correlation = d->channel_correlation,
-    .base_seed = ((uint64_t)_hash_string(pipe->image.filename) << 32)
+    .base_seed = ((uint64_t)_hash_string(pipe->dev->image_storage.filename) << 32)
                  ^ ((uint64_t)width << 16) ^ (uint64_t)height
   };
   const float current_surface = _average_discrete_grain_surface(&rt);

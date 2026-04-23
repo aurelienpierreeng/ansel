@@ -1407,7 +1407,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *params, dt_dev
   dt_iop_cacorrect_params_t *p = (dt_iop_cacorrect_params_t *)params;
   dt_iop_cacorrect_data_t *d = (dt_iop_cacorrect_data_t *) piece->data;
 
-  dt_image_t *img = &pipe->image;
+  dt_image_t *img = &pipe->dev->image_storage;
   const gboolean active = (dt_image_is_raw(img) && (img->dsc.filters != 9u) && !(dt_image_is_monochrome(img)));
 
   if(!active) piece->enabled = 0;

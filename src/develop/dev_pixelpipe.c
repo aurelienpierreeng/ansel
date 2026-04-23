@@ -458,7 +458,7 @@ void dt_dev_pixelpipe_get_roi_in(dt_dev_pixelpipe_t *pipe, const struct dt_iop_r
   /* ROI planning runs backwards, but rawprepare seals the effective Bayer/X-Trans phase only once
    * the real input crop is known. Forward that authored RAW descriptor now so the downstream RAW
    * modules process with the same CFA layout that rawprepare just computed for this run. */
-  dt_iop_buffer_dsc_t upstream_dsc = pipe->image.dsc;
+  dt_iop_buffer_dsc_t upstream_dsc = pipe->dev->image_storage.dsc;
   for(GList *nodes = g_list_first(pipe->nodes); nodes; nodes = g_list_next(nodes))
   {
     dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)nodes->data;
@@ -484,7 +484,7 @@ void dt_dev_pixelpipe_get_roi_in(dt_dev_pixelpipe_t *pipe, const struct dt_iop_r
 static uint64_t _default_pipe_hash(dt_dev_pixelpipe_t *pipe)
 {
   // Start with a hash that is unique, image-wise.
-  return dt_hash(5381, (const char *)&pipe->image.filename, DT_MAX_FILENAME_LEN);
+  return dt_hash(5381, (const char *)&pipe->dev->image_storage.filename, DT_MAX_FILENAME_LEN);
 }
 
 uint64_t dt_dev_pixelpipe_node_hash(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, 
@@ -732,7 +732,7 @@ static void _commit_piece_contract(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_io
 static void _sync_pipe_nodes_from_history(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, const uint32_t history_end,
                                           const char *debug_label)
 {
-  dt_iop_buffer_dsc_t upstream_dsc = pipe->image.dsc;
+  dt_iop_buffer_dsc_t upstream_dsc = pipe->dev->image_storage.dsc;
   const gboolean previous_want_detail_mask = (pipe->want_detail_mask != DT_DEV_DETAIL_MASK_NONE);
 
   for(GList *nodes = g_list_first(pipe->nodes); nodes; nodes = g_list_next(nodes))
@@ -791,7 +791,7 @@ static void _sync_pipe_nodes_from_history_from_node(dt_dev_pixelpipe_t *pipe,
 {
   if(IS_NULL_PTR(pipe) || IS_NULL_PTR(start_node)) return;
 
-  dt_iop_buffer_dsc_t upstream_dsc = pipe->image.dsc;
+  dt_iop_buffer_dsc_t upstream_dsc = pipe->dev->image_storage.dsc;
   const gboolean previous_want_detail_mask = (pipe->want_detail_mask != DT_DEV_DETAIL_MASK_NONE);
   for(GList *node = g_list_first(pipe->nodes); node && node != start_node; node = g_list_next(node))
   {
@@ -1145,7 +1145,7 @@ static void _sync_virtual_pipe(dt_develop_t *dev, dt_dev_pixelpipe_change_t flag
   if(dev->virtual_pipe->imgid != dev->image_storage.id
      || dev->virtual_pipe->iwidth != dev->roi.raw_width
      || dev->virtual_pipe->iheight != dev->roi.raw_height
-     || dev->virtual_pipe->image.id != dev->image_storage.id)
+     || dev->virtual_pipe->dev->image_storage.id != dev->image_storage.id)
   {
     dt_dev_pixelpipe_set_input(dev->virtual_pipe, dev->image_storage.id,
                                dev->roi.raw_width, dev->roi.raw_height, 1.0f, DT_MIPMAP_FULL);

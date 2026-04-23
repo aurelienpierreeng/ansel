@@ -530,11 +530,11 @@ static inline __attribute__((always_inline)) gboolean _refresh_piece_base_cache(
    * the stable identity here; page order is only a lookup hint and may drift
    * after sidecar rewrites without invalidating the pixels already cached. */
   if(data->process.cache_valid && data->process.base_patch.cache_entry
-     && data->process.cache_imgid == pipe->image.id
+     && data->process.cache_imgid == pipe->dev->image_storage.id
      && !g_strcmp0(data->process.cache_layer_name, params->layer_name)
      && data->process.base_patch.width > 0 && data->process.base_patch.height > 0)
   {
-    const uint64_t cached_hash = _drawlayer_params_cache_hash(pipe->image.id, params,
+    const uint64_t cached_hash = _drawlayer_params_cache_hash(pipe->dev->image_storage.id, params,
                                                               data->process.base_patch.width,
                                                               data->process.base_patch.height);
     if(data->process.base_patch.cache_hash == cached_hash)
@@ -542,7 +542,7 @@ static inline __attribute__((always_inline)) gboolean _refresh_piece_base_cache(
   }
 
   char path[PATH_MAX] = { 0 };
-  const gboolean have_sidecar_path = dt_drawlayer_io_sidecar_path(pipe->image.id, path, sizeof(path));
+  const gboolean have_sidecar_path = dt_drawlayer_io_sidecar_path(pipe->dev->image_storage.id, path, sizeof(path));
   const gboolean have_sidecar = have_sidecar_path && g_file_test(path, G_FILE_TEST_EXISTS);
   dt_drawlayer_io_layer_info_t info = { 0 };
   if(have_sidecar)
@@ -577,9 +577,9 @@ static inline __attribute__((always_inline)) gboolean _refresh_piece_base_cache(
       return FALSE;
   }
 
-  const uint64_t base_hash = _drawlayer_params_cache_hash(pipe->image.id, params, layer_width, layer_height);
+  const uint64_t base_hash = _drawlayer_params_cache_hash(pipe->dev->image_storage.id, params, layer_width, layer_height);
   if(data->process.cache_valid && data->process.base_patch.cache_entry
-     && data->process.base_patch.cache_hash == base_hash && data->process.cache_imgid == pipe->image.id
+     && data->process.base_patch.cache_hash == base_hash && data->process.cache_imgid == pipe->dev->image_storage.id
      && !g_strcmp0(data->process.cache_layer_name, params->layer_name))
     return TRUE;
 
@@ -596,7 +596,7 @@ static inline __attribute__((always_inline)) gboolean _refresh_piece_base_cache(
   {
     int created = 0;
     if(!dt_drawlayer_cache_patch_alloc_shared(&data->process.base_patch,
-                                              _drawlayer_params_cache_hash(pipe->image.id, params, layer_width,
+                                              _drawlayer_params_cache_hash(pipe->dev->image_storage.id, params, layer_width,
                                                                            layer_height),
                                               (size_t)layer_width * layer_height, layer_width, layer_height,
                                               "drawlayer sidecar cache", &created))
@@ -605,7 +605,7 @@ static inline __attribute__((always_inline)) gboolean _refresh_piece_base_cache(
     if(!created)
     {
       data->process.cache_valid = TRUE;
-      data->process.cache_imgid = pipe->image.id;
+      data->process.cache_imgid = pipe->dev->image_storage.id;
       g_strlcpy(data->process.cache_layer_name, params->layer_name, sizeof(data->process.cache_layer_name));
       data->process.cache_layer_order = params->layer_order;
       return TRUE;
@@ -629,7 +629,7 @@ static inline __attribute__((always_inline)) gboolean _refresh_piece_base_cache(
     if(warm_loaded)
     {
       data->process.cache_valid = TRUE;
-      data->process.cache_imgid = pipe->image.id;
+      data->process.cache_imgid = pipe->dev->image_storage.id;
       g_strlcpy(data->process.cache_layer_name, params->layer_name, sizeof(data->process.cache_layer_name));
       data->process.cache_layer_order = info.found ? info.index : params->layer_order;
       dt_drawlayer_paint_runtime_state_reset(&data->process.cache_dirty_rect);
@@ -639,7 +639,7 @@ static inline __attribute__((always_inline)) gboolean _refresh_piece_base_cache(
     data->process.cache_valid = TRUE;
     data->process.cache_dirty = FALSE;
     dt_drawlayer_paint_runtime_state_reset(&data->process.cache_dirty_rect);
-    data->process.cache_imgid = pipe->image.id;
+    data->process.cache_imgid = pipe->dev->image_storage.id;
     g_strlcpy(data->process.cache_layer_name, params->layer_name, sizeof(data->process.cache_layer_name));
     data->process.cache_layer_order = info.found ? info.index : params->layer_order;
     return TRUE;
@@ -1483,7 +1483,7 @@ static inline __attribute__((always_inline)) gboolean _update_runtime_state(cons
   dt_drawlayer_runtime_manager_t *const manager = request->manager;
   dt_drawlayer_process_state_t *const process = request->process_state;
 
-  if(process && process->cache_valid && process->base_patch.pixels && process->cache_imgid == pipe->image.id)
+  if(process && process->cache_valid && process->base_patch.pixels && process->cache_imgid == pipe->dev->image_storage.id)
   {
     const dt_iop_roi_t process_roi = request->roi_out ? *request->roi_out : *request->roi_in;
     const dt_iop_roi_t source_full_roi = {

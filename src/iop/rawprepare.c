@@ -209,10 +209,10 @@ static void _update_output_cfa_descriptor(const dt_dev_pixelpipe_t *pipe,
 {
   if(IS_NULL_PTR(pipe) || IS_NULL_PTR(piece) || IS_NULL_PTR(roi_in) || IS_NULL_PTR(dsc)) return;
 
-  dsc->filters = pipe->image.dsc.filters;
-  memcpy(dsc->xtrans, pipe->image.dsc.xtrans, sizeof(dsc->xtrans));
+  dsc->filters = pipe->dev->image_storage.dsc.filters;
+  memcpy(dsc->xtrans, pipe->dev->image_storage.dsc.xtrans, sizeof(dsc->xtrans));
 
-  if(!pipe->image.dsc.filters) return;
+  if(!pipe->dev->image_storage.dsc.filters) return;
 
   /* Rawprepare is the stage that converts the immutable sensor-aligned RAW descriptor
    * attached to the input image into the runtime descriptor seen by downstream RAW
@@ -224,15 +224,15 @@ static void _update_output_cfa_descriptor(const dt_dev_pixelpipe_t *pipe,
   const uint32_t crop_x = compute_proper_crop(piece, roi_in, d->x);
   const uint32_t crop_y = compute_proper_crop(piece, roi_in, d->y);
 
-  dsc->filters = dt_rawspeed_crop_dcraw_filters(pipe->image.dsc.filters, crop_x, crop_y);
+  dsc->filters = dt_rawspeed_crop_dcraw_filters(pipe->dev->image_storage.dsc.filters, crop_x, crop_y);
 
-  if(pipe->image.dsc.filters != 9u) return;
+  if(pipe->dev->image_storage.dsc.filters != 9u) return;
 
   for(int i = 0; i < 6; ++i)
   {
     for(int j = 0; j < 6; ++j)
     {
-      dsc->xtrans[j][i] = pipe->image.dsc.xtrans[(j + crop_y) % 6][(i + crop_x) % 6];
+      dsc->xtrans[j][i] = pipe->dev->image_storage.dsc.xtrans[(j + crop_y) % 6][(i + crop_x) % 6];
     }
   }
 }
@@ -732,7 +732,7 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelp
 {
   const dt_iop_rawprepare_params_t *const p = (dt_iop_rawprepare_params_t *)params;
   dt_iop_rawprepare_data_t *d = (dt_iop_rawprepare_data_t *)piece->data;
-  const dt_image_t *const img = &pipe->image;
+  const dt_image_t *const img = &pipe->dev->image_storage;
 
   d->x = p->x;
   d->y = p->y;
@@ -752,7 +752,7 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelp
   else
   {
     const float normalizer
-        = ((pipe->image.flags & DT_IMAGE_HDR) == DT_IMAGE_HDR) ? 1.0f : (float)UINT16_MAX;
+        = ((pipe->dev->image_storage.flags & DT_IMAGE_HDR) == DT_IMAGE_HDR) ? 1.0f : (float)UINT16_MAX;
     const float white = (float)p->raw_white_point / normalizer;
     float black = 0;
     for(int i = 0; i < 4; i++)
@@ -784,11 +784,11 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelp
   else
     d->apply_gainmaps = FALSE;
 
-  if(image_set_rawcrops(pipe->image.id, d->x + d->width, d->y + d->height))
+  if(image_set_rawcrops(pipe->dev->image_storage.id, d->x + d->width, d->y + d->height))
     DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_METADATA_UPDATE);
 
-  if(!(dt_image_is_rawprepare_supported(&pipe->image))
-     || image_is_normalized(&pipe->image))
+  if(!(dt_image_is_rawprepare_supported(&pipe->dev->image_storage))
+     || image_is_normalized(&pipe->dev->image_storage))
     piece->enabled = 0;
 
   // OpenCL path only for RAW, single-channel, CFA images.

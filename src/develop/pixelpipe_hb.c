@@ -483,7 +483,7 @@ void dt_dev_pixelpipe_set_input(dt_dev_pixelpipe_t *pipe, int32_t imgid, int wid
   pipe->iheight = height;
   pipe->iscale = iscale;
   pipe->imgid = imgid;
-  pipe->image = pipe->dev->image_storage;
+  pipe->dev->image_storage = pipe->dev->image_storage;
   pipe->size = size;
 }
 
@@ -802,7 +802,7 @@ static int _init_base_buffer(dt_dev_pixelpipe_t *pipe)
 {
   /* `dev` is only needed for darkroom pipes to expose the long base-buffer load in the GUI.
    * Headless callers pass NULL and keep this path side-effect free. */
-  const dt_iop_buffer_dsc_t *out_format = &pipe->image.dsc;
+  const dt_iop_buffer_dsc_t *out_format = &pipe->dev->image_storage.dsc;
   const size_t bpp = out_format->bpp;
   const dt_iop_roi_t roi = *_get_first_roi(pipe);
   const size_t bufsize = bpp * roi.width * roi.height;

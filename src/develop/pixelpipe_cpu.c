@@ -27,7 +27,7 @@ int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
   const float *process_input = input;
   const float *blend_input = input;
   void *blend_output = output;
-  const dt_iop_buffer_dsc_t actual_input_dsc = previous_piece ? previous_piece->dsc_out : pipe->image.dsc;
+  const dt_iop_buffer_dsc_t actual_input_dsc = previous_piece ? previous_piece->dsc_out : pipe->dev->image_storage.dsc;
   dt_iop_buffer_dsc_t process_input_dsc = actual_input_dsc;
   dt_iop_buffer_dsc_t blend_input_dsc = actual_input_dsc;
   dt_iop_buffer_dsc_t blend_output_dsc = piece->dsc_out;

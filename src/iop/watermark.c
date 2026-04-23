@@ -550,7 +550,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   gchar *svgdoc = NULL;
   if(type == DT_WTM_SVG)
   {
-    svgdoc = _watermark_get_svgdoc(self, data, &pipe->image, filename);
+    svgdoc = _watermark_get_svgdoc(self, data, &pipe->dev->image_storage, filename);
     if(IS_NULL_PTR(svgdoc))
     {
       dt_iop_image_copy_by_size(ovoid, ivoid, roi_out->width, roi_out->height, ch);

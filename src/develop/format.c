@@ -23,6 +23,7 @@
 
 #include "develop/format.h"
 #include "develop/imageop.h"
+#include "develop/develop.h"
 
 void dt_iop_buffer_dsc_update_bpp(dt_iop_buffer_dsc_t *dsc)
 {
@@ -62,11 +63,11 @@ void default_input_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_de
 
   if(dsc->cst == IOP_CS_RAW)
   {
-    if(dt_image_is_raw(&pipe->image)) dsc->channels = 1;
+    if(dt_image_is_raw(&pipe->dev->image_storage)) dsc->channels = 1;
 
     if(dt_ioppr_get_iop_order(pipe->iop_order_list, self->op, self->multi_priority)
        <= dt_ioppr_get_iop_order(pipe->iop_order_list, "rawprepare", 0)
-       && ((piece && piece->dsc_in.filters) || (!piece && pipe->image.dsc.filters)))
+       && ((piece && piece->dsc_in.filters) || (!piece && pipe->dev->image_storage.dsc.filters)))
       dsc->datatype = TYPE_UINT16;
   }
 }
@@ -80,11 +81,11 @@ void default_output_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_d
 
   if(dsc->cst == IOP_CS_RAW)
   {
-    if(dt_image_is_raw(&pipe->image)) dsc->channels = 1;
+    if(dt_image_is_raw(&pipe->dev->image_storage)) dsc->channels = 1;
 
     if(dt_ioppr_get_iop_order(pipe->iop_order_list, self->op, self->multi_priority)
        < dt_ioppr_get_iop_order(pipe->iop_order_list, "rawprepare", 0)
-       && ((piece && piece->dsc_in.filters) || (!piece && pipe->image.dsc.filters)))
+       && ((piece && piece->dsc_in.filters) || (!piece && pipe->dev->image_storage.dsc.filters)))
       dsc->datatype = TYPE_UINT16;
   }
 }

@@ -502,7 +502,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_grain_data_t *data = (dt_iop_grain_data_t *)piece->data;
 
-  unsigned int hash = _hash_string(pipe->image.filename) % (int)fmax(roi_out->width * 0.3, 1.0);
+  unsigned int hash = _hash_string(pipe->dev->image_storage.filename) % (int)fmax(roi_out->width * 0.3, 1.0);
 
   const int ch = 4;
   // Apply grain to image

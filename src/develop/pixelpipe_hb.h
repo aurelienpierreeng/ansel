@@ -306,8 +306,6 @@ typedef struct dt_dev_pixelpipe_t
   dt_imageio_levels_t levels;
   // opencl device that has been locked for this pipe.
   int devid;
-  // image struct as it was when the pixelpipe was initialized. copied to avoid race conditions.
-  dt_image_t image; // FIXME: remove, it's duplicating pipe->dev->image_storage
   // the user might choose to overwrite the output color space and rendering intent.
   dt_colorspaces_color_profile_type_t icc_type;
   gchar *icc_filename;
