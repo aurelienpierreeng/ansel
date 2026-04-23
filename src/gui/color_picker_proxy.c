@@ -177,7 +177,7 @@ static int _picker_sample_box(const dt_iop_module_t *module, const dt_iop_roi_t 
     fbox[3] = fbox[1];
   }
 
-  dt_dev_distort_backtransform_plus(dev, dev->preview_pipe, module->iop_order,
+  dt_dev_distort_backtransform_plus(dev->preview_pipe, module->iop_order,
                                     picker_source == PIXELPIPE_PICKER_INPUT
                                       ? DT_DEV_TRANSFORM_DIR_FORW_INCL
                                       : DT_DEV_TRANSFORM_DIR_FORW_EXCL,
@@ -662,19 +662,14 @@ void dt_iop_color_picker_request_update(void)
   _queue_refresh_active_picker(dev);
 }
 
-gboolean dt_iop_color_picker_force_cache(const dt_develop_t *dev, const dt_dev_pixelpipe_t *pipe,
+gboolean dt_iop_color_picker_force_cache(const dt_dev_pixelpipe_t *pipe,
                                          const dt_iop_module_t *module)
 {
-  if(IS_NULL_PTR(dev) || IS_NULL_PTR(pipe) || IS_NULL_PTR(module) || pipe != dev->preview_pipe || !dev->color_picker.enabled
-     || !dev->color_picker.module || !dev->gui_module || dev->color_picker.module != dev->gui_module
-     || !dev->gui_module->enabled)
-    return FALSE;
-
   const dt_dev_pixelpipe_iop_t *const piece = dt_dev_pixelpipe_get_module_piece((dt_dev_pixelpipe_t *)pipe,
-                                                                                 dev->color_picker.module);
+                                                                                 pipe->dev->color_picker.module);
   const dt_dev_pixelpipe_iop_t *const previous_piece = dt_dev_pixelpipe_get_prev_enabled_piece(pipe, piece);
 
-  return module == dev->color_picker.module || (previous_piece && previous_piece->module == module);
+  return module == pipe->dev->color_picker.module || (previous_piece && previous_piece->module == module);
 }
 
 static void _track_active_picker_hashes(dt_develop_t *dev)

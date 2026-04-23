@@ -205,7 +205,7 @@ static void _params_to_gui(dt_iop_crop_params_t *p, dt_iop_crop_gui_data_t *g)
 
 static void _commit_box(dt_iop_module_t *self, dt_iop_crop_gui_data_t *g, dt_iop_crop_params_t *p)
 {
-  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->virtual_pipe, self);
+  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(darktable.develop->virtual_pipe, self);
   if(IS_NULL_PTR(piece)) return;
   // we want value in iop space
   const float wd = (float)piece->buf_out.width; //self->dev->roi.preview_width;
@@ -218,10 +218,10 @@ static void _commit_box(dt_iop_module_t *self, dt_iop_crop_gui_data_t *g, dt_iop
 
   dt_boundingbox_t points = { bbox_left, bbox_top, bbox_right, bbox_bottom };
 
-  if(dt_dev_distort_backtransform_plus(self->dev, self->dev->virtual_pipe, self->iop_order,
+  if(dt_dev_distort_backtransform_plus(darktable.develop->virtual_pipe, self->iop_order,
                                        DT_DEV_TRANSFORM_DIR_FORW_EXCL, points, 2))
   {
-    //dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->virtual_pipe, self);
+    //dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);
     //if(piece)
     //{
       //fprintf(stderr, "buf_out size: %dx%d\n", piece->buf_out.width, piece->buf_out.height);
@@ -259,22 +259,22 @@ static void _commit_box(dt_iop_module_t *self, dt_iop_crop_gui_data_t *g, dt_iop
  * @param self the current module data
  * @return gboolean TRUE on success, FALSE otherwise 
  */
-static gboolean _set_max_clip(struct dt_iop_module_t *self)
+static gboolean _set_max_clip(dt_dev_pixelpipe_t *pipe, struct dt_iop_module_t *self)
 {
   dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)self->gui_data;
   dt_iop_crop_params_t *p = (dt_iop_crop_params_t *)self->params;
 
   // we want to know the size of the actual buffer
-  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->virtual_pipe, self);
+  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(pipe, self);
   if(IS_NULL_PTR(piece)) return FALSE;
 
   float wp = piece->buf_out.width;
   float hp = piece->buf_out.height;
   float points[8] = { 0.0f, 0.0f, wp, hp, p->cx * wp, p->cy * hp, p->cw * wp, p->ch * hp };
-  if(!dt_dev_distort_transform_plus(self->dev, self->dev->virtual_pipe, self->iop_order,
+  if(!dt_dev_distort_transform_plus(pipe, self->iop_order,
                                     DT_DEV_TRANSFORM_DIR_FORW_EXCL, points, 4))
     return FALSE;
-  dt_dev_coordinates_preview_abs_to_image_norm(self->dev, points, 4);
+  dt_dev_coordinates_preview_abs_to_image_norm(pipe->dev, points, 4);
 
   g->clip_max_x = fmaxf(points[0], 0.0f);
   g->clip_max_y = fmaxf(points[1], 0.0f);
@@ -472,7 +472,7 @@ static float _aspect_ratio_get(dt_iop_module_t *self, GtkWidget *combo)
   }
 
   // we want to know the size of the actual buffer
-  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->virtual_pipe, self);
+  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);
   if(IS_NULL_PTR(piece)) return 0.0f;
 
   const int iwd = piece->buf_in.width, iht = piece->buf_in.height;
@@ -1381,7 +1381,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   float pzy = pzxpy[1];
   cairo_set_line_width(cr, border_width);
 
-  if(_set_max_clip(self))
+  if(_set_max_clip(darktable.develop->virtual_pipe, self))
   {
     cairo_set_source_rgba(cr, .1, .1, .1, .8);
     cairo_set_fill_rule(cr, CAIRO_FILL_RULE_EVEN_ODD);
@@ -1493,7 +1493,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
 
   const _grab_region_t grab = _gui_get_grab(pzx, pzy, g, border, g->wd, g->ht);
 
-  _set_max_clip(self);
+  _set_max_clip(darktable.develop->virtual_pipe, self);
 
   if(g->dragging)
   {

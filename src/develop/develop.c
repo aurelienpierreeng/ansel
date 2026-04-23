@@ -144,9 +144,9 @@ void dt_dev_init(dt_develop_t *dev, int32_t gui_attached)
     dev->preview_pipe = (dt_dev_pixelpipe_t *)malloc(sizeof(dt_dev_pixelpipe_t));
     // Virtual pipe mirrors preview_pipe for geometry, but is never processed.
     dev->virtual_pipe = (dt_dev_pixelpipe_t *)malloc(sizeof(dt_dev_pixelpipe_t));
-    dt_dev_pixelpipe_init(dev->pipe);
-    dt_dev_pixelpipe_init_preview(dev->preview_pipe);
-    dt_dev_pixelpipe_init_preview(dev->virtual_pipe);
+    dt_dev_pixelpipe_init(dev->pipe, dev);
+    dt_dev_pixelpipe_init_preview(dev->preview_pipe, dev);
+    dt_dev_pixelpipe_init_preview(dev->virtual_pipe, dev);
     dev->histogram_pre_tonecurve = (uint32_t *)calloc(4 * 256, sizeof(uint32_t));
     dev->histogram_pre_levels = (uint32_t *)calloc(4 * 256, sizeof(uint32_t));
 
@@ -305,7 +305,7 @@ int dt_dev_get_thumbnail_size(dt_develop_t *dev)
       || dev->virtual_pipe->iwidth != dev->roi.raw_width
       || dev->virtual_pipe->iheight != dev->roi.raw_height
       || dev->virtual_pipe->image.id != dev->image_storage.id)
-    dt_dev_pixelpipe_set_input(dev->virtual_pipe, dev, dev->image_storage.id,
+    dt_dev_pixelpipe_set_input(dev->virtual_pipe, dev->image_storage.id,
                                 dev->roi.raw_width, dev->roi.raw_height, 1.0f, DT_MIPMAP_FULL);
 
   if(!dev->virtual_pipe->nodes)
@@ -319,10 +319,10 @@ int dt_dev_get_thumbnail_size(dt_develop_t *dev)
   }
 
   if(dt_dev_pixelpipe_get_changed(dev->virtual_pipe) != DT_DEV_PIPE_UNCHANGED)
-    dt_dev_pixelpipe_change(dev->virtual_pipe, dev);
+    dt_dev_pixelpipe_change(dev->virtual_pipe);
 
   // Compute the virtual full-res output. This needs an inited history
-  dt_dev_pixelpipe_get_roi_out(dev->virtual_pipe, dev, dev->roi.raw_width, dev->roi.raw_height, 
+  dt_dev_pixelpipe_get_roi_out(dev->virtual_pipe, dev->roi.raw_width, dev->roi.raw_height, 
                                &dev->roi.processed_width, &dev->roi.processed_height);
 
   // Compute the scaling factor that makes full-res output fit within widget
@@ -483,9 +483,9 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
     }
 
     // This is cheap to run, keep it in sync always.
-    dt_dev_pixelpipe_set_input(dev->pipe, dev, dev->image_storage.id, dev->roi.raw_width, dev->roi.raw_height,
+    dt_dev_pixelpipe_set_input(dev->pipe, dev->image_storage.id, dev->roi.raw_width, dev->roi.raw_height,
                                1.0f, DT_MIPMAP_FULL);
-    dt_dev_pixelpipe_set_input(dev->preview_pipe, dev, dev->image_storage.id, dev->roi.raw_width, dev->roi.raw_height,
+    dt_dev_pixelpipe_set_input(dev->preview_pipe, dev->image_storage.id, dev->roi.raw_width, dev->roi.raw_height,
                                1.0f, DT_MIPMAP_FULL);
 
     gboolean pipe_needs_update[G_N_ELEMENTS(pipes)] = { FALSE };
@@ -511,7 +511,7 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
       gboolean pipe_resynced = FALSE;
       while(dt_dev_pixelpipe_get_changed(pipe) != DT_DEV_PIPE_UNCHANGED)
       {
-        dt_dev_pixelpipe_change(pipe, dev);
+        dt_dev_pixelpipe_change(pipe);
         pipe_resynced = TRUE;
       }
       
@@ -567,7 +567,7 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
         // Resynch history with pipeline. NB: this locks dev->history_mutex.
         while(dt_dev_pixelpipe_get_changed(pipe) != DT_DEV_PIPE_UNCHANGED)
         {
-          dt_dev_pixelpipe_change(pipe, dev);
+          dt_dev_pixelpipe_change(pipe);
           pipe_resynced = TRUE;
         }
 
@@ -601,7 +601,7 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
 
         dev->progress.completed = 0;
         dev->progress.total = 0;
-        const int ret = dt_dev_pixelpipe_process(pipe, dev, roi);
+        const int ret = dt_dev_pixelpipe_process(pipe, roi);
         dev->progress.completed = 0;
         dev->progress.total = 0;
         const gint64 process_runtime_us = g_get_monotonic_time() - process_start_us;
@@ -1376,21 +1376,21 @@ gchar *dt_history_item_get_name_html(const struct dt_iop_module_t *module)
   return label;
 }
 
-static int dt_dev_distort_backtransform_locked(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, const double iop_order,
+static int dt_dev_distort_backtransform_locked(const dt_dev_pixelpipe_t *pipe, const double iop_order,
                                                const int transf_direction, float *points, size_t points_count);
 
 int dt_dev_coordinates_raw_abs_to_image_abs(dt_develop_t *dev, float *points, size_t points_count)
 {
-  return dt_dev_distort_transform_plus(dev, dev->virtual_pipe, 0.0f, DT_DEV_TRANSFORM_DIR_ALL, points, points_count);
+  return dt_dev_distort_transform_plus(dev->virtual_pipe, 0.0f, DT_DEV_TRANSFORM_DIR_ALL, points, points_count);
 }
 
 int dt_dev_coordinates_image_abs_to_raw_abs(dt_develop_t *dev, float *points, size_t points_count)
 {
-  return dt_dev_distort_backtransform_locked(dev, dev->virtual_pipe, 0.0f, DT_DEV_TRANSFORM_DIR_ALL, points, points_count);
+  return dt_dev_distort_backtransform_locked(dev->virtual_pipe, 0.0f, DT_DEV_TRANSFORM_DIR_ALL, points, points_count);
 }
 
 // only call directly or indirectly from dt_dev_distort_transform_plus, so that it runs with the history locked
-int dt_dev_distort_transform_locked(dt_develop_t *dev, const dt_dev_pixelpipe_t *pipe, const double iop_order,
+int dt_dev_distort_transform_locked(const dt_dev_pixelpipe_t *pipe, const double iop_order,
                                     const int transf_direction, float *points, size_t points_count)
 {
   for(GList *pieces = g_list_first(pipe->nodes); pieces; pieces = g_list_next(pieces))
@@ -1403,7 +1403,7 @@ int dt_dev_distort_transform_locked(dt_develop_t *dev, const dt_dev_pixelpipe_t 
            || (transf_direction == DT_DEV_TRANSFORM_DIR_FORW_EXCL && module->iop_order > iop_order)
            || (transf_direction == DT_DEV_TRANSFORM_DIR_BACK_INCL && module->iop_order <= iop_order)
            || (transf_direction == DT_DEV_TRANSFORM_DIR_BACK_EXCL && module->iop_order < iop_order))
-       && !dt_dev_pixelpipe_activemodule_disables_currentmodule(dev, module))
+       && !dt_dev_pixelpipe_activemodule_disables_currentmodule(pipe->dev, module))
     {
       module->distort_transform(module, pipe, piece, points, points_count);
     }
@@ -1411,15 +1411,15 @@ int dt_dev_distort_transform_locked(dt_develop_t *dev, const dt_dev_pixelpipe_t 
   return 1;
 }
 
-int dt_dev_distort_transform_plus(dt_develop_t *dev, const dt_dev_pixelpipe_t *pipe, const double iop_order, const int transf_direction,
+int dt_dev_distort_transform_plus(const dt_dev_pixelpipe_t *pipe, const double iop_order, const int transf_direction,
                                   float *points, size_t points_count)
 {
-  dt_dev_distort_transform_locked(dev, pipe, iop_order, transf_direction, points, points_count);
+  dt_dev_distort_transform_locked(pipe, iop_order, transf_direction, points, points_count);
   return 1;
 }
 
 // Internal backtransform loop. Keep this file-local so callers use the public wrappers.
-static int dt_dev_distort_backtransform_locked(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, const double iop_order,
+static int dt_dev_distort_backtransform_locked(const dt_dev_pixelpipe_t *pipe, const double iop_order,
                                                const int transf_direction, float *points, size_t points_count)
 {
   for(GList *pieces = g_list_last(pipe->nodes); pieces; pieces = g_list_previous(pieces))
@@ -1432,7 +1432,7 @@ static int dt_dev_distort_backtransform_locked(dt_develop_t *dev, dt_dev_pixelpi
            || (transf_direction == DT_DEV_TRANSFORM_DIR_FORW_EXCL && module->iop_order > iop_order)
            || (transf_direction == DT_DEV_TRANSFORM_DIR_BACK_INCL && module->iop_order <= iop_order)
            || (transf_direction == DT_DEV_TRANSFORM_DIR_BACK_EXCL && module->iop_order < iop_order))
-       && !dt_dev_pixelpipe_activemodule_disables_currentmodule(dev, module))
+       && !dt_dev_pixelpipe_activemodule_disables_currentmodule(pipe->dev, module))
     {
       module->distort_backtransform(module, pipe, piece, points, points_count);
     }
@@ -1440,14 +1440,14 @@ static int dt_dev_distort_backtransform_locked(dt_develop_t *dev, dt_dev_pixelpi
   return 1;
 }
 
-int dt_dev_distort_backtransform_plus(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, const double iop_order, const int transf_direction,
+int dt_dev_distort_backtransform_plus(const dt_dev_pixelpipe_t *pipe, const double iop_order, const int transf_direction,
                                       float *points, size_t points_count)
 {
-  const int success = dt_dev_distort_backtransform_locked(dev, pipe, iop_order, transf_direction, points, points_count);
+  const int success = dt_dev_distort_backtransform_locked(pipe, iop_order, transf_direction, points, points_count);
   return success;
 }
 
-dt_dev_pixelpipe_iop_t *dt_dev_distort_get_iop_pipe(dt_develop_t *dev, struct dt_dev_pixelpipe_t *pipe,
+dt_dev_pixelpipe_iop_t *dt_dev_distort_get_iop_pipe(struct dt_dev_pixelpipe_t *pipe,
                                                     struct dt_iop_module_t *module)
 {
   for(const GList *pieces = g_list_last(pipe->nodes); pieces; pieces = g_list_previous(pieces))

@@ -2010,7 +2010,7 @@ static void _build_pre_module_filter_string(dt_iop_module_t *self, char *filter,
   filter[0] = '\0';
   if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(self->dev->pipe)) return;
 
-  dt_dev_pixelpipe_iop_t *self_piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->pipe, self);
+  dt_dev_pixelpipe_iop_t *self_piece = dt_dev_distort_get_iop_pipe(self->dev->pipe, self);
   const char *prev_op = NULL;
   if(self_piece && self->dev->pipe)
   {
@@ -2086,7 +2086,7 @@ static gboolean _create_background_layer_from_input(dt_iop_module_t *self)
   if(!_ensure_layer_cache(self)) return FALSE;
   if(!_flush_layer_cache(self)) return FALSE;
 
-  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->pipe, self);
+  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev->pipe, self);
   int layer_width = 0;
   int layer_height = 0;
   if(!_resolve_layer_geometry(self, self->dev->pipe, piece, &layer_width, &layer_height, NULL, NULL)) return FALSE;

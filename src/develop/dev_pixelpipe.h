@@ -82,7 +82,7 @@ void dt_dev_pixelpipe_change_zoom_main(struct dt_develop_t *dev);
 // all modules of the pipe. This chains calls to module's modify_roi_out() methods in pipeline order.
 // Doesn't actually compute pixels.
 // NOTE: pipe must be a real or virtual pipe with nodes; NULL pipes are not supported anymore.
-void dt_dev_pixelpipe_get_roi_out(struct dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev, const int width_in,
+void dt_dev_pixelpipe_get_roi_out(struct dt_dev_pixelpipe_t *pipe, const int width_in,
                                   const int height_in, int *width, int *height);
                                 
 // Compute and save into each piece->roi_out/in the proper module-wise ROI to achieve
@@ -90,7 +90,7 @@ void dt_dev_pixelpipe_get_roi_out(struct dt_dev_pixelpipe_t *pipe, struct dt_dev
 // in pipeline reverse order.
 // Doesn't actually compute pixels.
 // NOTE: pipe must be a real or virtual pipe with nodes; NULL pipes are not supported anymore.
-void dt_dev_pixelpipe_get_roi_in(struct dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev, const struct dt_iop_roi_t roi_out);
+void dt_dev_pixelpipe_get_roi_in(struct dt_dev_pixelpipe_t *pipe, const struct dt_iop_roi_t roi_out);
 
 // Check if current_module is performing operations that dev->gui_module (active GUI module)
 // wants disabled. Use that to disable some features of current_module.
@@ -106,7 +106,7 @@ gboolean dt_dev_pixelpipe_activemodule_disables_currentmodule(struct dt_develop_
 
 // wrapper for cleanup_nodes, create_nodes, synch_all and synch_top, decides upon changed event which one to
 // take on. also locks dev->history_mutex.
-void dt_dev_pixelpipe_change(struct dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev);
+void dt_dev_pixelpipe_change(struct dt_dev_pixelpipe_t *pipe);
 void dt_dev_pixelpipe_sync_virtual(struct dt_develop_t *dev, dt_dev_pixelpipe_change_t flag);
 
 // Get the global hash of a pipe node (piece), or a fallback if none.
@@ -198,13 +198,13 @@ gboolean dt_dev_pixelpipe_cache_peek_gui(dt_dev_pixelpipe_t *pipe,
 
 // Compute the sequential hash over the pipeline for each module.
 // Need to run after dt_dev_pixelpipe_get_roi_in() has updated processed ROI in/out
-void dt_pixelpipe_get_global_hash(struct dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev);
+void dt_pixelpipe_get_global_hash(struct dt_dev_pixelpipe_t *pipe);
 
 // Return TRUE if the current backbuffer for the current pipe is in sync with current dev history stack.
-gboolean dt_dev_pixelpipe_is_backbufer_valid(struct dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev);
+gboolean dt_dev_pixelpipe_is_backbufer_valid(struct dt_dev_pixelpipe_t *pipe);
 
 // Return TRUE if the current pipeline (topology and node parameters) is in sync with current dev history stack.
-gboolean dt_dev_pixelpipe_is_pipeline_valid(struct dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev);
+gboolean dt_dev_pixelpipe_is_pipeline_valid(struct dt_dev_pixelpipe_t *pipe);
 
 
 #ifdef __cplusplus

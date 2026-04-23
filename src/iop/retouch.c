@@ -875,7 +875,7 @@ static int rt_masks_point_calc_delta(dt_iop_module_t *self, const dt_dev_pixelpi
     points[3] = source[1] * pipe->iheight;
   }
 
-  const int res = dt_dev_distort_transform_plus(self->dev, pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL,
+  const int res = dt_dev_distort_transform_plus(pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL,
                                                 points, 2);
   if(!res) return res;
 

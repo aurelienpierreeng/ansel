@@ -973,15 +973,15 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
   int res = 0;
   dt_dev_pixelpipe_t pipe;
   if(thumbnail_export)
-    res = dt_dev_pixelpipe_init_thumbnail(&pipe);
+    res = dt_dev_pixelpipe_init_thumbnail(&pipe, &dev);
   else
-    res = dt_dev_pixelpipe_init_export(&pipe, format->levels(format_params), export_masks);
+    res = dt_dev_pixelpipe_init_export(&pipe, &dev, format->levels(format_params), export_masks);
 
   if(!res) goto error;
 
   pipe.shutdown_ext = shutdown;
 
-  dt_dev_pixelpipe_create_nodes(&pipe, &dev);
+  dt_dev_pixelpipe_create_nodes(&pipe);
 
   // Sync history with pipeline nodes
   // Update the ICC type if DT_COLORSPACE_NONE is passed
@@ -1005,8 +1005,8 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
   dt_mipmap_cache_release(cache, &buf);
 
   // Update size with actual input and resync nodes
-  dt_dev_pixelpipe_set_input(&pipe, &dev, imgid, buf_width, buf_height, buf.iscale, size);
-  dt_dev_pixelpipe_synch_all(&pipe, &dev);
+  dt_dev_pixelpipe_set_input(&pipe, imgid, buf_width, buf_height, buf.iscale, size);
+  dt_dev_pixelpipe_synch_all(&pipe);
 
   // Write debug info to stdout
   _print_export_debug(&pipe, format_params, use_style);
@@ -1019,7 +1019,7 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
   // considering full-size original input. Meaning we can enlarge or reduce the original image,
   // even taking full-res input.
   // Needs to be done after optional filtering, in case we filter out distortion modules
-  dt_dev_pixelpipe_get_roi_out(&pipe, &dev, pipe.iwidth, pipe.iheight, &pipe.processed_width,
+  dt_dev_pixelpipe_get_roi_out(&pipe, pipe.iwidth, pipe.iheight, &pipe.processed_width,
                                &pipe.processed_height);
 
   dt_show_times(&start, "[export] creating pixelpipe");
@@ -1043,7 +1043,7 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
   dt_iop_roi_t roi = (dt_iop_roi_t){ 0, 0, processed_width, processed_height, scale };
 
   dt_get_times(&start);
-  int err = dt_dev_pixelpipe_process(&pipe, &dev, roi);
+  int err = dt_dev_pixelpipe_process(&pipe, roi);
   dt_show_times(&start, thumbnail_export ? "[dev_process_thumbnail] pixel pipeline processing thread"
                                          : "[dev_process_export] pixel pipeline processing thread");
 

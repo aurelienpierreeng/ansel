@@ -382,33 +382,36 @@ void dt_dev_pixelpipe_debug_dump_module_io(dt_dev_pixelpipe_t *pipe, dt_iop_modu
 }
 
 
-int dt_dev_pixelpipe_init_export(dt_dev_pixelpipe_t *pipe, int levels, gboolean store_masks)
+int dt_dev_pixelpipe_init_export(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, int levels, gboolean store_masks)
 {
   const int res = dt_dev_pixelpipe_init_cached(pipe);
   pipe->type = DT_DEV_PIXELPIPE_EXPORT;
   pipe->gui_observable_source = FALSE;
   pipe->levels = levels;
   pipe->store_all_raster_masks = store_masks;
+  pipe->dev = dev;
   return res;
 }
 
-int dt_dev_pixelpipe_init_thumbnail(dt_dev_pixelpipe_t *pipe)
+int dt_dev_pixelpipe_init_thumbnail(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
 {
   const int res = dt_dev_pixelpipe_init_cached(pipe);
   pipe->type = DT_DEV_PIXELPIPE_THUMBNAIL;
   pipe->no_cache = TRUE;
+  pipe->dev = dev;
   return res;
 }
 
-int dt_dev_pixelpipe_init_dummy(dt_dev_pixelpipe_t *pipe)
+int dt_dev_pixelpipe_init_dummy(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
 {
   const int res = dt_dev_pixelpipe_init_cached(pipe);
   pipe->type = DT_DEV_PIXELPIPE_THUMBNAIL;
   pipe->no_cache = TRUE;
+  pipe->dev = dev;
   return res;
 }
 
-int dt_dev_pixelpipe_init_preview(dt_dev_pixelpipe_t *pipe)
+int dt_dev_pixelpipe_init_preview(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
 {
   // Init with the size of MIPMAP_F
   const int res = dt_dev_pixelpipe_init_cached(pipe);
@@ -417,16 +420,18 @@ int dt_dev_pixelpipe_init_preview(dt_dev_pixelpipe_t *pipe)
 
   // Needed for caching
   pipe->store_all_raster_masks = TRUE;
+  pipe->dev = dev;
   return res;
 }
 
-int dt_dev_pixelpipe_init(dt_dev_pixelpipe_t *pipe)
+int dt_dev_pixelpipe_init(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
 {
   const int res = dt_dev_pixelpipe_init_cached(pipe);
   pipe->type = DT_DEV_PIXELPIPE_FULL;
 
   // Needed for caching
   pipe->store_all_raster_masks = TRUE;
+  pipe->dev = dev;
   return res;
 }
 
@@ -471,14 +476,14 @@ gboolean dt_dev_pixelpipe_get_realtime(const dt_dev_pixelpipe_t *pipe)
   return pipe ? dt_atomic_get_int((dt_atomic_int *)&pipe->realtime) : FALSE;
 }
 
-void dt_dev_pixelpipe_set_input(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, int32_t imgid, int width, int height,
+void dt_dev_pixelpipe_set_input(dt_dev_pixelpipe_t *pipe, int32_t imgid, int width, int height,
                                 float iscale, dt_mipmap_size_t size)
 {
   pipe->iwidth = width;
   pipe->iheight = height;
   pipe->iscale = iscale;
   pipe->imgid = imgid;
-  pipe->image = dev->image_storage;
+  pipe->image = pipe->dev->image_storage;
   pipe->size = size;
 }
 
@@ -596,15 +601,15 @@ void dt_dev_pixelpipe_cleanup_nodes(dt_dev_pixelpipe_t *pipe)
   dt_dev_pixelpipe_set_history_hash(pipe, DT_PIXELPIPE_CACHE_HASH_INVALID);
 }
 
-void dt_dev_pixelpipe_create_nodes(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
+void dt_dev_pixelpipe_create_nodes(dt_dev_pixelpipe_t *pipe)
 {
   // check that the pipe was actually properly cleaned up after the last run
   g_assert(IS_NULL_PTR(pipe->nodes));
   g_assert(IS_NULL_PTR(pipe->iop_order_list));
-  pipe->iop_order_list = dt_ioppr_iop_order_copy_deep(dev->iop_order_list);
+  pipe->iop_order_list = dt_ioppr_iop_order_copy_deep(pipe->dev->iop_order_list);
 
   // for all modules in dev:
-  for(GList *modules = g_list_first(dev->iop); modules; modules = g_list_next(modules))
+  for(GList *modules = g_list_first(pipe->dev->iop); modules; modules = g_list_next(modules))
   {
     dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
     dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)calloc(1, sizeof(dt_dev_pixelpipe_iop_t));
@@ -917,7 +922,7 @@ static int _init_base_buffer(dt_dev_pixelpipe_t *pipe)
   return err;
 }
 
-static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
+static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe,
                                         uint64_t *out_hash, const dt_dev_pixelpipe_iop_t **out_piece,
                                         GList *pieces, int pos)
 {
@@ -951,11 +956,11 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
 
   // skip this module?
   if(!piece->enabled)
-    return dt_dev_pixelpipe_process_rec(pipe, dev, out_hash, out_piece, g_list_previous(pieces), pos - 1);
+    return dt_dev_pixelpipe_process_rec(pipe, out_hash, out_piece, g_list_previous(pieces), pos - 1);
 
   module = piece->module;
 
-  if(dev->gui_attached) dev->progress.total++;
+  if(pipe->dev->gui_attached) pipe->dev->progress.total++;
   
   KILL_SWITCH_ABORT;
 
@@ -989,7 +994,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   // 3) now recurse through the pipeline.
   uint64_t input_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
   const dt_dev_pixelpipe_iop_t *previous_piece = NULL;
-  if(dt_dev_pixelpipe_process_rec(pipe, dev, &input_hash, &previous_piece, g_list_previous(pieces), pos - 1))
+  if(dt_dev_pixelpipe_process_rec(pipe, &input_hash, &previous_piece, g_list_previous(pieces), pos - 1))
   {
     /* Child recursion failed before this module acquired any output cache entry.
      * Dropping `hash` here underflows cached exact-hit outputs during shutdown. */
@@ -1033,7 +1038,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   // special case: user requests to see channel data in the parametric mask of a module, or the blending
   // mask. In that case we skip all modules manipulating pixel content and only process image distorting
   // modules. Finally "gamma" is responsible for displaying channel/mask data accordingly.
-  if(dev->gui_attached
+  if(pipe->dev->gui_attached
      && (pipe->mask_display != DT_DEV_PIXELPIPE_DISPLAY_NONE)
      && !(module->operation_tags() & IOP_TAG_DISTORT)
      && (piece->dsc_in.bpp == piece->dsc_out.bpp)
@@ -1049,7 +1054,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
     return 0;
   }
 
-  if(dev->gui_attached)
+  if(pipe->dev->gui_attached)
   {
     gchar *module_label = dt_history_item_get_name(module);
     dt_free(darktable.main_message);
@@ -1072,7 +1077,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
    * be fully overwritten later. As soon as we keep the current output as a published cacheline in
    * RAM, rekey reuse must stop for that piece so later runs cannot overwrite a long-term state in
    * place just because the pipe is running in realtime. */
-  const gboolean allow_rekey_reuse = dev && _requests_cache(pipe, piece) && allow_cache_reuse
+  const gboolean allow_rekey_reuse = _requests_cache(pipe, piece) && allow_cache_reuse
                                      && !cache_output;
   const dt_dev_pixelpipe_cache_writable_status_t acquire_status
       = dt_dev_pixelpipe_cache_get_writable(darktable.pixelpipe_cache, hash, bufsize, name, pipe->type,
@@ -1178,7 +1183,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   _print_perf_debug(pipe, pixelpipe_flow, piece, module,
                     (acquire_status != DT_DEV_PIXELPIPE_CACHE_WRITABLE_CREATED), &start);
 
-  if(dev->gui_attached) dev->progress.completed++;
+  if(pipe->dev->gui_attached) pipe->dev->progress.completed++;
 
   if(error)
   {
@@ -1242,7 +1247,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   if(_bypass_cache(pipe, piece) && !keep_final_output)
     dt_dev_pixelpipe_cache_flag_auto_destroy(darktable.pixelpipe_cache, output_entry);
 
-  if(dev->gui_attached)
+  if(pipe->dev->gui_attached)
   {
     dt_free(darktable.main_message);
     dt_control_queue_redraw_center();
@@ -1397,7 +1402,7 @@ static GList *_get_requested_piece_node(const dt_dev_pixelpipe_t *pipe, const dt
   return NULL;
 }
 
-int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop_roi_t roi)
+int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_iop_roi_t roi)
 {
   /* `pipe->devid` is only valid while the current run owns the OpenCL device lock.
    * Reset it before any cache probe so callers never reuse a stale device id from a
@@ -1412,18 +1417,18 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop
 
   dt_dev_pixelpipe_cache_print(darktable.pixelpipe_cache);
 
-  if(dev->gui_attached)
+  if(pipe->dev->gui_attached)
   {
-    dev->color_picker.pending_module = NULL;
-    dev->color_picker.pending_pipe = NULL;
-    dev->color_picker.piece_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+    pipe->dev->color_picker.pending_module = NULL;
+    pipe->dev->color_picker.pending_pipe = NULL;
+    pipe->dev->color_picker.piece_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
   }
 
   // Get the roi_out hash of all nodes.
   // Get the previous output size of the module, for cache invalidation.
-  dt_dev_pixelpipe_get_roi_in(pipe, dev, roi);
-  dt_pixelpipe_get_global_hash(pipe, dev);
-  const guint pos = g_list_length(dev->iop);
+  dt_dev_pixelpipe_get_roi_in(pipe, roi);
+  dt_pixelpipe_get_global_hash(pipe);
+  const guint pos = g_list_length(pipe->dev->iop);
 
   dt_dev_pixelpipe_cache_request_t cache_request = dt_dev_pixelpipe_get_cache_request(pipe);
   const dt_iop_module_t *const requested_module = dt_dev_pixelpipe_get_cache_request_module(pipe);
@@ -1473,9 +1478,9 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop
            dt_pixelpipe_get_pipe_name(pipe->type), roi.width, roi.height);
 
   // get a snapshot of the mask list
-  dt_pthread_rwlock_rdlock(&dev->masks_mutex);
-  pipe->forms = dt_masks_dup_forms_deep(dev->forms, NULL);
-  dt_pthread_rwlock_unlock(&dev->masks_mutex);
+  dt_pthread_rwlock_rdlock(&pipe->dev->masks_mutex);
+  pipe->forms = dt_masks_dup_forms_deep(pipe->dev->forms, NULL);
+  dt_pthread_rwlock_unlock(&pipe->dev->masks_mutex);
 
   // go through the list of modules from the end:
   GList *pieces = g_list_last(pipe->nodes);
@@ -1521,7 +1526,7 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop
     dt_get_times(&start);
     uint64_t final_hash = -1;
     const dt_dev_pixelpipe_iop_t *final_piece = NULL;
-    err = dt_dev_pixelpipe_process_rec(pipe, dev, &final_hash, &final_piece,
+    err = dt_dev_pixelpipe_process_rec(pipe, &final_hash, &final_piece,
                                        requested_backbuf ? pieces : requested_pieces,
                                        requested_backbuf ? pos : requested_pos);
     (void)final_piece;

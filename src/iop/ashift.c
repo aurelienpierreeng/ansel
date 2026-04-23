@@ -2764,7 +2764,7 @@ static void _draw_save_lines_to_params(dt_iop_module_t *self)
     float pts[8] = { g->lines[0].p1[0], g->lines[0].p1[1], g->lines[0].p2[0],
                      g->lines[0].p2[1], g->lines[1].p1[0], g->lines[1].p1[1],
                      g->lines[1].p2[0], g->lines[1].p2[1] };
-    if(dt_dev_distort_backtransform_plus(self->dev, self->dev->virtual_pipe, self->iop_order,
+    if(dt_dev_distort_backtransform_plus(self->dev->virtual_pipe, self->iop_order,
                                          DT_DEV_TRANSFORM_DIR_BACK_EXCL, pts, 4))
     {
       for(int i = 0; i < 8; i++) p->last_quad_lines[i] = pts[i];
@@ -2789,7 +2789,7 @@ static void _draw_save_lines_to_params(dt_iop_module_t *self)
         if(p->last_drawn_lines_count >= MAX_SAVED_LINES) break;
       }
     }
-    dt_dev_distort_backtransform_plus(self->dev, self->dev->virtual_pipe, self->iop_order,
+    dt_dev_distort_backtransform_plus(self->dev->virtual_pipe, self->iop_order,
                                       DT_DEV_TRANSFORM_DIR_BACK_EXCL, p->last_drawn_lines,
                                       p->last_drawn_lines_count * 2);
   }
@@ -2805,7 +2805,7 @@ static gboolean _draw_retrieve_lines_from_params(dt_iop_module_t *self, dt_iop_a
   dt_iop_ashift_params_t *p = _get_ashift_params(self);
   if(IS_NULL_PTR(g) || IS_NULL_PTR(p)) return FALSE;
 
-  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->virtual_pipe, self);
+  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);
 
   if(method == ASHIFT_METHOD_QUAD
      && p->last_quad_lines[0] > 0.0f && p->last_quad_lines[1] > 0.0f
@@ -2815,7 +2815,7 @@ static gboolean _draw_retrieve_lines_from_params(dt_iop_module_t *self, dt_iop_a
                      p->last_quad_lines[2], p->last_quad_lines[3],
                      p->last_quad_lines[4], p->last_quad_lines[5],
                      p->last_quad_lines[6], p->last_quad_lines[7] };
-    if(dt_dev_distort_transform_plus(self->dev, self->dev->virtual_pipe, self->iop_order,
+    if(dt_dev_distort_transform_plus(darktable.develop->virtual_pipe, self->iop_order,
                                      DT_DEV_TRANSFORM_DIR_BACK_EXCL, pts, 4))
     {
       if(g->lines)
@@ -2854,7 +2854,7 @@ static gboolean _draw_retrieve_lines_from_params(dt_iop_module_t *self, dt_iop_a
     for(int i = 0; i < p->last_drawn_lines_count * 4; i++)
       pts[i] = p->last_drawn_lines[i];
 
-    if(dt_dev_distort_transform_plus(self->dev, self->dev->virtual_pipe, self->iop_order,
+    if(dt_dev_distort_transform_plus(darktable.develop->virtual_pipe, self->iop_order,
                                      DT_DEV_TRANSFORM_DIR_BACK_EXCL, pts, p->last_drawn_lines_count * 2))
     {
       if(g->lines)
@@ -2940,7 +2940,7 @@ static gboolean _sync_private_buffer_from_preview_cache(dt_iop_module_t *self,
                                                         dt_dev_pixelpipe_iop_t **preview_piece_out)
 {
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
-  dt_dev_pixelpipe_iop_t *preview_piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->preview_pipe, self);
+  dt_dev_pixelpipe_iop_t *preview_piece = dt_dev_distort_get_iop_pipe(self->dev->preview_pipe, self);
   if(preview_piece_out) *preview_piece_out = preview_piece;
 
   if(IS_NULL_PTR(preview_piece) || !preview_piece->enabled || preview_piece->roi_in.width <= 0 || preview_piece->roi_in.height <= 0)
@@ -3004,7 +3004,7 @@ static uint64_t _current_preview_input_hash(dt_iop_module_t *self)
 {
   if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(self->dev->preview_pipe)) return DT_PIXELPIPE_CACHE_HASH_INVALID;
 
-  dt_dev_pixelpipe_iop_t *preview_piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->preview_pipe, self);
+  dt_dev_pixelpipe_iop_t *preview_piece = dt_dev_distort_get_iop_pipe(self->dev->preview_pipe, self);
   if(IS_NULL_PTR(preview_piece) || !preview_piece->enabled || preview_piece->roi_in.width <= 0 || preview_piece->roi_in.height <= 0)
     return DT_PIXELPIPE_CACHE_HASH_INVALID;
 
@@ -3035,7 +3035,7 @@ static int _do_get_structure_auto(dt_iop_module_t *self, dt_iop_ashift_params_t 
 
   if(IS_NULL_PTR(b))
   {
-    dt_dev_pixelpipe_iop_t *preview_piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->preview_pipe, self);
+    dt_dev_pixelpipe_iop_t *preview_piece = dt_dev_distort_get_iop_pipe(self->dev->preview_pipe, self);
     if(_sync_private_buffer_from_preview_cache(self, &preview_piece)) b = g->buf;
 
     if(IS_NULL_PTR(b))
@@ -3044,7 +3044,7 @@ static int _do_get_structure_auto(dt_iop_module_t *self, dt_iop_ashift_params_t 
       // If preview is already valid here, the GUI state was lost while the pipe can still exact-hit
       // downstream cachelines. Remove the preview chain from ashift onward so the worker recomputes
       // exactly that suffix. On a cold first run, just queue the job and let preview build normally.
-      if(dt_dev_pixelpipe_is_backbufer_valid(self->dev->preview_pipe, self->dev) && preview_piece)
+      if(dt_dev_pixelpipe_is_backbufer_valid(self->dev->preview_pipe) && preview_piece)
       {
         gboolean remove_from_ashift = FALSE;
         for(GList *node = g_list_first(self->dev->preview_pipe->nodes); node; node = g_list_next(node))
@@ -3111,16 +3111,16 @@ static void _do_get_structure_lines(dt_iop_module_t *self)
 
   if(IS_NULL_PTR(b))
   {
-    dt_dev_pixelpipe_iop_t *preview_piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->preview_pipe, self);
+    dt_dev_pixelpipe_iop_t *preview_piece = dt_dev_distort_get_iop_pipe(darktable.develop->preview_pipe, self);
     if(_sync_private_buffer_from_preview_cache(self, &preview_piece)) b = g->buf;
 
     if(IS_NULL_PTR(b))
     {
       dt_control_log(_("Data pending - Please repeat"));
-      if(dt_dev_pixelpipe_is_backbufer_valid(self->dev->preview_pipe, self->dev) && preview_piece)
+      if(dt_dev_pixelpipe_is_backbufer_valid(darktable.develop->preview_pipe) && preview_piece)
       {
         gboolean remove_from_ashift = FALSE;
-        for(GList *node = g_list_first(self->dev->preview_pipe->nodes); node; node = g_list_next(node))
+        for(GList *node = g_list_first(darktable.develop->preview_pipe->nodes); node; node = g_list_next(node))
         {
           dt_dev_pixelpipe_iop_t *current = (dt_dev_pixelpipe_iop_t *)node->data;
           remove_from_ashift |= (current == preview_piece);
@@ -3134,12 +3134,12 @@ static void _do_get_structure_lines(dt_iop_module_t *self)
       }
       g->jobcode = ASHIFT_JOBCODE_GET_STRUCTURE_LINES;
       g->jobparams = 0;
-      dt_dev_pixelpipe_resync_history_preview(self->dev);
+      dt_dev_pixelpipe_resync_history_preview(darktable.develop);
       return;
     }
   }
 
-  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->virtual_pipe, self);
+  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(darktable.develop->virtual_pipe, self);
 
   _do_clean_structure(self, p, TRUE);
 
@@ -3169,16 +3169,16 @@ static void _do_get_structure_quad(dt_iop_module_t *self)
 
   if(IS_NULL_PTR(b))
   {
-    dt_dev_pixelpipe_iop_t *preview_piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->preview_pipe, self);
+    dt_dev_pixelpipe_iop_t *preview_piece = dt_dev_distort_get_iop_pipe(darktable.develop->preview_pipe, self);
     if(_sync_private_buffer_from_preview_cache(self, &preview_piece)) b = g->buf;
 
     if(IS_NULL_PTR(b))
     {
       dt_control_log(_("Data pending - Please repeat"));
-      if(dt_dev_pixelpipe_is_backbufer_valid(self->dev->preview_pipe, self->dev) && preview_piece)
+      if(dt_dev_pixelpipe_is_backbufer_valid(darktable.develop->preview_pipe) && preview_piece)
       {
         gboolean remove_from_ashift = FALSE;
-        for(GList *node = g_list_first(self->dev->preview_pipe->nodes); node; node = g_list_next(node))
+        for(GList *node = g_list_first(darktable.develop->preview_pipe->nodes); node; node = g_list_next(node))
         {
           dt_dev_pixelpipe_iop_t *current = (dt_dev_pixelpipe_iop_t *)node->data;
           remove_from_ashift |= (current == preview_piece);
@@ -3197,7 +3197,7 @@ static void _do_get_structure_quad(dt_iop_module_t *self)
     }
   }
 
-  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->virtual_pipe, self);
+  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);
 
   _do_clean_structure(self, p, TRUE);
 
@@ -3212,7 +3212,7 @@ static void _do_get_structure_quad(dt_iop_module_t *self)
     const float wd = self->dev->roi.processed_width;
     const float ht = self->dev->roi.processed_height;
     float pts[8] = { wd * 0.2, ht * 0.2, wd * 0.2, ht * 0.8, wd * 0.8, ht * 0.2, wd * 0.8, ht * 0.8 };
-    if(dt_dev_distort_backtransform_plus(self->dev, self->dev->virtual_pipe, self->iop_order,
+    if(dt_dev_distort_backtransform_plus(darktable.develop->virtual_pipe, self->iop_order,
                                          DT_DEV_TRANSFORM_DIR_FORW_INCL, pts, 4))
     {
       g->current_structure_method = ASHIFT_METHOD_QUAD;
@@ -3356,7 +3356,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     float ivecl = sqrtf(ivec[0] * ivec[0] + ivec[1] * ivec[1]);
 
     // where do they go?
-    dt_dev_distort_backtransform_plus(self->dev, self->dev->virtual_pipe, self->iop_order,
+    dt_dev_distort_backtransform_plus(darktable.develop->virtual_pipe, self->iop_order,
                                       DT_DEV_TRANSFORM_DIR_FORW_EXCL, points, 2);
 
     float ovec[2] = { points[2] - points[0], points[3] - points[1] };
@@ -3496,7 +3496,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     const float ivecl = sqrtf(ivec[0] * ivec[0] + ivec[1] * ivec[1]);
 
     // where do they go?
-    dt_dev_distort_backtransform_plus(self->dev, self->dev->virtual_pipe, self->iop_order,
+    dt_dev_distort_backtransform_plus(darktable.develop->virtual_pipe, self->iop_order,
                                       DT_DEV_TRANSFORM_DIR_FORW_EXCL, points, 2);
 
     const float ovec[2] = { points[2] - points[0], points[3] - points[1] };
@@ -3851,9 +3851,9 @@ static int get_points(struct dt_iop_module_t *self, const dt_iop_ashift_line_t *
   }
 
   // third step: transform all points
-  if(!dt_dev_distort_transform_plus(dev, dev->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_INCL, my_points, total_points))
+  if(!dt_dev_distort_transform_plus(dev->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_INCL, my_points, total_points))
     goto error;
-  if(!dt_dev_distort_transform_plus(dev, dev->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_INCL,
+  if(!dt_dev_distort_transform_plus(dev->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_INCL,
                                     my_extremas, 2 * lines_count))
     goto error;
 
@@ -3914,14 +3914,14 @@ error:
 if(!dt_dev_distort_transform_plus(self->dev, self->dev->virtual_pipe, self->priority, self->priority + 1,
       (float *)V, 4))
 */
-static int call_distort_transform(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, struct dt_iop_module_t *self,
+static int call_distort_transform(dt_dev_pixelpipe_t *pipe, struct dt_iop_module_t *self,
                                   float *points, size_t points_count)
 {
   int ret = 0;
-  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->virtual_pipe, self);
+  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(pipe, self);
   if(IS_NULL_PTR(piece)) return ret;
   if(piece->module == self && /*piece->enabled && */  //see note below
-     !dt_dev_pixelpipe_activemodule_disables_currentmodule(dev, piece->module))
+     !dt_dev_pixelpipe_activemodule_disables_currentmodule(pipe->dev, piece->module))
   {
     if(piece->module->distort_transform)
     ret = piece->module->distort_transform(piece->module, pipe, piece, points, points_count);
@@ -4039,7 +4039,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   dt_dev_rescale_roi(dev, cr, width, height);
 
   // we draw the cropping area; use the input ROI from the virtual pipe piece
-  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(dev, dev->virtual_pipe, self);
+  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(darktable.develop->virtual_pipe, self);
   if(IS_NULL_PTR(piece))
   {
     cairo_restore(cr);
@@ -4057,7 +4057,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
                     { ixo + iwd,  iyo       } };
 
   // convert coordinates of corners to coordinates of this module's output
-  if(!call_distort_transform(self->dev, self->dev->virtual_pipe, self, (float *)V, 4))
+  if(!call_distort_transform(darktable.develop->virtual_pipe, self, (float *)V, 4))
     return;
 
   // get x/y-offset as well as width and height of output buffer
@@ -4108,10 +4108,10 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
                     { xmin + p->cr * owd, ymin + p->ct * oht } };
 
   // convert clipping corners to final output image
-  if(!dt_dev_distort_transform_plus(self->dev, self->dev->virtual_pipe, self->iop_order,
+  if(!dt_dev_distort_transform_plus(darktable.develop->virtual_pipe, self->iop_order,
                                     DT_DEV_TRANSFORM_DIR_FORW_EXCL, (float *)C, 4))
     return;
-  if(!dt_dev_distort_transform_plus(self->dev, self->dev->virtual_pipe, self->iop_order,
+  if(!dt_dev_distort_transform_plus(darktable.develop->virtual_pipe, self->iop_order,
                                     DT_DEV_TRANSFORM_DIR_FORW_EXCL, (float *)V, 4))
     return;
 
@@ -4119,7 +4119,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   cairo_set_dash(cr, &dashes, 0, 0);
   
   // Resize the coordinates of the rectangles V and C according to the current zoom.
-  const float scale_factor = dt_dev_get_natural_scale(dev);
+  const float scale_factor = dt_dev_get_natural_scale(darktable.develop);
   for(size_t i = 0; i < 4; i++)
   {
     V[i][0] *= scale_factor;
@@ -4395,12 +4395,12 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
 
   gboolean handled = FALSE;
 
-  const float wd = self->dev->roi.preview_width;
-  const float ht = self->dev->roi.preview_height;
+  const float wd = darktable.develop->roi.preview_width;
+  const float ht = darktable.develop->roi.preview_height;
   if(wd < 1.0 || ht < 1.0) return 1;
 
   float pzxpy[2] = { (float)x, (float)y };
-  dt_dev_coordinates_widget_to_image_norm(self->dev, pzxpy, 1);
+  dt_dev_coordinates_widget_to_image_norm(darktable.develop, pzxpy, 1);
   float pzx = pzxpy[0];
   float pzy = pzxpy[1];
 
@@ -4410,10 +4410,10 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   // if we are moving a drawn line extrema, we do the change here
   if(g->draw_point_move)
   {
-    const float pd_w = self->dev->roi.processed_width;
-    const float pd_h = self->dev->roi.processed_height;
+    const float pd_w = darktable.develop->roi.processed_width;
+    const float pd_h = darktable.develop->roi.processed_height;
     float pts[2] = { pzx * pd_w, pzy * pd_h };
-    if(dt_dev_distort_backtransform_plus(self->dev, self->dev->virtual_pipe, self->iop_order,
+    if(dt_dev_distort_backtransform_plus(darktable.develop->virtual_pipe, self->iop_order,
                                          DT_DEV_TRANSFORM_DIR_FORW_INCL, pts, 1))
     {
       // first we move the point
@@ -4474,7 +4474,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
     const float pd_w = self->dev->roi.processed_width;
     const float pd_h = self->dev->roi.processed_height;
     float pts[2] = { pzx * pd_w, pzy * pd_h };
-    if(dt_dev_distort_backtransform_plus(self->dev, self->dev->virtual_pipe, self->iop_order,
+    if(dt_dev_distort_backtransform_plus(darktable.develop->virtual_pipe, self->iop_order,
                                          DT_DEV_TRANSFORM_DIR_FORW_INCL, pts, 1))
     {
       const float dx = (pts[0] - g->draw_pointmove_x);
@@ -4690,10 +4690,10 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
     {
       if(g->points_idx[n].near)
       {
-        const float pd_w = self->dev->roi.processed_width;
-        const float pd_h = self->dev->roi.processed_height;
+        const float pd_w = darktable.develop->roi.processed_width;
+        const float pd_h = darktable.develop->roi.processed_height;
         float pts[2] = { pzx * pd_w, pzy * pd_h };
-        dt_dev_distort_backtransform_plus(self->dev, self->dev->virtual_pipe, self->iop_order,
+        dt_dev_distort_backtransform_plus(darktable.develop->virtual_pipe, self->iop_order,
                                           DT_DEV_TRANSFORM_DIR_FORW_INCL, pts, 1);
         g->draw_line_move = n;
         g->draw_pointmove_x = pts[0];
@@ -4771,7 +4771,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
     const float pd_w = self->dev->roi.processed_width;
     const float pd_h = self->dev->roi.processed_height;
     float pts[2] = { pzx * pd_w, pzy * pd_h };
-    dt_dev_distort_backtransform_plus(self->dev, self->dev->virtual_pipe, self->iop_order,
+    dt_dev_distort_backtransform_plus(darktable.develop->virtual_pipe, self->iop_order,
                                       DT_DEV_TRANSFORM_DIR_FORW_INCL, pts, 1);
     const int count = g->lines_count + 1;
     // if count > MAX_SAVED_LINES we alert that the next lines won't be saved in params
@@ -4835,13 +4835,13 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
     g->straightening = FALSE;
     // adjust the line with possible current angle and flip on this module
     float pzxpy[2] = { (float)x, (float)y };
-    dt_dev_coordinates_widget_to_image_norm(self->dev, pzxpy, 1);
+    dt_dev_coordinates_widget_to_image_norm(darktable.develop, pzxpy, 1);
     const float pzx = pzxpy[0];
     const float pzy = pzxpy[1];
-    const float pd_w = self->dev->roi.processed_width;
-    const float pd_h = self->dev->roi.processed_height;
+    const float pd_w = darktable.develop->roi.processed_width;
+    const float pd_h = darktable.develop->roi.processed_height;
     float pts[4] = { pzx * pd_w, pzy * pd_h, g->lastx * pd_w, g->lasty * pd_h };
-    dt_dev_distort_backtransform_plus(self->dev, self->dev->virtual_pipe,
+    dt_dev_distort_backtransform_plus(darktable.develop->virtual_pipe,
                                       self->iop_order,
                                       DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 2);
 

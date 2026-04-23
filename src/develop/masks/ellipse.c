@@ -372,7 +372,7 @@ static int _ellipse_get_points_source(dt_develop_t *dev, float xx, float yy, flo
 
   // we transform with all distortion that happen *before* the module
   // so we have now the TARGET points in module input reference
-  if(!dt_dev_distort_transform_plus(dev, dev->virtual_pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_EXCL,
+  if(!dt_dev_distort_transform_plus(dev->virtual_pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_EXCL,
                                     *points, *points_count))
     goto error;
 
@@ -380,7 +380,7 @@ static int _ellipse_get_points_source(dt_develop_t *dev, float xx, float yy, flo
   // so we have now the SOURCE points in module input reference
   float pts[2] = { xs, ys };
   dt_dev_coordinates_raw_norm_to_raw_abs(dev, pts, 1);
-  if(!dt_dev_distort_transform_plus(dev, dev->virtual_pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_EXCL,
+  if(!dt_dev_distort_transform_plus(dev->virtual_pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_EXCL,
                                     pts, 1))
     goto error;
 
@@ -399,7 +399,7 @@ static int _ellipse_get_points_source(dt_develop_t *dev, float xx, float yy, flo
 
   // we apply the rest of the distortions (those after the module)
   // so we have now the SOURCE points in final image reference
-  if(!dt_dev_distort_transform_plus(dev, dev->virtual_pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_FORW_INCL,
+  if(!dt_dev_distort_transform_plus(dev->virtual_pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_FORW_INCL,
                                     *points, *points_count))
     goto error;
 
@@ -1205,7 +1205,7 @@ static int _ellipse_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_t 
     return 1;
 
   // and we transform them with all distorted modules
-  if(!dt_dev_distort_transform_plus(darktable.develop, pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points, point_count))
+  if(!dt_dev_distort_transform_plus(pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points, point_count))
   {
     dt_pixelpipe_cache_free_align(points);
     return 1;
@@ -1239,7 +1239,7 @@ static int _ellipse_get_area(const dt_iop_module_t *const module, dt_dev_pixelpi
     return 1;
 
   // and we transform them with all distorted modules
-  if(!dt_dev_distort_transform_plus(module->dev, pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points, point_count))
+  if(!dt_dev_distort_transform_plus(pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points, point_count))
   {
     dt_pixelpipe_cache_free_align(points);
     return 1;
@@ -1294,7 +1294,7 @@ static int _ellipse_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpi
   }
 
   // we back transform all this points
-  if(!dt_dev_distort_backtransform_plus(module->dev, pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points, (size_t)w * h))
+  if(!dt_dev_distort_backtransform_plus(pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points, (size_t)w * h))
   {
     dt_pixelpipe_cache_free_align(points);
     return 1;
@@ -1423,7 +1423,7 @@ static int _ellipse_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pix
   }
 
   // we transform the outline from input image coordinates to current position in pixelpipe
-  if(!dt_dev_distort_transform_plus(module->dev, pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, ell,
+  if(!dt_dev_distort_transform_plus(pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, ell,
                                     ellpts))
   {
     dt_pixelpipe_cache_free_align(ell);
@@ -1501,7 +1501,7 @@ static int _ellipse_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pix
   }
 
   // we back transform all these points to the input image coordinates
-  if(!dt_dev_distort_backtransform_plus(module->dev, pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points,
+  if(!dt_dev_distort_backtransform_plus(pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points,
                                         (size_t)bbw * bbh))
   {
     dt_pixelpipe_cache_free_align(points);

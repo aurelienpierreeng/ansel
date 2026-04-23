@@ -690,7 +690,7 @@ static int _iop_clipping_set_max_clip(struct dt_iop_module_t *self)
   dt_iop_clipping_params_t *p = (dt_iop_clipping_params_t *)self->params;
 
   // we want to know the size of the actual buffer
-  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->virtual_pipe, self);
+  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(darktable.develop->virtual_pipe, self);
   if(IS_NULL_PTR(piece)) return 0;
 
   float wp = piece->buf_out.width, hp = piece->buf_out.height;
@@ -700,9 +700,9 @@ static int _iop_clipping_set_max_clip(struct dt_iop_module_t *self)
   const float ch = CLAMPF(fabsf(p->ch), 0.1f, 1.0f);
 
   float points[8] = { 0.0f, 0.0f, wp, hp, cx * wp, cy * hp, cw * wp, ch * hp };
-  if(!dt_dev_distort_transform_plus(self->dev, self->dev->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, points, 4))
+  if(!dt_dev_distort_transform_plus(darktable.develop->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, points, 4))
     return 0;
-  dt_dev_coordinates_preview_abs_to_image_norm(self->dev, points, 4);
+  dt_dev_coordinates_preview_abs_to_image_norm(darktable.develop, points, 4);
 
   g->clip_max_x = fmaxf(points[0], 0.0f);
   g->clip_max_y = fmaxf(points[1], 0.0f);
@@ -1317,7 +1317,7 @@ static float _ratio_get_aspect(dt_iop_module_t *self, GtkWidget *combo)
   }
 
   // we want to know the size of the actual buffer
-  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->virtual_pipe, self);
+  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);
   if(IS_NULL_PTR(piece)) return 0.0f;
 
   const int iwd = piece->buf_in.width, iht = piece->buf_in.height;
@@ -2405,13 +2405,13 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   if(g->k_show == 1 && p->k_type > 0)
   {
     // points in screen space
-    dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->virtual_pipe, self);
+    dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);
     if(IS_NULL_PTR(piece)) return;
 
     const float wp = piece->buf_out.width, hp = piece->buf_out.height;
     float pts[8] = { p->kxa * wp, p->kya * hp, p->kxb * wp, p->kyb * hp,
                      p->kxc * wp, p->kyc * hp, p->kxd * wp, p->kyd * hp };
-    if(dt_dev_distort_transform_plus(self->dev, self->dev->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 4))
+    if(dt_dev_distort_transform_plus(darktable.develop->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 4))
     {
       if(p->k_type == 3)
       {
@@ -2672,8 +2672,8 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
     if(g->k_drag == TRUE && g->k_selected >= 0)
     {
       float pts[2] = { pzx * wd, pzy * ht };
-      dt_dev_distort_backtransform_plus(self->dev, self->dev->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 1);
-      dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->virtual_pipe, self);
+      dt_dev_distort_backtransform_plus(darktable.develop->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 1);
+      dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);
       const float xx = pts[0] / (float)piece->buf_out.width, yy = pts[1] / (float)piece->buf_out.height;
       if(g->k_selected == 0)
       {
@@ -2877,9 +2877,9 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
       float points[4]
           = { g->clip_x * wd, g->clip_y * ht, (g->clip_x + g->clip_w) * wd, (g->clip_y + g->clip_h) * ht };
 
-      if(dt_dev_distort_backtransform_plus(self->dev, self->dev->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, points, 2))
+      if(dt_dev_distort_backtransform_plus(darktable.develop->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, points, 2))
       {
-        dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->virtual_pipe, self);
+        dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);
         if(!IS_NULL_PTR(piece))
         {
           // only update the sliders, not the dt_iop_clipping_params_t structure, so that the call to
@@ -2946,8 +2946,8 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
     if(g->k_show == 1 && g->k_drag == FALSE)
     {
       float pts[2] = { pzx * wd, pzy * ht };
-      dt_dev_distort_backtransform_plus(self->dev, self->dev->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 1);
-      dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->virtual_pipe, self);
+      dt_dev_distort_backtransform_plus(darktable.develop->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 1);
+      dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);
       float xx = pts[0] / (float)piece->buf_out.width, yy = pts[1] / (float)piece->buf_out.height;
       // are we near a keystone point ?
       g->k_selected = -1;
@@ -3012,13 +3012,13 @@ static void commit_box(dt_iop_module_t *self, dt_iop_clipping_gui_data_t *g, dt_
     p->cw = p->ch = 1.0f;
   }
   // we want value in iop space
-  const float wd = self->dev->roi.preview_width;
-  const float ht = self->dev->roi.preview_height;
+  const float wd = darktable.develop->roi.preview_width;
+  const float ht = darktable.develop->roi.preview_height;
   float points[4]
       = { g->clip_x * wd, g->clip_y * ht, (g->clip_x + g->clip_w) * wd, (g->clip_y + g->clip_h) * ht };
-  if(dt_dev_distort_backtransform_plus(self->dev, self->dev->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, points, 2))
+  if(dt_dev_distort_backtransform_plus(darktable.develop->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, points, 2))
   {
-    dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->virtual_pipe, self);
+    dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(darktable.develop->virtual_pipe, self);
     if(!IS_NULL_PTR(piece))
     {
       p->cx = CLAMPF(points[0] / (float)piece->buf_out.width, 0.0f, 0.9f);
@@ -3043,7 +3043,7 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
   {
     // adjust the line with possible current angle and flip on this module
     dt_boundingbox_t pts = { x, y, g->button_down_x, g->button_down_y };
-    dt_dev_distort_backtransform_plus(self->dev, self->dev->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_INCL, pts, 2);
+    dt_dev_distort_backtransform_plus(darktable.develop->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_INCL, pts, 2);
 
     float dx = pts[0] - pts[2];
     float dy = pts[1] - pts[3];
@@ -3085,7 +3085,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
 
   dt_iop_clipping_gui_data_t *g = (dt_iop_clipping_gui_data_t *)self->gui_data;
   dt_iop_clipping_params_t *p = (dt_iop_clipping_params_t *)self->params;
-  const dt_develop_t *dev = (const dt_develop_t *)self->dev;
+  dt_develop_t *dev = darktable.develop;
 
   // we don't do anything if the image is not ready
   if(!g->preview_ready) return 0;
@@ -3110,18 +3110,18 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
       {
         const float zoom_scale = dev->roi.scaling;
         float pzxpy[2] = { (float)x, (float)y };
-        dt_dev_coordinates_widget_to_image_norm(self->dev, pzxpy, 1);
+        dt_dev_coordinates_widget_to_image_norm(dev, pzxpy, 1);
         float pzx = pzxpy[0];
         float pzy = pzxpy[1];
 
-        dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->virtual_pipe, self);
+        dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(dev->virtual_pipe, self);
         const float wp = piece->buf_out.width, hp = piece->buf_out.height;
         float pts[8] = { p->kxa * wp, p->kya * hp, p->kxb * wp, p->kyb * hp,
                          p->kxc * wp, p->kyc * hp, p->kxd * wp, p->kyd * hp };
-        dt_dev_distort_transform_plus(self->dev, self->dev->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 4);
+        dt_dev_distort_transform_plus(dev->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 4);
 
         float point[2] = { pzx, pzy };
-        dt_dev_coordinates_image_norm_to_preview_abs(self->dev, point, 1);
+        dt_dev_coordinates_image_norm_to_preview_abs(dev, point, 1);
         const float xx = point[0];
         const float yy = point[1];
         float c[2] = { (MIN(pts[4], pts[2]) + MAX(pts[0], pts[6])) / 2.0f,
@@ -3210,7 +3210,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
                   if(g->k_selected_segment >= 0)
                   {
                     float border_pzxpy[2] = { (float)x, (float)y };
-                    dt_dev_coordinates_widget_to_image_norm(self->dev, border_pzxpy, 1);
+                    dt_dev_coordinates_widget_to_image_norm(dev, border_pzxpy, 1);
                     pzx = border_pzxpy[0];
                     pzy = border_pzxpy[1];
                     g->button_down_zoom_x += 0.5;

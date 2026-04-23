@@ -163,7 +163,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
   dt_boundingbox_t pts = {(float)(roi_out->x) / in_scale, (float)(roi_out->y) / in_scale,
                           (float)(roi_out->x + roi_out->width) / in_scale, (float)(roi_out->y + roi_out->height) / in_scale};
   printf("in  %f %f %f %f\n", pts[0], pts[1], pts[2], pts[3]);
-  dt_dev_distort_backtransform_plus(dev, dev->pipe, 0, priority, pts, 2);
+  dt_dev_distort_backtransform_plus(dev->pipe, 0, priority, pts, 2);
   printf("out %f %f %f %f\n\n", pts[0], pts[1], pts[2], pts[3]);
 #endif
 
@@ -195,7 +195,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
     }
 
     // where did they come from?
-    dt_dev_distort_backtransform_plus(self->dev, runtime_pipe, iop_order,
+    dt_dev_distort_backtransform_plus(runtime_pipe, iop_order,
                                       DT_DEV_TRANSFORM_DIR_BACK_INCL, bufptr, roi_out->width);
 
     for(int i = 0; i < roi_out->width; i++)
@@ -318,7 +318,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     }
 
     // where did they come from?
-    dt_dev_distort_backtransform_plus(self->dev, self->dev->pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, bufptr, roi_out->width);
+    dt_dev_distort_backtransform_plus(pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, bufptr, roi_out->width);
   }
 
   dev_coord = dt_opencl_alloc_device_buffer(devid, coordbufsize);

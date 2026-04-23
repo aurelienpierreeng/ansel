@@ -219,7 +219,7 @@ static uint64_t _current_preview_hash(dt_iop_module_t *self)
 {
   if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(self->dev->preview_pipe)) return DT_PIXELPIPE_CACHE_HASH_INVALID;
 
-  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->preview_pipe, self);
+  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev->preview_pipe, self);
   if(IS_NULL_PTR(piece) || !piece->enabled || piece->roi_in.width <= 0 || piece->roi_in.height <= 0)
     return DT_PIXELPIPE_CACHE_HASH_INVALID;
 

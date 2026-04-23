@@ -54,7 +54,7 @@ gboolean dt_drawlayer_widget_points_to_layer_coords(dt_iop_module_t *self, float
   dt_dev_coordinates_widget_to_image_norm(self->dev, pts, count);
   dt_dev_coordinates_image_norm_to_preview_abs(self->dev, pts, count);
 
-  if(!dt_dev_distort_backtransform_plus(self->dev, self->dev->virtual_pipe, self->iop_order,
+  if(!dt_dev_distort_backtransform_plus(self->dev->virtual_pipe, self->iop_order,
                                         DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, count))
     return FALSE;
   dt_dev_coordinates_preview_abs_to_image_norm(self->dev, pts, count);
@@ -65,23 +65,23 @@ gboolean dt_drawlayer_widget_points_to_layer_coords(dt_iop_module_t *self, float
 
 gboolean dt_drawlayer_layer_points_to_widget_coords(dt_iop_module_t *self, float *pts, const int count)
 {
-  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(self->dev->virtual_pipe) || IS_NULL_PTR(pts) || count <= 0) return FALSE;
-  dt_dev_coordinates_image_abs_to_image_norm(self->dev, pts, count);
-  dt_dev_coordinates_image_norm_to_preview_abs(self->dev, pts, count);
+  if(IS_NULL_PTR(pts) || count <= 0) return FALSE;
+  dt_dev_coordinates_image_abs_to_image_norm(darktable.develop, pts, count);
+  dt_dev_coordinates_image_norm_to_preview_abs(darktable.develop, pts, count);
 
-  if(!dt_dev_distort_transform_plus(self->dev, self->dev->virtual_pipe, self->iop_order,
+  if(!dt_dev_distort_transform_plus(darktable.develop->virtual_pipe, self->iop_order,
                                     DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, count))
     return FALSE;
 
-  dt_dev_coordinates_preview_abs_to_image_norm(self->dev, pts, count);
-  dt_dev_coordinates_image_norm_to_widget(self->dev, pts, count);
+  dt_dev_coordinates_preview_abs_to_image_norm(darktable.develop, pts, count);
+  dt_dev_coordinates_image_norm_to_widget(darktable.develop, pts, count);
   return TRUE;
 }
 
 gboolean dt_drawlayer_widget_to_layer_coords(dt_iop_module_t *self, const double wx, const double wy,
                                              float *lx, float *ly)
 {
-  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(self->dev->virtual_pipe) || IS_NULL_PTR(lx) || IS_NULL_PTR(ly)) return FALSE;
+  if(IS_NULL_PTR(lx) || IS_NULL_PTR(ly)) return FALSE;
 
   float pt[2] = { (float)wx, (float)wy };
   if(!dt_drawlayer_widget_points_to_layer_coords(self, pt, 1)) return FALSE;
@@ -94,7 +94,7 @@ gboolean dt_drawlayer_widget_to_layer_coords(dt_iop_module_t *self, const double
 gboolean dt_drawlayer_layer_to_widget_coords(dt_iop_module_t *self, const float x, const float y,
                                              float *wx, float *wy)
 {
-  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(self->dev->virtual_pipe) || IS_NULL_PTR(wx) || IS_NULL_PTR(wy)) return FALSE;
+  if(IS_NULL_PTR(wx) || IS_NULL_PTR(wy)) return FALSE;
 
   float pt[2] = { x, y };
   if(!dt_drawlayer_layer_points_to_widget_coords(self, pt, 1)) return FALSE;
@@ -108,8 +108,6 @@ gboolean dt_drawlayer_layer_bounds_to_widget_bounds(dt_iop_module_t *self, const
                                                     float *left, float *top,
                                                     float *right, float *bottom)
 {
-  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(self->dev->virtual_pipe)) return FALSE;
-
   float pts[8] = {
     x0, y0, x1, y0, x0, y1, x1, y1,
   };

@@ -130,12 +130,11 @@ int dt_iop_color_picker_get_ready_data(const dt_iop_module_t *module, GtkWidget 
  * The pixelpipe asks that question during `_set_opencl_cache()`, while the picker code asks it again
  * when deciding whether a cache miss should trigger a preview recompute.
  *
- * @param dev Current develop instance.
  * @param module Candidate module in the preview pipe.
  *
  * @return TRUE if the active picker captures @p module and therefore needs its output cached on host.
  */
-gboolean dt_iop_color_picker_force_cache(const dt_develop_t *dev, const struct dt_dev_pixelpipe_t *pipe,
+gboolean dt_iop_color_picker_force_cache(const struct dt_dev_pixelpipe_t *pipe,
                                          const dt_iop_module_t *module);
 
 /* global init: link signal */

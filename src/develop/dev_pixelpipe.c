@@ -31,7 +31,7 @@
 
 // Keep a preview-like virtual pipe in sync with history without running pixels.
 static void _sync_virtual_pipe(dt_develop_t *dev, dt_dev_pixelpipe_change_t flag);
-static void _sync_pipe_nodes_from_history_from_node(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
+static void _sync_pipe_nodes_from_history_from_node(dt_dev_pixelpipe_t *pipe,
                                                     const uint32_t history_end, GList *start_node,
                                                     const char *debug_label);
 static void _dt_dev_pixelpipe_cache_wait_ready_callback(gpointer instance, const guint64 hash,
@@ -129,19 +129,19 @@ static void _change_pipe(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_change_t fla
  * `dt_dev_pixelpipe_change()` still needs to run afterwards so cache policy and
  * ROI contracts remain sealed for the next processing pass.
  */
-static gboolean _sync_realtime_top_history_in_place(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
+static gboolean _sync_realtime_top_history_in_place(dt_dev_pixelpipe_t *pipe)
 {
-  if(IS_NULL_PTR(pipe) || IS_NULL_PTR(dev) || !dt_dev_pixelpipe_get_realtime(pipe))
+  if(!dt_dev_pixelpipe_get_realtime(pipe))
     return FALSE;
 
-  const uint32_t history_end = dt_dev_get_history_end_ext(dev);
-  if(history_end == 0 || IS_NULL_PTR(dev->gui_module)) return FALSE;
+  const uint32_t history_end = dt_dev_get_history_end_ext(pipe->dev);
+  if(history_end == 0 || IS_NULL_PTR(pipe->dev->gui_module)) return FALSE;
 
-  GList *last_item = g_list_nth(dev->history, history_end - 1);
+  GList *last_item = g_list_nth(pipe->dev->history, history_end - 1);
   if(IS_NULL_PTR(last_item)) return FALSE;
 
   dt_dev_history_item_t *hist = (dt_dev_history_item_t *)last_item->data;
-  if(!hist || !hist->module || hist->module != dev->gui_module) return FALSE;
+  if(!hist || !hist->module || hist->module != pipe->dev->gui_module) return FALSE;
 
   dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)dt_dev_pixelpipe_get_module_piece(pipe, hist->module);
   if(IS_NULL_PTR(piece)) return FALSE;
@@ -152,11 +152,11 @@ static gboolean _sync_realtime_top_history_in_place(dt_dev_pixelpipe_t *pipe, dt
   dt_iop_commit_params(hist->module, hist->params, hist->blend_params, pipe, piece);
   _refresh_pipe_detail_mask_state(pipe);
   if(previous_want_detail_mask != (pipe->want_detail_mask != DT_DEV_DETAIL_MASK_NONE)) return FALSE;
-  dt_pixelpipe_get_global_hash(pipe, dev);
+  dt_pixelpipe_get_global_hash(pipe);
 
   pipe->last_history_hash = hist->hash;
   pipe->last_history_item = hist;
-  dt_dev_pixelpipe_set_history_hash(pipe, dt_dev_get_history_hash(dev));
+  dt_dev_pixelpipe_set_history_hash(pipe, dt_dev_get_history_hash(pipe->dev));
   return TRUE;
 }
 
@@ -191,7 +191,7 @@ static gboolean _sync_realtime_top_history_in_place(dt_dev_pixelpipe_t *pipe, dt
  * of this policy avoids forcing stale module-output cachelines to be published
  * to host just because a transient GUI reader missed once.
  */
-static void _seal_opencl_cache_policy(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
+static void _seal_opencl_cache_policy(dt_dev_pixelpipe_t *pipe)
 {
   if(IS_NULL_PTR(pipe) || !pipe->nodes) return;
 
@@ -216,17 +216,17 @@ static void _seal_opencl_cache_policy(dt_dev_pixelpipe_t *pipe, dt_develop_t *de
     const gboolean user_requested_cache = dt_conf_get_bool(string);
     dt_free(string);
 
-    const gboolean color_picker_on = dt_iop_color_picker_force_cache(dev, pipe, module);
+    const gboolean color_picker_on = dt_iop_color_picker_force_cache(pipe, module);
     const gboolean global_hist_output_on = _module_requires_global_histogram_output_cache(pipe, module);
     const gboolean global_hist_input_on = _module_requires_global_histogram_input_cache(pipe, module);
     const gboolean module_hist_on
         = (pipe->type == DT_DEV_PIXELPIPE_PREVIEW
            && pipe->gui_observable_source
-           && (dev->gui_attached || !(piece->request_histogram & DT_REQUEST_ONLY_IN_GUI))
+           && (pipe->dev->gui_attached || !(piece->request_histogram & DT_REQUEST_ONLY_IN_GUI))
            && (piece->request_histogram & DT_REQUEST_ON));
     const gboolean active_in_gui
         = (pipe->type == DT_DEV_PIXELPIPE_FULL || pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
-           && dev->gui_module == module;
+           && pipe->dev->gui_module == module;
 
     const gboolean has_autoset = pipe->autoset && !IS_NULL_PTR(module->autoset);
 
@@ -353,7 +353,7 @@ gboolean dt_dev_pixelpipe_activemodule_disables_currentmodule(struct dt_develop_
 }
 
 
-void dt_dev_pixelpipe_get_roi_out(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev,
+void dt_dev_pixelpipe_get_roi_out(dt_dev_pixelpipe_t *pipe,
                                   const int width_in, const int height_in,
                                   int *width, int *height)
 {
@@ -361,7 +361,7 @@ void dt_dev_pixelpipe_get_roi_out(dt_dev_pixelpipe_t *pipe, struct dt_develop_t 
   dt_iop_roi_t roi_out = roi_in;
   gchar *pipe_name = NULL;
   if(darktable.unmuted & DT_DEBUG_PIPE)
-    pipe_name = _get_debug_pipe_name(pipe, dev);
+    pipe_name = _get_debug_pipe_name(pipe, pipe->dev);
 
   for(GList *nodes = g_list_first(pipe->nodes); nodes; nodes = g_list_next(nodes))
   {
@@ -372,7 +372,7 @@ void dt_dev_pixelpipe_get_roi_out(dt_dev_pixelpipe_t *pipe, struct dt_develop_t 
 
     // If in GUI and using a module that needs a full, undistorterted image,
     // we need to shutdown temporarily any module distorting the image.
-    if(dt_dev_pixelpipe_activemodule_disables_currentmodule(dev, module))
+    if(dt_dev_pixelpipe_activemodule_disables_currentmodule(pipe->dev, module))
       piece->enabled = FALSE;
 
     // If module is disabled, modify_roi_out() is a no-op
@@ -401,7 +401,7 @@ void dt_dev_pixelpipe_get_roi_out(dt_dev_pixelpipe_t *pipe, struct dt_develop_t 
   *height = roi_out.height;
 }
 
-void dt_dev_pixelpipe_get_roi_in(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev, const struct dt_iop_roi_t roi_out)
+void dt_dev_pixelpipe_get_roi_in(dt_dev_pixelpipe_t *pipe, const struct dt_iop_roi_t roi_out)
 {
   // while module->modify_roi_out describes how the current module will change the size of
   // the output buffer depending on its parameters (pretty intuitive),
@@ -418,7 +418,7 @@ void dt_dev_pixelpipe_get_roi_in(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *
   dt_iop_roi_t roi_in;
   gchar *pipe_name = NULL;
   if(darktable.unmuted & DT_DEBUG_PIPE)
-    pipe_name = _get_debug_pipe_name(pipe, dev);
+    pipe_name = _get_debug_pipe_name(pipe, pipe->dev);
   for(GList *nodes = g_list_last(pipe->nodes); nodes; nodes = g_list_previous(nodes))
   {
     dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)nodes->data;
@@ -428,7 +428,7 @@ void dt_dev_pixelpipe_get_roi_in(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *
 
     // If in GUI and using a module that needs a full, undistorterted image,
     // we need to shutdown temporarily any module distorting the image.
-    if(dt_dev_pixelpipe_activemodule_disables_currentmodule(dev, module))
+    if(dt_dev_pixelpipe_activemodule_disables_currentmodule(pipe->dev, module))
       piece->enabled = FALSE;
 
     // If module is disabled, modify_roi_in() is a no-op
@@ -781,11 +781,11 @@ static void _sync_pipe_nodes_from_history(dt_dev_pixelpipe_t *pipe, dt_develop_t
   {
     GList *detailmask_node = _find_detailmask_node(pipe);
     if(detailmask_node)
-      _sync_pipe_nodes_from_history_from_node(pipe, dev, history_end, detailmask_node, debug_label);
+      _sync_pipe_nodes_from_history_from_node(pipe, history_end, detailmask_node, debug_label);
   }
 }
 
-static void _sync_pipe_nodes_from_history_from_node(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
+static void _sync_pipe_nodes_from_history_from_node(dt_dev_pixelpipe_t *pipe,
                                                     const uint32_t history_end, GList *start_node,
                                                     const char *debug_label)
 {
@@ -818,7 +818,7 @@ static void _sync_pipe_nodes_from_history_from_node(dt_dev_pixelpipe_t *pipe, dt
     dt_develop_blend_params_t *blend_params = piece->module->default_blendop_params;
     gboolean found_history = FALSE;
 
-    for(GList *history = g_list_nth(dev->history, history_end - 1);
+    for(GList *history = g_list_nth(pipe->dev->history, history_end - 1);
         history;
         history = g_list_previous(history))
     {
@@ -848,11 +848,11 @@ static void _sync_pipe_nodes_from_history_from_node(dt_dev_pixelpipe_t *pipe, dt
   {
     GList *detailmask_node = _find_detailmask_node(pipe);
     if(detailmask_node && detailmask_node != start_node)
-      _sync_pipe_nodes_from_history_from_node(pipe, dev, history_end, detailmask_node, debug_label);
+      _sync_pipe_nodes_from_history_from_node(pipe, history_end, detailmask_node, debug_label);
   }
 }
 
-void dt_pixelpipe_get_global_hash(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
+void dt_pixelpipe_get_global_hash(dt_dev_pixelpipe_t *pipe)
 {
   /* Traverse the pipeline node by node and compute the cumulative (global) hash of each module.
   *  This hash takes into account the hashes of the previous modules and the size of the current ROI.
@@ -929,7 +929,7 @@ void dt_pixelpipe_get_global_hash(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
     // while bypass_cache only affects downstream ones.
     // In theory, distortion bypass should already affect planned ROI in/out, but it depends whether
     // internal params are committed. Anyway, make it more reliable.
-    int bypass_distort = dt_dev_pixelpipe_activemodule_disables_currentmodule(dev, piece->module);
+    int bypass_distort = dt_dev_pixelpipe_activemodule_disables_currentmodule(pipe->dev, piece->module);
     local_hash = dt_hash(local_hash, (const char *)&bypass_distort, sizeof(int));
 
     // If the cache bypass is on, the corresponding cache lines will be freed immediately after use,
@@ -941,7 +941,7 @@ void dt_pixelpipe_get_global_hash(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
 
     if(darktable.unmuted & DT_DEBUG_VERBOSE)
     {
-      gchar *type = _get_debug_pipe_name(pipe, dev);
+      gchar *type = _get_debug_pipe_name(pipe, pipe->dev);
       dt_print(DT_DEBUG_PIPE, "[pixelpipe] global hash for %20s (%s) in pipe %s with hash %lu\n",
                piece->module->op, piece->module->multi_name, type, (long unsigned int)hash);
     }
@@ -959,9 +959,8 @@ void dt_pixelpipe_get_global_hash(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
     piece->global_hash = hash;
 
     if(pipe->type == DT_DEV_PIXELPIPE_FULL
-       && dev->gui_attached
-       && (pipe == dev->pipe)
-       && (piece->module == dev->gui_module)
+       && pipe->dev->gui_attached
+       && (piece->module == pipe->dev->gui_module)
        && (piece->module->request_mask_display != DT_DEV_PIXELPIPE_DISPLAY_NONE))
     {
       passthrough_preview = TRUE;
@@ -983,16 +982,16 @@ void dt_pixelpipe_get_global_hash(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
  * @param dev
  * @param caller_func
  */
-void dt_dev_pixelpipe_synch_all_real(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, const char *caller_func)
+void dt_dev_pixelpipe_synch_all_real(dt_dev_pixelpipe_t *pipe, const char *caller_func)
 {
-  gchar *type = _get_debug_pipe_name(pipe, dev);
+  gchar *type = _get_debug_pipe_name(pipe, pipe->dev);
   dt_print(DT_DEBUG_DEV, "[pixelpipe] synch all modules with history for pipe %s called from %s\n", type, caller_func);
 
-  const uint32_t history_end = dt_dev_get_history_end_ext(dev);
-  _sync_pipe_nodes_from_history(pipe, dev, history_end, type);
+  const uint32_t history_end = dt_dev_get_history_end_ext(pipe->dev);
+  _sync_pipe_nodes_from_history(pipe, pipe->dev, history_end, type);
 
   // Keep track of the last history item to have been synced
-  GList *last_item = g_list_nth(dev->history, history_end - 1);
+  GList *last_item = g_list_nth(pipe->dev->history, history_end - 1);
   if(last_item)
   {
     dt_dev_history_item_t *last_hist = (dt_dev_history_item_t *)last_item->data;
@@ -1005,17 +1004,17 @@ void dt_dev_pixelpipe_synch_all_real(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev
     pipe->last_history_item = NULL;
   }
 
-  dt_dev_pixelpipe_set_history_hash(pipe, dt_dev_get_history_hash(dev));
+  dt_dev_pixelpipe_set_history_hash(pipe, dt_dev_get_history_hash(pipe->dev));
 }
 
-void dt_dev_pixelpipe_synch_top(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
+void dt_dev_pixelpipe_synch_top(dt_dev_pixelpipe_t *pipe)
 {
-  gchar *type = _get_debug_pipe_name(pipe, dev);
+  gchar *type = _get_debug_pipe_name(pipe, pipe->dev);
 
   dt_print(DT_DEBUG_DEV, "[pixelpipe] synch top modules with history for pipe %s\n", type);
 
-  const uint32_t history_end = dt_dev_get_history_end_ext(dev);
-  GList *last_item = g_list_nth(dev->history, history_end - 1);
+  const uint32_t history_end = dt_dev_get_history_end_ext(pipe->dev);
+  GList *last_item = g_list_nth(pipe->dev->history, history_end - 1);
   if(last_item)
   {
     GList *first_item = NULL;
@@ -1028,7 +1027,7 @@ void dt_dev_pixelpipe_synch_top(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
         break;
     }
 
-    GList *fence_item = g_list_nth(dev->history, history_end);
+    GList *fence_item = g_list_nth(pipe->dev->history, history_end);
     for(GList *history = first_item; history && history != fence_item; history = g_list_next(history))
     {
       dt_dev_history_item_t *hist = (dt_dev_history_item_t *)history->data;
@@ -1040,7 +1039,7 @@ void dt_dev_pixelpipe_synch_top(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
         dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)nodes->data;
         if(IS_NULL_PTR(piece) || piece->module != hist->module) continue;
 
-        _sync_pipe_nodes_from_history_from_node(pipe, dev, history_end, nodes, type);
+        _sync_pipe_nodes_from_history_from_node(pipe, history_end, nodes, type);
         break;
       }
     }
@@ -1056,10 +1055,10 @@ void dt_dev_pixelpipe_synch_top(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
     pipe->last_history_item = NULL;
   }
 
-  dt_dev_pixelpipe_set_history_hash(pipe, dt_dev_get_history_hash(dev));
+  dt_dev_pixelpipe_set_history_hash(pipe, dt_dev_get_history_hash(pipe->dev));
 }
 
-void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
+void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe)
 {
   dt_times_t start;
   dt_get_times(&start);
@@ -1075,7 +1074,7 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
   dt_dev_pixelpipe_change_t status
       = (dt_dev_pixelpipe_change_t)dt_atomic_exch_int((dt_atomic_int *)&pipe->changed, DT_DEV_PIPE_UNCHANGED);
 
-  gchar *type = _get_debug_pipe_name(pipe, dev);
+  gchar *type = _get_debug_pipe_name(pipe, pipe->dev);
   char *status_str = g_strdup_printf("%s%s%s%s%s%s",
                                   (status & DT_DEV_PIPE_UNCHANGED) ? "UNCHANGED " : "",
                                   (status & DT_DEV_PIPE_REMOVE) ? "REMOVE " : "",
@@ -1102,35 +1101,35 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
   else
     _refresh_pipe_detail_mask_state(pipe);
 
-  dt_pthread_rwlock_rdlock(&dev->history_mutex);
+  dt_pthread_rwlock_rdlock(&pipe->dev->history_mutex);
 
   // case DT_DEV_PIPE_UNCHANGED: case DT_DEV_PIPE_ZOOMED:
   if(status & DT_DEV_PIPE_REMOVE)
   {
     // modules have been added in between or removed. need to rebuild the whole pipeline.
     if(pipe->nodes) dt_dev_pixelpipe_cleanup_nodes(pipe);
-    dt_dev_pixelpipe_create_nodes(pipe, dev);
-    dt_dev_pixelpipe_synch_all(pipe, dev);
+    dt_dev_pixelpipe_create_nodes(pipe);
+    dt_dev_pixelpipe_synch_all(pipe);
   }
   else if(status & DT_DEV_PIPE_SYNCH)
   {
     // pipeline topology remains intact, only change all params.
-    dt_dev_pixelpipe_synch_all(pipe, dev);
+    dt_dev_pixelpipe_synch_all(pipe);
   }
   else if(status & DT_DEV_PIPE_TOP_CHANGED)
   {
     // only top history item(s) changed.
-    if(!_sync_realtime_top_history_in_place(pipe, dev))
-      dt_dev_pixelpipe_synch_top(pipe, dev);
+    if(!_sync_realtime_top_history_in_place(pipe))
+      dt_dev_pixelpipe_synch_top(pipe);
   }
-  dt_pthread_rwlock_unlock(&dev->history_mutex);
+  dt_pthread_rwlock_unlock(&pipe->dev->history_mutex);
 
-  _seal_opencl_cache_policy(pipe, dev);
+  _seal_opencl_cache_policy(pipe);
   
   // Update theoritical final scale based on distorting modules
   // This also writes piece->buf_in/out for each pipe->nodes piece,
   // so it's not nearly a matter of getting processed_width/height
-  dt_dev_pixelpipe_get_roi_out(pipe, dev, pipe->iwidth, pipe->iheight, &pipe->processed_width,
+  dt_dev_pixelpipe_get_roi_out(pipe, pipe->iwidth, pipe->iheight, &pipe->processed_width,
                                &pipe->processed_height);
 
   dt_show_times_f(&start, "[dev_pixelpipe] pipeline resync with history", "for pipe %s", type);
@@ -1148,13 +1147,13 @@ static void _sync_virtual_pipe(dt_develop_t *dev, dt_dev_pixelpipe_change_t flag
      || dev->virtual_pipe->iheight != dev->roi.raw_height
      || dev->virtual_pipe->image.id != dev->image_storage.id)
   {
-    dt_dev_pixelpipe_set_input(dev->virtual_pipe, dev, dev->image_storage.id,
+    dt_dev_pixelpipe_set_input(dev->virtual_pipe, dev->image_storage.id,
                                dev->roi.raw_width, dev->roi.raw_height, 1.0f, DT_MIPMAP_FULL);
   }
 
   // Mirror the preview-pipe change flags and commit immediately.
   _change_pipe(dev->virtual_pipe, flag);
-  dt_dev_pixelpipe_change(dev->virtual_pipe, dev);
+  dt_dev_pixelpipe_change(dev->virtual_pipe);
 }
 
 void dt_dev_pixelpipe_sync_virtual(dt_develop_t *dev, dt_dev_pixelpipe_change_t flag)
@@ -1162,15 +1161,15 @@ void dt_dev_pixelpipe_sync_virtual(dt_develop_t *dev, dt_dev_pixelpipe_change_t 
   _sync_virtual_pipe(dev, flag);
 }
 
-gboolean dt_dev_pixelpipe_is_backbufer_valid(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
+gboolean dt_dev_pixelpipe_is_backbufer_valid(dt_dev_pixelpipe_t *pipe)
 {
   return dt_dev_backbuf_get_hash(&pipe->backbuf) != DT_PIXELPIPE_CACHE_HASH_INVALID
          && dt_dev_pixelpipe_get_hash(pipe) == dt_dev_backbuf_get_hash(&pipe->backbuf)
-         && dt_dev_get_history_hash(dev) == dt_dev_backbuf_get_history_hash(&pipe->backbuf)
-         && dt_dev_backbuf_get_history_hash(&pipe->backbuf) == dt_dev_get_history_hash(dev);
+         && dt_dev_get_history_hash(pipe->dev) == dt_dev_backbuf_get_history_hash(&pipe->backbuf)
+         && dt_dev_backbuf_get_history_hash(&pipe->backbuf) == dt_dev_get_history_hash(pipe->dev);
 }
 
-gboolean dt_dev_pixelpipe_is_pipeline_valid(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
+gboolean dt_dev_pixelpipe_is_pipeline_valid(dt_dev_pixelpipe_t *pipe)
 {
-  return dt_dev_get_history_hash(dev) == dt_dev_pixelpipe_get_history_hash(pipe);
+  return dt_dev_get_history_hash(pipe->dev) == dt_dev_pixelpipe_get_history_hash(pipe);
 }

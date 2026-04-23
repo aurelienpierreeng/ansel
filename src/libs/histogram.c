@@ -675,7 +675,7 @@ static gboolean _is_backbuf_ready(dt_lib_histogram_t *d)
 {
   if(IS_NULL_PTR(d) || IS_NULL_PTR(d->backbuf)) return FALSE;
 
-  return (dt_dev_pixelpipe_is_backbufer_valid(darktable.develop->preview_pipe, darktable.develop)) &&
+  return (dt_dev_pixelpipe_is_backbufer_valid(darktable.develop->preview_pipe)) &&
          (dt_dev_backbuf_get_hash(d->backbuf) != (uint64_t)-1);
 }
 
@@ -1601,7 +1601,7 @@ static void _pixelpipe_pick_from_image(const dt_backbuf_t *const backbuf,
       fbox[3] = fbox[1];
     }
 
-    dt_dev_distort_backtransform_plus(darktable.develop, darktable.develop->preview_pipe, iop_order,
+    dt_dev_distort_backtransform_plus(darktable.develop->preview_pipe, iop_order,
                                       direction, fbox, 2);
 
     /* The backtransform returns stage coordinates in the sampled piece space. Shift them by the

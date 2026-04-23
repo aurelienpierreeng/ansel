@@ -1106,7 +1106,7 @@ static int _gradient_get_area(const dt_iop_module_t *const module, dt_dev_pixelp
   float points[8] = { 0.0f, 0.0f, wd, 0.0f, wd, ht, 0.0f, ht };
 
   // and we transform them with all distorted modules
-  if(!dt_dev_distort_transform_plus(module->dev, pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points, 4))
+  if(!dt_dev_distort_transform_plus(pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points, 4))
     return 1;
 
   // now we search min and max
@@ -1186,7 +1186,7 @@ static int _gradient_get_mask(const dt_iop_module_t *const module, dt_dev_pixelp
   }
 
   // we backtransform all these points
-  if(!dt_dev_distort_backtransform_plus(module->dev, pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points, (size_t)gw * gh))
+  if(!dt_dev_distort_backtransform_plus(pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points, (size_t)gw * gh))
   {
     dt_pixelpipe_cache_free_align(points);
     return 1;
@@ -1351,7 +1351,7 @@ static int _gradient_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pi
   }
 
   // we backtransform all these points
-  if(!dt_dev_distort_backtransform_plus(module->dev, pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points,
+  if(!dt_dev_distort_backtransform_plus(pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points,
                                         (size_t)gw * gh))
   {
     dt_pixelpipe_cache_free_align(points);

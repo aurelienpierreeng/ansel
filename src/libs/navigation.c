@@ -240,7 +240,7 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
   dt_lib_navigation_t *d = (dt_lib_navigation_t *)self->data;
 
-  const gboolean has_preview_image = dt_dev_pixelpipe_is_backbufer_valid(dev->preview_pipe, dev);
+  const gboolean has_preview_image = dt_dev_pixelpipe_is_backbufer_valid(dev->preview_pipe);
 
   static uint64_t image_hash = -1;
   static int wd = 0;

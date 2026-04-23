@@ -493,7 +493,7 @@ static inline __attribute__((always_inline)) int masks_point_calc_delta(dt_iop_m
   masks_point_denormalize(pipe, roi, target, 1, points);
   masks_point_denormalize(pipe, roi, source, 1, points + 2);
 
-  const int res = dt_dev_distort_transform_plus(self->dev, pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points, 2);
+  const int res = dt_dev_distort_transform_plus(pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points, 2);
   if(!res) return res;
 
   *dx = points[0] - points[2];
@@ -577,7 +577,7 @@ static int _process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe
         masks_point_denormalize(pipe, roi_in, circle->center, 1, points);
         masks_point_denormalize(pipe, roi_in, form->source, 1, points + 2);
 
-        if(!dt_dev_distort_transform_plus(self->dev, pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points, 2))
+        if(!dt_dev_distort_transform_plus(pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points, 2))
         {
           continue;
         }

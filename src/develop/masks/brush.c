@@ -1027,14 +1027,14 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
   {
     // we transform with all distortion that happen *before* the module
     // so we have now the TARGET points in module input reference
-    if(dt_dev_distort_transform_plus(develop, pipe, iop_order, DT_DEV_TRANSFORM_DIR_BACK_EXCL,
+    if(dt_dev_distort_transform_plus(pipe, iop_order, DT_DEV_TRANSFORM_DIR_BACK_EXCL,
                                      *point_buffer, *point_count))
     {
       // now we move all the points by the shift
       // so we have now the SOURCE points in module input reference
       float pts[2] = { mask_form->source[0], mask_form->source[1] };
       dt_dev_coordinates_raw_norm_to_raw_abs(develop, pts, 1);
-      if(!dt_dev_distort_transform_plus(develop, pipe, iop_order, DT_DEV_TRANSFORM_DIR_BACK_EXCL, pts, 1))
+      if(!dt_dev_distort_transform_plus(pipe, iop_order, DT_DEV_TRANSFORM_DIR_BACK_EXCL, pts, 1))
         goto fail;
 
       dx = pts[0] - (*point_buffer)[2];
@@ -1048,7 +1048,7 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
 
       // we apply the rest of the distortions (those after the module)
       // so we have now the SOURCE points in final image reference
-      if(!dt_dev_distort_transform_plus(develop, pipe, iop_order, DT_DEV_TRANSFORM_DIR_FORW_INCL,
+      if(!dt_dev_distort_transform_plus(pipe, iop_order, DT_DEV_TRANSFORM_DIR_FORW_INCL,
                                         *point_buffer, *point_count))
         goto fail;
     }
@@ -1059,11 +1059,11 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
 
     return 0;
   }
-  else if(dt_dev_distort_transform_plus(develop, pipe, iop_order, transform_direction,
+  else if(dt_dev_distort_transform_plus(pipe, iop_order, transform_direction,
                                         *point_buffer, *point_count))
   {
     if(!border_buffer
-       || dt_dev_distort_transform_plus(develop, pipe, iop_order, transform_direction,
+       || dt_dev_distort_transform_plus(pipe, iop_order, transform_direction,
                                         *border_buffer, *border_count))
     {
       if(darktable.unmuted & DT_DEBUG_PERF)

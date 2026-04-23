@@ -625,24 +625,24 @@ static void _distort_paths(const struct dt_iop_module_t *module,
   {
     if(params->transf_direction == DT_DEV_TRANSFORM_DIR_ALL)
     {
-      dt_dev_distort_transform_locked(params->develop, params->pipe, module->iop_order,
+      dt_dev_distort_transform_locked(params->pipe, module->iop_order,
                                       DT_DEV_TRANSFORM_DIR_BACK_EXCL, buffer, len);
-      dt_dev_distort_transform_locked(params->develop, params->pipe, module->iop_order,
+      dt_dev_distort_transform_locked(params->pipe, module->iop_order,
                                       DT_DEV_TRANSFORM_DIR_FORW_EXCL, buffer, len);
     }
     else
-      dt_dev_distort_transform_locked(params->develop, params->pipe, module->iop_order,
+      dt_dev_distort_transform_locked(params->pipe, module->iop_order,
                                       params->transf_direction, buffer, len);
   }
   else
   {
     if(params->transf_direction == DT_DEV_TRANSFORM_DIR_ALL)
     {
-      dt_dev_distort_transform_plus(params->develop, params->pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_EXCL, buffer, len);
-      dt_dev_distort_transform_plus(params->develop, params->pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, buffer, len);
+      dt_dev_distort_transform_plus(params->pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_EXCL, buffer, len);
+      dt_dev_distort_transform_plus(params->pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, buffer, len);
     }
     else
-      dt_dev_distort_transform_plus(params->develop, params->pipe, module->iop_order, params->transf_direction, buffer, len);
+      dt_dev_distort_transform_plus(params->pipe, module->iop_order, params->transf_direction, buffer, len);
   }
 
   // record back the transformed points
@@ -2911,9 +2911,9 @@ static void get_point_scale(struct dt_iop_module_t *module, float x, float y, fl
   float pts[2] = { (float)x, (float)y };
   dt_dev_coordinates_widget_to_image_norm(darktable.develop, pts, 1);
   dt_dev_coordinates_image_norm_to_image_abs(module->dev, pts, 1);
-  dt_dev_distort_backtransform_plus(module->dev, module->dev->virtual_pipe,
+  dt_dev_distort_backtransform_plus(module->dev->virtual_pipe,
                                     module->iop_order,DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 1);
-  dt_dev_distort_backtransform_plus(module->dev, module->dev->virtual_pipe,
+  dt_dev_distort_backtransform_plus(module->dev->virtual_pipe,
                                     module->iop_order,DT_DEV_TRANSFORM_DIR_BACK_EXCL, pts, 1);
 
   *scale = get_zoom_scale(module->dev);

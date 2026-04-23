@@ -47,6 +47,7 @@
 struct dt_iop_module_t;
 struct dt_dev_raster_mask_t;
 struct dt_iop_order_iccprofile_info_t;
+struct dt_develop_t;
 
 typedef struct dt_dev_pixelpipe_raster_mask_t
 {
@@ -215,6 +216,9 @@ static inline void dt_dev_backbuf_set_history_hash(dt_backbuf_t *backbuf, const 
 
 typedef struct dt_dev_pixelpipe_t
 {
+  // The development to which this pipeline is attached
+  struct dt_develop_t *dev;
+
   // input image. Will be fetched directly from mipmap cache
   int32_t imgid;
   dt_mipmap_size_t size;
@@ -303,7 +307,7 @@ typedef struct dt_dev_pixelpipe_t
   // opencl device that has been locked for this pipe.
   int devid;
   // image struct as it was when the pixelpipe was initialized. copied to avoid race conditions.
-  dt_image_t image;
+  dt_image_t image; // FIXME: remove, it's duplicating pipe->dev->image_storage
   // the user might choose to overwrite the output color space and rendering intent.
   dt_colorspaces_color_profile_type_t icc_type;
   gchar *icc_filename;
@@ -439,17 +443,17 @@ extern "C" {
 char *dt_pixelpipe_get_pipe_name(dt_dev_pixelpipe_type_t pipe_type);
 
 // inits the pixelpipe with plain passthrough input/output and empty input and default caching settings.
-int dt_dev_pixelpipe_init(dt_dev_pixelpipe_t *pipe);
+int dt_dev_pixelpipe_init(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev);
 // inits the preview pixelpipe with plain passthrough input/output and empty input and default caching
 // settings.
-int dt_dev_pixelpipe_init_preview(dt_dev_pixelpipe_t *pipe);
+int dt_dev_pixelpipe_init_preview(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev);
 // inits the pixelpipe with settings optimized for full-image export (no history stack cache)
-int dt_dev_pixelpipe_init_export(dt_dev_pixelpipe_t *pipe, int levels, gboolean store_masks);
+int dt_dev_pixelpipe_init_export(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev, int levels, gboolean store_masks);
 // inits the pixelpipe with settings optimized for thumbnail export (no history stack cache)
-int dt_dev_pixelpipe_init_thumbnail(dt_dev_pixelpipe_t *pipe);
+int dt_dev_pixelpipe_init_thumbnail(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev);
 // inits all but the pixel caches, so you can't actually process an image (just get dimensions and
 // distortions)
-int dt_dev_pixelpipe_init_dummy(dt_dev_pixelpipe_t *pipe);
+int dt_dev_pixelpipe_init_dummy(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev);
 // inits the pixelpipe
 int dt_dev_pixelpipe_init_cached(dt_dev_pixelpipe_t *pipe);
 // enable/disable best-effort processing mode, bypassing the usual early-abort
@@ -463,7 +467,7 @@ static inline gboolean dt_dev_pixelpipe_has_shutdown(const dt_dev_pixelpipe_t *p
                   || (pipe->shutdown_ext && dt_atomic_get_int(pipe->shutdown_ext)));
 }
 // constructs a new input buffer from given RGB float array.
-void dt_dev_pixelpipe_set_input(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev, int32_t imgid, int width,
+void dt_dev_pixelpipe_set_input(dt_dev_pixelpipe_t *pipe, int32_t imgid, int width,
                                 int height, float iscale, dt_mipmap_size_t size);
 // set some metadata for colorout to avoid race conditions.
 void dt_dev_pixelpipe_set_icc(dt_dev_pixelpipe_t *pipe, dt_colorspaces_color_profile_type_t icc_type,
@@ -474,15 +478,15 @@ void dt_dev_pixelpipe_cleanup(dt_dev_pixelpipe_t *pipe);
 void dt_dev_pixelpipe_cleanup_nodes(dt_dev_pixelpipe_t *pipe);
 // sync with develop_t history stack from scratch (new node added, have to pop old ones)
 // this should be called with dev->history_mutex locked in read mode
-void dt_dev_pixelpipe_create_nodes(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev);
+void dt_dev_pixelpipe_create_nodes(dt_dev_pixelpipe_t *pipe);
 // sync with develop_t history stack by just copying the top item params (same op, new params on top)
-void dt_dev_pixelpipe_synch_all_real(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev, const char *caller_func);
-#define dt_dev_pixelpipe_synch_all(pipe, dev) dt_dev_pixelpipe_synch_all_real(pipe, dev, __FUNCTION__)
+void dt_dev_pixelpipe_synch_all_real(dt_dev_pixelpipe_t *pipe, const char *caller_func);
+#define dt_dev_pixelpipe_synch_all(pipe) dt_dev_pixelpipe_synch_all_real(pipe, __FUNCTION__)
 // adjust output node according to history stack (history pop event)
-void dt_dev_pixelpipe_synch_top(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev);
+void dt_dev_pixelpipe_synch_top(dt_dev_pixelpipe_t *pipe);
 
 // process region of interest of pixels. returns 1 if pipe was altered during processing.
-int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev, dt_iop_roi_t roi);
+int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_iop_roi_t roi);
 
 // Refresh GUI samplers from the cachelines already published by a darkroom pipe.
 
