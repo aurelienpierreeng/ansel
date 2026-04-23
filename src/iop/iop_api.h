@@ -25,6 +25,12 @@
     You should have received a copy of the GNU Lesser General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
+
+/** 
+ * @defgroup iop_api IOP API
+ * @brief Global IOP module API functions 
+ */
+
 #include "common/module_api.h"
 
 #ifdef FULL_API_H
@@ -188,12 +194,25 @@ OPTIONAL(int, legacy_params, struct dt_iop_module_t *self, const void *const old
 // allow to select a shape inside an iop
 OPTIONAL(void, masks_selection_changed, struct dt_iop_module_t *self, const int form_selected_id);
 
-/** this is the temp homebrew callback to operations.
-  * x,y, and scale are just given for orientation in the framebuffer. i and o are
-  * scaled to the same size width*height and contain a max of 3 floats. other color
-  * formats may be filled by this callback, if the pipeline can handle it. */
-/** the simplest variant of process(). you can only use OpenMP SIMD here, no intrinsics */
-/** must be provided by each IOP. */
+
+/**
+ * @fn int process(struct dt_iop_module_t *self,
+ *                 const struct dt_dev_pixelpipe_t *pipe,
+ *                 const struct dt_dev_pixelpipe_iop_t *piece,
+ *                 const void *i, void *o)
+ * 
+ * @brief CPU implementation of the pixel filter for this module.
+ * 
+ * @param self reference to the base module object. WARNING: it lives in the GUI thread, not in the pipeline thread.
+ * @param pipe reference to the pipeline running the module
+ * @param piece descriptor of the processing contract (input/output sizes, module parameters and internal states), __in the current pipeline thread__.
+ * @param i input pixel buffer
+ * @param o output pixel buffer
+ * 
+ * @return 1 on error, 0 on completion
+ * 
+ * @ingroup iop_api
+ */
 REQUIRED(int, process, struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
                         const struct dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o);
 /** a tiling variant of process(). */
@@ -202,7 +221,25 @@ DEFAULT(int, process_tiling, struct dt_iop_module_t *self, const struct dt_dev_p
                                const int bpp);
 
 #ifdef HAVE_OPENCL
-/** the opencl equivalent of process(). */
+
+/**
+ * @fn int process_cl(struct dt_iop_module_t *self,
+ *                    const struct dt_dev_pixelpipe_t *pipe,
+ *                    const struct dt_dev_pixelpipe_iop_t *piece,
+ *                    cl_mem dev_in, cl_mem dev_out)
+ * 
+ * @brief GPU implementation of the pixel filter for this module.
+ * 
+ * @param self reference to the base module object. WARNING: it lives in the GUI thread, not in the pipeline thread.
+ * @param pipe reference to the pipeline running the module
+ * @param piece descriptor of the processing contract (input/output sizes, module parameters and internal states), __in the current pipeline thread__.
+ * @param dev_in input pixel buffer
+ * @param dev_out output pixel buffer
+ * 
+ * @return 1 on error, 0 on completion
+ * 
+ * @ingroup iop_api
+ */
 OPTIONAL(int, process_cl, struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
                           const struct dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out);
 /** a tiling variant of process_cl(). */
