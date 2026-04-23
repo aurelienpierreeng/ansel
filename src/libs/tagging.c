@@ -2527,10 +2527,7 @@ static void _import_button_clicked(GtkButton *button, dt_lib_module_t *self)
     char *dirname = g_path_get_dirname(filename);
     dt_conf_set_string("plugins/lighttable/tagging/last_import_export_location", dirname);
     uint32_t count = dt_tag_import(filename);
-    if(count < 0)
-      dt_control_log(_("error importing tags"));
-    else
-      dt_control_log(_("%u tags imported"), count);
+    dt_control_log(_("%u tags imported"), count);
     dt_free(filename);
     dt_free(dirname);
   }
@@ -2564,10 +2561,7 @@ static void _export_button_clicked(GtkButton *button, dt_lib_module_t *self)
     char *dirname = g_path_get_dirname(filename);
     dt_conf_set_string("plugins/lighttable/tagging/last_import_export_location", dirname);
     const uint32_t count = dt_tag_export(filename);
-    if(count < 0)
-      dt_control_log(_("error exporting tags"));
-    else
-      dt_control_log(_("%u tags exported"), count);
+    dt_control_log(_("%u tags exported"), count);
     dt_free(filename);
     dt_free(dirname);
   }
