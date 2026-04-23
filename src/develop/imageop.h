@@ -286,6 +286,13 @@ typedef struct dt_iop_module_t
   /** scale the histogram so the middle grey is at .5 */
   int histogram_middle_grey;
   /** the module is used in this develop module. */
+  // FIXME: this should disappear from there.
+  // To access the develop object from backend (pipeline threads), we already have pipe->dev 
+  // referenced in the pipeline object.
+  // To access the develop object from frontend (GUI), we have the global darktable.develop reference.
+  // Splitting like this between frontend/backend makes things clear and legible.
+  // This internal reference can be either, and used for writes and reads alike, 
+  // which is impossible to track across the program.
   struct dt_develop_t *dev;
   /** non zero if this node should be processed. */
   gboolean enabled;
