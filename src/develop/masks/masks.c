@@ -2498,6 +2498,7 @@ static void _dt_masks_find_best_attachment_point(const float ray_1[2], const flo
                                                  const float *points, const int points_count, const float zoom_scale,
                                                  const int first_pt,
                                                  const gboolean is_closed_shape,
+                                                 const float offset_factor,
                                                  float result[2])
 {
   // Fallback: no intersection found.
@@ -2514,7 +2515,7 @@ static void _dt_masks_find_best_attachment_point(const float ray_1[2], const flo
   const float dir_x = ray_1[0] - ray_2[0];
   const float dir_y = ray_1[1] - ray_2[1];
   float min_s = FLT_MAX;
-  const float offset = DT_PIXEL_APPLY_DPI(12.0f) / zoom_scale;
+  const float offset = DT_PIXEL_APPLY_DPI(12.0f * offset_factor) / zoom_scale;
   const float inv_dir_len = f_inv_sqrtf(dir_x * dir_x + dir_y * dir_y);
   const float ux = dir_x * inv_dir_len;
   const float uy = dir_y * inv_dir_len;
@@ -2590,11 +2591,11 @@ void dt_masks_draw_source(cairo_t *cr, dt_masks_form_gui_t *mask_gui, const int 
 
     // Find attachment point for the arrow's head with the main shape
     _dt_masks_find_best_attachment_point(main, source, gui_points->points, attach_points_count,
-                                         zoom_scale, first_point_index, is_closed_shape, head);
+                                         zoom_scale, first_point_index, is_closed_shape, 1.f, head);
 
     // Find attachment point for the arrow's base with the source shape
     _dt_masks_find_best_attachment_point(source, main, gui_points->source, attach_source_count,
-                                         zoom_scale, first_point_index, is_closed_shape, tail);
+                                         zoom_scale, first_point_index, is_closed_shape, 0.5f, tail);
 
     const gboolean selected = (mask_gui->group_selected == form_index)
                               && (mask_gui->source_selected || mask_gui->source_dragging);

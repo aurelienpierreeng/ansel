@@ -88,7 +88,6 @@ static int _group_events_key_pressed(struct dt_iop_module_t *module, GdkEventKey
   gboolean return_value = FALSE;
 
   // Global key bindings for groups
-  // TODO: map that to context menu
   if(!return_value)
   {
     switch(event->keyval)

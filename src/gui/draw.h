@@ -571,7 +571,7 @@ static inline void dt_draw_set_dash_style(cairo_t *cr, dt_draw_dash_type_t type,
 
     case DT_MASKS_DASH_ROUND:
       pattern[0] = (DT_DRAW_SCALE_DASH * 0.25f) / zoom_scale;
-      pattern[1] = DT_DRAW_SCALE_DASH / zoom_scale;
+      pattern[1] = (DT_DRAW_SCALE_DASH) / zoom_scale;
       break;
 
     default:

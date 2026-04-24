@@ -665,9 +665,6 @@ static int _ellipse_events_mouse_scrolled(struct dt_iop_module_t *module, double
                                           dt_masks_form_gui_t *gui, int index,
                                           dt_masks_interaction_t interaction)
 {
-  
-  
-  
   // add a preview when creating an ellipse
   if(gui->creation)
   {
