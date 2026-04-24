@@ -25,7 +25,14 @@ typedef struct dt_autoset_manager_t
 } dt_autoset_manager_t;
 
 typedef struct dt_develop_t dt_develop_t;
+typedef struct dt_iop_module_t dt_iop_module_t;
 
 void dt_iop_autoset_build_list(struct dt_develop_t *dev, dt_autoset_manager_t *manager);
 
 int dt_iop_autoset_advance(struct dt_develop_t *dev, dt_autoset_manager_t *manager);
+
+gchar *dt_iop_autoset_get_conf_key(const dt_iop_module_t *module);
+
+gboolean dt_iop_autoset_module_is_enabled(const dt_iop_module_t *module);
+
+void dt_iop_autoset_module_set_enabled(const dt_iop_module_t *module, const gboolean enabled);

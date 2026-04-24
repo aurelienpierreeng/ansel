@@ -3072,6 +3072,55 @@ static void apply_autotune(dt_iop_module_t *self,
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
+void autoset(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+             const struct dt_dev_pixelpipe_iop_t *piece, const void *i)
+{
+  const dt_iop_order_iccprofile_info_t *const work_profile
+      = pipe ? dt_ioppr_get_pipe_current_profile_info(self, pipe)
+             : dt_ioppr_get_iop_work_profile_info(self, self->dev->iop);
+  if(IS_NULL_PTR(work_profile) || piece->dsc_in.channels != 4) return;
+
+  dt_iop_filmicrgb_params_t *p = (dt_iop_filmicrgb_params_t *)self->params;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
+  const float *const restrict in = (const float *)i;
+
+  float min_Y = INFINITY;
+  float max_RGB = 0.0f;
+
+  __OMP_PARALLEL_FOR__(reduction(min:min_Y) reduction(max:max_RGB))
+  for(size_t k = 0; k < (size_t)roi_out->width * roi_out->height * 4; k += 4)
+  {
+    dt_aligned_pixel_t XYZ = { 0.f };
+    dt_ioppr_rgb_matrix_to_xyz(in + k, XYZ, work_profile->matrix_in_transposed, work_profile->lut_in,
+                               work_profile->unbounded_coeffs_in, work_profile->lutsize,
+                               work_profile->nonlinearlut);
+
+    if(isfinite(XYZ[1]))
+      min_Y = fminf(min_Y, XYZ[1]);
+
+    const float pixel_max = fmaxf(in[k], fmaxf(in[k + 1], in[k + 2]));
+    if(isfinite(pixel_max))
+      max_RGB = fmaxf(max_RGB, pixel_max);
+  }
+
+  if(!isfinite(min_Y) || !isfinite(max_RGB)) return;
+
+  const float grey = p->grey_point_source / 100.0f;
+  const float white = fmaxf(max_RGB, NORM_MIN);
+  const float black = fmaxf(min_Y, NORM_MIN);
+
+  float EVmax = CLAMP(log2f(white / grey), 1.0f, 16.0f);
+  EVmax *= (1.0f + p->security_factor / 100.0f);
+
+  float EVmin = CLAMP(log2f(black / grey), -16.0f, -1.0f);
+  EVmin *= (1.0f + p->security_factor / 100.0f);
+
+  p->black_point_source = fmaxf(EVmin, -16.0f);
+  p->white_point_source = EVmax;
+  p->output_power = logf(p->grey_point_target / 100.0f)
+                    / logf(-p->black_point_source / (p->white_point_source - p->black_point_source));
+}
+
 void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
   (void)piece;

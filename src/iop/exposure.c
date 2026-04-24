@@ -556,19 +556,32 @@ void autoset(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe
   dt_iop_exposure_params_t *p = (dt_iop_exposure_params_t *)self->params;
   if(piece->dsc_in.channels != 4) return;
 
+  const dt_iop_order_iccprofile_info_t *const input_profile = dt_ioppr_get_pipe_input_profile_info(pipe);
+  if(IS_NULL_PTR(input_profile)) return;
+
   const float *const restrict in = (float*)i;
-  float average_exposure = 0.f;
+  float average_luminance = 0.f;
   const float norm = 1.f / (float)(roi_out->width * roi_out->height);
 
-  __OMP_PARALLEL_FOR__(reduction(+:average_exposure))
+  __OMP_PARALLEL_FOR__(reduction(+:average_luminance))
   for(size_t k = 0; k < roi_out->width * roi_out->height * 4; k += 4)
   {
-    // Don't sample the alpha channel
-    for(size_t c = 0; c < 3; c++)
-      average_exposure += in[k + c] * norm;
+    // Convert each input RGB sample to XYZ to average scene luminance in a profile-aware way.
+    dt_aligned_pixel_t XYZ = { 0.f };
+    dt_ioppr_rgb_matrix_to_xyz(in + k, XYZ, input_profile->matrix_in_transposed, input_profile->lut_in,
+                               input_profile->unbounded_coeffs_in, input_profile->lutsize,
+                               input_profile->nonlinearlut);
+    average_luminance += XYZ[1] * norm;
   }
-  float correction = 0.18f / average_exposure;
-  float exposure = exp2f(correction);
+
+  // Solve the exposure module transfer so the average input luminance lands on middle grey at the output.
+  const float target_lightness = dt_conf_get_float("darkroom/modules/exposure/lightness");
+  const dt_aligned_pixel_t Lab = { target_lightness, 0.f, 0.f, 0.f };
+  dt_aligned_pixel_t XYZ = { 0.f };
+  dt_Lab_to_XYZ(Lab, XYZ);
+  const float target_luminance = XYZ[1];
+  const float white = p->black + fmaxf(average_luminance - p->black, 1e-6f) / target_luminance;
+  const float exposure = white2exposure(white);
 
   p->exposure = exposure;
 

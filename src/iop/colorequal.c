@@ -2159,6 +2159,32 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
   }
 }
 
+void autoset(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+             const struct dt_dev_pixelpipe_iop_t *piece, const void *i)
+{
+  const dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_pipe_current_profile_info(self, pipe);
+  if(IS_NULL_PTR(work_profile) || piece->dsc_in.channels != 4) return;
+
+  dt_iop_colorequal_params_t *p = (dt_iop_colorequal_params_t *)self->params;
+  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
+  const float *const restrict in = (const float *)i;
+  float max_Y = 0.0f;
+
+  __OMP_PARALLEL_FOR__(reduction(max:max_Y))
+  for(size_t k = 0; k < (size_t)roi_out->width * roi_out->height * 4; k += 4)
+  {
+    dt_aligned_pixel_t Ych = { 0.f };
+    dt_colorrings_profile_rgb_to_Ych(in + k, work_profile, Ych);
+    if(isfinite(Ych[0]))
+      max_Y = fmaxf(max_Y, Ych[0]);
+  }
+
+  p->white_level = log2f(fmaxf(max_Y, 1e-6f));
+  if(!IS_NULL_PTR(g))
+    g->gui_params.white_level = p->white_level;
+}
+
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
   dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;

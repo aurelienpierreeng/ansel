@@ -1435,6 +1435,29 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
+void autoset(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+             const struct dt_dev_pixelpipe_iop_t *piece, const void *i)
+{
+  const dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_pipe_current_profile_info(self, pipe);
+  if(IS_NULL_PTR(work_profile) || piece->dsc_in.channels != 4) return;
+
+  dt_iop_colorbalancergb_params_t *p = (dt_iop_colorbalancergb_params_t *)self->params;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
+  const float *const restrict in = (const float *)i;
+  float max_Y = 0.0f;
+
+  __OMP_PARALLEL_FOR__(reduction(max:max_Y))
+  for(size_t k = 0; k < (size_t)roi_out->width * roi_out->height * 4; k += 4)
+  {
+    dt_aligned_pixel_t Ych = { 0.f };
+    pipe_RGB_to_Ych(self, (dt_dev_pixelpipe_t *)pipe, in + k, Ych);
+    if(isfinite(Ych[0]))
+      max_Y = fmaxf(max_Y, Ych[0]);
+  }
+
+  p->white_fulcrum = log2f(fmaxf(max_Y, 1e-6f));
+}
+
 
 static void paint_chroma_slider(GtkWidget *w, const float hue)
 {

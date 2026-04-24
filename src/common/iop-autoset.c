@@ -22,16 +22,54 @@
 #include "develop/pixelpipe_cache.h"
 #include "develop/dev_pixelpipe.h"
 #include "develop/imageop.h"
+#include "control/conf.h"
 
 #include <glib.h>
 
+static gchar *_autoset_sanitize_conf_token(const char *token)
+{
+  gchar *sanitized = g_strdup(token && token[0] ? token : "0");
+  for(char *c = sanitized; *c; c++)
+    if(!g_ascii_isalnum(*c)) *c = '_';
+
+  return sanitized;
+}
+
+gchar *dt_iop_autoset_get_conf_key(const dt_iop_module_t *module)
+{
+  if(IS_NULL_PTR(module)) return NULL;
+  gchar *key = g_strdup_printf("plugins/darkroom/autoset/%s/%i", module->op, module->multi_priority);
+  return key;
+}
+
+gboolean dt_iop_autoset_module_is_enabled(const dt_iop_module_t *module)
+{
+  gchar *key = dt_iop_autoset_get_conf_key(module);
+  if(IS_NULL_PTR(key)) return FALSE;
+
+  const gboolean enabled = !dt_conf_key_exists(key) || dt_conf_get_int(key) != 0;
+  g_free(key);
+  return enabled;
+}
+
+void dt_iop_autoset_module_set_enabled(const dt_iop_module_t *module, const gboolean enabled)
+{
+  gchar *key = dt_iop_autoset_get_conf_key(module);
+  if(IS_NULL_PTR(key)) return;
+
+  dt_conf_set_int(key, enabled ? 1 : 0);
+  g_free(key);
+}
+
 void dt_iop_autoset_build_list(struct dt_develop_t *dev, dt_autoset_manager_t *manager)
 {
+  g_list_free(manager->iop_to_set);
+  manager->iop_to_set = NULL;
   dev->preview_pipe->autoset = TRUE;
   for(GList *mod = g_list_first(dev->iop); mod; mod = g_list_next(mod))
   {
     dt_iop_module_t * module = (dt_iop_module_t *)mod->data;
-    if(!IS_NULL_PTR(module->autoset))
+    if(module->enabled && !IS_NULL_PTR(module->autoset) && dt_iop_autoset_module_is_enabled(module))
     {
       manager->iop_to_set = g_list_append(manager->iop_to_set, module);
       fprintf(stdout, "adding %s\n", module->op);
@@ -61,12 +99,15 @@ int dt_iop_autoset_advance(struct dt_develop_t *dev, dt_autoset_manager_t *manag
   // direct references, we need to grab the current piece attached to module
   // in the current pipeline.
   const dt_dev_pixelpipe_iop_t *const piece = dt_dev_pixelpipe_get_module_piece(pipe, module);
+  if(IS_NULL_PTR(piece))
+    return 1;
+  const dt_dev_pixelpipe_iop_t *const input_piece = dt_dev_pixelpipe_get_prev_enabled_piece(pipe, piece);
 
   // Get the corresponding pipeline cache entry immediately if possible,
   // else the following function requests a partial pipe recompute
   dt_pixel_cache_entry_t *entry = NULL;
   void *input = NULL;
-  if(!dt_dev_pixelpipe_cache_peek_gui(pipe, piece, &input, &entry, NULL, NULL, NULL))
+  if(!dt_dev_pixelpipe_cache_peek_gui(pipe, input_piece ? input_piece : piece, &input, &entry, NULL, NULL, NULL))
     return 1;
 
   fprintf(stdout, "processing %s\n", module->op);

@@ -4378,6 +4378,136 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
 }
 
 
+void autoset(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+             const struct dt_dev_pixelpipe_iop_t *piece, const void *i)
+{
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
+  dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
+  if(piece->dsc_in.channels != 4) return;
+
+  const dt_iop_order_iccprofile_info_t *const current_profile
+      = dt_ioppr_get_pipe_current_profile_info(self, pipe);
+  if(IS_NULL_PTR(current_profile)) return;
+
+  dt_colormatrix_t MIX = { { 0.f } };
+
+  float norm_R = 1.0f;
+  if(p->normalize_R) norm_R = p->red[0] + p->red[1] + p->red[2];
+
+  float norm_G = 1.0f;
+  if(p->normalize_G) norm_G = p->green[0] + p->green[1] + p->green[2];
+
+  float norm_B = 1.0f;
+  if(p->normalize_B) norm_B = p->blue[0] + p->blue[1] + p->blue[2];
+
+  for(int c = 0; c < 3; c++)
+  {
+    MIX[0][c] = p->red[c] / norm_R;
+    MIX[1][c] = p->green[c] / norm_G;
+    MIX[2][c] = p->blue[c] / norm_B;
+  }
+
+  float lightness = 50.f;
+  if(dt_conf_key_exists("darkroom/modules/channelmixerrgb/lightness"))
+    lightness = dt_conf_get_float("darkroom/modules/channelmixerrgb/lightness");
+
+  float hue = 0.f;
+  if(dt_conf_key_exists("darkroom/modules/channelmixerrgb/hue"))
+    hue = dt_conf_get_float("darkroom/modules/channelmixerrgb/hue");
+
+  float chroma = 0.f;
+  if(dt_conf_key_exists("darkroom/modules/channelmixerrgb/chroma"))
+    chroma = dt_conf_get_float("darkroom/modules/channelmixerrgb/chroma");
+
+  dt_aligned_pixel_t Lch_target = { lightness, chroma, hue / 360.f, 0.f };
+  dt_aligned_pixel_t Lab_target = { 0.f };
+  dt_aligned_pixel_t XYZ_target = { 0.f };
+  dt_aligned_pixel_t LMS_target = { 0.f };
+  dt_LCH_2_Lab(Lch_target, Lab_target);
+  dt_Lab_to_XYZ(Lab_target, XYZ_target);
+
+  // Normalize for unit luminance (illuminant)
+  const float Y_target = XYZ_target[1];
+  for(int c = 0; c < 3; c++) XYZ_target[c] /= Y_target;
+  dt_store_simd_aligned(LMS_target, convert_any_XYZ_to_LMS(dt_load_simd_aligned(XYZ_target), p->adaptation));
+
+  float MIX_3x3[9];
+  pack_3xSSE_to_3x3(MIX, MIX_3x3);
+
+  float MIX_INV_3x3[9];
+  matrice_pseudoinverse((float (*)[3])MIX_3x3, (float (*)[3])MIX_INV_3x3, 3);
+
+  dt_colormatrix_t MIX_INV;
+  transpose_3x3_to_3xSSE(MIX_INV_3x3, MIX_INV);
+
+  dt_aligned_pixel_t temp = { 0.f };
+  dot_product(LMS_target, MIX_INV, temp);
+
+  dt_store_simd_aligned(XYZ_target, convert_any_LMS_to_XYZ(dt_load_simd_aligned(temp), p->adaptation));
+  const float Y_mix = XYZ_target[1];
+  if(Y_mix <= NORM_MIN) return;
+  for(int c = 0; c < 3; c++) XYZ_target[c] /= Y_mix;
+  dt_store_simd_aligned(LMS_target, convert_any_XYZ_to_LMS(dt_load_simd_aligned(XYZ_target), p->adaptation));
+
+  const float *const restrict in = (float *)i;
+  float average_L = 0.f;
+  float average_M = 0.f;
+  float average_S = 0.f;
+  size_t valid_pixels = 0;
+
+  // Compute average LMS in the image
+  __OMP_PARALLEL_FOR__(reduction(+:average_L, average_M, average_S, valid_pixels))
+  for(size_t k = 0; k < roi_out->width * roi_out->height * 4; k += 4)
+  {
+    // Convert each input pixel to the module CAT space first, then average the chromaticity there.
+    dt_aligned_pixel_t XYZ = { 0.f };
+    dt_aligned_pixel_t LMS = { 0.f };
+    dt_ioppr_rgb_matrix_to_xyz(in + k, XYZ, current_profile->matrix_in_transposed, current_profile->lut_in,
+                               current_profile->unbounded_coeffs_in, current_profile->lutsize,
+                               current_profile->nonlinearlut);
+
+    dt_store_simd_aligned(LMS, convert_any_XYZ_to_LMS(dt_load_simd_aligned(XYZ), p->adaptation));
+    if(!isfinite(LMS[0]) || !isfinite(LMS[1]) || !isfinite(LMS[2])) continue;
+
+    average_L += LMS[0];
+    average_M += LMS[1];
+    average_S += LMS[2];
+    valid_pixels++;
+  }
+
+  if(valid_pixels == 0) return;
+
+  const float norm = 1.f / (float)valid_pixels;
+  dt_aligned_pixel_t average_LMS = { average_L * norm, average_M * norm, average_S * norm, 0.f };
+
+  // Normalize for unit luminance
+  dt_aligned_pixel_t average_XYZ = { 0.f };
+  dt_store_simd_aligned(average_XYZ, convert_any_LMS_to_XYZ(dt_load_simd_aligned(average_LMS), p->adaptation));
+  const float Y_average_lms = average_XYZ[1];
+  for(int c = 0; c < 3; c++) average_XYZ[c] /= Y_average_lms;
+  dt_store_simd_aligned(average_LMS, convert_any_XYZ_to_LMS(dt_load_simd_aligned(average_XYZ), p->adaptation));
+
+  dt_aligned_pixel_t D50 = { 0.f };
+  dt_aligned_pixel_t illuminant_LMS = { 0.f };
+  dt_aligned_pixel_t illuminant_XYZ = { 0.f };
+  convert_D50_to_LMS(p->adaptation, D50);
+
+  for(int c = 0; c < 3; c++)
+  {
+    const float target = copysignf(fmaxf(fabsf(LMS_target[c]), NORM_MIN), LMS_target[c]);
+    illuminant_LMS[c] = D50[c] * average_LMS[c] / target;
+  }
+
+  dt_store_simd_aligned(illuminant_XYZ, convert_any_LMS_to_XYZ(dt_load_simd_aligned(illuminant_LMS), p->adaptation));
+
+  const float sum = fmaxf(illuminant_XYZ[0] + illuminant_XYZ[1] + illuminant_XYZ[2], NORM_MIN);
+  p->x = illuminant_XYZ[0] / sum;
+  p->y = illuminant_XYZ[1] / sum;
+  p->illuminant = DT_ILLUMINANT_CUSTOM;
+  check_if_close_to_daylight(p->x, p->y, &p->temperature, NULL, NULL);
+}
+
+
 void gui_init(struct dt_iop_module_t *self)
 {
   dt_iop_channelmixer_rgb_gui_data_t *g = IOP_GUI_ALLOC(channelmixer_rgb);

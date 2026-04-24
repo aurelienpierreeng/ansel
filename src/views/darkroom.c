@@ -152,6 +152,7 @@ static void _view_darkroom_filmstrip_activate_callback(gpointer instance, int32_
 static void _darkroom_image_loaded_callback(gpointer instance, guint request_id, guint result, gpointer user_data);
 
 static void _dev_change_image(dt_view_t *self, const int32_t imgid);
+static void _darkroom_autoset_popover_rebuild(dt_develop_t *dev);
 
 static int _change_scaling(dt_develop_t *dev, const float point[2], const float new_scaling);
 static void _release_expose_source_caches(void);
@@ -159,16 +160,18 @@ static void _release_expose_source_caches(void);
 static int32_t _darkroom_pending_imgid = UNKNOWN_IMAGE;
 static dt_iop_module_t *_darkroom_pending_focus_module = NULL;
 static GtkWidget *_darkroom_ioporder_button = NULL;
+
+static dt_autoset_manager_t *_autoset_manager = NULL;
 static GtkWidget *_darkroom_autoset_button = NULL;
+static GtkWidget *_darkroom_autoset_popover = NULL;
+static GtkWidget *_darkroom_autoset_list = NULL;
+static void _darkroom_autoset_popover_refresh(gpointer instance, gpointer user_data);
 
 static void _darkroom_ioporder_quickbutton_clicked(GtkButton *button, gpointer user_data)
 {
   dt_lib_module_t *module = dt_lib_get_module("ioporder");
   if(module && module->show_popup)
     module->show_popup(module);
-
-  (void)button;
-  (void)user_data;
 }
 
 const char *name(const dt_view_t *self)
@@ -195,6 +198,15 @@ void cleanup(dt_view_t *self)
   dt_develop_t *dev = (dt_develop_t *)self->data;
   _release_expose_source_caches();
   dt_gui_throttle_cancel(dev);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_darkroom_autoset_popover_refresh), dev);
+  if(_autoset_manager)
+  {
+    g_list_free(_autoset_manager->iop_to_set);
+    dt_free_align(_autoset_manager);
+    _autoset_manager = NULL;
+  }
+  _darkroom_autoset_list = NULL;
+  _darkroom_autoset_popover = NULL;
 
   // unref the grid lines popover if needed
   if(darktable.view_manager->guides_popover) g_object_unref(darktable.view_manager->guides_popover);
@@ -1307,6 +1319,8 @@ static gboolean _toolbar_show_popup(gpointer user_data)
   // for the guides popover, it need to be updated before we show it
   if(darktable.view_manager && GTK_WIDGET(popover) == darktable.view_manager->guides_popover)
     dt_guides_update_popover_values();
+  else if(GTK_WIDGET(popover) == _darkroom_autoset_popover)
+    _darkroom_autoset_popover_rebuild(darktable.develop);
 
   gtk_widget_show_all(GTK_WIDGET(popover));
 
@@ -1721,8 +1735,6 @@ gboolean _switch_to_prev_picture(GtkAccelGroup *accel_group, GObject *accelerabl
   return TRUE;
 }
 
-static dt_autoset_manager_t *_autoset_manager = NULL;
-
 static void _preview_pipe_finished(gpointer instance, gpointer user_data)
 {
   // Get the mip size that is at most as big as our pipeline backbuf
@@ -1766,6 +1778,56 @@ static void _darkroom_autoset_quickbutton_clicked(GtkButton *button, gpointer us
 {
   dt_iop_autoset_build_list(darktable.develop, _autoset_manager);
   fprintf(stdout, "lauching autoset\n");
+}
+
+static gchar *_darkroom_autoset_label(const dt_iop_module_t *module)
+{
+  gchar *clean_name = dt_history_item_get_name(module);
+  gchar *label = g_strdup_printf("%s (%i)", clean_name, module->multi_priority);
+  dt_free(clean_name);
+  return label;
+}
+
+static void _darkroom_autoset_module_toggled(GtkToggleButton *toggle, gpointer user_data)
+{
+  dt_iop_module_t *module = (dt_iop_module_t *)user_data;
+  dt_iop_autoset_module_set_enabled(module, gtk_toggle_button_get_active(toggle));
+}
+
+static void _darkroom_autoset_popover_rebuild(dt_develop_t *dev)
+{
+  if(IS_NULL_PTR(_darkroom_autoset_list) || IS_NULL_PTR(dev)) return;
+
+  GList *children = gtk_container_get_children(GTK_CONTAINER(_darkroom_autoset_list));
+  for(GList *child = children; child; child = g_list_next(child))
+    gtk_widget_destroy(GTK_WIDGET(child->data));
+  g_list_free(children);
+
+  GtkWidget *title = gtk_label_new(_("Module instances to autoset"));
+  gtk_box_pack_start(GTK_BOX(_darkroom_autoset_list), title, FALSE, FALSE, 0);
+  dt_gui_add_class(title, "dt_section_label");
+
+  for(GList *modules = g_list_last(dev->iop); modules; modules = g_list_previous(modules))
+  {
+    dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
+    if(IS_NULL_PTR(module->autoset)) continue;
+
+    gchar *label = _darkroom_autoset_label(module);
+    GtkWidget *toggle = gtk_check_button_new_with_label(label);
+    g_free(label);
+
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toggle), dt_iop_autoset_module_is_enabled(module));
+    gtk_widget_set_sensitive(toggle, module->enabled);
+    gtk_box_pack_start(GTK_BOX(_darkroom_autoset_list), toggle, FALSE, FALSE, 0);
+    g_signal_connect(G_OBJECT(toggle), "toggled", G_CALLBACK(_darkroom_autoset_module_toggled), module);
+  }
+
+  gtk_widget_show_all(_darkroom_autoset_list);
+}
+
+static void _darkroom_autoset_popover_refresh(gpointer instance, gpointer user_data)
+{
+  _darkroom_autoset_popover_rebuild((dt_develop_t *)user_data);
 }
 
 void gui_init(dt_view_t *self)
@@ -1915,19 +1977,6 @@ void gui_init(dt_view_t *self)
                                 N_("Darkroom/Toolbox"),
                                 N_("Show the pipeline node graph"), 0, 0,
                                 _("Triggers the action"));
-
-  _darkroom_autoset_button = gtk_button_new_with_label(_("Autoset"));
-  gtk_widget_set_tooltip_text(_darkroom_autoset_button, _("show the pipeline node graph"));
-  g_signal_connect(G_OBJECT(_darkroom_autoset_button), "clicked",
-                   G_CALLBACK(_darkroom_autoset_quickbutton_clicked), dev);
-  dt_view_manager_module_toolbox_add(darktable.view_manager, _darkroom_autoset_button, DT_VIEW_DARKROOM);
-  /*
-  dt_accels_new_darkroom_action(_darkroom_toolbox_button_activate_accel, _darkroom_autoset_button,
-                                N_("Darkroom/Toolbox"),
-                                N_("Show the pipeline node graph"), 0, 0,
-                                _("Triggers the action"));
-  */
-
 
   GtkWidget *colorscheme, *mode;
 
@@ -2184,10 +2233,40 @@ void gui_init(dt_view_t *self)
                                     G_CALLBACK(_guides_view_changed), dev);
   }
 
+  // Auto-set feature
+  {
+    _autoset_manager = dt_calloc_align(sizeof(dt_autoset_manager_t));
+
+    _darkroom_autoset_button = gtk_button_new_with_label(_("Autoset"));
+    gtk_widget_set_tooltip_text(_darkroom_autoset_button, _("run autoset on selected modules\nright click for options"));
+    g_signal_connect(G_OBJECT(_darkroom_autoset_button), "clicked",
+                    G_CALLBACK(_darkroom_autoset_quickbutton_clicked), dev);
+    dt_view_manager_module_toolbox_add(darktable.view_manager, _darkroom_autoset_button, DT_VIEW_DARKROOM);
+
+    _darkroom_autoset_popover = gtk_popover_new(_darkroom_autoset_button);
+    connect_button_press_release(_darkroom_autoset_button, _darkroom_autoset_popover);
+    g_object_set_data(G_OBJECT(_darkroom_autoset_button), "dt-darkroom-toolbox-popover",
+                      _darkroom_autoset_popover);
+    /*
+    dt_accels_new_darkroom_action(_darkroom_toolbox_button_activate_accel, _darkroom_autoset_button,
+                                  N_("Darkroom/Toolbox"),
+                                  N_("Show the pipeline node graph"), 0, 0,
+                                  _("Triggers the action"));
+    */
+    _darkroom_autoset_list = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_container_add(GTK_CONTAINER(_darkroom_autoset_popover), _darkroom_autoset_list);
+    _darkroom_autoset_popover_rebuild(dev);
+
+    DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE,
+                                    G_CALLBACK(_darkroom_autoset_popover_refresh), dev);
+    DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_IMAGE_CHANGED,
+                                    G_CALLBACK(_darkroom_autoset_popover_refresh), dev);
+    DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_MODULE_REMOVE,
+                                    G_CALLBACK(_darkroom_autoset_popover_refresh), dev);
+  }
+
   darktable.view_manager->proxy.darkroom.get_layout = _lib_darkroom_get_layout;
   dev->roi.border_size = DT_PIXEL_APPLY_DPI(dt_conf_get_int("plugins/darkroom/ui/border_size"));
-
-  _autoset_manager = dt_calloc_align(sizeof(dt_autoset_manager_t));
 }
 
 static gboolean _is_scroll_captured_by_widget()
