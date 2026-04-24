@@ -3322,7 +3322,6 @@ float dt_masks_form_set_interaction_value(dt_masks_form_group_t *form_group,
   if(interaction == DT_MASKS_INTERACTION_OPACITY)
   {
     const float result = _change_opacity(form_group, value, increment, flow);
-    dt_dev_add_history_item(darktable.develop, module, TRUE, TRUE);
     return result;
   }
 
@@ -3334,7 +3333,7 @@ float dt_masks_form_set_interaction_value(dt_masks_form_group_t *form_group,
                                                                      flow, mask_gui, module);
   if(isnan(result)) return NAN;
   dt_masks_form_update_gravity_center(target_form);
-  dt_dev_add_history_item(darktable.develop, module, TRUE, TRUE);
+  //dt_dev_add_history_item(darktable.develop, module, TRUE, TRUE);
   return result;
 }
 
