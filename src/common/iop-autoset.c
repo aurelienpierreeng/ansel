@@ -26,15 +26,6 @@
 
 #include <glib.h>
 
-static gchar *_autoset_sanitize_conf_token(const char *token)
-{
-  gchar *sanitized = g_strdup(token && token[0] ? token : "0");
-  for(char *c = sanitized; *c; c++)
-    if(!g_ascii_isalnum(*c)) *c = '_';
-
-  return sanitized;
-}
-
 gchar *dt_iop_autoset_get_conf_key(const dt_iop_module_t *module)
 {
   if(IS_NULL_PTR(module)) return NULL;
