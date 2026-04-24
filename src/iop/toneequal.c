@@ -588,7 +588,6 @@ static void invalidate_luminance_cache(dt_iop_module_t *const self)
   if(IS_NULL_PTR(g)) return;
 
   dt_pixel_cache_entry_t *preview_entry = NULL;
-  dt_iop_gui_enter_critical_section(self);
   g->max_histogram = 1;
   g->luminance_valid = FALSE;
   g->histogram_valid = 0;
@@ -598,7 +597,6 @@ static void invalidate_luminance_cache(dt_iop_module_t *const self)
   g->thumb_preview_buf_height = 0;
   preview_entry = g->thumb_preview_entry;
   g->thumb_preview_entry = NULL;
-  dt_iop_gui_leave_critical_section(self);
 
   if(preview_entry)
     dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
@@ -1302,7 +1300,6 @@ static void gui_cache_init(struct dt_iop_module_t *self)
   g->area_cursor_valid = FALSE;    // TRUE if mouse cursor is over the graph area
   g->area_dragging = FALSE;        // TRUE if left-button has been pushed but not released and cursor motion is recorded
   g->cursor_valid = FALSE;         // TRUE if mouse cursor is over the preview image
-  g->has_focus = FALSE;            // TRUE if module has focus from GTK
 
   g->thumb_preview_entry = NULL;
   g->thumb_preview_buf_width = 0;
@@ -1520,8 +1517,6 @@ static inline gboolean update_curve_lut(struct dt_iop_module_t *self)
 
   gboolean valid = TRUE;
 
-  dt_iop_gui_enter_critical_section(self);
-
   if(!g->interpolation_valid)
   {
     build_interpolation_matrix(g->interpolation_matrix, g->sigma);
@@ -1559,8 +1554,6 @@ static inline gboolean update_curve_lut(struct dt_iop_module_t *self)
     compute_lut_correction(g, 0.5f, 4.0f);
     g->lut_valid = TRUE;
   }
-
-  dt_iop_gui_leave_critical_section(self);
 
   return valid;
 }
@@ -1609,19 +1602,17 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   /*
    * Perform a radial-based interpolation using a series gaussian functions
    */
+  // FIXME: trying to spare some CPU cycles by mixing GUI params update
+  // with pipeline code is not worth the thread-safety issues (solved only by deadlocks).
+  // Move that to GUI code.
   if(self->dev->gui_attached && !IS_NULL_PTR(g))
   {
-    dt_iop_gui_enter_critical_section(self);
     if(g->sigma != p->smoothing) g->interpolation_valid = FALSE;
     g->sigma = p->smoothing;
     g->user_param_valid = FALSE; // force updating channels factors
-    dt_iop_gui_leave_critical_section(self);
 
     update_curve_lut(self);
-
-    dt_iop_gui_enter_critical_section(self);
     dt_simd_memcpy(g->factors, d->factors, PIXEL_CHAN);
-    dt_iop_gui_leave_critical_section(self);
   }
   else
   {
@@ -1823,12 +1814,7 @@ static void _switch_cursors(struct dt_iop_module_t *self)
     return;
   }
 
-  // check if module is expanded
-  dt_iop_gui_enter_critical_section(self);
-  g->has_focus = self->expanded;
-  dt_iop_gui_leave_critical_section(self);
-
-  if(!g->has_focus)
+  if(!self->expanded)
   {
     // if module lost focus or is disabled
     // do nothing and let the app decide
@@ -1888,17 +1874,13 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   dt_develop_t *dev = self->dev;
   dt_iop_toneequalizer_gui_data_t *g = (dt_iop_toneequalizer_gui_data_t *)self->gui_data;
 
-  dt_iop_gui_enter_critical_section(self);
   const int fail = !sanity_check(self);
-  dt_iop_gui_leave_critical_section(self);
   if(fail) return 0;
 
   if(dt_iop_color_picker_is_visible(dev))
   {
-    dt_iop_gui_enter_critical_section(self);
     g->cursor_valid = FALSE;
     g->area_active_node = -1;
-    dt_iop_gui_leave_critical_section(self);
     _switch_cursors(self);
     gtk_widget_queue_draw(GTK_WIDGET(g->area));
     return 0;
@@ -1917,7 +1899,6 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   const int x_pointer = pzxpy[0];
   const int y_pointer = pzxpy[1];
 
-  dt_iop_gui_enter_critical_section(self);
   // Cursor is valid if it's inside the picture frame
   if(x_pointer >= 0 && x_pointer < wd && y_pointer >= 0 && y_pointer < ht)
   {
@@ -1931,7 +1912,6 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
     g->cursor_pos_x = 0;
     g->cursor_pos_y = 0;
   }
-  dt_iop_gui_leave_critical_section(self);
 
   // Store the current preview exposure too, to spare recomputing it in the UI callbacks.
   if(g->cursor_valid && !dev->pipe->processing && g->luminance_valid && g->thumb_preview_entry)
@@ -1940,13 +1920,11 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
     size_t preview_width = 0;
     size_t preview_height = 0;
 
-    dt_iop_gui_enter_critical_section(self);
     preview_entry = g->thumb_preview_entry;
     preview_width = g->thumb_preview_buf_width;
     preview_height = g->thumb_preview_buf_height;
     if(preview_entry)
       dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, preview_entry);
-    dt_iop_gui_leave_critical_section(self);
 
     if(preview_entry && preview_width > 0 && preview_height > 0)
     {
@@ -1960,9 +1938,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
 
       if(!isnan(cursor_exposure))
       {
-        dt_iop_gui_enter_critical_section(self);
         g->cursor_exposure = cursor_exposure;
-        dt_iop_gui_leave_critical_section(self);
       }
 
     }
@@ -1982,10 +1958,8 @@ int mouse_leave(struct dt_iop_module_t *self)
 
   if(IS_NULL_PTR(g)) return 0;
 
-  dt_iop_gui_enter_critical_section(self);
   g->cursor_valid = FALSE;
   g->area_active_node = -1;
-  dt_iop_gui_leave_critical_section(self);
 
   // display default cursor
   GtkWidget *widget = dt_ui_main_window(darktable.gui->ui);
@@ -2061,7 +2035,7 @@ int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t 
   if(!sanity_check(self)) return 0;
   if(darktable.gui->reset) return 1;
   if(IS_NULL_PTR(g)) return 0;
-  if(!g->has_focus) return 0;
+  if(!self->expanded) return 0;
   if(dt_iop_color_picker_is_visible(dev)) return 0;
 
   // turn-on the module if off
@@ -2069,9 +2043,7 @@ int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t 
     if(self->off) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(self->off), 1);
 
   // if GUI buffers not ready, exit but still handle the cursor
-  dt_iop_gui_enter_critical_section(self);
-  const int fail = (!g->cursor_valid || !g->luminance_valid || !g->interpolation_valid || !g->user_param_valid || dev->pipe->processing || !g->has_focus);
-  dt_iop_gui_leave_critical_section(self);
+  const int fail = (!g->cursor_valid || !g->luminance_valid || !g->interpolation_valid || !g->user_param_valid || dev->pipe->processing || !self->expanded);
   if(fail) return 1;
 
   // Re-read the exposure in case the preview changed after the mouse moved.
@@ -2080,7 +2052,6 @@ int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t 
   size_t preview_height = 0;
   int cursor_x = 0;
   int cursor_y = 0;
-  dt_iop_gui_enter_critical_section(self);
   preview_entry = g->thumb_preview_entry;
   preview_width = g->thumb_preview_buf_width;
   preview_height = g->thumb_preview_buf_height;
@@ -2088,7 +2059,6 @@ int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t 
   cursor_y = g->cursor_pos_y;
   if(preview_entry)
     dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, preview_entry);
-  dt_iop_gui_leave_critical_section(self);
 
   if(preview_entry && preview_width > 0 && preview_height > 0)
   {
@@ -2102,9 +2072,7 @@ int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t 
 
     if(!isnan(cursor_exposure))
     {
-      dt_iop_gui_enter_critical_section(self);
       g->cursor_exposure = cursor_exposure;
-      dt_iop_gui_leave_critical_section(self);
     }
   }
 
@@ -2125,9 +2093,7 @@ int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t 
   const float offset = step * ((float)increment);
 
   // Get the desired correction on exposure channels
-  dt_iop_gui_enter_critical_section(self);
   const int commit = set_new_params_interactive(g->cursor_exposure, offset, g->sigma * g->sigma / 2.0f, g, p);
-  dt_iop_gui_leave_critical_section(self);
 
   gtk_widget_queue_draw(GTK_WIDGET(g->area));
 
@@ -2232,15 +2198,11 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   // If the darkroom picker owns the center view, keep tone equalizer overlays out of the way.
   if(in_mask_editing(self) || dt_iop_color_picker_is_visible(dev)) return;
 
-  dt_iop_gui_enter_critical_section(self);
-  const int fail = (!g->cursor_valid || !g->interpolation_valid || dev->pipe->processing || !sanity_check(self) || !g->has_focus);
-  dt_iop_gui_leave_critical_section(self);
+  const int fail = (!g->cursor_valid || !g->interpolation_valid || dev->pipe->processing || !sanity_check(self) || !self->expanded);
   if(fail) return;
 
   if(!g->graph_valid)
     if(!_init_drawing(self, self->widget, g)) return;
-
-  dt_iop_gui_enter_critical_section(self);
 
   // Get coordinates
   const float x_pointer = g->cursor_pos_x;
@@ -2291,9 +2253,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
 
     if(!isnan(exposure_in))
     {
-      dt_iop_gui_enter_critical_section(self);
       g->cursor_exposure = exposure_in;
-      dt_iop_gui_leave_critical_section(self);
     }
   }
 
@@ -2405,9 +2365,6 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
 void gui_focus(struct dt_iop_module_t *self, gboolean in)
 {
   dt_iop_toneequalizer_gui_data_t *g = (dt_iop_toneequalizer_gui_data_t *)self->gui_data;
-  dt_iop_gui_enter_critical_section(self);
-  g->has_focus = in;
-  dt_iop_gui_leave_critical_section(self);
   _switch_cursors(self);
   if(!in)
   {
@@ -2446,7 +2403,6 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
 
           dt_pixel_cache_entry_t *old_entry = NULL;
           gboolean keep_new_entry = FALSE;
-          dt_iop_gui_enter_critical_section(self);
           if(g->thumb_preview_entry != preview_entry || g->thumb_preview_hash != preview_hash
              || g->thumb_preview_buf_width != piece->roi_in.width
              || g->thumb_preview_buf_height != piece->roi_in.height || !g->luminance_valid)
@@ -2461,7 +2417,6 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
             g->histogram_valid = FALSE;
             keep_new_entry = TRUE;
           }
-          dt_iop_gui_leave_critical_section(self);
 
           if(old_entry)
             dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, old_entry);
@@ -2608,9 +2563,7 @@ static inline gboolean _init_drawing(dt_iop_module_t *const restrict self, GtkWi
 
   // end of caching section, this will not be drawn again
 
-  dt_iop_gui_enter_critical_section(self);
   g->graph_valid = 1;
-  dt_iop_gui_leave_critical_section(self);
 
   return TRUE;
 }
@@ -2657,10 +2610,8 @@ static gboolean area_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
 
   // since the widget sizes are not cached and invalidated properly above (yet...)
   // force the invalidation of the nodes coordinates to account for possible widget resizing
-  dt_iop_gui_enter_critical_section(self);
   g->valid_nodes_x = FALSE;
   g->valid_nodes_y = FALSE;
-  dt_iop_gui_leave_critical_section(self);
 
   // Refresh cached UI elements
   update_histogram(self);
@@ -2743,13 +2694,8 @@ static gboolean area_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
     cairo_stroke(g->cr);
   }
 
-  dt_iop_gui_enter_critical_section(self);
   init_nodes_x(g);
-  dt_iop_gui_leave_critical_section(self);
-
-  dt_iop_gui_enter_critical_section(self);
   init_nodes_y(g);
-  dt_iop_gui_leave_critical_section(self);
 
   if(g->user_param_valid)
   {
@@ -2832,14 +2778,11 @@ static gboolean area_enter_notify(GtkWidget *widget, GdkEventCrossing *event, gp
   if(!self->enabled) return 0;
 
   dt_iop_toneequalizer_gui_data_t *g = (dt_iop_toneequalizer_gui_data_t *)self->gui_data;
-
-  dt_iop_gui_enter_critical_section(self);
   g->area_x = (event->x - g->inset);
   g->area_y = (event->y - g->inset);
   g->area_dragging = FALSE;
   g->area_active_node = -1;
   g->area_cursor_valid = (g->area_x > 0.0f && g->area_x < g->graph_width && g->area_y > 0.0f && g->area_y < g->graph_height);
-  dt_iop_gui_leave_critical_section(self);
 
   gtk_widget_queue_draw(GTK_WIDGET(g->area));
   return TRUE;
@@ -2862,13 +2805,11 @@ static gboolean area_leave_notify(GtkWidget *widget, GdkEventCrossing *event, gp
 
     dt_dev_add_history_item(darktable.develop, self, FALSE, TRUE);
   }
-  dt_iop_gui_enter_critical_section(self);
   g->area_x = (event->x - g->inset);
   g->area_y = (event->y - g->inset);
   g->area_dragging = FALSE;
   g->area_active_node = -1;
   g->area_cursor_valid = (g->area_x > 0.0f && g->area_x < g->graph_width && g->area_y > 0.0f && g->area_y < g->graph_height);
-  dt_iop_gui_leave_critical_section(self);
 
   gtk_widget_queue_draw(GTK_WIDGET(g->area));
   return TRUE;
@@ -2941,16 +2882,13 @@ static gboolean area_motion_notify(GtkWidget *widget, GdkEventMotion *event, gpo
   if(g->area_dragging)
   {
     // vertical distance travelled since button_pressed event
-    dt_iop_gui_enter_critical_section(self);
     const float offset = (-event->y + g->area_y) / g->graph_height * 4.0f; // graph spans over 4 EV
     const float cursor_exposure = g->area_x / g->graph_width * 8.0f - 8.0f;
 
     // Get the desired correction on exposure channels
     g->area_dragging = set_new_params_interactive(cursor_exposure, offset, g->sigma * g->sigma / 2.0f, g, p);
-    dt_iop_gui_leave_critical_section(self);
   }
 
-  dt_iop_gui_enter_critical_section(self);
   g->area_x = (event->x - g->graph_left_space);
   g->area_y = event->y;
   g->area_cursor_valid = (g->area_x > 0.0f && g->area_x < g->graph_width && g->area_y > 0.0f && g->area_y < g->graph_height);
@@ -2970,7 +2908,6 @@ static gboolean area_motion_notify(GtkWidget *widget, GdkEventMotion *event, gpo
       }
     }
   }
-  dt_iop_gui_leave_critical_section(self);
 
   gtk_widget_queue_draw(GTK_WIDGET(g->area));
   return TRUE;
@@ -2996,13 +2933,8 @@ static gboolean area_button_release(GtkWidget *widget, GdkEventButton *event, gp
     {
       // Update GUI with new params
       update_exposure_sliders(g, p);
-
       dt_dev_add_history_item(darktable.develop, self, FALSE, TRUE);
-
-      dt_iop_gui_enter_critical_section(self);
       g->area_dragging= 0;
-      dt_iop_gui_leave_critical_section(self);
-
       return TRUE;
     }
   }
@@ -3036,19 +2968,14 @@ static void _develop_ui_pipe_started_callback(gpointer instance, gpointer user_d
   if(IS_NULL_PTR(g)) return;
   _switch_cursors(self);
 
+  // if module is not active, disable mask preview
   if(!self->expanded || !self->enabled)
   {
-    // if module is not active, disable mask preview
-    dt_iop_gui_enter_critical_section(self);
     g->mask_display = 0;
-    dt_iop_gui_leave_critical_section(self);
   }
 
   ++darktable.gui->reset;
-  dt_iop_gui_enter_critical_section(self);
-
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->show_luminance_mask), g->mask_display);
-  dt_iop_gui_leave_critical_section(self);
   --darktable.gui->reset;
 }
 
@@ -3063,22 +2990,18 @@ static void _develop_history_resync_callback(gpointer instance, gpointer user_da
   const uint64_t preview_hash = _current_preview_luminance_hash(self, NULL, NULL);
   if(preview_hash == DT_PIXELPIPE_CACHE_HASH_INVALID)
   {
-    dt_iop_gui_enter_critical_section(self);
     g->pending_preview_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
-    dt_iop_gui_leave_critical_section(self);
     _switch_cursors(self);
     gtk_widget_queue_draw(GTK_WIDGET(g->area));
     return;
   }
 
   gboolean already_attached = FALSE;
-  dt_iop_gui_enter_critical_section(self);
   if(g->thumb_preview_entry && g->thumb_preview_hash == preview_hash && g->luminance_valid)
   {
     g->pending_preview_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
     already_attached = TRUE;
   }
-  dt_iop_gui_leave_critical_section(self);
 
   if(!already_attached)
   {
@@ -3095,7 +3018,6 @@ static void _develop_history_resync_callback(gpointer instance, gpointer user_da
 
       dt_pixel_cache_entry_t *old_entry = NULL;
       gboolean keep_new_entry = FALSE;
-      dt_iop_gui_enter_critical_section(self);
       if(g->thumb_preview_entry != preview_entry || g->thumb_preview_hash != preview_hash
          || g->thumb_preview_buf_width != preview_width || g->thumb_preview_buf_height != preview_height
          || !g->luminance_valid)
@@ -3112,7 +3034,6 @@ static void _develop_history_resync_callback(gpointer instance, gpointer user_da
       }
       else
         g->pending_preview_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
-      dt_iop_gui_leave_critical_section(self);
 
       if(old_entry)
         dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, old_entry);
@@ -3121,9 +3042,7 @@ static void _develop_history_resync_callback(gpointer instance, gpointer user_da
     }
     else
     {
-      dt_iop_gui_enter_critical_section(self);
       g->pending_preview_hash = preview_hash;
-      dt_iop_gui_leave_critical_section(self);
     }
   }
 
@@ -3138,9 +3057,7 @@ static void _develop_cacheline_ready_callback(gpointer instance, const guint64 h
   dt_iop_toneequalizer_gui_data_t *g = (dt_iop_toneequalizer_gui_data_t *)self->gui_data;
   if(IS_NULL_PTR(g) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(self->dev->preview_pipe)) return;
 
-  dt_iop_gui_enter_critical_section(self);
   const gboolean matched = (g->pending_preview_hash == hash);
-  dt_iop_gui_leave_critical_section(self);
   if(!matched) return;
 
   size_t preview_width = 0;
@@ -3159,7 +3076,6 @@ static void _develop_cacheline_ready_callback(gpointer instance, const guint64 h
 
   dt_pixel_cache_entry_t *old_entry = NULL;
   gboolean keep_new_entry = FALSE;
-  dt_iop_gui_enter_critical_section(self);
   if(g->thumb_preview_entry != preview_entry || g->thumb_preview_hash != preview_hash
      || g->thumb_preview_buf_width != preview_width || g->thumb_preview_buf_height != preview_height
      || !g->luminance_valid)
@@ -3174,7 +3090,6 @@ static void _develop_cacheline_ready_callback(gpointer instance, const guint64 h
     keep_new_entry = TRUE;
   }
   g->pending_preview_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
-  dt_iop_gui_leave_critical_section(self);
 
   if(old_entry)
     dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, old_entry);
@@ -3301,14 +3216,12 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
     return;
   }
 
-  dt_iop_gui_enter_critical_section(self);
   preview_entry = g->thumb_preview_entry;
   preview_width = g->thumb_preview_buf_width;
   preview_height = g->thumb_preview_buf_height;
   g->area_active_node = -1;
   if(preview_entry)
     dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, preview_entry);
-  dt_iop_gui_leave_critical_section(self);
 
   if(IS_NULL_PTR(preview_entry) || preview_width < 1 || preview_height < 1)
   {
@@ -3338,10 +3251,8 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
     return;
   }
 
-  dt_iop_gui_enter_critical_section(self);
   g->cursor_valid = isfinite(picked) && picked > 0.0f;
   g->cursor_exposure = g->cursor_valid ? log2f(picked) : 0.0f;
-  dt_iop_gui_leave_critical_section(self);
 
   if(picker == g->exposure_boost)
   {
@@ -3416,6 +3327,41 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
   _switch_cursors(self);
 }
 
+
+void autoset(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+             const struct dt_dev_pixelpipe_iop_t *piece, const void *i)
+{
+  if(piece->dsc_in.channels != 4) return;
+
+  dt_iop_toneequalizer_params_t *p = (dt_iop_toneequalizer_params_t *)self->params;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
+  const size_t width = roi_out->width;
+  const size_t height = roi_out->height;
+  const size_t num_elem = width * height;
+  float *luminance = dt_pixelpipe_cache_alloc_align_float(num_elem, pipe);
+  if(IS_NULL_PTR(luminance)) return;
+
+  // Build the same luminance mask scalar field the picker edits, but with neutral
+  // boost/contrast because autoset can only solve the exposure translation.
+  luminance_mask((const float *const)i, luminance, width, height, piece->dsc_in.channels, p->method, 1.0f, 0.0f, 1.0f);
+
+  float mean = 0.0f;
+  size_t count = 0;
+  __OMP_PARALLEL_FOR__(reduction(+:mean, count))
+  for(size_t k = 0; k < num_elem; ++k)
+  {
+    const float value = luminance[k];
+    if(!isfinite(value) || value <= 0.0f) continue;
+    mean += value;
+    count++;
+  }
+
+  dt_pixelpipe_cache_free_align(luminance);
+  if(count == 0) return;
+
+  const float picked = mean / (float)count;
+  p->exposure_boost = log2f(CONTRAST_FULCRUM / picked);
+}
 
 void gui_init(struct dt_iop_module_t *self)
 {
