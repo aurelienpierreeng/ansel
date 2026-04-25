@@ -223,6 +223,30 @@ void output_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixel
   default_output_format(self, pipe, piece, dsc);
 }
 
+void autoset(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+             const struct dt_dev_pixelpipe_iop_t *piece, const void *input)
+{
+  dt_iop_highlights_params_t *p = (dt_iop_highlights_params_t *)self->params;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
+  const float *const restrict in = (const float *)input;
+  float max_RGB[3] = { 0.0f };
+
+  __OMP_PARALLEL_FOR__(reduction(max:max_RGB[:3]) collapse(2))
+  for(size_t i = 0; i < roi_out->height; i++)
+    for(size_t j = 0; j < roi_out->width; j++)
+    {
+      const size_t channel = 
+        (piece->dsc_in.filters == 9u) 
+          ? FCxtrans(i, j, roi_out, piece->dsc_in.xtrans) 
+          : FC(i + roi_out->y, j + roi_out->x, piece->dsc_in.filters);
+      const float pixel_max = in[i * roi_out->width + j] / piece->dsc_in.processed_maximum[channel];
+      max_RGB[channel] = MAX(max_RGB[channel], pixel_max);
+    }
+
+  p->clip = MIN(MIN(max_RGB[0], max_RGB[1]), max_RGB[2]);
+}
+
+
 int legacy_params(dt_iop_module_t *self, const void *const old_params, const int old_version,
                   void *new_params, const int new_version)
 {
