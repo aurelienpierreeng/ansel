@@ -83,6 +83,12 @@ int dt_iop_autoset_advance(struct dt_develop_t *dev, dt_autoset_manager_t *manag
   }
 
   dt_iop_module_t *module = (dt_iop_module_t *)mod->data;
+  if(IS_NULL_PTR(module))
+  {
+    pipe->autoset = FALSE;
+    return 1;
+  }
+
   fprintf(stdout, "trying to fetch cache from %s\n", module->op);
 
   // Note: module pieces (aka pipeline nodes) are not stable in time:
@@ -90,15 +96,15 @@ int dt_iop_autoset_advance(struct dt_develop_t *dev, dt_autoset_manager_t *manag
   // direct references, we need to grab the current piece attached to module
   // in the current pipeline.
   const dt_dev_pixelpipe_iop_t *const piece = dt_dev_pixelpipe_get_module_piece(pipe, module);
-  if(IS_NULL_PTR(piece))
-    return 1;
+  if(IS_NULL_PTR(piece)) return 1;
   const dt_dev_pixelpipe_iop_t *const input_piece = dt_dev_pixelpipe_get_prev_enabled_piece(pipe, piece);
+  if(IS_NULL_PTR(input_piece)) return 1;
 
   // Get the corresponding pipeline cache entry immediately if possible,
   // else the following function requests a partial pipe recompute
   dt_pixel_cache_entry_t *entry = NULL;
   void *input = NULL;
-  if(!dt_dev_pixelpipe_cache_peek_gui(pipe, input_piece ? input_piece : piece, &input, &entry, NULL, NULL, NULL))
+  if(!dt_dev_pixelpipe_cache_peek_gui(pipe, input_piece, &input, &entry, NULL, NULL, NULL))
     return 1;
 
   fprintf(stdout, "processing %s\n", module->op);

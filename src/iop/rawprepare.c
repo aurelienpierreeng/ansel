@@ -45,6 +45,7 @@
 #include "common/image.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
+#include "develop/imageop_math.h"
 #include "develop/tiling.h"
 #include "common/image_cache.h"
 
@@ -340,10 +341,52 @@ void output_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixel
 }
 
 static inline __attribute__((always_inline)) int BL(const dt_iop_roi_t *const roi_out,
-                                                    const dt_iop_rawprepare_data_t *const d, const int row,
-                                                    const int col)
+                                                    const int row, const int col, 
+                                                    const int32_t x, const int32_t y)
 {
-  return ((((row + roi_out->y + d->y) & 1) << 1) + ((col + roi_out->x + d->x) & 1));
+  return ((((row + roi_out->y + y) & 1) << 1) + ((col + roi_out->x + x) & 1));
+}
+
+/**
+ * @brief RawSpeed tends to under-evaluate the white point of RAW images,
+ * which leads to RGB values > 1 after normalization. We sanitize it here.
+ * It does the same for black point, which leads to negative RGB values,
+ * but detecting the min RGB here is not more robust to figure out black
+ * level per channel than RawSpeed reading black pixels (does it though ?).
+ * 
+ * @param self 
+ * @param pipe 
+ * @param piece 
+ * @param input 
+ */
+void autoset(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+             const struct dt_dev_pixelpipe_iop_t *piece, const void *input)
+{
+  dt_iop_rawprepare_params_t *p = (dt_iop_rawprepare_params_t *)self->params;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const int csx = compute_proper_crop(piece, roi_in, p->x);
+  const int csy = compute_proper_crop(piece, roi_in, p->y);
+
+  if(piece->dsc_in.filters && piece->dsc_in.channels == 1 && piece->dsc_in.datatype == TYPE_UINT16)
+  {
+    const uint16_t *const restrict in = (const uint16_t *const restrict)input;
+    // 4 channels : R, G sampled on R rows, G sampled on B rows, B.
+    int max_RGB[4] = { 0 };
+
+    __OMP_PARALLEL_FOR__(reduction(max: max_RGB[:4]) collapse(2))
+    for(int i = 0; i < roi_out->height; i++)
+      for(int j = 0; j < roi_out->width; j++)
+      {
+        const size_t channel = BL(roi_out, i, j, p->x, p->y);
+        const size_t pin = roi_in->width * (i + csy) + j + csx;
+        const int pixel = in[pin];
+        max_RGB[channel] = MAX(max_RGB[channel], pixel);
+      }
+
+    p->raw_white_point = MAX(MAX(max_RGB[0], MAX(max_RGB[1], MAX(max_RGB[2], max_RGB[3]))), pipe->dev->image_storage.raw_white_point);
+  }
+  // Do we need to handle float mosaiced images and non-mosaiced (sRAW) images too ?
 }
 
 /* Some comments about the cpu code path; tests with gcc 10.x show a clear performance gain for the
@@ -418,6 +461,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     const int x_phase = cfa_x & 1;
     float inv_div[4];
     for(int k = 0; k < 4; k++) inv_div[k] = 1.0f / d->div[k];
+
     __OMP_PARALLEL_FOR__()
     for(int j = 0; j < height; j++)
     {
@@ -454,7 +498,8 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     const float *const in = (const float *const)ivoid;
     float *const out = (float *const)ovoid;
 
-    const float sub = d->sub[0], div = d->div[0];
+    const float sub = d->sub[0];
+    const float div = d->div[0];
 
     const int ch = piece->dsc_in.channels;
     __OMP_PARALLEL_FOR__(collapse(3))
@@ -501,7 +546,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
       }
       for(int i = 0; i < width; i++)
       {
-        const int id = BL(roi_out, d, j, i);
+        const int id = BL(roi_out, j, i, d->x, d->y);
         const float x_map = CLAMP(((roi_x + csx + i) * im_to_rel_x - map_origin_h) * rel_to_map_x, 0, map_w);
         const uint32_t x_i0 = MIN(x_map, map_w - 1);
         const uint32_t x_i1 = MIN(x_i0 + 1, map_w - 1);

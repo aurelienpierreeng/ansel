@@ -1817,7 +1817,6 @@ static void _darkroom_autoset_popover_rebuild(dt_develop_t *dev)
     g_free(label);
 
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toggle), dt_iop_autoset_module_is_enabled(module));
-    gtk_widget_set_sensitive(toggle, module->enabled);
     gtk_box_pack_start(GTK_BOX(_darkroom_autoset_list), toggle, FALSE, FALSE, 0);
     g_signal_connect(G_OBJECT(toggle), "toggled", G_CALLBACK(_darkroom_autoset_module_toggled), module);
   }
