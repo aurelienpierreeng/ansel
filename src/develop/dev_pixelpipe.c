@@ -1058,6 +1058,20 @@ void dt_dev_pixelpipe_synch_top(dt_dev_pixelpipe_t *pipe)
   dt_dev_pixelpipe_set_history_hash(pipe, dt_dev_get_history_hash(pipe->dev));
 }
 
+// Modules without history need to be resynced unconditionnally with their internal params
+// because some of them are self-enabled/disabled from commit_params() methods
+void dt_dev_pixelpipe_sync_no_history(dt_dev_pixelpipe_t *pipe)
+{
+  for(GList *nodes = g_list_first(pipe->nodes); nodes; nodes = g_list_next(nodes))
+  {
+    dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)nodes->data;
+    if(IS_NULL_PTR(piece) || IS_NULL_PTR(piece->module)) continue;
+    dt_iop_module_t *module = piece->module;
+    if(module->flags() & IOP_FLAGS_NO_HISTORY_STACK)
+      dt_iop_commit_params(module, module->default_params, module->default_blendop_params, pipe, piece);
+  }
+}
+
 void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe)
 {
   dt_times_t start;
@@ -1109,18 +1123,28 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe)
     // modules have been added in between or removed. need to rebuild the whole pipeline.
     if(pipe->nodes) dt_dev_pixelpipe_cleanup_nodes(pipe);
     dt_dev_pixelpipe_create_nodes(pipe);
+    dt_dev_pixelpipe_sync_no_history(pipe);
     dt_dev_pixelpipe_synch_all(pipe);
   }
   else if(status & DT_DEV_PIPE_SYNCH)
   {
     // pipeline topology remains intact, only change all params.
+    dt_dev_pixelpipe_sync_no_history(pipe);
     dt_dev_pixelpipe_synch_all(pipe);
   }
   else if(status & DT_DEV_PIPE_TOP_CHANGED)
   {
-    // only top history item(s) changed.
+    // only top history item(s) changed
     if(!_sync_realtime_top_history_in_place(pipe))
+    {
+      dt_dev_pixelpipe_sync_no_history(pipe);
       dt_dev_pixelpipe_synch_top(pipe);
+    }
+  }
+  else // DT_DEV_PIPE_ZOOMED DT_DEV_PIPE_CACHE_REQUEST
+  {
+    // Finalscale will need to self-enable/disable depending on zoom level
+    dt_dev_pixelpipe_sync_no_history(pipe);
   }
   dt_pthread_rwlock_unlock(&pipe->dev->history_mutex);
 

@@ -1082,7 +1082,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   // The current processing grid may already be downsampled twice:
   // 1. by the ROI zoom factor used for the current preview/export,
   // 2. by the mipmap level chosen before the pipe even starts.
-  const float kernel_scale = fminf(MAX(1.0f / dt_dev_get_module_scale(pipe, roi_in), 1e-6f), 1.0f);
+  const float kernel_scale = MAX(1.0f / dt_dev_get_module_scale(pipe, roi_in), 1e-6f);
   cl_int err = CL_SUCCESS;
   float exposure[3] = { 1.0f, 1.0f, 1.0f };
 
@@ -1324,7 +1324,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const int width = roi_out->width;
   const int height = roi_out->height;
   // Grain size is authored in full-resolution output pixels at 100% zoom.
-  const float kernel_scale = fminf(MAX(1.0f / dt_dev_get_module_scale(pipe, roi_in), 1e-6f), 1.0f);
+  const float kernel_scale = MAX(1.0f / dt_dev_get_module_scale(pipe, roi_in), 1e-6f);
 
   if(width <= 0 || height <= 0 || d->layers <= 0 || d->filling <= 0.0f)
   {

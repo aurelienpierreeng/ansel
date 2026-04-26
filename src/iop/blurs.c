@@ -531,7 +531,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_blurs_params_t *p = (dt_iop_blurs_params_t *)piece->data;
-  const float scale = fmaxf(dt_dev_get_module_scale(pipe, roi_in), 1.f);
+  const float scale = dt_dev_get_module_scale(pipe, roi_in);
 
   const float *const restrict in = __builtin_assume_aligned(ivoid, 64);
   float *const restrict out = __builtin_assume_aligned(ovoid, 64);
@@ -619,7 +619,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   size_t sizes[] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
 
   // Init the blur kernel
-  const float scale = fmaxf(dt_dev_get_module_scale(pipe, roi_in), 1.f);
+  const float scale = dt_dev_get_module_scale(pipe, roi_in);
   const int radius = MAX(roundf(p->radius / scale), 2);
   const size_t kernel_width = 2 * radius + 1;
 

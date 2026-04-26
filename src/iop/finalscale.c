@@ -129,7 +129,10 @@ error:
 void commit_params(dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelpipe_t *pipe,
                    dt_dev_pixelpipe_iop_t *piece)
 {
-  piece->enabled = (pipe->type == DT_DEV_PIXELPIPE_EXPORT);
+  // Depending on ROI zoom level, we may need to enable finalscale so the pipeline runs
+  // at most at 100%, for pixel-level accuracy, and we upscale at the end. 
+  // This is important for consistency with exports.
+  piece->enabled = (pipe->dev->roi.scaling * pipe->dev->roi.natural_scale > 1.f) || (pipe->type == DT_DEV_PIXELPIPE_EXPORT);
 }
 
 void init_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)

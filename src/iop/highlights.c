@@ -484,7 +484,7 @@ void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe
   if(d->mode == DT_IOP_HIGHLIGHTS_LAPLACIAN && filters)
   {
     // Mosaic CFA and guided laplacian method: prepare for wavelets decomposition.
-    const float scale = fmaxf(DS_FACTOR * dt_dev_get_module_scale(pipe, roi_in), 1.f);
+    const float scale = DS_FACTOR * dt_dev_get_module_scale(pipe, roi_in);
     const float final_radius = (float)((int)(1 << d->scales)) / scale;
     const int scales = CLAMP((int)ceilf(log2f(final_radius)), 1, MAX_NUM_SCALES);
     const int max_filter_radius = (1 << scales);
@@ -1831,7 +1831,7 @@ static int process_laplacian_bayer(struct dt_iop_module_t *self, const dt_dev_pi
   float *const restrict LF_even = dt_pixelpipe_cache_alloc_align_float(ds_size * 4, pipe);
   float *const restrict temp = dt_pixelpipe_cache_alloc_align_float(ds_size * 4, pipe);
 
-  const float scale = fmaxf(DS_FACTOR * dt_dev_get_module_scale(pipe, roi_in), 1.f);
+  const float scale = DS_FACTOR * dt_dev_get_module_scale(pipe, roi_in);
   const float final_radius = (float)((int)(1 << data->scales)) / scale;
   const int scales = CLAMP((int)ceilf(log2f(final_radius)), 1, MAX_NUM_SCALES);
 
@@ -1929,7 +1929,7 @@ static int process_laplacian_xtrans(struct dt_iop_module_t *self, const dt_dev_p
   float *const restrict LF_even = dt_pixelpipe_cache_alloc_align_float(ds_size * 4, pipe);
   float *const restrict temp = dt_pixelpipe_cache_alloc_align_float(ds_size * 4, pipe);
 
-  const float scale = fmaxf(DS_FACTOR * dt_dev_get_module_scale(pipe, roi_in), 1.f);
+  const float scale = DS_FACTOR * dt_dev_get_module_scale(pipe, roi_in);
   const float final_radius = (float)((int)(1 << data->scales)) / scale;
   const int scales = CLAMP((int)ceilf(log2f(final_radius)), 1, MAX_NUM_SCALES);
   const float noise_level = data->noise_level / scale;
@@ -2195,7 +2195,7 @@ static cl_int process_laplacian_bayer_cl(struct dt_iop_module_t *self, const dt_
   cl_mem LF_even = dt_opencl_alloc_device(devid, ds_sizes[0], ds_sizes[1], sizeof(float) * 4);
   cl_mem temp = dt_opencl_alloc_device(devid, sizes[0], sizes[1], sizeof(float) * 4); // need full size here for blurring
 
-  const float scale = fmaxf(DS_FACTOR * dt_dev_get_module_scale(pipe, roi_in), 1.f);
+  const float scale = DS_FACTOR * dt_dev_get_module_scale(pipe, roi_in);
   const float final_radius = (float)((int)(1 << data->scales)) / scale;
   const int scales = CLAMP((int)ceilf(log2f(final_radius)), 1, MAX_NUM_SCALES);
 
@@ -2425,7 +2425,7 @@ static cl_int process_laplacian_xtrans_cl(struct dt_iop_module_t *self, const dt
   cl_mem LF_even = dt_opencl_alloc_device(devid, ds_sizes[0], ds_sizes[1], sizeof(float) * 4);
   cl_mem temp = dt_opencl_alloc_device(devid, sizes[0], sizes[1], sizeof(float) * 4);
 
-  const float scale = fmaxf(DS_FACTOR * dt_dev_get_module_scale(pipe, roi_in), 1.f);
+  const float scale = DS_FACTOR * dt_dev_get_module_scale(pipe, roi_in);
   const float final_radius = (float)((int)(1 << data->scales)) / scale;
   const int scales = CLAMP((int)ceilf(log2f(final_radius)), 1, MAX_NUM_SCALES);
   const float noise_level = data->noise_level / scale;

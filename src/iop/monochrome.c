@@ -222,7 +222,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   }
 
   // second step: blur filter contribution:
-  const float scale = fmaxf(dt_dev_get_module_scale(pipe, roi_in), 1.f);
+  const float scale = dt_dev_get_module_scale(pipe, roi_in);
   const float sigma_r = 250.0f; // does not depend on scale
   const float sigma_s = 20.0f / scale;
   const float detail = -1.0f; // bilateral base layer

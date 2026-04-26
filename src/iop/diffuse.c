@@ -577,7 +577,7 @@ void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   dt_iop_diffuse_data_t *data = (dt_iop_diffuse_data_t *)piece->data;
 
-  const float zoom = fmaxf(dt_dev_get_module_scale(pipe, roi_in), 1.f);
+  const float zoom = dt_dev_get_module_scale(pipe, roi_in);
   const float final_radius = (data->radius + data->radius_center) * 2.f / zoom;
   const int diffusion_scales = num_steps_to_reach_equivalent_sigma(B_SPLINE_SIGMA, final_radius);
   const int scales = CLAMP(diffusion_scales, 1, MAX_NUM_SCALES);
@@ -1163,7 +1163,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
       sizeof(uint8_t) * roi_out->width * roi_out->height,
       pipe);
 
-  const float zoom = fmaxf(dt_dev_get_module_scale(pipe, roi_in), 1.f);
+  const float zoom = dt_dev_get_module_scale(pipe, roi_in);
   const float final_radius = (data->radius + data->radius_center) * 2.f / zoom;
   // No legacy iteration remap is applied here anymore. The current solver uses
   // the historical a-trous band order and kernel-variance increments exactly,
@@ -1500,7 +1500,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
 
   cl_mem mask = dt_opencl_alloc_device(devid, sizes[0], sizes[1], sizeof(uint8_t));
 
-  const float zoom = fmaxf(dt_dev_get_module_scale(pipe, roi_in), 1.f);
+  const float zoom = dt_dev_get_module_scale(pipe, roi_in);
   const float final_radius = (data->radius + data->radius_center) * 2.f / zoom;
   // See the CPU path above: iterations stay in user space because the current
   // solver already matches the historical a-trous band ordering and kernel
