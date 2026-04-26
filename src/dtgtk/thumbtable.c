@@ -1867,6 +1867,7 @@ gboolean dt_thumbtable_key_pressed_grid(GtkWidget *self, GdkEventKey *event, gpo
       return TRUE;
     }
     case GDK_KEY_Delete:
+    case GDK_KEY_KP_Delete:
     {
       dt_control_remove_images();
       return TRUE;
