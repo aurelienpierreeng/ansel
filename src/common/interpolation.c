@@ -982,14 +982,17 @@ static void _interpolation_resample_plain(const struct dt_interpolation *itor,
 
   // Generic non 1:1 case... much more complicated :D
 
-  // Prepare resampling plans once and for all
+  // The actual resampling ratio between the two buffers,
+  // not the absolute pipeline scale
+  const float resample_scale = roi_out->scale / roi_in->scale;
+
   if(_prepare_resampling_plan(itor, roi_in->width, roi_in->x,
-                              roi_out->width, roi_out->x, roi_out->scale,
+                              roi_out->width, roi_out->x, resample_scale,
                               &hlength, &hkernel, &hindex, NULL))
     goto exit;
 
   if(_prepare_resampling_plan(itor, roi_in->height, roi_in->y,
-                              roi_out->height, roi_out->y, roi_out->scale,
+                              roi_out->height, roi_out->y, resample_scale,
                               &vlength, &vkernel, &vindex, &vmeta))
     goto exit;
 
@@ -1182,14 +1185,17 @@ int dt_interpolation_resample_cl(const struct dt_interpolation *itor,
 
   // Generic non 1:1 case... much more complicated :D
 
-  // Prepare resampling plans once and for all
+  // The actual resampling ratio between the two buffers,
+  // not the absolute pipeline scale
+  const float resample_scale = roi_out->scale / roi_in->scale;
+
   if(_prepare_resampling_plan(itor, roi_in->width, roi_in->x,
-                              roi_out->width, roi_out->x, roi_out->scale,
-                              &hlength, &hkernel, &hindex, &hmeta))
+                              roi_out->width, roi_out->x, resample_scale,
+                              &hlength, &hkernel, &hindex, NULL))
     goto error;
 
   if(_prepare_resampling_plan(itor, roi_in->height, roi_in->y,
-                              roi_out->height, roi_out->y, roi_out->scale,
+                              roi_out->height, roi_out->y, resample_scale,
                               &vlength, &vkernel, &vindex, &vmeta))
     goto error;
 
