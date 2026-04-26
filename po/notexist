@@ -1,0 +1,12 @@
+build/src/iop/introspection_clahe.c
+build/src/iop/introspection_colortransfer.c
+build/src/iop/introspection_equalizer.c
+src/control/jobs/develop_jobs.c
+src/external/wb_presets.c
+src/imageio/format/xcf.c
+src/iop/clahe.c
+src/iop/colortransfer.c
+src/iop/equalizer.c
+src/lua/image.c
+src/lua/lualib.c
+src/lua/preferences.c
