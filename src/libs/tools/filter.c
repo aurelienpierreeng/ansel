@@ -684,7 +684,7 @@ void gui_init(dt_lib_module_t *self)
   d->sort = gtk_combo_box_text_new();
 
   for(int i = 0; i < NB_ITEMS; i++)
-    gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(d->sort), NULL, _sort_names[i]);
+    gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(d->sort), NULL, _(_sort_names[i]));
 
   gtk_combo_box_set_active(GTK_COMBO_BOX(d->sort ), _filter_get_items(sort));
   g_signal_connect(G_OBJECT(d->sort), "changed", G_CALLBACK(_lib_filter_sort_combobox_changed), (gpointer)self);
