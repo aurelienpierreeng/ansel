@@ -80,14 +80,11 @@ void modify_roi_in(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, dt_dev
   // 1. we run an export pipeline. We mandatorily get a 1:1 image, process it whole, downscale at the end.
   // 2. we run a GUI (darkroom) pipeline. If we upsample it, we want it done at the end of the pipe,
   // so sharpening and blurring is at most 1:1.
-  if(piece->enabled || roi_out->scale > 1.f)
-  {
-    roi_in->x /= roi_out->scale;
-    roi_in->y /= roi_out->scale;
-    roi_in->width  = (int)round(roi_out->width / roi_out->scale);
-    roi_in->height = (int)round(roi_out->height / roi_out->scale);
-    roi_in->scale = 1.0f;
-  }
+  roi_in->x = (int)roundf(roi_in->x / roi_out->scale);
+  roi_in->y = (int)roundf(roi_in->y / roi_out->scale);
+  roi_in->width  = (int)round(roi_out->width / roi_out->scale);
+  roi_in->height = (int)round(roi_out->height / roi_out->scale);
+  roi_in->scale = 1.0f;
 }
 
 void distort_mask(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe, struct dt_dev_pixelpipe_iop_t *piece,

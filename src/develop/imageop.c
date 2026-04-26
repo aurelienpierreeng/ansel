@@ -1744,15 +1744,8 @@ void dt_iop_commit_params(dt_iop_module_t *module, dt_iop_params_t *params,
                           dt_develop_blend_params_t *blendop_params, dt_dev_pixelpipe_t *pipe,
                           dt_dev_pixelpipe_iop_t *piece)
 {
-  if(!piece->enabled)
-  {
-    piece->global_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
-    piece->global_mask_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
-    piece->blendop_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
-    piece->hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
-    return;
-  }
-
+  // We need to commit also modules that are disabled because some of them
+  // may self-enabled at commit time, depending on image input.
   // 1. commit params
   memcpy(piece->blendop_data, blendop_params, sizeof(dt_develop_blend_params_t));
 
