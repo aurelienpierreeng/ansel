@@ -3,7 +3,7 @@ msgstr ""
 "Project-Id-Version: darktable 3.9\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-04-26 13:02+0200\n"
-"PO-Revision-Date: 2025-03-10 14:57+0100\n"
+"PO-Revision-Date: 2026-04-26 13:56+0200\n"
 "Last-Translator: Aurélien PIERRE <contact@aurelienpierre.com>\n"
 "Language-Team: \n"
 "Language: fr_FR\n"
@@ -11,7 +11,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
-"X-Generator: Poedit 3.5\n"
+"X-Generator: Poedit 3.8\n"
 
 #: ../build/src/conf_gen.h:182 ../build/src/conf_gen.h:202
 #: ../build/src/conf_gen.h:366 ../build/src/preferences_gen.h:4505
@@ -711,7 +711,7 @@ msgstr "cpu / gpu / mémoire"
 
 #: ../build/src/preferences_gen.h:3349
 msgid "CPU cores"
-msgstr ""
+msgstr "Cœurs CPU"
 
 #: ../build/src/preferences_gen.h:3369 ../build/src/preferences_gen.h:3414
 #: ../build/src/preferences_gen.h:3459 ../build/src/preferences_gen.h:3504
@@ -729,6 +729,9 @@ msgid ""
 "Number of CPU cores to use for image processing, including virtual cores "
 "(hyperthreading). -1 or 0 uses all available/detected cores."
 msgstr ""
+"Nombre de cœurs de CPU à utiliser pour le traitement d'image, incluant les "
+"cœurs virtuels (hyperthreading). -1 ou 0 utilise tous les cœurs disponibles/"
+"détectés."
 
 #: ../build/src/preferences_gen.h:3394
 #, fuzzy
@@ -741,16 +744,21 @@ msgid ""
 "example to export images, resynchronize XMP, fetch thumbnails, etc. "
 "Increasing this number will increase the memory consumption."
 msgstr ""
+"Nombre de fils d'exécution concurrents pouvant fonctionner en parallèle, par "
+"exemple pour exporter des images, resynchroniser les XMP, aller chercher les "
+"miniatures, etc. Augmenter ce nombre augmente la consommation mémoire."
 
 #: ../build/src/preferences_gen.h:3439
 msgid "Memory headrom for OS/application (MiB)"
-msgstr ""
+msgstr "Espace mémoire laissé disponible pour l'OS et les applications (MiB)"
 
 #: ../build/src/preferences_gen.h:3462
 msgid ""
 "This is the amount of memory that Ansel will leave to the operating system "
 "and other applications"
 msgstr ""
+"Ceci est la quantité de mémoire qu'Ansel laissera au système d'exploitation "
+"et aux autres applications"
 
 #: ../build/src/preferences_gen.h:3484
 #, fuzzy
@@ -763,6 +771,8 @@ msgid ""
 "This is the amount of memory that Ansel will use to keep lighttable "
 "thumbnails quickly accessible when scrolling back"
 msgstr ""
+"Ceci est la quantité de mémoire qu'Ansel utilisera pour garder les "
+"miniatures rapidement accessible en défilant"
 
 #: ../build/src/preferences_gen.h:3529
 msgid "Pipe recompute timeout (milliseconds)"
@@ -825,17 +835,19 @@ msgstr "non disponible sur ce système"
 
 #: ../build/src/preferences_gen.h:3652
 msgid "GPU vRAM headroom (MiB)"
-msgstr ""
+msgstr "Espace mémoire laissé disponible pour sur la vRAM GPU (MiB)"
 
 #: ../build/src/preferences_gen.h:3675
 msgid ""
 "This is the amount of GPU memory that Ansel will leave to other GPU-"
 "accelerated applications, OpenGL, X server, etc."
 msgstr ""
+"Ceci est la quantité de mémoire GPU qu'Ansel laissera aux autres "
+"applications utilisant l'accélération graphique, OpenGL, le serveur X, etc."
 
 #: ../build/src/preferences_gen.h:3703
 msgid "system library with OpenCL runtime"
-msgstr ""
+msgstr "Librairie système fournissant OpenCL"
 
 #: ../build/src/preferences_gen.h:3721
 msgid ""
@@ -843,6 +855,10 @@ msgid ""
 "OpenCL runtime is at an unusual place and cannot be detected, enter the full "
 "pathname here. leave empty for default behavior."
 msgstr ""
+"L'environnement d'exécution OpenCL est normalement détecté automatiquement "
+"par Ansel. Si votre environnement est à un emplacement inhabituel et ne peut "
+"pas être détecté, entrez le chemin complet ici. Laissez vierge pour le "
+"comportement par défaut."
 
 #: ../build/src/preferences_gen.h:3738 ../src/common/image.h:235
 #: ../tools/generate_prefs.xsl:309
@@ -1214,7 +1230,7 @@ msgstr ""
 
 #: ../build/src/preferences_gen.h:5014
 msgid "Let the OS mask Ansel shortcuts"
-msgstr ""
+msgstr "Laisser l'OS masquer les raccourcis d'Ansel"
 
 #: ../build/src/preferences_gen.h:5028
 msgid ""
@@ -1223,6 +1239,10 @@ msgid ""
 "all key strokes as long as it is active, which may prevent system-wide "
 "shortcuts from working at all on some OS."
 msgstr ""
+"Cochez ceci si vous souhaitez que votre OS traite les raccourcis clavier en "
+"premier, et dispatche seulement ceux qu'il n'a pas consommé vers Ansel. "
+"Autrement, Ansel capture toutes les saisies clavier tant qu'il est actif, ce "
+"qui peut empêcher les raccourcis système de fonctionner sur certains OS."
 
 #: ../build/src/preferences_gen.h:5050
 msgid "sort built-in presets first"
@@ -1237,13 +1257,16 @@ msgstr ""
 
 #: ../build/src/preferences_gen.h:5086
 msgid "Disable thumbnail preview in import popup"
-msgstr ""
+msgstr "Désactiver la miniature de prévisualisation dans la fenêtre d'import"
 
 #: ../build/src/preferences_gen.h:5100
 msgid ""
 "Check this if you are impacted by extra-slow loading when accessing images "
 "on memory card through camera USB link and PTP/MTP drivers."
 msgstr ""
+"Cochez ceci si vous êtes affecté par un chargement extrêmement lent des "
+"images depuis la carte mémoire interne d'un appareil photo connecté en USB "
+"et utilisant des pilotes PTP/MTP."
 
 #: ../build/src/preferences_gen.h:5122
 msgid "method to use for getting the display profile"
@@ -2534,7 +2557,7 @@ msgstr "Markesteijn 3-passe + VNG"
 
 #: ../build/src/iop/introspection_demosaic.c:230
 msgid "downsample"
-msgstr ""
+msgstr "sous-échantillonner"
 
 #: ../build/src/iop/introspection_demosaic.c:234
 msgid "basic"
@@ -3717,7 +3740,7 @@ msgstr "Table Lumineuse, avec une collection affichée"
 
 #: ../src/bauhaus/bauhaus.c:431
 msgid "The target widget of the action does not exist anymore"
-msgstr ""
+msgstr "Le widget ciblé par l'action n'existe plus"
 
 #. Keys used by key-pressed event handler when the Bauhaus widget has the focus
 #: ../src/bauhaus/bauhaus.c:1093 ../src/bauhaus/bauhaus.c:1097
@@ -3730,27 +3753,27 @@ msgstr "contrôle des couleurs"
 
 #: ../src/bauhaus/bauhaus.c:1093
 msgid "Increase value (normal step)"
-msgstr ""
+msgstr "Augmenter la valeur (pas normal)"
 
 #: ../src/bauhaus/bauhaus.c:1097
 msgid "Decrease value (normal step)"
-msgstr ""
+msgstr "Diminuer la valeur (pas normal)"
 
 #: ../src/bauhaus/bauhaus.c:1101
 msgid "Increase value (fine step)"
-msgstr ""
+msgstr "Augmenter la valeur (pas fin)"
 
 #: ../src/bauhaus/bauhaus.c:1105
 msgid "Decrease value (fine step)"
-msgstr ""
+msgstr "Diminuer la valeur (pas fin)"
 
 #: ../src/bauhaus/bauhaus.c:1109
 msgid "Increase value (coarse step)"
-msgstr ""
+msgstr "Augmenter la valeur (pas grossier)"
 
 #: ../src/bauhaus/bauhaus.c:1113
 msgid "Decrease value (coarse step)"
-msgstr ""
+msgstr "Diminuer la valeur (pas grossier)"
 
 #: ../src/bauhaus/bauhaus.c:1117 ../src/bauhaus/bauhaus.c:1142
 #, fuzzy
@@ -3761,7 +3784,7 @@ msgstr "pipette de couleur"
 #: ../src/bauhaus/bauhaus.c:1130 ../src/bauhaus/bauhaus.c:1134
 #: ../src/bauhaus/bauhaus.c:1138 ../src/bauhaus/bauhaus.c:1142
 msgid "Darkroom/Controls/Comboboxes"
-msgstr ""
+msgstr "Chambre noire/Contrôles/Listes déroulantes"
 
 #: ../src/bauhaus/bauhaus.c:1122
 #, fuzzy
@@ -3775,7 +3798,7 @@ msgstr "cliquer pour éditer les points"
 
 #: ../src/bauhaus/bauhaus.c:1130
 msgid "Select previous (in editing mode)"
-msgstr ""
+msgstr "Sélectionner le précédent (en mode édition)"
 
 #: ../src/bauhaus/bauhaus.c:1134
 #, fuzzy
@@ -3784,7 +3807,7 @@ msgstr "sélectionner la méthode d'interpolation"
 
 #: ../src/bauhaus/bauhaus.c:1138
 msgid "Validate result (in editing mode)"
-msgstr ""
+msgstr "Valider le résultat (en mode édition)"
 
 #: ../src/bauhaus/bauhaus.c:1334 ../src/libs/tools/filter.c:740
 #, fuzzy
@@ -4700,6 +4723,11 @@ msgid ""
 "This action should only be performed if you are certain no other Ansel "
 "instances are running.\n"
 msgstr ""
+"\n"
+"<u>Attention !</u> Êtes vous sûr de vouloir détecter les fichiers de "
+"verrouillage de la base de données ?\n"
+"Cette action ne devrait être effectuée que si vous êtes certain qu'aucune "
+"autre instance d'Ansel n'est en cours d'exécution.\n"
 
 #: ../src/common/database.c:2695
 #, fuzzy
@@ -4708,7 +4736,7 @@ msgstr "oui"
 
 #: ../src/common/database.c:2711
 msgid "Done"
-msgstr ""
+msgstr "Effectué"
 
 #: ../src/common/database.c:2712
 #, fuzzy
@@ -4719,7 +4747,7 @@ msgstr "le fichier de verrouillage de la base de données semble être vide"
 
 #: ../src/common/database.c:2713
 msgid "Continue"
-msgstr ""
+msgstr "Continuer"
 
 #: ../src/common/database.c:2719
 #, fuzzy
@@ -4752,6 +4780,7 @@ msgstr ""
 #, c-format
 msgid "tried several times to acquire the database lock, giving up"
 msgstr ""
+"a tenté plusieurs fois d'acquérir le verrou de la base de données, abandon"
 
 #: ../src/common/database.c:2856
 #, c-format
@@ -4803,7 +4832,7 @@ msgstr "mise à jour de base de données"
 
 #: ../src/common/database.c:3132
 msgid "Ansel - Database is read-only"
-msgstr ""
+msgstr "Ansel - La base de données est en lecture seule"
 
 #: ../src/common/database.c:3134
 #, fuzzy
@@ -4822,6 +4851,16 @@ msgid ""
 "\n"
 "\t<span style='italic'>%s</span>"
 msgstr ""
+"<span weight='bold'>La base de données de la bibliothèque d'Ansel est en "
+"lecture seule</span>\n"
+"\n"
+"Ceci se produit si vous n'avez pas les permissions d'écriture sur le système "
+"de fichier\n"
+"ou si vous avez restoré une copie de sauvegarde protégée en écriture.\n"
+"\n"
+"Veuillez changer les permissions d'accès du système de fichier pour :\n"
+"\n"
+"\t<span style='italic'>%s</span>"
 
 #: ../src/common/database.c:3245 ../src/common/database.c:3423
 #, c-format
@@ -4994,15 +5033,15 @@ msgstr ""
 
 #: ../src/common/history_merge_gui.c:142 ../src/common/history_merge_gui.c:290
 msgid "Incompatible module ordering constraints"
-msgstr ""
+msgstr "Contraintes d'ordonnancement des modules incompatibles"
 
 #: ../src/common/history_merge_gui.c:143
 msgid "Preserve _destination ordering"
-msgstr ""
+msgstr "Préserver l'ordre de _destination"
 
 #: ../src/common/history_merge_gui.c:144
 msgid "Preserve _source ordering"
-msgstr ""
+msgstr "Préserver l'ordre de la _source"
 
 #: ../src/common/history_merge_gui.c:144
 #, fuzzy
@@ -5021,6 +5060,14 @@ msgid ""
 "\n"
 "Which ordering constraints should be preserved?"
 msgstr ""
+"Deux modules se requièrent chacun comme prédécesseur, créant un cycle.\n"
+"\n"
+"Module fautif : %s\n"
+"\n"
+"La destination demande : %s → %s → %s\n"
+"La source demande :      %s → %s → %s\n"
+"\n"
+"Quelle contrainte d'ordonnancement doit être préservée ?"
 
 #: ../src/common/history_merge_gui.c:225
 #, fuzzy
@@ -5034,7 +5081,7 @@ msgstr "Annuler"
 
 #: ../src/common/history_merge_gui.c:226
 msgid "_Continue"
-msgstr ""
+msgstr "_Continuer"
 
 #: ../src/common/history_merge_gui.c:241
 #, c-format
@@ -5047,6 +5094,13 @@ msgid ""
 "\n"
 "%s"
 msgstr ""
+"Certains modules collés utilisent des masques rasterisés produits par des "
+"modules qui n'ont pas été inclus.\n"
+"Ces masques ne seront plus disponibles après la fusion.\n"
+"\n"
+"Producteurs manquants :\n"
+"\n"
+"%s"
 
 #: ../src/common/history_merge_gui.c:291 ../src/dtgtk/thumbnail.c:259
 #, fuzzy
@@ -5060,6 +5114,11 @@ msgid ""
 "Cycle:\n"
 "\n"
 msgstr ""
+"Les contraintes d'ordonnancement des modules contiennent un cycle et ne "
+"peuvent pas être satisfaites.\n"
+"\n"
+"Cycle: \n"
+"\n"
 
 #: ../src/common/history_merge_gui.c:1230
 #, fuzzy
@@ -5072,11 +5131,11 @@ msgstr "canal de destination"
 
 #: ../src/common/history_merge_gui.c:1232
 msgid "append"
-msgstr ""
+msgstr "ajouter après"
 
 #: ../src/common/history_merge_gui.c:1233
 msgid "appstart"
-msgstr ""
+msgstr "ajouter avant"
 
 #: ../src/common/history_merge_gui.c:1234
 #, fuzzy
@@ -5086,11 +5145,11 @@ msgstr "placement"
 #: ../src/common/history_merge_gui.c:1237
 #, c-format
 msgid "Copy, merging pipeline in %s and history in %s mode"
-msgstr ""
+msgstr "Copie, fusionnant le pipeline en mode %s et l'historique en mode %s"
 
 #: ../src/common/history_merge_gui.c:1240
 msgid "History merge report"
-msgstr ""
+msgstr "Rapport de fusion d'historique"
 
 #: ../src/common/history_merge_gui.c:1241
 #, fuzzy
@@ -5099,7 +5158,7 @@ msgstr "jamais"
 
 #: ../src/common/history_merge_gui.c:1241
 msgid "_Accept"
-msgstr ""
+msgstr "_Accepter"
 
 #: ../src/common/history_merge_gui.c:1252
 #, fuzzy
@@ -5108,13 +5167,15 @@ msgstr "ordre du pipeline"
 
 #: ../src/common/history_merge_gui.c:1253
 msgid "Destination pipeline order was used"
-msgstr ""
+msgstr "L'ordre du pipeline de destination a été utilisé"
 
 #: ../src/common/history_merge_gui.c:1255
 msgid ""
 " as a fallback because we could not resolve positionning constraints with "
 "source order."
 msgstr ""
+" comme solution de repli parce que nous n'avons pas pu résoudre les "
+"contraintes d'ordonnancement avec l'ordre source."
 
 #: ../src/common/history_merge_gui.c:1280
 #, fuzzy, c-format
@@ -5124,7 +5185,7 @@ msgstr "original"
 #: ../src/common/history_merge_gui.c:1281
 #, c-format
 msgid "Source: %d %s"
-msgstr ""
+msgstr "Source : %d %s"
 
 #: ../src/common/history_merge_gui.c:1282
 #, fuzzy
@@ -5138,7 +5199,7 @@ msgstr "canal de destination"
 
 #: ../src/common/history_merge_gui.c:1314
 msgid "Override"
-msgstr ""
+msgstr "Écraser"
 
 #: ../src/common/history_merge_gui.c:1331
 msgid ""
@@ -5148,6 +5209,12 @@ msgid ""
 "farther), * on arrow means masks overridden.\n"
 "Drag and drop modules in the `Destination` column to reorder the pipeline."
 msgstr ""
+"[nom] module inséré, * utilise des masques, gras = module déplacé, italique "
+"= module désactivé (montré seulement si copié).\n"
+"Les flèches indiquent des paramètres écrasés ((→ même ligne, ↗/↘ adjacent, ↴/"
+"↴ plus loin), * sur les flèches signifie que les masques ont été écrasés.\n"
+"Cliquer-déplacer les modules dans la colonne `Destination` pour réorganiser "
+"le pipeline."
 
 #: ../src/common/history_merge_gui.c:1414
 #, fuzzy
@@ -5200,7 +5267,7 @@ msgstr "data/heure ré-appliquée à %d images"
 #: ../src/common/image.c:1471
 #, c-format
 msgid "Image %s is already in library and will not be re-imported.\n"
-msgstr ""
+msgstr "L'image %s est déjà dans la bibliothèque et ne sera pas ré-importée.\n"
 
 #: ../src/common/image.c:1972
 #, c-format
@@ -5351,12 +5418,12 @@ msgstr ""
 #: ../src/common/imageio.c:1280
 #, c-format
 msgid "The file `%s` is corrupted."
-msgstr ""
+msgstr "Le fichier `%s` est corrompu."
 
 #: ../src/common/imageio.c:1300
 #, c-format
 msgid "The file `%s` is supported by none of our decoders."
-msgstr ""
+msgstr "Le fichier `%s` n'est pris en charge par aucun de nos décodeurs."
 
 #: ../src/common/import.c:507
 msgid "All image files"
@@ -5372,12 +5439,12 @@ msgstr "Fichiers images matricielles"
 
 #: ../src/common/import.c:649
 msgid "No"
-msgstr "non"
+msgstr "Non"
 
 #: ../src/common/import.c:693
 #, c-format
 msgid " Yes (ID %i), in"
-msgstr "Oui (ID %i), dans"
+msgstr " Oui (ID %i), dans"
 
 #: ../src/common/import.c:693
 #, c-format
@@ -5602,11 +5669,11 @@ msgstr "v3.0 JPEG"
 
 #: ../src/common/iop_order.c:73
 msgid "Ansel RAW"
-msgstr ""
+msgstr "Anse RAW"
 
 #: ../src/common/iop_order.c:74
 msgid "Ansel JPEG"
-msgstr ""
+msgstr "Ansel JPEG"
 
 #: ../src/common/iop_profile.c:110
 #, c-format
@@ -5661,7 +5728,7 @@ msgstr "le profil de gestion du bruit « %s » n'est pas valide"
 #: ../src/common/opencl.c:99
 #, c-format
 msgid "Building OpenCL kernels: %s"
-msgstr ""
+msgstr "Compilation des kernels OpenCL : %s"
 
 #: ../src/common/pdf.h:93 ../src/iop/lens.cc:1947
 #: ../src/libs/print_settings.c:105
@@ -6184,6 +6251,8 @@ msgstr "définit comme images monochromes"
 #: ../src/control/jobs/control_jobs.c:1607
 msgid "removing images from library is only possible in Lighttable view"
 msgstr ""
+"supprimer des images de la bibliothèque n'est possible que dans la vue table "
+"lumineuse"
 
 #. get all selected images now, to avoid the set changing during ui interaction
 #: ../src/control/jobs/control_jobs.c:1612
@@ -6217,6 +6286,8 @@ msgstr "Retirer les images de la bibliothèque ?"
 #: ../src/control/jobs/control_jobs.c:1700
 msgid "Deleting images from library is only possible in Lighttable view"
 msgstr ""
+"Supprimer des images de la bibliothèque n'est possible que dans la vue table "
+"lumineuse"
 
 #. first get all selected images, to avoid the set changing during ui interaction
 #: ../src/control/jobs/control_jobs.c:1658
@@ -6405,11 +6476,13 @@ msgid ""
 "Impossible to create directory %s.\n"
 "The target may be full or read-only.\n"
 msgstr ""
+"Impossible de créer le répertoire %s. La cible est peut-être pleine ou en "
+"lecture seule.\n"
 
 #: ../src/control/jobs/import_jobs.c:370
 #, c-format
 msgid "Error importing file in collection: %s"
-msgstr ""
+msgstr "Erreur à l'importation du fichier dans la collection : %s"
 
 #: ../src/control/jobs/import_jobs.c:389
 #, c-format
@@ -6583,12 +6656,12 @@ msgstr "ajustement des couleurs"
 #: ../src/develop/blend_gui.c:102
 msgctxt "blendmode"
 msgid "Lab lightness"
-msgstr "clarté Lab"
+msgstr "Clarté Lab"
 
 #: ../src/develop/blend_gui.c:103
 msgctxt "blendmode"
 msgid "Lab color"
-msgstr "couleur Lab"
+msgstr "Couleur Lab"
 
 #: ../src/develop/blend_gui.c:104
 msgctxt "blendmode"
@@ -6777,7 +6850,7 @@ msgstr "Masques"
 #: ../src/develop/blend_gui.c:1720
 #, c-format
 msgid "Already in '%s'"
-msgstr ""
+msgstr "Déjà dans '%s'"
 
 #: ../src/develop/blend_gui.c:2040 ../src/iop/drawlayer.c:1848
 #, fuzzy
@@ -6867,7 +6940,7 @@ msgstr "inverser"
 #: ../src/develop/blend_gui.c:2265 ../src/develop/masks/masks_gui.c:554
 #: ../src/libs/masks.c:1172
 msgid "Union"
-msgstr ""
+msgstr "Union"
 
 #: ../src/develop/blend_gui.c:2273 ../src/develop/masks/masks_gui.c:556
 #: ../src/libs/masks.c:1175
@@ -7167,7 +7240,7 @@ msgstr "aucun utilisé"
 
 #: ../src/develop/blend_gui.c:3363
 msgid "Edit current module mask name"
-msgstr ""
+msgstr "Éditer le nom du masque du module courant"
 
 #. buttons for mask polarity and edit mode
 #: ../src/develop/blend_gui.c:3372
@@ -7187,6 +7260,8 @@ msgid ""
 "Show all shapes and groups to choose which ones to connect to or disconnect "
 "from the mask."
 msgstr ""
+"Montrer toutes les formes et tous les groupes pour choisir lesquels "
+"connecter ou déconnecter du masque."
 
 #: ../src/develop/blend_gui.c:3634 ../src/develop/imageop.c:2264
 msgid "raster mask"
@@ -7208,7 +7283,7 @@ msgstr "activé"
 #: ../src/develop/blend_gui.c:3735
 #, c-format
 msgid "Enable blending/masking in <b>%s%s</b>"
-msgstr ""
+msgstr "Activer fusion/masquage dans <b>%s%s</b>"
 
 #: ../src/develop/blend_gui.c:4231
 msgid "blending options"
@@ -7395,6 +7470,9 @@ msgid ""
 "Image #%i history is storing %d mask states. nConsider compressing history "
 "and removing unused masks to keep reads/writes manageable."
 msgstr ""
+"L'historique de l'image #%i stocke %d états des masques. Pensez à comprimer "
+"l'historique et à supprimer les masques inutilisés pour garder les lectures/"
+"écritures gérables."
 
 #. Duplicate and alias for auto-apply in develop.c
 #. For scene-referred workflow, since filmic doesn't brighten as base curve does,
@@ -7447,7 +7525,7 @@ msgstr "%s est désactivé"
 #: ../src/develop/imageop.c:1005 ../src/develop/imageop.c:1018
 #: ../src/develop/imageop.c:1832
 msgid "Darkroom/Modules/Instances"
-msgstr ""
+msgstr "Chambre noire/Modules/Instances"
 
 #: ../src/develop/imageop.c:1093
 #, fuzzy
@@ -7479,7 +7557,7 @@ msgstr "masque dessiné"
 #: ../src/develop/imageop.c:2267
 #, c-format
 msgid "this module has a '%s'"
-msgstr ""
+msgstr "ce module a un '%s'"
 
 #: ../src/develop/imageop.c:2272
 #, c-format
@@ -7566,6 +7644,8 @@ msgid ""
 "The pipeline cache is full while allocating `%s` (module `%s`). Either your "
 "RAM settings are too frugal or your RAM is too small."
 msgstr ""
+"Le cache du pipeline est plein en tentant d'allouer `%s` (module `%s`). Soit "
+"vos paramètres de RAM sont trop frugaux ou votre RAM est trop petite."
 
 #: ../src/develop/pixelpipe_cache.c:1579 ../src/develop/pixelpipe_cache.c:1693
 #, c-format
@@ -7573,6 +7653,8 @@ msgid ""
 "The pipeline cache is full while allocating `%s`. Either your RAM settings "
 "are too frugal or your RAM is too small."
 msgstr ""
+"Le cache du pipeline est plein en tentant d'allouer `%s`. Soit vos "
+"paramètres de RAM sont trop frugaux ou votre RAM est trop petite."
 
 #: ../src/develop/pixelpipe_cache.c:1582 ../src/develop/pixelpipe_cache.c:1695
 #, c-format
@@ -7580,12 +7662,16 @@ msgid ""
 "The pipeline cache is full while processing module `%s`. Either your RAM "
 "settings are too frugal or your RAM is too small."
 msgstr ""
+"Le cache du pipeline est plein en traitant le module  `%s`. Soit vos "
+"paramètres de RAM sont trop frugaux ou votre RAM est trop petite."
 
 #: ../src/develop/pixelpipe_cache.c:1585 ../src/develop/pixelpipe_cache.c:1697
 msgid ""
 "The pipeline cache is full. Either your RAM settings are too frugal or your "
 "RAM is too small."
 msgstr ""
+"Le cache du pipeline est plein. Soit vos paramètres de RAM sont trop frugaux "
+"ou votre RAM est trop petite."
 
 #: ../src/develop/masks/brush.c:1332
 #, c-format
@@ -7625,7 +7711,7 @@ msgstr "<b>taille</b> : défiler"
 #: ../src/develop/masks/brush.c:3188 ../src/develop/masks/polygon.c:3581
 #, c-format
 msgid "%s+Click"
-msgstr ""
+msgstr "%s+Clic"
 
 #: ../src/develop/masks/brush.c:3203 ../src/develop/masks/polygon.c:3609
 #, fuzzy, c-format
@@ -7634,11 +7720,11 @@ msgstr "cliquer pour éditer les points"
 
 #: ../src/develop/masks/brush.c:3203 ../src/develop/masks/polygon.c:3609
 msgid "round"
-msgstr ""
+msgstr "arrondi"
 
 #: ../src/develop/masks/brush.c:3203 ../src/develop/masks/polygon.c:3609
 msgid "cusp"
-msgstr ""
+msgstr "pointu"
 
 #: ../src/develop/masks/brush.c:3211 ../src/develop/masks/polygon.c:3618
 #, fuzzy
@@ -7647,7 +7733,7 @@ msgstr "Réinitialiser la rotation"
 
 #: ../src/develop/masks/brush.c:3220 ../src/develop/masks/polygon.c:3628
 msgid "Add a node here"
-msgstr ""
+msgstr "Ajouter un nœud ici"
 
 #: ../src/develop/masks/circle.c:163 ../src/develop/masks/ellipse.c:519
 #: ../src/develop/masks/polygon.c:1538
@@ -7741,12 +7827,14 @@ msgstr "supprimer cette forme"
 
 #: ../src/develop/masks/masks_gui.c:218
 msgid "will no longer be used."
-msgstr ""
+msgstr "ne sera plus utilisé."
 
 #: ../src/develop/masks/masks_gui.c:219
 msgid ""
 "Do you want to permanently delete it, or keep it unused for potential reuse?"
 msgstr ""
+"Voulez-vous le supprimer de façon permanente, ou le garder pour "
+"réutilisation potentielle  ?"
 
 #: ../src/develop/masks/masks_gui.c:221 ../src/libs/masks.c:1208
 #, fuzzy
@@ -7763,11 +7851,15 @@ msgid ""
 "Applying a boolean operation has no effect on the first shape of a group.\n"
 "Move it to at least the 2nd position if you need to use boolean operations"
 msgstr ""
+"Appliquer une opération booléenne n'a aucun effet sur la première forme d'un "
+"groupe.\n"
+"Déplacer là au moins en 2nde position si vous voulez utiliser des opérations "
+"booléennes"
 
 #. if no name, we are probably creating a new form, we create one based on the type
 #: ../src/develop/masks/masks_gui.c:426
 msgid "New "
-msgstr ""
+msgstr "Nouveau"
 
 #: ../src/develop/masks/masks_gui.c:430
 #, fuzzy
@@ -7781,7 +7873,7 @@ msgstr "ajouter une ellipse"
 
 #: ../src/develop/masks/masks_gui.c:436
 msgid "polygon"
-msgstr ""
+msgstr "polygone"
 
 #: ../src/develop/masks/masks_gui.c:439
 #, fuzzy
@@ -7806,7 +7898,7 @@ msgstr "masque inconnu"
 
 #: ../src/develop/masks/masks_gui.c:459
 msgid "Node"
-msgstr ""
+msgstr "Nœud"
 
 #: ../src/develop/masks/masks_gui.c:459
 #, fuzzy
@@ -7815,11 +7907,11 @@ msgstr "placement"
 
 #: ../src/develop/masks/masks_gui.c:509 ../src/iop/drawlayer.c:2891
 msgid "Size"
-msgstr ""
+msgstr "Taille"
 
 #: ../src/develop/masks/masks_gui.c:512
 msgid "Fading"
-msgstr ""
+msgstr "Estompage"
 
 #: ../src/develop/masks/masks_gui.c:516 ../src/iop/drawlayer.c:2917
 #, fuzzy
@@ -7871,7 +7963,7 @@ msgstr "masques ne peuvent pas se contenir"
 
 #: ../src/develop/masks/polygon.c:1695
 msgid "Polygon mask requires at least 3 nodes."
-msgstr ""
+msgstr "Le masque polygone requiert au moins 3 nœuds."
 
 #: ../src/develop/masks/polygon.c:3450
 #, fuzzy, c-format
@@ -7972,7 +8064,7 @@ msgstr "(invalide)"
 #: ../src/develop/pixelpipe_hb.c:906
 #, c-format
 msgid "Processing module `%s` for pipeline %s (%ix%i px @ %0.f%%)..."
-msgstr ""
+msgstr "Traitement du module `%s` pour le pipeline %s (%ix%i px @ %0.f% %)..."
 
 #: ../src/develop/pixelpipe_hb.c:1189
 #, fuzzy, c-format
@@ -8005,7 +8097,7 @@ msgstr "double-cliquer pour réinitialiser"
 #: ../src/dtgtk/preview_window.c:128
 #, c-format
 msgid "Ansel - Preview : %s"
-msgstr ""
+msgstr "Ansel - Prévisualisation : %s"
 
 #: ../src/dtgtk/thumbnail.c:105 ../src/dtgtk/thumbnail.c:132
 msgid "current"
@@ -8053,7 +8145,7 @@ msgstr "Dossiers"
 
 #: ../src/dtgtk/thumbnail.c:304
 msgid "Date : "
-msgstr ""
+msgstr "Date : "
 
 #: ../src/dtgtk/thumbnail.c:305
 #, fuzzy
@@ -8073,7 +8165,7 @@ msgstr "label couleur"
 
 #: ../src/dtgtk/thumbnail.c:331
 msgid "Open in preview window…"
-msgstr ""
+msgstr "Ouvrir dans une nouvelle fenêtre..."
 
 #: ../src/dtgtk/thumbnail.c:337
 #, fuzzy
@@ -8082,7 +8174,7 @@ msgstr "afficher le module"
 
 #: ../src/dtgtk/thumbnail.c:1268
 msgid "This picture is locally copied on your disk cache"
-msgstr ""
+msgstr "Cette image est copiée localement sur le cache de votre disque"
 
 #: ../src/dtgtk/thumbtable.c:1339
 msgid ""
@@ -8139,11 +8231,11 @@ msgstr "passe au fichier suivant"
 
 #: ../src/dtgtk/thumbtable.c:2075
 msgid "Go to the start"
-msgstr ""
+msgstr "Aller au début"
 
 #: ../src/dtgtk/thumbtable.c:2079
 msgid "Go to the end"
-msgstr ""
+msgstr "Aller à la fin"
 
 #: ../src/dtgtk/thumbtable.c:2083
 #, fuzzy
@@ -8152,23 +8244,23 @@ msgstr "sélectionne la teinte"
 
 #: ../src/dtgtk/thumbtable.c:2087
 msgid "Toogle the current thumbnail from selection"
-msgstr ""
+msgstr "Ajouter/enlever la miniature courante à la sélection"
 
 #: ../src/dtgtk/thumbtable.c:2091
 msgid "Expand the current selection up to the hovered thumbnail"
-msgstr ""
+msgstr "Élargir la sélection courante jusqu'à la miniature survolée"
 
 #: ../src/dtgtk/thumbtable.c:2095
 msgid "Open the current thumbnail in darkroom"
-msgstr ""
+msgstr "Ouvrir l'image courante en chambre noire"
 
 #: ../src/dtgtk/thumbtable.c:2099
 msgid "Enable thumbnail transient alternative view"
-msgstr ""
+msgstr "Activer la vue alternative transitoire des miniatures"
 
 #: ../src/dtgtk/thumbtable.c:2105
 msgid "Global/Menu/File"
-msgstr ""
+msgstr "Global/Menu/Fichier"
 
 #: ../src/dtgtk/thumbtable.c:2105
 #, fuzzy
@@ -8250,11 +8342,11 @@ msgstr ""
 
 #: ../src/gui/accelerators.c:157
 msgid "Shortcut"
-msgstr ""
+msgstr "Raccourci"
 
 #: ../src/gui/accelerators.c:609
 msgid "Contextual interaction on focus"
-msgstr ""
+msgstr "Interaction contextuelle au focus"
 
 #: ../src/gui/accelerators.c:644
 #, fuzzy
@@ -8268,11 +8360,11 @@ msgstr "orientation"
 
 #: ../src/gui/accelerators.c:1298
 msgid "The shortcut for"
-msgstr ""
+msgstr "Le raccourci pour"
 
 #: ../src/gui/accelerators.c:1299
 msgid "is already using the key combination"
-msgstr ""
+msgstr "utilise déjà cette combinaison de touches"
 
 #: ../src/gui/accelerators.c:1300
 #, fuzzy
@@ -8321,20 +8413,20 @@ msgstr ""
 
 #: ../src/gui/accelerators.c:1617
 msgid "Ansel - Keyboard shortcuts"
-msgstr ""
+msgstr "Ansel - Raccourcis clavier"
 
 #. Add tree view columns
 #: ../src/gui/accelerators.c:1663
 msgid "View / Scope / Feature / Control"
-msgstr ""
+msgstr "Vue / Portée / Fonction / Contrôle"
 
 #: ../src/gui/accelerators.c:1667
 msgid "Keys"
-msgstr ""
+msgstr "Touches"
 
 #: ../src/gui/accelerators.c:1678
 msgid "Clear"
-msgstr ""
+msgstr "Vider"
 
 #: ../src/gui/accelerators.c:1683
 #, fuzzy
@@ -8348,11 +8440,11 @@ msgstr "Chercher une image"
 
 #: ../src/gui/accelerators.c:1693
 msgid "Search by keys : "
-msgstr ""
+msgstr "Chercher pas touches :"
 
 #: ../src/gui/accelerators.c:2023
 msgid "Ansel - Search accelerators"
-msgstr ""
+msgstr "Ansel - Chercher des accélérateurs"
 
 #: ../src/gui/gtk.c:379
 msgid "closing Ansel..."
@@ -9217,7 +9309,7 @@ msgstr "mettre à jour le préréglage"
 
 #: ../src/gui/presets.c:1331
 msgid "Use OpenCL (GPU computing)"
-msgstr ""
+msgstr "Utiliser OpenCL (calcul sur GPU)"
 
 #: ../src/gui/presets.c:1332
 msgid ""
@@ -9225,6 +9317,10 @@ msgid ""
 "Disable if you face recurring issues on GPU with this module.\n"
 "Does not require a restart."
 msgstr ""
+"Exécuter ce module sur GPU si possible.\n"
+"Désactivez si vous rencontrez des problèmes récurrents sur GPU avec ce "
+"module.\n"
+"Ne requiert pas de redémarrage."
 
 #: ../src/gui/presets.c:1343
 #, fuzzy
@@ -9237,6 +9333,10 @@ msgid ""
 "This may prevent some recomputations, at the cost of more memory I/O.\n"
 "The trade-off is worth it only for slow modules."
 msgstr ""
+"Stocke la sortie de ce module dans le cache lorsqu'il est exécuté sur GPU.\n"
+"Ceci peut éviter certains recalculs inutiles, au prix de plus de transferts "
+"mémoire.\n"
+"Le compromis vaut la peine seulement pour les modules lents."
 
 #: ../src/gui/splash.c:132
 #, fuzzy
@@ -9246,7 +9346,7 @@ msgstr "contributeurs"
 #: ../src/gui/splash.c:291
 #, c-format
 msgid "© %s"
-msgstr ""
+msgstr "© %s"
 
 #: ../src/gui/splash.c:361
 #, fuzzy
@@ -9405,15 +9505,15 @@ msgstr "seulement embarqué"
 
 #: ../src/gui/actions/display.c:517
 msgid "Never, always process the raw"
-msgstr ""
+msgstr "Jamais, toujours traiter le raw"
 
 #: ../src/gui/actions/display.c:519
 msgid "For unedited pictures"
-msgstr ""
+msgstr "Pour les images non éditées"
 
 #: ../src/gui/actions/display.c:521
 msgid "Always, never process the raw"
-msgstr ""
+msgstr "Toujours, ne jamais traiter le raw"
 
 #: ../src/gui/actions/display.c:524
 msgid "Collapse grouped images"
@@ -9514,11 +9614,11 @@ msgstr "cliquer pour éditer les points"
 
 #: ../src/gui/actions/edit.c:493
 msgid "Append"
-msgstr ""
+msgstr "Ajouter après"
 
 #: ../src/gui/actions/edit.c:496
 msgid "Appstart"
-msgstr ""
+msgstr "Ajouter avant"
 
 #: ../src/gui/actions/edit.c:499
 #, fuzzy
@@ -9562,7 +9662,7 @@ msgstr "préférences..."
 
 #: ../src/gui/actions/edit.c:531
 msgid "Keyboard shortcuts..."
-msgstr ""
+msgstr "Raccourcis clavier..."
 
 #: ../src/gui/actions/file.c:53
 msgid " and "
@@ -9811,7 +9911,7 @@ msgstr "utilisation du disque pour le cache des miniatures"
 
 #: ../src/gui/actions/run.c:128
 msgid "Purge selected thumbnails from cache"
-msgstr ""
+msgstr "Purger les miniatures sélectionnées du cache"
 
 #: ../src/gui/actions/run.c:130
 msgid "Defragment the library"
@@ -9832,6 +9932,8 @@ msgstr "Sauvegarder les développements sélectionnés en XMP"
 #: ../src/gui/actions/run.c:136
 msgid "Resynchronize database with distant XMP for local copies"
 msgstr ""
+"Resynchroniser la base de données avec les XMP distants pour les copies "
+"locales"
 
 #: ../src/gui/actions/select.c:73
 msgid "Clear selection"
@@ -12188,6 +12290,8 @@ msgid ""
 "simple mixer mode requires all three output rows to be normalized with non-"
 "zero sums."
 msgstr ""
+"le mode mixeur simple requiert la normalisation des trois lignes de sortie "
+"avec des sommes non-nulles."
 
 #: ../src/iop/channelmixerrgb.c:3777 ../src/iop/channelmixerrgb.c:3889
 #: ../src/iop/splittoningrgb.c:571 ../src/iop/splittoningrgb.c:764
@@ -12196,6 +12300,8 @@ msgid ""
 "primaries mixer mode requires a non-singular 3x3 matrix with non-zero affine "
 "sums."
 msgstr ""
+"le mode mixeur primaires requiert un matrice 3x3 non singulière avec des "
+"sommes affines non nulles."
 
 #: ../src/iop/channelmixerrgb.c:3971
 msgid "white balance successfully extracted from raw image"
@@ -12352,7 +12458,7 @@ msgstr "la cible recherchée après le mappage de l'exposition"
 
 #: ../src/iop/channelmixerrgb.c:4692
 msgid "Mixer"
-msgstr ""
+msgstr "Mixeur"
 
 #: ../src/iop/channelmixerrgb.c:4692
 #, fuzzy
@@ -12361,15 +12467,15 @@ msgstr "mixeur de canaux"
 
 #: ../src/iop/channelmixerrgb.c:4695 ../src/iop/splittoningrgb.c:1303
 msgid "Complete"
-msgstr ""
+msgstr "Complet"
 
 #: ../src/iop/channelmixerrgb.c:4696 ../src/iop/splittoningrgb.c:1304
 msgid "Simple"
-msgstr ""
+msgstr "Simple"
 
 #: ../src/iop/channelmixerrgb.c:4697 ../src/iop/splittoningrgb.c:1305
 msgid "Primaries"
-msgstr ""
+msgstr "Primaires"
 
 #: ../src/iop/channelmixerrgb.c:4699
 msgid ""
@@ -12379,6 +12485,12 @@ msgid ""
 "primaries rebuilds the mixer as a generalized primaries, white tint and gain "
 "model."
 msgstr ""
+"complet expose les 9 coefficients originaux du mixeuxr.\n"
+"simple reconstruit le mixeur normalisé en tant que rotation exacte du plan "
+"chromatique,\n"
+"avec deux dilatations signés et deux couplages neutres.\n"
+"primaires reconstruit le mixeur en tant que primaires généralisées, teinte "
+"du blanc et gain."
 
 #: ../src/iop/channelmixerrgb.c:4719 ../src/iop/channelmixerrgb.c:4886
 #: ../src/iop/splittoningrgb.c:1105
@@ -12417,7 +12529,7 @@ msgstr "saturation globale"
 
 #: ../src/iop/channelmixerrgb.c:4742
 msgid "global rotation of the normalized chroma plane."
-msgstr ""
+msgstr "rotation globale du plan chromatique normalisé"
 
 #: ../src/iop/channelmixerrgb.c:4749 ../src/iop/splittoningrgb.c:1141
 #, fuzzy
@@ -12427,6 +12539,7 @@ msgstr "orientation de la page"
 #: ../src/iop/channelmixerrgb.c:4752
 msgid "orientation of the principal stretch axes in the chroma plane."
 msgstr ""
+"orientation de la dilatation des axes principaux dans le plan chromatique"
 
 #: ../src/iop/channelmixerrgb.c:4757 ../src/iop/splittoningrgb.c:1147
 #, fuzzy
