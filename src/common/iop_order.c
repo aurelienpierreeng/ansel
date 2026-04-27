@@ -1165,8 +1165,8 @@ GList *dt_ioppr_get_iop_order_list(int32_t imgid, gboolean sorted)
           _insert_before(iop_order_list, "rgbcurve", "colorbalancergb");
           _insert_before(iop_order_list, "colorbalancergb", "colorprimaries");
           _insert_before(iop_order_list, "colorprimaries", "splittoningrgb");
-          _insert_before(iop_order_list, "drawlayer", "colorequal");
           _insert_before(iop_order_list, "rgbcurve", "drawlayer");
+          _insert_before(iop_order_list, "drawlayer", "colorequal");
           _insert_before(iop_order_list, "ashift", "cacorrectrgb");
           _insert_before(iop_order_list, "graduatednd", "crop");
           _insert_before(iop_order_list, "colorbalance", "diffuse");
@@ -1174,6 +1174,7 @@ GList *dt_ioppr_get_iop_order_list(int32_t imgid, gboolean sorted)
           _insert_before(iop_order_list, "ashift", "initialscale");
           _insert_before(iop_order_list, "filmicrgb", "crystgrain");
           _insert_before(iop_order_list, "maskmanager", "detailmask");
+          _insert_before(iop_order_list, "rawprepare", "basebuffer");
         }
       }
       else if(version == DT_IOP_ORDER_LEGACY)
