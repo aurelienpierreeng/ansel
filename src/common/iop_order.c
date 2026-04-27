@@ -885,85 +885,39 @@ gint dt_sort_iop_list_by_order_f(gconstpointer a, gconstpointer b)
   return 0;
 }
 
+static const dt_iop_order_entry_t *orders[5]
+    = { legacy_order, v30_order, v30_jpg_order, ansel_raw_order, ansel_jpg_order };
+
 dt_iop_order_t dt_ioppr_get_iop_order_list_kind(GList *iop_order_list)
 {
-  // first check if this is the v30 order RAW
-  int k = 0;
-  GList *l = iop_order_list;
-  gboolean ok = TRUE;
-  while(l)
+  for(int i = 0; i < 5; i++)
   {
-    const dt_iop_order_entry_t *const restrict entry = (dt_iop_order_entry_t *)l->data;
-    if(strcmp(v30_order[k].operation, entry->operation))
+    int k = 0;
+    GList *l = iop_order_list;
+    gboolean ok = TRUE;
+
+    while(l)
     {
-      ok = FALSE;
-      break;
-    }
-    else
-    {
-      // skip all the other instance of same module if any
-      while(g_list_next(l)
-            && !strcmp(v30_order[k].operation, ((dt_iop_order_entry_t *)(g_list_next(l)->data))->operation))
-        l = g_list_next(l);
+      const dt_iop_order_entry_t *const restrict entry = (dt_iop_order_entry_t *)l->data;
+      if(strcmp(orders[i][k].operation, entry->operation))
+      {
+        ok = FALSE;
+        break;
+      }
+      else
+      {
+        // skip all the other instance of same module if any
+        while(g_list_next(l)
+              && !strcmp(orders[i][k].operation, ((dt_iop_order_entry_t *)(g_list_next(l)->data))->operation))
+          l = g_list_next(l);
+      }
+
+      k++;
+      l = g_list_next(l);
     }
 
-    k++;
-    l = g_list_next(l);
+    if(ok) return i;
   }
-
-  if(ok) return DT_IOP_ORDER_ANSEL_RAW;
-
-  // then check if this is the v30 order JPG
-  k = 0;
-  l = iop_order_list;
-  ok = TRUE;
-  while(l)
-  {
-    const dt_iop_order_entry_t *const restrict entry = (dt_iop_order_entry_t *)l->data;
-    if(strcmp(v30_jpg_order[k].operation, entry->operation))
-    {
-      ok = FALSE;
-      break;
-    }
-    else
-    {
-      // skip all the other instance of same module if any
-      while(g_list_next(l)
-            && !strcmp(v30_jpg_order[k].operation, ((dt_iop_order_entry_t *)(g_list_next(l)->data))->operation))
-        l = g_list_next(l);
-    }
-
-    k++;
-    l = g_list_next(l);
-  }
-
-  if(ok) return DT_IOP_ORDER_ANSEL_JPG;
-
-  // then check if this is the legacy order
-  k = 0;
-  l = iop_order_list;
-  ok = TRUE;
-  while(l)
-  {
-    const dt_iop_order_entry_t *const restrict entry = (dt_iop_order_entry_t *)l->data;
-    if(strcmp(legacy_order[k].operation, entry->operation))
-    {
-      ok = FALSE;
-      break;
-    }
-    else
-    {
-      // skip all the other instance of same module if any
-      while(g_list_next(l)
-            && !strcmp(legacy_order[k].operation, ((dt_iop_order_entry_t *)(g_list_next(l)->data))->operation))
-        l = g_list_next(l);
-    }
-
-    k++;
-    l = g_list_next(l);
-  }
-
-  if(ok) return DT_IOP_ORDER_LEGACY;
 
   return DT_IOP_ORDER_CUSTOM;
 }
