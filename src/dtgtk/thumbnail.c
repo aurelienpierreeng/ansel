@@ -653,29 +653,6 @@ _thumb_draw_image(GtkWidget *widget, cairo_t *cr, gpointer user_data)
   int h = gtk_widget_get_allocated_height(widget);
   if(w < 2 || h < 2) return TRUE;
 
-  gboolean can_draw = TRUE;
-
-  dt_pthread_mutex_lock(&thumb->lock);
-  if(thumb->img_surf && cairo_surface_get_reference_count(thumb->img_surf) > 0)
-  {
-    /*
-    fprintf(stdout, "surface: %ix%i, widget: %fx%f\n", thumb->img_width, thumb->img_height,
-            darktable.gui->ppd * w, darktable.gui->ppd * h);
-    */
-    // If the size of the image buffer is smaller than the widget surface, we need a new image
-    // dt_view_image_get_surface() aspect-fits the image inside the widget box,
-    // so one surface dimension is typically smaller than the widget even when up-to-date.
-    // Only invalidate cached buffers when the surface is too small in *both* dimensions.
-    const int req_w = w;
-    const int req_h = h;
-    if(!(abs(thumb->img_width - req_w) < 2 || abs(thumb->img_height - req_h) < 2))
-    {
-      thumb->image_inited = FALSE;
-      can_draw = FALSE;
-    }
-  }
-  dt_pthread_mutex_unlock(&thumb->lock);
-
   /**
    * thumb->image_inited is the validity flag for the image surface. While it is FALSE,
    * pending a new thumbnail, we may still hold an outdated thumbnail that can be painted
@@ -688,7 +665,7 @@ _thumb_draw_image(GtkWidget *widget, cairo_t *cr, gpointer user_data)
   dt_print(DT_DEBUG_LIGHTTABLE, "[lighttable] redrawing thumbnail %i\n", thumb->info.id);
 
   dt_pthread_mutex_lock(&thumb->lock);
-  if(can_draw && thumb->img_surf && cairo_surface_get_reference_count(thumb->img_surf) > 0)
+  if(thumb->img_surf && cairo_surface_get_reference_count(thumb->img_surf) > 0)
   {
     // we draw the image
     cairo_save(cr);
