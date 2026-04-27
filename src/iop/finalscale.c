@@ -75,23 +75,39 @@ void modify_roi_in(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, dt_dev
                    dt_iop_roi_t *roi_in)
 {
   *roi_in = *roi_out;
+  int scaling_pref = dt_conf_get_int("darkroom/render_size");
 
   // Use cases :
   // 1. we run an export pipeline. We mandatorily get a 1:1 image, process it whole, downscale at the end.
   // 2. we run a GUI (darkroom) pipeline. If we upsample it, we want it done at the end of the pipe,
   // so sharpening and blurring is at most 1:1.
-  roi_in->x = (int)roundf(roi_in->x / roi_out->scale);
-  roi_in->y = (int)roundf(roi_in->y / roi_out->scale);
-  roi_in->width  = (int)round(roi_out->width / roi_out->scale);
-  roi_in->height = (int)round(roi_out->height / roi_out->scale);
-  roi_in->scale = 1.0f;
+  if(roi_in->scale > 1.f)
+  {
+    roi_in->x = (int)roundf((float)roi_in->x / roi_out->scale);
+    roi_in->y = (int)roundf((float)roi_in->y / roi_out->scale);
+    roi_in->width  = (int)roundf(roi_out->width / roi_out->scale);
+    roi_in->height = (int)roundf(roi_out->height / roi_out->scale);
+    roi_in->scale = 1.0f;
+  }
+  // 3. we run the pipeline in full-res mode : force scale = 1 no matter what.
+  else if(scaling_pref == 0)
+  {    
+    // x, y are in original-image coordinates — leave them unchanged.
+    roi_in->width  = (int)roundf(roi_out->width / roi_out->scale);
+    roi_in->height = (int)roundf(roi_out->height / roi_out->scale);
+    roi_in->scale = 1.0f;
+    const float resample_scale = roi_out->scale / roi_in->scale;
+    roi_in->x = (int)roundf(roi_in->x / resample_scale);
+    roi_in->y = (int)roundf(roi_in->y / resample_scale);
+  }
+  // else if(scaling_pref == 1) : we run the pipeline scaled at display resolution
+  // nothing to resample and anyway commit_params() will self-disable
 }
 
 void distort_mask(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe, struct dt_dev_pixelpipe_iop_t *piece,
                   const float *const in, float *const out, const dt_iop_roi_t *const roi_in,
                   const dt_iop_roi_t *const roi_out)
 {
-  (void)pipe;
   const struct dt_interpolation *itor = dt_interpolation_new(DT_INTERPOLATION_USERPREF_WARP);
   dt_interpolation_resample_roi_1c(itor, out, roi_out, in, roi_in);
 }
@@ -99,22 +115,33 @@ void distort_mask(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t 
 int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
             const void *const ivoid, void *const ovoid)
 {
-  (void)pipe;
-  const dt_iop_roi_t *const roi_in = &piece->roi_in;
-  const dt_iop_roi_t *const roi_out = &piece->roi_out;
-  dt_iop_clip_and_zoom_roi(ovoid, ivoid, roi_out, roi_in, roi_out->width, roi_in->width);
+  dt_iop_roi_t roi_in = piece->roi_in;
+  dt_iop_roi_t roi_out = piece->roi_out;
+  // ROI (x,y) are not used here since we don't crop but only scale.
+  // Leaving them will offset the result, which is not what we want.
+  roi_in.x = 0;
+  roi_in.y = 0;
+  roi_out.x = 0;
+  roi_out.y = 0;
+  dt_iop_clip_and_zoom_roi(ovoid, ivoid, &roi_out, &roi_in, roi_out.width, roi_in.width);
   return 0;
 }
 
 #ifdef HAVE_OPENCL
 int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
 {
-  const dt_iop_roi_t *const roi_in = &piece->roi_in;
-  const dt_iop_roi_t *const roi_out = &piece->roi_out;
+  dt_iop_roi_t roi_in = piece->roi_in;
+  dt_iop_roi_t roi_out = piece->roi_out;
+  // ROI (x,y) are not used here since we don't crop but only scale.
+  // Leaving them will offset the result, which is not what we want.
+  roi_in.x = 0;
+  roi_in.y = 0;
+  roi_out.x = 0;
+  roi_out.y = 0;
   const int devid = pipe->devid;
   cl_int err = -999;
 
-  err = dt_iop_clip_and_zoom_roi_cl(devid, dev_out, dev_in, roi_out, roi_in);
+  err = dt_iop_clip_and_zoom_roi_cl(devid, dev_out, dev_in, &roi_out, &roi_in);
   if(err != CL_SUCCESS) goto error;
 
   return TRUE;
@@ -132,7 +159,10 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelp
   // Depending on ROI zoom level, we may need to enable finalscale so the pipeline runs
   // at most at 100%, for pixel-level accuracy, and we upscale at the end. 
   // This is important for consistency with exports.
-  piece->enabled = (pipe->dev->roi.scaling * pipe->dev->roi.natural_scale > 1.f) || (pipe->type == DT_DEV_PIXELPIPE_EXPORT);
+  const float darkroom_zoom = pipe->dev->roi.scaling * pipe->dev->roi.natural_scale;
+  piece->enabled = (darkroom_zoom > 1.f && pipe->type != DT_DEV_PIXELPIPE_THUMBNAIL) 
+    || (pipe->type == DT_DEV_PIXELPIPE_EXPORT)
+    || (dt_conf_get_int("darkroom/render_size") != 1 && darkroom_zoom != 1.f && pipe->type != DT_DEV_PIXELPIPE_THUMBNAIL);
 }
 
 void init_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)

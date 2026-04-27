@@ -1431,6 +1431,13 @@ static void display_borders_callback(GtkWidget *slider, gpointer user_data)
   dt_dev_pixelpipe_change_zoom_main(d);
 }
 
+static void _darkroom_change_rendering_size(GtkWidget *combobox, gpointer user_data)
+{
+  dt_develop_t *d = (dt_develop_t *)user_data;
+  dt_conf_set_int("darkroom/render_size", dt_bauhaus_combobox_get(combobox));
+  dt_dev_pixelpipe_resync_history_main(d);
+}
+
 /* overexposed */
 static void _overexposed_quickbutton_clicked(GtkWidget *w, gpointer user_data)
 {
@@ -1965,6 +1972,21 @@ void gui_init(dt_view_t *self)
     dt_bauhaus_slider_set_format(borders, "px");
     g_signal_connect(G_OBJECT(borders), "value-changed", G_CALLBACK(display_borders_callback), dev);
     gtk_box_pack_start(GTK_BOX(vbox), GTK_WIDGET(borders), TRUE, TRUE, 0);
+
+    GtkWidget *rendering;
+    DT_BAUHAUS_COMBOBOX_NEW_FULL(darktable.bauhaus, rendering, NULL, 
+                                N_("Rendering size"), 
+                                _("Choose at what size the main preview is rendered.\n"
+                                  "Full resolution renders the pipeline at the raw original resolution.\n"
+                                  "It is pixel-perfect, especially regarding denoising and deblurring, but very slow.\n"
+                                  "Scaled renders at screen resolution and is the best trade-off.\n"
+                                  "Pixel-level accuracy is guaranteed only when zoomed-in at 100%."),
+                                dt_conf_get_int("darkroom/render_size"),
+                                _darkroom_change_rendering_size, dev,
+                                N_("full resolution (slow)"),
+                                N_("scaled (default)")
+                              );
+    gtk_box_pack_start(GTK_BOX(vbox), GTK_WIDGET(rendering), TRUE, TRUE, 0);
   }
 
   _darkroom_ioporder_button = dtgtk_button_new(dtgtk_cairo_paint_flowchart, 0, NULL);

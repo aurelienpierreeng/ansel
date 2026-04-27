@@ -28,6 +28,12 @@
     <shortdescription>Enable the slideshow view</shortdescription>
     <longdescription>Check to enable the global slideshow view. If you don't print yourself, keep disabled to save some resources. (needs a restart)</longdescription>
   </dtconfig>
+  <dtconfig>
+    <name>darkroom/render_size</name>
+    <type>int</type>
+    <default>1</default>
+    <shortdescription>Resolution for darkroom renderings</shortdescription>
+  </dtconfig>
   <dtconfig prefs="misc" section="interface">
     <name>scroll/reverse_y</name>
     <type>bool</type>
