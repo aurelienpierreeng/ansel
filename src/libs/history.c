@@ -667,6 +667,8 @@ static void _history_apply_history_end(const int history_end)
   dt_dev_history_pixelpipe_update(dev, TRUE);
 
   dt_dev_history_gui_update(dev);
+
+  dt_dev_modules_update_multishow(darktable.develop);
 }
 
 static void _history_show_module_for_end(const int history_end)
