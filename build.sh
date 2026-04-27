@@ -471,6 +471,8 @@ if [ $DO_CLEAN_INSTALL -gt 0 ] ; then
 	else
 		log err "File not found: $MANIFEST_FILE"
 	fi
+	log warn "Cleaning directory ["$INSTALL_PREFIX"]: it will erase all the files in this path"
+	clean_build $FORCE_CLEAN "$INSTALL_PREFIX"
 fi
 
 if [ $DO_CLEAN_BUILD -gt 0 ] ; then
