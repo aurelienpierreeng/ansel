@@ -1113,6 +1113,16 @@ static gboolean _update_iop_visibility(gpointer user_data)
     }
   }
 
+  /* Multishow may hide extra instances, so we only compute section occupancy
+   * and final ordering after it has settled the visible module set. */
+  // FIXME: ditch that
+  dt_dev_modules_update_multishow(darktable.develop);
+
+  // Ensure the module is visible
+  dt_iop_module_t *active = darktable.develop->gui_module;
+  if(!IS_NULL_PTR(active) && !IS_NULL_PTR(active->expander)) 
+    darktable.gui->scroll_to[1] = active->expander;
+
   if(tab == MOD_TAB_BASIC)
   {
     for(int i = 0; i < TAB_BASIC_LAST; i++)

@@ -636,7 +636,6 @@ static void _gui_delete_callback(GtkButton *button, dt_iop_module_t *module)
   /* redraw */
   dt_dev_pixelpipe_rebuild_all(dev);
   dt_control_queue_redraw_center();
-  dt_dev_modules_update_multishow(darktable.develop);
 
   --darktable.gui->reset;
 }
@@ -714,47 +713,45 @@ dt_iop_module_t *dt_iop_gui_duplicate(dt_iop_module_t *base, gboolean copy_param
   --darktable.gui->reset;
   if(IS_NULL_PTR(module)) return NULL;
 
-  // hidden modules have no GUI and no history either, so there is nothing to do.
-  if(dt_iop_is_hidden(module)) return module;
-
-  // make sure gui_init and reload defaults is called safely
-  dt_iop_gui_init(module);
-  dt_iop_gui_set_expander(module);
-
-  // some modules like profiled denoise update the gui in reload_defaults
-  dt_iop_reload_defaults(module); 
-
-  if(copy_params)
+  // we set the gui part of it
+  /* initialize gui if iop have one defined */
+  if(!dt_iop_is_hidden(module))
   {
-    memcpy(module->params, base->params, module->params_size);
-    if(module->flags() & IOP_FLAGS_SUPPORTS_BLENDING)
+    // make sure gui_init and reload defaults is called safely
+    dt_iop_gui_init(module);
+
+    /* add module to right panel */
+    dt_iop_gui_set_expander(module);
+
+    dt_iop_reload_defaults(module); // some modules like profiled denoise update the gui in reload_defaults
+
+    if(copy_params)
     {
-      dt_iop_commit_blend_params(module, base->blend_params);
-      if(base->blend_params->mask_id > 0)
+      memcpy(module->params, base->params, module->params_size);
+      if(module->flags() & IOP_FLAGS_SUPPORTS_BLENDING)
       {
-        module->blend_params->mask_id = 0;
-        dt_masks_iop_use_same_as(module, base);
+        dt_iop_commit_blend_params(module, base->blend_params);
+        if(base->blend_params->mask_id > 0)
+        {
+          module->blend_params->mask_id = 0;
+          dt_masks_iop_use_same_as(module, base);
+        }
       }
     }
-  }
-  else
-  {
-    memcpy(module->params, module->default_params, module->params_size);
-    memcpy(module->blend_params, module->default_blendop_params, sizeof(dt_develop_blend_params_t));
-  }
-  
 
-  // we save the new instance creation
-  dt_dev_add_history_item(module->dev, module, TRUE, TRUE);
+    dt_iop_request_focus(module);
+    dt_iop_gui_set_expanded(module, TRUE, FALSE);
+    dt_iop_gui_update_blending(module);
 
-  // rebuild the pipe after history is commited
-  dt_dev_pixelpipe_rebuild_all(module->dev);
+    if(module->dev->gui_attached)
+      dt_dev_pixelpipe_rebuild_all(module->dev);
+
+    // we save the new instance creation
+    dt_dev_add_history_item(module->dev, module, TRUE, TRUE);
+  }
 
   /* update ui to new parameters */
   dt_iop_gui_update(module);
-  dt_iop_request_focus(module);
-  dt_iop_gui_set_expanded(module, TRUE, TRUE);
-  dt_dev_modules_update_multishow(darktable.develop);
 
   return module;
 }
