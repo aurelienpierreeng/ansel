@@ -63,6 +63,7 @@ static void dt_ioppr_check_duplicate_iop_order(GList **_iop_list, GList *history
 static void dt_ioppr_migrate_iop_order(struct dt_develop_t *dev, const int32_t imgid);
 static GList *dt_ioppr_extract_multi_instances_list(GList *iop_order_list);
 static GList *dt_ioppr_merge_multi_instance_iop_order_list(GList *iop_order_list, GList *multi_instance_list);
+static gboolean _ioppr_sanity_check_iop_order(GList *list);
 
 const char *iop_order_string[] =
 {
@@ -718,8 +719,7 @@ static GList *_insert_before(GList *iop_order_list, const char *module, const ch
 {
   gboolean exists = FALSE;
 
-  // first check that new module is missing
-
+  // First check that new module is missing
   for(const GList *l = iop_order_list; l; l = g_list_next(l))
   {
     const dt_iop_order_entry_t *const restrict entry = (dt_iop_order_entry_t *)l->data;
@@ -730,13 +730,12 @@ static GList *_insert_before(GList *iop_order_list, const char *module, const ch
     }
   }
 
-  // the insert it if needed
-
+  // Insert it if needed
   if(!exists)
   {
     for(GList *l = iop_order_list; l; l = g_list_next(l))
     {
-      const dt_iop_order_entry_t *const restrict entry = (dt_iop_order_entry_t *)l->data;
+      dt_iop_order_entry_t *entry = (dt_iop_order_entry_t *)l->data;
 
       if(!strcmp(entry->operation, module))
       {
@@ -746,6 +745,7 @@ static GList *_insert_before(GList *iop_order_list, const char *module, const ch
         new_entry->instance = 0;
         new_entry->o.iop_order = 0;
 
+        // Capture the returned pointer! g_list_insert_before may change the head.
         iop_order_list = g_list_insert_before(iop_order_list, l, new_entry);
         break;
       }
@@ -1113,22 +1113,22 @@ GList *dt_ioppr_get_iop_order_list(int32_t imgid, gboolean sorted)
         {
           // @@_NEW_MODULE: For new module it is required to insert the new module name in the iop-order list here.
           //                The insertion can be done depending on the current iop-order list kind.
-          _insert_before(iop_order_list, "nlmeans", "negadoctor");
-          _insert_before(iop_order_list, "negadoctor", "channelmixerrgb");
-          _insert_before(iop_order_list, "negadoctor", "censorize");
-          _insert_before(iop_order_list, "rgbcurve", "colorbalancergb");
-          _insert_before(iop_order_list, "colorbalancergb", "colorprimaries");
-          _insert_before(iop_order_list, "colorprimaries", "splittoningrgb");
-          _insert_before(iop_order_list, "rgbcurve", "drawlayer");
-          _insert_before(iop_order_list, "drawlayer", "colorequal");
-          _insert_before(iop_order_list, "ashift", "cacorrectrgb");
-          _insert_before(iop_order_list, "graduatednd", "crop");
-          _insert_before(iop_order_list, "colorbalance", "diffuse");
-          _insert_before(iop_order_list, "nlmeans", "blurs");
-          _insert_before(iop_order_list, "ashift", "initialscale");
-          _insert_before(iop_order_list, "filmicrgb", "crystgrain");
-          _insert_before(iop_order_list, "maskmanager", "detailmask");
-          _insert_before(iop_order_list, "rawprepare", "basebuffer");
+          iop_order_list = _insert_before(iop_order_list, "nlmeans", "negadoctor");
+          iop_order_list = _insert_before(iop_order_list, "negadoctor", "channelmixerrgb");
+          iop_order_list = _insert_before(iop_order_list, "negadoctor", "censorize");
+          iop_order_list = _insert_before(iop_order_list, "rgbcurve", "colorbalancergb");
+          iop_order_list = _insert_before(iop_order_list, "colorbalancergb", "colorprimaries");
+          iop_order_list = _insert_before(iop_order_list, "colorprimaries", "splittoningrgb");
+          iop_order_list = _insert_before(iop_order_list, "rgbcurve", "drawlayer");
+          iop_order_list = _insert_before(iop_order_list, "drawlayer", "colorequal");
+          iop_order_list = _insert_before(iop_order_list, "ashift", "cacorrectrgb");
+          iop_order_list = _insert_before(iop_order_list, "graduatednd", "crop");
+          iop_order_list = _insert_before(iop_order_list, "colorbalance", "diffuse");
+          iop_order_list = _insert_before(iop_order_list, "nlmeans", "blurs");
+          iop_order_list = _insert_before(iop_order_list, "ashift", "initialscale");
+          iop_order_list = _insert_before(iop_order_list, "filmicrgb", "crystgrain");
+          iop_order_list = _insert_before(iop_order_list, "maskmanager", "detailmask");
+          iop_order_list = _insert_before(iop_order_list, "rawprepare", "basebuffer");
         }
       }
       else if(version == DT_IOP_ORDER_LEGACY)
@@ -1157,6 +1157,13 @@ GList *dt_ioppr_get_iop_order_list(int32_t imgid, gboolean sorted)
       if(iop_order_list)
       {
         _ioppr_reset_iop_order(iop_order_list);
+        // Perform sanity check after migration to ensure the list is valid
+        if(!_ioppr_sanity_check_iop_order(iop_order_list))
+        {
+          g_list_free_full(iop_order_list, dt_free_gpointer);
+          iop_order_list = NULL;
+          fprintf(stderr, "[dt_ioppr_get_iop_order_list] sanity check failed for imgid %d, falling back to default\n", imgid);
+        }
       }
     }
 
@@ -2506,11 +2513,9 @@ GList *dt_ioppr_deserialize_text_iop_order_list(const char *buf)
     entry->o.iop_order = 0;
 
     // first operation name
-
     g_strlcpy(entry->operation, (char *)l->data, sizeof(entry->operation));
 
     // then operation instance
-
     l = g_list_next(l);
     if(IS_NULL_PTR(l)) goto error;
 
@@ -2520,7 +2525,6 @@ GList *dt_ioppr_deserialize_text_iop_order_list(const char *buf)
     entry->instance = inst;
 
     // append to the list
-
     iop_order_list = g_list_prepend(iop_order_list, entry);
   }
   iop_order_list = g_list_reverse(iop_order_list);  // list was built in reverse order, so un-reverse it
@@ -2530,7 +2534,7 @@ GList *dt_ioppr_deserialize_text_iop_order_list(const char *buf)
 
   _ioppr_reset_iop_order(iop_order_list);
 
-  if(!_ioppr_sanity_check_iop_order(iop_order_list)) goto error;
+  // Remove sanity check from here; it's now handled after migration in dt_ioppr_get_iop_order_list()
 
   return iop_order_list;
 
