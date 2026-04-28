@@ -411,144 +411,144 @@ const dt_iop_order_entry_t v30_jpg_order[] = {
 
 const dt_iop_order_entry_t ansel_jpg_order[] = {
   // RAW modules. Not used on JPG anyway
-  { { 0.0}, "basebuffer", 0 },
-  { { 1.0 }, "rawprepare", 0 },
-  { { 2.0 }, "invert", 0 },
-  { { 4.0f }, "highlights", 0 },
-  { { 5.0f }, "cacorrect", 0 },
-  { { 6.0f }, "hotpixels", 0 },
-  { { 7.0f }, "rawdenoise", 0 },
-  { { 8.0f }, "demosaic", 0 },
+  { { 0.5f}, "basebuffer", 0 },
+  { { 1.0f }, "rawprepare", 0 },
+  { { 2.0f }, "invert", 0 },
+  { { 3.0f }, "highlights", 0 },
+  { { 4.0f }, "cacorrect", 0 },
+  { { 5.0f }, "hotpixels", 0 },
+  { { 6.0f }, "rawdenoise", 0 },
+  { { 7.0f }, "demosaic", 0 },
 
   // input color profile: undo RGB TRC/gamma/EOTF
-  { { 28.0f }, "colorin", 0 },
+  { { 8.0f }, "colorin", 0 },
 
   // so from there we are in "linear RGB", meaning there has probably been some tone curve applied
   // on the pixels before saving to raster, but now we don't carry the uint8_t encoding
 
-  { { 8.5f }, "detailmask", 0 },
-  { { 3.0f }, "temperature", 0 },
-  { { 28.0f }, "denoiseprofile", 0},
-  { { 28.0f }, "bilateral", 0},  // RGB surface blur
-  { { 28.0f }, "rotatepixels", 0},
-  { { 28.0f }, "scalepixels", 0},
-  { { 28.0f }, "lens", 0},
-  { { 28.0f }, "cacorrectrgb", 0}, // correct chromatic aberrations after lens correction so that lensfun
+  { { 9.0f }, "detailmask", 0 },
+  { { 10.0f }, "temperature", 0 },
+  { { 11.0f }, "denoiseprofile", 0},
+  { { 12.0f }, "bilateral", 0},  // RGB surface blur
+  { { 13.0f }, "rotatepixels", 0},
+  { { 14.0f }, "scalepixels", 0},
+  { { 15.0f }, "lens", 0},
+  { { 16.0f }, "cacorrectrgb", 0}, // correct chromatic aberrations after lens correction so that lensfun
                                   // does not reintroduce chromatic aberrations when trying to correct them
-  { { 28.0f }, "hazeremoval", 0},
-  { { 28.0f }, "initialscale", 0 },
-  { { 28.0f }, "ashift", 0},
-  { { 28.0f }, "flip", 0},
-  { { 28.0f }, "clipping", 0},
-  { { 28.0f }, "liquify", 0},
-  { { 28.0f }, "spots", 0},
-  { { 28.0f }, "retouch", 0},
-  { { 28.0f }, "mask_manager", 0},
+  { { 17.0f }, "hazeremoval", 0},
+  { { 18.0f }, "initialscale", 0 },
+  { { 19.0f }, "ashift", 0},
+  { { 20.0f }, "flip", 0},
+  { { 21.0f }, "clipping", 0},
+  { { 22.0f }, "liquify", 0},
+  { { 23.0f }, "spots", 0},
+  { { 24.0f }, "retouch", 0},
+  { { 25.0f }, "mask_manager", 0},
 
   // Tone corrections
-  { { 28.0f }, "exposure", 0},
-  { { 68.0f }, "vignette", 0 },       // creative module but emulates lens vignetting, RGB, linear
+  { { 26.0f }, "exposure", 0},
+  { { 27.0f }, "vignette", 0 },       // creative module but emulates lens vignetting, RGB, linear
   { { 28.0f }, "graduatednd", 0},
-  { { 28.0f }, "toneequal", 0},       // last module that need enlarged roi_in
-  { { 28.0f }, "crop", 0},            // should go after all modules that may need a wider roi_in
-  { { 28.0f }, "profile_gamma", 0},   // shouldn't be needed for JPG
+  { { 29.0f }, "toneequal", 0},       // last module that need enlarged roi_in
+  { { 30.0f }, "crop", 0},            // should go after all modules that may need a wider roi_in
+  { { 31.0f }, "profile_gamma", 0},   // shouldn't be needed for JPG
 
   // from there, it's the same as the raw order
 
   // Linear color handling
-  { { 28.5f }, "negadoctor", 0 },      // Cineon film encoding comes after scanner input color profile
-  { { 28.5f }, "channelmixerrgb", 0 }, // CAT & new channel mixer
-  { { 39.0f }, "channelmixer", 0 },    // Old channel mixer : used HSL...
+  { { 32.0f }, "negadoctor", 0 },      // Cineon film encoding comes after scanner input color profile
+  { { 33.0f }, "channelmixerrgb", 0 }, // CAT & new channel mixer
+  { { 34.0f }, "channelmixer", 0 },    // Old channel mixer : used HSL...
 
   // Linear convolutions
-  { { 28.5f }, "diffuse", 0 },
-  { { 28.5f }, "censorize", 0 },
-  { { 28.5f }, "blurs", 0 },        // physically-accurate blurs (motion and lens)
+  { { 35.0f }, "diffuse", 0 },
+  { { 36.0f }, "censorize", 0 },
+  { { 37.0f }, "blurs", 0 },        // physically-accurate blurs (motion and lens)
 
   // Color work in RGB
-  { { 40.0f }, "basicadj", 0 },        // legacy shit duplicating features
-  { { 41.4f }, "splittoningrgb", 0 },  // keyed CAT16 plus RGB mixer before primary warping
-  { { 41.4f }, "colorprimaries", 0 },  // editable RGB/CYM primary nodes in dt UCS
+  { { 38.0f }, "basicadj", 0 },        // legacy shit duplicating features
+  { { 39.0f }, "splittoningrgb", 0 },  // keyed CAT16 plus RGB mixer before primary warping
+  { { 40.0f }, "colorprimaries", 0 },  // editable RGB/CYM primary nodes in dt UCS
   { { 41.0f }, "colorbalance", 0 },    // scene-referred color manipulation
-  { { 41.5f }, "colorbalancergb", 0 }, // scene-referred color manipulation
-  { { 41.6f }, "colorequal", 0 },      // dynamic hue-defined RGB stretching around the achromatic axis
-  { { 41.7f }, "drawlayer", 0 },       // TIFF-backed paint layers in scene-referred RGB
-  { { 45.5f }, "crystgrain", 0 },    // scene-referred grain, before filmic RGB
+  { { 42.0f }, "colorbalancergb", 0 }, // scene-referred color manipulation
+  { { 43.0f }, "colorequal", 0 },      // dynamic hue-defined RGB stretching around the achromatic axis
+  { { 44.0f }, "drawlayer", 0 },       // TIFF-backed paint layers in scene-referred RGB
+  { { 45.0f }, "crystgrain", 0 },    // scene-referred grain, before filmic RGB
 
   // Interpolation for export pipelines: works better before non-linear transforms
-  { { 72.0f }, "finalscale", 0 },    
+  { { 46.0f }, "finalscale", 0 },    
 
-  { { 28.0f }, "tonemap", 0},         // shitty but at least it's unbounded RGB
+  { { 47.0f }, "tonemap", 0},         // shitty but at least it's unbounded RGB
 
   // Display transforms: HDR -> SDR
-  { { 45.0f }, "filmic", 0 },        // same, but different (parametric) approach
-  { { 46.0f }, "filmicrgb", 0 },     // same, upgraded
-  { { 44.0f }, "basecurve", 0 },     // conversion from scene-referred to display referred, reverse-engineered
+  { { 48.0f }, "filmic", 0 },        // same, but different (parametric) approach
+  { { 49.0f }, "filmicrgb", 0 },     // same, upgraded
+  { { 50.0f }, "basecurve", 0 },     // conversion from scene-referred to display referred, reverse-engineered
                                      //    on camera JPEG default look
 
   // SDR modules :
 
   // Wannabe signal-processing modules but they work in Lab so it's shit
-  { { 29.0f }, "nlmeans", 0 },      // denoise
-  { { 31.0f }, "defringe", 0 },     // desaturate fringes
-  { { 54.0f }, "bilat", 0 },         // local contrast
-  { { 32.0f }, "atrous", 0 }, // frequential operation, needs a signal as scene-referred as possible to avoid halos
-  { { 33.0f }, "lowpass", 0 },       // same
-  { { 34.0f }, "highpass", 0 },      // same
-  { { 35.0f }, "sharpen", 0 },       // same, worst than atrous in same use-case, less control overall
+  { { 51.0f }, "nlmeans", 0 },      // denoise
+  { { 52.0f }, "defringe", 0 },     // desaturate fringes
+  { { 53.0f }, "bilat", 0 },         // local contrast
+  { { 54.0f }, "atrous", 0 }, // frequential operation, needs a signal as scene-referred as possible to avoid halos
+  { { 55.0f }, "lowpass", 0 },       // same
+  { { 56.0f }, "highpass", 0 },      // same
+  { { 57.0f }, "sharpen", 0 },       // same, worst than atrous in same use-case, less control overall
 
   // RGB modules but don't support HDR white
-  { { 36.0f }, "lut3d", 0 },         
-  { { 42.0f }, "rgbcurve", 0 },
-  { { 43.0f }, "rgblevels", 0 },
-  { { 67.0f }, "splittoning", 0 },      // HSL inside
+  { { 58.0f }, "lut3d", 0 },         
+  { { 59.0f }, "rgbcurve", 0 },
+  { { 60.0f }, "rgblevels", 0 },
+  { { 61.0f }, "splittoning", 0 },      // HSL inside
 
   // Lab color modules
-  { { 30.0f }, "colorchecker", 0 },  // calibration
-  { { 38.0f }, "colormapping", 0 },  // automagic shit. toy filter
-  { { 55.0f }, "colorcorrection", 0 },  // now that the colours have been damaged by contrast manipulations,
+  { { 62.0f }, "colorchecker", 0 },  // calibration
+  { { 63.0f }, "colormapping", 0 },  // automagic shit. toy filter
+  { { 64.0f }, "colorcorrection", 0 },  // now that the colours have been damaged by contrast manipulations,
                                         // try to recover them - global adjustment of white balance for shadows and
                                         // highlights
-  { { 56.0f }, "colorcontrast", 0 },    // adjust chrominance globally
-  { { 57.0f }, "velvia", 0 },           // same
-  { { 58.0f }, "vibrance", 0 },         // same, but more subtle
-  { { 60.0f }, "colorzones", 0 },       // same, but locally
+  { { 65.0f }, "colorcontrast", 0 },    // adjust chrominance globally
+  { { 66.0f }, "velvia", 0 },           // same
+  { { 67.0f }, "vibrance", 0 },         // same, but more subtle
+  { { 68.0f }, "colorzones", 0 },       // same, but locally
 
   // Legacy Lab shit that should never have existed
-  { { 47.0f }, "colisa", 0 },        // contrast, lightness, saturation
-  { { 48.0f }, "tonecurve", 0 },     // same
-  { { 49.0f }, "levels", 0 },        // same
-  { { 50.0f }, "shadhi", 0 },        // same
-  { { 51.0f }, "zonesystem", 0 },    // same
-  { { 52.0f }, "globaltonemap", 0 }, 
+  { { 69.0f }, "colisa", 0 },        // contrast, lightness, saturation
+  { { 70.0f }, "tonecurve", 0 },     // same
+  { { 71.0f }, "levels", 0 },        // same
+  { { 72.0f }, "shadhi", 0 },        // same
+  { { 73.0f }, "zonesystem", 0 },    // same
+  { { 74.0f }, "globaltonemap", 0 }, 
 
   // Lab toy filters
-  { { 53.0f }, "relight", 0 },          // tone EQ but worse
-  { { 61.0f }, "bloom", 0 },            // blurs but worse
-  { { 62.0f }, "colorize", 0 },         // somewhere between channel mixer and color balance
-  { { 63.0f }, "lowlight", 0 },         // simulate scotopic (night) vision
-  { { 64.0f }, "monochrome", 0 },       // channel mixer B&W mode but worse
-  { { 65.0f }, "grain", 0 },            // crystgrain but worse
-  { { 66.0f }, "soften", 0 },           // blurs but worse
-  { { 69.0f }, "colorreconstruct", 0 }, // try to salvage blown areas before ICC intents in LittleCMS2 do things
+  { { 75.0f }, "relight", 0 },          // tone EQ but worse
+  { { 76.0f }, "bloom", 0 },            // blurs but worse
+  { { 77.0f }, "colorize", 0 },         // somewhere between channel mixer and color balance
+  { { 78.0f }, "lowlight", 0 },         // simulate scotopic (night) vision
+  { { 79.0f }, "monochrome", 0 },       // channel mixer B&W mode but worse
+  { { 80.0f }, "grain", 0 },            // crystgrain but worse
+  { { 81.0f }, "soften", 0 },           // blurs but worse
+  { { 82.0f }, "colorreconstruct", 0 }, // try to salvage blown areas before ICC intents in LittleCMS2 do things
                                         // with them.
 
   // Display RGB from there
-  { { 70.0f }, "colorout", 0 },
-  { { 73.0f }, "overexposed", 0 },
-  { { 74.0f }, "rawoverexposed", 0 },
+  { { 83.0f }, "colorout", 0 },
+  { { 84.0f }, "overexposed", 0 },
+  { { 85.0f }, "rawoverexposed", 0 },
 
   // Those 2 are shit because they internally rely on display RGB being sRGB
   // Doesn't work for large gamut displays...
-  { { 76.0f }, "borders", 0 },
-  { { 77.0f }, "watermark", 0 },
+  { { 86.0f }, "borders", 0 },
+  { { 87.0f }, "watermark", 0 },
 
   // Hide quantization errors with noise
-  { { 75.0f }, "dither", 0 },
+  { { 88.0f }, "dither", 0 },
 
   // Float to uint8 but only for darkroom pipelines. 
   // Also handles mask previews.
-  { { 78.0f }, "gamma", 0 },
+  { { 89.0f }, "gamma", 0 },
 
   { { 0.0f }, "", 0 }
 };
@@ -556,9 +556,9 @@ const dt_iop_order_entry_t ansel_jpg_order[] = {
 // default order for RAW files, assumed to be linear from start
 const dt_iop_order_entry_t ansel_raw_order[] = {
   // RAW stuff
-  { { 0.0}, "basebuffer", 0 },
-  { { 1.0 }, "rawprepare", 0},
-  { { 2.0 }, "invert", 0},
+  { { 0.0f }, "basebuffer", 0 },
+  { { 1.0f }, "rawprepare", 0},
+  { { 2.0f }, "invert", 0},
   { { 3.0f }, "temperature", 0},
   { { 4.0f }, "highlights", 0},
   { { 5.0f }, "cacorrect", 0},
@@ -571,131 +571,131 @@ const dt_iop_order_entry_t ansel_raw_order[] = {
   { {10.0f }, "bilateral", 0},
   { {11.0f }, "rotatepixels", 0},
   { {12.0f }, "scalepixels", 0},
-  { { 8.5f }, "detailmask", 0},
-  { {13.0f }, "lens", 0},
-  { {13.5f }, "cacorrectrgb", 0}, // correct chromatic aberrations after lens correction so that lensfun
+  { {13.0f }, "detailmask", 0},
+  { {14.0f }, "lens", 0},
+  { {15.0f }, "cacorrectrgb", 0}, // correct chromatic aberrations after lens correction so that lensfun
                                   // does not reintroduce chromatic aberrations when trying to correct them
-  { {14.0f }, "hazeremoval", 0},
+  { {16.0f }, "hazeremoval", 0},
 
-  { {14.0f }, "initialscale", 0},
-  { {15.0f }, "ashift", 0},
-  { {16.0f }, "flip", 0},
-  { {17.0f }, "clipping", 0},
-  { {18.0f }, "liquify", 0},
-  { {19.0f }, "spots", 0},
-  { {20.0f }, "retouch", 0},
+  { {17.0f }, "initialscale", 0},
+  { {18.0f }, "ashift", 0},
+  { {19.0f }, "flip", 0},
+  { {20.0f }, "clipping", 0},
+  { {21.0f }, "liquify", 0},
+  { {22.0f }, "spots", 0},
+  { {23.0f }, "retouch", 0},
 
   // From there we support masking in modules
-  { {22.0f }, "mask_manager", 0},
+  { {24.0f }, "mask_manager", 0},
 
   // Linear tone corrections
-  { {21.0f }, "exposure", 0},
-  { {68.0f }, "vignette", 0 },       // creative module but emulates lens vignetting, RGB, linear
-  { {28.0f }, "graduatednd", 0},
-  { {24.0f }, "toneequal", 0},       // last module that need enlarged roi_in
-  { {24.5f }, "crop", 0},            // should go after all modules that may need a wider roi_in
+  { {25.0f }, "exposure", 0},
+  { {26.0f }, "vignette", 0 },       // creative module but emulates lens vignetting, RGB, linear
+  { {27.0f }, "graduatednd", 0},
+  { {28.0f }, "toneequal", 0},       // last module that need enlarged roi_in
+  { {29.0f }, "crop", 0},            // should go after all modules that may need a wider roi_in
 
   // Needed by some very old cameras in RAW mode
-  { {26.0f }, "profile_gamma", 0},
+  { {30.0f }, "profile_gamma", 0},
 
-  { {28.0f }, "colorin", 0},
+  { {31.0f }, "colorin", 0},
 
   // from there, it's the same as the JPEG order
 
   // Linear color handling
-  { { 28.5f }, "negadoctor", 0 },      // Cineon film encoding comes after scanner input color profile
-  { { 28.5f }, "channelmixerrgb", 0 }, // CAT & new channel mixer
-  { { 39.0f }, "channelmixer", 0 },    // Old channel mixer : used HSL...
+  { { 32.0f }, "negadoctor", 0 },      // Cineon film encoding comes after scanner input color profile
+  { { 33.0f }, "channelmixerrgb", 0 }, // CAT & new channel mixer
+  { { 34.0f }, "channelmixer", 0 },    // Old channel mixer : used HSL...
 
   // Linear convolutions
-  { { 28.5f }, "diffuse", 0 },
-  { { 28.5f }, "censorize", 0 },
-  { { 28.5f }, "blurs", 0 },        // physically-accurate blurs (motion and lens)
+  { { 35.0f }, "diffuse", 0 },
+  { { 36.0f }, "censorize", 0 },
+  { { 37.0f }, "blurs", 0 },        // physically-accurate blurs (motion and lens)
 
   // Color work in RGB
-  { { 40.0f }, "basicadj", 0 },        // legacy shit duplicating features
-  { { 41.4f }, "splittoningrgb", 0 },  // keyed CAT16 plus RGB mixer before primary warping
-  { { 41.4f }, "colorprimaries", 0 },  // editable RGB/CYM primary nodes in dt UCS
+  { { 38.0f }, "basicadj", 0 },        // legacy shit duplicating features
+  { { 39.0f }, "splittoningrgb", 0 },  // keyed CAT16 plus RGB mixer before primary warping
+  { { 40.0f }, "colorprimaries", 0 },  // editable RGB/CYM primary nodes in dt UCS
   { { 41.0f }, "colorbalance", 0 },    // scene-referred color manipulation
-  { { 41.5f }, "colorbalancergb", 0 }, // scene-referred color manipulation
-  { { 41.6f }, "colorequal", 0 },      // dynamic hue-defined RGB stretching around the achromatic axis
-  { { 41.7f }, "drawlayer", 0 },       // TIFF-backed paint layers in scene-referred RGB
-  { { 45.5f }, "crystgrain", 0 },    // scene-referred grain, before filmic RGB
+  { { 42.0f }, "colorbalancergb", 0 }, // scene-referred color manipulation
+  { { 43.0f }, "colorequal", 0 },      // dynamic hue-defined RGB stretching around the achromatic axis
+  { { 44.0f }, "drawlayer", 0 },       // TIFF-backed paint layers in scene-referred RGB
+  { { 45.0f }, "crystgrain", 0 },    // scene-referred grain, before filmic RGB
 
   // Interpolation for export pipelines: works better before non-linear transforms
-  { { 72.0f }, "finalscale", 0 },    
+  { { 46.0f }, "finalscale", 0 },    
 
-  { { 28.0f }, "tonemap", 0},         // shitty but at least it's unbounded RGB
+  { { 47.0f }, "tonemap", 0},         // shitty but at least it's unbounded RGB
 
   // Display transforms: HDR -> SDR
-  { { 45.0f }, "filmic", 0 },        // same, but different (parametric) approach
-  { { 46.0f }, "filmicrgb", 0 },     // same, upgraded
-  { { 44.0f }, "basecurve", 0 },     // conversion from scene-referred to display referred, reverse-engineered
+  { { 48.0f }, "filmic", 0 },        // same, but different (parametric) approach
+  { { 49.0f }, "filmicrgb", 0 },     // same, upgraded
+  { { 50.0f }, "basecurve", 0 },     // conversion from scene-referred to display referred, reverse-engineered
                                      //    on camera JPEG default look
 
   // SDR modules :
 
   // Wannabe signal-processing modules but they work in Lab so it's shit
-  { { 29.0f }, "nlmeans", 0 },      // denoise
-  { { 31.0f }, "defringe", 0 },     // desaturate fringes
-  { { 54.0f }, "bilat", 0 },         // local contrast
-  { { 32.0f }, "atrous", 0 }, // frequential operation, needs a signal as scene-referred as possible to avoid halos
-  { { 33.0f }, "lowpass", 0 },       // same
-  { { 34.0f }, "highpass", 0 },      // same
-  { { 35.0f }, "sharpen", 0 },       // same, worst than atrous in same use-case, less control overall
+  { { 51.0f }, "nlmeans", 0 },      // denoise
+  { { 52.0f }, "defringe", 0 },     // desaturate fringes
+  { { 53.0f }, "bilat", 0 },         // local contrast
+  { { 54.0f }, "atrous", 0 }, // frequential operation, needs a signal as scene-referred as possible to avoid halos
+  { { 55.0f }, "lowpass", 0 },       // same
+  { { 56.0f }, "highpass", 0 },      // same
+  { { 57.0f }, "sharpen", 0 },       // same, worst than atrous in same use-case, less control overall
 
   // RGB modules but don't support HDR white
-  { { 36.0f }, "lut3d", 0 },         
-  { { 42.0f }, "rgbcurve", 0 },
-  { { 43.0f }, "rgblevels", 0 },
-  { { 67.0f }, "splittoning", 0 },      // HSL inside
+  { { 58.0f }, "lut3d", 0 },         
+  { { 59.0f }, "rgbcurve", 0 },
+  { { 60.0f }, "rgblevels", 0 },
+  { { 61.0f }, "splittoning", 0 },      // HSL inside
 
   // Lab color modules
-  { { 30.0f }, "colorchecker", 0 },  // calibration
-  { { 38.0f }, "colormapping", 0 },  // automagic shit. toy filter
-  { { 55.0f }, "colorcorrection", 0 },  // now that the colours have been damaged by contrast manipulations,
+  { { 62.0f }, "colorchecker", 0 },  // calibration
+  { { 63.0f }, "colormapping", 0 },  // automagic shit. toy filter
+  { { 64.0f }, "colorcorrection", 0 },  // now that the colours have been damaged by contrast manipulations,
                                         // try to recover them - global adjustment of white balance for shadows and
                                         // highlights
-  { { 56.0f }, "colorcontrast", 0 },    // adjust chrominance globally
-  { { 57.0f }, "velvia", 0 },           // same
-  { { 58.0f }, "vibrance", 0 },         // same, but more subtle
-  { { 60.0f }, "colorzones", 0 },       // same, but locally
+  { { 65.0f }, "colorcontrast", 0 },    // adjust chrominance globally
+  { { 66.0f }, "velvia", 0 },           // same
+  { { 67.0f }, "vibrance", 0 },         // same, but more subtle
+  { { 68.0f }, "colorzones", 0 },       // same, but locally
 
   // Legacy Lab shit that should never have existed
-  { { 47.0f }, "colisa", 0 },        // contrast, lightness, saturation
-  { { 48.0f }, "tonecurve", 0 },     // same
-  { { 49.0f }, "levels", 0 },        // same
-  { { 50.0f }, "shadhi", 0 },        // same
-  { { 51.0f }, "zonesystem", 0 },    // same
-  { { 52.0f }, "globaltonemap", 0 }, 
+  { { 69.0f }, "colisa", 0 },        // contrast, lightness, saturation
+  { { 70.0f }, "tonecurve", 0 },     // same
+  { { 71.0f }, "levels", 0 },        // same
+  { { 72.0f }, "shadhi", 0 },        // same
+  { { 73.0f }, "zonesystem", 0 },    // same
+  { { 74.0f }, "globaltonemap", 0 }, 
 
   // Lab toy filters
-  { { 53.0f }, "relight", 0 },          // tone EQ but worse
-  { { 61.0f }, "bloom", 0 },            // blurs but worse
-  { { 62.0f }, "colorize", 0 },         // somewhere between channel mixer and color balance
-  { { 63.0f }, "lowlight", 0 },         // simulate scotopic (night) vision
-  { { 64.0f }, "monochrome", 0 },       // channel mixer B&W mode but worse
-  { { 65.0f }, "grain", 0 },            // crystgrain but worse
-  { { 66.0f }, "soften", 0 },           // blurs but worse
-  { { 69.0f }, "colorreconstruct", 0 }, // try to salvage blown areas before ICC intents in LittleCMS2 do things
+  { { 75.0f }, "relight", 0 },          // tone EQ but worse
+  { { 76.0f }, "bloom", 0 },            // blurs but worse
+  { { 77.0f }, "colorize", 0 },         // somewhere between channel mixer and color balance
+  { { 78.0f }, "lowlight", 0 },         // simulate scotopic (night) vision
+  { { 79.0f }, "monochrome", 0 },       // channel mixer B&W mode but worse
+  { { 80.0f }, "grain", 0 },            // crystgrain but worse
+  { { 81.0f }, "soften", 0 },           // blurs but worse
+  { { 82.0f }, "colorreconstruct", 0 }, // try to salvage blown areas before ICC intents in LittleCMS2 do things
                                         // with them.
 
   // Display RGB from there
-  { { 70.0f }, "colorout", 0 },
-  { { 73.0f }, "overexposed", 0 },
-  { { 74.0f }, "rawoverexposed", 0 },
+  { { 83.0f }, "colorout", 0 },
+  { { 84.0f }, "overexposed", 0 },
+  { { 85.0f }, "rawoverexposed", 0 },
 
   // Those 2 are shit because they internally rely on display RGB being sRGB
   // Doesn't work for large gamut displays...
-  { { 76.0f }, "borders", 0 },
-  { { 77.0f }, "watermark", 0 },
+  { { 86.0f }, "borders", 0 },
+  { { 87.0f }, "watermark", 0 },
 
   // Hide quantization errors with noise
-  { { 75.0f }, "dither", 0 },
+  { { 88.0f }, "dither", 0 },
 
   // Float to uint8 but only for darkroom pipelines. 
   // Also handles mask previews.
-  { { 78.0f }, "gamma", 0 },
+  { { 89.0f }, "gamma", 0 },
 
   { { 0.0f }, "", 0 }
 };
