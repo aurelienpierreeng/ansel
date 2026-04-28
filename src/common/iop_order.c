@@ -2160,7 +2160,18 @@ gboolean dt_ioppr_move_iop_before(struct dt_develop_t *dev, dt_iop_module_t *mod
   GList *next = dt_ioppr_get_iop_order_link(dev->iop_order_list, module_next->op, module_next->multi_priority);
   GList *current = dt_ioppr_get_iop_order_link(dev->iop_order_list, module->op, module->multi_priority);
 
-  if(IS_NULL_PTR(next) || IS_NULL_PTR(current)) return FALSE;
+  if(IS_NULL_PTR(next)) return FALSE;
+
+  if(IS_NULL_PTR(current))
+  {
+    // Module not in iop_order_list, create entry
+    dt_iop_order_entry_t *entry = (dt_iop_order_entry_t *)malloc(sizeof(dt_iop_order_entry_t));
+    g_strlcpy(entry->operation, module->op, sizeof(entry->operation));
+    entry->instance = module->multi_priority;
+    entry->o.iop_order = 0; // will be reset later
+    current = g_list_alloc();
+    current->data = entry;
+  }
 
   dev->iop_order_list = g_list_remove_link(dev->iop_order_list, current);
   dev->iop_order_list = g_list_insert_before(dev->iop_order_list, next, current->data);
@@ -2181,7 +2192,18 @@ gboolean dt_ioppr_move_iop_after(struct dt_develop_t *dev, dt_iop_module_t *modu
   GList *prev = dt_ioppr_get_iop_order_link(dev->iop_order_list, module_prev->op, module_prev->multi_priority);
   GList *current = dt_ioppr_get_iop_order_link(dev->iop_order_list, module->op, module->multi_priority);
 
-  if(IS_NULL_PTR(prev) || IS_NULL_PTR(current)) return FALSE;
+  if(IS_NULL_PTR(prev)) return FALSE;
+
+  if(IS_NULL_PTR(current))
+  {
+    // Module not in iop_order_list, create entry
+    dt_iop_order_entry_t *entry = (dt_iop_order_entry_t *)malloc(sizeof(dt_iop_order_entry_t));
+    g_strlcpy(entry->operation, module->op, sizeof(entry->operation));
+    entry->instance = module->multi_priority;
+    entry->o.iop_order = 0; // will be reset later
+    current = g_list_alloc();
+    current->data = entry;
+  }
 
   dev->iop_order_list = g_list_remove_link(dev->iop_order_list, current);
 

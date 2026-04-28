@@ -1213,10 +1213,10 @@ void _dev_module_update_multishow(dt_develop_t *dev, struct dt_iop_module_t *mod
   dt_iop_module_t *mod_prev = (dt_iop_module_t *)g_hash_table_lookup(state->prev_visible, module);
   dt_iop_module_t *mod_next = (dt_iop_module_t *)g_hash_table_lookup(state->next_visible, module);
 
-  const gboolean move_next = (mod_next && mod_next->iop_order != INT_MAX)
+  const gboolean move_next = mod_next
                                  ? dt_ioppr_check_can_move_after_iop(dev->iop, module, mod_next)
                                  : -1.0;
-  const gboolean move_prev = (mod_prev && mod_prev->iop_order != INT_MAX)
+  const gboolean move_prev = mod_prev
                                  ? dt_ioppr_check_can_move_before_iop(dev->iop, module, mod_prev)
                                  : -1.0;
 
