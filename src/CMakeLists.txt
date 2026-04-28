@@ -316,6 +316,7 @@ endif()
 # Don't reinvent a worse wheel.
 find_package(PkgConfig)
 pkg_check_modules(GTK3 REQUIRED IMPORTED_TARGET gtk+-3.0>=3.24)
+pkg_check_modules(GMODULE REQUIRED IMPORTED_TARGET gmodule-2.0)
 pkg_check_modules(RSVG2 REQUIRED IMPORTED_TARGET librsvg-2.0)
 pkg_check_modules(JSONGLIB REQUIRED IMPORTED_TARGET json-glib-1.0)
 pkg_check_modules(LIBXML2 REQUIRED IMPORTED_TARGET libxml-2.0)
@@ -357,6 +358,7 @@ target_include_directories(ansel_deps INTERFACE
 )
 target_link_libraries(ansel_deps INTERFACE
   PkgConfig::GTK3
+  PkgConfig::GMODULE
   PkgConfig::RSVG2
   PkgConfig::JSONGLIB
   PkgConfig::LIBXML2
@@ -861,6 +863,16 @@ target_link_libraries(lib_ansel PUBLIC ansel_deps)
 target_link_libraries(lib_ansel PRIVATE lib_ansel_imageio_rawspeed)
 target_link_libraries(lib_ansel PRIVATE lib_ansel_imageio_libraw)
 target_link_libraries(lib_ansel PRIVATE whereami)
+
+if(WIN32 AND CMAKE_C_COMPILER_ID STREQUAL "Clang")
+  # Work around a Windows loader failure (0xC000007B) seen with clang debug PE images.
+  # Stripping debug sections from libansel.dll keeps runtime behavior intact.
+  add_custom_command(
+    TARGET lib_ansel POST_BUILD
+    COMMAND ${CMAKE_OBJCOPY} --strip-debug $<TARGET_FILE:lib_ansel>
+    VERBATIM
+  )
+endif()
 
 if(OpenMP_C_FOUND)
   target_link_libraries(lib_ansel PUBLIC OpenMP::OpenMP_C)
