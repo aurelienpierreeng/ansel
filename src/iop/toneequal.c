@@ -2229,8 +2229,6 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
     sigma = g->sigma;
   }
 
-  dt_iop_gui_leave_critical_section(self);
-
   if(preview_entry && preview_width > 0 && preview_height > 0)
   {
     dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, preview_entry);
