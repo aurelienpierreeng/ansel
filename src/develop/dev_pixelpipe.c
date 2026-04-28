@@ -156,7 +156,6 @@ static gboolean _sync_realtime_top_history_in_place(dt_dev_pixelpipe_t *pipe)
 
   pipe->last_history_hash = hist->hash;
   pipe->last_history_item = hist;
-  dt_dev_pixelpipe_set_history_hash(pipe, dt_dev_get_history_hash(pipe->dev));
   return TRUE;
 }
 
@@ -1003,8 +1002,6 @@ void dt_dev_pixelpipe_synch_all_real(dt_dev_pixelpipe_t *pipe, const char *calle
     pipe->last_history_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
     pipe->last_history_item = NULL;
   }
-
-  dt_dev_pixelpipe_set_history_hash(pipe, dt_dev_get_history_hash(pipe->dev));
 }
 
 void dt_dev_pixelpipe_synch_top(dt_dev_pixelpipe_t *pipe)
@@ -1054,8 +1051,6 @@ void dt_dev_pixelpipe_synch_top(dt_dev_pixelpipe_t *pipe)
     pipe->last_history_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
     pipe->last_history_item = NULL;
   }
-
-  dt_dev_pixelpipe_set_history_hash(pipe, dt_dev_get_history_hash(pipe->dev));
 }
 
 // Modules without history need to be resynced unconditionnally with their internal params
@@ -1146,6 +1141,7 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe)
     // Finalscale will need to self-enable/disable depending on zoom level
     dt_dev_pixelpipe_sync_no_history(pipe);
   }
+  dt_dev_pixelpipe_set_history_hash(pipe, dt_dev_get_history_hash(pipe->dev));
   dt_pthread_rwlock_unlock(&pipe->dev->history_mutex);
 
   _seal_opencl_cache_policy(pipe);

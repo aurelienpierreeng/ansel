@@ -499,8 +499,13 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
 
       // We recompute if history hash changed or ROI has changed.
       // If we know history changed, ensure at least the last step is resynced.
-      if(dt_dev_pixelpipe_get_history_hash(pipe) != dt_dev_get_history_hash(dev))
+      const uint64_t pipe_hash = dt_dev_pixelpipe_get_history_hash(pipe);
+      const uint64_t dev_hash = dt_dev_get_history_hash(dev);
+      if(pipe_hash != dev_hash)
+      {
         dt_dev_pixelpipe_or_changed(pipe, DT_DEV_PIPE_TOP_CHANGED);
+        dt_print(DT_DEBUG_PIPE | DT_DEBUG_DEV, "dev history hash = %lu, pipe history hash %lu\n", dev_hash, pipe_hash);
+      }
 
       pipe_needs_update[i] = (dt_dev_pixelpipe_get_changed(pipe) != DT_DEV_PIPE_UNCHANGED) && !pipe->pause;
       if(!pipe_needs_update[i]) continue;
