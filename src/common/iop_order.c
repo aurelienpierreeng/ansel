@@ -1127,7 +1127,7 @@ GList *dt_ioppr_get_iop_order_list(int32_t imgid, gboolean sorted)
           iop_order_list = _insert_before(iop_order_list, "nlmeans", "blurs");
           iop_order_list = _insert_before(iop_order_list, "ashift", "initialscale");
           iop_order_list = _insert_before(iop_order_list, "filmicrgb", "crystgrain");
-          iop_order_list = _insert_before(iop_order_list, "maskmanager", "detailmask");
+          iop_order_list = _insert_before(iop_order_list, "mask_manager", "detailmask");
           iop_order_list = _insert_before(iop_order_list, "rawprepare", "basebuffer");
         }
       }
