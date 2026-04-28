@@ -18,9 +18,16 @@
 #include "gui/actions/menu.h"
 #include "control/crawler.h"
 #include "common/collection.h"
+#include "common/mipmap_cache.h"
 #include "common/selection.h"
 #include "control/jobs.h"
 #include "develop/dev_pixelpipe.h"
+
+/// Job parameters for preloading image cache with a maximum mipmap size.
+typedef struct _preload_cache_params_t
+{
+  dt_mipmap_size_t max_mipmap_size;  ///< Maximum mipmap size to generate
+} preload_cache_params_t;
 
 static gboolean clear_caches_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
@@ -50,10 +57,14 @@ static gboolean crawl_xmp_changes(GtkAccelGroup *group, GObject *acceleratable, 
 
 static int32_t preload_image_cache(dt_job_t *job)
 {
-  // Load the mipmap cache sizes 0 to 4 of the current selection
+  // Retrieve the maximum mipmap size to generate from job parameters
+  preload_cache_params_t *params = (preload_cache_params_t *)dt_control_job_get_params(job);
+  const dt_mipmap_size_t max_mipmap_size = (params) ? params->max_mipmap_size : DT_MIPMAP_2;
+
+  // Load the mipmap cache sizes 0 to max_mipmap_size of the current selection
   GList *selection = dt_selection_get_list(darktable.selection);
   int i = 0;
-  float imgs = (float)dt_selection_get_length(darktable.selection) * DT_MIPMAP_F;
+  float imgs = (float)dt_selection_get_length(darktable.selection) * (max_mipmap_size + 1);
   GList *img = g_list_first(selection);
 
   while(img && dt_control_job_get_state(job) != DT_JOB_STATE_CANCELLED)
@@ -64,7 +75,7 @@ static int32_t preload_image_cache(dt_job_t *job)
     // because the mipmap code has a mechanism that downscales
     // higher resolution thumbnails if present, rather
     // than recomputing a pipe from scratch.
-    for(int k = DT_MIPMAP_F - 1; k >= DT_MIPMAP_0 && dt_control_job_get_state(job) != DT_JOB_STATE_CANCELLED; k--)
+    for(int k = max_mipmap_size; k >= DT_MIPMAP_0 && dt_control_job_get_state(job) != DT_JOB_STATE_CANCELLED; k--)
     {
       char filename[PATH_MAX] = { 0 };
       dt_mipmap_get_cache_filename(filename, darktable.mipmap_cache, k, imgid);
@@ -92,12 +103,63 @@ static int32_t preload_image_cache(dt_job_t *job)
   return 0;
 }
 
-static gboolean preload_image_cache_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
+/// Helper function to create a preload job with the specified maximum mipmap size.
+static gboolean _preload_image_cache_with_max_size(dt_mipmap_size_t max_size, const char *description)
 {
+  preload_cache_params_t *params = (preload_cache_params_t *)g_malloc(sizeof(preload_cache_params_t));
+  params->max_mipmap_size = max_size;
+
   dt_job_t *job = dt_control_job_create(&preload_image_cache, "preload");
-  dt_control_job_add_progress(job, _("Preloading cache for current collection"), TRUE);
+  dt_control_job_set_params(job, params, g_free);
+  dt_control_job_add_progress(job, description, TRUE);
   dt_control_add_job(darktable.control, DT_JOB_QUEUE_USER_BG, job);
   return TRUE;
+}
+
+// Callback functions for each mipmap size
+static gboolean preload_to_mipmap_0_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
+{
+  return _preload_image_cache_with_max_size(DT_MIPMAP_0, _("Preloading cache (up to 360x225 px) for current collection"));
+}
+
+static gboolean preload_to_mipmap_1_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
+{
+  return _preload_image_cache_with_max_size(DT_MIPMAP_1, _("Preloading cache (up to 720x450 px) for current collection"));
+}
+
+static gboolean preload_to_mipmap_2_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
+{
+  return _preload_image_cache_with_max_size(DT_MIPMAP_2, _("Preloading cache (up to 1440x900 px) for current collection"));
+}
+
+static gboolean preload_to_mipmap_3_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
+{
+  return _preload_image_cache_with_max_size(DT_MIPMAP_3, _("Preloading cache (up to Full HD 1080p) for current collection"));
+}
+
+static gboolean preload_to_mipmap_4_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
+{
+  return _preload_image_cache_with_max_size(DT_MIPMAP_4, _("Preloading cache (up to 2560x1440 px) for current collection"));
+}
+
+static gboolean preload_to_mipmap_5_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
+{
+  return _preload_image_cache_with_max_size(DT_MIPMAP_5, _("Preloading cache (up to 4K/UHD) for current collection"));
+}
+
+static gboolean preload_to_mipmap_6_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
+{
+  return _preload_image_cache_with_max_size(DT_MIPMAP_6, _("Preloading cache (up to 5K) for current collection"));
+}
+
+static gboolean preload_to_mipmap_7_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
+{
+  return _preload_image_cache_with_max_size(DT_MIPMAP_7, _("Preloading cache (up to 6K) for current collection"));
+}
+
+static gboolean preload_to_mipmap_8_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
+{
+  return _preload_image_cache_with_max_size(DT_MIPMAP_8, _("Preloading cache (up to 8K) for current collection"));
 }
 
 static gboolean clear_image_cache(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
@@ -124,7 +186,22 @@ MAKE_ACCEL_WRAPPER(dt_image_local_copy_synch)
 void append_run(GtkWidget **menus, GList **lists, const dt_menus_t index)
 {
   add_sub_menu_entry(menus, lists, _("Clear darkroom pipeline caches"), index, NULL, clear_caches_callback, NULL, NULL, NULL, 0, 0);
-  add_sub_menu_entry(menus, lists, _("Preload selected thumbnails in cache"), index, NULL, preload_image_cache_callback, NULL, NULL, has_active_images, 0, 0);
+
+  // Create submenu for preloading selected thumbnails with different maximum mipmap sizes
+  add_top_submenu_entry(menus, lists, _("Preload selected thumbnails in cache"), index);
+  GtkWidget *parent = get_last_widget(lists);
+
+  // Add mipmap size options to the submenu
+  add_sub_sub_menu_entry(menus, parent, lists, _("360x225 px"), index, NULL, preload_to_mipmap_0_callback, NULL, NULL, has_active_images, 0, 0);
+  add_sub_sub_menu_entry(menus, parent, lists, _("720x450 px"), index, NULL, preload_to_mipmap_1_callback, NULL, NULL, has_active_images, 0, 0);
+  add_sub_sub_menu_entry(menus, parent, lists, _("1440x900 px"), index, NULL, preload_to_mipmap_2_callback, NULL, NULL, has_active_images, 0, 0);
+  add_sub_sub_menu_entry(menus, parent, lists, _("Full HD 1080p"), index, NULL, preload_to_mipmap_3_callback, NULL, NULL, has_active_images, 0, 0);
+  add_sub_sub_menu_entry(menus, parent, lists, _("2560x1440 px"), index, NULL, preload_to_mipmap_4_callback, NULL, NULL, has_active_images, 0, 0);
+  add_sub_sub_menu_entry(menus, parent, lists, _("4K/UHD"), index, NULL, preload_to_mipmap_5_callback, NULL, NULL, has_active_images, 0, 0);
+  add_sub_sub_menu_entry(menus, parent, lists, _("5K"), index, NULL, preload_to_mipmap_6_callback, NULL, NULL, has_active_images, 0, 0);
+  add_sub_sub_menu_entry(menus, parent, lists, _("6K"), index, NULL, preload_to_mipmap_7_callback, NULL, NULL, has_active_images, 0, 0);
+  add_sub_sub_menu_entry(menus, parent, lists, _("8K"), index, NULL, preload_to_mipmap_8_callback, NULL, NULL, has_active_images, 0, 0);
+
   add_sub_menu_entry(menus, lists, _("Purge selected thumbnails from cache"), index, NULL, clear_image_cache, NULL, NULL, has_active_images, 0, 0);
   add_menu_separator(menus[index]);
   add_sub_menu_entry(menus, lists, _("Defragment the library"), index, NULL, optimize_database_callback, NULL, NULL, NULL, 0, 0);
