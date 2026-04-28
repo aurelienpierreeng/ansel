@@ -1186,8 +1186,10 @@ GList *dt_ioppr_get_iop_order_list(int32_t imgid, gboolean sorted)
  *
  * @param iop_order_list Order list to normalize.
  */
+
 static void _ioppr_reset_iop_order(GList *iop_order_list)
 {
+  // Assign sequential iop_order based on current list order
   // iop-order must start with a number > 0 and be incremented. There is no
   // other constraints.
   int iop_order = 1;
@@ -1248,6 +1250,41 @@ void dt_ioppr_resync_modules_order(dt_develop_t *dev)
     // _update_iop_visibility.
     if(mod->iop_order != INT_MAX)
       mod->iop_order = dt_ioppr_get_iop_order(dev->iop_order_list, mod->op, mod->multi_priority);
+
+    modules = next;
+  }
+
+  // Ensure all modules have entries in iop_order_list
+  modules = dev->iop;
+  while(modules)
+  {
+    dt_iop_module_t *mod = (dt_iop_module_t *)(modules->data);
+    GList *next = g_list_next(modules);
+
+    if(mod->iop_order == INT_MAX)
+    {
+      // Add missing entry to iop_order_list
+      dt_iop_order_entry_t *entry = (dt_iop_order_entry_t *)malloc(sizeof(dt_iop_order_entry_t));
+      g_strlcpy(entry->operation, mod->op, sizeof(entry->operation));
+      entry->instance = mod->multi_priority;
+      entry->o.iop_order = 0;
+      dev->iop_order_list = g_list_append(dev->iop_order_list, entry);
+    }
+
+    modules = next;
+  }
+
+  // Re-reset orders now that all entries are in the list
+  _ioppr_reset_iop_order(dev->iop_order_list);
+
+  // Set orders for all modules
+  modules = dev->iop;
+  while(modules)
+  {
+    dt_iop_module_t *mod = (dt_iop_module_t *)(modules->data);
+    GList *next = g_list_next(modules);
+
+    mod->iop_order = dt_ioppr_get_iop_order(dev->iop_order_list, mod->op, mod->multi_priority);
 
     modules = next;
   }
