@@ -166,14 +166,39 @@ endif()
 # Set build flags
 #
 
+# This enables LTO (`-flto`): https://gcc.gnu.org/onlinedocs/gccint/LTO-Overview.html
+# It fails on Windows for exr.cc because std:string objects are defined twice,
+# once from OpenEXR and one from darktable.h, and there is no way to selectively
+# disable it there because it's global by nature.
+# LTO allows to look across DLL boundaries to merge symbols,
+# possibly allowing to inline functions across libraries for better 
+# parallel loops. But Linux/MacOS don't import libraries the way Windows does,
+# they use shared libraries.
+# Also Ansel inherits from Darktable a messy architecture that pretends to be 
+# modular, while in fact all libraries are shared globally, so using `-fvisibility=hidden`
+# breaks the whole project.
+# So I haven't found a way to fix that and it sucks that one lib is making us drop 
+# this feature for the whole project.
+if(NOT WIN32)
+  set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
+  set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO TRUE)
+  set(CMAKE_C_FLAGS_IPO "-flto=auto")
+  set(CMAKE_CXX_FLAGS_IPO "-flto=auto")
+
+  if(CMAKE_C_COMPILER_ID MATCHES "GNU")
+    set(CMAKE_C_FLAGS_IPO "${CMAKE_C_FLAGS_IPO} -fuse-linker-plugin")
+    set(CMAKE_CXX_FLAGS_IPO "${CMAKE_CXX_FLAGS_IPO} -fuse-linker-plugin")
+  endif()
+endif()
+
 ## Override default CMake build flags
 # Release flags
-set(CMAKE_C_FLAGS_RELEASE "-O3 -DNDEBUG" CACHE STRING "" FORCE)
-set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG" CACHE STRING "" FORCE)
+set(CMAKE_C_FLAGS_RELEASE "-O3 -DNDEBUG ${CMAKE_C_FLAGS_IPO}" CACHE STRING "" FORCE)
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG ${CMAKE_CXX_FLAGS_IPO}" CACHE STRING "" FORCE)
 
 # RelWithDebInfo flags
-set(CMAKE_C_FLAGS_RELWITHDEBINFO "-O3 -g3 -ggdb3 -DNDEBUG" CACHE STRING "" FORCE)
-set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -g3 -ggdb3 -DNDEBUG" CACHE STRING "" FORCE)
+set(CMAKE_C_FLAGS_RELWITHDEBINFO "-O3 -g3 -ggdb3 -DNDEBUG ${CMAKE_C_FLAGS_IPO}" CACHE STRING "" FORCE)
+set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -g3 -ggdb3 -DNDEBUG ${CMAKE_CXX_FLAGS_IPO}" CACHE STRING "" FORCE)
 
 # Debug flags
 set(CMAKE_C_FLAGS_DEBUG "-O0 -g3 -ggdb3 -D_DEBUG -fno-omit-frame-pointer -Werror -Wuninitialized -Wno-error=format-truncation" CACHE STRING "" FORCE)
