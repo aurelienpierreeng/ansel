@@ -1,7 +1,16 @@
 # Make Windows behave like Mac and Linux regarding flag support detection
 set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
 
-# -----------------------------------------------------------------------------
+# =============================================================================
+# MSVC: Early exit - MSVC doesn't support -march/-mtune flags
+# =============================================================================
+if(MSVC OR CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
+  message(STATUS "MSVC compiler detected: skipping -march/-mtune optimization flags")
+  set(MARCH "")
+  return()
+endif()
+
+# =============================================================================
 # Detect Apple universal builds (multiple archs)
 # -----------------------------------------------------------------------------
 set(DT_APPLE_UNIVERSAL_BUILD OFF)

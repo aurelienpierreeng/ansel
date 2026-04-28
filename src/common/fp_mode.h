@@ -40,8 +40,13 @@ typedef enum {
     DT_FP_MODE_STRICT  // debug/scientific
 } dt_cpu_fp_mode_t;
 
+#if defined(_MSC_VER)
+#define DT_ALWAYS_INLINE __forceinline
+#else
+#define DT_ALWAYS_INLINE __attribute__((always_inline)) inline
+#endif
 
-static inline __attribute__((always_inline)) void set_fast_mode(void)
+static DT_ALWAYS_INLINE void set_fast_mode(void)
 {
 #if defined(__x86_64__) || defined(__i386__)
   unsigned int mxcsr = _mm_getcsr();
@@ -63,7 +68,7 @@ static inline __attribute__((always_inline)) void set_fast_mode(void)
 #endif
 }
 
-static inline __attribute__((always_inline)) void set_strict_mode(void)
+static DT_ALWAYS_INLINE void set_strict_mode(void)
 {
 #if defined(__x86_64__) || defined(__i386__)
   unsigned int mxcsr = _mm_getcsr();
@@ -85,7 +90,7 @@ static inline __attribute__((always_inline)) void set_strict_mode(void)
  * 
  * @param mode 
  */
-static inline void __attribute__((always_inline)) dt_fp_init(const dt_cpu_fp_mode_t mode)
+static DT_ALWAYS_INLINE void dt_fp_init(const dt_cpu_fp_mode_t mode)
 {
   switch(mode)
   {

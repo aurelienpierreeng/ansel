@@ -83,23 +83,28 @@ if(NOT WIN32)
 endif(NOT WIN32)
 
 
-if(VALIDATE_APPDATA_FILE)
-  add_custom_command(
-    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.ansel.appdata.xml
-    SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/photos.ansel.ansel.appdata.xml.in
-    COMMAND sh -c "${intltool_merge_BIN} --xml-style ${CMAKE_SOURCE_DIR}/po ${CMAKE_CURRENT_SOURCE_DIR}/photos.ansel.ansel.appdata.xml.in ${CMAKE_CURRENT_BINARY_DIR}/ansel.appdata.xml"
-    COMMAND ${appstream_util_BIN} validate --nonet ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.ansel.appdata.xml
-    MAIN_DEPENDENCY ${CMAKE_CURRENT_SOURCE_DIR}/photos.ansel.ansel.appdata.xml.in
-    DEPENDS ${PO_FILES}
-  )
+if(NOT ${intltool_merge_BIN} STREQUAL "intltool_merge_BIN-NOTFOUND")
+  if(VALIDATE_APPDATA_FILE)
+    add_custom_command(
+      OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.ansel.appdata.xml
+      SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/photos.ansel.ansel.appdata.xml.in
+      COMMAND sh -c "${intltool_merge_BIN} --xml-style ${CMAKE_SOURCE_DIR}/po ${CMAKE_CURRENT_SOURCE_DIR}/photos.ansel.ansel.appdata.xml.in ${CMAKE_CURRENT_BINARY_DIR}/ansel.appdata.xml"
+      COMMAND ${appstream_util_BIN} validate --nonet ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.ansel.appdata.xml
+      MAIN_DEPENDENCY ${CMAKE_CURRENT_SOURCE_DIR}/photos.ansel.ansel.appdata.xml.in
+      DEPENDS ${PO_FILES}
+    )
+  else()
+    add_custom_command(
+      OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.ansel.appdata.xml
+      SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/photos.ansel.ansel.appdata.xml.in
+      COMMAND sh -c "${intltool_merge_BIN} --xml-style ${CMAKE_SOURCE_DIR}/po ${CMAKE_CURRENT_SOURCE_DIR}/photos.ansel.ansel.appdata.xml.in ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.ansel.appdata.xml"
+      MAIN_DEPENDENCY ${CMAKE_CURRENT_SOURCE_DIR}/photos.ansel.ansel.appdata.xml.in
+      DEPENDS ${PO_FILES}
+    )
+  endif()
 else()
-  add_custom_command(
-    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.ansel.appdata.xml
-    SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/photos.ansel.ansel.appdata.xml.in
-    COMMAND sh -c "${intltool_merge_BIN} --xml-style ${CMAKE_SOURCE_DIR}/po ${CMAKE_CURRENT_SOURCE_DIR}/photos.ansel.ansel.appdata.xml.in ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.ansel.appdata.xml"
-    MAIN_DEPENDENCY ${CMAKE_CURRENT_SOURCE_DIR}/photos.ansel.ansel.appdata.xml.in
-    DEPENDS ${PO_FILES}
-  )
+  message(WARNING "intltool-merge not found: using untranslated appdata template on this build")
+  configure_file(${CMAKE_CURRENT_SOURCE_DIR}/photos.ansel.ansel.appdata.xml.in ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.ansel.appdata.xml COPYONLY)
 endif()
 
 add_custom_target(ansel.appdata_file ALL DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.ansel.appdata.xml)
@@ -193,7 +198,16 @@ else(NOT ${Xsltproc_BIN} STREQUAL "Xsltproc_BIN-NOTFOUND")
       COMMAND ${Saxon_BIN} ${CMAKE_CURRENT_BINARY_DIR}/anselconfig.xml ${CMAKE_SOURCE_DIR}/tools/generate_anselrc.xsl > ${CMAKE_CURRENT_BINARY_DIR}/anselrc
     )
   else(NOT ${Saxon_BIN} STREQUAL "Saxon_BIN-NOTFOUND")
-    message(FATAL_ERROR "Don't know how to generate anselrc")
+    if(WIN32 AND (MSVC OR CMAKE_C_COMPILER_ID MATCHES "MSVC"))
+      message(WARNING "No XSLT engine found on MSVC: using anselconfig.xml as anselrc fallback")
+      add_custom_command(
+        DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/anselconfig.xml
+        OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/anselrc
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_BINARY_DIR}/anselconfig.xml ${CMAKE_CURRENT_BINARY_DIR}/anselrc
+      )
+    else()
+      message(FATAL_ERROR "Don't know how to generate anselrc")
+    endif()
   endif(NOT ${Saxon_BIN} STREQUAL "Saxon_BIN-NOTFOUND")
 endif(NOT ${Xsltproc_BIN} STREQUAL "Xsltproc_BIN-NOTFOUND")
 

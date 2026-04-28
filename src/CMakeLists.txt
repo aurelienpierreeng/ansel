@@ -652,9 +652,13 @@ configure_file("${CMAKE_CURRENT_SOURCE_DIR}/config.cmake.h" "${CMAKE_CURRENT_BIN
 # Actual defination of the target is in `external/CMakeLists.txt`.
 target_include_directories(whereami PUBLIC external/whereami)
 
-add_library(lib_ansel_imageio_rawspeed STATIC common/imageio_rawspeed.cc)
-target_link_libraries(lib_ansel_imageio_rawspeed PRIVATE rawspeed)
-target_link_libraries(lib_ansel_imageio_rawspeed PUBLIC ansel_deps)
+if(MSVC)
+  message(WARNING "MSVC build: disabling lib_ansel_imageio_rawspeed (requires GCC/Clang vector extensions)")
+else()
+  add_library(lib_ansel_imageio_rawspeed STATIC common/imageio_rawspeed.cc)
+  target_link_libraries(lib_ansel_imageio_rawspeed PRIVATE rawspeed)
+  target_link_libraries(lib_ansel_imageio_rawspeed PUBLIC ansel_deps)
+endif()
 
 # Don't do too much, if `USE_BUNDLED_LIBRAW=OFF` but `libraw_FOUND=NOTFOUND`,
 # it's considered as packager's mistake. Instead of using bundled LibRaw as
@@ -858,7 +862,9 @@ set_target_properties(lib_ansel PROPERTIES LINKER_LANGUAGE C)
 # Link external libs
 #
 target_link_libraries(lib_ansel PUBLIC ansel_deps)
-target_link_libraries(lib_ansel PRIVATE lib_ansel_imageio_rawspeed)
+if(TARGET lib_ansel_imageio_rawspeed)
+  target_link_libraries(lib_ansel PRIVATE lib_ansel_imageio_rawspeed)
+endif()
 target_link_libraries(lib_ansel PRIVATE lib_ansel_imageio_libraw)
 target_link_libraries(lib_ansel PRIVATE whereami)
 

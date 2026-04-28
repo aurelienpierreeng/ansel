@@ -99,12 +99,34 @@ else()
     message(STATUS "Found little endian system. Good.")
 endif(${BIGENDIAN})
 
-check_c_source_compiles("
+# =============================================================================
+# Thread-local storage (TLS) detection
+# MSVC uses __declspec(thread), GCC/Clang use __thread
+# =============================================================================
+if(MSVC OR CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
+  # MSVC has TLS via __declspec(thread)
+  set(HAVE_TLS TRUE)
+  message(STATUS "MSVC: Using __declspec(thread) for thread-local storage")
+elseif(WIN32 AND (CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID MATCHES "GNU"))
+  # MinGW/Clang on Windows also support __thread
+  check_c_source_compiles("
 static __thread int tls;
 int main(void)
 {
   return 0;
 }" HAVE_TLS)
-if(NOT HAVE_TLS)
-  MESSAGE(FATAL_ERROR "The compiler does not support Thread-local storage.")
+  if(NOT HAVE_TLS)
+    message(FATAL_ERROR "The compiler does not support Thread-local storage.")
+  endif()
+else()
+  # GCC/Clang on Unix
+  check_c_source_compiles("
+static __thread int tls;
+int main(void)
+{
+  return 0;
+}" HAVE_TLS)
+  if(NOT HAVE_TLS)
+    message(FATAL_ERROR "The compiler does not support Thread-local storage.")
+  endif()
 endif()

@@ -143,12 +143,18 @@ if(USE_OPENMP)
 endif(USE_OPENMP)
 
 # Check for base threading library
-set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
-find_package(Threads REQUIRED)
-
-# Fail if returned library is not pthread
-if(NOT CMAKE_USE_PTHREADS_INIT)
-  message(FATAL_ERROR "POSIX threads: not found")
+if(WIN32)
+  # Windows has native threading, no pthread required
+  message(STATUS "Windows: Using native Windows threading")
+else()
+  # Unix/Linux requires POSIX threads
+  set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
+  find_package(Threads REQUIRED)
+  
+  # Fail if returned library is not pthread
+  if(NOT CMAKE_USE_PTHREADS_INIT)
+    message(FATAL_ERROR "POSIX threads: not found")
+  endif()
 endif()
 
 include(ConfigureChecks.cmake)
@@ -167,17 +173,27 @@ endif()
 #
 
 ## Override default CMake build flags
-# Release flags
-set(CMAKE_C_FLAGS_RELEASE "-O3 -DNDEBUG" CACHE STRING "" FORCE)
-set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG" CACHE STRING "" FORCE)
+if(MSVC)
+  # MSVC-compatible defaults
+  set(CMAKE_C_FLAGS_RELEASE "/O2 /DNDEBUG" CACHE STRING "" FORCE)
+  set(CMAKE_CXX_FLAGS_RELEASE "/O2 /DNDEBUG" CACHE STRING "" FORCE)
 
-# RelWithDebInfo flags
-set(CMAKE_C_FLAGS_RELWITHDEBINFO "-O3 -g3 -ggdb3 -DNDEBUG" CACHE STRING "" FORCE)
-set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -g3 -ggdb3 -DNDEBUG" CACHE STRING "" FORCE)
+  set(CMAKE_C_FLAGS_RELWITHDEBINFO "/O2 /Zi /DNDEBUG" CACHE STRING "" FORCE)
+  set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "/O2 /Zi /DNDEBUG" CACHE STRING "" FORCE)
 
-# Debug flags
-set(CMAKE_C_FLAGS_DEBUG "-O0 -g3 -ggdb3 -D_DEBUG -fno-omit-frame-pointer -Werror -Wuninitialized -Wno-error=format-truncation" CACHE STRING "" FORCE)
-set(CMAKE_CXX_FLAGS_DEBUG "-O0 -g3 -ggdb3 -D_DEBUG -fno-omit-frame-pointer -Werror -Wuninitialized -Wno-error=format-truncation" CACHE STRING "" FORCE)
+  set(CMAKE_C_FLAGS_DEBUG "/Od /Zi /D_DEBUG" CACHE STRING "" FORCE)
+  set(CMAKE_CXX_FLAGS_DEBUG "/Od /Zi /D_DEBUG" CACHE STRING "" FORCE)
+else()
+  # GCC/Clang defaults
+  set(CMAKE_C_FLAGS_RELEASE "-O3 -DNDEBUG" CACHE STRING "" FORCE)
+  set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG" CACHE STRING "" FORCE)
+
+  set(CMAKE_C_FLAGS_RELWITHDEBINFO "-O3 -g3 -ggdb3 -DNDEBUG" CACHE STRING "" FORCE)
+  set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -g3 -ggdb3 -DNDEBUG" CACHE STRING "" FORCE)
+
+  set(CMAKE_C_FLAGS_DEBUG "-O0 -g3 -ggdb3 -D_DEBUG -fno-omit-frame-pointer -Werror -Wuninitialized -Wno-error=format-truncation" CACHE STRING "" FORCE)
+  set(CMAKE_CXX_FLAGS_DEBUG "-O0 -g3 -ggdb3 -D_DEBUG -fno-omit-frame-pointer -Werror -Wuninitialized -Wno-error=format-truncation" CACHE STRING "" FORCE)
+endif()
 
 if(NOT CUSTOM_CFLAGS)
 
@@ -190,18 +206,32 @@ if(NOT CUSTOM_CFLAGS)
   # in several places. There is no reason to do so, just use binary flags. 
   # TODO: remove the use of NAN in code as a special "undefined" flag for float values
   # TODO: no looping over pixels in place, aka input ptr = output ptr
-  set(DT_BASE_C_FLAGS "${MARCH} -Wall -funroll-loops -ftree-vectorize -fno-strict-aliasing")
-  set(DT_BASE_CXX_FLAGS "${MARCH} -Wall -funroll-loops -ftree-vectorize -fno-strict-aliasing")
+  if(MSVC)
+    # Keep base flags minimal for MSVC; GCC/Clang flags are invalid here.
+    set(DT_BASE_C_FLAGS "")
+    set(DT_BASE_CXX_FLAGS "")
+  else()
+    set(DT_BASE_C_FLAGS "${MARCH} -Wall -funroll-loops -ftree-vectorize -fno-strict-aliasing")
+    set(DT_BASE_CXX_FLAGS "${MARCH} -Wall -funroll-loops -ftree-vectorize -fno-strict-aliasing")
+  endif()
 
   # -------------------------------------------------------------------------
   # Build-type-specific flags
   # -------------------------------------------------------------------------
 
   # Release
-  set(DT_RELEASE_FLAGS "-ffast-math -ffp-contract=fast -fno-finite-math-only")
+  if(MSVC)
+    set(DT_RELEASE_FLAGS "")
+  else()
+    set(DT_RELEASE_FLAGS "-ffast-math -ffp-contract=fast -fno-finite-math-only")
+  endif()
 
   # RelWithDebInfo (same perf as release, but no dangerous float arithmetics)
-  set(DT_RELWITHDEBINFO_FLAGS "-ffast-math -ffp-contract=fast -fno-finite-math-only")
+  if(MSVC)
+    set(DT_RELWITHDEBINFO_FLAGS "")
+  else()
+    set(DT_RELWITHDEBINFO_FLAGS "-ffast-math -ffp-contract=fast -fno-finite-math-only")
+  endif()
 
   # Debug
   set(DT_DEBUG_FLAGS "")
@@ -540,7 +570,11 @@ endif()
 
 # done with looking for programs
 if(NOT EXTERNAL_PROGRAMS_FOUND)
-  message(FATAL_ERROR "Some external programs couldn't be found")
+  if(WIN32 AND (MSVC OR CMAKE_C_COMPILER_ID MATCHES "MSVC"))
+    message(WARNING "Some external Unix-oriented programs were not found; continuing on MSVC with reduced data generation")
+  else()
+    message(FATAL_ERROR "Some external programs couldn't be found")
+  endif()
 else(NOT EXTERNAL_PROGRAMS_FOUND)
   message(STATUS "All external programs found")
 endif(NOT EXTERNAL_PROGRAMS_FOUND)

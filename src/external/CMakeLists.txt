@@ -1,8 +1,10 @@
 # We don't control the code under here, so don't turn warnings into errors
 set(_PARENT_C_FLAGS "${CMAKE_C_FLAGS}")
 set(_PARENT_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-error")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error")
+if(NOT MSVC)
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-error")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error")
+endif()
 
 add_library(whereami STATIC "${CMAKE_CURRENT_SOURCE_DIR}/whereami/src/whereami.c")
 target_include_directories(whereami PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/whereami/src/")
@@ -47,8 +49,10 @@ set(CMAKE_CXX_FLAGS_SAVE "${CMAKE_CXX_FLAGS}")
 
 set(CMAKE_INSTALL_DATAROOTDIR "${CMAKE_INSTALL_DATAROOTDIR}/ansel")
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -w")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w")
+if(NOT MSVC)
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -w")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w")
+endif()
 
 set(CMAKE_CXX_CLANG_TIDY_SAVE "${CMAKE_CXX_CLANG_TIDY}")
 set(CMAKE_CXX_INCLUDE_WHAT_YOU_USE_SAVE "${CMAKE_CXX_INCLUDE_WHAT_YOU_USE}")
@@ -71,6 +75,13 @@ endif()
 set(HAVE_ZLIB_ULONGF 1 CACHE INTERNAL "Force override for broken CheckZLIB on macOS")
 
 set(CMAKE_BUILD_TYPE ${RAWSPEED_BUILD_TYPE} CACHE STRING "" FORCE)
+
+if(MSVC)
+  # RawSpeed uses __VA_OPT__ in variadic macros; MSVC needs conforming preprocessor mode.
+  # /FS prevents parallel cl.exe instances from colliding on .pdb files.
+  add_compile_options(/Zc:preprocessor /FS)
+endif()
+
 add_subdirectory(rawspeed)
 set(CMAKE_BUILD_TYPE ${_PARENT_BUILD_TYPE} CACHE STRING "" FORCE)
 

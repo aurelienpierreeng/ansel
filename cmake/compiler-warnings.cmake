@@ -2,45 +2,50 @@ include(CheckCompilerFlagAndEnableIt)
 include(CheckCCompilerFlagAndEnableIt)
 include(CheckCXXCompilerFlagAndEnableIt)
 
-CHECK_COMPILER_FLAG_AND_ENABLE_IT(-Wall)
+# =============================================================================
+# MSVC: Use /W3 instead of GCC/Clang flags (handled in toolchain_msvc.cmake)
+# =============================================================================
+if(NOT MSVC)
+  CHECK_COMPILER_FLAG_AND_ENABLE_IT(-Wall)
 
-if(WIN32)
-  # MSYS2 gcc compiler gives false positive warnings for (format (printf, 1, 2) - need to turn off for the time being
-  CHECK_COMPILER_FLAG_AND_ENABLE_IT(-Wno-format)
-else()
-  CHECK_COMPILER_FLAG_AND_ENABLE_IT(-Wformat)
-  CHECK_COMPILER_FLAG_AND_ENABLE_IT(-Wformat-security)
+  if(WIN32)
+    # MSYS2 gcc compiler gives false positive warnings for (format (printf, 1, 2) - need to turn off for the time being
+    CHECK_COMPILER_FLAG_AND_ENABLE_IT(-Wno-format)
+  else()
+    CHECK_COMPILER_FLAG_AND_ENABLE_IT(-Wformat)
+    CHECK_COMPILER_FLAG_AND_ENABLE_IT(-Wformat-security)
+  endif()
+
+  # cleanup this once we no longer need to support gcc-4.9
+  if(NOT (CMAKE_C_COMPILER_ID STREQUAL "GNU" AND CMAKE_C_COMPILER_VERSION VERSION_LESS 5.0))
+    CHECK_C_COMPILER_FLAG_AND_ENABLE_IT(-Wshadow)
+  endif()
+  if(NOT (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 5.0))
+    CHECK_CXX_COMPILER_FLAG_AND_ENABLE_IT(-Wshadow)
+  endif()
+
+  CHECK_COMPILER_FLAG_AND_ENABLE_IT(-Wtype-limits)
+
+  CHECK_COMPILER_FLAG_AND_ENABLE_IT(-Wvla)
+
+  CHECK_C_COMPILER_FLAG_AND_ENABLE_IT(-Wold-style-declaration)
+
+  CHECK_COMPILER_FLAG_AND_ENABLE_IT(-Wthread-safety)
+
+  # since checking if defined(__GNUC__) is not enough to prevent Clang from using GCC-specific pragmas
+  # (so Clang defines __GNUC__ ???) we need to disable the warnings about unknown pragmas
+  CHECK_COMPILER_FLAG_AND_ENABLE_IT(-Wno-unknown-pragmas)
+
+  # may be our bug :(
+  CHECK_COMPILER_FLAG_AND_ENABLE_IT(-Wno-error=varargs)
+
+  # need proper gcc7 to try to fix all the warnings.
+  # so just disable for now.
+  CHECK_COMPILER_FLAG_AND_ENABLE_IT(-Wno-format-truncation)
+
+  # clang-4.0 bug https://llvm.org/bugs/show_bug.cgi?id=28115#c7
+  CHECK_COMPILER_FLAG_AND_ENABLE_IT(-Wno-error=address-of-packed-member)
 endif()
-
-# cleanup this once we no longer need to support gcc-4.9
-if(NOT (CMAKE_C_COMPILER_ID STREQUAL "GNU" AND CMAKE_C_COMPILER_VERSION VERSION_LESS 5.0))
-  CHECK_C_COMPILER_FLAG_AND_ENABLE_IT(-Wshadow)
-endif()
-if(NOT (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 5.0))
-  CHECK_CXX_COMPILER_FLAG_AND_ENABLE_IT(-Wshadow)
-endif()
-
-CHECK_COMPILER_FLAG_AND_ENABLE_IT(-Wtype-limits)
-
-CHECK_COMPILER_FLAG_AND_ENABLE_IT(-Wvla)
-
-CHECK_C_COMPILER_FLAG_AND_ENABLE_IT(-Wold-style-declaration)
-
-CHECK_COMPILER_FLAG_AND_ENABLE_IT(-Wthread-safety)
-
-# since checking if defined(__GNUC__) is not enough to prevent Clang from using GCC-specific pragmas
-# (so Clang defines __GNUC__ ???) we need to disable the warnings about unknown pragmas
-CHECK_COMPILER_FLAG_AND_ENABLE_IT(-Wno-unknown-pragmas)
-
-# may be our bug :(
-CHECK_COMPILER_FLAG_AND_ENABLE_IT(-Wno-error=varargs)
-
-# need proper gcc7 to try to fix all the warnings.
-# so just disable for now.
-CHECK_COMPILER_FLAG_AND_ENABLE_IT(-Wno-format-truncation)
-
-# clang-4.0 bug https://llvm.org/bugs/show_bug.cgi?id=28115#c7
-CHECK_COMPILER_FLAG_AND_ENABLE_IT(-Wno-error=address-of-packed-member)
 
 # minimal main thread's stack/frame stack size.
 # 2 MiB seems to work.

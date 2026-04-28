@@ -52,7 +52,11 @@ extern const char darktable_last_commit_year[];
 #define DT_BUILD_C_FLAGS "@CMAKE_C_FLAGS@"
 #define DT_BUILD_CXX_FLAGS "@CMAKE_CXX_FLAGS@"
 
+#if defined(_MSC_VER)
+static const char *dt_supported_extensions[] = {"@DT_SUPPORTED_EXTENSIONS_STRING@", NULL};
+#else
 static const char *dt_supported_extensions[] __attribute__((unused)) = {"@DT_SUPPORTED_EXTENSIONS_STRING@", NULL};
+#endif
 
 #define GETTEXT_PACKAGE "ansel"
 

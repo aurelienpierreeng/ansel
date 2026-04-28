@@ -28,7 +28,11 @@
 
 #pragma once
 
+#if defined(_WIN32)
+#include <winsock2.h> /* for struct timeval */
+#else
 #include <sys/time.h> /* for struct timeval */
+#endif
 
 struct rusage {
     struct timeval ru_utime; /* user CPU time used */

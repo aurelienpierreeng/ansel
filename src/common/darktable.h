@@ -100,9 +100,14 @@
 #include <math.h>
 #include <sqlite3.h>
 #include <stdio.h>
+#ifdef _WIN32
+#include <winsock2.h>
+#include <io.h>
+#else
 #include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
+#endif
 
 #ifndef _RELEASE
 #include "common/poison.h"

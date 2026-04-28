@@ -26,17 +26,26 @@
 
 // WARNING: do not #include anything in here!
 
+/*
+ * Endianness detection:
+ * - GCC/Clang define __BYTE_ORDER__ / __ORDER_LITTLE_ENDIAN__
+ * - MSVC targets we support here are little-endian only
+ */
+#if defined(_MSC_VER)
+/* MSVC on supported Windows targets is little-endian. */
+#else
 #if !defined(__BYTE_ORDER__) || __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
 #error "Unfortunately we only work on litte-endian systems."
 #endif
+#endif
 
-#if (defined(__amd64__) || defined(__amd64) || defined(__x86_64__) || defined(__x86_64))
+#if (defined(__amd64__) || defined(__amd64) || defined(__x86_64__) || defined(__x86_64) || defined(_M_X64))
 #define DT_SUPPORTED_X86 1
 #else
 #define DT_SUPPORTED_X86 0
 #endif
 
-#if defined(__aarch64__) && (defined(__ARM_64BIT_STATE) && defined(__ARM_ARCH) && defined(__ARM_ARCH_8A) || defined(__APPLE__))
+#if (defined(__aarch64__) && (defined(__ARM_64BIT_STATE) && defined(__ARM_ARCH) && defined(__ARM_ARCH_8A) || defined(__APPLE__))) || defined(_M_ARM64)
 #define DT_SUPPORTED_ARMv8A 1
 #else
 #define DT_SUPPORTED_ARMv8A 0
@@ -61,7 +70,7 @@
 #undef DT_SUPPORTED_X86
 
 // double check for 32-bit architecture
-#if defined(__SIZEOF_POINTER__) && __SIZEOF_POINTER__ < 8
+#if (defined(__SIZEOF_POINTER__) && __SIZEOF_POINTER__ < 8) || (defined(_WIN64) == 0 && defined(_MSC_VER))
 #error "Unfortunately we only work on the 64-bit architectures amd64, ARMv8-A and PPC64."
 #endif
 
