@@ -170,8 +170,10 @@ endif()
 # We keep it target-scoped and selectively disable it for known incompatible files.
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
   message(STATUS "IPO/LTO disabled for Debug configuration")
+  set(ANSEL_IPO_SUPPORTED OFF)
 else()
   if(WIN32 AND (CMAKE_C_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang"))
+    set(ANSEL_WIN32_CLANG ON)
     # On MinGW/Windows, Clang's default linker is ld.bfd which requires LLVMgold.dll for LTO,
     # but that plugin does not load on Windows. So we force lld which supports LTO natively.
     # This also fixes check_ipo_supported()'s try_compile probe which uses the same linker.
@@ -185,37 +187,37 @@ else()
       CMAKE_EXE_LINKER_FLAGS CMAKE_SHARED_LINKER_FLAGS CMAKE_MODULE_LINKER_FLAGS
     )
     list(REMOVE_DUPLICATES CMAKE_TRY_COMPILE_PLATFORM_VARIABLES)
-  endif()
-  # Scope CMP0137 to this probe so try_compile() honors platform variables
-  # (including our linker flags) during check_ipo_supported(), without
-  # changing policy behavior for the rest of the project.
-  if(POLICY CMP0137)
-    cmake_policy(PUSH)
-    cmake_policy(SET CMP0137 NEW)
+    # Scope CMP0137 to this probe so try_compile() honors platform variables
+    # (including our linker flags) during check_ipo_supported(), without
+    # changing policy behavior for the rest of the project.
+    if(POLICY CMP0137)
+      cmake_policy(PUSH)
+      cmake_policy(SET CMP0137 NEW)
+    endif()
   endif()
 
   include(CheckIPOSupported)
   check_ipo_supported(RESULT ANSEL_IPO_SUPPORTED OUTPUT ANSEL_IPO_ERROR)
 
   # Reset
-  if(POLICY CMP0137)
+  if(ANSEL_WIN32_CLANG AND POLICY CMP0137)
     cmake_policy(POP)
   endif()
-endif()
 
-if(ANSEL_IPO_SUPPORTED)
-  message(STATUS "IPO/LTO enabled")
-  set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
-  set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO TRUE)
-  set(CMAKE_C_FLAGS_IPO "-flto=auto")
-  set(CMAKE_CXX_FLAGS_IPO "-flto=auto")
+  if(ANSEL_IPO_SUPPORTED)
+    message(STATUS "IPO/LTO enabled")
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO TRUE)
+    set(CMAKE_C_FLAGS_IPO "-flto=auto")
+    set(CMAKE_CXX_FLAGS_IPO "-flto=auto")
 
-  if(CMAKE_C_COMPILER_ID MATCHES "GNU")
-    set(CMAKE_C_FLAGS_IPO "${CMAKE_C_FLAGS_IPO} -fuse-linker-plugin")
-    set(CMAKE_CXX_FLAGS_IPO "${CMAKE_CXX_FLAGS_IPO} -fuse-linker-plugin")
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU")
+      set(CMAKE_C_FLAGS_IPO "${CMAKE_C_FLAGS_IPO} -fuse-linker-plugin")
+      set(CMAKE_CXX_FLAGS_IPO "${CMAKE_CXX_FLAGS_IPO} -fuse-linker-plugin")
+    endif()
+  else()
+    message(STATUS "IPO/LTO not supported: ${ANSEL_IPO_ERROR}")
   endif()
-else()
-  message(STATUS "IPO/LTO not supported: ${ANSEL_IPO_ERROR}")
 endif()
 
 ## Override default CMake build flags
