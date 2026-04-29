@@ -221,6 +221,80 @@ void dt_thumbtable_queue_update(dt_thumbtable_t *table)
   _thumbtable_schedule_update(table);
 }
 
+/**
+ * @brief Idle callback for applying grid configuration
+ *
+ * This handler is used when grid configuration changes (like column count).
+ * It handles the grid reconfiguration and thumbnail updates, then schedules
+ * a follow-up idle callback for scrolling to ensure proper GTK widget state.
+ * 
+ * The callback:
+ * 1. Reconfigures the grid based on new column settings
+ * 2. Updates and populates visible thumbnails
+ * 3. Schedules a follow-up idle callback for scrolling
+ */
+static gboolean _thumbtable_idle_apply_grid_configuration(gpointer user_data)
+{
+  dt_thumbtable_t *table = (dt_thumbtable_t *)user_data;
+  if(IS_NULL_PTR(table)) return G_SOURCE_REMOVE;
+
+  table->idle_update_id = 0;
+  
+  // Reconfigure the grid with new column settings from config
+  dt_thumbtable_configure(table);
+  
+  // Update and populate visible thumbnails at new sizes
+  dt_thumbtable_update(table);
+
+  dt_thumbtable_refresh_thumbnail(table, UNKNOWN_IMAGE, TRUE);
+  
+  // Queue redraw for any unpopulated areas
+  if(table->thumb_nb == 0) gtk_widget_queue_draw(table->grid);
+  
+  // Schedule scrolling as a follow-up idle callback with lower priority.
+  // This ensures the GTK widget grid is fully mapped and realized before we attempt to scroll.
+  // We use a lower priority (G_PRIORITY_LOW) to let the GTK layout pass complete first.
+  g_idle_add_full(G_PRIORITY_LOW, (GSourceFunc)_grab_focus, table, NULL);
+  
+  return G_SOURCE_REMOVE;
+}
+
+/**
+ * @brief Apply grid configuration changes with proper event synchronization
+ * @param table The thumbnail table
+ *
+ * This function should be called when grid properties like column count change.
+ * It properly coalesces and orders the necessary updates:
+ * 1. Configures the grid based on current column settings
+ * 2. Updates and resizes all visible thumbnails
+ * 3. Scrolls to maintain the active selection in view
+ *
+ * Unlike calling the functions separately, this ensures all operations happen
+ * together in the correct order within a single idle callback, preventing
+ * partial updates or out-of-sync scroll positions.
+ */
+void dt_thumbtable_apply_grid_configuration(dt_thumbtable_t *table)
+{
+  if(IS_NULL_PTR(table)) return;
+  if(table->scroll_window && !gtk_widget_is_visible(table->scroll_window)) return;
+  
+  // Cancel any pending standard idle update to coalesce configuration changes
+  if(table->idle_update_id)
+  {
+    g_source_remove(table->idle_update_id);
+    table->idle_update_id = 0;
+  }
+  
+  // Ensure we have the current active image so we can scroll back to it after grid size change
+  dt_thumbtable_set_active_rowid(table);
+
+  // Schedule the coordinated grid configuration with higher priority to ensure
+  // it runs before other pending updates
+  table->idle_update_id = g_idle_add_full(G_PRIORITY_DEFAULT_IDLE, 
+                                          (GSourceFunc)_thumbtable_idle_apply_grid_configuration, 
+                                          table, NULL);
+}
+
 static void _scrollbar_value_changed(GtkAdjustment *adjustment, gpointer user_data)
 {
   dt_thumbtable_t *table = (dt_thumbtable_t *)user_data;

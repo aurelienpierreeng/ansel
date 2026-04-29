@@ -316,10 +316,13 @@ void gui_cleanup(dt_lib_module_t *self)
 static void _set_columns(dt_lib_module_t *self, int columns)
 {
   dt_conf_set_int("plugins/lighttable/images_in_row", columns);
-  dt_thumbtable_t *table = darktable.gui->ui->thumbtable_lighttable;
-  dt_thumbtable_set_active_rowid(table);
-  dt_thumbtable_redraw(table);
-  g_idle_add((GSourceFunc) dt_thumbtable_scroll_to_active_rowid, table);
+  
+  // Use the coordinated grid configuration function that properly orders:
+  // 1. Grid reconfiguration with new column count
+  // 2. Thumbnail updates and resizing
+  // 3. Scrolling to active selection
+  // This prevents partial updates and ensures synchronization.
+  dt_thumbtable_apply_grid_configuration(darktable.gui->ui->thumbtable_lighttable);
 }
 
 static void _lib_lighttable_columns_slider_changed(GtkWidget *widget, gpointer user_data)
