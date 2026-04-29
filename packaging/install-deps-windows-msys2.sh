@@ -53,6 +53,7 @@ MINGW_PACKAGES=(
   lensfun
   llvm
   lld
+  libomp
   libavif
   libexif
   libheif
