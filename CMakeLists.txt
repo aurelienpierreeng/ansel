@@ -166,6 +166,17 @@ endif()
 # Set build flags
 #
 
+if(WIN32 AND (CMAKE_C_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang"))
+  # Force lld on Windows/Clang for all build modes.
+  string(APPEND CMAKE_EXE_LINKER_FLAGS " -fuse-ld=lld")
+  string(APPEND CMAKE_SHARED_LINKER_FLAGS " -fuse-ld=lld")
+  string(APPEND CMAKE_MODULE_LINKER_FLAGS " -fuse-ld=lld")
+  list(APPEND CMAKE_TRY_COMPILE_PLATFORM_VARIABLES
+    CMAKE_EXE_LINKER_FLAGS CMAKE_SHARED_LINKER_FLAGS CMAKE_MODULE_LINKER_FLAGS
+  )
+  list(REMOVE_DUPLICATES CMAKE_TRY_COMPILE_PLATFORM_VARIABLES)
+endif()
+
 # This enables LTO (`-flto`): https://gcc.gnu.org/onlinedocs/gccint/LTO-Overview.html
 # We keep it target-scoped and selectively disable it for known incompatible files.
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
@@ -177,16 +188,6 @@ else()
     # On MinGW/Windows, Clang's default linker is ld.bfd which requires LLVMgold.dll for LTO,
     # but that plugin does not load on Windows. So we force lld which supports LTO natively.
     # This also fixes check_ipo_supported()'s try_compile probe which uses the same linker.
-    # CMAKE_EXE_LINKER_FLAGS, CMAKE_SHARED_LINKER_FLAGS and CMAKE_MODULE_LINKER_FLAGS are propagated
-    # to try_compile, unlike add_link_options() which only applies to targets
-    # in the current directory scope.
-    string(APPEND CMAKE_EXE_LINKER_FLAGS " -fuse-ld=lld")
-    string(APPEND CMAKE_SHARED_LINKER_FLAGS " -fuse-ld=lld")
-    string(APPEND CMAKE_MODULE_LINKER_FLAGS " -fuse-ld=lld")
-    list(APPEND CMAKE_TRY_COMPILE_PLATFORM_VARIABLES
-      CMAKE_EXE_LINKER_FLAGS CMAKE_SHARED_LINKER_FLAGS CMAKE_MODULE_LINKER_FLAGS
-    )
-    list(REMOVE_DUPLICATES CMAKE_TRY_COMPILE_PLATFORM_VARIABLES)
     # Scope CMP0137 to this probe so try_compile() honors platform variables
     # (including our linker flags) during check_ipo_supported(), without
     # changing policy behavior for the rest of the project.
