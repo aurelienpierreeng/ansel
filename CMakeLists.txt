@@ -167,19 +167,44 @@ endif()
 #
 
 # This enables LTO (`-flto`): https://gcc.gnu.org/onlinedocs/gccint/LTO-Overview.html
-# It fails on Windows for exr.cc because std:string objects are defined twice,
-# once from OpenEXR and one from darktable.h, and there is no way to selectively
-# disable it there because it's global by nature.
-# LTO allows to look across DLL boundaries to merge symbols,
-# possibly allowing to inline functions across libraries for better 
-# parallel loops. But Linux/MacOS don't import libraries the way Windows does,
-# they use shared libraries.
-# Also Ansel inherits from Darktable a messy architecture that pretends to be 
-# modular, while in fact all libraries are shared globally, so using `-fvisibility=hidden`
-# breaks the whole project.
-# So I haven't found a way to fix that and it sucks that one lib is making us drop 
-# this feature for the whole project.
-if(NOT WIN32)
+# We keep it target-scoped and selectively disable it for known incompatible files.
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+  message(STATUS "IPO/LTO disabled for Debug configuration")
+else()
+  if(WIN32 AND (CMAKE_C_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang"))
+    # On MinGW/Windows, Clang's default linker is ld.bfd which requires LLVMgold.dll for LTO,
+    # but that plugin does not load on Windows. So we force lld which supports LTO natively.
+    # This also fixes check_ipo_supported()'s try_compile probe which uses the same linker.
+    # CMAKE_EXE_LINKER_FLAGS, CMAKE_SHARED_LINKER_FLAGS and CMAKE_MODULE_LINKER_FLAGS are propagated
+    # to try_compile, unlike add_link_options() which only applies to targets
+    # in the current directory scope.
+    string(APPEND CMAKE_EXE_LINKER_FLAGS " -fuse-ld=lld")
+    string(APPEND CMAKE_SHARED_LINKER_FLAGS " -fuse-ld=lld")
+    string(APPEND CMAKE_MODULE_LINKER_FLAGS " -fuse-ld=lld")
+    list(APPEND CMAKE_TRY_COMPILE_PLATFORM_VARIABLES
+      CMAKE_EXE_LINKER_FLAGS CMAKE_SHARED_LINKER_FLAGS CMAKE_MODULE_LINKER_FLAGS
+    )
+    list(REMOVE_DUPLICATES CMAKE_TRY_COMPILE_PLATFORM_VARIABLES)
+  endif()
+  # Scope CMP0137 to this probe so try_compile() honors platform variables
+  # (including our linker flags) during check_ipo_supported(), without
+  # changing policy behavior for the rest of the project.
+  if(POLICY CMP0137)
+    cmake_policy(PUSH)
+    cmake_policy(SET CMP0137 NEW)
+  endif()
+
+  include(CheckIPOSupported)
+  check_ipo_supported(RESULT ANSEL_IPO_SUPPORTED OUTPUT ANSEL_IPO_ERROR)
+
+  # Reset
+  if(POLICY CMP0137)
+    cmake_policy(POP)
+  endif()
+endif()
+
+if(ANSEL_IPO_SUPPORTED)
+  message(STATUS "IPO/LTO enabled")
   set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
   set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO TRUE)
   set(CMAKE_C_FLAGS_IPO "-flto=auto")
@@ -189,6 +214,8 @@ if(NOT WIN32)
     set(CMAKE_C_FLAGS_IPO "${CMAKE_C_FLAGS_IPO} -fuse-linker-plugin")
     set(CMAKE_CXX_FLAGS_IPO "${CMAKE_CXX_FLAGS_IPO} -fuse-linker-plugin")
   endif()
+else()
+  message(STATUS "IPO/LTO not supported: ${ANSEL_IPO_ERROR}")
 endif()
 
 ## Override default CMake build flags

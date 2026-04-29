@@ -51,6 +51,8 @@ MINGW_PACKAGES=(
   iso-codes
   lcms2
   lensfun
+  llvm
+  lld
   libavif
   libexif
   libheif
