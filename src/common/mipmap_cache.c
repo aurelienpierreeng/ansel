@@ -287,7 +287,7 @@ static void _write_mipmap_to_disk(const int32_t imgid, char *filename, char *ext
   // This allows fast toggling between JPEG and processed RAW thumbnail from GUI.
   if(write_to_disk)
   {
-    *write_to_disk = dt_conf_get_bool("cache_disk_backend") && !_use_embedded_jpg;
+    *write_to_disk = dt_conf_get_bool("cache_disk_backend");
   }
 
   if(img)

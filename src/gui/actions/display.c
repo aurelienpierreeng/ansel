@@ -434,7 +434,7 @@ static gboolean _jpg_combobox_changed(GtkAccelGroup *group, GObject *acceleratab
     for(GList *img = g_list_first(imgs); img; img = g_list_next(img))
     {
       const int32_t imgid = GPOINTER_TO_INT(img->data);
-      dt_mipmap_cache_remove(darktable.mipmap_cache, imgid, FALSE);
+      dt_mipmap_cache_remove(darktable.mipmap_cache, imgid, TRUE);
     }
     g_list_free(imgs);
     imgs = NULL;
