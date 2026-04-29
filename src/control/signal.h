@@ -220,6 +220,9 @@ typedef enum dt_signal_t
   /** \brief This signal is raised when image is changed in darkroom */
   DT_SIGNAL_DEVELOP_IMAGE_CHANGED,
 
+  /** \brief Signal that the darkroom GUI color changed */
+  DT_SIGNAL_DARKROOM_UI_CHANGED,
+
   /** \brief This signal is raised when an asynchronous darkroom image load finishes.
     1 : uint32_t the load request id
     2 : uint32_t the darkroom image load return code

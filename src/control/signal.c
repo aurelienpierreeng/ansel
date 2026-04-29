@@ -190,7 +190,9 @@ static dt_signal_description _signal_description[DT_SIGNAL_COUNT] = {
   { "dt-develop-module-moved", NULL, NULL, G_TYPE_NONE, g_cclosure_marshal_VOID__VOID, 0, NULL, NULL,
     FALSE }, // DT_SIGNAL_DEVELOP_MODULE_MOVED
   { "dt-develop-image-changed", NULL, NULL, G_TYPE_NONE, g_cclosure_marshal_VOID__VOID, 0, NULL, NULL,
-    FALSE }, // DT_SIGNAL_DEVELOP_IMAGE_CHANGE
+    FALSE }, // DT_SIGNAL_DEVELOP_IMAGE_CHANGED
+  { "dt-darkroom-ui-changed", NULL, NULL, G_TYPE_NONE, g_cclosure_marshal_VOID__VOID, 0, NULL, NULL, 
+    FALSE}, // DT_SIGNAL_DARKROOM_UI_CHANGED
   { "dt-image-loaded", NULL, NULL, G_TYPE_NONE, g_cclosure_marshal_generic, 2, uint_2arg,
     NULL, FALSE }, // DT_SIGNAL_IMAGE_LOADED
   { "dt-control-profile-changed", NULL, NULL, G_TYPE_NONE, g_cclosure_marshal_VOID__VOID, 0, NULL, NULL,

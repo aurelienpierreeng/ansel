@@ -1421,6 +1421,7 @@ static void display_brightness_callback(GtkWidget *slider, gpointer user_data)
 {
   dt_conf_set_int("display/brightness", (int)(dt_bauhaus_slider_get(slider)));
   dt_control_queue_redraw_center();
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DARKROOM_UI_CHANGED);
 }
 
 static void display_borders_callback(GtkWidget *slider, gpointer user_data)
@@ -1429,6 +1430,7 @@ static void display_borders_callback(GtkWidget *slider, gpointer user_data)
   dt_conf_set_int("plugins/darkroom/ui/border_size", (int)dt_bauhaus_slider_get(slider));
   _get_final_size_with_iso_12646(d);
   dt_dev_pixelpipe_change_zoom_main(d);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DARKROOM_UI_CHANGED);
 }
 
 static void _darkroom_change_rendering_size(GtkWidget *combobox, gpointer user_data)
