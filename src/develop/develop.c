@@ -504,7 +504,7 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
       if(pipe_hash != dev_hash)
       {
         dt_dev_pixelpipe_or_changed(pipe, DT_DEV_PIPE_TOP_CHANGED);
-        dt_print(DT_DEBUG_PIPE | DT_DEBUG_DEV, "dev history hash = %llu, pipe history hash %llu\n", dev_hash, pipe_hash);
+        dt_print(DT_DEBUG_PIPE | DT_DEBUG_DEV, "dev history hash = %" PRIu64 ", pipe history hash %" PRIu64 "\n", dev_hash, pipe_hash);
       }
 
       pipe_needs_update[i] = (dt_dev_pixelpipe_get_changed(pipe) != DT_DEV_PIPE_UNCHANGED) && !pipe->pause;
