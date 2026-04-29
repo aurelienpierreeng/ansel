@@ -47,6 +47,8 @@ jobs:
       matrix:
         btype:
           - RelWithDebInfo
+        compiler:
+          - { compiler: LLVM20, CC: clang, CXX: clang++, GCC_VER: "", LLVM_VER: "20" }
         eco: [-DBINARY_PACKAGE_BUILD=ON -DUSE_XMLLINT=OFF]
         target:
           - skiptest
@@ -60,6 +62,10 @@ jobs:
       run:
         shell: msys2 {0}
     env:
+      CC: ${{ matrix.compiler.CC }}
+      CXX: ${{ matrix.compiler.CXX }}
+      GCC_VER: ${{ matrix.compiler.GCC_VER }}
+      LLVM_VER: ${{ matrix.compiler.LLVM_VER }}
       SRC_DIR: ${{ github.workspace }}/src
       BUILD_DIR: ${{ github.workspace }}/build
       INSTALL_PREFIX: ${{ github.workspace }}/install
