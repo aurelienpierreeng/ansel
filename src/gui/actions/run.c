@@ -162,6 +162,17 @@ static gboolean preload_to_mipmap_8_callback(GtkAccelGroup *group, GObject *acce
   return _preload_image_cache_with_max_size(DT_MIPMAP_8, _("Preloading cache (up to 8K) for current collection"));
 }
 
+static gboolean preload_auto_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
+{
+  dt_thumbtable_t *table = darktable.gui->ui->thumbtable_lighttable;
+  const int width = ceilf(table->thumb_width * darktable.gui->ppd);
+  const int height = ceilf(table->thumb_height * darktable.gui->ppd);
+  dt_mipmap_cache_t *cache = darktable.mipmap_cache;
+  dt_mipmap_size_t mip = dt_mipmap_cache_get_matching_size(cache, width, height, UNKNOWN_IMAGE);
+  fprintf(stdout, "mipmap %i\n", mip);
+  return _preload_image_cache_with_max_size(mip, _("Preloading cache for current collection"));
+}
+
 static gboolean clear_image_cache(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
   GList *selection = dt_selection_get_list(darktable.selection);
@@ -192,15 +203,17 @@ void append_run(GtkWidget **menus, GList **lists, const dt_menus_t index)
   GtkWidget *parent = get_last_widget(lists);
 
   // Add mipmap size options to the submenu
-  add_sub_sub_menu_entry(menus, parent, lists, _("360x225 px"), index, NULL, preload_to_mipmap_0_callback, NULL, NULL, has_active_images, 0, 0);
-  add_sub_sub_menu_entry(menus, parent, lists, _("720x450 px"), index, NULL, preload_to_mipmap_1_callback, NULL, NULL, has_active_images, 0, 0);
-  add_sub_sub_menu_entry(menus, parent, lists, _("1440x900 px"), index, NULL, preload_to_mipmap_2_callback, NULL, NULL, has_active_images, 0, 0);
-  add_sub_sub_menu_entry(menus, parent, lists, _("Full HD 1080p"), index, NULL, preload_to_mipmap_3_callback, NULL, NULL, has_active_images, 0, 0);
-  add_sub_sub_menu_entry(menus, parent, lists, _("2560x1440 px"), index, NULL, preload_to_mipmap_4_callback, NULL, NULL, has_active_images, 0, 0);
-  add_sub_sub_menu_entry(menus, parent, lists, _("4K/UHD"), index, NULL, preload_to_mipmap_5_callback, NULL, NULL, has_active_images, 0, 0);
-  add_sub_sub_menu_entry(menus, parent, lists, _("5K"), index, NULL, preload_to_mipmap_6_callback, NULL, NULL, has_active_images, 0, 0);
-  add_sub_sub_menu_entry(menus, parent, lists, _("6K"), index, NULL, preload_to_mipmap_7_callback, NULL, NULL, has_active_images, 0, 0);
-  add_sub_sub_menu_entry(menus, parent, lists, _("8K"), index, NULL, preload_to_mipmap_8_callback, NULL, NULL, has_active_images, 0, 0);
+  add_sub_sub_menu_entry(menus, parent, lists, _("up to 360x225 px"), index, NULL, preload_to_mipmap_0_callback, NULL, NULL, has_active_images, 0, 0);
+  add_sub_sub_menu_entry(menus, parent, lists, _("up to 720x450 px"), index, NULL, preload_to_mipmap_1_callback, NULL, NULL, has_active_images, 0, 0);
+  add_sub_sub_menu_entry(menus, parent, lists, _("up to 1440x900 px"), index, NULL, preload_to_mipmap_2_callback, NULL, NULL, has_active_images, 0, 0);
+  add_sub_sub_menu_entry(menus, parent, lists, _("up to Full HD 1080p"), index, NULL, preload_to_mipmap_3_callback, NULL, NULL, has_active_images, 0, 0);
+  add_sub_sub_menu_entry(menus, parent, lists, _("up to 2560x1440 px"), index, NULL, preload_to_mipmap_4_callback, NULL, NULL, has_active_images, 0, 0);
+  add_sub_sub_menu_entry(menus, parent, lists, _("up to 4K/UHD"), index, NULL, preload_to_mipmap_5_callback, NULL, NULL, has_active_images, 0, 0);
+  add_sub_sub_menu_entry(menus, parent, lists, _("up to 5K"), index, NULL, preload_to_mipmap_6_callback, NULL, NULL, has_active_images, 0, 0);
+  add_sub_sub_menu_entry(menus, parent, lists, _("up to 6K"), index, NULL, preload_to_mipmap_7_callback, NULL, NULL, has_active_images, 0, 0);
+  add_sub_sub_menu_entry(menus, parent, lists, _("up to 8K"), index, NULL, preload_to_mipmap_8_callback, NULL, NULL, has_active_images, 0, 0);
+  add_sub_menu_separator(parent);
+  add_sub_sub_menu_entry(menus, parent, lists, _("for current grid size"), index, NULL, preload_auto_callback, NULL, NULL, has_active_images, 0, 0);
 
   add_sub_menu_entry(menus, lists, _("Purge selected thumbnails from cache"), index, NULL, clear_image_cache, NULL, NULL, has_active_images, 0, 0);
   add_menu_separator(menus[index]);
