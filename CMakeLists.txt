@@ -167,6 +167,7 @@ endif()
 #
 
 if(WIN32 AND (CMAKE_C_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang"))
+  set(ANSEL_WIN32_CLANG ON)
   # Force lld on Windows/Clang for all build modes.
   string(APPEND CMAKE_EXE_LINKER_FLAGS " -fuse-ld=lld")
   string(APPEND CMAKE_SHARED_LINKER_FLAGS " -fuse-ld=lld")
@@ -183,8 +184,7 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
   message(STATUS "IPO/LTO disabled for Debug configuration")
   set(ANSEL_IPO_SUPPORTED OFF)
 else()
-  if(WIN32 AND (CMAKE_C_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang"))
-    set(ANSEL_WIN32_CLANG ON)
+  if(ANSEL_WIN32_CLANG)
     # On MinGW/Windows, Clang's default linker is ld.bfd which requires LLVMgold.dll for LTO,
     # but that plugin does not load on Windows. So we force lld which supports LTO natively.
     # This also fixes check_ipo_supported()'s try_compile probe which uses the same linker.
