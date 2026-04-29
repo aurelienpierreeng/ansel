@@ -81,7 +81,11 @@ static int32_t preload_image_cache(dt_job_t *job)
       dt_mipmap_get_cache_filename(filename, darktable.mipmap_cache, k, imgid);
 
       // if a valid thumbnail file is already on disc - do nothing
-      if(dt_util_test_image_file(filename)) continue;
+      if(dt_util_test_image_file(filename))
+      {
+        i++;
+        continue;
+      }
 
       // else, generate thumbnail and store in mipmap cache.
       dt_mipmap_buffer_t buf;
