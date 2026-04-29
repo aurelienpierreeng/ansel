@@ -4786,7 +4786,7 @@ void gui_init(struct dt_iop_module_t *self)
 
   gtk_box_pack_start(GTK_BOX(mixer_primaries), dt_ui_section_label_new(_("achromatic axis")), FALSE, FALSE, 0);
 
-  g->primaries_achromatic_hue = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), -1.f, 1.f, 0, 0, 3);
+  g->primaries_achromatic_hue = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), -2.f, 2.f, 0, 0, 3);
   dt_bauhaus_widget_set_label(g->primaries_achromatic_hue, N_("white hue"));
   dt_bauhaus_slider_set_factor(g->primaries_achromatic_hue, 90.f);
   dt_bauhaus_slider_set_format(g->primaries_achromatic_hue, "\302\260");
