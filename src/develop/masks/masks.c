@@ -2355,8 +2355,11 @@ int dt_masks_events_button_pressed(struct dt_iop_module_t *module, double x, dou
     {
       GtkWidget *menu = dt_masks_create_menu(mask_gui, dispatch_form, group_entry,
                                              mask_gui->rel_pos[0], mask_gui->rel_pos[1]);
-      gtk_menu_popup_at_pointer(GTK_MENU(menu), NULL);
-      return_val = TRUE;
+      if(!IS_NULL_PTR(menu))
+      {
+        gtk_menu_popup_at_pointer(GTK_MENU(menu), NULL);
+        return_val = TRUE;
+      }
     }
   }
 

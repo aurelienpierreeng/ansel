@@ -393,7 +393,13 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
   dt_masks_form_t *grp = formgroup ? dt_masks_get_from_id(darktable.develop, formgroup->parentid) : NULL;
   if(grp && (grp->type & DT_MASKS_GROUP))
     op_form = dt_masks_form_group_from_parentid(grp->formid, form->formid);
-  if(IS_NULL_PTR(op_form)) return NULL;
+  if(IS_NULL_PTR(op_form) && !gui->creation)
+  {
+    for(size_t k = 0; k < G_N_ELEMENTS(op_icon); k++)
+      g_clear_object(&op_icon[k]);
+    gtk_widget_destroy(menu);
+    return NULL;
+  }
 
   // Find the position of the current form in the group
   guint form_pos = 0;
@@ -462,8 +468,8 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
     item_str = g_strdup("");
 
   // Create an assembled image if we have an inverse state to show
-  const dt_masks_state_t state = op_form->state & DT_MASKS_STATE_IS_COMBINE_OP;
-  const gboolean has_inverse = (op_form->state & DT_MASKS_STATE_INVERSE) != 0;
+  const dt_masks_state_t state = IS_NULL_PTR(op_form) ? 0 : op_form->state & DT_MASKS_STATE_IS_COMBINE_OP;
+  const gboolean has_inverse = !IS_NULL_PTR(op_form) && (op_form->state & DT_MASKS_STATE_INVERSE) != 0;
   GdkPixbuf *icon = (state <= DT_MASKS_STATE_EXCLUSION) ? op_icon[state] : NULL;
   GdkPixbuf *composed_icon = NULL;
   if(has_inverse && op_icon[DT_MASKS_STATE_INVERSE])
@@ -490,7 +496,7 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
       icon = op_icon[DT_MASKS_STATE_INVERSE];
   }
 
-  const gboolean draw_icon = form_pos > 0;
+  const gboolean draw_icon = !IS_NULL_PTR(op_form) && form_pos > 0;
   gchar *title = g_strdup_printf("<b><big>%s%s</big></b>", item_str, form_name);
   GtkWidget *menu_item = ctx_gtk_menu_item_new_with_markup_and_pixbuf(title, (draw_icon) ? icon : NULL, menu, NULL, gui);
   gtk_widget_set_sensitive(menu_item, FALSE);
