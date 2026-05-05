@@ -1238,7 +1238,7 @@ static void _shortcut_edited(GtkCellRenderer *cell, const gchar *path_string, gu
   // VoidSymbol or as an unmodified Delete/BackSpace key press. Normalize all those
   // cases to an empty shortcut so the model and the GtkAccelMap stay in sync.
   if(keyval == GDK_KEY_VoidSymbol
-     || (mods == 0 && (keyval == GDK_KEY_Delete || keyval == GDK_KEY_BackSpace)))
+     || (mods == 0 && (keyval == GDK_KEY_Delete || keyval == GDK_KEY_KP_Delete || keyval == GDK_KEY_BackSpace)))
   {
     keyval = 0;
     mods = 0;

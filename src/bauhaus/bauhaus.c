@@ -3100,7 +3100,7 @@ static gboolean dt_bauhaus_popup_key_press(GtkWidget *widget, GdkEventKey *event
         gtk_widget_queue_draw(bh->popup_area);
       }
       else if(bh->keys_cnt > 0
-              && (event->keyval == GDK_KEY_BackSpace || event->keyval == GDK_KEY_Delete))
+              && (event->keyval == GDK_KEY_BackSpace || event->keyval == GDK_KEY_Delete || event->keyval == GDK_KEY_KP_Delete))
       {
         bh->keys[--bh->keys_cnt] = 0;
         gtk_widget_queue_draw(bh->popup_area);
@@ -3143,7 +3143,7 @@ static gboolean dt_bauhaus_popup_key_press(GtkWidget *widget, GdkEventKey *event
         gtk_widget_queue_draw(bh->popup_area);
       }
       else if(bh->keys_cnt > 0
-              && (event->keyval == GDK_KEY_BackSpace || event->keyval == GDK_KEY_Delete))
+              && (event->keyval == GDK_KEY_BackSpace || event->keyval == GDK_KEY_Delete || event->keyval == GDK_KEY_KP_Delete))
       {
         bh->keys_cnt
             -= (bh->keys + bh->keys_cnt)

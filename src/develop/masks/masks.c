@@ -2400,6 +2400,7 @@ int dt_masks_events_key_pressed(struct dt_iop_module_t *module, GdkEventKey *eve
         break;
       }
       case GDK_KEY_Delete:
+      case GDK_KEY_KP_Delete:
       {
         if(mask_gui->group_selected >= 0)
         {
