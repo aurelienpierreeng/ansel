@@ -851,7 +851,9 @@ if(WIN32 AND CMAKE_C_COMPILER_ID STREQUAL "Clang")
   # Stripping debug sections from libansel.dll keeps runtime behavior intact.
   add_custom_command(
     TARGET lib_ansel POST_BUILD
+    COMMAND ${CMAKE_OBJCOPY} --only-keep-debug $<TARGET_FILE:lib_ansel> $<TARGET_FILE:lib_ansel>.dbg
     COMMAND ${CMAKE_OBJCOPY} --strip-debug $<TARGET_FILE:lib_ansel>
+    COMMAND ${CMAKE_OBJCOPY} --add-gnu-debuglink=$<TARGET_FILE_NAME:lib_ansel>.dbg $<TARGET_FILE:lib_ansel>
     VERBATIM
   )
 endif()
@@ -885,6 +887,9 @@ message(STATUS "Ansel deps:" ${_ansel_deps_libs})
 if(WIN32)
   # Windows needs its DLLs in the same directory as the executable to find them.
   install(TARGETS lib_ansel RUNTIME DESTINATION bin COMPONENT DTApplication)
+  if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    install(FILES $<TARGET_FILE:lib_ansel>.dbg DESTINATION bin COMPONENT DTDebugSymbols)
+  endif()
 else()
   install(TARGETS lib_ansel DESTINATION ${CMAKE_INSTALL_LIBDIR})
 endif()
