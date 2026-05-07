@@ -223,6 +223,38 @@ typedef struct dt_gui_widget_auto_height_t
   gulong buffer_changed;
 } dt_gui_widget_auto_height_t;
 
+
+#ifdef _DEBUG
+/** \brief Queue a GTK widget redraw with the Ansel call site in diagnostics.
+ *
+ * GTK only reports its own assertion site when a non-widget reaches
+ * gtk_widget_queue_draw(). Keep the caller location explicit in debug-capable
+ * builds so invalid GUI ownership/lifetime bugs point to the Ansel source line
+ * that queued the redraw.
+ */
+void dt_gtk_widget_queue_draw_ext(GtkWidget *widget, const char *file, const int line);
+#define dt_gtk_widget_queue_draw(widget) dt_gtk_widget_queue_draw_ext((GtkWidget *)(widget), __FILE__, __LINE__)
+#define gtk_widget_queue_draw(widget) dt_gtk_widget_queue_draw(widget)
+
+/** \brief Set a GTK toggle button state with the Ansel call site in diagnostics.
+ *
+ * Toggle state changes are often followed by redraws, so reporting the original
+ * invalid toggle object makes the first ownership/lifetime error visible before
+ * GTK emits secondary redraw assertions.
+ */
+void dt_gtk_toggle_button_set_active_ext(GtkToggleButton *toggle_button, const gboolean active,
+                                         const char *file, const int line);
+#define dt_gtk_toggle_button_set_active(toggle_button, active)                                                 \
+  dt_gtk_toggle_button_set_active_ext((GtkToggleButton *)(toggle_button), active, __FILE__, __LINE__)
+#define gtk_toggle_button_set_active(toggle_button, active)                                                   \
+  dt_gtk_toggle_button_set_active(toggle_button, active)
+
+#else
+#define dt_gtk_widget_queue_draw(widget) gtk_widget_queue_draw(widget)
+#define dt_gtk_toggle_button_set_active(toggle_button, active) gtk_toggle_button_set_active(toggle_button, active)
+#endif
+
+
 static inline cairo_surface_t *dt_cairo_image_surface_create(cairo_format_t format, int width, int height) {
   cairo_surface_t *cst = cairo_image_surface_create(format, width * darktable.gui->ppd, height * darktable.gui->ppd);
   cairo_surface_set_device_scale(cst, darktable.gui->ppd, darktable.gui->ppd);

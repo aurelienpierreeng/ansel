@@ -108,6 +108,7 @@
 #include <gtk/gtk.h>
 #include <math.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 #ifdef MAC_INTEGRATION
@@ -328,9 +329,35 @@ static gboolean _draw(GtkWidget *da, cairo_t *cr, gpointer user_data)
     cairo_set_source_surface(cr, darktable.gui->surface, 0, 0);
     cairo_paint(cr);
   }
-
   return TRUE;
 }
+
+#ifdef _DEBUG
+void dt_gtk_widget_queue_draw_ext(GtkWidget *widget, const char *file, const int line)
+{
+  if(!GTK_IS_WIDGET(widget))
+  {
+    fprintf(stderr, "gtk_widget_queue_draw() called with a non-WIDGET or NULL widget at %s:%d (widget=%p)\n",
+            file, line, widget);
+    return;
+  }
+
+  (gtk_widget_queue_draw)(widget);
+}
+
+void dt_gtk_toggle_button_set_active_ext(GtkToggleButton *toggle_button, const gboolean active,
+                                         const char *file, const int line)
+{
+  if(!GTK_IS_TOGGLE_BUTTON(toggle_button))
+  {
+    fprintf(stderr, "gtk_toggle_button_set_active() called with a non-TOGGLE_BUTTON or NULL widget at %s:%d (toggle_button=%p)\n",
+            file, line, toggle_button);
+    return;
+  }
+
+  (gtk_toggle_button_set_active)(toggle_button, active);
+}
+#endif
 
 static gboolean _scrolled(GtkWidget *widget, GdkEventScroll *event, gpointer user_data)
 {
