@@ -1813,7 +1813,16 @@ static void _blendop_masks_all_selection_changed(GtkTreeSelection *selection, dt
   gtk_tree_model_get(model, &iter, BLENDOP_MASKS_ALL_COL_FORMID, &formid, -1);
   if(formid <= 0) return;
 
-  dt_dev_masks_selection_change(darktable.develop, NULL, formid, TRUE);
+  // Keep the global shape manager in sync without firing its selection handler.
+  // That handler rebuilds the visible mask GUI and can be re-entered while this
+  // blend list selection is still being processed.
+  dt_dev_masks_selection_change(darktable.develop, NULL, formid, FALSE);
+  dt_masks_change_form_gui(dt_masks_get_from_id(darktable.develop, formid));
+  if(module->dev && module->dev->form_gui)
+  {
+    module->dev->form_gui->group_selected = 0;
+    module->dev->form_gui->form_selected = TRUE;
+  }
 }
 
 static void _blendop_masks_all_toggled(GtkCellRendererToggle *cell, gchar *path_string, dt_iop_module_t *module)
@@ -2070,8 +2079,21 @@ static void _blendop_masks_group_selection_changed(GtkTreeSelection *selection, 
   gtk_tree_model_get(model, &iter, BLENDOP_MASKS_GROUP_COL_FORMID, &formid, -1);
   if(formid <= 0) return;
 
-  // Switching edit mode is required to actually display mask overlays in the center view.
-  dt_masks_set_edit_mode(module, DT_MASKS_EDIT_FULL);
+  // Switching edit mode rebuilds the visible module group. Do it only when the
+  // current overlay does not already contain the selected row, because this
+  // callback runs inside a GtkTreeSelection::changed emission.
+  dt_masks_form_gui_t *gui = module->dev ? module->dev->form_gui : NULL;
+  dt_masks_form_t *visible_form = module->dev ? dt_masks_get_visible_form(module->dev) : NULL;
+  if(IS_NULL_PTR(gui) || gui->edit_mode != DT_MASKS_EDIT_FULL
+     || dt_masks_group_index_from_formid(visible_form, formid) < 0)
+  {
+    // Rebuilding the visible group may update Gtk widgets. Hold the GUI reset
+    // guard so selection callbacks emitted during that rebuild don't recurse.
+    ++darktable.gui->reset;
+    dt_masks_set_edit_mode(module, DT_MASKS_EDIT_FULL);
+    --darktable.gui->reset;
+  }
+
   // Keep lib/masks tree selection in sync without re-triggering its selection handler,
   // otherwise the visible overlay can be replaced by only the clicked shape.
   dt_dev_masks_selection_change(darktable.develop, module, formid, FALSE);
@@ -2079,8 +2101,8 @@ static void _blendop_masks_group_selection_changed(GtkTreeSelection *selection, 
   // Mark the selected shape as active in the central mask GUI state.
   if(module->dev && module->dev->form_gui)
   {
-    dt_masks_form_gui_t *gui = module->dev->form_gui;
-    dt_masks_form_t *visible_form = dt_masks_get_visible_form(module->dev);
+    gui = module->dev->form_gui;
+    visible_form = dt_masks_get_visible_form(module->dev);
     const int selected_index = dt_masks_group_index_from_formid(visible_form, formid);
     if(selected_index >= 0)
     {
@@ -2177,7 +2199,7 @@ static GtkWidget *_blendop_masks_create_shape_buttons(dt_iop_module_t *module, d
     .can_start = _blendop_masks_shape_can_start,
     .form_type = NULL,
     .started = NULL,
-    .cancelled = NULL
+    .exited = NULL
   };
   GtkWidget *widget = dt_masks_shape_buttons_create(&config);
 
@@ -3224,6 +3246,13 @@ void dt_masks_iop_update(dt_iop_module_t *module)
   ++darktable.gui->reset;
 
   /* update masks state */
+  dt_masks_form_gui_t *form_gui = module->dev->form_gui;
+  dt_masks_form_t *visible_form = dt_masks_get_visible_form(module->dev);
+  const gboolean module_creation = !IS_NULL_PTR(form_gui) && form_gui->creation
+                                  && form_gui->creation_module == module;
+  const dt_masks_type_t creation_type = module_creation && !IS_NULL_PTR(visible_form)
+                                        ? visible_form->type
+                                        : (module_creation ? form_gui->creation_type : DT_MASKS_NONE);
   dt_masks_form_t *grp = dt_masks_get_from_id(darktable.develop, module->blend_params->mask_id);
   const gboolean has_group_shapes = grp && (grp->type & DT_MASKS_GROUP) && grp->points;
   if(GTK_IS_WIDGET(bd->masks_combo))
@@ -3254,7 +3283,8 @@ void dt_masks_iop_update(dt_iop_module_t *module)
   if(bd->masks_support)
   {
     if(GTK_IS_TOGGLE_BUTTON(bd->masks_edit))
-      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->masks_edit), bd->masks_shown != DT_MASKS_EDIT_OFF);
+      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->masks_edit),
+                                   !module_creation && bd->masks_shown != DT_MASKS_EDIT_OFF);
 
     if(GTK_IS_TOGGLE_BUTTON(bd->masks_polarity))
       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->masks_polarity),
@@ -3266,10 +3296,7 @@ void dt_masks_iop_update(dt_iop_module_t *module)
   {
     if(!GTK_IS_TOGGLE_BUTTON(bd->masks_shapes[n])) continue;
 
-    dt_masks_form_t *visible_form = dt_masks_get_visible_form(module->dev);
-    if(module->dev->form_gui && visible_form && module->dev->form_gui->creation
-       && module->dev->form_gui->creation_module == module
-       && (visible_form->type & bd->masks_type[n]))
+    if(module_creation && (creation_type & bd->masks_type[n]))
     {
       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->masks_shapes[n]), TRUE);
     }

@@ -503,6 +503,12 @@ typedef struct dt_masks_form_gui_t
   gboolean creation;
   gboolean creation_closing_form;
   dt_iop_module_t *creation_module;
+  // Shape type reused to create the next temporary form in a continuous creation session.
+  dt_masks_type_t creation_type;
+  // Form ids completed during the active creation session; only these are drawn while creation stays active.
+  GList *creation_formids;
+  // Last completed form id, selected when the creation session is disabled.
+  int creation_last_formid;
 
   dt_masks_pressure_sensitivity_t pressure_sensitivity;
 
@@ -968,7 +974,7 @@ typedef struct dt_masks_shape_buttons_config_t
   dt_masks_shape_buttons_start_f can_start;
   dt_masks_shape_buttons_type_f form_type;
   dt_masks_shape_buttons_notify_f started;
-  dt_masks_shape_buttons_notify_f cancelled;
+  dt_masks_shape_buttons_notify_f exited;
 } dt_masks_shape_buttons_config_t;
 
 GtkWidget *dt_masks_shape_buttons_create(const dt_masks_shape_buttons_config_t *config);
@@ -1049,7 +1055,7 @@ gboolean dt_masks_remove_or_delete(struct dt_iop_module_t *module, dt_masks_form
 
 
 // Remove a mask
-gboolean dt_masks_form_cancel_creation(dt_iop_module_t *module, dt_masks_form_gui_t *gui);
+gboolean dt_masks_form_exit_creation(dt_iop_module_t *module, dt_masks_form_gui_t *gui);
 
 
 void dt_masks_gui_form_remove(dt_masks_form_t *form, dt_masks_form_gui_t *gui, int index);

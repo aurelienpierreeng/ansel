@@ -94,7 +94,7 @@ static int _group_events_key_pressed(struct dt_iop_module_t *module, GdkEventKey
     {
       case GDK_KEY_Escape:
       {
-        return_value = dt_masks_form_cancel_creation(module, gui);
+        return_value = dt_masks_form_exit_creation(module, gui);
         break;
       }
       case GDK_KEY_KP_Delete:

@@ -1905,7 +1905,6 @@ static int _brush_events_button_released(struct dt_iop_module_t *module, double 
       mask_gui->guipoints_payload = NULL;
       mask_gui->guipoints_count = 0;
 
-      // we save the form and quit creation mode
       dt_masks_gui_form_save_creation(darktable.develop, creation_module, mask_form, mask_gui);
 
       if(mask_form->type & (DT_MASKS_CLONE | DT_MASKS_NON_CLONE))

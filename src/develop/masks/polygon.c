@@ -1705,7 +1705,6 @@ static int _polygon_creation_closing_form(dt_masks_form_t *mask_form, dt_masks_f
   mask_gui->node_dragging = -1;
   _polygon_init_ctrl_points(mask_form);
 
-  // we save the form and quit creation mode
   dt_masks_gui_form_save_creation(darktable.develop, creation_module, mask_form, mask_gui);
 
   return 1;
@@ -1919,7 +1918,7 @@ static int _polygon_events_key_pressed(struct dt_iop_module_t *module, GdkEventK
         // Minimum points to create a polygon
         if(mask_gui->node_dragging < 1)
         {
-          dt_masks_form_cancel_creation(module, mask_gui);
+          dt_masks_form_exit_creation(module, mask_gui);
           return 1;
         }
         // switch previous node coords to the current one

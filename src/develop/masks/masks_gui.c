@@ -102,8 +102,8 @@ static int _masks_shape_button_index(const dt_masks_shape_buttons_data_t *data, 
 static gboolean _masks_shape_button_is_current_creation(const dt_masks_shape_buttons_data_t *data,
                                                         const int button_index)
 {
-  dt_masks_form_gui_t *mask_gui = darktable.develop ? darktable.develop->form_gui : NULL;
-  dt_masks_form_t *visible_form = darktable.develop ? dt_masks_get_visible_form(darktable.develop) : NULL;
+  dt_masks_form_gui_t *mask_gui = darktable.develop->form_gui;
+  dt_masks_form_t *visible_form = dt_masks_get_visible_form(darktable.develop);
 
   return !IS_NULL_PTR(mask_gui) && mask_gui->creation
          && mask_gui->creation_module == data->config.creation_module
@@ -122,13 +122,13 @@ static gboolean _masks_shape_button_pressed(GtkWidget *button, GdkEventButton *e
 
   dt_masks_type_t type = data->types[button_index];
   dt_iop_module_t *module = data->config.creation_module;
-  dt_masks_form_gui_t *mask_gui = darktable.develop ? darktable.develop->form_gui : NULL;
+  dt_masks_form_gui_t *mask_gui = darktable.develop->form_gui;
 
   if(_masks_shape_button_is_current_creation(data, button_index))
   {
     dt_masks_shape_buttons_deactivate_all(NULL);
-    dt_masks_form_cancel_creation(module, mask_gui);
-    if(data->config.cancelled) data->config.cancelled(button, module, type, data->config.user_data);
+    dt_masks_form_exit_creation(module, mask_gui);
+    if(data->config.exited) data->config.exited(button, module, type, data->config.user_data);
     dt_control_queue_redraw_center();
     return TRUE;
   }
@@ -168,7 +168,7 @@ static void _masks_shape_buttons_destroy(GtkWidget *widget, dt_masks_shape_butto
  * The buttons all use the same creation callback and listen to a process-wide
  * deactivation signal. This keeps multiple mask toolbars, such as blending,
  * retouch and the shape manager, from showing stale active buttons after
- * another toolbar starts or cancels a shape creation.
+ * another toolbar starts or exits a shape creation.
  */
 GtkWidget *dt_masks_shape_buttons_create(const dt_masks_shape_buttons_config_t *config)
 {
@@ -471,7 +471,7 @@ void _masks_gui_delete_node_callback(GtkWidget *menu, gpointer user_data)
     // Minimum points to create a polygon
     if(gui->node_dragging < 1)
     {
-      dt_masks_form_cancel_creation(module, gui);
+      dt_masks_form_exit_creation(module, gui);
       return;
     }
     dt_masks_form_t *sel = dt_masks_get_visible_form(darktable.develop);
@@ -493,11 +493,11 @@ void _masks_gui_delete_node_callback(GtkWidget *menu, gpointer user_data)
   }
 }
 
-static void _masks_gui_cancel_creation_callback(GtkWidget *menu, gpointer user_data)
+static void _masks_gui_exit_creation_callback(GtkWidget *menu, gpointer user_data)
 {
   dt_masks_form_gui_t *gui = (dt_masks_form_gui_t *)user_data;
   dt_iop_module_t *module = darktable.develop->gui_module;
-  dt_masks_form_cancel_creation(module, gui);
+  dt_masks_form_exit_creation(module, gui);
 }
 
 static void _masks_move_up_down_callback(gpointer user_data, const int up)
@@ -784,7 +784,8 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
   // Risky stuff at the end
   if(gui->creation)
   {
-    menu_item = ctx_gtk_menu_item_new_with_markup(_("Cancel"), menu, _masks_gui_cancel_creation_callback, gui);
+    menu_item = ctx_gtk_menu_item_new_with_markup(_("Done shape creation"), menu,
+                                                  _masks_gui_exit_creation_callback, gui);
     menu_item_set_fake_accel(menu_item, GDK_KEY_Escape, 0);
   }
   else

@@ -2181,7 +2181,7 @@ void gui_init(dt_iop_module_t *self)
     .can_start = rt_shape_buttons_can_start,
     .form_type = rt_shape_buttons_form_type,
     .started = NULL,
-    .cancelled = NULL,
+    .exited = NULL,
   };
   GtkWidget *shape_buttons_box = dt_masks_shape_buttons_create(&shape_buttons_config);
   gtk_box_pack_start(GTK_BOX(hbox_shapes), shape_buttons_box, FALSE, FALSE, 0);

@@ -224,7 +224,7 @@ static void _lib_masks_blending_gui_changed_callback(gpointer instance, dt_lib_m
   if(IS_NULL_PTR(self) || IS_NULL_PTR(self->data)) return;
 
   dt_lib_masks_t *lm = (dt_lib_masks_t *)self->data;
-  dt_iop_module_t *module = darktable.develop ? darktable.develop->gui_module : NULL;
+  dt_iop_module_t *module = darktable.develop->gui_module;
 
   if(IS_NULL_PTR(darktable.develop) || !darktable.develop->history || !module)
   {
@@ -898,6 +898,9 @@ static void _tree_cell_edited(GtkCellRendererText *cell, gchar *path_string, gch
 static void _tree_selection_change(GtkTreeSelection *selection, dt_lib_masks_t *self)
 {
   if(self->gui_reset) return;
+  dt_masks_form_gui_t *creation_gui = darktable.develop->form_gui;
+  if(!IS_NULL_PTR(creation_gui) && creation_gui->creation) return;
+
   // we reset all "show mask" icon of iops
   dt_masks_reset_show_masks_icons();
 
@@ -1476,7 +1479,11 @@ static void _lib_masks_recreate_list(dt_lib_module_t *self)
     selectids = _lib_masks_get_selected(self);
   }
 
-  dt_masks_shape_buttons_deactivate_all(NULL);
+  // Rebuilding the shape manager list is also used to refresh shapes created
+  // during continuous creation. In that case, the active creation button must
+  // stay active until the user cancels creation explicitly.
+  dt_masks_form_gui_t *gui = darktable.develop->form_gui;
+  if(IS_NULL_PTR(gui) || !gui->creation) dt_masks_shape_buttons_deactivate_all(NULL);
 
   GtkTreeStore *treestore;
   // we store : text ; *module ; groupid ; formid
@@ -1534,7 +1541,7 @@ static void _lib_masks_recreate_list(dt_lib_module_t *self)
   }
 
   // After list refresh, keep the tree selection aligned with the current GUI module mask group.
-  dt_iop_module_t *const current_module = darktable.develop ? darktable.develop->gui_module : NULL;
+  dt_iop_module_t *const current_module = darktable.develop->gui_module;
   const int current_group_id
       = (!IS_NULL_PTR(current_module) && current_module->blend_params
          && (current_module->flags() & IOP_FLAGS_SUPPORTS_BLENDING)
@@ -1542,7 +1549,7 @@ static void _lib_masks_recreate_list(dt_lib_module_t *self)
             ? current_module->blend_params->mask_id
             : 0;
 
-  if(current_group_id > 0)
+  if(current_group_id > 0 && (IS_NULL_PTR(gui) || !gui->creation))
   {
     GtkTreeModel *model = GTK_TREE_MODEL(treestore);
     GtkTreeIter iter;
@@ -1889,8 +1896,10 @@ static void _lib_masks_handler_callback(gpointer instance, const int formid, con
   else if(event == DT_MASKS_EVENT_ADD)
   {
     _lib_masks_recreate_list(self);
-    dt_masks_set_visible_form(darktable.develop,
-                              dt_masks_get_from_id(darktable.develop, parentid ? parentid : formid));
+    dt_masks_form_gui_t *gui = darktable.develop->form_gui;
+    if(IS_NULL_PTR(gui) || !gui->creation)
+      dt_masks_set_visible_form(darktable.develop,
+                                dt_masks_get_from_id(darktable.develop, parentid ? parentid : formid));
   }
 
   dt_control_queue_redraw_center();
@@ -1937,7 +1946,7 @@ void gui_init(dt_lib_module_t *self)
     .can_start = NULL,
     .form_type = NULL,
     .started = _lib_masks_shape_button_started,
-    .cancelled = NULL,
+    .exited = NULL,
   };
   GtkWidget *shape_buttons_box = dt_masks_shape_buttons_create(&shape_buttons_config);
   gtk_box_pack_end(GTK_BOX(hbox), shape_buttons_box, FALSE, FALSE, 0);
