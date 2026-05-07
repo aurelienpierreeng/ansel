@@ -994,6 +994,15 @@ gboolean dt_masks_form_cancel_creation(dt_iop_module_t *module, dt_masks_form_gu
 
 void dt_masks_gui_form_remove(dt_masks_form_t *form, dt_masks_form_gui_t *gui, int index);
 void dt_masks_gui_form_test_create(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module);
+
+/**
+ * @brief Save the form creation right after a shape has been finished drawing.
+ * 
+ * @param dev the develop structure
+ * @param module the module owning the mask
+ * @param form the form to save
+ * @param gui the GUI state of the form
+ */
 void dt_masks_gui_form_save_creation(dt_develop_t *dev, struct dt_iop_module_t *module, dt_masks_form_t *form,
                                      dt_masks_form_gui_t *gui);
 void dt_masks_group_ungroup(dt_masks_form_t *dest_grp, dt_masks_form_t *grp);

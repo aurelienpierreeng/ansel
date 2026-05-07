@@ -1264,6 +1264,21 @@ static gboolean _blendop_masks_add_shape(GtkWidget *widget, GdkEventButton *even
 
   if(this < 0) return FALSE;
 
+  dt_masks_form_gui_t *mask_gui = darktable.develop->form_gui;
+  //dt_masks_form_t *visible_form = dt_masks_get_visible_form(self->dev);
+  if(!IS_NULL_PTR(mask_gui) && mask_gui->creation
+     // && mask_gui->creation_module == self
+     // && !IS_NULL_PTR(visible_form) && (visible_form->type & bd->masks_type[this])
+     )
+  {
+    // A second click on the active shape button cancels the pending creation.
+    for(int n = 0; n < DEVELOP_MASKS_NB_SHAPES; n++)
+      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->masks_shapes[n]), FALSE);
+    dt_masks_form_cancel_creation(self, mask_gui);
+    dt_control_queue_redraw_center();
+    return TRUE;
+  }
+
   // set all shape buttons to inactive
   for(int n = 0; n < DEVELOP_MASKS_NB_SHAPES; n++)
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->masks_shapes[n]), FALSE);
