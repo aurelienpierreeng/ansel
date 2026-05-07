@@ -2896,7 +2896,8 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
   if(dt_masks_get_visible_form(dev)
      && dt_masks_events_button_pressed(dev->gui_module, x, y, pressure, which, type, state))
   {
-    dt_gui_throttle_queue(dev, _delayed_history_commit, dev);
+    if(!darktable.develop->form_gui->creation)
+      dt_gui_throttle_queue(dev, _delayed_history_commit, dev);
     return 1;
   }
   // module

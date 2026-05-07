@@ -301,6 +301,7 @@ typedef enum dt_signal_t
   /* Raised when a mask form is selected/deselected */
   DT_SIGNAL_MASK_SELECTION_CHANGED,
   DT_SIGNAL_MASK_CHANGED,
+  DT_SIGNAL_MASK_SHAPE_BUTTONS_DEACTIVATE,
 
   /* Raised when the focused darkroom module changes or its masks/blending GUI needs refresh */
   DT_SIGNAL_DEVELOP_MASKS_GUI_CHANGED,

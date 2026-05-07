@@ -1053,6 +1053,8 @@ gboolean dt_masks_remove_or_delete(struct dt_iop_module_t *module, dt_masks_form
 
 gboolean dt_masks_form_cancel_creation(dt_iop_module_t *module, dt_masks_form_gui_t *mask_gui)
 {
+  if(IS_NULL_PTR(mask_gui)) return FALSE;
+
   if(mask_gui->creation)
   {
     if(mask_gui->guipoints)
@@ -1065,8 +1067,11 @@ gboolean dt_masks_form_cancel_creation(dt_iop_module_t *module, dt_masks_form_gu
     }
 
     dt_masks_creation_mode_quit(mask_gui);
-    dt_masks_set_edit_mode(module, DT_MASKS_EDIT_FULL);
-    dt_masks_iop_update(module);
+    if(!IS_NULL_PTR(module))
+    {
+      dt_masks_set_edit_mode(module, DT_MASKS_EDIT_FULL);
+      dt_masks_iop_update(module);
+    }
 
     return TRUE;
   }
@@ -1307,6 +1312,8 @@ void dt_masks_gui_form_save_creation(dt_develop_t *develop, dt_iop_module_t *mod
     {
       // we select the new form
       dt_dev_masks_selection_change(darktable.develop, NULL, mask_form->formid, TRUE);
+      DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, mask_form->formid,
+                                    0, DT_MASKS_EVENT_ADD);
     }
   }
 
@@ -2855,34 +2862,33 @@ void dt_masks_change_form_gui(dt_masks_form_t *new_form)
 void dt_masks_reset_form_gui(void)
 {
   dt_masks_change_form_gui(NULL);
+  dt_masks_shape_buttons_deactivate_all(NULL);
   dt_iop_module_t *module = darktable.develop->gui_module;
   if(!IS_NULL_PTR(module) && (module->flags() & IOP_FLAGS_SUPPORTS_BLENDING) && !(module->flags() & IOP_FLAGS_NO_MASKS)
-    && module->blend_data)
+    && !IS_NULL_PTR(module->blend_data))
   {
     dt_iop_gui_blend_data_t *blend_data = (dt_iop_gui_blend_data_t *)module->blend_data;
     blend_data->masks_shown = DT_MASKS_EDIT_OFF;
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(blend_data->masks_edit), 0);
-    for(int n = 0; n < DEVELOP_MASKS_NB_SHAPES; n++)
-      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(blend_data->masks_shapes[n]), 0);
+    if(!IS_NULL_PTR(blend_data->masks_edit))
+      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(blend_data->masks_edit), 0);
   }
 }
 
 void dt_masks_reset_show_masks_icons(void)
 {
+  dt_masks_shape_buttons_deactivate_all(NULL);
   for(GList *module_node = darktable.develop->iop; module_node; module_node = g_list_next(module_node))
   {
     dt_iop_module_t *module = (dt_iop_module_t *)module_node->data;
-    if(module && (module->flags() & IOP_FLAGS_SUPPORTS_BLENDING) && !(module->flags() & IOP_FLAGS_NO_MASKS))
+    if(module && (module->flags() & IOP_FLAGS_SUPPORTS_BLENDING) && !(module->flags() & IOP_FLAGS_NO_MASKS)
+    && !IS_NULL_PTR(module->blend_data))
     {
       dt_iop_gui_blend_data_t *blend_data = (dt_iop_gui_blend_data_t *)module->blend_data;
-      if(!blend_data) break;  // TODO: this doesn't look right. Why do we break the while look as soon as one module has no blend_data?
       blend_data->masks_shown = DT_MASKS_EDIT_OFF;
-      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(blend_data->masks_edit), FALSE);
-      gtk_widget_queue_draw(blend_data->masks_edit);
-      for(int n = 0; n < DEVELOP_MASKS_NB_SHAPES; n++)
+      if(!IS_NULL_PTR(blend_data->masks_edit))
       {
-        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(blend_data->masks_shapes[n]), 0);
-        gtk_widget_queue_draw(blend_data->masks_shapes[n]);
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(blend_data->masks_edit), FALSE);
+        gtk_widget_queue_draw(blend_data->masks_edit);
       }
     }
   }
@@ -4048,9 +4054,9 @@ void dt_masks_creation_mode_quit(dt_masks_form_gui_t *mask_gui)
  */
 gboolean dt_masks_creation_mode_enter(dt_iop_module_t *module, const dt_masks_type_t type)
 {
-  if(IS_NULL_PTR(module) || (type & DT_MASKS_ALL) == 0) return FALSE;
+  if((type & DT_MASKS_ALL) == 0) return FALSE;
   // we want to be sure that the iop has focus
-  dt_iop_request_focus(module);
+  if(!IS_NULL_PTR(module)) dt_iop_request_focus(module);
 
   dt_masks_form_t *mask_form = dt_masks_create(type);
   dt_masks_change_form_gui(mask_form);

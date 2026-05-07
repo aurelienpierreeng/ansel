@@ -914,6 +914,66 @@ void dt_masks_reset_form_gui(void);
 void dt_masks_soft_reset_form_gui(dt_masks_form_gui_t *gui);
 void dt_masks_reset_show_masks_icons(void);
 
+#define DEVELOP_MASKS_NB_SHAPES 5
+
+typedef enum dt_masks_shape_button_index_t
+{
+  DT_MASKS_SHAPE_INDEX_GRADIENT = 0,
+  DT_MASKS_SHAPE_INDEX_POLYGON = 1,
+  DT_MASKS_SHAPE_INDEX_ELLIPSE = 2,
+  DT_MASKS_SHAPE_INDEX_CIRCLE = 3,
+  DT_MASKS_SHAPE_INDEX_BRUSH = 4,
+} dt_masks_shape_button_index_t;
+
+typedef enum dt_masks_shape_buttons_flags_t
+{
+  /** Do not create any shape button. */
+  DT_MASKS_SHAPE_BUTTONS_NONE = 0,
+  /** Create/register the circle button. */
+  DT_MASKS_SHAPE_BUTTONS_CIRCLE = 1 << 0,
+  /** Create/register the ellipse button. */
+  DT_MASKS_SHAPE_BUTTONS_ELLIPSE = 1 << 1,
+  /** Create/register the polygon button. */
+  DT_MASKS_SHAPE_BUTTONS_POLYGON = 1 << 2,
+  /** Create/register the brush button. */
+  DT_MASKS_SHAPE_BUTTONS_BRUSH = 1 << 3,
+  /** Create/register the gradient button. */
+  DT_MASKS_SHAPE_BUTTONS_GRADIENT = 1 << 4,
+  /** Create/register every shape button. */
+  DT_MASKS_SHAPE_BUTTONS_ALL = DT_MASKS_SHAPE_BUTTONS_CIRCLE
+                               | DT_MASKS_SHAPE_BUTTONS_ELLIPSE
+                               | DT_MASKS_SHAPE_BUTTONS_POLYGON
+                               | DT_MASKS_SHAPE_BUTTONS_BRUSH
+                               | DT_MASKS_SHAPE_BUTTONS_GRADIENT,
+} dt_masks_shape_buttons_flags_t;
+
+typedef gboolean (*dt_masks_shape_buttons_start_f)(GtkWidget *button, dt_iop_module_t *module,
+                                                   dt_masks_type_t type, gpointer user_data);
+typedef dt_masks_type_t (*dt_masks_shape_buttons_type_f)(dt_iop_module_t *module, dt_masks_type_t type,
+                                                         gpointer user_data);
+typedef void (*dt_masks_shape_buttons_notify_f)(GtkWidget *button, dt_iop_module_t *module,
+                                                dt_masks_type_t type, gpointer user_data);
+
+typedef struct dt_masks_shape_buttons_config_t
+{
+  dt_iop_module_t *owner_module;
+  dt_iop_module_t *creation_module;
+  GtkWidget **buttons;
+  int *types;
+  const char *action_section;
+  dt_masks_shape_buttons_flags_t flags;
+  dt_masks_shape_buttons_flags_t register_flags;
+  gboolean local;
+  gpointer user_data;
+  dt_masks_shape_buttons_start_f can_start;
+  dt_masks_shape_buttons_type_f form_type;
+  dt_masks_shape_buttons_notify_f started;
+  dt_masks_shape_buttons_notify_f cancelled;
+} dt_masks_shape_buttons_config_t;
+
+GtkWidget *dt_masks_shape_buttons_create(const dt_masks_shape_buttons_config_t *config);
+void dt_masks_shape_buttons_deactivate_all(GtkWidget *active_button);
+
 int dt_masks_events_mouse_moved(struct dt_iop_module_t *module, double x, double y, double pressure,
                                 int which);
 int dt_masks_events_button_released(struct dt_iop_module_t *module, double x, double y, int which,
