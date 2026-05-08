@@ -939,7 +939,6 @@ void dt_masks_remove_node(struct dt_iop_module_t *module, dt_masks_form_t *mask_
   dt_masks_gui_form_create(mask_form, mask_gui, form_index, module);
 }
 
-
 /**
  * @brief Remove a shape from the GUI and free its resources.
  * 
@@ -966,7 +965,10 @@ static gboolean _masks_remove_shape(struct dt_iop_module_t *module, dt_masks_for
   else
   {
     const int edit_mode = mask_gui->edit_mode;
+
     dt_masks_clear_form_gui(darktable.develop);
+    // Remove the selected shape copy from the visible group before deleting the
+    // real group entry below.
     for(GList *forms = visible_form->points; forms; forms = g_list_next(forms))
     {
       dt_masks_form_group_t *group_entry = (dt_masks_form_group_t *)forms->data;
@@ -1028,27 +1030,98 @@ gboolean dt_masks_remove_or_delete(struct dt_iop_module_t *module, dt_masks_form
       = !IS_NULL_PTR(module)
         && ((module->flags() & IOP_FLAGS_INTERNAL_MASKS) == IOP_FLAGS_INTERNAL_MASKS);
 
+  int response = GTK_RESPONSE_YES;
   if(use_count <= 1 && !internal_masks)
   {
-    const int response = dt_masks_gui_confirm_delete_form_dialog(sel->name);
+    response = dt_masks_gui_confirm_delete_form_dialog(sel->name);
     if(response == GTK_RESPONSE_CANCEL) return FALSE;
-    if(response == GTK_RESPONSE_NO)
+  }
+
+  dt_masks_form_t *visible_form = dt_masks_get_visible_form(darktable.develop);
+  int next_form_index = -1;
+  int next_formid = 0;
+  if(!IS_NULL_PTR(visible_form) && (visible_form->type & DT_MASKS_GROUP)
+     && mask_gui->group_selected >= 0 && !g_list_shorter_than(visible_form->points, 2))
+  {
+    const int group_length = g_list_length(visible_form->points);
+    next_form_index = mask_gui->group_selected < group_length - 1
+                          ? mask_gui->group_selected
+                          : mask_gui->group_selected - 1;
+
+    // Walk from the selected row to remember the shape that should be selected
+    // after deletion: next row first, previous row if the removed row is last.
+    GList *selected_node = g_list_nth(visible_form->points, mask_gui->group_selected);
+    if(!IS_NULL_PTR(selected_node))
     {
-      // only remove from current group, keep the form itself for potential reuse
-      gboolean res = _masks_remove_shape(module, sel, parent_id, mask_gui, mask_gui->group_selected);
-      dt_dev_add_history_item(darktable.develop, module, TRUE, TRUE);
-      DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, form_id, parent_id, DT_MASKS_EVENT_DELETE);
-      return res;
+      GList *next_node = g_list_next(selected_node);
+      if(IS_NULL_PTR(next_node)) next_node = g_list_previous(selected_node);
+      if(!IS_NULL_PTR(next_node))
+      {
+        dt_masks_form_group_t *next_group_entry = (dt_masks_form_group_t *)next_node->data;
+        if(!IS_NULL_PTR(next_group_entry)) next_formid = next_group_entry->formid;
+      }
     }
   }
 
-  // Default if use count > 1, or responded YES
-  // there is no gui for internal masks so we don't change it in this case.  
-  if(!internal_masks) dt_masks_change_form_gui(NULL);
-  dt_masks_form_delete(module, NULL, sel);
+  gboolean res = TRUE;
+  int signal_parent_id = 0;
+  dt_masks_event_t signal_event = DT_MASKS_EVENT_REMOVE;
+
+  if(response == GTK_RESPONSE_NO)
+  {
+    // Only remove from current group, keep the form itself for potential reuse.
+    res = _masks_remove_shape(module, sel, parent_id, mask_gui, mask_gui->group_selected);
+    signal_parent_id = parent_id;
+    signal_event = DT_MASKS_EVENT_DELETE;
+  }
+
+  else // Default if use count > 1, or responded YES.
+  {
+    if(IS_NULL_PTR(visible_form) || !(visible_form->type & DT_MASKS_GROUP))
+      dt_masks_change_form_gui(NULL);
+    else if(g_list_shorter_than(visible_form->points, 2))
+      dt_masks_change_form_gui(NULL);
+    else
+    {
+      const int edit_mode = mask_gui->edit_mode;
+      dt_masks_clear_form_gui(darktable.develop);
+      // Remove the selected shape copy from the visible group before deleting
+      // the real form from the develop mask list below.
+      for(GList *forms = visible_form->points; forms; forms = g_list_next(forms))
+      {
+        dt_masks_form_group_t *group_entry = (dt_masks_form_group_t *)forms->data;
+        if(group_entry->formid == sel->formid)
+        {
+          visible_form->points = g_list_remove(visible_form->points, group_entry);
+          dt_free(group_entry);
+          break;
+        }
+      }
+      mask_gui->edit_mode = edit_mode;
+      if(next_formid > 0)
+      {
+        mask_gui->group_selected = next_form_index;
+        mask_gui->form_selected = TRUE;
+      }
+    }
+
+    dt_masks_form_delete(module, NULL, sel);
+  }
+
   dt_dev_add_history_item(darktable.develop, module, TRUE, TRUE);
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, form_id, 0, DT_MASKS_EVENT_REMOVE);
-  return TRUE;
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, form_id, signal_parent_id,
+                                signal_event);
+
+  if(res && next_formid > 0)
+  {
+    // The mask manager rebuilds its tree on the delete/remove signal, so apply
+    // the replacement selection after the signal has finished refreshing lists.
+    mask_gui->group_selected = next_form_index;
+    mask_gui->form_selected = TRUE;
+    dt_dev_masks_selection_change(darktable.develop, module, next_formid, FALSE);
+    dt_masks_select_form(module, dt_masks_get_from_id(darktable.develop, next_formid));
+  }
+  return res;
 }
 
 gboolean dt_masks_form_exit_creation(dt_iop_module_t *module, dt_masks_form_gui_t *mask_gui)
@@ -1181,7 +1254,7 @@ gboolean dt_masks_gui_remove(struct dt_iop_module_t *module, dt_masks_form_t *ma
   // we remove the entire shape
   else if(parent_id > 0)
   {
-    dt_masks_remove_or_delete(module, mask_form, parent_id, mask_gui, mask_gui->group_selected);
+    dt_masks_remove_or_delete(module, mask_form, parent_id, mask_gui, mask_form->formid);
     return TRUE; // something happened even if the dialog was cancelled.
   }
   return FALSE;
