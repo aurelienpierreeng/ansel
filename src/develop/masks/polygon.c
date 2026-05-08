@@ -2184,12 +2184,14 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
           || mask_gui->handle_selected)
   {
     dt_masks_form_t *group_form = dt_masks_get_visible_form(darktable.develop);
-    if(IS_NULL_PTR(group_form)) return;
-    dt_masks_form_group_t *group_entry = g_list_nth_data(group_form->points, form_index);
-    if(IS_NULL_PTR(group_entry)) return;
-    dt_masks_form_t *polygon_form = dt_masks_get_from_id(darktable.develop, group_entry->formid);
-    if(IS_NULL_PTR(polygon_form)) return;
-    gui_points->clockwise = _polygon_is_clockwise(polygon_form);
+    if(!IS_NULL_PTR(group_form) && (group_form->type & DT_MASKS_GROUP))
+    {
+      dt_masks_form_group_t *group_entry = g_list_nth_data(group_form->points, form_index);
+      dt_masks_form_t *polygon_form = group_entry
+                                          ? dt_masks_get_from_id(darktable.develop, group_entry->formid)
+                                          : NULL;
+      if(!IS_NULL_PTR(polygon_form)) gui_points->clockwise = _polygon_is_clockwise(polygon_form);
+    }
   }
 
   // draw polygon
