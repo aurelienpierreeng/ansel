@@ -2866,6 +2866,9 @@ static void _masks_draw_creation_session_forms(dt_develop_t *develop, dt_iop_mod
       session_form->functions->post_expose(cr, zoom_scale, &draw_gui, 0, point_count);
     }
 
+    // Keep the saved-session shape path from being connected to the active
+    // creation cursor drawn right after this loop.
+    cairo_new_path(cr);
     g_list_free_full(draw_gui.points, dt_masks_form_gui_points_free);
     draw_gui.points = NULL;
     draw_gui.pipe_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
