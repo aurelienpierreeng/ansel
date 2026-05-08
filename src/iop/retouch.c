@@ -689,17 +689,17 @@ static void rt_show_forms_for_current_scale(dt_iop_module_t *self)
 }
 
 // called if a shape is added or deleted
-static void rt_resynch_params(struct dt_iop_module_t *self)
+static void rt_resynch_params(struct dt_iop_module_t *self, dt_iop_retouch_params_t *p, GList *forms_list)
 {
-  dt_iop_retouch_params_t *p = (dt_iop_retouch_params_t *)self->params;
   dt_develop_blend_params_t *bp = self->blend_params;
+  if(IS_NULL_PTR(p) || IS_NULL_PTR(bp)) return;
 
   // Create a temporary array to store form data and initialize it to zero
   dt_iop_retouch_form_data_t forms_d[RETOUCH_NO_FORMS];
   memset(forms_d, 0, sizeof(dt_iop_retouch_form_data_t) * RETOUCH_NO_FORMS);
 
   // we go through all forms in blend params
-  dt_masks_form_t *grp = dt_masks_get_from_id(darktable.develop, bp->mask_id);
+  dt_masks_form_t *grp = dt_masks_get_from_id_ext(forms_list, bp->mask_id);
   if(IS_NULL_PTR(grp) || !(grp->type & DT_MASKS_GROUP))
     return;
   
@@ -724,7 +724,7 @@ static void rt_resynch_params(struct dt_iop_module_t *self)
     else
     {
       // if it does not exists, add it to the new array
-      const dt_masks_form_t *parent_form = dt_masks_get_from_id(darktable.develop, formid);
+      const dt_masks_form_t *parent_form = dt_masks_get_from_id_ext(forms_list, formid);
       if(IS_NULL_PTR(parent_form)) continue;
       
       forms_d[new_form_index].formid = formid;
@@ -767,7 +767,9 @@ void post_history_commit(dt_iop_module_t *self)
   // to sync them with our params here.
 
   // TODO: share this code with gui_update()
-  rt_resynch_params(self);
+  dt_pthread_rwlock_rdlock(&self->dev->masks_mutex);
+  rt_resynch_params(self, (dt_iop_retouch_params_t *)self->params, self->dev->forms);
+  dt_pthread_rwlock_unlock(&self->dev->masks_mutex);
 
   dt_iop_retouch_gui_data_t *g = (dt_iop_retouch_gui_data_t *)self->gui_data;
   if(IS_NULL_PTR(g)) return;
@@ -2011,7 +2013,19 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
 void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelpipe_t *pipe,
                    dt_dev_pixelpipe_iop_t *piece)
 {
-  memcpy(piece->data, params, sizeof(dt_iop_retouch_params_t));
+  dt_iop_retouch_params_t synced_params = *(dt_iop_retouch_params_t *)params;
+  if(!IS_NULL_PTR(pipe) && !IS_NULL_PTR(pipe->forms))
+  {
+    rt_resynch_params(self, &synced_params, pipe->forms);
+  }
+  else
+  {
+    dt_pthread_rwlock_rdlock(&self->dev->masks_mutex);
+    rt_resynch_params(self, &synced_params, self->dev->forms);
+    dt_pthread_rwlock_unlock(&self->dev->masks_mutex);
+  }
+
+  memcpy(piece->data, &synced_params, sizeof(dt_iop_retouch_params_t));
 }
 
 void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe, const struct dt_dev_pixelpipe_iop_t *piece, struct dt_develop_tiling_t *tiling)
@@ -2051,7 +2065,9 @@ void gui_update(dt_iop_module_t *self)
   dt_iop_retouch_params_t *p = (dt_iop_retouch_params_t *)self->params;
 
   // check if there is new or deleted forms
-  rt_resynch_params(self);
+  dt_pthread_rwlock_rdlock(&self->dev->masks_mutex);
+  rt_resynch_params(self, p, self->dev->forms);
+  dt_pthread_rwlock_unlock(&self->dev->masks_mutex);
 
   // update clones count
   const dt_masks_form_t *grp = dt_masks_get_from_id(self->dev, self->blend_params->mask_id);
