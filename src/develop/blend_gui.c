@@ -3437,6 +3437,7 @@ void dt_iop_gui_init_masks(GtkBox *blendw, dt_iop_module_t *module)
     // Creating shapes buttons (circle, ellipse ....)
     bd->all_shapes_buttons = _blendop_masks_shape_buttons(module, bd);
     if(!GTK_IS_WIDGET(bd->all_shapes_buttons)) return;
+
     // Wire shapes toggle button
     bd->wire_shape_toggle = gtk_toggle_button_new_with_label(_("Wire shapes"));
     gtk_widget_set_tooltip_text(bd->wire_shape_toggle, _("Show all shapes and groups to choose which ones to connect to or disconnect from the mask."));
@@ -3510,11 +3511,9 @@ void dt_iop_gui_init_masks(GtkBox *blendw, dt_iop_module_t *module)
     // - all-shapes tree is hidden
     // The toggle callback flips these two scrolled windows.
     g_signal_connect(bd->wire_shape_toggle, "toggled", G_CALLBACK(_blendop_masks_edit_list_toggle), module);
-    if(GTK_IS_TOGGLE_BUTTON(bd->wire_shape_toggle))
-    {
-      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->wire_shape_toggle), FALSE);
-      _blendop_masks_edit_list_toggle(GTK_TOGGLE_BUTTON(bd->wire_shape_toggle), module);
-    }
+
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->wire_shape_toggle), FALSE);
+    _blendop_masks_edit_list_toggle(GTK_TOGGLE_BUTTON(bd->wire_shape_toggle), module);
 
     gtk_box_pack_start(GTK_BOX(bd->masks_box), bd->lists_box, FALSE, FALSE, 0);
 
