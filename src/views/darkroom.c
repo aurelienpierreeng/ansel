@@ -145,6 +145,10 @@ typedef struct coords_t
   double full[2];       // coordinates in image space
 }coords_t;
 
+#define DARKROOM_EDGE_PAN_INTERVAL_MS 64
+#define DARKROOM_EDGE_PAN_MARGIN_PX DT_PIXEL_APPLY_DPI(100)
+#define DARKROOM_EDGE_PAN_SPEED_PX_PER_S 360.0f
+
 static void _update_softproof_gamut_checking(dt_develop_t *d);
 
 /* signal handler for filmstrip image switching */
@@ -193,9 +197,23 @@ uint32_t view(const dt_view_t *self)
   return DT_VIEW_DARKROOM;
 }
 
+static void _reset_edge_pan()
+{
+  dt_gui_gtk_t *gui = darktable.gui;
+  if(gui->pan_edge.timeout_source)
+  {
+    g_source_remove(gui->pan_edge.timeout_source);
+  }
+  memset(&gui->pan_edge, 0, sizeof(gui->pan_edge));
+}
+
 void cleanup(dt_view_t *self)
 {
   dt_develop_t *dev = (dt_develop_t *)self->data;
+
+  // Cancel any pending edge pan timeout and reset the state
+  _reset_edge_pan();
+
   _release_expose_source_caches();
   dt_gui_throttle_cancel(dev);
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_darkroom_autoset_popover_refresh), dev);
@@ -2409,6 +2427,8 @@ void enter(dt_view_t *self)
 void leave(dt_view_t *self)
 {
   dt_develop_t *dev = (dt_develop_t *)self->data;
+  darktable.gui->mouse.is_dragging = FALSE;
+  _reset_edge_pan();
   dt_gui_throttle_cancel(dev);
 
   _release_expose_source_caches();
@@ -2550,6 +2570,27 @@ void mouse_leave(dt_view_t *self)
 {
   // if we are not hovering over a thumbnail in the filmstrip -> show metadata of opened image.
   dt_develop_t *dev = (dt_develop_t *)self->data;
+  dt_control_t *ctl = darktable.control;
+  dt_gui_gtk_t *gui = darktable.gui;
+  gui->mouse.is_dragging = FALSE;
+
+  if(gui->pan_edge.timeout_source
+     && gui->pan_edge.block_normal_pan
+     && !IS_NULL_PTR(ctl) && ctl->button_down && ctl->button_down_which == 1)
+  {
+    gui->pan_edge.velocity[0] = 0.0f;
+    gui->pan_edge.velocity[1] = 0.0f;
+    gui->pan_edge.last_time_us = 0;
+    if(gui->pan_edge.timeout_source)
+    {
+      g_source_remove(gui->pan_edge.timeout_source);
+      gui->pan_edge.timeout_source = 0;
+    }
+    gui->pan_edge.view = NULL;
+    gui->pan_edge.block_normal_pan = TRUE;
+  }
+  else
+    _reset_edge_pan();
 
   // masks
   gboolean handled = FALSE;
@@ -2625,15 +2666,229 @@ static void _delayed_history_commit(gpointer data)
     dt_dev_add_history_item(dev, dev->gui_module, FALSE, TRUE);
 }
 
+typedef struct darkroom_edge_pan_test_t
+{
+  dt_develop_t *dev;
+  gboolean drag;
+  gboolean inside_image;
+  gboolean in_margin;
+  float margin;
+  float velocity[2];
+} darkroom_edge_pan_test_t;
+
+static float _darkroom_edge_pan_velocity(const double position, const double size, const float margin)
+{
+  const double near_edge = position < margin ? margin - position
+                         : position > size - margin ? position - (size - margin)
+                         : 0.0;
+  if(near_edge <= 0.0) return 0.0f;
+
+  const float edge_distance = CLAMPF(near_edge / margin, 0.0f, 1.0f);
+  const float velocity = 0.10f + 0.90f * edge_distance * edge_distance;
+  return position < margin ? -velocity : velocity;
+}
+
+static gboolean _darkroom_edge_pan_enable_check(dt_develop_t *dev)
+{
+  dt_gui_gtk_t *gui = darktable.gui;
+  if(IS_NULL_PTR(gui) || IS_NULL_PTR(dev)) return FALSE;
+
+  dt_masks_form_gui_t *form_gui = dev->form_gui;
+  const gboolean creating_shape_mode = !IS_NULL_PTR(form_gui) && form_gui->creation;
+
+  return gui->mouse.is_dragging || creating_shape_mode;
+}
+
+/**
+ * @brief Test every condition that allows edge-pan for the current pointer.
+ *
+ * The helper keeps the geometry and drag-state checks identical between real
+ * mouse moves and timeout ticks. It also computes the velocity because the
+ * distance to the edge is part of the same eligibility decision.
+ */
+static void _darkroom_edge_pan_update_state(dt_view_t *self,
+                                            const double pointer_x,
+                                            const double pointer_y,
+                                            const int width,
+                                            const int height,
+                                            darkroom_edge_pan_test_t *edge)
+{
+  dt_gui_gtk_t *gui = darktable.gui;
+  dt_control_t *ctl = darktable.control;
+  if(IS_NULL_PTR(gui) || IS_NULL_PTR(ctl) || IS_NULL_PTR(self)) return;
+
+  dt_develop_t *dev = (dt_develop_t *)self->data;
+  if(IS_NULL_PTR(dev)) return;
+
+  // recheck the global eligibility conditions
+  gui->pan_edge.enabled = _darkroom_edge_pan_enable_check(dev);
+
+  if(!gui->pan_edge.enabled
+     || dt_view_manager_get_current_view(darktable.view_manager) != self
+     || dev->roi.scaling <= 1.0f)
+    return;
+
+  float image_box[4] = { 0.0f };
+  dt_dev_get_image_box_in_widget(dev, width, height, image_box);
+  const double image_x = pointer_x - image_box[0];
+  const double image_y = pointer_y - image_box[1];
+
+  edge->dev = dev;
+  edge->drag = TRUE;
+  edge->inside_image = mouse_in_imagearea(self, pointer_x, pointer_y);
+  const gboolean inside_action_area = mouse_in_actionarea(self, pointer_x, pointer_y)
+                                      && image_box[2] > 0.0f && image_box[3] > 0.0f;
+  edge->margin = inside_action_area
+                 ? CLAMPF(MIN(image_box[2], image_box[3]) / 3, 1, DARKROOM_EDGE_PAN_MARGIN_PX)
+                 : 0.0f;
+  edge->in_margin = inside_action_area
+                    && edge->margin > 0.0f
+                    && (image_x < edge->margin
+                        || image_x > (double)image_box[2] - edge->margin
+                        || image_y < edge->margin
+                        || image_y > (double)image_box[3] - edge->margin);
+
+  if(!edge->in_margin) return;
+
+  edge->velocity[0] = _darkroom_edge_pan_velocity(image_x, image_box[2], edge->margin);
+  edge->velocity[1] = _darkroom_edge_pan_velocity(image_y, image_box[3], edge->margin);
+}
+
+/**
+ * @brief Apply one edge-pan step when the current drag is still eligible.
+ *
+ * Edge-pan is gated by `darktable.gui->pan_edge.enabled`, then by the live
+ * pointer position in the displayed image edge band. The timeout calls this
+ * repeatedly because the ROI must keep moving even when the mouse is still.
+ */
+static gboolean _darkroom_edge_pan_apply(dt_view_t *self,
+                                         const double pointer_x,
+                                         const double pointer_y,
+                                         const int width,
+                                         const int height)
+{
+  dt_gui_gtk_t *gui = darktable.gui;
+  dt_control_t *ctl = darktable.control;
+  darkroom_edge_pan_test_t edge = { 0 };
+  _darkroom_edge_pan_update_state(self, pointer_x, pointer_y, width, height, &edge);
+
+  if(IS_NULL_PTR(gui))
+    return FALSE;
+
+  // reset and exit conditions
+  if(!gui->pan_edge.enabled || IS_NULL_PTR(self) || IS_NULL_PTR(ctl) || !edge.drag)
+  {
+    gui->pan_edge.timeout_source = 0;
+    _reset_edge_pan();
+    return FALSE;
+  }
+
+  if(!edge.in_margin)
+  {
+    // Leaving the edge band stops automatic ROI motion, but the current
+    // primary-button drag still belongs to the tool, so regular pan stays blocked.
+    gui->pan_edge.timeout_source = 0;
+    gui->pan_edge.view = self;
+    gui->pan_edge.velocity[0] = 0.0f;
+    gui->pan_edge.velocity[1] = 0.0f;
+    gui->pan_edge.last_time_us = 0;
+    gui->pan_edge.block_normal_pan = TRUE;
+    ctl->button_x = pointer_x;
+    ctl->button_y = pointer_y;
+    return FALSE;
+  }
+
+  if(gui->pan_edge.velocity[0] == 0.0f && gui->pan_edge.velocity[1] == 0.0f)
+  {
+    // A mouse event may have stopped edge-pan before this tick runs.
+    // End the timeout without releasing the stored drag reference position.
+    gui->pan_edge.timeout_source = 0;
+    gui->pan_edge.last_time_us = 0;
+    ctl->button_x = pointer_x;
+    ctl->button_y = pointer_y;
+    return FALSE;
+  }
+
+  const gint64 now_us = g_get_monotonic_time();
+  const float elapsed_s = CLAMPF((now_us - gui->pan_edge.last_time_us) / 1000000.0f, 0.001f, 0.100f);
+  gui->pan_edge.last_time_us = now_us;
+
+  float delta[2] = { gui->pan_edge.velocity[0] * DARKROOM_EDGE_PAN_SPEED_PX_PER_S * elapsed_s,
+                     gui->pan_edge.velocity[1] * DARKROOM_EDGE_PAN_SPEED_PX_PER_S * elapsed_s
+                   };
+  dt_develop_t *dev = edge.dev;
+  dt_dev_coordinates_widget_delta_to_image_delta(dev, delta, 1);
+
+  float roi[2] = { dev->roi.x + delta[0] / (float)dev->roi.processed_width,
+                   dev->roi.y + delta[1] / (float)dev->roi.processed_height
+                 };
+  dt_dev_check_zoom_pos_bounds(dev, &roi[0], &roi[1], NULL, NULL);
+
+  ctl->button_x = pointer_x;
+  ctl->button_y = pointer_y;
+
+  if(dev->roi.x != roi[0] || dev->roi.y != roi[1])
+  {
+    dev->roi.x = roi[0];
+    dev->roi.y = roi[1];
+    // Updating ctl->button_x/y changes the cursor position, which is the same as a mouse move event.
+    mouse_moved(self, pointer_x, pointer_y, 1.0, 0);
+    //dt_control_queue_redraw_center();
+    dt_dev_pixelpipe_change_zoom_main(dev);
+  }
+
+  return TRUE;
+}
+
+/**
+ * @brief Move the darkroom ROI while a drag stays in the center-widget edge band.
+ *
+ * The timeout owns only the cadence of the auto-pan. Each tick rechecks the real
+ * pointer position because a timeout keeps running when the mouse stops moving.
+ */
+static gboolean _darkroom_edge_pan_tick(gpointer user_data)
+{
+  dt_gui_gtk_t *gui = darktable.gui;
+  if(IS_NULL_PTR(gui))
+    return FALSE;
+
+  
+  // Read the live pointer position instead of ctl->button_x/y: the latter only
+  // stores the last mouse event, while the timeout must stop even if no event follows.
+  dt_view_t *self = gui->pan_edge.view;
+  GtkWidget *center = dt_ui_center(darktable.gui->ui);
+  GdkWindow *window = IS_NULL_PTR(center) ? NULL : gtk_widget_get_window(center);
+  GdkDisplay *display = IS_NULL_PTR(window) ? NULL : gdk_window_get_display(window);
+  GdkSeat *seat = IS_NULL_PTR(display) ? NULL : gdk_display_get_default_seat(display);
+  GdkDevice *pointer = IS_NULL_PTR(seat) ? NULL : gdk_seat_get_pointer(seat);
+  int pointer_x = 0;
+  int pointer_y = 0;
+  GtkAllocation allocation = { 0 };
+
+  if(IS_NULL_PTR(window) || IS_NULL_PTR(pointer))
+  {
+    gui->pan_edge.timeout_source = 0;
+    _reset_edge_pan();
+    return FALSE;
+  }
+
+  gdk_window_get_device_position(window, pointer, &pointer_x, &pointer_y, NULL);
+  gtk_widget_get_allocation(center, &allocation);
+
+  return _darkroom_edge_pan_apply(self, pointer_x, pointer_y, allocation.width, allocation.height);
+}
+
 void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which)
 {
   dt_develop_t *dev = (dt_develop_t *)self->data;
   dt_control_t *ctl = darktable.control;
+  dt_gui_gtk_t *gui = darktable.gui;
+
   const gboolean picker_active = dt_iop_color_picker_is_visible(dev);
 
   // change cursor appearance by default
   _set_default_cursor(self, x, y);
-  gboolean ret = FALSE;
+  gboolean handled = FALSE;
 
   if(picker_active && ctl->button_down && ctl->button_down_which == 1)
   {
@@ -2671,12 +2926,12 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
           dt_lib_colorpicker_set_point(darktable.lib, mouse_point);
       }
     }
-    ret = TRUE;
+    handled = TRUE;
   }
   else if(picker_active)
   {
     // Keep module-specific hover overlays and live-edit cursors disabled while the picker owns the center view.
-    ret = TRUE;
+    handled = TRUE;
   }
 
   // masks
@@ -2684,21 +2939,74 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
           && dt_masks_events_mouse_moved(dev->gui_module, x, y, pressure, which))
   {
     dt_gui_throttle_queue(dev, _delayed_history_commit, dev);
-    ret = TRUE;
+    handled = TRUE;
   }
 
   // module
   else if(dev->gui_module && dev->gui_module->mouse_moved
     &&dev->gui_module->mouse_moved(dev->gui_module, x, y, pressure, which))
   {
-    ret = TRUE;
+    handled = TRUE;
+  }
+
+  if(handled && ctl->button_down && ctl->button_down_which == 1)
+    gui->mouse.is_dragging = TRUE;
+
+  darkroom_edge_pan_test_t edge = { 0 };
+  _darkroom_edge_pan_update_state(self, x, y, self->width, self->height, &edge);
+
+  if(!edge.drag && (gui->pan_edge.timeout_source || gui->pan_edge.block_normal_pan))
+  {
+    _reset_edge_pan();
+  }
+
+  if(edge.drag && !edge.in_margin && (gui->pan_edge.timeout_source || gui->pan_edge.block_normal_pan))
+  {
+    /* The drag has already activated edge-pan. Leaving the edge band must stop
+       timeout-driven ROI motion immediately and keep normal pan blocked until release. */
+    gui->pan_edge.view = self;
+    gui->pan_edge.velocity[0] = 0.0f;
+    gui->pan_edge.velocity[1] = 0.0f;
+    gui->pan_edge.last_time_us = 0;
+    gui->pan_edge.block_normal_pan = TRUE;
+    if(gui->pan_edge.timeout_source)
+    {
+      g_source_remove(gui->pan_edge.timeout_source);
+      gui->pan_edge.timeout_source = 0;
+    }
+    ctl->button_x = x;
+    ctl->button_y = y;
+  }
+
+  // While a left-button drag is in the edge band, the timeout owns ROI motion.
+  // The current mouse position only updates the velocity that each tick applies.
+  if(edge.in_margin)
+  {
+    gui->pan_edge.view = self;
+    gui->pan_edge.block_normal_pan = TRUE;
+    gui->pan_edge.velocity[0] = edge.velocity[0];
+    gui->pan_edge.velocity[1] = edge.velocity[1];
+    if(!gui->pan_edge.timeout_source)
+    {
+      gui->pan_edge.last_time_us = g_get_monotonic_time();
+      gui->pan_edge.timeout_source = g_timeout_add(DARKROOM_EDGE_PAN_INTERVAL_MS,
+                                                   _darkroom_edge_pan_tick, &gui->pan_edge);
+    }
   }
 
   dt_control_commit_cursor();
 
-  if(ret)
+  if(handled)
   {
     dt_control_queue_redraw_center();
+    return;
+  }
+
+  // Edge-pan owns the current drag until button release, so do not fall back to regular pan.
+  if(gui->pan_edge.block_normal_pan)
+  {
+    ctl->button_x = x;
+    ctl->button_y = y;
     return;
   }
 
@@ -2709,11 +3017,9 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
     dt_dev_coordinates_widget_delta_to_image_delta(dev, delta, 1);
 
     // new roi position in full image scale
-    float roi[2] = {
-      dev->roi.x - (delta[0] / dev->roi.processed_width),
-      dev->roi.y - (delta[1] / dev->roi.processed_height)
-    };
-    dt_dev_check_zoom_pos_bounds(dev, &roi[0], &roi[1], NULL, NULL); 
+    float roi[2] = { dev->roi.x - (delta[0] / dev->roi.processed_width),
+                     dev->roi.y - (delta[1] / dev->roi.processed_height) };
+    dt_dev_check_zoom_pos_bounds(dev, &roi[0], &roi[1], NULL, NULL);
 
     dev->roi.x = roi[0];
     dev->roi.y = roi[1];
@@ -2733,6 +3039,12 @@ int button_released(dt_view_t *self, double x, double y, int which, uint32_t sta
 
   dt_print(DT_DEBUG_INPUT, "[darkroom] button released which: %d state: %d x: %.2f y: %.2f\n",
            which, state, x, y);
+
+  if(which == 1)
+  {
+    darktable.gui->mouse.is_dragging = FALSE;
+    _reset_edge_pan();
+  }
 
   if(dt_iop_color_picker_is_visible(dev) && which == 1)
   {
@@ -2776,6 +3088,8 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
 
   // Grab focus on any click so we can interact from keyboard
   gtk_widget_grab_focus(dt_ui_center(darktable.gui->ui));
+  if(which == 1)
+    darktable.gui->mouse.is_dragging = FALSE;
 
   if(dt_iop_color_picker_is_visible(dev))
   {
@@ -2842,6 +3156,7 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
           dt_lib_colorpicker_set_point(darktable.lib, point);
         }
       }
+      darktable.gui->mouse.is_dragging = TRUE;
       return 1;
     }
 
@@ -2896,6 +3211,8 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
   if(dt_masks_get_visible_form(dev)
      && dt_masks_events_button_pressed(dev->gui_module, x, y, pressure, which, type, state))
   {
+    if(which == 1)
+      darktable.gui->mouse.is_dragging = TRUE;
     if(!darktable.develop->form_gui->creation)
       dt_gui_throttle_queue(dev, _delayed_history_commit, dev);
     return 1;
@@ -2903,7 +3220,11 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
   // module
   if(dev->gui_module && dev->gui_module->enabled && dev->gui_module->button_pressed
      && dev->gui_module->button_pressed(dev->gui_module, x, y, pressure, which, type, state))
-     return 1;
+  {
+    if(which == 1)
+      darktable.gui->mouse.is_dragging = TRUE;
+    return 1;
+  }
 
   if(which == 2)
   {

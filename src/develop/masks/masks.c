@@ -416,8 +416,10 @@ void dt_masks_gui_reset_dragging(dt_masks_form_gui_t *gui)
 gboolean dt_masks_gui_is_dragging(const dt_masks_form_gui_t *gui)
 {
   if(IS_NULL_PTR(gui)) return FALSE;
-  return (gui->form_dragging || gui->source_dragging || gui->seg_dragging >= 0 || gui->node_dragging >= 0
-          || gui->handle_dragging >= 0 || gui->handle_border_dragging >= 0);
+  const gboolean dragging = (gui->form_dragging || gui->source_dragging || gui->seg_dragging >= 0 || gui->node_dragging >= 0
+                              || gui->handle_dragging >= 0 || gui->handle_border_dragging >= 0);
+  darktable.gui->mouse.is_dragging = dragging;
+  return dragging;
 }
 
 /**

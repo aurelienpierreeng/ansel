@@ -150,7 +150,8 @@ typedef struct dt_gui_gtk_t
     struct dt_view_t *view;
     float velocity[2];
     gint64 last_time_us;
-    gboolean block_pan;
+    gboolean enabled;
+    gboolean block_normal_pan;
   } pan_edge;
 
   // Culling mode is a special case of collection filter that is restricted to user selection
@@ -175,6 +176,7 @@ typedef struct dt_gui_gtk_t
     float effect_radius;
     // distance to the cursor in absolute output-image pixels
     float effect_radius_scaled;
+    gboolean is_dragging;
   } mouse;
 
   int icon_size; // size of top panel icons
