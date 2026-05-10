@@ -207,8 +207,8 @@ Build:
                               (default: $BUILD_TYPE_DEFAULT)
    --build-generator <string> Build tool
                               (default: Ninja)
-	 --build-package            Build a binary package with only generic optimizations, for portability.
-															(default: disabled)
+   --build-package            Build a binary package with only generic optimizations, for portability.
+                              (default: disabled)
 
 -j --jobs <integer>           Number of tasks
                               (default: number of CPUs)
@@ -216,11 +216,11 @@ Build:
    --asan                     Enable address sanitizer options
                               (default: disabled)
 
-	 --cccompiler               C Compiler (default: gcc)
-	                            (alternative: clang)
+   --cccompiler               C Compiler (default: gcc)
+                              (alternative: clang)
 
-	 --cxxcompiler              C++ Compiler (default: g++)
-	                            (alternative: clang++)
+   --cxxcompiler              C++ Compiler (default: g++)
+                              (alternative: clang++)
 
 Actual actions:
    --skip-build               Configure but exit before building the binaries
@@ -237,11 +237,11 @@ Cleanup actions:
 
 Update actions:
    --update                   Run 'git pull' to update the source code and submodules
-	                            from the project master branch.
-	                            Git needs to be installed on the computer.
-															(default: disabled)
-	 --skip-lensfun    					Skip lensfun data update after installation
-															(default: disabled)
+                              from the project master branch.
+                              Git needs to be installed on the computer.
+                              (default: disabled)
+   --skip-lensfun             Skip lensfun data update after installation
+                              (default: disabled)
 
 
 Features:
