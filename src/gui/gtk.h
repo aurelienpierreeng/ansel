@@ -145,6 +145,14 @@ typedef struct dt_gui_gtk_t
 
   int32_t center_tooltip; // 0 = no tooltip, 1 = new tooltip, 2 = old tooltip
 
+  struct {
+    guint timeout_source;
+    struct dt_view_t *view;
+    float velocity[2];
+    gint64 last_time_us;
+    gboolean block_pan;
+  } pan_edge;
+
   // Culling mode is a special case of collection filter that is restricted to user selection
   gboolean culling_mode;
 
@@ -232,8 +240,8 @@ typedef struct dt_gui_widget_auto_height_t
  * builds so invalid GUI ownership/lifetime bugs point to the Ansel source line
  * that queued the redraw.
  */
-void dt_gtk_widget_queue_draw_ext(GtkWidget *widget, const char *file, const int line);
-#define dt_gtk_widget_queue_draw(widget) dt_gtk_widget_queue_draw_ext((GtkWidget *)(widget), __FILE__, __LINE__)
+void dt_gtk_widget_queue_draw_ext(GtkWidget *widget, const char *name, const char *file, const int line);
+#define dt_gtk_widget_queue_draw(widget) dt_gtk_widget_queue_draw_ext((GtkWidget *)(widget), #widget, __FILE__, __LINE__)
 #define gtk_widget_queue_draw(widget) dt_gtk_widget_queue_draw(widget)
 
 /** \brief Set a GTK toggle button state with the Ansel call site in diagnostics.
@@ -242,10 +250,10 @@ void dt_gtk_widget_queue_draw_ext(GtkWidget *widget, const char *file, const int
  * invalid toggle object makes the first ownership/lifetime error visible before
  * GTK emits secondary redraw assertions.
  */
-void dt_gtk_toggle_button_set_active_ext(GtkToggleButton *toggle_button, const gboolean active,
+void dt_gtk_toggle_button_set_active_ext(GtkToggleButton *toggle_button, const char *name, const gboolean active,
                                          const char *file, const int line);
 #define dt_gtk_toggle_button_set_active(toggle_button, active)                                                 \
-  dt_gtk_toggle_button_set_active_ext((GtkToggleButton *)(toggle_button), active, __FILE__, __LINE__)
+  dt_gtk_toggle_button_set_active_ext((GtkToggleButton *)(toggle_button), #toggle_button, active, __FILE__, __LINE__)
 #define gtk_toggle_button_set_active(toggle_button, active)                                                   \
   dt_gtk_toggle_button_set_active(toggle_button, active)
 

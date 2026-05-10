@@ -715,6 +715,7 @@ typedef enum dt_debug_thread_t
   DT_DEBUG_CACHE          = 1 <<  0,
   DT_DEBUG_CONTROL        = 1 <<  1,
   DT_DEBUG_DEV            = 1 <<  2,
+  DT_DEBUG_GTK            = 1 <<  3,
   DT_DEBUG_PERF           = 1 <<  4,
   DT_DEBUG_PIPECACHE         = 1 <<  5,
   DT_DEBUG_PWSTORAGE      = 1 <<  6,

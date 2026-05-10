@@ -385,8 +385,8 @@ void dt_dev_pixelpipe_get_roi_out(dt_dev_pixelpipe_t *pipe,
     // module-local geometry change visible on `-d pipe`.
     if(piece->enabled && (darktable.unmuted & DT_DEBUG_PIPE))
       dt_print(DT_DEBUG_PIPE,
-               "[roi-out] pipe=%s module=%s enabled=%d in=(x=%d y=%d w=%d h=%d scale=%.6f)"
-               " out=(x=%d y=%d w=%d h=%d scale=%.6f)\n",
+               "[roi-out] pipe=%-15s module=%-18s enabled=%d in =(x=%5d y=%5d w=%5d h=%5d scale=%2.2f)"
+               " out=(x=%5d y=%5d w=%5d h=%5d scale=%2.2f)\n",
                pipe_name, module->op, piece->enabled,
                roi_in.x, roi_in.y, roi_in.width, roi_in.height, roi_in.scale,
                roi_out.x, roi_out.y, roi_out.width, roi_out.height, roi_out.scale);
@@ -442,8 +442,8 @@ void dt_dev_pixelpipe_get_roi_in(dt_dev_pixelpipe_t *pipe, const struct dt_iop_r
     // and padding traceable module-by-module on `-d pipe`.
     if(piece->enabled && (darktable.unmuted & DT_DEBUG_PIPE))
       dt_print(DT_DEBUG_PIPE,
-               "[roi-in ] pipe=%s module=%s enabled=%d out=(x=%d y=%d w=%d h=%d scale=%.6f)"
-               " in=(x=%d y=%d w=%d h=%d scale=%.6f)\n",
+               "[roi-in ] pipe=%-15s module=%-18s enabled=%d out=(x=%5d y=%5d w=%5d h=%5d scale=%2.2f)"
+               " in=(x=%5d y=%5d w=%5d h=%5d scale=%2.2f)\n",
                pipe_name, module->op, piece->enabled,
                roi_out_temp.x, roi_out_temp.y, roi_out_temp.width, roi_out_temp.height, roi_out_temp.scale,
                roi_in.x, roi_in.y, roi_in.width, roi_in.height, roi_in.scale);

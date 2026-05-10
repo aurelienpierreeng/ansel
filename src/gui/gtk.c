@@ -333,27 +333,34 @@ static gboolean _draw(GtkWidget *da, cairo_t *cr, gpointer user_data)
 }
 
 #ifdef _DEBUG
-void dt_gtk_widget_queue_draw_ext(GtkWidget *widget, const char *file, const int line)
+void dt_gtk_widget_queue_draw_ext(GtkWidget *widget, const char *name, const char *file, const int line)
 {
   if(!GTK_IS_WIDGET(widget))
   {
-    fprintf(stderr, "gtk_widget_queue_draw() called with a non-WIDGET or NULL widget at %s:%d (widget=%p)\n",
-            file, line, widget);
+    dt_print(DT_DEBUG_GTK, "gtk_widget_queue_draw(%s) called with a non-WIDGET or NULL widget at %s:%d (widget=%p)\n",
+             name, file, line, widget);
     return;
   }
+  else
+    dt_print(DT_DEBUG_GTK, "queueing redraw for `%s` (`%s`) at %s:%d\n",
+             name, gtk_widget_get_name(widget), file, line);
+
 
   (gtk_widget_queue_draw)(widget);
 }
 
-void dt_gtk_toggle_button_set_active_ext(GtkToggleButton *toggle_button, const gboolean active,
+void dt_gtk_toggle_button_set_active_ext(GtkToggleButton *toggle_button, const char *name, const gboolean active,
                                          const char *file, const int line)
 {
   if(!GTK_IS_TOGGLE_BUTTON(toggle_button))
   {
-    fprintf(stderr, "gtk_toggle_button_set_active() called with a non-TOGGLE_BUTTON or NULL widget at %s:%d (toggle_button=%p)\n",
-            file, line, toggle_button);
+    dt_print(DT_DEBUG_GTK, "gtk_toggle_button_set_active(%s) called with a non-TOGGLE_BUTTON or NULL widget at %s:%d (toggle_button=%p)\n",
+            name, file, line, toggle_button);
     return;
   }
+  else
+    dt_print(DT_DEBUG_GTK, "setting toggle button `%s` (`%s`) to %s at %s:%d\n", name, gtk_widget_get_name(GTK_WIDGET(toggle_button)),
+            active ? "active" : "inactive", file, line);
 
   (gtk_toggle_button_set_active)(toggle_button, active);
 }
