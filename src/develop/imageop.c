@@ -758,16 +758,36 @@ dt_iop_module_t *dt_iop_gui_duplicate(dt_iop_module_t *base, gboolean copy_param
 
 void dt_iop_gui_rename_module(dt_iop_module_t *module);
 
+/** Rename a freshly-created module after GTK has finished the menu activation.
+ *
+ * The copy/duplicate actions create and show a new expander while the
+ * multi-instance menu is still unwinding its activation path.  Starting the
+ * in-place editor immediately can lose the entry focus to the menu teardown,
+ * so we wait for the next main-loop idle before installing the entry in the
+ * new module header.
+ */
+static gboolean _rename_module_idle(gpointer user_data)
+{
+  dt_iop_module_t *module = (dt_iop_module_t *)user_data;
+  dt_iop_gui_rename_module(module);
+
+  return G_SOURCE_REMOVE;
+}
+
 static void _gui_copy_callback(GtkButton *button, gpointer user_data)
 {
   dt_iop_module_t *module = dt_iop_gui_duplicate(user_data, FALSE);
-  dt_iop_gui_rename_module(module);
+  if(IS_NULL_PTR(module)) return;
+
+  g_idle_add(_rename_module_idle, module);
 }
 
 static void _gui_duplicate_callback(GtkButton *button, gpointer user_data)
 {
   dt_iop_module_t *module = dt_iop_gui_duplicate(user_data, TRUE);
-  dt_iop_gui_rename_module(module);
+  if(IS_NULL_PTR(module)) return;
+
+  g_idle_add(_rename_module_idle, module);
 }
 
 static gboolean _rename_module_key_press(GtkWidget *entry, GdkEventKey *event, dt_iop_module_t *module)
