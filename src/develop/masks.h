@@ -1151,6 +1151,7 @@ float dt_masks_form_get_interaction_value(dt_masks_form_group_t *form_group,
                                           dt_masks_interaction_t interaction);
 gboolean dt_masks_form_get_gravity_center(const struct dt_masks_form_t *form, float center[2], float *area);
 void dt_masks_form_update_gravity_center(struct dt_masks_form_t *form);
+int dt_masks_center_view_on_form(struct dt_develop_t *dev, const struct dt_masks_form_t *form);
 float dt_masks_form_set_interaction_value(dt_masks_form_group_t *form_group,
                                           dt_masks_interaction_t interaction,
                                           float value, dt_masks_increment_t increment, int flow,

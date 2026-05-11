@@ -1812,17 +1812,20 @@ static void _blendop_masks_all_selection_changed(GtkTreeSelection *selection, dt
   int formid = -1;
   gtk_tree_model_get(model, &iter, BLENDOP_MASKS_ALL_COL_FORMID, &formid, -1);
   if(formid <= 0) return;
+  dt_masks_form_t *mask_form = dt_masks_get_from_id(darktable.develop, formid);
+  if(IS_NULL_PTR(mask_form)) return;
 
   // Keep the global shape manager in sync without firing its selection handler.
   // That handler rebuilds the visible mask GUI and can be re-entered while this
   // blend list selection is still being processed.
   dt_dev_masks_selection_change(darktable.develop, NULL, formid, FALSE);
-  dt_masks_change_form_gui(dt_masks_get_from_id(darktable.develop, formid));
+  dt_masks_change_form_gui(mask_form);
   if(module->dev && module->dev->form_gui)
   {
     module->dev->form_gui->group_selected = 0;
     module->dev->form_gui->form_selected = TRUE;
   }
+  dt_masks_center_view_on_form(module->dev, mask_form);
 }
 
 static void _blendop_masks_all_toggled(GtkCellRendererToggle *cell, gchar *path_string, dt_iop_module_t *module)
@@ -2078,6 +2081,8 @@ static void _blendop_masks_group_selection_changed(GtkTreeSelection *selection, 
   int formid = -1;
   gtk_tree_model_get(model, &iter, BLENDOP_MASKS_GROUP_COL_FORMID, &formid, -1);
   if(formid <= 0) return;
+  dt_masks_form_t *mask_form = dt_masks_get_from_id(darktable.develop, formid);
+  if(IS_NULL_PTR(mask_form)) return;
 
   // Switching edit mode rebuilds the visible module group. Do it only when the
   // current overlay does not already contain the selected row, because this
@@ -2121,6 +2126,7 @@ static void _blendop_masks_group_selection_changed(GtkTreeSelection *selection, 
       gui->pivot_selected = FALSE;
     }
   }
+  dt_masks_center_view_on_form(module->dev, mask_form);
 }
 
 static gboolean _blendop_masks_group_move_by_index(dt_masks_form_t *group_form, const int index,

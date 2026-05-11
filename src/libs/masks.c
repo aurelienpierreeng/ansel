@@ -916,6 +916,7 @@ static void _tree_selection_change(GtkTreeSelection *selection, dt_lib_masks_t *
   // else, we create a new form group with the selection and display it
   GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(self->treeview));
   dt_masks_form_t *grp = dt_masks_create(DT_MASKS_GROUP);
+  dt_masks_form_t *selected_form = NULL;
   GList *items = gtk_tree_selection_get_selected_rows(selection, NULL);
   for(const GList *items_iter = items; items_iter; items_iter = g_list_next(items_iter))
   {
@@ -928,8 +929,9 @@ static void _tree_selection_change(GtkTreeSelection *selection, dt_lib_masks_t *
       _lib_masks_get_values(model, &iter, NULL, &grid, &id);
 
       dt_masks_form_t *form = dt_masks_get_from_id(darktable.develop, id);
-      if(form)
+      if(!IS_NULL_PTR(form))
       {
+        if(nb == 1) selected_form = form;
         dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)malloc(sizeof(dt_masks_form_group_t));
         fpt->formid = id;
         fpt->parentid = grid;
@@ -963,7 +965,10 @@ static void _tree_selection_change(GtkTreeSelection *selection, dt_lib_masks_t *
   dt_masks_group_ungroup(grp2, grp);
   dt_masks_change_form_gui(grp2);
   darktable.develop->form_gui->edit_mode = DT_MASKS_EDIT_FULL;
-  dt_control_queue_redraw_center();
+  if(nb == 1 && !IS_NULL_PTR(selected_form))
+    dt_masks_center_view_on_form(darktable.develop, selected_form);
+  else
+    dt_dev_pixelpipe_change_zoom_main(darktable.develop);
 }
 
 static GtkWidget *_tree_context_menu(GtkTreeSelection *selection, GtkTreeModel *model,

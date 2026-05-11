@@ -50,6 +50,7 @@
 #include "control/conf.h"
 #include "common/undo.h"
 #include "develop/blend.h"
+#include "develop/dev_pixelpipe.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
 #include <stdint.h>
@@ -3535,6 +3536,37 @@ void dt_masks_form_update_gravity_center(dt_masks_form_t *mask_form)
            "[masks] gravity center updated: form=%p id=%d type=0x%x ok=%d center=(%f,%f), area=%f\n",
            (void *)mask_form, mask_form->formid, mask_form->type, ok,
            mask_form->gravity_center[0], mask_form->gravity_center[1], mask_form->area);
+}
+
+/**
+ * @brief Center the darkroom ROI on a mask form gravity center.
+ *
+ * @details Mask forms store their gravity center in normalized RAW coordinates,
+ * while `dev->roi.x` and `dev->roi.y` address the processed image. Transforming
+ * through absolute RAW and processed-image coordinates keeps the center aligned
+ * with the final image after distortion modules, then the ROI clamp preserves
+ * the same bounds used by manual panning.
+ *
+ * @return 0 on success, 1 when the form has no usable center or the transform fails.
+ */
+int dt_masks_center_view_on_form(dt_develop_t *dev, const dt_masks_form_t *mask_form)
+{
+  if(IS_NULL_PTR(dev) || IS_NULL_PTR(mask_form)) return 1;
+
+  float center[2] = { 0.0f, 0.0f };
+  float area = 0.0f;
+  if(!dt_masks_form_get_gravity_center(mask_form, center, &area)) return 1;
+
+  dt_dev_coordinates_raw_norm_to_raw_abs(dev, center, 1);
+  if(!dt_dev_coordinates_raw_abs_to_image_abs(dev, center, 1)) return 1;
+  dt_dev_coordinates_image_abs_to_image_norm(dev, center, 1);
+
+  dev->roi.x = center[0];
+  dev->roi.y = center[1];
+  dt_dev_check_zoom_pos_bounds(dev, &dev->roi.x, &dev->roi.y, NULL, NULL);
+  dt_dev_pixelpipe_change_zoom_main(dev);
+
+  return 0;
 }
 
 static float _change_opacity(dt_masks_form_group_t *form_group, float value,
