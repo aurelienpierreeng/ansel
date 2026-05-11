@@ -1067,7 +1067,7 @@ static void _gradient_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks
     dt_masks_draw_preview_shape(cr, zoom_scale, nb, preview.points, preview.points_count,
                                 preview.border, preview.border_count,
                                 &dt_masks_functions_gradient.draw_shape, CAIRO_LINE_CAP_ROUND,
-                                CAIRO_LINE_CAP_ROUND, FALSE);
+                                CAIRO_LINE_CAP_ROUND, FALSE, FALSE);
     _gradient_draw_arrow(cr, FALSE, FALSE, gui->form_rotating, zoom_scale, preview.points, preview.points_count);
     dt_masks_preview_buffers_cleanup(&preview);
   

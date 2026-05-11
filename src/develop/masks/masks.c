@@ -4197,7 +4197,7 @@ void dt_masks_set_source_pos_initial_value(dt_masks_form_gui_t *mask_gui, dt_mas
  *
  * This uses the stored source positioning mode and can follow the cursor while adding.
  */
-void dt_masks_calculate_source_pos_value(dt_masks_form_gui_t *mask_gui, const float initial_xpos,
+void dt_masks_calculate_source_pos_origin(dt_masks_form_gui_t *mask_gui, const float initial_xpos,
                                          const float initial_ypos, const float xpos, const float ypos,
                                          float *pos_x, float *pos_y, const int adding)
 {
@@ -4222,7 +4222,7 @@ void dt_masks_calculate_source_pos_value(dt_masks_form_gui_t *mask_gui, const fl
         source_y += ypos;
       }
       else
-        fprintf(stderr, "[dt_masks_calculate_source_pos_value] unsupported masks type when calculating source position value\n");
+        fprintf(stderr, "[dt_masks_calculate_source_pos_origin] unsupported masks type when calculating source position value\n");
     }
     else
     {
@@ -4246,7 +4246,7 @@ void dt_masks_calculate_source_pos_value(dt_masks_form_gui_t *mask_gui, const fl
     }
   }
   else
-    fprintf(stderr, "[dt_masks_calculate_source_pos_value] unknown source position type for setting source position value\n");
+    fprintf(stderr, "[dt_masks_calculate_source_pos_origin] unknown source position type for setting source position value\n");
 
   *pos_x = source_x;
   *pos_y = source_y;

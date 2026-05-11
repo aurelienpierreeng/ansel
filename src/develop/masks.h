@@ -779,14 +779,15 @@ static inline void dt_masks_draw_preview_shape(cairo_t *cr, const float zoom_sca
                                                                          const gboolean source),
                                                const cairo_line_cap_t shape_cap,
                                                const cairo_line_cap_t border_cap,
-                                               const gboolean save_restore)
+                                               const gboolean save_restore,
+                                               const gboolean source)
 {
   if(save_restore) cairo_save(cr);
   if(points && points_count > 0)
-    dt_draw_shape_lines(DT_MASKS_NO_DASH, FALSE, cr, num_points, FALSE, zoom_scale, points, points_count,
+    dt_draw_shape_lines(DT_MASKS_NO_DASH, source, cr, num_points, FALSE, zoom_scale, points, points_count,
                         draw_shape, shape_cap);
   if(border && border_count > 0)
-    dt_draw_shape_lines(DT_MASKS_DASH_STICK, FALSE, cr, num_points, FALSE, zoom_scale, border, border_count,
+    dt_draw_shape_lines(DT_MASKS_DASH_STICK, source, cr, num_points, FALSE, zoom_scale, border, border_count,
                         draw_shape, border_cap);
   if(save_restore) cairo_restore(cr);
 }
@@ -799,12 +800,15 @@ typedef struct dt_masks_preview_buffers_t
   int points_count;
   float *border;
   int border_count;
+
+  float *source_points;
 } dt_masks_preview_buffers_t;
 
 static inline void dt_masks_preview_buffers_cleanup(dt_masks_preview_buffers_t *buffers)
 {
   dt_pixelpipe_cache_free_align(buffers->points);
   dt_pixelpipe_cache_free_align(buffers->border);
+  dt_pixelpipe_cache_free_align(buffers->source_points);
 }
 
 typedef struct dt_masks_gui_center_point_t
@@ -1101,7 +1105,7 @@ void dt_masks_select_form(struct dt_iop_module_t *module, dt_masks_form_t *sel);
 /** utils for selecting the source of a clone mask while creating it */
 void dt_masks_set_source_pos_initial_state(dt_masks_form_gui_t *gui, const uint32_t state);
 void dt_masks_set_source_pos_initial_value(dt_masks_form_gui_t *gui, dt_masks_form_t *form);
-void dt_masks_calculate_source_pos_value(dt_masks_form_gui_t *gui, const float initial_xpos,
+void dt_masks_calculate_source_pos_origin(dt_masks_form_gui_t *gui, const float initial_xpos,
                                          const float initial_ypos, const float xpos, const float ypos, float *px,
                                          float *py, const int adding);
 static inline void dt_masks_draw_source_preview(cairo_t *cr, const float zoom_scale, dt_masks_form_gui_t *gui,
@@ -1109,7 +1113,7 @@ static inline void dt_masks_draw_source_preview(cairo_t *cr, const float zoom_sc
                                                 const float xpos, const float ypos, const int adding)
 {
   float source_pos[2] = { 0.0f, 0.0f };
-  dt_masks_calculate_source_pos_value(gui, initial_xpos, initial_ypos, xpos, ypos,
+  dt_masks_calculate_source_pos_origin(gui, initial_xpos, initial_ypos, xpos, ypos,
                                       &source_pos[0], &source_pos[1], adding);
   dt_draw_cross(cr, zoom_scale, source_pos[0], source_pos[1]);
 }

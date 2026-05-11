@@ -758,13 +758,16 @@ static inline void dt_draw_shape_lines(const dt_draw_dash_type_t dash_type, cons
   
   // OUTLINE (dark)
   cairo_set_line_width(cr, line_width_dark);
-  dt_draw_set_color_overlay(cr, FALSE, dash_type ? 0.3f : 0.9f);
+  float alpha = dash_type ? 0.3f : 0.9f;
+  if(source) alpha *= 0.5f;
+  dt_draw_set_color_overlay(cr, FALSE, alpha);
   cairo_stroke_preserve(cr);
 
   // NORMAL (bright)
   cairo_set_line_width(cr, line_width_bright);
-  dt_draw_set_color_overlay(cr, TRUE, 0.8);
+  dt_draw_set_color_overlay(cr, TRUE, source ? 0.4f : 0.8f);
   cairo_stroke(cr);
+
   
   cairo_restore(cr);
 }
