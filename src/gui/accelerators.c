@@ -1024,7 +1024,8 @@ static inline void _for_each_non_virtual_accel(gpointer key, gpointer value, gpo
   }
 }
 
-static gboolean _has_shortcut(dt_accels_t *accels, GtkAccelGroup *group, guint keyval, GdkModifierType mods)
+static dt_shortcut_t *_find_non_virtual_shortcut(dt_accels_t *accels, GtkAccelGroup *group, guint keyval,
+                                                 GdkModifierType mods)
 {
   _accel_lookup_t result = { .results = NULL, .key = keyval, .modifier = mods, .group = group };
 
@@ -1032,32 +1033,35 @@ static gboolean _has_shortcut(dt_accels_t *accels, GtkAccelGroup *group, guint k
   g_hash_table_foreach(accels->acceleratables, _for_each_non_virtual_accel, &result);
   dt_pthread_mutex_unlock(&accels->lock);
 
-  const gboolean has_accel = (!IS_NULL_PTR(result.results));
+  dt_shortcut_t *shortcut = NULL;
+  GList *item = g_list_first(result.results);
+  if(!IS_NULL_PTR(item)) shortcut = (dt_shortcut_t *)item->data;
+
   g_list_free(result.results);
   result.results = NULL;
-  return has_accel;
+  return IS_NULL_PTR(shortcut) ? NULL : shortcut;
 }
 
+static gboolean _call_shortcut_cclosure(dt_shortcut_t *shortcut, GtkWindow *main_window);
 
 static gboolean _key_pressed(GtkWidget *w, GdkEvent *event, dt_accels_t *accels, guint keyval, GdkModifierType mods)
 {
   // Get the accelerator entry from the accel group
   gchar *accel_name = gtk_accelerator_name(keyval, mods);
-  GQuark accel_quark = g_quark_from_string(accel_name);
   dt_print(DT_DEBUG_SHORTCUTS, "[shortcuts] Combination of keys decoded: %s\n", accel_name);
   dt_free(accel_name);
 
   // Look into the active group first, aka darkroom, lighttable, etc.
-  if(_has_shortcut(accels, accels->active_group, keyval, mods)
-     && gtk_accel_group_activate(accels->active_group, accel_quark, G_OBJECT(w), keyval, mods))
+  dt_shortcut_t *shortcut = _find_non_virtual_shortcut(accels, accels->active_group, keyval, mods);
+  if(!IS_NULL_PTR(shortcut) && _call_shortcut_cclosure(shortcut, GTK_WINDOW(w)))
   {
     dt_print(DT_DEBUG_SHORTCUTS, "[shortcuts] Active group action executed\n");
     return TRUE;
   }
 
   // If nothing found, try again with global accels.
-  if(_has_shortcut(accels, accels->global_accels, keyval, mods)
-     && gtk_accel_group_activate(accels->global_accels, accel_quark, G_OBJECT(w), keyval, mods))
+  shortcut = _find_non_virtual_shortcut(accels, accels->global_accels, keyval, mods);
+  if(!IS_NULL_PTR(shortcut) && _call_shortcut_cclosure(shortcut, GTK_WINDOW(w)))
   {
     dt_print(DT_DEBUG_SHORTCUTS, "[shortcuts] Global group action executed\n");
     return TRUE;
@@ -1818,7 +1822,7 @@ static void _search_entry_changed(GtkWidget *widget, gpointer user_data)
 }
 
 // fire action callbacks even when they don't have a keyboard shortcut defined
-static void _call_shortcut_cclosure(dt_shortcut_t *shortcut, GtkWindow *main_window)
+static gboolean _call_shortcut_cclosure(dt_shortcut_t *shortcut, GtkWindow *main_window)
 {
   /*
     Accel callback signature is:
@@ -1843,6 +1847,12 @@ static void _call_shortcut_cclosure(dt_shortcut_t *shortcut, GtkWindow *main_win
   g_value_init (&ret, G_TYPE_BOOLEAN);
 
   g_closure_invoke(dt_shortcut_get_closure(shortcut), &ret, 4, params, NULL);
+  const gboolean handled = g_value_get_boolean(&ret);
+
+  for(int k = 0; k < 4; k++) g_value_unset(&params[k]);
+  g_value_unset(&ret);
+
+  return handled;
 }
 
 static void _dispatch_selected_shortcut(dt_accels_dispatch_state_t *state)

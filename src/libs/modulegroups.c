@@ -714,57 +714,50 @@ static void _focus_module(dt_iop_module_t *module)
   }
 }
 
-/* WARNING: first/last refer to pipeline nodes order, which is reversed compared to GUI order. */
-static dt_iop_module_t *_find_first_visible_module(dt_lib_module_t *self)
-{
-  const dt_modulesgroups_tabs_t current_tab = _get_current_tab(self);
-
-  for(GList *module = g_list_first(darktable.develop->iop); module; module = g_list_next(module))
-  {
-    dt_iop_module_t *mod = (dt_iop_module_t *)module->data;
-    if(_is_module_in_tab(mod, current_tab)) return mod;
-  }
-  return NULL;
-}
-
-static dt_iop_module_t *_find_last_visible_module(dt_lib_module_t *self)
-{
-  const dt_modulesgroups_tabs_t current_tab = _get_current_tab(self);
-
-  for(GList *module = g_list_last(darktable.develop->iop); module; module = g_list_previous(module))
-  {
-    dt_iop_module_t *mod = (dt_iop_module_t *)module->data;
-    if(_is_module_in_tab(mod, current_tab)) return mod;
-  }
-  return NULL;
-}
-
-/* WARNING: next/previous refer to GUI order, which is reversed pipeline order
-* in a "layer over" logic: first pipeline node is at the GUI bottom.
-*/
 static gboolean _focus_previous_module(GtkAccelGroup *accel_group, GObject *accelerable, guint keyval,
                                        GdkModifierType modifier, gpointer user_data)
 {
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
+  dt_lib_modulegroups_t *d = (dt_lib_modulegroups_t *)self->data;
   dt_iop_module_t *focused = darktable.develop->gui_module;
   fprintf(stdout, "focusing previous module\n");
 
   dt_modulesgroups_tabs_t tab = _get_current_tab(self);
-  if(tab == MOD_TAB_BASIC)
-  {
-    // Basic tab uses internal sections that don't honour pipeline order
-    dt_control_log(_("Keyboard navigation in basic tab is not supported yet"));
-    return FALSE;
-  }
 
   if(IS_NULL_PTR(focused))
   {
-    _focus_module(_find_first_visible_module(self));
+    GList *children = NULL;
+    _modulegroups_append_visible_expanders(d->pages[tab], &children);
+    GList *first = g_list_first(children);
+    GtkWidget *widget = first ? GTK_WIDGET(first->data) : NULL;
+    _focus_module(widget ? (dt_iop_module_t *)g_object_get_data(G_OBJECT(widget), "dt-module") : NULL);
+    g_list_free(children);
   }
   else
   {
+    dt_iop_module_t *target = NULL;
+    GList *children = NULL;
+    _modulegroups_append_visible_expanders(d->pages[tab], &children);
+
+    /* Page Up follows the displayed module order.  The basic tab is split in
+     * section containers, so we walk the actual visible expander tree instead
+     * of the pipeline list. */
+    for(GList *module = g_list_first(children); module; module = g_list_next(module))
+    {
+      GtkWidget *widget = GTK_WIDGET(module->data);
+      if(widget == focused->expander) break;
+      target = (dt_iop_module_t *)g_object_get_data(G_OBJECT(widget), "dt-module");
+    }
+    if(IS_NULL_PTR(target))
+    {
+      GList *last = g_list_last(children);
+      GtkWidget *widget = last ? GTK_WIDGET(last->data) : NULL;
+      target = widget ? (dt_iop_module_t *)g_object_get_data(G_OBJECT(widget), "dt-module") : NULL;
+    }
+
     dt_iop_gui_set_expanded(focused, FALSE, TRUE);
-    _focus_module(dt_iop_gui_get_next_visible_module(focused));
+    _focus_module(target);
+    g_list_free(children);
   }
 
   return TRUE;
@@ -774,25 +767,46 @@ static gboolean _focus_next_module(GtkAccelGroup *accel_group, GObject *accelera
                                    GdkModifierType modifier, gpointer user_data)
 {
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
+  dt_lib_modulegroups_t *d = (dt_lib_modulegroups_t *)self->data;
   dt_iop_module_t *focused = darktable.develop->gui_module;
   fprintf(stdout, "focusing next module\n");
 
   dt_modulesgroups_tabs_t tab = _get_current_tab(self);
-  if(tab == MOD_TAB_BASIC)
-  {
-    // Basic tab uses internal sections that don't honour pipeline order
-    dt_control_log(_("Keyboard navigation in basic tab is not supported yet"));
-    return FALSE;
-  }
 
   if(IS_NULL_PTR(focused))
   {
-    _focus_module(_find_last_visible_module(self));
+    GList *children = NULL;
+    _modulegroups_append_visible_expanders(d->pages[tab], &children);
+    GList *last = g_list_last(children);
+    GtkWidget *widget = last ? GTK_WIDGET(last->data) : NULL;
+    _focus_module(widget ? (dt_iop_module_t *)g_object_get_data(G_OBJECT(widget), "dt-module") : NULL);
+    g_list_free(children);
   }
   else
   {
+    dt_iop_module_t *target = NULL;
+    GList *children = NULL;
+    _modulegroups_append_visible_expanders(d->pages[tab], &children);
+
+    /* Page Down follows the displayed module order.  The basic tab is split in
+     * section containers, so we walk the actual visible expander tree instead
+     * of the pipeline list. */
+    for(GList *module = g_list_last(children); module; module = g_list_previous(module))
+    {
+      GtkWidget *widget = GTK_WIDGET(module->data);
+      if(widget == focused->expander) break;
+      target = (dt_iop_module_t *)g_object_get_data(G_OBJECT(widget), "dt-module");
+    }
+    if(IS_NULL_PTR(target))
+    {
+      GList *first = g_list_first(children);
+      GtkWidget *widget = first ? GTK_WIDGET(first->data) : NULL;
+      target = widget ? (dt_iop_module_t *)g_object_get_data(G_OBJECT(widget), "dt-module") : NULL;
+    }
+
     dt_iop_gui_set_expanded(focused, FALSE, TRUE);
-    _focus_module(dt_iop_gui_get_previous_visible_module(focused));
+    _focus_module(target);
+    g_list_free(children);
   }
 
   return TRUE;
