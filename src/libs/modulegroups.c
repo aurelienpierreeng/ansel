@@ -722,6 +722,11 @@ static gboolean _focus_previous_module(GtkAccelGroup *accel_group, GObject *acce
   dt_iop_module_t *focused = darktable.develop->gui_module;
   fprintf(stdout, "focusing previous module\n");
 
+  // When filmstrip owns keyboard focus, keep PageUp routed to filmstrip navigation.
+  dt_thumbtable_t *filmstrip = darktable.gui->ui->thumbtable_filmstrip;
+  if(!IS_NULL_PTR(filmstrip) && !IS_NULL_PTR(filmstrip->grid) && gtk_widget_has_focus(filmstrip->grid))
+    return FALSE;
+
   dt_modulesgroups_tabs_t tab = _get_current_tab(self);
 
   if(IS_NULL_PTR(focused))
@@ -770,6 +775,11 @@ static gboolean _focus_next_module(GtkAccelGroup *accel_group, GObject *accelera
   dt_lib_modulegroups_t *d = (dt_lib_modulegroups_t *)self->data;
   dt_iop_module_t *focused = darktable.develop->gui_module;
   fprintf(stdout, "focusing next module\n");
+
+  // When filmstrip owns keyboard focus, keep PageDown routed to filmstrip navigation.
+  dt_thumbtable_t *filmstrip = darktable.gui->ui->thumbtable_filmstrip;
+  if(!IS_NULL_PTR(filmstrip) && !IS_NULL_PTR(filmstrip->grid) && gtk_widget_has_focus(filmstrip->grid))
+    return FALSE;
 
   dt_modulesgroups_tabs_t tab = _get_current_tab(self);
 
