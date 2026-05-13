@@ -328,8 +328,13 @@ static void _refine_with_detail_mask(struct dt_iop_module_t *self, const struct 
 
   // here we have the slightly blurred full detail mask available
   warp_mask = dt_dev_distort_detail_mask(p, lum, self);
-  dt_pixelpipe_cache_free_align(lum);
-  lum = NULL;
+  // dt_dev_distort_detail_mask() may return `lum` unchanged when no geometric distortion is needed.
+  const gboolean warp_mask_aliases_lum = (warp_mask == lum);
+  if(!warp_mask_aliases_lum)
+  {
+    dt_pixelpipe_cache_free_align(lum);
+    lum = NULL;
+  }
 
   if(IS_NULL_PTR(warp_mask)) goto error;
 
@@ -340,6 +345,7 @@ static void _refine_with_detail_mask(struct dt_iop_module_t *self, const struct 
     mask[idx] = mask[idx] * warp_mask[idx];
   }
   dt_pixelpipe_cache_free_align(warp_mask);
+  if(warp_mask_aliases_lum) lum = NULL;
 
   return;
 
@@ -950,8 +956,13 @@ static void _refine_with_detail_mask_cl(struct dt_iop_module_t *self, const stru
   // here we have the slightly blurred full detail available
   float *warp_mask = dt_dev_distort_detail_mask(p, lum, self);
   if(IS_NULL_PTR(warp_mask)) goto error;
-  dt_pixelpipe_cache_free_align(lum);
-  lum = NULL;
+  // dt_dev_distort_detail_mask() may return `lum` unchanged when no geometric distortion is needed.
+  const gboolean warp_mask_aliases_lum = (warp_mask == lum);
+  if(!warp_mask_aliases_lum)
+  {
+    dt_pixelpipe_cache_free_align(lum);
+    lum = NULL;
+  }
 
   const int msize = owidth * oheight;
   __OMP_PARALLEL_FOR_SIMD__(aligned(mask, warp_mask : 64))
@@ -960,6 +971,7 @@ static void _refine_with_detail_mask_cl(struct dt_iop_module_t *self, const stru
     mask[idx] = mask[idx] * warp_mask[idx];
   }
   dt_pixelpipe_cache_free_align(warp_mask);
+  if(warp_mask_aliases_lum) lum = NULL;
   return;
 
   error:
