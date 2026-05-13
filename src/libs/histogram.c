@@ -354,8 +354,6 @@ static void _refresh_preview_histograms(dt_develop_t *dev)
   if(IS_NULL_PTR(dev) || !dev->gui_attached || IS_NULL_PTR(dev->preview_pipe)) return;
   if(!dev->preview_pipe->gui_observable_source) return;
 
-  _clear_pending_preview_histograms();
-
   const char *ops[] = { "initialscale", "colorout", "gamma" };
   uint64_t *pending_hashes[] = {
     &_preview_refresh_state.initialscale_hash,
@@ -381,11 +379,25 @@ static void _refresh_preview_histograms(dt_develop_t *dev)
       hash = previous_piece ? previous_piece->global_hash : DT_PIXELPIPE_CACHE_HASH_INVALID;
     }
 
-    if(hash == DT_PIXELPIPE_CACHE_HASH_INVALID
-       || !_refresh_global_histogram_backbuf_for_hash(dev, ops[i], hash))
+    if(hash == DT_PIXELPIPE_CACHE_HASH_INVALID)
+    {
+      _clear_histogram_backbuf(_get_histogram_backbuf(dev, ops[i]));
+      *pending_hashes[i] = DT_PIXELPIPE_CACHE_HASH_INVALID;
+      continue;
+    }
+
+    // Avoid re-requesting the same cacheline on every history resync.
+    // While the same hash is pending, we wait for DT_SIGNAL_CACHELINE_READY
+    // to complete the refresh instead of feeding CACHE_REQUEST in a loop.
+    if(*pending_hashes[i] == hash) continue;
+
+    if(_refresh_global_histogram_backbuf_for_hash(dev, ops[i], hash))
+      *pending_hashes[i] = DT_PIXELPIPE_CACHE_HASH_INVALID;
+    else
       *pending_hashes[i] = hash;
   }
 
+  GHashTable *seen_modules = g_hash_table_new(g_direct_hash, g_direct_equal);
   for(GList *node = g_list_first(dev->preview_pipe->nodes); node; node = g_list_next(node))
   {
     dt_dev_pixelpipe_iop_t *piece = node->data;
@@ -393,17 +405,62 @@ static void _refresh_preview_histograms(dt_develop_t *dev)
     if(!(piece->request_histogram & DT_REQUEST_ON)) continue;
     if((piece->request_histogram & DT_REQUEST_ONLY_IN_GUI) && !dev->gui_attached) continue;
 
+    g_hash_table_insert(seen_modules, piece->module, piece->module);
+
     const dt_dev_pixelpipe_iop_t *const previous_piece
         = dt_dev_pixelpipe_get_prev_enabled_piece(dev->preview_pipe, piece);
     if(previous_piece && !_refresh_preview_module_histogram_for_hash(dev, piece->module, previous_piece->global_hash))
     {
-      dt_histogram_pending_module_refresh_t *pending = g_malloc0(sizeof(*pending));
-      pending->module = piece->module;
-      pending->hash = previous_piece->global_hash;
-      _preview_refresh_state.module_histograms
-          = g_list_prepend(_preview_refresh_state.module_histograms, pending);
+      gboolean found = FALSE;
+      for(GList *l = _preview_refresh_state.module_histograms; l; l = g_list_next(l))
+      {
+        dt_histogram_pending_module_refresh_t *pending = l->data;
+        if(IS_NULL_PTR(pending) || pending->module != piece->module) continue;
+        pending->hash = previous_piece->global_hash;
+        found = TRUE;
+        break;
+      }
+
+      if(!found)
+      {
+        dt_histogram_pending_module_refresh_t *pending = g_malloc0(sizeof(*pending));
+        pending->module = piece->module;
+        pending->hash = previous_piece->global_hash;
+        _preview_refresh_state.module_histograms
+            = g_list_prepend(_preview_refresh_state.module_histograms, pending);
+      }
+    }
+    else
+    {
+      for(GList *l = _preview_refresh_state.module_histograms; l;)
+      {
+        GList *next = g_list_next(l);
+        dt_histogram_pending_module_refresh_t *pending = l->data;
+        if(pending && pending->module == piece->module)
+        {
+          _preview_refresh_state.module_histograms
+              = g_list_delete_link(_preview_refresh_state.module_histograms, l);
+          g_free(pending);
+        }
+        l = next;
+      }
     }
   }
+
+  // Remove stale pending module refreshes.
+  for(GList *l = _preview_refresh_state.module_histograms; l;)
+  {
+    GList *next = g_list_next(l);
+    dt_histogram_pending_module_refresh_t *pending = l->data;
+    if(IS_NULL_PTR(pending) || !g_hash_table_contains(seen_modules, pending->module))
+    {
+      _preview_refresh_state.module_histograms
+          = g_list_delete_link(_preview_refresh_state.module_histograms, l);
+      g_free(pending);
+    }
+    l = next;
+  }
+  g_hash_table_destroy(seen_modules);
 }
 
 static void _preview_history_resync_callback(gpointer instance, gpointer user_data)
