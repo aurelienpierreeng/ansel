@@ -131,6 +131,7 @@ jobs:
           ./src/.ci/ci-script.sh;
       - name: Check if it runs
         run: |
+          set +e
           ${INSTALL_PREFIX}/bin/ansel --version || true
           ${INSTALL_PREFIX}/bin/ansel-cli \
                  --width 2048 --height 2048 \
@@ -142,6 +143,26 @@ jobs:
                  --conf worker_threads=4 -t 4 \
                  --conf plugins/lighttable/export/force_lcms2=FALSE \
                  --conf plugins/lighttable/export/iccintent=0
+          status=$?
+
+          mkdir -p "${RUNNER_TEMP}/ansel-debug"
+          cp -v /tmp/ansel_bt_* "${RUNNER_TEMP}/ansel-debug/" 2>/dev/null || true
+
+          for f in /tmp/ansel_bt_*; do
+            [ -f "$f" ] && {
+              echo "===== $f ====="
+              cat "$f"
+            }
+          done
+
+          exit $status
+      - name: Upload ansel backtrace
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ansel-backtrace-${{ matrix.os.code }}-${{ matrix.compiler.compiler }}-${{ matrix.target }}-${{ matrix.btype }}
+          path: ${{ runner.temp }}/ansel-debug/*
+          if-no-files-found: ignore
       - name: Run Integration test suite
         #integration test can get "stuck" plus there are couple of errors here, so it needs to be addressed first
         if: ${{ false }}
