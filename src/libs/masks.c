@@ -2030,6 +2030,19 @@ void gui_cleanup(dt_lib_module_t *self)
   if(self && self->data)
   {
     dt_lib_masks_t *d = (dt_lib_masks_t *)self->data;
+    if(!IS_NULL_PTR(d->ic_inverse)) g_object_unref(d->ic_inverse);
+    if(!IS_NULL_PTR(d->ic_wired)) g_object_unref(d->ic_wired);
+    if(!IS_NULL_PTR(d->ic_union)) g_object_unref(d->ic_union);
+    if(!IS_NULL_PTR(d->ic_intersection)) g_object_unref(d->ic_intersection);
+    if(!IS_NULL_PTR(d->ic_difference)) g_object_unref(d->ic_difference);
+    if(!IS_NULL_PTR(d->ic_exclusion)) g_object_unref(d->ic_exclusion);
+
+    d->ic_inverse = NULL;
+    d->ic_wired = NULL;
+    d->ic_union = NULL;
+    d->ic_intersection = NULL;
+    d->ic_difference = NULL;
+    d->ic_exclusion = NULL;
     _lib_masks_release_blending(d);
   }
 

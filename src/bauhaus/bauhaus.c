@@ -903,6 +903,7 @@ static void _widget_finalize(GObject *widget)
   if(w->type == DT_BAUHAUS_SLIDER)
   {
     dt_bauhaus_slider_data_t *d = &w->data.slider;
+    dt_free(d->grad_col);
     dt_free(d->grad_pos);
   }
   else
@@ -1332,7 +1333,8 @@ void dt_bauhaus_widget_set_label(GtkWidget *widget, const char *label)
 
       gchar *scope = g_strdup_printf("%s/Modules", m->view);
       dt_accels_new_darkroom_action(_action_request_focus, widget, scope, plugin_name, 0, 0, _("Focuses the control"));
-      g_object_set_data(G_OBJECT(widget), "accel-path", dt_accels_build_path("Darkroom/Modules", plugin_name));
+      g_object_set_data_full(G_OBJECT(widget), "accel-path",
+                             dt_accels_build_path("Darkroom/Modules", plugin_name), dt_free_gpointer);
       gtk_widget_set_has_tooltip(widget, TRUE);
       dt_free(scope);
       dt_free(plugin_name);

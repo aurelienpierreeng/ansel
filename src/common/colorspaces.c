@@ -1495,6 +1495,9 @@ static void _update_display_transforms(dt_colorspaces_t *self)
   if(self->transform_xyz_to_display) cmsDeleteTransform(self->transform_xyz_to_display);
   self->transform_xyz_to_display = NULL;
 
+  if(self->transform_display_to_adobe_rgb) cmsDeleteTransform(self->transform_display_to_adobe_rgb);
+  self->transform_display_to_adobe_rgb = NULL;
+
   const dt_colorspaces_color_profile_t *display_dt_profile = _get_profile(self, self->display_type,
                                                                           self->display_filename,
                                                                           DT_PROFILE_DIRECTION_DISPLAY);

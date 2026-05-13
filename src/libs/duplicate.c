@@ -184,7 +184,13 @@ void view_leave(struct dt_lib_module_t *self, struct dt_view_t *old_view, struct
 static void _thumb_remove(gpointer user_data)
 {
   dt_thumbnail_t *thumb = (dt_thumbnail_t *)user_data;
-  gtk_container_remove(GTK_CONTAINER(gtk_widget_get_parent(thumb->w_main)), thumb->w_main);
+  if(IS_NULL_PTR(thumb)) return;
+
+  GtkWidget *parent = NULL;
+  if(!IS_NULL_PTR(thumb->w_main)) parent = gtk_widget_get_parent(thumb->w_main);
+  if(!IS_NULL_PTR(parent) && GTK_IS_CONTAINER(parent) && !IS_NULL_PTR(thumb->w_main))
+    gtk_container_remove(GTK_CONTAINER(parent), thumb->w_main);
+
   dt_thumbnail_destroy(thumb);
 }
 
@@ -370,8 +376,24 @@ void gui_init(dt_lib_module_t *self)
 
 void gui_cleanup(dt_lib_module_t *self)
 {
+  dt_lib_duplicate_t *d = (dt_lib_duplicate_t *)self->data;
+
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_lib_duplicate_init_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_lib_duplicate_collection_changed), self);
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_lib_duplicate_preview_updated_callback), self);
+
+  if(!IS_NULL_PTR(d))
+  {
+    if(d->preview_surf)
+    {
+      cairo_surface_destroy(d->preview_surf);
+      d->preview_surf = NULL;
+    }
+
+    g_list_free_full(d->thumbs, _thumb_remove);
+    d->thumbs = NULL;
+    dt_gui_container_destroy_children(GTK_CONTAINER(d->duplicate_box));
+  }
 
   if(_duplicate_versions_stmt)
   {

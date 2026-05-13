@@ -211,7 +211,7 @@ typedef struct dt_gui_gtk_t
 typedef struct _gui_collapsible_section_t
 {
   GtkBox *parent;       // the parent widget
-  gchar *confname;      // configuration name for the toggle status
+  const char *confname; // configuration name for the toggle status
   GtkWidget *toggle;    // toggle button
   GtkWidget *expander;  // the expanded
   GtkBox *container;    // the container for all widgets into the section
@@ -435,7 +435,7 @@ gboolean dt_gui_show_standalone_yes_no_dialog(const char *title, const char *mar
 char *dt_gui_show_standalone_string_dialog(const char *title, const char *markup, const char *placeholder,
                                            const char *no_text, const char *yes_text);
 
-void dt_gui_add_help_link(GtkWidget *widget, const char *link);
+void dt_gui_add_help_link(GtkWidget *widget, char *link);
 
 // load a CSS theme
 void dt_gui_load_theme(const char *theme);

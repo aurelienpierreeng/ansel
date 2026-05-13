@@ -2471,7 +2471,7 @@ void *dt_ioppr_serialize_iop_order_list(GList *iop_order_list, size_t *size)
 
 char *dt_ioppr_serialize_text_iop_order_list(GList *iop_order_list)
 {
-  gchar *text = g_strdup("");
+  GString *text = g_string_new("");
 
   const GList *const last = g_list_last(iop_order_list);
   for(const GList *l = iop_order_list; l; l = g_list_next(l))
@@ -2479,10 +2479,10 @@ char *dt_ioppr_serialize_text_iop_order_list(GList *iop_order_list)
     const dt_iop_order_entry_t *const restrict entry = (dt_iop_order_entry_t *)l->data;
     gchar buf[64];
     snprintf(buf, sizeof(buf), "%s,%d%s", entry->operation, entry->instance, (l == last) ? "" : ",");
-    text = g_strconcat(text, buf, NULL);
+    g_string_append(text, buf);
   }
 
-  return text;
+  return g_string_free(text, FALSE);
 }
 
 /* this sanity check routine is used to correct wrong iop-list that

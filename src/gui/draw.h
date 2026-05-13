@@ -951,10 +951,17 @@ static inline GdkPixbuf *dt_draw_get_pixbuf_from_cairo(DTGTKCairoPaintIconFunc p
   dt_gui_gtk_set_source_rgba(cr, DT_GUI_COLOR_BUTTON_FG, 1.0);
   paint(cr, 0, 0, width, height, 0, NULL);
   cairo_destroy(cr);
+
   guchar *data = cairo_image_surface_get_data(cst);
   dt_draw_cairo_to_gdk_pixbuf(data, width, height);
-  return gdk_pixbuf_new_from_data(data, GDK_COLORSPACE_RGB, TRUE, 8, width, height,
-                                  cairo_image_surface_get_stride(cst), NULL, NULL);
+  const int stride = cairo_image_surface_get_stride(cst);
+  const size_t size = (size_t)stride * height;
+  guchar *buf = (guchar *)malloc(size);
+  memcpy(buf, data, size);
+  cairo_surface_destroy(cst);
+
+  return gdk_pixbuf_new_from_data(buf, GDK_COLORSPACE_RGB, TRUE, 8, width, height,
+                                  stride, (GdkPixbufDestroyNotify)free, NULL);
 }
 
 #ifdef __cplusplus

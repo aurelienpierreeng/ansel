@@ -138,8 +138,10 @@
 #include "conf_gen.h"
 
 #include <errno.h>
+#include <fontconfig/fontconfig.h>
 #include <glib.h>
 #include <glib/gstdio.h>
+#include <pango/pangocairo.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -171,6 +173,10 @@
 #endif
 
 darktable_t darktable;
+
+typedef struct _PangoFcFontMap PangoFcFontMap;
+extern GType pango_fc_font_map_get_type(void);
+extern void pango_fc_font_map_shutdown(PangoFcFontMap *fcfontmap);
 
 /**
  * GLib 2.82 routes GTK/GDK diagnostics through the structured log writer, so
@@ -1326,9 +1332,20 @@ void dt_cleanup()
 
     dt_gui_presets_cleanup();
 
+    if(!IS_NULL_PTR(darktable.gui->ui))
+      dt_ui_cleanup_main_table(darktable.gui->ui);
+
+    /* Force GTK to teardown the toplevel widget tree now, while the main
+     * context still exists. This helps release style/cairo resources that
+     * would otherwise stay alive until process exit. */
+    GtkWidget *main_window = dt_ui_main_window(darktable.gui->ui);
+    if(GTK_IS_WIDGET(main_window))
+      gtk_widget_destroy(main_window);
+
     dt_gui_gtk_t *gui = darktable.gui;
     darktable.gui = NULL;
     dt_accels_cleanup(gui->accels);
+    dt_free(gui->ui);
     dt_free(gui);
   }
 
@@ -1445,6 +1462,18 @@ void dt_cleanup()
   dt_pthread_rwlock_destroy(&(darktable.database_threadsafe));
 
   dt_exif_cleanup();
+
+  /* Stop GLib pooled workers first, then release the current thread default
+   * PangoCairo font map before finalizing Fontconfig caches. */
+  if(init_gui)
+  {
+    g_thread_pool_stop_unused_threads();
+    PangoFontMap *fontmap = pango_cairo_font_map_get_default();
+    if(fontmap && g_type_is_a(G_OBJECT_TYPE(fontmap), pango_fc_font_map_get_type()))
+      pango_fc_font_map_shutdown((PangoFcFontMap *)fontmap);
+    pango_cairo_font_map_set_default(NULL);
+    FcFini();
+  }
 }
 
 void dt_print(dt_debug_thread_t thread, const char *msg, ...)

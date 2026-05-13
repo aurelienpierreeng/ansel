@@ -1761,9 +1761,9 @@ char *dt_gui_show_standalone_string_dialog(const char *title, const char *markup
 }
 
 // TODO: should that go to another place than gtk.c?
-void dt_gui_add_help_link(GtkWidget *widget, const char *link)
+void dt_gui_add_help_link(GtkWidget *widget, char *link)
 {
-  g_object_set_data(G_OBJECT(widget), "dt-help-url", (void *)link);
+  g_object_set_data_full(G_OBJECT(widget), "dt-help-url", link, g_free);
   gtk_widget_add_events(widget, GDK_BUTTON_PRESS_MASK);
 }
 
@@ -2749,7 +2749,7 @@ void dt_gui_new_collapsible_section(dt_gui_collapsible_section_t *cs,
 {
   const gboolean expanded = dt_conf_get_bool(confname);
 
-  cs->confname = g_strdup(confname);
+  cs->confname = confname;
   cs->parent = parent;
 
   // collapsible section header

@@ -309,6 +309,18 @@ void dt_iop_default_init(dt_iop_module_t *module)
 {
   size_t param_size = module->so->get_introspection()->size;
   module->params_size = param_size;
+  /* Keep ownership explicit: if init is re-entered on the same instance,
+   * release previous params before rebuilding defaults from introspection. */
+  if(!IS_NULL_PTR(module->params))
+  {
+    dt_free(module->params);
+    module->params = NULL;
+  }
+  if(!IS_NULL_PTR(module->default_params))
+  {
+    dt_free(module->default_params);
+    module->default_params = NULL;
+  }
   module->params = (dt_iop_params_t *)calloc(1, param_size);
   module->default_params = (dt_iop_params_t *)calloc(1, param_size);
 
@@ -505,16 +517,29 @@ int dt_iop_load_module_by_so(dt_iop_module_t *module, dt_iop_module_so_t *so, dt
     return 1; // empty params hurt us in many places, just add a dummy value
   }
 
-  /* Alloc params */
-  module->params = calloc(1, module->params_size);
+  /* Allocate params only when module init did not allocate them already.
+   * Some init paths (notably default_init) already own the params buffers. */
+  if(IS_NULL_PTR(module->params))
+    module->params = calloc(1, module->params_size);
+  if(IS_NULL_PTR(module->default_params))
+    module->default_params = calloc(1, module->params_size);
   module->blend_params = calloc(1, sizeof(dt_develop_blend_params_t));
   module->default_blendop_params = calloc(1, sizeof(dt_develop_blend_params_t));
 
   // Don't init defaults here, it's done when reading/initing history
 
-  /* pass on the dt_gui_module_t args for bauhaus widgets */
-  module->common_fields.name = delete_underscore(module->name());
-  module->common_fields.view = g_strdup(_("Darkroom")); // IOP modules belong necessarily to darkroom
+  /* pass on the dt_gui_module_t args for bauhaus widgets
+   * only when a GUI lifetime exists for this module instance. */
+  if(IS_NULL_PTR(module->dev) || module->dev->gui_attached)
+  {
+    module->common_fields.name = delete_underscore(module->name());
+    module->common_fields.view = g_strdup(_("Darkroom")); // IOP modules belong necessarily to darkroom
+  }
+  else
+  {
+    module->common_fields.name = NULL;
+    module->common_fields.view = NULL;
+  }
   module->common_fields.widget_list = NULL;
   module->common_fields.widget_list_bh = NULL;
   module->common_fields.focus = module->iop_focus;
@@ -1431,6 +1456,17 @@ void dt_iop_cleanup_module(dt_iop_module_t *module)
 {
   module->cleanup(module);
 
+  if(!IS_NULL_PTR(module->common_fields.name))
+  {
+    dt_free(module->common_fields.name);
+    module->common_fields.name = NULL;
+  }
+  if(!IS_NULL_PTR(module->common_fields.view))
+  {
+    dt_free(module->common_fields.view);
+    module->common_fields.view = NULL;
+  }
+
   dt_free(module->blend_params);
   dt_free(module->default_blendop_params);
 
@@ -1856,7 +1892,9 @@ void dt_iop_gui_cleanup_module(dt_iop_module_t *module)
   g_list_free(m->widget_list_bh);
   m->widget_list_bh = NULL;
   dt_free(m->name);
+  m->name = NULL;
   dt_free(m->view);
+  m->view = NULL;
 
   if(module->color_picker_apply)
   {
@@ -1864,6 +1902,19 @@ void dt_iop_gui_cleanup_module(dt_iop_module_t *module)
   }
   if(module->gui_data && module->gui_cleanup) module->gui_cleanup(module);
   dt_iop_gui_cleanup_blending(module);
+
+  /* Release the transient widget tree explicitly. In normal GUI lifetime, these
+   * widgets are parented and get destroyed by container teardown. During module
+   * probe/init paths, they can stay unparented and would otherwise leak. */
+  if(!IS_NULL_PTR(module->expander))
+  {
+    gtk_widget_destroy(module->expander);
+  }
+  else
+  {
+    if(!IS_NULL_PTR(module->header)) gtk_widget_destroy(module->header);
+    if(!IS_NULL_PTR(module->widget)) gtk_widget_destroy(module->widget);
+  }
 
   module->widget = NULL;
   module->header = NULL;

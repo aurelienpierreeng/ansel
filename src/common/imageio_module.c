@@ -146,7 +146,7 @@ static int dt_imageio_load_modules_format(dt_imageio_t *iio)
     if(darktable.gui) ++darktable.gui->reset;
     module->gui_init(module);
     if(darktable.gui) --darktable.gui->reset;
-    if(module->widget) g_object_ref(module->widget);
+    if(module->widget) g_object_ref_sink(module->widget);
     dt_free(libname);
     res = g_list_insert_sorted(res, module, dt_imageio_sort_modules_format);
   }
@@ -225,7 +225,7 @@ static int dt_imageio_load_modules_storage(dt_imageio_t *iio)
     }
     module->gui_data = NULL;
     module->gui_init(module);
-    if(module->widget) g_object_ref(module->widget);
+    if(module->widget) g_object_ref_sink(module->widget);
     dt_free(libname);
     dt_imageio_insert_storage(module);
   }
@@ -399,4 +399,3 @@ gchar *dt_imageio_resizing_factor_get_and_parsing(double *num, double *denum)
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

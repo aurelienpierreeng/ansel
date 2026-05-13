@@ -86,6 +86,8 @@ int dt_ui_panel_get_size(dt_ui_t *ui, const dt_ui_panel_t p)
         size = DT_UI_PANEL_BOTTOM_DEFAULT_SIZE;
       else
         size = DT_UI_PANEL_SIDE_DEFAULT_SIZE;
+
+      if(!IS_NULL_PTR(key)) dt_free(key);
     }
     return size;
   }
@@ -764,7 +766,9 @@ void dt_hinter_set_message(dt_ui_t *ui, const char *message)
   // Remove hacky attempts of line wrapping with hardcoded newline :
   // Line wrap is handled by Gtk at the label scope.
   char **split = g_strsplit(message, "\n", -1);
-  gtk_label_set_markup(GTK_LABEL(ui->header->hinter), g_strjoinv(", ", split));
+  char *joined = g_strjoinv(", ", split);
+  gtk_label_set_markup(GTK_LABEL(ui->header->hinter), joined);
+  dt_free(joined);
   g_strfreev(split);
 }
 

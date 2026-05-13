@@ -2033,6 +2033,7 @@ dt_thumbtable_t *dt_thumbtable_new(dt_thumbtable_mode_t mode)
   gtk_container_set_focus_vadjustment(GTK_CONTAINER(table->scroll_window), dummy);
   gtk_container_set_focus_hadjustment(GTK_CONTAINER(table->grid), dummy);
   gtk_container_set_focus_vadjustment(GTK_CONTAINER(table->grid), dummy);
+  g_object_unref(dummy);
 
   // drag and drop : used for reordering, interactions with maps, exporting uri to external apps, importing images
   // in filmroll...
@@ -2190,24 +2191,26 @@ void _dt_thumbtable_empty_list(dt_thumbtable_t *table)
   const double start = dt_get_wtime();
 
   dt_pthread_mutex_lock(&table->lock);
-  for(int rowid = 0; rowid < table->collection_count; rowid++)
-    table->lut[rowid].thumb = NULL;
+  if(table->lut)
+    for(int rowid = 0; rowid < table->collection_count; rowid++)
+      table->lut[rowid].thumb = NULL;
 
   // WARNING: we need to detach children from parent starting from the last
   // otherwise, Gtk updates the index of all the next children in sequence
   // and that takes forever when thumb_nb > 1000
   GList *thumbs = g_hash_table_get_values(table->list);
   thumbs = g_list_sort(thumbs, _thumb_compare_rowid_desc);
+  g_hash_table_remove_all(table->list);
+  dt_pthread_mutex_unlock(&table->lock);
+
   for(GList *l = thumbs; l; l = g_list_next(l))
   {
     dt_thumbnail_t *thumb = (dt_thumbnail_t *)l->data;
     gtk_widget_hide(thumb->widget);
-    g_idle_add((GSourceFunc)dt_thumbnail_destroy, thumb);
+    dt_thumbnail_destroy(thumb);
   }
   g_list_free(thumbs);
   thumbs = NULL;
-  g_hash_table_remove_all(table->list);
-  dt_pthread_mutex_unlock(&table->lock);
 
   dt_print(DT_DEBUG_LIGHTTABLE, "Cleaning the list of %i elements in %0.04f sec\n", table->thumb_nb,
            dt_get_wtime() - start);
@@ -2258,8 +2261,9 @@ void dt_thumbtable_stop(dt_thumbtable_t *table)
   table->reset_collection = TRUE;
 
   dt_pthread_mutex_lock(&table->lock);
-  for(int rowid = 0; rowid < table->collection_count; rowid++)
-    table->lut[rowid].thumb = NULL;
+  if(table->lut)
+    for(int rowid = 0; rowid < table->collection_count; rowid++)
+      table->lut[rowid].thumb = NULL;
 
   GList *thumbs = g_hash_table_get_values(table->list);
   thumbs = g_list_sort(thumbs, _thumb_compare_rowid_desc);

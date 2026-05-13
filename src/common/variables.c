@@ -143,10 +143,11 @@ gboolean dt_get_user_pictures_dir(const gchar *homedir, gchar *picdir, size_t pi
     return 0;
 
   gchar dir[PATH_MAX] = { 0 };
-  if(g_get_user_special_dir(G_USER_DIRECTORY_PICTURES) == NULL)
-    g_strlcpy(dir, g_build_path(G_DIR_SEPARATOR_S, homedir, "Pictures", (char *)NULL), sizeof(dir));
+  const gchar *special_pictures_dir = g_get_user_special_dir(G_USER_DIRECTORY_PICTURES);
+  if(IS_NULL_PTR(special_pictures_dir))
+    g_snprintf(dir, sizeof(dir), "%s" G_DIR_SEPARATOR_S "Pictures", homedir);
   else
-    g_strlcpy(dir, g_strdup(g_get_user_special_dir(G_USER_DIRECTORY_PICTURES)), sizeof(dir));
+    g_strlcpy(dir, special_pictures_dir, sizeof(dir));
 
   if(*dir == 0)
     fprintf(stderr,"Error: Can't get user's pictures folder.\n");
@@ -278,6 +279,7 @@ static void _cleanup_expansion(dt_variables_params_t *params)
   dt_free(params->data->pictures_folder);
   dt_free(params->data->camera_maker);
   dt_free(params->data->camera_alias);
+  dt_free(params->data->exif_lens);
 }
 
 static inline gboolean _has_prefix(char **str, const char *prefix)

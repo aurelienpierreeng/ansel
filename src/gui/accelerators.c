@@ -259,6 +259,7 @@ void dt_shortcut_remove_closure(dt_shortcut_t *shortcut, gpointer data)
   {
     g_closure_unref(cl->base);
     shortcut->closure = g_list_delete_link(shortcut->closure, link);
+    dt_free(cl);
     // fprintf(stdout, "removing: %s at %p - %i entries remaining\n", shortcut->path, data, g_list_length(shortcut->closure));
   }
 }
@@ -317,7 +318,6 @@ void dt_shortcut_set_closure(dt_shortcut_t *shortcut,
   g_closure_set_marshal(pc->base, g_cclosure_marshal_generic);
   g_closure_ref(pc->base);
   g_closure_sink(pc->base);
-  g_closure_ref(pc->base);
   shortcut->closure = g_list_append(shortcut->closure, pc);
   // fprintf(stdout, "appending closure for %s - %i entries\n", shortcut->path, g_list_length(shortcut->closure));
   _insert_parent_data_into_children(shortcut);
@@ -519,6 +519,7 @@ static void _remove_generic_accel(dt_shortcut_t *shortcut)
   g_closure_ref(cl);
   g_closure_sink(cl);
   gtk_accel_group_disconnect(shortcut->accel_group, cl);
+  g_closure_unref(cl);
 }
 
 
@@ -729,6 +730,7 @@ void dt_accels_new_action_shortcut(dt_accels_t *accels,
   if(closure && closure->data == data)
   {
     // reference is still up-to-date: nothing to do.
+    dt_free(accel_path);
     return;
   }
   else if(shortcut && shortcut->type != DT_SHORTCUT_UNSET)

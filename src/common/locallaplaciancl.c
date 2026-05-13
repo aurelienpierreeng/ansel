@@ -52,6 +52,20 @@ dt_local_laplacian_cl_global_t *dt_local_laplacian_init_cl_global()
   return g;
 }
 
+void dt_local_laplacian_free_cl_global(dt_local_laplacian_cl_global_t *g)
+{
+  if(IS_NULL_PTR(g)) return;
+
+  dt_opencl_free_kernel(g->kernel_pad_input);
+  dt_opencl_free_kernel(g->kernel_gauss_expand);
+  dt_opencl_free_kernel(g->kernel_gauss_reduce);
+  dt_opencl_free_kernel(g->kernel_laplacian_assemble);
+  dt_opencl_free_kernel(g->kernel_process_curve);
+  dt_opencl_free_kernel(g->kernel_write_back);
+
+  dt_free(g);
+}
+
 void dt_local_laplacian_free_cl(dt_local_laplacian_cl_t *g)
 {
   if(IS_NULL_PTR(g)) return;
@@ -248,4 +262,3 @@ error:
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

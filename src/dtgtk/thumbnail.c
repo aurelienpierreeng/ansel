@@ -394,16 +394,6 @@ static gboolean _main_context_queue_draw(GtkWidget *widget)
   if(GTK_IS_WIDGET(widget))
   {
     gtk_widget_queue_draw(widget);
-
-    // Gtk redraws may get deferred until the next GDK event; force processing now
-    // to ensure background thumbnail jobs repaint as soon as they complete.
-    GdkWindow *window = gtk_widget_get_window(widget);
-    if(window)
-    {
-      G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-      gdk_window_process_updates(window, TRUE);
-      G_GNUC_END_IGNORE_DEPRECATIONS
-    }
   }
 
   return G_SOURCE_REMOVE;
@@ -895,18 +885,25 @@ void _create_alternative_view(dt_thumbnail_t *thumb)
   gtk_label_set_text(GTK_LABEL(thumb->w_datetime), thumb->info.datetime);
   gtk_label_set_text(GTK_LABEL(thumb->w_folder), thumb->info.folder);
 
-  const gchar *exposure_field = g_strdup_printf("%.0f ISO - f/%.1f - %s",
-                                                thumb->info.exif_iso,
-                                                thumb->info.exif_aperture,
-                                                dt_util_format_exposure(thumb->info.exif_exposure));
+  char *exposure_time = dt_util_format_exposure(thumb->info.exif_exposure);
+  char *exposure_field = g_strdup_printf("%.0f ISO - f/%.1f - %s",
+                                         thumb->info.exif_iso,
+                                         thumb->info.exif_aperture,
+                                         exposure_time);
+  char *exposure_bias = g_strdup_printf("%+.1f EV", thumb->info.exif_exposure_bias);
+  char *focal = g_strdup_printf("%0.f mm @ %.2f m", thumb->info.exif_focal_length,
+                                thumb->info.exif_focus_distance);
 
-  gtk_label_set_text(GTK_LABEL(thumb->w_exposure_bias), g_strdup_printf("%+.1f EV", thumb->info.exif_exposure_bias));
+  gtk_label_set_text(GTK_LABEL(thumb->w_exposure_bias), exposure_bias);
   gtk_label_set_text(GTK_LABEL(thumb->w_exposure), exposure_field);
   gtk_label_set_text(GTK_LABEL(thumb->w_camera), thumb->info.camera_makermodel);
   gtk_label_set_text(GTK_LABEL(thumb->w_lens), thumb->info.exif_lens);
-  gtk_label_set_text(GTK_LABEL(thumb->w_focal),
-                     g_strdup_printf("%0.f mm @ %.2f m", thumb->info.exif_focal_length,
-                                     thumb->info.exif_focus_distance));
+  gtk_label_set_text(GTK_LABEL(thumb->w_focal), focal);
+
+  dt_free(focal);
+  dt_free(exposure_bias);
+  dt_free(exposure_field);
+  dt_free(exposure_time);
 }
 
 
