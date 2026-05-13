@@ -2209,7 +2209,7 @@ static GtkWidget *_blendop_masks_create_shape_buttons(dt_iop_module_t *module, d
   };
   GtkWidget *widget = dt_masks_shape_buttons_create(&config);
 
-  return IS_NULL_PTR(widget) ? NULL : widget;
+  return widget;
 }
 
 static GtkWidget *_blendop_masks_group_ctx_menu(dt_iop_gui_blend_data_t *bd, dt_iop_module_t *module,

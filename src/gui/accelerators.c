@@ -1041,7 +1041,7 @@ static dt_shortcut_t *_find_non_virtual_shortcut(dt_accels_t *accels, GtkAccelGr
 
   g_list_free(result.results);
   result.results = NULL;
-  return IS_NULL_PTR(shortcut) ? NULL : shortcut;
+  return shortcut;
 }
 
 static gboolean _call_shortcut_cclosure(dt_shortcut_t *shortcut, GtkWindow *main_window);
