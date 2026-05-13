@@ -2945,10 +2945,10 @@ int mouse_moved(struct dt_iop_module_t *module,
     dt_liquify_hit_t hit = _hit_test_paths(module, &g->params, pt);
     dt_liquify_path_data_t *last_hovered = find_hovered(&g->params);
     if(hit.elem != last_hovered
-       || (!IS_NULL_PTR(last_hovered) && hit.elem
+       || (!IS_NULL_PTR(last_hovered) && !IS_NULL_PTR(hit.elem)
            && hit.elem->header.hovered != last_hovered->header.hovered))
     {
-      if(hit.elem)
+      if(!IS_NULL_PTR(hit.elem))
         hit.elem->header.hovered = hit.layer;
       if(!IS_NULL_PTR(last_hovered))
         last_hovered->header.hovered = 0;
@@ -2960,7 +2960,7 @@ int mouse_moved(struct dt_iop_module_t *module,
 
     const gboolean dragged = detect_drag(g, scale, pt);
 
-    if(dragged && g->last_hit.elem)
+    if(dragged && !IS_NULL_PTR(g->last_hit.elem))
     {
       // start dragging
       start_drag(g, g->last_hit.layer, g->last_hit.elem);
@@ -2970,7 +2970,7 @@ int mouse_moved(struct dt_iop_module_t *module,
       goto done;
     }
 
-    if(g->last_hit.elem)
+    if(!IS_NULL_PTR(g->last_hit.elem))
     {
       // an item is selected, so this mouvement is handled and must
       // not trigger any panning.
@@ -3088,6 +3088,12 @@ int mouse_moved(struct dt_iop_module_t *module,
   }
 
 done:
+  if(!handled && which != 0 && (!IS_NULL_PTR(g->temp) || !IS_NULL_PTR(g->last_hit.elem)))
+  {
+    // A drag/edit sequence is in progress, keep consuming motion events
+    // so darkroom pan does not steal the interaction.
+    handled = TRUE;
+  }
   dt_iop_gui_leave_critical_section(module);
   if(handled)
   {
@@ -3299,6 +3305,13 @@ int button_pressed(struct dt_iop_module_t *module,
       handled = 1;
       goto done;
     }
+  }
+
+  if(!handled && (which == 1 || which == 3) && (!IS_NULL_PTR(g->temp) || !IS_NULL_PTR(g->last_hit.elem)))
+  {
+    // Even when the actual edit is finalized on button release, this press
+    // starts an interaction sequence and must remain captured by liquify.
+    handled = 1;
   }
 
 done:
