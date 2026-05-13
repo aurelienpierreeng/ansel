@@ -201,6 +201,7 @@ uint32_t view(const dt_view_t *self)
 static void _reset_edge_pan()
 {
   dt_gui_gtk_t *gui = darktable.gui;
+  if(IS_NULL_PTR(gui)) return;
   if(gui->pan_edge.timeout_source)
   {
     g_source_remove(gui->pan_edge.timeout_source);
