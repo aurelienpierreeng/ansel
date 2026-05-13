@@ -164,6 +164,7 @@ static void _release_expose_source_caches(void);
 static int32_t _darkroom_pending_imgid = UNKNOWN_IMAGE;
 static dt_iop_module_t *_darkroom_pending_focus_module = NULL;
 static GtkWidget *_darkroom_ioporder_button = NULL;
+static gboolean _darkroom_center_pan_drag = FALSE;
 
 static dt_autoset_manager_t *_autoset_manager = NULL;
 static GtkWidget *_darkroom_autoset_button = NULL;
@@ -2428,6 +2429,7 @@ void leave(dt_view_t *self)
 {
   dt_develop_t *dev = (dt_develop_t *)self->data;
   darktable.gui->mouse.is_dragging = FALSE;
+  _darkroom_center_pan_drag = FALSE;
   _reset_edge_pan();
   dt_gui_throttle_cancel(dev);
 
@@ -2573,6 +2575,7 @@ void mouse_leave(dt_view_t *self)
   dt_control_t *ctl = darktable.control;
   dt_gui_gtk_t *gui = darktable.gui;
   gui->mouse.is_dragging = FALSE;
+  _darkroom_center_pan_drag = FALSE;
 
   if(gui->pan_edge.timeout_source
      && gui->pan_edge.block_normal_pan
@@ -2587,7 +2590,7 @@ void mouse_leave(dt_view_t *self)
       gui->pan_edge.timeout_source = 0;
     }
     gui->pan_edge.view = NULL;
-    gui->pan_edge.block_normal_pan = TRUE;
+    gui->pan_edge.block_normal_pan = FALSE;
   }
   else
     _reset_edge_pan();
@@ -2785,14 +2788,14 @@ static gboolean _darkroom_edge_pan_apply(dt_view_t *self,
 
   if(!edge.in_margin)
   {
-    // Leaving the edge band stops automatic ROI motion, but the current
-    // primary-button drag still belongs to the tool, so regular pan stays blocked.
+    // Leaving the edge band stops automatic ROI motion and immediately hands
+    // control back to the regular drag path.
     gui->pan_edge.timeout_source = 0;
     gui->pan_edge.view = self;
     gui->pan_edge.velocity[0] = 0.0f;
     gui->pan_edge.velocity[1] = 0.0f;
     gui->pan_edge.last_time_us = 0;
-    gui->pan_edge.block_normal_pan = TRUE;
+    gui->pan_edge.block_normal_pan = FALSE;
     ctl->button_x = pointer_x;
     ctl->button_y = pointer_y;
     return FALSE;
@@ -2960,15 +2963,15 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
     _reset_edge_pan();
   }
 
-  if(edge.drag && !edge.in_margin && (gui->pan_edge.timeout_source || gui->pan_edge.block_normal_pan))
+  if(edge.drag && !edge.in_margin && gui->pan_edge.timeout_source)
   {
     /* The drag has already activated edge-pan. Leaving the edge band must stop
-       timeout-driven ROI motion immediately and keep normal pan blocked until release. */
+       timeout-driven ROI motion immediately and restore normal pan right away. */
     gui->pan_edge.view = self;
     gui->pan_edge.velocity[0] = 0.0f;
     gui->pan_edge.velocity[1] = 0.0f;
     gui->pan_edge.last_time_us = 0;
-    gui->pan_edge.block_normal_pan = TRUE;
+    gui->pan_edge.block_normal_pan = FALSE;
     if(gui->pan_edge.timeout_source)
     {
       g_source_remove(gui->pan_edge.timeout_source);
@@ -2996,14 +2999,33 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
 
   dt_control_commit_cursor();
 
+  if(_darkroom_center_pan_drag && darktable.control->button_down
+     && darktable.control->button_down_which == 1 && dev->roi.scaling > 1)
+  {
+    float delta[2] = { x - ctl->button_x, y - ctl->button_y };
+    dt_dev_coordinates_widget_delta_to_image_delta(dev, delta, 1);
+
+    float roi[2] = { dev->roi.x - (delta[0] / dev->roi.processed_width),
+                     dev->roi.y - (delta[1] / dev->roi.processed_height) };
+    dt_dev_check_zoom_pos_bounds(dev, &roi[0], &roi[1], NULL, NULL);
+
+    dev->roi.x = roi[0];
+    dev->roi.y = roi[1];
+    ctl->button_x = x;
+    ctl->button_y = y;
+
+    dt_dev_pixelpipe_change_zoom_main(dev);
+    return;
+  }
+
   if(handled)
   {
     dt_control_queue_redraw_center();
     return;
   }
 
-  // Edge-pan owns the current drag until button release, so do not fall back to regular pan.
-  if(gui->pan_edge.block_normal_pan)
+  // Edge-pan owns ROI motion only while the timeout is actively driving updates.
+  if(gui->pan_edge.block_normal_pan && gui->pan_edge.timeout_source)
   {
     ctl->button_x = x;
     ctl->button_y = y;
@@ -3042,6 +3064,7 @@ int button_released(dt_view_t *self, double x, double y, int which, uint32_t sta
 
   if(which == 1)
   {
+    _darkroom_center_pan_drag = FALSE;
     darktable.gui->mouse.is_dragging = FALSE;
     _reset_edge_pan();
   }
@@ -3089,7 +3112,10 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
   // Grab focus on any click so we can interact from keyboard
   gtk_widget_grab_focus(dt_ui_center(darktable.gui->ui));
   if(which == 1)
+  {
+    _darkroom_center_pan_drag = FALSE;
     darktable.gui->mouse.is_dragging = FALSE;
+  }
 
   if(dt_iop_color_picker_is_visible(dev))
   {
@@ -3225,6 +3251,9 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
       darktable.gui->mouse.is_dragging = TRUE;
     return 1;
   }
+
+  if(which == 1 && dev->roi.scaling > 1.0f && mouse_in_imagearea(self, x, y))
+    _darkroom_center_pan_drag = TRUE;
 
   if(which == 2)
   {
