@@ -138,7 +138,9 @@
 #include "conf_gen.h"
 
 #include <errno.h>
+#if !defined(_WIN32) && !defined(__APPLE__)
 #include <fontconfig/fontconfig.h>
+#endif
 #include <glib.h>
 #include <glib/gstdio.h>
 #include <pango/pangocairo.h>
@@ -174,9 +176,11 @@
 
 darktable_t darktable;
 
+#if !defined(_WIN32) && !defined(__APPLE__)
 typedef struct _PangoFcFontMap PangoFcFontMap;
 extern GType pango_fc_font_map_get_type(void);
 extern void pango_fc_font_map_shutdown(PangoFcFontMap *fcfontmap);
+#endif
 
 /**
  * GLib 2.82 routes GTK/GDK diagnostics through the structured log writer, so
@@ -1469,10 +1473,23 @@ void dt_cleanup()
   {
     g_thread_pool_stop_unused_threads();
     PangoFontMap *fontmap = pango_cairo_font_map_get_default();
-    if(fontmap && g_type_is_a(G_OBJECT_TYPE(fontmap), pango_fc_font_map_get_type()))
+    gboolean use_fontconfig_backend = FALSE;
+
+    if(fontmap && PANGO_IS_CAIRO_FONT_MAP(fontmap))
+    {
+      const cairo_font_type_t font_backend
+          = pango_cairo_font_map_get_font_type(PANGO_CAIRO_FONT_MAP(fontmap));
+      use_fontconfig_backend = (font_backend == CAIRO_FONT_TYPE_FT);
+    }
+
+#if !defined(_WIN32) && !defined(__APPLE__)
+    if(use_fontconfig_backend && fontmap && g_type_is_a(G_OBJECT_TYPE(fontmap), pango_fc_font_map_get_type()))
       pango_fc_font_map_shutdown((PangoFcFontMap *)fontmap);
+#endif
     pango_cairo_font_map_set_default(NULL);
-    FcFini();
+#if !defined(_WIN32) && !defined(__APPLE__)
+    if(use_fontconfig_backend) FcFini();
+#endif
   }
 }
 
