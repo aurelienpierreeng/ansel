@@ -2920,6 +2920,24 @@ static void get_point_scale(struct dt_iop_module_t *module, float x, float y, fl
   *pt = pts[0] + pts[1] * I;
 }
 
+static gboolean _is_movable_layer(const dt_liquify_layer_enum_t layer)
+{
+  switch(layer)
+  {
+    case DT_LIQUIFY_LAYER_PATH:
+    case DT_LIQUIFY_LAYER_CENTERPOINT:
+    case DT_LIQUIFY_LAYER_CTRLPOINT1:
+    case DT_LIQUIFY_LAYER_CTRLPOINT2:
+    case DT_LIQUIFY_LAYER_RADIUSPOINT:
+    case DT_LIQUIFY_LAYER_HARDNESSPOINT1:
+    case DT_LIQUIFY_LAYER_HARDNESSPOINT2:
+    case DT_LIQUIFY_LAYER_STRENGTHPOINT:
+      return TRUE;
+    default:
+      return FALSE;
+  }
+}
+
 int mouse_moved(struct dt_iop_module_t *module,
                  double x,
                  double y,
@@ -2935,6 +2953,7 @@ int mouse_moved(struct dt_iop_module_t *module,
 
   dt_iop_gui_enter_critical_section(module);
 
+  const float complex prev_mouse_pos = g->last_mouse_pos;
   g->last_mouse_pos = pt;
 
   // Don't hit test while dragging, you'd only hit the dragged thing
@@ -2943,6 +2962,7 @@ int mouse_moved(struct dt_iop_module_t *module,
   if(!is_dragging(g))
   {
     dt_liquify_hit_t hit = _hit_test_paths(module, &g->params, pt);
+    dt_control_queue_cursor_by_name(_is_movable_layer(hit.layer) ? "move" : "default");
     dt_liquify_path_data_t *last_hovered = find_hovered(&g->params);
     if(hit.elem != last_hovered
        || (!IS_NULL_PTR(last_hovered) && !IS_NULL_PTR(hit.elem)
@@ -2979,6 +2999,7 @@ int mouse_moved(struct dt_iop_module_t *module,
   }
   else // we are dragging
   {
+    dt_control_queue_cursor_by_name("move");
     dt_liquify_path_data_t *d = g->dragging.elem;
     dt_liquify_path_data_t *n = node_next(&g->params, d);
     dt_liquify_path_data_t *p = node_prev(&g->params, d);
@@ -2987,6 +3008,33 @@ int mouse_moved(struct dt_iop_module_t *module,
 
     switch (g->dragging.layer)
     {
+       case DT_LIQUIFY_LAYER_PATH:
+       {
+         if(IS_NULL_PTR(p)) break;
+         const float complex delta = prev_mouse_pos == -1 ? 0.0f : pt - prev_mouse_pos;
+         if(cabsf(delta) < 1e-6f) break;
+
+         dt_liquify_path_data_t *moved_nodes[2] = { p, d };
+         for(int i = 0; i < 2; i++)
+         {
+           dt_liquify_path_data_t *node = moved_nodes[i];
+           dt_liquify_path_data_t *node_next_ptr = node_next(&g->params, node);
+           dt_liquify_path_data_t *node_prev_ptr = node_prev(&g->params, node);
+
+           if(node->header.type == DT_LIQUIFY_PATH_CURVE_TO_V1)
+             node->node.ctrl2 += delta;
+           if(!IS_NULL_PTR(node_next_ptr) && node_next_ptr->header.type == DT_LIQUIFY_PATH_CURVE_TO_V1)
+             node_next_ptr->node.ctrl1 += delta;
+           if(!IS_NULL_PTR(node_prev_ptr) && node_prev_ptr->header.type == DT_LIQUIFY_PATH_CURVE_TO_V1)
+             node_prev_ptr->node.ctrl2 += delta;
+
+           node->warp.radius += delta;
+           node->warp.strength += delta;
+           node->warp.point += delta;
+         }
+         break;
+       }
+
        case DT_LIQUIFY_LAYER_CENTERPOINT:
          switch (d->header.type)
          {
@@ -3730,7 +3778,7 @@ void gui_init(dt_iop_module_t *self)
                                          G_CALLBACK(btn_make_radio_callback), TRUE, 0, 0,
                                          dtgtk_liquify_cairo_paint_node_tool, hbox));
 
-  dt_liquify_layers[DT_LIQUIFY_LAYER_PATH].hint           = _("ctrl+click: add node - right click: remove path\n"
+  dt_liquify_layers[DT_LIQUIFY_LAYER_PATH].hint           = _("drag: move segment - ctrl+click: add node - right click: remove path\n"
                                                               "ctrl+alt+click: toggle line/curve");
   dt_liquify_layers[DT_LIQUIFY_LAYER_CENTERPOINT].hint    = _("click and drag to move - click: show/hide feathering controls\n"
                                                               "ctrl+click: autosmooth, cusp, smooth, symmetrical"
