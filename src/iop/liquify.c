@@ -3647,6 +3647,55 @@ done:
   return handled;
 }
 
+int key_pressed(struct dt_iop_module_t *self, GdkEventKey *event)
+{
+  if(IS_NULL_PTR(event)) return 0;
+
+  // Quit current creation or edition on Escape key
+  if(event->keyval == GDK_KEY_Escape)
+  {
+    dt_iop_liquify_gui_data_t *g = (dt_iop_liquify_gui_data_t *)self->gui_data;
+
+    const gboolean creating = gtk_toggle_button_get_active(g->btn_point_tool)
+                              || gtk_toggle_button_get_active(g->btn_line_tool)
+                              || gtk_toggle_button_get_active(g->btn_curve_tool)
+                              || (g->status & (DT_LIQUIFY_STATUS_NEW | DT_LIQUIFY_STATUS_PREVIEW));
+
+    if(!creating)
+      return 0;
+
+    dt_iop_gui_enter_critical_section(self);
+
+    dt_control_hinter_message(darktable.control, "");
+    end_drag(g);
+
+    if(g->temp)
+    {
+      node_delete(&g->params, g->temp);
+      g->temp = NULL;
+    }
+
+    g->status &= ~(DT_LIQUIFY_STATUS_PREVIEW | DT_LIQUIFY_STATUS_NEW);
+    g->last_hit = NOWHERE;
+
+    dt_iop_gui_leave_critical_section(self);
+
+    gtk_toggle_button_set_active(g->btn_point_tool, FALSE);
+    gtk_toggle_button_set_active(g->btn_line_tool, FALSE);
+    gtk_toggle_button_set_active(g->btn_curve_tool, FALSE);
+    gtk_toggle_button_set_active(g->btn_node_tool, TRUE);
+
+    dt_control_hinter_message(darktable.control, _("click to edit nodes"));
+    dt_iop_request_focus(self);
+    update_warp_count(g);
+    sync_pipe(self, TRUE);
+
+    return 1;
+  }
+
+  return 0;
+}
+
 // we need this only because darktable has no radiobutton support
 
 static gboolean btn_make_radio_callback(GtkToggleButton *btn, GdkEventButton *event, dt_iop_module_t *module)
