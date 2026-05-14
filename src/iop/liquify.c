@@ -3651,15 +3651,71 @@ int key_pressed(struct dt_iop_module_t *self, GdkEventKey *event)
 {
   if(IS_NULL_PTR(event)) return 0;
 
-  // Quit current creation or edition on Escape key
-  if(event->keyval == GDK_KEY_Escape)
-  {
-    dt_iop_liquify_gui_data_t *g = (dt_iop_liquify_gui_data_t *)self->gui_data;
+  dt_iop_liquify_gui_data_t *g = (dt_iop_liquify_gui_data_t *)self->gui_data;
 
-    const gboolean creating = gtk_toggle_button_get_active(g->btn_point_tool)
+  const gboolean creating = gtk_toggle_button_get_active(g->btn_point_tool)
                               || gtk_toggle_button_get_active(g->btn_line_tool)
                               || gtk_toggle_button_get_active(g->btn_curve_tool)
                               || (g->status & (DT_LIQUIFY_STATUS_NEW | DT_LIQUIFY_STATUS_PREVIEW));
+
+  // Delete selected node outside creation mode.
+  if(event->keyval == GDK_KEY_Delete || event->keyval == GDK_KEY_KP_Delete)
+  {
+    if(creating)
+      return 0;
+
+    dt_iop_gui_enter_critical_section(self);
+
+    dt_liquify_path_data_t *selected = NULL;
+    for(int k = 0; k < MAX_NODES; k++)
+    {
+      if(g->params.nodes[k].header.type == DT_LIQUIFY_PATH_INVALIDATED)
+        break;
+      if(g->params.nodes[k].header.selected == DT_LIQUIFY_LAYER_CENTERPOINT)
+      {
+        selected = &g->params.nodes[k];
+        break;
+      }
+    }
+
+    if(IS_NULL_PTR(selected))
+    {
+      dt_iop_gui_leave_critical_section(self);
+      return 0;
+    }
+
+    end_drag(g);
+    const int deleted_idx = selected->header.idx;
+    const int next_idx = selected->header.next;
+    const int prev_idx = selected->header.prev;
+    node_delete(&g->params, selected);
+    g->temp = NULL;
+    g->last_hit = NOWHERE;
+
+    unselect_all(&g->params);
+    int target_idx = (next_idx != -1) ? next_idx : prev_idx;
+    if(target_idx > deleted_idx)
+      target_idx--;
+
+    if(target_idx >= 0)
+    {
+      dt_liquify_path_data_t *target = node_get(&g->params, target_idx);
+      if(!IS_NULL_PTR(target) && target->header.type != DT_LIQUIFY_PATH_INVALIDATED)
+        target->header.selected = DT_LIQUIFY_LAYER_CENTERPOINT;
+    }
+
+    dt_iop_gui_leave_critical_section(self);
+
+    update_warp_count(g);
+    sync_pipe(self, TRUE);
+    return 1;
+  }
+
+  // Quit current creation or edition on Escape or Enter key
+  if(event->keyval == GDK_KEY_Escape
+     || event->keyval == GDK_KEY_KP_Enter
+     || event->keyval == GDK_KEY_Return)
+  {
 
     if(!creating)
       return 0;
