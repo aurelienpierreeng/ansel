@@ -3385,6 +3385,15 @@ int key_pressed(dt_view_t *self, GdkEventKey *event)
     return 1;
   }
 
+  // module
+  else if(!IS_NULL_PTR(dev->gui_module)
+          && !IS_NULL_PTR(dev->gui_module->key_pressed)
+          && dev->gui_module->key_pressed(dev->gui_module, event))
+  {
+    dt_gui_throttle_queue(dev, _delayed_history_commit, dev);
+    return 1;
+  }
+
   const gboolean shift = dt_modifier_is(event->state, GDK_SHIFT_MASK);
   const gboolean ctrl = dt_modifier_is(event->state, GDK_CONTROL_MASK);
   const gboolean ctrl_any = dt_modifiers_include(event->state, GDK_CONTROL_MASK);
