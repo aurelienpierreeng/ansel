@@ -3342,7 +3342,9 @@ void dt_iop_gui_init_masks(GtkBox *blendw, dt_iop_module_t *module)
     GtkWidget *group_shapes_header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
     dt_gui_add_class(group_shapes_header, "dt_section_label");
     bd->group_shapes_label = gtk_entry_new();
-    gtk_entry_set_placeholder_text(GTK_ENTRY(bd->group_shapes_label), dt_dev_get_masks_group_name(module));
+    gchar *group_placeholder = dt_dev_get_masks_group_name(module);
+    gtk_entry_set_placeholder_text(GTK_ENTRY(bd->group_shapes_label), group_placeholder);
+    g_free(group_placeholder);
     gtk_widget_set_tooltip_text(bd->group_shapes_label, _("Edit current module mask name"));
     gtk_widget_set_halign(bd->group_shapes_label, GTK_ALIGN_FILL);
     gtk_widget_set_hexpand(bd->group_shapes_label, TRUE);

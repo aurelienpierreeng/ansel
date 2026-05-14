@@ -943,6 +943,7 @@ void dt_pixelpipe_get_global_hash(dt_dev_pixelpipe_t *pipe)
       gchar *type = _get_debug_pipe_name(pipe, pipe->dev);
       dt_print(DT_DEBUG_PIPE, "[pixelpipe] global hash for %20s (%s) in pipe %s with hash %lu\n",
                piece->module->op, piece->module->multi_name, type, (long unsigned int)hash);
+      dt_free(type);
     }
     // In case of drawn masks, we would need to account only for the distortions of previous modules.
     // Aka conditional to: if((piece->module->operation_tags() & IOP_TAG_DISTORT) == IOP_TAG_DISTORT)
@@ -1002,6 +1003,8 @@ void dt_dev_pixelpipe_synch_all_real(dt_dev_pixelpipe_t *pipe, const char *calle
     pipe->last_history_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
     pipe->last_history_item = NULL;
   }
+
+  dt_free(type);
 }
 
 void dt_dev_pixelpipe_synch_top(dt_dev_pixelpipe_t *pipe)
@@ -1051,6 +1054,8 @@ void dt_dev_pixelpipe_synch_top(dt_dev_pixelpipe_t *pipe)
     pipe->last_history_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
     pipe->last_history_item = NULL;
   }
+
+  dt_free(type);
 }
 
 // Modules without history need to be resynced unconditionnally with their internal params
@@ -1153,6 +1158,7 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe)
                                &pipe->processed_height);
 
   dt_show_times_f(&start, "[dev_pixelpipe] pipeline resync with history", "for pipe %s", type);
+  dt_free(type);
 }
 
 static void _sync_virtual_pipe(dt_develop_t *dev, dt_dev_pixelpipe_change_t flag)

@@ -706,6 +706,7 @@ GtkWidget *dt_guides_popover(dt_view_t *self, GtkWidget *button)
 
   // create a new struct for all the widgets
   _guides_settings_t *gw = (_guides_settings_t *)g_malloc0(sizeof(_guides_settings_t));
+  g_object_set_data_full(G_OBJECT(pop), "guides-settings", gw, g_free);
   GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
 
   // title

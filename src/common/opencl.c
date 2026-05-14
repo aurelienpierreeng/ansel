@@ -1358,10 +1358,20 @@ static void dt_opencl_update_priorities()
   // Priority parsing iterates over the list of available devices.
   // If !cl->inited, that means we have no available device, so empty list.
   // Exit early of face a segfault
-  dt_opencl_priority_parse(cl, dt_conf_get_string("opencl_devid_darkroom"), cl->dev_priority_image, &cl->mandatory[0]);
-  dt_opencl_priority_parse(cl, dt_conf_get_string("opencl_devid_preview"), cl->dev_priority_preview, &cl->mandatory[1]);
-  dt_opencl_priority_parse(cl, dt_conf_get_string("opencl_devid_export"), cl->dev_priority_export, &cl->mandatory[2]);
-  dt_opencl_priority_parse(cl, dt_conf_get_string("opencl_devid_thumbnail"), cl->dev_priority_thumbnail, &cl->mandatory[3]);
+  char *darkroom = dt_conf_get_string("opencl_devid_darkroom");
+  char *preview = dt_conf_get_string("opencl_devid_preview");
+  char *export = dt_conf_get_string("opencl_devid_export");
+  char *thumbnail = dt_conf_get_string("opencl_devid_thumbnail");
+
+  dt_opencl_priority_parse(cl, darkroom, cl->dev_priority_image, &cl->mandatory[0]);
+  dt_opencl_priority_parse(cl, preview, cl->dev_priority_preview, &cl->mandatory[1]);
+  dt_opencl_priority_parse(cl, export, cl->dev_priority_export, &cl->mandatory[2]);
+  dt_opencl_priority_parse(cl, thumbnail, cl->dev_priority_thumbnail, &cl->mandatory[3]);
+
+  dt_free(darkroom);
+  dt_free(preview);
+  dt_free(export);
+  dt_free(thumbnail);
 
   dt_print_nts(DT_DEBUG_OPENCL, "[dt_opencl_update_priorities] these are your device priorities:\n");
   dt_print_nts(DT_DEBUG_OPENCL, "[dt_opencl_update_priorities] \tid |\t\tIMAGE\tPREVIEW\tEXPORT\tTHUMBS\n");
