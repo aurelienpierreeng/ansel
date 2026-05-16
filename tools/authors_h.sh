@@ -31,9 +31,11 @@ export LC_ALL=C
 
 AUTHORS="$1"
 H_FILE="$2"
+TMP_H_FILE="${H_FILE}.tmp.$$"
+trap 'rm -f "$TMP_H_FILE"' EXIT
 
-echo "#pragma once" > "$H_FILE"
-echo "" >> "$H_FILE"
+echo "#pragma once" > "$TMP_H_FILE"
+echo "" >> "$TMP_H_FILE"
 
 # category counter
 SECTIONS=0
@@ -42,11 +44,11 @@ function print_section()
 {
     # only add if non empty
     if [ -n "${CONTENT}" ]; then
-        echo "static const char *section${SECTIONS}[] = {" >> "$H_FILE"
-        echo "$CONTENT" >> "$H_FILE"
-        echo "  NULL };" >> "$H_FILE"
-        echo "gtk_about_dialog_add_credit_section (GTK_ABOUT_DIALOG(dialog), _(\"${SECTION}\"), section${SECTIONS});" >> "$H_FILE"
-        echo "" >> "$H_FILE"
+        echo "static const char *section${SECTIONS}[] = {" >> "$TMP_H_FILE"
+        echo "$CONTENT" >> "$TMP_H_FILE"
+        echo "  NULL };" >> "$TMP_H_FILE"
+        echo "gtk_about_dialog_add_credit_section (GTK_ABOUT_DIALOG(dialog), _(\"${SECTION}\"), section${SECTIONS});" >> "$TMP_H_FILE"
+        echo "" >> "$TMP_H_FILE"
     fi
 }
 
@@ -76,6 +78,9 @@ while IFS="" read -r p || [ -n "$p" ]; do
 done < "$AUTHORS"
 
 print_section
+
+mv -f "$TMP_H_FILE" "$H_FILE"
+trap - EXIT
 
 # vim: tabstop=2 expandtab shiftwidth=2 softtabstop=2
 # kate: tab-width: 2; replace-tabs on; indent-width 2; tab-indents: off;
