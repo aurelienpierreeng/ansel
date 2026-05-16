@@ -2833,7 +2833,11 @@ void gui_post_expose(struct dt_iop_module_t *module,
                       int32_t pointerx,
                       int32_t pointery)
 {
+  if(IS_NULL_PTR(module))
+    return;
   dt_develop_t *develop = module->dev;
+  if(IS_NULL_PTR(develop))
+    return;
   dt_iop_liquify_gui_data_t *g = (dt_iop_liquify_gui_data_t *) module->gui_data;
   if(IS_NULL_PTR(g))
     return;
@@ -3314,9 +3318,10 @@ int button_pressed(struct dt_iop_module_t *module,
       }
       else
       {
-        if(IS_NULL_PTR(g->temp)) goto done;
+        goto done;
       }
     }
+
     g->last_hit = NOWHERE;
     if(gtk_toggle_button_get_active(g->btn_curve_tool))
     {
@@ -3652,11 +3657,78 @@ int key_pressed(struct dt_iop_module_t *self, GdkEventKey *event)
   if(IS_NULL_PTR(event)) return 0;
 
   dt_iop_liquify_gui_data_t *g = (dt_iop_liquify_gui_data_t *)self->gui_data;
+  if(IS_NULL_PTR(g)) return 0;
+
 
   const gboolean creating = gtk_toggle_button_get_active(g->btn_point_tool)
                               || gtk_toggle_button_get_active(g->btn_line_tool)
                               || gtk_toggle_button_get_active(g->btn_curve_tool)
                               || (g->status & (DT_LIQUIFY_STATUS_NEW | DT_LIQUIFY_STATUS_PREVIEW));
+
+  // Delete last created node while creating a shape.
+  if(event->keyval == GDK_KEY_BackSpace)
+  {
+    if(!creating)
+      return 0;
+
+    const gboolean create_tool_active = gtk_toggle_button_get_active(g->btn_point_tool)
+                                        || gtk_toggle_button_get_active(g->btn_line_tool)
+                                        || gtk_toggle_button_get_active(g->btn_curve_tool);
+    gboolean restart_shape = FALSE;
+
+    dt_iop_gui_enter_critical_section(self);
+
+    dt_liquify_path_data_t *last = NULL;
+    for(int k = 0; k < MAX_NODES; k++)
+    {
+      if(g->params.nodes[k].header.type == DT_LIQUIFY_PATH_INVALIDATED)
+        break;
+      last = &g->params.nodes[k];
+    }
+
+    if(IS_NULL_PTR(last) && IS_NULL_PTR(g->temp))
+    {
+      restart_shape = create_tool_active;
+      dt_iop_gui_leave_critical_section(self);
+      if(restart_shape)
+      {
+        _start_new_shape(self);
+        update_warp_count(g);
+        sync_pipe(self, TRUE);
+      }
+      return 1;
+    }
+
+    dt_liquify_path_data_t *to_delete = !IS_NULL_PTR(g->temp) ? g->temp : last;
+
+    end_drag(g);
+    const int prev_index = to_delete->header.prev;
+    node_delete(&g->params, to_delete);
+    g->temp = prev_index >= 0 ? node_get(&g->params, prev_index) : NULL;
+    g->node_index = !IS_NULL_PTR(g->temp) ? g->temp->header.idx : 0;
+    g->last_hit = NOWHERE;
+
+    if(!IS_NULL_PTR(g->temp))
+    {
+      // Continue creation from the current endpoint by restoring the live drag preview.
+      start_drag(g, DT_LIQUIFY_LAYER_CENTERPOINT, g->temp);
+      g->status &= ~DT_LIQUIFY_STATUS_NEW;
+    }
+    else
+    {
+      restart_shape = create_tool_active;
+      g->status &= ~(DT_LIQUIFY_STATUS_PREVIEW | DT_LIQUIFY_STATUS_NEW);
+    }
+
+    dt_iop_gui_leave_critical_section(self);
+
+    if(restart_shape)
+      _start_new_shape(self);
+
+    update_warp_count(g);
+    sync_pipe(self, TRUE);
+    return 1;
+  }
 
   // Delete selected node outside creation mode.
   if(event->keyval == GDK_KEY_Delete || event->keyval == GDK_KEY_KP_Delete)
