@@ -125,6 +125,6 @@ int dt_iop_autoset_advance(struct dt_develop_t *dev, dt_autoset_manager_t *manag
   // Params have changed, update the module GUI to reflect it.
   dt_iop_gui_update(module);
 
-  manager->iop_to_set = g_list_remove_link(manager->iop_to_set, mod);
+  manager->iop_to_set = g_list_delete_link(manager->iop_to_set, mod);
   return 0;
 }

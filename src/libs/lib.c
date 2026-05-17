@@ -959,6 +959,34 @@ static void dt_lib_init_module(void *m)
 
 void dt_lib_unload_module(dt_lib_module_t *module)
 {
+  GtkWidget *retained_widget = module->widget;
+
+  if(darktable.gui && darktable.gui->accels && module->views)
+  {
+    gchar *clean_name = delete_underscore(module->name(module));
+    dt_capitalize_label(clean_name);
+
+    const char **views = module->views(module);
+    for(const char **view = views; view && *view; ++view)
+    {
+      const char *scope = NULL;
+      if(!g_strcmp0(*view, "darkroom")) scope = "Darkroom/Toolboxes";
+      else if(!g_strcmp0(*view, "lighttable")) scope = "Lighttable/Toolboxes";
+      else if(!g_strcmp0(*view, "map")) scope = "Map/Toolboxes";
+      else if(!g_strcmp0(*view, "print")) scope = "Print/Toolboxes";
+      else if(!g_strcmp0(*view, "slideshow")) scope = "Slideshow/Toolboxes";
+
+      if(scope)
+      {
+        gchar *path = dt_accels_build_path(scope, clean_name);
+        dt_accels_remove_shortcut(darktable.gui->accels, path);
+        dt_free(path);
+      }
+    }
+
+    dt_free(clean_name);
+  }
+
   dt_gui_module_t *m = DT_GUI_MODULE(module);
   g_list_free(m->widget_list);
   m->widget_list = NULL;
@@ -966,6 +994,25 @@ void dt_lib_unload_module(dt_lib_module_t *module)
   m->widget_list_bh = NULL;
   dt_free(m->name);
   dt_free(m->view);
+
+  if(!IS_NULL_PTR(module->expander) && GTK_IS_WIDGET(module->expander))
+  {
+    GtkWidget *expander = module->expander;
+    g_object_ref_sink(expander);
+    gtk_widget_destroy(expander);
+    g_object_unref(expander);
+  }
+  else if(!IS_NULL_PTR(module->widget) && GTK_IS_WIDGET(module->widget))
+  {
+    GtkWidget *widget = module->widget;
+    g_object_ref_sink(widget);
+    gtk_widget_destroy(widget);
+    g_object_unref(widget);
+  }
+  module->expander = NULL;
+  module->widget = NULL;
+  if(!IS_NULL_PTR(retained_widget) && G_IS_OBJECT(retained_widget))
+    g_object_unref(retained_widget);
 
   if(module->module) g_module_close(module->module);
 }
@@ -1243,11 +1290,11 @@ void dt_lib_cleanup(dt_lib_t *lib)
     dt_lib_module_t *module = (dt_lib_module_t *)(lib->plugins->data);
     if(module)
     {
-      if(!IS_NULL_PTR(module->data))
-      {
+      if(module->gui_cleanup)
         module->gui_cleanup(module);
-        module->data = NULL;
-      }
+      module->data = NULL;
+      dt_free(module->common_fields.view);
+      module->common_fields.view = NULL;
       dt_lib_unload_module(module);
       dt_free(module);
     }

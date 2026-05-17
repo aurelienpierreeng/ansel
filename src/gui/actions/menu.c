@@ -91,6 +91,12 @@ static gboolean _menu_icon_draw(GtkWidget *widget, cairo_t *cr, gpointer user_da
   return FALSE;
 }
 
+static void _menu_entry_destroy(GtkWidget *widget, gpointer user_data)
+{
+  dt_menu_entry_t *entry = (dt_menu_entry_t *)user_data;
+  dt_free(entry);
+}
+
 GtkWidget *ctx_gtk_menu_item_new_with_icon(const char *label, GtkWidget *menu,
                                              void (*activate_callback)(GtkWidget *widget, gpointer user_data),
                                              gpointer user_data, dt_menu_icon_t icon)
@@ -401,6 +407,7 @@ dt_menu_entry_t *set_menu_entry(GtkWidget **menus, GList **items_list,
 
   // Add it to the list of menus items for easy sequential access later
   *items_list = g_list_append(*items_list, entry);
+  g_signal_connect(G_OBJECT(entry->widget), "destroy", G_CALLBACK(_menu_entry_destroy), entry);
   //fprintf(stdout, "menu %s, ref is at %p, list it as %p\n", label, items_list, *items_list);
 
   return entry;

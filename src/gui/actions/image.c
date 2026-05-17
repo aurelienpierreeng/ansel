@@ -97,17 +97,17 @@ static gboolean ungroup_images_callback(GtkAccelGroup *group, GObject *accelerat
 
 static gboolean _colorlabels_callback(int color)
 {
-  GList *imgs = dt_act_on_get_images(); // this yields a copy
+  GList *imgs = dt_act_on_get_images();
   dt_colorlabels_toggle_label_on_list(imgs, color, TRUE);
-  //g_list_free(imgs); // this segfaults sooner or later
+  g_list_free(imgs);
   return TRUE;
 }
 
 static gboolean _rating_callback(int value)
 {
-  GList *imgs = dt_act_on_get_images(); // this yields a copy
+  GList *imgs = dt_act_on_get_images();
   dt_ratings_apply_on_list(imgs, value, TRUE);
-  //g_list_free(imgs); // this segfaults sooner or later
+  g_list_free(imgs);
   return TRUE;
 }
 

@@ -147,6 +147,8 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
 
       if(!IS_NULL_PTR(error)) *error = 1;
 
+      dt_free(clean_source_name);
+      dt_free(source_name);
       dt_free(clean_target_name);
       dt_free(target_name);
       return NULL;
@@ -170,6 +172,8 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
           {
             fprintf(stderr, "[raster masks] could not allocate memory for transformed mask\n");
             if(error) *error = 1;
+            dt_free(clean_source_name);
+            dt_free(source_name);
             dt_free(clean_target_name);
             dt_free(target_name);
             return NULL;
@@ -196,12 +200,17 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
 
       if(module->module == target_module)
       {
+        gchar *clean_module_name = delete_underscore(module->module->name());
         dt_print(DT_DEBUG_MASKS, "[raster masks] found mask id %i from %s for module %s (%s) in pipe %s\n",
-                 raster_mask_id, source_name, delete_underscore(module->module->name()),
+                 raster_mask_id, source_name, clean_module_name,
                  module->module->multi_name, dt_pixelpipe_get_pipe_name(pipe->type));
+        dt_free(clean_module_name);
         break;
       }
     }
+
+    dt_free(clean_source_name);
+    dt_free(source_name);
   }
 
   dt_free(clean_target_name);

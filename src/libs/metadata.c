@@ -254,7 +254,14 @@ static void _update(dt_lib_module_t *self)
       continue;
     g_list_free_full(d->metadata_list[i], dt_free_gpointer);
     d->metadata_list[i] = metadata[keyid];
+    metadata[keyid] = NULL;
     _fill_text_view(i, metadata_count[keyid], self);
+  }
+
+  for(unsigned int key = 0; key < DT_METADATA_NUMBER; key++)
+  {
+    g_list_free_full(metadata[key], dt_free_gpointer);
+    metadata[key] = NULL;
   }
 
   gtk_widget_set_sensitive(GTK_WIDGET(d->apply_button), imgs_count > 0);
@@ -779,8 +786,9 @@ void gui_init(dt_lib_module_t *self)
 
 void gui_cleanup(dt_lib_module_t *self)
 {
+  if(IS_NULL_PTR(self->data)) return;
   dt_lib_cancel_postponed_update(self);
-  const dt_lib_metadata_t *d = (dt_lib_metadata_t *)self->data;
+  dt_lib_metadata_t *d = (dt_lib_metadata_t *)self->data;
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_image_selection_changed_callback), self);
 
   for(unsigned int i = 0; i < DT_METADATA_NUMBER; i++)
@@ -788,6 +796,8 @@ void gui_cleanup(dt_lib_module_t *self)
     if(dt_metadata_get_type_by_display_order(i) == DT_METADATA_TYPE_INTERNAL)
       continue;
     g_signal_handlers_block_by_func(d->textview[i], _lost_focus, self);
+    g_list_free_full(d->metadata_list[i], dt_free_gpointer);
+    d->metadata_list[i] = NULL;
     dt_free(d->setting_name[i]);
   }
   if(_metadata_update_stmt)
@@ -795,6 +805,10 @@ void gui_cleanup(dt_lib_module_t *self)
     sqlite3_finalize(_metadata_update_stmt);
     _metadata_update_stmt = NULL;
   }
+
+  g_list_free(d->last_act_on);
+  d->last_act_on = NULL;
+
   dt_free(self->data);
 }
 

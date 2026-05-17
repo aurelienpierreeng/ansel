@@ -858,9 +858,9 @@ GList *dt_tag_get_list(int32_t imgid)
 
   if(count < 1) return NULL;
 
-  for(; taglist; taglist = g_list_next(taglist))
+  for(GList *tag_iter = taglist; tag_iter; tag_iter = g_list_next(tag_iter))
   {
-    dt_tag_t *t = (dt_tag_t *)taglist->data;
+    dt_tag_t *t = (dt_tag_t *)tag_iter->data;
     gchar *value = t->tag;
 
     gchar **pch = g_strsplit(value, "|", -1);
@@ -980,13 +980,13 @@ GList *dt_tag_get_list_export(int32_t imgid, int32_t flags)
   {
     for(GList *tagt = sorted_tags; tagt; tagt = g_list_next(tagt))
     {
-      dt_tag_t *t = (dt_tag_t *)sorted_tags->data;
+      dt_tag_t *t = (dt_tag_t *)tagt->data;
       t->flags &= ~DT_TF_PRIVATE;
     }
   }
-  for(; sorted_tags; sorted_tags = g_list_next(sorted_tags))
+  for(GList *sorted_iter = sorted_tags; sorted_iter; sorted_iter = g_list_next(sorted_iter))
   {
-    dt_tag_t *t = (dt_tag_t *)sorted_tags->data;
+    dt_tag_t *t = (dt_tag_t *)sorted_iter->data;
     if ((export_private_tags || !(t->flags & DT_TF_PRIVATE))
         && !(t->flags & DT_TF_CATEGORY))
     {
@@ -997,7 +997,7 @@ GList *dt_tag_get_list_export(int32_t imgid, int32_t flags)
       // unless otherwise stated (defined as category or private)
       if(!omit_tag_hierarchy)
       {
-        GList *next = g_list_next(sorted_tags);
+        GList *next = g_list_next(sorted_iter);
         gchar *end = g_strrstr(t->tag, "|");
         while (end)
         {
@@ -1035,7 +1035,7 @@ GList *dt_tag_get_list_export(int32_t imgid, int32_t flags)
       }
     }
   }
-  dt_tag_free_result(&taglist);
+  dt_tag_free_result(&sorted_tags);
 
   return dt_util_glist_uniq(tags);
 }

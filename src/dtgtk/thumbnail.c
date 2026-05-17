@@ -206,7 +206,9 @@ static GtkWidget *_menuitem_from_text(const char *label, const char *value, GtkW
 static void _color_label_callback(GtkWidget *widget, dt_thumbnail_t *thumb)
 {
   int color = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "custom-data"));
-  dt_colorlabels_toggle_label_on_list(g_list_append(NULL, GINT_TO_POINTER(thumb->info.id)), color, TRUE);
+  GList *imgs = g_list_append(NULL, GINT_TO_POINTER(thumb->info.id));
+  dt_colorlabels_toggle_label_on_list(imgs, color, TRUE);
+  g_list_free(imgs);
 }
 
 static void _preview_window_open(GtkWidget *widget, dt_thumbnail_t *thumb)

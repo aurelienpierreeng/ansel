@@ -193,6 +193,7 @@ void gui_init(dt_lib_module_t *self)
 
 void gui_cleanup(dt_lib_module_t *self)
 {
+  if(IS_NULL_PTR(self->data)) return;
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_lib_history_change_callback), self);
   dt_lib_history_t *d = (dt_lib_history_t *)self->data;
   if(d && d->history_store) g_object_unref(d->history_store);
@@ -459,8 +460,11 @@ static gchar *_create_tooltip_text(const dt_dev_history_item_t *hitem)
   add_history_change_string(multi_name, _("instance name"));
 
   if(hitem->module->have_introspection)
-    change_parts[num_parts++] = _lib_history_change_text(hitem->module->get_introspection()->field, NULL,
-                                                hitem->params, old_params);
+  {
+    gchar *introspection_change = _lib_history_change_text(hitem->module->get_introspection()->field, NULL,
+                                                           hitem->params, old_params);
+    if(!IS_NULL_PTR(introspection_change)) change_parts[num_parts++] = introspection_change;
+  }
 
   if(hitem->module->flags() & IOP_FLAGS_SUPPORTS_BLENDING)
   {
@@ -550,48 +554,7 @@ static gboolean _changes_tooltip_callback(GtkWidget *widget, gint x, gint y, gbo
   const gchar *tooltip_text = g_object_get_data(G_OBJECT(widget), "tooltip-text");
   if(IS_NULL_PTR(tooltip_text) || !tooltip_text[0]) return FALSE;
 
-  static GtkWidget *view = NULL;
-  if(IS_NULL_PTR(view))
-  {
-    view = gtk_text_view_new();
-    dt_gui_add_class(view, "dt_transparent_background");
-    dt_gui_add_class(view, "dt_monospace");
-    g_signal_connect(G_OBJECT(view), "destroy", G_CALLBACK(gtk_widget_destroyed), &view);
-  }
-
-  GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(view));
-  gtk_text_buffer_set_text(buffer, tooltip_text, -1);
-  gtk_tooltip_set_custom(tooltip, view);
-  gtk_widget_map(view); // FIXME: workaround added in order to fix #9908, probably a Gtk issue, remove when fixed upstream
-
-  int count_column1 = 0, count_column2 = 0;
-  for(gchar *line = (gchar *)tooltip_text; *line;)
-  {
-    gchar *endline = g_strstr_len(line, -1, "\n");
-    if(IS_NULL_PTR(endline)) endline = line + strlen(line);
-
-    gchar *found_tab1 = g_strstr_len(line, endline - line, "\t");
-    if(found_tab1)
-    {
-      if(found_tab1 - line >= count_column1) count_column1 = found_tab1 - line + 1;
-
-      gchar *found_tab2 = g_strstr_len(found_tab1 + 1, endline - found_tab1 - 1, "\t");
-      if(found_tab2 - found_tab1 > count_column2) count_column2 = found_tab2 - found_tab1;
-    }
-
-    line = endline;
-    if(*line) line++;
-  }
-
-  PangoLayout *layout = gtk_widget_create_pango_layout(view, " ");
-  int char_width;
-  pango_layout_get_size(layout, &char_width, NULL);
-  g_object_unref(layout);
-  PangoTabArray *tabs = pango_tab_array_new_with_positions(3, FALSE, PANGO_TAB_LEFT, (count_column1) * char_width,
-                                                                      PANGO_TAB_LEFT, (count_column1 + count_column2) * char_width,
-                                                                      PANGO_TAB_LEFT, (count_column1 + count_column2 + 2) * char_width);
-  gtk_text_view_set_tabs(GTK_TEXT_VIEW(view), tabs);
-  pango_tab_array_free(tabs);
+  gtk_tooltip_set_text(tooltip, tooltip_text);
 
   return TRUE;
 }

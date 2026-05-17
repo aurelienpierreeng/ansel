@@ -330,6 +330,8 @@ typedef enum dt_debug_signal_action_t
 
 /* inititialize the signal framework */
 struct dt_control_signal_t *dt_control_signal_init();
+/* cleanup the signal framework */
+void dt_control_signal_cleanup(struct dt_control_signal_t *ctlsig);
 /* raises a signal */
 void dt_control_signal_raise(const struct dt_control_signal_t *ctlsig, const dt_signal_t signal, ...);
 /* connects a callback to a signal */

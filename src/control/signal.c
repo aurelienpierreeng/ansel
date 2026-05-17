@@ -99,7 +99,7 @@ static void _collection_changed_destroy_callback(gpointer instance, int query_ch
 // callback for the destructor of DT_SIGNAL_IMAGE_INFO_CHANGED
 static void _image_info_changed_destroy_callback(gpointer instance, gpointer imgs, gpointer user_data)
 {
-  if(imgs)
+  if(!IS_NULL_PTR(imgs))
   {
     g_list_free(imgs);
     imgs = NULL;
@@ -115,7 +115,7 @@ static void _presets_changed_destroy_callback(gpointer instance, gpointer module
 // callback for the destructor of DT_SIGNAL_GEOTAG_CHANGED
 static void _image_geotag_destroy_callback(gpointer instance, gpointer imgs, const int locid, gpointer user_data)
 {
-  if(imgs)
+  if(!IS_NULL_PTR(imgs))
   {
     g_list_free(imgs);
     imgs = NULL;
@@ -277,6 +277,13 @@ dt_control_signal_t *dt_control_signal_init()
   return ctlsig;
 }
 
+void dt_control_signal_cleanup(dt_control_signal_t *ctlsig)
+{
+  if(IS_NULL_PTR(ctlsig)) return;
+  if(!IS_NULL_PTR(ctlsig->sink)) g_object_unref(ctlsig->sink);
+  dt_free(ctlsig);
+}
+
 typedef struct _signal_param_t
 {
   GValue *instance_and_params;
@@ -284,14 +291,20 @@ typedef struct _signal_param_t
   guint n_params;
 } _signal_param_t;
 
-static gboolean _signal_raise(gpointer user_data)
+static gboolean _signal_emit(gpointer user_data)
 {
   _signal_param_t *params = (_signal_param_t *)user_data;
   g_signal_emitv(params->instance_and_params, params->signal_id, 0, NULL);
+  return G_SOURCE_REMOVE;
+}
+
+static void _signal_param_cleanup(gpointer user_data)
+{
+  _signal_param_t *params = (_signal_param_t *)user_data;
+  if(IS_NULL_PTR(params)) return;
   for(int i = 0; i <= params->n_params; i++) g_value_unset(&params->instance_and_params[i]);
   dt_free(params->instance_and_params);
   dt_free(params);
-  return FALSE;
 }
 
 typedef struct async_com_data
@@ -305,7 +318,8 @@ gboolean _async_com_callback(gpointer data)
 {
   async_com_data *communication = (async_com_data*)data;
   g_mutex_lock(&communication->end_mutex);
-  _signal_raise(communication->user_data);
+  _signal_emit(communication->user_data);
+  _signal_param_cleanup(communication->user_data);
 
   g_cond_signal(&communication->end_cond);
   g_mutex_unlock(&communication->end_mutex);
@@ -401,13 +415,14 @@ void dt_control_signal_raise(const dt_control_signal_t *ctlsig, dt_signal_t sign
 
   if(!signal_description->synchronous)
   {
-    g_main_context_invoke(NULL, _signal_raise, params);
+    g_main_context_invoke_full(NULL, G_PRIORITY_DEFAULT, _signal_emit, params, _signal_param_cleanup);
   }
   else
   {
     if(pthread_equal(darktable.control->gui_thread, pthread_self()))
     {
-      _signal_raise(params);
+      _signal_emit(params);
+      _signal_param_cleanup(params);
     }
     else
     {

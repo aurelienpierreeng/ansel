@@ -902,10 +902,12 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe,
   if(pipe->dev->gui_attached)
   {
     gchar *module_label = dt_history_item_get_name(module);
+    dt_pthread_mutex_lock(&darktable.control->log_mutex);
     dt_free(darktable.main_message);
     darktable.main_message = g_strdup_printf(_("Processing module `%s` for pipeline %s (%ix%i px @ %0.f%%)..."),
                                              module_label, dt_pixelpipe_get_pipe_name(pipe->type),
                                              piece->roi_out.width, piece->roi_out.height, piece->roi_out.scale * 100.f);
+    dt_pthread_mutex_unlock(&darktable.control->log_mutex);
     dt_free(module_label);
     dt_control_queue_redraw_center();
   }
@@ -1094,7 +1096,10 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe,
 
   if(pipe->dev->gui_attached)
   {
+    dt_pthread_mutex_lock(&darktable.control->log_mutex);
     dt_free(darktable.main_message);
+    darktable.main_message = NULL;
+    dt_pthread_mutex_unlock(&darktable.control->log_mutex);
     dt_control_queue_redraw_center();
   }
 

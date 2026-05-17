@@ -124,6 +124,7 @@ dt_collection_t *dt_collection_new()
 void dt_collection_free(const dt_collection_t *collection)
 {
   dt_free(collection->query);
+  dt_free(collection->params.text_filter);
   g_strfreev(collection->where_ext);
   if(_collection_count_stmt)
   {

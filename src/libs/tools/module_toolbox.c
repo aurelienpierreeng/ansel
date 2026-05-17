@@ -93,6 +93,7 @@ void gui_init(dt_lib_module_t *self)
 
 void gui_cleanup(dt_lib_module_t *self)
 {
+  if(IS_NULL_PTR(self->data)) return;
   dt_lib_module_toolbox_t *d = (dt_lib_module_toolbox_t *)self->data;
   g_list_free_full(d->child_views, dt_free_gpointer);
   d->child_views = NULL;

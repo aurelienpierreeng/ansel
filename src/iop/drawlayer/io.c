@@ -1034,10 +1034,10 @@ gboolean dt_drawlayer_io_list_layer_names(const char *path, char ***names, int *
     return TRUE;
   }
 
-  char **out = g_new0(char *, arr->len);
-  for(guint i = 0; i < arr->len; i++)
-    out[i] = (char *)g_ptr_array_index(arr, i);
-  g_ptr_array_free(arr, FALSE);
+  const guint layer_count = arr->len;
+  char **out = (char **)g_ptr_array_free(arr, FALSE);
+  out = g_renew(char *, out, layer_count + 1);
+  out[layer_count] = NULL;
   *names = out;
   return TRUE;
 }
@@ -1046,8 +1046,15 @@ gboolean dt_drawlayer_io_list_layer_names(const char *path, char ***names, int *
 void dt_drawlayer_io_free_layer_names(char ***names, int *count)
 {
   if(IS_NULL_PTR(names) || !*names) return;
-  const int n = (count && *count > 0) ? *count : 0;
-  for(int i = 0; i < n; i++) dt_free((*names)[i]);
+  const int n = (!IS_NULL_PTR(count) && *count > 0) ? *count : 0;
+  if(n > 0)
+  {
+    for(int i = 0; i < n; i++) dt_free((*names)[i]);
+  }
+  else
+  {
+    for(int i = 0; (*names)[i]; i++) dt_free((*names)[i]);
+  }
   dt_free(*names);
   if(!IS_NULL_PTR(count)) *count = 0;
 }

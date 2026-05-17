@@ -772,6 +772,22 @@ void gui_init(dt_lib_module_t *self)
 
 void gui_cleanup(dt_lib_module_t *self)
 {
+  gchar *path = dt_accels_build_path(_("Lighttable/Actions"), _("Reload current collection"));
+  dt_accels_remove_shortcut(darktable.gui->accels, path);
+  dt_free(path);
+
+  path = dt_accels_build_path(_("Lighttable/Actions"), _("Toggle culling mode"));
+  dt_accels_remove_shortcut(darktable.gui->accels, path);
+  dt_free(path);
+
+  path = dt_accels_build_path(_("Lighttable/Actions"), _("Select all filters"));
+  dt_accels_remove_shortcut(darktable.gui->accels, path);
+  dt_free(path);
+
+  path = dt_accels_build_path(_("Lighttable/Actions"), _("Deselect all filters"));
+  dt_accels_remove_shortcut(darktable.gui->accels, path);
+  dt_free(path);
+
   dt_collection_set_text_filter(darktable.collection, NULL);
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_lib_filter_images_order_change), self);
   dt_free(self->data);

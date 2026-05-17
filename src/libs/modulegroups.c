@@ -1076,7 +1076,8 @@ void gui_cleanup(dt_lib_module_t *self)
     }
     for(int i = 0; i < MOD_TAB_ALL; i++)
     {
-      gtk_widget_destroy(d->pages[i]);
+      if(!IS_NULL_PTR(d->pages[i]) && GTK_IS_WIDGET(d->pages[i]))
+        gtk_widget_destroy(d->pages[i]);
       d->pages[i] = NULL;
     }
     dt_free(d);

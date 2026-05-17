@@ -1217,7 +1217,8 @@ static void dt_ioppr_resync_iop_list(dt_develop_t *dev)
     const dt_iop_module_t *const restrict mod = dt_iop_get_module_by_op_priority(dev->iop, e->operation, e->instance);
     if(IS_NULL_PTR(mod))
     {
-      dev->iop_order_list = g_list_remove_link(dev->iop_order_list, l);
+      dt_free(l->data);
+      dev->iop_order_list = g_list_delete_link(dev->iop_order_list, l);
     }
 
     l = next;
@@ -1414,7 +1415,8 @@ GList *dt_ioppr_merge_module_multi_instance_iop_order_list(GList *iop_order_list
       GList *next = g_list_next(link);
       if(strcmp(operation, entry->operation) == 0)
       {
-        iop_order_list = g_list_remove_link(iop_order_list, link);
+        dt_free(link->data);
+        iop_order_list = g_list_delete_link(iop_order_list, link);
       }
 
       link = next;
@@ -1448,7 +1450,7 @@ static GList *dt_ioppr_merge_multi_instance_iop_order_list(GList *iop_order_list
 
     op = g_list_append(op, entry);
 
-    copy = g_list_remove_link(copy, l);
+    copy = g_list_delete_link(copy, l);
 
     GList *mi = l_next;
     while(mi)
@@ -1458,7 +1460,7 @@ static GList *dt_ioppr_merge_multi_instance_iop_order_list(GList *iop_order_list
       if(strcmp(entry->operation, mi_entry->operation) == 0)
       {
         op = g_list_append(op, mi_entry);
-        copy = g_list_remove_link(copy, mi);
+        copy = g_list_delete_link(copy, mi);
       }
 
       mi = next;
@@ -2561,6 +2563,8 @@ GList *dt_ioppr_deserialize_text_iop_order_list(const char *buf)
   return iop_order_list;
 
  error:
+  g_list_free_full(list, dt_free_gpointer);
+  list = NULL;
   g_list_free_full(iop_order_list, dt_free_gpointer);
   iop_order_list = NULL;
   return NULL;

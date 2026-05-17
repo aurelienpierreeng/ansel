@@ -1283,6 +1283,14 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   return 0;
 }
 
+static void _dt_drain_main_context(const int max_iters)
+{
+  if(max_iters <= 0) return;
+  GMainContext *ctx = g_main_context_default();
+  for(int i = 0; i < max_iters && g_main_context_pending(ctx); i++)
+    g_main_context_iteration(ctx, FALSE);
+}
+
 void dt_cleanup()
 {
   const int init_gui = (!IS_NULL_PTR(darktable.gui));
@@ -1312,6 +1320,15 @@ void dt_cleanup()
 
   if(init_gui)
   {
+    if(!IS_NULL_PTR(darktable.gui->ui))
+      dt_ui_cleanup_titlebar(darktable.gui->ui);
+
+    if(darktable.gui->surface)
+    {
+      cairo_surface_destroy(darktable.gui->surface);
+      darktable.gui->surface = NULL;
+    }
+
     // hide main window and do rest of the cleanup in the background
     gtk_widget_hide(dt_ui_main_window(darktable.gui->ui));
 
@@ -1321,6 +1338,8 @@ void dt_cleanup()
     // Stop control workers before unloading views and libs. They can still be
     // processing lighttable-side jobs while shutdown is tearing down modules.
     dt_control_shutdown(darktable.control);
+
+    _dt_drain_main_context(256);
 
     dt_lib_cleanup(darktable.lib);
     dt_free(darktable.lib);
@@ -1345,6 +1364,8 @@ void dt_cleanup()
     GtkWidget *main_window = dt_ui_main_window(darktable.gui->ui);
     if(GTK_IS_WIDGET(main_window))
       gtk_widget_destroy(main_window);
+
+    _dt_drain_main_context(256);
 
     dt_gui_gtk_t *gui = darktable.gui;
     darktable.gui = NULL;
@@ -1455,6 +1476,9 @@ void dt_cleanup()
     dt_pthread_mutex_destroy(&darktable.control->run_mutex);
   }
   dt_free(darktable.control);
+
+  dt_control_signal_cleanup(darktable.signals);
+  darktable.signals = NULL;
 
   dt_capabilities_cleanup();
 

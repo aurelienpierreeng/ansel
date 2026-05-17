@@ -3322,8 +3322,22 @@ void gui_init(dt_lib_module_t *self)
 
 void gui_cleanup(dt_lib_module_t *self)
 {
+  if(IS_NULL_PTR(self->data)) return;
   dt_lib_cancel_postponed_update(self);
   dt_lib_tagging_t *d = (dt_lib_tagging_t *)self->data;
+
+  gchar *path = dt_accels_build_path(N_("Lighttable/Tags"), N_("Tag"));
+  dt_accels_remove_accel(darktable.gui->accels, path, self);
+  dt_free(path);
+  path = dt_accels_build_path(N_("Lighttable/Tags"), N_("Redo last tag"));
+  dt_accels_remove_accel(darktable.gui->accels, path, self);
+  dt_free(path);
+  path = dt_accels_build_path(N_("Map/Tags"), N_("Tag"));
+  dt_accels_remove_accel(darktable.gui->accels, path, self);
+  dt_free(path);
+  path = dt_accels_build_path(N_("Map/Tags"), N_("Redo last tag"));
+  dt_accels_remove_accel(darktable.gui->accels, path, self);
+  dt_free(path);
 
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_lib_tagging_redraw_callback), self);
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_lib_tagging_tags_changed_callback), self);

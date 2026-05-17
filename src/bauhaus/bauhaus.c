@@ -579,7 +579,7 @@ static void show_pango_text(struct dt_bauhaus_widget_t *w, GtkStyleContext *cont
   }
 
   // Paint background color if any - useful to highlight elements in popup list
-  if(bg_color)
+  if(!IS_NULL_PTR(bg_color))
   {
     cairo_save(cr);
     cairo_rectangle(cr, bounding_box->x, bounding_box->y, bounding_box->width, bounding_box->height);
@@ -2410,7 +2410,7 @@ static gboolean _widget_draw(GtkWidget *widget, cairo_t *crf)
   cairo_t *cr = cairo_create(cst);
   GtkStyleContext *context = gtk_widget_get_style_context(widget);
 
-  GdkRGBA *bg_color = default_color_assign();
+  GdkRGBA *bg_color = NULL;
   GdkRGBA *text_color = default_color_assign();
   GdkRGBA *value_color = default_color_assign();
   GdkRGBA *value_text_color = default_color_assign();
@@ -2533,7 +2533,7 @@ static gboolean _widget_draw(GtkWidget *widget, cairo_t *crf)
   gdk_rgba_free(text_color);
   gdk_rgba_free(value_color);
   gdk_rgba_free(value_text_color);
-  gdk_rgba_free(bg_color);
+  if(!IS_NULL_PTR(bg_color)) gdk_rgba_free(bg_color);
 
   return TRUE;
 }

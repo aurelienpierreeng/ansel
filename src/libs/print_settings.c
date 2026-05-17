@@ -3127,6 +3127,7 @@ void *get_params(dt_lib_module_t *self, int *size)
 
 void gui_cleanup(dt_lib_module_t *self)
 {
+  if(IS_NULL_PTR(self->data)) return;
   dt_lib_print_settings_t *ps = (dt_lib_print_settings_t *)self->data;
 
   // these can be called on shutdown, resulting in null-pointer

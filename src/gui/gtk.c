@@ -154,6 +154,7 @@ void dt_gui_remove_class(GtkWidget *widget, const gchar *class_name)
  * OLD UI API
  */
 static void _init_widgets(dt_gui_gtk_t *gui);
+static gboolean _configure(GtkWidget *da, GdkEventConfigure *event, gpointer user_data);
 
 gboolean dt_gui_get_scroll_deltas(const GdkEventScroll *event, gdouble *delta_x, gdouble *delta_y)
 {
@@ -1255,6 +1256,13 @@ void dt_gui_gtk_run(dt_gui_gtk_t *gui)
   GtkWidget *widget = dt_ui_center(darktable.gui->ui);
   GtkAllocation allocation;
   gtk_widget_get_allocation(widget, &allocation);
+
+  if(darktable.gui->surface)
+  {
+    cairo_surface_destroy(darktable.gui->surface);
+    darktable.gui->surface = NULL;
+  }
+
   darktable.gui->surface
       = dt_cairo_image_surface_create(CAIRO_FORMAT_ARGB32, allocation.width, allocation.height);
   // need to pre-configure views to avoid crash caused by draw coming before configure-event

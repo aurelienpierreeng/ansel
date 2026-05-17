@@ -1122,6 +1122,7 @@ void dt_opencl_cleanup(dt_opencl_t *cl)
     dt_bilateral_free_cl_global(cl->bilateral);
     dt_gaussian_free_cl_global(cl->gaussian);
     dt_interpolation_free_cl_global(cl->interpolation);
+    dt_local_laplacian_free_cl_global(cl->local_laplacian);
     dt_dwt_free_cl_global(cl->dwt);
     dt_heal_free_cl_global(cl->heal);
     dt_colorspaces_free_cl_global(cl->colorspaces);

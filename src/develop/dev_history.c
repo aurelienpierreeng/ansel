@@ -2183,7 +2183,7 @@ static int _check_deleted_instances(dt_develop_t *dev, GList **_iop_list, GList 
         gtk_widget_destroy(mod->widget);
       }
 
-      iop_list = g_list_remove_link(iop_list, modules);
+      iop_list = g_list_delete_link(iop_list, modules);
 
       // remove the module reference from all snapshots
       dt_undo_iterate_internal(darktable.undo, DT_UNDO_HISTORY, mod, &_history_invalidate_cb);

@@ -775,10 +775,19 @@ void dt_hinter_set_message(dt_ui_t *ui, const char *message)
 
 void dt_ui_cleanup_titlebar(dt_ui_t *ui)
 {
+  if(IS_NULL_PTR(ui) || IS_NULL_PTR(ui->header)) return;
+
+  if(!IS_NULL_PTR(ui->header->titlebar) && GTK_IS_WIDGET(ui->header->titlebar))
+  {
+    gtk_widget_destroy(ui->header->titlebar);
+    ui->header->titlebar = NULL;
+  }
+
   for(int i = 0; i < DT_MENU_LAST; i++)
   {
-    g_list_free_full(ui->header->item_lists[i], dt_free_gpointer);
+    g_list_free(ui->header->item_lists[i]);
     ui->header->item_lists[i] = NULL;
   }
   dt_free(ui->header);
+  ui->header = NULL;
 }

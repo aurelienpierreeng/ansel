@@ -65,28 +65,21 @@ typedef enum _develop_mask_post_processing
   DEVELOP_MASK_POST_TONE_CURVE = 4,
 } _develop_mask_post_processing;
 
-static gchar *dt_pipe_type_to_str(dt_dev_pixelpipe_type_t pipe_type)
+static const char *dt_pipe_type_to_str(dt_dev_pixelpipe_type_t pipe_type)
 {
-  gchar *type_str = NULL;
-
   switch(pipe_type)
   {
     case DT_DEV_PIXELPIPE_PREVIEW:
-      type_str = g_strdup("PREVIEW");
-      break;
+      return "PREVIEW";
     case DT_DEV_PIXELPIPE_FULL:
-      type_str = g_strdup("FULL");
-      break;
+      return "FULL";
     case DT_DEV_PIXELPIPE_THUMBNAIL:
-      type_str = g_strdup("THUMBNAIL");
-      break;
+      return "THUMBNAIL";
     case DT_DEV_PIXELPIPE_EXPORT:
-      type_str = g_strdup("EXPORT");
-      break;
+      return "EXPORT";
     default:
-      type_str = g_strdup("UNKNOWN");
+      return "UNKNOWN";
   }
-  return type_str;
 }
 
 static dt_develop_blend_params_t _default_blendop_params

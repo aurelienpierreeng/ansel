@@ -1305,6 +1305,12 @@ int32_t dt_view_active_images_get_first()
 
 void dt_view_active_images_set(GList *images, gboolean raise)
 {
+  if(!IS_NULL_PTR(darktable.view_manager->active_images)
+     && darktable.view_manager->active_images != images)
+  {
+    g_list_free(darktable.view_manager->active_images);
+  }
+
   darktable.view_manager->active_images = images;
 
   if(raise)

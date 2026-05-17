@@ -1195,7 +1195,7 @@ void dt_dev_module_remove(dt_develop_t *dev, dt_iop_module_t *module)
     dt_iop_module_t *mod = (dt_iop_module_t *)modules->data;
     if(mod == module)
     {
-      dev->iop = g_list_remove_link(dev->iop, modules);
+      dev->iop = g_list_delete_link(dev->iop, modules);
       break;
     }
   }

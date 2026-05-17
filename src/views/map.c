@@ -709,9 +709,10 @@ void cleanup(dt_view_t *self)
       g_list_free_full(lib->loc.others, dt_free_gpointer);
       lib->loc.others = NULL;
     }
-    // FIXME: it would be nice to cleanly destroy the object, but we are doing this inside expose() so
-    // removing the widget can cause segfaults.
-    //     g_object_unref(G_OBJECT(lib->map));
+    // Release the extra strong reference taken in init(). The widget tree keeps
+    // its own ownership, this only drops our view-level keepalive reference.
+    g_object_unref(G_OBJECT(lib->map));
+    lib->map = NULL;
   }
   if(lib->main_query) sqlite3_finalize(lib->main_query);
   dt_free(self->data);

@@ -383,6 +383,10 @@ void dt_masks_gui_cleanup(dt_develop_t *dev)
 {
   if(IS_NULL_PTR(dev) || IS_NULL_PTR(dev->form_gui)) return;
 
+  // If shutdown happens while a shape is being created, release the unfinished
+  // temporary visible form before clearing the GUI state.
+  dt_masks_form_exit_creation(NULL, dev->form_gui);
+  
   dt_masks_clear_form_gui(dev);
   dt_free(dev->form_gui);
   dt_masks_set_visible_form(dev, NULL);
@@ -3078,6 +3082,36 @@ void dt_masks_clear_form_gui(dt_develop_t *develop)
 
 void dt_masks_change_form_gui(dt_masks_form_t *new_form)
 {
+  dt_masks_form_t *old_form = dt_masks_get_visible_form(darktable.develop);
+  if(!IS_NULL_PTR(old_form))
+  {
+    gboolean is_registered = FALSE;
+    gboolean is_registered_for_cleanup = FALSE;
+    dt_pthread_rwlock_rdlock(&darktable.develop->masks_mutex);
+    for(const GList *form_node = darktable.develop->forms; form_node; form_node = g_list_next(form_node))
+    {
+      if(form_node->data == old_form)
+      {
+        is_registered = TRUE;
+        break;
+      }
+    }
+
+    for(const GList *form_node = darktable.develop->allforms; form_node; form_node = g_list_next(form_node))
+    {
+      if(form_node->data == old_form)
+      {
+        is_registered_for_cleanup = TRUE;
+        break;
+      }
+    }
+    dt_pthread_rwlock_unlock(&darktable.develop->masks_mutex);
+
+    // Free only fully orphan temporary previews. Forms tracked in either list
+    // are owned by develop and will be released by its teardown path.
+    if(!is_registered && !is_registered_for_cleanup) dt_masks_free_form(old_form);
+  }
+
   dt_masks_clear_form_gui(darktable.develop);
   dt_masks_set_visible_form(darktable.develop, new_form);
 }

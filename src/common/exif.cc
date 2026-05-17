@@ -3896,18 +3896,34 @@ static void _exif_xmp_read_data(Exiv2::XmpData &xmpData, const int32_t imgid, co
   std::unique_ptr<Exiv2::Value> v2(Exiv2::Value::create(Exiv2::xmpBag));
 
   GList *tags = dt_tag_get_list(imgid);
-  for(GList *tag = tags; tag; tag = g_list_next(tag))
+  try
   {
-    v1->read((char *)tag->data);
+    for(GList *tag = tags; tag; tag = g_list_next(tag))
+    {
+      v1->read((char *)tag->data);
+    }
+  }
+  catch(...)
+  {
+    g_list_free_full(tags, dt_free_gpointer);
+    throw;
   }
   if(v1->count() > 0) xmpData.add(Exiv2::XmpKey("Xmp.dc.subject"), v1.get());
   g_list_free_full(tags, dt_free_gpointer);
   tags = NULL;
 
   GList *hierarchical = dt_tag_get_hierarchical(imgid);
-  for(GList *hier = hierarchical; hier; hier = g_list_next(hier))
+  try
   {
-    v2->read((char *)hier->data);
+    for(GList *hier = hierarchical; hier; hier = g_list_next(hier))
+    {
+      v2->read((char *)hier->data);
+    }
+  }
+  catch(...)
+  {
+    g_list_free_full(hierarchical, dt_free_gpointer);
+    throw;
   }
   if(v2->count() > 0) xmpData.add(Exiv2::XmpKey("Xmp.lr.hierarchicalSubject"), v2.get());
   g_list_free_full(hierarchical, dt_free_gpointer);
@@ -4011,9 +4027,17 @@ static void _exif_xmp_read_data_export(Exiv2::XmpData &xmpData, const int32_t im
     // get tags from db, store in dublin core
     std::unique_ptr<Exiv2::Value> v1(Exiv2::Value::create(Exiv2::xmpBag));
     GList *tags = dt_tag_get_list_export(imgid, metadata->flags);
-    for(GList *tag = tags; tag; tag = g_list_next(tag))
+    try
     {
-      v1->read((char *)tag->data);
+      for(GList *tag = tags; tag; tag = g_list_next(tag))
+      {
+        v1->read((char *)tag->data);
+      }
+    }
+    catch(...)
+    {
+      g_list_free_full(tags, dt_free_gpointer);
+      throw;
     }
     if(v1->count() > 0) xmpData.add(Exiv2::XmpKey("Xmp.dc.subject"), v1.get());
     g_list_free_full(tags, dt_free_gpointer);
@@ -4024,9 +4048,17 @@ static void _exif_xmp_read_data_export(Exiv2::XmpData &xmpData, const int32_t im
   {
     std::unique_ptr<Exiv2::Value> v2(Exiv2::Value::create(Exiv2::xmpBag));
     GList *hierarchical = dt_tag_get_hierarchical_export(imgid, metadata->flags);
-    for(GList *hier = hierarchical; hier; hier = g_list_next(hier))
+    try
     {
-      v2->read((char *)hier->data);
+      for(GList *hier = hierarchical; hier; hier = g_list_next(hier))
+      {
+        v2->read((char *)hier->data);
+      }
+    }
+    catch(...)
+    {
+      g_list_free_full(hierarchical, dt_free_gpointer);
+      throw;
     }
     if(v2->count() > 0) xmpData.add(Exiv2::XmpKey("Xmp.lr.hierarchicalSubject"), v2.get());
     g_list_free_full(hierarchical, dt_free_gpointer);

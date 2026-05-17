@@ -1322,7 +1322,9 @@ void init_global(dt_iop_module_so_t *module)
 
     // get parent directory
     GFile *file = g_file_parse_name(datadir);
-    gchar *path = g_file_get_path(g_file_get_parent(file));
+    GFile *parent = g_file_get_parent(file);
+    gchar *path = g_file_get_path(parent);
+    g_object_unref(parent);
     g_object_unref(file);
 #ifdef LF_MAX_DATABASE_VERSION
     gchar *sysdbpath = g_build_filename(path, "lensfun", "version_" STR(LF_MAX_DATABASE_VERSION), (char *)NULL);
@@ -1765,6 +1767,7 @@ static void camera_autosearch_clicked(GtkWidget *button, gpointer user_data)
   }
   else
   {
+    make[0] = '\0';
     parse_model(txt, model, sizeof(model));
     dt_pthread_mutex_lock(&darktable.plugin_threadsafe);
     const lfCamera **camlist = dt_iop_lensfun_db->FindCamerasExt(make, model, 0);
@@ -2504,6 +2507,7 @@ void gui_update(struct dt_iop_module_t *self)
       camera_set(self, cam[0]);
     else
       camera_set(self, NULL);
+    lf_free(cam);
   }
   if(g->camera && p->lens[0])
   {

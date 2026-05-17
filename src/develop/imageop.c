@@ -606,7 +606,6 @@ static void _gui_delete_callback(GtkButton *button, dt_iop_module_t *module)
 
     dt_iop_gui_cleanup_module(module);
     dt_gui_refocus_center();
-    gtk_widget_destroy(module->widget);
   }
 
   // we remove all references in the history stack and dev->iop
@@ -1426,6 +1425,7 @@ static void _init_module_so(void *m)
       dt_iop_gui_cleanup_module(module_instance);
 
       dt_iop_cleanup_module(module_instance);
+
     }
 
     dt_free(module_instance);
@@ -1900,20 +1900,37 @@ void dt_iop_gui_cleanup_module(dt_iop_module_t *module)
   {
     DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_iop_color_picker_data_ready_callback), module);
   }
-  if(module->gui_data && module->gui_cleanup) module->gui_cleanup(module);
+  if(module->gui_cleanup)
+    module->gui_cleanup(module);
   dt_iop_gui_cleanup_blending(module);
 
   /* Release the transient widget tree explicitly. In normal GUI lifetime, these
    * widgets are parented and get destroyed by container teardown. During module
    * probe/init paths, they can stay unparented and would otherwise leak. */
-  if(!IS_NULL_PTR(module->expander))
+  if(!IS_NULL_PTR(module->expander) && GTK_IS_WIDGET(module->expander))
   {
-    gtk_widget_destroy(module->expander);
+    GtkWidget *expander = module->expander;
+    g_object_ref_sink(expander);
+    gtk_widget_destroy(expander);
+    g_object_unref(expander);
   }
   else
   {
-    if(!IS_NULL_PTR(module->header)) gtk_widget_destroy(module->header);
-    if(!IS_NULL_PTR(module->widget)) gtk_widget_destroy(module->widget);
+    if(!IS_NULL_PTR(module->header) && GTK_IS_WIDGET(module->header))
+    {
+      GtkWidget *header = module->header;
+      g_object_ref_sink(header);
+      gtk_widget_destroy(header);
+      g_object_unref(header);
+    }
+
+    if(!IS_NULL_PTR(module->widget) && GTK_IS_WIDGET(module->widget))
+    {
+      GtkWidget *widget = module->widget;
+      g_object_ref_sink(widget);
+      gtk_widget_destroy(widget);
+      g_object_unref(widget);
+    }
   }
 
   module->widget = NULL;

@@ -860,17 +860,40 @@ void dt_control_toast_redraw()
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_CONTROL_TOAST_REDRAW);
 }
 
-static int _widget_queue_draw(void *widget)
+typedef struct dt_control_redraw_widget_t
 {
-  gtk_widget_queue_draw((GtkWidget*)widget);
+  GWeakRef widget_ref;
+} dt_control_redraw_widget_t;
+
+static int _widget_queue_draw(void *widget_data)
+{
+  dt_control_redraw_widget_t *const redraw_widget = (dt_control_redraw_widget_t *)widget_data;
+  GtkWidget *const widget = GTK_WIDGET(g_weak_ref_get(&redraw_widget->widget_ref));
+  if(!IS_NULL_PTR(widget))
+  {
+    gtk_widget_queue_draw(widget);
+    g_object_unref(widget);
+  }
+
   return FALSE;
+}
+
+static void _widget_queue_draw_cleanup(void *widget_data)
+{
+  dt_control_redraw_widget_t *const redraw_widget = (dt_control_redraw_widget_t *)widget_data;
+  g_weak_ref_clear(&redraw_widget->widget_ref);
+  dt_free(redraw_widget);
 }
 
 void dt_control_queue_redraw_widget(GtkWidget *widget)
 {
   if(dt_control_running())
   {
-    g_idle_add(_widget_queue_draw, (void*)widget);
+    dt_control_redraw_widget_t *const redraw_widget = calloc(1, sizeof(dt_control_redraw_widget_t));
+    if(IS_NULL_PTR(redraw_widget)) return;
+
+    g_weak_ref_init(&redraw_widget->widget_ref, G_OBJECT(widget));
+    g_idle_add_full(G_PRIORITY_DEFAULT_IDLE, _widget_queue_draw, redraw_widget, _widget_queue_draw_cleanup);
   }
 }
 

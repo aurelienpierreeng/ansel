@@ -1375,6 +1375,7 @@ static void _free_metadata_queue(dt_lib_metadata_info_t *m)
 void gui_cleanup(dt_lib_module_t *self)
 {
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_mouse_over_image_callback), self);
+  if(IS_NULL_PTR(self->data)) return;
   dt_lib_metadata_view_t *d = (dt_lib_metadata_view_t *)self->data;
   g_list_free_full(d->metadata, (GDestroyNotify)_free_metadata_queue);
   d->metadata = NULL;

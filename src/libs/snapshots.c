@@ -421,6 +421,7 @@ void gui_init(dt_lib_module_t *self)
 
 void gui_cleanup(dt_lib_module_t *self)
 {
+  if(IS_NULL_PTR(self->data)) return;
   dt_lib_snapshots_t *d = (dt_lib_snapshots_t *)self->data;
 
   dt_free(d->snapshot);

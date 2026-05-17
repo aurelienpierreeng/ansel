@@ -1050,7 +1050,9 @@ void gui_init(dt_iop_module_t *self)
 void gui_cleanup(struct dt_iop_module_t *self)
 {
   dt_iop_negadoctor_gui_data_t *g = (dt_iop_negadoctor_gui_data_t *)self->gui_data;
-  dt_conf_set_int("plugins/darkroom/negadoctor/gui_page", gtk_notebook_get_current_page (g->notebook));
+  if(!IS_NULL_PTR(g) && GTK_IS_NOTEBOOK(g->notebook))
+    dt_conf_set_int("plugins/darkroom/negadoctor/gui_page", gtk_notebook_get_current_page(g->notebook));
+  IOP_GUI_FREE;
 }
 
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)

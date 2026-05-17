@@ -351,6 +351,7 @@ static void init_tab_general(GtkWidget *dialog, GtkWidget *stack, dt_gui_themetw
     if(i) *i = '\0';
     gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widget), name);
     if(!g_strcmp0(name, theme_name)) selected = k;
+    g_free(name);
     k++;
   }
   dt_free(theme_name);

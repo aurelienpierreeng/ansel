@@ -2004,6 +2004,16 @@ void gui_init(dt_lib_module_t *self)
 
 void gui_cleanup(dt_lib_module_t *self)
 {
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_mouse_over_image_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_selection_changed_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_image_info_changed), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_dt_pref_change_callback), self);
+#ifdef HAVE_MAP
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_view_changed), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_geotag_changed), self);
+#endif
+  if(IS_NULL_PTR(self->data)) return;
+
   dt_lib_geotagging_t *d = (dt_lib_geotagging_t *)self->data;
   g_list_free_full(d->timezones, free_tz_tuple);
   d->timezones = NULL;
@@ -2013,9 +2023,6 @@ void gui_cleanup(dt_lib_module_t *self)
   if(d->datetime0)
     g_date_time_unref(d->datetime0);
 
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_mouse_over_image_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_selection_changed_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_image_info_changed), self);
   if(d->imgs)
   {
 #ifdef HAVE_MAP
@@ -2038,6 +2045,7 @@ void gui_cleanup(dt_lib_module_t *self)
   }
 #endif
   dt_free(self->data);
+  self->data = NULL;
 }
 
 // clang-format off
