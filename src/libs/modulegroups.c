@@ -1174,8 +1174,19 @@ static gboolean _update_iop_visibility(gpointer user_data)
 
   // Ensure the module is visible
   dt_iop_module_t *active = darktable.develop->gui_module;
-  if(!IS_NULL_PTR(active) && !IS_NULL_PTR(active->expander)) 
-    darktable.gui->scroll_to[1] = active->expander;
+  if(!IS_NULL_PTR(active) && !IS_NULL_PTR(active->expander))
+  {
+    if(darktable.gui->scroll_to[1] != active->header)
+    {
+      const gboolean scroll_new_instance_to_header
+        = (darktable.gui->scroll_to_header_once == active->expander
+           && !IS_NULL_PTR(active->header) && GTK_IS_WIDGET(active->header));
+
+      darktable.gui->scroll_to[1] = scroll_new_instance_to_header ? active->header : active->expander;
+
+      if(scroll_new_instance_to_header) darktable.gui->scroll_to_header_once = NULL;
+    }
+  }
 
   if(tab == MOD_TAB_BASIC)
   {
@@ -1213,8 +1224,12 @@ static void _lib_modulegroups_signal_set(gpointer instance, gpointer module, gpo
   dt_iop_module_t *iop_module = (dt_iop_module_t *)module;
   if(IS_NULL_PTR(iop_module)) return;
 
+  const dt_modulesgroups_tabs_t current_tab = _get_current_tab(self);
+
   // If module not in current tab: switch tab
-  if(!_is_module_in_tab(iop_module, _get_current_tab(self)))
+  // Keep users on the Pipeline tab when they duplicate/create modules from it.
+  // Pipeline is an activity-centered view and should not auto-jump to category tabs.
+  if(current_tab != MOD_TAB_ACTIVE && !_is_module_in_tab(iop_module, current_tab))
     _set_current_tab_from_module_group(self, iop_module->default_group());
 
   // If module in current tab but not visible: refresh tab

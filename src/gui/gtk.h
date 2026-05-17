@@ -185,6 +185,7 @@ typedef struct dt_gui_gtk_t
   char gtkrc[PATH_MAX];
 
   GtkWidget *scroll_to[2]; // one for left, one for right
+  GtkWidget *scroll_to_header_once; // one-shot: module expander that should scroll to its header once
 
   gint scroll_mask;
 

@@ -119,6 +119,7 @@ static gboolean _iop_plugin_focus_accel(GtkAccelGroup *accel_group, GObject *acc
 static gboolean _iop_plugin_enable_accel(GtkAccelGroup *accel_group, GObject *accelerable, guint keyval,
                                         GdkModifierType modifier, gpointer data);
 static gboolean _iop_plugin_header_button_release(GtkWidget *w, GdkEventButton *e, gpointer user_data);
+static void _gui_set_single_expanded(dt_iop_module_t *module, gboolean expanded);
 
 float dt_dev_get_module_scale(const dt_dev_pixelpipe_t *const pipe, const dt_iop_roi_t *const roi_in)
 {
@@ -746,6 +747,7 @@ dt_iop_module_t *dt_iop_gui_duplicate(dt_iop_module_t *base, gboolean copy_param
 
     /* add module to right panel */
     dt_iop_gui_set_expander(module);
+    darktable.gui->scroll_to_header_once = module->expander;
 
     dt_iop_reload_defaults(module); // some modules like profiled denoise update the gui in reload_defaults
 
@@ -765,6 +767,7 @@ dt_iop_module_t *dt_iop_gui_duplicate(dt_iop_module_t *base, gboolean copy_param
 
     dt_iop_request_focus(module);
     dt_iop_gui_set_expanded(module, TRUE, FALSE);
+    if(base != module && !IS_NULL_PTR(base->expander)) _gui_set_single_expanded(base, FALSE);
     dt_iop_gui_update_blending(module);
 
     if(module->dev->gui_attached)
@@ -1933,6 +1936,9 @@ void dt_iop_gui_cleanup_module(dt_iop_module_t *module)
     }
   }
 
+  if(darktable.gui && darktable.gui->scroll_to_header_once == module->expander)
+    darktable.gui->scroll_to_header_once = NULL;
+
   module->widget = NULL;
   module->header = NULL;
   module->expander = NULL;
@@ -2016,7 +2022,13 @@ void dt_iop_request_focus(dt_iop_module_t *module)
   if(darktable.gui->reset || (out_focus_module == module)) return;
 
   darktable.develop->gui_module = module;
-  if(!IS_NULL_PTR(module)) darktable.gui->scroll_to[1] = module->expander;
+  if(!IS_NULL_PTR(module))
+  {
+    const gboolean scroll_new_instance_to_header
+      = (darktable.gui->scroll_to_header_once == module->expander
+         && !IS_NULL_PTR(module->header) && GTK_IS_WIDGET(module->header));
+    darktable.gui->scroll_to[1] = scroll_new_instance_to_header ? module->header : module->expander;
+  }
 
   /* lets lose the focus of previous focus module*/
   if(out_focus_module)
