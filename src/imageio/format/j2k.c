@@ -74,7 +74,19 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#if defined(__has_include)
+#if __has_include(<openjpeg.h>)
 #include <openjpeg.h>
+#elif __has_include(<openjpeg-2.5/openjpeg.h>)
+#include <openjpeg-2.5/openjpeg.h>
+#elif __has_include(<openjpeg-2.1/openjpeg.h>)
+#include <openjpeg-2.1/openjpeg.h>
+#else
+#error "openjpeg.h not found"
+#endif
+#else
+#include <openjpeg.h>
+#endif
 
 typedef enum
 {
