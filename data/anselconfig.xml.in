@@ -594,6 +594,13 @@
     <longdescription/>
   </dtconfig>
   <dtconfig>
+    <name>ui_last/window_monitor</name>
+    <type>int</type>
+    <default>-1</default>
+    <shortdescription/>
+    <longdescription/>
+  </dtconfig>
+  <dtconfig>
     <name>ui_last/grouping</name>
     <type>bool</type>
     <default>false</default>
