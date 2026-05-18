@@ -512,13 +512,13 @@ void append_display(GtkWidget **menus, GList **lists, const dt_menus_t index)
                          always_show_overlays_callback, always_show_overlays_checked_callback, NULL, NULL, GDK_KEY_o, GDK_CONTROL_MASK | GDK_SHIFT_MASK);
 
   // Submenu embedded JPEG
-  add_top_submenu_entry(menus, lists, _("Show embedded JPEG"), index);
+  add_top_submenu_entry(menus, lists, _("Thumbnail source"), index);
   parent = get_last_widget(lists);
-  add_sub_sub_menu_entry(menus, parent, lists, _("Never, always process the raw"), index, GINT_TO_POINTER(0),
+  add_sub_sub_menu_entry(menus, parent, lists, _("Always process the RAW"), index, GINT_TO_POINTER(0),
                                   _jpg_combobox_changed, _jpg_checked, NULL, NULL, 0, 0);
-  add_sub_sub_menu_entry(menus, parent, lists, _("For unedited pictures"), index, GINT_TO_POINTER(1),
+  add_sub_sub_menu_entry(menus, parent, lists, _("Use embedded JPG if unedited"), index, GINT_TO_POINTER(1),
                                   _jpg_combobox_changed, _jpg_checked, NULL, NULL, 0, 0);
-  add_sub_sub_menu_entry(menus, parent, lists, _("Always, never process the raw"), index, GINT_TO_POINTER(2),
+  add_sub_sub_menu_entry(menus, parent, lists, _("Always use embedded JPG"), index, GINT_TO_POINTER(2),
                                   _jpg_combobox_changed, _jpg_checked, NULL, NULL, 0, 0);
 
   add_sub_menu_entry(menus, lists, _("Collapse grouped images"), index, NULL, collapse_grouped_callback, collapse_grouped_checked_callback, NULL, NULL, 0, 0);
