@@ -191,6 +191,7 @@ static void collection_updated(gpointer instance, dt_collection_change_t query_c
                                dt_collection_properties_t changed_property, gpointer imgs, int next,
                                gpointer self);
 static void row_activated_with_event(GtkTreeView *view, GtkTreePath *path, GtkTreeViewColumn *col, GdkEventButton *event, dt_lib_collect_t *d);
+static void view_onRowExpanded(GtkTreeView *view, GtkTreeIter *iter, GtkTreePath *path, dt_lib_collect_t *d);
 static int is_time_property(int property);
 static void _populate_collect_combo(GtkWidget *w);
 
@@ -849,6 +850,12 @@ static gboolean view_onPopupMenu(GtkWidget *treeview, dt_lib_collect_t *d)
   view_popup_menu(treeview, NULL, d);
 
   return TRUE; /* we handled this */
+}
+
+static void view_onRowExpanded(GtkTreeView *view, GtkTreeIter *iter, GtkTreePath *path, dt_lib_collect_t *d)
+{
+  if(d->view_rule != DT_COLLECTION_PROP_FOLDERS) return;
+  gtk_tree_view_scroll_to_cell(view, path, NULL, TRUE, 0.0, 0.0);
 }
 
 static dt_lib_collect_t *get_collect(dt_lib_collect_rule_t *r)
@@ -3400,6 +3407,7 @@ void gui_init(dt_lib_module_t *self)
   gtk_widget_set_can_focus(GTK_WIDGET(view), TRUE);
   g_signal_connect(G_OBJECT(view), "button-press-event", G_CALLBACK(view_onButtonPressed), d);
   g_signal_connect(G_OBJECT(view), "popup-menu", G_CALLBACK(view_onPopupMenu), d);
+  g_signal_connect(G_OBJECT(view), "row-expanded", G_CALLBACK(view_onRowExpanded), d);
 
   GtkTreeViewColumn *col = gtk_tree_view_column_new();
   gtk_tree_view_append_column(view, col);
