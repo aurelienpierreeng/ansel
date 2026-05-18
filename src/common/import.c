@@ -1283,13 +1283,30 @@ static void _do_select_new(dt_lib_import_t *d)
   // We need to select all then unselect what we don't want.
   _do_select_all(d);
 
-  gchar *folder = gtk_file_chooser_get_current_folder(GTK_FILE_CHOOSER(d->file_chooser));
-  GFileEnumerator *files = g_file_enumerate_children(
-      g_file_new_for_path(folder), G_FILE_ATTRIBUTE_STANDARD_NAME "," G_FILE_ATTRIBUTE_STANDARD_TYPE,
+  GtkFileChooser *chooser = GTK_FILE_CHOOSER(d->file_chooser);
+  gchar *folder = gtk_file_chooser_get_current_folder(chooser);
+  if(IS_NULL_PTR(folder)) return;
+
+  GFile *folder_file = g_file_new_for_path(folder);
+  GFileEnumerator *files = NULL;
+  if(IS_NULL_PTR(folder_file))
+    goto end;
+
+  files = g_file_enumerate_children(
+      folder_file, G_FILE_ATTRIBUTE_STANDARD_NAME "," G_FILE_ATTRIBUTE_STANDARD_TYPE,
       G_FILE_QUERY_INFO_NONE, NULL, NULL);
+  g_object_unref(folder_file);
+  if(IS_NULL_PTR(files))
+    goto end;
 
   // Get the file filter in use
-  GtkFileFilter *filter = gtk_file_chooser_get_filter(GTK_FILE_CHOOSER(d->file_chooser));
+  GtkFileFilter *filter = gtk_file_chooser_get_filter(chooser);
+  if(IS_NULL_PTR(filter))
+  {
+    g_object_unref(files);
+    goto end;
+  }
+  const GtkFileFilterFlags filter_needed = gtk_file_filter_get_needed(filter);
 
   GFile *file = NULL;
   while(g_file_enumerator_iterate(files, NULL, &file, NULL, NULL))
@@ -1298,21 +1315,36 @@ static void _do_select_new(dt_lib_import_t *d)
     // We need an ugly break here else infinite loop.
     if(IS_NULL_PTR(file)) break;
 
-    GtkFileFilterInfo filter_info = { gtk_file_filter_get_needed(filter),
-                                      g_file_get_parse_name(file),
-                                      g_file_get_uri(file),
-                                      g_file_get_parse_name(file), NULL };
+    gchar *parse_name = g_file_get_parse_name(file);
+    gchar *uri = g_file_get_uri(file);
+    gchar *basename = g_file_get_basename(file);
+    gchar *filepath = g_file_get_path(file);
+    GtkFileFilterInfo filter_info = { filter_needed,
+                                      parse_name,
+                                      uri,
+                                      parse_name, NULL };
+
+    const gboolean is_regular = !IS_NULL_PTR(filepath) && g_file_test(filepath, G_FILE_TEST_IS_REGULAR);
+    const int is_path_in_lib = !IS_NULL_PTR(basename) ? _is_in_library_by_path(folder, basename) : -1;
+    const int is_metadata_in_lib = _is_in_library_by_metadata(file);
+    const gboolean is_in_lib = (is_path_in_lib > -1) || (is_metadata_in_lib > -1);
 
     // We need to act only on files passing the file filter, aka being currently displayed on screen.
     // Unselecting files not displayed in the current list freezes the UI and introduces oddities.
     if(gtk_file_filter_filter(filter, &filter_info)
-       && !(g_file_test(g_file_get_path(file), G_FILE_TEST_IS_REGULAR)
-            && _is_in_library_by_metadata(file) == -1))
+       && !(is_regular && !is_in_lib))
     {
-      gtk_file_chooser_unselect_file(GTK_FILE_CHOOSER(d->file_chooser), file);
+      gtk_file_chooser_unselect_file(chooser, file);
     }
+
+    dt_free(parse_name);
+    dt_free(uri);
+    dt_free(basename);
+    dt_free(filepath);
   }
-  g_object_unref(files);
+
+  end:
+  if(!IS_NULL_PTR(files)) g_object_unref(files);
   dt_free(folder);
 }
 
