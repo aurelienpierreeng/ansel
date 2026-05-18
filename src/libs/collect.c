@@ -760,7 +760,9 @@ static gboolean view_onButtonPressed(GtkWidget *treeview, GdkEventButton *event,
 {
   /* Get tree path for row that was clicked */
   GtkTreePath *path = NULL;
-  int get_path = gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(treeview), (gint)event->x, (gint)event->y, &path, NULL, NULL, NULL);
+  GtkTreeViewColumn *column = NULL;
+  int get_path = gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(treeview), (gint)event->x, (gint)event->y,
+                                                &path, &column, NULL, NULL);
   if(!get_path)
   {
     gtk_tree_path_free(path);
@@ -805,11 +807,45 @@ static gboolean view_onButtonPressed(GtkWidget *treeview, GdkEventButton *event,
     }
     else if(!dt_modifier_is(event->state, GDK_SHIFT_MASK))
     {
-      // Toggle expand/collapse state except on Shift because it excludes sub-folders
-      if(gtk_tree_view_row_expanded(GTK_TREE_VIEW(treeview), path))
-        gtk_tree_view_collapse_row(GTK_TREE_VIEW(treeview), path);
-      else
-        gtk_tree_view_expand_row(GTK_TREE_VIEW(treeview), path, FALSE);
+      gboolean clicked_expander = FALSE;
+
+      if(item_is_folder_collection(d->view_rule))
+      {
+        GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(treeview));
+        GtkTreeIter iter;
+        if(!IS_NULL_PTR(model) && gtk_tree_model_get_iter(model, &iter, path)
+           && gtk_tree_model_iter_has_child(model, &iter))
+        {
+          GtkTreeViewColumn *expander_col = column;
+          if(IS_NULL_PTR(expander_col))
+            expander_col = gtk_tree_view_get_column(GTK_TREE_VIEW(treeview), 0);
+
+          if(!IS_NULL_PTR(expander_col))
+          {
+            GdkRectangle cell_area = { 0 };
+            gtk_tree_view_get_cell_area(GTK_TREE_VIEW(treeview), path, expander_col, &cell_area);
+
+            gint expander_size = 12;
+            gint horizontal_separator = 0;
+            gtk_widget_style_get(treeview, "expander-size", &expander_size, "horizontal-separator",
+                                 &horizontal_separator, NULL);
+
+            // The expander arrow is drawn in the background area before the first cell.
+            const gint expander_right = cell_area.x + horizontal_separator;
+            const gint expander_left = expander_right - expander_size - horizontal_separator;
+            const gint click_x = (gint)event->x;
+            clicked_expander = (click_x >= expander_left && click_x <= expander_right);
+          }
+        }
+      }
+
+      if(clicked_expander)
+      {
+        if(gtk_tree_view_row_expanded(GTK_TREE_VIEW(treeview), path))
+          gtk_tree_view_collapse_row(GTK_TREE_VIEW(treeview), path);
+        else
+          gtk_tree_view_expand_row(GTK_TREE_VIEW(treeview), path, FALSE);
+      }
 
       // Select the folder
       gtk_tree_selection_unselect_all(selection);
