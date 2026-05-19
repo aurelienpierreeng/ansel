@@ -7,6 +7,48 @@ include(CheckCXXCompilerFlag)
 include(CheckCSourceCompiles)
 include(CheckCXXSymbolExists)
 
+# Generate headers and source files for wayland color management.
+
+include(FindPkgConfig)
+pkg_get_variable(WAYLAND_PROTOCOLS_DATADIR wayland-protocols pkgdatadir)
+
+find_program(WAYLAND_SCANNER wayland-scanner)
+
+set(COLOR_MANAGEMENT_XML
+    ${WAYLAND_PROTOCOLS_DATADIR}/staging/color-management/color-management-v1.xml
+)
+
+set(COLOR_MANAGEMENT_CODE ${CMAKE_CURRENT_BINARY_DIR}/color-management-v1-protocol.c)
+set(COLOR_MANAGEMENT_HEADER ${CMAKE_CURRENT_BINARY_DIR}/color-management-v1-client-protocol.h)
+
+add_custom_command(
+    OUTPUT ${COLOR_MANAGEMENT_CODE}
+    COMMAND ${WAYLAND_SCANNER} private-code ${COLOR_MANAGEMENT_XML} ${COLOR_MANAGEMENT_CODE}
+    DEPENDS ${COLOR_MANAGEMENT_XML}
+    COMMENT "Generating color management c file."
+    VERBATIM
+)
+
+add_custom_command(
+    OUTPUT ${COLOR_MANAGEMENT_HEADER}
+    COMMAND ${WAYLAND_SCANNER} client-header ${COLOR_MANAGEMENT_XML} ${COLOR_MANAGEMENT_HEADER}
+    DEPENDS ${COLOR_MANAGEMENT_XML}
+    COMMENT "Generating color management h file."
+    VERBATIM
+)
+
+add_custom_target(
+  generate_wayland_protocols_h ALL
+  DEPENDS ${COLOR_MANAGEMENT_HEADER}
+)
+
+add_custom_target(
+  generate_wayland_protocols_c ALL
+  DEPENDS ${COLOR_MANAGEMENT_CODE}
+)
+
+# wayland protocol check end
+
 add_custom_command(
   OUTPUT ${ANSEL_AUTHORS_FILE}
   COMMAND ${CMAKE_COMMAND}
@@ -316,14 +358,14 @@ find_package(Sqlite3 3.24 REQUIRED)
 find_package(Exiv2 0.27.4 REQUIRED)
 find_package(Pugixml 1.2 REQUIRED)
 
-# CMake provides a `FindCURL.cmake` module, which will set `CURL_LIBRARIES`, 
-# however if cURL is built with CMake, it will generate a `CURLConfig.cmake` 
-# config, which will not set `CURL_LIBRARIES`. 
-# 
-# MSYS2 currently build cURL with CMake, and if we do `find_package(CURL)` 
-# directly, config will be used, so we need to keep compatibility。 
-# 
-# See <https://cmake.org/cmake/help/latest/module/FindCURL.html#curl-cmake>. 
+# CMake provides a `FindCURL.cmake` module, which will set `CURL_LIBRARIES`,
+# however if cURL is built with CMake, it will generate a `CURLConfig.cmake`
+# config, which will not set `CURL_LIBRARIES`.
+#
+# MSYS2 currently build cURL with CMake, and if we do `find_package(CURL)`
+# directly, config will be used, so we need to keep compatibility。
+#
+# See <https://cmake.org/cmake/help/latest/module/FindCURL.html#curl-cmake>.
 # See <https://github.com/msys2/MINGW-packages/issues/21028>.
 find_package(CURL REQUIRED)
 
@@ -817,6 +859,9 @@ if(USE_XMLLINT)
   add_dependencies(generate_preferences validate_anselconfig_xml generate_conf)
 endif(USE_XMLLINT)
 
+# Wayland color management source files
+list(APPEND SOURCES "color-management-v1-protocol.c")
+
 #
 # build libansel
 #
@@ -830,6 +875,10 @@ add_dependencies(lib_ansel generate_conf)
 add_dependencies(lib_ansel generate_version)
 add_dependencies(lib_ansel generate_preferences)
 add_dependencies(lib_ansel generate_authors_h)
+
+# Wayland add protocol files.
+add_dependencies(lib_ansel generate_wayland_protocols_h)
+add_dependencies(lib_ansel generate_wayland_protocols_c)
 
 if(APPLE)
   set_target_properties(lib_ansel PROPERTIES MACOSX_RPATH TRUE)

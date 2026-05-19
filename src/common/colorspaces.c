@@ -35,17 +35,18 @@
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2023 Alynx Zhou.
     Copyright (C) 2023 Luca Zulberti.
-    
+    Copyright (C) 2026 Mareks Rops.
+
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
     (at your option) any later version.
-    
+
     darktable is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
-    
+
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
@@ -86,6 +87,11 @@
 #endif
 #ifdef HAVE_LIBHEIF
 #include "common/imageio_heif.h"
+#endif
+#ifdef GDK_WINDOWING_WAYLAND
+#include <sys/mman.h>
+#include <gtk-3.0/gdk/gdkwayland.h>
+#include "color-management-v1-client-protocol.h"
 #endif
 
 #if 0
@@ -2079,6 +2085,107 @@ static int _gtk_get_monitor_num(GdkMonitor *monitor)
 }
 #endif
 
+#if defined GDK_WINDOWING_WAYLAND
+typedef struct {
+  struct wl_surface *color_wl_surface;
+  struct wp_color_manager_v1 *color_manager;
+  struct wp_color_management_surface_v1 *color_surface;
+  struct wp_color_management_surface_feedback_v1 *color_surface_feedback;
+  struct wp_image_description_v1 *color_image_description;
+  struct wp_image_description_info_v1 *color_image_description_info;
+  guint8 *icc_buffer;
+  gint icc_buffer_size;
+} wayland_color_management_struct;
+
+wayland_color_management_struct wayland_color_management = {0};
+
+void noop(){return;}
+
+void handle_wp_image_description_info_icc_file(void *data,
+			                                         struct wp_image_description_info_v1 *wp_image_description_info_v1,
+																							 int32_t icc,
+																							 uint32_t icc_size)
+{
+  wayland_color_management_struct *wcm = data;
+
+  wcm->icc_buffer = mmap(NULL, icc_size, PROT_READ, MAP_PRIVATE, icc, 0);
+  wcm->icc_buffer_size = icc_size;
+  close(icc);
+}
+
+struct wp_image_description_info_v1_listener wp_image_description_info_v1_listener = {
+  .done = noop,
+	.icc_file = handle_wp_image_description_info_icc_file,
+	.primaries = noop,
+	.primaries_named = noop,
+	.tf_power = noop,
+	.tf_named = noop,
+	.luminances = noop,
+	.target_primaries = noop,
+	.target_luminance = noop,
+	.target_max_cll = noop,
+	.target_max_fall = noop,
+};
+
+void handle_wp_image_decription_ready(void *data,
+		                                  struct wp_image_description_v1 *wp_image_description_v1,
+																			uint32_t identity)
+{
+  wayland_color_management_struct *wcm = data;
+
+  wcm->color_image_description_info = wp_image_description_v1_get_information(wcm->color_image_description);
+  wp_image_description_info_v1_add_listener(wcm->color_image_description_info, &wp_image_description_info_v1_listener, &wayland_color_management);
+
+  // Set image description on surface to tell compositor in which colorspace window is in.
+  wp_color_management_surface_v1_set_image_description(wcm->color_surface, wcm->color_image_description, WP_COLOR_MANAGER_V1_RENDER_INTENT_PERCEPTUAL);
+
+  wl_surface_commit(wcm->color_wl_surface);
+}
+
+struct wp_image_description_v1_listener wp_image_description_v1_listener = {
+  .failed = noop,
+	.ready = handle_wp_image_decription_ready,
+};
+
+void handle_wp_color_management_surface_feedback_preferred_changed(void *data,
+				                                                           struct wp_color_management_surface_feedback_v1 *wp_color_management_surface_feedback_v1,
+																																	 uint32_t identity)
+{
+  wayland_color_management_struct *wcm = data;
+
+  if (wcm->color_image_description)
+  {
+    wp_image_description_v1_destroy(wcm->color_image_description);
+    wcm->color_image_description = NULL;
+  }
+
+  wayland_color_management.color_image_description = wp_color_management_surface_feedback_v1_get_preferred(wayland_color_management.color_surface_feedback);
+  wp_image_description_v1_add_listener(wayland_color_management.color_image_description, &wp_image_description_v1_listener, &wayland_color_management);
+}
+
+struct wp_color_management_surface_feedback_v1_listener wp_color_management_surface_feedback_v1_listener = {
+  .preferred_changed = handle_wp_color_management_surface_feedback_preferred_changed,
+};
+
+void handle_wl_registry_global(void *data,
+		                           struct wl_registry *wl_registry,
+															 uint32_t name,
+									             const char *interface,
+															 uint32_t version)
+{
+  wayland_color_management_struct *wcm = data;
+
+  if (strcmp(interface, wp_color_manager_v1_interface.name) == 0) {
+    wcm->color_manager = wl_registry_bind(wl_registry, name, &wp_color_manager_v1_interface, 1);
+  }
+}
+
+struct wl_registry_listener wl_registry_listener = {
+	.global = handle_wl_registry_global,
+	.global_remove = noop,
+};
+#endif
+
 // Get the display ICC profile of the monitor associated with the widget.
 // For X display, uses the ICC profile specifications version 0.2 from
 // http://burtonini.com/blog/computers/xicc
@@ -2149,6 +2256,48 @@ void dt_colorspaces_set_display_profile(const dt_colorspaces_color_profile_type_
     cd_window_get_profile(window, center_widget, NULL, dt_colorspaces_get_display_profile_colord_callback,
                           GINT_TO_POINTER(profile_type));
   }
+#endif
+
+#ifdef GDK_WINDOWING_WAYLAND
+if (!wayland_color_management.color_manager)
+{
+  GtkWidget *widget = dt_ui_center(darktable.gui->ui);
+  GdkDisplay *display = gtk_widget_get_display(widget);
+  GdkWindow *window = gtk_widget_get_window(widget);
+
+  struct wl_display *wl_display = gdk_wayland_display_get_wl_display(display);
+  struct wl_registry *wl_registry = wl_display_get_registry(wl_display);
+  wl_registry_add_listener(wl_registry, &wl_registry_listener, &wayland_color_management);
+
+  // Initial roundtrip for wl_registry events
+  wl_display_roundtrip(wl_display);
+
+  // Initial roundtrip for wp_color_manager events.
+  wl_display_roundtrip(wl_display);
+
+  wayland_color_management.color_wl_surface = gdk_wayland_window_get_wl_surface(window);
+
+  wayland_color_management.color_surface = wp_color_manager_v1_get_surface(wayland_color_management.color_manager, wayland_color_management.color_wl_surface);
+
+  wayland_color_management.color_surface_feedback = wp_color_manager_v1_get_surface_feedback(wayland_color_management.color_manager, wayland_color_management.color_wl_surface);
+  wp_color_management_surface_feedback_v1_add_listener(wayland_color_management.color_surface_feedback, &wp_color_management_surface_feedback_v1_listener, &wayland_color_management);
+
+  wayland_color_management.color_image_description = wp_color_management_surface_feedback_v1_get_preferred(wayland_color_management.color_surface_feedback);
+  wp_image_description_v1_add_listener(wayland_color_management.color_image_description, &wp_image_description_v1_listener, &wayland_color_management);
+
+  // Initial roundtrip for wp_image_description events
+  wl_display_roundtrip(wl_display);
+
+  // Initial roundtrip for wp_image_description_info events
+  wl_display_roundtrip(wl_display);
+}
+
+if (wayland_color_management.color_manager && wayland_color_management.icc_buffer && wayland_color_management.icc_buffer_size > 0)
+{
+  buffer = wayland_color_management.icc_buffer;
+  buffer_size = wayland_color_management.icc_buffer_size;
+  profile_source = g_strdup("Wayland color profile api");
+}
 #endif
 
 #elif defined GDK_WINDOWING_QUARTZ
