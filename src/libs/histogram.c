@@ -765,6 +765,19 @@ uint32_t _find_max_histogram(const uint32_t *const restrict bins, const size_t b
   return max_hist;
 }
 
+static inline void _sample_raw_box_to_image_norm(const dt_colorpicker_sample_t *const sample, float box[4])
+{
+  memcpy(box, sample->box, sizeof(float) * 4);
+  dt_dev_coordinates_raw_norm_to_image_norm(darktable.develop, box, 2);
+}
+
+static inline void _sample_raw_point_to_image_norm(const dt_colorpicker_sample_t *const sample, float point[2])
+{
+  point[0] = sample->point[0];
+  point[1] = sample->point[1];
+  dt_dev_coordinates_raw_norm_to_image_norm(darktable.develop, point, 1);
+}
+
 
 static inline void _bin_pixels_histogram_in_roi(const float *const restrict image, uint32_t *const restrict bins,
                                                 const size_t min_x, const size_t max_x,
@@ -800,18 +813,22 @@ static inline void _bin_pickers_histogram(const float *const restrict image,
 {
   if(sample->size == DT_LIB_COLORPICKER_SIZE_BOX)
   {
+    float image_box[4] = { 0.0f };
+    _sample_raw_box_to_image_norm(sample, image_box);
     const size_t box[4] = {
-      CLAMP((size_t)roundf(sample->box[0] * width), 0, width),
-      CLAMP((size_t)roundf(sample->box[1] * height), 0, height),
-      CLAMP((size_t)roundf(sample->box[2] * width), 0, width),
-      CLAMP((size_t)roundf(sample->box[3] * height), 0, height)
+      CLAMP((size_t)roundf(image_box[0] * width), 0, width),
+      CLAMP((size_t)roundf(image_box[1] * height), 0, height),
+      CLAMP((size_t)roundf(image_box[2] * width), 0, width),
+      CLAMP((size_t)roundf(image_box[3] * height), 0, height)
     };
     _bin_pixels_histogram_in_roi(image, bins, box[0], box[2], box[1], box[3], width);
   }
   else
   {
-    const size_t x = CLAMP((size_t)roundf(sample->point[0] * width), 0, width - 1);
-    const size_t y = CLAMP((size_t)roundf(sample->point[1] * height), 0, height - 1);
+    float image_point[2] = { 0.0f };
+    _sample_raw_point_to_image_norm(sample, image_point);
+    const size_t x = CLAMP((size_t)roundf(image_point[0] * width), 0, width - 1);
+    const size_t y = CLAMP((size_t)roundf(image_point[1] * height), 0, height - 1);
     _bin_pixels_histogram_in_roi(image, bins, x, x + 1, y, y + 1, width);
   }
 }
@@ -928,18 +945,22 @@ static inline void _bin_pickers_waveforms(const float *const restrict image, uin
 {
   if(sample->size == DT_LIB_COLORPICKER_SIZE_BOX)
   {
+    float image_box[4] = { 0.0f };
+    _sample_raw_box_to_image_norm(sample, image_box);
     const size_t box[4] = {
-      CLAMP((size_t)roundf(sample->box[0] * width), 0, width),
-      CLAMP((size_t)roundf(sample->box[1] * height), 0, height),
-      CLAMP((size_t)roundf(sample->box[2] * width), 0, width),
-      CLAMP((size_t)roundf(sample->box[3] * height), 0, height)
+      CLAMP((size_t)roundf(image_box[0] * width), 0, width),
+      CLAMP((size_t)roundf(image_box[1] * height), 0, height),
+      CLAMP((size_t)roundf(image_box[2] * width), 0, width),
+      CLAMP((size_t)roundf(image_box[3] * height), 0, height)
     };
     _bin_pixels_waveform_in_roi(image, bins, box[0], box[2], box[1], box[3], width, binning_size, vertical);
   }
   else
   {
-    const size_t x = CLAMP((size_t)roundf(sample->point[0] * width), 0, width - 1);
-    const size_t y = CLAMP((size_t)roundf(sample->point[1] * height), 0, height - 1);
+    float image_point[2] = { 0.0f };
+    _sample_raw_point_to_image_norm(sample, image_point);
+    const size_t x = CLAMP((size_t)roundf(image_point[0] * width), 0, width - 1);
+    const size_t y = CLAMP((size_t)roundf(image_point[1] * height), 0, height - 1);
     _bin_pixels_waveform_in_roi(image, bins, x, x + 1, y, y + 1, width, binning_size, vertical);
   }
 }
@@ -1177,18 +1198,22 @@ static inline void _bin_pickers_vectorscope(const float *const restrict image,
 {
   if(sample->size == DT_LIB_COLORPICKER_SIZE_BOX)
   {
+    float image_box[4] = { 0.0f };
+    _sample_raw_box_to_image_norm(sample, image_box);
     const size_t box[4] = {
-      CLAMP((size_t)roundf(sample->box[0] * width), 0, width),
-      CLAMP((size_t)roundf(sample->box[1] * height), 0, height),
-      CLAMP((size_t)roundf(sample->box[2] * width), 0, width),
-      CLAMP((size_t)roundf(sample->box[3] * height), 0, height)
+      CLAMP((size_t)roundf(image_box[0] * width), 0, width),
+      CLAMP((size_t)roundf(image_box[1] * height), 0, height),
+      CLAMP((size_t)roundf(image_box[2] * width), 0, width),
+      CLAMP((size_t)roundf(image_box[3] * height), 0, height)
     };
     _bin_pixels_vectorscope_in_roi(image, vectorscope, box[0], box[2], box[1], box[3], width, zoom, d);
   }
   else
   {
-    const size_t x = CLAMP((size_t)roundf(sample->point[0] * width), 0, width - 1);
-    const size_t y = CLAMP((size_t)roundf(sample->point[1] * height), 0, height - 1);
+    float image_point[2] = { 0.0f };
+    _sample_raw_point_to_image_norm(sample, image_point);
+    const size_t x = CLAMP((size_t)roundf(image_point[0] * width), 0, width - 1);
+    const size_t y = CLAMP((size_t)roundf(image_point[1] * height), 0, height - 1);
     _bin_pixels_vectorscope_in_roi(image, vectorscope, x, x + 1, y, y + 1, width, zoom, d);
   }
 }
@@ -1694,13 +1719,12 @@ static void _pixelpipe_pick_from_image(const dt_backbuf_t *const backbuf,
 
     if(sample->size == DT_LIB_COLORPICKER_SIZE_BOX)
     {
-      memcpy(fbox, sample->box, sizeof(float) * 4);
+      _sample_raw_box_to_image_norm(sample, fbox);
       dt_dev_coordinates_image_norm_to_preview_abs(darktable.develop, fbox, 2);
     }
     else if(sample->size == DT_LIB_COLORPICKER_SIZE_POINT)
     {
-      fbox[0] = sample->point[0];
-      fbox[1] = sample->point[1];
+      _sample_raw_point_to_image_norm(sample, fbox);
       dt_dev_coordinates_image_norm_to_preview_abs(darktable.develop, fbox, 1);
       fbox[2] = fbox[0];
       fbox[3] = fbox[1];
@@ -1912,7 +1936,7 @@ static gboolean _area_scrolled_callback(GtkWidget *widget, GdkEventScroll *event
   if(dt_bauhaus_combobox_get(d->display) != DT_LIB_HISTOGRAM_SCOPE_VECTORSCOPE) return FALSE;
 
   int delta_y = 0;
-  if (!dt_gui_get_scroll_unit_deltas(event, NULL, &delta_y)) return TRUE;
+  if(!dt_gui_get_scroll_unit_deltas(event, NULL, &delta_y)) return TRUE;
 
   const float new_value = 4.f * delta_y + d->zoom;
 
@@ -2044,31 +2068,17 @@ static void _picker_button_toggled(GtkToggleButton *button, dt_lib_histogram_t *
   gtk_widget_set_sensitive(GTK_WIDGET(d->add_sample_button), gtk_toggle_button_get_active(button));
 }
 
-static void _update_size(dt_lib_module_t *self, dt_lib_colorpicker_size_t size)
-{
-  darktable.develop->color_picker.primary_sample->size = size;
-  _update_picker_output(self);
-}
-
 /* set sample area proxy impl */
 
 static void _set_sample_box_area(dt_lib_module_t *self, const dt_boundingbox_t box)
 {
-  // primary sample always follows/represents current picker
-  for(int k = 0; k < 4; k++)
-    darktable.develop->color_picker.primary_sample->box[k] = box[k];
-
-  _update_size(self, DT_LIB_COLORPICKER_SIZE_BOX);
+  dt_lib_colorpicker_set_box_area(darktable.lib, box);
   _update_everything(self);
 }
 
 static void _set_sample_point(dt_lib_module_t *self, const float pos[2])
 {
-  // primary sample always follows/represents current picker
-  darktable.develop->color_picker.primary_sample->point[0] = pos[0];
-  darktable.develop->color_picker.primary_sample->point[1] = pos[1];
-
-  _update_size(self, DT_LIB_COLORPICKER_SIZE_POINT);
+  dt_lib_colorpicker_set_point(darktable.lib, pos);
   _update_everything(self);
 }
 
@@ -2210,9 +2220,17 @@ static gboolean _live_sample_button(GtkWidget *widget, GdkEventButton *event, dt
     if(IS_NULL_PTR(picker)) return FALSE;
 
     if(sample->size == DT_LIB_COLORPICKER_SIZE_POINT)
-      _set_sample_point(self, sample->point);
+    {
+      float point[2] = { 0.0f };
+      _sample_raw_point_to_image_norm(sample, point);
+      _set_sample_point(self, point);
+    }
     else if(sample->size == DT_LIB_COLORPICKER_SIZE_BOX)
-      _set_sample_box_area(self, sample->box);
+    {
+      dt_boundingbox_t box = { 0.0f };
+      _sample_raw_box_to_image_norm(sample, box);
+      _set_sample_box_area(self, box);
+    }
     else
       return FALSE;
 

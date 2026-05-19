@@ -998,6 +998,20 @@ void dt_dev_coordinates_raw_norm_to_raw_abs(dt_develop_t *dev, float *points, si
   }
 }
 
+void dt_dev_coordinates_image_norm_to_raw_norm(dt_develop_t *dev, float *points, size_t num_points)
+{
+  dt_dev_coordinates_image_norm_to_image_abs(dev, points, num_points);
+  dt_dev_coordinates_image_abs_to_raw_abs(dev, points, num_points);
+  dt_dev_coordinates_raw_abs_to_raw_norm(dev, points, num_points);
+}
+
+void dt_dev_coordinates_raw_norm_to_image_norm(dt_develop_t *dev, float *points, size_t num_points)
+{
+  dt_dev_coordinates_raw_norm_to_raw_abs(dev, points, num_points);
+  dt_dev_coordinates_raw_abs_to_image_abs(dev, points, num_points);
+  dt_dev_coordinates_image_abs_to_image_norm(dev, points, num_points);
+}
+
 void dt_dev_coordinates_image_abs_to_raw_norm(dt_develop_t *dev, float *points, size_t num_points)
 {
   dt_dev_coordinates_image_abs_to_raw_abs(dev, points, num_points);

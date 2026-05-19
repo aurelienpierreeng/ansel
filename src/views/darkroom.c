@@ -255,6 +255,21 @@ static gboolean _darkroom_is_only_selected_sample(gboolean is_primary_sample, dt
   return !is_primary_sample && selected_sample && !display_samples;
 }
 
+static inline void _darkroom_sample_raw_point_to_image_norm(const dt_colorpicker_sample_t *const sample,
+                                                            float point[2])
+{
+  point[0] = sample->point[0];
+  point[1] = sample->point[1];
+  dt_dev_coordinates_raw_norm_to_image_norm(darktable.develop, point, 1);
+}
+
+static inline void _darkroom_sample_raw_box_to_image_norm(const dt_colorpicker_sample_t *const sample,
+                                                          float box[4])
+{
+  memcpy(box, sample->box, sizeof(float) * 4);
+  dt_dev_coordinates_raw_norm_to_image_norm(darktable.develop, box, 2);
+}
+
 /**
  * @brief Draw colorpicker samples overlays in darkroom view
  * 
@@ -312,8 +327,10 @@ static void _darkroom_pickers_draw(dt_view_t *self, cairo_t *cri,
     // overlays are aligned with pixels for a clean look
     if(sample->size == DT_LIB_COLORPICKER_SIZE_BOX)
     {
-      double x = sample->box[0] * wd, y = sample->box[1] * ht,
-        w = sample->box[2] * wd, h = sample->box[3] * ht;
+      float image_box[4] = { 0.0f };
+      _darkroom_sample_raw_box_to_image_norm(sample, image_box);
+      double x = image_box[0] * wd, y = image_box[1] * ht,
+        w = image_box[2] * wd, h = image_box[3] * ht;
       cairo_user_to_device(cri, &x, &y);
       cairo_user_to_device(cri, &w, &h);
       x=round(x+0.5)-0.5;
@@ -336,8 +353,10 @@ static void _darkroom_pickers_draw(dt_view_t *self, cairo_t *cri,
     else if(sample->size == DT_LIB_COLORPICKER_SIZE_POINT)
     {
       // FIXME: to be really accurate, the colorpicker should render precisely over the nearest pixelpipe pixel, but this gets particularly tricky to do with iop pickers with transformations after them in the pipeline
-      double x = sample->point[0] * wd;
-      double y = sample->point[1] * ht;
+      float image_point[2] = { 0.0f };
+      _darkroom_sample_raw_point_to_image_norm(sample, image_point);
+      double x = image_point[0] * wd;
+      double y = image_point[1] * ht;
       cairo_user_to_device(cri, &x, &y);
       x=round(x+0.5)-0.5;
       y=round(y+0.5)-0.5;
@@ -389,12 +408,14 @@ static void _darkroom_pickers_draw(dt_view_t *self, cairo_t *cri,
     // flicker when an iop is adjusted.
     if(sample->size == DT_LIB_COLORPICKER_SIZE_POINT)
     {
+      float image_point[2] = { 0.0f };
+      _darkroom_sample_raw_point_to_image_norm(sample, image_point);
       if(sample == selected_sample)
-        cairo_arc(cri, sample->point[0] * wd, sample->point[1] * ht, half_px * 2., 0., 2. * M_PI);
+        cairo_arc(cri, image_point[0] * wd, image_point[1] * ht, half_px * 2., 0., 2. * M_PI);
       else if(show_preview_pixel_scale)
-        cairo_rectangle(cri, sample->point[0] * wd - half_px, sample->point[1] * ht - half_px, half_px * 2., half_px * 2.);
+        cairo_rectangle(cri, image_point[0] * wd - half_px, image_point[1] * ht - half_px, half_px * 2., half_px * 2.);
       else
-        cairo_arc(cri, sample->point[0] * wd, sample->point[1] * ht, half_px, 0., 2. * M_PI);
+        cairo_arc(cri, image_point[0] * wd, image_point[1] * ht, half_px, 0., 2. * M_PI);
 
       set_color(cri, sample->swatch);
       cairo_fill(cri);
@@ -1404,7 +1425,7 @@ static void _get_final_size_with_iso_12646(dt_develop_t *d)
 static void _iso_12646_quickbutton_clicked(GtkWidget *w, gpointer user_data)
 {
   dt_develop_t *d = (dt_develop_t *)user_data;
-  if (!d->gui_attached) return;
+  if(!d->gui_attached) return;
 
   d->iso_12646.enabled = !d->iso_12646.enabled;
   _get_final_size_with_iso_12646(d);
@@ -2910,22 +2931,28 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
 
       if(sample->size == DT_LIB_COLORPICKER_SIZE_BOX)
       {
+        float anchor[2] = { 0.0f };
+        _darkroom_sample_raw_point_to_image_norm(sample, anchor);
         const float box[4] = {
-          fmaxf(0.0, MIN(sample->point[0], mouse_point[0]) - delta[0]),
-          fmaxf(0.0, MIN(sample->point[1], mouse_point[1]) - delta[1]),
-          fminf(1.0, MAX(sample->point[0], mouse_point[0]) + delta[0]),
-          fminf(1.0, MAX(sample->point[1], mouse_point[1]) + delta[1])
+          fmaxf(0.0, MIN(anchor[0], mouse_point[0]) - delta[0]),
+          fmaxf(0.0, MIN(anchor[1], mouse_point[1]) - delta[1]),
+          fminf(1.0, MAX(anchor[0], mouse_point[0]) + delta[0]),
+          fminf(1.0, MAX(anchor[1], mouse_point[1]) + delta[1])
         };
+        dt_boundingbox_t image_box = { sample->box[0], sample->box[1], sample->box[2], sample->box[3] };
+        dt_dev_coordinates_raw_norm_to_image_norm(dev, image_box, 2);
 
         for(int k = 0; k < 4; k++)
-          sample_changed |= (sample->box[k] != box[k]);
+          sample_changed |= (image_box[k] != box[k]);
 
         if(sample_changed)
           dt_lib_colorpicker_set_box_area(darktable.lib, box);
       }
       else if(sample->size == DT_LIB_COLORPICKER_SIZE_POINT)
       {
-        sample_changed = memcmp(sample->point, mouse_point, sizeof(mouse_point)) != 0;
+        float image_point[2] = { 0.0f };
+        _darkroom_sample_raw_point_to_image_norm(sample, image_point);
+        sample_changed = memcmp(image_point, mouse_point, sizeof(mouse_point)) != 0;
         if(sample_changed)
           dt_lib_colorpicker_set_point(darktable.lib, mouse_point);
       }
@@ -3142,28 +3169,37 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
           /* Box drags need one anchor corner stored in sample->point so mouse motion can stretch
              the rectangle against that fixed corner. Keep that anchor local to the darkroom drag
              state, but let the picker API own the actual sampling geometry and update signaling. */
-          memcpy(sample->point, point, sizeof(point));
+          float raw_point[2] = { point[0], point[1] };
+          dt_dev_coordinates_image_norm_to_raw_norm(dev, raw_point, 1);
+          memcpy(sample->point, raw_point, sizeof(raw_point));
+
+          dt_boundingbox_t image_box = { sample->box[0], sample->box[1], sample->box[2], sample->box[3] };
+          dt_dev_coordinates_raw_norm_to_image_norm(dev, image_box, 2);
 
           // this is slightly more than as drawn, to give room for slop
           gboolean on_corner_prev_box = TRUE;
           float opposite[2] = { 0.0f };
 
-          if(fabsf(point[0] - sample->box[0]) <= handle[0])
-            opposite[0] = sample->box[2];
-          else if(fabsf(point[0] - sample->box[2]) <= handle[0])
-            opposite[0] = sample->box[0];
+          if(fabsf(point[0] - image_box[0]) <= handle[0])
+            opposite[0] = image_box[2];
+          else if(fabsf(point[0] - image_box[2]) <= handle[0])
+            opposite[0] = image_box[0];
           else
             on_corner_prev_box = FALSE;
 
-          if(fabsf(point[1] - sample->box[1]) <= handle[1])
-            opposite[1] = sample->box[3];
-          else if(fabsf(point[1] - sample->box[3]) <= handle[1])
-            opposite[1] = sample->box[1];
+          if(fabsf(point[1] - image_box[1]) <= handle[1])
+            opposite[1] = image_box[3];
+          else if(fabsf(point[1] - image_box[3]) <= handle[1])
+            opposite[1] = image_box[1];
           else
             on_corner_prev_box = FALSE;
 
           if(on_corner_prev_box)
-            memcpy(sample->point, opposite, sizeof(opposite));
+          {
+            float raw_opposite[2] = { opposite[0], opposite[1] };
+            dt_dev_coordinates_image_norm_to_raw_norm(dev, raw_opposite, 1);
+            memcpy(sample->point, raw_opposite, sizeof(raw_opposite));
+          }
           else
           {
             const dt_boundingbox_t box = {
@@ -3198,10 +3234,12 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
           dt_colorpicker_sample_t *live_sample = samples->data;
           if(live_sample->size == DT_LIB_COLORPICKER_SIZE_BOX && picker->kind != DT_COLOR_PICKER_POINT)
           {
-            if(point[0] < live_sample->box[0] || point[0] > live_sample->box[2]
-               || point[1] < live_sample->box[1] || point[1] > live_sample->box[3])
+            dt_boundingbox_t live_box = { live_sample->box[0], live_sample->box[1], live_sample->box[2], live_sample->box[3] };
+            dt_dev_coordinates_raw_norm_to_image_norm(dev, live_box, 2);
+            if(point[0] < live_box[0] || point[0] > live_box[2]
+               || point[1] < live_box[1] || point[1] > live_box[3])
               continue;
-            dt_lib_colorpicker_set_box_area(darktable.lib, live_sample->box);
+            dt_lib_colorpicker_set_box_area(darktable.lib, live_box);
           }
           else if(live_sample->size == DT_LIB_COLORPICKER_SIZE_POINT && picker->kind != DT_COLOR_PICKER_AREA)
           {
@@ -3213,10 +3251,12 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
             dt_dev_coordinates_widget_delta_to_image_delta(dev, slop, 1);
             slop[0] /= dev->roi.processed_width;
             slop[1] /= dev->roi.processed_height;
-            if(fabsf(point[0] - live_sample->point[0]) > slop[0]
-               || fabsf(point[1] - live_sample->point[1]) > slop[1])
+            float live_point[2] = { live_sample->point[0], live_sample->point[1] };
+            dt_dev_coordinates_raw_norm_to_image_norm(dev, live_point, 1);
+            if(fabsf(point[0] - live_point[0]) > slop[0]
+               || fabsf(point[1] - live_point[1]) > slop[1])
               continue;
-            dt_lib_colorpicker_set_point(darktable.lib, live_sample->point);
+            dt_lib_colorpicker_set_point(darktable.lib, live_point);
           }
           else
             continue;

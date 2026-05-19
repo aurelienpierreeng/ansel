@@ -58,6 +58,7 @@
 #include "common/module.h"
 #include "control/conf.h"
 #include "control/control.h"
+#include "develop/develop.h"
 #include "dtgtk/button.h"
 #include "dtgtk/expander.h"
 #include "dtgtk/icon.h"
@@ -1413,12 +1414,15 @@ void dt_lib_colorpicker_set_box_area(dt_lib_t *lib, const dt_boundingbox_t box)
   dt_colorpicker_sample_t *const sample = dev ? dev->color_picker.primary_sample : NULL;
   if(IS_NULL_PTR(sample)) return;
 
+  dt_boundingbox_t raw_box = { box[0], box[1], box[2], box[3] };
+  dt_dev_coordinates_image_norm_to_raw_norm(dev, raw_box, 2);
+
   gboolean changed = (sample->size != DT_LIB_COLORPICKER_SIZE_BOX);
   sample->size = DT_LIB_COLORPICKER_SIZE_BOX;
   for(int k = 0; k < 4; k++)
   {
-    changed |= (sample->box[k] != box[k]);
-    sample->box[k] = box[k];
+    changed |= (sample->box[k] != raw_box[k]);
+    sample->box[k] = raw_box[k];
   }
 
   if(!changed) return;
@@ -1432,12 +1436,15 @@ void dt_lib_colorpicker_set_point(dt_lib_t *lib, const float pos[2])
   dt_colorpicker_sample_t *const sample = dev ? dev->color_picker.primary_sample : NULL;
   if(IS_NULL_PTR(sample)) return;
 
+  float raw_pos[2] = { pos[0], pos[1] };
+  dt_dev_coordinates_image_norm_to_raw_norm(dev, raw_pos, 1);
+
   const gboolean changed = sample->size != DT_LIB_COLORPICKER_SIZE_POINT
-                        || sample->point[0] != pos[0]
-                        || sample->point[1] != pos[1];
+                        || sample->point[0] != raw_pos[0]
+                        || sample->point[1] != raw_pos[1];
   sample->size = DT_LIB_COLORPICKER_SIZE_POINT;
-  sample->point[0] = pos[0];
-  sample->point[1] = pos[1];
+  sample->point[0] = raw_pos[0];
+  sample->point[1] = raw_pos[1];
 
   if(!changed) return;
   dt_iop_color_picker_request_update();
@@ -1462,7 +1469,7 @@ static gboolean _postponed_update(gpointer data)
 {
   dt_lib_module_t *self = (dt_lib_module_t *)data;
   self->timeout_handle = 0;
-  if (self->_postponed_update)
+  if(self->_postponed_update)
     self->_postponed_update(self);
 
   return FALSE; // cancel the timer
@@ -1484,7 +1491,7 @@ void dt_lib_queue_postponed_update(dt_lib_module_t *mod, void (*update_fn)(dt_li
 void dt_lib_cancel_postponed_update(dt_lib_module_t *mod)
 {
   mod->_postponed_update = NULL;
-  if (mod->timeout_handle)
+  if(mod->timeout_handle)
   {
     g_source_remove(mod->timeout_handle);
     mod->timeout_handle = 0;
