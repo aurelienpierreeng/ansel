@@ -7,48 +7,6 @@ include(CheckCXXCompilerFlag)
 include(CheckCSourceCompiles)
 include(CheckCXXSymbolExists)
 
-# Generate headers and source files for wayland color management.
-
-include(FindPkgConfig)
-pkg_get_variable(WAYLAND_PROTOCOLS_DATADIR wayland-protocols pkgdatadir)
-
-find_program(WAYLAND_SCANNER wayland-scanner)
-
-set(COLOR_MANAGEMENT_XML
-    ${WAYLAND_PROTOCOLS_DATADIR}/staging/color-management/color-management-v1.xml
-)
-
-set(COLOR_MANAGEMENT_CODE ${CMAKE_CURRENT_BINARY_DIR}/color-management-v1-protocol.c)
-set(COLOR_MANAGEMENT_HEADER ${CMAKE_CURRENT_BINARY_DIR}/color-management-v1-client-protocol.h)
-
-add_custom_command(
-    OUTPUT ${COLOR_MANAGEMENT_CODE}
-    COMMAND ${WAYLAND_SCANNER} private-code ${COLOR_MANAGEMENT_XML} ${COLOR_MANAGEMENT_CODE}
-    DEPENDS ${COLOR_MANAGEMENT_XML}
-    COMMENT "Generating color management c file."
-    VERBATIM
-)
-
-add_custom_command(
-    OUTPUT ${COLOR_MANAGEMENT_HEADER}
-    COMMAND ${WAYLAND_SCANNER} client-header ${COLOR_MANAGEMENT_XML} ${COLOR_MANAGEMENT_HEADER}
-    DEPENDS ${COLOR_MANAGEMENT_XML}
-    COMMENT "Generating color management h file."
-    VERBATIM
-)
-
-add_custom_target(
-  generate_wayland_protocols_h ALL
-  DEPENDS ${COLOR_MANAGEMENT_HEADER}
-)
-
-add_custom_target(
-  generate_wayland_protocols_c ALL
-  DEPENDS ${COLOR_MANAGEMENT_CODE}
-)
-
-# wayland protocol check end
-
 add_custom_command(
   OUTPUT ${ANSEL_AUTHORS_FILE}
   COMMAND ${CMAKE_COMMAND}
@@ -344,6 +302,7 @@ pkg_check_modules(GMODULE REQUIRED IMPORTED_TARGET gmodule-2.0)
 pkg_check_modules(RSVG2 REQUIRED IMPORTED_TARGET librsvg-2.0)
 pkg_check_modules(JSONGLIB REQUIRED IMPORTED_TARGET json-glib-1.0)
 pkg_check_modules(LIBXML2 REQUIRED IMPORTED_TARGET libxml-2.0)
+pkg_check_modules(Wayland IMPORTED_TARGET wayland-client)
 
 # TODO: the following find_package() need to be replaced by pkg_check_modules()
 # like above as soon as they will get supported by PkgConfig,
@@ -665,6 +624,48 @@ if(WIN32)
   )
 endif()
 
+if(Wayland_FOUND)
+  pkg_get_variable(WAYLAND_PROTOCOLS_DATADIR wayland-protocols pkgdatadir)
+
+  find_program(WAYLAND_SCANNER wayland-scanner)
+
+  set(COLOR_MANAGEMENT_XML
+    ${WAYLAND_PROTOCOLS_DATADIR}/staging/color-management/color-management-v1.xml
+  )
+
+  set(COLOR_MANAGEMENT_CODE ${CMAKE_CURRENT_BINARY_DIR}/color-management-v1-protocol.c)
+  set(COLOR_MANAGEMENT_HEADER ${CMAKE_CURRENT_BINARY_DIR}/color-management-v1-client-protocol.h)
+
+  add_custom_command(
+      OUTPUT ${COLOR_MANAGEMENT_CODE}
+      COMMAND ${WAYLAND_SCANNER} private-code ${COLOR_MANAGEMENT_XML} ${COLOR_MANAGEMENT_CODE}
+      DEPENDS ${COLOR_MANAGEMENT_XML}
+      COMMENT "Generating color management c file."
+      VERBATIM
+  )
+
+  add_custom_command(
+      OUTPUT ${COLOR_MANAGEMENT_HEADER}
+      COMMAND ${WAYLAND_SCANNER} client-header ${COLOR_MANAGEMENT_XML} ${COLOR_MANAGEMENT_HEADER}
+      DEPENDS ${COLOR_MANAGEMENT_XML}
+      COMMENT "Generating color management h file."
+      VERBATIM
+  )
+
+  add_custom_target(
+    generate_wayland_protocols_h ALL
+    DEPENDS ${COLOR_MANAGEMENT_HEADER}
+  )
+
+  add_custom_target(
+    generate_wayland_protocols_c ALL
+    DEPENDS ${COLOR_MANAGEMENT_CODE}
+  )
+
+  # Wayland color management source files
+  list(APPEND SOURCES "color-management-v1-protocol.c")
+endif()
+
 #
 # Generate config.h
 #
@@ -859,9 +860,6 @@ if(USE_XMLLINT)
   add_dependencies(generate_preferences validate_anselconfig_xml generate_conf)
 endif(USE_XMLLINT)
 
-# Wayland color management source files
-list(APPEND SOURCES "color-management-v1-protocol.c")
-
 #
 # build libansel
 #
@@ -876,9 +874,10 @@ add_dependencies(lib_ansel generate_version)
 add_dependencies(lib_ansel generate_preferences)
 add_dependencies(lib_ansel generate_authors_h)
 
-# Wayland add protocol files.
-add_dependencies(lib_ansel generate_wayland_protocols_h)
-add_dependencies(lib_ansel generate_wayland_protocols_c)
+if(Wayland_FOUND)
+  add_dependencies(lib_ansel generate_wayland_protocols_h)
+  add_dependencies(lib_ansel generate_wayland_protocols_c)
+endif()
 
 if(APPLE)
   set_target_properties(lib_ansel PROPERTIES MACOSX_RPATH TRUE)
