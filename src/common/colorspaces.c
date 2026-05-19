@@ -2259,44 +2259,47 @@ void dt_colorspaces_set_display_profile(const dt_colorspaces_color_profile_type_
 #endif
 
 #ifdef GDK_WINDOWING_WAYLAND
-if (!wayland_color_management.color_manager)
+GtkWidget *widget = dt_ui_center(darktable.gui->ui);
+GdkDisplay *display = gtk_widget_get_display(widget);
+GdkWindow *window = gtk_widget_get_window(widget);
+
+if (GDK_IS_WAYLAND_DISPLAY(display))
 {
-  GtkWidget *widget = dt_ui_center(darktable.gui->ui);
-  GdkDisplay *display = gtk_widget_get_display(widget);
-  GdkWindow *window = gtk_widget_get_window(widget);
+  if (!wayland_color_management.color_manager)
+  {
+    struct wl_display *wl_display = gdk_wayland_display_get_wl_display(display);
+    struct wl_registry *wl_registry = wl_display_get_registry(wl_display);
+    wl_registry_add_listener(wl_registry, &wl_registry_listener, &wayland_color_management);
 
-  struct wl_display *wl_display = gdk_wayland_display_get_wl_display(display);
-  struct wl_registry *wl_registry = wl_display_get_registry(wl_display);
-  wl_registry_add_listener(wl_registry, &wl_registry_listener, &wayland_color_management);
+    // Initial roundtrip for wl_registry events
+    wl_display_roundtrip(wl_display);
 
-  // Initial roundtrip for wl_registry events
-  wl_display_roundtrip(wl_display);
+    // Initial roundtrip for wp_color_manager events.
+    wl_display_roundtrip(wl_display);
 
-  // Initial roundtrip for wp_color_manager events.
-  wl_display_roundtrip(wl_display);
+    wayland_color_management.color_wl_surface = gdk_wayland_window_get_wl_surface(window);
 
-  wayland_color_management.color_wl_surface = gdk_wayland_window_get_wl_surface(window);
+    wayland_color_management.color_surface = wp_color_manager_v1_get_surface(wayland_color_management.color_manager, wayland_color_management.color_wl_surface);
 
-  wayland_color_management.color_surface = wp_color_manager_v1_get_surface(wayland_color_management.color_manager, wayland_color_management.color_wl_surface);
+    wayland_color_management.color_surface_feedback = wp_color_manager_v1_get_surface_feedback(wayland_color_management.color_manager, wayland_color_management.color_wl_surface);
+    wp_color_management_surface_feedback_v1_add_listener(wayland_color_management.color_surface_feedback, &wp_color_management_surface_feedback_v1_listener, &wayland_color_management);
 
-  wayland_color_management.color_surface_feedback = wp_color_manager_v1_get_surface_feedback(wayland_color_management.color_manager, wayland_color_management.color_wl_surface);
-  wp_color_management_surface_feedback_v1_add_listener(wayland_color_management.color_surface_feedback, &wp_color_management_surface_feedback_v1_listener, &wayland_color_management);
+    wayland_color_management.color_image_description = wp_color_management_surface_feedback_v1_get_preferred(wayland_color_management.color_surface_feedback);
+    wp_image_description_v1_add_listener(wayland_color_management.color_image_description, &wp_image_description_v1_listener, &wayland_color_management);
 
-  wayland_color_management.color_image_description = wp_color_management_surface_feedback_v1_get_preferred(wayland_color_management.color_surface_feedback);
-  wp_image_description_v1_add_listener(wayland_color_management.color_image_description, &wp_image_description_v1_listener, &wayland_color_management);
+    // Initial roundtrip for wp_image_description events
+    wl_display_roundtrip(wl_display);
 
-  // Initial roundtrip for wp_image_description events
-  wl_display_roundtrip(wl_display);
+    // Initial roundtrip for wp_image_description_info events
+    wl_display_roundtrip(wl_display);
+  }
 
-  // Initial roundtrip for wp_image_description_info events
-  wl_display_roundtrip(wl_display);
-}
-
-if (wayland_color_management.color_manager && wayland_color_management.icc_buffer && wayland_color_management.icc_buffer_size > 0)
-{
-  buffer = wayland_color_management.icc_buffer;
-  buffer_size = wayland_color_management.icc_buffer_size;
-  profile_source = g_strdup("Wayland color profile api");
+  if (wayland_color_management.color_manager && wayland_color_management.icc_buffer && wayland_color_management.icc_buffer_size > 0)
+  {
+    buffer = wayland_color_management.icc_buffer;
+    buffer_size = wayland_color_management.icc_buffer_size;
+    profile_source = g_strdup("Wayland color profile api");
+  }
 }
 #endif
 
