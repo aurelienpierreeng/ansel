@@ -5076,7 +5076,7 @@ msgid "append"
 msgstr ""
 
 #: ../src/common/history_merge_gui.c:1233
-msgid "appstart"
+msgid "prepend"
 msgstr ""
 
 #: ../src/common/history_merge_gui.c:1234
@@ -9524,12 +9524,12 @@ msgstr "Pegar historial (partes)"
 msgid "History pasting mode"
 msgstr "Pulsar para editar nodos"
 
-#: ../src/gui/actions/edit.c:493
+#: ../src/gui/actions/edit.c:496
 msgid "Append"
 msgstr ""
 
-#: ../src/gui/actions/edit.c:496
-msgid "Appstart"
+#: ../src/gui/actions/edit.c:493
+msgid "Prepend"
 msgstr ""
 
 #: ../src/gui/actions/edit.c:499

@@ -5134,7 +5134,7 @@ msgid "append"
 msgstr "ajouter après"
 
 #: ../src/common/history_merge_gui.c:1233
-msgid "appstart"
+msgid "prepend"
 msgstr "ajouter avant"
 
 #: ../src/common/history_merge_gui.c:1234
@@ -9612,12 +9612,12 @@ msgstr "Coller l'historique (parties)…"
 msgid "History pasting mode"
 msgstr "cliquer pour éditer les points"
 
-#: ../src/gui/actions/edit.c:493
+#: ../src/gui/actions/edit.c:496
 msgid "Append"
 msgstr "Ajouter après"
 
-#: ../src/gui/actions/edit.c:496
-msgid "Appstart"
+#: ../src/gui/actions/edit.c:493
+msgid "Prepend"
 msgstr "Ajouter avant"
 
 #: ../src/gui/actions/edit.c:499

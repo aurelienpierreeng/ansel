@@ -31,8 +31,8 @@ extern "C"
 
   typedef enum dt_history_merge_strategy_t
   {
-    DT_HISTORY_MERGE_APPEND = 0,   // source applied after destination (source wins conflicts)
-    DT_HISTORY_MERGE_APPSTART = 1, // source applied early in destination history (destination wins conflicts)
+    DT_HISTORY_MERGE_PREPEND = 0,   // source applied early in destination history (destination wins conflicts)
+    DT_HISTORY_MERGE_APPEND = 1,   // source applied after destination (source wins conflicts)
     DT_HISTORY_MERGE_REPLACE = 2   // entirely replace history and modules order
   } dt_history_merge_strategy_t;
 
@@ -48,7 +48,7 @@ extern "C"
    * @param merge_iop_order If TRUE, attempt to merge the pipeline order constraints from src and dest
    *                        using a topological sort. On unsatisfiable constraints, falls back to
    *                        overwriting the destination iop-order list with the source list.
-   * @param strategy DT_HISTORY_MERGE_APPEND or DT_HISTORY_MERGE_APPSTART.
+   * @param strategy DT_HISTORY_MERGE_APPEND or DT_HISTORY_MERGE_PREPEND.
    * @param force_new_modules If TRUE, always add modules from source as new instances (when possible).
    *
    * @return 0 on success, 1 on error.
