@@ -465,6 +465,12 @@ static void _lib_snapshots_add_button_clicked_callback(GtkWidget *widget, gpoint
   g_snprintf(label, sizeof(label), "%s (%d)", name, dt_dev_get_history_end_ext(darktable.develop));
   gtk_label_set_text(GTK_LABEL(gtk_bin_get_child(GTK_BIN(d->snapshot[0].button))), label);
 
+  // Save current darkroom ROI so toggling this snapshot restores its view position.
+  dt_lib_snapshot_t *s = d->snapshot + 0;
+  s->zoom_y = darktable.develop->roi.y;
+  s->zoom_x = darktable.develop->roi.x;
+  s->zoom_scale = darktable.develop->roi.scaling;
+
   /* update slots used */
   if(d->num_snapshots != d->size) d->num_snapshots++;
 
@@ -500,7 +506,18 @@ static void _lib_snapshots_toggled_callback(GtkToggleButton *widget, gpointer us
     /* setup snapshot */
     d->selected = which;
     dt_lib_snapshot_t *s = d->snapshot + (which - 1);
+
+    // Restore the ROI saved with this snapshot before drawing the comparison overlay.
+    darktable.develop->roi.scaling = s->zoom_scale;
+    dt_dev_check_zoom_scale_bounds(darktable.develop);
+
+    float roi[2] = { s->zoom_x, s->zoom_y };
+    dt_dev_check_zoom_pos_bounds(darktable.develop, &roi[0], &roi[1], NULL, NULL);
+    darktable.develop->roi.x = roi[0];
+    darktable.develop->roi.y = roi[1];
+
     dt_dev_pixelpipe_resync_history_main(darktable.develop);
+    dt_dev_pixelpipe_change_zoom_main(darktable.develop);
     d->snapshot_image = dt_cairo_image_surface_create_from_png(s->filename);
   }
 
