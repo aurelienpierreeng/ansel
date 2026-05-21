@@ -65,8 +65,6 @@
 #include "control/control.h"
 #include "develop/imageop.h"
 
-#include <glib.h>
-#include <glibconfig.h>
 #include <strings.h>
 
 #ifdef USE_COLORDGTK
