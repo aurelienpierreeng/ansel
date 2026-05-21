@@ -65,6 +65,8 @@
 #include "control/control.h"
 #include "develop/imageop.h"
 
+#include <glib.h>
+#include <glibconfig.h>
 #include <strings.h>
 
 #ifdef USE_COLORDGTK
@@ -2095,6 +2097,8 @@ typedef struct {
   struct wp_image_description_info_v1 *color_image_description_info;
   guint8 *icc_buffer;
   gint icc_buffer_size;
+  gboolean have_registry;
+  gboolean have_color_manager;
 } wayland_color_management_struct;
 
 wayland_color_management_struct wayland_color_management = {0};
@@ -2177,6 +2181,11 @@ void handle_wl_registry_global(void *data,
 
   if (strcmp(interface, wp_color_manager_v1_interface.name) == 0) {
     wcm->color_manager = wl_registry_bind(wl_registry, name, &wp_color_manager_v1_interface, 1);
+
+    if (wcm->color_manager)
+    {
+      wcm->have_color_manager = TRUE;
+    }
   }
 }
 
@@ -2268,30 +2277,38 @@ if (GDK_IS_WAYLAND_DISPLAY(display))
   if (!wayland_color_management.color_manager)
   {
     struct wl_display *wl_display = gdk_wayland_display_get_wl_display(display);
-    struct wl_registry *wl_registry = wl_display_get_registry(wl_display);
-    wl_registry_add_listener(wl_registry, &wl_registry_listener, &wayland_color_management);
 
-    // Initial roundtrip for wl_registry events
-    wl_display_roundtrip(wl_display);
+    if (!wayland_color_management.have_registry)
+    {
+      struct wl_registry *wl_registry = wl_display_get_registry(wl_display);
+      wl_registry_add_listener(wl_registry, &wl_registry_listener, &wayland_color_management);
 
-    // Initial roundtrip for wp_color_manager events.
-    wl_display_roundtrip(wl_display);
+      // Initial roundtrip for wl_registry events
+      wl_display_roundtrip(wl_display);
+      wayland_color_management.have_registry = TRUE;
+    }
 
-    wayland_color_management.color_wl_surface = gdk_wayland_window_get_wl_surface(window);
+    if (wayland_color_management.have_color_manager)
+    {
+      // Initial roundtrip for wp_color_manager events.
+      wl_display_roundtrip(wl_display);
 
-    wayland_color_management.color_surface = wp_color_manager_v1_get_surface(wayland_color_management.color_manager, wayland_color_management.color_wl_surface);
+      wayland_color_management.color_wl_surface = gdk_wayland_window_get_wl_surface(window);
 
-    wayland_color_management.color_surface_feedback = wp_color_manager_v1_get_surface_feedback(wayland_color_management.color_manager, wayland_color_management.color_wl_surface);
-    wp_color_management_surface_feedback_v1_add_listener(wayland_color_management.color_surface_feedback, &wp_color_management_surface_feedback_v1_listener, &wayland_color_management);
+      wayland_color_management.color_surface = wp_color_manager_v1_get_surface(wayland_color_management.color_manager, wayland_color_management.color_wl_surface);
 
-    wayland_color_management.color_image_description = wp_color_management_surface_feedback_v1_get_preferred(wayland_color_management.color_surface_feedback);
-    wp_image_description_v1_add_listener(wayland_color_management.color_image_description, &wp_image_description_v1_listener, &wayland_color_management);
+      wayland_color_management.color_surface_feedback = wp_color_manager_v1_get_surface_feedback(wayland_color_management.color_manager, wayland_color_management.color_wl_surface);
+      wp_color_management_surface_feedback_v1_add_listener(wayland_color_management.color_surface_feedback, &wp_color_management_surface_feedback_v1_listener, &wayland_color_management);
 
-    // Initial roundtrip for wp_image_description events
-    wl_display_roundtrip(wl_display);
+      wayland_color_management.color_image_description = wp_color_management_surface_feedback_v1_get_preferred(wayland_color_management.color_surface_feedback);
+      wp_image_description_v1_add_listener(wayland_color_management.color_image_description, &wp_image_description_v1_listener, &wayland_color_management);
 
-    // Initial roundtrip for wp_image_description_info events
-    wl_display_roundtrip(wl_display);
+      // Initial roundtrip for wp_image_description events
+      wl_display_roundtrip(wl_display);
+
+      // Initial roundtrip for wp_image_description_info events
+      wl_display_roundtrip(wl_display);
+    }
   }
 
   if (wayland_color_management.color_manager && wayland_color_management.icc_buffer && wayland_color_management.icc_buffer_size > 0)
