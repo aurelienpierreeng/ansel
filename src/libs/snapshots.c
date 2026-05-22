@@ -98,7 +98,7 @@ typedef struct dt_lib_snapshots_t
 
   /* change snapshot overlay controls */
   gboolean dragging, vertical, inverted;
-  double vp_width, vp_height, vp_xpointer, vp_ypointer, vp_xrotate, vp_yrotate;
+  double vp_x, vp_y, vp_width, vp_height, vp_xpointer, vp_ypointer, vp_xrotate, vp_yrotate;
   gboolean on_going;
 
   GtkWidget *take_button;
@@ -297,9 +297,6 @@ static int _lib_snapshots_refresh_pipe_image(dt_lib_module_t *self, dt_lib_snaps
     goto cleanup;
   }
 
-  const uint64_t pipe_hash = dt_dev_pixelpipe_get_hash(&snapshot_pipe);
-  const uint64_t backbuf_hist = dt_dev_backbuf_get_history_hash(&snapshot_pipe.backbuf);
-  const uint64_t pipe_hist = dt_dev_pixelpipe_get_history_hash(&snapshot_pipe);
   /*if(hash != pipe_hash || backbuf_hist != pipe_hist)
     SNAP_LOG("[snapshots] refresh note: non-strict backbuf validity hash=%" PRIu64 " pipe_hash=%" PRIu64
              " backbuf_hist=%" PRIu64 " pipe_hist=%" PRIu64 "\n",
@@ -448,22 +445,31 @@ void gui_post_expose(dt_lib_module_t *self, cairo_t *cri, int32_t width, int32_t
     const double tx = 0.5 * width - dev->roi.x * surface_width * render_scale;
     const double ty = 0.5 * height - dev->roi.y * surface_height * render_scale;
 
-    d->vp_width = width;
-    d->vp_height = height;
+    float image_box[4] = { 0.0f };
+    dt_dev_get_image_box_in_widget(dev, width, height, image_box);
+    if(image_box[2] <= 0.0f || image_box[3] <= 0.0f) return;
+    d->vp_x = image_box[0];
+    d->vp_y = image_box[1];
+    d->vp_width = image_box[2];
+    d->vp_height = image_box[3];
+    const double split_x = CLAMP(d->vp_xpointer, 0.0, 1.0);
+    const double split_y = CLAMP(d->vp_ypointer, 0.0, 1.0);
 
     /* set x,y,w,h of surface depending on split align and invert */
-    const double x = d->vertical
-      ? (d->inverted ? width * d->vp_xpointer : 0)
-      : 0;
-    const double y = d->vertical
-      ? 0
-      : (d->inverted ? height * d->vp_ypointer : 0);
-    const double w = d->vertical
-      ? (d->inverted ? (width * (1.0 - d->vp_xpointer)) : width * d->vp_xpointer)
-      : width;
-    const double h = d->vertical
-      ? height
-      : (d->inverted ? (height * (1.0 - d->vp_ypointer)) : height * d->vp_ypointer);
+    double x = d->vp_x;
+    double y = d->vp_y;
+    double w = d->vp_width;
+    double h = d->vp_height;
+    if(d->vertical)
+    {
+      x = d->inverted ? d->vp_x + d->vp_width * split_x : d->vp_x;
+      w = d->inverted ? d->vp_width * (1.0 - split_x) : d->vp_width * split_x;
+    }
+    else
+    {
+      y = d->inverted ? d->vp_y + d->vp_height * split_y : d->vp_y;
+      h = d->inverted ? d->vp_height * (1.0 - split_y) : d->vp_height * split_y;
+    }
 
     const double size = DT_PIXEL_APPLY_DPI(d->inverted ? -15 : 15);
 
@@ -484,12 +490,12 @@ void gui_post_expose(dt_lib_module_t *self, cairo_t *cri, int32_t width, int32_t
 
     if(d->vertical)
     {
-      const double lx = width * d->vp_xpointer;
-      const double center = (fabs(size) * 2.0) + ty;
+      const double lx = d->vp_x + d->vp_width * split_x;
+      const double center = d->vp_y + 0.5 * d->vp_height;
 
       // line
-      cairo_move_to(cri, lx, 0.0f);
-      cairo_line_to(cri, lx, height);
+      cairo_move_to(cri, lx, d->vp_y);
+      cairo_line_to(cri, lx, d->vp_y + d->vp_height);
       cairo_stroke(cri);
 
       if(!d->dragging)
@@ -507,12 +513,12 @@ void gui_post_expose(dt_lib_module_t *self, cairo_t *cri, int32_t width, int32_t
     }
     else
     {
-      const double ly = height * d->vp_ypointer;
-      const double center = (fabs(size) * 2.0) + tx;
+      const double ly = d->vp_y + d->vp_height * split_y;
+      const double center = d->vp_x + 0.5 * d->vp_width;
 
       // line
-      cairo_move_to(cri, 0.0f, ly);
-      cairo_line_to(cri, width, ly);
+      cairo_move_to(cri, d->vp_x, ly);
+      cairo_line_to(cri, d->vp_x + d->vp_width, ly);
       cairo_stroke(cri);
 
       if(!d->dragging)
@@ -532,9 +538,11 @@ void gui_post_expose(dt_lib_module_t *self, cairo_t *cri, int32_t width, int32_t
     /* if mouse over control lets draw center rotate control, hide if split is dragged */
     if(!d->dragging)
     {
-      const double handle_size = fmin(24, width * HANDLE_SIZE);
-      const gint rx = (d->vertical ? width * d->vp_xpointer : width * 0.5) - (handle_size * 0.5);
-      const gint ry = (d->vertical ? height * 0.5 : height * d->vp_ypointer) - (handle_size * 0.5);
+      const double handle_size = fmin(24, d->vp_width * HANDLE_SIZE);
+      const gint rx = (d->vertical ? d->vp_x + d->vp_width * split_x : d->vp_x + d->vp_width * 0.5)
+                      - (handle_size * 0.5);
+      const gint ry = (d->vertical ? d->vp_y + d->vp_height * 0.5 : d->vp_y + d->vp_height * split_y)
+                      - (handle_size * 0.5);
 
       const gboolean display_rotation = (abs(pointerx - rx) < 40) && (abs(pointery - ry) < 40);
       dt_draw_set_color_overlay(cri, TRUE, display_rotation ? 1.0 : 0.3);
@@ -568,9 +576,11 @@ int button_pressed(struct dt_lib_module_t *self, double x, double y, double pres
   if(d->snapshot_image)
   {
     if(d->on_going) return 1;
+    if(d->vp_width <= 0.0 || d->vp_height <= 0.0) return 0;
+    if(x < d->vp_x || x > d->vp_x + d->vp_width || y < d->vp_y || y > d->vp_y + d->vp_height) return 0;
 
-    const double xp = x / d->vp_width;
-    const double yp = y / d->vp_height;
+    const double xp = CLAMP((x - d->vp_x) / d->vp_width, 0.0, 1.0);
+    const double yp = CLAMP((y - d->vp_y) / d->vp_height, 0.0, 1.0);
 
     /* do the split rotating */
     const double hhs = HANDLE_SIZE * 0.5;
@@ -616,8 +626,9 @@ int mouse_moved(dt_lib_module_t *self, double x, double y, double pressure, int 
 
   if(d->snapshot_image)
   {
-    const double xp = x / d->vp_width;
-    const double yp = y / d->vp_height;
+    if(d->vp_width <= 0.0 || d->vp_height <= 0.0) return 0;
+    const double xp = CLAMP((x - d->vp_x) / d->vp_width, 0.0, 1.0);
+    const double yp = CLAMP((y - d->vp_y) / d->vp_height, 0.0, 1.0);
 
     /* update x pointer */
     if(d->dragging)
@@ -663,6 +674,10 @@ void gui_init(dt_lib_module_t *self)
   /* initialize snapshot storages */
   d->size = 4;
   d->snapshot = (dt_lib_snapshot_t *)g_malloc0_n(d->size, sizeof(dt_lib_snapshot_t));
+  d->vp_x = 0.0;
+  d->vp_y = 0.0;
+  d->vp_width = 1.0;
+  d->vp_height = 1.0;
   d->vp_xpointer = 0.5;
   d->vp_ypointer = 0.5;
   d->vp_xrotate = 0.0;

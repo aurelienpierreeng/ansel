@@ -433,7 +433,7 @@ void _colormanage_ui_color(const float L, const float a, const float b, dt_align
   cmsDoTransform(darktable.color_profiles->transform_xyz_to_display, XYZ, RGB, 1);
 }
 
-static void _render_iso12646(cairo_t *cr, int width, int height, int border)
+static void _render_iso12646(cairo_t *cr, double width, double height, int border)
 {
   // draw the white frame around picture
   cairo_rectangle(cr, -border * .5f, -border * .5f, width + border, height + border);
@@ -715,19 +715,20 @@ static gboolean _build_preview_fallback_surface(dt_develop_t *dev, const int wid
   const float preview_wd = wd / ppd;
   const float preview_ht = ht / ppd;
   const float preview_scale = dev->roi.scaling;
+  float image_box[4] = { 0.0f };
+  dt_dev_get_image_box_in_widget(dev, width, height, image_box);
 
   if(dev->iso_12646.enabled)
   {
-    // The preview backbuffer is already a full-image fit render. Reprojecting it
-    // for temporary zoom/pan feedback therefore only needs the extra darkroom
-    // zoom factor, not another full processed-image rescale.
-    const float roi_wd = fminf(preview_wd * preview_scale, width);
-    const float roi_ht = fminf(preview_ht * preview_scale, height);
 
-    cairo_save(cr);
-    cairo_translate(cr, .5f * (width - roi_wd), .5f * (height - roi_ht));
-    _render_iso12646(cr, roi_wd, roi_ht, border);
-    cairo_restore(cr);
+
+    if(image_box[2] > 0 && image_box[3] > 0)
+    {
+      cairo_save(cr);
+      cairo_translate(cr, image_box[0], image_box[1]);
+      _render_iso12646(cr, image_box[2], image_box[3], border);
+      cairo_restore(cr);
+    }
   }
 
   dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, _darkroom_preview_locked.entry);
