@@ -1,13 +1,13 @@
 # Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
 # This file is distributed under the same license as the PACKAGE package.
 #
-# SPDX-FileCopyrightText: 2022, 2023, 2024, 2025 Maurizio Paglia <mpaglia0@gmail.com>
+# SPDX-FileCopyrightText: 2022-2026 Maurizio Paglia <mpaglia0@gmail.com>
 msgid ""
 msgstr ""
 "Project-Id-Version: \n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-04-26 13:02+0200\n"
-"PO-Revision-Date: 2025-05-05 19:27+0200\n"
+"PO-Revision-Date: 2026-05-22 20:20+0200\n"
 "Last-Translator: Maurizio <maurizio@mauriziopaglia.it>\n"
 "Language-Team: Italian <kde-i18n-it@kde.org>\n"
 "Language: it_IT\n"
@@ -15,7 +15,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
-"X-Generator: Lokalize 25.04.0\n"
+"X-Generator: Lokalize 26.04.1\n"
 
 #: ../build/src/conf_gen.h:182 ../build/src/conf_gen.h:202
 #: ../build/src/conf_gen.h:366 ../build/src/preferences_gen.h:4505
@@ -458,9 +458,8 @@ msgid "this setting has been modified"
 msgstr "Questa impostazione è stata modificata"
 
 #: ../build/src/preferences_gen.h:2543 ../tools/generate_prefs.xsl:192
-#, fuzzy
 msgid "views"
-msgstr "Anteprima"
+msgstr "Viste"
 
 #. TODO: look for active view. Do we know it at init time ?
 #: ../build/src/preferences_gen.h:2546 ../src/libs/lib.c:905
@@ -584,7 +583,6 @@ msgstr ""
 "i menu preset e preferiti."
 
 #: ../build/src/preferences_gen.h:2918 ../tools/generate_prefs.xsl:224
-#, fuzzy
 msgid "Other views"
 msgstr "Altre viste"
 
@@ -645,7 +643,6 @@ msgstr ""
 "informazioni dell'immagine"
 
 #: ../build/src/preferences_gen.h:3078 ../tools/generate_prefs.xsl:253
-#, fuzzy
 msgid "Slideshow"
 msgstr "Presentazione"
 
@@ -1260,13 +1257,17 @@ msgstr ""
 
 #: ../build/src/preferences_gen.h:5086
 msgid "Disable thumbnail preview in import popup"
-msgstr ""
+msgstr "Disabilita le anteprime nella maschera di importazione"
 
 #: ../build/src/preferences_gen.h:5100
 msgid ""
 "Check this if you are impacted by extra-slow loading when accessing images "
 "on memory card through camera USB link and PTP/MTP drivers."
 msgstr ""
+"Seleziona questa opzione se riscontri un caricamento estremamente lento quando"
+" accedi alle immagini"
+"presenti sulla scheda di memoria tramite il collegamento USB della fotocamera "
+"e i driver PTP/MTP."
 
 #: ../build/src/preferences_gen.h:5122
 msgid "method to use for getting the display profile"
@@ -2555,7 +2556,7 @@ msgstr "Markesteijn 3-pass + VNG"
 
 #: ../build/src/iop/introspection_demosaic.c:230
 msgid "downsample"
-msgstr ""
+msgstr "Ridimensionare"
 
 #: ../build/src/iop/introspection_demosaic.c:234
 msgid "basic"
@@ -3527,9 +3528,8 @@ msgstr "Diametro omogeneizzazione"
 
 #: ../build/src/iop/introspection_toneequal.c:210
 #: ../build/src/iop/introspection_toneequal.c:333
-#, fuzzy
 msgid "edges refinement (feathering)"
-msgstr "Rifinitura/sfumatura margini"
+msgstr "Rifinitura margini (sfumatura)"
 
 #: ../build/src/iop/introspection_toneequal.c:216
 #: ../build/src/iop/introspection_toneequal.c:337
@@ -3626,7 +3626,6 @@ msgstr "Rapporto automatico"
 
 #: ../build/src/iop/introspection_vignette.c:139
 #: ../build/src/iop/introspection_vignette.c:232
-#, fuzzy
 msgid "width vs. height ratio"
 msgstr "Rapporto larghezza/altezza"
 
@@ -3737,79 +3736,73 @@ msgstr "Tavolo luminoso virtuale, visualizza una raccolta"
 
 #: ../src/bauhaus/bauhaus.c:431
 msgid "The target widget of the action does not exist anymore"
-msgstr ""
+msgstr "Il widget di destinazione dell'azione non esiste più"
 
 #. Keys used by key-pressed event handler when the Bauhaus widget has the focus
 #: ../src/bauhaus/bauhaus.c:1093 ../src/bauhaus/bauhaus.c:1097
 #: ../src/bauhaus/bauhaus.c:1101 ../src/bauhaus/bauhaus.c:1105
 #: ../src/bauhaus/bauhaus.c:1109 ../src/bauhaus/bauhaus.c:1113
 #: ../src/bauhaus/bauhaus.c:1117
-#, fuzzy
 msgid "Darkroom/Controls/Sliders"
-msgstr "Selettori scorrevoli controllo colore"
+msgstr "Camera Oscura/Controlli/Selettori"
 
 #: ../src/bauhaus/bauhaus.c:1093
 msgid "Increase value (normal step)"
-msgstr ""
+msgstr "Aumenta valore (regolazione normale)"
 
 #: ../src/bauhaus/bauhaus.c:1097
 msgid "Decrease value (normal step)"
-msgstr ""
+msgstr "Diminuisci valore (regolazione normale)"
 
 #: ../src/bauhaus/bauhaus.c:1101
 msgid "Increase value (fine step)"
-msgstr ""
+msgstr "Aumenta valore (regolazione fine)"
 
 #: ../src/bauhaus/bauhaus.c:1105
 msgid "Decrease value (fine step)"
-msgstr ""
+msgstr "Diminuisci valore (regolazione fine)"
 
 #: ../src/bauhaus/bauhaus.c:1109
 msgid "Increase value (coarse step)"
-msgstr ""
+msgstr "Aumenta valore (regolazione grossolana)"
 
 #: ../src/bauhaus/bauhaus.c:1113
 msgid "Decrease value (coarse step)"
-msgstr ""
+msgstr "Diminuisci valore (regolazione grossolana)"
 
 #: ../src/bauhaus/bauhaus.c:1117 ../src/bauhaus/bauhaus.c:1142
-#, fuzzy
 msgid "Toggle color-picker"
-msgstr "Selettore colore"
+msgstr "Commuta il selettore colore"
 
 #: ../src/bauhaus/bauhaus.c:1122 ../src/bauhaus/bauhaus.c:1126
 #: ../src/bauhaus/bauhaus.c:1130 ../src/bauhaus/bauhaus.c:1134
 #: ../src/bauhaus/bauhaus.c:1138 ../src/bauhaus/bauhaus.c:1142
 msgid "Darkroom/Controls/Comboboxes"
-msgstr ""
+msgstr "Camera Oscura/Controlli/Combo"
 
 #: ../src/bauhaus/bauhaus.c:1122
-#, fuzzy
 msgid "Open editing mode"
-msgstr "Seleziona il metodo di fusione"
+msgstr "Apri la modalità di modifica"
 
 #: ../src/bauhaus/bauhaus.c:1126
-#, fuzzy
 msgid "Exit editing mode"
-msgstr "Clic per modificare i nodi"
+msgstr "Esci dalla modalità di modifica"
 
 #: ../src/bauhaus/bauhaus.c:1130
 msgid "Select previous (in editing mode)"
-msgstr ""
+msgstr "Seleziona precedente (in modalità modifica)"
 
 #: ../src/bauhaus/bauhaus.c:1134
-#, fuzzy
 msgid "Select next (in editing mode)"
-msgstr "Seleziona il metodo di interpolazione"
+msgstr "Seleziona successivo (in modalità modifica)"
 
 #: ../src/bauhaus/bauhaus.c:1138
 msgid "Validate result (in editing mode)"
-msgstr ""
+msgstr "Conferma risultato (in modalità modifica)"
 
 #: ../src/bauhaus/bauhaus.c:1334 ../src/libs/tools/filter.c:740
-#, fuzzy
 msgid "Focuses the control"
-msgstr "Focus sul controllo del modulo successivo"
+msgstr "Focus sul controllo"
 
 #: ../src/chart/main.c:517 ../src/control/jobs/control_jobs.c:1757
 #: ../src/control/jobs/control_jobs.c:1819 ../src/gui/hist_dialog.c:187
@@ -4081,9 +4074,8 @@ msgid "altered"
 msgstr "Modificato"
 
 #: ../src/common/collection.c:1278 ../src/libs/collect.c:1883
-#, fuzzy
 msgid "unaltered"
-msgstr "Modificato"
+msgstr "Non modificato"
 
 #: ../src/common/collection.c:1291 ../src/common/collection.c:1356
 #: ../src/libs/collect.c:1366 ../src/libs/collect.c:1486
@@ -4603,24 +4595,20 @@ msgstr "Errore nel caricamento del file '%s'"
 
 #. Print
 #: ../src/common/darktable.c:1646
-#, fuzzy
 msgid "[MEMORY CONFIGURATION] Total system RAM: %"
-msgstr "[MEMORY CONFIGURATION] RAM totale sistema: %lu MiB\n"
+msgstr "[CONFIGURAZIONE MEMORIA] RAM totale sistema: %"
 
 #: ../src/common/darktable.c:1649
-#, fuzzy
 msgid "[MEMORY CONFIGURATION] OS & Apps RAM headroom: %"
-msgstr "[MEMORY CONFIGURATION] Spazio RAM OS & Apps: %lu MiB\n"
+msgstr "[CONFIGURAZIONE MEMORIA] Spazio RAM OS & Apps: %"
 
 #: ../src/common/darktable.c:1652
-#, fuzzy
 msgid "[MEMORY CONFIGURATION] Lightable thumbnails cache size: %"
-msgstr "[MEMORY CONFIGURATION] Dimensione cache Tavolo Luminoso: %lu MiB\n"
+msgstr "[CONFIGURAZIONE MEMORIA] Dimensione cache Tavolo Luminoso: %"
 
 #: ../src/common/darktable.c:1655
-#, fuzzy
 msgid "[MEMORY CONFIGURATION] Pixelpipe cache size: %"
-msgstr "[MEMORY CONFIGURATION] Spazio cache coda di sviluppo: %lu MiB\n"
+msgstr "[CONFIGURAZIONE MEMORIA] Spazio cache coda di sviluppo: %"
 
 #: ../src/common/darktable.c:1658
 #, c-format
@@ -4632,9 +4620,12 @@ msgid ""
 "CRITICAL WARNING: Ansel will not be able to use the RAM you allocated it.\n"
 "Review your memory settings or add more RAM to your system."
 msgstr ""
+"AVVISO IMPORTANTE: Ansel non sarà in grado di utilizzare la RAM che gli hai as"
+"segnato.\n"
+"Controlla le impostazioni della memoria o aggiungi altra RAM al tuo sistema."
 
 #: ../src/common/database.c:2664
-#, fuzzy, c-format
+#, c-format
 msgid ""
 "\n"
 "  Sorry, Ansel could not be started because the database is locked.\n"
@@ -4665,12 +4656,13 @@ msgid ""
 "</i>\n"
 msgstr ""
 "\n"
-"  Scusa, Ansel non può esser avviato (il database è bloccato)\n"
+"  Scusa, Ansel non può esser avviato perché il database è bloccato.\n"
 "\n"
 "  Come puoi risolvere questo problema?\n"
 "\n"
 "  1 - Se un'altra istanza di Ansel è già aperta, \n"
-"      clicca annulla e usa quell'istanza oppure chiudila prima di tentare di "
+"      clicca \"Annulla\" e usa quell'istanza oppure chiudila prima di tentare "
+"di "
 "riavviare Ansel \n"
 "      (il processo ID <i><b>%d</b></i> ha creato il blocco del database)\n"
 "\n"
@@ -4694,7 +4686,6 @@ msgstr ""
 
 #. clang-format on
 #: ../src/common/database.c:2686
-#, fuzzy
 msgid "Error starting Ansel"
 msgstr "Errore in fase di avvio di Ansel"
 
@@ -4704,14 +4695,12 @@ msgid "Quit"
 msgstr "Chiudi"
 
 #: ../src/common/database.c:2687
-#, fuzzy
 msgid "Delete database lock files and try again"
-msgstr "Elimina i file di blocco del database"
+msgstr "Elimina i file di blocco del database quindi riprova"
 
 #: ../src/common/database.c:2693
-#, fuzzy
 msgid "Confirmation"
-msgstr "Iterazioni"
+msgstr "Conferma"
 
 #: ../src/common/database.c:2694
 msgid ""
@@ -4720,34 +4709,38 @@ msgid ""
 "This action should only be performed if you are certain no other Ansel "
 "instances are running.\n"
 msgstr ""
+"\n"
+"<u>Attenzione!</u> Sei sicuro di voler eliminare i file di blocco del database"
+"?\n"
+"Questa operazione deve essere eseguita solo se sei certo che non siano in esec"
+"uzione altre istanze di Ansel \n"
 
 #: ../src/common/database.c:2695
-#, fuzzy
 msgid "Yes"
 msgstr "Si"
 
 #: ../src/common/database.c:2711
 msgid "Done"
-msgstr ""
+msgstr "Fatto"
 
 #: ../src/common/database.c:2712
-#, fuzzy
 msgid ""
 "\n"
 "The database lock files have been deleted successfully.\n"
-msgstr "Il file di blocco del database sembra essere vuoto"
+msgstr ""
+"\n"
+"I file di blocco del database sono stati eliminati correttamente.\n"
 
 #: ../src/common/database.c:2713
 msgid "Continue"
-msgstr ""
+msgstr "Continua"
 
 #: ../src/common/database.c:2719
-#, fuzzy
 msgid "Error"
 msgstr "Errore"
 
 #: ../src/common/database.c:2720
-#, fuzzy, c-format
+#, c-format
 msgid ""
 "\n"
 "At least one lock file could not be removed.\n"
@@ -4772,6 +4765,7 @@ msgstr ""
 #, c-format
 msgid "tried several times to acquire the database lock, giving up"
 msgstr ""
+"Ho tentato più volte di acquisire il blocco del database, ma non è possibile"
 
 #: ../src/common/database.c:2856
 #, c-format
@@ -5021,20 +5015,19 @@ msgstr ""
 
 #: ../src/common/history_merge_gui.c:142 ../src/common/history_merge_gui.c:290
 msgid "Incompatible module ordering constraints"
-msgstr ""
+msgstr "L'ordinamento dei moduli non è accettabile"
 
 #: ../src/common/history_merge_gui.c:143
 msgid "Preserve _destination ordering"
-msgstr ""
+msgstr "Preserva _l'ordinamento della destinazione"
 
 #: ../src/common/history_merge_gui.c:144
 msgid "Preserve _source ordering"
-msgstr ""
+msgstr "Preserva _l'ordinamento dell'origine"
 
 #: ../src/common/history_merge_gui.c:144
-#, fuzzy
 msgid "_Cancel"
-msgstr "Annulla"
+msgstr "_Annulla"
 
 #: ../src/common/history_merge_gui.c:156
 #, c-format
@@ -5048,20 +5041,26 @@ msgid ""
 "\n"
 "Which ordering constraints should be preserved?"
 msgstr ""
+"Due moduli si richiamano a vicenda come modulo precedente.\n"
+"\n"
+"Modulo in errore: %s\n"
+"\n"
+"La destinazione chiede: %s → %s → %s\n"
+"Il sorgente chiede:      %s → %s → %s\n"
+"\n"
+"Quale ordinamento deve essere preservato?"
 
 #: ../src/common/history_merge_gui.c:225
-#, fuzzy
 msgid "Missing raster mask producers"
-msgstr "ID maschera raster"
+msgstr "Produttori di maschere raster assenti"
 
 #: ../src/common/history_merge_gui.c:226
-#, fuzzy
 msgid "_Cancel merge"
-msgstr "Annulla"
+msgstr "_Annulla fusione"
 
 #: ../src/common/history_merge_gui.c:226
 msgid "_Continue"
-msgstr ""
+msgstr "_Continua"
 
 #: ../src/common/history_merge_gui.c:241
 #, c-format
@@ -5074,11 +5073,17 @@ msgid ""
 "\n"
 "%s"
 msgstr ""
+"Alcuni moduli incollati utilizzano delle maschere raster generate da moduli "
+"che non sono inclusi.\n"
+"Queste maschere non saranno disponibili dopo la fusione.\n"
+"\n"
+"Produttori assenti:\n"
+"\n"
+"%s"
 
 #: ../src/common/history_merge_gui.c:291 ../src/dtgtk/thumbnail.c:259
-#, fuzzy
 msgid "_Close"
-msgstr "_chiudi"
+msgstr "_Chiudi"
 
 #: ../src/common/history_merge_gui.c:306
 msgid ""
@@ -5087,11 +5092,15 @@ msgid ""
 "Cycle:\n"
 "\n"
 msgstr ""
+"L'ordinamento dei moduli contiene un richiamo circolare quindi non può funzion"
+"are.\n"
+"\n"
+"Richiamo circolare:\n"
+"\n"
 
 #: ../src/common/history_merge_gui.c:1230
-#, fuzzy
 msgid "merge"
-msgstr "Unisci da:"
+msgstr "Fondi"
 
 #: ../src/common/history_merge_gui.c:1230 ../src/iop/channelmixer.c:572
 msgid "destination"
@@ -5099,73 +5108,72 @@ msgstr "Destinazione"
 
 #: ../src/common/history_merge_gui.c:1232
 msgid "append"
-msgstr ""
+msgstr "Accoda"
 
 #: ../src/common/history_merge_gui.c:1233
 msgid "prepend"
-msgstr ""
+msgstr "All'inizio"
 
 #: ../src/common/history_merge_gui.c:1234
-#, fuzzy
 msgid "replace"
-msgstr "Posizionamento"
+msgstr "Sostituisci"
 
 #: ../src/common/history_merge_gui.c:1237
 #, c-format
 msgid "Copy, merging pipeline in %s and history in %s mode"
-msgstr ""
+msgstr "Copia e fondi la cache di sviluppo in %s e la coda in modalità %s"
 
 #: ../src/common/history_merge_gui.c:1240
 msgid "History merge report"
-msgstr ""
+msgstr "Rapporto della fusione della coda di sviluppo"
 
 #: ../src/common/history_merge_gui.c:1241
-#, fuzzy
 msgid "_Revert"
-msgstr "Mai"
+msgstr "_Annulla"
 
 #: ../src/common/history_merge_gui.c:1241
 msgid "_Accept"
-msgstr ""
+msgstr "_Conferma"
 
 #: ../src/common/history_merge_gui.c:1252
-#, fuzzy
 msgid "Source pipeline order was used"
-msgstr "Ordine di sviluppo"
+msgstr "È stata utilizzata la coda sorgente"
 
 #: ../src/common/history_merge_gui.c:1253
 msgid "Destination pipeline order was used"
-msgstr ""
+msgstr "È stata utilizzata la coda di destinazione"
 
 #: ../src/common/history_merge_gui.c:1255
 msgid ""
 " as a fallback because we could not resolve positionning constraints with "
 "source order."
 msgstr ""
+" come alternativa perché non è possibile risolvere dei posizionamenti obbligat"
+"ori con "
+"l'ordinamento di origine."
 
 #: ../src/common/history_merge_gui.c:1280
-#, fuzzy, c-format
+#, c-format
 msgid "Original: %d %s"
-msgstr "Originale"
+msgstr "Originale: %d %s"
 
 #: ../src/common/history_merge_gui.c:1281
 #, c-format
 msgid "Source: %d %s"
-msgstr ""
+msgstr "Sorgente: %d %s"
 
 #: ../src/common/history_merge_gui.c:1282
-#, fuzzy
 msgid "Source"
-msgstr "Sorgente F"
+msgstr "Sorgente"
 
 #: ../src/common/history_merge_gui.c:1283
-#, fuzzy, c-format
+#, c-format
 msgid "Destination: %d %s"
-msgstr "Destinazione"
+msgstr "Destinazione: %d %s"
 
 #: ../src/common/history_merge_gui.c:1314
 msgid "Override"
-msgstr ""
+msgstr "Sovrascrivi"
 
 #: ../src/common/history_merge_gui.c:1331
 msgid ""
@@ -5175,11 +5183,18 @@ msgid ""
 "farther), * on arrow means masks overridden.\n"
 "Drag and drop modules in the `Destination` column to reorder the pipeline."
 msgstr ""
+"[nome] modulo inserito, * usa le maschere, grassetto = modulo spostato, corsiv"
+"o = modulo "
+"disabilitato (visualizzato solo se copiato).\n"
+"Le frecce indicano i parametri sovrascritti (→ stessa riga, ↗/↘ adiacente, ↴/↴"
+" "
+"più lontana), * sulla freccia significa maschera sovrascritta.\n"
+"Trascina il modulo nella colonna `Destinazione` per riordinare la coda di svil"
+"uppo."
 
 #: ../src/common/history_merge_gui.c:1414
-#, fuzzy
 msgid "Input image"
-msgstr "Importa immagine"
+msgstr "Immagine di input"
 
 #: ../src/common/http_server.c:111 ../src/common/http_server.c:160
 #, c-format
@@ -5228,7 +5243,7 @@ msgstr "Data/ora ri-applicata alle %d immagini"
 #: ../src/common/image.c:1471
 #, c-format
 msgid "Image %s is already in library and will not be re-imported.\n"
-msgstr ""
+msgstr "L'immagine %s è già presente nella libreria e non verrà reimportata.\n"
 
 #: ../src/common/image.c:1972
 #, c-format
@@ -5630,11 +5645,11 @@ msgstr "v3.0 JPEG"
 
 #: ../src/common/iop_order.c:73
 msgid "Ansel RAW"
-msgstr ""
+msgstr "RAW Ansel"
 
 #: ../src/common/iop_order.c:74
 msgid "Ansel JPEG"
-msgstr ""
+msgstr "JPEG Ansel"
 
 #: ../src/common/iop_profile.c:110
 #, c-format
@@ -5690,7 +5705,7 @@ msgstr "Il file di profilo del rumore `%s' non è valido"
 #: ../src/common/opencl.c:99
 #, c-format
 msgid "Building OpenCL kernels: %s"
-msgstr ""
+msgstr "Genero i kernel OpenCL: %s"
 
 #: ../src/common/pdf.h:93 ../src/iop/lens.cc:1947
 #: ../src/libs/print_settings.c:105
@@ -5844,7 +5859,6 @@ msgid "m"
 msgstr "m"
 
 #: ../src/control/control.c:284
-#, fuzzy
 msgid "Working..."
 msgstr "Elaborazione..."
 
@@ -6216,6 +6230,7 @@ msgstr "Imposta le immagini in bianco e nero"
 #: ../src/control/jobs/control_jobs.c:1607
 msgid "removing images from library is only possible in Lighttable view"
 msgstr ""
+"È possibile rimuovere immagini dalla libreria solo dalla vista Tavolo Luminoso"
 
 #. get all selected images now, to avoid the set changing during ui interaction
 #: ../src/control/jobs/control_jobs.c:1612
@@ -6249,6 +6264,8 @@ msgstr "Rimuovi le immagini dalla libreria?"
 #: ../src/control/jobs/control_jobs.c:1700
 msgid "Deleting images from library is only possible in Lighttable view"
 msgstr ""
+"La cancellazione di immagini dalla libreria è possibile solo dalla vista Tavol"
+"o Luminoso"
 
 #. first get all selected images, to avoid the set changing during ui interaction
 #: ../src/control/jobs/control_jobs.c:1658
@@ -6437,6 +6454,8 @@ msgid ""
 "Impossible to create directory %s.\n"
 "The target may be full or read-only.\n"
 msgstr ""
+"Impossibile creare la directory %s.\n"
+"La destinazione potrebbe essere piena o di sola lettura.\n"
 
 #: ../src/control/jobs/import_jobs.c:370
 #, c-format
@@ -6802,40 +6821,34 @@ msgid " (log)"
 msgstr "(log)"
 
 #: ../src/develop/blend_gui.c:1423
-#, fuzzy
 msgid "Mask"
-msgstr "Maschere"
+msgstr "Maschera"
 
 #: ../src/develop/blend_gui.c:1720
 #, c-format
 msgid "Already in '%s'"
-msgstr ""
+msgstr "Già in '%s'"
 
 #: ../src/develop/blend_gui.c:2040 ../src/iop/drawlayer.c:1848
-#, fuzzy
 msgid "Delete"
 msgstr "Elimina"
 
 #: ../src/develop/blend_gui.c:2045
-#, fuzzy
 msgid "Duplicate"
 msgstr "Duplica"
 
 #: ../src/develop/blend_gui.c:2050
-#, fuzzy
 msgid "Rename"
 msgstr "Rinomina"
 
 #: ../src/develop/blend_gui.c:2175
-#, fuzzy
 msgid "OK"
-msgstr "_OK"
+msgstr "OK"
 
 #. Wire shapes toggle button
 #: ../src/develop/blend_gui.c:2177 ../src/develop/blend_gui.c:3426
-#, fuzzy
 msgid "Wire shapes"
-msgstr "Forme create"
+msgstr "Collega forme"
 
 #: ../src/develop/blend_gui.c:2195 ../src/libs/masks.c:1086
 #: ../src/libs/masks.c:1996
@@ -6856,14 +6869,12 @@ msgid "add multiple brush strokes"
 msgstr "Aggiungi più pennellate"
 
 #: ../src/develop/blend_gui.c:2211 ../src/iop/retouch.c:2241
-#, fuzzy
 msgid "add polygon"
-msgstr "Punti massimi del poligono"
+msgstr "Aggiungi poligono"
 
 #: ../src/develop/blend_gui.c:2212 ../src/iop/retouch.c:2241
-#, fuzzy
 msgid "add multiple polygons"
-msgstr "Aggiungi più tracciati"
+msgstr "Aggiungi più poligoni"
 
 #: ../src/develop/blend_gui.c:2219 ../src/iop/retouch.c:2245
 #: ../src/iop/spots.c:848 ../src/libs/masks.c:1078 ../src/libs/masks.c:2008
@@ -6886,45 +6897,38 @@ msgid "add multiple circles"
 msgstr "Aggiungi più forme circolari"
 
 #: ../src/develop/blend_gui.c:2249 ../src/develop/masks/masks_gui.c:546
-#, fuzzy
 msgid "Operation"
-msgstr "Iterazioni"
+msgstr "Operazione"
 
 #: ../src/develop/blend_gui.c:2254 ../src/develop/masks/masks_gui.c:551
-#, fuzzy
 msgid "Invert"
-msgstr "inverti"
+msgstr "Inverti"
 
 #: ../src/develop/blend_gui.c:2265 ../src/develop/masks/masks_gui.c:554
 #: ../src/libs/masks.c:1172
 msgid "Union"
-msgstr ""
+msgstr "Unione"
 
 #: ../src/develop/blend_gui.c:2273 ../src/develop/masks/masks_gui.c:556
 #: ../src/libs/masks.c:1175
-#, fuzzy
 msgid "Intersection"
-msgstr "Inverti selezione"
+msgstr "Intersezione"
 
 #: ../src/develop/blend_gui.c:2281 ../src/develop/masks/masks_gui.c:558
 #: ../src/libs/masks.c:1178
-#, fuzzy
 msgid "Difference"
 msgstr "Differenza"
 
 #: ../src/develop/blend_gui.c:2289 ../src/develop/masks/masks_gui.c:560
 #: ../src/libs/masks.c:1181
-#, fuzzy
 msgid "Exclusion"
-msgstr "Modalità: esclusione"
+msgstr "Esclusione"
 
 #: ../src/develop/blend_gui.c:2299
-#, fuzzy
 msgid "Move Up"
 msgstr "Sposta su"
 
 #: ../src/develop/blend_gui.c:2307
-#, fuzzy
 msgid "Move Down"
 msgstr "Sposta giù"
 
@@ -7198,7 +7202,7 @@ msgstr "Nessuna maschera in uso"
 
 #: ../src/develop/blend_gui.c:3363
 msgid "Edit current module mask name"
-msgstr ""
+msgstr "Modifica il nome della maschera"
 
 #. buttons for mask polarity and edit mode
 #: ../src/develop/blend_gui.c:3372
@@ -7218,6 +7222,8 @@ msgid ""
 "Show all shapes and groups to choose which ones to connect to or disconnect "
 "from the mask."
 msgstr ""
+"Visualizza tutte le forme e i gruppi e selezione quelle da connettere "
+"o disconnettere dalla maschera."
 
 #: ../src/develop/blend_gui.c:3634 ../src/develop/imageop.c:2264
 msgid "raster mask"
@@ -7232,14 +7238,13 @@ msgstr "Commuta polarità della maschera raster"
 #. We have no way of knowing here at init time.
 #. if(!module->hide_enable_button)
 #: ../src/develop/blend_gui.c:3718 ../src/develop/imageop.c:1102
-#, fuzzy
 msgid "Enable"
-msgstr "Abilitato"
+msgstr "Abilita"
 
 #: ../src/develop/blend_gui.c:3735
 #, c-format
 msgid "Enable blending/masking in <b>%s%s</b>"
-msgstr ""
+msgstr "Abilita la fusione/maschera in <b>%s%s</b>"
 
 #: ../src/develop/blend_gui.c:4231
 msgid "blending options"
@@ -7311,15 +7316,14 @@ msgid "details threshold"
 msgstr "Soglia dei dettagli"
 
 #: ../src/develop/blend_gui.c:4301
-#, fuzzy
 msgid ""
 "adjust the threshold for the details mask, \n"
 "positive values selects areas with strong details, \n"
 "negative values select flat areas"
 msgstr ""
-"Regola la soglia per la maschera dettagli (usando dati grezzi), \n"
-"valori positivi selezionano aree con elevati dettagli, \n"
-"valori negativi selezionano aree piatte"
+"Regolare la soglia della maschera dei dettagli, \n"
+"i valori positivi selezionano le aree con dettagli marcati, \n"
+"i valori negativi selezionano le aree piatte"
 
 #: ../src/develop/blend_gui.c:4306 ../src/libs/history.c:475
 msgid "feathering guide"
@@ -7402,24 +7406,20 @@ msgstr ""
 "Disattiva temporaneamente la maschera di fusione. Per il solo modulo in uso"
 
 #: ../src/develop/blend_gui.c:4396
-#, fuzzy
 msgid "Raster"
-msgstr "Master"
+msgstr "Raster"
 
 #: ../src/develop/blend_gui.c:4400
-#, fuzzy
 msgid "Drawn"
-msgstr "Maschera disegnata"
+msgstr "Disegnata"
 
 #: ../src/develop/blend_gui.c:4404
-#, fuzzy
 msgid "Parametric"
-msgstr "Maschera parametrica"
+msgstr "Parametrica"
 
 #: ../src/develop/blend_gui.c:4409
-#, fuzzy
 msgid "Options"
-msgstr "Opzioni lua"
+msgstr "Opzioni"
 
 #: ../src/develop/dev_history.c:1173
 #, c-format
@@ -7483,22 +7483,19 @@ msgstr "%s è disabilitato"
 #: ../src/develop/imageop.c:1005 ../src/develop/imageop.c:1018
 #: ../src/develop/imageop.c:1832
 msgid "Darkroom/Modules/Instances"
-msgstr ""
+msgstr "Camera Oscura/Moduli/Istanze"
 
 #: ../src/develop/imageop.c:1093
-#, fuzzy
 msgid "Darkroom/Modules"
-msgstr "Camera Oscura/Azioni"
+msgstr "Camera Oscura/Moduli"
 
 #: ../src/develop/imageop.c:1096 ../src/libs/lib.c:952
-#, fuzzy
 msgid "Focuses the module"
-msgstr "Focus sul modulo successivo"
+msgstr "Focus sul modulo"
 
 #: ../src/develop/imageop.c:1102
-#, fuzzy
 msgid "Enables the module"
-msgstr "Focus sul modulo successivo"
+msgstr "Abilita il modulo"
 
 #: ../src/develop/imageop.c:2254
 msgid "unknown mask"
@@ -7602,6 +7599,9 @@ msgid ""
 "The pipeline cache is full while allocating `%s` (module `%s`). Either your "
 "RAM settings are too frugal or your RAM is too small."
 msgstr ""
+"La cache della coda di sviluppo si è riempita mentre allocavo "
+"`%s` (modulo `%s`). Le impostazioni per l'utilizzo della RAM sono "
+"troppo conservative oppure la RAM è troppo poca."
 
 #: ../src/develop/pixelpipe_cache.c:1579 ../src/develop/pixelpipe_cache.c:1693
 #, c-format
@@ -7609,6 +7609,9 @@ msgid ""
 "The pipeline cache is full while allocating `%s`. Either your RAM settings "
 "are too frugal or your RAM is too small."
 msgstr ""
+"La cache della coda di sviluppo si è riempita mentre allocavo "
+"`%s`. Le impostazioni per l'utilizzo della RAM sono "
+"troppo conservative oppure la RAM è troppo poca."
 
 #: ../src/develop/pixelpipe_cache.c:1582 ../src/develop/pixelpipe_cache.c:1695
 #, c-format
@@ -7616,12 +7619,18 @@ msgid ""
 "The pipeline cache is full while processing module `%s`. Either your RAM "
 "settings are too frugal or your RAM is too small."
 msgstr ""
+"La cache della coda di sviluppo si è riempita mentre processavo "
+"il modulo `%s`. Le impostazioni per l'utilizzo della RAM sono "
+"troppo conservative oppure la RAM è troppo poca."
 
 #: ../src/develop/pixelpipe_cache.c:1585 ../src/develop/pixelpipe_cache.c:1697
 msgid ""
 "The pipeline cache is full. Either your RAM settings are too frugal or your "
 "RAM is too small."
 msgstr ""
+"La cache della coda di sviluppo è piena. Le impostazioni per l'utilizzo della "
+"RAM sono "
+"troppo conservative oppure la RAM è troppo poca."
 
 #: ../src/develop/masks/brush.c:1332
 #, c-format
@@ -7645,61 +7654,59 @@ msgstr "Pennello #%d"
 
 #: ../src/develop/masks/brush.c:3089 ../src/develop/masks/circle.c:1083
 #: ../src/develop/masks/polygon.c:3476
-#, fuzzy, c-format
+#, c-format
 msgid ""
 "<b>Size</b>: scroll, <b>Hardness</b>: shift+scroll\n"
 "<b>Opacity</b>: ctrl+scroll (%d%%)"
 msgstr ""
-"<b>dimensione</b>: (rotella mouse), <b>durezza</b>: Maiusc+(rotella mouse)\n"
-"<b>opacità</b>: Ctrl+(rotella mouse) (%d%%)"
+"<b>Dimensione</b>: (rotella mouse), <b>Durezza</b>: Maiusc+(rotella mouse)\n"
+"<b>Opacità</b>: Ctrl+(rotella mouse) (%d%%)"
 
 #: ../src/develop/masks/brush.c:3092
-#, fuzzy
 msgid "<b>Size</b>: scroll"
-msgstr "<b>dimensione</b>: (rotella mouse)"
+msgstr "<b>Dimensione</b>: (rotella mouse)"
 
 #: ../src/develop/masks/brush.c:3188 ../src/develop/masks/polygon.c:3581
 #, c-format
 msgid "%s+Click"
-msgstr ""
+msgstr "%s+Click"
 
 #: ../src/develop/masks/brush.c:3203 ../src/develop/masks/polygon.c:3609
-#, fuzzy, c-format
+#, c-format
 msgid "Switch to %s node"
-msgstr "Clic per modificare i nodi"
+msgstr "Vai al nodo %s"
 
 #: ../src/develop/masks/brush.c:3203 ../src/develop/masks/polygon.c:3609
 msgid "round"
-msgstr ""
+msgstr "Arrotondato"
 
 #: ../src/develop/masks/brush.c:3203 ../src/develop/masks/polygon.c:3609
 msgid "cusp"
-msgstr ""
+msgstr "Spigoloso"
 
 #: ../src/develop/masks/brush.c:3211 ../src/develop/masks/polygon.c:3618
-#, fuzzy
 msgid "Reset round node"
-msgstr "Ripristina rotazione"
+msgstr "Azzera nodo arrotondato"
 
 #: ../src/develop/masks/brush.c:3220 ../src/develop/masks/polygon.c:3628
 msgid "Add a node here"
-msgstr ""
+msgstr "Aggiungi un nodo qui"
 
 #: ../src/develop/masks/circle.c:163 ../src/develop/masks/ellipse.c:519
 #: ../src/develop/masks/polygon.c:1538
-#, fuzzy, c-format
+#, c-format
 msgid "Hardness: %3.2f%%"
 msgstr "Durezza: %3.2f%%"
 
 #: ../src/develop/masks/circle.c:171 ../src/develop/masks/ellipse.c:527
 #: ../src/develop/masks/polygon.c:1607
-#, fuzzy, c-format
+#, c-format
 msgid "Size: %3.2f%%"
 msgstr "Dimensione: %3.2f%%"
 
 #: ../src/develop/masks/circle.c:178 ../src/develop/masks/ellipse.c:534
 #: ../src/develop/masks/gradient.c:378 ../src/develop/masks/masks.c:3312
-#, fuzzy, c-format
+#, c-format
 msgid "Opacity: %3.2f%%"
 msgstr "Opacità: %3.2f%%"
 
@@ -7709,7 +7716,7 @@ msgid "circle #%d"
 msgstr "Cerchio #%d"
 
 #: ../src/develop/masks/ellipse.c:541 ../src/develop/masks/gradient.c:385
-#, fuzzy, c-format
+#, c-format
 msgid "Rotation: %3.2f°"
 msgstr "Rotazione: %3.f°"
 
@@ -7719,33 +7726,32 @@ msgid "ellipse #%d"
 msgstr "Ellisse #%d"
 
 #: ../src/develop/masks/ellipse.c:1605
-#, fuzzy, c-format
+#, c-format
 msgid ""
 "<b>Size</b>: scroll, <b>Hardness</b>: shift+scroll\n"
 "<b>Rotate</b>: ctrl+shift+scroll, <b>Opacity</b>: ctrl+scroll (%d%%)"
 msgstr ""
-"<b>dimensione</b>: (rotella mouse), <b>dimensione sfumatura</b>: "
-"Maiusc+rotella mouse\n"
-"<b>rotazione</b>: Ctrl+Maiusc+(rotella mouse), <b>opacità</b>: Ctrl+rotella "
+"<b>Dimensione</b>: (rotella mouse), <b>Durezza</b>: Maiusc+rotella mouse\n"
+"<b>Rotazione</b>: Ctrl+Maiusc+(rotella mouse), <b>Opacità</b>: Ctrl+rotella "
 "mouse (%d%%)"
 
 #: ../src/develop/masks/ellipse.c:1609
-#, fuzzy, c-format
+#, c-format
 msgid ""
 "<b>Hardness mode</b>: shift+click, <b>Size</b>: scroll\n"
 "<b>Hardness</b>: shift+scroll, <b>Opacity</b>: ctrl+scroll (%d%%)"
 msgstr ""
-"<b>modo sfumatura</b>: Maiusc+click, <b>ruota</b>: Ctrl+trascina\n"
-"<b>dimensione</b>: (rotella mouse), <b>dimensione sfumatura</b>: "
-"Maiusc+rotella mouse, <b>opacità</b>: Ctrl+ (rotella mouse) (%d%%)"
+"<b>Modalità durezza</b>: Maiusc+click,<b>Dimensione</b>: (rotella mouse)\n"
+"<b>Durezza</b>: Maiusc+rotella mouse, <b>Opacità</b>: Ctrl+ (rotella mouse) (%"
+"d%%)"
 
 #: ../src/develop/masks/gradient.c:364
-#, fuzzy, c-format
+#, c-format
 msgid "extent: %3.2f%%"
-msgstr "Dimensione: %3.2f%%"
+msgstr "Estensione: %3.2f%%"
 
 #: ../src/develop/masks/gradient.c:371
-#, fuzzy, c-format
+#, c-format
 msgid "Curvature: %3.2f%%"
 msgstr "Curvatura: %3.2f%%"
 
@@ -7755,139 +7761,130 @@ msgid "gradient #%d"
 msgstr "Gradiente #%d"
 
 #: ../src/develop/masks/gradient.c:1484
-#, fuzzy, c-format
+#, c-format
 msgid ""
 "<b>Extent</b>: scroll, <b>Curvature</b>: shift+scroll\n"
 "<b>Rotate</b>: shift+drag, <b>Opacity</b>: ctrl+scroll (%d%%)"
 msgstr ""
-"<b>dimensione</b>: (rotella mouse), <b>dimensione sfumatura</b>: "
-"Maiusc+rotella mouse\n"
-"<b>rotazione</b>: Ctrl+Maiusc+(rotella mouse), <b>opacità</b>: Ctrl+rotella "
+"<b>Estensione</b>: (rotella mouse), <b>Curvatura</b>: Maiusc+rotella mouse\n"
+"<b>Rotazione</b>: Ctrl+trascina, <b>Opacità</b>: Ctrl+rotella "
 "mouse (%d%%)"
 
 #: ../src/develop/masks/gradient.c:1487
-#, fuzzy, c-format
+#, c-format
 msgid ""
 "<b>Extent</b>: scroll, <b>Curvature</b>: shift+scroll\n"
 "<b>Reset curvature</b>: double-click, <b>Opacity</b>: ctrl+scroll (%d%%)"
 msgstr ""
-"<b>curvatura</b>: (rotella mouse), <b>compressione</b>: Maiusc+(rotella "
+"<b>Estensione</b>: (rotella mouse), <b>Curvatura</b>: Maiusc+(rotella "
 "mouse)\n"
-"<b>rotazione</b>: click+trascina, <b>opacità</b>: Ctrl+(rotella mouse) (%d%%)"
+"<b>Azzera curvatura</b>: doppio click, <b>Opacità</b>: Ctrl+(rotella mouse) (%"
+"d%%)"
 
 #: ../src/develop/masks/masks_gui.c:215
-#, fuzzy, c-format
+#, c-format
 msgid "Delete the shape '%s' ?"
-msgstr "Elimina questa forma"
+msgstr "Eliminare la forma '%s' ?"
 
 #: ../src/develop/masks/masks_gui.c:218
 msgid "will no longer be used."
-msgstr ""
+msgstr "non verrà più utilizzata."
 
 #: ../src/develop/masks/masks_gui.c:219
 msgid ""
 "Do you want to permanently delete it, or keep it unused for potential reuse?"
 msgstr ""
+"Vuoi eliminarlo definitivamente o tenerlo inutilizzata per un eventuale riutil"
+"izzo?"
 
 #: ../src/develop/masks/masks_gui.c:221 ../src/libs/masks.c:1208
-#, fuzzy
 msgid "Delete shape"
-msgstr "Elimina questa forma"
+msgstr "Elimina la forma"
 
 #: ../src/develop/masks/masks_gui.c:222
-#, fuzzy
 msgid "Keep unused shape"
-msgstr "Elimina forme non in uso"
+msgstr "Mantieni la forma inutilizzata"
 
 #: ../src/develop/masks/masks_gui.c:344
 msgid ""
 "Applying a boolean operation has no effect on the first shape of a group.\n"
 "Move it to at least the 2nd position if you need to use boolean operations"
 msgstr ""
+"Un'operazione booleana non ha nessun effetto sulla prima forma di un gruppo.\n"
+"Spostata almeno alla seconda posizione se devi utilizzare un'operazione boolea"
+"na."
 
 #. if no name, we are probably creating a new form, we create one based on the type
 #: ../src/develop/masks/masks_gui.c:426
 msgid "New "
-msgstr ""
+msgstr "Nuovo"
 
 #: ../src/develop/masks/masks_gui.c:430
-#, fuzzy
 msgid "circle"
-msgstr "Aggiungi forma circolare"
+msgstr "Cerchio"
 
 #: ../src/develop/masks/masks_gui.c:433
-#, fuzzy
 msgid "ellipse"
-msgstr "Aggiungi ellisse"
+msgstr "Ellisse"
 
 #: ../src/develop/masks/masks_gui.c:436
 msgid "polygon"
-msgstr ""
+msgstr "Poligono"
 
 #: ../src/develop/masks/masks_gui.c:439
-#, fuzzy
 msgid "brush"
-msgstr "Aggiungi pennello"
+msgstr "Pennello"
 
 #: ../src/develop/masks/masks_gui.c:442
-#, fuzzy
 msgid "gradient"
-msgstr "Aggiungi gradiente"
+msgstr "Gradiente"
 
 #: ../src/develop/masks/masks_gui.c:445
-#, fuzzy
 msgid "mask"
-msgstr "Maschere"
+msgstr "Maschera"
 
 #. Erase the "New " prefix
 #: ../src/develop/masks/masks_gui.c:449
-#, fuzzy
 msgid "Unknown shape"
-msgstr "Maschera sconosciuta"
+msgstr "Forma sconosciuta"
 
 #: ../src/develop/masks/masks_gui.c:459
 msgid "Node"
-msgstr ""
+msgstr "Nodo"
 
 #: ../src/develop/masks/masks_gui.c:459
-#, fuzzy
 msgid "Segment"
-msgstr "Posizionamento"
+msgstr "Segmento"
 
 #: ../src/develop/masks/masks_gui.c:509 ../src/iop/drawlayer.c:2891
 msgid "Size"
-msgstr ""
+msgstr "Dimensione"
 
 #: ../src/develop/masks/masks_gui.c:512
 msgid "Fading"
-msgstr ""
+msgstr "Sfocatura"
 
 #: ../src/develop/masks/masks_gui.c:516 ../src/iop/drawlayer.c:2917
-#, fuzzy
 msgid "Opacity"
 msgstr "Opacità"
 
 #: ../src/develop/masks/masks_gui.c:568 ../src/dtgtk/thumbtable.c:2051
 #: ../src/libs/masks.c:1186 ../src/views/darkroom.c:1849
-#, fuzzy
 msgid "Move up"
 msgstr "Sposta su"
 
 #: ../src/develop/masks/masks_gui.c:570 ../src/dtgtk/thumbtable.c:2055
 #: ../src/libs/masks.c:1189 ../src/views/darkroom.c:1864
-#, fuzzy
 msgid "Move down"
 msgstr "Sposta giù"
 
 #: ../src/develop/masks/masks_gui.c:586
-#, fuzzy
 msgid "Delete node"
 msgstr "Elimina il nodo"
 
 #: ../src/develop/masks/masks_gui.c:591 ../src/libs/masks.c:1221
-#, fuzzy
 msgid "Remove shape from mask"
-msgstr "Rimuovi l'immagine dal disco?"
+msgstr "Rimuovi la forma dalla maschera"
 
 #: ../src/develop/masks/masks.c:1331
 #, c-format
@@ -7905,85 +7902,78 @@ msgid "reuse shapes from %s"
 msgstr "Usa la stessa forma di %s"
 
 #: ../src/develop/masks/masks.c:3541
-#, fuzzy
 msgid "Masks can not contain themselves"
-msgstr "Le maschere non possono contenere se stesse\t"
+msgstr "Le maschere non possono contenere se stesse"
 
 #: ../src/develop/masks/polygon.c:1695
 msgid "Polygon mask requires at least 3 nodes."
-msgstr ""
+msgstr "La maschera poligono richiede almeno 3 nodi."
 
 #: ../src/develop/masks/polygon.c:3450
-#, fuzzy, c-format
+#, c-format
 msgid "polygon #%d"
-msgstr "Raggruppa #%d"
+msgstr "Poligono #%d"
 
 #: ../src/develop/masks/polygon.c:3460
-#, fuzzy
 msgid ""
 "<b>Add node</b>: click, <b>Add sharp node</b>:ctrl+click\n"
 "<b>Cancel</b>: right-click or Esc"
 msgstr ""
-"<b>aggiungi un nodo</b>: click, <b>aggiungi un nodo ad angolo</b>:"
-"Ctrl+click\n"
-"<b>annulla</b>: click destro"
+"<b>Aggiungi un nodo</b>: Click, <b>aggiungi un nodo spigoloso</"
+"b>:Ctrl+Click\n"
+"<b>Annulla</b>: Click destro o Esc"
 
 #: ../src/develop/masks/polygon.c:3463
-#, fuzzy
 msgid ""
 "<b>Add node</b>: click, <b>Add sharp node</b>:ctrl+click\n"
 "<b>Finish polygon</b>: Enter or click on first node"
 msgstr ""
-"<b>aggiungi un nodo</b>: click, <b>aggiungi un nodo ad angolo</b>:"
-"Ctrl+click\n"
-"<b>termina il tracciato</b>: click destro"
+"<b>Aggiungi un nodo</b>:Click, <b>aggiungi un nodo spigoloso</"
+"b>:Ctrl+Click\n"
+"<b>Termina il poligono</b>: Enter o Click sul primo nodo"
 
 #: ../src/develop/masks/polygon.c:3466
-#, fuzzy
 msgid ""
 "<b>Node curvature</b>: drag\n"
 "<b>Reset curvature</b>: right-click"
 msgstr ""
-"<b>curvatura nodo</b>: trascina\n"
-"<b>ripristina curvatura</b>: click destro"
+"<b>Curvatura nodo</b>: trascina\n"
+"<b>Ripristina curvatura</b>: click destro"
 
 #: ../src/develop/masks/polygon.c:3468
-#, fuzzy
 msgid ""
 "<b>NODE:</b> <b>Move</b>: drag, <b>Delete</b>: right-click or Del\n"
 "<b>Hardness</b>: scroll, <b>Switch smooth/sharp</b>: ctrl+click"
 msgstr ""
-"<b>sposta il nodo</b>: trascina, <b>rimuovi il nodo</b>: click destro\n"
-"<b>attiva il modo ammorbidisci/nitidezza</b>: Ctrl+click"
+"<b>NODO:</b> <b>Sposta</b>: trascina, <b>Cancella</b>: Click destro o Canc\n"
+"<b>Durezza</b>: Rotella del mouse, <b>Commuta morbidezza/durezza</b>: Ctrl+Cli"
+"ck"
 
 #: ../src/develop/masks/polygon.c:3471
-#, fuzzy
 msgid ""
 "<b>Move node</b>: drag\n"
 "<b>Delete node</b>: right-click\n"
 "<b>Hardness</b>: scroll, <b>Switch smooth/sharp</b>: ctrl+click"
 msgstr ""
-"<b>sposta il nodo</b>: trascina, <b>rimuovi il nodo</b>: click destro\n"
-"<b>attiva il modo ammorbidisci/nitidezza</b>: Ctrl+click"
+"<b>Sposta il nodo</b>: trascina\n"
+"<b>Cancella nodo</b>: Click destro\n"
+"<b>Durezza</b>: Scorri, <b>Alterna morbido/duro</b>: Ctrl+Click"
 
 #: ../src/develop/masks/polygon.c:3474
-#, fuzzy
 msgid ""
 "<b>Move segment</b>: drag\n"
 "<b>Add node</b>: ctrl+click"
 msgstr ""
-"<b>sposta il</b>: trascina\n"
-"<b>aggiungi un nodo</b>: Ctrl+click"
+"<b>Sposta il segmento</b>: Trascina\n"
+"<b>Aggiungi un nodo</b>: Ctrl+Click"
 
 #: ../src/develop/masks/polygon.c:3587
-#, fuzzy
 msgid "Close path"
-msgstr "Percorso completo"
+msgstr "Chiudi selezione"
 
 #: ../src/develop/masks/polygon.c:3592
-#, fuzzy
 msgid "Remove last point"
-msgstr "Ripristina ultima etichetta"
+msgstr "Rimuovi l'ultimo punto"
 
 #: ../src/develop/pixelpipe_hb.c:262 ../src/libs/textnotes.c:2138
 #: ../src/libs/geotagging.c:956
@@ -7996,7 +7986,6 @@ msgid "full"
 msgstr "Completo"
 
 #: ../src/develop/pixelpipe_hb.c:268
-#, fuzzy
 msgid "thumbnail"
 msgstr "Anteprima"
 
@@ -8007,23 +7996,22 @@ msgid "export"
 msgstr "Esporta"
 
 #: ../src/develop/pixelpipe_hb.c:274
-#, fuzzy
 msgid "invalid"
-msgstr "(non valido)"
+msgstr "Non valido"
 
 #: ../src/develop/pixelpipe_hb.c:906
 #, c-format
 msgid "Processing module `%s` for pipeline %s (%ix%i px @ %0.f%%)..."
-msgstr ""
+msgstr "Processo il modulo `%s` per la coda %s (%ix%i px @ %0.f%%)..."
 
 #: ../src/develop/pixelpipe_hb.c:1189
-#, fuzzy, c-format
+#, c-format
 msgid ""
 "Ansel discovered problems with your OpenCL setup; disabling OpenCL for %s "
 "pipeline!"
 msgstr ""
-"Ansel ha riscontrato dei problemi con la configurazione OpenCL; "
-"disabilitazione OpenCL per questa sessione!"
+"Ansel ha rilevato dei problemi nella configurazione di OpenCL; "
+"disattivazione di OpenCL per la coda di sviluppo %s!"
 
 #: ../src/develop/pixelpipe_hb.c:1194
 msgid ""
@@ -8070,16 +8058,14 @@ msgid "grouped images"
 msgstr "Immagini raggruppate"
 
 #: ../src/dtgtk/thumbnail.c:253
-#, fuzzy
 msgid "No active modules"
-msgstr "Focus sul modulo successivo"
+msgstr "Non ci sono moduli attivi"
 
 #. Use the real application window as transient parent, not the popup menu toplevel.
 #. Standalone dialog (no transient parent) to avoid GTK parent warnings from popup menus.
 #: ../src/dtgtk/thumbnail.c:257
-#, fuzzy
 msgid "Active modules"
-msgstr "Moduli"
+msgstr "Moduli attivi"
 
 #. * image info
 #: ../src/dtgtk/thumbnail.c:299
@@ -8112,9 +8098,8 @@ msgid "Open in preview window…"
 msgstr "Apro in finestra anteprima..."
 
 #: ../src/dtgtk/thumbnail.c:337
-#, fuzzy
 msgid "Show active modules…"
-msgstr "Visualizza modulo"
+msgstr "Visualizza moduli attivi..."
 
 #: ../src/dtgtk/thumbnail.c:1268
 msgid "This picture is locally copied on your disk cache"
@@ -8134,82 +8119,73 @@ msgid "'%s': Please use 'File > Import' to import a folder."
 msgstr "'%s': Prego utilizzare 'File > Importa' per importare una cartella."
 
 #: ../src/dtgtk/thumbtable.c:2037
-#, fuzzy
 msgid "Lighttable/Thumbtable"
-msgstr "Tavolo Luminoso"
+msgstr "Tavolo Luminoso/Anteprime"
 
 #: ../src/dtgtk/thumbtable.c:2038
-#, fuzzy
 msgid "Darkroom/Filmstrip"
-msgstr "Provino"
+msgstr "Camera oscura/Provino"
 
 #: ../src/dtgtk/thumbtable.c:2039
-#, fuzzy
 msgid "Print/Filmstrip"
-msgstr "Provino"
+msgstr "Stampa/Provino"
 
 #: ../src/dtgtk/thumbtable.c:2040
-#, fuzzy
 msgid "Map/Filmstrip"
-msgstr "Provino"
+msgstr "Mappa/Provino"
 
 #: ../src/dtgtk/thumbtable.c:2059 ../src/views/darkroom.c:1879
-#, fuzzy
 msgid "Move left"
-msgstr "Taglia a sinistra"
+msgstr "Sposta a sinistra"
 
 #: ../src/dtgtk/thumbtable.c:2063 ../src/views/darkroom.c:1894
-#, fuzzy
 msgid "Move right"
-msgstr "Taglia a destra"
+msgstr "Sposta a destra"
 
 #: ../src/dtgtk/thumbtable.c:2067
-#, fuzzy
 msgid "Go to previous page"
-msgstr "Vai all'immagine precedente"
+msgstr "Vai alla pagina precedente"
 
 #: ../src/dtgtk/thumbtable.c:2071
-#, fuzzy
 msgid "Go to next page"
-msgstr "Salta al file successivo"
+msgstr "Vai alla pagina successiva"
 
 #: ../src/dtgtk/thumbtable.c:2075
 msgid "Go to the start"
-msgstr ""
+msgstr "Vai all'inizio"
 
 #: ../src/dtgtk/thumbtable.c:2079
 msgid "Go to the end"
-msgstr ""
+msgstr "Vai alla fine"
 
 #: ../src/dtgtk/thumbtable.c:2083
-#, fuzzy
 msgid "Select the current thumbnail"
-msgstr "Seleziona la tonalità della tinta"
+msgstr "Seleziona la miniatura corrente"
 
 #: ../src/dtgtk/thumbtable.c:2087
 msgid "Toogle the current thumbnail from selection"
-msgstr ""
+msgstr "Commuta la selezione sulla miniatura corrente"
 
 #: ../src/dtgtk/thumbtable.c:2091
 msgid "Expand the current selection up to the hovered thumbnail"
 msgstr ""
+"Allarga la selezione corrente alla miniatura su cui si trova il cursore"
 
 #: ../src/dtgtk/thumbtable.c:2095
 msgid "Open the current thumbnail in darkroom"
-msgstr ""
+msgstr "Apri la miniatura corrente in Camera Oscura"
 
 #: ../src/dtgtk/thumbtable.c:2099
 msgid "Enable thumbnail transient alternative view"
-msgstr ""
+msgstr "Abilita la visualizzazione alternativa transitoria delle miniature"
 
 #: ../src/dtgtk/thumbtable.c:2105
 msgid "Global/Menu/File"
-msgstr ""
+msgstr "Globale/Menu/File"
 
 #: ../src/dtgtk/thumbtable.c:2105
-#, fuzzy
 msgid "Remove image from library"
-msgstr "Rimuovi l'immagine dalla libreria?"
+msgstr "Rimuovi l'immagine dalla libreria"
 
 #: ../src/dtgtk/thumbtable.c:2238
 msgid ""
@@ -8268,12 +8244,12 @@ msgid ""
 "to enable disk backend for thumbnail cache\n"
 "no thumbnails to be generated, done.\n"
 msgstr ""
-"Attenzione: la gestione disco per la cache anteprime è disabilitato "
+"Attenzione: la gestione disco per la cache delle miniature è disabilitato "
 "(cache_disk_backend)\n"
-"Se si vogliono generare in anticipo le anteprime e fare anche in modo che "
+"Se si vogliono generare in anticipo le miniature e fare anche in modo che "
 "esse possano essere utilizzate da Ansel, è necessario abilitare il backend "
 "disco per la cache delle anteprime\n"
-"Nessuna anteprima deve essere generata, fatto.\n"
+"Nessuna miniatura deve essere generata, fatto.\n"
 
 #: ../src/generate-cache/main.c:249
 #, c-format
@@ -8283,113 +8259,115 @@ msgstr "Errore: assicurarsi che min_mip <= max_mip\n"
 #: ../src/generate-cache/main.c:254
 #, c-format
 msgid "creating complete lighttable thumbnail cache\n"
-msgstr "Creazione cache anteprime Tavolo Luminoso in corso\n"
+msgstr "Creazione cache miniature Tavolo Luminoso in corso\n"
 
 #: ../src/gui/accelerators.c:157
 msgid "Shortcut"
-msgstr ""
+msgstr "Scorciatoia"
 
 #: ../src/gui/accelerators.c:609
 msgid "Contextual interaction on focus"
-msgstr ""
+msgstr "Interazione contestuale sull'elemento selezionato"
 
 #: ../src/gui/accelerators.c:644
-#, fuzzy
 msgid "Focuses the instance"
-msgstr "Distanza focale"
+msgstr "Focus sull'istanza"
 
 #: ../src/gui/accelerators.c:695
-#, fuzzy
 msgid "Trigger the action"
-msgstr "Orientamento"
+msgstr "Avvia l'azione"
 
 #: ../src/gui/accelerators.c:1298
 msgid "The shortcut for"
-msgstr ""
+msgstr "La scorciatoia per"
 
 #: ../src/gui/accelerators.c:1299
 msgid "is already using the key combination"
-msgstr ""
+msgstr "sta già utilizzando questa combinazione di tasti"
 
 #: ../src/gui/accelerators.c:1300
-#, fuzzy
 msgid "Delete it first."
-msgstr "Cancella sviluppo"
+msgstr "Prima cancellala"
 
 #: ../src/gui/accelerators.c:1600
 msgid "<Primary> - Decoded as <Control> on Windows/Linux or <Meta> on Mac OS"
 msgstr ""
+"<Primary> - Decodificato come <Ctrl> su Windows/Linux o <Meta> su Mac OS"
 
 #: ../src/gui/accelerators.c:1601
 msgid "<Control>"
-msgstr ""
+msgstr "<Ctrl>"
 
 #: ../src/gui/accelerators.c:1602
 msgid "<Shift>"
-msgstr ""
+msgstr "<Maiusc>"
 
 #: ../src/gui/accelerators.c:1603
 msgid "<Alt>"
-msgstr ""
+msgstr "<Alt>"
 
 #: ../src/gui/accelerators.c:1604
 msgid "<Super> - The Windows key on PC"
-msgstr ""
+msgstr "<Super> - Il tasto Windows sul PC"
 
 #: ../src/gui/accelerators.c:1605
 msgid "<Hyper>"
-msgstr ""
+msgstr "<Hyper>"
 
 #: ../src/gui/accelerators.c:1606
 msgid "<Meta> - Decoded as <Command> on Mac OS"
-msgstr ""
+msgstr "<Meta> - Codificato come <Command> su Mac OS"
 
 #: ../src/gui/accelerators.c:1609
 msgid ""
 "Look for keys and modifiers codes, as `<Modifier>Key`.\n"
 "Type `<` to start the auto-completion"
 msgstr ""
+"Cerca i codici dei tasti e dei modificatori, nel formato `<Modificatore>Tasto`"
+".\n"
+"Digita `<` per avviare il completamento automatico"
 
 #: ../src/gui/accelerators.c:1612
 msgid ""
 "Case-insensitive search for keywords of full pathes.\n"
 "Ex: `darkroom/controls/sliders`"
 msgstr ""
+"Ricerca delle parole chiave nei percorsi completi senza distinzione tra maiusc"
+"ole e minuscole.\n"
+"Es.: `darkroom/controls/sliders`"
 
 #: ../src/gui/accelerators.c:1617
 msgid "Ansel - Keyboard shortcuts"
-msgstr ""
+msgstr "Ansel - Scorciatoie da tastiera"
 
 #. Add tree view columns
 #: ../src/gui/accelerators.c:1663
 msgid "View / Scope / Feature / Control"
-msgstr ""
+msgstr "Vista / Grafico / Funzionalità / Controllo"
 
 #: ../src/gui/accelerators.c:1667
 msgid "Keys"
-msgstr ""
+msgstr "Tasti"
 
 #: ../src/gui/accelerators.c:1678
 msgid "Clear"
-msgstr ""
+msgstr "Pulisci"
 
 #: ../src/gui/accelerators.c:1683
-#, fuzzy
 msgid "Description"
 msgstr "Descrizione"
 
 #: ../src/gui/accelerators.c:1691
-#, fuzzy
 msgid "Search by feature : "
-msgstr "Cerca immagine"
+msgstr "Cerca per funzionalità : "
 
 #: ../src/gui/accelerators.c:1693
 msgid "Search by keys : "
-msgstr ""
+msgstr "Cerca per tasti : "
 
 #: ../src/gui/accelerators.c:2023
 msgid "Ansel - Search accelerators"
-msgstr ""
+msgstr "Ansel - Cerca acceleratori"
 
 #: ../src/gui/gtk.c:379
 msgid "closing Ansel..."
@@ -8560,19 +8538,19 @@ msgstr "$(MSEC) - Millisecondi"
 
 #: ../src/gui/gtkentry.c:236
 msgid "$(IMPORT.DATE) - import date (YYYY-MM-DD HH:MM:SS)"
-msgstr ""
+msgstr "$(IMPORT.DATE) - Data importazione (YYYY-MM-DD HH:MM:SS)"
 
 #: ../src/gui/gtkentry.c:237
 msgid "$(CHANGE.DATE) - last change date (YYYY-MM-DD HH:MM:SS)"
-msgstr ""
+msgstr "$(CHANGE.DATE) - Data ultima modifica (YYYY-MM-DD HH:MM:SS)"
 
 #: ../src/gui/gtkentry.c:238
 msgid "$(EXPORT.DATE) - last export date (YYYY-MM-DD HH:MM:SS)"
-msgstr ""
+msgstr "$(EXPORT.DATE) - Data ultima esportazione (YYYY-MM-DD HH:MM:SS)"
 
 #: ../src/gui/gtkentry.c:239
 msgid "$(PRINT.DATE) - last print date (YYYY-MM-DD HH:MM:SS)"
-msgstr ""
+msgstr "$(PRINT.DATE) - Data ultima stampa (YYYY-MM-DD HH:MM:SS)"
 
 #: ../src/gui/gtkentry.c:240
 msgid "$(EXIF.YEAR) - EXIF year"
@@ -9259,7 +9237,7 @@ msgstr "Aggiorna la preimpostazione"
 
 #: ../src/gui/presets.c:1331
 msgid "Use OpenCL (GPU computing)"
-msgstr ""
+msgstr "Utilizza OpenCL (elaborazione con GPU)"
 
 #: ../src/gui/presets.c:1332
 msgid ""
@@ -9267,11 +9245,13 @@ msgid ""
 "Disable if you face recurring issues on GPU with this module.\n"
 "Does not require a restart."
 msgstr ""
+"Esegui questo modulo con la GPU, se possibile.\n"
+"Disabilita se hai dei problemi di GPU con il modulo.\n"
+"Non è richiesto il riavvio."
 
 #: ../src/gui/presets.c:1343
-#, fuzzy
 msgid "Cache the GPU output"
-msgstr "Controlla il delta E di output"
+msgstr "Metti in cache l'output della GPU"
 
 #: ../src/gui/presets.c:1344
 msgid ""
@@ -9279,31 +9259,31 @@ msgid ""
 "This may prevent some recomputations, at the cost of more memory I/O.\n"
 "The trade-off is worth it only for slow modules."
 msgstr ""
+"Memorizza nella cache l'output del modulo se elaborato dalla GPU.\n"
+"In questo modo puoi risparmiare tempo di calcolo a discapito di un maggiore ut"
+"ilizzo di memoria.\n"
+"Utile solo con i moduli più lenti."
 
 #: ../src/gui/splash.c:132
-#, fuzzy
 msgid "Contributors"
 msgstr "Contributori"
 
 #: ../src/gui/splash.c:291
 #, c-format
 msgid "© %s"
-msgstr ""
+msgstr "© %s"
 
 #: ../src/gui/splash.c:361
-#, fuzzy
 msgid "Darktable & Ansel contributors"
-msgstr "Contributori di Rawspeed"
+msgstr "Contributori di Darktable & Ansel"
 
 #: ../src/gui/splash.c:367
-#, fuzzy
 msgid "Boilerplate image"
-msgstr "Immagine orfana"
+msgstr "Immagine standard"
 
 #: ../src/gui/splash.c:593
-#, fuzzy
 msgid "Starting..."
-msgstr "Elaborazione..."
+msgstr "Avvio..."
 
 #: ../src/gui/styles_dialog.c:225
 #, c-format
@@ -9485,9 +9465,8 @@ msgstr "Commuta visibilità di tutti i pannelli"
 #: ../src/views/darkroom.c:2001 ../src/views/darkroom.c:2064
 #: ../src/views/darkroom.c:2150 ../src/views/darkroom.c:2158
 #: ../src/views/darkroom.c:2225
-#, fuzzy
 msgid "Triggers the action"
-msgstr "Orientamento"
+msgstr "Attiva l'azione"
 
 #: ../src/gui/actions/edit.c:171 ../src/gui/actions/edit.c:198
 msgid "Copy is allowed only with exactly one image selected"
@@ -9544,32 +9523,28 @@ msgstr "Incolla sviluppo (parziale)..."
 
 #. History merging options
 #: ../src/gui/actions/edit.c:490
-#, fuzzy
 msgid "History pasting mode"
-msgstr "Clic per modificare i nodi"
+msgstr "Modalità incollaggio sviluppo"
 
 #: ../src/gui/actions/edit.c:496
 msgid "Append"
-msgstr ""
+msgstr "Accoda"
 
 #: ../src/gui/actions/edit.c:493
 msgid "Prepend"
-msgstr ""
+msgstr "All'inizio"
 
 #: ../src/gui/actions/edit.c:499
-#, fuzzy
 msgid "Replace"
-msgstr "Posizionamento"
+msgstr "Sostituisci"
 
 #: ../src/gui/actions/edit.c:502
-#, fuzzy
 msgid "Nodes pasting mode"
-msgstr "Modalità operativa"
+msgstr "Modalità incollaggio nodi"
 
 #: ../src/gui/actions/edit.c:505
-#, fuzzy
 msgid "Copy module order"
-msgstr "Ordine dei moduli"
+msgstr "Copia ordinamento moduli"
 
 #: ../src/gui/actions/edit.c:513
 msgid "Load history from XMP..."
@@ -9592,13 +9567,12 @@ msgid "Delete history"
 msgstr "Cancella sviluppo"
 
 #: ../src/gui/actions/edit.c:530
-#, fuzzy
 msgid "Preferences..."
 msgstr "Preferenze..."
 
 #: ../src/gui/actions/edit.c:531
 msgid "Keyboard shortcuts..."
-msgstr ""
+msgstr "Scorciatoie da tastiera..."
 
 #: ../src/gui/actions/file.c:53
 msgid " and "
@@ -9660,7 +9634,6 @@ msgid "Remove from library"
 msgstr "Rimuovi dalla libreria"
 
 #: ../src/gui/actions/file.c:264
-#, fuzzy
 msgid "Delete from disk"
 msgstr "Rimuovi dal disco"
 
@@ -9737,9 +9710,8 @@ msgid "Open contextual help"
 msgstr "Apri l'aiuto contestuale"
 
 #: ../src/gui/actions/help.c:228 ../src/gui/window_manager.c:693
-#, fuzzy
 msgid "Search actions..."
-msgstr "Raccolte usate recentemente"
+msgstr "Cerca azioni..."
 
 #: ../src/gui/actions/help.c:231
 msgid "About"
@@ -9848,11 +9820,11 @@ msgstr "Pulisci la cache di sviluppo della Camera Oscura"
 
 #: ../src/gui/actions/run.c:127
 msgid "Preload selected thumbnails in cache"
-msgstr "Pre-carica anteprime selezionate nella cache"
+msgstr "Pre-carica miniature selezionate nella cache"
 
 #: ../src/gui/actions/run.c:128
 msgid "Purge selected thumbnails from cache"
-msgstr "Rimuovi le anteprime selezionate dalla cache"
+msgstr "Rimuovi le miniature selezionate dalla cache"
 
 #: ../src/gui/actions/run.c:130
 msgid "Defragment the library"
@@ -9883,29 +9855,24 @@ msgid "Invert selection"
 msgstr "Inverti selezione"
 
 #: ../src/gui/actions/select.c:79
-#, fuzzy
 msgid "Scroll back to selection"
-msgstr "Restringi alla selezione"
+msgstr "Torna alla selezione"
 
 #: ../src/gui/actions/styles.c:123
-#, fuzzy
 msgid "Ansel - Styles"
-msgstr "File stile Ansel"
+msgstr "Ansel - Stili"
 
 #: ../src/gui/actions/styles.c:280
-#, fuzzy
 msgid "No styles available"
-msgstr "Non disponibile"
+msgstr "Nessun stile disponibile"
 
 #: ../src/gui/actions/styles.c:313
-#, fuzzy
 msgid "Create new style..."
-msgstr "Crea un nuovo stile"
+msgstr "Crea un nuovo stile..."
 
 #: ../src/gui/actions/styles.c:316
-#, fuzzy
 msgid "Manage styles..."
-msgstr "Gestione delle preimpostazioni..."
+msgstr "Gestisci stili..."
 
 #: ../src/gui/window_manager.c:668
 msgid "_File"
@@ -10636,13 +10603,11 @@ msgid "could not launch email client!"
 msgstr "Impossibile lanciare il client email!"
 
 #: ../src/iop/initialscale.c:53
-#, fuzzy
 msgctxt "modulename"
 msgid "Initial resampling"
-msgstr "Ricampionamento finale"
+msgstr "Ricampionamento iniziale"
 
 #: ../src/iop/initialscale.c:173
-#, fuzzy
 msgid ""
 "This module is used to downscale images at export time. Moving it along the "
 "pipeline will have diffent effects on exported images. <a href='https://"
@@ -10671,34 +10636,31 @@ msgid "scan restore"
 msgstr "Ripristina"
 
 #: ../src/libs/textnotes.c:84
-#, fuzzy
 msgid "Notes"
-msgstr "Note"
+msgstr "Appunti"
 
 #: ../src/libs/textnotes.c:206
-#, fuzzy
 msgid "Default"
 msgstr "Predefinito"
 
 #: ../src/libs/textnotes.c:495
-#, fuzzy
 msgid "variable"
-msgstr "Varianza blu: "
+msgstr "Variabile"
 
 #: ../src/libs/textnotes.c:674
-#, fuzzy, c-format
+#, c-format
 msgid "could not open link: %s"
-msgstr "Impossibile leggere il file `%s'"
+msgstr "Impossibile aprire il link: %s"
 
 #: ../src/libs/textnotes.c:1627
-#, fuzzy, c-format
+#, c-format
 msgid "Last modified: %s"
-msgstr "Modificato dall'utente"
+msgstr "Ultima modifica: %s"
 
 #: ../src/libs/textnotes.c:1923
-#, fuzzy, c-format
+#, c-format
 msgid "failed to save text notes to %s: %s"
-msgstr "Impossibile sovrascrivere il file di stile per %s"
+msgstr "Impossibile salvare le note in %s: %s"
 
 #. Update GUI
 #: ../src/libs/textnotes.c:1986 ../src/iop/ashift.c:5137
@@ -10708,14 +10670,12 @@ msgid "Edit"
 msgstr "Modifica "
 
 #: ../src/libs/textnotes.c:1986
-#, fuzzy
 msgid "Preview"
 msgstr "Anteprima"
 
 #: ../src/libs/textnotes.c:2139
-#, fuzzy
 msgid "toggle Markdown preview"
-msgstr "Commuta visualizzazione lista / albero"
+msgstr "Commuta anteprima Markdown"
 
 #: ../src/libs/tools/mask_toolbar.c:42
 msgid "mask toolbar"
@@ -10795,7 +10755,6 @@ msgid "automatic cropping failed"
 msgstr "Ritaglio automatico fallito"
 
 #: ../src/iop/ashift.c:3043 ../src/iop/ashift.c:3119 ../src/iop/ashift.c:3177
-#, fuzzy
 msgid "Data pending - Please repeat"
 msgstr "Dati in sospeso - per favore ripetere"
 
@@ -12226,6 +12185,9 @@ msgid ""
 "simple mixer mode requires all three output rows to be normalized with non-"
 "zero sums."
 msgstr ""
+"La modalità “Mixer semplice” richiede che tutte e tre le file di uscita siano "
+"normalizzate con somme diverse da"
+"zero."
 
 #: ../src/iop/channelmixerrgb.c:3777 ../src/iop/channelmixerrgb.c:3889
 #: ../src/iop/splittoningrgb.c:571 ../src/iop/splittoningrgb.c:764
@@ -12234,6 +12196,8 @@ msgid ""
 "primaries mixer mode requires a non-singular 3x3 matrix with non-zero affine "
 "sums."
 msgstr ""
+"La modalità “Mixer primario” richiede una matrice 3x3 non singolare con somme "
+"affini diverse da zero."
 
 #: ../src/iop/channelmixerrgb.c:3971
 msgid "white balance successfully extracted from raw image"
@@ -12390,24 +12354,23 @@ msgstr "Il colore obiettivo desiderato dopo la mappatura"
 
 #: ../src/iop/channelmixerrgb.c:4692
 msgid "Mixer"
-msgstr ""
+msgstr "Mixer"
 
 #: ../src/iop/channelmixerrgb.c:4692
-#, fuzzy
 msgid "channel mixing"
-msgstr "miscelatore canali"
+msgstr "Mixer canali"
 
 #: ../src/iop/channelmixerrgb.c:4695 ../src/iop/splittoningrgb.c:1303
 msgid "Complete"
-msgstr ""
+msgstr "Completo"
 
 #: ../src/iop/channelmixerrgb.c:4696 ../src/iop/splittoningrgb.c:1304
 msgid "Simple"
-msgstr ""
+msgstr "Semplice"
 
 #: ../src/iop/channelmixerrgb.c:4697 ../src/iop/splittoningrgb.c:1305
 msgid "Primaries"
-msgstr ""
+msgstr "Primari"
 
 #: ../src/iop/channelmixerrgb.c:4699
 msgid ""
@@ -12417,6 +12380,13 @@ msgid ""
 "primaries rebuilds the mixer as a generalized primaries, white tint and gain "
 "model."
 msgstr ""
+"Mostra completamente i nove coefficienti originali del mixer.\n"
+"'Semplice' ricostruisce il mixer normalizzato come una rotazione esatta del "
+"piano cromatico,\n"
+"due allungamenti con segno e due accoppiamenti neutri.\n"
+"'Primario' ricostruisce il mixer come un modello generalizzato basato su color"
+"i "
+"primari, tinta di bianco e guadagno "
 
 #: ../src/iop/channelmixerrgb.c:4719 ../src/iop/channelmixerrgb.c:4886
 #: ../src/iop/splittoningrgb.c:1105
@@ -12434,216 +12404,222 @@ msgid "input B"
 msgstr "B in ingresso"
 
 #: ../src/iop/channelmixerrgb.c:4731 ../src/iop/splittoningrgb.c:1104
-#, fuzzy
 msgid "output red"
-msgstr "Uscita R"
+msgstr "Uscita Rosso"
 
 #: ../src/iop/channelmixerrgb.c:4732 ../src/iop/splittoningrgb.c:1104
-#, fuzzy
 msgid "output green"
-msgstr "Grigio d'uscita"
+msgstr "Uscita Verde"
 
 #: ../src/iop/channelmixerrgb.c:4733 ../src/iop/splittoningrgb.c:1104
-#, fuzzy
 msgid "output blue"
-msgstr "Uscita R"
+msgstr "Uscita Blu"
 
 #: ../src/iop/channelmixerrgb.c:4739 ../src/iop/splittoningrgb.c:1135
-#, fuzzy
 msgid "global hue rotation"
-msgstr "Saturazione globale"
+msgstr "Rotazione globale tonalità"
 
 #: ../src/iop/channelmixerrgb.c:4742
 msgid "global rotation of the normalized chroma plane."
-msgstr ""
+msgstr "Rotazione globale del piano cromatico normalizzato."
 
 #: ../src/iop/channelmixerrgb.c:4749 ../src/iop/splittoningrgb.c:1141
-#, fuzzy
 msgid "chroma (u,v) axes orientation"
-msgstr "Orientazione pagina"
+msgstr "Orientamento assi cromatici (u,v)"
 
 #: ../src/iop/channelmixerrgb.c:4752
 msgid "orientation of the principal stretch axes in the chroma plane."
 msgstr ""
+"Orientamento degli assi principali di deformazione nel piano cromatico."
 
 #: ../src/iop/channelmixerrgb.c:4757 ../src/iop/splittoningrgb.c:1147
-#, fuzzy
 msgid "u stretch"
-msgstr "Intensità"
+msgstr "Allungamento u"
 
 #: ../src/iop/channelmixerrgb.c:4758
 msgid ""
 "stretch along the first principal chroma axis. 0 neutralizes chroma, 1 keeps "
 "identity, -1 reverses chroma and +/-1.5 add contrast."
 msgstr ""
+"Deforma lungo il primo asse principale della cromaticità. 0 neutralizza la cro"
+"maticità, 1 la mantiene, "
+"-1 inverte la cromaticità e +/-1,5 aggiungono contrasto."
 
 #: ../src/iop/channelmixerrgb.c:4763 ../src/iop/splittoningrgb.c:1151
-#, fuzzy
 msgid "v stretch"
-msgstr "Intensità"
+msgstr "Allungamento v"
 
 #: ../src/iop/channelmixerrgb.c:4764
 msgid ""
 "stretch along the second principal chroma axis. 0 neutralizes chroma, 1 "
 "keeps identity, -1 reverses chroma and +/-1.5 add contrast."
 msgstr ""
+"Deforma lungo il secondo asse principale della cromaticità. 0 neutralizza la c"
+"romaticità, 1 la mantiene, "
+"-1 inverte la cromaticità e +/-1,5 aggiungono contrasto."
 
 #: ../src/iop/channelmixerrgb.c:4768 ../src/iop/splittoningrgb.c:1169
-#, fuzzy
 msgid "achromatic coupling"
-msgstr "Ritaglio automatico"
+msgstr "Accoppiamento acromatico"
 
 #: ../src/iop/channelmixerrgb.c:4771 ../src/iop/splittoningrgb.c:1155
-#, fuzzy
 msgid "achromatic coupling hue"
-msgstr "Ritaglio automatico"
+msgstr "Tonalità di accoppiamento acromatico"
 
 #: ../src/iop/channelmixerrgb.c:4774
 msgid ""
 "chroma direction, in the fixed chroma basis, that is coupled into the "
 "achromatic axis."
 msgstr ""
+"Direzione cromatica, nella base cromatica fissa, che è accoppiata all'"
+"asse acromatico."
 
 #: ../src/iop/channelmixerrgb.c:4779 ../src/iop/splittoningrgb.c:1161
-#, fuzzy
 msgid "achromatic coupling amount"
-msgstr "Ritaglio automatico"
+msgstr "Quantità di accoppiamento acromatico"
 
 #: ../src/iop/channelmixerrgb.c:4780
 msgid ""
 "strength of the chroma-to-achromatic coupling in the fixed chroma basis."
 msgstr ""
+"Intensità dell'accoppiamento cromatico-acromatico nella base cromatica fissa."
 
 #: ../src/iop/channelmixerrgb.c:4787 ../src/iop/splittoningrgb.c:1233
-#, fuzzy
 msgid "achromatic axis"
-msgstr "Cromaticità"
+msgstr "Assi acromatici"
 
 #: ../src/iop/channelmixerrgb.c:4790 ../src/iop/splittoningrgb.c:1190
-#, fuzzy
 msgid "white hue"
-msgstr "Bianco"
+msgstr "Tonalità del bianco"
 
 #: ../src/iop/channelmixerrgb.c:4794
 msgid ""
 "rotate the custom white vector around the D50 white of the current mixer "
 "basis."
 msgstr ""
+"Ruota il vettore bianco personalizzato attorno al bianco D50 della base "
+"del mixer corrente."
 
 #: ../src/iop/channelmixerrgb.c:4800 ../src/iop/splittoningrgb.c:1196
-#, fuzzy
 msgid "white purity"
-msgstr "Punto di bianco"
+msgstr "Purezza del bianco"
 
 #: ../src/iop/channelmixerrgb.c:4802
 msgid ""
 "distance of the custom white vector from the D50 white within the current "
 "mixer basis."
 msgstr ""
+"Distanza del vettore bianco personalizzato dal bianco D50 all'interno dell'att"
+"uale "
+"base del mixer."
 
 #: ../src/iop/channelmixerrgb.c:4807 ../src/iop/splittoningrgb.c:1236
 msgid "red primary"
-msgstr ""
+msgstr "Rosso primario"
 
 #: ../src/iop/channelmixerrgb.c:4810 ../src/iop/splittoningrgb.c:1200
-#, fuzzy
 msgid "red hue"
-msgstr "Rosso & blu"
+msgstr "Tonalità del rosso"
 
 #: ../src/iop/channelmixerrgb.c:4814
 msgid ""
 "rotate the first basis vector around the D50 white of the current mixer "
 "basis."
 msgstr ""
+"Ruota il primo vettore di base attorno al bianco D50 della base "
+"del mixer corrente."
 
 #: ../src/iop/channelmixerrgb.c:4820 ../src/iop/splittoningrgb.c:1206
-#, fuzzy
 msgid "red purity"
-msgstr "Sicurezza"
+msgstr "Purezza del rosso"
 
 #: ../src/iop/channelmixerrgb.c:4822
 msgid ""
 "radial scaling of the first basis vector inside the affine primaries "
 "footprint."
 msgstr ""
+"Ridimensionamento radiale del primo vettore di base all'interno "
+"dell'impronta delle primarie affini."
 
 #: ../src/iop/channelmixerrgb.c:4827 ../src/iop/splittoningrgb.c:1239
 msgid "green primary"
-msgstr ""
+msgstr "Verde primario"
 
 #: ../src/iop/channelmixerrgb.c:4830 ../src/iop/splittoningrgb.c:1210
-#, fuzzy
 msgid "green hue"
-msgstr "Verde"
+msgstr "Tonalità del verde"
 
 #: ../src/iop/channelmixerrgb.c:4834
 msgid ""
 "rotate the second basis vector around the D50 white of the current mixer "
 "basis."
 msgstr ""
+"Ruota il secondo vettore di base attorno al bianco D50 della base "
+"del mixer corrente."
 
 #: ../src/iop/channelmixerrgb.c:4840 ../src/iop/splittoningrgb.c:1216
-#, fuzzy
 msgid "green purity"
-msgstr "Sicurezza"
+msgstr "Purezza del verde"
 
 #: ../src/iop/channelmixerrgb.c:4842
 msgid ""
 "radial scaling of the second basis vector inside the affine primaries "
 "footprint."
 msgstr ""
+"Ridimensionamento radiale del secondo vettore di base all'interno "
+"dell'impronta delle primarie affini."
 
 #: ../src/iop/channelmixerrgb.c:4847 ../src/iop/splittoningrgb.c:1242
 msgid "blue primary"
-msgstr ""
+msgstr "Blu primario"
 
 #: ../src/iop/channelmixerrgb.c:4850 ../src/iop/splittoningrgb.c:1220
-#, fuzzy
 msgid "blue hue"
-msgstr "Spostamento del blu"
+msgstr "Tonalità del blu"
 
 #: ../src/iop/channelmixerrgb.c:4854
 msgid ""
 "rotate the third basis vector around the D50 white of the current mixer "
 "basis."
 msgstr ""
+"Ruota il terzo vettore di base attorno al bianco D50 della base "
+"del mixer corrente."
 
 #: ../src/iop/channelmixerrgb.c:4860 ../src/iop/splittoningrgb.c:1226
-#, fuzzy
 msgid "blue purity"
-msgstr "Spostamento del blu"
+msgstr "Purezza del blu"
 
 #: ../src/iop/channelmixerrgb.c:4862
 msgid ""
 "radial scaling of the third basis vector inside the affine primaries "
 "footprint."
 msgstr ""
+"Ridimensionamento radiale del terzo vettore di base all'interno "
+"dell'impronta delle primarie affini."
 
 #: ../src/iop/channelmixerrgb.c:4867 ../src/iop/splittoningrgb.c:1245
-#, fuzzy
 msgid "gain correction"
-msgstr "Correzione distorsione"
+msgstr "Correzione aumento"
 
 #: ../src/iop/channelmixerrgb.c:4870 ../src/iop/splittoningrgb.c:1230
-#, fuzzy
 msgid "gain"
-msgstr "Gain"
+msgstr "Aumento"
 
 #: ../src/iop/channelmixerrgb.c:4872
 msgid ""
 "global gain multiplying the custom white vector after the affine primaries "
 "transform."
 msgstr ""
+"Guadagno globale che moltiplica il vettore bianco personalizzato dopo la "
+"trasformazione affine primaria."
 
 #: ../src/iop/channelmixerrgb.c:4877
-#, fuzzy
 msgid "Outputs"
-msgstr "Output"
+msgstr "Uscita"
 
 #: ../src/iop/channelmixerrgb.c:4878
-#, fuzzy
 msgid "output colorfulness, brightness and B&W mixing"
-msgstr "Modifica il colore, la luminosità ed il contrasto"
+msgstr "Vivacità dei colori, luminosità e miscelazione B&N"
 
 #: ../src/iop/channelmixerrgb.c:4902
 msgid "colorfulness"
@@ -13805,9 +13781,8 @@ msgstr ""
 "usando i profili colore per ricalcolare i valori RGB"
 
 #: ../src/iop/colorout.c:125
-#, fuzzy
 msgid "linear or non-linear, RGB or Lab, display-referred"
-msgstr "Lineare o non-lineare, Lab, riferito allo schermo"
+msgstr "DuplicaLineare o non-lineare, Lab, riferito allo schermo"
 
 #: ../src/iop/colorout.c:127
 msgid "non-linear, RGB or Lab, display-referred"
@@ -14178,6 +14153,9 @@ msgid ""
 "how many post-demosaic smoothing passes.\n"
 "in downsample mode this sets the guided detail equalization iterations"
 msgstr ""
+"Numero di passaggi di sfocatura post-demosaicizzazione.\n"
+"In modalità di sotto-campionamento, questo parametro imposta il numero di iter"
+"azioni dell'equalizzazione guidata dei dettagli"
 
 #: ../src/iop/demosaic.c:2344
 msgid "green channels matching method"
@@ -15455,6 +15433,10 @@ msgid ""
 "0% keeps the toe at middle gray, 100% pushes it to the point where the\n"
 "current slope would hit the output black level."
 msgstr ""
+"Distanza tra il grigio medio e l'inizio della transizione delle ombre.\n"
+"0% mantiene il punto di inizio sul grigio medio, 100% lo sposta nel punto in c"
+"ui la\n"
+"pendenza attuale raggiungerebbe il livello di nero in uscita."
 
 #: ../src/iop/filmicrgb.c:4993
 msgid ""
@@ -15462,6 +15444,11 @@ msgid ""
 "0% keeps the shoulder at middle gray, 100% pushes it to the point where the\n"
 "current slope would hit the output white level."
 msgstr ""
+"Distanza tra il grigio medio e l'inizio della curva di attenuazione delle alte"
+"-luci.\n"
+"Il valore 0% mantiene il grigio medio, mentre il valore 100% lo sposta fino al"
+" punto in cui la\n"
+"curva attuale raggiungerebbe il livello di bianco in uscita."
 
 #: ../src/iop/filmicrgb.c:5000
 msgid ""
@@ -16010,9 +15997,8 @@ msgid "focal length (mm)"
 msgstr "Lunghezza focale (mm)"
 
 #: ../src/iop/lens.cc:1972
-#, fuzzy
 msgid "f"
-msgstr "f/"
+msgstr "f"
 
 #: ../src/iop/lens.cc:1973
 msgid "f-number (aperture)"
@@ -16249,11 +16235,11 @@ msgstr ""
 
 #: ../src/iop/liquify.c:3688
 msgid "Warps: "
-msgstr ""
+msgstr "Deformazioni:"
 
 #: ../src/iop/liquify.c:3695
 msgid "Nodes: "
-msgstr ""
+msgstr "Nodi:"
 
 #: ../src/iop/liquify.c:3704
 msgid "edit, add and delete nodes"
@@ -17355,26 +17341,24 @@ msgid "max scale is %i for this image size"
 msgstr "La scala massima per un'immagine di queste dimensioni è %i"
 
 #: ../src/iop/retouch.c:4466
-#, fuzzy
 msgid "Retouch correction"
-msgstr "Correzione"
+msgstr "Correzione ritocco"
 
 #: ../src/iop/retouch.c:4474
-#, fuzzy
 msgid "Clone"
-msgstr "Clone"
+msgstr "Clona"
 
 #: ../src/iop/retouch.c:4475
 msgid "Heal"
-msgstr ""
+msgstr "Ripara"
 
 #: ../src/iop/retouch.c:4476
 msgid "Blur"
-msgstr ""
+msgstr "Sfoca"
 
 #: ../src/iop/retouch.c:4477 ../src/iop/drawlayer.c:2952
 msgid "Fill"
-msgstr ""
+msgstr "Riempi"
 
 #: ../src/iop/rgbcurve.c:142
 msgid "rgb curve"
@@ -18018,20 +18002,18 @@ msgstr ""
 "contrasto locale."
 
 #: ../src/iop/toneequal.c:3406
-#, fuzzy
 msgid ""
 "use this to slide the mask average exposure along channels\n"
 "for a better control of the exposure correction with the available nodes.\n"
 "the color picker will map the sampled tone to -4 EV."
 msgstr ""
-"Utilizzalo per far scorrere la maschera dell'esposizione media lungo i "
-"canali\n"
-"per un miglior controllo della correzione d'esposizione con i nodi "
-"disponibili.\n"
-"La bacchetta magica regolerà automaticamente l'esposizione media"
+"Utilizzare questa opzione per regolare l'esposizione media della maschera lung"
+"o i canali\n"
+"per un migliore controllo della correzione dell'esposizione tramite i nodi dis"
+"ponibili.\n"
+"Il selettore di colore mapperà la tonalità campionata a -4 EV."
 
 #: ../src/iop/toneequal.c:3414
-#, fuzzy
 msgid ""
 "use this to counter the averaging effect of the guided filter\n"
 "and dilate the mask contrast around -4EV\n"
@@ -18039,11 +18021,13 @@ msgid ""
 "for a better control of the exposure correction.\n"
 "the color picker will fit the sampled spread inside the control range."
 msgstr ""
-"Usalo per contrastare gli effetti di appiattimento del filtro guidato\n"
-"e dilatare il contrasto della maschera intorno a -4EV\n"
-"Questo permette di allargare l'istogramma dell'esposizone su più canali\n"
-"per un miglior controllo della correzione dell'esposizione.\n"
-"La bacchetta magica regolerà automaticamente il contrasto"
+"Utilizzare questa opzione per contrastare l'effetto di mediazione del filtro g"
+"uidato\n"
+"e dilatare il contrasto della maschera intorno a -4 EV\n"
+"Ciò consente di distribuire l'istogramma dell'esposizione su più canali\n"
+"per un migliore controllo della correzione dell'esposizione.\n"
+"Il selettore di colore adatterà la distribuzione campionata all'interno dell'i"
+"ntervallo di controllo."
 
 #. Simple view
 #: ../src/iop/toneequal.c:3422
@@ -19044,7 +19028,6 @@ msgid "delete metadata tag"
 msgstr "Elimina metadati etichetta"
 
 #: ../src/libs/geotagging.c:165
-#, fuzzy
 msgid "Datetime and GPS"
 msgstr "Data e GPS"
 
@@ -19286,7 +19269,6 @@ msgstr "Vettorscopio"
 
 #. Adding the live samples section
 #: ../src/libs/histogram.c:2290
-#, fuzzy
 msgid "Color picker"
 msgstr "Selettore colore"
 
@@ -19308,17 +19290,14 @@ msgstr ""
 
 #. Adding the live samples section
 #: ../src/libs/histogram.c:2382
-#, fuzzy
 msgid "Live samples"
-msgstr "Campionatura live"
+msgstr "Campioni in tempo reale"
 
 #: ../src/libs/histogram.c:2389
-#, fuzzy
 msgid "Display samples on image"
-msgstr "Mostra esempi su immagine/vettorscopio"
+msgstr "Evidenzia i campioni sull'immagine"
 
 #: ../src/libs/histogram.c:2398
-#, fuzzy
 msgid "Restrict scope to selection"
 msgstr "Restringi il grafico alla selezione"
 
@@ -19407,7 +19386,7 @@ msgstr "Originale"
 
 #: ../src/libs/history.c:700
 msgid "Shift+click: show module without changing history"
-msgstr ""
+msgstr "Maiusc+Click: visualizza il modulo senza modificare la cronologia"
 
 #: ../src/libs/history.c:876
 msgid "do you really want to clear history of current image?"
@@ -19418,71 +19397,64 @@ msgid "delete image's history?"
 msgstr "Cancello sviluppo immagine?"
 
 #: ../src/libs/ioporder.c:205
-#, fuzzy
 msgid "32-bit float"
-msgstr "32-bit (virgola mobile)"
+msgstr "32-bit virgola mobile"
 
 #: ../src/libs/ioporder.c:207
 msgid "16-bit integer"
-msgstr ""
+msgstr "16-bit intero"
 
 #: ../src/libs/ioporder.c:209
 msgid "8-bit integer"
-msgstr ""
+msgstr "8-bit intero"
 
 #: ../src/libs/ioporder.c:212
-#, fuzzy
 msgid "unknown type"
-msgstr "Sconosciuto"
+msgstr "Tipo sconosciuto"
 
 #: ../src/libs/ioporder.c:231 ../src/libs/ioporder.c:353
-#, fuzzy
 msgid "Display RGB"
-msgstr "Display P3 RGB"
+msgstr "Visualizza RGB"
 
 #: ../src/libs/ioporder.c:233
 msgid "CIE Lab"
-msgstr ""
+msgstr "CIE Lab"
 
 #: ../src/libs/ioporder.c:239
 msgid "JzCzHz"
-msgstr ""
+msgstr "jzCzHz"
 
 #: ../src/libs/ioporder.c:243
-#, fuzzy
 msgid "unknown colorspace"
-msgstr "Spazio colore"
+msgstr "Spazio colore sconosciuto"
 
 #: ../src/libs/ioporder.c:255
 msgid "no runtime descriptor"
-msgstr ""
+msgstr "Nessun descrittore runtime"
 
 #: ../src/libs/ioporder.c:259
-#, fuzzy
 msgid "X-Trans passthrough"
-msgstr "Passaggio"
+msgstr "Filtro X-Trans"
 
 #: ../src/libs/ioporder.c:260
-#, fuzzy
 msgid "Bayer passthrough"
-msgstr "Passaggio"
+msgstr "Filtro Bayer"
 
 #: ../src/libs/ioporder.c:261
 msgid "no RAW flags"
-msgstr ""
+msgstr "Nessun flag RAW"
 
 #: ../src/libs/ioporder.c:264
 msgid "RAW X-Trans"
-msgstr ""
+msgstr "RAW X-Trans"
 
 #: ../src/libs/ioporder.c:265
 msgid "RAW Bayer"
-msgstr ""
+msgstr "RAW Bayer"
 
 #: ../src/libs/ioporder.c:266
-#, fuzzy
 msgid "RAW monochrome"
-msgstr "scala di grigi"
+msgstr "RAW monocromatico"
 
 #: ../src/libs/ioporder.c:284
 #, c-format
@@ -19490,6 +19462,8 @@ msgid ""
 "%s:\n"
 "- runtime descriptor unavailable"
 msgstr ""
+"%s:\n"
+"- Descrittore runtime non disponibile"
 
 #: ../src/libs/ioporder.c:287
 #, c-format
@@ -19504,90 +19478,85 @@ msgid ""
 "\t\t%.3f\n"
 "\t- %s"
 msgstr ""
+"%s:\n"
+"\t- %s\n"
+"\t- %u canali\n"
+"\t- %s\n"
+"\t- RGB max:\n"
+"\t\t%.3f\n"
+"\t\t%.3f\n"
+"\t\t%.3f\n"
+"\t- %s"
 
 #: ../src/libs/ioporder.c:290 ../src/libs/ioporder.c:357
 #: ../src/libs/ioporder.c:359 ../src/libs/ioporder.c:362
 #: ../src/libs/ioporder.c:470
-#, fuzzy
 msgid "runtime unavailable"
-msgstr "Non disponibile"
+msgstr "Runtime non disponibile"
 
 #: ../src/libs/ioporder.c:349
-#, fuzzy
 msgid "Sensor RGB"
-msgstr "RGB normale"
+msgstr "Sensore RGB"
 
 #: ../src/libs/ioporder.c:351
-#, fuzzy
 msgid "Pipeline RGB"
-msgstr "Coda di sviluppo"
+msgstr "Coda di sviluppo RGB"
 
 #: ../src/libs/ioporder.c:355
 msgid "CIE Lab 1976"
-msgstr ""
+msgstr "CIE Lab 1976"
 
 #: ../src/libs/ioporder.c:572
-#, fuzzy
 msgid "custom order"
-msgstr "Personalizzato"
+msgstr "Ordinam. personalizzato"
 
 #: ../src/libs/ioporder.c:822
-#, fuzzy
 msgid "toggle module"
-msgstr "Visualizza modulo"
+msgstr "Commuta modulo"
 
 #: ../src/libs/ioporder.c:823
-#, fuzzy
 msgid "display mask"
-msgstr "Visualizza le maschere"
+msgstr "Visualizza maschera"
 
 #: ../src/libs/ioporder.c:824
-#, fuzzy
 msgid "module presets"
-msgstr "Elimino impostazione?"
+msgstr "Preimpostaz. modulo"
 
 #: ../src/libs/ioporder.c:831
 msgid "In"
-msgstr ""
+msgstr "Ingresso"
 
 #: ../src/libs/ioporder.c:832
-#, fuzzy
 msgid "Out"
-msgstr "Output"
+msgstr "Uscita"
 
 #: ../src/libs/ioporder.c:997
-#, fuzzy
 msgid "base image"
-msgstr "Immagine B/N"
+msgstr "Immagine di base"
 
 #: ../src/libs/ioporder.c:1004
-#, fuzzy
 msgid "screen"
-msgstr "Scherma"
+msgstr "Schermo"
 
 #: ../src/libs/ioporder.c:1192
 msgid "No active or history modules are currently available."
-msgstr ""
+msgstr "Al momento non sono disponibili moduli attivi o in storico."
 
 #: ../src/libs/ioporder.c:1534
-#, fuzzy
 msgid "save module order preset"
-msgstr "Ordine dei moduli"
+msgstr "Salva l'ordinamento delle preimpostaz. dei moduli"
 
 #: ../src/libs/ioporder.c:1543
-#, fuzzy
 msgid "preset name"
-msgstr "Rinomina"
+msgstr "Nome preimpostaz."
 
 #: ../src/libs/ioporder.c:1618
-#, fuzzy
 msgid "add preset"
-msgstr "Etichette preimpostazioni"
+msgstr "Aggiungi preimpostaz."
 
 #: ../src/libs/ioporder.c:1620
-#, fuzzy
 msgid "reset"
-msgstr "Pre-impostazioni"
+msgstr "Azzera"
 
 #: ../src/libs/ioporder.c:1816
 msgid "v3.0 for RAW input (default)"
@@ -19598,14 +19567,12 @@ msgid "v3.0 for JPEG/non-RAW input"
 msgstr "v3.0 per JPEG/input non-RAW"
 
 #: ../src/libs/ioporder.c:1830
-#, fuzzy
 msgid "Ansel v0.1 for RAW input (default)"
-msgstr "v3.0 per input RAW (predefinito)"
+msgstr "Ansel v0.1 per input RAW (predefinito)"
 
 #: ../src/libs/ioporder.c:1837
-#, fuzzy
 msgid "Ansel v0.1 for JPEG/non-RAW input"
-msgstr "v3.0 per JPEG/input non-RAW"
+msgstr "Ansel v0.1 per input JPEG/non-RAW"
 
 #: ../src/libs/lib.c:456
 msgid "deleting preset for obsolete module"
@@ -19729,101 +19696,88 @@ msgid "select the source of the map. some entries might not work"
 msgstr "Scegli la mappa sorgente. Alcune potrebbero non funzionare"
 
 #: ../src/libs/map_settings.c:188
-#, fuzzy
 msgid "Map/Actions"
-msgstr "Globale/Azioni"
+msgstr "Mappa/Azioni"
 
 #: ../src/libs/map_settings.c:189
-#, fuzzy
 msgid "Thumbnail display"
 msgstr "Visualizza miniature"
 
 #: ../src/libs/map_settings.c:190
 msgid "Cycles the image display mode on the map"
-msgstr ""
+msgstr "Attiva/disattiva la visualizzazione delle immagini sulla mappa"
 
 #: ../src/libs/masks.c:84
-#, fuzzy
 msgid "Masking & Blending"
-msgstr "Fusione"
+msgstr "Maschere e Fusione"
 
 #: ../src/libs/masks.c:246
 #, c-format
 msgid "<i>Select a module to edit its blending settings.</i>"
-msgstr ""
+msgstr "<i>Seleziona un modulo per modificarne le impostazioni di fusione.</i>"
 
 #: ../src/libs/masks.c:260
 #, c-format
 msgid "<i>Blending is not available for the <b>%s</b> module.</i>"
 msgstr ""
+"<i>La funzione di fusione non è disponibile per il modulo <b>%s</b>.</i>"
 
 #: ../src/libs/masks.c:414
-#, fuzzy, c-format
+#, c-format
 msgid "Mask #%d"
-msgstr "Tracciato #%d"
+msgstr "Maschera #%d"
 
 #: ../src/libs/masks.c:1070 ../src/libs/masks.c:1099
 msgid "Add new shape ..."
-msgstr ""
+msgstr "Aggiungi forma..."
 
 #: ../src/libs/masks.c:1103
-#, fuzzy
 msgid "Add brush"
 msgstr "Aggiungi pennello"
 
 #: ../src/libs/masks.c:1107
-#, fuzzy
 msgid "Add circle"
-msgstr "Aggiungi forma circolare"
+msgstr "Aggiungi cerchio"
 
 #: ../src/libs/masks.c:1111
-#, fuzzy
 msgid "Add ellipse"
 msgstr "Aggiungi ellisse"
 
 #: ../src/libs/masks.c:1115
 msgid "Add polygon"
-msgstr ""
+msgstr "Aggiungi poligono"
 
 #: ../src/libs/masks.c:1119
-#, fuzzy
 msgid "Add gradient"
 msgstr "Aggiungi gradiente"
 
 #: ../src/libs/masks.c:1148
-#, fuzzy
 msgid "Add shape ..."
-msgstr "%d forma in uso"
+msgstr "Aggiungi forma..."
 
 #: ../src/libs/masks.c:1158
-#, fuzzy
 msgid "Group the forms"
 msgstr "Raggruppa le forme"
 
 #: ../src/libs/masks.c:1166
-#, fuzzy
 msgid "Invert shape"
-msgstr "Usa forme invertite"
+msgstr "Inverti la forma"
 
 #: ../src/libs/masks.c:1198
-#, fuzzy
 msgid "Duplicate shape"
-msgstr "Duplica questa forma"
+msgstr "Duplica la forma"
 
 #: ../src/libs/masks.c:1214
-#, fuzzy
 msgid "Delete mask"
-msgstr "Elimina immagini"
+msgstr "Elimina maschera"
 
 #: ../src/libs/masks.c:1226
-#, fuzzy
 msgid "Cleanup unused shapes"
-msgstr "Elimina forme non in uso"
+msgstr "Elimina forme inutilizzate"
 
 #: ../src/libs/masks.c:1988
-#, fuzzy
 msgid "Shape manager"
-msgstr "Gestore maschere"
+msgstr "Gestione forme"
 
 #: ../src/libs/masks.c:1990
 msgid "created shapes"
@@ -20013,7 +19967,6 @@ msgid "categories"
 msgstr "Categorie"
 
 #: ../src/libs/metadata_view.c:208
-#, fuzzy
 msgid "EXIF and IPTC"
 msgstr "EXIF e IPTC"
 
@@ -20099,12 +20052,10 @@ msgstr ""
 "se sono necessarie impostazioni differenti, usa le preimpostazioni"
 
 #: ../src/libs/modulegroups.c:345
-#, fuzzy
 msgid "film"
-msgstr "filmic"
+msgstr "Pellicola"
 
 #: ../src/libs/modulegroups.c:348
-#, fuzzy
 msgid "tones"
 msgstr "Toni"
 
@@ -20116,15 +20067,15 @@ msgstr "Moduli di gruppo"
 #: ../src/libs/modulegroups.c:756 ../src/libs/modulegroups.c:784
 msgid "Keyboard navigation in basic tab is not supported yet"
 msgstr ""
+"La navigazione tramite tastiera nella scheda “Base” non è ancora supportata"
 
 #: ../src/libs/modulegroups.c:935
 msgid "Pipeline"
 msgstr "Coda di sviluppo"
 
 #: ../src/libs/modulegroups.c:935
-#, fuzzy
 msgid "Basic"
-msgstr "Basico"
+msgstr "Base"
 
 #: ../src/libs/modulegroups.c:935
 msgid "Repair"
@@ -20155,11 +20106,13 @@ msgstr ""
 "nella coda di sviluppo."
 
 #: ../src/libs/modulegroups.c:938
-#, fuzzy
 msgid ""
 "Modules destined to adjust brightness, contrast and dynamic range, work with "
 "film scans, and perform color-grading."
-msgstr "Moduli per regolare la brillanza, il contrasto e la gamma dinamica."
+msgstr ""
+"I moduli destinati alla regolazione di luminosità, contrasto e gamma dinamica,"
+" operano con "
+"acquisizioni di pellicola e d effettuano correzioni del colore."
 
 #: ../src/libs/modulegroups.c:939
 msgid "Modules destined to repair and reconstruct noisy or missing pixels."
@@ -20226,23 +20179,20 @@ msgid "Fit"
 msgstr "Adatta"
 
 #: ../src/libs/navigation.c:562
-#, fuzzy
 msgid "Small"
-msgstr "Piccola"
+msgstr "Piccolo"
 
 #: ../src/libs/navigation.c:566
-#, fuzzy
 msgid "Fit to screen"
 msgstr "Adatta allo schermo"
 
 #: ../src/libs/navigation.c:570
-#, fuzzy
 msgid "25%"
-msgstr "50%"
+msgstr "25%"
 
 #: ../src/libs/navigation.c:574
 msgid "33%"
-msgstr ""
+msgstr "33%"
 
 #: ../src/libs/navigation.c:578
 msgid "50%"
@@ -20842,9 +20792,9 @@ msgid "_import"
 msgstr "_Importa"
 
 #: ../src/libs/tagging.c:2530
-#, fuzzy, c-format
+#, c-format
 msgid "%u tags imported"
-msgstr "Importate %zd etichette"
+msgstr "%u etichette importate"
 
 #: ../src/libs/tagging.c:2551
 msgid "select file to export to"
@@ -20855,9 +20805,9 @@ msgid "_export"
 msgstr "_Esporta"
 
 #: ../src/libs/tagging.c:2564
-#, fuzzy, c-format
+#, c-format
 msgid "%u tags exported"
-msgstr "Esportate %zd etichette"
+msgstr "%u etichette esportate"
 
 #: ../src/libs/tagging.c:2988
 msgid "drop to root"
@@ -20990,32 +20940,28 @@ msgid "suggestion"
 msgstr "Suggerimento"
 
 #: ../src/libs/tagging.c:3306 ../src/libs/tagging.c:3310
-#, fuzzy
 msgid "Lighttable/Tags"
-msgstr "Tavolo Luminoso"
+msgstr "Tavolo Luminoso/Etichette"
 
 #: ../src/libs/tagging.c:3307 ../src/libs/tagging.c:3315
-#, fuzzy
 msgid "Tag"
-msgstr "Etichette"
+msgstr "Etichetta"
 
 #: ../src/libs/tagging.c:3308 ../src/libs/tagging.c:3316
 msgid "Opens the quick tagging entry"
-msgstr ""
+msgstr "Apri l'etichettatura rapida"
 
 #: ../src/libs/tagging.c:3311 ../src/libs/tagging.c:3319
-#, fuzzy
 msgid "Redo last tag"
 msgstr "Ripristina ultima etichetta"
 
 #: ../src/libs/tagging.c:3312 ../src/libs/tagging.c:3320
 msgid "Re-applies the last used tag"
-msgstr ""
+msgstr "Ri-applica l'ultima etichetta usata"
 
 #: ../src/libs/tagging.c:3314 ../src/libs/tagging.c:3318
-#, fuzzy
 msgid "Map/Tags"
-msgstr "Etichette"
+msgstr "Mappa/Etichette"
 
 #: ../src/libs/tagging.c:3421
 msgid ""
@@ -21251,13 +21197,12 @@ msgid "soft proof"
 msgstr "Prova colore a monitor"
 
 #: ../src/views/darkroom.c:1133
-#, fuzzy
 msgid "Could not load the image source data."
-msgstr "Impossibile caricare l'immagine!"
+msgstr "Impossibile caricare i dati sorgente dell'immagine."
 
 #: ../src/views/darkroom.c:1136
 msgid "Could not read image information from the database."
-msgstr ""
+msgstr "Impossibile leggere le informazioni dal database."
 
 #: ../src/views/darkroom.c:1139
 msgid "We could not load the image."
@@ -21268,12 +21213,16 @@ msgid ""
 "The current selection contains more than one image, which is ambiguous.\n"
 "Select exactly one image to enter the darkroom."
 msgstr ""
+"La selezione attuale contiene più di un'immagine, il che crea confusione.\n"
+"Seleziona esattamente un'immagine da portare in camera oscura."
 
 #: ../src/views/darkroom.c:1242
 msgid ""
 "There is no image selected.\n"
 "Select exactly one image to enter the darkroom."
 msgstr ""
+"Non è stata selezionata alcuna immagine.\n"
+"Seleziona esattamente un'immagine da portare in camera oscura."
 
 #. fail :(
 #: ../src/views/darkroom.c:1257
@@ -21281,24 +21230,20 @@ msgid "No image to open !"
 msgstr "Nessuna immagine da aprire!"
 
 #: ../src/views/darkroom.c:1806
-#, fuzzy
 msgid "Module instances to autoset"
-msgstr "Distanza dal soggetto"
+msgstr "Istanze moduli da regolare"
 
 #: ../src/views/darkroom.c:1840
-#, fuzzy
 msgid "Switch to the next picture"
 msgstr "Vai alla prossima immagine"
 
 #: ../src/views/darkroom.c:1842
-#, fuzzy
 msgid "Switch to the previous picture"
 msgstr "Vai all'immagine precedente"
 
 #: ../src/views/darkroom.c:1844
-#, fuzzy
 msgid "Give focus to the main image"
-msgstr "Impossibile caricare l'immagine!"
+msgstr "Il fuoco va all'immagine principale"
 
 #: ../src/views/darkroom.c:1849 ../src/views/darkroom.c:1854
 #: ../src/views/darkroom.c:1859 ../src/views/darkroom.c:1864
@@ -21307,52 +21252,46 @@ msgstr "Impossibile caricare l'immagine!"
 #: ../src/views/darkroom.c:1889 ../src/views/darkroom.c:1894
 #: ../src/views/darkroom.c:1899 ../src/views/darkroom.c:1904
 #: ../src/views/darkroom.c:1909 ../src/views/darkroom.c:1914
-#, fuzzy
 msgid "Darkroom/Main image"
-msgstr "Camera Oscura/Azioni"
+msgstr "Camera oscura/Immagine principale"
 
 #: ../src/views/darkroom.c:1854
 msgid "Move up (coarse step)"
-msgstr ""
+msgstr "Aumenta valore (regolazione grossolana)"
 
 #: ../src/views/darkroom.c:1859
 msgid "Move up (fine step)"
-msgstr ""
+msgstr "Aumenta valore (regolazione fine)"
 
 #: ../src/views/darkroom.c:1869
 msgid "Move down (coarse step)"
-msgstr ""
+msgstr "Diminuisci valore (regolazione grossolana)"
 
 #: ../src/views/darkroom.c:1874
-#, fuzzy
 msgid "Move down (fine step)"
-msgstr "Sposta giù"
+msgstr "Diminuisci valore (regolazione fine)"
 
 #: ../src/views/darkroom.c:1884
 msgid "Move left (coarse step)"
-msgstr ""
+msgstr "Sposta a sinistra (regolazione grossolana)"
 
 #: ../src/views/darkroom.c:1889
-#, fuzzy
 msgid "Move left (fine step)"
-msgstr "Taglia a sinistra"
+msgstr "Sposta a sinistra (regolazione fine)"
 
 #: ../src/views/darkroom.c:1899
 msgid "Move right (coarse step)"
-msgstr ""
+msgstr "Sposta a destra (regolazione grossolana)"
 
 #: ../src/views/darkroom.c:1904
-#, fuzzy
 msgid "Move right (fine step)"
-msgstr "Taglia a destra"
+msgstr "Sposta a destra (regolazione fine)"
 
 #: ../src/views/darkroom.c:1909
-#, fuzzy
 msgid "Zoom in"
 msgstr "Ingrandisci"
 
 #: ../src/views/darkroom.c:1914
-#, fuzzy
 msgid "Zoom out"
 msgstr "Rimpicciolisci"
 
@@ -21367,12 +21306,10 @@ msgstr "Commuta le condizioni di valutazione colore ISO 12646"
 #: ../src/views/darkroom.c:2152 ../src/views/darkroom.c:2156
 #: ../src/views/darkroom.c:2160 ../src/views/darkroom.c:2223
 #: ../src/views/darkroom.c:2227
-#, fuzzy
 msgid "Darkroom/Toolbox"
-msgstr "Camera Oscura/Azioni"
+msgstr "Camera oscura/Moduli"
 
 #: ../src/views/darkroom.c:1930
-#, fuzzy
 msgid "Toggle ISO 12646 color assessment conditions"
 msgstr "Commuta le condizioni di valutazione colore ISO 12646"
 
@@ -21381,14 +21318,12 @@ msgid "Picture display options"
 msgstr "Opzioni visualizz. immagine"
 
 #: ../src/views/darkroom.c:1948
-#, fuzzy
 msgid "Focus picture display options"
-msgstr "Opzioni visualizz. immagine"
+msgstr "Opzioni visualizz. fuoco"
 
 #: ../src/views/darkroom.c:1949 ../src/views/darkroom.c:2005
 #: ../src/views/darkroom.c:2068 ../src/views/darkroom.c:2154
 #: ../src/views/darkroom.c:2162 ../src/views/darkroom.c:2229
-#, fuzzy
 msgid "Shows the options popover"
 msgstr "Mostra al passaggio del mouse"
 
@@ -21401,14 +21336,12 @@ msgid "Picture margins"
 msgstr "Margini immagine"
 
 #: ../src/views/darkroom.c:1971
-#, fuzzy
 msgid "show the pipeline node graph"
-msgstr "Ordine di sviluppo"
+msgstr "Mostra il grafico dei nodi della coda di sviluppo"
 
 #: ../src/views/darkroom.c:1977
-#, fuzzy
 msgid "Show the pipeline node graph"
-msgstr "Ordine di sviluppo"
+msgstr "Mostra il grafico dei nodi della coda di sviluppo"
 
 #: ../src/views/darkroom.c:1987
 msgid ""
@@ -21419,18 +21352,12 @@ msgstr ""
 "click destro per ulteriori opzioni"
 
 #: ../src/views/darkroom.c:2000
-#, fuzzy
 msgid "Toggle raw over exposed indication"
-msgstr ""
-"Commuta l'indicatore di sovraesposizione RAW\n"
-"click destro per ulteriori opzioni"
+msgstr "Commuta l'indicatore di sovraesposizione RAW"
 
 #: ../src/views/darkroom.c:2004
-#, fuzzy
 msgid "Focus raw over exposed indication options"
-msgstr ""
-"Commuta l'indicatore di sovraesposizione RAW\n"
-"click destro per ulteriori opzioni"
+msgstr "Mostra opzioni sovraesposizione raw"
 
 #: ../src/views/darkroom.c:2013
 msgid "select how to mark the clipped pixels"
@@ -21500,18 +21427,12 @@ msgstr ""
 "click destro per ulteriori opzioni"
 
 #: ../src/views/darkroom.c:2063
-#, fuzzy
 msgid "Toggle clipping indication"
-msgstr ""
-"Commuta l'indicatore di taglio\n"
-"click destro per ulteriori opzioni"
+msgstr "Commuta l'indicatore di taglio"
 
 #: ../src/views/darkroom.c:2067
-#, fuzzy
 msgid "Focus clipping indication options"
-msgstr ""
-"Commuta l'indicatore di taglio\n"
-"click destro per ulteriori opzioni"
+msgstr "Mostra opzioni visualizzazione taglio"
 
 #. * let's fill the encapsulating widgets
 #. preview mode
@@ -21613,24 +21534,20 @@ msgstr ""
 "Click destro per le opzioni profilo"
 
 #: ../src/views/darkroom.c:2149
-#, fuzzy
 msgid "Toggle softproofing"
-msgstr "Prova colore a monitor"
+msgstr "Commuta la prova colore a monitor"
 
 #: ../src/views/darkroom.c:2153
-#, fuzzy
 msgid "Focus softproof options"
-msgstr "Profilo simulazione a schermo"
+msgstr "Mostra opzioni prova colore"
 
 #: ../src/views/darkroom.c:2157
-#, fuzzy
 msgid "Toggle gamut checking"
-msgstr "Controllo gamma"
+msgstr "Commuta il controllo della gamma cromatica"
 
 #: ../src/views/darkroom.c:2161
-#, fuzzy
 msgid "Focus gamut checking options"
-msgstr "Opzioni di adattamento"
+msgstr "Mostra opzioni controllo gamma"
 
 #: ../src/views/darkroom.c:2194
 #, c-format
@@ -21646,27 +21563,24 @@ msgstr ""
 "Click destro per ulteriori opzioni"
 
 #: ../src/views/darkroom.c:2224
-#, fuzzy
 msgid "Toggle guide lines"
-msgstr "Imposta linee guida"
+msgstr "Commuta le linee guida"
 
 #: ../src/views/darkroom.c:2228
-#, fuzzy
 msgid "Focus guide lines options"
-msgstr "Imposta linee guida"
+msgstr "Mostra opzioni linee guida"
 
 #: ../src/views/darkroom.c:2239
 msgid "Autoset"
-msgstr ""
+msgstr "Autoset"
 
 #: ../src/views/darkroom.c:2240
-#, fuzzy
 msgid ""
 "run autoset on selected modules\n"
 "right click for options"
 msgstr ""
-"Commuta le linee guida\n"
-"Click destro per ulteriori opzioni"
+"Applica la regolazione automatica sui moduli selezionati\n"
+"Click destro per le opzioni"
 
 #: ../src/views/print.c:73
 msgctxt "view"
@@ -21700,9 +21614,8 @@ msgid "waiting to start slideshow"
 msgstr "In attesa di iniziare la presentazione"
 
 #: ../src/views/slideshow.c:535
-#, fuzzy
 msgid "slideshow started"
-msgstr "Presentazione in pausa"
+msgstr "Presentazione avviata"
 
 #: ../src/views/slideshow.c:542 ../src/views/slideshow.c:586
 #: ../src/views/slideshow.c:603
@@ -21721,62 +21634,52 @@ msgstr[1] "Ritardo per la presentazione impostato su %d secondi"
 #: ../src/views/slideshow.c:665 ../src/views/slideshow.c:668
 #: ../src/views/slideshow.c:671 ../src/views/slideshow.c:674
 #: ../src/views/slideshow.c:677
-#, fuzzy
 msgid "Slideshow/Actions"
-msgstr "Presentazione"
+msgstr "Presentazione/Azioni"
 
 #: ../src/views/slideshow.c:654
-#, fuzzy
 msgid "Start and stop"
-msgstr "Avvia e Stop"
+msgstr "Avvia e Ferma"
 
 #: ../src/views/slideshow.c:655
 msgid "Toggles slideshow auto-advance"
-msgstr ""
+msgstr "Commuta auto-avanzamento della presentazione"
 
 #: ../src/views/slideshow.c:657 ../src/views/slideshow.c:660
 #: ../src/views/slideshow.c:663
-#, fuzzy
 msgid "Slow down"
 msgstr "Rallenta"
 
 #: ../src/views/slideshow.c:658 ../src/views/slideshow.c:661
 #: ../src/views/slideshow.c:664
-#, fuzzy
 msgid "Increases the slideshow delay"
-msgstr "Abilita l'ambiente presentazione"
+msgstr "Aumenta il ritardo della presentazione"
 
 #: ../src/views/slideshow.c:666 ../src/views/slideshow.c:669
 #: ../src/views/slideshow.c:672
-#, fuzzy
 msgid "Speed up"
 msgstr "Accelera"
 
 #: ../src/views/slideshow.c:667 ../src/views/slideshow.c:670
 #: ../src/views/slideshow.c:673
-#, fuzzy
 msgid "Decreases the slideshow delay"
-msgstr "Abilita l'ambiente presentazione"
+msgstr "Riduci il ritardo della presentazione"
 
 #: ../src/views/slideshow.c:675
-#, fuzzy
 msgid "Step back"
 msgstr "Un passo indietro"
 
 #: ../src/views/slideshow.c:676
-#, fuzzy
 msgid "Displays the previous image"
-msgstr "Vai all'immagine precedente"
+msgstr "Mostra l'immagine precedente"
 
 #: ../src/views/slideshow.c:678
-#, fuzzy
 msgid "Step forward"
 msgstr "Un passo avanti"
 
 #: ../src/views/slideshow.c:679
-#, fuzzy
 msgid "Displays the next image"
-msgstr "distorce parte dell'immagine"
+msgstr "Mostra l'immagine successiva"
 
 #: ../tools/generate_prefs.xsl:480 ../tools/generate_prefs.xsl:493
 msgid "</xsl:text><xsl:value-of select="
@@ -21794,126 +21697,115 @@ msgid "</xsl:text><xsl:value-of select="
 msgstr "</xsl:text><xsl:value-of select="
 
 #: ../src/common/lut_viewer.c:960 ../src/common/lut_viewer.c:982
-#, fuzzy
 msgid "no LUT to display"
-msgstr "% visualizza"
+msgstr "Nessuna LUT disponibile"
 
 #: ../src/common/lut_viewer.c:974
 msgid "no control nodes to display"
-msgstr ""
+msgstr "Non ci sono nodi di controllo da visualizzare"
 
 #: ../src/common/lut_viewer.c:1201
-#, fuzzy
 msgid "no LUT to save"
-msgstr "Niente da salvare"
+msgstr "Nessuna LUT da salvare"
 
 #: ../src/common/lut_viewer.c:1207
 msgid "save 3D LUT"
-msgstr ""
+msgstr "Salve 3D LUT"
 
 #: ../src/common/lut_viewer.c:1222
 msgid "3D lut (cube)"
-msgstr ""
+msgstr "3D LUT (cubo)"
 
 #: ../src/common/lut_viewer.c:1238
-#, fuzzy
 msgid "failed to save LUT file"
-msgstr "Fallita l'analisi del file GPX"
+msgstr "Impossibile salvare il file LUT"
 
 #: ../src/common/lut_viewer.c:1263
 #, c-format
 msgid "saved LUT to %s"
-msgstr ""
+msgstr "LUT salvata in %s"
 
 #: ../src/common/lut_viewer.c:1296
 msgid "azimuth"
-msgstr ""
+msgstr "Azimut"
 
 #: ../src/common/lut_viewer.c:1297 ../src/common/lut_viewer.c:1304
 #: ../src/iop/colorprimaries.c:1178
 msgid "°"
-msgstr ""
+msgstr "°"
 
 #: ../src/common/lut_viewer.c:1303
 msgid "axis tilt"
-msgstr ""
+msgstr "Inclinazione asse"
 
 #: ../src/common/lut_viewer.c:1310
-#, fuzzy
 msgid "slice depth"
-msgstr "Profondità di bit"
+msgstr "Profondità settore"
 
 #: ../src/common/lut_viewer.c:1311 ../src/common/lut_viewer.c:1318
 #: ../src/common/lut_viewer.c:1325 ../src/iop/colorequal.c:2359
 #: ../src/iop/colorprimaries.c:1183 ../src/iop/colorprimaries.c:1188
 #: ../src/iop/colorprimaries.c:1208 ../src/iop/colorprimaries.c:1213
 msgid " %"
-msgstr ""
+msgstr " %"
 
 #: ../src/common/lut_viewer.c:1317
 msgid "slice thickness"
-msgstr ""
+msgstr "Spessore settore"
 
 #: ../src/common/lut_viewer.c:1324
-#, fuzzy
 msgid "color shift threshold"
-msgstr "Soglia inferiore"
+msgstr "Soglia di variazione cromatica"
 
 #: ../src/common/lut_viewer.c:1329
-#, fuzzy
 msgid "show control nodes"
-msgstr "Selettori scorrevoli controllo colore"
+msgstr "Visualizza i nodi di controllo"
 
 #: ../src/common/lut_viewer.c:1335
-#, fuzzy
 msgid "target gamut"
-msgstr "Obiettivo gamma"
+msgstr "Gamma cromatica di riferimento"
 
 #: ../src/common/lut_viewer.c:1336
 msgid "sRGB/Rec709"
-msgstr ""
+msgstr "sRGB/Rec709"
 
 #: ../src/common/lut_viewer.c:1339
-#, fuzzy
 msgid "Rec2020"
-msgstr "PQ Rec2020"
+msgstr "Rec2020"
 
 #: ../src/common/lut_viewer.c:1344
 msgid "save to cLUT"
-msgstr ""
+msgstr "Salva in cLUT"
 
 #: ../src/common/lut_viewer.c:1348
-#, fuzzy
 msgid "viewer controls"
-msgstr "Contributori whereami"
+msgstr "Comandi di riproduzione"
 
 #: ../src/develop/dev_pixelpipe.c:671
 #, c-format
 msgid "disabled module `%s`: unexpected input buffer format"
-msgstr ""
+msgstr "Modulo `%s` disabilitato: formato del buffer di input non previsto"
 
 #: ../src/develop/pixelpipe_raster_masks.c:43
-#, fuzzy, c-format
+#, c-format
 msgid ""
 "- Check if the module providing the masks for the module %s has not been "
 "deleted.\n"
 msgstr ""
-"\n"
 "- Verifica se il modulo che sta fornendo le maschere al modulo %s non sia "
 "stato cancellato.\n"
 
 #: ../src/develop/pixelpipe_raster_masks.c:48
-#, fuzzy, c-format
+#, c-format
 msgid ""
 "- Check if the module %s (%s) providing the masks has not been moved above "
 "%s.\n"
 msgstr ""
-"\n"
 "- Verifica se il modulo %s (%s) che sta fornendo le maschere non sia stato "
 "spostato sopra %s.\n"
 
 #: ../src/develop/pixelpipe_raster_masks.c:53
-#, fuzzy, c-format
+#, c-format
 msgid ""
 "The %s module is trying to reuse a mask from a module but it can't be "
 "found.\n"
@@ -21922,36 +21814,32 @@ msgid ""
 msgstr ""
 "Il modulo %s sta tentando di riutilizzare una maschera da un altro modulo "
 "che non riesce a trovare.\n"
-"Il mascheramento in %s verrà disabilitato finché non tornerà disponibile una "
-"maschera.\n"
+"\n"
 "%s"
 
 #: ../src/develop/pixelpipe_raster_masks.c:66
-#, fuzzy, c-format
+#, c-format
 msgid ""
 "The `%s` module is trying to reuse a mask from disabled module `%s`.\n"
 "Disabled modules cannot provide their masks to other modules.\n"
 "\n"
 "- Please enable `%s` or change the raster mask in `%s`."
 msgstr ""
-"Il modulo `%s` sta tentando di riutilizzare una maschera dal modulo\n"
-"`%s` che è disattivato. I moduli disabilitati non possono mettere a "
-"disposizione\n"
-"le loro maschere per altri moduli. La maschera in `%s` verrà disabilitata\n"
-"finché il modulo `%s` non sarà stato riattivato."
+"Il modulo `%s` sta tentando di riutilizzare una maschera dal modulo `%s`.\n"
+"I moduli disabilitati non possono mettere a disposizione\n"
+"le loro maschere per altri moduli.\n"
+"\n"
+"- Abilita `%s` oppure modifica la maschera raster in `%s`."
 
 #: ../src/iop/basebuffer.c:43
-#, fuzzy
 msgid "base buffer"
-msgstr "curva base"
+msgstr "Buffer di base"
 
 #: ../src/iop/colorequal.c:204
-#, fuzzy
 msgid "color equalizer"
-msgstr "equalizzatore contrasto"
+msgstr "Equalizzatore colore"
 
 #: ../src/iop/colorequal.c:209
-#, fuzzy
 msgid "color zones"
 msgstr "Zone colore"
 
@@ -21959,10 +21847,11 @@ msgstr "Zone colore"
 msgid ""
 "stretch RGB colors around the achromatic axis from editable dt UCS hue nodes"
 msgstr ""
+"Distribuisci i colori RGB attorno all'asse acromatico a partire dai nodi di to"
+"nalità UCS modificabili"
 
 #: ../src/iop/colorequal.c:274 ../src/iop/colorequal.c:2080
 #: ../src/iop/colorequal.c:2086
-#, fuzzy
 msgid "midtones"
 msgstr "Mezzi toni"
 
@@ -21971,76 +21860,79 @@ msgid ""
 "scroll over image to adjust the selected color graph\n"
 "right-click to add a node at the sampled hue"
 msgstr ""
+"Scorri il mouse sull'immagine per regolare il grafico dei colori selezionato\n"
+"Click-destro per aggiungere un nodo alla tonalità campionata"
 
 #: ../src/iop/colorequal.c:2119 ../src/iop/colorequal.c:2381
-#, fuzzy
 msgid "no sample"
-msgstr "Campionatura live"
+msgstr "Nessun campione"
 
 #: ../src/iop/colorequal.c:2343 ../src/iop/colorprimaries.c:1195
-#, fuzzy
 msgid "options"
-msgstr "Opzioni lua"
+msgstr "Opzioni"
 
 #: ../src/iop/colorprimaries.c:138
-#, fuzzy
 msgid "color primaries"
-msgstr "Spazio colore"
+msgstr "Colori primari"
 
 #: ../src/iop/colorprimaries.c:143
 msgid "RGB primaries|primary colors"
-msgstr ""
+msgstr "RGB primari | colori primari"
 
 #: ../src/iop/colorprimaries.c:149
 msgid ""
 "edit RGB/CYM primary control nodes in dt UCS and interpolate their RGB "
 "shifts through a cylindrical local field"
 msgstr ""
+"Modifica i nodi di controllo primari RGB/CMY nel sistema UCS di Ansel e interp"
+"ola i loro spostamenti RGB "
+"attraverso un campo locale cilindrico"
 
 #: ../src/iop/colorprimaries.c:1159
-#, fuzzy
 msgid "colors"
-msgstr "Colore"
+msgstr "Colori"
 
 #: ../src/iop/crystgrain.c:148
-#, fuzzy
 msgid "Photographic grain"
-msgstr "Ortografica"
+msgstr "Grana fotografica"
 
 #: ../src/iop/crystgrain.c:153
 msgid "simulate photographic grain from stacked silver-halide crystal layers"
-msgstr ""
+msgstr "Simula la grana fotografica di alogenuro di argento"
 
 #: ../src/iop/crystgrain.c:187
-#, fuzzy
 msgid "color grain"
-msgstr "mappatura dei colori"
+msgstr "Grana colore"
 
 #: ../src/iop/crystgrain.c:198
-#, fuzzy
 msgid "B&W grain"
-msgstr "grana"
+msgstr "Grana BN"
 
 #: ../src/iop/crystgrain.c:1457
 msgid ""
 "simulate one shared B&W grain field or one shared blue/green/red-sensitive "
 "color grain stack"
 msgstr ""
+"Simula una grana BN o una grana colore sensibile al blu, verde e rosso."
 
 #: ../src/iop/crystgrain.c:1462
 msgid "surface ratio occupied by silver-halide crystals in each layer"
 msgstr ""
+"Percentuale della superficie occupata dai cristalli di alogenuro d'argento su "
+"ciascun livello"
 
 #: ../src/iop/crystgrain.c:1467
-#, c-format
+#, no-c-format
 msgid ""
 "average crystal footprint at 100% zoom, clamped so zooming in does not "
 "enlarge it further"
 msgstr ""
+"Area media del cristallo fissata al 100% di zoom, così che l'ingrandimento "
+"non lo allarghi ulteriormente"
 
 #: ../src/iop/crystgrain.c:1471
 msgid "number of crystal layers stacked through the emulsion"
-msgstr ""
+msgstr "Numero di strati di cristalli sovrapposti dall'emulsione"
 
 #: ../src/iop/crystgrain.c:1476
 msgid ""
@@ -22048,251 +21940,248 @@ msgid ""
 "by the rasterized grain surface; positive values increase that capture and "
 "negative values decrease it"
 msgstr ""
+"0 EV significa che un livello raggiunge la sua quota neutra (1/numero di livel"
+"li) dopo la normalizzazione "
+"in base alla superficie rasterizzata della grana; i valori positivi aumentano "
+"tale quota e "
+"quelli negativi la diminuiscono"
 
 #: ../src/iop/crystgrain.c:1480
 msgid ""
 "probability that blue-, green- and red-sensitive sub-layers reuse the same "
 "crystal births and shapes at matching depths"
 msgstr ""
+"Probabilità che i sottolivelli sensibili al blu, al verde e al rosso riutilizz"
+"ino gli stessi "
+"punti di origine e le stesse forme cristalline a profondità corrispondenti"
 
 #: ../src/iop/crystgrain.c:1484
 msgid ""
 "scale only the chromatic amplitude of the RGB grain residual while keeping "
 "its achromatic strength unchanged"
 msgstr ""
+"Ridimensionare solo l'ampiezza cromatica del residuo di grana RGB mantenendo "
+"invariata la sua intensità acromatica"
 
 #: ../src/iop/crystgrain.c:1487
 msgid "log-normal standard deviation of crystal sizes"
-msgstr ""
+msgstr "Deviazione standard log-normale delle dimensioni dei cristalli"
 
 #: ../src/iop/detailmask.c:45
-#, fuzzy
 msgid "detail mask"
-msgstr "Dettagli"
+msgstr "Maschera di dettaglio"
 
 #: ../src/iop/drawlayer.c:1204
 msgid "Confirm"
-msgstr ""
+msgstr "Conferma"
 
 #: ../src/iop/drawlayer.c:1788 ../src/iop/drawlayer.c:1900
 #: ../src/iop/drawlayer/layers.c:245
 msgid "failed to resolve drawlayer sidecar path"
-msgstr ""
+msgstr "Impossibile risolvere il percorso del sidecar del livello grafico"
 
 #: ../src/iop/drawlayer.c:1792 ../src/iop/drawlayer.c:1902
 msgid "drawlayer sidecar TIFF is missing"
-msgstr ""
+msgstr "Il sidecar TIFF del livello grafico non esiste"
 
 #: ../src/iop/drawlayer.c:1797
-#, fuzzy
 msgid "failed to delete drawing layer from sidecar"
-msgstr "Impossibile leggere il buffer RAW dall'immagine '%s'"
+msgstr "Impossibile cancellare il livello grafico dal sidecar"
 
 #: ../src/iop/drawlayer.c:1838
 msgid ""
 "Delete the linked drawing layer from the sidecar TIFF before removing this "
 "module instance?"
 msgstr ""
+"Eliminare il livello grafico collegato dal sidecar TIFF prima di rimuovere que"
+"sta "
+"istanza del modulo?"
 
 #: ../src/iop/drawlayer.c:1839
 msgid "Delete the linked drawing layer from the sidecar TIFF?"
-msgstr ""
+msgstr "Eliminare il livello grafico collegato dal file sidecar TIFF?"
 
 #: ../src/iop/drawlayer.c:1842
 msgid "Keep layer"
-msgstr ""
+msgstr "Conserva il livello"
 
 #: ../src/iop/drawlayer.c:1843
-#, fuzzy
 msgid "Delete layer"
-msgstr "Elimina immagini"
+msgstr "Elimina il livello"
 
 #: ../src/iop/drawlayer.c:1893
 msgid "failed to commit drawing stroke before renaming"
-msgstr ""
+msgstr "Impossibile salvare il tratto del disegno prima della ridenominazione"
 
 #: ../src/iop/drawlayer.c:1895 ../src/iop/drawlayer/layers.c:191
 #: ../src/iop/drawlayer/runtime.c:782
 msgid "failed to write drawing layer sidecar"
-msgstr ""
+msgstr "Impossibile scrivere il sidecar con il livello del disegno"
 
 #: ../src/iop/drawlayer.c:1908
 msgid "failed to rename drawing layer in sidecar"
-msgstr ""
+msgstr "Impossibile rinominare il livello grafico nel sidecar"
 
 #: ../src/iop/drawlayer.c:1956
-#, fuzzy
 msgid "A drawing layer with that name already exists."
-msgstr "Stile con nome '%s' già esistente"
+msgstr "Il nome del livello grafico esiste già"
 
 #: ../src/iop/drawlayer.c:1957
 msgid "Choose a different layer name."
-msgstr ""
+msgstr "Scegli un nome differente per il livello"
 
 #: ../src/iop/drawlayer.c:2032
-#, fuzzy
 msgid "background layer job finished"
-msgstr "Elaborazioni in background"
+msgstr "Il lavoro del livello di sfondo è terminato"
 
 #: ../src/iop/drawlayer.c:2132
 msgid "creating background layer"
-msgstr ""
+msgstr "Sto creando un livello di sfondo"
 
 #: ../src/iop/drawlayer.c:2249
 msgid "Rename drawing layer"
-msgstr ""
+msgstr "Rinomina il livello grafico"
 
 #: ../src/iop/drawlayer.c:2250
-#, fuzzy
 msgid "Enter the new name for the current drawing layer."
-msgstr "Inserisci il nome del nuovo stile"
+msgstr "Inserisci il nome del livello grafico corrente."
 
 #: ../src/iop/drawlayer.c:2255
 msgid "failed to rename drawing layer"
-msgstr ""
+msgstr "Impossibile rinominare il livello grafico"
 
 #: ../src/iop/drawlayer.c:2343 ../src/iop/drawlayer.c:2350
 msgid "failed to fill drawing layer"
-msgstr ""
+msgstr "Impossibile riempire il livello grafico"
 
 #: ../src/iop/drawlayer.c:2357
-#, fuzzy
 msgid "failed to clear drawing layer"
-msgstr "Fallita l'analisi del file GPX"
+msgstr "Impossibile ripulire il livello grafico"
 
 #: ../src/iop/drawlayer.c:2370
 msgid "No drawing layer is loaded in memory."
-msgstr ""
+msgstr "In memoria non è stato caricato nessun livello grafico."
 
 #: ../src/iop/drawlayer.c:2371 ../src/iop/drawlayer.c:2378
-#, fuzzy
 msgid "The sidecar save was aborted."
-msgstr "Il file `%s` è corrotto."
+msgstr "Non è stato possibile salvare il sidecar."
 
 #: ../src/iop/drawlayer.c:2377
 msgid "Layer name is empty."
-msgstr ""
+msgstr "Il nome del livello è vuoto"
 
 #: ../src/iop/drawlayer.c:2385
 msgid "Save the drawing sidecar now?"
-msgstr ""
+msgstr "Salvo il sidecar grafico ora?"
 
 #: ../src/iop/drawlayer.c:2388
 msgid ""
 "This writes the current in-memory drawing layer to the sidecar TIFF "
 "immediately."
 msgstr ""
+"L'operazione scriverà immediatamente nel sidecar TIFF il livello grafico attua"
+"lmente in memoria."
 
 #: ../src/iop/drawlayer.c:2390
 msgid "Save"
-msgstr ""
+msgstr "Salva"
 
 #: ../src/iop/drawlayer.c:2399 ../src/iop/drawlayer.c:2583
-#, fuzzy
 msgid "Saving layer"
-msgstr "Filtro di riscaldamento"
+msgstr "Salvataggio livelli"
 
 #: ../src/iop/drawlayer.c:2400 ../src/iop/drawlayer.c:2584
 msgid "Waiting for the layer rasterization to finish..."
-msgstr ""
+msgstr "Sto terminando la rasterizzazione dei livelli..."
 
 #: ../src/iop/drawlayer.c:2408
 msgid "Failed to finalize the drawing stroke."
-msgstr ""
+msgstr "Impossibile completare il tratto del disegno."
 
 #: ../src/iop/drawlayer.c:2409
 msgid "The sidecar was not saved."
-msgstr ""
+msgstr "Il sidecar non è stato salvato."
 
 #: ../src/iop/drawlayer.c:2419
-#, fuzzy
 msgid "Failed to write the drawing layer sidecar."
-msgstr "Impossibile sovrascrivere il file di stile per %s"
+msgstr "Impossibile scrivere il livello grafico sidecar."
 
 #: ../src/iop/drawlayer.c:2420
 msgid "The sidecar TIFF could not be updated."
-msgstr ""
+msgstr "Il sidecar TIFF non può essere aggiornato."
 
 #: ../src/iop/drawlayer.c:2428
 msgid "Drawing sidecar saved."
-msgstr ""
+msgstr "Il sidecar grafico è stato aggiornato."
 
 #: ../src/iop/drawlayer.c:2429
 msgid "The current in-memory layer has been written to the sidecar TIFF."
-msgstr ""
+msgstr "L'attuale livello in memoria è stato scritto sul sidecar TIFF."
 
 #: ../src/iop/drawlayer.c:2439
 msgid "Create drawing layer"
-msgstr ""
+msgstr "Crea un livello grafico"
 
 #: ../src/iop/drawlayer.c:2440
-#, fuzzy
 msgid "Enter the name of the new drawing layer."
-msgstr "Inserisci il nome del nuovo stile"
+msgstr "Inserisci il nome del nuovo livello grafico."
 
 #: ../src/iop/drawlayer.c:2445
-#, fuzzy
 msgid "failed to create drawing layer"
-msgstr "Non posso creare un PDF temporaneo per stampare"
+msgstr "Impossibile creare un livello grafico"
 
 #: ../src/iop/drawlayer.c:2452 ../src/iop/drawlayer/io.c:1065
-#, fuzzy
 msgid "failed to create background layer from input"
-msgstr ""
-"Non è stato possibile creare il file temporaneo per le opzioni di stampa"
+msgstr "Impossibile creare il livello di sfondo dall'input"
 
 #: ../src/iop/drawlayer.c:2578
 msgid "Finishing drawing"
-msgstr ""
+msgstr "Termina i disegni"
 
 #: ../src/iop/drawlayer.c:2579
 msgid "Waiting for the drawing rasterization to finish..."
-msgstr ""
+msgstr "Sto terminando la rasterizzazione dei disegni..."
 
 #: ../src/iop/drawlayer.c:2596
-#, fuzzy
 msgctxt "modulename"
 msgid "drawing"
-msgstr "Disegna linee"
+msgstr "Disegno"
 
 #: ../src/iop/drawlayer.c:2602
 msgid "paint premultiplied RGB layers in a TIFF sidecar"
-msgstr ""
+msgstr "Disegna i livelli RGB pre-moltiplicati in un file sidecar TIFF"
 
 #: ../src/iop/drawlayer.c:2796
-#, fuzzy
 msgid "save sidecar"
-msgstr "Apri file di elaborazione"
+msgstr "Salva il sidecar"
 
 #: ../src/iop/drawlayer.c:2812
 msgid "Brush"
-msgstr ""
+msgstr "Pennello"
 
 #: ../src/iop/drawlayer.c:2813
 msgid "Layer"
-msgstr ""
+msgstr "Livello"
 
 #: ../src/iop/drawlayer.c:2819
-#, fuzzy
 msgid "Background"
-msgstr "Elaborazioni in background"
+msgstr "Sfondo"
 
 #: ../src/iop/drawlayer.c:2829
 msgid "grey"
-msgstr ""
+msgstr "Grigio"
 
 #: ../src/iop/drawlayer.c:2840
 msgid "paint"
-msgstr ""
+msgstr "Dipingi"
 
 #: ../src/iop/drawlayer.c:2843
 msgid "smudge"
-msgstr ""
+msgstr "Sfuma"
 
 #: ../src/iop/drawlayer.c:2844
-#, fuzzy
 msgid "Paint mode"
-msgstr "Modalità operativa"
+msgstr "Modalità disegno"
 
 #: ../src/iop/drawlayer.c:2847
 msgid "Color"
@@ -22300,244 +22189,223 @@ msgstr "Colore"
 
 #: ../src/iop/drawlayer.c:2866
 msgid "Pick from"
-msgstr ""
+msgstr "Preleva da"
 
 #: ../src/iop/drawlayer.c:2873
-#, fuzzy
 msgid "HDR exposure"
-msgstr "Esposizione"
+msgstr "Esposizione HDR"
 
 #: ../src/iop/drawlayer.c:2877
-#, fuzzy
 msgid "Geometry"
 msgstr "Geometria"
 
 #: ../src/iop/drawlayer.c:2881
 msgid "Fall-off"
-msgstr ""
+msgstr "Caduta"
 
 #: ../src/iop/drawlayer.c:2892 ../src/iop/drawlayer.c:2938
-#, fuzzy
 msgid " px"
-msgstr "2 px"
+msgstr " px"
 
 #: ../src/iop/drawlayer.c:2896
-#, fuzzy
 msgid "Sampling distance"
-msgstr "Distanza"
+msgstr "Distanza campione"
 
 #: ../src/iop/drawlayer.c:2901
-#, fuzzy
 msgid "Smoothing"
-msgstr "Sfumatura colore"
+msgstr "Morbidezza"
 
 #: ../src/iop/drawlayer.c:2906
-#, fuzzy
 msgid "Hardness"
-msgstr "Intensità"
+msgstr "Durezza"
 
 #: ../src/iop/drawlayer.c:2911
 msgid "Thickness"
-msgstr ""
+msgstr "Spessore"
 
 #: ../src/iop/drawlayer.c:2922
 msgid "Flow"
-msgstr ""
+msgstr "Flusso"
 
 #: ../src/iop/drawlayer.c:2926
-#, fuzzy
 msgid "Texture"
-msgstr "Diaframma"
+msgstr "Trama"
 
 #: ../src/iop/drawlayer.c:2932
-#, fuzzy
 msgid "Sprinkles"
-msgstr "Stampante"
+msgstr "Grana"
 
 #: ../src/iop/drawlayer.c:2937
-#, fuzzy
 msgid "Sprinkle size"
-msgstr "Dimensione della cornice"
+msgstr "Dimensione della grana"
 
 #: ../src/iop/drawlayer.c:2942
-#, fuzzy
 msgid "Coarseness"
 msgstr "Grossolanità"
 
 #: ../src/iop/drawlayer.c:2960
-#, fuzzy
 msgid "Source layer"
-msgstr "Matrice di origine:"
+msgstr "Sorgente livello"
 
 #: ../src/iop/drawlayer.c:2961
-#, fuzzy
 msgid "delete layer"
-msgstr "Elimina etichetta"
+msgstr "Elimina livello"
 
 #: ../src/iop/drawlayer.c:2962
-#, fuzzy
 msgid "create new layer"
-msgstr "Crea un nuovo stile"
+msgstr "Crea un nuovo livello"
 
 #: ../src/iop/drawlayer.c:2963
-#, fuzzy
 msgid "rename layer"
-msgstr "Rinomina"
+msgstr "Rinomina il livello"
 
 #: ../src/iop/drawlayer.c:2964
-#, fuzzy
 msgid "reuse selected layer"
-msgstr "Raggio del tipo di sfocatura selezionata"
+msgstr "Riutilizza il livello selezionato"
 
 #: ../src/iop/drawlayer.c:2965
 msgid "create background from input"
-msgstr ""
+msgstr "Crea sfondo dall'input"
 
 #: ../src/iop/drawlayer.c:2968
-#, fuzzy
 msgid "transparency"
-msgstr "Traduttori"
+msgstr "Trasparenza"
 
 #: ../src/iop/drawlayer.c:2984
-#, fuzzy
 msgid "tablet mapping"
-msgstr "mappatura dei toni"
+msgstr "Mappatura"
 
 #: ../src/iop/drawlayer.c:2990
 msgid "flow"
-msgstr ""
+msgstr "Flusso"
 
 #: ../src/iop/drawlayer.c:2991
-#, fuzzy
 msgid "pressure"
-msgstr "Pre-impostazioni"
+msgstr "Pressione"
 
 #: ../src/iop/drawlayer.c:2991
 msgid "tilt"
-msgstr ""
+msgstr "Inclinazione"
 
 #: ../src/iop/drawlayer.c:2991
-#, fuzzy
 msgid "acceleration"
-msgstr "Altitudine"
+msgstr "Accelerazione"
 
 #: ../src/iop/drawlayer.c:3017
 msgid "quadratic"
-msgstr ""
+msgstr "Quadratico"
 
 #: ../src/iop/drawlayer.c:3018
-#, fuzzy
 msgid "square root"
-msgstr "Quadrato"
+msgstr "Radice quadrata"
 
 #: ../src/iop/drawlayer.c:3019
-#, fuzzy
 msgid "inverse linear"
-msgstr "Inverti selezione"
+msgstr "Lineare inverso"
 
 #: ../src/iop/drawlayer.c:3020
 msgid "inverse square root"
-msgstr ""
+msgstr "Radice quadrata inversa"
 
 #: ../src/iop/drawlayer.c:3021
 msgid "inverse quadratic"
-msgstr ""
+msgstr "Quadratico inverso"
 
 #: ../src/iop/drawlayer.c:3383
-#, fuzzy, c-format
+#, c-format
 msgid "size %.1f px  hardness %.2f%%"
-msgstr "Durezza: %3.2f%%"
+msgstr "Dimensione %.1f px  durezza %.2f%%"
 
 #: ../src/iop/drawlayer.c:3385
-#, fuzzy, c-format
+#, c-format
 msgid "opacity %.2f%%  flow %.2f%%"
-msgstr "Opacità: %3.2f%%"
+msgstr "Opacità %.2f%%  flusso %.2f%%"
 
 #: ../src/iop/drawlayer.c:3387
 #, c-format
 msgid "pressure %.2f%%  tilt %.2f%%  acceleration %.2f%%"
-msgstr ""
+msgstr "Pressione %.2f%%  inclinazione %.2f%%  Accelerazione %.2f%%"
 
 #: ../src/iop/drawlayer.c:3723
 msgid "failed to queue live drawing stroke"
-msgstr ""
+msgstr "Impossibile accodare il tratto del disegno"
 
 #: ../src/iop/drawlayer.c:3775
 msgid "failed to queue drawing stroke end"
-msgstr ""
+msgstr "Impossibile accodare la fine del tratto di disegno"
 
 #: ../src/iop/drawlayer/io.c:1126
 #, c-format
 msgid "created background layer `%s'"
-msgstr ""
+msgstr "Generato livello di sfondo `%s'"
 
 #: ../src/iop/drawlayer/layers.c:176
 msgid "failed to resolve drawlayer working profile"
-msgstr ""
+msgstr "Impossibile risolvere il profilo di lavoro del livello grafico"
 
 #: ../src/iop/drawlayer/layers.c:180
-#, fuzzy
 msgid "drawlayer working profile mismatch"
-msgstr "Profilo di lavoro"
+msgstr "Profilo di lavoro del livello grafico non corrispondente"
 
 #: ../src/iop/drawlayer/layers.c:219
-#, fuzzy
 msgid "failed to allocate drawlayer stroke mask"
-msgstr "Impossibile leggere il buffer RAW dall'immagine '%s'"
+msgstr "Impossibile allocare la maschera del tratto del livello grafico"
 
 #: ../src/iop/drawlayer/layers.c:273
 #, c-format
 msgid "The drawing layer \"%s\" was not found in the sidecar TIFF."
-msgstr ""
+msgstr "Il livello grafico \"%s\" non è stato trovato nel sidecar TIFF."
 
 #: ../src/iop/drawlayer/layers.c:306
-#, fuzzy
 msgid "drawlayer sidecar profile mismatch"
-msgstr "Scrivi file XMP"
+msgstr "Il profilo del livello grafico nel sidecar non corrisponde"
 
 #: ../src/iop/drawlayer/layers.c:321
 msgid "failed to read drawing layer sidecar"
-msgstr ""
+msgstr "Impossibile leggere il sidecar del livello grafico"
 
 #: ../src/iop/drawlayer/runtime.c:708 ../src/iop/drawlayer/runtime.c:750
 #: ../src/iop/drawlayer/runtime.c:809 ../src/iop/drawlayer/runtime.c:827
 #: ../src/iop/drawlayer/runtime.c:842
 msgid "failed to start drawing worker"
-msgstr ""
+msgstr "Impossibile avviare il processo di disegno"
 
 #: ../src/iop/drawlayer/worker.c:1506
 msgid "drawing worker queue is full, stroke aborted"
-msgstr ""
+msgstr "La coda del processo di disegno è piena, tratto interrotto"
 
 #: ../src/iop/drawlayer/worker.c:1526
 msgid "drawing worker queue is full"
-msgstr ""
+msgstr "La coda del processo di disegno è piena"
 
 #: ../src/iop/splittoningrgb.c:144
-#, fuzzy
 msgid "split-toning RGB"
-msgstr "divisione dei toni"
+msgstr "Divisione dei toni RGB"
 
 #: ../src/iop/splittoningrgb.c:149
 msgid "split toning|split tone RGB"
-msgstr ""
+msgstr "Divisione dei toni | divisione RGB"
 
 #: ../src/iop/splittoningrgb.c:155
 msgid "blend two CAT16 plus RGB mixer corrections across brightness keyframes"
 msgstr ""
+"Applicare due correzioni CAT16 più quelle del mixer RGB ai fotogrammi di lumin"
+"osità"
 
 #: ../src/iop/splittoningrgb.c:156
-#, fuzzy
 msgid "creative or corrective"
-msgstr "Correttivo o creativo"
+msgstr "Creativo o correttivo"
 
 #: ../src/iop/splittoningrgb.c:562 ../src/iop/splittoningrgb.c:750
 msgid "simple mixer mode requires normalized rows with non-zero sums."
 msgstr ""
+"La modalità “Mixer semplice” richiede righe normalizzate con somme diverse da "
+"zero."
 
 #: ../src/iop/splittoningrgb.c:1287
 msgid "sample average luminance from an area to set this keyframe"
 msgstr ""
+"Campionare la luminanza media di un'area per impostare questo fotogramma"
 
 #~ msgctxt "preferences"
 #~ msgid "12 Mpx"
