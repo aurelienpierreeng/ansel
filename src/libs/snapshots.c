@@ -438,7 +438,7 @@ void gui_post_expose(dt_lib_module_t *self, cairo_t *cri, int32_t width, int32_t
       const dt_lib_snapshot_t *s = d->snapshot + (d->selected - 1);
       if(s->sample_scale > 1e-6f) snapshot_scale = s->sample_scale;
     }
-    const float zoom_level = dt_dev_get_zoom_level(dev) / darktable.gui->ppd;
+    const float zoom_level = dt_dev_get_zoom_level(dev);
     const float render_scale = zoom_level / snapshot_scale;
     const float surface_width = cairo_image_surface_get_width(d->snapshot_image);
     const float surface_height = cairo_image_surface_get_height(d->snapshot_image);
