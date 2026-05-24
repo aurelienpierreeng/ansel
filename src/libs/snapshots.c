@@ -440,8 +440,8 @@ void gui_post_expose(dt_lib_module_t *self, cairo_t *cri, int32_t width, int32_t
     }
     const float zoom_level = dt_dev_get_zoom_level(dev);
     const float render_scale = zoom_level / snapshot_scale;
-    const float surface_width = cairo_image_surface_get_width(d->snapshot_image) * darktable.gui->ppd;
-    const float surface_height = cairo_image_surface_get_height(d->snapshot_image) * darktable.gui->ppd;
+    const float surface_width = cairo_image_surface_get_width(d->snapshot_image) / darktable.gui->ppd;
+    const float surface_height = cairo_image_surface_get_height(d->snapshot_image) / darktable.gui->ppd;
     const double tx = 0.5 * width - dev->roi.x * surface_width * render_scale;
     const double ty = 0.5 * height - dev->roi.y * surface_height * render_scale;
 
