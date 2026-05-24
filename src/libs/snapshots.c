@@ -571,6 +571,9 @@ static int _lib_snapshot_rotation_cnt = 0;
 int button_pressed(struct dt_lib_module_t *self, double x, double y, double pressure, int which, int type,
                    uint32_t state)
 {
+  // only react to left click
+  if(which != 1) return 0;
+
   dt_lib_snapshots_t *d = (dt_lib_snapshots_t *)self->data;
 
   if(d->snapshot_image)
