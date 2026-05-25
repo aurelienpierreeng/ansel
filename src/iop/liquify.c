@@ -3658,6 +3658,7 @@ int key_pressed(struct dt_iop_module_t *self, GdkEventKey *event)
 
   dt_iop_liquify_gui_data_t *g = (dt_iop_liquify_gui_data_t *)self->gui_data;
   if(IS_NULL_PTR(g)) return 0;
+  guint key = dt_keys_mainpad_alternatives(event->keyval);
 
 
   const gboolean creating = gtk_toggle_button_get_active(g->btn_point_tool)
@@ -3666,7 +3667,7 @@ int key_pressed(struct dt_iop_module_t *self, GdkEventKey *event)
                               || (g->status & (DT_LIQUIFY_STATUS_NEW | DT_LIQUIFY_STATUS_PREVIEW));
 
   // Delete last created node while creating a shape.
-  if(event->keyval == GDK_KEY_BackSpace)
+  if(key == GDK_KEY_BackSpace)
   {
     if(!creating)
       return 0;
@@ -3731,7 +3732,7 @@ int key_pressed(struct dt_iop_module_t *self, GdkEventKey *event)
   }
 
   // Delete selected node outside creation mode.
-  if(event->keyval == GDK_KEY_Delete || event->keyval == GDK_KEY_KP_Delete)
+  if(key == GDK_KEY_Delete)
   {
     if(creating)
       return 0;
@@ -3784,9 +3785,8 @@ int key_pressed(struct dt_iop_module_t *self, GdkEventKey *event)
   }
 
   // Quit current creation or edition on Escape or Enter key
-  if(event->keyval == GDK_KEY_Escape
-     || event->keyval == GDK_KEY_KP_Enter
-     || event->keyval == GDK_KEY_Return)
+  guint key = dt_keys_mainpad_alternatives(event->keyval);
+  if(key == GDK_KEY_Escape || key == GDK_KEY_Return)
   {
 
     if(!creating)

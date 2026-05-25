@@ -86,18 +86,18 @@ static int _group_events_key_pressed(struct dt_iop_module_t *module, GdkEventKey
   if(IS_NULL_PTR(form)) return 0;
 
   gboolean return_value = FALSE;
+  guint key = dt_keys_mainpad_alternatives(event->keyval);
 
   // Global key bindings for groups
   if(!return_value)
   {
-    switch(event->keyval)
+    switch(key)
     {
       case GDK_KEY_Escape:
       {
         return_value = dt_masks_form_exit_creation(module, gui);
         break;
       }
-      case GDK_KEY_KP_Delete:
       case GDK_KEY_Delete:
       {
         if(gui->group_selected >= 0)

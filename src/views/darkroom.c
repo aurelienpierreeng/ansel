@@ -3489,6 +3489,7 @@ int key_pressed(dt_view_t *self, GdkEventKey *event)
   const gboolean shift = dt_modifier_is(event->state, GDK_SHIFT_MASK);
   const gboolean ctrl = dt_modifier_is(event->state, GDK_CONTROL_MASK);
   const gboolean ctrl_any = dt_modifiers_include(event->state, GDK_CONTROL_MASK);
+  guint key = dt_keys_mainpad_alternatives(event->keyval);
 
   if(ctrl_any)
   {
@@ -3496,13 +3497,11 @@ int key_pressed(dt_view_t *self, GdkEventKey *event)
     float center[2] = { 0.0f };
     dt_dev_get_widget_center(dev, center);
 
-    switch(event->keyval)
+    switch(key)
     {
       case GDK_KEY_plus:
-      case GDK_KEY_KP_Add:
         return _change_scaling(dev, center, dev->roi.scaling * zoom_step);
       case GDK_KEY_minus:
-      case GDK_KEY_KP_Subtract:
         return _change_scaling(dev, center, dev->roi.scaling / zoom_step);
     }
   }
@@ -3514,31 +3513,27 @@ int key_pressed(dt_view_t *self, GdkEventKey *event)
   float delta[2] = { 10.f * multiplier, 10.f * multiplier };
   dt_dev_coordinates_widget_delta_to_image_delta(dev, delta, 1);
 
-  switch(event->keyval)
+  switch(key)
   {
     case GDK_KEY_Up:
-    case GDK_KEY_KP_Up:
     {
       dev->roi.y -= delta[1] / (float)dev->roi.processed_height;
       _key_scroll(dev);
       return 1;
     }
     case GDK_KEY_Down:
-    case GDK_KEY_KP_Down:
     {
       dev->roi.y += delta[1] / (float)dev->roi.processed_height;
       _key_scroll(dev);
       return 1;
     }
     case GDK_KEY_Left:
-    case GDK_KEY_KP_Left:
     {
       dev->roi.x -= delta[0] / (float)dev->roi.processed_width;
       _key_scroll(dev);
       return 1;
     }
     case GDK_KEY_Right:
-    case GDK_KEY_KP_Right:
     {
       dev->roi.x += delta[0] / (float)dev->roi.processed_width;
       _key_scroll(dev);

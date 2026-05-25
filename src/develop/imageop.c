@@ -825,8 +825,9 @@ static void _gui_duplicate_callback(GtkButton *button, gpointer user_data)
 static gboolean _rename_module_key_press(GtkWidget *entry, GdkEventKey *event, dt_iop_module_t *module)
 {
   int ended = 0;
+  guint key = dt_keys_mainpad_alternatives(event->keyval);
 
-  if(event->type == GDK_FOCUS_CHANGE || event->keyval == GDK_KEY_Return || event->keyval == GDK_KEY_KP_Enter)
+  if(event->type == GDK_FOCUS_CHANGE || key == GDK_KEY_Return)
   {
     if(gtk_entry_get_text_length(GTK_ENTRY(entry)) > 0)
     {
@@ -853,7 +854,7 @@ static gboolean _rename_module_key_press(GtkWidget *entry, GdkEventKey *event, d
 
     ended = 1;
   }
-  else if(event->keyval == GDK_KEY_Escape)
+  else if(key == GDK_KEY_Escape)
   {
     // restore saved 1st character of instance name
     module->multi_name[0] = module->multi_name[sizeof(module->multi_name) - 1];

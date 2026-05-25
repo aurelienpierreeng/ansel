@@ -261,7 +261,9 @@ static void _delete_tag_button_clicked(GtkButton *button, dt_lib_export_metadata
 
 static gboolean _key_press_on_list(GtkWidget *widget, GdkEventKey *event, dt_lib_export_metadata_t *d)
 {
-  if(event->type == GDK_KEY_PRESS && (event->keyval == GDK_KEY_Delete || event->keyval == GDK_KEY_KP_Delete) && !event->state)
+  guint key = dt_keys_mainpad_alternatives(event->keyval);
+
+  if(event->type == GDK_KEY_PRESS && (key == GDK_KEY_Delete) && !event->state)
   {
     _remove_tag_from_list(d);
     return TRUE;

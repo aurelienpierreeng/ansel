@@ -434,17 +434,15 @@ static gboolean _gradient_slider_key_press_event(GtkWidget *widget, GdkEventKey 
 
   int handled = FALSE;
   float delta = -gslider->increment;
-  switch(event->keyval)
+  guint key = dt_keys_mainpad_alternatives(event->keyval);
+
+  switch(key)
   {
     case GDK_KEY_Up:
-    case GDK_KEY_KP_Up:
     case GDK_KEY_Right:
-    case GDK_KEY_KP_Right:
       delta = gslider->increment;
     case GDK_KEY_Down:
-    case GDK_KEY_KP_Down:
     case GDK_KEY_Left:
-    case GDK_KEY_KP_Left:
       handled = TRUE;
   }
 

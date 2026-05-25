@@ -1220,7 +1220,7 @@ static int guess_key_group(dt_accels_t *accels, guint keyval, guint hardware_key
   return 0; // not found, default
 }
 
-static void _shortcut_edited(GtkCellRenderer *cell, const gchar *path_string, guint keyval, GdkModifierType mods,
+static void _shortcut_edited(GtkCellRenderer *cell, const gchar *path_string, guint key, GdkModifierType mods,
                              guint hardware_key, gpointer user_data)
 {
   // The tree model passed as arg is the filtered proxy.
@@ -1239,12 +1239,13 @@ static void _shortcut_edited(GtkCellRenderer *cell, const gchar *path_string, gu
     gtk_tree_model_get(GTK_TREE_MODEL(filter), &f_iter, COL_SHORTCUT, &shortcut, -1);
 
   const char *shortcut_path = NULL;
+  guint keyval = dt_keys_mainpad_alternatives(key);
 
   // In GTK "OTHER" accel mode, clearing from the editor may come through either as
   // VoidSymbol or as an unmodified Delete/BackSpace key press. Normalize all those
   // cases to an empty shortcut so the model and the GtkAccelMap stay in sync.
   if(keyval == GDK_KEY_VoidSymbol
-     || (mods == 0 && (keyval == GDK_KEY_Delete || keyval == GDK_KEY_KP_Delete || keyval == GDK_KEY_BackSpace)))
+     || (mods == 0 && (keyval == GDK_KEY_Delete || keyval == GDK_KEY_BackSpace)))
   {
     keyval = 0;
     mods = 0;
@@ -1980,17 +1981,20 @@ static gboolean _shortcut_search_move_selection(dt_accels_search_state_t *state,
 static gboolean _search_entry_key_pressed(GtkWidget *widget, GdkEventKey *event, gpointer user_data)
 {
   dt_accels_search_state_t *state = (dt_accels_search_state_t *)user_data;
-  if(event->keyval == GDK_KEY_Escape)
+  guint key = dt_keys_mainpad_alternatives(event->keyval);
+
+  if(key == GDK_KEY_Escape)
   {
     state->response = GTK_RESPONSE_CANCEL;
     gtk_widget_destroy(state->window);
     return TRUE;
   }
-  if(event->keyval == GDK_KEY_Down)
+  
+  if(key == GDK_KEY_Down)
     return _shortcut_search_move_selection(state, TRUE);
-  if(event->keyval == GDK_KEY_Up)
+  if(key == GDK_KEY_Up)
     return _shortcut_search_move_selection(state, FALSE);
-  if(event->keyval == GDK_KEY_Return || event->keyval == GDK_KEY_KP_Enter)
+  if(key == GDK_KEY_Return)
   {
     dt_shortcut_t *shortcut = state->selected ? state->selected : _find_first_match(state);
     if(shortcut)

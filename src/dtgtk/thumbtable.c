@@ -1831,10 +1831,10 @@ gboolean dt_thumbtable_key_pressed_grid(GtkWidget *self, GdkEventKey *event, gpo
   if(event->keyval != GDK_KEY_Alt_L && event->keyval != GDK_KEY_Alt_R)
     _alternative_mode(table, FALSE);
 
-  switch(event->keyval)
+  guint key = dt_keys_mainpad_alternatives(event->keyval);
+  switch(key)
   {
     case GDK_KEY_Up:
-    case GDK_KEY_KP_Up:
     {
       if(table->mode == DT_THUMBTABLE_MODE_FILEMANAGER)
       {
@@ -1844,7 +1844,6 @@ gboolean dt_thumbtable_key_pressed_grid(GtkWidget *self, GdkEventKey *event, gpo
       break;
     }
     case GDK_KEY_Down:
-    case GDK_KEY_KP_Down:
     {
       if(table->mode == DT_THUMBTABLE_MODE_FILEMANAGER)
       {
@@ -1854,37 +1853,31 @@ gboolean dt_thumbtable_key_pressed_grid(GtkWidget *self, GdkEventKey *event, gpo
       break;
     }
     case GDK_KEY_Left:
-    case GDK_KEY_KP_Left:
     {
       _move_in_grid(table, event, DT_TT_MOVE_LEFT, imgid);
       return TRUE;
     }
     case GDK_KEY_Right:
-    case GDK_KEY_KP_Right:
     {
       _move_in_grid(table, event, DT_TT_MOVE_RIGHT, imgid);
       return TRUE;
     }
     case GDK_KEY_Page_Up:
-    case GDK_KEY_KP_Page_Up:
     {
       _move_in_grid(table, event, DT_TT_MOVE_PREVIOUS_PAGE, imgid);
       return TRUE;
     }
     case GDK_KEY_Page_Down:
-    case GDK_KEY_KP_Page_Down:
     {
       _move_in_grid(table, event, DT_TT_MOVE_NEXT_PAGE, imgid);
       return TRUE;
     }
     case GDK_KEY_Home:
-    case GDK_KEY_KP_Home:
     {
       _move_in_grid(table, event, DT_TT_MOVE_START, imgid);
       return TRUE;
     }
     case GDK_KEY_End:
-    case GDK_KEY_KP_End:
     {
       _move_in_grid(table, event, DT_TT_MOVE_END, imgid);
       return TRUE;
@@ -1922,7 +1915,6 @@ gboolean dt_thumbtable_key_pressed_grid(GtkWidget *self, GdkEventKey *event, gpo
       break;
     }
     case GDK_KEY_Return:
-    case GDK_KEY_KP_Enter:
     {
       // This is only to be consistent with mouse events:
       // opening to darkroom happens with double click (aka ACTIVATE event),
@@ -1941,7 +1933,6 @@ gboolean dt_thumbtable_key_pressed_grid(GtkWidget *self, GdkEventKey *event, gpo
       return TRUE;
     }
     case GDK_KEY_Delete:
-    case GDK_KEY_KP_Delete:
     {
       dt_control_remove_images();
       return TRUE;

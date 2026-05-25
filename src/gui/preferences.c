@@ -939,8 +939,9 @@ static gboolean tree_key_press_presets(GtkWidget *widget, GdkEventKey *event, gp
 
   // We can just ignore mod key presses outright
   if(event->is_modifier) return FALSE;
+  guint key = dt_keys_mainpad_alternatives(event->keyval);
 
-  if(event->keyval == GDK_KEY_Delete || event->keyval == GDK_KEY_KP_Delete || event->keyval == GDK_KEY_BackSpace)
+  if(key == GDK_KEY_Delete || key == GDK_KEY_BackSpace)
   {
     // If a leaf node is selected, delete that preset
 

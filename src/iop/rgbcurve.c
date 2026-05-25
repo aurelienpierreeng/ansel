@@ -642,24 +642,25 @@ static gboolean _area_key_press_callback(GtkWidget *widget, GdkEventKey *event, 
 
   if(g->selected < 0) return FALSE;
 
+  guint key = dt_keys_mainpad_alternatives(event->keyval);
   int handled = 0;
   float dx = 0.0f, dy = 0.0f;
-  if(event->keyval == GDK_KEY_Up || event->keyval == GDK_KEY_KP_Up)
+  if(key == GDK_KEY_Up)
   {
     handled = 1;
     dy = RGBCURVE_DEFAULT_STEP;
   }
-  else if(event->keyval == GDK_KEY_Down || event->keyval == GDK_KEY_KP_Down)
+  else if(key == GDK_KEY_Down)
   {
     handled = 1;
     dy = -RGBCURVE_DEFAULT_STEP;
   }
-  else if(event->keyval == GDK_KEY_Right || event->keyval == GDK_KEY_KP_Right)
+  else if(key == GDK_KEY_Right)
   {
     handled = 1;
     dx = RGBCURVE_DEFAULT_STEP;
   }
-  else if(event->keyval == GDK_KEY_Left || event->keyval == GDK_KEY_KP_Left)
+  else if(key == GDK_KEY_Left)
   {
     handled = 1;
     dx = -RGBCURVE_DEFAULT_STEP;

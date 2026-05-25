@@ -441,14 +441,15 @@ static gboolean _edit_key_press(GtkWidget *widget, GdkEventKey *event, dt_lib_mo
   dt_lib_textnotes_t *d = (dt_lib_textnotes_t *)self->data;
   if(IS_NULL_PTR(d) || IS_NULL_PTR(d->completion_popover)) return FALSE;
   if(!gtk_widget_get_visible(d->completion_popover)) return FALSE;
+  guint key = dt_keys_mainpad_alternatives(event->keyval);
 
-  if(event->keyval == GDK_KEY_Escape)
+  if(key == GDK_KEY_Escape)
   {
     _completion_hide(d);
     return TRUE;
   }
 
-  if(event->keyval == GDK_KEY_Return || event->keyval == GDK_KEY_KP_Enter || event->keyval == GDK_KEY_Tab)
+  if(key == GDK_KEY_Return || key == GDK_KEY_Tab)
   {
     if(_completion_apply_selected(self))
       return TRUE;

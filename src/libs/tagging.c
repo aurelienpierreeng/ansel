@@ -1346,16 +1346,16 @@ static gboolean _attached_key_pressed(GtkWidget *view, GdkEventKey *event, dt_li
   dt_lib_tagging_t *d = (dt_lib_tagging_t *)self->data;
   _unselect_all_in_view(d->dictionary_view);
 
+  guint key = dt_keys_mainpad_alternatives(event->keyval);
   GtkTreeIter iter;
   GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(d->attached_view));
   GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(view));
   if(gtk_tree_selection_get_selected(selection, &model, &iter))
   {
     GtkTreePath *path = gtk_tree_model_get_path(model, &iter);
-    switch(event->keyval)
+    switch(key)
     {
       case GDK_KEY_Delete:
-      case GDK_KEY_KP_Delete:
         _detach_selected_tag(GTK_TREE_VIEW(view), self);
         gtk_tree_path_free(path);
         return TRUE;
@@ -1364,13 +1364,13 @@ static gboolean _attached_key_pressed(GtkWidget *view, GdkEventKey *event, dt_li
     }
     gtk_tree_path_free(path);
   }
-  if(event->keyval == GDK_KEY_Tab)
+  if(key == GDK_KEY_Tab)
   {
     gtk_tree_selection_unselect_all(selection);
     gtk_widget_grab_focus(GTK_WIDGET(d->entry));
     return TRUE;
   }
-  else if(event->keyval == GDK_KEY_ISO_Left_Tab)
+  else if(key == GDK_KEY_ISO_Left_Tab)
   {
     gtk_tree_selection_unselect_all(selection);
     return TRUE;
@@ -1407,17 +1407,16 @@ static void _new_button_clicked(GtkButton *button, dt_lib_module_t *self)
 static gboolean _enter_key_pressed(GtkWidget *entry, GdkEventKey *event, dt_lib_module_t *self)
 {
   dt_lib_tagging_t *d = (dt_lib_tagging_t *)self->data;
-  switch(event->keyval)
+  guint key = dt_keys_mainpad_alternatives(event->keyval);
+  switch(key)
   {
     case GDK_KEY_Return:
-    case GDK_KEY_KP_Enter:
       _new_button_clicked(NULL, self);
       break;
     case GDK_KEY_Escape:
       gtk_window_set_focus(GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)), NULL);
       break;
     case GDK_KEY_Down:
-    case GDK_KEY_KP_Down:
     case GDK_KEY_Tab:
     {
       _unselect_all_in_view(d->attached_view);
@@ -1438,7 +1437,6 @@ static gboolean _enter_key_pressed(GtkWidget *entry, GdkEventKey *event, dt_lib_
       break;
     }
     case GDK_KEY_Up:
-    case GDK_KEY_KP_Up:
       return TRUE;  // keep focus
       break;
     default:
@@ -2411,13 +2409,14 @@ static gboolean _dictionary_key_pressed(GtkWidget *view, GdkEventKey *event, dt_
   GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(d->dictionary_view));
   GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(view));
   gboolean res = FALSE;
+  guint key = dt_keys_mainpad_alternatives(event->keyval);
+
   if(gtk_tree_selection_get_selected(selection, &model, &iter))
   {
     GtkTreePath *path = gtk_tree_model_get_path(model, &iter);
-    switch(event->keyval)
+    switch(key)
     {
       case GDK_KEY_Return:
-      case GDK_KEY_KP_Enter:
       {
         _attach_selected_tag(self, d);
         if(dt_modifier_is(event->state, GDK_SHIFT_MASK))
@@ -3356,7 +3355,9 @@ void gui_cleanup(dt_lib_module_t *self)
 static gboolean _lib_tagging_tag_key_press(GtkWidget *entry, GdkEventKey *event, dt_lib_module_t *self)
 {
   dt_lib_tagging_t *d = (dt_lib_tagging_t *)self->data;
-  switch(event->keyval)
+  guint key = dt_keys_mainpad_alternatives(event->keyval);
+
+  switch(key)
   {
     case GDK_KEY_Escape:
       g_list_free(d->floating_tag_imgs);
@@ -3367,7 +3368,6 @@ static gboolean _lib_tagging_tag_key_press(GtkWidget *entry, GdkEventKey *event,
     case GDK_KEY_Tab:
       return TRUE;
     case GDK_KEY_Return:
-    case GDK_KEY_KP_Enter:
     {
       const gchar *tag = gtk_entry_get_text(GTK_ENTRY(entry));
       const gboolean res = dt_tag_attach_string_list(tag, d->floating_tag_imgs, TRUE);

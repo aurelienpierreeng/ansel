@@ -1564,7 +1564,9 @@ static GtkWidget *_gui_init_datetime(dt_lib_datetime_t *dt, const int type, dt_l
 static gboolean _datetime_key_pressed(GtkWidget *entry, GdkEventKey *event, dt_lib_module_t *self)
 {
   dt_lib_geotagging_t *d = (dt_lib_geotagging_t *)self->data;
-  switch(event->keyval)
+  guint key = dt_keys_mainpad_alternatives(event->keyval);
+
+  switch(key)
   {
     case GDK_KEY_Escape:
     {
@@ -1580,42 +1582,27 @@ static gboolean _datetime_key_pressed(GtkWidget *entry, GdkEventKey *event, dt_l
     }
     // allow  0 .. 9, left/right/home/end movement using arrow keys and del/backspace
     case GDK_KEY_0:
-    case GDK_KEY_KP_0:
     case GDK_KEY_1:
-    case GDK_KEY_KP_1:
     case GDK_KEY_2:
-    case GDK_KEY_KP_2:
     case GDK_KEY_3:
-    case GDK_KEY_KP_3:
     case GDK_KEY_4:
-    case GDK_KEY_KP_4:
     case GDK_KEY_5:
-    case GDK_KEY_KP_5:
     case GDK_KEY_6:
-    case GDK_KEY_KP_6:
     case GDK_KEY_7:
-    case GDK_KEY_KP_7:
     case GDK_KEY_8:
-    case GDK_KEY_KP_8:
     case GDK_KEY_9:
-    case GDK_KEY_KP_9:
     case GDK_KEY_Delete:
-    case GDK_KEY_KP_Delete:
     case GDK_KEY_BackSpace:
     case GDK_KEY_Left:
     case GDK_KEY_Right:
     case GDK_KEY_Home:
-    case GDK_KEY_KP_Home:
     case GDK_KEY_End:
-    case GDK_KEY_KP_End:
       d->editing = TRUE;
       return FALSE;
 
     case GDK_KEY_Tab:
-    case GDK_KEY_KP_Tab:
     case GDK_KEY_ISO_Left_Tab:
     case GDK_KEY_Return:
-    case GDK_KEY_KP_Enter:
       d->editing = FALSE;
       g_signal_emit_by_name(d->dt.widget[0], "changed");
       return FALSE;
@@ -1652,10 +1639,11 @@ static void _timezone_save(dt_lib_module_t *self)
 
 static gboolean _timezone_key_pressed(GtkWidget *entry, GdkEventKey *event, dt_lib_module_t *self)
 {
-  switch(event->keyval)
+  guint key = dt_keys_mainpad_alternatives(event->keyval);
+
+  switch(key)
   {
     case GDK_KEY_Return:
-    case GDK_KEY_KP_Enter:
     case GDK_KEY_Tab:
       _timezone_save(self);
       return TRUE;

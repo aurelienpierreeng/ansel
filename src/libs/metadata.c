@@ -334,12 +334,13 @@ static gboolean _key_pressed(GtkWidget *textview, GdkEventKey *event, dt_lib_mod
 {
   dt_lib_metadata_t *d = (dt_lib_metadata_t *)self->data;
 
+  guint key = dt_keys_mainpad_alternatives(event->keyval);
+
   if(dt_modifier_is(event->state, GDK_CONTROL_MASK))
   {
-    switch(event->keyval)
+    switch(key)
     {
       case GDK_KEY_Return:
-      case GDK_KEY_KP_Enter:
         // insert new line
         event->state &= ~GDK_CONTROL_MASK;  //TODO: on Mac, remap Ctrl to Cmd key
         d->editing = TRUE;
@@ -350,16 +351,14 @@ static gboolean _key_pressed(GtkWidget *textview, GdkEventKey *event, dt_lib_mod
   }
   else
   {
-    switch(event->keyval)
+    switch(key)
     {
       case GDK_KEY_Return:
-      case GDK_KEY_KP_Enter:
         _write_metadata(GTK_TEXT_VIEW(textview), self);
         _text_set_all_selected(GTK_TEXT_VIEW(textview), FALSE);
         return TRUE;
         break;
       case GDK_KEY_Tab:
-      case GDK_KEY_KP_Tab:
       case GDK_KEY_ISO_Left_Tab:
         _write_metadata(GTK_TEXT_VIEW(textview), self);
         break;
@@ -692,7 +691,7 @@ static gboolean _metadata_reset(GtkWidget *label, GdkEventButton *event, GtkWidg
 
     GdkEventKey e = {0};
     e.type = GDK_KEY_PRESS;
-    e.keyval = GDK_KEY_KP_Enter;
+    e.keyval = GDK_KEY_Return;
     e.send_event = TRUE;
     e.window = gtk_text_view_get_window(GTK_TEXT_VIEW(widget), GTK_TEXT_WINDOW_TEXT);
     gboolean ret_val;
