@@ -1834,6 +1834,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
 {
   dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
   dt_develop_t *dev = self ? self->dev : NULL;
+  if(IS_NULL_PTR(g) || IS_NULL_PTR(dev)) return;
   if(!g->has_focus || !self->enabled || !g->cursor_valid || dt_iop_color_picker_is_visible(dev))
     return;
 

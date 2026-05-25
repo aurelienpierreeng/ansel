@@ -2386,7 +2386,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   if(IS_NULL_PTR(work_profile)) return;
 
   const dt_iop_channelmixer_rgb_gui_data_t *g = (const dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
-  if(!g->is_profiling_started) return;
+  if(IS_NULL_PTR(g) || !g->is_profiling_started) return;
 
   // Rescale and shift Cairo drawing coordinates
   dt_develop_t *dev = self->dev;

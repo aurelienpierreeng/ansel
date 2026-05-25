@@ -1648,6 +1648,7 @@ void gui_post_expose (struct dt_iop_module_t *self,
                       int32_t pointery)
 {
   dt_iop_retouch_gui_data_t *g = (dt_iop_retouch_gui_data_t *)self->gui_data;
+  if(IS_NULL_PTR(g)) return;
 
   const int shape_id = rt_get_selected_shape_id(self);
 

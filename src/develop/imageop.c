@@ -597,6 +597,11 @@ static void _gui_delete_callback(GtkButton *button, dt_iop_module_t *module)
   // we must pay attention if priority is 0
   const gboolean is_zero = (module->multi_priority == 0);
 
+  // We are about to destroy this module GUI. Drop darkroom focus first so the
+  // center expose callback cannot call module->gui_post_expose() with a stale
+  // module->gui_data pointer during teardown-triggered redraws.
+  if(dev->gui_module == module) dt_iop_request_focus(NULL);
+
   ++darktable.gui->reset;
 
   // we remove the plugin effectively
@@ -1888,6 +1893,7 @@ void dt_iop_gui_cleanup_module(dt_iop_module_t *module)
 {
   if(IS_NULL_PTR(module)) return;
   dt_gui_module_t *mod = (dt_gui_module_t *)module;
+  if(!IS_NULL_PTR(module->dev) && module->dev->gui_module == module) module->dev->gui_module = NULL;
 
   // remove multiple delayed gtk_widget_queue_draw triggers
   if(module->widget)
