@@ -239,7 +239,7 @@ static dt_signal_description _signal_description[DT_SIGNAL_COUNT] = {
     FALSE }, // DT_SIGNAL_DEVELOP_MASKS_GUI_CHANGED
 
   { "dt-control-filelist-update", NULL, NULL, G_TYPE_NONE, g_cclosure_marshal_generic, 3, file_crawling_arg, NULL,
-    FALSE }, // DT_SIGNAL_FILELIST_UPDATED
+    TRUE }, // DT_SIGNAL_FILELIST_UPDATED: synchronous so crawler-owned pointers stay valid until handlers return.
 };
 
 static GType _signal_type;
