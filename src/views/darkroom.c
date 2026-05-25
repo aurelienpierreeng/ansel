@@ -197,8 +197,8 @@ static void _darkroom_autoset_button_set_running(const gboolean running)
   gtk_button_set_label(GTK_BUTTON(_darkroom_autoset_button), running ? _("Autoset...") : _("Autoset"));
   gtk_widget_set_sensitive(_darkroom_autoset_button, !running);
   gtk_widget_set_tooltip_text(_darkroom_autoset_button,
-                              running ? _("autoset is running on selected modules")
-                                      : _("run autoset on selected modules\nright click for options"));
+                              running ? _("Autoset is running on selected modules")
+                                      : _("Run autoset on selected modules\nRight click for options"));
 
   if(running)
     dt_gui_add_class(_darkroom_autoset_button, "active");
@@ -2339,7 +2339,7 @@ void gui_init(dt_view_t *self)
     _autoset_manager = dt_calloc_align(sizeof(dt_autoset_manager_t));
 
     _darkroom_autoset_button = gtk_button_new_with_label(_("Autoset"));
-    gtk_widget_set_tooltip_text(_darkroom_autoset_button, _("run autoset on selected modules\nright click for options"));
+    gtk_widget_set_tooltip_text(_darkroom_autoset_button, _("Run autoset on selected modules\nRight click for options"));
     g_signal_connect(G_OBJECT(_darkroom_autoset_button), "clicked",
                     G_CALLBACK(_darkroom_autoset_quickbutton_clicked), dev);
     dt_view_manager_module_toolbox_add(darktable.view_manager, _darkroom_autoset_button, DT_VIEW_DARKROOM);
