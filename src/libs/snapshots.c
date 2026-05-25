@@ -812,16 +812,21 @@ static void _lib_snapshots_add_button_clicked_callback(GtkWidget *widget, gpoint
   d->snapshot[0] = last;
   d->snapshot[0].button = b;
   const gchar *name = _("original");
+  gchar *dynamic_name = NULL;
   if(dt_dev_get_history_end_ext(darktable.develop) > 0)
   {
     dt_dev_history_item_t *history_item = g_list_nth_data(darktable.develop->history,
                                                           dt_dev_get_history_end_ext(darktable.develop) - 1);
     if(!IS_NULL_PTR(history_item) && !IS_NULL_PTR(history_item->module))
-      name = dt_history_item_get_name(history_item->module);
+    {
+      dynamic_name = dt_history_item_get_name(history_item->module);
+      if(!IS_NULL_PTR(dynamic_name)) name = dynamic_name;
+    }
     else
       name = _("unknown");
   }
   g_snprintf(label, sizeof(label), "%s (%d)", name, dt_dev_get_history_end_ext(darktable.develop));
+  if(!IS_NULL_PTR(dynamic_name)) dt_free(dynamic_name);
   gtk_label_set_text(GTK_LABEL(gtk_bin_get_child(GTK_BIN(d->snapshot[0].button))), label);
 
   // Save current darkroom ROI and zoom as the reference view for this history snapshot.
