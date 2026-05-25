@@ -58,6 +58,7 @@
 */
 
 #include "common/darktable.h"
+#include "gui/gdkkeys.h"
 #include "bauhaus/bauhaus.h"
 #include "common/calculator.h"
 #include "common/math.h"

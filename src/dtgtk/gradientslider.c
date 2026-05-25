@@ -41,6 +41,7 @@
 #include <string.h>
 
 #include "common/darktable.h"
+#include "gui/gdkkeys.h"
 #include "common/math.h"
 #include "develop/develop.h"
 #include "gradientslider.h"

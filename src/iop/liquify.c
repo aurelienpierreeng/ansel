@@ -45,6 +45,7 @@
 
 #ifdef HAVE_CONFIG_H
 #include "common/darktable.h"
+#include "gui/gdkkeys.h"
 #include "config.h"
 #endif
 #include "bauhaus/bauhaus.h"
@@ -3785,7 +3786,6 @@ int key_pressed(struct dt_iop_module_t *self, GdkEventKey *event)
   }
 
   // Quit current creation or edition on Escape or Enter key
-  guint key = dt_keys_mainpad_alternatives(event->keyval);
   if(key == GDK_KEY_Escape || key == GDK_KEY_Return)
   {
 

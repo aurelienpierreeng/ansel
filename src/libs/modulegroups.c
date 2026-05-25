@@ -407,9 +407,13 @@ static dt_modulesgroups_tabs_t _get_current_tab(dt_lib_module_t *self)
 {
   dt_lib_modulegroups_t *d = (dt_lib_modulegroups_t *)self->data;
   if(!IS_NULL_PTR(d) && GTK_IS_NOTEBOOK(d->notebook))
-    return gtk_notebook_get_current_page(GTK_NOTEBOOK(d->notebook));
+  {
+    const gint page = gtk_notebook_get_current_page(GTK_NOTEBOOK(d->notebook));
+    if(page >= 0 && page < MOD_TAB_LAST) return (dt_modulesgroups_tabs_t)page;
+  }
 
-  return MOD_TAB_ACTIVE;
+  // Fall back to persisted state when notebook page is temporarily unavailable.
+  return _modulegroups_cycle_tabs(dt_conf_get_int("plugins/darkroom/moduletab"));
 }
 
 static void _set_current_tab(dt_lib_module_t *self, dt_modulesgroups_tabs_t tab)
@@ -1225,11 +1229,18 @@ static void _lib_modulegroups_signal_set(gpointer instance, gpointer module, gpo
   if(IS_NULL_PTR(iop_module)) return;
 
   const dt_modulesgroups_tabs_t current_tab = _get_current_tab(self);
+  const gboolean allow_switch_from_active
+      = !IS_NULL_PTR(iop_module->expander)
+        && GPOINTER_TO_INT(g_object_get_data(G_OBJECT(iop_module->expander),
+                                             "dt-modulegroups-switch-from-active-once"));
+  if(!IS_NULL_PTR(iop_module->expander))
+    g_object_set_data(G_OBJECT(iop_module->expander), "dt-modulegroups-switch-from-active-once", NULL);
 
   // If module not in current tab: switch tab
   // Keep users on the Pipeline tab when they duplicate/create modules from it.
   // Pipeline is an activity-centered view and should not auto-jump to category tabs.
-  if(current_tab != MOD_TAB_ACTIVE && !_is_module_in_tab(iop_module, current_tab))
+  if((current_tab != MOD_TAB_ACTIVE || allow_switch_from_active)
+     && !_is_module_in_tab(iop_module, current_tab))
     _set_current_tab_from_module_group(self, iop_module->default_group());
 
   // If module in current tab but not visible: refresh tab

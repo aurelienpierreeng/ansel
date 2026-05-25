@@ -28,6 +28,7 @@
 */
 #include "bauhaus/bauhaus.h"
 #include "common/darktable.h"
+#include "gui/gdkkeys.h"
 #include "common/debug.h"
 #include "common/imageio_module.h"
 #include "control/conf.h"

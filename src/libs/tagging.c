@@ -49,6 +49,7 @@
 #include "common/collection.h"
 #include "common/selection.h"
 #include "common/darktable.h"
+#include "gui/gdkkeys.h"
 #include "common/debug.h"
 #include "common/tags.h"
 #include "control/conf.h"

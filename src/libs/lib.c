@@ -53,6 +53,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "common/darktable.h"
+#include "gui/gdkkeys.h"
 #include "libs/lib.h"
 #include "common/debug.h"
 #include "common/module.h"

@@ -83,6 +83,7 @@
 #include "develop/format.h"
 #include "develop/masks.h"
 #include "develop/tiling.h"
+#include "gui/gdkkeys.h"
 #include "gui/presets.h"
 #include "dtgtk/button.h"
 #include "dtgtk/expander.h"

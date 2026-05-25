@@ -17,6 +17,7 @@
 */
 
 #include "common/darktable.h"
+#include "gui/gdkkeys.h"
 #include "common/datetime.h"
 #include "common/debug.h"
 #include "common/image.h"

@@ -52,6 +52,7 @@
 #include "develop/imageop_gui.h"
 #include "dtgtk/drawingarea.h"
 #include "gui/color_picker_proxy.h"
+#include "gui/gdkkeys.h"
 #include "gui/presets.h"
 #include "gui/draw.h"
 #include "control/control.h"

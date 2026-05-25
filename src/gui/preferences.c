@@ -57,6 +57,7 @@
 
 #include "bauhaus/bauhaus.h"
 #include "common/darktable.h"
+#include "gui/gdkkeys.h"
 #include "common/debug.h"
 #include "common/file_location.h"
 #include "common/l10n.h"
