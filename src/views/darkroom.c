@@ -172,12 +172,38 @@ static GtkWidget *_darkroom_autoset_button = NULL;
 static GtkWidget *_darkroom_autoset_popover = NULL;
 static GtkWidget *_darkroom_autoset_list = NULL;
 static void _darkroom_autoset_popover_refresh(gpointer instance, gpointer user_data);
+static void _darkroom_autoset_button_set_running(const gboolean running);
 
 static void _darkroom_ioporder_quickbutton_clicked(GtkButton *button, gpointer user_data)
 {
   dt_lib_module_t *module = dt_lib_get_module("ioporder");
   if(module && module->show_popup)
     module->show_popup(module);
+}
+
+/**
+ * @brief Reflect autoset processing state on the darkroom quick button.
+ *
+ * @details
+ * The autoset pipeline advances asynchronously across preview-finished callbacks.
+ * We keep the button state explicit so users can see when a run is in progress.
+ *
+ * @param running TRUE while autoset still has operations to process.
+ */
+static void _darkroom_autoset_button_set_running(const gboolean running)
+{
+  if(IS_NULL_PTR(_darkroom_autoset_button)) return;
+
+  gtk_button_set_label(GTK_BUTTON(_darkroom_autoset_button), running ? _("Autoset...") : _("Autoset"));
+  gtk_widget_set_sensitive(_darkroom_autoset_button, !running);
+  gtk_widget_set_tooltip_text(_darkroom_autoset_button,
+                              running ? _("autoset is running on selected modules")
+                                      : _("run autoset on selected modules\nright click for options"));
+
+  if(running)
+    dt_gui_add_class(_darkroom_autoset_button, "active");
+  else
+    dt_gui_remove_class(_darkroom_autoset_button, "active");
 }
 
 const char *name(const dt_view_t *self)
@@ -1815,7 +1841,10 @@ static void _preview_pipe_finished(gpointer instance, gpointer user_data)
   }
 
   if(pipe->autoset)
+  {
     dt_iop_autoset_advance(darktable.develop, _autoset_manager);
+    _darkroom_autoset_button_set_running(_autoset_manager && _autoset_manager->progress_cursor_active);
+  }
 }
 
 /*
@@ -1834,6 +1863,7 @@ static gboolean _darkroom_toolbox_button_activate_accel(GtkAccelGroup *accel_gro
 static void _darkroom_autoset_quickbutton_clicked(GtkButton *button, gpointer user_data)
 {
   dt_iop_autoset_build_list(darktable.develop, _autoset_manager);
+  _darkroom_autoset_button_set_running(_autoset_manager && _autoset_manager->progress_cursor_active);
   fprintf(stdout, "lauching autoset\n");
 }
 
@@ -2327,6 +2357,7 @@ void gui_init(dt_view_t *self)
     _darkroom_autoset_list = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_container_add(GTK_CONTAINER(_darkroom_autoset_popover), _darkroom_autoset_list);
     _darkroom_autoset_popover_rebuild(dev);
+    _darkroom_autoset_button_set_running(FALSE);
 
     DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE,
                                     G_CALLBACK(_darkroom_autoset_popover_refresh), dev);
