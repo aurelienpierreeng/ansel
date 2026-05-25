@@ -171,6 +171,7 @@ static dt_autoset_manager_t *_autoset_manager = NULL;
 static GtkWidget *_darkroom_autoset_button = NULL;
 static GtkWidget *_darkroom_autoset_popover = NULL;
 static GtkWidget *_darkroom_autoset_list = NULL;
+static gboolean _darkroom_autoset_button_is_running = FALSE;
 static void _darkroom_autoset_popover_refresh(gpointer instance, gpointer user_data);
 static void _darkroom_autoset_button_set_running(const gboolean running);
 
@@ -193,6 +194,9 @@ static void _darkroom_ioporder_quickbutton_clicked(GtkButton *button, gpointer u
 static void _darkroom_autoset_button_set_running(const gboolean running)
 {
   if(IS_NULL_PTR(_darkroom_autoset_button)) return;
+  if(_darkroom_autoset_button_is_running == running) return;
+
+  _darkroom_autoset_button_is_running = running;
 
   gtk_button_set_label(GTK_BUTTON(_darkroom_autoset_button), running ? _("Autoset...") : _("Autoset"));
   gtk_widget_set_sensitive(_darkroom_autoset_button, !running);
@@ -257,6 +261,7 @@ void cleanup(dt_view_t *self)
     dt_free_align(_autoset_manager);
     _autoset_manager = NULL;
   }
+  _darkroom_autoset_button_is_running = FALSE;
   _darkroom_autoset_list = NULL;
   _darkroom_autoset_popover = NULL;
 
@@ -1822,6 +1827,8 @@ static void _preview_pipe_finished(gpointer instance, gpointer user_data)
 {
   // Get the mip size that is at most as big as our pipeline backbuf
   dt_dev_pixelpipe_t *pipe = darktable.develop->preview_pipe;
+  const gboolean autoset_running_before
+      = !IS_NULL_PTR(_autoset_manager) && _autoset_manager->progress_cursor_active;
   const int32_t imgid = darktable.develop->image_storage.id;
   dt_mipmap_size_t mip = dt_mipmap_cache_get_fitting_size(darktable.mipmap_cache, pipe->backbuf.width, pipe->backbuf.height, imgid);
 
@@ -1831,19 +1838,25 @@ static void _preview_pipe_finished(gpointer instance, gpointer user_data)
   gboolean cache_ready = !IS_NULL_PTR(tmp.buf);
   dt_mipmap_cache_release(darktable.mipmap_cache, &tmp);
 
-  // Only refresh thumbnails once the cache is ready, to avoid spawning extra
-  // thumbnail rendering threads. We populate the mipmap cache inside the preview pipe 
-  // background rendering thread.
-  if(cache_ready)
-  {
-    dt_thumbtable_refresh_thumbnail(darktable.gui->ui->thumbtable_lighttable, imgid, TRUE);
-    dt_thumbtable_refresh_thumbnail(darktable.gui->ui->thumbtable_filmstrip, imgid, TRUE);
-  }
-
   if(pipe->autoset)
   {
     dt_iop_autoset_advance(darktable.develop, _autoset_manager);
     _darkroom_autoset_button_set_running(_autoset_manager && _autoset_manager->progress_cursor_active);
+  }
+
+  const gboolean autoset_running_after
+      = !IS_NULL_PTR(_autoset_manager) && _autoset_manager->progress_cursor_active;
+
+  // While autoset iterates over modules, avoid spawning thumbnail refresh jobs on each preview completion.
+  // We refresh once the autoset run is finished and the preview cache reached a stable state.
+  if(cache_ready && !autoset_running_after)
+  {
+    const gboolean autoset_just_finished = autoset_running_before && !autoset_running_after;
+    if(!autoset_running_before || autoset_just_finished)
+    {
+      dt_thumbtable_refresh_thumbnail(darktable.gui->ui->thumbtable_lighttable, imgid, TRUE);
+      dt_thumbtable_refresh_thumbnail(darktable.gui->ui->thumbtable_filmstrip, imgid, TRUE);
+    }
   }
 }
 
