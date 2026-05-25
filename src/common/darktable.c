@@ -1365,8 +1365,6 @@ void dt_cleanup()
     if(GTK_IS_WIDGET(main_window))
       gtk_widget_destroy(main_window);
 
-    _dt_drain_main_context(256);
-
     dt_gui_gtk_t *gui = darktable.gui;
     darktable.gui = NULL;
     dt_accels_cleanup(gui->accels);
