@@ -23,6 +23,7 @@
 #include "develop/dev_pixelpipe.h"
 #include "develop/imageop.h"
 #include "control/conf.h"
+#include "control/control.h"
 
 #include <glib.h>
 
@@ -54,6 +55,12 @@ void dt_iop_autoset_module_set_enabled(const dt_iop_module_t *module, const gboo
 
 void dt_iop_autoset_build_list(struct dt_develop_t *dev, dt_autoset_manager_t *manager)
 {
+  if(manager->progress_cursor_active)
+  {
+    dt_control_log_busy_leave();
+    manager->progress_cursor_active = FALSE;
+  }
+
   g_list_free(manager->iop_to_set);
   manager->iop_to_set = NULL;
   dev->preview_pipe->autoset = TRUE;
@@ -79,13 +86,31 @@ int dt_iop_autoset_advance(struct dt_develop_t *dev, dt_autoset_manager_t *manag
   if(IS_NULL_PTR(mod)) 
   {
     pipe->autoset = FALSE;
+    if(manager->progress_cursor_active)
+    {
+      dt_control_log_busy_leave();
+      manager->progress_cursor_active = FALSE;
+    }
     return 1;
+  }
+
+  // Enter busy cursor exactly when the first autoset operation starts.
+  if(!manager->progress_cursor_active)
+  {
+    dt_control_log_busy_enter();
+    dt_control_change_cursor_by_name_and_flush("progress");
+    manager->progress_cursor_active = TRUE;
   }
 
   dt_iop_module_t *module = (dt_iop_module_t *)mod->data;
   if(IS_NULL_PTR(module))
   {
     pipe->autoset = FALSE;
+    if(manager->progress_cursor_active)
+    {
+      dt_control_log_busy_leave();
+      manager->progress_cursor_active = FALSE;
+    }
     return 1;
   }
 
@@ -126,5 +151,14 @@ int dt_iop_autoset_advance(struct dt_develop_t *dev, dt_autoset_manager_t *manag
   dt_iop_gui_update(module);
 
   manager->iop_to_set = g_list_delete_link(manager->iop_to_set, mod);
+  if(IS_NULL_PTR(manager->iop_to_set))
+  {
+    pipe->autoset = FALSE;
+    if(manager->progress_cursor_active)
+    {
+      dt_control_log_busy_leave();
+      manager->progress_cursor_active = FALSE;
+    }
+  }
   return 0;
 }

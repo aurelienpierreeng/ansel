@@ -222,6 +222,11 @@ void cleanup(dt_view_t *self)
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_darkroom_autoset_popover_refresh), dev);
   if(_autoset_manager)
   {
+    if(_autoset_manager->progress_cursor_active)
+    {
+      dt_control_log_busy_leave();
+      _autoset_manager->progress_cursor_active = FALSE;
+    }
     g_list_free(_autoset_manager->iop_to_set);
     dt_free_align(_autoset_manager);
     _autoset_manager = NULL;

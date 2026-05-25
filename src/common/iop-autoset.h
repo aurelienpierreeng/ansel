@@ -21,6 +21,7 @@
 typedef struct dt_autoset_manager_t 
 {
   GList *iop_to_set;
+  gboolean progress_cursor_active;
 
 } dt_autoset_manager_t;
 
