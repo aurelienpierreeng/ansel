@@ -116,7 +116,7 @@ void dt_control_change_cursor_EXT(dt_cursor_t cursor, const char *file, int line
 #define dt_control_change_cursor(cursor) \
   dt_control_change_cursor_EXT((cursor), __FILE__, __LINE__)
 
-void dt_control_change_cursor_by_name(const char *curs_str);
+//void dt_control_change_cursor_by_name(const char *curs_str);
 
 // set darktable.control->cursor.shape to the desired cursor shape
 void dt_control_queue_cursor_EXT(dt_cursor_t cursor, const char *file, int line);
@@ -124,6 +124,7 @@ void dt_control_queue_cursor_EXT(dt_cursor_t cursor, const char *file, int line)
   dt_control_queue_cursor_EXT((cursor), __FILE__, __LINE__)
 
 void dt_control_queue_cursor_by_name(const char *curs_str);
+
 // commit the currently set cursor shape from darktable.control->cursor.shape
 void dt_control_commit_cursor();
 /** \brief Set whether the cursor should be visible or not.

@@ -1288,6 +1288,7 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   // finally set the cursor to be the default.
   // for some reason this is needed on some systems to pick up the correctly themed cursor
   dt_control_change_cursor(GDK_LEFT_PTR);
+  gui->mouse.effect_radius =  DT_PIXEL_APPLY_DPI(15.0f) * darktable.gui->ppd;
 
   return 0;
 }

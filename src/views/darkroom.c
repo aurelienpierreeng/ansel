@@ -160,6 +160,7 @@ static void _darkroom_autoset_popover_rebuild(dt_develop_t *dev);
 
 static int _change_scaling(dt_develop_t *dev, const float point[2], const float new_scaling);
 static void _release_expose_source_caches(void);
+static void _darkroom_set_default_cursor(dt_view_t *self, double x, double y);
 
 static int32_t _darkroom_pending_imgid = UNKNOWN_IMAGE;
 static dt_iop_module_t *_darkroom_pending_focus_module = NULL;
@@ -2331,6 +2332,7 @@ void gui_init(dt_view_t *self)
   }
 
   darktable.view_manager->proxy.darkroom.get_layout = _lib_darkroom_get_layout;
+  darktable.view_manager->proxy.darkroom.set_default_cursor = _darkroom_set_default_cursor;
   dev->roi.border_size = DT_PIXEL_APPLY_DPI(dt_conf_get_int("plugins/darkroom/ui/border_size"));
 }
 
@@ -2660,14 +2662,14 @@ static gboolean mouse_in_actionarea(dt_view_t *self, double x, double y)
   return _is_in_frame(self->width, self->height, round(x), round(y));
 }
 
-static void _set_default_cursor(dt_view_t *self, double x, double y)
+static void _darkroom_set_default_cursor(dt_view_t *self, double x, double y)
 {
   if(mouse_in_imagearea(self, x, y))
-    dt_control_queue_cursor(GDK_DOT);
+    dt_control_queue_cursor_by_name("dot");
   else if(mouse_in_actionarea(self, x, y))
-    dt_control_queue_cursor(GDK_CROSSHAIR);
+    dt_control_queue_cursor_by_name("crosshair");
   else
-    dt_control_queue_cursor(GDK_LEFT_PTR);
+    dt_control_queue_cursor_by_name("left_ptr");
 }
 
 void mouse_enter(dt_view_t *self)
@@ -2913,7 +2915,7 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
   const gboolean picker_active = dt_iop_color_picker_is_visible(dev);
 
   // change cursor appearance by default
-  _set_default_cursor(self, x, y);
+  _darkroom_set_default_cursor(self, x, y);
   gboolean handled = FALSE;
 
   if(picker_active && ctl->button_down && ctl->button_down_which == 1)

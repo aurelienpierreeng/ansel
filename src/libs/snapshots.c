@@ -60,7 +60,7 @@ DT_MODULE(1)
 
 #define DT_LIB_SNAPSHOTS_COUNT 4
 #define SNAP_LOG(...) dt_print(DT_DEBUG_DEV, __VA_ARGS__)
-#define HANDLE_SIZE 0.02
+#define HANDLE_SIZE DT_PIXEL_APPLY_DPI_DPP(36)
 
 /* a snapshot */
 typedef struct dt_lib_snapshot_t
@@ -100,6 +100,7 @@ typedef struct dt_lib_snapshots_t
   gboolean dragging, vertical, inverted;
   double vp_x, vp_y, vp_width, vp_height, vp_xpointer, vp_ypointer, vp_xrotate, vp_yrotate;
   gboolean on_going;
+  gboolean hover_rotation;
 
   GtkWidget *take_button;
 } dt_lib_snapshots_t;
@@ -416,9 +417,10 @@ void gui_post_expose(dt_lib_module_t *self, cairo_t *cri, int32_t width, int32_t
                      int32_t pointery)
 {
   dt_lib_snapshots_t *d = (dt_lib_snapshots_t *)self->data;
+  if(IS_NULL_PTR(d)) return;
   dt_develop_t *dev = darktable.develop;
 
-  if(!IS_NULL_PTR(d) && !IS_NULL_PTR(d->snapshot_image))
+  if(!IS_NULL_PTR(d->snapshot_image))
   {
     if(d->selected >= 1 && d->selected <= d->size)
     {
@@ -438,10 +440,10 @@ void gui_post_expose(dt_lib_module_t *self, cairo_t *cri, int32_t width, int32_t
       const dt_lib_snapshot_t *s = d->snapshot + (d->selected - 1);
       if(s->sample_scale > 1e-6f) snapshot_scale = s->sample_scale;
     }
-    const float zoom_level = dt_dev_get_zoom_level(dev) / darktable.gui->ppd;
+    const float zoom_level = dt_dev_get_zoom_level(dev);
     const float render_scale = zoom_level / snapshot_scale;
-    const float surface_width = cairo_image_surface_get_width(d->snapshot_image);
-    const float surface_height = cairo_image_surface_get_height(d->snapshot_image);
+    const float surface_width = cairo_image_surface_get_width(d->snapshot_image) / darktable.gui->ppd;
+    const float surface_height = cairo_image_surface_get_height(d->snapshot_image) / darktable.gui->ppd;
     const double tx = 0.5 * width - dev->roi.x * surface_width * render_scale;
     const double ty = 0.5 * height - dev->roi.y * surface_height * render_scale;
 
@@ -535,33 +537,49 @@ void gui_post_expose(dt_lib_module_t *self, cairo_t *cri, int32_t width, int32_t
       }
     }
 
-    /* if mouse over control lets draw center rotate control, hide if split is dragged */
+    /* if mouse over control, lets draw center rotate control, hide if split is dragged */
     if(!d->dragging)
     {
-      const double handle_size = fmin(24, d->vp_width * HANDLE_SIZE);
+      const double half_handle_size = HANDLE_SIZE * 0.5;
       const gint rx = (d->vertical ? d->vp_x + d->vp_width * split_x : d->vp_x + d->vp_width * 0.5)
-                      - (handle_size * 0.5);
+                      - half_handle_size;
       const gint ry = (d->vertical ? d->vp_y + d->vp_height * 0.5 : d->vp_y + d->vp_height * split_y)
-                      - (handle_size * 0.5);
+                      - half_handle_size;
 
-      const gboolean display_rotation = (abs(pointerx - rx) < 40) && (abs(pointery - ry) < 40);
-      dt_draw_set_color_overlay(cri, TRUE, display_rotation ? 1.0 : 0.3);
+      dt_draw_set_color_overlay(cri, TRUE, d->hover_rotation ? 1.0 : 0.3);
 
       cairo_set_line_width(cri, 0.5);
-      dtgtk_cairo_paint_refresh(cri, rx, ry, handle_size, handle_size, 0, NULL);
+      dtgtk_cairo_paint_refresh(cri, rx, ry, HANDLE_SIZE, HANDLE_SIZE, 0, NULL);
     }
 
     d->on_going = FALSE;
+
+    if(d->hover_rotation) dt_control_queue_cursor_by_name("exchange");
+    else if(d->dragging) dt_control_queue_cursor_by_name("grabbing");
+    else
+    {
+      dt_view_t *view = darktable.view_manager->proxy.darkroom.view;
+      if(!IS_NULL_PTR(view) && !IS_NULL_PTR(darktable.view_manager->proxy.darkroom.set_default_cursor))
+        darktable.view_manager->proxy.darkroom.set_default_cursor(view, pointerx, pointery);
+      else
+        dt_control_queue_cursor_by_name("left_ptr");
+    }
+
   }
 }
 
 int button_released(struct dt_lib_module_t *self, double x, double y, int which, uint32_t state)
 {
   dt_lib_snapshots_t *d = (dt_lib_snapshots_t *)self->data;
-  if(d->snapshot_image)
+  if(d->snapshot_image && which == 1)
   {
-    d->dragging = FALSE;
-    return 1;
+    if(d->dragging)
+    {
+      d->dragging = FALSE;
+      d->hover_rotation = FALSE;
+    }
+    // Refresh mouse_moved event
+    return mouse_moved(self, x, y, 0.0, which);
   }
   return 0;
 }
@@ -571,6 +589,9 @@ static int _lib_snapshot_rotation_cnt = 0;
 int button_pressed(struct dt_lib_module_t *self, double x, double y, double pressure, int which, int type,
                    uint32_t state)
 {
+  // only react to left click
+  if(which != 1) return 0;
+
   dt_lib_snapshots_t *d = (dt_lib_snapshots_t *)self->data;
 
   if(d->snapshot_image)
@@ -582,15 +603,7 @@ int button_pressed(struct dt_lib_module_t *self, double x, double y, double pres
     const double xp = CLAMP((x - d->vp_x) / d->vp_width, 0.0, 1.0);
     const double yp = CLAMP((y - d->vp_y) / d->vp_height, 0.0, 1.0);
 
-    /* do the split rotating */
-    const double hhs = HANDLE_SIZE * 0.5;
-    if(which == 1
-       && (((d->vertical && xp > d->vp_xpointer - hhs && xp < d->vp_xpointer + hhs)
-            && yp > 0.5 - hhs && yp < 0.5 + hhs)
-           || ((!d->vertical && yp > d->vp_ypointer - hhs && yp < d->vp_ypointer + hhs)
-               && xp > 0.5 - hhs && xp < 0.5 + hhs)
-           || (d->vp_xrotate > xp - hhs && d->vp_xrotate <= xp + hhs && d->vp_yrotate > yp - hhs
-               && d->vp_yrotate <= yp + hhs )))
+    if(d->hover_rotation)
     {
       /* let's rotate */
       _lib_snapshot_rotation_cnt++;
@@ -606,7 +619,7 @@ int button_pressed(struct dt_lib_module_t *self, double x, double y, double pres
       dt_control_queue_redraw_center();
     }
     /* do the dragging !? */
-    else if(which == 1)
+    else
     {
       d->dragging = TRUE;
       d->vp_ypointer = yp;
@@ -629,10 +642,22 @@ int mouse_moved(dt_lib_module_t *self, double x, double y, double pressure, int 
     if(d->vp_width <= 0.0 || d->vp_height <= 0.0) return 0;
     const double xp = CLAMP((x - d->vp_x) / d->vp_width, 0.0, 1.0);
     const double yp = CLAMP((y - d->vp_y) / d->vp_height, 0.0, 1.0);
+    d->hover_rotation = FALSE;
 
-    /* update x pointer */
-    if(d->dragging)
+    if(!d->dragging)
     {
+      const double split_x = CLAMP(d->vp_xpointer, 0.0, 1.0);
+      const double split_y = CLAMP(d->vp_ypointer, 0.0, 1.0);
+      const double handle_mouse = (DT_GUI_MOUSE_EFFECT_RADIUS + HANDLE_SIZE) * 0.5;
+      const double rxc = d->vertical ? d->vp_x + d->vp_width * split_x : d->vp_x + d->vp_width * 0.5;
+      const double ryc = d->vertical ? d->vp_y + d->vp_height * 0.5 : d->vp_y + d->vp_height * split_y;
+      const double dx = x - rxc;
+      const double dy = y - ryc;
+      d->hover_rotation = (dx * dx + dy * dy) < (handle_mouse * handle_mouse);
+    }
+    else
+    {
+      /* update pointer pos */
       d->vp_xpointer = xp;
       d->vp_ypointer = yp;
     }
@@ -647,6 +672,7 @@ void gui_reset(dt_lib_module_t *self)
 {
   dt_lib_snapshots_t *d = (dt_lib_snapshots_t *)self->data;
   d->num_snapshots = 0;
+  d->hover_rotation = FALSE;
   if(d->snapshot_image)
   {
     cairo_surface_destroy(d->snapshot_image);
@@ -684,6 +710,7 @@ void gui_init(dt_lib_module_t *self)
   d->vp_yrotate = 0.0;
   d->vertical = TRUE;
   d->on_going = FALSE;
+  d->hover_rotation = FALSE;
   d->snapshot_imgid = UNKNOWN_IMAGE;
   d->snapshot_zoom_level = -1.0f;
 
@@ -783,8 +810,8 @@ static void _lib_snapshots_add_button_clicked_callback(GtkWidget *widget, gpoint
   {
     dt_dev_history_item_t *history_item = g_list_nth_data(darktable.develop->history,
                                                           dt_dev_get_history_end_ext(darktable.develop) - 1);
-    if(history_item && history_item->module)
-      name = history_item->module->name();
+    if(!IS_NULL_PTR(history_item) && !IS_NULL_PTR(history_item->module))
+      name = dt_history_item_get_name(history_item->module);
     else
       name = _("unknown");
   }

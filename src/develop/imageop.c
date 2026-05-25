@@ -1863,6 +1863,27 @@ void dt_iop_commit_params(dt_iop_module_t *module, dt_iop_params_t *params,
            dt_pixelpipe_get_pipe_name(pipe->type), piece->hash);
 }
 
+/**
+ * @brief Clear GUI pointers that still reference one iop widget being finalized.
+ *
+ * @param user_data iop module owner.
+ * @param where_the_object_was finalized widget address.
+ */
+static void _iop_gui_widget_gone(gpointer user_data, GObject *where_the_object_was)
+{
+  dt_iop_module_t *module = (dt_iop_module_t *)user_data;
+  if(IS_NULL_PTR(module)) return;
+
+  if(module->header == (GtkWidget *)where_the_object_was) module->header = NULL;
+  if(module->expander == (GtkWidget *)where_the_object_was) module->expander = NULL;
+
+  if(IS_NULL_PTR(darktable.gui)) return;
+
+  if(darktable.gui->scroll_to[0] == (GtkWidget *)where_the_object_was) darktable.gui->scroll_to[0] = NULL;
+  if(darktable.gui->scroll_to[1] == (GtkWidget *)where_the_object_was) darktable.gui->scroll_to[1] = NULL;
+  if(darktable.gui->scroll_to_header_once == (GtkWidget *)where_the_object_was) darktable.gui->scroll_to_header_once = NULL;
+}
+
 void dt_iop_gui_cleanup_module(dt_iop_module_t *module)
 {
   if(IS_NULL_PTR(module)) return;
@@ -1907,6 +1928,17 @@ void dt_iop_gui_cleanup_module(dt_iop_module_t *module)
     module->gui_cleanup(module);
   dt_iop_gui_cleanup_blending(module);
 
+  // size-allocate callbacks can still read scroll targets while GTK tears down widgets
+  if(!IS_NULL_PTR(darktable.gui))
+  {
+    if(darktable.gui->scroll_to[0] == module->header || darktable.gui->scroll_to[0] == module->expander)
+      darktable.gui->scroll_to[0] = NULL;
+    if(darktable.gui->scroll_to[1] == module->header || darktable.gui->scroll_to[1] == module->expander)
+      darktable.gui->scroll_to[1] = NULL;
+    if(darktable.gui->scroll_to_header_once == module->expander)
+      darktable.gui->scroll_to_header_once = NULL;
+  }
+
   /* Release the transient widget tree explicitly. In normal GUI lifetime, these
    * widgets are parented and get destroyed by container teardown. During module
    * probe/init paths, they can stay unparented and would otherwise leak. */
@@ -1935,9 +1967,6 @@ void dt_iop_gui_cleanup_module(dt_iop_module_t *module)
       g_object_unref(widget);
     }
   }
-
-  if(darktable.gui && darktable.gui->scroll_to_header_once == module->expander)
-    darktable.gui->scroll_to_header_once = NULL;
 
   module->widget = NULL;
   module->header = NULL;
@@ -2620,6 +2649,8 @@ void dt_iop_gui_set_expander(dt_iop_module_t *module)
   gtk_widget_hide(iopw);
 
   module->expander = expander;
+  g_object_weak_ref(G_OBJECT(header), _iop_gui_widget_gone, module);
+  g_object_weak_ref(G_OBJECT(expander), _iop_gui_widget_gone, module);
 
   /* update header */
   dt_iop_gui_update_header(module);
