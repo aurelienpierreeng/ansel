@@ -249,6 +249,10 @@ static int _lib_snapshots_refresh_pipe_image(dt_lib_module_t *self, dt_lib_snaps
     return 1;
   }
 
+  // Snapshot refresh is synchronous on the UI thread. Apply the busy cursor now,
+  // then restore the queued cursor once the blocking pipe work is complete.
+  dt_control_change_cursor_by_name_and_flush("progress");
+
   dt_mipmap_cache_get(darktable.mipmap_cache, &buf, snapshot_dev->image_storage.id, DT_MIPMAP_FULL,
                       DT_MIPMAP_BLOCKING, 'r');
   input_ready = !IS_NULL_PTR(buf.buf) && buf.width > 0 && buf.height > 0;
@@ -363,6 +367,8 @@ cleanup:
              snapshot_pipe.iwidth, snapshot_pipe.iheight, snapshot_pipe.processed_width, snapshot_pipe.processed_height);
   if(input_ready) dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
   if(pipe_ready) dt_dev_pixelpipe_cleanup(&snapshot_pipe);
+  dt_control_commit_cursor();
+
   return status;
 }
 

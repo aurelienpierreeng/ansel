@@ -313,6 +313,24 @@ void dt_control_change_cursor_by_name(const char *curs_str)
   }
 }
 
+/**
+ * @brief Apply a named cursor immediatelly and flush display updates for immediate feedback.
+ *
+ * @details
+ * Some synchronous UI-thread operations perform heavy work right after cursor setup.
+ * Without an explicit display flush, GTK may delay painting and the busy cursor can
+ * remain invisible until the computation already finished.
+ *
+ * @param curs_str GTK cursor name (for example `"progress"`).
+ */
+void dt_control_change_cursor_by_name_and_flush(const char *curs_str)
+{
+  if(IS_NULL_PTR(curs_str)) return;
+  dt_control_change_cursor_by_name(curs_str);
+  GdkDisplay *display = gdk_display_get_default();
+  if(!IS_NULL_PTR(display)) gdk_display_flush(display);
+}
+
 void dt_control_commit_cursor()
 {
   //fprintf(stderr, "Committing cursor \n");
