@@ -19,10 +19,13 @@
 */
 #include "common/darktable.h"
 #include "control/control.h"
+#include "develop/develop.h"
+#include "develop/imageop.h"
 #include "views/view.h"
 #include "gui/window_manager.h"
 #include "gui/actions/menu.h"
 #include "dtgtk/sidepanel.h"
+#include "libs/lib.h"
 
 #define WINDOW_DEBUG 0
 
@@ -38,6 +41,13 @@ typedef struct dt_header_t
   GtkWidget *iconify;
   GtkWidget *image_info;
 } dt_header_t;
+
+typedef enum dt_panel_side_t
+{
+  LEFT_PANNEL = 0,
+  RIGHT_PANNEL = 1,
+  PANEL_SIDE_COUNT
+} dt_panel_side_t;
 
 const char *_ui_panel_config_names[]
     = { "header", "toolbar_top", "toolbar_bottom", "left", "right", "bottom" };
@@ -304,13 +314,54 @@ static GtkWidget *_ui_init_panel_container_top(GtkWidget *container)
   return w;
 }
 
+/**
+ * @brief Check whether a deferred panel scroll target is still a live module widget.
+ *
+ * We only accept widgets currently referenced by module descriptors. This avoids
+ * dereferencing stale pointers left after asynchronous GTK teardown.
+ *
+ * @param target widget pointer queued for panel scrolling.
+ * @param side panel side (`LEFT_PANNEL` or `RIGHT_PANNEL`).
+ *
+ * @return gboolean TRUE if target is still referenced by a visible module tree.
+ */
+static gboolean _ui_scroll_target_is_live_widget(const GtkWidget *target, const int side)
+{
+  if(IS_NULL_PTR(target)) return FALSE;
+  if(side != LEFT_PANNEL && side != RIGHT_PANNEL) return FALSE;
+
+  if(!IS_NULL_PTR(darktable.lib))
+  {
+    // Walk all lib modules and look for the exact expander address queued for scrolling.
+    for(const GList *libs = darktable.lib->plugins; libs; libs = g_list_next(libs))
+    {
+      const dt_lib_module_t *module = (const dt_lib_module_t *)libs->data;
+      if(!IS_NULL_PTR(module) && module->expander == target) return TRUE;
+    }
+  }
+
+  if(side == RIGHT_PANNEL && !IS_NULL_PTR(darktable.develop))
+  {
+    // Walk darkroom iop modules and accept either header or expander scroll anchors.
+    for(const GList *iops = darktable.develop->iop; iops; iops = g_list_next(iops))
+    {
+      const dt_iop_module_t *module = (const dt_iop_module_t *)iops->data;
+      if(IS_NULL_PTR(module)) continue;
+      if(module->expander == target || module->header == target) return TRUE;
+    }
+  }
+
+  return FALSE;
+}
+
 // this should work as long as everything happens in the gui thread
 static void _ui_panel_size_changed(GtkAdjustment *adjustment, GParamSpec *pspec, gpointer user_data)
 {
   GtkAllocation allocation;
-  static float last_height[2] = { 0 };
+  static float last_height[PANEL_SIDE_COUNT] = { 0 };
 
   const int side = GPOINTER_TO_INT(user_data);
+  if(side != LEFT_PANNEL && side != RIGHT_PANNEL) return;
 
   // don't do anything when the size didn't actually change.
   const float height = gtk_adjustment_get_upper(adjustment) - gtk_adjustment_get_lower(adjustment);
@@ -319,6 +370,11 @@ static void _ui_panel_size_changed(GtkAdjustment *adjustment, GParamSpec *pspec,
   last_height[side] = height;
 
   if(IS_NULL_PTR(darktable.gui->scroll_to[side])) return;
+  if(!_ui_scroll_target_is_live_widget(darktable.gui->scroll_to[side], side))
+  {
+    darktable.gui->scroll_to[side] = NULL;
+    return;
+  }
 
   if(GTK_IS_WIDGET(darktable.gui->scroll_to[side]))
   {
@@ -349,7 +405,8 @@ static GtkWidget *_ui_init_panel_container_center(GtkWidget *container, gboolean
   gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(widget), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
 
   g_signal_connect(G_OBJECT(gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(widget))), "notify::lower",
-                   G_CALLBACK(_ui_panel_size_changed), GINT_TO_POINTER(left ? 1 : 0));
+                   G_CALLBACK(_ui_panel_size_changed),
+                   GINT_TO_POINTER(left ? RIGHT_PANNEL : LEFT_PANNEL));
 
   /* create the scrolled viewport */
   container = widget;
