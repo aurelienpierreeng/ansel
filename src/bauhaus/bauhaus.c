@@ -438,7 +438,14 @@ gboolean _action_request_focus(GtkAccelGroup *accel_group, GObject *accelerable,
 
   // Make sure the parent module widget is visible, if we know it,
   // because we can't grab focus on invisible widgets
-  if(w->module) w->module->focus(w->module, FALSE);
+  if(!IS_NULL_PTR(w->module))
+  {
+    dt_iop_module_t *module = (dt_iop_module_t *)w->module;
+    if(!IS_NULL_PTR(module->expander))
+      g_object_set_data(G_OBJECT(module->expander), "dt-modulegroups-switch-from-active-once",
+                        GINT_TO_POINTER(TRUE));
+    w->module->focus(w->module, FALSE);
+  }
 
   g_idle_add(ensure_focus_idle, data);
   return TRUE;

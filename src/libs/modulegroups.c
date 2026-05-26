@@ -1229,17 +1229,32 @@ static void _lib_modulegroups_signal_set(gpointer instance, gpointer module, gpo
   if(IS_NULL_PTR(iop_module)) return;
 
   const dt_modulesgroups_tabs_t current_tab = _get_current_tab(self);
+  const gboolean prefer_active_once
+      = !IS_NULL_PTR(iop_module->expander)
+        && GPOINTER_TO_INT(g_object_get_data(G_OBJECT(iop_module->expander),
+                                             "dt-modulegroups-prefer-active-once"));
   const gboolean allow_switch_from_active
       = !IS_NULL_PTR(iop_module->expander)
         && GPOINTER_TO_INT(g_object_get_data(G_OBJECT(iop_module->expander),
                                              "dt-modulegroups-switch-from-active-once"));
+  const gboolean module_in_active_tab = _is_module_in_tab(iop_module, MOD_TAB_ACTIVE);
   if(!IS_NULL_PTR(iop_module->expander))
+  {
+    g_object_set_data(G_OBJECT(iop_module->expander), "dt-modulegroups-prefer-active-once", NULL);
     g_object_set_data(G_OBJECT(iop_module->expander), "dt-modulegroups-switch-from-active-once", NULL);
+  }
 
+  // Direct actions (enable/toggle) should prioritize Pipeline for the focused module.
+  if(prefer_active_once && module_in_active_tab && current_tab != MOD_TAB_ACTIVE)
+    _set_current_tab(self, MOD_TAB_ACTIVE);
+  // Focus-only requests from accel search: stay in Pipeline when the module is
+  // already there, otherwise jump to the module group tab.
+  else if(allow_switch_from_active && module_in_active_tab && current_tab != MOD_TAB_ACTIVE)
+    _set_current_tab(self, MOD_TAB_ACTIVE);
   // If module not in current tab: switch tab
   // Keep users on the Pipeline tab when they duplicate/create modules from it.
   // Pipeline is an activity-centered view and should not auto-jump to category tabs.
-  if((current_tab != MOD_TAB_ACTIVE || allow_switch_from_active)
+  else if((current_tab != MOD_TAB_ACTIVE || allow_switch_from_active)
      && !_is_module_in_tab(iop_module, current_tab))
     _set_current_tab_from_module_group(self, iop_module->default_group());
 

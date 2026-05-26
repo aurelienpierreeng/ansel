@@ -2286,6 +2286,12 @@ static gboolean _iop_plugin_enable_accel(GtkAccelGroup *accel_group, GObject *ac
   dt_iop_module_t *module = (dt_iop_module_t *)data;
   if(IS_NULL_PTR(module)) return FALSE;
 
+  // Direct actions from accel search should prioritize Pipeline when they focus
+  // the edited module right after applying the change.
+  if(!IS_NULL_PTR(module->expander))
+    g_object_set_data(G_OBJECT(module->expander), "dt-modulegroups-prefer-active-once",
+                      GINT_TO_POINTER(TRUE));
+
   // Kind of ugly to go through history to change module GUI state
   // FIXME: we should have a GUI callback that enables module and dispatches history instead, 
   // history should not care about module GUI. This is a wrong, reversed inheritance.
