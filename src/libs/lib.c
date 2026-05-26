@@ -53,6 +53,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "common/darktable.h"
+#include "gui/gdkkeys.h"
 #include "libs/lib.h"
 #include "common/debug.h"
 #include "common/module.h"
@@ -1505,7 +1506,9 @@ gboolean dt_lib_presets_can_autoapply(dt_lib_module_t *mod)
 
 gboolean dt_handle_dialog_enter(GtkWidget *widget, GdkEventKey *event, gpointer data)
 {
-  if(event->keyval == GDK_KEY_Return || event->keyval == GDK_KEY_KP_Enter)
+  guint key = dt_keys_mainpad_alternatives(event->keyval);
+
+  if(key == GDK_KEY_Return)
   {
     gtk_dialog_response(GTK_DIALOG(widget), GTK_RESPONSE_ACCEPT);
     return TRUE;

@@ -1349,6 +1349,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
 {
   dt_develop_t *dev = self->dev;
   dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)self->gui_data;
+  if(IS_NULL_PTR(g)) return;
 
   _aspect_apply(self, GRAB_HORIZONTAL);
 

@@ -58,6 +58,7 @@
 */
 
 #include "common/darktable.h"
+#include "gui/gdkkeys.h"
 #include "bauhaus/bauhaus.h"
 #include "common/calculator.h"
 #include "common/math.h"
@@ -437,7 +438,14 @@ gboolean _action_request_focus(GtkAccelGroup *accel_group, GObject *accelerable,
 
   // Make sure the parent module widget is visible, if we know it,
   // because we can't grab focus on invisible widgets
-  if(w->module) w->module->focus(w->module, FALSE);
+  if(!IS_NULL_PTR(w->module))
+  {
+    dt_iop_module_t *module = (dt_iop_module_t *)w->module;
+    if(!IS_NULL_PTR(module->expander))
+      g_object_set_data(G_OBJECT(module->expander), "dt-modulegroups-switch-from-active-once",
+                        GINT_TO_POINTER(TRUE));
+    w->module->focus(w->module, FALSE);
+  }
 
   g_idle_add(ensure_focus_idle, data);
   return TRUE;
@@ -2745,23 +2753,21 @@ static gboolean _widget_scroll(GtkWidget *widget, GdkEventScroll *event)
 static gboolean _widget_key_press(GtkWidget *widget, GdkEventKey *event)
 {
   struct dt_bauhaus_widget_t *w = DT_BAUHAUS_WIDGET(widget);
+  guint key = dt_keys_mainpad_alternatives(event->keyval);
 
   if(w->type == DT_BAUHAUS_SLIDER)
   {
-    switch(event->keyval)
+    switch(key)
     {
       case GDK_KEY_Right:
-      case GDK_KEY_KP_Right:
         _slider_add_step(widget, 1, event->state);
         return TRUE;
 
       case GDK_KEY_Left:
-      case GDK_KEY_KP_Left:
         _slider_add_step(widget, -1, event->state);
         return TRUE;
 
       case GDK_KEY_Insert:
-      case GDK_KEY_KP_Insert:
         if(w->quad_toggle)
         {
           dt_bauhaus_widget_press_quad(widget);
@@ -2775,15 +2781,13 @@ static gboolean _widget_key_press(GtkWidget *widget, GdkEventKey *event)
   }
   else if(w->type == DT_BAUHAUS_COMBOBOX)
   {
-    switch(event->keyval)
+    switch(key)
     {
-      case GDK_KEY_KP_Enter:
       case GDK_KEY_Return:
         dt_bauhaus_show_popup(widget);
         return TRUE;
 
       case GDK_KEY_Insert:
-      case GDK_KEY_KP_Insert:
         if(w->quad_toggle)
         {
           dt_bauhaus_widget_press_quad(widget);
@@ -3084,31 +3088,33 @@ static gboolean dt_bauhaus_popup_key_press(GtkWidget *widget, GdkEventKey *event
   dt_bauhaus_t *bh = g_object_get_data(G_OBJECT(widget), "bauhaus");
   dt_bauhaus_widget_t *w = bh->current;
 
+  guint key = dt_keys_mainpad_alternatives(event->keyval);
+
   switch(w->type)
   {
     case DT_BAUHAUS_SLIDER:
     {
       if(bh->keys_cnt + 2 < 64
-         && (event->keyval == GDK_KEY_space || event->keyval == GDK_KEY_KP_Space ||              // SPACE
-             event->keyval == GDK_KEY_percent ||                                                 // %
-             (event->string[0] >= 40 && event->string[0] <= 57) ||                               // ()+-*/.,0-9
-             event->keyval == GDK_KEY_asciicircum || event->keyval == GDK_KEY_dead_circumflex || // ^
-             event->keyval == GDK_KEY_X || event->keyval == GDK_KEY_x))                          // Xx
+         && (key == GDK_KEY_space ||                                         // SPACE
+             key == GDK_KEY_percent ||                                       // %
+             (event->string[0] >= 40 && event->string[0] <= 57) ||           // ()+-*/.,0-9
+             key == GDK_KEY_asciicircum || key == GDK_KEY_dead_circumflex || // ^
+             key == GDK_KEY_X || key == GDK_KEY_x))                          // Xx
       {
-        if(event->keyval == GDK_KEY_dead_circumflex)
+        if(key == GDK_KEY_dead_circumflex)
           bh->keys[bh->keys_cnt++] = '^';
         else
           bh->keys[bh->keys_cnt++] = event->string[0];
         gtk_widget_queue_draw(bh->popup_area);
       }
       else if(bh->keys_cnt > 0
-              && (event->keyval == GDK_KEY_BackSpace || event->keyval == GDK_KEY_Delete || event->keyval == GDK_KEY_KP_Delete))
+              && (key == GDK_KEY_BackSpace || key == GDK_KEY_Delete))
       {
         bh->keys[--bh->keys_cnt] = 0;
         gtk_widget_queue_draw(bh->popup_area);
       }
       else if(bh->keys_cnt > 0 && bh->keys_cnt + 1 < 64
-              && (event->keyval == GDK_KEY_Return || event->keyval == GDK_KEY_KP_Enter))
+              && (key == GDK_KEY_Return))
       {
         // accept input
         bh->keys[bh->keys_cnt] = 0;
@@ -3120,7 +3126,7 @@ static gboolean dt_bauhaus_popup_key_press(GtkWidget *widget, GdkEventKey *event
         memset(bh->keys, 0, sizeof(bh->keys));
         dt_bauhaus_hide_popup(bh);
       }
-      else if(event->keyval == GDK_KEY_Escape)
+      else if(key == GDK_KEY_Escape)
       {
         // discard input ands close popup
         bh->keys_cnt = 0;
@@ -3145,7 +3151,7 @@ static gboolean dt_bauhaus_popup_key_press(GtkWidget *widget, GdkEventKey *event
         gtk_widget_queue_draw(bh->popup_area);
       }
       else if(bh->keys_cnt > 0
-              && (event->keyval == GDK_KEY_BackSpace || event->keyval == GDK_KEY_Delete || event->keyval == GDK_KEY_KP_Delete))
+              && (key == GDK_KEY_BackSpace || key == GDK_KEY_Delete))
       {
         bh->keys_cnt
             -= (bh->keys + bh->keys_cnt)
@@ -3154,7 +3160,7 @@ static gboolean dt_bauhaus_popup_key_press(GtkWidget *widget, GdkEventKey *event
         gtk_widget_queue_draw(bh->popup_area);
       }
       else if(bh->keys_cnt > 0 && bh->keys_cnt + 1 < 64
-              && (event->keyval == GDK_KEY_Return || event->keyval == GDK_KEY_KP_Enter))
+              && (key == GDK_KEY_Return))
       {
         // accept unique matches only for editable:
         if(w->data.combobox.editable)
@@ -3167,22 +3173,22 @@ static gboolean dt_bauhaus_popup_key_press(GtkWidget *widget, GdkEventKey *event
         memset(bh->keys, 0, sizeof(bh->keys));
         dt_bauhaus_hide_popup(bh);
       }
-      else if(event->keyval == GDK_KEY_Escape)
+      else if(key == GDK_KEY_Escape)
       {
         // discard input and close popup
         bh->keys_cnt = 0;
         memset(bh->keys, 0, sizeof(bh->keys));
         dt_bauhaus_hide_popup(bh);
       }
-      else if(event->keyval == GDK_KEY_Up || event->keyval == GDK_KEY_KP_Up)
+      else if(key == GDK_KEY_Up)
       {
         _combobox_next_sensitive(w, -1);
       }
-      else if(event->keyval == GDK_KEY_Down || event->keyval == GDK_KEY_KP_Down)
+      else if(key == GDK_KEY_Down)
       {
         _combobox_next_sensitive(w, +1);
       }
-      else if(event->keyval == GDK_KEY_Return || event->keyval == GDK_KEY_KP_Enter)
+      else if(key == GDK_KEY_Return)
       {
         // return pressed, but didn't type anything
         bh->end_mouse_y = -1; // negative will use currently highlighted instead.

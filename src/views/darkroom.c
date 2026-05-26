@@ -85,6 +85,7 @@
 #include "common/collection.h"
 #include "common/colorspaces.h"
 #include "common/darktable.h"
+#include "gui/gdkkeys.h"
 #include "common/debug.h"
 #include "common/file_location.h"
 #include "common/history.h"
@@ -160,6 +161,7 @@ static void _darkroom_autoset_popover_rebuild(dt_develop_t *dev);
 
 static int _change_scaling(dt_develop_t *dev, const float point[2], const float new_scaling);
 static void _release_expose_source_caches(void);
+static void _darkroom_set_default_cursor(dt_view_t *self, double x, double y);
 
 static int32_t _darkroom_pending_imgid = UNKNOWN_IMAGE;
 static dt_iop_module_t *_darkroom_pending_focus_module = NULL;
@@ -170,13 +172,43 @@ static dt_autoset_manager_t *_autoset_manager = NULL;
 static GtkWidget *_darkroom_autoset_button = NULL;
 static GtkWidget *_darkroom_autoset_popover = NULL;
 static GtkWidget *_darkroom_autoset_list = NULL;
+static gboolean _darkroom_autoset_button_is_running = FALSE;
 static void _darkroom_autoset_popover_refresh(gpointer instance, gpointer user_data);
+static void _darkroom_autoset_button_set_running(const gboolean running);
 
 static void _darkroom_ioporder_quickbutton_clicked(GtkButton *button, gpointer user_data)
 {
   dt_lib_module_t *module = dt_lib_get_module("ioporder");
   if(module && module->show_popup)
     module->show_popup(module);
+}
+
+/**
+ * @brief Reflect autoset processing state on the darkroom quick button.
+ *
+ * @details
+ * The autoset pipeline advances asynchronously across preview-finished callbacks.
+ * We keep the button state explicit so users can see when a run is in progress.
+ *
+ * @param running TRUE while autoset still has operations to process.
+ */
+static void _darkroom_autoset_button_set_running(const gboolean running)
+{
+  if(IS_NULL_PTR(_darkroom_autoset_button)) return;
+  if(_darkroom_autoset_button_is_running == running) return;
+
+  _darkroom_autoset_button_is_running = running;
+
+  gtk_button_set_label(GTK_BUTTON(_darkroom_autoset_button), running ? _("Autoset...") : _("Autoset"));
+  gtk_widget_set_sensitive(_darkroom_autoset_button, !running);
+  gtk_widget_set_tooltip_text(_darkroom_autoset_button,
+                              running ? _("Autoset is running on selected modules")
+                                      : _("Run autoset on selected modules\nRight click for options"));
+
+  if(running)
+    dt_gui_add_class(_darkroom_autoset_button, "active");
+  else
+    dt_gui_remove_class(_darkroom_autoset_button, "active");
 }
 
 const char *name(const dt_view_t *self)
@@ -221,10 +253,22 @@ void cleanup(dt_view_t *self)
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_darkroom_autoset_popover_refresh), dev);
   if(_autoset_manager)
   {
+    if(!IS_NULL_PTR(_autoset_manager->input_wait))
+    {
+      dt_dev_pixelpipe_cache_wait_cleanup((dt_dev_pixelpipe_cache_wait_t *)_autoset_manager->input_wait);
+      g_free(_autoset_manager->input_wait);
+      _autoset_manager->input_wait = NULL;
+    }
+    if(_autoset_manager->progress_cursor_active)
+    {
+      dt_control_log_busy_leave();
+      _autoset_manager->progress_cursor_active = FALSE;
+    }
     g_list_free(_autoset_manager->iop_to_set);
     dt_free_align(_autoset_manager);
     _autoset_manager = NULL;
   }
+  _darkroom_autoset_button_is_running = FALSE;
   _darkroom_autoset_list = NULL;
   _darkroom_autoset_popover = NULL;
 
@@ -433,7 +477,7 @@ void _colormanage_ui_color(const float L, const float a, const float b, dt_align
   cmsDoTransform(darktable.color_profiles->transform_xyz_to_display, XYZ, RGB, 1);
 }
 
-static void _render_iso12646(cairo_t *cr, int width, int height, int border)
+static void _render_iso12646(cairo_t *cr, double width, double height, int border)
 {
   // draw the white frame around picture
   cairo_rectangle(cr, -border * .5f, -border * .5f, width + border, height + border);
@@ -453,6 +497,15 @@ static void _render_iso12646(cairo_t *cr, int width, int height, int border)
 #endif
 
 #if DARKROOM_EXPOSE_DUMB_DEBUG
+static dt_dev_pixelpipe_cache_wait_t _darkroom_main_debug_wait = { 0 };
+
+static void _darkroom_debug_restart_cache_wait(gpointer user_data)
+{
+  dt_develop_t *dev = (dt_develop_t *)user_data;
+  if(IS_NULL_PTR(dev) || !dev->gui_attached) return;
+  dt_control_queue_redraw_center();
+}
+
 static gboolean _render_main_direct_debug(cairo_t *cr, dt_develop_t *dev, const int width, const int height,
                                           const int border, const dt_aligned_pixel_t bg_color)
 {
@@ -467,7 +520,10 @@ static gboolean _render_main_direct_debug(cairo_t *cr, dt_develop_t *dev, const 
 
   dt_pixel_cache_entry_t *entry = NULL;
   void *data = NULL;
-  if(!dt_dev_pixelpipe_cache_peek_gui(dev->pipe, NULL, &data, &entry, NULL, NULL, NULL))
+  dt_dev_pixelpipe_cache_wait_set_owner(&_darkroom_main_debug_wait, "darkroom-debug-main", dev);
+  if(!dt_dev_pixelpipe_cache_peek_gui(dev->pipe, NULL, &data, &entry,
+                                      &_darkroom_main_debug_wait,
+                                      _darkroom_debug_restart_cache_wait, dev))
     return FALSE;
 
   dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, entry);
@@ -527,6 +583,8 @@ typedef struct darkroom_locked_surface_t
 
 static darkroom_locked_surface_t _darkroom_main_locked = { .hash = (uint64_t)-1 };
 static darkroom_locked_surface_t _darkroom_preview_locked = { .hash = (uint64_t)-1 };
+static dt_dev_pixelpipe_cache_wait_t _darkroom_main_wait = { 0 };
+static dt_dev_pixelpipe_cache_wait_t _darkroom_preview_wait = { 0 };
 static cairo_surface_t *_darkroom_preview_fallback_surface = NULL;
 static int32_t _darkroom_preview_fallback_imgid = UNKNOWN_IMAGE;
 static uint64_t _darkroom_preview_fallback_zoom_hash = 0;
@@ -569,18 +627,44 @@ static void _release_preview_fallback_surface(void)
   _darkroom_preview_fallback_height = 0;
 }
 
+static void _darkroom_restart_cache_wait(gpointer user_data)
+{
+  dt_develop_t *dev = (dt_develop_t *)user_data;
+  if(IS_NULL_PTR(dev) || !dev->gui_attached) return;
+  dt_control_queue_redraw_center();
+}
+
 static void _release_expose_source_caches(void)
 {
   _release_locked_surface(&_darkroom_main_locked);
   _release_locked_surface(&_darkroom_preview_locked);
+  dt_dev_pixelpipe_cache_wait_cleanup(&_darkroom_main_wait);
+  dt_dev_pixelpipe_cache_wait_cleanup(&_darkroom_preview_wait);
+#if DARKROOM_EXPOSE_DUMB_DEBUG
+  dt_dev_pixelpipe_cache_wait_cleanup(&_darkroom_main_debug_wait);
+#endif
   _release_preview_fallback_surface();
 }
 
 static gboolean _lock_pipe_surface(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, darkroom_locked_surface_t *locked,
                                    const gboolean keep_previous_on_fail, const gboolean lock_read)
 {
-  if(IS_NULL_PTR(dev) || IS_NULL_PTR(pipe) || !locked) return FALSE;
+  if(IS_NULL_PTR(dev) || IS_NULL_PTR(pipe) || IS_NULL_PTR(locked)) return FALSE;
   (void)lock_read;
+  dt_dev_pixelpipe_cache_wait_t *wait = NULL;
+  const char *wait_owner = "darkroom-unknown";
+  if(pipe == dev->pipe)
+  {
+    wait = &_darkroom_main_wait;
+    wait_owner = "darkroom-main";
+  }
+  else if(pipe == dev->preview_pipe)
+  {
+    wait = &_darkroom_preview_wait;
+    wait_owner = "darkroom-preview";
+  }
+  if(!IS_NULL_PTR(wait))
+    dt_dev_pixelpipe_cache_wait_set_owner(wait, wait_owner, dev);
 
   const uint64_t hash = dt_dev_backbuf_get_hash(&pipe->backbuf);
   if(hash == (uint64_t)-1) return keep_previous_on_fail && (!IS_NULL_PTR(locked->surface));
@@ -590,8 +674,9 @@ static gboolean _lock_pipe_surface(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, 
    * when an entry is recreated or replaced under the same key. */
   dt_pixel_cache_entry_t *live_entry = NULL;
   void *live_data = NULL;
-  if(locked->surface && locked->hash == hash
-     && dt_dev_pixelpipe_cache_peek_gui(pipe, NULL, &live_data, &live_entry, NULL, NULL, NULL)
+  if(!IS_NULL_PTR(locked->surface) && locked->hash == hash
+     && dt_dev_pixelpipe_cache_peek_gui(pipe, NULL, &live_data, &live_entry, wait,
+                                        _darkroom_restart_cache_wait, dev)
      && live_entry == locked->entry && live_data == locked->data)
   {
     locked->width = pipe->backbuf.width;
@@ -603,7 +688,8 @@ static gboolean _lock_pipe_surface(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, 
   /* GUI surfaces only borrow the currently published backbuffer. They rely on the backbuffer keepalive ref
    * owned by `pixelpipe_hb.c`, so they must not take or drop their own cache refs here. */
   void *data = NULL;
-  if(!dt_dev_pixelpipe_cache_peek_gui(pipe, NULL, &data, &entry, NULL, NULL, NULL))
+  if(!dt_dev_pixelpipe_cache_peek_gui(pipe, NULL, &data, &entry, wait,
+                                      _darkroom_restart_cache_wait, dev))
     data = NULL;
   if(IS_NULL_PTR(data))
   {
@@ -611,7 +697,7 @@ static gboolean _lock_pipe_surface(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, 
      * If requested hash equals the currently locked one but cache lookup fails,
      * the cached line was likely flushed/invalidated: drop stale lock so the
      * line can be recreated and displayed again. */
-    if(keep_previous_on_fail && locked->surface && locked->hash != hash) return TRUE;
+    if(keep_previous_on_fail && !IS_NULL_PTR(locked->surface) && locked->hash != hash) return TRUE;
     _release_locked_surface(locked);
     return FALSE;
   }
@@ -623,12 +709,12 @@ static gboolean _lock_pipe_surface(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, 
   const size_t entry_size = dt_pixel_cache_entry_get_size(entry);
   if(width <= 0 || height <= 0 || entry_size < required_size || dt_pixel_cache_entry_get_data(entry) != data)
   {
-    if(keep_previous_on_fail && locked->surface && locked->hash != hash) return TRUE;
+    if(keep_previous_on_fail && !IS_NULL_PTR(locked->surface) && locked->hash != hash) return TRUE;
     _release_locked_surface(locked);
     return FALSE;
   }
 
-  if(locked->surface && locked->data == data && locked->width == width && locked->height == height)
+  if(!IS_NULL_PTR(locked->surface) && locked->data == data && locked->width == width && locked->height == height)
   {
     locked->hash = hash;
     locked->entry = entry;
@@ -639,8 +725,8 @@ static gboolean _lock_pipe_surface(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, 
   cairo_surface_t *surface = cairo_image_surface_create_for_data(data, CAIRO_FORMAT_RGB24, width, height, stride);
   if(IS_NULL_PTR(surface) || cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS)
   {
-    if(surface) cairo_surface_destroy(surface);
-    if(keep_previous_on_fail && locked->surface) return TRUE;
+    if(!IS_NULL_PTR(surface)) cairo_surface_destroy(surface);
+    if(keep_previous_on_fail && !IS_NULL_PTR(locked->surface)) return TRUE;
     _release_locked_surface(locked);
     return FALSE;
   }
@@ -659,8 +745,8 @@ static gboolean _render_main_locked_surface(cairo_t *cr, dt_develop_t *dev, dark
                                             const int width, const int height, const int border,
                                             const dt_aligned_pixel_t bg_color)
 {
-  if(IS_NULL_PTR(cr) || IS_NULL_PTR(dev) || !locked || !locked->surface) return FALSE;
-  if(!locked->entry || locked->hash == (uint64_t)-1) return FALSE;
+  if(IS_NULL_PTR(cr) || IS_NULL_PTR(dev) || IS_NULL_PTR(locked) || IS_NULL_PTR(locked->surface)) return FALSE;
+  if(IS_NULL_PTR(locked->entry) || locked->hash == (uint64_t)-1) return FALSE;
 
   cairo_set_source_rgb(cr, bg_color[0], bg_color[1], bg_color[2]);
   cairo_paint(cr);
@@ -689,10 +775,10 @@ static gboolean _build_preview_fallback_surface(dt_develop_t *dev, const int wid
                                                 const dt_aligned_pixel_t bg_color, const uint64_t zoom_hash)
 {
   if(IS_NULL_PTR(_darkroom_preview_locked.surface)) return FALSE;
-  if(!_darkroom_preview_locked.entry || _darkroom_preview_locked.hash == (uint64_t)-1) return FALSE;
+  if(IS_NULL_PTR(_darkroom_preview_locked.entry) || _darkroom_preview_locked.hash == (uint64_t)-1) return FALSE;
   if(width <= 0 || height <= 0) return FALSE;
 
-  if(!_darkroom_preview_fallback_surface
+  if(IS_NULL_PTR(_darkroom_preview_fallback_surface)
      || _darkroom_preview_fallback_width != width
      || _darkroom_preview_fallback_height != height)
   {
@@ -715,19 +801,20 @@ static gboolean _build_preview_fallback_surface(dt_develop_t *dev, const int wid
   const float preview_wd = wd / ppd;
   const float preview_ht = ht / ppd;
   const float preview_scale = dev->roi.scaling;
+  float image_box[4] = { 0.0f };
+  dt_dev_get_image_box_in_widget(dev, width, height, image_box);
 
   if(dev->iso_12646.enabled)
   {
-    // The preview backbuffer is already a full-image fit render. Reprojecting it
-    // for temporary zoom/pan feedback therefore only needs the extra darkroom
-    // zoom factor, not another full processed-image rescale.
-    const float roi_wd = fminf(preview_wd * preview_scale, width);
-    const float roi_ht = fminf(preview_ht * preview_scale, height);
 
-    cairo_save(cr);
-    cairo_translate(cr, .5f * (width - roi_wd), .5f * (height - roi_ht));
-    _render_iso12646(cr, roi_wd, roi_ht, border);
-    cairo_restore(cr);
+
+    if(image_box[2] > 0 && image_box[3] > 0)
+    {
+      cairo_save(cr);
+      cairo_translate(cr, image_box[0], image_box[1]);
+      _render_iso12646(cr, image_box[2], image_box[3], border);
+      cairo_restore(cr);
+    }
   }
 
   dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, _darkroom_preview_locked.entry);
@@ -1789,6 +1876,8 @@ static void _preview_pipe_finished(gpointer instance, gpointer user_data)
 {
   // Get the mip size that is at most as big as our pipeline backbuf
   dt_dev_pixelpipe_t *pipe = darktable.develop->preview_pipe;
+  const gboolean autoset_running_before
+      = !IS_NULL_PTR(_autoset_manager) && _autoset_manager->progress_cursor_active;
   const int32_t imgid = darktable.develop->image_storage.id;
   dt_mipmap_size_t mip = dt_mipmap_cache_get_fitting_size(darktable.mipmap_cache, pipe->backbuf.width, pipe->backbuf.height, imgid);
 
@@ -1798,17 +1887,26 @@ static void _preview_pipe_finished(gpointer instance, gpointer user_data)
   gboolean cache_ready = !IS_NULL_PTR(tmp.buf);
   dt_mipmap_cache_release(darktable.mipmap_cache, &tmp);
 
-  // Only refresh thumbnails once the cache is ready, to avoid spawning extra
-  // thumbnail rendering threads. We populate the mipmap cache inside the preview pipe 
-  // background rendering thread.
-  if(cache_ready)
+  if(pipe->autoset)
   {
-    dt_thumbtable_refresh_thumbnail(darktable.gui->ui->thumbtable_lighttable, imgid, TRUE);
-    dt_thumbtable_refresh_thumbnail(darktable.gui->ui->thumbtable_filmstrip, imgid, TRUE);
+    dt_iop_autoset_advance(darktable.develop, _autoset_manager);
+    _darkroom_autoset_button_set_running(_autoset_manager && _autoset_manager->progress_cursor_active);
   }
 
-  if(pipe->autoset)
-    dt_iop_autoset_advance(darktable.develop, _autoset_manager);
+  const gboolean autoset_running_after
+      = !IS_NULL_PTR(_autoset_manager) && _autoset_manager->progress_cursor_active;
+
+  // While autoset iterates over modules, avoid spawning thumbnail refresh jobs on each preview completion.
+  // We refresh once the autoset run is finished and the preview cache reached a stable state.
+  if(cache_ready && !autoset_running_after)
+  {
+    const gboolean autoset_just_finished = autoset_running_before && !autoset_running_after;
+    if(!autoset_running_before || autoset_just_finished)
+    {
+      dt_thumbtable_refresh_thumbnail(darktable.gui->ui->thumbtable_lighttable, imgid, TRUE);
+      dt_thumbtable_refresh_thumbnail(darktable.gui->ui->thumbtable_filmstrip, imgid, TRUE);
+    }
+  }
 }
 
 /*
@@ -1827,6 +1925,7 @@ static gboolean _darkroom_toolbox_button_activate_accel(GtkAccelGroup *accel_gro
 static void _darkroom_autoset_quickbutton_clicked(GtkButton *button, gpointer user_data)
 {
   dt_iop_autoset_build_list(darktable.develop, _autoset_manager);
+  _darkroom_autoset_button_set_running(_autoset_manager && _autoset_manager->progress_cursor_active);
   fprintf(stdout, "lauching autoset\n");
 }
 
@@ -2302,7 +2401,7 @@ void gui_init(dt_view_t *self)
     _autoset_manager = dt_calloc_align(sizeof(dt_autoset_manager_t));
 
     _darkroom_autoset_button = gtk_button_new_with_label(_("Autoset"));
-    gtk_widget_set_tooltip_text(_darkroom_autoset_button, _("run autoset on selected modules\nright click for options"));
+    gtk_widget_set_tooltip_text(_darkroom_autoset_button, _("Run autoset on selected modules\nRight click for options"));
     g_signal_connect(G_OBJECT(_darkroom_autoset_button), "clicked",
                     G_CALLBACK(_darkroom_autoset_quickbutton_clicked), dev);
     dt_view_manager_module_toolbox_add(darktable.view_manager, _darkroom_autoset_button, DT_VIEW_DARKROOM);
@@ -2320,6 +2419,7 @@ void gui_init(dt_view_t *self)
     _darkroom_autoset_list = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_container_add(GTK_CONTAINER(_darkroom_autoset_popover), _darkroom_autoset_list);
     _darkroom_autoset_popover_rebuild(dev);
+    _darkroom_autoset_button_set_running(FALSE);
 
     DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE,
                                     G_CALLBACK(_darkroom_autoset_popover_refresh), dev);
@@ -2330,6 +2430,7 @@ void gui_init(dt_view_t *self)
   }
 
   darktable.view_manager->proxy.darkroom.get_layout = _lib_darkroom_get_layout;
+  darktable.view_manager->proxy.darkroom.set_default_cursor = _darkroom_set_default_cursor;
   dev->roi.border_size = DT_PIXEL_APPLY_DPI(dt_conf_get_int("plugins/darkroom/ui/border_size"));
 }
 
@@ -2450,6 +2551,8 @@ void enter(dt_view_t *self)
 void leave(dt_view_t *self)
 {
   dt_develop_t *dev = (dt_develop_t *)self->data;
+  if(!IS_NULL_PTR(_autoset_manager) && !IS_NULL_PTR(_autoset_manager->input_wait))
+    dt_dev_pixelpipe_cache_wait_cleanup((dt_dev_pixelpipe_cache_wait_t *)_autoset_manager->input_wait);
   darktable.gui->mouse.is_dragging = FALSE;
   _darkroom_center_pan_drag = FALSE;
   _reset_edge_pan();
@@ -2465,6 +2568,7 @@ void leave(dt_view_t *self)
   dt_atomic_set_int(&dev->preview_pipe->shutdown, TRUE);
   if(dev->virtual_pipe) dt_atomic_set_int(&dev->virtual_pipe->shutdown, TRUE);
   dev->pipelines_started = FALSE;
+  dt_dev_pixelpipe_cache_wait_dump_pending("darkroom-leave-before-cleanup");
 
   _darkroom_pending_focus_module = NULL;
 
@@ -2659,14 +2763,14 @@ static gboolean mouse_in_actionarea(dt_view_t *self, double x, double y)
   return _is_in_frame(self->width, self->height, round(x), round(y));
 }
 
-static void _set_default_cursor(dt_view_t *self, double x, double y)
+static void _darkroom_set_default_cursor(dt_view_t *self, double x, double y)
 {
   if(mouse_in_imagearea(self, x, y))
-    dt_control_queue_cursor(GDK_DOT);
+    dt_control_queue_cursor_by_name("dot");
   else if(mouse_in_actionarea(self, x, y))
-    dt_control_queue_cursor(GDK_CROSSHAIR);
+    dt_control_queue_cursor_by_name("crosshair");
   else
-    dt_control_queue_cursor(GDK_LEFT_PTR);
+    dt_control_queue_cursor_by_name("left_ptr");
 }
 
 void mouse_enter(dt_view_t *self)
@@ -2912,7 +3016,7 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
   const gboolean picker_active = dt_iop_color_picker_is_visible(dev);
 
   // change cursor appearance by default
-  _set_default_cursor(self, x, y);
+  _darkroom_set_default_cursor(self, x, y);
   gboolean handled = FALSE;
 
   if(picker_active && ctl->button_down && ctl->button_down_which == 1)
@@ -3437,6 +3541,7 @@ int key_pressed(dt_view_t *self, GdkEventKey *event)
   const gboolean shift = dt_modifier_is(event->state, GDK_SHIFT_MASK);
   const gboolean ctrl = dt_modifier_is(event->state, GDK_CONTROL_MASK);
   const gboolean ctrl_any = dt_modifiers_include(event->state, GDK_CONTROL_MASK);
+  guint key = dt_keys_mainpad_alternatives(event->keyval);
 
   if(ctrl_any)
   {
@@ -3444,13 +3549,11 @@ int key_pressed(dt_view_t *self, GdkEventKey *event)
     float center[2] = { 0.0f };
     dt_dev_get_widget_center(dev, center);
 
-    switch(event->keyval)
+    switch(key)
     {
       case GDK_KEY_plus:
-      case GDK_KEY_KP_Add:
         return _change_scaling(dev, center, dev->roi.scaling * zoom_step);
       case GDK_KEY_minus:
-      case GDK_KEY_KP_Subtract:
         return _change_scaling(dev, center, dev->roi.scaling / zoom_step);
     }
   }
@@ -3462,31 +3565,27 @@ int key_pressed(dt_view_t *self, GdkEventKey *event)
   float delta[2] = { 10.f * multiplier, 10.f * multiplier };
   dt_dev_coordinates_widget_delta_to_image_delta(dev, delta, 1);
 
-  switch(event->keyval)
+  switch(key)
   {
     case GDK_KEY_Up:
-    case GDK_KEY_KP_Up:
     {
       dev->roi.y -= delta[1] / (float)dev->roi.processed_height;
       _key_scroll(dev);
       return 1;
     }
     case GDK_KEY_Down:
-    case GDK_KEY_KP_Down:
     {
       dev->roi.y += delta[1] / (float)dev->roi.processed_height;
       _key_scroll(dev);
       return 1;
     }
     case GDK_KEY_Left:
-    case GDK_KEY_KP_Left:
     {
       dev->roi.x -= delta[0] / (float)dev->roi.processed_width;
       _key_scroll(dev);
       return 1;
     }
     case GDK_KEY_Right:
-    case GDK_KEY_KP_Right:
     {
       dev->roi.x += delta[0] / (float)dev->roi.processed_width;
       _key_scroll(dev);

@@ -3939,6 +3939,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   dt_develop_t *dev = self->dev;
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
   dt_iop_ashift_params_t *p = _get_ashift_params(self);
+  if(IS_NULL_PTR(g) || IS_NULL_PTR(p)) return;
 
   // the usual rescaling stuff
   const float wd = dev->roi.preview_width;

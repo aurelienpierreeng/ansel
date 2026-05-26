@@ -298,7 +298,7 @@ static void color_picker_helper_4ch_parallel(const dt_iop_buffer_dsc_t *const ds
 
   const float w = 1.0f / (float)size;
 
-  const size_t numthreads = darktable.num_openmp_threads;
+  const size_t numthreads = MAX(1, (size_t)omp_get_max_threads());
 
   size_t allocsize;
   float *const restrict mean = dt_pixelpipe_cache_alloc_perthread_float(4, &allocsize);
@@ -575,7 +575,7 @@ static void color_picker_helper_bayer_parallel(const dt_iop_buffer_dsc_t *const 
     mmax[n] = -INFINITY;
     cnt[n] = 0u;
   }
-  __OMP_PARALLEL__()
+  __OMP_PARALLEL__(num_threads(numthreads))
   {
     const int tnum = dt_get_thread_num();
 
@@ -683,7 +683,7 @@ static void color_picker_helper_xtrans_parallel(const dt_iop_buffer_dsc_t *const
 
   uint32_t weights[3] = { 0u, 0u, 0u };
 
-  const size_t numthreads = darktable.num_openmp_threads;
+  const size_t numthreads = MAX(1, (size_t)omp_get_max_threads());
 
   //TODO: convert to use dt_pixelpipe_cache_alloc_perthread
   float *const mmin = malloc(sizeof(float) * numthreads * 3);
@@ -702,7 +702,7 @@ static void color_picker_helper_xtrans_parallel(const dt_iop_buffer_dsc_t *const
     mmax[n] = -INFINITY;
     cnt[n] = 0u;
   }
-  __OMP_PARALLEL__()
+  __OMP_PARALLEL__(num_threads(numthreads))
   {
     const int tnum = dt_get_thread_num();
 

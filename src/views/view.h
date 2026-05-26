@@ -243,6 +243,7 @@ typedef struct dt_view_manager_t
     {
       struct dt_view_t *view;
       dt_darkroom_layout_t (*get_layout)(struct dt_view_t *view);
+      void (*set_default_cursor)(struct dt_view_t *view, double x, double y);
     } darkroom;
 
 /* map view proxy object */

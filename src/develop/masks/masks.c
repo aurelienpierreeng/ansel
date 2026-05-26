@@ -41,6 +41,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "common/darktable.h"
+#include "gui/gdkkeys.h"
 #include "develop/masks.h"
 #include "develop/develop.h"
 #include "bauhaus/bauhaus.h"
@@ -2577,7 +2578,8 @@ int dt_masks_events_key_pressed(struct dt_iop_module_t *module, GdkEventKey *eve
   
   if(!return_value)
   {
-    switch(event->keyval)
+    guint key = dt_keys_mainpad_alternatives(event->keyval);
+    switch(key)
     {
       case GDK_KEY_Escape:
       {
@@ -2585,7 +2587,6 @@ int dt_masks_events_key_pressed(struct dt_iop_module_t *module, GdkEventKey *eve
         break;
       }
       case GDK_KEY_Delete:
-      case GDK_KEY_KP_Delete:
       {
         if(mask_gui->group_selected >= 0)
         {

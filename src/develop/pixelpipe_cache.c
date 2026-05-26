@@ -233,7 +233,11 @@ int _non_thread_safe_cache_remove(dt_dev_pixelpipe_cache_t *cache, const gboolea
     if(!locked) dt_pthread_rwlock_unlock(&cache_entry->lock);
     gboolean used = dt_atomic_get_int(&cache_entry->refcount) > 0;
 
-    if((!used || force) && !locked)
+    /* Force-removal may bypass caller lifecycle checks but must never destroy
+     * an entry that still has active readers/writers. Active users can still
+     * access cl_mem_list after this call (for example borrowed GPU payloads),
+     * so removing a referenced entry here would create dangling pointers. */
+    if(!used && (!locked || force))
     {
       // Note: the free callback takes care of flushing OpenCL buffers too
       g_hash_table_remove(table, &cache_entry->hash);
@@ -2137,7 +2141,9 @@ gboolean dt_dev_pixelpipe_cache_peek(dt_dev_pixelpipe_cache_t *cache, const uint
   dt_print(DT_DEBUG_PIPECACHE,
            "[pixelpipe] cache entry %" PRIu64 " has no authoritative RAM nor vRAM payload and will be removed\n",
            hash);
-  dt_dev_pixelpipe_cache_remove(cache, TRUE, cache_entry);
+  // If the entry removal fails, flag it for auto-destroy.
+  if(dt_dev_pixelpipe_cache_remove(cache, TRUE, cache_entry))
+    dt_dev_pixelpipe_cache_flag_auto_destroy(cache, cache_entry);
   if(data) *data = NULL;
   return FALSE;
 }

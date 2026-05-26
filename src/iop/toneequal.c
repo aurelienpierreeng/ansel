@@ -2182,6 +2182,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
 
   dt_develop_t *dev = self->dev;
   dt_iop_toneequalizer_gui_data_t *g = (dt_iop_toneequalizer_gui_data_t *)self->gui_data;
+  if(IS_NULL_PTR(g)) return;
 
   // If the darkroom picker owns the center view, keep tone equalizer overlays out of the way.
   if(in_mask_editing(self) || dt_iop_color_picker_is_visible(dev)) return;

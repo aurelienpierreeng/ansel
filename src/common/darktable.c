@@ -127,6 +127,7 @@
 #include "control/jobs/film_jobs.h"
 #include "control/signal.h"
 #include "develop/blend.h"
+#include "develop/dev_pixelpipe.h"
 #include "develop/imageop.h"
 
 #include "gui/gtk.h"
@@ -1345,6 +1346,7 @@ void dt_cleanup()
     dt_free(darktable.lib);
   }
 
+  dt_dev_pixelpipe_cache_wait_dump_pending("app-cleanup-before-view-manager");
   dt_view_manager_cleanup(darktable.view_manager);
   dt_free(darktable.view_manager);
 
@@ -1364,8 +1366,6 @@ void dt_cleanup()
     GtkWidget *main_window = dt_ui_main_window(darktable.gui->ui);
     if(GTK_IS_WIDGET(main_window))
       gtk_widget_destroy(main_window);
-
-    _dt_drain_main_context(256);
 
     dt_gui_gtk_t *gui = darktable.gui;
     darktable.gui = NULL;

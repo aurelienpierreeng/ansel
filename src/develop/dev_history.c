@@ -2015,8 +2015,10 @@ static gboolean _compress_disabled_with_history(dt_iop_module_t *module)
  */
 static void _dt_dev_history_compress_internal(dt_develop_t *dev, const gboolean write_history)
 {
-  const int32_t imgid = dev->image_storage.id;
-
+  // Rebuild the history list under lock, but run expensive cross-subsystem
+  // operations (history->modules sync, optional DB write) after releasing it.
+  // This keeps history_mutex hold time short and avoids lock-order contention
+  // with GUI/pipeline users touching masks/pixelpipe.
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
 
   // Cleanup old history
@@ -2041,10 +2043,20 @@ static void _dt_dev_history_compress_internal(dt_develop_t *dev, const gboolean 
   _dev_history_add_filtered(dev, _compress_disabled_with_history);
 
   dt_dev_set_history_end_ext(dev, g_list_length(dev->history));
-  dt_dev_pop_history_items_ext(dev);
-  if(write_history) dt_dev_write_history_ext(dev, imgid);
-
   dt_pthread_rwlock_unlock(&dev->history_mutex);
+
+  if(darktable.gui && dev->gui_attached) ++darktable.gui->reset;
+  dt_pthread_rwlock_wrlock(&dev->history_mutex);
+  dt_dev_pop_history_items_ext(dev);
+  dt_pthread_rwlock_unlock(&dev->history_mutex);
+  if(dev->gui_attached) dt_dev_get_thumbnail_size(dev);
+  if(darktable.gui && dev->gui_attached) --darktable.gui->reset;
+  if(write_history)
+  {
+    dt_pthread_rwlock_rdlock(&dev->history_mutex);
+    dt_dev_write_history_ext(dev, dev->image_storage.id);
+    dt_pthread_rwlock_unlock(&dev->history_mutex);
+  }
 }
 
 void dt_dev_history_compress_ext(dt_develop_t *dev, gboolean write_history)
@@ -2059,6 +2071,8 @@ void dt_dev_history_compress(dt_develop_t *dev)
 
 void dt_dev_history_truncate(dt_develop_t *dev, const int32_t imgid)
 {
+  dt_pthread_rwlock_wrlock(&dev->history_mutex);
+
   // Remove tail entries (num >= end).
   // history_end is a cursor expressed in "number of applied items" terms:
   // - keep items [0..history_end-1]
@@ -2072,9 +2086,18 @@ void dt_dev_history_truncate(dt_develop_t *dev, const int32_t imgid)
     link = next;
   }
 
+  dt_pthread_rwlock_unlock(&dev->history_mutex);
+
   // Re-apply history and resync iop order from the truncated stack.
+  if(darktable.gui && dev->gui_attached) ++darktable.gui->reset;
+  dt_pthread_rwlock_wrlock(&dev->history_mutex);
   dt_dev_pop_history_items_ext(dev);
+  dt_pthread_rwlock_unlock(&dev->history_mutex);
+  if(dev->gui_attached) dt_dev_get_thumbnail_size(dev);
+  if(darktable.gui && dev->gui_attached) --darktable.gui->reset;
+  dt_pthread_rwlock_rdlock(&dev->history_mutex);
   dt_dev_write_history_ext(dev, imgid);
+  dt_pthread_rwlock_unlock(&dev->history_mutex);
 }
 
 void dt_dev_history_compress_or_truncate(dt_develop_t *dev)
