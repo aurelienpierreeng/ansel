@@ -19458,7 +19458,7 @@ msgstr "Messwerte aus dem Bild anzeigen"
 
 #: ../src/libs/histogram.c:2488
 msgid "Restrict scope to selection"
-msgstr "Histogramm auf Auswahl beschränken"
+msgstr "Graphen auf Auswahl beschränken"
 
 #: ../src/libs/history.c:108
 msgid "History of changes"
