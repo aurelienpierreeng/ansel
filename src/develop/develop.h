@@ -372,6 +372,8 @@ typedef struct dt_develop_t
     uint64_t piece_hash;
     uint64_t wait_input_hash;
     uint64_t wait_output_hash;
+    dt_dev_pixelpipe_cache_wait_t input_wait;
+    dt_dev_pixelpipe_cache_wait_t output_wait;
 
     struct dt_iop_module_t *pending_module;
     struct dt_dev_pixelpipe_t *pending_pipe;

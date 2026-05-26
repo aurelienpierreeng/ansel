@@ -156,10 +156,35 @@ typedef struct dt_dev_pixelpipe_cache_wait_t
   uint64_t hash;
   dt_dev_pixelpipe_cache_ready_callback_t restart;
   gpointer user_data;
+  const char *owner_tag;
+  gpointer owner_object;
+  uint64_t request_id;
   gboolean connected;
 } dt_dev_pixelpipe_cache_wait_t;
 
 void dt_dev_pixelpipe_cache_wait_cleanup(dt_dev_pixelpipe_cache_wait_t *wait);
+
+/**
+ * @brief Attach debug ownership metadata to one cache wait request.
+ *
+ * The cache wait manager tracks heterogeneous GUI consumers (pickers,
+ * histograms, autoset, darkroom surfaces) in a shared pending queue.
+ * This setter lets each caller stamp the wait object with:
+ * - a stable textual tag ( @p owner_tag) used in logs,
+ * - the originating runtime object pointer ( @p owner_object) used to
+ *   correlate repeated requests from the same caller.
+ *
+ * Ownership metadata does not affect scheduling or locking decisions.
+ * It only improves traceability when diagnosing missed/served requests
+ * and UI/pipeline desynchronization.
+ *
+ * @param wait Caller-owned wait object to annotate.
+ * @param owner_tag Short static owner label for debug traces.
+ * @param owner_object Caller instance pointer associated with the request.
+ */
+void dt_dev_pixelpipe_cache_wait_set_owner(dt_dev_pixelpipe_cache_wait_t *wait,
+                                           const char *owner_tag,
+                                           gpointer owner_object);
 
 /**
  * @brief Reopen one GUI-visible host cacheline, or queue the minimal pipe recompute needed to publish it.

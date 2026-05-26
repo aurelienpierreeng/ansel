@@ -176,6 +176,7 @@ typedef struct dt_iop_colorequal_gui_data_t
   gboolean viewer_lut_valid;
   gboolean preview_signal_connected;
   uint64_t pending_preview_hash;
+  dt_dev_pixelpipe_cache_wait_t preview_wait;
   gboolean has_focus;
   gboolean picker_valid;
   gboolean cursor_valid;
@@ -234,6 +235,7 @@ int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, const dt
 static void _update_gui_lut_cache(dt_iop_module_t *self);
 static void _switch_preview_cursor(dt_iop_module_t *self);
 static gboolean _refresh_preview_cursor_sample(dt_iop_module_t *self);
+static void _preview_cache_wait_restart(gpointer user_data);
 
 static inline float _channel_value_from_y(const dt_iop_colorequal_channel_t channel, const float y)
 {
@@ -1349,6 +1351,20 @@ static void _cacheline_ready_callback(gpointer instance, const guint64 hash, gpo
   dt_control_queue_redraw_center();
 }
 
+static void _preview_cache_wait_restart(gpointer user_data)
+{
+  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->gui_data)) return;
+
+  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
+  if(IS_NULL_PTR(g) || !g->has_focus || !_refresh_preview_cursor_sample(self)) return;
+
+  const dt_iop_colorequal_ring_t ring = _active_ring_from_gui(g);
+  const dt_iop_colorequal_channel_t channel = _active_channel_from_gui(g, ring);
+  gtk_widget_queue_draw(GTK_WIDGET(g->area[ring][channel]));
+  dt_control_queue_redraw_center();
+}
+
 static int _find_selected_node(const dt_iop_module_t *self, const dt_iop_colorequal_ring_t ring,
                                const dt_iop_colorequal_channel_t channel, const float mouse_x, const float mouse_y,
                                const float graph_width, const float graph_height)
@@ -1963,6 +1979,7 @@ static gboolean _refresh_preview_cursor_sample(dt_iop_module_t *self)
   dt_develop_t *dev = self ? self->dev : NULL;
   if(!self->enabled || !g->cursor_valid)
   {
+    dt_dev_pixelpipe_cache_wait_cleanup(&g->preview_wait);
     _invalidate_preview_cursor(g);
     return FALSE;
   }
@@ -1973,6 +1990,7 @@ static gboolean _refresh_preview_cursor_sample(dt_iop_module_t *self)
   if(IS_NULL_PTR(piece) || IS_NULL_PTR(previous_piece) || previous_piece->dsc_out.datatype != TYPE_FLOAT || previous_piece->dsc_out.channels < 3)
   {
     g->pending_preview_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+    dt_dev_pixelpipe_cache_wait_cleanup(&g->preview_wait);
     _invalidate_preview_cursor(g);
     return FALSE;
   }
@@ -1980,7 +1998,10 @@ static gboolean _refresh_preview_cursor_sample(dt_iop_module_t *self)
   g->pending_preview_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
   void *input = NULL;
   dt_pixel_cache_entry_t *input_entry = NULL;
-  if(!dt_dev_pixelpipe_cache_peek_gui(dev->preview_pipe, previous_piece, &input, &input_entry, NULL, NULL, NULL) || IS_NULL_PTR(input) || IS_NULL_PTR(input_entry))
+  dt_dev_pixelpipe_cache_wait_set_owner(&g->preview_wait, "colorequal-preview-cursor", self);
+  if(!dt_dev_pixelpipe_cache_peek_gui(dev->preview_pipe, previous_piece, &input, &input_entry,
+                                      &g->preview_wait, _preview_cache_wait_restart, self)
+     || IS_NULL_PTR(input) || IS_NULL_PTR(input_entry))
   {
     g->pending_preview_hash = previous_piece->global_hash;
     if(!dev->preview_pipe->processing) dt_dev_pixelpipe_update_history_preview(dev);
@@ -2228,6 +2249,7 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
     DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_cacheline_ready_callback), self);
     g->preview_signal_connected = FALSE;
     g->pending_preview_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+    dt_dev_pixelpipe_cache_wait_cleanup(&g->preview_wait);
   }
 
   _switch_preview_cursor(self);
@@ -2257,6 +2279,7 @@ void gui_cleanup(dt_iop_module_t *self)
     DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_cacheline_ready_callback), self);
     g->preview_signal_connected = FALSE;
   }
+  dt_dev_pixelpipe_cache_wait_cleanup(&g->preview_wait);
 
   const int current_primary = CLAMP(gtk_notebook_get_current_page(g->ring_notebook), 0, DT_IOP_COLOREQUAL_NUM_RINGS);
   dt_conf_set_int("plugins/darkroom/colorequal/gui_ring_page", current_primary);

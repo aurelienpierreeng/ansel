@@ -22,7 +22,8 @@ typedef struct dt_autoset_manager_t
 {
   GList *iop_to_set;
   gboolean progress_cursor_active;
-
+  struct dt_develop_t *dev;
+  gpointer input_wait;
 } dt_autoset_manager_t;
 
 typedef struct dt_develop_t dt_develop_t;

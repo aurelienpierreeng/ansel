@@ -28,6 +28,7 @@
 #include "control/control.h"
 #include "control/signal.h"
 #include <stdint.h>
+#include <stdlib.h>
 
 // Keep a preview-like virtual pipe in sync with history without running pixels.
 static void _sync_virtual_pipe(dt_develop_t *dev, dt_dev_pixelpipe_change_t flag);
@@ -35,7 +36,66 @@ static void _sync_pipe_nodes_from_history_from_node(dt_dev_pixelpipe_t *pipe,
                                                     const uint32_t history_end, GList *start_node,
                                                     const char *debug_label);
 static void _dt_dev_pixelpipe_cache_wait_ready_callback(gpointer instance, const guint64 hash,
-                                                        dt_dev_pixelpipe_cache_wait_t *wait);
+                                                        gpointer user_data);
+
+typedef struct dt_dev_pixelpipe_cache_wait_record_t
+{
+  dt_dev_pixelpipe_cache_wait_t *wait;
+  uint64_t request_id;
+  int64_t queued_at_us;
+} dt_dev_pixelpipe_cache_wait_record_t;
+
+typedef struct dt_dev_pixelpipe_cache_wait_manager_t
+{
+  dt_pthread_mutex_t lock;
+  GList *pending;
+  gboolean connected;
+  gboolean wait_cursor_active;
+  uint64_t next_request_id;
+  uint64_t queued_requests;
+  uint64_t served_requests;
+  uint64_t immediate_hits;
+  uint64_t misses;
+} dt_dev_pixelpipe_cache_wait_manager_t;
+
+static dt_dev_pixelpipe_cache_wait_manager_t _cache_wait_manager
+    = { .lock = { PTHREAD_MUTEX_INITIALIZER }, .pending = NULL, .connected = FALSE,
+        .wait_cursor_active = FALSE,
+        .next_request_id = 1, .queued_requests = 0, .served_requests = 0,
+        .immediate_hits = 0, .misses = 0 };
+
+static gboolean _cache_wait_cursor_progress(gpointer user_data)
+{
+  if(IS_NULL_PTR(darktable.control) || IS_NULL_PTR(darktable.gui) || IS_NULL_PTR(darktable.gui->ui))
+    return G_SOURCE_REMOVE;
+
+  dt_control_change_cursor_by_name_and_flush("progress");
+  return G_SOURCE_REMOVE;
+}
+
+static gboolean _cache_wait_cursor_restore(gpointer user_data)
+{
+  if(IS_NULL_PTR(darktable.control) || IS_NULL_PTR(darktable.gui) || IS_NULL_PTR(darktable.gui->ui))
+    return G_SOURCE_REMOVE;
+
+  dt_control_commit_cursor();
+  dt_control_queue_redraw_center();
+  return G_SOURCE_REMOVE;
+}
+
+static void _cache_wait_manager_remove_wait_locked(dt_dev_pixelpipe_cache_wait_t *wait)
+{
+  for(GList *iter = _cache_wait_manager.pending; iter; iter = g_list_next(iter))
+  {
+    dt_dev_pixelpipe_cache_wait_record_t *record = iter->data;
+    if(!IS_NULL_PTR(record) && record->wait == wait)
+    {
+      _cache_wait_manager.pending = g_list_delete_link(_cache_wait_manager.pending, iter);
+      dt_free(record);
+      break;
+    }
+  }
+}
 
 static gboolean _module_requires_global_histogram_output_cache(const dt_dev_pixelpipe_t *pipe,
                                                                const dt_iop_module_t *module)
@@ -64,7 +124,7 @@ static gchar *_get_debug_pipe_name(const dt_dev_pixelpipe_t *pipe, const dt_deve
   if(!IS_NULL_PTR(dev) && !IS_NULL_PTR(pipe) && dev->virtual_pipe == pipe)
     return g_strdup("virtual-preview");
 
-  return g_strdup(dt_pixelpipe_get_pipe_name(pipe ? pipe->type : DT_DEV_PIXELPIPE_NONE));
+  return g_strdup(dt_pixelpipe_get_pipe_name(!IS_NULL_PTR(pipe) ? pipe->type : DT_DEV_PIXELPIPE_NONE));
 }
 
 static GList *_find_detailmask_node(dt_dev_pixelpipe_t *pipe)
@@ -72,7 +132,7 @@ static GList *_find_detailmask_node(dt_dev_pixelpipe_t *pipe)
   for(GList *nodes = g_list_first(pipe->nodes); nodes; nodes = g_list_next(nodes))
   {
     dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)nodes->data;
-    if(piece && !strcmp(piece->module->op, "detailmask")) return nodes;
+    if(!IS_NULL_PTR(piece) && !strcmp(piece->module->op, "detailmask")) return nodes;
   }
 
   return NULL;
@@ -96,7 +156,7 @@ static void _refresh_pipe_detail_mask_state(dt_dev_pixelpipe_t *pipe)
     }
   }
 
-  if(detailmask_piece)
+  if(!IS_NULL_PTR(detailmask_piece))
   {
     const gboolean enabled = (pipe->want_detail_mask == DT_DEV_DETAIL_MASK_ENABLED)
                              && (detailmask_piece->dsc_in.channels == 4)
@@ -104,7 +164,7 @@ static void _refresh_pipe_detail_mask_state(dt_dev_pixelpipe_t *pipe)
                              && (detailmask_piece->dsc_in.cst == IOP_CS_RGB);
     detailmask_piece->enabled = enabled;
     detailmask_piece->process_tiling_ready = !enabled;
-    if(detailmask_piece->data) *((int *)detailmask_piece->data) = enabled ? 1 : 0;
+    if(!IS_NULL_PTR(detailmask_piece->data)) *((int *)detailmask_piece->data) = enabled ? 1 : 0;
   }
 }
 
@@ -141,14 +201,14 @@ static gboolean _sync_realtime_top_history_in_place(dt_dev_pixelpipe_t *pipe)
   if(IS_NULL_PTR(last_item)) return FALSE;
 
   dt_dev_history_item_t *hist = (dt_dev_history_item_t *)last_item->data;
-  if(!hist || !hist->module || hist->module != pipe->dev->gui_module) return FALSE;
+  if(IS_NULL_PTR(hist) || IS_NULL_PTR(hist->module) || hist->module != pipe->dev->gui_module) return FALSE;
 
   dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)dt_dev_pixelpipe_get_module_piece(pipe, hist->module);
   if(IS_NULL_PTR(piece)) return FALSE;
 
   const gboolean previous_want_detail_mask = (pipe->want_detail_mask != DT_DEV_DETAIL_MASK_NONE);
   piece->enabled = hist->enabled;
-  piece->detail_mask = hist->blend_params && hist->blend_params->details != 0.0f;
+  piece->detail_mask = !IS_NULL_PTR(hist->blend_params) && hist->blend_params->details != 0.0f;
   dt_iop_commit_params(hist->module, hist->params, hist->blend_params, pipe, piece);
   _refresh_pipe_detail_mask_state(pipe);
   if(previous_want_detail_mask != (pipe->want_detail_mask != DT_DEV_DETAIL_MASK_NONE)) return FALSE;
@@ -192,14 +252,14 @@ static gboolean _sync_realtime_top_history_in_place(dt_dev_pixelpipe_t *pipe)
  */
 static void _seal_opencl_cache_policy(dt_dev_pixelpipe_t *pipe)
 {
-  if(IS_NULL_PTR(pipe) || !pipe->nodes) return;
+  if(IS_NULL_PTR(pipe) || IS_NULL_PTR(pipe->nodes)) return;
 
   gboolean current_output_must_cache_host = TRUE;
 
   for(GList *pieces = g_list_last(pipe->nodes); pieces; pieces = g_list_previous(pieces))
   {
     dt_dev_pixelpipe_iop_t *piece = pieces->data;
-    dt_iop_module_t *module = piece ? piece->module : NULL;
+    dt_iop_module_t *module = !IS_NULL_PTR(piece) ? piece->module : NULL;
     if(IS_NULL_PTR(piece) || IS_NULL_PTR(module) || !piece->enabled) continue;
 
     gboolean supports_opencl = FALSE;
@@ -543,89 +603,223 @@ gboolean dt_dev_pixelpipe_cache_peek_gui(dt_dev_pixelpipe_t *pipe, const dt_dev_
                                          dt_dev_pixelpipe_cache_ready_callback_t restart,
                                          gpointer restart_data)
 {
-  if(data) *data = NULL;
-  if(cache_entry) *cache_entry = NULL;
+  if(!IS_NULL_PTR(data)) *data = NULL;
+  if(!IS_NULL_PTR(cache_entry)) *cache_entry = NULL;
   if(IS_NULL_PTR(pipe)) return FALSE;
 
-  // Module-output cache requests are not satisfiable while the current pipe run
-  // intentionally bypasses cache retention. Re-queueing them from GUI redraws
-  // would keep transient edit modes in a self-feeding recompute loop.
-  if(piece
-     && (dt_dev_pixelpipe_get_realtime(pipe) || pipe->bypass_cache || pipe->no_cache
-         || piece->bypass_cache))
+  // Module-output cache requests are not satisfiable when the target piece
+  // itself bypasses cache retention. Re-queueing those from GUI redraws would
+  // keep transient edit modes in a self-feeding recompute loop.
+  // Upstream targets (for example color-picker input sampling) stay allowed even if a
+  // downstream piece enabled bypass mode.
+  if(!IS_NULL_PTR(piece)
+     && (dt_dev_pixelpipe_get_realtime(pipe) || pipe->no_cache || piece->bypass_cache))
     return FALSE;
 
-  const uint64_t hash = piece ? piece->global_hash : dt_dev_pixelpipe_get_hash(pipe);
+  const uint64_t hash = !IS_NULL_PTR(piece) ? piece->global_hash : dt_dev_pixelpipe_get_hash(pipe);
   void *buffer = NULL;
   dt_pixel_cache_entry_t *entry = NULL;
   if(hash != DT_PIXELPIPE_CACHE_HASH_INVALID
      && dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, hash, &buffer, &entry, pipe->devid, NULL)
-     && buffer && entry)
+     &&  !IS_NULL_PTR(buffer) && !IS_NULL_PTR(entry))
   {
+    dt_pthread_mutex_lock(&_cache_wait_manager.lock);
+    _cache_wait_manager.immediate_hits++;
+    dt_pthread_mutex_unlock(&_cache_wait_manager.lock);
     dt_dev_pixelpipe_cache_wait_cleanup(wait);
     if(!IS_NULL_PTR(data)) *data = buffer;
-    if(cache_entry) *cache_entry = entry;
+    if(!IS_NULL_PTR(cache_entry)) *cache_entry = entry;
     return TRUE;
   }
 
-  if(!IS_NULL_PTR(wait) && restart && hash != DT_PIXELPIPE_CACHE_HASH_INVALID)
+  dt_pthread_mutex_lock(&_cache_wait_manager.lock);
+  _cache_wait_manager.misses++;
+  dt_pthread_mutex_unlock(&_cache_wait_manager.lock);
+
+  if(!IS_NULL_PTR(wait) && !IS_NULL_PTR(restart) && hash != DT_PIXELPIPE_CACHE_HASH_INVALID)
   {
     const gboolean changed_target = !wait->connected
                                     || wait->pipe != pipe
-                                    || wait->module != (piece ? piece->module : NULL)
+                                    || wait->module != (!IS_NULL_PTR(piece) ? piece->module : NULL)
                                     || wait->hash != hash
                                     || wait->restart != restart;
     if(changed_target)
     {
+      gboolean activate_wait_cursor = FALSE;
       dt_dev_pixelpipe_cache_wait_cleanup(wait);
       wait->pipe = pipe;
-      wait->module = piece ? piece->module : NULL;
+      wait->module = !IS_NULL_PTR(piece) ? piece->module : NULL;
       wait->hash = hash;
       wait->restart = restart;
       wait->user_data = restart_data;
+      if(IS_NULL_PTR(wait->owner_tag))
+        wait->owner_tag = !IS_NULL_PTR(piece) && !IS_NULL_PTR(piece->module) ? piece->module->op : "gui-backbuf";
+      if(IS_NULL_PTR(wait->owner_object))
+        wait->owner_object = restart_data;
       wait->connected = TRUE;
-      DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_CACHELINE_READY,
-                                      G_CALLBACK(_dt_dev_pixelpipe_cache_wait_ready_callback), wait);
+
+      dt_pthread_mutex_lock(&_cache_wait_manager.lock);
+      wait->request_id = _cache_wait_manager.next_request_id++;
+      _cache_wait_manager.queued_requests++;
+      dt_dev_pixelpipe_cache_wait_record_t *record = calloc(1, sizeof(*record));
+      record->wait = wait;
+      record->request_id = wait->request_id;
+      record->queued_at_us = g_get_monotonic_time();
+      _cache_wait_manager.pending = g_list_prepend(_cache_wait_manager.pending, record);
+      if(!_cache_wait_manager.connected)
+      {
+        DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_CACHELINE_READY,
+                                        G_CALLBACK(_dt_dev_pixelpipe_cache_wait_ready_callback), NULL);
+        _cache_wait_manager.connected = TRUE;
+      }
+      if(!_cache_wait_manager.wait_cursor_active)
+      {
+        _cache_wait_manager.wait_cursor_active = TRUE;
+        activate_wait_cursor = TRUE;
+      }
+      dt_pthread_mutex_unlock(&_cache_wait_manager.lock);
+      if(activate_wait_cursor)
+        g_main_context_invoke(NULL, _cache_wait_cursor_progress, NULL);
+
+      dt_print(DT_DEBUG_PIPECACHE,
+               "[cache-wait] queued id=%" PRIu64 " owner=%s hash=%" PRIu64 " target=%s\n",
+               wait->request_id,
+               !IS_NULL_PTR(wait->owner_tag) ? wait->owner_tag : "(unknown)",
+               wait->hash,
+               !IS_NULL_PTR(wait->module) ? wait->module->op : "backbuf");
     }
   }
 
   dt_dev_pixelpipe_set_cache_request(pipe,
-                                     piece ? DT_DEV_PIXELPIPE_CACHE_REQUEST_MODULE
-                                           : DT_DEV_PIXELPIPE_CACHE_REQUEST_BACKBUF,
-                                     piece ? piece->module : NULL);
+                                     !IS_NULL_PTR(piece) ? DT_DEV_PIXELPIPE_CACHE_REQUEST_MODULE
+                                                         : DT_DEV_PIXELPIPE_CACHE_REQUEST_BACKBUF,
+                                     !IS_NULL_PTR(piece) ? piece->module : NULL);
   dt_dev_pixelpipe_or_changed(pipe, DT_DEV_PIPE_CACHE_REQUEST);
 
   dt_print(DT_DEBUG_DEV, "[pixelpipe/gui] request host cache pipe=%s target=%s hash=%" PRIu64 "\n",
            dt_pixelpipe_get_pipe_name(pipe->type),
-           piece && piece->module ? piece->module->op : "backbuf", hash);
+           !IS_NULL_PTR(piece) && !IS_NULL_PTR(piece->module) ? piece->module->op : "backbuf", hash);
 
   return FALSE;
 }
 
+/**
+ * @brief Serve queued GUI cache waiters matching one published cacheline hash.
+ *
+ * `DT_SIGNAL_CACHELINE_READY` may wake several GUI consumers at once (pickers,
+ * histograms, darkroom surfaces, autoset). We therefore:
+ * 1. iterate the pending wait list under the manager lock,
+ * 2. extract only waiters whose requested hash matches @p hash,
+ * 3. disconnect the global signal and clear the busy cursor when the queue
+ *    becomes empty,
+ * 4. release the lock before running restart callbacks.
+ *
+ * Keeping callbacks out of the critical section is intentional: restart
+ * handlers can queue redraws or request new cachelines, so running them under
+ * lock would serialize unrelated GUI wakeups and risks re-entrant lock
+ * contention.
+ */
 static void _dt_dev_pixelpipe_cache_wait_ready_callback(gpointer instance, const guint64 hash,
-                                                        dt_dev_pixelpipe_cache_wait_t *wait)
+                                                        gpointer user_data)
 {
-  (void)instance;
-  if(IS_NULL_PTR(wait) || !wait->connected || wait->hash != hash) return;
+  GList *to_restart = NULL;
+  gboolean restore_wait_cursor = FALSE;
 
-  dt_dev_pixelpipe_cache_ready_callback_t restart = wait->restart;
-  gpointer user_data = wait->user_data;
-  dt_dev_pixelpipe_cache_wait_cleanup(wait);
-  if(restart) restart(user_data);
+  dt_pthread_mutex_lock(&_cache_wait_manager.lock);
+  for(GList *iter = _cache_wait_manager.pending; iter; )
+  {
+    GList *next = g_list_next(iter);
+    dt_dev_pixelpipe_cache_wait_record_t *record = iter->data;
+    dt_dev_pixelpipe_cache_wait_t *wait = !IS_NULL_PTR(record) ? record->wait : NULL;
+    if(!IS_NULL_PTR(wait) && wait->connected && wait->hash == hash)
+    {
+      _cache_wait_manager.pending = g_list_delete_link(_cache_wait_manager.pending, iter);
+      _cache_wait_manager.served_requests++;
+      wait->connected = FALSE;
+      to_restart = g_list_prepend(to_restart, wait);
+      dt_free(record);
+    }
+    iter = next;
+  }
+
+  if(IS_NULL_PTR(_cache_wait_manager.pending) && _cache_wait_manager.connected)
+  {
+    DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals,
+                                       G_CALLBACK(_dt_dev_pixelpipe_cache_wait_ready_callback), NULL);
+    _cache_wait_manager.connected = FALSE;
+  }
+  if(IS_NULL_PTR(_cache_wait_manager.pending) && _cache_wait_manager.wait_cursor_active)
+  {
+    _cache_wait_manager.wait_cursor_active = FALSE;
+    restore_wait_cursor = TRUE;
+  }
+  dt_pthread_mutex_unlock(&_cache_wait_manager.lock);
+  if(restore_wait_cursor)
+    g_main_context_invoke(NULL, _cache_wait_cursor_restore, NULL);
+
+  for(GList *iter = to_restart; iter; iter = g_list_next(iter))
+  {
+    dt_dev_pixelpipe_cache_wait_t *wait = iter->data;
+    const dt_dev_pixelpipe_cache_ready_callback_t restart = wait->restart;
+    gpointer restart_data = wait->user_data;
+
+    dt_print(DT_DEBUG_PIPECACHE,
+             "[cache-wait] served id=%" PRIu64 " owner=%s hash=%" PRIu64 " target=%s\n",
+             wait->request_id,
+             !IS_NULL_PTR(wait->owner_tag) ? wait->owner_tag : "(unknown)",
+             hash,
+             !IS_NULL_PTR(wait->module) ? wait->module->op : "backbuf");
+
+    wait->pipe = NULL;
+    wait->module = NULL;
+    wait->hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+    wait->restart = NULL;
+    wait->user_data = NULL;
+    wait->request_id = 0;
+
+    if(!IS_NULL_PTR(restart)) restart(restart_data);
+  }
+  g_list_free(to_restart);
 }
 
 void dt_dev_pixelpipe_cache_wait_cleanup(dt_dev_pixelpipe_cache_wait_t *wait)
 {
   if(IS_NULL_PTR(wait) || !wait->connected) return;
+  gboolean restore_wait_cursor = FALSE;
 
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals,
-                                     G_CALLBACK(_dt_dev_pixelpipe_cache_wait_ready_callback), wait);
+  dt_pthread_mutex_lock(&_cache_wait_manager.lock);
+  _cache_wait_manager_remove_wait_locked(wait);
+  if(IS_NULL_PTR(_cache_wait_manager.pending) && _cache_wait_manager.connected)
+  {
+    DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals,
+                                       G_CALLBACK(_dt_dev_pixelpipe_cache_wait_ready_callback), NULL);
+    _cache_wait_manager.connected = FALSE;
+  }
+  if(IS_NULL_PTR(_cache_wait_manager.pending) && _cache_wait_manager.wait_cursor_active)
+  {
+    _cache_wait_manager.wait_cursor_active = FALSE;
+    restore_wait_cursor = TRUE;
+  }
+  dt_pthread_mutex_unlock(&_cache_wait_manager.lock);
+  if(restore_wait_cursor)
+    g_main_context_invoke(NULL, _cache_wait_cursor_restore, NULL);
+
   wait->pipe = NULL;
   wait->module = NULL;
   wait->hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
   wait->restart = NULL;
   wait->user_data = NULL;
+  wait->request_id = 0;
   wait->connected = FALSE;
+}
+
+void dt_dev_pixelpipe_cache_wait_set_owner(dt_dev_pixelpipe_cache_wait_t *wait,
+                                           const char *owner_tag,
+                                           gpointer owner_object)
+{
+  if(IS_NULL_PTR(wait)) return;
+  wait->owner_tag = owner_tag;
+  wait->owner_object = owner_object;
 }
 
 static gboolean _prepare_piece_input_contract(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,

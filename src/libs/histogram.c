@@ -129,6 +129,7 @@ const gchar *dt_lib_colorpicker_statistic_names[]
 
 typedef struct dt_lib_histogram_t
 {
+  struct dt_lib_module_t *module;
   GtkWidget *scope_draw;               // GtkDrawingArea -- scope, scale, and draggable overlays
   GtkWidget *stage;                    // Module at which stage we sample histogram
   GtkWidget *display;                  // Kind of display
@@ -149,6 +150,9 @@ typedef struct dt_lib_histogram_t
   GtkWidget *display_samples_check_box;
   GArray *pending_hashes;
   guint refresh_idle_source;
+  dt_dev_pixelpipe_cache_wait_t scope_wait;
+  dt_dev_pixelpipe_cache_wait_t picker_wait;
+  dt_dev_pixelpipe_cache_wait_t module_wait;
 
 } dt_lib_histogram_t;
 
@@ -169,6 +173,14 @@ typedef struct dt_histogram_preview_refresh_state_t
 static dt_histogram_preview_refresh_state_t _preview_refresh_state
     = { DT_PIXELPIPE_CACHE_HASH_INVALID, DT_PIXELPIPE_CACHE_HASH_INVALID,
         DT_PIXELPIPE_CACHE_HASH_INVALID, NULL };
+static void _schedule_histogram_refresh(dt_lib_module_t *self);
+
+static void _histogram_restart_cache_wait(gpointer user_data)
+{
+  dt_lib_module_t *self = (dt_lib_module_t *)user_data;
+  if(IS_NULL_PTR(self)) return;
+  _schedule_histogram_refresh(self);
+}
 
 static void _clear_pending_preview_histograms(void)
 {
@@ -290,7 +302,7 @@ static gboolean _refresh_global_histogram_backbuf_for_hash(dt_develop_t *dev, co
 static gboolean _refresh_preview_module_histogram_for_hash(dt_develop_t *dev, dt_iop_module_t *module,
                                                            const uint64_t expected_hash)
 {
-  if(IS_NULL_PTR(dev) || IS_NULL_PTR(dev->preview_pipe) || !module) return FALSE;
+  if(IS_NULL_PTR(dev) || IS_NULL_PTR(dev->preview_pipe) || IS_NULL_PTR(module)) return FALSE;
 
   const dt_dev_pixelpipe_iop_t *const piece = dt_dev_pixelpipe_get_module_piece(dev->preview_pipe, module);
   if(IS_NULL_PTR(piece) || !(piece->request_histogram & DT_REQUEST_ON)) return FALSE;
@@ -304,7 +316,13 @@ static gboolean _refresh_preview_module_histogram_for_hash(dt_develop_t *dev, dt
 
   void *input = NULL;
   dt_pixel_cache_entry_t *input_entry = NULL;
-  if(!dt_dev_pixelpipe_cache_peek_gui(dev->preview_pipe, previous_piece, &input, &input_entry, NULL, NULL, NULL))
+  dt_lib_module_t *const histogram_module = darktable.develop->color_picker.histogram_module;
+  dt_lib_histogram_t *const d = !IS_NULL_PTR(histogram_module) ? histogram_module->data : NULL;
+  if(!IS_NULL_PTR(d))
+    dt_dev_pixelpipe_cache_wait_set_owner(&d->module_wait, "histogram-module-refresh", module);
+  if(!dt_dev_pixelpipe_cache_peek_gui(dev->preview_pipe, previous_piece, &input, &input_entry,
+                                      !IS_NULL_PTR(d) ? &d->module_wait : NULL,
+                                      _histogram_restart_cache_wait, histogram_module))
     return FALSE;
 
   dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, input_entry);
@@ -410,7 +428,8 @@ static void _refresh_preview_histograms(dt_develop_t *dev)
 
     const dt_dev_pixelpipe_iop_t *const previous_piece
         = dt_dev_pixelpipe_get_prev_enabled_piece(dev->preview_pipe, piece);
-    if(previous_piece && !_refresh_preview_module_histogram_for_hash(dev, piece->module, previous_piece->global_hash))
+    if(!IS_NULL_PTR(previous_piece)
+       && !_refresh_preview_module_histogram_for_hash(dev, piece->module, previous_piece->global_hash))
     {
       gboolean found = FALSE;
       for(GList *l = _preview_refresh_state.module_histograms; l; l = g_list_next(l))
@@ -836,14 +855,24 @@ static inline void _bin_pickers_histogram(const float *const restrict image,
 static const dt_dev_pixelpipe_iop_t *_get_backbuf_source_piece(const dt_backbuf_t *backbuf, const char *op);
 
 static void _process_histogram(dt_backbuf_t *backbuf, const char *op, cairo_t *cr, const int width,
-                               const int height)
+                               const int height, dt_lib_histogram_t *d)
 {
   // Histogram backbuffers already own their keepalive ref in the pipeline state. Drawing only borrows them.
   struct dt_pixel_cache_entry_t *entry = NULL;
   void *data = NULL;
   dt_pthread_mutex_lock(&darktable.develop->preview_pipe->busy_mutex);
   const dt_dev_pixelpipe_iop_t *const piece = _get_backbuf_source_piece(backbuf, op);
-  if(IS_NULL_PTR(piece) || !dt_dev_pixelpipe_cache_peek_gui(darktable.develop->preview_pipe, piece, &data, &entry, NULL, NULL, NULL))
+  if(IS_NULL_PTR(piece))
+  {
+    dt_pthread_mutex_unlock(&darktable.develop->preview_pipe->busy_mutex);
+    return;
+  }
+  if(!IS_NULL_PTR(d))
+    dt_dev_pixelpipe_cache_wait_set_owner(&d->scope_wait, "histogram-scope", d->module);
+  if(!dt_dev_pixelpipe_cache_peek_gui(darktable.develop->preview_pipe, piece, &data, &entry,
+                                      !IS_NULL_PTR(d) ? &d->scope_wait : NULL,
+                                      _histogram_restart_cache_wait,
+                                      !IS_NULL_PTR(d) ? d->module : NULL))
   {
     dt_pthread_mutex_unlock(&darktable.develop->preview_pipe->busy_mutex);
     return;
@@ -1082,13 +1111,24 @@ static void _paint_parade(cairo_t *cr, uint8_t *const restrict image, const int 
 
 
 static void _process_waveform(dt_backbuf_t *backbuf, const char *op, cairo_t *cr, const int width,
-                              const int height, const gboolean vertical, const gboolean parade)
+                              const int height, const gboolean vertical, const gboolean parade,
+                              dt_lib_histogram_t *d)
 {
   struct dt_pixel_cache_entry_t *entry = NULL;
   void *data = NULL;
   dt_pthread_mutex_lock(&darktable.develop->preview_pipe->busy_mutex);
   const dt_dev_pixelpipe_iop_t *const piece = _get_backbuf_source_piece(backbuf, op);
-  if(IS_NULL_PTR(piece) || !dt_dev_pixelpipe_cache_peek_gui(darktable.develop->preview_pipe, piece, &data, &entry, NULL, NULL, NULL))
+  if(IS_NULL_PTR(piece))
+  {
+    dt_pthread_mutex_unlock(&darktable.develop->preview_pipe->busy_mutex);
+    return;
+  }
+  if(!IS_NULL_PTR(d))
+    dt_dev_pixelpipe_cache_wait_set_owner(&d->scope_wait, "histogram-scope", d->module);
+  if(!dt_dev_pixelpipe_cache_peek_gui(darktable.develop->preview_pipe, piece, &data, &entry,
+                                      !IS_NULL_PTR(d) ? &d->scope_wait : NULL,
+                                      _histogram_restart_cache_wait,
+                                      !IS_NULL_PTR(d) ? d->module : NULL))
   {
     dt_pthread_mutex_unlock(&darktable.develop->preview_pipe->busy_mutex);
     return;
@@ -1293,7 +1333,14 @@ static void _process_vectorscope(dt_backbuf_t *backbuf, const char *op, cairo_t 
   void *data = NULL;
   dt_pthread_mutex_lock(&darktable.develop->preview_pipe->busy_mutex);
   const dt_dev_pixelpipe_iop_t *const piece = _get_backbuf_source_piece(backbuf, op);
-  if(IS_NULL_PTR(piece) || !dt_dev_pixelpipe_cache_peek_gui(darktable.develop->preview_pipe, piece, &data, &entry, NULL, NULL, NULL))
+  if(IS_NULL_PTR(piece))
+  {
+    dt_pthread_mutex_unlock(&darktable.develop->preview_pipe->busy_mutex);
+    return;
+  }
+  dt_dev_pixelpipe_cache_wait_set_owner(&d->scope_wait, "histogram-scope", d->module);
+  if(!dt_dev_pixelpipe_cache_peek_gui(darktable.develop->preview_pipe, piece, &data, &entry, &d->scope_wait,
+                                      _histogram_restart_cache_wait, d->module))
   {
     dt_pthread_mutex_unlock(&darktable.develop->preview_pipe->busy_mutex);
     return;
@@ -1523,27 +1570,27 @@ gboolean _redraw_surface(dt_lib_histogram_t *d)
   {
     case DT_LIB_HISTOGRAM_SCOPE_HISTOGRAM:
     {
-      _process_histogram(d->backbuf, d->op, cr, width, height);
+      _process_histogram(d->backbuf, d->op, cr, width, height, d);
       break;
     }
     case DT_LIB_HISTOGRAM_SCOPE_WAVEFORM_HORIZONTAL:
     {
-      _process_waveform(d->backbuf, d->op, cr, width, height, FALSE, FALSE);
+      _process_waveform(d->backbuf, d->op, cr, width, height, FALSE, FALSE, d);
       break;
     }
     case DT_LIB_HISTOGRAM_SCOPE_WAVEFORM_VERTICAL:
     {
-      _process_waveform(d->backbuf, d->op, cr, width, height, TRUE, FALSE);
+      _process_waveform(d->backbuf, d->op, cr, width, height, TRUE, FALSE, d);
       break;
     }
     case DT_LIB_HISTOGRAM_SCOPE_PARADE_HORIZONTAL:
     {
-      _process_waveform(d->backbuf, d->op, cr, width, height, FALSE, TRUE);
+      _process_waveform(d->backbuf, d->op, cr, width, height, FALSE, TRUE, d);
       break;
     }
     case DT_LIB_HISTOGRAM_SCOPE_PARADE_VERTICAL:
     {
-      _process_waveform(d->backbuf, d->op, cr, width, height, TRUE, TRUE);
+      _process_waveform(d->backbuf, d->op, cr, width, height, TRUE, TRUE, d);
       break;
     }
     case DT_LIB_HISTOGRAM_SCOPE_VECTORSCOPE:
@@ -1684,8 +1731,14 @@ static void _pixelpipe_pick_from_image(const dt_backbuf_t *const backbuf,
   void *data = NULL;
   dt_pthread_mutex_lock(&darktable.develop->preview_pipe->busy_mutex);
   const dt_dev_pixelpipe_iop_t *const source_piece = _get_backbuf_source_piece(backbuf, op);
-  if(IS_NULL_PTR(source_piece)
-     || !dt_dev_pixelpipe_cache_peek_gui(darktable.develop->preview_pipe, source_piece, &data, &entry, NULL, NULL, NULL))
+  if(IS_NULL_PTR(source_piece))
+  {
+    dt_pthread_mutex_unlock(&darktable.develop->preview_pipe->busy_mutex);
+    return;
+  }
+  dt_dev_pixelpipe_cache_wait_set_owner(&d->picker_wait, "histogram-picker", d->module);
+  if(!dt_dev_pixelpipe_cache_peek_gui(darktable.develop->preview_pipe, source_piece, &data, &entry,
+                                      &d->picker_wait, _histogram_restart_cache_wait, d->module))
   {
     dt_pthread_mutex_unlock(&darktable.develop->preview_pipe->busy_mutex);
     return;
@@ -1884,6 +1937,9 @@ void view_leave(struct dt_lib_module_t *self, struct dt_view_t *old_view, struct
 {
   dt_lib_histogram_t *d = self->data;
   _reset_cache(d);
+  dt_dev_pixelpipe_cache_wait_cleanup(&d->scope_wait);
+  dt_dev_pixelpipe_cache_wait_cleanup(&d->picker_wait);
+  dt_dev_pixelpipe_cache_wait_cleanup(&d->module_wait);
 
   _clear_pending_preview_histograms();
   _clear_pending_hashes(d);
@@ -2362,6 +2418,7 @@ void gui_init(dt_lib_module_t *self)
   dt_lib_histogram_t *d = (dt_lib_histogram_t *)dt_pixelpipe_cache_alloc_align_cache(sizeof(dt_lib_histogram_t), 0);
   if(d) memset(d, 0, sizeof(dt_lib_histogram_t));
   self->data = (void *)d;
+  d->module = self;
   d->cst = NULL;
   d->pending_hashes = g_array_new(FALSE, FALSE, sizeof(uint64_t));
   d->refresh_idle_source = 0;
@@ -2518,6 +2575,9 @@ void gui_cleanup(dt_lib_module_t *self)
 {
   if(IS_NULL_PTR(self->data)) return;
   dt_lib_histogram_t *d = self->data;
+  dt_dev_pixelpipe_cache_wait_cleanup(&d->scope_wait);
+  dt_dev_pixelpipe_cache_wait_cleanup(&d->picker_wait);
+  dt_dev_pixelpipe_cache_wait_cleanup(&d->module_wait);
   _clear_pending_preview_histograms();
   _clear_pending_hashes(d);
   if(d->refresh_idle_source != 0)
