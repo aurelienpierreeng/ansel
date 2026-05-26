@@ -162,7 +162,19 @@ typedef struct dt_dev_pixelpipe_cache_wait_t
   gboolean connected;
 } dt_dev_pixelpipe_cache_wait_t;
 
-void dt_dev_pixelpipe_cache_wait_cleanup(dt_dev_pixelpipe_cache_wait_t *wait);
+/**
+ * @brief Cancel one pending GUI cache wait request and clear its runtime state.
+ *
+ * @details
+ * This removes @p wait from the shared pending queue (if connected), emits a
+ * lifecycle debug log and resets the wait object to an inert state.
+ * Callers should pass a short static @p reason string to make cancellations
+ * traceable in logs.
+ *
+ * @param wait Caller-owned wait object.
+ * @param reason Short static cancellation context label for debug traces.
+ */
+void dt_dev_pixelpipe_cache_wait_cleanup(dt_dev_pixelpipe_cache_wait_t *wait, const char *reason);
 
 /**
  * @brief Dump pending GUI cache wait requests for lifecycle debugging.

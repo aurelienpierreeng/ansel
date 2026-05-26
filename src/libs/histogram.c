@@ -1937,9 +1937,9 @@ void view_leave(struct dt_lib_module_t *self, struct dt_view_t *old_view, struct
 {
   dt_lib_histogram_t *d = self->data;
   _reset_cache(d);
-  dt_dev_pixelpipe_cache_wait_cleanup(&d->scope_wait);
-  dt_dev_pixelpipe_cache_wait_cleanup(&d->picker_wait);
-  dt_dev_pixelpipe_cache_wait_cleanup(&d->module_wait);
+  dt_dev_pixelpipe_cache_wait_cleanup(&d->scope_wait, "histogram-view-leave-scope");
+  dt_dev_pixelpipe_cache_wait_cleanup(&d->picker_wait, "histogram-view-leave-picker");
+  dt_dev_pixelpipe_cache_wait_cleanup(&d->module_wait, "histogram-view-leave-module");
 
   _clear_pending_preview_histograms();
   _clear_pending_hashes(d);
@@ -2575,9 +2575,9 @@ void gui_cleanup(dt_lib_module_t *self)
 {
   if(IS_NULL_PTR(self->data)) return;
   dt_lib_histogram_t *d = self->data;
-  dt_dev_pixelpipe_cache_wait_cleanup(&d->scope_wait);
-  dt_dev_pixelpipe_cache_wait_cleanup(&d->picker_wait);
-  dt_dev_pixelpipe_cache_wait_cleanup(&d->module_wait);
+  dt_dev_pixelpipe_cache_wait_cleanup(&d->scope_wait, "histogram-gui-cleanup-scope");
+  dt_dev_pixelpipe_cache_wait_cleanup(&d->picker_wait, "histogram-gui-cleanup-picker");
+  dt_dev_pixelpipe_cache_wait_cleanup(&d->module_wait, "histogram-gui-cleanup-module");
   _clear_pending_preview_histograms();
   _clear_pending_hashes(d);
   if(d->refresh_idle_source != 0)

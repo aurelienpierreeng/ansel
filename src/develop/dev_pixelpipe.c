@@ -662,7 +662,7 @@ gboolean dt_dev_pixelpipe_cache_peek_gui(dt_dev_pixelpipe_t *pipe, const dt_dev_
     dt_pthread_mutex_lock(&_cache_wait_manager.lock);
     _cache_wait_manager.immediate_hits++;
     dt_pthread_mutex_unlock(&_cache_wait_manager.lock);
-    dt_dev_pixelpipe_cache_wait_cleanup(wait);
+    dt_dev_pixelpipe_cache_wait_cleanup(wait, "peek-gui-immediate-hit");
     if(!IS_NULL_PTR(data)) *data = buffer;
     if(!IS_NULL_PTR(cache_entry)) *cache_entry = entry;
     return TRUE;
@@ -682,7 +682,7 @@ gboolean dt_dev_pixelpipe_cache_peek_gui(dt_dev_pixelpipe_t *pipe, const dt_dev_
     if(changed_target)
     {
       gboolean activate_wait_cursor = FALSE;
-      dt_dev_pixelpipe_cache_wait_cleanup(wait);
+      dt_dev_pixelpipe_cache_wait_cleanup(wait, "peek-gui-target-changed");
       wait->pipe = pipe;
       wait->module = !IS_NULL_PTR(piece) ? piece->module : NULL;
       wait->hash = hash;
@@ -818,7 +818,7 @@ static void _dt_dev_pixelpipe_cache_wait_ready_callback(gpointer instance, const
   g_list_free(to_restart);
 }
 
-void dt_dev_pixelpipe_cache_wait_cleanup(dt_dev_pixelpipe_cache_wait_t *wait)
+void dt_dev_pixelpipe_cache_wait_cleanup(dt_dev_pixelpipe_cache_wait_t *wait, const char *reason)
 {
   if(IS_NULL_PTR(wait) || !wait->connected) return;
   gboolean restore_wait_cursor = FALSE;
@@ -827,6 +827,7 @@ void dt_dev_pixelpipe_cache_wait_cleanup(dt_dev_pixelpipe_cache_wait_t *wait)
   const uint64_t hash = wait->hash;
   const char *owner_tag = wait->owner_tag;
   const dt_iop_module_t *module = wait->module;
+  const char *cancel_reason = !IS_NULL_PTR(reason) ? reason : "unspecified";
 
   dt_pthread_mutex_lock(&_cache_wait_manager.lock);
   dt_dev_pixelpipe_cache_wait_record_t *record = _cache_wait_manager_remove_wait_locked(wait);
@@ -854,12 +855,13 @@ void dt_dev_pixelpipe_cache_wait_cleanup(dt_dev_pixelpipe_cache_wait_t *wait)
   const int64_t age_ms = queued_at_us > 0 ? MAX((g_get_monotonic_time() - queued_at_us) / 1000, 0) : -1;
   dt_print(DT_DEBUG_PIPECACHE,
            "[cache-wait] cancelled id=%" PRIu64 " owner=%s hash=%" PRIu64
-           " target=%s age_ms=%" PRId64 "\n",
+           " target=%s age_ms=%" PRId64 " reason=%s\n",
            request_id,
            !IS_NULL_PTR(owner_tag) ? owner_tag : "(unknown)",
            hash,
            !IS_NULL_PTR(module) ? module->op : "backbuf",
-           age_ms);
+           age_ms,
+           cancel_reason);
 
   wait->pipe = NULL;
   wait->module = NULL;

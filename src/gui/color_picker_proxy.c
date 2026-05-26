@@ -656,8 +656,8 @@ void dt_iop_color_picker_reset(dt_iop_module_t *module, gboolean keep)
   {
     if(!keep)
     {
-      dt_dev_pixelpipe_cache_wait_cleanup(&dev->color_picker.input_wait);
-      dt_dev_pixelpipe_cache_wait_cleanup(&dev->color_picker.output_wait);
+      dt_dev_pixelpipe_cache_wait_cleanup(&dev->color_picker.input_wait, "picker-reset-input");
+      dt_dev_pixelpipe_cache_wait_cleanup(&dev->color_picker.output_wait, "picker-reset-output");
       _color_picker_reset(picker);
       dev->color_picker.picker = NULL;
       dev->color_picker.widget = NULL;
@@ -767,8 +767,8 @@ static gboolean _color_picker_callback_button_press(GtkWidget *button, GdkEventB
   }
   else
   {
-    dt_dev_pixelpipe_cache_wait_cleanup(&dev->color_picker.input_wait);
-    dt_dev_pixelpipe_cache_wait_cleanup(&dev->color_picker.output_wait);
+    dt_dev_pixelpipe_cache_wait_cleanup(&dev->color_picker.input_wait, "picker-deactivate-input");
+    dt_dev_pixelpipe_cache_wait_cleanup(&dev->color_picker.output_wait, "picker-deactivate-output");
     dev->color_picker.picker = NULL;
     dev->color_picker.widget = NULL;
     dev->color_picker.module = NULL;
