@@ -854,9 +854,29 @@ static gboolean _focus_next_module(GtkAccelGroup *accel_group, GObject *accelera
 
 static gboolean _is_valid_widget(GtkWidget *widget)
 {
+  if(IS_NULL_PTR(widget))
+  {
+    dt_print(DT_DEBUG_SHORTCUTS, "[modulegroups] _is_valid_widget skip: widget=NULL\n");
+    return FALSE;
+  }
+
   // The parent will always be a GtkBox
   GtkWidget *parent = gtk_widget_get_parent(widget);
+  if(IS_NULL_PTR(parent))
+  {
+    dt_print(DT_DEBUG_SHORTCUTS, "[modulegroups] _is_valid_widget skip: parent=NULL widget=%s\n",
+             gtk_widget_get_name(widget));
+    return FALSE;
+  }
+
   GtkWidget *grandparent = gtk_widget_get_parent(parent);
+  if(IS_NULL_PTR(grandparent))
+  {
+    dt_print(DT_DEBUG_SHORTCUTS, "[modulegroups] _is_valid_widget skip: grandparent=NULL widget=%s parent=%s\n",
+             gtk_widget_get_name(widget), gtk_widget_get_name(parent));
+    return FALSE;
+  }
+
   GType type = G_OBJECT_TYPE(grandparent);
 
   gboolean visible_parent = TRUE;
