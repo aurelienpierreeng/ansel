@@ -2268,7 +2268,15 @@ static gboolean _iop_plugin_focus_accel(GtkAccelGroup *accel_group, GObject *acc
                                         GdkModifierType modifier, gpointer data)
 {
   dt_gui_module_t *module = (dt_gui_module_t *)data;
+  dt_iop_module_t *iop = (dt_iop_module_t *)data;
   if(IS_NULL_PTR(module) || !module->focus) return FALSE;
+
+  // Accel search explicitly targets a module, so allow modulegroups to leave
+  // the Pipeline tab once for this focus request.
+  if(iop->expander)
+    g_object_set_data(G_OBJECT(iop->expander), "dt-modulegroups-switch-from-active-once",
+                      GINT_TO_POINTER(TRUE));
+
   return module->focus(module, FALSE);
 }
 
