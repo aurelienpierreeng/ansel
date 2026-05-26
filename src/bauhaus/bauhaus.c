@@ -2774,7 +2774,6 @@ static gboolean _widget_key_press(GtkWidget *widget, GdkEventKey *event)
   }
   else if(w->type == DT_BAUHAUS_COMBOBOX)
   {
-    guint key = dt_keys_mainpad_alternatives(event->keyval);
     switch(key)
     {
       case GDK_KEY_Return:
