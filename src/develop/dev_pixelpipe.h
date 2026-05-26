@@ -165,6 +165,19 @@ typedef struct dt_dev_pixelpipe_cache_wait_t
 void dt_dev_pixelpipe_cache_wait_cleanup(dt_dev_pixelpipe_cache_wait_t *wait);
 
 /**
+ * @brief Dump pending GUI cache wait requests for lifecycle debugging.
+ *
+ * @details
+ * This reports the current queue of not-yet-served cache wait requests, with
+ * ownership tags, request ids and target hashes. Callers should use it right
+ * before teardown phases (view leave / app shutdown) to identify abandoned
+ * waits that never received a cacheline-ready event.
+ *
+ * @param reason Short caller-provided context label for the log entry.
+ */
+void dt_dev_pixelpipe_cache_wait_dump_pending(const char *reason);
+
+/**
  * @brief Attach debug ownership metadata to one cache wait request.
  *
  * The cache wait manager tracks heterogeneous GUI consumers (pickers,

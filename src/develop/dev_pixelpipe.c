@@ -54,6 +54,7 @@ typedef struct dt_dev_pixelpipe_cache_wait_manager_t
   uint64_t next_request_id;
   uint64_t queued_requests;
   uint64_t served_requests;
+  uint64_t cancelled_requests;
   uint64_t immediate_hits;
   uint64_t misses;
 } dt_dev_pixelpipe_cache_wait_manager_t;
@@ -62,7 +63,7 @@ static dt_dev_pixelpipe_cache_wait_manager_t _cache_wait_manager
     = { .lock = { PTHREAD_MUTEX_INITIALIZER }, .pending = NULL, .connected = FALSE,
         .wait_cursor_active = FALSE,
         .next_request_id = 1, .queued_requests = 0, .served_requests = 0,
-        .immediate_hits = 0, .misses = 0 };
+        .cancelled_requests = 0, .immediate_hits = 0, .misses = 0 };
 
 static gboolean _cache_wait_cursor_progress(gpointer user_data)
 {
@@ -83,7 +84,7 @@ static gboolean _cache_wait_cursor_restore(gpointer user_data)
   return G_SOURCE_REMOVE;
 }
 
-static void _cache_wait_manager_remove_wait_locked(dt_dev_pixelpipe_cache_wait_t *wait)
+static dt_dev_pixelpipe_cache_wait_record_t *_cache_wait_manager_remove_wait_locked(dt_dev_pixelpipe_cache_wait_t *wait)
 {
   for(GList *iter = _cache_wait_manager.pending; iter; iter = g_list_next(iter))
   {
@@ -91,10 +92,45 @@ static void _cache_wait_manager_remove_wait_locked(dt_dev_pixelpipe_cache_wait_t
     if(!IS_NULL_PTR(record) && record->wait == wait)
     {
       _cache_wait_manager.pending = g_list_delete_link(_cache_wait_manager.pending, iter);
-      dt_free(record);
-      break;
+      return record;
     }
   }
+
+  return NULL;
+}
+
+void dt_dev_pixelpipe_cache_wait_dump_pending(const char *reason)
+{
+  const char *context = !IS_NULL_PTR(reason) ? reason : "unspecified";
+  const int64_t now_us = g_get_monotonic_time();
+
+  dt_pthread_mutex_lock(&_cache_wait_manager.lock);
+  const guint pending_count = g_list_length(_cache_wait_manager.pending);
+  dt_print(DT_DEBUG_PIPECACHE,
+           "[cache-wait] dump reason=%s pending=%u queued=%" PRIu64 " served=%" PRIu64
+           " cancelled=%" PRIu64 " immediate=%" PRIu64 " misses=%" PRIu64 "\n",
+           context, pending_count, _cache_wait_manager.queued_requests,
+           _cache_wait_manager.served_requests, _cache_wait_manager.cancelled_requests,
+           _cache_wait_manager.immediate_hits, _cache_wait_manager.misses);
+
+  for(GList *iter = _cache_wait_manager.pending; iter; iter = g_list_next(iter))
+  {
+    dt_dev_pixelpipe_cache_wait_record_t *record = iter->data;
+    dt_dev_pixelpipe_cache_wait_t *wait = !IS_NULL_PTR(record) ? record->wait : NULL;
+    if(IS_NULL_PTR(wait) || IS_NULL_PTR(record)) continue;
+
+    const int64_t age_ms = MAX((now_us - record->queued_at_us) / 1000, 0);
+    dt_print(DT_DEBUG_PIPECACHE,
+             "[cache-wait] pending id=%" PRIu64 " owner=%s hash=%" PRIu64
+             " target=%s connected=%d age_ms=%" PRId64 "\n",
+             wait->request_id,
+             !IS_NULL_PTR(wait->owner_tag) ? wait->owner_tag : "(unknown)",
+             wait->hash,
+             !IS_NULL_PTR(wait->module) ? wait->module->op : "backbuf",
+             wait->connected,
+             age_ms);
+  }
+  dt_pthread_mutex_unlock(&_cache_wait_manager.lock);
 }
 
 static gboolean _module_requires_global_histogram_output_cache(const dt_dev_pixelpipe_t *pipe,
@@ -786,9 +822,20 @@ void dt_dev_pixelpipe_cache_wait_cleanup(dt_dev_pixelpipe_cache_wait_t *wait)
 {
   if(IS_NULL_PTR(wait) || !wait->connected) return;
   gboolean restore_wait_cursor = FALSE;
+  int64_t queued_at_us = 0;
+  const uint64_t request_id = wait->request_id;
+  const uint64_t hash = wait->hash;
+  const char *owner_tag = wait->owner_tag;
+  const dt_iop_module_t *module = wait->module;
 
   dt_pthread_mutex_lock(&_cache_wait_manager.lock);
-  _cache_wait_manager_remove_wait_locked(wait);
+  dt_dev_pixelpipe_cache_wait_record_t *record = _cache_wait_manager_remove_wait_locked(wait);
+  if(!IS_NULL_PTR(record))
+  {
+    queued_at_us = record->queued_at_us;
+    dt_free(record);
+  }
+  _cache_wait_manager.cancelled_requests++;
   if(IS_NULL_PTR(_cache_wait_manager.pending) && _cache_wait_manager.connected)
   {
     DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals,
@@ -803,6 +850,16 @@ void dt_dev_pixelpipe_cache_wait_cleanup(dt_dev_pixelpipe_cache_wait_t *wait)
   dt_pthread_mutex_unlock(&_cache_wait_manager.lock);
   if(restore_wait_cursor)
     g_main_context_invoke(NULL, _cache_wait_cursor_restore, NULL);
+
+  const int64_t age_ms = queued_at_us > 0 ? MAX((g_get_monotonic_time() - queued_at_us) / 1000, 0) : -1;
+  dt_print(DT_DEBUG_PIPECACHE,
+           "[cache-wait] cancelled id=%" PRIu64 " owner=%s hash=%" PRIu64
+           " target=%s age_ms=%" PRId64 "\n",
+           request_id,
+           !IS_NULL_PTR(owner_tag) ? owner_tag : "(unknown)",
+           hash,
+           !IS_NULL_PTR(module) ? module->op : "backbuf",
+           age_ms);
 
   wait->pipe = NULL;
   wait->module = NULL;

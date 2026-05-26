@@ -2568,6 +2568,7 @@ void leave(dt_view_t *self)
   dt_atomic_set_int(&dev->preview_pipe->shutdown, TRUE);
   if(dev->virtual_pipe) dt_atomic_set_int(&dev->virtual_pipe->shutdown, TRUE);
   dev->pipelines_started = FALSE;
+  dt_dev_pixelpipe_cache_wait_dump_pending("darkroom-leave-before-cleanup");
 
   _darkroom_pending_focus_module = NULL;
 
