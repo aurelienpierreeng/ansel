@@ -58,7 +58,7 @@
 #include <glib.h>
 
 // Separator used to space between query and command in accels search
-#define DT_ACCEL_SEARCH_INLINE_SEPARATOR "    "
+#define DT_ACCEL_SEARCH_INLINE_SEPARATOR "    >  "
 
 typedef struct {
   GClosure  *base;
@@ -1415,6 +1415,22 @@ void _for_each_accel_create_treeview_row(gpointer key, gpointer value, gpointer 
   g_strfreev(parts);
 }
 
+static gchar *_shortcut_search_trim_display_path(const gchar *path)
+{
+  if(IS_NULL_PTR(path)) return g_strdup("");
+
+  gchar **parts = g_strsplit(path, "/", -1);
+  const gint len = g_strv_length(parts);
+  gchar *tail = NULL;
+  if(len >= 3)
+    tail = g_strjoinv("/", parts + 2);
+  else if(len == 2)
+    tail = g_strdup(parts[1]);
+  else
+    tail = g_strdup(parts[0]);
+  g_strfreev(parts);
+  return tail;
+}
 
 void _for_each_path_create_treeview_row(gpointer key, gpointer value, gpointer user_data)
 {
@@ -1434,9 +1450,7 @@ void _for_each_path_create_treeview_row(gpointer key, gpointer value, gpointer u
   if(shortcut->accel_group == accels->global_accels ||
      shortcut->accel_group == accels->active_group)
   {
-    // Discard <Ansel>/View/ from the start of the path to make the view narrower
-    gchar **parts = g_strsplit(path, "/", -1);
-    gchar *tail = g_strjoinv ("/", parts + 2);
+    gchar *tail = _shortcut_search_trim_display_path(path);
     gchar **tail_parts = g_strsplit(tail, "/", -1);
     const gint tail_len = g_strv_length(tail_parts);
     const gchar *leaf = tail;
@@ -1456,7 +1470,6 @@ void _for_each_path_create_treeview_row(gpointer key, gpointer value, gpointer u
                        -1);
     g_strfreev(tail_parts);
     dt_free(tail);
-    g_strfreev(parts);
   }
 }
 
@@ -1944,8 +1957,10 @@ static void _shortcut_search_load_recent_entries(GtkListStore *store)
       continue;
     }
 
+    // Keep split limit to 3 for backward compatibility with older persisted
+    // values using "query<TAB>command<TAB>description".
     gchar **parts = g_strsplit(entry, "\t", 3);
-    if(IS_NULL_PTR(parts[0]) || IS_NULL_PTR(parts[1]) || IS_NULL_PTR(parts[2])
+    if(IS_NULL_PTR(parts[0]) || IS_NULL_PTR(parts[1])
        || parts[0][0] == '\0' || parts[1][0] == '\0')
     {
       g_strfreev(parts);
@@ -1955,10 +1970,7 @@ static void _shortcut_search_load_recent_entries(GtkListStore *store)
 
     const gchar *query = parts[0];
     const gchar *command = parts[1];
-    const gchar *description = parts[2];
-    const gchar *display_command = command;
-    if(g_str_has_prefix(command, "<Ansel>/"))
-      display_command = command + strlen("<Ansel>/");
+    gchar *display_command = _shortcut_search_trim_display_path(command);
     gchar *display = g_strdup_printf("%s%s%s", query, DT_ACCEL_SEARCH_INLINE_SEPARATOR, display_command);
 
     GtkTreeIter iter;
@@ -1966,10 +1978,11 @@ static void _shortcut_search_load_recent_entries(GtkListStore *store)
     gtk_list_store_set(store, &iter,
                        0, query,
                        1, command,
-                       2, description,
+                       2, "",
                        3, display,
                        4, i,
                        -1);
+    dt_free(display_command);
     dt_free(display);
     g_strfreev(parts);
     dt_free(entry);
@@ -2074,14 +2087,12 @@ static void _shortcut_search_save_recent_entry(const char *query, const dt_short
   }
 
   gchar *command = g_strdup(shortcut->path);
-  gchar *description = g_strdup(!IS_NULL_PTR(shortcut->description) ? shortcut->description : "");
   g_strdelimit(trimmed, "\t\r\n", ' ');
   g_strdelimit(command, "\t\r\n", ' ');
-  g_strdelimit(description, "\t\r\n", ' ');
 
   GPtrArray *entries = g_ptr_array_new_with_free_func(g_free);
   GPtrArray *entries_ci = g_ptr_array_new_with_free_func(g_free);
-  g_ptr_array_add(entries, g_strdup_printf("%s\t%s\t%s", trimmed, command, description));
+  g_ptr_array_add(entries, g_strdup_printf("%s\t%s", trimmed, command));
   g_ptr_array_add(entries_ci, g_utf8_casefold(trimmed, -1));
 
   for(gint i = 0; i < DT_ACCEL_SEARCH_RECENT_MAX && entries->len < DT_ACCEL_SEARCH_RECENT_MAX; i++)
@@ -2108,7 +2119,7 @@ static void _shortcut_search_save_recent_entry(const char *query, const dt_short
     }
 
     gchar **parts = g_strsplit(candidate, "\t", 3);
-    if(IS_NULL_PTR(parts[0]) || IS_NULL_PTR(parts[1]) || IS_NULL_PTR(parts[2])
+    if(IS_NULL_PTR(parts[0]) || IS_NULL_PTR(parts[1])
        || parts[0][0] == '\0' || parts[1][0] == '\0')
     {
       g_strfreev(parts);
@@ -2118,7 +2129,6 @@ static void _shortcut_search_save_recent_entry(const char *query, const dt_short
 
     const gchar *candidate_query = parts[0];
     const gchar *candidate_command = parts[1];
-    const gchar *candidate_description = parts[2];
 
     gchar *candidate_ci = g_utf8_casefold(candidate_query, -1);
     gboolean found = FALSE;
@@ -2138,7 +2148,7 @@ static void _shortcut_search_save_recent_entry(const char *query, const dt_short
       dt_free(candidate);
       continue;
     }
-    g_ptr_array_add(entries, g_strdup_printf("%s\t%s\t%s", candidate_query, candidate_command, candidate_description));
+    g_ptr_array_add(entries, g_strdup_printf("%s\t%s", candidate_query, candidate_command));
     g_ptr_array_add(entries_ci, candidate_ci);
     g_strfreev(parts);
     dt_free(candidate);
@@ -2155,7 +2165,6 @@ static void _shortcut_search_save_recent_entry(const char *query, const dt_short
 
   g_ptr_array_free(entries_ci, TRUE);
   g_ptr_array_free(entries, TRUE);
-  dt_free(description);
   dt_free(command);
   dt_free(trimmed);
 }
@@ -2213,9 +2222,6 @@ static void _search_entry_changed(GtkWidget *widget, gpointer user_data)
     gtk_tree_model_get(state->filter_model, target_iter, 1, &state->selected, -1);
   }
 }
-
-static gboolean _shortcut_search_recent_completion_match(GtkEntryCompletion *completion, const gchar *key,
-                                                         GtkTreeIter *iter, gpointer user_data);
 
 static gboolean _shortcut_search_recent_match_selected(GtkEntryCompletion *completion, GtkTreeModel *model,
                                                        GtkTreeIter *iter, gpointer user_data)
@@ -2288,6 +2294,7 @@ static gboolean _shortcut_search_recent_insert_prefix(GtkEntryCompletion *comple
   gchar *best_display = NULL;
   gchar *best_query_ci = NULL;
   gchar *best_command_ci = NULL;
+  const glong query_len = g_utf8_strlen(query_ci, -1);
 
   GtkTreeIter iter;
   if(gtk_tree_model_get_iter_first(model, &iter))
@@ -2311,9 +2318,16 @@ static gboolean _shortcut_search_recent_insert_prefix(GtkEntryCompletion *comple
       gchar *row_command_ci = g_utf8_casefold(!IS_NULL_PTR(row_command) ? row_command : "", -1);
       gint row_rank = G_MAXINT;
       if(g_str_has_prefix(row_query_ci, query_ci))
-        row_rank = 0;
+      {
+        // Prefer the shortest matching query for inline completion (ex: "exp" before "expo" for "ex").
+        const glong row_query_len = g_utf8_strlen(row_query_ci, -1);
+        row_rank = MAX((gint)(row_query_len - query_len), 0);
+      }
       else if(g_str_has_prefix(row_command_ci, query_ci))
-        row_rank = 100000;
+      {
+        const glong row_command_len = g_utf8_strlen(row_command_ci, -1);
+        row_rank = 100000 + MAX((gint)(row_command_len - query_len), 0);
+      }
       else
       {
         const gchar *match_query = g_strstr_len(row_query_ci, -1, query_ci);
@@ -2362,8 +2376,46 @@ static gboolean _shortcut_search_recent_insert_prefix(GtkEntryCompletion *comple
       dt_free(state->preferred_command);
       state->preferred_command = NULL;
     }
-    if(!IS_NULL_PTR(best_command) && best_command[0] != '\0')
-      state->preferred_command = g_strdup(best_command);
+    state->preferred_command = g_strdup(best_command);
+
+    GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(state->tree_view));
+    GtkTreeIter filter_iter;
+    if(gtk_tree_model_get_iter_first(state->filter_model, &filter_iter))
+    {
+      do
+      {
+        dt_shortcut_t *shortcut = NULL;
+        gchar *shortcut_path_display = NULL;
+        gtk_tree_model_get(state->filter_model, &filter_iter, 1, &shortcut, 0, &shortcut_path_display, -1);
+        gchar *shortcut_trimmed = NULL;
+        if(!IS_NULL_PTR(shortcut) && !IS_NULL_PTR(shortcut->path))
+          shortcut_trimmed = _shortcut_search_trim_display_path(shortcut->path);
+        if(!IS_NULL_PTR(shortcut) && !IS_NULL_PTR(shortcut->path)
+           && (!g_strcmp0(shortcut->path, best_command)
+               || (!IS_NULL_PTR(shortcut_trimmed) && !g_strcmp0(shortcut_trimmed, best_command))
+               || (!IS_NULL_PTR(shortcut_path_display) && !g_strcmp0(shortcut_path_display, best_command))))
+        {
+          GtkTreePath *path = gtk_tree_model_get_path(state->filter_model, &filter_iter);
+          if(IS_NULL_PTR(path))
+          {
+            dt_free(shortcut_trimmed);
+            dt_free(shortcut_path_display);
+            break;
+          }
+          gtk_tree_selection_select_iter(selection, &filter_iter);
+          gtk_tree_view_set_cursor(GTK_TREE_VIEW(state->tree_view), path, NULL, FALSE);
+          gtk_tree_view_scroll_to_cell(GTK_TREE_VIEW(state->tree_view), path, NULL, FALSE, 0.f, 0.f);
+          gtk_tree_path_free(path);
+          gtk_tree_model_get(state->filter_model, &filter_iter, 1, &state->selected, -1);
+          dt_free(shortcut_trimmed);
+          dt_free(shortcut_path_display);
+          break;
+        }
+        dt_free(shortcut_trimmed);
+        dt_free(shortcut_path_display);
+      } while(gtk_tree_model_iter_next(state->filter_model, &filter_iter));
+    }
+
     if(!IS_NULL_PTR(best_display) && best_display[0] != '\0')
     {
       const gchar *current = gtk_entry_get_text(GTK_ENTRY(state->search_entry));
@@ -2551,26 +2603,6 @@ static gboolean _dispatch_selected_shortcut_idle(gpointer data)
   return G_SOURCE_REMOVE;
 }
 
-static dt_shortcut_t *_find_first_match(dt_accels_search_state_t *state)
-{
-  GtkTreeIter iter;
-  GtkTreeModel *model = GTK_TREE_MODEL(state->store);
-
-  if(gtk_tree_model_get_iter_first(model, &iter))
-  {
-    do
-    {
-      int rank = -1;
-      dt_shortcut_t *shortcut = NULL;
-      gtk_tree_model_get(model, &iter, 2, &rank, 1, &shortcut, -1);
-      if(rank >= 0 && shortcut)
-        return shortcut;
-    } while(gtk_tree_model_iter_next(model, &iter));
-  }
-
-  return NULL;
-}
-
 static gboolean _shortcut_search_visible(GtkTreeModel *model, GtkTreeIter *iter, gpointer user_data)
 {
   int rank = -1;
@@ -2604,6 +2636,7 @@ static gboolean _shortcut_search_recent_completion_match(GtkEntryCompletion *com
   gtk_tree_model_get(model, iter, 0, &query, -1);
   if(IS_NULL_PTR(query))
   {
+    dt_free(key_query);
     return FALSE;
   }
 
@@ -2740,7 +2773,55 @@ static gboolean _search_entry_key_pressed(GtkWidget *widget, GdkEventKey *event,
     return _shortcut_search_move_selection(state, FALSE);
   if(key == GDK_KEY_Return)
   {
-    dt_shortcut_t *shortcut = state->selected ? state->selected : _find_first_match(state);
+    dt_shortcut_t *shortcut = state->selected;
+    gchar *command = NULL;
+    if(IS_NULL_PTR(shortcut))
+    {
+      const gchar *entry_text = gtk_entry_get_text(GTK_ENTRY(state->search_entry));
+      if(!IS_NULL_PTR(entry_text) && entry_text[0] != '\0')
+      {
+        const gchar *sep = g_strstr_len(entry_text, -1, DT_ACCEL_SEARCH_INLINE_SEPARATOR);
+        command = !IS_NULL_PTR(sep)
+                    ? g_strdup(sep + strlen(DT_ACCEL_SEARCH_INLINE_SEPARATOR))
+                    : g_strdup(entry_text);
+      }
+
+      if(!IS_NULL_PTR(command))
+      {
+        g_strstrip(command);
+        if(command[0] != '\0')
+        {
+          GtkTreeIter iter;
+          if(gtk_tree_model_get_iter_first(GTK_TREE_MODEL(state->store), &iter))
+          {
+            do
+            {
+              dt_shortcut_t *candidate = NULL;
+              gchar *candidate_path = NULL;
+              gtk_tree_model_get(GTK_TREE_MODEL(state->store), &iter, 1, &candidate, 0, &candidate_path, -1);
+              gchar *candidate_display_path = NULL;
+              if(!IS_NULL_PTR(candidate) && !IS_NULL_PTR(candidate->path))
+                candidate_display_path = _shortcut_search_trim_display_path(candidate->path);
+              if(!IS_NULL_PTR(candidate) && !IS_NULL_PTR(candidate->path)
+                 && (!g_strcmp0(command, candidate->path)
+                     || !g_strcmp0(command, candidate_path)
+                     || (!IS_NULL_PTR(candidate_display_path)
+                         && !g_strcmp0(command, candidate_display_path))))
+              {
+                shortcut = candidate;
+                dt_free(candidate_path);
+                dt_free(candidate_display_path);
+                break;
+              }
+              dt_free(candidate_path);
+              dt_free(candidate_display_path);
+            } while(gtk_tree_model_iter_next(GTK_TREE_MODEL(state->store), &iter));
+          }
+        }
+        dt_free(command);
+      }
+    }
+
     if(shortcut)
       return _queue_action_from_shortcut(shortcut, state->window, state);
     return TRUE;
@@ -2769,10 +2850,7 @@ static gboolean _search_entry_key_pressed(GtkWidget *widget, GdkEventKey *event,
 
       const gchar *sep = g_strstr_len(query_only, -1, DT_ACCEL_SEARCH_INLINE_SEPARATOR);
       if(!IS_NULL_PTR(sep))
-      {
-        gchar *sep_mut = g_strstr_len(query_only, -1, DT_ACCEL_SEARCH_INLINE_SEPARATOR);
-        if(!IS_NULL_PTR(sep_mut)) *sep_mut = '\0';
-      }
+        *((gchar *)sep) = '\0';
 
       if(!IS_NULL_PTR(state->pending_space_query)) dt_free(state->pending_space_query);
       state->pending_space_query = query_only;
@@ -2800,15 +2878,6 @@ static gboolean _search_entry_key_pressed(GtkWidget *widget, GdkEventKey *event,
         const gint position = gtk_editable_get_position(GTK_EDITABLE(state->search_entry));
         const gsize query_len = sep - entry_text;
         gchar *query_only = g_strndup(entry_text, query_len);
-        if(key == GDK_KEY_space)
-        {
-          gint insert_pos = query_len;
-          gtk_entry_set_text(GTK_ENTRY(state->search_entry), query_only);
-          gtk_editable_insert_text(GTK_EDITABLE(state->search_entry), " ", 1, &insert_pos);
-          gtk_editable_set_position(GTK_EDITABLE(state->search_entry), insert_pos);
-          dt_free(query_only);
-          return TRUE;
-        }
 
         gtk_entry_set_text(GTK_ENTRY(state->search_entry), query_only);
         gtk_editable_set_position(GTK_EDITABLE(state->search_entry), MIN(position, (gint)query_len));
@@ -2940,6 +3009,7 @@ void dt_accels_search(dt_accels_t *accels, GtkWindow *main_window, GtkWidget *an
   GtkWidget *search_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
   gtk_box_pack_start(GTK_BOX(box), search_row, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(search_row), search_entry, TRUE, TRUE, 0);
+
   GtkTreeModel *filter_model = gtk_tree_model_filter_new(GTK_TREE_MODEL(store), NULL);
   state.filter_model = filter_model;
   gtk_tree_model_filter_set_visible_func(GTK_TREE_MODEL_FILTER(filter_model),
@@ -2957,14 +3027,8 @@ void dt_accels_search(dt_accels_t *accels, GtkWindow *main_window, GtkWidget *an
   gtk_entry_completion_set_text_column(completion, 3);
   gtk_entry_completion_set_inline_completion(completion, TRUE);
   gtk_entry_completion_set_inline_selection(completion, TRUE);
-  gtk_entry_completion_set_popup_completion(completion, TRUE);
-  gtk_entry_completion_set_popup_set_width(completion, TRUE);
+  gtk_entry_completion_set_popup_completion(completion, FALSE);
   gtk_entry_completion_set_match_func(completion, _shortcut_search_recent_completion_match, NULL, NULL);
-  gtk_cell_layout_clear(GTK_CELL_LAYOUT(completion));
-  GtkCellRenderer *completion_display = gtk_cell_renderer_text_new();
-  g_object_set(completion_display, "foreground", "#e0e0e0", "xpad", 6, NULL);
-  gtk_cell_layout_pack_start(GTK_CELL_LAYOUT(completion), completion_display, TRUE);
-  gtk_cell_layout_set_attributes(GTK_CELL_LAYOUT(completion), completion_display, "text", 3, NULL);
   gtk_entry_set_completion(GTK_ENTRY(search_entry), completion);
   g_object_unref(completion);
 
@@ -2978,7 +3042,7 @@ void dt_accels_search(dt_accels_t *accels, GtkWindow *main_window, GtkWidget *an
   state.tree_view = tree_view;
   gtk_tree_view_set_headers_visible(GTK_TREE_VIEW(tree_view), FALSE);
   gtk_tree_view_set_enable_search(GTK_TREE_VIEW(tree_view), FALSE);
-  gtk_tree_view_set_hover_selection(GTK_TREE_VIEW(tree_view), TRUE);
+  gtk_tree_view_set_hover_selection(GTK_TREE_VIEW(tree_view), FALSE);
   gtk_tree_view_set_activate_on_single_click(GTK_TREE_VIEW(tree_view), TRUE);
   gtk_tree_view_set_tooltip_column(GTK_TREE_VIEW(tree_view), 0);
   gtk_widget_set_hexpand(tree_view, TRUE);
