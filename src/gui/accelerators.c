@@ -1909,6 +1909,8 @@ typedef struct dt_accels_search_state_t
   dt_shortcut_t *selected;
   gchar *preferred_command;
   gboolean suppress_inline_once;
+  gchar *pending_space_query;
+  guint pending_space_idle_id;
 } dt_accels_search_state_t;
 
 #define DT_ACCEL_SEARCH_RECENT_KEY "plugins/accel_search/recent_entries"
@@ -2246,6 +2248,7 @@ static gboolean _shortcut_search_recent_insert_prefix(GtkEntryCompletion *comple
 {
   dt_accels_search_state_t *state = (dt_accels_search_state_t *)user_data;
   if(IS_NULL_PTR(state) || IS_NULL_PTR(state->search_entry)) return FALSE;
+  const gchar *entry_text = gtk_entry_get_text(GTK_ENTRY(state->search_entry));
   if(state->suppress_inline_once)
   {
     state->suppress_inline_once = FALSE;
@@ -2254,13 +2257,12 @@ static gboolean _shortcut_search_recent_insert_prefix(GtkEntryCompletion *comple
 
   GtkTreeModel *model = gtk_entry_completion_get_model(completion);
   if(IS_NULL_PTR(model)) return FALSE;
-
-  const gchar *entry_text = gtk_entry_get_text(GTK_ENTRY(state->search_entry));
   if(!IS_NULL_PTR(entry_text) && entry_text[0] != '\0')
   {
     const gchar *last = g_utf8_find_prev_char(entry_text, entry_text + strlen(entry_text));
     const gunichar last_char = !IS_NULL_PTR(last) ? g_utf8_get_char(last) : 0;
-    if(last_char != 0 && !g_unichar_isalnum(last_char)) return TRUE;
+    if(last_char != 0 && !g_unichar_isalnum(last_char))
+      return TRUE;
   }
   gchar *query = g_strdup(!IS_NULL_PTR(entry_text) ? entry_text : "");
   gchar *sep = g_strstr_len(query, -1, DT_ACCEL_SEARCH_INLINE_SEPARATOR);
@@ -2703,6 +2705,23 @@ static gboolean _shortcut_search_move_selection(dt_accels_search_state_t *state,
   return TRUE;
 }
 
+static gboolean _search_entry_restore_space_idle(gpointer user_data)
+{
+  // Run after GTK key processing/completion so we can enforce "<typed query> + space".
+  dt_accels_search_state_t *state = (dt_accels_search_state_t *)user_data;
+  state->pending_space_idle_id = 0;
+  if(IS_NULL_PTR(state->search_entry) || IS_NULL_PTR(state->pending_space_query))
+    return G_SOURCE_REMOVE;
+
+  gchar *with_space = g_strconcat(state->pending_space_query, " ", NULL);
+  gtk_entry_set_text(GTK_ENTRY(state->search_entry), with_space);
+  gtk_editable_set_position(GTK_EDITABLE(state->search_entry), -1);
+  dt_free(with_space);
+  dt_free(state->pending_space_query);
+  state->pending_space_query = NULL;
+  return G_SOURCE_REMOVE;
+}
+
 static gboolean _search_entry_key_pressed(GtkWidget *widget, GdkEventKey *event, gpointer user_data)
 {
   dt_accels_search_state_t *state = (dt_accels_search_state_t *)user_data;
@@ -2724,6 +2743,43 @@ static gboolean _search_entry_key_pressed(GtkWidget *widget, GdkEventKey *event,
     dt_shortcut_t *shortcut = state->selected ? state->selected : _find_first_match(state);
     if(shortcut)
       return _queue_action_from_shortcut(shortcut, state->window, state);
+    return TRUE;
+  }
+
+  if(key == GDK_KEY_space)
+  {
+    // Hack: GTK entry completion can be too aggressive here and may treat Space as
+    // suggestion acceptance. Restore "<typed query> + space" in idle to preserve
+    // user input semantics for multi-term search.
+
+    const gchar *entry_text = gtk_entry_get_text(GTK_ENTRY(state->search_entry));
+    if(!IS_NULL_PTR(entry_text))
+    {
+      gchar *query_only = NULL;
+      gint sel_start = 0, sel_end = 0;
+      const gboolean has_selection = gtk_editable_get_selection_bounds(GTK_EDITABLE(state->search_entry),
+                                                                       &sel_start, &sel_end);
+      const gint cursor_chars = has_selection ? sel_start
+                                              : gtk_editable_get_position(GTK_EDITABLE(state->search_entry));
+      const gint text_chars = g_utf8_strlen(entry_text, -1);
+      if(cursor_chars >= 0 && cursor_chars <= text_chars)
+        query_only = g_utf8_substring(entry_text, 0, cursor_chars);
+      else
+        query_only = g_strdup(entry_text);
+
+      const gchar *sep = g_strstr_len(query_only, -1, DT_ACCEL_SEARCH_INLINE_SEPARATOR);
+      if(!IS_NULL_PTR(sep))
+      {
+        gchar *sep_mut = g_strstr_len(query_only, -1, DT_ACCEL_SEARCH_INLINE_SEPARATOR);
+        if(!IS_NULL_PTR(sep_mut)) *sep_mut = '\0';
+      }
+
+      if(!IS_NULL_PTR(state->pending_space_query)) dt_free(state->pending_space_query);
+      state->pending_space_query = query_only;
+    }
+
+    if(state->pending_space_idle_id != 0) g_source_remove(state->pending_space_idle_id);
+    state->pending_space_idle_id = g_idle_add(_search_entry_restore_space_idle, state);
     return TRUE;
   }
 
@@ -2808,6 +2864,16 @@ static gboolean _shortcut_search_button_press(GtkWidget *widget, GdkEventButton 
 static void _shortcut_search_destroy(GtkWidget *widget, gpointer user_data)
 {
   dt_accels_search_state_t *state = (dt_accels_search_state_t *)user_data;
+  if(state->pending_space_idle_id != 0)
+  {
+    g_source_remove(state->pending_space_idle_id);
+    state->pending_space_idle_id = 0;
+  }
+  if(!IS_NULL_PTR(state->pending_space_query))
+  {
+    dt_free(state->pending_space_query);
+    state->pending_space_query = NULL;
+  }
   gtk_grab_remove(widget);
   if(state->window == widget) state->window = NULL;
   if(state->loop) g_main_loop_quit(state->loop);
@@ -2856,7 +2922,9 @@ void dt_accels_search(dt_accels_t *accels, GtkWindow *main_window, GtkWidget *an
     .response = GTK_RESPONSE_CANCEL,
     .selected = NULL,
     .preferred_command = NULL,
-    .suppress_inline_once = FALSE
+    .suppress_inline_once = FALSE,
+    .pending_space_query = NULL,
+    .pending_space_idle_id = 0
   };
 
   // Sort the filtered model by relevance
@@ -2998,6 +3066,8 @@ void dt_accels_search(dt_accels_t *accels, GtkWindow *main_window, GtkWidget *an
     g_idle_add(_dispatch_selected_shortcut_idle, dispatch);
   }
   if(state.window) gtk_widget_destroy(state.window);
+  if(state.pending_space_idle_id != 0) g_source_remove(state.pending_space_idle_id);
+  if(!IS_NULL_PTR(state.pending_space_query)) dt_free(state.pending_space_query);
   if(!IS_NULL_PTR(state.preferred_command)) dt_free(state.preferred_command);
   if(!IS_NULL_PTR(state.recent_entries)) g_object_unref(state.recent_entries);
   g_object_unref(store);
