@@ -66,6 +66,7 @@
 #include "control/control.h"
 
 
+#include "gui/accelerators.h"
 #include "gui/color_picker_proxy.h"
 #include "gui/gui_throttle.h"
 #include "gui/gtk.h"
@@ -954,6 +955,19 @@ static gboolean _enter_leave(GtkWidget *widget, GdkEventCrossing *event)
 static void _widget_finalize(GObject *widget)
 {
   struct dt_bauhaus_widget_t *w = DT_BAUHAUS_WIDGET(widget);
+
+  const guint focus_source = GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(widget), DT_BAUHAUS_FOCUS_IDLE_SOURCE_KEY));
+  if(focus_source > 0)
+  {
+    g_source_remove(focus_source);
+    g_object_set_data(G_OBJECT(widget), DT_BAUHAUS_FOCUS_IDLE_SOURCE_KEY, NULL);
+    g_object_set_data(G_OBJECT(widget), DT_BAUHAUS_FOCUS_IDLE_TRIES_KEY, NULL);
+  }
+
+  const char *accel_path = g_object_get_data(G_OBJECT(widget), "accel-path");
+  if(!IS_NULL_PTR(accel_path) && !IS_NULL_PTR(darktable.gui) && !IS_NULL_PTR(darktable.gui->accels))
+    dt_accels_remove_accel(darktable.gui->accels, accel_path, widget);
+
   if(darktable.gui && darktable.gui->has_scroll_focus == GTK_WIDGET(w))
     darktable.gui->has_scroll_focus = NULL;
   dt_gui_throttle_cancel(widget);
