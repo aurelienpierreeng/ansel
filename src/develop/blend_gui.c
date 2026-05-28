@@ -3240,6 +3240,20 @@ void dt_iop_gui_init_blendif(GtkBox *blendw, dt_iop_module_t *module)
 
     bd->blendif_inited = 1;
   }
+  else
+  {
+    gchar *module_name = dt_history_item_get_name(module);
+    gchar *markup = g_markup_printf_escaped(
+      _("<i>Parametric masking is disabled because the <b>%s</b> module does not provide compatible color channels.</i>"),
+      module_name);
+    GtkWidget *label = gtk_label_new(NULL);
+    gtk_label_set_markup(GTK_LABEL(label), markup);
+    gtk_label_set_xalign(GTK_LABEL(label), 0.0f);
+    gtk_label_set_line_wrap(GTK_LABEL(label), TRUE);
+    gtk_box_pack_start(GTK_BOX(bd->blendif_box), label, FALSE, FALSE, 0);
+    dt_free(markup);
+    dt_free(module_name);
+  }
 }
 
 void dt_masks_iop_update(dt_iop_module_t *module)
