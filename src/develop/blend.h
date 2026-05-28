@@ -320,10 +320,10 @@ typedef struct dt_iop_gui_blend_data_t
 
   GtkWidget *blending_body_box;
   GtkWidget *blending_notebook;
-  GtkWidget *top_enable;
-  GtkWidget *masks_enable;
-  GtkWidget *raster_enable;
-  GtkWidget *blendif_enable;
+  GtkWidget *top_disable;
+  GtkWidget *masks_disable;
+  GtkWidget *raster_disable;
+  GtkWidget *blendif_disable;
   GtkWidget *top_content;
   GtkWidget *masks_content;
   GtkWidget *raster_content;
