@@ -1116,6 +1116,19 @@ gboolean dt_accels_dispatch(GtkWidget *w, GdkEvent *event, gpointer user_data)
   // It's bad design, it should not be turned into a rule.
   if(accels->disable_accels && !mods) return FALSE;
 
+  // When a text editor has keyboard focus, bypass accelerators so typing keeps
+  // native widget behavior (letters, spaces, modifiers and editing keys).
+  if(event->type == GDK_KEY_PRESS || event->type == GDK_KEY_RELEASE)
+  {
+    GtkWidget *focused = gtk_window_get_focus(GTK_WINDOW(w));
+    if(!IS_NULL_PTR(focused) && (GTK_IS_EDITABLE(focused) || GTK_IS_TEXT_VIEW(focused)))
+    {
+      accels->active_key.accel_key = 0;
+      accels->active_key.accel_mods = 0;
+      return FALSE;
+    }
+  }
+
   if(event->type == GDK_KEY_PRESS && 
     !(keyval == accels->active_key.accel_key && mods == accels->active_key.accel_mods))
   {
