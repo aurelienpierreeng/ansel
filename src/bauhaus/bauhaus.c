@@ -64,6 +64,7 @@
 #include "common/math.h"
 #include "common/debug.h"
 #include "control/control.h"
+#include "develop/imageop.h"
 
 
 #include "gui/accelerators.h"
@@ -484,8 +485,18 @@ gboolean _action_request_focus(GtkAccelGroup *accel_group, GObject *accelerable,
   {
     dt_iop_module_t *module = (dt_iop_module_t *)w->module;
     if(!IS_NULL_PTR(module->expander))
+    {
       g_object_set_data(G_OBJECT(module->expander), "dt-modulegroups-switch-from-active-once",
                         GINT_TO_POINTER(TRUE));
+      dt_iop_gui_set_expanded(module, TRUE, TRUE);
+    }
+
+    // If the target module is already marked as focused, modulegroups focus
+    // signal may not be emitted and tab visibility can stay stale. Drop focus
+    // once so the next focus request re-emits the full focus/update sequence.
+    if(!IS_NULL_PTR(darktable.develop) && darktable.develop->gui_module == module)
+      dt_iop_request_focus(NULL);
+
     w->module->focus(w->module, FALSE);
   }
 

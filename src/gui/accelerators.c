@@ -59,6 +59,7 @@
 
 // Separator used to space between query and command in accels search
 #define DT_ACCEL_SEARCH_INLINE_SEPARATOR "    >  "
+#define DT_ACCEL_SEARCH_DISPATCH_RETRY_DELAY_MS 50
 
 typedef struct {
   GClosure  *base;
@@ -2173,7 +2174,10 @@ typedef struct dt_accels_dispatch_state_t
 {
   dt_shortcut_t *shortcut;
   GtkWindow *main_window;
+  guint retries;
 } dt_accels_dispatch_state_t;
+
+static gboolean _dispatch_selected_shortcut_idle(gpointer data);
 
 // redo the suggestion list on each entry change
 static void _search_entry_changed(GtkWidget *widget, gpointer user_data)
@@ -2495,6 +2499,7 @@ static void _dispatch_selected_shortcut(dt_accels_dispatch_state_t *state)
   }
 
   PayloadClosure *payload = NULL;
+  PayloadClosure *payload_in_main_window = NULL;
   if(!IS_NULL_PTR(state->shortcut->closure))
   {
     for(GList *item = g_list_last(state->shortcut->closure); item; item = g_list_previous(item))
@@ -2504,26 +2509,26 @@ static void _dispatch_selected_shortcut(dt_accels_dispatch_state_t *state)
       if(GTK_IS_WIDGET(candidate->base->data))
       {
         GtkWidget *candidate_widget = GTK_WIDGET(candidate->base->data);
-        if(gtk_widget_get_visible(candidate_widget) && gtk_widget_get_mapped(candidate_widget))
+        const gboolean in_main_window = IS_NULL_PTR(state->main_window)
+                                        || gtk_widget_is_ancestor(candidate_widget, GTK_WIDGET(state->main_window));
+        if(in_main_window && IS_NULL_PTR(payload_in_main_window))
+          payload_in_main_window = candidate;
+        if(in_main_window && gtk_widget_get_visible(candidate_widget) && gtk_widget_get_mapped(candidate_widget))
         {
           payload = candidate;
           break;
         }
-
-        if(IS_NULL_PTR(payload)) payload = candidate;
-        continue;
       }
-
-      if(IS_NULL_PTR(payload)) payload = candidate;
     }
   }
+  if(IS_NULL_PTR(payload)) payload = payload_in_main_window;
   if(IS_NULL_PTR(payload)) payload = dt_shortcut_get_payload_closure(state->shortcut);
 
   GtkWidget *target_widget = NULL;
-  if(!IS_NULL_PTR(state->shortcut->widget))
-    target_widget = state->shortcut->widget;
-  else if(!IS_NULL_PTR(payload) && !IS_NULL_PTR(payload->base) && GTK_IS_WIDGET(payload->base->data))
+  if(!IS_NULL_PTR(payload) && !IS_NULL_PTR(payload->base) && GTK_IS_WIDGET(payload->base->data))
     target_widget = GTK_WIDGET(payload->base->data);
+  else if(!IS_NULL_PTR(state->shortcut->widget))
+    target_widget = state->shortcut->widget;
 
   // Keep module/control focus actions in their UI context.
   // Refocusing center here would move focus to the main view (thumbtable/center)
@@ -2593,6 +2598,23 @@ static void _dispatch_selected_shortcut(dt_accels_dispatch_state_t *state)
            !IS_NULL_PTR(scroll_focused_widget) ? gtk_widget_get_name(scroll_focused_widget) : "<null>",
            (void *)scroll_focused_widget,
            target_focused_gtk, target_focused_scroll, target_focused);
+
+  // First dispatch can still hit an outdated control instance while module tabs
+  // are being switched/rebuilt. Retry once shortly after for Bauhaus controls.
+  if(!target_focused && !IS_NULL_PTR(target_widget) && state->retries < 1
+     && !g_strcmp0(G_OBJECT_TYPE_NAME(target_widget), "DtBauhausWidget"))
+  {
+    dt_accels_dispatch_state_t *retry = g_malloc0(sizeof(*retry));
+    retry->shortcut = state->shortcut;
+    retry->main_window = state->main_window;
+    retry->retries = state->retries + 1;
+    dt_print(DT_DEBUG_SHORTCUTS,
+             "[accel_search] dispatch retry scheduled target='%s' retry=%u\n",
+             !IS_NULL_PTR(state->shortcut->path) ? state->shortcut->path : "<null>",
+             retry->retries);
+    g_timeout_add_full(G_PRIORITY_DEFAULT, DT_ACCEL_SEARCH_DISPATCH_RETRY_DELAY_MS,
+                       _dispatch_selected_shortcut_idle, retry, NULL);
+  }
 }
 
 static gboolean _dispatch_selected_shortcut_idle(gpointer data)
