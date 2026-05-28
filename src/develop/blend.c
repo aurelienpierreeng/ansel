@@ -444,6 +444,38 @@ static uint32_t _develop_blend_get_effective_mask_mode(const dt_develop_blend_pa
   return effective_mask_mode;
 }
 
+/**
+ * @brief Check whether blending can be skipped as an exact no-op.
+ *
+ * We can skip mask generation and blend kernels when the configuration is strictly
+ * equivalent to passthrough:
+ * - uniform mask only,
+ * - normal blend mode without reverse,
+ * - 100% opacity,
+ * - no mask/channel display request in the current or previous module,
+ * - no need to export/store raster masks for downstream consumers.
+ */
+static gboolean _develop_blend_can_skip_processing(const dt_develop_blend_params_t *const params,
+                                                   const uint32_t effective_mask_mode,
+                                                   const dt_dev_pixelpipe_t *const pipe,
+                                                   dt_iop_module_t *const self,
+                                                   const dt_dev_pixelpipe_display_mask_t request_mask_display)
+{
+  const uint32_t blend_mode = params->blend_mode & DEVELOP_BLEND_MODE_MASK;
+  const gboolean blend_reversed = (params->blend_mode & DEVELOP_BLEND_REVERSE) != 0;
+  const gboolean full_opacity = fabsf(params->opacity - 100.0f) < 1e-4f;
+  const gboolean no_mask_display = request_mask_display == DT_DEV_PIXELPIPE_DISPLAY_NONE
+                                   && pipe->mask_display == DT_DEV_PIXELPIPE_DISPLAY_NONE;
+  const gboolean no_mask_storage = !pipe->store_all_raster_masks && !dt_iop_is_raster_mask_used(self, 0);
+
+  return effective_mask_mode == DEVELOP_MASK_ENABLED
+         && blend_mode == DEVELOP_BLEND_NORMAL2
+         && !blend_reversed
+         && full_opacity
+         && no_mask_display
+         && no_mask_storage;
+}
+
 
 static inline float *_develop_blend_process_copy_region(const float *const restrict input, const size_t iwidth,
                                                         const size_t xoffs, const size_t yoffs,
@@ -690,6 +722,12 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *p
   const gboolean suppress_mask = self->suppress_mask && self->dev->gui_attached && (self == self->dev->gui_module)
                                  && (pipe == self->dev->pipe)
                                  && preview_mask_mode;
+
+  if(_develop_blend_can_skip_processing(d, effective_mask_mode, pipe, self, request_mask_display))
+  {
+    dt_pixelpipe_raster_remove(piece->raster_masks);
+    return 0;
+  }
 
   // obtaining the list of mask operations to perform
   _develop_mask_post_processing post_operations[3];
@@ -1097,6 +1135,12 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_t
   const gboolean suppress_mask = self->suppress_mask && self->dev->gui_attached && (self == self->dev->gui_module)
                                  && (pipe == self->dev->pipe)
                                  && preview_mask_mode;
+
+  if(_develop_blend_can_skip_processing(d, effective_mask_mode, pipe, self, request_mask_display))
+  {
+    dt_pixelpipe_raster_remove(piece->raster_masks);
+    return 0;
+  }
 
   // obtaining the list of mask operations to perform
   _develop_mask_post_processing post_operations[3];
