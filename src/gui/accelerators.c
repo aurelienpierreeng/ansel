@@ -2956,9 +2956,26 @@ static gboolean _shortcut_search_button_press(GtkWidget *widget, GdkEventButton 
   GtkAllocation allocation = { 0 };
   gtk_widget_get_allocation(widget, &allocation);
 
-  if(event->x >= 0.0 && event->x < allocation.width
-     && event->y >= 0.0 && event->y < allocation.height)
-    return FALSE;
+  gboolean click_inside = FALSE;
+  GdkWindow *win = gtk_widget_get_window(widget);
+  if(!IS_NULL_PTR(win))
+  {
+    gint wx = 0, wy = 0;
+    gdk_window_get_origin(win, &wx, &wy);
+    const gdouble x0 = (gdouble)wx;
+    const gdouble y0 = (gdouble)wy;
+    const gdouble x1 = x0 + (gdouble)allocation.width;
+    const gdouble y1 = y0 + (gdouble)allocation.height;
+    click_inside = (event->x_root >= x0 && event->x_root < x1
+                    && event->y_root >= y0 && event->y_root < y1);
+  }
+  else
+  {
+    click_inside = (event->x >= 0.0 && event->x < allocation.width
+                    && event->y >= 0.0 && event->y < allocation.height);
+  }
+
+  if(click_inside) return FALSE;
 
   state->response = GTK_RESPONSE_CANCEL;
   gtk_widget_destroy(widget);
@@ -3007,7 +3024,7 @@ void dt_accels_search(dt_accels_t *accels, GtkWindow *main_window, GtkWidget *an
   gtk_window_set_focus_on_map(GTK_WINDOW(window), TRUE);
   gtk_window_set_default_size(GTK_WINDOW(window), dialog_width, dialog_height);
   gtk_widget_set_name(window, "shortcut-search-dialog");
-  gtk_widget_add_events(window, GDK_BUTTON_PRESS_MASK);
+  gtk_widget_add_events(window, GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK);
 
   // Build the list of currently-relevant shortcut pathes
   GtkListStore *store = gtk_list_store_new(7, G_TYPE_STRING, G_TYPE_POINTER, G_TYPE_INT, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_UINT, G_TYPE_UINT);
@@ -3122,6 +3139,7 @@ void dt_accels_search(dt_accels_t *accels, GtkWindow *main_window, GtkWidget *an
   g_signal_connect(G_OBJECT(tree_view), "row-activated", G_CALLBACK(_shortcut_search_row_activated), &state);
   g_signal_connect(G_OBJECT(window), "key-press-event", G_CALLBACK(_shortcut_search_window_key_pressed), &state);
   g_signal_connect(G_OBJECT(window), "button-press-event", G_CALLBACK(_shortcut_search_button_press), &state);
+  g_signal_connect(G_OBJECT(window), "button-release-event", G_CALLBACK(_shortcut_search_button_press), &state);
   g_signal_connect(G_OBJECT(window), "destroy", G_CALLBACK(_shortcut_search_destroy), &state);
 
   _search_entry_changed(search_entry, &state);
