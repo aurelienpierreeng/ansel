@@ -187,11 +187,17 @@ static int _grab_focus(dt_thumbtable_t *table)
 
   if(table->mode == DT_THUMBTABLE_MODE_FILEMANAGER)
   {
+    GtkWidget *focused = NULL;
+    GtkWidget *toplevel = gtk_widget_get_toplevel(table->grid);
+    if(!IS_NULL_PTR(toplevel) && GTK_IS_WINDOW(toplevel))
+      focused = gtk_window_get_focus(GTK_WINDOW(toplevel));
+
     // Grab focus here otherwise, on first click over the grid,
     // scrolled window gets scrolled all the way to the top and it's annoying.
     // This can work only if the grid is mapped and realized, which we ensure
     // by wrapping that in a g_idle() method.
-    gtk_widget_grab_focus(table->grid);
+    if(IS_NULL_PTR(focused) || (!GTK_IS_EDITABLE(focused) && !GTK_IS_TEXT_VIEW(focused)))
+      gtk_widget_grab_focus(table->grid);
   }
   dt_thumbtable_scroll_to_selection(table);
   return 0;
