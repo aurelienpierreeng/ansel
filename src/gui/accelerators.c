@@ -1491,30 +1491,9 @@ void _for_each_path_create_treeview_row(gpointer key, gpointer value, gpointer u
 static gint _sort_model_by_relevance_func(GtkTreeModel *model, GtkTreeIter *a, GtkTreeIter *b, gpointer data)
 {
   int ka, kb;
-  dt_shortcut_t *sa = NULL, *sb = NULL;
-  const gchar *preferred_command = NULL;
-  if(!IS_NULL_PTR(data))
-  {
-    const gchar *const *ptr = (const gchar *const *)data;
-    preferred_command = !IS_NULL_PTR(ptr) ? *ptr : NULL;
-  }
   gchar *pa = NULL, *pb = NULL;
-  gtk_tree_model_get(model, a, 2, &ka, 0, &pa, 1, &sa, -1);
-  gtk_tree_model_get(model, b, 2, &kb, 0, &pb, 1, &sb, -1);
-
-  if(!IS_NULL_PTR(preferred_command) && preferred_command[0] != '\0')
-  {
-    const gboolean a_preferred = !IS_NULL_PTR(sa) && !IS_NULL_PTR(sa->path)
-                                 && !g_strcmp0(sa->path, preferred_command);
-    const gboolean b_preferred = !IS_NULL_PTR(sb) && !IS_NULL_PTR(sb->path)
-                                 && !g_strcmp0(sb->path, preferred_command);
-    if(a_preferred != b_preferred)
-    {
-      dt_free(pa);
-      dt_free(pb);
-      return a_preferred ? -1 : 1;
-    }
-  }
+  gtk_tree_model_get(model, a, 2, &ka, 0, &pa, -1);
+  gtk_tree_model_get(model, b, 2, &kb, 0, &pb, -1);
 
   if(ka != kb)
   {
@@ -2790,7 +2769,8 @@ static gboolean _search_entry_restore_space_idle(gpointer user_data)
   return G_SOURCE_REMOVE;
 }
 
-static gboolean _search_entry_key_pressed(GtkWidget *widget, GdkEventKey *event, gpointer user_data)
+static gboolean _search_entry_key_pressed(GtkWidget *widget __attribute__((unused)),
+                                          GdkEventKey *event, gpointer user_data)
 {
   dt_accels_search_state_t *state = (dt_accels_search_state_t *)user_data;
   guint key = dt_keys_mainpad_alternatives(event->keyval);
@@ -2857,7 +2837,7 @@ static gboolean _search_entry_key_pressed(GtkWidget *widget, GdkEventKey *event,
       }
     }
 
-    if(shortcut)
+    if(!IS_NULL_PTR(shortcut))
       return _queue_action_from_shortcut(shortcut, state->window, state);
     return TRUE;
   }
@@ -2997,12 +2977,11 @@ static void _shortcut_search_destroy(GtkWidget *widget, gpointer user_data)
   }
   gtk_grab_remove(widget);
   if(state->window == widget) state->window = NULL;
-  if(state->loop) g_main_loop_quit(state->loop);
+  if(!IS_NULL_PTR(state->loop)) g_main_loop_quit(state->loop);
 }
 
 void dt_accels_search(dt_accels_t *accels, GtkWindow *main_window, GtkWidget *anchor)
 {
-  (void)anchor;
   GtkWidget *window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
   gtk_window_set_title(GTK_WINDOW(window), _("Ansel - Search accelerators"));
 
@@ -3050,7 +3029,7 @@ void dt_accels_search(dt_accels_t *accels, GtkWindow *main_window, GtkWidget *an
 
   // Sort the filtered model by relevance
   gtk_tree_sortable_set_sort_func(GTK_TREE_SORTABLE(store), 2,
-                                  (GtkTreeIterCompareFunc)_sort_model_by_relevance_func, &state.preferred_command, NULL);
+                                  (GtkTreeIterCompareFunc)_sort_model_by_relevance_func, NULL, NULL);
   gtk_tree_sortable_set_sort_column_id(GTK_TREE_SORTABLE(store), 2, GTK_SORT_ASCENDING);
 
   // Build the search entry
@@ -3175,16 +3154,14 @@ void dt_accels_search(dt_accels_t *accels, GtkWindow *main_window, GtkWidget *an
 
   g_main_loop_run(loop);
   g_main_loop_unref(loop);
-  if(state.response == GTK_RESPONSE_ACCEPT && state.selected)
+  if(state.response == GTK_RESPONSE_ACCEPT && !IS_NULL_PTR(state.selected))
   {
     dt_accels_dispatch_state_t *dispatch = g_malloc0(sizeof(*dispatch));
     dispatch->shortcut = state.selected;
     dispatch->main_window = main_window;
     g_idle_add(_dispatch_selected_shortcut_idle, dispatch);
   }
-  if(state.window) gtk_widget_destroy(state.window);
-  if(state.pending_space_idle_id != 0) g_source_remove(state.pending_space_idle_id);
-  if(!IS_NULL_PTR(state.pending_space_query)) dt_free(state.pending_space_query);
+  if(!IS_NULL_PTR(state.window)) gtk_widget_destroy(state.window);
   if(!IS_NULL_PTR(state.preferred_command)) dt_free(state.preferred_command);
   if(!IS_NULL_PTR(state.recent_entries)) g_object_unref(state.recent_entries);
   g_object_unref(store);
