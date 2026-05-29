@@ -560,6 +560,11 @@ void dt_iop_init_pipe(struct dt_iop_module_t *module, struct dt_dev_pixelpipe_t 
 void dt_iop_cleanup_pipe(struct dt_iop_module_t *module, struct dt_dev_pixelpipe_t *pipe,
                         struct dt_dev_pixelpipe_iop_t *piece)
 {
+  if(IS_NULL_PTR(module)
+     || IS_NULL_PTR(module->cleanup_pipe)
+     || IS_NULL_PTR(pipe)
+     || IS_NULL_PTR(piece))
+        return;
   module->cleanup_pipe(module, pipe, piece);
   dt_free_align(piece->blendop_data);
   piece->blendop_data = NULL;
