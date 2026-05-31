@@ -520,7 +520,8 @@ static void _concatenate_multiple_images(gboolean skip[md_size], int count)
   sqlite3_stmt *stmt = NULL;
   // clang-format off
   gchar *query = g_strdup_printf("SELECT COUNT(DISTINCT film_id), "
-                                        "2, " //id always different
+                                        "COUNT(DISTINCT film_id), "
+                                        "2, " // imgid always different
                                         "COUNT(DISTINCT group_id), "
                                         "COUNT(DISTINCT filename), "
                                         "COUNT(DISTINCT version), "
@@ -552,12 +553,13 @@ static void _concatenate_multiple_images(gboolean skip[md_size], int count)
                                         "(SELECT COUNT(DISTINCT IFNULL(value,'')) FROM images LEFT JOIN meta_data ON meta_data.id = images.id AND key = 4 WHERE images.id in (%s)), " //rights
                                         "(SELECT COUNT(DISTINCT IFNULL(value,'')) FROM images LEFT JOIN meta_data ON meta_data.id = images.id AND key = 5 WHERE images.id in (%s)), " //notes
                                         "(SELECT COUNT(DISTINCT IFNULL(value,'')) FROM images LEFT JOIN meta_data ON meta_data.id = images.id AND key = 6 WHERE images.id in (%s)), " //version name
+                                        "(SELECT COUNT(DISTINCT IFNULL(value,'')) FROM images LEFT JOIN meta_data ON meta_data.id = images.id AND key = 7 WHERE images.id in (%s)), " //image id
                                         "COUNT(DISTINCT IFNULL(latitude, '')), "
                                         "COUNT(DISTINCT IFNULL(longitude, '')), "
                                         "COUNT(DISTINCT IFNULL(altitude, '')) "
                                         "FROM main.images "
                                         "WHERE id IN (%s)",
-                                  images, images, images, images, images, images, images, images);
+                                  images, images, images, images, images, images, images, images, images);
   // clang-format on
 
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query, -1, &stmt, NULL);
@@ -575,8 +577,11 @@ static void _concatenate_multiple_images(gboolean skip[md_size], int count)
   dt_free(query);
 
   if(sqlite3_step(stmt) == SQLITE_ROW)
-    for(int32_t md = 0; md < md_tag_names; md++)
+  {
+    const int col_count = sqlite3_column_count(stmt);
+    for(int32_t md = 0; md < md_tag_names && md < col_count; md++)
       skip[md] = (sqlite3_column_int(stmt, md) > 1);
+  }
 
   sqlite3_finalize(stmt);
 
@@ -1375,6 +1380,7 @@ static void _free_metadata_queue(dt_lib_metadata_info_t *m)
 void gui_cleanup(dt_lib_module_t *self)
 {
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_mouse_over_image_callback), self);
+  if(IS_NULL_PTR(self->data)) return;
   dt_lib_metadata_view_t *d = (dt_lib_metadata_view_t *)self->data;
   g_list_free_full(d->metadata, (GDestroyNotify)_free_metadata_queue);
   d->metadata = NULL;

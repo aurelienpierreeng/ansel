@@ -627,9 +627,17 @@ gboolean dt_imageio_is_handled_by_libraw(dt_image_t *img, const char *filename)
   gboolean is_handled = FALSE;
 
   char *ext = g_strrstr(filename, ".") + 1; // move the pointer after the extension dot
-  is_handled |= _is_in_list(ext,             strtok(dt_conf_get_string("libraw/extensions"), ","));
-  is_handled |= _is_in_list(img->exif_maker, strtok(dt_conf_get_string("libraw/makers"), ","));
-  is_handled |= _is_in_list(img->exif_model, strtok(dt_conf_get_string("libraw/models"), ","));
+  char *extensions = dt_conf_get_string("libraw/extensions");
+  char *makers = dt_conf_get_string("libraw/makers");
+  char *models = dt_conf_get_string("libraw/models");
+
+  is_handled |= _is_in_list(ext, strtok(extensions, ","));
+  is_handled |= _is_in_list(img->exif_maker, strtok(makers, ","));
+  is_handled |= _is_in_list(img->exif_model, strtok(models, ","));
+
+  dt_free(extensions);
+  dt_free(makers);
+  dt_free(models);
 
   const char *iolib = (is_handled) ? "Libraw" : "Rawspeed";
   dt_print(DT_DEBUG_IMAGEIO, "[image I/O] image `%s` from camera `%s` of maker `%s` loaded with %s\n", filename,

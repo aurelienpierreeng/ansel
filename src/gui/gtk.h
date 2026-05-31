@@ -67,7 +67,9 @@ extern "C" {
 #endif
 
 #define DT_GUI_IOP_MODULE_CONTROL_SPACING 0
+// For mouse interaction with elements that are NOT related to any scale effect
 #define DT_GUI_MOUSE_EFFECT_RADIUS darktable.gui->mouse.effect_radius
+// For mouse interaction with elements that are related to a scale effect
 #define DT_GUI_MOUSE_EFFECT_RADIUS_SCALED darktable.gui->mouse.effect_radius_scaled
 
 /* helper macro that applies the DPI transformation to fixed pixel values. input should be defaulting to 96
@@ -145,6 +147,15 @@ typedef struct dt_gui_gtk_t
 
   int32_t center_tooltip; // 0 = no tooltip, 1 = new tooltip, 2 = old tooltip
 
+  struct {
+    guint timeout_source;
+    struct dt_view_t *view;
+    float velocity[2];
+    gint64 last_time_us;
+    gboolean enabled;
+    gboolean block_normal_pan;
+  } pan_edge;
+
   // Culling mode is a special case of collection filter that is restricted to user selection
   gboolean culling_mode;
 
@@ -163,10 +174,11 @@ typedef struct dt_gui_gtk_t
 
 
   struct {
-    // distance to the cursor in device pixels (screen space)
+    // distance to the cursor in abs preview pixels
     float effect_radius;
-    // distance to the cursor in absolute output-image pixels
+    // distance to the cursor in abs image pixels
     float effect_radius_scaled;
+    gboolean is_dragging;
   } mouse;
 
   int icon_size; // size of top panel icons
@@ -175,6 +187,7 @@ typedef struct dt_gui_gtk_t
   char gtkrc[PATH_MAX];
 
   GtkWidget *scroll_to[2]; // one for left, one for right
+  GtkWidget *scroll_to_header_once; // one-shot: module expander that should scroll to its header once
 
   gint scroll_mask;
 
@@ -201,7 +214,7 @@ typedef struct dt_gui_gtk_t
 typedef struct _gui_collapsible_section_t
 {
   GtkBox *parent;       // the parent widget
-  gchar *confname;      // configuration name for the toggle status
+  const char *confname; // configuration name for the toggle status
   GtkWidget *toggle;    // toggle button
   GtkWidget *expander;  // the expanded
   GtkBox *container;    // the container for all widgets into the section
@@ -222,6 +235,38 @@ typedef struct dt_gui_widget_auto_height_t
   gulong model_row_collapsed;
   gulong buffer_changed;
 } dt_gui_widget_auto_height_t;
+
+
+#ifdef _DEBUG
+/** \brief Queue a GTK widget redraw with the Ansel call site in diagnostics.
+ *
+ * GTK only reports its own assertion site when a non-widget reaches
+ * gtk_widget_queue_draw(). Keep the caller location explicit in debug-capable
+ * builds so invalid GUI ownership/lifetime bugs point to the Ansel source line
+ * that queued the redraw.
+ */
+void dt_gtk_widget_queue_draw_ext(GtkWidget *widget, const char *name, const char *file, const int line);
+#define dt_gtk_widget_queue_draw(widget) dt_gtk_widget_queue_draw_ext((GtkWidget *)(widget), #widget, __FILE__, __LINE__)
+#define gtk_widget_queue_draw(widget) dt_gtk_widget_queue_draw(widget)
+
+/** \brief Set a GTK toggle button state with the Ansel call site in diagnostics.
+ *
+ * Toggle state changes are often followed by redraws, so reporting the original
+ * invalid toggle object makes the first ownership/lifetime error visible before
+ * GTK emits secondary redraw assertions.
+ */
+void dt_gtk_toggle_button_set_active_ext(GtkToggleButton *toggle_button, const char *name, const gboolean active,
+                                         const char *file, const int line);
+#define dt_gtk_toggle_button_set_active(toggle_button, active)                                                 \
+  dt_gtk_toggle_button_set_active_ext((GtkToggleButton *)(toggle_button), #toggle_button, active, __FILE__, __LINE__)
+#define gtk_toggle_button_set_active(toggle_button, active)                                                   \
+  dt_gtk_toggle_button_set_active(toggle_button, active)
+
+#else
+#define dt_gtk_widget_queue_draw(widget) gtk_widget_queue_draw(widget)
+#define dt_gtk_toggle_button_set_active(toggle_button, active) gtk_toggle_button_set_active(toggle_button, active)
+#endif
+
 
 static inline cairo_surface_t *dt_cairo_image_surface_create(cairo_format_t format, int width, int height) {
   cairo_surface_t *cst = cairo_image_surface_create(format, width * darktable.gui->ppd, height * darktable.gui->ppd);
@@ -393,7 +438,7 @@ gboolean dt_gui_show_standalone_yes_no_dialog(const char *title, const char *mar
 char *dt_gui_show_standalone_string_dialog(const char *title, const char *markup, const char *placeholder,
                                            const char *no_text, const char *yes_text);
 
-void dt_gui_add_help_link(GtkWidget *widget, const char *link);
+void dt_gui_add_help_link(GtkWidget *widget, char *link);
 
 // load a CSS theme
 void dt_gui_load_theme(const char *theme);

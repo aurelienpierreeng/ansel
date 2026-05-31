@@ -65,32 +65,25 @@ typedef enum _develop_mask_post_processing
   DEVELOP_MASK_POST_TONE_CURVE = 4,
 } _develop_mask_post_processing;
 
-static gchar *dt_pipe_type_to_str(dt_dev_pixelpipe_type_t pipe_type)
+static const char *dt_pipe_type_to_str(dt_dev_pixelpipe_type_t pipe_type)
 {
-  gchar *type_str = NULL;
-
   switch(pipe_type)
   {
     case DT_DEV_PIXELPIPE_PREVIEW:
-      type_str = g_strdup("PREVIEW");
-      break;
+      return "PREVIEW";
     case DT_DEV_PIXELPIPE_FULL:
-      type_str = g_strdup("FULL");
-      break;
+      return "FULL";
     case DT_DEV_PIXELPIPE_THUMBNAIL:
-      type_str = g_strdup("THUMBNAIL");
-      break;
+      return "THUMBNAIL";
     case DT_DEV_PIXELPIPE_EXPORT:
-      type_str = g_strdup("EXPORT");
-      break;
+      return "EXPORT";
     default:
-      type_str = g_strdup("UNKNOWN");
+      return "UNKNOWN";
   }
-  return type_str;
 }
 
 static dt_develop_blend_params_t _default_blendop_params
-    = { DEVELOP_MASK_DISABLED,
+    = { DEVELOP_MASK_ENABLED | DEVELOP_MASK_MASK | DEVELOP_MASK_CONDITIONAL | DEVELOP_MASK_RASTER,
         DEVELOP_BLEND_CS_NONE,
         DEVELOP_BLEND_NORMAL2,
         0.0f,
@@ -328,8 +321,13 @@ static void _refine_with_detail_mask(struct dt_iop_module_t *self, const struct 
 
   // here we have the slightly blurred full detail mask available
   warp_mask = dt_dev_distort_detail_mask(p, lum, self);
-  dt_pixelpipe_cache_free_align(lum);
-  lum = NULL;
+  // dt_dev_distort_detail_mask() may return `lum` unchanged when no geometric distortion is needed.
+  const gboolean warp_mask_aliases_lum = (warp_mask == lum);
+  if(!warp_mask_aliases_lum)
+  {
+    dt_pixelpipe_cache_free_align(lum);
+    lum = NULL;
+  }
 
   if(IS_NULL_PTR(warp_mask)) goto error;
 
@@ -340,6 +338,7 @@ static void _refine_with_detail_mask(struct dt_iop_module_t *self, const struct 
     mask[idx] = mask[idx] * warp_mask[idx];
   }
   dt_pixelpipe_cache_free_align(warp_mask);
+  if(warp_mask_aliases_lum) lum = NULL;
 
   return;
 
@@ -391,6 +390,90 @@ static size_t _develop_mask_get_post_operations(const dt_develop_blend_params_t 
   }
 
   return index;
+}
+
+/**
+ * @brief Compute runtime-effective mask mode by collapsing neutral defaults.
+ *
+ * The UI can enable raster/drawn/parametric modes by default while settings remain
+ * neutral. This function removes neutral bits so the processing path stays equivalent
+ * to uniform blending until the user configures an actual mask source.
+ * 
+ * @param
+ * 
+ */
+static uint32_t _develop_blend_get_effective_mask_mode(const dt_develop_blend_params_t *const params,
+                                                       const dt_develop_blend_colorspace_t blend_csp)
+{
+  uint32_t effective_mask_mode = params->mask_mode;
+  const gboolean mask_inversed = (params->mask_combine & DEVELOP_COMBINE_INV) != 0;
+
+  if((effective_mask_mode & DEVELOP_MASK_RASTER)
+     && !params->raster_mask_invert
+     && params->raster_mask_source[0] == '\0')
+    effective_mask_mode &= ~DEVELOP_MASK_RASTER;
+
+  if((effective_mask_mode & DEVELOP_MASK_MASK)
+     && params->mask_id <= 0
+     && !(params->mask_combine & DEVELOP_COMBINE_MASKS_POS))
+    effective_mask_mode &= ~DEVELOP_MASK_MASK;
+
+  if((effective_mask_mode & DEVELOP_MASK_CONDITIONAL) && !mask_inversed)
+  {
+    if(blend_csp == DEVELOP_BLEND_CS_RAW)
+    {
+      effective_mask_mode &= ~DEVELOP_MASK_CONDITIONAL;
+    }
+    else
+    {
+      const uint32_t channel_mask = blend_csp == DEVELOP_BLEND_CS_LAB
+        ? DEVELOP_BLENDIF_Lab_MASK
+        : DEVELOP_BLENDIF_RGB_MASK;
+      const uint32_t active_channels = params->blendif & channel_mask;
+      const uint32_t inverted_channels
+          = (params->blendif >> 16) ^ ((params->mask_combine & DEVELOP_COMBINE_INCL) ? channel_mask : 0);
+      const uint32_t cancel_channels = inverted_channels & ~params->blendif & channel_mask;
+      if(!active_channels && !cancel_channels)
+        effective_mask_mode &= ~DEVELOP_MASK_CONDITIONAL;
+    }
+  }
+
+  if((effective_mask_mode & (DEVELOP_MASK_MASK | DEVELOP_MASK_CONDITIONAL | DEVELOP_MASK_RASTER)) == 0)
+    effective_mask_mode = DEVELOP_MASK_ENABLED;
+
+  return effective_mask_mode;
+}
+
+/**
+ * @brief Check whether blending can be skipped as an exact no-op.
+ *
+ * We can skip mask generation and blend kernels when the configuration is strictly
+ * equivalent to passthrough:
+ * - uniform mask only,
+ * - normal blend mode without reverse,
+ * - 100% opacity,
+ * - no mask/channel display request in the current or previous module,
+ * - no need to export/store raster masks for downstream consumers.
+ */
+static gboolean _develop_blend_can_skip_processing(const dt_develop_blend_params_t *const params,
+                                                   const uint32_t effective_mask_mode,
+                                                   const dt_dev_pixelpipe_t *const pipe,
+                                                   dt_iop_module_t *const self,
+                                                   const dt_dev_pixelpipe_display_mask_t request_mask_display)
+{
+  const uint32_t blend_mode = params->blend_mode & DEVELOP_BLEND_MODE_MASK;
+  const gboolean blend_reversed = (params->blend_mode & DEVELOP_BLEND_REVERSE) != 0;
+  const gboolean full_opacity = fabsf(params->opacity - 100.0f) < 1e-4f;
+  const gboolean no_mask_display = request_mask_display == DT_DEV_PIXELPIPE_DISPLAY_NONE
+                                   && pipe->mask_display == DT_DEV_PIXELPIPE_DISPLAY_NONE;
+  const gboolean no_mask_storage = !pipe->store_all_raster_masks && !dt_iop_is_raster_mask_used(self, 0);
+
+  return effective_mask_mode == DEVELOP_MASK_ENABLED
+         && blend_mode == DEVELOP_BLEND_NORMAL2
+         && !blend_reversed
+         && full_opacity
+         && no_mask_display
+         && no_mask_storage;
 }
 
 
@@ -633,11 +716,18 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *p
   // get channel max values depending on colorspace
   const dt_develop_blend_colorspace_t blend_csp = d->blend_cst;
   const dt_iop_colorspace_type_t cst = dt_develop_blend_colorspace(piece, IOP_CS_NONE);
+  const uint32_t effective_mask_mode = _develop_blend_get_effective_mask_mode(d, blend_csp);
 
   // check if mask should be suppressed temporarily (i.e. just set to global opacity value)
   const gboolean suppress_mask = self->suppress_mask && self->dev->gui_attached && (self == self->dev->gui_module)
                                  && (pipe == self->dev->pipe)
                                  && preview_mask_mode;
+
+  if(_develop_blend_can_skip_processing(d, effective_mask_mode, pipe, self, request_mask_display))
+  {
+    dt_pixelpipe_raster_remove(piece->raster_masks);
+    return 0;
+  }
 
   // obtaining the list of mask operations to perform
   _develop_mask_post_processing post_operations[3];
@@ -655,9 +745,10 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *p
   }
   int raster_error = 0;
   float *const restrict mask = _mask;
-  const gboolean raster_only = (mask_mode & DEVELOP_MASK_RASTER) && !(mask_mode & DEVELOP_MASK_MASK_CONDITIONAL);
+  const gboolean raster_only = (effective_mask_mode & DEVELOP_MASK_RASTER)
+                               && !(effective_mask_mode & DEVELOP_MASK_MASK_CONDITIONAL);
 
-  if(mask_mode == DEVELOP_MASK_ENABLED || suppress_mask)
+  if(effective_mask_mode == DEVELOP_MASK_ENABLED || suppress_mask)
   {
     // blend uniformly (no drawn or parametric mask)
     dt_iop_image_fill(mask,opacity,owidth,oheight,1);  //mask[k] = opacity;
@@ -670,8 +761,8 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *p
   }
   else
   {
-    const gboolean use_raster_mask = (mask_mode & DEVELOP_MASK_RASTER) != 0;
-    const gboolean use_drawn_mask = (mask_mode & DEVELOP_MASK_MASK) != 0;
+    const gboolean use_raster_mask = (effective_mask_mode & DEVELOP_MASK_RASTER) != 0;
+    const gboolean use_drawn_mask = (effective_mask_mode & DEVELOP_MASK_MASK) != 0;
 
     if(use_raster_mask)
     {
@@ -950,8 +1041,13 @@ static void _refine_with_detail_mask_cl(struct dt_iop_module_t *self, const stru
   // here we have the slightly blurred full detail available
   float *warp_mask = dt_dev_distort_detail_mask(p, lum, self);
   if(IS_NULL_PTR(warp_mask)) goto error;
-  dt_pixelpipe_cache_free_align(lum);
-  lum = NULL;
+  // dt_dev_distort_detail_mask() may return `lum` unchanged when no geometric distortion is needed.
+  const gboolean warp_mask_aliases_lum = (warp_mask == lum);
+  if(!warp_mask_aliases_lum)
+  {
+    dt_pixelpipe_cache_free_align(lum);
+    lum = NULL;
+  }
 
   const int msize = owidth * oheight;
   __OMP_PARALLEL_FOR_SIMD__(aligned(mask, warp_mask : 64))
@@ -960,6 +1056,7 @@ static void _refine_with_detail_mask_cl(struct dt_iop_module_t *self, const stru
     mask[idx] = mask[idx] * warp_mask[idx];
   }
   dt_pixelpipe_cache_free_align(warp_mask);
+  if(warp_mask_aliases_lum) lum = NULL;
   return;
 
   error:
@@ -1031,6 +1128,7 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_t
   // get channel max values depending on colorspace
   const dt_develop_blend_colorspace_t blend_csp = d->blend_cst;
   const dt_iop_colorspace_type_t cst = dt_develop_blend_colorspace(piece, IOP_CS_NONE);
+  const uint32_t effective_mask_mode = _develop_blend_get_effective_mask_mode(d, blend_csp);
 
   // check if mask should be suppressed temporarily (i.e. just set to global
   // opacity value)
@@ -1038,13 +1136,20 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_t
                                  && (pipe == self->dev->pipe)
                                  && preview_mask_mode;
 
+  if(_develop_blend_can_skip_processing(d, effective_mask_mode, pipe, self, request_mask_display))
+  {
+    dt_pixelpipe_raster_remove(piece->raster_masks);
+    return 0;
+  }
+
   // obtaining the list of mask operations to perform
   _develop_mask_post_processing post_operations[3];
   const size_t post_operations_size = _develop_mask_get_post_operations(d, piece, post_operations);
 
   // get the clipped opacity value  0 - 1
   const float opacity = fminf(fmaxf(d->opacity / 100.0f, 0.0f), 1.0f);
-  const gboolean raster_only = (mask_mode & DEVELOP_MASK_RASTER) && !(mask_mode & DEVELOP_MASK_MASK_CONDITIONAL);
+  const gboolean raster_only = (effective_mask_mode & DEVELOP_MASK_RASTER)
+                               && !(effective_mask_mode & DEVELOP_MASK_MASK_CONDITIONAL);
 
   // allocate space for blend mask
   float *_mask = dt_pixelpipe_cache_alloc_align_float(buffsize, pipe);
@@ -1128,7 +1233,7 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_t
                                             &profile_lut_cl, &dev_profile_info, &dev_profile_lut);
   if(err != CL_SUCCESS) goto error;
 
-  if(mask_mode == DEVELOP_MASK_ENABLED || suppress_mask)
+  if(effective_mask_mode == DEVELOP_MASK_ENABLED || suppress_mask)
   {
     // blend uniformly (no drawn or parametric mask)
 
@@ -1152,8 +1257,8 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_t
   }
   else
   {
-    const gboolean use_raster_mask = (mask_mode & DEVELOP_MASK_RASTER) != 0;
-    const gboolean use_drawn_mask = (mask_mode & DEVELOP_MASK_MASK) != 0;
+    const gboolean use_raster_mask = (effective_mask_mode & DEVELOP_MASK_RASTER) != 0;
+    const gboolean use_drawn_mask = (effective_mask_mode & DEVELOP_MASK_MASK) != 0;
 
     if(use_raster_mask)
     {
@@ -1188,14 +1293,6 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_t
     err = dt_opencl_write_host_to_device(devid, mask, dev_mask_1, owidth, oheight, sizeof(float));
     if(err != CL_SUCCESS) goto error;
 
-    // The following call to clFinish() works around a bug in some OpenCL
-    // drivers (namely AMD).
-    // Without this synchronization point, reads to dev_in would often not
-    // return the correct value.
-    // This depends on the module after which blending is called. One of the
-    // affected ones is sharpen.
-    dt_opencl_finish(devid);
-
     // get parametric mask (if any) and apply global opacity
     const unsigned blendif = d->blendif;
     const unsigned int mask_combine = d->mask_combine;
@@ -1208,7 +1305,7 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_t
     dt_opencl_set_kernel_arg(devid, kernel_mask, 6, sizeof(float), (void *)&opacity);
     dt_opencl_set_kernel_arg(devid, kernel_mask, 7, sizeof(unsigned), (void *)&blendif);
     dt_opencl_set_kernel_arg(devid, kernel_mask, 8, sizeof(cl_mem), (void *)&dev_blendif_params);
-    dt_opencl_set_kernel_arg(devid, kernel_mask, 9, sizeof(unsigned), (void *)&mask_mode);
+    dt_opencl_set_kernel_arg(devid, kernel_mask, 9, sizeof(unsigned), (void *)&effective_mask_mode);
     dt_opencl_set_kernel_arg(devid, kernel_mask, 10, sizeof(unsigned), (void *)&mask_combine);
     dt_opencl_set_kernel_arg(devid, kernel_mask, 11, 2 * sizeof(int), (void *)&offs);
     dt_opencl_set_kernel_arg(devid, kernel_mask, 12, sizeof(cl_mem), (void *)&dev_profile_info);

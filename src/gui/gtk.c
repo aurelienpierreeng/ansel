@@ -102,9 +102,13 @@
 #ifdef GDK_WINDOWING_WAYLAND
 #include <gdk/gdkwayland.h>
 #endif
+#ifdef _WIN32
+#include <gdk/gdkwin32.h>
+#endif
 #include <gtk/gtk.h>
 #include <math.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 #ifdef MAC_INTEGRATION
@@ -150,6 +154,7 @@ void dt_gui_remove_class(GtkWidget *widget, const gchar *class_name)
  * OLD UI API
  */
 static void _init_widgets(dt_gui_gtk_t *gui);
+static gboolean _configure(GtkWidget *da, GdkEventConfigure *event, gpointer user_data);
 
 gboolean dt_gui_get_scroll_deltas(const GdkEventScroll *event, gdouble *delta_x, gdouble *delta_y)
 {
@@ -325,9 +330,42 @@ static gboolean _draw(GtkWidget *da, cairo_t *cr, gpointer user_data)
     cairo_set_source_surface(cr, darktable.gui->surface, 0, 0);
     cairo_paint(cr);
   }
-
   return TRUE;
 }
+
+#ifdef _DEBUG
+void dt_gtk_widget_queue_draw_ext(GtkWidget *widget, const char *name, const char *file, const int line)
+{
+  if(!GTK_IS_WIDGET(widget))
+  {
+    dt_print(DT_DEBUG_GTK, "gtk_widget_queue_draw(%s) called with a non-WIDGET or NULL widget at %s:%d (widget=%p)\n",
+             name, file, line, widget);
+    return;
+  }
+  else
+    dt_print(DT_DEBUG_GTK, "queueing redraw for `%s` (`%s`) at %s:%d\n",
+             name, gtk_widget_get_name(widget), file, line);
+
+
+  (gtk_widget_queue_draw)(widget);
+}
+
+void dt_gtk_toggle_button_set_active_ext(GtkToggleButton *toggle_button, const char *name, const gboolean active,
+                                         const char *file, const int line)
+{
+  if(!GTK_IS_TOGGLE_BUTTON(toggle_button))
+  {
+    dt_print(DT_DEBUG_GTK, "gtk_toggle_button_set_active(%s) called with a non-TOGGLE_BUTTON or NULL widget at %s:%d (toggle_button=%p)\n",
+            name, file, line, toggle_button);
+    return;
+  }
+  else
+    dt_print(DT_DEBUG_GTK, "setting toggle button `%s` (`%s`) to %s at %s:%d\n", name, gtk_widget_get_name(GTK_WIDGET(toggle_button)),
+            active ? "active" : "inactive", file, line);
+
+  (gtk_toggle_button_set_active)(toggle_button, active);
+}
+#endif
 
 static gboolean _scrolled(GtkWidget *widget, GdkEventScroll *event, gpointer user_data)
 {
@@ -349,12 +387,53 @@ int dt_gui_gtk_write_config()
 {
   dt_pthread_mutex_lock(&darktable.gui->mutex);
   GtkWidget *widget = dt_ui_main_window(darktable.gui->ui);
-  dt_conf_set_bool("ui_last/maximized",
-                   (gdk_window_get_state(gtk_widget_get_window(widget)) & GDK_WINDOW_STATE_MAXIMIZED));
+  const GdkWindowState window_state = gdk_window_get_state(gtk_widget_get_window(widget));
+  dt_conf_set_bool("ui_last/maximized", (window_state & GDK_WINDOW_STATE_MAXIMIZED));
   int width, height;
   gtk_window_get_size(GTK_WINDOW(widget), &width, &height);
   dt_conf_set_int("ui_last/window_width", width);
   dt_conf_set_int("ui_last/window_height", height);
+
+  gboolean save_window_position = TRUE;
+#ifdef GDK_WINDOWING_WAYLAND
+  GdkDisplay *display = gtk_widget_get_display(widget);
+  if(GDK_IS_WAYLAND_DISPLAY(display))
+    save_window_position = FALSE;
+#endif
+
+  if(save_window_position)
+  {
+    GdkWindow *gdk_window = gtk_widget_get_window(widget);
+    GdkDisplay *window_display = gtk_widget_get_display(widget);
+    if(!IS_NULL_PTR(gdk_window) && !IS_NULL_PTR(window_display))
+    {
+      GdkMonitor *monitor = gdk_display_get_monitor_at_window(window_display, gdk_window);
+      if(!IS_NULL_PTR(monitor))
+      {
+        const int n_monitors = gdk_display_get_n_monitors(window_display);
+        int monitor_index = -1;
+        for(int i = 0; i < n_monitors; i++)
+        {
+          if(gdk_display_get_monitor(window_display, i) == monitor)
+          {
+            monitor_index = i;
+            break;
+          }
+        }
+        if(monitor_index >= 0)
+          dt_conf_set_int("ui_last/window_monitor", monitor_index);
+      }
+    }
+
+    if(!(window_state & GDK_WINDOW_STATE_MAXIMIZED))
+    {
+      int x, y;
+      gtk_window_get_position(GTK_WINDOW(widget), &x, &y);
+      dt_conf_set_int("ui_last/window_x", x);
+      dt_conf_set_int("ui_last/window_y", y);
+    }
+  }
+
   dt_pthread_mutex_unlock(&darktable.gui->mutex);
 
   return 0;
@@ -938,6 +1017,42 @@ static gboolean _mouse_moved(GtkWidget *w, GdkEventMotion *event, gpointer user_
   return FALSE;
 }
 
+#ifdef _WIN32
+/* Arbitrary stable subclass identifier encoded as ASCII "ASNN".
+ * It only needs to stay unique within this process for SetWindowSubclass(). */
+#define DT_WIN32_CURSOR_SUBCLASS_CENTER ((UINT_PTR)0x41534e4e)
+
+static LRESULT CALLBACK _center_win32_cursor_proc(HWND hwnd, UINT message, WPARAM w_param, LPARAM l_param,
+                                                  UINT_PTR subclass_id, DWORD_PTR ref_data)
+{
+  /* On Win32, DefSubclassProc() answers WM_SETCURSOR for the drawing area in center view by
+   * restoring the window-class default arrow on every mouse move. The center
+   * view already selected the proper cursor through GDK, so swallow the
+   * client-area reset and keep the current cursor unchanged until the view
+   * requests another explicit cursor change. */
+  if(subclass_id == DT_WIN32_CURSOR_SUBCLASS_CENTER && message == WM_SETCURSOR && LOWORD(l_param) == HTCLIENT)
+    return TRUE;
+
+  return DefSubclassProc(hwnd, message, w_param, l_param);
+}
+
+static void _center_realize(GtkWidget *widget, gpointer user_data)
+{
+  GdkWindow *center_window = gtk_widget_get_window(widget);
+  HWND center_hwnd = center_window ? (HWND)gdk_win32_window_get_handle(center_window) : NULL;
+  if(!IS_NULL_PTR(center_hwnd))
+    SetWindowSubclass(center_hwnd, _center_win32_cursor_proc, DT_WIN32_CURSOR_SUBCLASS_CENTER, (DWORD_PTR)widget);
+}
+
+static void _center_unrealize(GtkWidget *widget, gpointer user_data)
+{
+  GdkWindow *center_window = gtk_widget_get_window(widget);
+  HWND center_hwnd = center_window ? (HWND)gdk_win32_window_get_handle(center_window) : NULL;
+  if(!IS_NULL_PTR(center_hwnd))
+    RemoveWindowSubclass(center_hwnd, _center_win32_cursor_proc, DT_WIN32_CURSOR_SUBCLASS_CENTER);
+}
+#endif
+
 static gboolean _key_pressed(GtkWidget *w, GdkEventKey *event)
 {
   if(!gtk_window_is_active(GTK_WINDOW(darktable.gui->ui->main_window))) return FALSE;
@@ -1090,6 +1205,12 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   g_signal_connect(G_OBJECT(widget), "button-press-event", G_CALLBACK(_button_pressed), NULL);
   g_signal_connect(G_OBJECT(widget), "button-release-event", G_CALLBACK(_button_released), NULL);
   g_signal_connect(G_OBJECT(widget), "scroll-event", G_CALLBACK(_scrolled), NULL);
+#ifdef _WIN32
+  g_signal_connect(G_OBJECT(widget), "realize", G_CALLBACK(_center_realize), NULL);
+  g_signal_connect(G_OBJECT(widget), "unrealize", G_CALLBACK(_center_unrealize), NULL);
+  if(gtk_widget_get_realized(widget))
+    _center_realize(widget, NULL);
+#endif
 
   dt_gui_presets_init();
 
@@ -1167,6 +1288,7 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   // finally set the cursor to be the default.
   // for some reason this is needed on some systems to pick up the correctly themed cursor
   dt_control_change_cursor(GDK_LEFT_PTR);
+  gui->mouse.effect_radius =  DT_PIXEL_APPLY_DPI(15.0f) * darktable.gui->ppd;
 
   return 0;
 }
@@ -1176,6 +1298,13 @@ void dt_gui_gtk_run(dt_gui_gtk_t *gui)
   GtkWidget *widget = dt_ui_center(darktable.gui->ui);
   GtkAllocation allocation;
   gtk_widget_get_allocation(widget, &allocation);
+
+  if(darktable.gui->surface)
+  {
+    cairo_surface_destroy(darktable.gui->surface);
+    darktable.gui->surface = NULL;
+  }
+
   darktable.gui->surface
       = dt_cairo_image_surface_create(CAIRO_FORMAT_ARGB32, allocation.width, allocation.height);
   // need to pre-configure views to avoid crash caused by draw coming before configure-event
@@ -1298,6 +1427,50 @@ static void _init_widgets(dt_gui_gtk_t *gui)
   // NOTE: allowing full-screen on startup shits the bed with MacOS
   if(dt_conf_get_bool("ui_last/maximized"))
   {
+    gboolean restore_window_position = TRUE;
+#ifdef GDK_WINDOWING_WAYLAND
+    GdkDisplay *display = gtk_widget_get_display(gui->ui->main_window);
+    if(GDK_IS_WAYLAND_DISPLAY(display))
+      restore_window_position = FALSE;
+#endif
+
+    if(restore_window_position)
+    {
+      GdkDisplay *window_display = gtk_widget_get_display(gui->ui->main_window);
+      GdkMonitor *monitor = NULL;
+
+      if(!IS_NULL_PTR(window_display))
+      {
+        if(dt_conf_key_exists("ui_last/window_monitor"))
+        {
+          const int monitor_index = dt_conf_get_int("ui_last/window_monitor");
+          if(monitor_index >= 0 && monitor_index < gdk_display_get_n_monitors(window_display))
+            monitor = gdk_display_get_monitor(window_display, monitor_index);
+        }
+
+        if(IS_NULL_PTR(monitor)
+           && dt_conf_key_exists("ui_last/window_x")
+           && dt_conf_key_exists("ui_last/window_y"))
+        {
+          const int x = dt_conf_get_int("ui_last/window_x");
+          const int y = dt_conf_get_int("ui_last/window_y");
+          monitor = gdk_display_get_monitor_at_point(window_display, x, y);
+        }
+
+        if(IS_NULL_PTR(monitor))
+          monitor = gdk_display_get_primary_monitor(window_display);
+        if(IS_NULL_PTR(monitor) && gdk_display_get_n_monitors(window_display) > 0)
+          monitor = gdk_display_get_monitor(window_display, 0);
+      }
+
+      if(!IS_NULL_PTR(monitor))
+      {
+        GdkRectangle workarea = { 0 };
+        gdk_monitor_get_workarea(monitor, &workarea);
+        gtk_window_move(GTK_WINDOW(gui->ui->main_window), workarea.x, workarea.y);
+      }
+    }
+
     gtk_window_maximize(GTK_WINDOW(gui->ui->main_window));
   }
   else
@@ -1305,6 +1478,56 @@ static void _init_widgets(dt_gui_gtk_t *gui)
     int width = dt_conf_get_int("ui_last/window_width");
     int height = dt_conf_get_int("ui_last/window_height");
     gtk_window_resize(GTK_WINDOW(gui->ui->main_window), width, height);
+
+    gboolean restore_window_position = TRUE;
+#ifdef GDK_WINDOWING_WAYLAND
+    GdkDisplay *display = gtk_widget_get_display(gui->ui->main_window);
+    if(GDK_IS_WAYLAND_DISPLAY(display))
+      restore_window_position = FALSE;
+#endif
+
+    if(restore_window_position
+       && dt_conf_key_exists("ui_last/window_x")
+       && dt_conf_key_exists("ui_last/window_y"))
+    {
+      const int x = dt_conf_get_int("ui_last/window_x");
+      const int y = dt_conf_get_int("ui_last/window_y");
+
+      int clamped_x = x;
+      int clamped_y = y;
+      GdkDisplay *window_display = gtk_widget_get_display(gui->ui->main_window);
+      GdkMonitor *monitor = NULL;
+
+      if(!IS_NULL_PTR(window_display))
+      {
+        if(dt_conf_key_exists("ui_last/window_monitor"))
+        {
+          const int monitor_index = dt_conf_get_int("ui_last/window_monitor");
+          if(monitor_index >= 0 && monitor_index < gdk_display_get_n_monitors(window_display))
+            monitor = gdk_display_get_monitor(window_display, monitor_index);
+        }
+
+        if(IS_NULL_PTR(monitor))
+          monitor = gdk_display_get_monitor_at_point(window_display, x + width / 2, y + height / 2);
+        if(IS_NULL_PTR(monitor))
+          monitor = gdk_display_get_primary_monitor(window_display);
+        if(IS_NULL_PTR(monitor) && gdk_display_get_n_monitors(window_display) > 0)
+          monitor = gdk_display_get_monitor(window_display, 0);
+      }
+
+      if(!IS_NULL_PTR(monitor))
+      {
+        GdkRectangle workarea = { 0 };
+        gdk_monitor_get_workarea(monitor, &workarea);
+
+        const int max_x = workarea.x + MAX(0, workarea.width - width);
+        const int max_y = workarea.y + MAX(0, workarea.height - height);
+        clamped_x = CLAMP(x, workarea.x, max_x);
+        clamped_y = CLAMP(y, workarea.y, max_y);
+      }
+
+      gtk_window_move(GTK_WINDOW(gui->ui->main_window), clamped_x, clamped_y);
+    }
   }
 
   dt_gui_splash_set_transient_for(gui->ui->main_window);
@@ -1682,9 +1905,9 @@ char *dt_gui_show_standalone_string_dialog(const char *title, const char *markup
 }
 
 // TODO: should that go to another place than gtk.c?
-void dt_gui_add_help_link(GtkWidget *widget, const char *link)
+void dt_gui_add_help_link(GtkWidget *widget, char *link)
 {
-  g_object_set_data(G_OBJECT(widget), "dt-help-url", (void *)link);
+  g_object_set_data_full(G_OBJECT(widget), "dt-help-url", link, g_free);
   gtk_widget_add_events(widget, GDK_BUTTON_PRESS_MASK);
 }
 
@@ -2670,7 +2893,7 @@ void dt_gui_new_collapsible_section(dt_gui_collapsible_section_t *cs,
 {
   const gboolean expanded = dt_conf_get_bool(confname);
 
-  cs->confname = g_strdup(confname);
+  cs->confname = confname;
   cs->parent = parent;
 
   // collapsible section header

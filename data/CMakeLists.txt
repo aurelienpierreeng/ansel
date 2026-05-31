@@ -132,6 +132,7 @@ endif()
 install(FILES noiseprofiles.json DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ansel COMPONENT DTApplication)
 
 # Install AUTHORS file for splash screen credits
+install(SCRIPT "${CMAKE_BINARY_DIR}/cmake/install_generate_authors.cmake")
 install(FILES ${ANSEL_AUTHORS_FILE} DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ansel COMPONENT DTApplication)
 
 #

@@ -118,6 +118,7 @@ static gboolean _record_point_area(dt_iop_color_picker_t *self)
   if(self && sample)
   {
     if(sample->size == DT_LIB_COLORPICKER_SIZE_POINT)
+    {
       for(int k = 0; k < 2; k++)
       {
         if(self->pick_pos[k] != sample->point[k])
@@ -126,15 +127,20 @@ static gboolean _record_point_area(dt_iop_color_picker_t *self)
           changed = TRUE;
         }
       }
+      self->geometry_is_raw = TRUE;
+    }
     else if(sample->size == DT_LIB_COLORPICKER_SIZE_BOX)
+    {
       for(int k = 0; k < 4; k++)
       {
-        if (self->pick_box[k] != sample->box[k])
+        if(self->pick_box[k] != sample->box[k])
         {
           self->pick_box[k] = sample->box[k];
           changed = TRUE;
         }
       }
+      self->geometry_is_raw = TRUE;
+    }
   }
   return changed;
 }
@@ -153,6 +159,113 @@ typedef enum dt_color_picker_resample_status_t
 } dt_color_picker_resample_status_t;
 
 static void _refresh_active_picker(dt_develop_t *dev);
+static void _track_active_picker_hashes(dt_develop_t *dev);
+static void _restart_picker_cache_wait(gpointer user_data);
+
+static inline void _picker_raw_point_to_image_norm(const dt_develop_t *dev, const float raw_point[2],
+                                                   float image_point[2])
+{
+  image_point[0] = raw_point[0];
+  image_point[1] = raw_point[1];
+  dt_dev_coordinates_raw_norm_to_image_norm((dt_develop_t *)dev, image_point, 1);
+}
+
+static inline void _picker_raw_box_to_image_norm(const dt_develop_t *dev, const float raw_box[4],
+                                                 float image_box[4])
+{
+  memcpy(image_box, raw_box, sizeof(float) * 4);
+  dt_dev_coordinates_raw_norm_to_image_norm((dt_develop_t *)dev, image_box, 2);
+}
+
+static void _picker_get_module_bounds_image_norm(const dt_develop_t *dev,
+                                                 const dt_iop_module_t *active_module,
+                                                 float bounds[4])
+{
+  bounds[0] = 0.0f;
+  bounds[1] = 0.0f;
+  bounds[2] = 1.0f;
+  bounds[3] = 1.0f;
+
+  if(IS_NULL_PTR(dev) || IS_NULL_PTR(dev->preview_pipe) || IS_NULL_PTR(active_module)) return;
+  const float processed_width = dev->roi.processed_width;
+  const float processed_height = dev->roi.processed_height;
+  if(processed_width <= 0.0f || processed_height <= 0.0f) return;
+
+  const dt_dev_pixelpipe_iop_t *const piece = dt_dev_pixelpipe_get_module_piece(dev->preview_pipe,
+                                                                                 (dt_iop_module_t *)active_module);
+  if(IS_NULL_PTR(piece)) return;
+
+  float quad[8] = {
+    0.0f, 0.0f,
+    (float)piece->buf_out.width, 0.0f,
+    (float)piece->buf_out.width, (float)piece->buf_out.height,
+    0.0f, (float)piece->buf_out.height
+  };
+  dt_dev_distort_transform_plus(dev->preview_pipe, active_module->iop_order,
+                                DT_DEV_TRANSFORM_DIR_FORW_EXCL, quad, 4);
+
+  float min_x = fminf(fminf(quad[0], quad[2]), fminf(quad[4], quad[6]));
+  float min_y = fminf(fminf(quad[1], quad[3]), fminf(quad[5], quad[7]));
+  float max_x = fmaxf(fmaxf(quad[0], quad[2]), fmaxf(quad[4], quad[6]));
+  float max_y = fmaxf(fmaxf(quad[1], quad[3]), fmaxf(quad[5], quad[7]));
+
+  min_x = CLAMP(min_x / processed_width, 0.0f, 1.0f);
+  min_y = CLAMP(min_y / processed_height, 0.0f, 1.0f);
+  max_x = CLAMP(max_x / processed_width, 0.0f, 1.0f);
+  max_y = CLAMP(max_y / processed_height, 0.0f, 1.0f);
+  bounds[0] = fminf(min_x, max_x);
+  bounds[1] = fminf(min_y, max_y);
+  bounds[2] = fmaxf(min_x, max_x);
+  bounds[3] = fmaxf(min_y, max_y);
+}
+
+static void _picker_initialize_geometry_raw(dt_iop_color_picker_t *picker, dt_develop_t *dev)
+{
+  if(IS_NULL_PTR(picker) || IS_NULL_PTR(dev) || picker->geometry_is_raw) return;
+
+  float bounds[4] = { 0.0f, 0.0f, 1.0f, 1.0f };
+  _picker_get_module_bounds_image_norm(dev, picker->module, bounds);
+
+  const float processed_width = dev->roi.processed_width;
+  const float processed_height = dev->roi.processed_height;
+  if(processed_width <= 0.0f || processed_height <= 0.0f) return;
+  // Fixed border inset in scale-1 image pixels, then converted to image-norm.
+  // Keep this explicit here so the caller directly controls default picker coverage.
+  const float inset_pixels = 64.0f;
+  const float inset_x = inset_pixels / processed_width;
+  const float inset_y = inset_pixels / processed_height;
+  const float width = fmaxf(bounds[2] - bounds[0], 0.0f);
+  const float height = fmaxf(bounds[3] - bounds[1], 0.0f);
+  picker->pick_pos[0] = 0.5f * (bounds[0] + bounds[2]);
+  picker->pick_pos[1] = 0.5f * (bounds[1] + bounds[3]);
+  picker->pick_box[0] = bounds[0] + fminf(inset_x, 0.5f * width);
+  picker->pick_box[1] = bounds[1] + fminf(inset_y, 0.5f * height);
+  picker->pick_box[2] = bounds[2] - fminf(inset_x, 0.5f * width);
+  picker->pick_box[3] = bounds[3] - fminf(inset_y, 0.5f * height);
+
+  picker->pick_pos[0] = CLAMP(picker->pick_pos[0], bounds[0], bounds[2]);
+  picker->pick_pos[1] = CLAMP(picker->pick_pos[1], bounds[1], bounds[3]);
+  picker->pick_box[0] = CLAMP(picker->pick_box[0], bounds[0], bounds[2]);
+  picker->pick_box[1] = CLAMP(picker->pick_box[1], bounds[1], bounds[3]);
+  picker->pick_box[2] = CLAMP(picker->pick_box[2], bounds[0], bounds[2]);
+  picker->pick_box[3] = CLAMP(picker->pick_box[3], bounds[1], bounds[3]);
+  if(picker->pick_box[0] > picker->pick_box[2])
+  {
+    const float center = 0.5f * (picker->pick_box[0] + picker->pick_box[2]);
+    picker->pick_box[0] = center;
+    picker->pick_box[2] = center;
+  }
+  if(picker->pick_box[1] > picker->pick_box[3])
+  {
+    const float center = 0.5f * (picker->pick_box[1] + picker->pick_box[3]);
+    picker->pick_box[1] = center;
+    picker->pick_box[3] = center;
+  }
+
+  dt_dev_coordinates_image_norm_to_raw_norm(dev, picker->pick_pos, 1);
+  dt_dev_coordinates_image_norm_to_raw_norm(dev, picker->pick_box, 2);
+  picker->geometry_is_raw = TRUE;
+}
 
 static int _picker_sample_box(const dt_iop_module_t *module, const dt_iop_roi_t *roi,
                               const dt_pixelpipe_picker_source_t picker_source, int *box)
@@ -165,14 +278,13 @@ static int _picker_sample_box(const dt_iop_module_t *module, const dt_iop_roi_t 
 
   if(sample->size == DT_LIB_COLORPICKER_SIZE_BOX)
   {
-    memcpy(fbox, sample->box, sizeof(float) * 4);
-    dt_dev_coordinates_image_norm_to_preview_abs(dev, fbox, 2);
+    _picker_raw_box_to_image_norm(dev, sample->box, fbox);
+    dt_dev_coordinates_image_norm_to_image_abs(dev, fbox, 2);
   }
   else if(sample->size == DT_LIB_COLORPICKER_SIZE_POINT)
   {
-    fbox[0] = sample->point[0];
-    fbox[1] = sample->point[1];
-    dt_dev_coordinates_image_norm_to_preview_abs(dev, fbox, 1);
+    _picker_raw_point_to_image_norm(dev, sample->point, fbox);
+    dt_dev_coordinates_image_norm_to_image_abs(dev, fbox, 1);
     fbox[2] = fbox[0];
     fbox[3] = fbox[1];
   }
@@ -182,6 +294,15 @@ static int _picker_sample_box(const dt_iop_module_t *module, const dt_iop_roi_t 
                                       ? DT_DEV_TRANSFORM_DIR_FORW_INCL
                                       : DT_DEV_TRANSFORM_DIR_FORW_EXCL,
                                     fbox, 2);
+
+  const float roi_scale = roi->scale;
+  if(roi_scale != 1.0f)
+  {
+    fbox[0] *= roi_scale;
+    fbox[1] *= roi_scale;
+    fbox[2] *= roi_scale;
+    fbox[3] *= roi_scale;
+  }
 
   fbox[0] -= roi->x;
   fbox[1] -= roi->y;
@@ -307,7 +428,9 @@ static dt_color_picker_resample_status_t _sample_picker_from_cache(dt_develop_t 
 
   void *input = NULL;
   dt_pixel_cache_entry_t *input_entry = NULL;
-  if(!dt_dev_pixelpipe_cache_peek_gui(pipe, previous_piece, &input, &input_entry, NULL, NULL, NULL))
+  dt_dev_pixelpipe_cache_wait_set_owner(&dev->color_picker.input_wait, "color-picker-input", dev->color_picker.module);
+  if(!dt_dev_pixelpipe_cache_peek_gui(pipe, previous_piece, &input, &input_entry,
+                                      &dev->color_picker.input_wait, _restart_picker_cache_wait, dev))
   {
     dev->color_picker.wait_input_hash = previous_piece->global_hash;
     dt_print(DT_DEBUG_DEV, "[picker] input cache miss module=%s prev_hash=%" PRIu64 "\n",
@@ -317,7 +440,12 @@ static dt_color_picker_resample_status_t _sample_picker_from_cache(dt_develop_t 
 
   void *output = NULL;
   dt_pixel_cache_entry_t *output_entry = NULL;
-  const gboolean have_output = dt_dev_pixelpipe_cache_peek_gui(pipe, piece, &output, &output_entry, NULL, NULL, NULL);
+  dt_dev_pixelpipe_cache_wait_set_owner(&dev->color_picker.output_wait, "color-picker-output", dev->color_picker.module);
+  const gboolean have_output = dt_dev_pixelpipe_cache_peek_gui(pipe, piece, &output, &output_entry,
+                                                               &dev->color_picker.output_wait,
+                                                               _restart_picker_cache_wait, dev);
+  const gboolean output_cache_blocked_by_policy
+      = piece->bypass_cache || pipe->bypass_cache || pipe->no_cache || dt_dev_pixelpipe_get_realtime(pipe);
   if(!have_output)
   {
     /* Module GUIs such as color equalizer only consume the module-input sample. A missing output
@@ -325,9 +453,12 @@ static dt_color_picker_resample_status_t _sample_picker_from_cache(dt_develop_t 
        cache entry feeds an endless recompute/retry loop. Keep output statistics explicitly invalid
        so output-dependent consumers can detect the missing sample, but still publish the ready
        input sample. */
-    dt_print(DT_DEBUG_DEV, "[picker] output cache miss module=%s hash=%" PRIu64 "\n",
-             piece->module->op, piece->global_hash);
-    dev->color_picker.wait_output_hash = piece->global_hash;
+    dt_print(DT_DEBUG_DEV, "[picker] output cache miss module=%s hash=%" PRIu64 " blocked=%d\n",
+             piece->module->op, piece->global_hash, output_cache_blocked_by_policy);
+    if(!output_cache_blocked_by_policy)
+      dev->color_picker.wait_output_hash = piece->global_hash;
+    else
+      dev->color_picker.wait_output_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
 
     for(int k = 0; k < 4; k++)
     {
@@ -367,6 +498,20 @@ static dt_color_picker_resample_status_t _sample_picker_from_cache(dt_develop_t 
                                   piece->module->picked_output_color, piece->module->picked_output_color_min,
                                   piece->module->picked_output_color_max, PIXELPIPE_PICKER_OUTPUT)
           : FALSE;
+
+  if(!have_output && sampled_input)
+  {
+    // Keep GUI picker feedback alive whenever module output is temporarily
+    // unavailable: mirror input sample statistics to output slots. If output
+    // cache becomes available later, subsequent refreshes overwrite these with
+    // true output samples.
+    for(int k = 0; k < 4; k++)
+    {
+      piece->module->picked_output_color[k] = piece->module->picked_color[k];
+      piece->module->picked_output_color_min[k] = piece->module->picked_color_min[k];
+      piece->module->picked_output_color_max[k] = piece->module->picked_color_max[k];
+    }
+  }
 
   if(have_output)
   {
@@ -422,6 +567,12 @@ static void _queue_refresh_active_picker(dt_develop_t *dev)
   dev->color_picker.refresh_idle_source = g_idle_add(_refresh_active_picker_idle, dev);
 }
 
+static void _restart_picker_cache_wait(gpointer user_data)
+{
+  dt_develop_t *const dev = (dt_develop_t *)user_data;
+  _queue_refresh_active_picker(dev);
+}
+
 static void _refresh_active_picker(dt_develop_t *dev)
 {
   if(IS_NULL_PTR(dev) || IS_NULL_PTR(dev->color_picker.picker) || !dev->color_picker.enabled) return;
@@ -438,7 +589,13 @@ static void _refresh_active_picker(dt_develop_t *dev)
   /* A picker update is satisfied either from the current preview cache or from the next completed
      preview run. If preview is already processing, re-dirtying it here only feeds TOP_CHANGED
      loops and prevents the current run from ever publishing the cacheline we are waiting for. */
-  if(dev->preview_pipe && dev->preview_pipe->processing) return;
+  if(!IS_NULL_PTR(dev->preview_pipe) && dev->preview_pipe->processing)
+  {
+    // Make sure CACHELINE_READY can wake us as soon as this in-flight run
+    // publishes input/output cachelines for the active picker.
+    _track_active_picker_hashes(dev);
+    return;
+  }
 
   if(IS_NULL_PTR(dev->color_picker.module))
   {
@@ -499,6 +656,8 @@ void dt_iop_color_picker_reset(dt_iop_module_t *module, gboolean keep)
   {
     if(!keep)
     {
+      dt_dev_pixelpipe_cache_wait_cleanup(&dev->color_picker.input_wait, "picker-reset-input");
+      dt_dev_pixelpipe_cache_wait_cleanup(&dev->color_picker.output_wait, "picker-reset-output");
       _color_picker_reset(picker);
       dev->color_picker.picker = NULL;
       dev->color_picker.widget = NULL;
@@ -521,13 +680,16 @@ static void _init_picker(dt_iop_color_picker_t *picker, dt_iop_module_t *module,
   picker->picker_cst = module ? module->default_colorspace(module, NULL, NULL) : IOP_CS_NONE;
   picker->colorpick  = button;
   picker->update_pending = FALSE;
+  picker->geometry_is_raw = FALSE;
 
   // default values
   const float middle = 0.5f;
-  const float area = 0.99f;
+  const float area = 0.975f;
   picker->pick_pos[0] = picker->pick_pos[1] = middle;
-  picker->pick_box[0] = picker->pick_box[1] = 1.0f - area;
-  picker->pick_box[2] = picker->pick_box[3] = area;
+  picker->pick_box[0] = (1.0f - area);
+  picker->pick_box[1] = (1.0f - area);
+  picker->pick_box[2] = area;
+  picker->pick_box[3] = area;
 
   _color_picker_reset(picker);
 }
@@ -554,7 +716,7 @@ static gboolean _color_picker_callback_button_press(GtkWidget *button, GdkEventB
   const gboolean ctrl_key_pressed = dt_modifier_is(state, GDK_CONTROL_MASK) || (!IS_NULL_PTR(e) && e->button == 3);
   dt_iop_color_picker_kind_t kind = self->kind;
 
-  if (prior_picker != self || (kind == DT_COLOR_PICKER_POINT_AREA &&
+  if(prior_picker != self || (kind == DT_COLOR_PICKER_POINT_AREA &&
       (ctrl_key_pressed ^ (dev->color_picker.primary_sample->size == DT_LIB_COLORPICKER_SIZE_BOX))))
   {
     dev->color_picker.picker = self;
@@ -570,11 +732,20 @@ static gboolean _color_picker_callback_button_press(GtkWidget *button, GdkEventB
     {
       kind = ctrl_key_pressed ? DT_COLOR_PICKER_AREA : DT_COLOR_PICKER_POINT;
     }
-    // pull picker's last recorded positions
+    _picker_initialize_geometry_raw(self, dev);
+
     if(kind == DT_COLOR_PICKER_AREA)
-      dt_lib_colorpicker_set_box_area(darktable.lib, self->pick_box);
+    {
+      dt_boundingbox_t image_box = { 0.0f };
+      _picker_raw_box_to_image_norm(dev, self->pick_box, image_box);
+      dt_lib_colorpicker_set_box_area(darktable.lib, image_box);
+    }
     else if(kind == DT_COLOR_PICKER_POINT)
-      dt_lib_colorpicker_set_point(darktable.lib, self->pick_pos);
+    {
+      float image_point[2] = { 0.0f };
+      _picker_raw_point_to_image_norm(dev, self->pick_pos, image_point);
+      dt_lib_colorpicker_set_point(darktable.lib, image_point);
+    }
     else
       dt_unreachable_codepath();
 
@@ -596,6 +767,8 @@ static gboolean _color_picker_callback_button_press(GtkWidget *button, GdkEventB
   }
   else
   {
+    dt_dev_pixelpipe_cache_wait_cleanup(&dev->color_picker.input_wait, "picker-deactivate-input");
+    dt_dev_pixelpipe_cache_wait_cleanup(&dev->color_picker.output_wait, "picker-deactivate-output");
     dev->color_picker.picker = NULL;
     dev->color_picker.widget = NULL;
     dev->color_picker.module = NULL;
@@ -612,10 +785,10 @@ static gboolean _color_picker_callback_button_press(GtkWidget *button, GdkEventB
              module ? module->op : "global", (void *)self, (void *)self->colorpick);
   }
 
+  // Draw picker geometry immediately; data sampling update can complete later.
+  dt_control_queue_redraw_center();
   if(dev->color_picker.enabled)
     dt_iop_color_picker_request_update();
-  else
-    dt_control_queue_redraw_center();
 
   return TRUE;
 }
@@ -756,7 +929,7 @@ static GtkWidget *_color_picker_new(dt_iop_module_t *module, dt_iop_color_picker
     g_signal_connect_data(G_OBJECT(button), "button-press-event",
                           G_CALLBACK(_color_picker_callback_button_press), color_picker, (GClosureNotify)g_free, 0);
     g_signal_connect(G_OBJECT(button), "destroy", G_CALLBACK(_color_picker_widget_destroy), color_picker);
-    if (w) gtk_box_pack_start(GTK_BOX(w), button, FALSE, FALSE, 0);
+    if(w) gtk_box_pack_start(GTK_BOX(w), button, FALSE, FALSE, 0);
 
     dt_develop_t *const dev = darktable.develop;
     if(dev && dev->color_picker.enabled && dev->color_picker.module == module

@@ -353,9 +353,6 @@ dt_gaussian_cl_global_t *dt_gaussian_init_cl_global()
 void dt_gaussian_free_cl(dt_gaussian_cl_t *g)
 {
   if(IS_NULL_PTR(g)) return;
-  // be sure we're done with the memory:
-  dt_opencl_finish(g->devid);
-
   dt_free(g->min);
   dt_free(g->max);
   // free device mem

@@ -39,6 +39,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "common/darktable.h"
+#include "gui/gdkkeys.h"
 #include "bauhaus/bauhaus.h"
 #include "common/debug.h"
 #include "common/imagebuf.h"
@@ -1705,7 +1706,6 @@ static int _polygon_creation_closing_form(dt_masks_form_t *mask_form, dt_masks_f
   mask_gui->node_dragging = -1;
   _polygon_init_ctrl_points(mask_form);
 
-  // we save the form and quit creation mode
   dt_masks_gui_form_save_creation(darktable.develop, creation_module, mask_form, mask_gui);
 
   return 1;
@@ -1910,16 +1910,19 @@ static int _polygon_events_key_pressed(struct dt_iop_module_t *module, GdkEventK
 {
   if(IS_NULL_PTR(mask_gui) || IS_NULL_PTR(mask_form)) return 0;
 
+  guint key = dt_keys_mainpad_alternatives(event->keyval);
+
+
   if(mask_gui->creation)
   {
-    switch(event->keyval)
+    switch(key)
     {
       case GDK_KEY_BackSpace:
       {
         // Minimum points to create a polygon
         if(mask_gui->node_dragging < 1)
         {
-          dt_masks_form_cancel_creation(module, mask_gui);
+          dt_masks_form_exit_creation(module, mask_gui);
           return 1;
         }
         // switch previous node coords to the current one
@@ -1938,7 +1941,6 @@ static int _polygon_events_key_pressed(struct dt_iop_module_t *module, GdkEventK
         dt_dev_pixelpipe_update_history_preview(darktable.develop);
         return 1;
       }
-      case GDK_KEY_KP_Enter:
       case GDK_KEY_Return:
         return _polygon_creation_closing_form(mask_form, mask_gui);
     }
@@ -2185,12 +2187,14 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
           || mask_gui->handle_selected)
   {
     dt_masks_form_t *group_form = dt_masks_get_visible_form(darktable.develop);
-    if(IS_NULL_PTR(group_form)) return;
-    dt_masks_form_group_t *group_entry = g_list_nth_data(group_form->points, form_index);
-    if(IS_NULL_PTR(group_entry)) return;
-    dt_masks_form_t *polygon_form = dt_masks_get_from_id(darktable.develop, group_entry->formid);
-    if(IS_NULL_PTR(polygon_form)) return;
-    gui_points->clockwise = _polygon_is_clockwise(polygon_form);
+    if(!IS_NULL_PTR(group_form) && (group_form->type & DT_MASKS_GROUP))
+    {
+      dt_masks_form_group_t *group_entry = g_list_nth_data(group_form->points, form_index);
+      dt_masks_form_t *polygon_form = group_entry
+                                          ? dt_masks_get_from_id(darktable.develop, group_entry->formid)
+                                          : NULL;
+      if(!IS_NULL_PTR(polygon_form)) gui_points->clockwise = _polygon_is_clockwise(polygon_form);
+    }
   }
 
   // draw polygon

@@ -241,6 +241,107 @@ whitebalance_1f_xtrans(read_only image2d_t in, write_only image2d_t out, const i
   write_imagef (out, (int2)(x, y), (float4)(pixel * coeffs[FCxtrans(ry+y, rx+x, xtrans)], 0.0f, 0.0f, 0.0f));
 }
 
+static inline void
+hotpixels_testone(const float other, const float mid,
+                   int *const count, float *const maxin)
+{
+  if(mid > other)
+  {
+    (*count)++;
+    if(other > *maxin) *maxin = other;
+  }
+}
+
+kernel void
+hotpixels_bayer(read_only image2d_t in, write_only image2d_t out,
+                 const int width, const int height,
+                 const float threshold, const float multiplier,
+                 const int min_neighbours)
+{
+  const int x = get_global_id(0);
+  const int y = get_global_id(1);
+  if(x >= width || y >= height) return;
+
+  const float pixel = read_imagef(in, sampleri, (int2)(x, y)).x;
+  if(x < 2 || x >= width - 2 || y < 2 || y >= height - 2)
+  {
+    write_imagef(out, (int2)(x, y), pixel);
+    return;
+  }
+
+  const float mid = pixel * multiplier;
+  int count = 0;
+  float maxin = 0.0f;
+  float other;
+
+  other = read_imagef(in, sampleri, (int2)(x - 2, y)).x;
+  hotpixels_testone(other, mid, &count, &maxin);
+  other = read_imagef(in, sampleri, (int2)(x + 2, y)).x;
+  hotpixels_testone(other, mid, &count, &maxin);
+  other = read_imagef(in, sampleri, (int2)(x, y - 2)).x;
+  hotpixels_testone(other, mid, &count, &maxin);
+  other = read_imagef(in, sampleri, (int2)(x, y + 2)).x;
+  hotpixels_testone(other, mid, &count, &maxin);
+
+  float output = pixel;
+  if(count >= min_neighbours)
+  {
+    output = maxin;
+  }
+
+  write_imagef(out, (int2)(x, y), (float4)(output, 0.0f, 0.0f, 0.0f));
+}
+
+kernel void
+hotpixels_xtrans(read_only image2d_t in, write_only image2d_t out,
+                  const int width, const int height,
+                  const float threshold, const float multiplier,
+                  const int min_neighbours,
+                  const int rx, const int ry,
+                  global const unsigned char (*const xtrans)[6])
+{
+  const int x = get_global_id(0);
+  const int y = get_global_id(1);
+  if(x >= width || y >= height) return;
+
+  const float pixel = read_imagef(in, sampleri, (int2)(x, y)).x;
+  if(x < 2 || x >= width - 2 || y < 2 || y >= height - 2)
+  {
+    write_imagef(out, (int2)(x, y), (float4)(pixel, 0.0f, 0.0f, 0.0f));
+    return;
+  }
+
+  const float mid = pixel * multiplier;
+  int count = 0;
+  float maxin = 0.0f;
+  float other;
+  const int search[20][2] = { { -1, 0 }, { 1, 0 }, { 0, -1 }, { 0, 1 },
+                              { -1, -1 }, { -1, 1 }, { 1, -1 }, { 1, 1 },
+                              { -2, 0 }, { 2, 0 }, { 0, -2 }, { 0, 2 },
+                              { -2, -1 }, { -2, 1 }, { 2, -1 }, { 2, 1 },
+                              { -1, -2 }, { 1, -2 }, { -1, 2 }, { 1, 2 } };
+
+  const int c = FCxtrans(ry + y, rx + x, xtrans);
+  int found = 0;
+  for(int s = 0; s < 20 && found < 4; ++s)
+  {
+    const int xx = x + search[s][0];
+    const int yy = y + search[s][1];
+    const int color = FCxtrans(ry + yy, rx + xx, xtrans);
+    if(color != c) continue;
+    found++;
+    other = read_imagef(in, sampleri, (int2)(xx, yy)).x;
+    hotpixels_testone(other, mid, &count, &maxin);
+  }
+
+  float output = pixel;
+  if(count >= min_neighbours)
+  {
+    output = maxin;
+  }
+
+  write_imagef(out, (int2)(x, y), output);
+}
 
 kernel void
 whitebalance_4f(read_only image2d_t in, write_only image2d_t out, const int width, const int height, global float *coeffs,

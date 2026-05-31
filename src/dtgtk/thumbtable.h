@@ -213,6 +213,22 @@ void dt_thumbtable_update_parent(dt_thumbtable_t *table);
 void dt_thumbtable_queue_update(dt_thumbtable_t *table);
 
 /**
+ * @brief Apply grid configuration changes with proper event synchronization
+ * @param table The thumbnail table
+ *
+ * This function should be called when grid properties like column count change.
+ * It properly coalesces and orders the necessary updates:
+ * 1. Configures the grid based on current column settings
+ * 2. Updates and resizes all visible thumbnails
+ * 3. Scrolls to maintain the active selection in view
+ *
+ * Unlike calling the functions separately, this ensures all operations happen
+ * together in the correct order within a single idle callback, preventing
+ * partial updates or out-of-sync scroll positions.
+ */
+void dt_thumbtable_apply_grid_configuration(dt_thumbtable_t *table);
+
+/**
  * @brief Handle drag-and-drop data received
  * @param widget The widget receiving the drop
  * @param context The drag context

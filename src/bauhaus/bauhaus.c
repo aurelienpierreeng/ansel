@@ -58,13 +58,16 @@
 */
 
 #include "common/darktable.h"
+#include "gui/gdkkeys.h"
 #include "bauhaus/bauhaus.h"
 #include "common/calculator.h"
 #include "common/math.h"
 #include "common/debug.h"
 #include "control/control.h"
+#include "develop/imageop.h"
 
 
+#include "gui/accelerators.h"
 #include "gui/color_picker_proxy.h"
 #include "gui/gui_throttle.h"
 #include "gui/gtk.h"
@@ -368,30 +371,71 @@ static _bh_active_region_t _popup_coordinates(dt_bauhaus_t *bh, const double x_r
 }
 
 // Ensure the programmatically-focused widget is visible,
-// ake its parents are all visible.
+// and all its parents containers expose the right page before grabbing focus.
+#define DT_BAUHAUS_FOCUS_IDLE_SOURCE_KEY "dt-bauhaus-focus-idle-source"
+#define DT_BAUHAUS_FOCUS_IDLE_TRIES_KEY "dt-bauhaus-focus-idle-tries"
+#define DT_BAUHAUS_FOCUS_IDLE_MAX_TRIES 20
 static gboolean ensure_focus_idle(gpointer data)
 {
-  GtkWidget *child = GTK_WIDGET(data);
+  GtkWidget *target = GTK_WIDGET(data);
+  if(!GTK_IS_WIDGET(target)) return G_SOURCE_REMOVE;
+
+  GtkWidget *child = target;
 
   for(GtkWidget *w = child; w; w = gtk_widget_get_parent(w))
   {
     if(GTK_IS_NOTEBOOK(w))
     {
+      GtkWidget *page = child;
+      while(!IS_NULL_PTR(page) && gtk_widget_get_parent(page) != w)
+        page = gtk_widget_get_parent(page);
+
       GtkNotebook *nb = GTK_NOTEBOOK(w);
-      gint page = gtk_notebook_page_num(nb, child);
-      gtk_notebook_set_current_page(nb, page);
+      const gint page_num = !IS_NULL_PTR(page) ? gtk_notebook_page_num(nb, page) : -1;
+      if(page_num >= 0) gtk_notebook_set_current_page(nb, page_num);
+    }
+    else if(GTK_IS_STACK(w))
+    {
+      GtkWidget *page = child;
+      while(!IS_NULL_PTR(page) && gtk_widget_get_parent(page) != w)
+        page = gtk_widget_get_parent(page);
+
+      GtkWidget *visible_child = gtk_stack_get_visible_child(GTK_STACK(w));
+      if(!IS_NULL_PTR(page) && visible_child != page) gtk_stack_set_visible_child(GTK_STACK(w), page);
     }
     child = w;
   }
 
-  GtkWidget *target = GTK_WIDGET(data);
   if(gtk_widget_is_drawable(target))
   {
     gtk_widget_grab_focus(target);
     darktable.gui->has_scroll_focus = target;
+    GtkWidget *gtk_focus = NULL;
+    if(!IS_NULL_PTR(darktable.gui) && !IS_NULL_PTR(darktable.gui->ui))
+      gtk_focus = gtk_window_get_focus(GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)));
+    dt_print(DT_DEBUG_SHORTCUTS,
+             "[bauhaus] ensure_focus_idle success target=%s(%p) gtk_focus=%s(%p) scroll_focus=%s(%p)\n",
+             gtk_widget_get_name(target), (void *)target,
+             !IS_NULL_PTR(gtk_focus) ? gtk_widget_get_name(gtk_focus) : "<null>", (void *)gtk_focus,
+             !IS_NULL_PTR(darktable.gui->has_scroll_focus) ? gtk_widget_get_name(darktable.gui->has_scroll_focus) : "<null>",
+             (void *)darktable.gui->has_scroll_focus);
+    g_object_set_data(G_OBJECT(target), DT_BAUHAUS_FOCUS_IDLE_SOURCE_KEY, NULL);
+    g_object_set_data(G_OBJECT(target), DT_BAUHAUS_FOCUS_IDLE_TRIES_KEY, NULL);
     return G_SOURCE_REMOVE;
   }
 
+  const int tries = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(target), DT_BAUHAUS_FOCUS_IDLE_TRIES_KEY)) + 1;
+  if(tries >= DT_BAUHAUS_FOCUS_IDLE_MAX_TRIES)
+  {
+    dt_print(DT_DEBUG_SHORTCUTS,
+             "[bauhaus] ensure_focus_idle abort target=%s(%p) tries=%d drawable=%d\n",
+             gtk_widget_get_name(target), (void *)target, tries, gtk_widget_is_drawable(target));
+    g_object_set_data(G_OBJECT(target), DT_BAUHAUS_FOCUS_IDLE_SOURCE_KEY, NULL);
+    g_object_set_data(G_OBJECT(target), DT_BAUHAUS_FOCUS_IDLE_TRIES_KEY, NULL);
+    return G_SOURCE_REMOVE;
+  }
+
+  g_object_set_data(G_OBJECT(target), DT_BAUHAUS_FOCUS_IDLE_TRIES_KEY, GINT_TO_POINTER(tries));
   return G_SOURCE_CONTINUE;
 }
 
@@ -437,9 +481,34 @@ gboolean _action_request_focus(GtkAccelGroup *accel_group, GObject *accelerable,
 
   // Make sure the parent module widget is visible, if we know it,
   // because we can't grab focus on invisible widgets
-  if(w->module) w->module->focus(w->module, FALSE);
+  if(!IS_NULL_PTR(w->module))
+  {
+    dt_iop_module_t *module = (dt_iop_module_t *)w->module;
+    if(!IS_NULL_PTR(module->expander))
+    {
+      g_object_set_data(G_OBJECT(module->expander), "dt-modulegroups-switch-from-active-once",
+                        GINT_TO_POINTER(TRUE));
+      dt_iop_gui_set_expanded(module, TRUE, TRUE);
+    }
 
-  g_idle_add(ensure_focus_idle, data);
+    // If the target module is already marked as focused, modulegroups focus
+    // signal may not be emitted and tab visibility can stay stale. Drop focus
+    // once so the next focus request re-emits the full focus/update sequence.
+    if(!IS_NULL_PTR(darktable.develop) && darktable.develop->gui_module == module)
+      dt_iop_request_focus(NULL);
+
+    w->module->focus(w->module, FALSE);
+  }
+
+  GtkWidget *target = GTK_WIDGET(data);
+  const guint previous_source = GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(target), DT_BAUHAUS_FOCUS_IDLE_SOURCE_KEY));
+  if(previous_source > 0)
+    g_source_remove(previous_source);
+
+  g_object_set_data(G_OBJECT(target), DT_BAUHAUS_FOCUS_IDLE_TRIES_KEY, GINT_TO_POINTER(0));
+  const guint source = g_idle_add_full(G_PRIORITY_DEFAULT_IDLE, ensure_focus_idle, g_object_ref(target),
+                                       (GDestroyNotify)g_object_unref);
+  g_object_set_data(G_OBJECT(target), DT_BAUHAUS_FOCUS_IDLE_SOURCE_KEY, GUINT_TO_POINTER(source));
   return TRUE;
 }
 
@@ -579,7 +648,7 @@ static void show_pango_text(struct dt_bauhaus_widget_t *w, GtkStyleContext *cont
   }
 
   // Paint background color if any - useful to highlight elements in popup list
-  if(bg_color)
+  if(!IS_NULL_PTR(bg_color))
   {
     cairo_save(cr);
     cairo_rectangle(cr, bounding_box->x, bounding_box->y, bounding_box->width, bounding_box->height);
@@ -897,12 +966,26 @@ static gboolean _enter_leave(GtkWidget *widget, GdkEventCrossing *event)
 static void _widget_finalize(GObject *widget)
 {
   struct dt_bauhaus_widget_t *w = DT_BAUHAUS_WIDGET(widget);
+
+  const guint focus_source = GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(widget), DT_BAUHAUS_FOCUS_IDLE_SOURCE_KEY));
+  if(focus_source > 0)
+  {
+    g_source_remove(focus_source);
+    g_object_set_data(G_OBJECT(widget), DT_BAUHAUS_FOCUS_IDLE_SOURCE_KEY, NULL);
+    g_object_set_data(G_OBJECT(widget), DT_BAUHAUS_FOCUS_IDLE_TRIES_KEY, NULL);
+  }
+
+  const char *accel_path = g_object_get_data(G_OBJECT(widget), "accel-path");
+  if(!IS_NULL_PTR(accel_path) && !IS_NULL_PTR(darktable.gui) && !IS_NULL_PTR(darktable.gui->accels))
+    dt_accels_remove_accel(darktable.gui->accels, accel_path, widget);
+
   if(darktable.gui && darktable.gui->has_scroll_focus == GTK_WIDGET(w))
     darktable.gui->has_scroll_focus = NULL;
   dt_gui_throttle_cancel(widget);
   if(w->type == DT_BAUHAUS_SLIDER)
   {
     dt_bauhaus_slider_data_t *d = &w->data.slider;
+    dt_free(d->grad_col);
     dt_free(d->grad_pos);
   }
   else
@@ -1332,7 +1415,8 @@ void dt_bauhaus_widget_set_label(GtkWidget *widget, const char *label)
 
       gchar *scope = g_strdup_printf("%s/Modules", m->view);
       dt_accels_new_darkroom_action(_action_request_focus, widget, scope, plugin_name, 0, 0, _("Focuses the control"));
-      g_object_set_data(G_OBJECT(widget), "accel-path", dt_accels_build_path("Darkroom/Modules", plugin_name));
+      g_object_set_data_full(G_OBJECT(widget), "accel-path",
+                             dt_accels_build_path("Darkroom/Modules", plugin_name), dt_free_gpointer);
       gtk_widget_set_has_tooltip(widget, TRUE);
       dt_free(scope);
       dt_free(plugin_name);
@@ -2408,7 +2492,7 @@ static gboolean _widget_draw(GtkWidget *widget, cairo_t *crf)
   cairo_t *cr = cairo_create(cst);
   GtkStyleContext *context = gtk_widget_get_style_context(widget);
 
-  GdkRGBA *bg_color = default_color_assign();
+  GdkRGBA *bg_color = NULL;
   GdkRGBA *text_color = default_color_assign();
   GdkRGBA *value_color = default_color_assign();
   GdkRGBA *value_text_color = default_color_assign();
@@ -2531,7 +2615,7 @@ static gboolean _widget_draw(GtkWidget *widget, cairo_t *crf)
   gdk_rgba_free(text_color);
   gdk_rgba_free(value_color);
   gdk_rgba_free(value_text_color);
-  gdk_rgba_free(bg_color);
+  if(!IS_NULL_PTR(bg_color)) gdk_rgba_free(bg_color);
 
   return TRUE;
 }
@@ -2743,23 +2827,21 @@ static gboolean _widget_scroll(GtkWidget *widget, GdkEventScroll *event)
 static gboolean _widget_key_press(GtkWidget *widget, GdkEventKey *event)
 {
   struct dt_bauhaus_widget_t *w = DT_BAUHAUS_WIDGET(widget);
+  guint key = dt_keys_mainpad_alternatives(event->keyval);
 
   if(w->type == DT_BAUHAUS_SLIDER)
   {
-    switch(event->keyval)
+    switch(key)
     {
       case GDK_KEY_Right:
-      case GDK_KEY_KP_Right:
         _slider_add_step(widget, 1, event->state);
         return TRUE;
 
       case GDK_KEY_Left:
-      case GDK_KEY_KP_Left:
         _slider_add_step(widget, -1, event->state);
         return TRUE;
 
       case GDK_KEY_Insert:
-      case GDK_KEY_KP_Insert:
         if(w->quad_toggle)
         {
           dt_bauhaus_widget_press_quad(widget);
@@ -2773,15 +2855,13 @@ static gboolean _widget_key_press(GtkWidget *widget, GdkEventKey *event)
   }
   else if(w->type == DT_BAUHAUS_COMBOBOX)
   {
-    switch(event->keyval)
+    switch(key)
     {
-      case GDK_KEY_KP_Enter:
       case GDK_KEY_Return:
         dt_bauhaus_show_popup(widget);
         return TRUE;
 
       case GDK_KEY_Insert:
-      case GDK_KEY_KP_Insert:
         if(w->quad_toggle)
         {
           dt_bauhaus_widget_press_quad(widget);
@@ -3082,31 +3162,33 @@ static gboolean dt_bauhaus_popup_key_press(GtkWidget *widget, GdkEventKey *event
   dt_bauhaus_t *bh = g_object_get_data(G_OBJECT(widget), "bauhaus");
   dt_bauhaus_widget_t *w = bh->current;
 
+  guint key = dt_keys_mainpad_alternatives(event->keyval);
+
   switch(w->type)
   {
     case DT_BAUHAUS_SLIDER:
     {
       if(bh->keys_cnt + 2 < 64
-         && (event->keyval == GDK_KEY_space || event->keyval == GDK_KEY_KP_Space ||              // SPACE
-             event->keyval == GDK_KEY_percent ||                                                 // %
-             (event->string[0] >= 40 && event->string[0] <= 57) ||                               // ()+-*/.,0-9
-             event->keyval == GDK_KEY_asciicircum || event->keyval == GDK_KEY_dead_circumflex || // ^
-             event->keyval == GDK_KEY_X || event->keyval == GDK_KEY_x))                          // Xx
+         && (key == GDK_KEY_space ||                                         // SPACE
+             key == GDK_KEY_percent ||                                       // %
+             (event->string[0] >= 40 && event->string[0] <= 57) ||           // ()+-*/.,0-9
+             key == GDK_KEY_asciicircum || key == GDK_KEY_dead_circumflex || // ^
+             key == GDK_KEY_X || key == GDK_KEY_x))                          // Xx
       {
-        if(event->keyval == GDK_KEY_dead_circumflex)
+        if(key == GDK_KEY_dead_circumflex)
           bh->keys[bh->keys_cnt++] = '^';
         else
           bh->keys[bh->keys_cnt++] = event->string[0];
         gtk_widget_queue_draw(bh->popup_area);
       }
       else if(bh->keys_cnt > 0
-              && (event->keyval == GDK_KEY_BackSpace || event->keyval == GDK_KEY_Delete))
+              && (key == GDK_KEY_BackSpace || key == GDK_KEY_Delete))
       {
         bh->keys[--bh->keys_cnt] = 0;
         gtk_widget_queue_draw(bh->popup_area);
       }
       else if(bh->keys_cnt > 0 && bh->keys_cnt + 1 < 64
-              && (event->keyval == GDK_KEY_Return || event->keyval == GDK_KEY_KP_Enter))
+              && (key == GDK_KEY_Return))
       {
         // accept input
         bh->keys[bh->keys_cnt] = 0;
@@ -3118,7 +3200,7 @@ static gboolean dt_bauhaus_popup_key_press(GtkWidget *widget, GdkEventKey *event
         memset(bh->keys, 0, sizeof(bh->keys));
         dt_bauhaus_hide_popup(bh);
       }
-      else if(event->keyval == GDK_KEY_Escape)
+      else if(key == GDK_KEY_Escape)
       {
         // discard input ands close popup
         bh->keys_cnt = 0;
@@ -3143,7 +3225,7 @@ static gboolean dt_bauhaus_popup_key_press(GtkWidget *widget, GdkEventKey *event
         gtk_widget_queue_draw(bh->popup_area);
       }
       else if(bh->keys_cnt > 0
-              && (event->keyval == GDK_KEY_BackSpace || event->keyval == GDK_KEY_Delete))
+              && (key == GDK_KEY_BackSpace || key == GDK_KEY_Delete))
       {
         bh->keys_cnt
             -= (bh->keys + bh->keys_cnt)
@@ -3152,7 +3234,7 @@ static gboolean dt_bauhaus_popup_key_press(GtkWidget *widget, GdkEventKey *event
         gtk_widget_queue_draw(bh->popup_area);
       }
       else if(bh->keys_cnt > 0 && bh->keys_cnt + 1 < 64
-              && (event->keyval == GDK_KEY_Return || event->keyval == GDK_KEY_KP_Enter))
+              && (key == GDK_KEY_Return))
       {
         // accept unique matches only for editable:
         if(w->data.combobox.editable)
@@ -3165,22 +3247,22 @@ static gboolean dt_bauhaus_popup_key_press(GtkWidget *widget, GdkEventKey *event
         memset(bh->keys, 0, sizeof(bh->keys));
         dt_bauhaus_hide_popup(bh);
       }
-      else if(event->keyval == GDK_KEY_Escape)
+      else if(key == GDK_KEY_Escape)
       {
         // discard input and close popup
         bh->keys_cnt = 0;
         memset(bh->keys, 0, sizeof(bh->keys));
         dt_bauhaus_hide_popup(bh);
       }
-      else if(event->keyval == GDK_KEY_Up || event->keyval == GDK_KEY_KP_Up)
+      else if(key == GDK_KEY_Up)
       {
         _combobox_next_sensitive(w, -1);
       }
-      else if(event->keyval == GDK_KEY_Down || event->keyval == GDK_KEY_KP_Down)
+      else if(key == GDK_KEY_Down)
       {
         _combobox_next_sensitive(w, +1);
       }
-      else if(event->keyval == GDK_KEY_Return || event->keyval == GDK_KEY_KP_Enter)
+      else if(key == GDK_KEY_Return)
       {
         // return pressed, but didn't type anything
         bh->end_mouse_y = -1; // negative will use currently highlighted instead.

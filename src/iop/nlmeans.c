@@ -362,11 +362,6 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
       dt_opencl_set_kernel_arg(devid, gd->kernel_nlmeans_accu, 5, 2 * sizeof(int), (void *)&q);
       err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_nlmeans_accu, sizes);
       if(err != CL_SUCCESS) goto error;
-
-      dt_opencl_finish(devid);
-
-      // indirectly give gpu some air to breathe (and to do display related stuff)
-      dt_iop_nap(dt_opencl_micro_nap(devid));
     }
 
   // normalize and blend

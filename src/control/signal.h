@@ -220,6 +220,9 @@ typedef enum dt_signal_t
   /** \brief This signal is raised when image is changed in darkroom */
   DT_SIGNAL_DEVELOP_IMAGE_CHANGED,
 
+  /** \brief Signal that the darkroom GUI color changed */
+  DT_SIGNAL_DARKROOM_UI_CHANGED,
+
   /** \brief This signal is raised when an asynchronous darkroom image load finishes.
     1 : uint32_t the load request id
     2 : uint32_t the darkroom image load return code
@@ -298,6 +301,7 @@ typedef enum dt_signal_t
   /* Raised when a mask form is selected/deselected */
   DT_SIGNAL_MASK_SELECTION_CHANGED,
   DT_SIGNAL_MASK_CHANGED,
+  DT_SIGNAL_MASK_SHAPE_BUTTONS_DEACTIVATE,
 
   /* Raised when the focused darkroom module changes or its masks/blending GUI needs refresh */
   DT_SIGNAL_DEVELOP_MASKS_GUI_CHANGED,
@@ -326,6 +330,8 @@ typedef enum dt_debug_signal_action_t
 
 /* inititialize the signal framework */
 struct dt_control_signal_t *dt_control_signal_init();
+/* cleanup the signal framework */
+void dt_control_signal_cleanup(struct dt_control_signal_t *ctlsig);
 /* raises a signal */
 void dt_control_signal_raise(const struct dt_control_signal_t *ctlsig, const dt_signal_t signal, ...);
 /* connects a callback to a signal */

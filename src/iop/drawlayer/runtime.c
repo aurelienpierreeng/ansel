@@ -718,7 +718,7 @@ dt_drawlayer_runtime_result_t dt_drawlayer_runtime_manager_update(dt_drawlayer_r
       if(schedule.set_pointer_state && g)
       {
         g->session.pointer_valid = schedule.pointer_valid;
-        dt_drawlayer_set_os_cursor_hidden(schedule.pointer_hide_cursor);
+        dt_control_set_cursor_visible(!schedule.pointer_hide_cursor);
       }
       if(schedule.queue_redraw_center) dt_control_queue_redraw_center();
       break;

@@ -388,7 +388,7 @@ int dt_opencl_write_host_to_device_rowpitch_non_blocking(const int devid, void *
                                                          const int width, const int height,
                                                          const int rowpitch);
 
-int dt_opencl_write_host_to_device_raw(const int devid, void *host, void *device, const size_t *origin,
+int dt_opencl_write_host_to_device_raw(const int devid, const void *host, void *device, const size_t *origin,
                                        const size_t *region, const int rowpitch, const int blocking);
 
 void *dt_opencl_copy_host_to_device(const int devid, void *host, const int width, const int height,
@@ -424,7 +424,7 @@ int dt_opencl_write_buffer_to_device(const int devid, void *host, void *device, 
 
 void *dt_opencl_alloc_device_buffer(const int devid, const size_t size);
 
-void *dt_opencl_alloc_device_buffer_with_flags(const int devid, const size_t size, const int flags);
+void *dt_opencl_alloc_device_buffer_with_flags(const int devid, const size_t size, const int flags, void *host_ptr);
 
 void dt_opencl_release_mem_object(cl_mem mem);
 
@@ -490,6 +490,7 @@ gboolean dt_opencl_read_device_config(const int devid);
 int dt_opencl_avoid_atomics(const int devid);
 int dt_opencl_micro_nap(const int devid);
 gboolean dt_opencl_use_pinned_memory(const int devid);
+gboolean dt_opencl_is_pinned_memory(cl_mem mem);
 
 #ifdef __cplusplus
 }

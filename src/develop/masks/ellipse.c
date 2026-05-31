@@ -299,6 +299,28 @@ static int _ellipse_get_creation_preview(dt_masks_form_t *form, dt_masks_form_gu
   if(!err && values.border > 0.0f)
     err = _ellipse_get_points(darktable.develop, center[0], center[1], border_a, border_b, values.rotation,
                               &preview->border, &preview->border_count);
+  
+  if(!err && dt_masks_form_is_clone(form))
+  {
+    float source_pos[2] = { 0.0f, 0.0f };
+    dt_masks_calculate_source_pos_origin(gui, gui->pos[0], gui->pos[1], gui->pos[0], gui->pos[1],
+                                        &source_pos[0], &source_pos[1], FALSE);
+    const float center_source[2] = { source_pos[0] - gui->pos[0], source_pos[1] - gui->pos[1] };
+
+    preview->source_points = dt_pixelpipe_cache_alloc_align_float_cache((size_t)2 * preview->points_count, 0);
+    if(IS_NULL_PTR(preview->source_points))
+      err = 1;
+
+    for(int i = 0; !err && i < preview->points_count; i++)
+    {
+      preview->source_points[i * 2] = preview->points[i * 2] + center_source[0];
+      preview->source_points[i * 2 + 1] = preview->points[i * 2 + 1] + center_source[1];
+    }
+  }
+
+  if(err)
+    dt_masks_preview_buffers_cleanup(preview);
+  
   return err;
 }
 
@@ -1008,13 +1030,16 @@ static void _ellipse_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
     dt_masks_draw_preview_shape(cr, zoom_scale, num_points, preview.points, preview.points_count,
                                 preview.border, preview.border_count,
                                 &dt_masks_functions_ellipse.draw_shape, CAIRO_LINE_CAP_BUTT,
-                                CAIRO_LINE_CAP_ROUND, TRUE);
+                                CAIRO_LINE_CAP_ROUND, TRUE, FALSE);
 
 
     // draw a cross where the source will be created
     if(dt_masks_form_is_clone(form))
     {
       dt_masks_draw_source_preview(cr, zoom_scale, gui, gui->pos[0], gui->pos[1], gui->pos[0], gui->pos[1], FALSE);
+      dt_masks_draw_preview_shape(cr, zoom_scale, num_points, preview.source_points, preview.points_count,
+                                NULL, 0, &dt_masks_functions_ellipse.draw_shape, CAIRO_LINE_CAP_BUTT,
+                                CAIRO_LINE_CAP_ROUND, FALSE, TRUE);
     }
 
     dt_masks_preview_buffers_cleanup(&preview);

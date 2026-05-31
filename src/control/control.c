@@ -96,7 +96,11 @@ void dt_control_init(dt_control_t *s)
 {
   // same thread as init
   s->gui_thread = pthread_self();
-  s->cursor = GDK_LEFT_PTR;
+  s->cursor.shape = GDK_LEFT_PTR;
+  s->cursor.current_shape = GDK_LEFT_PTR;
+  s->cursor.shape_str = NULL;
+  s->cursor.current_shape_str = NULL;
+  s->cursor.hide = FALSE;
   // s->last_expose_time = dt_get_wtime();
   s->log_pos = s->log_ack = 0;
   s->log_busy = 0;
@@ -123,17 +127,108 @@ void dt_control_init(dt_control_t *s)
   s->button_down_which = 0;
   s->mouse_over_id = -1;
   s->keyboard_over_id = -1;
-  s->lock_cursor_shape = FALSE;
+  s->cursor.lock = FALSE;
+}
+
+// used for debugging, might remove later
+gchar *_get_cursor_name(dt_cursor_t cursor)
+{
+  gchar *shape_str = NULL;
+  switch(cursor)
+  {
+    case GDK_X_CURSOR: shape_str = g_strdup("GDK_X_CURSOR"); break;
+    case GDK_ARROW: shape_str = g_strdup("GDK_ARROW"); break;
+    case GDK_BASED_ARROW_DOWN: shape_str = g_strdup("GDK_BASED_ARROW_DOWN"); break;
+    case GDK_BASED_ARROW_UP: shape_str = g_strdup("GDK_BASED_ARROW_UP"); break;
+    case GDK_BOAT: shape_str = g_strdup("GDK_BOAT"); break;
+    case GDK_BOGOSITY: shape_str = g_strdup("GDK_BOGOSITY"); break;
+    case GDK_BOTTOM_LEFT_CORNER: shape_str = g_strdup("GDK_BOTTOM_LEFT_CORNER"); break;
+    case GDK_BOTTOM_RIGHT_CORNER: shape_str = g_strdup("GDK_BOTTOM_RIGHT_CORNER"); break;
+    case GDK_BOTTOM_SIDE: shape_str = g_strdup("GDK_BOTTOM_SIDE"); break;
+    case GDK_BOTTOM_TEE: shape_str = g_strdup("GDK_BOTTOM_TEE"); break;
+    case GDK_BOX_SPIRAL: shape_str = g_strdup("GDK_BOX_SPIRAL"); break;
+    case GDK_CENTER_PTR: shape_str = g_strdup("GDK_CENTER_PTR"); break;
+    case GDK_CIRCLE: shape_str = g_strdup("GDK_CIRCLE"); break;
+    case GDK_CLOCK: shape_str = g_strdup("GDK_CLOCK"); break;
+    case GDK_COFFEE_MUG: shape_str = g_strdup("GDK_COFFEE_MUG"); break;
+    case GDK_CROSS: shape_str = g_strdup("GDK_CROSS"); break;
+    case GDK_CROSS_REVERSE: shape_str = g_strdup("GDK_CROSS_REVERSE"); break;
+    case GDK_CROSSHAIR: shape_str = g_strdup("GDK_CROSSHAIR"); break;
+    case GDK_DIAMOND_CROSS: shape_str = g_strdup("GDK_DIAMOND_CROSS"); break;
+    case GDK_DOT: shape_str = g_strdup("GDK_DOT"); break;
+    case GDK_DOTBOX: shape_str = g_strdup("GDK_DOTBOX"); break;
+    case GDK_DOUBLE_ARROW: shape_str = g_strdup("GDK_DOUBLE_ARROW"); break;
+    case GDK_DRAFT_LARGE: shape_str = g_strdup("GDK_DRAFT_LARGE"); break;
+    case GDK_DRAFT_SMALL: shape_str = g_strdup("GDK_DRAFT_SMALL"); break;
+    case GDK_DRAPED_BOX: shape_str = g_strdup("GDK_DRAPED_BOX"); break;
+    case GDK_EXCHANGE: shape_str = g_strdup("GDK_EXCHANGE"); break;
+    case GDK_FLEUR: shape_str = g_strdup("GDK_FLEUR"); break;
+    case GDK_GOBBLER: shape_str = g_strdup("GDK_GOBBLER"); break;
+    case GDK_GUMBY: shape_str = g_strdup("GDK_GUMBY"); break;
+    case GDK_HAND1: shape_str = g_strdup("GDK_HAND1"); break;
+    case GDK_HAND2: shape_str = g_strdup("GDK_HAND2"); break;
+    case GDK_HEART: shape_str = g_strdup("GDK_HEART"); break;
+    case GDK_ICON: shape_str = g_strdup("GDK_ICON"); break;
+    case GDK_IRON_CROSS: shape_str = g_strdup("GDK_IRON_CROSS"); break;
+    case GDK_LEFT_PTR: shape_str = g_strdup("GDK_LEFT_PTR"); break;
+    case GDK_LEFT_SIDE: shape_str = g_strdup("GDK_LEFT_SIDE"); break;
+    case GDK_LEFT_TEE: shape_str = g_strdup("GDK_LEFT_TEE"); break;
+    case GDK_LEFTBUTTON: shape_str = g_strdup("GDK_LEFTBUTTON"); break;
+    case GDK_LL_ANGLE: shape_str = g_strdup("GDK_LL_ANGLE"); break;
+    case GDK_LR_ANGLE: shape_str = g_strdup("GDK_LR_ANGLE"); break;
+    case GDK_MAN: shape_str = g_strdup("GDK_MAN"); break;
+    case GDK_MIDDLEBUTTON: shape_str = g_strdup("GDK_MIDDLEBUTTON"); break;
+    case GDK_MOUSE: shape_str = g_strdup("GDK_MOUSE"); break;
+    case GDK_PENCIL: shape_str = g_strdup("GDK_PENCIL"); break;
+    case GDK_PIRATE: shape_str = g_strdup("GDK_PIRATE"); break;
+    case GDK_PLUS: shape_str = g_strdup("GDK_PLUS"); break;
+    case GDK_QUESTION_ARROW: shape_str = g_strdup("GDK_QUESTION_ARROW"); break;
+    case GDK_RIGHT_PTR: shape_str = g_strdup("GDK_RIGHT_PTR"); break;
+    case GDK_RIGHT_SIDE: shape_str = g_strdup("GDK_RIGHT_SIDE"); break;
+    case GDK_RIGHT_TEE: shape_str = g_strdup("GDK_RIGHT_TEE"); break;
+    case GDK_RIGHTBUTTON: shape_str = g_strdup("GDK_RIGHTBUTTON"); break;
+    case GDK_RTL_LOGO: shape_str = g_strdup("GDK_RTL_LOGO"); break;
+    case GDK_SAILBOAT: shape_str = g_strdup("GDK_SAILBOAT"); break;
+    case GDK_SB_DOWN_ARROW: shape_str = g_strdup("GDK_SB_DOWN_ARROW"); break;
+    case GDK_SB_H_DOUBLE_ARROW: shape_str = g_strdup("GDK_SB_H_DOUBLE_ARROW"); break;
+    case GDK_SB_LEFT_ARROW: shape_str = g_strdup("GDK_SB_LEFT_ARROW"); break;
+    case GDK_SB_RIGHT_ARROW: shape_str = g_strdup("GDK_SB_RIGHT_ARROW"); break;
+    case GDK_SB_UP_ARROW: shape_str = g_strdup("GDK_SB_UP_ARROW"); break;
+    case GDK_SB_V_DOUBLE_ARROW: shape_str = g_strdup("GDK_SB_V_DOUBLE_ARROW"); break;
+    case GDK_SHUTTLE: shape_str = g_strdup("GDK_SHUTTLE"); break;
+    case GDK_SIZING: shape_str = g_strdup("GDK_SIZING"); break;
+    case GDK_SPIDER: shape_str = g_strdup("GDK_SPIDER"); break;
+    case GDK_SPRAYCAN: shape_str = g_strdup("GDK_SPRAYCAN"); break;
+    case GDK_STAR: shape_str = g_strdup("GDK_STAR"); break;
+    case GDK_TARGET: shape_str = g_strdup("GDK_TARGET"); break;
+    case GDK_TCROSS: shape_str = g_strdup("GDK_TCROSS"); break;
+    case GDK_TOP_LEFT_ARROW: shape_str = g_strdup("GDK_TOP_LEFT_ARROW"); break;
+    case GDK_TOP_LEFT_CORNER: shape_str = g_strdup("GDK_TOP_LEFT_CORNER"); break;
+    case GDK_TOP_RIGHT_CORNER: shape_str = g_strdup("GDK_TOP_RIGHT_CORNER"); break;
+    case GDK_TOP_SIDE: shape_str = g_strdup("GDK_TOP_SIDE"); break;
+    case GDK_TOP_TEE: shape_str = g_strdup("GDK_TOP_TEE"); break;
+    case GDK_TREK: shape_str = g_strdup("GDK_TREK"); break;
+    case GDK_UL_ANGLE: shape_str = g_strdup("GDK_UL_ANGLE"); break;
+    case GDK_UMBRELLA: shape_str = g_strdup("GDK_UMBRELLA"); break;
+    case GDK_UR_ANGLE: shape_str = g_strdup("GDK_UR_ANGLE"); break;
+    case GDK_WATCH: shape_str = g_strdup("GDK_WATCH"); break;
+    case GDK_XTERM: shape_str = g_strdup("GDK_XTERM"); break;
+    case GDK_LAST_CURSOR: shape_str = g_strdup("GDK_LAST_CURSOR"); break;
+    case GDK_BLANK_CURSOR: shape_str = g_strdup("GDK_BLANK_CURSOR"); break;
+    case GDK_CURSOR_IS_PIXMAP: shape_str = g_strdup("GDK_CURSOR_IS_PIXMAP"); break;
+    default: break;
+  }
+  return shape_str;
 }
 
 void dt_control_forbid_change_cursor()
 {
-  darktable.control->lock_cursor_shape = TRUE;
+  darktable.control->cursor.lock = TRUE;
 }
 
 void dt_control_allow_change_cursor()
 {
-  darktable.control->lock_cursor_shape = FALSE;
+  darktable.control->cursor.lock = FALSE;
 }
 
 static void _control_set_cursor_on_widget(GtkWidget *widget, GdkCursor *cursor)
@@ -141,7 +236,7 @@ static void _control_set_cursor_on_widget(GtkWidget *widget, GdkCursor *cursor)
   if(IS_NULL_PTR(widget)) return;
 
   GdkWindow *window = gtk_widget_get_window(widget);
-  if(window) gdk_window_set_cursor(window, cursor);
+  if(!IS_NULL_PTR(window)) gdk_window_set_cursor(window, cursor);
 }
 
 static void _control_apply_cursor(GdkCursor *cursor)
@@ -160,35 +255,169 @@ static void _control_apply_cursor(GdkCursor *cursor)
     _control_set_cursor_on_widget(center, cursor);
 }
 
-void dt_control_change_cursor(dt_cursor_t curs)
+static void _control_store_current_cursor(const dt_cursor_t shape, const char *shape_str)
 {
-  if (!darktable.control->lock_cursor_shape)
+  gchar *current_shape_str = g_strdup(shape_str);
+
+  darktable.control->cursor.current_shape = shape;
+  g_free(darktable.control->cursor.current_shape_str);
+  darktable.control->cursor.current_shape_str = current_shape_str;
+}
+
+/** \brief Apply a GTK named cursor without changing the queued cursor.
+ *
+ * Named cursors report GDK_CURSOR_IS_PIXMAP as their type, which is only a
+ * marker for GTK's cursor cache. The queued cursor state is owned by
+ * dt_control_queue_cursor_by_name(), so temporary named cursors such as the
+ * busy cursor do not overwrite the cursor that should be restored later.
+ */
+void dt_control_change_cursor_by_name(const char *curs_str)
+{
+  if(IS_NULL_PTR(curs_str)) return;
+
+  if(!darktable.control->cursor.lock)
   {
-    GdkCursor *cursor = gdk_cursor_new_for_display(gdk_display_get_default(), curs);
-    _control_apply_cursor(cursor);
-    g_object_unref(cursor);
+    const gboolean hide = darktable.control->cursor.hide;
+    const gboolean current_is_named_cursor =
+      !IS_NULL_PTR(darktable.control->cursor.current_shape_str)
+      && g_strcmp0(darktable.control->cursor.current_shape_str, curs_str) == 0;
+
+    // "progress" is a special cursor that should not overwrite the queued cursor.
+    if(g_strcmp0(curs_str, "progress") != 0)
+      dt_control_queue_cursor_by_name(curs_str);
+    
+    if(hide)
+    {
+      if(IS_NULL_PTR(darktable.control->cursor.current_shape_str)
+         && darktable.control->cursor.current_shape == GDK_BLANK_CURSOR)
+        return;
+    }
+    else if(current_is_named_cursor)
+      return;
+
+    // We choose the GTK constructor here because named cursors are pixmaps in
+    // GTK's cache, while the hidden cursor is one of the standard shapes.
+    const dt_cursor_t chosen_shape = hide ? GDK_BLANK_CURSOR : GDK_CURSOR_IS_PIXMAP;
+    GdkCursor *cursor_shape = hide
+      ? gdk_cursor_new_for_display(gdk_display_get_default(), GDK_BLANK_CURSOR)
+      : gdk_cursor_new_from_name(gdk_display_get_default(), curs_str);
+
+    if(IS_NULL_PTR(cursor_shape)) return;
+    _control_apply_cursor(cursor_shape);
+    _control_store_current_cursor(chosen_shape, hide ? NULL : curs_str);
+
+    if(darktable.unmuted & DT_DEBUG_VERBOSE)
+      dt_print(DT_DEBUG_CONTROL, "Changing cursor to `%s`\n", hide ? "GDK_BLANK_CURSOR" : curs_str);
+
+    g_object_unref(cursor_shape);
   }
 }
 
-void dt_control_change_cursor_with_name(const char *curs_str)
+/**
+ * @brief Apply a named cursor immediatelly and flush display updates for immediate feedback.
+ *
+ * @details
+ * Some synchronous UI-thread operations perform heavy work right after cursor setup.
+ * Without an explicit display flush, GTK may delay painting and the busy cursor can
+ * remain invisible until the computation already finished.
+ *
+ * @param curs_str GTK cursor name (for example `"progress"`).
+ */
+void dt_control_change_cursor_by_name_and_flush(const char *curs_str)
 {
-  if (!darktable.control->lock_cursor_shape)
-  {
-    GdkCursor *cursor = gdk_cursor_new_from_name(gdk_display_get_default(), curs_str);
-    _control_apply_cursor(cursor);
-    g_object_unref(cursor);
-  }
-}
-
-void dt_control_set_cursor(dt_cursor_t cursor)
-{
-  darktable.control->cursor = cursor;
+  if(IS_NULL_PTR(curs_str)) return;
+  dt_control_change_cursor_by_name(curs_str);
+  GdkDisplay *display = gdk_display_get_default();
+  if(!IS_NULL_PTR(display)) gdk_display_flush(display);
 }
 
 void dt_control_commit_cursor()
 {
+  //fprintf(stderr, "Committing cursor \n");
   if(darktable.control->log_busy > 0) return;
-  dt_control_change_cursor(darktable.control->cursor);
+
+  if(IS_NULL_PTR(darktable.control->cursor.shape_str))
+    dt_control_change_cursor(darktable.control->cursor.shape);
+  else
+    dt_control_change_cursor_by_name(darktable.control->cursor.shape_str);
+}
+
+void dt_control_change_cursor_EXT(dt_cursor_t cursor, const char *file, int line)
+{
+  const gboolean hide = darktable.control->cursor.hide;
+
+  // GDK_CURSOR_IS_PIXMAP is returned by GTK for named cursors and custom pixmaps.
+  // It is not a cursor shape that can be constructed with gdk_cursor_new_for_display().
+  const dt_cursor_t requested_shape = cursor == GDK_CURSOR_IS_PIXMAP ? GDK_LEFT_PTR : cursor;
+  const dt_cursor_t chosen_shape = hide ? GDK_BLANK_CURSOR : requested_shape;
+
+  // Keep the requested cursor queued even if the visible cursor stays blank.
+  dt_control_queue_cursor_EXT(requested_shape, file, line);
+
+  if(IS_NULL_PTR(darktable.control->cursor.current_shape_str)
+     && darktable.control->cursor.current_shape == chosen_shape)
+    return;
+
+  if(!darktable.control->cursor.lock)
+  {
+    GdkCursor *cursor_shape = gdk_cursor_new_for_display(gdk_display_get_default(), chosen_shape);
+    if(IS_NULL_PTR(cursor_shape)) return;
+    _control_apply_cursor(cursor_shape);
+    g_object_unref(cursor_shape);
+    _control_store_current_cursor(chosen_shape, NULL);
+
+    if(darktable.unmuted & DT_DEBUG_VERBOSE)
+      dt_print(DT_DEBUG_CONTROL,
+               "Changing cursor to `%s`, requested from %s:%d\n",
+               hide ? "GDK_BLANK_CURSOR" : _get_cursor_name(requested_shape), file, line);
+  }
+}
+
+void dt_control_queue_cursor_EXT(dt_cursor_t cursor, const char *file, int line)
+{
+  const dt_cursor_t requested_shape = cursor == GDK_CURSOR_IS_PIXMAP ? GDK_LEFT_PTR : cursor;
+
+  if(darktable.control->cursor.shape == requested_shape
+     && IS_NULL_PTR(darktable.control->cursor.shape_str))
+    return;
+
+  if(darktable.unmuted & DT_DEBUG_VERBOSE)
+    dt_print(DT_DEBUG_CONTROL, "Queue cursor to `%s`, requested from %s:%d\n", _get_cursor_name(requested_shape), file, line);
+
+  g_free(darktable.control->cursor.shape_str);
+  darktable.control->cursor.shape_str = NULL;
+  darktable.control->cursor.shape = requested_shape;
+}
+
+/** \brief Queue a GTK named cursor for the next cursor commit.
+ *
+ * The cursor object is created only to validate the theme name. The queued
+ * ownership remains the string because GTK exposes named cursors as
+ * GDK_CURSOR_IS_PIXMAP, which cannot be passed back to gdk_cursor_new_for_display().
+ */
+void dt_control_queue_cursor_by_name(const char *curs_str)
+{
+  if(IS_NULL_PTR(curs_str)) return;
+  // "progress" is a special cursor that should not overwrite the queued cursor.
+  // Use dt_change_cursor_by_name() to set it directly without queuing.
+  if(g_strcmp0(curs_str, "progress") == 0)
+    return;
+
+  if(g_strcmp0(darktable.control->cursor.shape_str, curs_str) == 0) return;
+
+  GdkCursor *cursor = gdk_cursor_new_from_name(gdk_display_get_default(), curs_str);
+  if(IS_NULL_PTR(cursor)) return;
+  g_object_unref(cursor);
+
+  g_free(darktable.control->cursor.shape_str);
+  darktable.control->cursor.shape_str = g_strdup(curs_str);
+}
+
+void dt_control_set_cursor_visible_EXT(gboolean visible, const char *file, int line)
+{
+  if(darktable.unmuted & DT_DEBUG_VERBOSE)
+    dt_print(DT_DEBUG_CONTROL, "%s cursor, requested from %s:%d\n", visible ? "Show" : "Hide", file, line);
+  darktable.control->cursor.hide = !visible;
 }
 
 int dt_control_running()
@@ -242,6 +471,8 @@ void dt_control_cleanup(dt_control_t *s)
   // DT_DEBUG_SQLITE3_EXEC(dt_database_get(darktable.db), "PRAGMA incremental_vacuum(0)", NULL, NULL, NULL);
   // DT_DEBUG_SQLITE3_EXEC(dt_database_get(darktable.db), "vacuum", NULL, NULL, NULL);
   dt_control_jobs_cleanup(s);
+  g_free(s->cursor.shape_str);
+  g_free(s->cursor.current_shape_str);
   dt_pthread_mutex_destroy(&s->queue_mutex);
   dt_pthread_mutex_destroy(&s->cond_mutex);
   dt_pthread_mutex_destroy(&s->log_mutex);
@@ -341,8 +572,8 @@ void *dt_control_expose(void *voidptr)
   if(darktable.control->log_busy > 0)
   {
     dt_control_draw_busy_msg(cr, width, height);
-    // set the cursor to arrow with busy indicator
-    dt_control_change_cursor_with_name("progress");
+    // force set the cursor to arrow with busy indicator
+    dt_control_change_cursor_by_name("progress");
   }
   else // Apply cursor change
     dt_control_commit_cursor();
@@ -647,17 +878,40 @@ void dt_control_toast_redraw()
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_CONTROL_TOAST_REDRAW);
 }
 
-static int _widget_queue_draw(void *widget)
+typedef struct dt_control_redraw_widget_t
 {
-  gtk_widget_queue_draw((GtkWidget*)widget);
+  GWeakRef widget_ref;
+} dt_control_redraw_widget_t;
+
+static int _widget_queue_draw(void *widget_data)
+{
+  dt_control_redraw_widget_t *const redraw_widget = (dt_control_redraw_widget_t *)widget_data;
+  GtkWidget *const widget = GTK_WIDGET(g_weak_ref_get(&redraw_widget->widget_ref));
+  if(!IS_NULL_PTR(widget))
+  {
+    gtk_widget_queue_draw(widget);
+    g_object_unref(widget);
+  }
+
   return FALSE;
+}
+
+static void _widget_queue_draw_cleanup(void *widget_data)
+{
+  dt_control_redraw_widget_t *const redraw_widget = (dt_control_redraw_widget_t *)widget_data;
+  g_weak_ref_clear(&redraw_widget->widget_ref);
+  dt_free(redraw_widget);
 }
 
 void dt_control_queue_redraw_widget(GtkWidget *widget)
 {
   if(dt_control_running())
   {
-    g_idle_add(_widget_queue_draw, (void*)widget);
+    dt_control_redraw_widget_t *const redraw_widget = calloc(1, sizeof(dt_control_redraw_widget_t));
+    if(IS_NULL_PTR(redraw_widget)) return;
+
+    g_weak_ref_init(&redraw_widget->widget_ref, G_OBJECT(widget));
+    g_idle_add_full(G_PRIORITY_DEFAULT_IDLE, _widget_queue_draw, redraw_widget, _widget_queue_draw_cleanup);
   }
 }
 

@@ -186,9 +186,12 @@ typedef struct dt_masks_gradient_creation_values_t
 
 static void _gradient_get_creation_values(dt_masks_gradient_creation_values_t *values)
 {
-  values->extent = dt_conf_get_float("plugins/darkroom/masks/gradient/extent");
-  values->curvature = dt_conf_get_float("plugins/darkroom/masks/gradient/curvature");
+  values->extent = CLAMPF(dt_conf_get_float("plugins/darkroom/masks/gradient/extent"),
+                          extent_MIN, extent_MAX);
+  values->curvature = CLAMPF(dt_conf_get_float("plugins/darkroom/masks/gradient/curvature"),
+                             CURVATURE_MIN, CURVATURE_MAX);
   values->rotation = dt_conf_get_float("plugins/darkroom/masks/gradient/rotation");
+  if(!isfinite(values->rotation)) values->rotation = 0.0f;
 }
 
 static void _gradient_init_new(dt_masks_form_gui_t *gui, dt_masks_anchor_gradient_t *gradient)
@@ -721,6 +724,14 @@ static inline gboolean _gradient_is_canonical(const float x, const float y, cons
   return (isnormal(x) && isnormal(y) && (x >= -wd) && (x <= 2 * wd) && (y >= -ht) && (y <= 2 * ht)) ? TRUE : FALSE;
 }
 
+/**
+ * @brief Build the distorted display polyline for a gradient mask.
+ *
+ * The guide curve is sampled in raw image coordinates first, then transformed
+ * through the distortion stack in one call. Threads collect only the samples
+ * that stay close enough to the raw frame, so the final merge must keep the
+ * output bounded to the number of input samples.
+ */
 static int _gradient_get_points(dt_develop_t *dev, float x, float y, float rotation, float curvature,
                                 float **points, int *points_count)
 {
@@ -729,6 +740,8 @@ static int _gradient_get_points(dt_develop_t *dev, float x, float y, float rotat
 
   const float wd = dev->roi.raw_width;
   const float ht = dev->roi.raw_height;
+  if(!isfinite(wd) || !isfinite(ht) || wd <= 0.0f || ht <= 0.0f) return 1;
+
   const float scale = sqrtf(wd * wd + ht * ht);
   const float distance = 0.1f * fminf(wd, ht);
 
@@ -760,10 +773,11 @@ static int _gradient_get_points(dt_develop_t *dev, float x, float y, float rotat
   (*points)[4] = x2;
   (*points)[5] = y2;
 
-  const int nthreads = omp_get_max_threads();
+  const int nthreads = darktable.num_openmp_threads;
   size_t c_padded_size;
-  uint32_t *pts_count = dt_pixelpipe_cache_calloc_perthread(nthreads, sizeof(uint32_t), &c_padded_size);
-  float *const restrict pts = dt_pixelpipe_cache_alloc_align_float_cache((size_t)2 * count * nthreads, 0);
+  uint32_t *pts_count = dt_pixelpipe_cache_calloc_perthread(1, sizeof(uint32_t), &c_padded_size);
+  size_t pts_padded_size;
+  float *const restrict pts = dt_pixelpipe_cache_alloc_perthread_float((size_t)2 * count, &pts_padded_size);
   if(IS_NULL_PTR(pts_count) || IS_NULL_PTR(pts))
   {
     dt_pixelpipe_cache_free_align(pts_count);
@@ -779,7 +793,7 @@ static int _gradient_get_points(dt_develop_t *dev, float x, float y, float rotat
   const float xdelta = -2.0f * xstart / (count - 3);
 
 //  gboolean in_frame = FALSE;
-  __OMP_PARALLEL_FOR__(if(count > 100))
+  __OMP_PARALLEL_FOR__(if(count > 100) num_threads(nthreads))
   for(int i = 3; i < count; i++)
   {
     const float xi = xstart + (i - 3) * xdelta;
@@ -793,10 +807,10 @@ static int _gradient_get_points(dt_develop_t *dev, float x, float y, float rotat
     // this is to avoid that modules like lens correction fail on out of range coordinates
     if(!(xiii < -wd || xiii > 2 * wd || yiii < -ht || yiii > 2 * ht))
     {
-      const int thread = omp_get_thread_num();
       uint32_t *tcount = dt_get_perthread(pts_count, c_padded_size);
-      pts[(thread * count) + *tcount * 2]     = xiii;
-      pts[(thread * count) + *tcount * 2 + 1] = yiii;
+      float *const tpts = dt_get_perthread(pts, pts_padded_size);
+      tpts[*tcount * 2]     = xiii;
+      tpts[*tcount * 2 + 1] = yiii;
       (*tcount)++;
     }
   }
@@ -805,10 +819,13 @@ static int _gradient_get_points(dt_develop_t *dev, float x, float y, float rotat
   for(int thread = 0; thread < nthreads; thread++)
   {
     const uint32_t tcount = *(uint32_t *)dt_get_bythread(pts_count, c_padded_size, thread);
-    for(int k = 0; k < tcount; k++)
+    const float *const tpts = dt_get_bythread(pts, pts_padded_size, thread);
+    // Merge only the retained in-frame samples. The source loop has at most
+    // count - 3 samples, so the three metadata points leave exactly that room.
+    for(uint32_t k = 0; k < tcount && *points_count < count; k++)
     {
-      (*points)[(*points_count) * 2]     = pts[(thread * count) + k * 2];
-      (*points)[(*points_count) * 2 + 1] = pts[(thread * count) + k * 2 + 1];
+      (*points)[(*points_count) * 2]     = tpts[k * 2];
+      (*points)[(*points_count) * 2 + 1] = tpts[k * 2 + 1];
       (*points_count)++;
     }
   }
@@ -843,6 +860,7 @@ static int _gradient_get_pts_border(dt_develop_t *dev, float x, float y, float r
 {
   *points = NULL;
   *points_count = 0;
+  distance = CLAMPF(distance, extent_MIN, extent_MAX);
 
   // Get border curve dimensions and scaling
   const float wd = dev->roi.raw_width;
@@ -1049,7 +1067,7 @@ static void _gradient_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks
     dt_masks_draw_preview_shape(cr, zoom_scale, nb, preview.points, preview.points_count,
                                 preview.border, preview.border_count,
                                 &dt_masks_functions_gradient.draw_shape, CAIRO_LINE_CAP_ROUND,
-                                CAIRO_LINE_CAP_ROUND, FALSE);
+                                CAIRO_LINE_CAP_ROUND, FALSE, FALSE);
     _gradient_draw_arrow(cr, FALSE, FALSE, gui->form_rotating, zoom_scale, preview.points, preview.points_count);
     dt_masks_preview_buffers_cleanup(&preview);
   

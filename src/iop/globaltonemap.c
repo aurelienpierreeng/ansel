@@ -284,7 +284,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_global_tonemap_data_t *data = (dt_iop_global_tonemap_data_t *)piece->data;
-  const float scale = fmaxf(dt_dev_get_module_scale(pipe, roi_in), 1.f);
+  const float scale = dt_dev_get_module_scale(pipe, roi_in);
   const float sigma_r = 8.0f; // does not depend on scale
   const float iw = piece->buf_in.width / scale;
   const float ih = piece->buf_in.height / scale;

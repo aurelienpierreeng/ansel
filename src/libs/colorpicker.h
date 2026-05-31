@@ -55,6 +55,9 @@ typedef struct dt_colorpicker_sample_t
   // For the primary sample, these are the current sample area,
   // whether from colorpicker lib or an iop. They are used for showing
   // the sample in the center view, and sampling in the pixelpipe.
+  // Coordinates are stored canonically in normalized RAW space.
+  // Callers operating in processed/image space need to convert with
+  // dt_dev_coordinates_raw_norm_to_image_norm().
   float point[2];
   dt_boundingbox_t box;
   dt_lib_colorpicker_size_t size;

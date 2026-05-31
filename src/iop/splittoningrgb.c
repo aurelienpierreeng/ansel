@@ -1186,7 +1186,7 @@ static void _build_primaries_ui(dt_iop_module_t *self, dt_iop_splittoning_rgb_gu
                                 GtkWidget *container)
 {
   g->point[point].primaries_achromatic_hue
-      = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), -1.f, 1.f, 0, 0.f, 3);
+      = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), -2.f, 2.f, 0, 0.f, 3);
   dt_bauhaus_widget_set_label(g->point[point].primaries_achromatic_hue, N_("white hue"));
   dt_bauhaus_slider_set_factor(g->point[point].primaries_achromatic_hue, 90.f);
   dt_bauhaus_slider_set_format(g->point[point].primaries_achromatic_hue, "\302\260");

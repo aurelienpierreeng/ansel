@@ -457,9 +457,6 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_decompose, sizes);
     if(err != CL_SUCCESS) goto error;
 
-    // indirectly give gpu some air to breathe (and to do display related stuff)
-    dt_iop_nap(darktable.opencl->micro_nap);
-
     // now immediately run the synthesis for the current scale, accumulating the details into dev_out
     dt_opencl_set_kernel_arg(devid, gd->kernel_synthesize, 0, sizeof(cl_mem), (void *)&dev_out);
     dt_opencl_set_kernel_arg(devid, gd->kernel_synthesize, 1, sizeof(cl_mem), (void *)&dev_out);
@@ -478,9 +475,6 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_synthesize, sizes);
     if(err != CL_SUCCESS) goto error;
 
-    // indirectly give gpu some air to breathe (and to do display related stuff)
-    dt_iop_nap(darktable.opencl->micro_nap);
-
     // swap scratch buffers
     if (scale == 0) dev_buf1 = dev_tmp2;
     void* tmp = dev_buf2;
@@ -494,8 +488,6 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
 
   err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_addbuffers, sizes);
   if(err != CL_SUCCESS) goto error;
-
-  dt_opencl_finish(devid);
 
   dt_opencl_release_mem_object(dev_filter);
   dt_opencl_release_mem_object(dev_tmp);
@@ -598,9 +590,6 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
 
     err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_decompose, sizes);
     if(err != CL_SUCCESS) goto error;
-
-    // indirectly give gpu some air to breathe (and to do display related stuff)
-    dt_iop_nap(dt_opencl_micro_nap(devid));
   }
 
   /* now synthesize again */
@@ -631,12 +620,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
 
     err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_synthesize, sizes);
     if(err != CL_SUCCESS) goto error;
-
-    // indirectly give gpu some air to breathe (and to do display related stuff)
-    dt_iop_nap(dt_opencl_micro_nap(devid));
   }
-
-  dt_opencl_finish(devid);
 
   dt_opencl_release_mem_object(dev_filter);
   dt_opencl_release_mem_object(dev_tmp);
@@ -757,7 +741,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *params, dt_dev
   for(int k = (int)MIN(pipe->iwidth, pipe->iheight); k; k >>= 1) l++;
   d->octaves = MIN(BANDS, l);
 
-  piece->force_opencl_cache = TRUE;
+  piece->cache_output_on_ram = TRUE;
 }
 
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)

@@ -124,6 +124,7 @@ dt_collection_t *dt_collection_new()
 void dt_collection_free(const dt_collection_t *collection)
 {
   dt_free(collection->query);
+  dt_free(collection->params.text_filter);
   g_strfreev(collection->where_ext);
   if(_collection_count_stmt)
   {
@@ -1809,35 +1810,44 @@ static void _update_recentcollections()
     if(IS_NULL_PTR(line)) continue;
     if(!strcmp(line, buf))
     {
-      snprintf(confname, sizeof(confname), "plugins/lighttable/recentcollect/pos%1d", k);
       n = k;
       found_duplicate = TRUE;
       break;
     }
   }
 
-  // Shift all history items one step behind
-  int shifted_index = num_items;
-  shifted_index -= found_duplicate ? 1 : 0;
+  // Shift all history items one step behind. When the history is already full,
+  // the last item has no destination slot and must be dropped before moving
+  // the remaining entries down.
+  const int max_items = CLAMP(dt_conf_get_int("plugins/lighttable/recentcollect/max_items"), 1,
+                              NUM_LAST_COLLECTIONS);
+  int shifted_index = MIN(num_items - (found_duplicate ? 1 : 0), max_items);
   for(int k = num_items - 1; k > -1; k--)
   {
     if(k == n) continue; // this is the duplicate of current collection we found, skip it
 
     // Get old records
     snprintf(confname, sizeof(confname), "plugins/lighttable/recentcollect/line%1d", k);
-    const gchar *line1 = dt_conf_get_string_const(confname);
+    gchar *line1 = dt_conf_get_string(confname);
     snprintf(confname, sizeof(confname), "plugins/lighttable/recentcollect/pos%1d", k);
     uint32_t pos1 = dt_conf_get_int(confname);
 
     // Write new records shifted by 1 slot
-    if(line1 && line1[0] != '\0' && shifted_index < NUM_LAST_COLLECTIONS)
+    if(IS_NULL_PTR(line1) || line1[0] == '\0')
+    {
+      dt_free(line1);
+      continue;
+    }
+
+    if(shifted_index >= 0 && shifted_index < max_items)
     {
       snprintf(confname, sizeof(confname), "plugins/lighttable/recentcollect/line%1d", shifted_index);
       dt_conf_set_string(confname, line1);
       snprintf(confname, sizeof(confname), "plugins/lighttable/recentcollect/pos%1d", shifted_index);
       dt_conf_set_int(confname, pos1);
-      shifted_index -= 1;
     }
+    shifted_index -= 1;
+    dt_free(line1);
   }
 
   // Prepend current collection on top of history
@@ -1845,7 +1855,7 @@ static void _update_recentcollections()
 
   // Increment items if we didn't find a duplicate
   num_items += found_duplicate ? 0 : 1;
-  dt_conf_set_int("plugins/lighttable/recentcollect/num_items", CLAMP(num_items, 1, NUM_LAST_COLLECTIONS));
+  dt_conf_set_int("plugins/lighttable/recentcollect/num_items", CLAMP(num_items, 1, max_items));
 }
 
 

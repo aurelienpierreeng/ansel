@@ -207,8 +207,8 @@ Build:
                               (default: $BUILD_TYPE_DEFAULT)
    --build-generator <string> Build tool
                               (default: Ninja)
-	 --build-package            Build a binary package with only generic optimizations, for portability.
-															(default: disabled)
+   --build-package            Build a binary package with only generic optimizations, for portability.
+                              (default: disabled)
 
 -j --jobs <integer>           Number of tasks
                               (default: number of CPUs)
@@ -216,11 +216,11 @@ Build:
    --asan                     Enable address sanitizer options
                               (default: disabled)
 
-	 --cccompiler               C Compiler (default: gcc)
-	                            (alternative: clang)
+   --cccompiler               C Compiler (default: gcc)
+                              (alternative: clang)
 
-	 --cxxcompiler              C++ Compiler (default: g++)
-	                            (alternative: clang++)
+   --cxxcompiler              C++ Compiler (default: g++)
+                              (alternative: clang++)
 
 Actual actions:
    --skip-build               Configure but exit before building the binaries
@@ -237,11 +237,11 @@ Cleanup actions:
 
 Update actions:
    --update                   Run 'git pull' to update the source code and submodules
-	                            from the project master branch.
-	                            Git needs to be installed on the computer.
-															(default: disabled)
-	 --skip-lensfun    					Skip lensfun data update after installation
-															(default: disabled)
+                              from the project master branch.
+                              Git needs to be installed on the computer.
+                              (default: disabled)
+   --skip-lensfun             Skip lensfun data update after installation
+                              (default: disabled)
 
 
 Features:
@@ -284,7 +284,7 @@ num_cpu()
 	SunOS)
 		ncpu=$(/usr/sbin/psrinfo |wc -l)
 		;;
-	Linux|MINGW64*)
+	Linux|MSYS*|MINGW*|UCRT*|CLANG*)
 		if [ -r /proc/cpuinfo ]; then
 			ncpu=$(grep -c "^processor" /proc/cpuinfo)
 		elif [ -x /sbin/sysctl ]; then
@@ -298,7 +298,7 @@ num_cpu()
 		ncpu=$(/usr/sbin/sysctl -n machdep.cpu.core_count 2>/dev/null)
 		;;
 	*)
-		printf "warning: unable to determine number of CPUs on $platform\n"
+		printf "warning: unable to determine number of CPUs on $platform\n" >&2
 		ncpu=-1
 		;;
 	esac
@@ -437,6 +437,16 @@ else
 	CMAKE_MORE_OPTIONS="${CMAKE_MORE_OPTIONS} -DBINARY_PACKAGE_BUILD=OFF"
 fi
 
+# Choose between a parallel install or regular, depending on the CMake version and generator
+CMAKE_MAJOR=$(cmake --version | sed -n 's/^cmake version \([0-9][0-9]*\)\..*/\1/p' | head -n 1)
+CMAKE_MINOR=$(cmake --version | sed -n 's/^cmake version [0-9][0-9]*\.\([0-9][0-9]*\).*/\1/p' | head -n 1)
+INSTALL_TARGET="$TARGET"
+if [ -n "$CMAKE_MAJOR" ] && [ -n "$CMAKE_MINOR" ] \
+	&& [ "$TARGET" = "install" ] && [[ "$BUILD_GENERATOR" =~ ^Ninja ]] \
+	&& { [ "$CMAKE_MAJOR" -gt 3 ] || { [ "$CMAKE_MAJOR" -eq 3 ] && [ "$CMAKE_MINOR" -ge 30 ]; }; }; then
+	INSTALL_TARGET="install/parallel"
+fi
+
 # ---------------------------------------------------------------------------
 # Let's go
 # ---------------------------------------------------------------------------
@@ -449,6 +459,7 @@ Installation prefix: $INSTALL_PREFIX
 Build type:          $BUILD_TYPE
 Build generator:     $BUILD_GENERATOR
 Build tasks:         $MAKE_TASKS
+Install target:      $INSTALL_TARGET
 CPU Architecture:    $CPU_ARCHITECTURE
 Compiler:            $CC_COMPILER $CXX_COMPILER
 Skip Lensfun update: $([ $SKIP_UPDATE_LENSFUN -eq 1 ] && echo "Yes" || echo "No")
@@ -471,6 +482,8 @@ if [ $DO_CLEAN_INSTALL -gt 0 ] ; then
 	else
 		log err "File not found: $MANIFEST_FILE"
 	fi
+	log warn "Cleaning directory ["$INSTALL_PREFIX"]: it will erase all the files in this path"
+	clean_build $FORCE_CLEAN "$INSTALL_PREFIX"
 fi
 
 if [ $DO_CLEAN_BUILD -gt 0 ] ; then
@@ -495,7 +508,7 @@ fi
 
 cmd_config="CXX=${CXX_COMPILER} CC=${CC_COMPILER} ${ASAN_FLAGS}cmake -G \"$BUILD_GENERATOR\" -DCMAKE_INSTALL_PREFIX=${INSTALL_PREFIX} -DCMAKE_BUILD_TYPE=${BUILD_TYPE} ${CMAKE_MORE_OPTIONS} \"$DT_SRC_DIR\""
 cmd_build="cmake --build "$BUILD_DIR" -- -j$MAKE_TASKS"
-cmd_install="${SUDO}cmake --build \"$BUILD_DIR\" --target $TARGET -- -j$MAKE_TASKS"
+cmd_install="${SUDO}cmake --build \"$BUILD_DIR\" --target $INSTALL_TARGET -- -j$MAKE_TASKS"
 
 cat <<EOF
 
@@ -551,23 +564,17 @@ eval "$cmd_install"
 if [ $DO_INSTALL ] ; then
 	if [ -f "$INSTALL_PREFIX/bin/ansel" ]; then
 		[ ! -d "/usr/local/bin/" ] && $SUDO mkdir -p /usr/local/bin/
-		[ -f "/usr/local/bin/ansel" ] && $SUDO rm /usr/local/bin/ansel
-
-		$SUDO ln -s "$INSTALL_PREFIX"/bin/ansel /usr/local/bin/ansel
+		$SUDO ln -sfn "$INSTALL_PREFIX"/bin/ansel /usr/local/bin/ansel
 	fi
 
 	if [ -f "$INSTALL_PREFIX/bin/ansel-cli" ]; then
 		[ ! -d "/usr/local/bin/" ] && $SUDO mkdir -p /usr/local/bin/
-		[ -f "/usr/local/bin/ansel-cli" ] && $SUDO rm /usr/local/bin/ansel-cli
-
-		$SUDO ln -s "$INSTALL_PREFIX"/bin/ansel-cli /usr/local/bin/ansel-cli
+		$SUDO ln -sfn "$INSTALL_PREFIX"/bin/ansel-cli /usr/local/bin/ansel-cli
 	fi
 
 	if [ -f "$INSTALL_PREFIX/share/applications/photos.ansel.ansel.desktop" ]; then
 		[ ! -d "/usr/share/applications/" ] && $SUDO mkdir -p /usr/share/applications/
-		[ -f "/usr/share/applications/ansel.desktop" ] && $SUDO rm /usr/share/applications/ansel.desktop
-
-		$SUDO ln -s "$INSTALL_PREFIX"/share/applications/photos.ansel.ansel.desktop /usr/share/applications/ansel.desktop
+		$SUDO ln -sfn "$INSTALL_PREFIX"/share/applications/photos.ansel.ansel.desktop /usr/share/applications/ansel.desktop
 	fi
 fi
 # update Lensfun

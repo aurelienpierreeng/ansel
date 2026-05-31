@@ -1801,32 +1801,27 @@ static void _switch_cursors(struct dt_iop_module_t *self)
   dt_iop_toneequalizer_gui_data_t *g = (dt_iop_toneequalizer_gui_data_t *)self->gui_data;
   if(IS_NULL_PTR(g) || !self->dev->gui_attached) return;
 
-  GtkWidget *widget = dt_ui_main_window(darktable.gui->ui);
-
-  // if we are editing masks or using colour-pickers, do not display controls
-  if(!sanity_check(self) || in_mask_editing(self) || dt_iop_color_picker_is_visible(self->dev))
-  {
-    // display default cursor
-    GdkCursor *const cursor = gdk_cursor_new_from_name(gdk_display_get_default(), "default");
-    gdk_window_set_cursor(gtk_widget_get_window(widget), cursor);
-    g_object_unref(cursor);
-
-    return;
-  }
-
   if(!self->expanded)
   {
     // if module lost focus or is disabled
     // do nothing and let the app decide
     return;
   }
+  else if(!sanity_check(self) || in_mask_editing(self) || dt_iop_color_picker_is_visible(self->dev))
+  {
+    // if we are editing masks or using colour-pickers, do not display controls
+    
+    // display default cursor
+    dt_control_set_cursor_visible(TRUE);
+    dt_control_queue_cursor_by_name("default");
+    return;
+  }
   else if((self->dev->pipe->processing || self->dev->preview_pipe->processing) && g->cursor_valid)
   {
     // if pipe is busy or dirty but cursor is on preview,
     // display waiting cursor while pipe reprocesses
-    GdkCursor *const cursor = gdk_cursor_new_from_name(gdk_display_get_default(), "wait");
-    gdk_window_set_cursor(gtk_widget_get_window(widget), cursor);
-    g_object_unref(cursor);
+    dt_control_set_cursor_visible(TRUE);
+    dt_control_queue_cursor_by_name("wait");
 
     dt_control_queue_redraw_center();
   }
@@ -1834,9 +1829,7 @@ static void _switch_cursors(struct dt_iop_module_t *self)
   {
     // if pipe is clean and idle and cursor is on preview,
     // hide GTK cursor because we display our custom one
-    dt_control_change_cursor(GDK_BLANK_CURSOR);
-    // set it in control->cursor in case it's run from mouse_moved event
-    dt_control_set_cursor(GDK_BLANK_CURSOR);
+    dt_control_set_cursor_visible(FALSE);
     dt_control_hinter_message(darktable.control,
                               _("scroll over image to change tone exposure\n"
                                 "shift+scroll for large steps; "
@@ -1848,9 +1841,8 @@ static void _switch_cursors(struct dt_iop_module_t *self)
   {
     // if module is active and opened but cursor is out of the preview,
     // display default cursor
-    GdkCursor *const cursor = gdk_cursor_new_from_name(gdk_display_get_default(), "default");
-    gdk_window_set_cursor(gtk_widget_get_window(widget), cursor);
-    g_object_unref(cursor);
+    dt_control_set_cursor_visible(TRUE);
+    dt_control_queue_cursor_by_name("default");
 
     dt_control_queue_redraw_center();
   }
@@ -1858,9 +1850,8 @@ static void _switch_cursors(struct dt_iop_module_t *self)
   {
     // in any other situation where module has focus,
     // reset the cursor but don't launch a redraw
-    GdkCursor *const cursor = gdk_cursor_new_from_name(gdk_display_get_default(), "default");
-    gdk_window_set_cursor(gtk_widget_get_window(widget), cursor);
-    g_object_unref(cursor);
+    dt_control_set_cursor_visible(TRUE);
+    dt_control_queue_cursor_by_name("default");
   }
 }
 
@@ -1962,10 +1953,7 @@ int mouse_leave(struct dt_iop_module_t *self)
   g->area_active_node = -1;
 
   // display default cursor
-  GtkWidget *widget = dt_ui_main_window(darktable.gui->ui);
-  GdkCursor *cursor = gdk_cursor_new_from_name(gdk_display_get_default(), "default");
-  gdk_window_set_cursor(gtk_widget_get_window(widget), cursor);
-  g_object_unref(cursor);
+  dt_control_queue_cursor_by_name("default");
   dt_control_queue_redraw_center();
   gtk_widget_queue_draw(GTK_WIDGET(g->area));
 
@@ -2194,6 +2182,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
 
   dt_develop_t *dev = self->dev;
   dt_iop_toneequalizer_gui_data_t *g = (dt_iop_toneequalizer_gui_data_t *)self->gui_data;
+  if(IS_NULL_PTR(g)) return;
 
   // If the darkroom picker owns the center view, keep tone equalizer overlays out of the way.
   if(in_mask_editing(self) || dt_iop_color_picker_is_visible(dev)) return;
@@ -2228,8 +2217,6 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
     dt_simd_memcpy(g->factors, factors, PIXEL_CHAN);
     sigma = g->sigma;
   }
-
-  dt_iop_gui_leave_critical_section(self);
 
   if(preview_entry && preview_width > 0 && preview_height > 0)
   {

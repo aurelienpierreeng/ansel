@@ -223,8 +223,8 @@ dt_dev_pixelpipe_cache_get_writable(dt_dev_pixelpipe_cache_t *cache, const uint6
  * @param flags Tracked OpenCL flags used when the payload was cached.
  * @return void* Borrowed `cl_mem`, or NULL if no matching cached payload exists.
  */
-void *dt_dev_pixelpipe_cache_borrow_cl_payload(struct dt_pixel_cache_entry_t *entry, void *host_ptr,
-                                               int devid, int width, int height, int bpp, int flags);
+void *dt_dev_pixelpipe_cache_borrow_cl_payload(struct dt_pixel_cache_entry_t *entry,
+                                               int devid, int width, int height, int bpp);
 
 /**
  * @brief Return a borrowed cached OpenCL payload to its cache entry.
@@ -347,8 +347,6 @@ gboolean dt_dev_pixelpipe_cache_flush_host_pinned_image(dt_dev_pixelpipe_cache_t
  * @param module Module for debug messages.
  * @param message Human-readable allocation context.
  * @param entry Owning cache entry.
- * @param reuse_pinned Whether pinned images may be reused from cache.
- * @param reuse_device Whether device-only images may be reused from cache.
  * @param[out] out_reused Optional flag set TRUE when the buffer came from cache reuse.
  * @param keep Optional OpenCL buffer that must not be flushed during retry.
  * @return void* OpenCL image (`cl_mem`) or NULL on failure.
@@ -356,7 +354,6 @@ gboolean dt_dev_pixelpipe_cache_flush_host_pinned_image(dt_dev_pixelpipe_cache_t
 void *dt_dev_pixelpipe_cache_get_cl_buffer(int devid, void *host_ptr, const struct dt_iop_roi_t *roi,
                                            size_t bpp, struct dt_iop_module_t *module,
                                            const char *message, struct dt_pixel_cache_entry_t *entry,
-                                           gboolean reuse_pinned, gboolean reuse_device,
                                            gboolean *out_reused, void *keep);
 
 /**
@@ -555,11 +552,8 @@ void dt_dev_pixelpipe_cache_flush(dt_dev_pixelpipe_cache_t *cache, const int id)
  * This is intentionally a lightweight VRAM-pressure/retry helper: it drops cached
  * `cl_mem` objects without taking per-entry write locks. Realtime paths rely on it
  * to free scratch OpenCL buffers without stalling in-flight renders.
- * 
- * @param keep OpenCL buffer to keep. Typically, you want to keep the input if you
- * are trying to make room for the output.
  */
-void dt_dev_pixelpipe_cache_flush_clmem(dt_dev_pixelpipe_cache_t *cache, const int devid, void *keep);
+void dt_dev_pixelpipe_cache_flush_clmem(dt_dev_pixelpipe_cache_t *cache, const int devid);
 
 
 /**

@@ -316,7 +316,7 @@ static gboolean _add_shape(GtkWidget *widget, dt_iop_module_t *self)
 
 
   const dt_masks_type_t masks_type = (type | DT_MASKS_CLONE);
-  dt_masks_creation_mode(self, masks_type);
+  dt_masks_creation_mode_enter(self, masks_type);
 
 
   dt_control_queue_redraw_center();

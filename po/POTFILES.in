@@ -14,7 +14,6 @@ build/src/iop/introspection_cacorrectrgb.c
 build/src/iop/introspection_censorize.c
 build/src/iop/introspection_channelmixer.c
 build/src/iop/introspection_channelmixerrgb.c
-build/src/iop/introspection_clahe.c
 build/src/iop/introspection_clipping.c
 build/src/iop/introspection_colisa.c
 build/src/iop/introspection_colorbalance.c
@@ -27,7 +26,6 @@ build/src/iop/introspection_colorize.c
 build/src/iop/introspection_colormapping.c
 build/src/iop/introspection_colorout.c
 build/src/iop/introspection_colorreconstruction.c
-build/src/iop/introspection_colortransfer.c
 build/src/iop/introspection_colorzones.c
 build/src/iop/introspection_crop.c
 build/src/iop/introspection_defringe.c
@@ -35,7 +33,6 @@ build/src/iop/introspection_demosaic.c
 build/src/iop/introspection_denoiseprofile.c
 build/src/iop/introspection_diffuse.c
 build/src/iop/introspection_dither.c
-build/src/iop/introspection_equalizer.c
 build/src/iop/introspection_exposure.c
 build/src/iop/introspection_filmic.c
 build/src/iop/introspection_filmicrgb.c
@@ -139,7 +136,6 @@ src/common/variables.c
 src/control/control.c
 src/control/crawler.c
 src/control/jobs/control_jobs.c
-src/control/jobs/develop_jobs.c
 src/control/jobs/film_jobs.c
 src/control/jobs/image_jobs.c
 src/control/jobs/import_jobs.c
@@ -166,7 +162,6 @@ src/dtgtk/preview_window.c
 src/dtgtk/thumbnail.c
 src/dtgtk/thumbnail_btn.c
 src/dtgtk/thumbtable.c
-src/external/wb_presets.c
 src/generate-cache/main.c
 src/gui/accelerators.c
 src/gui/gtk.c
@@ -198,7 +193,6 @@ src/imageio/format/png.c
 src/imageio/format/ppm.c
 src/imageio/format/tiff.c
 src/imageio/format/webp.c
-src/imageio/format/xcf.c
 src/imageio/storage/disk.c
 src/imageio/storage/gallery.c
 src/imageio/storage/piwigo.c
@@ -225,7 +219,6 @@ src/iop/censorize.c
 src/iop/channelmixer.c
 src/iop/channelmixerrgb.c
 src/iop/choleski.h
-src/iop/clahe.c
 src/iop/clipping.c
 src/iop/colisa.c
 src/iop/colorbalance.c
@@ -238,7 +231,6 @@ src/iop/colorize.c
 src/iop/colormapping.c
 src/iop/colorout.c
 src/iop/colorreconstruction.c
-src/iop/colortransfer.c
 src/iop/colorzones.c
 src/iop/crop.c
 src/iop/defringe.c
@@ -246,7 +238,6 @@ src/iop/demosaic.c
 src/iop/denoiseprofile.c
 src/iop/diffuse.c
 src/iop/dither.c
-src/iop/equalizer.c
 src/iop/exposure.c
 src/iop/filmic.c
 src/iop/filmicrgb.c
@@ -322,9 +313,6 @@ src/libs/tagging.c
 src/libs/tools/filter.c
 src/libs/tools/lighttable.c
 src/libs/tools/module_toolbox.c
-src/lua/image.c
-src/lua/lualib.c
-src/lua/preferences.c
 src/views/darkroom.c
 src/views/lighttable.c
 src/views/map.c
@@ -335,5 +323,19 @@ tools/release/create_release.sh
 tools/release/devel-stats.sh
 tools/release/generate-authors.sh
 tools/generate_prefs.xsl
+src/common/lut_viewer.c
+src/develop/dev_pixelpipe.c
+src/develop/pixelpipe_raster_masks.c
+src/iop/basebuffer.c
+src/iop/colorequal.c
+src/iop/colorprimaries.c
+src/iop/crystgrain.c
+src/iop/detailmask.c
+src/iop/drawlayer.c
+src/iop/drawlayer/io.c
+src/iop/drawlayer/layers.c
+src/iop/drawlayer/runtime.c
+src/iop/drawlayer/worker.c
+src/iop/splittoningrgb.c
 # files added by intltool-prepare
 packaging/macosx/open.desktop

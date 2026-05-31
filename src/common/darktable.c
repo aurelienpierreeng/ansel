@@ -127,6 +127,7 @@
 #include "control/jobs/film_jobs.h"
 #include "control/signal.h"
 #include "develop/blend.h"
+#include "develop/dev_pixelpipe.h"
 #include "develop/imageop.h"
 
 #include "gui/gtk.h"
@@ -138,8 +139,12 @@
 #include "conf_gen.h"
 
 #include <errno.h>
+#if !defined(_WIN32) && !defined(__APPLE__)
+#include <fontconfig/fontconfig.h>
+#endif
 #include <glib.h>
 #include <glib/gstdio.h>
+#include <pango/pangocairo.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -171,6 +176,12 @@
 #endif
 
 darktable_t darktable;
+
+#if !defined(_WIN32) && !defined(__APPLE__)
+typedef struct _PangoFcFontMap PangoFcFontMap;
+extern GType pango_fc_font_map_get_type(void);
+extern void pango_fc_font_map_shutdown(PangoFcFontMap *fcfontmap);
+#endif
 
 /**
  * GLib 2.82 routes GTK/GDK diagnostics through the structured log writer, so
@@ -225,7 +236,7 @@ static int usage(const char *argv0)
   printf("  --cachedir <user cache directory>\n");
   printf("  --conf <key>=<value>\n");
   printf("  --configdir <user config directory>\n");
-  printf("  -d {all,cache,camctl,camsupport,colorprofile,control,demosaic,dev,history,imageio,import,\n");
+  printf("  -d {all,cache,camctl,camsupport,colorprofile,control,demosaic,dev,gtk,history,imageio,import,\n");
   printf("      input,ioporder,lighttable,lua,masks,memory,nan,nocache_reuse,opencl,params,\n");
   printf("      perf,pipe,pipecache,print,pwstorage,signal,sql,shortcuts,tiling,undo,verbose}\n");
   printf("  --d-signal <signal> \n");
@@ -625,6 +636,8 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
           darktable.unmuted |= DT_DEBUG_CONTROL; // enable debugging for scheduler module
         else if(!strcmp(argv[k + 1], "dev"))
           darktable.unmuted |= DT_DEBUG_DEV; // develop module
+        else if(!strcmp(argv[k + 1], "gtk"))
+          darktable.unmuted |= DT_DEBUG_GTK; // GTK widgets and display setup
         else if(!strcmp(argv[k + 1], "input"))
           darktable.unmuted |= DT_DEBUG_INPUT; // input devices
         else if(!strcmp(argv[k + 1], "pipecache"))
@@ -745,6 +758,7 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
         CHKSIGDBG(DT_SIGNAL_DEVELOP_MODULE_REMOVE);
         CHKSIGDBG(DT_SIGNAL_DEVELOP_MODULE_MOVED);
         CHKSIGDBG(DT_SIGNAL_DEVELOP_IMAGE_CHANGED);
+        CHKSIGDBG(DT_SIGNAL_DARKROOM_UI_CHANGED);
         CHKSIGDBG(DT_SIGNAL_IMAGE_LOADED);
         CHKSIGDBG(DT_SIGNAL_CONTROL_PROFILE_CHANGED);
         CHKSIGDBG(DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED);
@@ -1270,6 +1284,14 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   return 0;
 }
 
+static void _dt_drain_main_context(const int max_iters)
+{
+  if(max_iters <= 0) return;
+  GMainContext *ctx = g_main_context_default();
+  for(int i = 0; i < max_iters && g_main_context_pending(ctx); i++)
+    g_main_context_iteration(ctx, FALSE);
+}
+
 void dt_cleanup()
 {
   const int init_gui = (!IS_NULL_PTR(darktable.gui));
@@ -1299,6 +1321,15 @@ void dt_cleanup()
 
   if(init_gui)
   {
+    if(!IS_NULL_PTR(darktable.gui->ui))
+      dt_ui_cleanup_titlebar(darktable.gui->ui);
+
+    if(darktable.gui->surface)
+    {
+      cairo_surface_destroy(darktable.gui->surface);
+      darktable.gui->surface = NULL;
+    }
+
     // hide main window and do rest of the cleanup in the background
     gtk_widget_hide(dt_ui_main_window(darktable.gui->ui));
 
@@ -1309,10 +1340,13 @@ void dt_cleanup()
     // processing lighttable-side jobs while shutdown is tearing down modules.
     dt_control_shutdown(darktable.control);
 
+    _dt_drain_main_context(256);
+
     dt_lib_cleanup(darktable.lib);
     dt_free(darktable.lib);
   }
 
+  dt_dev_pixelpipe_cache_wait_dump_pending("app-cleanup-before-view-manager");
   dt_view_manager_cleanup(darktable.view_manager);
   dt_free(darktable.view_manager);
 
@@ -1323,9 +1357,20 @@ void dt_cleanup()
 
     dt_gui_presets_cleanup();
 
+    if(!IS_NULL_PTR(darktable.gui->ui))
+      dt_ui_cleanup_main_table(darktable.gui->ui);
+
+    /* Force GTK to teardown the toplevel widget tree now, while the main
+     * context still exists. This helps release style/cairo resources that
+     * would otherwise stay alive until process exit. */
+    GtkWidget *main_window = dt_ui_main_window(darktable.gui->ui);
+    if(GTK_IS_WIDGET(main_window))
+      gtk_widget_destroy(main_window);
+
     dt_gui_gtk_t *gui = darktable.gui;
     darktable.gui = NULL;
     dt_accels_cleanup(gui->accels);
+    dt_free(gui->ui);
     dt_free(gui);
   }
 
@@ -1432,6 +1477,9 @@ void dt_cleanup()
   }
   dt_free(darktable.control);
 
+  dt_control_signal_cleanup(darktable.signals);
+  darktable.signals = NULL;
+
   dt_capabilities_cleanup();
 
   dt_pthread_mutex_destroy(&(darktable.plugin_threadsafe));
@@ -1442,6 +1490,29 @@ void dt_cleanup()
   dt_pthread_rwlock_destroy(&(darktable.database_threadsafe));
 
   dt_exif_cleanup();
+
+  /* Stop GLib pooled workers first, then release the current thread default
+   * PangoCairo font map before finalizing Fontconfig caches. */
+  if(init_gui)
+  {
+    g_thread_pool_stop_unused_threads();
+#if !defined(_WIN32) && !defined(__APPLE__)
+    PangoFontMap *fontmap = pango_cairo_font_map_get_default();
+    gboolean use_fontconfig_backend = FALSE;
+
+    if(fontmap && PANGO_IS_CAIRO_FONT_MAP(fontmap))
+    {
+      const cairo_font_type_t font_backend
+          = pango_cairo_font_map_get_font_type(PANGO_CAIRO_FONT_MAP(fontmap));
+      use_fontconfig_backend = (font_backend == CAIRO_FONT_TYPE_FT);
+    }
+
+    if(use_fontconfig_backend && fontmap && g_type_is_a(G_OBJECT_TYPE(fontmap), pango_fc_font_map_get_type()))
+      pango_fc_font_map_shutdown((PangoFcFontMap *)fontmap);
+    if(use_fontconfig_backend) FcFini();
+#endif
+    pango_cairo_font_map_set_default(NULL);
+  }
 }
 
 void dt_print(dt_debug_thread_t thread, const char *msg, ...)

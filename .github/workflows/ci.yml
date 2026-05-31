@@ -80,6 +80,7 @@ jobs:
         os:
           - { label: ubuntu-24.04, code: noble }
         compiler:
+          - { compiler: GNU12,  CC: gcc-12,   CXX: g++-12,   GCC_VER: "12", LLVM_VER: "" }
           - { compiler: GNU14,  CC: gcc-14,   CXX: g++-14,   GCC_VER: "14", LLVM_VER: "" }
           - { compiler: LLVM20, CC: clang-20, CXX: clang++-20, GCC_VER: "", LLVM_VER: "20" }
         btype:
@@ -102,9 +103,8 @@ jobs:
       TARGET: ${{ matrix.target }}
       DARKTABLE_CLI: ${{ github.workspace }}/install/bin/ansel-cli
     steps:
-      - name: Enable compiler repositories
+      - name: Enable Ubuntu repositories
         run: |
-          sudo add-apt-repository ppa:ubuntu-toolchain-r/test
           sudo add-apt-repository -y universe
           sudo add-apt-repository -y multiverse
       - name: Setup LLVM 20
@@ -131,6 +131,7 @@ jobs:
           ./src/.ci/ci-script.sh;
       - name: Check if it runs
         run: |
+          set +e
           ${INSTALL_PREFIX}/bin/ansel --version || true
           ${INSTALL_PREFIX}/bin/ansel-cli \
                  --width 2048 --height 2048 \
@@ -142,6 +143,26 @@ jobs:
                  --conf worker_threads=4 -t 4 \
                  --conf plugins/lighttable/export/force_lcms2=FALSE \
                  --conf plugins/lighttable/export/iccintent=0
+          status=$?
+
+          mkdir -p "${RUNNER_TEMP}/ansel-debug"
+          cp -v /tmp/ansel_bt_* "${RUNNER_TEMP}/ansel-debug/" 2>/dev/null || true
+
+          for f in /tmp/ansel_bt_*; do
+            [ -f "$f" ] && {
+              echo "===== $f ====="
+              cat "$f"
+            }
+          done
+
+          exit $status
+      - name: Upload ansel backtrace
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ansel-backtrace-${{ matrix.os.code }}-${{ matrix.compiler.compiler }}-${{ matrix.target }}-${{ matrix.btype }}
+          path: ${{ runner.temp }}/ansel-debug/*
+          if-no-files-found: ignore
       - name: Run Integration test suite
         #integration test can get "stuck" plus there are couple of errors here, so it needs to be addressed first
         if: ${{ false }}

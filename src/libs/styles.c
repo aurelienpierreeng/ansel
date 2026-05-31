@@ -170,8 +170,9 @@ static void _gui_styles_update_view(dt_lib_styles_t *d)
 
       if(style->description && *style->description)
       {
-        tooltip
-            = g_strconcat("<b>", g_markup_escape_text(style->description, -1), "</b>\n", items_string, NULL);
+        gchar *escaped_description = g_markup_escape_text(style->description, -1);
+        tooltip = g_strconcat("<b>", escaped_description, "</b>\n", items_string, NULL);
+        dt_free(escaped_description);
       }
       else
       {
@@ -911,6 +912,7 @@ void gui_init(dt_lib_module_t *self)
 
 void gui_cleanup(dt_lib_module_t *self)
 {
+  if(IS_NULL_PTR(self->data)) return;
   dt_lib_cancel_postponed_update(self);
 
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_styles_changed_callback), self);

@@ -582,7 +582,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   float *in = (float *)ivoid;
   float *out = (float *)ovoid;
 
-  const float scale = fmaxf(dt_dev_get_module_scale(pipe, roi_in), 1.f);
+  const float scale = dt_dev_get_module_scale(pipe, roi_in);
   const float sigma_r = fmax(data->range, 0.1f);
   const float sigma_s = fmax(data->spatial, 1.0f) / scale;
   const float hue = hue_conversion(data->hue); // convert to LCH hue which better fits to Lab colorspace
@@ -639,8 +639,6 @@ typedef struct dt_iop_colorreconstruct_bilateral_cl_t
 static void dt_iop_colorreconstruct_bilateral_free_cl(dt_iop_colorreconstruct_bilateral_cl_t *b)
 {
   if(IS_NULL_PTR(b)) return;
-  // be sure we're done with the memory:
-  dt_opencl_finish(b->devid);
   // free device mem
   dt_opencl_release_mem_object(b->dev_grid);
   dt_opencl_release_mem_object(b->dev_grid_tmp);

@@ -948,7 +948,7 @@ static void _ioporder_rebuild_graph(dt_lib_module_t *self)
   x += DT_IOPORDER_GRAPH_NODE_STEP;
 
   /* Walk the sorted module list and instantiate one graph node per visible module. */
-  for(GList *modules = darktable.develop ? darktable.develop->iop : NULL; modules; modules = g_list_next(modules))
+  for(GList *modules = darktable.develop->iop; modules; modules = g_list_next(modules))
   {
     dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
     if(!_ioporder_module_is_graph_visible(module)) continue;
@@ -1773,6 +1773,7 @@ void gui_init(dt_lib_module_t *self)
 
 void gui_cleanup(dt_lib_module_t *self)
 {
+  if(IS_NULL_PTR(self->data)) return;
   dt_lib_ioporder_t *d = (dt_lib_ioporder_t *)self->data;
   if(IS_NULL_PTR(d)) return;
 

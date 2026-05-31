@@ -1905,7 +1905,6 @@ static int _brush_events_button_released(struct dt_iop_module_t *module, double 
       mask_gui->guipoints_payload = NULL;
       mask_gui->guipoints_count = 0;
 
-      // we save the form and quit creation mode
       dt_masks_gui_form_save_creation(darktable.develop, creation_module, mask_form, mask_gui);
 
       if(mask_form->type & (DT_MASKS_CLONE | DT_MASKS_NON_CLONE))
@@ -2297,10 +2296,12 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
       cairo_save(cr);
       dt_gui_gtk_set_source_rgba(cr, DT_GUI_COLOR_BRUSH_CURSOR, opacity);
       cairo_set_line_width(cr, DT_DRAW_SIZE_LINE / zoom_scale);
+      cairo_new_path(cr);
       cairo_arc(cr, xpos, ypos, radius1, 0, 2.0 * M_PI);
       cairo_fill_preserve(cr);
       cairo_set_source_rgba(cr, .8, .8, .8, .8);
       cairo_stroke(cr);
+      cairo_new_path(cr);
       cairo_arc(cr, xpos, ypos, radius2, 0, 2.0 * M_PI);
       dt_draw_stroke_line(DT_MASKS_DASH_STICK, FALSE, cr, FALSE, zoom_scale, CAIRO_LINE_CAP_ROUND);
 
@@ -2406,6 +2407,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
 
       cairo_set_line_width(cr, DT_DRAW_SIZE_LINE / zoom_scale);
       dt_gui_gtk_set_source_rgba(cr, DT_GUI_COLOR_BRUSH_CURSOR, opacity);
+      cairo_new_path(cr);
       cairo_arc(cr, guipoints[2 * (mask_gui->guipoints_count - 1)],
                 guipoints[2 * (mask_gui->guipoints_count - 1) + 1],
                 radius, 0, 2.0 * M_PI);
@@ -2413,6 +2415,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
       cairo_set_source_rgba(cr, .8, .8, .8, .8);
       cairo_stroke(cr);
       dt_draw_set_dash_style(cr, DT_MASKS_DASH_STICK, zoom_scale);
+      cairo_new_path(cr);
       cairo_arc(cr, guipoints[2 * (mask_gui->guipoints_count - 1)],
                 guipoints[2 * (mask_gui->guipoints_count - 1) + 1], masks_border * min_iwd_iht, 0,
                 2.0 * M_PI);

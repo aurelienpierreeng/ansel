@@ -192,6 +192,11 @@ void gui_init(dt_lib_module_t *self)
 
 void gui_cleanup(dt_lib_module_t *self)
 {
+  gchar *path = dt_accels_build_path(N_("Map/Actions"), N_("Thumbnail display"));
+  dt_accels_remove_accel(darktable.gui->accels, path, self);
+  dt_free(path);
+
+  if(IS_NULL_PTR(self->data)) return;
   dt_free(self->data);
 }
 

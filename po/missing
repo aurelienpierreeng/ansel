@@ -1,0 +1,14 @@
+src/common/lut_viewer.c
+src/develop/dev_pixelpipe.c
+src/develop/pixelpipe_raster_masks.c
+src/iop/basebuffer.c
+src/iop/colorequal.c
+src/iop/colorprimaries.c
+src/iop/crystgrain.c
+src/iop/detailmask.c
+src/iop/drawlayer.c
+src/iop/drawlayer/io.c
+src/iop/drawlayer/layers.c
+src/iop/drawlayer/runtime.c
+src/iop/drawlayer/worker.c
+src/iop/splittoningrgb.c

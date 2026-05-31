@@ -33,7 +33,7 @@
  * The members of interest are `dev->history`, `dev->iop`, `dev->iop_order`
  *
  * The first problem is simple : we have append mode (concatenate `devB->history` at the end of `devA->history`)
- * or appstart mode (concatenate `devB->history` at the start of `devA->history`), decided by user.
+ * or prepend mode (concatenate `devB->history` at the start of `devA->history`), decided by user.
  * Histories are commited to pipeline nodes ("popped") in the order of items.
  * Since each history item may overwrite any previous item targetting the same module,
  * this order defines which history takes precedence over the other, in case of conflicts.
@@ -1285,7 +1285,7 @@ static void _hm_renumber_history(GList *history)
 {
   /* Ensure each history item's `num` matches its position in the list.
    *
-   * After concatenation (append/appstart), list indices change. We renumber so that:
+   * After concatenation (append/prepend), list indices change. We renumber so that:
    * - debug output is consistent,
    * - DB write/read paths that assume `num` is sequential do not get confused.
    */
@@ -1340,7 +1340,7 @@ int dt_history_merge(dt_develop_t *dev_dest, dt_develop_t *dev_src, const int32_
    * Inputs:
    * - `mod_list` is the set of source module instances we want to paste.
    * - `merge_iop_order` decides whether we try to also merge pipeline ordering constraints.
-   * - `strategy` chooses whether the pasted history is appended or prepended (appstart) to destination history.
+   * - `strategy` chooses whether the pasted history is appended or prepended (prepend) to destination history.
    *
    * High-level algorithm:
    *  1) Invalidate destination redo tail (new edit semantics).
@@ -1348,7 +1348,7 @@ int dt_history_merge(dt_develop_t *dev_dest, dt_develop_t *dev_src, const int32_
    *  3) Ensure destination has all module instances required by `mod_list`.
    *  4) Build a temporary history: one history item per module (the last relevant source history item),
    *     but bound to the destination module ordering (which may have changed in step 2).
-   *  5) Concatenate temporary history with destination history (append/appstart), renumber, set history_end,
+   *  5) Concatenate temporary history with destination history (append/prepend), renumber, set history_end,
    *     pop into modules, and write to DB.
    *
    * Assumptions:
@@ -1432,7 +1432,7 @@ int dt_history_merge(dt_develop_t *dev_dest, dt_develop_t *dev_src, const int32_
   // Concatenate temporary history with destination history in the requested order.
   if(strategy == DT_HISTORY_MERGE_APPEND)
     dev_dest->history = g_list_concat(dev_dest->history, temp_history);
-  else // DT_HISTORY_MERGE_APPSTART
+  else // DT_HISTORY_MERGE_PREPEND
     dev_dest->history = g_list_concat(temp_history, dev_dest->history);
 
   // Don't g_list_free(temp_history), it belongs to dev_dst->history now

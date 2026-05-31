@@ -584,7 +584,9 @@ gboolean restart_required = FALSE;
         GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(widget));
         gtk_text_buffer_get_start_iter(buffer, &amp;start);
         gtk_text_buffer_get_end_iter(buffer, &amp;end);
-        dt_conf_set_string("</xsl:text><xsl:value-of select="name"/><xsl:text>", gtk_text_buffer_get_text(buffer, &amp;start, &amp;end, FALSE));
+        gchar *content = gtk_text_buffer_get_text(buffer, &amp;start, &amp;end, FALSE);
+        dt_conf_set_string("</xsl:text><xsl:value-of select="name"/><xsl:text>", content);
+        g_free(content);
      </xsl:text>
   </xsl:template>
 

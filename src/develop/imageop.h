@@ -176,7 +176,8 @@ typedef enum dt_iop_flags_t
   IOP_FLAGS_TAKE_NO_INPUT = 1 << 10,     // The module doesn't use input
   IOP_FLAGS_UNSAFE_COPY = 1 << 11,       // Unsafe to copy as part of history
   IOP_FLAGS_GUIDES_SPECIAL_DRAW = 1 << 12, // handle the grid drawing directly
-  IOP_FLAGS_INTERNAL_MASKS = 1 << 13     // Module uses masks internally, outside of blendops. This advertises the need to commit them to history unconditionnaly.
+  IOP_FLAGS_INTERNAL_MASKS = 1 << 13,     // Module uses masks internally, outside of blendops. This advertises the need to commit them to history unconditionnaly.
+  IOP_FLAGS_CPU_WRITES_OPENCL = 1 << 14  // Special case where the process() CPU path inits OpenCL vRAM output cache too
 } dt_iop_flags_t;
 
 typedef struct dt_iop_gui_data_t

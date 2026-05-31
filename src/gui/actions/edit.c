@@ -420,15 +420,15 @@ static gboolean history_append_checked_callback(GtkWidget *widget)
   return dt_conf_get_int("history/mode") == DT_HISTORY_MERGE_APPEND;
 }
 
-static gboolean history_appstart_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
+static gboolean history_prepend_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
-  dt_conf_set_int("history/mode", DT_HISTORY_MERGE_APPSTART);
+  dt_conf_set_int("history/mode", DT_HISTORY_MERGE_PREPEND);
   return TRUE;
 }
 
-static gboolean history_appstart_checked_callback(GtkWidget *widget)
+static gboolean history_prepend_checked_callback(GtkWidget *widget)
 {
-  return dt_conf_get_int("history/mode") == DT_HISTORY_MERGE_APPSTART;
+  return dt_conf_get_int("history/mode") == DT_HISTORY_MERGE_PREPEND;
 }
 
 static gboolean history_replace_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval,
@@ -490,11 +490,11 @@ void append_edit(GtkWidget **menus, GList **lists, const dt_menus_t index)
   add_top_submenu_entry(menus, lists, _("History pasting mode"), index);
   GtkWidget *parent = get_last_widget(lists);
 
+  add_sub_sub_menu_entry(menus, parent, lists, _("Prepend"), index, NULL,
+                         history_prepend_callback, history_prepend_checked_callback, NULL, NULL, 0, 0);
+
   add_sub_sub_menu_entry(menus, parent, lists, _("Append"), index, NULL,
                          history_append_callback, history_append_checked_callback, NULL, NULL, 0, 0);
-
-  add_sub_sub_menu_entry(menus, parent, lists, _("Appstart"), index, NULL,
-                         history_appstart_callback, history_appstart_checked_callback, NULL, NULL, 0, 0);
 
   add_sub_sub_menu_entry(menus, parent, lists, _("Replace"), index, NULL,
                          history_replace_callback, history_replace_checked_callback, NULL, NULL, 0, 0);

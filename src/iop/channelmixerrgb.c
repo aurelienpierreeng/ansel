@@ -2284,14 +2284,13 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   // if cursor is close from a node, remove the system pointer arrow to prevent hiding the spot behind it
   if(g->is_cursor_close)
   {
-    dt_control_set_cursor(GDK_BLANK_CURSOR);
+    dt_control_set_cursor_visible(FALSE);
   }
   else
   {
     // fall back to default cursor
-    GdkCursor *const cursor = gdk_cursor_new_from_name(gdk_display_get_default(), "default");
-    gdk_window_set_cursor(gtk_widget_get_window(dt_ui_main_window(darktable.gui->ui)), cursor);
-    g_object_unref(cursor);
+    dt_control_set_cursor_visible(TRUE);
+    dt_control_queue_cursor_by_name("default");
   }
 
   dt_control_queue_redraw_center();
@@ -2387,7 +2386,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   if(IS_NULL_PTR(work_profile)) return;
 
   const dt_iop_channelmixer_rgb_gui_data_t *g = (const dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
-  if(!g->is_profiling_started) return;
+  if(IS_NULL_PTR(g) || !g->is_profiling_started) return;
 
   // Rescale and shift Cairo drawing coordinates
   dt_develop_t *dev = self->dev;
@@ -4786,7 +4785,7 @@ void gui_init(struct dt_iop_module_t *self)
 
   gtk_box_pack_start(GTK_BOX(mixer_primaries), dt_ui_section_label_new(_("achromatic axis")), FALSE, FALSE, 0);
 
-  g->primaries_achromatic_hue = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), -1.f, 1.f, 0, 0, 3);
+  g->primaries_achromatic_hue = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), -2.f, 2.f, 0, 0, 3);
   dt_bauhaus_widget_set_label(g->primaries_achromatic_hue, N_("white hue"));
   dt_bauhaus_slider_set_factor(g->primaries_achromatic_hue, 90.f);
   dt_bauhaus_slider_set_format(g->primaries_achromatic_hue, "\302\260");

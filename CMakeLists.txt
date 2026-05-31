@@ -31,6 +31,12 @@ endif()
 
 set(CMAKE_C_STANDARD 11)
 
+if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.30)
+  # CMake parallelizes installation per subdirectory; install-time ordering
+  # dependencies therefore need to stay in the subdirectory that consumes them.
+  set_property(GLOBAL PROPERTY INSTALL_PARALLEL TRUE)
+endif()
+
 # Shell to use for scripts (prefer bash for bash-specific scripts)
 if(WIN32)
   if(CMAKE_SH)
@@ -55,16 +61,16 @@ file(GENERATE
   CONTENT
 "execute_process(
   COMMAND \"${CMAKE_COMMAND}\"
-    -DANSEL_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}\"
-    -DANSEL_AUTHORS_FILE=\"${ANSEL_AUTHORS_FILE}\"
-    -DANSEL_SH_EXECUTABLE=\"${ANSEL_SH_EXECUTABLE}\"
-    -DANSEL_BASE=release-3.9.0
-    -DANSEL_HEAD=HEAD
-    -P \"${CMAKE_SOURCE_DIR}/tools/generate-authors.cmake\"
+    \"-DANSEL_SOURCE_DIR=${CMAKE_SOURCE_DIR}\"
+    \"-DANSEL_AUTHORS_FILE=${ANSEL_AUTHORS_FILE}\"
+    \"-DANSEL_SH_EXECUTABLE=${ANSEL_SH_EXECUTABLE}\"
+    \"-DANSEL_BASE=release-3.9.0\"
+    \"-DANSEL_HEAD=HEAD\"
+    \"-P\"
+    \"${CMAKE_SOURCE_DIR}/tools/generate-authors.cmake\"
 )
 "
 )
-install(SCRIPT "${CMAKE_BINARY_DIR}/cmake/install_generate_authors.cmake")
 
 # Allow forcing the C/CPP compiler that is actually used during the compilation
 # to something other than what is used by the cmake run. This is useful when
@@ -166,14 +172,73 @@ endif()
 # Set build flags
 #
 
+if(WIN32 AND (CMAKE_C_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang"))
+  set(ANSEL_WIN32_CLANG ON)
+  # Force lld on Windows/Clang for all build modes.
+  string(APPEND CMAKE_EXE_LINKER_FLAGS " -fuse-ld=lld")
+  string(APPEND CMAKE_SHARED_LINKER_FLAGS " -fuse-ld=lld")
+  string(APPEND CMAKE_MODULE_LINKER_FLAGS " -fuse-ld=lld")
+  list(APPEND CMAKE_TRY_COMPILE_PLATFORM_VARIABLES
+    CMAKE_EXE_LINKER_FLAGS CMAKE_SHARED_LINKER_FLAGS CMAKE_MODULE_LINKER_FLAGS
+  )
+  list(REMOVE_DUPLICATES CMAKE_TRY_COMPILE_PLATFORM_VARIABLES)
+endif()
+
+# This enables LTO (`-flto`): https://gcc.gnu.org/onlinedocs/gccint/LTO-Overview.html
+# We keep it target-scoped and selectively disable it for known incompatible files.
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+  message(STATUS "IPO/LTO disabled for Debug configuration")
+  set(ANSEL_IPO_SUPPORTED OFF)
+elseif(WIN32 AND CMAKE_C_COMPILER_ID MATCHES "GNU")
+  # On MinGW/Windows, GNU ld does not support LTO at all, so we disable it on that platform.
+  message(STATUS "IPO/LTO disabled for MinGW/Windows with GNU toolchain")
+  set(ANSEL_IPO_SUPPORTED OFF)
+else()
+  if(ANSEL_WIN32_CLANG)
+    # On MinGW/Windows, Clang's default linker is ld.bfd which requires LLVMgold.dll for LTO,
+    # but that plugin does not load on Windows. So we force lld which supports LTO natively.
+    # This also fixes check_ipo_supported()'s try_compile probe which uses the same linker.
+    # Scope CMP0137 to this probe so try_compile() honors platform variables
+    # (including our linker flags) during check_ipo_supported(), without
+    # changing policy behavior for the rest of the project.
+    if(POLICY CMP0137)
+      cmake_policy(PUSH)
+      cmake_policy(SET CMP0137 NEW)
+    endif()
+  endif()
+
+  include(CheckIPOSupported)
+  check_ipo_supported(RESULT ANSEL_IPO_SUPPORTED OUTPUT ANSEL_IPO_ERROR)
+
+  # Reset
+  if(ANSEL_WIN32_CLANG AND POLICY CMP0137)
+    cmake_policy(POP)
+  endif()
+
+  if(ANSEL_IPO_SUPPORTED)
+    message(STATUS "IPO/LTO enabled")
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO TRUE)
+    set(CMAKE_C_FLAGS_IPO "-flto=auto")
+    set(CMAKE_CXX_FLAGS_IPO "-flto=auto")
+
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU")
+      set(CMAKE_C_FLAGS_IPO "${CMAKE_C_FLAGS_IPO} -fuse-linker-plugin")
+      set(CMAKE_CXX_FLAGS_IPO "${CMAKE_CXX_FLAGS_IPO} -fuse-linker-plugin")
+    endif()
+  else()
+    message(STATUS "IPO/LTO not supported: ${ANSEL_IPO_ERROR}")
+  endif()
+endif()
+
 ## Override default CMake build flags
 # Release flags
-set(CMAKE_C_FLAGS_RELEASE "-O3 -DNDEBUG" CACHE STRING "" FORCE)
-set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG" CACHE STRING "" FORCE)
+set(CMAKE_C_FLAGS_RELEASE "-O3 -DNDEBUG ${CMAKE_C_FLAGS_IPO}" CACHE STRING "" FORCE)
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG ${CMAKE_CXX_FLAGS_IPO}" CACHE STRING "" FORCE)
 
 # RelWithDebInfo flags
-set(CMAKE_C_FLAGS_RELWITHDEBINFO "-O3 -g3 -ggdb3 -DNDEBUG" CACHE STRING "" FORCE)
-set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -g3 -ggdb3 -DNDEBUG" CACHE STRING "" FORCE)
+set(CMAKE_C_FLAGS_RELWITHDEBINFO "-O3 -g3 -ggdb3 -DNDEBUG ${CMAKE_C_FLAGS_IPO}" CACHE STRING "" FORCE)
+set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -g3 -ggdb3 -DNDEBUG ${CMAKE_CXX_FLAGS_IPO}" CACHE STRING "" FORCE)
 
 # Debug flags
 set(CMAKE_C_FLAGS_DEBUG "-O0 -g3 -ggdb3 -D_DEBUG -fno-omit-frame-pointer -Werror -Wuninitialized -Wno-error=format-truncation" CACHE STRING "" FORCE)

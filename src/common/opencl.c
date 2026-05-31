@@ -187,6 +187,12 @@ gboolean dt_opencl_use_pinned_memory(const int devid)
   return cl->dev[devid].pinned_memory;
 }
 
+gboolean dt_opencl_is_pinned_memory(cl_mem mem)
+{
+  const cl_mem_flags flags = dt_opencl_get_mem_flags(mem);
+  return (flags & CL_MEM_USE_HOST_PTR) || (flags & CL_MEM_ALLOC_HOST_PTR);
+}
+
 void dt_opencl_write_device_config(const int devid)
 {
   if(devid < 0) return;
@@ -1116,6 +1122,7 @@ void dt_opencl_cleanup(dt_opencl_t *cl)
     dt_bilateral_free_cl_global(cl->bilateral);
     dt_gaussian_free_cl_global(cl->gaussian);
     dt_interpolation_free_cl_global(cl->interpolation);
+    dt_local_laplacian_free_cl_global(cl->local_laplacian);
     dt_dwt_free_cl_global(cl->dwt);
     dt_heal_free_cl_global(cl->heal);
     dt_colorspaces_free_cl_global(cl->colorspaces);
@@ -1352,10 +1359,20 @@ static void dt_opencl_update_priorities()
   // Priority parsing iterates over the list of available devices.
   // If !cl->inited, that means we have no available device, so empty list.
   // Exit early of face a segfault
-  dt_opencl_priority_parse(cl, dt_conf_get_string("opencl_devid_darkroom"), cl->dev_priority_image, &cl->mandatory[0]);
-  dt_opencl_priority_parse(cl, dt_conf_get_string("opencl_devid_preview"), cl->dev_priority_preview, &cl->mandatory[1]);
-  dt_opencl_priority_parse(cl, dt_conf_get_string("opencl_devid_export"), cl->dev_priority_export, &cl->mandatory[2]);
-  dt_opencl_priority_parse(cl, dt_conf_get_string("opencl_devid_thumbnail"), cl->dev_priority_thumbnail, &cl->mandatory[3]);
+  char *darkroom = dt_conf_get_string("opencl_devid_darkroom");
+  char *preview = dt_conf_get_string("opencl_devid_preview");
+  char *export = dt_conf_get_string("opencl_devid_export");
+  char *thumbnail = dt_conf_get_string("opencl_devid_thumbnail");
+
+  dt_opencl_priority_parse(cl, darkroom, cl->dev_priority_image, &cl->mandatory[0]);
+  dt_opencl_priority_parse(cl, preview, cl->dev_priority_preview, &cl->mandatory[1]);
+  dt_opencl_priority_parse(cl, export, cl->dev_priority_export, &cl->mandatory[2]);
+  dt_opencl_priority_parse(cl, thumbnail, cl->dev_priority_thumbnail, &cl->mandatory[3]);
+
+  dt_free(darkroom);
+  dt_free(preview);
+  dt_free(export);
+  dt_free(thumbnail);
 
   dt_print_nts(DT_DEBUG_OPENCL, "[dt_opencl_update_priorities] these are your device priorities:\n");
   dt_print_nts(DT_DEBUG_OPENCL, "[dt_opencl_update_priorities] \tid |\t\tIMAGE\tPREVIEW\tEXPORT\tTHUMBS\n");
@@ -2055,7 +2072,7 @@ int dt_opencl_write_host_to_device_rowpitch_non_blocking(const int devid, void *
   return dt_opencl_write_host_to_device_raw(devid, host, device, origin, region, rowpitch, CL_FALSE);
 }
 
-int dt_opencl_write_host_to_device_raw(const int devid, void *host, void *device, const size_t *origin,
+int dt_opencl_write_host_to_device_raw(const int devid, const void *host, void *device, const size_t *origin,
                                        const size_t *region, const int rowpitch, const int blocking)
 {
   if(!darktable.opencl->inited) return -1;
@@ -2264,7 +2281,7 @@ static inline void *_dt_opencl_alloc_image2d(const int devid, const int width, c
       dt_print(DT_DEBUG_OPENCL,
                "[opencl %s] out of memory on device %d, flushing cached pinned buffers and retrying\n",
                context, devid);
-      dt_dev_pixelpipe_cache_flush_clmem(darktable.pixelpipe_cache, devid, NULL);
+      dt_dev_pixelpipe_cache_flush_clmem(darktable.pixelpipe_cache, devid);
       continue;
     }
     break;
@@ -2320,7 +2337,7 @@ void *dt_opencl_alloc_device_use_host_pointer(const int devid, const int width, 
   return _dt_opencl_alloc_image2d(devid, width, height, flags, fmt, host, "alloc_device_use_host_pointer");
 }
 
-void *dt_opencl_alloc_device_buffer_with_flags(const int devid, const size_t size, const int flags)
+void *dt_opencl_alloc_device_buffer_with_flags(const int devid, const size_t size, const int flags, void *host_ptr)
 {
   if(!darktable.opencl->inited) return NULL;
   cl_int err;
@@ -2328,14 +2345,14 @@ void *dt_opencl_alloc_device_buffer_with_flags(const int devid, const size_t siz
   for(int attempt = 0; attempt < 2; attempt++)
   {
     buf = (darktable.opencl->dlocl->symbols->dt_clCreateBuffer)(darktable.opencl->dev[devid].context,
-                                                               flags, size, NULL, &err);
+                                                               flags, size, host_ptr, &err);
     if(err == CL_SUCCESS) break;
     if(attempt == 0 && (err == CL_MEM_OBJECT_ALLOCATION_FAILURE || err == CL_OUT_OF_RESOURCES))
     {
       dt_print(DT_DEBUG_OPENCL,
                "[opencl alloc_device_buffer] out of memory on device %d, flushing cached pinned buffers and retrying\n",
                devid);
-      dt_dev_pixelpipe_cache_flush_clmem(darktable.pixelpipe_cache, devid, NULL);
+      dt_dev_pixelpipe_cache_flush_clmem(darktable.pixelpipe_cache, devid);
       continue;
     }
     break;
@@ -2352,7 +2369,7 @@ void *dt_opencl_alloc_device_buffer_with_flags(const int devid, const size_t siz
 
 void *dt_opencl_alloc_device_buffer(const int devid, const size_t size)
 {
-  return dt_opencl_alloc_device_buffer_with_flags(devid, size,  CL_MEM_READ_WRITE);
+  return dt_opencl_alloc_device_buffer_with_flags(devid, size, CL_MEM_READ_WRITE, NULL);
 }
 
 

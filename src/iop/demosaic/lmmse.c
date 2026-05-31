@@ -198,7 +198,7 @@ static void lmmse_demosaic(const dt_dev_pixelpipe_iop_t *piece, float *const res
         {
           float *cfa = qix[5] + rrr * LMMSE_GRP + BORDER_AROUND;
           int idx = row * width + colStart;
-          for(int ccc = BORDER_AROUND, col = colStart; ccc < tileCols + BORDER_AROUND; ccc++, col++, cfa++, idx++)
+          for(int ccc = BORDER_AROUND; ccc < tileCols + BORDER_AROUND; ccc++, cfa++, idx++)
           {
             cfa[0] = calc_gamma(revscaler * in[idx], gamma_in);
           }

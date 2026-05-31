@@ -48,5 +48,4 @@ void dt_drawlayer_show_runtime_feedback(const dt_iop_drawlayer_gui_data_t *g,
 void dt_drawlayer_wait_for_rasterization_modal(const dt_iop_drawlayer_gui_data_t *g,
                                                const char *title,
                                                const char *message);
-void dt_drawlayer_set_os_cursor_hidden(gboolean hidden);
 void gui_update(dt_iop_module_t *self);

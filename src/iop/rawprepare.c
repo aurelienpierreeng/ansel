@@ -45,7 +45,6 @@
 #include "common/image.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
-#include "develop/imageop_math.h"
 #include "develop/tiling.h"
 #include "common/image_cache.h"
 
@@ -222,19 +221,29 @@ static void _update_output_cfa_descriptor(const dt_dev_pixelpipe_t *pipe,
    * Bayer/X-Trans phase offset. */
 
   const dt_iop_rawprepare_data_t *d = (dt_iop_rawprepare_data_t *)piece->data;
-  const uint32_t crop_x = compute_proper_crop(piece, roi_in, d->x);
-  const uint32_t crop_y = compute_proper_crop(piece, roi_in, d->y);
+  const uint32_t crop_x = compute_proper_crop(piece, roi_in, d->x + roi_in->x);
+  const uint32_t crop_y = compute_proper_crop(piece, roi_in, d->y + roi_in->y);
 
   dsc->filters = dt_rawspeed_crop_dcraw_filters(pipe->dev->image_storage.dsc.filters, crop_x, crop_y);
-
+  //fprintf(stdout, "crop: x=%u, y=%u\n", crop_x, crop_y);
   if(pipe->dev->image_storage.dsc.filters != 9u) return;
 
+  /**
+   * @brief XTrans doc:
+   * XTrans sensors work by color filter tiles of 6x6 pixels, which are expected
+   * to start at the top-left corner of the image. When cropping images, depending
+   * on the number of trimmed pixels, we generally cut in the middle of the 6x6 pattern.
+   * So this corrects the phase shift to account for the current trimming, aka we 
+   * reorder the filter coefficients for the current phase shift.
+   */
   for(int i = 0; i < 6; ++i)
   {
     for(int j = 0; j < 6; ++j)
     {
       dsc->xtrans[j][i] = pipe->dev->image_storage.dsc.xtrans[(j + crop_y) % 6][(i + crop_x) % 6];
+      //fprintf(stdout, "%u\t", dsc->xtrans[j][i]);
     }
+    //fprintf(stdout, "\n");
   }
 }
 
@@ -324,8 +333,14 @@ void modify_roi_in(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, dt_dev
                    const dt_iop_roi_t *const roi_out,
                    dt_iop_roi_t *roi_in)
 {
-  // Input is always full-size raw
-  *roi_in = (dt_iop_roi_t){ 0, 0, pipe->iwidth, pipe->iheight, 1.f };
+  *roi_in = *roi_out;
+  dt_iop_rawprepare_data_t *d = (dt_iop_rawprepare_data_t *)piece->data;
+
+  const double x = d->x + d->width;
+  const double y = d->y + d->height;
+  const double scale = roi_in->scale;
+  roi_in->width = (int)round((double)roi_in->width + x * scale);
+  roi_in->height = (int)round((double)roi_in->height + y * scale);
 
   /* Same reasoning as in modify_roi_out(): the CFA/X-Trans descriptor depends on the input ROI scale,
    * so finalize it here once the upstream ROI has been computed. */
@@ -336,8 +351,7 @@ void output_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixel
                    dt_iop_buffer_dsc_t *dsc)
 {
   default_output_format(self, pipe, piece, dsc);
-  dsc->filters = piece->dsc_in.filters;
-  memcpy(dsc->xtrans, piece->dsc_in.xtrans, sizeof(dsc->xtrans));
+  _update_output_cfa_descriptor(pipe, piece, &piece->roi_in, &piece->dsc_out);
 }
 
 static inline __attribute__((always_inline)) int BL(const dt_iop_roi_t *const roi_out,

@@ -58,7 +58,15 @@ typedef struct dt_iop_buffer_dsc_t
   size_t bpp;
   /** Bayer demosaic pattern */
   uint32_t filters;
-  /** filter for Fuji X-Trans images, only used if filters == 9u */
+  /** filter for Fuji X-Trans images, only used if filters == 9u.
+   * The coefficients in the filter represent the channel (R, G, B)
+   * associated with a pixel spatial coordinate. The filter itself is a 6x6
+   * tile that we shift on the image, starting at the top-left corner,
+   * when demosaicing, so we know what "color" we are looking at, at any
+   * given pixel coordinate, in the raw image. When images are cropped at the 
+   * raw level, we need to shift the coefficients properly to take care of the
+   * phase shift introduced by trimming. See rawprepare.c:_update_output_cfa_descriptor()
+  */
   uint8_t xtrans[6][6];
 
   struct

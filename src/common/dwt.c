@@ -587,10 +587,6 @@ dwt_params_cl_t *dt_dwt_init_cl(const int devid, cl_mem image, const int width, 
 void dt_dwt_free_cl(dwt_params_cl_t *p)
 {
   if(IS_NULL_PTR(p)) return;
-
-  // be sure we're done with the memory:
-  dt_opencl_finish(p->devid);
-
   dt_free(p);
 }
 

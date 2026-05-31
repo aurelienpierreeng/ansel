@@ -48,6 +48,7 @@
 #include "common/collection.h"
 #include "common/selection.h"
 #include "common/darktable.h"
+#include "gui/gdkkeys.h"
 #include "common/debug.h"
 #include "control/conf.h"
 #include "control/control.h"
@@ -254,7 +255,14 @@ static void _update(dt_lib_module_t *self)
       continue;
     g_list_free_full(d->metadata_list[i], dt_free_gpointer);
     d->metadata_list[i] = metadata[keyid];
+    metadata[keyid] = NULL;
     _fill_text_view(i, metadata_count[keyid], self);
+  }
+
+  for(unsigned int key = 0; key < DT_METADATA_NUMBER; key++)
+  {
+    g_list_free_full(metadata[key], dt_free_gpointer);
+    metadata[key] = NULL;
   }
 
   gtk_widget_set_sensitive(GTK_WIDGET(d->apply_button), imgs_count > 0);
@@ -327,12 +335,13 @@ static gboolean _key_pressed(GtkWidget *textview, GdkEventKey *event, dt_lib_mod
 {
   dt_lib_metadata_t *d = (dt_lib_metadata_t *)self->data;
 
+  guint key = dt_keys_mainpad_alternatives(event->keyval);
+
   if(dt_modifier_is(event->state, GDK_CONTROL_MASK))
   {
-    switch(event->keyval)
+    switch(key)
     {
       case GDK_KEY_Return:
-      case GDK_KEY_KP_Enter:
         // insert new line
         event->state &= ~GDK_CONTROL_MASK;  //TODO: on Mac, remap Ctrl to Cmd key
         d->editing = TRUE;
@@ -343,16 +352,14 @@ static gboolean _key_pressed(GtkWidget *textview, GdkEventKey *event, dt_lib_mod
   }
   else
   {
-    switch(event->keyval)
+    switch(key)
     {
       case GDK_KEY_Return:
-      case GDK_KEY_KP_Enter:
         _write_metadata(GTK_TEXT_VIEW(textview), self);
         _text_set_all_selected(GTK_TEXT_VIEW(textview), FALSE);
         return TRUE;
         break;
       case GDK_KEY_Tab:
-      case GDK_KEY_KP_Tab:
       case GDK_KEY_ISO_Left_Tab:
         _write_metadata(GTK_TEXT_VIEW(textview), self);
         break;
@@ -685,7 +692,7 @@ static gboolean _metadata_reset(GtkWidget *label, GdkEventButton *event, GtkWidg
 
     GdkEventKey e = {0};
     e.type = GDK_KEY_PRESS;
-    e.keyval = GDK_KEY_KP_Enter;
+    e.keyval = GDK_KEY_Return;
     e.send_event = TRUE;
     e.window = gtk_text_view_get_window(GTK_TEXT_VIEW(widget), GTK_TEXT_WINDOW_TEXT);
     gboolean ret_val;
@@ -779,8 +786,9 @@ void gui_init(dt_lib_module_t *self)
 
 void gui_cleanup(dt_lib_module_t *self)
 {
+  if(IS_NULL_PTR(self->data)) return;
   dt_lib_cancel_postponed_update(self);
-  const dt_lib_metadata_t *d = (dt_lib_metadata_t *)self->data;
+  dt_lib_metadata_t *d = (dt_lib_metadata_t *)self->data;
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_image_selection_changed_callback), self);
 
   for(unsigned int i = 0; i < DT_METADATA_NUMBER; i++)
@@ -788,6 +796,8 @@ void gui_cleanup(dt_lib_module_t *self)
     if(dt_metadata_get_type_by_display_order(i) == DT_METADATA_TYPE_INTERNAL)
       continue;
     g_signal_handlers_block_by_func(d->textview[i], _lost_focus, self);
+    g_list_free_full(d->metadata_list[i], dt_free_gpointer);
+    d->metadata_list[i] = NULL;
     dt_free(d->setting_name[i]);
   }
   if(_metadata_update_stmt)
@@ -795,6 +805,10 @@ void gui_cleanup(dt_lib_module_t *self)
     sqlite3_finalize(_metadata_update_stmt);
     _metadata_update_stmt = NULL;
   }
+
+  g_list_free(d->last_act_on);
+  d->last_act_on = NULL;
+
   dt_free(self->data);
 }
 

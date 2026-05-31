@@ -19,8 +19,9 @@
 #   
 #   You should have received a copy of the GNU General Public License
 #   along with darktable.  If not, see <http://www.gnu.org/licenses/>.
-# it is supposed to be run by travis-ci
- expects a few env variables to be set:
+#
+#   it is supposed to be run by travis-ci
+#   expects a few env variables to be set:
 #   BUILD_DIR - the working directory, where to build
 #   INSTALL_DIR - the installation prefix.
 #   SRC_DIR - read-only directory with git checkout to compile

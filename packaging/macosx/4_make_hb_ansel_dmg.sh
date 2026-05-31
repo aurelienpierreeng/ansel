@@ -32,15 +32,21 @@ scriptDir=$(cd "$(dirname "$0")" && pwd)
 buildDir="${scriptDir}/../../install"
 cd "$buildDir"/
 
+device=""
+temp_dmg="pack.${PROGN}.$$.temp.dmg"
+trap 'set +e; if [ -n "${device:-}" ]; then hdiutil detach -force "${device}" >/dev/null 2>&1; fi; rm -f "${temp_dmg:-}"' EXIT
+
 # Generate symlink to applications folder for easier drag & drop within dmg
 ln -s /Applications package/ || true
 
-# Create temporary rw image
+# Create a temporary rw image. Use a process-local filename so a stale mounted
+# image from a previous interrupted packaging attempt cannot make hdiutil report
+# "Resource busy" when the CI runner reuses the same install directory.
 hdiutil create -srcfolder package -volname "${PROGN}" -fs HFS+ \
-	-fsargs "-c c=64,a=16,e=16" -format UDRW pack.temp.dmg
+	-fsargs "-c c=64,a=16,e=16" -format UDRW "${temp_dmg}"
 
 # Mount image without autoopen to create window style params
-device=$(hdiutil attach -readwrite -noverify -autoopen "pack.temp.dmg" |
+device=$(hdiutil attach -readwrite -noverify -autoopen "${temp_dmg}" |
 	egrep '^/dev/' | sed 1q | awk '{print $1}')
 
 echo '
@@ -63,7 +69,8 @@ echo '
 # Finalizing creation
 chmod -Rf go-w /Volumes/"${PROGN}"
 sync
-hdiutil detach ${device}
+hdiutil detach "${device}"
+device=""
 # Find repo root (a parent directory that contains `tools`) and use its script.
 search_dir="${scriptDir}"
 while [ ! -d "${search_dir}/tools" ] && [ "${search_dir}" != "/" ]; do
@@ -77,8 +84,8 @@ fi
 OUTPUT_VERSION=$(sh "${tools_script}")
 DMG="${PROGN}-${OUTPUT_VERSION}-$(arch)"
 echo "Create DMG $DMG"
-hdiutil convert "pack.temp.dmg" -format UDZO -imagekey zlib-level=9 -o "${DMG}"
-rm -f pack.temp.dmg
+hdiutil convert "${temp_dmg}" -format UDZO -imagekey zlib-level=9 -o "${DMG}"
+rm -f "${temp_dmg}"
 
 # Sign dmg image when a certificate has been provided
 if [ -n "$CODECERT" ]; then

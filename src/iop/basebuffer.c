@@ -50,7 +50,7 @@ int default_group()
 
 int flags()
 {
-  return IOP_FLAGS_HIDDEN | IOP_FLAGS_ONE_INSTANCE | IOP_FLAGS_NO_HISTORY_STACK | IOP_FLAGS_UNSAFE_COPY | IOP_FLAGS_TAKE_NO_INPUT;
+  return IOP_FLAGS_HIDDEN | IOP_FLAGS_ONE_INSTANCE | IOP_FLAGS_NO_HISTORY_STACK | IOP_FLAGS_UNSAFE_COPY | IOP_FLAGS_TAKE_NO_INPUT | IOP_FLAGS_CPU_WRITES_OPENCL;
 }
 
 int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece)
@@ -71,66 +71,90 @@ void modify_roi_out(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, dt_de
   *roi_out = (dt_iop_roi_t){ 0, 0, pipe->iwidth, pipe->iheight, 1.f };
 }
 
-static int _fetch_base_buffer(const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const dt_iop_roi_t *const roi_out, 
-                              const dt_mipmap_buffer_t buf, const void *const ivoid, void *const ovoid)
-{
-  if(!buf.buf || buf.width != pipe->iwidth || buf.height != pipe->iheight || !ovoid) return 1;
-  if(roi_out->width <= 0 || roi_out->height <= 0) return 1;
-  if(roi_out->x + roi_out->width > pipe->iwidth || roi_out->y + roi_out->height > pipe->iheight) return 1;
 
-  const size_t height = roi_out->height;
-  const size_t stride = roi_out->width * piece->dsc_out.bpp;
-  const void *const restrict input = buf.buf;
-
-  /* This stage copies the immutable mipmap-cache payload into the pixelpipe cacheline that will
-   * be consumed by the first real processing stage. Keeping the source copy local here makes the
-   * cache ownership and lifetime visible in the recursion instead of in a hidden bootstrap path. */
-  __OMP_PARALLEL_FOR__()
-  for(size_t j = 0; j < height; j++)
-    memcpy(ovoid + j * stride, input + j * stride, stride);
-
-  return 0;
-}
-
+__DT_CLONE_TARGETS__
 int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
             const void *const ivoid, void *const ovoid)
 {
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
-  int err = 1;
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
   dt_mipmap_buffer_t buf;
 
   dt_mipmap_cache_get(darktable.mipmap_cache, &buf, pipe->imgid, pipe->size, DT_MIPMAP_BLOCKING, 'r');
-  err = _fetch_base_buffer(pipe, piece, roi_out, buf, ivoid, ovoid);
+
+  // Catch out-of-bounds here because roi_in -> roi_out conversions
+  // use float scaling that may not always respect initial size.
+
+  // Crop rectangle offset
+  const size_t x = MAX(roi_in->x, 0);
+  const size_t y = MAX(roi_in->y, 0);
+
+  // Crop rectangle size
+  const size_t in_width = MIN(roi_in->width, pipe->iwidth - x);
+  const size_t in_height = MIN(roi_in->height, pipe->iheight - y);
+  const size_t in_stride = in_width * piece->dsc_in.bpp;
+  const size_t out_stride = roi_out->width * piece->dsc_out.bpp;
+
+  // Crop offset translated in memory sizes
+  const size_t y_offset = y * in_stride;
+  const size_t x_offset = x * piece->dsc_in.bpp;
+
+  /* This stage copies the immutable mipmap-cache payload into the pixelpipe cacheline that will
+   * be consumed by the first real processing stage. Keeping the source copy local here makes the
+   * cache ownership and lifetime visible in the recursion instead of in a hidden bootstrap path. */
+  const void *const restrict input = buf.buf;
+
+  __OMP_PARALLEL_FOR__()
+  for(size_t j = 0; j < MIN(roi_out->height, in_height); j++)
+    memcpy(ovoid + j * out_stride, input + x_offset + y_offset + j * in_stride, MIN(in_stride, out_stride));
+
   dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
 
+  return 0;
+}
+
 #ifdef HAVE_OPENCL
-  if(!err && pipe->opencl_enabled)
-  {
-    /**
-     * Put the RAM output on the GPU memory right now. This is optional, as it would be done by the next
-     * OpenCL-able module anyway, but on some shitty GPU (AMD), that copy is expensive and it would look
-     * as if the next module was slow. So we pay the memory expense now for the sake of accurate benchmarking
-     * in later modules.
-     */
-    dt_pixel_cache_entry_t *cache_entry = dt_dev_pixelpipe_cache_get_entry_by_data(darktable.pixelpipe_cache, ovoid);
-    void *cl_mem_base = dt_dev_pixelpipe_cache_get_pinned_image(darktable.pixelpipe_cache, ovoid,
-                                                                cache_entry, pipe->devid, roi_out->width,
-                                                                roi_out->height, piece->dsc_out.bpp,
-                                                                CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
-                                                                NULL);
-    if(cl_mem_base != NULL)
-    {
-      if(dt_dev_pixelpipe_cache_sync_cl_buffer(pipe->devid, ovoid, cl_mem_base, roi_out, CL_MAP_WRITE,
-                                               piece->dsc_out.bpp, NULL, "base buffer preload to device") == 0)
-        dt_dev_pixelpipe_cache_put_pinned_image(darktable.pixelpipe_cache, ovoid, cache_entry, &cl_mem_base);
-      else
-        dt_dev_pixelpipe_cache_release_cl_buffer(&cl_mem_base, cache_entry, NULL, FALSE);
-    }
-  }
+int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
+{
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  dt_mipmap_buffer_t buf;
+
+  dt_mipmap_cache_get(darktable.mipmap_cache, &buf, pipe->imgid, pipe->size, DT_MIPMAP_BLOCKING, 'r');
+
+  // Catch out-of-bounds here because roi_in -> roi_out conversions
+  // use float scaling that may not always respect initial size.
+
+  // Crop rectangle offset
+  const size_t x = MAX(roi_in->x, 0);
+  const size_t y = MAX(roi_in->y, 0);
+
+  // Crop rectangle size
+  const size_t in_width = MIN(roi_in->width, pipe->iwidth - x);
+  const size_t in_stride = in_width * piece->dsc_in.bpp;
+
+  // Crop offset translated in memory sizes
+  const size_t y_offset = y * in_stride;
+  const size_t x_offset = x * piece->dsc_in.bpp;
+
+  /* This stage copies the immutable mipmap-cache payload into the pixelpipe cacheline that will
+   * be consumed by the first real processing stage. Keeping the source copy local here makes the
+   * cache ownership and lifetime visible in the recursion instead of in a hidden bootstrap path. */
+  const void *const restrict input = buf.buf;
+
+  size_t origin[] = { x, y, 0 };
+  size_t region[] = { MIN(roi_out->width, roi_in->width), MIN(roi_out->height, roi_in->height), 1 };
+
+  int err = dt_opencl_write_host_to_device_raw(pipe->devid, input + x_offset + y_offset, dev_out, origin,
+                                               region, in_stride, CL_TRUE);
+
+
+  dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
+
+  return err == CL_SUCCESS;
+}
 #endif
 
-  return err;
-}
 
 void init_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {

@@ -1183,10 +1183,6 @@ static int _default_process_tiling_cl_ptp(struct dt_iop_module_t *self, const st
   cl_int err = -999;
   cl_mem input = NULL;
   cl_mem output = NULL;
-  cl_mem pinned_input = NULL;
-  cl_mem pinned_output = NULL;
-  void *input_buffer = NULL;
-  void *output_buffer = NULL;
 
   dt_print(DT_DEBUG_TILING, "[default_process_tiling_cl_ptp] **** tiling module '%s' for image with size %dx%d --> %dx%d\n",
            self->op, roi_in->width, roi_in->height, roi_out->width, roi_out->height);
@@ -1202,17 +1198,11 @@ static int _default_process_tiling_cl_ptp(struct dt_iop_module_t *self, const st
   dt_develop_tiling_t tiling = { 0 };
   self->tiling_callback(self, pipe, piece, &tiling);
 
-  /* shall we use pinned memory transfers? */
-  gboolean use_pinned_memory = dt_opencl_use_pinned_memory(devid);
-  const int pinned_buffer_overhead = use_pinned_memory ? 2 : 0; // add two additional pinned memory buffers
-                                                                // which seemingly get allocated not only on
-                                                                // host but also on device (why???)
   // avoid problems when pinned buffer size gets too close to max_mem_alloc size
-  const float pinned_buffer_slack = use_pinned_memory ? 0.85f : 1.0f;
   const float available = (float)dt_opencl_get_device_available(devid);
-  const float factor = fmaxf(tiling.factor_cl + pinned_buffer_overhead, 1.0f);
+  const float factor = fmaxf(tiling.factor_cl, 1.0f);
   const float singlebuffer = fminf(fmaxf((available - tiling.overhead) / factor, 0.0f),
-                                  pinned_buffer_slack * (float)(dt_opencl_get_device_memalloc(devid)));
+                                   (float)(dt_opencl_get_device_memalloc(devid)));
   const float maxbuf = fmaxf(tiling.maxbuf_cl, 1.0f);
   int width = _min(roi_in->width, darktable.opencl->dev[devid].max_image_width);
   int height = _min(roi_in->height, darktable.opencl->dev[devid].max_image_height);
@@ -1307,60 +1297,8 @@ static int _default_process_tiling_cl_ptp(struct dt_iop_module_t *self, const st
     return FALSE;
   }
 
-  dt_print(DT_DEBUG_TILING, "[default_process_tiling_cl_ptp] (%dx%d) tiles with max dimensions %dx%d, pinned=%s, good %dx%d and overlap %d\n",
-           tiles_x, tiles_y, width, height, (use_pinned_memory) ? "ON" : "OFF", tile_wd, tile_ht, overlap);
-
-  /* reserve pinned input and output memory for host<->device data transfer */
-  if(use_pinned_memory)
-  {
-    pinned_input = dt_opencl_alloc_device_buffer_with_flags(devid, (size_t)width * height * in_bpp,
-                                                            CL_MEM_READ_ONLY | CL_MEM_ALLOC_HOST_PTR);
-    if(IS_NULL_PTR(pinned_input))
-    {
-      dt_print(DT_DEBUG_OPENCL | DT_DEBUG_TILING,
-               "[default_process_tiling_cl_ptp] could not alloc pinned input buffer for module '%s'\n", self->op);
-      use_pinned_memory = FALSE;
-    }
-  }
-
-  if(use_pinned_memory)
-  {
-
-    input_buffer = dt_opencl_map_buffer(devid, pinned_input, CL_TRUE, CL_MAP_WRITE, 0,
-                                        (size_t)width * height * in_bpp);
-    if(IS_NULL_PTR(input_buffer))
-    {
-      dt_print(DT_DEBUG_OPENCL | DT_DEBUG_TILING, "[default_process_tiling_cl_ptp] could not map pinned input buffer to host "
-                                "memory for module '%s'\n", self->op);
-      use_pinned_memory = FALSE;
-    }
-  }
-
-  if(use_pinned_memory)
-  {
-
-    pinned_output = dt_opencl_alloc_device_buffer_with_flags(devid, (size_t)width * height * out_bpp,
-                                                             CL_MEM_WRITE_ONLY | CL_MEM_ALLOC_HOST_PTR);
-    if(IS_NULL_PTR(pinned_output))
-    {
-      dt_print(DT_DEBUG_OPENCL | DT_DEBUG_TILING,
-               "[default_process_tiling_cl_ptp] could not alloc pinned output buffer for module '%s'\n", self->op);
-      use_pinned_memory = FALSE;
-    }
-  }
-
-  if(use_pinned_memory)
-  {
-
-    output_buffer = dt_opencl_map_buffer(devid, pinned_output, CL_TRUE, CL_MAP_READ, 0,
-                                         (size_t)width * height * out_bpp);
-    if(IS_NULL_PTR(output_buffer))
-    {
-      dt_print(DT_DEBUG_OPENCL | DT_DEBUG_TILING, "[default_process_tiling_cl_ptp] could not map pinned output buffer to host "
-                                "memory for module '%s'\n", self->op);
-      use_pinned_memory = FALSE;
-    }
-  }
+  dt_print(DT_DEBUG_TILING, "[default_process_tiling_cl_ptp] (%dx%d) tiles with max dimensions %dx%d, good %dx%d and overlap %d\n",
+           tiles_x, tiles_y, width, height, tile_wd, tile_ht, overlap);
 
   /* iterate over tiles */
   for(size_t tx = 0; tx < tiles_x; tx++)
@@ -1397,48 +1335,16 @@ static int _default_process_tiling_cl_ptp(struct dt_iop_module_t *self, const st
       output = dt_opencl_alloc_device(devid, wd, ht, out_bpp);
       if(IS_NULL_PTR(output)) goto error;
 
-      if(use_pinned_memory)
-      {
-/* prepare pinned input tile buffer: copy part of input image */
-        __OMP_PARALLEL_FOR__()
-        for(size_t j = 0; j < ht; j++)
-          memcpy((char *)input_buffer + j * wd * in_bpp, (char *)ivoid + ioffs + j * ipitch,
-                 (size_t)wd * in_bpp);
-
-        /* blocking memory transfer: pinned host input buffer -> opencl/device tile */
-        err = dt_opencl_write_host_to_device_raw(devid, (char *)input_buffer, input, origin, region,
-                                                 wd * in_bpp, CL_TRUE);
-        if(err != CL_SUCCESS)
-        {
-          use_pinned_memory = FALSE;
-          goto error;
-        }
-      }
-      else
-      {
-        /* blocking direct memory transfer: host input image -> opencl/device tile */
-        err = dt_opencl_write_host_to_device_raw(devid, (char *)ivoid + ioffs, input, origin, region, ipitch,
-                                                 CL_TRUE);
-        if(err != CL_SUCCESS) goto error;
-      }
+      /* blocking direct memory transfer: host input image -> opencl/device tile */
+      err = dt_opencl_write_host_to_device_raw(devid, (char *)ivoid + ioffs, input, origin, region, ipitch,
+                                                CL_TRUE);
+      if(err != CL_SUCCESS) goto error;
 
       /* call process_cl of module */
       dt_dev_pixelpipe_iop_t piece_tile = *piece;
       piece_tile.roi_in = iroi;
       piece_tile.roi_out = oroi;
       if(!self->process_cl(self, pipe, &piece_tile, input, output)) goto error;
-
-      if(use_pinned_memory)
-      {
-        /* blocking memory transfer: complete opencl/device tile -> pinned host output buffer */
-        err = dt_opencl_read_host_from_device_raw(devid, (char *)output_buffer, output, origin, region,
-                                                  wd * out_bpp, CL_TRUE);
-        if(err != CL_SUCCESS)
-        {
-          use_pinned_memory = FALSE;
-          goto error;
-        }
-      }
 
       /* correct origin and region of tile for overlap.
          makes sure that we only copy back the "good" part. */
@@ -1455,24 +1361,10 @@ static int _default_process_tiling_cl_ptp(struct dt_iop_module_t *self, const st
         ooffs += (size_t)overlap * opitch;
       }
 
-      if(use_pinned_memory)
-      {
-/* copy "good" part of tile from pinned output buffer to output image */
-#if 0 // def _OPENMP
-#pragma omp parallel for default(firstprivate) 
-#endif
-        for(size_t j = 0; j < region[1]; j++)
-          memcpy((char *)ovoid + ooffs + j * opitch,
-                 (char *)output_buffer + ((j + origin[1]) * wd + origin[0]) * out_bpp,
-                 (size_t)region[0] * out_bpp);
-      }
-      else
-      {
-        /* blocking direct memory transfer: good part of opencl/device tile -> host output image */
-        err = dt_opencl_read_host_from_device_raw(devid, (char *)ovoid + ooffs, output, origin, region,
-                                                  opitch, CL_TRUE);
-        if(err != CL_SUCCESS) goto error;
-      }
+      /* blocking direct memory transfer: good part of opencl/device tile -> host output image */
+      err = dt_opencl_read_host_from_device_raw(devid, (char *)ovoid + ooffs, output, origin, region,
+                                                opitch, CL_TRUE);
+      if(err != CL_SUCCESS) goto error;
 
       /* release input and output buffers */
       dt_opencl_release_mem_object(input);
@@ -1484,28 +1376,18 @@ static int _default_process_tiling_cl_ptp(struct dt_iop_module_t *self, const st
       dt_opencl_finish(devid);
     }
 
-  if(!IS_NULL_PTR(input_buffer)) dt_opencl_unmap_mem_object(devid, pinned_input, input_buffer);
-  dt_opencl_release_mem_object(pinned_input);
-  if(!IS_NULL_PTR(output_buffer)) dt_opencl_unmap_mem_object(devid, pinned_output, output_buffer);
-  dt_opencl_release_mem_object(pinned_output);
   dt_opencl_release_mem_object(input);
   dt_opencl_release_mem_object(output);
   mutable_pipe->tiling = 0;
   return TRUE;
 
 error:
-  if(!IS_NULL_PTR(input_buffer)) dt_opencl_unmap_mem_object(devid, pinned_input, input_buffer);
-  dt_opencl_release_mem_object(pinned_input);
-  if(!IS_NULL_PTR(output_buffer)) dt_opencl_unmap_mem_object(devid, pinned_output, output_buffer);
-  dt_opencl_release_mem_object(pinned_output);
   dt_opencl_release_mem_object(input);
   dt_opencl_release_mem_object(output);
   mutable_pipe->tiling = 0;
-  const gboolean pinning_error = (use_pinned_memory == FALSE) && dt_opencl_use_pinned_memory(devid);
   dt_print(DT_DEBUG_TILING | DT_DEBUG_OPENCL,
-      "[default_process_tiling_opencl_ptp] couldn't run process_cl() for module '%s' in tiling mode:%s %i\n",
-      self->op, (pinning_error) ? " pinning problem" : "", err);
-  if(pinning_error) darktable.opencl->dev[devid].runtime_error |= 1;
+      "[default_process_tiling_opencl_ptp] couldn't run process_cl() for module '%s' in tiling mode: %i\n",
+      self->op, err);
   return FALSE;
 }
 
@@ -1522,10 +1404,6 @@ static int _default_process_tiling_cl_roi(struct dt_iop_module_t *self, const st
   cl_int err = -999;
   cl_mem input = NULL;
   cl_mem output = NULL;
-  cl_mem pinned_input = NULL;
-  cl_mem pinned_output = NULL;
-  void *input_buffer = NULL;
-  void *output_buffer = NULL;
 
   dt_print(DT_DEBUG_TILING,
       "[default_process_tiling_cl_roi] **** tiling module '%s' for image with input size %dx%d --> %dx%d\n",
@@ -1553,17 +1431,11 @@ static int _default_process_tiling_cl_roi(struct dt_iop_module_t *self, const st
   dt_develop_tiling_t tiling = { 0 };
   self->tiling_callback(self, pipe, piece, &tiling);
 
-  /* shall we use pinned memory transfers? */
-  gboolean use_pinned_memory = dt_opencl_use_pinned_memory(devid);
-  const int pinned_buffer_overhead = use_pinned_memory ? 2 : 0; // add two additional pinned memory buffers
-                                                                // which seemingly get allocated not only on
-                                                                // host but also on device (why???)
   // avoid problems when pinned buffer size gets too close to max_mem_alloc size
-  const float pinned_buffer_slack = use_pinned_memory ? 0.85f : 1.0f;
   const float available = (float)dt_opencl_get_device_available(devid);
-  const float factor = fmaxf(tiling.factor_cl + pinned_buffer_overhead, 1.0f);
+  const float factor = fmaxf(tiling.factor_cl, 1.0f);
   const float singlebuffer = fminf(fmaxf((available - tiling.overhead) / factor, 0.0f),
-                                  pinned_buffer_slack * (float)(dt_opencl_get_device_memalloc(devid)));
+                                   (float)(dt_opencl_get_device_memalloc(devid)));
   const float maxbuf = fmaxf(tiling.maxbuf_cl, 1.0f);
 
   int width = _min(_max(roi_in->width, roi_out->width), darktable.opencl->dev[devid].max_image_width);
@@ -1668,62 +1540,8 @@ static int _default_process_tiling_cl_roi(struct dt_iop_module_t *self, const st
       roi_out->height % tiles_y == 0 ? roi_out->height / tiles_y : roi_out->height / tiles_y + 1, xyalign);
 
   dt_print(DT_DEBUG_TILING,
-           "[default_process_tiling_cl_roi] (%dx%d) tiles with max input dimensions %dx%d, pinned=%s, good %ix%i\n",
-           tiles_x, tiles_y, width, height, (use_pinned_memory) ? "ON" : "OFF", tile_wd, tile_ht);
-
-
-  /* reserve pinned input and output memory for host<->device data transfer */
-  if(use_pinned_memory)
-  {
-    pinned_input = dt_opencl_alloc_device_buffer_with_flags(devid, (size_t)width * height * in_bpp,
-                                                            CL_MEM_READ_ONLY | CL_MEM_ALLOC_HOST_PTR);
-    if(IS_NULL_PTR(pinned_input))
-    {
-      dt_print(DT_DEBUG_OPENCL | DT_DEBUG_TILING,
-               "[default_process_tiling_cl_roi] could not alloc pinned input buffer for module '%s'\n", self->op);
-      use_pinned_memory = FALSE;
-    }
-  }
-
-  if(use_pinned_memory)
-  {
-
-    input_buffer = dt_opencl_map_buffer(devid, pinned_input, CL_TRUE, CL_MAP_WRITE, 0,
-                                        (size_t)width * height * in_bpp);
-    if(IS_NULL_PTR(input_buffer))
-    {
-      dt_print(DT_DEBUG_OPENCL | DT_DEBUG_TILING, "[default_process_tiling_cl_roi] could not map pinned input buffer to host "
-                                "memory for module '%s'\n", self->op);
-      use_pinned_memory = FALSE;
-    }
-  }
-
-  if(use_pinned_memory)
-  {
-
-    pinned_output = dt_opencl_alloc_device_buffer_with_flags(devid, (size_t)width * height * out_bpp,
-                                                             CL_MEM_WRITE_ONLY | CL_MEM_ALLOC_HOST_PTR);
-    if(IS_NULL_PTR(pinned_output))
-    {
-      dt_print(DT_DEBUG_OPENCL | DT_DEBUG_TILING,
-               "[default_process_tiling_cl_roi] could not alloc pinned output buffer for module '%s'\n", self->op);
-      use_pinned_memory = FALSE;
-    }
-  }
-
-  if(use_pinned_memory)
-  {
-
-    output_buffer = dt_opencl_map_buffer(devid, pinned_output, CL_TRUE, CL_MAP_READ, 0,
-                                         (size_t)width * height * out_bpp);
-    if(IS_NULL_PTR(output_buffer))
-    {
-      dt_print(DT_DEBUG_OPENCL | DT_DEBUG_TILING, "[default_process_tiling_cl_roi] could not map pinned output buffer to host "
-                                "memory for module '%s'\n", self->op);
-      use_pinned_memory = FALSE;
-    }
-  }
-
+           "[default_process_tiling_cl_roi] (%dx%d) tiles with max input dimensions %dx%d, good %ix%i\n",
+           tiles_x, tiles_y, width, height, tile_wd, tile_ht);
 
   /* iterate over tiles */
   for(size_t tx = 0; tx < tiles_x; tx++)
@@ -1824,10 +1642,6 @@ static int _default_process_tiling_cl_roi(struct dt_iop_module_t *self, const st
       size_t iorigin[] = { 0, 0, 0 };
       size_t iregion[] = { iroi_full.width, iroi_full.height, 1 };
 
-      /* origin and region of full output tile */
-      size_t oforigin[] = { 0, 0, 0 };
-      size_t ofregion[] = { oroi_full.width, oroi_full.height, 1 };
-
       /* origin and region of good part of output tile */
       size_t oorigin[] = { oroi_good.x - oroi_full.x, oroi_good.y - oroi_full.y, 0 };
       size_t oregion[] = { oroi_good.width, oroi_good.height, 1 };
@@ -1844,30 +1658,10 @@ static int _default_process_tiling_cl_roi(struct dt_iop_module_t *self, const st
       output = dt_opencl_alloc_device(devid, oroi_full.width, oroi_full.height, out_bpp);
       if(IS_NULL_PTR(output)) goto error;
 
-      if(use_pinned_memory)
-      {
-/* prepare pinned input tile buffer: copy part of input image */
-        __OMP_PARALLEL_FOR__()
-        for(size_t j = 0; j < iroi_full.height; j++)
-          memcpy((char *)input_buffer + j * iroi_full.width * in_bpp, (char *)ivoid + ioffs + j * ipitch,
-                 (size_t)iroi_full.width * in_bpp);
-
-        /* blocking memory transfer: pinned host input buffer -> opencl/device tile */
-        err = dt_opencl_write_host_to_device_raw(devid, (char *)input_buffer, input, iorigin, iregion,
-                                                 (size_t)iroi_full.width * in_bpp, CL_TRUE);
-        if(err != CL_SUCCESS)
-        {
-          use_pinned_memory = FALSE;
-          goto error;
-        }
-      }
-      else
-      {
-        /* blocking direct memory transfer: host input image -> opencl/device tile */
-        err = dt_opencl_write_host_to_device_raw(devid, (char *)ivoid + ioffs, input, iorigin, iregion,
-                                                 ipitch, CL_TRUE);
-        if(err != CL_SUCCESS) goto error;
-      }
+      /* blocking direct memory transfer: host input image -> opencl/device tile */
+      err = dt_opencl_write_host_to_device_raw(devid, (char *)ivoid + ioffs, input, iorigin, iregion,
+                                                ipitch, CL_TRUE);
+      if(err != CL_SUCCESS) goto error;
 
       /* call process_cl of module */
       dt_dev_pixelpipe_iop_t piece_tile = *piece;
@@ -1875,30 +1669,10 @@ static int _default_process_tiling_cl_roi(struct dt_iop_module_t *self, const st
       piece_tile.roi_out = oroi_full;
       if(!self->process_cl(self, pipe, &piece_tile, input, output)) goto error;
 
-      if(use_pinned_memory)
-      {
-        /* blocking memory transfer: complete opencl/device tile -> pinned host output buffer */
-        err = dt_opencl_read_host_from_device_raw(devid, (char *)output_buffer, output, oforigin, ofregion,
-                                                  (size_t)oroi_full.width * out_bpp, CL_TRUE);
-        if(err != CL_SUCCESS)
-        {
-          use_pinned_memory = FALSE;
-          goto error;
-        }
-/* copy "good" part of tile from pinned output buffer to output image */
-        __OMP_PARALLEL_FOR__()
-        for(size_t j = 0; j < oregion[1]; j++)
-          memcpy((char *)ovoid + ooffs + j * opitch,
-                 (char *)output_buffer + ((j + oorigin[1]) * oroi_full.width + oorigin[0]) * out_bpp,
-                 (size_t)oregion[0] * out_bpp);
-      }
-      else
-      {
-        /* blocking direct memory transfer: good part of opencl/device tile -> host output image */
-        err = dt_opencl_read_host_from_device_raw(devid, (char *)ovoid + ooffs, output, oorigin, oregion,
-                                                  opitch, CL_TRUE);
-        if(err != CL_SUCCESS) goto error;
-      }
+      /* blocking direct memory transfer: good part of opencl/device tile -> host output image */
+      err = dt_opencl_read_host_from_device_raw(devid, (char *)ovoid + ooffs, output, oorigin, oregion,
+                                                opitch, CL_TRUE);
+      if(err != CL_SUCCESS) goto error;
 
       /* release input and output buffers */
       dt_opencl_release_mem_object(input);
@@ -1910,28 +1684,18 @@ static int _default_process_tiling_cl_roi(struct dt_iop_module_t *self, const st
       dt_opencl_finish(devid);
     }
 
-  if(!IS_NULL_PTR(input_buffer)) dt_opencl_unmap_mem_object(devid, pinned_input, input_buffer);
-  dt_opencl_release_mem_object(pinned_input);
-  if(!IS_NULL_PTR(output_buffer)) dt_opencl_unmap_mem_object(devid, pinned_output, output_buffer);
-  dt_opencl_release_mem_object(pinned_output);
   dt_opencl_release_mem_object(input);
   dt_opencl_release_mem_object(output);
   mutable_pipe->tiling = 0;
   return TRUE;
 
 error:
-  if(!IS_NULL_PTR(input_buffer)) dt_opencl_unmap_mem_object(devid, pinned_input, input_buffer);
-  dt_opencl_release_mem_object(pinned_input);
-  if(!IS_NULL_PTR(output_buffer)) dt_opencl_unmap_mem_object(devid, pinned_output, output_buffer);
-  dt_opencl_release_mem_object(pinned_output);
   dt_opencl_release_mem_object(input);
   dt_opencl_release_mem_object(output);
   mutable_pipe->tiling = 0;
-  const gboolean pinning_error = (use_pinned_memory == FALSE) && dt_opencl_use_pinned_memory(devid);
   dt_print(DT_DEBUG_OPENCL | DT_DEBUG_TILING,
-      "[default_process_tiling_opencl_roi] couldn't run process_cl() for module '%s' in tiling mode:%s %i\n",
-      self->op, (pinning_error) ? " pinning problem" : "", err);
-  if(pinning_error) darktable.opencl->dev[devid].runtime_error |= 1;
+      "[default_process_tiling_opencl_roi] couldn't run process_cl() for module '%s' in tiling mode: %i\n",
+      self->op, err);
   return FALSE;
 }
 

@@ -43,7 +43,7 @@ jobs:
         btype:
           - RelWithDebInfo
         compiler:
-          - { compiler: GNU13, CC: gcc-13, CXX: g++-13, GCC_VER: "13", LLVM_VER: "" }
+          - { compiler: GNU12, CC: gcc-12, CXX: g++-12, GCC_VER: "12", LLVM_VER: "" }
         eco: [-DBINARY_PACKAGE_BUILD=ON -DUSE_XMLLINT=OFF]
         target:
           - skiptest
@@ -67,9 +67,8 @@ jobs:
       BRANCH: ${{ matrix.branch.code }}
       BUILD_NAME: ${{ matrix.branch.label }}
     steps:
-      - name: Enable compiler repositories
+      - name: Enable Ubuntu repositories
         run: |
-          sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
           sudo add-apt-repository -y universe
           sudo add-apt-repository -y multiverse
           sudo apt-get update

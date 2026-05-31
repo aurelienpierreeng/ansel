@@ -94,6 +94,15 @@ static int _gpu_early_cpu_fallback_if_unsupported(dt_dev_pixelpipe_t *pipe, floa
 
   dt_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] %s will run directly on CPU\n", module->name());
 
+  /** Modules that author their own root input, such as basebuffer, have no
+   * upstream cache entry by design. The OpenCL path skips input borrowing for
+   * them before reaching process_cl(); the CPU fallback must preserve the same
+   * contract and let pixelpipe_process_on_CPU() call process() with a NULL
+   * input. */
+  if(module->flags() & IOP_FLAGS_TAKE_NO_INPUT)
+    return pixelpipe_process_on_CPU(pipe, piece, previous_piece, tiling, pixelpipe_flow,
+                                    cache_output, input_entry, output_entry);
+
   /* CPU fallback only needs a valid host buffer. If `input` already exists here, the upstream
    * hand-off has already materialized authoritative RAM and re-reading the same pixels back out
    * of the cached OpenCL image is redundant. */
@@ -201,43 +210,24 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
   dt_iop_buffer_dsc_t blend_input_dsc = actual_input_dsc;
   dt_iop_buffer_dsc_t blend_output_dsc = piece->dsc_out;
 
-  if(input_entry == NULL)
-    return pixelpipe_process_on_CPU(pipe, piece, previous_piece, tiling, pixelpipe_flow,
-                                    cache_output, NULL, output_entry);
-
-  /* The recursion already owns `input_entry`, so GPU payload recovery must happen from that entry
-   * directly instead of going back through the hash lookup path. Hash lookup is for published
-   * cache hits; here we are consuming the current upstream stage inside the same pipeline run.
-   * When the cacheline already carries a host-backed pinned image, reopen that payload first so
-   * GPU-to-GPU stages can keep flowing through the cached OpenCL image instead of rebuilding it
-   * from host RAM. Base-buffer initialization also seeds this path for the first OpenCL stage. */
-  if(!IS_NULL_PTR(input) && pipe->devid >= 0)
+  // Try to reuse the cached vRAM buffer for the input entry if available 
+  // except for basebuffer module which takes no input
+  if(!(piece->module->flags() & IOP_FLAGS_TAKE_NO_INPUT))
   {
-    /* The cache entry still owns the previous stage payload at this point. Reopen the cached OpenCL image
-     * using the descriptor that was actually published by the upstream stage, not the descriptor this module
-     * wants after any later colorspace conversion. Otherwise GPU-only hand-offs miss reusable payloads as soon
-     * as `piece->dsc_in` diverges from `previous_piece->dsc_out`, and the next module wrongly concludes that
-     * its input vanished from both RAM and vRAM. */
-    cl_mem_input = dt_dev_pixelpipe_cache_borrow_cl_payload(input_entry, input, pipe->devid,
+    cl_mem_input = dt_dev_pixelpipe_cache_borrow_cl_payload(input_entry, pipe->devid,
                                             piece->roi_in.width, piece->roi_in.height,
-                                            actual_input_dsc.bpp,
-                                            CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR);
+                                            actual_input_dsc.bpp);
     borrowed_cl_mem_input = (!IS_NULL_PTR(cl_mem_input));
-  }
+    if(IS_NULL_PTR(cl_mem_input))
+      dt_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] %s could not get a cached vRAM input buffer.\n", module->name());
+      
+    // Note: if that fails, we will attempt resync from RAM cache later
 
-  if(IS_NULL_PTR(cl_mem_input) && IS_NULL_PTR(input) && pipe->devid >= 0)
-  {
-    /* Hostless cachelines only carry the previous stage device payload, so match that published layout here too. */
-    cl_mem_input = dt_dev_pixelpipe_cache_borrow_cl_payload(input_entry, NULL, pipe->devid,
-                                            piece->roi_in.width, piece->roi_in.height,
-                                            actual_input_dsc.bpp, CL_MEM_READ_WRITE);
-    borrowed_cl_mem_input = (!IS_NULL_PTR(cl_mem_input));
-  }
-
-  if(IS_NULL_PTR(input) && IS_NULL_PTR(cl_mem_input))
-  {
-    dt_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] %s has no RAM nor vRAM input... aborting.\n", module->name());
-    return 1;
+    if(IS_NULL_PTR(input) && IS_NULL_PTR(cl_mem_input))
+    {
+      dt_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] %s has no RAM nor vRAM input... aborting.\n", module->name());
+      return 1;
+    }
   }
 
   if(!_is_opencl_supported(pipe, piece, module) || !pipe->opencl_enabled || !(pipe->devid >= 0))
@@ -266,7 +256,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
     dt_print(DT_DEBUG_OPENCL,
              "[dev_pixelpipe] %s pre-check didn't fit on device, flushing cached pinned buffers and retrying\n",
              module->name());
-    dt_dev_pixelpipe_cache_flush_clmem(darktable.pixelpipe_cache, pipe->devid, cl_mem_input);
+    dt_dev_pixelpipe_cache_flush_clmem(darktable.pixelpipe_cache, pipe->devid);
     fits_on_device = dt_opencl_image_fits_device(pipe->devid, precheck_width, precheck_height,
                                                  MAX(piece->dsc_in.bpp, piece->dsc_out.bpp),
                                                  required_factor_cl, tiling->overhead);
@@ -285,6 +275,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
 
   if(possible_cl && !fits_on_device)
   {
+    // Prepare the input buffer for tiling
     const float cl_px = dt_opencl_get_device_available(pipe->devid)
                         / (sizeof(float) * MAX(piece->dsc_in.bpp, piece->dsc_out.bpp)
                            * ceilf(required_factor_cl));
@@ -300,8 +291,10 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
       goto error;
     }
 
+    // Ensure the input image is present on RAM cache,
+    // tiling on OpenCL will only copy tiles from it to GPU.
     if(_gpu_init_input(pipe, &input, &cl_mem_input, piece, tiling,
-                       input_entry, output_entry))
+                      input_entry, output_entry))
       goto error;
   }
 
@@ -309,23 +302,21 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
 
   if(fits_on_device)
   {
-    if(dt_dev_pixelpipe_cache_prepare_cl_input(pipe, module, input, &cl_mem_input,
-                             &piece->roi_in, piece->dsc_in.bpp, input_entry,
-                             &locked_input_entry, NULL))
-      goto error;
+    // Alloc input GPU buffer if we didn't already borrow it
+    if(!(piece->module->flags() & IOP_FLAGS_TAKE_NO_INPUT))
+      if(dt_dev_pixelpipe_cache_prepare_cl_input(pipe, module, input, &cl_mem_input,
+                              &piece->roi_in, piece->dsc_in.bpp, input_entry,
+                              &locked_input_entry, NULL))
+        goto error;
+
     cl_mem_process_input = cl_mem_input;
 
-    if(IS_NULL_PTR(cl_mem_output))
-    {
-      const gboolean reuse_output_cacheline = _requests_cache(pipe, piece)
-                                              && (pipe->realtime || !(*cache_output));
-      const gboolean reuse_output_pinned = reuse_output_cacheline;
-      cl_mem_output = dt_dev_pixelpipe_cache_get_cl_buffer(pipe->devid, output, &piece->roi_out, piece->dsc_out.bpp, module,
-                                       "output", output_entry, reuse_output_pinned, reuse_output_cacheline,
-                                       NULL, cl_mem_input);
-      if(IS_NULL_PTR(cl_mem_output)) goto error;
-    }
-
+    // Alloc output GPU buffer - non-optional
+    cl_mem_output = dt_dev_pixelpipe_cache_get_cl_buffer(pipe->devid, output, &piece->roi_out, piece->dsc_out.bpp, module,
+                                                         "output", output_entry,
+                                                         NULL, cl_mem_input);
+    if(IS_NULL_PTR(cl_mem_output)) goto error;
+    
     const int cst_before_cl = process_input_dsc.cst;
     if(process_input_dsc.cst != piece->dsc_in.cst
        && !(dt_iop_colorspace_is_rgb(process_input_dsc.cst) && dt_iop_colorspace_is_rgb(piece->dsc_in.cst)))
@@ -422,7 +413,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
 
         if(!success)
         {
-          dt_print(DT_DEBUG_OPENCL, "[opencl_pixelpipe] couldn't transform blending colorspace for module %s\n",
+          dt_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] couldn't transform blending colorspace for module %s\n",
                    module->name());
           goto error;
         }
@@ -463,6 +454,8 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
   }
   else if(piece->process_tiling_ready && !IS_NULL_PTR(input))
   {
+    // FIXME: we don't cover the case (piece->module->flags() & IOP_FLAGS_TAKE_NO_INPUT)
+    // in tiling path
     const float *module_input = input;
     const float *blend_input = input;
     float *module_input_temp = NULL;
@@ -608,7 +601,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
   }
   else
   {
-    dt_print(DT_DEBUG_OPENCL, "[opencl_pixelpipe] could not run module '%s' on gpu. falling back to cpu path\n",
+    dt_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] could not run module '%s' on gpu. falling back to cpu path\n",
              module->name());
     goto error;
   }
@@ -633,10 +626,9 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
 
   /* The backend now owns the authoritative module output payload until publish time.
    * When the output stayed GPU-only, the recursion no longer carries `cl_mem_output`
-   * back explicitly, so we must cache or release it here before returning. Otherwise
+   * back explicitly, so we must cache it here before returning. Otherwise
    * the caller publishes a cacheline with metadata only and no recoverable payload. */
-  dt_dev_pixelpipe_cache_release_cl_buffer(&cl_mem_output, output_entry, output,
-                                    dt_dev_pixelpipe_cache_gpu_device_buffer(pipe, output_entry));
+  dt_dev_pixelpipe_cache_release_cl_buffer(&cl_mem_output, output_entry, output, TRUE);
 
   dt_dev_pixelpipe_cache_release_cl_buffer(&cl_mem_blend_output_temp, NULL, NULL, FALSE);
   dt_dev_pixelpipe_cache_release_cl_buffer(&cl_mem_blend_input_temp, NULL, NULL, FALSE);

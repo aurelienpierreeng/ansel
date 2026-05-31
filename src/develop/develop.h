@@ -372,6 +372,8 @@ typedef struct dt_develop_t
     uint64_t piece_hash;
     uint64_t wait_input_hash;
     uint64_t wait_output_hash;
+    dt_dev_pixelpipe_cache_wait_t input_wait;
+    dt_dev_pixelpipe_cache_wait_t output_wait;
 
     struct dt_iop_module_t *pending_module;
     struct dt_dev_pixelpipe_t *pending_pipe;
@@ -547,6 +549,8 @@ void dt_dev_coordinates_image_norm_to_image_abs(dt_develop_t *dev, float *points
 void dt_dev_coordinates_image_abs_to_image_norm(dt_develop_t *dev, float *points, size_t num_points);
 void dt_dev_coordinates_raw_abs_to_raw_norm(dt_develop_t *dev, float *points, size_t num_points);
 void dt_dev_coordinates_raw_norm_to_raw_abs(dt_develop_t *dev, float *points, size_t num_points);
+void dt_dev_coordinates_image_norm_to_raw_norm(dt_develop_t *dev, float *points, size_t num_points);
+void dt_dev_coordinates_raw_norm_to_image_norm(dt_develop_t *dev, float *points, size_t num_points);
 void dt_dev_coordinates_image_norm_to_preview_abs(dt_develop_t *dev, float *points, size_t num_points);
 void dt_dev_coordinates_preview_abs_to_image_norm(dt_develop_t *dev, float *points, size_t num_points);
 void dt_dev_coordinates_image_abs_to_raw_norm(dt_develop_t *dev, float *points, size_t num_points);

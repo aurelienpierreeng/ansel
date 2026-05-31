@@ -121,7 +121,6 @@ typedef dt_drawlayer_runtime_context_t drawlayer_runtime_host_context_t;
 #define _ensure_layer_cache dt_drawlayer_ensure_layer_cache
 #define _release_all_base_patch_extra_refs dt_drawlayer_release_all_base_patch_extra_refs
 #define _drawlayer_wait_for_rasterization_modal dt_drawlayer_wait_for_rasterization_modal
-#define _set_drawlayer_os_cursor_hidden dt_drawlayer_set_os_cursor_hidden
 #define _current_live_padding dt_drawlayer_current_live_padding
 #define _layer_to_widget_coords dt_drawlayer_layer_to_widget_coords
 #define _touch_stroke_commit_hash dt_drawlayer_touch_stroke_commit_hash
@@ -711,19 +710,11 @@ static gboolean _drawlayer_sync_host_image_to_device(const int devid, cl_mem dev
     }
   }
 
-  const cl_mem_flags flags = dt_opencl_get_mem_flags(device_image);
-  if(flags & CL_MEM_USE_HOST_PTR)
+  if(dt_opencl_is_pinned_memory(device_image))
   {
     void *mapped = dt_opencl_map_image(devid, device_image, TRUE, CL_MAP_WRITE, width, height, bpp);
-    if(mapped)
-    {
-      const gboolean zero_copy = (mapped == host_pixels);
-      if(dt_opencl_unmap_mem_object(devid, device_image, mapped) == CL_SUCCESS)
-      {
-        dt_opencl_finish(devid);
-        if(zero_copy) return TRUE;
-      }
-    }
+    if(dt_opencl_unmap_mem_object(devid, device_image, mapped) == CL_SUCCESS)
+      return TRUE;
   }
 
   return dt_opencl_write_host_to_device(devid, host_pixels, device_image, width, height, bpp) == CL_SUCCESS;
@@ -754,7 +745,7 @@ static gboolean _drawlayer_acquire_source_image(const int devid, const float *la
     const dt_iop_roi_t source_roi = { .width = source_w, .height = source_h };
     gboolean reused_from_cache = FALSE;
     source->mem = dt_dev_pixelpipe_cache_get_cl_buffer(devid, NULL, &source_roi, 4 * sizeof(float), NULL,
-                                                       "drawlayer source", resolved_entry, FALSE, TRUE,
+                                                       "drawlayer source", resolved_entry,
                                                        &reused_from_cache, NULL);
     if(source->mem)
     {
@@ -841,7 +832,7 @@ static gboolean _drawlayer_acquire_layer_image(const int devid, dt_pixel_cache_e
   if(realtime_reuse && resolved_entry)
   {
     layer->mem = dt_dev_pixelpipe_cache_get_cl_buffer(devid, NULL, target_roi, 4 * sizeof(float), NULL,
-                                                      "drawlayer layer", resolved_entry, FALSE, TRUE, NULL,
+                                                      "drawlayer layer", resolved_entry, NULL,
                                                       dev_source_rgba);
     layer->is_cached_device = (!IS_NULL_PTR(layer->mem));
   }
@@ -849,11 +840,6 @@ static gboolean _drawlayer_acquire_layer_image(const int devid, dt_pixel_cache_e
   if(IS_NULL_PTR(layer->mem))
   {
     layer->mem = dt_opencl_alloc_device(devid, target_roi->width, target_roi->height, 4 * sizeof(float));
-    if(IS_NULL_PTR(layer->mem))
-    {
-      dt_dev_pixelpipe_cache_flush_clmem(darktable.pixelpipe_cache, devid, dev_source_rgba);
-      layer->mem = dt_opencl_alloc_device(devid, target_roi->width, target_roi->height, 4 * sizeof(float));
-    }
   }
 
   if(IS_NULL_PTR(layer->mem))
@@ -1074,26 +1060,6 @@ static void _ensure_cursor_stamp_surface(dt_iop_module_t *self, const float widg
   g->ui.cursor_color[0] = display_rgb[0];
   g->ui.cursor_color[1] = display_rgb[1];
   g->ui.cursor_color[2] = display_rgb[2];
-}
-
-void dt_drawlayer_set_os_cursor_hidden(const gboolean hidden)
-{
-  if(IS_NULL_PTR(darktable.gui) || IS_NULL_PTR(darktable.gui->ui)) return;
-
-  GtkWidget *center = dt_ui_center(darktable.gui->ui);
-  GtkWidget *main = dt_ui_main_window(darktable.gui->ui);
-  GdkDisplay *display = gdk_display_get_default();
-  if(IS_NULL_PTR(display)) return;
-
-  const dt_cursor_t cursor_id = hidden ? GDK_BLANK_CURSOR : GDK_LEFT_PTR;
-  GdkCursor *cursor = gdk_cursor_new_for_display(display, cursor_id);
-  if(IS_NULL_PTR(cursor)) return;
-
-  if(center && gtk_widget_get_window(center)) gdk_window_set_cursor(gtk_widget_get_window(center), cursor);
-  if(main && gtk_widget_get_window(main)) gdk_window_set_cursor(gtk_widget_get_window(main), cursor);
-
-  dt_control_set_cursor(cursor_id);
-  g_object_unref(cursor);
 }
 
 static drawlayer_wait_dialog_t _show_drawlayer_wait_dialog(const char *title, const char *message)
@@ -3254,7 +3220,7 @@ void gui_focus(dt_iop_module_t *self, gboolean in)
       .event = DT_DRAWLAYER_RUNTIME_EVENT_GUI_FOCUS_LOSS,
       .raw_input_kind = DT_DRAWLAYER_RUNTIME_RAW_INPUT_NONE,
     };
-    _set_drawlayer_os_cursor_hidden(FALSE);
+    dt_control_set_cursor_visible(TRUE);
     if(g) dt_drawlayer_runtime_manager_update(&g->manager, &update, &runtime_manager);
     if(had_pending_edits && params)
       _touch_stroke_commit_hash(params, pending_samples, g->stroke.last_dab_valid, g->stroke.last_dab_x,
@@ -3303,7 +3269,7 @@ void gui_cleanup(dt_iop_module_t *self)
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
   if(IS_NULL_PTR(g)) return;
 
-  _set_drawlayer_os_cursor_hidden(FALSE);
+  dt_control_set_cursor_visible(TRUE);
   _update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_FOCUS_LOSS, FALSE);
 
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_develop_ui_pipe_finished_callback), self);

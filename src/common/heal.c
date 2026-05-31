@@ -441,10 +441,6 @@ heal_params_cl_t *dt_heal_init_cl(const int devid)
 void dt_heal_free_cl(heal_params_cl_t *p)
 {
   if(IS_NULL_PTR(p)) return;
-
-  // be sure we're done with the memory:
-  dt_opencl_finish(p->devid);
-
   dt_free(p);
 }
 

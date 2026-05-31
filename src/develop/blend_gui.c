@@ -1139,36 +1139,36 @@ static void _blendop_masks_mode_changed(GtkToggleButton *togglebutton, dt_iop_mo
   if(IS_NULL_PTR(module->blend_data)) return;
 
   uint32_t mask_mode = module->blend_params->mask_mode;
-  const gboolean active = gtk_toggle_button_get_active(togglebutton);
+  const gboolean disabled = gtk_toggle_button_get_active(togglebutton);
 
   switch(bit)
   {
     case DEVELOP_MASK_ENABLED:
-      if(active)
-        mask_mode |= DEVELOP_MASK_ENABLED;
-      else
+      if(disabled)
         mask_mode &= ~DEVELOP_MASK_ENABLED;
+      else
+        mask_mode |= DEVELOP_MASK_ENABLED;
       break;
 
     case DEVELOP_MASK_RASTER:
-      if(active)
-        mask_mode |= DEVELOP_MASK_ENABLED | DEVELOP_MASK_RASTER;
-      else
+      if(disabled)
         mask_mode &= ~DEVELOP_MASK_RASTER;
+      else
+        mask_mode |= DEVELOP_MASK_ENABLED | DEVELOP_MASK_RASTER;
       break;
 
     case DEVELOP_MASK_MASK:
-      if(active)
-        mask_mode |= DEVELOP_MASK_ENABLED | DEVELOP_MASK_MASK;
-      else
+      if(disabled)
         mask_mode &= ~DEVELOP_MASK_MASK;
+      else
+        mask_mode |= DEVELOP_MASK_ENABLED | DEVELOP_MASK_MASK;
       break;
 
     case DEVELOP_MASK_CONDITIONAL:
-      if(active)
-        mask_mode |= DEVELOP_MASK_ENABLED | DEVELOP_MASK_CONDITIONAL;
-      else
+      if(disabled)
         mask_mode &= ~DEVELOP_MASK_CONDITIONAL;
+      else
+        mask_mode |= DEVELOP_MASK_ENABLED | DEVELOP_MASK_CONDITIONAL;
       break;
 
     default:
@@ -1245,40 +1245,18 @@ static gboolean _blendop_blendif_invert(GtkButton *button, GdkEventButton *event
   return TRUE;
 }
 
-static gboolean _blendop_masks_add_shape(GtkWidget *widget, GdkEventButton *event, dt_iop_module_t *self)
+static gboolean _blendop_masks_shape_can_start(GtkWidget *button, dt_iop_module_t *module,
+                                               dt_masks_type_t type, gpointer user_data)
 {
-  if(darktable.gui->reset || event->button != GDK_BUTTON_PRIMARY) return TRUE;
-
-  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)self->blend_data;
-
-  // find out who we are
-  int this = -1;
-  for(int n = 0; n < DEVELOP_MASKS_NB_SHAPES; n++)
-  {
-    if(widget == bd->masks_shapes[n])
-    {
-      this = n;
-      break;
-    }
-  }
-
-  if(this < 0) return FALSE;
-
-  // set all shape buttons to inactive
-  for(int n = 0; n < DEVELOP_MASKS_NB_SHAPES; n++)
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->masks_shapes[n]), FALSE);
+  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)user_data;
+  if(IS_NULL_PTR(module) || IS_NULL_PTR(bd)) return FALSE;
 
   // we want to be sure that the iop has focus
-  dt_iop_request_focus(self);
-  dt_iop_color_picker_reset(self, FALSE);
+  dt_iop_request_focus(module);
+  dt_iop_color_picker_reset(module, FALSE);
   bd->masks_shown = DT_MASKS_EDIT_FULL;
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widget), TRUE);
   if(GTK_IS_TOGGLE_BUTTON(bd->masks_edit))
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->masks_edit), FALSE);
-  // we create the new form
-  dt_masks_creation_mode(self, bd->masks_type[this]);
-  dt_control_queue_redraw_center();
-
   return TRUE;
 }
 
@@ -1324,9 +1302,8 @@ static gboolean _blendop_masks_show_and_edit(GtkWidget *widget, GdkEventButton *
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->masks_edit), bd->masks_shown != DT_MASKS_EDIT_OFF);
     dt_masks_set_edit_mode(self, bd->masks_shown);
 
-    // set all add shape buttons to inactive
-    for(int n = 0; n < DEVELOP_MASKS_NB_SHAPES; n++)
-      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->masks_shapes[n]), FALSE);
+    // Deactivate every masks shape toolbar because edit mode replaces creation mode.
+    dt_masks_shape_buttons_deactivate_all(NULL);
 
     --darktable.gui->reset;
 
@@ -1835,8 +1812,20 @@ static void _blendop_masks_all_selection_changed(GtkTreeSelection *selection, dt
   int formid = -1;
   gtk_tree_model_get(model, &iter, BLENDOP_MASKS_ALL_COL_FORMID, &formid, -1);
   if(formid <= 0) return;
+  dt_masks_form_t *mask_form = dt_masks_get_from_id(darktable.develop, formid);
+  if(IS_NULL_PTR(mask_form)) return;
 
-  dt_dev_masks_selection_change(darktable.develop, NULL, formid, TRUE);
+  // Keep the global shape manager in sync without firing its selection handler.
+  // That handler rebuilds the visible mask GUI and can be re-entered while this
+  // blend list selection is still being processed.
+  dt_dev_masks_selection_change(darktable.develop, NULL, formid, FALSE);
+  dt_masks_change_form_gui(mask_form);
+  if(module->dev && module->dev->form_gui)
+  {
+    module->dev->form_gui->group_selected = 0;
+    module->dev->form_gui->form_selected = TRUE;
+  }
+  dt_masks_center_view_on_form(module->dev, mask_form);
 }
 
 static void _blendop_masks_all_toggled(GtkCellRendererToggle *cell, gchar *path_string, dt_iop_module_t *module)
@@ -2092,9 +2081,24 @@ static void _blendop_masks_group_selection_changed(GtkTreeSelection *selection, 
   int formid = -1;
   gtk_tree_model_get(model, &iter, BLENDOP_MASKS_GROUP_COL_FORMID, &formid, -1);
   if(formid <= 0) return;
+  dt_masks_form_t *mask_form = dt_masks_get_from_id(darktable.develop, formid);
+  if(IS_NULL_PTR(mask_form)) return;
 
-  // Switching edit mode is required to actually display mask overlays in the center view.
-  dt_masks_set_edit_mode(module, DT_MASKS_EDIT_FULL);
+  // Switching edit mode rebuilds the visible module group. Do it only when the
+  // current overlay does not already contain the selected row, because this
+  // callback runs inside a GtkTreeSelection::changed emission.
+  dt_masks_form_gui_t *gui = module->dev ? module->dev->form_gui : NULL;
+  dt_masks_form_t *visible_form = module->dev ? dt_masks_get_visible_form(module->dev) : NULL;
+  if(IS_NULL_PTR(gui) || gui->edit_mode != DT_MASKS_EDIT_FULL
+     || dt_masks_group_index_from_formid(visible_form, formid) < 0)
+  {
+    // Rebuilding the visible group may update Gtk widgets. Hold the GUI reset
+    // guard so selection callbacks emitted during that rebuild don't recurse.
+    ++darktable.gui->reset;
+    dt_masks_set_edit_mode(module, DT_MASKS_EDIT_FULL);
+    --darktable.gui->reset;
+  }
+
   // Keep lib/masks tree selection in sync without re-triggering its selection handler,
   // otherwise the visible overlay can be replaced by only the clicked shape.
   dt_dev_masks_selection_change(darktable.develop, module, formid, FALSE);
@@ -2102,8 +2106,8 @@ static void _blendop_masks_group_selection_changed(GtkTreeSelection *selection, 
   // Mark the selected shape as active in the central mask GUI state.
   if(module->dev && module->dev->form_gui)
   {
-    dt_masks_form_gui_t *gui = module->dev->form_gui;
-    dt_masks_form_t *visible_form = dt_masks_get_visible_form(module->dev);
+    gui = module->dev->form_gui;
+    visible_form = dt_masks_get_visible_form(module->dev);
     const int selected_index = dt_masks_group_index_from_formid(visible_form, formid);
     if(selected_index >= 0)
     {
@@ -2122,6 +2126,7 @@ static void _blendop_masks_group_selection_changed(GtkTreeSelection *selection, 
       gui->pivot_selected = FALSE;
     }
   }
+  dt_masks_center_view_on_form(module->dev, mask_form);
 }
 
 static gboolean _blendop_masks_group_move_by_index(dt_masks_form_t *group_form, const int index,
@@ -2183,55 +2188,28 @@ static void _blendop_masks_edit_list_toggle(GtkToggleButton *togglebutton, dt_io
     gtk_widget_set_sensitive(bd->group_shapes_label, !edit_mode);
 }
 
-static GtkWidget *_blendop_masks_shape_buttons(dt_iop_module_t *module, dt_iop_gui_blend_data_t *bd)
+static GtkWidget *_blendop_masks_create_shape_buttons(dt_iop_module_t *module, dt_iop_gui_blend_data_t *bd)
 {
   if(IS_NULL_PTR(module) || IS_NULL_PTR(bd)) return NULL;
 
-  GtkWidget *all_shapes_buttons = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-  gtk_widget_set_halign(all_shapes_buttons, GTK_ALIGN_END);
-  gtk_widget_set_valign(all_shapes_buttons, GTK_ALIGN_START);
+  const dt_masks_shape_buttons_config_t config = {
+    .owner_module = module,
+    .creation_module = module,
+    .buttons = bd->masks_shapes,
+    .types = bd->masks_type,
+    .action_section = "blend_shapes",
+    .flags = DT_MASKS_SHAPE_BUTTONS_ALL,
+    .register_flags = DT_MASKS_SHAPE_BUTTONS_POLYGON,
+    .local = FALSE,
+    .user_data = bd,
+    .can_start = _blendop_masks_shape_can_start,
+    .form_type = NULL,
+    .started = NULL,
+    .exited = NULL
+  };
+  GtkWidget *widget = dt_masks_shape_buttons_create(&config);
 
-  bd->masks_type[0] = DT_MASKS_GRADIENT;
-  bd->masks_shapes[0] = dt_iop_togglebutton_new_no_register(module, "blend`shapes", N_("add gradient"),
-                                                            N_("add multiple gradients"),
-                                                            G_CALLBACK(_blendop_masks_add_shape),
-                                                            FALSE, 0, 0, dtgtk_cairo_paint_masks_gradient,
-                                                            all_shapes_buttons);
-  gtk_widget_set_valign(bd->masks_shapes[0], GTK_ALIGN_START);
-
-  bd->masks_type[4] = DT_MASKS_BRUSH;
-  bd->masks_shapes[4] = dt_iop_togglebutton_new_no_register(module, "blend`shapes", N_("add brush"),
-                                                            N_("add multiple brush strokes"),
-                                                            G_CALLBACK(_blendop_masks_add_shape),
-                                                            FALSE, 0, 0, dtgtk_cairo_paint_masks_brush,
-                                                            all_shapes_buttons);
-  gtk_widget_set_valign(bd->masks_shapes[4], GTK_ALIGN_START);
-
-  bd->masks_type[1] = DT_MASKS_POLYGON;
-  bd->masks_shapes[1] = dt_iop_togglebutton_new(module, "blend`shapes", N_("add polygon"),
-                                                N_("add multiple polygons"),
-                                                G_CALLBACK(_blendop_masks_add_shape),
-                                                FALSE, 0, 0, dtgtk_cairo_paint_masks_polygon,
-                                                all_shapes_buttons);
-  gtk_widget_set_valign(bd->masks_shapes[1], GTK_ALIGN_START);
-
-  bd->masks_type[2] = DT_MASKS_ELLIPSE;
-  bd->masks_shapes[2] = dt_iop_togglebutton_new_no_register(module, "blend`shapes", N_("add ellipse"),
-                                                            N_("add multiple ellipses"),
-                                                            G_CALLBACK(_blendop_masks_add_shape),
-                                                            FALSE, 0, 0, dtgtk_cairo_paint_masks_ellipse,
-                                                            all_shapes_buttons);
-  gtk_widget_set_valign(bd->masks_shapes[2], GTK_ALIGN_START);
-
-  bd->masks_type[3] = DT_MASKS_CIRCLE;
-  bd->masks_shapes[3] = dt_iop_togglebutton_new_no_register(module, "blend`shapes", N_("add circle"),
-                                                            N_("add multiple circles"),
-                                                            G_CALLBACK(_blendop_masks_add_shape),
-                                                            FALSE, 0, 0, dtgtk_cairo_paint_masks_circle,
-                                                            all_shapes_buttons);
-  gtk_widget_set_valign(bd->masks_shapes[3], GTK_ALIGN_START);
-
-  return all_shapes_buttons;
+  return widget;
 }
 
 static GtkWidget *_blendop_masks_group_ctx_menu(dt_iop_gui_blend_data_t *bd, dt_iop_module_t *module,
@@ -3262,6 +3240,20 @@ void dt_iop_gui_init_blendif(GtkBox *blendw, dt_iop_module_t *module)
 
     bd->blendif_inited = 1;
   }
+  else
+  {
+    gchar *module_name = dt_history_item_get_name(module);
+    gchar *markup = g_markup_printf_escaped(
+      _("<i>Parametric masking is disabled because the <b>%s</b> module does not provide compatible color channels.</i>"),
+      module_name);
+    GtkWidget *label = gtk_label_new(NULL);
+    gtk_label_set_markup(GTK_LABEL(label), markup);
+    gtk_label_set_xalign(GTK_LABEL(label), 0.0f);
+    gtk_label_set_line_wrap(GTK_LABEL(label), TRUE);
+    gtk_box_pack_start(GTK_BOX(bd->blendif_box), label, FALSE, FALSE, 0);
+    dt_free(markup);
+    dt_free(module_name);
+  }
 }
 
 void dt_masks_iop_update(dt_iop_module_t *module)
@@ -3274,6 +3266,13 @@ void dt_masks_iop_update(dt_iop_module_t *module)
   ++darktable.gui->reset;
 
   /* update masks state */
+  dt_masks_form_gui_t *form_gui = module->dev->form_gui;
+  dt_masks_form_t *visible_form = dt_masks_get_visible_form(module->dev);
+  const gboolean module_creation = !IS_NULL_PTR(form_gui) && form_gui->creation
+                                  && form_gui->creation_module == module;
+  const dt_masks_type_t creation_type = module_creation && !IS_NULL_PTR(visible_form)
+                                        ? visible_form->type
+                                        : (module_creation ? form_gui->creation_type : DT_MASKS_NONE);
   dt_masks_form_t *grp = dt_masks_get_from_id(darktable.develop, module->blend_params->mask_id);
   const gboolean has_group_shapes = grp && (grp->type & DT_MASKS_GROUP) && grp->points;
   if(GTK_IS_WIDGET(bd->masks_combo))
@@ -3304,7 +3303,8 @@ void dt_masks_iop_update(dt_iop_module_t *module)
   if(bd->masks_support)
   {
     if(GTK_IS_TOGGLE_BUTTON(bd->masks_edit))
-      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->masks_edit), bd->masks_shown != DT_MASKS_EDIT_OFF);
+      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->masks_edit),
+                                   !module_creation && bd->masks_shown != DT_MASKS_EDIT_OFF);
 
     if(GTK_IS_TOGGLE_BUTTON(bd->masks_polarity))
       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->masks_polarity),
@@ -3316,10 +3316,7 @@ void dt_masks_iop_update(dt_iop_module_t *module)
   {
     if(!GTK_IS_TOGGLE_BUTTON(bd->masks_shapes[n])) continue;
 
-    dt_masks_form_t *visible_form = dt_masks_get_visible_form(module->dev);
-    if(module->dev->form_gui && visible_form && module->dev->form_gui->creation
-       && module->dev->form_gui->creation_module == module
-       && (visible_form->type & bd->masks_type[n]))
+    if(module_creation && (creation_type & bd->masks_type[n]))
     {
       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->masks_shapes[n]), TRUE);
     }
@@ -3359,7 +3356,9 @@ void dt_iop_gui_init_masks(GtkBox *blendw, dt_iop_module_t *module)
     GtkWidget *group_shapes_header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
     dt_gui_add_class(group_shapes_header, "dt_section_label");
     bd->group_shapes_label = gtk_entry_new();
-    gtk_entry_set_placeholder_text(GTK_ENTRY(bd->group_shapes_label), dt_dev_get_masks_group_name(module));
+    gchar *group_placeholder = dt_dev_get_masks_group_name(module);
+    gtk_entry_set_placeholder_text(GTK_ENTRY(bd->group_shapes_label), group_placeholder);
+    g_free(group_placeholder);
     gtk_widget_set_tooltip_text(bd->group_shapes_label, _("Edit current module mask name"));
     gtk_widget_set_halign(bd->group_shapes_label, GTK_ALIGN_FILL);
     gtk_widget_set_hexpand(bd->group_shapes_label, TRUE);
@@ -3420,8 +3419,9 @@ void dt_iop_gui_init_masks(GtkBox *blendw, dt_iop_module_t *module)
     dt_gui_widget_init_auto_height(bd->masks_group_treeview, TREE_LIST_MIN_ROWS, TREE_LIST_MAX_ROWS);
 
     // Creating shapes buttons (circle, ellipse ....)
-    bd->all_shapes_buttons = _blendop_masks_shape_buttons(module, bd);
+    bd->all_shapes_buttons = _blendop_masks_create_shape_buttons(module, bd);
     if(!GTK_IS_WIDGET(bd->all_shapes_buttons)) return;
+
     // Wire shapes toggle button
     bd->wire_shape_toggle = gtk_toggle_button_new_with_label(_("Wire shapes"));
     gtk_widget_set_tooltip_text(bd->wire_shape_toggle, _("Show all shapes and groups to choose which ones to connect to or disconnect from the mask."));
@@ -3495,16 +3495,28 @@ void dt_iop_gui_init_masks(GtkBox *blendw, dt_iop_module_t *module)
     // - all-shapes tree is hidden
     // The toggle callback flips these two scrolled windows.
     g_signal_connect(bd->wire_shape_toggle, "toggled", G_CALLBACK(_blendop_masks_edit_list_toggle), module);
-    if(GTK_IS_TOGGLE_BUTTON(bd->wire_shape_toggle))
-    {
-      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->wire_shape_toggle), FALSE);
-      _blendop_masks_edit_list_toggle(GTK_TOGGLE_BUTTON(bd->wire_shape_toggle), module);
-    }
+
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->wire_shape_toggle), FALSE);
+    _blendop_masks_edit_list_toggle(GTK_TOGGLE_BUTTON(bd->wire_shape_toggle), module);
 
     gtk_box_pack_start(GTK_BOX(bd->masks_box), bd->lists_box, FALSE, FALSE, 0);
 
     bd->masks_inited = 1;
     _blendop_masks_refresh_lists(module);
+  }
+  else
+  {
+    gchar *module_name = dt_history_item_get_name(module);
+    gchar *markup = g_markup_printf_escaped(
+      _("<i>Drawn masking is disabled because the <b>%s</b> module manages drawn shapes internally.</i>"),
+       module_name);
+    GtkWidget *label = gtk_label_new(NULL);
+    gtk_label_set_markup(GTK_LABEL(label), markup);
+    gtk_label_set_xalign(GTK_LABEL(label), 0.0f);
+    gtk_label_set_line_wrap(GTK_LABEL(label), TRUE);
+    gtk_box_pack_start(GTK_BOX(bd->masks_box), label, FALSE, FALSE, 0);
+    dt_free(markup);
+    dt_free(module_name);
   }
   gtk_container_add(GTK_CONTAINER(event_box), GTK_WIDGET(bd->masks_box));
 }
@@ -3715,7 +3727,7 @@ static void _notebook_append_full_width_page(GtkWidget *notebook, GtkWidget *pag
 
 static GtkWidget *_blendop_create_enable_toggle(dt_iop_module_t *module, const unsigned int mask_bit)
 {
-  GtkWidget *toggle = gtk_check_button_new_with_label(_("Enable"));
+  GtkWidget *toggle = gtk_check_button_new_with_label(_("Disable"));
   g_object_set_data(G_OBJECT(toggle), "mask-bit", GUINT_TO_POINTER(mask_bit));
   g_signal_connect(G_OBJECT(toggle), "toggled", G_CALLBACK(_blendop_masks_mode_changed), module);
   return toggle;
@@ -3726,13 +3738,13 @@ static void _blendop_update_top_enable_label(dt_iop_module_t *module)
   if(IS_NULL_PTR(module) || !module->blend_data) return;
 
   dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
-  if(!GTK_IS_BUTTON(bd->top_enable)) return;
+  if(!GTK_IS_BUTTON(bd->top_disable)) return;
 
   gchar *clean_name = delete_underscore(module->name());
   const char *multi_name = module->multi_name[0] ? module->multi_name : "0";
   gchar *multi_name_dup = ((g_strcmp0(multi_name, "0") == 0) || (g_strcmp0(multi_name, "") == 0)) ?  g_strdup("") : g_strdup_printf(" (%s)", multi_name);
-  GtkWidget *child = gtk_bin_get_child(GTK_BIN(bd->top_enable));
-  gchar *label = g_markup_printf_escaped(_("Enable blending/masking in <b>%s%s</b>"), clean_name, multi_name_dup);
+  GtkWidget *child = gtk_bin_get_child(GTK_BIN(bd->top_disable));
+  gchar *label = g_markup_printf_escaped(_("Disable blending/masking in <b>%s%s</b>"), clean_name, multi_name_dup);
   if(GTK_IS_LABEL(child))
   {
     gtk_label_set_markup(GTK_LABEL(child), label);
@@ -3775,7 +3787,7 @@ static void _blendop_toggle_button_set_active(GtkWidget *toggle, const gboolean 
 static void _blendop_sync_toggle_state(GtkWidget *toggle, const gboolean available,
                                        const gboolean enabled, GtkWidget *content)
 {
-  _blendop_toggle_button_set_active(toggle, enabled);
+  _blendop_toggle_button_set_active(toggle, !enabled);
   if(GTK_IS_WIDGET(toggle))
     gtk_widget_set_sensitive(toggle, available);
   if(GTK_IS_WIDGET(content))
@@ -3958,14 +3970,14 @@ void dt_iop_gui_update_blending(dt_iop_module_t *module)
                                                   || (bd->blendif_inited && blendif_enabled));
 
   _blendop_update_top_enable_label(module);
-  _blendop_toggle_button_set_active(bd->top_enable, top_enabled);
+  _blendop_toggle_button_set_active(bd->top_disable, !top_enabled);
   if(GTK_IS_WIDGET(bd->top_content))
     gtk_widget_set_sensitive(bd->top_content, top_enabled);
   if(GTK_IS_WIDGET(bd->blending_notebook))
     gtk_widget_set_sensitive(bd->blending_notebook, top_enabled);
-  _blendop_sync_toggle_state(bd->masks_enable, bd->masks_inited, masks_enabled, bd->masks_content);
-  _blendop_sync_toggle_state(bd->raster_enable, bd->raster_inited, raster_enabled, bd->raster_content);
-  _blendop_sync_toggle_state(bd->blendif_enable, bd->blendif_inited, blendif_enabled, bd->blendif_content);
+  _blendop_sync_toggle_state(bd->masks_disable, bd->masks_inited, masks_enabled, bd->masks_content);
+  _blendop_sync_toggle_state(bd->raster_disable, bd->raster_inited, raster_enabled, bd->raster_content);
+  _blendop_sync_toggle_state(bd->blendif_disable, bd->blendif_inited, blendif_enabled, bd->blendif_content);
   gtk_widget_set_sensitive(bd->bottom_content, bottom_enabled);
 
   // Details mask is deprecated. Show it only if it was used in an old edit,
@@ -4039,9 +4051,7 @@ void dt_iop_gui_update_blending(dt_iop_module_t *module)
 
   if(bd->masks_support && !masks_enabled)
   {
-    for(int n = 0; n < DEVELOP_MASKS_NB_SHAPES; n++)
-      if(bd->masks_shapes[n])
-        _blendop_toggle_button_set_active(bd->masks_shapes[n], FALSE);
+    dt_masks_shape_buttons_deactivate_all(NULL);
   }
 
   if(bd->blendif_inited && !blendif_enabled)
@@ -4097,9 +4107,7 @@ void dt_iop_gui_blending_lose_focus(dt_iop_module_t *module)
       _blendop_toggle_button_set_active(bd->masks_edit, FALSE);
       dt_masks_set_edit_mode(module, DT_MASKS_EDIT_OFF);
 
-      for(int k=0; k < DEVELOP_MASKS_NB_SHAPES; k++)
-        if(bd->masks_shapes[k])
-          _blendop_toggle_button_set_active(bd->masks_shapes[k], FALSE);
+      dt_masks_shape_buttons_deactivate_all(NULL);
     }
 
     dt_pthread_mutex_lock(&bd->lock);
@@ -4153,10 +4161,10 @@ void dt_iop_gui_cleanup_blending_body(dt_iop_module_t *module)
 
   bd->blending_body_box = NULL;
   bd->blending_notebook = NULL;
-  bd->top_enable = NULL;
-  bd->masks_enable = NULL;
-  bd->raster_enable = NULL;
-  bd->blendif_enable = NULL;
+  bd->top_disable = NULL;
+  bd->masks_disable = NULL;
+  bd->raster_disable = NULL;
+  bd->blendif_disable = NULL;
   bd->top_content = NULL;
   bd->masks_content = NULL;
   bd->raster_content = NULL;
@@ -4370,9 +4378,9 @@ void dt_iop_gui_init_blending_body(GtkBox *blendw, dt_iop_module_t *module)
   gtk_box_pack_start(GTK_BOX(blendw), bd->blending_body_box, TRUE, TRUE, 0);
 
   GtkWidget *top_header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-  bd->top_enable = _blendop_create_enable_toggle(module, DEVELOP_MASK_ENABLED);
+  bd->top_disable = _blendop_create_enable_toggle(module, DEVELOP_MASK_ENABLED);
   _blendop_update_top_enable_label(module);
-  gtk_box_pack_start(GTK_BOX(top_header), bd->top_enable, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(top_header), bd->top_disable, FALSE, FALSE, 0);
   dt_gui_add_help_link(top_header, dt_get_help_url("masks_blending"));
   gtk_box_pack_start(GTK_BOX(bd->blending_body_box), top_header, FALSE, FALSE, 0);
 
@@ -4394,15 +4402,15 @@ void dt_iop_gui_init_blending_body(GtkBox *blendw, dt_iop_module_t *module)
   gtk_box_pack_start(GTK_BOX(bd->blending_body_box), bd->blending_notebook, TRUE, TRUE, 0);
 
   _blendop_create_toggle_page(bd->blending_notebook, _("Raster"), module,
-                              DEVELOP_MASK_RASTER, &bd->raster_enable, &bd->raster_content);
+                              DEVELOP_MASK_RASTER, &bd->raster_disable, &bd->raster_content);
   dt_iop_gui_init_raster(GTK_BOX(bd->raster_content), module);
 
   _blendop_create_toggle_page(bd->blending_notebook, _("Drawn"), module,
-                              DEVELOP_MASK_MASK, &bd->masks_enable, &bd->masks_content);
+                              DEVELOP_MASK_MASK, &bd->masks_disable, &bd->masks_content);
   dt_iop_gui_init_masks(GTK_BOX(bd->masks_content), module);
 
   _blendop_create_toggle_page(bd->blending_notebook, _("Parametric"), module,
-                              DEVELOP_MASK_CONDITIONAL, &bd->blendif_enable,
+                              DEVELOP_MASK_CONDITIONAL, &bd->blendif_disable,
                               &bd->blendif_content);
   dt_iop_gui_init_blendif(GTK_BOX(bd->blendif_content), module);
 
@@ -4432,10 +4440,10 @@ void dt_iop_gui_init_blending_body(GtkBox *blendw, dt_iop_module_t *module)
   gtk_widget_set_name(GTK_WIDGET(bd->blending_body_box), "blending-wrapper");
 
   const unsigned int mask_mode = module->blend_params->mask_mode;
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->top_enable), (mask_mode & DEVELOP_MASK_ENABLED) != 0);
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->masks_enable), (mask_mode & DEVELOP_MASK_MASK) != 0);
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->raster_enable), (mask_mode & DEVELOP_MASK_RASTER) != 0);
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->blendif_enable), (mask_mode & DEVELOP_MASK_CONDITIONAL) != 0);
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->top_disable), (mask_mode & DEVELOP_MASK_ENABLED) == 0);
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->masks_disable), (mask_mode & DEVELOP_MASK_MASK) == 0);
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->raster_disable), (mask_mode & DEVELOP_MASK_RASTER) == 0);
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->blendif_disable), (mask_mode & DEVELOP_MASK_CONDITIONAL) == 0);
 
   gtk_widget_show_all(GTK_WIDGET(bd->blending_body_box));
   gtk_widget_set_sensitive(bd->top_content, (mask_mode & DEVELOP_MASK_ENABLED) != 0);

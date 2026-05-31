@@ -57,6 +57,7 @@ typedef struct dt_lib_tool_lighttable_t
 {
   GtkWidget *columns;
   GList *menu_items;
+  gulong scroll_handler_id;
 } dt_lib_tool_lighttable_t;
 
 /* set columns proxy function */
@@ -304,22 +305,57 @@ void gui_init(dt_lib_module_t *self)
 
   // Wire a scroll event handler on thumbtable here. This avoids us a proxy
   dt_thumbtable_t *table = darktable.gui->ui->thumbtable_lighttable;
-  g_signal_connect(G_OBJECT(table->scroll_window), "scroll-event", G_CALLBACK(_thumbtable_scroll), self);
+  d->scroll_handler_id
+      = g_signal_connect(G_OBJECT(table->scroll_window), "scroll-event", G_CALLBACK(_thumbtable_scroll), self);
 }
 
 void gui_cleanup(dt_lib_module_t *self)
 {
+  if(IS_NULL_PTR(self->data)) return;
+  dt_lib_tool_lighttable_t *d = (dt_lib_tool_lighttable_t *)self->data;
+
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_dt_collection_changed_callback), self);
+
+  if(d->scroll_handler_id > 0)
+  {
+    dt_thumbtable_t *table = darktable.gui->ui->thumbtable_lighttable;
+    if(!IS_NULL_PTR(table) && !IS_NULL_PTR(table->scroll_window))
+      g_signal_handler_disconnect(G_OBJECT(table->scroll_window), d->scroll_handler_id);
+    d->scroll_handler_id = 0;
+  }
+
+  GList *menu_widgets = NULL;
+  for(GList *iter = d->menu_items; iter; iter = g_list_next(iter))
+  {
+    dt_menu_entry_t *entry = (dt_menu_entry_t *)iter->data;
+    if(IS_NULL_PTR(entry) || IS_NULL_PTR(entry->widget) || !GTK_IS_WIDGET(entry->widget)) continue;
+    menu_widgets = g_list_prepend(menu_widgets, g_object_ref(entry->widget));
+  }
+
+  for(GList *iter = menu_widgets; iter; iter = g_list_next(iter))
+  {
+    GtkWidget *widget = GTK_WIDGET(iter->data);
+    if(GTK_IS_WIDGET(widget)) gtk_widget_destroy(widget);
+    g_object_unref(widget);
+  }
+  g_list_free(menu_widgets);
+
+  g_list_free(d->menu_items);
+  d->menu_items = NULL;
+
   dt_free(self->data);
 }
 
 static void _set_columns(dt_lib_module_t *self, int columns)
 {
   dt_conf_set_int("plugins/lighttable/images_in_row", columns);
-  dt_thumbtable_t *table = darktable.gui->ui->thumbtable_lighttable;
-  dt_thumbtable_set_active_rowid(table);
-  dt_thumbtable_redraw(table);
-  g_idle_add((GSourceFunc) dt_thumbtable_scroll_to_active_rowid, table);
+  
+  // Use the coordinated grid configuration function that properly orders:
+  // 1. Grid reconfiguration with new column count
+  // 2. Thumbnail updates and resizing
+  // 3. Scrolling to active selection
+  // This prevents partial updates and ensures synchronization.
+  dt_thumbtable_apply_grid_configuration(darktable.gui->ui->thumbtable_lighttable);
 }
 
 static void _lib_lighttable_columns_slider_changed(GtkWidget *widget, gpointer user_data)

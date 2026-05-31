@@ -191,6 +191,7 @@ static void collection_updated(gpointer instance, dt_collection_change_t query_c
                                dt_collection_properties_t changed_property, gpointer imgs, int next,
                                gpointer self);
 static void row_activated_with_event(GtkTreeView *view, GtkTreePath *path, GtkTreeViewColumn *col, GdkEventButton *event, dt_lib_collect_t *d);
+static void view_onRowExpanded(GtkTreeView *view, GtkTreeIter *iter, GtkTreePath *path, dt_lib_collect_t *d);
 static int is_time_property(int property);
 static void _populate_collect_combo(GtkWidget *w);
 
@@ -759,7 +760,9 @@ static gboolean view_onButtonPressed(GtkWidget *treeview, GdkEventButton *event,
 {
   /* Get tree path for row that was clicked */
   GtkTreePath *path = NULL;
-  int get_path = gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(treeview), (gint)event->x, (gint)event->y, &path, NULL, NULL, NULL);
+  GtkTreeViewColumn *column = NULL;
+  int get_path = gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(treeview), (gint)event->x, (gint)event->y,
+                                                &path, &column, NULL, NULL);
   if(!get_path)
   {
     gtk_tree_path_free(path);
@@ -804,11 +807,45 @@ static gboolean view_onButtonPressed(GtkWidget *treeview, GdkEventButton *event,
     }
     else if(!dt_modifier_is(event->state, GDK_SHIFT_MASK))
     {
-      // Toggle expand/collapse state except on Shift because it excludes sub-folders
-      if(gtk_tree_view_row_expanded(GTK_TREE_VIEW(treeview), path))
-        gtk_tree_view_collapse_row(GTK_TREE_VIEW(treeview), path);
-      else
-        gtk_tree_view_expand_row(GTK_TREE_VIEW(treeview), path, FALSE);
+      gboolean clicked_expander = FALSE;
+
+      if(item_is_folder_collection(d->view_rule))
+      {
+        GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(treeview));
+        GtkTreeIter iter;
+        if(!IS_NULL_PTR(model) && gtk_tree_model_get_iter(model, &iter, path)
+           && gtk_tree_model_iter_has_child(model, &iter))
+        {
+          GtkTreeViewColumn *expander_col = column;
+          if(IS_NULL_PTR(expander_col))
+            expander_col = gtk_tree_view_get_column(GTK_TREE_VIEW(treeview), 0);
+
+          if(!IS_NULL_PTR(expander_col))
+          {
+            GdkRectangle cell_area = { 0 };
+            gtk_tree_view_get_cell_area(GTK_TREE_VIEW(treeview), path, expander_col, &cell_area);
+
+            gint expander_size = 12;
+            gint horizontal_separator = 0;
+            gtk_widget_style_get(treeview, "expander-size", &expander_size, "horizontal-separator",
+                                 &horizontal_separator, NULL);
+
+            // The expander arrow is drawn in the background area before the first cell.
+            const gint expander_right = cell_area.x + horizontal_separator;
+            const gint expander_left = expander_right - expander_size - horizontal_separator;
+            const gint click_x = (gint)event->x;
+            clicked_expander = (click_x >= expander_left && click_x <= expander_right);
+          }
+        }
+      }
+
+      if(clicked_expander)
+      {
+        if(gtk_tree_view_row_expanded(GTK_TREE_VIEW(treeview), path))
+          gtk_tree_view_collapse_row(GTK_TREE_VIEW(treeview), path);
+        else
+          gtk_tree_view_expand_row(GTK_TREE_VIEW(treeview), path, FALSE);
+      }
 
       // Select the folder
       gtk_tree_selection_unselect_all(selection);
@@ -849,6 +886,12 @@ static gboolean view_onPopupMenu(GtkWidget *treeview, dt_lib_collect_t *d)
   view_popup_menu(treeview, NULL, d);
 
   return TRUE; /* we handled this */
+}
+
+static void view_onRowExpanded(GtkTreeView *view, GtkTreeIter *iter, GtkTreePath *path, dt_lib_collect_t *d)
+{
+  if(d->view_rule != DT_COLLECTION_PROP_FOLDERS) return;
+  gtk_tree_view_scroll_to_cell(view, path, NULL, TRUE, 0.0, 0.0);
 }
 
 static dt_lib_collect_t *get_collect(dt_lib_collect_rule_t *r)
@@ -3400,6 +3443,7 @@ void gui_init(dt_lib_module_t *self)
   gtk_widget_set_can_focus(GTK_WIDGET(view), TRUE);
   g_signal_connect(G_OBJECT(view), "button-press-event", G_CALLBACK(view_onButtonPressed), d);
   g_signal_connect(G_OBJECT(view), "popup-menu", G_CALLBACK(view_onPopupMenu), d);
+  g_signal_connect(G_OBJECT(view), "row-expanded", G_CALLBACK(view_onRowExpanded), d);
 
   GtkTreeViewColumn *col = gtk_tree_view_column_new();
   gtk_tree_view_append_column(view, col);
@@ -3469,6 +3513,7 @@ void gui_init(dt_lib_module_t *self)
 
 void gui_cleanup(dt_lib_module_t *self)
 {
+  if(IS_NULL_PTR(self->data)) return;
   dt_lib_collect_t *d = (dt_lib_collect_t *)self->data;
 
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(collection_updated), self);

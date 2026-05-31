@@ -368,8 +368,9 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
                      int32_t pointerx, int32_t pointery)
 {
   dt_develop_t *dev = self->dev;
-  //   dt_iop_vignette_gui_data_t *g = (dt_iop_vignette_gui_data_t *)self->gui_data;
+  dt_iop_vignette_gui_data_t *g = (dt_iop_vignette_gui_data_t *)self->gui_data;
   dt_iop_vignette_params_t *p = (dt_iop_vignette_params_t *)self->params;
+  if(IS_NULL_PTR(g) || IS_NULL_PTR(p)) return;
 
   const float wd = dev->roi.preview_width;
   const float ht = dev->roi.preview_height;
@@ -457,6 +458,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   const dt_develop_t *dev = (const dt_develop_t *)self->dev;
   dt_iop_vignette_gui_data_t *g = (dt_iop_vignette_gui_data_t *)self->gui_data;
   dt_iop_vignette_params_t *p = (dt_iop_vignette_params_t *)self->params;
+  if(IS_NULL_PTR(g) || IS_NULL_PTR(p)) return 0;
   const float wd = dev->roi.preview_width;
   const float ht = dev->roi.preview_height;
   float bigger_side, smaller_side;
@@ -536,7 +538,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   {
     if(grab == 0) // pan the image
     {
-      dt_control_set_cursor(GDK_HAND1);
+      dt_control_queue_cursor(GDK_HAND1);
       return 0;
     }
     else if(grab == 1) // move the center
@@ -629,19 +631,19 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   else if(grab)
   {
     if(grab == 1)
-      dt_control_set_cursor(GDK_FLEUR);
+      dt_control_queue_cursor(GDK_FLEUR);
     else if(grab == 2)
-      dt_control_set_cursor(GDK_SB_H_DOUBLE_ARROW);
+      dt_control_queue_cursor(GDK_SB_H_DOUBLE_ARROW);
     else if(grab == 4)
-      dt_control_set_cursor(GDK_SB_V_DOUBLE_ARROW);
+      dt_control_queue_cursor(GDK_SB_V_DOUBLE_ARROW);
     else if(grab == 8)
-      dt_control_set_cursor(GDK_SB_H_DOUBLE_ARROW);
+      dt_control_queue_cursor(GDK_SB_H_DOUBLE_ARROW);
     else if(grab == 16)
-      dt_control_set_cursor(GDK_SB_V_DOUBLE_ARROW);
+      dt_control_queue_cursor(GDK_SB_V_DOUBLE_ARROW);
   }
   else
   {
-    if(old_grab != grab) dt_control_set_cursor(GDK_LEFT_PTR);
+    if(old_grab != grab) dt_control_queue_cursor(GDK_LEFT_PTR);
   }
   old_grab = grab;
   dt_control_queue_redraw_center();
@@ -940,6 +942,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
   dt_iop_vignette_gui_data_t *g = (dt_iop_vignette_gui_data_t *)self->gui_data;
   dt_iop_vignette_params_t *p = (dt_iop_vignette_params_t *)self->params;
+  if(IS_NULL_PTR(g) || IS_NULL_PTR(p)) return;
 
   gtk_widget_set_sensitive(GTK_WIDGET(g->whratio), !p->autoratio);
 }
@@ -997,6 +1000,7 @@ void gui_update(struct dt_iop_module_t *self)
 {
   dt_iop_vignette_gui_data_t *g = (dt_iop_vignette_gui_data_t *)self->gui_data;
   dt_iop_vignette_params_t *p = (dt_iop_vignette_params_t *)self->params;
+  if(IS_NULL_PTR(g) || IS_NULL_PTR(p)) return;
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->autoratio), p->autoratio);
   gtk_widget_set_sensitive(GTK_WIDGET(g->whratio), !p->autoratio);
 }

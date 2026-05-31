@@ -20,12 +20,214 @@
 #include "develop/masks.h"
 #include "bauhaus/bauhaus.h"
 #include "common/debug.h"
+#include "control/signal.h"
+#include "develop/imageop_gui.h"
+#include "dtgtk/button.h"
+#include "dtgtk/paint.h"
 #include "gui/actions/menu.h"
 #include "gui/draw.h"
 #include "gui/gtk.h"
-#include "dtgtk/paint.h"
 
 #include <math.h>
+#include <stdlib.h>
+
+#define DT_MASKS_SHAPE_BUTTON_COUNT 5
+
+typedef struct dt_masks_shape_button_def_t
+{
+  int index;
+  guint flag;
+  dt_masks_type_t type;
+  const gchar *label;
+  const gchar *ctrl_label;
+  DTGTKCairoPaintIconFunc paint;
+} dt_masks_shape_button_def_t;
+
+typedef struct dt_masks_shape_buttons_data_t
+{
+  GtkWidget *box;
+  GtkWidget *buttons[DT_MASKS_SHAPE_BUTTON_COUNT];
+  int types[DT_MASKS_SHAPE_BUTTON_COUNT];
+  dt_masks_shape_buttons_config_t config;
+} dt_masks_shape_buttons_data_t;
+
+static const dt_masks_shape_button_def_t _masks_shape_button_defs[] = {
+  { DT_MASKS_SHAPE_INDEX_GRADIENT, DT_MASKS_SHAPE_BUTTONS_GRADIENT, DT_MASKS_GRADIENT,
+    N_("add gradient"), N_("add multiple gradients"), dtgtk_cairo_paint_masks_gradient },
+  { DT_MASKS_SHAPE_INDEX_BRUSH, DT_MASKS_SHAPE_BUTTONS_BRUSH, DT_MASKS_BRUSH,
+    N_("add brush"), N_("add multiple brush strokes"), dtgtk_cairo_paint_masks_brush },
+  { DT_MASKS_SHAPE_INDEX_POLYGON, DT_MASKS_SHAPE_BUTTONS_POLYGON, DT_MASKS_POLYGON,
+    N_("add polygon"), N_("add multiple polygons"), dtgtk_cairo_paint_masks_polygon },
+  { DT_MASKS_SHAPE_INDEX_ELLIPSE, DT_MASKS_SHAPE_BUTTONS_ELLIPSE, DT_MASKS_ELLIPSE,
+    N_("add ellipse"), N_("add multiple ellipses"), dtgtk_cairo_paint_masks_ellipse },
+  { DT_MASKS_SHAPE_INDEX_CIRCLE, DT_MASKS_SHAPE_BUTTONS_CIRCLE, DT_MASKS_CIRCLE,
+    N_("add circle"), N_("add multiple circles"), dtgtk_cairo_paint_masks_circle },
+};
+
+static void _masks_shape_buttons_deactivate(GtkWidget *active_button, dt_masks_shape_buttons_data_t *data)
+{
+  if(IS_NULL_PTR(data)) return;
+
+  // Walk all buttons in this group so any caller can reset every masks shape toolbar through the shared signal.
+  for(int i = 0; i < DT_MASKS_SHAPE_BUTTON_COUNT; i++)
+  {
+    GtkWidget *button = data->buttons[i];
+    if(GTK_IS_TOGGLE_BUTTON(button) && button != active_button)
+      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(button), FALSE);
+  }
+}
+
+static void _masks_shape_buttons_deactivate_signal(gpointer instance, GtkWidget *active_button,
+                                                   dt_masks_shape_buttons_data_t *data)
+{
+  _masks_shape_buttons_deactivate(active_button, data);
+}
+
+void dt_masks_shape_buttons_deactivate_all(GtkWidget *active_button)
+{
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_SHAPE_BUTTONS_DEACTIVATE, active_button);
+}
+
+static int _masks_shape_button_index(const dt_masks_shape_buttons_data_t *data, GtkWidget *button)
+{
+  if(IS_NULL_PTR(data)) return -1;
+
+  // Search the stored button pointers because callers may keep their own storage arrays.
+  for(int i = 0; i < DT_MASKS_SHAPE_BUTTON_COUNT; i++)
+    if(data->buttons[i] == button) return i;
+
+  return -1;
+}
+
+static gboolean _masks_shape_button_is_current_creation(const dt_masks_shape_buttons_data_t *data,
+                                                        const int button_index)
+{
+  dt_masks_form_gui_t *mask_gui = darktable.develop->form_gui;
+  dt_masks_form_t *visible_form = dt_masks_get_visible_form(darktable.develop);
+
+  return !IS_NULL_PTR(mask_gui) && mask_gui->creation
+         && mask_gui->creation_module == data->config.creation_module
+         && !IS_NULL_PTR(visible_form)
+         && (visible_form->type & data->types[button_index]);
+}
+
+static gboolean _masks_shape_button_pressed(GtkWidget *button, GdkEventButton *event, gpointer user_data)
+{
+  if(darktable.gui->reset || event->button != GDK_BUTTON_PRIMARY) return TRUE;
+
+  dt_masks_shape_buttons_data_t *data =
+      (dt_masks_shape_buttons_data_t *)g_object_get_data(G_OBJECT(button), "dt-masks-shape-buttons-data");
+  const int button_index = _masks_shape_button_index(data, button);
+  if(button_index < 0) return FALSE;
+
+  dt_masks_type_t type = data->types[button_index];
+  dt_iop_module_t *module = data->config.creation_module;
+  dt_masks_form_gui_t *mask_gui = darktable.develop->form_gui;
+
+  if(_masks_shape_button_is_current_creation(data, button_index))
+  {
+    dt_masks_shape_buttons_deactivate_all(NULL);
+    dt_masks_form_exit_creation(module, mask_gui);
+    if(data->config.exited) data->config.exited(button, module, type, data->config.user_data);
+    dt_control_queue_redraw_center();
+    return TRUE;
+  }
+
+  if(data->config.can_start && !data->config.can_start(button, module, type, data->config.user_data))
+  {
+    dt_masks_shape_buttons_deactivate_all(NULL);
+    dt_control_queue_redraw_center();
+    return TRUE;
+  }
+
+  if(data->config.form_type) type = data->config.form_type(module, type, data->config.user_data);
+
+  dt_masks_shape_buttons_deactivate_all(button);
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(button), TRUE);
+
+  if(dt_masks_creation_mode_enter(module, type))
+  {
+    if(data->config.started) data->config.started(button, module, type, data->config.user_data);
+  }
+  else
+    dt_masks_shape_buttons_deactivate_all(NULL);
+
+  dt_control_queue_redraw_center();
+  return TRUE;
+}
+
+static void _masks_shape_buttons_destroy(GtkWidget *widget, dt_masks_shape_buttons_data_t *data)
+{
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_masks_shape_buttons_deactivate_signal), data);
+  dt_free(data);
+}
+
+/**
+ * @brief Build a synchronized toolbar for creating masks shapes.
+ *
+ * The buttons all use the same creation callback and listen to a process-wide
+ * deactivation signal. This keeps multiple mask toolbars, such as blending,
+ * retouch and the shape manager, from showing stale active buttons after
+ * another toolbar starts or exits a shape creation.
+ */
+GtkWidget *dt_masks_shape_buttons_create(const dt_masks_shape_buttons_config_t *config)
+{
+  if(IS_NULL_PTR(config)) return NULL;
+
+  dt_masks_shape_buttons_data_t *data = calloc(1, sizeof(dt_masks_shape_buttons_data_t));
+  if(IS_NULL_PTR(data)) return NULL;
+
+  data->config = *config;
+  data->box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  gtk_widget_set_halign(data->box, GTK_ALIGN_END);
+  gtk_widget_set_valign(data->box, GTK_ALIGN_START);
+
+  const char *action_section = config->action_section ? config->action_section : N_("shapes");
+  const size_t button_defs_count = sizeof(_masks_shape_button_defs) / sizeof(_masks_shape_button_defs[0]);
+
+  // Create buttons in the same visible order used by the module-local toolbars.
+  for(size_t i = 0; i < button_defs_count; i++)
+  {
+    const dt_masks_shape_button_def_t *def = &_masks_shape_button_defs[i];
+    if(!(config->flags & def->flag)) continue;
+
+    GtkWidget *button = NULL;
+    if(config->owner_module)
+    {
+      const gboolean register_button = (config->register_flags & def->flag);
+      if(register_button)
+        button = dt_iop_togglebutton_new(config->owner_module, action_section, def->label, def->ctrl_label,
+                                         G_CALLBACK(_masks_shape_button_pressed), config->local,
+                                         0, 0, def->paint, data->box);
+      else
+        button = dt_iop_togglebutton_new_no_register(config->owner_module, action_section, def->label, def->ctrl_label,
+                                                     G_CALLBACK(_masks_shape_button_pressed), config->local,
+                                                     0, 0, def->paint, data->box);
+    }
+    else
+    {
+      button = dtgtk_togglebutton_new(def->paint, 0, NULL);
+      gtk_widget_set_tooltip_text(button, _(def->label));
+      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(button), FALSE);
+      gtk_box_pack_end(GTK_BOX(data->box), button, FALSE, FALSE, 0);
+      g_signal_connect(G_OBJECT(button), "button-press-event", G_CALLBACK(_masks_shape_button_pressed), NULL);
+    }
+
+    gtk_widget_set_valign(button, GTK_ALIGN_START);
+    g_object_set_data(G_OBJECT(button), "dt-masks-shape-buttons-data", data);
+
+    data->buttons[def->index] = button;
+    data->types[def->index] = def->type;
+    if(config->buttons) config->buttons[def->index] = button;
+    if(config->types) config->types[def->index] = def->type;
+  }
+
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_MASK_SHAPE_BUTTONS_DEACTIVATE,
+                                  G_CALLBACK(_masks_shape_buttons_deactivate_signal), data);
+  g_signal_connect(G_OBJECT(data->box), "destroy", G_CALLBACK(_masks_shape_buttons_destroy), data);
+
+  return data->box;
+}
 
 typedef struct dt_masks_gui_interaction_slider_t
 {
@@ -269,7 +471,7 @@ void _masks_gui_delete_node_callback(GtkWidget *menu, gpointer user_data)
     // Minimum points to create a polygon
     if(gui->node_dragging < 1)
     {
-      dt_masks_form_cancel_creation(module, gui);
+      dt_masks_form_exit_creation(module, gui);
       return;
     }
     dt_masks_form_t *sel = dt_masks_get_visible_form(darktable.develop);
@@ -291,11 +493,11 @@ void _masks_gui_delete_node_callback(GtkWidget *menu, gpointer user_data)
   }
 }
 
-static void _masks_gui_cancel_creation_callback(GtkWidget *menu, gpointer user_data)
+static void _masks_gui_exit_creation_callback(GtkWidget *menu, gpointer user_data)
 {
   dt_masks_form_gui_t *gui = (dt_masks_form_gui_t *)user_data;
   dt_iop_module_t *module = darktable.develop->gui_module;
-  dt_masks_form_cancel_creation(module, gui);
+  dt_masks_form_exit_creation(module, gui);
 }
 
 static void _masks_move_up_down_callback(gpointer user_data, const int up)
@@ -393,7 +595,13 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
   dt_masks_form_t *grp = formgroup ? dt_masks_get_from_id(darktable.develop, formgroup->parentid) : NULL;
   if(grp && (grp->type & DT_MASKS_GROUP))
     op_form = dt_masks_form_group_from_parentid(grp->formid, form->formid);
-  if(IS_NULL_PTR(op_form)) return NULL;
+  if(IS_NULL_PTR(op_form) && !gui->creation)
+  {
+    for(size_t k = 0; k < G_N_ELEMENTS(op_icon); k++)
+      g_clear_object(&op_icon[k]);
+    gtk_widget_destroy(menu);
+    return NULL;
+  }
 
   // Find the position of the current form in the group
   guint form_pos = 0;
@@ -462,8 +670,8 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
     item_str = g_strdup("");
 
   // Create an assembled image if we have an inverse state to show
-  const dt_masks_state_t state = op_form->state & DT_MASKS_STATE_IS_COMBINE_OP;
-  const gboolean has_inverse = (op_form->state & DT_MASKS_STATE_INVERSE) != 0;
+  const dt_masks_state_t state = IS_NULL_PTR(op_form) ? 0 : op_form->state & DT_MASKS_STATE_IS_COMBINE_OP;
+  const gboolean has_inverse = !IS_NULL_PTR(op_form) && (op_form->state & DT_MASKS_STATE_INVERSE) != 0;
   GdkPixbuf *icon = (state <= DT_MASKS_STATE_EXCLUSION) ? op_icon[state] : NULL;
   GdkPixbuf *composed_icon = NULL;
   if(has_inverse && op_icon[DT_MASKS_STATE_INVERSE])
@@ -490,7 +698,7 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
       icon = op_icon[DT_MASKS_STATE_INVERSE];
   }
 
-  const gboolean draw_icon = form_pos > 0;
+  const gboolean draw_icon = !IS_NULL_PTR(op_form) && form_pos > 0;
   gchar *title = g_strdup_printf("<b><big>%s%s</big></b>", item_str, form_name);
   GtkWidget *menu_item = ctx_gtk_menu_item_new_with_markup_and_pixbuf(title, (draw_icon) ? icon : NULL, menu, NULL, gui);
   gtk_widget_set_sensitive(menu_item, FALSE);
@@ -576,7 +784,8 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
   // Risky stuff at the end
   if(gui->creation)
   {
-    menu_item = ctx_gtk_menu_item_new_with_markup(_("Cancel"), menu, _masks_gui_cancel_creation_callback, gui);
+    menu_item = ctx_gtk_menu_item_new_with_markup(_("Done shape creation"), menu,
+                                                  _masks_gui_exit_creation_callback, gui);
     menu_item_set_fake_accel(menu_item, GDK_KEY_Escape, 0);
   }
   else

@@ -60,6 +60,10 @@
 #include "gui/gtk.h"
 #include "iop/iop_api.h"
 
+#ifdef HAVE_OPENCL
+#include "common/opencl.h"
+#endif
+
 #include <gtk/gtk.h>
 #include <stdlib.h>
 
@@ -76,10 +80,7 @@ typedef struct dt_iop_hotpixels_params_t
 typedef struct dt_iop_hotpixels_gui_data_t
 {
   GtkWidget *threshold, *strength;
-  GtkToggleButton *markfixed;
   GtkToggleButton *permissive;
-  GtkLabel *message;
-  int pixels_fixed;
 } dt_iop_hotpixels_gui_data_t;
 
 typedef struct dt_iop_hotpixels_data_t
@@ -88,8 +89,13 @@ typedef struct dt_iop_hotpixels_data_t
   float threshold;
   float multiplier;
   gboolean permissive;
-  gboolean markfixed;
 } dt_iop_hotpixels_data_t;
+
+typedef struct dt_iop_hotpixels_global_data_t
+{
+  int kernel_hotpixels_bayer;
+  int kernel_hotpixels_xtrans;
+} dt_iop_hotpixels_global_data_t;
 
 
 const char *name()
@@ -130,6 +136,17 @@ void input_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelp
   dt_iop_buffer_dsc_update_bpp(dsc);
 }
 
+static inline void hotpixels_testone(const float *const in, const float mid, const int offset,
+                                     int *const count, float *const maxin)
+{
+  const float other = in[offset];
+  if(mid > other)
+  {
+    (*count)++;
+    if(other > *maxin) *maxin = other;
+  }
+}
+
 /* Detect hot sensor pixels based on the 4 surrounding sites. Pixels
  * having 3 or 4 (depending on permissive setting) surrounding pixels that
  * than value*multiplier are considered "hot", and are replaced by the maximum of
@@ -139,18 +156,16 @@ void input_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelp
  * non-hot pixels.
  * This is the Bayer sensor variant. */
 __DT_CLONE_TARGETS__
-static int process_bayer(const dt_iop_hotpixels_data_t *data,
+static void process_bayer(const dt_iop_hotpixels_data_t *data,
                          const void *const ivoid, void *const ovoid,
                          const dt_iop_roi_t *const roi_out)
 {
   const float threshold = data->threshold;
   const float multiplier = data->multiplier;
-  const gboolean markfixed = data->markfixed;
   const int min_neighbours = data->permissive ? 3 : 4;
   const int width = roi_out->width;
   const int widthx2 = width * 2;
-  int fixed = 0;
-  __OMP_PARALLEL_FOR__(reduction(+ : fixed) )
+  __OMP_PARALLEL_FOR__()
   for(int row = 2; row < roi_out->height - 2; row++)
   {
     const float *in = (float *)ivoid + (size_t)width * row + 2;
@@ -162,39 +177,22 @@ static int process_bayer(const dt_iop_hotpixels_data_t *data,
       {
         int count = 0;
         float maxin = 0.0;
-        float other;
-#define TESTONE(OFFSET)                                                                                      \
-  other = in[OFFSET];                                                                                        \
-  if(mid > other)                                                                                            \
-  {                                                                                                          \
-    count++;                                                                                                 \
-    if(other > maxin) maxin = other;                                                                         \
-  }
-        TESTONE(-2);
-        TESTONE(-widthx2);
-        TESTONE(+2);
-        TESTONE(+widthx2);
-#undef TESTONE
+        hotpixels_testone(in, mid, -2, &count, &maxin);
+        hotpixels_testone(in, mid, -widthx2, &count, &maxin);
+        hotpixels_testone(in, mid, +2, &count, &maxin);
+        hotpixels_testone(in, mid, +widthx2, &count, &maxin);
         if(count >= min_neighbours)
         {
           *out = maxin;
-          fixed++;
-          if(markfixed)
-          {
-            for(int i = -2; i >= -10 && i >= -col; i -= 2) out[i] = *in;
-            for(int i = 2; i <= 10 && i < width - col; i += 2) out[i] = *in;
-          }
         }
       }
     }
   }
-
-  return fixed;
 }
 
 /* X-Trans sensor equivalent of process_bayer(). */
 __DT_CLONE_TARGETS__
-static int process_xtrans(const dt_iop_hotpixels_data_t *data,
+static void process_xtrans(const dt_iop_hotpixels_data_t *data,
                           const void *const ivoid, void *const ovoid,
                           const dt_iop_roi_t *const roi_out, const uint8_t (*const xtrans)[6])
 {
@@ -202,26 +200,10 @@ static int process_xtrans(const dt_iop_hotpixels_data_t *data,
   // offsets of the four radially nearest pixels of the same color
   int offsets[6][6][4][2];
   // increasing offsets from pixel to find nearest like-colored pixels
-  const int search[20][2] = { { -1, 0 },
-                              { 1, 0 },
-                              { 0, -1 },
-                              { 0, 1 },
-                              { -1, -1 },
-                              { -1, 1 },
-                              { 1, -1 },
-                              { 1, 1 },
-                              { -2, 0 },
-                              { 2, 0 },
-                              { 0, -2 },
-                              { 0, 2 },
-                              { -2, -1 },
-                              { -2, 1 },
-                              { 2, -1 },
-                              { 2, 1 },
-                              { -1, -2 },
-                              { 1, -2 },
-                              { -1, 2 },
-                              { 1, 2 } };
+  const int search[20][2] = { { -1, 0 }, { 1, 0 },  { 0, -1 },  { 0, 1 },  { -1, -1 }, { -1, 1 },  { 1, -1 },
+                              { 1, 1 },  { -2, 0 }, { 2, 0 },   { 0, -2 }, { 0, 2 },   { -2, -1 }, { -2, 1 },
+                              { 2, -1 }, { 2, 1 },  { -1, -2 }, { 1, -2 }, { -1, 2 },  { 1, 2 } };
+
   for(int j = 0; j < 6; ++j)
   {
     for(int i = 0; i < 6; ++i)
@@ -241,11 +223,9 @@ static int process_xtrans(const dt_iop_hotpixels_data_t *data,
 
   const float threshold = data->threshold;
   const float multiplier = data->multiplier;
-  const gboolean markfixed = data->markfixed;
   const int min_neighbours = data->permissive ? 3 : 4;
   const int width = roi_out->width;
-  int fixed = 0;
-  __OMP_PARALLEL_FOR__(reduction(+ : fixed) )
+  __OMP_PARALLEL_FOR__()
   for(int row = 2; row < roi_out->height - 2; row++)
   {
     const float *in = (float *)ivoid + (size_t)width * row + 2;
@@ -272,59 +252,102 @@ static int process_xtrans(const dt_iop_hotpixels_data_t *data,
         if(count >= min_neighbours)
         {
           *out = maxin;
-          fixed++;
-          if(markfixed)
-          {
-            const uint8_t c = FCxtrans(row, col, roi_out, xtrans);
-            for(int i = -2; i >= -10 && i >= -col; --i)
-            {
-              if(c == FCxtrans(row, col+i, roi_out, xtrans))
-              {
-                out[i] = *in;
-              }
-            }
-            for(int i = 2; i <= 10 && i < width - col; ++i)
-            {
-              if(c == FCxtrans(row, col+i, roi_out, xtrans))
-              {
-                out[i] = *in;
-              }
-            }
-          }
         }
       }
     }
   }
-
-  return fixed;
 }
 
 int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid)
 {
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
-  dt_iop_hotpixels_gui_data_t *g = (dt_iop_hotpixels_gui_data_t *)self->gui_data;
   const dt_iop_hotpixels_data_t *data = (dt_iop_hotpixels_data_t *)piece->data;
 
   // The processing loop should output only a few pixels, so just copy everything first
   dt_iop_image_copy_by_size(ovoid, ivoid, roi_out->width, roi_out->height, 1);
 
-  int fixed;
   if(piece->dsc_in.filters == 9u)
   {
-    fixed = process_xtrans(data, ivoid, ovoid, roi_out, (const uint8_t(*const)[6])piece->dsc_in.xtrans);
+    process_xtrans(data, ivoid, ovoid, roi_out, (const uint8_t(*const)[6])piece->dsc_in.xtrans);
   }
   else
   {
-    fixed = process_bayer(data, ivoid, ovoid, roi_out);
+    process_bayer(data, ivoid, ovoid, roi_out);
   }
 
-  if(!IS_NULL_PTR(g) && self->dev->gui_attached && pipe->type == DT_DEV_PIXELPIPE_FULL)
-  {
-    g->pixels_fixed = fixed;
-  }
   return 0;
 }
+
+#ifdef HAVE_OPENCL
+int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
+               const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
+{
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
+  const dt_iop_hotpixels_data_t *const data = (dt_iop_hotpixels_data_t *)piece->data;
+  dt_iop_hotpixels_global_data_t *const gd = (dt_iop_hotpixels_global_data_t *)self->global_data;
+
+  const int devid = pipe->devid;
+  const int min_neighbours = data->permissive ? 3 : 4;
+  const int width = roi_out->width;
+  const int height = roi_out->height;
+  const uint32_t filters = piece->dsc_in.filters;
+  cl_mem dev_xtrans = NULL;
+  cl_int err = 0;
+  int kernel = filters == 9u ? gd->kernel_hotpixels_xtrans : gd->kernel_hotpixels_bayer;
+
+  if(filters == 9u)
+  {
+    dev_xtrans = dt_opencl_copy_host_to_device_constant(devid, sizeof(piece->dsc_in.xtrans), (void *)piece->dsc_in.xtrans);
+    if(IS_NULL_PTR(dev_xtrans)) goto error;
+  }
+
+  size_t sizes[3] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
+  dt_opencl_set_kernel_arg(devid, kernel, 0, sizeof(cl_mem), (void *)&dev_in);
+  dt_opencl_set_kernel_arg(devid, kernel, 1, sizeof(cl_mem), (void *)&dev_out);
+  dt_opencl_set_kernel_arg(devid, kernel, 2, sizeof(int), (void *)&width);
+  dt_opencl_set_kernel_arg(devid, kernel, 3, sizeof(int), (void *)&height);
+  dt_opencl_set_kernel_arg(devid, kernel, 4, sizeof(float), (void *)&data->threshold);
+  dt_opencl_set_kernel_arg(devid, kernel, 5, sizeof(float), (void *)&data->multiplier);
+  dt_opencl_set_kernel_arg(devid, kernel, 6, sizeof(int), (void *)&min_neighbours);
+
+  if(filters == 9u)
+  {
+    const int rx = roi_out->x;
+    const int ry = roi_out->y;
+    dt_opencl_set_kernel_arg(devid, kernel, 7, sizeof(int), (void *)&rx);
+    dt_opencl_set_kernel_arg(devid, kernel, 8, sizeof(int), (void *)&ry);
+    dt_opencl_set_kernel_arg(devid, kernel, 9, sizeof(cl_mem), (void *)&dev_xtrans);
+  }
+
+  err = dt_opencl_enqueue_kernel_2d(devid, kernel, sizes);
+  if(err != CL_SUCCESS) goto error;
+
+  dt_opencl_release_mem_object(dev_xtrans);
+  return TRUE;
+
+error:
+  dt_opencl_release_mem_object(dev_xtrans);
+  return FALSE;
+}
+
+void init_global(dt_iop_module_so_t *module)
+{
+  const int program = 2; // basic.cl
+  dt_iop_hotpixels_global_data_t *gd = (dt_iop_hotpixels_global_data_t *)malloc(sizeof(dt_iop_hotpixels_global_data_t));
+  module->data = gd;
+  gd->kernel_hotpixels_bayer = dt_opencl_create_kernel(program, "hotpixels_bayer");
+  gd->kernel_hotpixels_xtrans = dt_opencl_create_kernel(program, "hotpixels_xtrans");
+}
+
+void cleanup_global(dt_iop_module_so_t *module)
+{
+  dt_iop_hotpixels_global_data_t *gd = (dt_iop_hotpixels_global_data_t *)module->data;
+  dt_opencl_free_kernel(gd->kernel_hotpixels_bayer);
+  dt_opencl_free_kernel(gd->kernel_hotpixels_xtrans);
+  dt_free(module->data);
+}
+#endif
 
 void reload_defaults(dt_iop_module_t *module)
 {
@@ -343,8 +366,6 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *params, dt_dev
   d->multiplier = p->strength / 2.0;
   d->threshold = p->threshold;
   d->permissive = p->permissive;
-  d->markfixed = p->markfixed && (pipe->type != DT_DEV_PIXELPIPE_EXPORT)
-    && (pipe->type != DT_DEV_PIXELPIPE_THUMBNAIL);
 
   const dt_image_t *img = &pipe->dev->image_storage;
   const gboolean enabled = dt_image_is_raw(img) && !dt_image_is_monochrome(img);
@@ -369,10 +390,7 @@ void gui_update(dt_iop_module_t *self)
 {
   dt_iop_hotpixels_gui_data_t *g = (dt_iop_hotpixels_gui_data_t *)self->gui_data;
   dt_iop_hotpixels_params_t *p = (dt_iop_hotpixels_params_t *)self->params;
-  gtk_toggle_button_set_active(g->markfixed, p->markfixed);
   gtk_toggle_button_set_active(g->permissive, p->permissive);
-  g->pixels_fixed = -1;
-  gtk_label_set_text(g->message, "");
 
   const dt_image_t *img = &self->dev->image_storage;
   const gboolean enabled = dt_image_is_raw(img) && !dt_image_is_monochrome(img);
@@ -382,33 +400,11 @@ void gui_update(dt_iop_module_t *self)
   gtk_stack_set_visible_child_name(GTK_STACK(self->widget), self->hide_enable_button ? "non_raw" : "raw");
 }
 
-static gboolean draw(GtkWidget *widget, cairo_t *cr, dt_iop_module_t *self)
-{
-  dt_iop_hotpixels_gui_data_t *g = (dt_iop_hotpixels_gui_data_t *)self->gui_data;
-  if(darktable.gui->reset) return FALSE;
-
-  if(g->pixels_fixed < 0) return FALSE;
-
-  char *str = g_strdup_printf(ngettext("fixed %d pixel", "fixed %d pixels", g->pixels_fixed), g->pixels_fixed);
-  g->pixels_fixed = -1;
-
-  ++darktable.gui->reset;
-  gtk_label_set_text(g->message, str);
-  --darktable.gui->reset;
-
-  dt_free(str);
-
-  return FALSE;
-}
-
 void gui_init(dt_iop_module_t *self)
 {
   dt_iop_hotpixels_gui_data_t *g = IOP_GUI_ALLOC(hotpixels);
 
-  g->pixels_fixed = -1;
-
   GtkWidget *box_raw = self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
-  g_signal_connect(G_OBJECT(box_raw), "draw", G_CALLBACK(draw), self);
 
   g->threshold = dt_bauhaus_slider_from_params(self, N_("threshold"));
   dt_bauhaus_slider_set_digits(g->threshold, 4);
@@ -420,13 +416,6 @@ void gui_init(dt_iop_module_t *self)
 
   // 3 neighbours
   g->permissive = GTK_TOGGLE_BUTTON(dt_bauhaus_toggle_from_params(self, "permissive"));
-
-  // mark fixed pixels
-  GtkWidget *hbox = self->widget = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-  g->markfixed = GTK_TOGGLE_BUTTON(dt_bauhaus_toggle_from_params(self, "markfixed"));
-  g->message = GTK_LABEL(gtk_label_new("")); // This gets filled in by process
-  gtk_box_pack_start(GTK_BOX(hbox), GTK_WIDGET(g->message), TRUE, TRUE, 0);
-  gtk_box_pack_start(GTK_BOX(box_raw), hbox, TRUE, TRUE, 0);
 
   // start building top level widget
   self->widget = gtk_stack_new();

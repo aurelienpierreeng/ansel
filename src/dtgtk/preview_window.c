@@ -31,6 +31,7 @@ typedef struct dt_preview_window_t
   int32_t imgid;
   cairo_surface_t *surface;
   dt_view_image_surface_fetcher_t fetcher;
+  GtkWidget *area;
   int width;
   int height;
 } dt_preview_window_t;
@@ -64,6 +65,16 @@ static void _preview_window_size_allocate(GtkWidget *widget, GtkAllocation *allo
   gtk_widget_queue_draw(widget);
 }
 
+// TODO: we color-manage the preview window assuming it sits on the same screen as the main window
+// Will need to grab the color profile of the actual monitor where it sits.
+void _colormanage_ui_color(const float L, const float a, const float b, dt_aligned_pixel_t RGB)
+{
+  dt_aligned_pixel_t Lab = { L, a, b, 1.f };
+  dt_aligned_pixel_t XYZ = { 0.f, 0.f, 0.f, 1.f };
+  dt_Lab_to_XYZ(Lab, XYZ);
+  cmsDoTransform(darktable.color_profiles->transform_xyz_to_display, XYZ, RGB, 1);
+}
+
 static gboolean
 _thumb_draw_image(GtkWidget *widget, cairo_t *cr, gpointer user_data)
 {
@@ -75,6 +86,18 @@ _thumb_draw_image(GtkWidget *widget, cairo_t *cr, gpointer user_data)
   int w = gtk_widget_get_allocated_width(widget);
   int h = gtk_widget_get_allocated_height(widget);
 
+  // Paint background
+  dt_aligned_pixel_t bg_color;
+  _colormanage_ui_color((float)dt_conf_get_int("display/brightness"), 0., 0., bg_color);
+  cairo_set_source_rgb(cr, bg_color[0], bg_color[1], bg_color[2]);
+  cairo_paint(cr);
+
+  int borders = DT_PIXEL_APPLY_DPI(dt_conf_get_int("plugins/darkroom/ui/border_size"));
+  w -= 2 * borders;
+  h -= 2 * borders;
+
+  // FIXME: this gets the color-managed image surface using the color profile of the monitor
+  // where the main window sits. Need to detect the monitor of the preview window instead.
   const dt_view_surface_value_t res =
       dt_view_image_get_surface_async(&preview->fetcher, preview->imgid, w, h, &preview->surface, widget, 0);
 
@@ -90,8 +113,8 @@ _thumb_draw_image(GtkWidget *widget, cairo_t *cr, gpointer user_data)
 
     // we draw the image
     cairo_save(cr);
-    double x_offset = (w - logical_width) / 2.;
-    double y_offset = (h - logical_height) / 2.;
+    double x_offset = (w - logical_width) / 2. + borders;
+    double y_offset = (h - logical_height) / 2. + borders;
     cairo_set_source_surface(cr, preview->surface, x_offset, y_offset);
 
     // get the transparency value
@@ -101,7 +124,7 @@ _thumb_draw_image(GtkWidget *widget, cairo_t *cr, gpointer user_data)
     cairo_paint_with_alpha(cr, im_color.alpha);
 
     // and eventually the image border
-    gtk_render_frame(context, cr, 0, 0, w, h);
+    gtk_render_frame(context, cr, borders, borders, w, h);
     cairo_restore(cr);
   }
   else
@@ -113,6 +136,12 @@ _thumb_draw_image(GtkWidget *widget, cairo_t *cr, gpointer user_data)
     dt_get_wtime() - start);
 
   return TRUE;
+}
+
+
+void _preview_redraw(gpointer instance, dt_preview_window_t *preview)
+{
+  gtk_widget_queue_draw(preview->area);
 }
 
 
@@ -142,17 +171,17 @@ void dt_preview_window_spawn(const int32_t imgid)
   g_signal_connect(G_OBJECT(dialog), "response", G_CALLBACK(_close_preview_popup), NULL);
   g_signal_connect(G_OBJECT(dialog), "destroy", G_CALLBACK(_preview_window_destroy), preview);
 
-  GtkWidget *area = gtk_drawing_area_new();
-  gtk_widget_set_hexpand(area, TRUE);
-  gtk_widget_set_vexpand(area, TRUE);
-  gtk_widget_set_halign(area, GTK_ALIGN_FILL);
-  gtk_widget_set_valign(area, GTK_ALIGN_FILL);
-  gtk_widget_set_size_request(area, 350, 350);
-  gtk_box_pack_start(GTK_BOX(gtk_dialog_get_content_area(GTK_DIALOG(dialog))), area, TRUE, TRUE, 0);
-  g_signal_connect(G_OBJECT(area), "draw", G_CALLBACK(_thumb_draw_image), preview);
-  g_signal_connect(G_OBJECT(area), "size-allocate", G_CALLBACK(_preview_window_size_allocate), preview);
+  preview->area = gtk_drawing_area_new();
+  gtk_widget_set_hexpand(preview->area, TRUE);
+  gtk_widget_set_vexpand(preview->area, TRUE);
+  gtk_widget_set_halign(preview->area, GTK_ALIGN_FILL);
+  gtk_widget_set_valign(preview->area, GTK_ALIGN_FILL);
+  gtk_widget_set_size_request(preview->area, 350, 350);
+  gtk_box_pack_start(GTK_BOX(gtk_dialog_get_content_area(GTK_DIALOG(dialog))), preview->area, TRUE, TRUE, 0);
+  g_signal_connect(G_OBJECT(preview->area), "draw", G_CALLBACK(_thumb_draw_image), preview);
+  g_signal_connect(G_OBJECT(preview->area), "size-allocate", G_CALLBACK(_preview_window_size_allocate), preview);
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DARKROOM_UI_CHANGED, G_CALLBACK(_preview_redraw), preview);
 
-
-  gtk_widget_set_visible(area, TRUE);
+  gtk_widget_set_visible(preview->area, TRUE);
   gtk_widget_show_all(dialog);
 }

@@ -156,7 +156,7 @@ typedef struct dt_dev_pixelpipe_iop_t
   // even when running on OpenCL. This is a processing-policy flag authored
   // during synchronization and then consumed by one recursion step; it does not
   // change the descriptor contract.
-  gboolean force_opencl_cache;
+  gboolean cache_output_on_ram;
 
   GHashTable *raster_masks; // GList* of dt_dev_pixelpipe_raster_mask_t
 } dt_dev_pixelpipe_iop_t;

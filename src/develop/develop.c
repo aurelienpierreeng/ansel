@@ -499,8 +499,13 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
 
       // We recompute if history hash changed or ROI has changed.
       // If we know history changed, ensure at least the last step is resynced.
-      if(dt_dev_pixelpipe_get_history_hash(pipe) != dt_dev_get_history_hash(dev))
+      const uint64_t pipe_hash = dt_dev_pixelpipe_get_history_hash(pipe);
+      const uint64_t dev_hash = dt_dev_get_history_hash(dev);
+      if(pipe_hash != dev_hash)
+      {
         dt_dev_pixelpipe_or_changed(pipe, DT_DEV_PIPE_TOP_CHANGED);
+        dt_print(DT_DEBUG_PIPE | DT_DEBUG_DEV, "dev history hash = %" PRIu64 ", pipe history hash %" PRIu64 "\n", dev_hash, pipe_hash);
+      }
 
       pipe_needs_update[i] = (dt_dev_pixelpipe_get_changed(pipe) != DT_DEV_PIPE_UNCHANGED) && !pipe->pause;
       if(!pipe_needs_update[i]) continue;
@@ -993,6 +998,20 @@ void dt_dev_coordinates_raw_norm_to_raw_abs(dt_develop_t *dev, float *points, si
   }
 }
 
+void dt_dev_coordinates_image_norm_to_raw_norm(dt_develop_t *dev, float *points, size_t num_points)
+{
+  dt_dev_coordinates_image_norm_to_image_abs(dev, points, num_points);
+  dt_dev_coordinates_image_abs_to_raw_abs(dev, points, num_points);
+  dt_dev_coordinates_raw_abs_to_raw_norm(dev, points, num_points);
+}
+
+void dt_dev_coordinates_raw_norm_to_image_norm(dt_develop_t *dev, float *points, size_t num_points)
+{
+  dt_dev_coordinates_raw_norm_to_raw_abs(dev, points, num_points);
+  dt_dev_coordinates_raw_abs_to_image_abs(dev, points, num_points);
+  dt_dev_coordinates_image_abs_to_image_norm(dev, points, num_points);
+}
+
 void dt_dev_coordinates_image_abs_to_raw_norm(dt_develop_t *dev, float *points, size_t num_points)
 {
   dt_dev_coordinates_image_abs_to_raw_abs(dev, points, num_points);
@@ -1190,7 +1209,7 @@ void dt_dev_module_remove(dt_develop_t *dev, dt_iop_module_t *module)
     dt_iop_module_t *mod = (dt_iop_module_t *)modules->data;
     if(mod == module)
     {
-      dev->iop = g_list_remove_link(dev->iop, modules);
+      dev->iop = g_list_delete_link(dev->iop, modules);
       break;
     }
   }
@@ -1213,10 +1232,10 @@ void _dev_module_update_multishow(dt_develop_t *dev, struct dt_iop_module_t *mod
   dt_iop_module_t *mod_prev = (dt_iop_module_t *)g_hash_table_lookup(state->prev_visible, module);
   dt_iop_module_t *mod_next = (dt_iop_module_t *)g_hash_table_lookup(state->next_visible, module);
 
-  const gboolean move_next = (mod_next && mod_next->iop_order != INT_MAX)
+  const gboolean move_next = mod_next
                                  ? dt_ioppr_check_can_move_after_iop(dev->iop, module, mod_next)
                                  : -1.0;
-  const gboolean move_prev = (mod_prev && mod_prev->iop_order != INT_MAX)
+  const gboolean move_prev = mod_prev
                                  ? dt_ioppr_check_can_move_before_iop(dev->iop, module, mod_prev)
                                  : -1.0;
 
@@ -1360,6 +1379,7 @@ gchar *dt_history_item_get_name(const struct dt_iop_module_t *module)
     label = g_strdup_printf("%s %s", clean_name, module->multi_name);
     dt_free(clean_name);
   }
+  dt_capitalize_label(label);
   return label;
 }
 
@@ -1728,10 +1748,8 @@ void dt_dev_update_mouse_effect_radius(dt_develop_t *dev)
   float zoom_level = dt_dev_get_zoom_level(dev);
   if(zoom_level <= 0.f) zoom_level = 1.0f;
 
-  // Constant 10 device-pixel safety margin for mask selection, independent of zoom and PPD.
-  const float radius = DT_PIXEL_APPLY_DPI(15.0f);
-  darktable.gui->mouse.effect_radius = radius / zoom_level;
-  darktable.gui->mouse.effect_radius_scaled = darktable.gui->mouse.effect_radius * darktable.gui->ppd;
+  // Constant device-pixel safety margin for selection.
+  darktable.gui->mouse.effect_radius_scaled = darktable.gui->mouse.effect_radius / zoom_level;
 
   dt_print(DT_DEBUG_MASKS,
            "[mouse] effect_radius=%0.2f effect_radius_scaled=%0.2f zoom_level=%0.4f ppd=%0.4f\n",

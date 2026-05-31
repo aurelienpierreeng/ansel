@@ -45,6 +45,7 @@
 
 #ifdef HAVE_CONFIG_H
 #include "common/darktable.h"
+#include "gui/gdkkeys.h"
 #include "config.h"
 #endif
 #include "bauhaus/bauhaus.h"
@@ -2833,7 +2834,11 @@ void gui_post_expose(struct dt_iop_module_t *module,
                       int32_t pointerx,
                       int32_t pointery)
 {
+  if(IS_NULL_PTR(module))
+    return;
   dt_develop_t *develop = module->dev;
+  if(IS_NULL_PTR(develop))
+    return;
   dt_iop_liquify_gui_data_t *g = (dt_iop_liquify_gui_data_t *) module->gui_data;
   if(IS_NULL_PTR(g))
     return;
@@ -2920,6 +2925,24 @@ static void get_point_scale(struct dt_iop_module_t *module, float x, float y, fl
   *pt = pts[0] + pts[1] * I;
 }
 
+static gboolean _is_movable_layer(const dt_liquify_layer_enum_t layer)
+{
+  switch(layer)
+  {
+    case DT_LIQUIFY_LAYER_PATH:
+    case DT_LIQUIFY_LAYER_CENTERPOINT:
+    case DT_LIQUIFY_LAYER_CTRLPOINT1:
+    case DT_LIQUIFY_LAYER_CTRLPOINT2:
+    case DT_LIQUIFY_LAYER_RADIUSPOINT:
+    case DT_LIQUIFY_LAYER_HARDNESSPOINT1:
+    case DT_LIQUIFY_LAYER_HARDNESSPOINT2:
+    case DT_LIQUIFY_LAYER_STRENGTHPOINT:
+      return TRUE;
+    default:
+      return FALSE;
+  }
+}
+
 int mouse_moved(struct dt_iop_module_t *module,
                  double x,
                  double y,
@@ -2935,6 +2958,7 @@ int mouse_moved(struct dt_iop_module_t *module,
 
   dt_iop_gui_enter_critical_section(module);
 
+  const float complex prev_mouse_pos = g->last_mouse_pos;
   g->last_mouse_pos = pt;
 
   // Don't hit test while dragging, you'd only hit the dragged thing
@@ -2943,12 +2967,13 @@ int mouse_moved(struct dt_iop_module_t *module,
   if(!is_dragging(g))
   {
     dt_liquify_hit_t hit = _hit_test_paths(module, &g->params, pt);
+    dt_control_queue_cursor_by_name(_is_movable_layer(hit.layer) ? "move" : "default");
     dt_liquify_path_data_t *last_hovered = find_hovered(&g->params);
     if(hit.elem != last_hovered
-       || (!IS_NULL_PTR(last_hovered) && hit.elem
+       || (!IS_NULL_PTR(last_hovered) && !IS_NULL_PTR(hit.elem)
            && hit.elem->header.hovered != last_hovered->header.hovered))
     {
-      if(hit.elem)
+      if(!IS_NULL_PTR(hit.elem))
         hit.elem->header.hovered = hit.layer;
       if(!IS_NULL_PTR(last_hovered))
         last_hovered->header.hovered = 0;
@@ -2960,7 +2985,7 @@ int mouse_moved(struct dt_iop_module_t *module,
 
     const gboolean dragged = detect_drag(g, scale, pt);
 
-    if(dragged && g->last_hit.elem)
+    if(dragged && !IS_NULL_PTR(g->last_hit.elem))
     {
       // start dragging
       start_drag(g, g->last_hit.layer, g->last_hit.elem);
@@ -2970,7 +2995,7 @@ int mouse_moved(struct dt_iop_module_t *module,
       goto done;
     }
 
-    if(g->last_hit.elem)
+    if(!IS_NULL_PTR(g->last_hit.elem))
     {
       // an item is selected, so this mouvement is handled and must
       // not trigger any panning.
@@ -2979,6 +3004,7 @@ int mouse_moved(struct dt_iop_module_t *module,
   }
   else // we are dragging
   {
+    dt_control_queue_cursor_by_name("move");
     dt_liquify_path_data_t *d = g->dragging.elem;
     dt_liquify_path_data_t *n = node_next(&g->params, d);
     dt_liquify_path_data_t *p = node_prev(&g->params, d);
@@ -2987,6 +3013,33 @@ int mouse_moved(struct dt_iop_module_t *module,
 
     switch (g->dragging.layer)
     {
+       case DT_LIQUIFY_LAYER_PATH:
+       {
+         if(IS_NULL_PTR(p)) break;
+         const float complex delta = prev_mouse_pos == -1 ? 0.0f : pt - prev_mouse_pos;
+         if(cabsf(delta) < 1e-6f) break;
+
+         dt_liquify_path_data_t *moved_nodes[2] = { p, d };
+         for(int i = 0; i < 2; i++)
+         {
+           dt_liquify_path_data_t *node = moved_nodes[i];
+           dt_liquify_path_data_t *node_next_ptr = node_next(&g->params, node);
+           dt_liquify_path_data_t *node_prev_ptr = node_prev(&g->params, node);
+
+           if(node->header.type == DT_LIQUIFY_PATH_CURVE_TO_V1)
+             node->node.ctrl2 += delta;
+           if(!IS_NULL_PTR(node_next_ptr) && node_next_ptr->header.type == DT_LIQUIFY_PATH_CURVE_TO_V1)
+             node_next_ptr->node.ctrl1 += delta;
+           if(!IS_NULL_PTR(node_prev_ptr) && node_prev_ptr->header.type == DT_LIQUIFY_PATH_CURVE_TO_V1)
+             node_prev_ptr->node.ctrl2 += delta;
+
+           node->warp.radius += delta;
+           node->warp.strength += delta;
+           node->warp.point += delta;
+         }
+         break;
+       }
+
        case DT_LIQUIFY_LAYER_CENTERPOINT:
          switch (d->header.type)
          {
@@ -3088,6 +3141,12 @@ int mouse_moved(struct dt_iop_module_t *module,
   }
 
 done:
+  if(!handled && which != 0 && (!IS_NULL_PTR(g->temp) || !IS_NULL_PTR(g->last_hit.elem)))
+  {
+    // A drag/edit sequence is in progress, keep consuming motion events
+    // so darkroom pan does not steal the interaction.
+    handled = TRUE;
+  }
   dt_iop_gui_leave_critical_section(module);
   if(handled)
   {
@@ -3260,9 +3319,10 @@ int button_pressed(struct dt_iop_module_t *module,
       }
       else
       {
-        if(IS_NULL_PTR(g->temp)) goto done;
+        goto done;
       }
     }
+
     g->last_hit = NOWHERE;
     if(gtk_toggle_button_get_active(g->btn_curve_tool))
     {
@@ -3299,6 +3359,13 @@ int button_pressed(struct dt_iop_module_t *module,
       handled = 1;
       goto done;
     }
+  }
+
+  if(!handled && (which == 1 || which == 3) && (!IS_NULL_PTR(g->temp) || !IS_NULL_PTR(g->last_hit.elem)))
+  {
+    // Even when the actual edit is finalized on button release, this press
+    // starts an interaction sequence and must remain captured by liquify.
+    handled = 1;
   }
 
 done:
@@ -3586,6 +3653,177 @@ done:
   return handled;
 }
 
+int key_pressed(struct dt_iop_module_t *self, GdkEventKey *event)
+{
+  if(IS_NULL_PTR(event)) return 0;
+
+  dt_iop_liquify_gui_data_t *g = (dt_iop_liquify_gui_data_t *)self->gui_data;
+  if(IS_NULL_PTR(g)) return 0;
+  guint key = dt_keys_mainpad_alternatives(event->keyval);
+
+
+  const gboolean creating = gtk_toggle_button_get_active(g->btn_point_tool)
+                              || gtk_toggle_button_get_active(g->btn_line_tool)
+                              || gtk_toggle_button_get_active(g->btn_curve_tool)
+                              || (g->status & (DT_LIQUIFY_STATUS_NEW | DT_LIQUIFY_STATUS_PREVIEW));
+
+  // Delete last created node while creating a shape.
+  if(key == GDK_KEY_BackSpace)
+  {
+    if(!creating)
+      return 0;
+
+    const gboolean create_tool_active = gtk_toggle_button_get_active(g->btn_point_tool)
+                                        || gtk_toggle_button_get_active(g->btn_line_tool)
+                                        || gtk_toggle_button_get_active(g->btn_curve_tool);
+    gboolean restart_shape = FALSE;
+
+    dt_iop_gui_enter_critical_section(self);
+
+    dt_liquify_path_data_t *last = NULL;
+    for(int k = 0; k < MAX_NODES; k++)
+    {
+      if(g->params.nodes[k].header.type == DT_LIQUIFY_PATH_INVALIDATED)
+        break;
+      last = &g->params.nodes[k];
+    }
+
+    if(IS_NULL_PTR(last) && IS_NULL_PTR(g->temp))
+    {
+      restart_shape = create_tool_active;
+      dt_iop_gui_leave_critical_section(self);
+      if(restart_shape)
+      {
+        _start_new_shape(self);
+        update_warp_count(g);
+        sync_pipe(self, TRUE);
+      }
+      return 1;
+    }
+
+    dt_liquify_path_data_t *to_delete = !IS_NULL_PTR(g->temp) ? g->temp : last;
+
+    end_drag(g);
+    const int prev_index = to_delete->header.prev;
+    node_delete(&g->params, to_delete);
+    g->temp = prev_index >= 0 ? node_get(&g->params, prev_index) : NULL;
+    g->node_index = !IS_NULL_PTR(g->temp) ? g->temp->header.idx : 0;
+    g->last_hit = NOWHERE;
+
+    if(!IS_NULL_PTR(g->temp))
+    {
+      // Continue creation from the current endpoint by restoring the live drag preview.
+      start_drag(g, DT_LIQUIFY_LAYER_CENTERPOINT, g->temp);
+      g->status &= ~DT_LIQUIFY_STATUS_NEW;
+    }
+    else
+    {
+      restart_shape = create_tool_active;
+      g->status &= ~(DT_LIQUIFY_STATUS_PREVIEW | DT_LIQUIFY_STATUS_NEW);
+    }
+
+    dt_iop_gui_leave_critical_section(self);
+
+    if(restart_shape)
+      _start_new_shape(self);
+
+    update_warp_count(g);
+    sync_pipe(self, TRUE);
+    return 1;
+  }
+
+  // Delete selected node outside creation mode.
+  if(key == GDK_KEY_Delete)
+  {
+    if(creating)
+      return 0;
+
+    dt_iop_gui_enter_critical_section(self);
+
+    dt_liquify_path_data_t *selected = NULL;
+    for(int k = 0; k < MAX_NODES; k++)
+    {
+      if(g->params.nodes[k].header.type == DT_LIQUIFY_PATH_INVALIDATED)
+        break;
+      if(g->params.nodes[k].header.selected == DT_LIQUIFY_LAYER_CENTERPOINT)
+      {
+        selected = &g->params.nodes[k];
+        break;
+      }
+    }
+
+    if(IS_NULL_PTR(selected))
+    {
+      dt_iop_gui_leave_critical_section(self);
+      return 0;
+    }
+
+    end_drag(g);
+    const int deleted_idx = selected->header.idx;
+    const int next_idx = selected->header.next;
+    const int prev_idx = selected->header.prev;
+    node_delete(&g->params, selected);
+    g->temp = NULL;
+    g->last_hit = NOWHERE;
+
+    unselect_all(&g->params);
+    int target_idx = (next_idx != -1) ? next_idx : prev_idx;
+    if(target_idx > deleted_idx)
+      target_idx--;
+
+    if(target_idx >= 0)
+    {
+      dt_liquify_path_data_t *target = node_get(&g->params, target_idx);
+      if(!IS_NULL_PTR(target) && target->header.type != DT_LIQUIFY_PATH_INVALIDATED)
+        target->header.selected = DT_LIQUIFY_LAYER_CENTERPOINT;
+    }
+
+    dt_iop_gui_leave_critical_section(self);
+
+    update_warp_count(g);
+    sync_pipe(self, TRUE);
+    return 1;
+  }
+
+  // Quit current creation or edition on Escape or Enter key
+  if(key == GDK_KEY_Escape || key == GDK_KEY_Return)
+  {
+
+    if(!creating)
+      return 0;
+
+    dt_iop_gui_enter_critical_section(self);
+
+    dt_control_hinter_message(darktable.control, "");
+    end_drag(g);
+
+    if(g->temp)
+    {
+      node_delete(&g->params, g->temp);
+      g->temp = NULL;
+    }
+
+    g->status &= ~(DT_LIQUIFY_STATUS_PREVIEW | DT_LIQUIFY_STATUS_NEW);
+    g->last_hit = NOWHERE;
+
+    dt_iop_gui_leave_critical_section(self);
+
+    gtk_toggle_button_set_active(g->btn_point_tool, FALSE);
+    gtk_toggle_button_set_active(g->btn_line_tool, FALSE);
+    gtk_toggle_button_set_active(g->btn_curve_tool, FALSE);
+    gtk_toggle_button_set_active(g->btn_node_tool, TRUE);
+
+    dt_control_hinter_message(darktable.control, _("click to edit nodes"));
+    dt_iop_request_focus(self);
+    update_warp_count(g);
+    sync_pipe(self, TRUE);
+
+    return 1;
+  }
+
+  return 0;
+}
+
 // we need this only because darktable has no radiobutton support
 
 static gboolean btn_make_radio_callback(GtkToggleButton *btn, GdkEventButton *event, dt_iop_module_t *module)
@@ -3717,7 +3955,7 @@ void gui_init(dt_iop_module_t *self)
                                          G_CALLBACK(btn_make_radio_callback), TRUE, 0, 0,
                                          dtgtk_liquify_cairo_paint_node_tool, hbox));
 
-  dt_liquify_layers[DT_LIQUIFY_LAYER_PATH].hint           = _("ctrl+click: add node - right click: remove path\n"
+  dt_liquify_layers[DT_LIQUIFY_LAYER_PATH].hint           = _("drag: move segment - ctrl+click: add node - right click: remove path\n"
                                                               "ctrl+alt+click: toggle line/curve");
   dt_liquify_layers[DT_LIQUIFY_LAYER_CENTERPOINT].hint    = _("click and drag to move - click: show/hide feathering controls\n"
                                                               "ctrl+click: autosmooth, cusp, smooth, symmetrical"

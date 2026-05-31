@@ -64,6 +64,7 @@ typedef struct dt_iop_color_picker_t
   // activated, and will remember the most recent picker position
   float pick_pos[2];
   dt_boundingbox_t pick_box;
+  gboolean geometry_is_raw;
   /** One-shot request for the next signal emission after activation or colorspace change. */
   gboolean update_pending;
 } dt_iop_color_picker_t;

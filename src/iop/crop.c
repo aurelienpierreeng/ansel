@@ -1349,6 +1349,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
 {
   dt_develop_t *dev = self->dev;
   dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)self->gui_data;
+  if(IS_NULL_PTR(g)) return;
 
   _aspect_apply(self, GRAB_HORIZONTAL);
 
@@ -1596,25 +1597,25 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
     // hover over active borders, no button pressed
     // change mouse pointer
     if(grab == GRAB_LEFT)
-      dt_control_set_cursor(GDK_LEFT_SIDE);
+      dt_control_queue_cursor(GDK_LEFT_SIDE);
     else if(grab == GRAB_TOP)
-      dt_control_set_cursor(GDK_TOP_SIDE);
+      dt_control_queue_cursor(GDK_TOP_SIDE);
     else if(grab == GRAB_RIGHT)
-      dt_control_set_cursor(GDK_RIGHT_SIDE);
+      dt_control_queue_cursor(GDK_RIGHT_SIDE);
     else if(grab == GRAB_BOTTOM)
-      dt_control_set_cursor(GDK_BOTTOM_SIDE);
+      dt_control_queue_cursor(GDK_BOTTOM_SIDE);
     else if(grab == GRAB_TOP_LEFT)
-      dt_control_set_cursor(GDK_TOP_LEFT_CORNER);
+      dt_control_queue_cursor(GDK_TOP_LEFT_CORNER);
     else if(grab == GRAB_TOP_RIGHT)
-      dt_control_set_cursor(GDK_TOP_RIGHT_CORNER);
+      dt_control_queue_cursor(GDK_TOP_RIGHT_CORNER);
     else if(grab == GRAB_BOTTOM_RIGHT)
-      dt_control_set_cursor(GDK_BOTTOM_RIGHT_CORNER);
+      dt_control_queue_cursor(GDK_BOTTOM_RIGHT_CORNER);
     else if(grab == GRAB_BOTTOM_LEFT)
-      dt_control_set_cursor(GDK_BOTTOM_LEFT_CORNER);
+      dt_control_queue_cursor(GDK_BOTTOM_LEFT_CORNER);
     else if(grab == GRAB_NONE)
     {
       dt_control_hinter_message(darktable.control, "");
-      dt_control_set_cursor(GDK_LEFT_PTR);
+      dt_control_queue_cursor(GDK_LEFT_PTR);
     }
     if(grab != GRAB_NONE)
       dt_control_hinter_message(darktable.control, _("<b>resize</b>: drag, <b>keep aspect ratio</b>: shift+drag"));
@@ -1622,7 +1623,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   }
   else
   {
-    dt_control_set_cursor(GDK_FLEUR);
+    dt_control_queue_cursor(GDK_FLEUR);
     g->cropping = GRAB_CENTER;
     dt_control_hinter_message(darktable.control, _("<b>move</b>: drag, <b>move vertically</b>: shift+drag, <b>move horizontally</b>: ctrl+drag"));
     dt_control_queue_redraw_center();

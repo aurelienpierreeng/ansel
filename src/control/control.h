@@ -111,11 +111,43 @@ void dt_control_draw_busy_msg(cairo_t *cr, int width, int height);
 void dt_control_forbid_change_cursor();
 // enable the possibility to change the cursor shape with dt_control_change_cursor
 void dt_control_allow_change_cursor();
-void dt_control_change_cursor(dt_cursor_t cursor);
-// set darktable.control->cursor to the desired cursor shape
-void dt_control_set_cursor(dt_cursor_t cursor);
-// commit the currently set cursor shape from darktable.control->cursor
+
+void dt_control_change_cursor_EXT(dt_cursor_t cursor, const char *file, int line);
+#define dt_control_change_cursor(cursor) \
+  dt_control_change_cursor_EXT((cursor), __FILE__, __LINE__)
+
+/** \brief Apply a GTK named cursor immediately without replacing the queued cursor state.
+ *
+ * This is used for temporary cursors such as "progress" while synchronous UI-thread
+ * operations are running.
+ */
+void dt_control_change_cursor_by_name(const char *curs_str);
+
+/** \brief Apply a GTK named cursor immediately and flush display updates.
+ *
+ * This helper is intended for synchronous UI-thread work that blocks right after
+ * setting the cursor, ensuring the new shape is visible before computation starts.
+ */
+void dt_control_change_cursor_by_name_and_flush(const char *curs_str);
+
+// set darktable.control->cursor.shape to the desired cursor shape
+void dt_control_queue_cursor_EXT(dt_cursor_t cursor, const char *file, int line);
+#define  dt_control_queue_cursor(cursor) \
+  dt_control_queue_cursor_EXT((cursor), __FILE__, __LINE__)
+
+void dt_control_queue_cursor_by_name(const char *curs_str);
+
+// commit the currently set cursor shape from darktable.control->cursor.shape
 void dt_control_commit_cursor();
+/** \brief Set whether the cursor should be visible or not.
+ *
+ * Cursor visibility changes are routed through a macro so the implementation
+ * can log the exact call site that requested the state transition.
+ */
+void dt_control_set_cursor_visible_EXT(gboolean visible, const char *file, int line);
+#define dt_control_set_cursor_visible(visible) \
+  dt_control_set_cursor_visible_EXT((visible), __FILE__, __LINE__)
+
 void dt_control_write_sidecar_files();
 void dt_control_save_xmp(const int32_t imgid);
 void dt_control_save_xmps(const GList *imgids, const gboolean check_history);
@@ -186,8 +218,19 @@ typedef struct dt_control_t
   int history_start;
   int32_t mouse_over_id;
   int32_t keyboard_over_id;
-  gboolean lock_cursor_shape;
-  dt_cursor_t cursor; // cursor to draw at the end of mouse_moved
+
+  struct
+  {
+    /** Prevent cursor shape commits while another subsystem owns the cursor. */
+    gboolean lock;
+    /** Cursor shape to draw at the end of mouse_moved. */
+    dt_cursor_t shape;
+    dt_cursor_t current_shape;
+    gchar *shape_str;
+    gchar *current_shape_str;
+    /** Force a blank GTK cursor while custom drawing owns the visible cursor. */
+    gboolean hide;
+  } cursor;
 
   // message log
   int log_pos, log_ack;

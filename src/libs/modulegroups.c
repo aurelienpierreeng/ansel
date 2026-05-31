@@ -89,6 +89,8 @@ typedef struct dt_lib_modulegroups_t
   GtkWidget *pages[MOD_TAB_LAST];
   GtkWidget *containers[TAB_BASIC_LAST];
   GtkWidget *sections[TAB_BASIC_LAST];
+  GList *visible_expanders;
+  dt_modulesgroups_tabs_t visible_expanders_tab;
   GtkWidget *drag_highlight;
   dt_iop_module_t *drag_source;
   gboolean inited;
@@ -238,6 +240,42 @@ static void _modulegroups_append_visible_expanders(GtkWidget *widget, GList **wi
 }
 
 /**
+ * @brief Drop the cached list of visible expanders used for keyboard module focus.
+ *
+ * The cache stores borrowed GtkWidget pointers only.  Modulegroups owns the
+ * list container and refreshes it during the regular visibility update cycle.
+ *
+ * @param d Modulegroups runtime data.
+ */
+static void _modulegroups_clear_visible_expanders_cache(dt_lib_modulegroups_t *d)
+{
+  if(IS_NULL_PTR(d)) return;
+  g_list_free(d->visible_expanders);
+  d->visible_expanders = NULL;
+  d->visible_expanders_tab = MOD_TAB_LAST;
+}
+
+/**
+ * @brief Rebuild the visible expander cache for one tab after GUI update.
+ *
+ * Focus navigation reads this cache and must not trigger widget discovery or
+ * reparenting during key handling.  We therefore rebuild once in the
+ * init/update lifecycle, then consume read-only during user interactions.
+ *
+ * @param self Modulegroups lib module.
+ * @param tab Tab whose visible expanders should populate the cache.
+ */
+static void _modulegroups_refresh_visible_expanders_cache(dt_lib_module_t *self, dt_modulesgroups_tabs_t tab)
+{
+  dt_lib_modulegroups_t *d = (dt_lib_modulegroups_t *)self->data;
+  _modulegroups_clear_visible_expanders_cache(d);
+  if(IS_NULL_PTR(d) || IS_NULL_PTR(d->pages[tab])) return;
+
+  _modulegroups_append_visible_expanders(d->pages[tab], &d->visible_expanders);
+  d->visible_expanders_tab = tab;
+}
+
+/**
  * @brief Find the module header under the current drop position.
  *
  * The y coordinate is relative to the page widget receiving the drop event.
@@ -369,9 +407,13 @@ static dt_modulesgroups_tabs_t _get_current_tab(dt_lib_module_t *self)
 {
   dt_lib_modulegroups_t *d = (dt_lib_modulegroups_t *)self->data;
   if(!IS_NULL_PTR(d) && GTK_IS_NOTEBOOK(d->notebook))
-    return gtk_notebook_get_current_page(GTK_NOTEBOOK(d->notebook));
+  {
+    const gint page = gtk_notebook_get_current_page(GTK_NOTEBOOK(d->notebook));
+    if(page >= 0 && page < MOD_TAB_LAST) return (dt_modulesgroups_tabs_t)page;
+  }
 
-  return MOD_TAB_ACTIVE;
+  // Fall back to persisted state when notebook page is temporarily unavailable.
+  return _modulegroups_cycle_tabs(dt_conf_get_int("plugins/darkroom/moduletab"));
 }
 
 static void _set_current_tab(dt_lib_module_t *self, dt_modulesgroups_tabs_t tab)
@@ -714,57 +756,49 @@ static void _focus_module(dt_iop_module_t *module)
   }
 }
 
-/* WARNING: first/last refer to pipeline nodes order, which is reversed compared to GUI order. */
-static dt_iop_module_t *_find_first_visible_module(dt_lib_module_t *self)
-{
-  const dt_modulesgroups_tabs_t current_tab = _get_current_tab(self);
-
-  for(GList *module = g_list_first(darktable.develop->iop); module; module = g_list_next(module))
-  {
-    dt_iop_module_t *mod = (dt_iop_module_t *)module->data;
-    if(_is_module_in_tab(mod, current_tab)) return mod;
-  }
-  return NULL;
-}
-
-static dt_iop_module_t *_find_last_visible_module(dt_lib_module_t *self)
-{
-  const dt_modulesgroups_tabs_t current_tab = _get_current_tab(self);
-
-  for(GList *module = g_list_last(darktable.develop->iop); module; module = g_list_previous(module))
-  {
-    dt_iop_module_t *mod = (dt_iop_module_t *)module->data;
-    if(_is_module_in_tab(mod, current_tab)) return mod;
-  }
-  return NULL;
-}
-
-/* WARNING: next/previous refer to GUI order, which is reversed pipeline order
-* in a "layer over" logic: first pipeline node is at the GUI bottom.
-*/
 static gboolean _focus_previous_module(GtkAccelGroup *accel_group, GObject *accelerable, guint keyval,
                                        GdkModifierType modifier, gpointer user_data)
 {
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
+  dt_lib_modulegroups_t *d = (dt_lib_modulegroups_t *)self->data;
   dt_iop_module_t *focused = darktable.develop->gui_module;
-  fprintf(stdout, "focusing previous module\n");
 
-  dt_modulesgroups_tabs_t tab = _get_current_tab(self);
-  if(tab == MOD_TAB_BASIC)
-  {
-    // Basic tab uses internal sections that don't honour pipeline order
-    dt_control_log(_("Keyboard navigation in basic tab is not supported yet"));
+  // When filmstrip owns keyboard focus, keep PageUp routed to filmstrip navigation.
+  dt_thumbtable_t *filmstrip = darktable.gui->ui->thumbtable_filmstrip;
+  if(!IS_NULL_PTR(filmstrip) && !IS_NULL_PTR(filmstrip->grid) && gtk_widget_has_focus(filmstrip->grid))
     return FALSE;
-  }
+  if(d->visible_expanders_tab != _get_current_tab(self))
+    return TRUE;
 
+  const GList *children = d->visible_expanders;
   if(IS_NULL_PTR(focused))
   {
-    _focus_module(_find_first_visible_module(self));
+    GList *first = g_list_first((GList *)children);
+    GtkWidget *widget = first ? GTK_WIDGET(first->data) : NULL;
+    _focus_module(widget ? (dt_iop_module_t *)g_object_get_data(G_OBJECT(widget), "dt-module") : NULL);
   }
   else
   {
+    dt_iop_module_t *target = NULL;
+
+    /* Page Up follows the displayed module order.  The basic tab is split in
+     * section containers, so we walk the actual visible expander tree instead
+     * of the pipeline list. */
+    for(const GList *module = g_list_first((GList *)children); module; module = g_list_next(module))
+    {
+      GtkWidget *widget = GTK_WIDGET(module->data);
+      if(widget == focused->expander) break;
+      target = (dt_iop_module_t *)g_object_get_data(G_OBJECT(widget), "dt-module");
+    }
+    if(IS_NULL_PTR(target))
+    {
+      GList *last = g_list_last((GList *)children);
+      GtkWidget *widget = last ? GTK_WIDGET(last->data) : NULL;
+      target = widget ? (dt_iop_module_t *)g_object_get_data(G_OBJECT(widget), "dt-module") : NULL;
+    }
+
     dt_iop_gui_set_expanded(focused, FALSE, TRUE);
-    _focus_module(dt_iop_gui_get_next_visible_module(focused));
+    _focus_module(target);
   }
 
   return TRUE;
@@ -774,25 +808,45 @@ static gboolean _focus_next_module(GtkAccelGroup *accel_group, GObject *accelera
                                    GdkModifierType modifier, gpointer user_data)
 {
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
+  dt_lib_modulegroups_t *d = (dt_lib_modulegroups_t *)self->data;
   dt_iop_module_t *focused = darktable.develop->gui_module;
-  fprintf(stdout, "focusing next module\n");
 
-  dt_modulesgroups_tabs_t tab = _get_current_tab(self);
-  if(tab == MOD_TAB_BASIC)
-  {
-    // Basic tab uses internal sections that don't honour pipeline order
-    dt_control_log(_("Keyboard navigation in basic tab is not supported yet"));
+  // When filmstrip owns keyboard focus, keep PageDown routed to filmstrip navigation.
+  dt_thumbtable_t *filmstrip = darktable.gui->ui->thumbtable_filmstrip;
+  if(!IS_NULL_PTR(filmstrip) && !IS_NULL_PTR(filmstrip->grid) && gtk_widget_has_focus(filmstrip->grid))
     return FALSE;
-  }
+  if(d->visible_expanders_tab != _get_current_tab(self))
+    return TRUE;
 
+  const GList *children = d->visible_expanders;
   if(IS_NULL_PTR(focused))
   {
-    _focus_module(_find_last_visible_module(self));
+    GList *last = g_list_last((GList *)children);
+    GtkWidget *widget = last ? GTK_WIDGET(last->data) : NULL;
+    _focus_module(widget ? (dt_iop_module_t *)g_object_get_data(G_OBJECT(widget), "dt-module") : NULL);
   }
   else
   {
+    dt_iop_module_t *target = NULL;
+
+    /* Page Down follows the displayed module order.  The basic tab is split in
+     * section containers, so we walk the actual visible expander tree instead
+     * of the pipeline list. */
+    for(const GList *module = g_list_last((GList *)children); module; module = g_list_previous(module))
+    {
+      GtkWidget *widget = GTK_WIDGET(module->data);
+      if(widget == focused->expander) break;
+      target = (dt_iop_module_t *)g_object_get_data(G_OBJECT(widget), "dt-module");
+    }
+    if(IS_NULL_PTR(target))
+    {
+      GList *first = g_list_first((GList *)children);
+      GtkWidget *widget = first ? GTK_WIDGET(first->data) : NULL;
+      target = widget ? (dt_iop_module_t *)g_object_get_data(G_OBJECT(widget), "dt-module") : NULL;
+    }
+
     dt_iop_gui_set_expanded(focused, FALSE, TRUE);
-    _focus_module(dt_iop_gui_get_previous_visible_module(focused));
+    _focus_module(target);
   }
 
   return TRUE;
@@ -800,9 +854,29 @@ static gboolean _focus_next_module(GtkAccelGroup *accel_group, GObject *accelera
 
 static gboolean _is_valid_widget(GtkWidget *widget)
 {
+  if(IS_NULL_PTR(widget))
+  {
+    dt_print(DT_DEBUG_SHORTCUTS, "[modulegroups] _is_valid_widget skip: widget=NULL\n");
+    return FALSE;
+  }
+
   // The parent will always be a GtkBox
   GtkWidget *parent = gtk_widget_get_parent(widget);
+  if(IS_NULL_PTR(parent))
+  {
+    dt_print(DT_DEBUG_SHORTCUTS, "[modulegroups] _is_valid_widget skip: parent=NULL widget=%s\n",
+             gtk_widget_get_name(widget));
+    return FALSE;
+  }
+
   GtkWidget *grandparent = gtk_widget_get_parent(parent);
+  if(IS_NULL_PTR(grandparent))
+  {
+    dt_print(DT_DEBUG_SHORTCUTS, "[modulegroups] _is_valid_widget skip: grandparent=NULL widget=%s parent=%s\n",
+             gtk_widget_get_name(widget), gtk_widget_get_name(parent));
+    return FALSE;
+  }
+
   GType type = G_OBJECT_TYPE(grandparent);
 
   gboolean visible_parent = TRUE;
@@ -925,6 +999,8 @@ void gui_init(dt_lib_module_t *self)
   dt_lib_modulegroups_t *d = (dt_lib_modulegroups_t *)g_malloc0(sizeof(dt_lib_modulegroups_t));
   self->data = (void *)d;
   d->inited = FALSE;
+  d->visible_expanders = NULL;
+  d->visible_expanders_tab = MOD_TAB_LAST;
 
   self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
   dt_gui_add_help_link(self->widget, dt_get_help_url(self->plugin_name));
@@ -1008,6 +1084,7 @@ void gui_cleanup(dt_lib_module_t *self)
   if(self->data)
   {
     dt_lib_modulegroups_t *d = (dt_lib_modulegroups_t *)self->data;
+    _modulegroups_clear_visible_expanders_cache(d);
     _modulegroups_clear_drop_state(d);
     GtkBox *root = dt_ui_get_container(darktable.gui->ui, DT_UI_CONTAINER_PANEL_RIGHT_CENTER);
     if(darktable.develop && root)
@@ -1023,7 +1100,8 @@ void gui_cleanup(dt_lib_module_t *self)
     }
     for(int i = 0; i < MOD_TAB_ALL; i++)
     {
-      gtk_widget_destroy(d->pages[i]);
+      if(!IS_NULL_PTR(d->pages[i]) && GTK_IS_WIDGET(d->pages[i]))
+        gtk_widget_destroy(d->pages[i]);
       d->pages[i] = NULL;
     }
     dt_free(d);
@@ -1120,8 +1198,19 @@ static gboolean _update_iop_visibility(gpointer user_data)
 
   // Ensure the module is visible
   dt_iop_module_t *active = darktable.develop->gui_module;
-  if(!IS_NULL_PTR(active) && !IS_NULL_PTR(active->expander)) 
-    darktable.gui->scroll_to[1] = active->expander;
+  if(!IS_NULL_PTR(active) && !IS_NULL_PTR(active->expander))
+  {
+    if(darktable.gui->scroll_to[1] != active->header)
+    {
+      const gboolean scroll_new_instance_to_header
+        = (darktable.gui->scroll_to_header_once == active->expander
+           && !IS_NULL_PTR(active->header) && GTK_IS_WIDGET(active->header));
+
+      darktable.gui->scroll_to[1] = scroll_new_instance_to_header ? active->header : active->expander;
+
+      if(scroll_new_instance_to_header) darktable.gui->scroll_to_header_once = NULL;
+    }
+  }
 
   if(tab == MOD_TAB_BASIC)
   {
@@ -1138,6 +1227,7 @@ static gboolean _update_iop_visibility(gpointer user_data)
   }
 
   // Ensure the parent get refreshed
+  _modulegroups_refresh_visible_expanders_cache(self, tab);
   gtk_widget_queue_resize(d->pages[tab]);
   gtk_widget_queue_draw(d->pages[tab]);
 
@@ -1158,8 +1248,34 @@ static void _lib_modulegroups_signal_set(gpointer instance, gpointer module, gpo
   dt_iop_module_t *iop_module = (dt_iop_module_t *)module;
   if(IS_NULL_PTR(iop_module)) return;
 
+  const dt_modulesgroups_tabs_t current_tab = _get_current_tab(self);
+  const gboolean prefer_active_once
+      = !IS_NULL_PTR(iop_module->expander)
+        && GPOINTER_TO_INT(g_object_get_data(G_OBJECT(iop_module->expander),
+                                             "dt-modulegroups-prefer-active-once"));
+  const gboolean allow_switch_from_active
+      = !IS_NULL_PTR(iop_module->expander)
+        && GPOINTER_TO_INT(g_object_get_data(G_OBJECT(iop_module->expander),
+                                             "dt-modulegroups-switch-from-active-once"));
+  const gboolean module_in_active_tab = _is_module_in_tab(iop_module, MOD_TAB_ACTIVE);
+  if(!IS_NULL_PTR(iop_module->expander))
+  {
+    g_object_set_data(G_OBJECT(iop_module->expander), "dt-modulegroups-prefer-active-once", NULL);
+    g_object_set_data(G_OBJECT(iop_module->expander), "dt-modulegroups-switch-from-active-once", NULL);
+  }
+
+  // Direct actions (enable/toggle) should prioritize Pipeline for the focused module.
+  if(prefer_active_once && module_in_active_tab && current_tab != MOD_TAB_ACTIVE)
+    _set_current_tab(self, MOD_TAB_ACTIVE);
+  // Focus-only requests from accel search: stay in Pipeline when the module is
+  // already there, otherwise jump to the module group tab.
+  else if(allow_switch_from_active && module_in_active_tab && current_tab != MOD_TAB_ACTIVE)
+    _set_current_tab(self, MOD_TAB_ACTIVE);
   // If module not in current tab: switch tab
-  if(!_is_module_in_tab(iop_module, _get_current_tab(self)))
+  // Keep users on the Pipeline tab when they duplicate/create modules from it.
+  // Pipeline is an activity-centered view and should not auto-jump to category tabs.
+  else if((current_tab != MOD_TAB_ACTIVE || allow_switch_from_active)
+     && !_is_module_in_tab(iop_module, current_tab))
     _set_current_tab_from_module_group(self, iop_module->default_group());
 
   // If module in current tab but not visible: refresh tab

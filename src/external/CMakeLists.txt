@@ -74,6 +74,14 @@ set(CMAKE_BUILD_TYPE ${RAWSPEED_BUILD_TYPE} CACHE STRING "" FORCE)
 add_subdirectory(rawspeed)
 set(CMAKE_BUILD_TYPE ${_PARENT_BUILD_TYPE} CACHE STRING "" FORCE)
 
+if(TARGET rstest)
+  target_compile_definitions(rstest PRIVATE -DRAWSPEED_SOURCE_DIR="${RAWSPEED_PATH}")
+endif()
+
+if(TARGET rsbench)
+  target_compile_definitions(rsbench PRIVATE -DRAWSPEED_SOURCE_DIR="${RAWSPEED_PATH}")
+endif()
+
 # Only patch the target when OpenMP is actually enabled
 if(USE_OPENMP AND TARGET rawspeed)
   target_link_libraries(rawspeed PUBLIC OpenMP::OpenMP_CXX)

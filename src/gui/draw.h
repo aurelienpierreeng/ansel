@@ -758,13 +758,16 @@ static inline void dt_draw_shape_lines(const dt_draw_dash_type_t dash_type, cons
   
   // OUTLINE (dark)
   cairo_set_line_width(cr, line_width_dark);
-  dt_draw_set_color_overlay(cr, FALSE, dash_type ? 0.3f : 0.9f);
+  float alpha = dash_type ? 0.3f : 0.9f;
+  if(source) alpha *= 0.5f;
+  dt_draw_set_color_overlay(cr, FALSE, alpha);
   cairo_stroke_preserve(cr);
 
   // NORMAL (bright)
   cairo_set_line_width(cr, line_width_bright);
-  dt_draw_set_color_overlay(cr, TRUE, 0.8);
+  dt_draw_set_color_overlay(cr, TRUE, source ? 0.4f : 0.8f);
   cairo_stroke(cr);
+
   
   cairo_restore(cr);
 }
@@ -948,10 +951,17 @@ static inline GdkPixbuf *dt_draw_get_pixbuf_from_cairo(DTGTKCairoPaintIconFunc p
   dt_gui_gtk_set_source_rgba(cr, DT_GUI_COLOR_BUTTON_FG, 1.0);
   paint(cr, 0, 0, width, height, 0, NULL);
   cairo_destroy(cr);
+
   guchar *data = cairo_image_surface_get_data(cst);
   dt_draw_cairo_to_gdk_pixbuf(data, width, height);
-  return gdk_pixbuf_new_from_data(data, GDK_COLORSPACE_RGB, TRUE, 8, width, height,
-                                  cairo_image_surface_get_stride(cst), NULL, NULL);
+  const int stride = cairo_image_surface_get_stride(cst);
+  const size_t size = (size_t)stride * height;
+  guchar *buf = (guchar *)malloc(size);
+  memcpy(buf, data, size);
+  cairo_surface_destroy(cst);
+
+  return gdk_pixbuf_new_from_data(buf, GDK_COLORSPACE_RGB, TRUE, 8, width, height,
+                                  stride, (GdkPixbufDestroyNotify)free, NULL);
 }
 
 #ifdef __cplusplus

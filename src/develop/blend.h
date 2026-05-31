@@ -38,6 +38,7 @@
 
 #include "common/iop_profile.h"
 #include "common/opencl.h"
+#include "develop/masks.h"
 #include "develop/pixelpipe.h"
 #include "dtgtk/button.h"
 #include "dtgtk/gradientslider.h"
@@ -305,8 +306,6 @@ extern const dt_develop_name_value_t dt_develop_combine_masks_names[];
 extern const dt_develop_name_value_t dt_develop_feathering_guide_names[];
 extern const dt_develop_name_value_t dt_develop_invert_mask_names[];
 
-#define DEVELOP_MASKS_NB_SHAPES 5
-
 /** blend gui data */
 typedef struct dt_iop_gui_blend_data_t
 {
@@ -321,10 +320,10 @@ typedef struct dt_iop_gui_blend_data_t
 
   GtkWidget *blending_body_box;
   GtkWidget *blending_notebook;
-  GtkWidget *top_enable;
-  GtkWidget *masks_enable;
-  GtkWidget *raster_enable;
-  GtkWidget *blendif_enable;
+  GtkWidget *top_disable;
+  GtkWidget *masks_disable;
+  GtkWidget *raster_disable;
+  GtkWidget *blendif_disable;
   GtkWidget *top_content;
   GtkWidget *masks_content;
   GtkWidget *raster_content;

@@ -287,7 +287,7 @@ static void _write_mipmap_to_disk(const int32_t imgid, char *filename, char *ext
   // This allows fast toggling between JPEG and processed RAW thumbnail from GUI.
   if(write_to_disk)
   {
-    *write_to_disk = dt_conf_get_bool("cache_disk_backend") && !_use_embedded_jpg;
+    *write_to_disk = dt_conf_get_bool("cache_disk_backend");
   }
 
   if(img)
@@ -879,6 +879,11 @@ static void _generate_blocking(dt_cache_entry_t *entry, dt_mipmap_buffer_t *buf,
                                const int32_t imgid, const dt_mipmap_size_t mip, dt_atomic_int *shutdown)
 {
   struct dt_mipmap_buffer_dsc *dsc = _get_dsc_from_entry(entry);
+  // Unpoison the descriptor before reading any field in this function.
+  ASAN_UNPOISON_MEMORY_REGION(dsc, dt_mipmap_buffer_dsc_size);
+  // _generate_blocking() can write directly into the cache pixel payload
+  // (notably through _init_8() -> _write_image()), so unpoison it up-front.
+  ASAN_UNPOISON_MEMORY_REGION(_get_buffer_from_dsc(dsc), dsc->size - dt_mipmap_buffer_dsc_size);
   const uint32_t original_width = dsc->width;
   const uint32_t original_height = dsc->height;
   const float original_iscale = dsc->iscale;
@@ -1102,6 +1107,9 @@ void dt_mipmap_cache_swap_at_size(dt_mipmap_cache_t *cache, const int32_t imgid,
   if(entry)
   {
     struct dt_mipmap_buffer_dsc *dsc = _get_dsc_from_entry(entry);
+    // Unpoison descriptor and pixel payload before reading/writing either.
+    ASAN_UNPOISON_MEMORY_REGION(dsc, dt_mipmap_buffer_dsc_size);
+    ASAN_UNPOISON_MEMORY_REGION(_get_buffer_from_dsc(dsc), dsc->size - dt_mipmap_buffer_dsc_size);
     dt_print(DT_DEBUG_CACHE, "[mipmap_cache] image %d is synchronized from pipeline at size %i (%ix%i->%ix%i)\n", 
       imgid, mip, width, height, dsc->width, dsc->height);
 

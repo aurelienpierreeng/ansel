@@ -285,24 +285,6 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# This enables LTO (`-flto`): https://gcc.gnu.org/onlinedocs/gccint/LTO-Overview.html
-# It fails on Windows for exr.cc because std:string objects are defined twice,
-# once from OpenEXR and one from darktable.h, and there is no way to selectively
-# disable it there because it's global by nature.
-# LTO allows to look across DLL boundaries to merge symbols,
-# possibly allowing to inline functions across libraries for better 
-# parallel loops. But Linux/MacOS don't import libraries the way Windows does,
-# they use shared libraries.
-# Also Ansel inherits from Darktable a messy architecture that pretends to be 
-# modular, while in fact all libraries are shared globally, so using `-fvisibility=hidden`
-# breaks the whole project.
-# So I haven't found a way to fix that and it sucks that one lib is making us drop 
-# this feature for the whole project.
-if(NOT WIN32)
-  set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
-  set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO TRUE)
-endif()
-
 if(USE_DARKTABLE_PROFILING)
 	add_definitions(-DUSE_DARKTABLE_PROFILING)
 	set(SOURCES ${SOURCES} "common/profiling.c")
@@ -316,6 +298,7 @@ endif()
 # Don't reinvent a worse wheel.
 find_package(PkgConfig)
 pkg_check_modules(GTK3 REQUIRED IMPORTED_TARGET gtk+-3.0>=3.24)
+pkg_check_modules(GMODULE REQUIRED IMPORTED_TARGET gmodule-2.0)
 pkg_check_modules(RSVG2 REQUIRED IMPORTED_TARGET librsvg-2.0)
 pkg_check_modules(JSONGLIB REQUIRED IMPORTED_TARGET json-glib-1.0)
 pkg_check_modules(LIBXML2 REQUIRED IMPORTED_TARGET libxml-2.0)
@@ -357,6 +340,7 @@ target_include_directories(ansel_deps INTERFACE
 )
 target_link_libraries(ansel_deps INTERFACE
   PkgConfig::GTK3
+  PkgConfig::GMODULE
   PkgConfig::RSVG2
   PkgConfig::JSONGLIB
   PkgConfig::LIBXML2
@@ -862,6 +846,18 @@ target_link_libraries(lib_ansel PRIVATE lib_ansel_imageio_rawspeed)
 target_link_libraries(lib_ansel PRIVATE lib_ansel_imageio_libraw)
 target_link_libraries(lib_ansel PRIVATE whereami)
 
+if(WIN32 AND CMAKE_C_COMPILER_ID STREQUAL "Clang")
+  # Work around a Windows loader failure (0xC000007B) seen with clang debug PE images.
+  # Stripping debug sections from libansel.dll keeps runtime behavior intact.
+  add_custom_command(
+    TARGET lib_ansel POST_BUILD
+    COMMAND ${CMAKE_OBJCOPY} --only-keep-debug $<TARGET_FILE:lib_ansel> $<TARGET_FILE:lib_ansel>.dbg
+    COMMAND ${CMAKE_OBJCOPY} --strip-debug $<TARGET_FILE:lib_ansel>
+    COMMAND ${CMAKE_OBJCOPY} --add-gnu-debuglink=$<TARGET_FILE_NAME:lib_ansel>.dbg $<TARGET_FILE:lib_ansel>
+    VERBATIM
+  )
+endif()
+
 if(OpenMP_C_FOUND)
   target_link_libraries(lib_ansel PUBLIC OpenMP::OpenMP_C)
 endif()
@@ -891,6 +887,9 @@ message(STATUS "Ansel deps:" ${_ansel_deps_libs})
 if(WIN32)
   # Windows needs its DLLs in the same directory as the executable to find them.
   install(TARGETS lib_ansel RUNTIME DESTINATION bin COMPONENT DTApplication)
+  if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    install(FILES $<TARGET_FILE:lib_ansel>.dbg DESTINATION bin COMPONENT DTDebugSymbols)
+  endif()
 else()
   install(TARGETS lib_ansel DESTINATION ${CMAKE_INSTALL_LIBDIR})
 endif()

@@ -44,21 +44,7 @@ typedef enum dt_pixelpipe_blend_transform_t
  */
 static inline gboolean _bypass_cache(const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece)
 {
-  return pipe && (pipe->reentry || pipe->bypass_cache || pipe->no_cache || (piece && piece->bypass_cache));
-}
-
-/**
- * @brief Tell whether cache lookups and published cachelines are allowed for the current pipeline state.
- *
- * @details
- * `DT_DEBUG_NOCACHE_REUSE` is intentionally not handled here. That debug mode is meant to
- * disable writable output reuse, not to disable cache reads entirely. Exact hits on already
- * published cachelines are still valid in that mode, but later writable acquisition must
- * refuse to reopen those cachelines for overwrite.
- */
-static inline gboolean _requests_cache(const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece)
-{
-  return pipe && !_bypass_cache(pipe, piece);
+  return (pipe->reentry || pipe->bypass_cache || pipe->no_cache || (piece && piece->bypass_cache));
 }
 
 /**

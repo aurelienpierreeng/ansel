@@ -107,6 +107,10 @@ typedef struct dt_iop_colorprimaries_global_data_t
   dt_iop_colorprimaries_params_t params;
   gboolean cache_valid;
   uint64_t cache_generation;
+  int kernel_lut3d_tetrahedral;
+  int kernel_lut3d_trilinear;
+  int kernel_lut3d_pyramid;
+  int kernel_exposure;
 } dt_iop_colorprimaries_global_data_t;
 
 typedef struct dt_iop_colorprimaries_gui_data_t
@@ -832,6 +836,85 @@ void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev
   piece->data = NULL;
 }
 
+#ifdef HAVE_OPENCL
+int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
+               cl_mem dev_in, cl_mem dev_out)
+{
+  const dt_iop_colorprimaries_data_t *d = (const dt_iop_colorprimaries_data_t *)piece->data;
+  dt_iop_colorprimaries_global_data_t *gd = (dt_iop_colorprimaries_global_data_t *)self->global_data;
+  const int width = piece->roi_in.width;
+  const int height = piece->roi_in.height;
+  const int devid = pipe->devid;
+  const size_t sizes[] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
+  const float white_level = fmaxf(d->white_level, 1e-6f);
+  const float normalize = 1.f / white_level;
+  const float denormalize = white_level;
+  const float black = 0.f;
+  cl_mem clut_cl = NULL;
+  cl_int err = CL_SUCCESS;
+  const int kernel = (d->interpolation == DT_LUT3D_INTERP_TRILINEAR) ? gd->kernel_lut3d_trilinear
+                     : (d->interpolation == DT_LUT3D_INTERP_PYRAMID) ? gd->kernel_lut3d_pyramid
+                     : gd->kernel_lut3d_tetrahedral;
+
+  if(IS_NULL_PTR(d->clut) || d->clut_level == 0 || IS_NULL_PTR(d->lut_profile) || IS_NULL_PTR(d->work_profile)) return FALSE;
+
+  dt_opencl_set_kernel_arg(devid, gd->kernel_exposure, 0, sizeof(cl_mem), &dev_in);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_exposure, 1, sizeof(cl_mem), &dev_out);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_exposure, 2, sizeof(int), &width);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_exposure, 3, sizeof(int), &height);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_exposure, 4, sizeof(float), &black);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_exposure, 5, sizeof(float), &normalize);
+  err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_exposure, sizes);
+  if(err != CL_SUCCESS) goto cleanup;
+
+  if(!dt_ioppr_transform_image_colorspace_rgb_cl(devid, dev_out, dev_out, width, height, d->work_profile,
+                                                 d->lut_profile, "colorequal work to HLG Rec2020"))
+  {
+    err = CL_INVALID_OPERATION;
+    goto cleanup;
+  }
+
+  dt_pthread_rwlock_rdlock(&gd->lock);
+  clut_cl = dt_opencl_copy_host_to_device_constant(devid, sizeof(float) * 3 * d->clut_level * d->clut_level * d->clut_level,
+                                                   gd->cache.clut);
+  dt_pthread_rwlock_unlock(&gd->lock);
+  if(IS_NULL_PTR(clut_cl))
+  {
+    err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
+    goto cleanup;
+  }
+
+  dt_opencl_set_kernel_arg(devid, kernel, 0, sizeof(cl_mem), &dev_out);
+  dt_opencl_set_kernel_arg(devid, kernel, 1, sizeof(cl_mem), &dev_out);
+  dt_opencl_set_kernel_arg(devid, kernel, 2, sizeof(int), &width);
+  dt_opencl_set_kernel_arg(devid, kernel, 3, sizeof(int), &height);
+  dt_opencl_set_kernel_arg(devid, kernel, 4, sizeof(cl_mem), &clut_cl);
+  dt_opencl_set_kernel_arg(devid, kernel, 5, sizeof(int), &d->clut_level);
+  err = dt_opencl_enqueue_kernel_2d(devid, kernel, sizes);
+  if(err != CL_SUCCESS) goto cleanup;
+
+  if(!dt_ioppr_transform_image_colorspace_rgb_cl(devid, dev_out, dev_out, width, height, d->lut_profile,
+                                                 d->work_profile, "colorequal HLG Rec2020 to work"))
+  {
+    err = CL_INVALID_OPERATION;
+    goto cleanup;
+  }
+
+  dt_opencl_set_kernel_arg(devid, gd->kernel_exposure, 0, sizeof(cl_mem), &dev_out);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_exposure, 1, sizeof(cl_mem), &dev_out);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_exposure, 2, sizeof(int), &width);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_exposure, 3, sizeof(int), &height);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_exposure, 4, sizeof(float), &black);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_exposure, 5, sizeof(float), &denormalize);
+  err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_exposure, sizes);
+
+cleanup:
+  dt_opencl_release_mem_object(clut_cl);
+  if(err != CL_SUCCESS) dt_print(DT_DEBUG_OPENCL, "[opencl_colorequal] couldn't enqueue kernel! %d\n", err);
+  return err == CL_SUCCESS;
+}
+#endif
+
 __DT_CLONE_TARGETS__
 int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
             const void *const ibuf, void *const obuf)
@@ -1243,6 +1326,15 @@ void init_global(dt_iop_module_so_t *module)
   memset(gd, 0, sizeof(*gd));
   module->data = gd;
   dt_pthread_rwlock_init(&gd->lock, NULL);
+
+#ifdef HAVE_OPENCL
+  const int lut_program = 28; // lut3d.cl, from programs.conf
+  const int basic_program = 2; // basic.cl, from programs.conf
+  gd->kernel_lut3d_tetrahedral = dt_opencl_create_kernel(lut_program, "lut3d_tetrahedral");
+  gd->kernel_lut3d_trilinear = dt_opencl_create_kernel(lut_program, "lut3d_trilinear");
+  gd->kernel_lut3d_pyramid = dt_opencl_create_kernel(lut_program, "lut3d_pyramid");
+  gd->kernel_exposure = dt_opencl_create_kernel(basic_program, "exposure");
+#endif
 }
 
 void cleanup_global(dt_iop_module_so_t *module)
@@ -1250,6 +1342,12 @@ void cleanup_global(dt_iop_module_so_t *module)
   dt_iop_colorprimaries_global_data_t *gd = (dt_iop_colorprimaries_global_data_t *)module->data;
   dt_free_align(gd->cache.clut);
   gd->cache.clut = NULL;
+#ifdef HAVE_OPENCL
+  dt_opencl_free_kernel(gd->kernel_lut3d_tetrahedral);
+  dt_opencl_free_kernel(gd->kernel_lut3d_trilinear);
+  dt_opencl_free_kernel(gd->kernel_lut3d_pyramid);
+  dt_opencl_free_kernel(gd->kernel_exposure);
+#endif
   dt_pthread_rwlock_destroy(&gd->lock);
   dt_free(module->data);
 }
