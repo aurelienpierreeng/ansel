@@ -394,6 +394,10 @@ typedef struct dt_iop_gui_blend_data_t
   GtkWidget *raster_combo;
   GtkWidget *raster_polarity;
 
+  gboolean picker_set_values_box_valid;
+  dt_boundingbox_t picker_set_values_box;
+  gboolean picker_set_values_manual_boost_lock;
+
   int control_button_pressed;
   dt_pthread_mutex_t lock;
 } dt_iop_gui_blend_data_t;

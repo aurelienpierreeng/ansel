@@ -67,6 +67,7 @@
 #include "gui/actions/menu.h"
 #include "gui/gtk.h"
 #include "gui/presets.h"
+#include "libs/colorpicker.h"
 
 #include <assert.h>
 #include <gmodule.h>
@@ -838,6 +839,12 @@ static inline int _blendif_print_digits_picker(float value)
 static void _update_gradient_slider_pickers(GtkWidget *callback_dummy, dt_iop_module_t *module)
 {
   dt_iop_gui_blend_data_t *data = module->blend_data;
+  if(callback_dummy == data->colorpicker_set_values
+     && !gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(data->colorpicker_set_values)))
+  {
+    data->picker_set_values_box_valid = FALSE;
+    data->picker_set_values_manual_boost_lock = FALSE;
+  }
 
   dt_iop_color_picker_set_cst(module, _blendop_blendif_get_picker_colorspace(data));
 
@@ -991,16 +998,6 @@ static void _blendop_blendif_update_tab(dt_iop_module_t *module, const int tab)
     for(int in_out = 0; in_out < 2 && !modified; in_out++)
     {
       const dt_develop_blendif_channels_t ch = page_channel->param_channels[in_out];
-      const uint32_t bit = 1u << ch;
-      const uint32_t inv_bit = 1u << (16 + ch);
-
-      if((bp->blendif & bit) != (dp->blendif & bit)
-         || (bp->blendif & inv_bit) != (dp->blendif & inv_bit)
-         || fabsf(bp->blendif_boost_factors[ch] - dp->blendif_boost_factors[ch]) > epsilon)
-      {
-        modified = TRUE;
-        break;
-      }
 
       const float *params = &bp->blendif_parameters[4 * ch];
       const float *defaults = &dp->blendif_parameters[4 * ch];
@@ -1094,6 +1091,12 @@ static void _blendop_blendif_boost_factor_callback(GtkWidget *slider, dt_iop_gui
       bp->blendif &= ~(1 << ch);
     bp->blendif_boost_factors[ch] = new_value;
   }
+
+  if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(data->colorpicker_set_values)))
+  {
+    data->picker_set_values_manual_boost_lock = TRUE;
+  }
+
   _blendop_blendif_update_tab(data->module, tab);
 
   dt_dev_add_history_item(darktable.develop, data->module, TRUE, TRUE);
@@ -2462,8 +2465,84 @@ gboolean blend_color_picker_apply(dt_iop_module_t *module, GtkWidget *picker, dt
       }
     }
 
-    _blendif_scale(data, cst, raw_min, picker_min, work_profile, in_out);
     _blendif_scale(data, cst, raw_max, picker_max, work_profile, in_out);
+
+    gboolean picker_box_changed = FALSE;
+    const dt_colorpicker_sample_t *const sample = module->dev->color_picker.primary_sample;
+    if(!IS_NULL_PTR(sample) && sample->size == DT_LIB_COLORPICKER_SIZE_BOX)
+    {
+      if(!data->picker_set_values_box_valid)
+      {
+        picker_box_changed = TRUE;
+      }
+      else
+      {
+        const float epsilon = 1e-6f;
+        for(int k = 0; k < 4; k++)
+        {
+          if(fabsf(sample->box[k] - data->picker_set_values_box[k]) > epsilon)
+          {
+            picker_box_changed = TRUE;
+            break;
+          }
+        }
+      }
+
+      if(picker_box_changed)
+      {
+        for(int k = 0; k < 4; k++) data->picker_set_values_box[k] = sample->box[k];
+        data->picker_set_values_box_valid = TRUE;
+        data->picker_set_values_manual_boost_lock = FALSE;
+      }
+    }
+    else
+    {
+      data->picker_set_values_box_valid = FALSE;
+      data->picker_set_values_manual_boost_lock = FALSE;
+    }
+
+    if(channel->boost_factor_enabled && picker_box_changed
+       && !data->picker_set_values_manual_boost_lock)
+    {
+      const float picker_margin = 0.02f;
+      const float boost_step = 0.25f;
+      const int max_boost_iters = 64;
+      const float boost_min = channel->boost_factor_offset;
+      const float boost_max = channel->boost_factor_offset + 18.0f;
+      const float target_max = (picker_max[tab] > (1.0f - picker_margin)) ? 1.0f : (1.0f - picker_margin);
+      float trial = bp->blendif_boost_factors[ch];
+      gboolean within_bounds = picker_max[tab] <= target_max;
+
+      if(!within_bounds)
+      {
+        for(int iter = 0; iter < max_boost_iters && trial < boost_max; iter++)
+        {
+          trial = fminf(trial + boost_step, boost_max);
+          bp->blendif_boost_factors[ch] = trial;
+          _blendif_scale(data, cst, raw_max, picker_max, work_profile, in_out);
+          within_bounds = picker_max[tab] <= target_max;
+          if(within_bounds) break;
+        }
+      }
+
+      if(within_bounds)
+      {
+        for(int iter = 0; iter < max_boost_iters && trial > boost_min; iter++)
+        {
+          const float candidate = fmaxf(trial - boost_step, boost_min);
+          bp->blendif_boost_factors[ch] = candidate;
+          _blendif_scale(data, cst, raw_max, picker_max, work_profile, in_out);
+          if(picker_max[tab] > target_max)
+            break;
+          trial = candidate;
+        }
+      }
+
+      bp->blendif_boost_factors[ch] = trial;
+      _blendif_scale(data, cst, raw_max, picker_max, work_profile, in_out);
+    }
+
+    _blendif_scale(data, cst, raw_min, picker_min, work_profile, in_out);
 
     const float feather = 0.01f;
 
@@ -4275,6 +4354,9 @@ void dt_iop_gui_cleanup_blending_body(dt_iop_module_t *module)
   bd->masks_ic_exclusion = NULL;
   bd->raster_combo = NULL;
   bd->raster_polarity = NULL;
+  bd->picker_set_values_box_valid = FALSE;
+  memset(bd->picker_set_values_box, 0, sizeof(bd->picker_set_values_box));
+  bd->picker_set_values_manual_boost_lock = FALSE;
   bd->channel_tabs = NULL;
   bd->blendif_inited = 0;
   bd->masks_inited = 0;
