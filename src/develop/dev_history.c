@@ -1764,6 +1764,17 @@ static void _process_history_db_entry(dt_develop_t *dev, const int32_t imgid, co
   // Copy blending params if valid, else try to convert legacy params
   _sync_blendop_params(hist, blendop_params, bl_length, blendop_version, legacy_params);
 
+  if(presets && !IS_NULL_PTR(hist->blend_params) && !IS_NULL_PTR(hist->module)
+     && !IS_NULL_PTR(hist->module->default_blendop_params))
+  {
+    dt_develop_blend_params_t preset_blend = *hist->blend_params;
+    dt_develop_blend_params_t default_blend = *hist->module->default_blendop_params;
+    preset_blend.mask_mode &= ~DEVELOP_MASK_ENABLED;
+    default_blend.mask_mode &= ~DEVELOP_MASK_ENABLED;
+    if(memcmp(&preset_blend, &default_blend, sizeof(dt_develop_blend_params_t)) == 0)
+      hist->blend_params->mask_mode &= ~DEVELOP_MASK_ENABLED;
+  }
+
   dev->history = g_list_append(dev->history, hist);
 
   dt_print(DT_DEBUG_HISTORY, "[history entry] read %s at pipe position %i (enabled %i) from %s %s\n", hist->op_name,

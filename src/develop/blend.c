@@ -83,7 +83,7 @@ static const char *dt_pipe_type_to_str(dt_dev_pixelpipe_type_t pipe_type)
 }
 
 static dt_develop_blend_params_t _default_blendop_params
-    = { DEVELOP_MASK_DISABLED,
+    = { DEVELOP_MASK_SHAPE | DEVELOP_MASK_PARAMETRIC | DEVELOP_MASK_RASTER,
         DEVELOP_BLEND_CS_NONE,
         DEVELOP_BLEND_NORMAL2,
         0.0f,
@@ -241,6 +241,65 @@ void dt_develop_blendif_process_parameters(float *const restrict parameters,
       parameters[j + 5] = 0.0f;
     }
   }
+}
+
+void dt_develop_blend_get_mask_usage(const dt_iop_module_t *module,
+                                     const dt_develop_blend_params_t *params,
+                                     gboolean *top_enabled,
+                                     gboolean *raster_used,
+                                     gboolean *drawn_used,
+                                     gboolean *parametric_used)
+{
+  if(!IS_NULL_PTR(top_enabled)) *top_enabled = FALSE;
+  if(!IS_NULL_PTR(raster_used)) *raster_used = FALSE;
+  if(!IS_NULL_PTR(drawn_used)) *drawn_used = FALSE;
+  if(!IS_NULL_PTR(parametric_used)) *parametric_used = FALSE;
+  if(IS_NULL_PTR(params)) return;
+
+  const uint32_t mask_mode = params->mask_mode;
+  const gboolean top = (mask_mode & DEVELOP_MASK_ENABLED) != 0;
+  const gboolean raster_mode = (mask_mode & DEVELOP_MASK_RASTER) != 0;
+  const gboolean drawn_mode = (mask_mode & DEVELOP_MASK_SHAPE) != 0;
+  const gboolean parametric_mode = (mask_mode & DEVELOP_MASK_PARAMETRIC) != 0;
+
+  gboolean raster = raster_mode
+                    && (params->raster_mask_id > 0
+                        || params->raster_mask_source[0] != '\0'
+                        || (!IS_NULL_PTR(module) && !IS_NULL_PTR(module->raster_mask.sink.source)));
+
+  gboolean drawn = FALSE;
+  if(drawn_mode && !IS_NULL_PTR(module) && !IS_NULL_PTR(module->dev))
+  {
+    dt_masks_form_t *grp = dt_masks_get_from_id(module->dev, params->mask_id);
+    drawn = !IS_NULL_PTR(grp) && (grp->type & DT_MASKS_GROUP) && g_list_length(grp->points) > 0;
+  }
+
+  gboolean parametric = FALSE;
+  if(parametric_mode)
+  {
+    const float threshold_epsilon = 1e-6f;
+    const uint32_t channel_mask = params->blend_cst == DEVELOP_BLEND_CS_LAB
+                                      ? DEVELOP_BLENDIF_Lab_MASK
+                                      : DEVELOP_BLENDIF_RGB_MASK;
+    uint32_t active_channels = 0;
+    for(uint32_t ch = 0; ch < DEVELOP_BLENDIF_SIZE; ch++)
+    {
+      const uint32_t bit = 1u << ch;
+      if(!(channel_mask & bit) || !(params->blendif & bit)) continue;
+      const float *channel = &params->blendif_parameters[ch * 4];
+      if(fabsf(channel[0]) > threshold_epsilon
+         || fabsf(channel[1]) > threshold_epsilon
+         || fabsf(channel[2] - 1.0f) > threshold_epsilon
+         || fabsf(channel[3] - 1.0f) > threshold_epsilon)
+        active_channels |= bit;
+    }
+    parametric = active_channels != 0;
+  }
+
+  if(!IS_NULL_PTR(top_enabled)) *top_enabled = top;
+  if(!IS_NULL_PTR(raster_used)) *raster_used = raster;
+  if(!IS_NULL_PTR(drawn_used)) *drawn_used = drawn;
+  if(!IS_NULL_PTR(parametric_used)) *parametric_used = parametric;
 }
 
 // See function definition in blend.h for important information
@@ -495,14 +554,14 @@ static int _develop_blend_init_drawn_mask(const dt_develop_blend_params_t *const
 {
   dt_masks_form_t *form = dt_masks_get_from_id(self->dev, params->mask_id);
 
-  if(form && (!(self->flags() & IOP_FLAGS_NO_MASKS)) && (params->mask_mode & DEVELOP_MASK_MASK))
+  if(form && (!(self->flags() & IOP_FLAGS_NO_MASKS)) && (params->mask_mode & DEVELOP_MASK_SHAPE))
   {
     if(dt_masks_group_render_roi(self, pipe, piece, form, roi_out, mask) != 0) return 1;
 
     if(params->mask_combine & DEVELOP_COMBINE_MASKS_POS)
       dt_iop_image_invert(mask, 1.0f, owidth, oheight, 1);
   }
-  else if((!(self->flags() & IOP_FLAGS_NO_MASKS)) && (params->mask_mode & DEVELOP_MASK_MASK))
+  else if((!(self->flags() & IOP_FLAGS_NO_MASKS)) && (params->mask_mode & DEVELOP_MASK_SHAPE))
   {
     const float fill = (params->mask_combine & DEVELOP_COMBINE_MASKS_POS) ? 0.0f : 1.0f;
     dt_iop_image_fill(mask, fill, owidth, oheight, 1);
@@ -591,10 +650,14 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *p
   const dt_develop_blend_params_t *const d = (const dt_develop_blend_params_t *const)piece->blendop_data;
   if(IS_NULL_PTR(d)) return 0;
 
-  const unsigned int mask_mode = d->mask_mode;
-  // check if blend is disabled
-  if(!(mask_mode & DEVELOP_MASK_ENABLED)) return 0;
-  const unsigned int preview_mask_mode = mask_mode & (DEVELOP_MASK_MASK_CONDITIONAL | DEVELOP_MASK_RASTER);
+  gboolean top_enabled = FALSE;
+  gboolean raster_used = FALSE;
+  gboolean drawn_used = FALSE;
+  gboolean parametric_used = FALSE;
+  dt_develop_blend_get_mask_usage(self, d, &top_enabled, &raster_used, &drawn_used, &parametric_used);
+  if(!top_enabled) return 0;
+  const unsigned int preview_mask_mode = (raster_used ? DEVELOP_MASK_RASTER : 0)
+                                         | ((drawn_used || parametric_used) ? DEVELOP_MASK_SHAPE_PARAMETRIC : 0);
 
   const size_t ch = piece->dsc_in.channels;           // the number of channels in the buffer
   const int xoffs = roi_out->x - roi_in->x;
@@ -654,9 +717,10 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *p
   }
   int raster_error = 0;
   float *const restrict mask = _mask;
-  const gboolean raster_only = (mask_mode & DEVELOP_MASK_RASTER) && !(mask_mode & DEVELOP_MASK_MASK_CONDITIONAL);
+  const gboolean use_masks = raster_used || drawn_used || parametric_used;
+  const gboolean raster_only = raster_used && !drawn_used && !parametric_used;
 
-  if(mask_mode == DEVELOP_MASK_ENABLED || suppress_mask)
+  if(!use_masks || suppress_mask)
   {
     // blend uniformly (no drawn or parametric mask)
     dt_iop_image_fill(mask,opacity,owidth,oheight,1);  //mask[k] = opacity;
@@ -669,14 +733,11 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *p
   }
   else
   {
-    const gboolean use_raster_mask = (mask_mode & DEVELOP_MASK_RASTER) != 0;
-    const gboolean use_drawn_mask = (mask_mode & DEVELOP_MASK_MASK) != 0;
-
-    if(use_raster_mask)
+    if(raster_used)
     {
       _develop_blend_init_raster_mask(d, self, pipe, piece, mask, owidth, oheight, &raster_error);
 
-      if(use_drawn_mask)
+      if(drawn_used)
       {
         float *const restrict drawn_mask = dt_pixelpipe_cache_alloc_align_float(buffsize, pipe);
         if(IS_NULL_PTR(drawn_mask))
@@ -697,7 +758,8 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *p
         dt_pixelpipe_cache_free_align(drawn_mask);
       }
     }
-    else if(_develop_blend_init_drawn_mask(d, self, pipe, piece, roi_out, mask, owidth, oheight) != 0)
+    else if(drawn_used
+            && _develop_blend_init_drawn_mask(d, self, pipe, piece, roi_out, mask, owidth, oheight) != 0)
     {
       dt_pixelpipe_cache_free_align(_mask);
       return 1;
@@ -992,10 +1054,15 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_t
   dt_develop_blend_params_t *const d = (dt_develop_blend_params_t *const)piece->blendop_data;
   if(IS_NULL_PTR(d)) return 0;
 
+  gboolean top_enabled = FALSE;
+  gboolean raster_used = FALSE;
+  gboolean drawn_used = FALSE;
+  gboolean parametric_used = FALSE;
+  dt_develop_blend_get_mask_usage(self, d, &top_enabled, &raster_used, &drawn_used, &parametric_used);
+  if(!top_enabled) return 0;
   const unsigned int mask_mode = d->mask_mode;
-  // check if blend is disabled: just return, output is already in dev_out
-  if(!(mask_mode & DEVELOP_MASK_ENABLED)) return 0;
-  const unsigned int preview_mask_mode = mask_mode & (DEVELOP_MASK_MASK_CONDITIONAL | DEVELOP_MASK_RASTER);
+  const unsigned int preview_mask_mode = (raster_used ? DEVELOP_MASK_RASTER : 0)
+                                         | ((drawn_used || parametric_used) ? DEVELOP_MASK_SHAPE_PARAMETRIC : 0);
 
   const int ch = piece->dsc_in.channels; // the number of channels in the buffer
   const int xoffs = roi_out->x - roi_in->x;
@@ -1049,7 +1116,8 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_t
 
   // get the clipped opacity value  0 - 1
   const float opacity = fminf(fmaxf(d->opacity / 100.0f, 0.0f), 1.0f);
-  const gboolean raster_only = (mask_mode & DEVELOP_MASK_RASTER) && !(mask_mode & DEVELOP_MASK_MASK_CONDITIONAL);
+  const gboolean use_masks = raster_used || drawn_used || parametric_used;
+  const gboolean raster_only = raster_used && !drawn_used && !parametric_used;
 
   // allocate space for blend mask
   float *_mask = dt_pixelpipe_cache_alloc_align_float(buffsize, pipe);
@@ -1133,7 +1201,7 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_t
                                             &profile_lut_cl, &dev_profile_info, &dev_profile_lut);
   if(err != CL_SUCCESS) goto error;
 
-  if(mask_mode == DEVELOP_MASK_ENABLED || suppress_mask)
+  if(!use_masks || suppress_mask)
   {
     // blend uniformly (no drawn or parametric mask)
 
@@ -1157,16 +1225,13 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_t
   }
   else
   {
-    const gboolean use_raster_mask = (mask_mode & DEVELOP_MASK_RASTER) != 0;
-    const gboolean use_drawn_mask = (mask_mode & DEVELOP_MASK_MASK) != 0;
-
-    if(use_raster_mask)
+    if(raster_used)
     {
       int raster_error = 0;
       _develop_blend_init_raster_mask(d, self, pipe, piece, mask, owidth, oheight, &raster_error);
       if(raster_error) goto error;
 
-      if(use_drawn_mask)
+      if(drawn_used)
       {
         float *const restrict drawn_mask = dt_pixelpipe_cache_alloc_align_float(buffsize, pipe);
         if(IS_NULL_PTR(drawn_mask)) goto error;
@@ -1181,7 +1246,8 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_t
         dt_pixelpipe_cache_free_align(drawn_mask);
       }
     }
-    else if(_develop_blend_init_drawn_mask(d, self, pipe, piece, roi_out, mask, owidth, oheight) != 0)
+    else if(drawn_used
+            && _develop_blend_init_drawn_mask(d, self, pipe, piece, roi_out, mask, owidth, oheight) != 0)
     {
       goto error;
     }
@@ -1617,7 +1683,7 @@ int dt_develop_blend_legacy_params(dt_iop_module_t *module, const void *const ol
     *n = default_display_blend_params; // start with a fresh copy of default parameters
     n->mask_mode = (o->mode == DEVELOP_BLEND_DISABLED_OBSOLETE) ? DEVELOP_MASK_DISABLED : DEVELOP_MASK_ENABLED;
     n->mask_mode |= ((o->blendif & (1u << DEVELOP_BLENDIF_active)) && (n->mask_mode == DEVELOP_MASK_ENABLED))
-                        ? DEVELOP_MASK_CONDITIONAL
+                        ? DEVELOP_MASK_PARAMETRIC
                         : 0;
     n->blend_mode = _blend_legacy_blend_mode(o->mode);
     n->opacity = o->opacity;
@@ -1655,7 +1721,7 @@ int dt_develop_blend_legacy_params(dt_iop_module_t *module, const void *const ol
     *n = default_display_blend_params; // start with a fresh copy of default parameters
     n->mask_mode = (o->mode == DEVELOP_BLEND_DISABLED_OBSOLETE) ? DEVELOP_MASK_DISABLED : DEVELOP_MASK_ENABLED;
     n->mask_mode |= ((o->blendif & (1u << DEVELOP_BLENDIF_active)) && (n->mask_mode == DEVELOP_MASK_ENABLED))
-                        ? DEVELOP_MASK_CONDITIONAL
+                        ? DEVELOP_MASK_PARAMETRIC
                         : 0;
     n->blend_mode = _blend_legacy_blend_mode(o->mode);
     n->opacity = o->opacity;
@@ -1693,7 +1759,7 @@ int dt_develop_blend_legacy_params(dt_iop_module_t *module, const void *const ol
     *n = default_display_blend_params; // start with a fresh copy of default parameters
     n->mask_mode = (o->mode == DEVELOP_BLEND_DISABLED_OBSOLETE) ? DEVELOP_MASK_DISABLED : DEVELOP_MASK_ENABLED;
     n->mask_mode |= ((o->blendif & (1u << DEVELOP_BLENDIF_active)) && (n->mask_mode == DEVELOP_MASK_ENABLED))
-                        ? DEVELOP_MASK_CONDITIONAL
+                        ? DEVELOP_MASK_PARAMETRIC
                         : 0;
     n->blend_mode = _blend_legacy_blend_mode(o->mode);
     n->opacity = o->opacity;

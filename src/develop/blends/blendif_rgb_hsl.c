@@ -246,7 +246,7 @@ void dt_develop_blendif_rgb_hsl_make_mask(const struct dt_dev_pixelpipe_t *pipe,
   // get the clipped opacity value  0 - 1
   const float global_opacity = clamp_simd(d->opacity / 100.0f);
 
-  if(!(d->mask_mode & DEVELOP_MASK_CONDITIONAL) || (!canceling_channel && !any_channel_active))
+  if(!(d->mask_mode & DEVELOP_MASK_PARAMETRIC) || (!canceling_channel && !any_channel_active))
   {
     // mask is not conditional, invert the mask if required
     if(mask_inversed)

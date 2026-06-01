@@ -1141,8 +1141,8 @@ static void _blendop_masks_mode_changed(GtkToggleButton *togglebutton, dt_iop_mo
   uint32_t mask_mode = module->blend_params->mask_mode;
   const gboolean active = gtk_toggle_button_get_active(togglebutton);
   const gboolean is_disable_toggle = bit == DEVELOP_MASK_RASTER
-                                     || bit == DEVELOP_MASK_MASK
-                                     || bit == DEVELOP_MASK_CONDITIONAL;
+                                     || bit == DEVELOP_MASK_SHAPE
+                                     || bit == DEVELOP_MASK_PARAMETRIC;
   const gboolean enable_bit = is_disable_toggle ? !active : active;
 
   switch(bit)
@@ -1161,18 +1161,18 @@ static void _blendop_masks_mode_changed(GtkToggleButton *togglebutton, dt_iop_mo
         mask_mode &= ~DEVELOP_MASK_RASTER;
       break;
 
-    case DEVELOP_MASK_MASK:
+    case DEVELOP_MASK_SHAPE:
       if(enable_bit)
-        mask_mode |= DEVELOP_MASK_ENABLED | DEVELOP_MASK_MASK;
+        mask_mode |= DEVELOP_MASK_ENABLED | DEVELOP_MASK_SHAPE;
       else
-        mask_mode &= ~DEVELOP_MASK_MASK;
+        mask_mode &= ~DEVELOP_MASK_SHAPE;
       break;
 
-    case DEVELOP_MASK_CONDITIONAL:
+    case DEVELOP_MASK_PARAMETRIC:
       if(enable_bit)
-        mask_mode |= DEVELOP_MASK_ENABLED | DEVELOP_MASK_CONDITIONAL;
+        mask_mode |= DEVELOP_MASK_ENABLED | DEVELOP_MASK_PARAMETRIC;
       else
-        mask_mode &= ~DEVELOP_MASK_CONDITIONAL;
+        mask_mode &= ~DEVELOP_MASK_PARAMETRIC;
       break;
 
     default:
@@ -3732,8 +3732,8 @@ static void _notebook_append_full_width_page(GtkWidget *notebook, GtkWidget *pag
 static GtkWidget *_blendop_create_enable_toggle(dt_iop_module_t *module, const unsigned int mask_bit)
 {
   const gboolean is_disable_toggle = mask_bit == DEVELOP_MASK_RASTER
-                                     || mask_bit == DEVELOP_MASK_MASK
-                                     || mask_bit == DEVELOP_MASK_CONDITIONAL;
+                                     || mask_bit == DEVELOP_MASK_SHAPE
+                                     || mask_bit == DEVELOP_MASK_PARAMETRIC;
   GtkWidget *toggle = gtk_check_button_new_with_label(is_disable_toggle ? _("Disable") : _("Enable"));
   g_object_set_data(G_OBJECT(toggle), "mask-bit", GUINT_TO_POINTER(mask_bit));
   g_signal_connect(G_OBJECT(toggle), "toggled", G_CALLBACK(_blendop_masks_mode_changed), module);
@@ -3791,8 +3791,8 @@ static void _blendop_toggle_button_set_active(GtkWidget *toggle, const gboolean 
   {
     const unsigned int bit = GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(toggle), "mask-bit"));
     const gboolean is_disable_toggle = bit == DEVELOP_MASK_RASTER
-                                       || bit == DEVELOP_MASK_MASK
-                                       || bit == DEVELOP_MASK_CONDITIONAL;
+                                       || bit == DEVELOP_MASK_SHAPE
+                                       || bit == DEVELOP_MASK_PARAMETRIC;
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toggle), is_disable_toggle ? !enabled : enabled);
   }
 }
@@ -3975,9 +3975,9 @@ void dt_iop_gui_update_blending(dt_iop_module_t *module)
   /* sync page states from mask mode */
   uint32_t mask_mode = module->blend_params->mask_mode;
   const gboolean top_enabled = (mask_mode & DEVELOP_MASK_ENABLED) != 0;
-  const gboolean masks_enabled = (mask_mode & DEVELOP_MASK_MASK) != 0;
+  const gboolean masks_enabled = (mask_mode & DEVELOP_MASK_SHAPE) != 0;
   const gboolean raster_enabled = (mask_mode & DEVELOP_MASK_RASTER) != 0;
-  const gboolean blendif_enabled = (mask_mode & DEVELOP_MASK_CONDITIONAL) != 0;
+  const gboolean blendif_enabled = (mask_mode & DEVELOP_MASK_PARAMETRIC) != 0;
   const gboolean bottom_enabled = top_enabled && ((bd->masks_inited && masks_enabled)
                                                   || (bd->raster_inited && raster_enabled)
                                                   || (bd->blendif_inited && blendif_enabled));
@@ -4422,11 +4422,11 @@ void dt_iop_gui_init_blending_body(GtkBox *blendw, dt_iop_module_t *module)
   dt_iop_gui_init_raster(GTK_BOX(bd->raster_content), module);
 
   _blendop_create_toggle_page(bd->blending_notebook, _("Drawn"), module,
-                              DEVELOP_MASK_MASK, &bd->masks_enable, &bd->masks_content);
+                              DEVELOP_MASK_SHAPE, &bd->masks_enable, &bd->masks_content);
   dt_iop_gui_init_masks(GTK_BOX(bd->masks_content), module);
 
   _blendop_create_toggle_page(bd->blending_notebook, _("Parametric"), module,
-                              DEVELOP_MASK_CONDITIONAL, &bd->blendif_enable,
+                              DEVELOP_MASK_PARAMETRIC, &bd->blendif_enable,
                               &bd->blendif_content);
   dt_iop_gui_init_blendif(GTK_BOX(bd->blendif_content), module);
 
@@ -4457,9 +4457,9 @@ void dt_iop_gui_init_blending_body(GtkBox *blendw, dt_iop_module_t *module)
 
   const unsigned int mask_mode = module->blend_params->mask_mode;
   _blendop_toggle_button_set_active(bd->top_enable, (mask_mode & DEVELOP_MASK_ENABLED) != 0);
-  _blendop_toggle_button_set_active(bd->masks_enable, (mask_mode & DEVELOP_MASK_MASK) != 0);
+  _blendop_toggle_button_set_active(bd->masks_enable, (mask_mode & DEVELOP_MASK_SHAPE) != 0);
   _blendop_toggle_button_set_active(bd->raster_enable, (mask_mode & DEVELOP_MASK_RASTER) != 0);
-  _blendop_toggle_button_set_active(bd->blendif_enable, (mask_mode & DEVELOP_MASK_CONDITIONAL) != 0);
+  _blendop_toggle_button_set_active(bd->blendif_enable, (mask_mode & DEVELOP_MASK_PARAMETRIC) != 0);
 
   gtk_widget_show_all(GTK_WIDGET(bd->blending_body_box));
   gtk_widget_set_sensitive(bd->top_content, (mask_mode & DEVELOP_MASK_ENABLED) != 0);

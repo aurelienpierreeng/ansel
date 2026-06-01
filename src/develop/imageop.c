@@ -1542,8 +1542,14 @@ void dt_iop_unload_modules_so()
 
 void dt_iop_set_mask_mode(dt_iop_module_t *module, int mask_mode)
 {
+  (void)mask_mode;
   static const int key = 0;
-  if(mask_mode & DEVELOP_MASK_ENABLED && !(mask_mode & DEVELOP_MASK_RASTER))
+
+  gboolean drawn_used = FALSE;
+  gboolean parametric_used = FALSE;
+  dt_develop_blend_get_mask_usage(module, module->blend_params, NULL, NULL, &drawn_used, &parametric_used);
+
+  if(drawn_used || parametric_used)
   {
     char *modulename = dt_history_item_get_name(module);
     g_hash_table_insert(module->raster_mask.source.masks, GINT_TO_POINTER(key), modulename);
@@ -2422,51 +2428,26 @@ static void _mask_indicator_get_usage(dt_iop_module_t *module, gboolean *top_ena
   if(IS_NULL_PTR(module) || IS_NULL_PTR(module->blend_params)) return;
 
   const dt_iop_gui_blend_data_t *bd = (const dt_iop_gui_blend_data_t *)module->blend_data;
-  const uint32_t mask_mode = module->blend_params->mask_mode;
-
-  gboolean top = (mask_mode & DEVELOP_MASK_ENABLED) != 0;
-
-  gboolean raster = module->blend_params->raster_mask_id > 0 || !IS_NULL_PTR(module->raster_mask.sink.source);
-  if(!IS_NULL_PTR(bd))
-  {
-    if(GTK_IS_TOGGLE_BUTTON(bd->raster_enable)
-       && gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(bd->raster_enable)))
-      raster = FALSE;
-    else if(GTK_IS_WIDGET(bd->raster_combo))
-      raster = dt_bauhaus_combobox_get(bd->raster_combo) > 0;
-  }
-
+  gboolean top = FALSE;
+  gboolean raster = FALSE;
   gboolean drawn = FALSE;
-  if(!IS_NULL_PTR(module->dev))
-  {
-    dt_masks_form_t *grp = dt_masks_get_from_id(module->dev, module->blend_params->mask_id);
-    drawn = !IS_NULL_PTR(grp) && (grp->type & DT_MASKS_GROUP) && g_list_length(grp->points) > 0;
-  }
+  gboolean parametric = FALSE;
+  dt_develop_blend_get_mask_usage(module, module->blend_params, &top, &raster, &drawn, &parametric);
+
+  // look if the user disabled masks modes
+
+  // raster mask must be enabled and a raster mask must be selected in the combo
+  if(!IS_NULL_PTR(bd) && GTK_IS_TOGGLE_BUTTON(bd->raster_enable)
+     && gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(bd->raster_enable)))
+    raster = FALSE;
+
   if(!IS_NULL_PTR(bd) && GTK_IS_TOGGLE_BUTTON(bd->masks_enable)
      && gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(bd->masks_enable)))
     drawn = FALSE;
 
-  gboolean parametric = FALSE;
-  if(!IS_NULL_PTR(bd))
-  {
-    if(GTK_IS_TOGGLE_BUTTON(bd->blendif_enable)
-       && gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(bd->blendif_enable)))
-      parametric = FALSE;
-    else if(bd->blendif_support && bd->blendif_inited)
-    {
-      const uint32_t mask = bd->csp == DEVELOP_BLEND_CS_LAB ? DEVELOP_BLENDIF_Lab_MASK : DEVELOP_BLENDIF_RGB_MASK;
-      uint32_t active_channels = 0;
-      for(uint32_t ch = 0; ch < DEVELOP_BLENDIF_SIZE; ch++)
-      {
-        const uint32_t bit = 1u << ch;
-        if(!(mask & bit) || !(module->blend_params->blendif & bit)) continue;
-        const float *params = &module->blend_params->blendif_parameters[ch * 4];
-        if(params[0] != 0.0f || params[1] != 0.0f || params[2] != 1.0f || params[3] != 1.0f)
-          active_channels |= bit;
-      }
-      parametric = active_channels != 0;
-    }
-  }
+  if(!IS_NULL_PTR(bd) && GTK_IS_TOGGLE_BUTTON(bd->blendif_enable)
+     && gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(bd->blendif_enable)))
+    parametric = FALSE;
 
   if(!IS_NULL_PTR(top_enabled)) *top_enabled = top;
   if(!IS_NULL_PTR(raster_used)) *raster_used = raster;
@@ -2551,31 +2532,8 @@ void dt_iop_add_remove_mask_indicator(dt_iop_module_t *module)
 
   gboolean top_enabled = FALSE, raster_used = FALSE, drawn_used = FALSE, parametric_used = FALSE;
   _mask_indicator_get_usage(module, &top_enabled, &raster_used, &drawn_used, &parametric_used);
-  const dt_iop_gui_blend_data_t *bd = (const dt_iop_gui_blend_data_t *)module->blend_data;
-  const uint32_t mask_mode = module->blend_params->mask_mode;
 
   const gboolean use_masks = top_enabled && (raster_used || drawn_used || parametric_used);
-
-  if(!IS_NULL_PTR(bd))
-  {
-    const gboolean raster_disable = GTK_IS_TOGGLE_BUTTON(bd->raster_enable)
-      ? gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(bd->raster_enable)) : FALSE;
-    const gboolean drawn_disable = GTK_IS_TOGGLE_BUTTON(bd->masks_enable)
-      ? gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(bd->masks_enable)) : FALSE;
-    const gboolean param_disable = GTK_IS_TOGGLE_BUTTON(bd->blendif_enable)
-      ? gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(bd->blendif_enable)) : FALSE;
-    const int raster_combo = GTK_IS_WIDGET(bd->raster_combo) ? dt_bauhaus_combobox_get(bd->raster_combo) : -1;
-    fprintf(stderr,
-            "[mask indicator] %s top=%d mode=0x%x used[r=%d d=%d p=%d] disable[r=%d d=%d p=%d] raster_combo=%d show=%d\n",
-            module->op, top_enabled, mask_mode, raster_used, drawn_used, parametric_used,
-            raster_disable, drawn_disable, param_disable, raster_combo, use_masks);
-  }
-  else
-  {
-    fprintf(stderr,
-            "[mask indicator] %s top=%d mode=0x%x used[r=%d d=%d p=%d] show=%d (no blend_data)\n",
-            module->op, top_enabled, mask_mode, raster_used, drawn_used, parametric_used, use_masks);
-  }
 
   gtk_widget_set_visible(GTK_WIDGET(module->mask_indicator), use_masks);
   gtk_widget_set_sensitive(GTK_WIDGET(module->mask_indicator), module->enabled);

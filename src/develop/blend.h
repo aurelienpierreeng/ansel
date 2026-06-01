@@ -112,10 +112,10 @@ typedef enum dt_develop_mask_mode_t
 {
   DEVELOP_MASK_DISABLED = 0,                                                         // off
   DEVELOP_MASK_ENABLED = 1,                                                          // uniformly
-  DEVELOP_MASK_MASK = 1 << 1,                                                        // drawn mask
-  DEVELOP_MASK_CONDITIONAL = 1 << 2,                                                 // parametric mask
+  DEVELOP_MASK_SHAPE = 1 << 1,                                                       // drawn mask
+  DEVELOP_MASK_PARAMETRIC = 1 << 2,                                                  // parametric mask
   DEVELOP_MASK_RASTER = 1 << 3,                                                      // raster mask
-  DEVELOP_MASK_MASK_CONDITIONAL = (DEVELOP_MASK_MASK | DEVELOP_MASK_CONDITIONAL)     // drawn & parametric
+  DEVELOP_MASK_SHAPE_PARAMETRIC = (DEVELOP_MASK_SHAPE | DEVELOP_MASK_PARAMETRIC)     // drawn & parametric
 } dt_develop_mask_mode_t;
 
 typedef enum dt_develop_mask_combine_mode_t
@@ -444,6 +444,34 @@ int dt_develop_blend_legacy_params_from_so(dt_iop_module_so_t *module_so, const 
 
 /** initializes the parameter array (of size DEVELOP_BLENDIF_PARAMETER_ITEMS * DEVELOP_BLENDIF_SIZE) */
 void dt_develop_blendif_process_parameters(float *const parameters, const dt_develop_blend_params_t *const params);
+
+/**
+ * Return effective mask usage for current blending parameters.
+ *
+ * This inspects mask mode bits and payload state to decide whether raster,
+ * drawn and/or parametric masks are actually contributing, so callers can
+ * skip mask computation branches when modes are enabled but still at default.
+ *
+ * State rules:
+ * - top_enabled: set by params->mask_mode & DEVELOP_MASK_ENABLED.
+ * 
+ * - raster_used: requires params->mask_mode & DEVELOP_MASK_RASTER
+ *   and module->raster_mask.sink.source set.
+ * 
+ * - drawn_used: requires params->mask_mode & DEVELOP_MASK_MASK and a valid
+ *   group form from params->mask_id containing at least one shape.
+ * 
+ * - parametric_used: requires params->mask_mode & DEVELOP_MASK_CONDITIONAL and
+ *   at least one active blendif channel (channel bit set in params->blendif,
+ *   channel allowed by blend colorspace mask, and channel thresholds different
+ *   from defaults [0, 0, 1, 1] in params->blendif_parameters).
+ */
+void dt_develop_blend_get_mask_usage(const dt_iop_module_t *module,
+                                     const dt_develop_blend_params_t *params,
+                                     gboolean *top_enabled,
+                                     gboolean *raster_used,
+                                     gboolean *drawn_used,
+                                     gboolean *parametric_used);
 
 /**
  * Set up a profile adapted to the blending.
