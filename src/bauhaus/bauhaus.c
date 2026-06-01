@@ -2681,11 +2681,12 @@ void dt_bauhaus_show_popup(GtkWidget *widget)
   // Make sure all relevant widgets exist
   gtk_widget_realize(w->bauhaus->popup_window);
   gtk_widget_realize(widget);
+  _margins_retrieve(w);
 
   GtkAllocation tmp;
   gtk_widget_get_allocation(widget, &tmp);
-  int width = tmp.width;
-  int height = tmp.height;
+  int width = MAX(tmp.width, 1);
+  int height = MAX(tmp.height, 1);
 
   switch(w->bauhaus->current->type)
   {
@@ -2737,8 +2738,8 @@ void dt_bauhaus_show_popup(GtkWidget *widget)
   GdkRectangle anchor = {
     .x = wx - wwx,
     .y = wy - wwy,
-    .width = tmp.width,
-    .height = tmp.height
+    .width = MAX(tmp.width, 1),
+    .height = MAX(tmp.height, 1)
   };
 
   // Set desired size, but it's more a guide than a rule.
@@ -2749,6 +2750,12 @@ void dt_bauhaus_show_popup(GtkWidget *widget)
   gtk_window_resize(GTK_WINDOW(w->bauhaus->popup_window), width, height);
 
   GdkWindow *window = gtk_widget_get_window(w->bauhaus->popup_window);
+  if(IS_NULL_PTR(window))
+  {
+    gtk_widget_show_all(w->bauhaus->popup_window);
+    gtk_widget_grab_focus(w->bauhaus->popup_area);
+    return;
+  }
 
   // For Wayland (and supposed to work on X11 too) and Gtk 3.24 this is how you do it
   gdk_window_move_to_rect(GDK_WINDOW(window), &anchor, GDK_GRAVITY_STATIC, GDK_GRAVITY_STATIC,
