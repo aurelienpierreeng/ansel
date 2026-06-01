@@ -905,6 +905,7 @@ static void _blendop_blendif_update_tab(dt_iop_module_t *module, const int tab)
   dt_iop_gui_blend_data_t *data = module->blend_data;
   dt_develop_blend_params_t *bp = module->blend_params;
   dt_develop_blend_params_t *dp = module->default_blendop_params;
+  const float epsilon = 1e-6f;
 
   ++darktable.gui->reset;
 
@@ -981,6 +982,49 @@ static void _blendop_blendif_update_tab(dt_iop_module_t *module, const int tab)
   }
   gtk_widget_set_sensitive(GTK_WIDGET(data->channel_boost_factor_slider), boost_factor_enabled);
   dt_bauhaus_slider_set(GTK_WIDGET(data->channel_boost_factor_slider), boost_factor);
+
+  for(int page_num = 0; !IS_NULL_PTR(data->channel[page_num].label); page_num++)
+  {
+    gboolean modified = FALSE;
+    const dt_iop_gui_blendif_channel_t *page_channel = &data->channel[page_num];
+
+    for(int in_out = 0; in_out < 2 && !modified; in_out++)
+    {
+      const dt_develop_blendif_channels_t ch = page_channel->param_channels[in_out];
+      const uint32_t bit = 1u << ch;
+      const uint32_t inv_bit = 1u << (16 + ch);
+
+      if((bp->blendif & bit) != (dp->blendif & bit)
+         || (bp->blendif & inv_bit) != (dp->blendif & inv_bit)
+         || fabsf(bp->blendif_boost_factors[ch] - dp->blendif_boost_factors[ch]) > epsilon)
+      {
+        modified = TRUE;
+        break;
+      }
+
+      const float *params = &bp->blendif_parameters[4 * ch];
+      const float *defaults = &dp->blendif_parameters[4 * ch];
+      for(int k = 0; k < 4; k++)
+      {
+        if(fabsf(params[k] - defaults[k]) > epsilon)
+        {
+          modified = TRUE;
+          break;
+        }
+      }
+    }
+
+    GtkWidget *page = gtk_notebook_get_nth_page(data->channel_tabs, page_num);
+    GtkWidget *label = GTK_IS_WIDGET(page) ? gtk_notebook_get_tab_label(data->channel_tabs, page) : NULL;
+    if(GTK_IS_LABEL(label))
+    {
+      gchar *tab_title = modified
+                             ? g_markup_printf_escaped("<b>%s</b>", _(page_channel->label))
+                             : g_markup_printf_escaped("%s", _(page_channel->label));
+      gtk_label_set_markup(GTK_LABEL(label), tab_title);
+      dt_free(tab_title);
+    }
+  }
 
   --darktable.gui->reset;
 }
