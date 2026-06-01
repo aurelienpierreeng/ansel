@@ -2411,29 +2411,99 @@ static void _display_mask_indicator_callback(GtkToggleButton *bt, dt_iop_module_
   dt_dev_pixelpipe_update_history_main(module->dev);
 }
 
+static void _mask_indicator_get_usage(dt_iop_module_t *module, gboolean *top_enabled, gboolean *raster_used,
+                                      gboolean *drawn_used, gboolean *parametric_used)
+{
+  if(!IS_NULL_PTR(top_enabled)) *top_enabled = FALSE;
+  if(!IS_NULL_PTR(raster_used)) *raster_used = FALSE;
+  if(!IS_NULL_PTR(drawn_used)) *drawn_used = FALSE;
+  if(!IS_NULL_PTR(parametric_used)) *parametric_used = FALSE;
+
+  if(IS_NULL_PTR(module) || IS_NULL_PTR(module->blend_params)) return;
+
+  const dt_iop_gui_blend_data_t *bd = (const dt_iop_gui_blend_data_t *)module->blend_data;
+  const uint32_t mask_mode = module->blend_params->mask_mode;
+
+  gboolean top = (mask_mode & DEVELOP_MASK_ENABLED) != 0;
+
+  gboolean raster = module->blend_params->raster_mask_id > 0 || !IS_NULL_PTR(module->raster_mask.sink.source);
+  if(!IS_NULL_PTR(bd))
+  {
+    if(GTK_IS_TOGGLE_BUTTON(bd->raster_enable)
+       && gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(bd->raster_enable)))
+      raster = FALSE;
+    else if(GTK_IS_WIDGET(bd->raster_combo))
+      raster = dt_bauhaus_combobox_get(bd->raster_combo) > 0;
+  }
+
+  gboolean drawn = FALSE;
+  if(!IS_NULL_PTR(module->dev))
+  {
+    dt_masks_form_t *grp = dt_masks_get_from_id(module->dev, module->blend_params->mask_id);
+    drawn = !IS_NULL_PTR(grp) && (grp->type & DT_MASKS_GROUP) && g_list_length(grp->points) > 0;
+  }
+  if(!IS_NULL_PTR(bd) && GTK_IS_TOGGLE_BUTTON(bd->masks_enable)
+     && gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(bd->masks_enable)))
+    drawn = FALSE;
+
+  gboolean parametric = FALSE;
+  if(!IS_NULL_PTR(bd))
+  {
+    if(GTK_IS_TOGGLE_BUTTON(bd->blendif_enable)
+       && gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(bd->blendif_enable)))
+      parametric = FALSE;
+    else if(bd->blendif_support && bd->blendif_inited)
+    {
+      const uint32_t mask = bd->csp == DEVELOP_BLEND_CS_LAB ? DEVELOP_BLENDIF_Lab_MASK : DEVELOP_BLENDIF_RGB_MASK;
+      uint32_t active_channels = 0;
+      for(uint32_t ch = 0; ch < DEVELOP_BLENDIF_SIZE; ch++)
+      {
+        const uint32_t bit = 1u << ch;
+        if(!(mask & bit) || !(module->blend_params->blendif & bit)) continue;
+        const float *params = &module->blend_params->blendif_parameters[ch * 4];
+        if(params[0] != 0.0f || params[1] != 0.0f || params[2] != 1.0f || params[3] != 1.0f)
+          active_channels |= bit;
+      }
+      parametric = active_channels != 0;
+    }
+  }
+
+  if(!IS_NULL_PTR(top_enabled)) *top_enabled = top;
+  if(!IS_NULL_PTR(raster_used)) *raster_used = raster;
+  if(!IS_NULL_PTR(drawn_used)) *drawn_used = drawn;
+  if(!IS_NULL_PTR(parametric_used)) *parametric_used = parametric;
+}
+
 static gboolean _mask_indicator_tooltip(GtkWidget *treeview, gint x, gint y, gboolean kb_mode,
       GtkTooltip* tooltip, dt_iop_module_t *module)
 {
+  (void)treeview;
+  (void)x;
+  (void)y;
+  (void)kb_mode;
+
   gboolean res = FALSE;
-  const gboolean raster = module->blend_params->mask_mode & DEVELOP_MASK_RASTER;
   if(module->mask_indicator)
   {
     gchar *type = _("unknown mask");
     gchar *text;
-    const uint32_t mm = module->blend_params->mask_mode;
-    if((mm & DEVELOP_MASK_MASK) && (mm & DEVELOP_MASK_CONDITIONAL))
+    gboolean top_enabled = FALSE, raster_used = FALSE, drawn_used = FALSE, parametric_used = FALSE;
+    _mask_indicator_get_usage(module, &top_enabled, &raster_used, &drawn_used, &parametric_used);
+    if(!top_enabled) return FALSE;
+
+    if(drawn_used && parametric_used)
       type=_("drawn + parametric mask");
-    else if(mm & DEVELOP_MASK_MASK)
+    else if(drawn_used)
       type=_("drawn mask");
-    else if(mm & DEVELOP_MASK_CONDITIONAL)
+    else if(parametric_used)
       type=_("parametric mask");
-    else if(mm & DEVELOP_MASK_RASTER)
+    else if(raster_used)
       type=_("raster mask");
     else
-      fprintf(stderr, "unknown mask mode '%d' in module '%s'\n", mm, module->op);
+      return FALSE;
     gchar *part1 = g_strdup_printf(_("this module has a '%s'"), type);
     gchar *part2 = NULL;
-    if(raster && module->raster_mask.sink.source)
+    if(raster_used && module->raster_mask.sink.source)
     {
       gchar *source = dt_history_item_get_name(module->raster_mask.sink.source);
       part2 = g_strdup_printf(_("taken from module %s"), source);
@@ -2479,8 +2549,33 @@ void dt_iop_add_remove_mask_indicator(dt_iop_module_t *module)
     return;
   }
 
-  // Note : DEVELOP_MASK_ENABLED means uniform blending (opacity), not masks
-  const gboolean use_masks = module->blend_params->mask_mode > DEVELOP_MASK_ENABLED;
+  gboolean top_enabled = FALSE, raster_used = FALSE, drawn_used = FALSE, parametric_used = FALSE;
+  _mask_indicator_get_usage(module, &top_enabled, &raster_used, &drawn_used, &parametric_used);
+  const dt_iop_gui_blend_data_t *bd = (const dt_iop_gui_blend_data_t *)module->blend_data;
+  const uint32_t mask_mode = module->blend_params->mask_mode;
+
+  const gboolean use_masks = top_enabled && (raster_used || drawn_used || parametric_used);
+
+  if(!IS_NULL_PTR(bd))
+  {
+    const gboolean raster_disable = GTK_IS_TOGGLE_BUTTON(bd->raster_enable)
+      ? gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(bd->raster_enable)) : FALSE;
+    const gboolean drawn_disable = GTK_IS_TOGGLE_BUTTON(bd->masks_enable)
+      ? gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(bd->masks_enable)) : FALSE;
+    const gboolean param_disable = GTK_IS_TOGGLE_BUTTON(bd->blendif_enable)
+      ? gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(bd->blendif_enable)) : FALSE;
+    const int raster_combo = GTK_IS_WIDGET(bd->raster_combo) ? dt_bauhaus_combobox_get(bd->raster_combo) : -1;
+    fprintf(stderr,
+            "[mask indicator] %s top=%d mode=0x%x used[r=%d d=%d p=%d] disable[r=%d d=%d p=%d] raster_combo=%d show=%d\n",
+            module->op, top_enabled, mask_mode, raster_used, drawn_used, parametric_used,
+            raster_disable, drawn_disable, param_disable, raster_combo, use_masks);
+  }
+  else
+  {
+    fprintf(stderr,
+            "[mask indicator] %s top=%d mode=0x%x used[r=%d d=%d p=%d] show=%d (no blend_data)\n",
+            module->op, top_enabled, mask_mode, raster_used, drawn_used, parametric_used, use_masks);
+  }
 
   gtk_widget_set_visible(GTK_WIDGET(module->mask_indicator), use_masks);
   gtk_widget_set_sensitive(GTK_WIDGET(module->mask_indicator), module->enabled);
