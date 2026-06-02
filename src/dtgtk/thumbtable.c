@@ -179,11 +179,8 @@ static gint _thumb_compare_rowid_desc(gconstpointer a, gconstpointer b)
 
 static int _grab_focus(dt_thumbtable_t *table)
 {
-  // Ensure all previous Gtk events are finished,
-  // aka the scrolled window widget inits or else the scroll
-  // will have no effect
-  while(gtk_events_pending())
-    gtk_main_iteration();
+  if(IS_NULL_PTR(table)) return 0;
+  table->focus_idle_id = 0;
 
   if(table->mode == DT_THUMBTABLE_MODE_FILEMANAGER)
   {
@@ -201,6 +198,12 @@ static int _grab_focus(dt_thumbtable_t *table)
   }
   dt_thumbtable_scroll_to_selection(table);
   return 0;
+}
+
+static void _thumbtable_schedule_focus(dt_thumbtable_t *table, const gint priority)
+{
+  if(IS_NULL_PTR(table) || table->focus_idle_id) return;
+  table->focus_idle_id = g_idle_add_full(priority, (GSourceFunc)_grab_focus, table, NULL);
 }
 
 static gboolean _thumbtable_idle_update(gpointer user_data)
@@ -261,7 +264,7 @@ static gboolean _thumbtable_idle_apply_grid_configuration(gpointer user_data)
   // Schedule scrolling as a follow-up idle callback with lower priority.
   // This ensures the GTK widget grid is fully mapped and realized before we attempt to scroll.
   // We use a lower priority (G_PRIORITY_LOW) to let the GTK layout pass complete first.
-  g_idle_add_full(G_PRIORITY_LOW, (GSourceFunc)_grab_focus, table, NULL);
+  _thumbtable_schedule_focus(table, G_PRIORITY_LOW);
   
   return G_SOURCE_REMOVE;
 }
@@ -518,6 +521,8 @@ static void dt_thumbtable_scroll_to_rowid(dt_thumbtable_t *table, int rowid)
 
 static int _find_rowid_from_imgid(dt_thumbtable_t *table, const int32_t imgid)
 {
+  if(IS_NULL_PTR(table) || IS_NULL_PTR(table->lut) || table->collection_count <= 0) return UNKNOWN_IMAGE;
+
   for(int i = 0; i < table->collection_count; i++)
     if(table->lut[i].imgid == imgid)
       return i;
@@ -527,7 +532,9 @@ static int _find_rowid_from_imgid(dt_thumbtable_t *table, const int32_t imgid)
 
 int dt_thumbtable_scroll_to_imgid(dt_thumbtable_t *table, int32_t imgid)
 {
-  if(!table->collection_inited) return 1;
+  if(IS_NULL_PTR(table) || !table->collection_inited || IS_NULL_PTR(table->lut) || table->collection_count <= 0)
+    return 1;
+
   int rowid = UNKNOWN_IMAGE;
   if(imgid > UNKNOWN_IMAGE)
   {
@@ -1138,7 +1145,7 @@ void dt_thumbtable_set_zoom(dt_thumbtable_t *table, dt_thumbtable_zoom_t level)
   table->zoom = level;
   dt_thumbtable_set_active_rowid(table);
   dt_thumbtable_refresh_thumbnail(table, UNKNOWN_IMAGE, TRUE);
-  g_idle_add((GSourceFunc)_grab_focus, table);
+  _thumbtable_schedule_focus(table, G_PRIORITY_DEFAULT_IDLE);
 }
 
 dt_thumbtable_zoom_t dt_thumbtable_get_zoom(dt_thumbtable_t *table)
@@ -1429,7 +1436,7 @@ static void _dt_collection_changed_callback(gpointer instance, dt_collection_cha
     // Coalesce multiple layout/resize signals that can happen during collection loads.
     dt_thumbtable_queue_update(table);
 
-    g_idle_add((GSourceFunc)_grab_focus, table);
+    _thumbtable_schedule_focus(table, G_PRIORITY_DEFAULT_IDLE);
   }
 }
 
@@ -2067,6 +2074,7 @@ dt_thumbtable_t *dt_thumbtable_new(dt_thumbtable_mode_t mode)
   table->collapse_groups = dt_conf_get_bool("ui_last/grouping");
   table->draw_group_borders = dt_conf_get_bool("plugins/lighttable/group_borders");
   table->idle_update_id = 0;
+  table->focus_idle_id = 0;
   table->last_parent_width = 0;
   table->last_parent_height = 0;
   table->last_h_scrollbar_height = -1;
@@ -2225,6 +2233,11 @@ void dt_thumbtable_cleanup(dt_thumbtable_t *table)
     g_source_remove(table->idle_update_id);
     table->idle_update_id = 0;
   }
+  if(table->focus_idle_id)
+  {
+    g_source_remove(table->focus_idle_id);
+    table->focus_idle_id = 0;
+  }
 
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_dt_collection_changed_callback), table);
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_dt_selection_changed_callback), table);
@@ -2255,6 +2268,11 @@ void dt_thumbtable_stop(dt_thumbtable_t *table)
     g_source_remove(table->idle_update_id);
     table->idle_update_id = 0;
   }
+  if(table->focus_idle_id)
+  {
+    g_source_remove(table->focus_idle_id);
+    table->focus_idle_id = 0;
+  }
 
   table->reset_collection = TRUE;
 
@@ -2282,7 +2300,7 @@ void dt_thumbtable_stop(dt_thumbtable_t *table)
 
 void dt_thumbtable_update_parent(dt_thumbtable_t *table)
 {
-  g_idle_add((GSourceFunc)_grab_focus, table);
+  _thumbtable_schedule_focus(table, G_PRIORITY_DEFAULT_IDLE);
 }
 
 void dt_thumbtable_set_parent(dt_thumbtable_t *table, dt_thumbtable_mode_t mode)
