@@ -4185,6 +4185,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
 
   // points data are missing or outdated, or distortion has changed?
   if(IS_NULL_PTR(g->points) || IS_NULL_PTR(g->points_idx) || hash != g->grid_hash
+     || g->points_lines_count != g->lines_count
      || (g->lines_version > g->points_version
          && g->lines_hash != lines_hash))
   {
@@ -4387,6 +4388,7 @@ static void _draw_recompute_line_length(dt_iop_ashift_line_t *line)
 int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressure, int which)
 {
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
+  if(IS_NULL_PTR(g)) return FALSE;
 
   if(g->straightening)
   {
@@ -4408,9 +4410,25 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   // if visibility of lines is switched off or no lines available, we have nothing to do
   if(IS_NULL_PTR(g->lines)) return FALSE;
 
+  /* Selection uses transformed display point descriptors, but writes the state
+   * back into g->lines[n]. Display points can be stale until the next expose
+   * after editing or deleting lines, so every loop below is capped to live
+   * line storage. */
+  const int selectable_lines_count = (!IS_NULL_PTR(g->points) && !IS_NULL_PTR(g->points_idx))
+                                     ? MIN(g->points_lines_count, g->lines_count)
+                                     : 0;
+
   // if we are moving a drawn line extrema, we do the change here
   if(g->draw_point_move)
   {
+    const int line = g->draw_near_point / 2;
+    if(g->draw_near_point < 0 || line >= g->lines_count)
+    {
+      g->draw_point_move = FALSE;
+      g->draw_near_point = -1;
+      return FALSE;
+    }
+
     const float pd_w = darktable.develop->roi.processed_width;
     const float pd_h = darktable.develop->roi.processed_height;
     float pts[2] = { pzx * pd_w, pzy * pd_h };
@@ -4420,22 +4438,21 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
       // first we move the point
       if(g->draw_near_point >= 0)
       {
-        const int l = g->draw_near_point / 2;
         if(g->draw_near_point % 2 == 0)
         {
-          g->lines[l].p1[0] = pts[0];
-          g->lines[l].p1[1] = pts[1];
+          g->lines[line].p1[0] = pts[0];
+          g->lines[line].p1[1] = pts[1];
         }
         else
         {
-          g->lines[l].p2[0] = pts[0];
-          g->lines[l].p2[1] = pts[1];
+          g->lines[line].p2[0] = pts[0];
+          g->lines[line].p2[1] = pts[1];
         }
-        _draw_recompute_line_length(&g->lines[l]);
+        _draw_recompute_line_length(&g->lines[line]);
       }
 
       // for the rectangle method, we need to move the horizontal line too
-      if(g->current_structure_method == ASHIFT_METHOD_QUAD)
+      if(g->current_structure_method == ASHIFT_METHOD_QUAD && g->lines_count >= 4)
       {
         if(g->draw_near_point == 0)
         {
@@ -4472,6 +4489,12 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   // case where we move a drawn line
   if(g->draw_line_move >= 0)
   {
+    if(g->draw_line_move >= g->lines_count)
+    {
+      g->draw_line_move = -1;
+      return FALSE;
+    }
+
     const float pd_w = self->dev->roi.processed_width;
     const float pd_h = self->dev->roi.processed_height;
     float pts[2] = { pzx * pd_w, pzy * pd_h };
@@ -4498,7 +4521,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
       _draw_recompute_line_length(&g->lines[n]);
 
       // for the rectangle method, we need to move the adjacent lines too
-      if(g->current_structure_method == ASHIFT_METHOD_QUAD)
+      if(g->current_structure_method == ASHIFT_METHOD_QUAD && g->lines_count >= 4)
       {
         if(n == 0)
         {
@@ -4557,10 +4580,10 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   // the rectangular selection
   if(g->isbounding != ASHIFT_BOUNDING_OFF)
   {
-    if(wd >= 1.0 && ht >= 1.0)
+    if(wd >= 1.0 && ht >= 1.0 && selectable_lines_count > 0)
     {
       // mark lines inside the rectangle
-      _get_bounded_inside(g->points, g->points_idx, g->points_lines_count, pzx * wd, pzy * ht, g->lastx * wd,
+      _get_bounded_inside(g->points, g->points_idx, selectable_lines_count, pzx * wd, pzy * ht, g->lastx * wd,
                           g->lasty * ht, g->isbounding);
     }
 
@@ -4569,14 +4592,16 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   }
 
   // gather information about "near"-ness in g->points_idx
-  _get_near(
-      g->points, g->points_idx, g->points_lines_count, pzx * wd, pzy * ht, g->near_delta,
-      !(g->current_structure_method == ASHIFT_METHOD_LINES || g->current_structure_method == ASHIFT_METHOD_QUAD));
+  if(selectable_lines_count > 0)
+    _get_near(
+        g->points, g->points_idx, selectable_lines_count, pzx * wd, pzy * ht, g->near_delta,
+        !(g->current_structure_method == ASHIFT_METHOD_LINES || g->current_structure_method == ASHIFT_METHOD_QUAD));
 
   // if we are in sweeping mode iterate over lines as we move the pointer and change "selected" state.
   if(g->isdeselecting || g->isselecting)
   {
-    for(int n = 0; g->selecting_lines_version == g->lines_version && n < g->points_lines_count; n++)
+    // Loop over displayed lines close to the pointer and update the matching live line flags.
+    for(int n = 0; g->selecting_lines_version == g->lines_version && n < selectable_lines_count; n++)
     {
       if(g->points_idx[n].near == 0)
         continue;
@@ -4611,6 +4636,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
                    uint32_t state)
 {
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
+  if(IS_NULL_PTR(g)) return FALSE;
   gboolean handled = FALSE;
 
   // avoid unexpected back to lt mode:
@@ -4643,6 +4669,9 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
       || g->current_structure_method == ASHIFT_METHOD_LINES)
      && g->draw_near_point >= 0)
   {
+    const int line = g->draw_near_point / 2;
+    if(IS_NULL_PTR(g->lines) || line >= g->lines_count) return FALSE;
+
     g->draw_point_move = TRUE;
     g->lastx = x;
     g->lasty = y;
@@ -4657,6 +4686,8 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
   // in a rectangle area)
   if(dt_modifier_is(state, GDK_SHIFT_MASK))
   {
+    if(IS_NULL_PTR(g->lines) || IS_NULL_PTR(g->points) || IS_NULL_PTR(g->points_idx)) return FALSE;
+
     g->lastx = pzx;
     g->lasty = pzy;
 
@@ -4669,8 +4700,18 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
   const float min_scale = dt_dev_get_zoom_scale(self->dev,  0);
   const float cur_scale = dt_dev_get_zoom_scale(self->dev,  0);
 
+  /* Selection uses transformed display point descriptors, but writes the state
+   * back into g->lines[n]. Display points can be stale until the next expose
+   * after editing or deleting lines, so every loop below is capped to live
+   * line storage. */
+  const int selectable_lines_count = (!IS_NULL_PTR(g->lines)
+                                     && !IS_NULL_PTR(g->points)
+                                     && !IS_NULL_PTR(g->points_idx))
+                                     ? MIN(g->points_lines_count, g->lines_count)
+                                     : 0;
+
   // if we are zoomed out (no panning possible) and we have lines to display we take control
-  const int take_control = (cur_scale == min_scale) && (g->points_lines_count > 0);
+  const int take_control = (cur_scale == min_scale) && (selectable_lines_count > 0);
 
   if(g->current_structure_method == ASHIFT_METHOD_QUAD || g->current_structure_method == ASHIFT_METHOD_LINES)
     g->near_delta = dt_conf_get_float("plugins/darkroom/ashift/near_delta_draw");
@@ -4678,16 +4719,17 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
     g->near_delta = dt_conf_get_float("plugins/darkroom/ashift/near_delta");
 
   // gather information about "near"-ness in g->points_idx
-  _get_near(g->points, g->points_idx, g->points_lines_count,
-            pzx * wd, pzy * ht, g->near_delta,
-            !(g->current_structure_method == ASHIFT_METHOD_QUAD
-              || g->current_structure_method == ASHIFT_METHOD_LINES));
+  if(selectable_lines_count > 0)
+    _get_near(g->points, g->points_idx, selectable_lines_count,
+              pzx * wd, pzy * ht, g->near_delta,
+              !(g->current_structure_method == ASHIFT_METHOD_QUAD
+                || g->current_structure_method == ASHIFT_METHOD_LINES));
 
   if((g->current_structure_method == ASHIFT_METHOD_LINES && which == 1)
      || g->current_structure_method == ASHIFT_METHOD_QUAD)
   {
     // we search the selected line and mark it as the moved line
-    for(int n = 0; n < g->points_lines_count; n++)
+    for(int n = 0; n < selectable_lines_count; n++)
     {
       if(g->points_idx[n].near)
       {
@@ -4709,7 +4751,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
   {
     // iterate over all lines close to the pointer and change "selected" state.
     // left-click selects and right-click deselects the line
-    for(int n = 0; g->selecting_lines_version == g->lines_version && n < g->points_lines_count; n++)
+    for(int n = 0; g->selecting_lines_version == g->lines_version && n < selectable_lines_count; n++)
     {
       if(g->points_idx[n].near == 0) continue;
 
@@ -4732,7 +4774,25 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
           }
 
           const int count = g->lines_count - 1;
-          dt_iop_ashift_line_t *lines = (dt_iop_ashift_line_t *)malloc(sizeof(dt_iop_ashift_line_t) * count);
+          dt_iop_ashift_line_t *lines = NULL;
+          if(count > 0)
+          {
+            lines = (dt_iop_ashift_line_t *)malloc(sizeof(dt_iop_ashift_line_t) * count);
+            if(IS_NULL_PTR(lines))
+            {
+              if(g->lines[n].type == ASHIFT_LINE_HORIZONTAL_SELECTED)
+              {
+                g->horizontal_count++;
+                g->horizontal_weight += 1.0f;
+              }
+              else
+              {
+                g->vertical_count++;
+                g->vertical_weight += 1.0f;
+              }
+              break;
+            }
+          }
           int pos = 0;
           for(int i = 0; i < g->lines_count; i++)
           {
@@ -4748,6 +4808,8 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
           }
           g->lines = lines;
           g->lines_count = count;
+          handled = TRUE;
+          break;
         }
 
         handled = TRUE;
@@ -4826,6 +4888,7 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
 {
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
   dt_iop_ashift_params_t *p = _get_ashift_params(self);
+  if(IS_NULL_PTR(g)) return FALSE;
   const float wd = self->dev->roi.preview_width;
   const float ht = self->dev->roi.preview_height;
 
@@ -4895,6 +4958,13 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
   // release a drawn corner
   if(g->draw_point_move)
   {
+    if(IS_NULL_PTR(g->lines))
+    {
+      g->draw_point_move = FALSE;
+      g->draw_near_point = -1;
+      return FALSE;
+    }
+
     // we determine the vertical/horizontal line type (that may have changed)
     // we also save the lines in params
     // points move are done directly in mouse_move routine
@@ -4944,12 +5014,19 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
 
     if(wd >= 1.0 && ht >= 1.0)
     {
+      const int selectable_lines_count = (!IS_NULL_PTR(g->lines)
+                                         && !IS_NULL_PTR(g->points)
+                                         && !IS_NULL_PTR(g->points_idx))
+                                         ? MIN(g->points_lines_count, g->lines_count)
+                                         : 0;
+
       // mark lines inside the rectangle
-      _get_bounded_inside(g->points, g->points_idx, g->points_lines_count, pzx * wd, pzy * ht, g->lastx * wd,
-                          g->lasty * ht, g->isbounding);
+      if(selectable_lines_count > 0)
+        _get_bounded_inside(g->points, g->points_idx, selectable_lines_count, pzx * wd, pzy * ht, g->lastx * wd,
+                            g->lasty * ht, g->isbounding);
 
       // select or deselect lines within the rectangle according to isbounding state
-      for(int n = 0; g->selecting_lines_version == g->lines_version && n < g->points_lines_count; n++)
+      for(int n = 0; g->selecting_lines_version == g->lines_version && n < selectable_lines_count; n++)
       {
         if(g->points_idx[n].bounded == 0) continue;
 
@@ -4996,6 +5073,7 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
 int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t state)
 {
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
+  if(IS_NULL_PTR(g)) return FALSE;
 
   // do nothing if visibility of lines is switched off or no lines available
   if(IS_NULL_PTR(g->lines)) return FALSE;
@@ -5029,10 +5107,14 @@ int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t 
       return TRUE;
 
     // gather information about "near"-ness in g->points_idx
-    _get_near(g->points, g->points_idx, g->points_lines_count, pzx * wd, pzy * ht, g->near_delta, TRUE);
+    const int selectable_lines_count = (!IS_NULL_PTR(g->points) && !IS_NULL_PTR(g->points_idx))
+                                       ? MIN(g->points_lines_count, g->lines_count)
+                                       : 0;
+    if(selectable_lines_count > 0)
+      _get_near(g->points, g->points_idx, selectable_lines_count, pzx * wd, pzy * ht, g->near_delta, TRUE);
 
     // iterate over all lines close to the pointer and change "selected" state.
-    for(int n = 0; g->selecting_lines_version == g->lines_version && n < g->points_lines_count; n++)
+    for(int n = 0; g->selecting_lines_version == g->lines_version && n < selectable_lines_count; n++)
     {
       if(g->points_idx[n].near == 0)
         continue;
