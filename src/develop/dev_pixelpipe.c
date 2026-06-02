@@ -672,6 +672,7 @@ gboolean dt_dev_pixelpipe_cache_peek_gui(dt_dev_pixelpipe_t *pipe, const dt_dev_
   _cache_wait_manager.misses++;
   dt_pthread_mutex_unlock(&_cache_wait_manager.lock);
 
+  gboolean request_cacheline = TRUE;
   if(!IS_NULL_PTR(wait) && !IS_NULL_PTR(restart) && hash != DT_PIXELPIPE_CACHE_HASH_INVALID)
   {
     const gboolean changed_target = !wait->connected
@@ -724,17 +725,27 @@ gboolean dt_dev_pixelpipe_cache_peek_gui(dt_dev_pixelpipe_t *pipe, const dt_dev_
                wait->hash,
                !IS_NULL_PTR(wait->module) ? wait->module->op : "backbuf");
     }
+    else
+    {
+      /* The GUI already waits for this exact cacheline. Re-emitting CACHE_REQUEST from
+       * each expose keeps retrying an unsatisfied target forever when the pipeline cannot
+       * publish it, for example after an OpenCL memory pre-check failure on very large images. */
+      request_cacheline = FALSE;
+    }
   }
 
-  dt_dev_pixelpipe_set_cache_request(pipe,
-                                     !IS_NULL_PTR(piece) ? DT_DEV_PIXELPIPE_CACHE_REQUEST_MODULE
-                                                         : DT_DEV_PIXELPIPE_CACHE_REQUEST_BACKBUF,
-                                     !IS_NULL_PTR(piece) ? piece->module : NULL);
-  dt_dev_pixelpipe_or_changed(pipe, DT_DEV_PIPE_CACHE_REQUEST);
+  if(request_cacheline)
+  {
+    dt_dev_pixelpipe_set_cache_request(pipe,
+                                       !IS_NULL_PTR(piece) ? DT_DEV_PIXELPIPE_CACHE_REQUEST_MODULE
+                                                           : DT_DEV_PIXELPIPE_CACHE_REQUEST_BACKBUF,
+                                       !IS_NULL_PTR(piece) ? piece->module : NULL);
+    dt_dev_pixelpipe_or_changed(pipe, DT_DEV_PIPE_CACHE_REQUEST);
 
-  dt_print(DT_DEBUG_DEV, "[pixelpipe/gui] request host cache pipe=%s target=%s hash=%" PRIu64 "\n",
-           dt_pixelpipe_get_pipe_name(pipe->type),
-           !IS_NULL_PTR(piece) && !IS_NULL_PTR(piece->module) ? piece->module->op : "backbuf", hash);
+    dt_print(DT_DEBUG_DEV, "[pixelpipe/gui] request host cache pipe=%s target=%s hash=%" PRIu64 "\n",
+             dt_pixelpipe_get_pipe_name(pipe->type),
+             !IS_NULL_PTR(piece) && !IS_NULL_PTR(piece->module) ? piece->module->op : "backbuf", hash);
+  }
 
   return FALSE;
 }
