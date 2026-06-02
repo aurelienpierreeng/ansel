@@ -557,35 +557,91 @@ void dt_iop_init_pipe(struct dt_iop_module_t *module, struct dt_dev_pixelpipe_t 
   piece->blendop_data = dt_calloc_align(sizeof(dt_develop_blend_params_t));
 }
 
+/**
+ * @brief Release module-owned resources for one pixelpipe node.
+ *
+ * @details The normal contract is to call the instance callback copied from the
+ * module shared object. If that instance callback is invalid, the only safe
+ * fallback is a shared-object descriptor still present in `darktable.iop`; stale
+ * module instances can remain referenced by already-built pixelpipes after GUI
+ * removal, so the descriptor must be validated before dereferencing it.
+ */
 void dt_iop_cleanup_pipe(struct dt_iop_module_t *module, struct dt_dev_pixelpipe_t *pipe,
                         struct dt_dev_pixelpipe_iop_t *piece)
 {
-  if(IS_NULL_PTR(module) || IS_NULL_PTR(pipe) || IS_NULL_PTR(piece)) return;
+  if(IS_NULL_PTR(piece)) return;
 
   void (*cleanup_pipe)(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_t *pipe,
-                       struct dt_dev_pixelpipe_iop_t *piece) = module->cleanup_pipe;
+                       struct dt_dev_pixelpipe_iop_t *piece) = NULL;
 
-  if(IS_NULL_PTR(cleanup_pipe) || (gsize)cleanup_pipe <= 0x1000)
+  if(IS_NULL_PTR(module))
   {
-    if(!IS_NULL_PTR(module->so) && !IS_NULL_PTR(module->so->cleanup_pipe) && (gsize)module->so->cleanup_pipe > 0x1000)
+    dt_print(DT_DEBUG_ALWAYS,
+             "[dt_iop_cleanup_pipe] missing module, skipping module pipe cleanup\n");
+  }
+  else if(IS_NULL_PTR(pipe))
+  {
+    dt_print(DT_DEBUG_ALWAYS,
+             "[dt_iop_cleanup_pipe] missing pipe for `%s`, skipping module pipe cleanup\n",
+             module->op);
+  }
+  else
+  {
+    cleanup_pipe = module->cleanup_pipe;
+
+    if(IS_NULL_PTR(cleanup_pipe) || (gsize)cleanup_pipe <= 0x1000)
     {
-      dt_print(DT_DEBUG_ALWAYS,
-               "[dt_iop_cleanup_pipe] invalid module cleanup callback for `%s`, using shared-object fallback\n",
-               module->op);
-      cleanup_pipe = module->so->cleanup_pipe;
+      dt_iop_module_so_t *module_so = module->so;
+      if(IS_NULL_PTR(module_so))
+      {
+        dt_print(DT_DEBUG_ALWAYS,
+                 "[dt_iop_cleanup_pipe] missing shared-object descriptor for `%s`, skipping module pipe cleanup\n",
+                 module->op);
+        cleanup_pipe = NULL;
+      }
+      else
+      {
+        gboolean module_so_loaded = FALSE;
+
+        /* Deleted module instances can stay referenced by already-built pixelpipes.
+         * Loop over the loaded shared-object descriptors before reading
+         * module_so->cleanup_pipe, otherwise a stale module->so pointer can make the
+         * crash handler report this cleanup path instead of the real invalid module
+         * state. */
+        for(GList *iop = g_list_first(darktable.iop); iop; iop = g_list_next(iop))
+        {
+          if(iop->data == module_so)
+          {
+            module_so_loaded = TRUE;
+            break;
+          }
+        }
+
+        if(module_so_loaded && !IS_NULL_PTR(module_so->cleanup_pipe) && (gsize)module_so->cleanup_pipe > 0x1000)
+        {
+          dt_print(DT_DEBUG_ALWAYS,
+                   "[dt_iop_cleanup_pipe] invalid module cleanup callback for `%s`, using shared-object fallback\n",
+                   module->op);
+          cleanup_pipe = module_so->cleanup_pipe;
+        }
+        else
+        {
+          dt_print(DT_DEBUG_ALWAYS,
+                   "[dt_iop_cleanup_pipe] invalid cleanup callback for `%s`, skipping module pipe cleanup\n",
+                   module->op);
+          cleanup_pipe = NULL;
+        }
+      }
     }
-    else
-    {
-      dt_print(DT_DEBUG_ALWAYS,
-               "[dt_iop_cleanup_pipe] invalid cleanup callback for `%s`, skipping module pipe cleanup\n",
-               module->op);
-      cleanup_pipe = NULL;
-    }
+
+    if(!IS_NULL_PTR(cleanup_pipe)) cleanup_pipe(module, pipe, piece);
   }
 
-  if(!IS_NULL_PTR(cleanup_pipe)) cleanup_pipe(module, pipe, piece);
-  dt_free_align(piece->blendop_data);
-  piece->blendop_data = NULL;
+  if(!IS_NULL_PTR(piece->blendop_data))
+  {
+    dt_free_align(piece->blendop_data);
+    piece->blendop_data = NULL;
+  }
 }
 
 static void _gui_delete_callback(GtkButton *button, dt_iop_module_t *module)
