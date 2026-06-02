@@ -2988,6 +2988,8 @@ static void update_xy_color(dt_iop_module_t *self)
   dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
 
+  if(IS_NULL_PTR(g) || IS_NULL_PTR(p) || IS_NULL_PTR(g->illum_x) || IS_NULL_PTR(g->illum_y)) return;
+
   // Varies x in range around current y param
   for(int i = 0; i < DT_BAUHAUS_SLIDER_MAX_STOPS; i++)
   {
@@ -3259,7 +3261,11 @@ static void _channelmixerrgb_update_simple_colors(dt_iop_module_t *self)
 static void update_illuminant_color(dt_iop_module_t *self)
 {
   dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
-  gtk_widget_queue_draw(g->illum_color);
+  if(IS_NULL_PTR(g)) return;
+
+  if(!IS_NULL_PTR(g->illum_color))
+    gtk_widget_queue_draw(g->illum_color);
+
   update_xy_color(self);
 }
 
@@ -3939,8 +3945,14 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
       = w == g->scale_red_R || w == g->scale_red_G || w == g->scale_red_B || w == g->scale_green_R
         || w == g->scale_green_G || w == g->scale_green_B || w == g->scale_blue_R || w == g->scale_blue_G
         || w == g->scale_blue_B || w == g->normalize_R || w == g->normalize_G || w == g->normalize_B;
+  // Some Bauhaus setters emit during gui_init(), so synchronize the illuminant group only after
+  // every widget sharing the same xyY/Lch state has been created.
+  const gboolean illuminant_widgets_ready
+      = !IS_NULL_PTR(g->illuminant) && !IS_NULL_PTR(g->illum_fluo) && !IS_NULL_PTR(g->illum_led)
+        && !IS_NULL_PTR(g->temperature) && !IS_NULL_PTR(g->illum_color) && !IS_NULL_PTR(g->illum_x)
+        && !IS_NULL_PTR(g->illum_y);
 
-  if(w == g->illuminant)
+  if(!IS_NULL_PTR(w) && w == g->illuminant)
   {
     if(!IS_NULL_PTR(previous))
     {
@@ -3977,7 +3989,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
     }
   }
 
-  if(w == g->illuminant || w == g->illum_fluo || w == g->illum_led || w == g->temperature)
+  if(!IS_NULL_PTR(w) && (w == g->illuminant || w == g->illum_fluo || w == g->illum_led || w == g->temperature))
   {
     // Convert and synchronize all the possible ways to define an illuminant to allow swapping modes
 
@@ -4001,7 +4013,8 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
     paint_hue(self);
   }
 
-  if(IS_NULL_PTR(w) || w == g->illuminant || w == g->illum_fluo || w == g->illum_led || w == g->temperature)
+  if((IS_NULL_PTR(w) || w == g->illuminant || w == g->illum_fluo || w == g->illum_led || w == g->temperature)
+     && illuminant_widgets_ready)
   {
     update_illuminants(self);
     update_approx_cct(self);
@@ -4578,9 +4591,6 @@ void gui_init(struct dt_iop_module_t *self)
   g->illum_led = dt_bauhaus_combobox_from_params(self, "illum_led");
 
   g->temperature = dt_bauhaus_slider_from_params(self, N_("temperature"));
-  dt_bauhaus_slider_set_soft_range(g->temperature, 3000., 7000.);
-  dt_bauhaus_slider_set_digits(g->temperature, 0);
-  dt_bauhaus_slider_set_format(g->temperature, " K");
 
   g->illum_x = dt_bauhaus_slider_new_with_range_and_feedback(darktable.bauhaus, DT_GUI_MODULE(self), 0., ILLUM_X_MAX, 0, 0, 1, 0);
   dt_bauhaus_widget_set_label(g->illum_x, N_("hue"));
@@ -4594,6 +4604,10 @@ void gui_init(struct dt_iop_module_t *self)
   dt_bauhaus_slider_set_hard_max(g->illum_y, ILLUM_Y_MAX);
   g_signal_connect(G_OBJECT(g->illum_y), "value-changed", G_CALLBACK(illum_xy_callback), self);
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(g->illum_y), FALSE, FALSE, 0);
+
+  dt_bauhaus_slider_set_soft_range(g->temperature, 3000., 7000.);
+  dt_bauhaus_slider_set_digits(g->temperature, 0);
+  dt_bauhaus_slider_set_format(g->temperature, " K");
 
   g->gamut = dt_bauhaus_slider_from_params(self, "gamut");
   dt_bauhaus_slider_set_soft_max(g->gamut, 4.f);
