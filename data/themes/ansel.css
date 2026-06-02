@@ -1538,6 +1538,11 @@ treeview header label
   font-weight: 700;
 }
 
+#preferences-notebook scrolledwindow #pref_subsection > label  /* nested title inside a preferences sub-category */
+{
+  font-weight: 700;
+}
+
 /* Just add spacing between label settings and setting beside */
 #preferences-notebook stack widget label
 {

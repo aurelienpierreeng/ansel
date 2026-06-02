@@ -204,6 +204,17 @@ typedef struct dt_opencl_device_t
   size_t forced_headroom;
 } dt_opencl_device_t;
 
+typedef struct dt_opencl_detected_device_t
+{
+  int config_id;
+  char *name;
+  char *cname;
+  unsigned int cltype;
+  int disabled;
+  int pinned_memory;
+  size_t forced_headroom;
+} dt_opencl_detected_device_t;
+
 struct dt_bilateral_cl_global_t;
 struct dt_local_laplacian_cl_global_t;
 struct dt_dwt_cl_global_t; // wavelet decompose
@@ -223,6 +234,7 @@ typedef struct dt_opencl_t
   int enabled;
   int stopped;
   int num_devs;
+  int num_detected_devs;
   int error_count;
   int opencl_synchronization_timeout;
   uint32_t crc;
@@ -232,6 +244,7 @@ typedef struct dt_opencl_t
   int *dev_priority_export;
   int *dev_priority_thumbnail;
   dt_opencl_device_t *dev;
+  dt_opencl_detected_device_t *detected_devs;
   dt_dlopencl_t *dlocl;
 
   // global kernels for blending operations.
@@ -487,6 +500,38 @@ int dt_opencl_local_buffer_opt(const int devid, const int kernel, dt_opencl_loca
 /** utility functions handling device specific properties */
 void dt_opencl_write_device_config(const int devid);
 gboolean dt_opencl_read_device_config(const int devid);
+/**
+ * Number of GPU devices detected during OpenCL probing, including devices disabled by user preference.
+ */
+int dt_opencl_get_detected_device_count(void);
+/**
+ * Return metadata for a detected GPU, or NULL when the detected-device index is invalid.
+ */
+const dt_opencl_detected_device_t *dt_opencl_get_detected_device(const int detected);
+/**
+ * Return whether a detected GPU is enabled by its per-device OpenCL preference.
+ */
+gboolean dt_opencl_detected_device_enabled(const int detected);
+/**
+ * Persist the per-device OpenCL preference and derive the global OpenCL switch from all GPU states.
+ */
+int dt_opencl_set_detected_device_enabled(const int detected, const gboolean enabled);
+/**
+ * Return whether pinned memory transfer is enabled for a detected GPU.
+ */
+gboolean dt_opencl_detected_device_pinned_memory(const int detected);
+/**
+ * Persist the per-device pinned memory transfer preference.
+ */
+int dt_opencl_set_detected_device_pinned_memory(const int detected, const gboolean enabled);
+/**
+ * Return the per-device GPU vRAM headroom in MiB.
+ */
+size_t dt_opencl_detected_device_headroom(const int detected);
+/**
+ * Persist the per-device GPU vRAM headroom in MiB.
+ */
+int dt_opencl_set_detected_device_headroom(const int detected, const size_t headroom);
 int dt_opencl_avoid_atomics(const int devid);
 int dt_opencl_micro_nap(const int devid);
 gboolean dt_opencl_use_pinned_memory(const int devid);
@@ -512,6 +557,16 @@ typedef struct dt_opencl_t
   int stopped;
   int error_count;
 } dt_opencl_t;
+typedef struct dt_opencl_detected_device_t
+{
+  int config_id;
+  char *name;
+  char *cname;
+  unsigned int cltype;
+  int disabled;
+  int pinned_memory;
+  size_t forced_headroom;
+} dt_opencl_detected_device_t;
 static inline void dt_opencl_init(dt_opencl_t *cl, const gboolean exclude_opencl, const gboolean print_statistics)
 {
   cl->inited = 0;
@@ -595,6 +650,38 @@ static inline void dt_opencl_disable(void)
 static inline int dt_opencl_update_settings(void)
 {
   return 0;
+}
+static inline int dt_opencl_get_detected_device_count(void)
+{
+  return 0;
+}
+static inline const dt_opencl_detected_device_t *dt_opencl_get_detected_device(const int detected)
+{
+  return NULL;
+}
+static inline gboolean dt_opencl_detected_device_enabled(const int detected)
+{
+  return FALSE;
+}
+static inline int dt_opencl_set_detected_device_enabled(const int detected, const gboolean enabled)
+{
+  return -1;
+}
+static inline gboolean dt_opencl_detected_device_pinned_memory(const int detected)
+{
+  return FALSE;
+}
+static inline int dt_opencl_set_detected_device_pinned_memory(const int detected, const gboolean enabled)
+{
+  return -1;
+}
+static inline size_t dt_opencl_detected_device_headroom(const int detected)
+{
+  return 0;
+}
+static inline int dt_opencl_set_detected_device_headroom(const int detected, const size_t headroom)
+{
+  return -1;
 }
 static inline gboolean dt_opencl_image_fits_device(const int devid, const size_t width, const size_t height,
                                               const unsigned bpp, const float factor, const size_t overhead)
