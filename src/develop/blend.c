@@ -656,8 +656,10 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *p
   gboolean parametric_used = FALSE;
   dt_develop_blend_get_mask_usage(self, d, &top_enabled, &raster_used, &drawn_used, &parametric_used);
   if(!top_enabled) return 0;
-  const unsigned int preview_mask_mode = (raster_used ? DEVELOP_MASK_RASTER : 0)
-                                         | ((drawn_used || parametric_used) ? DEVELOP_MASK_SHAPE_PARAMETRIC : 0);
+  // A mask preview request must also be honored when every sub-mask is neutral.
+  // In that case no raster/drawn/parametric mask is "used", but the effective
+  // blend mask is still the uniform opacity mask written into alpha below.
+  const gboolean preview_mask_mode = top_enabled;
 
   const size_t ch = piece->dsc_in.channels;           // the number of channels in the buffer
   const int xoffs = roi_out->x - roi_in->x;
@@ -733,7 +735,16 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *p
   }
   else
   {
-    if(raster_used)
+    if(!raster_used && !drawn_used)
+    {
+      // Parametric-only blending has no raster/drawn form mask to seed `mask`.
+      // The combination code below loops on parametric channels and composes them
+      // with that form mask, so initialize it as the neutral value of the chosen
+      // mask-combine operator.
+      const float fill = (d->mask_combine & DEVELOP_COMBINE_INCL) ? 0.0f : 1.0f;
+      dt_iop_image_fill(mask, fill, owidth, oheight, 1);
+    }
+    else if(raster_used)
     {
       _develop_blend_init_raster_mask(d, self, pipe, piece, mask, owidth, oheight, &raster_error);
 
@@ -1061,8 +1072,10 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_t
   dt_develop_blend_get_mask_usage(self, d, &top_enabled, &raster_used, &drawn_used, &parametric_used);
   if(!top_enabled) return 0;
   const unsigned int mask_mode = d->mask_mode;
-  const unsigned int preview_mask_mode = (raster_used ? DEVELOP_MASK_RASTER : 0)
-                                         | ((drawn_used || parametric_used) ? DEVELOP_MASK_SHAPE_PARAMETRIC : 0);
+  // A mask preview request must also be honored when every sub-mask is neutral.
+  // In that case no raster/drawn/parametric mask is "used", but the effective
+  // blend mask is still the uniform opacity mask written into alpha below.
+  const gboolean preview_mask_mode = top_enabled;
 
   const int ch = piece->dsc_in.channels; // the number of channels in the buffer
   const int xoffs = roi_out->x - roi_in->x;
@@ -1225,7 +1238,15 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_t
   }
   else
   {
-    if(raster_used)
+    if(!raster_used && !drawn_used)
+    {
+      // Parametric-only blending has no raster/drawn form mask to seed `mask`.
+      // The OpenCL mask kernel reads that form mask from `dev_mask_1`, so keep
+      // the CPU staging buffer explicit and initialized before upload.
+      const float fill = (d->mask_combine & DEVELOP_COMBINE_INCL) ? 0.0f : 1.0f;
+      dt_iop_image_fill(mask, fill, owidth, oheight, 1);
+    }
+    else if(raster_used)
     {
       int raster_error = 0;
       _develop_blend_init_raster_mask(d, self, pipe, piece, mask, owidth, oheight, &raster_error);
