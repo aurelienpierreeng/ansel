@@ -109,6 +109,10 @@ static sqlite3_stmt *_iop_presets_select_stmt = NULL;
 #include <strings.h>
 #include <time.h>
 
+#define DT_IOP_HEADER_MENU_OPEN "dt-module-header-menu-open"
+#define DT_IOP_HEADER_MENU_DISMISS_CLICK "dt-module-header-menu-dismiss-click"
+#define DT_IOP_HEADER_IGNORE_RELEASE "dt-module-header-ignore-release"
+
 typedef struct dt_iop_gui_simple_callback_t
 {
   dt_iop_module_t *self;
@@ -1003,6 +1007,32 @@ static void _gui_rename_callback(GtkButton *button, dt_iop_module_t *module)
   dt_iop_gui_rename_module(module);
 }
 
+static gboolean _iop_plugin_header_menu_dismiss_idle(gpointer user_data)
+{
+  GtkWidget *expander = GTK_WIDGET(user_data);
+  if(GTK_IS_WIDGET(expander))
+    g_object_set_data(G_OBJECT(expander), DT_IOP_HEADER_MENU_DISMISS_CLICK, NULL);
+
+  g_object_unref(expander);
+  return G_SOURCE_REMOVE;
+}
+
+static void _iop_plugin_header_menu_deactivate(GtkWidget *menu, gpointer user_data)
+{
+  GtkWidget *expander = GTK_WIDGET(user_data);
+  if(!GTK_IS_WIDGET(expander)) return;
+
+  /**
+   * Keep the dismiss-click marker until the next main-loop pass. GTK first
+   * deactivates the menu, then may deliver the same pointer event to the
+   * module header underneath. That event closes the menu only; it must not
+   * also toggle the expander state.
+   */
+  g_object_set_data(G_OBJECT(expander), DT_IOP_HEADER_MENU_OPEN, NULL);
+  g_object_set_data(G_OBJECT(expander), DT_IOP_HEADER_MENU_DISMISS_CLICK, GINT_TO_POINTER(TRUE));
+  g_idle_add(_iop_plugin_header_menu_dismiss_idle, g_object_ref(expander));
+}
+
 static gboolean _gui_multiinstance_callback(GtkButton *button, GdkEventButton *event, gpointer user_data)
 {
   dt_iop_module_t *module = (dt_iop_module_t *)user_data;
@@ -1043,6 +1073,14 @@ static gboolean _gui_multiinstance_callback(GtkButton *button, GdkEventButton *e
   item = gtk_menu_item_new_with_label(_("rename"));
   g_signal_connect(G_OBJECT(item), "activate", G_CALLBACK(_gui_rename_callback), module);
   gtk_menu_shell_append(menu, item);
+
+  if(!IS_NULL_PTR(module->expander))
+  {
+    g_object_set_data(G_OBJECT(module->expander), DT_IOP_HEADER_MENU_OPEN, GINT_TO_POINTER(TRUE));
+    g_signal_connect_data(G_OBJECT(menu), "deactivate",
+                          G_CALLBACK(_iop_plugin_header_menu_deactivate),
+                          g_object_ref(module->expander), (GClosureNotify)g_object_unref, 0);
+  }
 
   dt_gui_menu_popup(GTK_MENU(menu), GTK_WIDGET(button), GDK_GRAVITY_SOUTH_EAST, GDK_GRAVITY_NORTH_EAST);
 
@@ -2134,6 +2172,14 @@ static void _presets_popup_callback(GtkButton *button, dt_iop_module_t *module)
 
   dt_gui_presets_popup_menu_show_for_module(module);
 
+  if(!IS_NULL_PTR(module->expander) && !IS_NULL_PTR(darktable.gui->presets_popup_menu))
+  {
+    g_object_set_data(G_OBJECT(module->expander), DT_IOP_HEADER_MENU_OPEN, GINT_TO_POINTER(TRUE));
+    g_signal_connect_data(G_OBJECT(darktable.gui->presets_popup_menu), "deactivate",
+                          G_CALLBACK(_iop_plugin_header_menu_deactivate),
+                          g_object_ref(module->expander), (GClosureNotify)g_object_unref, 0);
+  }
+
   dt_gui_menu_popup(darktable.gui->presets_popup_menu, GTK_WIDGET(button), GDK_GRAVITY_SOUTH_EAST, GDK_GRAVITY_NORTH_EAST);
 }
 
@@ -2396,6 +2442,15 @@ static gboolean _iop_plugin_header_button_press(GtkWidget *w, GdkEventButton *e,
   if(e->type == GDK_2BUTTON_PRESS || e->type == GDK_3BUTTON_PRESS) return TRUE;
 
   dt_iop_module_t *module = (dt_iop_module_t *)user_data;
+  if(IS_NULL_PTR(module)) return FALSE;
+
+  if(!IS_NULL_PTR(module->expander)
+     && (g_object_get_data(G_OBJECT(module->expander), DT_IOP_HEADER_MENU_OPEN)
+         || g_object_get_data(G_OBJECT(module->expander), DT_IOP_HEADER_MENU_DISMISS_CLICK)))
+  {
+    g_object_set_data(G_OBJECT(module->expander), DT_IOP_HEADER_IGNORE_RELEASE, GINT_TO_POINTER(TRUE));
+    return TRUE;
+  }
 
   /* Reset the scrolling focus. If the click happened on any bauhaus element,
    * its internal button_press method will set it for itself */
@@ -2430,6 +2485,18 @@ static gboolean _iop_plugin_header_button_release(GtkWidget *w, GdkEventButton *
 
   dt_iop_module_t *module = (dt_iop_module_t *)user_data;
   if(IS_NULL_PTR(module) || !module->expander) return FALSE;
+
+  if(g_object_get_data(G_OBJECT(module->expander), DT_IOP_HEADER_IGNORE_RELEASE))
+  {
+    g_object_set_data(G_OBJECT(module->expander), DT_IOP_HEADER_IGNORE_RELEASE, NULL);
+    return TRUE;
+  }
+
+  if(g_object_get_data(G_OBJECT(module->expander), DT_IOP_HEADER_MENU_OPEN)
+     || g_object_get_data(G_OBJECT(module->expander), DT_IOP_HEADER_MENU_DISMISS_CLICK))
+  {
+    return TRUE;
+  }
 
   if(g_object_get_data(G_OBJECT(module->expander), "dt-module-header-child-click"))
   {
