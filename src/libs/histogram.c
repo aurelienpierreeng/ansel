@@ -1195,13 +1195,15 @@ static void _process_waveform(dt_backbuf_t *backbuf, const char *op, cairo_t *cr
       }
     }
   uint32_t *smooth_bins = NULL;
-  dt_print(DT_DEBUG_DEV,
-           "[histogram/scope] waveform setup op=%s parade=%d vertical=%d widget=%dx%d backbuf=%zux%zu "
-           "tone_bins=%zu raster_extent=%zu source_axis=%zu source_per_raster=%.4f binning_size=%zu "
-           "source_value=%0.6f..%0.6f clipped=%zu nan=%zu sample_step=%zu\n",
-           op, parade, vertical, width, height, backbuf->width, backbuf->height,
-           tone_bins, raster_extent, source_axis, (double)source_axis / (double)raster_extent,
-           binning_size, source_min, source_max, source_clipped, source_nan, source_step);
+
+  if(darktable.unmuted & DT_DEBUG_VERBOSE)
+    dt_print(DT_DEBUG_DEV,
+            "[histogram/scope] waveform setup op=%s parade=%d vertical=%d widget=%dx%d backbuf=%zux%zu "
+            "tone_bins=%zu raster_extent=%zu source_axis=%zu source_per_raster=%.4f binning_size=%zu "
+            "source_value=%0.6f..%0.6f clipped=%zu nan=%zu sample_step=%zu\n",
+            op, parade, vertical, width, height, backbuf->width, backbuf->height,
+            tone_bins, raster_extent, source_axis, (double)source_axis / (double)raster_extent,
+            binning_size, source_min, source_max, source_clipped, source_nan, source_step);
   uint32_t *const restrict bins = dt_pixelpipe_cache_alloc_align_cache(
       binning_size * sizeof(uint32_t),
       0);
@@ -1210,9 +1212,10 @@ static void _process_waveform(dt_backbuf_t *backbuf, const char *op, cairo_t *cr
       0);
   if(IS_NULL_PTR(image) || IS_NULL_PTR(bins))
   {
-    dt_print(DT_DEBUG_DEV,
-             "[histogram/scope] waveform allocation failed bins=%p image=%p binning_size=%zu image_size=%zu\n",
-             (void *)bins, (void *)image, binning_size, image_size);
+    if(darktable.unmuted & DT_DEBUG_VERBOSE)
+      dt_print(DT_DEBUG_DEV,
+              "[histogram/scope] waveform allocation failed bins=%p image=%p binning_size=%zu image_size=%zu\n",
+              (void *)bins, (void *)image, binning_size, image_size);
     goto error;
   }
 
