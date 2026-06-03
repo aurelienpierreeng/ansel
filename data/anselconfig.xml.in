@@ -2047,6 +2047,13 @@
     <longdescription />
   </dtconfig>
   <dtconfig>
+    <name>plugin/darkroom/histogram/scope_height</name>
+    <type min="120" max="3000">int</type>
+    <default>250</default>
+    <shortdescription>Height of the scope display</shortdescription>
+    <longdescription />
+  </dtconfig>
+  <dtconfig>
     <name>plugins/darkroom/atrous/aspect_percent</name>
     <type min="50" max="100">int</type>
     <default>56</default>

@@ -84,8 +84,16 @@
 #endif
 
 #define HISTOGRAM_BINS 256
-#define TONES 128
 #define GAMMA 1.f / 1.5f
+#define DT_LIB_HISTOGRAM_SCOPE_ENABLE_SMOOTHING 1
+#define DT_LIB_HISTOGRAM_SCOPE_SMOOTH_SPATIAL_PASSES 1
+#define DT_LIB_HISTOGRAM_SCOPE_SMOOTH_TONE_PASSES 4
+#define DT_LIB_HISTOGRAM_SCOPE_SMOOTH_FORCE (256 * 0.33)
+#define DT_LIB_HISTOGRAM_SCOPE_DEFAULT_HEIGHT 250
+#define DT_LIB_HISTOGRAM_SCOPE_MIN_HEIGHT 120
+#define DT_LIB_HISTOGRAM_SCOPE_MAX_HEIGHT 500
+#define DT_LIB_HISTOGRAM_SCOPE_HANDLE_HEIGHT 8
+#define DT_LIB_HISTOGRAM_SCOPE_HEIGHT_CONF "plugin/darkroom/histogram/scope_height"
 
 DT_MODULE(1)
 
@@ -131,11 +139,16 @@ typedef struct dt_lib_histogram_t
 {
   struct dt_lib_module_t *module;
   GtkWidget *scope_draw;               // GtkDrawingArea -- scope, scale, and draggable overlays
+  GtkWidget *scope_resize_handle;      // GtkDrawingArea -- vertical resize grip kept outside the rendered scope
   GtkWidget *stage;                    // Module at which stage we sample histogram
   GtkWidget *display;                  // Kind of display
   dt_backbuf_t *backbuf;               // reference to the dev backbuf currently in use
   const char *op;
   float zoom; // zoom level for the vectorscope
+  gboolean scope_resize_dragging;
+  int scope_resize_start_y;
+  int scope_resize_start_height;
+  int scope_height;
 
   dt_lib_histogram_cache_t cache;
   cairo_surface_t *cst;
@@ -949,27 +962,84 @@ static void _process_histogram(dt_backbuf_t *backbuf, const char *op, cairo_t *c
 static inline void _bin_pixels_waveform_in_roi(const float *const restrict image, uint32_t *const restrict bins,
                                                const size_t min_x, const size_t max_x,
                                                const size_t min_y, const size_t max_y,
-                                               const size_t width,
-                                               const size_t binning_size,
+                                               const size_t source_width, const size_t source_height,
+                                               const size_t tone_bins, const size_t raster_extent,
                                                const gboolean vertical)
 {
-  // Process
-  __OMP_PARALLEL_FOR__(shared(bins)  collapse(3))
-  for(size_t i = min_y; i < max_y; i++)
-    for(size_t j = min_x; j < max_x; j++)
-      for(size_t c = 0; c < 3; c++)
+  if(vertical)
+  {
+    /* In vertical waveform/parade, pixel value is drawn along the widget width and source image
+     * position along the widget height. We therefore loop on final raster rows and collect the
+     * source rows that map there, so both axes have the same detail as the drawn surface. */
+    __OMP_PARALLEL_FOR__(shared(bins))
+    for(size_t raster_y = 0; raster_y < raster_extent; raster_y++)
+    {
+      const double source_y0d = (double)raster_y * (double)source_height / (double)raster_extent;
+      const double source_y1d = (double)(raster_y + 1) * (double)source_height / (double)raster_extent;
+      const size_t source_y0 = MAX(min_y, (size_t)floor(source_y0d));
+      const size_t source_y1 = MIN(max_y, (size_t)ceil(source_y1d));
+      if(source_y0 >= source_y1) continue;
+
+      for(size_t i = source_y0; i < source_y1; i++)
       {
-        const float value = image[(i * width + j) * 4 + c];
-        const size_t index = (uint8_t)CLAMP(roundf(value * (TONES - 1)), 0, TONES - 1);
-        if(vertical)
-          bins[((i * (TONES)) + index) * 4 + c]++;
-        else
-          bins[(((TONES - 1) - index) * width + j) * 4 + c]++;
+        const double overlap = MIN((double)(i + 1), source_y1d) - MAX((double)i, source_y0d);
+        const uint32_t weight = MAX(1u, (uint32_t)round(overlap * 256.));
+        __OMP_PARALLEL_FOR__(shared(bins) collapse(2))
+        for(size_t j = min_x; j < max_x; j++)
+          for(size_t c = 0; c < 3; c++)
+          {
+            const float value = image[(i * source_width + j) * 4 + c];
+            const float tone_position = CLAMPF(value, 0.f, 1.f) * (float)(tone_bins - 1);
+            const size_t tone0 = (size_t)floorf(tone_position);
+            const size_t tone1 = MIN(tone0 + 1, tone_bins - 1);
+            const float tone_mix = tone_position - (float)tone0;
+            const uint32_t weight1 = (uint32_t)roundf((float)weight * tone_mix);
+            const uint32_t weight0 = weight - weight1;
+            bins[(raster_y * tone_bins + tone0) * 4 + c] += weight0;
+            bins[(raster_y * tone_bins + tone1) * 4 + c] += weight1;
+          }
       }
+    }
+  }
+  else
+  {
+    /* In horizontal waveform/parade, pixel value is drawn along the widget height and source image
+     * position along the widget width. Each final raster column owns disjoint bins, avoiding races. */
+    __OMP_PARALLEL_FOR__(shared(bins))
+    for(size_t raster_x = 0; raster_x < raster_extent; raster_x++)
+    {
+      const double source_x0d = (double)raster_x * (double)source_width / (double)raster_extent;
+      const double source_x1d = (double)(raster_x + 1) * (double)source_width / (double)raster_extent;
+      const size_t source_x0 = MAX(min_x, (size_t)floor(source_x0d));
+      const size_t source_x1 = MIN(max_x, (size_t)ceil(source_x1d));
+      if(source_x0 >= source_x1) continue;
+
+      for(size_t j = source_x0; j < source_x1; j++)
+      {
+        const double overlap = MIN((double)(j + 1), source_x1d) - MAX((double)j, source_x0d);
+        const uint32_t weight = MAX(1u, (uint32_t)round(overlap * 256.));
+        __OMP_PARALLEL_FOR__(shared(bins) collapse(2))
+        for(size_t i = min_y; i < max_y; i++)
+          for(size_t c = 0; c < 3; c++)
+          {
+            const float value = image[(i * source_width + j) * 4 + c];
+            const float tone_position = CLAMPF(value, 0.f, 1.f) * (float)(tone_bins - 1);
+            const size_t tone0 = (size_t)floorf(tone_position);
+            const size_t tone1 = MIN(tone0 + 1, tone_bins - 1);
+            const float tone_mix = tone_position - (float)tone0;
+            const uint32_t weight1 = (uint32_t)roundf((float)weight * tone_mix);
+            const uint32_t weight0 = weight - weight1;
+            bins[((tone_bins - 1 - tone0) * raster_extent + raster_x) * 4 + c] += weight0;
+            bins[((tone_bins - 1 - tone1) * raster_extent + raster_x) * 4 + c] += weight1;
+          }
+      }
+    }
+  }
 }
 
 static inline void _bin_pickers_waveforms(const float *const restrict image, uint32_t *const restrict bins,
-                                          const size_t width, const size_t height, const size_t binning_size,
+                                          const size_t width, const size_t height,
+                                          const size_t tone_bins, const size_t raster_extent,
                                           const gboolean vertical, dt_colorpicker_sample_t *sample)
 {
   if(sample->size == DT_LIB_COLORPICKER_SIZE_BOX)
@@ -982,7 +1052,8 @@ static inline void _bin_pickers_waveforms(const float *const restrict image, uin
       CLAMP((size_t)roundf(image_box[2] * width), 0, width),
       CLAMP((size_t)roundf(image_box[3] * height), 0, height)
     };
-    _bin_pixels_waveform_in_roi(image, bins, box[0], box[2], box[1], box[3], width, binning_size, vertical);
+    _bin_pixels_waveform_in_roi(image, bins, box[0], box[2], box[1], box[3],
+                                width, height, tone_bins, raster_extent, vertical);
   }
   else
   {
@@ -990,13 +1061,15 @@ static inline void _bin_pickers_waveforms(const float *const restrict image, uin
     _sample_raw_point_to_image_norm(sample, image_point);
     const size_t x = CLAMP((size_t)roundf(image_point[0] * width), 0, width - 1);
     const size_t y = CLAMP((size_t)roundf(image_point[1] * height), 0, height - 1);
-    _bin_pixels_waveform_in_roi(image, bins, x, x + 1, y, y + 1, width, binning_size, vertical);
+    _bin_pixels_waveform_in_roi(image, bins, x, x + 1, y, y + 1,
+                                width, height, tone_bins, raster_extent, vertical);
   }
 }
 
 
 static inline void _bin_pixels_waveform(const float *const restrict image, uint32_t *const restrict bins,
                                         const size_t width, const size_t height, const size_t binning_size,
+                                        const size_t tone_bins, const size_t raster_extent,
                                         const gboolean vertical)
 {
   // Init
@@ -1010,18 +1083,19 @@ static inline void _bin_pixels_waveform(const float *const restrict image, uint3
     while(samples)
     {
       dt_colorpicker_sample_t *sample = samples->data;
-      _bin_pickers_waveforms(image, bins, width, height, binning_size, vertical, sample);
+      _bin_pickers_waveforms(image, bins, width, height, tone_bins, raster_extent, vertical, sample);
       samples = g_slist_next(samples);
     }
 
     if(darktable.develop->color_picker.picker)
-      _bin_pickers_waveforms(image, bins, width, height, binning_size, vertical,
+      _bin_pickers_waveforms(image, bins, width, height, tone_bins, raster_extent, vertical,
                              darktable.develop->color_picker.primary_sample);
   }
   else
   {
     // Bin the whole image
-    _bin_pixels_waveform_in_roi(image, bins, 0, width, 0, height, width, binning_size, vertical);
+    _bin_pixels_waveform_in_roi(image, bins, 0, width, 0, height,
+                                width, height, tone_bins, raster_extent, vertical);
   }
 }
 
@@ -1041,72 +1115,22 @@ static void _create_waveform_image(const uint32_t *const restrict bins, uint8_t 
   }
 }
 
-static void _mask_waveform(const uint8_t *const restrict image, uint8_t *const restrict masked, const size_t width, const size_t height, const size_t channel)
-{
-  // Channel masking, aka extract the desired channel out of the RGBa image
-  uint8_t mask[4] = { 0, 0, 0, 0 };
-  mask[channel] = 1;
-
-  __OMP_PARALLEL_FOR__(collapse(2))
-  for(size_t i = 0; i < height; i++)
-    for(size_t j = 0; j < width; j++)
-    {
-      const size_t index = (i * width + j) * 4;
-      const uint8_t *const restrict pixel_in = image + index;
-      uint8_t *const restrict pixel_out = masked + index;
-
-      __OMP_SIMD__(aligned(mask, pixel_in, pixel_out: 16))
-      for(size_t c = 0; c < 4; c++) pixel_out[c] = pixel_in[c] * mask[c];
-    }
-}
-
-static void _paint_waveform(cairo_t *cr, uint8_t *const restrict image, const int width, const int height, const size_t img_width, const size_t img_height, const gboolean vertical)
+static void _paint_waveform(cairo_t *cr, uint8_t *const restrict image, const int width, const int height,
+                            const size_t img_width, const size_t img_height, const size_t tone_bins,
+                            const gboolean vertical)
 {
   const size_t stride = cairo_format_stride_for_width(CAIRO_FORMAT_ARGB32, img_width);
   cairo_surface_t *background = cairo_image_surface_create_for_data(image, CAIRO_FORMAT_ARGB32, img_width, img_height, stride);
-  const double scale_w = (vertical) ? (double)width / (double)TONES
+  const double scale_w = (vertical) ? (double)width / (double)tone_bins
                                     : (double)width / (double)img_width;
   const double scale_h = (vertical) ? (double)height / (double)img_height
-                                    : (double)height / (double)TONES;
+                                    : (double)height / (double)tone_bins;
   cairo_scale(cr, scale_w, scale_h);
   cairo_set_operator(cr, CAIRO_OPERATOR_ADD);
   cairo_set_source_surface(cr, background, 0., 0.);
   cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_BEST);
   cairo_paint(cr);
   cairo_surface_destroy(background);
-}
-
-static void _paint_parade(cairo_t *cr, uint8_t *const restrict image, const int width, const int height, const size_t img_width, const size_t img_height, const gboolean vertical)
-{
-  const size_t stride = cairo_format_stride_for_width(CAIRO_FORMAT_ARGB32, img_width);
-  const double scale_w = (vertical) ? (double)width / (double)TONES
-                                    : (double)width / (double)img_width / 3.;
-  const double scale_h = (vertical) ? (double)height / (double)img_height / 3.
-                                    : (double)height / (double)TONES;
-  cairo_set_operator(cr, CAIRO_OPERATOR_ADD);
-  cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_BEST);
-  cairo_scale(cr, scale_w, scale_h);
-
-  // The parade is basically a waveform where channels are shown
-  // next to each other instead of on top of each other.
-  // We need to isolate each channel, then paint it at a third of the nominal image width/height.
-  for(int c = 0; c < 3; c++)
-  {
-    uint8_t *const restrict channel = dt_pixelpipe_cache_alloc_align_cache(
-        img_width * img_height * 4 * sizeof(uint8_t),
-        0);
-    if(channel)
-    {
-      _mask_waveform(image, channel, img_width, img_height, c);
-      cairo_surface_t *background = cairo_image_surface_create_for_data(channel, CAIRO_FORMAT_ARGB32, img_width, img_height, stride);
-      const double x = (vertical) ? 0. : (double)c * img_width;
-      const double y = (vertical) ? (double)c * img_height : 0.;
-      cairo_set_source_surface(cr, background, x, y);
-      cairo_paint(cr);
-      cairo_surface_destroy(background);
-      dt_pixelpipe_cache_free_align(channel);
-    }
-  }
 }
 
 
@@ -1137,30 +1161,264 @@ static void _process_waveform(dt_backbuf_t *backbuf, const char *op, cairo_t *cr
 
   dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, entry);
 
-  const size_t binning_size = (vertical) ? 4 * TONES * backbuf->height : 4 * TONES * backbuf->width;
+  /* The value axis must match the final drawing axis: widget height for horizontal scopes and
+   * widget width for vertical scopes. Keeping it fixed forces Cairo to stretch sparse
+   * value rows/columns, which shows as hatching when the scope is resized. */
+  const size_t tone_bins = MAX(2, (vertical) ? width : height);
+  /* The source-position axis must also match the final raster size. Otherwise Cairo stretches the
+   * preview-pipe dimensions to the scope allocation, which can leave visible regular stripes. */
+  const size_t raster_extent = MAX(2, (vertical)
+      ? (parade ? (height + 2) / 3 : height)
+      : (parade ? (width + 2) / 3 : width));
+  const size_t binning_size = 4 * tone_bins * raster_extent;
+  const size_t img_width = (parade) ? width : ((vertical) ? tone_bins : raster_extent);
+  const size_t img_height = (parade) ? height : ((vertical) ? raster_extent : tone_bins);
+  const size_t image_size = 4 * img_width * img_height;
+  const size_t source_axis = (vertical) ? backbuf->height : backbuf->width;
+  float source_min = INFINITY;
+  float source_max = -INFINITY;
+  size_t source_clipped = 0;
+  size_t source_nan = 0;
+  const size_t source_step = MAX((size_t)1, (backbuf->width * backbuf->height) / 4096);
+  for(size_t pixel = 0; pixel < backbuf->width * backbuf->height; pixel += source_step)
+    for(size_t c = 0; c < 3; c++)
+    {
+      const float value = ((const float *)data)[pixel * 4 + c];
+      if(isnan(value))
+        source_nan++;
+      else
+      {
+        source_min = fminf(source_min, value);
+        source_max = fmaxf(source_max, value);
+        source_clipped += (value < 0.f || value > 1.f);
+      }
+    }
+  uint32_t *smooth_bins = NULL;
+  dt_print(DT_DEBUG_DEV,
+           "[histogram/scope] waveform setup op=%s parade=%d vertical=%d widget=%dx%d backbuf=%zux%zu "
+           "tone_bins=%zu raster_extent=%zu source_axis=%zu source_per_raster=%.4f binning_size=%zu "
+           "source_value=%0.6f..%0.6f clipped=%zu nan=%zu sample_step=%zu\n",
+           op, parade, vertical, width, height, backbuf->width, backbuf->height,
+           tone_bins, raster_extent, source_axis, (double)source_axis / (double)raster_extent,
+           binning_size, source_min, source_max, source_clipped, source_nan, source_step);
   uint32_t *const restrict bins = dt_pixelpipe_cache_alloc_align_cache(
       binning_size * sizeof(uint32_t),
       0);
   uint8_t *const restrict image = dt_pixelpipe_cache_alloc_align_cache(
-      binning_size * sizeof(uint8_t),
+      image_size * sizeof(uint8_t),
       0);
-  if(IS_NULL_PTR(image) || IS_NULL_PTR(bins)) goto error;
+  if(IS_NULL_PTR(image) || IS_NULL_PTR(bins))
+  {
+    dt_print(DT_DEBUG_DEV,
+             "[histogram/scope] waveform allocation failed bins=%p image=%p binning_size=%zu image_size=%zu\n",
+             (void *)bins, (void *)image, binning_size, image_size);
+    goto error;
+  }
 
   // 1. Pixel binning along columns/rows, aka compute a column/row-wise histogram
-  _bin_pixels_waveform(data, bins, backbuf->width, backbuf->height, binning_size, vertical);
+  _bin_pixels_waveform(data, bins, backbuf->width, backbuf->height, binning_size,
+                       tone_bins, raster_extent, vertical);
+
+  const uint32_t *render_bins = bins;
+  int smoothing_passes = 0;
+#if DT_LIB_HISTOGRAM_SCOPE_ENABLE_SMOOTHING \
+    && (DT_LIB_HISTOGRAM_SCOPE_SMOOTH_SPATIAL_PASSES > 0 \
+        || DT_LIB_HISTOGRAM_SCOPE_SMOOTH_TONE_PASSES > 0)
+  smooth_bins = dt_pixelpipe_cache_alloc_align_cache(binning_size * sizeof(uint32_t), 0);
+  const uint32_t smoothing_force = CLAMP(DT_LIB_HISTOGRAM_SCOPE_SMOOTH_FORCE, 0, 256);
+  if(!IS_NULL_PTR(smooth_bins) && smoothing_force > 0)
+  {
+    /* The waveform/parade is a spatially-indexed histogram. Even after fractional resampling,
+     * isolated source-column content can create one-pixel density modulation that reads as stries.
+     * The passes below are explicit at call site because the source/destination ownership matters:
+     * bins and smooth_bins alternate roles, and render_bins always records the last valid raster. */
+    const uint32_t original_force = 256u - smoothing_force;
+
+    for(int pass = 0; pass < DT_LIB_HISTOGRAM_SCOPE_SMOOTH_SPATIAL_PASSES; pass++)
+    {
+      const uint32_t *const source_bins = render_bins;
+      uint32_t *const target_bins = (source_bins == bins) ? smooth_bins : bins;
+
+      if(vertical)
+      {
+        for(size_t axis = 0; axis < raster_extent; axis++)
+        {
+          const size_t axis_m2 = (axis > 1) ? axis - 2 : 0;
+          const size_t axis_m1 = (axis > 0) ? axis - 1 : 0;
+          const size_t axis_p1 = MIN(axis + 1, raster_extent - 1);
+          const size_t axis_p2 = MIN(axis + 2, raster_extent - 1);
+          for(size_t tone = 0; tone < tone_bins; tone++)
+            for(size_t c = 0; c < 4; c++)
+            {
+              const size_t index = (axis * tone_bins + tone) * 4 + c;
+              const uint64_t smoothed = source_bins[(axis_m2 * tone_bins + tone) * 4 + c]
+                                      + 4u * source_bins[(axis_m1 * tone_bins + tone) * 4 + c]
+                                      + 6u * source_bins[index]
+                                      + 4u * source_bins[(axis_p1 * tone_bins + tone) * 4 + c]
+                                      + source_bins[(axis_p2 * tone_bins + tone) * 4 + c];
+              const uint64_t blended = original_force * source_bins[index]
+                                     + smoothing_force * ((smoothed + 8u) / 16u);
+              target_bins[index] = (uint32_t)((blended + 128u) / 256u);
+            }
+        }
+      }
+      else
+      {
+        for(size_t tone = 0; tone < tone_bins; tone++)
+          for(size_t axis = 0; axis < raster_extent; axis++)
+          {
+            const size_t axis_m2 = (axis > 1) ? axis - 2 : 0;
+            const size_t axis_m1 = (axis > 0) ? axis - 1 : 0;
+            const size_t axis_p1 = MIN(axis + 1, raster_extent - 1);
+            const size_t axis_p2 = MIN(axis + 2, raster_extent - 1);
+            for(size_t c = 0; c < 4; c++)
+            {
+              const size_t index = (tone * raster_extent + axis) * 4 + c;
+              const uint64_t smoothed = source_bins[(tone * raster_extent + axis_m2) * 4 + c]
+                                      + 4u * source_bins[(tone * raster_extent + axis_m1) * 4 + c]
+                                      + 6u * source_bins[index]
+                                      + 4u * source_bins[(tone * raster_extent + axis_p1) * 4 + c]
+                                      + source_bins[(tone * raster_extent + axis_p2) * 4 + c];
+              const uint64_t blended = original_force * source_bins[index]
+                                     + smoothing_force * ((smoothed + 8u) / 16u);
+              target_bins[index] = (uint32_t)((blended + 128u) / 256u);
+            }
+          }
+      }
+
+      render_bins = target_bins;
+      smoothing_passes++;
+    }
+
+    for(int pass = 0; pass < DT_LIB_HISTOGRAM_SCOPE_SMOOTH_TONE_PASSES; pass++)
+    {
+      const uint32_t *const source_bins = render_bins;
+      uint32_t *const target_bins = (source_bins == bins) ? smooth_bins : bins;
+
+      if(vertical)
+      {
+        for(size_t axis = 0; axis < raster_extent; axis++)
+          for(size_t tone = 0; tone < tone_bins; tone++)
+          {
+            const size_t tone_m1 = (tone > 0) ? tone - 1 : 0;
+            const size_t tone_p1 = MIN(tone + 1, tone_bins - 1);
+            for(size_t c = 0; c < 4; c++)
+            {
+              const size_t index = (axis * tone_bins + tone) * 4 + c;
+              const uint64_t smoothed = source_bins[(axis * tone_bins + tone_m1) * 4 + c]
+                                      + 2u * source_bins[index]
+                                      + source_bins[(axis * tone_bins + tone_p1) * 4 + c];
+              const uint64_t blended = original_force * source_bins[index]
+                                     + smoothing_force * ((smoothed + 2u) / 4u);
+              target_bins[index] = (uint32_t)((blended + 128u) / 256u);
+            }
+          }
+      }
+      else
+      {
+        for(size_t tone = 0; tone < tone_bins; tone++)
+        {
+          const size_t tone_m1 = (tone > 0) ? tone - 1 : 0;
+          const size_t tone_p1 = MIN(tone + 1, tone_bins - 1);
+          for(size_t axis = 0; axis < raster_extent; axis++)
+            for(size_t c = 0; c < 4; c++)
+            {
+              const size_t index = (tone * raster_extent + axis) * 4 + c;
+              const uint64_t smoothed = source_bins[(tone_m1 * raster_extent + axis) * 4 + c]
+                                      + 2u * source_bins[index]
+                                      + source_bins[(tone_p1 * raster_extent + axis) * 4 + c];
+              const uint64_t blended = original_force * source_bins[index]
+                                     + smoothing_force * ((smoothed + 2u) / 4u);
+              target_bins[index] = (uint32_t)((blended + 128u) / 256u);
+            }
+        }
+      }
+
+      render_bins = target_bins;
+      smoothing_passes++;
+    }
+  }
+#endif
 
   // 2. Paint image.
   // In a 1D histogram, pixel frequencies are shown as height (y axis) for each RGB quantum (x axis).
   // Here, we do a sort of 2D histogram : pixel frequencies are shown as opacity ("z" axis),
   // for each image column (x axis), for each RGB quantum (y axis)
-  const size_t img_width = (vertical) ? TONES : backbuf->width;
-  const size_t img_height = (vertical) ? backbuf->height : TONES;
-  const uint32_t overall_max_hist = _find_max_histogram(bins, binning_size);
-  _create_waveform_image(bins, image, overall_max_hist, img_width, img_height);
+  const uint32_t overall_max_hist = _find_max_histogram(render_bins, binning_size);
+  size_t empty_axis = 0;
+  uint64_t min_axis = UINT64_MAX;
+  uint64_t max_axis = 0;
+  uint32_t min_axis_peak = UINT32_MAX;
+  uint32_t max_axis_peak = 0;
+  for(size_t axis = 0; axis < raster_extent; axis++)
+  {
+    uint64_t axis_total = 0;
+    uint32_t axis_peak = 0;
+    for(size_t tone = 0; tone < tone_bins; tone++)
+    {
+      const size_t pixel = (vertical) ? axis * tone_bins + tone : tone * raster_extent + axis;
+      for(size_t c = 0; c < 3; c++)
+      {
+        const uint32_t value = render_bins[pixel * 4 + c];
+        axis_total += value;
+        axis_peak = MAX(axis_peak, value);
+      }
+    }
+
+    if(axis_total == 0) empty_axis++;
+    min_axis = MIN(min_axis, axis_total);
+    max_axis = MAX(max_axis, axis_total);
+    min_axis_peak = MIN(min_axis_peak, axis_peak);
+    max_axis_peak = MAX(max_axis_peak, axis_peak);
+  }
+  const size_t stride = cairo_format_stride_for_width(CAIRO_FORMAT_ARGB32, img_width);
+  dt_print(DT_DEBUG_DEV,
+           "[histogram/scope] waveform raster op=%s parade=%d vertical=%d image=%zux%zu stride=%zu "
+           "overall_max=%u empty_axis=%zu axis_total=%" PRIu64 "..%" PRIu64
+           " axis_peak=%u..%u smooth=%d scale=%0.4fx%0.4f\n",
+           op, parade, vertical, img_width, img_height, stride, overall_max_hist,
+           empty_axis, min_axis, max_axis, min_axis_peak, max_axis_peak, smoothing_passes,
+           (double)width / (double)img_width, (double)height / (double)img_height);
 
   // 3. Send everything to GUI buffer.
   if(overall_max_hist > 0)
   {
+    if(parade)
+    {
+      /* Build the parade directly in the final widget raster. This keeps channel thirds on integer
+       * device pixels and removes all Cairo source-offset/scaling interactions from the diagnostic
+       * path: if stries remain, they are in the histogram bins, not in channel painting. */
+      for(size_t k = 0; k < image_size; k++) image[k] = 0;
+
+      for(size_t c = 0; c < 3; c++)
+      {
+        const size_t x0 = (vertical) ? 0 : c * width / 3;
+        const size_t x1 = (vertical) ? width : (c + 1) * width / 3;
+        const size_t y0 = (vertical) ? c * height / 3 : 0;
+        const size_t y1 = (vertical) ? (c + 1) * height / 3 : height;
+        const size_t channel_width = x1 - x0;
+        const size_t channel_height = y1 - y0;
+        if(channel_width == 0 || channel_height == 0) continue;
+
+        for(size_t y = y0; y < y1; y++)
+          for(size_t x = x0; x < x1; x++)
+          {
+            const size_t axis = (vertical)
+                ? (y - y0) * raster_extent / channel_height
+                : (x - x0) * raster_extent / channel_width;
+            const size_t tone = (vertical) ? x : y;
+            const size_t bin_index = (vertical) ? (axis * tone_bins + tone) * 4 + c
+                                                : (tone * raster_extent + axis) * 4 + c;
+            const uint8_t value = (uint8_t)CLAMP(roundf(powf((float)render_bins[bin_index] / (float)overall_max_hist, GAMMA) * 255.f), 0, 255);
+            const size_t image_index = (y * img_width + x) * 4;
+            image[image_index + 2 - c] = value;
+            image[image_index + 3] = 255;
+          }
+      }
+    }
+    else
+      _create_waveform_image(render_bins, image, overall_max_hist, img_width, img_height);
+
     cairo_save(cr);
 
     // Paint background - Color not exposed to user theme because this is tricky
@@ -1171,15 +1429,13 @@ static void _process_waveform(dt_backbuf_t *backbuf, const char *op, cairo_t *cr
     cairo_set_source_rgb(cr, 0.21, 0.21, 0.21);
     dt_draw_grid(cr, 4, 0, 0, width, height);
 
-    if(parade)
-      _paint_parade(cr, image, width, height, img_width, img_height, vertical);
-    else
-      _paint_waveform(cr, image, width, height, img_width, img_height, vertical);
+    _paint_waveform(cr, image, width, height, img_width, img_height, tone_bins, vertical);
 
     cairo_restore(cr);
   }
 
 error:;
+  dt_pixelpipe_cache_free_align(smooth_bins);
   dt_pixelpipe_cache_free_align(bins);
   dt_pixelpipe_cache_free_align(image);
   dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, entry);
@@ -1367,8 +1623,9 @@ static void _process_vectorscope(dt_backbuf_t *backbuf, const char *op, cairo_t 
   {
     const size_t stride = cairo_format_stride_for_width(CAIRO_FORMAT_ARGB32, HISTOGRAM_BINS);
     cairo_surface_t *background = cairo_image_surface_create_for_data(image, CAIRO_FORMAT_ARGB32, HISTOGRAM_BINS, HISTOGRAM_BINS, stride);
-    cairo_translate(cr, (double)(width - height) / 2., 0.);
-    cairo_scale(cr, (double)height / HISTOGRAM_BINS, (double)height / HISTOGRAM_BINS);
+    const int side = MIN(width, height);
+    cairo_translate(cr, (double)(width - side) / 2., (double)(height - side) / 2.);
+    cairo_scale(cr, (double)side / HISTOGRAM_BINS, (double)side / HISTOGRAM_BINS);
 
     const double radius = (float)(HISTOGRAM_BINS - 1) / 2 - DT_PIXEL_APPLY_DPI(1.);
     const double x_center = (float)(HISTOGRAM_BINS - 1) / 2;
@@ -2009,6 +2266,116 @@ static gboolean _area_scrolled_callback(GtkWidget *widget, GdkEventScroll *event
   return TRUE;
 }
 
+/**
+ * @brief Paint the scope resize handle below the cached histogram image.
+ *
+ * @details
+ * The handle is a separate event target so resizing never changes ownership of the cached Cairo
+ * surface. We only draw a small grip here; all scope image drawing remains in @ref _draw_callback.
+ */
+static gboolean _scope_resize_handle_draw_callback(GtkWidget *widget, cairo_t *cr, gpointer user_data)
+{
+  GtkAllocation allocation;
+  gtk_widget_get_allocation(widget, &allocation);
+  GtkStyleContext *context = gtk_widget_get_style_context(widget);
+  gtk_render_background(context, cr, 0, 0, allocation.width, allocation.height);
+
+  GdkRGBA color;
+  gtk_style_context_get_color(context, gtk_widget_get_state_flags(widget), &color);
+  gdk_cairo_set_source_rgba(cr, &color);
+  cairo_set_line_width(cr, 1.);
+
+  const double center_y = allocation.height / 2.0;
+  const double start_x = allocation.width * 0.35;
+  const double end_x = allocation.width * 0.65;
+
+  /* Draw the visible grip line in the middle of the event area we use for vertical dragging. */
+  cairo_move_to(cr, start_x, center_y);
+  cairo_line_to(cr, end_x, center_y);
+  cairo_stroke(cr);
+
+  return FALSE;
+}
+
+/**
+ * @brief Switch to the north-south resize cursor while hovering the scope handle.
+ */
+static gboolean _scope_resize_handle_cursor_callback(GtkWidget *widget, GdkEventCrossing *event,
+                                                     dt_lib_histogram_t *d)
+{
+  if(event->type == GDK_ENTER_NOTIFY)
+    dt_control_change_cursor(GDK_SB_V_DOUBLE_ARROW);
+  else if(!d->scope_resize_dragging)
+    dt_control_change_cursor(GDK_LEFT_PTR);
+
+  return TRUE;
+}
+
+/**
+ * @brief Start or stop vertical resizing from the handle below the histogram surface.
+ *
+ * @details
+ * The drag stores the allocated scope height at button press so the motion path can apply only the
+ * pointer delta. Persisting happens on release, not on every motion event, to avoid writing the
+ * configuration backend for each pointer sample.
+ */
+static gboolean _scope_resize_handle_button_callback(GtkWidget *widget, GdkEventButton *event,
+                                                     dt_lib_histogram_t *d)
+{
+  if(event->button != 1) return TRUE;
+
+  if(event->type == GDK_BUTTON_PRESS)
+  {
+    d->scope_resize_dragging = TRUE;
+    d->scope_resize_start_y = event->y_root;
+    d->scope_resize_start_height = gtk_widget_get_allocated_height(d->scope_draw);
+    gtk_grab_add(widget);
+    dt_control_change_cursor(GDK_SB_V_DOUBLE_ARROW);
+  }
+  else if(event->type == GDK_BUTTON_RELEASE)
+  {
+    d->scope_resize_dragging = FALSE;
+    gtk_grab_remove(widget);
+    dt_conf_set_int(DT_LIB_HISTOGRAM_SCOPE_HEIGHT_CONF, d->scope_height);
+
+    GtkAllocation allocation;
+    gtk_widget_get_allocation(widget, &allocation);
+    const gboolean pointer_on_handle = event->x >= 0. && event->x <= allocation.width
+                                      && event->y >= 0. && event->y <= allocation.height;
+    dt_control_change_cursor(pointer_on_handle ? GDK_SB_V_DOUBLE_ARROW : GDK_LEFT_PTR);
+  }
+
+  return TRUE;
+}
+
+/**
+ * @brief Resize the histogram image surface while dragging the handle under it.
+ *
+ * @details
+ * The loop here is the GTK motion stream: each pointer event maps to one new requested height.
+ * The actual Cairo cache rebuild stays in the existing size-allocate path so allocation and
+ * rendering remain synchronized by GTK.
+ */
+static gboolean _scope_resize_handle_motion_callback(GtkWidget *widget, GdkEventMotion *event,
+                                                     dt_lib_histogram_t *d)
+{
+  if(!d->scope_resize_dragging) return TRUE;
+
+  int window_height;
+  gtk_window_get_size(GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)), NULL, &window_height);
+
+  const int min_height = DT_PIXEL_APPLY_DPI(DT_LIB_HISTOGRAM_SCOPE_MIN_HEIGHT);
+  const int max_height = MAX(min_height, MIN(DT_PIXEL_APPLY_DPI(DT_LIB_HISTOGRAM_SCOPE_MAX_HEIGHT),
+                                            window_height * 3 / 4));
+  const int delta_y = event->y_root - d->scope_resize_start_y;
+  d->scope_height = CLAMP(d->scope_resize_start_height + delta_y, min_height, max_height);
+
+  gtk_widget_set_size_request(d->scope_draw, -1, d->scope_height);
+  gtk_widget_queue_resize(d->scope_draw);
+
+  return TRUE;
+}
+
 void _set_params(dt_lib_histogram_t *d)
 {
   d->op = dt_conf_get_string_const("plugin/darkroom/histogram/op");
@@ -2424,13 +2791,52 @@ void gui_init(dt_lib_module_t *self)
   d->refresh_idle_source = 0;
 
   self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-  d->scope_draw = dtgtk_drawing_area_new_with_aspect_ratio(1.);
+  d->scope_draw = gtk_drawing_area_new();
   gtk_widget_add_events(GTK_WIDGET(d->scope_draw), darktable.gui->scroll_mask);
-  gtk_widget_set_size_request(d->scope_draw, -1, DT_PIXEL_APPLY_DPI(250));
+  d->scope_height = dt_conf_key_exists(DT_LIB_HISTOGRAM_SCOPE_HEIGHT_CONF)
+      ? dt_conf_get_int(DT_LIB_HISTOGRAM_SCOPE_HEIGHT_CONF)
+      : DT_PIXEL_APPLY_DPI(DT_LIB_HISTOGRAM_SCOPE_DEFAULT_HEIGHT);
+  d->scope_height = CLAMP(d->scope_height,
+                          DT_PIXEL_APPLY_DPI(DT_LIB_HISTOGRAM_SCOPE_MIN_HEIGHT),
+                          DT_PIXEL_APPLY_DPI(DT_LIB_HISTOGRAM_SCOPE_MAX_HEIGHT));
+  gtk_widget_set_size_request(d->scope_draw, -1, d->scope_height);
   g_signal_connect(G_OBJECT(d->scope_draw), "draw", G_CALLBACK(_draw_callback), d);
   g_signal_connect(G_OBJECT(d->scope_draw), "scroll-event", G_CALLBACK(_area_scrolled_callback), d);
   g_signal_connect(G_OBJECT(d->scope_draw), "size-allocate", G_CALLBACK(_resize_callback), d);
-  gtk_box_pack_start(GTK_BOX(self->widget), d->scope_draw, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(self->widget), d->scope_draw, FALSE, FALSE, 0);
+
+  /**
+   * @userdoc
+   * @id: scope-resize
+   * @page: section/page.md
+   * @type: feature
+   * @section: Scope
+   * @screenshot: ${5|required,optional}
+   * @controls: control1, control2
+   *
+   * Handle to resize the scope vertically. Drag the handle up or down to adjust the height of the scope display.
+   */
+
+  d->scope_resize_handle = gtk_drawing_area_new();
+  gtk_widget_set_size_request(d->scope_resize_handle, -1,
+                              DT_PIXEL_APPLY_DPI(DT_LIB_HISTOGRAM_SCOPE_HANDLE_HEIGHT));
+  gtk_widget_set_events(d->scope_resize_handle, GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK
+                                                | GDK_ENTER_NOTIFY_MASK | GDK_LEAVE_NOTIFY_MASK
+                                                | GDK_POINTER_MOTION_MASK);
+  gtk_widget_set_tooltip_text(d->scope_resize_handle, _("drag to resize the scope vertically"));
+  g_signal_connect(G_OBJECT(d->scope_resize_handle), "draw",
+                   G_CALLBACK(_scope_resize_handle_draw_callback), d);
+  g_signal_connect(G_OBJECT(d->scope_resize_handle), "button-press-event",
+                   G_CALLBACK(_scope_resize_handle_button_callback), d);
+  g_signal_connect(G_OBJECT(d->scope_resize_handle), "button-release-event",
+                   G_CALLBACK(_scope_resize_handle_button_callback), d);
+  g_signal_connect(G_OBJECT(d->scope_resize_handle), "motion-notify-event",
+                   G_CALLBACK(_scope_resize_handle_motion_callback), d);
+  g_signal_connect(G_OBJECT(d->scope_resize_handle), "enter-notify-event",
+                   G_CALLBACK(_scope_resize_handle_cursor_callback), d);
+  g_signal_connect(G_OBJECT(d->scope_resize_handle), "leave-notify-event",
+                   G_CALLBACK(_scope_resize_handle_cursor_callback), d);
+  gtk_box_pack_start(GTK_BOX(self->widget), d->scope_resize_handle, FALSE, FALSE, 0);
 
   d->stage = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
   dt_bauhaus_widget_set_label(d->stage, _("Show data from"));
