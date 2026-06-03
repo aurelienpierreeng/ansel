@@ -3093,7 +3093,10 @@ void dt_iop_gui_changed(dt_iop_module_t *action, GtkWidget *widget, gpointer dat
 
   dt_dev_add_history_item(darktable.develop, module, TRUE, TRUE);
 
-  dt_iop_gui_set_enable_button(module);
+  if(!IS_NULL_PTR(widget) && g_object_get_data(G_OBJECT(widget), "dt-blendop-header-update"))
+    dt_iop_gui_update_header(module);
+  else
+    dt_iop_gui_set_enable_button(module);
 }
 
 
