@@ -435,10 +435,13 @@ void *dt_mipmap_cache_alloc(dt_mipmap_buffer_t *buf, const dt_image_t *img)
     return NULL;
   }
 
-  // Free and reset everything
+  /* Free and reset everything. ASan poisoning applies to live cache payloads only: after freeing
+   * the old allocation there is no valid user region left, and poisoning a NULL reset pointer makes
+   * the ASan runtime abort before it can report the real caller context. */
+  if(!IS_NULL_PTR(entry->data))
+    ASAN_POISON_MEMORY_REGION(entry->data, entry->data_size);
   dt_free_align(entry->data);
   entry->data = NULL;
-  ASAN_POISON_MEMORY_REGION(entry->data, entry->data_size);
 
   // Get a new allocation
   const int wd = img->width;
