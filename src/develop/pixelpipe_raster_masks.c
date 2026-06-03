@@ -32,7 +32,7 @@ static gboolean _dt_dev_raster_mask_check(dt_dev_pixelpipe_iop_t *source_piece,
 
   if(IS_NULL_PTR(source_piece) || IS_NULL_PTR(current_piece))
   {
-    fprintf(stderr,"[raster masks] ERROR: source: %s, current: %s\n",
+    dt_print(DT_DEBUG_MASKS,"[raster masks] ERROR: source: %s, current: %s\n",
             (!IS_NULL_PTR(source_piece)) ? "is defined" : "is undefined",
             (!IS_NULL_PTR(current_piece)) ? "is definded" : "is undefined");
 
@@ -55,7 +55,7 @@ static gboolean _dt_dev_raster_mask_check(dt_dev_pixelpipe_iop_t *source_piece,
                    target_name, hint ? hint : "");
     dt_free(hint);
 
-    fprintf(stderr, "[raster masks] no source module for module %s could be found\n", target_name);
+    dt_print(DT_DEBUG_MASKS, "[raster masks] no source module for module %s could be found\n", target_name);
     success = FALSE;
   }
 
@@ -68,7 +68,7 @@ static gboolean _dt_dev_raster_mask_check(dt_dev_pixelpipe_iop_t *source_piece,
                      "\n- Please enable `%s` or change the raster mask in `%s`."),
                    target_name, source_name, source_name, target_name);
 
-    fprintf(stderr, "[raster masks] module %s trying to reuse a mask from disabled instance of %s\n",
+    dt_print(DT_DEBUG_MASKS, "[raster masks] module %s trying to reuse a mask from disabled instance of %s\n",
             target_name, source_name);
 
     dt_free(clean_source_name);
@@ -93,7 +93,7 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
 
   if(IS_NULL_PTR(raster_mask_source))
   {
-    fprintf(stderr, "[raster masks] The source module of the mask for %s was not found\n", target_name);
+    dt_print(DT_DEBUG_MASKS, "[raster masks] The source module of the mask for %s was not found\n", target_name);
     dt_free(clean_target_name);
     dt_free(target_name);
     return NULL;
@@ -138,7 +138,7 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
     }
     else
     {
-      fprintf(stderr,
+      dt_print(DT_DEBUG_MASKS,
               "[raster masks] mask id %i from %s for module %s could not be found in pipe %s. Pipe re-entry will be attempted.\n",
               raster_mask_id, source_name, target_name, type);
 
@@ -170,7 +170,7 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
               (size_t)module->roi_out.width * module->roi_out.height, 0);
           if(IS_NULL_PTR(transformed_mask))
           {
-            fprintf(stderr, "[raster masks] could not allocate memory for transformed mask\n");
+            dt_print(DT_DEBUG_MASKS, "[raster masks] could not allocate memory for transformed mask\n");
             if(error) *error = 1;
             dt_free(clean_source_name);
             dt_free(source_name);
@@ -191,7 +191,7 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
                     || module->roi_in.height != module->roi_out.height
                     || module->roi_in.x != module->roi_out.x
                     || module->roi_in.y != module->roi_out.y))
-          fprintf(stderr, "FIXME: module `%s' changed the roi from %d x %d @ %d / %d to %d x %d | %d / %d but doesn't have "
+          dt_print(DT_DEBUG_MASKS, "FIXME: module `%s' changed the roi from %d x %d @ %d / %d to %d x %d | %d / %d but doesn't have "
                           "distort_mask() implemented!\n", module->module->op, module->roi_in.width,
                           module->roi_in.height, module->roi_in.x, module->roi_in.y,
                           module->roi_out.width, module->roi_out.height, module->roi_out.x,
