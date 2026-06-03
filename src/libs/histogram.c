@@ -85,6 +85,7 @@
 
 #define HISTOGRAM_BINS 256
 #define GAMMA 1.f / 1.5f
+#define DT_LIB_HISTOGRAM_SCOPE_MIN_VALUE (1.f / 256.f)
 #define DT_LIB_HISTOGRAM_SCOPE_ENABLE_SMOOTHING 1
 #define DT_LIB_HISTOGRAM_SCOPE_SMOOTH_SPATIAL_PASSES 1
 #define DT_LIB_HISTOGRAM_SCOPE_SMOOTH_TONE_PASSES 4
@@ -1426,8 +1427,71 @@ static void _process_waveform(dt_backbuf_t *backbuf, const char *op, cairo_t *cr
     cairo_set_source_rgb(cr, 0.3, 0.3, 0.3);
     cairo_fill(cr);
 
+    /**
+     * @userdoc
+     * @id: Scope grid
+     * @page: views/toolboxes/scopes.md
+     * @type: feature
+     * @section: Guide lines
+     * @screenshot: ${5|required,optional}
+     * @controls:
+     *
+     * Raw image: The tone axis guides shows bit-stops levels.
+     * Padade: The spatial axis guides has been removed.
+     */
+
     cairo_set_source_rgb(cr, 0.21, 0.21, 0.21);
-    dt_draw_grid(cr, 4, 0, 0, width, height);
+    const gboolean raw_stage = (!strcmp(op, "initialscale") || !strcmp(op, "demosaic"));
+    if(raw_stage)
+    {
+      /* The regular 4x4 grid has a tonal guide at 0.75, which is not an integer raw bit stop.
+       * In raw mode, non-parade scopes keep only the global spatial guides here; the tone guides
+       * are drawn below from powers of two. Parade intentionally has no spatial guides. */
+      for(int k = 1; !parade && k < 4; k++)
+      {
+        if(vertical)
+          dt_draw_line(cr, 0, (double)k * (double)height / 4.0, width, (double)k * (double)height / 4.0);
+        else
+          dt_draw_line(cr, (double)k * (double)width / 4.0, 0, (double)k * (double)width / 4.0, height);
+        cairo_stroke(cr);
+      }
+    }
+    else if(parade)
+    {
+      /* Parade already splits the spatial axis into RGB strips. Keep only the regular tone-axis
+       * guides here so the grid does not add misleading source-position lines inside each strip. */
+      for(int k = 1; k < 4; k++)
+      {
+        if(vertical)
+          dt_draw_line(cr, (double)k * (double)width / 4.0, 0, (double)k * (double)width / 4.0, height);
+        else
+          dt_draw_line(cr, 0, (double)k * (double)height / 4.0, width, (double)k * (double)height / 4.0);
+        cairo_stroke(cr);
+      }
+    }
+    else
+      dt_draw_grid(cr, 4, 0, 0, width, height);
+
+    if(raw_stage)
+    {
+      /* Raw data is linear, so integer bit stops are powers of two in normalized tone space.
+       * Drawing those stops on the tone axis makes exposure clipping and low-bit detail readable
+       * without depending on the current scope height. */
+      for(float value = 1.f; value >= DT_LIB_HISTOGRAM_SCOPE_MIN_VALUE; value *= 0.5f)
+      {
+        if(vertical)
+        {
+          const double x = (double)value * (double)width;
+          dt_draw_line(cr, x, 0, x, height);
+        }
+        else
+        {
+          const double y = (1.0 - (double)value) * (double)height;
+          dt_draw_line(cr, 0, y, width, y);
+        }
+        cairo_stroke(cr);
+      }
+    }
 
     _paint_waveform(cr, image, width, height, img_width, img_height, tone_bins, vertical);
 
