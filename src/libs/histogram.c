@@ -1426,9 +1426,8 @@ static void _process_waveform(dt_backbuf_t *backbuf, const char *op, cairo_t *cr
     cairo_save(cr);
 
     // Paint background - Color not exposed to user theme because this is tricky
-    cairo_rectangle(cr, 0, 0, width, height);
     cairo_set_source_rgb(cr, 0.3, 0.3, 0.3);
-    cairo_fill(cr);
+    cairo_paint(cr);
 
     /**
      * @userdoc
@@ -1650,7 +1649,7 @@ static void _process_vectorscope(dt_backbuf_t *backbuf, const char *op, cairo_t 
                                  const int height, const float zoom, dt_lib_histogram_t *d)
 {
   dt_iop_order_iccprofile_info_t *profile = darktable.develop->preview_pipe->output_profile_info;
-  if(IS_NULL_PTR(profile)) return;
+  if(IS_NULL_PTR(profile) || IS_NULL_PTR(d)) return;
 
   struct dt_pixel_cache_entry_t *entry = NULL;
   void *data = NULL;
@@ -2221,6 +2220,12 @@ static gboolean _refresh_global_picker(dt_lib_module_t *self)
 
   if(!_is_backbuf_ready(d)) return FALSE;
 
+  /* In restricted mode the scope bins only picker rectangles/points. Moving the
+   * global picker does not change the preview cache hash, so invalidate the
+   * Cairo scope cache explicitly before recomputing from the same backbuffer. */
+  if(dt_conf_get_bool("ui_last/colorpicker_restrict_histogram"))
+    _reset_cache(d);
+
   _update_everything(self);
   return TRUE;
 }
@@ -2563,12 +2568,18 @@ static void _picker_button_toggled(GtkToggleButton *button, dt_lib_histogram_t *
 static void _set_sample_box_area(dt_lib_module_t *self, const dt_boundingbox_t box)
 {
   dt_lib_colorpicker_set_box_area(darktable.lib, box);
+  dt_lib_histogram_t *d = self->data;
+  if(dt_conf_get_bool("ui_last/colorpicker_restrict_histogram"))
+    _reset_cache(d);
   _update_everything(self);
 }
 
 static void _set_sample_point(dt_lib_module_t *self, const float pos[2])
 {
   dt_lib_colorpicker_set_point(darktable.lib, pos);
+  dt_lib_histogram_t *d = self->data;
+  if(dt_conf_get_bool("ui_last/colorpicker_restrict_histogram"))
+    _reset_cache(d);
   _update_everything(self);
 }
 
@@ -2689,8 +2700,15 @@ static void _remove_sample(dt_colorpicker_sample_t *sample)
 
 static void _remove_sample_cb(GtkButton *widget, dt_colorpicker_sample_t *sample)
 {
+  dt_lib_module_t *self = darktable.develop->color_picker.histogram_module;
+  dt_lib_histogram_t *d = self ? self->data : NULL;
+  if(dt_conf_get_bool("ui_last/colorpicker_restrict_histogram") && !IS_NULL_PTR(d))
+    _reset_cache(d);
+
   _remove_sample(sample);
   dt_control_queue_redraw_center();
+  if(!IS_NULL_PTR(self))
+    _update_everything(self);
 }
 
 static gboolean _live_sample_button(GtkWidget *widget, GdkEventButton *event, dt_colorpicker_sample_t *sample)
@@ -2787,6 +2805,8 @@ static void _add_sample(GtkButton *widget, dt_lib_module_t *self)
   darktable.develop->color_picker.selected_sample = NULL;
 
   // Updating the display
+  if(dt_conf_get_bool("ui_last/colorpicker_restrict_histogram"))
+    _reset_cache(d);
   _update_everything(self);
 }
 
@@ -2800,8 +2820,10 @@ static void _display_samples_changed(GtkToggleButton *button, dt_lib_module_t *s
 
 static void _restrict_histogram_changed(GtkToggleButton *button, dt_lib_module_t *self)
 {
+  dt_lib_histogram_t *d = self->data;
   dt_conf_set_bool("ui_last/colorpicker_restrict_histogram", gtk_toggle_button_get_active(button));
   darktable.develop->color_picker.restrict_histogram = gtk_toggle_button_get_active(button);
+  _reset_cache(d);
   _update_everything(self);
 }
 
