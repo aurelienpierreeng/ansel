@@ -93,7 +93,7 @@ typedef struct dt_iop_colorout_data_t
   dt_colorspaces_color_mode_t mode;
   float lut[3][LUT_SAMPLES];
   dt_colormatrix_t cmatrix;
-  cmsHTRANSFORM *xform;
+  cmsHTRANSFORM xform;
   float unbounded_coeffs[3][3]; // for extrapolation of shaper curves
 } dt_iop_colorout_data_t;
 
@@ -515,7 +515,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   // we need to bypass the cache entirely in these modes.
   dt_iop_set_cache_bypass(self, (d->mode != DT_PROFILE_NORMAL));
 
-  if(d->xform)
+  if(!IS_NULL_PTR(d->xform))
   {
     cmsDeleteTransform(d->xform);
     d->xform = NULL;
@@ -580,6 +580,17 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   // when the output type is Lab then process is a nop, so we can avoid creating a transform
   // and the subsequent error messages
   d->type = out_type;
+  /* The virtual pipe mirrors history only for GUI geometry queries. It must
+   * still commit module contracts so ROI transforms see the same enabled
+   * modules, but creating an LCMS output transform for a pipe that will never
+   * process pixels only adds lifetime coupling to display/softproof profiles. */
+  if(!IS_NULL_PTR(pipe->dev) && pipe->dev->virtual_pipe == pipe)
+  {
+    d->type = DT_COLORSPACE_LAB;
+    piece->process_cl_ready = 0;
+    return;
+  }
+
   if(out_type == DT_COLORSPACE_LAB)
     return;
 
@@ -792,7 +803,7 @@ void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pi
 void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
   dt_iop_colorout_data_t *d = (dt_iop_colorout_data_t *)piece->data;
-  if(d->xform)
+  if(!IS_NULL_PTR(d->xform))
   {
     cmsDeleteTransform(d->xform);
     d->xform = NULL;

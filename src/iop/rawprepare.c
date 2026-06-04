@@ -354,6 +354,14 @@ void output_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixel
   _update_output_cfa_descriptor(pipe, piece, &piece->roi_in, &piece->dsc_out);
 }
 
+
+void input_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
+                   dt_iop_buffer_dsc_t *dsc)
+{
+  memcpy(dsc, &pipe->dev->image_storage.dsc, sizeof(dt_iop_buffer_dsc_t));
+}
+
+
 static inline __attribute__((always_inline)) int BL(const dt_iop_roi_t *const roi_out,
                                                     const int row, const int col, 
                                                     const int32_t x, const int32_t y)

@@ -68,7 +68,7 @@ void dt_iop_autoset_build_list(struct dt_develop_t *dev, dt_autoset_manager_t *m
   dt_dev_pixelpipe_cache_wait_t *input_wait = (dt_dev_pixelpipe_cache_wait_t *)manager->input_wait;
   manager->dev = dev;
   if(!IS_NULL_PTR(input_wait))
-    dt_dev_pixelpipe_cache_wait_cleanup(input_wait);
+    dt_dev_pixelpipe_cache_wait_cleanup(input_wait, "autoset-build-list-reset");
 
   if(manager->progress_cursor_active)
   {
@@ -105,7 +105,7 @@ int dt_iop_autoset_advance(struct dt_develop_t *dev, dt_autoset_manager_t *manag
   if(IS_NULL_PTR(mod)) 
   {
     if(!IS_NULL_PTR(input_wait))
-      dt_dev_pixelpipe_cache_wait_cleanup(input_wait);
+      dt_dev_pixelpipe_cache_wait_cleanup(input_wait, "autoset-finished");
     pipe->autoset = FALSE;
     if(manager->progress_cursor_active)
     {
@@ -127,7 +127,7 @@ int dt_iop_autoset_advance(struct dt_develop_t *dev, dt_autoset_manager_t *manag
   if(IS_NULL_PTR(module))
   {
     if(!IS_NULL_PTR(input_wait))
-      dt_dev_pixelpipe_cache_wait_cleanup(input_wait);
+      dt_dev_pixelpipe_cache_wait_cleanup(input_wait, "autoset-module-missing");
     pipe->autoset = FALSE;
     if(manager->progress_cursor_active)
     {
@@ -181,7 +181,7 @@ int dt_iop_autoset_advance(struct dt_develop_t *dev, dt_autoset_manager_t *manag
   if(IS_NULL_PTR(manager->iop_to_set))
   {
     if(!IS_NULL_PTR(input_wait))
-      dt_dev_pixelpipe_cache_wait_cleanup(input_wait);
+      dt_dev_pixelpipe_cache_wait_cleanup(input_wait, "autoset-list-empty");
     pipe->autoset = FALSE;
     if(manager->progress_cursor_active)
     {

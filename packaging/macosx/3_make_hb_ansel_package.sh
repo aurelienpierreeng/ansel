@@ -281,9 +281,14 @@ glib-compile-schemas "$dtResourcesDir"/share/glib-2.0/schemas/
 
 # Define gtk-query-immodules-3.0
 immodulesCacheFile="$dtResourcesDir"/lib/gtk-3.0/3.0.0/immodules.cache
-hbGtk3Path=$(brew info gtk+3|grep "/`pkg-config --modversion gtk+-3.0`"|cut -f1 -d' ')
+hbGtk3Path=$(pkg-config --variable=prefix gtk+-3.0 2>/dev/null || brew --prefix gtk+3 2>/dev/null)
+hbGtk3ResolvedPath=$(realpath "$hbGtk3Path" 2>/dev/null || true)
 sed -i -e "s#$hbGtk3Path/lib/gtk-3.0/3.0.0/immodules#@executable_path/../Resources/lib/gtk-3.0/3.0.0/immodules#g" "$immodulesCacheFile"
 sed -i -e "s#$hbGtk3Path/share/locale#@executable_path/../Resources/share/locale#g" "$immodulesCacheFile"
+if [[ -n "$hbGtk3ResolvedPath" && "$hbGtk3ResolvedPath" != "$hbGtk3Path" ]]; then
+    sed -i -e "s#$hbGtk3ResolvedPath/lib/gtk-3.0/3.0.0/immodules#@executable_path/../Resources/lib/gtk-3.0/3.0.0/immodules#g" "$immodulesCacheFile"
+    sed -i -e "s#$hbGtk3ResolvedPath/share/locale#@executable_path/../Resources/share/locale#g" "$immodulesCacheFile"
+fi
 # Rename and move it to the right place
 mv "$immodulesCacheFile" "$dtResourcesDir"/etc/gtk-3.0/gtk.immodules
 

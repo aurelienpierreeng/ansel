@@ -321,14 +321,14 @@
     <shortdescription>do not set the 'uncategorized' entry for tags</shortdescription>
     <longdescription>do not set the 'uncategorized' entry for tags which do not have children</longdescription>
   </dtconfig>
-  <dtconfig prefs="processing" section="cpugpu" capability="opencl">
+  <dtconfig>
     <name>opencl</name>
     <type>bool</type>
     <default>${DEFCONFIG_OPENCL}</default>
     <shortdescription>activate OpenCL support</shortdescription>
     <longdescription>if found, use OpenCL runtime on your system for improved processing speed. can be switched on and off at any time.</longdescription>
   </dtconfig>
-  <dtconfig prefs="processing" section="cpugpu" capability="opencl">
+  <dtconfig>
     <name>memory_opencl_headroom</name>
     <type>int</type>
     <default>200</default>
@@ -2044,6 +2044,13 @@
     <type>float</type>
     <default>220.0</default>
     <shortdescription>Zoom level in vectorscope</shortdescription>
+    <longdescription />
+  </dtconfig>
+  <dtconfig>
+    <name>plugin/darkroom/histogram/scope_height</name>
+    <type min="120" max="3000">int</type>
+    <default>250</default>
+    <shortdescription>Height of the scope display</shortdescription>
     <longdescription />
   </dtconfig>
   <dtconfig>

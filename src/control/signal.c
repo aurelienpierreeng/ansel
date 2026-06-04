@@ -302,7 +302,16 @@ static void _signal_param_cleanup(gpointer user_data)
 {
   _signal_param_t *params = (_signal_param_t *)user_data;
   if(IS_NULL_PTR(params)) return;
-  for(int i = 0; i <= params->n_params; i++) g_value_unset(&params->instance_and_params[i]);
+  // We iterate over the whole emitted argument vector (instance at index 0 + signal params)
+  // and only unset slots that currently hold a valid GValue type.
+  for(int i = 0; i <= params->n_params; i++)
+  {
+    GValue *value = &params->instance_and_params[i];
+    const GType value_type = G_VALUE_TYPE(value);
+    if(value_type == G_TYPE_INVALID) continue;
+    if(!g_type_check_is_value_type(value_type)) continue;
+    g_value_unset(value);
+  }
   dt_free(params->instance_and_params);
   dt_free(params);
 }
@@ -392,6 +401,9 @@ void dt_control_signal_raise(const dt_control_signal_t *ctlsig, dt_signal_t sign
         break;
       case G_TYPE_STRING:
         g_value_set_string(&instance_and_params[i], va_arg(extra_args, const char *));
+        break;
+      case G_TYPE_INT:
+        g_value_set_int(&instance_and_params[i], va_arg(extra_args, int));
         break;
       case G_TYPE_POINTER:
         g_value_set_pointer(&instance_and_params[i], va_arg(extra_args, void *));

@@ -182,6 +182,7 @@ typedef struct dt_thumbtable_t
 
   // Coalesce layout/scroll updates outside of draw handlers.
   guint idle_update_id;
+  guint focus_idle_id;
 
   // Last parent overlay allocation (used to ignore no-op size-allocate signals).
   int last_parent_width;

@@ -84,9 +84,9 @@ typedef enum dt_develop_mask_mode_t
 {
   DEVELOP_MASK_DISABLED = 0x00,
   DEVELOP_MASK_ENABLED = 0x01,
-  DEVELOP_MASK_MASK = 0x02,
-  DEVELOP_MASK_CONDITIONAL = 0x04,
-  DEVELOP_MASK_BOTH = (DEVELOP_MASK_MASK | DEVELOP_MASK_CONDITIONAL)
+  DEVELOP_MASK_SHAPE = 0x02,
+  DEVELOP_MASK_PARAMETRIC = 0x04,
+  DEVELOP_MASK_BOTH = (DEVELOP_MASK_SHAPE | DEVELOP_MASK_PARAMETRIC)
 } dt_develop_mask_mode_t;
 
 typedef enum dt_develop_mask_combine_mode_t
@@ -189,7 +189,7 @@ blendif_factor_Lab(const float4 input, const float4 output,
 {
   float scaled[DEVELOP_BLENDIF_SIZE];
 
-  if(!(mask_mode & DEVELOP_MASK_CONDITIONAL)) return (mask_combine & DEVELOP_COMBINE_INCL) ? 0.0f : 1.0f;
+  if(!(mask_mode & DEVELOP_MASK_PARAMETRIC)) return (mask_combine & DEVELOP_COMBINE_INCL) ? 0.0f : 1.0f;
 
   scaled[DEVELOP_BLENDIF_L_in] = input.x / 100.0f,			// L scaled to 0..1
   scaled[DEVELOP_BLENDIF_A_in] = input.y / 256.0f;		// a scaled to -0.5..0.5
@@ -264,7 +264,7 @@ blendif_factor_rgb_hsl(const float4 input, const float4 output,
 {
   float scaled[DEVELOP_BLENDIF_SIZE];
 
-  if(!(mask_mode & DEVELOP_MASK_CONDITIONAL)) return (mask_combine & DEVELOP_COMBINE_INCL) ? 0.0f : 1.0f;
+  if(!(mask_mode & DEVELOP_MASK_PARAMETRIC)) return (mask_combine & DEVELOP_COMBINE_INCL) ? 0.0f : 1.0f;
 
   if(use_work_profile == 0)
   {
@@ -364,7 +364,7 @@ blendif_factor_rgb_jzczhz(const float4 input, const float4 output,
 {
   float scaled[DEVELOP_BLENDIF_SIZE];
 
-  if(!(mask_mode & DEVELOP_MASK_CONDITIONAL)) return (mask_combine & DEVELOP_COMBINE_INCL) ? 0.0f : 1.0f;
+  if(!(mask_mode & DEVELOP_MASK_PARAMETRIC)) return (mask_combine & DEVELOP_COMBINE_INCL) ? 0.0f : 1.0f;
 
   scaled[DEVELOP_BLENDIF_GRAY_in]  = get_rgb_matrix_luminance(input, profile_info, profile_info->matrix_in, profile_lut); // Gray scaled to 0..1
   scaled[DEVELOP_BLENDIF_GRAY_out] = get_rgb_matrix_luminance(output, profile_info, profile_info->matrix_in, profile_lut); // Gray scaled to 0..1

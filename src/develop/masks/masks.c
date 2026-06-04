@@ -4014,7 +4014,7 @@ void dt_masks_cleanup_unused_from_list(GList *history_list)
       history_node = g_list_previous(history_node))
   {
     dt_dev_history_item_t *history_item = (dt_dev_history_item_t *)history_node->data;
-    if(history_item->forms && strcmp(history_item->op_name, "mask_manager") == 0)
+    if(!IS_NULL_PTR(history_item->forms)) //&& strcmp(history_item->op_name, "mask_manager") == 0)
     {
       _masks_cleanup_unused(&history_item->forms, history_list, history_end);
       history_end = history_count - 1;

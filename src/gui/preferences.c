@@ -61,6 +61,7 @@
 #include "common/debug.h"
 #include "common/file_location.h"
 #include "common/l10n.h"
+#include "common/opencl.h"
 #include "common/presets.h"
 #include "control/control.h"
 #include "develop/imageop.h"
@@ -89,6 +90,30 @@ extern const char *dt_gui_presets_exposure_value_str[];
 extern const int dt_gui_presets_aperture_value_cnt;
 extern const float dt_gui_presets_aperture_value[];
 extern const char *dt_gui_presets_aperture_value_str[];
+
+static void _opencl_device_enabled_callback(GtkToggleButton *button, gpointer user_data)
+{
+  const int detected = GPOINTER_TO_INT(user_data);
+  const gboolean device_enabled = gtk_toggle_button_get_active(button);
+  if(dt_opencl_set_detected_device_enabled(detected, device_enabled) == 0)
+    restart_required = TRUE;
+}
+
+static void _opencl_device_pinned_memory_callback(GtkToggleButton *button, gpointer user_data)
+{
+  const int detected = GPOINTER_TO_INT(user_data);
+  const gboolean pinned_memory = gtk_toggle_button_get_active(button);
+  if(dt_opencl_set_detected_device_pinned_memory(detected, pinned_memory) == 0)
+    restart_required = TRUE;
+}
+
+static void _opencl_device_headroom_callback(GtkSpinButton *button, gpointer user_data)
+{
+  const int detected = GPOINTER_TO_INT(user_data);
+  const size_t headroom = gtk_spin_button_get_value_as_int(button);
+  if(dt_opencl_set_detected_device_headroom(detected, headroom) == 0)
+    restart_required = TRUE;
+}
 
 // Values for the accelerators/presets treeview
 
@@ -560,6 +585,149 @@ void dt_gui_preferences_show()
   init_tab_general(_preferences_dialog, stack, tweak_widgets);
   init_tab_views(_preferences_dialog, stack);
   init_tab_processing(_preferences_dialog, stack);
+
+  // `init_tab_processing()` is generated from `data/anselconfig.xml.in`, so it can only create static
+  // preferences. OpenCL devices are detected at runtime, therefore their per-device switches are added
+  // after the generated processing tab exists.
+  {
+    GtkWidget *scroll = gtk_stack_get_child_by_name(GTK_STACK(stack), _("processing"));
+    GtkWidget *viewport = GTK_IS_BIN(scroll) ? gtk_bin_get_child(GTK_BIN(scroll)) : NULL;
+    GtkWidget *grid = GTK_IS_BIN(viewport) ? gtk_bin_get_child(GTK_BIN(viewport)) : NULL;
+
+    const int detected_devices = dt_opencl_get_detected_device_count();
+    if(!IS_NULL_PTR(grid) && detected_devices > 0)
+    {
+      int line = 0;
+      int insert_line = -1;
+      GList *children = gtk_container_get_children(GTK_CONTAINER(grid));
+      // Walk over the generated preference rows to find where the dynamic OpenCL rows must be inserted.
+      // We also keep the current bottom row as a fallback when the expected anchor is not present.
+      for(GList *child = children; child; child = g_list_next(child))
+      {
+        int top = 0;
+        int height = 1;
+        gtk_container_child_get(GTK_CONTAINER(grid), GTK_WIDGET(child->data), "top-attach", &top, "height", &height,
+                                NULL);
+        line = MAX(line, top + height);
+
+        if(GTK_IS_CONTAINER(child->data))
+        {
+          // Find the disk thumbnail cache row. The per-GPU OpenCL switches belong just
+          // after it, before the remaining GPU memory/runtime preferences.
+          GList *box_children = gtk_container_get_children(GTK_CONTAINER(child->data));
+          for(GList *box_child = box_children; box_child; box_child = g_list_next(box_child))
+          {
+            const char *name = gtk_widget_get_name(GTK_WIDGET(box_child->data));
+            if(!IS_NULL_PTR(name) && strcmp(name, "cache_disk_backend") == 0)
+            {
+              insert_line = top + height;
+              break;
+            }
+          }
+          g_list_free(box_children);
+        }
+      }
+      g_list_free(children);
+
+      if(insert_line < 0)
+        insert_line = line;
+      else
+      {
+        children = gtk_container_get_children(GTK_CONTAINER(grid));
+        // Shift all generated rows below the insertion point down, leaving one row
+        // for the indented box that contains all per-GPU option blocks.
+        for(GList *child = children; child; child = g_list_next(child))
+        {
+          int top = 0;
+          gtk_container_child_get(GTK_CONTAINER(grid), GTK_WIDGET(child->data), "top-attach", &top, NULL);
+          if(top >= insert_line)
+            gtk_container_child_set(GTK_CONTAINER(grid), GTK_WIDGET(child->data), "top-attach",
+                                    top + 1, NULL);
+        }
+        g_list_free(children);
+        line = insert_line;
+      }
+
+      GtkWidget *devices_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+      gtk_widget_set_margin_start(devices_box, DT_PIXEL_APPLY_DPI(24));
+      gtk_widget_set_hexpand(devices_box, TRUE);
+      GtkWidget *devices_grid = gtk_grid_new();
+      gtk_grid_set_column_spacing(GTK_GRID(devices_grid), DT_PIXEL_APPLY_DPI(5));
+      gtk_widget_set_hexpand(devices_grid, TRUE);
+      gtk_box_pack_start(GTK_BOX(devices_box), devices_grid, FALSE, FALSE, 0);
+
+      // Create one block per detected GPU. The OpenCL subsystem owns the device-specific
+      // configuration keys and keeps the global OpenCL preference in sync.
+      int devices_line = 0;
+      for(int dev = 0; dev < detected_devices; dev++)
+      {
+        const dt_opencl_detected_device_t *device = dt_opencl_get_detected_device(dev);
+        if(IS_NULL_PTR(device)) continue;
+
+        const char *device_name = !IS_NULL_PTR(device->name) ? device->name
+                                                             : (!IS_NULL_PTR(device->cname) ? device->cname : "");
+        gchar *label_text = g_strdup_printf("%d: %s", device->config_id, device_name);
+        GtkWidget *device_title = gtk_label_new(label_text);
+        GtkWidget *title_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+        gtk_box_pack_start(GTK_BOX(title_box), device_title, FALSE, FALSE, 0);
+        gtk_widget_set_margin_top(title_box, dev > 0 ? DT_PIXEL_APPLY_DPI(8) : 0);
+        gtk_widget_set_name(title_box, "pref_subsection");
+        gtk_grid_attach(GTK_GRID(devices_grid), title_box, 0, devices_line++, 3, 1);
+        dt_free(label_text);
+
+        GtkWidget *enable_label = gtk_label_new(_("Enable"));
+        gtk_widget_set_halign(enable_label, GTK_ALIGN_START);
+        gtk_widget_set_hexpand(enable_label, TRUE);
+        gtk_grid_attach(GTK_GRID(devices_grid), enable_label, 0, devices_line, 1, 1);
+        GtkWidget *enable_labdef = gtk_label_new("");
+        gtk_widget_set_name(enable_labdef, "preference_non_default");
+        gtk_grid_attach(GTK_GRID(devices_grid), enable_labdef, 1, devices_line, 1, 1);
+
+        GtkWidget *enable = gtk_check_button_new();
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(enable), dt_opencl_detected_device_enabled(dev));
+        gtk_widget_set_tooltip_text(enable, _("Enable or disable OpenCL processing for this GPU"));
+        g_signal_connect(G_OBJECT(enable), "toggled", G_CALLBACK(_opencl_device_enabled_callback),
+                         GINT_TO_POINTER(dev));
+        gtk_grid_attach(GTK_GRID(devices_grid), enable, 2, devices_line++, 1, 1);
+
+        GtkWidget *pinned_memory_label = gtk_label_new(_("pinned memory"));
+        gtk_widget_set_halign(pinned_memory_label, GTK_ALIGN_START);
+        gtk_widget_set_hexpand(pinned_memory_label, TRUE);
+        gtk_grid_attach(GTK_GRID(devices_grid), pinned_memory_label, 0, devices_line, 1, 1);
+        GtkWidget *pinned_memory_labdef = gtk_label_new("");
+        gtk_widget_set_name(pinned_memory_labdef, "preference_non_default");
+        gtk_grid_attach(GTK_GRID(devices_grid), pinned_memory_labdef, 1, devices_line, 1, 1);
+
+        GtkWidget *pinned_memory = gtk_check_button_new();
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(pinned_memory),
+                                     dt_opencl_detected_device_pinned_memory(dev));
+        gtk_widget_set_tooltip_text(pinned_memory, _("Use pinned host memory for OpenCL transfers on this GPU"));
+        g_signal_connect(G_OBJECT(pinned_memory), "toggled", G_CALLBACK(_opencl_device_pinned_memory_callback),
+                         GINT_TO_POINTER(dev));
+        gtk_grid_attach(GTK_GRID(devices_grid), pinned_memory, 2, devices_line++, 1, 1);
+
+        GtkWidget *headroom_label = gtk_label_new(_("GPU vRAM headroom (MiB)"));
+        gtk_widget_set_halign(headroom_label, GTK_ALIGN_START);
+        gtk_widget_set_hexpand(headroom_label, TRUE);
+        gtk_grid_attach(GTK_GRID(devices_grid), headroom_label, 0, devices_line, 1, 1);
+        GtkWidget *headroom_labdef = gtk_label_new("");
+        gtk_widget_set_name(headroom_labdef, "preference_non_default");
+        gtk_grid_attach(GTK_GRID(devices_grid), headroom_labdef, 1, devices_line, 1, 1);
+
+        GtkWidget *headroom = gtk_spin_button_new_with_range(0, G_MAXINT, 1);
+        gtk_widget_set_hexpand(headroom, FALSE);
+        gtk_spin_button_set_digits(GTK_SPIN_BUTTON(headroom), 0);
+        gtk_spin_button_set_value(GTK_SPIN_BUTTON(headroom), dt_opencl_detected_device_headroom(dev));
+        gtk_widget_set_tooltip_text(headroom, _("GPU memory reserved for the system and other applications"));
+        g_signal_connect(G_OBJECT(headroom), "value-changed", G_CALLBACK(_opencl_device_headroom_callback),
+                         GINT_TO_POINTER(dev));
+        gtk_grid_attach(GTK_GRID(devices_grid), headroom, 2, devices_line++, 1, 1);
+      }
+
+      gtk_grid_attach(GTK_GRID(grid), devices_box, 0, line++, 3, 1);
+    }
+  }
+
   init_tab_security(_preferences_dialog, stack);
   init_tab_storage(_preferences_dialog, stack);
   init_tab_misc(_preferences_dialog, stack);

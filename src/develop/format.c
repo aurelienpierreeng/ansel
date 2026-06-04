@@ -83,6 +83,9 @@ void default_output_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_d
   {
     if(dt_image_is_raw(&pipe->dev->image_storage)) dsc->channels = 1;
 
+    // FIXME: this is shit. Chain it in input/output_format() so each module
+    // actually tells what it does without relying on pipeline-centric hardcoded assumptions
+    // like that.
     if(dt_ioppr_get_iop_order(pipe->iop_order_list, self->op, self->multi_priority)
        < dt_ioppr_get_iop_order(pipe->iop_order_list, "rawprepare", 0)
        && ((piece && piece->dsc_in.filters) || (!piece && pipe->dev->image_storage.dsc.filters)))

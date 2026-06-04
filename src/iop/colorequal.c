@@ -1979,7 +1979,7 @@ static gboolean _refresh_preview_cursor_sample(dt_iop_module_t *self)
   dt_develop_t *dev = self ? self->dev : NULL;
   if(!self->enabled || !g->cursor_valid)
   {
-    dt_dev_pixelpipe_cache_wait_cleanup(&g->preview_wait);
+    dt_dev_pixelpipe_cache_wait_cleanup(&g->preview_wait, "colorequal-preview-inactive");
     _invalidate_preview_cursor(g);
     return FALSE;
   }
@@ -1990,7 +1990,7 @@ static gboolean _refresh_preview_cursor_sample(dt_iop_module_t *self)
   if(IS_NULL_PTR(piece) || IS_NULL_PTR(previous_piece) || previous_piece->dsc_out.datatype != TYPE_FLOAT || previous_piece->dsc_out.channels < 3)
   {
     g->pending_preview_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
-    dt_dev_pixelpipe_cache_wait_cleanup(&g->preview_wait);
+    dt_dev_pixelpipe_cache_wait_cleanup(&g->preview_wait, "colorequal-preview-piece-missing");
     _invalidate_preview_cursor(g);
     return FALSE;
   }
@@ -2249,7 +2249,7 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
     DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_cacheline_ready_callback), self);
     g->preview_signal_connected = FALSE;
     g->pending_preview_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
-    dt_dev_pixelpipe_cache_wait_cleanup(&g->preview_wait);
+    dt_dev_pixelpipe_cache_wait_cleanup(&g->preview_wait, "colorequal-focus-leave");
   }
 
   _switch_preview_cursor(self);
@@ -2279,7 +2279,7 @@ void gui_cleanup(dt_iop_module_t *self)
     DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_cacheline_ready_callback), self);
     g->preview_signal_connected = FALSE;
   }
-  dt_dev_pixelpipe_cache_wait_cleanup(&g->preview_wait);
+  dt_dev_pixelpipe_cache_wait_cleanup(&g->preview_wait, "colorequal-gui-cleanup");
 
   const int current_primary = CLAMP(gtk_notebook_get_current_page(g->ring_notebook), 0, DT_IOP_COLOREQUAL_NUM_RINGS);
   dt_conf_set_int("plugins/darkroom/colorequal/gui_ring_page", current_primary);

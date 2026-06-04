@@ -255,7 +255,8 @@ void cleanup(dt_view_t *self)
   {
     if(!IS_NULL_PTR(_autoset_manager->input_wait))
     {
-      dt_dev_pixelpipe_cache_wait_cleanup((dt_dev_pixelpipe_cache_wait_t *)_autoset_manager->input_wait);
+      dt_dev_pixelpipe_cache_wait_cleanup((dt_dev_pixelpipe_cache_wait_t *)_autoset_manager->input_wait,
+                                          "darkroom-cleanup-autoset-manager");
       g_free(_autoset_manager->input_wait);
       _autoset_manager->input_wait = NULL;
     }
@@ -638,10 +639,10 @@ static void _release_expose_source_caches(void)
 {
   _release_locked_surface(&_darkroom_main_locked);
   _release_locked_surface(&_darkroom_preview_locked);
-  dt_dev_pixelpipe_cache_wait_cleanup(&_darkroom_main_wait);
-  dt_dev_pixelpipe_cache_wait_cleanup(&_darkroom_preview_wait);
+  dt_dev_pixelpipe_cache_wait_cleanup(&_darkroom_main_wait, "darkroom-release-main");
+  dt_dev_pixelpipe_cache_wait_cleanup(&_darkroom_preview_wait, "darkroom-release-preview");
 #if DARKROOM_EXPOSE_DUMB_DEBUG
-  dt_dev_pixelpipe_cache_wait_cleanup(&_darkroom_main_debug_wait);
+  dt_dev_pixelpipe_cache_wait_cleanup(&_darkroom_main_debug_wait, "darkroom-release-debug");
 #endif
   _release_preview_fallback_surface();
 }
@@ -2552,7 +2553,8 @@ void leave(dt_view_t *self)
 {
   dt_develop_t *dev = (dt_develop_t *)self->data;
   if(!IS_NULL_PTR(_autoset_manager) && !IS_NULL_PTR(_autoset_manager->input_wait))
-    dt_dev_pixelpipe_cache_wait_cleanup((dt_dev_pixelpipe_cache_wait_t *)_autoset_manager->input_wait);
+    dt_dev_pixelpipe_cache_wait_cleanup((dt_dev_pixelpipe_cache_wait_t *)_autoset_manager->input_wait,
+                                        "darkroom-leave-autoset");
   darktable.gui->mouse.is_dragging = FALSE;
   _darkroom_center_pan_drag = FALSE;
   _reset_edge_pan();
