@@ -3149,7 +3149,7 @@ static void show_mask_callback(GtkToggleButton *button, GdkEventButton *event, g
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(self->off), TRUE);
   dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)self->gui_data;
 
-    // if blend module is displaying mask do not display it here
+  // if blend module is displaying mask do not display it here
   if(self->request_mask_display != DT_DEV_PIXELPIPE_DISPLAY_NONE)
     self->request_mask_display = DT_DEV_PIXELPIPE_DISPLAY_NONE;
 
@@ -3158,7 +3158,7 @@ static void show_mask_callback(GtkToggleButton *button, GdkEventButton *event, g
   if(g->show_mask)
     self->request_mask_display = DT_DEV_PIXELPIPE_DISPLAY_PASSTHRU;
 
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->show_highlight_mask), !g->show_mask);
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->show_highlight_mask), g->show_mask);
   dt_iop_set_cache_bypass(self, g->show_mask);
   dt_dev_pixelpipe_update_history_main(self->dev);
 }
