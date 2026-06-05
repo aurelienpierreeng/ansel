@@ -1206,9 +1206,9 @@ static void _process_waveform(dt_backbuf_t *backbuf, const char *op, cairo_t *cr
 
   if(darktable.unmuted & DT_DEBUG_VERBOSE)
     dt_print(DT_DEBUG_DEV,
-            "[histogram/scope] waveform setup op=%s parade=%d vertical=%d widget=%dx%d backbuf=%zux%zu "
-            "tone_bins=%zu raster_extent=%zu source_axis=%zu source_per_raster=%.4f binning_size=%zu "
-            "source_value=%0.6f..%0.6f clipped=%zu nan=%zu sample_step=%zu\n",
+            "[histogram/scope] waveform setup op=%s parade=%d vertical=%d widget=%dx%d backbuf=%" PRIu64 "x%" PRIu64 " "
+            "tone_bins=%" PRIu64 " raster_extent=%" PRIu64 " source_axis=%" PRIu64 " source_per_raster=%.4f binning_size=%" PRIu64 " "
+            "source_value=%0.6f..%0.6f clipped=%" PRIu64 " nan=%" PRIu64 " sample_step=%" PRIu64 "\n",
             op, parade, vertical, width, height, backbuf->width, backbuf->height,
             tone_bins, raster_extent, source_axis, (double)source_axis / (double)raster_extent,
             binning_size, source_min, source_max, source_clipped, source_nan, source_step);
@@ -1222,7 +1222,7 @@ static void _process_waveform(dt_backbuf_t *backbuf, const char *op, cairo_t *cr
   {
     if(darktable.unmuted & DT_DEBUG_VERBOSE)
       dt_print(DT_DEBUG_DEV,
-              "[histogram/scope] waveform allocation failed bins=%p image=%p binning_size=%zu image_size=%zu\n",
+              "[histogram/scope] waveform allocation failed bins=%p image=%p binning_size=%" PRIu64 " image_size=%" PRIu64 "\n",
               (void *)bins, (void *)image, binning_size, image_size);
     goto error;
   }
@@ -1385,8 +1385,8 @@ static void _process_waveform(dt_backbuf_t *backbuf, const char *op, cairo_t *cr
   }
   const size_t stride = cairo_format_stride_for_width(CAIRO_FORMAT_ARGB32, img_width);
   dt_print(DT_DEBUG_DEV,
-           "[histogram/scope] waveform raster op=%s parade=%d vertical=%d image=%zux%zu stride=%zu "
-           "overall_max=%u empty_axis=%zu axis_total=%" PRIu64 "..%" PRIu64
+           "[histogram/scope] waveform raster op=%s parade=%d vertical=%d image=%" PRIu64 "x%" PRIu64 " stride=%" PRIu64
+           " overall_max=%u empty_axis=%" PRIu64 " axis_total=%" PRIu64 "..%" PRIu64
            " axis_peak=%u..%u smooth=%d scale=%0.4fx%0.4f\n",
            op, parade, vertical, img_width, img_height, stride, overall_max_hist,
            empty_axis, min_axis, max_axis, min_axis_peak, max_axis_peak, smoothing_passes,
