@@ -2515,6 +2515,17 @@ gboolean blend_color_picker_apply(dt_iop_module_t *module, GtkWidget *picker, dt
       data->picker_set_values_manual_boost_lock = FALSE;
     }
 
+    /**
+     * @userdoc
+     * @id: auto-boost-factor
+     * @page: views/darkroom/masking-and-blending/masks/parametric.md
+     * @type: feature
+     * @section: Channel tabs
+     * @controls: boost factor
+     *
+     * The "Boost factor" is calculated automatically with the auto-picker.
+     */
+
     if(channel->boost_factor_enabled && picker_box_changed
        && !data->picker_set_values_manual_boost_lock)
     {
