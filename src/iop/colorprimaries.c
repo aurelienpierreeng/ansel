@@ -1060,6 +1060,14 @@ static void _refresh_slider_gradients(dt_iop_module_t *self)
                               (dt_aligned_pixel_t){ target_hsb[0], target_hsb[1], CLAMP(source_hsb[2] + 0.05f, 0.f, 1.f),
                                                     0.f },
                               display_profile);
+
+    /* The three sliders in one color node share the same edited hue, saturation
+     * and brightness. A drag redraws the active slider through GTK events, but
+     * the two sibling sliders only repaint if we invalidate them explicitly
+     * after replacing their gradient stops. */
+    gtk_widget_queue_draw(g->node_hue[node]);
+    gtk_widget_queue_draw(g->node_saturation[node]);
+    gtk_widget_queue_draw(g->node_brightness[node]);
   }
 }
 
