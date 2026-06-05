@@ -1206,9 +1206,10 @@ static void _process_waveform(dt_backbuf_t *backbuf, const char *op, cairo_t *cr
 
   if(darktable.unmuted & DT_DEBUG_VERBOSE)
     dt_print(DT_DEBUG_DEV,
-            "[histogram/scope] waveform setup op=%s parade=%d vertical=%d widget=%dx%d backbuf=%" PRIu64 "x%" PRIu64 " "
-            "tone_bins=%" PRIu64 " raster_extent=%" PRIu64 " source_axis=%" PRIu64 " source_per_raster=%.4f binning_size=%" PRIu64 " "
-            "source_value=%0.6f..%0.6f clipped=%" PRIu64 " nan=%" PRIu64 " sample_step=%" PRIu64 "\n",
+            "[histogram/scope] waveform setup op=%s parade=%d vertical=%d widget=%dx%d backbuf=%" G_GSIZE_FORMAT "x%" G_GSIZE_FORMAT " "
+            "tone_bins=%" G_GSIZE_FORMAT " raster_extent=%" G_GSIZE_FORMAT " source_axis=%" G_GSIZE_FORMAT
+            " source_per_raster=%.4f binning_size=%" G_GSIZE_FORMAT " "
+            "source_value=%0.6f..%0.6f clipped=%" G_GSIZE_FORMAT " nan=%" G_GSIZE_FORMAT " sample_step=%" G_GSIZE_FORMAT "\n",
             op, parade, vertical, width, height, backbuf->width, backbuf->height,
             tone_bins, raster_extent, source_axis, (double)source_axis / (double)raster_extent,
             binning_size, source_min, source_max, source_clipped, source_nan, source_step);
@@ -1222,7 +1223,8 @@ static void _process_waveform(dt_backbuf_t *backbuf, const char *op, cairo_t *cr
   {
     if(darktable.unmuted & DT_DEBUG_VERBOSE)
       dt_print(DT_DEBUG_DEV,
-              "[histogram/scope] waveform allocation failed bins=%p image=%p binning_size=%" PRIu64 " image_size=%" PRIu64 "\n",
+              "[histogram/scope] waveform allocation failed bins=%p image=%p binning_size=%" G_GSIZE_FORMAT
+              " image_size=%" G_GSIZE_FORMAT "\n",
               (void *)bins, (void *)image, binning_size, image_size);
     goto error;
   }
@@ -1385,8 +1387,8 @@ static void _process_waveform(dt_backbuf_t *backbuf, const char *op, cairo_t *cr
   }
   const size_t stride = cairo_format_stride_for_width(CAIRO_FORMAT_ARGB32, img_width);
   dt_print(DT_DEBUG_DEV,
-           "[histogram/scope] waveform raster op=%s parade=%d vertical=%d image=%" PRIu64 "x%" PRIu64 " stride=%" PRIu64
-           " overall_max=%u empty_axis=%" PRIu64 " axis_total=%" PRIu64 "..%" PRIu64
+           "[histogram/scope] waveform raster op=%s parade=%d vertical=%d image=%" G_GSIZE_FORMAT "x%" G_GSIZE_FORMAT
+           " stride=%" G_GSIZE_FORMAT " overall_max=%u empty_axis=%" G_GSIZE_FORMAT " axis_total=%" PRIu64 "..%" PRIu64
            " axis_peak=%u..%u smooth=%d scale=%0.4fx%0.4f\n",
            op, parade, vertical, img_width, img_height, stride, overall_max_hist,
            empty_axis, min_axis, max_axis, min_axis_peak, max_axis_peak, smoothing_passes,
@@ -1404,10 +1406,10 @@ static void _process_waveform(dt_backbuf_t *backbuf, const char *op, cairo_t *cr
 
       for(size_t c = 0; c < 3; c++)
       {
-        const size_t x0 = (vertical) ? 0 : c * width / 3;
-        const size_t x1 = (vertical) ? width : (c + 1) * width / 3;
-        const size_t y0 = (vertical) ? c * height / 3 : 0;
-        const size_t y1 = (vertical) ? (c + 1) * height / 3 : height;
+        const size_t x0 = vertical ? 0 : c * width / 3;
+        const size_t x1 = vertical ? width : (c + 1) * width / 3;
+        const size_t y0 = vertical ? c * height / 3 : 0;
+        const size_t y1 = vertical ? (c + 1) * height / 3 : height;
         const size_t channel_width = x1 - x0;
         const size_t channel_height = y1 - y0;
         if(channel_width == 0 || channel_height == 0) continue;
@@ -1415,11 +1417,11 @@ static void _process_waveform(dt_backbuf_t *backbuf, const char *op, cairo_t *cr
         for(size_t y = y0; y < y1; y++)
           for(size_t x = x0; x < x1; x++)
           {
-            const size_t axis = (vertical)
+            const size_t axis = vertical
                 ? (y - y0) * raster_extent / channel_height
                 : (x - x0) * raster_extent / channel_width;
-            const size_t tone = (vertical) ? x : y;
-            const size_t bin_index = (vertical) ? (axis * tone_bins + tone) * 4 + c
+            const size_t tone = vertical ? x : y;
+            const size_t bin_index = vertical ? (axis * tone_bins + tone) * 4 + c
                                                 : (tone * raster_extent + axis) * 4 + c;
             const uint8_t value = (uint8_t)CLAMP(roundf(powf((float)render_bins[bin_index] / (float)overall_max_hist, GAMMA) * 255.f), 0, 255);
             const size_t image_index = (y * img_width + x) * 4;
@@ -1487,16 +1489,19 @@ static void _process_waveform(dt_backbuf_t *backbuf, const char *op, cairo_t *cr
       /* Raw data is linear, so integer bit stops are powers of two in normalized tone space.
        * Drawing those stops on the tone axis makes exposure clipping and low-bit detail readable
        * without depending on the current scope height. */
-      for(float value = 1.f; value >= DT_LIB_HISTOGRAM_SCOPE_MIN_VALUE; value *= 0.5f)
+      for(int stop = 0; stop <= 8; stop++)
       {
+        const double value = 1.0 / (double)(1u << stop);
+        if(value < (double)DT_LIB_HISTOGRAM_SCOPE_MIN_VALUE) break;
+
         if(vertical)
         {
-          const double x = (double)value * (double)width;
+          const double x = value * (double)width;
           dt_draw_line(cr, x, 0, x, height);
         }
         else
         {
-          const double y = (1.0 - (double)value) * (double)height;
+          const double y = (1.0 - value) * (double)height;
           dt_draw_line(cr, 0, y, width, y);
         }
         cairo_stroke(cr);
