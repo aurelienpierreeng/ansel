@@ -2687,8 +2687,8 @@ static void checker_color_changed_callback(GtkWidget *widget, gpointer user_data
   g->checker = dt_get_color_checker(n_chkr, &(g->colorcheckers), color_path);
 
   dt_develop_t *dev = self->dev;
-  const float wd = dev->preview_pipe->backbuf_width;
-  const float ht = dev->preview_pipe->backbuf_height;
+  const float wd = dev->roi.preview_width;
+  const float ht = dev->roi.preview_height;
   if(wd == 0.f || ht == 0.f) return;
 
   dt_iop_gui_enter_critical_section(self);
@@ -3636,36 +3636,6 @@ static void illum_xy_callback(GtkWidget *slider, gpointer user_data)
   dt_print(DT_DEBUG_DEV, "[picker/channelmixerrgb] history commit source=illum_xy_callback slider=%p\n",
            (void *)slider);
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
-}
-
-void update_colorchecker_list(dt_iop_module_t *self)
-{
-  dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
-
-  if(!g) return;
-
-  // clear and refill the colorchecker list
-  g_list_free_full(g->colorcheckers, dt_colorchecker_label_cleanup);
-  g->colorcheckers = NULL;
-
-  g->n_colorcheckers = 0;
-
-  int pos = -1;
-
-  pos += dt_colorchecker_find(&(g->colorcheckers));
-  
-  g->n_colorcheckers = pos;
-
-  // update the gui
-  dt_bauhaus_combobox_clear(g->checkers_list);
-
-  for(GList *l = g_list_first(g->colorcheckers); l; l = g_list_next(l))
-  {
-    const dt_colorchecker_label_t *checker_data = (dt_colorchecker_label_t *)l->data;
-    const char *checkername = checker_data->label;
-    dt_bauhaus_combobox_add(g->checkers_list, checkername);
-  }
-
 }
 
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
@@ -5160,7 +5130,7 @@ void gui_init(struct dt_iop_module_t *self)
     
     gchar *user_CGATS_dir = g_build_filename(confdir, "color", "checker", NULL);
     tip_files_loc = g_strdup_printf(_("'%s'"), user_CGATS_dir);
-    g_free(user_CGATS_dir);
+    dt_free(user_CGATS_dir);
   }
 
   g->checkers_list = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
@@ -5170,7 +5140,7 @@ void gui_init(struct dt_iop_module_t *self)
   gchar *tooltip = g_strdup_printf(_("Choose the vendor and the type of your chart.\n"
                                       ".cht files in %s."), tip_files_loc);
   gtk_widget_set_tooltip_text(g->checkers_list, tooltip);
-  g_free(tooltip);
+  dt_free(tooltip);
   g_signal_connect(G_OBJECT(g->checkers_list), "value-changed", G_CALLBACK(checker_changed_callback), (gpointer)self);
 
   g->checkers_color_list = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
@@ -5181,16 +5151,18 @@ void gui_init(struct dt_iop_module_t *self)
   tooltip = g_strdup_printf(_("Choose the definition of your chart.\n"
                                       "CGATS.17 files in %s."), tip_files_loc);
   gtk_widget_set_tooltip_text(g->checkers_color_list, tooltip);
-  g_free(tooltip);
+  dt_free(tooltip);
   g_signal_connect(G_OBJECT(g->checkers_color_list), "value-changed", G_CALLBACK(checker_color_changed_callback), (gpointer)self);
   
-  tooltip = g_strdup_printf(_("WARNING: No compatible CGATS.17 file found for the selected checker. Add your CGATS files in %s"), tip_files_loc);
-  g->checker_msg = gtk_label_new(tooltip);
+  tooltip = g_markup_printf_escaped(_("<i>No CGATS.17 color file matches the selected chart.\n"
+                                      "Add a compatible CGATS.17 file to <b>%s</b>.</i>"), tip_files_loc);
+  g->checker_msg = gtk_label_new(NULL);
+  gtk_label_set_markup(GTK_LABEL(g->checker_msg), tooltip);
   gtk_label_set_line_wrap(GTK_LABEL(g->checker_msg), TRUE);
   gtk_label_set_line_wrap_mode(GTK_LABEL(g->checker_msg), PANGO_WRAP_WORD);
   gtk_box_pack_start(GTK_BOX(collapsible), GTK_WIDGET(g->checker_msg), FALSE, TRUE, 0);
   gtk_widget_set_visible(g->checker_msg, FALSE);
-  g_free(tip_files_loc);
+  dt_free(tip_files_loc);
 
 
 
@@ -5259,7 +5231,7 @@ void gui_cleanup(struct dt_iop_module_t *self)
     g->delta_E_in = NULL;
   }
 
-  g_free(g->delta_E_label_text);
+  dt_free(g->delta_E_label_text);
 
   dt_colorchecker_label_list_cleanup(&(g->colorcheckers));
   dt_colorchecker_label_list_cleanup(&(g->colorcheckers_all_color));
