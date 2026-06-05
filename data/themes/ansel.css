@@ -247,6 +247,7 @@ Why that? Just because it's a developer choice and most classes use underscore i
 @define-color graph_fg_active @grey_95;
 @define-color graph_grid @grey_30;
 @define-color graph_overlay @grey_50;
+@define-color graph_scope_restricted @grey_30;
 @define-color inset_histogram alpha(@grey_95, 0.50);
 
 /* */
@@ -934,6 +935,16 @@ dialog  /* dialog window background */
   color: alpha(@field_selected_fg, 0.56);
   background-color: alpha(darker(@button_bg),0.8);
   border: 0.07em solid alpha(@button_bg, 0.33);
+}
+
+.resize-handle
+{
+  color: @grey_70;
+}
+
+.resize-handle:hover
+{
+  color: @grey_90;
 }
 
 /* set channel buttons at inactive state */

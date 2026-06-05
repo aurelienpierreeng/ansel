@@ -977,6 +977,167 @@ static gboolean _enter_leave(GtkWidget *widget, GdkEventCrossing *event)
   return FALSE;
 }
 
+typedef struct dt_bauhaus_resize_handle_t
+{
+  GtkOrientation orientation;
+  dt_bauhaus_resize_handle_get_size_f get_size;
+  dt_bauhaus_resize_handle_resize_f resize;
+  gpointer user_data;
+  gboolean dragging;
+  double start_root;
+  int start_size;
+  int current_size;
+} dt_bauhaus_resize_handle_t;
+
+static gboolean _resize_handle_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
+{
+  dt_bauhaus_resize_handle_t *handle = (dt_bauhaus_resize_handle_t *)user_data;
+  GtkAllocation allocation;
+  gtk_widget_get_allocation(widget, &allocation);
+  GtkStyleContext *context = gtk_widget_get_style_context(widget);
+  gtk_render_background(context, cr, 0, 0, allocation.width, allocation.height);
+
+  GdkRGBA color;
+  gtk_style_context_get_color(context, gtk_widget_get_state_flags(widget), &color);
+  gdk_cairo_set_source_rgba(cr, &color);
+  const int line_width = DT_PIXEL_APPLY_DPI(5.);
+  cairo_set_line_width(cr, line_width);
+  cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+
+  /* Draw the resize affordance orthogonally to the drag axis: horizontal for
+   * vertical resize, vertical for horizontal resize. The caller only owns the
+   * target size; Bauhaus owns this standard visual language. */
+  if(handle->orientation == GTK_ORIENTATION_VERTICAL)
+  {
+    const double center_y = allocation.height / 2.0;
+    const double start_x = allocation.width * 0.35;
+    const double end_x = allocation.width * 0.65;
+    cairo_move_to(cr, start_x, center_y + line_width * 0.5);
+    cairo_line_to(cr, end_x, center_y + line_width * 0.5);
+  }
+  else
+  {
+    const double center_x = allocation.width / 2.0;
+    const double start_y = allocation.height * 0.35;
+    const double end_y = allocation.height * 0.65;
+    cairo_move_to(cr, center_x + line_width * 0.5, start_y);
+    cairo_line_to(cr, center_x + line_width * 0.5, end_y);
+  }
+
+  cairo_stroke(cr);
+  return FALSE;
+}
+
+static gboolean _resize_handle_cursor(GtkWidget *widget, GdkEventCrossing *event, gpointer user_data)
+{
+  dt_bauhaus_resize_handle_t *handle = (dt_bauhaus_resize_handle_t *)user_data;
+  if(event->type == GDK_ENTER_NOTIFY)
+  {
+    gtk_widget_set_state_flags(widget, GTK_STATE_FLAG_PRELIGHT, FALSE);
+    dt_control_change_cursor(handle->orientation == GTK_ORIENTATION_VERTICAL
+                             ? GDK_SB_V_DOUBLE_ARROW
+                             : GDK_SB_H_DOUBLE_ARROW);
+  }
+  else if(!handle->dragging)
+  {
+    gtk_widget_unset_state_flags(widget, GTK_STATE_FLAG_PRELIGHT);
+    dt_control_change_cursor(GDK_LEFT_PTR);
+  }
+
+  gtk_widget_queue_draw(widget);
+  return TRUE;
+}
+
+static gboolean _resize_handle_button(GtkWidget *widget, GdkEventButton *event, gpointer user_data)
+{
+  dt_bauhaus_resize_handle_t *handle = (dt_bauhaus_resize_handle_t *)user_data;
+  if(event->button != 1) return TRUE;
+
+  if(event->type == GDK_BUTTON_PRESS)
+  {
+    handle->dragging = TRUE;
+    handle->start_root = (handle->orientation == GTK_ORIENTATION_VERTICAL) ? event->y_root : event->x_root;
+    handle->start_size = handle->get_size(handle->user_data);
+    handle->current_size = handle->start_size;
+    gtk_grab_add(widget);
+    dt_control_change_cursor(handle->orientation == GTK_ORIENTATION_VERTICAL
+                             ? GDK_SB_V_DOUBLE_ARROW
+                             : GDK_SB_H_DOUBLE_ARROW);
+  }
+  else if(event->type == GDK_BUTTON_RELEASE)
+  {
+    handle->dragging = FALSE;
+    gtk_grab_remove(widget);
+    handle->current_size = handle->resize(handle->current_size, TRUE, handle->user_data);
+
+    GtkAllocation allocation;
+    gtk_widget_get_allocation(widget, &allocation);
+    const gboolean pointer_on_handle = event->x >= 0. && event->x <= allocation.width
+                                      && event->y >= 0. && event->y <= allocation.height;
+    if(pointer_on_handle)
+      gtk_widget_set_state_flags(widget, GTK_STATE_FLAG_PRELIGHT, FALSE);
+    else
+      gtk_widget_unset_state_flags(widget, GTK_STATE_FLAG_PRELIGHT);
+
+    dt_control_change_cursor(pointer_on_handle
+                             ? (handle->orientation == GTK_ORIENTATION_VERTICAL
+                                ? GDK_SB_V_DOUBLE_ARROW
+                                : GDK_SB_H_DOUBLE_ARROW)
+                             : GDK_LEFT_PTR);
+    gtk_widget_queue_draw(widget);
+  }
+
+  return TRUE;
+}
+
+static gboolean _resize_handle_motion(GtkWidget *widget, GdkEventMotion *event, gpointer user_data)
+{
+  dt_bauhaus_resize_handle_t *handle = (dt_bauhaus_resize_handle_t *)user_data;
+  if(!handle->dragging) return TRUE;
+
+  /* Each motion event is one sample in the GTK pointer stream. Convert only the
+   * axis matching the resize direction and leave clamping/application to the
+   * owner callback, which is the code owning the resized widget. */
+  const double root = (handle->orientation == GTK_ORIENTATION_VERTICAL) ? event->y_root : event->x_root;
+  const int requested_size = handle->start_size + (int)round(root - handle->start_root);
+  handle->current_size = handle->resize(requested_size, FALSE, handle->user_data);
+  return TRUE;
+}
+
+GtkWidget *dt_bauhaus_resize_handle_new(GtkOrientation orientation, int handle_size, const char *tooltip,
+                                        dt_bauhaus_resize_handle_get_size_f get_size,
+                                        dt_bauhaus_resize_handle_resize_f resize, gpointer user_data)
+{
+  GtkWidget *handle_widget = gtk_drawing_area_new();
+  dt_bauhaus_resize_handle_t *handle = g_malloc0(sizeof(*handle));
+  handle->orientation = orientation;
+  handle->get_size = get_size;
+  handle->resize = resize;
+  handle->user_data = user_data;
+
+  gtk_style_context_add_class(gtk_widget_get_style_context(handle_widget), "resize-handle");
+  if(orientation == GTK_ORIENTATION_VERTICAL)
+    gtk_widget_set_size_request(handle_widget, -1, handle_size);
+  else
+    gtk_widget_set_size_request(handle_widget, handle_size, -1);
+
+  gtk_widget_set_events(handle_widget, GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK
+                                      | GDK_ENTER_NOTIFY_MASK | GDK_LEAVE_NOTIFY_MASK
+                                      | GDK_POINTER_MOTION_MASK);
+  if(!IS_NULL_PTR(tooltip))
+    gtk_widget_set_tooltip_text(handle_widget, tooltip);
+
+  g_object_set_data_full(G_OBJECT(handle_widget), "dt-bauhaus-resize-handle", handle, g_free);
+  g_signal_connect(G_OBJECT(handle_widget), "draw", G_CALLBACK(_resize_handle_draw), handle);
+  g_signal_connect(G_OBJECT(handle_widget), "button-press-event", G_CALLBACK(_resize_handle_button), handle);
+  g_signal_connect(G_OBJECT(handle_widget), "button-release-event", G_CALLBACK(_resize_handle_button), handle);
+  g_signal_connect(G_OBJECT(handle_widget), "motion-notify-event", G_CALLBACK(_resize_handle_motion), handle);
+  g_signal_connect(G_OBJECT(handle_widget), "enter-notify-event", G_CALLBACK(_resize_handle_cursor), handle);
+  g_signal_connect(G_OBJECT(handle_widget), "leave-notify-event", G_CALLBACK(_resize_handle_cursor), handle);
+
+  return handle_widget;
+}
+
 static void _widget_finalize(GObject *widget)
 {
   struct dt_bauhaus_widget_t *w = DT_BAUHAUS_WIDGET(widget);
@@ -1065,6 +1226,8 @@ void dt_bauhaus_load_theme(dt_bauhaus_t *bauhaus)
   gtk_style_context_lookup_color(ctx, "graph_fg", &bauhaus->graph_fg);
   gtk_style_context_lookup_color(ctx, "graph_fg_active", &bauhaus->graph_fg_active);
   gtk_style_context_lookup_color(ctx, "graph_overlay", &bauhaus->graph_overlay);
+  if(!gtk_style_context_lookup_color(ctx, "graph_scope_restricted", &bauhaus->graph_scope_restricted))
+    bauhaus->graph_scope_restricted = bauhaus->graph_fg; // For the "restricted" text in the scope
   gtk_style_context_lookup_color(ctx, "inset_histogram", &bauhaus->inset_histogram);
   gtk_style_context_lookup_color(ctx, "graph_red", &bauhaus->graph_colors[0]);
   gtk_style_context_lookup_color(ctx, "graph_green", &bauhaus->graph_colors[1]);

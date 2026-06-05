@@ -159,6 +159,8 @@ typedef struct dt_bauhaus_widget_t DtBauhausWidget;
 typedef struct dt_bauhaus_widget_class_t DtBauhausWidgetClass;
 
 typedef void (*dt_bauhaus_quad_paint_f)(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
+typedef int (*dt_bauhaus_resize_handle_get_size_f)(gpointer user_data);
+typedef int (*dt_bauhaus_resize_handle_resize_f)(int requested_size, gboolean finished, gpointer user_data);
 
 // our new widget and its private members, inheriting from drawing area:
 typedef struct dt_bauhaus_widget_t
@@ -270,7 +272,8 @@ struct dt_bauhaus_t
       color_value, color_value_insensitive, color_value_text, color_value_text_insensitive;
 
   // colors for graphs
-  GdkRGBA graph_bg, graph_exterior, graph_border, graph_fg, graph_grid, graph_fg_active, graph_overlay, inset_histogram;
+  GdkRGBA graph_bg, graph_exterior, graph_border, graph_fg, graph_grid, graph_fg_active, graph_overlay,
+      graph_scope_restricted, inset_histogram;
   GdkRGBA graph_colors[3];               // primaries
   GdkRGBA colorlabels[DT_COLORLABELS_LAST];
 
@@ -307,6 +310,19 @@ void dt_bauhaus_widget_set_field(GtkWidget *w, gpointer field, dt_introspection_
 
 void dt_bauhaus_hide_popup(dt_bauhaus_t *bh);
 void dt_bauhaus_show_popup(GtkWidget *w);
+
+/**
+ * @brief Create a themed handle widget driving one-dimensional resize gestures.
+ *
+ * @details The handle owns the GTK event bookkeeping: hover state, cursor, grab lifetime,
+ * drawing and drag delta computation. The caller owns the resized target and keeps that
+ * ownership visible through @p get_size and @p resize. During pointer motion @p resize receives
+ * `finished == FALSE`; on button release it receives `finished == TRUE` so callers can persist
+ * the final size without writing settings at every motion sample.
+ */
+GtkWidget *dt_bauhaus_resize_handle_new(GtkOrientation orientation, int handle_size, const char *tooltip,
+                                        dt_bauhaus_resize_handle_get_size_f get_size,
+                                        dt_bauhaus_resize_handle_resize_f resize, gpointer user_data);
 
 // slider:
 GtkWidget *dt_bauhaus_slider_new(dt_bauhaus_t *bh, dt_gui_module_t *self);
