@@ -1,7 +1,6 @@
 /*
     This file is part of darktable,
-    Copyright (C) 2020 darktable developers,
-    Copyright (C) 2025 Guillaume Stutin.
+    Copyright (C) 2025-2026 Guillaume Stutin.
 
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -38,12 +37,17 @@
 #include <inttypes.h>
 #include <lcms2.h>
 
+// In some environments ERROR is already defined, ie: WIN32
+#if defined(ERROR)
+#undef ERROR
+#endif // defined (ERROR)
+
 #define ERROR           \
   {                     \
     lineno = __LINE__;  \
     goto error;         \
   }
-
+  
 typedef enum parser_state_t {
   BLOCK_NONE = 0,
   BLOCK_BOXES,
@@ -85,7 +89,7 @@ typedef struct cht_box_F_t {
 
 static void _dt_colorchecker_copy_patch(dt_color_checker_patch *dest, const dt_color_checker_patch *src)
 {
-  if(!dest || !src) return;
+  if(IS_NULL_PTR(dest) || IS_NULL_PTR(src)) return;
 
   dest->name = g_strdup(src->name);
   dest->x = src->x;
@@ -97,7 +101,7 @@ static void _dt_colorchecker_copy_patch(dt_color_checker_patch *dest, const dt_c
 
 void dt_colorchecker_copy(dt_color_checker_t *dest, const dt_color_checker_t *src)
 {
-  if(!dest || !src) return;
+  if(IS_NULL_PTR(dest) || IS_NULL_PTR(src)) return;
 
   dest->name = g_strdup(src->name);
   dest->author = g_strdup(src->author);
@@ -113,15 +117,15 @@ void dt_colorchecker_copy(dt_color_checker_t *dest, const dt_color_checker_t *sr
   dest->white = src->white;
   dest->black = src->black;
 
-  if(src->values)
+  if(!IS_NULL_PTR(src->values))
   {
     dest->values = dt_colorchecker_patch_array_init(src->patches);
-    if(!dest->values)
+    if(IS_NULL_PTR(dest->values))
     {
       fprintf(stderr, "Error: Memory allocation failed for color checker values.\n");
       return;
     }
-    
+
     for(int i = 0; i < src->patches; i++)
     {
       _dt_colorchecker_copy_patch(&dest->values[i], &src->values[i]);
@@ -136,14 +140,14 @@ void dt_colorchecker_copy(dt_color_checker_t *dest, const dt_color_checker_t *sr
 
 /**
  * @brief Extracts the frame coordinates from the tokens, computes the width and height.
- * 
+ *
  * @param tokens An array of strings containing the data from a F box in a .cht file.
  * @return cht_box_F_t* A pointer to a cht_box_F_t structure containing the extracted coordinates and dimensions.
  */
 static cht_box_F_t *_dt_cht_extract_F(const char **tokens)
 {
   cht_box_F_t *frame_coordinates = (cht_box_F_t *)malloc(sizeof(cht_box_F_t));
-  if(!frame_coordinates) return NULL;
+  if(IS_NULL_PTR(frame_coordinates)) return NULL;
 
   size_t index = 0;
   float extracted_coords[8] = { 0.f };
@@ -171,14 +175,14 @@ static cht_box_F_t *_dt_cht_extract_F(const char **tokens)
   // Compute the width and height of the frame
   frame_coordinates->width = extracted_coords[2] - extracted_coords[0];
   frame_coordinates->height = extracted_coords[5] - extracted_coords[1];
-  
+
   return frame_coordinates;
 }
 
 static dt_colorchecker_chart_spec_t *_dt_colorchecker_chart_spec_init()
 {
   dt_colorchecker_chart_spec_t *result = (dt_colorchecker_chart_spec_t *)malloc(sizeof(dt_colorchecker_chart_spec_t));
-  if(!result) return NULL;
+  if(IS_NULL_PTR(result)) return NULL;
 
   result->type = NULL;
   result->radius = 0.f;
@@ -204,20 +208,19 @@ static dt_colorchecker_chart_spec_t *_dt_colorchecker_chart_spec_init()
 
 static void _dt_colorchecker_chart_spec_cleanup(dt_colorchecker_chart_spec_t *chart_spec)
 {
-  if(!chart_spec) return;
+  if(IS_NULL_PTR(chart_spec)) return;
 
   // Free the patches' gslist
   if(chart_spec->patches)
     g_slist_free_full(chart_spec->patches, dt_colorchecker_patch_cleanup_list);
 
-  free(chart_spec);
-  chart_spec = NULL;
+  dt_free(chart_spec);
 }
 
 static dt_color_checker_patch *_dt_colorchecker_patch_init()
 {
   dt_color_checker_patch *patch = (dt_color_checker_patch *)malloc(sizeof(dt_color_checker_patch));
-  if(!patch) return NULL;
+  if(IS_NULL_PTR(patch)) return NULL;
 
   patch->name = NULL;
   patch->Lab[0] = 0.f;
@@ -232,23 +235,23 @@ static dt_color_checker_patch *_dt_colorchecker_patch_init()
 static void _dt_cht_box_cleanup(void *data)
 {
   cht_box_t *box = (cht_box_t *)data;
-  if(!box) return;
+  if(IS_NULL_PTR(box)) return;
 
-  SAFE_FREE(box->label_x_start);
-  SAFE_FREE(box->label_x_end);
-  SAFE_FREE(box->label_y_start);
-  SAFE_FREE(box->label_y_end);
-  SAFE_FREE(box);
+  dt_free(box->label_x_start);
+  dt_free(box->label_x_end);
+  dt_free(box->label_y_start);
+  dt_free(box->label_y_end);
+  dt_free(box);
 }
 
 static cht_box_t *_dt_cht_box_extract(const char **tokens)
 {
   cht_box_t *box = (cht_box_t *)calloc(1, sizeof(cht_box_t));
-  if(!box) return NULL;
+  if(IS_NULL_PTR(box)) return NULL;
 
   size_t index = 0;
   size_t i = 0;
-  while(tokens[i] != NULL && index <= 10)
+  while(!IS_NULL_PTR(tokens[i]) && index <= 10)
   {
     if(tokens[i][0] != '\0')
     {
@@ -258,14 +261,14 @@ static cht_box_t *_dt_cht_box_extract(const char **tokens)
       // Check if the token is a digit or a negative number before converting the string to float
       if(g_ascii_isdigit(tokens[i][0]) || (tokens[i][0] == '-' && g_ascii_isdigit(tokens[i][1])))
         value = (float)g_ascii_strtod(tokens[i], NULL);
-      
+
       switch(index)
       {
         case 0: box->key_letter    = tokens[i][0]; index++; break; // 'D', 'X', or 'Y'
         case 1: box->label_x_start = g_strdup(string); index++; break;
         case 2: box->label_x_end   = g_strdup(string); index++; break;
         case 3: box->label_y_start = g_strdup(string); index++; break;
-        case 4: box->label_y_end   = g_strdup(string); index++; break;      
+        case 4: box->label_y_end   = g_strdup(string); index++; break;
         case 5: box->width         = value; index++; break;
         case 6: box->height        = value; index++; break;
         case 7: box->x_origin      = value; index++; break;
@@ -285,25 +288,31 @@ static cht_box_t *_dt_cht_box_extract(const char **tokens)
 
 /**
  * @brief Increments a string alphanumerically.
- * 
+ *
  * @param in The input string to increment.
  * @return char* A new string with the last character incremented. The caller is responsible for freeing the returned string.
  */
 static char *_increment_string(const gchar *in)
 {
-  if (!in || *in == '\0') return NULL;
+  if (IS_NULL_PTR(in) || *in == '\0') return NULL;
 
   gchar *result = g_strdup(in);
-  size_t len = safe_strlen(result);
+  if(IS_NULL_PTR(result)) return NULL;
 
-  if(len == 0) return NULL;
+  size_t len = strlen(result);
+
+  if(len == 0)
+  {
+    dt_free(result);
+    return NULL;
+  }
 
   for(int i = (int)len - 1; i >= 0; i--)
   {
     // for numbers
-    if (g_ascii_isdigit(result[i]))
+    if(g_ascii_isdigit(result[i]))
     {
-      if (result[i] == '9')
+      if(result[i] == '9')
       {
         result[i] = '0';
         continue;
@@ -312,9 +321,9 @@ static char *_increment_string(const gchar *in)
       break;
     }
     // for letters
-    else if (g_ascii_isalpha(result[i]))
+    else if(g_ascii_isalpha(result[i]))
     {
-      if (result[i] == 'z' || result[i] == 'Z')
+      if(result[i] == 'z' || result[i] == 'Z')
       {
         result[i] = (result[i] == 'z') ? 'a' : 'A';
         continue;
@@ -333,14 +342,14 @@ static char *_increment_string(const gchar *in)
 }
 
 /**
- * @brief Removes leading zeros from a string. 
- * 
+ * @brief Removes leading zeros from a string.
+ *
  * @param in The input string.
  * @return char* A pointer to the first char following the leading zero.
  */
 static inline const char *_remove_leading_zeros(const char *in)
 {
-  if(!in || *in == '\0') return "";
+  if(IS_NULL_PTR(in) || *in == '\0') return "";
   const char *start = in;
   while(*start == '0') start++;
 
@@ -350,7 +359,7 @@ static inline const char *_remove_leading_zeros(const char *in)
 /**
  * @brief Generates a list of patches from the provided cht_patch structure.
  * Patche's positions are calculated by iterating over the labels alphanumerically.
- * 
+ *
  * @param chart The structure to populate with patches.
  * @param cht_patch The structure containing the patch information.
  * @param F_box The cht_box_F_t structure containing the frame values.
@@ -366,13 +375,13 @@ static gboolean _dt_cht_generate_patch_list(dt_colorchecker_chart_spec_t *chart,
   gchar *last_label = NULL;
 
   // Input validation
-  if(!cht_patch)
+  if(IS_NULL_PTR(cht_patch))
   {
     fprintf(stderr, "Invalid cht_patch");
     ERROR;
   }
 
-  if(!chart)
+  if(IS_NULL_PTR(chart))
   {
     fprintf(stderr, "Invalid chart");
     ERROR;
@@ -407,16 +416,16 @@ static gboolean _dt_cht_generate_patch_list(dt_colorchecker_chart_spec_t *chart,
 
   // Copy string for manipulation
   current_colum = g_strdup(start_colum);
-  const char *colum_last = swap_axes ? cht_patch->label_y_end : cht_patch->label_x_end; 
+  if(IS_NULL_PTR(current_colum)) ERROR
+  const char *colum_last = swap_axes ? cht_patch->label_y_end : cht_patch->label_x_end;
   const char *row_last = swap_axes ? cht_patch->label_x_end : cht_patch->label_y_end;
-  if(!current_colum) ERROR
 
   // iterate over the columns and rows
   int index_colum = 0;
   while(g_strcmp0(current_colum, colum_last) <= 0)
   {
     current_row = g_strdup(start_row);
-    if(!current_row) ERROR
+    if(IS_NULL_PTR(current_row)) ERROR
     int index_row = 0;
 
     while(g_strcmp0(current_row, row_last) <= 0)
@@ -426,24 +435,24 @@ static gboolean _dt_cht_generate_patch_list(dt_colorchecker_chart_spec_t *chart,
       const char *label_row = current_row[0] != '_' ? _remove_leading_zeros(current_row) : NULL;
 
       const gchar *label = g_strconcat(label_colum ? label_colum : "", label_row ? label_row : "", NULL);
-      if(!label) ERROR
+      if(IS_NULL_PTR(label)) ERROR
 
       // Create the patch
       dt_color_checker_patch *patch = _dt_colorchecker_patch_init();
-      if(!patch) ERROR
+      if(IS_NULL_PTR(patch)) ERROR
 
       // Set the patch properties
       patch->name = g_strdup(label);
-      if(!patch->name) ERROR
+      if(IS_NULL_PTR(patch->name)) ERROR
 
       int index_x = swap_axes ? index_row : index_colum;
       float temp_x = origin_x + (cht_patch->x_increment * index_x);
       temp_x /= F_box->width - chart->guide_size[0]; // factorize to the frame width
-      
+
       int index_y = swap_axes ? index_colum : index_row;
       float temp_y = origin_y + (cht_patch->y_increment * index_y);
       temp_y /= F_box->height - chart->guide_size[1]; // factorize to the frame height
-      
+
       patch->x = temp_x;
       patch->y = temp_y;
 
@@ -455,16 +464,16 @@ static gboolean _dt_cht_generate_patch_list(dt_colorchecker_chart_spec_t *chart,
 
       // increment x in a new string and pass the ownership to current_row
       gchar *temp = _increment_string(current_row);
-      SAFE_G_FREE(current_row)
+      dt_free(current_row)
       current_row = temp;
-      
+
       chart->colums = MAX(chart->colums, index_row + 1);
       index_row++;
     }
 
     // increment y in a new string and pass the ownership to current_colum
     gchar *temp = _increment_string(current_colum);
-    SAFE_G_FREE(current_colum)
+    dt_free(current_colum)
     current_colum = temp;
 
     chart->rows = MAX(chart->rows, index_colum + 1);
@@ -479,15 +488,15 @@ error:
   fprintf(stderr, "error parsing CHT file, in %s %s:%d\n", __FUNCTION__, __FILE__, lineno);
 
 end:
-  SAFE_G_FREE(last_label)
-  SAFE_G_FREE(current_row)
-  SAFE_G_FREE(current_colum)
+  dt_free(last_label)
+  dt_free(current_row)
+  dt_free(current_colum)
   return result;
 }
 
 /**
  * @brief Parses a CHT file and extracts the boxes data.
- * 
+ *
  * @param filename The path to the CHT file to parse.
  * @return GList* A GList containing the parsed boxes data. Each element is a GList of strings representing a box.
  */
@@ -495,9 +504,15 @@ static GList *_parse_cht(const char *filename)
 {
   GList *result = NULL;
 
+  if(IS_NULL_PTR(filename))
+  {
+    fprintf(stderr, "Invalid filename for CHT parsing");
+    return NULL;
+  }
+
   int lineno = 0;
   GIOChannel *fp = g_io_channel_new_file(filename, "r", NULL);
-  if(!fp)
+  if(IS_NULL_PTR(fp))
   {
     fprintf(stderr, "Error opening '%s'\n", filename);
     return NULL;
@@ -507,7 +522,7 @@ static GList *_parse_cht(const char *filename)
   GString *line = g_string_new(NULL);
   parser_state_t last_block = BLOCK_NONE;
   int skip_block = 0;
-  
+
   // main loop over the input file
   while(g_io_channel_read_line_string(fp, line, NULL, NULL) == G_IO_STATUS_NORMAL)
   {
@@ -520,10 +535,12 @@ static GList *_parse_cht(const char *filename)
 
     // we should be at the start of a block now
     const char *c = line->str;
+    if(IS_NULL_PTR(c)) continue;
+
     while(*c == ' ') c++; // skip leading spaces
     gchar **line_tokens = g_strsplit(c, " ", 0);
 
-    if(!g_strcmp0(line_tokens[0], "BOXES") && last_block < BLOCK_BOXES)
+    if(!IS_NULL_PTR(line_tokens[0]) && !g_strcmp0(line_tokens[0], "BOXES") && last_block < BLOCK_BOXES)
     {
       last_block = BLOCK_BOXES;
 
@@ -536,18 +553,28 @@ static GList *_parse_cht(const char *filename)
         while(*c == ' ') c++; // skip leading spaces
 
         gchar **box_tokens = g_strsplit(c, " ", 0);
-        if(!g_strcmp0(box_tokens[0], "F") || !g_strcmp0(box_tokens[0], "D") || !g_strcmp0(box_tokens[0], "X") || !g_strcmp0(box_tokens[0], "Y"))
+        if(!IS_NULL_PTR(box_tokens[0])
+            && (!g_strcmp0(box_tokens[0], "F")
+                || !g_strcmp0(box_tokens[0], "D")
+                || !g_strcmp0(box_tokens[0], "X")
+                || !g_strcmp0(box_tokens[0], "Y")))
+        {
           result = g_list_append(result, box_tokens);
+        }
+        else
+        {
+          g_strfreev(box_tokens);
+        }
       }
     }
 
-    if(!g_strcmp0(line_tokens[0], "BOX_SHRINK") && last_block < BLOCK_BOX_SHRINK)
+    if(!IS_NULL_PTR(line_tokens[0]) && !g_strcmp0(line_tokens[0], "BOX_SHRINK") && last_block < BLOCK_BOX_SHRINK)
     {
       last_block = BLOCK_BOX_SHRINK;
       skip_block = 1;
     }
 
-    g_strfreev(line_tokens); 
+    g_strfreev(line_tokens);
   }
 
   if(last_block == BLOCK_NONE)
@@ -568,7 +595,7 @@ end:
 // "The keywords and associated data must be used in the following order: BOXES, BOX_SHRINK, REF_ROTATION,
 // XLIST, YLIST and EXPECTED."
 static gboolean _dispatch_cht_data(GList **boxes, dt_colorchecker_chart_spec_t *chart_spec)
-{ 
+{
   gboolean result = FALSE;
   int lineno = 0;
 
@@ -578,27 +605,34 @@ static gboolean _dispatch_cht_data(GList **boxes, dt_colorchecker_chart_spec_t *
 
   float chart_radius = -1.f;
 
+  if(IS_NULL_PTR(boxes) || IS_NULL_PTR(chart_spec))
+  {
+    fprintf(stderr, "Invalid input to dispatch cht data");
+    ERROR
+  }
+
+  // Gather the frame box and every patch-row/column box before deriving the chart geometry.
   for(GList *lines = *boxes; lines; lines = g_list_next(lines))
   {
     const char **tokens = (const char **)lines->data;
-    if(!tokens) ERROR
+    if(IS_NULL_PTR(tokens)) ERROR
 
     const char letter = tokens[0][0];
     if(letter == 'F')
     {
       F_box = _dt_cht_extract_F(tokens);
     }
- 
+
     else if(letter == 'D' || letter == 'X' || letter == 'Y')
     {
       cht_box_t *box = _dt_cht_box_extract(tokens);
-      if(!box) ERROR
+      if(IS_NULL_PTR(box)) ERROR
 
       boxes_list = g_list_append(boxes_list, box);
     }
   }
 
-  if(!F_box) ERROR
+  if(IS_NULL_PTR(F_box)) ERROR
 
   // Fill the colorchecker spec structure
   chart_spec->ratio = F_box->height / F_box->width;
@@ -607,11 +641,11 @@ static gboolean _dispatch_cht_data(GList **boxes, dt_colorchecker_chart_spec_t *
   for(GList *iter = boxes_list; iter; iter = g_list_next(iter))
   {
     cht_box_t *box = (cht_box_t *)iter->data;
-    if(!box) ERROR
+    if(IS_NULL_PTR(box)) ERROR
 
     if(box->key_letter == 'D')
     {
-      // Save the guide corner sizes when they are specified, to changes the patches area size in consequence. 
+      // Save the guide corner sizes when they are specified, to changes the patches area size in consequence.
       if(!g_strcmp0(box->label_x_start,"MARK")) chart_spec->guide_size[0] = box->width - box->x_origin;
       if(!g_strcmp0(box->label_x_start,"MARK")) chart_spec->guide_size[1] = box->height - box->y_origin;
     }
@@ -620,14 +654,9 @@ static gboolean _dispatch_cht_data(GList **boxes, dt_colorchecker_chart_spec_t *
     {
       chart_spec->patch_width  = MIN(chart_spec->patch_width, box->width);
       chart_spec->patch_height = MIN(chart_spec->patch_height, box->height);
-      
+
       if(!_dt_cht_generate_patch_list(chart_spec, box, F_box))
       {
-        free(box->label_x_start);
-        free(box->label_x_end);
-        free(box->label_y_start);
-        free(box->label_y_end);
-        free(box);
         ERROR
       }
     }
@@ -646,31 +675,37 @@ error:
   fprintf(stderr, "Error dispatching CHT file, in %s %s:%d\n", __FUNCTION__, __FILE__, lineno);
 
 end:
-  SAFE_FREE(F_box)
-  if(boxes_list) g_list_free_full(boxes_list, _dt_cht_box_cleanup);
+  dt_free(F_box);
+  if(!IS_NULL_PTR(boxes_list)) g_list_free_full(boxes_list, _dt_cht_box_cleanup);
 
   return result;
 }
 
 /**
- * @brief Opens a CHT file and parses its content to fill the chart_spec structure. 
- * 
+ * @brief Opens a CHT file and parses its content to fill the chart_spec structure.
+ *
  * @param filename The path to the CHT file.
  * @param chart_spec The initialized structure to fill with the parsed data.
  * @return gboolean TRUE if the file was successfully parsed and the chart_spec filled, FALSE otherwise.
  */
 static gboolean _dt_colorchecker_open_cht(const char *filename, dt_colorchecker_chart_spec_t *chart_spec)
 {
-  GList *boxes = _parse_cht(filename);
-  if(!boxes)
+  if(IS_NULL_PTR(filename) || IS_NULL_PTR(chart_spec))
   {
-    fprintf(stderr, "Error parsing CHT file '%s'\n", filename);
+    fprintf(stderr, "[_dt_colorchecker_open_cht] Error: Invalid input parameters.\n");
+    return FALSE;
+  }
+
+  GList *boxes = _parse_cht(filename);
+  if(IS_NULL_PTR(boxes))
+  {
+    fprintf(stderr, "[_dt_colorchecker_open_cht] Error parsing CHT file '%s'\n", filename);
     return FALSE;
   }
 
   if(!_dispatch_cht_data(&boxes, chart_spec))
   {
-    fprintf(stderr, "Error dispatching CHT data from '%s'\n", filename);
+    fprintf(stderr, "[_dt_colorchecker_open_cht] Error dispatching CHT data from '%s'\n", filename);
     g_list_free_full(boxes, (GDestroyNotify)g_strfreev);
     return FALSE;
   }
@@ -682,60 +717,68 @@ static gboolean _dt_colorchecker_open_cht(const char *filename, dt_colorchecker_
   return TRUE;
 }
 
+static inline dt_colorchecker_CGATS_types _dt_CGATS_get_type_value(const char *type);
+
 static inline dt_colorchecker_material_types _dt_colorchecker_IT8_get_material_type(const cmsHANDLE *hIT8)
 {
-  if(!hIT8)
+  if(IS_NULL_PTR(*hIT8))
   {
-    fprintf(stderr, "Error: Invalid IT8 handle provided.\n");
+    fprintf(stderr, "[_dt_colorchecker_IT8_get_material_type] Error: Invalid IT8 handle provided.\n");
     return COLOR_CHECKER_MATERIAL_UNKNOWN;
   }
 
-  const char *CGATS_type = cmsIT8GetSheetType(*hIT8);
-  if(!CGATS_type) return COLOR_CHECKER_MATERIAL_UNKNOWN;
+  const int CGATS_type_value = _dt_CGATS_get_type_value(cmsIT8GetSheetType(*hIT8));
+  switch(CGATS_type_value)
+  {
+    case CGATS_TYPE_IT8_7_1:
+      return COLOR_CHECKER_MATERIAL_TRANSPARENT;
 
-  if(g_strcmp0(CGATS_type, CGATS_types[CGATS_TYPE_IT8_7_1]) == 0)
-    return COLOR_CHECKER_MATERIAL_TRANSPARENT;
+    case CGATS_TYPE_IT8_7_2:
+    case CGATS_TYPE_CTI3:
+      return COLOR_CHECKER_MATERIAL_OPAQUE;
 
-  else if(g_strcmp0(CGATS_type, CGATS_types[CGATS_TYPE_IT8_7_2]) == 0)
-    return COLOR_CHECKER_MATERIAL_OPAQUE;
+    case CGATS_TYPE_UNKOWN:
+    default:
+      return COLOR_CHECKER_MATERIAL_UNKNOWN;
+  }
 
-  // if something went wrong
-  return COLOR_CHECKER_MATERIAL_UNKNOWN; 
+  return COLOR_CHECKER_MATERIAL_UNKNOWN;
 }
 
 
 /**
  * @brief Gets the string representation of the material type ("Transparent" or "Opaque") to be used in label name.
  * The caller is responsible for freeing the returned string.
- * 
+ *
  * @param material (dt_colorchecker_material_types) the material type of the color checker
  * @return gchar* The string representation of the material type, or NULL if unknown.
  */
 static inline const char *_dt_colorchecker_get_material_string(const dt_colorchecker_material_types material)
 {
-  if (material >= COLOR_CHECKER_MATERIAL_TRANSPARENT && material < COLOR_CHECKER_MATERIAL_UNKNOWN)
+  if(material >= COLOR_CHECKER_MATERIAL_TRANSPARENT && material < COLOR_CHECKER_MATERIAL_UNKNOWN)
     return colorchecker_material_types[material];
-  
+
   // else
+  fprintf(stderr, "[_dt_colorchecker_get_material_string] Error: Unknown material type.\n");
   return NULL;
 }
 
 static inline dt_colorchecker_CGATS_types _dt_CGATS_get_type_value(const char *type)
 {
-  dt_colorchecker_CGATS_types t = CGATS_TYPE_IT8_7_1;
+  if(IS_NULL_PTR(type)) return CGATS_TYPE_UNKOWN;
 
-  // Ensure t doesn't overflows CGATS_types 
-  while(type && t < CGATS_TYPE_UNKOWN)
+  // Scan only supported names and return the sentinel for unsupported metadata.
+  for(dt_colorchecker_CGATS_types t = CGATS_TYPE_IT8_7_1; t < CGATS_TYPE_UNKOWN; t++)
   {
-    if(!g_strcmp0(type, CGATS_types[t])) break;
-    t++;
+    if(!g_strcmp0(type, CGATS_types[t])) return t;
   }
-  return t;
+
+  return CGATS_TYPE_UNKOWN;
 }
 
 /**
  * @brief Get the standard type name from a CGATS type.
- * 
+ *
  * @param type the CGATS type (the first 7 characters of the CGATS file)
  * @return gchar* The standard type name, or "Unknown Type" if the type is invalid.
  */
@@ -743,9 +786,9 @@ static gchar *_dt_colorchecker_get_standard_type(const char *type)
 {
   gchar *result = NULL;
 
-  if(!type)
+  if(IS_NULL_PTR(type))
   {
-    fprintf(stderr, "Error: Invalid CGATS type provided.\n");
+    fprintf(stderr, "[_dt_colorchecker_get_standard_type] Error: Invalid CGATS type provided.\n");
     result = g_strdup("Unknown Type");
   }
   else
@@ -753,17 +796,21 @@ static gchar *_dt_colorchecker_get_standard_type(const char *type)
     dt_colorchecker_CGATS_types t = _dt_CGATS_get_type_value(type);
     if(t == CGATS_TYPE_IT8_7_1 || t == CGATS_TYPE_IT8_7_2)
       result = g_strdup("IT8"); // make a shorter title for the IT8 types
-    
-    else if(t > CGATS_TYPE_IT8_7_2 && t < CGATS_TYPE_UNKOWN)
-      result = g_strdup(CGATS_types[t]);
-    
+    else if(t == CGATS_TYPE_CTI3)
+      result = g_strdup("CTI3");
     else
     {
-      fprintf(stderr, "Warning: Unknown CGATS type: %s\n", type);
+      dt_print(DT_DEBUG_VERBOSE, "[_dt_colorchecker_get_standard_type] Unknown CGATS type: %s\n", type);
       result = g_strdup(type);
     }
   }
-  
+
+  if(IS_NULL_PTR(result))
+  {
+    fprintf(stderr, "[_dt_colorchecker_get_standard_type] Error: Memory allocation failed for standard type string.\n");
+    return NULL;
+  }
+
   return result;
 }
 
@@ -776,37 +823,40 @@ static gchar *_dt_colorchecker_get_standard_type(const char *type)
  */
 static gboolean _dt_CGATS_is_supported(const cmsHANDLE *hIT8)
 {
-  if(!hIT8)
+  if(IS_NULL_PTR(hIT8) || IS_NULL_PTR(*hIT8))
   {
-    fprintf(stderr, "Error loading IT8 file.\n");
+    fprintf(stderr, "[_dt_CGATS_is_supported] Error: Invalid IT8 handle provided.\n");
     return FALSE;
   }
-  else
-  {    
-    const char *CGATS_type = cmsIT8GetProperty(*hIT8, "CGATS");
-    // Check if the data type can be found in our supported list of CGATS types
-    if(_dt_CGATS_get_type_value(CGATS_type) == CGATS_TYPE_UNKOWN)
-    {
-      fprintf(stderr, "Warning: type '%s' is not supported by Ansel.\n", CGATS_type);
-      return FALSE;
-    }
 
-    int column_SAMPLE_ID = -1;
-    int column_X = -1;
-    int column_Y = -1;
-    int column_Z = -1;
-    int column_L = -1;
-    int column_a = -1;
-    int column_b = -1;
-    char **sample_names = NULL;
-    int n_columns = cmsIT8EnumDataFormat(*hIT8, &sample_names);
+  const char *CGATS_type = cmsIT8GetSheetType(*hIT8);
+  // The CGATS property stores the file syntax version, for example
+  // "CGATS.17". The sheet type stores the target family we support,
+  // for example "IT8.7/1" or "IT8.7/2".
+  if(_dt_CGATS_get_type_value(CGATS_type) == CGATS_TYPE_UNKOWN)
+  {
+    dt_print(DT_DEBUG_VERBOSE, "[_dt_CGATS_is_supported] type '%s' is not supported by Ansel.\n",
+             !IS_NULL_PTR(CGATS_type) ? CGATS_type : "(null)");
+    return FALSE;
+  }
 
-    if(n_columns == -1)
-    {
-      fprintf(stderr, "Error with the CGATS file, can't get column types\n");
-      return FALSE;
-    }
+  int column_SAMPLE_ID = -1;
+  int column_X = -1;
+  int column_Y = -1;
+  int column_Z = -1;
+  int column_L = -1;
+  int column_a = -1;
+  int column_b = -1;
+  char **sample_names = NULL;
+  int n_columns = cmsIT8EnumDataFormat(*hIT8, &sample_names);
 
+  if(n_columns == -1)
+  {
+    fprintf(stderr, "[_dt_CGATS_is_supported] Error with the CGATS file, can't get column types\n");
+    return FALSE;
+  }
+
+  if(!IS_NULL_PTR(sample_names))
     for(int i = 0; i < n_columns; i++)
     {
       if(!g_strcmp0(sample_names[i], "SAMPLE_ID") || !g_strcmp0(sample_names[i], "SAMPLE_LOC"))
@@ -824,25 +874,25 @@ static gboolean _dt_CGATS_is_supported(const cmsHANDLE *hIT8)
       else if(!g_strcmp0(sample_names[i], "LAB_B"))
         column_b = i;
     }
-    if(column_SAMPLE_ID == -1)
-    {
-      fprintf(stderr, "Error: can't find the SAMPLE_ID column in the CGATS file.\n");
-      return FALSE;
-    }
 
-    if(column_X + column_Y + column_Z + column_L + column_a + column_b == -1)
-    {
-      fprintf(stderr, "Error: No XYZ or Lab columns found in the CGATS file.\n");
-      return FALSE;
-    }
+  if(column_SAMPLE_ID == -1)
+  {
+    fprintf(stderr, "[_dt_CGATS_is_supported] Error: can't find the SAMPLE_ID column in the CGATS file.\n");
+    return FALSE;
+  }
 
-    uint32_t table_count = cmsIT8TableCount(*hIT8);
-    if(table_count != 1)
-    {
-      fprintf(stderr, "Warning: the CGATS file contains %u tables but we only support files"
-              "with one table at the moment.\n", table_count);
-      return FALSE;
-    }
+  if(column_X + column_Y + column_Z + column_L + column_a + column_b == -1)
+  {
+    fprintf(stderr, "[_dt_CGATS_is_supported] Error: No XYZ or Lab columns found in the CGATS file.\n");
+    return FALSE;
+  }
+
+  uint32_t table_count = cmsIT8TableCount(*hIT8);
+  if(table_count != 1)
+  {
+    dt_print(DT_DEBUG_VERBOSE, "[_dt_CGATS_is_supported] the CGATS file contains %u tables but only one table is supported at the moment.\n",
+             table_count);
+    return FALSE;
   }
 
   return TRUE;
@@ -850,14 +900,14 @@ static gboolean _dt_CGATS_is_supported(const cmsHANDLE *hIT8)
 
 static inline const char *_dt_CGATS_get_author(const cmsHANDLE *hIT8)
 {
-  if(!hIT8)
+  if(IS_NULL_PTR(hIT8) || IS_NULL_PTR(*hIT8))
   {
-    fprintf(stderr, "Error: Invalid IT8 handle provided.\n");
+    fprintf(stderr, "[_dt_CGATS_get_author] Error: Invalid IT8 handle provided.\n");
     return "Unknown Author";
   }
   const char *author = cmsIT8GetProperty(*hIT8, "ORIGINATOR");
 
-  return author ? author : "Unknown Author";
+  return !IS_NULL_PTR(author) ? author : "Unknown Author";
 }
 
 /**
@@ -868,27 +918,27 @@ static inline const char *_dt_CGATS_get_author(const cmsHANDLE *hIT8)
  */
 static inline const char *_dt_CGATS_get_date(const cmsHANDLE *hIT8)
 {
-  if(!hIT8)
+  if(IS_NULL_PTR(hIT8) || IS_NULL_PTR(*hIT8))
   {
-    fprintf(stderr, "Error: Invalid IT8 handle provided.\n");
+    fprintf(stderr, "[_dt_CGATS_get_date] Error: Invalid IT8 handle provided.\n");
     return "Unknown Date";
   }
 
   // in CGATS.17, the date in PROD_DATE is stored in the format YYYY:MM
   const char *date = cmsIT8GetProperty(*hIT8, "PROD_DATE");
 
-  return date ? date : "Unknown Date";
+  return !IS_NULL_PTR(date) ? date : "Unknown Date";
 }
 
 static inline const char *_dt_CGATS_get_manufacturer(const cmsHANDLE *hIT8)
 {
-  if(!hIT8)
+  if(IS_NULL_PTR(hIT8) || IS_NULL_PTR(*hIT8))
   {
-    fprintf(stderr, "Error: Invalid IT8 handle provided.\n");
+    fprintf(stderr, "[_dt_CGATS_get_manufacturer] Error: Invalid IT8 handle provided.\n");
     return "Unknown Manufacturer";
   }
   const char *manufacturer = cmsIT8GetProperty(*hIT8, "MANUFACTURER");
-  return manufacturer ? manufacturer : "Unknown Manufacturer";
+  return !IS_NULL_PTR(manufacturer) ? manufacturer : "Unknown Manufacturer";
 }
 
 /**
@@ -897,36 +947,36 @@ static inline const char *_dt_CGATS_get_manufacturer(const cmsHANDLE *hIT8)
  * @param target_type The type of colorchecker
  * @return char* The name of the colorchecker
  */
-static inline const char *_dt_get_builtin_colorchecker_name(const dt_color_checker_targets target_type)
+static inline gchar *_dt_get_builtin_colorchecker_name(const dt_color_checker_targets target_type)
 {
   dt_color_checker_t *color_checker = dt_get_color_checker(target_type, NULL, NULL);
-  if(!color_checker)
+  if(IS_NULL_PTR(color_checker))
   {
-    fprintf(stderr, "Error: Unable to get the color checker %d.\n", target_type);
-    return NULL;
+    fprintf(stderr, "[_dt_get_builtin_colorchecker_name] Error: Unable to get the color checker %d.\n", target_type);
+    return g_strdup("Unknown name");
   }
-  const char *name = g_strdup(color_checker->name);
-  
+  gchar *name = g_strdup(color_checker->name);
+
   dt_colorchecker_cleanup(color_checker);
-  return name;
+  return !IS_NULL_PTR(name) ? name : g_strdup("Unknown name");
 }
 
 /**
  * @brief Get the number of patches in a built-in colorchecker.
- * 
+ *
  * @param target_type The type of colorchecker
  * @return int The number of patches in the colorchecker, or 0 if an error occurred.
  */
 static inline int _dt_get_builtin_colorchecker_patch_nb(const dt_color_checker_targets target_type)
 {
   dt_color_checker_t *color_checker = dt_get_color_checker(target_type, NULL, NULL);
-  if(!color_checker)
+  if(IS_NULL_PTR(color_checker))
   {
-    fprintf(stderr, "Error: Unable to get the color checker %d.\n", target_type);
+    fprintf(stderr, "[_dt_get_builtin_colorchecker_patch_nb] Error: Unable to get the color checker %d.\n", target_type);
     return 0;
   }
   const int patch_nb = color_checker->patches;
-  
+
   dt_colorchecker_cleanup(color_checker);
   return patch_nb;
 }
@@ -939,19 +989,28 @@ static inline int _dt_get_builtin_colorchecker_patch_nb(const dt_color_checker_t
  * @return gchar* String with the name of the colorchecker.
  */
 static gchar *_dt_colorchecker_label_build_name(const dt_colorchecker_CGATS_label_make_name_t *label)
-{  
-  const gchar *type = label->type ? label->type : g_strdup("?");
+{
+  if(IS_NULL_PTR(label))
+  {
+    fprintf(stderr, "[_dt_colorchecker_label_build_name] Error: Invalid label provided.\n");
+    return g_strdup("Unknown Color Checker");
+  }
+  const gchar *type = !IS_NULL_PTR(label->type) && g_strcmp0(label->type, "") != 0 ? label->type : "?";
   // material if any
-  gchar *tmp_material = (label->material && g_strcmp0(label->material, "") != 0) ? g_strdup_printf(" (%s)", label->material) : g_strdup("");
+  gchar *tmp_material = !IS_NULL_PTR(label->material) && g_strcmp0(label->material, "") != 0
+                           ? g_strdup_printf(" (%s)", label->material)
+                           : g_strdup("");
   // Description if any
-  gchar *tmp_description = (label->description && g_strcmp0(label->description, "") != 0) ? g_strdup(label->description) : g_strdup("Unknown");
-  
+  gchar *tmp_description = !IS_NULL_PTR(label->description) && g_strcmp0(label->description, "") != 0
+                             ? g_strdup(label->description)
+                             : g_strdup("Unknown");
+
   // Compose: filename
   gchar *name = g_strdup_printf("%s%s - %s", type, tmp_material, tmp_description);
 
   // Clean up
-  SAFE_G_FREE(tmp_material)
-  SAFE_G_FREE(tmp_description)
+  dt_free(tmp_material)
+  dt_free(tmp_description)
 
   return name;
 }
@@ -969,21 +1028,21 @@ static inline char *_dt_CGATS_get_name(const cmsHANDLE *hIT8, const char *filena
   gchar *result = NULL;
   gchar *basename = NULL;
 
-  if(filename && g_strcmp0(filename, "") != 0)
+  if(!IS_NULL_PTR(filename) && g_strcmp0(filename, "") != 0)
   {
     basename = g_path_get_basename(filename);
     char *dot = g_strrstr(basename, ".");
-    if(dot)
+    if(!IS_NULL_PTR(dot))
     {
       // remove the file extension
       *dot = '\0';
     }
   }
 
-  if(!hIT8)
+  if(IS_NULL_PTR(hIT8) || IS_NULL_PTR(*hIT8))
   {
-    fprintf(stderr, "dt_CGATS_get_name: Error: Invalid CGATS handle provided.\n");
-    result = g_strdup(basename ? basename : "Unnamed CGATS");
+    fprintf(stderr, "[_dt_CGATS_get_name] Error: Invalid CGATS handle provided.\n");
+    result = g_strdup(!IS_NULL_PTR(basename) ? basename : "Unnamed CGATS");
   }
   else
   {
@@ -993,39 +1052,57 @@ static inline char *_dt_CGATS_get_name(const cmsHANDLE *hIT8, const char *filena
     const dt_colorchecker_material_types material = _dt_colorchecker_IT8_get_material_type(hIT8);
     gchar *material_str = g_strdup(_dt_colorchecker_get_material_string(material));
 
-    const dt_colorchecker_CGATS_label_make_name_t label = {
-                                                      .type = chart_type,
-                                                      .description = description ? description : NULL,
-                                                      .material = material_str }; //can be NULL
-
-    gchar *name = _dt_colorchecker_label_build_name(&label);
-    
-    if(name && g_strcmp0(name, "") != 0)
-      result = name;
+    if(IS_NULL_PTR(chart_type) && IS_NULL_PTR(description) && IS_NULL_PTR(material_str))
+    {
+      dt_print(DT_DEBUG_VERBOSE, "[_dt_CGATS_get_name] no useful metadata found in the CGATS file to build a name, using filename instead.\n");
+      result = (!IS_NULL_PTR(basename) && g_strcmp0(basename, "") != 0) ? g_strdup(basename) : g_strdup("Unnamed CGATS");
+    }
     else
-      result = (basename && g_strcmp0(basename, "")) ? g_strdup(basename) : g_strdup("Unnamed CGATS");
-    
-    SAFE_G_FREE(chart_type)
-    SAFE_G_FREE(material_str)
+    {
+      const dt_colorchecker_CGATS_label_make_name_t label = {
+                                                        .type = chart_type,
+                                                        .description = !IS_NULL_PTR(description) ? description : NULL,
+                                                        .material = material_str }; //can be NULL
+
+      gchar *name = _dt_colorchecker_label_build_name(&label);
+
+      if(!IS_NULL_PTR(name) && g_strcmp0(name, "") != 0)
+        result = name;
+      else
+      {
+        result = (!IS_NULL_PTR(basename) && g_strcmp0(basename, "") != 0) ? g_strdup(basename) : g_strdup("Unnamed CGATS");
+        dt_free(name)
+      }
+    }
+
+    dt_free(chart_type)
+    dt_free(material_str)
   }
 
-  SAFE_G_FREE(basename)
+  dt_free(basename)
 
   return result;
 }
 
 /**
  * @brief Get the number of patches in a CHT file.
- * 
+ *
  * @param filepath the path to the CHT file
  * @return int the number of patches in the CHT file, or 0 if an error occurred.
  */
 static int _dt_colorchecker_cht_get_patch_nb(const char *filepath)
 {
   int result = 0;
+  dt_colorchecker_chart_spec_t *chart_spec = NULL;
 
-  dt_colorchecker_chart_spec_t *chart_spec = _dt_colorchecker_chart_spec_init();
-  if(!chart_spec) 
+  if(IS_NULL_PTR(filepath) || g_strcmp0(filepath, "") == 0)
+  {
+    fprintf(stderr, "Error: Invalid file path provided for CHT file.\n");
+    goto end;
+  }
+
+  chart_spec = _dt_colorchecker_chart_spec_init();
+  if(IS_NULL_PTR(chart_spec))
   {
     fprintf(stderr, "Error: cannot allocate memory for the chart spec.\n");
     goto end;
@@ -1037,12 +1114,12 @@ static int _dt_colorchecker_cht_get_patch_nb(const char *filepath)
     goto end;
   }
 
-  if(!chart_spec->num_patches)  
+  if(!chart_spec->num_patches)
     fprintf(stderr, "Error: no patches found in the cht file '%s'.\n", filepath);
   else result = chart_spec->num_patches;
 
   end:
-  _dt_colorchecker_chart_spec_cleanup(chart_spec);
+  if(!IS_NULL_PTR(chart_spec)) _dt_colorchecker_chart_spec_cleanup(chart_spec);
   return result;
 }
 
@@ -1053,6 +1130,12 @@ static float dE_1976(const float a, const float b, const float c)
 
 static inline void _dt_CGATS_find_whitest_blackest_greyest(const dt_color_checker_patch *const values, size_t *bwg, const size_t patch)
 {
+  if(IS_NULL_PTR(values) || IS_NULL_PTR(bwg))
+  {
+    fprintf(stderr, "[_dt_CGATS_find_whitest_blackest_greyest] Error: Invalid input parameters.\n");
+    return;
+  }
+
   for(int i = 0; i < 3; i++)
   {
     float target = 50.f * i;
@@ -1075,6 +1158,12 @@ static inline void _dt_CGATS_find_whitest_blackest_greyest(const dt_color_checke
  */
 static dt_color_checker_patch *_dt_colorchecker_CGATS_fill_patch_values(const cmsHANDLE hIT8, size_t *bwg, const dt_colorchecker_chart_spec_t *chart_spec, const size_t num_patches)
 {
+  if(IS_NULL_PTR(hIT8) || IS_NULL_PTR(bwg) || IS_NULL_PTR(chart_spec) || num_patches == 0)
+  {
+    fprintf(stderr, "Error: Invalid input parameters for filling patch values from CGATS file.\n");
+    return NULL;
+  }
+
   int column_SAMPLE_ID = -1;
   int column_X = -1;
   int column_Y = -1;
@@ -1086,7 +1175,7 @@ static dt_color_checker_patch *_dt_colorchecker_CGATS_fill_patch_values(const cm
   int n_columns = cmsIT8EnumDataFormat(hIT8, &sample_names);
 
   dt_color_checker_patch *values = dt_colorchecker_patch_array_init(num_patches);
-  if(!values)
+  if(IS_NULL_PTR(values))
   {
     fprintf(stderr, "Error: Memory allocation failed for values array.\n");
     goto error;
@@ -1096,6 +1185,7 @@ static dt_color_checker_patch *_dt_colorchecker_CGATS_fill_patch_values(const cm
   if(n_columns == -1)
   {
     fprintf(stderr, "Error with the CGATS file, can't get column types\n");
+    goto error;
   }
 
   for(int i = 0; i < n_columns; i++)
@@ -1153,22 +1243,28 @@ static dt_color_checker_patch *_dt_colorchecker_CGATS_fill_patch_values(const cm
   {
     // set name
     values[patch_iter].name = g_strdup(cmsIT8GetDataRowCol(hIT8, patch_iter, 0));
-    if(values[patch_iter].name == NULL)
+    if(IS_NULL_PTR(values[patch_iter].name))
     {
       fprintf(stderr, "Error : can't find sample '%lu' in CGATS file\n", patch_iter);
       goto error;
     }
-    
+
     // set patch position
     // The position of the patch is given by the chart specification
+    if(IS_NULL_PTR(chart_spec->patches))
+    {
+      fprintf(stderr, "Error: no patches found in the chart specification.\n");
+      goto error;
+    }
+
     const dt_color_checker_patch *p = (dt_color_checker_patch*)g_slist_nth_data(chart_spec->patches, (guint)patch_iter);
-    if(!p)
+    if(IS_NULL_PTR(p))
     {
       fprintf(stderr, "Error: patch %lu not found in chart specification.\n", patch_iter);
       goto error;
     }
-    _dt_colorchecker_copy_patch(&values[patch_iter], p);      
-    
+    _dt_colorchecker_copy_patch(&values[patch_iter], p);
+
     // Copy color values
     const double patchdbl[3] = { cmsIT8GetDataRowColDbl(hIT8, (int)patch_iter, columns[0]),
                                  cmsIT8GetDataRowColDbl(hIT8, (int)patch_iter, columns[1]),
@@ -1193,12 +1289,13 @@ static dt_color_checker_patch *_dt_colorchecker_CGATS_fill_patch_values(const cm
   goto end;
 
 error:
-  if(values)
+  if(!IS_NULL_PTR(values))
   {
     for(size_t i = 0; i < num_patches; i++)
-    { 
+    {
       dt_colorchecker_patch_cleanup(&values[i]);
     }
+    dt_free_align(values);
   }
   values = NULL;
 
@@ -1213,12 +1310,18 @@ dt_color_checker_t *dt_colorchecker_user_ref_create(const char *color_filename, 
 
   int lineno = 0;
 
+  if(IS_NULL_PTR(color_filename) || g_strcmp0(color_filename, "") == 0)
+  {
+    fprintf(stderr, "Error: Invalid color filename provided.\n");
+    return NULL;
+  }
+
   if(!g_file_test(color_filename, G_FILE_TEST_IS_REGULAR))
   {
     fprintf(stderr, "Error: the color file '%s' does not exist or is not a regular file.\n", color_filename);
     return NULL;
   }
-  
+
   cmsHANDLE hIT8 = cmsIT8LoadFromFile(NULL, color_filename);
 
   if(!_dt_CGATS_is_supported(&hIT8))
@@ -1228,13 +1331,13 @@ dt_color_checker_t *dt_colorchecker_user_ref_create(const char *color_filename, 
   }
 
   chart_spec = _dt_colorchecker_chart_spec_init();
-  if(!chart_spec)
+  if(IS_NULL_PTR(chart_spec))
   {
     fprintf(stderr, "Error: cannot allocate memory for the chart spec.\n");
     ERROR
   }
   // load the cht file if any
-  if(cht_filename && g_file_test(cht_filename, G_FILE_TEST_IS_REGULAR))
+  if(!IS_NULL_PTR(cht_filename) && g_file_test(cht_filename, G_FILE_TEST_IS_REGULAR))
   {
     if(!_dt_colorchecker_open_cht(cht_filename, chart_spec))
     {
@@ -1242,23 +1345,23 @@ dt_color_checker_t *dt_colorchecker_user_ref_create(const char *color_filename, 
       ERROR
     }
   }
-  else fprintf(stderr, "Warning: invalid cht file '%s'.\n", cht_filename);
+  else dt_print(DT_DEBUG_VERBOSE, "invalid cht file '%s'.\n", cht_filename);
 
   // Check if the CGATS file contains the expected number of patches
   const int num_patches_it8 = (const int)cmsIT8GetPropertyDbl(hIT8, "NUMBER_OF_SETS");
-  
+
   if(chart_spec->num_patches > 0 && num_patches_it8 != chart_spec->num_patches)
   {
-    fprintf(stderr, "Warning: the number of patches in the CGATS file (%i) does not match the expected number (%i) in the cht file.\n",
-            num_patches_it8, chart_spec->num_patches);
+    dt_print(DT_DEBUG_VERBOSE, "the number of patches in the CGATS file (%i) does not match the expected number (%i) in the cht file.\n",
+             num_patches_it8, chart_spec->num_patches);
   }
 
   // Limit the number of patches to the minimum between the CGATS file and the chart specification to avoid overflow.
   const size_t num_patches = MIN(num_patches_it8, chart_spec->num_patches);
-  dt_print(DT_DEBUG_VERBOSE, "%zu patches will be added to the chart\n", num_patches);
+  dt_print(DT_DEBUG_VERBOSE, "%" PRIu64 " patches will be added to the chart\n", (uint64_t)num_patches);
 
   checker = dt_colorchecker_init();
-  if(!checker)
+  if(IS_NULL_PTR(checker))
   {
     fprintf(stderr, "Error: cannot allocate memory for the color checker.\n");
     ERROR
@@ -1281,7 +1384,7 @@ dt_color_checker_t *dt_colorchecker_user_ref_create(const char *color_filename, 
   // blackest, whitest and greyest patches will be found while filling the color values
   size_t bwg[3] = { 0, 0, 0 };
   checker->values = _dt_colorchecker_CGATS_fill_patch_values(hIT8, bwg, chart_spec, num_patches);
-  if(!checker->values)
+  if(IS_NULL_PTR(checker->values))
   {
     fprintf(stderr, "Error: cannot fill the color values from the CGATS file.\n");
     ERROR
@@ -1300,8 +1403,8 @@ dt_color_checker_t *dt_colorchecker_user_ref_create(const char *color_filename, 
   fprintf(stderr, "Error creating user ref checker, in %s %s:%d\n", __FUNCTION__, __FILE__, lineno);
 
   end:
-  if(chart_spec) _dt_colorchecker_chart_spec_cleanup(chart_spec); // only allocated chart will be freed
-  if(hIT8) cmsIT8Free(hIT8);
+  if(!IS_NULL_PTR(chart_spec)) _dt_colorchecker_chart_spec_cleanup(chart_spec); // only allocated chart will be freed
+  if(!IS_NULL_PTR(hIT8)) cmsIT8Free(hIT8);
   return checker;
 }
 
@@ -1309,33 +1412,46 @@ static dt_colorchecker_label_t *_dt_colorchecker_user_ref_make_label(const gchar
 {
   dt_colorchecker_label_t *result = NULL;
 
+  if(IS_NULL_PTR(filename) || g_strcmp0(filename, "") == 0 || IS_NULL_PTR(user_it8_dir) || g_strcmp0(user_it8_dir, "") == 0)
+  {
+    fprintf(stderr, "Error: Invalid filename or user IT8 directory provided for making CGATS label.\n");
+    return NULL;
+  }
+
   gchar *filepath = g_build_filename(user_it8_dir, filename, NULL);
   if(g_file_test(filepath, G_FILE_TEST_IS_REGULAR))
   {
     cmsHANDLE hIT8 = cmsIT8LoadFromFile(NULL, filepath);
-    const int patch_nb = (int)cmsIT8GetPropertyDbl(hIT8, "NUMBER_OF_SETS");
-    if(hIT8 && _dt_CGATS_is_supported(&hIT8) && patch_nb > 0)
+    if(!IS_NULL_PTR(hIT8) && _dt_CGATS_is_supported(&hIT8))
     {
-      gchar *label = _dt_CGATS_get_name(&hIT8, filename);
-      dt_colorchecker_label_t *CGATS_label = dt_colorchecker_label_init(label, COLOR_CHECKER_USER_REF, filepath, patch_nb);
-          
-      SAFE_G_FREE(label);
-      result = CGATS_label;
-    }
-    cmsIT8Free(hIT8);
-  }
-  SAFE_G_FREE(filepath)
+      const int patch_nb = (int)cmsIT8GetPropertyDbl(hIT8, "NUMBER_OF_SETS");
+      if(patch_nb > 0)
+      {
+        gchar *label = _dt_CGATS_get_name(&hIT8, filename);
+        dt_colorchecker_label_t *CGATS_label = dt_colorchecker_label_init(label, COLOR_CHECKER_USER_REF, filepath, patch_nb);
 
-  if(!result)
-  {
-    SAFE_FREE(result)
-    return NULL;
+        dt_free(label);
+        result = CGATS_label;
+      }
+    }
+    if(!IS_NULL_PTR(hIT8)) cmsIT8Free(hIT8);
   }
+  dt_free(filepath)
+
+  if(IS_NULL_PTR(result))
+    return NULL;
+
   else return result;
 }
 
 static dt_colorchecker_label_t *_dt_colorchecker_cht_make_label(const gchar *filename, const gchar *user_it8_dir)
 {
+  if(IS_NULL_PTR(filename) || g_strcmp0(filename, "") == 0 || IS_NULL_PTR(user_it8_dir) || g_strcmp0(user_it8_dir, "") == 0)
+  {
+    fprintf(stderr, "Error: Invalid filename or user IT8 directory provided for making CHT label.\n");
+    return NULL;
+  }
+
   dt_colorchecker_label_t *cht_label = NULL;
 
   gchar *filepath = g_build_filename(user_it8_dir, filename, NULL);
@@ -1343,15 +1459,15 @@ static dt_colorchecker_label_t *_dt_colorchecker_cht_make_label(const gchar *fil
   {
     gchar *basename = g_path_get_basename(filename);
     char *dot = g_strrstr(basename, ".");
-    if(dot) *dot = '\0'; // removes the file extension in basename
+    if(!IS_NULL_PTR(dot)) *dot = '\0'; // removes the file extension in basename
     const int patch_nb = _dt_colorchecker_cht_get_patch_nb(filepath);
-    
+
     if(patch_nb > 0) // only create a label if the CHT file has patches
       cht_label = dt_colorchecker_label_init(basename, COLOR_CHECKER_USER_REF, filepath, patch_nb);
 
-    SAFE_G_FREE(basename)
+    dt_free(basename);
   }
-  SAFE_G_FREE(filepath)
+  dt_free(filepath);
 
   return cht_label;
 }
@@ -1361,13 +1477,18 @@ int dt_colorchecker_find_builtin(GList **colorcheckers_label)
   int nb = 0;
   for(int k = 0; k < COLOR_CHECKER_USER_REF; k++)
   {
-    const char *name = _dt_get_builtin_colorchecker_name(k);
+    gchar *name = _dt_get_builtin_colorchecker_name(k);
     const int patch_nb = _dt_get_builtin_colorchecker_patch_nb(k);
-    if(patch_nb <= 0) continue; // skip color checkers with no patches
-    
-    dt_colorchecker_label_t *builtin_label = dt_colorchecker_label_init(name, k, NULL, patch_nb);
+    if(patch_nb <= 0)
+    {
+      dt_free(name)
+      continue; // skip color checkers with no patches
+    }
 
-    if(!builtin_label)
+    dt_colorchecker_label_t *builtin_label = dt_colorchecker_label_init(name, k, NULL, patch_nb);
+    dt_free(name)
+
+    if(IS_NULL_PTR(builtin_label))
     {
       fprintf(stderr, "Error: failed to allocate memory for builtin colorchecker label %d\n", k);
       continue;
@@ -1389,27 +1510,27 @@ int dt_colorchecker_find_CGATS_reference_files(GList **ref_colorcheckers_files)
   gchar *user_it8_dir = g_build_filename(confdir, "color", "checker", NULL);
 
   GDir *dir = g_dir_open(user_it8_dir, 0, NULL);
-  if(dir)
+  if(!IS_NULL_PTR(dir))
   {
     const char *filename;
-    while((filename = g_dir_read_name(dir)) != NULL)
+    while(!IS_NULL_PTR(filename = g_dir_read_name(dir)))
     {
       const char *dot = g_strrstr(filename, ".");
-      if(g_ascii_strcasecmp(dot, ".cht") == 0)
+      if(!IS_NULL_PTR(dot) && g_ascii_strcasecmp(dot, ".cht") == 0)
         continue; // skip .cht files
-      
+
       dt_colorchecker_label_t *CGATS_label = _dt_colorchecker_user_ref_make_label(filename, user_it8_dir);
-      if(CGATS_label)
+      if(!IS_NULL_PTR(CGATS_label))
       {
         *ref_colorcheckers_files = g_list_append(*ref_colorcheckers_files, CGATS_label);
         nb++;
       }
       else
-        fprintf(stderr, "Warning: failed to load CGATS file '%s' in %s\n", filename, user_it8_dir);
+        dt_print(DT_DEBUG_VERBOSE, "failed to load CGATS file '%s' in %s\n", filename, user_it8_dir);
     }
     g_dir_close(dir);
   }
-  SAFE_G_FREE(user_it8_dir)
+  dt_free(user_it8_dir)
 
   return nb;
 }
@@ -1422,17 +1543,17 @@ int dt_colorchecker_find_cht_files(GList **chts)
   gchar *user_it8_dir = g_build_filename(confdir, "color", "checker", NULL);
 
   GDir *dir = g_dir_open(user_it8_dir, 0, NULL);
-  if(dir)
+  if(!IS_NULL_PTR(dir))
   {
     const char *filename;
-    while((filename = g_dir_read_name(dir)) != NULL)
+    while(!IS_NULL_PTR(filename = g_dir_read_name(dir)))
     {
       const char *dot = g_strrstr(filename, ".");
-      if(g_ascii_strcasecmp(dot, ".cht") != 0)
+      if(IS_NULL_PTR(dot) || g_ascii_strcasecmp(dot, ".cht") != 0)
         continue; // skip files that are not .cht
 
       dt_colorchecker_label_t *cht_label = _dt_colorchecker_cht_make_label(filename, user_it8_dir);
-      if(cht_label)
+      if(!IS_NULL_PTR(cht_label))
       {
         *chts = g_list_append(*chts, cht_label);
         nb++;
@@ -1440,7 +1561,7 @@ int dt_colorchecker_find_cht_files(GList **chts)
     }
     g_dir_close(dir);
   }
-  SAFE_G_FREE(user_it8_dir)
+  dt_free(user_it8_dir);
 
   return nb;
 }

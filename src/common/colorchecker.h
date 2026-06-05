@@ -106,8 +106,8 @@ dt_color_checker_t xrite_24_2000 = { .name = "Xrite ColorChecker 24 before 2014"
                                     .date = "3/27/2000",
                                     .manufacturer = "X-Rite/Gretag Macbeth",
                                     .type = COLOR_CHECKER_XRITE_24_2000,
-                                    .radius = 0.055f,
                                     .ratio = 2.f / 3.f,
+                                    .radius = 0.055f,
                                     .patches = 24,
                                     .size = { 4, 6 },
                                     .middle_grey = 21,
@@ -152,8 +152,8 @@ dt_color_checker_t xrite_24_2014 = { .name = "Xrite ColorChecker 24 after 2014",
                                     .date = "3/28/2015",
                                     .manufacturer = "X-Rite/Gretag Macbeth",
                                     .type = COLOR_CHECKER_XRITE_24_2014,
-                                    .radius = 0.055f,
                                     .ratio = 2.f / 3.f,
+                                    .radius = 0.055f,
                                     .patches = 24,
                                     .size = { 4, 6 },
                                     .middle_grey = 21,
@@ -403,12 +403,15 @@ typedef enum dt_colorchecker_CGATS_types
 {
   CGATS_TYPE_IT8_7_1 = 0,
   CGATS_TYPE_IT8_7_2 = 1,
-  CGATS_TYPE_UNKOWN = 2
+  CGATS_TYPE_CTI3    = 2,
+
+  CGATS_TYPE_UNKOWN  = 3
 } dt_colorchecker_CGATS_types;
 
 const char *CGATS_types[CGATS_TYPE_UNKOWN] = {
   "IT8.7/1", // transparent 
-  "IT8.7/2"  // opaque
+  "IT8.7/2", // opaque
+  "CTI3"     // opaque
 };
 
 typedef enum dt_colorchecker_material_types
@@ -490,7 +493,7 @@ void dt_colorchecker_patch_cleanup(dt_color_checker_patch *patch)
   if(!patch) return;
   if(!patch->name) return;
 
-  SAFE_G_FREE(patch->name);
+  dt_free(patch->name);
 }
 
 // This one is to fully free GSList of dt_color_checker_patch
@@ -500,9 +503,9 @@ void dt_colorchecker_patch_cleanup_list(void *_patch)
   if(!patch) return;
 
   // Free the name if it was allocated
-  SAFE_G_FREE(patch->name)
+  dt_free(patch->name);
 
-  free(patch);
+  dt_free(patch);
 }
 
 dt_color_checker_t *dt_colorchecker_init()
@@ -524,10 +527,10 @@ void dt_colorchecker_cleanup(dt_color_checker_t *checker)
 {
   if (!checker) return;
 
-  SAFE_G_FREE(checker->name)
-  SAFE_G_FREE(checker->author)
-  SAFE_G_FREE(checker->date)
-  SAFE_G_FREE(checker->manufacturer)
+  dt_free(checker->name);
+  dt_free(checker->author);
+  dt_free(checker->date);
+  dt_free(checker->manufacturer);
 
   if(checker->patches > 0 && checker->values)
   {
@@ -550,8 +553,8 @@ void dt_colorchecker_label_free(gpointer data)
   // Only free if not NULL and if dynamically allocated (user reference)
   if(checker_label->type == COLOR_CHECKER_USER_REF)
   {
-    SAFE_G_FREE(checker_label->name)
-    SAFE_G_FREE(checker_label->path) // Builtin checker doesn't use this char dynamically
+    dt_free(checker_label->name);
+    dt_free(checker_label->path); // Builtin checker doesn't use this char dynamically
   }
 }
 
