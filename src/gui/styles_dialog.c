@@ -663,7 +663,7 @@ static void _gui_styles_dialog_run(gboolean edit, const char *name, int32_t imgi
         gtk_list_store_set(GTK_LIST_STORE(liststore), &iter,
                            DT_STYLE_ITEMS_COL_ENABLED,  enabled,
                            DT_STYLE_ITEMS_COL_ISACTIVE, item->enabled ? is_active_pb : is_inactive_pb,
-                           DT_STYLE_ITEMS_COL_NAME,     item->name,
+                           DT_STYLE_ITEMS_COL_NAME,     delete_underscore(item->name),
                            DT_STYLE_ITEMS_COL_NUM,      item->num,
                            -1);
 
