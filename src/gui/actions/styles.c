@@ -232,7 +232,10 @@ static void _styles_menu_clear(void)
 
   if(*_styles_lists)
   {
-    g_list_free_full(*_styles_lists, dt_free_gpointer);
+    // Menu entries are owned by their GtkMenuItem: set_menu_entry() frees the
+    // dt_menu_entry_t from the widget "destroy" signal. Only the temporary list
+    // nodes need to be released here after destroying the menu children above.
+    g_list_free(*_styles_lists);
     *_styles_lists = NULL;
   }
 }
