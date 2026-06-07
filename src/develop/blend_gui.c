@@ -3262,7 +3262,7 @@ void dt_iop_gui_update_blendif(dt_iop_module_t *module)
 }
 
 
-void dt_iop_gui_init_blendif(GtkBox *blendw, dt_iop_module_t *module)
+void dt_iop_gui_init_blendif(GtkBox *blendw, dt_iop_module_t *module, GtkWidget *blendif_header)
 {
   dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
 
@@ -3276,16 +3276,9 @@ void dt_iop_gui_init_blendif(GtkBox *blendw, dt_iop_module_t *module)
   /* create and add blendif support if module supports it */
   if(bd->blendif_support)
   {
-    GtkWidget *section = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-
-    gtk_box_pack_start(GTK_BOX(section), dt_ui_label_new(_("parametric mask")), TRUE, TRUE, 0);
-    dt_gui_add_class(section, "dt_section_label");
-
     dt_iop_togglebutton_new_no_register(module, "blend`tools", N_("reset blend mask settings"), NULL,
                                         G_CALLBACK(_blendop_blendif_reset), FALSE, 0, 0,
-                                        dtgtk_cairo_paint_reset, section);
-
-    gtk_box_pack_start(GTK_BOX(bd->blendif_box), GTK_WIDGET(section), TRUE, FALSE, 0);
+                                        dtgtk_cairo_paint_reset, blendif_header);
 
     GtkWidget *header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
 
@@ -3903,7 +3896,7 @@ static void _blendop_update_top_enable_label(dt_iop_module_t *module)
   const char *multi_name = module->multi_name[0] ? module->multi_name : "0";
   gchar *multi_name_dup = ((g_strcmp0(multi_name, "0") == 0) || (g_strcmp0(multi_name, "") == 0)) ?  g_strdup("") : g_strdup_printf(" (%s)", multi_name);
   GtkWidget *child = gtk_bin_get_child(GTK_BIN(bd->top_enable));
-  gchar *label = g_markup_printf_escaped(_("Enable blending/masking in <b>%s%s</b>"), clean_name, multi_name_dup);
+  gchar *label = g_markup_printf_escaped(_("Enable in <b>%s%s</b>"), clean_name, multi_name_dup);
   if(GTK_IS_LABEL(child))
   {
     gtk_label_set_markup(GTK_LABEL(child), label);
@@ -4537,19 +4530,18 @@ void dt_iop_gui_init_blending_body(GtkBox *blendw, dt_iop_module_t *module)
   gtk_box_pack_start(GTK_BOX(refine_mask_label), dt_ui_label_new(_("mask refinement")), TRUE, TRUE, 0);
   dt_gui_add_class(refine_mask_label, "dt_section_label");
 
-  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *display_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
   bd->showmask = dt_iop_togglebutton_new_no_register(module, "blend`tools", N_("display mask and/or color channel"), NULL, G_CALLBACK(_blendop_blendif_showmask_clicked),
-                                                     FALSE, 0, 0, dtgtk_cairo_paint_showmask, hbox);
+                                                     FALSE, 0, 0, dtgtk_cairo_paint_showmask, display_box);
   gtk_widget_set_tooltip_text(bd->showmask, _("display mask and/or color channel. ctrl+click to display mask, "
                                               "shift+click to display channel. hover over parametric mask slider to "
                                               "select channel for display"));
   dt_gui_add_class(bd->showmask, "dt_transparent_background");
 
   bd->suppress = dt_iop_togglebutton_new_no_register(module, "blend`tools", N_("temporarily switch off blend mask"), NULL, G_CALLBACK(_blendop_blendif_suppress_toggled),
-                                                     FALSE, 0, 0, dtgtk_cairo_paint_eye_toggle, hbox);
+                                                     FALSE, 0, 0, dtgtk_cairo_paint_eye_toggle, display_box);
   gtk_widget_set_tooltip_text(bd->suppress, _("temporarily switch off blend mask. only for module in focus"));
   dt_gui_add_class(bd->suppress, "dt_transparent_background");
-
 
   
   bd->blending_body_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
@@ -4559,6 +4551,8 @@ void dt_iop_gui_init_blending_body(GtkBox *blendw, dt_iop_module_t *module)
   bd->top_enable = _blendop_create_enable_toggle(module, DEVELOP_MASK_ENABLED);
   _blendop_update_top_enable_label(module);
   gtk_box_pack_start(GTK_BOX(top_header), bd->top_enable, FALSE, FALSE, 0);
+  gtk_box_pack_end(GTK_BOX(top_header), display_box, TRUE, TRUE, 0);
+
   dt_gui_add_help_link(top_header, dt_get_help_url("masks_blending"));
   gtk_box_pack_start(GTK_BOX(bd->blending_body_box), top_header, FALSE, FALSE, 0);
 
@@ -4568,7 +4562,7 @@ void dt_iop_gui_init_blending_body(GtkBox *blendw, dt_iop_module_t *module)
   gtk_box_pack_start(GTK_BOX(top_box), bd->blend_mode_parameter_slider, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(top_box), bd->opacity_slider, TRUE, TRUE, 0);
 
-  gtk_box_pack_start(GTK_BOX(top_box), hbox, TRUE, TRUE, 0);
+  //gtk_box_pack_start(GTK_BOX(bd->top_enable), hbox, TRUE, TRUE, 0);
 
   gtk_box_pack_start(GTK_BOX(bd->top_content), top_box, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(bd->blending_body_box), bd->top_content, FALSE, FALSE, 0);
@@ -4587,10 +4581,10 @@ void dt_iop_gui_init_blending_body(GtkBox *blendw, dt_iop_module_t *module)
                               DEVELOP_MASK_SHAPE, &bd->masks_enable, &bd->masks_content);
   dt_iop_gui_init_masks(GTK_BOX(bd->masks_content), module);
 
-  _blendop_create_toggle_page(bd->blending_notebook, _("Parametric"), module,
+  GtkWidget *blendif_header = _blendop_create_toggle_page(bd->blending_notebook, _("Parametric"), module,
                               DEVELOP_MASK_PARAMETRIC, &bd->blendif_enable,
                               &bd->blendif_content);
-  dt_iop_gui_init_blendif(GTK_BOX(bd->blendif_content), module);
+  dt_iop_gui_init_blendif(GTK_BOX(bd->blendif_content), module, blendif_header);
 
   _blendop_create_notebook_page(bd->blending_notebook, _("Options"), &bd->bottom_content);
   GtkWidget *bottom_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);

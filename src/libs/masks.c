@@ -2056,10 +2056,6 @@ void gui_init(dt_lib_module_t *self)
 
   gtk_box_pack_start(GTK_BOX(shape_manager_container), d->treeview, TRUE, TRUE, 0);
   dt_gui_widget_init_auto_height(d->treeview, TREE_LIST_MIN_ROWS, TREE_LIST_MAX_ROWS);
-  
-  GtkWidget *blending_label = dt_ui_section_label_new(_("Blending"));
-  gtk_widget_set_margin_top(blending_label, DT_PIXEL_APPLY_DPI(12));
-  gtk_box_pack_start(GTK_BOX(self->widget), blending_label, TRUE, TRUE, 0);
 
   d->blending_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
   gtk_box_pack_start(GTK_BOX(self->widget), d->blending_box, FALSE, FALSE, 0);

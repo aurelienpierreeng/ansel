@@ -527,7 +527,7 @@ void dt_develop_blendif_rgb_jzczhz_blend(const struct dt_dev_pixelpipe_t *pipe,
 
 
 /** gui related stuff */
-void dt_iop_gui_init_blendif(GtkBox *blendw, dt_iop_module_t *module);
+void dt_iop_gui_init_blendif(GtkBox *blendw, dt_iop_module_t *module, GtkWidget *header);
 void dt_iop_gui_init_blending(dt_iop_module_t *module);
 void dt_iop_gui_init_blending_body(GtkBox *blendw, dt_iop_module_t *module);
 void dt_iop_gui_update_blending(dt_iop_module_t *module);
