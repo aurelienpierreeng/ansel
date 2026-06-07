@@ -1624,19 +1624,49 @@ static void update_profile_list(dt_iop_module_t *self)
     dt_colorspaces_color_profile_t *prof = (dt_colorspaces_color_profile_t *)l->data;
     dt_bauhaus_combobox_add(g->profile_combobox, prof->name);
   }
+  gboolean input_system_profile_separator_added = FALSE;
+  gboolean input_file_profile_separator_added = FALSE;
   for(GList *l = darktable.color_profiles->profiles; l; l = g_list_next(l))
   {
     dt_colorspaces_color_profile_t *prof = (dt_colorspaces_color_profile_t *)l->data;
-    if(prof->in_pos > -1) dt_bauhaus_combobox_add(g->profile_combobox, prof->name);
+    if(prof->in_pos > -1)
+    {
+      if(g->n_image_profiles > 0 && !input_system_profile_separator_added)
+      {
+        dt_bauhaus_combobox_add_separator(g->profile_combobox);
+        input_system_profile_separator_added = TRUE;
+      }
+      if(prof->type == DT_COLORSPACE_FILE && !input_file_profile_separator_added)
+      {
+        dt_bauhaus_combobox_add_separator(g->profile_combobox);
+        input_file_profile_separator_added = TRUE;
+      }
+      if(prof->type == DT_COLORSPACE_FILE)
+        dt_bauhaus_combobox_add_with_tooltip(g->profile_combobox, prof->name, prof->filename);
+      else
+        dt_bauhaus_combobox_add(g->profile_combobox, prof->name);
+    }
   }
 
   // working profile
   dt_bauhaus_combobox_clear(g->work_combobox);
 
+  gboolean work_file_profile_separator_added = FALSE;
   for(GList *l = darktable.color_profiles->profiles; l; l = g_list_next(l))
   {
     dt_colorspaces_color_profile_t *prof = (dt_colorspaces_color_profile_t *)l->data;
-    if(prof->work_pos > -1) dt_bauhaus_combobox_add(g->work_combobox, prof->name);
+    if(prof->work_pos > -1)
+    {
+      if(prof->type == DT_COLORSPACE_FILE && !work_file_profile_separator_added)
+      {
+        dt_bauhaus_combobox_add_separator(g->work_combobox);
+        work_file_profile_separator_added = TRUE;
+      }
+      if(prof->type == DT_COLORSPACE_FILE)
+        dt_bauhaus_combobox_add_with_tooltip(g->work_combobox, prof->name, prof->filename);
+      else
+        dt_bauhaus_combobox_add(g->work_combobox, prof->name);
+    }
   }
 }
 
