@@ -67,10 +67,9 @@ extern "C" {
 #endif
 
 #define DT_GUI_IOP_MODULE_CONTROL_SPACING 0
-// For mouse interaction with elements that are NOT related to any scale effect
-#define DT_GUI_MOUSE_EFFECT_RADIUS darktable.gui->mouse.effect_radius
-// For mouse interaction with elements that are related to a scale effect
-#define DT_GUI_MOUSE_EFFECT_RADIUS_SCALED darktable.gui->mouse.effect_radius_scaled
+
+// Mouse hit-test radius in darkroom image space, clamped for usable overlay selection.
+#define DT_GUI_MOUSE_EFFECT_RADIUS darktable.gui->mouse.effect_radius_clamped
 
 /* helper macro that applies the DPI transformation to fixed pixel values. input should be defaulting to 96
  * DPI */
@@ -174,10 +173,10 @@ typedef struct dt_gui_gtk_t
 
 
   struct {
-    // distance to the cursor in abs preview pixels
+    // Raw mouse hit-test radius in display pixels
     float effect_radius;
-    // distance to the cursor in abs image pixels
-    float effect_radius_scaled;
+    // Mouse hit-test radius coordinates, clamped for usable overlay selection.
+    float effect_radius_clamped;
     gboolean is_dragging;
   } mouse;
 

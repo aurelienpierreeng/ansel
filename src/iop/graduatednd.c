@@ -520,7 +520,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   else
   {
     g->selected = 0;
-    float ext[2] = { DT_GUI_MOUSE_EFFECT_RADIUS_SCALED, 0 };
+    float ext[2] = { DT_GUI_MOUSE_EFFECT_RADIUS, 0 };
     dt_dev_coordinates_image_abs_to_image_norm(self->dev, ext, 1);
 
     const float ext2 = ext[0] * ext[0];

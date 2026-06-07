@@ -1975,7 +1975,7 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, double x,
     if(mask_gui->creation && !g_list_shorter_than(mask_form->points, 4))
     {
       // check if we are near the first point to close the polygon on creation
-      const float dist_curs = DT_GUI_MOUSE_EFFECT_RADIUS_SCALED;
+      const float dist_curs = DT_GUI_MOUSE_EFFECT_RADIUS;
       const float dx = mask_gui->pos[0] - gui_points->points[2];
       const float dy = mask_gui->pos[1] - gui_points->points[3];
       const float dist2 = dx * dx + dy * dy;

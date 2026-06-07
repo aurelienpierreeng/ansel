@@ -1748,12 +1748,15 @@ void dt_dev_update_mouse_effect_radius(dt_develop_t *dev)
   float zoom_level = dt_dev_get_zoom_level(dev);
   if(zoom_level <= 0.f) zoom_level = 1.0f;
 
-  // Constant device-pixel safety margin for selection.
-  darktable.gui->mouse.effect_radius_scaled = darktable.gui->mouse.effect_radius / zoom_level;
+  // Keep mouse hit-tests usable across zoom levels by bounding the selection
+  // radius once it is expressed in image-space pixels.
+  darktable.gui->mouse.effect_radius_clamped = CLAMP(darktable.gui->mouse.effect_radius, 
+                                                    DT_PIXEL_APPLY_DPI(4.0f) / zoom_level,
+                                                    DT_PIXEL_APPLY_DPI(15.0f) / zoom_level);
 
   dt_print(DT_DEBUG_MASKS,
-           "[mouse] effect_radius=%0.2f effect_radius_scaled=%0.2f zoom_level=%0.4f ppd=%0.4f\n",
-           darktable.gui->mouse.effect_radius, darktable.gui->mouse.effect_radius_scaled,
+           "[mouse] effect_radius=%0.3f effect_radius_clamped=%0.3f zoom_level=%0.4f ppd=%0.4f\n",
+           darktable.gui->mouse.effect_radius, darktable.gui->mouse.effect_radius_clamped,
            zoom_level, darktable.gui->ppd);
 }
 

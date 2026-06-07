@@ -106,7 +106,7 @@ int dt_masks_find_closest_handle_common(dt_masks_form_t *mask_form,
   if(IS_NULL_PTR(gui_points)) return 0;
 
   // Handle detection in backbuffer space.
-  const float cursor_radius = DT_GUI_MOUSE_EFFECT_RADIUS_SCALED;
+  const float cursor_radius = DT_GUI_MOUSE_EFFECT_RADIUS;
   const float cursor_radius2 = cursor_radius * cursor_radius;
   const float cursor_x = mask_gui->pos[0];
   const float cursor_y = mask_gui->pos[1];
@@ -542,7 +542,7 @@ static gboolean _dt_masks_events_group_update_selection(dt_masks_form_t *group_f
   if(IS_NULL_PTR(group_form) || IS_NULL_PTR(mask_gui)) return FALSE;
 
   dt_develop_t *const dev = darktable.develop;
-  const float radius = DT_GUI_MOUSE_EFFECT_RADIUS_SCALED;
+  const float radius = DT_GUI_MOUSE_EFFECT_RADIUS;
   const float cursor_x = mask_gui->pos[0];
   const float cursor_y = mask_gui->pos[1];
   const int prev_group_selected = mask_gui->group_selected;
@@ -664,7 +664,7 @@ static gboolean _dt_masks_events_cursor_over_form(const dt_masks_form_t *dispatc
   int near = -1;
   int inside_source = 0;
   float dist = FLT_MAX;
-  dispatch_form->functions->get_distance(mask_gui->pos[0], mask_gui->pos[1], DT_GUI_MOUSE_EFFECT_RADIUS_SCALED,
+  dispatch_form->functions->get_distance(mask_gui->pos[0], mask_gui->pos[1], DT_GUI_MOUSE_EFFECT_RADIUS,
                                          mask_gui, form_index,
                                          g_list_length(dispatch_form->points), &inside, &inside_border, &near,
                                          &inside_source, &dist);
@@ -678,7 +678,7 @@ static gboolean _dt_masks_events_group_blocks_motion(dt_masks_form_gui_t *mask_g
 {
   if(IS_NULL_PTR(mask_gui)) return FALSE;
 
-  const float radius = DT_GUI_MOUSE_EFFECT_RADIUS_SCALED;
+  const float radius = DT_GUI_MOUSE_EFFECT_RADIUS;
   if(mask_gui->scrollx == 0.0f || mask_gui->scrolly == 0.0f) return FALSE;
 
   if((mask_gui->scrollx - mask_gui->pos[0] < radius && mask_gui->scrollx - mask_gui->pos[0] > -radius)

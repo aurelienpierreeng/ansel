@@ -2461,7 +2461,7 @@ static dt_liquify_hit_t _hit_paths(dt_iop_module_t *module,
     }
   }
 
-  if(distance < DT_GUI_MOUSE_EFFECT_RADIUS_SCALED * 0.5)
+  if(distance < DT_GUI_MOUSE_EFFECT_RADIUS * 0.5)
     return hit;
   else
     return NOWHERE;
