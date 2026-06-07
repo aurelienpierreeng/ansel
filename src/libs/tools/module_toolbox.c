@@ -83,8 +83,15 @@ void gui_init(dt_lib_module_t *self)
   dt_lib_module_toolbox_t *d = (dt_lib_module_toolbox_t *)g_malloc0(sizeof(dt_lib_module_toolbox_t));
   self->data = (void *)d;
 
-  /* the toolbar container */
-  d->container = self->widget = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  /* the toolbar container: use a flow box so children wrap to new lines when
+   * there are more buttons than fit in one row. */
+  d->container = self->widget = gtk_flow_box_new();
+  /* set a small spacing and a style class so we can target it in CSS */
+  gtk_flow_box_set_column_spacing(GTK_FLOW_BOX(d->container), 0);
+  gtk_flow_box_set_row_spacing(GTK_FLOW_BOX(d->container), 0);
+  /* allow children to keep their natural widths (don't force uniform cells) */
+  gtk_flow_box_set_homogeneous(GTK_FLOW_BOX(d->container), FALSE);
+  gtk_style_context_add_class(gtk_widget_get_style_context(d->container), "dt-module-toolbox");
 
   /* setup proxy */
   darktable.view_manager->proxy.module_toolbox.module = self;
@@ -121,13 +128,40 @@ void view_enter(struct dt_lib_module_t *self,struct dt_view_t *old_view,struct d
 static void _lib_module_toolbox_add(dt_lib_module_t *self, GtkWidget *widget, dt_view_type_flags_t views)
 {
   dt_lib_module_toolbox_t *d = (dt_lib_module_toolbox_t *)self->data;
-  gtk_box_pack_start(GTK_BOX(d->container), GTK_WIDGET(widget), TRUE, FALSE, 0);
-  gtk_widget_show_all(GTK_WIDGET(widget));
+  /* If caller set a priority flag on the widget, insert it first and add a
+   * separator after it. This is used to place the autoset button first. */
+  gpointer prio = g_object_get_data(G_OBJECT(widget), "dt-toolbox-priority");
+  if(prio && GPOINTER_TO_INT(prio) == 1)
+  {
+    /* insert widget at position 0 */
+    /* mark widget for css styling and insert at the first position */
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(widget)), "dt-module-toolbox-item");
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(widget)), "dt-toolbox-priority");
+    gtk_widget_set_hexpand(GTK_WIDGET(widget), FALSE);
+    gtk_widget_set_halign(GTK_WIDGET(widget), GTK_ALIGN_CENTER);
+    gtk_flow_box_insert(GTK_FLOW_BOX(d->container), GTK_WIDGET(widget), 0);
+
+    /* register both in child_views so view visibility logic applies */
+    child_data_t *child_data = malloc(sizeof(child_data_t));
+    child_data->child = widget;
+    child_data->views = views;
+    d->child_views = g_list_prepend(d->child_views, child_data);
+
+    gtk_widget_show_all(d->container);
+    return;
+  }
+
+  /* Add widget to flow container so it participates in wrapping. */
+  gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(widget)), "dt-module-toolbox-item");
+  gtk_widget_set_hexpand(GTK_WIDGET(widget), FALSE);
+  gtk_widget_set_halign(GTK_WIDGET(widget), GTK_ALIGN_CENTER);
+  gtk_container_add(GTK_CONTAINER(d->container), GTK_WIDGET(widget));
+  gtk_widget_show_all(d->container);
 
   child_data_t *child_data = malloc(sizeof(child_data_t));
   child_data->child = widget;
   child_data->views = views;
-  d->child_views = g_list_prepend(d->child_views,child_data);
+  d->child_views = g_list_prepend(d->child_views, child_data);
 
 }
 // clang-format off

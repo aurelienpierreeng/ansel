@@ -2401,10 +2401,12 @@ void gui_init(dt_view_t *self)
   {
     _autoset_manager = dt_calloc_align(sizeof(dt_autoset_manager_t));
 
-    _darkroom_autoset_button = gtk_button_new_with_label(_("Autoset"));
+    _darkroom_autoset_button = dtgtk_togglebutton_new(dtgtk_cairo_paint_wand, 0, NULL);
     gtk_widget_set_tooltip_text(_darkroom_autoset_button, _("Run autoset on selected modules\nRight click for options"));
     g_signal_connect(G_OBJECT(_darkroom_autoset_button), "clicked",
                     G_CALLBACK(_darkroom_autoset_quickbutton_clicked), dev);
+    /* Ensure autoset button is placed first in the toolbox. */
+    g_object_set_data(G_OBJECT(_darkroom_autoset_button), "dt-toolbox-priority", GINT_TO_POINTER(1));
     dt_view_manager_module_toolbox_add(darktable.view_manager, _darkroom_autoset_button, DT_VIEW_DARKROOM);
 
     _darkroom_autoset_popover = gtk_popover_new(_darkroom_autoset_button);

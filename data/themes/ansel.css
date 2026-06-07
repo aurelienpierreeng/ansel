@@ -588,6 +588,25 @@ menu separator
   border-top: 1px solid @grey_48;
 }
 
+/* Module toolbox: keep rules GTK-compatible and simple. */
+.dt-module-toolbox {
+  padding: 3px;
+  /* Match the main menu/header background to visually integrate the toolbox */
+  background-color: @grey_35;
+  border-top: none;
+  border-bottom: none;
+}
+
+.dt-module-toolbox .dt_module_btn,
+.dt-module-toolbox .dt-module-toolbox-item
+{
+  min-height: 1.1em; /* override broader rule */
+  background-color: transparent;
+  border: none;
+  padding: 2px 0;
+  margin: 2px;
+}
+
 menubar menuitem label
 {
   font-weight: 600;
