@@ -238,6 +238,19 @@ Why that? Just because it's a developer choice and most classes use underscore i
 @define-color brush_cursor alpha(white, .9);
 @define-color brush_trace alpha(black, .8);
 
+/* Blending UI alignment
+   Ensure internal blending containers (set in code via gtk_widget_set_name)
+   do not add extra margins/padding. The main library widget remains
+   responsible for outer spacing. */
+#blending-box,
+#blending-box box,
+#blending-wrapper,
+#blending-wrapper box
+{
+  margin: 0;
+  padding: 0;
+}
+
 /* Graphs : histogram, navigation thumbnail and some items on tone curve */
 @define-color graph_bg @grey_40;
 @define-color navigation_bg transparent;
