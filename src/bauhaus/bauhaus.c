@@ -41,7 +41,7 @@
     Copyright (C) 2022 Nicolas Auffray.
     Copyright (C) 2023 Alynx Zhou.
     Copyright (C) 2023 Luca Zulberti.
-    Copyright (C) 2025 Guillaume Stutin.
+    Copyright (C) 2025-2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -148,6 +148,19 @@ static void _margins_retrieve(struct dt_bauhaus_widget_t *w)
 static float _bh_get_row_height(struct dt_bauhaus_widget_t *w)
 {
   return w->bauhaus->line_height * 1.4;
+}
+
+/**
+ * @brief Get the vertical space used by a combobox popup entry.
+ *
+ * Real entries keep the regular row height. Separators may reserve a smaller
+ * row while remaining part of the popup geometry for mouse hit-testing.
+ */
+static float _bh_get_combobox_entry_height(struct dt_bauhaus_widget_t *w,
+                                           const dt_bauhaus_combobox_entry_t *entry)
+{
+  const float row_height_factor = (entry->is_separator) ? MAX(entry->row_height_factor, 0.1f) : 1.f;
+  return _bh_get_row_height(w) * row_height_factor;
 }
 
 /**
@@ -258,12 +271,18 @@ static double _get_combobox_popup_height(struct dt_bauhaus_widget_t *w)
   if(d->populate) d->populate(GTK_WIDGET(w), module);
   if(!d->entries->len) return 0.;
 
-  int num_lines = d->entries->len;
+  double height = 0.;
 
   // Add an extra sit for user keyboard input if any
-  if(w->bauhaus->keys_cnt > 0) num_lines += 1;
+  if(w->bauhaus->keys_cnt > 0) height += _bh_get_row_height(w);
 
-  return num_lines * _bh_get_row_height(w);
+  for(int i = 0; i < d->entries->len; i++)
+  {
+    const dt_bauhaus_combobox_entry_t *entry = g_ptr_array_index(d->entries, i);
+    height += _bh_get_combobox_entry_height(w, entry);
+  }
+
+  return height;
 }
 
 
@@ -364,9 +383,32 @@ static void _bh_combobox_get_hovered_entry(struct dt_bauhaus_widget_t *w)
 {
   if(w->bauhaus->current->type == DT_BAUHAUS_COMBOBOX)
   {
-    // Mark which combobox entry is active
     dt_bauhaus_combobox_data_t *d = &w->bauhaus->current->data.combobox;
-    d->hovered = (int)floorf(w->bauhaus->mouse_y / _bh_get_row_height(w));
+    double y = w->bauhaus->mouse_y;
+    d->hovered = -1;
+    gtk_widget_set_tooltip_text(w->bauhaus->popup_area, NULL);
+
+    // If the combobox has a user input row, it is always the first one and has the regular row height.
+    if(w->bauhaus->keys_cnt > 0)
+    {
+      y -= _bh_get_row_height(w);
+      if(y < 0.) return;
+    }
+
+    // Separators may use less vertical space than regular entries.
+    // Accumulate actual row heights so mouse hit-testing stays aligned with drawing.
+    for(int i = 0; i < d->entries->len; i++)
+    {
+      const dt_bauhaus_combobox_entry_t *entry = g_ptr_array_index(d->entries, i);
+      const double entry_height = _bh_get_combobox_entry_height(w, entry);
+      if(y < entry_height)
+      {
+        d->hovered = i;
+        gtk_widget_set_tooltip_text(w->bauhaus->popup_area, entry->tooltip);
+        return;
+      }
+      y -= entry_height;
+    }
   }
 }
 
@@ -547,15 +589,35 @@ static void _combobox_next_sensitive(struct dt_bauhaus_widget_t *w, int delta)
   _combobox_set(GTK_WIDGET(w), new_pos, TRUE);
 }
 
-static dt_bauhaus_combobox_entry_t *new_combobox_entry(const char *label, dt_bauhaus_combobox_alignment_t alignment,
-                                                       gboolean sensitive, void *data, void (*free_func)(void *))
+static dt_bauhaus_combobox_entry_t *new_combobox_entry(const char *label, const char *tooltip,
+                                                       dt_bauhaus_combobox_alignment_t alignment, gboolean sensitive,
+                                                       void *data, void (*free_func)(void *))
 {
   dt_bauhaus_combobox_entry_t *entry = (dt_bauhaus_combobox_entry_t *)calloc(1, sizeof(dt_bauhaus_combobox_entry_t));
   entry->label = g_strdup(label);
+  entry->tooltip = g_strdup(tooltip);
   entry->alignment = alignment;
   entry->sensitive = sensitive;
+  entry->row_height_factor = 1.f;
   entry->data = data;
   entry->free_func = free_func;
+  return entry;
+}
+
+/**
+ * @brief Create a new combobox separator entry.
+ *
+ * @param row_height_factor The height factor for the separator row.
+ * @return A new combobox separator entry.
+ */
+static dt_bauhaus_combobox_entry_t *new_combobox_separator(const float row_height_factor)
+{
+  dt_bauhaus_combobox_entry_t *entry = (dt_bauhaus_combobox_entry_t *)calloc(1, sizeof(dt_bauhaus_combobox_entry_t));
+  entry->label = g_strdup("");
+  entry->tooltip = NULL;
+  entry->sensitive = FALSE;
+  entry->is_separator = TRUE;
+  entry->row_height_factor = CLAMPF(row_height_factor, 0.1f, 1.f);
   return entry;
 }
 
@@ -563,6 +625,7 @@ static void free_combobox_entry(gpointer data)
 {
   dt_bauhaus_combobox_entry_t *entry = (dt_bauhaus_combobox_entry_t *)data;
   dt_free(entry->label);
+  dt_free(entry->tooltip);
   if(entry->free_func)
     entry->free_func(entry->data);
   dt_free(entry);
@@ -886,7 +949,7 @@ static gboolean dt_bauhaus_popup_button_press(GtkWidget *widget, GdkEventButton 
     {
       // counts as double click, reset:
       const dt_bauhaus_combobox_data_t *d = &w->data.combobox;
-      _combobox_set(GTK_WIDGET(w), d->defpos, FALSE);
+      dt_bauhaus_combobox_set(GTK_WIDGET(w), d->defpos);
       dt_bauhaus_widget_reject(w);
     }
     else
@@ -1800,6 +1863,65 @@ static dt_bauhaus_combobox_data_t *_combobox_data(GtkWidget *widget)
   return d;
 }
 
+/**
+ * @brief Count selectable combobox entries.
+ *
+ * Separators are drawn as rows in the popup, but they are not values. Public
+ * indexes therefore stay stable when separators are inserted.
+ */
+static int _combobox_selectable_count(const dt_bauhaus_combobox_data_t *d)
+{
+  int count = 0;
+  for(int i = 0; !IS_NULL_PTR(d) && i < d->entries->len; i++)
+  {
+    const dt_bauhaus_combobox_entry_t *entry = g_ptr_array_index(d->entries, i);
+    if(!entry->is_separator) count++;
+  }
+  return count;
+}
+
+/**
+ * @brief Convert a public value index to the internal entry row.
+ *
+ * The internal row includes separators because the popup needs to draw them.
+ * The public index excludes separators because callers use it as a value.
+ */
+static int _combobox_public_to_entry_pos(const dt_bauhaus_combobox_data_t *d, const int pos,
+                                         const gboolean allow_end)
+{
+  if(IS_NULL_PTR(d) || pos < 0) return -1;
+
+  int selectable_pos = 0;
+  for(int i = 0; i < d->entries->len; i++)
+  {
+    const dt_bauhaus_combobox_entry_t *entry = g_ptr_array_index(d->entries, i);
+    if(entry->is_separator) continue;
+    if(selectable_pos == pos) return i;
+    selectable_pos++;
+  }
+
+  return (allow_end && selectable_pos == pos) ? (int)d->entries->len : -1;
+}
+
+/**
+ * @brief Convert an internal entry row to the public value index.
+ */
+static int _combobox_entry_pos_to_public(const dt_bauhaus_combobox_data_t *d, const int entry_pos)
+{
+  if(IS_NULL_PTR(d) || entry_pos < 0 || entry_pos >= d->entries->len) return -1;
+
+  int selectable_pos = 0;
+  for(int i = 0; i <= entry_pos; i++)
+  {
+    const dt_bauhaus_combobox_entry_t *entry = g_ptr_array_index(d->entries, i);
+    if(entry->is_separator) continue;
+    if(i == entry_pos) return selectable_pos;
+    selectable_pos++;
+  }
+
+  return -1;
+}
+
 void dt_bauhaus_combobox_add_populate_fct(GtkWidget *widget, void (*fct)(GtkWidget *w, void *module))
 {
   if(IS_NULL_PTR(widget)) return;
@@ -1819,6 +1941,18 @@ void dt_bauhaus_combobox_add(GtkWidget *widget, const char *text)
   dt_bauhaus_combobox_add_full(widget, text, DT_BAUHAUS_COMBOBOX_ALIGN_RIGHT, NULL, NULL, TRUE);
 }
 
+void dt_bauhaus_combobox_add_with_tooltip(GtkWidget *widget, const char *text, const char *tooltip)
+{
+  if(IS_NULL_PTR(widget)) return;
+  struct dt_bauhaus_widget_t *w = DT_BAUHAUS_WIDGET(widget);
+  if(w->type != DT_BAUHAUS_COMBOBOX) return;
+  dt_bauhaus_combobox_data_t *d = &w->data.combobox;
+  dt_bauhaus_combobox_entry_t *entry
+      = new_combobox_entry(text, tooltip, DT_BAUHAUS_COMBOBOX_ALIGN_RIGHT, TRUE, NULL, NULL);
+  g_ptr_array_add(d->entries, entry);
+  if(d->active < 0) d->active = (int)d->entries->len - 1;
+}
+
 void dt_bauhaus_combobox_add_aligned(GtkWidget *widget, const char *text, dt_bauhaus_combobox_alignment_t align)
 {
   dt_bauhaus_combobox_add_full(widget, text, align, NULL, NULL, TRUE);
@@ -1831,9 +1965,23 @@ void dt_bauhaus_combobox_add_full(GtkWidget *widget, const char *text, dt_bauhau
   struct dt_bauhaus_widget_t *w = DT_BAUHAUS_WIDGET(widget);
   if(w->type != DT_BAUHAUS_COMBOBOX) return;
   dt_bauhaus_combobox_data_t *d = &w->data.combobox;
-  dt_bauhaus_combobox_entry_t *entry = new_combobox_entry(text, align, sensitive, data, free_func);
+  dt_bauhaus_combobox_entry_t *entry = new_combobox_entry(text, NULL, align, sensitive, data, free_func);
   g_ptr_array_add(d->entries, entry);
-  if(d->active < 0) d->active = 0;
+  if(d->active < 0) d->active = (int)d->entries->len - 1;
+}
+
+void dt_bauhaus_combobox_add_separator(GtkWidget *widget)
+{
+  dt_bauhaus_combobox_add_separator_with_height(widget, DT_BAUHAUS_COMBO_SEPARATOR_DEFAULT_HEIGHT_FACTOR);
+}
+
+void dt_bauhaus_combobox_add_separator_with_height(GtkWidget *widget, const float row_height_factor)
+{
+  if(IS_NULL_PTR(widget)) return;
+  struct dt_bauhaus_widget_t *w = DT_BAUHAUS_WIDGET(widget);
+  if(w->type != DT_BAUHAUS_COMBOBOX) return;
+  dt_bauhaus_combobox_data_t *d = &w->data.combobox;
+  g_ptr_array_add(d->entries, new_combobox_separator(row_height_factor));
 }
 
 void dt_bauhaus_combobox_set_entries_ellipsis(GtkWidget *widget, PangoEllipsizeMode ellipis)
@@ -1876,16 +2024,18 @@ void dt_bauhaus_combobox_set_selected_text_align(GtkWidget *widget, const dt_bau
 void dt_bauhaus_combobox_remove_at(GtkWidget *widget, int pos)
 {
   dt_bauhaus_combobox_data_t *d = _combobox_data(widget);
+  if(IS_NULL_PTR(d)) return;
+  const int entry_pos = _combobox_public_to_entry_pos(d, pos, FALSE);
 
-  if(IS_NULL_PTR(d) || pos < 0 || pos >= d->entries->len) return;
+  if(entry_pos < 0) return;
 
   // move active position up if removing anything before it
   // or when removing last position that is currently active.
   // this also sets active to -1 when removing the last remaining entry in a combobox.
-  if(d->active > pos || d->active == d->entries->len-1)
+  if(d->active > entry_pos || d->active == d->entries->len-1)
     d->active--;
 
-  g_ptr_array_remove_index(d->entries, pos);
+  g_ptr_array_remove_index(d->entries, entry_pos);
 }
 
 void dt_bauhaus_combobox_insert(GtkWidget *widget, const char *text,int pos)
@@ -1899,15 +2049,37 @@ void dt_bauhaus_combobox_insert_full(GtkWidget *widget, const char *text, dt_bau
   struct dt_bauhaus_widget_t *w = DT_BAUHAUS_WIDGET(widget);
   if(w->type != DT_BAUHAUS_COMBOBOX) return;
   dt_bauhaus_combobox_data_t *d = &w->data.combobox;
-  g_ptr_array_insert(d->entries, pos, new_combobox_entry(text, align, TRUE, data, free_func));
-  if(d->active < 0) d->active = 0;
+  const int entry_pos = _combobox_public_to_entry_pos(d, pos, TRUE);
+  if(entry_pos < 0) return;
+  g_ptr_array_insert(d->entries, entry_pos, new_combobox_entry(text, NULL, align, TRUE, data, free_func));
+  if(d->active < 0)
+    d->active = entry_pos;
+  else if(entry_pos <= d->active)
+    d->active++;
+}
+
+void dt_bauhaus_combobox_insert_separator(GtkWidget *widget, int pos)
+{
+  dt_bauhaus_combobox_insert_separator_with_height(widget, pos, DT_BAUHAUS_COMBO_SEPARATOR_DEFAULT_HEIGHT_FACTOR);
+}
+
+void dt_bauhaus_combobox_insert_separator_with_height(GtkWidget *widget, int pos, const float row_height_factor)
+{
+  if(IS_NULL_PTR(widget)) return;
+  struct dt_bauhaus_widget_t *w = DT_BAUHAUS_WIDGET(widget);
+  if(w->type != DT_BAUHAUS_COMBOBOX) return;
+  dt_bauhaus_combobox_data_t *d = &w->data.combobox;
+  const int entry_pos = _combobox_public_to_entry_pos(d, pos, TRUE);
+  if(entry_pos < 0) return;
+  g_ptr_array_insert(d->entries, entry_pos, new_combobox_separator(row_height_factor));
+  if(entry_pos <= d->active) d->active++;
 }
 
 int dt_bauhaus_combobox_length(GtkWidget *widget)
 {
   const dt_bauhaus_combobox_data_t *d = _combobox_data(widget);
 
-  return d ? d->entries->len : 0;
+  return _combobox_selectable_count(d);
 }
 
 const char *dt_bauhaus_combobox_get_text(GtkWidget *widget)
@@ -1922,6 +2094,7 @@ const char *dt_bauhaus_combobox_get_text(GtkWidget *widget)
   else
   {
     const dt_bauhaus_combobox_entry_t *entry = g_ptr_array_index(d->entries, d->active);
+    if(entry->is_separator) return NULL;
     return entry->label;
   }
 }
@@ -1932,6 +2105,7 @@ gpointer dt_bauhaus_combobox_get_data(GtkWidget *widget)
   if(IS_NULL_PTR(d) || d->active < 0) return NULL;
 
   const dt_bauhaus_combobox_entry_t *entry = g_ptr_array_index(d->entries, d->active);
+  if(entry->is_separator) return NULL;
   return entry->data;
 }
 
@@ -1948,9 +2122,10 @@ void dt_bauhaus_combobox_clear(GtkWidget *widget)
 const char *dt_bauhaus_combobox_get_entry(GtkWidget *widget, int pos)
 {
   const dt_bauhaus_combobox_data_t *d = _combobox_data(widget);
-  if(IS_NULL_PTR(d) || pos < 0 || pos >= d->entries->len) return NULL;
+  const int entry_pos = _combobox_public_to_entry_pos(d, pos, FALSE);
+  if(entry_pos < 0) return NULL;
 
-  const dt_bauhaus_combobox_entry_t *entry = g_ptr_array_index(d->entries, pos);
+  const dt_bauhaus_combobox_entry_t *entry = g_ptr_array_index(d->entries, entry_pos);
   return entry->label;
 }
 
@@ -2009,6 +2184,12 @@ void _combobox_set(GtkWidget *widget, const int pos, gboolean timeout)
   const int old_pos = d->active;
   const int new_pos = (d->entries) ? CLAMP(pos, -1, (int)d->entries->len - 1)
                                    : -1;
+  if(new_pos >= 0)
+  {
+    // if the new position is a separator, don't change the active position but still redraw to update the visual selection
+    const dt_bauhaus_combobox_entry_t *entry = g_ptr_array_index(d->entries, new_pos);
+    if(entry->is_separator) return;
+  }
 
   // When updating programmatically (GUI reset), ensure no delayed commit from a
   // previous user interaction survives, even if the value doesn't change.
@@ -2042,7 +2223,11 @@ void _combobox_set(GtkWidget *widget, const int pos, gboolean timeout)
 // Public API function, called from GUI init and update
 void dt_bauhaus_combobox_set(GtkWidget *widget, const int pos)
 {
-  _combobox_set(widget, pos, FALSE);
+  const dt_bauhaus_combobox_data_t *d = _combobox_data(widget);
+  const int selectable_count = _combobox_selectable_count(d);
+  const int public_pos = (selectable_count > 0) ? CLAMP(pos, -1, selectable_count - 1) : -1;
+  const int entry_pos = _combobox_public_to_entry_pos(d, public_pos, FALSE);
+  _combobox_set(widget, entry_pos, FALSE);
 }
 
 
@@ -2055,9 +2240,10 @@ gboolean dt_bauhaus_combobox_set_from_text(GtkWidget *widget, const char *text)
   for(int i = 0; d && i < d->entries->len; i++)
   {
     const dt_bauhaus_combobox_entry_t *entry = g_ptr_array_index(d->entries, i);
+    if(entry->is_separator) continue;
     if(!g_strcmp0(entry->label, text))
     {
-      dt_bauhaus_combobox_set(widget, i);
+      _combobox_set(widget, i, FALSE);
       return TRUE;
     }
   }
@@ -2071,9 +2257,10 @@ gboolean dt_bauhaus_combobox_set_from_value(GtkWidget *widget, int value)
   for(int i = 0; d && i < d->entries->len; i++)
   {
     const dt_bauhaus_combobox_entry_t *entry = g_ptr_array_index(d->entries, i);
+    if(entry->is_separator) continue;
     if(GPOINTER_TO_INT(entry->data) == value)
     {
-      dt_bauhaus_combobox_set(widget, i);
+      _combobox_set(widget, i, FALSE);
       return TRUE;
     }
   }
@@ -2084,15 +2271,16 @@ int dt_bauhaus_combobox_get(GtkWidget *widget)
 {
   const dt_bauhaus_combobox_data_t *d = _combobox_data(widget);
 
-  return d ? d->active : -1;
+  return _combobox_entry_pos_to_public(d, d ? d->active : -1);
 }
 
 void dt_bauhaus_combobox_entry_set_sensitive(GtkWidget *widget, int pos, gboolean sensitive)
 {
   const dt_bauhaus_combobox_data_t *d = _combobox_data(widget);
-  if(IS_NULL_PTR(d) || pos < 0 || pos >= d->entries->len) return;
+  const int entry_pos = _combobox_public_to_entry_pos(d, pos, FALSE);
+  if(entry_pos < 0) return;
 
-  dt_bauhaus_combobox_entry_t *entry = (dt_bauhaus_combobox_entry_t *)g_ptr_array_index(d->entries, pos);
+  dt_bauhaus_combobox_entry_t *entry = (dt_bauhaus_combobox_entry_t *)g_ptr_array_index(d->entries, entry_pos);
   entry->sensitive = sensitive;
 }
 
@@ -2503,18 +2691,19 @@ static gboolean dt_bauhaus_popup_draw(GtkWidget *widget, cairo_t *crf, gpointer 
       const dt_bauhaus_combobox_data_t *d = &w->data.combobox;
 
       // User keyboard input goes first
-      int offset = 0;
+      double popup_y = 0.;
       if(w->bauhaus->keys_cnt > 0)
       {
         cairo_save(cr);
         set_color(cr, text_color_focused);
+        const double query_height = _bh_get_row_height(w);
         GdkRectangle query_label = { .x = 0.,
-                                     .y = 0.,
+                                     .y = popup_y,
                                      .width = main_width,
-                                     .height = _bh_get_row_height(w) };
+                                     .height = query_height };
         show_pango_text(w, context, cr, &query_label, w->bauhaus->keys, BH_ALIGN_RIGHT, BH_ALIGN_MIDDLE,
                         PANGO_ELLIPSIZE_NONE, NULL, NULL, NULL, GTK_STATE_FLAG_NORMAL);
-        offset = 1;
+        popup_y += query_height;
         cairo_restore(cr);
       }
 
@@ -2523,6 +2712,21 @@ static gboolean dt_bauhaus_popup_draw(GtkWidget *widget, cairo_t *crf, gpointer 
       for(int j = 0; j < d->entries->len; j++)
       {
         const dt_bauhaus_combobox_entry_t *entry = g_ptr_array_index(d->entries, j);
+        const double entry_height = _bh_get_combobox_entry_height(w, entry);
+        if(entry->is_separator)
+        {
+          if(w->bauhaus->keys_cnt == 0)
+          {
+            cairo_set_source_rgba(cr, 0.5, 0.5, 0.5, 1.);
+            cairo_move_to(cr, 0., popup_y + 0.5 * entry_height);
+            cairo_line_to(cr, main_width, popup_y + 0.5 * entry_height);
+            cairo_set_line_width(cr, 1.);
+            cairo_stroke(cr);
+          }
+          popup_y += entry_height;
+          continue;
+        }
+
         gchar *text_cmp = g_utf8_casefold(entry->label, -1);
         if(!strncmp(text_cmp, keys, w->bauhaus->keys_cnt))
         {
@@ -2552,9 +2756,9 @@ static gboolean dt_bauhaus_popup_draw(GtkWidget *widget, cairo_t *crf, gpointer 
           }
 
           GdkRectangle bounding_label = { .x = 0.,
-                                          .y = (offset + j) * _bh_get_row_height(w),
+                                          .y = popup_y,
                                           .width = main_width,
-                                          .height = _bh_get_row_height(w) };
+                                          .height = entry_height };
 #if DEBUG
           cairo_rectangle(cr, bounding_label.x, bounding_label.y, bounding_label.width, bounding_label.height);
           cairo_set_line_width(cr, 2);
@@ -2565,6 +2769,7 @@ static gboolean dt_bauhaus_popup_draw(GtkWidget *widget, cairo_t *crf, gpointer 
         }
 
         dt_free(text_cmp);
+        popup_y += entry_height;
       }
       cairo_restore(cr);
       dt_free(keys);
@@ -3108,7 +3313,7 @@ static gboolean dt_bauhaus_combobox_button_press(GtkWidget *widget, GdkEventButt
       {
         // never called, as we popup the other window under your cursor before.
         // (except in weird corner cases where the popup is under the -1st entry
-        _combobox_set(widget, d->defpos, FALSE);
+        dt_bauhaus_combobox_set(widget, d->defpos);
         dt_bauhaus_hide_popup(w->bauhaus);
       }
       else

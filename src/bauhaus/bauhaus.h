@@ -22,7 +22,7 @@
     Copyright (C) 2021 Philippe Weyland.
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2025 Alynx Zhou.
-    Copyright (C) 2025 Guillaume Stutin.
+    Copyright (C) 2025-2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -70,6 +70,7 @@ extern GType DT_BAUHAUS_WIDGET_TYPE;
 #define DT_BAUHAUS_SLIDER_VALUE_CHANGED_DELAY_MIN 25
 #define DT_BAUHAUS_SLIDER_MAX_STOPS 20
 #define DT_BAUHAUS_COMBO_MAX_TEXT 180
+#define DT_BAUHAUS_COMBO_SEPARATOR_DEFAULT_HEIGHT_FACTOR 0.6f
 
 // INNER_PADDING is the horizontal space between slider and quad
 // and vertical space between labels and slider baseline
@@ -126,8 +127,11 @@ typedef enum dt_bauhaus_combobox_alignment_t
 typedef struct dt_bauhaus_combobox_entry_t
 {
   char *label;
+  char *tooltip;
   dt_bauhaus_combobox_alignment_t alignment;
   gboolean sensitive;
+  gboolean is_separator;
+  float row_height_factor;
   gpointer data;
   void (*free_func)(gpointer); // callback to free data elements
 } dt_bauhaus_combobox_entry_t;
@@ -381,9 +385,13 @@ GtkWidget *dt_bauhaus_combobox_new_full(dt_bauhaus_t *bh, dt_gui_module_t *self,
 }
 
 void dt_bauhaus_combobox_add(GtkWidget *widget, const char *text);
+void dt_bauhaus_combobox_add_with_tooltip(GtkWidget *widget, const char *text, const char *tooltip);
 void dt_bauhaus_combobox_add_aligned(GtkWidget *widget, const char *text, dt_bauhaus_combobox_alignment_t align);
 void dt_bauhaus_combobox_add_full(GtkWidget *widget, const char *text, dt_bauhaus_combobox_alignment_t align,
                                   gpointer data, void (*free_func)(void *data), gboolean sensitive);
+// Separators are visual-only rows and don't count in public combobox indexes.
+void dt_bauhaus_combobox_add_separator(GtkWidget *widget);
+void dt_bauhaus_combobox_add_separator_with_height(GtkWidget *widget, float row_height_factor);
 void dt_bauhaus_combobox_set(GtkWidget *w, int pos);
 gboolean dt_bauhaus_combobox_set_from_text(GtkWidget *w, const char *text);
 gboolean dt_bauhaus_combobox_set_from_value(GtkWidget *w, int value);
@@ -391,6 +399,9 @@ void dt_bauhaus_combobox_remove_at(GtkWidget *widget, int pos);
 void dt_bauhaus_combobox_insert(GtkWidget *widget, const char *text,int pos);
 void dt_bauhaus_combobox_insert_full(GtkWidget *widget, const char *text, dt_bauhaus_combobox_alignment_t align,
                                      gpointer data, void (*free_func)(void *data), int pos);
+// Insert before public index pos, or at the end when pos == dt_bauhaus_combobox_length().
+void dt_bauhaus_combobox_insert_separator(GtkWidget *widget, int pos);
+void dt_bauhaus_combobox_insert_separator_with_height(GtkWidget *widget, int pos, float row_height_factor);
 int dt_bauhaus_combobox_length(GtkWidget *widget);
 void dt_bauhaus_combobox_set_editable(GtkWidget *w, int editable);
 void dt_bauhaus_combobox_set_selected_text_align(GtkWidget *widget, const dt_bauhaus_combobox_alignment_t text_align);
