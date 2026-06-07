@@ -55,6 +55,11 @@
 #include "libs/lib.h"
 #include "libs/lib_api.h"
 
+#ifdef GDK_WINDOWING_QUARTZ
+#include "osx/osx.h"
+#endif
+
+
 DT_MODULE(1)
 
 #pragma GCC diagnostic ignored "-Wshadow"
