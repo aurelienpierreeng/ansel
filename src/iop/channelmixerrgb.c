@@ -2636,7 +2636,7 @@ void update_colorchecker_color_list(dt_iop_module_t *self)
 void update_colorchecker_list(dt_iop_module_t *self)
 {
   dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
-  if(!g) return;
+  if(IS_NULL_PTR(g)) return;
 
   dt_colorchecker_label_list_cleanup(&(g->colorcheckers));
 
@@ -2646,9 +2646,22 @@ void update_colorchecker_list(dt_iop_module_t *self)
 
   // update the gui
   dt_bauhaus_combobox_clear(g->checkers_list);
+  gboolean has_builtin_checker = FALSE;
+  gboolean user_checker_separator_added = FALSE;
   for(GList *l = g_list_first(g->colorcheckers); l; l = g_list_next(l))
   {
     const dt_colorchecker_label_t *checker_data = (const dt_colorchecker_label_t*)l->data;
+
+    if(checker_data->type < COLOR_CHECKER_USER_REF)
+    {
+      has_builtin_checker = TRUE;
+    }
+    else if(has_builtin_checker && !user_checker_separator_added)
+    {
+      dt_bauhaus_combobox_add_separator(g->checkers_list);
+      user_checker_separator_added = TRUE;
+    }
+
     dt_bauhaus_combobox_add(g->checkers_list, checker_data->name);
   }
 }
