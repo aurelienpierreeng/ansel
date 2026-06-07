@@ -307,6 +307,9 @@ static int _hm_build_last_history_by_id_from_history(GList *history, const int h
   }
 
   *out_map = map;
+  dt_print(DT_DEBUG_HISTORY | DT_DEBUG_VERBOSE,
+           "[_hm_build_last_history_by_id_from_history] history_end=%d scanned=%d entries=%d\n",
+           history_end, idx, g_hash_table_size(map));
   return 0;
 }
 
@@ -329,11 +332,21 @@ static int _hm_backup_dest(const dt_develop_t *dev_dest, const GHashTable *mod_l
     return 1;
   }
   backup->orig_ids = last_by_id;
+  dt_print(DT_DEBUG_HISTORY | DT_DEBUG_VERBOSE,
+           "[_hm_backup_dest] imgid=%d history_end=%d history_len=%d iop_order=%d labels=%u selected=%d\n",
+           dev_dest->image_storage.id, backup->history_end, g_list_length(backup->history),
+           g_list_length(backup->iop_order_list), backup->orig_labels->len,
+           mod_list_ids ? g_hash_table_size((GHashTable *)mod_list_ids) : 0);
   return 0;
 }
 
 static void _hm_restore_dest_from_backup(dt_develop_t *dev_dest, _hm_dest_backup_t *backup)
 {
+  dt_print(DT_DEBUG_HISTORY | DT_DEBUG_VERBOSE,
+           "[_hm_restore_dest_from_backup] imgid=%d history_end=%d history_len=%d iop_order=%d\n",
+           dev_dest->image_storage.id, backup->history_end, g_list_length(backup->history),
+           g_list_length(backup->iop_order_list));
+
   dt_dev_history_free_history(dev_dest);
   dev_dest->history = backup->history;
   backup->history = NULL;
@@ -390,6 +403,9 @@ int _hm_build_last_history_by_id(const dt_develop_t *dev, GHashTable **out_map)
   }
 
   *out_map = map;
+  dt_print(DT_DEBUG_HISTORY | DT_DEBUG_VERBOSE,
+           "[_hm_build_last_history_by_id] imgid=%d history_end=%d iop=%d entries=%d\n",
+           dev->image_storage.id, history_end, g_list_length(dev->iop), g_hash_table_size(map));
   return 0;
 }
 
@@ -404,6 +420,8 @@ static int _hm_build_id_set_from_mod_list(const GList *mod_list, GHashTable **ou
     g_hash_table_add(ids, _hm_make_node_id(mod->op, mod->multi_name));
   }
   *out_ids = ids;
+  dt_print(DT_DEBUG_HISTORY | DT_DEBUG_VERBOSE, "[_hm_build_id_set_from_mod_list] modules=%d ids=%d\n",
+           g_list_length((GList *)mod_list), g_hash_table_size(ids));
   return 0;
 }
 
@@ -926,10 +944,22 @@ static int _hm_topo_flatten_constraints(_hm_topo_merge_ctx_t *ctx)
     goto error;
   if(_iop_rules(NULL, &rule_nodes)) goto error;
 
+  const int dest_nodes_len = g_list_length(dest_nodes);
+  const int src_nodes_len = g_list_length(src_nodes);
+  const int mod_nodes_len = g_list_length(mod_nodes);
+  const int dst_raster_nodes_len = g_list_length(dst_raster_nodes);
+  const int src_raster_nodes_len = g_list_length(src_raster_nodes);
+  const int rule_nodes_len = g_list_length(rule_nodes);
+
   ctx->input_nodes = g_list_concat(
       g_list_concat(g_list_concat(dest_nodes, src_nodes),
                     g_list_concat(mod_nodes, g_list_concat(dst_raster_nodes, src_raster_nodes))),
       rule_nodes);
+  dt_print(DT_DEBUG_HISTORY | DT_DEBUG_VERBOSE,
+           "[_hm_topo_flatten_constraints] input nodes: dst=%d src=%d mod=%d dst-raster=%d src-raster=%d "
+           "rules=%d total=%d\n",
+           dest_nodes_len, src_nodes_len, mod_nodes_len, dst_raster_nodes_len, src_raster_nodes_len,
+           rule_nodes_len, g_list_length(ctx->input_nodes));
 
   if(flatten_nodes(ctx->input_nodes, &ctx->flat))
   {
@@ -940,9 +970,15 @@ static int _hm_topo_flatten_constraints(_hm_topo_merge_ctx_t *ctx)
 
   if(_hm_topo_resolve_incompatible_constraints(ctx->flat, ctx->id_ht, ctx->src_ids, ctx->dest_ids)) return 1;
 
+  dt_print(DT_DEBUG_HISTORY | DT_DEBUG_VERBOSE, "[_hm_topo_flatten_constraints] flat nodes=%d\n", g_list_length(ctx->flat));
   return 0;
 
 error:
+  dt_print(DT_DEBUG_HISTORY | DT_DEBUG_VERBOSE,
+           "[_hm_topo_flatten_constraints] failed while building input nodes: dst=%d src=%d mod=%d "
+           "dst-raster=%d src-raster=%d rules=%d\n",
+           g_list_length(dest_nodes), g_list_length(src_nodes), g_list_length(mod_nodes),
+           g_list_length(dst_raster_nodes), g_list_length(src_raster_nodes), g_list_length(rule_nodes));
   _hm_free_input_nodes(dest_nodes);
   _hm_free_input_nodes(src_nodes);
   _hm_free_input_nodes(mod_nodes);
@@ -974,10 +1010,32 @@ static int _hm_topo_resolve_incompatible_constraints(GList *flat, GHashTable *id
   GHashTable *src_next = NULL;
   GHashTable *dst_prev = NULL;
   GHashTable *dst_next = NULL;
-  if(_hm_build_prev_map_from_ids(src_ids, &src_prev)) goto cleanup;
-  if(_hm_build_next_map_from_ids(src_ids, &src_next)) goto cleanup;
-  if(_hm_build_prev_map_from_ids(dest_ids, &dst_prev)) goto cleanup;
-  if(_hm_build_next_map_from_ids(dest_ids, &dst_next)) goto cleanup;
+  const char *cleanup_reason = NULL;
+  int cleanup_line = 0;
+  if(_hm_build_prev_map_from_ids(src_ids, &src_prev))
+  {
+    cleanup_reason = "_hm_build_prev_map_from_ids(src_ids)";
+    cleanup_line = __LINE__;
+    goto cleanup;
+  }
+  if(_hm_build_next_map_from_ids(src_ids, &src_next))
+  {
+    cleanup_reason = "_hm_build_next_map_from_ids(src_ids)";
+    cleanup_line = __LINE__;
+    goto cleanup;
+  }
+  if(_hm_build_prev_map_from_ids(dest_ids, &dst_prev))
+  {
+    cleanup_reason = "_hm_build_prev_map_from_ids(dest_ids)";
+    cleanup_line = __LINE__;
+    goto cleanup;
+  }
+  if(_hm_build_next_map_from_ids(dest_ids, &dst_next))
+  {
+    cleanup_reason = "_hm_build_next_map_from_ids(dest_ids)";
+    cleanup_line = __LINE__;
+    goto cleanup;
+  }
 
   typedef struct
   {
@@ -990,7 +1048,12 @@ static int _hm_topo_resolve_incompatible_constraints(GList *flat, GHashTable *id
   } _hm_cycle_t;
 
   seen_cycles = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, NULL);
-  if(!seen_cycles) goto cleanup;
+  if(IS_NULL_PTR(seen_cycles))
+  {
+    cleanup_reason = "g_hash_table_new_full(seen_cycles)";
+    cleanup_line = __LINE__;
+    goto cleanup;
+  }
 
   // Scan all edges a<-b and record those where b also has a as predecessor (2-cycle).
   for(GList *it = g_list_first(flat); it; it = g_list_next(it))
@@ -1014,7 +1077,12 @@ static int _hm_topo_resolve_incompatible_constraints(GList *flat, GHashTable *id
       }
 
       gchar *key = g_strdup_printf("%s<->%s", id1, id2);
-      if(IS_NULL_PTR(key)) goto cleanup;
+      if(IS_NULL_PTR(key))
+      {
+        cleanup_reason = "g_strdup_printf(cycle key)";
+        cleanup_line = __LINE__;
+        goto cleanup;
+      }
       if(g_hash_table_contains(seen_cycles, key))
       {
         dt_free(key);
@@ -1023,7 +1091,12 @@ static int _hm_topo_resolve_incompatible_constraints(GList *flat, GHashTable *id
       g_hash_table_add(seen_cycles, key);
 
       _hm_cycle_t *c = g_new0(_hm_cycle_t, 1);
-      if(IS_NULL_PTR(c)) goto cleanup;
+      if(IS_NULL_PTR(c))
+      {
+        cleanup_reason = "g_new0(_hm_cycle_t)";
+        cleanup_line = __LINE__;
+        goto cleanup;
+      }
       c->a = a;
       c->b = b;
 
@@ -1118,6 +1191,9 @@ static int _hm_topo_resolve_incompatible_constraints(GList *flat, GHashTable *id
   return 0;
 
 cleanup:
+  dt_print(DT_DEBUG_HISTORY | DT_DEBUG_VERBOSE,
+           "[_hm_topo_resolve_incompatible_constraints] cleanup from line %d: %s\n",
+           cleanup_line, cleanup_reason ? cleanup_reason : "unknown");
   if(seen_cycles) g_hash_table_destroy(seen_cycles);
   if(src_prev) g_hash_table_destroy(src_prev);
   if(src_next) g_hash_table_destroy(src_next);
@@ -1160,6 +1236,7 @@ static int _hm_topo_sort_constraints(_hm_topo_merge_ctx_t *ctx)
     g_list_free(cycle_nodes);
     cycle_nodes = NULL;
   }
+  dt_print(DT_DEBUG_HISTORY | DT_DEBUG_VERBOSE, "[_hm_topo_sort_constraints] sorted nodes=%d\n", g_list_length(ctx->sorted));
   return 0;
 }
 
@@ -1247,36 +1324,49 @@ static int _hm_try_merge_iop_order_topologically(dt_develop_t *dev_dest, dt_deve
   ctx.mod_list = mod_list;
   ctx.dev_dest = dev_dest;
 
+  dt_print(DT_DEBUG_HISTORY | DT_DEBUG_VERBOSE,
+           "[_hm_try_merge_iop_order_topologically] start merge_iop_order=%d modules=%d dst_iop=%d src_iop=%d\n",
+           merge_iop_order, g_list_length((GList *)mod_list), g_list_length(dev_dest->iop),
+           g_list_length(dev_src->iop));
+
   if(_hm_topo_build_id_info_table(&ctx, dev_dest, dev_src, mod_list))
   {
+    dt_print(DT_DEBUG_HISTORY | DT_DEBUG_VERBOSE, "[_hm_try_merge_iop_order_topologically] failed: id info table\n");
     _hm_topo_merge_cleanup(&ctx);
     return 1;
   }
 
   if(_hm_topo_build_constraint_ids(&ctx, dev_dest, dev_src, mod_list, merge_iop_order))
   {
+    dt_print(DT_DEBUG_HISTORY | DT_DEBUG_VERBOSE, "[_hm_try_merge_iop_order_topologically] failed: constraint ids\n");
     _hm_topo_merge_cleanup(&ctx);
     return 1;
   }
 
   if(_hm_topo_flatten_constraints(&ctx))
   {
+    dt_print(DT_DEBUG_HISTORY | DT_DEBUG_VERBOSE, "[_hm_try_merge_iop_order_topologically] failed: flatten constraints\n");
     _hm_topo_merge_cleanup(&ctx);
     return 1;
   }
 
   if(_hm_topo_sort_constraints(&ctx))
   {
+    dt_print(DT_DEBUG_HISTORY | DT_DEBUG_VERBOSE, "[_hm_try_merge_iop_order_topologically] failed: topological sort\n");
     _hm_topo_merge_cleanup(&ctx);
     return 1;
   }
 
   if(_hm_topo_apply_solution(&ctx, dev_dest, dev_src))
   {
+    dt_print(DT_DEBUG_HISTORY | DT_DEBUG_VERBOSE, "[_hm_try_merge_iop_order_topologically] failed: apply solution\n");
     _hm_topo_merge_cleanup(&ctx);
     return 1;
   }
 
+  dt_print(DT_DEBUG_HISTORY | DT_DEBUG_VERBOSE,
+           "[_hm_try_merge_iop_order_topologically] success merge_iop_order=%d dst_iop=%d order=%d\n",
+           merge_iop_order, g_list_length(dev_dest->iop), g_list_length(dev_dest->iop_order_list));
   _hm_topo_merge_cleanup(&ctx);
   return 0;
 }
@@ -1296,6 +1386,7 @@ static void _hm_renumber_history(GList *history)
     dt_dev_history_item_t *h = (dt_dev_history_item_t *)it->data;
     h->num = idx;
   }
+  dt_print(DT_DEBUG_HISTORY | DT_DEBUG_VERBOSE, "[_hm_renumber_history] history_len=%d\n", idx);
 }
 
 static void _hm_truncate_dest_redo_tail(dt_develop_t *dev_dest)
@@ -1311,7 +1402,13 @@ static void _hm_truncate_dest_redo_tail(dt_develop_t *dev_dest)
   const int history_end = dt_dev_get_history_end_ext(dev_dest);
   const int history_len = g_list_length(dev_dest->history);
 
-  if(history_end >= history_len) return;
+  if(history_end >= history_len)
+  {
+    dt_print(DT_DEBUG_HISTORY | DT_DEBUG_VERBOSE,
+             "[_hm_truncate_dest_redo_tail] no redo tail: imgid=%d end=%d len=%d\n",
+             dev_dest->image_storage.id, history_end, history_len);
+    return;
+  }
 
   dt_print(DT_DEBUG_HISTORY,
            "[dt_history_merge_module_list_into_image_advanced] truncating destination redo tail: end=%d len=%d\n",
@@ -1367,12 +1464,34 @@ int dt_history_merge(dt_develop_t *dev_dest, dt_develop_t *dev_src, const int32_
   GHashTable *src_last_by_id = NULL;
   GHashTable *dst_last_before_by_id = NULL;
   _hm_dest_backup_t backup = { 0 };
+  const char *cleanup_reason = NULL;
+  int cleanup_line = 0;
 
   // Snapshot the original destination pipeline and last history items before we modify the destination history.
-  if(_hm_build_id_set_from_mod_list(mod_list, &mod_list_ids)) goto cleanup;
-  if(_hm_backup_dest(dev_dest, mod_list_ids, &backup)) goto cleanup;
-  if(_hm_build_last_history_by_id(dev_src, &src_last_by_id)) goto cleanup;
-  if(_hm_build_last_history_by_id(dev_dest, &dst_last_before_by_id)) goto cleanup;
+  if(_hm_build_id_set_from_mod_list(mod_list, &mod_list_ids))
+  {
+    cleanup_reason = "_hm_build_id_set_from_mod_list(mod_list)";
+    cleanup_line = __LINE__;
+    goto cleanup;
+  }
+  if(_hm_backup_dest(dev_dest, mod_list_ids, &backup))
+  {
+    cleanup_reason = "_hm_backup_dest(dev_dest)";
+    cleanup_line = __LINE__;
+    goto cleanup;
+  }
+  if(_hm_build_last_history_by_id(dev_src, &src_last_by_id))
+  {
+    cleanup_reason = "_hm_build_last_history_by_id(dev_src)";
+    cleanup_line = __LINE__;
+    goto cleanup;
+  }
+  if(_hm_build_last_history_by_id(dev_dest, &dst_last_before_by_id))
+  {
+    cleanup_reason = "_hm_build_last_history_by_id(dev_dest)";
+    cleanup_line = __LINE__;
+    goto cleanup;
+  }
 
   if(force_new_modules)
     dt_print(DT_DEBUG_HISTORY, "[dt_history_merge] force_new_modules is "
@@ -1401,6 +1520,8 @@ int dt_history_merge(dt_develop_t *dev_dest, dt_develop_t *dev_src, const int32_
         // It's unlikely that it fail again, but if it does, there is nothing we can do.
         // The only mathematically valid way to insert new instances is through topology.
         // Abort then.
+        cleanup_reason = "_hm_try_merge_iop_order_topologically() retry";
+        cleanup_line = __LINE__;
         goto cleanup;
       }
     }
@@ -1424,7 +1545,17 @@ int dt_history_merge(dt_develop_t *dev_dest, dt_develop_t *dev_src, const int32_
     dt_iop_module_t *mod_dest
         = dt_dev_get_module_instance(dev_dest, mod_src->op, mod_src->multi_name, mod_src->multi_priority);
     dt_dev_history_item_t *hist = NULL;
-    if(dt_dev_history_item_from_source_history_item(dev_dest, dev_src, hist_src, mod_dest, &hist)) goto cleanup;
+    dt_print(DT_DEBUG_HISTORY | DT_DEBUG_VERBOSE,
+             "[dt_history_merge] build temp history: src=%s multi='%s' priority=%d hist=%s dest=%s dest_priority=%d\n",
+             mod_src->op, mod_src->multi_name, mod_src->multi_priority,
+             hist_src ? "yes" : "no", mod_dest ? "yes" : "no",
+             mod_dest ? mod_dest->multi_priority : -1);
+    if(dt_dev_history_item_from_source_history_item(dev_dest, dev_src, hist_src, mod_dest, &hist))
+    {
+      cleanup_reason = "dt_dev_history_item_from_source_history_item()";
+      cleanup_line = __LINE__;
+      goto cleanup;
+    }
 
     temp_history = g_list_append(temp_history, hist);
   }
@@ -1450,6 +1581,8 @@ int dt_history_merge(dt_develop_t *dev_dest, dt_develop_t *dev_src, const int32_
   if(revert)
   {
     _hm_restore_dest_from_backup(dev_dest, &backup);
+    cleanup_reason = "_hm_show_merge_report_popup() revert";
+    cleanup_line = __LINE__;
     goto cleanup;
   }
 
@@ -1459,6 +1592,9 @@ int dt_history_merge(dt_develop_t *dev_dest, dt_develop_t *dev_src, const int32_
   rc = 0;
 
 cleanup:
+  if(cleanup_reason)
+    dt_print(DT_DEBUG_HISTORY | DT_DEBUG_VERBOSE, "[dt_history_merge] cleanup from line %d: %s\n",
+             cleanup_line, cleanup_reason);
   if(src_last_by_id) g_hash_table_destroy(src_last_by_id);
   if(dst_last_before_by_id) g_hash_table_destroy(dst_last_before_by_id);
   if(mod_list_ids) g_hash_table_destroy(mod_list_ids);

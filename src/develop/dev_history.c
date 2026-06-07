@@ -293,13 +293,29 @@ int dt_dev_history_item_from_source_history_item(dt_develop_t *dev_dest, dt_deve
                                                  const dt_dev_history_item_t *hist_src, dt_iop_module_t *mod_dest,
                                                  dt_dev_history_item_t **out_hist)
 {
-  if(IS_NULL_PTR(hist_src) || IS_NULL_PTR(hist_src->module) || IS_NULL_PTR(mod_dest) || IS_NULL_PTR(out_hist)) return 1;
+  if(IS_NULL_PTR(hist_src) || IS_NULL_PTR(hist_src->module) || IS_NULL_PTR(mod_dest) || IS_NULL_PTR(out_hist))
+  {
+    dt_print(DT_DEBUG_HISTORY | DT_DEBUG_VERBOSE,
+             "[dt_dev_history_item_from_source_history_item] invalid input: hist=%s hist_module=%s dest=%s out=%s\n",
+             hist_src ? "yes" : "no", hist_src && hist_src->module ? "yes" : "no",
+             mod_dest ? "yes" : "no", out_hist ? "yes" : "no");
+    return 1;
+  }
 
   dt_dev_history_item_t *hist = (dt_dev_history_item_t *)calloc(1, sizeof(dt_dev_history_item_t));
-  if(IS_NULL_PTR(hist)) return 1;
+  if(IS_NULL_PTR(hist))
+  {
+    dt_print(DT_DEBUG_HISTORY | DT_DEBUG_VERBOSE,
+             "[dt_dev_history_item_from_source_history_item] allocation failed: src=%s multi='%s'\n",
+             hist_src->module->op, hist_src->module->multi_name);
+    return 1;
+  }
 
   if(dt_masks_copy_used_forms_for_module(dev_dest, dev_src, hist_src->module))
   {
+    dt_print(DT_DEBUG_HISTORY | DT_DEBUG_VERBOSE,
+             "[dt_dev_history_item_from_source_history_item] mask copy failed: src=%s multi='%s'\n",
+             hist_src->module->op, hist_src->module->multi_name);
     dt_dev_free_history_item(hist);
     return 1;
   }
@@ -309,6 +325,11 @@ int dt_dev_history_item_from_source_history_item(dt_develop_t *dev_dest, dt_deve
     forms_snapshot = dt_masks_snapshot_current_forms(dev_dest, FALSE);
     if(IS_NULL_PTR(forms_snapshot))
     {
+      dt_print(DT_DEBUG_HISTORY | DT_DEBUG_VERBOSE,
+               "[dt_dev_history_item_from_source_history_item] no destination mask forms to snapshot: "
+               "src=%s multi='%s'\n",
+               hist_src->module->op, hist_src->module->multi_name);
+
       dt_dev_free_history_item(hist);
       return 1;
     }
@@ -317,6 +338,11 @@ int dt_dev_history_item_from_source_history_item(dt_develop_t *dev_dest, dt_deve
   if(!dt_dev_history_item_update_from_params(dev_dest, hist, mod_dest, hist_src->enabled, hist_src->params,
                                              hist_src->module->params_size, hist_src->blend_params, forms_snapshot))
   {
+    dt_print(DT_DEBUG_HISTORY | DT_DEBUG_VERBOSE,
+             "[dt_dev_history_item_from_source_history_item] params update failed: src=%s multi='%s' "
+             "dest=%s multi='%s' src_params=%d dest_params=%d\n",
+             hist_src->module->op, hist_src->module->multi_name, mod_dest->op, mod_dest->multi_name,
+             hist_src->module->params_size, mod_dest->params_size);
     dt_dev_free_history_item(hist);
     return 1;
   }
