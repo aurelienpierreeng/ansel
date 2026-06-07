@@ -1674,12 +1674,14 @@ gboolean dt_iop_module_needs_mask_history(const dt_iop_module_t *module)
   const gboolean internal_masks = ((module->flags() & IOP_FLAGS_INTERNAL_MASKS) == IOP_FLAGS_INTERNAL_MASKS);
 
   if(!supports_blending) return internal_masks;
+  if(IS_NULL_PTR(module->blend_params)) return internal_masks;
 
-  const gboolean mask_mode_on = module->blend_params && (module->blend_params->mask_mode > DEVELOP_MASK_ENABLED);
-  const gboolean has_mask_id = module->blend_params && (module->blend_params->mask_id > 0);
-  const gboolean has_raster = dt_iop_module_has_raster_mask(module);
+  gboolean raster_used = FALSE;
+  gboolean drawn_used = FALSE;
+  gboolean parametric_used = FALSE;
+  dt_develop_blend_get_mask_usage(module, module->blend_params, NULL, &raster_used, &drawn_used, &parametric_used);
 
-  return (mask_mode_on || has_mask_id || has_raster) || internal_masks;
+  return raster_used || drawn_used || parametric_used || internal_masks;
 }
 
 // make sure that blend_params are in sync with the iop struct
