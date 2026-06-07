@@ -147,10 +147,17 @@ static gboolean _masks_shape_button_pressed(GtkWidget *button, GdkEventButton *e
 
   if(dt_masks_creation_mode_enter(module, type))
   {
-    if(data->config.started) data->config.started(button, module, type, data->config.user_data);
+    if(data->config.started)
+    {
+      data->config.started(button, module, type, data->config.user_data);
+      // Force focus back to the drawing area after creation mode enabling
+      gtk_widget_grab_focus(dt_ui_center(darktable.gui->ui));
+    }
   }
   else
+  {
     dt_masks_shape_buttons_deactivate_all(NULL);
+  }
 
   dt_control_queue_redraw_center();
   return TRUE;
@@ -213,6 +220,7 @@ GtkWidget *dt_masks_shape_buttons_create(const dt_masks_shape_buttons_config_t *
       g_signal_connect(G_OBJECT(button), "button-press-event", G_CALLBACK(_masks_shape_button_pressed), NULL);
     }
 
+    gtk_widget_set_can_focus(button, FALSE);
     gtk_widget_set_valign(button, GTK_ALIGN_START);
     g_object_set_data(G_OBJECT(button), "dt-masks-shape-buttons-data", data);
 
