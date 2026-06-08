@@ -4597,9 +4597,9 @@ void dt_iop_gui_init_blending_body(GtkBox *blendw, dt_iop_module_t *module)
   _blendop_create_notebook_page(bd->blending_notebook, _("Edges"), &bd->bottom_content);
   GtkWidget *bottom_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
   gtk_box_pack_start(GTK_BOX(bottom_box), bd->details_slider, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(bottom_box), bd->blur_radius_slider, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(bottom_box), bd->masks_feathering_guide_combo, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(bottom_box), bd->feathering_radius_slider, TRUE, TRUE, 0);
-  gtk_box_pack_start(GTK_BOX(bottom_box), bd->blur_radius_slider, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(bottom_box), bd->brightness_slider, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(bottom_box), bd->contrast_slider, TRUE, TRUE, 0);
   GtkWidget *event_box = gtk_event_box_new();
