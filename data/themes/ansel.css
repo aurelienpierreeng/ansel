@@ -466,8 +466,12 @@ spinbutton button
 .text-button radio, /* this line and following one are needed to set good margin inside some buttons, especially in header buttons in about dialog window and on radio button and label inside star icon overlay menu */
 .text-button label
 {
-  min-height: 1.5em;
-  min-width: 1.5em;
+  min-height: 1.2em;
+  min-width: 1.2em;
+  background-color: transparent;
+  border: none;
+  padding: 2px;
+  margin: 2px;
 }
 
 #module-header button,
@@ -530,13 +534,6 @@ textview text selection
 entry selection
 {
   background-color: shade(@field_selected_bg, 1.1);
-}
-
-/* Checkbox */
-checkbutton check
-{
-  margin: 0 0.56em 0 0;
-  padding: 0;
 }
 
 /* Separator */
@@ -625,10 +622,11 @@ menu separator
 .dt-module-toolbox .dt_module_btn,
 .dt-module-toolbox .dt-module-toolbox-item
 {
-  min-height: 1.1em; /* override broader rule */
+  min-height: 1.1em;
+  min-width: 1.1em;
   background-color: transparent;
   border: none;
-  padding: 2px 0;
+  padding: 2px;
   margin: 2px;
 }
 
@@ -678,16 +676,12 @@ menubar menuitem label
 #header-toolbar .dt_module_btn,
 #footer-toolbar .dt_module_btn
 {
-  min-height: 1.7em;
-  min-width: 1.7em;
-}
-
-/* Set default button spacing  for specific buttons */
-.dt_section_expander #button-canvas,
-.dt_big_btn_canvas #button-canvas,
-#module-header #button-canvas
-{
-  margin: 12px; /* not real pixels. This is used as a percent extra space and couldn't be scalable */
+  min-height: 1.1em;
+  min-width: 1.1em;
+  background-color: transparent;
+  border: none;
+  padding: 2px;
+  margin: 2px;
 }
 
 #top-first-line button
@@ -764,6 +758,19 @@ dialog  /* dialog window background */
   border-radius: 15px;
 }
 
+/* Ensure buttons inside module boxes have transparent background and no border
+   so icon-only buttons (dt_module_btn) don't draw a framed background in sidebars */
+.dt_module_frame .dt_module_btn,
+.dt_plugin_ui .dt_module_btn
+{
+  background-color: transparent;
+  border: none;
+  box-shadow: none;
+  min-width: 1.25em;
+  min-height: 1.25em;
+}
+
+
 #right .dt_module_focus,
 #right .dt_module_frame:focus
 {
@@ -779,8 +786,7 @@ dialog  /* dialog window background */
 }
 
 /* Module On/Off switch and history switches */
-#module-header .dt_iop_enable_button,
-.dt_module_btn.dt_history_switch
+#module-header .dt_iop_enable_button
 {
   padding: 0;
 }
@@ -795,15 +801,6 @@ dialog  /* dialog window background */
   border-color: transparent;
 }
 
-.dt_module_btn.dt_history_switch
-{
-  background: #6f6f6f;
-  border-radius: 10px;
-  min-width: 6px;
-  min-height: 24px;
-  margin: 0 30px 0 0;
-}
-
 #module-header .dt_iop_enable_button:hover,
 #module-header .dt_iop_enable_button:active,
 #module-header .dt_iop_enable_button:checked,
@@ -814,20 +811,7 @@ dialog  /* dialog window background */
   border-color: transparent;
 }
 
-.dt_module_btn.dt_history_switch
-{
-  margin: 3px 5px;
-  min-width: 0.4em;
-}
-
-.dt_module_btn.dt_history_switch:not(.dt_history_switch_off)
-{
-  color: transparent;
-  background: @button_fg;
-}
-
-#module-header .dt_iop_enable_button:disabled,
-.dt_module_btn.dt_history_switch.dt_history_switch_off
+#module-header .dt_iop_enable_button:disabled
 {
   color: @disabled_fg_color;
   background: transparent;
@@ -1206,34 +1190,6 @@ notebook tabs,
   margin: 0 0.5em 0.5em;
   border-radius: 5px;
   padding-left: 1em;
-}
-
-/* set sizes of "buttons" in modules and blending tabs ; and guides lines too */
-#modules-tabs .toggle
-{
-  min-height: 2em;
-}
-
-.dt_plugin_ui #blending-header .dt_module_btn,
-#guides-line .toggle
-{
-  min-height: 1.3em;
-}
-
-#modules-tabs .dt_module_btn,   /* This is needed separately to set a minimal width if panel is really narrow */
-.dt_plugin_ui #blending-header .dt_module_btn,
-#guides-line .dt_module_btn
-{
-  border-radius: 0;
-  min-width: 1.5em;
-  margin: 0;
-}
-
-/* reduce and align now hamburger menu of modules and blending tabs */
-.dt_plugin_ui #blending-header .dt_module_btn,
-#modules-tabs .dt_module_btn
-{
-  padding: 0.3em;
 }
 
 #search-box entry placeholder {
@@ -1706,15 +1662,6 @@ treeview header label
   border-radius: 0 0 0.5em 0.5em;
 }
 
-/* set group icons */
-#modulegroups-group-icon,
-#modulegroups-icons-popup .dt_module_btn
-{
-  min-height: 1.8em;
-  min-width: 1.8em;
-  margin: 0 0.7em 0 0.07em;
-}
-
 /*---------------------------------------------------------------
   - Set sidebars settings on preferences window and filechooser -
   ---------------------------------------------------------------*/
@@ -2018,22 +1965,6 @@ progressbar progress
   margin: 0.14em;
 }
 
-/* then the switches */
-.dt_history_switch:disabled /* state of those switch is always disabled */
-{
-  color: @plugin_label_color;
-  font-size: 0.75em;
-  margin-left: 0.42em;
-  border: 0;
-}
-
-/* deactivated switch buttons, make them less visible */
-.dt_history_switch_off,
-.dt_history_switch_off:disabled
-{
-  color: @disabled_fg_color;
-}
-
 /*---------------------
   - Set color pickers -
   ---------------------*/
@@ -2175,11 +2106,6 @@ checkbutton:active label
 
 .module-dimmed {
   opacity: 0.5;
-}
-
-.dt_history_switch_off:hover  /* set specific hover effect for disabled modules in history stack */
-{
-  color: shade(@fg_color, 0.8);
 }
 
 /* workaround for a macOS quartz GTK backend bug
@@ -2867,8 +2793,8 @@ togglebutton,
 spinbutton,
 #non-flat
 {
-  margin: 0.2em;
-  padding: 0.3em;
+  margin: 2px;
+  padding: 2px;
   border: none;
   border-radius: 3px;
   box-shadow: none;
@@ -2945,7 +2871,6 @@ spinbutton button
 #module-header togglebutton,
 #module-header .dt_module_btn
 {
-  padding: 3px;
   background-color: transparent;
   background-image: none;
 }
@@ -2954,19 +2879,8 @@ spinbutton button
 .quick_filter_box togglebutton,
 .quick_filter_box .dt_module_btn
 {
-  margin: 0.05em;
-  padding: 3px;
   background-color: transparent;
   background-image: none;
-}
-
-#quickfilters-colors .dt_module_btn,
-#quickfilters-altered .dt_module_btn
-{
-  min-width: 1.55em;
-  min-height: 1.55em;
-  margin: 0 2px;
-  padding: 0;
 }
 
 button:disabled,
@@ -3029,8 +2943,6 @@ checkbutton label,
 checkbutton:not(:hover) label,
 checkbutton box label
 {
-  margin: 0;
-  padding: 0;
   border: none;
   box-shadow: none;
   background-color: transparent;
@@ -3040,8 +2952,6 @@ checkbutton box label
 checkbutton check,
 checkbutton:not(:hover) check
 {
-  margin: 0.28em 0.56em 0.28em 0;
-  padding: 0;
   border: none;
   box-shadow: none;
   background-color: @button_bg;
