@@ -1239,23 +1239,6 @@ static void _blendop_masks_mode_changed(GtkToggleButton *togglebutton, dt_iop_mo
   dt_iop_gui_update_header(data->module);
 }
 
-
-static gboolean _blendop_blendif_suppress_toggled(GtkToggleButton *togglebutton, GdkEventButton *event, dt_iop_module_t *module)
-{
-  module->suppress_mask = !gtk_toggle_button_get_active(togglebutton);
-  if(darktable.gui->reset) return FALSE;
-
-  if(module->off) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(module->off), TRUE);
-  dt_iop_request_focus(module);
-
-  gtk_toggle_button_set_active(togglebutton, module->suppress_mask);
-
-  dt_control_queue_redraw_widget(GTK_WIDGET(togglebutton));
-  dt_dev_pixelpipe_update_history_main(module->dev);
-
-  return TRUE;
-}
-
 static gboolean _blendop_blendif_reset(GtkButton *button, GdkEventButton *event, dt_iop_module_t *module)
 {
   module->blend_params->blendif = module->default_blendop_params->blendif;
@@ -4196,8 +4179,6 @@ void dt_iop_gui_update_blending(dt_iop_module_t *module)
     module->request_mask_display = DT_DEV_PIXELPIPE_DISPLAY_NONE;
     dt_iop_set_cache_bypass(module, FALSE);
     _blendop_toggle_button_set_active(bd->showmask, FALSE);
-    module->suppress_mask = 0;
-    _blendop_toggle_button_set_active(bd->suppress, FALSE);
   }
 
   if(bd->masks_inited && !masks_enabled)
@@ -4247,18 +4228,14 @@ void dt_iop_gui_blending_lose_focus(dt_iop_module_t *module)
   if(IS_NULL_PTR(module)) return;
 
   const int has_mask_display = module->request_mask_display & (DT_DEV_PIXELPIPE_DISPLAY_MASK | DT_DEV_PIXELPIPE_DISPLAY_CHANNEL);
-  const int suppress = module->suppress_mask;
 
   if((module->flags() & IOP_FLAGS_SUPPORTS_BLENDING) && module->blend_data)
   {
     dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
     if(bd->showmask)
       _blendop_toggle_button_set_active(bd->showmask, FALSE);
-    if(bd->suppress)
-      _blendop_toggle_button_set_active(bd->suppress, FALSE);
     module->request_mask_display = DT_DEV_PIXELPIPE_DISPLAY_NONE;
     dt_iop_set_cache_bypass(module, FALSE);
-    module->suppress_mask = 0;
 
     // (re)set the header mask indicator too
     if(bd->masks_support && bd->masks_edit)
@@ -4281,7 +4258,7 @@ void dt_iop_gui_blending_lose_focus(dt_iop_module_t *module)
     dt_pthread_mutex_unlock(&bd->lock);
 
     // reprocess main center image if needed
-    if (has_mask_display || suppress)
+    if (has_mask_display)
       dt_dev_pixelpipe_update_history_main(module->dev);
   }
 }
@@ -4337,7 +4314,6 @@ void dt_iop_gui_cleanup_blending_body(dt_iop_module_t *module)
   bd->colorpicker_set_values = NULL;
   memset(bd->filter, 0, sizeof(bd->filter));
   bd->showmask = NULL;
-  bd->suppress = NULL;
   bd->masks_combine_combo = NULL;
   bd->blend_modes_combo = NULL;
   bd->blend_modes_blend_order = NULL;
@@ -4549,12 +4525,6 @@ void dt_iop_gui_init_blending_body(GtkBox *blendw, dt_iop_module_t *module)
                                               "select channel for display"));
   dt_gui_add_class(bd->showmask, "dt_transparent_background");
 
-  bd->suppress = dt_iop_togglebutton_new_no_register(module, "blend`tools", N_("temporarily switch off blend mask"), NULL, G_CALLBACK(_blendop_blendif_suppress_toggled),
-                                                     FALSE, 0, 0, dtgtk_cairo_paint_eye_toggle, display_box);
-  gtk_widget_set_tooltip_text(bd->suppress, _("temporarily switch off blend mask. only for module in focus"));
-  dt_gui_add_class(bd->suppress, "dt_transparent_background");
-
-  
   bd->blending_body_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
   gtk_box_pack_start(GTK_BOX(blendw), bd->blending_body_box, TRUE, TRUE, 0);
 

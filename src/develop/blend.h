@@ -337,7 +337,6 @@ typedef struct dt_iop_gui_blend_data_t
   GtkWidget *colorpicker_set_values;
   dt_iop_gui_blendif_filter_t filter[2];
   GtkWidget *showmask;
-  GtkWidget *suppress;
   GtkWidget *masks_combine_combo;
   GtkWidget *blend_modes_combo;
   GtkWidget *blend_modes_blend_order;

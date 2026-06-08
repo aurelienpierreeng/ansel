@@ -698,11 +698,6 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *p
   const dt_develop_blend_colorspace_t blend_csp = d->blend_cst;
   const dt_iop_colorspace_type_t cst = dt_develop_blend_colorspace(piece, IOP_CS_NONE);
 
-  // check if mask should be suppressed temporarily (i.e. just set to global opacity value)
-  const gboolean suppress_mask = self->suppress_mask && self->dev->gui_attached && (self == self->dev->gui_module)
-                                 && (pipe == self->dev->pipe)
-                                 && preview_mask_mode;
-
   // obtaining the list of mask operations to perform
   _develop_mask_post_processing post_operations[3];
   const size_t post_operations_size = _develop_mask_get_post_operations(d, piece, post_operations);
@@ -722,7 +717,7 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *p
   const gboolean use_masks = raster_used || drawn_used || parametric_used;
   const gboolean raster_only = raster_used && !drawn_used && !parametric_used;
 
-  if(!use_masks || suppress_mask)
+  if(!use_masks)
   {
     // blend uniformly (no drawn or parametric mask)
     dt_iop_image_fill(mask,opacity,owidth,oheight,1);  //mask[k] = opacity;
@@ -1117,12 +1112,6 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_t
   const dt_develop_blend_colorspace_t blend_csp = d->blend_cst;
   const dt_iop_colorspace_type_t cst = dt_develop_blend_colorspace(piece, IOP_CS_NONE);
 
-  // check if mask should be suppressed temporarily (i.e. just set to global
-  // opacity value)
-  const gboolean suppress_mask = self->suppress_mask && self->dev->gui_attached && (self == self->dev->gui_module)
-                                 && (pipe == self->dev->pipe)
-                                 && preview_mask_mode;
-
   // obtaining the list of mask operations to perform
   _develop_mask_post_processing post_operations[3];
   const size_t post_operations_size = _develop_mask_get_post_operations(d, piece, post_operations);
@@ -1214,7 +1203,7 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_t
                                             &profile_lut_cl, &dev_profile_info, &dev_profile_lut);
   if(err != CL_SUCCESS) goto error;
 
-  if(!use_masks || suppress_mask)
+  if(!use_masks)
   {
     // blend uniformly (no drawn or parametric mask)
 
