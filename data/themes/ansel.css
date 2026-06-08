@@ -251,6 +251,18 @@ Why that? Just because it's a developer choice and most classes use underscore i
   padding: 0;
 }
 
+/* Separator between global blending options and notebook: slightly thicker and brighter */
+#blending-separator,
+#blending-separator separator
+{
+  min-height: 1px;
+  margin: 0.5em 0;
+  background-color: @grey_80;
+  margin-top: 6px;
+  margin-bottom: 6px;
+  border: none;
+}
+
 /* Graphs : histogram, navigation thumbnail and some items on tone curve */
 @define-color graph_bg @grey_40;
 @define-color navigation_bg transparent;

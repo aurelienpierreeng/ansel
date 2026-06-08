@@ -552,37 +552,33 @@ static void _blendop_blend_mode_callback(GtkWidget *combo, dt_iop_gui_blend_data
     bp->blend_mode = new_blend_mode | (bp->blend_mode & DEVELOP_BLEND_REVERSE);
     if(_blendif_blend_parameter_enabled(data->blend_modes_csp, bp->blend_mode))
     {
-      gtk_widget_set_sensitive(data->blend_mode_parameter_slider, TRUE);
+      gtk_widget_set_visible(data->blend_mode_parameter_slider, TRUE);
     }
     else
     {
       bp->blend_parameter = 0.0f;
       dt_bauhaus_slider_set(data->blend_mode_parameter_slider, bp->blend_parameter);
-      gtk_widget_set_sensitive(data->blend_mode_parameter_slider, FALSE);
+      gtk_widget_set_visible(data->blend_mode_parameter_slider, FALSE);
     }
     dt_dev_add_history_item(darktable.develop, data->module, TRUE, TRUE);
     dt_iop_gui_update_header(data->module);
   }
 }
 
-static gboolean _blendop_blend_order_clicked(GtkWidget *button, GdkEventButton *event, dt_iop_module_t *module)
+static void _blendop_compositing_changed(GtkWidget *combobox, dt_iop_gui_blend_data_t *data)
 {
-  if(darktable.gui->reset) return TRUE;
+  if(darktable.gui->reset) return;
 
-  dt_develop_blend_params_t *bp = (dt_develop_blend_params_t *)module->blend_params;
-  const gboolean active = !(bp->blend_mode & DEVELOP_BLEND_REVERSE);
-  if(!active)
+  dt_develop_blend_params_t *bp = data->module->blend_params;
+  const int val = GPOINTER_TO_INT(dt_bauhaus_combobox_get_data(combobox));
+  if(val == 0)
     bp->blend_mode &= ~DEVELOP_BLEND_REVERSE;
   else
     bp->blend_mode |= DEVELOP_BLEND_REVERSE;
 
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(button), active);
-
-  dt_dev_add_history_item(darktable.develop, module, TRUE, TRUE);
-  dt_iop_gui_update_header(module);
-  dt_control_queue_redraw_widget(GTK_WIDGET(button));
-
-  return TRUE;
+  dt_dev_add_history_item(darktable.develop, data->module, TRUE, TRUE);
+  dt_iop_gui_update_header(data->module);
+  dt_control_queue_redraw_widget(GTK_WIDGET(combobox));
 }
 
 static void _blendop_masks_combine_callback(GtkWidget *combo, dt_iop_gui_blend_data_t *data)
@@ -611,11 +607,11 @@ static void _blendop_masks_combine_callback(GtkWidget *combo, dt_iop_gui_blend_d
   dt_iop_gui_update_header(data->module);
 }
 
-static void _blendop_masks_invert_callback(GtkWidget *combo, dt_iop_gui_blend_data_t *data)
+static void _blendop_masks_invert_toggled(GtkToggleButton *togglebutton, dt_iop_gui_blend_data_t *data)
 {
-  unsigned int invert = GPOINTER_TO_UINT(dt_bauhaus_combobox_get_data(data->masks_invert_combo))
-                        & DEVELOP_COMBINE_INV;
-  if(invert)
+  if(darktable.gui->reset) return;
+  const gboolean active = gtk_toggle_button_get_active(togglebutton);
+  if(active)
     data->module->blend_params->mask_combine |= DEVELOP_COMBINE_INV;
   else
     data->module->blend_params->mask_combine &= ~DEVELOP_COMBINE_INV;
@@ -4086,12 +4082,17 @@ void dt_iop_gui_update_blending(dt_iop_module_t *module)
   }
 
   gboolean blend_mode_reversed = (module->blend_params->blend_mode & DEVELOP_BLEND_REVERSE) == DEVELOP_BLEND_REVERSE;
-  _blendop_toggle_button_set_active(bd->blend_modes_blend_order, blend_mode_reversed);
+  dt_bauhaus_combobox_set_from_value(bd->blend_modes_blend_order, blend_mode_reversed);
 
   dt_bauhaus_slider_set(bd->blend_mode_parameter_slider, module->blend_params->blend_parameter);
-  gtk_widget_set_sensitive(bd->blend_mode_parameter_slider,
-                           _blendif_blend_parameter_enabled(bd->blend_modes_csp, module->blend_params->blend_mode));
-  gtk_widget_set_visible(bd->blend_mode_parameter_slider, bd->blend_modes_csp == DEVELOP_BLEND_CS_RGB_SCENE);
+  const gboolean show_param = (bd->blend_modes_csp == DEVELOP_BLEND_CS_RGB_SCENE) &&
+                              _blendif_blend_parameter_enabled(bd->blend_modes_csp, module->blend_params->blend_mode);
+  if(!show_param)
+  {
+    module->blend_params->blend_parameter = 0.0f;
+    dt_bauhaus_slider_set(bd->blend_mode_parameter_slider, module->blend_params->blend_parameter);
+  }
+  gtk_widget_set_visible(bd->blend_mode_parameter_slider, show_param);
 
   dt_bauhaus_combobox_set_from_value(bd->masks_combine_combo,
                                      module->blend_params->mask_combine & (DEVELOP_COMBINE_INV | DEVELOP_COMBINE_INCL));
@@ -4399,6 +4400,9 @@ void dt_iop_gui_init_blending_body(GtkBox *blendw, dt_iop_module_t *module)
 
   ++darktable.gui->reset;
 
+  bd->top_content = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  GtkWidget *top_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+
   GtkWidget *presets_button = dtgtk_button_new(dtgtk_cairo_paint_presets, 0, NULL);
   gtk_widget_set_tooltip_text(presets_button, _("blending options"));
   if(bd->blendif_support)
@@ -4410,8 +4414,6 @@ void dt_iop_gui_init_blending_body(GtkBox *blendw, dt_iop_module_t *module)
     gtk_widget_set_sensitive(GTK_WIDGET(presets_button), FALSE);
   }
 
-  GtkWidget *blend_modes_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-
   bd->blend_modes_combo = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(module));
   dt_bauhaus_disable_module_list(bd->blend_modes_combo);
   dt_bauhaus_set_use_default_callback(bd->blend_modes_combo);
@@ -4422,14 +4424,21 @@ void dt_iop_gui_init_blending_body(GtkBox *blendw, dt_iop_module_t *module)
   g_signal_connect(G_OBJECT(bd->blend_modes_combo), "value-changed",
                    G_CALLBACK(_blendop_blend_mode_callback), bd);
   dt_gui_add_help_link(GTK_WIDGET(bd->blend_modes_combo), dt_get_help_url("masks_blending_op"));
-  gtk_box_pack_start(GTK_BOX(blend_modes_hbox), bd->blend_modes_combo, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(top_box), bd->blend_modes_combo, TRUE, TRUE, 0);
 
-  bd->blend_modes_blend_order = dt_iop_togglebutton_new_no_register(module, "blend`tools", N_("toggle blend order"), NULL,
-                                                                    G_CALLBACK(_blendop_blend_order_clicked), FALSE,
-                                                                    0, 0, dtgtk_cairo_paint_invert, blend_modes_hbox);
-  gtk_widget_set_tooltip_text(bd->blend_modes_blend_order, _("toggle the blending order between the input and the output of the module,"
-                                                             "\nby default the output will be blended on top of the input,"
-                                                             "\norder can be reversed by clicking on the icon (input on top of output)"));
+  /* Compositing combobox: choose compositing order */
+  bd->blend_modes_blend_order = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(module));
+  dt_bauhaus_widget_set_label(bd->blend_modes_blend_order, N_("Compositing"));
+  dt_bauhaus_combobox_add_full(bd->blend_modes_blend_order, _("Output over input"), DT_BAUHAUS_COMBOBOX_ALIGN_RIGHT,
+                               GINT_TO_POINTER(0), NULL, TRUE);
+  dt_bauhaus_combobox_add_full(bd->blend_modes_blend_order, _("Input over output"), DT_BAUHAUS_COMBOBOX_ALIGN_RIGHT,
+                               GINT_TO_POINTER(1), NULL, TRUE);
+  dt_bauhaus_disable_module_list(bd->blend_modes_blend_order);
+  dt_bauhaus_disable_accels(bd->blend_modes_blend_order);
+  gtk_widget_set_tooltip_text(bd->blend_modes_blend_order, _("choose compositing order: which layer is placed on top"));
+  g_signal_connect(G_OBJECT(bd->blend_modes_blend_order), "value-changed",
+                   G_CALLBACK(_blendop_compositing_changed), bd);
+  gtk_box_pack_start(GTK_BOX(top_box), bd->blend_modes_blend_order, TRUE, TRUE, 0);
 
   bd->blend_mode_parameter_slider = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(module), -18.0f, 18.0f, 0, 0.0f, 3);
   dt_bauhaus_disable_module_list(bd->blend_mode_parameter_slider);
@@ -4443,6 +4452,7 @@ void dt_iop_gui_init_blending_body(GtkBox *blendw, dt_iop_module_t *module)
                                                                  " operations"));
   g_object_set_data(G_OBJECT(bd->blend_mode_parameter_slider), "dt-blendop-header-update", GINT_TO_POINTER(TRUE));
   gtk_widget_set_visible(bd->blend_mode_parameter_slider, FALSE);
+  gtk_box_pack_start(GTK_BOX(top_box), bd->blend_mode_parameter_slider, TRUE, TRUE, 0);
 
   bd->opacity_slider = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(module), 0.0, 100.0, 0, 100.0, 0);
   dt_bauhaus_disable_module_list(bd->opacity_slider);
@@ -4454,17 +4464,23 @@ void dt_iop_gui_init_blending_body(GtkBox *blendw, dt_iop_module_t *module)
   module->fusion_slider = bd->opacity_slider;
   gtk_widget_set_tooltip_text(bd->opacity_slider, _("set the opacity of the blending"));
   g_object_set_data(G_OBJECT(bd->opacity_slider), "dt-blendop-header-update", GINT_TO_POINTER(TRUE));
+  gtk_box_pack_start(GTK_BOX(top_box), bd->opacity_slider, TRUE, TRUE, 0);
 
-  bd->masks_combine_combo = _combobox_new_from_list(module, _("combine masks"), dt_develop_combine_masks_names, NULL,
-                                                    _("how to combine individual drawn mask and different channels of parametric mask"));
+  /* mask combine control: how to combine drawn/parametric masks */
+  bd->masks_combine_combo = _combobox_new_from_list(module, _("Combine drawn & parametric"), dt_develop_combine_masks_names, NULL,
+                                                    _("how to combine drawn and parametric masks"));
   g_signal_connect(G_OBJECT(bd->masks_combine_combo), "value-changed",
                    G_CALLBACK(_blendop_masks_combine_callback), bd);
   dt_gui_add_help_link(GTK_WIDGET(bd->masks_combine_combo), dt_get_help_url("masks_combined"));
 
-  bd->masks_invert_combo = _combobox_new_from_list(module, _("invert mask"), dt_develop_invert_mask_names, NULL,
-                                                   _("apply mask in normal or inverted mode"));
-  g_signal_connect(G_OBJECT(bd->masks_invert_combo), "value-changed",
-                   G_CALLBACK(_blendop_masks_invert_callback), bd);
+  /* mask invert control: single checkbox to invert masks */
+  bd->masks_invert_combo = gtk_check_button_new_with_label(_("Invert mask"));
+  gtk_widget_set_tooltip_text(bd->masks_invert_combo, _("invert the resulting mask (apply mask in inverted mode)"));
+  g_signal_connect(G_OBJECT(bd->masks_invert_combo), "toggled",
+                   G_CALLBACK(_blendop_masks_invert_toggled), bd);
+
+  gtk_box_pack_start(GTK_BOX(top_box), GTK_WIDGET(bd->masks_combine_combo), TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(top_box), GTK_WIDGET(bd->masks_invert_combo), TRUE, TRUE, 0);
 
   bd->details_slider = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(module), -1.0f, 1.0f, 0, 0.0f, 2);
   dt_bauhaus_disable_module_list(bd->details_slider);
@@ -4526,10 +4542,6 @@ void dt_iop_gui_init_blending_body(GtkBox *blendw, dt_iop_module_t *module)
                                                      "adjust its contrast"));
   g_object_set_data(G_OBJECT(bd->contrast_slider), "dt-blendop-header-update", GINT_TO_POINTER(TRUE));
 
-  GtkWidget *refine_mask_label = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-  gtk_box_pack_start(GTK_BOX(refine_mask_label), dt_ui_label_new(_("mask refinement")), TRUE, TRUE, 0);
-  dt_gui_add_class(refine_mask_label, "dt_section_label");
-
   GtkWidget *display_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
   bd->showmask = dt_iop_togglebutton_new_no_register(module, "blend`tools", N_("display mask and/or color channel"), NULL, G_CALLBACK(_blendop_blendif_showmask_clicked),
                                                      FALSE, 0, 0, dtgtk_cairo_paint_showmask, display_box);
@@ -4556,16 +4568,13 @@ void dt_iop_gui_init_blending_body(GtkBox *blendw, dt_iop_module_t *module)
   dt_gui_add_help_link(top_header, dt_get_help_url("masks_blending"));
   gtk_box_pack_start(GTK_BOX(bd->blending_body_box), top_header, FALSE, FALSE, 0);
 
-  bd->top_content = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-  GtkWidget *top_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-  gtk_box_pack_start(GTK_BOX(top_box), blend_modes_hbox, TRUE, TRUE, 0);
-  gtk_box_pack_start(GTK_BOX(top_box), bd->blend_mode_parameter_slider, TRUE, TRUE, 0);
-  gtk_box_pack_start(GTK_BOX(top_box), bd->opacity_slider, TRUE, TRUE, 0);
-
-  //gtk_box_pack_start(GTK_BOX(bd->top_enable), hbox, TRUE, TRUE, 0);
-
   gtk_box_pack_start(GTK_BOX(bd->top_content), top_box, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(bd->blending_body_box), bd->top_content, FALSE, FALSE, 0);
+
+  /* separator between global blending options and the masking sub-modes notebook */
+  GtkWidget *blend_separator = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
+  gtk_widget_set_name(blend_separator, "blending-separator");
+  gtk_box_pack_start(GTK_BOX(bd->blending_body_box), blend_separator, FALSE, FALSE, 0);
 
   bd->blending_notebook = gtk_notebook_new();
   gtk_notebook_set_scrollable(GTK_NOTEBOOK(bd->blending_notebook), TRUE);
@@ -4588,11 +4597,6 @@ void dt_iop_gui_init_blending_body(GtkBox *blendw, dt_iop_module_t *module)
 
   _blendop_create_notebook_page(bd->blending_notebook, _("Options"), &bd->bottom_content);
   GtkWidget *bottom_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-  gtk_box_pack_start(GTK_BOX(bottom_box), GTK_WIDGET(bd->masks_combine_combo), TRUE, TRUE, 0);
-  gtk_box_pack_start(GTK_BOX(bottom_box), GTK_WIDGET(bd->masks_invert_combo), TRUE, TRUE, 0);
-  
-  gtk_box_pack_start(GTK_BOX(bottom_box), refine_mask_label, TRUE, TRUE, 0);
-
   gtk_box_pack_start(GTK_BOX(bottom_box), bd->details_slider, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(bottom_box), bd->masks_feathering_guide_combo, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(bottom_box), bd->feathering_radius_slider, TRUE, TRUE, 0);
