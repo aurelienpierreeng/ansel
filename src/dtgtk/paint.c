@@ -704,8 +704,25 @@ void dtgtk_cairo_paint_masks_circle(cairo_t *cr, gint x, gint y, gint w, gint h,
 {
   PREAMBLE(1, 1, 0, 0)
 
+  // Draw in a SOURCE group so overlapping strokes don't accumulate alpha.
+  const cairo_operator_t prev_operator = cairo_get_operator(cr);
+  cairo_push_group(cr);
+  cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+
   cairo_arc(cr, 0.5, 0.5, 0.5, 0, 2.0 * M_PI);
   cairo_stroke(cr);
+
+  // Add a center control node
+  cairo_arc(cr, 0.5, 0.5, 0.075, 0, 2 * M_PI);
+  cairo_fill(cr);
+
+  // Add an edge control node
+  cairo_arc(cr, 1., 0.5, 0.075, 0, 2 * M_PI);
+  cairo_fill(cr);
+
+  cairo_pop_group_to_source(cr);
+  cairo_set_operator(cr, prev_operator);
+  cairo_paint(cr);
 
   FINISH
 }
@@ -722,6 +739,12 @@ void dtgtk_cairo_paint_masks_ellipse(cairo_t *cr, gint x, gint y, gint w, gint h
 {
   PREAMBLE(1, 1, 0, 0)
 
+  // Draw in a SOURCE group so overlapping strokes don't accumulate alpha.
+
+  const cairo_operator_t prev_operator = cairo_get_operator(cr);
+  cairo_push_group(cr);
+  cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+
   const double scale_x = 0.95 / sqrt(2.0);
   const double scale_y = 0.95;
   // Pick the radius so the rotated ellipse's axis-aligned bbox has half-extent 0.5.
@@ -734,6 +757,27 @@ void dtgtk_cairo_paint_masks_ellipse(cairo_t *cr, gint x, gint y, gint w, gint h
   cairo_arc(cr, 0.0, 0.0, radius, 0.0, 2.0 * M_PI);
   cairo_restore(cr);
   cairo_stroke(cr);
+
+  // Add a center control node
+  cairo_arc(cr, 0.5, 0.5, 0.075, 0, 2 * M_PI);
+  cairo_fill(cr);
+
+  // Add an edge control node
+  const double c = M_SQRT1_2; // 1/sqrt(2)
+
+  const double major_x = 0.5 + scale_y * radius * c;
+  const double major_y = 0.5 - scale_y * radius * c;
+  cairo_arc(cr, major_x, major_y, 0.075, 0, 2 * M_PI);
+  cairo_fill(cr);
+
+  const double minor_x = 0.5 + scale_x * radius * c;
+  const double minor_y = 0.5 + scale_x * radius * c;
+  cairo_arc(cr, minor_x, minor_y, 0.075, 0, 2 * M_PI);
+  cairo_fill(cr);
+
+  cairo_pop_group_to_source(cr);
+  cairo_set_operator(cr, prev_operator);
+  cairo_paint(cr);
 
   FINISH
 }

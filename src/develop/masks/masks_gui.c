@@ -187,7 +187,7 @@ GtkWidget *dt_masks_shape_buttons_create(const dt_masks_shape_buttons_config_t *
   data->config = *config;
   data->box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
   gtk_widget_set_halign(data->box, GTK_ALIGN_END);
-  gtk_widget_set_valign(data->box, GTK_ALIGN_START);
+  gtk_widget_set_valign(data->box, GTK_ALIGN_CENTER);
 
   const char *action_section = config->action_section ? config->action_section : N_("shapes");
   const size_t button_defs_count = sizeof(_masks_shape_button_defs) / sizeof(_masks_shape_button_defs[0]);
@@ -203,13 +203,17 @@ GtkWidget *dt_masks_shape_buttons_create(const dt_masks_shape_buttons_config_t *
     {
       const gboolean register_button = (config->register_flags & def->flag);
       if(register_button)
+      {
         button = dt_iop_togglebutton_new(config->owner_module, action_section, def->label, def->ctrl_label,
                                          G_CALLBACK(_masks_shape_button_pressed), config->local,
                                          0, 0, def->paint, data->box);
+      }
       else
+      {
         button = dt_iop_togglebutton_new_no_register(config->owner_module, action_section, def->label, def->ctrl_label,
                                                      G_CALLBACK(_masks_shape_button_pressed), config->local,
                                                      0, 0, def->paint, data->box);
+      }
     }
     else
     {
