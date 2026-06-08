@@ -256,10 +256,8 @@ Why that? Just because it's a developer choice and most classes use underscore i
 #blending-separator separator
 {
   min-height: 1px;
-  margin: 0.5em 0;
+  margin: 6px 0;
   background-color: @grey_80;
-  margin-top: 6px;
-  margin-bottom: 6px;
   border: none;
 }
 
@@ -418,12 +416,6 @@ textview,
   font-weight: 400;
 }
 
-/* needed to align popup menu with combobox label */
-combobox button
-{
-  padding: 2px;
-}
-
 /* the combobox popup menu can't cover the whole button for some reason
 so we need to erase the background button while the popup is visible, aka checked state */
 combobox button:checked
@@ -435,10 +427,6 @@ combobox window menu menuitem
 {
   padding: 2px;
   margin: 0 0.25em;
-}
-
-combobox {
-  margin: 2px 0.25em;
 }
 
 combobox window {
@@ -772,12 +760,7 @@ dialog  /* dialog window background */
 
 
 #right .dt_module_focus,
-#right .dt_module_frame:focus
-{
-  border: 3px solid #ccc;
-  border-radius: 12px;
-}
-
+#right .dt_module_frame:focus,
 #left .dt_module_focus,
 #left .dt_module_frame:focus
 {
@@ -789,10 +772,6 @@ dialog  /* dialog window background */
 #module-header .dt_iop_enable_button
 {
   padding: 0;
-}
-
-#module-header .dt_iop_enable_button
-{
   min-width: 16px;
   min-height: 24px;
   margin: 0;
@@ -908,31 +887,26 @@ dialog  /* dialog window background */
   background-image: none;
 }
 
-#collapsible,
-#collapsible #bauhaus-slider,
-.dt_section_expander,
-.dt_section_expander label
-{
-  background-color: @button_bg;
-}
-
-#collapsible,
-.dt_section_expander,
-.dt_section_expander label
-{
-  border: none;
-  border-color: transparent;
-}
-
 #collapsible
 {
+  background-color: @button_bg;
+  border: none;
+  border-color: transparent;
   box-shadow: none;
   padding: 0.28em;
 }
 
+#collapsible #bauhaus-slider
+{
+  background-color: @button_bg;
+}
+
 .dt_section_expander,
 .dt_section_expander label
 {
+  background-color: @button_bg;
+  border: none;
+  border-color: transparent;
   margin-top: 0.14em;
 }
 
@@ -1185,11 +1159,10 @@ notebook tabs,
 
 #blending-header
 {
-  padding: 0 0.25em;
+  padding: 0 0.25em 0 1em;
   background-color: @grey_40;
   margin: 0 0.5em 0.5em;
   border-radius: 5px;
-  padding-left: 1em;
 }
 
 #search-box entry placeholder {
@@ -1226,127 +1199,62 @@ notebook header /* add space between notebook tabs and options below */
   margin-bottom: 0.42em;
 }
 
+/* --- Shared styles: #modules-tabs and #colorequal-ring-tabs --- */
+
+/* Tab base: shared properties */
+#modules-tabs notebook tab,
+#colorequal-ring-tabs > header > tabs > tab
+{
+  padding: 0;
+  border: 1px solid alpha(@grey_95, 0.10);
+  background-color: @grey_35;
+}
+
+/* Tab dimensions: widget-specific */
 #modules-tabs notebook tab
 {
   min-width: 6.25em;
   min-height: 2.7em;
-  padding: 0;
   margin: 0.35em 0.2em 0;
-  border: 1px solid alpha(@grey_95, 0.10);
   border-radius: 0.55em 0.55em 0 0;
-  background-color: @grey_35;
-}
-
-#modules-tabs notebook tabs arrow
-{
-  min-width: 1.4em;
-  min-height: 1.4em;
-  padding: 0.1em;
-  border: none;
-  color: @grey_70;
-}
-
-#modules-tabs notebook header
-{
-  margin: 0;
-  background-color: @bg_color;
-  border-bottom: none;
-}
-
-#modules-tabs notebook header tabs
-{
-  background-color: transparent;
-  border: none;
-  border-bottom: 1px solid alpha(@grey_95, 0.36);
-}
-
-#modules-tabs notebook header, #modules-tabs notebook
-{
-  margin-bottom: 0;
-  border: none;
-  box-shadow: none;
-}
-
-#modules-tabs notebook tab label,
-#modules-tabs notebook tab label.dt_modulegroups_tab_label
-{
-  color: @grey_70;
-  opacity: 1;
-  font-size: 1.05em;
-  font-weight: 500;
-  background-color: transparent;
-  border: none;
-  padding: 0.22em 0.45em 0.18em;
-}
-
-#modules-tabs notebook tab:hover
-{
-  border-color: alpha(@grey_95, 0.20);
-  background-color: @grey_38;
-}
-
-#modules-tabs notebook tab:hover label,
-#modules-tabs notebook tab:hover label.dt_modulegroups_tab_label
-{
-  color: @grey_90;
-  border: none;
-}
-
-#modules-tabs notebook tab:checked
-{
-  border-top: 1px solid alpha(@grey_95, 0.36);
-  border-left: 1px solid alpha(@grey_95, 0.36);
-  border-right: 1px solid alpha(@grey_95, 0.36);
-  border-bottom: none;
-  background-color: @grey_44;
-  margin-bottom: -1px;
-}
-
-#modules-tabs notebook tab:checked label,
-#modules-tabs notebook tab:checked label.dt_modulegroups_tab_label
-{
-  color: @grey_100;
-  font-weight: 700;
-  border: none;
-}
-
-#modules-tabs notebook:disabled tab
-{
-  border-color: alpha(@grey_95, 0.08);
-  background-color: @grey_35;
-}
-
-#modules-tabs notebook:disabled tab label,
-#modules-tabs notebook:disabled tab label.dt_modulegroups_tab_label
-{
-  color: @grey_65;
-  border: none;
 }
 
 #colorequal-ring-tabs > header > tabs > tab
 {
   min-width: 5.1em;
   min-height: 2.1em;
-  padding: 0;
   margin: 0.22em 0.12em 0;
-  border: 1px solid alpha(@grey_95, 0.10);
   border-radius: 0.48em 0.48em 0 0;
-  background-color: @grey_35;
 }
 
+/* Arrow: shared */
+#modules-tabs notebook tabs arrow,
 #colorequal-ring-tabs > header > tabs arrow
 {
   border: none;
   color: @grey_70;
 }
 
+/* Arrow dimensions: modules-tabs only */
+#modules-tabs notebook tabs arrow
+{
+  min-width: 1.4em;
+  min-height: 1.4em;
+  padding: 0.1em;
+}
+
+/* Header: identical for both */
+#modules-tabs notebook header,
 #colorequal-ring-tabs > header
 {
   margin: 0;
   background-color: @bg_color;
-  border-bottom: none;
+  border: none;
+  box-shadow: none;
 }
 
+/* Header tab strip: identical for both */
+#modules-tabs notebook header tabs,
 #colorequal-ring-tabs > header > tabs
 {
   background-color: transparent;
@@ -1354,7 +1262,8 @@ notebook header /* add space between notebook tabs and options below */
   border-bottom: 1px solid alpha(@grey_95, 0.36);
 }
 
-#colorequal-ring-tabs > header,
+/* Notebook container */
+#modules-tabs notebook,
 #colorequal-ring-tabs
 {
   margin-bottom: 0;
@@ -1362,24 +1271,45 @@ notebook header /* add space between notebook tabs and options below */
   box-shadow: none;
 }
 
+/* Tab label: shared base */
+#modules-tabs notebook tab label,
+#modules-tabs notebook tab label.dt_modulegroups_tab_label,
 #colorequal-ring-tabs > header > tabs > tab label,
 #colorequal-ring-tabs > header > tabs > tab label.dt_modulegroups_tab_label
 {
   color: @grey_70;
   opacity: 1;
-  font-size: 0.95em;
   font-weight: 500;
   background-color: transparent;
   border: none;
+}
+
+/* Tab label: widget-specific sizing */
+#modules-tabs notebook tab label,
+#modules-tabs notebook tab label.dt_modulegroups_tab_label
+{
+  font-size: 1.05em;
+  padding: 0.22em 0.45em 0.18em;
+}
+
+#colorequal-ring-tabs > header > tabs > tab label,
+#colorequal-ring-tabs > header > tabs > tab label.dt_modulegroups_tab_label
+{
+  font-size: 0.95em;
   padding: 0.16em 0.36em 0.14em;
 }
 
+/* Tab hover: identical */
+#modules-tabs notebook tab:hover,
 #colorequal-ring-tabs > header > tabs > tab:hover
 {
   border-color: alpha(@grey_95, 0.20);
   background-color: @grey_38;
 }
 
+/* Tab hover label: identical */
+#modules-tabs notebook tab:hover label,
+#modules-tabs notebook tab:hover label.dt_modulegroups_tab_label,
 #colorequal-ring-tabs > header > tabs > tab:hover label,
 #colorequal-ring-tabs > header > tabs > tab:hover label.dt_modulegroups_tab_label
 {
@@ -1387,6 +1317,8 @@ notebook header /* add space between notebook tabs and options below */
   border: none;
 }
 
+/* Tab active/checked: identical */
+#modules-tabs notebook tab:checked,
 #colorequal-ring-tabs > header > tabs > tab:checked
 {
   border-top: 1px solid alpha(@grey_95, 0.36);
@@ -1397,6 +1329,9 @@ notebook header /* add space between notebook tabs and options below */
   margin-bottom: -1px;
 }
 
+/* Tab active label: identical */
+#modules-tabs notebook tab:checked label,
+#modules-tabs notebook tab:checked label.dt_modulegroups_tab_label,
 #colorequal-ring-tabs > header > tabs > tab:checked label,
 #colorequal-ring-tabs > header > tabs > tab:checked label.dt_modulegroups_tab_label
 {
@@ -1405,12 +1340,17 @@ notebook header /* add space between notebook tabs and options below */
   border: none;
 }
 
+/* Disabled tab: identical */
+#modules-tabs notebook:disabled tab,
 #colorequal-ring-tabs:disabled > header > tabs > tab
 {
   border-color: alpha(@grey_95, 0.08);
   background-color: @grey_35;
 }
 
+/* Disabled tab label: identical */
+#modules-tabs notebook:disabled tab label,
+#modules-tabs notebook:disabled tab label.dt_modulegroups_tab_label,
 #colorequal-ring-tabs:disabled > header > tabs > tab label,
 #colorequal-ring-tabs:disabled > header > tabs > tab label.dt_modulegroups_tab_label
 {
@@ -1726,12 +1666,7 @@ filechooser row:hover .sidebar-icon
 
 /* and adjust label and color buttons, especially in header bar */
 .quick_filter_box > * {
-	margin-left: 0.25em;
-	margin-right: 0.25em;
-}
-
-.quick_filter_box #quickfilter-culling label
-{
+  margin: 0 0.25em;
 }
 
 #quickfilter-culling
@@ -1748,11 +1683,7 @@ filechooser row:hover .sidebar-icon
 
 #quick-filter-ratings,
 #quickfilters-colors,
-#quickfilters-altered
-{
-  margin-right: 1em;
-}
-
+#quickfilters-altered,
 #rejected-filter
 {
   margin-right: 1em;
@@ -1991,23 +1922,16 @@ progressbar progress
 
 /* Color picker visibility for levels and rgb levels modules.
    be careful to not change that unless you really now what you do */
-#picker-black
-{
-  color: @grey_00;
-  border: 0;
-}
-
-#picker-grey
-{
-  color: @grey_50;
-  border: 0;
-}
-
+#picker-black,
+#picker-grey,
 #picker-white
 {
-  color: @grey_100;
   border: 0;
 }
+
+#picker-black { color: @grey_00; }
+#picker-grey  { color: @grey_50; }
+#picker-white { color: @grey_100; }
 
 /*------------------------------------------------------------------
   - Pseudo-classes : need to be defined last to not be overwritten -
@@ -2713,8 +2637,6 @@ treeview *,
 menu,
 menu *,
 separator,
-eventbox,
-eventbox *,
 box,
 box *
 {
@@ -2932,16 +2854,12 @@ menu.dt-masks-context-menu menuitem.dt-masks-checked:not(:disabled) label.dt-mas
 
 /* Final checkbox overrides */
 checkbutton,
-checkbutton:not(:hover),
 checkbutton:hover,
 checkbutton:focus,
 checkbutton:active,
 checkbutton:selected,
 checkbutton box,
-checkbutton:not(:hover) box,
-checkbutton label,
-checkbutton:not(:hover) label,
-checkbutton box label
+checkbutton label
 {
   border: none;
   box-shadow: none;
@@ -2949,8 +2867,7 @@ checkbutton box label
   background-image: none;
 }
 
-checkbutton check,
-checkbutton:not(:hover) check
+checkbutton check
 {
   border: none;
   box-shadow: none;
@@ -2958,8 +2875,7 @@ checkbutton:not(:hover) check
   background-image: none;
 }
 
-checkbutton check:checked,
-checkbutton:not(:hover) check:checked
+checkbutton check:checked
 {
   background-color: @button_bg;
   color: @bauhaus_value_text;
