@@ -1313,7 +1313,7 @@ void dt_bauhaus_load_theme(dt_bauhaus_t *bauhaus)
   
   PangoContext *context = gtk_widget_get_pango_context(ref);
   PangoLayout *layout = pango_layout_new(context);
-  pango_layout_set_text(layout, "XMp", -1);
+  pango_layout_set_text(layout, "XMP", -1);
   pango_layout_set_font_description(layout, bauhaus->pango_font_desc);
   //double dpi = pango_cairo_context_get_resolution(context);
   //double scale = gtk_widget_get_scale_factor(ref);
@@ -2854,6 +2854,7 @@ static float _get_combobox_max_width(GtkWidget *widget)
 static gboolean _widget_draw(GtkWidget *widget, cairo_t *crf)
 {
   struct dt_bauhaus_widget_t *w = DT_BAUHAUS_WIDGET(widget);
+  GtkStyleContext *context = gtk_widget_get_style_context(widget);
 
   // Get current Gtk allocation
   GtkAllocation allocation;
@@ -2878,32 +2879,38 @@ static gboolean _widget_draw(GtkWidget *widget, cairo_t *crf)
 
   cairo_surface_t *cst = dt_cairo_image_surface_create(CAIRO_FORMAT_ARGB32, allocation.width, allocation.height);
   cairo_t *cr = cairo_create(cst);
-  GtkStyleContext *context = gtk_widget_get_style_context(widget);
 
-  GdkRGBA *bg_color = NULL;
   GdkRGBA *text_color = default_color_assign();
   GdkRGBA *value_color = default_color_assign();
   GdkRGBA *value_text_color = default_color_assign();
   GtkStateFlags state = gtk_widget_get_state_flags(widget);
   if(gtk_widget_has_focus(widget))
     state |= GTK_STATE_FLAG_FOCUSED;
+
   gtk_style_context_save(context);
   gtk_style_context_set_state(context, state);
   gtk_style_context_get_color(context, state, text_color);
-  gtk_style_context_get(context, state, "background-color", &bg_color, NULL);
+
   *value_color = gtk_widget_is_sensitive(widget) ? w->bauhaus->color_value : w->bauhaus->color_value_insensitive;
   *value_text_color = gtk_widget_is_sensitive(widget) ? w->bauhaus->color_value_text : w->bauhaus->color_value_text_insensitive;
+  
+  // Compute internal widget sizes, that is allocation minus margins
   _margins_retrieve(w);
+  // Note : box is the border box in CSS conventions
+  const float box_width = allocation.width - w->margin->left - w->margin->right;
+  const float box_height = allocation.height - w->margin->top - w->margin->bottom;
 
-  // Paint background first
-  gtk_render_background(context, cr, allocation.x, allocation.y, allocation.width, allocation.height);
+  // Paint background and borders first
+  gtk_render_background(context, crf, w->margin->left, w->margin->top, box_width, box_height);
+  gtk_render_frame(context, crf, w->margin->left, w->margin->top, box_width, box_height);
 
   // Translate Cairo coordinates to account for the widget spacing
-  const float available_width = _widget_get_main_width(w, NULL, NULL);
-  const float inner_height = _widget_get_main_height(w, NULL);
   cairo_translate(cr,
                   w->margin->left + w->padding->left,
                   w->margin->top + w->padding->top);
+
+  const float available_width = _widget_get_main_width(w, NULL, NULL);
+  const float inner_height = _widget_get_main_height(w, NULL);
 
   // draw type specific content:
   cairo_save(cr);
@@ -3012,7 +3019,6 @@ static gboolean _widget_draw(GtkWidget *widget, cairo_t *crf)
   gdk_rgba_free(text_color);
   gdk_rgba_free(value_color);
   gdk_rgba_free(value_text_color);
-  if(!IS_NULL_PTR(bg_color)) gdk_rgba_free(bg_color);
 
   return TRUE;
 }
