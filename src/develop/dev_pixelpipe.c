@@ -104,7 +104,14 @@ void dt_dev_pixelpipe_cache_wait_dump_pending(const char *reason)
   const char *context = !IS_NULL_PTR(reason) ? reason : "unspecified";
   const int64_t now_us = g_get_monotonic_time();
 
-  dt_pthread_mutex_lock(&_cache_wait_manager.lock);
+  // This is a diagnostic snapshot only. Skip it rather than stalling GUI teardown
+  // behind a cache-ready callback that is already updating the same wait list.
+  if(dt_pthread_mutex_trylock(&_cache_wait_manager.lock))
+  {
+    dt_print(DT_DEBUG_PIPECACHE, "[cache-wait] dump reason=%s skipped=lock-busy\n", context);
+    return;
+  }
+
   const guint pending_count = g_list_length(_cache_wait_manager.pending);
   dt_print(DT_DEBUG_PIPECACHE,
            "[cache-wait] dump reason=%s pending=%u queued=%" PRIu64 " served=%" PRIu64
@@ -659,18 +666,26 @@ gboolean dt_dev_pixelpipe_cache_peek_gui(dt_dev_pixelpipe_t *pipe, const dt_dev_
      && dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, hash, &buffer, &entry, pipe->devid, NULL)
      &&  !IS_NULL_PTR(buffer) && !IS_NULL_PTR(entry))
   {
-    dt_pthread_mutex_lock(&_cache_wait_manager.lock);
-    _cache_wait_manager.immediate_hits++;
-    dt_pthread_mutex_unlock(&_cache_wait_manager.lock);
+    // These counters are only diagnostic; cache consumers should not wait for
+    // queue lifecycle updates before reopening an already available cacheline.
+    if(!dt_pthread_mutex_trylock(&_cache_wait_manager.lock))
+    {
+      _cache_wait_manager.immediate_hits++;
+      dt_pthread_mutex_unlock(&_cache_wait_manager.lock);
+    }
     dt_dev_pixelpipe_cache_wait_cleanup(wait, "peek-gui-immediate-hit");
     if(!IS_NULL_PTR(data)) *data = buffer;
     if(!IS_NULL_PTR(cache_entry)) *cache_entry = entry;
     return TRUE;
   }
 
-  dt_pthread_mutex_lock(&_cache_wait_manager.lock);
-  _cache_wait_manager.misses++;
-  dt_pthread_mutex_unlock(&_cache_wait_manager.lock);
+  // A missed GUI peek already requests cache publication below. The miss counter
+  // is diagnostic, so it must not block redraw/picker paths under contention.
+  if(!dt_pthread_mutex_trylock(&_cache_wait_manager.lock))
+  {
+    _cache_wait_manager.misses++;
+    dt_pthread_mutex_unlock(&_cache_wait_manager.lock);
+  }
 
   gboolean request_cacheline = TRUE;
   if(!IS_NULL_PTR(wait) && !IS_NULL_PTR(restart) && hash != DT_PIXELPIPE_CACHE_HASH_INVALID)
