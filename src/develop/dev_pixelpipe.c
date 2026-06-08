@@ -1381,21 +1381,6 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe)
 
   dt_free(status_str);
 
-  const gboolean virtual_pipe = !IS_NULL_PTR(pipe->dev) && pipe->dev->virtual_pipe == pipe;
-  if(virtual_pipe && dt_pthread_rwlock_tryrdlock(&pipe->dev->history_mutex))
-  {
-    /* The virtual pipe is used by GUI coordinate transforms only. If history
-     * is being rewritten, keep the previous geometry for this event loop
-     * iteration and restore the consumed flags so the next GUI pass retries
-     * the same synchronization instead of losing it. */
-    dt_dev_pixelpipe_or_changed(pipe, status);
-    dt_print(DT_DEBUG_DEV, "[dt_dev_pixelpipe_change] deferred virtual pipe sync, history lock busy\n");
-    dt_free(type);
-    return;
-  }
-  else if(!virtual_pipe)
-    dt_pthread_rwlock_rdlock(&pipe->dev->history_mutex);
-
   // mask display off as a starting point
   pipe->mask_display = DT_DEV_PIXELPIPE_DISPLAY_NONE;
   pipe->bypass_blendif = 0;
@@ -1408,6 +1393,8 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe)
     pipe->want_detail_mask = DT_DEV_DETAIL_MASK_NONE;
   else
     _refresh_pipe_detail_mask_state(pipe);
+
+  dt_pthread_rwlock_rdlock(&pipe->dev->history_mutex);
 
   // case DT_DEV_PIPE_UNCHANGED: case DT_DEV_PIPE_ZOOMED:
   if(status & DT_DEV_PIPE_REMOVE)
