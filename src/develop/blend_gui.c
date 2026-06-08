@@ -3809,6 +3809,7 @@ void dt_iop_gui_cleanup_blending(dt_iop_module_t *module)
   dt_pthread_mutex_destroy(&bd->lock);
 
   dt_free(module->blend_data);
+  module->blend_data = NULL;
 }
 
 
