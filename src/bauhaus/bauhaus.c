@@ -2395,16 +2395,23 @@ static void dt_bauhaus_draw_baseline(struct dt_bauhaus_widget_t *w, cairo_t *cr,
   const gboolean has_colored_background = d->grad_cnt > 0;
   const float baseline_top = w->bauhaus->line_height + INNER_PADDING;
   const float baseline_height = w->bauhaus->baseline_size;
+  const gboolean is_sensitive = gtk_widget_is_sensitive(GTK_WIDGET(w));
 
   // the background of the line
-  cairo_rectangle(cr, 0, baseline_top, width, baseline_height);
+  // Note: to ensure the indicator is not clipped on the left side,
+  // we push the whole slider of an indicator radius to the right.
+  // Issue is that leaves a dent on the baseline, so the trick
+  // is to make it overlap back by a radius on the left.
+  const double x_origin = -w->bauhaus->marker_size / 3.;
+  cairo_rectangle(cr, x_origin, baseline_top, width, baseline_height);
+
   cairo_pattern_t *gradient = NULL;
-  if(has_colored_background)
+  if(has_colored_background && is_sensitive)
   {
     // gradient line as used in some modules for hue, saturation, lightness
     const double zoom = (d->max - d->min) / (d->hard_max - d->hard_min);
     const double offset = (d->min - d->hard_min) / (d->hard_max - d->hard_min);
-    gradient = cairo_pattern_create_linear(0, 0, width, baseline_height);
+    gradient = cairo_pattern_create_linear(x_origin, 0, width, baseline_height);
     for(int k = 0; k < d->grad_cnt; k++)
       cairo_pattern_add_color_stop_rgba(gradient, (d->grad_pos[k] - offset) / zoom,
                                         d->grad_col[k][0], d->grad_col[k][1], d->grad_col[k][2], 0.4f);
@@ -2419,32 +2426,44 @@ static void dt_bauhaus_draw_baseline(struct dt_bauhaus_widget_t *w, cairo_t *cr,
   if(gradient) cairo_pattern_destroy(gradient);
 
   // get the reference of the slider aka the position of the 0 value
-  const float origin = fmaxf(fminf((d->factor > 0 ? -d->min - d->offset/d->factor
-                                                  :  d->max + d->offset/d->factor)
-                                                  / (d->max - d->min), 1.0f) * width, 0.0f);
-  const float position = d->pos * width;
-  const float delta = position - origin;
+  float origin = fmaxf(fminf((d->factor > 0 ? -d->min - d->offset/d->factor
+                                            :  d->max + d->offset/d->factor)
+                              / (d->max - d->min), 
+                             1.0f) * width, 
+                       0.f);
 
   // have a `fill ratio feel' from zero to current position
-  if(!has_colored_background && d->fill_feedback)
+  if(!has_colored_background && d->fill_feedback && is_sensitive)
   {
     // only brighten, useful for colored sliders to not get too faint:
     cairo_save(cr);
     cairo_set_operator(cr, CAIRO_OPERATOR_SCREEN);
     set_color(cr, w->bauhaus->color_value);
-    cairo_rectangle(cr, origin, baseline_top, delta, baseline_height);
+
+    const float position = d->pos * width;
+    const float delta = position - origin;
+    
+    // origin = 0 means start on left, but our left is shifted to the right,
+    // so offset it. (see x_origin)
+    if(origin == 0.f)
+      cairo_rectangle(cr, x_origin, baseline_top, delta - x_origin, baseline_height);
+    else
+      cairo_rectangle(cr, origin, baseline_top, delta, baseline_height);
+
     cairo_fill(cr);
     cairo_restore(cr);
   }
 
   // draw the 0 reference graduation if it's different than the bounds of the slider
-  const float graduation_top = baseline_top + w->bauhaus->marker_size + w->bauhaus->border_width;
-  set_color(cr, w->bauhaus->color_fg);
-
   // If the max of the slider is 360, it is likely an absolute hue slider in degrees
   // a zero in periodic stuff has not much meaning so we skip it.
-  if(d->hard_max != 360.0f)
+  if(d->hard_max != 360.0f && is_sensitive)
   {
+    const float graduation_top = baseline_top + w->bauhaus->marker_size + w->bauhaus->border_width;
+    set_color(cr, w->bauhaus->color_fg);
+
+    // If we are to put the 0 reference on the "left", this time we need to account for
+    // actual leftmost resting position of the indicator, not the starting point of the baseline.
     cairo_arc(cr, origin, graduation_top, w->bauhaus->border_width / 2., 0, 2 * M_PI);
     cairo_fill(cr);
   }
@@ -2623,14 +2642,11 @@ static gboolean dt_bauhaus_popup_draw(GtkWidget *widget, cairo_t *crf, gpointer 
       // Get the x offset compared to d->oldpos accounting for vertical position magnification
       const double mouse_off = d->pos - d->oldpos;
 
-      // Draw the baseline with fill feedback if any (needs the new d->pos set before)
       cairo_save(cr);
       cairo_translate(cr, slider_cursor_radius, 0.0);
-      dt_bauhaus_draw_baseline(w, cr, main_width);
-      cairo_restore(cr);
 
-      cairo_save(cr);
-      cairo_translate(cr, slider_cursor_radius, 0.0);
+      // Draw the baseline with fill feedback if any (needs the new d->pos set before)
+      dt_bauhaus_draw_baseline(w, cr, main_width);
 
       // draw mouse over indicator line
       set_color(cr, w->bauhaus->color_value_text);
