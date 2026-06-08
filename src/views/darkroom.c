@@ -199,7 +199,6 @@ static void _darkroom_autoset_button_set_running(const gboolean running)
 
   _darkroom_autoset_button_is_running = running;
 
-  gtk_button_set_label(GTK_BUTTON(_darkroom_autoset_button), running ? _("Autoset...") : _("Autoset"));
   gtk_widget_set_sensitive(_darkroom_autoset_button, !running);
   gtk_widget_set_tooltip_text(_darkroom_autoset_button,
                               running ? _("Autoset is running on selected modules")
