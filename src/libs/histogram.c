@@ -384,7 +384,9 @@ static void _refresh_preview_histograms(dt_develop_t *dev)
 {
   if(IS_NULL_PTR(dev) || !dev->gui_attached || IS_NULL_PTR(dev->preview_pipe)) return;
   if(!dev->preview_pipe->gui_observable_source) return;
-  dt_pthread_mutex_lock(&dev->preview_pipe->busy_mutex);
+  /* Do not grab preview_pipe->busy_mutex from GUI thread: it may be held by
+   * the pipeline worker for long recomputations and would freeze the UI.
+   * We rely on non-blocking cache probes and the cache-wait manager instead. */
 
   const char *ops[] = { "initialscale", "colorout", "gamma" };
   uint64_t *pending_hashes[] = {
@@ -494,7 +496,6 @@ static void _refresh_preview_histograms(dt_develop_t *dev)
     l = next;
   }
   g_hash_table_destroy(seen_modules);
-  dt_pthread_mutex_unlock(&dev->preview_pipe->busy_mutex);
 }
 
 static void _preview_history_resync_callback(gpointer instance, gpointer user_data)
@@ -511,8 +512,6 @@ static void _preview_cacheline_ready_callback(gpointer instance, const guint64 h
 
   dt_develop_t *const dev = darktable.develop;
   if(IS_NULL_PTR(dev) || !dev->gui_attached || IS_NULL_PTR(dev->preview_pipe)) return;
-  dt_pthread_mutex_lock(&dev->preview_pipe->busy_mutex);
-
   if(_preview_refresh_state.initialscale_hash == hash)
   {
     _refresh_global_histogram_backbuf_for_hash(dev, "initialscale", hash);
@@ -543,7 +542,6 @@ static void _preview_cacheline_ready_callback(gpointer instance, const guint64 h
     }
     l = next;
   }
-  dt_pthread_mutex_unlock(&dev->preview_pipe->busy_mutex);
 }
 
 const char *name(struct dt_lib_module_t *self)
@@ -709,27 +707,19 @@ static uint64_t _get_live_histogram_hash(const char *op)
   dt_develop_t *const dev = darktable.develop;
   dt_dev_pixelpipe_t *const pipe = dev ? dev->preview_pipe : NULL;
   if(IS_NULL_PTR(dev) || IS_NULL_PTR(pipe) || IS_NULL_PTR(op)) return DT_PIXELPIPE_CACHE_HASH_INVALID;
-  dt_pthread_mutex_lock(&pipe->busy_mutex);
-
+  /* Avoid taking `pipe->busy_mutex` on the GUI thread: read the live module
+   * hashes without the mutex and rely on the cache peek manager to handle
+   * synchronization and retries for missing cachelines. */
   dt_iop_module_t *const module = dt_iop_get_module_by_op_priority(dev->iop, op, 0);
-  if(IS_NULL_PTR(module))
-  {
-    dt_pthread_mutex_unlock(&pipe->busy_mutex);
-    return DT_PIXELPIPE_CACHE_HASH_INVALID;
-  }
+  if(IS_NULL_PTR(module)) return DT_PIXELPIPE_CACHE_HASH_INVALID;
 
   const dt_dev_pixelpipe_iop_t *piece = dt_dev_pixelpipe_get_module_piece(pipe, module);
-  if(IS_NULL_PTR(piece))
-  {
-    dt_pthread_mutex_unlock(&pipe->busy_mutex);
-    return DT_PIXELPIPE_CACHE_HASH_INVALID;
-  }
+  if(IS_NULL_PTR(piece)) return DT_PIXELPIPE_CACHE_HASH_INVALID;
 
   if(!strcmp(op, "gamma"))
     piece = dt_dev_pixelpipe_get_prev_enabled_piece(pipe, piece);
 
   const uint64_t hash = piece ? piece->global_hash : DT_PIXELPIPE_CACHE_HASH_INVALID;
-  dt_pthread_mutex_unlock(&pipe->busy_mutex);
   return hash;
 }
 
@@ -881,13 +871,8 @@ static void _process_histogram(dt_backbuf_t *backbuf, const char *op, cairo_t *c
   // Histogram backbuffers already own their keepalive ref in the pipeline state. Drawing only borrows them.
   struct dt_pixel_cache_entry_t *entry = NULL;
   void *data = NULL;
-  dt_pthread_mutex_lock(&darktable.develop->preview_pipe->busy_mutex);
   const dt_dev_pixelpipe_iop_t *const piece = _get_backbuf_source_piece(backbuf, op);
-  if(IS_NULL_PTR(piece))
-  {
-    dt_pthread_mutex_unlock(&darktable.develop->preview_pipe->busy_mutex);
-    return;
-  }
+  if(IS_NULL_PTR(piece)) return;
   if(!IS_NULL_PTR(d))
     dt_dev_pixelpipe_cache_wait_set_owner(&d->scope_wait, "histogram-scope", d->module);
   if(!dt_dev_pixelpipe_cache_peek_gui(darktable.develop->preview_pipe, piece, &data, &entry,
@@ -895,10 +880,8 @@ static void _process_histogram(dt_backbuf_t *backbuf, const char *op, cairo_t *c
                                       _histogram_restart_cache_wait,
                                       !IS_NULL_PTR(d) ? d->module : NULL))
   {
-    dt_pthread_mutex_unlock(&darktable.develop->preview_pipe->busy_mutex);
     return;
   }
-  dt_pthread_mutex_unlock(&darktable.develop->preview_pipe->busy_mutex);
 
   dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, entry);
 
@@ -1149,13 +1132,8 @@ static void _process_waveform(dt_backbuf_t *backbuf, const char *op, cairo_t *cr
 {
   struct dt_pixel_cache_entry_t *entry = NULL;
   void *data = NULL;
-  dt_pthread_mutex_lock(&darktable.develop->preview_pipe->busy_mutex);
   const dt_dev_pixelpipe_iop_t *const piece = _get_backbuf_source_piece(backbuf, op);
-  if(IS_NULL_PTR(piece))
-  {
-    dt_pthread_mutex_unlock(&darktable.develop->preview_pipe->busy_mutex);
-    return;
-  }
+  if(IS_NULL_PTR(piece)) return;
   if(!IS_NULL_PTR(d))
     dt_dev_pixelpipe_cache_wait_set_owner(&d->scope_wait, "histogram-scope", d->module);
   if(!dt_dev_pixelpipe_cache_peek_gui(darktable.develop->preview_pipe, piece, &data, &entry,
@@ -1163,10 +1141,8 @@ static void _process_waveform(dt_backbuf_t *backbuf, const char *op, cairo_t *cr
                                       _histogram_restart_cache_wait,
                                       !IS_NULL_PTR(d) ? d->module : NULL))
   {
-    dt_pthread_mutex_unlock(&darktable.develop->preview_pipe->busy_mutex);
     return;
   }
-  dt_pthread_mutex_unlock(&darktable.develop->preview_pipe->busy_mutex);
 
   dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, entry);
 
@@ -1666,21 +1642,14 @@ static void _process_vectorscope(dt_backbuf_t *backbuf, const char *op, cairo_t 
 
   struct dt_pixel_cache_entry_t *entry = NULL;
   void *data = NULL;
-  dt_pthread_mutex_lock(&darktable.develop->preview_pipe->busy_mutex);
   const dt_dev_pixelpipe_iop_t *const piece = _get_backbuf_source_piece(backbuf, op);
-  if(IS_NULL_PTR(piece))
-  {
-    dt_pthread_mutex_unlock(&darktable.develop->preview_pipe->busy_mutex);
-    return;
-  }
+  if(IS_NULL_PTR(piece)) return;
   dt_dev_pixelpipe_cache_wait_set_owner(&d->scope_wait, "histogram-scope", d->module);
   if(!dt_dev_pixelpipe_cache_peek_gui(darktable.develop->preview_pipe, piece, &data, &entry, &d->scope_wait,
                                       _histogram_restart_cache_wait, d->module))
   {
-    dt_pthread_mutex_unlock(&darktable.develop->preview_pipe->busy_mutex);
     return;
   }
-  dt_pthread_mutex_unlock(&darktable.develop->preview_pipe->busy_mutex);
 
   dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, entry);
 
@@ -2074,21 +2043,13 @@ static gboolean _resolve_backbuf_sampling_source(const char *const op, const dt_
   dt_develop_t *const dev = darktable.develop;
   dt_dev_pixelpipe_t *const pipe = dev ? dev->preview_pipe : NULL;
   if(IS_NULL_PTR(dev) || IS_NULL_PTR(pipe) || IS_NULL_PTR(op) || IS_NULL_PTR(backbuf) || IS_NULL_PTR(roi) || IS_NULL_PTR(dsc) || !iop_order || IS_NULL_PTR(direction)) return FALSE;
-  dt_pthread_mutex_lock(&pipe->busy_mutex);
-
+  /* Avoid taking `pipe->busy_mutex` on the GUI thread: read live module state
+   * without blocking and let the cache peek manager handle synchronization. */
   dt_iop_module_t *const module = dt_iop_get_module_by_op_priority(dev->iop, op, 0);
-  if(IS_NULL_PTR(module))
-  {
-    dt_pthread_mutex_unlock(&pipe->busy_mutex);
-    return FALSE;
-  }
+  if(IS_NULL_PTR(module)) return FALSE;
 
   const dt_dev_pixelpipe_iop_t *const piece = dt_dev_pixelpipe_get_module_piece(pipe, module);
-  if(IS_NULL_PTR(piece))
-  {
-    dt_pthread_mutex_unlock(&pipe->busy_mutex);
-    return FALSE;
-  }
+  if(IS_NULL_PTR(piece)) return FALSE;
 
   uint64_t hash = piece->global_hash;
   *roi = piece->roi_out;
@@ -2099,11 +2060,7 @@ static gboolean _resolve_backbuf_sampling_source(const char *const op, const dt_
   if(!strcmp(op, "gamma"))
   {
     const dt_dev_pixelpipe_iop_t *const previous_piece = dt_dev_pixelpipe_get_prev_enabled_piece(pipe, piece);
-    if(IS_NULL_PTR(previous_piece))
-    {
-      dt_pthread_mutex_unlock(&pipe->busy_mutex);
-      return FALSE;
-    }
+    if(IS_NULL_PTR(previous_piece)) return FALSE;
 
     hash = previous_piece->global_hash;
     *roi = previous_piece->roi_out;
@@ -2112,7 +2069,6 @@ static gboolean _resolve_backbuf_sampling_source(const char *const op, const dt_
   }
 
   const gboolean valid = hash == dt_dev_backbuf_get_hash(backbuf);
-  dt_pthread_mutex_unlock(&pipe->busy_mutex);
   return valid;
 }
 
@@ -2122,21 +2078,14 @@ static void _pixelpipe_pick_from_image(const dt_backbuf_t *const backbuf,
 {
   struct dt_pixel_cache_entry_t *entry = NULL;
   void *data = NULL;
-  dt_pthread_mutex_lock(&darktable.develop->preview_pipe->busy_mutex);
   const dt_dev_pixelpipe_iop_t *const source_piece = _get_backbuf_source_piece(backbuf, op);
-  if(IS_NULL_PTR(source_piece))
-  {
-    dt_pthread_mutex_unlock(&darktable.develop->preview_pipe->busy_mutex);
-    return;
-  }
+  if(IS_NULL_PTR(source_piece)) return;
   dt_dev_pixelpipe_cache_wait_set_owner(&d->picker_wait, "histogram-picker", d->module);
   if(!dt_dev_pixelpipe_cache_peek_gui(darktable.develop->preview_pipe, source_piece, &data, &entry,
                                       &d->picker_wait, _histogram_restart_cache_wait, d->module))
   {
-    dt_pthread_mutex_unlock(&darktable.develop->preview_pipe->busy_mutex);
     return;
   }
-  dt_pthread_mutex_unlock(&darktable.develop->preview_pipe->busy_mutex);
 
   dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, entry);
 
