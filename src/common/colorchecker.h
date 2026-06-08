@@ -550,12 +550,9 @@ void dt_colorchecker_label_free(gpointer data)
   dt_colorchecker_label_t *checker_label = (dt_colorchecker_label_t *)data;
   if(!checker_label) return;
 
-  // Only free if not NULL and if dynamically allocated (user reference)
-  if(checker_label->type == COLOR_CHECKER_USER_REF)
-  {
-    dt_free(checker_label->name);
-    dt_free(checker_label->path); // Builtin checker doesn't use this char dynamically
-  }
+  dt_free(checker_label->name);
+  dt_free(checker_label->path);
+  dt_free(checker_label);
 }
 
 void dt_colorchecker_label_list_cleanup(GList **colorcheckers)

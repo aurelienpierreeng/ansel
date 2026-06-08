@@ -5171,6 +5171,7 @@ void gui_init(struct dt_iop_module_t *self)
                                       "Add a compatible CGATS.17 file to <b>%s</b>.</i>"), tip_files_loc);
   g->checker_msg = gtk_label_new(NULL);
   gtk_label_set_markup(GTK_LABEL(g->checker_msg), tooltip);
+  dt_free(tooltip);
   gtk_label_set_line_wrap(GTK_LABEL(g->checker_msg), TRUE);
   gtk_label_set_line_wrap_mode(GTK_LABEL(g->checker_msg), PANGO_WRAP_WORD);
   gtk_box_pack_start(GTK_BOX(collapsible), GTK_WIDGET(g->checker_msg), FALSE, TRUE, 0);

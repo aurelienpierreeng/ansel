@@ -210,6 +210,8 @@ static void _dt_colorchecker_chart_spec_cleanup(dt_colorchecker_chart_spec_t *ch
 {
   if(IS_NULL_PTR(chart_spec)) return;
 
+  dt_free(chart_spec->type);
+
   // Free the patches' gslist
   if(chart_spec->patches)
     g_slist_free_full(chart_spec->patches, dt_colorchecker_patch_cleanup_list);
@@ -373,6 +375,7 @@ static gboolean _dt_cht_generate_patch_list(dt_colorchecker_chart_spec_t *chart,
   gchar *current_colum = NULL;
   gchar *current_row = NULL;
   gchar *last_label = NULL;
+  GSList *patch_tail = NULL;
 
   // Input validation
   if(IS_NULL_PTR(cht_patch))
@@ -413,14 +416,19 @@ static gboolean _dt_cht_generate_patch_list(dt_colorchecker_chart_spec_t *chart,
   const char *last_label_colum = (end_colum[0] != '_') ? _remove_leading_zeros(end_colum) : NULL;
   const char *last_label_row = (end_row[0] != '_') ? _remove_leading_zeros(end_row) : NULL;
   last_label = g_strconcat(last_label_colum ? last_label_colum : "", last_label_row ? last_label_row : "", NULL);
+  if(IS_NULL_PTR(last_label)) ERROR
 
   // Copy string for manipulation
   current_colum = g_strdup(start_colum);
   if(IS_NULL_PTR(current_colum)) ERROR
   const char *colum_last = swap_axes ? cht_patch->label_y_end : cht_patch->label_x_end;
   const char *row_last = swap_axes ? cht_patch->label_x_end : cht_patch->label_y_end;
+  const float inv_frame_width = 1.f / (F_box->width - chart->guide_size[0]);
+  const float inv_frame_height = 1.f / (F_box->height - chart->guide_size[1]);
 
-  // iterate over the columns and rows
+  patch_tail = g_slist_last(chart->patches);
+
+  // Iterate over chart columns and rows, creating one patch per label until the CHT end label is reached.
   int index_colum = 0;
   while(g_strcmp0(current_colum, colum_last) <= 0)
   {
@@ -434,32 +442,43 @@ static gboolean _dt_cht_generate_patch_list(dt_colorchecker_chart_spec_t *chart,
       const char *label_colum = current_colum[0] != '_' ? _remove_leading_zeros(current_colum) : NULL;
       const char *label_row = current_row[0] != '_' ? _remove_leading_zeros(current_row) : NULL;
 
-      const gchar *label = g_strconcat(label_colum ? label_colum : "", label_row ? label_row : "", NULL);
+      gchar *label = g_strconcat(label_colum ? label_colum : "", label_row ? label_row : "", NULL);
       if(IS_NULL_PTR(label)) ERROR
 
       // Create the patch
       dt_color_checker_patch *patch = _dt_colorchecker_patch_init();
-      if(IS_NULL_PTR(patch)) ERROR
+      if(IS_NULL_PTR(patch))
+      {
+        dt_free(label);
+        ERROR
+      }
 
       // Set the patch properties
-      patch->name = g_strdup(label);
-      if(IS_NULL_PTR(patch->name)) ERROR
+      patch->name = label;
+      label = NULL;
 
       int index_x = swap_axes ? index_row : index_colum;
-      float temp_x = origin_x + (cht_patch->x_increment * index_x);
-      temp_x /= F_box->width - chart->guide_size[0]; // factorize to the frame width
+      float temp_x = (origin_x + (cht_patch->x_increment * index_x)) * inv_frame_width;
 
       int index_y = swap_axes ? index_colum : index_row;
-      float temp_y = origin_y + (cht_patch->y_increment * index_y);
-      temp_y /= F_box->height - chart->guide_size[1]; // factorize to the frame height
+      float temp_y = (origin_y + (cht_patch->y_increment * index_y)) * inv_frame_height;
 
       patch->x = temp_x;
       patch->y = temp_y;
 
-      // Add to the list
-      chart->patches = g_slist_append(chart->patches, patch);
+      // Add the node explicitly at the current tail: g_slist_append() would rescan
+      // the whole list for every patch and turn large charts into quadratic work.
+      GSList *patch_node = g_slist_alloc();
+      patch_node->data = patch;
+      patch_node->next = NULL;
+      if(!IS_NULL_PTR(patch_tail))
+        patch_tail->next = patch_node;
+      else
+        chart->patches = patch_node;
+      patch_tail = patch_node;
 
-      if(!g_strcmp0(label, last_label)) goto out;
+      const gboolean last_patch_reached = !g_strcmp0(patch->name, last_label);
+      if(last_patch_reached) goto out;
       if(!g_strcmp0(current_row, "_")) break;
 
       // increment x in a new string and pass the ownership to current_row
@@ -470,6 +489,9 @@ static gboolean _dt_cht_generate_patch_list(dt_colorchecker_chart_spec_t *chart,
       chart->colums = MAX(chart->colums, index_row + 1);
       index_row++;
     }
+
+    dt_free(current_row)
+    current_row = NULL;
 
     // increment y in a new string and pass the ownership to current_colum
     gchar *temp = _increment_string(current_colum);
@@ -1241,11 +1263,13 @@ static dt_color_checker_patch *_dt_colorchecker_CGATS_fill_patch_values(const cm
 
   for(size_t patch_iter = 0; patch_iter < num_patches; patch_iter++)
   {
-    // set name
-    values[patch_iter].name = g_strdup(cmsIT8GetDataRowCol(hIT8, patch_iter, 0));
-    if(IS_NULL_PTR(values[patch_iter].name))
+    // Ensure the CGATS row exists before binding its values to the chart patch
+    // at the same index. The display name comes from the chart geometry below,
+    // so we must not allocate a temporary row name that gets overwritten.
+    const char *sample_name = cmsIT8GetDataRowCol(hIT8, patch_iter, 0);
+    if(IS_NULL_PTR(sample_name))
     {
-      fprintf(stderr, "Error : can't find sample '%lu' in CGATS file\n", patch_iter);
+      fprintf(stderr, "Error : can't find sample '%" G_GSIZE_FORMAT "' in CGATS file\n", patch_iter);
       goto error;
     }
 
@@ -1260,10 +1284,15 @@ static dt_color_checker_patch *_dt_colorchecker_CGATS_fill_patch_values(const cm
     const dt_color_checker_patch *p = (dt_color_checker_patch*)g_slist_nth_data(chart_spec->patches, (guint)patch_iter);
     if(IS_NULL_PTR(p))
     {
-      fprintf(stderr, "Error: patch %lu not found in chart specification.\n", patch_iter);
+      fprintf(stderr, "Error: patch %" G_GSIZE_FORMAT " not found in chart specification.\n", patch_iter);
       goto error;
     }
     _dt_colorchecker_copy_patch(&values[patch_iter], p);
+    if(IS_NULL_PTR(values[patch_iter].name))
+    {
+      fprintf(stderr, "Error: patch %" G_GSIZE_FORMAT " has no name in chart specification.\n", patch_iter);
+      goto error;
+    }
 
     // Copy color values
     const double patchdbl[3] = { cmsIT8GetDataRowColDbl(hIT8, (int)patch_iter, columns[0]),
@@ -1399,8 +1428,10 @@ dt_color_checker_t *dt_colorchecker_user_ref_create(const char *color_filename, 
   dt_print(DT_DEBUG_VERBOSE, _("it8 '%s' done\n"), color_filename);
   goto end;
 
-  error:
+error:
   fprintf(stderr, "Error creating user ref checker, in %s %s:%d\n", __FUNCTION__, __FILE__, lineno);
+  dt_colorchecker_cleanup(checker);
+  checker = NULL;
 
   end:
   if(!IS_NULL_PTR(chart_spec)) _dt_colorchecker_chart_spec_cleanup(chart_spec); // only allocated chart will be freed
