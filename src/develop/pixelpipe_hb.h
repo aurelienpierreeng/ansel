@@ -256,6 +256,10 @@ typedef struct dt_dev_pixelpipe_t
   // ahead of processing image.
   dt_atomic_uint64 hash;
 
+  // Lock this while a pipeline is working.
+  // This is meant to prevent pipeline destruction/cleanup while it is working.
+  // It should __NEVER__ be used from the GUI thread, the GUI thread interacts
+  // with pipelines __ONLY__ through the pipeline cache.
   dt_pthread_mutex_t busy_mutex;
 
   // The hidden detailmask module publishes the full-resolution detail mask in
