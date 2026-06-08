@@ -2240,7 +2240,7 @@ static void _blendop_masks_edit_list_toggle(GtkToggleButton *togglebutton, dt_io
   if(edit_mode)
     gtk_button_set_label(GTK_BUTTON(togglebutton), _("OK"));
   else
-    gtk_button_set_label(GTK_BUTTON(togglebutton), _("Wire shapes"));
+    gtk_button_set_label(GTK_BUTTON(togglebutton), _("Attach shapes"));
 
   if(GTK_IS_STACK(bd->lists_stack))
     gtk_stack_set_visible_child_name(GTK_STACK(bd->lists_stack), edit_mode ? "all" : "group");
@@ -3566,7 +3566,7 @@ void dt_iop_gui_init_masks(GtkBox *blendw, dt_iop_module_t *module)
     if(!GTK_IS_WIDGET(bd->all_shapes_buttons)) return;
 
     // Wire shapes toggle button
-    bd->wire_shape_toggle = gtk_toggle_button_new_with_label(_("Wire shapes"));
+    bd->wire_shape_toggle = gtk_toggle_button_new_with_label(_("Attach shapes"));
     gtk_widget_set_tooltip_text(bd->wire_shape_toggle, _("Show all shapes and groups to choose which ones to connect to or disconnect from the mask."));
 
     GtkWidget *bottom_bar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
