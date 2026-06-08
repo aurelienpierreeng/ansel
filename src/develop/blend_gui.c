@@ -4139,9 +4139,6 @@ void dt_iop_gui_update_blending(dt_iop_module_t *module)
   _blendop_sync_toggle_state(bd->blendif_enable, bd->blendif_inited, blendif_enabled, bd->blendif_content);
   gtk_widget_set_sensitive(bd->bottom_content, bottom_enabled);
 
-  // Details mask is deprecated. Show it only if it was used in an old edit,
-  // but do not hide it solely because the current input is not RAW.
-  gtk_widget_set_visible(bd->details_slider, module->blend_params->details != 0.0f);
 
   if(bd->blendif_inited && blendif_enabled)
   {
@@ -4189,8 +4186,9 @@ void dt_iop_gui_update_blending(dt_iop_module_t *module)
     gtk_widget_show(bd->brightness_slider);
     gtk_widget_set_sensitive(bd->contrast_slider, TRUE);
     gtk_widget_show(bd->contrast_slider);
-    gtk_widget_set_sensitive(bd->details_slider, TRUE);
-    gtk_widget_show(bd->details_slider);
+    /* show details slider only if it was used in an old edit (non-zero) */
+    const gboolean show_details = (module->blend_params->details != 0.0f);
+    gtk_widget_set_visible(bd->details_slider, show_details);
   }
 
   if(!bottom_enabled)
@@ -4492,6 +4490,17 @@ void dt_iop_gui_init_blending_body(GtkBox *blendw, dt_iop_module_t *module)
                                                     "\npositive values selects areas with strong details, "
                                                     "\nnegative values select flat areas"));
   g_signal_connect(G_OBJECT(bd->details_slider), "value-changed", G_CALLBACK(_blendop_blendif_details_callback), bd);
+  gtk_widget_hide(bd->details_slider);
+
+  bd->blur_radius_slider = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(module), 0.0, 100.0, 0, 0.0, 1);
+  dt_bauhaus_disable_module_list(bd->blur_radius_slider);
+  dt_bauhaus_set_use_default_callback(bd->blur_radius_slider);
+  dt_bauhaus_disable_accels(bd->blur_radius_slider);
+  dt_bauhaus_widget_set_field(bd->blur_radius_slider, &module->blend_params->blur_radius, DT_INTROSPECTION_TYPE_FLOAT);
+  dt_bauhaus_widget_set_label(bd->blur_radius_slider, N_("blurring radius"));
+  dt_bauhaus_slider_set_format(bd->blur_radius_slider, " px");
+  gtk_widget_set_tooltip_text(bd->blur_radius_slider, _("radius for gaussian blur of blend mask"));
+  g_object_set_data(G_OBJECT(bd->blur_radius_slider), "dt-blendop-header-update", GINT_TO_POINTER(TRUE));
 
   bd->masks_feathering_guide_combo = _combobox_new_from_list(module, _("feathering guide"), dt_develop_feathering_guide_names,
                                                              &module->blend_params->feathering_guide,
@@ -4509,22 +4518,12 @@ void dt_iop_gui_init_blending_body(GtkBox *blendw, dt_iop_module_t *module)
   gtk_widget_set_tooltip_text(bd->feathering_radius_slider, _("spatial radius of feathering"));
   g_object_set_data(G_OBJECT(bd->feathering_radius_slider), "dt-blendop-header-update", GINT_TO_POINTER(TRUE));
 
-  bd->blur_radius_slider = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(module), 0.0, 100.0, 0, 0.0, 1);
-  dt_bauhaus_disable_module_list(bd->blur_radius_slider);
-  dt_bauhaus_set_use_default_callback(bd->blur_radius_slider);
-  dt_bauhaus_disable_accels(bd->blur_radius_slider);
-  dt_bauhaus_widget_set_field(bd->blur_radius_slider, &module->blend_params->blur_radius, DT_INTROSPECTION_TYPE_FLOAT);
-  dt_bauhaus_widget_set_label(bd->blur_radius_slider, N_("blurring radius"));
-  dt_bauhaus_slider_set_format(bd->blur_radius_slider, " px");
-  gtk_widget_set_tooltip_text(bd->blur_radius_slider, _("radius for gaussian blur of blend mask"));
-  g_object_set_data(G_OBJECT(bd->blur_radius_slider), "dt-blendop-header-update", GINT_TO_POINTER(TRUE));
-
   bd->brightness_slider = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(module), -1.0, 1.0, 0, 0.0, 2);
   dt_bauhaus_disable_module_list(bd->brightness_slider);
   dt_bauhaus_set_use_default_callback(bd->brightness_slider);
   dt_bauhaus_disable_accels(bd->brightness_slider);
   dt_bauhaus_widget_set_field(bd->brightness_slider, &module->blend_params->brightness, DT_INTROSPECTION_TYPE_FLOAT);
-  dt_bauhaus_widget_set_label(bd->brightness_slider, N_("mask opacity"));
+  dt_bauhaus_widget_set_label(bd->brightness_slider, N_("Feathering mask opacity"));
   dt_bauhaus_slider_set_format(bd->brightness_slider, "%");
   gtk_widget_set_tooltip_text(bd->brightness_slider, _("shifts and tilts the tone curve of the blend mask to adjust its "
                                                        "brightness without affecting fully transparent/fully opaque "
@@ -4536,7 +4535,7 @@ void dt_iop_gui_init_blending_body(GtkBox *blendw, dt_iop_module_t *module)
   dt_bauhaus_set_use_default_callback(bd->contrast_slider);
   dt_bauhaus_disable_accels(bd->contrast_slider);
   dt_bauhaus_widget_set_field(bd->contrast_slider, &module->blend_params->contrast, DT_INTROSPECTION_TYPE_FLOAT);
-  dt_bauhaus_widget_set_label(bd->contrast_slider, N_("mask contrast"));
+  dt_bauhaus_widget_set_label(bd->contrast_slider, N_("Feathering mask contrast"));
   dt_bauhaus_slider_set_format(bd->contrast_slider, "%");
   gtk_widget_set_tooltip_text(bd->contrast_slider, _("gives the tone curve of the blend mask an s-like shape to "
                                                      "adjust its contrast"));
@@ -4595,7 +4594,7 @@ void dt_iop_gui_init_blending_body(GtkBox *blendw, dt_iop_module_t *module)
                               &bd->blendif_content);
   dt_iop_gui_init_blendif(GTK_BOX(bd->blendif_content), module, blendif_header);
 
-  _blendop_create_notebook_page(bd->blending_notebook, _("Options"), &bd->bottom_content);
+  _blendop_create_notebook_page(bd->blending_notebook, _("Edges"), &bd->bottom_content);
   GtkWidget *bottom_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
   gtk_box_pack_start(GTK_BOX(bottom_box), bd->details_slider, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(bottom_box), bd->masks_feathering_guide_combo, TRUE, TRUE, 0);
