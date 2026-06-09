@@ -676,6 +676,7 @@ dialog,
   color: shade(@plugin_label_color, 1.2);
 }
 
+#pref_section,
 .dt_section_label {
   padding: 0;
   color: @section_label;
