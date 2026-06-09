@@ -1088,6 +1088,11 @@ void dt_lib_gui_set_expanded(dt_lib_module_t *module, gboolean expanded)
     dt_gui_refocus_center();
   }
 
+  if(expanded)
+    dt_gui_add_class(module->expander, "expanded");
+  else
+    dt_gui_remove_class(module->expander, "expanded");
+
   /* store expanded state of module */
   char var[1024];
   const dt_view_t *current_view = dt_view_manager_get_current_view(darktable.view_manager);
