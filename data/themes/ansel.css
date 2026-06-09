@@ -249,6 +249,7 @@ box * {
   font-weight: 300;
   font-size: 1em;
   background-color: transparent;
+  -gtk-secondary-caret-color: transparent;
 }
 
 /* Emphasized Typography */
@@ -288,10 +289,23 @@ decoration {
 }
 
 separator {
-  border-color: @grey_48;
-  background-color: @grey_48;
-  color: @grey_48;
-  border-left: 0.07em solid @grey_48;
+  background-color: alpha(@grey_100, 0.5);
+}
+
+separator.horizontal {
+  min-height: 1px;
+  border: none;
+  margin: 0.5em 0;
+}
+
+separator.vertical {
+  min-width: 1px;
+  border: none;
+  margin: 2px 0.5em;
+}
+
+menu separator {
+  min-height: 1px;
 }
 
 .dt_dimmed {
@@ -343,8 +357,7 @@ button,
 .dt_module_btn,
 togglebutton,
 spinbutton,
-#non-flat,
-.dt_accels_stick {
+combobox {
   /* 
     Do NOT change sizing here. 
     em is proportional to font size and adjusts dynamically 
@@ -361,6 +374,28 @@ spinbutton,
   background-image: none;
   background-color: transparent;
   font-weight: 400;
+}
+
+/*
+  We assume buttons go on horizontal toolbars.
+  So we put horizontal margins by default. 
+  For first/last children of the toolbar, we 
+  need to remove left/right margins so they sit
+  flush on column ends.
+*/
+
+button:first-child,
+togglebutton:first-child,
+combobox:first-child
+.dt_module_btn:first-child {
+  margin-left: 0;
+}
+
+button:last-child,
+togglebutton:last-child,
+combobox:last-child,
+.dt_module_btn:last-child {
+  margin-right: 0;
 }
 
 button.text-button,
@@ -409,31 +444,11 @@ checkbutton check {
 
 /* Comboboxes & Spinbuttons inner normalization */
 combobox {
-  margin: 2px 0.25em;
-}
-
-combobox button,
-spinbutton button,
-combobox button.combo,
-combobox button cellview,
-combobox button box {
-  background-color: @button_bg;
-  background-image: none;
-  box-shadow: none;
+  margin: 2px 0;
 }
 
 combobox button:checked {
   background: transparent;
-}
-
-combobox window {
-  margin: 2px 0.25em;
-  padding: 0.25em 0;
-}
-
-combobox window menu menuitem {
-  padding: 2px;
-  margin: 0 0.25em;
 }
 
 /*======================================
@@ -483,12 +498,6 @@ menuitem menu menuitem {
   padding: 0.25em;
 }
 
-menu separator {
-  margin: 0.25em 0;
-  padding: 0;
-  border-top: 1px solid @grey_48;
-}
-
 menubar menuitem label {
   font-weight: 600;
 }
@@ -507,17 +516,6 @@ menubar menuitem,
 menubar menuitem label,
 notebook tab {
   border: none;
-}
-
-#header-toolbar,
-#footer-toolbar {
-  padding: 0.14em 0.28em;
-  background-color: @bg_color;
-}
-
-#hinter {
-  padding: 0.14em 0;
-  min-height: 1.75em;
 }
 
 /*======================================
@@ -565,14 +563,6 @@ dialog,
 
 #blending-box {
   padding: 0.5em;
-  border: none;
-}
-
-#blending-separator,
-#blending-separator separator {
-  min-height: 1px;
-  margin: 6px 0;
-  background-color: @grey_80;
   border: none;
 }
 
@@ -658,10 +648,6 @@ dialog,
 .dt_duplicate_ui grid,
 .dt_duplicate_ui grid>label {
   margin: 0.28em 0.14em;
-}
-
-.dt_duplicate_ui entry {
-  margin: 1em 0 1em 0.5em;
 }
 
 #iop-panel-label,
@@ -905,18 +891,6 @@ tooltip label,
   color: @tooltip_fg_color;
 }
 
-menu separator,
-popover separator {
-  margin: 0.6em 2em;
-  padding-bottom: 0.07em;
-  background-color: @grey_48;
-}
-
-combobox separator {
-  min-height: 0.07em;
-  background-color: @grey_48;
-}
-
 popover spinbutton {
   margin-left: 0.35em;
 }
@@ -1034,7 +1008,6 @@ notebook header {
 
 #colorequal-ring-tabs>header>tabs>tab label,
 #colorequal-ring-tabs>header>tabs>tab label.dt_modulegroups_tab_label {
-  font-size: 0.95em;
   padding: 0.16em 0.36em 0.14em;
 }
 
@@ -1120,7 +1093,6 @@ scale contents trough highlight {
 scale contents trough slider {
   background-color: @scroll_bar_inactive;
   border: 0.1em solid @border_color;
-  font-size: 1em;
   min-height: 0.5em;
   min-width: 0.5em;
 }
@@ -1140,20 +1112,20 @@ scale contents trough slider:hover {
 }
 
 treeview,
+treview *,
 filechooser widget treeview {
   color: @fg_color;
+}
+
+#pathbarbox, /* default Gtk item in filechooser popup */
+treeview header
+{
+  border-bottom: 1px solid @grey_80;
 }
 
 treeview header label {
   font-weight: 700;
   padding: 0.14em;
-}
-
-.dt_accels_cat_title {
-  background-color: transparent;
-  font-weight: bold;
-  font-size: 1.1em;
-  padding: 0.7em 0;
 }
 
 /* Preferences & Filechooser Sidebar styling */
@@ -1177,13 +1149,9 @@ treeview header label {
   min-height: 1.5em;
 }
 
-#preferences-notebook scrolledwindow #pref_section>label {
-  font-size: 1.2em;
-  font-weight: 700;
-}
-
+#preferences-notebook scrolledwindow #pref_section>label,
 #preferences-notebook scrolledwindow #pref_subsection>label {
-  font-weight: 700;
+  font-weight: 600;
 }
 
 #preferences-notebook stack widget label {
@@ -1207,19 +1175,14 @@ filechooser .sidebar-button {
 }
 
 filechooser .sidebar,
+filechooser treeview,
 #preferences-box .sidebar scrolledwindow {
-  padding: 0;
-  font-size: 1.1em;
   background-color: @grey_40;
 }
 
 #preferences-box .sidebar row {
   padding: 0.35em;
   border-left: 0.14em solid @bg_color;
-}
-
-filechooser row {
-  margin-top: -0.28em;
 }
 
 filechooser row:selected .sidebar-icon,
@@ -1236,64 +1199,7 @@ filechooser row:hover .sidebar-icon {
   padding: 0.14em 0.84em;
 }
 
-/* Module layout manager */
-#modulegroups-top-boxes {
-  margin-right: 6em;
-}
-
-#modulegroups-groups-title label {
-  font-size: 1.1em;
-}
-
-#modulegroups-groups-title label,
-#modulegroups-header-center entry {
-  font-weight: 700;
-  margin-right: 0.28em;
-}
-
-#modulegroups-groups-box {
-  border-top: 0.035em solid @section_label;
-  padding-top: 0.5em;
-}
-
-#modulegroups-topbox,
-#modulegroups-groupbox {
-  margin: 0 0.5em;
-}
-
-#modulegroups-header-center,
-#modulegroups-iop-header {
-  background-color: shade(@bg_color, 1.05);
-  padding: 0.28em;
-}
-
-#modulegroups-header-center {
-  border: 0.07em solid @bg_color;
-  border-radius: 0.5em 0.5em 0 0;
-  margin-bottom: 0.14em;
-}
-
-#modulegroups-iop-header:first-child {
-  border-top: 0.07em solid @bg_color;
-  border-radius: 0;
-  margin-top: 0.14em;
-}
-
-#modulegroups-iop-header {
-  border-left: 0.07em solid @bg_color;
-  border-right: 0.07em solid @bg_color;
-}
-
-#modulegroups-iop-header:last-child {
-  border-bottom: 0.07em solid @bg_color;
-  border-radius: 0 0 0.5em 0.5em;
-}
-
 /* Collect Module & Filters */
-.quick_filter_box>* {
-  margin: 0 0.25em;
-}
-
 #quickfilter-culling:selected,
 #quickfilter-culling:active,
 #quickfilter-culling:checked {
@@ -1318,19 +1224,6 @@ filechooser row:hover .sidebar-icon {
   font-weight: 500;
   margin-right: 1em;
   padding-left: 0.25em;
-}
-
-.quick_filter_box separator.horizontal,
-.lighttable_box separator.horizontal {
-  margin: 2px 0.5em;
-  border: 1px solid @grey_48;
-  padding: 0;
-}
-
-#top-first-line separator.horizontal {
-  margin: 2px 0.5em 2px 1em;
-  border: 1px solid @grey_48;
-  padding: 0;
 }
 
 #dt-map-location>* {
@@ -1372,48 +1265,9 @@ filechooser row:hover .sidebar-icon {
   background-color: @grey_50;
 }
 
-#right .search {
-  margin: 0.5em;
-  font-size: 1em;
-}
-
-#quickfilter-search-box,
-#lib-collect-entry,
-#shortcut-search-dialog entry,
-#shortcut-search-dialog {
-  background-color: @field_bg;
-  color: @field_fg;
-}
-
 #shortcut-search-dialog {
   margin: 0;
   padding: 0;
-}
-
-.search label,
-.thumb-localcopy,
-.thumb-ext {
-  margin-right: 0.5em;
-}
-
-.search image.left {
-  padding: 0 0.14em;
-}
-
-.search image:disabled {
-  color: shade(@fg_color, 0.75);
-}
-
-#background-job-eventbox label,
-#lighttable_layouts_box,
-#footer-toolbar .toggle,
-#footer-toolbar entry,
-#footer-toolbar scale {
-  margin: 0.07em 0.28em;
-}
-
-#footer-toolbar .toggle {
-  margin: 1px 2px;
 }
 
 progressbar trough {
@@ -1655,11 +1509,6 @@ dialog.dt_import_dialog headerbar entry {
   font-weight: 700;
 }
 
-.thumb-alternative separator {
-  color: @grey_48;
-  min-height: 1px;
-}
-
 .dt_overlays_none .dt_thumb_btn,
 .dt_overlays_none .thumb-main:hover .dt_thumb_btn,
 .dt_overlays_hover .dt_thumb_btn,
@@ -1779,12 +1628,14 @@ treeview *:selected:not(check),
 treeview *:checked:not(check) {
   background-color: @field_selected_bg;
   color: @field_selected_fg;
+  caret-color: @fg_color;
 }
 
 treeview *:selected:not(check),
 treeview *:checked:not(check) {
   background-color: alpha(@bauhaus_value, 0.42);
   color: @grey_10;
+  caret-color: @fg_color;
 }
 
 /* Inactive/Disabled Toggle Overrides */
@@ -1807,10 +1658,9 @@ dialog .sidebar :hover,
 menuitem:hover,
 notebook tab:hover,
 radiobutton:hover label,
-treeview:not(#lutname) *:hover:not(check),
+treeview *:hover:not(check),
 .dt_module_btn:hover,
 button:hover,
-#non-flat:hover,
 #view-label:hover {
   background-color: @button_hover_bg;
   border-color: transparent;
@@ -1842,6 +1692,7 @@ treeview *:active,
 filechooser *:active {
   background-color: @field_active_bg;
   color: @field_active_fg;
+  caret-color: @field_active_fg;
 }
 
 treeview check:selected {
@@ -1856,6 +1707,7 @@ menuitem check:checked,
 menuitem check:selected {
   background-color: @button_bg;
   color: @bauhaus_value_text;
+  caret-color: @bauhaus_value_text;
   border-color: @bauhaus_value_text;
 }
 
@@ -1884,6 +1736,10 @@ treeview#delete-dialog:selected {
 
 .dt_bauhaus_popup:disabled {
   color: white;
+}
+
+entry {
+  min-height: 0; /* reset to text height */
 }
 
 entry:hover {
