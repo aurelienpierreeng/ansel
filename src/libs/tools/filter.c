@@ -577,7 +577,7 @@ void gui_init(dt_lib_module_t *self)
   dt_free(path);
 
   // dumb empty flexible spacer at the end
-  GtkWidget *spacer = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
+  GtkWidget *spacer = gtk_separator_new(GTK_ORIENTATION_VERTICAL);
   gtk_box_pack_start(GTK_BOX(self->widget), spacer, FALSE, FALSE, 0);
 
   label = gtk_label_new(_("Include"));
@@ -672,7 +672,7 @@ void gui_init(dt_lib_module_t *self)
   dt_free(path);
 
   // dumb empty flexible spacer at the end
-  spacer = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
+  spacer = gtk_separator_new(GTK_ORIENTATION_VERTICAL);
   gtk_box_pack_start(GTK_BOX(self->widget), spacer, FALSE, FALSE, 0);
 
   label = gtk_label_new(_("Sort by"));
@@ -706,7 +706,7 @@ void gui_init(dt_lib_module_t *self)
                    (gpointer)self);
 
   // dumb empty flexible spacer at the end
-  spacer = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
+  spacer = gtk_separator_new(GTK_ORIENTATION_VERTICAL);
   gtk_box_pack_start(GTK_BOX(self->widget), spacer, FALSE, FALSE, 0);
 
   // text filter
@@ -740,7 +740,7 @@ void gui_init(dt_lib_module_t *self)
                                   GDK_KEY_f, GDK_CONTROL_MASK, _("Focuses the control"));
 
   // dumb empty flexible spacer at the end
-  spacer = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
+  spacer = gtk_separator_new(GTK_ORIENTATION_VERTICAL);
   gtk_box_pack_start(GTK_BOX(self->widget), spacer, FALSE, FALSE, 0);
 
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_IMAGES_ORDER_CHANGE,

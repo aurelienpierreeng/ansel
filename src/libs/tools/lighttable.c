@@ -278,7 +278,7 @@ void gui_init(dt_lib_module_t *self)
   append_thumbnails(menus, &d->menu_items, index, accel_group);
 
   // dumb empty flexible spacer at the end
-  GtkWidget *spacer = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
+  GtkWidget *spacer = gtk_separator_new(GTK_ORIENTATION_VERTICAL);
   gtk_box_pack_start(GTK_BOX(self->widget), spacer, TRUE, TRUE, 0);
 
   GtkWidget *label = gtk_label_new(C_("quickfilter", "Columns"));

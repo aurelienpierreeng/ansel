@@ -779,7 +779,7 @@ void dt_ui_init_global_menu(dt_ui_t *ui)
   dt_ui_titlebar_pack_end(ui, ui->header->home);
   gtk_widget_show(ui->header->home);
 
-  GtkWidget *spacer = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
+  GtkWidget *spacer = gtk_separator_new(GTK_ORIENTATION_VERTICAL);
   dt_ui_titlebar_pack_end(ui, spacer);
   gtk_widget_show(spacer);
 
@@ -793,7 +793,7 @@ void dt_ui_init_global_menu(dt_ui_t *ui)
   dt_ui_titlebar_pack_end(ui, ui->header->hinter);
   gtk_widget_show(ui->header->hinter);
 
-  spacer = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
+  spacer = gtk_separator_new(GTK_ORIENTATION_VERTICAL);
   dt_ui_titlebar_pack_end(ui, spacer);
   gtk_widget_show(spacer);
 

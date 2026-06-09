@@ -1273,31 +1273,39 @@ static void gui_init(dt_lib_import_t *d)
   g_signal_connect(G_OBJECT(file), "changed", G_CALLBACK(_filename_changed), d);
 
   /* Create the grid of import params when using duplication */
+  int row = 0;
+  _attach_grid_separator(GTK_WIDGET(grid), row, 5);
+  row++;
 
   // Row 0: labels for text entries
-  // Row 1: text entries
-  gtk_grid_attach(grid, calendar_label, 0, 0, 1, 1);
-  gtk_grid_attach(grid, GTK_WIDGET(box_calendar), 0, 1, 1, 1);
-  gtk_grid_attach(grid, jobcode_label, 2, 0, 1, 1);
-  gtk_grid_attach(grid, jobcode, 2, 1, 1, 1);
+  gtk_grid_attach(grid, calendar_label, 0, row, 1, 1);
+  gtk_grid_attach(grid, jobcode_label, 2, row, 1, 1);
+  row++;
 
-  // create text box with label and attach on grid directly
-  //dt_gui_preferences_string(grid, "ui_last/import_jobcode", 2, 0);
+  // Row 1: text entries
+  gtk_grid_attach(grid, GTK_WIDGET(box_calendar), 0, row, 1, 1);
+  gtk_grid_attach(grid, jobcode, 2, row, 1, 1);
+  row++;
 
   // Row 2: separator
-  _attach_grid_separator(GTK_WIDGET(grid), 2, 5);
+  _attach_grid_separator(GTK_WIDGET(grid), row, 5);
+  row++;
 
   // Row 3: labels for text entries
-  gtk_grid_attach(grid, base_label, 0, 3, 1, 1);
-  gtk_grid_attach(grid, dir_label, 2, 3, 1, 1);
-  gtk_grid_attach(grid, file_label, 4, 3, 1, 1);
+  gtk_grid_attach(grid, base_label, 0, row, 1, 1);
+  gtk_grid_attach(grid, dir_label, 2, row, 1, 1);
+  gtk_grid_attach(grid, file_label, 4, row, 1, 1);
+  row++;
 
   // Row 4: text entries
-  gtk_grid_attach(grid, base_dir, 0, 4, 1, 1);
-  gtk_grid_attach(grid, sep1, 1, 4, 1, 1);
-  gtk_grid_attach(grid, project_dir, 2, 4, 1, 1);
-  gtk_grid_attach(grid, sep2, 3, 4, 1, 1);
-  gtk_grid_attach(grid, file, 4, 4, 1, 1);
+  gtk_grid_attach(grid, base_dir, 0, row, 1, 1);
+  gtk_grid_attach(grid, sep1, 1, row, 1, 1);
+  gtk_grid_attach(grid, project_dir, 2, row, 1, 1);
+  gtk_grid_attach(grid, sep2, 3, row, 1, 1);
+  gtk_grid_attach(grid, file, 4, row, 1, 1);
+  row++;
+
+  _attach_grid_separator(GTK_WIDGET(grid), row, 5);
 
   gtk_box_pack_start(GTK_BOX(rbox), GTK_WIDGET(grid), FALSE, FALSE, 0);
 
