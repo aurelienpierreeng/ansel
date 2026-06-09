@@ -3912,31 +3912,31 @@ void gui_init(dt_iop_module_t *self)
   g->last_hit = NOWHERE;
   g->node_index = 0;
 
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
-  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_widget_set_tooltip_text(hbox, _("use a tool to add warps.\nright-click to remove a warp."));
   gtk_box_pack_start(GTK_BOX(self->widget), hbox, TRUE, TRUE, 0);
 
 
-  GtkWidget *lbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+  GtkWidget *lbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(hbox), lbox, FALSE, TRUE, 0);
 
-  GtkWidget *labelbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *labelbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   GtkWidget *label = dt_ui_label_new(_("Warps: "));
   gtk_box_pack_start(GTK_BOX(labelbox), label, FALSE, TRUE, 0);
   g->label_warp = GTK_LABEL(dt_ui_label_new("-"));
   gtk_box_pack_start(GTK_BOX(labelbox), GTK_WIDGET(g->label_warp), FALSE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(lbox), labelbox, FALSE, TRUE, 0);
 
-  GtkWidget *labelbox2 = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *labelbox2 = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   GtkWidget *label2 = dt_ui_label_new(_("Nodes: "));
   gtk_box_pack_start(GTK_BOX(labelbox2), label2, FALSE, TRUE, 0);
   g->label_node = GTK_LABEL(dt_ui_label_new("-"));
   gtk_box_pack_start(GTK_BOX(labelbox2), GTK_WIDGET(g->label_node), FALSE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(lbox), labelbox2, FALSE, TRUE, 0);
 
-  hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(self->widget), hbox, TRUE, TRUE, 0);
 
   g->btn_node_tool = GTK_TOGGLE_BUTTON(dt_iop_togglebutton_new(self, NULL, N_("edit, add and delete nodes"), NULL,

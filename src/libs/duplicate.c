@@ -352,12 +352,12 @@ void gui_init(dt_lib_module_t *self)
   d->preview_width = 0;
   d->preview_height = 0;
 
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   dt_gui_add_class(self->widget, "dt_duplicate_ui");
 
-  d->duplicate_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  d->duplicate_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
-  GtkWidget *hb = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *hb = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
 
   /* add duplicate list and buttonbox to widget */
   gtk_box_pack_start(GTK_BOX(self->widget),

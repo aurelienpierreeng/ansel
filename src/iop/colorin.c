@@ -1682,7 +1682,7 @@ void gui_init(struct dt_iop_module_t *self)
   dt_loc_get_datadir(datadir, sizeof(datadir));
   dt_loc_get_user_config_dir(confdir, sizeof(confdir));
 
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   g->profile_combobox = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
   dt_bauhaus_widget_set_label(g->profile_combobox, N_("input profile"));

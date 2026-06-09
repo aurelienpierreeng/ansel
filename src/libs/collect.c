@@ -3372,7 +3372,7 @@ void gui_init(dt_lib_module_t *self)
   dt_lib_collect_t *d = (dt_lib_collect_t *)calloc(1, sizeof(dt_lib_collect_t));
 
   self->data = (void *)d;
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   d->active_rule = 0;
   d->nb_rules = 0;
@@ -3399,7 +3399,7 @@ void gui_init(dt_lib_module_t *self)
     d->rule[i].typing = FALSE;
     d->rule[i].lib_collect = (void *)d;
 
-    box = GTK_BOX(gtk_box_new(GTK_ORIENTATION_VERTICAL, 0));
+    box = GTK_BOX(gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING));
     d->rule[i].hbox = GTK_WIDGET(box);
     gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(box), TRUE, TRUE, 0);
     gtk_widget_set_name(GTK_WIDGET(box), "lib-dtbutton");
@@ -3411,7 +3411,7 @@ void gui_init(dt_lib_module_t *self)
     g_signal_connect(G_OBJECT(d->rule[i].combo), "value-changed", G_CALLBACK(combo_changed), d->rule + i);
     gtk_box_pack_start(box, d->rule[i].combo, FALSE, FALSE, 0);
 
-    GtkBox *hbox = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0));
+    GtkBox *hbox = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING));
     gtk_box_pack_start(box, GTK_WIDGET(hbox), FALSE, FALSE, 0);
 
     w = gtk_search_entry_new();

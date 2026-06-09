@@ -130,11 +130,11 @@ void gui_init(dt_lib_module_t *self)
 {
   dt_lib_map_settings_t *d = (dt_lib_map_settings_t *)malloc(sizeof(dt_lib_map_settings_t));
   self->data = d;
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   GtkBox *hbox;
   GtkWidget *label;
 
-  hbox = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0));
+  hbox = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING));
 
   label = dt_ui_label_new(_("map source"));
   gtk_box_pack_start(hbox, label, TRUE, TRUE, 0);
@@ -167,7 +167,7 @@ void gui_init(dt_lib_module_t *self)
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(hbox), TRUE, TRUE, 0);
 
   GtkGrid *grid = GTK_GRID(gtk_grid_new());
-  gtk_grid_set_column_spacing(grid, DT_PIXEL_APPLY_DPI(5));
+  gtk_grid_set_column_spacing(grid, DT_GUI_BOX_SPACING);
 
   int line = 0;
   d->max_outline_nodes = dt_gui_preferences_int(grid, "plugins/map/max_outline_nodes", 0, line++);

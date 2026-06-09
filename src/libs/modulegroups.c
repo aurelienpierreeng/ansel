@@ -359,7 +359,7 @@ static void _ensure_page_widgets(dt_lib_module_t *self)
   for(int i = 0; i < MOD_TAB_LAST; i++)
   {
     if(!IS_NULL_PTR(d->pages[i])) continue;
-    _modulegroups_track_widget(&d->pages[i], gtk_box_new(GTK_ORIENTATION_VERTICAL, 0));
+    _modulegroups_track_widget(&d->pages[i], gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING));
     gtk_widget_show(d->pages[i]);
     gtk_drag_dest_set(d->pages[i], 0, _modulegroups_target_list, _modulegroups_n_targets, GDK_ACTION_COPY);
     g_signal_connect(d->pages[i], "drag-data-received", G_CALLBACK(_modulegroups_drag_data_received), self);
@@ -391,7 +391,7 @@ static void _ensure_page_widgets(dt_lib_module_t *self)
     }
     if(IS_NULL_PTR(d->containers[i]))
     {
-      _modulegroups_track_widget(&d->containers[i], gtk_box_new(GTK_ORIENTATION_VERTICAL, 0));
+      _modulegroups_track_widget(&d->containers[i], gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING));
       gtk_box_pack_start(GTK_BOX(d->pages[MOD_TAB_BASIC]), d->containers[i], FALSE, FALSE, 0);
       gtk_widget_show(d->containers[i]);
     }
@@ -1002,7 +1002,7 @@ void gui_init(dt_lib_module_t *self)
   d->visible_expanders = NULL;
   d->visible_expanders_tab = MOD_TAB_LAST;
 
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   dt_gui_add_help_link(self->widget, dt_get_help_url(self->plugin_name));
   gtk_widget_set_name(self->widget, "modules-tabs");
 
@@ -1027,7 +1027,7 @@ void gui_init(dt_lib_module_t *self)
     gtk_widget_set_hexpand(label, TRUE);
     gtk_label_set_justify(GTK_LABEL(label), GTK_JUSTIFY_CENTER);
 
-    GtkWidget *page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    GtkWidget *page = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
     gtk_notebook_append_page(GTK_NOTEBOOK(d->notebook), page, label);
     gtk_container_child_set(GTK_CONTAINER(d->notebook), page, "tab-expand", TRUE, "tab-fill", TRUE, NULL);
     gtk_widget_show(page);

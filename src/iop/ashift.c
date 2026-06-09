@@ -5947,9 +5947,9 @@ void gui_init(struct dt_iop_module_t *self)
   g->draw_near_point = -1;
   g->draw_line_move = -1;
 
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
-  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
 
   g->edit_button = gtk_toggle_button_new_with_label(_("Edit"));
   g_signal_connect(GTK_TOGGLE_BUTTON(g->edit_button), "toggled", G_CALLBACK(_enter_edit_mode), self);
@@ -5987,7 +5987,7 @@ void gui_init(struct dt_iop_module_t *self)
   dt_bauhaus_slider_set_soft_range(g->shear, -SHEAR_RANGE, SHEAR_RANGE);
 
   g->mode = dt_bauhaus_combobox_from_params(self, "mode");
-  self->widget = g->specifics = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+  self->widget = g->specifics = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   g->f_length = dt_bauhaus_slider_from_params(self, "f_length");
   dt_bauhaus_slider_set_soft_range(g->f_length, 10.0f, 1000.0f);
@@ -6012,8 +6012,8 @@ void gui_init(struct dt_iop_module_t *self)
   self->widget = main_box;
 
   GtkGrid *auto_grid = GTK_GRID(gtk_grid_new());
-  gtk_grid_set_row_spacing(auto_grid, 2 * DT_BAUHAUS_SPACE);
-  gtk_grid_set_column_spacing(auto_grid, DT_PIXEL_APPLY_DPI(10));
+  gtk_grid_set_row_spacing(auto_grid, DT_GUI_BOX_SPACING);
+  gtk_grid_set_column_spacing(auto_grid, DT_GUI_BOX_SPACING);
 
   gtk_grid_attach(auto_grid, dt_ui_label_new(_("Mark reference lines")), 0, 0, 1, 1);
 

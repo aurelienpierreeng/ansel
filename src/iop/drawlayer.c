@@ -1078,7 +1078,7 @@ static drawlayer_wait_dialog_t _show_drawlayer_wait_dialog(const char *title, co
   gtk_window_set_position(GTK_WINDOW(dialog), GTK_WIN_POS_CENTER_ON_PARENT);
 
   GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
-  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_PIXEL_APPLY_DPI(12));
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   GtkWidget *spinner = gtk_spinner_new();
   GtkWidget *label = gtk_label_new(message);
   gtk_label_set_xalign(GTK_LABEL(label), 0.0f);
@@ -1169,7 +1169,7 @@ static gboolean _prompt_layer_name_dialog(const char *title, const char *message
       GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL, _("Cancel"), GTK_RESPONSE_CANCEL,
       _("Confirm"), GTK_RESPONSE_ACCEPT, NULL);
   GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
-  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_PIXEL_APPLY_DPI(8));
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   GtkWidget *entry = gtk_entry_new();
   if(!IS_NULL_PTR(message) && message[0] != '\0')
   {
@@ -2755,10 +2755,10 @@ void gui_init(dt_iop_module_t *self)
     g->session.last_view_scale = self->dev->roi.scaling;
   }
 
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_IOP_MODULE_CONTROL_SPACING);
+  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   if(self->reset_button) gtk_widget_hide(self->reset_button);
 
-  GtkWidget *history_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_IOP_MODULE_CONTROL_SPACING);
+  GtkWidget *history_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   g->controls.save_layer = gtk_button_new_with_label(_("save sidecar"));
   gtk_box_pack_start(GTK_BOX(history_box), g->controls.save_layer, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(self->widget), history_box, FALSE, FALSE, 0);
@@ -2768,9 +2768,9 @@ void gui_init(dt_iop_module_t *self)
   gtk_widget_set_hexpand(notebook, TRUE);
   gtk_box_pack_start(GTK_BOX(self->widget), notebook, FALSE, FALSE, 0);
 
-  GtkWidget *brush_tab = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_IOP_MODULE_CONTROL_SPACING);
-  GtkWidget *layer_tab = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_IOP_MODULE_CONTROL_SPACING);
-  GtkWidget *input_tab = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_IOP_MODULE_CONTROL_SPACING);
+  GtkWidget *brush_tab = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  GtkWidget *layer_tab = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  GtkWidget *input_tab = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   g->controls.brush_tab = brush_tab;
   g->controls.layer_tab = layer_tab;
   g->controls.input_tab = input_tab;
@@ -2785,7 +2785,7 @@ void gui_init(dt_iop_module_t *self)
   GtkWidget *preview_title = gtk_label_new(_("Background"));
   g->controls.preview_title = preview_title;
   gtk_widget_set_halign(preview_title, GTK_ALIGN_START);
-  GtkWidget *preview_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_IOP_MODULE_CONTROL_SPACING);
+  GtkWidget *preview_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   g->controls.preview_box = preview_box;
   GSList *preview_group = NULL;
   g->controls.preview_bg_image = gtk_radio_button_new_with_label(preview_group, _("image"));
@@ -2818,13 +2818,13 @@ void gui_init(dt_iop_module_t *self)
   gtk_widget_set_size_request(g->controls.color, -1, DT_DRAWLAYER_COLOR_PICKER_HEIGHT);
   gtk_widget_add_events(g->controls.color, GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK | GDK_POINTER_MOTION_MASK);
   gtk_box_pack_start(GTK_BOX(brush_tab), g->controls.color, TRUE, TRUE, 0);
-  g->controls.color_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_PIXEL_APPLY_DPI(16));
+  g->controls.color_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   g->controls.color_swatch = gtk_drawing_area_new();
   gtk_widget_set_size_request(g->controls.color_swatch, -1, DT_PIXEL_APPLY_DPI(DT_DRAWLAYER_COLOR_HISTORY_HEIGHT));
   gtk_widget_add_events(g->controls.color_swatch, GDK_BUTTON_PRESS_MASK);
   gtk_box_pack_start(GTK_BOX(g->controls.color_row), g->controls.color_swatch, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(brush_tab), g->controls.color_row, TRUE, TRUE, 0);
-  GtkWidget *picker_controls = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_PIXEL_APPLY_DPI(6));
+  GtkWidget *picker_controls = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   g->controls.image_colorpicker = dt_color_picker_new_with_cst(self, DT_COLOR_PICKER_POINT_AREA, NULL, IOP_CS_NONE);
   g->controls.image_colorpicker_source = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
   dt_bauhaus_combobox_add(g->controls.image_colorpicker_source, _("input"));
@@ -2909,7 +2909,7 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_slider_set_format(g->controls.sprinkle_coarseness, "%");
   gtk_box_pack_start(GTK_BOX(brush_tab), g->controls.sprinkle_coarseness, TRUE, TRUE, 0);
 
-  GtkWidget *layer_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_IOP_MODULE_CONTROL_SPACING);
+  GtkWidget *layer_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   GtkWidget *layer_status = gtk_label_new("");
   g->controls.layer_status = layer_status;
   gtk_widget_set_halign(layer_status, GTK_ALIGN_START);
@@ -2918,9 +2918,9 @@ void gui_init(dt_iop_module_t *self)
   GtkWidget *layer_fill_title = gtk_label_new(_("Fill"));
   g->controls.layer_fill_title = layer_fill_title;
   gtk_widget_set_halign(layer_fill_title, GTK_ALIGN_START);
-  GtkWidget *layer_action_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_IOP_MODULE_CONTROL_SPACING);
+  GtkWidget *layer_action_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   g->controls.layer_action_row = layer_action_row;
-  GtkWidget *layer_fill_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_IOP_MODULE_CONTROL_SPACING);
+  GtkWidget *layer_fill_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   g->controls.layer_fill_row = layer_fill_row;
   g->controls.layer_select = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
   dt_bauhaus_widget_set_label(g->controls.layer_select, _("Source layer"));
@@ -2950,8 +2950,8 @@ void gui_init(dt_iop_module_t *self)
   GtkWidget *mapping_title = gtk_label_new(_("tablet mapping"));
   gtk_widget_set_halign(mapping_title, GTK_ALIGN_START);
   GtkWidget *grid = gtk_grid_new();
-  gtk_grid_set_row_spacing(GTK_GRID(grid), 2);
-  gtk_grid_set_column_spacing(GTK_GRID(grid), 6);
+  gtk_grid_set_row_spacing(GTK_GRID(grid), DT_GUI_BOX_SPACING);
+  gtk_grid_set_column_spacing(GTK_GRID(grid), DT_GUI_BOX_SPACING);
 
   const char *labels[4] = { _("size"), _("opacity"), _("flow"), _("hardness") };
   const char *rows[3] = { _("pressure"), _("tilt"), _("acceleration") };

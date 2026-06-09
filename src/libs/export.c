@@ -1076,7 +1076,7 @@ void gui_init(dt_lib_module_t *self)
   dt_lib_export_t *d = (dt_lib_export_t *)malloc(sizeof(dt_lib_export_t));
   self->timeout_handle = 0;
   self->data = (void *)d;
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   GtkWidget *label = dt_ui_section_label_new(_("Storage options"));
   gtk_box_pack_start(GTK_BOX(self->widget), label, FALSE, TRUE, 0);
@@ -1182,7 +1182,7 @@ void gui_init(dt_lib_module_t *self)
   gtk_container_add(GTK_CONTAINER(d->print_size), d->print_height);
   d->unit_label = gtk_label_new(_("cm"));
   gtk_container_add(GTK_CONTAINER(d->print_size), d->unit_label);
-  GtkBox *dpi_box = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 3));
+  GtkBox *dpi_box = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING));
   gtk_box_pack_start(dpi_box, gtk_label_new(_("@")), FALSE, FALSE, 0);
   gtk_box_pack_start(dpi_box, d->print_dpi, TRUE, TRUE, 0);
   gtk_box_pack_start(dpi_box, gtk_label_new(_("dpi")), FALSE, FALSE, 0);
@@ -1194,7 +1194,7 @@ void gui_init(dt_lib_module_t *self)
   gtk_flow_box_set_column_spacing (GTK_FLOW_BOX(d->px_size), 3);
   gtk_container_add(GTK_CONTAINER(d->px_size), d->width);
   gtk_container_add(GTK_CONTAINER(d->px_size), gtk_label_new(_("x")));
-  GtkBox *px_box = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 3));
+  GtkBox *px_box = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING));
   gtk_box_pack_start(px_box, d->height, TRUE, TRUE, 0);
   gtk_box_pack_start(px_box, gtk_label_new(_("px")), FALSE, FALSE, 0);
   gtk_container_add(GTK_CONTAINER(d->px_size), GTK_WIDGET(px_box));
@@ -1319,7 +1319,7 @@ void gui_init(dt_lib_module_t *self)
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_STYLE_CHANGED,
                             G_CALLBACK(_lib_export_styles_changed_callback), self);
 
-  GtkBox *hbox = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0));
+  GtkBox *hbox = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING));
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(hbox), FALSE, TRUE, 0);
 
   // Export button

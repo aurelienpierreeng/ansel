@@ -616,7 +616,7 @@ void gui_init(dt_iop_module_t *self)
 
   // If the first widget is created using a _from_params call, self->widget does not have to
   // be explicitly initialised, as a new vertical box will be created automatically.
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   // Linking a slider to an integer will make it take only whole numbers (step=1).
   // The new slider is added to self->widget

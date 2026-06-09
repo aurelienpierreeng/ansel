@@ -1078,13 +1078,13 @@ static void gui_init(dt_lib_import_t *d)
   /* Grid of options for copy/duplicate */
   d->grid = gtk_grid_new();
   GtkGrid *grid = GTK_GRID(d->grid);
-  gtk_grid_set_column_spacing(grid, 0);
-  gtk_grid_set_row_spacing(grid, 0);
+  gtk_grid_set_column_spacing(grid, DT_GUI_BOX_SPACING);
+  gtk_grid_set_row_spacing(grid, DT_GUI_BOX_SPACING);
   gtk_grid_set_column_homogeneous(grid, FALSE);
   gtk_grid_set_row_homogeneous(grid, FALSE);
 
   /* BOTTOM PANEL */
-  GtkWidget *rbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  GtkWidget *rbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(content), rbox, TRUE, TRUE, 0);
 
   // File browser
@@ -1104,7 +1104,7 @@ static void gui_init(dt_lib_import_t *d)
   _file_filters(d->file_chooser);
 
   // File browser toolbox (extra widgets)
-  GtkWidget *toolbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *toolbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_widget_set_halign(toolbox, GTK_ALIGN_END);
 
   GtkWidget *select_all = gtk_button_new_with_label(_("Select all"));
@@ -1132,14 +1132,14 @@ static void gui_init(dt_lib_import_t *d)
   /* RIGHT PANEL */
   // File browser preview box
   // 1. Thumbnail
-  GtkWidget *preview_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+  GtkWidget *preview_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   d->preview = gtk_image_new();
   gtk_widget_set_size_request(d->preview, DT_PIXEL_APPLY_DPI(240), DT_PIXEL_APPLY_DPI(240));
   gtk_box_pack_start(GTK_BOX(preview_box), d->preview, TRUE, FALSE, 0);
 
   // 2. Exif metadata
   d->exif = gtk_grid_new();
-  gtk_grid_set_column_spacing(GTK_GRID(d->exif), 1);
+  gtk_grid_set_column_spacing(GTK_GRID(d->exif), DT_GUI_BOX_SPACING);
   _attach_aligned_grid_item(d->exif, 0, 0, _("Shot:"), GTK_ALIGN_END, FALSE, FALSE);
   _attach_grid_separator(   d->exif, 1, 2);
   _attach_aligned_grid_item(d->exif, 2, 0, _("Camera:"), GTK_ALIGN_END, FALSE, FALSE);
@@ -1183,7 +1183,7 @@ static void gui_init(dt_lib_import_t *d)
   gtk_file_chooser_set_preview_widget(GTK_FILE_CHOOSER(d->file_chooser), preview_box);
   /* BOTTOM PANEL */
 
-  GtkWidget *files = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
+  GtkWidget *files = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   GtkWidget *file_handling = gtk_label_new("");
   gtk_label_set_markup(GTK_LABEL(file_handling), _("<b>File handling</b>"));
   gtk_box_pack_start(GTK_BOX(files), GTK_WIDGET(file_handling), FALSE, FALSE, 0);

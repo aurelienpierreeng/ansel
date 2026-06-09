@@ -556,7 +556,7 @@ void gui_init(dt_lib_module_t *self)
   dt_lib_tool_filter_t *d = (dt_lib_tool_filter_t *)g_malloc0(sizeof(dt_lib_tool_filter_t));
   self->data = (void *)d;
 
-  self->widget = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  self->widget = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   _widget_align_left(self->widget);
   dt_gui_add_class(self->widget, "quick_filter_box");
 
@@ -583,7 +583,7 @@ void gui_init(dt_lib_module_t *self)
   label = gtk_label_new(_("Include"));
   gtk_box_pack_start(GTK_BOX(self->widget), label, FALSE, FALSE, 0);
 
-  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(hbox), FALSE, FALSE, 0);
   gtk_widget_set_name(hbox, "quick-filter-ratings");
 
@@ -618,7 +618,7 @@ void gui_init(dt_lib_module_t *self)
   gtk_widget_set_tooltip_text(d->stars[6], _("Toggle filtering in/out images rated 5 stars"));
 
   // colorlabels filter
-  hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(hbox), FALSE, FALSE, 0);
   gtk_widget_set_name(hbox, "quickfilters-colors");
 
@@ -641,7 +641,7 @@ void gui_init(dt_lib_module_t *self)
   gtk_widget_set_tooltip_text(d->colors[5], _("Toggle filtering in/out images with purple label"));
 
   // changed filter
-  hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(hbox), FALSE, FALSE, 0);
   gtk_widget_set_name(hbox, "quickfilters-altered");
 

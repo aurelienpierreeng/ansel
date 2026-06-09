@@ -1540,7 +1540,7 @@ static void _init_widgets(dt_gui_gtk_t *gui)
   container = gui->ui->main_window;
 
   // Adding the outermost vbox
-  widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_container_add(GTK_CONTAINER(container), widget);
   gtk_widget_show(widget);
 
@@ -1770,16 +1770,16 @@ gboolean dt_gui_show_standalone_yes_no_dialog(const char *title, const char *mar
     gtk_window_set_position(GTK_WINDOW(window), GTK_WIN_POS_CENTER);
   }
 
-  GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, padding);
+  GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_container_add(GTK_CONTAINER(window), vbox);
 
-  GtkWidget *mhbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, padding);
+  GtkWidget *mhbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(vbox), mhbox, TRUE, TRUE, padding);
 
   if(padding)
   {
     gtk_box_pack_start(GTK_BOX(mhbox),
-                       gtk_box_new(GTK_ORIENTATION_VERTICAL, padding), TRUE, TRUE, padding);
+                       gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING), TRUE, TRUE, padding);
   }
 
   GtkWidget *label = gtk_label_new(NULL);
@@ -1789,10 +1789,10 @@ gboolean dt_gui_show_standalone_yes_no_dialog(const char *title, const char *mar
   if(padding)
   {
     gtk_box_pack_start(GTK_BOX(mhbox),
-                       gtk_box_new(GTK_ORIENTATION_VERTICAL, padding), TRUE, TRUE, padding);
+                       gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING), TRUE, TRUE, padding);
   }
 
-  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(vbox), hbox, TRUE, TRUE, 0);
 
   result_t result = {.result = RESULT_NONE, .window = window};
@@ -1851,7 +1851,7 @@ char *dt_gui_show_standalone_string_dialog(const char *title, const char *markup
     gtk_window_set_position(GTK_WINDOW(window), GTK_WIN_POS_MOUSE);
   }
 
-  GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+  GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_widget_set_margin_start(vbox, 10);
   gtk_widget_set_margin_end(vbox, 10);
   gtk_widget_set_margin_top(vbox, 7);
@@ -1870,7 +1870,7 @@ char *dt_gui_show_standalone_string_dialog(const char *title, const char *markup
     gtk_entry_set_placeholder_text(GTK_ENTRY(entry), placeholder);
   gtk_box_pack_start(GTK_BOX(vbox), entry, TRUE, TRUE, 0);
 
-  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_widget_set_margin_top(hbox, 10);
   gtk_box_pack_start(GTK_BOX(vbox), hbox, TRUE, TRUE, 0);
 
@@ -2144,7 +2144,7 @@ GtkWidget *dt_ui_notebook_page(GtkNotebook *notebook, const char *text, const ch
   dt_capitalize_label(text_cpy);
   GtkWidget *label = gtk_label_new(text_cpy);
   dt_free(text_cpy);
-  GtkWidget *page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  GtkWidget *page = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   if(strlen(text) > 2)
     gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_END);
   gtk_widget_set_tooltip_text(label, tooltip ? tooltip : _(text));
@@ -2897,7 +2897,7 @@ void dt_gui_new_collapsible_section(dt_gui_collapsible_section_t *cs,
   cs->parent = parent;
 
   // collapsible section header
-  GtkWidget *destdisp_head = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_BAUHAUS_SPACE);
+  GtkWidget *destdisp_head = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   GtkWidget *header_evb = gtk_event_box_new();
   cs->label = dt_ui_section_label_new(label);
   dt_gui_add_class(destdisp_head, "dt_section_expander");
@@ -2908,7 +2908,7 @@ void dt_gui_new_collapsible_section(dt_gui_collapsible_section_t *cs,
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(cs->toggle), expanded);
   dt_gui_add_class(cs->toggle, "dt_ignore_fg_state");
 
-  cs->container = GTK_BOX(gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE));
+  cs->container = GTK_BOX(gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING));
   gtk_widget_set_name(GTK_WIDGET(cs->container), "collapsible");
   gtk_box_pack_start(GTK_BOX(destdisp_head), header_evb, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(destdisp_head), cs->toggle, FALSE, FALSE, 0);
@@ -2947,7 +2947,7 @@ void dt_capitalize_label(gchar *text)
 GtkBox * attach_popover(GtkWidget *widget, const char *icon, GtkWidget *content)
 {
   // Create the wrapping box and add the original widget to it
-  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(box), widget, FALSE, FALSE, 0);
 
   // Create the info icon button that will trigger the popover
@@ -2960,7 +2960,7 @@ GtkBox * attach_popover(GtkWidget *widget, const char *icon, GtkWidget *content)
   gtk_box_pack_start(GTK_BOX(box), button, FALSE, FALSE, 0);
 
   // Create the content of the popover
-  GtkWidget *popover_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  GtkWidget *popover_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(popover_box), content, FALSE, FALSE, 0);
 
   // Wrap the content into a popover and attach it to the button

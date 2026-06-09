@@ -262,7 +262,7 @@ void gui_init(dt_lib_module_t *self)
   dt_lib_tool_lighttable_t *d = (dt_lib_tool_lighttable_t *)g_malloc0(sizeof(dt_lib_tool_lighttable_t));
   self->data = (void *)d;
 
-  self->widget = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  self->widget = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   dt_gui_add_class(self->widget, "lighttable_box");
   gtk_widget_set_halign(self->widget, GTK_ALIGN_END);
   gtk_widget_set_hexpand(self->widget, FALSE);

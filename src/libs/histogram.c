@@ -2719,7 +2719,7 @@ static void _add_sample(GtkButton *widget, dt_lib_module_t *self)
   g_signal_connect(G_OBJECT(sample->container), "enter-notify-event", G_CALLBACK(_sample_enter_callback), sample);
   g_signal_connect(G_OBJECT(sample->container), "leave-notify-event", G_CALLBACK(_sample_leave_callback), sample);
 
-  GtkWidget *container = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *container = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_container_add(GTK_CONTAINER(sample->container), container);
 
   sample->color_patch = gtk_drawing_area_new();
@@ -2730,7 +2730,7 @@ static void _add_sample(GtkButton *widget, dt_lib_module_t *self)
   g_signal_connect(G_OBJECT(sample->color_patch), "button-press-event", G_CALLBACK(_live_sample_button), sample);
   g_signal_connect(G_OBJECT(sample->color_patch), "draw", G_CALLBACK(_sample_draw_callback), sample);
 
-  GtkWidget *color_patch_wrapper = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *color_patch_wrapper = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_widget_set_name(color_patch_wrapper, "live-sample");
   gtk_box_pack_start(GTK_BOX(color_patch_wrapper), sample->color_patch, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(container), color_patch_wrapper, TRUE, TRUE, 0);
@@ -2842,7 +2842,7 @@ void gui_init(dt_lib_module_t *self)
   d->pending_hashes = g_array_new(FALSE, FALSE, sizeof(uint64_t));
   d->refresh_idle_source = 0;
 
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   d->scope_draw = gtk_drawing_area_new();
   gtk_widget_add_events(GTK_WIDGET(d->scope_draw), darktable.gui->scroll_mask);
   d->scope_height = dt_conf_key_exists(DT_LIB_HISTOGRAM_SCOPE_HEIGHT_CONF)
@@ -2920,11 +2920,11 @@ void gui_init(dt_lib_module_t *self)
       d->statistic = i;
 
   // The color patch
-  GtkWidget *color_patch_wrapper = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *color_patch_wrapper = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_widget_set_name(GTK_WIDGET(color_patch_wrapper), "color-picker-area");
 
   // The picker button, mode and statistic combo boxes
-  GtkWidget *picker_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *picker_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
 
   d->statistic_selector = dt_bauhaus_combobox_new_full(
       darktable.bauhaus, NULL, NULL, _("select which statistic to show"), d->statistic,
@@ -2958,14 +2958,14 @@ void gui_init(dt_lib_module_t *self)
                    darktable.develop->color_picker.primary_sample);
   gtk_box_pack_start(GTK_BOX(self->widget), sample_row_events, TRUE, TRUE, 0);
 
-  GtkWidget *sample_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *sample_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_container_add(GTK_CONTAINER(sample_row_events), sample_row);
 
   darktable.develop->color_picker.primary_sample->color_patch = gtk_drawing_area_new();
   g_signal_connect(G_OBJECT(darktable.develop->color_picker.primary_sample->color_patch), "draw",
                    G_CALLBACK(_sample_draw_callback), darktable.develop->color_picker.primary_sample);
 
-  color_patch_wrapper = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  color_patch_wrapper = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_widget_set_name(color_patch_wrapper, "live-sample");
   gtk_box_pack_start(GTK_BOX(color_patch_wrapper), darktable.develop->color_picker.primary_sample->color_patch, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(sample_row), color_patch_wrapper, TRUE, TRUE, 0);
@@ -2991,7 +2991,7 @@ void gui_init(dt_lib_module_t *self)
   label = dt_ui_section_label_new(_("Live samples"));
   gtk_box_pack_start(GTK_BOX(self->widget), label, TRUE, TRUE, 0);
 
-  d->samples_container = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  d->samples_container = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(self->widget),
                      dt_ui_scroll_wrap(d->samples_container, 1, "plugins/darkroom/colorpicker/windowheight"), TRUE, TRUE, 0);
 

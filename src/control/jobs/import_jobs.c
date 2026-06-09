@@ -514,7 +514,7 @@ static int _discarded_files_popup(dt_control_image_enumerator_t *params)
   g_object_unref(store);
 
   // Pack widgets to an unified box
-  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(box), label, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(box), scrolled_window, TRUE, TRUE, 0);
   gtk_container_add(GTK_CONTAINER(scrolled_window), view);

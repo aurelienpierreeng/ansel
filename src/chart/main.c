@@ -530,8 +530,8 @@ static char *get_export_filename(dt_lut_t *self, const char *extension, char **n
   dt_free(reference_filename);
 
   GtkWidget *grid = gtk_grid_new();
-  gtk_grid_set_row_spacing(GTK_GRID(grid), 10);
-  gtk_grid_set_column_spacing(GTK_GRID(grid), 10);
+  gtk_grid_set_row_spacing(GTK_GRID(grid), DT_GUI_BOX_SPACING);
+  gtk_grid_set_column_spacing(GTK_GRID(grid), DT_GUI_BOX_SPACING);
   gtk_grid_set_row_homogeneous(GTK_GRID(grid), TRUE);
 
   *name = g_strdup(self->reference_filename);
@@ -1171,9 +1171,9 @@ static void shrink_changed_callback(GtkRange *range, gpointer user_data)
 
 static GtkWidget *create_notebook_page_source(dt_lut_t *self)
 {
-  GtkWidget *page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+  GtkWidget *page = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
-  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(page), hbox, FALSE, TRUE, 0);
 
   GtkWidget *image_button = gtk_file_chooser_button_new("image of a color chart", GTK_FILE_CHOOSER_ACTION_OPEN);
@@ -1209,9 +1209,9 @@ static GtkWidget *create_notebook_page_source(dt_lut_t *self)
 
 static GtkWidget *create_notebook_page_reference(dt_lut_t *self)
 {
-  GtkWidget *page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+  GtkWidget *page = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
-  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(page), hbox, FALSE, TRUE, 0);
 
   GtkWidget *reference_mode = gtk_combo_box_text_new();
@@ -1235,12 +1235,12 @@ static GtkWidget *create_notebook_page_reference(dt_lut_t *self)
   gtk_box_pack_start(GTK_BOX(hbox), gtk_label_new("mode:"), FALSE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(hbox), reference_mode, TRUE, TRUE, 0);
 
-  GtkWidget *reference_it8_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+  GtkWidget *reference_it8_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(reference_it8_box), gtk_label_new("reference it8:"), FALSE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(reference_it8_box), it8_button, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(hbox), reference_it8_box, TRUE, TRUE, 0);
 
-  GtkWidget *reference_image_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+  GtkWidget *reference_image_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(reference_image_box), gtk_label_new("reference image:"), FALSE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(reference_image_box), reference_image_button, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(reference_image_box), gtk_label_new("size:"), FALSE, TRUE, 0);
@@ -1273,8 +1273,8 @@ static GtkWidget *create_notebook_page_reference(dt_lut_t *self)
 static GtkWidget *create_notebook_page_process(dt_lut_t *self)
 {
   GtkWidget *page = gtk_grid_new();
-  gtk_grid_set_row_spacing(GTK_GRID(page), 10);
-  gtk_grid_set_column_spacing(GTK_GRID(page), 10);
+  gtk_grid_set_row_spacing(GTK_GRID(page), DT_GUI_BOX_SPACING);
+  gtk_grid_set_column_spacing(GTK_GRID(page), DT_GUI_BOX_SPACING);
 
   int line = 0;
 

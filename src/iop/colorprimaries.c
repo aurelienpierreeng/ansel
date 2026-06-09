@@ -1240,13 +1240,13 @@ void gui_init(dt_iop_module_t *self)
   g->preview_signal_connected = FALSE;
   g->viewer_display_profile = NULL;
 
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   g->tabs = GTK_NOTEBOOK(gtk_notebook_new());
   gtk_notebook_set_show_border(g->tabs, FALSE);
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(g->tabs), TRUE, TRUE, 0);
 
-  GtkWidget *colors_page = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+  GtkWidget *colors_page = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   GtkWidget *colors_tab = gtk_label_new(_("colors"));
   dt_gui_add_class(colors_tab, "dt_modulegroups_tab_label");
   gtk_notebook_append_page(g->tabs, colors_page, colors_tab);
@@ -1282,7 +1282,7 @@ void gui_init(dt_iop_module_t *self)
   }
   self->widget = module_root;
 
-  GtkWidget *options_page = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+  GtkWidget *options_page = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   GtkWidget *options_tab = gtk_label_new(_("options"));
   dt_gui_add_class(options_tab, "dt_modulegroups_tab_label");
   gtk_notebook_append_page(g->tabs, options_page, options_tab);

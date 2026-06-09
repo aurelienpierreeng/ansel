@@ -92,7 +92,7 @@ int expandable(dt_lib_module_t *self)
 void gui_init(dt_lib_module_t *self)
 {
   /* initialize base */
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_widget_set_no_show_all(self->widget, TRUE);
 
   /* setup proxy */
@@ -173,8 +173,8 @@ static void *_lib_backgroundjobs_added(dt_lib_module_t *self, gboolean has_progr
   /* initialize the ui elements for job */
   gtk_widget_set_name(GTK_WIDGET(instance->widget), "background-job-eventbox");
   dt_gui_add_class(GTK_WIDGET(instance->widget), "dt_big_btn_canvas");
-  GtkBox *vbox = GTK_BOX(gtk_box_new(GTK_ORIENTATION_VERTICAL, 0));
-  instance->hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkBox *vbox = GTK_BOX(gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING));
+  instance->hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_container_add(GTK_CONTAINER(instance->widget), GTK_WIDGET(vbox));
 
   /* add job label */

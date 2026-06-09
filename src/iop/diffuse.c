@@ -1637,7 +1637,7 @@ void cleanup_global(dt_iop_module_so_t *module)
 void gui_init(struct dt_iop_module_t *self)
 {
   dt_iop_diffuse_gui_data_t *g = IOP_GUI_ALLOC(diffuse);
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   gtk_box_pack_start(GTK_BOX(self->widget), dt_ui_section_label_new(_("properties")), FALSE, FALSE, 0);
 

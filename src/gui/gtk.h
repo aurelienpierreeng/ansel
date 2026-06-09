@@ -66,8 +66,6 @@
 extern "C" {
 #endif
 
-#define DT_GUI_IOP_MODULE_CONTROL_SPACING 0
-
 // Mouse hit-test radius in darkroom image space, clamped for usable overlay selection.
 #define DT_GUI_MOUSE_EFFECT_RADIUS darktable.gui->mouse.effect_radius_clamped
 
@@ -76,6 +74,20 @@ extern "C" {
 #define DT_PIXEL_APPLY_DPI(value) ((value) * darktable.gui->dpi_factor)
 #define DT_PIXEL_APPLY_DPI_DPP(value) ((value) * darktable.gui->dpi_factor * darktable.gui->ppd)
 
+/* Handling spacing between children widget within Gtk boxes 
+ * through margins applied on widgets
+ * via CSS would be nice, but turns into a nightmare: 
+ * then you need to remove left margin on first child, right margin on last child,
+ * and that's only assuming the box is a row.  
+ * If you don't do that, then widgets on containers edges are recessed.
+ * Gtk boxes use a spacing property to handle that, but it can't be set in CSS.
+ * So, Gtk boxes inner spacing has to be done in code,
+ * and this macro allows to manage it uniformingly from one place.
+*/
+// TODO: at least make it a preference and replace the macro by a function.
+// No DPI scaling here, those are device pixels and need to stay consistent
+// with CSS px for ansel.css proper margin matching.
+#define DT_GUI_BOX_SPACING 10
 
 enum
 {

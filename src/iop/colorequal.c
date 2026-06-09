@@ -2300,9 +2300,9 @@ void gui_init(dt_iop_module_t *self)
   g->pending_preview_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
   g->has_focus = FALSE;
 
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
-  GtkWidget *ring_tabs_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  GtkWidget *ring_tabs_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(self->widget), ring_tabs_box, TRUE, TRUE, 0);
 
   g->ring_notebook = GTK_NOTEBOOK(gtk_notebook_new());
@@ -2319,7 +2319,7 @@ void gui_init(dt_iop_module_t *self)
   {
     GtkWidget *ring_label = gtk_label_new(_ring_label((dt_iop_colorequal_ring_t)ring));
     dt_gui_add_class(ring_label, "dt_modulegroups_tab_label");
-    GtkWidget *ring_page = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+    GtkWidget *ring_page = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
     gtk_notebook_append_page(g->ring_notebook, ring_page, ring_label);
     gtk_container_child_set(GTK_CONTAINER(g->ring_notebook), ring_page, "tab-expand", TRUE, "tab-fill", TRUE, NULL);
 
@@ -2332,7 +2332,7 @@ void gui_init(dt_iop_module_t *self)
     for(int order = 0; order < DT_IOP_COLOREQUAL_NUM_CHANNELS; order++)
     {
       const dt_iop_colorequal_channel_t ch = channel_order[order];
-      GtkWidget *channel_page = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+      GtkWidget *channel_page = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
       g_object_set_data(G_OBJECT(channel_page), "colorequal-channel", GINT_TO_POINTER(ch));
       g->area[ring][ch] = GTK_DRAWING_AREA(dtgtk_drawing_area_new_with_aspect_ratio(2.f / 3.f));
       gtk_widget_add_events(GTK_WIDGET(g->area[ring][ch]),
@@ -2355,7 +2355,7 @@ void gui_init(dt_iop_module_t *self)
 
   GtkWidget *options_label = gtk_label_new(_("options"));
   dt_gui_add_class(options_label, "dt_modulegroups_tab_label");
-  GtkWidget *options_page = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+  GtkWidget *options_page = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_notebook_append_page(g->ring_notebook, options_page, options_label);
   gtk_container_child_set(GTK_CONTAINER(g->ring_notebook), options_page, "tab-expand", TRUE, "tab-fill", TRUE, NULL);
 
@@ -2385,7 +2385,7 @@ void gui_init(dt_iop_module_t *self)
 
   self->widget = module_root;
 
-  GtkWidget *picker_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_BAUHAUS_SPACE);
+  GtkWidget *picker_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(ring_tabs_box), picker_box, FALSE, FALSE, 0);
 
   g->module_picker = dt_color_picker_new_with_cst(self, DT_COLOR_PICKER_AREA, NULL, IOP_CS_RGB);

@@ -138,7 +138,7 @@ void gui_init(dt_lib_module_t *self)
 {
   dt_lib_tool_mask_t *d = (dt_lib_tool_mask_t *)g_malloc0(sizeof(dt_lib_tool_mask_t));
   self->data = (void *)d;
-  self->widget = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  self->widget = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_widget_set_halign(self->widget, GTK_ALIGN_START);
   gtk_widget_set_valign(self->widget, GTK_ALIGN_CENTER);
   gtk_widget_set_name(self->widget, "mask-toolbar");

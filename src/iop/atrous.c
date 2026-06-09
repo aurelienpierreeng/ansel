@@ -1597,7 +1597,7 @@ void gui_init(struct dt_iop_module_t *self)
   c->mouse_radius = 1.0 / BANDS;
   c->in_curve = FALSE;
 
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   c->channel_tabs = dt_ui_notebook_new();
   dt_ui_notebook_page(c->channel_tabs, N_("luma"), _("change lightness at each feature size"));

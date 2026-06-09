@@ -931,7 +931,7 @@ void gui_init(dt_lib_module_t *self)
   dt_lib_map_locations_t *d = (dt_lib_map_locations_t *)g_malloc0(sizeof(dt_lib_map_locations_t));
   self->data = d;
 
-  self->widget =  gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  self->widget =  gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   GtkWidget *w = gtk_scrolled_window_new(NULL, NULL);
   d->window = w;
@@ -983,7 +983,7 @@ void gui_init(dt_lib_module_t *self)
                                 "\nctrl-wheel scroll to resize the window"));
 
   // buttons
-  GtkBox *hbox = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0));
+  GtkBox *hbox = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING));
 
   int shape = dt_conf_get_int("plugins/map/locationshape");
   if(shape == MAP_LOCATION_SHAPE_POLYGONS)

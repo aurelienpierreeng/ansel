@@ -1140,7 +1140,7 @@ GtkWidget *dt_thumbnail_create_widget(dt_thumbnail_t *thumb)
   gtk_container_add(GTK_CONTAINER(thumb->widget), thumb->w_main);
   gtk_widget_show(thumb->w_main);
 
-  thumb->w_background = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  thumb->w_background = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   dt_gui_add_class(thumb->w_background, "thumb-background");
   gtk_widget_set_valign(thumb->w_background, GTK_ALIGN_FILL);
   gtk_widget_set_halign(thumb->w_background, GTK_ALIGN_FILL);
@@ -1176,7 +1176,7 @@ GtkWidget *dt_thumbnail_create_widget(dt_thumbnail_t *thumb)
   gtk_widget_show(thumb->w_bottom_eb);
   gtk_overlay_add_overlay(GTK_OVERLAY(thumb->w_main), thumb->w_bottom_eb);
 
-  GtkWidget *bottom_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *bottom_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   dt_gui_add_class(bottom_box, "thumb-bottom");
   gtk_container_add(GTK_CONTAINER(thumb->w_bottom_eb), bottom_box);
   gtk_widget_show(bottom_box);
@@ -1190,7 +1190,7 @@ GtkWidget *dt_thumbnail_create_widget(dt_thumbnail_t *thumb)
   g_signal_connect(G_OBJECT(thumb->w_reject), "button-release-event", G_CALLBACK(_event_rating_release), thumb);
   gtk_box_pack_start(GTK_BOX(bottom_box), thumb->w_reject, FALSE, FALSE, 0);
 
-  GtkWidget *stars_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *stars_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(bottom_box), stars_box, TRUE, TRUE, 0);
   gtk_widget_set_valign(stars_box, GTK_ALIGN_CENTER);
   gtk_widget_set_halign(stars_box, GTK_ALIGN_CENTER);
@@ -1226,7 +1226,7 @@ GtkWidget *dt_thumbnail_create_widget(dt_thumbnail_t *thumb)
   gtk_widget_show(thumb->w_top_eb);
   gtk_overlay_add_overlay(GTK_OVERLAY(thumb->w_main), thumb->w_top_eb);
 
-  GtkWidget *top_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *top_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   dt_gui_add_class(top_box, "thumb-top");
   gtk_container_add(GTK_CONTAINER(thumb->w_top_eb), top_box);
   gtk_widget_show(top_box);
@@ -1277,11 +1277,11 @@ GtkWidget *dt_thumbnail_create_widget(dt_thumbnail_t *thumb)
   gtk_widget_set_valign(thumb->w_alternative, GTK_ALIGN_FILL);
   gtk_widget_hide(thumb->w_alternative);
 
-  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_container_add(GTK_CONTAINER(thumb->w_alternative), box);
   dt_gui_add_class(box, "thumb-alternative");
 
-  GtkWidget *bbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  GtkWidget *bbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_widget_set_valign(bbox, GTK_ALIGN_START);
   gtk_box_pack_start(GTK_BOX(box), bbox, TRUE, TRUE, 0);
   thumb->w_filename = gtk_label_new("");
@@ -1293,7 +1293,7 @@ GtkWidget *dt_thumbnail_create_widget(dt_thumbnail_t *thumb)
   gtk_label_set_ellipsize(GTK_LABEL(thumb->w_folder), PANGO_ELLIPSIZE_MIDDLE);
   gtk_box_pack_start(GTK_BOX(bbox), thumb->w_folder, FALSE, FALSE, 0);
 
-  bbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  bbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_widget_set_valign(bbox, GTK_ALIGN_CENTER);
   gtk_box_pack_start(GTK_BOX(box), bbox, TRUE, TRUE, 0);
   thumb->w_exposure = gtk_label_new("");
@@ -1301,7 +1301,7 @@ GtkWidget *dt_thumbnail_create_widget(dt_thumbnail_t *thumb)
   thumb->w_exposure_bias = gtk_label_new("");
   gtk_box_pack_start(GTK_BOX(bbox), thumb->w_exposure_bias, FALSE, FALSE, 0);
 
-  bbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  bbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_widget_set_valign(bbox, GTK_ALIGN_END);
   gtk_box_pack_start(GTK_BOX(box), bbox, TRUE, TRUE, 0);
   thumb->w_camera = gtk_label_new("");

@@ -464,7 +464,7 @@ static inline void gui_init_section(struct dt_iop_module_t *self, char *section,
   gtk_color_button_set_title(GTK_COLOR_BUTTON(*picker), _("select tone color"));
   g_signal_connect(G_OBJECT(*picker), "color-set", G_CALLBACK(colorpick_callback), self);
 
-  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(hbox), slider_box, TRUE, TRUE, 0);
   gtk_box_pack_end(GTK_BOX(hbox), *picker, FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(self->widget), hbox, FALSE, FALSE, 0);
@@ -474,20 +474,20 @@ void gui_init(struct dt_iop_module_t *self)
 {
   dt_iop_splittoning_gui_data_t *g = IOP_GUI_ALLOC(splittoning);
 
-  GtkWidget *shadows_box = self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  GtkWidget *shadows_box = self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   g->shadow_hue_gslider = dt_bauhaus_slider_from_params(self, "shadow_hue");
   dt_bauhaus_slider_set_factor(g->shadow_hue_gslider, 360.0f);
   dt_bauhaus_slider_set_format(g->shadow_hue_gslider, "\302\260");
   g->shadow_sat_gslider = dt_bauhaus_slider_from_params(self, "shadow_saturation");
 
-  GtkWidget *highlights_box = self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  GtkWidget *highlights_box = self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   g->highlight_hue_gslider = dt_bauhaus_slider_from_params(self, "highlight_hue");
   dt_bauhaus_slider_set_factor(g->highlight_hue_gslider, 360.0f);
   dt_bauhaus_slider_set_format(g->highlight_hue_gslider, "\302\260");
   g->highlight_sat_gslider = dt_bauhaus_slider_from_params(self, "highlight_saturation");
 
   // start building top level widget
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   gui_init_section(self, N_("shadows"), shadows_box, g->shadow_hue_gslider, g->shadow_sat_gslider, &g->shadow_colorpick, TRUE);
 

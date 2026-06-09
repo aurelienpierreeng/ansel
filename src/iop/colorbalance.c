@@ -1520,7 +1520,7 @@ static void _configure_slider_blocks(gpointer instance, dt_iop_module_t *self)
          N_("highlights: gain / slope") };
 
   gchar *layout = dt_conf_get_string("plugins/darkroom/colorbalance/layout");
-  new_container = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+  new_container = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   for(int i=0; i<3; i++)
   {
@@ -1586,7 +1586,7 @@ void gui_init(dt_iop_module_t *self)
     g->luma_patches_flags[k] = INVALID;
   }
 
-  GtkWidget *mode_box = self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+  GtkWidget *mode_box = self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   // mode choice
   g->mode = dt_bauhaus_combobox_from_params(self, N_("mode"));
@@ -1606,7 +1606,7 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_combobox_set(g->controls, !g_strcmp0(mode, "RGBL") ? RGBL :
                                        !g_strcmp0(mode, "BOTH") ? BOTH : HSL);
 
-  g->master_box = self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+  g->master_box = self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   gtk_box_pack_start(GTK_BOX(g->master_box), dt_ui_section_label_new(_("master")), FALSE, FALSE, 0);
 
@@ -1636,7 +1636,7 @@ void gui_init(dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(g->contrast, _("contrast"));
 
 #ifdef SHOW_COLOR_WHEELS
-  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_BAUHAUS_SPACE);
+  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(self->widget), hbox, FALSE, FALSE, 0);
 
   GtkWidget *area = dtgtk_drawing_area_new_with_aspect_ratio(1.0);
@@ -1703,7 +1703,7 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_widget_set_label(g->which##_##c, #n);                 \
 
 #define ADD_BLOCK(blk, which, section, text, span, satspan)                 \
-  g->blocks[blk] = self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0); \
+  g->blocks[blk] = self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING); \
                                                                             \
   sprintf(field_name, "%s[%d]", #which, CHANNEL_FACTOR);                    \
   g->which##_factor = dt_color_picker_new(self, DT_COLOR_PICKER_AREA,       \
@@ -1784,7 +1784,7 @@ void gui_init(dt_iop_module_t *self)
   ADD_BLOCK(2, gain,  N_("highlights"), gain_messages,  0.5f, 25.0f)
   _configure_slider_blocks(NULL, self);
 
-  g->optimizer_box = self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+  g->optimizer_box = self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   gtk_box_pack_start(GTK_BOX(self->widget), dt_ui_section_label_new(_("auto optimizers")), FALSE, FALSE, 0);
 
@@ -1801,7 +1801,7 @@ void gui_init(dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(self->widget), g->auto_color, FALSE, FALSE, 0);
 
   // start building top level widget
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(mode_box), TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(g->master_box), TRUE, TRUE, 0);

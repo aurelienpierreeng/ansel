@@ -766,8 +766,8 @@ static dt_ioporder_graph_node_t *_ioporder_create_graph_node(dt_iop_module_t *mo
 
   GtkWidget *event_box = gtk_event_box_new();
   GtkWidget *frame = gtk_frame_new(NULL);
-  GtkWidget *body = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_PIXEL_APPLY_DPI(6));
-  GtkWidget *header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_PIXEL_APPLY_DPI(4));
+  GtkWidget *body = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  GtkWidget *header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gchar *clean_name = delete_underscore(module->name());
   gchar **split_name = g_strsplit(clean_name, "-", -1);
   gchar *module_name = g_strjoinv(" ", split_name);
@@ -886,7 +886,7 @@ static dt_ioporder_graph_node_t *_ioporder_create_endpoint_node(const char *labe
 
   GtkWidget *event_box = gtk_event_box_new();
   GtkWidget *frame = gtk_frame_new(NULL);
-  GtkWidget *body = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  GtkWidget *body = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   GtkWidget *title = gtk_label_new(label);
 
   dt_gui_add_class(frame, "dt_module_frame");
@@ -1612,8 +1612,8 @@ static void _ioporder_init_popup(dt_lib_module_t *self)
   if(d->window) return;
 
   GtkWidget *window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-  GtkWidget *root = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_PIXEL_APPLY_DPI(8));
-  GtkWidget *toolbar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_PIXEL_APPLY_DPI(8));
+  GtkWidget *root = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  GtkWidget *toolbar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   GtkWidget *label = gtk_label_new("");
   GtkWidget *add_preset = gtk_button_new_with_label(_("add preset"));
   GtkWidget *preset_combo = gtk_combo_box_text_new();

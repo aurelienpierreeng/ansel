@@ -813,7 +813,7 @@ void gui_init(dt_imageio_module_format_t *self)
   if(dt_conf_key_exists("plugins/imageio/format/tiff/compresslevel"))
     compresslevel = dt_conf_get_int("plugins/imageio/format/tiff/compresslevel");
 
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   // Bit depth combo box
   gui->bpp = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));

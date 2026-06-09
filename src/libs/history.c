@@ -132,7 +132,7 @@ void gui_init(dt_lib_module_t *self)
 
   d->selection_reset = FALSE;
 
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_widget_set_name(self->widget, "history-ui");
 
   d->history_store = gtk_list_store_new(DT_HISTORY_VIEW_COL_COUNT,

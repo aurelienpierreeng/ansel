@@ -1223,7 +1223,7 @@ GtkWidget *dt_lib_gui_get_expander(dt_lib_module_t *module)
     return NULL;
   }
 
-  GtkWidget *header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_widget_set_name(GTK_WIDGET(header), "module-header");
 
   GtkWidget *expander = dtgtk_expander_new(header, module->widget);

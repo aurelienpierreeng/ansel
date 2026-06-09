@@ -317,10 +317,10 @@ static gboolean reset_language_widget(GtkWidget *label, GdkEventButton *event, G
 static void init_tab_general(GtkWidget *dialog, GtkWidget *stack, dt_gui_themetweak_widgets_t *tw)
 {
 
-  GtkWidget *container = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  GtkWidget *container = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   GtkWidget *grid = gtk_grid_new();
-  gtk_grid_set_row_spacing(GTK_GRID(grid), DT_PIXEL_APPLY_DPI(3));
-  gtk_grid_set_column_spacing(GTK_GRID(grid), DT_PIXEL_APPLY_DPI(5));
+  gtk_grid_set_row_spacing(GTK_GRID(grid), DT_GUI_BOX_SPACING);
+  gtk_grid_set_column_spacing(GTK_GRID(grid), DT_GUI_BOX_SPACING);
   gtk_widget_set_valign(grid, GTK_ALIGN_START);
   int line = 0;
 
@@ -455,7 +455,7 @@ static void init_tab_general(GtkWidget *dialog, GtkWidget *stack, dt_gui_themetw
   g_signal_connect(G_OBJECT(tw->apply_toggle), "toggled", G_CALLBACK(usercss_callback), 0);
 
   //scrollable textarea with save button to allow user to directly modify user.css file
-  GtkWidget *usercssbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  GtkWidget *usercssbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(container), usercssbox, TRUE, TRUE, 0);
   gtk_widget_set_name(usercssbox, "usercss-box");
 
@@ -475,7 +475,7 @@ static void init_tab_general(GtkWidget *dialog, GtkWidget *stack, dt_gui_themetw
   tw->save_button = gtk_button_new_with_label(C_("usercss", "save CSS and apply"));
   g_signal_connect(G_OBJECT(tw->save_button), "clicked", G_CALLBACK(save_usercss_callback), tw);
   g_signal_connect(G_OBJECT(dialog), "response", G_CALLBACK(usercss_dialog_callback), tw);
-  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_end(GTK_BOX(hbox), tw->save_button, FALSE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(usercssbox), hbox, FALSE, FALSE, 0);
   gtk_widget_set_tooltip_text(tw->save_button, _("click to save and apply the CSS tweaks entered in this editor"));
@@ -565,7 +565,7 @@ void dt_gui_preferences_show()
   gtk_container_set_border_width(GTK_CONTAINER(content), 0);
 
   //place a box in the content area
-  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_widget_set_name(box, "preferences-box");
   gtk_container_set_border_width(GTK_CONTAINER(box), 0);
   gtk_box_pack_start(GTK_BOX(content), box, TRUE, TRUE, 0);
@@ -648,11 +648,11 @@ void dt_gui_preferences_show()
         line = insert_line;
       }
 
-      GtkWidget *devices_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+      GtkWidget *devices_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
       gtk_widget_set_margin_start(devices_box, DT_PIXEL_APPLY_DPI(24));
       gtk_widget_set_hexpand(devices_box, TRUE);
       GtkWidget *devices_grid = gtk_grid_new();
-      gtk_grid_set_column_spacing(GTK_GRID(devices_grid), DT_PIXEL_APPLY_DPI(5));
+      gtk_grid_set_column_spacing(GTK_GRID(devices_grid), DT_GUI_BOX_SPACING);
       gtk_widget_set_hexpand(devices_grid, TRUE);
       gtk_box_pack_start(GTK_BOX(devices_box), devices_grid, FALSE, FALSE, 0);
 
@@ -668,7 +668,7 @@ void dt_gui_preferences_show()
                                                              : (!IS_NULL_PTR(device->cname) ? device->cname : "");
         gchar *label_text = g_strdup_printf("%d: %s", device->config_id, device_name);
         GtkWidget *device_title = gtk_label_new(label_text);
-        GtkWidget *title_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+        GtkWidget *title_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
         gtk_box_pack_start(GTK_BOX(title_box), device_title, FALSE, FALSE, 0);
         gtk_widget_set_margin_top(title_box, dev > 0 ? DT_PIXEL_APPLY_DPI(8) : 0);
         gtk_widget_set_name(title_box, "pref_subsection");
@@ -945,7 +945,7 @@ static gboolean _search_func(GtkTreeModel *model, gint column, const gchar *key,
 
 static void init_tab_presets(GtkWidget *stack)
 {
-  GtkWidget *container = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  GtkWidget *container = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
   GtkTreeView *tree = GTK_TREE_VIEW(gtk_tree_view_new());
   GtkTreeStore *model = gtk_tree_store_new(
@@ -1015,7 +1015,7 @@ static void init_tab_presets(GtkWidget *stack)
   gtk_box_pack_start(GTK_BOX(container), scroll, TRUE, TRUE, 0);
 
   // Adding the import/export buttons
-  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_widget_set_name(hbox, "preset_controls");
 
   GtkWidget *search_presets = gtk_search_entry_new();

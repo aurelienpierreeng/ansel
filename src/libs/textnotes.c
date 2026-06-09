@@ -2130,11 +2130,11 @@ void gui_init(dt_lib_module_t *self)
   d->imgid = -1;
   d->height_setting = g_strdup("plugins/darkroom/textnotes/text_height");
 
-  GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   self->widget = vbox;
   d->root = vbox;
 
-  GtkWidget *toolbar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *toolbar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(vbox), toolbar, FALSE, FALSE, 0);
 
   d->mode_toggle = gtk_toggle_button_new_with_label(_("preview"));

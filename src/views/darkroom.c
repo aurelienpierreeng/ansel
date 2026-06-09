@@ -2097,7 +2097,7 @@ void gui_init(dt_view_t *self)
                                   N_("Focus picture display options"), 0, 0,
                                   _("Shows the options popover"));
 
-    GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
     gtk_container_add(GTK_CONTAINER(dev->display.floating_window), vbox);
 
     /** let's fill the encapsulating widgets */
@@ -2168,7 +2168,7 @@ void gui_init(dt_view_t *self)
                                   N_("Focus raw over exposed indication options"), 0, 0,
                                   _("Shows the options popover"));
 
-    GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
     gtk_container_add(GTK_CONTAINER(dev->rawoverexposed.floating_window), vbox);
 
     /** let's fill the encapsulating widgets */
@@ -2231,7 +2231,7 @@ void gui_init(dt_view_t *self)
                                   N_("Focus clipping indication options"), 0, 0,
                                   _("Shows the options popover"));
 
-    GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
     gtk_container_add(GTK_CONTAINER(dev->overexposed.floating_window), vbox);
 
     /** let's fill the encapsulating widgets */
@@ -2325,7 +2325,7 @@ void gui_init(dt_view_t *self)
                                   N_("Focus gamut checking options"), 0, 0,
                                   _("Shows the options popover"));
 
-    GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
     gtk_container_add(GTK_CONTAINER(dev->profile.floating_window), vbox);
 
     /** let's fill the encapsulating widgets */
@@ -2418,7 +2418,7 @@ void gui_init(dt_view_t *self)
                                   N_("Show the pipeline node graph"), 0, 0,
                                   _("Triggers the action"));
     */
-    _darkroom_autoset_list = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    _darkroom_autoset_list = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
     gtk_container_add(GTK_CONTAINER(_darkroom_autoset_popover), _darkroom_autoset_list);
     _darkroom_autoset_popover_rebuild(dev);
     _darkroom_autoset_button_set_running(FALSE);

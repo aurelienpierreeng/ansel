@@ -4760,7 +4760,7 @@ void gui_init(struct dt_iop_module_t *self)
                                 "- XYZ is a simple scaling in XYZ space. It is not recommended in general.\n"
                                 "- none disables any adaptation and uses pipeline working RGB."));
 
-  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
 
   g->approx_cct = dt_ui_label_new("CCT:");
   gtk_box_pack_start(GTK_BOX(hbox), g->approx_cct, FALSE, FALSE, 0);
@@ -4840,8 +4840,8 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(g->csspot.container), GTK_WIDGET(g->use_mixing), TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(g->use_mixing), "toggled", G_CALLBACK(_spot_settings_changed_callback), self);
 
-  GtkWidget *hhbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_PIXEL_APPLY_DPI(darktable.bauhaus->quad_width));
-  GtkWidget *vvbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+  GtkWidget *hhbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
+  GtkWidget *vvbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   gtk_box_pack_start(GTK_BOX(vvbox), dt_ui_section_label_new(_("input")), FALSE, FALSE, 0);
 
@@ -4861,7 +4861,7 @@ void gui_init(struct dt_iop_module_t *self)
 
   gtk_box_pack_start(GTK_BOX(hhbox), GTK_WIDGET(vvbox), FALSE, FALSE, DT_BAUHAUS_SPACE);
 
-  vvbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+  vvbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   gtk_box_pack_start(GTK_BOX(vvbox), dt_ui_section_label_new(_("target")), TRUE, TRUE, 0);
 
@@ -4916,7 +4916,7 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_stack_set_transition_type(GTK_STACK(g->mixer_stack), GTK_STACK_TRANSITION_TYPE_NONE);
   gtk_box_pack_start(GTK_BOX(mixer_page), GTK_WIDGET(g->mixer_stack), FALSE, FALSE, 0);
 
-  GtkWidget *mixer_complete = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+  GtkWidget *mixer_complete = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_stack_add_named(GTK_STACK(g->mixer_stack), mixer_complete, "complete");
 
   GtkWidget *first, *second, *third;
@@ -4941,7 +4941,7 @@ void gui_init(struct dt_iop_module_t *self)
   MIXER_ROW(green, G, _("output green"), FALSE)
   MIXER_ROW(blue, B, _("output blue"), FALSE)
 
-  GtkWidget *mixer_simple = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+  GtkWidget *mixer_simple = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_stack_add_named(GTK_STACK(g->mixer_stack), mixer_simple, "simple");
 
   g->simple_theta = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), -1.f, 1.f, 0, 0, 3);
@@ -4990,7 +4990,7 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(mixer_simple), GTK_WIDGET(g->simple_coupling_1), FALSE, FALSE, 0);
   g_signal_connect(G_OBJECT(g->simple_coupling_1), "value-changed", G_CALLBACK(_channelmixerrgb_simple_slider_callback), self);
 
-  GtkWidget *mixer_primaries = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+  GtkWidget *mixer_primaries = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_stack_add_named(GTK_STACK(g->mixer_stack), mixer_primaries, "primaries");
 
   gtk_box_pack_start(GTK_BOX(mixer_primaries), dt_ui_section_label_new(_("achromatic axis")), FALSE, FALSE, 0);
@@ -5114,7 +5114,7 @@ void gui_init(struct dt_iop_module_t *self)
   OUTPUT_SECTION(grey, grey, _("B&W"), FALSE)
 
   // start building top level widget
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(g->notebook), FALSE, FALSE, 0);
   const int saved_page = dt_conf_get_int("plugins/darkroom/channelmixerrgb/gui_page");
@@ -5209,7 +5209,7 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(collapsible), GTK_WIDGET(g->label_delta_E), TRUE, TRUE, 0);
   gtk_widget_set_tooltip_text(g->label_delta_E, _("the delta E is using the CIE 2000 formula"));
 
-  GtkWidget *toolbar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_BAUHAUS_SPACE);
+  GtkWidget *toolbar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
 
   g->button_commit = dtgtk_button_new(dtgtk_cairo_paint_check_mark, 0, NULL);
   gtk_box_pack_end(GTK_BOX(toolbar), GTK_WIDGET(g->button_commit), FALSE, FALSE, 0);

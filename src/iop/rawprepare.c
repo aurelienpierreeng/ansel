@@ -984,7 +984,7 @@ void gui_init(dt_iop_module_t *self)
 {
   dt_iop_rawprepare_gui_data_t *g = IOP_GUI_ALLOC(rawprepare);
 
-  GtkWidget *box_raw = self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+  GtkWidget *box_raw = self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   for(int i = 0; i < 4; i++)
   {

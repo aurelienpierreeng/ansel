@@ -87,8 +87,8 @@ void gui_init(dt_lib_module_t *self)
    * there are more buttons than fit in one row. */
   d->container = self->widget = gtk_flow_box_new();
   /* set a small spacing and a style class so we can target it in CSS */
-  gtk_flow_box_set_column_spacing(GTK_FLOW_BOX(d->container), 0);
-  gtk_flow_box_set_row_spacing(GTK_FLOW_BOX(d->container), 0);
+  gtk_flow_box_set_column_spacing(GTK_FLOW_BOX(d->container), DT_GUI_BOX_SPACING);
+  gtk_flow_box_set_row_spacing(GTK_FLOW_BOX(d->container), DT_GUI_BOX_SPACING);
   /* allow children to keep their natural widths (don't force uniform cells) */
   gtk_flow_box_set_homogeneous(GTK_FLOW_BOX(d->container), FALSE);
   gtk_style_context_add_class(gtk_widget_get_style_context(d->container), "dt-module-toolbox");

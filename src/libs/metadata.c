@@ -710,10 +710,8 @@ void gui_init(dt_lib_module_t *self)
 
   GtkGrid *grid = GTK_GRID(gtk_grid_new());
   self->widget = GTK_WIDGET(grid);
-  gtk_grid_set_row_spacing(grid, DT_PIXEL_APPLY_DPI(5));
-
-  gtk_grid_set_row_spacing(grid, DT_PIXEL_APPLY_DPI(5));
-  gtk_grid_set_column_spacing(grid, DT_PIXEL_APPLY_DPI(10));
+  gtk_grid_set_row_spacing(grid, DT_GUI_BOX_SPACING);
+  gtk_grid_set_column_spacing(grid, DT_GUI_BOX_SPACING);
 
   for(int i = 0; i < DT_METADATA_NUMBER; i++)
   {

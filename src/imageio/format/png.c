@@ -54,6 +54,7 @@
 #include "common/imageio.h"
 #include "common/imageio_module.h"
 #include "control/conf.h"
+#include "gui/gtk.h"
 #include "imageio/format/imageio_format_api.h"
 
 DT_MODULE(3)
@@ -546,7 +547,7 @@ void gui_init(dt_imageio_module_format_t *self)
   if(dt_conf_key_exists("plugins/imageio/format/png/compression"))
     compression = dt_conf_get_int("plugins/imageio/format/png/compression");
 
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   // Bit depth combo box
   gui->bit_depth = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));

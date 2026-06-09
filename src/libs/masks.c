@@ -1982,12 +1982,12 @@ void gui_init(dt_lib_module_t *self)
   g_signal_connect(G_OBJECT(d->popup_window), "delete-event", G_CALLBACK(gtk_widget_hide_on_delete), NULL);
 
   // 3. Create a clean box container inside the popup window to receive original shape elements
-  GtkWidget *shape_manager_container = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+  GtkWidget *shape_manager_container = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_container_add(GTK_CONTAINER(d->popup_window), shape_manager_container);
 
   // initialise widgets
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
 
   // Create and pack the button to control the popup panel
   d->popup_button = dtgtk_togglebutton_new(dtgtk_cairo_paint_masks_drawn, 0, NULL);
@@ -2062,7 +2062,7 @@ void gui_init(dt_lib_module_t *self)
   gtk_box_pack_start(GTK_BOX(shape_manager_container), d->treeview, TRUE, TRUE, 0);
   dt_gui_widget_init_auto_height(d->treeview, TREE_LIST_MIN_ROWS, TREE_LIST_MAX_ROWS);
 
-  d->blending_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  d->blending_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(self->widget), d->blending_box, FALSE, FALSE, 0);
 
 

@@ -1495,7 +1495,7 @@ static void _pop_menu_dictionary_delete_tag(GtkWidget *menuitem, dt_lib_module_t
                                   _("cancel"), GTK_RESPONSE_NONE, _("delete"), GTK_RESPONSE_YES, NULL);
     gtk_window_set_default_size(GTK_WINDOW(dialog), 300, -1);
     GtkWidget *area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
-    GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+    GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
     gtk_container_set_border_width(GTK_CONTAINER(vbox), 8);
     gtk_container_add(GTK_CONTAINER(area), vbox);
     text = g_strdup_printf(_("selected: %s"), tagname);
@@ -1503,7 +1503,7 @@ static void _pop_menu_dictionary_delete_tag(GtkWidget *menuitem, dt_lib_module_t
     gtk_box_pack_start(GTK_BOX(vbox), label, FALSE, TRUE, 0);
     dt_free(text);
 
-    GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+    GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
     gtk_box_pack_start(GTK_BOX(vbox), box, FALSE, TRUE, 0);
     text = g_markup_printf_escaped(ngettext("do you really want to delete the tag `%s'?\n%d image is assigned this tag!",
              "do you really want to delete the tag `%s'?\n%d images are assigned this tag!", img_count), tagname, img_count);
@@ -1584,7 +1584,7 @@ static void _pop_menu_dictionary_delete_node(GtkWidget *menuitem, dt_lib_module_
                                 _("cancel"), GTK_RESPONSE_NONE, _("delete"), GTK_RESPONSE_YES, NULL);
   gtk_window_set_default_size(GTK_WINDOW(dialog), 300, -1);
   GtkWidget *area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
-  GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+  GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_container_set_border_width(GTK_CONTAINER(vbox), 8);
   gtk_container_add(GTK_CONTAINER(area), vbox);
   text = g_strdup_printf(_("selected: %s"), tagname);
@@ -1592,7 +1592,7 @@ static void _pop_menu_dictionary_delete_node(GtkWidget *menuitem, dt_lib_module_
   gtk_box_pack_start(GTK_BOX(vbox), label, FALSE, TRUE, 0);
   dt_free(text);
 
-  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(vbox), box, FALSE, TRUE, 0);
   text = g_strdup_printf(ngettext("<u>%d</u> tag will be deleted", "<u>%d</u> tags will be deleted", tag_count), tag_count);
   label = gtk_label_new(NULL);
@@ -1666,11 +1666,11 @@ static void _pop_menu_dictionary_create_tag(GtkWidget *menuitem, dt_lib_module_t
                                        _("cancel"), GTK_RESPONSE_NONE, _("save"), GTK_RESPONSE_YES, NULL);
   gtk_window_set_default_size(GTK_WINDOW(dialog), 300, -1);
   GtkWidget *area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
-  GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+  GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_container_set_border_width(GTK_CONTAINER(vbox), 8);
   gtk_container_add(GTK_CONTAINER(area), vbox);
 
-  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(vbox), box, FALSE, TRUE, 0);
   label = gtk_label_new(_("name: "));
   gtk_box_pack_start(GTK_BOX(box), label, FALSE, TRUE, 0);
@@ -1682,7 +1682,7 @@ static void _pop_menu_dictionary_create_tag(GtkWidget *menuitem, dt_lib_module_t
   GtkWidget *private;
   GtkWidget *parent;
   GtkTextBuffer *buffer = NULL;
-  GtkWidget *vbox2 = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  GtkWidget *vbox2 = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(vbox), vbox2, FALSE, TRUE, 0);
 
   text = g_strdup_printf(_("add to: \"%s\" "), path);
@@ -1698,7 +1698,7 @@ static void _pop_menu_dictionary_create_tag(GtkWidget *menuitem, dt_lib_module_t
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(private), FALSE);
   gtk_box_pack_end(GTK_BOX(vbox2), private, FALSE, TRUE, 0);
 
-  box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_end(GTK_BOX(vbox), box, TRUE, TRUE, 0);
   label = gtk_label_new(_("synonyms: "));
   gtk_box_pack_start(GTK_BOX(box), label, FALSE, TRUE, 0);
@@ -1798,7 +1798,7 @@ static void _pop_menu_dictionary_edit_tag(GtkWidget *menuitem, dt_lib_module_t *
                                        _("cancel"), GTK_RESPONSE_NONE, _("save"), GTK_RESPONSE_YES, NULL);
   gtk_window_set_default_size(GTK_WINDOW(dialog), 300, -1);
   GtkWidget *area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
-  GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+  GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_container_set_border_width(GTK_CONTAINER(vbox), 8);
   gtk_container_add(GTK_CONTAINER(area), vbox);
   text = g_strdup_printf(_("selected: %s"), tagname);
@@ -1806,7 +1806,7 @@ static void _pop_menu_dictionary_edit_tag(GtkWidget *menuitem, dt_lib_module_t *
   gtk_box_pack_start(GTK_BOX(vbox), label, FALSE, TRUE, 0);
   dt_free(text);
 
-  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(vbox), box, FALSE, TRUE, 0);
   text = g_strdup_printf(ngettext("<u>%d</u> tag will be updated", "<u>%d</u> tags will be updated", tag_count), tag_count);
   label = gtk_label_new(NULL);
@@ -1819,7 +1819,7 @@ static void _pop_menu_dictionary_edit_tag(GtkWidget *menuitem, dt_lib_module_t *
   gtk_box_pack_start(GTK_BOX(box), label, FALSE, TRUE, 0);
   dt_free(text);
 
-  box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(vbox), box, FALSE, TRUE, 0);
   label = gtk_label_new(_("name: "));
   gtk_box_pack_start(GTK_BOX(box), label, FALSE, TRUE, 0);
@@ -1835,7 +1835,7 @@ static void _pop_menu_dictionary_edit_tag(GtkWidget *menuitem, dt_lib_module_t *
 
   if(tagid)
   {
-    GtkWidget *vbox2 = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    GtkWidget *vbox2 = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
     gtk_box_pack_start(GTK_BOX(vbox), vbox2, FALSE, TRUE, 0);
     flags = dt_tag_get_flags(tagid);
     category = gtk_check_button_new_with_label(_("category"));
@@ -1844,7 +1844,7 @@ static void _pop_menu_dictionary_edit_tag(GtkWidget *menuitem, dt_lib_module_t *
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(private), flags & DT_TF_PRIVATE);
     gtk_box_pack_end(GTK_BOX(vbox2), private, FALSE, TRUE, 0);
 
-    box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
     gtk_box_pack_end(GTK_BOX(vbox), box, TRUE, TRUE, 0);
     label = gtk_label_new(_("synonyms: "));
     gtk_box_pack_start(GTK_BOX(box), label, FALSE, TRUE, 0);
@@ -2082,7 +2082,7 @@ static void _pop_menu_dictionary_change_path(GtkWidget *menuitem, dt_lib_module_
                                        _("cancel"), GTK_RESPONSE_NONE, _("save"), GTK_RESPONSE_YES, NULL);
   gtk_window_set_default_size(GTK_WINDOW(dialog), 300, -1);
   GtkWidget *area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
-  GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+  GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_container_set_border_width(GTK_CONTAINER(vbox), 8);
   gtk_container_add(GTK_CONTAINER(area), vbox);
   text = g_strdup_printf(_("selected: %s"), tagname);
@@ -2090,7 +2090,7 @@ static void _pop_menu_dictionary_change_path(GtkWidget *menuitem, dt_lib_module_
   gtk_box_pack_start(GTK_BOX(vbox), label, FALSE, TRUE, 0);
   dt_free(text);
 
-  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(vbox), box, FALSE, TRUE, 0);
   text = g_strdup_printf(ngettext("<u>%d</u> tag will be updated", "<u>%d</u> tags will be updated", tag_count), tag_count);
   label = gtk_label_new(NULL);
@@ -3071,7 +3071,7 @@ void gui_init(dt_lib_module_t *self)
   d->last_tag = NULL;
   self->timeout_handle = 0;
 
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   GtkBox *box, *hbox;
   GtkWidget *button;
@@ -3084,7 +3084,7 @@ void gui_init(dt_lib_module_t *self)
   GtkCellRenderer *renderer;
 
   // attached_view
-  box = GTK_BOX(gtk_box_new(GTK_ORIENTATION_VERTICAL, 0));
+  box = GTK_BOX(gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING));
 
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(box), TRUE, TRUE, 0);
   view = GTK_TREE_VIEW(gtk_tree_view_new());
@@ -3132,7 +3132,7 @@ void gui_init(dt_lib_module_t *self)
   g_signal_connect(gtk_tree_view_get_selection(view), "changed", G_CALLBACK(_tree_selection_changed), self);
 
   // attach/detach buttons
-  hbox = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0));
+  hbox = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING));
 
   d->attach_button = dt_action_button_new(self, N_("attach"), _attach_button_clicked, self,
                                           _("attach tag to all selected images"), 0, 0);
@@ -3160,10 +3160,10 @@ void gui_init(dt_lib_module_t *self)
   gtk_box_pack_start(box, GTK_WIDGET(hbox), FALSE, TRUE, 0);
 
   // dictionary_view
-  box = GTK_BOX(gtk_box_new(GTK_ORIENTATION_VERTICAL, 0));
+  box = GTK_BOX(gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING));
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(box), TRUE, TRUE, 0);
 
-  hbox = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0));
+  hbox = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING));
 
   // text entry
   w = gtk_entry_new();
@@ -3266,7 +3266,7 @@ void gui_init(dt_lib_module_t *self)
   }
 
   // buttons
-  hbox = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0));
+  hbox = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING));
 
   d->new_button = dt_action_button_new(self, N_("new"), _new_button_clicked, self, _("create a new tag with the\nname you entered"), 0, 0);
   gtk_box_pack_start(hbox, d->new_button, TRUE, TRUE, 0);

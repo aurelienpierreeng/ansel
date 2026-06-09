@@ -1260,7 +1260,7 @@ static void _build_primaries_ui(dt_iop_module_t *self, dt_iop_splittoning_rgb_gu
 void gui_init(struct dt_iop_module_t *self)
 {
   dt_iop_splittoning_rgb_gui_data_t *g = IOP_GUI_ALLOC(splittoning_rgb);
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   g->preview_surface = NULL;
   g->preview_width = 0;
   g->preview_height = 0;
@@ -1313,9 +1313,9 @@ void gui_init(struct dt_iop_module_t *self)
     gtk_stack_set_transition_type(GTK_STACK(g->point[point].mixer_stack), GTK_STACK_TRANSITION_TYPE_NONE);
     gtk_box_pack_start(GTK_BOX(page), g->point[point].mixer_stack, FALSE, FALSE, 0);
 
-    GtkWidget *complete = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
-    GtkWidget *simple = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
-    GtkWidget *primaries = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+    GtkWidget *complete = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+    GtkWidget *simple = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+    GtkWidget *primaries = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
     gtk_stack_add_named(GTK_STACK(g->point[point].mixer_stack), complete, "complete");
     gtk_stack_add_named(GTK_STACK(g->point[point].mixer_stack), simple, "simple");
     gtk_stack_add_named(GTK_STACK(g->point[point].mixer_stack), primaries, "primaries");

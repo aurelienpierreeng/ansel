@@ -36,7 +36,19 @@
     (at your option) any later version.
 */
 
-/*** This has been tested with GTK 3.24 on Gnome ***/
+/**
+ * WARNING: Within Gtk boxes, grids and flowboxes, spacing between
+ * widgets cannot be done with CSS margins/padding because that wouldn't
+ * honour the boundaries of the container, so some widgets would not 
+ * be properly aligned with the others on the container's contours.
+ * This has to be hardcoded in boxes declaration, using the DT_GUI_BOX_SPACING macro.
+ * Because this macro is defined in device pixels (= 10px), to match its length,
+ * we have to use absolute margin/padding values here, and can't use proportional
+ * em sizing.
+ * The rule is margins/paddings are defined in CSS as px so they get rescaled
+ * similarly to hardcoded DT_GUI_BOX_SPACING by window manager × GTK,
+ * but anything handling text/font should be defined in em as to match system-defined font size.
+ */
 
 /*======================================
   1. COLOR DEFINITIONS
@@ -295,13 +307,13 @@ separator {
 separator.horizontal {
   min-height: 1px;
   border: none;
-  margin: 0.5em 0;
 }
 
 separator.vertical {
   min-width: 1px;
   border: none;
-  margin: 2px 0.5em;
+  margin-top: 2px;
+  margin-bottom: 2px;
 }
 
 menu separator {
@@ -367,7 +379,6 @@ combobox {
   */
   min-height: 1em;
   min-width: 1em;
-  margin: 2px;
   padding: 2px;
   border: none;
   box-shadow: none;
@@ -402,7 +413,7 @@ button.text-button,
 #search-button,
 spinbutton button {
   border: 1px solid @grey_70;
-  border-radius: 0.25em;
+  border-radius: 3px;
 }
 
 #button-canvas {
@@ -421,7 +432,6 @@ textview,
   box-shadow: none;
   background-image: none;
   background-color: @field_bg;
-  min-height: 1em;
 }
 
 /* Checkbuttons */
@@ -439,14 +449,10 @@ checkbutton check {
   box-shadow: none;
   background-color: @button_bg;
   background-image: none;
-  margin-right: 0.25em;
+  margin-right: 3px;
 }
 
 /* Comboboxes & Spinbuttons inner normalization */
-combobox {
-  margin: 2px 0;
-}
-
 combobox button:checked {
   background: transparent;
 }
@@ -462,12 +468,17 @@ scrolledwindow {
   border-bottom: none;
 }
 
-#plugins_box {
-  padding-bottom: 0.5em;
+#right #plugins_box {
+  padding: 10px 0;
+}
+
+#top {
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.5);
 }
 
 #top-first-line {
   background-color: @grey_35;
+  padding: 2px 0;
 }
 
 #top-first-line label,
@@ -479,11 +490,15 @@ scrolledwindow {
 }
 
 #top-second-line {
-  margin: 0;
-  padding-left: 0.25em;
-  padding-right: 0.25em;
-  border-top: none;
+  padding: 0 3px;
+  border: none;
+  min-height: 0;
   background-color: @bg_color;
+}
+
+#top-second-line > * {
+  margin-top: 2px;
+  margin-bottom: 2px;
 }
 
 #menu-bar menuitem:hover {
@@ -491,11 +506,11 @@ scrolledwindow {
 }
 
 menuitem {
-  padding: 0.25em 0.5em;
+  padding: 3px 6px;
 }
 
 menuitem menu menuitem {
-  padding: 0.25em;
+  padding: 3px;
 }
 
 menubar menuitem label {
@@ -544,8 +559,7 @@ dialog,
 
 .dt_plugin_ui_main,
 #guides-module-combobox {
-  padding: 0.5em 0.75em;
-  margin: 0;
+  padding: 12px;
   border: none;
 }
 
@@ -553,56 +567,51 @@ dialog,
   border-top: none;
 }
 
-#blending-box,
-#blending-box box,
-#blending-wrapper,
-#blending-wrapper box {
-  margin: 0;
-  padding: 0;
-}
+/**
+ * Modules in the right sidebar are IOP modules, they can be reordered.
+ * Modules in the left sidebars are toolboxes, they can't.
+ * Make them visually different to signal it.
+ */
 
-#blending-box {
-  padding: 0.5em;
-  border: none;
-}
-
-.dt_module_frame {
-  border-top: none;
-  border-bottom: none;
-  margin: 0.5em 0.5em 0;
+#right .dt_module_frame {
+  margin: -1px 6px; /* no vertical margin: that's handled as children spacing by the container */
   padding: 0;
   border-radius: 15px;
-}
-
-#right .dt_module_focus,
-#right .dt_module_frame:focus,
-#left .dt_module_focus,
-#left .dt_module_frame:focus {
-  border: 2px solid @grey_75;
-  border-radius: 10px;
-}
-
-.dt_module_frame {
   border: 2px solid @grey_35;
   border-radius: 10px;
 }
 
-#module-header {
+#right .dt_module_focus,
+#right .dt_module_frame:focus {
+  border: 2px solid @grey_75;
+}
+
+#right #module-header {
   min-height: 1em;
-  /*border-bottom: 2px solid @grey_50;*/
-  border-radius: 9px;
-  padding: 0.5em 0.75em;
+  border-radius: 8px;
+  padding: 6px 12px;
   background-color: @grey_38;
 }
 
-.expanded #module-header {
-  border-radius: 9px 9px 0 0;
+#left #module-header {
+  min-height: 1em;
+  border-top: 2px solid @grey_65;
+  padding: 10px 12px;
+  background-color: @grey_38;
+}
+
+#right .expanded #module-header {
+  border-radius: 8px 8px 0 0;
+  border-bottom: 2px solid @grey_35;
+}
+
+#left .expanded #module-header {
+  border-bottom: 2px solid @grey_35;
 }
 
 #module-header .dt_module_btn {
   min-width: 1.em;
   min-height: 1.em;
-  margin: 2px;
   padding: 2px;
 }
 
@@ -621,7 +630,7 @@ dialog,
 #module-header .dt_module_btn.dt_iop_enable_button {
   min-width: 1.1em;
   min-height: 1.1em;
-  margin: 0 0.1em 0 -0.5em;
+  margin: 0 3px 0 -6px;
   color: @grey_50;
   background: transparent;
   border-color: transparent;
@@ -674,18 +683,19 @@ dialog,
 #plugins_box .dt_section_label {
   color: @grey_15;
   border-bottom-color: @grey_15;
-  margin: 0.25em 0.25em 0;
+  margin: 3px 3px 0;
 }
 
 #plugins_box .dt_plugin_ui_main .dt_section_label {
   color: @section_label;
   border-bottom: 1px solid @grey_90;
-  margin: 0.25em 0 0 0;
+  margin: 3px 0 0 0;
 }
 
 #plugins_box .dt_plugin_ui_main .dt_section_expander .dt_section_label {
   border-bottom: none;
   margin: 0;
+  padding: 2px;
 }
 
 #collapse-block,
@@ -713,25 +723,6 @@ dialog,
 
 #collapsible {
   padding: 0.28em;
-}
-
-.dt_section_expander,
-.dt_section_expander label {
-  margin-top: 0.14em;
-}
-
-/* Component spacing inside plugin bodies */
-.dt_plugin_ui_main .dt_bauhaus,
-.dt_plugin_ui_main checkbutton,
-.dt_plugin_ui_main combobox,
-.dt_plugin_ui_main spinbutton,
-.dt_plugin_ui_main button,
-.dt_plugin_ui_main entry,
-.dt_plugin_ui_main .dt_section_label,
-.dt_plugin_ui_main .dt_section_expander,
-.dt_plugin_ui_main #collapse-block {
-  margin-top: 2px;
-  margin-bottom: 2px;
 }
 
 .dt_plugin_ui_main #collapsible {
@@ -830,6 +821,16 @@ dialog.dt_import_dialog headerbar {
   padding: 4px 8px;
 }
 
+/* 
+* Enable to debug bauhaus widgets
+.dt_bauhaus,
+checkbutton {
+  padding: 0;
+  margin: 0;
+  background-color: red;
+}
+*/
+
 .dt_bauhaus window,
 .popup,
 context-menu,
@@ -873,13 +874,6 @@ menuitem>arrow {
   padding-right: 0.42em;
 }
 
-#view-dropdown button,
-#view-dropdown menuitem,
-#view-label {
-  padding: 0.07em 0.42em;
-  margin: 0;
-}
-
 tooltip,
 #range-current {
   border: 0.07em solid shade(@tooltip_bg_color, 1.5);
@@ -895,30 +889,26 @@ popover spinbutton {
   margin-left: 0.35em;
 }
 
-.dt_plugin_ui .dt_bauhaus_alignment,
-dialog.dt_import_dialog filechooser {
-  margin: 0;
-}
-
 
 /*======================================
   8. NOTEBOOK TABS
   ======================================*/
 
-#blending-header {
-  padding: 0 0.25em 0 1em;
-  background-color: @grey_40;
-  margin: 0 0.5em 0.5em;
-  border-radius: 5px;
-}
-
 #search-box entry placeholder {
   color: @grey_25;
 }
 
+notebook header {
+  margin-bottom: 10px;
+}
+
+notebook tab {
+  min-height: 1em;
+}
+
 notebook tab label {
   color: @grey_80;
-  padding: 0.28em 0.07em;
+  padding: 6px 0.07em;
   border-bottom: 3px solid @field_bg;
 }
 
@@ -932,11 +922,11 @@ notebook tab:checked label {
   color: @grey_95;
 }
 
-notebook header {
-  margin-bottom: 0.42em;
+/* Shared Notebook & Ring Tabs */
+#modules-tabs notebook header {
+  margin-bottom: 0;
 }
 
-/* Shared Notebook & Ring Tabs */
 #modules-tabs notebook tab,
 #colorequal-ring-tabs>header>tabs>tab {
   padding: 0;
@@ -965,12 +955,11 @@ notebook header {
 #modules-tabs notebook tabs arrow {
   min-width: 1.4em;
   min-height: 1.4em;
-  padding: 0.1em;
+  padding: 3px;
 }
 
 #modules-tabs notebook header,
 #colorequal-ring-tabs>header {
-  margin: 0;
   background-color: @bg_color;
   border: none;
   box-shadow: none;
@@ -1092,9 +1081,9 @@ scale contents trough highlight {
 
 scale contents trough slider {
   background-color: @scroll_bar_inactive;
-  border: 0.1em solid @border_color;
-  min-height: 0.5em;
-  min-width: 0.5em;
+  border: 3px solid @border_color;
+  min-height: 6px;
+  min-width: 6px;
 }
 
 scrollbar {
@@ -1103,7 +1092,6 @@ scrollbar {
   border-radius: 0.6em;
   min-height: 0.6em;
   min-width: 0.6em;
-  margin: 0.1em;
 }
 
 scrollbar slider:hover,
@@ -1132,7 +1120,6 @@ treeview header label {
 #preferences-content,
 #preferences-content .dialog-action-box,
 #quick-presets-manager box {
-  margin: 0;
   background-color: @bg_color;
 }
 
@@ -1176,8 +1163,8 @@ filechooser .sidebar-button {
 
 filechooser .sidebar,
 filechooser treeview,
-#preferences-box .sidebar scrolledwindow {
-  background-color: @grey_40;
+#blending-box treeview {
+  background-color: @field_bg;
 }
 
 #preferences-box .sidebar row {
@@ -1206,24 +1193,9 @@ filechooser row:hover .sidebar-icon {
   background-color: @grey_65;
 }
 
-#quick-filter-ratings,
-#quickfilters-colors,
-#quickfilters-altered,
-#rejected-filter {
-  margin-right: 1em;
-}
-
-#quickfilter-search-box,
-#quickfilters-colors {
-  margin-left: 1em;
-  margin-right: 1em;
-}
-
 .quickfilter-label {
   color: @section_label;
   font-weight: 500;
-  margin-right: 1em;
-  padding-left: 0.25em;
 }
 
 #dt-map-location>* {
@@ -1355,11 +1327,6 @@ menu.dt-masks-context-menu menuitem.dt-masks-checked:not(:disabled) label.dt-mas
   border: 4px solid @thumbnail_bg_color;
 }
 
-#thumbtable-filmstrip .thumb-main,
-dialog.dt_import_dialog headerbar entry {
-  margin: 2px;
-}
-
 #thumbtable-filmstrip .thumb-background {
   border-width: 2px;
 }
@@ -1377,10 +1344,6 @@ dialog.dt_import_dialog headerbar entry {
 
 .thumb-image {
   margin: 4px;
-}
-
-#thumbtable-filmstrip .thumb-image {
-  margin: 2px;
 }
 
 #thumbtable-filmstrip .thumb-main:selected {
@@ -1465,7 +1428,6 @@ dialog.dt_import_dialog headerbar entry {
 .thumb-bottom,
 .thumb-top {
   border: 0;
-  margin: 0;
   padding: 4px;
 }
 
@@ -1489,18 +1451,18 @@ dialog.dt_import_dialog headerbar entry {
 }
 
 .thumb-reject {
-  margin-right: 0.25em;
+  margin-right: 3px;
 }
 
 .thumb-colorlabels {
-  margin-left: 0.25em;
+  margin-left: 3px;
   opacity: 0.8;
 }
 
 .thumb-alternative {
   background-color: rgba(255, 255, 255, 0.7);
   border: 1px solid #666;
-  padding: 0.5em;
+  padding: 6px;
 }
 
 .thumb-alternative * {
@@ -1597,7 +1559,7 @@ dialog.dt_import_dialog headerbar entry {
 .thumb-altered,
 .thumb-group,
 .thumb-audio {
-  margin-left: 0.5em;
+  margin-left: 6px;
 }
 
 .thumb-zoom-label {

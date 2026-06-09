@@ -1778,10 +1778,10 @@ void dt_accels_window(dt_accels_t *accels, GtkWindow *main_window)
   gtk_tree_view_append_column(GTK_TREE_VIEW(tree_view), column);
 
   // Pack and show widgets
-  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(gtk_dialog_get_content_area(GTK_DIALOG(dialog))), box, TRUE, TRUE, 0);
 
-  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(hbox), gtk_label_new(_("Search by feature : ")), FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(hbox), params->path_search, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(hbox), gtk_label_new(_("Search by keys : ")), FALSE, FALSE, 0);
@@ -3035,9 +3035,9 @@ void dt_accels_search(dt_accels_t *accels, GtkWindow *main_window, GtkWidget *an
   // Build the search entry
   GtkWidget *search_entry = gtk_search_entry_new();
   state.search_entry = search_entry;
-  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_container_add(GTK_CONTAINER(window), box);
-  GtkWidget *search_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+  GtkWidget *search_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(box), search_row, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(search_row), search_entry, TRUE, TRUE, 0);
 

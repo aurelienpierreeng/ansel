@@ -40,6 +40,8 @@
 #include "common/imageio_module.h"
 #include "control/conf.h"
 #include "imageio/format/imageio_format_api.h"
+#include "gui/gtk.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -376,7 +378,7 @@ void gui_init(dt_imageio_module_format_t *self)
   const int quality = dt_conf_get_int("plugins/imageio/format/webp/quality");
   const int hint = dt_conf_get_int("plugins/imageio/format/webp/hint");
 
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   gui->compression = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
   dt_bauhaus_widget_set_label(gui->compression, N_("compression type"));

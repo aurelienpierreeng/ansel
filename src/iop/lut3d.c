@@ -1450,9 +1450,9 @@ void gui_init(dt_iop_module_t *self)
 {
   dt_iop_lut3d_gui_data_t *g = IOP_GUI_ALLOC(lut3d);
 
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
-  g->hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_PIXEL_APPLY_DPI(8));
+  g->hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   GtkWidget *button = dtgtk_button_new(dtgtk_cairo_paint_directory, CPF_NONE, NULL);
 #ifdef HAVE_GMIC
   gtk_widget_set_tooltip_text(button, _("select a png (haldclut)"

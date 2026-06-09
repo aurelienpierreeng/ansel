@@ -46,6 +46,8 @@
 #include "common/imageio_module.h"
 #include "control/conf.h"
 #include "imageio/format/imageio_format_api.h"
+#include "gui/gtk.h"
+
 #include <inttypes.h>
 #include <setjmp.h>
 #include <stdio.h>
@@ -583,7 +585,7 @@ void gui_init(dt_imageio_module_format_t *self)
   dt_imageio_jpeg_gui_data_t *g = (dt_imageio_jpeg_gui_data_t *)malloc(sizeof(dt_imageio_jpeg_gui_data_t));
   self->gui_data = g;
   // construct gui with jpeg specific options:
-  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   self->widget = box;
   // quality slider
   g->quality = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(NULL),

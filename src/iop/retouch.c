@@ -2170,7 +2170,7 @@ void gui_init(dt_iop_module_t *self)
   change_image(self);
 
   // shapes toolbar
-  GtkWidget *hbox_shapes = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *hbox_shapes = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
 
   gtk_box_pack_start(GTK_BOX(hbox_shapes), dt_ui_label_new(_("shapes:")), FALSE, TRUE, 0);
   g->label_form = GTK_LABEL(gtk_label_new("-1"));
@@ -2208,7 +2208,7 @@ void gui_init(dt_iop_module_t *self)
   g->bt_brush = shape_buttons[DT_MASKS_SHAPE_INDEX_BRUSH];
 
   // algorithm toolbar
-  GtkWidget *hbox_algo = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *hbox_algo = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
 
   gtk_box_pack_start(GTK_BOX(hbox_algo), dt_ui_label_new(_("algorithms:")), FALSE, TRUE, 0);
 
@@ -2284,7 +2284,7 @@ void gui_init(dt_iop_module_t *self)
   gtk_widget_set_size_request(g->wd_bar, -1, DT_PIXEL_APPLY_DPI(40));
 
   // toolbar display current scale / cut&paste / suppress&display masks
-  GtkWidget *hbox_scale = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+  GtkWidget *hbox_scale = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
 
   // display & suppress masks
   g->bt_showmask = dt_iop_togglebutton_new(self, N_("editing"), N_("display masks"), NULL,
@@ -2317,12 +2317,12 @@ void gui_init(dt_iop_module_t *self)
   dt_gui_add_class(g->bt_display_wavelet_scale, "dt_transparent_background");
 
   // preview single scale
-  g->vbox_preview_scale = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  g->vbox_preview_scale = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   GtkWidget *lbl_psc = dt_ui_section_label_new(_("preview single scale"));
   gtk_box_pack_start(GTK_BOX(g->vbox_preview_scale), lbl_psc, FALSE, TRUE, 0);
 
-  GtkWidget *prev_lvl = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *prev_lvl = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
 
   // gradient slider
   #define NEUTRAL_GRAY 0.5
@@ -2352,7 +2352,7 @@ void gui_init(dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(g->vbox_preview_scale), prev_lvl, TRUE, TRUE, 0);
 
   // shapes selected (label)
-  GtkWidget *hbox_shape_sel = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *hbox_shape_sel = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   GtkWidget *label1 = gtk_label_new(_("shape selected:"));
   gtk_label_set_ellipsize(GTK_LABEL(label1), PANGO_ELLIPSIZE_START);
   gtk_box_pack_start(GTK_BOX(hbox_shape_sel), label1, FALSE, TRUE, 0);
@@ -2362,7 +2362,7 @@ void gui_init(dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(hbox_shape_sel), GTK_WIDGET(g->label_form_selected), FALSE, TRUE, 0);
 
   // fill properties
-  g->vbox_fill = self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  g->vbox_fill = self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   g->cmb_fill_mode = dt_bauhaus_combobox_from_params(self, "fill_mode");
   gtk_widget_set_tooltip_text(g->cmb_fill_mode, _("erase the detail or fills with chosen color"));
@@ -2371,7 +2371,7 @@ void gui_init(dt_iop_module_t *self)
   GdkRGBA color
       = (GdkRGBA){.red = p->fill_color[0], .green = p->fill_color[1], .blue = p->fill_color[2], .alpha = 1.0 };
 
-  g->hbox_color_pick = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  g->hbox_color_pick = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   GtkWidget *lbl_fill_color = dt_ui_label_new(_("fill color: "));
   gtk_box_pack_start(GTK_BOX(g->hbox_color_pick), lbl_fill_color, FALSE, TRUE, 0);
 
@@ -2394,7 +2394,7 @@ void gui_init(dt_iop_module_t *self)
                               _("adjusts color brightness to fine-tune it. works with erase as well"));
 
   // blur properties
-  g->vbox_blur = self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+  g->vbox_blur = self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   g->cmb_blur_type = dt_bauhaus_combobox_from_params(self, "blur_type");
   gtk_widget_set_tooltip_text(g->cmb_blur_type, _("type for the blur algorithm"));
@@ -2411,7 +2411,7 @@ void gui_init(dt_iop_module_t *self)
   g_signal_connect(G_OBJECT(g->sl_mask_opacity), "value-changed", G_CALLBACK(rt_mask_opacity_callback), self);
 
   // start building top level widget
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   GtkWidget *lbl_rt_tools = dt_ui_section_label_new(_("retouch tools"));
   gtk_box_pack_start(GTK_BOX(self->widget), lbl_rt_tools, FALSE, TRUE, 0);

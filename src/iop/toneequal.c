@@ -3489,7 +3489,7 @@ void gui_init(struct dt_iop_module_t *self)
                                                  "produce piece-wise smooth areas when using high feathering values"));
 
   // start building top level widget
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   const int active_page = dt_conf_get_int("plugins/darkroom/toneequal/gui_page");
   gtk_widget_show(gtk_notebook_get_nth_page(g->notebook, active_page));
@@ -3498,7 +3498,7 @@ void gui_init(struct dt_iop_module_t *self)
   g_signal_connect(G_OBJECT(g->notebook), "button-press-event", G_CALLBACK(notebook_button_press), self);
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(g->notebook), FALSE, FALSE, 0);
 
-  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(hbox), dt_ui_label_new(_("display exposure mask")), TRUE, TRUE, 0);
   g->show_luminance_mask = dt_iop_togglebutton_new(self, NULL, N_("display exposure mask"), NULL, G_CALLBACK(show_luminance_mask_callback),
                                            FALSE, 0, 0, dtgtk_cairo_paint_showmask, hbox);

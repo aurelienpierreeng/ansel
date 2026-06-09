@@ -185,7 +185,7 @@ GtkWidget *dt_masks_shape_buttons_create(const dt_masks_shape_buttons_config_t *
   if(IS_NULL_PTR(data)) return NULL;
 
   data->config = *config;
-  data->box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  data->box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_widget_set_halign(data->box, GTK_ALIGN_END);
   gtk_widget_set_valign(data->box, GTK_ALIGN_CENTER);
 
@@ -369,7 +369,7 @@ static GtkWidget *_masks_gui_add_interaction_slider(GtkWidget *menu, const char 
                                                     dt_masks_form_gui_t *gui, dt_iop_module_t *module)
 {
   GtkWidget *menu_item = gtk_menu_item_new();
-  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
 
   gtk_widget_set_can_focus(menu_item, FALSE);
   g_signal_connect(G_OBJECT(menu_item), "activate",

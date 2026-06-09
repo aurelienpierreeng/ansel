@@ -1469,7 +1469,7 @@ void gui_init(struct dt_iop_module_t *self)
   const int feedback = TRUE;
   g->button_bar_visible = TRUE;
 
-  GtkBox *box_enabled = GTK_BOX(gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE));
+  GtkBox *box_enabled = GTK_BOX(gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING));
 
   g->btn_asshot = dt_iop_togglebutton_new(self, N_("settings"), N_("as shot"), NULL,
                                           G_CALLBACK(btn_toggled), FALSE, 0, 0,
@@ -1496,7 +1496,7 @@ void gui_init(struct dt_iop_module_t *self)
                                        dtgtk_cairo_paint_bulb, NULL);
   gtk_widget_set_tooltip_text(g->btn_d65, _("set white balance to camera reference point\nin most cases it should be D65"));
 
-  g->buttonbar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0); // put buttons at top. fill later.
+  g->buttonbar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING); // put buttons at top. fill later.
   dt_gui_add_class(g->buttonbar, "dt_iop_toggle");
   gtk_box_pack_end(GTK_BOX(g->buttonbar), g->btn_d65, TRUE, TRUE, 0);
   gtk_box_pack_end(GTK_BOX(g->buttonbar), g->btn_user, TRUE, TRUE, 0);

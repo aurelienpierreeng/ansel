@@ -1096,7 +1096,7 @@ void gui_init(struct dt_iop_module_t *self)
                                                  "not displayed. chroma values (a and b) of each pixel are "
                                                  "then adjusted based on L curve data. auto XYZ is similar "
                                                  "but applies the saturation changes in XYZ space."));
-  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
 
   c->channel_tabs = dt_ui_notebook_new();
   dt_ui_notebook_page(c->channel_tabs, N_("L"), _("tonecurve for L channel"));

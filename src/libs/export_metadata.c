@@ -176,7 +176,7 @@ static void _add_tag_button_clicked(GtkButton *button, dt_lib_export_metadata_t 
   g_signal_connect(dialog, "key-press-event", G_CALLBACK(dt_handle_dialog_enter), NULL);
   gtk_window_set_default_size(GTK_WINDOW(dialog), 300, -1);
   GtkWidget *area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
-  GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+  GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_container_set_border_width(GTK_CONTAINER(vbox), 8);
   gtk_container_add(GTK_CONTAINER(area), vbox);
 
@@ -306,16 +306,16 @@ char *dt_lib_export_metadata_configuration_dialog(char *metadata_presets, const 
   gtk_window_set_default_size(GTK_WINDOW(dialog), 300, -1);
   GtkWidget *area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
 
-  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_container_add(GTK_CONTAINER(area), hbox);
 
   // general info
-  GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+  GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_container_set_border_width(GTK_CONTAINER(vbox), 8);
   gtk_container_add(GTK_CONTAINER(hbox), vbox);
   GtkWidget *label = gtk_label_new(_("general settings"));
   gtk_box_pack_start(GTK_BOX(vbox), label, FALSE, TRUE, 0);
-  GtkWidget *vbox2 = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  GtkWidget *vbox2 = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(vbox), vbox2, FALSE, TRUE, 0);
 
   GtkWidget *exiftag = gtk_check_button_new_with_label(_("EXIF data"));
@@ -328,9 +328,9 @@ char *dt_lib_export_metadata_configuration_dialog(char *metadata_presets, const 
   GtkWidget *calculated;
   if (!ondisk)
   {
-    GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
     gtk_box_pack_start(GTK_BOX(vbox2), box, FALSE, TRUE, 0);
-    GtkWidget *vbox3 = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    GtkWidget *vbox3 = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
     gtk_box_pack_start(GTK_BOX(box), vbox3, FALSE, TRUE, 10);
     calculated = gtk_check_button_new_with_label(_("only embedded"));
     gtk_widget_set_tooltip_text(calculated, _("per default the interface sends some (limited) metadata beside the image to remote storage.\n"
@@ -347,9 +347,9 @@ char *dt_lib_export_metadata_configuration_dialog(char *metadata_presets, const 
   gtk_box_pack_start(GTK_BOX(vbox2), dttag, FALSE, TRUE, 0);
   g_signal_connect(G_OBJECT(dttag), "clicked", G_CALLBACK(_tags_toggled), (gpointer)d);
 
-  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(vbox2), box, FALSE, TRUE, 0);
-  GtkWidget *vbox3 = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  GtkWidget *vbox3 = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(box), vbox3, FALSE, TRUE, 10);
   d->private = gtk_check_button_new_with_label(_("private tags"));
   gtk_widget_set_tooltip_text(d->private, _("export private tags"));
@@ -369,7 +369,7 @@ char *dt_lib_export_metadata_configuration_dialog(char *metadata_presets, const 
   gtk_box_pack_start(GTK_BOX(vbox2), dthistory, FALSE, TRUE, 0);
 
   // specific rules
-  vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+  vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_container_set_border_width(GTK_CONTAINER(vbox), 8);
   gtk_container_add(GTK_CONTAINER(hbox), vbox);
   label = gtk_label_new(_("per metadata settings"));
@@ -448,7 +448,7 @@ char *dt_lib_export_metadata_configuration_dialog(char *metadata_presets, const 
   if (!ondisk)
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(calculated), flags & DT_META_CALCULATED);
 
-  box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(vbox), box, FALSE, TRUE, 0);
 
   GtkWidget *button = dtgtk_button_new(dtgtk_cairo_paint_plus_simple, 0, NULL);

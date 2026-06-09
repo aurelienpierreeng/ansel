@@ -721,8 +721,8 @@ void gui_init(dt_lib_module_t *self)
   d->snapshot_zoom_level = -1.0f;
 
   /* initialize ui containers */
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-  d->snapshots_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  d->snapshots_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   /* create take snapshot button */
   d->take_button = dt_action_button_new(self, N_("take snapshot"), _lib_snapshots_add_button_clicked_callback, self,

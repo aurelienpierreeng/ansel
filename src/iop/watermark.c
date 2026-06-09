@@ -1116,11 +1116,11 @@ void gui_init(struct dt_iop_module_t *self)
   dt_iop_watermark_gui_data_t *g = IOP_GUI_ALLOC(watermark);
   dt_iop_watermark_params_t *p = (dt_iop_watermark_params_t *)self->params;
 
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   GtkGrid *grid = GTK_GRID(gtk_grid_new());
-  gtk_grid_set_row_spacing(grid, DT_BAUHAUS_SPACE);
-  gtk_grid_set_column_spacing(grid, DT_PIXEL_APPLY_DPI(10));
+  gtk_grid_set_row_spacing(grid, DT_GUI_BOX_SPACING);
+  gtk_grid_set_column_spacing(grid, DT_GUI_BOX_SPACING);
   int line = 0;
 
   // Add the marker combobox
@@ -1210,8 +1210,8 @@ void gui_init(struct dt_iop_module_t *self)
   label = dtgtk_reset_label_new(_("alignment"), self, &p->alignment, sizeof(p->alignment));
   gtk_grid_attach(GTK_GRID(bat), label, 0, 0, 1, 3);
   gtk_widget_set_hexpand(label, TRUE);
-  gtk_grid_set_row_spacing(GTK_GRID(bat), DT_PIXEL_APPLY_DPI(3));
-  gtk_grid_set_column_spacing(GTK_GRID(bat), DT_PIXEL_APPLY_DPI(3));
+  gtk_grid_set_row_spacing(GTK_GRID(bat), DT_GUI_BOX_SPACING);
+  gtk_grid_set_column_spacing(GTK_GRID(bat), DT_GUI_BOX_SPACING);
   for(int i = 0; i < 9; i++)
   {
     g->align[i] = dtgtk_togglebutton_new(dtgtk_cairo_paint_alignment, (CPF_SPECIAL_FLAG << i), NULL);

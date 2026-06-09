@@ -3245,7 +3245,7 @@ void dt_iop_gui_init_blendif(GtkBox *blendw, dt_iop_module_t *module, GtkWidget 
 {
   dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
 
-  bd->blendif_box = GTK_BOX(gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE));
+  bd->blendif_box = GTK_BOX(gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING));
   // add event box so that one can click into the area to get help for parametric masks
   GtkWidget* event_box = gtk_event_box_new();
   dt_gui_add_help_link(GTK_WIDGET(event_box), dt_get_help_url("masks_parametric"));
@@ -3259,7 +3259,7 @@ void dt_iop_gui_init_blendif(GtkBox *blendw, dt_iop_module_t *module, GtkWidget 
                                         G_CALLBACK(_blendop_blendif_reset), FALSE, 0, 0,
                                         dtgtk_cairo_paint_reset, blendif_header);
 
-    GtkWidget *header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    GtkWidget *header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
 
     bd->tab = 0;
     bd->channel_tabs_csp = DEVELOP_BLEND_CS_NONE;
@@ -3294,7 +3294,7 @@ void dt_iop_gui_init_blendif(GtkBox *blendw, dt_iop_module_t *module, GtkWidget 
     {
       dt_iop_gui_blendif_filter_t *sl = &bd->filter[in_out];
 
-      GtkWidget *slider_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+      GtkWidget *slider_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
 
       sl->slider = DTGTK_GRADIENT_SLIDER_MULTIVALUE(dtgtk_gradient_slider_multivalue_new_with_name(4,
                                                    in_out ? "blend-upper" : "blend-lower"));
@@ -3340,7 +3340,7 @@ void dt_iop_gui_init_blendif(GtkBox *blendw, dt_iop_module_t *module, GtkWidget 
       g_signal_connect(G_OBJECT(sl->slider), "key-press-event", G_CALLBACK(_blendop_blendif_key_press), module);
       g_signal_connect(G_OBJECT(sl->polarity), "toggled", G_CALLBACK(_blendop_blendif_polarity_callback), bd);
 
-      sl->box = GTK_BOX(gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE));
+      sl->box = GTK_BOX(gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING));
       gtk_box_pack_start(GTK_BOX(sl->box), GTK_WIDGET(label_box), TRUE, FALSE, 0);
       gtk_box_pack_start(GTK_BOX(sl->box), GTK_WIDGET(slider_box), TRUE, FALSE, 0);
       gtk_box_pack_start(GTK_BOX(bd->blendif_box), GTK_WIDGET(sl->box), TRUE, FALSE, 0);
@@ -3462,7 +3462,7 @@ void dt_iop_gui_init_masks(GtkBox *blendw, dt_iop_module_t *module)
 {
   dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
 
-  bd->masks_box = GTK_BOX(gtk_box_new(GTK_ORIENTATION_VERTICAL, 0));
+  bd->masks_box = GTK_BOX(gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING));
   // add event box so that one can click into the area to get help for drawn masks
   GtkWidget* event_box = gtk_event_box_new();
   dt_gui_add_help_link(GTK_WIDGET(event_box), dt_get_help_url("masks_drawn"));
@@ -3474,13 +3474,12 @@ void dt_iop_gui_init_masks(GtkBox *blendw, dt_iop_module_t *module)
     bd->masks_combo_ids = NULL;
     bd->masks_shown = DT_MASKS_EDIT_OFF;
 
-    bd->lists_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    bd->lists_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
     GtkCellRenderer *renderer = NULL;
     GtkTreeSelection *selection = NULL;
 
-    GtkWidget *group_shapes_header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-    dt_gui_add_class(group_shapes_header, "dt_section_label");
+    GtkWidget *group_shapes_header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
     bd->group_shapes_label = gtk_entry_new();
     gchar *group_placeholder = dt_dev_get_masks_group_name(module);
     gtk_entry_set_placeholder_text(GTK_ENTRY(bd->group_shapes_label), group_placeholder);
@@ -3552,7 +3551,7 @@ void dt_iop_gui_init_masks(GtkBox *blendw, dt_iop_module_t *module)
     bd->wire_shape_toggle = gtk_toggle_button_new_with_label(_("Attach shapes"));
     gtk_widget_set_tooltip_text(bd->wire_shape_toggle, _("Show all shapes and groups to choose which ones to connect to or disconnect from the mask."));
 
-    GtkWidget *bottom_bar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    GtkWidget *bottom_bar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
     gtk_box_pack_start(GTK_BOX(bottom_bar), bd->wire_shape_toggle, FALSE, FALSE, 0);
     gtk_box_pack_end(GTK_BOX(bottom_bar), bd->all_shapes_buttons, FALSE, FALSE, 0);
     gtk_box_pack_end(GTK_BOX(bd->lists_box), bottom_bar, FALSE, FALSE, 0);
@@ -3757,7 +3756,7 @@ void dt_iop_gui_init_raster(GtkBox *blendw, dt_iop_module_t *module)
 {
   dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
 
-  bd->raster_box = GTK_BOX(gtk_box_new(GTK_ORIENTATION_VERTICAL, 0));
+  bd->raster_box = GTK_BOX(gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING));
   // add event box so that one can click into the area to get help for drawn masks
   GtkWidget* event_box = gtk_event_box_new();
   dt_gui_add_help_link(GTK_WIDGET(event_box), dt_get_help_url("masks_raster"));
@@ -3766,7 +3765,7 @@ void dt_iop_gui_init_raster(GtkBox *blendw, dt_iop_module_t *module)
   /* create and add raster support if module supports it (it's coupled to masks at the moment) */
   if(bd->masks_support)
   {
-    GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
 
     bd->raster_combo = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(module));
     dt_bauhaus_disable_module_list(bd->raster_combo);
@@ -3890,8 +3889,8 @@ static void _blendop_update_top_enable_label(dt_iop_module_t *module)
 
 static GtkWidget *_blendop_create_notebook_page(GtkWidget *notebook, const gchar *label, GtkWidget **content)
 {
-  GtkWidget *page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-  *content = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  GtkWidget *page = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  *content = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(page), *content, TRUE, TRUE, 0);
   _notebook_append_full_width_page(notebook, page, label);
   return page;
@@ -3902,7 +3901,7 @@ static GtkWidget *_blendop_create_toggle_page(GtkWidget *notebook, const gchar *
                                               GtkWidget **toggle, GtkWidget **content)
 {
   GtkWidget *page = _blendop_create_notebook_page(notebook, label, content);
-  GtkWidget *header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   *toggle = _blendop_create_enable_toggle(module, mask_bit);
   gtk_box_pack_start(GTK_BOX(header), *toggle, FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(page), header, FALSE, FALSE, 0);
@@ -4375,8 +4374,8 @@ void dt_iop_gui_init_blending_body(GtkBox *blendw, dt_iop_module_t *module)
 
   ++darktable.gui->reset;
 
-  bd->top_content = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-  GtkWidget *top_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  bd->top_content = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  GtkWidget *top_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   GtkWidget *presets_button = dtgtk_button_new(dtgtk_cairo_paint_presets, 0, NULL);
   gtk_widget_set_tooltip_text(presets_button, _("blending options"));
@@ -4518,7 +4517,7 @@ void dt_iop_gui_init_blending_body(GtkBox *blendw, dt_iop_module_t *module)
                                                      "adjust its contrast"));
   g_object_set_data(G_OBJECT(bd->contrast_slider), "dt-blendop-header-update", GINT_TO_POINTER(TRUE));
 
-  GtkWidget *display_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *display_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   bd->showmask = dt_iop_togglebutton_new_no_register(module, "blend`tools", N_("display mask and/or color channel"), NULL, G_CALLBACK(_blendop_blendif_showmask_clicked),
                                                      FALSE, 0, 0, dtgtk_cairo_paint_showmask, display_box);
   gtk_widget_set_tooltip_text(bd->showmask, _("display mask and/or color channel. ctrl+click to display mask, "
@@ -4526,10 +4525,10 @@ void dt_iop_gui_init_blending_body(GtkBox *blendw, dt_iop_module_t *module)
                                               "select channel for display"));
   dt_gui_add_class(bd->showmask, "dt_transparent_background");
 
-  bd->blending_body_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  bd->blending_body_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(blendw), bd->blending_body_box, TRUE, TRUE, 0);
 
-  GtkWidget *top_header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *top_header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   bd->top_enable = _blendop_create_enable_toggle(module, DEVELOP_MASK_ENABLED);
   _blendop_update_top_enable_label(module);
   gtk_box_pack_start(GTK_BOX(top_header), bd->top_enable, FALSE, FALSE, 0);
@@ -4566,7 +4565,7 @@ void dt_iop_gui_init_blending_body(GtkBox *blendw, dt_iop_module_t *module)
   dt_iop_gui_init_blendif(GTK_BOX(bd->blendif_content), module, blendif_header);
 
   _blendop_create_notebook_page(bd->blending_notebook, _("Edges"), &bd->bottom_content);
-  GtkWidget *bottom_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  GtkWidget *bottom_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(bottom_box), bd->details_slider, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(bottom_box), bd->blur_radius_slider, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(bottom_box), bd->masks_feathering_guide_combo, TRUE, TRUE, 0);

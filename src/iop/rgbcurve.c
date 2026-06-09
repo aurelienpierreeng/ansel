@@ -1294,7 +1294,7 @@ void gui_init(struct dt_iop_module_t *self)
   g->autoscale = dt_bauhaus_combobox_from_params(self, "curve_autoscale");
   gtk_widget_set_tooltip_text(g->autoscale, _("choose between linked and independent channels."));
 
-  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
 
   g->channel_tabs = GTK_NOTEBOOK(gtk_notebook_new());
   dt_ui_notebook_page(g->channel_tabs, N_("R"), _("curve nodes for r channel"));
@@ -1317,7 +1317,7 @@ void gui_init(struct dt_iop_module_t *self)
                                                            "ctrl+drag to create a positive curve\n"
                                                            "shift+drag to create a negative curve"));
 
-  GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(self->widget), vbox, FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(vbox), GTK_WIDGET(hbox), TRUE, TRUE, 0);
 

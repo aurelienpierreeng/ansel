@@ -573,7 +573,7 @@ static void _presets_show_edit_dialog(dt_gui_presets_edit_dialog_t *g, gboolean 
   dt_osx_disallow_fullscreen(dialog);
 #endif
   GtkContainer *content_area = GTK_CONTAINER(gtk_dialog_get_content_area(GTK_DIALOG(dialog)));
-  GtkBox *box = GTK_BOX(gtk_box_new(GTK_ORIENTATION_VERTICAL, 0));
+  GtkBox *box = GTK_BOX(gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING));
   gtk_container_add(content_area, GTK_WIDGET(box));
 
   g->name = GTK_ENTRY(gtk_entry_new());
@@ -615,8 +615,8 @@ static void _presets_show_edit_dialog(dt_gui_presets_edit_dialog_t *g, gboolean 
 
   int line = 0;
   g->details = gtk_grid_new();
-  gtk_grid_set_row_spacing(GTK_GRID(g->details), DT_PIXEL_APPLY_DPI(5));
-  gtk_grid_set_column_spacing(GTK_GRID(g->details), DT_PIXEL_APPLY_DPI(10));
+  gtk_grid_set_row_spacing(GTK_GRID(g->details), DT_GUI_BOX_SPACING);
+  gtk_grid_set_column_spacing(GTK_GRID(g->details), DT_GUI_BOX_SPACING);
   gtk_box_pack_start(box, GTK_WIDGET(g->details), TRUE, TRUE, 0);
 
   GtkWidget *label = NULL;

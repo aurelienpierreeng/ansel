@@ -102,7 +102,7 @@ GtkWidget *ctx_gtk_menu_item_new_with_icon(const char *label, GtkWidget *menu,
                                              gpointer user_data, dt_menu_icon_t icon)
 {
   GtkWidget *menu_item = gtk_menu_item_new();
-  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   GtkWidget *icon_widget = gtk_drawing_area_new();
   GtkWidget *label_widget = gtk_label_new(NULL);
 
@@ -133,8 +133,8 @@ GtkWidget *ctx_gtk_menu_item_new_with_icon_and_shortcut(const char *label, const
                                                            gpointer user_data, dt_menu_icon_t icon)
 {
   GtkWidget *menu_item = gtk_menu_item_new();
-  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-  GtkWidget *left_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
+  GtkWidget *left_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   GtkWidget *icon_widget = gtk_drawing_area_new();
   GtkWidget *label_widget = gtk_label_new(NULL);
   GtkWidget *shortcut_widget = gtk_label_new(shortcut);
@@ -191,7 +191,7 @@ GtkWidget *ctx_gtk_menu_item_new_with_markup_and_shortcut(const char *label, con
                                                              gpointer user_data)
 {
   GtkWidget *menu_item = gtk_menu_item_new();
-  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 16);
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   GtkWidget *label_widget = gtk_label_new(NULL);
   GtkWidget *shortcut_widget = gtk_label_new(shortcut);
 
@@ -221,7 +221,7 @@ GtkWidget *ctx_gtk_menu_item_new_with_markup_and_pixbuf(const char *label, GdkPi
                                                            gpointer user_data)
 {
   GtkWidget *menu_item = gtk_menu_item_new();
-  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   GtkWidget *image_widget = icon ? gtk_image_new_from_pixbuf(icon) : gtk_image_new();
   GtkWidget *label_widget = gtk_label_new(NULL);
 
@@ -249,7 +249,7 @@ GtkWidget *ctx_gtk_check_menu_item_new_with_markup(const char *label,
                                                    const gboolean show_checkbox)
 {
   GtkWidget *menu_item = gtk_check_menu_item_new();
-  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   GtkWidget *label_widget = gtk_label_new(NULL);
 
   gtk_label_set_markup(GTK_LABEL(label_widget), label);
@@ -288,8 +288,8 @@ GtkWidget *ctx_gtk_check_menu_item_new_with_markup_and_pixbuf(const char *label,
                                                                  const gboolean show_checkbox)
 {
   GtkWidget *menu_item = gtk_check_menu_item_new();
-  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
-  GtkWidget *left_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
+  GtkWidget *left_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   GtkWidget *image_widget = icon ? gtk_image_new_from_pixbuf(icon) : gtk_image_new();
   GtkWidget *label_widget = gtk_label_new(NULL);
 
