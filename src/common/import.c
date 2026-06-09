@@ -768,7 +768,7 @@ static void _set_test_path(dt_lib_import_t *d, dt_image_t *img)
 
   if(IS_NULL_PTR(file->data) || !dt_supported_image(file->data))
   {
-    gtk_label_set_text(GTK_LABEL(d->test_path), _("Result of the pattern : please select a picture file"));
+    gtk_label_set_text(GTK_LABEL(d->test_path), _("Choose a file to see the result..."));
     return;
   }
   else
@@ -812,7 +812,7 @@ static void _set_test_path(dt_lib_import_t *d, dt_image_t *img)
     }
 
     if(fake_path && fake_path[0] != 0)
-      _gtk_label_set_and_free(d->test_path, g_strdup_printf(_("Result of the pattern : ...%s"), fake_path));
+      _gtk_label_set_and_free(d->test_path, g_strdup_printf(_("...%s"), fake_path));
     else
       gtk_label_set_text(GTK_LABEL(d->test_path), _("Can't build a valid path."));
 
@@ -1078,8 +1078,8 @@ static void gui_init(dt_lib_import_t *d)
   /* Grid of options for copy/duplicate */
   d->grid = gtk_grid_new();
   GtkGrid *grid = GTK_GRID(d->grid);
-  gtk_grid_set_column_spacing(grid, DT_GUI_BOX_SPACING);
-  gtk_grid_set_row_spacing(grid, DT_GUI_BOX_SPACING);
+  gtk_grid_set_column_spacing(grid, DT_GUI_BOX_SPACING / 2.);
+  gtk_grid_set_row_spacing(grid, DT_GUI_BOX_SPACING / 2.);
   gtk_grid_set_column_homogeneous(grid, FALSE);
   gtk_grid_set_row_homogeneous(grid, FALSE);
 
@@ -1272,6 +1272,15 @@ static void gui_init(dt_lib_import_t *d)
   dt_gtkentry_setup_completion(GTK_ENTRY(file), dt_gtkentry_get_default_path_compl_list(), "$(");
   g_signal_connect(G_OBJECT(file), "changed", G_CALLBACK(_filename_changed), d);
 
+  GtkWidget *pattern_label = gtk_label_new(_("Pattern result"));
+  gtk_widget_set_halign(pattern_label, GTK_ALIGN_START);
+
+  d->test_path = gtk_label_new(_("Choose a file to see the result..."));
+  gtk_widget_set_halign(d->test_path, GTK_ALIGN_START);
+  gtk_label_set_line_wrap(GTK_LABEL(d->test_path), TRUE);
+  gtk_label_set_max_width_chars(GTK_LABEL(d->test_path), 60);
+  _set_test_path(d, NULL);
+
   /* Create the grid of import params when using duplication */
   int row = 0;
   _attach_grid_separator(GTK_WIDGET(grid), row, 5);
@@ -1280,11 +1289,13 @@ static void gui_init(dt_lib_import_t *d)
   // Row 0: labels for text entries
   gtk_grid_attach(grid, calendar_label, 0, row, 1, 1);
   gtk_grid_attach(grid, jobcode_label, 2, row, 1, 1);
+  gtk_grid_attach(grid, pattern_label, 4, row, 1, 1);
   row++;
 
   // Row 1: text entries
   gtk_grid_attach(grid, GTK_WIDGET(box_calendar), 0, row, 1, 1);
   gtk_grid_attach(grid, jobcode, 2, row, 1, 1);
+  gtk_grid_attach(grid, d->test_path, 4, row, 1, 1);
   row++;
 
   // Row 2: separator
@@ -1305,14 +1316,7 @@ static void gui_init(dt_lib_import_t *d)
   gtk_grid_attach(grid, file, 4, row, 1, 1);
   row++;
 
-  _attach_grid_separator(GTK_WIDGET(grid), row, 5);
-
   gtk_box_pack_start(GTK_BOX(rbox), GTK_WIDGET(grid), FALSE, FALSE, 0);
-
-  d->test_path = gtk_label_new("");
-  gtk_box_pack_start(GTK_BOX(rbox), GTK_WIDGET(d->test_path), FALSE, FALSE, 0);
-  gtk_widget_set_halign(d->test_path, GTK_ALIGN_START);
-  _set_test_path(d, NULL);
 
   gtk_widget_show_all(d->dialog);
 
