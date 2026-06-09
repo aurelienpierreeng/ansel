@@ -1908,9 +1908,9 @@ void dtgtk_cairo_paint_label(cairo_t *cr, gint x, gint y, gint w, gint h, gint f
 
 void dtgtk_cairo_paint_label_sel(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data)
 {
-  PREAMBLE(0.9, 1, 0, 0)
+  PREAMBLE(1., 1, 0, 0)
 
-  const double r = 0.45;
+  const double r = 0.5;
   const dt_colorlabels_enum color = (flags & 7);
 
   if(color < DT_COLORLABELS_LAST)
@@ -2070,7 +2070,7 @@ void dtgtk_cairo_paint_local_copy(cairo_t *cr, gint x, gint y, gint w, gint h, g
 
 void dtgtk_cairo_paint_altered(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data)
 {
-  PREAMBLE(0.5 * 0.88, 1, 0.5, 0.5)
+  PREAMBLE(0.5, 1, 0.5, 0.5)
 
   cairo_push_group(cr);
 
@@ -2107,7 +2107,7 @@ void dtgtk_cairo_paint_altered(cairo_t *cr, gint x, gint y, gint w, gint h, gint
 
 void dtgtk_cairo_paint_unaltered(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data)
 {
-  PREAMBLE(0.5 * 0.85, 1, 0.5, 0.5)
+  PREAMBLE(0.5, 1, 0.5, 0.5)
 
   cairo_push_group(cr);
 
@@ -2406,7 +2406,7 @@ void dtgtk_cairo_paint_help(cairo_t *cr, gint x, gint y, gint w, gint h, gint fl
 
 void dtgtk_cairo_paint_grouping(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data)
 {
-  PREAMBLE(1.08, 1, 0, 0)
+  PREAMBLE(1.15, 1, 0, 0)
 
   cairo_move_to(cr, 0.30, 0.15);
   cairo_line_to(cr, 0.95, 0.15);

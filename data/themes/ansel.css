@@ -316,6 +316,11 @@ separator.vertical {
   margin-bottom: 2px;
 }
 
+separator.subsection.vertical {
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+}
+
 menu separator {
   min-height: 1px;
 }
@@ -368,8 +373,7 @@ togglebutton {
 button,
 .dt_module_btn,
 togglebutton,
-spinbutton,
-combobox {
+spinbutton {
   /* 
     Do NOT change sizing here. 
     em is proportional to font size and adjusts dynamically 
@@ -1559,7 +1563,8 @@ menu.dt-masks-context-menu menuitem.dt-masks-checked:not(:disabled) label.dt-mas
 .thumb-altered,
 .thumb-group,
 .thumb-audio {
-  margin-left: 6px;
+  margin-left: 3px;
+  padding: 1px;
 }
 
 .thumb-zoom-label {
