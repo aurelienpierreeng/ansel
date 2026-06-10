@@ -359,7 +359,9 @@ static void _ensure_page_widgets(dt_lib_module_t *self)
   for(int i = 0; i < MOD_TAB_LAST; i++)
   {
     if(!IS_NULL_PTR(d->pages[i])) continue;
-    _modulegroups_track_widget(&d->pages[i], gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING));
+    GtkWidget *container = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+    dt_gui_add_class(container, "module-groups-container");
+    _modulegroups_track_widget(&d->pages[i], container);
     gtk_widget_show(d->pages[i]);
     gtk_drag_dest_set(d->pages[i], 0, _modulegroups_target_list, _modulegroups_n_targets, GDK_ACTION_COPY);
     g_signal_connect(d->pages[i], "drag-data-received", G_CALLBACK(_modulegroups_drag_data_received), self);
@@ -391,7 +393,9 @@ static void _ensure_page_widgets(dt_lib_module_t *self)
     }
     if(IS_NULL_PTR(d->containers[i]))
     {
-      _modulegroups_track_widget(&d->containers[i], gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING));
+      GtkWidget *container = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+      dt_gui_add_class(container, "module-groups-container");
+      _modulegroups_track_widget(&d->containers[i], container);
       gtk_box_pack_start(GTK_BOX(d->pages[MOD_TAB_BASIC]), d->containers[i], FALSE, FALSE, 0);
       gtk_widget_show(d->containers[i]);
     }

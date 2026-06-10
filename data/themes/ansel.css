@@ -573,8 +573,12 @@ dialog,
  * Make them visually different to signal it.
  */
 
+.module-groups-container {
+  padding: 12px 0;
+}
+
 .dt_iop_module.dt_module_frame {
-  margin: -1px 6px; /* no vertical margin: that's handled as children spacing by the container */
+  margin: 0 6px; /* no vertical margin: that's handled as children spacing by the container */
   padding: 0;
   border-radius: 15px;
   border: 2px solid @grey_35;
@@ -586,14 +590,6 @@ dialog,
   border: 2px solid @grey_75;
   margin-top: 6px;
   margin-bottom: 6px;
-}
-
-.dt_iop_module:first-child {
-  margin-top: 12px;
-}
-
-.dt_iop_module:last-child {
-  margin-bottom: 12px;
 }
 
 .dt_iop_module #module-header {
@@ -699,14 +695,15 @@ dialog,
   padding: 0;
   color: @section_label;
   border-bottom: 1px solid @grey_90;
-  font-weight: 300;
   padding: 0;
 }
+
+/* Section labels for the "basic" tab */
 
 #plugins_box .dt_section_label {
   color: @grey_15;
   border-bottom-color: @grey_15;
-  margin: 0 3px -12px;
+  margin: 0 12px 0;
 }
 
 #plugins_box .dt_plugin_ui_main .dt_section_label {
