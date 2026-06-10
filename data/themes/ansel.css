@@ -930,7 +930,7 @@ notebook tab:checked label {
 but we trick them only for tabs. We need a margin below tabs
 only if the pages are populated, so we reset the rule on .empty class.
 */
-notebook stack {
+notebook > stack {
   padding-top: 10px;
 }
 
