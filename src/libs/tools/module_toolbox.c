@@ -91,6 +91,8 @@ void gui_init(dt_lib_module_t *self)
   gtk_flow_box_set_row_spacing(GTK_FLOW_BOX(d->container), DT_GUI_BOX_SPACING);
   /* allow children to keep their natural widths (don't force uniform cells) */
   gtk_flow_box_set_homogeneous(GTK_FLOW_BOX(d->container), FALSE);
+  gtk_flow_box_set_max_children_per_line(GTK_FLOW_BOX(d->container), 20);
+
   gtk_style_context_add_class(gtk_widget_get_style_context(d->container), "dt-module-toolbox");
 
   /* setup proxy */
