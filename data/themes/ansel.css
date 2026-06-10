@@ -278,6 +278,7 @@ box * {
   font-family: "Roboto Condensed", "Roboto", "Segoe UI Condensed", "Segoe UI", "SF Pro Display", "SF Pro Display", "Ubuntu Condensed", "Ubuntu", "IPAPGothic", "Cantarell", sans-serif;
   font-weight: 400;
   font-stretch: condensed;
+  font-size: 1.05em;
 }
 
 /* Normal Weight UI Elements */
@@ -639,8 +640,6 @@ dialog,
 }
 
 #module-header .dt_module_btn.dt_iop_enable_button {
-  min-width: 1.1em;
-  min-height: 1.1em;
   margin: 0 3px 0 -6px;
   color: @grey_50;
   background: transparent;
@@ -680,8 +679,6 @@ dialog,
 #lib-panel-label {
   color: @plugin_label_color;
   padding: 0;
-  font-size: 1.1em;
-  min-width: 1.1em;
   margin-left: -3px;
 }
 
