@@ -347,8 +347,6 @@ menu separator {
 .dt_module_btn,
 .dt_module_btn:disabled,
 .dt_transparent_background,
-.dt_transparent_background:checked,
-.dt_transparent_background check:selected,
 .dt_ignore_fg_state:checked,
 filechooser .sidebar-button,
 menuitem:hover arrow,
@@ -446,9 +444,12 @@ checkbutton label {
   background-image: none;
 }
 
-checkbutton check {
+check,
+checkbutton check,
+menuitem check,
+treeview check {
   border: none;
-  background-color: @button_bg;
+  background-color: rgba(0, 0, 0, 0.2);
   background-image: none;
   margin-right: 3px;
 }
@@ -878,13 +879,6 @@ popover,
 filechooser .sidebar-icon,
 filechooser .sidebar-label {
   padding: 0.42em;
-}
-
-menuitem check,
-menuitem check:selected {
-  min-width: 0.7em;
-  min-height: 0.7em;
-  margin: 0 0.35em;
 }
 
 .dt_bauhaus_popup {
@@ -1678,17 +1672,11 @@ filechooser *:active {
   caret-color: @field_active_fg;
 }
 
-treeview check:selected {
-  background-color: @button_bg;
-  border-color: @plugin_bg_color;
-}
-
 checkbutton check:checked,
 treeview check:checked,
 treeview check:selected,
 menuitem check:checked,
 menuitem check:selected {
-  background-color: @button_bg;
   color: @bauhaus_value_text;
   caret-color: @bauhaus_value_text;
   border-color: @bauhaus_value_text;
@@ -1756,18 +1744,4 @@ textview text selection {
 
 .iop_drop_after {
   border-top: 2.4em solid @plugin_bg_color;
-}
-
-/* Masks context menus fixes */
-menu.dt-masks-context-menu menuitem.dt-masks-hide-check check {
-  -gtk-icon-source: none;
-  min-width: 0;
-  min-height: 0;
-  margin: 0;
-  padding: 0;
-  opacity: 0;
-}
-
-menu.dt-masks-context-menu menuitem.dt-masks-checked label.dt-masks-checked-label {
-  font-weight: 600;
 }
