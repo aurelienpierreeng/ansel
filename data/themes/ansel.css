@@ -565,7 +565,7 @@ dialog,
 
 .dt_plugin_ui_main,
 #guides-module-combobox {
-  padding: 12px;
+  padding: 10px;
   border: none;
 }
 
@@ -601,14 +601,14 @@ dialog,
 .dt_iop_module #module-header {
   min-height: 1em;
   border-radius: 8px;
-  padding: 6px 12px;
+  padding: 6px 10px;
   background-color: @grey_38;
 }
 
 .dt_lib_module #module-header {
   min-height: 1em;
   border-top: 2px solid @grey_65;
-  padding: 6px 12px;
+  padding: 6px 10px;
   background-color: @grey_38;
 }
 
@@ -705,7 +705,7 @@ dialog,
 #plugins_box .dt_section_label {
   color: @grey_15;
   border-bottom-color: @grey_15;
-  margin: 0 12px 0;
+  margin: 0 10px 0;
 }
 
 #plugins_box .dt_plugin_ui_main .dt_section_label {
@@ -911,6 +911,10 @@ popover spinbutton {
   color: @grey_25;
 }
 
+notebook header {
+  margin-top: -10px;
+}
+
 notebook tab {
   min-height: 1em;
 }
@@ -944,6 +948,10 @@ notebook.empty stack {
 }
 
 /* Shared Notebook & Ring Tabs */
+#modules-tabs header {
+  margin-top: 0;
+}
+
 #modules-tabs notebook tab,
 #colorequal-ring-tabs>header>tabs>tab {
   padding: 0;
@@ -970,8 +978,7 @@ notebook.empty stack {
 }
 
 #modules-tabs notebook tabs arrow {
-  min-width: 1.4em;
-  min-height: 1.4em;
+  font-size: 1.4em;
   padding: 3px;
 }
 
