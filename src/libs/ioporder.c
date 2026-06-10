@@ -779,6 +779,7 @@ static dt_ioporder_graph_node_t *_ioporder_create_graph_node(dt_iop_module_t *mo
   GtkWidget *presets = dtgtk_button_new(dtgtk_cairo_paint_presets, 0, NULL);
 
   dt_gui_add_class(frame, "dt_module_frame");
+  dt_gui_add_class(frame, "dt_iop_module");
   gtk_widget_set_name(body, "module-header");
   dt_gui_add_class(enable, "dt_transparent_background");
   dt_gui_add_class(enable, "dt_iop_enable_button");
@@ -890,6 +891,7 @@ static dt_ioporder_graph_node_t *_ioporder_create_endpoint_node(const char *labe
   GtkWidget *title = gtk_label_new(label);
 
   dt_gui_add_class(frame, "dt_module_frame");
+  dt_gui_add_class(frame, "dt_iop_module");
   gtk_frame_set_shadow_type(GTK_FRAME(frame), GTK_SHADOW_NONE);
   gtk_widget_set_size_request(event_box, DT_PIXEL_APPLY_DPI(180), DT_PIXEL_APPLY_DPI(64));
   gtk_widget_set_halign(event_box, GTK_ALIGN_START);

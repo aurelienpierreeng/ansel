@@ -1248,6 +1248,7 @@ GtkWidget *dt_lib_gui_get_expander(dt_lib_module_t *module)
 
   GtkWidget *expander = dtgtk_expander_new(header, module->widget);
   dt_gui_add_class(expander, "dt_module_frame");
+  dt_gui_add_class(expander, "dt_lib_module");
 
   GtkWidget *header_evb = dtgtk_expander_get_header_event_box(DTGTK_EXPANDER(expander));
   GtkWidget *body_evb = dtgtk_expander_get_body_event_box(DTGTK_EXPANDER(expander));

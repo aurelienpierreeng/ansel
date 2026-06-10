@@ -2747,6 +2747,7 @@ void dt_iop_gui_set_expander(dt_iop_module_t *module)
   GtkWidget *iopw = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   GtkWidget *expander = dtgtk_expander_new(header, iopw);
   dt_gui_add_class(expander, "dt_module_frame");
+  dt_gui_add_class(expander, "dt_iop_module");
 
   GtkWidget *header_evb = dtgtk_expander_get_header_event_box(DTGTK_EXPANDER(expander));
   GtkWidget *body_evb = dtgtk_expander_get_body_event_box(DTGTK_EXPANDER(expander));

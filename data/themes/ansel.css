@@ -472,10 +472,6 @@ scrolledwindow {
   border-bottom: none;
 }
 
-#right #plugins_box {
-  padding: 10px 0;
-}
-
 #top {
   box-shadow: 0 0 4px rgba(0, 0, 0, 0.5);
 }
@@ -577,7 +573,7 @@ dialog,
  * Make them visually different to signal it.
  */
 
-#right .dt_module_frame {
+.dt_iop_module.dt_module_frame {
   margin: -1px 6px; /* no vertical margin: that's handled as children spacing by the container */
   padding: 0;
   border-radius: 15px;
@@ -585,31 +581,39 @@ dialog,
   border-radius: 10px;
 }
 
-#right .dt_module_focus,
-#right .dt_module_frame:focus {
+.dt_iop_module.dt_module_focus,
+.dt_iop_module.dt_module_frame:focus {
   border: 2px solid @grey_75;
 }
 
-#right #module-header {
+.dt_iop_module:first-child {
+  margin-top: 12px;
+}
+
+.dt_iop_module:last-child {
+  margin-bottom: 12px;
+}
+
+.dt_iop_module #module-header {
   min-height: 1em;
   border-radius: 8px;
   padding: 6px 12px;
   background-color: @grey_38;
 }
 
-#left #module-header {
+.dt_lib_module #module-header {
   min-height: 1em;
   border-top: 2px solid @grey_65;
   padding: 6px 12px;
   background-color: @grey_38;
 }
 
-#right .expanded #module-header {
+.dt_iop_module.expanded #module-header {
   border-radius: 8px 8px 0 0;
   border-bottom: 2px solid @grey_35;
 }
 
-#left .expanded #module-header {
+.dt_lib_module.expanded #module-header {
   border-bottom: 2px solid @grey_35;
 }
 
