@@ -2388,7 +2388,7 @@ static void dt_bauhaus_draw_quad(struct dt_bauhaus_widget_t *w, cairo_t *cr, con
   else if(w->type == DT_BAUHAUS_COMBOBOX)
   {
     // draw combobox chevron
-    cairo_translate(cr, x + w->bauhaus->quad_width / 2., y + w->bauhaus->line_height / 2.);
+    cairo_translate(cr, x + w->bauhaus->quad_width / 2. - INNER_PADDING, y + w->bauhaus->line_height / 2.);
     const float r = w->bauhaus->quad_width * .2f;
     cairo_move_to(cr, -r, -r * .5f);
     cairo_line_to(cr, 0, r * .5f);
