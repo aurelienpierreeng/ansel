@@ -3383,6 +3383,7 @@ void gui_init(dt_lib_module_t *self)
 
   // Main notebook
   d->notebook = GTK_WIDGET(dt_ui_notebook_new());
+  dt_gui_add_class(d->notebook, "empty");
 
   dt_ui_notebook_page(GTK_NOTEBOOK(d->notebook), _("Folders"), _("Browse the content of folders known to Ansel"));
   dt_ui_notebook_page(GTK_NOTEBOOK(d->notebook), _("Collections"), _("Query files by hierarchical tags"));

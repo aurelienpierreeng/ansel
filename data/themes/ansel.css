@@ -914,10 +914,6 @@ popover spinbutton {
   color: @grey_25;
 }
 
-notebook header {
-  margin-bottom: 10px;
-}
-
 notebook tab {
   min-height: 1em;
 }
@@ -938,11 +934,19 @@ notebook tab:checked label {
   color: @grey_95;
 }
 
-/* Shared Notebook & Ring Tabs */
-#modules-tabs notebook header {
-  margin-bottom: 0;
+/* Some notebooks don't contain actual pages/stack
+but we trick them only for tabs. We need a margin below tabs
+only if the pages are populated, so we reset the rule on .empty class.
+*/
+notebook stack {
+  padding-top: 10px;
 }
 
+notebook.empty stack {
+  padding-top: 0;
+}
+
+/* Shared Notebook & Ring Tabs */
 #modules-tabs notebook tab,
 #colorequal-ring-tabs>header>tabs>tab {
   padding: 0;

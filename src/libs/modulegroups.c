@@ -1012,6 +1012,7 @@ void gui_init(dt_lib_module_t *self)
 
   /* Tabs */
   d->notebook = GTK_WIDGET(gtk_notebook_new());
+  dt_gui_add_class(d->notebook, "empty");
   char *labels[] = { _("Pipeline"), _("Basic"), _("Repair"), _("Sharpness"), _("Effects"), _("Technics"), _("All") };
   char *tooltips[]
       = { _("List all modules currently enabled in the reverse order of application in the pipeline."),
