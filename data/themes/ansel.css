@@ -584,6 +584,8 @@ dialog,
 .dt_iop_module.dt_module_focus,
 .dt_iop_module.dt_module_frame:focus {
   border: 2px solid @grey_75;
+  margin-top: 6px;
+  margin-bottom: 6px;
 }
 
 .dt_iop_module:first-child {
