@@ -600,7 +600,7 @@ dialog,
 #left #module-header {
   min-height: 1em;
   border-top: 2px solid @grey_65;
-  padding: 10px 12px;
+  padding: 6px 12px;
   background-color: @grey_38;
 }
 
@@ -638,6 +638,12 @@ dialog,
   color: @grey_50;
   background: transparent;
   border-color: transparent;
+}
+
+#module-header .dt_module_btn.dt-collapse-arrow {
+  min-width: 1em;
+  min-height: 1em;
+  margin: 0 3px 0 -6px;
 }
 
 #module-header .dt_iop_enable_button:hover,

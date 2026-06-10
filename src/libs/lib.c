@@ -1093,6 +1093,13 @@ void dt_lib_gui_set_expanded(dt_lib_module_t *module, gboolean expanded)
   else
     dt_gui_remove_class(module->expander, "expanded");
 
+  // Update expander arrow state
+  // Note: directions are inverted in drawing method for some reason.
+  dtgtk_button_set_paint(DTGTK_BUTTON(module->arrow), 
+                         dtgtk_cairo_paint_arrow,
+                         (expanded ? CPF_DIRECTION_UP : CPF_DIRECTION_LEFT), 
+                         NULL);
+
   /* store expanded state of module */
   char var[1024];
   const dt_view_t *current_view = dt_view_manager_get_current_view(darktable.view_manager);
@@ -1127,6 +1134,43 @@ gboolean dt_lib_gui_get_expanded(dt_lib_module_t *module)
   return dtgtk_expander_get_expanded(DTGTK_EXPANDER(module->expander));
 }
 
+static void _toggle_expanded(dt_lib_module_t *module, gboolean close_all)
+{
+  if(close_all)
+  {
+    const dt_view_t *v = dt_view_manager_get_current_view(darktable.view_manager);
+    gboolean all_other_closed = TRUE;
+    uint32_t container = module->container(module);
+
+    for(const GList *it = darktable.lib->plugins; it; it = g_list_next(it))
+    {
+      dt_lib_module_t *m = (dt_lib_module_t *)it->data;
+
+      if(m != module && container == m->container(m) && m->expandable(m) && dt_lib_is_visible_in_view(m, v))
+      {
+        if(m->expander && DTGTK_IS_EXPANDER(m->expander))
+          all_other_closed = all_other_closed && !dtgtk_expander_get_expanded(DTGTK_EXPANDER(m->expander));
+
+        dt_lib_gui_set_expanded(m, FALSE);
+      }
+    }
+    if(all_other_closed)
+      dt_lib_gui_set_expanded(module, !dt_lib_gui_get_expanded(module));
+    else
+      dt_lib_gui_set_expanded(module, TRUE);
+  }
+  else
+  {
+    /* else just toggle */
+    dt_lib_gui_set_expanded(module, !dt_lib_gui_get_expanded(module));
+  }
+}
+
+static void expand_callback(GtkButton *button, dt_lib_module_t *module)
+{
+  _toggle_expanded(module, FALSE);
+}
+
 static gboolean _lib_plugin_header_button_press(GtkWidget *w, GdkEventButton *e, gpointer user_data)
 {
   if(e->type == GDK_2BUTTON_PRESS || e->type == GDK_3BUTTON_PRESS) return TRUE;
@@ -1152,31 +1196,7 @@ static gboolean _lib_plugin_header_button_press(GtkWidget *w, GdkEventButton *e,
     gtk_widget_grab_focus(GTK_WIDGET(module->expander));
 
     /* handle shiftclick on expander, hide all except this */
-    if(dt_modifier_is(e->state, GDK_SHIFT_MASK))
-    {
-      const dt_view_t *v = dt_view_manager_get_current_view(darktable.view_manager);
-      gboolean all_other_closed = TRUE;
-      for(const GList *it = darktable.lib->plugins; it; it = g_list_next(it))
-      {
-        dt_lib_module_t *m = (dt_lib_module_t *)it->data;
-
-        if(m != module && container == m->container(m) && m->expandable(m) && dt_lib_is_visible_in_view(m, v))
-        {
-          if(m->expander && DTGTK_IS_EXPANDER(m->expander))
-            all_other_closed = all_other_closed && !dtgtk_expander_get_expanded(DTGTK_EXPANDER(m->expander));
-          dt_lib_gui_set_expanded(m, FALSE);
-        }
-      }
-      if(all_other_closed)
-        dt_lib_gui_set_expanded(module, !dt_lib_gui_get_expanded(module));
-      else
-        dt_lib_gui_set_expanded(module, TRUE);
-    }
-    else
-    {
-      /* else just toggle */
-      dt_lib_gui_set_expanded(module, !dt_lib_gui_get_expanded(module));
-    }
+    _toggle_expanded(module, dt_modifier_is(e->state, GDK_SHIFT_MASK));
 
     return TRUE;
   }
@@ -1245,6 +1265,16 @@ GtkWidget *dt_lib_gui_get_expander(dt_lib_module_t *module)
   /*
    * initialize the header widgets
    */
+
+  /* add collapsing arrow */
+  if(module->expandable(module))
+  {
+    module->arrow = dtgtk_button_new(dtgtk_cairo_paint_arrow, 0, NULL);
+    g_signal_connect(G_OBJECT(module->arrow), "clicked", G_CALLBACK(expand_callback), module);
+    gtk_box_pack_start(GTK_BOX(header), module->arrow, FALSE, FALSE, 0);
+    dt_gui_add_class(module->arrow, "dt-collapse-arrow");
+  }
+
   /* add module label */
   GtkWidget *label = gtk_label_new("");
   GtkWidget *label_evb = gtk_event_box_new();

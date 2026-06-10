@@ -272,16 +272,19 @@ void dtgtk_cairo_paint_arrow(cairo_t *cr, gint x, gint y, gint w, gint h, gint f
   C = flags & CPF_DIRECTION_UP ? cosf(-(M_PI * 1.5f)) : C;
   S = flags & CPF_DIRECTION_UP ? sinf(-(M_PI * 1.5f)) : S;
   cairo_matrix_t rotation_matrix;
-  cairo_matrix_init(&rotation_matrix, C, S, -S, C, 0.5 - C * 0.5 + S * 0.5, 0.5 - S * 0.5 - C * 0.5);
+  cairo_matrix_init(&rotation_matrix, 
+                    C, S, -S, C, 
+                    0.5 - C * 0.5 + S * 0.5, 
+                    0.5 - S * 0.5 - C * 0.5);
 
   if(flags & CPF_DIRECTION_UP || flags & CPF_DIRECTION_DOWN)
     cairo_transform(cr, &rotation_matrix);
   else if(flags & CPF_DIRECTION_RIGHT) // Flip x transformation
     cairo_transform(cr, &hflip_matrix);
 
-  cairo_move_to(cr, 0.2, 0.1);
-  cairo_line_to(cr, 0.9, 0.5);
-  cairo_line_to(cr, 0.2, 0.9);
+  cairo_move_to(cr, 0.25, 0.1);
+  cairo_line_to(cr, 0.75, 0.5);
+  cairo_line_to(cr, 0.25, 0.9);
   cairo_stroke(cr);
 
   FINISH
