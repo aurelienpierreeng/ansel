@@ -9,8 +9,8 @@
 {
   GtkWidget *widget, *label, *labelev, *viewport, *box;
   GtkWidget *grid = gtk_grid_new();
-  gtk_grid_set_row_spacing(GTK_GRID(grid), DT_GUI_BOX_SPACING));
-  gtk_grid_set_column_spacing(GTK_GRID(grid), DT_GUI_BOX_SPACING));
+  gtk_grid_set_row_spacing(GTK_GRID(grid), DT_GUI_BOX_SPACING);
+  gtk_grid_set_column_spacing(GTK_GRID(grid), DT_GUI_BOX_SPACING);
   gtk_widget_set_valign(grid, GTK_ALIGN_START);
   int line = 0;
   char tooltip[1024];
@@ -31,8 +31,8 @@
 {
   GtkWidget *widget, *label, *labelev, *viewport, *box;
   GtkWidget *grid = gtk_grid_new();
-  gtk_grid_set_row_spacing(GTK_GRID(grid), DT_GUI_BOX_SPACING));
-  gtk_grid_set_column_spacing(GTK_GRID(grid), DT_GUI_BOX_SPACING));
+  gtk_grid_set_row_spacing(GTK_GRID(grid), DT_GUI_BOX_SPACING);
+  gtk_grid_set_column_spacing(GTK_GRID(grid), DT_GUI_BOX_SPACING);
   gtk_widget_set_valign(grid, GTK_ALIGN_START);
   int line = 0;
   char tooltip[1024];
