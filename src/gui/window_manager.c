@@ -588,11 +588,15 @@ void dt_ui_init_main_table(GtkWidget *parent, dt_ui_t *ui)
   gtk_box_pack_start(GTK_BOX(parent), container, TRUE, TRUE, 0);
   gtk_widget_show(container);
 
-  /* initialize the top container */
+  /* initialize toolboxes panels */
   _ui_init_panel_top(ui, container);
+  _ui_init_panel_bottom(ui, container);
+  _ui_init_panel_left(ui, container);
+  _ui_init_panel_right(ui, container);
 
-  /* initialize the center top/center/bottom */
+  /* initialize the main drawing widget (center) */
   widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  gtk_widget_set_name(widget, "main-widget");
   gtk_widget_set_hexpand(GTK_WIDGET(widget), TRUE);
   gtk_widget_set_vexpand(GTK_WIDGET(widget), TRUE);
   gtk_grid_attach(GTK_GRID(container), widget, 2, 1, 1, 1);
@@ -627,11 +631,6 @@ void dt_ui_init_main_table(GtkWidget *parent, dt_ui_t *ui)
   /* center should redraw when signal redraw center is raised*/
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_CONTROL_REDRAW_CENTER,
                             G_CALLBACK(_ui_widget_redraw_callback), ui->center);
-
-  /* initialize panels */
-  _ui_init_panel_bottom(ui, container);
-  _ui_init_panel_left(ui, container);
-  _ui_init_panel_right(ui, container);
 
   gtk_widget_show_all(container);
 }
