@@ -8,6 +8,8 @@ Prefer explicit code at the call site over helper indirection when the code cont
 
 Code should be documented through Doxygen docstrings. In particular, the design choices need to be explained. Add in comments explainations on what we are looping on, looking for what.
 
+Design decisions are documented in ./doc Markdown files. While these might be slightly outdated compared to current code, regarding implementation, they hold the initial intents that should prevail in case of misunderstanding of the codebase or disagreements between several APIs.
+
 ## Helper policy
 
 Do not introduce or keep helper functions whose main effect is to hide:

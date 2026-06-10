@@ -767,7 +767,7 @@ static dt_ioporder_graph_node_t *_ioporder_create_graph_node(dt_iop_module_t *mo
   GtkWidget *event_box = gtk_event_box_new();
   GtkWidget *frame = gtk_frame_new(NULL);
   GtkWidget *body = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
-  GtkWidget *header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
+  GtkWidget *header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING / 2.);
   gchar *clean_name = delete_underscore(module->name());
   gchar **split_name = g_strsplit(clean_name, "-", -1);
   gchar *module_name = g_strjoinv(" ", split_name);

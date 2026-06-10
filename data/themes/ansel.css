@@ -679,6 +679,12 @@ dialog,
   padding: 0;
   font-size: 1.1em;
   min-width: 1.1em;
+  margin-left: -3px;
+}
+
+.dt_iop_module #iop_description,
+.dt_iop_module #iop_description #iop-panel-label {
+  margin-left: -10px;
 }
 
 .dt_module_focus #iop-panel-label,
@@ -698,7 +704,7 @@ dialog,
 #plugins_box .dt_section_label {
   color: @grey_15;
   border-bottom-color: @grey_15;
-  margin: 3px 3px 0;
+  margin: 0 3px -12px;
 }
 
 #plugins_box .dt_plugin_ui_main .dt_section_label {

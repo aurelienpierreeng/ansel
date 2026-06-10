@@ -2741,7 +2741,7 @@ gboolean _iop_tooltip_callback(GtkWidget *widget, gint x, gint y, gboolean keybo
 
 void dt_iop_gui_set_expander(dt_iop_module_t *module)
 {
-  GtkWidget *header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
+  GtkWidget *header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING / 2.);
   gtk_widget_set_name(GTK_WIDGET(header), "module-header");
 
   GtkWidget *iopw = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
