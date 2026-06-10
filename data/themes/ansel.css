@@ -587,7 +587,7 @@ dialog,
   margin: 0 6px; /* no vertical margin: that's handled as children spacing by the container */
   padding: 0;
   border-radius: 15px;
-  border: 2px solid @grey_35;
+  border: 1px solid @grey_35;
   border-radius: 10px;
 }
 
@@ -598,18 +598,20 @@ dialog,
   margin-bottom: 6px;
 }
 
+.dt_lib_module #module-header,
 .dt_iop_module #module-header {
-  min-height: 1em;
-  border-radius: 8px;
-  padding: 6px 10px;
+  padding: 10px;
   background-color: @grey_38;
 }
 
 .dt_lib_module #module-header {
-  min-height: 1em;
-  border-top: 2px solid @grey_65;
-  padding: 6px 10px;
-  background-color: @grey_38;
+  border-top: 1px solid @grey_65;
+}
+
+.dt_iop_module #module-header {
+  border-radius: 8px;
+  border-top: 1px solid @grey_45;
+  border-bottom: 1px solid @grey_30;
 }
 
 .dt_iop_module.expanded #module-header {
