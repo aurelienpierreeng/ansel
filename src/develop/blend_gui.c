@@ -3543,6 +3543,7 @@ void dt_iop_gui_init_masks(GtkBox *blendw, dt_iop_module_t *module)
                      G_CALLBACK(_blendop_masks_group_button_pressed), module);
 
     bd->group_shapes_sw = gtk_scrolled_window_new(NULL, NULL);
+    gtk_widget_set_vexpand(bd->group_shapes_sw, TRUE);
     gtk_container_add(GTK_CONTAINER(bd->group_shapes_sw), bd->masks_group_treeview);
     dt_gui_widget_init_auto_height(bd->masks_group_treeview, TREE_LIST_MIN_ROWS, TREE_LIST_MAX_ROWS);
 
@@ -3607,6 +3608,7 @@ void dt_iop_gui_init_masks(GtkBox *blendw, dt_iop_module_t *module)
                      G_CALLBACK(_blendop_masks_all_button_pressed), module);
 
     bd->all_shapes_sw = gtk_scrolled_window_new(NULL, NULL);
+    gtk_widget_set_vexpand(bd->all_shapes_sw, TRUE);
     gtk_container_add(GTK_CONTAINER(bd->all_shapes_sw), bd->masks_treeview);
     dt_gui_widget_init_auto_height(bd->masks_treeview, TREE_LIST_MIN_ROWS, TREE_LIST_MAX_ROWS);
 
@@ -3616,7 +3618,7 @@ void dt_iop_gui_init_masks(GtkBox *blendw, dt_iop_module_t *module)
     gtk_stack_set_homogeneous(GTK_STACK(bd->lists_stack), FALSE);
     gtk_stack_add_named(GTK_STACK(bd->lists_stack), bd->group_shapes_sw, "group");
     gtk_stack_add_named(GTK_STACK(bd->lists_stack), bd->all_shapes_sw, "all");
-    gtk_box_pack_start(GTK_BOX(bd->lists_box), bd->lists_stack, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(bd->lists_box), bd->lists_stack, TRUE, TRUE, 0);
 
     // Default state:
     // - current-module tree is visible
@@ -3627,7 +3629,7 @@ void dt_iop_gui_init_masks(GtkBox *blendw, dt_iop_module_t *module)
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->wire_shape_toggle), FALSE);
     _blendop_masks_edit_list_toggle(GTK_TOGGLE_BUTTON(bd->wire_shape_toggle), module);
 
-    gtk_box_pack_start(GTK_BOX(bd->masks_box), bd->lists_box, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(bd->masks_box), bd->lists_box, TRUE, TRUE, 0);
 
     bd->masks_inited = 1;
     _blendop_masks_refresh_lists(module);
@@ -3896,7 +3898,7 @@ static GtkWidget *_blendop_create_notebook_page(GtkWidget *notebook, const gchar
 }
 
 static GtkWidget *_blendop_create_toggle_page(GtkWidget *notebook, const gchar *label,
-                                              gchar *help_url,
+                                              const gchar *help_url,
                                               dt_iop_module_t *module, const unsigned int mask_bit,
                                               GtkWidget **toggle, GtkWidget **content)
 {
