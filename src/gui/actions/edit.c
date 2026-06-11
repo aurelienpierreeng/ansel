@@ -492,12 +492,20 @@ void append_edit(GtkWidget **menus, GList **lists, const dt_menus_t index)
 
   add_sub_sub_menu_entry(menus, parent, lists, _("Prepend"), index, NULL,
                          history_prepend_callback, history_prepend_checked_callback, NULL, NULL, 0, 0);
+  gtk_widget_set_tooltip_text(get_last_widget(lists),
+                              _("Paste copied history BEFORE the current history.\n"
+                                "CURRENT EDITS are applied afterwards and win conflicts."));
 
   add_sub_sub_menu_entry(menus, parent, lists, _("Append"), index, NULL,
                          history_append_callback, history_append_checked_callback, NULL, NULL, 0, 0);
+  gtk_widget_set_tooltip_text(get_last_widget(lists),
+                              _("Paste copied history AFTER the current history.\n"
+                                "COPIED EDITS are applied afterwards and win conflicts."));
 
   add_sub_sub_menu_entry(menus, parent, lists, _("Replace"), index, NULL,
                          history_replace_callback, history_replace_checked_callback, NULL, NULL, 0, 0);
+  gtk_widget_set_tooltip_text(get_last_widget(lists),
+                              _("Discard the current history and replace it entirely with the copied history."));
 
   add_top_submenu_entry(menus, lists, _("Nodes pasting mode"), index);
   parent = get_last_widget(lists);
