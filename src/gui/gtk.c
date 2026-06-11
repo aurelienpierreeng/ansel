@@ -2205,6 +2205,7 @@ static gboolean _scroll_wrap_resize(GtkWidget *w, void *cr, const char *config_s
 {
   GtkWidget *sw = gtk_widget_get_parent(w);
   if(GTK_IS_VIEWPORT(sw)) sw = gtk_widget_get_parent(sw);
+  if(!GTK_IS_SCROLLED_WINDOW(sw)) return FALSE;
 
   const gint increment = _get_container_row_heigth(w);
 
