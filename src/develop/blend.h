@@ -327,7 +327,7 @@ typedef struct dt_iop_gui_blend_data_t
   GtkWidget *masks_content;
   GtkWidget *raster_content;
   GtkWidget *blendif_content;
-  GtkWidget *bottom_content;
+  GtkWidget *contours_content;
   GtkBox *blendif_box;
   GtkBox *masks_box;
   GtkBox *raster_box;

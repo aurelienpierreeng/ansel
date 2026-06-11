@@ -3245,13 +3245,7 @@ void dt_iop_gui_init_blendif(GtkBox *blendw, dt_iop_module_t *module, GtkWidget 
 {
   dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
 
-  // add event box so that one can click into the area to get help for parametric masks
-  GtkWidget* event_box = gtk_event_box_new();
-  dt_gui_add_help_link(GTK_WIDGET(event_box), dt_get_help_url("masks_parametric"));
-  gtk_container_add(GTK_CONTAINER(blendw), event_box);
-  gtk_container_add(GTK_CONTAINER(event_box), GTK_WIDGET(bd->blendif_box));
-
-  bd->blendif_box = GTK_BOX(gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING));
+  bd->blendif_box = blendw;
 
   /* create and add blendif support if module supports it */
   if(bd->blendif_support)
@@ -3383,6 +3377,18 @@ void dt_iop_gui_init_blendif(GtkBox *blendw, dt_iop_module_t *module, GtkWidget 
   }
 }
 
+void dt_iop_gui_init_contours(GtkBox *blendw, dt_iop_module_t *module)
+{
+  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
+
+  gtk_box_pack_start(blendw, bd->details_slider, FALSE, FALSE, 0);
+  gtk_box_pack_start(blendw, bd->blur_radius_slider, FALSE, FALSE, 0);
+  gtk_box_pack_start(blendw, bd->masks_feathering_guide_combo, FALSE, FALSE, 0);
+  gtk_box_pack_start(blendw, bd->feathering_radius_slider, FALSE, FALSE, 0);
+  gtk_box_pack_start(blendw, bd->brightness_slider, FALSE, FALSE, 0);
+  gtk_box_pack_start(blendw, bd->contrast_slider, FALSE, FALSE, 0);
+}
+
 void dt_masks_iop_update(dt_iop_module_t *module)
 {
   dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
@@ -3463,11 +3469,7 @@ void dt_iop_gui_init_masks(GtkBox *blendw, dt_iop_module_t *module)
 {
   dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
 
-  bd->masks_box = GTK_BOX(gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING));
-  // add event box so that one can click into the area to get help for drawn masks
-  GtkWidget* event_box = gtk_event_box_new();
-  dt_gui_add_help_link(GTK_WIDGET(event_box), dt_get_help_url("masks_drawn"));
-  gtk_container_add(GTK_CONTAINER(blendw), event_box);
+  bd->masks_box = blendw;
 
   /* create and add masks support if module supports it */
   if(bd->masks_support)
@@ -3644,7 +3646,6 @@ void dt_iop_gui_init_masks(GtkBox *blendw, dt_iop_module_t *module)
     dt_free(markup);
     dt_free(module_name);
   }
-  gtk_container_add(GTK_CONTAINER(event_box), GTK_WIDGET(bd->masks_box));
 }
 
 typedef struct raster_combo_entry_t
@@ -3757,11 +3758,7 @@ void dt_iop_gui_init_raster(GtkBox *blendw, dt_iop_module_t *module)
 {
   dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
 
-  bd->raster_box = GTK_BOX(gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING));
-  // add event box so that one can click into the area to get help for drawn masks
-  GtkWidget* event_box = gtk_event_box_new();
-  dt_gui_add_help_link(GTK_WIDGET(event_box), dt_get_help_url("masks_raster"));
-  gtk_container_add(GTK_CONTAINER(blendw), event_box);
+  bd->raster_box = blendw;
 
   /* create and add raster support if module supports it (it's coupled to masks at the moment) */
   if(bd->masks_support)
@@ -3789,7 +3786,6 @@ void dt_iop_gui_init_raster(GtkBox *blendw, dt_iop_module_t *module)
 
     bd->raster_inited = 1;
   }
-  gtk_container_add(GTK_CONTAINER(event_box), GTK_WIDGET(bd->raster_box));
 }
 
 void dt_iop_gui_cleanup_blending(dt_iop_module_t *module)
@@ -3888,25 +3884,36 @@ static void _blendop_update_top_enable_label(dt_iop_module_t *module)
   dt_free(multi_name_dup);
 }
 
-static GtkWidget *_blendop_create_notebook_page(GtkWidget *notebook, const gchar *label, GtkWidget **content)
+static GtkWidget *_blendop_create_notebook_page(GtkWidget *notebook, const gchar *label,
+                                                gchar *help_url, GtkWidget **content)
 {
-  GtkWidget *page = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  GtkWidget *page = gtk_event_box_new();
+  if(help_url) dt_gui_add_help_link(page, help_url);
   *content = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
-  gtk_box_pack_start(GTK_BOX(page), *content, TRUE, TRUE, 0);
+  gtk_container_add(GTK_CONTAINER(page), *content);
   _notebook_append_full_width_page(notebook, page, label);
   return page;
 }
 
 static GtkWidget *_blendop_create_toggle_page(GtkWidget *notebook, const gchar *label,
+                                              gchar *help_url,
                                               dt_iop_module_t *module, const unsigned int mask_bit,
                                               GtkWidget **toggle, GtkWidget **content)
 {
-  GtkWidget *page = _blendop_create_notebook_page(notebook, label, content);
+  GtkWidget *page = gtk_event_box_new();
+  if(help_url) dt_gui_add_help_link(page, help_url);
+  GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  gtk_container_add(GTK_CONTAINER(page), vbox);
+
   GtkWidget *header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   *toggle = _blendop_create_enable_toggle(module, mask_bit);
   gtk_box_pack_start(GTK_BOX(header), *toggle, FALSE, FALSE, 0);
-  gtk_box_pack_start(GTK_BOX(page), header, FALSE, FALSE, 0);
-  gtk_box_reorder_child(GTK_BOX(page), header, 0);
+  gtk_box_pack_start(GTK_BOX(vbox), header, FALSE, FALSE, 0);
+
+  *content = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  gtk_box_pack_start(GTK_BOX(vbox), *content, TRUE, TRUE, 0);
+
+  _notebook_append_full_width_page(notebook, page, label);
   return header;
 }
 
@@ -4126,9 +4133,6 @@ void dt_iop_gui_update_blending(dt_iop_module_t *module)
   _blendop_sync_toggle_state(bd->raster_enable, bd->raster_inited, raster_enabled, bd->raster_content);
   _blendop_sync_toggle_state(bd->blendif_enable, bd->blendif_inited, blendif_enabled, bd->blendif_content);
 
-  gtk_widget_set_sensitive(bd->bottom_content, bottom_enabled);
-
-
   if(bd->blendif_inited && blendif_enabled)
   {
     gtk_widget_hide(GTK_WIDGET(bd->masks_invert_combo));
@@ -4312,7 +4316,7 @@ void dt_iop_gui_cleanup_blending_body(dt_iop_module_t *module)
   bd->masks_content = NULL;
   bd->raster_content = NULL;
   bd->blendif_content = NULL;
-  bd->bottom_content = NULL;
+  bd->contours_content = NULL;
   bd->blendif_box = NULL;
   bd->masks_box = NULL;
   bd->raster_box = NULL;
@@ -4561,34 +4565,25 @@ void dt_iop_gui_init_blending_body(GtkWidget *container, dt_iop_module_t *module
   gtk_box_pack_start(GTK_BOX(bd->blending_box), bd->blending_notebook, TRUE, TRUE, 0);
 
   /* Raster page */
-  _blendop_create_toggle_page(bd->blending_notebook, _("Raster"), module,
-                              DEVELOP_MASK_RASTER, &bd->raster_enable, &bd->raster_content);
+  _blendop_create_toggle_page(bd->blending_notebook, _("Raster"), dt_get_help_url("masks_raster"),
+                              module, DEVELOP_MASK_RASTER, &bd->raster_enable, &bd->raster_content);
   dt_iop_gui_init_raster(GTK_BOX(bd->raster_content), module);
 
   /* Drawn page */
-  _blendop_create_toggle_page(bd->blending_notebook, _("Drawn"), module,
-                              DEVELOP_MASK_SHAPE, &bd->masks_enable, &bd->masks_content);
+  _blendop_create_toggle_page(bd->blending_notebook, _("Drawn"), dt_get_help_url("masks_drawn"),
+                              module, DEVELOP_MASK_SHAPE, &bd->masks_enable, &bd->masks_content);
   dt_iop_gui_init_masks(GTK_BOX(bd->masks_content), module);
 
   /* Parametric page */
-  GtkWidget *blendif_header = _blendop_create_toggle_page(bd->blending_notebook, _("Parametric"), module,
-                              DEVELOP_MASK_PARAMETRIC, &bd->blendif_enable,
+  GtkWidget *blendif_header = _blendop_create_toggle_page(bd->blending_notebook, _("Parametric"),
+                              dt_get_help_url("masks_parametric"),
+                              module, DEVELOP_MASK_PARAMETRIC, &bd->blendif_enable,
                               &bd->blendif_content);
   dt_iop_gui_init_blendif(GTK_BOX(bd->blendif_content), module, blendif_header);
 
   /* Contours page */
-  _blendop_create_notebook_page(bd->blending_notebook, _("Contours"), &bd->bottom_content);
-  GtkWidget *bottom_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
-  gtk_box_pack_start(GTK_BOX(bottom_box), bd->details_slider, TRUE, TRUE, 0);
-  gtk_box_pack_start(GTK_BOX(bottom_box), bd->blur_radius_slider, TRUE, TRUE, 0);
-  gtk_box_pack_start(GTK_BOX(bottom_box), bd->masks_feathering_guide_combo, TRUE, TRUE, 0);
-  gtk_box_pack_start(GTK_BOX(bottom_box), bd->feathering_radius_slider, TRUE, TRUE, 0);
-  gtk_box_pack_start(GTK_BOX(bottom_box), bd->brightness_slider, TRUE, TRUE, 0);
-  gtk_box_pack_start(GTK_BOX(bottom_box), bd->contrast_slider, TRUE, TRUE, 0);
-  GtkWidget *event_box = gtk_event_box_new();
-  dt_gui_add_help_link(event_box, dt_get_help_url("masks_refinement"));
-  gtk_container_add(GTK_CONTAINER(event_box), bottom_box);
-  gtk_box_pack_start(GTK_BOX(bd->bottom_content), event_box, TRUE, TRUE, 0);
+  _blendop_create_notebook_page(bd->blending_notebook, _("Contours"), dt_get_help_url("masks_refinement"), &bd->contours_content);
+  dt_iop_gui_init_contours(GTK_BOX(bd->contours_content), module);
 
   /* Init all GUI states from module params */
   const unsigned int mask_mode = module->blend_params->mask_mode;
