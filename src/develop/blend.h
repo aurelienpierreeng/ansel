@@ -318,13 +318,12 @@ typedef struct dt_iop_gui_blend_data_t
   dt_develop_blend_colorspace_t csp;
   dt_iop_module_t *module;
 
-  GtkWidget *blending_body_box;
+  GtkWidget *blending_box;
   GtkWidget *blending_notebook;
   GtkWidget *top_enable;
   GtkWidget *masks_enable;
   GtkWidget *raster_enable;
   GtkWidget *blendif_enable;
-  GtkWidget *top_content;
   GtkWidget *masks_content;
   GtkWidget *raster_content;
   GtkWidget *blendif_content;
@@ -528,7 +527,7 @@ void dt_develop_blendif_rgb_jzczhz_blend(const struct dt_dev_pixelpipe_t *pipe,
 /** gui related stuff */
 void dt_iop_gui_init_blendif(GtkBox *blendw, dt_iop_module_t *module, GtkWidget *header);
 void dt_iop_gui_init_blending(dt_iop_module_t *module);
-void dt_iop_gui_init_blending_body(GtkBox *blendw, dt_iop_module_t *module);
+void dt_iop_gui_init_blending_body(GtkWidget *container, dt_iop_module_t *module);
 void dt_iop_gui_update_blending(dt_iop_module_t *module);
 void dt_iop_gui_update_blendif(dt_iop_module_t *module);
 void dt_iop_gui_cleanup_blending_body(dt_iop_module_t *module);

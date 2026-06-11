@@ -69,8 +69,6 @@ static void _lib_masks_update_list(dt_lib_module_t *self);
 
 typedef struct dt_lib_masks_t
 {
-  /* vbox with managed history items */
-  GtkWidget *blending_box;
   GtkWidget *hbox;
   GtkWidget *bt_circle, *bt_path, *bt_gradient, *bt_ellipse, *bt_brush;
   GtkWidget *treeview;
@@ -161,11 +159,11 @@ static gboolean _lib_masks_module_is_current(const dt_iop_module_t *module)
   return darktable.develop && module && g_list_find(darktable.develop->iop, (gpointer)module);
 }
 
-static void _lib_masks_clear_blending_box(dt_lib_masks_t *lm)
+static void _lib_masks_clear_blending_box(dt_lib_module_t *self)
 {
-  if(IS_NULL_PTR(lm) || !lm->blending_box) return;
+  if(IS_NULL_PTR(self) || !GTK_IS_WIDGET(self->widget)) return;
 
-  GList *children = gtk_container_get_children(GTK_CONTAINER(lm->blending_box));
+  GList *children = gtk_container_get_children(GTK_CONTAINER(self->widget));
   for(GList *iter = children; iter; iter = g_list_next(iter))
     gtk_widget_destroy(GTK_WIDGET(iter->data));
   g_list_free(children);
@@ -181,22 +179,22 @@ static gboolean _lib_masks_can_host_blending(const dt_iop_module_t *module)
   return TRUE;
 }
 
-static void _lib_masks_release_blending(dt_lib_masks_t *lm)
+static void _lib_masks_release_blending(dt_lib_module_t *self)
 {
-  if(IS_NULL_PTR(lm)) return;
-
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->data)) return;
+  dt_lib_masks_t *lm = (dt_lib_masks_t *)self->data;
   dt_iop_module_t *hosted_module = lm->hosted_module;
   lm->hosted_module = NULL;
 
   if(_lib_masks_can_host_blending(hosted_module))
     dt_iop_gui_cleanup_blending_body(hosted_module);
   else
-    _lib_masks_clear_blending_box(lm);
+    _lib_masks_clear_blending_box(self);
 }
 
-static void _lib_masks_show_blending_message(dt_lib_masks_t *lm, gchar *markup)
+static void _lib_masks_show_blending_message(dt_lib_module_t *self, gchar *markup)
 {
-  if(IS_NULL_PTR(lm) || !lm->blending_box || IS_NULL_PTR(markup)) return;
+  if(IS_NULL_PTR(self) || !GTK_IS_WIDGET(self->widget) || IS_NULL_PTR(markup)) return;
 
   GtkWidget *label = gtk_label_new(NULL);
   gtk_label_set_markup(GTK_LABEL(label), markup);
@@ -205,26 +203,9 @@ static void _lib_masks_show_blending_message(dt_lib_masks_t *lm, gchar *markup)
   gtk_widget_set_margin_top(label, DT_PIXEL_APPLY_DPI(16));
   gtk_widget_set_margin_bottom(label, DT_PIXEL_APPLY_DPI(16));
   gtk_widget_set_sensitive(label, FALSE);
-  gtk_box_pack_start(GTK_BOX(lm->blending_box), label, FALSE, FALSE, 0);
-  gtk_widget_show_all(lm->blending_box);
+  gtk_box_pack_start(GTK_BOX(self->widget), label, FALSE, FALSE, 0);
+  gtk_widget_show_all(self->widget);
 }
-
-/*
-static void _lib_masks_reveal(dt_lib_module_t *self)
-{
-  if(!dt_ui_panel_visible(darktable.gui->ui, DT_UI_PANEL_LEFT))
-    dt_ui_panel_show(darktable.gui->ui, DT_UI_PANEL_LEFT, TRUE, TRUE);
-
-  if(self->expander && !dt_lib_gui_get_expanded(self))
-    dt_lib_gui_set_expanded(self, TRUE);
-
-  if(self->expander)
-  {
-    darktable.gui->scroll_to[0] = self->expander;
-    gtk_widget_grab_focus(self->expander);
-  }
-}
-*/
 
 static void _lib_masks_blending_gui_changed_callback(gpointer instance, dt_lib_module_t *self)
 {
@@ -235,12 +216,12 @@ static void _lib_masks_blending_gui_changed_callback(gpointer instance, dt_lib_m
 
   if(IS_NULL_PTR(darktable.develop) || !darktable.develop->history || !module)
   {
-    _lib_masks_release_blending(lm);
-    _lib_masks_clear_blending_box(lm);
+    _lib_masks_release_blending(self);
+    _lib_masks_clear_blending_box(self);
 
     gchar *markup = g_markup_printf_escaped(_("<i>Select a module to edit its blending settings.</i>"));
 
-    _lib_masks_show_blending_message(lm, markup);
+    _lib_masks_show_blending_message(self, markup);
     g_free(markup);
   
     return;
@@ -248,13 +229,13 @@ static void _lib_masks_blending_gui_changed_callback(gpointer instance, dt_lib_m
 
   if(!_lib_masks_can_host_blending(module))
   {
-    _lib_masks_release_blending(lm);
-    _lib_masks_clear_blending_box(lm);
+    _lib_masks_release_blending(self);
+    _lib_masks_clear_blending_box(self);
 
     gchar *module_label = dt_history_item_get_name(module);
     gchar *markup = g_markup_printf_escaped(_("<i>Blending is not available for the <b>%s</b> module.</i>"), module_label);
 
-    _lib_masks_show_blending_message(lm, markup);
+    _lib_masks_show_blending_message(self, markup);
     g_free(markup);
     dt_free(module_label);
   
@@ -264,17 +245,15 @@ static void _lib_masks_blending_gui_changed_callback(gpointer instance, dt_lib_m
   const gboolean module_changed = (lm->active_module != module);
   lm->active_module = module;
 
-  if(module_changed) _lib_masks_release_blending(lm);
+  if(module_changed) _lib_masks_release_blending(self);
 
-  if(!lm->hosted_module) _lib_masks_clear_blending_box(lm);
+  if(!lm->hosted_module) _lib_masks_clear_blending_box(self);
 
-  dt_iop_gui_init_blending_body(GTK_BOX(lm->blending_box), module);
+  dt_iop_gui_init_blending_body(self->widget, module);
   lm->hosted_module = module;
-  gtk_widget_show(lm->blending_box);
+  gtk_widget_show(self->widget);
 
   dt_iop_gui_update_blending(module);
-
-  //if(module_changed) _lib_masks_reveal(self);
 }
 
 static void _tree_add_circle(GtkButton *button, dt_iop_module_t *module)
@@ -1985,14 +1964,16 @@ void gui_init(dt_lib_module_t *self)
   GtkWidget *shape_manager_container = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_container_add(GTK_CONTAINER(d->popup_window), shape_manager_container);
 
-  // initialise widgets
+  // The main container for module blending params.
+  // It's populated in blend_gui.c when a mask-able module gets focused.
   self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
-  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
 
-  // Create and pack the button to control the popup panel
+
+  // Create and pack the button to control the popup panel.
+  // NOTE: it's added to the darkroom module toolbox, aka not here.
   d->popup_button = dtgtk_togglebutton_new(dtgtk_cairo_paint_masks_drawn, 0, NULL);
   gtk_widget_set_tooltip_text(d->popup_button, _("Open mask manager..."));
-  //gtk_box_pack_start(GTK_BOX(self->widget), d->popup_button, FALSE, FALSE, 0);
+
   /* module_toolbox may not be initialized yet when modules are being created.
    * Schedule adding the popup button via an idle callback so it runs after
    * other modules (including the module_toolbox) have had their gui_init
@@ -2000,6 +1981,8 @@ void gui_init(dt_lib_module_t *self)
   g_idle_add((GSourceFunc)_lib_masks_add_popup_button_idle, d);
   g_signal_connect(G_OBJECT(d->popup_button), "clicked", G_CALLBACK(_lib_masks_popup_button_clicked_cb), d);
 
+  // From here, everything goes into the mask manager popup,
+  // so there is no child added to self->widget from here.
   GtkWidget *shape_buttons[DEVELOP_MASKS_NB_SHAPES] = { 0 };
   const dt_masks_shape_buttons_config_t shape_buttons_config = {
     .owner_module = NULL,
@@ -2016,6 +1999,7 @@ void gui_init(dt_lib_module_t *self)
     .started = _lib_masks_shape_button_started,
     .exited = NULL,
   };
+  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   GtkWidget *shape_buttons_box = dt_masks_shape_buttons_create(&shape_buttons_config);
   gtk_box_pack_end(GTK_BOX(hbox), shape_buttons_box, FALSE, FALSE, 0);
   d->bt_gradient = shape_buttons[DT_MASKS_SHAPE_INDEX_GRADIENT];
@@ -2062,13 +2046,6 @@ void gui_init(dt_lib_module_t *self)
   gtk_box_pack_start(GTK_BOX(shape_manager_container), d->treeview, TRUE, TRUE, 0);
   dt_gui_widget_init_auto_height(d->treeview, TREE_LIST_MIN_ROWS, TREE_LIST_MAX_ROWS);
 
-  d->blending_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
-  gtk_box_pack_start(GTK_BOX(self->widget), d->blending_box, FALSE, FALSE, 0);
-
-
-  gtk_widget_show_all(self->widget);
-  gtk_widget_hide(d->blending_box);
-
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_MASK_CHANGED, G_CALLBACK(_lib_masks_handler_callback), self);
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_MASKS_GUI_CHANGED,
                                   G_CALLBACK(_lib_masks_blending_gui_changed_callback), self);
@@ -2110,7 +2087,7 @@ void gui_cleanup(dt_lib_module_t *self)
     d->ic_intersection = NULL;
     d->ic_difference = NULL;
     d->ic_exclusion = NULL;
-    _lib_masks_release_blending(d);
+    _lib_masks_release_blending(self);
   }
 
   dt_free(self->data);
