@@ -3898,7 +3898,7 @@ static GtkWidget *_blendop_create_notebook_page(GtkWidget *notebook, const gchar
 }
 
 static GtkWidget *_blendop_create_toggle_page(GtkWidget *notebook, const gchar *label,
-                                              const gchar *help_url,
+                                              gchar *help_url,
                                               dt_iop_module_t *module, const unsigned int mask_bit,
                                               GtkWidget **toggle, GtkWidget **content)
 {
