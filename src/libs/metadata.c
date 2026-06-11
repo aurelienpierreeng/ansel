@@ -448,7 +448,8 @@ static void _update_layout(dt_lib_module_t *self)
     GtkWidget *label = gtk_grid_get_child_at(GTK_GRID(self->widget), 0, i);
     gtk_widget_set_visible(label, !hidden);
     GtkWidget *current = GTK_WIDGET(d->textview[i]);
-    gtk_widget_set_visible(gtk_widget_get_parent(current), !hidden);
+    GtkWidget *current_parent = gtk_widget_get_parent(current);
+    if(!IS_NULL_PTR(current_parent)) gtk_widget_set_visible(current_parent, !hidden);
 
     if(!hidden)
     {
