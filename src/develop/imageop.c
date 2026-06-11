@@ -1974,10 +1974,32 @@ void dt_iop_commit_params(dt_iop_module_t *module, dt_iop_params_t *params,
   if(module->flags() & IOP_FLAGS_ALLOW_TILING)
     piece->process_tiling_ready = 1;
 
-  if(darktable.unmuted & DT_DEBUG_PARAMS && module->so->get_introspection())
+  if(darktable.unmuted & DT_DEBUG_PARAMS && !IS_NULL_PTR(module->so)
+     && !IS_NULL_PTR(module->so->get_introspection) && module->so->get_introspection())
     _iop_validate_params(module->so->get_introspection()->field, params, TRUE);
 
-  module->commit_params(module, params, pipe, piece);
+  void (*commit_params)(struct dt_iop_module_t *self, dt_iop_params_t *params,
+                        dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece) = module->commit_params;
+
+  if(IS_NULL_PTR(commit_params) || (gsize)commit_params <= 0x1000)
+  {
+    if(!IS_NULL_PTR(module->so) && !IS_NULL_PTR(module->so->commit_params) && (gsize)module->so->commit_params > 0x1000)
+    {
+      dt_print(DT_DEBUG_ALWAYS,
+               "[dt_iop_commit_params] invalid module commit callback for `%s`, using shared-object fallback\n",
+               module->op);
+      commit_params = module->so->commit_params;
+    }
+    else
+    {
+      dt_print(DT_DEBUG_ALWAYS,
+               "[dt_iop_commit_params] invalid commit callback for `%s`, skipping params commit\n",
+               module->op);
+      return;
+    }
+  }
+
+  commit_params(module, params, pipe, piece);
 
   gchar *string = g_strdup_printf("/plugins/%s/opencl", module->op);
 
