@@ -1554,13 +1554,22 @@ gboolean dt_handle_dialog_enter(GtkWidget *widget, GdkEventKey *event, gpointer 
 
 GtkWidget *dt_action_button_new(dt_lib_module_t *self, const gchar *label, gpointer callback, gpointer data, const gchar *tooltip, guint accel_key, GdkModifierType mods)
 {
-  gchar *label_copy = g_strdup(_(label));
+  gchar *label_copy = g_strdup(label);
   dt_capitalize_label(label_copy);
   GtkWidget *button = gtk_button_new_with_label(label_copy);
   dt_free(label_copy);
+
+  gtk_widget_set_valign(GTK_WIDGET(button), GTK_ALIGN_CENTER);
+  gtk_widget_set_halign(GTK_WIDGET(button), GTK_ALIGN_CENTER);
+  gtk_widget_set_vexpand(GTK_WIDGET(button), FALSE);
+  gtk_widget_set_hexpand(GTK_WIDGET(button), FALSE);
+
   gtk_label_set_ellipsize(GTK_LABEL(gtk_bin_get_child(GTK_BIN(button))), PANGO_ELLIPSIZE_END);
+
   if(tooltip) gtk_widget_set_tooltip_text(button, tooltip);
+
   g_signal_connect(G_OBJECT(button), "clicked", G_CALLBACK(callback), data);
+
   return button;
 }
 
