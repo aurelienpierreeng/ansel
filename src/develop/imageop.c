@@ -556,7 +556,30 @@ int dt_iop_load_module_by_so(dt_iop_module_t *module, dt_iop_module_so_t *so, dt
 void dt_iop_init_pipe(struct dt_iop_module_t *module, struct dt_dev_pixelpipe_t *pipe,
                       struct dt_dev_pixelpipe_iop_t *piece)
 {
-  module->init_pipe(module, pipe, piece);
+  if(IS_NULL_PTR(module) || IS_NULL_PTR(pipe) || IS_NULL_PTR(piece)) return;
+
+  void (*init_pipe)(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_t *pipe,
+                    struct dt_dev_pixelpipe_iop_t *piece) = module->init_pipe;
+
+  if(IS_NULL_PTR(init_pipe) || (gsize)init_pipe <= 0x1000)
+  {
+    if(!IS_NULL_PTR(module->so) && !IS_NULL_PTR(module->so->init_pipe) && (gsize)module->so->init_pipe > 0x1000)
+    {
+      dt_print(DT_DEBUG_ALWAYS,
+               "[dt_iop_init_pipe] invalid module init callback for `%s`, using shared-object fallback\n",
+               module->op);
+      init_pipe = module->so->init_pipe;
+    }
+    else
+    {
+      dt_print(DT_DEBUG_ALWAYS,
+               "[dt_iop_init_pipe] invalid init callback for `%s`, skipping module pipe init\n",
+               module->op);
+      return;
+    }
+  }
+
+  init_pipe(module, pipe, piece);
   piece->blendop_data = dt_calloc_align(sizeof(dt_develop_blend_params_t));
 }
 
