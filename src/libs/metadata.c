@@ -79,9 +79,7 @@ typedef enum dt_metadata_pref_cols_t
 typedef struct dt_lib_metadata_t
 {
   GtkTextView *textview[DT_METADATA_NUMBER];
-  GtkWidget *swindow[DT_METADATA_NUMBER];
   GList *metadata_list[DT_METADATA_NUMBER];
-  char *setting_name[DT_METADATA_NUMBER];
   gboolean editing;
   GtkWidget *apply_button;
   GList *last_act_on;
@@ -731,6 +729,7 @@ void gui_init(dt_lib_module_t *self)
 
     GtkWidget *textview = gtk_text_view_new();
     dt_accels_disconnect_on_text_input(textview);
+    
     GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(textview));
     g_object_set_data(G_OBJECT(buffer), "buffer_tv", GINT_TO_POINTER(textview));
     g_object_set_data(G_OBJECT(textview), "tv_index", GINT_TO_POINTER(i));
@@ -738,21 +737,11 @@ void gui_init(dt_lib_module_t *self)
     gtk_text_buffer_create_tag(gtk_text_view_get_buffer(GTK_TEXT_VIEW(textview)),
                                 "italic", "style", PANGO_STYLE_ITALIC, NULL);
 
-    const char *name = (char *)dt_metadata_get_name_by_display_order(i);
-    d->setting_name[i] = g_strdup_printf("plugins/lighttable/metadata/%s_text_height", name);
-
-    GtkWidget *swindow = gtk_scrolled_window_new(NULL, NULL);
-    gtk_container_add(GTK_CONTAINER(swindow), textview);
-
-    gtk_grid_attach(grid, swindow, 1, i, 1, 1);
-    gtk_widget_set_hexpand(swindow, TRUE);
-    d->swindow[i] = swindow;
-    
-    dt_gui_widget_init_auto_height(GTK_WIDGET(textview), 1, 3);
-
+    gtk_grid_attach(grid, textview, 1, i, 1, 1);
     gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(textview), GTK_WRAP_WORD_CHAR);
     gtk_text_view_set_accepts_tab(GTK_TEXT_VIEW(textview), FALSE);
     gtk_widget_add_events(textview, GDK_FOCUS_CHANGE_MASK);
+
     g_signal_connect(textview, "key-press-event", G_CALLBACK(_key_pressed), self);
     g_signal_connect(textview, "focus", G_CALLBACK(_textview_focus), self);
     g_signal_connect(textview, "populate-popup", G_CALLBACK(_populate_popup_multi), self);
@@ -760,6 +749,7 @@ void gui_init(dt_lib_module_t *self)
     g_signal_connect(textview, "focus-out-event", G_CALLBACK(_lost_focus), self);
     g_signal_connect(labelev, "button-press-event", G_CALLBACK(_metadata_reset), textview);
     g_signal_connect(buffer, "changed", G_CALLBACK(_textbuffer_changed), self);
+
     d->textview[i] = GTK_TEXT_VIEW(textview);
     gtk_widget_set_hexpand(textview, TRUE);
     gtk_widget_set_vexpand(textview, TRUE);
@@ -796,7 +786,6 @@ void gui_cleanup(dt_lib_module_t *self)
     g_signal_handlers_block_by_func(d->textview[i], _lost_focus, self);
     g_list_free_full(d->metadata_list[i], dt_free_gpointer);
     d->metadata_list[i] = NULL;
-    dt_free(d->setting_name[i]);
   }
   if(_metadata_update_stmt)
   {
