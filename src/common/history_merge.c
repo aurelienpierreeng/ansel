@@ -1541,9 +1541,14 @@ int dt_history_merge(dt_develop_t *dev_dest, dt_develop_t *dev_src, const int32_
     const dt_dev_history_item_t *hist_src
         = dt_dev_history_get_last_item_by_module(dev_src->history, (dt_iop_module_t *)mod_src, src_end);
 
-    // Destination module instance and its current pipeline ordering info.
-    dt_iop_module_t *mod_dest
-        = dt_dev_get_module_instance(dev_dest, mod_src->op, mod_src->multi_name, mod_src->multi_priority);
+    // Destination module instance and its current pipeline ordering info. Single-instance
+    // modules are keyed by operation only in the destination pipe, so ignore source
+    // multi-instance metadata when binding the history item.
+    dt_iop_module_t *mod_dest = NULL;
+    if((mod_src->flags() & IOP_FLAGS_ONE_INSTANCE) == IOP_FLAGS_ONE_INSTANCE)
+      mod_dest = dt_iop_get_module_by_op_priority(dev_dest->iop, mod_src->op, -1);
+    else
+      mod_dest = dt_dev_get_module_instance(dev_dest, mod_src->op, mod_src->multi_name, mod_src->multi_priority);
     dt_dev_history_item_t *hist = NULL;
     dt_print(DT_DEBUG_HISTORY | DT_DEBUG_VERBOSE,
              "[dt_history_merge] build temp history: src=%s multi='%s' priority=%d hist=%s dest=%s dest_priority=%d\n",
