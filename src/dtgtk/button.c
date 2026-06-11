@@ -139,6 +139,10 @@ GtkWidget *dtgtk_button_new(DTGTKCairoPaintIconFunc paint, gint paintflags, void
   button->canvas = gtk_drawing_area_new();
   gtk_container_add(GTK_CONTAINER(button), button->canvas);
   dt_gui_add_class(GTK_WIDGET(button), "dt_module_btn");
+  gtk_widget_set_valign(GTK_WIDGET(button), GTK_ALIGN_CENTER);
+  gtk_widget_set_halign(GTK_WIDGET(button), GTK_ALIGN_CENTER);
+  gtk_widget_set_vexpand(GTK_WIDGET(button), FALSE);
+  gtk_widget_set_hexpand(GTK_WIDGET(button), FALSE);
   return (GtkWidget *)button;
 }
 

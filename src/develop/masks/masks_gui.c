@@ -225,7 +225,6 @@ GtkWidget *dt_masks_shape_buttons_create(const dt_masks_shape_buttons_config_t *
     }
 
     gtk_widget_set_can_focus(button, FALSE);
-    gtk_widget_set_valign(button, GTK_ALIGN_START);
     g_object_set_data(G_OBJECT(button), "dt-masks-shape-buttons-data", data);
 
     data->buttons[def->index] = button;

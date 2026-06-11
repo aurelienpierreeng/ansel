@@ -207,60 +207,11 @@
   border: 0;
   margin: 0;
   padding: 0;
+  border-radius: 0;
 }
 
 /* Base Typographic Defaults & Background Reset for GTK nodes */
-*,
-#lib-plugin-ui,
-#iop-plugin-ui,
-#bauhaus-popup,
-#modules-tabs,
-#left,
-#right,
-combobox,
-combobox *,
-togglebutton,
-togglebutton *,
-notebook,
-notebook *,
-notebook tab,
-notebook tab *,
-table,
-table *,
-row,
-row *,
-frame,
-frame *,
-filechooser,
-filechooser *,
-filechooserdialog,
-filechooserdialog *,
-alignment,
-entry,
-entry *,
-textview,
-textview *,
-dialog,
-dialog *,
-colorswatch,
-colorswatch *,
-stack,
-stack *,
-scrollbar,
-scrollbar *,
-scale,
-scale *,
-button,
-button *,
-treeview,
-treeview *,
-menu,
-menu *,
-separator,
-eventbox,
-eventbox *,
-box,
-box * {
+* {
   font-family: "Roboto Light", "Roboto", "Segoe UI Light", "Segoe UI", "SF Pro Display Light", "SF Pro Display", "Ubuntu Light", "Ubuntu", "IPAPGothic", "Cantarell", sans-serif;
   font-weight: 300;
   font-size: 1em;
@@ -347,26 +298,6 @@ menu separator {
   opacity: 0.5;
 }
 
-/* Utility Transparent Resets */
-.dt_accels_box treeview,
-.dt_module_btn,
-.dt_module_btn:disabled,
-.dt_transparent_background,
-.dt_ignore_fg_state:checked,
-filechooser .sidebar-button,
-menuitem:hover arrow,
-popover #bauhaus-combobox,
-overshoot,
-undershoot,
-textview,
-button,
-togglebutton {
-  background-color: transparent;
-  background-image: none;
-  border: none;
-  box-shadow: none;
-}
-
 
 /*======================================
   3. NORMALIZED CONTROLS
@@ -386,6 +317,7 @@ spinbutton {
   */
   min-height: 1em;
   min-width: 1em;
+  border-radius: 4px;
   padding: 2px;
   border: none;
   box-shadow: none;
@@ -420,12 +352,13 @@ button.text-button,
 #search-button,
 spinbutton button {
   border: 1px solid @grey_70;
-  border-radius: 3px;
 }
 
-#button-canvas {
-  min-height: 1em;
-  min-width: 1em;
+button.text-button,
+#search-button {
+  /* a bit more horizontal breathing room for text in buttons */
+  padding-left: 4px;
+  padding-right: 4px;
 }
 
 /* Text Inputs */
@@ -853,9 +786,7 @@ popover #bauhaus-slider,
 #range-current {
   opacity: 1;
   background-color: @tooltip_bg_color;
-  border-radius: 0.14em;
-  min-height: 0.4em;
-  min-width: 0.4em;
+  border-radius: 0.25em;
 }
 
 menu {
@@ -881,7 +812,6 @@ menuitem>arrow {
 tooltip,
 #range-current {
   border: 0.07em solid shade(@tooltip_bg_color, 1.5);
-  border-radius: 0;
 }
 
 tooltip label,
