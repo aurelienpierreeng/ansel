@@ -679,12 +679,17 @@ typedef enum _bh_halign_t
  * @param height Pointer where text spanning height will be returned in Cairo units. Can be NULL.
  * @param ignore_pseudo_classes Disregard styling done in pseudo-classes and use the normal style.
  */
-static void show_pango_text(struct dt_bauhaus_widget_t *w, GtkStyleContext *context,
-                            cairo_t *cr, GdkRectangle *bounding_box,
+static void show_pango_text(struct dt_bauhaus_widget_t *w,
+                            GtkStyleContext *context,
+                            cairo_t *cr,
+                            GdkRectangle *bounding_box,
                             const char *text,
-                            _bh_halign_t halign, _bh_valign_t valign,
+                            _bh_halign_t halign,
+                            _bh_valign_t valign,
                             PangoEllipsizeMode ellipsize,
-                            GdkRGBA *bg_color, float *width, float *height,
+                            GdkRGBA *bg_color,
+                            float *width,
+                            float *height,
                             GtkStateFlags state)
 {
   if(IS_NULL_PTR(text)) return;
@@ -705,47 +710,76 @@ static void show_pango_text(struct dt_bauhaus_widget_t *w, GtkStyleContext *cont
     pango_font_description_free(css_font);
   }
 
-  PangoLayout *layout = pango_layout_new(gtk_widget_get_pango_context(GTK_WIDGET(w)));
+  // --- Propagate GTK's font rendering settings to the Cairo context ---
+  //
+  // gtk_widget_update_pango_context() (called by GTK on realise / screen
+  // change) already populated this context with the system's hinting,
+  // anti-aliasing, subpixel order and hint-metrics settings, sourced from
+  // GtkSettings / Xft / fontconfig.  This is the identical source used by
+  // every native GTK widget for text rendering.
+  //
+  // pango_cairo_update_layout() copies font options FROM cr TO the layout's
+  // Pango context.  When cr is an intermediate image surface (as used by the
+  // bauhaus off-screen compositing path) Cairo initialises it with its own
+  // defaults — anti-aliasing on, regardless of system settings.  Calling
+  // pango_cairo_update_layout() without correcting cr first silently
+  // overwrites everything GTK configured.
+  //
+  // Solution: push the widget Pango context's options onto cr before
+  // pango_cairo_update_layout() runs.  The round-trip then becomes a no-op
+  // on font options; only the CTM/DPI are synchronised.
+  //
+  // cairo_set_font_options() makes an internal copy, so the const pointer
+  // lifetime is not a concern.
+  PangoContext *pc = gtk_widget_get_pango_context(GTK_WIDGET(w));
+  const cairo_font_options_t *fo = pango_cairo_context_get_font_options(pc);
+  if(fo) cairo_set_font_options(cr, fo);
+
+  // --- Build the layout ---
+  PangoLayout *layout = pango_layout_new(pc);
   pango_layout_set_font_description(layout, resolved);
+  pango_font_description_free(resolved);
 
   // Set the actual text
   pango_layout_set_text(layout, text, -1);
   
-  // Get advanced font options
-  const cairo_font_options_t *opts = gdk_screen_get_font_options(gtk_widget_get_screen(GTK_WIDGET(w)));
-  cairo_set_font_options(cr, opts);
+  // Sync layout with Cairo context (CTM, DPI).
+  // Font options are now consistent between cr and pc, so no overwrite occurs.
+  pango_cairo_update_layout(cr, layout);
 
-  // Record Pango sizes, convert them to Cairo units and return them
-  int pango_width;
-  int pango_height;
+  // --- Measure ---
+  int pango_width, pango_height;
   pango_layout_get_size(layout, &pango_width, &pango_height);
-  double text_width = (double)pango_width / PANGO_SCALE;
+  double text_width  = (double)pango_width  / PANGO_SCALE;
   double text_height = fmax((double)pango_height / PANGO_SCALE, w->bauhaus->line_height);
-  if(width) *width = text_width;
-  if(height) *height = text_height;
+  if(width)  *width  = (float)text_width;
+  if(height) *height = (float)text_height;
 
-  // Handle bounding box overflow if any
+  // --- Ellipsise on overflow ---
   if(text_width > bounding_box->width)
   {
     pango_layout_set_ellipsize(layout, ellipsize);
     pango_layout_set_width(layout, (int)(PANGO_SCALE * bounding_box->width));
     text_width = bounding_box->width;
-    if(width) *width = text_width;
+    if(width) *width = (float)text_width;
+    pango_cairo_update_layout(cr, layout); // re-sync after constraint change
   }
 
   // Paint background color if any - useful to highlight elements in popup list
   if(!IS_NULL_PTR(bg_color))
   {
     cairo_save(cr);
-    cairo_rectangle(cr, bounding_box->x, bounding_box->y, bounding_box->width, bounding_box->height);
-    cairo_set_source_rgba(cr, bg_color->red, bg_color->green, bg_color->blue, bg_color->alpha);
+    cairo_rectangle(cr, bounding_box->x, bounding_box->y,
+                        bounding_box->width, bounding_box->height);
+    cairo_set_source_rgba(cr, bg_color->red, bg_color->green,
+                              bg_color->blue, bg_color->alpha);
     cairo_fill(cr);
     cairo_restore(cr);
   }
 
   // Compute the coordinates of the top-left corner as to ensure proper alignment
   // in bounding box given the dimensions of the label.
-  double x = 0;
+  double x = 0.;
   switch(halign)
   {
     case BH_ALIGN_CENTER:
@@ -760,7 +794,7 @@ static void show_pango_text(struct dt_bauhaus_widget_t *w, GtkStyleContext *cont
       break;
   }
 
-  double y = 0;
+  double y = 0.;
   switch(valign)
   {
     case BH_ALIGN_MIDDLE:
@@ -781,7 +815,6 @@ static void show_pango_text(struct dt_bauhaus_widget_t *w, GtkStyleContext *cont
 
   // Cleanup
   g_object_unref(layout);
-  pango_font_description_free(resolved);
 }
 
 static void dt_bauhaus_slider_set_normalized(struct dt_bauhaus_widget_t *w, float pos, gboolean raise, gboolean timeout);
