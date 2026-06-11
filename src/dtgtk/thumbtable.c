@@ -1581,7 +1581,7 @@ static void _thumbtable_drag_set_icon(dt_thumbtable_t *table, GdkDragContext *co
 
   GtkWidget *image = gtk_image_new_from_surface(surface);
   cairo_surface_destroy(surface);
-  dt_gui_add_class(image, "dt_transparent_background");
+
   gtk_widget_show(image);
   gtk_drag_set_icon_widget(context, image, hotspot_x, hotspot_y);
 }

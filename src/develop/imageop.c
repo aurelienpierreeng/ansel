@@ -2795,7 +2795,7 @@ void dt_iop_gui_set_expander(dt_iop_module_t *module)
 
   /* add mask preview button */
   hw[IOP_MODULE_MASK] = dtgtk_togglebutton_new(dtgtk_cairo_paint_showmask, 0, NULL);
-  dt_gui_add_class(hw[IOP_MODULE_MASK], "dt_transparent_background");
+
   g_signal_connect(G_OBJECT(hw[IOP_MODULE_MASK]), "toggled",
                     G_CALLBACK(_display_mask_indicator_callback), module);
   g_signal_connect(G_OBJECT(hw[IOP_MODULE_MASK]), "button-press-event",
@@ -2835,7 +2835,7 @@ void dt_iop_gui_set_expander(dt_iop_module_t *module)
 
   /* add enabled button */
   hw[IOP_MODULE_SWITCH] = dtgtk_togglebutton_new(dtgtk_cairo_paint_module_switch, 0, module);
-  dt_gui_add_class(hw[IOP_MODULE_SWITCH], "dt_transparent_background");
+
   dt_gui_add_class(hw[IOP_MODULE_SWITCH], "dt_iop_enable_button");
   dt_iop_gui_set_enable_button_icon(hw[IOP_MODULE_SWITCH], module);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(hw[IOP_MODULE_SWITCH]), module->enabled);

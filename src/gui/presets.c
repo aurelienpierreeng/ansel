@@ -1246,7 +1246,7 @@ static void _gui_presets_popup_menu_show_internal(dt_dev_operation_t op, int32_t
     else
       label = g_strdup(name);
     mi = gtk_menu_item_new_with_label(label);
-    dt_gui_add_class(mi, "dt_transparent_background");
+
     dt_free(label);
 
     if(module

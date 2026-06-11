@@ -781,9 +781,9 @@ static dt_ioporder_graph_node_t *_ioporder_create_graph_node(dt_iop_module_t *mo
   dt_gui_add_class(frame, "dt_module_frame");
   dt_gui_add_class(frame, "dt_iop_module");
   gtk_widget_set_name(body, "module-header");
-  dt_gui_add_class(enable, "dt_transparent_background");
+
   dt_gui_add_class(enable, "dt_iop_enable_button");
-  dt_gui_add_class(mask, "dt_transparent_background");
+
   gtk_frame_set_shadow_type(GTK_FRAME(frame), GTK_SHADOW_NONE);
 
   gtk_widget_set_size_request(event_box, DT_IOPORDER_GRAPH_NODE_WIDTH, -1);

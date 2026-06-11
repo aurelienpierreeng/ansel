@@ -2743,7 +2743,7 @@ static void _blendif_options_callback(GtkButton *button, GdkEventButton *event, 
     if(module_cst == DEVELOP_BLEND_CS_LAB)
     {
       mi = gtk_check_menu_item_new_with_label(_("Lab"));
-      dt_gui_add_class(mi, "dt_transparent_background");
+
       if(module_blend_cst == DEVELOP_BLEND_CS_LAB)
       {
         gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(mi), TRUE);
@@ -2755,7 +2755,7 @@ static void _blendif_options_callback(GtkButton *button, GdkEventButton *event, 
     }
 
     mi = gtk_check_menu_item_new_with_label(_("RGB (display)"));
-    dt_gui_add_class(mi, "dt_transparent_background");
+
     if(module_blend_cst == DEVELOP_BLEND_CS_RGB_DISPLAY)
     {
       gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(mi), TRUE);
@@ -2766,7 +2766,7 @@ static void _blendif_options_callback(GtkButton *button, GdkEventButton *event, 
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), mi);
 
     mi = gtk_check_menu_item_new_with_label(_("RGB (scene)"));
-    dt_gui_add_class(mi, "dt_transparent_background");
+
     if(module_blend_cst == DEVELOP_BLEND_CS_RGB_SCENE)
     {
       gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(mi), TRUE);
@@ -3278,7 +3278,7 @@ void dt_iop_gui_init_blendif(GtkBox *blendw, dt_iop_module_t *module, GtkWidget 
     bd->colorpicker_set_values = dt_color_picker_new(module, DT_COLOR_PICKER_AREA, header);
     dtgtk_togglebutton_set_paint(DTGTK_TOGGLEBUTTON(bd->colorpicker_set_values),
                                  dtgtk_cairo_paint_colorpicker, CPF_ALTER, NULL);
-    dt_gui_add_class(bd->colorpicker_set_values, "dt_transparent_background");
+
     gtk_widget_set_tooltip_text(bd->colorpicker_set_values, _("set the range based on an area from the image\n"
                                                               "drag to use the input image\n"
                                                               "ctrl+drag to use the output image"));
@@ -3302,7 +3302,7 @@ void dt_iop_gui_init_blendif(GtkBox *blendw, dt_iop_module_t *module, GtkWidget 
 
       sl->polarity = dtgtk_togglebutton_new(dtgtk_cairo_paint_invert, 0, NULL);
       dt_gui_add_class(sl->polarity, "dt_ignore_fg_state");
-      dt_gui_add_class(sl->polarity, "dt_transparent_background");
+
       gtk_widget_set_tooltip_text(sl->polarity, _("toggle polarity. best seen by enabling 'display mask'"));
       gtk_box_pack_end(GTK_BOX(slider_box), GTK_WIDGET(sl->polarity), FALSE, FALSE, 0);
 
@@ -4523,7 +4523,7 @@ void dt_iop_gui_init_blending_body(GtkBox *blendw, dt_iop_module_t *module)
   gtk_widget_set_tooltip_text(bd->showmask, _("display mask and/or color channel. ctrl+click to display mask, "
                                               "shift+click to display channel. hover over parametric mask slider to "
                                               "select channel for display"));
-  dt_gui_add_class(bd->showmask, "dt_transparent_background");
+
 
   bd->blending_body_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(blendw), bd->blending_body_box, TRUE, TRUE, 0);
