@@ -982,7 +982,7 @@ int dt_styles_apply_to_image_merge(const char *name, const int style_id, const i
   {
     ret_val = dt_dev_merge_history_into_image(&dev_src, newimgid, mod_list,
                                               dt_conf_get_bool("history/copy_iop_order"), mode,
-                                              dt_conf_get_bool("history/paste_instances"));
+                                              dt_conf_get_bool("history/paste_instances"), name);
   }
 
   g_list_free(mod_list);

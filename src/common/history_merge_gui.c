@@ -1218,7 +1218,7 @@ gboolean _hm_show_merge_report_popup(dt_develop_t *dev_dest, dt_develop_t *dev_s
                                      const dt_history_merge_strategy_t strategy, GHashTable *src_last_by_id,
                                      GHashTable *dst_last_before_by_id, const GPtrArray *orig_labels,
                                      const GPtrArray *orig_styles, const GHashTable *orig_ids,
-                                     const GHashTable *mod_list_ids)
+                                     const GHashTable *mod_list_ids, const char *source_label)
 {
   /* Present a merge report with source/destination pipelines and override markers. */
   if(IS_NULL_PTR(darktable.gui)) return FALSE;
@@ -1278,8 +1278,10 @@ gboolean _hm_show_merge_report_popup(dt_develop_t *dev_dest, dt_develop_t *dev_s
   gchar *dst_base = g_path_get_basename(dev_dest->image_storage.filename);
 
   gchar *orig_title = g_strdup_printf(_("Original: %d %s"), dev_dest->image_storage.id, dst_base);
-  gchar *src_title = dev_src ? g_strdup_printf(_("Source: %d %s"), dev_src->image_storage.id, src_base)
-                             : g_strdup(_("Source"));
+  gchar *src_title = !IS_NULL_PTR(source_label) && source_label[0] != '\0'
+                         ? g_strdup_printf(_("Source: %s"), source_label)
+                         : (dev_src ? g_strdup_printf(_("Source: %d %s"), dev_src->image_storage.id, src_base)
+                                    : g_strdup(_("Source")));
   gchar *dst_title = g_strdup_printf(_("Destination: %d %s"), dev_dest->image_storage.id, dst_base);
 
   GtkCellRenderer *r_orig = gtk_cell_renderer_text_new();

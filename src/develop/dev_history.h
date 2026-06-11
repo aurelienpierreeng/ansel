@@ -203,11 +203,12 @@ int dt_dev_history_item_from_source_history_item(struct dt_develop_t *dev_dest, 
  * @param merge_iop_order Whether to merge pipeline order (TRUE) or preserve destination (FALSE).
  * @param mode Merge strategy for history entries.
  * @param paste_instances Whether to paste module instances.
+ * @param source_label Optional source label for the merge report header.
  * @return 0 on success, non-zero on failure.
  */
 int dt_dev_merge_history_into_image(struct dt_develop_t *dev_src, int32_t dest_imgid, const GList *mod_list,
                                     gboolean merge_iop_order, const dt_history_merge_strategy_t mode,
-                                    const gboolean paste_instances);
+                                    const gboolean paste_instances, const char *source_label);
 /**
  * @brief Replace an image history with the content of @p dev_src.
  *

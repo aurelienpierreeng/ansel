@@ -53,4 +53,4 @@ gboolean _hm_show_merge_report_popup(struct dt_develop_t *dev_dest, struct dt_de
                                      const dt_history_merge_strategy_t strategy, GHashTable *src_last_by_id,
                                      GHashTable *dst_last_before_by_id, const GPtrArray *orig_labels,
                                      const GPtrArray *orig_styles, const GHashTable *orig_ids,
-                                     const GHashTable *mod_list_ids);
+                                     const GHashTable *mod_list_ids, const char *source_label);

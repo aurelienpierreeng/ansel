@@ -50,12 +50,14 @@ extern "C"
    *                        overwriting the destination iop-order list with the source list.
    * @param strategy DT_HISTORY_MERGE_APPEND or DT_HISTORY_MERGE_PREPEND.
    * @param force_new_modules If TRUE, always add modules from source as new instances (when possible).
+   * @param source_label Optional source label for the report header (style name, for example).
    *
    * @return 0 on success, 1 on error.
    */
   int dt_history_merge(struct dt_develop_t *dev_dest, struct dt_develop_t *dev_src, const int32_t dest_imgid,
                        const GList *mod_list, const gboolean merge_iop_order,
-                       const dt_history_merge_strategy_t strategy, const gboolean force_new_modules);
+                       const dt_history_merge_strategy_t strategy, const gboolean force_new_modules,
+                       const char *source_label);
 
 #ifdef __cplusplus
 }

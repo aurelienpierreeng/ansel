@@ -177,7 +177,7 @@ static int _history_copy_and_paste_on_image_merge(int32_t imgid, int32_t dest_im
     GList *mod_list = _get_user_mod_list(dev_src, ops, copy_full);
     ret_val = dt_dev_merge_history_into_image(dev_src, dest_imgid, mod_list,
                                               dt_conf_get_bool("history/copy_iop_order"), mode,
-                                              dt_conf_get_bool("history/paste_instances"));
+                                              dt_conf_get_bool("history/paste_instances"), NULL);
     g_list_free(mod_list);
     mod_list = NULL;
   }
