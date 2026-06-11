@@ -4408,7 +4408,6 @@ void dt_iop_gui_init_blending_body(GtkWidget *container, dt_iop_module_t *module
   gtk_widget_set_tooltip_text(bd->showmask, _("display mask and/or color channel. ctrl+click to display mask, "
                                               "shift+click to display channel. hover over parametric mask slider to "
                                               "select channel for display"));
-  gtk_box_pack_end(GTK_BOX(display_box), bd->showmask, TRUE, TRUE, 0);
 
   gtk_box_pack_start(GTK_BOX(container), display_box, FALSE, FALSE, 0);
   gtk_widget_show_all(display_box);
