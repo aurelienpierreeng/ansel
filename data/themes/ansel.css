@@ -45,9 +45,15 @@
  * Because this macro is defined in device pixels (= 10px), to match its length,
  * we have to use absolute margin/padding values here, and can't use proportional
  * em sizing.
+ * 
  * The rule is margins/paddings are defined in CSS as px so they get rescaled
  * similarly to hardcoded DT_GUI_BOX_SPACING by window manager × GTK,
  * but anything handling text/font should be defined in em as to match system-defined font size.
+ * 
+ * The exception are scrollbar sliders: we expect them to grow with font size for
+ * proper legibility, so they are defined in em units.
+ * 
+ * Debug with GTK inspector by starting `GTK_DEBUG=interactive ansel`
  */
 
 /*======================================
@@ -94,6 +100,10 @@
 @define-color placeholder_text_color @grey_70;
 @define-color disabled_fg_color @grey_65;
 
+/* Any control that appears to be recessed/punched-in behind GUI surface */
+@define-color recessed_color_bg alpha(@grey_00, 0.25);
+@define-color recessed_color_border rgba(255, 255, 255, 0.05);
+
 /* Scroll bars */
 @define-color scroll_bar_inactive @grey_55;
 @define-color scroll_bar_active @grey_70;
@@ -110,9 +120,9 @@
 @define-color collapsible_bg_color @grey_55;
 
 /* Bauhaus Controls */
-@define-color bauhaus_bg @grey_38;
+@define-color bauhaus_bg @recessed_color_bg;
 @define-color bauhaus_fg shade(@fg_color, 0.95);
-@define-color bauhaus_border @grey_40;
+@define-color bauhaus_border @recessed_color_border;
 @define-color bauhaus_indicator_border @grey_50;
 @define-color bauhaus_fill @grey_70;
 @define-color bauhaus_value #bf8000;
@@ -132,7 +142,6 @@
 @define-color button_hover_bg @grey_70;
 @define-color button_hover_fg @grey_30;
 
-@define-color field_bg @grey_35;
 @define-color field_fg @fg_color;
 @define-color field_active_bg @grey_55;
 @define-color field_active_fg @grey_95;
@@ -144,7 +153,6 @@
 /* Helpers, Views & Tooltips */
 @define-color tooltip_bg_color @grey_30;
 @define-color tooltip_fg_color @grey_80;
-@define-color really_dark_bg_color @grey_05;
 @define-color log_fg_color @grey_95;
 
 @define-color darkroom_bg_color @grey_50;
@@ -195,7 +203,9 @@
   ======================================*/
 
 /* Base Document Reset */
-* {
+*,
+window,
+dialog {
   background-color: @bg_color;
   background-image: none;
   color: @fg_color;
@@ -204,7 +214,7 @@
   box-shadow: none;
   outline-style: none;
   text-shadow: none;
-  border: 0;
+  border: none;
   margin: 0;
   padding: 0;
   border-radius: 0;
@@ -222,7 +232,7 @@
 /* Emphasized Typography */
 .dt_section_label,
 .quickfilter-label,
-.dt_section_label * {
+treeview *:selected:not(check) {
   font-family: "Roboto Medium", "Roboto", "Segoe UI Semibold", "Segoe UI", "SF Pro Display Medium", "SF Pro Display", "Ubuntu Medium", "Ubuntu", "IPAPGothic", "Cantarell", sans-serif;
   font-weight: 500;
 }
@@ -262,12 +272,10 @@ separator {
 
 separator.horizontal {
   min-height: 1px;
-  border: none;
 }
 
 separator.vertical {
   min-width: 1px;
-  border: none;
   margin-top: 2px;
   margin-bottom: 2px;
 }
@@ -319,10 +327,6 @@ spinbutton {
   min-width: 1em;
   border-radius: 4px;
   padding: 2px;
-  border: none;
-  box-shadow: none;
-  background-image: none;
-  background-color: transparent;
   font-weight: 400;
 }
 
@@ -364,37 +368,23 @@ button.text-button,
 /* Text Inputs */
 entry,
 textview,
-.menu-text-entry,
-#lib-collect-entry {
-  padding: 2px;
-  border: none;
-  border-radius: 0;
+treeview {
+  padding: 2px 4px;
+  min-height: 1em;
+  border: 1px solid @recessed_color_border;
   background-image: none;
-  background-color: @field_bg;
+  background-color: @recessed_color_bg;
 }
 
 /* Checkbuttons */
-checkbutton,
-checkbutton box,
-checkbutton label {
-  border: none;
-  background-color: transparent;
-  background-image: none;
-}
-
 check,
 checkbutton check,
 menuitem check,
 treeview check {
-  border: none;
-  background-color: rgba(0, 0, 0, 0.2);
+  border: 1px solid @recessed_color_border;
+  background-color: @recessed_color_bg;
   background-image: none;
-  margin-right: 3px;
-}
-
-/* Comboboxes & Spinbuttons inner normalization */
-combobox button:checked {
-  background: transparent;
+  margin-right: 6px;
 }
 
 /*======================================
@@ -405,7 +395,6 @@ combobox button:checked {
 #plugins_box,
 scrolledwindow {
   background-color: @bg_color;
-  border-bottom: none;
 }
 
 #top,
@@ -434,7 +423,6 @@ scrolledwindow {
 
 #top-second-line {
   padding: 0 3px;
-  border: none;
   min-height: 0;
   background-color: @bg_color;
 }
@@ -470,11 +458,6 @@ menuitem.menu-active label {
   color: @grey_100;
 }
 
-menubar menuitem,
-menubar menuitem label,
-notebook tab {
-  border: none;
-}
 
 /*======================================
   5. PANELS, MODULES, & TOOLBOXES
@@ -483,8 +466,6 @@ notebook tab {
 .dt-module-toolbox {
   padding: 6px;
   background-color: @toolbar_color;
-  border-top: none;
-  border-bottom: none;
 }
 
 dialog .sidebar row:selected,
@@ -494,21 +475,9 @@ dialog .sidebar row:selected:hover label,
   background-color: @plugin_bg_color;
 }
 
-dialog,
-window,
-#modules-tabs,
-#guides-line {
-  background-color: @bg_color;
-}
-
 .dt_plugin_ui_main,
 #guides-module-combobox {
   padding: 10px;
-  border: none;
-}
-
-.dt_plugin_ui_main {
-  border-top: none;
 }
 
 /**
@@ -524,8 +493,7 @@ window,
 .dt_iop_module.dt_module_frame {
   margin: 0 6px; /* no vertical margin: that's handled as children spacing by the container */
   padding: 0;
-  border-radius: 15px;
-  border: 1px solid @grey_35;
+  border: 1px solid @recessed_color_bg;
   border-radius: 10px;
 }
 
@@ -727,44 +695,6 @@ window,
   7. DIALOGS, POPOVERS & CONTEXT MENUS
   ======================================*/
 
-.dt_accels_window,
-dialog .dialog-vbox {
-  margin: 0.42em;
-}
-
-dialog .dialog-action-box,
-#modulegroups-groups-title,
-#modulegroups-groups-box {
-  margin-top: 0.42em;
-}
-
-dialog .dialog-action-box button:first-child {
-  margin-left: 0;
-}
-
-dialog .dialog-action-box button:last-child {
-  margin-right: 0;
-}
-
-dialog filechooser {
-  margin-top: -0.21em;
-  margin-left: -0.42em;
-}
-
-dialog headerbar {
-  background-color: @border_color;
-  padding: 0.2em 0.6em;
-}
-
-dialog headerbar entry {
-  margin: 0.56em;
-}
-
-dialog.dt_import_dialog headerbar {
-  background-color: @bg_color;
-  padding: 4px 8px;
-}
-
 /* 
 * Enable to debug bauhaus widgets
 .dt_bauhaus,
@@ -779,11 +709,9 @@ checkbutton {
 .popup,
 context-menu,
 menu,
-menuitem>arrow,
 tooltip,
 popover,
-popover #bauhaus-slider,
-#range-current {
+popover #bauhaus-slider {
   opacity: 1;
   background-color: @tooltip_bg_color;
   border-radius: 0.25em;
@@ -807,16 +735,6 @@ filechooser .sidebar-label {
 
 menuitem>arrow {
   padding-right: 0.42em;
-}
-
-tooltip,
-#range-current {
-  border: 0.07em solid shade(@tooltip_bg_color, 1.5);
-}
-
-tooltip label,
-#range-current label {
-  color: @tooltip_fg_color;
 }
 
 popover spinbutton {
@@ -843,16 +761,16 @@ notebook tab {
 notebook tab label {
   color: @grey_80;
   padding: 6px 0.07em;
-  border-bottom: 3px solid @field_bg;
+  border-bottom: 4px solid @recessed_color_bg;
 }
 
 notebook tab:hover label {
-  border-bottom: 3px solid @grey_100;
+  border-bottom-color: @grey_100;
   color: @grey_100;
 }
 
 notebook tab:checked label {
-  border-bottom: 3px solid @grey_90;
+  border-bottom-color: @grey_90;
   color: @grey_95;
 }
 
@@ -877,7 +795,7 @@ notebook.empty stack {
 #colorequal-ring-tabs>header>tabs>tab {
   padding: 0;
   border: 1px solid alpha(@grey_95, 0.10);
-  background-color: @grey_35;
+  background-color: @recessed_color_bg;
 }
 
 #modules-tabs notebook tab {
@@ -979,7 +897,7 @@ notebook.empty stack {
 #modules-tabs notebook:disabled tab,
 #colorequal-ring-tabs:disabled>header>tabs>tab {
   border-color: alpha(@grey_95, 0.08);
-  background-color: @grey_35;
+  background-color: @recessed_color_bg;
 }
 
 #modules-tabs notebook:disabled tab label,
@@ -995,44 +913,42 @@ notebook.empty stack {
   9. SLIDERS, SCALES & TREEVIEWS
   ======================================*/
 
-scrollbar.vertical slider {
+scrollbar slider {
   background-color: @scroll_bar_inactive;
-  border: 1px solid transparent;
-  min-width: 0.6em;
+  /* We can't set margins here, so transparent border is our way to space it */
+  border: 3px solid transparent;
+  border-radius: 0.5em;
+}
+
+scrollbar.vertical slider {
+  min-width: 0.5em;
   min-height: 1em;
 }
 
 scrollbar.horizontal slider {
-  background-color: @scroll_bar_inactive;
-  border: 1px solid transparent;
   min-width: 1em;
-  min-height: 0.6em;
+  min-height: 0.5em;
 }
 
 scale contents trough {
   background-color: @scroll_bar_bg;
-  border-radius: 0.3em;
-  min-width: 0.6em;
-  min-height: 0.6em;
+  min-width: 0.5em;
+  min-height: 0.5em;
 }
 
 scale contents trough highlight {
   background-color: @button_bg;
-  min-height: 0;
-  min-width: 0;
 }
 
 scale contents trough slider {
   background-color: @scroll_bar_inactive;
-  border: 3px solid @border_color;
-  min-height: 6px;
-  min-width: 6px;
+  min-width: 0.5em;
+  min-height: 0.5em;
 }
 
 scrollbar {
-  border: 1px solid @scroll_bar_bg;
-  background: @grey_35;
-  border-radius: 0.6em;
+  background: @recessed_color_bg;
+  border: 1px solid @recessed_color_border;
   min-height: 0.6em;
   min-width: 0.6em;
 }
@@ -1107,7 +1023,7 @@ filechooser .sidebar-button {
 filechooser .sidebar,
 filechooser treeview,
 #blending-box treeview {
-  background-color: @field_bg;
+  background-color: @recessed_color_bg;
 }
 
 #preferences-box .sidebar row {
@@ -1224,7 +1140,6 @@ progressbar progress {
 #color-picker-button {
   min-height: 1.5em;
   min-width: 1.5em;
-  border: 0;
 }
 
 #color-picker-area {
@@ -1235,12 +1150,6 @@ progressbar progress {
 #live-sample {
   margin: 0.21em 0.21em 0.21em 0;
   min-width: 2em;
-}
-
-#picker-black,
-#picker-grey,
-#picker-white {
-  border: 0;
 }
 
 #picker-black {
@@ -1356,21 +1265,8 @@ menu.dt-masks-context-menu menuitem.dt-masks-checked:not(:disabled) label.dt-mas
   border-right-color: shade(@group_border, 1.3);
 }
 
-.dt_group_right.non-hovered-group,
-.dt_group_left.non-hovered-group,
-.dt_group_top.non-hovered-group,
-.dt_group_bottom.non-hovered-group {
-  border-color: transparent;
-}
-
-#show-tooltip {
-  margin: 0.28em 0 0 0.28em;
-  border-top: 0.07em dashed @button_border;
-}
-
 .thumb-bottom,
 .thumb-top {
-  border: 0;
   padding: 4px;
 }
 
@@ -1537,25 +1433,22 @@ treeview *:checked:not(check) {
   caret-color: @fg_color;
 }
 
-treeview *:selected:not(check),
+/*
 treeview *:checked:not(check) {
   background-color: alpha(@bauhaus_value, 0.42);
   color: @grey_10;
   caret-color: @fg_color;
 }
+*/
+
+treeview *:selected:not(check) {
+  background-color: alpha(@bauhaus_value, 0.5);
+}
 
 /* Inactive/Disabled Toggle Overrides */
-#module-header .dt_iop_enable_button:disabled,
-#module-header .dt_iop_enable_button:disabled:active,
-#module-header .dt_iop_enable_button:disabled:checked,
-#module-header .dt_iop_enable_button:disabled:selected,
-#module-header .dt_iop_enable_button.dt_iop_enable_forced_off,
-#module-header .dt_iop_enable_button.dt_iop_enable_forced_off:active,
-#module-header .dt_iop_enable_button.dt_iop_enable_forced_off:checked,
-#module-header .dt_iop_enable_button.dt_iop_enable_forced_off:selected {
+.dt_iop_enable_button:disabled,
+.dt_iop_enable_button.dt_iop_enable_forced_off {
   color: @disabled_fg_color;
-  background-color: transparent;
-  border-color: transparent;
 }
 
 /* Hover Adjustments */
@@ -1566,10 +1459,8 @@ notebook tab:hover,
 radiobutton:hover label,
 treeview *:hover:not(check),
 .dt_module_btn:hover,
-button:hover,
-#view-label:hover {
+button:hover {
   background-color: @button_hover_bg;
-  border-color: transparent;
   color: @button_hover_fg;
 }
 
@@ -1607,8 +1498,7 @@ treeview check:selected,
 menuitem check:checked,
 menuitem check:selected {
   color: @bauhaus_value_text;
-  caret-color: @bauhaus_value_text;
-  border-color: @bauhaus_value_text;
+  border: 1px solid @recessed_color_border;
 }
 
 treeview check:hover,

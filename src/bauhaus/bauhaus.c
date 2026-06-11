@@ -1389,8 +1389,8 @@ void dt_bauhaus_load_theme(dt_bauhaus_t *bauhaus)
   bauhaus->line_height = pango_height / PANGO_SCALE;
   bauhaus->quad_width = bauhaus->line_height;
 
-  bauhaus->baseline_size = DT_PIXEL_APPLY_DPI(5); // absolute size in Cairo unit
-  bauhaus->border_width = DT_PIXEL_APPLY_DPI(2); // absolute size in Cairo unit
+  bauhaus->baseline_size = 5; // absolute size in Cairo unit
+  bauhaus->border_width = 1; // absolute size in Cairo unit
   bauhaus->marker_size = pango_height / PANGO_SCALE * 0.6;
 }
 
@@ -2454,7 +2454,9 @@ static void dt_bauhaus_draw_baseline(struct dt_bauhaus_widget_t *w, cairo_t *cr,
   // Issue is that leaves a dent on the baseline, so the trick
   // is to make it overlap back by a radius on the left.
   const double x_origin = -w->bauhaus->marker_size / 3.;
-  cairo_rectangle(cr, x_origin, baseline_top, width, baseline_height);
+  // Make sure we use integer coordinates to limit anti-aliasing blur
+  cairo_rectangle(cr, round(x_origin), round(baseline_top), 
+                      round(width), round(baseline_height));
 
   cairo_pattern_t *gradient = NULL;
   if(has_colored_background && is_sensitive)
@@ -2473,7 +2475,21 @@ static void dt_bauhaus_draw_baseline(struct dt_bauhaus_widget_t *w, cairo_t *cr,
     // regular baseline
     set_color(cr, w->bauhaus->color_bg);
   }
-  cairo_fill(cr);
+
+  if(w->bauhaus->border_width > 0)
+  {
+    // Draw the background and the border on top
+    cairo_fill_preserve(cr);
+    set_color(cr, w->bauhaus->color_border);
+    cairo_set_line_width(cr, 1.);
+    cairo_stroke(cr);
+  }
+  else
+  {
+    // Draw only the background
+    cairo_fill(cr);
+  }
+
   if(gradient) cairo_pattern_destroy(gradient);
 
   // get the reference of the slider aka the position of the 0 value

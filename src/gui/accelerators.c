@@ -3035,9 +3035,9 @@ void dt_accels_search(dt_accels_t *accels, GtkWindow *main_window, GtkWidget *an
   // Build the search entry
   GtkWidget *search_entry = gtk_search_entry_new();
   state.search_entry = search_entry;
-  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
   gtk_container_add(GTK_CONTAINER(window), box);
-  GtkWidget *search_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
+  GtkWidget *search_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
   gtk_box_pack_start(GTK_BOX(box), search_row, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(search_row), search_entry, TRUE, TRUE, 0);
 
@@ -3081,8 +3081,7 @@ void dt_accels_search(dt_accels_t *accels, GtkWindow *main_window, GtkWidget *an
   gtk_container_add(GTK_CONTAINER(scrolled), tree_view);
 
   GtkCellRenderer *txt = gtk_cell_renderer_text_new();
-  g_object_set(txt, "ellipsize", PANGO_ELLIPSIZE_END, "ellipsize-set", TRUE, "max-width-chars", 70,
-               "foreground", "#ccc", "xpad", 10, NULL);
+  g_object_set(txt, "ellipsize", PANGO_ELLIPSIZE_END, "ellipsize-set", TRUE, "max-width-chars", 70, NULL);
   GtkTreeViewColumn *column = gtk_tree_view_column_new_with_attributes(NULL, txt, "text", 0, NULL);
   gtk_tree_view_column_set_expand(column, FALSE);
   gtk_tree_view_column_set_sizing(column, GTK_TREE_VIEW_COLUMN_FIXED);
@@ -3090,15 +3089,13 @@ void dt_accels_search(dt_accels_t *accels, GtkWindow *main_window, GtkWidget *an
   gtk_tree_view_append_column(GTK_TREE_VIEW(tree_view), column);
 
   GtkCellRenderer *accel = gtk_cell_renderer_accel_new();
-  g_object_set(accel, "editable", FALSE, "accel-mode", GTK_CELL_RENDERER_ACCEL_MODE_OTHER,
-               "foreground", "#eee", "xpad", 10, NULL);
+  g_object_set(accel, "editable", FALSE, "accel-mode", GTK_CELL_RENDERER_ACCEL_MODE_OTHER, NULL);
   column = gtk_tree_view_column_new_with_attributes(NULL, accel, "accel-key", 5, "accel-mods", 6, NULL);
   gtk_tree_view_column_set_min_width(column, 140);
   gtk_tree_view_append_column(GTK_TREE_VIEW(tree_view), column);
 
   GtkCellRenderer *description = gtk_cell_renderer_text_new();
-  g_object_set(description, "ellipsize", PANGO_ELLIPSIZE_END, "ellipsize-set", TRUE,
-               "foreground", "#aaa", "xpad", 10, NULL);
+  g_object_set(description, "ellipsize", PANGO_ELLIPSIZE_END, "ellipsize-set", TRUE, NULL);
   column = gtk_tree_view_column_new_with_attributes(NULL, description, "text", 3, NULL);
   gtk_tree_view_column_set_sizing(column, GTK_TREE_VIEW_COLUMN_FIXED);
   gtk_tree_view_column_set_min_width(column, 280);
