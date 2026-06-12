@@ -270,6 +270,7 @@ static void _active_modules_popup(GtkWidget *widget, dt_thumbnail_t *thumb)
   gtk_container_set_border_width(GTK_CONTAINER(scrolled), 4);
 
   GtkWidget *view = gtk_text_view_new();
+  dt_gui_textview_set_padding(GTK_TEXT_VIEW(view));
   gtk_text_view_set_editable(GTK_TEXT_VIEW(view), FALSE);
   gtk_text_view_set_cursor_visible(GTK_TEXT_VIEW(view), FALSE);
   gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(view), GTK_WRAP_WORD_CHAR);

@@ -1156,12 +1156,15 @@ static int _compute_max_image_width(dt_lib_textnotes_t *d, const int scale, gboo
   if(max_w <= 0 && d->root)
     max_w = gtk_widget_get_allocated_width(d->root);
 
-  if((!have_device || !*have_device) && d->preview_view)
+  if(d->preview_view)
   {
     const int margin = gtk_text_view_get_left_margin(d->preview_view)
                        + gtk_text_view_get_right_margin(d->preview_view);
     if(margin > 0 && max_w > margin) max_w -= margin;
+  }
 
+  if((!have_device || !*have_device) && d->preview_view)
+  {
     GtkStyleContext *ctx = gtk_widget_get_style_context(GTK_WIDGET(d->preview_view));
     GtkStateFlags state = gtk_widget_get_state_flags(GTK_WIDGET(d->preview_view));
     GtkBorder padding = { 0 }, border = { 0 };
@@ -2154,6 +2157,7 @@ void gui_init(dt_lib_module_t *self)
 
   GtkWidget *textview = gtk_text_view_new();
   dt_accels_disconnect_on_text_input(textview);
+  dt_gui_textview_set_padding(GTK_TEXT_VIEW(textview));
   gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(textview), GTK_WRAP_WORD_CHAR);
   gtk_text_view_set_accepts_tab(GTK_TEXT_VIEW(textview), FALSE);
   gtk_widget_set_hexpand(textview, TRUE);
@@ -2177,6 +2181,7 @@ void gui_init(dt_lib_module_t *self)
   gtk_stack_add_named(GTK_STACK(d->stack), edit_sw, "edit");
 
   GtkWidget *preview_view = gtk_text_view_new();
+  dt_gui_textview_set_padding(GTK_TEXT_VIEW(preview_view));
   gtk_text_view_set_editable(GTK_TEXT_VIEW(preview_view), FALSE);
   gtk_text_view_set_cursor_visible(GTK_TEXT_VIEW(preview_view), FALSE);
   gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(preview_view), GTK_WRAP_WORD_CHAR);

@@ -477,6 +477,17 @@ GdkModifierType dt_key_modifier_state();
  */
 void dt_gui_widget_init_auto_height(GtkWidget *widget , int min_rows, int max_rows);
 GtkWidget *dt_ui_scroll_wrap(GtkWidget *w, gint min_size, char *config_str);
+
+/**
+ * @brief Apply the standard recessed-input text padding to a GtkTextView.
+ *
+ * CSS padding on the textview "text" node is parsed but ignored for layout
+ * in GTK3, so the 2px/4px inset matching `entry`/`treeview` (see
+ * data/themes/.css) has to be set on the widget itself.
+ *
+ * @param textview The GtkTextView to update.
+ */
+void dt_gui_textview_set_padding(GtkTextView *textview);
 // check whether the given container has any user-added children
 gboolean dt_gui_container_has_children(GtkContainer *container);
 // return a count of the user-added children in the given container

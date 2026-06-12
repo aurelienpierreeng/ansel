@@ -2625,6 +2625,16 @@ static void _widget_auto_height_free(gpointer data)
   dt_free(state);
 }
 
+void dt_gui_textview_set_padding(GtkTextView *textview)
+{
+  if(!GTK_IS_TEXT_VIEW(textview)) return;
+
+  gtk_text_view_set_left_margin(textview, DT_PIXEL_APPLY_DPI(4));
+  gtk_text_view_set_right_margin(textview, DT_PIXEL_APPLY_DPI(4));
+  gtk_text_view_set_top_margin(textview, DT_PIXEL_APPLY_DPI(2));
+  gtk_text_view_set_bottom_margin(textview, DT_PIXEL_APPLY_DPI(2));
+}
+
 void dt_gui_widget_init_auto_height(GtkWidget *w, const int min_rows, const int max_rows)
 {
   if(!GTK_IS_TREE_VIEW(w) && !GTK_IS_TEXT_VIEW(w)) return;

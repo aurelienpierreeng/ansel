@@ -367,13 +367,32 @@ button.text-button,
 
 /* Text Inputs */
 entry,
-textview,
 treeview {
   padding: 2px 4px;
   min-height: 1em;
   border: 1px solid @recessed_color_border;
   background-image: none;
   background-color: @recessed_color_bg;
+}
+
+/**
+ * Textview is one of those annoying widgets that have no publicly
+ * visible internal nodes. So you have to guess what's inside.
+ * Background is applied on the external container, and the border
+ * has to be applied on the inner text node to be drawn at all.
+ * CSS padding on the text node is parsed but has no effect on text
+ * layout, so the 2px/4px inset has to be set in code with
+ * gtk_text_view_set_{left,right,top,bottom}_margin().
+ * Go figure...
+ **/
+textview {
+  background-color: @recessed_color_bg;
+  padding: 0;
+}
+
+textview text {
+  min-height: 1em;
+  border: 1px solid @recessed_color_border;
 }
 
 /* Checkbuttons */

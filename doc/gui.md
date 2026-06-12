@@ -126,3 +126,28 @@ Now:
 3. Controls should be fully accessible from keyboard alone and fully accessible from mouse/pointing devices alone, but never require a mix of both. Combinations of keyboard and mouse events should only be shortcuts alternatives to faster access features that are already fully accessible from one or the other entirely.[^3]
 
 [^3]: There are still many parts in the GUI where buttons require Ctrl+click to trigger special behaviours that cannot be accessed otherwise. These should be fixed.
+
+## Implementation
+
+### Spacing within boxes, grids and flowboxes
+
+Within `GtkBox`, `GtkGrid` and `GtkFlowBox` containers, it is not possible to define spacing between children using CSS `margin`/`padding`: that would not honour the boundaries of the container, so widgets sitting on the container's edges would end up recessed compared to its contours while inner widgets would not. Spacing between children therefore has to be hardcoded in C at box-creation time, using the `DT_GUI_BOX_SPACING` macro (`src/gui/gtk.h`), so it is managed consistently from a single place.
+
+`DT_GUI_BOX_SPACING` is defined in device pixels (10px) and is intentionally *not* rescaled through `DT_PIXEL_APPLY_DPI()`. To stay visually consistent with it, CSS margins and paddings that contribute to layout/spacing should also be expressed in `px`, which the window manager and GTK rescale for HiDPI the same way as `DT_GUI_BOX_SPACING`. Anything related to text or font metrics (padding around labels, line spacing, etc.) should instead be expressed in `em`, so it follows the user's font-size setting.
+
+The deliberate exception is scrollbar sliders, which are sized in `em` so their grip grows with the font size for legibility.
+
+### GtkTextView: background, border and padding
+
+`GtkTextView` doesn't expose its internal "text" CSS node through any public API, so styling it the same way as `entry`/`treeview` requires working around a few GTK3 quirks (also documented next to the `textview` rules in `data/themes/ansel.css`):
+
+- `background-color` has to be set on the outer `textview` node.
+- `border` only gets painted when applied to the inner `textview text` node — a `border` declared on `textview` itself reserves layout space but is never drawn.
+- `padding` on the outer `textview` node *does* shift the inner "text" node (and the glyphs with it) inward, but a `border` on `textview text` would then be painted at that shifted position, i.e. *outside* the padding instead of around it — the opposite of the `entry`/`treeview` look (border flush with the widget edge, padding between the border and the text).
+- `padding` declared directly on `textview text` is parsed without error but has **no effect** on text layout at all.
+
+Because of this, CSS alone cannot reproduce the `entry`/`treeview` recessed look for a `GtkTextView`. The CSS only provides the background and the border (`textview { padding: 0; background-color: @recessed_color_bg; }` and `textview text { border: 1px solid @recessed_color_border; }`); the actual 2px/4px text inset is applied in C with `dt_gui_textview_set_padding()` (`src/gui/gtk.c`), which calls `gtk_text_view_set_{left,right,top,bottom}_margin()`. Every `GtkTextView` created in the codebase should call this helper so it stays visually consistent with `entry`/`treeview`.
+
+### Scrollbar slider spacing
+
+`scrollbar slider` cannot use `margin` in CSS (GTK ignores it for this node), so the gap around the slider is faked with a transparent `border` instead (see `data/themes/ansel.css`).
