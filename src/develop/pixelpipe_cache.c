@@ -447,7 +447,21 @@ static gboolean _cache_entry_clmem_flush_host_pinned_locked(dt_pixel_cache_entry
 
 void dt_dev_pixelpipe_cache_flush_clmem(dt_dev_pixelpipe_cache_t *cache, const int devid)
 {
-  if(devid >= 0) dt_opencl_events_wait_for(devid);
+  if(devid >= 0)
+  {
+    dt_opencl_events_wait_for(devid);
+  }
+#ifdef HAVE_OPENCL
+  else if(!IS_NULL_PTR(darktable.opencl) && darktable.opencl->inited)
+  {
+    // Full cache teardown drops cl_mem objects from every OpenCL context.
+    // Driver event lists are only diagnostics here: finish each command queue so no
+    // pending kernel or transfer can still reference a cache payload when we
+    // release it below.
+    for(int dev = 0; dev < darktable.opencl->num_devs; dev++)
+      dt_opencl_finish(dev);
+  }
+#endif
 
   dt_pthread_mutex_lock(&cache->lock);
   GHashTableIter iter;
