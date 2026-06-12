@@ -105,15 +105,17 @@ static gboolean _button_draw(GtkWidget *widget, cairo_t *cr)
     cwidth -= border.left + border.right + padding.left + padding.right;
     cheight -= border.top + border.bottom + padding.top + padding.bottom;
 
-    /* we have to leave some breathing room to the cairo icon paint function to possibly    */
-    /* draw slightly outside the bounding box, for optical alignment and balancing of icons */
-    /* we do this by putting a drawing area widget inside the button and using the CSS      */
-    /* margin property in px of the drawing area as extra room in percent (DPI safe)        */
-    /* we do this because Gtk+ does not support CSS size in percent                         */
-    /* this extra margin can be also (slightly) negative                                    */
-    GtkStyleContext *ccontext = gtk_widget_get_style_context(DTGTK_BUTTON(widget)->canvas);
-    GtkBorder cmargin;
-    gtk_style_context_get_margin(ccontext, state, &cmargin);
+    /* The icon margin is read from our drawing-area child only while GTK still owns it.
+       gtk_button_set_label() can replace the child with a label, which destroys the
+       canvas and leaves our stored pointer stale. In that case, we keep drawing the
+       icon with no extra margin instead of dereferencing an invalid child pointer. */
+    GtkBorder cmargin = { 0 };
+    GtkWidget *canvas = gtk_bin_get_child(GTK_BIN(widget));
+    if(!IS_NULL_PTR(canvas) && canvas == DTGTK_BUTTON(widget)->canvas)
+    {
+      GtkStyleContext *ccontext = gtk_widget_get_style_context(canvas);
+      gtk_style_context_get_margin(ccontext, state, &cmargin);
+    }
 
     startx += round(cmargin.left * cwidth / 100.0f);
     starty += round(cmargin.top * cheight / 100.0f);
