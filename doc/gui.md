@@ -151,3 +151,20 @@ Because of this, CSS alone cannot reproduce the `entry`/`treeview` recessed look
 ### Scrollbar slider spacing
 
 `scrollbar slider` cannot use `margin` in CSS (GTK ignores it for this node), so the gap around the slider is faked with a transparent `border` instead (see `data/themes/ansel.css`).
+
+## Font
+
+We use the font Roboto, because: 
+
+1. it was designed for legibility on hiDPI screens,
+2. is has a wide language support,
+3. it has a wide font weight & variants support,
+4. this allows to fine-tune the display better than trying to account for any system font.
+
+If Roboto is not found on the system, we try to reuse the system font: Segoe UI on Windows, SF Pro on Mac, Ubuntu on Ubuntu, Cantarell on Gnome etc. But depending on how the font manager is configured, for different font weight, we might actually need to change the `font-family` name (like "Roboto Display" for `font-weight: 300`), and not merely the weight. So that makes for cumbersome fonts definitions that need to account for every combination on every OS.
+
+TODO: ship Roboto in pre-built packages.
+
+## Developping
+
+Start `GTK_DEBUG=interactive ansel` to get the GTK inspector. Before changing any styling rule, identify which line from `ansel.css` is last overriding it, from GTK node inspector nodes list on the target widget. Then find if you can mutualize/refactor global rules and existing overrides, rather than hacking another override on top.
