@@ -102,7 +102,7 @@
 
 /* Any control that appears to be recessed/punched-in behind GUI surface */
 @define-color recessed_color_bg alpha(@grey_00, 0.25);
-@define-color recessed_color_border rgba(255, 255, 255, 0.05);
+@define-color recessed_color_border rgba(255, 255, 255, 0.2);
 
 /* Scroll bars */
 @define-color scroll_bar_inactive @grey_55;
@@ -207,8 +207,9 @@
 window,
 dialog,
 messagedialog {
-  background-color: @bg_color;
+  background-color: transparent;
   background-image: none;
+  background-clip: border-box;
   color: @fg_color;
   font-size: 1em;
   font-weight: 300;
@@ -221,27 +222,49 @@ messagedialog {
   border-radius: 0;
 }
 
+/* Ensure all windows & popups have a background */
+window,
+dialog,
+messagedialog {
+  background-color: @bg_color;
+}
+
 /* Base Typographic Defaults & Background Reset for GTK nodes */
 * {
-  font-family: "Roboto Light", "Roboto", "Segoe UI Light", "Segoe UI", "SF Pro Display Light", "SF Pro Display", "Ubuntu Light", "Ubuntu", "IPAPGothic", "Cantarell", sans-serif;
+  font-family: 
+    "Roboto Light", "Roboto", 
+    "Segoe UI Light", "Segoe UI", 
+    "SF Pro Display Light", "SF Pro Display", 
+    "Ubuntu Light", "Ubuntu", 
+    "IPAPGothic", "Cantarell", sans-serif;
   font-weight: 300;
   font-size: 1em;
-  background-color: transparent;
   -gtk-secondary-caret-color: transparent;
 }
 
 /* Emphasized Typography */
 .dt_section_label,
 .quickfilter-label,
+treeview header label,
 treeview *:selected:not(check) {
-  font-family: "Roboto Medium", "Roboto", "Segoe UI Semibold", "Segoe UI", "SF Pro Display Medium", "SF Pro Display", "Ubuntu Medium", "Ubuntu", "IPAPGothic", "Cantarell", sans-serif;
+  font-family: 
+    "Roboto Medium", "Roboto", 
+    "Segoe UI Semibold", "Segoe UI", 
+    "SF Pro Display Medium", "SF Pro Display", 
+    "Ubuntu Medium", "Ubuntu", 
+    "IPAPGothic", "Cantarell", sans-serif;
   font-weight: 500;
 }
 
 /* Condensed Typography */
 #iop-panel-label,
 #lib-panel-label {
-  font-family: "Roboto Condensed", "Roboto", "Segoe UI Condensed", "Segoe UI", "SF Pro Display", "SF Pro Display", "Ubuntu Condensed", "Ubuntu", "IPAPGothic", "Cantarell", sans-serif;
+  font-family: 
+    "Roboto Condensed", "Roboto", 
+    "Segoe UI Condensed", "Segoe UI", 
+    "SF Pro Display", "SF Pro Display", 
+    "Ubuntu Condensed", "Ubuntu", 
+    "IPAPGothic", "Cantarell", sans-serif;
   font-weight: 400;
   font-stretch: condensed;
   font-size: 1.05em;
@@ -259,7 +282,7 @@ tooltip label,
 }
 
 .dt_monospace {
-  font-family: monospace;
+  font-family: "Roboto Mono", monospace;
 }
 
 /* General Layout Options */
@@ -979,11 +1002,18 @@ notebook.empty stack {
   9. SLIDERS, SCALES & TREEVIEWS
   ======================================*/
 
+scrollbar {
+  background: @recessed_color_bg;
+  min-height: 0.6em;
+  min-width: 0.6em;
+}
+
 scrollbar slider {
   background-color: @scroll_bar_inactive;
   /* We can't set margins here, so transparent border is our way to space it */
   border: 3px solid transparent;
   border-radius: 0.5em;
+  background-clip: padding-box;
 }
 
 scrollbar.vertical slider {
@@ -996,32 +1026,21 @@ scrollbar.horizontal slider {
   min-height: 0.5em;
 }
 
-scale contents trough {
+scale trough {
   background-color: @scroll_bar_bg;
   min-width: 0.5em;
   min-height: 0.5em;
 }
 
-scale contents trough highlight {
+scale highlight {
   background-color: @button_bg;
 }
 
-scale contents trough slider {
+scale slider {
   background-color: @scroll_bar_inactive;
   min-width: 0.5em;
   min-height: 0.5em;
-}
-
-scrollbar {
-  background: @recessed_color_bg;
-  border: 1px solid @recessed_color_border;
-  min-height: 0.6em;
-  min-width: 0.6em;
-}
-
-scrollbar slider:hover,
-scale contents trough slider:hover {
-  background-color: @scroll_bar_active;
+  background-clip: padding-box;
 }
 
 treeview,
@@ -1030,15 +1049,14 @@ filechooser widget treeview {
   color: @fg_color;
 }
 
-#pathbarbox, /* default Gtk item in filechooser popup */
-treeview header
-{
-  border-bottom: 1px solid @grey_80;
+treeview header button {
+  background-color: rgba(255, 255, 255, 0.1);
+  border-radius: 0;
+  margin: 0 1px 1px;
 }
 
 treeview header label {
-  font-weight: 700;
-  padding: 0.14em;
+  padding: 2px 4px;
 }
 
 /* Preferences & Filechooser Sidebar styling */
@@ -1086,14 +1104,21 @@ filechooser .sidebar-button {
   margin-right: 0.28em;
 }
 
-filechooser .sidebar,
-filechooser treeview {
+filechooser .sidebar {
   background-color: @recessed_color_bg;
+}
+
+filechooser paned separator {
+  background: transparent;
 }
 
 #preferences-box .sidebar row {
   padding: 0.35em;
   border-left: 0.14em solid @bg_color;
+}
+
+filechooser treeview.view row:nth-child(odd) {
+    background-color: @recessed_color_bg;
 }
 
 filechooser row:selected .sidebar-icon,
@@ -1518,20 +1543,20 @@ treeview *:selected:not(check) {
 
 /* Hover Adjustments */
 .dt_transparent_background:hover,
-dialog .sidebar :hover,
+row:hover,
 menuitem:hover,
 notebook tab:hover,
-radiobutton:hover label,
 treeview *:hover:not(check),
 .dt_module_btn:hover,
-button:hover {
+button:hover,
+slider:hover {
   background-color: @button_hover_bg;
   color: @button_hover_fg;
 }
 
 .dt_bauhaus:hover,
 combobox window *:hover,
-menuitem:hover>arrow {
+menuitem:hover > arrow {
   color: shade(@fg_color, 1.2);
 }
 
