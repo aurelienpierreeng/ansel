@@ -602,6 +602,10 @@ dialog .sidebar row:selected:hover label,
   border-top: 1px solid @grey_65;
 }
 
+.dt_lib_module:first-child #module-header {
+  border-top-color: @plugin_header_color;
+}
+
 .dt_iop_module #module-header {
   border-radius: 8px;
   border-top: 1px solid shade(@plugin_header_color, 1.15);
