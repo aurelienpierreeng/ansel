@@ -2418,12 +2418,17 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
         void *preview_buf = NULL;
         dt_pixel_cache_entry_t *preview_entry = NULL;
 
-        if(dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, preview_hash, &preview_buf, &preview_entry,
-                                       self->dev->preview_pipe->devid, NULL)
-       && !IS_NULL_PTR(preview_buf) && !IS_NULL_PTR(preview_entry))
+        gboolean preview_ready = dt_dev_pixelpipe_cache_ref_entry_by_hash(darktable.pixelpipe_cache, preview_hash,
+                                                                          &preview_buf, &preview_entry);
+        if(preview_ready && (IS_NULL_PTR(preview_buf) || IS_NULL_PTR(preview_entry)))
         {
-          dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, preview_entry);
+          if(!IS_NULL_PTR(preview_entry))
+            dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
+          preview_ready = FALSE;
+        }
 
+        if(preview_ready)
+        {
           dt_pixel_cache_entry_t *old_entry = NULL;
           gboolean keep_new_entry = FALSE;
           dt_iop_gui_enter_critical_section(self);
@@ -3038,14 +3043,20 @@ static void _develop_history_resync_callback(gpointer instance, gpointer user_da
   {
     void *preview_buf = NULL;
     dt_pixel_cache_entry_t *preview_entry = NULL;
-    if(dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, preview_hash, &preview_buf, &preview_entry,
-                                   self->dev->preview_pipe->devid, NULL)
-           && !IS_NULL_PTR(preview_buf) && !IS_NULL_PTR(preview_entry))
+    gboolean preview_ready = dt_dev_pixelpipe_cache_ref_entry_by_hash(darktable.pixelpipe_cache, preview_hash,
+                                                                      &preview_buf, &preview_entry);
+    if(preview_ready && (IS_NULL_PTR(preview_buf) || IS_NULL_PTR(preview_entry)))
+    {
+      if(!IS_NULL_PTR(preview_entry))
+        dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
+      preview_ready = FALSE;
+    }
+
+    if(preview_ready)
     {
       size_t preview_width = 0;
       size_t preview_height = 0;
       (void)_current_preview_luminance_hash(self, &preview_width, &preview_height);
-      dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, preview_entry);
 
       dt_pixel_cache_entry_t *old_entry = NULL;
       gboolean keep_new_entry = FALSE;
@@ -3104,12 +3115,14 @@ static void _develop_cacheline_ready_callback(gpointer instance, const guint64 h
 
   void *preview_buf = NULL;
   dt_pixel_cache_entry_t *preview_entry = NULL;
-  if(!dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, preview_hash, &preview_buf, &preview_entry,
-                                  self->dev->preview_pipe->devid, NULL)
-     || IS_NULL_PTR(preview_buf) || IS_NULL_PTR(preview_entry))
+  const gboolean preview_ready = dt_dev_pixelpipe_cache_ref_entry_by_hash(darktable.pixelpipe_cache, preview_hash,
+                                                                          &preview_buf, &preview_entry);
+  if(!preview_ready || IS_NULL_PTR(preview_buf) || IS_NULL_PTR(preview_entry))
+  {
+    if(!IS_NULL_PTR(preview_entry))
+      dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
     return;
-
-  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, preview_entry);
+  }
 
   dt_pixel_cache_entry_t *old_entry = NULL;
   gboolean keep_new_entry = FALSE;

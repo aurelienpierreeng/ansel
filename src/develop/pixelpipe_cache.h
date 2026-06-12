@@ -471,6 +471,30 @@ int dt_dev_pixelpipe_cache_prepare_cl_input(struct dt_dev_pixelpipe_t *pipe,
 struct dt_pixel_cache_entry_t *dt_dev_pixelpipe_cache_ref_entry_for_host_ptr(dt_dev_pixelpipe_cache_t *cache,
                                                                               void *host_ptr);
 
+/**
+ * @brief Resolve and retain an existing cache entry by hash.
+ *
+ * @details
+ * This is the race-free counterpart to `dt_dev_pixelpipe_cache_peek()` for GUI
+ * code that needs to keep a cacheline past the lookup call. The cache lock is
+ * held while the entry is found and its refcount is incremented, so normal cache
+ * eviction cannot destroy the returned entry before the caller takes its own
+ * read lock.
+ *
+ * The function never creates or allocates a cache entry. Release a successful
+ * result with `dt_dev_pixelpipe_cache_ref_count_entry(cache, FALSE, entry)`.
+ *
+ * @param cache Pixelpipe cache.
+ * @param hash Cacheline hash to resolve.
+ * @param data Returned current host buffer pointer, if requested.
+ * @param entry Returned retained cache entry, if requested.
+ * @return TRUE when an existing non-auto-destroy entry was retained.
+ */
+gboolean dt_dev_pixelpipe_cache_ref_entry_by_hash(dt_dev_pixelpipe_cache_t *cache,
+                                                  const uint64_t hash,
+                                                  void **data,
+                                                  struct dt_pixel_cache_entry_t **entry);
+
 /** Peek the host data pointer of a cache entry without allocating. */
 void *dt_pixel_cache_entry_get_data(struct dt_pixel_cache_entry_t *entry);
 
