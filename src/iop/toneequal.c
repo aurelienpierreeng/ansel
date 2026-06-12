@@ -588,6 +588,7 @@ static void invalidate_luminance_cache(dt_iop_module_t *const self)
   if(IS_NULL_PTR(g)) return;
 
   dt_pixel_cache_entry_t *preview_entry = NULL;
+  dt_iop_gui_enter_critical_section(self);
   g->max_histogram = 1;
   g->luminance_valid = FALSE;
   g->histogram_valid = 0;
@@ -597,8 +598,9 @@ static void invalidate_luminance_cache(dt_iop_module_t *const self)
   g->thumb_preview_buf_height = 0;
   preview_entry = g->thumb_preview_entry;
   g->thumb_preview_entry = NULL;
+  dt_iop_gui_leave_critical_section(self);
 
-  if(preview_entry)
+  if(!IS_NULL_PTR(preview_entry))
     dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
 }
 
@@ -1446,7 +1448,7 @@ static inline void update_histogram(struct dt_iop_module_t *const self)
 
   if(!needs_histogram || width == 0 || height == 0)
   {
-    if(preview_entry)
+    if(!IS_NULL_PTR(preview_entry))
       dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
     return;
   }
@@ -1803,8 +1805,13 @@ static void _switch_cursors(struct dt_iop_module_t *self)
 
   if(!self->expanded)
   {
-    // if module lost focus or is disabled
-    // do nothing and let the app decide
+    // If the module lost focus, do nothing and let the app decide.
+    return;
+  }
+  else if(!self->enabled)
+  {
+    // A disabled module does not own the cursor state: leave whatever the view
+    // or another tool has currently selected, and most importantly do not hide it.
     return;
   }
   else if(!sanity_check(self) || in_mask_editing(self) || dt_iop_color_picker_is_visible(self->dev))
@@ -1825,7 +1832,7 @@ static void _switch_cursors(struct dt_iop_module_t *self)
 
     dt_control_queue_redraw_center();
   }
-  else if(g->cursor_valid && !self->dev->pipe->processing)
+  else if(self->enabled && g->cursor_valid && !self->dev->pipe->processing)
   {
     // if pipe is clean and idle and cursor is on preview,
     // hide GTK cursor because we display our custom one
@@ -1905,19 +1912,25 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   }
 
   // Store the current preview exposure too, to spare recomputing it in the UI callbacks.
-  if(g->cursor_valid && !dev->pipe->processing && g->luminance_valid && g->thumb_preview_entry)
+  if(g->cursor_valid && !dev->pipe->processing)
   {
     dt_pixel_cache_entry_t *preview_entry = NULL;
     size_t preview_width = 0;
     size_t preview_height = 0;
 
-    preview_entry = g->thumb_preview_entry;
-    preview_width = g->thumb_preview_buf_width;
-    preview_height = g->thumb_preview_buf_height;
-    if(preview_entry)
+    // Keep the GUI cache entry alive before releasing the GUI state lock.
+    // Pipe workers can replace the retained entry while mouse motion keeps sampling it.
+    dt_iop_gui_enter_critical_section(self);
+    if(g->luminance_valid && !IS_NULL_PTR(g->thumb_preview_entry))
+    {
+      preview_entry = g->thumb_preview_entry;
+      preview_width = g->thumb_preview_buf_width;
+      preview_height = g->thumb_preview_buf_height;
       dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, preview_entry);
+    }
+    dt_iop_gui_leave_critical_section(self);
 
-    if(preview_entry && preview_width > 0 && preview_height > 0)
+    if(!IS_NULL_PTR(preview_entry) && preview_width > 0 && preview_height > 0)
     {
       dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, preview_entry);
       const float *const preview_buf = (const float *const)dt_pixel_cache_entry_get_data(preview_entry);
@@ -2031,7 +2044,7 @@ int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t 
     if(self->off) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(self->off), 1);
 
   // if GUI buffers not ready, exit but still handle the cursor
-  const int fail = (!g->cursor_valid || !g->luminance_valid || !g->interpolation_valid || !g->user_param_valid || dev->pipe->processing || !self->expanded);
+  const int fail = (!g->cursor_valid || !g->interpolation_valid || !g->user_param_valid || dev->pipe->processing || !self->expanded);
   if(fail) return 1;
 
   // Re-read the exposure in case the preview changed after the mouse moved.
@@ -2040,15 +2053,29 @@ int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t 
   size_t preview_height = 0;
   int cursor_x = 0;
   int cursor_y = 0;
-  preview_entry = g->thumb_preview_entry;
-  preview_width = g->thumb_preview_buf_width;
-  preview_height = g->thumb_preview_buf_height;
-  cursor_x = g->cursor_pos_x;
-  cursor_y = g->cursor_pos_y;
-  if(preview_entry)
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, preview_entry);
 
-  if(preview_entry && preview_width > 0 && preview_height > 0)
+  // Copy the cursor sample source while holding the GUI state lock, then keep the
+  // cacheline alive with an explicit ref until the sampling read lock is released.
+  dt_iop_gui_enter_critical_section(self);
+  if(g->luminance_valid && !IS_NULL_PTR(g->thumb_preview_entry))
+  {
+    preview_entry = g->thumb_preview_entry;
+    preview_width = g->thumb_preview_buf_width;
+    preview_height = g->thumb_preview_buf_height;
+    cursor_x = g->cursor_pos_x;
+    cursor_y = g->cursor_pos_y;
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, preview_entry);
+  }
+  dt_iop_gui_leave_critical_section(self);
+
+  if(IS_NULL_PTR(preview_entry) || preview_width == 0 || preview_height == 0)
+  {
+    if(!IS_NULL_PTR(preview_entry))
+      dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
+    return 1;
+  }
+
+  if(!IS_NULL_PTR(preview_entry) && preview_width > 0 && preview_height > 0)
   {
     dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, preview_entry);
     const float *const preview_buf = (const float *const)dt_pixel_cache_entry_get_data(preview_entry);
@@ -2064,7 +2091,7 @@ int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t 
     }
   }
 
-  if(preview_entry)
+  if(!IS_NULL_PTR(preview_entry))
     dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
 
   // Set the correction from mouse scroll input
@@ -2187,7 +2214,8 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   // If the darkroom picker owns the center view, keep tone equalizer overlays out of the way.
   if(in_mask_editing(self) || dt_iop_color_picker_is_visible(dev)) return;
 
-  const int fail = (!g->cursor_valid || !g->interpolation_valid || dev->pipe->processing || !sanity_check(self) || !self->expanded);
+  const int fail = (!g->cursor_valid || !g->interpolation_valid || dev->pipe->processing
+                    || !sanity_check(self) || !self->expanded);
   if(fail) return;
 
   if(!g->graph_valid)
@@ -2207,18 +2235,24 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   float correction = 0.0f;
   float exposure_out = 0.0f;
   float luminance_out = 0.0f;
-  if(g->luminance_valid && self->enabled)
+  if(self->enabled)
   {
-    preview_entry = g->thumb_preview_entry;
-    preview_width = g->thumb_preview_buf_width;
-    preview_height = g->thumb_preview_buf_height;
-    if(preview_entry)
+    // The drawing pass samples the same retained luminance cacheline as the event
+    // handlers, so the ref has to be taken before another pipe callback can detach it.
+    dt_iop_gui_enter_critical_section(self);
+    if(g->luminance_valid && !IS_NULL_PTR(g->thumb_preview_entry))
+    {
+      preview_entry = g->thumb_preview_entry;
+      preview_width = g->thumb_preview_buf_width;
+      preview_height = g->thumb_preview_buf_height;
       dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, preview_entry);
-    dt_simd_memcpy(g->factors, factors, PIXEL_CHAN);
-    sigma = g->sigma;
+      dt_simd_memcpy(g->factors, factors, PIXEL_CHAN);
+      sigma = g->sigma;
+    }
+    dt_iop_gui_leave_critical_section(self);
   }
 
-  if(preview_entry && preview_width > 0 && preview_height > 0)
+  if(!IS_NULL_PTR(preview_entry) && preview_width > 0 && preview_height > 0)
   {
     dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, preview_entry);
     const float *const preview_buf = (const float *const)dt_pixel_cache_entry_get_data(preview_entry);
@@ -2358,7 +2392,9 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
     //lost focus - stop showing mask
     const gboolean was_mask = g->mask_display;
     g->mask_display = FALSE;
+    dt_iop_gui_enter_critical_section(self);
     g->pending_preview_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+    dt_iop_gui_leave_critical_section(self);
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->show_luminance_mask), FALSE);
     if(was_mask) dt_dev_pixelpipe_update_history_main(self->dev);
     dt_collection_hint_message(darktable.collection);
@@ -2384,12 +2420,13 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
 
         if(dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, preview_hash, &preview_buf, &preview_entry,
                                        self->dev->preview_pipe->devid, NULL)
-           && preview_buf && preview_entry)
+       && !IS_NULL_PTR(preview_buf) && !IS_NULL_PTR(preview_entry))
         {
           dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, preview_entry);
 
           dt_pixel_cache_entry_t *old_entry = NULL;
           gboolean keep_new_entry = FALSE;
+          dt_iop_gui_enter_critical_section(self);
           if(g->thumb_preview_entry != preview_entry || g->thumb_preview_hash != preview_hash
              || g->thumb_preview_buf_width != piece->roi_in.width
              || g->thumb_preview_buf_height != piece->roi_in.height || !g->luminance_valid)
@@ -2404,6 +2441,7 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
             g->histogram_valid = FALSE;
             keep_new_entry = TRUE;
           }
+          dt_iop_gui_leave_critical_section(self);
 
           if(old_entry)
             dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, old_entry);
@@ -2412,7 +2450,9 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
         }
         else
         {
+          dt_iop_gui_enter_critical_section(self);
           g->pending_preview_hash = preview_hash;
+          dt_iop_gui_leave_critical_section(self);
           needs_preview_update = TRUE;
         }
       }
@@ -2977,18 +3017,22 @@ static void _develop_history_resync_callback(gpointer instance, gpointer user_da
   const uint64_t preview_hash = _current_preview_luminance_hash(self, NULL, NULL);
   if(preview_hash == DT_PIXELPIPE_CACHE_HASH_INVALID)
   {
+    dt_iop_gui_enter_critical_section(self);
     g->pending_preview_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+    dt_iop_gui_leave_critical_section(self);
     _switch_cursors(self);
     gtk_widget_queue_draw(GTK_WIDGET(g->area));
     return;
   }
 
   gboolean already_attached = FALSE;
-  if(g->thumb_preview_entry && g->thumb_preview_hash == preview_hash && g->luminance_valid)
+  dt_iop_gui_enter_critical_section(self);
+  if(!IS_NULL_PTR(g->thumb_preview_entry) && g->thumb_preview_hash == preview_hash && g->luminance_valid)
   {
     g->pending_preview_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
     already_attached = TRUE;
   }
+  dt_iop_gui_leave_critical_section(self);
 
   if(!already_attached)
   {
@@ -2996,7 +3040,7 @@ static void _develop_history_resync_callback(gpointer instance, gpointer user_da
     dt_pixel_cache_entry_t *preview_entry = NULL;
     if(dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, preview_hash, &preview_buf, &preview_entry,
                                    self->dev->preview_pipe->devid, NULL)
-       && preview_buf && preview_entry)
+           && !IS_NULL_PTR(preview_buf) && !IS_NULL_PTR(preview_entry))
     {
       size_t preview_width = 0;
       size_t preview_height = 0;
@@ -3005,6 +3049,7 @@ static void _develop_history_resync_callback(gpointer instance, gpointer user_da
 
       dt_pixel_cache_entry_t *old_entry = NULL;
       gboolean keep_new_entry = FALSE;
+      dt_iop_gui_enter_critical_section(self);
       if(g->thumb_preview_entry != preview_entry || g->thumb_preview_hash != preview_hash
          || g->thumb_preview_buf_width != preview_width || g->thumb_preview_buf_height != preview_height
          || !g->luminance_valid)
@@ -3021,6 +3066,7 @@ static void _develop_history_resync_callback(gpointer instance, gpointer user_da
       }
       else
         g->pending_preview_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+      dt_iop_gui_leave_critical_section(self);
 
       if(old_entry)
         dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, old_entry);
@@ -3029,7 +3075,9 @@ static void _develop_history_resync_callback(gpointer instance, gpointer user_da
     }
     else
     {
+      dt_iop_gui_enter_critical_section(self);
       g->pending_preview_hash = preview_hash;
+      dt_iop_gui_leave_critical_section(self);
     }
   }
 
@@ -3044,7 +3092,9 @@ static void _develop_cacheline_ready_callback(gpointer instance, const guint64 h
   dt_iop_toneequalizer_gui_data_t *g = (dt_iop_toneequalizer_gui_data_t *)self->gui_data;
   if(IS_NULL_PTR(g) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(self->dev->preview_pipe)) return;
 
+  dt_iop_gui_enter_critical_section(self);
   const gboolean matched = (g->pending_preview_hash == hash);
+  dt_iop_gui_leave_critical_section(self);
   if(!matched) return;
 
   size_t preview_width = 0;
@@ -3056,13 +3106,14 @@ static void _develop_cacheline_ready_callback(gpointer instance, const guint64 h
   dt_pixel_cache_entry_t *preview_entry = NULL;
   if(!dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, preview_hash, &preview_buf, &preview_entry,
                                   self->dev->preview_pipe->devid, NULL)
-     || !preview_buf || !preview_entry)
+     || IS_NULL_PTR(preview_buf) || IS_NULL_PTR(preview_entry))
     return;
 
   dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, preview_entry);
 
   dt_pixel_cache_entry_t *old_entry = NULL;
   gboolean keep_new_entry = FALSE;
+  dt_iop_gui_enter_critical_section(self);
   if(g->thumb_preview_entry != preview_entry || g->thumb_preview_hash != preview_hash
      || g->thumb_preview_buf_width != preview_width || g->thumb_preview_buf_height != preview_height
      || !g->luminance_valid)
@@ -3077,6 +3128,7 @@ static void _develop_cacheline_ready_callback(gpointer instance, const guint64 h
     keep_new_entry = TRUE;
   }
   g->pending_preview_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+  dt_iop_gui_leave_critical_section(self);
 
   if(old_entry)
     dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, old_entry);
@@ -3203,16 +3255,21 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
     return;
   }
 
+  g->area_active_node = -1;
+
+  // Picker callbacks can run while the preview pipe publishes a newer luminance
+  // cacheline, so take the cache ref under the same GUI state lock as other readers.
+  dt_iop_gui_enter_critical_section(self);
   preview_entry = g->thumb_preview_entry;
   preview_width = g->thumb_preview_buf_width;
   preview_height = g->thumb_preview_buf_height;
-  g->area_active_node = -1;
-  if(preview_entry)
+  if(!IS_NULL_PTR(preview_entry))
     dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, preview_entry);
+  dt_iop_gui_leave_critical_section(self);
 
   if(IS_NULL_PTR(preview_entry) || preview_width < 1 || preview_height < 1)
   {
-    if(preview_entry)
+    if(!IS_NULL_PTR(preview_entry))
       dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
     dt_print(DT_DEBUG_DEV, "[picker/toneequal] no preview mask picker=%p pipe=%p hash=%" PRIu64 "\n",
              (void *)picker, (void *)pipe, piece ? piece->global_hash : 0);
@@ -3532,8 +3589,18 @@ void gui_cleanup(struct dt_iop_module_t *self)
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_develop_history_resync_callback), self);
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_develop_cacheline_ready_callback), self);
 
-  if(g->thumb_preview_entry)
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, g->thumb_preview_entry);
+  dt_pixel_cache_entry_t *preview_entry = NULL;
+  dt_iop_gui_enter_critical_section(self);
+  preview_entry = g->thumb_preview_entry;
+  g->thumb_preview_entry = NULL;
+  g->thumb_preview_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+  g->pending_preview_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+  g->thumb_preview_buf_width = 0;
+  g->thumb_preview_buf_height = 0;
+  g->luminance_valid = FALSE;
+  dt_iop_gui_leave_critical_section(self);
+  if(!IS_NULL_PTR(preview_entry))
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
   if(g->desc) pango_font_description_free(g->desc);
   if(g->layout) g_object_unref(g->layout);
   if(g->cr) cairo_destroy(g->cr);
