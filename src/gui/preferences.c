@@ -1055,6 +1055,7 @@ static void init_tab_presets(GtkWidget *stack)
   gtk_tree_view_set_model(tree, GTK_TREE_MODEL(model));
 
   // Adding the treeview to its containers
+  dt_gui_add_class(scroll, "dt_recessed_scroll");
   gtk_container_add(GTK_CONTAINER(scroll), GTK_WIDGET(tree));
   gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
 

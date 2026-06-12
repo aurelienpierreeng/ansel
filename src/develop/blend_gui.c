@@ -3544,6 +3544,7 @@ void dt_iop_gui_init_masks(GtkBox *blendw, dt_iop_module_t *module)
 
     bd->group_shapes_sw = gtk_scrolled_window_new(NULL, NULL);
     gtk_widget_set_vexpand(bd->group_shapes_sw, TRUE);
+    dt_gui_add_class(bd->group_shapes_sw, "dt_recessed_scroll");
     gtk_container_add(GTK_CONTAINER(bd->group_shapes_sw), bd->masks_group_treeview);
     dt_gui_widget_init_auto_height(bd->masks_group_treeview, TREE_LIST_MIN_ROWS, TREE_LIST_MAX_ROWS);
 
@@ -3609,6 +3610,7 @@ void dt_iop_gui_init_masks(GtkBox *blendw, dt_iop_module_t *module)
 
     bd->all_shapes_sw = gtk_scrolled_window_new(NULL, NULL);
     gtk_widget_set_vexpand(bd->all_shapes_sw, TRUE);
+    dt_gui_add_class(bd->all_shapes_sw, "dt_recessed_scroll");
     gtk_container_add(GTK_CONTAINER(bd->all_shapes_sw), bd->masks_treeview);
     dt_gui_widget_init_auto_height(bd->masks_treeview, TREE_LIST_MIN_ROWS, TREE_LIST_MAX_ROWS);
 

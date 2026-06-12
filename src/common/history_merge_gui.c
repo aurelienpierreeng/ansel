@@ -1265,6 +1265,7 @@ gboolean _hm_show_merge_report_popup(dt_develop_t *dev_dest, dt_develop_t *dev_s
   GtkWidget *scrolled = gtk_scrolled_window_new(NULL, NULL);
   gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
   gtk_widget_set_size_request(scrolled, 740, 420);
+  dt_gui_add_class(scrolled, "dt_recessed_scroll");
   gtk_box_pack_start(GTK_BOX(content_area), scrolled, TRUE, TRUE, 0);
 
   GtkListStore *store = gtk_list_store_new(HM_REPORT_COL_COUNT, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING,

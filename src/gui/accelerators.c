@@ -1789,6 +1789,7 @@ void dt_accels_window(dt_accels_t *accels, GtkWindow *main_window)
   gtk_box_pack_start(GTK_BOX(box), hbox, FALSE, FALSE, 0);
 
   GtkWidget *scrolled_window = gtk_scrolled_window_new(NULL, NULL);
+  dt_gui_add_class(scrolled_window, "dt_recessed_scroll");
   gtk_container_add(GTK_CONTAINER(scrolled_window), tree_view);
   gtk_box_pack_start(GTK_BOX(box), scrolled_window, TRUE, TRUE, 0);
 
@@ -3067,6 +3068,7 @@ void dt_accels_search(dt_accels_t *accels, GtkWindow *main_window, GtkWidget *an
   gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled),
                                  GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
   gtk_widget_set_size_request(scrolled, dialog_width, 320);
+  dt_gui_add_class(scrolled, "dt_recessed_scroll");
   gtk_box_pack_start(GTK_BOX(box), scrolled, TRUE, TRUE, 0);
 
   GtkWidget *tree_view = gtk_tree_view_new_with_model(filter_model);

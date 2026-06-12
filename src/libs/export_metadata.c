@@ -191,6 +191,7 @@ static void _add_tag_button_clicked(GtkButton *button, dt_lib_export_metadata_t 
   GtkWidget *w = gtk_scrolled_window_new(NULL, NULL);
   gtk_widget_set_size_request(w, DT_PIXEL_APPLY_DPI(500), DT_PIXEL_APPLY_DPI(300));
   gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(w), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+  dt_gui_add_class(w, "dt_recessed_scroll");
   gtk_box_pack_start(GTK_BOX(vbox), w, TRUE, TRUE, 0);
   GtkTreeView *view = GTK_TREE_VIEW(gtk_tree_view_new());
   d->sel_view = view;
@@ -379,6 +380,7 @@ char *dt_lib_export_metadata_configuration_dialog(char *metadata_presets, const 
   gtk_widget_set_size_request(w, DT_PIXEL_APPLY_DPI(450), DT_PIXEL_APPLY_DPI(100));
   gtk_widget_set_hexpand(w, TRUE);
   gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(w), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+  dt_gui_add_class(w, "dt_recessed_scroll");
   gtk_box_pack_start(GTK_BOX(vbox), w, TRUE, TRUE, 0);
   GtkTreeView *view = GTK_TREE_VIEW(gtk_tree_view_new());
   d->view = view;

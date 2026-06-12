@@ -774,6 +774,7 @@ void dt_control_crawler_show_image_list(GList *images)
   g_object_set(renderer_date, "xalign", 1., NULL);
   gtk_tree_view_append_column(GTK_TREE_VIEW(tree), column);
 
+  dt_gui_add_class(scroll, "dt_recessed_scroll");
   gtk_container_add(GTK_CONTAINER(scroll), tree);
   gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll),
                                  GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
@@ -834,6 +835,7 @@ void dt_control_crawler_show_image_list(GList *images)
   scroll = gtk_scrolled_window_new(NULL, NULL);
   gui->log = gtk_tree_view_new();
   gtk_box_pack_start(GTK_BOX(content_box), scroll, TRUE, TRUE, 0);
+  dt_gui_add_class(scroll, "dt_recessed_scroll");
   gtk_container_add(GTK_CONTAINER(scroll), gui->log);
   gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll),
                                  GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);

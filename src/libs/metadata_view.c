@@ -1193,6 +1193,7 @@ void _menuitem_preferences(GtkMenuItem *menuitem, dt_lib_module_t *self)
   gtk_widget_set_size_request(w, -1, DT_PIXEL_APPLY_DPI(600));
   gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(w), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
   gtk_scrolled_window_set_overlay_scrolling(GTK_SCROLLED_WINDOW(w), FALSE);
+  dt_gui_add_class(w, "dt_recessed_scroll");
   gtk_box_pack_start(GTK_BOX(area), w, TRUE, TRUE, 0);
 
   GtkListStore *store = gtk_list_store_new(DT_METADATA_PREF_NUM_COLS,

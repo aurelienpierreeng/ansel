@@ -456,6 +456,7 @@ static void _gui_styles_dialog_run(gboolean edit, const char *name, int32_t imgi
 
   // box in scrollwindow containing the two possible trees
   GtkBox *sbox = GTK_BOX(gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING));
+  dt_gui_add_class(GTK_WIDGET(sbox), "dt_recessed_scroll");
 
   gtk_box_pack_start(GTK_BOX(content_area), GTK_WIDGET(box), TRUE, TRUE, 0);
   gtk_container_add(GTK_CONTAINER(scroll), GTK_WIDGET(sbox));

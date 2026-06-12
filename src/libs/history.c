@@ -181,8 +181,8 @@ void gui_init(dt_lib_module_t *self)
   gtk_tree_view_append_column(GTK_TREE_VIEW(d->history_view), col_icon);
 
   /* add history list and buttonbox to widget */
-  gtk_box_pack_start(GTK_BOX(self->widget),
-                     dt_ui_scroll_wrap(d->history_view, 1, "plugins/darkroom/history/windowheight"), FALSE, FALSE, 0);
+  GtkWidget *history_sw = dt_ui_scroll_wrap(d->history_view, 1, "plugins/darkroom/history/windowheight");
+  gtk_box_pack_start(GTK_BOX(self->widget), history_sw, FALSE, FALSE, 0);
 
   gtk_widget_show_all(self->widget);
 

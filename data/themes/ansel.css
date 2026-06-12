@@ -366,13 +366,59 @@ button.text-button,
 }
 
 /* Text Inputs */
-entry,
-treeview {
+entry {
   padding: 2px 4px;
   min-height: 1em;
   border: 1px solid @recessed_color_border;
   background-image: none;
   background-color: @recessed_color_bg;
+}
+
+/**
+ * treeview paints its background/border/padding once per row/cell, not once
+ * for the whole widget, so a border or padding declared here would draw a
+ * grid of little boxes instead of a single outer frame.
+ *
+ * The recessed look (background + border + padding) belongs on the wrapping
+ * scrolledwindow instead: opt in with the .dt_recessed_scroll class for our
+ * own treeviews, see below. The treeview itself stays transparent so that
+ * background isn't painted twice (once per row on top of the scrolledwindow's
+ * own fill), which would otherwise stack the two alpha layers into a much
+ * darker result.
+ **/
+treeview {
+  padding: 0;
+  border: none;
+  background-image: none;
+  background-color: transparent;
+}
+
+/**
+ * Recessed outer frame for a treeview (the counterpart to entry/textview
+ * above, applied once on the whole widget rather than per row).
+ *
+ * GtkScrolledWindow's border/padding/background apply to its whole content
+ * box, which includes the scrollbar gutter - so without the rule below, the
+ * scrollbar would end up inset and framed too, which looks wrong since
+ * scrollbars are GUI controls, not semantic content. The `> scrollbar` rule
+ * resets the scrollbar's own box model and pulls it back out via a negative
+ * margin so it appears to sit outside the recessed frame.
+ *
+ * GTK's native filechooser dialogs can't be tagged from our code, so their
+ * scrolledwindow gets the recessed frame unconditionally (scrollbar included).
+ **/
+.dt_recessed_scroll,
+filechooser scrolledwindow {
+  border: 1px solid @recessed_color_border;
+  padding: 2px;
+  background-color: @recessed_color_bg;
+}
+
+.dt_recessed_scroll > scrollbar {
+  border: none;
+  background: none;
+  background-color: transparent;
+  margin: -2px;
 }
 
 /**
@@ -1040,8 +1086,7 @@ filechooser .sidebar-button {
 }
 
 filechooser .sidebar,
-filechooser treeview,
-#blending-box treeview {
+filechooser treeview {
   background-color: @recessed_color_bg;
 }
 

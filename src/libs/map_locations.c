@@ -938,6 +938,7 @@ void gui_init(dt_lib_module_t *self)
   int height = dt_conf_get_int("plugins/map/heightlocationwindow");
   gtk_widget_set_size_request(w, -1, DT_PIXEL_APPLY_DPI(height ? height : 100));
   gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(w), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+  dt_gui_add_class(w, "dt_recessed_scroll");
   gtk_box_pack_start(GTK_BOX(self->widget), w, TRUE, TRUE, 0);
   GtkTreeView *view = GTK_TREE_VIEW(gtk_tree_view_new());
   d->view = GTK_WIDGET(view);

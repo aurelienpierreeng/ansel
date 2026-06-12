@@ -300,6 +300,7 @@ static gboolean ask_and_delete(gpointer user_data)
 
   GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
   gtk_widget_set_vexpand(scroll, TRUE);
+  dt_gui_add_class(scroll, "dt_recessed_scroll");
 
   GtkListStore *store = gtk_list_store_new(1, G_TYPE_STRING);
 

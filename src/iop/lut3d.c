@@ -1493,6 +1493,7 @@ void gui_init(dt_iop_module_t *self)
   GtkWidget *sw = gtk_scrolled_window_new(NULL, NULL);
   g->lutwindow = sw;
   gtk_scrolled_window_set_policy((GtkScrolledWindow *)sw, GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+  dt_gui_add_class(sw, "dt_recessed_scroll");
   GtkTreeModel *lutmodel = (GtkTreeModel *)gtk_list_store_new(DT_LUT3D_NUM_COLS, G_TYPE_STRING, G_TYPE_BOOLEAN);
   GtkTreeModel *lutfilter = gtk_tree_model_filter_new(lutmodel, NULL);
   gtk_tree_model_filter_set_visible_column(GTK_TREE_MODEL_FILTER(lutfilter), DT_LUT3D_COL_VISIBLE);

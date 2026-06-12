@@ -2284,6 +2284,8 @@ GtkWidget *dt_ui_scroll_wrap(GtkWidget *w, gint min_size, char *config_str)
   gtk_scrolled_window_set_min_content_height(GTK_SCROLLED_WINDOW(sw), - DT_PIXEL_APPLY_DPI(min_size));
   g_signal_connect(G_OBJECT(sw), "scroll-event", G_CALLBACK(_scroll_wrap_scroll), config_str);
   g_signal_connect(G_OBJECT(w), "draw", G_CALLBACK(_scroll_wrap_resize), config_str);
+
+  if(GTK_IS_TREE_VIEW(w)) dt_gui_add_class(sw, "dt_recessed_scroll");
   gtk_container_add(GTK_CONTAINER(sw), w);
 
   return GTK_WIDGET(sw);
@@ -2334,6 +2336,7 @@ static void _widget_auto_ensure_scrolled_window(GtkWidget *w)
 
   g_object_ref(w);
   gtk_container_remove(GTK_CONTAINER(parent), w);
+  if(GTK_IS_TREE_VIEW(w)) dt_gui_add_class(sw, "dt_recessed_scroll");
   gtk_container_add(GTK_CONTAINER(sw), w);
   g_object_unref(w);
 

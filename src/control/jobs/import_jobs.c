@@ -24,6 +24,7 @@
 #include "control/control.h"
 #include "common/image.h"
 #include "control/jobs/control_jobs.h"
+#include "gui/gtk.h"
 
 #ifndef _WIN32
 #include <glob.h>
@@ -517,6 +518,7 @@ static int _discarded_files_popup(dt_control_image_enumerator_t *params)
   GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(box), label, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(box), scrolled_window, TRUE, TRUE, 0);
+  dt_gui_add_class(scrolled_window, "dt_recessed_scroll");
   gtk_container_add(GTK_CONTAINER(scrolled_window), view);
 
   // Pack the box to the dialog internal container
