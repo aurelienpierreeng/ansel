@@ -3255,6 +3255,7 @@ void dt_iop_gui_init_blendif(GtkBox *blendw, dt_iop_module_t *module, GtkWidget 
                                         dtgtk_cairo_paint_reset, blendif_header);
 
     GtkWidget *header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
+    gtk_widget_set_name(header, "blendif-pickers");
 
     bd->tab = 0;
     bd->channel_tabs_csp = DEVELOP_BLEND_CS_NONE;

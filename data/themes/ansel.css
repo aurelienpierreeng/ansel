@@ -685,6 +685,10 @@ dialog .sidebar row:selected:hover label,
   padding: 0;
 }
 
+#blendif-pickers {
+  padding-left: 10px;
+}
+
 /* Section labels for the "basic" tab */
 
 #plugins_box .dt_section_label {
