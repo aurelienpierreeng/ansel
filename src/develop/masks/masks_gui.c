@@ -389,7 +389,6 @@ static GtkWidget *_masks_gui_add_interaction_slider(GtkWidget *menu, const char 
   gtk_widget_set_valign(slider, GTK_ALIGN_CENTER);
   gtk_widget_set_size_request(slider, DT_PIXEL_APPLY_DPI(220), DT_PIXEL_APPLY_DPI(28));
   gtk_widget_set_can_focus(slider, TRUE);
-  gtk_widget_set_size_request(menu_item, -1, DT_PIXEL_APPLY_DPI(48));
 
   dt_masks_gui_interaction_slider_t *data = g_malloc0(sizeof(dt_masks_gui_interaction_slider_t));
   data->form_group = form_group;
