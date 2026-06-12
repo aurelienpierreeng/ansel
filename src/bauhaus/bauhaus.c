@@ -2476,18 +2476,19 @@ static void dt_bauhaus_draw_baseline(struct dt_bauhaus_widget_t *w, cairo_t *cr,
     set_color(cr, w->bauhaus->color_bg);
   }
 
+  cairo_fill(cr);
+
+
   if(w->bauhaus->border_width > 0)
   {
-    // Draw the background and the border on top
-    cairo_fill_preserve(cr);
+    // Draw the border on top
+    // We need to recess the coordinates by half a line-width for perfect border matching
+    const double line_width = 1.;
+    cairo_rectangle(cr, round(x_origin) + line_width / 2., round(baseline_top) + line_width / 2., 
+                        round(width) - line_width, round(baseline_height) - line_width);
+    cairo_set_line_width(cr, line_width);
     set_color(cr, w->bauhaus->color_border);
-    cairo_set_line_width(cr, 1.);
     cairo_stroke(cr);
-  }
-  else
-  {
-    // Draw only the background
-    cairo_fill(cr);
   }
 
   if(gradient) cairo_pattern_destroy(gradient);
@@ -2502,9 +2503,6 @@ static void dt_bauhaus_draw_baseline(struct dt_bauhaus_widget_t *w, cairo_t *cr,
   // have a `fill ratio feel' from zero to current position
   if(!has_colored_background && d->fill_feedback && is_sensitive)
   {
-    // only brighten, useful for colored sliders to not get too faint:
-    cairo_save(cr);
-    cairo_set_operator(cr, CAIRO_OPERATOR_SCREEN);
     set_color(cr, w->bauhaus->color_value);
 
     const float position = d->pos * width;
@@ -2518,7 +2516,6 @@ static void dt_bauhaus_draw_baseline(struct dt_bauhaus_widget_t *w, cairo_t *cr,
       cairo_rectangle(cr, origin, baseline_top, delta, baseline_height);
 
     cairo_fill(cr);
-    cairo_restore(cr);
   }
 
   // draw the 0 reference graduation if it's different than the bounds of the slider
