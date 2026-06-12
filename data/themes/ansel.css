@@ -205,7 +205,8 @@
 /* Base Document Reset */
 *,
 window,
-dialog {
+dialog,
+messagedialog {
   background-color: @bg_color;
   background-image: none;
   color: @fg_color;
