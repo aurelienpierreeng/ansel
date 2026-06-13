@@ -3261,8 +3261,9 @@ void dt_iop_gui_init_blendif(GtkBox *blendw, dt_iop_module_t *module, GtkWidget 
     bd->channel_tabs_csp = DEVELOP_BLEND_CS_NONE;
     bd->channel_tabs = GTK_NOTEBOOK(gtk_notebook_new());
     gtk_notebook_set_scrollable(bd->channel_tabs, TRUE);
-    gtk_box_pack_start(GTK_BOX(bd->blendif_box), GTK_WIDGET(bd->channel_tabs), TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(bd->blendif_box), GTK_WIDGET(bd->channel_tabs), FALSE, FALSE, 0);
     gtk_notebook_set_action_widget(GTK_NOTEBOOK(bd->channel_tabs), header, GTK_PACK_END);
+    dt_gui_add_class(GTK_WIDGET(bd->channel_tabs), "empty");
 
     bd->colorpicker = dt_color_picker_new(module, DT_COLOR_PICKER_POINT_AREA, header);
     gtk_widget_set_tooltip_text(bd->colorpicker, _("pick GUI color from image\nctrl+click or right-click to select an area"));
@@ -3331,10 +3332,12 @@ void dt_iop_gui_init_blendif(GtkBox *blendw, dt_iop_module_t *module, GtkWidget 
       g_signal_connect(G_OBJECT(sl->slider), "key-press-event", G_CALLBACK(_blendop_blendif_key_press), module);
       g_signal_connect(G_OBJECT(sl->polarity), "toggled", G_CALLBACK(_blendop_blendif_polarity_callback), bd);
 
-      sl->box = GTK_BOX(gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING));
-      gtk_box_pack_start(GTK_BOX(sl->box), GTK_WIDGET(label_box), TRUE, FALSE, 0);
-      gtk_box_pack_start(GTK_BOX(sl->box), GTK_WIDGET(slider_box), TRUE, FALSE, 0);
-      gtk_box_pack_start(GTK_BOX(bd->blendif_box), GTK_WIDGET(sl->box), TRUE, FALSE, 0);
+      // The label is semantically "part of" the slider, even though it's a different widget,
+      // so the parent box has no internal spacing between children to keep them grouped.
+      sl->box = GTK_BOX(gtk_box_new(GTK_ORIENTATION_VERTICAL, 0));
+      gtk_box_pack_start(GTK_BOX(sl->box), GTK_WIDGET(label_box), FALSE, FALSE, 0);
+      gtk_box_pack_start(GTK_BOX(sl->box), GTK_WIDGET(slider_box), FALSE, FALSE, 0);
+      gtk_box_pack_start(GTK_BOX(bd->blendif_box), GTK_WIDGET(sl->box), FALSE, FALSE, 0);
     }
 
     bd->channel_boost_factor_slider = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(module), 0.0f, 18.0f, 0, 0.0f, 3);
@@ -3349,7 +3352,7 @@ void dt_iop_gui_init_blendif(GtkBox *blendw, dt_iop_module_t *module, GtkWidget 
     g_signal_connect(G_OBJECT(bd->channel_boost_factor_slider), "value-changed",
                      G_CALLBACK(_blendop_blendif_boost_factor_callback), bd);
 
-    gtk_box_pack_start(GTK_BOX(bd->blendif_box), GTK_WIDGET(bd->channel_boost_factor_slider), TRUE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(bd->blendif_box), GTK_WIDGET(bd->channel_boost_factor_slider), FALSE, FALSE, 0);
 
     g_signal_connect(G_OBJECT(bd->channel_tabs), "switch_page", G_CALLBACK(_blendop_blendif_tab_switch), bd);
     g_signal_connect(G_OBJECT(bd->colorpicker), "toggled", G_CALLBACK(_update_gradient_slider_pickers), module);
@@ -3782,7 +3785,7 @@ void dt_iop_gui_init_raster(GtkBox *blendw, dt_iop_module_t *module)
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->raster_polarity), FALSE);
     gtk_box_pack_start(GTK_BOX(hbox), bd->raster_polarity, FALSE, FALSE, 0);
 
-    gtk_box_pack_start(GTK_BOX(bd->raster_box), GTK_WIDGET(hbox), TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(bd->raster_box), GTK_WIDGET(hbox), FALSE, FALSE, 0);
 
     bd->raster_inited = 1;
   }
@@ -4412,7 +4415,7 @@ void dt_iop_gui_init_blending_body(GtkWidget *container, dt_iop_module_t *module
 
   /* Main widget container */
   bd->blending_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
-  gtk_box_pack_start(GTK_BOX(container), bd->blending_box, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(container), bd->blending_box, TRUE, TRUE, 0);
   gtk_widget_set_name(bd->blending_box, "blending-box");
 
   /* Blend mode */

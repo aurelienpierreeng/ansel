@@ -651,8 +651,7 @@ dialog .sidebar row:selected:hover label,
 
 .dt_gslider,
 .dt_gslider_multivalue {
-  min-height: 1.7em;
-  padding: 0.56em;
+  min-height: 2em;
 }
 
 .dt_duplicate_ui grid,
