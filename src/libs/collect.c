@@ -83,7 +83,7 @@
   keys plugins/lighttable/collect/{num_rules,item<N>,mode<N>,string<N>} and turns them into
   the query (get_query_string / dt_collection_update_query). So this module's whole contract
   is: write those conf keys through the helpers in "Section 2 — conf layer", then call
-  _commit(). Everything else here is presentation and management.
+  _commit_colllection(). Everything else here is presentation and management.
 
   Three tabs (a notebook tab-bar drives one shared value view):
     - Folders      : film-rolls/folders, as a flat List or a hierarchical Tree. The place to
@@ -541,17 +541,18 @@ static void get_properties(dt_lib_collect_rule_t *dr)
 }
 
 // Rebuild the collection query from the conf rules and refresh the lighttable.
-static void _commit()
+// Note: _commit() would conflict with msys64/ucrt64/include/io.h namespace on Windows.
+static void _commit_colllection()
 {
   dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_NEW_QUERY, DT_COLLECTION_PROP_UNDEF, NULL);
 }
 
-// Like _commit() but without bouncing back into our own collection_updated() handler.
+// Like _commit_colllection() but without bouncing back into our own collection_updated() handler.
 static void _commit_quiet()
 {
   dt_control_signal_block_by_func(darktable.signals, G_CALLBACK(collection_updated),
                                   darktable.view_manager->proxy.module_collect.module);
-  _commit();
+  _commit_colllection();
   dt_control_signal_unblock_by_func(darktable.signals, G_CALLBACK(collection_updated),
                                     darktable.view_manager->proxy.module_collect.module);
 }
@@ -610,7 +611,7 @@ int set_params(dt_lib_module_t *self, const void *params, int size)
   _rules_set_count(p->rules);
   _lib_collect_update_params(self->data);
   _lib_collect_gui_update(self);
-  _commit();
+  _commit_colllection();
   return 0;
 }
 
@@ -624,7 +625,7 @@ void gui_reset(dt_lib_module_t *self)
   d->active_rule = 0;
   d->view_rule = -1;
   dt_collection_set_query_flags(darktable.collection, COLLECTION_QUERY_FULL);
-  _commit();
+  _commit_colllection();
 }
 
 // =====================================================================================
@@ -1995,7 +1996,7 @@ static void _op_changed(GtkWidget *w, dt_lib_collect_rule_t *dr)
   c->active_rule = dr->num;
   set_properties(dr);
   c->view_rule = -1;
-  _commit(); // signal-driven refresh, like combo_changed
+  _commit_colllection(); // signal-driven refresh, like combo_changed
 }
 
 static void combo_changed(GtkWidget *combo, dt_lib_collect_rule_t *dr)
@@ -2038,7 +2039,7 @@ static void combo_changed(GtkWidget *combo, dt_lib_collect_rule_t *dr)
   // _lib_collect_gui_update rebuilds the value list against the fresh constraints. (Doing the
   // rebuild ourselves before committing would use a stale where_ext and not refresh.)
   c->view_rule = -1;
-  _commit();
+  _commit_colllection();
 }
 
 static void entry_changed(GtkEntry *entry, dt_lib_collect_rule_t *dr)
@@ -2146,7 +2147,7 @@ static void _raw_entry_activated(GtkWidget *entry, dt_lib_collect_t *d)
   _rule_set_mode(0, DT_LIB_COLLECT_MODE_AND);
   _rule_set_string(0, gtk_entry_get_text(GTK_ENTRY(entry)));
   d->active_rule = 0;
-  _commit();
+  _commit_colllection();
 }
 
 // ---- Queries rule +/- management ----
@@ -2164,7 +2165,7 @@ static void menuitem_mode(GtkMenuItem *menuitem, dt_lib_collect_rule_t *dr)
     c->active_rule = active;
     c->view_rule = -1;
   }
-  _commit();
+  _commit_colllection();
 }
 
 static void menuitem_mode_change(GtkMenuItem *menuitem, dt_lib_collect_rule_t *dr)
@@ -2174,7 +2175,7 @@ static void menuitem_mode_change(GtkMenuItem *menuitem, dt_lib_collect_rule_t *d
     _rule_set_mode(num, GPOINTER_TO_INT(g_object_get_data(G_OBJECT(menuitem), "menuitem_mode")));
   dt_lib_collect_t *c = get_collect(dr);
   c->view_rule = -1;
-  _commit();
+  _commit_colllection();
 }
 
 static void menuitem_clear(GtkMenuItem *menuitem, dt_lib_collect_rule_t *dr)
@@ -2206,7 +2207,7 @@ static void menuitem_clear(GtkMenuItem *menuitem, dt_lib_collect_rule_t *dr)
     }
   }
   c->view_rule = -1;
-  _commit();
+  _commit_colllection();
 }
 
 static gboolean popup_button_callback(GtkWidget *widget, GdkEventButton *event, dt_lib_collect_rule_t *dr)
@@ -2627,7 +2628,7 @@ static void _menuitem_preferences(GtkMenuItem *menuitem, dt_lib_module_t *self)
   gtk_widget_show_all(dialog);
   gtk_dialog_run(GTK_DIALOG(dialog));
   gtk_widget_destroy(dialog);
-  _commit();
+  _commit_colllection();
 }
 
 void set_preferences(void *menu, dt_lib_module_t *self)
