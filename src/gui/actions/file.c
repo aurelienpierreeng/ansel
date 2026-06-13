@@ -123,9 +123,12 @@ void init_collection_line(gpointer instance,
     pretty_print_collection(collection, label, sizeof(label));
     dt_capitalize_label(label);
 
-    // Update the menu entry label for current collection name
+    // Update the menu entry label for current collection name. Escape it: a collection value
+    // can contain markup-significant characters (e.g. the < > operators in date/numeric rules).
     GtkWidget *child = gtk_bin_get_child(GTK_BIN(widget));
-    gtk_label_set_markup(GTK_LABEL(child), label);
+    gchar *escaped = g_markup_escape_text(label, -1);
+    gtk_label_set_markup(GTK_LABEL(child), escaped);
+    g_free(escaped);
   }
 }
 

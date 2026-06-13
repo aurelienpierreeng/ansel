@@ -452,6 +452,48 @@ void dt_film_remove(const int id)
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_FILMROLLS_CHANGED);
 }
 
+void dt_film_relocate(const char *old_path, const char *new_path)
+{
+  if(IS_NULL_PTR(old_path) || IS_NULL_PTR(new_path)) return;
+
+  // Gather every film roll under old_path together with its remapped folder first, so we do
+  // not mutate the table while still iterating the SELECT.
+  sqlite3_stmt *stmt;
+  gchar *like = g_strdup_printf("%s%%", old_path);
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                              "SELECT id, folder FROM main.film_rolls WHERE folder LIKE ?1", -1, &stmt, NULL);
+  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, like, -1, SQLITE_TRANSIENT);
+  g_free(like);
+
+  GList *ids = NULL;
+  GList *folders = NULL;
+  while(sqlite3_step(stmt) == SQLITE_ROW)
+  {
+    const int id = sqlite3_column_int(stmt, 0);
+    const gchar *old = (const gchar *)sqlite3_column_text(stmt, 1);
+    gchar *final = g_strcmp0(old, old_path) ? g_strdup_printf("%s/%s", new_path, old + strlen(old_path) + 1)
+                                            : g_strdup(new_path);
+    ids = g_list_prepend(ids, GINT_TO_POINTER(id));
+    folders = g_list_prepend(folders, final);
+  }
+  sqlite3_finalize(stmt);
+
+  sqlite3_stmt *up;
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                              "UPDATE main.film_rolls SET folder=?1 WHERE id=?2", -1, &up, NULL);
+  for(GList *i = ids, *f = folders; i && f; i = g_list_next(i), f = g_list_next(f))
+  {
+    sqlite3_reset(up);
+    sqlite3_clear_bindings(up);
+    DT_DEBUG_SQLITE3_BIND_TEXT(up, 1, (const char *)f->data, -1, SQLITE_TRANSIENT);
+    DT_DEBUG_SQLITE3_BIND_INT(up, 2, GPOINTER_TO_INT(i->data));
+    sqlite3_step(up);
+  }
+  sqlite3_finalize(up);
+  g_list_free(ids);
+  g_list_free_full(folders, g_free);
+}
+
 GList *dt_film_get_image_ids(const int filmid)
 {
   GList *result = NULL;

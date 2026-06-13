@@ -74,6 +74,9 @@ void dt_film_remove_empty();
 GList *dt_film_get_image_ids(const int filmid);
 // initialize film folder status
 void dt_film_set_folder_status();
+/** relocate every film roll located under old_path so it sits under new_path (database only,
+ * does not move files on disk). Used by the library module to fix moved folders. */
+void dt_film_relocate(const char *old_path, const char *new_path);
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent

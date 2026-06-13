@@ -683,6 +683,7 @@ const char *dt_collection_name(dt_collection_properties_t prop)
     case DT_COLLECTION_PROP_MODULE:           return _("module");
     case DT_COLLECTION_PROP_ORDER:            return _("module order");
     case DT_COLLECTION_PROP_RATING:           return _("rating");
+    case DT_COLLECTION_PROP_QUERY:            return _("custom query");
     case DT_COLLECTION_PROP_LAST:             return NULL;
     default:
     {
@@ -1199,6 +1200,16 @@ static gchar *get_query_string(const dt_collection_properties_t property, const 
 
   switch(property)
   {
+    case DT_COLLECTION_PROP_QUERY: // raw user-provided SQL WHERE expression (advanced)
+      // Intentionally NOT escaped: this is a power-user escape hatch that injects a raw
+      // read-only WHERE clause against the local library. A malformed expression makes the
+      // prepared statement fail gracefully (empty collection), it does not crash.
+      if(text && *text)
+        query = g_strdup_printf("(%s)", text);
+      else
+        query = g_strdup("1=1");
+      break;
+
     case DT_COLLECTION_PROP_FILMROLL: // film roll
       if(!(escaped_text && *escaped_text))
         // clang-format off
@@ -1701,6 +1712,303 @@ static gchar *get_query_string(const dt_collection_properties_t property, const 
     query = g_strdup_printf("(1=1)");
 
   return query;
+}
+
+GList *dt_collection_get_images_for_rule(const dt_collection_properties_t property, const char *text)
+{
+  // Build the same WHERE clause the collection would use for this single rule, then
+  // enumerate the matching image ids. Independent of the currently active collection so it
+  // can feed batch/background operations (remove, attach tag, pre-render thumbnails, ...).
+  GList *result = NULL;
+  gchar *where = get_query_string(property, text);
+  if(IS_NULL_PTR(where)) return NULL;
+
+  gchar *query = g_strdup_printf("SELECT id FROM main.images WHERE %s", where);
+  dt_free(where);
+
+  sqlite3_stmt *stmt = NULL;
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query, -1, &stmt, NULL);
+  if(stmt)
+  {
+    while(sqlite3_step(stmt) == SQLITE_ROW)
+      result = g_list_prepend(result, GINT_TO_POINTER(sqlite3_column_int(stmt, 0)));
+    sqlite3_finalize(stmt);
+  }
+  dt_free(query);
+
+  return g_list_reverse(result);
+}
+
+void dt_collection_name_value_free(gpointer value)
+{
+  dt_collection_name_value_t *v = (dt_collection_name_value_t *)value;
+  if(!v) return;
+  g_free(v->name);
+  g_free(v);
+}
+
+static dt_collection_name_value_t *_name_value_new(char *name, int id, int count, int status)
+{
+  dt_collection_name_value_t *v = g_malloc0(sizeof(dt_collection_name_value_t));
+  v->name = name;
+  v->id = id;
+  v->count = count;
+  v->status = status;
+  return v;
+}
+
+GList *dt_collection_get_property_values(const dt_collection_properties_t property, const int rule)
+{
+  GList *out = NULL;
+  gchar *where_ext = dt_collection_get_extended_where(darktable.collection, rule);
+
+  // Camera is special: it groups on two text columns and combines them into a display name.
+  if(property == DT_COLLECTION_PROP_CAMERA)
+  {
+    gchar *q = g_strdup_printf("SELECT maker, model, COUNT(*) AS count FROM main.images AS mi"
+                               " WHERE %s GROUP BY maker, model", where_ext);
+    g_free(where_ext);
+    sqlite3_stmt *stmt = NULL;
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), q, -1, &stmt, NULL);
+    int index = 0;
+    while(stmt && sqlite3_step(stmt) == SQLITE_ROW)
+    {
+      const char *maker = (const char *)sqlite3_column_text(stmt, 0);
+      const char *model = (const char *)sqlite3_column_text(stmt, 1);
+      gchar *name = dt_collection_get_makermodel(maker, model);
+      out = g_list_prepend(out, _name_value_new(name, index++, sqlite3_column_int(stmt, 2), -1));
+    }
+    if(stmt) sqlite3_finalize(stmt);
+    g_free(q);
+    return g_list_reverse(out);
+  }
+
+  const gboolean is_date = property == DT_COLLECTION_PROP_DAY || property == DT_COLLECTION_PROP_TIME
+                           || property == DT_COLLECTION_PROP_IMPORT_TIMESTAMP
+                           || property == DT_COLLECTION_PROP_CHANGE_TIMESTAMP
+                           || property == DT_COLLECTION_PROP_EXPORT_TIMESTAMP
+                           || property == DT_COLLECTION_PROP_PRINT_TIMESTAMP;
+  const gboolean has_status
+      = (property == DT_COLLECTION_PROP_FOLDERS || property == DT_COLLECTION_PROP_FILMROLL);
+  gchar *query = NULL;
+
+  switch(property)
+  {
+    case DT_COLLECTION_PROP_FOLDERS:
+      query = g_strdup_printf("SELECT folder, film_rolls_id, COUNT(*) AS count, status"
+                              " FROM main.images AS mi"
+                              " JOIN (SELECT fr.id AS film_rolls_id, folder, status"
+                              "       FROM main.film_rolls AS fr"
+                              "       JOIN memory.film_folder AS ff ON fr.id = ff.id)"
+                              "   ON film_id = film_rolls_id"
+                              " WHERE %s GROUP BY folder, film_rolls_id", where_ext);
+      break;
+
+    case DT_COLLECTION_PROP_TAG:
+      query = g_strdup_printf("SELECT name, 1 AS tagid, SUM(count) AS count"
+                              " FROM (SELECT tagid, COUNT(*) as count"
+                              "   FROM main.images AS mi JOIN main.tagged_images ON id = imgid"
+                              "   WHERE %s GROUP BY tagid)"
+                              " JOIN (SELECT LOWER(name) AS name, id AS tag_id FROM data.tags)"
+                              "   ON tagid = tag_id GROUP BY name", where_ext);
+      query = dt_util_dstrcat(query, " UNION ALL "
+                                     "SELECT '%s' AS name, 0 as id, COUNT(*) AS count "
+                                     "FROM main.images AS mi WHERE mi.id NOT IN"
+                                     "  (SELECT DISTINCT imgid FROM main.tagged_images AS ti"
+                                     "   WHERE ti.tagid NOT IN memory.darktable_tags)",
+                              _("not tagged"));
+      break;
+
+    case DT_COLLECTION_PROP_GEOTAGGING:
+      query = g_strdup_printf("SELECT CASE WHEN mi.longitude IS NULL OR mi.latitude IS null THEN '%s'"
+                              "      ELSE CASE WHEN ta.imgid IS NULL THEN '%s' ELSE '%s' || ta.tagname END"
+                              "      END AS name, ta.tagid AS tag_id, COUNT(*) AS count"
+                              " FROM main.images AS mi"
+                              " LEFT JOIN (SELECT imgid, t.id AS tagid, SUBSTR(t.name, %d) AS tagname"
+                              "   FROM main.tagged_images AS ti JOIN data.tags AS t ON ti.tagid = t.id"
+                              "   JOIN data.locations AS l ON l.tagid = t.id) AS ta ON ta.imgid = mi.id"
+                              " WHERE %s GROUP BY name, tag_id",
+                              _("not tagged"), _("tagged"), _("tagged"),
+                              (int)strlen(dt_map_location_data_tag_root()) + 1, where_ext);
+      break;
+
+    case DT_COLLECTION_PROP_DAY:
+      query = g_strdup_printf("SELECT (datetime_taken / 86400000000) * 86400000000 AS date, 1, COUNT(*) AS count"
+                              " FROM main.images AS mi"
+                              " WHERE datetime_taken IS NOT NULL AND datetime_taken <> 0 AND %s"
+                              " GROUP BY date", where_ext);
+      break;
+
+    case DT_COLLECTION_PROP_TIME:
+    case DT_COLLECTION_PROP_IMPORT_TIMESTAMP:
+    case DT_COLLECTION_PROP_CHANGE_TIMESTAMP:
+    case DT_COLLECTION_PROP_EXPORT_TIMESTAMP:
+    case DT_COLLECTION_PROP_PRINT_TIMESTAMP:
+    {
+      char *colname = NULL;
+      switch(property)
+      {
+        case DT_COLLECTION_PROP_TIME: colname = "datetime_taken"; break;
+        case DT_COLLECTION_PROP_IMPORT_TIMESTAMP: colname = "import_timestamp"; break;
+        case DT_COLLECTION_PROP_CHANGE_TIMESTAMP: colname = "change_timestamp"; break;
+        case DT_COLLECTION_PROP_EXPORT_TIMESTAMP: colname = "export_timestamp"; break;
+        case DT_COLLECTION_PROP_PRINT_TIMESTAMP: colname = "print_timestamp"; break;
+        default: break; // unreachable: outer switch already restricts to the timestamp cases
+      }
+      query = g_strdup_printf("SELECT %s AS date, 1, COUNT(*) AS count FROM main.images AS mi"
+                              " WHERE %s IS NOT NULL AND %s <> 0 AND %s GROUP BY date",
+                              colname, colname, colname, where_ext);
+      break;
+    }
+
+    case DT_COLLECTION_PROP_HISTORY:
+      query = g_strdup_printf("SELECT CASE WHEN EXISTS (SELECT 1 FROM main.history h WHERE h.imgid = mi.id)"
+                              "       THEN '%s' ELSE '%s' END as altered, 1, COUNT(*) AS count"
+                              " FROM main.images AS mi WHERE %s GROUP BY altered ORDER BY altered ASC",
+                              _("altered"), _("unaltered"), where_ext);
+      break;
+
+    case DT_COLLECTION_PROP_LOCAL_COPY:
+      query = g_strdup_printf("SELECT CASE WHEN (flags & %d) THEN '%s' ELSE '%s' END as lcp, 1, COUNT(*) AS count"
+                              " FROM main.images AS mi WHERE %s GROUP BY lcp ORDER BY lcp ASC",
+                              DT_IMAGE_LOCAL_COPY, _("copied locally"), _("not copied locally"), where_ext);
+      break;
+
+    case DT_COLLECTION_PROP_COLORLABEL:
+      query = g_strdup_printf("SELECT CASE color WHEN 0 THEN '%s' WHEN 1 THEN '%s' WHEN 2 THEN '%s'"
+                              "         WHEN 3 THEN '%s' WHEN 4 THEN '%s' ELSE '' END, color, COUNT(*) AS count"
+                              " FROM main.images AS mi"
+                              " JOIN (SELECT imgid AS color_labels_id, color FROM main.color_labels)"
+                              "   ON id = color_labels_id WHERE %s GROUP BY color ORDER BY color DESC",
+                              _("red"), _("yellow"), _("green"), _("blue"), _("purple"), where_ext);
+      break;
+
+    case DT_COLLECTION_PROP_LENS:
+      query = g_strdup_printf("SELECT lens, 1, COUNT(*) AS count FROM main.images AS mi WHERE %s"
+                              " GROUP BY lens ORDER BY lens", where_ext);
+      break;
+
+    case DT_COLLECTION_PROP_FOCAL_LENGTH:
+      query = g_strdup_printf("SELECT CAST(focal_length AS INTEGER) AS focal_length, 1, COUNT(*) AS count"
+                              " FROM main.images AS mi WHERE %s GROUP BY CAST(focal_length AS INTEGER)"
+                              " ORDER BY CAST(focal_length AS INTEGER)", where_ext);
+      break;
+
+    case DT_COLLECTION_PROP_ISO:
+      query = g_strdup_printf("SELECT CAST(iso AS INTEGER) AS iso, 1, COUNT(*) AS count"
+                              " FROM main.images AS mi WHERE %s GROUP BY iso ORDER BY iso", where_ext);
+      break;
+
+    case DT_COLLECTION_PROP_APERTURE:
+      query = g_strdup_printf("SELECT ROUND(aperture,1) AS aperture, 1, COUNT(*) AS count"
+                              " FROM main.images AS mi WHERE %s GROUP BY aperture ORDER BY aperture", where_ext);
+      break;
+
+    case DT_COLLECTION_PROP_EXPOSURE:
+      query = g_strdup_printf("SELECT CASE WHEN (exposure < 0.4) THEN '1/' || CAST(1/exposure + 0.9 AS INTEGER)"
+                              "         ELSE ROUND(exposure,2) || '\"' END as _exposure, 1, COUNT(*) AS count"
+                              " FROM main.images AS mi WHERE %s GROUP BY _exposure ORDER BY exposure", where_ext);
+      break;
+
+    case DT_COLLECTION_PROP_FILENAME:
+      query = g_strdup_printf("SELECT filename, 1, COUNT(*) AS count FROM main.images AS mi WHERE %s"
+                              " GROUP BY filename ORDER BY filename", where_ext);
+      break;
+
+    case DT_COLLECTION_PROP_GROUPING:
+      query = g_strdup_printf("SELECT CASE WHEN id = group_id THEN '%s' ELSE '%s' END as group_leader, 1,"
+                              " COUNT(*) AS count FROM main.images AS mi WHERE %s"
+                              " GROUP BY group_leader ORDER BY group_leader ASC",
+                              _("group leaders"), _("group followers"), where_ext);
+      break;
+
+    case DT_COLLECTION_PROP_MODULE:
+      query = g_strdup_printf("SELECT m.name AS module_name, 1, COUNT(*) AS count FROM main.images AS mi"
+                              " JOIN (SELECT DISTINCT imgid, operation FROM main.history WHERE enabled = 1) AS h"
+                              "  ON h.imgid = mi.id JOIN memory.darktable_iop_names AS m"
+                              "  ON m.operation = h.operation WHERE %s GROUP BY module_name ORDER BY module_name",
+                              where_ext);
+      break;
+
+    case DT_COLLECTION_PROP_ORDER:
+    {
+      char *orders = NULL;
+      for(int i = 0; i < DT_IOP_ORDER_LAST; i++)
+        orders = dt_util_dstrcat(orders, "WHEN mo.version = %d THEN '%s' ", i, _(dt_iop_order_string(i)));
+      orders = dt_util_dstrcat(orders, "ELSE '%s' ", _("none"));
+      query = g_strdup_printf("SELECT CASE %s END as ver, 1, COUNT(*) AS count FROM main.images AS mi"
+                              " LEFT JOIN (SELECT imgid, version FROM main.module_order) mo ON mo.imgid = mi.id"
+                              " WHERE %s GROUP BY ver ORDER BY ver", orders, where_ext);
+      g_free(orders);
+      break;
+    }
+
+    case DT_COLLECTION_PROP_RATING:
+      query = g_strdup_printf("SELECT CASE WHEN (flags & 8) == 8 THEN -1 ELSE (flags & 7) END AS rating, 1,"
+                              " COUNT(*) AS count FROM main.images AS mi WHERE %s GROUP BY rating ORDER BY rating",
+                              where_ext);
+      break;
+
+    default:
+      if(property >= DT_COLLECTION_PROP_METADATA && property < DT_COLLECTION_PROP_METADATA + DT_METADATA_NUMBER)
+      {
+        const int keyid = dt_metadata_get_keyid_by_display_order(property - DT_COLLECTION_PROP_METADATA);
+        const char *name = (const char *)dt_metadata_get_name(keyid);
+        char *setting = g_strdup_printf("plugins/lighttable/metadata/%s_flag", name);
+        const gboolean hidden = dt_conf_get_int(setting) & DT_METADATA_FLAG_HIDDEN;
+        g_free(setting);
+        if(!hidden)
+          query = g_strdup_printf("SELECT CASE WHEN value IS NULL THEN '%s' ELSE value END AS value, 1,"
+                                  " COUNT(*) AS count, CASE WHEN value IS NULL THEN 0 ELSE 1 END AS force_order"
+                                  " FROM main.images AS mi"
+                                  " LEFT JOIN (SELECT id AS meta_data_id, value FROM main.meta_data WHERE key = %d)"
+                                  "  ON id = meta_data_id WHERE %s GROUP BY value ORDER BY force_order, value",
+                                  _("not defined"), keyid, where_ext);
+      }
+      else // film roll
+      {
+        gchar *order_by = NULL;
+        const char *filmroll_sort = dt_conf_get_string_const("plugins/collect/filmroll_sort");
+        if(strcmp(filmroll_sort, "id") == 0)
+          order_by = g_strdup("film_rolls_id DESC");
+        else
+          order_by = dt_conf_get_bool("plugins/collect/descending") ? g_strdup("folder DESC") : g_strdup("folder");
+        query = g_strdup_printf("SELECT folder, film_rolls_id, COUNT(*) AS count, status FROM main.images AS mi"
+                                " JOIN (SELECT fr.id AS film_rolls_id, folder, status FROM main.film_rolls AS fr"
+                                "        JOIN memory.film_folder AS ff ON ff.id = fr.id) ON film_id = film_rolls_id"
+                                " WHERE %s GROUP BY folder ORDER BY %s", where_ext, order_by);
+        g_free(order_by);
+      }
+      break;
+  }
+  g_free(where_ext);
+  if(!query) return NULL;
+
+  sqlite3_stmt *stmt = NULL;
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query, -1, &stmt, NULL);
+  while(stmt && sqlite3_step(stmt) == SQLITE_ROW)
+  {
+    char *name;
+    if(is_date)
+    {
+      char sdt[DT_DATETIME_EXIF_LENGTH] = { 0 };
+      dt_datetime_gtimespan_to_exif(sdt, sizeof(sdt), sqlite3_column_int64(stmt, 0));
+      if(property == DT_COLLECTION_PROP_DAY) sdt[10] = '\0';
+      name = g_strdup(sdt);
+    }
+    else
+    {
+      const char *txt = (const char *)sqlite3_column_text(stmt, 0);
+      name = txt ? g_strdup(txt) : g_strdup("");
+    }
+    const int id = sqlite3_column_int(stmt, 1);
+    const int count = sqlite3_column_int(stmt, 2);
+    const int status = has_status ? sqlite3_column_int(stmt, 3) : -1;
+    out = g_list_prepend(out, _name_value_new(name, id, count, status));
+  }
+  if(stmt) sqlite3_finalize(stmt);
+  g_free(query);
+  return g_list_reverse(out);
 }
 
 int dt_collection_serialize(char *buf, int bufsize)

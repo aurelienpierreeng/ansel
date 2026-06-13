@@ -134,6 +134,8 @@ typedef enum dt_collection_properties_t
   DT_COLLECTION_PROP_ORDER,
   DT_COLLECTION_PROP_RATING,
 
+  DT_COLLECTION_PROP_QUERY, // raw user-provided SQL WHERE expression (advanced)
+
   DT_COLLECTION_PROP_LAST,
 
   DT_COLLECTION_PROP_UNDEF,
@@ -236,6 +238,27 @@ int dt_collection_get_nth(const dt_collection_t *collection, int nth);
 /** get all image ids order as current selection. no more than limit many images are returned, <0 ==
  * unlimited */
 GList *dt_collection_get_all(const dt_collection_t *collection, int limit);
+
+/** get the list of image ids matching a single (property, text) rule, independently of the
+ * currently active collection. Returns a GList of imgids (GINT_TO_POINTER), caller frees with
+ * g_list_free. Used by the library module to feed batch/background operations. */
+GList *dt_collection_get_images_for_rule(const dt_collection_properties_t property, const char *text);
+
+/** One distinct value of a collection property, for the library module's value lists. */
+typedef struct dt_collection_name_value_t
+{
+  char *name;  // raw/display value: folder path, tag name, formatted number/date, ...
+  int id;      // film_roll id / tag id / running index, or 0
+  int count;   // number of matching images
+  int status;  // folder reachability (1 = reachable) for folders/film-rolls, else -1
+} dt_collection_name_value_t;
+
+/** Enumerate the distinct values of a collection property for the library module, honouring
+ * all the *other* active rules through the extended-where of rule `rule`. The library module
+ * then turns these into a flat list or a hierarchical tree. Returns a GList of
+ * dt_collection_name_value_t*, free with g_list_free_full(list, dt_collection_name_value_free). */
+GList *dt_collection_get_property_values(const dt_collection_properties_t property, const int rule);
+void dt_collection_name_value_free(gpointer value);
 
 /** update query by conf vars */
 void dt_collection_update_query(const dt_collection_t *collection, dt_collection_change_t query_change,
