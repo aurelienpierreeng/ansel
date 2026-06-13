@@ -191,6 +191,12 @@ void dt_tag_get_tags_images(const gchar *keyword, GList **tag_list, GList **img_
  * conf value "xxx" */
 uint32_t dt_tag_get_with_usage(GList **result);
 
+/** retrieves the list of tags attached to the images of the current collection
+ *  (memory.collected_images). \param[out] result a pointer to list populated with
+ *  result (dt_tag_t items, only name and id are meaningful). \return the count.
+ *  \note free with dt_tag_free_result(). */
+uint32_t dt_tag_get_collection_tags(GList **result);
+
 /** retrieves synonyms of the tag */
 gchar *dt_tag_get_synonyms(gint tagid);
 
