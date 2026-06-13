@@ -133,6 +133,7 @@
 #include "common/image.h"
 #include "common/map_locations.h"
 #include "common/metadata.h"
+#include "common/mipmap_cache.h"
 #include "common/selection.h"
 #include "common/tags.h"
 #include "common/utility.h"
@@ -143,6 +144,7 @@
 #include "dtgtk/button.h"
 #include "dtgtk/paint.h"
 #include "dtgtk/togglebutton.h"
+#include "gui/drag_and_drop.h"
 #include "gui/gtk.h"
 #include "gui/preferences_dialogs.h"
 #include "libs/lib.h"
@@ -213,6 +215,11 @@ typedef struct dt_lib_collect_t
   GtkWidget *recursive_check;  // "include sub-folders" -> '*' suffix
   GtkWidget *sort_dir;         // ascending/descending toggle
   GtkWidget *sort_by;          // film-roll sort key (id / folder name)
+  GtkWidget *folder_levels;    // show_folder_levels: levels shown in film-roll names (List only)
+
+  // Collections-tab inline controls
+  GtkWidget *collections_controls; // hbox holding the widget below
+  GtkWidget *no_uncategorized;     // "no 'uncategorized' group" for childless tags
 
   // Queries-tab raw SQL escape
   GtkWidget *raw_box;
@@ -898,6 +905,42 @@ static void tree_set_visibility(GtkTreeModel *model, gpointer data)
   gtk_tree_model_foreach(model, (GtkTreeModelForeachFunc)tree_reveal_func, NULL);
 }
 
+// Turn a partial date string ("2021", "2021:06:15", "2021:06:15 13:00", ...) into a comparable
+// 14-digit YYYYMMDDHHMMSS number, keeping only digits (separator-agnostic) and padding the
+// unspecified low-order part with `pad`. Pad '0' yields the earliest instant of the prefix,
+// pad '9' an upper bound past its latest instant.
+static guint64 _date_key(const char *s, char pad)
+{
+  char digits[15];
+  int n = 0;
+  for(const char *p = s; p && *p && n < 14; p++)
+    if(g_ascii_isdigit(*p)) digits[n++] = *p;
+  while(n < 14) digits[n++] = pad;
+  digits[14] = '\0';
+  return g_ascii_strtoull(digits, NULL, 10);
+}
+
+typedef struct _date_range_t
+{
+  guint64 lo, hi; // inclusive bounds as _date_key() numbers
+} _date_range_t;
+
+// Reduce a date tree to the nodes whose date prefix overlaps [lo;hi]. A node's prefix spans
+// [node_lo;node_hi]; it overlaps the range iff node_hi >= lo AND node_lo <= hi. Pair this with
+// tree_reveal_func() so the visible leaves' ancestors stay visible too.
+static gboolean tree_range_visible(GtkTreeModel *model, GtkTreePath *path, GtkTreeIter *iter, gpointer data)
+{
+  const _date_range_t *r = (const _date_range_t *)data;
+  gchar *str = NULL;
+  gtk_tree_model_get(model, iter, DT_LIB_COLLECT_COL_PATH, &str, -1);
+  const guint64 node_lo = _date_key(str, '0');
+  const guint64 node_hi = _date_key(str, '9');
+  dt_free(str);
+  const gboolean visible = (node_hi >= r->lo) && (node_lo <= r->hi);
+  gtk_tree_store_set(GTK_TREE_STORE(model), iter, DT_LIB_COLLECT_COL_VISIBLE, visible, -1);
+  return FALSE;
+}
+
 static gboolean list_select(GtkTreeModel *model, GtkTreePath *path, GtkTreeIter *iter, gpointer data)
 {
   dt_lib_collect_rule_t *dr = (dt_lib_collect_rule_t *)data;
@@ -1312,12 +1355,44 @@ static void _populate_tree(dt_lib_collect_rule_t *dr)
     d->view_rule = property;
   }
 
-  if(dr->typing) tree_set_visibility(model, dr);
+  // A [a;b] range on a numeric/date tree property reduces the tree to the in-range nodes (like
+  // a text search reduces folder/filename lists), instead of a substring filter that — since no
+  // node literally contains "[a;b]" — would hide everything.
+  _range_t *range = NULL;
+  if(item_is_numeric(property))
+  {
+    GRegex *regex = g_regex_new("^\\s*\\[\\s*(.*)\\s*;\\s*(.*)\\s*\\]\\s*$", 0, 0, NULL);
+    GMatchInfo *match_info;
+    g_regex_match_full(regex, gtk_entry_get_text(GTK_ENTRY(dr->text)), -1, 0, 0, &match_info, NULL);
+    if(g_match_info_get_match_count(match_info) == 3)
+    {
+      range = (_range_t *)calloc(1, sizeof(_range_t));
+      range->start = g_match_info_fetch(match_info, 2); // inverted: dates are reverse-ordered
+      range->stop = g_match_info_fetch(match_info, 1);
+    }
+    g_match_info_free(match_info);
+    g_regex_unref(regex);
+  }
+
+  if(range)
+  {
+    // restrict the visible nodes to the dates within [start;stop] (bounds taken order-agnostic)
+    const guint64 a_lo = _date_key(range->start, '0'), a_hi = _date_key(range->start, '9');
+    const guint64 b_lo = _date_key(range->stop, '0'), b_hi = _date_key(range->stop, '9');
+    _date_range_t dvr = { MIN(a_lo, b_lo), MAX(a_hi, b_hi) };
+    gtk_tree_model_foreach(model, (GtkTreeModelForeachFunc)tree_range_visible, &dvr);
+    gtk_tree_model_foreach(model, (GtkTreeModelForeachFunc)tree_reveal_func, NULL);
+  }
+  else if(dr->typing)
+    tree_set_visibility(model, dr);
+
   gtk_tree_selection_unselect_all(gtk_tree_view_get_selection(d->view));
 
-  // Collapse-all only belongs to active search (we then expand just the matches). When merely
+  // Active search (text or range) collapses, then we expand just the matches. When merely
   // refreshing/browsing, restore the previous expansion so the view stays where the user was.
-  if(dr->typing)
+  if(range)
+    gtk_tree_view_expand_all(d->view); // reveal the reduced in-range set
+  else if(dr->typing)
     gtk_tree_view_collapse_all(d->view);
   else if(saved_expanded)
   {
@@ -1326,30 +1401,17 @@ static void _populate_tree(dt_lib_collect_rule_t *dr)
   }
   if(saved_expanded) g_hash_table_destroy(saved_expanded);
 
-  if(item_is_numeric(property))
+  if(range)
   {
-    GRegex *regex = g_regex_new("^\\s*\\[\\s*(.*)\\s*;\\s*(.*)\\s*\\]\\s*$", 0, 0, NULL);
-    GMatchInfo *match_info;
-    g_regex_match_full(regex, gtk_entry_get_text(GTK_ENTRY(dr->text)), -1, 0, 0, &match_info, NULL);
-    const int match_count = g_match_info_get_match_count(match_info);
-    if(match_count == 3)
-    {
-      _range_t *range = (_range_t *)calloc(1, sizeof(_range_t));
-      range->start = g_match_info_fetch(match_info, 2); // inverted: dates are reverse-ordered
-      range->stop = g_match_info_fetch(match_info, 1);
-      gtk_tree_model_foreach(d->treefilter, (GtkTreeModelForeachFunc)range_select, range);
-      if(range->path1 && range->path2)
-        gtk_tree_selection_select_range(gtk_tree_view_get_selection(d->view), range->path1, range->path2);
-      dt_free(range->start);
-      dt_free(range->stop);
-      gtk_tree_path_free(range->path1);
-      gtk_tree_path_free(range->path2);
-      dt_free(range);
-    }
-    else
-      gtk_tree_model_foreach(d->treefilter, (GtkTreeModelForeachFunc)tree_expand, dr);
-    g_match_info_free(match_info);
-    g_regex_unref(regex);
+    // also select the boundary rows when the typed bounds match actual leaves
+    gtk_tree_model_foreach(d->treefilter, (GtkTreeModelForeachFunc)range_select, range);
+    if(range->path1 && range->path2)
+      gtk_tree_selection_select_range(gtk_tree_view_get_selection(d->view), range->path1, range->path2);
+    dt_free(range->start);
+    dt_free(range->stop);
+    gtk_tree_path_free(range->path1);
+    gtk_tree_path_free(range->path2);
+    dt_free(range);
   }
   else
     gtk_tree_model_foreach(d->treefilter, (GtkTreeModelForeachFunc)tree_expand, dr);
@@ -1812,6 +1874,65 @@ static void _act_tag_rename(dt_lib_collect_t *d, GList *rows)
   }
 }
 
+// ---- pre-render thumbnails of the matching image set (background job) ----
+typedef struct collect_prerender_t
+{
+  GList *imgids;            // owned: imgids to render
+  dt_mipmap_size_t max_size;
+} collect_prerender_t;
+
+static void _prerender_free(void *p)
+{
+  collect_prerender_t *pr = (collect_prerender_t *)p;
+  g_list_free(pr->imgids);
+  g_free(pr);
+}
+
+// Fill the on-disk mipmap cache for every imgid, largest size first (smaller sizes are then
+// downscaled from it rather than recomputed). Mirrors the "preload" job in gui/actions/run.c,
+// but works on an explicit imgid list so it never touches the user's selection.
+static int32_t _prerender_job(dt_job_t *job)
+{
+  collect_prerender_t *p = (collect_prerender_t *)dt_control_job_get_params(job);
+  const dt_mipmap_size_t max = p->max_size;
+  const int n = g_list_length(p->imgids);
+  const float total = (n > 0) ? (float)(n * (max + 1)) : 1.0f;
+  int done = 0;
+
+  for(GList *l = p->imgids; l && dt_control_job_get_state(job) != DT_JOB_STATE_CANCELLED; l = g_list_next(l))
+  {
+    const int32_t imgid = GPOINTER_TO_INT(l->data);
+    for(int k = max; k >= DT_MIPMAP_0 && dt_control_job_get_state(job) != DT_JOB_STATE_CANCELLED; k--)
+    {
+      char filename[PATH_MAX] = { 0 };
+      dt_mipmap_get_cache_filename(filename, darktable.mipmap_cache, k, imgid);
+      if(!dt_util_test_image_file(filename)) // skip thumbnails already on disc
+      {
+        dt_mipmap_buffer_t buf;
+        dt_mipmap_cache_get(darktable.mipmap_cache, &buf, imgid, k, DT_MIPMAP_BLOCKING, 'r');
+        dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
+      }
+      dt_control_job_set_progress(job, (float)(++done) / total);
+    }
+    dt_mimap_cache_evict(darktable.mipmap_cache, imgid); // flush to disc, free RAM
+  }
+  return 0;
+}
+
+static void _act_prerender(dt_lib_collect_t *d, GList *rows)
+{
+  // recursive for folders so a parent folder renders its whole subtree
+  GList *imgids = _rows_to_imgids(d->view_rule, rows, TRUE);
+  if(!imgids) return;
+  collect_prerender_t *p = g_malloc0(sizeof(collect_prerender_t));
+  p->imgids = imgids; // takes ownership
+  p->max_size = DT_MIPMAP_2;
+  dt_job_t *job = dt_control_job_create(&_prerender_job, "prerender collection thumbnails");
+  dt_control_job_set_params(job, p, _prerender_free);
+  dt_control_job_add_progress(job, _("pre-rendering thumbnails"), TRUE);
+  dt_control_add_job(darktable.control, DT_JOB_QUEUE_USER_BG, job);
+}
+
 // ---- action table: add a bulk operation by adding a row here ----
 static gboolean _en_folders(int property, int n)
 {
@@ -1824,6 +1945,10 @@ static gboolean _en_tags(int property, int n)
 static gboolean _en_tag_single(int property, int n)
 {
   return item_is_tag(property) && n == 1;
+}
+static gboolean _en_any(int property, int n)
+{
+  return item_is_folder(property) || item_is_tag(property);
 }
 
 typedef struct collect_action_t
@@ -1839,8 +1964,7 @@ static const collect_action_t ACTIONS[] = {
   { N_("relocate..."), TRUE, _en_folders, _act_folders_relocate },
   { N_("delete tag(s)..."), TRUE, _en_tags, _act_tags_remove },
   { N_("rename tag..."), FALSE, _en_tag_single, _act_tag_rename },
-  // Template for future bulk ops over the matching image set (imgids via _rows_to_imgids):
-  // { N_("pre-render thumbnails"), TRUE, _en_any, _act_prerender },
+  { N_("pre-render thumbnails"), TRUE, _en_any, _act_prerender },
 };
 
 static void _action_activate(GtkMenuItem *mi, dt_lib_collect_t *d)
@@ -1882,6 +2006,98 @@ static void _show_context_menu(dt_lib_collect_t *d, GdkEventButton *event)
 // =====================================================================================
 // Section 7 — view & widget events
 // =====================================================================================
+
+// Drag & drop target: images dragged from the lighttable thumbtable (DND_TARGET_IMGID carries an
+// array of uint32_t imgids). Dropping on a folder row physically moves the files into it; dropping
+// on a tag row attaches the tag.
+static gboolean _drop_move_to_folder(dt_lib_collect_t *d, const char *folder, GList *imgs)
+{
+  if(IS_NULL_PTR(folder) || !*folder || IS_NULL_PTR(imgs)) return FALSE;
+  const int n = g_list_length(imgs);
+  gchar *msg = g_strdup_printf(ngettext("Physically move %d image to\n%s ?\n\nFiles are moved on disk.",
+                                        "Physically move %d images to\n%s ?\n\nFiles are moved on disk.", n),
+                               n, folder);
+  const gboolean ok = _confirm(_("move images"), msg);
+  g_free(msg);
+  if(!ok) return FALSE;
+
+  dt_film_t film;
+  dt_film_init(&film);
+  dt_film_new(&film, folder); // create-or-fetch the film roll for that folder
+  const int32_t filmid = film.id;
+  dt_film_cleanup(&film);
+  if(filmid <= 0)
+  {
+    dt_control_log(_("could not access the destination folder"));
+    return FALSE;
+  }
+
+  int moved = 0;
+  for(GList *l = imgs; l; l = g_list_next(l))
+    if(dt_image_move(GPOINTER_TO_INT(l->data), filmid) != -1) moved++;
+
+  if(moved)
+  {
+    dt_collection_memory_update();
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_FILMROLLS_CHANGED);
+    dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF, NULL);
+    _force_refresh(d);
+    dt_control_queue_redraw_center();
+  }
+  return moved > 0;
+}
+
+static void _view_drag_data_received(GtkWidget *widget, GdkDragContext *context, gint x, gint y,
+                                     GtkSelectionData *selection_data, guint target_type, guint time,
+                                     dt_lib_collect_t *d)
+{
+  GtkTreeView *tree = GTK_TREE_VIEW(widget);
+  g_signal_stop_emission_by_name(tree, "drag-data-received"); // bypass GtkTreeView's own DnD
+  gboolean success = FALSE;
+
+  const int property = d->view_rule;
+  const gboolean to_folder = item_is_folder(property);
+  const gboolean to_tag = item_is_tag(property);
+
+  if(target_type == DND_TARGET_IMGID && (to_folder || to_tag) && !IS_NULL_PTR(selection_data))
+  {
+    const int imgs_nb = gtk_selection_data_get_length(selection_data) / (int)sizeof(uint32_t);
+    GtkTreePath *path = NULL;
+    if(imgs_nb > 0 && gtk_tree_view_get_path_at_pos(tree, x, y, &path, NULL, NULL, NULL))
+    {
+      const uint32_t *imgt = (const uint32_t *)gtk_selection_data_get_data(selection_data);
+      GList *imgs = NULL;
+      for(int i = 0; i < imgs_nb; i++) imgs = g_list_prepend(imgs, GINT_TO_POINTER((int)imgt[i]));
+
+      GtkTreeModel *model = gtk_tree_view_get_model(tree);
+      GtkTreeIter iter;
+      if(gtk_tree_model_get_iter(model, &iter, path))
+      {
+        gchar *rowpath = NULL;
+        gtk_tree_model_get(model, &iter, DT_LIB_COLLECT_COL_PATH, &rowpath, -1);
+        if(to_tag)
+        {
+          // tree rows carry a placeholder id, so resolve the real tag id from the full path
+          const guint tagid = (IS_NULL_PTR(rowpath) || !*rowpath) ? 0 : dt_tag_get_tag_id_by_name(rowpath);
+          if(tagid)
+          {
+            dt_tag_attach_images(tagid, imgs, TRUE);
+            dt_image_synch_xmp(-1);
+            DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_TAG_CHANGED);
+            _force_refresh(d);
+            success = TRUE;
+          }
+        }
+        else
+          success = _drop_move_to_folder(d, rowpath, imgs);
+        dt_free(rowpath);
+      }
+      g_list_free(imgs);
+    }
+    if(path) gtk_tree_path_free(path);
+  }
+  gtk_drag_finish(context, success, FALSE, time);
+}
 
 static gboolean _view_button_pressed(GtkWidget *treeview, GdkEventButton *event, dt_lib_collect_t *d)
 {
@@ -2027,9 +2243,14 @@ static void combo_changed(GtkWidget *combo, dt_lib_collect_rule_t *dr)
   }
 
   // On the Folders tab the property combo is the List/Tree toggle: keep the sub-folders
-  // checkbox visible only for the hierarchical (Tree = FOLDERS) view.
+  // checkbox visible only for the hierarchical (Tree = FOLDERS) view, and the "sort by"
+  // selector only for the flat film-roll List (the folder Tree is always path-sorted).
   if(c->folders_controls && gtk_widget_get_visible(c->folders_controls))
+  {
     gtk_widget_set_visible(c->recursive_check, property == DT_COLLECTION_PROP_FOLDERS);
+    gtk_widget_set_visible(c->sort_by, property == DT_COLLECTION_PROP_FILMROLL);
+    gtk_widget_set_visible(c->folder_levels, property == DT_COLLECTION_PROP_FILMROLL);
+  }
 
   _set_tooltip(dr);
   _update_op_combo(dr);
@@ -2135,6 +2356,21 @@ static void _sort_by_changed(GtkWidget *combo, dt_lib_collect_t *d)
 {
   if(darktable.gui->reset) return;
   dt_conf_set_string("plugins/collect/filmroll_sort", dt_bauhaus_combobox_get(combo) == 0 ? "folder" : "id");
+  _force_refresh(d);
+}
+
+// Surfaced settings that used to live in the hidden preferences popup (TODO).
+static void _folder_levels_changed(GtkWidget *spin, dt_lib_collect_t *d)
+{
+  if(darktable.gui->reset) return;
+  dt_conf_set_int("show_folder_levels", (int)gtk_spin_button_get_value(GTK_SPIN_BUTTON(spin)));
+  _force_refresh(d);
+}
+
+static void _no_uncategorized_toggled(GtkToggleButton *b, dt_lib_collect_t *d)
+{
+  if(darktable.gui->reset) return;
+  dt_conf_set_bool("plugins/lighttable/tagging/no_uncategorized", gtk_toggle_button_get_active(b));
   _force_refresh(d);
 }
 
@@ -2327,6 +2563,8 @@ static void _hide_all_widgets(dt_lib_collect_t *d)
   }
   gtk_widget_set_no_show_all(d->folders_controls, TRUE);
   gtk_widget_hide(d->folders_controls);
+  gtk_widget_set_no_show_all(d->collections_controls, TRUE);
+  gtk_widget_hide(d->collections_controls);
   gtk_widget_set_no_show_all(d->raw_box, TRUE);
   gtk_widget_hide(d->raw_box);
   gtk_widget_set_no_show_all(GTK_WIDGET(d->view), FALSE);
@@ -2368,6 +2606,12 @@ static void _configure_tab(dt_lib_collect_t *d, dt_collect_tab_t tab)
                                  desc ? CPF_DIRECTION_DOWN : CPF_DIRECTION_UP, NULL);
     dt_bauhaus_combobox_set(
         d->sort_by, g_strcmp0(dt_conf_get_string_const("plugins/collect/filmroll_sort"), "id") == 0 ? 1 : 0);
+    // "sort by name/id" and "folder levels" only affect the flat film-roll List; the folder
+    // Tree is always path-sorted and shows full paths, so hide them there for consistency (TODO).
+    gtk_widget_set_visible(d->sort_by, item == DT_COLLECTION_PROP_FILMROLL);
+    gtk_spin_button_set_value(GTK_SPIN_BUTTON(d->folder_levels),
+                              CLAMP(dt_conf_get_int("show_folder_levels"), 1, 5));
+    gtk_widget_set_visible(d->folder_levels, item == DT_COLLECTION_PROP_FILMROLL);
     const gchar *t = gtk_entry_get_text(GTK_ENTRY(d->rule[0].text));
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->recursive_check),
                                  g_str_has_suffix(t, "*") || g_str_has_suffix(t, "%"));
@@ -2388,6 +2632,11 @@ static void _configure_tab(dt_lib_collect_t *d, dt_collect_tab_t tab)
     gtk_entry_set_placeholder_text(GTK_ENTRY(d->rule[0].text), _("Search a collection..."));
     _set_tooltip(&d->rule[0]);
     _update_op_combo(&d->rule[0]);
+
+    gtk_widget_set_no_show_all(d->collections_controls, FALSE);
+    gtk_widget_show_all(d->collections_controls);
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->no_uncategorized),
+                                 dt_conf_get_bool("plugins/lighttable/tagging/no_uncategorized"));
     d->active_rule = 0;
   }
   else // TAB_QUERIES
@@ -2614,29 +2863,9 @@ static void _mount_changed(GUnixMountMonitor *monitor, dt_lib_module_t *self)
 // Section 11 — preferences popup, construction & teardown
 // =====================================================================================
 
-static void _menuitem_preferences(GtkMenuItem *menuitem, dt_lib_module_t *self)
-{
-  GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
-  GtkWidget *dialog
-      = gtk_dialog_new_with_buttons(_("collections settings"), GTK_WINDOW(win), GTK_DIALOG_DESTROY_WITH_PARENT,
-                                    _("cancel"), GTK_RESPONSE_NONE, _("save"), GTK_RESPONSE_ACCEPT, NULL);
-  dt_prefs_init_dialog_collect(dialog);
-  g_signal_connect(dialog, "key-press-event", G_CALLBACK(dt_handle_dialog_enter), NULL);
-#ifdef GDK_WINDOWING_QUARTZ
-  dt_osx_disallow_fullscreen(dialog);
-#endif
-  gtk_widget_show_all(dialog);
-  gtk_dialog_run(GTK_DIALOG(dialog));
-  gtk_widget_destroy(dialog);
-  _commit_colllection();
-}
-
-void set_preferences(void *menu, dt_lib_module_t *self)
-{
-  GtkWidget *mi = gtk_menu_item_new_with_label(_("preferences..."));
-  g_signal_connect(G_OBJECT(mi), "activate", G_CALLBACK(_menuitem_preferences), self);
-  gtk_menu_shell_append(GTK_MENU_SHELL(menu), mi);
-}
+// NB: the old hidden "preferences..." popup has been retired (TODO). Every collect setting it
+// exposed now lives in the front widget: filmroll_sort / descending / folder_levels on the
+// Folders tab, no_uncategorized on the Collections tab.
 
 void gui_init(dt_lib_module_t *self)
 {
@@ -2729,7 +2958,22 @@ void gui_init(dt_lib_module_t *self)
   gtk_widget_set_tooltip_text(d->sort_dir, _("toggle ascending / descending order"));
   g_signal_connect(G_OBJECT(d->sort_dir), "toggled", G_CALLBACK(_sort_dir_toggled), d);
   gtk_box_pack_start(GTK_BOX(d->folders_controls), d->sort_dir, FALSE, FALSE, 0);
+
+  d->folder_levels = gtk_spin_button_new_with_range(1, 5, 1);
+  gtk_widget_set_tooltip_text(d->folder_levels,
+                              _("number of folder levels to show in film-roll names, from the right"));
+  g_signal_connect(G_OBJECT(d->folder_levels), "value-changed", G_CALLBACK(_folder_levels_changed), d);
+  gtk_box_pack_start(GTK_BOX(d->folders_controls), d->folder_levels, FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(self->widget), d->folders_controls, FALSE, FALSE, 0);
+
+  // Collections inline controls, shown only on the Collections tab
+  d->collections_controls = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
+  d->no_uncategorized = gtk_check_button_new_with_label(_("no 'uncategorized' group"));
+  gtk_widget_set_tooltip_text(d->no_uncategorized,
+                              _("do not group childless tags under an 'uncategorized' entry"));
+  g_signal_connect(G_OBJECT(d->no_uncategorized), "toggled", G_CALLBACK(_no_uncategorized_toggled), d);
+  gtk_box_pack_start(GTK_BOX(d->collections_controls), d->no_uncategorized, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(self->widget), d->collections_controls, FALSE, FALSE, 0);
 
   // Queries raw-SQL escape, shown only on the Queries tab
   d->raw_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
@@ -2754,6 +2998,12 @@ void gui_init(dt_lib_module_t *self)
   g_signal_connect(G_OBJECT(view), "popup-menu", G_CALLBACK(_view_popup_menu), d);
   g_signal_connect(G_OBJECT(view), "row-activated", G_CALLBACK(_view_row_activated), d);
   g_signal_connect(G_OBJECT(view), "row-expanded", G_CALLBACK(_view_row_expanded), d);
+
+  // accept images dragged from the lighttable thumbtable: drop on a folder row to move the
+  // files there, on a tag row to attach the tag (handled in _view_drag_data_received)
+  gtk_drag_dest_set(GTK_WIDGET(view), GTK_DEST_DEFAULT_ALL, target_list_internal, n_targets_internal,
+                    GDK_ACTION_MOVE);
+  g_signal_connect(G_OBJECT(view), "drag-data-received", G_CALLBACK(_view_drag_data_received), d);
 
   GtkTreeViewColumn *col = gtk_tree_view_column_new();
   gtk_tree_view_append_column(view, col);
