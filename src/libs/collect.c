@@ -192,6 +192,7 @@ typedef struct dt_lib_collect_rule_t
   GtkWidget *text;
   GtkWidget *button;
   gboolean typing;
+  gboolean reveal;   // one-shot: after a view/tab switch, unfold the tree to the preserved query
   gchar *searchstring;
   void *lib_collect; // backref to dt_lib_collect_t
 } dt_lib_collect_rule_t;
@@ -1001,11 +1002,16 @@ static gboolean tree_expand(GtkTreeModel *model, GtkTreePath *path, GtkTreeIter 
   gchar *txt2 = g_utf8_strdown(txt, -1);
   const int property = _combo_get_active_collection(dr->combo);
 
+  // While typing, or right after a view/tab switch that preserved a query, we want to actively
+  // reveal the matching node(s); on a plain refresh we leave the tree where the user left it.
+  const gboolean reveal = dr->typing || dr->reveal;
+
   if(g_str_has_prefix(needle, "%")) startwildcard = TRUE;
   if(g_str_has_suffix(needle, "%")) needle[strlen(needle) - 1] = '\0';
   if(g_str_has_suffix(haystack, "%")) haystack[strlen(haystack) - 1] = '\0';
   if(property == DT_COLLECTION_PROP_TAG || property == DT_COLLECTION_PROP_GEOTAGGING)
   {
+    if(g_str_has_suffix(needle, "*")) needle[strlen(needle) - 1] = '\0'; // hierarchy + sub
     if(g_str_has_suffix(needle, "|")) needle[strlen(needle) - 1] = '\0';
     if(g_str_has_suffix(haystack, "|")) haystack[strlen(haystack) - 1] = '\0';
   }
@@ -1021,7 +1027,7 @@ static gboolean tree_expand(GtkTreeModel *model, GtkTreePath *path, GtkTreeIter 
     if(g_str_has_suffix(haystack, ":")) haystack[strlen(haystack) - 1] = '\0';
   }
 
-  if(dr->typing && g_strrstr(txt2, needle) != NULL)
+  if(reveal && g_strrstr(txt2, needle) != NULL)
   {
     gtk_tree_view_expand_to_path(d->view, path);
     expanded = TRUE;
@@ -1043,7 +1049,7 @@ static gboolean tree_expand(GtkTreeModel *model, GtkTreePath *path, GtkTreeIter 
     gtk_tree_view_expand_to_path(d->view, path);
     expanded = TRUE;
   }
-  else if((dr->typing || property != DT_COLLECTION_PROP_FOLDERS) && g_str_has_prefix(haystack, needle))
+  else if((reveal || property != DT_COLLECTION_PROP_FOLDERS) && g_str_has_prefix(haystack, needle))
   {
     gtk_tree_view_expand_to_path(d->view, path);
     expanded = TRUE;
@@ -1550,6 +1556,7 @@ static void update_view(dt_lib_collect_rule_t *dr)
     _populate_tree(dr);
   else
     _populate_list(dr);
+  dr->reveal = FALSE; // one-shot: consumed by this rebuild
 }
 
 // =====================================================================================
@@ -2290,6 +2297,10 @@ static void combo_changed(GtkWidget *combo, dt_lib_collect_rule_t *dr)
   _update_op_combo(dr);
   set_properties(dr);
 
+  // when the query carried over (e.g. List <-> Tree, or folder <-> film-roll), unfold the rebuilt
+  // tree to it instead of leaving the user on a collapsed view
+  dr->reveal = transferable;
+
   // Signal-driven refresh: committing rebuilds where_ext first, then collection_updated ->
   // _lib_collect_gui_update rebuilds the value list against the fresh constraints. (Doing the
   // rebuild ourselves before committing would use a stale where_ext and not refresh.)
@@ -2742,7 +2753,14 @@ static void _on_tab_switch(GtkNotebook *nb, GtkWidget *page, guint page_num, dt_
   const gboolean raw = (page_num == TAB_QUERIES && _rule_get_item(0) == DT_COLLECTION_PROP_QUERY);
   _configure_tab(d, page_num);
   d->view_rule = -1;
-  if(!raw) update_view(get_active_rule(d)); // raw SQL mode has no value list
+  if(!raw)
+  {
+    // _configure_tab kept the query whenever the destination field is compatible; unfold the tree
+    // to it (a no-op when the field was incompatible and the entry was cleared)
+    get_active_rule(d)->reveal = TRUE;
+    update_view(get_active_rule(d));
+  }
+  // raw SQL mode has no value list
   // NB: switching tabs only reconfigures the GUI and rebuilds the value list; it must NOT
   // re-run the collection query (that rebuilds the whole lighttable and was the slow path).
   // The collection updates when the user actually clicks a value or edits a rule.
