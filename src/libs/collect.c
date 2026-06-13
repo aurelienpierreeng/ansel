@@ -1057,46 +1057,47 @@ static gboolean tree_expand(GtkTreeModel *model, GtkTreePath *path, GtkTreeIter 
   return expanded;
 }
 
+// Walk down a folder tree through single-child nodes and return the path of the deepest such node
+// (the unique common root), so the filtered model can hide the redundant leading folders. Returns
+// NULL when there is nothing to collapse. Stops descending at a node that is itself a film-roll.
+static GtkTreePath *_folders_root_collapse_path(GtkTreeModel *model)
+{
+  GtkTreeIter child, iter;
+  int level = 0;
+  while(gtk_tree_model_iter_n_children(model, level > 0 ? &iter : NULL) > 0)
+  {
+    if(level > 0)
+    {
+      gchar *pth = NULL;
+      gtk_tree_model_get(model, &iter, DT_LIB_COLLECT_COL_PATH, &pth, -1);
+      const int id = dt_film_get_id(pth); // is this folder a known film-roll?
+      dt_free(pth);
+      if(id != -1)
+      {
+        if(!gtk_tree_model_iter_parent(model, &child, &iter)) level = 0;
+        iter = child;
+        break;
+      }
+    }
+    if(gtk_tree_model_iter_n_children(model, level > 0 ? &iter : NULL) != 1) break;
+    gtk_tree_model_iter_children(model, &child, level > 0 ? &iter : NULL);
+    iter = child;
+    level++;
+  }
+  if(level <= 0) return NULL;
+
+  if(gtk_tree_model_iter_n_children(model, &iter) == 0 && gtk_tree_model_iter_parent(model, &child, &iter))
+    return gtk_tree_model_get_path(model, &child);
+  return gtk_tree_model_get_path(model, &iter);
+}
+
 // Build the filtered model; for folders, collapse a unique common root into the virtual root.
 static GtkTreeModel *_create_filtered_model(GtkTreeModel *model, dt_lib_collect_rule_t *dr)
 {
-  GtkTreeModel *filter = NULL;
-  GtkTreePath *path = NULL;
-
-  if(_combo_get_active_collection(dr->combo) == DT_COLLECTION_PROP_FOLDERS)
-  {
-    GtkTreeIter child, iter;
-    int level = 0;
-    while(gtk_tree_model_iter_n_children(model, level > 0 ? &iter : NULL) > 0)
-    {
-      if(level > 0)
-      {
-        gchar *pth = NULL;
-        gtk_tree_model_get(model, &iter, DT_LIB_COLLECT_COL_PATH, &pth, -1);
-        const int id = dt_film_get_id(pth); // is this folder a known film-roll?
-        dt_free(pth);
-        if(id != -1)
-        {
-          if(!gtk_tree_model_iter_parent(model, &child, &iter)) level = 0;
-          iter = child;
-          break;
-        }
-      }
-      if(gtk_tree_model_iter_n_children(model, level > 0 ? &iter : NULL) != 1) break;
-      gtk_tree_model_iter_children(model, &child, level > 0 ? &iter : NULL);
-      iter = child;
-      level++;
-    }
-    if(level > 0)
-    {
-      if(gtk_tree_model_iter_n_children(model, &iter) == 0 && gtk_tree_model_iter_parent(model, &child, &iter))
-        path = gtk_tree_model_get_path(model, &child);
-      else
-        path = gtk_tree_model_get_path(model, &iter);
-    }
-  }
-
-  filter = gtk_tree_model_filter_new(model, path);
+  GtkTreePath *path = (_combo_get_active_collection(dr->combo) == DT_COLLECTION_PROP_FOLDERS)
+                          ? _folders_root_collapse_path(model)
+                          : NULL;
+  GtkTreeModel *filter = gtk_tree_model_filter_new(model, path);
   gtk_tree_path_free(path);
   gtk_tree_model_filter_set_visible_column(GTK_TREE_MODEL_FILTER(filter), DT_LIB_COLLECT_COL_VISIBLE);
   return filter;
@@ -1132,6 +1133,179 @@ static gboolean _restore_expanded_cb(GtkTreeModel *model, GtkTreePath *path, Gtk
   if(p && g_hash_table_contains(c->set, p)) gtk_tree_view_expand_to_path(c->d->view, path);
   dt_free(p);
   return FALSE;
+}
+
+// Split a tree value into its path components for the active property.
+static char **_split_tree_name(int property, const char *name)
+{
+  if(property == DT_COLLECTION_PROP_FOLDERS) return split_path(name);
+  if(property == DT_COLLECTION_PROP_DAY) return g_strsplit(name, ":", -1);
+  if(is_time_property(property)) return g_strsplit_set(name, ": ", 4);
+  return g_strsplit(name, "|", -1);
+}
+
+// Add `count` to every ancestor of `leaf` so parent folders/dates show the total beneath them
+// (fixes #537 for the displayed count).
+static void _propagate_count_to_ancestors(GtkTreeStore *store, GtkTreeIter *leaf, int count)
+{
+  GtkTreeModel *model = GTK_TREE_MODEL(store);
+  GtkTreeIter parent, child = *leaf;
+  while(gtk_tree_model_iter_parent(model, &parent, &child))
+  {
+    guint parentcount;
+    gtk_tree_model_get(model, &parent, DT_LIB_COLLECT_COL_COUNT, &parentcount, -1);
+    gtk_tree_store_set(store, &parent, DT_LIB_COLLECT_COL_COUNT, count + parentcount, -1);
+    child = parent;
+  }
+}
+
+// A top-level tag with no children of its own is filed under a synthetic "uncategorized" node
+// (created lazily). Returns TRUE when `name` was filed this way, so the caller skips it.
+static gboolean _maybe_file_uncategorized(GtkTreeStore *store, const char *name, const char *next_name_raw,
+                                          GtkTreeIter *uncategorized, guint *index, int count)
+{
+  if(strchr(name, '|') != NULL) return FALSE; // has a hierarchy of its own
+
+  char *next_name = g_strdup(next_name_raw ? next_name_raw : "");
+  if(strlen(next_name) >= strlen(name) + 1 && next_name[strlen(name)] == '|') next_name[strlen(name)] = '\0';
+  const gboolean leaf_toplevel = g_strcmp0(next_name, name) && g_strcmp0(name, _("not tagged"));
+  dt_free(next_name);
+  if(!leaf_toplevel) return FALSE;
+
+  if(!uncategorized->stamp)
+  {
+    gtk_tree_store_insert_with_values(store, uncategorized, NULL, -1, DT_LIB_COLLECT_COL_TEXT,
+                                      _(UNCATEGORIZED_TAG), DT_LIB_COLLECT_COL_PATH, "",
+                                      DT_LIB_COLLECT_COL_VISIBLE, TRUE, DT_LIB_COLLECT_COL_INDEX, *index,
+                                      DT_LIB_COLLECT_COL_FONT, PANGO_WEIGHT_NORMAL, -1);
+    (*index)++;
+  }
+  GtkTreeIter temp;
+  gtk_tree_store_insert_with_values(store, &temp, uncategorized, 0, DT_LIB_COLLECT_COL_TEXT, name,
+                                    DT_LIB_COLLECT_COL_PATH, name, DT_LIB_COLLECT_COL_VISIBLE, TRUE,
+                                    DT_LIB_COLLECT_COL_COUNT, count, DT_LIB_COLLECT_COL_INDEX, *index,
+                                    DT_LIB_COLLECT_COL_FONT, PANGO_WEIGHT_NORMAL, -1);
+  (*index)++;
+  return TRUE;
+}
+
+// Pull the raw values from the SQL engine and sort them ourselves: sqlite knows nothing about path
+// separators, so we order by a path-aware collate key and build the tree by hand. Caller frees with
+// g_list_free_full(list, free_tuple).
+static GList *_collect_sorted_tree_names(int property, int rule)
+{
+  GList *sorted_names = NULL;
+  GList *values = dt_collection_get_property_values(property, rule);
+  for(GList *v = values; v; v = g_list_next(v))
+  {
+    dt_collection_name_value_t *nv = (dt_collection_name_value_t *)v->data;
+    char *name = g_strdup(nv->name ? nv->name : "");
+    gchar *collate_key;
+    if(property == DT_COLLECTION_PROP_FOLDERS)
+    {
+      char *name_folded = g_utf8_casefold(name, -1);
+      char *name_folded_slash = g_strconcat(name_folded, G_DIR_SEPARATOR_S, NULL);
+      collate_key = g_utf8_collate_key_for_filename(name_folded_slash, -1);
+      dt_free(name_folded_slash);
+      dt_free(name_folded);
+    }
+    else
+      collate_key = tag_collate_key(name);
+
+    name_key_tuple_t *tuple = (name_key_tuple_t *)malloc(sizeof(name_key_tuple_t));
+    tuple->name = name;
+    tuple->collate_key = collate_key;
+    tuple->count = nv->count;
+    tuple->status = (property == DT_COLLECTION_PROP_FOLDERS) ? nv->status : -1;
+    sorted_names = g_list_prepend(sorted_names, tuple);
+  }
+  g_list_free_full(values, dt_collection_name_value_free);
+
+  sorted_names = g_list_sort(sorted_names, sort_folder_tag);
+  if(!dt_conf_get_bool("plugins/collect/descending")) sorted_names = g_list_reverse(sorted_names);
+  return sorted_names;
+}
+
+// Build the hierarchical tree store from the pre-sorted names. Each name is split into path
+// components; consecutive names share their common prefix, so we only insert the new tail under
+// the right parent (which is why the input must be path-sorted).
+static void _build_tree_store(GtkTreeStore *store, int property, GList *sorted_names,
+                              gboolean no_uncategorized, const char *format_separator)
+{
+  GtkTreeModel *model = GTK_TREE_MODEL(store);
+  GtkTreeIter uncategorized = { 0 };
+  char **last_tokens = NULL;
+  int last_tokens_length = 0;
+  GtkTreeIter last_parent = { 0 };
+  guint index = 0;
+
+  for(GList *names = sorted_names; names; names = g_list_next(names))
+  {
+    name_key_tuple_t *tuple = (name_key_tuple_t *)names->data;
+    char *name = tuple->name;
+    const int count = tuple->count;
+    const int status = tuple->status;
+    if(IS_NULL_PTR(name)) continue;
+
+    const char *next_name = names->next ? ((name_key_tuple_t *)names->next->data)->name : NULL;
+    if(!no_uncategorized && _maybe_file_uncategorized(store, name, next_name, &uncategorized, &index, count))
+      continue;
+
+    char **tokens = _split_tree_name(property, name);
+    if(IS_NULL_PTR(tokens)) continue;
+
+    GtkTreeIter parent = last_parent;
+    const int tokens_length = string_array_length(tokens);
+    int common_length = 0;
+    if(last_tokens)
+    {
+      while(tokens[common_length] && last_tokens[common_length]
+            && !g_strcmp0(tokens[common_length], last_tokens[common_length]))
+        common_length++;
+      for(int i = common_length; i < last_tokens_length; i++)
+      {
+        gtk_tree_model_iter_parent(model, &parent, &last_parent);
+        last_parent = parent;
+      }
+    }
+
+    char *pth = NULL;
+#ifndef _WIN32
+    if(property == DT_COLLECTION_PROP_FOLDERS) pth = g_strdup("/");
+#endif
+    for(int i = 0; i < common_length; i++) pth = dt_util_dstrcat(pth, format_separator, tokens[i]);
+
+    for(char **token = &tokens[common_length]; *token; token++)
+    {
+      GtkTreeIter iter;
+      pth = dt_util_dstrcat(pth, format_separator, *token);
+      if(is_time_property(property) && !*(token + 1)) pth[10] = ' ';
+
+      gchar *pth2 = g_strdup(pth);
+      pth2[strlen(pth2) - 1] = '\0';
+      const gboolean leaf = !*(token + 1);
+      gtk_tree_store_insert_with_values(store, &iter, common_length > 0 ? &parent : NULL, 0,
+                                        DT_LIB_COLLECT_COL_TEXT, *token, DT_LIB_COLLECT_COL_PATH, pth2,
+                                        DT_LIB_COLLECT_COL_VISIBLE, TRUE, DT_LIB_COLLECT_COL_COUNT,
+                                        (leaf ? count : 0), DT_LIB_COLLECT_COL_INDEX, index,
+                                        DT_LIB_COLLECT_COL_UNREACHABLE, (leaf ? !status : 0),
+                                        DT_LIB_COLLECT_COL_FONT, PANGO_WEIGHT_NORMAL, -1);
+      index++;
+      const gboolean recursive_count = property == DT_COLLECTION_PROP_DAY || is_time_property(property)
+                                       || property == DT_COLLECTION_PROP_FOLDERS;
+      if(recursive_count && leaf) _propagate_count_to_ancestors(store, &iter, count);
+      common_length++;
+      parent = iter;
+      dt_free(pth2);
+    }
+    dt_free(pth);
+
+    if(last_tokens) g_strfreev(last_tokens);
+    last_tokens = tokens;
+    last_parent = parent;
+    last_tokens_length = tokens_length;
+  }
+  g_strfreev(last_tokens);
 }
 
 // Hierarchical (tree) properties: folders, tags, geotags, day, date-times.
@@ -1170,9 +1344,6 @@ static void _populate_tree(dt_lib_collect_rule_t *dr)
 
   if(d->view_rule != property)
   {
-    GtkTreeIter uncategorized = { 0 };
-    GtkTreeIter temp;
-
     // remember which nodes were expanded so the rebuild doesn't lose the user's place
     saved_expanded = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
     gtk_tree_view_map_expanded_rows(d->view, _collect_expanded_cb, saved_expanded);
@@ -1183,175 +1354,24 @@ static void _populate_tree(dt_lib_collect_rule_t *dr)
     gtk_tree_store_clear(GTK_TREE_STORE(model));
     gtk_widget_hide(GTK_WIDGET(d->view));
 
-    char **last_tokens = NULL;
-    int last_tokens_length = 0;
-    GtkTreeIter last_parent = { 0 };
-
-    // Pull the raw values from the SQL engine, then sort ourselves: sqlite knows nothing about
-    // path separators, so we order by a path-aware collate key and build the tree by hand.
-    GList *sorted_names = NULL;
-    guint index = 0;
-    GList *values = dt_collection_get_property_values(property, dr->num);
-    for(GList *v = values; v; v = g_list_next(v))
-    {
-      dt_collection_name_value_t *nv = (dt_collection_name_value_t *)v->data;
-      char *name = g_strdup(nv->name ? nv->name : "");
-      gchar *collate_key = NULL;
-      if(property == DT_COLLECTION_PROP_FOLDERS)
-      {
-        char *name_folded = g_utf8_casefold(name, -1);
-        char *name_folded_slash = g_strconcat(name_folded, G_DIR_SEPARATOR_S, NULL);
-        collate_key = g_utf8_collate_key_for_filename(name_folded_slash, -1);
-        dt_free(name_folded_slash);
-        dt_free(name_folded);
-      }
-      else
-        collate_key = tag_collate_key(name);
-
-      name_key_tuple_t *tuple = (name_key_tuple_t *)malloc(sizeof(name_key_tuple_t));
-      tuple->name = name;
-      tuple->collate_key = collate_key;
-      tuple->count = nv->count;
-      tuple->status = (property == DT_COLLECTION_PROP_FOLDERS) ? nv->status : -1;
-      sorted_names = g_list_prepend(sorted_names, tuple);
-    }
-    g_list_free_full(values, dt_collection_name_value_free);
-
-    sorted_names = g_list_sort(sorted_names, sort_folder_tag);
-    const gboolean sort_descend = dt_conf_get_bool("plugins/collect/descending");
-    if(!sort_descend) sorted_names = g_list_reverse(sorted_names);
-
-    gboolean no_uncategorized = (property == DT_COLLECTION_PROP_TAG)
-                                    ? dt_conf_get_bool("plugins/lighttable/tagging/no_uncategorized")
-                                    : TRUE;
-
-    for(GList *names = sorted_names; names; names = g_list_next(names))
-    {
-      name_key_tuple_t *tuple = (name_key_tuple_t *)names->data;
-      char *name = tuple->name;
-      const int count = tuple->count;
-      const int status = tuple->status;
-      if(IS_NULL_PTR(name)) continue;
-
-      gboolean uncategorized_found = FALSE;
-      if(!no_uncategorized && strchr(name, '|') == NULL)
-      {
-        char *next_name = g_strdup(names->next ? ((name_key_tuple_t *)names->next->data)->name : "");
-        if(strlen(next_name) >= strlen(name) + 1 && next_name[strlen(name)] == '|') next_name[strlen(name)] = '\0';
-
-        if(g_strcmp0(next_name, name) && g_strcmp0(name, _("not tagged")))
-        {
-          if(!uncategorized.stamp)
-          {
-            gtk_tree_store_insert_with_values(
-                GTK_TREE_STORE(model), &uncategorized, NULL, -1, DT_LIB_COLLECT_COL_TEXT, _(UNCATEGORIZED_TAG),
-                DT_LIB_COLLECT_COL_PATH, "", DT_LIB_COLLECT_COL_VISIBLE, TRUE, DT_LIB_COLLECT_COL_INDEX, index,
-                DT_LIB_COLLECT_COL_FONT, PANGO_WEIGHT_NORMAL, -1);
-            index++;
-          }
-          gtk_tree_store_insert_with_values(
-              GTK_TREE_STORE(model), &temp, &uncategorized, 0, DT_LIB_COLLECT_COL_TEXT, name,
-              DT_LIB_COLLECT_COL_PATH, name, DT_LIB_COLLECT_COL_VISIBLE, TRUE, DT_LIB_COLLECT_COL_COUNT, count,
-              DT_LIB_COLLECT_COL_INDEX, index, DT_LIB_COLLECT_COL_FONT, PANGO_WEIGHT_NORMAL, -1);
-          uncategorized_found = TRUE;
-          index++;
-        }
-        dt_free(next_name);
-      }
-
-      if(!uncategorized_found)
-      {
-        char **tokens;
-        if(property == DT_COLLECTION_PROP_FOLDERS)
-          tokens = split_path(name);
-        else if(property == DT_COLLECTION_PROP_DAY)
-          tokens = g_strsplit(name, ":", -1);
-        else if(is_time_property(property))
-          tokens = g_strsplit_set(name, ": ", 4);
-        else
-          tokens = g_strsplit(name, "|", -1);
-
-        if(!IS_NULL_PTR(tokens))
-        {
-          GtkTreeIter parent = last_parent;
-          const int tokens_length = string_array_length(tokens);
-          int common_length = 0;
-          if(last_tokens)
-          {
-            while(tokens[common_length] && last_tokens[common_length]
-                  && !g_strcmp0(tokens[common_length], last_tokens[common_length]))
-              common_length++;
-            for(int i = common_length; i < last_tokens_length; i++)
-            {
-              gtk_tree_model_iter_parent(model, &parent, &last_parent);
-              last_parent = parent;
-            }
-          }
-
-          char *pth = NULL;
-#ifndef _WIN32
-          if(property == DT_COLLECTION_PROP_FOLDERS) pth = g_strdup("/");
-#endif
-          for(int i = 0; i < common_length; i++) pth = dt_util_dstrcat(pth, format_separator, tokens[i]);
-
-          for(char **token = &tokens[common_length]; *token; token++)
-          {
-            GtkTreeIter iter;
-            pth = dt_util_dstrcat(pth, format_separator, *token);
-            if(is_time_property(property) && !*(token + 1)) pth[10] = ' ';
-
-            gchar *pth2 = g_strdup(pth);
-            pth2[strlen(pth2) - 1] = '\0';
-            gtk_tree_store_insert_with_values(
-                GTK_TREE_STORE(model), &iter, common_length > 0 ? &parent : NULL, 0, DT_LIB_COLLECT_COL_TEXT,
-                *token, DT_LIB_COLLECT_COL_PATH, pth2, DT_LIB_COLLECT_COL_VISIBLE, TRUE, DT_LIB_COLLECT_COL_COUNT,
-                (*(token + 1) ? 0 : count), DT_LIB_COLLECT_COL_INDEX, index, DT_LIB_COLLECT_COL_UNREACHABLE,
-                (*(token + 1) ? 0 : !status), DT_LIB_COLLECT_COL_FONT, PANGO_WEIGHT_NORMAL, -1);
-            index++;
-            // recursive counts: propagate each leaf's count to its ancestors so parent folders /
-            // dates show the total of everything beneath them (fixes #537 for the displayed count)
-            if((property == DT_COLLECTION_PROP_DAY || is_time_property(property)
-                || property == DT_COLLECTION_PROP_FOLDERS)
-               && !*(token + 1))
-            {
-              guint parentcount;
-              GtkTreeIter parent2, child = iter;
-              while(gtk_tree_model_iter_parent(model, &parent2, &child))
-              {
-                gtk_tree_model_get(model, &parent2, DT_LIB_COLLECT_COL_COUNT, &parentcount, -1);
-                gtk_tree_store_set(GTK_TREE_STORE(model), &parent2, DT_LIB_COLLECT_COL_COUNT, count + parentcount,
-                                   -1);
-                child = parent2;
-              }
-            }
-            common_length++;
-            parent = iter;
-            dt_free(pth2);
-          }
-          dt_free(pth);
-
-          if(last_tokens) g_strfreev(last_tokens);
-          last_tokens = tokens;
-          last_parent = parent;
-          last_tokens_length = tokens_length;
-        }
-      }
-    }
+    const gboolean no_uncategorized = (property == DT_COLLECTION_PROP_TAG)
+                                          ? dt_conf_get_bool("plugins/lighttable/tagging/no_uncategorized")
+                                          : TRUE;
+    GList *sorted_names = _collect_sorted_tree_names(property, dr->num);
+    _build_tree_store(GTK_TREE_STORE(model), property, sorted_names, no_uncategorized, format_separator);
     g_list_free_full(sorted_names, free_tuple);
 
     gtk_tree_view_set_tooltip_column(GTK_TREE_VIEW(d->view), DT_LIB_COLLECT_COL_TOOLTIP);
     d->treefilter = _create_filtered_model(model, dr);
 
     GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(d->view));
-    gtk_tree_selection_set_mode(selection,
-                                item_is_numeric(property) ? GTK_SELECTION_MULTIPLE : GTK_SELECTION_MULTIPLE);
+    gtk_tree_selection_set_mode(selection, GTK_SELECTION_MULTIPLE);
 
     gtk_tree_view_set_model(GTK_TREE_VIEW(d->view), d->treefilter);
     gtk_widget_set_no_show_all(GTK_WIDGET(d->view), FALSE);
     gtk_widget_show_all(GTK_WIDGET(d->view));
 
     g_object_unref(model);
-    g_strfreev(last_tokens);
     d->view_rule = property;
   }
 
@@ -1536,6 +1556,49 @@ static void update_view(dt_lib_collect_rule_t *dr)
 // Section 5 — clicking a value row -> write the rule text and refresh the collection
 // =====================================================================================
 
+// Append the tag/geotag hierarchy suffix chosen by the modifier keys. Consumes and replaces
+// `text`: ctrl -> sub-hierarchies only ("|%"), plain -> this hierarchy + sub ("*"), shift -> the
+// exact node (no suffix).
+static gchar *_decorate_hierarchy(gchar *text, GdkEventButton *event)
+{
+  if(event && dt_modifier_is(event->state, GDK_CONTROL_MASK))
+  {
+    gchar *n = g_strconcat(text, "|%", NULL);
+    dt_free(text);
+    return n;
+  }
+  if(!event || !dt_modifier_is(event->state, GDK_SHIFT_MASK))
+  {
+    gchar *n = g_strconcat(text, "*", NULL);
+    dt_free(text);
+    return n;
+  }
+  return text;
+}
+
+// Clicking a leaf tag in the first rule adopts that tag's saved sort order. Returns TRUE (with
+// *order filled) when an order change should be signalled.
+static gboolean _adopt_tag_order(const char *text, int *order)
+{
+  const uint32_t tagid = dt_tag_get_tag_id_by_name(text);
+  if(!tagid)
+  {
+    dt_collection_set_tag_id((dt_collection_t *)darktable.collection, 0);
+    return FALSE;
+  }
+  uint32_t sort = DT_COLLECTION_SORT_NONE;
+  gboolean descending = FALSE;
+  if(dt_tag_get_tag_order_by_id(tagid, &sort, &descending))
+    *order = sort | (descending ? DT_COLLECTION_ORDER_FLAG : 0);
+  else
+  {
+    *order = DT_COLLECTION_SORT_FILENAME;
+    dt_tag_set_tag_order_by_id(tagid, *order & ~DT_COLLECTION_ORDER_FLAG, *order & DT_COLLECTION_ORDER_FLAG);
+  }
+  dt_collection_set_tag_id((dt_collection_t *)darktable.collection, tagid);
+  return TRUE;
+}
+
 static void row_activated(GtkTreeView *view, GtkTreePath *path, GdkEventButton *event, dt_lib_collect_t *d)
 {
   GtkTreeIter iter;
@@ -1594,40 +1657,9 @@ static void row_activated(GtkTreeView *view, GtkTreePath *path, GdkEventButton *
     else if(item == DT_COLLECTION_PROP_TAG || item == DT_COLLECTION_PROP_GEOTAGGING)
     {
       if(gtk_tree_model_iter_has_child(model, &iter))
-      {
-        if(event && dt_modifier_is(event->state, GDK_CONTROL_MASK))
-        {
-          gchar *n_text = g_strconcat(text, "|%", NULL); // sub-hierarchies only
-          dt_free(text);
-          text = n_text;
-        }
-        else if(!event || !dt_modifier_is(event->state, GDK_SHIFT_MASK))
-        {
-          gchar *n_text = g_strconcat(text, "*", NULL); // this hierarchy + sub
-          dt_free(text);
-          text = n_text;
-        }
-      }
+        text = _decorate_hierarchy(text, event);
       else if(item == DT_COLLECTION_PROP_TAG && active_rule == d->rule && g_strcmp0(text, _("not tagged")))
-      {
-        uint32_t sort = DT_COLLECTION_SORT_NONE;
-        gboolean descending = FALSE;
-        const uint32_t tagid = dt_tag_get_tag_id_by_name(text);
-        if(tagid)
-        {
-          order_request = TRUE;
-          if(dt_tag_get_tag_order_by_id(tagid, &sort, &descending))
-            order = sort | (descending ? DT_COLLECTION_ORDER_FLAG : 0);
-          else
-          {
-            order = DT_COLLECTION_SORT_FILENAME;
-            dt_tag_set_tag_order_by_id(tagid, order & ~DT_COLLECTION_ORDER_FLAG, order & DT_COLLECTION_ORDER_FLAG);
-          }
-          dt_collection_set_tag_id((dt_collection_t *)darktable.collection, tagid);
-        }
-        else
-          dt_collection_set_tag_id((dt_collection_t *)darktable.collection, 0);
-      }
+        order_request = _adopt_tag_order(text, &order);
     }
     else
       _combo_set_active_collection(active_rule->combo, item);
@@ -2047,55 +2079,57 @@ static gboolean _drop_move_to_folder(dt_lib_collect_t *d, const char *folder, GL
   return moved > 0;
 }
 
+static gboolean _drop_attach_tag(dt_lib_collect_t *d, const char *tagpath, GList *imgs)
+{
+  // tree rows carry a placeholder id, so resolve the real tag id from the full path
+  const guint tagid = (IS_NULL_PTR(tagpath) || !*tagpath) ? 0 : dt_tag_get_tag_id_by_name(tagpath);
+  if(!tagid) return FALSE;
+  dt_tag_attach_images(tagid, imgs, TRUE);
+  dt_image_synch_xmp(-1);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_TAG_CHANGED);
+  _force_refresh(d);
+  return TRUE;
+}
+
+// Perform the drop of `sel` (a uint32_t imgid array) onto the row under (x, y). Returns success.
+static gboolean _do_drop(dt_lib_collect_t *d, GtkTreeView *tree, gint x, gint y, GtkSelectionData *sel)
+{
+  const gboolean to_tag = item_is_tag(d->view_rule);
+  if(!(to_tag || item_is_folder(d->view_rule))) return FALSE;
+
+  const int imgs_nb = gtk_selection_data_get_length(sel) / (int)sizeof(uint32_t);
+  if(imgs_nb <= 0) return FALSE;
+
+  GtkTreePath *path = NULL;
+  if(!gtk_tree_view_get_path_at_pos(tree, x, y, &path, NULL, NULL, NULL)) return FALSE;
+
+  GtkTreeModel *model = gtk_tree_view_get_model(tree);
+  GtkTreeIter iter;
+  gboolean ok = FALSE;
+  if(gtk_tree_model_get_iter(model, &iter, path))
+  {
+    const uint32_t *imgt = (const uint32_t *)gtk_selection_data_get_data(sel);
+    GList *imgs = NULL;
+    for(int i = 0; i < imgs_nb; i++) imgs = g_list_prepend(imgs, GINT_TO_POINTER((int)imgt[i]));
+
+    gchar *rowpath = NULL;
+    gtk_tree_model_get(model, &iter, DT_LIB_COLLECT_COL_PATH, &rowpath, -1);
+    ok = to_tag ? _drop_attach_tag(d, rowpath, imgs) : _drop_move_to_folder(d, rowpath, imgs);
+    dt_free(rowpath);
+    g_list_free(imgs);
+  }
+  gtk_tree_path_free(path);
+  return ok;
+}
+
 static void _view_drag_data_received(GtkWidget *widget, GdkDragContext *context, gint x, gint y,
                                      GtkSelectionData *selection_data, guint target_type, guint time,
                                      dt_lib_collect_t *d)
 {
   GtkTreeView *tree = GTK_TREE_VIEW(widget);
   g_signal_stop_emission_by_name(tree, "drag-data-received"); // bypass GtkTreeView's own DnD
-  gboolean success = FALSE;
-
-  const int property = d->view_rule;
-  const gboolean to_folder = item_is_folder(property);
-  const gboolean to_tag = item_is_tag(property);
-
-  if(target_type == DND_TARGET_IMGID && (to_folder || to_tag) && !IS_NULL_PTR(selection_data))
-  {
-    const int imgs_nb = gtk_selection_data_get_length(selection_data) / (int)sizeof(uint32_t);
-    GtkTreePath *path = NULL;
-    if(imgs_nb > 0 && gtk_tree_view_get_path_at_pos(tree, x, y, &path, NULL, NULL, NULL))
-    {
-      const uint32_t *imgt = (const uint32_t *)gtk_selection_data_get_data(selection_data);
-      GList *imgs = NULL;
-      for(int i = 0; i < imgs_nb; i++) imgs = g_list_prepend(imgs, GINT_TO_POINTER((int)imgt[i]));
-
-      GtkTreeModel *model = gtk_tree_view_get_model(tree);
-      GtkTreeIter iter;
-      if(gtk_tree_model_get_iter(model, &iter, path))
-      {
-        gchar *rowpath = NULL;
-        gtk_tree_model_get(model, &iter, DT_LIB_COLLECT_COL_PATH, &rowpath, -1);
-        if(to_tag)
-        {
-          // tree rows carry a placeholder id, so resolve the real tag id from the full path
-          const guint tagid = (IS_NULL_PTR(rowpath) || !*rowpath) ? 0 : dt_tag_get_tag_id_by_name(rowpath);
-          if(tagid)
-          {
-            dt_tag_attach_images(tagid, imgs, TRUE);
-            dt_image_synch_xmp(-1);
-            DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_TAG_CHANGED);
-            _force_refresh(d);
-            success = TRUE;
-          }
-        }
-        else
-          success = _drop_move_to_folder(d, rowpath, imgs);
-        dt_free(rowpath);
-      }
-      g_list_free(imgs);
-    }
-    if(path) gtk_tree_path_free(path);
-  }
+  const gboolean success = (target_type == DND_TARGET_IMGID && !IS_NULL_PTR(selection_data))
+                           && _do_drop(d, tree, x, y, selection_data);
   gtk_drag_finish(context, success, FALSE, time);
 }
 
@@ -2950,6 +2984,9 @@ void gui_init(dt_lib_module_t *self)
   dt_bauhaus_widget_set_label(d->sort_by, _("sort by"));
   dt_bauhaus_combobox_add(d->sort_by, _("name"));
   dt_bauhaus_combobox_add(d->sort_by, _("id"));
+  // bauhaus widgets render at their own (short) natural height; in this horizontal row they would
+  // otherwise stick to the top and sit higher than the native spin/toggle siblings, so center them
+  gtk_widget_set_valign(d->sort_by, GTK_ALIGN_CENTER);
   g_signal_connect(G_OBJECT(d->sort_by), "value-changed", G_CALLBACK(_sort_by_changed), d);
   gtk_box_pack_start(GTK_BOX(d->folders_controls), d->sort_by, TRUE, TRUE, 0);
 
