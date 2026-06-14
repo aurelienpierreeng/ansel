@@ -129,13 +129,97 @@ Now:
 
 ## Implementation
 
+### Pixel scaling
+
+GTK3 exposes two *independent* scaling mechanisms, and the codebase has to keep them straight:
+
+- **Integer scale-factor** (`gtk_widget_get_scale_factor()`, cached as `darktable.gui->ppd`): the HiDPI factor (1–4) reported by the compositor (Wayland) or the macOS backing scale. GTK applies it *automatically* at render time to every logical-px sink — CSS `px`, widget size requests, box spacing, the window default size — and we apply it to raw cairo buffers via `cairo_surface_set_device_scale()`.
+- **Font/screen DPI** (`gdk_screen_get_resolution()` / 96, cached as `darktable.gui->dpi_factor`): the classic X11 `Xft.dpi` knob. On plain X11 the scale-factor stays at 1, so this is the *only* HiDPI lever available there; it scales point-sized fonts but, by GTK design, it does **not** touch CSS `px`.
+
+Because the right factor depends on the **destination sink** (not on the platform), pixel sizes go through one of two intent-named macros in `src/gui/gtk.h`. Their inputs are device-independent px at the 96 DPI baseline:
+
+- `DT_UI_SCALE_UI(px)` — for logical-px GUI sinks (`gtk_widget_set_size_request()`, window geometry, anything fed to a GTK widget geometry setter). GTK already multiplies these by `ppd`, so this macro must **not** pre-apply `ppd`; it only adds the `dpi_factor` UI zoom.
+- `DT_UI_SCALE_DEVICE(px)` — for raw device-pixel buffers (cairo image surfaces, `gdk_pixbuf_*_at_size`, mouse hit-test radii). The toolkit does not auto-scale these, so the macro carries both `dpi_factor` and `ppd`.
+
+`DT_PIXEL_APPLY_DPI()` / `DT_PIXEL_APPLY_DPI_DPP()` remain as deprecated aliases of `DT_UI_SCALE_UI` / `DT_UI_SCALE_DEVICE` so existing call sites keep compiling; prefer the intent-named macros in new code.
+
+**Raw `darktable.gui->ppd` is *not* automatically a smell.** It legitimately appears in two situations that are **not** "scale a design constant" and must stay raw:
+
+- **Coordinate-space transforms** — converting between image space and screen space (e.g. `dt_dev_get_zoom_level(dev) / ppd`, `roi.scaling / ppd`, mipmap buffer sizing `thumb_width * ppd`, `cairo_translate(... * ppd)`). These are space conversions, not the scaling of a fixed pixel size; wrapping them in a scaling macro would be meaningless.
+- **Self-managed device buffers** — code that sizes a cairo buffer in device pixels itself and publishes `cairo_surface_set_device_scale(s, ppd, ppd)` (see "Cairo image surfaces" above).
+
+Only when you take a fixed device-independent pixel constant and need it in raw device pixels (the mouse hit-test radius is the canonical example) should you use `DT_UI_SCALE_DEVICE()` rather than hand-writing `× dpi_factor × ppd`.
+
+Likewise, **`darktable.gui->dpi`** (the raw screen DPI) is used correctly only for its own configuration, the `em` computation, and setting the resolution of cairo-drawn text — for the latter, use `dt_gui_set_pango_resolution(layout)` instead of hand-writing `pango_cairo_context_set_resolution(..., darktable.gui->dpi)`, so the screen-DPI dependency lives in one place.
+
+> **Direction of travel.** `dpi_factor` is essentially the X11-era manual-HiDPI trick; on Wayland, macOS, GTK4 and Qt the toolkit owns physical scaling through the single scale-factor. The long-term plan is to demote `dpi_factor` to a pure text/UI-zoom factor routed through the toolkit's font scaling, after which logical-px sinks need no macro at all and only `DT_UI_SCALE_DEVICE` (`= ×ppd`) survives as the single entry point.
+
+#### Testing HiDPI on a 1× machine
+
+Most pixel-arithmetic bugs come from developers working on `ppd == 1` / `dpi_factor == 1` displays, where a forgotten scale factor still looks correct — the breakage only shows on a user's HiDPI screen, by which point it has often propagated through the coordinate pipeline. **Always smoke-test GUI/coordinate work under a non-unity scale before committing:**
+
+- `GDK_SCALE=2 ansel` forces the integer scale-factor (`gui->ppd == 2`), exercising every device-pixel buffer and the toolkit's CSS/geometry scaling. This is the single most effective check.
+- Set the *screen DPI* override in `Preferences → General` (or `screen_dpi_overwrite` in the config) to a value like 144 or 192 to exercise the `dpi_factor` / font path.
+- Combine the two to reproduce a fractional-HiDPI laptop (e.g. `GDK_SCALE=2` with a 144 DPI override).
+
+If a widget looks right at 1× but blurry or mis-sized at `GDK_SCALE=2`, the surface or size very likely bypassed the scaling API documented above.
+
 ### Spacing within boxes, grids and flowboxes
 
-Within `GtkBox`, `GtkGrid` and `GtkFlowBox` containers, it is not possible to define spacing between children using CSS `margin`/`padding`: that would not honour the boundaries of the container, so widgets sitting on the container's edges would end up recessed compared to its contours while inner widgets would not. Spacing between children therefore has to be hardcoded in C at box-creation time, using the `DT_GUI_BOX_SPACING` macro (`src/gui/gtk.h`), so it is managed consistently from a single place.
+Within `GtkBox`, `GtkGrid` and `GtkFlowBox` containers, it is not possible to define spacing between children using CSS `margin`/`padding`: that would not honour the boundaries of the container, so widgets sitting on the container's edges would end up recessed compared to its contours while inner widgets would not. Spacing between children therefore has to be set in C at box-creation time, using the `DT_GUI_BOX_SPACING` macro (`src/gui/gtk.h`), so it is managed consistently from a single place.
 
-`DT_GUI_BOX_SPACING` is defined in device pixels (10px) and is intentionally *not* rescaled through `DT_PIXEL_APPLY_DPI()`. To stay visually consistent with it, CSS margins and paddings that contribute to layout/spacing should also be expressed in `px`, which the window manager and GTK rescale for HiDPI the same way as `DT_GUI_BOX_SPACING`. Anything related to text or font metrics (padding around labels, line spacing, etc.) should instead be expressed in `em`, so it follows the user's font-size setting.
+`DT_GUI_BOX_SPACING` is expressed as a fraction of `1em` (`DT_GUI_BOX_SPACING_EM = 0.625`, i.e. 10px at the 16px reference font). The current `1em` size in px is resolved from the active theme/font by `dt_gui_update_em()` and cached in `darktable.gui->em`; it is refreshed whenever the theme/font or the screen DPI changes. Because the font's point→px conversion already folds in the screen DPI, the spacing needs **no** `DT_PIXEL_APPLY_DPI` on top — and because it is `em`-based, the inner gutters now scale with the user's font-size setting exactly like the `em`-based margins/paddings in `data/themes/ansel.css`.
+
+`gtk_box_set_spacing()` (and the grid/flowbox equivalents) bake the value into the widget at creation time, so reloading the CSS does *not* update the gutters of already-built containers. To make a runtime font/DPI change take effect without restarting, `dt_gui_update_em()` walks every toplevel and re-applies the new `DT_GUI_BOX_SPACING` to the containers that still carry the previous standard value (deliberate `0`-spacing and custom-spacing containers are left untouched, matched by value). New code therefore does **not** need to do anything special: keep passing `DT_GUI_BOX_SPACING` at creation and the live refresh handles the rest. Note that fixed pixel `gtk_widget_set_size_request()` geometry has the same one-shot nature but is *not* yet re-applied live — changing the DPI override still requires a restart for those to take full effect.
+
+To stay visually consistent with it, CSS margins and paddings that contribute to layout/spacing should be expressed in `em` too (use `calc(<n>em - 1px)` where a fixed hairline border has to be accounted for; GTK3 supports `calc()` with mixed units). Hairline borders themselves stay in `px` so they render crisp. Anything related to text or font metrics already follows the font size naturally through `em`.
+
+> **Migration status.** The C side (`DT_GUI_BOX_SPACING`) is `em`-derived. The `data/themes/ansel.css` layout values are still being migrated from `px` to `em`; at the reference 16px font the two are identical (`0.625em == 10px`), so they only diverge once the user scales the font, which is the behaviour the migration is converging toward.
 
 The deliberate exception is scrollbar sliders, which are sized in `em` so their grip grows with the font size for legibility.
+
+### Cairo image surfaces
+
+Cairo image surfaces that are **drawn in logical coordinates and blitted to the screen** (widget icons, scopes, graphs, overlays, navigation thumbnails) must be created through the wrappers in `src/gui/gtk.h` rather than the native cairo/gdk calls:
+
+| Use this wrapper | instead of the native call |
+|---|---|
+| `dt_cairo_image_surface_create()` | `cairo_image_surface_create()` |
+| `dt_cairo_image_surface_create_for_data()` | `cairo_image_surface_create_for_data()` |
+| `dt_cairo_image_surface_create_from_png()` | `cairo_image_surface_create_from_png()` |
+| `dt_cairo_image_surface_get_width()` / `_get_height()` | `cairo_image_surface_get_width()` / `_get_height()` |
+| `dt_gdk_cairo_surface_create_from_pixbuf()` | `gdk_cairo_surface_create_from_pixbuf()` |
+| `dt_gdk_pixbuf_new_from_file_at_size()` | `gdk_pixbuf_new_from_file_at_size()` |
+
+The wrappers exist to centralize HiDPI handling: they allocate the backing buffer at `width * ppd` × `height * ppd` device pixels and call `cairo_surface_set_device_scale(surface, ppd, ppd)`, so the caller draws in **logical** coordinates and the result is crisp on HiDPI displays. The matching `_get_width()` / `_get_height()` wrappers divide back by `ppd` so callers reason in logical pixels too. Doing this by hand (raw `create()` + a separate `set_device_scale()`) is what we are migrating *away* from, because it is easy to forget the device-scale call (→ blurry output) or to mismatch the buffer dimensions.
+
+**Exceptions — these must stay on the raw cairo calls:**
+
+- **Image/pipeline/export/print surfaces** — watermark, print, the chart tool, and module previews drawn at the *image* resolution. `ppd` is a screen concept; multiplying an image-space buffer by it is wrong. These operate in image pixels, not logical GUI pixels.
+- **Self-managed device-pixel buffers** — a few GUI paths (the darkroom image surface in `views/view.c`, snapshots, the drawlayer cursor/preview) deliberately compute their buffer size in *device* pixels themselves (for direct pixel-buffer access or cache sizing) and then *publish* the scale with a bare `cairo_surface_set_device_scale(s, ppd, ppd)`. That is the legitimate low-level form of the same contract; it does not go through the wrapper because the wrapper would re-multiply already-device dimensions.
+
+The rule of thumb: **if you pass logical dimensions and want a screen-crisp surface, use the wrapper. If you are working in image/export space, or you have already sized the buffer in device pixels yourself, stay raw.**
+
+### Drawing text on Cairo surfaces
+
+Several widgets (the bauhaus controls, iop graphs/scopes) draw their own text with Pango/Cairo rather than letting GTK lay out a `GtkLabel`. To make that text match the rest of the UI — same font family/weight, DPI, anti-aliasing, hinting, subpixel order and kerning — use the two app-level helpers instead of configuring Cairo/Pango by hand:
+
+- `dt_gui_set_pango_resolution(layout)` — sets the layout resolution to the screen DPI (`darktable.gui->dpi`), so point sizes convert to px the same way as native widgets.
+- `dt_gui_cairo_set_font_options(cr, widget)` — pushes the system text-rendering options (anti-aliasing, hinting, subpixel order, hint-metrics/kerning) onto the Cairo context. These come from `widget`'s Pango context, which GTK populates from `GtkSettings`/Xft/fontconfig — the identical source native widgets use. An off-screen Cairo surface otherwise defaults to "anti-aliasing on" regardless of system settings, so text drawn on it looks subtly different from the rest of the UI.
+
+The canonical recipe for cairo-drawn text:
+
+```c
+dt_gui_cairo_set_font_options(cr, widget);                 // system AA/hinting/kerning
+PangoLayout *layout = pango_cairo_create_layout(cr);
+PangoFontDescription *desc = NULL;                          // font family/weight/style from CSS
+gtk_style_context_get(context, state, GTK_STYLE_PROPERTY_FONT, &desc, NULL);
+pango_layout_set_font_description(layout, desc);            // (optionally override the size)
+dt_gui_set_pango_resolution(layout);                        // screen DPI
+/* ... set_text, update_layout, show_layout ... */
+```
+
+Font *family/weight/style* therefore always come from CSS (the `GTK_STYLE_PROPERTY_FONT` of the widget's style context), never hardcoded — which keeps cairo-drawn text on the same theming path as everything else. The bauhaus text renderer (`src/bauhaus/bauhaus.c`) is the reference implementation; it additionally merges only the style fields of the CSS font while keeping its own resolved size.
 
 ### GtkTextView: background, border and padding
 

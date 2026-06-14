@@ -617,8 +617,10 @@ static void _render_preview_surface(dt_iop_module_t *self, cairo_surface_t *surf
 
   dt_iop_splittoning_rgb_data_t state = { 0 };
   cairo_t *cr = cairo_create(surface);
-  const int width = cairo_image_surface_get_width(surface);
-  const int height = cairo_image_surface_get_height(surface);
+  // logical dimensions (the surface is device-scaled by dt_cairo_image_surface_create);
+  // we draw in logical coordinates and Cairo maps them to device pixels.
+  const int width = dt_cairo_image_surface_get_width(surface);
+  const int height = dt_cairo_image_surface_get_height(surface);
 
   if(_build_point_transform(p, DT_SPLITTONING_RGB_POINT_DARK, work_profile,
                             state.point_matrix[DT_SPLITTONING_RGB_POINT_DARK]))
@@ -679,7 +681,7 @@ static gboolean _preview_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data
   if(IS_NULL_PTR(g->preview_surface) || g->preview_width != allocation.width || g->preview_height != allocation.height)
   {
     if(g->preview_surface) cairo_surface_destroy(g->preview_surface);
-    g->preview_surface = cairo_image_surface_create(CAIRO_FORMAT_RGB24, allocation.width, allocation.height);
+    g->preview_surface = dt_cairo_image_surface_create(CAIRO_FORMAT_RGB24, allocation.width, allocation.height);
     if(IS_NULL_PTR(g->preview_surface)) return FALSE;
     g->preview_width = allocation.width;
     g->preview_height = allocation.height;

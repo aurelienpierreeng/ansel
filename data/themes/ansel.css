@@ -41,14 +41,18 @@
  * widgets cannot be done with CSS margins/padding because that wouldn't
  * honour the boundaries of the container, so some widgets would not 
  * be properly aligned with the others on the container's contours.
- * This has to be hardcoded in boxes declaration, using the DT_GUI_BOX_SPACING macro.
- * Because this macro is defined in device pixels (= 10px), to match its length,
- * we have to use absolute margin/padding values here, and can't use proportional
- * em sizing.
- * 
- * The rule is margins/paddings are defined in CSS as px so they get rescaled
- * similarly to hardcoded DT_GUI_BOX_SPACING by window manager × GTK,
- * but anything handling text/font should be defined in em as to match system-defined font size.
+ * This has to be set in boxes declaration, using the DT_GUI_BOX_SPACING macro.
+ *
+ * That macro is now em-derived (0.625em == 10px at the 16px reference font), so
+ * layout margins/paddings here should be expressed in em too, to match it and to
+ * scale together with the user's font size. Use calc(<n>em - 1px) where a fixed
+ * hairline border has to be subtracted (GTK3 supports calc() with mixed units).
+ * Hairline borders stay in px so they render crisp; anything handling text/font
+ * naturally follows the font size through em.
+ *
+ * NOTE: this px -> em migration is in progress; some layout values below are still
+ * in px. At the reference 16px font, px and em values coincide, so the two only
+ * diverge once the font is scaled. See doc/gui.md "Spacing within boxes...".
  * 
  * The exception are scrollbar sliders: we expect them to grow with font size for
  * proper legibility, so they are defined in em units.
@@ -473,7 +477,7 @@ treeview check {
   border: 1px solid @recessed_color_border;
   background-color: @recessed_color_bg;
   background-image: none;
-  margin-right: 6px;
+  margin-right: calc(0.625em - 4px);
 }
 
 /*======================================
@@ -511,7 +515,7 @@ scrolledwindow {
 }
 
 #top-second-line {
-  padding: 0 3px;
+  padding: 0 calc(0.625em - 7px);
   min-height: 0;
   background-color: @bg_color;
 }
@@ -553,7 +557,7 @@ menuitem.menu-active label {
   ======================================*/
 
 .dt-module-toolbox {
-  padding: 6px;
+  padding: calc(0.625em - 4px);
   background-color: @toolbar_color;
 }
 
@@ -566,7 +570,7 @@ dialog .sidebar row:selected:hover label,
 
 .dt_plugin_ui_main,
 #guides-module-combobox {
-  padding: 10px;
+  padding: 0.625em;
 }
 
 /**
@@ -576,11 +580,11 @@ dialog .sidebar row:selected:hover label,
  */
 
 .module-groups-container {
-  padding: 12px 0;
+  padding: 0.625em 0;
 }
 
 .dt_iop_module.dt_module_frame {
-  margin: 0 6px; /* no vertical margin: that's handled as children spacing by the container */
+  margin: 0 calc(0.625em - 4px); /* no vertical margin: that's handled as children spacing by the container */
   padding: 0;
   border: 1px solid @recessed_color_bg;
   border-radius: 10px;
@@ -589,12 +593,12 @@ dialog .sidebar row:selected:hover label,
 .dt_iop_module.dt_module_focus,
 .dt_iop_module.dt_module_frame:focus {
   border: 2px solid @grey_75;
-  margin-top: 6px;
-  margin-bottom: 6px;
+  margin-top: calc(0.625em - 4px);
+  margin-bottom: calc(0.625em - 4px);
 }
 
 #module-header {
-  padding: 10px;
+  padding: 0.625em;
   background-color: @plugin_header_color;
 }
 
@@ -685,7 +689,7 @@ dialog .sidebar row:selected:hover label,
 }
 
 #blendif-pickers {
-  padding-left: 10px;
+  padding-left: 0.625em;
 }
 
 /* Section labels for the "basic" tab */
@@ -693,13 +697,13 @@ dialog .sidebar row:selected:hover label,
 #plugins_box .dt_section_label {
   color: @grey_15;
   border-bottom-color: @grey_15;
-  margin: 0 10px 0;
+  margin: 0 0.625em 0;
 }
 
 #plugins_box .dt_plugin_ui_main .dt_section_label {
   color: @section_label;
   border-bottom: 1px solid @grey_90;
-  margin: 3px 0 0 0;
+  margin: calc(0.625em - 7px) 0 0 0;
 }
 
 #plugins_box .dt_plugin_ui_main .dt_section_expander .dt_section_label {
@@ -863,7 +867,7 @@ notebook tab {
 
 notebook tab label {
   color: @grey_80;
-  padding: 6px 0.07em;
+  padding: calc(0.625em - 4px) 0.07em;
   border-bottom: 4px solid @recessed_color_bg;
 }
 
@@ -882,7 +886,7 @@ but we trick them only for tabs. We need a margin below tabs
 only if the pages are populated, so we reset the rule on .empty class.
 */
 notebook > stack {
-  padding-top: 10px;
+  padding-top: 0.625em;
 }
 
 notebook.empty stack {
@@ -921,7 +925,7 @@ notebook.empty stack {
 
 #modules-tabs notebook tabs arrow {
   font-size: 1.4em;
-  padding: 3px;
+  padding: calc(0.625em - 7px);
 }
 
 #modules-tabs notebook header,

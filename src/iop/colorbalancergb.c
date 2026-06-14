@@ -1544,7 +1544,7 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
   const gint font_size = pango_font_description_get_size(desc);
   pango_font_description_set_size(desc, 0.95 * font_size);
   pango_layout_set_font_description(layout, desc);
-  pango_cairo_context_set_resolution(pango_layout_get_context(layout), darktable.gui->dpi);
+  dt_gui_set_pango_resolution(layout);
 
   char text[256];
 

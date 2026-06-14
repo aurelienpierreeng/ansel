@@ -69,25 +69,42 @@ extern "C" {
 // Mouse hit-test radius in darkroom image space, clamped for usable overlay selection.
 #define DT_GUI_MOUSE_EFFECT_RADIUS darktable.gui->mouse.effect_radius_clamped
 
-/* helper macro that applies the DPI transformation to fixed pixel values. input should be defaulting to 96
- * DPI */
-#define DT_PIXEL_APPLY_DPI(value) ((value) * darktable.gui->dpi_factor)
-#define DT_PIXEL_APPLY_DPI_DPP(value) ((value) * darktable.gui->dpi_factor * darktable.gui->ppd)
+/* Pixel scaling - two intents, chosen by the *destination sink* (not by platform).
+ * See doc/gui.md "Pixel scaling" for the full rationale.
+ *
+ * DT_UI_SCALE_UI: logical-px GUI sinks (gtk_widget_set_size_request, window default
+ *   size, anything fed to a GTK widget geometry setter). GTK already multiplies these
+ *   by the integer scale-factor (ppd) at render time, so we must NOT pre-apply ppd here;
+ *   we only add the font/UI zoom carried by dpi_factor (the X11 Xft.dpi path).
+ *
+ * DT_UI_SCALE_DEVICE: raw device-pixel buffers (cairo image surfaces, pixbuf-at-size,
+ *   mouse hit-test radii). The toolkit does not auto-scale these, so we carry both the
+ *   UI zoom (dpi_factor) and the integer scale-factor (ppd) ourselves.
+ *
+ * Input values are device-independent pixels at the 96 DPI baseline. */
+#define DT_UI_SCALE_UI(value) ((value) * darktable.gui->dpi_factor)
+#define DT_UI_SCALE_DEVICE(value) ((value) * darktable.gui->dpi_factor * darktable.gui->ppd)
 
-/* Handling spacing between children widget within Gtk boxes 
- * through margins applied on widgets
- * via CSS would be nice, but turns into a nightmare: 
- * then you need to remove left margin on first child, right margin on last child,
- * and that's only assuming the box is a row.  
- * If you don't do that, then widgets on containers edges are recessed.
- * Gtk boxes use a spacing property to handle that, but it can't be set in CSS.
- * So, Gtk boxes inner spacing has to be done in code,
- * and this macro allows to manage it uniformingly from one place.
-*/
-// TODO: at least make it a preference and replace the macro by a function.
-// No DPI scaling here, those are device pixels and need to stay consistent
-// with CSS px for ansel.css proper margin matching.
-#define DT_GUI_BOX_SPACING 10
+/* Deprecated spellings kept so the existing call sites keep compiling. Prefer the
+ * intent-named macros above in new code. */
+#define DT_PIXEL_APPLY_DPI(value) DT_UI_SCALE_UI(value)
+#define DT_PIXEL_APPLY_DPI_DPP(value) DT_UI_SCALE_DEVICE(value)
+
+/* Spacing between children widgets within Gtk boxes/grids/flowboxes cannot be set from
+ * CSS (margins/paddings on the children would recess the ones sitting on the container
+ * edges relative to the inner ones). GTK exposes a "spacing" property for this, but only
+ * from code - so it is centralized here, in ONE place, for the whole app.
+ *
+ * It is expressed as a fraction of 1em (the resolved root font size, cached in
+ * darktable.gui->em by dt_gui_update_em()), so the inner gutters scale with the user's
+ * font size exactly like the em-based margins/paddings in ansel.css. 0.625em == 10px at
+ * the 16px reference font. Because the font's point->px conversion already folds in the
+ * screen DPI, this needs NO DT_PIXEL_APPLY_DPI on top.
+ *
+ * Falls back to the 10px reference before gui->em has been resolved (early init). */
+#define DT_GUI_BOX_SPACING_EM 0.625
+#define DT_GUI_BOX_SPACING                                                                                     \
+  ((gint)((darktable.gui->em > 0.0 ? darktable.gui->em : 16.0) * DT_GUI_BOX_SPACING_EM + 0.5))
 
 enum
 {
@@ -178,6 +195,11 @@ typedef struct dt_gui_gtk_t
   double overlay_red, overlay_blue, overlay_green, overlay_contrast;
 
   double dpi, dpi_factor, ppd;
+
+  // Resolved root font size (1em) in device-independent px, read from the active
+  // theme/font by dt_gui_update_em(). Drives DT_GUI_BOX_SPACING so inner gutters
+  // track the font size like em-based CSS margins. 0.0 until first resolved.
+  double em;
 
 
   struct {
@@ -465,6 +487,22 @@ void dt_gui_load_theme(const char *theme);
 
 // reload GUI scalings
 void dt_configure_ppd_dpi(dt_gui_gtk_t *gui);
+
+// Recompute the cached 1em size (darktable.gui->em) from the main window's resolved
+// font. Call after the theme/font or the screen DPI changes. Also re-applies the standard
+// inter-child spacing (DT_GUI_BOX_SPACING) to existing containers so the change is live.
+void dt_gui_update_em(void);
+
+// Set a PangoLayout's resolution to the screen DPI for crisp cairo-drawn text. Use this
+// instead of hand-writing pango_cairo_context_set_resolution(..., darktable.gui->dpi).
+void dt_gui_set_pango_resolution(PangoLayout *layout);
+
+// Apply the system's text-rendering options (anti-aliasing, hinting, subpixel order,
+// hint-metrics/kerning) to a Cairo context, sourced from @p widget's Pango context (the same
+// settings native GTK widgets use). Call on any off-screen/scratch Cairo surface before drawing
+// text so it matches the rest of the UI instead of Cairo's defaults. @p widget may be NULL (falls
+// back to the main window, then the screen). Pair with dt_gui_set_pango_resolution() for the DPI.
+void dt_gui_cairo_set_font_options(cairo_t *cr, GtkWidget *widget);
 
 // return modifier keys currently pressed, independent of any key event
 GdkModifierType dt_key_modifier_state();

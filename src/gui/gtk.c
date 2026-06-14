@@ -1288,7 +1288,7 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   // finally set the cursor to be the default.
   // for some reason this is needed on some systems to pick up the correctly themed cursor
   dt_control_change_cursor(GDK_LEFT_PTR);
-  gui->mouse.effect_radius =  DT_PIXEL_APPLY_DPI(15.0f) * darktable.gui->ppd;
+  gui->mouse.effect_radius = DT_UI_SCALE_DEVICE(15.0f);
 
   return 0;
 }
@@ -1385,6 +1385,128 @@ void dt_configure_ppd_dpi(dt_gui_gtk_t *gui)
   }
   gui->dpi_factor
       = gui->dpi / 96; // according to man xrandr and the docs of gdk_screen_set_resolution 96 is the default
+
+  // em depends on the screen DPI (point -> px), so refresh it here too.
+  dt_gui_update_em();
+}
+
+// Last DT_GUI_BOX_SPACING value actually applied to containers. Used to retarget exactly
+// the containers that carry the standard spacing when em changes, leaving deliberate 0-spacing
+// and custom-spacing containers untouched. Seeded with the pre-em reference (10px).
+static gint _last_box_spacing = 10;
+
+typedef struct _spacing_ctx_t { gint old_s, new_s; } _spacing_ctx_t;
+
+// Recursively retarget GtkBox/GtkGrid/GtkFlowBox children whose spacing still equals the
+// previously-applied standard spacing. Setting spacing inside gtk_container_foreach() doesn't
+// mutate the child list, so the walk is safe.
+static void _refresh_container_spacing(GtkWidget *w, gpointer user_data)
+{
+  const _spacing_ctx_t *c = (const _spacing_ctx_t *)user_data;
+
+  if(GTK_IS_BOX(w))
+  {
+    if(gtk_box_get_spacing(GTK_BOX(w)) == c->old_s) gtk_box_set_spacing(GTK_BOX(w), c->new_s);
+  }
+  else if(GTK_IS_FLOW_BOX(w))
+  {
+    if((gint)gtk_flow_box_get_row_spacing(GTK_FLOW_BOX(w)) == c->old_s)
+      gtk_flow_box_set_row_spacing(GTK_FLOW_BOX(w), c->new_s);
+    if((gint)gtk_flow_box_get_column_spacing(GTK_FLOW_BOX(w)) == c->old_s)
+      gtk_flow_box_set_column_spacing(GTK_FLOW_BOX(w), c->new_s);
+  }
+  else if(GTK_IS_GRID(w))
+  {
+    if((gint)gtk_grid_get_row_spacing(GTK_GRID(w)) == c->old_s)
+      gtk_grid_set_row_spacing(GTK_GRID(w), c->new_s);
+    if((gint)gtk_grid_get_column_spacing(GTK_GRID(w)) == c->old_s)
+      gtk_grid_set_column_spacing(GTK_GRID(w), c->new_s);
+  }
+
+  if(GTK_IS_CONTAINER(w))
+    gtk_container_foreach(GTK_CONTAINER(w), _refresh_container_spacing, user_data);
+}
+
+// Propagate a new DT_GUI_BOX_SPACING to already-built containers across every toplevel, so a
+// runtime font/DPI change updates the inner gutters live (gtk_*_set_spacing bakes the value into
+// the widget at creation time, so reloading the CSS alone is not enough).
+static void _refresh_all_container_spacing(void)
+{
+  const gint new_s = DT_GUI_BOX_SPACING;
+  if(new_s == _last_box_spacing) return;
+
+  _spacing_ctx_t c = { _last_box_spacing, new_s };
+  GList *toplevels = gtk_window_list_toplevels(); // list owned by us, elements not reffed
+  for(GList *l = toplevels; l; l = l->next)
+    _refresh_container_spacing(GTK_WIDGET(l->data), &c);
+  g_list_free(toplevels);
+
+  _last_box_spacing = new_s;
+}
+
+void dt_gui_update_em(void)
+{
+  dt_gui_gtk_t *gui = darktable.gui;
+  if(!gui || !gui->ui || !gui->ui->main_window) return;
+
+  GtkStyleContext *ctx = gtk_widget_get_style_context(gui->ui->main_window);
+  PangoFontDescription *desc = NULL;
+  gtk_style_context_get(ctx, gtk_style_context_get_state(ctx), GTK_STYLE_PROPERTY_FONT, &desc, NULL);
+  if(!desc) return;
+
+  const gint size = pango_font_description_get_size(desc);
+  if(size > 0)
+  {
+    if(pango_font_description_get_size_is_absolute(desc))
+      // already device-independent px
+      gui->em = (double)size / PANGO_SCALE;
+    else
+      // points -> px at the screen DPI, matching how GTK renders point-sized fonts
+      gui->em = (double)size / PANGO_SCALE * gui->dpi / 72.0;
+  }
+  pango_font_description_free(desc);
+
+  // The new em may change DT_GUI_BOX_SPACING; push it to existing containers so the change is live.
+  _refresh_all_container_spacing();
+}
+
+void dt_gui_set_pango_resolution(PangoLayout *layout)
+{
+  if(IS_NULL_PTR(layout) || !darktable.gui) return;
+  // Cairo-drawn text is laid out in points; the screen DPI converts those to device-independent px,
+  // matching how GTK renders the rest of the UI. Centralized here so call sites never hand-write the DPI.
+  pango_cairo_context_set_resolution(pango_layout_get_context(layout), darktable.gui->dpi);
+}
+
+void dt_gui_cairo_set_font_options(cairo_t *cr, GtkWidget *widget)
+{
+  if(IS_NULL_PTR(cr)) return;
+
+  // Source GTK's resolved text-rendering options (anti-aliasing, hinting, subpixel order,
+  // hint-metrics/kerning), which GTK populates from GtkSettings/Xft/fontconfig. The widget's
+  // Pango context is the same source native widgets use; fall back to the main window, then to the
+  // screen defaults, so an off-screen/scratch Cairo surface never silently reverts to Cairo's
+  // AA-on defaults (which would make our cairo-drawn text look unlike the rest of the UI).
+  const cairo_font_options_t *fo = NULL;
+
+  if(widget)
+  {
+    PangoContext *pc = gtk_widget_get_pango_context(widget);
+    if(pc) fo = pango_cairo_context_get_font_options(pc);
+  }
+  if(!fo && darktable.gui && darktable.gui->ui && darktable.gui->ui->main_window)
+  {
+    PangoContext *pc = gtk_widget_get_pango_context(darktable.gui->ui->main_window);
+    if(pc) fo = pango_cairo_context_get_font_options(pc);
+  }
+  if(!fo)
+  {
+    GdkScreen *screen = gdk_screen_get_default();
+    if(screen) fo = gdk_screen_get_font_options(screen);
+  }
+
+  // cairo_set_font_options() copies internally, so the const pointer's lifetime is not a concern.
+  if(fo) cairo_set_font_options(cr, fo);
 }
 
 static gboolean _focus_in_out_event(GtkWidget *widget, GdkEvent *event, gpointer user_data)
@@ -2063,6 +2185,10 @@ void dt_gui_load_theme(const char *theme)
       c[i] = init[i].default_col;
     }
   }
+
+  // The active theme/font may change the root font size, so refresh the cached em
+  // that drives DT_GUI_BOX_SPACING.
+  dt_gui_update_em();
 }
 
 GdkModifierType dt_key_modifier_state()

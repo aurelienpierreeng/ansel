@@ -734,8 +734,7 @@ static void show_pango_text(struct dt_bauhaus_widget_t *w,
   // cairo_set_font_options() makes an internal copy, so the const pointer
   // lifetime is not a concern.
   PangoContext *pc = gtk_widget_get_pango_context(GTK_WIDGET(w));
-  const cairo_font_options_t *fo = pango_cairo_context_get_font_options(pc);
-  if(fo) cairo_set_font_options(cr, fo);
+  dt_gui_cairo_set_font_options(cr, GTK_WIDGET(w));
 
   // --- Build the layout ---
   PangoLayout *layout = pango_layout_new(pc);
@@ -1354,9 +1353,8 @@ void dt_bauhaus_load_theme(dt_bauhaus_t *bauhaus)
   //double scale = gtk_widget_get_scale_factor(ref);
   //pango_cairo_context_set_resolution(context, dpi * scale);
 
-  // Get advanced font options
-  const cairo_font_options_t *opts = gdk_screen_get_font_options(gtk_widget_get_screen(ref));
-  cairo_set_font_options(cr, opts);
+  // Get advanced font options (system anti-aliasing/hinting/subpixel/kerning)
+  dt_gui_cairo_set_font_options(cr, ref);
 
   // Render
   pango_cairo_update_layout(cr, layout);

@@ -2336,7 +2336,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   pango_font_description_set_size (desc, (int)(old_size / zoom_scale));
   layout = pango_cairo_create_layout(cr);
   pango_layout_set_font_description(layout, desc);
-  pango_cairo_context_set_resolution(pango_layout_get_context(layout), darktable.gui->dpi);
+  dt_gui_set_pango_resolution(layout);
 
   // Build text object
   if(preview_entry && self->enabled)
@@ -2495,7 +2495,7 @@ static inline gboolean _init_drawing(dt_iop_module_t *const restrict self, GtkWi
   g->desc = pango_font_description_copy_static(darktable.bauhaus->pango_font_desc);
 
   pango_layout_set_font_description(g->layout, g->desc);
-  pango_cairo_context_set_resolution(pango_layout_get_context(g->layout), darktable.gui->dpi);
+  dt_gui_set_pango_resolution(g->layout);
   g->context = gtk_widget_get_style_context(widget);
 
   char text[256];

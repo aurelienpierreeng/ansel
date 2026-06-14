@@ -3739,7 +3739,7 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
   PangoLayout *layout = pango_cairo_create_layout(cr);
 
   pango_layout_set_font_description(layout, desc);
-  pango_cairo_context_set_resolution(pango_layout_get_context(layout), darktable.gui->dpi);
+  dt_gui_set_pango_resolution(layout);
   g->context = gtk_widget_get_style_context(widget);
 
   char text[256];
