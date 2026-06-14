@@ -74,6 +74,7 @@
 #include "dtgtk/drawingarea.h"
 
 #include "gui/color_picker_proxy.h"
+#include "gui/gtk.h"
 #include "gui/draw.h"
 #include "gui/presets.h"
 #include "libs/colorpicker.h"
@@ -1706,18 +1707,7 @@ static gboolean _area_scrolled_callback(GtkWidget *widget, GdkEventScroll *event
 
   int delta_y;
 
-  if(dt_gui_get_scroll_unit_deltas(event, NULL, &delta_y))
-  {
-    if(dt_modifier_is(event->state, GDK_CONTROL_MASK))
-    {
-      //adjust aspect
-      const int aspect = dt_conf_get_int("plugins/darkroom/colorzones/aspect_percent");
-      dt_conf_set_int("plugins/darkroom/colorzones/aspect_percent", aspect + delta_y);
-      dtgtk_drawing_area_set_aspect_ratio(widget, aspect / 100.0);
-
-      return TRUE;
-    }
-  }
+  // (the graph height is now adjusted with the drag grip on its bottom edge, not Ctrl+Scroll)
 
   if(c->selected < 0 && !c->edit_by_area) return TRUE;
 
@@ -2324,10 +2314,13 @@ void gui_init(struct dt_iop_module_t *self)
                                                            "shift+drag to create a negative curve"));
 
   // the nice graph
-  const float aspect = dt_conf_get_int("plugins/darkroom/colorzones/aspect_percent") / 100.0;
-  c->area = GTK_DRAWING_AREA(dtgtk_drawing_area_new_with_aspect_ratio(aspect));
+  c->area = GTK_DRAWING_AREA(gtk_drawing_area_new());
+  gtk_widget_set_hexpand(GTK_WIDGET(c->area), TRUE);
 
-  gtk_box_pack_start(GTK_BOX(vbox), GTK_WIDGET(c->area), TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(vbox),
+                     dt_ui_resizable_drawing_area(GTK_WIDGET(c->area),
+                                                  "plugins/darkroom/colorzones/graphheight", 280, 100),
+                     FALSE, FALSE, 0);
 
   GtkWidget *dabox = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_widget_set_name(GTK_WIDGET(dabox), "iop-bottom-bar");

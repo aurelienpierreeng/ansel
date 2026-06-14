@@ -3541,11 +3541,9 @@ void dt_iop_gui_init_masks(GtkBox *blendw, dt_iop_module_t *module)
     g_signal_connect(bd->masks_group_treeview, "button-press-event",
                      G_CALLBACK(_blendop_masks_group_button_pressed), module);
 
-    bd->group_shapes_sw = gtk_scrolled_window_new(NULL, NULL);
+    bd->group_shapes_sw = dt_ui_scroll_wrap(bd->masks_group_treeview, 90,
+                                            "plugins/darkroom/masks/group_list_height", DT_UI_RESIZE_DYNAMIC);
     gtk_widget_set_vexpand(bd->group_shapes_sw, TRUE);
-    dt_gui_add_class(bd->group_shapes_sw, "dt_recessed_scroll");
-    gtk_container_add(GTK_CONTAINER(bd->group_shapes_sw), bd->masks_group_treeview);
-    dt_gui_widget_init_auto_height(bd->masks_group_treeview, TREE_LIST_MIN_ROWS, TREE_LIST_MAX_ROWS);
 
     // Creating shapes buttons (circle, ellipse ....)
     bd->all_shapes_buttons = _blendop_masks_create_shape_buttons(module, bd);
@@ -3607,11 +3605,9 @@ void dt_iop_gui_init_masks(GtkBox *blendw, dt_iop_module_t *module)
     g_signal_connect(bd->masks_treeview, "button-press-event",
                      G_CALLBACK(_blendop_masks_all_button_pressed), module);
 
-    bd->all_shapes_sw = gtk_scrolled_window_new(NULL, NULL);
+    bd->all_shapes_sw = dt_ui_scroll_wrap(bd->masks_treeview, 90,
+                                          "plugins/darkroom/masks/all_list_height", DT_UI_RESIZE_DYNAMIC);
     gtk_widget_set_vexpand(bd->all_shapes_sw, TRUE);
-    dt_gui_add_class(bd->all_shapes_sw, "dt_recessed_scroll");
-    gtk_container_add(GTK_CONTAINER(bd->all_shapes_sw), bd->masks_treeview);
-    dt_gui_widget_init_auto_height(bd->masks_treeview, TREE_LIST_MIN_ROWS, TREE_LIST_MAX_ROWS);
 
     // The two lists share the same slot; Edit selects which one is visible.
     bd->lists_stack = gtk_stack_new();

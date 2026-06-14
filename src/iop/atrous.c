@@ -1543,18 +1543,8 @@ static gboolean area_scrolled(GtkWidget *widget, GdkEventScroll *event, gpointer
   int delta_y;
   if(dt_gui_get_scroll_unit_deltas(event, NULL, &delta_y))
   {
-    if(dt_modifier_is(event->state, GDK_CONTROL_MASK))
-    {
-      //adjust aspect
-      const int aspect = dt_conf_get_int("plugins/darkroom/atrous/aspect_percent");
-      dt_conf_set_int("plugins/darkroom/atrous/aspect_percent", aspect + delta_y);
-      dtgtk_drawing_area_set_aspect_ratio(widget, aspect / 100.0);
-    }
-    else
-    {
-      c->mouse_radius = CLAMP(c->mouse_radius * (1.0 + 0.1 * delta_y), 0.25 / BANDS, 1.0);
-      gtk_widget_queue_draw(widget);
-    }
+    c->mouse_radius = CLAMP(c->mouse_radius * (1.0 + 0.1 * delta_y), 0.25 / BANDS, 1.0);
+    gtk_widget_queue_draw(widget);
   }
   return TRUE;
 }
@@ -1609,9 +1599,12 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(c->channel_tabs), FALSE, FALSE, 0);
 
   // graph
-  const float aspect = dt_conf_get_int("plugins/darkroom/atrous/aspect_percent") / 100.0;
-  c->area = GTK_DRAWING_AREA(dtgtk_drawing_area_new_with_aspect_ratio(aspect));
-  gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(c->area), TRUE, TRUE, 0);
+  c->area = GTK_DRAWING_AREA(gtk_drawing_area_new());
+  gtk_widget_set_hexpand(GTK_WIDGET(c->area), TRUE);
+  gtk_box_pack_start(GTK_BOX(self->widget),
+                     dt_ui_resizable_drawing_area(GTK_WIDGET(c->area),
+                                                  "plugins/darkroom/atrous/graphheight", 280, 100),
+                     FALSE, FALSE, 0);
 
   gtk_widget_add_events(GTK_WIDGET(c->area),
                         GDK_POINTER_MOTION_MASK

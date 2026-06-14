@@ -4757,18 +4757,7 @@ static gboolean area_motion_notify(GtkWidget *widget, GdkEventMotion *event, gpo
 
 static gboolean area_scroll_callback(GtkWidget *widget, GdkEventScroll *event, gpointer user_data)
 {
-  if(dt_modifier_is(event->state, GDK_CONTROL_MASK))
-  {
-    int delta_y;
-    if(dt_gui_get_scroll_unit_deltas(event, NULL, &delta_y))
-    {
-      //adjust aspect
-      const int aspect = dt_conf_get_int("plugins/darkroom/filmicrgb/aspect_percent");
-      dt_conf_set_int("plugins/darkroom/filmicrgb/aspect_percent", aspect + delta_y);
-      dtgtk_drawing_area_set_aspect_ratio(widget, aspect / 100.0);
-    }
-    return TRUE; // Ensure that scrolling cannot move side panel when no delta
-  }
+  // let scroll events fall through (e.g. to scroll the panel); the height is set via the grip
   return FALSE;
 }
 
@@ -4782,9 +4771,9 @@ void gui_init(dt_iop_module_t *self)
   g->gui_hover = FALSE;
   g->gui_sizes_inited = FALSE;
 
-  // don't make the area square to safe some vertical space -- it's not interactive anyway
-  const float aspect = dt_conf_get_int("plugins/darkroom/filmicrgb/aspect_percent") / 100.0;
-  g->area = GTK_DRAWING_AREA(dtgtk_drawing_area_new_with_aspect_ratio(aspect));
+  // the graph is not interactive; give it a modest default height, user-resizable via its grip
+  g->area = GTK_DRAWING_AREA(gtk_drawing_area_new());
+  gtk_widget_set_hexpand(GTK_WIDGET(g->area), TRUE);
   g_object_set_data(G_OBJECT(g->area), "iop-instance", self);
 
   gtk_widget_set_can_focus(GTK_WIDGET(g->area), TRUE);
@@ -5064,7 +5053,10 @@ void gui_init(dt_iop_module_t *self)
   // start building top level widget
   self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
-  gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(g->area), TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(self->widget),
+                     dt_ui_resizable_drawing_area(GTK_WIDGET(g->area),
+                                                  "plugins/darkroom/filmicrgb/graphheight", 230, 100),
+                     FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(g->notebook), FALSE, FALSE, 0);
 }
 

@@ -3082,8 +3082,12 @@ void gui_init(dt_lib_module_t *self)
   gtk_tree_model_filter_set_visible_column(GTK_TREE_MODEL_FILTER(d->treefilter), DT_LIB_COLLECT_COL_VISIBLE);
   g_object_unref(treemodel);
 
-  gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(view), TRUE, TRUE, 0);
-  dt_gui_widget_init_auto_height(GTK_WIDGET(view), TREE_LIST_MIN_ROWS, TREE_LIST_MAX_ROWS);
+  // Static height: the collection list refreshes on selection/act-on, so a fixed user-set size keeps
+  // the side-panel layout from jumping. Defaults to ~200px until the user drags the grip.
+  gtk_box_pack_start(GTK_BOX(self->widget),
+                     dt_ui_scroll_wrap(GTK_WIDGET(view), 200, "plugins/lighttable/collect/windowheight",
+                                       DT_UI_RESIZE_STATIC),
+                     TRUE, TRUE, 0);
 
   // proxy used by other code to force a refresh
   darktable.view_manager->proxy.module_collect.module = self;

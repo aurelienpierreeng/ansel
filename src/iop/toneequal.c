@@ -3432,8 +3432,12 @@ void gui_init(struct dt_iop_module_t *self)
 
   self->widget = dt_ui_notebook_page(g->notebook, N_("graph"), NULL);
 
-  g->area = GTK_DRAWING_AREA(dtgtk_drawing_area_new_with_aspect_ratio(1.));
-  gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(g->area), TRUE, TRUE, 0);
+  g->area = GTK_DRAWING_AREA(gtk_drawing_area_new());
+  gtk_widget_set_hexpand(GTK_WIDGET(g->area), TRUE);
+  gtk_box_pack_start(GTK_BOX(self->widget),
+                     dt_ui_resizable_drawing_area(GTK_WIDGET(g->area),
+                                                  "plugins/darkroom/toneequal/graphheight", 280, 120),
+                     FALSE, FALSE, 0);
   gtk_widget_add_events(GTK_WIDGET(g->area), GDK_POINTER_MOTION_MASK | darktable.gui->scroll_mask
                                            | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK
                                            | GDK_ENTER_NOTIFY_MASK | GDK_LEAVE_NOTIFY_MASK);

@@ -1818,20 +1818,7 @@ void gui_reset(dt_iop_module_t *self)
 
 static gboolean area_scroll_callback(GtkWidget *widget, GdkEventScroll *event, gpointer user_data)
 {
-  int delta_y;
-  if(dt_gui_get_scroll_unit_deltas(event, NULL, &delta_y))
-  {
-    if(dt_modifier_is(event->state, GDK_CONTROL_MASK))
-    {
-      //adjust aspect
-      const int aspect = dt_conf_get_int("plugins/darkroom/colorbalancergb/aspect_percent");
-      dt_conf_set_int("plugins/darkroom/colorbalancergb/aspect_percent", aspect + delta_y);
-      dtgtk_drawing_area_set_aspect_ratio(widget, aspect / 100.0);
-
-      return TRUE;
-    }
-  }
-
+  // let scroll events fall through (e.g. to scroll the panel); the height is set via the grip
   return FALSE;
 }
 
@@ -2017,11 +2004,14 @@ void gui_init(dt_iop_module_t *self)
 
   gtk_box_pack_start(GTK_BOX(self->widget), dt_ui_section_label_new(_("luminance ranges")), FALSE, FALSE, 0);
 
-  const float aspect = dt_conf_get_int("plugins/darkroom/colorbalancergb/aspect_percent") / 100.0;
-  g->area = GTK_DRAWING_AREA(dtgtk_drawing_area_new_with_aspect_ratio(aspect));
+  g->area = GTK_DRAWING_AREA(gtk_drawing_area_new());
+  gtk_widget_set_hexpand(GTK_WIDGET(g->area), TRUE);
   g_object_set_data(G_OBJECT(g->area), "iop-instance", self);
   g_signal_connect(G_OBJECT(g->area), "draw", G_CALLBACK(dt_iop_tonecurve_draw), self);
-  gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(g->area), FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(self->widget),
+                     dt_ui_resizable_drawing_area(GTK_WIDGET(g->area),
+                                                  "plugins/darkroom/colorbalancergb/graphheight", 200, 100),
+                     FALSE, FALSE, 0);
   gtk_widget_add_events(GTK_WIDGET(g->area), darktable.gui->scroll_mask | GDK_ENTER_NOTIFY_MASK);
   g_signal_connect(G_OBJECT(g->area), "scroll-event", G_CALLBACK(area_scroll_callback), self);
 

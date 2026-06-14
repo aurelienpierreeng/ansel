@@ -765,7 +765,8 @@ void gui_init(dt_lib_module_t *self)
 
   /* add snapshot box and take snapshot button to widget ui*/
   gtk_box_pack_start(GTK_BOX(self->widget),
-                     dt_ui_scroll_wrap(d->snapshots_box, 1, "plugins/darkroom/snapshots/windowheight"), TRUE, TRUE, 0);
+                     dt_ui_scroll_wrap(d->snapshots_box, 1, "plugins/darkroom/snapshots/windowheight",
+                                       DT_UI_RESIZE_DYNAMIC), TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(d->take_button), TRUE, TRUE, 0);
 }
 

@@ -1552,10 +1552,14 @@ void gui_init(struct dt_iop_module_t *self)
 
   self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
-  c->area = GTK_DRAWING_AREA(dtgtk_drawing_area_new_with_aspect_ratio(1.0));
+  c->area = GTK_DRAWING_AREA(gtk_drawing_area_new());
+  gtk_widget_set_hexpand(GTK_WIDGET(c->area), TRUE);
   gtk_widget_set_tooltip_text(GTK_WIDGET(c->area), _("abscissa: input, ordinate: output. works on RGB channels"));
   g_object_set_data(G_OBJECT(c->area), "iop-instance", self);
-  gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(c->area), TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(self->widget),
+                     dt_ui_resizable_drawing_area(GTK_WIDGET(c->area),
+                                                  "plugins/darkroom/basecurve/graphheight", 280, 100),
+                     FALSE, FALSE, 0);
 
   c->cmb_preserve_colors = dt_bauhaus_combobox_from_params(self, "preserve_colors");
   gtk_widget_set_tooltip_text(c->cmb_preserve_colors, _("method to preserve colors when applying contrast"));

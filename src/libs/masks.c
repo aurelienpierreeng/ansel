@@ -2043,8 +2043,11 @@ void gui_init(dt_lib_module_t *self)
   g_signal_connect(selection, "changed", G_CALLBACK(_tree_selection_change), d);
   g_signal_connect(d->treeview, "button-press-event", (GCallback)_tree_button_pressed, self);
 
-  gtk_box_pack_start(GTK_BOX(shape_manager_container), d->treeview, TRUE, TRUE, 0);
-  dt_gui_widget_init_auto_height(d->treeview, TREE_LIST_MIN_ROWS, TREE_LIST_MAX_ROWS);
+  // Auto-grows to its content (the side panel scrolls) up to a user-set, persisted height.
+  gtk_box_pack_start(GTK_BOX(shape_manager_container),
+                     dt_ui_scroll_wrap(d->treeview, 90, "plugins/darkroom/masks/windowheight",
+                                       DT_UI_RESIZE_DYNAMIC),
+                     TRUE, TRUE, 0);
 
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_MASK_CHANGED, G_CALLBACK(_lib_masks_handler_callback), self);
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_MASKS_GUI_CHANGED,

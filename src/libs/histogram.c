@@ -2855,7 +2855,12 @@ void gui_init(dt_lib_module_t *self)
   g_signal_connect(G_OBJECT(d->scope_draw), "draw", G_CALLBACK(_draw_callback), d);
   g_signal_connect(G_OBJECT(d->scope_draw), "scroll-event", G_CALLBACK(_area_scrolled_callback), d);
   g_signal_connect(G_OBJECT(d->scope_draw), "size-allocate", G_CALLBACK(_resize_callback), d);
-  gtk_box_pack_start(GTK_BOX(self->widget), d->scope_draw, FALSE, FALSE, 0);
+
+  // The grip floats on the scope's bottom edge (overlay) so it takes no layout space and leaves no
+  // margin-like gap; invisible until hovered.
+  GtkWidget *scope_overlay = gtk_overlay_new();
+  gtk_container_add(GTK_CONTAINER(scope_overlay), d->scope_draw);
+  gtk_box_pack_start(GTK_BOX(self->widget), scope_overlay, FALSE, FALSE, 0);
 
   /**
    * @userdoc
@@ -2869,12 +2874,11 @@ void gui_init(dt_lib_module_t *self)
    * Handle to resize the scope vertically. Drag the handle up or down to adjust the height of the scope display.
    */
 
-  d->scope_resize_handle = dt_bauhaus_resize_handle_new(GTK_ORIENTATION_VERTICAL,
-                                                        DT_PIXEL_APPLY_DPI(DT_LIB_HISTOGRAM_SCOPE_HANDLE_HEIGHT),
+  d->scope_resize_handle = dt_bauhaus_resize_handle_new(GTK_ORIENTATION_VERTICAL, FALSE,
                                                         _("Drag to resize the scope vertically"),
                                                         _scope_resize_handle_get_size,
                                                         _scope_resize_handle_resize, d);
-  gtk_box_pack_start(GTK_BOX(self->widget), d->scope_resize_handle, FALSE, FALSE, 0);
+  gtk_overlay_add_overlay(GTK_OVERLAY(scope_overlay), d->scope_resize_handle);
 
   d->stage = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
   dt_bauhaus_widget_set_label(d->stage, _("Show data from"));
@@ -2993,7 +2997,8 @@ void gui_init(dt_lib_module_t *self)
 
   d->samples_container = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(self->widget),
-                     dt_ui_scroll_wrap(d->samples_container, 1, "plugins/darkroom/colorpicker/windowheight"), TRUE, TRUE, 0);
+                     dt_ui_scroll_wrap(d->samples_container, 1, "plugins/darkroom/colorpicker/windowheight",
+                                       DT_UI_RESIZE_DYNAMIC), TRUE, TRUE, 0);
 
   d->display_samples_check_box = gtk_check_button_new_with_label(_("Display samples on image"));
   gtk_label_set_ellipsize(GTK_LABEL(gtk_bin_get_child(GTK_BIN(d->display_samples_check_box))),

@@ -610,10 +610,13 @@ void gui_init(dt_iop_module_t *self)
   c->mode_stack = gtk_stack_new();
   gtk_stack_set_homogeneous(GTK_STACK(c->mode_stack),FALSE);
 
-  const float aspect = dt_conf_get_int("plugins/darkroom/levels/aspect_percent") / 100.0;
-  c->area = GTK_DRAWING_AREA(dtgtk_drawing_area_new_with_aspect_ratio(aspect));
+  c->area = GTK_DRAWING_AREA(gtk_drawing_area_new());
+  gtk_widget_set_hexpand(GTK_WIDGET(c->area), TRUE);
   GtkWidget *vbox_manual = GTK_WIDGET(gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING));
-  gtk_box_pack_start(GTK_BOX(vbox_manual), GTK_WIDGET(c->area), TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(vbox_manual),
+                     dt_ui_resizable_drawing_area(GTK_WIDGET(c->area),
+                                                  "plugins/darkroom/levels/graphheight", 280, 100),
+                     FALSE, FALSE, 0);
 
   gtk_widget_set_tooltip_text(GTK_WIDGET(c->area),_("drag handles to set black, gray, and white points. "
                                                     "operates on L channel."));
@@ -951,18 +954,6 @@ static gboolean dt_iop_levels_scroll(GtkWidget *widget, GdkEventScroll *event, g
   dt_iop_levels_params_t *p = (dt_iop_levels_params_t *)self->params;
 
   int delta_y;
-  if(dt_gui_get_scroll_unit_deltas(event, NULL, &delta_y))
-  {
-    if(dt_modifier_is(event->state, GDK_CONTROL_MASK))
-    {
-      //adjust aspect
-      const int aspect = dt_conf_get_int("plugins/darkroom/levels/aspect_percent");
-      dt_conf_set_int("plugins/darkroom/levels/aspect_percent", aspect + delta_y);
-      dtgtk_drawing_area_set_aspect_ratio(widget, aspect / 100.0);
-
-      return TRUE;
-    }
-  }
 
   dt_iop_color_picker_reset(self, TRUE);
 

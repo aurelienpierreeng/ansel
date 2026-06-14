@@ -22,6 +22,7 @@
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "views/view.h"
+#include "bauhaus/bauhaus.h"
 #include "gui/window_manager.h"
 #include "gui/actions/menu.h"
 #include "dtgtk/sidepanel.h"
@@ -221,89 +222,54 @@ void dt_ui_restore_panels(dt_ui_t *ui)
   }
 }
 
-static gboolean _panel_handle_button_callback(GtkWidget *w, GdkEventButton *e, gpointer user_data)
+/* The main panels share the generic resize-handle primitive (dt_bauhaus_resize_handle_new),
+ * so they get the same grip visual, hover border and cursor as every other resizable area.
+ * These two callbacks let the handle query and apply the panel size; the panel widget is passed
+ * as user_data and identified by its name ("left"/"right"/"bottom"). */
+static int _panel_handle_get_size(gpointer user_data)
 {
-  if(e->button == 1)
-  {
-    if(e->type == GDK_BUTTON_PRESS)
-    {
-      /* store current  mousepointer position */
-      gdk_window_get_device_position(e->window,
-                                     gdk_seat_get_pointer(gdk_display_get_default_seat(gdk_window_get_display(
-                                         gtk_widget_get_window(dt_ui_main_window(darktable.gui->ui))))),
-                                     &darktable.gui->widgets.panel_handle_x,
-                                     &darktable.gui->widgets.panel_handle_y, 0);
-
-      darktable.gui->widgets.panel_handle_dragging = TRUE;
-    }
-    else if(e->type == GDK_BUTTON_RELEASE)
-    {
-      darktable.gui->widgets.panel_handle_dragging = FALSE;
-    }
-    else if(e->type == GDK_2BUTTON_PRESS)
-    {
-      darktable.gui->widgets.panel_handle_dragging = FALSE;
-    }
-  }
-  return TRUE;
+  GtkWidget *widget = GTK_WIDGET(user_data);
+  const gboolean bottom = (strcmp(gtk_widget_get_name(widget), "bottom") == 0);
+  gint w = 0, h = 0;
+  gtk_widget_get_size_request(widget, &w, &h);
+  if(bottom) return (h > 0) ? h : gtk_widget_get_allocated_height(widget);
+  return (w > 0) ? w : gtk_widget_get_allocated_width(widget);
 }
 
-static gboolean _panel_handle_cursor_callback(GtkWidget *w, GdkEventCrossing *e, gpointer user_data)
+static int _panel_handle_resize(int requested_size, gboolean finished, gpointer user_data)
 {
-  if(strcmp(gtk_widget_get_name(w), "panel-handle-bottom") == 0)
-    dt_control_change_cursor((e->type == GDK_ENTER_NOTIFY) ? GDK_SB_V_DOUBLE_ARROW : GDK_LEFT_PTR);
-  else
-    dt_control_change_cursor((e->type == GDK_ENTER_NOTIFY) ? GDK_SB_H_DOUBLE_ARROW : GDK_LEFT_PTR);
-  return TRUE;
-}
+  GtkWidget *widget = GTK_WIDGET(user_data);
+  const char *name = gtk_widget_get_name(widget);
+  GtkWidget *window = dt_ui_main_window(darktable.gui->ui);
+  int win_w = 0, win_h = 0;
+  gtk_window_get_size(GTK_WINDOW(window), &win_w, &win_h);
 
-static gboolean _panel_handle_motion_callback(GtkWidget *w, GdkEventButton *e, gpointer user_data)
-{
-  GtkWidget *widget = (GtkWidget *)user_data;
-  if(darktable.gui->widgets.panel_handle_dragging)
+  gchar *key = NULL;
+  int size = requested_size;
+  if(strcmp(name, "right") == 0)
   {
-    gint x, y, sx, sy;
-    GtkWidget *window = dt_ui_main_window(darktable.gui->ui);
-    int win_w, win_h;
-    gtk_window_get_size(GTK_WINDOW(window), &win_w, &win_h);
-
-    // FIXME: can work with the event x,y to skip the gdk_window_get_device_position() call?
-    gdk_window_get_device_position(e->window,
-                                   gdk_seat_get_pointer(gdk_display_get_default_seat(gdk_window_get_display(
-                                       gtk_widget_get_window(window)))),
-                                   &x, &y, 0);
-    gtk_widget_get_size_request(widget, &sx, &sy);
-
-    // conf entry to store the new size
-    gchar *key = NULL;
-    if(strcmp(gtk_widget_get_name(w), "panel-handle-right") == 0)
-    {
-      sx = CLAMP(sx + darktable.gui->widgets.panel_handle_x - x, 150, win_w / 2);
-      key = panels_get_panel_path(DT_UI_PANEL_RIGHT, "_size");
-      gtk_widget_set_size_request(widget, sx, -1);
-    }
-    else if(strcmp(gtk_widget_get_name(w), "panel-handle-left") == 0)
-    {
-      sx = CLAMP(sx - darktable.gui->widgets.panel_handle_x + x, 150, win_w / 2);
-      key = panels_get_panel_path(DT_UI_PANEL_LEFT, "_size");
-      gtk_widget_set_size_request(widget, sx, -1);
-    }
-    else if(strcmp(gtk_widget_get_name(w), "panel-handle-bottom") == 0)
-    {
-      // yes, we write sx for uniformity with the others
-      sx = CLAMP((sy + darktable.gui->widgets.panel_handle_y - y), 48, win_h / 3.);
-      key = panels_get_panel_path(DT_UI_PANEL_BOTTOM, "_size");
-      gtk_widget_set_size_request(widget, -1, sx);
-    }
-
-    // we store and apply the new value
-    dt_conf_set_int(key, sx);
-    dt_free(key);
-
-    return TRUE;
+    size = CLAMP(requested_size, 150, win_w / 2);
+    key = panels_get_panel_path(DT_UI_PANEL_RIGHT, "_size");
+    gtk_widget_set_size_request(widget, size, -1);
+  }
+  else if(strcmp(name, "left") == 0)
+  {
+    size = CLAMP(requested_size, 150, win_w / 2);
+    key = panels_get_panel_path(DT_UI_PANEL_LEFT, "_size");
+    gtk_widget_set_size_request(widget, size, -1);
+  }
+  else if(strcmp(name, "bottom") == 0)
+  {
+    size = CLAMP(requested_size, 48, win_h / 3);
+    key = panels_get_panel_path(DT_UI_PANEL_BOTTOM, "_size");
+    gtk_widget_set_size_request(widget, -1, size);
   }
 
-  return FALSE;
+  // Persist only when the gesture ends, but apply the size live during the drag.
+  if(finished && key) dt_conf_set_int(key, size);
+  dt_free(key);
+
+  return size;
 }
 
 /* initialize the top container of panel */
@@ -438,27 +404,17 @@ static void _ui_init_panel_left(dt_ui_t *ui, GtkWidget *container)
   GtkWidget *widget;
 
   /* create left panel main widget and add it to ui */
-  darktable.gui->widgets.panel_handle_dragging = FALSE;
   widget = ui->panels[DT_UI_PANEL_LEFT] = dtgtk_side_panel_new();
   gtk_widget_set_name(widget, "left");
   _ui_init_panel_size(widget, ui);
 
   GtkWidget *over = gtk_overlay_new();
   gtk_container_add(GTK_CONTAINER(over), widget);
-  // we add a transparent overlay over the modules margins to resize the panel
-  GtkWidget *handle = gtk_drawing_area_new();
-  gtk_widget_set_halign(handle, GTK_ALIGN_END);
-  gtk_widget_set_valign(handle, GTK_ALIGN_FILL);
-  gtk_widget_set_size_request(handle, DT_PIXEL_APPLY_DPI(5), -1);
+  // resize grip overlaid on the panel's inner (right) edge: drag right to grow
+  GtkWidget *handle = dt_bauhaus_resize_handle_new(GTK_ORIENTATION_HORIZONTAL, FALSE,
+                                                   _("Drag to resize panel"),
+                                                   _panel_handle_get_size, _panel_handle_resize, widget);
   gtk_overlay_add_overlay(GTK_OVERLAY(over), handle);
-  gtk_widget_set_events(handle, GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK | GDK_ENTER_NOTIFY_MASK
-                                    | GDK_LEAVE_NOTIFY_MASK | GDK_POINTER_MOTION_MASK);
-  gtk_widget_set_name(GTK_WIDGET(handle), "panel-handle-left");
-  g_signal_connect(G_OBJECT(handle), "button-press-event", G_CALLBACK(_panel_handle_button_callback), handle);
-  g_signal_connect(G_OBJECT(handle), "button-release-event", G_CALLBACK(_panel_handle_button_callback), handle);
-  g_signal_connect(G_OBJECT(handle), "motion-notify-event", G_CALLBACK(_panel_handle_motion_callback), widget);
-  g_signal_connect(G_OBJECT(handle), "leave-notify-event", G_CALLBACK(_panel_handle_cursor_callback), handle);
-  g_signal_connect(G_OBJECT(handle), "enter-notify-event", G_CALLBACK(_panel_handle_cursor_callback), handle);
   gtk_widget_show(handle);
 
   gtk_grid_attach(GTK_GRID(container), over, 1, 1, 1, 1);
@@ -478,28 +434,18 @@ static void _ui_init_panel_right(dt_ui_t *ui, GtkWidget *container)
 {
   GtkWidget *widget;
 
-  /* create left panel main widget and add it to ui */
-  darktable.gui->widgets.panel_handle_dragging = FALSE;
+  /* create right panel main widget and add it to ui */
   widget = ui->panels[DT_UI_PANEL_RIGHT] = dtgtk_side_panel_new();
   gtk_widget_set_name(widget, "right");
   _ui_init_panel_size(widget, ui);
 
   GtkWidget *over = gtk_overlay_new();
   gtk_container_add(GTK_CONTAINER(over), widget);
-  // we add a transparent overlay over the modules margins to resize the panel
-  GtkWidget *handle = gtk_drawing_area_new();
-  gtk_widget_set_halign(handle, GTK_ALIGN_START);
-  gtk_widget_set_valign(handle, GTK_ALIGN_FILL);
-  gtk_widget_set_size_request(handle, DT_PIXEL_APPLY_DPI(5), -1);
+  // resize grip overlaid on the panel's inner (left) edge: drag left to grow (inverted)
+  GtkWidget *handle = dt_bauhaus_resize_handle_new(GTK_ORIENTATION_HORIZONTAL, TRUE,
+                                                   _("Drag to resize panel"),
+                                                   _panel_handle_get_size, _panel_handle_resize, widget);
   gtk_overlay_add_overlay(GTK_OVERLAY(over), handle);
-  gtk_widget_set_events(handle, GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK | GDK_ENTER_NOTIFY_MASK
-                                    | GDK_LEAVE_NOTIFY_MASK | GDK_POINTER_MOTION_MASK);
-  gtk_widget_set_name(GTK_WIDGET(handle), "panel-handle-right");
-  g_signal_connect(G_OBJECT(handle), "button-press-event", G_CALLBACK(_panel_handle_button_callback), handle);
-  g_signal_connect(G_OBJECT(handle), "button-release-event", G_CALLBACK(_panel_handle_button_callback), handle);
-  g_signal_connect(G_OBJECT(handle), "motion-notify-event", G_CALLBACK(_panel_handle_motion_callback), widget);
-  g_signal_connect(G_OBJECT(handle), "leave-notify-event", G_CALLBACK(_panel_handle_cursor_callback), handle);
-  g_signal_connect(G_OBJECT(handle), "enter-notify-event", G_CALLBACK(_panel_handle_cursor_callback), handle);
   gtk_widget_show(handle);
 
   gtk_grid_attach(GTK_GRID(container), over, 3, 1, 1, 1);
@@ -552,24 +498,15 @@ static void _ui_init_panel_bottom(dt_ui_t *ui, GtkWidget *container)
   _ui_init_panel_size(ui->thumbtable_filmstrip->parent_overlay, ui);
   gtk_grid_attach(GTK_GRID(container), over, 1, 2, 3, 1);
 
-  // we add a transparent overlay over the modules margins to resize the panel
-  GtkWidget *handle = gtk_drawing_area_new();
-  gtk_widget_set_halign(handle, GTK_ALIGN_FILL);
-  gtk_widget_set_valign(handle, GTK_ALIGN_START);
-  gtk_widget_set_size_request(handle, -1, DT_PIXEL_APPLY_DPI(5));
-  gtk_overlay_add_overlay(GTK_OVERLAY(over), handle);
-  gtk_widget_set_events(handle, GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK | GDK_ENTER_NOTIFY_MASK
-                                    | GDK_LEAVE_NOTIFY_MASK | GDK_POINTER_MOTION_MASK);
-  gtk_widget_set_name(GTK_WIDGET(handle), "panel-handle-bottom");
-  g_signal_connect(G_OBJECT(handle), "button-press-event", G_CALLBACK(_panel_handle_button_callback), handle);
-  g_signal_connect(G_OBJECT(handle), "button-release-event", G_CALLBACK(_panel_handle_button_callback), handle);
-  // Resize the actual bottom panel widget (named "bottom"), not the overlay wrapper.
+  // resize grip overlaid on the panel's top edge: drag up to grow (inverted).
+  // We resize the actual bottom panel widget (named "bottom"), not the overlay wrapper.
   // Otherwise the panel can be grown (outer overlay expands) but not shrunk because the
   // filmstrip panel keeps its previous size request until the view is recreated.
-  g_signal_connect(G_OBJECT(handle), "motion-notify-event", G_CALLBACK(_panel_handle_motion_callback),
-                   ui->thumbtable_filmstrip->parent_overlay);
-  g_signal_connect(G_OBJECT(handle), "leave-notify-event", G_CALLBACK(_panel_handle_cursor_callback), handle);
-  g_signal_connect(G_OBJECT(handle), "enter-notify-event", G_CALLBACK(_panel_handle_cursor_callback), handle);
+  GtkWidget *handle = dt_bauhaus_resize_handle_new(GTK_ORIENTATION_VERTICAL, TRUE,
+                                                   _("Drag to resize panel"),
+                                                   _panel_handle_get_size, _panel_handle_resize,
+                                                   ui->thumbtable_filmstrip->parent_overlay);
+  gtk_overlay_add_overlay(GTK_OVERLAY(over), handle);
   gtk_widget_show(handle);
 }
 

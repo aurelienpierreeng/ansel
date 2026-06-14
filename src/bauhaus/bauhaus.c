@@ -1087,6 +1087,7 @@ static gboolean _enter_leave(GtkWidget *widget, GdkEventCrossing *event)
 typedef struct dt_bauhaus_resize_handle_t
 {
   GtkOrientation orientation;
+  gboolean invert;
   dt_bauhaus_resize_handle_get_size_f get_size;
   dt_bauhaus_resize_handle_resize_f resize;
   gpointer user_data;
@@ -1095,45 +1096,6 @@ typedef struct dt_bauhaus_resize_handle_t
   int start_size;
   int current_size;
 } dt_bauhaus_resize_handle_t;
-
-static gboolean _resize_handle_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
-{
-  dt_bauhaus_resize_handle_t *handle = (dt_bauhaus_resize_handle_t *)user_data;
-  GtkAllocation allocation;
-  gtk_widget_get_allocation(widget, &allocation);
-  GtkStyleContext *context = gtk_widget_get_style_context(widget);
-  gtk_render_background(context, cr, 0, 0, allocation.width, allocation.height);
-
-  GdkRGBA color;
-  gtk_style_context_get_color(context, gtk_widget_get_state_flags(widget), &color);
-  gdk_cairo_set_source_rgba(cr, &color);
-  const int line_width = DT_PIXEL_APPLY_DPI(5.);
-  cairo_set_line_width(cr, line_width);
-  cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
-
-  /* Draw the resize affordance orthogonally to the drag axis: horizontal for
-   * vertical resize, vertical for horizontal resize. The caller only owns the
-   * target size; Bauhaus owns this standard visual language. */
-  if(handle->orientation == GTK_ORIENTATION_VERTICAL)
-  {
-    const double center_y = allocation.height / 2.0;
-    const double start_x = allocation.width * 0.35;
-    const double end_x = allocation.width * 0.65;
-    cairo_move_to(cr, start_x, center_y + line_width * 0.5);
-    cairo_line_to(cr, end_x, center_y + line_width * 0.5);
-  }
-  else
-  {
-    const double center_x = allocation.width / 2.0;
-    const double start_y = allocation.height * 0.35;
-    const double end_y = allocation.height * 0.65;
-    cairo_move_to(cr, center_x + line_width * 0.5, start_y);
-    cairo_line_to(cr, center_x + line_width * 0.5, end_y);
-  }
-
-  cairo_stroke(cr);
-  return FALSE;
-}
 
 static gboolean _resize_handle_cursor(GtkWidget *widget, GdkEventCrossing *event, gpointer user_data)
 {
@@ -1206,27 +1168,48 @@ static gboolean _resize_handle_motion(GtkWidget *widget, GdkEventMotion *event, 
    * axis matching the resize direction and leave clamping/application to the
    * owner callback, which is the code owning the resized widget. */
   const double root = (handle->orientation == GTK_ORIENTATION_VERTICAL) ? event->y_root : event->x_root;
-  const int requested_size = handle->start_size + (int)round(root - handle->start_root);
+  double delta = root - handle->start_root;
+  if(handle->invert) delta = -delta;
+  const int requested_size = handle->start_size + (int)round(delta);
   handle->current_size = handle->resize(requested_size, FALSE, handle->user_data);
   return TRUE;
 }
 
-GtkWidget *dt_bauhaus_resize_handle_new(GtkOrientation orientation, int handle_size, const char *tooltip,
+GtkWidget *dt_bauhaus_resize_handle_new(GtkOrientation orientation, gboolean invert, const char *tooltip,
                                         dt_bauhaus_resize_handle_get_size_f get_size,
                                         dt_bauhaus_resize_handle_resize_f resize, gpointer user_data)
 {
-  GtkWidget *handle_widget = gtk_drawing_area_new();
+  // A GtkEventBox is enough: it owns a GdkWindow for pointer events and renders its CSS
+  // background/border, so the whole hover affordance lives in the stylesheet (.resize-handle)
+  // with no custom drawing. It is meant to be added as an overlay child on the resized widget.
+  GtkWidget *handle_widget = gtk_event_box_new();
   dt_bauhaus_resize_handle_t *handle = g_malloc0(sizeof(*handle));
   handle->orientation = orientation;
+  handle->invert = invert;
   handle->get_size = get_size;
   handle->resize = resize;
   handle->user_data = user_data;
 
-  gtk_style_context_add_class(gtk_widget_get_style_context(handle_widget), "resize-handle");
+  // Pin the grip to the edge that grows the target when dragged outward, filling the other axis.
+  // `invert` means the target grows in the negative direction, so the grip sits on the start edge.
+  // The grab thickness is set here (a CSS min-height/width isn't honoured for an empty overlay
+  // child -- GTK allocates its ~0px natural size); an edge class is added for hover styling.
+  GtkStyleContext *ctx = gtk_widget_get_style_context(handle_widget);
+  gtk_style_context_add_class(ctx, "resize-handle");
   if(orientation == GTK_ORIENTATION_VERTICAL)
-    gtk_widget_set_size_request(handle_widget, -1, handle_size);
+  {
+    gtk_widget_set_size_request(handle_widget, -1, DT_PIXEL_APPLY_DPI(5));
+    gtk_widget_set_halign(handle_widget, GTK_ALIGN_FILL);
+    gtk_widget_set_valign(handle_widget, invert ? GTK_ALIGN_START : GTK_ALIGN_END);
+    gtk_style_context_add_class(ctx, invert ? "resize-handle-top" : "resize-handle-bottom");
+  }
   else
-    gtk_widget_set_size_request(handle_widget, handle_size, -1);
+  {
+    gtk_widget_set_size_request(handle_widget, DT_PIXEL_APPLY_DPI(5), -1);
+    gtk_widget_set_valign(handle_widget, GTK_ALIGN_FILL);
+    gtk_widget_set_halign(handle_widget, invert ? GTK_ALIGN_START : GTK_ALIGN_END);
+    gtk_style_context_add_class(ctx, invert ? "resize-handle-left" : "resize-handle-right");
+  }
 
   gtk_widget_set_events(handle_widget, GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK
                                       | GDK_ENTER_NOTIFY_MASK | GDK_LEAVE_NOTIFY_MASK
@@ -1235,7 +1218,6 @@ GtkWidget *dt_bauhaus_resize_handle_new(GtkOrientation orientation, int handle_s
     gtk_widget_set_tooltip_text(handle_widget, tooltip);
 
   g_object_set_data_full(G_OBJECT(handle_widget), "dt-bauhaus-resize-handle", handle, g_free);
-  g_signal_connect(G_OBJECT(handle_widget), "draw", G_CALLBACK(_resize_handle_draw), handle);
   g_signal_connect(G_OBJECT(handle_widget), "button-press-event", G_CALLBACK(_resize_handle_button), handle);
   g_signal_connect(G_OBJECT(handle_widget), "button-release-event", G_CALLBACK(_resize_handle_button), handle);
   g_signal_connect(G_OBJECT(handle_widget), "motion-notify-event", G_CALLBACK(_resize_handle_motion), handle);

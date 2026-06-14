@@ -3129,7 +3129,9 @@ void gui_init(dt_lib_module_t *self)
 
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(box), TRUE, TRUE, 0);
   view = GTK_TREE_VIEW(gtk_tree_view_new());
-  w = dt_ui_scroll_wrap(GTK_WIDGET(view), 200, "plugins/lighttable/tagging/heightattachedwindow");
+  // Static: the attached-tags list tracks the hovered/selected images, so keep a fixed height.
+  w = dt_ui_scroll_wrap(GTK_WIDGET(view), 200, "plugins/lighttable/tagging/heightattachedwindow",
+                        DT_UI_RESIZE_STATIC);
   gtk_box_pack_start(box, w, TRUE, TRUE, 0);
   d->attached_view = view;
   gtk_tree_view_set_enable_search(view, FALSE);
@@ -3269,7 +3271,9 @@ void gui_init(dt_lib_module_t *self)
 
   // dictionary_view tree view
   view = GTK_TREE_VIEW(gtk_tree_view_new());
-  w = dt_ui_scroll_wrap(GTK_WIDGET(view), 200, "plugins/lighttable/tagging/heightdictionarywindow");
+  // Static: keep a fixed height for stability alongside the attached-tags list above.
+  w = dt_ui_scroll_wrap(GTK_WIDGET(view), 200, "plugins/lighttable/tagging/heightdictionarywindow",
+                        DT_UI_RESIZE_STATIC);
   gtk_box_pack_start(box, w, TRUE, TRUE, 0);
   d->dictionary_view = view;
   gtk_tree_view_set_enable_search(view, FALSE);

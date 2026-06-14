@@ -100,10 +100,6 @@ typedef struct dt_gui_widgets_t
   /* left panel */
   GtkGrid *panel_left; // panel grid 3 rows, top,center,bottom and file on center
   GtkGrid *panel_right;
-
-  /* resize of left/right panels */
-  gboolean panel_handle_dragging;
-  int panel_handle_x, panel_handle_y;
 } dt_gui_widgets_t;
 
 typedef enum dt_gui_color_t
@@ -232,10 +228,23 @@ typedef struct _gui_collapsible_section_t
   GtkWidget *label;     // The section label
 } dt_gui_collapsible_section_t;
 
+typedef enum dt_ui_resize_mode_t
+{
+  // Auto-fit: the area shrinks to its content (up to the user/max height). Best for widgets
+  // updated rarely; their height following content is helpful, not disruptive.
+  DT_UI_RESIZE_DYNAMIC = 0,
+  // Fixed: the area keeps the user-set (or default) height regardless of content, so it never
+  // shifts the surrounding layout when its content changes. Best for widgets that refresh on
+  // hover/selection (tags, notes, metadata) and the collection/library list.
+  DT_UI_RESIZE_STATIC
+} dt_ui_resize_mode_t;
+
 typedef struct dt_gui_widget_auto_height_t
 {
-  int min_rows;
-  int max_rows;
+  char *config_str;   // conf key persisting the user-chosen height (px); owned
+  int min_size;       // minimum height floor in device pixels
+  int last_height;    // last applied bare (pre-padding) height, shared with the drag handle
+  dt_ui_resize_mode_t mode;
   GtkTreeModel *model;
   GtkTextBuffer *buffer;
   gulong model_row_inserted;
@@ -462,21 +471,40 @@ GdkModifierType dt_key_modifier_state();
 
 
 /**
- * @brief Set the automatic height for a widget based on the number of rows or lines it contains.
- * 
- * Compatible with GtkTreeView and GtkTextView.
- * 
- * If the widget is already wrapped in a `GtkBox`, this function creates a `GtkScrolledWindow` to contain the widget to scroll.
- * The widget is then wrapped into a `GtkScrolledWindow` while preserving box packing options.
- * If the widget is already inside a `GtkScrolledWindow`, its policy is set to
- * horizontal=never and vertical=automatic.
- * 
- * @param widget The GtkWidget. It have to be already packed into a `GtkBox`, or already wrapped in a `GtkScrolledWindow`.
- * @param min_rows The minimum number of rows to display.
- * @param max_rows The maximum number of rows to display.
+ * @brief Wrap a scrollable widget in a recessed, vertically resizable scrolled window with a drag handle.
+ *
+ * Compatible with GtkTreeView, GtkTextView and any other content widget. A drag grip floats on the
+ * scrolled window's bottom edge (invisible until hovered); the chosen height is persisted under
+ * @p config_str. Returns the wrapper overlay, not the scrolled window.
+ *
+ * @param w content widget.
+ * @param min_size minimum height floor, in device-independent pixels (rescaled by DT_PIXEL_APPLY_DPI).
+ *                 In DT_UI_RESIZE_STATIC mode it also serves as the default height before the user drags.
+ * @param config_str conf key persisting the user-chosen height (copied internally).
+ * @param mode DT_UI_RESIZE_DYNAMIC to auto-fit content, or DT_UI_RESIZE_STATIC to keep a fixed height
+ *             regardless of content (avoids layout shifts for hover-/selection-driven widgets).
  */
-void dt_gui_widget_init_auto_height(GtkWidget *widget , int min_rows, int max_rows);
-GtkWidget *dt_ui_scroll_wrap(GtkWidget *w, gint min_size, char *config_str);
+GtkWidget *dt_ui_scroll_wrap(GtkWidget *w, gint min_size, char *config_str, dt_ui_resize_mode_t mode);
+
+/**
+ * @brief Return the inner GtkScrolledWindow of a dt_ui_scroll_wrap() wrapper, or NULL.
+ */
+GtkWidget *dt_ui_scroll_wrap_get_scrolled_window(GtkWidget *wrapper);
+
+/**
+ * @brief Make a self-drawing widget (typically a GtkDrawingArea graph or scope) vertically resizable.
+ *
+ * The widget is given a fixed height-request (persisted under @p config_str) and a drag grip floating
+ * on its bottom edge — the same grip used by panels, scroll wrappers and the histogram scope. The
+ * content is not scrolled: it keeps drawing to its live allocation, only the height-request changes.
+ * Returns a wrapper overlay to pack in place of @p area.
+ *
+ * @param area the drawing widget (its callbacks/refs stay valid; pack the returned overlay instead).
+ * @param config_str conf key persisting the user-chosen height (copied internally).
+ * @param default_height default height in device-independent px (rescaled by DT_PIXEL_APPLY_DPI).
+ * @param min_height minimum height floor in device-independent px.
+ */
+GtkWidget *dt_ui_resizable_drawing_area(GtkWidget *area, char *config_str, int default_height, int min_height);
 
 /**
  * @brief Apply the standard recessed-input text padding to a GtkTextView.

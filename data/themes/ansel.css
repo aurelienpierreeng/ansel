@@ -746,8 +746,15 @@ dialog .sidebar row:selected:hover label,
   margin: 0.21em;
 }
 
+/* Resize grips (panels, scrolled windows, scopes, graphs): floating overlays, invisible at rest so
+   they take no visual space, materializing a fill + white border on hover to advertise drag-to-resize.
+   The grab thickness is set in code (a CSS min-height/width is not honoured for an empty overlay
+   child); the cursor change is handled in code. The grip sits flush on its edge -- a negative-margin
+   shift to centre it on the border would overflow the overlay child and trip GTK allocation warnings.
+   The edge classes (.resize-handle-{top,bottom,left,right}) are kept for any edge-specific styling. */
 .resize-handle:hover {
-  color: @grey_90;
+  background-color: @grey_90;
+  border: 1px solid @grey_90;
 }
 
 #red-channel-button {

@@ -1347,7 +1347,9 @@ void gui_init(dt_lib_module_t *self)
   d->grid = child_grid_window;
   gtk_grid_set_column_spacing(GTK_GRID(child_grid_window), DT_GUI_BOX_SPACING);
 
-  self->widget = dt_ui_scroll_wrap(child_grid_window, 200, "plugins/lighttable/metadata_view/windowheight");
+  // Static: the metadata grid refreshes for the hovered/selected image, so keep a fixed height.
+  self->widget = dt_ui_scroll_wrap(child_grid_window, 200, "plugins/lighttable/metadata_view/windowheight",
+                                   DT_UI_RESIZE_STATIC);
 
   gtk_widget_show_all(d->grid);
   gtk_widget_set_no_show_all(d->grid, TRUE);

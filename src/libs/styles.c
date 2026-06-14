@@ -845,7 +845,8 @@ void gui_init(dt_lib_module_t *self)
 
 
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(d->entry), TRUE, TRUE, 0);
-  GtkWidget *style_tree_sw = dt_ui_scroll_wrap(GTK_WIDGET(d->tree), 250, "plugins/lighttable/style/windowheight");
+  GtkWidget *style_tree_sw = dt_ui_scroll_wrap(GTK_WIDGET(d->tree), 250, "plugins/lighttable/style/windowheight",
+                                               DT_UI_RESIZE_DYNAMIC);
   gtk_box_pack_start(GTK_BOX(self->widget), style_tree_sw, FALSE, FALSE, 0);
 
   d->duplicate = gtk_check_button_new_with_label(_("create duplicate"));

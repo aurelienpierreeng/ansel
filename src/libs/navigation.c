@@ -62,6 +62,7 @@ DT_MODULE(1)
 
 typedef struct dt_lib_navigation_t
 {
+  GtkWidget *area;    // the drawing area (self->widget is the resizable wrapper around it)
   int dragging;
   int zoom_w, zoom_h; // size of the zoom button
   cairo_surface_t *image_surface;
@@ -133,14 +134,16 @@ static void _lib_navigation_control_redraw_callback(gpointer instance, gpointer 
 {
   (void)instance;
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
-  dt_control_queue_redraw_widget(self->widget);
+  dt_lib_navigation_t *d = (dt_lib_navigation_t *)self->data;
+  dt_control_queue_redraw_widget(d->area);
 }
 
 static void _lib_navigation_restart_cache_wait(gpointer user_data)
 {
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
   if(IS_NULL_PTR(self)) return;
-  dt_control_queue_redraw_widget(self->widget);
+  dt_lib_navigation_t *d = (dt_lib_navigation_t *)self->data;
+  dt_control_queue_redraw_widget(d->area);
 }
 
 static void _lib_navigation_history_resync_callback(gpointer instance, gpointer user_data)
@@ -155,7 +158,7 @@ static void _lib_navigation_history_resync_callback(gpointer instance, gpointer 
   dt_dev_pixelpipe_cache_wait_set_owner(&d->preview_wait, "navigation-preview", self);
   if(dt_dev_pixelpipe_cache_peek_gui(dev->preview_pipe, NULL, NULL, NULL, &d->preview_wait,
                                      _lib_navigation_restart_cache_wait, self))
-    dt_control_queue_redraw_widget(self->widget);
+    dt_control_queue_redraw_widget(d->area);
 }
 
 
@@ -167,26 +170,27 @@ void gui_init(dt_lib_module_t *self)
   d->image_surface = NULL;
 
   /* create drawingarea */
-  self->widget = gtk_drawing_area_new();
-  gtk_widget_set_events(self->widget, GDK_EXPOSURE_MASK | GDK_ENTER_NOTIFY_MASK
+  d->area = gtk_drawing_area_new();
+  gtk_widget_set_events(d->area, GDK_EXPOSURE_MASK | GDK_ENTER_NOTIFY_MASK
                                       | GDK_POINTER_MOTION_MASK | GDK_BUTTON_PRESS_MASK
                                       | GDK_BUTTON_RELEASE_MASK | GDK_STRUCTURE_MASK);
 
   /* connect callbacks */
-  gtk_widget_set_app_paintable(self->widget, TRUE);
-  g_signal_connect(G_OBJECT(self->widget), "draw", G_CALLBACK(_lib_navigation_draw_callback), self);
-  g_signal_connect(G_OBJECT(self->widget), "button-press-event",
+  gtk_widget_set_app_paintable(d->area, TRUE);
+  g_signal_connect(G_OBJECT(d->area), "draw", G_CALLBACK(_lib_navigation_draw_callback), self);
+  g_signal_connect(G_OBJECT(d->area), "button-press-event",
                    G_CALLBACK(_lib_navigation_button_press_callback), self);
-  g_signal_connect(G_OBJECT(self->widget), "button-release-event",
+  g_signal_connect(G_OBJECT(d->area), "button-release-event",
                    G_CALLBACK(_lib_navigation_button_release_callback), self);
-  g_signal_connect(G_OBJECT(self->widget), "motion-notify-event",
+  g_signal_connect(G_OBJECT(d->area), "motion-notify-event",
                    G_CALLBACK(_lib_navigation_motion_notify_callback), self);
-  g_signal_connect(G_OBJECT(self->widget), "leave-notify-event",
+  g_signal_connect(G_OBJECT(d->area), "leave-notify-event",
                    G_CALLBACK(_lib_navigation_leave_notify_callback), self);
 
-  /* set size of navigation draw area */
-  gtk_widget_set_size_request(self->widget, -1, 175);
-  gtk_widget_set_name(GTK_WIDGET(self->widget), "navigation-module");
+  gtk_widget_set_name(GTK_WIDGET(d->area), "navigation-module");
+
+  /* make the navigation preview vertically resizable, persisting its height */
+  self->widget = dt_ui_resizable_drawing_area(d->area, "plugins/darkroom/navigation/height", 175, 100);
 
   /* connect redraw callbacks to targeted preview cache publication and explicit redraw requests */
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_HISTORY_RESYNC,
@@ -462,7 +466,7 @@ static void _lib_navigation_set_position(dt_lib_module_t *self, double x, double
   dev->roi.y = fy;
 
   /* redraw myself */
-  gtk_widget_queue_draw(self->widget);
+  gtk_widget_queue_draw(d->area);
 
   /* redraw pipe */
   dt_dev_pixelpipe_change_zoom_main(darktable.develop);

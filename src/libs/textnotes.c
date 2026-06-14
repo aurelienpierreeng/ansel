@@ -71,6 +71,7 @@ typedef struct dt_lib_textnotes_t
   dt_variables_params_t *vars_params;
   int32_t imgid;
   uint64_t load_token;
+  int preview_render_width;   // panel-driven width used at the last preview render (loop/debounce guard)
   gboolean loading;
   gboolean dirty;
   gboolean rendering;
@@ -225,6 +226,27 @@ static void _render_preview_from_edit(dt_lib_textnotes_t *d)
   gchar *text = _get_edit_text(d);
   _render_preview(d, text);
   dt_free(text);
+}
+
+/**
+ * @brief Re-render the preview when the panel-given width changes, so embedded images rescale
+ * to fit the available width instead of forcing their parents to grow.
+ *
+ * @details The handler is connected to the preview scrolled window, whose width is driven top-down
+ * by the panel (not by the rendered content), so it is a stable reference. We only re-render on a
+ * meaningful width change and never while a render is already running, which keeps this from looping
+ * (a re-render at an unchanged width produces the same layout, hence no further width change).
+ */
+static void _preview_width_changed(GtkWidget *widget, GdkRectangle *allocation, gpointer user_data)
+{
+  dt_lib_module_t *self = (dt_lib_module_t *)user_data;
+  dt_lib_textnotes_t *d = (dt_lib_textnotes_t *)self->data;
+  if(IS_NULL_PTR(d) || d->rendering || IS_NULL_PTR(d->stack)) return;
+  if(g_strcmp0(gtk_stack_get_visible_child_name(GTK_STACK(d->stack)), "preview") != 0) return;
+
+  if(ABS(allocation->width - d->preview_render_width) < DT_PIXEL_APPLY_DPI(8)) return;
+  d->preview_render_width = allocation->width;
+  _render_preview_from_edit(d);
 }
 
 static void _completion_hide(dt_lib_textnotes_t *d)
@@ -1172,6 +1194,21 @@ static int _compute_max_image_width(dt_lib_textnotes_t *d, const int scale, gboo
     gtk_style_context_get_border(ctx, state, &border);
     const int chrome = padding.left + padding.right + border.left + border.right;
     if(chrome > 0 && max_w > chrome) max_w -= chrome;
+  }
+
+  // Hard cap: never wider than the width the panel grants the scrolled window, so a wide image can
+  // never push the textview / module / sidebar wider. This enforces top-down sizing as a safety net
+  // on top of the size-allocate driven re-render.
+  if(d->preview_sw)
+  {
+    const int sw_w = gtk_widget_get_allocated_width(d->preview_sw);
+    if(sw_w > 0)
+    {
+      // leave room for the vertical scrollbar gutter + recessed frame padding
+      const int chrome = DT_PIXEL_APPLY_DPI(16);
+      const int cap = (sw_w > chrome) ? sw_w - chrome : sw_w;
+      if(max_w <= 0 || max_w > cap) max_w = cap;
+    }
   }
 
   if(max_w > 2) max_w -= 2;
@@ -2173,11 +2210,12 @@ void gui_init(dt_lib_module_t *self)
   d->edit_view = GTK_TEXT_VIEW(textview);
   _setup_completion(self, textview);
 
-  GtkWidget *edit_sw = dt_ui_scroll_wrap(textview, 140, d->height_setting);
+  GtkWidget *edit_sw = dt_ui_scroll_wrap(textview, 140, d->height_setting, DT_UI_RESIZE_STATIC);
+  GtkWidget *edit_inner = dt_ui_scroll_wrap_get_scrolled_window(edit_sw);
   gtk_widget_set_hexpand(edit_sw, TRUE);
   gtk_widget_set_vexpand(edit_sw, TRUE);
-  gtk_scrolled_window_set_propagate_natural_width(GTK_SCROLLED_WINDOW(edit_sw), FALSE);
-  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(edit_sw), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+  gtk_scrolled_window_set_propagate_natural_width(GTK_SCROLLED_WINDOW(edit_inner), FALSE);
+  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(edit_inner), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
   gtk_stack_add_named(GTK_STACK(d->stack), edit_sw, "edit");
 
   GtkWidget *preview_view = gtk_text_view_new();
@@ -2195,12 +2233,15 @@ void gui_init(dt_lib_module_t *self)
   gtk_widget_set_vexpand(preview_view, TRUE);
   d->preview_view = GTK_TEXT_VIEW(preview_view);
 
-  GtkWidget *preview_sw = dt_ui_scroll_wrap(preview_view, 140, d->height_setting);
+  GtkWidget *preview_sw = dt_ui_scroll_wrap(preview_view, 140, d->height_setting, DT_UI_RESIZE_STATIC);
+  GtkWidget *preview_inner = dt_ui_scroll_wrap_get_scrolled_window(preview_sw);
   d->preview_sw = preview_sw;
   gtk_widget_set_hexpand(preview_sw, TRUE);
   gtk_widget_set_vexpand(preview_sw, TRUE);
-  gtk_scrolled_window_set_propagate_natural_width(GTK_SCROLLED_WINDOW(preview_sw), FALSE);
-  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(preview_sw), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+  gtk_scrolled_window_set_propagate_natural_width(GTK_SCROLLED_WINDOW(preview_inner), FALSE);
+  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(preview_inner), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+  // Rescale embedded images whenever the panel hands the preview a new width.
+  g_signal_connect(G_OBJECT(preview_inner), "size-allocate", G_CALLBACK(_preview_width_changed), self);
   gtk_stack_add_named(GTK_STACK(d->stack), preview_sw, "preview");
   gtk_stack_set_visible_child_name(GTK_STACK(d->stack), "preview");
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->mode_toggle), TRUE);

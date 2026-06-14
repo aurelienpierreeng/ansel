@@ -2334,7 +2334,8 @@ void gui_init(dt_iop_module_t *self)
       const dt_iop_colorequal_channel_t ch = channel_order[order];
       GtkWidget *channel_page = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
       g_object_set_data(G_OBJECT(channel_page), "colorequal-channel", GINT_TO_POINTER(ch));
-      g->area[ring][ch] = GTK_DRAWING_AREA(dtgtk_drawing_area_new_with_aspect_ratio(2.f / 3.f));
+      g->area[ring][ch] = GTK_DRAWING_AREA(gtk_drawing_area_new());
+      gtk_widget_set_hexpand(GTK_WIDGET(g->area[ring][ch]), TRUE);
       gtk_widget_add_events(GTK_WIDGET(g->area[ring][ch]),
                             GDK_POINTER_MOTION_MASK | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK);
       g_object_set_data(G_OBJECT(g->area[ring][ch]), "colorequal-ring", GINT_TO_POINTER(ring));
@@ -2346,7 +2347,11 @@ void gui_init(dt_iop_module_t *self)
                        self);
       g_signal_connect(G_OBJECT(g->area[ring][ch]), "button-release-event",
                        G_CALLBACK(_area_button_release_callback), self);
-      gtk_box_pack_start(GTK_BOX(channel_page), GTK_WIDGET(g->area[ring][ch]), TRUE, TRUE, 0);
+      // All ring/channel graphs are alternate views of the same plot, so they share one height key.
+      gtk_box_pack_start(GTK_BOX(channel_page),
+                         dt_ui_resizable_drawing_area(GTK_WIDGET(g->area[ring][ch]),
+                                                      "plugins/darkroom/colorequal/graphheight", 220, 100),
+                         FALSE, FALSE, 0);
       gtk_notebook_append_page(g->channel_notebook[ring], channel_page, gtk_label_new(channel_labels[order]));
       gtk_container_child_set(GTK_CONTAINER(g->channel_notebook[ring]), channel_page, "tab-expand", TRUE,
                               "tab-fill", TRUE, NULL);
