@@ -803,7 +803,7 @@
     <shortdescription>Use the embedded JPG instead of rendering thumbnails from RAW.</shortdescription>
     <longdescription/>
   </dtconfig>
-  <dtconfig prefs="views" section="darkroom">
+  <dtconfig>
     <name>pressure_sensitivity</name>
     <type>
       <enum>
@@ -816,10 +816,10 @@
       </enum>
     </type>
     <default>off</default>
-    <shortdescription>pen pressure control for brush masks</shortdescription>
+    <shortdescription>Pen pressure mapping</shortdescription>
     <longdescription>off - pressure reading ignored, hardness/opacity/brush size - pressure reading controls specified attribute, absolute/relative - pressure reading is taken directly as attribute value or multiplied with pre-defined setting.</longdescription>
   </dtconfig>
-  <dtconfig prefs="views" section="darkroom">
+  <dtconfig>
     <name>brush_smoothing</name>
     <type>
       <enum>
@@ -829,7 +829,7 @@
       </enum>
     </type>
     <default>medium</default>
-    <shortdescription>smoothing of brush strokes</shortdescription>
+    <shortdescription>Brush strokes smoothing</shortdescription>
     <longdescription>sets level for smoothing of brush strokes. stronger smoothing leads to less nodes and easier editing but with lower control of accuracy.</longdescription>
   </dtconfig>
   <dtconfig prefs="views" section="darkroom">

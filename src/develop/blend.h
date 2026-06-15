@@ -43,6 +43,7 @@
 #include "dtgtk/button.h"
 #include "dtgtk/gradientslider.h"
 #include "gui/color_picker_proxy.h"
+#include "gui/gtk.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -387,6 +388,7 @@ typedef struct dt_iop_gui_blend_data_t
   GdkPixbuf *masks_ic_exclusion;
   GtkWidget *all_shapes_buttons;
   GtkWidget *lists_box;
+  dt_gui_collapsible_section_t masks_cs;
 
 
   GtkWidget *raster_combo;

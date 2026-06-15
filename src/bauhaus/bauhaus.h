@@ -395,6 +395,12 @@ GtkWidget *dt_bauhaus_combobox_new_full(dt_bauhaus_t *bh, dt_gui_module_t *self,
   widget = dt_bauhaus_combobox_new_full(bauhaus, action, label, tip, pos, callback, data, texts);            \
 }
 
+// Build a combobox from a <dtconfig> entry of anselconfig.xml.in whose <type> is <enum>.
+// Entries are pre-filled from the <enum><option> list (translated for display), the widget
+// is pre-selected from the current dt_conf value, and any later user selection is written
+// back to that same config key. Returns NULL if `confkey` is not a known enum config entry.
+GtkWidget *dt_bauhaus_combobox_from_conf(dt_bauhaus_t *bh, dt_gui_module_t *self, const char *confkey);
+
 void dt_bauhaus_combobox_add(GtkWidget *widget, const char *text);
 void dt_bauhaus_combobox_add_with_tooltip(GtkWidget *widget, const char *text, const char *tooltip);
 void dt_bauhaus_combobox_add_aligned(GtkWidget *widget, const char *text, dt_bauhaus_combobox_alignment_t align);

@@ -3628,6 +3628,18 @@ void dt_iop_gui_init_masks(GtkBox *blendw, dt_iop_module_t *module)
 
     gtk_box_pack_start(GTK_BOX(bd->masks_box), bd->lists_box, TRUE, TRUE, 0);
 
+    dt_gui_new_collapsible_section
+      (&bd->masks_cs,
+      "plugins/darkroom/masks/wacom",
+      _("Brush options"),
+      GTK_BOX(bd->masks_box), GTK_PACK_END);
+
+    GtkWidget *brush_smoothing = dt_bauhaus_combobox_from_conf(darktable.bauhaus, DT_GUI_MODULE(NULL), "brush_smoothing");
+    gtk_box_pack_start(GTK_BOX(bd->masks_cs.container), brush_smoothing, TRUE, TRUE, 0);
+
+    GtkWidget *pressure_mapping = dt_bauhaus_combobox_from_conf(darktable.bauhaus, DT_GUI_MODULE(NULL), "pressure_sensitivity");
+    gtk_box_pack_start(GTK_BOX(bd->masks_cs.container), pressure_mapping, TRUE, TRUE, 0);
+
     bd->masks_inited = 1;
     _blendop_masks_refresh_lists(module);
   }
