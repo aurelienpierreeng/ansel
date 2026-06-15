@@ -2635,9 +2635,13 @@ void leave(dt_view_t *self)
   dt_pthread_mutex_unlock(&dev->virtual_pipe->busy_mutex);
 
   /* Device-side cache payloads are only an acceleration layer. Once darkroom
-   * leaves and all pipe workers are quiescent, drop all cached cl_mem objects
-   * so a later reopen can only exact-hit host-authoritative cachelines. */
-  dt_dev_pixelpipe_cache_flush_clmem(darktable.pixelpipe_cache, -1);
+   * leaves, drop the cl_mem objects these pipes produced -- but only on the
+   * device(s) they themselves last ran on, so we never touch cache entries
+   * another, still-running pipe (e.g. a background thumbnail export) holds on
+   * its own OpenCL device. */
+  dt_dev_pixelpipe_cache_flush_clmem_for_pipe(darktable.pixelpipe_cache, dev->pipe->last_devid);
+  if(dev->preview_pipe->last_devid != dev->pipe->last_devid)
+    dt_dev_pixelpipe_cache_flush_clmem_for_pipe(darktable.pixelpipe_cache, dev->preview_pipe->last_devid);
 
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
   dt_dev_history_free_history(dev);

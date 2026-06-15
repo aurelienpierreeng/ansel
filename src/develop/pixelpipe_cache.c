@@ -474,21 +474,26 @@ static gboolean _cache_entry_clmem_flush_host_pinned_locked(dt_pixel_cache_entry
 
 void dt_dev_pixelpipe_cache_flush_clmem(dt_dev_pixelpipe_cache_t *cache, const int devid)
 {
-  if(devid >= 0)
-  {
-    dt_opencl_events_wait_for(devid);
-  }
-#ifdef HAVE_OPENCL
-  else if(!IS_NULL_PTR(darktable.opencl) && darktable.opencl->inited)
-  {
-    // Full cache teardown drops cl_mem objects from every OpenCL context.
-    // Driver event lists are only diagnostics here: finish each command queue so no
-    // pending kernel or transfer can still reference a cache payload when we
-    // release it below.
-    for(int dev = 0; dev < darktable.opencl->num_devs; dev++)
-      dt_opencl_finish(dev);
-  }
-#endif
+  // devid < 0 means the calling pipe never used OpenCL: it owns no device-side
+  // payload in the cache, so there is nothing of its own to release here.
+  //
+  // This used to also support devid == -1 as "drop cl_mem from every device,
+  // regardless of who else is using it", called from per-pipe cleanup. That ran
+  // without holding any dev[].lock, so it could race the eventlist/cl_mem
+  // bookkeeping of whichever OTHER pixelpipe was concurrently running on that
+  // device, corrupting it and crashing inside clGetEventInfo/clWaitForEvents
+  // (see #859 and #864). A global, all-devices teardown is never needed during
+  // normal operation: dt_cleanup() already finishes every device and
+  // dt_dev_pixelpipe_cache_cleanup() unconditionally releases all remaining
+  // cl_mem objects at application exit, when nothing else is running.
+  if(devid < 0) return;
+
+  // NOTE: the caller must hold darktable.opencl->dev[devid].lock -- either
+  // because it IS the pixelpipe currently running on that device (the lock
+  // dt_opencl_lock_device() handed it for the duration of its run), or because
+  // it explicitly took that lock to safely flush this device's cache entries
+  // after its own run finished (see dt_dev_pixelpipe_cache_flush_clmem_for_pipe()).
+  dt_opencl_events_wait_for(devid);
 
   dt_pthread_mutex_lock(&cache->lock);
   GHashTableIter iter;
@@ -502,13 +507,35 @@ void dt_dev_pixelpipe_cache_flush_clmem(dt_dev_pixelpipe_cache_t *cache, const i
      * allocation fallback can deadlock against in-flight GPU renders that already
      * hold cache entry locks. */
     if(darktable.unmuted & DT_DEBUG_VERBOSE)
-      dt_print(DT_DEBUG_OPENCL, 
-        "[dt_dev_pixelpipe_cache_flush_clmem] trying to flush vRAM for entry %" PRIu64 "...\n",
-        entry->hash);
+      dt_print(DT_DEBUG_OPENCL,
+        "[dt_dev_pixelpipe_cache_flush_clmem] trying to flush vRAM for entry %" PRIu64 " on device %d...\n",
+        entry->hash, devid);
     _cache_entry_clmem_flush_device(entry, devid);
   }
   dt_pthread_mutex_unlock(&cache->lock);
 }
+
+#ifdef HAVE_OPENCL
+void dt_dev_pixelpipe_cache_flush_clmem_for_pipe(dt_dev_pixelpipe_cache_t *cache, const int devid)
+{
+  // Like dt_dev_pixelpipe_cache_flush_clmem(), but for callers that do NOT
+  // currently hold darktable.opencl->dev[devid].lock -- typically a pipe's own
+  // cleanup, running after dt_dev_pixelpipe_process() already released that
+  // lock. Taking it here ensures we can't race the eventlist/cl_mem bookkeeping
+  // of whichever OTHER pixelpipe is now running on that device.
+  if(devid < 0 || IS_NULL_PTR(darktable.opencl) || !darktable.opencl->inited) return;
+
+  dt_pthread_mutex_lock(&darktable.opencl->dev[devid].lock);
+  dt_dev_pixelpipe_cache_flush_clmem(cache, devid);
+  dt_pthread_mutex_unlock(&darktable.opencl->dev[devid].lock);
+}
+#else
+void dt_dev_pixelpipe_cache_flush_clmem_for_pipe(dt_dev_pixelpipe_cache_t *cache, const int devid)
+{
+  (void)cache;
+  (void)devid;
+}
+#endif
 
 typedef struct _cache_lru_t
 {
@@ -1471,8 +1498,8 @@ static inline void _log_arena_allocation_failure(dt_dev_pixelpipe_cache_t *cache
 #ifdef HAVE_OPENCL
 static void _cache_entry_clmem_flush_device(dt_pixel_cache_entry_t *entry, const int devid)
 {
-  // devid = -1 is code for flush all regardless of device
-  // it runs at pipeline cleanup
+  // devid is always >= 0 here: dt_dev_pixelpipe_cache_flush_clmem() early-returns
+  // otherwise. Only cachelines living on this specific device are candidates.
   dt_pthread_mutex_lock(&entry->cl_mem_lock);
 
   for(GList *l = g_list_first(entry->cl_mem_list); l;)
@@ -1489,7 +1516,7 @@ static void _cache_entry_clmem_flush_device(dt_pixel_cache_entry_t *entry, const
     }
 
     gboolean referenced = c->refs > 0;
-    gboolean not_ours = (dt_opencl_get_mem_context_id(c->mem) != devid) && devid > -1;
+    gboolean not_ours = dt_opencl_get_mem_context_id(c->mem) != devid;
 
     if(referenced || not_ours)
     {

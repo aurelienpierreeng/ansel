@@ -310,6 +310,11 @@ typedef struct dt_dev_pixelpipe_t
   dt_imageio_levels_t levels;
   // opencl device that has been locked for this pipe.
   int devid;
+  // last opencl device this pipe ran on, kept after `devid` is reset to -1 at
+  // the end of dt_dev_pixelpipe_process(). Used by dt_dev_pixelpipe_cleanup()
+  // to release only this pipe's own cl_mem cache payloads. -1 if this pipe
+  // never ran on OpenCL.
+  int last_devid;
   // the user might choose to overwrite the output color space and rendering intent.
   dt_colorspaces_color_profile_type_t icc_type;
   gchar *icc_filename;

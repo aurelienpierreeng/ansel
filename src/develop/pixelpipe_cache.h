@@ -570,14 +570,29 @@ gboolean dt_dev_pixelpipe_cache_peek(dt_dev_pixelpipe_cache_t *cache, const uint
 void dt_dev_pixelpipe_cache_flush(dt_dev_pixelpipe_cache_t *cache, const int id);
 
 /**
- * @brief Release cached OpenCL buffers for a device (-1 for all).
+ * @brief Release cached OpenCL buffers for a single device.
  *
  * @details
  * This is intentionally a lightweight VRAM-pressure/retry helper: it drops cached
  * `cl_mem` objects without taking per-entry write locks. Realtime paths rely on it
  * to free scratch OpenCL buffers without stalling in-flight renders.
+ *
+ * @param devid Device to flush, or a negative value for a no-op (e.g. a pipe that
+ *              never used OpenCL). The caller must already hold
+ *              `darktable.opencl->dev[devid].lock` -- this is the case for the
+ *              pixelpipe currently running on that device. Callers that don't hold
+ *              it (e.g. cleaning up a pipe after it finished) must use
+ *              dt_dev_pixelpipe_cache_flush_clmem_for_pipe() instead.
  */
 void dt_dev_pixelpipe_cache_flush_clmem(dt_dev_pixelpipe_cache_t *cache, const int devid);
+
+/**
+ * @brief Like dt_dev_pixelpipe_cache_flush_clmem(), for callers that do not hold
+ * `darktable.opencl->dev[devid].lock` (e.g. a pipe's own cleanup after
+ * dt_dev_pixelpipe_process() already released it). Takes the lock itself, then
+ * delegates. No-op if devid < 0 or OpenCL isn't available.
+ */
+void dt_dev_pixelpipe_cache_flush_clmem_for_pipe(dt_dev_pixelpipe_cache_t *cache, const int devid);
 
 
 /**

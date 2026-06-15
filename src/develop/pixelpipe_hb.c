@@ -429,6 +429,7 @@ int dt_dev_pixelpipe_init_cached(dt_dev_pixelpipe_t *pipe)
 
   // Set only the stuff that doesn't take 0 as default
   pipe->devid = -1;
+  pipe->last_devid = -1;
   dt_dev_pixelpipe_set_changed(pipe, DT_DEV_PIPE_UNCHANGED);
   dt_dev_pixelpipe_set_hash(pipe, DT_PIXELPIPE_CACHE_HASH_INVALID);
   dt_dev_pixelpipe_set_history_hash(pipe, DT_PIXELPIPE_CACHE_HASH_INVALID);
@@ -485,10 +486,11 @@ void dt_dev_pixelpipe_set_icc(dt_dev_pixelpipe_t *pipe, dt_colorspaces_color_pro
 
 void dt_dev_pixelpipe_cleanup(dt_dev_pixelpipe_t *pipe)
 {
-  /* Device-side cache payloads are only an acceleration layer. Once darkroom
-   * leaves and all pipe workers are quiescent, drop all cached cl_mem objects
-   * so a later reopen can only exact-hit host-authoritative cachelines. */
-  dt_dev_pixelpipe_cache_flush_clmem(darktable.pixelpipe_cache, -1);
+  /* Device-side cache payloads are only an acceleration layer. Drop the cl_mem
+   * objects this pipe produced on the device it last ran on -- but only that
+   * device, so we never touch cache entries another, still-running pipe holds
+   * on a different (or the same) OpenCL device. */
+  dt_dev_pixelpipe_cache_flush_clmem_for_pipe(darktable.pixelpipe_cache, pipe->last_devid);
 
   // blocks while busy and sets shutdown bit:
   dt_dev_pixelpipe_cleanup_nodes(pipe);
@@ -1349,7 +1351,11 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_iop_roi_t roi)
   pipe->devid = (pipe->opencl_enabled) ? dt_opencl_lock_device(pipe->type)
                                        : -1; // try to get/lock opencl resource
 
-  if(pipe->devid > -1) dt_opencl_events_reset(pipe->devid);
+  if(pipe->devid > -1)
+  {
+    dt_opencl_events_reset(pipe->devid);
+    pipe->last_devid = pipe->devid;
+  }
   dt_print(DT_DEBUG_OPENCL, "[pixelpipe_process] [%s] using device %d\n", dt_pixelpipe_get_pipe_name(pipe->type),
            pipe->devid);
 
