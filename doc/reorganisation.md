@@ -115,8 +115,10 @@ IOP modules read their pixel input into the pipeline cache, and write their pixe
 
 Cachelines on the pipeline cache are indexed by the `dt_dev_pixelpipe_iop_t.global_hash` of their pipeline node `piece` object. To find the pipeline node connected to a certain module in a certain pipeline, use the function `dt_dev_pixelpipe_get_module_piece()`. From there, two different functions can fetch the data buffer connected to the cacheline associated to that piece:
 
-- from GUI, `dt_dev_pixelpipe_cache_peek_gui()` will either return the cacheline and data buffer if available, or request a partial pipeline recompute (up to this module) to create it if missing,
+- from GUI, `dt_dev_pixelpipe_cache_peek_gui()` will either return the cacheline and data buffer if available, or queue a *cache-wait* and request a partial pipeline recompute (up to this module) to create it if missing,
 - from backend, `dt_dev_pixelpipe_cache_peek()` will return the cacheline and data buffer if available, or nothing.
+
+Note that a module's *input* is the *output* of the previous enabled module (`dt_dev_pixelpipe_get_prev_enabled_piece()`), so GUI code that needs a module's input must fetch the previous piece's cacheline, not the module's own. The full mechanics of the GUI fetch — the cache-wait manager, the `DT_SIGNAL_CACHELINE_READY` retry protocol, the partial-recompute request, and the pitfalls of using raw `dt_dev_pixelpipe_cache_peek()` from GUI — are documented separately in `pipeline-cache.md`.
 
 This new pipeline architecture allows for fully asynchronous pipelines, where IOP modules can grab their input from the output of any arbitrary module (even non-sequential), pipelines can have parallel branches, and we can easily run partial pipelines (starting or ending at any arbitrary node).
 
@@ -136,7 +138,7 @@ So the application doesn't have explicit pipeline rendering triggers anymore or 
 
 This removes a lot of pressure on multi-threading synchronization because threads can live entirely in their own timeline without having to wait each other or start each other. We just declare data states through checksums and let each thread decide what it should do with it.
 
-Also, when a new pipe cacheline is written, it raises the signal `DT_SIGNAL_CACHELINE_READY` with the hash of the cacheline, which means that all GUI places waiting for a particular buffer rendering can connect on this signal and immediately refresh their internal state without having to wait for a full pipeline to complete.
+Also, when a new pipe cacheline is written, it raises the signal `DT_SIGNAL_CACHELINE_READY` with the hash of the cacheline, which means that all GUI places waiting for a particular buffer rendering can connect on this signal and immediately refresh their internal state without having to wait for a full pipeline to complete. GUI consumers should not subscribe to this signal directly: the shared cache-wait manager (`dt_dev_pixelpipe_cache_peek_gui()` + `dt_dev_pixelpipe_cache_wait_t`) already centralizes the subscription, the deduplication of pending requests, the busy-cursor feedback and the resume callbacks. See `pipeline-cache.md`.
 
 ### Data lifecycle
 

@@ -331,8 +331,16 @@ int dt_dev_get_thumbnail_size(dt_develop_t *dev)
   // The preview backbuffer and the pipeline ROI both live in raster pixels.
   // `natural_scale` therefore directly maps the processed image size to the
   // raster backbuffer size, without any GUI-density factor mixed in.
-  dev->roi.preview_width = dev->roi.natural_scale * dev->roi.processed_width;
-  dev->roi.preview_height = dev->roi.natural_scale * dev->roi.processed_height;
+  // Use roundf() — NOT a plain (int) truncation — so these match the ROI the
+  // worker actually requests in `_update_darkroom_roi()` (which rounds too) and
+  // therefore the size of the backbuffer the pipe produces. A truncation here
+  // disagreed with that rounding by 1px whenever the fractional part was >= 0.5,
+  // which is image-dependent: it silently broke `dt_dev_pixelpipe_has_preview_output()`
+  // (hence ashift structure detection / drawing) on some images but not others,
+  // and resetting the module to neutral did not help because the mismatch does
+  // not depend on the module parameters at all.
+  dev->roi.preview_width = roundf(dev->roi.natural_scale * dev->roi.processed_width);
+  dev->roi.preview_height = roundf(dev->roi.natural_scale * dev->roi.processed_height);
   dev->roi.output_inited = TRUE;
 
   dt_dev_update_mouse_effect_radius(dev); 
@@ -371,7 +379,24 @@ gboolean dt_dev_pixelpipe_has_preview_output(const dt_develop_t *dev, const dt_d
     _update_darkroom_roi((dt_develop_t *)dev, (dt_dev_pixelpipe_t *)pipe, &x, &y, &width, &height, &scale);
   }
 
-  if(width != dev->roi.preview_width || height != dev->roi.preview_height) return FALSE;
+  // A module upstream of the orientation swap (the "flip" module) — e.g. ashift, demosaic,
+  // highlights — produces output whose width/height are swapped relative to the final, post-flip
+  // preview dimensions on portrait images. Accept that swapped match too: otherwise the
+  // "is this the full preview image?" test wrongly fails for every pre-flip module on portrait,
+  // and `roi` here is the module's own (pre-flip) `roi_out`. This is why ashift never captured its
+  // GUI buffer on portrait images, breaking structure detection and manual drawing (#710).
+  //
+  // Tolerate a couple of pixels of slack on the dimensions. `dev->roi.preview_*` is derived from the
+  // virtual pipe at scale 1.0, whereas `roi` is produced at `natural_scale`; geometric modules
+  // (ashift, lens) round their transformed bounding box with floorf() independently at each scale,
+  // so the two legitimately disagree by ~1px for the very same full image. The real discriminators
+  // are the origin and scale tests below: a zoomed or panned ROI has a non-zero x/y and a scale
+  // strictly greater than natural_scale, so loosening the size match cannot misclassify those.
+  const int tol = 2;
+  const gboolean dims_match
+      = (abs(width - dev->roi.preview_width) <= tol && abs(height - dev->roi.preview_height) <= tol)
+        || (abs(width - dev->roi.preview_height) <= tol && abs(height - dev->roi.preview_width) <= tol);
+  if(!dims_match) return FALSE;
   return x == 0 && y == 0 && fabsf(scale - dev->roi.natural_scale) < 1e-4f;
 }
 

@@ -516,7 +516,6 @@ typedef struct dt_iop_ashift_gui_data_t
   float crop_cy;
   dt_iop_ashift_jobcode_t jobcode;
   int jobparams;
-  uint64_t pending_preview_input_hash;
 
   dt_iop_ashift_method_t current_structure_method;
   int draw_near_point;
@@ -1169,13 +1168,17 @@ void modify_roi_in(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t
                    struct dt_dev_pixelpipe_iop_t *piece,
                    const dt_iop_roi_t *const roi_out, dt_iop_roi_t *roi_in)
 {
-  (void)pipe;
   dt_iop_ashift_data_t *data = (dt_iop_ashift_data_t *)piece->data;
   *roi_in = *roi_out;
 
   // nothing more to be done if parameters are set to neutral values
   if(isneutral(data)) return;
 
+  // NB: while editing, commit_params() neutralizes the crop (cl/cr/ct/cb), so the back-transform
+  // below maps the full uncropped output back to the full input (cx=cy=0). process() then captures
+  // the whole image into g->buf — exactly what structure detection and the crop frame need — with no
+  // edit-specific special-casing in this function.
+  (void)pipe;
   float ihomograph[3][3];
   homography((float *)ihomograph, data->rotation, data->lensshift_v, data->lensshift_h, data->shear, data->f_length_kb,
              data->orthocorr, data->aspect, piece->buf_in.width, piece->buf_in.height, ASHIFT_HOMOGRAPH_INVERTED);
@@ -2536,11 +2539,35 @@ static void do_crop(dt_iop_module_t *self, dt_iop_ashift_params_t *p)
 {
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
 
-  // if sizes are not ready (module disabled), just ignore this
-  if(g->buf_width == 0 || g->buf_height == 0) return;
+  // Auto-crop is a purely geometric fit: it only needs ashift's *full* (uncropped) input size, not
+  // pixel data. Read it from the preview-pipe piece buf_in, which is the full input at preview scale
+  // and stays independent of the current crop ROI. ashift's roi_in (and hence g->buf) is the
+  // crop-dependent sub-region feeding the cropped output, so using it here fed the previous crop
+  // back into the next one and the crop only converged after several manual toggles (#710).
+  int crop_width = 0, crop_height = 0;
+  const dt_dev_pixelpipe_iop_t *crop_piece = dt_dev_distort_get_iop_pipe(self->dev->preview_pipe, self);
+  if(!IS_NULL_PTR(crop_piece) && crop_piece->buf_in.width > 0 && crop_piece->buf_in.height > 0)
+  {
+    crop_width = crop_piece->buf_in.width;
+    crop_height = crop_piece->buf_in.height;
+  }
+  else
+  {
+    // Fall back to the captured buffer size if the preview geometry is not ready yet.
+    crop_width = g->buf_width;
+    crop_height = g->buf_height;
+  }
+
+  // if sizes are not ready (module disabled / preview not computed yet), just ignore this
+  if(crop_width == 0 || crop_height == 0) return;
 
   // skip if fitting is still running
   if(g->fitting) return;
+
+  // Changing the crop changes the output geometry and thus where the control-line overlay lands.
+  // Drop the overlay's cached screen coordinates so gui_post_expose() recomputes them against the
+  // virtual-pipe geometry that the resync below makes current (#710 overlay lag).
+  g->grid_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
 
   // reset fit margins if auto-cropping is off
   if(p->cropmode == ASHIFT_CROP_OFF)
@@ -2570,8 +2597,8 @@ static void do_crop(dt_iop_module_t *self, dt_iop_ashift_params_t *p)
 
   // prepare structure of constant parameters
   dt_iop_ashift_cropfit_params_t cropfit;
-  cropfit.width = g->buf_width;
-  cropfit.height = g->buf_height;
+  cropfit.width = crop_width;
+  cropfit.height = crop_height;
   homography((float *)cropfit.homograph, rotation, lensshift_v, lensshift_h, shear, f_length_kb,
              orthocorr, aspect, cropfit.width, cropfit.height, ASHIFT_HOMOGRAPH_FORWARD);
 
@@ -2918,107 +2945,6 @@ static int _do_clean_structure(dt_iop_module_t *module, dt_iop_ashift_params_t *
   return TRUE;
 }
 
-/**
- * @brief Rebuild the GUI-side fitting buffer from the authoritative preview cacheline.
- *
- * The ashift GUI keeps a private float buffer used by structure detection and fit. That buffer is
- * not owned by the pixelpipe cache and may disappear on darkroom teardown while the preview pipe
- * still exact-hits cached hashes on re-entry. In that case, the correct recovery is to reopen the
- * cached upstream preview input of the ashift piece and copy it back into @p g->buf.
- *
- * This helper performs only that buffer resynchronization. Callers keep ownership of the fallback
- * policy when the cacheline is unavailable, so the control flow that removes cache suffixes,
- * requeues jobs, and resyncs preview remains explicit at the call site.
- *
- * @param self Current ashift module.
- * @param[out] preview_piece_out Matching ashift piece on the preview pipe, used by callers when
- * the cache restore fails and they need to invalidate the preview suffix explicitly.
- *
- * @return TRUE when @p g->buf has been repopulated from cache, FALSE otherwise.
- */
-static gboolean _sync_private_buffer_from_preview_cache(dt_iop_module_t *self,
-                                                        dt_dev_pixelpipe_iop_t **preview_piece_out)
-{
-  dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
-  dt_dev_pixelpipe_iop_t *preview_piece = dt_dev_distort_get_iop_pipe(self->dev->preview_pipe, self);
-  if(preview_piece_out) *preview_piece_out = preview_piece;
-
-  if(IS_NULL_PTR(preview_piece) || !preview_piece->enabled || preview_piece->roi_in.width <= 0 || preview_piece->roi_in.height <= 0)
-    return FALSE;
-
-  const dt_dev_pixelpipe_iop_t *previous_piece = NULL;
-  for(GList *node = g_list_first(self->dev->preview_pipe->nodes); node; node = g_list_next(node))
-  {
-    const dt_dev_pixelpipe_iop_t *current = (dt_dev_pixelpipe_iop_t *)node->data;
-    if(current == preview_piece) break;
-    if(current->enabled) previous_piece = current;
-  }
-
-  const uint64_t upstream_hash
-      = dt_dev_pixelpipe_node_hash(self->dev->preview_pipe, previous_piece, preview_piece->roi_in, 0);
-  void *preview_buf = NULL;
-  dt_pixel_cache_entry_t *preview_entry = NULL;
-  if(!dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, upstream_hash, &preview_buf, &preview_entry,
-                                  self->dev->preview_pipe->devid, NULL)
-     || !preview_buf || !preview_entry)
-    return FALSE;
-
-  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, preview_entry);
-
-  const int width = preview_piece->roi_in.width;
-  const int height = preview_piece->roi_in.height;
-  const int ch = preview_piece->dsc_in.channels;
-  const float scale_x = (preview_piece->buf_in.width > 0)
-                            ? (float)width / (float)preview_piece->buf_in.width
-                            : 1.0f;
-  const float scale_y = (preview_piece->buf_in.height > 0)
-                            ? (float)height / (float)preview_piece->buf_in.height
-                            : 1.0f;
-  // The line detector needs the actual preview-buffer decimation factor to map
-  // detected segments back to the module input. Derive it from buffer sizes so
-  // it stays correct even if ROI bookkeeping changes around the GUI boundary.
-  const float buffer_scale = 0.5f * (scale_x + scale_y);
-  dt_iop_gui_enter_critical_section(self);
-  if(IS_NULL_PTR(g->buf) || (size_t)g->buf_width * g->buf_height < (size_t)width * height)
-  {
-    dt_free(g->buf);
-    g->buf = malloc(sizeof(float) * 4 * (size_t)width * height);
-  }
-  if(g->buf)
-  {
-    dt_iop_image_copy_by_size(g->buf, preview_buf, width, height, ch);
-    g->buf_width = width;
-    g->buf_height = height;
-    g->buf_x_off = preview_piece->roi_in.x;
-    g->buf_y_off = preview_piece->roi_in.y;
-    g->buf_scale = buffer_scale;
-    g->buf_hash = upstream_hash;
-  }
-  dt_iop_gui_leave_critical_section(self);
-
-  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
-  return !IS_NULL_PTR(g->buf);
-}
-
-static uint64_t _current_preview_input_hash(dt_iop_module_t *self)
-{
-  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(self->dev->preview_pipe)) return DT_PIXELPIPE_CACHE_HASH_INVALID;
-
-  dt_dev_pixelpipe_iop_t *preview_piece = dt_dev_distort_get_iop_pipe(self->dev->preview_pipe, self);
-  if(IS_NULL_PTR(preview_piece) || !preview_piece->enabled || preview_piece->roi_in.width <= 0 || preview_piece->roi_in.height <= 0)
-    return DT_PIXELPIPE_CACHE_HASH_INVALID;
-
-  const dt_dev_pixelpipe_iop_t *previous_piece = NULL;
-  for(GList *node = g_list_first(self->dev->preview_pipe->nodes); node; node = g_list_next(node))
-  {
-    const dt_dev_pixelpipe_iop_t *current = (dt_dev_pixelpipe_iop_t *)node->data;
-    if(current == preview_piece) break;
-    if(current->enabled) previous_piece = current;
-  }
-
-  return dt_dev_pixelpipe_node_hash(self->dev->preview_pipe, previous_piece, preview_piece->roi_in, 0);
-}
-
 // helper function to start analysis for structural data and report about errors
 static int _do_get_structure_auto(dt_iop_module_t *self, dt_iop_ashift_params_t *p,
                                   dt_iop_ashift_enhance_t enhance)
@@ -3035,35 +2961,15 @@ static int _do_get_structure_auto(dt_iop_module_t *self, dt_iop_ashift_params_t 
 
   if(IS_NULL_PTR(b))
   {
-    dt_dev_pixelpipe_iop_t *preview_piece = dt_dev_distort_get_iop_pipe(self->dev->preview_pipe, self);
-    if(_sync_private_buffer_from_preview_cache(self, &preview_piece)) b = g->buf;
-
-    if(IS_NULL_PTR(b))
-    {
-      dt_control_log(_("Data pending - Please repeat"));
-      // If preview is already valid here, the GUI state was lost while the pipe can still exact-hit
-      // downstream cachelines. Remove the preview chain from ashift onward so the worker recomputes
-      // exactly that suffix. On a cold first run, just queue the job and let preview build normally.
-      if(dt_dev_pixelpipe_is_backbufer_valid(self->dev->preview_pipe) && preview_piece)
-      {
-        gboolean remove_from_ashift = FALSE;
-        for(GList *node = g_list_first(self->dev->preview_pipe->nodes); node; node = g_list_next(node))
-        {
-          dt_dev_pixelpipe_iop_t *current = (dt_dev_pixelpipe_iop_t *)node->data;
-          remove_from_ashift |= (current == preview_piece);
-          if(!remove_from_ashift) continue;
-          if(current->global_hash == DT_PIXELPIPE_CACHE_HASH_INVALID) continue;
-
-          dt_pixel_cache_entry_t *entry
-              = dt_dev_pixelpipe_cache_get_entry(darktable.pixelpipe_cache, current->global_hash);
-          if(entry) dt_dev_pixelpipe_cache_remove(darktable.pixelpipe_cache, TRUE, entry);
-        }
-      }
-      g->jobcode = ASHIFT_JOBCODE_GET_STRUCTURE;
-      g->jobparams = enhance;
-      dt_dev_pixelpipe_resync_history_preview(self->dev);
-      goto error;
-    }
+    // The preview input buffer is captured by process() on every preview render (process() always
+    // runs while editing, because the module is in cache-bypass mode). It is simply not ready yet,
+    // e.g. the click landed before the first edit-mode render completed. Queue the job and let the
+    // in-flight render publish g->buf; _event_process_after_preview_callback() resumes us. We do not
+    // poke the cache from here: a module cache-request only renders the pipe up to the previous
+    // module and never runs ashift's process(), so it could never capture g->buf and would spin (#710).
+    g->jobcode = ASHIFT_JOBCODE_GET_STRUCTURE;
+    g->jobparams = enhance;
+    goto error;
   }
 
   if(!_get_structure(self, enhance))
@@ -3104,42 +3010,11 @@ static void _do_get_structure_lines(dt_iop_module_t *self)
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
   dt_iop_ashift_params_t *p = _get_ashift_params(self);
 
-  // we verify that we have a valid buffer
-  dt_iop_gui_enter_critical_section(self);
-  float *b = g->buf;
-  dt_iop_gui_leave_critical_section(self);
-
-  if(IS_NULL_PTR(b))
-  {
-    dt_dev_pixelpipe_iop_t *preview_piece = dt_dev_distort_get_iop_pipe(darktable.develop->preview_pipe, self);
-    if(_sync_private_buffer_from_preview_cache(self, &preview_piece)) b = g->buf;
-
-    if(IS_NULL_PTR(b))
-    {
-      dt_control_log(_("Data pending - Please repeat"));
-      if(dt_dev_pixelpipe_is_backbufer_valid(darktable.develop->preview_pipe) && preview_piece)
-      {
-        gboolean remove_from_ashift = FALSE;
-        for(GList *node = g_list_first(darktable.develop->preview_pipe->nodes); node; node = g_list_next(node))
-        {
-          dt_dev_pixelpipe_iop_t *current = (dt_dev_pixelpipe_iop_t *)node->data;
-          remove_from_ashift |= (current == preview_piece);
-          if(!remove_from_ashift) continue;
-          if(current->global_hash == DT_PIXELPIPE_CACHE_HASH_INVALID) continue;
-
-          dt_pixel_cache_entry_t *entry
-              = dt_dev_pixelpipe_cache_get_entry(darktable.pixelpipe_cache, current->global_hash);
-          if(entry) dt_dev_pixelpipe_cache_remove(darktable.pixelpipe_cache, TRUE, entry);
-        }
-      }
-      g->jobcode = ASHIFT_JOBCODE_GET_STRUCTURE_LINES;
-      g->jobparams = 0;
-      dt_dev_pixelpipe_resync_history_preview(darktable.develop);
-      return;
-    }
-  }
-
-  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(darktable.develop->virtual_pipe, self);
+  // Manual line drawing only needs the module input geometry, never the pixel buffer (unlike
+  // auto-detection). Tying it to g->buf used to block all manual input whenever the preview buffer
+  // was momentarily unavailable, e.g. when the module already had parameters set (#710).
+  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);
+  if(IS_NULL_PTR(piece) || piece->iwidth <= 0 || piece->iheight <= 0) return;
 
   _do_clean_structure(self, p, TRUE);
 
@@ -3162,42 +3037,10 @@ static void _do_get_structure_quad(dt_iop_module_t *self)
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
   dt_iop_ashift_params_t *p = _get_ashift_params(self);
 
-  // we verify that we have a valid buffer
-  dt_iop_gui_enter_critical_section(self);
-  float *b = g->buf;
-  dt_iop_gui_leave_critical_section(self);
-
-  if(IS_NULL_PTR(b))
-  {
-    dt_dev_pixelpipe_iop_t *preview_piece = dt_dev_distort_get_iop_pipe(darktable.develop->preview_pipe, self);
-    if(_sync_private_buffer_from_preview_cache(self, &preview_piece)) b = g->buf;
-
-    if(IS_NULL_PTR(b))
-    {
-      dt_control_log(_("Data pending - Please repeat"));
-      if(dt_dev_pixelpipe_is_backbufer_valid(darktable.develop->preview_pipe) && preview_piece)
-      {
-        gboolean remove_from_ashift = FALSE;
-        for(GList *node = g_list_first(darktable.develop->preview_pipe->nodes); node; node = g_list_next(node))
-        {
-          dt_dev_pixelpipe_iop_t *current = (dt_dev_pixelpipe_iop_t *)node->data;
-          remove_from_ashift |= (current == preview_piece);
-          if(!remove_from_ashift) continue;
-          if(current->global_hash == DT_PIXELPIPE_CACHE_HASH_INVALID) continue;
-
-          dt_pixel_cache_entry_t *entry
-              = dt_dev_pixelpipe_cache_get_entry(darktable.pixelpipe_cache, current->global_hash);
-          if(entry) dt_dev_pixelpipe_cache_remove(darktable.pixelpipe_cache, TRUE, entry);
-        }
-      }
-      g->jobcode = ASHIFT_JOBCODE_GET_STRUCTURE_QUAD;
-      g->jobparams = 0;
-      dt_dev_pixelpipe_resync_history_preview(self->dev);
-      return;
-    }
-  }
-
+  // The manual perspective rectangle only needs the module input geometry, never the pixel buffer
+  // (unlike auto-detection), so it must not wait for the preview input buffer (#710).
   dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);
+  if(IS_NULL_PTR(piece) || piece->iwidth <= 0 || piece->iheight <= 0) return;
 
   _do_clean_structure(self, p, TRUE);
 
@@ -5209,7 +5052,6 @@ void gui_reset(struct dt_iop_module_t *self)
   g->editing = FALSE;
   g->jobcode = ASHIFT_JOBCODE_NONE;
   g->jobparams = 0;
-  g->pending_preview_input_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
   dt_iop_set_cache_bypass(self, FALSE);
 
   dt_iop_ashift_params_t *p = (dt_iop_ashift_params_t *)self->params;
@@ -5624,38 +5466,19 @@ static void _run_pending_preview_job(dt_iop_module_t *self)
   }
 }
 
-static void _event_history_resync_callback(gpointer instance, gpointer user_data)
+// Run any pending GUI job once the preview pipe has finished a render. By this point process() has
+// captured g->buf (it always runs while editing because the module is in cache-bypass mode), so the
+// pixel-reading jobs (auto-detection, fit) find their buffer; the geometry-only jobs (manual
+// line/quad, auto-crop) never needed it. Driving jobs from PREVIEW_PIPE_FINISHED — rather than from
+// a cache request that only renders up to the previous module — is what avoids the buffer never
+// being captured and the pipe spinning forever (#710).
+static void _event_process_after_preview_callback(gpointer instance, gpointer user_data)
 {
   (void)instance;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
   if(IS_NULL_PTR(g) || g->jobcode == ASHIFT_JOBCODE_NONE || darktable.gui->reset) return;
 
-  const uint64_t preview_input_hash = _current_preview_input_hash(self);
-  if(preview_input_hash == DT_PIXELPIPE_CACHE_HASH_INVALID) return;
-
-  if((IS_NULL_PTR(g->buf) || g->buf_hash != preview_input_hash)
-     && !_sync_private_buffer_from_preview_cache(self, NULL))
-  {
-    g->pending_preview_input_hash = preview_input_hash;
-    return;
-  }
-
-  g->pending_preview_input_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
-  _run_pending_preview_job(self);
-  dt_control_queue_redraw_center();
-}
-
-static void _event_cacheline_ready_callback(gpointer instance, const guint64 hash, gpointer user_data)
-{
-  (void)instance;
-  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
-  if(IS_NULL_PTR(g) || g->pending_preview_input_hash != hash || darktable.gui->reset) return;
-
-  if(!_sync_private_buffer_from_preview_cache(self, NULL)) return;
-
-  g->pending_preview_input_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
   _run_pending_preview_job(self);
   dt_control_queue_redraw_center();
 }
@@ -5680,24 +5503,26 @@ static void _event_process_after_ui_callback(gpointer instance, gpointer user_da
   if(!g->editing && p->cropmode == ASHIFT_CROP_OFF) return;
 
   dt_dev_get_thumbnail_size(self->dev);
+
+  // Force the control-line overlay to recompute its screen coordinates on the next expose. Its
+  // cache is keyed on the preview-pipe hash, which is published asynchronously by the worker, so on
+  // crop-mode/rotation changes the cached points would otherwise lag a frame behind the freshly
+  // rendered geometry (the overlay "not adjusting" to the new crop). The thumbnail/virtual-pipe
+  // geometry refreshed just above is authoritative here, so invalidating the cache now makes the
+  // overlay follow it reliably.
+  g->grid_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+
   dt_control_queue_redraw_center();
 }
 
 void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_t *pipe,
                    dt_dev_pixelpipe_iop_t *piece)
 {
-  dt_iop_ashift_params_t *p;
   dt_iop_ashift_data_t *d = (dt_iop_ashift_data_t *)piece->data;
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
 
-  if(!IS_NULL_PTR(g) && g->editing)
-  {
-    p = (dt_iop_ashift_params_t *)&g->new_params;
-  }
-  else
-  {
-    p = (dt_iop_ashift_params_t *)p1;
-  }
+  const gboolean editing = !IS_NULL_PTR(g) && g->editing;
+  dt_iop_ashift_params_t *p = editing ? &g->new_params : (dt_iop_ashift_params_t *)p1;
 
   d->rotation = p->rotation;
   d->lensshift_v = p->lensshift_v;
@@ -5706,10 +5531,27 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   d->f_length_kb = (p->mode == ASHIFT_MODE_GENERIC) ? DEFAULT_F_LENGTH : p->f_length * p->crop_factor;
   d->orthocorr = (p->mode == ASHIFT_MODE_GENERIC) ? 0.0f : p->orthocorr;
   d->aspect = (p->mode == ASHIFT_MODE_GENERIC) ? 1.0f : p->aspect;
-  d->cl = p->cl;
-  d->cr = p->cr;
-  d->ct = p->ct;
-  d->cb = p->cb;
+
+  if(editing)
+  {
+    // In editing mode we need to see the full uncropped image to set up the crop frame and run
+    // structure detection on the whole image. Same approach as the crop module's commit_params():
+    // neutralize the crop here so the pipe renders the full transformed image (the darkroom view
+    // already expects the uncropped output while a cache-bypass module is focused). modify_roi_in()
+    // then naturally requests the full input, so process() captures the whole image into g->buf. The
+    // real crop is reapplied from params as soon as edit mode is committed/cancelled. (#710)
+    d->cl = 0.0f;
+    d->cr = 1.0f;
+    d->ct = 0.0f;
+    d->cb = 1.0f;
+  }
+  else
+  {
+    d->cl = p->cl;
+    d->cr = p->cr;
+    d->ct = p->ct;
+    d->cb = p->cb;
+  }
 }
 
 gboolean runtime_data_hash(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
@@ -5831,7 +5673,6 @@ void reload_defaults(dt_iop_module_t *module)
 
     g->jobcode = ASHIFT_JOBCODE_NONE;
     g->jobparams = 0;
-    g->pending_preview_input_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
     g->lastx = g->lasty = -1.0f;
     g->crop_cx = g->crop_cy = 1.0f;
 
@@ -5938,7 +5779,6 @@ void gui_init(struct dt_iop_module_t *self)
 
   g->jobcode = ASHIFT_JOBCODE_NONE;
   g->jobparams = 0;
-  g->pending_preview_input_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
   g->lastx = g->lasty = -1.0f;
   g->crop_cx = g->crop_cy = 1.0f;
   memcpy(&g->previous_params, self->params, sizeof(dt_iop_ashift_params_t));
@@ -6111,19 +5951,17 @@ void gui_init(struct dt_iop_module_t *self)
                    (gpointer)self);
   g_signal_connect(G_OBJECT(self->widget), "draw", G_CALLBACK(_event_draw), self);
 
-  /* pending structure jobs now wake up from targeted preview-cache publication */
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_HISTORY_RESYNC,
-                                  G_CALLBACK(_event_history_resync_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_CACHELINE_READY,
-                                  G_CALLBACK(_event_cacheline_ready_callback), self);
+  /* Pending GUI jobs run once the preview pipe published a fresh render: by then process() has
+     captured g->buf. The UI-pipe-finished hook only refreshes the overlay geometry. */
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED,
+                                  G_CALLBACK(_event_process_after_preview_callback), self);
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_UI_PIPE_FINISHED,
                                   G_CALLBACK(_event_process_after_ui_callback), self);
 }
 
 void gui_cleanup(struct dt_iop_module_t *self)
 {
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_event_history_resync_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_event_cacheline_ready_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_event_process_after_preview_callback), self);
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_event_process_after_ui_callback), self);
   dt_iop_set_cache_bypass(self, FALSE);
 
