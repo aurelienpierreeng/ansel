@@ -1499,7 +1499,9 @@ static int _thumb_resize_overlays(dt_thumbnail_t *thumb, int width, int height)
   // inner margins are defined in css (margin_* values)
 
   // retrieves the size of the main icons in the top panel, thumbtable overlays shall not exceed that
-  const float r1 = fminf(DT_PIXEL_APPLY_DPI(20) / 2., (float)width / (2.5 * (4 + MAX_STARS)));
+  const int n_widgets = 4 + MAX_STARS;
+  const float r1 = fminf(1.25 * DT_GUI_EM_SIZE / 2., 
+                         (float)(width - (n_widgets - 1) * DT_GUI_BOX_SPACING) / (2. * n_widgets));
   int icon_size = roundf(2 * r1);
 
   // reject icon

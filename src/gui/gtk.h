@@ -102,9 +102,10 @@ extern "C" {
  * screen DPI, this needs NO DT_PIXEL_APPLY_DPI on top.
  *
  * Falls back to the 10px reference before gui->em has been resolved (early init). */
+#define DT_GUI_EM_SIZE (gint)(darktable.gui->em > 0.0 ? darktable.gui->em : 16.0)
 #define DT_GUI_BOX_SPACING_EM 0.625
 #define DT_GUI_BOX_SPACING                                                                                     \
-  ((gint)((darktable.gui->em > 0.0 ? darktable.gui->em : 16.0) * DT_GUI_BOX_SPACING_EM + 0.5))
+  ((gint)(DT_GUI_EM_SIZE * DT_GUI_BOX_SPACING_EM + 0.5))
 
 enum
 {
