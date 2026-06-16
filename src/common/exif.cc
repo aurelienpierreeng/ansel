@@ -3857,16 +3857,22 @@ static void _exif_xmp_read_data(Exiv2::XmpData &xmpData, const int32_t imgid, co
     gts = sqlite3_column_int64(stmt, 7);
   }
 
-  // get iop-order list
-  const dt_iop_order_t iop_order_version = dt_ioppr_get_iop_order_version(imgid);
-  GList *iop_list = dt_ioppr_get_iop_order_list(imgid, TRUE);
-
-  if(iop_order_version == DT_IOP_ORDER_CUSTOM || dt_ioppr_has_multiple_instances(iop_list))
+  // The pipe order only matters when history entries are exported. After
+  // deleting history, avoid rebuilding a default order just to write an empty
+  // sidecar: the default will be selected again when the image is opened.
+  dt_iop_order_t iop_order_version = DT_IOP_ORDER_ANSEL_RAW;
+  if(history_end > 0)
   {
-    iop_order_list = dt_ioppr_serialize_text_iop_order_list(iop_list);
+    iop_order_version = dt_ioppr_get_iop_order_version(imgid);
+    GList *iop_list = dt_ioppr_get_iop_order_list(imgid, TRUE);
+
+    if(iop_order_version == DT_IOP_ORDER_CUSTOM || dt_ioppr_has_multiple_instances(iop_list))
+    {
+      iop_order_list = dt_ioppr_serialize_text_iop_order_list(iop_list);
+    }
+    g_list_free_full(iop_list, dt_free_gpointer);
+    iop_list = NULL;
   }
-  g_list_free_full(iop_list, dt_free_gpointer);
-  iop_list = NULL;
 
   // Store datetime_taken as DateTimeOriginal to take into account the user's selected date/time
   gchar exif_datetime[DT_DATETIME_LENGTH];
@@ -3938,9 +3944,11 @@ static void _exif_xmp_read_data(Exiv2::XmpData &xmpData, const int32_t imgid, co
     xmpData["Xmp.darktable.auto_presets_applied"] = 0;
   dt_set_xmp_dt_history(xmpData, imgid, history_end);
 
-  // we need to read the iop-order list
-  xmpData["Xmp.darktable.iop_order_version"] = iop_order_version;
-  if(iop_order_list) xmpData["Xmp.darktable.iop_order_list"] = iop_order_list;
+  if(history_end > 0)
+  {
+    xmpData["Xmp.darktable.iop_order_version"] = iop_order_version;
+    if(iop_order_list) xmpData["Xmp.darktable.iop_order_list"] = iop_order_list;
+  }
 
   _exif_xmp_append_history_hash(xmpData, imgid, image);
 
@@ -3981,16 +3989,22 @@ static void _exif_xmp_read_data_export(Exiv2::XmpData &xmpData, const int32_t im
     gts = sqlite3_column_int64(stmt, 7);
   }
 
-  // get iop-order list
-  const dt_iop_order_t iop_order_version = dt_ioppr_get_iop_order_version(imgid);
-  GList *iop_list = dt_ioppr_get_iop_order_list(imgid, TRUE);
-
-  if(iop_order_version == DT_IOP_ORDER_CUSTOM || dt_ioppr_has_multiple_instances(iop_list))
+  // The pipe order only matters when history entries are exported. After
+  // deleting history, avoid rebuilding a default order just to write an empty
+  // sidecar: the default will be selected again when the image is opened.
+  dt_iop_order_t iop_order_version = DT_IOP_ORDER_ANSEL_RAW;
+  if(history_end > 0)
   {
-    iop_order_list = dt_ioppr_serialize_text_iop_order_list(iop_list);
+    iop_order_version = dt_ioppr_get_iop_order_version(imgid);
+    GList *iop_list = dt_ioppr_get_iop_order_list(imgid, TRUE);
+
+    if(iop_order_version == DT_IOP_ORDER_CUSTOM || dt_ioppr_has_multiple_instances(iop_list))
+    {
+      iop_order_list = dt_ioppr_serialize_text_iop_order_list(iop_list);
+    }
+    g_list_free_full(iop_list, dt_free_gpointer);
+    iop_list = NULL;
   }
-  g_list_free_full(iop_list, dt_free_gpointer);
-  iop_list = NULL;
 
   if(metadata->flags & DT_META_METADATA)
   {
@@ -4075,9 +4089,11 @@ static void _exif_xmp_read_data_export(Exiv2::XmpData &xmpData, const int32_t im
       xmpData["Xmp.darktable.auto_presets_applied"] = 0;
     dt_set_xmp_dt_history(xmpData, imgid, history_end);
 
-    // we need to read the iop-order list
-    xmpData["Xmp.darktable.iop_order_version"] = iop_order_version;
-    if(iop_order_list) xmpData["Xmp.darktable.iop_order_list"] = iop_order_list;
+    if(history_end > 0)
+    {
+      xmpData["Xmp.darktable.iop_order_version"] = iop_order_version;
+      if(iop_order_list) xmpData["Xmp.darktable.iop_order_list"] = iop_order_list;
+    }
     _exif_xmp_append_history_hash(xmpData, imgid, NULL);
   }
 

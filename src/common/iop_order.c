@@ -777,7 +777,7 @@ dt_iop_order_t dt_ioppr_get_iop_order_version(const int32_t imgid)
 
   if(!has_stored_order && imgid > 0 && !IS_NULL_PTR(darktable.image_cache))
   {
-    const dt_image_t *image = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+    const dt_image_t *image = dt_image_cache_testget(darktable.image_cache, imgid, 'r');
     if(!IS_NULL_PTR(image))
     {
       iop_order_version = dt_image_is_rawprepare_supported(image) ? DT_IOP_ORDER_ANSEL_RAW : DT_IOP_ORDER_ANSEL_JPG;
@@ -1198,7 +1198,7 @@ GList *dt_ioppr_get_iop_order_list(int32_t imgid, gboolean sorted)
     dt_iop_order_t default_order = DT_IOP_ORDER_ANSEL_RAW;
     if(imgid > 0 && !IS_NULL_PTR(darktable.image_cache))
     {
-      const dt_image_t *image = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+      const dt_image_t *image = dt_image_cache_testget(darktable.image_cache, imgid, 'r');
       if(!IS_NULL_PTR(image))
       {
         default_order = dt_image_is_rawprepare_supported(image) ? DT_IOP_ORDER_ANSEL_RAW : DT_IOP_ORDER_ANSEL_JPG;
