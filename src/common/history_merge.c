@@ -759,8 +759,10 @@ typedef struct _hm_topo_merge_ctx_t
   GList *sorted;
   // When FALSE, topo merge only updates ordering/instances; it does not copy module content.
   gboolean copy_module_contents;
-  // Set of ids (strings) used to decide which source adjacency edges we import.
-  // An edge prev->cur from the source pipeline is kept when prev or cur is in this set.
+  // When FALSE, the source iop list cannot impose successors around newly-created instances.
+  gboolean source_iop_order;
+  // Set of ids (strings) selecting modules that source-order or destination-slot constraints should position.
+  // In source-order mode, edges touching this set are imported; otherwise this set holds missing instances.
   GHashTable *src_focus_ids;
   // Modules selected for pasting (source instances).
   const GList *mod_list;
@@ -867,10 +869,9 @@ static int _hm_topo_build_constraint_ids(_hm_topo_merge_ctx_t *ctx, dt_develop_t
    * source-only modules into the ordering problem.
    */
 
-  // Build a focus set selecting which source adjacency edges should be imported.
-  // - merge_iop_order=TRUE: import ordering constraints around all pasted modules.
-  // - merge_iop_order=FALSE: import ordering constraints only around modules that are missing in destination,
-  //   to determine where they should be inserted into the existing destination pipeline.
+  // Build a focus set selecting which pasted modules need source-order or insertion-slot constraints.
+  // - merge_iop_order=TRUE: import source ordering constraints around all pasted modules.
+  // - merge_iop_order=FALSE: slot only modules missing in destination into the existing destination pipeline.
   ctx->src_focus_ids = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, NULL);
   if(IS_NULL_PTR(ctx->src_focus_ids)) return 1;
   for(const GList *l = g_list_first((GList *)mod_list); l; l = g_list_next(l))
@@ -929,10 +930,134 @@ static int _hm_topo_flatten_constraints(_hm_topo_merge_ctx_t *ctx)
   GList *dst_raster_nodes = NULL;
   GList *src_raster_nodes = NULL;
   GList *rule_nodes = NULL;
+  GHashTable *dest_rank = NULL;
 
   if(_hm_build_input_nodes_from_ids(ctx->dest_ids, "dst", &dest_nodes)) goto error;
-  // Import source ordering only for edges touching `ctx->src_focus_ids`.
-  if(_hm_build_input_nodes_from_ids_filtered(ctx->src_ids, "src", ctx->src_focus_ids, &src_nodes)) goto error;
+  if(ctx->source_iop_order)
+  {
+    // Source-order merge imports the local source neighborhood around pasted modules.
+    if(_hm_build_input_nodes_from_ids_filtered(ctx->src_ids, "src", ctx->src_focus_ids, &src_nodes)) goto error;
+  }
+  else
+  {
+    /* Destination-order merge must not let a style's full iop_list move existing destination modules.
+     *
+     * For each missing source instance, we use the style order only to find a destination slot:
+     * - the latest destination module that appears before it in the style,
+     * - the earliest destination module that appears after it in the style and still follows that lower bound.
+     *
+     * This keeps the destination pipe stable while allowing style instances to land in their intended
+     * pipeline region. It also drops stale successor constraints that would move existing modules or create
+     * cycles, such as "Exposure (AAA) before Mask manager" on current RAW orders.
+     */
+    dest_rank = g_hash_table_new(g_str_hash, g_str_equal);
+    if(IS_NULL_PTR(dest_rank)) goto error;
+
+    int rank = 1;
+    for(const GList *d = g_list_first(ctx->dest_ids); d; d = g_list_next(d), rank++)
+      g_hash_table_insert(dest_rank, d->data, GINT_TO_POINTER(rank));
+
+    for(const GList *l = g_list_first(ctx->src_ids); l; l = g_list_next(l))
+    {
+      const char *id = (const char *)l->data;
+      if(!g_hash_table_contains(ctx->src_focus_ids, id)) continue;
+
+      int lower_rank = 0;
+      int upper_rank = 0;
+      const char *lower_id = NULL;
+      const char *upper_id = NULL;
+      const char *prev_focus_id = NULL;
+      const char *next_focus_id = NULL;
+
+      const GList *prev_link = g_list_previous((GList *)l);
+      if(prev_link && g_hash_table_contains(ctx->src_focus_ids, prev_link->data))
+        prev_focus_id = (const char *)prev_link->data;
+      const GList *next_link = g_list_next(l);
+      if(next_link && g_hash_table_contains(ctx->src_focus_ids, next_link->data))
+        next_focus_id = (const char *)next_link->data;
+
+      // Scan source predecessors and keep the latest one in destination order as lower slot boundary.
+      for(const GList *p = g_list_first(ctx->src_ids); p && p != l; p = g_list_next(p))
+      {
+        const char *candidate_id = (const char *)p->data;
+        const int candidate_rank = GPOINTER_TO_INT(g_hash_table_lookup(dest_rank, candidate_id));
+        if(candidate_rank > lower_rank)
+        {
+          lower_rank = candidate_rank;
+          lower_id = candidate_id;
+        }
+      }
+
+      // Scan source successors and keep the earliest destination node that still follows the lower boundary.
+      for(const GList *n = g_list_next(l); n; n = g_list_next(n))
+      {
+        const char *candidate_id = (const char *)n->data;
+        const int candidate_rank = GPOINTER_TO_INT(g_hash_table_lookup(dest_rank, candidate_id));
+        if(candidate_rank <= lower_rank) continue;
+        if(upper_rank == 0 || candidate_rank < upper_rank)
+        {
+          upper_rank = candidate_rank;
+          upper_id = candidate_id;
+        }
+      }
+
+      dt_digraph_node_t *cur = dt_digraph_node_new(id);
+      if(IS_NULL_PTR(cur)) goto error;
+      src_nodes = g_list_append(src_nodes, cur);
+
+      if(lower_id)
+      {
+        dt_digraph_node_t *lower = dt_digraph_node_new(lower_id);
+        if(IS_NULL_PTR(lower)) goto error;
+        cur->previous = g_list_append(cur->previous, lower);
+        src_nodes = g_list_append(src_nodes, lower);
+      }
+      if(prev_focus_id)
+      {
+        dt_digraph_node_t *prev_focus = dt_digraph_node_new(prev_focus_id);
+        if(IS_NULL_PTR(prev_focus)) goto error;
+        cur->previous = g_list_append(cur->previous, prev_focus);
+        src_nodes = g_list_append(src_nodes, prev_focus);
+      }
+
+      if(next_focus_id)
+      {
+        dt_digraph_node_t *next_focus = dt_digraph_node_new(next_focus_id);
+        dt_digraph_node_t *next_focus_prev = dt_digraph_node_new(id);
+        if(IS_NULL_PTR(next_focus) || IS_NULL_PTR(next_focus_prev))
+        {
+          _hm_free_input_node(next_focus);
+          _hm_free_input_node(next_focus_prev);
+          goto error;
+        }
+        next_focus->previous = g_list_append(next_focus->previous, next_focus_prev);
+        src_nodes = g_list_append(src_nodes, next_focus_prev);
+        src_nodes = g_list_append(src_nodes, next_focus);
+      }
+      if(upper_id)
+      {
+        dt_digraph_node_t *upper = dt_digraph_node_new(upper_id);
+        dt_digraph_node_t *upper_prev = dt_digraph_node_new(id);
+        if(IS_NULL_PTR(upper) || IS_NULL_PTR(upper_prev))
+        {
+          _hm_free_input_node(upper);
+          _hm_free_input_node(upper_prev);
+          goto error;
+        }
+        upper->previous = g_list_append(upper->previous, upper_prev);
+        src_nodes = g_list_append(src_nodes, upper_prev);
+        src_nodes = g_list_append(src_nodes, upper);
+      }
+
+      dt_print(DT_DEBUG_HISTORY | DT_DEBUG_VERBOSE,
+               "[_hm_topo_flatten_constraints] destination slot: %s after %s%s%s before %s%s%s\n",
+               id, lower_id ? lower_id : "(none)", (lower_id && prev_focus_id) ? ", " : "",
+               prev_focus_id ? prev_focus_id : "", upper_id ? upper_id : "(end)",
+               (upper_id && next_focus_id) ? ", " : "", next_focus_id ? next_focus_id : "");
+    }
+    g_hash_table_destroy(dest_rank);
+    dest_rank = NULL;
+  }
   // Ensure all pasted modules are present in the graph, even if they don't appear in src/dst adjacency lists.
   if(_hm_build_isolated_nodes_from_modules(ctx->mod_list, "mod", &mod_nodes)) goto error;
   // Raster mask constraints: producer must come before user.
@@ -974,6 +1099,7 @@ static int _hm_topo_flatten_constraints(_hm_topo_merge_ctx_t *ctx)
   return 0;
 
 error:
+  if(dest_rank) g_hash_table_destroy(dest_rank);
   dt_print(DT_DEBUG_HISTORY | DT_DEBUG_VERBOSE,
            "[_hm_topo_flatten_constraints] failed while building input nodes: dst=%d src=%d mod=%d "
            "dst-raster=%d src-raster=%d rules=%d\n",
@@ -1321,6 +1447,7 @@ static int _hm_try_merge_iop_order_topologically(dt_develop_t *dev_dest, dt_deve
 
   _hm_topo_merge_ctx_t ctx = { 0 };
   ctx.copy_module_contents = merge_iop_order;
+  ctx.source_iop_order = merge_iop_order;
   ctx.mod_list = mod_list;
   ctx.dev_dest = dev_dest;
 
