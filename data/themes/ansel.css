@@ -207,11 +207,14 @@
   ======================================*/
 
 /* Base Document Reset */
+* {
+  background-color: transparent;
+}
+
 *,
 window,
 dialog,
 messagedialog {
-  background-color: transparent;
   background-image: none;
   background-clip: border-box;
   color: @fg_color;
@@ -290,10 +293,6 @@ tooltip label,
 }
 
 /* General Layout Options */
-decoration {
-  margin: 0px;
-}
-
 separator {
   background-color: alpha(@grey_100, 0.5);
 }
@@ -820,8 +819,8 @@ tooltip,
 popover,
 popover #bauhaus-slider {
   opacity: 1;
-  background-color: @tooltip_bg_color;
-  border-radius: 0.25em;
+  background-color: @toolbar_color;
+  border-radius: 0;
 }
 
 menu {
