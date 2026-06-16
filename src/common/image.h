@@ -138,7 +138,41 @@ typedef enum
   DT_IMAGE_MONOCHROME_BAYER = 1 << 19,
   // image has a flag set to use the monochrome workflow in the modules supporting it
   DT_IMAGE_MONOCHROME_WORKFLOW = 1 << 20,
+  // the decoded buffer carries a CFA mosaic (dsc.filters != 0), i.e. it still needs
+  // demosaicing. Set/cleared by dt_image_buffer_resolve_flags() from the decoded buffer
+  // descriptor. This is the bit that separates a mosaiced raw from an already-demosaiced
+  // raw (sRAW / linear DNG), a distinction that otherwise only lives in the dsc.filters
+  // field which is never stored in the database. Persisted to DB through the image cache.
+  DT_IMAGE_MOSAIC = 1 << 21,
+  // the codec has decoded the file at least once, so the buffer-derived classification
+  // (DT_IMAGE_MOSAIC and the dsc descriptor) is authoritative. Until this bit is set the
+  // pipeline class is only a provisional guess inferred from the filename extension at
+  // import time. Persisted to DB through the image cache.
+  DT_IMAGE_BUFFER_RESOLVED = 1 << 22,
 } dt_image_flags_t;
+
+/**
+ * @brief Mutually-exclusive classification of an image by the early-pipeline processing it
+ * requires. This is the single source of truth used to auto-enable/disable and auto-configure
+ * the decoding modules (basebuffer, rawprepare, demosaic, temperature, colorin, ...).
+ *
+ * Unlike the historical overloaded "raw" notion, the class cleanly separates the two
+ * independent axes that issue #77 identified: whether the buffer is *mosaiced* (needs
+ * demosaic) and whether it carries *raw colorimetry* (needs rawprepare + a camera input
+ * profile). A DNG (issue #849) can land in any of these classes.
+ *
+ * The class is computed purely from img->flags, so it is available even for images that have
+ * never been decoded (remote/unplugged storage). Before the first decode the class is a
+ * *provisional* guess from the file extension; see dt_image_pipe_class_is_provisional().
+ */
+typedef enum dt_image_pipe_class_t
+{
+  DT_IMAGE_PIPE_UNKNOWN = 0, // not yet resolved and the extension gave no hint
+  DT_IMAGE_PIPE_MOSAIC_RAW,  // raw colorimetry + CFA mosaic: needs rawprepare AND demosaic
+  DT_IMAGE_PIPE_LINEAR_RAW,  // raw colorimetry, already demosaiced (sRAW / linear DNG): rawprepare, no demosaic
+  DT_IMAGE_PIPE_RGB_LDR,     // display-referred integer RGB (jpg/png/tiff8...)
+  DT_IMAGE_PIPE_RGB_HDR,     // scene/linear float RGB (exr/pfm/hdr/float-tiff)
+} dt_image_pipe_class_t;
 
 typedef enum dt_image_colorspace_t
 {
@@ -358,14 +392,52 @@ int dt_image_is_ldr(const dt_image_t *img);
 int dt_image_is_raw(const dt_image_t *img);
 /** returns non-zero if the image contains float data. */
 int dt_image_is_hdr(const dt_image_t *img);
+
+/* ------------------------------------------------------------------------------------------
+ * Canonical image-type API.
+ *
+ * Each predicate below tests exactly ONE independent fact about img->flags (no overlapping
+ * conditions, no filename-extension sniffing). The mutually-exclusive classification is
+ * dt_image_pipe_class(); the orthogonal predicates answer the individual "does this image
+ * need stage X" questions used by module auto-enable logic. See src/doc/image-type-detection.md.
+ * ------------------------------------------------------------------------------------------ */
+
+/** returns the mutually-exclusive pipeline class of the image (from flags only, works on
+ * undecoded images). Before the first decode the result is provisional; see
+ * dt_image_pipe_class_is_provisional(). */
+dt_image_pipe_class_t dt_image_pipe_class(const dt_image_t *img);
+/** TRUE while the class is only a provisional guess from the file extension, i.e. the codec
+ * has not decoded the buffer yet (DT_IMAGE_BUFFER_RESOLVED not set). */
+gboolean dt_image_pipe_class_is_provisional(const dt_image_t *img);
+/** untranslated, stable identifier for a pipeline class (for logs/debug). */
+const char *dt_image_pipe_class_name(const dt_image_pipe_class_t klass);
+
+/** TRUE if the buffer carries raw sensor colorimetry (mosaiced raw or already-demosaiced
+ * sRAW/linear DNG), i.e. it needs the rawprepare stage and a camera input profile. */
+gboolean dt_image_needs_rawprepare(const dt_image_t *img);
+/** TRUE if the buffer carries a CFA mosaic and therefore needs demosaicing. */
+gboolean dt_image_needs_demosaic(const dt_image_t *img);
+/** TRUE if the image has been imported/flagged as carrying a CFA mosaic (DT_IMAGE_MOSAIC).
+ * Only authoritative once dt_image_pipe_class_is_provisional() is FALSE. */
+gboolean dt_image_is_mosaiced(const dt_image_t *img);
+/** TRUE if the image was decoded as already-demosaiced raw (sRAW / linear DNG). */
+gboolean dt_image_is_sraw(const dt_image_t *img);
+
+/** Finalize the buffer-derived type flags right after a codec has populated img->dsc:
+ * sets/clears DT_IMAGE_MOSAIC from dsc.filters and sets DT_IMAGE_BUFFER_RESOLVED. This is the
+ * single place where the dsc->flags type mapping is decided; the result is persisted to the
+ * database through the regular image-cache writeback. */
+void dt_image_buffer_resolve_flags(dt_image_t *img);
+/** Seed a provisional img->dsc descriptor from the (extension-derived) pipeline class so the
+ * first pipeline stage has a usable contract before the file is decoded. No-op once the buffer
+ * has been resolved (DT_IMAGE_BUFFER_RESOLVED). */
+void dt_image_set_provisional_dsc(dt_image_t *img);
 /** set the monochrome flags if monochrome is TRUE and clear it otherwise */
 void dt_image_set_monochrome_flag(const int32_t imgid, gboolean monochrome);
 /** returns non-zero if this image was taken using a monochrome camera */
 gboolean dt_image_is_monochrome(const dt_image_t *img);
 /** returns non-zero if the image supports a color correction matrix */
 gboolean dt_image_is_matrix_correction_supported(const dt_image_t *img);
-/** returns non-zero if the image supports the rawprepare module */
-gboolean dt_image_is_rawprepare_supported(const dt_image_t *img);
 /** returns the bitmask containing info about monochrome images */
 int dt_image_monochrome_flags(const dt_image_t *img);
 /** returns true if the image has been tested to be monochrome and the image wants monochrome workflow */

@@ -1392,12 +1392,39 @@ cleanup:
  * end raw therapee code
  *==================================================================================*/
 
+/* Single source of truth for "does this image support CA correction".
+ * Bayer-only CFA operation: requires a mosaiced buffer (needs_demosaic) that is not X-Trans
+ * (filters != 9u) and not monochrome. The old DT_IMAGE_RAW-only test let an already-demosaiced
+ * raw (sRAW / linear DNG) through whenever its stale filters value happened to be non-9u.
+ * Shared by reload_defaults() (fresh-history defaults + GUI) and force_enable() (history
+ * sanitization), so the rule cannot drift between the two. */
+static gboolean _cacorrect_supported(const dt_image_t *img)
+{
+  return dt_image_needs_demosaic(img) && (img->dsc.filters != 9u) && !dt_image_is_monochrome(img);
+}
+
 void reload_defaults(dt_iop_module_t *module)
 {
   dt_image_t *img = &module->dev->image_storage;
-  // can't be switched on for non-raw or x-trans images:
-  const gboolean active = (dt_image_is_raw(img) && (img->dsc.filters != 9u) && !(dt_image_is_monochrome(img)));
+  const gboolean active = _cacorrect_supported(img);
+  // can't be switched on for non-Bayer-mosaic images:
   module->hide_enable_button = !active;
+  dt_iop_fmt_log(module, "reload_defaults: class=%s needs_demosaic=%d filters=%u mono=%d -> hide_enable=%d",
+                 dt_image_pipe_class_name(dt_image_pipe_class(img)), dt_image_needs_demosaic(img),
+                 img->dsc.filters, dt_image_is_monochrome(img), module->hide_enable_button);
+}
+
+gboolean force_enable(struct dt_iop_module_t *self, const gboolean current_state)
+{
+  // History sanitization: a CA-correction entry copied/pasted onto an unsupported image
+  // (non-mosaic, X-Trans or monochrome) must be forced off here, at history-read time, instead
+  // of being patched later in commit_params() on the pipeline node.
+  const gboolean active = _cacorrect_supported(&self->dev->image_storage);
+  const gboolean state = current_state && active;
+  dt_iop_fmt_log(self, "force_enable: class=%s supported=%d current=%d -> %d",
+                 dt_image_pipe_class_name(dt_image_pipe_class(&self->dev->image_storage)),
+                 active, current_state, state);
+  return state;
 }
 
 /** commit is the synch point between core and gui, so it copies params to pipe data. */
@@ -1407,13 +1434,12 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *params, dt_dev
   dt_iop_cacorrect_params_t *p = (dt_iop_cacorrect_params_t *)params;
   dt_iop_cacorrect_data_t *d = (dt_iop_cacorrect_data_t *) piece->data;
 
-  dt_image_t *img = &pipe->dev->image_storage;
-  const gboolean active = (dt_image_is_raw(img) && (img->dsc.filters != 9u) && !(dt_image_is_monochrome(img)));
-
-  if(!active) piece->enabled = 0;
-
+  // Image-type gating is handled at history level by force_enable()/reload_defaults(); nothing
+  // type-related is decided here anymore.
   d->iterations = p->iterations;
   d->avoidshift = p->avoidshift;
+  dt_iop_fmt_log(self, "commit: class=%s enabled=%d",
+                 dt_image_pipe_class_name(dt_image_pipe_class(&pipe->dev->image_storage)), piece->enabled);
 }
 
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
@@ -1435,7 +1461,7 @@ void gui_update(dt_iop_module_t *self)
 
   dt_image_t *img = &self->dev->image_storage;
 
-  const gboolean active = (dt_image_is_raw(img) && (img->dsc.filters != 9u) && !(dt_image_is_monochrome(img)));
+  const gboolean active = _cacorrect_supported(img);
   self->hide_enable_button = !active;
 
   gtk_stack_set_visible_child_name(GTK_STACK(self->widget), active ? "raw" : "non_raw");
@@ -1453,7 +1479,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 
   dt_image_t *img = &self->dev->image_storage;
 
-  const gboolean active = (dt_image_is_raw(img) && (img->dsc.filters != 9u) && !(dt_image_is_monochrome(img)));
+  const gboolean active = _cacorrect_supported(img);
 
   gtk_stack_set_visible_child_name(GTK_STACK(self->widget), active ? "raw" : "non_raw");
 

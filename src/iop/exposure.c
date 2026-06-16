@@ -608,12 +608,17 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   d->deflicker = 0;
 
   if(p->mode == EXPOSURE_MODE_DEFLICKER
-     && dt_image_is_raw(&self->dev->image_storage)
+     && dt_image_needs_rawprepare(&self->dev->image_storage)
      && self->dev->image_storage.dsc.channels == 1
      && self->dev->image_storage.dsc.datatype == TYPE_UINT16)
   {
     d->deflicker = 1;
   }
+  dt_iop_fmt_log(self, "commit: class=%s needs_rawprepare=%d channels=%i datatype=%i mode=%d -> deflicker=%d",
+                 dt_image_pipe_class_name(dt_image_pipe_class(&self->dev->image_storage)),
+                 dt_image_needs_rawprepare(&self->dev->image_storage),
+                 self->dev->image_storage.dsc.channels, self->dev->image_storage.dsc.datatype,
+                 p->mode, d->deflicker);
 
   _process_common_setup(self, pipe, piece);
   for(int k = 0; k < 3; k++) piece->dsc_out.processed_maximum[k] = piece->dsc_in.processed_maximum[k] * d->scale;
@@ -641,7 +646,7 @@ void gui_update(struct dt_iop_module_t *self)
   dt_iop_exposure_gui_data_t *g = (dt_iop_exposure_gui_data_t *)self->gui_data;
   dt_iop_exposure_params_t *p = (dt_iop_exposure_params_t *)self->params;
 
-  if(!dt_image_is_raw(&self->dev->image_storage)
+  if(!dt_image_needs_rawprepare(&self->dev->image_storage)
      || self->dev->image_storage.dsc.channels != 1
      || self->dev->image_storage.dsc.datatype != TYPE_UINT16)
   {
@@ -876,7 +881,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
     {
       case EXPOSURE_MODE_DEFLICKER:
         _autoexp_disable(self);
-        if(!dt_image_is_raw(&self->dev->image_storage)
+        if(!dt_image_needs_rawprepare(&self->dev->image_storage)
            || self->dev->image_storage.dsc.channels != 1
            || self->dev->image_storage.dsc.datatype != TYPE_UINT16)
         {

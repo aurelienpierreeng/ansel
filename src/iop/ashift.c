@@ -1634,10 +1634,16 @@ static int _get_structure(dt_iop_module_t *module, dt_iop_ashift_enhance_t enhan
   float vertical_weight;
   float horizontal_weight;
 
-  // get new structural data
+  // get new structural data. The trailing flag tells line_detect() the image originates from a
+  // raw sensor (different edge/contrast expectations than a display-referred JPEG); this holds
+  // for any raw colorimetry, mosaiced or already-demosaiced sraw/linear DNG, hence needs_rawprepare.
+  const gboolean raw_origin = dt_image_needs_rawprepare(&module->dev->image_storage);
+  dt_iop_fmt_log(module, "structure: class=%s raw_origin=%d enhance=%d",
+                 dt_image_pipe_class_name(dt_image_pipe_class(&module->dev->image_storage)),
+                 raw_origin, enhance);
   if(!line_detect(buffer, width, height, x_off, y_off, scale, &lines, &lines_count,
                   &vertical_count, &horizontal_count, &vertical_weight, &horizontal_weight,
-                  enhance, dt_image_is_raw(&module->dev->image_storage)))
+                  enhance, raw_origin))
     goto error;
 
   // save new structural data

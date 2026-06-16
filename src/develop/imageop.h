@@ -438,6 +438,21 @@ dt_iop_module_t *dt_iop_gui_duplicate(dt_iop_module_t *base, gboolean copy_param
 
 void dt_iop_gui_update_header(dt_iop_module_t *module);
 
+/**
+ * @brief Debug helper to trace a module's input-format-driven decisions on the `-d pipe`
+ * channel (DT_DEBUG_PIPE). Use it at every spot where a module branches on the image or
+ * buffer type — self enable/disable, code-path selection, descriptor choice — so the
+ * heuristics are readable from logs instead of having to be reverse-engineered from pixel
+ * outputs. The first argument is the module (dt_iop_module_t* or dt_iop_module_so_t*, both
+ * expose `op`); the rest is a printf format and its arguments. A trailing newline is added.
+ *
+ * Example:
+ *   dt_iop_fmt_log(self, "enable=%d needs_demosaic=%d filters=%u",
+ *                  enabled, dt_image_needs_demosaic(img), img->dsc.filters);
+ */
+#define dt_iop_fmt_log(module, fmt, ...) \
+  dt_print(DT_DEBUG_PIPE, "[iop-fmt] %-14s " fmt "\n", (module)->op, ##__VA_ARGS__)
+
 /** commits params and updates piece hash. */
 void dt_iop_commit_params(dt_iop_module_t *module, dt_iop_params_t *params,
                           struct dt_develop_blend_params_t *blendop_params, struct dt_dev_pixelpipe_t *pipe,

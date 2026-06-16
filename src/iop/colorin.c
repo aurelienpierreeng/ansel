@@ -1248,7 +1248,12 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   }
   piece->enabled = 1;
 
+  const dt_colorspaces_color_profile_type_t requested_input_type = p->type;
   type = _resolve_input_profile(p, pipe, d);
+  dt_iop_fmt_log(self, "commit: class=%s matrix_supported=%d requested_input=%d resolved_input=%d blue_mapping=%d",
+                 dt_image_pipe_class_name(dt_image_pipe_class(&pipe->dev->image_storage)),
+                 dt_image_is_matrix_correction_supported(&pipe->dev->image_storage),
+                 requested_input_type, type, d->blue_mapping);
 
   // should never happen, but catch that case to avoid a crash
   if(IS_NULL_PTR(d->input))
@@ -1519,6 +1524,9 @@ void reload_defaults(dt_iop_module_t *module)
   dt_iop_colorin_params_t *d = module->default_params;
   gboolean new_profile;
   d->type = dt_image_find_best_color_profile(module->dev->image_storage.id, NULL, &new_profile);
+  dt_iop_fmt_log(module, "reload_defaults: class=%s matrix_supported=%d -> default_input_profile=%d new_profile=%d",
+                 dt_image_pipe_class_name(dt_image_pipe_class(&module->dev->image_storage)),
+                 dt_image_is_matrix_correction_supported(&module->dev->image_storage), d->type, new_profile);
   update_profile_list(module);
 }
 

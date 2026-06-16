@@ -280,7 +280,10 @@ void dt_image_from_stmt(dt_image_t *img, sqlite3_stmt *stmt)
   dt_datetime_gtimespan_to_local(img->datetime, sizeof(img->datetime), img->exif_datetime_taken, FALSE, FALSE);
 
   // img->dsc are written by imageio drivers : never (re)set them from DB,
-  // they are not saved anyway.
+  // they are not saved anyway. Until the codec decodes the file, seed a provisional
+  // descriptor from the (extension-derived) pipeline class so the image can be reasoned
+  // about and the first pipeline stage has a usable contract even before decoding.
+  dt_image_set_provisional_dsc(img);
 
   img->has_localcopy = (img->flags & DT_IMAGE_LOCAL_COPY);
   img->has_audio = (img->flags & DT_IMAGE_HAS_WAV);

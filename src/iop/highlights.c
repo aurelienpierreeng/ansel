@@ -2797,9 +2797,14 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
 
   memcpy(d, p, sizeof(*p));
 
-  // No code path for monochrome or JPEG/TIFF
-  if(dt_image_is_monochrome(&self->dev->image_storage) || !dt_image_is_raw(&self->dev->image_storage))
-    piece->enabled = FALSE;
+  // Image-type gating (raw colorimetry, not monochrome) is handled at history level by
+  // enable()/force_enable()/reload_defaults(); nothing type-related is decided here. process()
+  // still has a dedicated !filters branch so already-demosaiced raw (sRAW / linear DNG) is
+  // processed correctly when the module is enabled.
+  const dt_image_t *const img = &self->dev->image_storage;
+  dt_iop_fmt_log(self, "commit: class=%s filters=%u mode=%d -> enabled=%d",
+                 dt_image_pipe_class_name(dt_image_pipe_class(img)), piece->dsc_in.filters,
+                 d->mode, piece->enabled);
 
   // no OpenCL for DT_IOP_HIGHLIGHTS_INPAINT
   piece->process_cl_ready = (d->mode == DT_IOP_HIGHLIGHTS_INPAINT) ? 0 : 1;
@@ -2826,16 +2831,22 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
 
 static gboolean enable(dt_image_t *image)
 {
-  return dt_image_is_raw(image) && !dt_image_is_monochrome(image);
+  // raw colorimetry (raw or sraw/linear-DNG), but not real monochrome. Must match the
+  // commit_params() gate above.
+  return dt_image_needs_rawprepare(image) && !dt_image_is_monochrome(image);
 }
 
 gboolean force_enable(struct dt_iop_module_t *self, const gboolean current_state)
 {
-  // No codepath for non-raw images
-  if(current_state && dt_image_is_monochrome(&self->dev->image_storage))
-    return FALSE;
-  else
-    return current_state;
+  // History sanitization: clamp against the SAME support rule as enable()/reload_defaults()
+  // (raw colorimetry, not monochrome). The previous version only handled the monochrome case and
+  // let a highlights entry pasted onto a non-raw image survive until commit_params() patched it.
+  const gboolean active = enable(&self->dev->image_storage);
+  const gboolean state = current_state && active;
+  dt_iop_fmt_log(self, "force_enable: class=%s supported=%d current=%d -> %d",
+                 dt_image_pipe_class_name(dt_image_pipe_class(&self->dev->image_storage)),
+                 active, current_state, state);
+  return state;
 }
 
 void init_global(dt_iop_module_so_t *module)
@@ -2932,7 +2943,7 @@ void gui_update(struct dt_iop_module_t *self)
   dt_iop_highlights_gui_data_t *g = (dt_iop_highlights_gui_data_t *)self->gui_data;
   const gboolean monochrome = dt_image_is_monochrome(&self->dev->image_storage);
   // enable this per default if raw or sraw if not real monochrome
-  self->default_enabled = dt_image_is_rawprepare_supported(&self->dev->image_storage) && !monochrome;
+  self->default_enabled = dt_image_needs_rawprepare(&self->dev->image_storage) && !monochrome;
 
   // Neuter the on/off button only if not already enabled.
   // It can be enabled by history copy & paste from a RAW image.
@@ -2953,6 +2964,9 @@ void reload_defaults(dt_iop_module_t *module)
   // enable this per default if raw or sraw if not real monochrome
   module->default_enabled = enable(&module->dev->image_storage);
   module->hide_enable_button = !enable(&module->dev->image_storage);
+  dt_iop_fmt_log(module, "reload_defaults: class=%s default_enabled=%d",
+                 dt_image_pipe_class_name(dt_image_pipe_class(&module->dev->image_storage)),
+                 module->default_enabled);
   if(module->widget)
     gtk_stack_set_visible_child_name(GTK_STACK(module->widget), module->default_enabled ? "default" : "monochrome");
 

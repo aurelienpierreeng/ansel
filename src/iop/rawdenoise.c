@@ -541,10 +541,21 @@ void init(dt_iop_module_t *module)
   }
 }
 
+/* Single source of truth: raw CFA wavelet denoise operates on the mosaiced buffer, so it needs a
+ * CFA (needs_demosaic), not merely the RAW flag. An already-demosaiced raw (sRAW / linear DNG) has
+ * no mosaic to denoise. Shared by reload_defaults() and force_enable(). */
+static gboolean _rawdenoise_supported(const dt_image_t *img)
+{
+  return dt_image_needs_demosaic(img);
+}
+
 void reload_defaults(dt_iop_module_t *module)
 {
-  // can't be switched on for non-raw images:
-  module->hide_enable_button = !dt_image_is_raw(&module->dev->image_storage);
+  const dt_image_t *const img = &module->dev->image_storage;
+  module->hide_enable_button = !_rawdenoise_supported(img);
+  dt_iop_fmt_log(module, "reload_defaults: class=%s needs_demosaic=%d -> hide_enable=%d",
+                 dt_image_pipe_class_name(dt_image_pipe_class(img)), dt_image_needs_demosaic(img),
+                 module->hide_enable_button);
 
   if(module->widget)
   {
@@ -552,6 +563,18 @@ void reload_defaults(dt_iop_module_t *module)
   }
 
   module->default_enabled = 0;
+}
+
+gboolean force_enable(struct dt_iop_module_t *self, const gboolean current_state)
+{
+  // History sanitization: a rawdenoise entry pasted onto a non-mosaic image is forced off here,
+  // at history-read time, rather than patched on the pipeline node in commit_params().
+  const gboolean active = _rawdenoise_supported(&self->dev->image_storage);
+  const gboolean state = current_state && active;
+  dt_iop_fmt_log(self, "force_enable: class=%s supported=%d current=%d -> %d",
+                 dt_image_pipe_class_name(dt_image_pipe_class(&self->dev->image_storage)),
+                 active, current_state, state);
+  return state;
 }
 
 void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelpipe_t *pipe,
@@ -572,8 +595,9 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *params, dt_dev
     dt_draw_curve_calc_values(d->curve[ch], 0.0, 1.0, DT_IOP_RAWDENOISE_BANDS, NULL, d->force[ch]);
   }
 
-  if (!(dt_image_is_raw(&pipe->dev->image_storage)))
-    piece->enabled = 0;
+  // Image-type gating handled at history level by force_enable()/reload_defaults().
+  dt_iop_fmt_log(self, "commit: class=%s enabled=%d",
+                 dt_image_pipe_class_name(dt_image_pipe_class(&pipe->dev->image_storage)), piece->enabled);
 }
 
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)

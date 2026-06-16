@@ -1318,6 +1318,11 @@ dt_imageio_retval_t dt_imageio_open(dt_image_t *img,               // non-const 
   img->p_width = img->width - img->crop_x - img->crop_width;
   img->p_height = img->height - img->crop_y - img->crop_height;
 
+  // The codec has now populated img->dsc: finalize the buffer-derived type flags
+  // (DT_IMAGE_MOSAIC + DT_IMAGE_BUFFER_RESOLVED). This is the single point where the
+  // decoded descriptor is mapped to the persisted classification.
+  dt_image_buffer_resolve_flags(img);
+
   return ret;
 }
 

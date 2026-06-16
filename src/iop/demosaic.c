@@ -2065,9 +2065,15 @@ void cleanup_global(dt_iop_module_so_t *module)
 
 gboolean force_enable(struct dt_iop_module_t *self, const gboolean current_state)
 {
-  // This needs to be enabled for raw images, disabled for other images.
-  // There is no messing around.
-  return dt_image_is_raw(&self->dev->image_storage);
+  // Demosaicing applies if and only if the buffer carries a CFA mosaic. Gate on the mosaic
+  // axis, not on the historical "raw" flag: an already-demosaiced raw (sRAW / linear DNG) must
+  // not be demosaiced, while a mosaiced raw that the RAW flag missed still must.
+  // Mandatory module: the decision is purely image metadata and ignores current_state.
+  const gboolean state = dt_image_needs_demosaic(&self->dev->image_storage);
+  dt_iop_fmt_log(self, "force_enable: class=%s needs_demosaic=%d current=%d -> %d",
+                 dt_image_pipe_class_name(dt_image_pipe_class(&self->dev->image_storage)),
+                 state, current_state, state);
+  return state;
 }
 
 
@@ -2196,6 +2202,11 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *params, dt_dev
       dt_control_log(_("`%s' color matrix not found for 4bayer image!"), camera);
     }
   }
+
+  dt_iop_fmt_log(self, "commit: class=%s in(filters=%u ch=%i) method=%d passthrough=%d -> enabled=%d cl_ready=%d",
+                 dt_image_pipe_class_name(dt_image_pipe_class(&self->dev->image_storage)),
+                 piece->dsc_in.filters, piece->dsc_in.channels, d->demosaicing_method, passing,
+                 piece->enabled, piece->process_cl_ready);
 }
 
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
@@ -2223,7 +2234,15 @@ void reload_defaults(dt_iop_module_t *module)
 
   module->hide_enable_button = 1;
 
-  module->default_enabled = dt_image_is_raw(&module->dev->image_storage);
+  // Enabled iff the buffer is mosaiced (see force_enable): keeps demosaic off for
+  // already-demosaiced sRAW / linear DNG and on for monochrome Bayer sensors.
+  module->default_enabled = dt_image_needs_demosaic(&module->dev->image_storage);
+  dt_iop_fmt_log(module, "reload_defaults: class=%s needs_demosaic=%d filters=%u mono=%d method=%d -> default_enabled=%d",
+                 dt_image_pipe_class_name(dt_image_pipe_class(&module->dev->image_storage)),
+                 dt_image_needs_demosaic(&module->dev->image_storage),
+                 module->dev->image_storage.dsc.filters,
+                 dt_image_is_monochrome(&module->dev->image_storage),
+                 d->demosaicing_method, module->default_enabled);
   if(module->widget)
     gtk_stack_set_visible_child_name(GTK_STACK(module->widget), module->default_enabled ? "raw" : "non_raw");
 }

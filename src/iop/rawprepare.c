@@ -848,14 +848,16 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelp
   if(image_set_rawcrops(pipe->dev->image_storage.id, d->x + d->width, d->y + d->height))
     DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_METADATA_UPDATE);
 
-  if(!(dt_image_is_rawprepare_supported(&pipe->dev->image_storage))
-     || image_is_normalized(&pipe->dev->image_storage))
-    piece->enabled = 0;
+  // Image-type gating (needs_rawprepare && !normalized) is handled at history level by
+  // enable()/force_enable()/reload_defaults(); it is no longer duplicated here.
 
-  // OpenCL path only for RAW, single-channel, CFA images.
+  // OpenCL path only for RAW, single-channel, CFA images (runtime/format decision).
   const gboolean cl_ok = (img->dsc.cst == IOP_CS_RAW && img->dsc.channels == 1 && img->dsc.filters);
   if(!cl_ok) piece->process_cl_ready = FALSE;
 
+  dt_iop_fmt_log(self, "commit: class=%s needs_rawprepare=%d normalized=%d cl_ok=%d -> enabled=%d",
+                 dt_image_pipe_class_name(dt_image_pipe_class(img)),
+                 dt_image_needs_rawprepare(img), image_is_normalized(img), cl_ok, piece->enabled);
 }
 
 void init_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
@@ -873,13 +875,22 @@ void cleanup_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelp
 
 static gboolean enable(const dt_image_t *image)
 {
-  return dt_image_is_rawprepare_supported(image) 
+  // rawprepare (black/white normalization) applies to any raw colorimetry: mosaiced raw and
+  // already-demosaiced sRAW / linear DNG alike, unless the buffer is already normalized.
+  return dt_image_needs_rawprepare(image)
           && !image_is_normalized(image);
 }
 
 gboolean force_enable(struct dt_iop_module_t *self, const gboolean current_state)
 {
-  return enable(&self->dev->image_storage) && current_state;
+  // History sanitization: rawprepare must be off for non-raw or already-normalized buffers,
+  // decided here from image metadata using the same enable() rule as reload_defaults().
+  const gboolean active = enable(&self->dev->image_storage);
+  const gboolean state = active && current_state;
+  dt_iop_fmt_log(self, "force_enable: class=%s supported=%d current=%d -> %d",
+                 dt_image_pipe_class_name(dt_image_pipe_class(&self->dev->image_storage)),
+                 active, current_state, state);
+  return state;
 }
 
 void reload_defaults(dt_iop_module_t *self)

@@ -1041,7 +1041,7 @@ gboolean dt_gui_presets_autoapply_for_module(dt_iop_module_t *module)
   sqlite3_stmt *stmt;
   const char *workflow_preset = (has_matrix) ? _("scene-referred default") : "\t\n";
   int iformat = 0;
-  if(dt_image_is_rawprepare_supported(image)) iformat |= FOR_RAW;
+  if(dt_image_needs_rawprepare(image)) iformat |= FOR_RAW;
   else iformat |= FOR_LDR;
   if(dt_image_is_hdr(image)) iformat |= FOR_HDR;
 
@@ -1137,7 +1137,7 @@ static void _gui_presets_popup_menu_show_internal(dt_dev_operation_t op, int32_t
   {
     // only matching if filter is on:
     int iformat = 0;
-    if(dt_image_is_rawprepare_supported(image))
+    if(dt_image_needs_rawprepare(image))
       iformat |= FOR_RAW;
     else
       iformat |= FOR_LDR;

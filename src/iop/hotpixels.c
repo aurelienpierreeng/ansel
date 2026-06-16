@@ -349,12 +349,35 @@ void cleanup_global(dt_iop_module_so_t *module)
 }
 #endif
 
+/* Single source of truth: hot-pixel detection works on the raw CFA mosaic, so it requires a
+ * mosaiced buffer (needs_demosaic), NOT merely the RAW flag — an already-demosaiced raw
+ * (sRAW / linear DNG) has no CFA to analyse. Shared by reload_defaults() and force_enable(). */
+static gboolean _hotpixels_supported(const dt_image_t *img)
+{
+  return dt_image_needs_demosaic(img) && !dt_image_is_monochrome(img);
+}
+
 void reload_defaults(dt_iop_module_t *module)
 {
   const dt_image_t *img = &module->dev->image_storage;
-  const gboolean enabled = dt_image_is_raw(img) && !dt_image_is_monochrome(img);
-  // can't be switched on for non-raw images:
+  const gboolean enabled = _hotpixels_supported(img);
+  // can't be switched on for non-mosaiced images:
   module->hide_enable_button = !enabled;
+  dt_iop_fmt_log(module, "reload_defaults: class=%s needs_demosaic=%d mono=%d -> hide_enable=%d",
+                 dt_image_pipe_class_name(dt_image_pipe_class(img)), dt_image_needs_demosaic(img),
+                 dt_image_is_monochrome(img), module->hide_enable_button);
+}
+
+gboolean force_enable(struct dt_iop_module_t *self, const gboolean current_state)
+{
+  // History sanitization: a hotpixels entry pasted onto a non-mosaic/monochrome image is forced
+  // off here. The runtime-only "strength == 0" no-op shortcut stays in commit_params().
+  const gboolean active = _hotpixels_supported(&self->dev->image_storage);
+  const gboolean state = current_state && active;
+  dt_iop_fmt_log(self, "force_enable: class=%s supported=%d current=%d -> %d",
+                 dt_image_pipe_class_name(dt_image_pipe_class(&self->dev->image_storage)),
+                 active, current_state, state);
+  return state;
 }
 
 void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelpipe_t *pipe,
@@ -367,10 +390,12 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *params, dt_dev
   d->threshold = p->threshold;
   d->permissive = p->permissive;
 
-  const dt_image_t *img = &pipe->dev->image_storage;
-  const gboolean enabled = dt_image_is_raw(img) && !dt_image_is_monochrome(img);
-
-  if(!enabled || p->strength == 0.0) piece->enabled = 0;
+  // Image-type gating is handled at history level (force_enable/reload_defaults). Only the
+  // runtime, param-driven no-op shortcut remains here: a zero strength does nothing.
+  if(p->strength == 0.0) piece->enabled = 0;
+  dt_iop_fmt_log(self, "commit: class=%s filters=%u strength=%.3f -> enabled=%d",
+                 dt_image_pipe_class_name(dt_image_pipe_class(&pipe->dev->image_storage)),
+                 d->filters, p->strength, piece->enabled);
 }
 
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
@@ -393,8 +418,8 @@ void gui_update(dt_iop_module_t *self)
   gtk_toggle_button_set_active(g->permissive, p->permissive);
 
   const dt_image_t *img = &self->dev->image_storage;
-  const gboolean enabled = dt_image_is_raw(img) && !dt_image_is_monochrome(img);
-  // can't be switched on for non-raw images:
+  const gboolean enabled = _hotpixels_supported(img);
+  // can't be switched on for non-mosaiced images:
   self->hide_enable_button = !enabled;
 
   gtk_stack_set_visible_child_name(GTK_STACK(self->widget), self->hide_enable_button ? "non_raw" : "raw");

@@ -559,7 +559,12 @@ static int get_white_balance_coeff(struct dt_iop_module_t *self, dt_aligned_pixe
   // Init output with a no-op
   for(size_t k = 0; k < 4; k++) custom_wb[k] = 1.f;
 
-  if(!dt_image_is_matrix_correction_supported(&self->dev->image_storage)) return 1;
+  if(!dt_image_is_matrix_correction_supported(&self->dev->image_storage))
+  {
+    dt_iop_fmt_log(self, "get_white_balance_coeff: class=%s matrix_supported=0 -> custom_wb=no-op (CAT uses identity)",
+                   dt_image_pipe_class_name(dt_image_pipe_class(&self->dev->image_storage)));
+    return 1;
+  }
 
   // First, get the D65-ish coeffs from the input matrix
   // keep this in synch with calculate_bogus_daylight_wb from temperature.c !
@@ -571,10 +576,14 @@ static int get_white_balance_coeff(struct dt_iop_module_t *self, dt_aligned_pixe
                                             self->dev->image_storage.d65_color_matrix, bwb))
   {
     // normalize green:
-    bwb[0] /= bwb[1];
-    bwb[2] /= bwb[1];
-    bwb[3] /= bwb[1];
+    const double green = bwb[1];
+    bwb[0] /= green;
+    bwb[2] /= green;
     bwb[1] = 1.0;
+    // bwb[3] is the SECOND green. For non-4-colour sensors the matrix's 4th coefficient is bogus
+    // (often huge or inf, see the temperature.c "usually NAN for RGB" note): both green sites
+    // share the first green, so force it to the green reference instead of propagating garbage.
+    bwb[3] = (self->dev->image_storage.flags & DT_IMAGE_4BAYER) ? bwb[3] / green : 1.0;
   }
   else
   {
@@ -585,7 +594,13 @@ static int get_white_balance_coeff(struct dt_iop_module_t *self, dt_aligned_pixe
   // and user made a correct preset, find the WB adaptation ratio
   if(self->dev->proxy.wb_coeffs[0] != 0.f)
   {
-    for(size_t k = 0; k < 4; k++) custom_wb[k] = bwb[k] / self->dev->proxy.wb_coeffs[k];
+    for(size_t k = 0; k < 4; k++)
+    {
+      // Guard the second-green ratio: proxy.wb_coeffs[3] may be 0 (non-RGBG sensor), which would
+      // yield inf. Mirror the first-green ratio in that case so custom_wb stays finite.
+      const float denom = self->dev->proxy.wb_coeffs[k];
+      custom_wb[k] = (k == 3 && !isnormal(denom)) ? custom_wb[1] : bwb[k] / denom;
+    }
   }
 
   return 0;
@@ -2994,6 +3009,11 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   // Convert illuminant from XYZ to Bradford modified LMS
   dt_store_simd_aligned(d->illuminant, convert_any_XYZ_to_LMS(dt_load_simd_aligned(XYZ), d->adaptation));
   d->illuminant[3] = 0.f;
+
+  dt_iop_fmt_log(self, "commit: class=%s matrix_supported=%d illuminant=%d adaptation=%d custom_wb=[%.4f %.4f %.4f %.4f] xy=[%.4f %.4f]",
+                 dt_image_pipe_class_name(dt_image_pipe_class(&pipe->dev->image_storage)),
+                 dt_image_is_matrix_correction_supported(&pipe->dev->image_storage),
+                 p->illuminant, d->adaptation, custom_wb[0], custom_wb[1], custom_wb[2], custom_wb[3], x, y);
 
   //fprintf(stdout, "illuminant: %i\n", p->illuminant);
   //fprintf(stdout, "x: %f, y: %f\n", x, y);

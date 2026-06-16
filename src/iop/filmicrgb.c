@@ -3582,7 +3582,11 @@ void reload_defaults(dt_iop_module_t *module)
   d->white_point_source = module->so->get_f("white_point_source")->Float.Default;
   d->output_power = module->so->get_f("output_power")->Float.Default;
 
-  if(dt_image_is_raw(&module->dev->image_storage))
+  // Scene-referred dynamic-range defaults apply to any raw-colorimetry image (mosaiced raw
+  // OR already-demosaiced sraw/linear DNG), so gate on needs_rawprepare rather than the
+  // mosaic-centric DT_IMAGE_RAW flag, otherwise an sraw/linear DNG silently gets the
+  // display-referred defaults.
+  if(dt_image_needs_rawprepare(&module->dev->image_storage))
   {
     // For scene-referred workflow, auto-enable and adjust based on exposure
     // TODO: fetch actual exposure in module, don't assume 1.
@@ -3598,6 +3602,10 @@ void reload_defaults(dt_iop_module_t *module)
 
     module->workflow_enabled = TRUE;
   }
+  dt_iop_fmt_log(module, "reload_defaults: class=%s needs_rawprepare=%d -> workflow_enabled=%d white=%.3f black=%.3f",
+                 dt_image_pipe_class_name(dt_image_pipe_class(&module->dev->image_storage)),
+                 dt_image_needs_rawprepare(&module->dev->image_storage), module->workflow_enabled,
+                 d->white_point_source, d->black_point_source);
 }
 
 
