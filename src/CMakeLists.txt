@@ -924,9 +924,9 @@ if(BUILD_CMSTEST)
 endif(BUILD_CMSTEST)
 
 # have some test programs for unit testing, ...
-if(BUILD_TESTING)
+if(BUILD_TESTING AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/CMakeLists.txt")
   add_subdirectory(tests)
-endif(BUILD_TESTING)
+endif()
 
 add_library(help_menu "gui/actions/help.c")
 add_dependencies(help_menu generate_authors_h)
