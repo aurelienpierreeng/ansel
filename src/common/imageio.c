@@ -116,16 +116,27 @@
 #include <string.h>
 #include <strings.h>
 
-// note `dng` is not included anywhere as it can be anything. For this images we'll need to open it for "real"
+// These lists drive *type inference from the file extension only* (dt_imageio_get_type_from_extension).
+// They are deliberately conservative: the extension is only allowed to commit a dynamic-range flag
+// when the container's sample format is fixed. A raw extension always means sensor data; an
+// integer-only container is always LDR; a float-only container is always HDR.
+//
+// Containers that can hold EITHER integer or float / high-bit-depth data — TIFF, AVIF, HEIF/HEIC,
+// and `dng` — are NOT listed here on purpose: their dynamic range cannot be known before decoding,
+// so they stay UNKNOWN until dt_image_buffer_resolve_flags() classifies them from the decoded
+// buffer datatype (TYPE_FLOAT -> HDR, integer non-raw -> LDR). Decoder *routing* for those formats
+// lives in the separate raster_formats[] / hdr_formats[] lists below, which is a different concern.
 static const gchar *_supported_raw[]
     = { "3fr", "ari", "arw", "bay", "cr2", "cr3", "crw", "dc2", "dcr", "erf", "fff",
         "ia",  "iiq", "k25", "kc2", "kdc", "mdc", "mef", "mos", "mrw", "nef", "nrw",
         "orf", "pef", "raf", "raw", "rw2", "rwl", "sr2", "srf", "srw", "sti", "x3f", NULL };
+// integer-only raster containers — unambiguously low dynamic range:
 static const gchar *_supported_ldr[]
-    = { "bmp",  "bmq", "cap", "cine", "cs1", "dcm", "gif", "gpr", "j2c", "j2k", "jng", "jp2", "jpc", "jpeg", "jpg",
-        "miff", "mng", "ori", "pbm",  "pfm", "pgm", "png", "pnm", "ppm", "pxn", "qtk", "rdc", "tif", "tiff", "webp",
-        NULL };
-static const gchar *_supported_hdr[] = { "avif", "exr", "hdr", "heic", "heif", "hif", "pfm", NULL };
+    = { "bmp",  "bmq", "cap", "cine", "cs1", "dcm", "gif", "gpr", "j2c", "j2k", "jng", "jp2", "jpc",
+        "jpeg", "jpg", "miff", "mng", "ori", "pbm", "pgm", "png", "pnm", "ppm", "pxn", "qtk", "rdc",
+        "webp", NULL };
+// float-only raster containers — unambiguously high dynamic range:
+static const gchar *_supported_hdr[] = { "exr", "hdr", "pfm", NULL };
 
 /**
  * @brief Map Exiv2 preview MIME types to decoder format identifiers.
@@ -162,7 +173,10 @@ static const char *_preview_format_from_mime_type(const char *mime_type)
 }
 #endif
 
-// get the type of image from its extension
+// Best-effort image-type hint from the file extension. Returns DT_IMAGE_RAW / DT_IMAGE_LDR /
+// DT_IMAGE_HDR for the unambiguous extensions, or 0 ("unknown") for containers whose dynamic range
+// only the decoder can settle (TIFF, AVIF, HEIF/HEIC, DNG). Callers must treat 0 as "decode it";
+// dt_image_buffer_resolve_flags() sets the authoritative LDR/HDR/MOSAIC flags once decoded.
 dt_image_flags_t dt_imageio_get_type_from_extension(const char *extension)
 {
   const char *ext = g_str_has_prefix(extension, ".") ? extension + 1 : extension;

@@ -159,36 +159,28 @@ static void _pop_undo(gpointer user_data, const dt_undo_type_t type, dt_undo_dat
 static void _copy_text_sidecar_if_present(const char *src_image_path, const char *dest_image_path);
 static void _move_text_sidecar_if_present(const char *src_image_path, const char *dest_image_path, const gboolean overwrite);
 
-int dt_image_is_ldr(const dt_image_t *img)
-{
-  const char *c = img->filename + strlen(img->filename);
-  while(*c != '.' && c > img->filename) c--;
-  if((img->flags & DT_IMAGE_LDR) || !strcasecmp(c, ".jpg") || !strcasecmp(c, ".png")
-     || !strcasecmp(c, ".ppm"))
-    return 1;
-  else
-    return 0;
-}
-
-int dt_image_is_hdr(const dt_image_t *img)
-{
-  const char *c = img->filename + strlen(img->filename);
-  while(*c != '.' && c > img->filename) c--;
-  if((img->flags & DT_IMAGE_HDR) || !strcasecmp(c, ".exr") || !strcasecmp(c, ".hdr")
-     || !strcasecmp(c, ".pfm"))
-    return 1;
-  else
-    return 0;
-}
-
 // NULL terminated list of supported non-RAW extensions
 //  const char *dt_non_raw_extensions[]
 //    = { ".jpeg", ".jpg",  ".pfm", ".hdr", ".exr", ".pxn", ".tif", ".tiff", ".png",
 //        ".j2c",  ".j2k",  ".jp2", ".jpc", ".gif", ".jpc", ".jp2", ".bmp",  ".dcm",
 //        ".jng",  ".miff", ".mng", ".pbm", ".pnm", ".ppm", ".pgm", NULL };
-int dt_image_is_raw(const dt_image_t *img)
+gboolean dt_image_is_raw(const dt_image_t *img)
 {
-  return (img->flags & DT_IMAGE_RAW);
+  return (img->flags & DT_IMAGE_RAW) != 0;
+}
+
+// LDR / HDR are flag-only predicates now: no filename-extension sniffing. The flags themselves are
+// derived from the actual decoded buffer datatype in dt_image_buffer_resolve_flags() (float -> HDR,
+// integer display-referred -> LDR), so these report what was really loaded, not what the file name
+// suggested. They are kept as a public API so callers don't open-code the bitmask test.
+gboolean dt_image_is_ldr(const dt_image_t *img)
+{
+  return (img->flags & DT_IMAGE_LDR) != 0;
+}
+
+gboolean dt_image_is_hdr(const dt_image_t *img)
+{
+  return (img->flags & DT_IMAGE_HDR) != 0;
 }
 
 gboolean dt_image_is_monochrome(const dt_image_t *img)
@@ -373,6 +365,26 @@ void dt_image_buffer_resolve_flags(dt_image_t *img)
     img->flags |= DT_IMAGE_MOSAIC;
   else
     img->flags &= ~DT_IMAGE_MOSAIC;
+
+  // The decoded buffer datatype is the authoritative source for the LDR/HDR axis, replacing the
+  // old filename-extension guessing. A floating-point buffer (16- or 32-bit float, both decoded
+  // into TYPE_FLOAT in RAM) carries high dynamic range; an integer buffer that is not raw sensor
+  // data is low dynamic range, display-referred. Raw sensor data (mosaiced or sRAW/linear) is
+  // neither in the display sense, except that an unnormalized float raw is still flagged HDR.
+  if(img->dsc.datatype == TYPE_FLOAT)
+  {
+    img->flags |= DT_IMAGE_HDR;
+    img->flags &= ~DT_IMAGE_LDR;
+  }
+  else if(!dt_image_needs_rawprepare(img))
+  {
+    img->flags |= DT_IMAGE_LDR;
+    img->flags &= ~DT_IMAGE_HDR;
+  }
+  else
+  {
+    img->flags &= ~(DT_IMAGE_LDR | DT_IMAGE_HDR);
+  }
 
   img->flags |= DT_IMAGE_BUFFER_RESOLVED;
 }

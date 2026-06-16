@@ -386,12 +386,16 @@ typedef struct dt_image_t
 void dt_image_init(dt_image_t *img);
 /** Refresh makermodel from the raw and exif values **/
 void dt_image_refresh_makermodel(dt_image_t *img);
-/** returns non-zero if the image contains low-dynamic range data. */
-int dt_image_is_ldr(const dt_image_t *img);
-/** returns non-zero if the image contains mosaic data. */
-int dt_image_is_raw(const dt_image_t *img);
-/** returns non-zero if the image contains float data. */
-int dt_image_is_hdr(const dt_image_t *img);
+/** returns non-zero if the image is flagged as raw (mosaic-capable) sensor data. */
+gboolean dt_image_is_raw(const dt_image_t *img);
+/** returns non-zero if the image holds low-dynamic-range (integer, display-referred) data.
+ * Flag-only test of DT_IMAGE_LDR — set from the decoded buffer datatype, see
+ * dt_image_buffer_resolve_flags(). Use this instead of testing the flag by hand. */
+gboolean dt_image_is_ldr(const dt_image_t *img);
+/** returns non-zero if the image holds high-dynamic-range (floating-point) data.
+ * Flag-only test of DT_IMAGE_HDR — set from the decoded buffer datatype (16- or 32-bit float),
+ * see dt_image_buffer_resolve_flags(). Use this instead of testing the flag by hand. */
+gboolean dt_image_is_hdr(const dt_image_t *img);
 
 /* ------------------------------------------------------------------------------------------
  * Canonical image-type API.
