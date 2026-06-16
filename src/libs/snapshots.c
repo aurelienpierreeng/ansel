@@ -274,6 +274,9 @@ static int _lib_snapshots_refresh_pipe_image(dt_lib_module_t *self, dt_lib_snaps
   dt_dev_pixelpipe_set_icc(&snapshot_pipe, preview_pipe->icc_type, preview_pipe->icc_filename,
                            preview_pipe->icc_intent);
   dt_dev_pixelpipe_synch_all(&snapshot_pipe);
+  // Driven directly (not via dt_dev_pixelpipe_change()), so settle the format contract and
+  // disable incompatible nodes before ROI planning / global hashing.
+  dt_dev_pixelpipe_propagate_formats(&snapshot_pipe);
   dt_dev_pixelpipe_get_roi_out(&snapshot_pipe, snapshot_pipe.iwidth, snapshot_pipe.iheight,
                                &snapshot_pipe.processed_width, &snapshot_pipe.processed_height);
 

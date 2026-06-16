@@ -246,6 +246,15 @@ gboolean dt_dev_pixelpipe_cache_peek_gui(dt_dev_pixelpipe_t *pipe,
                                          dt_dev_pixelpipe_cache_ready_callback_t restart,
                                          gpointer restart_data);
 
+// Direction-independent forward pass that (re)establishes the per-node buffer-format contract
+// (dsc_in/dsc_out) for the whole chain from the input image descriptor, and is the single place
+// that disables a node whose input is incompatible with what the previous stage publishes.
+// MUST run after history/params have been committed (synch_all / synch_top / realtime) and
+// BEFORE dt_pixelpipe_get_global_hash(), because that hash is cumulative over enabled nodes.
+// dt_dev_pixelpipe_change() calls it automatically; callers that drive a pipe directly
+// (export, snapshots) must call it themselves after dt_dev_pixelpipe_synch_all().
+void dt_dev_pixelpipe_propagate_formats(struct dt_dev_pixelpipe_t *pipe);
+
 // Compute the sequential hash over the pipeline for each module.
 // Need to run after dt_dev_pixelpipe_get_roi_in() has updated processed ROI in/out
 void dt_pixelpipe_get_global_hash(struct dt_dev_pixelpipe_t *pipe);

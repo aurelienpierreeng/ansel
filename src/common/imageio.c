@@ -1023,6 +1023,11 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
   // Useful for partial exports, for technical purposes (HDR merge)
   _filter_pipeline(filter, &pipe);
 
+  // This export path drives the pipe directly instead of through dt_dev_pixelpipe_change(), so
+  // establish the buffer-format contract (and disable incompatible nodes) explicitly, after the
+  // optional filtering changed the node set and before ROI planning / global hashing.
+  dt_dev_pixelpipe_propagate_formats(&pipe);
+
   // Get theoritical final size of image, taking distortions and croppings AND borders into account,
   // considering full-size original input. Meaning we can enlarge or reduce the original image,
   // even taking full-res input.

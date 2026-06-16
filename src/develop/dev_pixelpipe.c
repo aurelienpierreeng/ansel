@@ -35,6 +35,9 @@ static void _sync_virtual_pipe(dt_develop_t *dev, dt_dev_pixelpipe_change_t flag
 static void _sync_pipe_nodes_from_history_from_node(dt_dev_pixelpipe_t *pipe,
                                                     const uint32_t history_end, GList *start_node,
                                                     const char *debug_label);
+// dt_dev_pixelpipe_propagate_formats() is the authoritative forward buffer-format pass; it is
+// declared in dev_pixelpipe.h. It must run before any dt_pixelpipe_get_global_hash() because the
+// auto-disable it performs feeds the cumulative global hash (see its definition).
 static void _dt_dev_pixelpipe_cache_wait_ready_callback(gpointer instance, const guint64 hash,
                                                         gpointer user_data);
 
@@ -255,6 +258,10 @@ static gboolean _sync_realtime_top_history_in_place(dt_dev_pixelpipe_t *pipe)
   dt_iop_commit_params(hist->module, hist->params, hist->blend_params, pipe, piece);
   _refresh_pipe_detail_mask_state(pipe);
   if(previous_want_detail_mask != (pipe->want_detail_mask != DT_DEV_DETAIL_MASK_NONE)) return FALSE;
+
+  // The global hash is cumulative and skips disabled nodes, so the format contract (which may
+  // disable a node on an incompatible input) must be settled first.
+  dt_dev_pixelpipe_propagate_formats(pipe);
   dt_pixelpipe_get_global_hash(pipe);
 
   pipe->last_history_hash = hist->hash;
@@ -907,67 +914,51 @@ void dt_dev_pixelpipe_cache_wait_set_owner(dt_dev_pixelpipe_cache_wait_t *wait,
   wait->owner_object = owner_object;
 }
 
-static gboolean _prepare_piece_input_contract(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
-                                              dt_iop_buffer_dsc_t *upstream_dsc)
+/* Establish the *input* side of a piece's buffer contract from the upstream descriptor by
+ * asking the module's input_format(). This does NOT decide compatibility or finalize the
+ * output: the single authoritative pass dt_dev_pixelpipe_propagate_formats() owns the mismatch/auto-disable
+ * decision so it is taken once, on the fully-committed and consistently-threaded chain, never
+ * on the stale partial state a synch_top / realtime edit can leave behind (issue #733).
+ *
+ * It is split out from that pass because commit_params() of a few modules (exposure, highlights,
+ * invert, temperature) reads piece->dsc_in (filters, processed_maximum), so the commit loop must
+ * set dsc_in before committing. */
+// Short colorspace name for the [dsc] format-propagation debug log (-d pipe). Knowing the cst of
+// each node's input/output is essential to spot when the pixelpipe's automatic RGB<->Lab conversion
+// should fire: a Lab-domain module whose dsc_in.cst is not "lab" will silently consume RGB.
+static const char *_dsc_cst_name(const int cst)
 {
-  const dt_iop_buffer_dsc_t actual_input_dsc = *upstream_dsc;
+  switch(cst)
+  {
+    case IOP_CS_RAW:         return "raw";
+    case IOP_CS_LAB:         return "lab";
+    case IOP_CS_RGB:         return "rgb";
+    case IOP_CS_RGB_DISPLAY: return "display-rgb";
+    case IOP_CS_LCH:         return "lch";
+    case IOP_CS_HSL:         return "hsl";
+    case IOP_CS_JZCZHZ:      return "jzczhz";
+    case IOP_CS_NONE:        return "none";
+    default:                 return "?";
+  }
+}
 
-  piece->dsc_in = actual_input_dsc;
-  piece->dsc_out = actual_input_dsc;
+static void _prepare_piece_input_contract(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
+                                          const dt_iop_buffer_dsc_t *upstream_dsc)
+{
+  piece->dsc_in = *upstream_dsc;
+  piece->dsc_out = *upstream_dsc;
   dt_iop_buffer_dsc_update_bpp(&piece->dsc_in);
   dt_iop_buffer_dsc_update_bpp(&piece->dsc_out);
 
   /* Disabled modules are strict pass-through stages. Their advertised contracts must
    * not rewrite the upstream descriptor, otherwise a disabled RGB-only module can make
    * downstream RAW stages such as demosaic believe the stream was already converted. */
-  if(!piece->enabled) return TRUE;
+  if(!piece->enabled) return;
 
   piece->module->input_format(piece->module, pipe, piece, &piece->dsc_in);
   dt_iop_buffer_dsc_update_bpp(&piece->dsc_in);
   piece->dsc_out = piece->dsc_in;
   dt_iop_buffer_dsc_update_bpp(&piece->dsc_out);
-
-  if(piece->enabled && (darktable.unmuted & DT_DEBUG_PIPE))
-  {
-    gchar *pipe_name = _get_debug_pipe_name(pipe, NULL);
-    dt_print(DT_DEBUG_PIPE,
-              "[dsc-in] pipe=%s module=%s"
-              " in=(channels=%i bpp=%" G_GSIZE_FORMAT " filters=%u)"
-              " \n",
-              pipe_name, piece->module->op, 
-              piece->dsc_in.channels, piece->dsc_in.bpp, piece->dsc_in.filters);
-    dt_free(pipe_name);
-  }
-
-  const gboolean input_mismatch
-      = piece->enabled
-        && (piece->dsc_in.bpp != actual_input_dsc.bpp
-            || piece->dsc_in.channels != actual_input_dsc.channels
-            || piece->dsc_in.filters != actual_input_dsc.filters);
-  if(input_mismatch)
-  {
-    dt_control_log(_("disabled module `%s`: unexpected input buffer format"),
-                   piece->module->name());
-    fprintf(stdout,
-             "[pixelpipe] disabling module %s because input format expects %" G_GSIZE_FORMAT " B/px, %u channels, filters %u but upstream publishes %" G_GSIZE_FORMAT " B/px, %u channels, filters %u\n",
-             piece->module->op, piece->dsc_in.bpp, piece->dsc_in.channels, piece->dsc_in.filters,
-             actual_input_dsc.bpp, actual_input_dsc.channels, actual_input_dsc.filters);
-  }
-
-  if(input_mismatch)
-  {
-    piece->enabled = FALSE;
-    piece->hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
-    piece->blendop_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
-    piece->global_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
-    piece->global_mask_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
-    piece->dsc_in = actual_input_dsc;
-    piece->dsc_out = actual_input_dsc;
-    dt_iop_buffer_dsc_update_bpp(&piece->dsc_in);
-    dt_iop_buffer_dsc_update_bpp(&piece->dsc_out);
-  }
-
-  return !input_mismatch;
 }
 
 static void _commit_piece_contract(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
@@ -975,26 +966,20 @@ static void _commit_piece_contract(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_io
                                    dt_iop_buffer_dsc_t *upstream_dsc)
 {
   const dt_iop_buffer_dsc_t actual_input_dsc = *upstream_dsc;
-  if(!_prepare_piece_input_contract(pipe, piece, upstream_dsc)) return;
 
+  // Set dsc_in before committing (commit_params() of some modules reads it). Compatibility and
+  // the final output descriptor are settled later by dt_dev_pixelpipe_propagate_formats(), so this loop
+  // never auto-disables a module on a possibly-stale upstream descriptor.
+  _prepare_piece_input_contract(pipe, piece, upstream_dsc);
+
+  // This should run even if the module is disabled because 
+  // some modules with no history self-enable based on runtime context
   dt_iop_commit_params(piece->module, params, blend_params, pipe, piece);
 
   if(piece->enabled)
   {
     piece->module->output_format(piece->module, pipe, piece, &piece->dsc_out);
     dt_iop_buffer_dsc_update_bpp(&piece->dsc_out);
-
-    if(piece->enabled && (darktable.unmuted & DT_DEBUG_PIPE))
-    {
-      gchar *pipe_name = _get_debug_pipe_name(pipe, NULL);
-      dt_print(DT_DEBUG_PIPE,
-                "[dsc-out] pipe=%s module=%s"
-                " out=(channels=%i bpp=%" G_GSIZE_FORMAT " filters=%u)"
-                " \n",
-                pipe_name, piece->module->op, 
-                piece->dsc_out.channels, piece->dsc_out.bpp, piece->dsc_out.filters);
-      dt_free(pipe_name);
-    }
   }
   else
   {
@@ -1005,6 +990,124 @@ static void _commit_piece_contract(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_io
   }
 
   *upstream_dsc = piece->dsc_out;
+}
+
+/* Direction-independent forward format pass.
+ *
+ * The buffer-format contract (channels / datatype / colorspace / CFA presence flowing from one
+ * module to the next) is conceptually independent of ROI planning, which runs in both
+ * directions (end->start for a target size, start->end for the native size). Deriving the
+ * contract inside the history-sync commit loop made it sensitive to partial syncs
+ * (synch_top / realtime top edits): a downstream module could read a stale upstream descriptor
+ * and get wrongly disabled for an "unexpected input buffer format" (issue #733). Worse, the
+ * auto-disable is one-way, so a later pass could not undo a false positive.
+ *
+ * This single forward pass re-threads the whole chain from the input image descriptor after
+ * params have been committed, and is the *only* place that disables a module for a genuinely
+ * incompatible input. Disabling here is safe because the chain is consistent and fully threaded
+ * from pipe->dev->image_storage.dsc. Only the first stage (basebuffer) reads the input image
+ * type; every later node derives its contract solely from its upstream piece. The lone
+ * ROI-dependent refinement, rawprepare's CFA phase shift, is finalized later in modify_roi_*().
+ *
+ * It is deliberately NON-destructive for compatible enabled modules: it verifies the input
+ * contract and re-threads dsc_in, but keeps the dsc_out that commit_params() produced. dsc_out
+ * carries runtime fields (processed_maximum, rawprepare black/white, temperature coeffs, CFA
+ * phase) that input/output_format cannot reconstruct, so recomputing them here would wipe the
+ * tonal scaling and render images black/white. */
+void dt_dev_pixelpipe_propagate_formats(dt_dev_pixelpipe_t *pipe)
+{
+  if(IS_NULL_PTR(pipe)) return;
+
+  dt_iop_buffer_dsc_t upstream_dsc = pipe->dev->image_storage.dsc;
+  gchar *pipe_name = (darktable.unmuted & DT_DEBUG_PIPE) ? _get_debug_pipe_name(pipe, NULL) : NULL;
+
+  for(GList *nodes = g_list_first(pipe->nodes); nodes; nodes = g_list_next(nodes))
+  {
+    dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)nodes->data;
+    if(IS_NULL_PTR(piece) || IS_NULL_PTR(piece->module)) continue;
+
+    const dt_iop_buffer_dsc_t actual_input_dsc = upstream_dsc;
+
+    if(!piece->enabled)
+    {
+      // Disabled modules are strict pass-through stages.
+      piece->dsc_in = actual_input_dsc;
+      piece->dsc_out = actual_input_dsc;
+      dt_iop_buffer_dsc_update_bpp(&piece->dsc_in);
+      dt_iop_buffer_dsc_update_bpp(&piece->dsc_out);
+    }
+    else
+    {
+      // Ask the module what input it expects, into a scratch descriptor. We must NOT recompute
+      // piece->dsc_out from input/output_format here: commit_params() already produced dsc_out
+      // with runtime fields that those methods cannot reconstruct (processed_maximum, rawprepare
+      // black/white, temperature coeffs, CFA phase). Recomputing would reset processed_maximum to
+      // the input image's value and blow up downstream tone handling (black/white renders).
+      dt_iop_buffer_dsc_t declared_in = actual_input_dsc;
+      dt_iop_buffer_dsc_update_bpp(&declared_in);
+      piece->module->input_format(piece->module, pipe, piece, &declared_in);
+      dt_iop_buffer_dsc_update_bpp(&declared_in);
+
+      // A module whose declared input does not match what the previous stage actually publishes
+      // cannot run: disable it (in the pipe only; history is untouched) and turn it into a
+      // pass-through so the contract keeps flowing to the next stage.
+      const gboolean input_mismatch
+          = (declared_in.bpp != actual_input_dsc.bpp
+             || declared_in.channels != actual_input_dsc.channels
+             || declared_in.filters != actual_input_dsc.filters);
+
+      if(input_mismatch)
+      {
+        dt_control_log(_("disabled module `%s`: unexpected input buffer format"),
+                       piece->module->name());
+        dt_print(DT_DEBUG_PIPE,
+                 "[pixelpipe] disabling module %s because input format expects %" G_GSIZE_FORMAT
+                 " B/px, %u channels, filters %u but upstream publishes %" G_GSIZE_FORMAT
+                 " B/px, %u channels, filters %u\n",
+                 piece->module->op, declared_in.bpp, declared_in.channels, declared_in.filters,
+                 actual_input_dsc.bpp, actual_input_dsc.channels, actual_input_dsc.filters);
+
+        piece->enabled = FALSE;
+        piece->hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+        piece->blendop_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+        piece->global_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+        piece->global_mask_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+        piece->dsc_in = actual_input_dsc;
+        piece->dsc_out = actual_input_dsc;
+        dt_iop_buffer_dsc_update_bpp(&piece->dsc_in);
+        dt_iop_buffer_dsc_update_bpp(&piece->dsc_out);
+      }
+      else
+      {
+        // Input is compatible: publish the module's DECLARED input descriptor. `declared_in` was
+        // seeded from the upstream descriptor and then run through input_format(), so it already
+        // carries the upstream runtime fields (processed_maximum, rawprepare, temperature, CFA
+        // phase) AND the colorspace/channel layout the module actually consumes.
+        //
+        // Critically, we must NOT fall back to `actual_input_dsc` here: that would reset dsc_in.cst
+        // to the upstream colorspace and make it equal to the buffer's cst, so the pixelpipe's
+        // automatic colorspace conversion (pixelpipe_cpu.c / pixelpipe_gpu.c) would believe no
+        // conversion is needed. Lab-domain modules (old color balance, color checker, atrous, ...)
+        // inserted after an RGB stage would then receive RGB data interpreted as Lab and render
+        // garbled/solid colors. The full-resync path keeps dsc_in from input_format() for the same
+        // reason; this incremental (synch_top) path must match it.
+        piece->dsc_in = declared_in;
+        dt_iop_buffer_dsc_update_bpp(&piece->dsc_in);
+      }
+    }
+
+    if(pipe_name)
+      dt_print(DT_DEBUG_PIPE,
+               "[dsc] pipe=%s module=%s enabled=%d in=(cst=%s ch=%i bpp=%" G_GSIZE_FORMAT
+               " filters=%u) out=(cst=%s ch=%i bpp=%" G_GSIZE_FORMAT " filters=%u)\n",
+               pipe_name, piece->module->op, piece->enabled,
+               _dsc_cst_name(piece->dsc_in.cst), piece->dsc_in.channels, piece->dsc_in.bpp, piece->dsc_in.filters,
+               _dsc_cst_name(piece->dsc_out.cst), piece->dsc_out.channels, piece->dsc_out.bpp, piece->dsc_out.filters);
+
+    upstream_dsc = piece->dsc_out;
+  }
+
+  dt_free(pipe_name);
 }
 
 static void _sync_pipe_nodes_from_history(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, const uint32_t history_end,
@@ -1396,6 +1499,11 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe)
 
   dt_pthread_rwlock_rdlock(&pipe->dev->history_mutex);
 
+  // The realtime in-place path settles the format contract and the global hash itself (it must,
+  // since that hash is cumulative over enabled nodes); the other paths defer it to the
+  // unconditional pass below.
+  gboolean formats_propagated = FALSE;
+
   // case DT_DEV_PIPE_UNCHANGED: case DT_DEV_PIPE_ZOOMED:
   if(status & DT_DEV_PIPE_REMOVE)
   {
@@ -1414,7 +1522,11 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe)
   else if(status & DT_DEV_PIPE_TOP_CHANGED)
   {
     // only top history item(s) changed
-    if(!_sync_realtime_top_history_in_place(pipe))
+    if(_sync_realtime_top_history_in_place(pipe))
+    {
+      formats_propagated = TRUE;
+    }
+    else
     {
       dt_dev_pixelpipe_sync_no_history(pipe);
       dt_dev_pixelpipe_synch_top(pipe);
@@ -1427,6 +1539,14 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe)
   }
   dt_dev_pixelpipe_set_history_hash(pipe, dt_dev_get_history_hash(pipe->dev));
   dt_pthread_rwlock_unlock(&pipe->dev->history_mutex);
+
+  // Re-establish the buffer-format contract of the whole chain once, after whichever sync path
+  // (full, top-only or realtime-in-place) committed params. This is the single authoritative,
+  // direction-independent place where per-node dsc_in/dsc_out are settled and incompatible
+  // modules are disabled (issue #733), so the OpenCL cache policy and ROI planning below see a
+  // consistent contract. The realtime path already did this before computing its global hash.
+  if(!formats_propagated)
+    dt_dev_pixelpipe_propagate_formats(pipe);
 
   _seal_opencl_cache_policy(pipe);
   
