@@ -1396,7 +1396,7 @@ static gboolean _dev_auto_apply_presets(dt_develop_t *dev, int32_t imgid)
       // No auto-applied order exists for this image. Persist the built-in order
       // matching the input class; the non-RAW order is named ANSEL_JPG but also
       // covers rendered formats such as TIFF/PNG/HDR.
-      const dt_iop_order_t default_order = dt_image_is_rawprepare_supported(image)
+      const dt_iop_order_t default_order = dt_image_needs_rawprepare(image)
                                              ? DT_IOP_ORDER_ANSEL_RAW
                                              : DT_IOP_ORDER_ANSEL_JPG;
       GList *iop_list = dt_ioppr_get_iop_order_list_version(default_order);
