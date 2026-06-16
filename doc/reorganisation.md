@@ -100,6 +100,8 @@ The one thing that it does not grab from database is the [image buffer descripto
 
 IOP modules' `default_params()` method, that initialize the internal parameters when building fresh histories for new pictures, need complete `dt_image_t` object, including the `dt_image_t.dsc` buffer descriptor, which is used in particular to force demosaicing on RAW images or disable it on non-RAW images.
 
+The two-phase (provisional → resolved) lifecycle that lets the application classify an image before it is decoded — and the canonical, non-overlapping type API (`dt_image_pipe_class()` and the orthogonal `dt_image_needs_*` predicates) that replaces the overlapping `dt_image_is_*` heuristics — are documented separately in `image-type-detection.md`.
+
 The GUI layer interfacing with `dt_image_t` object for user read/write is the [lighttable](@ref lighttable.c), through the `thumbnails.c` and `thumbtable.c` libraries.
 
 #### Mipmap cache
