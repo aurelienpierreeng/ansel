@@ -399,12 +399,20 @@ typedef enum dt_hm_report_col_t
   HM_REPORT_COL_DST_ID,
   HM_REPORT_COL_SRC_WEIGHT,
   HM_REPORT_COL_DST_WEIGHT,
-  HM_REPORT_COL_ORIG_STYLE,
-  HM_REPORT_COL_SRC_STYLE,
+  HM_REPORT_COL_DST_DISABLED,
   HM_REPORT_COL_DST_STYLE,
+  HM_REPORT_COL_ORIG_FG,
+  HM_REPORT_COL_SRC_FG,
+  HM_REPORT_COL_DST_FG,
+  HM_REPORT_COL_ORIG_FG_SET,
+  HM_REPORT_COL_SRC_FG_SET,
+  HM_REPORT_COL_DST_FG_SET,
   HM_REPORT_COL_IS_INPUT,
   HM_REPORT_COL_COUNT
 } dt_hm_report_col_t;
+
+static const char *const HM_REPORT_DISABLED_FG = "#282828";
+static const char *const HM_REPORT_EXISTING_DST_FG = "#bbb";
 
 typedef struct
 {
@@ -420,15 +428,15 @@ typedef struct
   gboolean in_reorder;         // guard against recursive row-reordered signals
 } _hm_report_reorder_ctx_t;
 
-static gboolean _hm_history_item_uses_masks(const dt_dev_history_item_t *hist)
+typedef struct
 {
-  if(IS_NULL_PTR(hist)) return FALSE;
-  if(hist->forms) return TRUE;
-  if(hist->blend_params && hist->blendop_params_size == sizeof(dt_develop_blend_params_t)
-     && hist->blend_params->mask_mode > DEVELOP_MASK_ENABLED)
-    return TRUE;
-  return FALSE;
-}
+  GtkWidget *legend;             // legend table placed before the hint in the footer
+  GtkWidget *hint;               // drag-and-drop explanation to align with Destination
+  GtkTreeViewColumn *orig_column;
+  GtkTreeViewColumn *filet_column;
+  GtkTreeViewColumn *src_column;
+  GtkTreeViewColumn *arrow_column;
+} dt_hm_drag_hint_align_t;
 
 typedef struct
 {
@@ -454,14 +462,14 @@ GPtrArray *_hm_collect_labels_from_history_map(GHashTable *last_by_id, const GHa
   while(g_hash_table_iter_next(&it, &key, &value))
   {
     dt_dev_history_item_t *hist = (dt_dev_history_item_t *)value;
-    if(!hist || !hist->module) continue;
+    if(IS_NULL_PTR(hist) || IS_NULL_PTR(hist->module)) continue;
     if(hist->module->flags() & IOP_FLAGS_NO_HISTORY_STACK) continue;
-    if(!hist->enabled && (!mod_list_ids || !g_hash_table_contains((GHashTable *)mod_list_ids, key))) continue;
+    if(!hist->enabled && (IS_NULL_PTR(mod_list_ids) || !g_hash_table_contains((GHashTable *)mod_list_ids, key))) continue;
 
     gchar *label = _hm_module_row_label(hist->module);
-    if(_hm_history_item_uses_masks(hist))
+    if(dt_iop_module_needs_mask_history(hist->module))
     {
-      gchar *tmp = g_strdup_printf("%s*", label);
+      gchar *tmp = g_strdup_printf("%s *", label);
       dt_free(label);
       label = tmp;
     }
@@ -527,9 +535,9 @@ static gchar *_hm_report_dest_label(const dt_iop_module_t *mod, GHashTable *dst_
   gchar *id = _hm_make_node_id(mod->op, mod->multi_name);
   const dt_dev_history_item_t *hist_dst
       = dst_last_by_id ? (const dt_dev_history_item_t *)g_hash_table_lookup(dst_last_by_id, id) : NULL;
-  if(_hm_history_item_uses_masks(hist_dst))
+  if(!IS_NULL_PTR(hist_dst) && dt_iop_module_needs_mask_history(hist_dst->module))
   {
-    gchar *tmp = g_strdup_printf("%s*", dst_txt);
+    gchar *tmp = g_strdup_printf("%s *", dst_txt);
     dt_free(dst_txt);
     dst_txt = tmp;
   }
@@ -787,8 +795,9 @@ static void _hm_report_update_move_styles(GtkListStore *store, dt_develop_t *dev
     gboolean is_input = FALSE;
     gchar *src_id = NULL;
     gchar *dst_id = NULL;
+    gboolean dst_disabled = FALSE;
     gtk_tree_model_get(GTK_TREE_MODEL(store), &iter, HM_REPORT_COL_SRC_ID, &src_id, HM_REPORT_COL_DST_ID, &dst_id,
-                       HM_REPORT_COL_IS_INPUT, &is_input, -1);
+                       HM_REPORT_COL_DST_DISABLED, &dst_disabled, HM_REPORT_COL_IS_INPUT, &is_input, -1);
 
     const gboolean src_moved = (!is_input && src_id && g_hash_table_contains(moved, src_id));
     const gboolean dst_moved = (!is_input && dst_id && g_hash_table_contains(moved, dst_id));
@@ -796,6 +805,9 @@ static void _hm_report_update_move_styles(GtkListStore *store, dt_develop_t *dev
     gtk_list_store_set(store, &iter, HM_REPORT_COL_SRC_WEIGHT,
                        src_moved ? PANGO_WEIGHT_BOLD : PANGO_WEIGHT_NORMAL, HM_REPORT_COL_DST_WEIGHT,
                        dst_moved ? PANGO_WEIGHT_BOLD : PANGO_WEIGHT_NORMAL, -1);
+    if(dst_moved && !dst_disabled)
+      gtk_list_store_set(store, &iter, HM_REPORT_COL_DST_STYLE, PANGO_STYLE_NORMAL,
+                         HM_REPORT_COL_DST_FG, NULL, HM_REPORT_COL_DST_FG_SET, FALSE, -1);
 
     dt_free(src_id);
     dt_free(dst_id);
@@ -864,7 +876,7 @@ static void _hm_report_update_arrows(GtkListStore *store, GHashTable *override, 
       if(hist_before)
         mask_override = !_hm_history_masks_match(hist_after, hist_before);
       else
-        mask_override = _hm_history_item_uses_masks(hist_after);
+        mask_override = !IS_NULL_PTR(hist_after) && dt_iop_module_needs_mask_history(hist_after->module);
 
       const gpointer dst_row_ptr = g_hash_table_lookup(dst_row, src_id);
       if(dst_row_ptr)
@@ -924,7 +936,7 @@ static void _hm_report_keep_input_row_at_bottom(GtkListStore *store)
 }
 
 static void _hm_report_update_dest_labels(GtkListStore *store, dt_develop_t *dev_dest, GHashTable *dst_last_by_id,
-                                          const GHashTable *orig_ids)
+                                          const GHashTable *orig_ids, const GHashTable *override)
 {
   /* Refresh destination column labels after iop_order changes. */
   GtkTreeIter iter;
@@ -939,7 +951,22 @@ static void _hm_report_update_dest_labels(GtkListStore *store, dt_develop_t *dev
     {
       dt_iop_module_t *mod = _hm_module_from_id(dev_dest, id);
       gchar *dst_txt = mod ? _hm_report_dest_label(mod, dst_last_by_id, orig_ids) : g_strdup("");
-      gtk_list_store_set(store, &iter, HM_REPORT_COL_DST, dst_txt, -1);
+      const gboolean dst_disabled = !IS_NULL_PTR(mod) && !mod->enabled;
+      const gboolean dst_inserted = !IS_NULL_PTR(mod) && !IS_NULL_PTR(orig_ids)
+                                    && !g_hash_table_contains((GHashTable *)orig_ids, id);
+      const gboolean dst_existing = !IS_NULL_PTR(mod) && !IS_NULL_PTR(orig_ids) && !dst_inserted;
+      const dt_dev_history_item_t *hist_dst
+          = dst_last_by_id ? (const dt_dev_history_item_t *)g_hash_table_lookup(dst_last_by_id, id) : NULL;
+      const gboolean dst_masked = !IS_NULL_PTR(hist_dst) && dt_iop_module_needs_mask_history(hist_dst->module);
+      const gboolean dst_overridden = !IS_NULL_PTR(override) && g_hash_table_contains((GHashTable *)override, id);
+      const gboolean dst_plain_existing = dst_existing && !dst_disabled && !dst_masked && !dst_overridden;
+      const gboolean dst_dimmed_existing = dst_existing && !dst_overridden;
+      const gchar *dst_fg = dst_disabled ? HM_REPORT_DISABLED_FG
+                                         : (dst_dimmed_existing ? HM_REPORT_EXISTING_DST_FG : NULL);
+      const gboolean dst_fg_set = dst_disabled || dst_dimmed_existing;
+      gtk_list_store_set(store, &iter, HM_REPORT_COL_DST, dst_txt,
+                         HM_REPORT_COL_DST_STYLE, dst_plain_existing ? PANGO_STYLE_ITALIC : PANGO_STYLE_NORMAL,
+                         HM_REPORT_COL_DST_FG, dst_fg, HM_REPORT_COL_DST_FG_SET, dst_fg_set, -1);
       dt_free(dst_txt);
     }
 
@@ -960,7 +987,7 @@ static void _hm_report_apply_store_order(_hm_report_reorder_ctx_t *ctx)
   if(desired && _hm_report_apply_visible_order(ctx->dev_dest, desired, ctx->mod_list_ids))
   {
     _hm_report_resync_history_iop_order(ctx->dev_dest);
-    _hm_report_update_dest_labels(ctx->store, ctx->dev_dest, ctx->dst_last_by_id, ctx->orig_ids);
+    _hm_report_update_dest_labels(ctx->store, ctx->dev_dest, ctx->dst_last_by_id, ctx->orig_ids, ctx->override);
     _hm_report_update_arrows(ctx->store, ctx->override, ctx->dst_last_by_id, ctx->dst_last_before_by_id);
     _hm_report_update_move_styles(ctx->store, ctx->dev_src, ctx->mod_list_ids);
   }
@@ -1213,6 +1240,26 @@ static GHashTable *_hm_build_override_map(const dt_develop_t *dev_dest, GHashTab
   return override;
 }
 
+/** Align the drag hint with the destination column once GTK knows column widths.
+ *
+ * The hint is packed after the legend in the same horizontal footer, so the margin
+ * is the start of the destination column minus the current legend width.
+ */
+static void _hm_report_align_drag_hint(GtkWidget *widget, GtkAllocation *allocation, gpointer user_data)
+{
+  dt_hm_drag_hint_align_t *align = (dt_hm_drag_hint_align_t *)user_data;
+  if(!gtk_widget_get_visible(widget) || allocation->width <= 0) return;
+
+  GtkAllocation legend_allocation = { 0 };
+  gtk_widget_get_allocation(align->legend, &legend_allocation);
+
+  const int dst_column_start = gtk_tree_view_column_get_width(align->orig_column)
+                               + gtk_tree_view_column_get_width(align->filet_column)
+                               + gtk_tree_view_column_get_width(align->src_column)
+                               + gtk_tree_view_column_get_width(align->arrow_column);
+  gtk_widget_set_margin_start(align->hint, MAX(dst_column_start - legend_allocation.width, 0));
+}
+
 gboolean _hm_show_merge_report_popup(dt_develop_t *dev_dest, dt_develop_t *dev_src,
                                      const gboolean merge_iop_order, const gboolean used_source_order,
                                      const dt_history_merge_strategy_t strategy, GHashTable *src_last_by_id,
@@ -1234,7 +1281,7 @@ gboolean _hm_show_merge_report_popup(dt_develop_t *dev_dest, dt_develop_t *dev_s
         : _("replace");
 
   gchar *title_text
-      = g_strdup_printf(_("Copy, merging pipeline in %s and history in %s mode"), merge_mode, strategy_name);
+      = g_strdup_printf(_("Copy, merging pipeline in %s and history in <b>%s</b> mode."), merge_mode, strategy_name);
 
   GtkDialog *dialog = GTK_DIALOG(gtk_dialog_new_with_buttons(
       _("History merge report"), GTK_WINDOW(window),
@@ -1243,7 +1290,8 @@ gboolean _hm_show_merge_report_popup(dt_develop_t *dev_dest, dt_develop_t *dev_s
 
   GtkWidget *content_area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
 
-  GtkWidget *label = gtk_label_new(title_text);
+  GtkWidget *label = gtk_label_new(NULL);
+  gtk_label_set_markup(GTK_LABEL(label), title_text);
   gtk_label_set_xalign(GTK_LABEL(label), 0.0f);
   gtk_label_set_line_wrap(GTK_LABEL(label), TRUE);
   gtk_label_set_max_width_chars(GTK_LABEL(label), 100);
@@ -1270,10 +1318,13 @@ gboolean _hm_show_merge_report_popup(dt_develop_t *dev_dest, dt_develop_t *dev_s
 
   GtkListStore *store = gtk_list_store_new(HM_REPORT_COL_COUNT, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING,
                                            G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_INT,
-                                           G_TYPE_INT, G_TYPE_INT, G_TYPE_INT, G_TYPE_INT, G_TYPE_BOOLEAN);
+                                           G_TYPE_INT, G_TYPE_BOOLEAN, G_TYPE_INT, G_TYPE_STRING, G_TYPE_STRING,
+                                           G_TYPE_STRING, G_TYPE_BOOLEAN, G_TYPE_BOOLEAN, G_TYPE_BOOLEAN,
+                                           G_TYPE_BOOLEAN);
   GtkWidget *tree = gtk_tree_view_new_with_model(GTK_TREE_MODEL(store));
   g_object_unref(store);
   gtk_tree_view_set_headers_visible(GTK_TREE_VIEW(tree), TRUE);
+  gtk_tree_selection_set_mode(gtk_tree_view_get_selection(GTK_TREE_VIEW(tree)), GTK_SELECTION_NONE);
 
   gchar *src_base = dev_src ? g_path_get_basename(dev_src->image_storage.filename) : g_strdup("");
   gchar *dst_base = g_path_get_basename(dev_dest->image_storage.filename);
@@ -1288,8 +1339,9 @@ gboolean _hm_show_merge_report_popup(dt_develop_t *dev_dest, dt_develop_t *dev_s
   GtkCellRenderer *r_orig = gtk_cell_renderer_text_new();
   g_object_set(r_orig, "fixed-height-from-font", 1, "ypad", 0, NULL);
   GtkTreeViewColumn *c_orig = gtk_tree_view_column_new_with_attributes(orig_title, r_orig, "text",
-                                                                       HM_REPORT_COL_ORIG, "style",
-                                                                       HM_REPORT_COL_ORIG_STYLE, NULL);
+                                                                       HM_REPORT_COL_ORIG, "foreground",
+                                                                       HM_REPORT_COL_ORIG_FG, "foreground-set",
+                                                                       HM_REPORT_COL_ORIG_FG_SET, NULL);
   gtk_tree_view_column_set_expand(c_orig, TRUE);
   gtk_tree_view_append_column(GTK_TREE_VIEW(tree), c_orig);
 
@@ -1307,8 +1359,9 @@ gboolean _hm_show_merge_report_popup(dt_develop_t *dev_dest, dt_develop_t *dev_s
   g_object_set(r_src, "fixed-height-from-font", 1, "ypad", 0, NULL);
   GtkTreeViewColumn *c_src = gtk_tree_view_column_new_with_attributes(src_title, r_src, "text",
                                                                       HM_REPORT_COL_SRC, "weight",
-                                                                      HM_REPORT_COL_SRC_WEIGHT, "style",
-                                                                      HM_REPORT_COL_SRC_STYLE, NULL);
+                                                                      HM_REPORT_COL_SRC_WEIGHT, "foreground",
+                                                                      HM_REPORT_COL_SRC_FG, "foreground-set",
+                                                                      HM_REPORT_COL_SRC_FG_SET, NULL);
   gtk_tree_view_column_set_expand(c_src, TRUE);
   gtk_tree_view_append_column(GTK_TREE_VIEW(tree), c_src);
 
@@ -1325,25 +1378,85 @@ gboolean _hm_show_merge_report_popup(dt_develop_t *dev_dest, dt_develop_t *dev_s
   GtkTreeViewColumn *c_dst = gtk_tree_view_column_new_with_attributes(dst_title, r_dst, "text",
                                                                       HM_REPORT_COL_DST, "weight",
                                                                       HM_REPORT_COL_DST_WEIGHT, "style",
-                                                                      HM_REPORT_COL_DST_STYLE, NULL);
+                                                                      HM_REPORT_COL_DST_STYLE, "foreground",
+                                                                      HM_REPORT_COL_DST_FG, "foreground-set",
+                                                                      HM_REPORT_COL_DST_FG_SET, NULL);
   gtk_tree_view_column_set_expand(c_dst, TRUE);
   gtk_tree_view_append_column(GTK_TREE_VIEW(tree), c_dst);
 
   gtk_container_add(GTK_CONTAINER(scrolled), tree);
 
-  GtkWidget *legend = gtk_label_new(_("[name] inserted module, * uses masks, bold = moved module, italic = disabled module (shown only if copied).\n"
-    "Arrows indicate parameters overriden (→ same row, ↗/↘ adjacent, ↴/↴ farther), * on arrow means masks overridden.\n"
-                                      "Drag and drop modules in the `Destination` column to reorder the pipeline."));
-  gtk_label_set_xalign(GTK_LABEL(legend), 0.0f);
-  gtk_label_set_line_wrap(GTK_LABEL(legend), TRUE);
-  gtk_label_set_max_width_chars(GTK_LABEL(legend), 100);
-  gtk_box_pack_start(GTK_BOX(content_area), legend, FALSE, FALSE, 6);
+  GtkWidget *legend_content = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  gtk_widget_set_halign(legend_content, GTK_ALIGN_START);
+
+  GtkWidget *legend = gtk_grid_new();
+  gtk_grid_set_column_spacing(GTK_GRID(legend), DT_PIXEL_APPLY_DPI(10));
+  gtk_widget_set_halign(legend, GTK_ALIGN_START);
+
+  gchar *txt_color = g_strdup_printf("<span foreground='%s'> %s </span> ", HM_REPORT_DISABLED_FG, _("Module"));
+
+  const struct
+  {
+    const gchar *symbol;
+    const gchar *definition;
+    gboolean symbol_markup;
+  } legend_rows[] = {
+    { _("[ Module ]"),      _("inserted module"), FALSE },
+    { "  Module *",         _("module uses masks"), FALSE },
+    { _("<b> Module </b>"), _("moved module"), TRUE },
+    { txt_color,            _("disabled module (shown only if copied)"), TRUE },
+    { "→",                  _("parameters overridden on the same row"), FALSE },
+    { "↗ / ↘",              _("parameters overridden on an adjacent row"), FALSE },
+    { "↴",                  _("parameters overridden on a farther row"), FALSE },
+    { "→*",                 _("masks overridden"), FALSE },
+  };
+
+  /* Fill one two-column table so every symbol stays aligned with its explanation. */
+  for(int row = 0; row < (int)G_N_ELEMENTS(legend_rows); row++)
+  {
+    GtkWidget *legend_symbol = gtk_label_new(NULL);
+    gtk_label_set_xalign(GTK_LABEL(legend_symbol), 0.5f);
+    gtk_widget_set_size_request(legend_symbol, DT_PIXEL_APPLY_DPI(72), -1);
+    if(legend_rows[row].symbol_markup)
+      gtk_label_set_markup(GTK_LABEL(legend_symbol), legend_rows[row].symbol);
+    else
+      gtk_label_set_text(GTK_LABEL(legend_symbol), legend_rows[row].symbol);
+
+    GtkWidget *legend_definition = gtk_label_new(legend_rows[row].definition);
+    gtk_label_set_xalign(GTK_LABEL(legend_definition), 0.0f);
+    gtk_widget_set_size_request(legend_definition, DT_PIXEL_APPLY_DPI(360), -1);
+
+    gtk_grid_attach(GTK_GRID(legend), legend_symbol, 0, row, 1, 1);
+    gtk_grid_attach(GTK_GRID(legend), legend_definition, 1, row, 1, 1);
+  }
+  dt_free(txt_color);
+
+  GtkWidget *drag_label = gtk_label_new(_("Drag and drop modules in the “Destination” column to reorder the pipeline."));
+  gtk_label_set_xalign(GTK_LABEL(drag_label), 0.0f);
+  gtk_label_set_yalign(GTK_LABEL(drag_label), 0.0f);
+  gtk_widget_set_valign(drag_label, GTK_ALIGN_START);
+  gtk_label_set_line_wrap(GTK_LABEL(drag_label), TRUE);
+  gtk_label_set_max_width_chars(GTK_LABEL(drag_label), 36);
+
+  gtk_box_pack_start(GTK_BOX(legend_content), legend, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(legend_content), drag_label, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(content_area), legend_content, FALSE, FALSE, 6);
 
   const int orig_len = orig_labels ? orig_labels->len : 0;
   GPtrArray *src_mods = dev_src ? _hm_collect_enabled_modules_gui_order(dev_src, mod_list_ids) : g_ptr_array_new();
   GPtrArray *dst_mods = _hm_collect_enabled_modules_gui_order(dev_dest, mod_list_ids);
   GHashTable *dst_last_by_id = NULL;
   if(_hm_build_last_history_by_id(dev_dest, &dst_last_by_id)) return FALSE;
+
+  dt_hm_drag_hint_align_t drag_hint_align = { 0 };
+  drag_hint_align.legend = legend;
+  drag_hint_align.hint = drag_label;
+  drag_hint_align.orig_column = c_orig;
+  drag_hint_align.filet_column = c_filet;
+  drag_hint_align.src_column = c_src;
+  drag_hint_align.arrow_column = c_arrow;
+  g_signal_connect(G_OBJECT(tree), "size-allocate", G_CALLBACK(_hm_report_align_drag_hint), &drag_hint_align);
+  g_signal_connect(G_OBJECT(legend), "size-allocate", G_CALLBACK(_hm_report_align_drag_hint), &drag_hint_align);
 
   const int src_len = src_mods->len;
   const int dst_len = dst_mods->len;
@@ -1369,27 +1482,27 @@ gboolean _hm_show_merge_report_popup(dt_develop_t *dev_dest, dt_develop_t *dev_s
     const int src_idx = r - src_offset;
     const int dst_idx = r - dst_offset;
 
-    const char *orig_txt = (orig_idx >= 0 && orig_labels)
+    const char *orig_txt = (orig_idx >= 0 && !IS_NULL_PTR(orig_labels))
                                ? (const char *)g_ptr_array_index((GPtrArray *)orig_labels, orig_idx)
                                : "";
-    const int orig_style = (orig_idx >= 0 && orig_styles)
-                               ? GPOINTER_TO_INT(g_ptr_array_index((GPtrArray *)orig_styles, orig_idx))
-                               : PANGO_STYLE_NORMAL;
+    const gboolean orig_disabled = (orig_idx >= 0 && !IS_NULL_PTR(orig_styles))
+                                       && (GPOINTER_TO_INT(g_ptr_array_index((GPtrArray *)orig_styles, orig_idx))
+                                           == PANGO_STYLE_ITALIC);
     const dt_iop_module_t *src_mod = (src_idx >= 0) ? (const dt_iop_module_t *)g_ptr_array_index(src_mods, src_idx) : NULL;
     const dt_iop_module_t *dst_mod = (dst_idx >= 0) ? (const dt_iop_module_t *)g_ptr_array_index(dst_mods, dst_idx) : NULL;
 
-    gchar *src_txt = src_mod ? _hm_module_row_label(src_mod) : g_strdup("");
-    gchar *dst_txt = dst_mod ? _hm_report_dest_label(dst_mod, dst_last_by_id, orig_ids) : g_strdup("");
-    gchar *src_id = src_mod ? _hm_make_node_id(src_mod->op, src_mod->multi_name) : NULL;
-    const int src_style = (src_mod && !src_mod->enabled) ? PANGO_STYLE_ITALIC : PANGO_STYLE_NORMAL;
-    const int dst_style = (dst_mod && !dst_mod->enabled) ? PANGO_STYLE_ITALIC : PANGO_STYLE_NORMAL;
+    gchar *src_txt = !IS_NULL_PTR(src_mod) ? _hm_module_row_label(src_mod) : g_strdup("");
+    gchar *dst_txt = !IS_NULL_PTR(dst_mod) ? _hm_report_dest_label(dst_mod, dst_last_by_id, orig_ids) : g_strdup("");
+    gchar *src_id = !IS_NULL_PTR(src_mod) ? _hm_make_node_id(src_mod->op, src_mod->multi_name) : NULL;
+    const gboolean src_disabled = !IS_NULL_PTR(src_mod) && !src_mod->enabled;
+    const gboolean dst_disabled = !IS_NULL_PTR(dst_mod) && !dst_mod->enabled;
 
-    if(src_mod && src_last_by_id)
+    if(!IS_NULL_PTR(src_mod) && !IS_NULL_PTR(src_last_by_id))
     {
       const dt_dev_history_item_t *hist_src = (const dt_dev_history_item_t *)g_hash_table_lookup(src_last_by_id, src_id);
-      if(_hm_history_item_uses_masks(hist_src))
+      if(!IS_NULL_PTR(hist_src) && dt_iop_module_needs_mask_history(hist_src->module))
       {
-        gchar *tmp = g_strdup_printf("%s*", src_txt);
+        gchar *tmp = g_strdup_printf("%s *", src_txt);
         dt_free(src_txt);
         src_txt = tmp;
       }
@@ -1399,12 +1512,30 @@ gboolean _hm_show_merge_report_popup(dt_develop_t *dev_dest, dt_develop_t *dev_s
 
     GtkTreeIter iter;
     gtk_list_store_append(store, &iter);
-    gchar *dst_id = dst_mod ? _hm_make_node_id(dst_mod->op, dst_mod->multi_name) : NULL;
+    gchar *dst_id = !IS_NULL_PTR(dst_mod) ? _hm_make_node_id(dst_mod->op, dst_mod->multi_name) : NULL;
+    const gboolean dst_inserted = !IS_NULL_PTR(dst_id) && !IS_NULL_PTR(orig_ids)
+                                  && !g_hash_table_contains((GHashTable *)orig_ids, dst_id);
+    const gboolean dst_existing = !IS_NULL_PTR(dst_id) && !IS_NULL_PTR(orig_ids) && !dst_inserted;
+    const dt_dev_history_item_t *hist_dst
+        = !IS_NULL_PTR(dst_id) && !IS_NULL_PTR(dst_last_by_id)
+              ? (const dt_dev_history_item_t *)g_hash_table_lookup(dst_last_by_id, dst_id)
+              : NULL;
+    const gboolean dst_masked = !IS_NULL_PTR(hist_dst) && dt_iop_module_needs_mask_history(hist_dst->module);
+    const gboolean dst_overridden = !IS_NULL_PTR(dst_id) && !IS_NULL_PTR(override)
+                                    && g_hash_table_contains((GHashTable *)override, dst_id);
+    const gboolean dst_plain_existing = dst_existing && !dst_disabled && !dst_masked && !dst_overridden;
+    const gboolean dst_dimmed_existing = dst_existing && !dst_overridden;
+    const gchar *dst_fg = dst_disabled ? HM_REPORT_DISABLED_FG : (dst_dimmed_existing ? HM_REPORT_EXISTING_DST_FG : NULL);
+    const gboolean dst_fg_set = dst_disabled || dst_dimmed_existing;
     gtk_list_store_set(store, &iter, HM_REPORT_COL_ORIG, orig_txt, HM_REPORT_COL_FILET, "│", HM_REPORT_COL_SRC,
                        src_txt, HM_REPORT_COL_ARROW, arrow, HM_REPORT_COL_DST, dst_txt, HM_REPORT_COL_SRC_ID,
                        src_id, HM_REPORT_COL_DST_ID, dst_id, HM_REPORT_COL_SRC_WEIGHT, PANGO_WEIGHT_NORMAL,
-                       HM_REPORT_COL_DST_WEIGHT, PANGO_WEIGHT_NORMAL, HM_REPORT_COL_ORIG_STYLE, orig_style,
-                       HM_REPORT_COL_SRC_STYLE, src_style, HM_REPORT_COL_DST_STYLE, dst_style,
+                       HM_REPORT_COL_DST_WEIGHT, PANGO_WEIGHT_NORMAL, HM_REPORT_COL_DST_DISABLED, dst_disabled,
+                       HM_REPORT_COL_DST_STYLE, dst_plain_existing ? PANGO_STYLE_ITALIC : PANGO_STYLE_NORMAL,
+                       HM_REPORT_COL_ORIG_FG, orig_disabled ? HM_REPORT_DISABLED_FG : NULL,
+                       HM_REPORT_COL_SRC_FG, src_disabled ? HM_REPORT_DISABLED_FG : NULL, HM_REPORT_COL_DST_FG, dst_fg,
+                       HM_REPORT_COL_ORIG_FG_SET, orig_disabled,
+                       HM_REPORT_COL_SRC_FG_SET, src_disabled, HM_REPORT_COL_DST_FG_SET, dst_fg_set,
                        HM_REPORT_COL_IS_INPUT, FALSE, -1);
     dt_free(dst_id);
     dt_free(src_id);
@@ -1420,9 +1551,12 @@ gboolean _hm_show_merge_report_popup(dt_develop_t *dev_dest, dt_develop_t *dev_s
     gtk_list_store_set(store, &iter, HM_REPORT_COL_ORIG, input_label, HM_REPORT_COL_FILET, "│", HM_REPORT_COL_SRC,
                        input_label, HM_REPORT_COL_ARROW, "", HM_REPORT_COL_DST, input_label, HM_REPORT_COL_SRC_ID,
                        NULL, HM_REPORT_COL_DST_ID, NULL, HM_REPORT_COL_SRC_WEIGHT, PANGO_WEIGHT_NORMAL,
-                       HM_REPORT_COL_DST_WEIGHT, PANGO_WEIGHT_NORMAL, HM_REPORT_COL_ORIG_STYLE, PANGO_STYLE_NORMAL,
-                       HM_REPORT_COL_SRC_STYLE, PANGO_STYLE_NORMAL, HM_REPORT_COL_DST_STYLE, PANGO_STYLE_NORMAL,
-                       HM_REPORT_COL_IS_INPUT, TRUE, -1);
+                       HM_REPORT_COL_DST_WEIGHT, PANGO_WEIGHT_NORMAL, HM_REPORT_COL_DST_DISABLED, FALSE,
+                       HM_REPORT_COL_DST_STYLE, PANGO_STYLE_ITALIC,
+                       HM_REPORT_COL_ORIG_FG, NULL, HM_REPORT_COL_SRC_FG, NULL,
+                       HM_REPORT_COL_DST_FG, HM_REPORT_EXISTING_DST_FG,
+                       HM_REPORT_COL_ORIG_FG_SET, FALSE, HM_REPORT_COL_SRC_FG_SET, FALSE,
+                       HM_REPORT_COL_DST_FG_SET, TRUE, HM_REPORT_COL_IS_INPUT, TRUE, -1);
     dt_free(input_label);
   }
 
