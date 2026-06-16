@@ -24,6 +24,7 @@
 #include "common/history.h"
 #include "common/styles.h"
 #include "common/undo.h"
+#include "gui/accelerators.h"
 #include "control/conf.h"
 #include "control/control.h"
 #include "control/signal.h"
@@ -136,27 +137,6 @@ static gboolean _styles_open_popup_callback(GtkAccelGroup *group, GObject *accel
   return TRUE;
 }
 
-static gchar *_styles_build_label(gchar **split)
-{
-  if(IS_NULL_PTR(split) || !split[0]) return g_strdup("");
-
-  if(split[1])
-  {
-    GString *label = g_string_new(split[1]);
-    for(int i = 2; split[i]; i++)
-    {
-      g_string_append(label, " | ");
-      g_string_append(label, split[i]);
-    }
-    gchar *markup = g_markup_escape_text(label->str, -1);
-    g_string_free(label, TRUE);
-    return markup ? markup : g_strdup("");
-  }
-
-  gchar *markup = g_markup_escape_text(split[0], -1);
-  return markup ? markup : g_strdup("");
-}
-
 static gchar *_styles_build_tooltip(const dt_style_t *style)
 {
   char *items_string = dt_styles_get_item_list_as_string(style->name);
@@ -185,22 +165,37 @@ static gchar *_styles_build_tooltip(const dt_style_t *style)
 }
 
 static GtkWidget *_styles_get_submenu(GtkWidget **menus, GList **lists, GHashTable *submenus,
-                                      const gchar *group, const dt_menus_t index)
+                                      GtkWidget *parent, const gchar *path, const gchar *label,
+                                      const dt_menus_t index)
 {
-  if(IS_NULL_PTR(group) || !*group) return menus[index];
+  if(IS_NULL_PTR(parent) || IS_NULL_PTR(path) || !*path || IS_NULL_PTR(label) || !*label)
+    return parent;
 
-  GtkWidget *submenu = g_hash_table_lookup(submenus, group);
+  GtkWidget *submenu = g_hash_table_lookup(submenus, path);
   if(submenu) return submenu;
 
-  gchar *group_label = g_markup_escape_text(group, -1);
-  if(IS_NULL_PTR(group_label)) group_label = g_strdup("");
-  add_top_submenu_entry(menus, lists, group_label, index);
-  dt_free(group_label);
+  gchar *menu_label = g_markup_escape_text(label, -1);
+  if(IS_NULL_PTR(menu_label)) menu_label = g_strdup("");
 
-  GtkWidget *menu_item = get_last_widget(lists);
-  submenu = gtk_menu_item_get_submenu(GTK_MENU_ITEM(menu_item));
+  submenu = gtk_menu_new();
+  gtk_menu_set_accel_group(GTK_MENU(submenu), darktable.gui->accels->global_accels);
 
-  g_hash_table_insert(submenus, g_strdup(group), submenu);
+  gchar *clean_label = strip_markup(menu_label);
+  if(g_strrstr(clean_label, "/") != NULL)
+    g_strdelimit(clean_label, "/", '-');
+  gchar *accel_path = dt_accels_build_path(gtk_menu_get_accel_path(GTK_MENU(parent)), clean_label);
+  gtk_menu_set_accel_path(GTK_MENU(submenu), accel_path);
+  dt_free(accel_path);
+  dt_free(clean_label);
+
+  dt_menu_entry_t *entry = set_menu_entry(menus, lists, menu_label, index, GTK_MENU(parent), NULL,
+                                          NULL, NULL, NULL, NULL, 0, 0,
+                                          darktable.gui->accels->global_accels);
+  gtk_menu_item_set_submenu(GTK_MENU_ITEM(entry->widget), submenu);
+  gtk_menu_shell_append(GTK_MENU_SHELL(parent), entry->widget);
+
+  g_hash_table_insert(submenus, g_strdup(path), submenu);
+  dt_free(menu_label);
   return submenu;
 }
 
@@ -292,16 +287,32 @@ void append_styles(GtkWidget **menus, GList **lists, const dt_menus_t index)
       dt_style_t *style = (dt_style_t *)iter->data;
       if(IS_NULL_PTR(style) || IS_NULL_PTR(style->name)) continue;
 
-      gchar **split = g_strsplit(style->name, "|", 0);
-      gchar *label = _styles_build_label(split);
+      gchar **split = g_strsplit(style->name, "|", -1);
       gchar *tooltip = _styles_build_tooltip(style);
 
-      GtkWidget *parent_menu = menus[index];
-      if(split[1])
-        parent_menu = _styles_get_submenu(menus, lists, submenus, split[0], index);
+      int leaf = -1;
+      for(int i = 0; split[i]; i++)
+        if(split[i][0] != '\0')
+          leaf = i;
 
+      GtkWidget *parent_menu = menus[index];
+      GString *submenu_path = g_string_new(NULL);
+      for(int i = 0; i < leaf; i++)
+      {
+        if(split[i][0] == '\0') continue;
+
+        if(submenu_path->len > 0)
+          g_string_append_c(submenu_path, '|');
+        g_string_append(submenu_path, split[i]);
+        parent_menu = _styles_get_submenu(menus, lists, submenus, parent_menu,
+                                          submenu_path->str, split[i], index);
+      }
+
+      gchar *label = g_markup_escape_text(leaf >= 0 ? split[leaf] : style->name, -1);
+      if(IS_NULL_PTR(label)) label = g_strdup("");
       _styles_add_menu_entry(menus, lists, parent_menu, index, label, tooltip, style->name);
 
+      g_string_free(submenu_path, TRUE);
       dt_free(label);
       dt_free(tooltip);
       g_strfreev(split);
