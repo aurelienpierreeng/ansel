@@ -1153,12 +1153,6 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   gui->styles_popup.window = NULL;
   gui->styles_popup.module = NULL;
 
-  // load the style / theme
-  GtkSettings *settings = gtk_settings_get_default();
-  g_object_set(G_OBJECT(settings), "gtk-application-prefer-dark-theme", TRUE, (gchar *)0);
-  g_object_set(G_OBJECT(settings), "gtk-theme-name", "Adwaita", (gchar *)0);
-  g_object_unref(settings);
-
   // smooth scrolling must be enabled to handle trackpad/touch events
   gui->scroll_mask = GDK_SCROLL_MASK | GDK_SMOOTH_SCROLL_MASK;
 
