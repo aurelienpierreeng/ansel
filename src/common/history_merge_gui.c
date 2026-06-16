@@ -1463,5 +1463,5 @@ gboolean _hm_show_merge_report_popup(dt_develop_t *dev_dest, dt_develop_t *dev_s
   dt_free(dst_title);
   dt_free(title_text);
 
-  return (res == GTK_RESPONSE_ACCEPT);
+  return (res == GTK_RESPONSE_ACCEPT || res == GTK_RESPONSE_DELETE_EVENT);
 }
