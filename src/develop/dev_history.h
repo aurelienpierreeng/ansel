@@ -381,8 +381,9 @@ void dt_dev_pop_history_items(struct dt_develop_t *dev);
  *
  * @param dev Develop context.
  * @param imgid Image id.
+ * @return TRUE if this reload initialized a first-run history.
  */
-void dt_dev_reload_history_items(struct dt_develop_t *dev, const int32_t imgid);
+gboolean dt_dev_reload_history_items(struct dt_develop_t *dev, const int32_t imgid);
 
 
 /**

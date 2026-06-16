@@ -360,9 +360,31 @@ int dt_dev_merge_history_into_image(dt_develop_t *dev_src, int32_t dest_imgid, c
 
   dt_develop_t dev_dest = { 0 };
   dt_dev_init(&dev_dest, FALSE);
-  dt_dev_reload_history_items(&dev_dest, dest_imgid);
+  const gboolean first_run = dt_dev_reload_history_items(&dev_dest, dest_imgid);
 
-  const int ret_val = dt_history_merge(&dev_dest, dev_src, dest_imgid, mod_list, merge_iop_order, mode,
+  if(first_run)
+  {
+    /* Match the persistent state produced by opening the destination in darkroom
+     * after a history deletion: the first-run defaults, auto-presets, image
+     * flags and resulting module order must exist before paste/style merging.
+     */
+    dt_image_t *image = dt_image_cache_get(darktable.image_cache, dest_imgid, 'w');
+    if(!IS_NULL_PTR(image))
+    {
+      *image = dev_dest.image_storage;
+      dt_image_cache_write_release(darktable.image_cache, image, DT_IMAGE_CACHE_SAFE);
+    }
+
+    dt_dev_write_history_ext(&dev_dest, dest_imgid);
+  }
+
+  /* If the destination history was just recreated from an empty stack, keep the
+   * image-format default order we would get by opening the image in darkroom.
+   * Source ordering constraints would otherwise let a pasted JPEG/style order
+   * turn a freshly reset RAW destination into a non-RAW pipeline.
+   */
+  const gboolean use_source_iop_order = merge_iop_order && !first_run;
+  const int ret_val = dt_history_merge(&dev_dest, dev_src, dest_imgid, mod_list, use_source_iop_order, mode,
                                        paste_instances, source_label);
 
   if(ret_val == 0)
@@ -997,16 +1019,17 @@ void dt_dev_history_free_history(dt_develop_t *dev)
   dev->history = NULL;
 }
 
-void dt_dev_reload_history_items(dt_develop_t *dev, const int32_t imgid)
+gboolean dt_dev_reload_history_items(dt_develop_t *dev, const int32_t imgid)
 {
   // Recreate the whole history from scratch.
   // Backend only: GUI updates and pixelpipe rebuilds need to be triggered by callers.
   if(darktable.gui && dev->gui_attached) ++darktable.gui->reset;
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
-  dt_dev_read_history_ext(dev, imgid);
+  const gboolean first_run = dt_dev_read_history_ext(dev, imgid);
   dt_dev_pop_history_items_ext(dev);
   dt_pthread_rwlock_unlock(&dev->history_mutex);
   if(darktable.gui && dev->gui_attached) --darktable.gui->reset;
+  return first_run;
 }
 
 
@@ -1370,8 +1393,13 @@ static gboolean _dev_auto_apply_presets(dt_develop_t *dev, int32_t imgid)
     }
     else
     {
-      // we have no auto-apply order, so apply iop order, depending of the workflow
-      GList *iop_list = dt_ioppr_get_iop_order_list_version(DT_IOP_ORDER_ANSEL_RAW);
+      // No auto-applied order exists for this image. Persist the built-in order
+      // matching the input class; the non-RAW order is named ANSEL_JPG but also
+      // covers rendered formats such as TIFF/PNG/HDR.
+      const dt_iop_order_t default_order = dt_image_is_rawprepare_supported(image)
+                                             ? DT_IOP_ORDER_ANSEL_RAW
+                                             : DT_IOP_ORDER_ANSEL_JPG;
+      GList *iop_list = dt_ioppr_get_iop_order_list_version(default_order);
       dt_ioppr_write_iop_order_list(iop_list, imgid);
       g_list_free_full(iop_list, dt_free_gpointer);
       iop_list = NULL;

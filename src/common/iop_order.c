@@ -42,6 +42,8 @@
 #include "common/styles.h"
 #include "common/debug.h"
 #include "common/deprecations.h"
+#include "common/image.h"
+#include "common/image_cache.h"
 #include "develop/imageop.h"
 #include "develop/pixelpipe.h"
 
@@ -759,6 +761,7 @@ static GList *_insert_before(GList *iop_order_list, const char *module, const ch
 dt_iop_order_t dt_ioppr_get_iop_order_version(const int32_t imgid)
 {
   dt_iop_order_t iop_order_version = DT_IOP_ORDER_ANSEL_RAW;
+  gboolean has_stored_order = FALSE;
 
   // check current iop order version
   sqlite3_stmt *stmt;
@@ -768,8 +771,19 @@ dt_iop_order_t dt_ioppr_get_iop_order_version(const int32_t imgid)
   if(sqlite3_step(stmt) == SQLITE_ROW)
   {
     iop_order_version = sqlite3_column_int(stmt, 0);
+    has_stored_order = TRUE;
   }
   sqlite3_finalize(stmt);
+
+  if(!has_stored_order && imgid > 0 && !IS_NULL_PTR(darktable.image_cache))
+  {
+    const dt_image_t *image = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+    if(!IS_NULL_PTR(image))
+    {
+      iop_order_version = dt_image_is_rawprepare_supported(image) ? DT_IOP_ORDER_ANSEL_RAW : DT_IOP_ORDER_ANSEL_JPG;
+      dt_image_cache_read_release(darktable.image_cache, image);
+    }
+  }
 
   return iop_order_version;
 }
@@ -890,16 +904,22 @@ static const dt_iop_order_entry_t *orders[5]
 
 dt_iop_order_t dt_ioppr_get_iop_order_list_kind(GList *iop_order_list)
 {
-  for(int i = 0; i < 5; i++)
+  if(IS_NULL_PTR(iop_order_list)) return DT_IOP_ORDER_CUSTOM;
+
+  for(dt_iop_order_t version = DT_IOP_ORDER_LEGACY; version < DT_IOP_ORDER_LAST; version++)
   {
     int k = 0;
     GList *l = iop_order_list;
     gboolean ok = TRUE;
+    const dt_iop_order_entry_t *order = orders[version - DT_IOP_ORDER_LEGACY];
 
+    // Compare the incoming operation sequence against each built-in order. The
+    // array excludes DT_IOP_ORDER_CUSTOM, so the array index must be translated
+    // back to the enum value before returning the detected order kind.
     while(l)
     {
       const dt_iop_order_entry_t *const restrict entry = (dt_iop_order_entry_t *)l->data;
-      if(strcmp(orders[i][k].operation, entry->operation))
+      if(strcmp(order[k].operation, entry->operation))
       {
         ok = FALSE;
         break;
@@ -908,7 +928,7 @@ dt_iop_order_t dt_ioppr_get_iop_order_list_kind(GList *iop_order_list)
       {
         // skip all the other instance of same module if any
         while(g_list_next(l)
-              && !strcmp(orders[i][k].operation, ((dt_iop_order_entry_t *)(g_list_next(l)->data))->operation))
+              && !strcmp(order[k].operation, ((dt_iop_order_entry_t *)(g_list_next(l)->data))->operation))
           l = g_list_next(l);
       }
 
@@ -916,7 +936,7 @@ dt_iop_order_t dt_ioppr_get_iop_order_list_kind(GList *iop_order_list)
       l = g_list_next(l);
     }
 
-    if(ok) return i;
+    if(ok && order[k].operation[0] == '\0') return version;
   }
 
   return DT_IOP_ORDER_CUSTOM;
@@ -1170,9 +1190,24 @@ GList *dt_ioppr_get_iop_order_list(int32_t imgid, gboolean sorted)
     sqlite3_finalize(stmt);
   }
 
-  // fallback to last iop order list (also used to initialize the pipe when imgid = UNKNOWN_IMAGE)
-  // and new image not yet loaded or whose history has been reset.
-  if(!iop_order_list) iop_order_list = _table_to_list(ansel_raw_order);
+  // Fall back to the image-format default order when no module_order row exists
+  // yet, for example after deleting history. UNKNOWN_IMAGE keeps the RAW order
+  // because there is no concrete file format to inspect.
+  if(!iop_order_list)
+  {
+    dt_iop_order_t default_order = DT_IOP_ORDER_ANSEL_RAW;
+    if(imgid > 0 && !IS_NULL_PTR(darktable.image_cache))
+    {
+      const dt_image_t *image = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+      if(!IS_NULL_PTR(image))
+      {
+        default_order = dt_image_is_rawprepare_supported(image) ? DT_IOP_ORDER_ANSEL_RAW : DT_IOP_ORDER_ANSEL_JPG;
+        dt_image_cache_read_release(darktable.image_cache, image);
+      }
+    }
+
+    iop_order_list = dt_ioppr_get_iop_order_list_version(default_order);
+  }
 
   if(sorted) iop_order_list = g_list_sort(iop_order_list, dt_sort_iop_list_by_order);
 
@@ -1289,9 +1324,33 @@ void dt_ioppr_rebuild_iop_order_from_modules(struct dt_develop_t *dev, GList *or
 // if a module do not exists on iop_order_list it is flagged as unused with INT_MAX
 void dt_ioppr_set_default_iop_order(dt_develop_t *dev, const int32_t imgid)
 {
-  // get the iop-order for this image
+  // First check whether the image already owns an order in DB. If it does not,
+  // choose the built-in order from dev->image_storage, which was just refreshed
+  // by the darkroom/history caller and is the image state used by module reloads.
+  gboolean has_stored_order = FALSE;
+  if(imgid > 0)
+  {
+    sqlite3_stmt *stmt;
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                                "SELECT 1 FROM main.module_order WHERE imgid = ?1", -1,
+                                &stmt, NULL);
+    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+    has_stored_order = (sqlite3_step(stmt) == SQLITE_ROW);
+    sqlite3_finalize(stmt);
+  }
 
-  GList *iop_order_list = dt_ioppr_get_iop_order_list(imgid, FALSE);
+  GList *iop_order_list = NULL;
+  if(!has_stored_order && dev->image_storage.id == imgid)
+  {
+    const dt_iop_order_t default_order = dt_image_is_rawprepare_supported(&dev->image_storage)
+                                           ? DT_IOP_ORDER_ANSEL_RAW
+                                           : DT_IOP_ORDER_ANSEL_JPG;
+    iop_order_list = dt_ioppr_get_iop_order_list_version(default_order);
+  }
+  else
+  {
+    iop_order_list = dt_ioppr_get_iop_order_list(imgid, FALSE);
+  }
 
   // we assign a single iop-order to each module
 
