@@ -913,6 +913,12 @@ static int _styles_prepare_source_dev(dt_develop_t *dev_src, const char *name, c
   if(_styles_init_source_dev(dev_src, name, imgid)) return 1;
 
   GList *si_list = _dt_styles_get_apply_items(style_id);
+  // Style import can renumber style_items multi-priorities without rewriting
+  // the stored iop_list. Align the temporary order list before creating the
+  // style modules, otherwise those new modules make update_for_style_items()
+  // believe the order entries already exist and their iop_order stays INT_MAX.
+  dt_ioppr_update_for_style_items(dev_src, si_list, FALSE);
+
   GHashTable *style_ids = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, NULL);
   GList *applied_items = _styles_collect_applied_items(dev_src, si_list, style_ids);
 
