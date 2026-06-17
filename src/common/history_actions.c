@@ -152,7 +152,8 @@ static GList *_get_user_mod_list(dt_develop_t *dev_src, GList *ops, gboolean cop
  * @return 0 on success, non-zero on failure.
  */
 static int _history_copy_and_paste_on_image_merge(int32_t imgid, int32_t dest_imgid, GList *ops,
-                                                  const gboolean copy_full, const dt_history_merge_strategy_t mode)
+                                                  const gboolean copy_full, const dt_history_merge_strategy_t mode,
+                                                  const gboolean copy_iop_order)
 {
   // Init source history + pipeline
   dt_develop_t _dev_src = { 0 };
@@ -176,7 +177,7 @@ static int _history_copy_and_paste_on_image_merge(int32_t imgid, int32_t dest_im
     // Merge
     GList *mod_list = _get_user_mod_list(dev_src, ops, copy_full);
     ret_val = dt_dev_merge_history_into_image(dev_src, dest_imgid, mod_list,
-                                              dt_conf_get_bool("history/copy_iop_order"), mode,
+                                              copy_iop_order, mode,
                                               dt_conf_get_bool("history/paste_instances"), NULL);
     g_list_free(mod_list);
     mod_list = NULL;
@@ -187,7 +188,8 @@ static int _history_copy_and_paste_on_image_merge(int32_t imgid, int32_t dest_im
 }
 
 gboolean dt_history_copy_and_paste_on_image(const int32_t imgid, const int32_t dest_imgid, GList *ops,
-                                            const gboolean copy_full, const dt_history_merge_strategy_t mode)
+                                            const gboolean copy_full, const dt_history_merge_strategy_t mode,
+                                            const gboolean copy_iop_order)
 {
   if(imgid == dest_imgid) return 1;
 
@@ -201,7 +203,7 @@ gboolean dt_history_copy_and_paste_on_image(const int32_t imgid, const int32_t d
   hist->imgid = dest_imgid;
   dt_history_snapshot_undo_create(hist->imgid, &hist->before, &hist->before_history_end);
 
-  int ret_val = _history_copy_and_paste_on_image_merge(imgid, dest_imgid, ops, copy_full, mode);
+  int ret_val = _history_copy_and_paste_on_image_merge(imgid, dest_imgid, ops, copy_full, mode, copy_iop_order);
 
   dt_history_snapshot_undo_create(hist->imgid, &hist->after, &hist->after_history_end);
   dt_undo_record(darktable.undo, NULL, DT_UNDO_LT_HISTORY, (dt_undo_data_t)hist,
@@ -246,7 +248,8 @@ static gboolean _history_paste_apply(const int32_t imgid, void *user_data)
                                                              imgid,
                                                              darktable.view_manager->copy_paste.selops,
                                                              FALSE,
-                                                             dt_conf_get_int("history/mode")) == 0;
+                                                             dt_conf_get_int("history/paste/mode"),
+                                                             dt_conf_get_bool("history/paste/copy_iop_order")) == 0;
   return pasted;
 }
 
@@ -288,7 +291,8 @@ static gboolean _history_paste_parts_apply(const int32_t imgid, void *user_data)
                                                              imgid,
                                                              darktable.view_manager->copy_paste.selops,
                                                              FALSE,
-                                                             dt_conf_get_int("history/mode")) == 0;
+                                                             dt_conf_get_int("history/paste/mode"),
+                                                             dt_conf_get_bool("history/paste/copy_iop_order")) == 0;
   return pasted;
 }
 
@@ -441,7 +445,8 @@ static gboolean _history_style_apply(const int32_t imgid, void *user_data)
     newimgid = dt_image_duplicate(imgid);
     if(newimgid == UNKNOWN_IMAGE) return FALSE;
 
-    const gboolean pasted = dt_history_copy_and_paste_on_image(imgid, newimgid, NULL, TRUE, params->mode) == 0;
+    const gboolean pasted = dt_history_copy_and_paste_on_image(imgid, newimgid, NULL, TRUE, params->mode,
+                                                               dt_conf_get_bool("history/style/copy_iop_order")) == 0;
     return pasted;
   }
 
@@ -467,7 +472,7 @@ gboolean dt_history_style_on_image(const int32_t imgid, const char *name, const 
     .name = name,
     .style_id = dt_styles_get_id_by_name(name),
     .duplicate = duplicate,
-    .mode = dt_conf_get_int("history/mode"),
+    .mode = dt_conf_get_int("history/style/mode"),
   };
   if(params.style_id == 0) return FALSE;
 
@@ -482,7 +487,7 @@ gboolean dt_history_style_on_list(const GList *list, const char *name, const gbo
     .name = name,
     .style_id = dt_styles_get_id_by_name(name),
     .duplicate = duplicate,
-    .mode = dt_conf_get_int("history/mode"),
+    .mode = dt_conf_get_int("history/style/mode"),
   };
   if(params.style_id == 0) return FALSE;
 

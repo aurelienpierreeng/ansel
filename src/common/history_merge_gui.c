@@ -1599,3 +1599,113 @@ gboolean _hm_show_merge_report_popup(dt_develop_t *dev_dest, dt_develop_t *dev_s
 
   return (res == GTK_RESPONSE_ACCEPT || res == GTK_RESPONSE_DELETE_EVENT);
 }
+
+gboolean dt_gui_merge_options_dialog(const char *title, const char *mode_key,
+                                     const char *iop_order_key, const char *ask_key,
+                                     const gboolean iop_order_available)
+{
+  if(IS_NULL_PTR(darktable.gui)) return TRUE;
+  if(!g_main_context_is_owner(g_main_context_default())) return TRUE;
+
+  GtkWidget *window = dt_ui_main_window(darktable.gui->ui);
+  if(IS_NULL_PTR(window)) return TRUE;
+
+  const dt_history_merge_strategy_t cur_mode = dt_conf_get_int(mode_key);
+  const gboolean cur_iop_order = dt_conf_get_bool(iop_order_key);
+
+  GtkDialog *dialog = GTK_DIALOG(gtk_dialog_new_with_buttons(
+      title, GTK_WINDOW(window),
+      GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+      _("_Cancel"), GTK_RESPONSE_CANCEL,
+      _("_Apply"), GTK_RESPONSE_OK,
+      NULL));
+  gtk_dialog_set_default_response(dialog, GTK_RESPONSE_OK);
+  gtk_window_set_resizable(GTK_WINDOW(dialog), FALSE);
+
+  GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+  gtk_container_set_border_width(GTK_CONTAINER(content), 12);
+  gtk_box_set_spacing(GTK_BOX(content), 6);
+
+  // --- History merge mode ---
+  GtkWidget *mode_label = gtk_label_new(_("Where should source edits be placed relative to destination ones?"));
+  gtk_label_set_xalign(GTK_LABEL(mode_label), 0.0f);
+  gtk_label_set_line_wrap(GTK_LABEL(mode_label), TRUE);
+  gtk_box_pack_start(GTK_BOX(content), mode_label, FALSE, FALSE, 4);
+
+  GtkWidget *radio_prepend = gtk_radio_button_new_with_label(NULL,
+      _("Below (prepend) — incoming (source) is the base ; on conflicts, the original wins."));
+  gtk_widget_set_tooltip_text(radio_prepend,
+      _("Incoming edits are applied BEFORE yours in the processing stack.\n"
+        "When the same module exists in both, your version wins."));
+  gtk_box_pack_start(GTK_BOX(content), radio_prepend, FALSE, FALSE, 0);
+
+  GtkWidget *radio_append = gtk_radio_button_new_with_label_from_widget(GTK_RADIO_BUTTON(radio_prepend),
+      _("Above (append) — the original is the base ; on conflicts, incoming (source) wins."));
+  gtk_widget_set_tooltip_text(radio_append,
+      _("Incoming edits are applied AFTER yours in the processing stack.\n"
+        "When the same module exists in both, the incoming version wins."));
+  gtk_box_pack_start(GTK_BOX(content), radio_append, FALSE, FALSE, 0);
+
+  GtkWidget *radio_replace = gtk_radio_button_new_with_label_from_widget(GTK_RADIO_BUTTON(radio_prepend),
+      _("Replace — discard original edits entirely."));
+  gtk_widget_set_tooltip_text(radio_replace,
+      _("Your current edits are discarded and replaced entirely by the incoming history."));
+  gtk_box_pack_start(GTK_BOX(content), radio_replace, FALSE, FALSE, 0);
+
+  switch(cur_mode)
+  {
+    case DT_HISTORY_MERGE_APPEND:  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(radio_append),  TRUE); break;
+    case DT_HISTORY_MERGE_REPLACE: gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(radio_replace), TRUE); break;
+    default:                       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(radio_prepend), TRUE); break;
+  }
+
+  gtk_box_pack_start(GTK_BOX(content), gtk_separator_new(GTK_ORIENTATION_HORIZONTAL), FALSE, FALSE, 6);
+
+  // --- Pipeline (node) order ---
+  GtkWidget *iop_check = gtk_check_button_new_with_label(_("Use incoming (source) pipeline order"));
+  if(iop_order_available)
+  {
+    gtk_widget_set_tooltip_text(iop_check,
+        _("When checked, the module processing order from the incoming source replaces yours.\n"
+          "When unchecked, your current pipeline order is preserved."));
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(iop_check), cur_iop_order);
+  }
+  else
+  {
+    gtk_widget_set_tooltip_text(iop_check,
+        _("This source has no saved pipeline order — your current pipeline order will be kept."));
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(iop_check), FALSE);
+    gtk_widget_set_sensitive(iop_check, FALSE);
+  }
+  gtk_box_pack_start(GTK_BOX(content), iop_check, FALSE, FALSE, 0);
+
+  gtk_box_pack_start(GTK_BOX(content), gtk_separator_new(GTK_ORIENTATION_HORIZONTAL), FALSE, FALSE, 6);
+
+  // --- Remember choice ---
+  GtkWidget *ask_check = gtk_check_button_new_with_label(_("Ask every time"));
+  gtk_widget_set_tooltip_text(ask_check,
+      _("When unchecked, the current settings are used silently without showing this dialog.\n"
+        "You can still change the defaults from the menu."));
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(ask_check), TRUE);
+  gtk_box_pack_start(GTK_BOX(content), ask_check, FALSE, FALSE, 0);
+
+  gtk_widget_show_all(GTK_WIDGET(dialog));
+  const int res = gtk_dialog_run(dialog);
+
+  if(res == GTK_RESPONSE_OK)
+  {
+    dt_history_merge_strategy_t new_mode = DT_HISTORY_MERGE_PREPEND;
+    if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(radio_append)))
+      new_mode = DT_HISTORY_MERGE_APPEND;
+    else if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(radio_replace)))
+      new_mode = DT_HISTORY_MERGE_REPLACE;
+
+    dt_conf_set_int(mode_key, new_mode);
+    if(iop_order_available)
+      dt_conf_set_bool(iop_order_key, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(iop_check)));
+    dt_conf_set_bool(ask_key, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(ask_check)));
+  }
+
+  gtk_widget_destroy(GTK_WIDGET(dialog));
+  return res == GTK_RESPONSE_OK;
+}

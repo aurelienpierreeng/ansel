@@ -33,7 +33,8 @@ gboolean dt_history_paste_on_image(const int32_t imgid);
 gboolean dt_history_paste_parts_on_image(const int32_t imgid);
 
 gboolean dt_history_copy_and_paste_on_image(const int32_t imgid, const int32_t dest_imgid, GList *ops,
-                                            const gboolean copy_full, const dt_history_merge_strategy_t mode);
+                                            const gboolean copy_full, const dt_history_merge_strategy_t mode,
+                                            const gboolean copy_iop_order);
 
 /** apply style to selected images */
 gboolean dt_history_style_on_list(const GList *list, const char *name, const gboolean duplicate);

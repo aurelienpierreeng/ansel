@@ -22,6 +22,8 @@
 #include "gui/styles.h"
 #include "common/act_on.h"
 #include "common/history.h"
+#include "common/history_merge.h"
+#include "common/history_merge_gui.h"
 #include "common/styles.h"
 #include "common/undo.h"
 #include "gui/accelerators.h"
@@ -48,6 +50,18 @@ static gboolean _styles_apply_callback(GtkAccelGroup *group, GObject *accelerata
 {
   const char *style_name = get_custom_data(GTK_WIDGET(user_data));
   if(IS_NULL_PTR(style_name) || !*style_name) return FALSE;
+
+  if(dt_conf_get_bool("history/style/ask"))
+  {
+    gchar *title = g_strdup_printf(_("Apply style \"%s\" — merge settings"), style_name);
+    const gboolean ok = dt_gui_merge_options_dialog(title,
+                                                    "history/style/mode",
+                                                    "history/style/copy_iop_order",
+                                                    "history/style/ask",
+                                                    dt_styles_has_module_order(style_name));
+    dt_free(title);
+    if(!ok) return FALSE;
+  }
 
   GList *imgs = dt_act_on_get_images();
   const gboolean duplicate = dt_conf_get_bool("ui_last/styles_create_duplicate");
@@ -214,6 +228,66 @@ static void _styles_add_menu_entry(GtkWidget **menus, GList **lists, GtkWidget *
     gtk_widget_set_tooltip_markup(entry->widget, tooltip);
 }
 
+static gboolean _styles_history_prepend_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval,
+                                                 GdkModifierType mods, gpointer user_data)
+{
+  dt_conf_set_int("history/style/mode", DT_HISTORY_MERGE_PREPEND);
+  return TRUE;
+}
+
+static gboolean _styles_history_prepend_checked_callback(GtkWidget *widget)
+{
+  return dt_conf_get_int("history/style/mode") == DT_HISTORY_MERGE_PREPEND;
+}
+
+static gboolean _styles_history_append_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval,
+                                                GdkModifierType mods, gpointer user_data)
+{
+  dt_conf_set_int("history/style/mode", DT_HISTORY_MERGE_APPEND);
+  return TRUE;
+}
+
+static gboolean _styles_history_append_checked_callback(GtkWidget *widget)
+{
+  return dt_conf_get_int("history/style/mode") == DT_HISTORY_MERGE_APPEND;
+}
+
+static gboolean _styles_history_replace_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval,
+                                                 GdkModifierType mods, gpointer user_data)
+{
+  dt_conf_set_int("history/style/mode", DT_HISTORY_MERGE_REPLACE);
+  return TRUE;
+}
+
+static gboolean _styles_history_replace_checked_callback(GtkWidget *widget)
+{
+  return dt_conf_get_int("history/style/mode") == DT_HISTORY_MERGE_REPLACE;
+}
+
+static gboolean _styles_copy_iop_order_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval,
+                                                GdkModifierType mods, gpointer user_data)
+{
+  dt_conf_set_bool("history/style/copy_iop_order", !dt_conf_get_bool("history/style/copy_iop_order"));
+  return TRUE;
+}
+
+static gboolean _styles_copy_iop_order_checked_callback(GtkWidget *widget)
+{
+  return dt_conf_get_bool("history/style/copy_iop_order");
+}
+
+static gboolean _styles_ask_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval,
+                                     GdkModifierType mods, gpointer user_data)
+{
+  dt_conf_set_bool("history/style/ask", !dt_conf_get_bool("history/style/ask"));
+  return TRUE;
+}
+
+static gboolean _styles_ask_checked_callback(GtkWidget *widget)
+{
+  return dt_conf_get_bool("history/style/ask");
+}
+
 static void _styles_menu_clear(void)
 {
   if(IS_NULL_PTR(_styles_menus) || !_styles_lists) return;
@@ -322,6 +396,37 @@ void append_styles(GtkWidget **menus, GList **lists, const dt_menus_t index)
     g_list_free_full(styles, dt_style_free);
     styles = NULL;
   }
+
+  add_menu_separator(menus[index]);
+
+  add_top_submenu_entry(menus, lists, _("History pasting mode"), index);
+  GtkWidget *parent = get_last_widget(lists);
+
+  add_sub_sub_menu_entry(menus, parent, lists, _("Prepend"), index, NULL,
+                         _styles_history_prepend_callback, _styles_history_prepend_checked_callback, NULL, NULL, 0, 0);
+  gtk_widget_set_tooltip_text(get_last_widget(lists),
+                              _("Apply style BEFORE the current history.\n"
+                                "CURRENT EDITS are applied afterwards and win conflicts."));
+
+  add_sub_sub_menu_entry(menus, parent, lists, _("Append"), index, NULL,
+                         _styles_history_append_callback, _styles_history_append_checked_callback, NULL, NULL, 0, 0);
+  gtk_widget_set_tooltip_text(get_last_widget(lists),
+                              _("Apply style AFTER the current history.\n"
+                                "STYLE EDITS are applied afterwards and win conflicts."));
+
+  add_sub_sub_menu_entry(menus, parent, lists, _("Replace"), index, NULL,
+                         _styles_history_replace_callback, _styles_history_replace_checked_callback, NULL, NULL, 0, 0);
+  gtk_widget_set_tooltip_text(get_last_widget(lists),
+                              _("Discard the current history and replace it entirely with the style."));
+
+  add_top_submenu_entry(menus, lists, _("Nodes pasting mode"), index);
+  parent = get_last_widget(lists);
+
+  add_sub_sub_menu_entry(menus, parent, lists, _("Copy module order"), index, NULL,
+                         _styles_copy_iop_order_callback, _styles_copy_iop_order_checked_callback, NULL, NULL, 0, 0);
+
+  add_sub_menu_entry(menus, lists, _("Ask merge settings before apply"), index, NULL,
+                     _styles_ask_callback, _styles_ask_checked_callback, NULL, NULL, 0, 0);
 
   add_menu_separator(menus[index]);
   add_sub_menu_entry(menus, lists, _("Create new style..."), index, NULL,
