@@ -101,8 +101,10 @@ extern "C" {
  * the 16px reference font. Because the font's point->px conversion already folds in the
  * screen DPI, this needs NO DT_PIXEL_APPLY_DPI on top.
  *
- * Falls back to the 10px reference before gui->em has been resolved (early init). */
-#define DT_GUI_EM_SIZE (gint)(darktable.gui->em > 0.0 ? darktable.gui->em : 16.0)
+ * Falls back to the 10px reference before the GUI exists or before gui->em has
+ * been resolved. Standalone dialogs may run after gtk_init() but before the
+ * main Ansel GUI allocation when startup needs user input. */
+#define DT_GUI_EM_SIZE ((gint)((!IS_NULL_PTR(darktable.gui) && darktable.gui->em > 0.0) ? darktable.gui->em : 16.0))
 #define DT_GUI_BOX_SPACING_EM 0.625
 #define DT_GUI_BOX_SPACING                                                                                     \
   ((gint)(DT_GUI_EM_SIZE * DT_GUI_BOX_SPACING_EM + 0.5))
