@@ -877,6 +877,12 @@ typedef struct darkroom_expose_state_t
   gboolean image_surface_has_main;
   uint64_t main_zoom_hash;
   uint64_t main_hash;
+  /* Main backbuf hash for which we already asked for a retry redraw after failing
+   * to lock/render it. Used to re-queue at most once per distinct main frame so a
+   * permanently-unlockable main backbuf (e.g. evicted under memory pressure) does
+   * not spin the center redraw at frame-clock rate while we show the preview
+   * fallback. Reset whenever a main frame is rendered successfully. */
+  uint64_t pending_main_hash;
 } darkroom_expose_state_t;
 
 static inline gboolean _darkroom_preview_fallback_valid(const dt_develop_t *dev, const int width,
@@ -906,6 +912,7 @@ static inline void _darkroom_reset_expose_state(darkroom_expose_state_t *state)
   state->image_surface_has_main = FALSE;
   state->main_zoom_hash = 0;
   state->main_hash = 0;
+  state->pending_main_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
 }
 
 static void _darkroom_prepare_image_surface(dt_develop_t *dev, const int width, const int height,
@@ -961,6 +968,7 @@ void expose(
   cairo_restore(cri);
   return;
 #endif
+
   static darkroom_expose_state_t expose_state = {
     .image_surface_width = 0,
     .image_surface_height = 0,
@@ -968,6 +976,7 @@ void expose(
     .image_surface_has_main = FALSE,
     .main_zoom_hash = 0,
     .main_hash = 0,
+    .pending_main_hash = DT_PIXELPIPE_CACHE_HASH_INVALID,
   };
   const uint64_t zoom_hash = dt_hash(5381, (char *)&dev->roi, sizeof(dev->roi));
   const gboolean allow_uncropped_full_image = _darkroom_gui_module_requests_uncropped_full_image(dev);
@@ -1041,14 +1050,24 @@ void expose(
       expose_state.main_zoom_hash = zoom_hash;
       expose_state.image_surface_imgid = dev->image_storage.id;
       expose_state.image_surface_has_main = TRUE;
+      expose_state.pending_main_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
       _release_preview_fallback_surface();
       drawn = TRUE;
       drawn_from_main = TRUE;
       draw_source = "fresh main backbuf";
       draw_hash = _darkroom_main_locked.hash;
     }
-    else if(main_backbuf_is_newer)
+    else if(main_backbuf_is_newer && expose_state.pending_main_hash != main_backbuf_hash)
+    {
+      /* The main backbuf hash advanced but its cacheline could not be locked this
+       * frame. Ask for one retry, then remember the hash: if the same main frame
+       * stays unlockable (e.g. evicted under memory pressure), we keep presenting
+       * the preview fallback below instead of re-queueing a redraw every frame.
+       * A genuinely new main frame (different hash) re-arms the retry, and the
+       * pipeline itself re-queues a redraw when it publishes a fresh backbuf. */
+      expose_state.pending_main_hash = main_backbuf_hash;
       dt_control_queue_redraw_center();
+    }
   }
 
   /* Rule 2: preview is directly equivalent to main only in full-image view
