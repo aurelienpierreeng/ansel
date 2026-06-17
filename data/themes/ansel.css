@@ -489,6 +489,13 @@ scrolledwindow {
   background-color: @bg_color;
 }
 
+/* The thumbtable grid is full-bleed: drop GtkScrolledWindow's 3px "scrollbar-spacing"
+ * gutter (a legacy GtkWidget style property, not a CSS box property) so the grid sits
+ * flush against the scrollbar instead of leaving a strip of background before it. */
+#thumbtable-scroll {
+  -GtkScrolledWindow-scrollbar-spacing: 0;
+}
+
 #top,
 #left,
 #right,
@@ -1273,7 +1280,8 @@ menu.dt-masks-context-menu menuitem.dt-masks-checked:not(:disabled) label.dt-mas
   11. THUMBTABLE (FILMSTRIP / LIGHTTABLE)
   ======================================*/
 
-.dt_thumbtable {
+.dt_thumbtable,
+.background {
   background-color: @lighttable_bg_color;
 }
 

@@ -68,7 +68,6 @@
 #include <glib-object.h>
 #include <math.h>
 
-
 static gboolean _thumbtable_clone_lut(dt_thumbtable_t *dst)
 {
   if(IS_NULL_PTR(dst) || IS_NULL_PTR(darktable.gui) || IS_NULL_PTR(darktable.gui->ui)) return FALSE;
@@ -669,9 +668,11 @@ void _update_grid_area(dt_thumbtable_t *table)
   {
     const int height = (int)ceilf((float)table->collection_count / (float)table->thumbs_per_row) * table->thumb_height;
     main_dimension = height;
-    if(current_h != height)
+    // Pin the cross-axis (width) to the viewport so the grid reaches the scrollbar instead of
+    // stopping at the column total (which is floor-rounded and leaves a gap before the scrollbar).
+    if(current_h != height || current_w != table->view_width)
     {
-      gtk_widget_set_size_request(table->grid, -1, height);
+      gtk_widget_set_size_request(table->grid, table->view_width, height);
       changed = TRUE;
     }
   }
@@ -679,9 +680,10 @@ void _update_grid_area(dt_thumbtable_t *table)
   {
     const int width = table->collection_count * table->thumb_width;
     main_dimension = width;
-    if(current_w != width)
+    // Pin the cross-axis (height) to the viewport for the same reason as above.
+    if(current_w != width || current_h != table->view_height)
     {
-      gtk_widget_set_size_request(table->grid, width, -1);
+      gtk_widget_set_size_request(table->grid, width, table->view_height);
       changed = TRUE;
     }
   }
@@ -727,6 +729,36 @@ void _grid_configure(dt_thumbtable_t *table, int width, int height, int cols)
            table->view_width, table->view_height, table->thumbs_per_row, table->thumb_width);
 }
 
+// Extra extent one thumb cell adds beyond the layout stride (thumb_width/height).
+//
+// The cells (.thumb-cell) carry a transparent border plus a negative margin, used to overlap and merge
+// the borders of adjacent cells. As a result a cell's margin box is larger than the stride by
+// (border + margin); inner cells overlap their neighbours so it cancels out, but the last row/column
+// has no neighbour to overlap into, so the GtkFixed grid ends up exactly that much larger than
+// cols*thumb_width (confirmed: GtkFixed sizes itself as max(child->x + child_preferred), and the
+// child's preferred size includes its margins). Budgeting for it - read from the theme rather than
+// hardcoded - lets the grid fit its viewport instead of spilling the last cell past the scrollbar.
+//
+// The cell is square-symmetric, so the horizontal and vertical surplus are equal.
+static int _thumb_cell_decoration(void)
+{
+  GtkWidgetPath *path = gtk_widget_path_new();
+  gtk_widget_path_append_type(path, GTK_TYPE_EVENT_BOX);
+  gtk_widget_path_iter_add_class(path, -1, "thumb-cell");
+
+  GtkStyleContext *ctx = gtk_style_context_new();
+  gtk_style_context_set_path(ctx, path);
+
+  GtkBorder margin, border;
+  gtk_style_context_get_margin(ctx, GTK_STATE_FLAG_NORMAL, &margin);
+  gtk_style_context_get_border(ctx, GTK_STATE_FLAG_NORMAL, &border);
+
+  g_object_unref(ctx);
+  gtk_widget_path_unref(path);
+
+  return MAX(0, (border.left + border.right) + (margin.left + margin.right));
+}
+
 // Track size changes of the container or number of thumbs per row
 // and recomputed the size of individual thumbnails accordingly
 void dt_thumbtable_configure(dt_thumbtable_t *table)
@@ -734,47 +766,39 @@ void dt_thumbtable_configure(dt_thumbtable_t *table)
   if(!gtk_widget_is_visible(table->scroll_window)) return;
 
   int cols = 1;
-  int new_width = 0;
-  int new_height = 0;
   int new_thumbs_per_row = 0;
   int new_thumb_width = 0;
   int new_thumb_height = 0;
 
+  // Available area for the grid = parent overlay allocation minus the scrollbar gutter. We must read
+  // it from the parent overlay (not the scrolled window's viewport): the parent overlay has no main
+  // child of its own, so its size is driven from the outside and shrinks freely with the window.
+  //
+  // Besides the scrollbar itself, GtkScrolledWindow reserves a "scrollbar-spacing" gutter between the
+  // content and the scrollbar. That gutter is a legacy GtkWidget *style property* (default 3px), not a
+  // CSS box-model property - which is why it is invisible in the GTK Inspector's CSS pane and looks
+  // like it "comes from nowhere". Read its real value (rather than guessing) so the maths stays exact
+  // across themes and DPI; we also zero it via CSS (see ansel.css) so in practice it is 0 here and the
+  // grid sits flush against the scrollbar.
+  gint sb_spacing = 0;
+  gtk_widget_style_get(table->scroll_window, "scrollbar-spacing", &sb_spacing, NULL);
+
+  int new_width = gtk_widget_get_allocated_width(table->parent_overlay);
+  int new_height = gtk_widget_get_allocated_height(table->parent_overlay);
+
   if(table->mode == DT_THUMBTABLE_MODE_FILEMANAGER)
   {
-    // Use actual widget allocations for sizing: GtkAdjustment page sizes are not reliably updated
-    // during shrinking, which can prevent thumbnails from downscaling until another resize happens.
-    new_width = gtk_widget_get_allocated_width(table->parent_overlay);
-    new_height = gtk_widget_get_allocated_height(table->parent_overlay);
-
     GtkWidget *v_scroll = gtk_scrolled_window_get_vscrollbar(GTK_SCROLLED_WINDOW(table->scroll_window));
     const int v_scroll_w = v_scroll ? gtk_widget_get_allocated_width(v_scroll) : 0;
-    if(v_scroll_w > 0) new_width -= v_scroll_w + 1;
+    new_width -= v_scroll_w + sb_spacing;
 
     cols = dt_conf_get_int("plugins/lighttable/images_in_row");
   }
   else if(table->mode == DT_THUMBTABLE_MODE_FILMSTRIP)
   {
-    // Don't use GtkAdjustment page sizes here: in filmstrip, the scrolled window height can
-    // be influenced by its (resized) children during initial layout, which may cause a
-    // feedback loop where thumbnails keep growing.
-    new_width = gtk_widget_get_allocated_width(table->parent_overlay);
-    new_height = gtk_widget_get_allocated_height(table->parent_overlay);
     GtkWidget *h_scroll = gtk_scrolled_window_get_hscrollbar(GTK_SCROLLED_WINDOW(table->scroll_window));
-    int h_scroll_h = 0;
-    if(h_scroll)
-    {
-      h_scroll_h = gtk_widget_get_allocated_height(h_scroll);
-      if(h_scroll_h > 0) h_scroll_h += 1;
-    }
-
-    // Clamp to the explicit panel size request when present to enforce "container drives child size".
-    int req_w = -1, req_h = -1;
-    gtk_widget_get_size_request(table->parent_overlay, &req_w, &req_h);
-    if(req_h > 0)
-      new_height = MIN(new_height, req_h);
-
-    new_height -= h_scroll_h;
+    const int h_scroll_h = h_scroll ? gtk_widget_get_allocated_height(h_scroll) : 0;
+    new_height -= h_scroll_h + sb_spacing;
   }
 
   // Parent is not allocated or something went wrong:
@@ -789,18 +813,22 @@ void dt_thumbtable_configure(dt_thumbtable_t *table)
     return;
   }
 
+  // Reserve the per-cell decoration surplus on the cross axis so the whole grid (cols*thumb_width plus
+  // the last cell's protruding border) fits exactly within the viewport instead of overflowing it.
+  const int deco = _thumb_cell_decoration();
+
   // Compute derived thumbnail sizes and only invalidate thumbnails when they actually change.
   if(table->mode == DT_THUMBTABLE_MODE_FILEMANAGER)
   {
     new_thumbs_per_row = cols;
-    new_thumb_width = (int)floorf((float)new_width / (float)MAX(new_thumbs_per_row, 1));
+    new_thumb_width = (int)floorf((float)(new_width - deco) / (float)MAX(new_thumbs_per_row, 1));
     new_thumb_height = (new_thumbs_per_row == 1) ? new_height : new_thumb_width;
   }
   else if(table->mode == DT_THUMBTABLE_MODE_FILMSTRIP)
   {
     new_thumbs_per_row = 1;
-    new_thumb_height = new_height;
-    new_thumb_width = new_height;
+    new_thumb_height = new_height - deco;
+    new_thumb_width = new_thumb_height;
   }
 
   const gboolean thumbs_changed = (!table->configured
@@ -2000,8 +2028,15 @@ dt_thumbtable_t *dt_thumbtable_new(dt_thumbtable_mode_t mode)
   dt_thumbtable_t *table = (dt_thumbtable_t *)calloc(1, sizeof(dt_thumbtable_t));
 
   table->scroll_window = gtk_scrolled_window_new(NULL, NULL);
+  // Named so the theme can zero its "scrollbar-spacing" style property (see dt_thumbtable_configure).
+  gtk_widget_set_name(table->scroll_window, "thumbtable-scroll");
   gtk_scrolled_window_set_overlay_scrolling(GTK_SCROLLED_WINDOW(table->scroll_window), FALSE);
-  gtk_scrolled_window_set_shadow_type(GTK_SCROLLED_WINDOW(table->scroll_window), GTK_SHADOW_ETCHED_IN);
+  // No frame: GTK_SHADOW_ETCHED_IN adds the .frame style class, whose border becomes part of the
+  // scrolled window's *minimum* width (grid + scrollbar + frame border) because the horizontal scroll
+  // policy is NEVER. When that minimum exceeds the parent overlay's width, GtkOverlay's FILL handler
+  // lets the scrolled window overflow, pushing the vertical scrollbar past the visible area where it
+  // gets clipped. The image grid is full-bleed content and needs no recessed frame anyway.
+  gtk_scrolled_window_set_shadow_type(GTK_SCROLLED_WINDOW(table->scroll_window), GTK_SHADOW_NONE);
 
   table->v_scrollbar = gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(table->scroll_window));
   table->h_scrollbar = gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(table->scroll_window));
@@ -2022,6 +2057,14 @@ dt_thumbtable_t *dt_thumbtable_new(dt_thumbtable_mode_t mode)
   table->grid = gtk_fixed_new();
   dt_gui_add_class(table->grid, "dt_thumbtable");
   gtk_container_add(GTK_CONTAINER(table->scroll_window), table->grid);
+
+  // gtk_container_add() wraps the grid in an implicit GtkViewport whose default shadow type is
+  // GTK_SHADOW_IN. That shadow adds the .frame style class (hence a ~1px border on each side) and
+  // bakes it into the scrolled window's minimum width, which pushes the scrollbar a couple of pixels
+  // past the parent. Drop it so the grid + scrollbar add up exactly to the available width.
+  GtkWidget *viewport = gtk_bin_get_child(GTK_BIN(table->scroll_window));
+  if(GTK_IS_VIEWPORT(viewport))
+    gtk_viewport_set_shadow_type(GTK_VIEWPORT(viewport), GTK_SHADOW_NONE);
   g_object_set_data(G_OBJECT(table->grid), DT_ACCELS_WIDGET_TOOLTIP_DISABLED_KEY, GINT_TO_POINTER(1));
   gtk_widget_set_has_tooltip(table->grid, FALSE);
   gtk_widget_set_can_focus(table->grid, TRUE);
@@ -2307,6 +2350,7 @@ void dt_thumbtable_set_parent(dt_thumbtable_t *table, dt_thumbtable_mode_t mode)
 {
   table->mode = mode;
   table->parent_overlay = gtk_overlay_new();
+  dt_gui_add_class(table->parent_overlay, "background");
   gtk_overlay_add_overlay(GTK_OVERLAY(table->parent_overlay), table->scroll_window);
   g_signal_connect(G_OBJECT(table->parent_overlay), "size-allocate", G_CALLBACK(_parent_overlay_size_allocate), table);
 
@@ -2314,13 +2358,22 @@ void dt_thumbtable_set_parent(dt_thumbtable_t *table, dt_thumbtable_mode_t mode)
   {
     gtk_widget_set_name(table->grid, "thumbtable-filemanager");
     dt_gui_add_help_link(table->grid, dt_get_help_url("lighttable_filemanager"));
-    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(table->scroll_window), GTK_POLICY_NEVER, GTK_POLICY_ALWAYS);
+    // Cross-axis policy is EXTERNAL, not NEVER: NEVER folds the grid's full minimum width into the
+    // scrolled window's own minimum (gtkscrolledwindow.c), and a GtkFixed cannot shrink below its
+    // children's extent - which is a few pixels wider than cols*thumb_width because of the thumb
+    // cells' transparent border / negative margin. That surplus would push the scrolled window past
+    // the parent overlay and clip the scrollbar. EXTERNAL hides the scrollbar all the same but lets
+    // the scrolled window be narrower than its content, so the few px of transparent cell border get
+    // harmlessly clipped while every thumbnail still fits.
+    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(table->scroll_window), GTK_POLICY_EXTERNAL, GTK_POLICY_ALWAYS);
   }
   else if(mode == DT_THUMBTABLE_MODE_FILMSTRIP)
   {
     gtk_widget_set_name(table->grid, "thumbtable-filmstrip");
     dt_gui_add_help_link(table->grid, dt_get_help_url("filmstrip"));
-    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(table->scroll_window), GTK_POLICY_ALWAYS, GTK_POLICY_NEVER);
+    // Vertical policy EXTERNAL for the same reason as the filemanager's horizontal one above: it stops
+    // the grid's surplus height (thumb cell border/margin) from clipping the horizontal scrollbar.
+    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(table->scroll_window), GTK_POLICY_ALWAYS, GTK_POLICY_EXTERNAL);
   }
 }
 
