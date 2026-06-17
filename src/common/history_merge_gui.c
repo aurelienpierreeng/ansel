@@ -1265,7 +1265,8 @@ gboolean _hm_show_merge_report_popup(dt_develop_t *dev_dest, dt_develop_t *dev_s
                                      const dt_history_merge_strategy_t strategy, GHashTable *src_last_by_id,
                                      GHashTable *dst_last_before_by_id, const GPtrArray *orig_labels,
                                      const GPtrArray *orig_styles, const GHashTable *orig_ids,
-                                     const GHashTable *mod_list_ids, const char *source_label)
+                                     const GHashTable *mod_list_ids, const char *source_label,
+                                     dt_hm_batch_state_t *batch)
 {
   /* Present a merge report with source/destination pipelines and override markers. */
   if(IS_NULL_PTR(darktable.gui)) return FALSE;
@@ -1574,8 +1575,27 @@ gboolean _hm_show_merge_report_popup(dt_develop_t *dev_dest, dt_develop_t *dev_s
   gulong drag_recv_handler =
       g_signal_connect(G_OBJECT(tree), "drag-data-received", G_CALLBACK(_hm_report_drag_data_received), reorder_ctx);
 
+  GtkWidget *batch_check = NULL;
+  if(batch != NULL)
+  {
+    batch_check = gtk_check_button_new_with_label(_("Don't ask again for this batch"));
+    gtk_widget_set_tooltip_text(batch_check,
+        _("When checked, the chosen action (Accept or Revert) is applied silently\n"
+          "to all remaining images in this batch without showing this report again."));
+    gtk_box_pack_start(GTK_BOX(content_area), batch_check, FALSE, FALSE, 6);
+  }
+
   gtk_widget_show_all(GTK_WIDGET(dialog));
   const int res = gtk_dialog_run(dialog);
+
+  if(batch && batch_check && gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(batch_check)))
+  {
+    if(res == GTK_RESPONSE_ACCEPT)       // Revert button
+      batch->decision = DT_HM_BATCH_REVERT;
+    else if(res == GTK_RESPONSE_CLOSE)   // Accept button
+      batch->decision = DT_HM_BATCH_ACCEPT;
+    // GTK_RESPONSE_DELETE_EVENT: leave UNDECIDED — closing the window is ambiguous
+  }
 
   g_signal_handler_disconnect(tree, drag_begin_handler);
   g_signal_handler_disconnect(tree, drag_get_handler);

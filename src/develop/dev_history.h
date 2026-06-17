@@ -208,7 +208,8 @@ int dt_dev_history_item_from_source_history_item(struct dt_develop_t *dev_dest, 
  */
 int dt_dev_merge_history_into_image(struct dt_develop_t *dev_src, int32_t dest_imgid, const GList *mod_list,
                                     gboolean merge_iop_order, const dt_history_merge_strategy_t mode,
-                                    const gboolean paste_instances, const char *source_label);
+                                    const gboolean paste_instances, const char *source_label,
+                                    dt_hm_batch_state_t *batch);
 /**
  * @brief Replace an image history with the content of @p dev_src.
  *

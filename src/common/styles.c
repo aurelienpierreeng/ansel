@@ -981,7 +981,7 @@ static int _styles_prepare_source_dev(dt_develop_t *dev_src, const char *name, c
 }
 
 int dt_styles_apply_to_image_merge(const char *name, const int style_id, const int32_t newimgid,
-                                   const dt_history_merge_strategy_t mode)
+                                   const dt_history_merge_strategy_t mode, dt_hm_batch_state_t *batch)
 {
   int ret_val = 1;
 
@@ -1008,7 +1008,7 @@ int dt_styles_apply_to_image_merge(const char *name, const int style_id, const i
   {
     ret_val = dt_dev_merge_history_into_image(&dev_src, newimgid, mod_list,
                                               dt_conf_get_bool("history/style/copy_iop_order"), mode,
-                                              dt_conf_get_bool("history/paste_instances"), name);
+                                              dt_conf_get_bool("history/paste_instances"), name, batch);
   }
 
   g_list_free(mod_list);

@@ -353,7 +353,8 @@ int dt_dev_history_item_from_source_history_item(dt_develop_t *dev_dest, dt_deve
 
 int dt_dev_merge_history_into_image(dt_develop_t *dev_src, int32_t dest_imgid, const GList *mod_list,
                                     gboolean merge_iop_order, const dt_history_merge_strategy_t mode,
-                                    const gboolean paste_instances, const char *source_label)
+                                    const gboolean paste_instances, const char *source_label,
+                                    dt_hm_batch_state_t *batch)
 {
   if(dest_imgid <= 0) return 1;
   if(IS_NULL_PTR(mod_list)) return 0;
@@ -385,7 +386,7 @@ int dt_dev_merge_history_into_image(dt_develop_t *dev_src, int32_t dest_imgid, c
    */
   const gboolean use_source_iop_order = merge_iop_order && !first_run;
   const int ret_val = dt_history_merge(&dev_dest, dev_src, dest_imgid, mod_list, use_source_iop_order, mode,
-                                       paste_instances, source_label);
+                                       paste_instances, source_label, batch);
 
   if(ret_val == 0)
   {

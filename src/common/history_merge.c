@@ -1558,7 +1558,7 @@ static void _hm_truncate_dest_redo_tail(dt_develop_t *dev_dest)
 int dt_history_merge(dt_develop_t *dev_dest, dt_develop_t *dev_src, const int32_t dest_imgid,
                      const GList *mod_list, const gboolean merge_iop_order,
                      const dt_history_merge_strategy_t strategy, const gboolean force_new_modules,
-                     const char *source_label)
+                     const char *source_label, dt_hm_batch_state_t *batch)
 {
   /* Merge module edits from `dev_src` into `dev_dest` and write the resulting history to DB.
    *
@@ -1707,9 +1707,13 @@ int dt_history_merge(dt_develop_t *dev_dest, dt_develop_t *dev_src, const int32_
   dt_print(DT_DEBUG_HISTORY, "[dt_history_merge] merged history: end=%d len=%d\n",
            dt_dev_get_history_end_ext(dev_dest), g_list_length(dev_dest->history));
 
-  revert = _hm_show_merge_report_popup(dev_dest, dev_src, merge_iop_order, used_source_order, strategy,
-                                       src_last_by_id, dst_last_before_by_id, backup.orig_labels,
-                                       backup.orig_styles, backup.orig_ids, mod_list_ids, source_label);
+  if(batch && batch->decision != DT_HM_BATCH_UNDECIDED)
+    revert = (batch->decision == DT_HM_BATCH_REVERT);
+  else
+    revert = _hm_show_merge_report_popup(dev_dest, dev_src, merge_iop_order, used_source_order, strategy,
+                                         src_last_by_id, dst_last_before_by_id, backup.orig_labels,
+                                         backup.orig_styles, backup.orig_ids, mod_list_ids, source_label,
+                                         batch);
 
   if(revert)
   {

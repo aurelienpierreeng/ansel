@@ -36,6 +36,18 @@ extern "C"
     DT_HISTORY_MERGE_REPLACE = 2   // entirely replace history and modules order
   } dt_history_merge_strategy_t;
 
+  typedef enum dt_hm_batch_decision_t
+  {
+    DT_HM_BATCH_UNDECIDED = 0,  // show the report dialog for each image
+    DT_HM_BATCH_ACCEPT,         // silently keep the merge result
+    DT_HM_BATCH_REVERT,         // silently revert the merge
+  } dt_hm_batch_decision_t;
+
+  typedef struct dt_hm_batch_state_t
+  {
+    dt_hm_batch_decision_t decision;
+  } dt_hm_batch_state_t;
+
   /**
    * @brief Merge a list of modules into a destination image, solving pipeline topologies
    * for proper insertion of source modules.
@@ -57,7 +69,7 @@ extern "C"
   int dt_history_merge(struct dt_develop_t *dev_dest, struct dt_develop_t *dev_src, const int32_t dest_imgid,
                        const GList *mod_list, const gboolean merge_iop_order,
                        const dt_history_merge_strategy_t strategy, const gboolean force_new_modules,
-                       const char *source_label);
+                       const char *source_label, dt_hm_batch_state_t *batch);
 
 #ifdef __cplusplus
 }

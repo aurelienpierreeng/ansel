@@ -632,7 +632,7 @@ static int32_t dt_control_duplicate_images_job_run(dt_job_t *job)
       if(GPOINTER_TO_INT(params->data))
         dt_history_delete_on_image(newimgid);
       else
-        dt_history_copy_and_paste_on_image(imgid, newimgid, NULL, TRUE, DT_HISTORY_MERGE_REPLACE, FALSE);
+        dt_history_copy_and_paste_on_image(imgid, newimgid, NULL, TRUE, DT_HISTORY_MERGE_REPLACE, FALSE, NULL);
 
       dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF, NULL);
     }
