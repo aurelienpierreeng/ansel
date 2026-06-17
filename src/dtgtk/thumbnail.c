@@ -530,39 +530,37 @@ int32_t _get_image_buffer(dt_job_t *job)
     dt_pixelpipe_cache_free_align(full_res_thumb);
   }
 
-  // The job was cancelled on the queue. Good chances of having thumb destroyed anytime soon.
-  if(IS_NULL_PTR(thumb->job) || thumb->job != job 
-     || dt_control_job_get_state(job) == DT_JOB_STATE_CANCELLED 
-     || dt_atomic_get_int(&thumb->destroying))
-  {
-    cairo_surface_destroy(surface);
-    return 1;
-  }
+  // Commit the rendered surface only if the thumb is still live and expects this specific render.
+  // All validity checks and the surface write happen inside a single locked section to eliminate
+  // TOCTOU races with dt_thumbnail_destroy (which nulls widget pointers under the same lock)
+  // and dt_thumbnail_image_refresh_real (which clears thumb->job under the same lock to cancel
+  // stale renders from before a size change or data invalidation).
+  double sx = 1.0, sy = 1.0;
+  cairo_surface_get_device_scale(surface, &sx, &sy);
 
-  // Write temporary surface into actual image surface if we still have a widget to paint on
-  if(thumb && thumb->widget && thumb->w_main)
+  dt_pthread_mutex_lock(&thumb->lock);
+  const gboolean still_valid = (thumb->job == job           // not cancelled by refresh or destroy
+                                && !dt_atomic_get_int(&thumb->destroying)
+                                && thumb->w_image != NULL);
+  if(still_valid)
   {
-    double sx = 1.0, sy = 1.0;
-    cairo_surface_get_device_scale(surface, &sx, &sy);
-
-    dt_pthread_mutex_lock(&thumb->lock);
     _free_image_surface(thumb);
     thumb->img_width = roundf(img_width / sx);
     thumb->img_height = roundf(img_height / sy);
     thumb->zoomx = zoomx / sx;
     thumb->zoomy = zoomy / sy;
     thumb->img_surf = surface;
-    dt_pthread_mutex_unlock(&thumb->lock);
-
-    _finish_buffer_thread(thumb, TRUE);
+    surface = NULL;  // ownership transferred to thumb
   }
-  else 
+  dt_pthread_mutex_unlock(&thumb->lock);
+
+  if(surface)
   {
-    // Lost thumbnail to paint on
     cairo_surface_destroy(surface);
     return 1;
   }
 
+  _finish_buffer_thread(thumb, TRUE);
   return 0;
 }
 
@@ -1641,7 +1639,15 @@ void dt_thumbnail_set_drop(dt_thumbnail_t *thumb, gboolean accept_drop)
 int dt_thumbnail_image_refresh_real(dt_thumbnail_t *thumb)
 {
   thumb_return_if_fails(thumb, G_SOURCE_REMOVE);
+
+  dt_pthread_mutex_lock(&thumb->lock);
+  // Cancel any in-flight render job. It was started for the old state (stale size or data).
+  // The job checks thumb->job == job under the same lock before committing; clearing it here
+  // makes that check fail so the old result is discarded and a fresh job can be queued.
+  thumb->job = NULL;
   thumb->image_inited = FALSE;
+  dt_pthread_mutex_unlock(&thumb->lock);
+
   // Queue redraw on the drawing area itself: it's the widget that requests/regenerates the cairo surface.
   // Queueing only the parent overlay may not invalidate the drawing area's window, leaving stale (too small)
   // cached surfaces until some pointer event happens.
