@@ -1036,7 +1036,13 @@ void dt_image_set_flip(const int32_t imgid, const dt_image_orientation_t orienta
                                    NULL, 0, 0, 0, "");
   dt_history_set_end(imgid, num + 1);
 
-  dt_image_t *image = dt_image_cache_get(darktable.image_cache, imgid, 'w');
+  // We just wrote a new "flip" history entry. Reload the cached image metadata from the DB
+  // so history_items reflects it. history_items drives the "altered" state, and on the
+  // "embedded JPEG for unedited images" mode the altered state is what selects raw processing
+  // over the (unrotated) embedded JPEG for the thumbnail. With stale history_items the rotated
+  // image keeps showing its embedded JPEG, so the rotation appears to do nothing unless the user
+  // forces "never use embedded JPEG" mode (issue #647).
+  dt_image_t *image = dt_image_cache_get_reload(darktable.image_cache, imgid, 'w');
   if(image)
   {
     image->history_hash = UINT64_MAX;
