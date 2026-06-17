@@ -114,7 +114,7 @@ static dt_pixel_cache_entry_t *dt_pixel_cache_new_entry(const uint64_t hash, con
                                                         const char *name, const int id,
                                                         dt_dev_pixelpipe_cache_t *cache, gboolean alloc,
                                                         GHashTable *table);
-static void _cache_entry_clmem_flush_device(dt_pixel_cache_entry_t *entry, const int devid);
+static gboolean _cache_entry_clmem_flush_device(dt_pixel_cache_entry_t *entry, const int devid);
 static gboolean _cache_entry_materialize_host_data_locked(dt_pixel_cache_entry_t *entry, int preferred_devid,
                                                           gboolean prefer_device_payload);
 static int dt_dev_pixelpipe_cache_flush_old(dt_dev_pixelpipe_cache_t *cache);
@@ -502,15 +502,40 @@ void dt_dev_pixelpipe_cache_flush_clmem(dt_dev_pixelpipe_cache_t *cache, const i
   while(g_hash_table_iter_next(&iter, &key, &value))
   {
     dt_pixel_cache_entry_t *entry = (dt_pixel_cache_entry_t *)value;
-    /* Realtime display paths use cached cl_mem as scratch storage. Flushing VRAM
-     * must stay lightweight and must not wait on per-entry writer locks, otherwise
-     * allocation fallback can deadlock against in-flight GPU renders that already
-     * hold cache entry locks. */
+
+    /* Only idle cachelines may have their vRAM reclaimed. An entry that is referenced or
+     * write-locked is somebody's live (or about-to-be-consumed) buffer: the recursion reserves
+     * an entry-level ref for the next consumer before that consumer borrows the cl_mem payload,
+     * so a payload can be unborrowed (per-payload refs == 0) yet still belong to an in-flight
+     * pipe. Honoring the same protection the LRU/removal paths use (refcount + non-blocking
+     * write-lock probe) keeps us from yanking the sole vRAM copy of another pipe's input out
+     * from under it -- which left a husk and produced skull thumbnails (issue #817). The
+     * trywrlock never waits, so this stays lightweight and cannot deadlock against renders that
+     * already hold entry locks. */
+    const gboolean used = dt_atomic_get_int(&entry->refcount) > 0;
+    gboolean locked = dt_pthread_rwlock_trywrlock(&entry->lock);
+    if(!locked) dt_pthread_rwlock_unlock(&entry->lock);
+    if(used || locked)
+    {
+      if(darktable.unmuted & DT_DEBUG_VERBOSE)
+        dt_print(DT_DEBUG_OPENCL,
+          "[dt_dev_pixelpipe_cache_flush_clmem] entry %" PRIu64 " is in use (refcount=%i locked=%i), "
+          "keeping its vRAM\n", entry->hash, dt_atomic_get_int(&entry->refcount), locked);
+      continue;
+    }
+
     if(darktable.unmuted & DT_DEBUG_VERBOSE)
       dt_print(DT_DEBUG_OPENCL,
         "[dt_dev_pixelpipe_cache_flush_clmem] trying to flush vRAM for entry %" PRIu64 " on device %d...\n",
         entry->hash, devid);
-    _cache_entry_clmem_flush_device(entry, devid);
+
+    /* If reclaiming this device's vRAM leaves the entry with no buffer at all, delete it now
+     * instead of letting a payload-less husk persist as a cache hit. We hold cache->lock for the
+     * whole iteration, and lookups bump the consumer ref under that same lock, so no consumer can
+     * be mid-acquisition of this (refcount == 0) entry. iter_remove runs _free_cache_entry, which
+     * releases any remaining resources. */
+    if(_cache_entry_clmem_flush_device(entry, devid))
+      g_hash_table_iter_remove(&iter);
   }
   dt_pthread_mutex_unlock(&cache->lock);
 }
@@ -1496,19 +1521,16 @@ static inline void _log_arena_allocation_failure(dt_dev_pixelpipe_cache_t *cache
 
 // keep: OpenCL buffer to NOT release
 #ifdef HAVE_OPENCL
-static void _cache_entry_clmem_flush_device(dt_pixel_cache_entry_t *entry, const int devid)
+// Release this device's vRAM payloads for one entry. The caller has already established that
+// the entry is idle (refcount == 0, not write-locked), so the device buffers are nobody's live
+// input and reclaiming them honors the flush's purpose: free vRAM for later allocations.
+// Returns TRUE if the entry holds no buffer at all afterwards (no host RAM, no vRAM on any
+// device) and should therefore be evicted entirely instead of lingering as a husk.
+static gboolean _cache_entry_clmem_flush_device(dt_pixel_cache_entry_t *entry, const int devid)
 {
   // devid is always >= 0 here: dt_dev_pixelpipe_cache_flush_clmem() early-returns
   // otherwise. Only cachelines living on this specific device are candidates.
   dt_pthread_mutex_lock(&entry->cl_mem_lock);
-
-  // When the entry has no host-RAM copy, its device payload is the ONLY copy of the data.
-  // Releasing it would leave a husk cacheline (no RAM, no vRAM) that the cache still hands out
-  // as a hit, making a later consumer abort with "has no RAM nor vRAM input" -- e.g. the lens
-  // module input when a thumbnail export reuses an entry produced by an OpenCL darkroom pipe
-  // that was just torn down, yielding skull thumbnails (issue #817). Keep the vRAM in that case;
-  // the LRU reclaims it later, once the data is either redundant or no longer referenced.
-  const gboolean no_host_copy = IS_NULL_PTR(entry->data);
 
   for(GList *l = g_list_first(entry->cl_mem_list); l;)
   {
@@ -1526,15 +1548,15 @@ static void _cache_entry_clmem_flush_device(dt_pixel_cache_entry_t *entry, const
     gboolean referenced = c->refs > 0;
     gboolean not_ours = dt_opencl_get_mem_context_id(c->mem) != devid;
 
-    if(referenced || not_ours || no_host_copy)
+    if(referenced || not_ours)
     {
       // Don't flush cachelines that don't belong to the current OpenCL device,
-      // or might still be used (references > 0), or have no RAM cache but only vRAM.
+      // or are still borrowed by an in-flight GPU module (per-payload refs > 0).
       if(darktable.unmuted & DT_DEBUG_VERBOSE)
         dt_print(DT_DEBUG_OPENCL,
           "[dt_dev_pixelpipe_cache_flush_clmem] for entry %" PRIu64 ": couldn't flush %p "
-          "(referenced=%i not ours=%i no_host_copy=%i)\n",
-          entry->hash, c->mem, referenced, not_ours, no_host_copy);
+          "(referenced=%i not ours=%i)\n",
+          entry->hash, c->mem, referenced, not_ours);
       l = next;
       continue;
     }
@@ -1544,12 +1566,18 @@ static void _cache_entry_clmem_flush_device(dt_pixel_cache_entry_t *entry, const
     dt_free(c);
     l = next;
   }
+
+  // A cacheline that now carries neither a host buffer nor any vRAM is a husk: the cache would
+  // still hand it out as a hit, making a later consumer abort with "has no RAM nor vRAM input"
+  // (issue #817 skull thumbnails). Signal the caller to delete it entirely.
+  const gboolean empty = IS_NULL_PTR(entry->data) && IS_NULL_PTR(entry->cl_mem_list);
   dt_pthread_mutex_unlock(&entry->cl_mem_lock);
+  return empty;
 }
-#else 
-static void _cache_entry_clmem_flush_device(dt_pixel_cache_entry_t *entry, const int devid)
+#else
+static gboolean _cache_entry_clmem_flush_device(dt_pixel_cache_entry_t *entry, const int devid)
 {
-  return;
+  return FALSE;
 }
 #endif
 
