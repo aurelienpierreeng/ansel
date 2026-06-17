@@ -145,7 +145,6 @@ typedef struct dt_lib_histogram_t
   dt_backbuf_t *backbuf;               // reference to the dev backbuf currently in use
   const char *op;                      // pipeline stage ("initialscale" | "colorout" | "gamma")
   dt_lib_histogram_scope_type_t scope; // which scope/display type is active
-  gboolean raw_stage_available;        // FALSE when the current image has no raw/demosaic stage
   float zoom; // zoom level for the vectorscope
   int scope_height;
 
@@ -2403,7 +2402,6 @@ void _set_params(dt_lib_histogram_t *d)
   }
   d->backbuf = _get_histogram_backbuf(darktable.develop, d->op);
   d->zoom = fminf(fmaxf(dt_conf_get_float("plugin/darkroom/histogram/zoom"), 32.f), 252.f);
-  d->raw_stage_available = dt_image_is_raw(&darktable.develop->image_storage);
 
   d->scope = (dt_lib_histogram_scope_type_t)CLAMP(
       dt_conf_get_int("plugin/darkroom/histogram/display"), 0, DT_LIB_HISTOGRAM_SCOPE_N - 1);
@@ -2411,13 +2409,6 @@ void _set_params(dt_lib_histogram_t *d)
   // Vectorscope is not valid on raw Bayer data; fall back to histogram
   if(!strcmp(d->op, "initialscale") && d->scope == DT_LIB_HISTOGRAM_SCOPE_VECTORSCOPE)
     d->scope = DT_LIB_HISTOGRAM_SCOPE_HISTOGRAM;
-
-  // If the image has no raw stage and the saved op points there, redirect to output
-  if(!d->raw_stage_available && !strcmp(d->op, "initialscale"))
-  {
-    d->op = "colorout";
-    dt_conf_set_string("plugin/darkroom/histogram/op", d->op);
-  }
 }
 
 
@@ -2871,7 +2862,6 @@ void set_preferences(void *menu, dt_lib_module_t *self)
     GtkWidget *item = gtk_radio_menu_item_new_with_label(stage_group, _(stage_labels[i]));
     stage_group = gtk_radio_menu_item_get_group(GTK_RADIO_MENU_ITEM(item));
     if(i == current_stage) gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item), TRUE);
-    if(i == 0) gtk_widget_set_sensitive(item, d->raw_stage_available);
     g_object_set_data(G_OBJECT(item), "self", self);
     g_signal_connect(G_OBJECT(item), "toggled", G_CALLBACK(_pref_stage_toggled), GINT_TO_POINTER(i));
     gtk_menu_shell_append(GTK_MENU_SHELL(submenu_stage), item);
