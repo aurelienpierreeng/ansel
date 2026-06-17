@@ -142,10 +142,10 @@ typedef struct dt_lib_histogram_t
   struct dt_lib_module_t *module;
   GtkWidget *scope_draw;               // GtkDrawingArea -- scope, scale, and draggable overlays
   GtkWidget *scope_resize_handle;      // GtkDrawingArea -- vertical resize grip kept outside the rendered scope
-  GtkWidget *stage;                    // Module at which stage we sample histogram
-  GtkWidget *display;                  // Kind of display
   dt_backbuf_t *backbuf;               // reference to the dev backbuf currently in use
-  const char *op;
+  const char *op;                      // pipeline stage ("initialscale" | "colorout" | "gamma")
+  dt_lib_histogram_scope_type_t scope; // which scope/display type is active
+  gboolean raw_stage_available;        // FALSE when the current image has no raw/demosaic stage
   float zoom; // zoom level for the vectorscope
   int scope_height;
 
@@ -166,6 +166,8 @@ typedef struct dt_lib_histogram_t
   dt_dev_pixelpipe_cache_wait_t scope_wait;
   dt_dev_pixelpipe_cache_wait_t picker_wait;
   dt_dev_pixelpipe_cache_wait_t module_wait;
+
+  dt_gui_collapsible_section_t cs;
 
 } dt_lib_histogram_t;
 
@@ -1817,7 +1819,7 @@ error:;
 gboolean _needs_recompute(dt_lib_histogram_t *d, const int width, const int height)
 {
   // Check if cache is up-to-date
-  dt_lib_histogram_scope_type_t view = dt_bauhaus_combobox_get(d->display);
+  dt_lib_histogram_scope_type_t view = d->scope;
   gboolean hash_match = (d->cache.hash == dt_dev_backbuf_get_hash(d->backbuf));
   gboolean size_match = (d->cache.width == width && d->cache.height == height);
   gboolean zoom_match = (d->cache.zoom == d->zoom);
@@ -1917,7 +1919,7 @@ gboolean _redraw_surface(dt_lib_histogram_t *d)
   d->cache.width = width;
   d->cache.height = height;
   d->cache.zoom = d->zoom;
-  d->cache.view = dt_bauhaus_combobox_get(d->display);
+  d->cache.view = d->scope;
 
   cairo_t *cr = cairo_create(d->cst);
 
@@ -1926,7 +1928,7 @@ gboolean _redraw_surface(dt_lib_histogram_t *d)
   cairo_set_line_width(cr, 1.); // we want exactly 1 px no matter the resolution
 
   // Paint content
-  switch(dt_bauhaus_combobox_get(d->display))
+  switch(d->scope)
   {
     case DT_LIB_HISTOGRAM_SCOPE_HISTOGRAM:
     {
@@ -2304,26 +2306,28 @@ void view_leave(struct dt_lib_module_t *self, struct dt_view_t *old_view, struct
 }
 
 
-void _stage_callback(GtkWidget *widget, dt_lib_module_t *self)
+static void _set_stage(dt_lib_module_t *self, int value)
 {
   dt_lib_histogram_t *d = (dt_lib_histogram_t *)self->data;
-  const int value = dt_bauhaus_combobox_get(widget);
   _backbuf_int_to_op(value, d);
   dt_conf_set_string("plugin/darkroom/histogram/op", d->op);
 
-  // Disable vectorscope for RAW stage
-  dt_bauhaus_combobox_entry_set_sensitive(d->display, DT_LIB_HISTOGRAM_SCOPE_VECTORSCOPE,
-                                          strcmp(d->op, "initialscale"));
+  // Vectorscope is meaningless for raw Bayer data
+  if(!strcmp(d->op, "initialscale") && d->scope == DT_LIB_HISTOGRAM_SCOPE_VECTORSCOPE)
+  {
+    d->scope = DT_LIB_HISTOGRAM_SCOPE_HISTOGRAM;
+    dt_conf_set_int("plugin/darkroom/histogram/display", d->scope);
+  }
 
   _refresh_preview_histograms(darktable.develop);
   _sync_pending_histogram_hashes(self);
 }
 
-
-void _display_callback(GtkWidget *widget, dt_lib_module_t *self)
+static void _set_scope(dt_lib_module_t *self, dt_lib_histogram_scope_type_t scope)
 {
   dt_lib_histogram_t *d = (dt_lib_histogram_t *)self->data;
-  dt_conf_set_int("plugin/darkroom/histogram/display", dt_bauhaus_combobox_get(d->display));
+  d->scope = scope;
+  dt_conf_set_int("plugin/darkroom/histogram/display", d->scope);
   if(_trigger_recompute(d)) _redraw_scopes(d);
 }
 
@@ -2337,7 +2341,7 @@ static void _resize_callback(GtkWidget *widget, GdkRectangle *allocation, dt_lib
 
 static gboolean _area_scrolled_callback(GtkWidget *widget, GdkEventScroll *event, dt_lib_histogram_t *d)
 {
-  if(dt_bauhaus_combobox_get(d->display) != DT_LIB_HISTOGRAM_SCOPE_VECTORSCOPE) return FALSE;
+  if(d->scope != DT_LIB_HISTOGRAM_SCOPE_VECTORSCOPE) return FALSE;
 
   int delta_y = 0;
   if(!dt_gui_get_scroll_unit_deltas(event, NULL, &delta_y)) return TRUE;
@@ -2399,16 +2403,21 @@ void _set_params(dt_lib_histogram_t *d)
   }
   d->backbuf = _get_histogram_backbuf(darktable.develop, d->op);
   d->zoom = fminf(fmaxf(dt_conf_get_float("plugin/darkroom/histogram/zoom"), 32.f), 252.f);
+  d->raw_stage_available = dt_image_is_raw(&darktable.develop->image_storage);
 
-  // Disable RAW stage for non-RAW images
-  dt_bauhaus_combobox_entry_set_sensitive(d->stage, 0, dt_image_is_raw(&darktable.develop->image_storage));
+  d->scope = (dt_lib_histogram_scope_type_t)CLAMP(
+      dt_conf_get_int("plugin/darkroom/histogram/display"), 0, DT_LIB_HISTOGRAM_SCOPE_N - 1);
 
-  // Disable vectorscope if RAW stage is selected
-  dt_bauhaus_combobox_entry_set_sensitive(d->display, DT_LIB_HISTOGRAM_SCOPE_VECTORSCOPE,
-                                          strcmp(d->op, "initialscale"));
+  // Vectorscope is not valid on raw Bayer data; fall back to histogram
+  if(!strcmp(d->op, "initialscale") && d->scope == DT_LIB_HISTOGRAM_SCOPE_VECTORSCOPE)
+    d->scope = DT_LIB_HISTOGRAM_SCOPE_HISTOGRAM;
 
-  dt_bauhaus_combobox_set(d->display, dt_conf_get_int("plugin/darkroom/histogram/display"));
-  dt_bauhaus_combobox_set(d->stage, _backbuf_op_to_int(d));
+  // If the image has no raw stage and the saved op points there, redirect to output
+  if(!d->raw_stage_available && !strcmp(d->op, "initialscale"))
+  {
+    d->op = "colorout";
+    dt_conf_set_string("plugin/darkroom/histogram/op", d->op);
+  }
 }
 
 
@@ -2831,6 +2840,72 @@ void gui_reset(dt_lib_module_t *self)
   dt_dev_pixelpipe_update_history_preview(darktable.develop);
 }
 
+static void _pref_stage_toggled(GtkCheckMenuItem *item, gpointer user_data)
+{
+  if(!gtk_check_menu_item_get_active(item)) return;
+  dt_lib_module_t *self = (dt_lib_module_t *)g_object_get_data(G_OBJECT(item), "self");
+  _set_stage(self, GPOINTER_TO_INT(user_data));
+}
+
+static void _pref_display_toggled(GtkCheckMenuItem *item, gpointer user_data)
+{
+  if(!gtk_check_menu_item_get_active(item)) return;
+  dt_lib_module_t *self = (dt_lib_module_t *)g_object_get_data(G_OBJECT(item), "self");
+  _set_scope(self, (dt_lib_histogram_scope_type_t)GPOINTER_TO_INT(user_data));
+}
+
+void set_preferences(void *menu, dt_lib_module_t *self)
+{
+  dt_lib_histogram_t *d = (dt_lib_histogram_t *)self->data;
+
+  // "Show data from" submenu
+  GtkWidget *mi_stage = gtk_menu_item_new_with_label(_("Show data from"));
+  GtkWidget *submenu_stage = gtk_menu_new();
+  gtk_menu_item_set_submenu(GTK_MENU_ITEM(mi_stage), submenu_stage);
+
+  const char *stage_labels[] = { N_("Raw image"), N_("Output color profile"), N_("Final display"), NULL };
+  const int current_stage = _backbuf_op_to_int(d);
+  GSList *stage_group = NULL;
+  for(int i = 0; stage_labels[i]; i++)
+  {
+    GtkWidget *item = gtk_radio_menu_item_new_with_label(stage_group, _(stage_labels[i]));
+    stage_group = gtk_radio_menu_item_get_group(GTK_RADIO_MENU_ITEM(item));
+    if(i == current_stage) gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item), TRUE);
+    if(i == 0) gtk_widget_set_sensitive(item, d->raw_stage_available);
+    g_object_set_data(G_OBJECT(item), "self", self);
+    g_signal_connect(G_OBJECT(item), "toggled", G_CALLBACK(_pref_stage_toggled), GINT_TO_POINTER(i));
+    gtk_menu_shell_append(GTK_MENU_SHELL(submenu_stage), item);
+  }
+  gtk_widget_show_all(mi_stage);
+  gtk_menu_shell_append(GTK_MENU_SHELL(menu), mi_stage);
+
+  // "Display" submenu
+  GtkWidget *mi_display = gtk_menu_item_new_with_label(_("Display"));
+  GtkWidget *submenu_display = gtk_menu_new();
+  gtk_menu_item_set_submenu(GTK_MENU_ITEM(mi_display), submenu_display);
+
+  const char *display_labels[] = {
+    N_("Histogram"), N_("Waveform (horizontal)"), N_("Waveform (vertical)"),
+    N_("Parade (horizontal)"), N_("Parade (vertical)"), N_("Vectorscope"), NULL
+  };
+  const gboolean vectorscope_ok = strcmp(d->op, "initialscale");
+  GSList *display_group = NULL;
+  for(int i = 0; display_labels[i]; i++)
+  {
+    GtkWidget *item = gtk_radio_menu_item_new_with_label(display_group, _(display_labels[i]));
+    display_group = gtk_radio_menu_item_get_group(GTK_RADIO_MENU_ITEM(item));
+    if((dt_lib_histogram_scope_type_t)i == d->scope)
+      gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item), TRUE);
+    if(i == DT_LIB_HISTOGRAM_SCOPE_VECTORSCOPE)
+      gtk_widget_set_sensitive(item, vectorscope_ok);
+    g_object_set_data(G_OBJECT(item), "self", self);
+    g_signal_connect(G_OBJECT(item), "toggled", G_CALLBACK(_pref_display_toggled), GINT_TO_POINTER(i));
+    gtk_menu_shell_append(GTK_MENU_SHELL(submenu_display), item);
+  }
+  gtk_widget_show_all(mi_display);
+  gtk_menu_shell_append(GTK_MENU_SHELL(menu), mi_display);
+}
+
 void gui_init(dt_lib_module_t *self)
 {
   /* initialize ui widgets */
@@ -2880,28 +2955,11 @@ void gui_init(dt_lib_module_t *self)
                                                         _scope_resize_handle_resize, d);
   gtk_overlay_add_overlay(GTK_OVERLAY(scope_overlay), d->scope_resize_handle);
 
-  d->stage = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
-  dt_bauhaus_widget_set_label(d->stage, _("Show data from"));
-  dt_bauhaus_combobox_add(d->stage, _("Raw image"));
-  dt_bauhaus_combobox_add(d->stage, _("Output color profile"));
-  dt_bauhaus_combobox_add(d->stage, _("Final display"));
-  g_signal_connect(G_OBJECT(d->stage), "value-changed", G_CALLBACK(_stage_callback), self);
-  gtk_box_pack_start(GTK_BOX(self->widget), d->stage, FALSE, FALSE, 0);
-
-  d->display = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
-  dt_bauhaus_widget_set_label(d->display, _("Display"));
-  dt_bauhaus_combobox_add(d->display, _("Histogram"));
-  dt_bauhaus_combobox_add(d->display, _("Waveform (horizontal)"));
-  dt_bauhaus_combobox_add(d->display, _("Waveform (vertical)"));
-  dt_bauhaus_combobox_add(d->display, _("Parade (horizontal)"));
-  dt_bauhaus_combobox_add(d->display, _("Parade (vertical)"));
-  dt_bauhaus_combobox_add(d->display, _("Vectorscope"));
-  g_signal_connect(G_OBJECT(d->display), "value-changed", G_CALLBACK(_display_callback), self);
-  gtk_box_pack_start(GTK_BOX(self->widget), d->display, FALSE, FALSE, 0);
-
-  // Adding the live samples section
-  GtkWidget *label = dt_ui_section_label_new(_("Color picker"));
-  gtk_box_pack_start(GTK_BOX(self->widget), label, TRUE, TRUE, 0);
+  dt_gui_new_collapsible_section
+      (&d->cs,
+      "plugins/darkroom/colorpicker/show",
+      _("Color picker"),
+      GTK_BOX(self->widget), GTK_PACK_END);
 
   // The develop module owns the picker state because both the preview pipe and the GUI need to
   // observe it. Histogram only binds its widgets to that shared state.
@@ -2929,6 +2987,7 @@ void gui_init(dt_lib_module_t *self)
 
   // The picker button, mode and statistic combo boxes
   GtkWidget *picker_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
+  gtk_box_pack_start(GTK_BOX(d->cs.container), picker_row, TRUE, TRUE, 0);
 
   d->statistic_selector = dt_bauhaus_combobox_new_full(
       darktable.bauhaus, NULL, NULL, _("select which statistic to show"), d->statistic,
@@ -2951,8 +3010,6 @@ void gui_init(dt_lib_module_t *self)
   gtk_widget_set_name(GTK_WIDGET(d->picker_button), "color-picker-button");
   g_signal_connect(G_OBJECT(d->picker_button), "toggled", G_CALLBACK(_picker_button_toggled), d);
 
-  gtk_box_pack_start(GTK_BOX(self->widget), picker_row, TRUE, TRUE, 0);
-
   // The small sample, label and add button
   GtkWidget *sample_row_events = gtk_event_box_new();
   gtk_widget_add_events(sample_row_events, GDK_ENTER_NOTIFY_MASK | GDK_LEAVE_NOTIFY_MASK);
@@ -2960,7 +3017,7 @@ void gui_init(dt_lib_module_t *self)
                    darktable.develop->color_picker.primary_sample);
   g_signal_connect(G_OBJECT(sample_row_events), "leave-notify-event", G_CALLBACK(_sample_leave_callback),
                    darktable.develop->color_picker.primary_sample);
-  gtk_box_pack_start(GTK_BOX(self->widget), sample_row_events, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(d->cs.container), sample_row_events, TRUE, TRUE, 0);
 
   GtkWidget *sample_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_container_add(GTK_CONTAINER(sample_row_events), sample_row);
@@ -2974,7 +3031,7 @@ void gui_init(dt_lib_module_t *self)
   gtk_box_pack_start(GTK_BOX(color_patch_wrapper), darktable.develop->color_picker.primary_sample->color_patch, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(sample_row), color_patch_wrapper, TRUE, TRUE, 0);
 
-  label = darktable.develop->color_picker.primary_sample->output_label = gtk_label_new("");
+  GtkWidget *label = darktable.develop->color_picker.primary_sample->output_label = gtk_label_new("");
   gtk_label_set_justify(GTK_LABEL(label), GTK_JUSTIFY_CENTER);
   gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_START);
   gtk_label_set_selectable(GTK_LABEL(label), TRUE);
@@ -2993,10 +3050,10 @@ void gui_init(dt_lib_module_t *self)
 
   // Adding the live samples section
   label = dt_ui_section_label_new(_("Live samples"));
-  gtk_box_pack_start(GTK_BOX(self->widget), label, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(d->cs.container), label, TRUE, TRUE, 0);
 
   d->samples_container = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
-  gtk_box_pack_start(GTK_BOX(self->widget),
+  gtk_box_pack_start(GTK_BOX(d->cs.container),
                      dt_ui_scroll_wrap(d->samples_container, 1, "plugins/darkroom/colorpicker/windowheight",
                                        DT_UI_RESIZE_DYNAMIC), TRUE, TRUE, 0);
 
@@ -3007,14 +3064,14 @@ void gui_init(dt_lib_module_t *self)
                                dt_conf_get_bool("ui_last/colorpicker_display_samples"));
   g_signal_connect(G_OBJECT(d->display_samples_check_box), "toggled",
                    G_CALLBACK(_display_samples_changed), self);
-  gtk_box_pack_start(GTK_BOX(self->widget), d->display_samples_check_box, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(d->cs.container), d->display_samples_check_box, TRUE, TRUE, 0);
 
   d->restrict_button = gtk_check_button_new_with_label(_("Restrict scope to selection"));
   gtk_label_set_ellipsize(GTK_LABEL(gtk_bin_get_child(GTK_BIN(d->restrict_button))), PANGO_ELLIPSIZE_MIDDLE);
   gboolean restrict_histogram = dt_conf_get_bool("ui_last/colorpicker_restrict_histogram");
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->restrict_button), restrict_histogram);
   g_signal_connect(G_OBJECT(d->restrict_button), "toggled", G_CALLBACK(_restrict_histogram_changed), self);
-  gtk_box_pack_start(GTK_BOX(self->widget), d->restrict_button, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(d->cs.container), d->restrict_button, TRUE, TRUE, 0);
 
   _reset_cache(d);
   _set_params(d);
