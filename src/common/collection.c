@@ -536,11 +536,11 @@ void dt_collection_reset(const dt_collection_t *collection)
   params->query_flags = COLLECTION_QUERY_FULL;
 
   // enable all filters, aka filter in everything
-  params->filter_flags = ~COLLECTION_FILTER_NONE;
+  params->filter_flags = COLLECTION_FILTER_ALL;
 
   /* apply stored query parameters from previous darktable session */
   int flags = dt_conf_get_int("plugins/collection/filter_flags");
-  params->filter_flags = (flags < 0) ? ~0 : flags;
+  params->filter_flags = (flags < 0) ? COLLECTION_FILTER_ALL : flags;
 
   dt_free(params->text_filter);
   params->text_filter = dt_conf_get_string("plugins/collection/text_filter");

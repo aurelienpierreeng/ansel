@@ -80,6 +80,7 @@ typedef enum dt_collection_filter_flag_t
   COLLECTION_FILTER_BLUE            = 1 << 12,
   COLLECTION_FILTER_MAGENTA         = 1 << 13,
   COLLECTION_FILTER_WHITE           = 1 << 14, // white means "no color label"
+  COLLECTION_FILTER_ALL             = (1 << 15) - 1, // all 15 defined flags
 } dt_collection_filter_flag_t;
 
 typedef enum dt_collection_sort_t
