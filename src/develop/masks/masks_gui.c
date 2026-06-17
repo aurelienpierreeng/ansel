@@ -251,6 +251,23 @@ typedef struct dt_masks_gui_interaction_slider_t
   GtkWidget *slider;
 } dt_masks_gui_interaction_slider_t;
 
+// Push the new value to history (so the pipeline re-renders) and refresh the mask
+// treeviews (opacity text, etc.).
+//
+// This is called from the slider "value-changed" handler. The bauhaus slider already
+// throttles that emission through dt_gui_throttle_queue() while dragging, so the commit
+// is debounced at the slider-value level: transient values do not flood the pipeline with
+// renders, yet the image updates without waiting for the context menu to be closed.
+static void _masks_gui_interaction_commit(dt_masks_gui_interaction_slider_t *data)
+{
+  if(IS_NULL_PTR(data) || IS_NULL_PTR(data->form_group)) return;
+
+  dt_dev_add_history_item(darktable.develop, data->module, TRUE, TRUE);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED,
+                                data->form_group->formid, data->form_group->parentid,
+                                DT_MASKS_EVENT_UPDATE);
+}
+
 static void _masks_gui_interaction_apply_value(dt_masks_gui_interaction_slider_t *data, float value)
 {
   if(IS_NULL_PTR(data) || IS_NULL_PTR(data->form_group)) return;
@@ -260,6 +277,7 @@ static void _masks_gui_interaction_apply_value(dt_masks_gui_interaction_slider_t
     dt_masks_form_set_interaction_value(data->form_group, data->interaction, value,
                                         data->increment, 1, data->gui, data->module);
     data->last_value = value;
+    _masks_gui_interaction_commit(data);
     return;
   }
 
@@ -271,6 +289,7 @@ static void _masks_gui_interaction_apply_value(dt_masks_gui_interaction_slider_t
   dt_masks_form_set_interaction_value(data->form_group, data->interaction, scale,
                                       DT_MASKS_INCREMENT_SCALE, 1.f, data->gui, data->module);
   data->last_value = value;
+  _masks_gui_interaction_commit(data);
 }
 
 static void _masks_gui_menu_item_block_activate(GtkWidget *widget, gpointer user_data)
