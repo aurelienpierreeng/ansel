@@ -1563,12 +1563,21 @@ static int _blendop_masks_group_tree_append_entry(const dt_iop_gui_blend_data_t 
   if(IS_NULL_PTR(bd) || IS_NULL_PTR(tree_store) || IS_NULL_PTR(group_entry) || IS_NULL_PTR(mask_form)) return 0;
 
   GtkTreeIter iter;
+
+  // Append the opacity to the displayed name, same as the masks library treeview.
+  char display_name[256] = "";
+  if(group_entry->opacity != 1.0f)
+    g_snprintf(display_name, sizeof(display_name), "%s %d%%", mask_form->name,
+               (int)(group_entry->opacity * 100));
+  else
+    g_strlcpy(display_name, mask_form->name, sizeof(display_name));
+
   gtk_tree_store_append(tree_store, &iter, parent_iter);
   gtk_tree_store_set(tree_store, &iter, BLENDOP_MASKS_GROUP_COL_OP_ICON,
                      _blendop_masks_get_op_icon(bd, group_entry->state, index),
                      BLENDOP_MASKS_GROUP_COL_INV_ICON,
                      _blendop_masks_get_inverse_icon(bd, group_entry->state),
-                     BLENDOP_MASKS_GROUP_COL_NAME, mask_form->name,
+                     BLENDOP_MASKS_GROUP_COL_NAME, display_name,
                      BLENDOP_MASKS_GROUP_COL_FORMID, group_entry->formid,
                      BLENDOP_MASKS_GROUP_COL_PARENTID, group_entry->parentid,
                      BLENDOP_MASKS_GROUP_COL_STATE, group_entry->state,
@@ -2337,15 +2346,119 @@ static GtkWidget *_blendop_masks_group_ctx_menu(dt_iop_gui_blend_data_t *bd, dt_
   return menu;
 }
 
+// Detach the form from its parent group, but keep it in dev->forms for potential reuse.
+static void _blendop_masks_group_unlink(dt_iop_module_t *module, const int formid, const int parentid)
+{
+  if(IS_NULL_PTR(module)) return;
+  dt_masks_form_t *parent_group = dt_masks_get_from_id(darktable.develop, parentid);
+  dt_masks_form_t *form = dt_masks_get_from_id(darktable.develop, formid);
+  if(IS_NULL_PTR(parent_group) || !(parent_group->type & DT_MASKS_GROUP) || IS_NULL_PTR(form)) return;
+
+  // Discard any visible overlay before mutating the group.
+  dt_masks_change_form_gui(NULL);
+
+  // Passing the parent group only detaches the form from this group.
+  dt_masks_form_delete(module, parent_group, form);
+
+  _blendop_masks_apply_and_commit(module);
+  _blendop_masks_refresh_lists(module);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, formid, parentid,
+                                DT_MASKS_EVENT_REMOVE);
+}
+
+static gboolean _blendop_masks_confirm_delete(const char *form_name)
+{
+  if(IS_NULL_PTR(darktable.gui) || IS_NULL_PTR(darktable.gui->ui)) return FALSE;
+
+  GtkWidget *dialog = gtk_message_dialog_new(GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)),
+                                             GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL,
+                                             GTK_MESSAGE_QUESTION, GTK_BUTTONS_NONE,
+                                             _("Permanently delete the shape '%s'?"), form_name);
+  gtk_message_dialog_format_secondary_text(
+      GTK_MESSAGE_DIALOG(dialog), "%s",
+      _("It will be detached from this mask and removed from the list of available shapes."));
+  gtk_dialog_add_button(GTK_DIALOG(dialog), _("Cancel"), GTK_RESPONSE_CANCEL);
+  gtk_dialog_add_button(GTK_DIALOG(dialog), _("Delete"), GTK_RESPONSE_YES);
+  gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_CANCEL);
+
+  const int response = gtk_dialog_run(GTK_DIALOG(dialog));
+  gtk_widget_destroy(dialog);
+  return response == GTK_RESPONSE_YES;
+}
+
+// Detach the form from its parent group and remove it from dev->forms altogether.
+static void _blendop_masks_group_delete(dt_iop_module_t *module, const int formid, const int parentid)
+{
+  if(IS_NULL_PTR(module)) return;
+  dt_masks_form_t *form = dt_masks_get_from_id(darktable.develop, formid);
+  if(IS_NULL_PTR(form)) return;
+
+  if(!_blendop_masks_confirm_delete(form->name)) return;
+
+  // Discard any visible overlay before mutating the masks.
+  dt_masks_change_form_gui(NULL);
+
+  // Passing no group permanently deletes the form from every module and dev->forms.
+  dt_masks_form_delete(module, NULL, form);
+
+  _blendop_masks_apply_and_commit(module);
+  _blendop_masks_refresh_lists(module);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, formid, parentid,
+                                DT_MASKS_EVENT_REMOVE);
+}
+
+// Handle a left click on the per-row unlink / delete icon columns.
+// Returns TRUE if the click was consumed (so row selection is not triggered).
+static gboolean _blendop_masks_group_handle_action_click(GtkWidget *treeview, GtkTreePath *path,
+                                                         GtkTreeViewColumn *column, dt_iop_module_t *module)
+{
+  if(IS_NULL_PTR(module) || IS_NULL_PTR(path) || IS_NULL_PTR(column)) return FALSE;
+  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
+  if(IS_NULL_PTR(bd)) return FALSE;
+  if(column != bd->group_unlink_col && column != bd->group_delete_col) return FALSE;
+
+  GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(treeview));
+  GtkTreeIter iter;
+  if(!gtk_tree_model_get_iter(model, &iter, path)) return TRUE;
+
+  int formid = -1;
+  int parentid = -1;
+  gtk_tree_model_get(model, &iter, BLENDOP_MASKS_GROUP_COL_FORMID, &formid,
+                     BLENDOP_MASKS_GROUP_COL_PARENTID, &parentid, -1);
+  if(formid <= 0 || parentid <= 0) return TRUE;
+
+  if(column == bd->group_unlink_col)
+    _blendop_masks_group_unlink(module, formid, parentid);
+  else
+    _blendop_masks_group_delete(module, formid, parentid);
+
+  return TRUE;
+}
+
 static gboolean _blendop_masks_group_button_pressed(GtkWidget *treeview, GdkEventButton *event,
                                                     dt_iop_module_t *module)
 {
-  if(IS_NULL_PTR(event) || event->type != GDK_BUTTON_PRESS || event->button != GDK_BUTTON_SECONDARY) return FALSE;
+  if(IS_NULL_PTR(event) || event->type != GDK_BUTTON_PRESS) return FALSE;
 
   GtkTreePath *path = NULL;
+  GtkTreeViewColumn *column = NULL;
   if(!gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(treeview), (gint)event->x, (gint)event->y, &path,
-                                    NULL, NULL, NULL))
+                                    &column, NULL, NULL))
     return FALSE;
+
+  // Left click on the unlink / delete icon columns triggers the row action.
+  if(event->button == GDK_BUTTON_PRIMARY)
+  {
+    const gboolean consumed = _blendop_masks_group_handle_action_click(treeview, path, column, module);
+    gtk_tree_path_free(path);
+    return consumed;
+  }
+
+  if(event->button != GDK_BUTTON_SECONDARY)
+  {
+    gtk_tree_path_free(path);
+    return FALSE;
+  }
 
   GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(treeview));
   gtk_tree_selection_unselect_all(selection);
@@ -2379,14 +2492,101 @@ static gboolean _blendop_masks_group_button_pressed(GtkWidget *treeview, GdkEven
   return TRUE;
 }
 
+// Per-column tooltips for the unlink / delete action icons.
+static gboolean _blendop_masks_group_query_tooltip(GtkWidget *treeview, gint x, gint y, gboolean keyboard_tip,
+                                                   GtkTooltip *tooltip, dt_iop_module_t *module)
+{
+  if(IS_NULL_PTR(module) || keyboard_tip) return FALSE;
+  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
+  if(IS_NULL_PTR(bd)) return FALSE;
+
+  gint bx = 0, by = 0;
+  gtk_tree_view_convert_widget_to_bin_window_coords(GTK_TREE_VIEW(treeview), x, y, &bx, &by);
+
+  GtkTreePath *path = NULL;
+  GtkTreeViewColumn *column = NULL;
+  if(!gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(treeview), bx, by, &path, &column, NULL, NULL))
+    return FALSE;
+  gtk_tree_path_free(path);
+
+  const char *text = NULL;
+  if(column == bd->group_unlink_col)
+    text = _("Detach this shape from the mask. The shape is kept and stays available for reuse.");
+  else if(column == bd->group_delete_col)
+    text = _("Permanently delete this shape. It is detached from the mask and removed from the list of available shapes.");
+
+  if(IS_NULL_PTR(text)) return FALSE;
+
+  gtk_tooltip_set_text(tooltip, text);
+  return TRUE;
+}
+
+// Depth-first search for the row matching (formid, parentid) anywhere in the group tree.
+static gboolean _blendop_masks_group_find_row(GtkTreeModel *model, GtkTreeIter *parent,
+                                              const int formid, const int parentid, GtkTreeIter *out)
+{
+  GtkTreeIter iter;
+  gboolean valid = gtk_tree_model_iter_children(model, &iter, parent);
+  while(valid)
+  {
+    int fid = -1;
+    int pid = -1;
+    gtk_tree_model_get(model, &iter, BLENDOP_MASKS_GROUP_COL_FORMID, &fid,
+                       BLENDOP_MASKS_GROUP_COL_PARENTID, &pid, -1);
+    if(fid == formid && pid == parentid)
+    {
+      *out = iter;
+      return TRUE;
+    }
+    if(gtk_tree_model_iter_has_child(model, &iter)
+       && _blendop_masks_group_find_row(model, &iter, formid, parentid, out))
+      return TRUE;
+    valid = gtk_tree_model_iter_next(model, &iter);
+  }
+  return FALSE;
+}
+
+// Refresh a single row in place (name + opacity + operation/inverse icons), the same way
+// the masks library treeview does, so live opacity changes don't rebuild and collapse the tree.
+static void _blendop_masks_group_update_row(dt_iop_module_t *module, const int formid, const int parentid)
+{
+  if(IS_NULL_PTR(module) || IS_NULL_PTR(module->blend_data)) return;
+  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
+  if(!GTK_IS_TREE_VIEW(bd->masks_group_treeview)) return;
+  GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(bd->masks_group_treeview));
+  if(!GTK_IS_TREE_STORE(model)) return;
+
+  GtkTreeIter iter;
+  if(!_blendop_masks_group_find_row(model, NULL, formid, parentid, &iter)) return;
+
+  dt_masks_form_t *form = dt_masks_get_from_id(darktable.develop, formid);
+  dt_masks_form_t *parent_group = dt_masks_get_from_id(darktable.develop, parentid);
+  int index = -1;
+  dt_masks_form_group_t *entry = _blendop_masks_find_group_entry(parent_group, formid, &index);
+  if(IS_NULL_PTR(form) || IS_NULL_PTR(entry)) return;
+
+  char display_name[256] = "";
+  if(entry->opacity != 1.0f)
+    g_snprintf(display_name, sizeof(display_name), "%s %d%%", form->name, (int)(entry->opacity * 100));
+  else
+    g_strlcpy(display_name, form->name, sizeof(display_name));
+
+  gtk_tree_store_set(GTK_TREE_STORE(model), &iter, BLENDOP_MASKS_GROUP_COL_NAME, display_name,
+                     BLENDOP_MASKS_GROUP_COL_OP_ICON, _blendop_masks_get_op_icon(bd, entry->state, index),
+                     BLENDOP_MASKS_GROUP_COL_INV_ICON, _blendop_masks_get_inverse_icon(bd, entry->state),
+                     BLENDOP_MASKS_GROUP_COL_STATE, entry->state, -1);
+}
+
 static void _blendop_masks_handler_callback(gpointer instance, const int formid, const int parentid,
                                             const dt_masks_event_t event, dt_iop_module_t *module)
 {
   (void)instance;
-  (void)formid;
-  (void)parentid;
-  (void)event;
-  _blendop_masks_refresh_lists(module);
+  // A plain value update (e.g. opacity) only needs the affected row refreshed in place.
+  // Structural changes rebuild the whole list.
+  if(event == DT_MASKS_EVENT_UPDATE)
+    _blendop_masks_group_update_row(module, formid, parentid);
+  else
+    _blendop_masks_refresh_lists(module);
 }
 
 gboolean blend_color_picker_apply(dt_iop_module_t *module, GtkWidget *picker, dt_dev_pixelpipe_t *pipe,
@@ -3533,6 +3733,27 @@ void dt_iop_gui_init_masks(GtkBox *blendw, dt_iop_module_t *module)
     gtk_tree_view_column_pack_start(bd->group_shapes_col, renderer, TRUE);
     gtk_tree_view_column_add_attribute(bd->group_shapes_col, renderer, "text", BLENDOP_MASKS_GROUP_COL_NAME);
 
+    // Per-row action icons: unlink (detach from this mask) and delete (remove altogether).
+    // Clicks are handled in _blendop_masks_group_button_pressed by matching the column.
+    bd->group_unlink_col = gtk_tree_view_column_new();
+    renderer = gtk_cell_renderer_pixbuf_new();
+    g_object_set(renderer, "icon-name", "list-remove-symbolic", "stock-size", GTK_ICON_SIZE_MENU, NULL);
+    gtk_tree_view_column_pack_start(bd->group_unlink_col, renderer, FALSE);
+    gtk_tree_view_column_set_sizing(bd->group_unlink_col, GTK_TREE_VIEW_COLUMN_FIXED);
+    gtk_tree_view_column_set_fixed_width(bd->group_unlink_col, DT_PIXEL_APPLY_DPI(24));
+    gtk_tree_view_append_column(GTK_TREE_VIEW(bd->masks_group_treeview), bd->group_unlink_col);
+
+    bd->group_delete_col = gtk_tree_view_column_new();
+    renderer = gtk_cell_renderer_pixbuf_new();
+    g_object_set(renderer, "icon-name", "user-trash-symbolic", "stock-size", GTK_ICON_SIZE_MENU, NULL);
+    gtk_tree_view_column_pack_start(bd->group_delete_col, renderer, FALSE);
+    gtk_tree_view_column_set_sizing(bd->group_delete_col, GTK_TREE_VIEW_COLUMN_FIXED);
+    gtk_tree_view_column_set_fixed_width(bd->group_delete_col, DT_PIXEL_APPLY_DPI(24));
+    gtk_tree_view_append_column(GTK_TREE_VIEW(bd->masks_group_treeview), bd->group_delete_col);
+
+    // Keep the name column expanding so the action icons stay flush right.
+    gtk_tree_view_column_set_expand(bd->group_shapes_col, TRUE);
+
     selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(bd->masks_group_treeview));
     gtk_tree_selection_set_mode(selection, GTK_SELECTION_SINGLE);
     g_signal_connect(selection, "changed", G_CALLBACK(_blendop_masks_group_selection_changed), module);
@@ -3540,6 +3761,10 @@ void dt_iop_gui_init_masks(GtkBox *blendw, dt_iop_module_t *module)
     gtk_tree_view_set_show_expanders(GTK_TREE_VIEW(bd->masks_group_treeview), TRUE);
     g_signal_connect(bd->masks_group_treeview, "button-press-event",
                      G_CALLBACK(_blendop_masks_group_button_pressed), module);
+
+    gtk_widget_set_has_tooltip(bd->masks_group_treeview, TRUE);
+    g_signal_connect(bd->masks_group_treeview, "query-tooltip",
+                     G_CALLBACK(_blendop_masks_group_query_tooltip), module);
 
     bd->group_shapes_sw = dt_ui_scroll_wrap(bd->masks_group_treeview, 90,
                                             "plugins/darkroom/masks/group_list_height", DT_UI_RESIZE_DYNAMIC);
@@ -4358,6 +4583,8 @@ void dt_iop_gui_cleanup_blending_body(dt_iop_module_t *module)
   bd->masks_group_treeview = NULL;
   bd->group_shapes_store = NULL;
   bd->group_shapes_col = NULL;
+  bd->group_unlink_col = NULL;
+  bd->group_delete_col = NULL;
   bd->all_shapes_store = NULL;
   bd->group_shapes_sw = NULL;
   bd->all_shapes_col = NULL;
@@ -4603,6 +4830,8 @@ void dt_iop_gui_init_blending_body(GtkWidget *container, dt_iop_module_t *module
   _blendop_toggle_button_set_active(bd->blendif_enable, (mask_mode & DEVELOP_MASK_PARAMETRIC) != 0);
 
   gtk_widget_show_all(GTK_WIDGET(bd->blending_box));
+  // show_all overrides the visibility the collapsible section set at init; re-apply config state.
+  if(bd->masks_inited) dt_gui_update_collapsible_section(&bd->masks_cs);
   gtk_widget_set_sensitive(bd->blending_box, (mask_mode & DEVELOP_MASK_ENABLED) != 0);
 
   g_signal_connect(G_OBJECT(bd->blending_notebook), "switch_page", G_CALLBACK(_blendop_blending_notebook_switch), bd);

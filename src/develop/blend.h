@@ -376,6 +376,8 @@ typedef struct dt_iop_gui_blend_data_t
   GtkWidget *masks_group_treeview;
   GtkTreeStore *group_shapes_store;
   GtkTreeViewColumn *group_shapes_col;
+  GtkTreeViewColumn *group_unlink_col;
+  GtkTreeViewColumn *group_delete_col;
   GtkListStore *all_shapes_store;
   GtkWidget *group_shapes_sw;
   GtkTreeViewColumn *all_shapes_col;
