@@ -489,10 +489,11 @@ scrolledwindow {
   background-color: @bg_color;
 }
 
-/* The thumbtable grid is full-bleed: drop GtkScrolledWindow's 3px "scrollbar-spacing"
- * gutter (a legacy GtkWidget style property, not a CSS box property) so the grid sits
- * flush against the scrollbar instead of leaving a strip of background before it. */
-#thumbtable-scroll {
+/* Drop GtkScrolledWindow's 3px "scrollbar-spacing" gutter (a legacy GtkWidget style property,
+ * not a CSS box property) so the content sits flush against the scrollbar instead of leaving a
+ * strip of background before it. Applies to the full-bleed thumbtable grid and the side panels. */
+#thumbtable-scroll,
+#panel-scroll {
   -GtkScrolledWindow-scrollbar-spacing: 0;
 }
 

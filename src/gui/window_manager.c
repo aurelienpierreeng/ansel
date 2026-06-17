@@ -364,6 +364,9 @@ static GtkWidget *_ui_init_panel_container_center(GtkWidget *container, gboolean
 
   /* create the scrolled window */
   widget = gtk_scrolled_window_new(a[0], a[1]);
+  // Named so the theme can zero its "scrollbar-spacing" style property (a legacy GtkWidget style
+  // property, not a CSS box property), removing the 3px gutter between the modules and the scrollbar.
+  gtk_widget_set_name(widget, "panel-scroll");
   gtk_widget_set_can_focus(widget, TRUE);
   gtk_scrolled_window_set_placement(GTK_SCROLLED_WINDOW(widget),
                                     left ? GTK_CORNER_TOP_LEFT : GTK_CORNER_TOP_RIGHT);
