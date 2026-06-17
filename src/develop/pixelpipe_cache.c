@@ -1502,6 +1502,14 @@ static void _cache_entry_clmem_flush_device(dt_pixel_cache_entry_t *entry, const
   // otherwise. Only cachelines living on this specific device are candidates.
   dt_pthread_mutex_lock(&entry->cl_mem_lock);
 
+  // When the entry has no host-RAM copy, its device payload is the ONLY copy of the data.
+  // Releasing it would leave a husk cacheline (no RAM, no vRAM) that the cache still hands out
+  // as a hit, making a later consumer abort with "has no RAM nor vRAM input" -- e.g. the lens
+  // module input when a thumbnail export reuses an entry produced by an OpenCL darkroom pipe
+  // that was just torn down, yielding skull thumbnails (issue #817). Keep the vRAM in that case;
+  // the LRU reclaims it later, once the data is either redundant or no longer referenced.
+  const gboolean no_host_copy = IS_NULL_PTR(entry->data);
+
   for(GList *l = g_list_first(entry->cl_mem_list); l;)
   {
     GList *next = g_list_next(l);
@@ -1518,15 +1526,15 @@ static void _cache_entry_clmem_flush_device(dt_pixel_cache_entry_t *entry, const
     gboolean referenced = c->refs > 0;
     gboolean not_ours = dt_opencl_get_mem_context_id(c->mem) != devid;
 
-    if(referenced || not_ours)
+    if(referenced || not_ours || no_host_copy)
     {
       // Don't flush cachelines that don't belong to the current OpenCL device,
       // or might still be used (references > 0), or have no RAM cache but only vRAM.
       if(darktable.unmuted & DT_DEBUG_VERBOSE)
-        dt_print(DT_DEBUG_OPENCL, 
+        dt_print(DT_DEBUG_OPENCL,
           "[dt_dev_pixelpipe_cache_flush_clmem] for entry %" PRIu64 ": couldn't flush %p "
-          "(referenced=%i not ours=%i)\n",
-          entry->hash, c->mem, referenced, not_ours);
+          "(referenced=%i not ours=%i no_host_copy=%i)\n",
+          entry->hash, c->mem, referenced, not_ours, no_host_copy);
       l = next;
       continue;
     }
