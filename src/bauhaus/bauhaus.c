@@ -103,6 +103,7 @@ static gboolean _widget_draw(GtkWidget *widget, cairo_t *crf);
 static gboolean _widget_scroll(GtkWidget *widget, GdkEventScroll *event);
 static gboolean _widget_key_press(GtkWidget *widget, GdkEventKey *event);
 static void _get_preferred_width(GtkWidget *widget, gint *minimum_size, gint *natural_size);
+static void _get_preferred_height(GtkWidget *widget, gint *minimum_size, gint *natural_size);
 static void _style_updated(GtkWidget *widget);
 static void dt_bauhaus_widget_accept(struct dt_bauhaus_widget_t *w, gboolean timeout);
 static void dt_bauhaus_widget_reject(struct dt_bauhaus_widget_t *w);
@@ -1278,6 +1279,7 @@ static void dt_bh_class_init(DtBauhausWidgetClass *class)
   widget_class->scroll_event = _widget_scroll;
   widget_class->key_press_event = _widget_key_press;
   widget_class->get_preferred_width = _get_preferred_width;
+  widget_class->get_preferred_height = _get_preferred_height;
   widget_class->enter_notify_event = _enter_leave;
   widget_class->leave_notify_event = _enter_leave;
   widget_class->style_updated = _style_updated;
@@ -3149,6 +3151,22 @@ static void _get_preferred_width(GtkWidget *widget, gint *minimum_size, gint *na
     *natural_size = dt_ui_panel_get_size(darktable.gui->ui, DT_UI_PANEL_LEFT);
   else
     *natural_size = DT_PIXEL_APPLY_DPI(300);
+}
+
+static void _get_preferred_height(GtkWidget *widget, gint *minimum_size, gint *natural_size)
+{
+  // Resolve the height from the same getters used everywhere else so it is
+  // always correct at measure time, regardless of when "style-updated" fires.
+  // Relying solely on the size-request set in _style_updated is not enough:
+  // when the widget lives inside a freshly popped-up GtkMenu, the menu measures
+  // its children before their style context is resolved, so it would size
+  // itself from a stale/zero height and end up showing scroll arrows.
+  struct dt_bauhaus_widget_t *w = (struct dt_bauhaus_widget_t *)widget;
+  _margins_retrieve(w);
+  const gint height = (w->type == DT_BAUHAUS_COMBOBOX) ? (gint)ceil(_get_combobox_height(widget))
+                                                       : (gint)ceil(_get_slider_height(widget));
+  *minimum_size = height;
+  *natural_size = height;
 }
 
 void dt_bauhaus_hide_popup(dt_bauhaus_t *bh)
