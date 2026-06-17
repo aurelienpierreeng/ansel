@@ -3043,6 +3043,17 @@ static void _collapsible_set_states(dt_gui_collapsible_section_t *cs, gboolean a
   }
 }
 
+static void _collapsible_container_show(GtkWidget *widget, gpointer user_data)
+{
+  /* Called whenever the container receives a "show" event, including from gtk_widget_show_all().
+   * If the toggle is not active the section should remain collapsed, so we re-hide the container
+   * immediately. By the time this fires, show_all has already recursed into the children and
+   * set their visible flags, so a later expand will find all children ready to display. */
+  dt_gui_collapsible_section_t *cs = (dt_gui_collapsible_section_t *)user_data;
+  if(!gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(cs->toggle)))
+    gtk_widget_hide(widget);
+}
+
 static void _coeffs_button_changed(GtkDarktableToggleButton *widget, gpointer user_data)
 {
   dt_gui_collapsible_section_t *cs = (dt_gui_collapsible_section_t *)user_data;
@@ -3115,6 +3126,11 @@ void dt_gui_new_collapsible_section(dt_gui_collapsible_section_t *cs,
   gtk_box_pack_start(GTK_BOX(destdisp_head), cs->toggle, FALSE, FALSE, 0);
 
   cs->expander = dtgtk_expander_new(destdisp_head, GTK_WIDGET(cs->container));
+  /* gtk_widget_show_all() on the parent (called by lib modules after gui_init) recurses into
+   * the container and would override the collapsed state set by dtgtk_expander_set_expanded.
+   * Connect to "show" so we can re-apply the correct visibility right after show_all touches it. */
+  g_signal_connect(G_OBJECT(cs->container), "show",
+                   G_CALLBACK(_collapsible_container_show), (gpointer)cs);
   // Pack at the requested side so callers control ordering at insertion time.
   if(pack == GTK_PACK_START)
     gtk_box_pack_start(GTK_BOX(cs->parent), cs->expander, FALSE, FALSE, 0);
