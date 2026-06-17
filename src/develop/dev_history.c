@@ -1226,15 +1226,11 @@ void dt_dev_history_notify_change(dt_develop_t *dev, const int32_t imgid)
                      imgid, states);
   }
 
-  // Remove all old images
-  dt_mipmap_cache_remove(darktable.mipmap_cache, imgid, TRUE);
-
-  // Don't refresh the thumbnail if we are in darkroom, aka on filmstrip.
-  // Spawning another export thread will likely slow-down the current one,
-  // we want ressources allocated to realtime main preview, not diverted to
-  // cosmetic GUI refreshes.
-  if(darktable.gui)
-    dt_thumbtable_refresh_thumbnail(darktable.gui->ui->thumbtable_lighttable, imgid, TRUE);
+  // Reload metadata, drop the stale mipmap and refresh the lighttable thumbnail.
+  // refresh_filmstrip = FALSE: in darkroom the filmstrip is best-effort, spawning another export
+  // thread would slow down the current one and we want resources allocated to the realtime main
+  // preview, not diverted to cosmetic GUI refreshes.
+  dt_image_history_changed(imgid, FALSE);
 }
 
 

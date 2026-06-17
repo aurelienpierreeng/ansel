@@ -493,6 +493,13 @@ void dt_image_remove(const int32_t imgid);
 int32_t dt_image_duplicate_with_version(const int32_t imgid, const int32_t newversion);
 /** duplicates the given image in the database. */
 int32_t dt_image_duplicate(const int32_t imgid);
+/** Notify the caches and GUI that an image's development history changed.
+ *  Reloads the cached image metadata from the DB (so history_items, the "altered" flag that the
+ *  thumbnail regeneration uses to pick raw processing over the embedded JPEG, is correct), drops
+ *  the stale rendered thumbnail and requests a refresh. Callers MUST have already persisted the
+ *  new history to the DB. Pass refresh_filmstrip = FALSE from darkroom write paths: the filmstrip
+ *  is best-effort and must not steal pipeline resources from the realtime main preview. */
+void dt_image_history_changed(const int32_t imgid, const gboolean refresh_filmstrip);
 /** flips the image, clock wise, if given flag. */
 void dt_image_flip(const int32_t imgid, const int32_t cw);
 void dt_image_set_flip(const int32_t imgid, const dt_image_orientation_t user_flip);

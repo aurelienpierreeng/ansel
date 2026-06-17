@@ -381,14 +381,9 @@ static gboolean _history_load_and_apply_apply(const int32_t imgid, void *user_da
   // the darkroom/paste path that goes through dt_dev_history_notify_change(). Nothing invalidates
   // the rendered thumbnail, so it keeps showing the pre-XMP development (issue #861).
   // The cached metadata (history_items, ratings...) is refreshed by the DT_SIGNAL_IMAGE_INFO_CHANGED
-  // raised in _history_action_finalize_list(), but the pixels are not: invalidate the mipmap and
-  // request a pixel refresh explicitly here.
-  dt_mipmap_cache_remove(darktable.mipmap_cache, imgid, TRUE);
-  if(darktable.gui)
-  {
-    dt_thumbtable_refresh_thumbnail(darktable.gui->ui->thumbtable_lighttable, imgid, TRUE);
-    dt_thumbtable_refresh_thumbnail(darktable.gui->ui->thumbtable_filmstrip, imgid, TRUE);
-  }
+  // raised in _history_action_finalize_list(), but the pixels are not: reload metadata, invalidate
+  // the mipmap and refresh the thumbnail (lighttable context, so refresh the filmstrip too).
+  dt_image_history_changed(imgid, TRUE);
 
   return TRUE;
 }
