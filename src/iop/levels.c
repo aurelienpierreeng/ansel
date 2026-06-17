@@ -136,7 +136,7 @@ typedef struct dt_iop_levels_data_t
 
 const char *name()
 {
-  return _("levels");
+  return _("levels (legacy)");
 }
 
 int default_group()

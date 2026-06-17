@@ -116,7 +116,7 @@ typedef struct dt_iop_splittoning_data_t
 
 const char *name()
 {
-  return _("split-toning");
+  return _("split-toning (legacy)");
 }
 
 int flags()

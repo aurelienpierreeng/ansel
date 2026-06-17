@@ -141,7 +141,7 @@ typedef float (*_coeffs_table_ptr)[3];
 
 const char *name()
 {
-  return _("rgb curve");
+  return _("curve");
 }
 
 int default_group()

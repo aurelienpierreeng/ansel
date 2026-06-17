@@ -113,7 +113,7 @@ typedef struct dt_iop_rgblevels_data_t
 
 const char *name()
 {
-  return _("rgb levels");
+  return _("levels");
 }
 
 int default_group()

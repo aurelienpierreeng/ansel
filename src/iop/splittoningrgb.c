@@ -141,7 +141,7 @@ static void _update_point_slider_colors(dt_iop_module_t *self, int point);
 
 const char *name()
 {
-  return _("split-toning RGB");
+  return _("split-toning");
 }
 
 const char *aliases()

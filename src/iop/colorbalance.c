@@ -175,7 +175,7 @@ typedef struct dt_iop_colorbalance_global_data_t
 
 const char *name()
 {
-  return _("color balance");
+  return _("color balance (legacy)");
 }
 
 const char *aliases()
