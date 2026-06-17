@@ -1138,6 +1138,7 @@ void dt_image_flip(const int32_t imgid, const int32_t cw)
 
   // signal that the mipmap need to be updated
   dt_thumbtable_refresh_thumbnail(darktable.gui->ui->thumbtable_lighttable, imgid, TRUE);
+  dt_thumbtable_refresh_thumbnail(darktable.gui->ui->thumbtable_filmstrip, imgid, TRUE);
 }
 
 
