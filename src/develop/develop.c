@@ -607,6 +607,8 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
 
       dev->progress.completed = 0;
       dev->progress.total = 0;
+      const dt_dev_pixelpipe_cache_request_t cache_request
+          = dt_dev_pixelpipe_get_cache_request(pipe);
       const int ret = dt_dev_pixelpipe_process(pipe, roi);
       dev->progress.completed = 0;
       dev->progress.total = 0;
@@ -631,6 +633,32 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
         dt_dev_pixelpipe_reset_reentry(pipe);
       }
 
+      /**
+       * Module cache requests deliberately stop before the end of the pipe.
+       * DT_SIGNAL_CACHELINE_READY notifies their caller when the requested
+       * cache line is written, but the final backbuffer remains stale.
+       * Advertising PIPE_FINISHED for such a pass would wake preview
+       * consumers and schedule another otherwise unnecessary processing pass.
+       */
+      const gboolean published_backbuffer
+          = processed && dt_dev_pixelpipe_is_backbufer_valid(pipe);
+
+      /**
+       * A module cache request consumes the pipe change that started this
+       * worker pass, but intentionally stops before publishing the final
+       * backbuffer. Queue the full continuation explicitly instead of relying
+       * on a PIPE_FINISHED listener to notice the missing backbuffer. A newer
+       * GUI cache request may have arrived while processing; preserve it and
+       * only install the backbuffer request when no newer target is pending.
+       */
+      if(processed && cache_request == DT_DEV_PIXELPIPE_CACHE_REQUEST_MODULE
+         && !published_backbuffer)
+      {
+        if(dt_dev_pixelpipe_get_cache_request(pipe) == DT_DEV_PIXELPIPE_CACHE_REQUEST_NONE)
+          dt_dev_pixelpipe_set_cache_request(pipe, DT_DEV_PIXELPIPE_CACHE_REQUEST_BACKBUF, NULL);
+        dt_dev_pixelpipe_or_changed(pipe, DT_DEV_PIPE_CACHE_REQUEST);
+      }
+
       pipe->processing = 0;
       dt_pthread_mutex_unlock(&pipe->busy_mutex);
 
@@ -639,15 +667,16 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
 
       // Use the full-frame (uncropped) preview backbuffer to init the mipmap cache without extra computations
       // Note: this will resample non-linear uint8 at the end of the pipeline, so it is low-quality resampling.
-      if(processed && !dt_dev_pixelpipe_get_realtime(pipe) && pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
+      if(published_backbuffer && !dt_dev_pixelpipe_get_realtime(pipe)
+         && pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
         dt_dev_resync_mipmap_cache(dev, pipe, roi);
 
-      if(pipe->type == DT_DEV_PIXELPIPE_FULL)
+      if(published_backbuffer && pipe->type == DT_DEV_PIXELPIPE_FULL)
       {
         DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_UI_PIPE_FINISHED);
         dt_control_queue_redraw_center();
       }
-      if(pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
+      if(published_backbuffer && pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
       {
         DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED);
         dt_control_queue_redraw();
