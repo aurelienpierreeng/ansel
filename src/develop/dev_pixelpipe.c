@@ -222,40 +222,61 @@ static void _change_pipe(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_change_t fla
 }
 
 /**
- * @brief Update the current top history entry in place for realtime pipes.
+ * @brief Re-commit the focused module's piece in place from transient (or realtime) params.
  *
  * @details
- * Realtime editing keeps appending new top history items for the currently
- * focused module while the pipe is already instantiated. In that situation we
- * can refresh just that module piece from the newest top history item and
- * advance the pipe history fence without replaying the generic `synch_top()`
- * walk through the whole tail of the stack.
+ * Interactive editing (drawlayer realtime stroke, ashift/crop edit mode) keeps changing the focused
+ * module's params while the pipe is already instantiated. Rather than replaying the generic
+ * `synch_top()` walk, we refresh just that one piece and recompute the cumulative global hash, which
+ * naturally re-keys the focused piece and every downstream piece in the pixelpipe cache.
  *
- * This helper only replaces the history-tail replay. The rest of
- * `dt_dev_pixelpipe_change()` still needs to run afterwards so cache policy and
- * ROI contracts remain sealed for the next processing pass.
+ * The params come from the thread-safe **transient** channel when the focused module has published one
+ * (`dt_dev_transient_params_*`), otherwise from the module's history snapshot. We never read the
+ * GUI-owned `module->params` from this (pipeline) thread. The module's enable/blend state is taken from
+ * its history item, since transient edits change params only.
+ *
+ * This helper only replaces the history-tail replay. The rest of `dt_dev_pixelpipe_change()` still runs
+ * afterwards so cache policy and ROI contracts remain sealed for the next processing pass.
  */
-static gboolean _sync_realtime_top_history_in_place(dt_dev_pixelpipe_t *pipe)
+static gboolean _sync_focused_in_place(dt_dev_pixelpipe_t *pipe)
 {
-  if(!dt_dev_pixelpipe_get_realtime(pipe))
-    return FALSE;
+  if(IS_NULL_PTR(pipe) || IS_NULL_PTR(pipe->dev) || IS_NULL_PTR(pipe->dev->gui_module)) return FALSE;
+  dt_develop_t *dev = pipe->dev;
+  dt_iop_module_t *focus = dev->gui_module;
 
-  const uint32_t history_end = dt_dev_get_history_end_ext(pipe->dev);
-  if(history_end == 0 || IS_NULL_PTR(pipe->dev->gui_module)) return FALSE;
+  const gboolean transient = dt_dev_transient_params_active(dev, focus);
+  const gboolean realtime = dt_dev_pixelpipe_get_realtime(pipe);
+  if(!transient && !realtime) return FALSE;
 
-  GList *last_item = g_list_nth(pipe->dev->history, history_end - 1);
-  if(IS_NULL_PTR(last_item)) return FALSE;
+  const uint32_t history_end = dt_dev_get_history_end_ext(dev);
+  if(history_end == 0) return FALSE;
 
-  dt_dev_history_item_t *hist = (dt_dev_history_item_t *)last_item->data;
-  if(IS_NULL_PTR(hist) || IS_NULL_PTR(hist->module) || hist->module != pipe->dev->gui_module) return FALSE;
+  // Enable/blend state comes from the focused module's history item (transient edits are params-only).
+  dt_dev_history_item_t *hist = dt_dev_history_get_last_item_by_module(dev->history, focus, history_end);
+  if(IS_NULL_PTR(hist) || IS_NULL_PTR(hist->module) || IS_NULL_PTR(hist->params)) return FALSE;
 
-  dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)dt_dev_pixelpipe_get_module_piece(pipe, hist->module);
+  dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)dt_dev_pixelpipe_get_module_piece(pipe, focus);
   if(IS_NULL_PTR(piece)) return FALSE;
+
+  // Resolve params: thread-safe transient snapshot when published, else the history snapshot. A copy is
+  // taken so the slot lock is not held across commit_params(); never the live GUI module->params.
+  dt_iop_params_t *params = hist->params;
+  void *tbuf = NULL;
+  if(transient && focus->params_size > 0)
+  {
+    tbuf = g_malloc0(focus->params_size);
+    if(!IS_NULL_PTR(tbuf)
+       && dt_dev_transient_params_get(dev, focus, tbuf, (size_t)focus->params_size, NULL, 0, NULL))
+      params = (dt_iop_params_t *)tbuf;
+    else
+      dt_free(tbuf);
+  }
 
   const gboolean previous_want_detail_mask = (pipe->want_detail_mask != DT_DEV_DETAIL_MASK_NONE);
   piece->enabled = hist->enabled;
   piece->detail_mask = !IS_NULL_PTR(hist->blend_params) && hist->blend_params->details != 0.0f;
-  dt_iop_commit_params(hist->module, hist->params, hist->blend_params, pipe, piece);
+  dt_iop_commit_params(focus, params, hist->blend_params, pipe, piece);
+  dt_free(tbuf);
   _refresh_pipe_detail_mask_state(pipe);
   if(previous_want_detail_mask != (pipe->want_detail_mask != DT_DEV_DETAIL_MASK_NONE)) return FALSE;
 
@@ -264,8 +285,15 @@ static gboolean _sync_realtime_top_history_in_place(dt_dev_pixelpipe_t *pipe)
   dt_dev_pixelpipe_propagate_formats(pipe);
   dt_pixelpipe_get_global_hash(pipe);
 
-  pipe->last_history_hash = hist->hash;
-  pipe->last_history_item = hist;
+  // Only advance the synch_top fence when the focused module is the newest history item (the realtime
+  // drawlayer case, where each heartbeat appended a top item). For a transient edit of a non-top module
+  // no history item changed, so the fence must stay where the last real history sync left it.
+  GList *last_item = g_list_nth(dev->history, history_end - 1);
+  if(last_item && (dt_dev_history_item_t *)last_item->data == hist)
+  {
+    pipe->last_history_hash = hist->hash;
+    pipe->last_history_item = hist;
+  }
   return TRUE;
 }
 
@@ -988,7 +1016,7 @@ static void _commit_piece_contract(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_io
   // never auto-disables a module on a possibly-stale upstream descriptor.
   _prepare_piece_input_contract(pipe, piece, upstream_dsc);
 
-  // This should run even if the module is disabled because 
+  // This should run even if the module is disabled because
   // some modules with no history self-enable based on runtime context
   dt_iop_commit_params(piece->module, params, blend_params, pipe, piece);
 
@@ -1537,8 +1565,8 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe)
   }
   else if(status & DT_DEV_PIPE_TOP_CHANGED)
   {
-    // only top history item(s) changed
-    if(_sync_realtime_top_history_in_place(pipe))
+    // only top history item(s) changed, or a focused module published transient/realtime params
+    if(_sync_focused_in_place(pipe))
     {
       formats_propagated = TRUE;
     }

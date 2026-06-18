@@ -2471,3 +2471,116 @@ int dt_dev_history_refresh_nodes_ext(dt_develop_t *dev, GList **iop, GList *hist
 
   return pipe_remove;
 }
+
+
+/* ---------------------------------------------------------------------------------------------------
+ * Out-of-history transient param channel (see dev_history.h).
+ *
+ * Thread-safety: the slot is guarded by `dev->transient_params_mutex`. Writers (GUI/worker thread)
+ * `_set`/`_clear`; the pipeline reader (`_get`) copies out under the same lock and never dereferences
+ * the publishing module. The published payload is a plain byte copy of the module params struct, so the
+ * pipeline never touches GUI-owned `module->params`.
+ * ------------------------------------------------------------------------------------------------- */
+
+void dt_dev_transient_params_set(dt_iop_module_t *module, const void *params, const size_t params_size,
+                                 const void *blend_params, const size_t blend_size)
+{
+  if(IS_NULL_PTR(module) || IS_NULL_PTR(module->dev) || IS_NULL_PTR(params) || params_size == 0) return;
+  dt_develop_t *dev = module->dev;
+
+  dt_pthread_mutex_lock(&dev->transient_params_mutex);
+
+  if(dev->transient_params.params_size != (int32_t)params_size)
+  {
+    dt_free(dev->transient_params.params);
+    dev->transient_params.params = g_malloc0(params_size);
+    dev->transient_params.params_size = (int32_t)params_size;
+  }
+  if(!IS_NULL_PTR(dev->transient_params.params))
+    memcpy(dev->transient_params.params, params, params_size);
+
+  if(!IS_NULL_PTR(blend_params) && blend_size > 0)
+  {
+    if(dev->transient_params.blend_size != (int32_t)blend_size)
+    {
+      dt_free(dev->transient_params.blend_params);
+      dev->transient_params.blend_params = g_malloc0(blend_size);
+      dev->transient_params.blend_size = (int32_t)blend_size;
+    }
+    if(!IS_NULL_PTR(dev->transient_params.blend_params))
+      memcpy(dev->transient_params.blend_params, blend_params, blend_size);
+  }
+  else
+  {
+    dt_free(dev->transient_params.blend_params);
+    dev->transient_params.blend_size = 0;
+  }
+
+  dev->transient_params.module = module;
+  dev->transient_params.serial++;
+
+  dt_pthread_mutex_unlock(&dev->transient_params_mutex);
+
+  /* Intentionally does NOT trigger a pipe recompute. The caller flags the pipe the way that fits its
+   * use case: a realtime module (drawlayer) raises DT_DEV_PIPE_TOP_CHANGED on the main pipe for a fast
+   * focused-piece resync, while a geometry-changing edit (crop/ashift) drives a full
+   * dt_dev_pixelpipe_resync_history_all() so every pipe (main, preview, virtual) replans ROI/formats.
+   * Auto-triggering here too would route those edits through the partial focused-piece resync as well
+   * and race the full one (garbled geometry on warm re-edits). */
+}
+
+void dt_dev_transient_params_clear(dt_iop_module_t *module)
+{
+  if(IS_NULL_PTR(module) || IS_NULL_PTR(module->dev)) return;
+  dt_develop_t *dev = module->dev;
+
+  dt_pthread_mutex_lock(&dev->transient_params_mutex);
+  if(dev->transient_params.module == module)
+  {
+    dt_free(dev->transient_params.params);
+    dev->transient_params.params_size = 0;
+    dt_free(dev->transient_params.blend_params);
+    dev->transient_params.blend_size = 0;
+    dev->transient_params.module = NULL;
+    dev->transient_params.serial++;
+  }
+  dt_pthread_mutex_unlock(&dev->transient_params_mutex);
+
+  /* As with _set, the caller is responsible for re-triggering the pipe (resync / history commit) so it
+   * re-commits the focused module's piece from history instead of the dropped transient snapshot. */
+}
+
+gboolean dt_dev_transient_params_get(dt_develop_t *dev, const dt_iop_module_t *module,
+                                     void *out_params, const size_t out_params_size,
+                                     void *out_blend, const size_t out_blend_size, gboolean *out_has_blend)
+{
+  if(!IS_NULL_PTR(out_has_blend)) *out_has_blend = FALSE;
+  if(IS_NULL_PTR(dev) || IS_NULL_PTR(module) || IS_NULL_PTR(out_params) || out_params_size == 0) return FALSE;
+
+  gboolean ok = FALSE;
+  dt_pthread_mutex_lock(&dev->transient_params_mutex);
+  if(dev->transient_params.module == module && !IS_NULL_PTR(dev->transient_params.params)
+     && dev->transient_params.params_size == (int32_t)out_params_size)
+  {
+    memcpy(out_params, dev->transient_params.params, out_params_size);
+    ok = TRUE;
+
+    if(!IS_NULL_PTR(out_blend) && out_blend_size > 0 && !IS_NULL_PTR(dev->transient_params.blend_params)
+       && dev->transient_params.blend_size == (int32_t)out_blend_size)
+    {
+      memcpy(out_blend, dev->transient_params.blend_params, out_blend_size);
+      if(!IS_NULL_PTR(out_has_blend)) *out_has_blend = TRUE;
+    }
+  }
+  dt_pthread_mutex_unlock(&dev->transient_params_mutex);
+  return ok;
+}
+
+gboolean dt_dev_transient_params_active(dt_develop_t *dev, const dt_iop_module_t *module)
+{
+  if(IS_NULL_PTR(dev) || IS_NULL_PTR(module)) return FALSE;
+  dt_pthread_mutex_lock(&dev->transient_params_mutex);
+  const gboolean active = (dev->transient_params.module == module);
+  dt_pthread_mutex_unlock(&dev->transient_params_mutex);
+  return active;
+}

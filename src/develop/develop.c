@@ -131,6 +131,7 @@ void dt_dev_init(dt_develop_t *dev, int32_t gui_attached)
   dt_dev_set_history_hash(dev, DT_PIXELPIPE_CACHE_HASH_INVALID);
   dt_pthread_rwlock_init(&dev->history_mutex, NULL);
   dt_pthread_rwlock_init(&dev->masks_mutex, NULL);
+  dt_pthread_mutex_init(&dev->transient_params_mutex, NULL);
 
   dev->gui_attached = gui_attached;
   dev->roi.width = -1;
@@ -226,6 +227,16 @@ void dt_dev_cleanup(dt_develop_t *dev)
   g_list_free_full(dev->undo_history_before_iop_order_list, dt_free_gpointer);
   dev->undo_history_before_iop_order_list = NULL;
   dev->undo_history_before_end = 0;
+
+  // free the transient param channel
+  dt_pthread_mutex_lock(&dev->transient_params_mutex);
+  dt_free(dev->transient_params.params);
+  dev->transient_params.params = NULL;
+  dt_free(dev->transient_params.blend_params);
+  dev->transient_params.blend_params = NULL;
+  dev->transient_params.module = NULL;
+  dt_pthread_mutex_unlock(&dev->transient_params_mutex);
+  dt_pthread_mutex_destroy(&dev->transient_params_mutex);
 
   while(dev->iop)
   {
