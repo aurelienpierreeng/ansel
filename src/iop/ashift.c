@@ -308,8 +308,7 @@ typedef enum dt_iop_ashift_jobcode_t
   ASHIFT_JOBCODE_GET_STRUCTURE = 1,
   ASHIFT_JOBCODE_FIT = 2,
   ASHIFT_JOBCODE_GET_STRUCTURE_LINES = 3,
-  ASHIFT_JOBCODE_GET_STRUCTURE_QUAD = 4,
-  ASHIFT_JOBCODE_DO_CROP = 5
+  ASHIFT_JOBCODE_GET_STRUCTURE_QUAD = 4
 } dt_iop_ashift_jobcode_t;
 
 typedef struct dt_iop_ashift_params1_t
@@ -735,13 +734,20 @@ static void print_roi(const dt_iop_roi_t *roi, const char *label)
 }
 #endif
 
-static void _clear_shadow_crop_box(dt_iop_ashift_gui_data_t *g)
+/**
+ * @brief Reset the active crop rectangle to the complete transformed image.
+ *
+ * The caller passes either the persistent module parameters or the private edit-mode copy. Writing
+ * through that explicit pointer keeps the normal and edit paths consistent.
+ *
+ * @param p Parameter set whose crop margins must be reset.
+ */
+static void _clear_crop_box(dt_iop_ashift_params_t *p)
 {
-  // reset the crop to the full image
-  g->new_params.cl = 0.0f;
-  g->new_params.cr = 1.0f;
-  g->new_params.ct = 0.0f;
-  g->new_params.cb = 1.0f;
+  p->cl = 0.0f;
+  p->cr = 1.0f;
+  p->ct = 0.0f;
+  p->cb = 1.0f;
 }
 
 #define MAT3SWAP(a, b) { float (*tmp)[3] = (a); (a) = (b); (b) = tmp; }
@@ -2503,40 +2509,6 @@ static double crop_fitness(double *params, void *data)
   return -A;
 }
 
-/**
- * @brief Return the crop rectangle diagonal angle matching the final displayed aspect.
- *
- * Auto-crop is solved in ashift input coordinates, before the orientation module rotates the
- * image for portrait display. The crop rectangle itself still lives in ashift coordinates, but
- * its aspect ratio needs to match what the user finally sees on screen. When the final display is
- * rotated by 90 degrees, that means swapping width and height before building the diagonal angle
- * used by the crop fit.
- *
- * @param self Current ashift module.
- * @param g GUI state used to reuse the current pipeline flip diagnosis when available.
- * @param width Ashift input width.
- * @param height Ashift input height.
- *
- * @return Diagonal angle in radians for the crop rectangle.
- */
-static float _get_crop_aspect_angle(dt_iop_module_t *self, const dt_iop_ashift_gui_data_t *g,
-                                    const int width, const int height)
-{
-  int isflipped = 0;
-
-  if(!IS_NULL_PTR(g) && g->isflipped != -1)
-  {
-    isflipped = g->isflipped;
-  }
-  else if(self->dev)
-  {
-    const dt_image_orientation_t orientation = dt_image_get_orientation(self->dev->image_storage.id);
-    isflipped = (orientation & ORIENTATION_SWAP_XY) ? 1 : 0;
-  }
-
-  return isflipped ? atan2f((float)width, (float)height) : atan2f((float)height, (float)width);
-}
-
 // strategy: for a given center of the crop area and a specific aspect angle
 // we calculate the largest crop area that still lies within the output image;
 // now we allow a Nelder-Mead simplex to search for the center coordinates
@@ -2545,13 +2517,28 @@ static void do_crop(dt_iop_module_t *self, dt_iop_ashift_params_t *p)
 {
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
 
+  // Resetting the crop does not depend on pipeline geometry. Do it before looking up buf_in so
+  // "off" also works during initialization or after a cache-only preview pass.
+  if(p->cropmode == ASHIFT_CROP_OFF)
+  {
+    _clear_crop_box(p);
+    g->grid_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+    if(g->editing)
+    {
+      dt_dev_pixelpipe_sync_virtual(self->dev, DT_DEV_PIPE_SYNCH);
+      dt_dev_get_thumbnail_size(self->dev);
+      dt_dev_pixelpipe_resync_history_all(self->dev);
+    }
+    return;
+  }
+
   // Auto-crop is a purely geometric fit: it only needs ashift's *full* (uncropped) input size, not
-  // pixel data. Read it from the preview-pipe piece buf_in, which is the full input at preview scale
-  // and stays independent of the current crop ROI. ashift's roi_in (and hence g->buf) is the
-  // crop-dependent sub-region feeding the cropped output, so using it here fed the previous crop
-  // back into the next one and the crop only converged after several manual toggles (#710).
+  // pixel data. Read it from the virtual-pipe piece, which is synchronized on the GUI thread and
+  // remains available when the preview worker exact-hits downstream cache entries without running
+  // ashift's process() to populate g->buf. ashift's roi_in is crop-dependent, while buf_in is the
+  // stable full input geometry required by the fit.
   int crop_width = 0, crop_height = 0;
-  const dt_dev_pixelpipe_iop_t *crop_piece = dt_dev_distort_get_iop_pipe(self->dev->preview_pipe, self);
+  const dt_dev_pixelpipe_iop_t *crop_piece = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);
   if(!IS_NULL_PTR(crop_piece) && crop_piece->buf_in.width > 0 && crop_piece->buf_in.height > 0)
   {
     crop_width = crop_piece->buf_in.width;
@@ -2574,18 +2561,6 @@ static void do_crop(dt_iop_module_t *self, dt_iop_ashift_params_t *p)
   // Drop the overlay's cached screen coordinates so gui_post_expose() recomputes them against the
   // virtual-pipe geometry that the resync below makes current (#710 overlay lag).
   g->grid_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
-
-  // reset fit margins if auto-cropping is off
-  if(p->cropmode == ASHIFT_CROP_OFF)
-  {
-    _clear_shadow_crop_box(g);
-    if(g->editing)
-      dt_dev_pixelpipe_resync_history_all(self->dev);
-    else
-      dt_dev_pixelpipe_update_history_all(self->dev);
-    dt_dev_get_thumbnail_size(self->dev);
-    return;
-  }
 
   g->fitting = 1;
 
@@ -2610,7 +2585,10 @@ static void do_crop(dt_iop_module_t *self, dt_iop_ashift_params_t *p)
 
   const float wd = cropfit.width;
   const float ht = cropfit.height;
-  const float crop_alpha = _get_crop_aspect_angle(self, g, cropfit.width, cropfit.height);
+  // The crop rectangle is solved in ashift coordinates. A later orientation swap rotates both the
+  // rectangle and the image, preserving their relative aspect; swapping width/height here too
+  // would therefore invert "original format" on portrait images.
+  const float crop_alpha = atan2f(ht, wd);
 
   // the four vertices of the image in input image coordinates
   const float Vc[4][3] = { { 0.0f, 0.0f, 1.0f },
@@ -2712,16 +2690,17 @@ static void do_crop(dt_iop_module_t *self, dt_iop_ashift_params_t *p)
 #endif
 
   if(g->editing)
+  {
+    dt_dev_pixelpipe_sync_virtual(self->dev, DT_DEV_PIPE_SYNCH);
+    dt_dev_get_thumbnail_size(self->dev);
     dt_dev_pixelpipe_resync_history_all(self->dev);
-  else
-    dt_dev_pixelpipe_update_history_all(self->dev);
-  dt_dev_get_thumbnail_size(self->dev);
+  }
   return;
 
 failed:
   // in case of failure: reset clipping margins, set "automatic cropping" parameter
   // to "off" state, and display warning message
-  _clear_shadow_crop_box(g);
+  _clear_crop_box(p);
   p->cropmode = ASHIFT_CROP_OFF;
   ++darktable.gui->reset;
   dt_bauhaus_combobox_set(g->cropmode, p->cropmode);
@@ -2730,10 +2709,11 @@ failed:
   dt_control_log(_("automatic cropping failed"));
 
   if(g->editing)
+  {
+    dt_dev_pixelpipe_sync_virtual(self->dev, DT_DEV_PIPE_SYNCH);
+    dt_dev_get_thumbnail_size(self->dev);
     dt_dev_pixelpipe_resync_history_all(self->dev);
-  else
-    dt_dev_pixelpipe_update_history_all(self->dev);
-  dt_dev_get_thumbnail_size(self->dev);
+  }
   return;
 }
 
@@ -4786,10 +4766,7 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
     dt_bauhaus_slider_set(g->rotation, p->rotation);
     --darktable.gui->reset;
 
-    if(g->buf_height > 0 && g->buf_width > 0)
-      do_crop(self, p);
-    else
-      g->jobcode = ASHIFT_JOBCODE_DO_CROP;
+    do_crop(self, p);
 
     dt_dev_add_history_item(self->dev, self, FALSE, TRUE);
     return TRUE;
@@ -5040,16 +5017,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 
   _make_controls_sensitive(self, g->editing);
 
-  if(g->buf_height > 0 && g->buf_width > 0)
-    do_crop(self, p);
-  else
-  {
-    g->jobcode = ASHIFT_JOBCODE_DO_CROP;
-    if(g->editing)
-      dt_dev_pixelpipe_resync_history_all(self->dev);
-    else
-      dt_dev_pixelpipe_update_history_all(self->dev);
-  }
+  do_crop(self, p);
 }
 
 void gui_reset(struct dt_iop_module_t *self)
@@ -5064,6 +5032,7 @@ void gui_reset(struct dt_iop_module_t *self)
   memcpy(p, self->default_params, sizeof(dt_iop_ashift_params_t));
   memcpy(&g->previous_params, p, sizeof(dt_iop_ashift_params_t));
   memcpy(&g->new_params, p, sizeof(dt_iop_ashift_params_t));
+  dt_bauhaus_combobox_set(g->cropmode, p->cropmode);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->edit_button), FALSE);
   gtk_button_set_label(GTK_BUTTON(g->edit_button), _("Edit"));
   gtk_widget_set_sensitive(g->commit_button, FALSE);
@@ -5093,7 +5062,6 @@ static void cropmode_callback(GtkWidget *widget, gpointer user_data)
   dt_conf_set_int("plugins/darkroom/ashift/autocrop_value", crop_mode);
 
   p->cropmode = crop_mode;
-  g->jobcode = ASHIFT_JOBCODE_DO_CROP;
   do_crop(self, p);
 
   if(g->editing)
@@ -5102,7 +5070,8 @@ static void cropmode_callback(GtkWidget *widget, gpointer user_data)
   }
   else
   {
-    // Update params directly
+    // Commit the crop mode and the margins computed above together. Scheduling the pipe from
+    // do_crop() before this history item existed made the non-edit path synchronize stale margins.
     dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   }
 }
@@ -5390,6 +5359,10 @@ static void _enter_edit_mode(GtkToggleButton* button, struct dt_iop_module_t *se
     // Commit the params backup
     gui_changed(self, NULL, NULL);
 
+    ++darktable.gui->reset;
+    dt_bauhaus_combobox_set(g->cropmode, p->cropmode);
+    --darktable.gui->reset;
+
     // Update GUI
     gtk_button_set_label(GTK_BUTTON(button), _("Edit"));
     gtk_widget_set_sensitive(g->commit_button, FALSE);
@@ -5449,10 +5422,6 @@ static void _run_pending_preview_job(dt_iop_module_t *self)
 
   switch(jobcode)
   {
-    case ASHIFT_JOBCODE_DO_CROP:
-      do_crop(self, p);
-      break;
-
     case ASHIFT_JOBCODE_GET_STRUCTURE_QUAD:
       _do_get_structure_quad(self);
       break;
@@ -5591,6 +5560,7 @@ void gui_update(struct dt_iop_module_t *self)
   dt_iop_ashift_params_t *p = _get_ashift_params(self);
 
   gtk_widget_set_visible(g->specifics, p->mode == ASHIFT_MODE_SPECIFIC);
+  dt_bauhaus_combobox_set(g->cropmode, p->cropmode);
   _make_controls_sensitive(self, FALSE);
 
   dt_gui_update_collapsible_section(&g->cs);
@@ -5643,6 +5613,8 @@ void reload_defaults(dt_iop_module_t *module)
 
     dt_bauhaus_slider_set_default(g->f_length, f_length);
     dt_bauhaus_slider_set_default(g->crop_factor, crop_factor);
+    dt_bauhaus_combobox_set_default(g->cropmode,
+                                    ((dt_iop_ashift_params_t *)module->default_params)->cropmode);
 
     dt_iop_gui_enter_critical_section(module);
     dt_free(g->buf);
@@ -5907,8 +5879,14 @@ void gui_init(struct dt_iop_module_t *self)
                                      (GtkCallback)fitting_option_changed, self, option_labels);
   gtk_box_pack_start(GTK_BOX(self->widget), g->fitting_option, TRUE, TRUE, 0);
 
-  g->cropmode = dt_bauhaus_combobox_from_params(self, "cropmode");
-  g_signal_connect(G_OBJECT(g->cropmode), "value-changed", G_CALLBACK(cropmode_callback), self);
+  const gchar *crop_labels[] = { _("off"), _("largest area"), _("original format"), NULL };
+  g->cropmode
+      = dt_bauhaus_combobox_new_full(darktable.bauhaus, DT_GUI_MODULE(self), _("automatic cropping"), NULL,
+                                     ((dt_iop_ashift_params_t *)self->params)->cropmode,
+                                     (GtkCallback)cropmode_callback, self, crop_labels);
+  dt_bauhaus_combobox_set_default(g->cropmode,
+                                  ((dt_iop_ashift_params_t *)self->default_params)->cropmode);
+  gtk_box_pack_start(GTK_BOX(self->widget), g->cropmode, FALSE, FALSE, 0);
 
   self->widget = main_box;
 
