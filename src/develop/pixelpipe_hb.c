@@ -920,7 +920,16 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe,
   dt_pixelpipe_flow_t pixelpipe_flow = (PIXELPIPE_FLOW_NONE | PIXELPIPE_FLOW_HISTOGRAM_NONE);
 
   gchar *name = g_strdup_printf("module %s (%s) for pipe %s", module->op, module->multi_name, type);
-  gboolean cache_ram_output = piece->cache_output_on_ram && !_bypass_cache(pipe, piece);
+  // Cache bypass makes intermediate module outputs disposable, but the final output is the
+  // backbuffer consumed by Cairo. It must keep a host payload even when an edit mode (crop,
+  // clipping, ashift...) bypasses the downstream cache. Otherwise the GUI requests that host
+  // cacheline after every GPU render, while each cache-request pass publishes another device-only
+  // backbuffer and feeds an infinite preview recompute loop.
+  const gboolean keep_final_output = (hash == dt_dev_pixelpipe_get_hash(pipe));
+  gboolean cache_ram_output
+      //= piece->cache_output_on_ram && (!_bypass_cache(pipe, piece) || keep_final_output);
+      = piece->cache_output_on_ram && !_bypass_cache(pipe, piece);
+
   /* `piece->cache_entry` is only valid as a writable-reuse hint for transient outputs that will
    * be fully overwritten later. As soon as we keep the current output as a published cacheline in
    * RAM, rekey reuse must stop for that piece so later runs cannot overwrite a long-term state in
@@ -1092,7 +1101,6 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe,
   // to survive long enough for dt_dev_pixelpipe_process() to promote it to the backbuffer,
   // otherwise thumbnail/export callers only see a missing exact-hit and fall back to invalid
   // placeholder pixels.
-  const gboolean keep_final_output = (hash == dt_dev_pixelpipe_get_hash(pipe));
   if(_bypass_cache(pipe, piece) && !keep_final_output)
     dt_dev_pixelpipe_cache_flag_auto_destroy(darktable.pixelpipe_cache, output_entry);
 

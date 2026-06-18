@@ -5395,11 +5395,14 @@ static void _enter_edit_mode(GtkToggleButton* button, struct dt_iop_module_t *se
     gtk_widget_set_sensitive(g->commit_button, FALSE);
   }
 
-  // It sucks that we need to invalidate the preview too but we need its final dimension.
-  dt_dev_pixelpipe_resync_history_all(self->dev);
+  // Entering or leaving edit mode changes ashift's runtime crop contract. Settle that contract on
+  // the virtual pipe first, then publish the resulting full-image dimensions before waking either
+  // pixel worker. Resyncing first and queuing separate ZOOMED updates afterwards let a worker start
+  // with the previous ROI, get killed by the next update, and repeatedly feed slightly different
+  // preview dimensions back into the GUI geometry.
+  dt_dev_pixelpipe_sync_virtual(self->dev, DT_DEV_PIPE_SYNCH);
   dt_dev_get_thumbnail_size(self->dev);
-  dt_dev_pixelpipe_update_zoom_main(self->dev);
-  dt_dev_pixelpipe_update_zoom_preview(self->dev);
+  dt_dev_pixelpipe_resync_history_all(self->dev);
 }
 
 static void _event_commit_clicked(GtkButton *button, dt_iop_module_t *self)

@@ -34,17 +34,23 @@ typedef enum dt_pixelpipe_blend_transform_t
  * @brief Tell whether the current pipeline state forbids keeping this module output in cache.
  *
  * @details
- * This aggregates all pipeline-wide and module-local policy switches that turn cache lines into
- * disposable buffers:
+ * This combines the pipeline-wide modes with the bypass state already propagated to the current
+ * piece:
  *
  * - pipe re-entry,
- * - pipe-wide cache bypass,
  * - no-cache pipelines,
- * - module-local cache bypass.
+ * - module-local cache bypass propagated from the first requesting module to every downstream
+ *   piece.
+ *
+ * `pipe->bypass_cache` is the aggregate "at least one piece bypasses cache" state used when no
+ * piece is available, for example while deciding how to retain the final pipe output. It must not
+ * be applied to a concrete upstream piece: doing so makes outputs before the editing module
+ * disposable too. GUI consumers requesting such an upstream output then repeatedly render and
+ * discard the same cacheline.
  */
 static inline gboolean _bypass_cache(const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece)
 {
-  return (pipe->reentry || pipe->bypass_cache || pipe->no_cache || (piece && piece->bypass_cache));
+  return pipe->reentry || pipe->no_cache || (!IS_NULL_PTR(piece) ? piece->bypass_cache : pipe->bypass_cache);
 }
 
 /**
