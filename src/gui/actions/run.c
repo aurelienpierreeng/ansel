@@ -224,8 +224,8 @@ void append_run(GtkWidget **menus, GList **lists, const dt_menus_t index)
   add_sub_menu_entry(menus, lists, _("Defragment the library"), index, NULL, optimize_database_callback, NULL, NULL, NULL, 0, 0);
   add_sub_menu_entry(menus, lists, _("Backup the library"), index, NULL, backup_database_callback, NULL, NULL, NULL, 0, 0);
   add_menu_separator(menus[index]);
-  add_sub_menu_entry(menus, lists, _("Resynchronize library and XMP"), index, NULL, crawl_xmp_changes, NULL, NULL, NULL, 0, 0);
-  add_sub_menu_entry(menus, lists, _("Save selected developments to XMP"), index, NULL, GET_ACCEL_WRAPPER(dt_control_write_sidecar_files), NULL, NULL, has_active_images, 0, 0);
+  add_sub_menu_entry(menus, lists, _("Synchronize developments from XMP to database"), index, NULL, crawl_xmp_changes, NULL, NULL, NULL, 0, 0);
+  add_sub_menu_entry(menus, lists, _("Synchronize developments from database to XMP"), index, NULL, GET_ACCEL_WRAPPER(dt_control_write_sidecar_files), NULL, NULL, has_active_images, 0, 0);
   add_menu_separator(menus[index]);
-  add_sub_menu_entry(menus, lists, _("Resynchronize database with distant XMP for local copies"), index, NULL, GET_ACCEL_WRAPPER(dt_image_local_copy_synch), NULL, NULL, NULL, 0, 0);
+  add_sub_menu_entry(menus, lists, _("Resynchronize local copies with distant XMP"), index, NULL, GET_ACCEL_WRAPPER(dt_image_local_copy_synch), NULL, NULL, NULL, 0, 0);
 }
