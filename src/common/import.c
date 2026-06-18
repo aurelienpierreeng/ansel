@@ -342,7 +342,7 @@ static GdkPixbuf *_import_get_thumbnail(const gchar *filename, const int width, 
   const char *const extension = g_strrstr(filename, ".");
   const dt_image_flags_t file_type = extension ? dt_imageio_get_type_from_extension(extension + 1) : 0u;
   dt_colorspaces_color_profile_type_t color_space;
-  if(!(file_type & DT_IMAGE_HDR)
+  if(!dt_image_is_hdr(img)
      && !dt_imageio_large_thumbnail(filename, &buffer, &th_width, &th_height, &color_space, width, height))
   {
     const float ratio = ((float)th_height) / ((float)th_width);

@@ -1228,33 +1228,6 @@ dt_imageio_retval_t dt_imageio_open_exotic(dt_image_t *img, const char *filename
   return ret;
 }
 
-void dt_imageio_update_monochrome_workflow_tag(int32_t id, int mask)
-{
-  if(mask & (DT_IMAGE_MONOCHROME | DT_IMAGE_MONOCHROME_PREVIEW | DT_IMAGE_MONOCHROME_BAYER))
-  {
-    guint tagid = 0;
-    char tagname[64];
-    snprintf(tagname, sizeof(tagname), "darktable|mode|monochrome");
-    dt_tag_new(tagname, &tagid);
-    dt_tag_attach(tagid, id, FALSE, FALSE);
-  }
-  else
-    dt_tag_detach_by_string("darktable|mode|monochrome", id, FALSE, FALSE);
-
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_TAG_CHANGED);
-}
-
-void dt_imageio_set_hdr_tag(dt_image_t *img)
-{
-  guint tagid = 0;
-  char tagname[64];
-  snprintf(tagname, sizeof(tagname), "darktable|mode|hdr");
-  dt_tag_new(tagname, &tagid);
-  dt_tag_attach(tagid, img->id, FALSE, FALSE);
-  img->flags |= DT_IMAGE_HDR;
-  img->flags &= ~DT_IMAGE_LDR;
-}
-
 // =================================================
 //   combined reading
 // =================================================
@@ -1267,7 +1240,6 @@ dt_imageio_retval_t dt_imageio_open(dt_image_t *img,               // non-const 
   if(!g_file_test(filename, G_FILE_TEST_IS_REGULAR))
     return !DT_IMAGEIO_OK;
 
-  const int32_t was_hdr = (img->flags & DT_IMAGE_HDR);
   const int32_t was_bw = dt_image_monochrome_flags(img);
 
   dt_imageio_retval_t ret = DT_IMAGEIO_FILE_CORRUPTED;
@@ -1327,12 +1299,6 @@ dt_imageio_retval_t dt_imageio_open(dt_image_t *img,               // non-const 
     dt_control_log(_("The file `%s` is supported by none of our decoders."), filename);
     return ret;
   }
-
-  if((ret == DT_IMAGEIO_OK) && !was_hdr && (img->flags & DT_IMAGE_HDR))
-    dt_imageio_set_hdr_tag(img);
-
-  if((ret == DT_IMAGEIO_OK) && (was_bw != dt_image_monochrome_flags(img)))
-    dt_imageio_update_monochrome_workflow_tag(img->id, dt_image_monochrome_flags(img));
 
   img->p_width = img->width - img->crop_x - img->crop_width;
   img->p_height = img->height - img->crop_y - img->crop_height;

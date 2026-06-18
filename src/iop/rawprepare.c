@@ -703,7 +703,7 @@ error:
 static int image_is_normalized(const dt_image_t *const image)
 {
   // if raw with floating-point data, if not special magic whitelevel, then it needs normalization
-  if((image->flags & DT_IMAGE_HDR) == DT_IMAGE_HDR)
+  if(dt_image_is_hdr(image))
   {
     union {
         float f;
@@ -813,7 +813,7 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelp
   else
   {
     const float normalizer
-        = ((pipe->dev->image_storage.flags & DT_IMAGE_HDR) == DT_IMAGE_HDR) ? 1.0f : (float)UINT16_MAX;
+        = dt_image_is_hdr(&pipe->dev->image_storage) ? 1.0f : (float)UINT16_MAX;
     const float white = (float)p->raw_white_point / normalizer;
     float black = 0;
     for(int i = 0; i < 4; i++)

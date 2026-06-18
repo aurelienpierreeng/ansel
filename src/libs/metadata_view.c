@@ -419,19 +419,19 @@ static void _metadata_get_flags(const dt_image_t *const img, char *const text, c
   else
     value[2] = FALSE_FIELD;
 
-  if(img->flags & DT_IMAGE_LDR)
+  if(dt_image_is_ldr(img))
   {
     value[3] = 'l';
     tooltip_parts[next_tooltip_part++] = _(flag_descriptions[2]);
   }
 
-  if(img->flags & DT_IMAGE_RAW)
+  if(dt_image_is_raw(img))
   {
     value[4] = 'r';
     tooltip_parts[next_tooltip_part++] = _(flag_descriptions[3]);
   }
 
-  if(img->flags & DT_IMAGE_HDR)
+  if(dt_image_is_hdr(img))
   {
     value[5] = 'h';
     tooltip_parts[next_tooltip_part++] = _(flag_descriptions[4]);

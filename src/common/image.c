@@ -169,10 +169,11 @@ gboolean dt_image_is_raw(const dt_image_t *img)
   return (img->flags & DT_IMAGE_RAW) != 0;
 }
 
-// LDR / HDR are flag-only predicates now: no filename-extension sniffing. The flags themselves are
-// derived from the actual decoded buffer datatype in dt_image_buffer_resolve_flags() (float -> HDR,
-// integer display-referred -> LDR), so these report what was really loaded, not what the file name
-// suggested. They are kept as a public API so callers don't open-code the bitmask test.
+// LDR / HDR are flag-only predicates now: no filename-extension sniffing. The flags are set by the
+// decoding codec from the real file content (the buffer datatype is not a dynamic-range signal:
+// every raster decodes into a TYPE_FLOAT working buffer regardless of LDR/HDR), so these report what
+// was really loaded, not what the file name suggested. They are kept as a public API so callers
+// don't open-code the bitmask test.
 gboolean dt_image_is_ldr(const dt_image_t *img)
 {
   return (img->flags & DT_IMAGE_LDR) != 0;
@@ -217,7 +218,6 @@ static void _image_set_monochrome_flag(const int32_t imgid, gboolean monochrome,
     {
       const int mask = dt_image_monochrome_flags(img);
       dt_image_cache_write_release(darktable.image_cache, img, DT_IMAGE_CACHE_RELAXED);
-      dt_imageio_update_monochrome_workflow_tag(imgid, mask);
 
       if(undo_on)
       {
@@ -332,8 +332,8 @@ dt_image_pipe_class_t dt_image_pipe_class(const dt_image_t *img)
     return DT_IMAGE_PIPE_MOSAIC_RAW;
   }
 
-  if(img->flags & DT_IMAGE_LDR) return DT_IMAGE_PIPE_RGB_LDR;
-  if(img->flags & DT_IMAGE_HDR) return DT_IMAGE_PIPE_RGB_HDR;
+  if(dt_image_is_ldr(img)) return DT_IMAGE_PIPE_RGB_LDR;
+  if(dt_image_is_hdr(img)) return DT_IMAGE_PIPE_RGB_HDR;
 
   return DT_IMAGE_PIPE_UNKNOWN;
 }
@@ -366,25 +366,17 @@ void dt_image_buffer_resolve_flags(dt_image_t *img)
   else
     img->flags &= ~DT_IMAGE_MOSAIC;
 
-  // The decoded buffer datatype is the authoritative source for the LDR/HDR axis, replacing the
-  // old filename-extension guessing. A floating-point buffer (16- or 32-bit float, both decoded
-  // into TYPE_FLOAT in RAM) carries high dynamic range; an integer buffer that is not raw sensor
-  // data is low dynamic range, display-referred. Raw sensor data (mosaiced or sRAW/linear) is
-  // neither in the display sense, except that an unnormalized float raw is still flagged HDR.
-  if(img->dsc.datatype == TYPE_FLOAT)
-  {
-    img->flags |= DT_IMAGE_HDR;
-    img->flags &= ~DT_IMAGE_LDR;
-  }
-  else if(!dt_image_needs_rawprepare(img))
-  {
-    img->flags |= DT_IMAGE_LDR;
-    img->flags &= ~DT_IMAGE_HDR;
-  }
-  else
-  {
+  // The LDR/HDR axis is NOT derivable from the buffer datatype: every raster codec decodes into a
+  // TYPE_FLOAT working buffer in RAM regardless of the file's real dynamic range (sRGB JPEG/PNG/WebP
+  // all land as float just like Radiance/PFM/EXR). The decoding codec is the authoritative source
+  // and has already set DT_IMAGE_LDR / DT_IMAGE_HDR from the actual file content, so we must not
+  // override it here from the datatype — doing so re-flagged every display-referred raster as HDR.
+  //
+  // The only normalization we still own is the raw-sensor case: mosaiced / sRAW integer data is
+  // scene-linear sensor data, neither display LDR nor HDR. A float raw (e.g. HDRMerge, legacy float
+  // DNG) is left flagged HDR exactly as the raw codec set it.
+  if(dt_image_needs_rawprepare(img) && img->dsc.datatype != TYPE_FLOAT)
     img->flags &= ~(DT_IMAGE_LDR | DT_IMAGE_HDR);
-  }
 
   img->flags |= DT_IMAGE_BUFFER_RESOLVED;
 }

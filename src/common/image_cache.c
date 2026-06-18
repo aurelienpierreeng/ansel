@@ -46,6 +46,7 @@
 #include "common/debug.h"
 #include "common/exif.h"
 #include "common/image.h"
+#include "common/imageio.h"
 #include "common/datetime.h"
 #include "control/conf.h"
 #include "control/control.h"
@@ -292,6 +293,30 @@ void dt_image_from_stmt(dt_image_t *img, sqlite3_stmt *stmt)
   img->is_bw = dt_image_monochrome_flags(img);
   img->is_bw_flow = dt_image_use_monochrome_workflow(img);
   img->is_hdr = dt_image_is_hdr(img);
+
+  // Instrumentation: the LDR/HDR flags are now pure flag predicates (no filename sniffing at read
+  // time). Historically the flag could have been mis-set at import, so cross-check the flags loaded
+  // from the DB against the unambiguous extension hint and log any contradiction. Containers whose
+  // dynamic range only the decoder can settle (TIFF/AVIF/HEIF/DNG ...) return 0 here and are skipped
+  // to avoid false positives. This surfaces stale/garbage flags persisted in the database.
+  {
+    const gchar *ext = g_strrstr(img->filename, ".");
+    const dt_image_flags_t ext_hint = ext ? dt_imageio_get_type_from_extension(ext) : 0;
+    const gboolean db_hdr = (img->flags & DT_IMAGE_HDR) != 0;
+    const gboolean db_ldr = (img->flags & DT_IMAGE_LDR) != 0;
+
+    if(ext_hint == DT_IMAGE_HDR && !db_hdr)
+      dt_print(DT_DEBUG_IMAGEIO,
+               "[image_cache] DB flag mismatch: id=%d filename='%s' has an HDR extension but stored "
+               "flags=0x%08x lack DT_IMAGE_HDR (ldr=%d hdr=%d)\n",
+               img->id, img->filename, (unsigned int)img->flags, db_ldr, db_hdr);
+    else if((ext_hint == DT_IMAGE_LDR || ext_hint == DT_IMAGE_RAW) && db_hdr)
+      dt_print(DT_DEBUG_IMAGEIO,
+               "[image_cache] DB flag mismatch: id=%d filename='%s' has a %s extension but stored "
+               "flags=0x%08x carry DT_IMAGE_HDR (ldr=%d hdr=%d)\n",
+               img->id, img->filename, (ext_hint == DT_IMAGE_RAW) ? "RAW" : "LDR",
+               (unsigned int)img->flags, db_ldr, db_hdr);
+  }
 
   dt_image_refresh_makermodel(img);
 }

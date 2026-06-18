@@ -1581,9 +1581,6 @@ static bool _exif_decode_exif_data(dt_image_t *img, Exiv2::ExifData &exifData)
       }
     }
 
-    int is_monochrome = FALSE;
-    int is_hdr = dt_image_is_hdr(img);
-
     // Finding out about DNG hdr and monochrome images can be done here while reading exif data.
     if(FIND_EXIF_TAG("Exif.Image.DNGVersion"))
     {
@@ -1612,19 +1609,13 @@ static bool _exif_decode_exif_data(dt_image_t *img, Exiv2::ExifData &exifData)
       else if(FIND_EXIF_TAG("Exif.Image.PhotometricInterpretation"))
         phi = pos->toLong();
 
-      if((format == 3) && (bps >= 16) && ((phi == 32803) || (phi == 34892))) is_hdr = TRUE;
+      if((format == 3) && (bps >= 16) && ((phi == 32803) || (phi == 34892))) 
+        img->flags |= DT_IMAGE_HDR;
 
-      if((spp == 1) && (phi == 34892)) is_monochrome = TRUE;
+      if((spp == 1) && (phi == 34892)) 
+        img->flags |= DT_IMAGE_MONOCHROME;
     }
-
-    if(is_hdr)
-      dt_imageio_set_hdr_tag(img);
-
-    if(is_monochrome)
-    {
-      img->flags |= DT_IMAGE_MONOCHROME;
-      dt_imageio_update_monochrome_workflow_tag(img->id, DT_IMAGE_MONOCHROME);
-    }
+    
     // some files have the display colorspace explicitly set. try to read that. The Exif.Photo.ColorSpace
     // tag only exists in display-referred integer images, so gate on "not raw and not HDR-float"
     // rather than on DT_IMAGE_LDR: at this point the dynamic range of an ambiguous container (TIFF,
@@ -1636,7 +1627,7 @@ static bool _exif_decode_exif_data(dt_image_t *img, Exiv2::ExifData &exifData)
     // 0xffff -> Uncalibrated
     //          + Exif.Iop.InteroperabilityIndex of 'R03' -> AdobeRGB
     //          + Exif.Iop.InteroperabilityIndex of 'R98' -> sRGB
-    if(!dt_image_is_raw(img) && !dt_image_is_hdr(img) && FIND_EXIF_TAG("Exif.Photo.ColorSpace"))
+    if(!dt_image_is_raw(img) && FIND_EXIF_TAG("Exif.Photo.ColorSpace"))
     {
       int colorspace = pos->toLong();
       if(colorspace == 0x01)
