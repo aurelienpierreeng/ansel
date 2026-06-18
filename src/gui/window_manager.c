@@ -535,7 +535,7 @@ void dt_ui_init_main_table(GtkWidget *parent, dt_ui_t *ui)
   _ui_init_panel_right(ui, container);
 
   /* initialize the main drawing widget (center) */
-  widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_widget_set_name(widget, "main-widget");
   gtk_widget_set_hexpand(GTK_WIDGET(widget), TRUE);
   gtk_widget_set_vexpand(GTK_WIDGET(widget), TRUE);

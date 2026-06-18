@@ -1656,7 +1656,7 @@ static void _init_widgets(dt_gui_gtk_t *gui)
   container = gui->ui->main_window;
 
   // Adding the outermost vbox
-  widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_container_add(GTK_CONTAINER(container), widget);
   gtk_widget_show(widget);
 

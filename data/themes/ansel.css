@@ -1282,8 +1282,7 @@ menu.dt-masks-context-menu menuitem.dt-masks-checked:not(:disabled) label.dt-mas
   11. THUMBTABLE (FILMSTRIP / LIGHTTABLE)
   ======================================*/
 
-.dt_thumbtable,
-.background {
+.dt_thumbtable {
   background-color: @lighttable_bg_color;
 }
 
