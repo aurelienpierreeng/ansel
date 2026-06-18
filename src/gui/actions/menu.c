@@ -663,7 +663,7 @@ gboolean dt_menu_is_image_in_dev(GList *imgs)
     && g_list_find(imgs, GINT_TO_POINTER(darktable.develop->image_storage.id));
 }
 
-void dt_menu_apply_dev_history_update(dt_develop_t *dev, const gboolean history_inited)
+void dt_menu_apply_dev_history_update(dt_develop_t *dev)
 {
   if(IS_NULL_PTR(dev)) return;
 

@@ -1158,9 +1158,9 @@ void dt_dev_history_gui_update(dt_develop_t *dev)
 {
   if(!dev->gui_attached) return;
 
-  // Ensure the set of module instances shown in the right panel matches the current history:
-  // hide/remove instances that are no longer referenced by any history item.
-  // Note: this may also reorder modules in the GUI if needed.
+  // Match the live module instances to the reloaded history before touching GTK.
+  // This loop may remove obsolete instances or expose instances newly created
+  // while reading a style/history from the database.
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
   dt_dev_history_refresh_nodes_ext(dev, &dev->iop, dev->history);
   dt_pthread_rwlock_unlock(&dev->history_mutex);
@@ -1170,6 +1170,18 @@ void dt_dev_history_gui_update(dt_develop_t *dev)
   for(GList *module = g_list_first(dev->iop); module; module = g_list_next(module))
   {
     dt_iop_module_t *mod = (dt_iop_module_t *)(module->data);
+
+    // History reload is backend-only and creates new multi-instances without
+    // GTK state. Attach every missing GUI here, after releasing history_mutex,
+    // so styles and global history actions expose their complete module set.
+    if(!dt_iop_is_hidden(mod) && IS_NULL_PTR(mod->expander))
+    {
+      if(IS_NULL_PTR(mod->widget)) dt_iop_gui_init(mod);
+      dt_iop_gui_set_expander(mod);
+    }
+
+    // Parameters, enabled state, headers and blending controls may all have
+    // changed, therefore refresh every module rather than only history entries.
     dt_iop_gui_update(mod);
   }
 
@@ -2396,13 +2408,6 @@ static int _create_deleted_modules(GList **_iop_list, GList *history_list)
         return changed;
       }
       module->instance = base_module->instance;
-
-      if(!dt_iop_is_hidden(module))
-      {
-        ++darktable.gui->reset;
-        module->gui_init(module);
-        --darktable.gui->reset;
-      }
 
       // adjust the multi_name of the new module
       g_strlcpy(module->multi_name, hitem->multi_name, sizeof(module->multi_name));

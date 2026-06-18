@@ -74,7 +74,7 @@ static gboolean _styles_apply_callback(GtkAccelGroup *group, GObject *accelerata
     const gboolean applied = dt_history_style_on_image(darktable.develop->image_storage.id, style_name, duplicate);
     dt_dev_undo_end_record(darktable.develop);
     if(applied)
-      dt_menu_apply_dev_history_update(darktable.develop, TRUE);
+      dt_menu_apply_dev_history_update(darktable.develop);
   }
 
   if(imgs) dt_history_style_on_list(imgs, style_name, duplicate);

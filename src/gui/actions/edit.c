@@ -121,7 +121,7 @@ static gboolean compress_history_callback(GtkAccelGroup *group, GObject *acceler
     dt_dev_undo_start_record(dev);
     dt_history_compress_on_image(dev->image_storage.id);
     dt_dev_undo_end_record(dev);
-    dt_menu_apply_dev_history_update(dev, TRUE);
+    dt_menu_apply_dev_history_update(dev);
 
     // Avoid running a headless compression for the current darkroom image: the history module
     // (src/libs/history.c) compresses directly from the loaded pipeline.
@@ -155,7 +155,7 @@ static gboolean delete_history_callback(GtkAccelGroup *group, GObject *accelerat
   if(is_darkroom_image_in_list)
   {
     dt_dev_undo_end_record(darktable.develop);
-    dt_menu_apply_dev_history_update(darktable.develop, TRUE);
+    dt_menu_apply_dev_history_update(darktable.develop);
   }
 
   dt_control_queue_redraw_center();
@@ -370,7 +370,7 @@ static gboolean load_xmp_callback(GtkAccelGroup *group, GObject *acceleratable, 
   }
 
   if(dt_menu_is_image_in_dev(imgs))
-    dt_menu_apply_dev_history_update(darktable.develop, TRUE);
+    dt_menu_apply_dev_history_update(darktable.develop);
 
   g_object_unref(filechooser);
   g_list_free(imgs);

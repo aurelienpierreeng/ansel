@@ -221,7 +221,12 @@ GtkWidget *ctx_gtk_check_menu_item_new_with_markup_and_pixbuf(const char *label,
 
 gboolean dt_menu_is_image_in_dev(GList *imgs);
 struct dt_develop_t;
-void dt_menu_apply_dev_history_update(struct dt_develop_t *dev, const gboolean history_inited);
+/**
+ * @brief Reload the current darkroom history and refresh every dependent GUI.
+ *
+ * @param dev Develop context attached to darkroom.
+ */
+void dt_menu_apply_dev_history_update(struct dt_develop_t *dev);
 
 // Helper to wrap (*void)(void) functions into GtkAccel compatible callbacks
 #define MAKE_ACCEL_WRAPPER(cb)                                            \
