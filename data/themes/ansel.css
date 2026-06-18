@@ -493,7 +493,8 @@ scrolledwindow {
  * not a CSS box property) so the content sits flush against the scrollbar instead of leaving a
  * strip of background before it. Applies to the full-bleed thumbtable grid and the side panels. */
 #thumbtable-scroll,
-#panel-scroll {
+#panel-scroll,
+scrollbar {
   -GtkScrolledWindow-scrollbar-spacing: 0;
 }
 
