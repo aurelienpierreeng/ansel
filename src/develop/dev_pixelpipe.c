@@ -667,10 +667,26 @@ gboolean dt_dev_pixelpipe_cache_peek_gui(dt_dev_pixelpipe_t *pipe, const dt_dev_
     return FALSE;
 
   const uint64_t hash = !IS_NULL_PTR(piece) ? piece->global_hash : dt_dev_pixelpipe_get_hash(pipe);
+
+  // For the final backbuffer (piece == NULL), GUI consumers display the last *published* frame,
+  // identified by pipe->backbuf.hash. The pipeline plans the next frame ahead of publishing it, so
+  // pipe->hash (the planned final hash) runs ahead of the backbuffer while a recompute is in flight.
+  // This is the normal steady state of realtime drawing: every heartbeat plans a new frame. Peeking
+  // the planned hash would then miss the perfectly valid published frame, the darkroom main-surface
+  // lock would fail, and the view would drop to the paused preview pipe (which lacks the in-progress
+  // stroke) — the flicker between "drawing applied" and "original". So look up the published backbuf
+  // hash for display, and keep the planned hash only to drive recompute on a genuine miss below.
+  uint64_t display_hash = hash;
+  if(IS_NULL_PTR(piece))
+  {
+    const uint64_t backbuf_hash = dt_dev_backbuf_get_hash(&pipe->backbuf);
+    if(backbuf_hash != DT_PIXELPIPE_CACHE_HASH_INVALID) display_hash = backbuf_hash;
+  }
+
   void *buffer = NULL;
   dt_pixel_cache_entry_t *entry = NULL;
-  if(hash != DT_PIXELPIPE_CACHE_HASH_INVALID
-     && dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, hash, &buffer, &entry, pipe->devid, NULL)
+  if(display_hash != DT_PIXELPIPE_CACHE_HASH_INVALID
+     && dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, display_hash, &buffer, &entry, pipe->devid, NULL)
      &&  !IS_NULL_PTR(buffer) && !IS_NULL_PTR(entry))
   {
     // These counters are only diagnostic; cache consumers should not wait for
