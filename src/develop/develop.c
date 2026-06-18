@@ -514,10 +514,15 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
                                1.0f, DT_MIPMAP_FULL);
 
     gboolean pipe_needs_update[G_N_ELEMENTS(pipes)] = { FALSE };
+    dt_iop_roi_t pipe_roi[G_N_ELEMENTS(pipes)] = { { 0 } };
     gboolean history_resynced = FALSE;
 
-    // First resynchronize all dirty pipelines from history so GUI listeners can resolve
-    // stable piece->global_hash values before any cacheline starts publishing pixels.
+    // First resynchronize all dirty pipelines from history, plan their ROI and finalize their
+    // cumulative global hash, so GUI listeners can resolve stable piece->global_hash values
+    // before any cacheline starts publishing pixels. This is the contract advertised by the
+    // HISTORY_RESYNC signal raised at the end of this stage: it must only fire once every
+    // piece->global_hash is final. Otherwise GUI consumers (navigation, scopes, pickers) latch a
+    // stale/provisional hash here and never match the cacheline the worker publishes below.
     for(size_t i = 0; i < G_N_ELEMENTS(pipes); i++)
     {
       dt_dev_pixelpipe_t *pipe = pipes[i];
@@ -544,7 +549,18 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
         dt_dev_pixelpipe_change(pipe);
         pipe_resynced = TRUE;
       }
-      
+
+      // Plan the ROI for this run and finalize the cumulative global hash now, while the pipe is
+      // settled and not yet publishing pixels. dt_dev_pixelpipe_process() recomputes both at its
+      // entry (it is also called directly by export/snapshot pipes), but computing them here is
+      // what lets the HISTORY_RESYNC signal below advertise a hash that is already final.
+      int x = 0, y = 0, wd = 0, ht = 0;
+      float scale = 1.f;
+      _update_darkroom_roi(dev, pipe, &x, &y, &wd, &ht, &scale);
+      pipe_roi[i] = (dt_iop_roi_t){ x, y, wd, ht, scale };
+      dt_dev_pixelpipe_get_roi_in(pipe, pipe_roi[i]);
+      dt_pixelpipe_get_global_hash(pipe);
+
       pipe->processing = 0;
       dt_pthread_mutex_unlock(&pipe->busy_mutex);
 
@@ -559,130 +575,86 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
     for(size_t i = 0; i < G_N_ELEMENTS(pipes); i++)
     {
       dt_dev_pixelpipe_t *pipe = pipes[i];
-      gboolean needs_update = pipe_needs_update[i];
-      if(!needs_update) continue;
+      if(!pipe_needs_update[i]) continue;
+      if(dev->exit || !dt_control_running()) break;
 
-      float scale = 1.f;
-      int x = 0, y = 0, wd = 0, ht = 0;
+      // The resync stage above synchronized history, planned the ROI and advertised the matching
+      // final global hash. We process the exact state it committed, using pipe_roi[i]: that is what
+      // dt_dev_pixelpipe_process() recomputes its hash from, so the cacheline it publishes always
+      // carries the hash already announced to GUI consumers. A change that landed after the resync
+      // (zoom/pan, a fresh history commit) does NOT invalidate this run — it always also raised the
+      // killswitch (`_change_pipe()` sets shutdown together with the changed flag), so the run below
+      // aborts cleanly and the next loop iteration resyncs, re-advertises and reprocesses the new
+      // state. We must NOT skip on a set changed flag here: every darkroom configure-event flags the
+      // preview pipe ZOOMED, so on an image switch (which re-lays-out the view) skipping would starve
+      // the preview and leave navigation/scopes blank.
+      dt_print(DT_DEBUG_PIPE | DT_DEBUG_DEV, "PIPE %s needs update\n", pipe->type == DT_DEV_PIXELPIPE_FULL ? "full" : "preview");
 
-      // Re-entries are designed for raster masks when we lose their reference, so we rerun the full
-      // pipeline immediately but cap retries to avoid infinite loops.
-      int reentries = 0;
-      dt_dev_pixelpipe_reset_reentry(pipe);
+      dt_pthread_mutex_lock(&pipe->busy_mutex);
+      pipe->processing = 1;
 
-      int runs = 0;
+      // We are starting fresh, reset the killswitch signal.
+      dt_atomic_set_int(&pipe->shutdown, FALSE);
 
-      // Updating loop: run while output is invalid/unavailable, or while realtime mode
-      // has a new history state to consume.
-      while(!dev->exit && dt_control_running() && reentries < 2 && runs < 2 && needs_update)
+      const dt_iop_roi_t roi = pipe_roi[i];
+
+      dt_control_log_busy_enter();
+      dt_control_toast_busy_enter();
+
+      dt_times_t thread_start;
+      dt_get_times(&thread_start);
+      const gint64 process_start_us = g_get_monotonic_time();
+
+      dev->progress.completed = 0;
+      dev->progress.total = 0;
+      const int ret = dt_dev_pixelpipe_process(pipe, roi);
+      dev->progress.completed = 0;
+      dev->progress.total = 0;
+      const gint64 process_runtime_us = g_get_monotonic_time() - process_start_us;
+
+      gchar *msg = g_strdup_printf("[dev_process_%s] pipeline processing thread", dt_pixelpipe_get_pipe_name(pipe->type));
+      dt_show_times(&thread_start, msg);
+      dt_free(msg);
+
+      dt_control_log_busy_leave();
+      dt_control_toast_busy_leave();
+
+      const gboolean processed = (!ret && !dt_atomic_get_int(&pipe->shutdown));
+
+      // Re-entry is designed for raster masks when we lose their reference: force a full rebuild
+      // and defer it to the resync stage of the next loop iteration. History resync now lives
+      // exclusively in the first block so the global hash stays advertised consistently.
+      if(dt_dev_pixelpipe_has_reentry(pipe))
       {
-        dt_print(DT_DEBUG_PIPE | DT_DEBUG_DEV, "PIPE %s needs update\n", pipe->type == DT_DEV_PIXELPIPE_FULL ? "full" : "preview");
-
-        dt_pthread_mutex_lock(&pipe->busy_mutex);
-        pipe->processing = 1;
-
-        // We are starting fresh, reset the killswitch signal.
-        dt_atomic_set_int(&pipe->shutdown, FALSE);
-
-        gboolean pipe_resynced = FALSE;
-
-        // In case of re-entry, we will rerun the whole pipe, so we need
-        // to resynch it in full too before.
-        if(dt_dev_pixelpipe_has_reentry(pipe))
-        {
-          dt_dev_pixelpipe_or_changed(pipe, DT_DEV_PIPE_REMOVE);
-          dt_dev_pixelpipe_cache_flush(darktable.pixelpipe_cache, pipe->type);
-        }
-
-        // Resynch history with pipeline. NB: this locks dev->history_mutex.
-        while(dt_dev_pixelpipe_get_changed(pipe) != DT_DEV_PIPE_UNCHANGED)
-        {
-          dt_dev_pixelpipe_change(pipe);
-          pipe_resynced = TRUE;
-        }
-
-        if(pipe_resynced)
-          DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_HISTORY_RESYNC);
-
-        // If user zoomed/panned in darkroom during the previous loop of recomputation,
-        // the kill-switch event was sent, which terminated the pipeline before completion in the previous run,
-        // but the coordinates of the ROI changed since then, and we will handle the new coordinates right away
-        // without restarting the worker. If re-entry was still armed, the object that owned it may have changed
-        // hash too, so we hard-reset the flag here.
-        if(_update_darkroom_roi(dev, pipe, &x, &y, &wd, &ht, &scale))
-          dt_dev_pixelpipe_reset_reentry(pipe);
-
-        // Catch early killswitch. dt_dev_pixelpipe_change() can be lengthy with huge masks stacks.
-        if(dt_atomic_get_int(&pipe->shutdown))
-        {
-          pipe->processing = 0;
-          dt_pthread_mutex_unlock(&pipe->busy_mutex);
-          break;
-        }
-
-        dt_iop_roi_t roi = (dt_iop_roi_t){ x, y, wd, ht, scale };
-
-        dt_control_log_busy_enter();
-        dt_control_toast_busy_enter();
-
-        dt_times_t thread_start;
-        dt_get_times(&thread_start);
-        const gint64 process_start_us = g_get_monotonic_time();
-
-        dev->progress.completed = 0;
-        dev->progress.total = 0;
-        const int ret = dt_dev_pixelpipe_process(pipe, roi);
-        dev->progress.completed = 0;
-        dev->progress.total = 0;
-        const gint64 process_runtime_us = g_get_monotonic_time() - process_start_us;
-
-        gchar *msg = g_strdup_printf("[dev_process_%s] pipeline processing thread", dt_pixelpipe_get_pipe_name(pipe->type));
-        dt_show_times(&thread_start, msg);
-        dt_free(msg);
-
-        dt_control_log_busy_leave();
-        dt_control_toast_busy_leave();
-
-        // If pipe is flagged for re-entry, we need to restart it right away.
-        if(dt_dev_pixelpipe_has_reentry(pipe))
-        {
-          reentries++;
-        }
-        else if(!dt_atomic_get_int(&pipe->shutdown))
-        {
-          runs++;
-        }
-
-        pipe->processing = 0;
-        dt_pthread_mutex_unlock(&pipe->busy_mutex);
-
-        if(!ret && !dt_atomic_get_int(&pipe->shutdown))
-        {
-          dt_gui_throttle_record_runtime(pipe, process_runtime_us);
-          needs_update = FALSE;
-        }
-
-        // Use the full-frame (uncropped) preview backbuffer to init the mipmap cache without extra computations
-        // Note: this will resample non-linear uint8 at the end of the pipeline, so it is low-quality resampling.
-        if(!dt_dev_pixelpipe_get_realtime(pipe) && !needs_update && pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
-        {
-          dt_dev_resync_mipmap_cache(dev, pipe, roi);
-        }
-
-        if(pipe->type == DT_DEV_PIXELPIPE_FULL)
-        {
-          DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_UI_PIPE_FINISHED);
-          dt_control_queue_redraw_center();
-        }
-        if(pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
-        {
-          DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED);
-          dt_control_queue_redraw();
-        }
-
-        // Allow some breathing room to the OS and GPU
-        dt_iop_nap(10000); // 10 ms
+        dt_dev_pixelpipe_or_changed(pipe, DT_DEV_PIPE_REMOVE);
+        dt_dev_pixelpipe_cache_flush(darktable.pixelpipe_cache, pipe->type);
+        dt_dev_pixelpipe_reset_reentry(pipe);
       }
+
+      pipe->processing = 0;
+      dt_pthread_mutex_unlock(&pipe->busy_mutex);
+
+      if(processed)
+        dt_gui_throttle_record_runtime(pipe, process_runtime_us);
+
+      // Use the full-frame (uncropped) preview backbuffer to init the mipmap cache without extra computations
+      // Note: this will resample non-linear uint8 at the end of the pipeline, so it is low-quality resampling.
+      if(processed && !dt_dev_pixelpipe_get_realtime(pipe) && pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
+        dt_dev_resync_mipmap_cache(dev, pipe, roi);
+
+      if(pipe->type == DT_DEV_PIXELPIPE_FULL)
+      {
+        DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_UI_PIPE_FINISHED);
+        dt_control_queue_redraw_center();
+      }
+      if(pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
+      {
+        DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED);
+        dt_control_queue_redraw();
+      }
+
+      // Allow some breathing room to the OS and GPU
+      dt_iop_nap(10000); // 10 ms
     }
 
     if(dt_dev_pixelpipe_get_realtime(pipes[0]) || dt_dev_pixelpipe_get_realtime(pipes[1]))
