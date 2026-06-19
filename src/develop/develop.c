@@ -515,7 +515,9 @@ gboolean _resync_pipe_with_history(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, 
   dt_pthread_mutex_lock(&pipe->busy_mutex);
   pipe->processing = 1;
 
-  // Commit history to pipeline
+  // Commit history to pipeline.
+  // This can take 40-80 ms or much more with masks on weak hardware,
+  // so user may have changed the history again during that lapse.
   gboolean pipe_resynced = FALSE;
   while(dt_dev_pixelpipe_get_changed(pipe) != DT_DEV_PIPE_UNCHANGED)
   {
