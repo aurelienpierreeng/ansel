@@ -157,8 +157,6 @@ typedef struct dt_dev_pixelpipe_iop_t
   // during synchronization and then consumed by one recursion step; it does not
   // change the descriptor contract.
   gboolean cache_output_on_ram;
-
-  GHashTable *raster_masks; // GList* of dt_dev_pixelpipe_raster_mask_t
 } dt_dev_pixelpipe_iop_t;
 
 typedef enum dt_dev_pixelpipe_change_t
@@ -169,7 +167,8 @@ typedef enum dt_dev_pixelpipe_change_t
   DT_DEV_PIPE_SYNCH
   = 1 << 2, // all nodes up to end need to be synched, but no removal of module pieces is necessary
   DT_DEV_PIPE_ZOOMED = 1 << 3, // zoom event, preview pipe does not need changes
-  DT_DEV_PIPE_CACHE_REQUEST = 1 << 4 // GUI requested one cacheline to be materialized on host
+  DT_DEV_PIPE_CACHE_REQUEST = 1 << 4, // GUI requested one cacheline to be materialized on host
+  DT_DEV_PIPE_REENTRY = 1 << 5 // retry runtime side-band generation without rebuilding nodes
 } dt_dev_pixelpipe_change_t;
 
 typedef enum dt_dev_pixelpipe_cache_request_t
@@ -271,6 +270,11 @@ typedef struct dt_dev_pixelpipe_t
   struct dt_iop_roi_t rawdetail_mask_roi;
   int want_detail_mask;
 
+  // References held on the dedicated global raster-mask cachelines required by
+  // the current graph. Keeping them at pipe level prevents LRU eviction between
+  // provider publication and downstream consumption or mask export.
+  GArray *raster_mask_hashes;
+
   int output_imgid;
   // processing is true when actual pixel computations are ongoing
   int processing;
@@ -323,7 +327,8 @@ typedef struct dt_dev_pixelpipe_t
   GList *iop_order_list;
   // snapshot of mask list
   GList *forms;
-  // the masks generated in the pipe for later reusal are inside dt_dev_pixelpipe_iop_t
+  // Publish every provider mask in the global pixelpipe cache, including masks
+  // which have no downstream consumer but may be requested by export.
   gboolean store_all_raster_masks;
 
   // hash of the last history item synchronized with pipeline
@@ -502,14 +507,17 @@ void dt_dev_pixelpipe_disable_after(dt_dev_pixelpipe_t *pipe, const char *op);
 // disable given op and all that comes before it in the pipe:
 void dt_dev_pixelpipe_disable_before(dt_dev_pixelpipe_t *pipe, const char *op);
 
-// helper function to pass a raster mask through a (so far) processed pipe
-// `*error` will be set to 1 if the raster mask reference couldn't be found while it should have been,
-// aka not if user has forgotten to input what module should provide its mask, but only
-// if the mask reference has been lost by the pipeline. This should lead to a pipeline cache flushing.
-// `*error` can be NULL, e.g. for non-cached pipelines (export, thumbnail).
+/**
+ * @brief Retrieve a provider mask from the global cache and transform it to a consumer.
+ *
+ * @details The returned buffer is always a caller-owned working copy. If an
+ * expected cache entry was evicted, `*error` is set to 1 so interactive
+ * pipelines can perform one targeted provider retry. `error` may be NULL for
+ * export/thumbnail callers.
+ */
 float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const struct dt_iop_module_t *raster_mask_source,
                               const int raster_mask_id, const struct dt_iop_module_t *target_module,
-                              gboolean *free_mask, int *error);
+                              int *error);
 
 // helper function writing the pipe-processed ctmask data to dest
 float *dt_dev_distort_detail_mask(const dt_dev_pixelpipe_t *pipe, float *src, const struct dt_iop_module_t *target_module);
@@ -518,11 +526,12 @@ float *dt_dev_retrieve_rawdetail_mask(const dt_dev_pixelpipe_t *pipe, const stru
 
 /**
  * @brief Set the re-entry pipeline flag, only if no object is already capturing it.
- * Re-entered pipelines run with cache disabled, but without flushing the whole cache.
- * This was designed for cases where raster masks references are lost on pipeline,
- * for example when going to lighttable and re-entering darkroom (pipe caches are not flushed
- * for performance, if re-entering the same image), as to trigger a full pipe run
- * and reinit references.
+ *
+ * @details Re-entered pipelines bypass normal exact hits for one processing
+ * pass. Raster-mask consumers use this after the dedicated side-band cacheline
+ * was evicted while the provider image remained cached: provider and downstream
+ * image states are invalidated immediately before the retry, while upstream
+ * states and the synchronized node graph remain intact.
  *
  * It can be used for any case where a full pipeline recompute is needed once,
  * based on runtime module requirements, but a full cache flush would be overkill.

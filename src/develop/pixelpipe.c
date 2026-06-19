@@ -42,11 +42,6 @@ const char *dt_pixelpipe_name(dt_dev_pixelpipe_type_t pipe)
   }
 }
 
-static void _free_raster_mask(void *mask)
-{
-  dt_pixelpipe_cache_free_align(mask);
-}
-
 uint64_t dt_dev_pixelpipe_rawdetail_mask_hash(const dt_dev_pixelpipe_iop_t *piece)
 {
   static const char cache_tag[] = "detailmask:rawdetail";
@@ -55,9 +50,15 @@ uint64_t dt_dev_pixelpipe_rawdetail_mask_hash(const dt_dev_pixelpipe_iop_t *piec
   return dt_hash(piece->global_hash, cache_tag, sizeof(cache_tag));
 }
 
-GHashTable *dt_pixelpipe_raster_alloc()
+uint64_t dt_dev_pixelpipe_raster_mask_hash(const dt_dev_pixelpipe_iop_t *piece,
+                                           const int raster_mask_id)
 {
-  return g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, _free_raster_mask);
+  static const char cache_tag[] = "raster-mask";
+  if(IS_NULL_PTR(piece) || piece->global_mask_hash == DT_PIXELPIPE_CACHE_HASH_INVALID)
+    return DT_PIXELPIPE_CACHE_HASH_INVALID;
+
+  uint64_t hash = dt_hash(piece->global_mask_hash, cache_tag, sizeof(cache_tag));
+  return dt_hash(hash, (const char *)&raster_mask_id, sizeof(raster_mask_id));
 }
 
 void dt_dev_clear_rawdetail_mask(dt_dev_pixelpipe_t *pipe)
@@ -65,29 +66,6 @@ void dt_dev_clear_rawdetail_mask(dt_dev_pixelpipe_t *pipe)
   dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, pipe->rawdetail_mask_hash);
   pipe->rawdetail_mask_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
   memset(&pipe->rawdetail_mask_roi, 0, sizeof(pipe->rawdetail_mask_roi));
-}
-
-void dt_pixelpipe_raster_cleanup(GHashTable *raster_masks)
-{
-  g_hash_table_destroy(raster_masks);
-  raster_masks = NULL;
-}
-
-gboolean dt_pixelpipe_raster_replace(GHashTable *raster_masks, float *mask)
-{
-  return g_hash_table_replace(raster_masks, GINT_TO_POINTER(0), mask);
-}
-
-gboolean dt_pixelpipe_raster_remove(GHashTable *raster_masks)
-{
-  return g_hash_table_remove(raster_masks, GINT_TO_POINTER(0));
-}
-
-float *dt_pixelpipe_raster_get(GHashTable *raster_masks, const int raster_mask_id)
-{
-  if(IS_NULL_PTR(raster_masks)) return NULL;
-  
-  return g_hash_table_lookup(raster_masks, GINT_TO_POINTER(raster_mask_id));
 }
 
 // clang-format off

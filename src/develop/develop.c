@@ -623,6 +623,7 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
       dev->progress.total = 0;
       const dt_dev_pixelpipe_cache_request_t cache_request
           = dt_dev_pixelpipe_get_cache_request(pipe);
+      const gboolean retrying_raster_mask = dt_dev_pixelpipe_has_reentry(pipe);
       const int ret = dt_dev_pixelpipe_process(pipe, roi);
       dev->progress.completed = 0;
       dev->progress.total = 0;
@@ -637,14 +638,26 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
 
       const gboolean processed = (!ret && !dt_atomic_get_int(&pipe->shutdown));
 
-      // Re-entry is designed for raster masks when we lose their reference: force a full rebuild
-      // and defer it to the resync stage of the next loop iteration. History resync now lives
-      // exclusively in the first block so the global hash stays advertised consistently.
       if(dt_dev_pixelpipe_has_reentry(pipe))
       {
-        dt_dev_pixelpipe_or_changed(pipe, DT_DEV_PIPE_REMOVE);
-        dt_dev_pixelpipe_cache_flush(darktable.pixelpipe_cache, pipe->type);
-        dt_dev_pixelpipe_reset_reentry(pipe);
+        /**
+         * A missing raster mask gets exactly one reconstruction pass. Keep the
+         * re-entry flag active for that pass so _bypass_cache() recomputes the
+         * provider instead of exact-hitting pixels without their side-band
+         * mask. If the retry still cannot provide it, release the flag and
+         * propagate the processing error without scheduling an infinite loop.
+         */
+        if(retrying_raster_mask)
+        {
+          dt_dev_pixelpipe_reset_reentry(pipe);
+        }
+        else
+        {
+          // The synchronized graph and its ROIs are still valid. The retry
+          // only needs another processing pass after targeted cache
+          // invalidation, not node destruction and history reconstruction.
+          dt_dev_pixelpipe_or_changed(pipe, DT_DEV_PIPE_REENTRY);
+        }
       }
 
       /**

@@ -352,8 +352,6 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
       return 1;
     }
   }
-  else
-    g_hash_table_remove(piece->raster_masks, GINT_TO_POINTER(mask_id));
 
 // iterate over all output pixels (same coordinates as input)
 #ifdef _OPENMP
@@ -388,7 +386,42 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
   // now that the mask is generated we can publish it
   if(!IS_NULL_PTR(mask))
-    g_hash_table_replace(piece->raster_masks, GINT_TO_POINTER(mask_id), mask);
+  {
+    const size_t mask_size = sizeof(float) * (size_t)roi_out->width * roi_out->height;
+    const uint64_t mask_hash = dt_dev_pixelpipe_raster_mask_hash(piece, mask_id);
+    dt_pixel_cache_entry_t *mask_entry = NULL;
+    void *cache_data = NULL;
+    const int created = dt_dev_pixelpipe_cache_get(
+        darktable.pixelpipe_cache, mask_hash, mask_size, "useless raster mask",
+        pipe->type, TRUE, &cache_data, &mask_entry);
+
+    if(IS_NULL_PTR(cache_data) || IS_NULL_PTR(mask_entry))
+    {
+      if(created && !IS_NULL_PTR(mask_entry))
+        dt_dev_pixelpipe_cache_wrlock_entry(
+            darktable.pixelpipe_cache, FALSE, mask_entry);
+      if(!IS_NULL_PTR(mask_entry))
+      {
+        dt_dev_pixelpipe_cache_ref_count_entry(
+            darktable.pixelpipe_cache, FALSE, mask_entry);
+        if(created)
+          dt_dev_pixelpipe_cache_remove(
+              darktable.pixelpipe_cache, TRUE, mask_entry);
+      }
+      dt_pixelpipe_cache_free_align(mask);
+      return 1;
+    }
+
+    if(created)
+    {
+      memcpy(cache_data, mask, mask_size);
+      dt_dev_pixelpipe_cache_wrlock_entry(
+          darktable.pixelpipe_cache, FALSE, mask_entry);
+    }
+    dt_dev_pixelpipe_t *mutable_pipe = (dt_dev_pixelpipe_t *)pipe;
+    g_array_append_val(mutable_pipe->raster_mask_hashes, mask_hash);
+    dt_pixelpipe_cache_free_align(mask);
+  }
 }
 
 /** Optional init and cleanup */

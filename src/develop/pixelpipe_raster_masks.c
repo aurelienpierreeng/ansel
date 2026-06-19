@@ -7,8 +7,9 @@
  * planned and partially processed, so they stay in the develop subsystem and are included from `pixelpipe_hb.c`.
  *
  * The goal is to keep raster-mask specific lifecycle code out of the main pixel-processing recursion file:
- * raster masks are not part of normal pixel transport, they are side-band buffers fetched from providers and
- * optionally distorted through downstream modules until they reach the consumer.
+ * raster masks are not part of normal pixel transport. Providers publish them in the global pixelpipe cache
+ * under dedicated keys; consumers copy those side-band buffers and optionally distort them through downstream
+ * modules until they reach the requested stage.
  */
 
 /**
@@ -27,14 +28,19 @@ static gboolean _dt_dev_raster_mask_check(dt_dev_pixelpipe_iop_t *source_piece,
                                           const dt_iop_module_t *target_module)
 {
   gboolean success = TRUE;
-  gchar *clean_target_name = delete_underscore(target_module->name());
-  gchar *target_name = g_strdup_printf("%s (%s)", clean_target_name, target_module->multi_name);
+  gchar *clean_target_name = !IS_NULL_PTR(target_module)
+      ? delete_underscore(target_module->name())
+      : g_strdup(_("export"));
+  gchar *target_name = !IS_NULL_PTR(target_module)
+      ? g_strdup_printf("%s (%s)", clean_target_name, target_module->multi_name)
+      : g_strdup(clean_target_name);
 
-  if(IS_NULL_PTR(source_piece) || IS_NULL_PTR(current_piece))
+  if(IS_NULL_PTR(source_piece)
+     || (!IS_NULL_PTR(target_module) && IS_NULL_PTR(current_piece)))
   {
     dt_print(DT_DEBUG_MASKS,"[raster masks] ERROR: source: %s, current: %s\n",
             (!IS_NULL_PTR(source_piece)) ? "is defined" : "is undefined",
-            (!IS_NULL_PTR(current_piece)) ? "is definded" : "is undefined");
+            (!IS_NULL_PTR(current_piece)) ? "is defined" : "is undefined");
 
     gchar *hint = NULL;
     if(IS_NULL_PTR(source_piece))
@@ -45,9 +51,11 @@ static gboolean _dt_dev_raster_mask_check(dt_dev_pixelpipe_iop_t *source_piece,
     }
     else if(IS_NULL_PTR(current_piece))
     {
+      gchar *clean_source_name = delete_underscore(source_piece->module->name());
       hint = g_strdup_printf(_("- Check if the module %s (%s) providing the masks has not been moved above %s.\n"),
-                             delete_underscore(source_piece->module->name()),
+                             clean_source_name,
                              source_piece->module->multi_name, clean_target_name);
+      dt_free(clean_source_name);
     }
 
     dt_control_log(_("The %s module is trying to reuse a mask from a module but it can't be found.\n"
@@ -83,13 +91,16 @@ static gboolean _dt_dev_raster_mask_check(dt_dev_pixelpipe_iop_t *source_piece,
 
 float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *raster_mask_source,
                               const int raster_mask_id, const dt_iop_module_t *target_module,
-                              gboolean *free_mask, int *error)
+                              int *error)
 {
-  if(IS_NULL_PTR(error)) return NULL;
-  *error = 0;
+  if(!IS_NULL_PTR(error)) *error = 0;
 
-  gchar *clean_target_name = delete_underscore(target_module->name());
-  gchar *target_name = g_strdup_printf("%s (%s)", clean_target_name, target_module->multi_name);
+  gchar *clean_target_name = !IS_NULL_PTR(target_module)
+      ? delete_underscore(target_module->name())
+      : g_strdup(_("export"));
+  gchar *target_name = !IS_NULL_PTR(target_module)
+      ? g_strdup_printf("%s (%s)", clean_target_name, target_module->multi_name)
+      : g_strdup(clean_target_name);
 
   if(IS_NULL_PTR(raster_mask_source))
   {
@@ -99,7 +110,6 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
     return NULL;
   }
 
-  *free_mask = FALSE;
   float *raster_mask = NULL;
 
   dt_dev_pixelpipe_iop_t *source_piece = NULL;
@@ -118,34 +128,86 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
   }
 
   const int err_ret = !_dt_dev_raster_mask_check(source_piece, current_piece, target_module);
-  *error = err_ret;
+  if(!IS_NULL_PTR(error)) *error = err_ret;
 
   if(!err_ret)
   {
-    const uint64_t raster_hash = current_piece->global_mask_hash;
+    const uint64_t provider_hash = source_piece->global_hash;
+    const uint64_t raster_hash
+        = dt_dev_pixelpipe_raster_mask_hash(source_piece, raster_mask_id);
 
     gchar *clean_source_name = delete_underscore(source_piece->module->name());
     gchar *source_name = g_strdup_printf("%s (%s)", clean_source_name, source_piece->module->multi_name);
-    raster_mask = dt_pixelpipe_raster_get(source_piece->raster_masks, raster_mask_id);
+    dt_pixel_cache_entry_t *raster_entry = NULL;
+    void *cache_data = NULL;
+    const gboolean found = dt_dev_pixelpipe_cache_ref_entry_by_hash(
+        darktable.pixelpipe_cache, raster_hash, &cache_data, &raster_entry);
 
     gchar *type = dt_pixelpipe_get_pipe_name(pipe->type);
-    if(!IS_NULL_PTR(raster_mask))
+    if(found && !IS_NULL_PTR(cache_data) && !IS_NULL_PTR(raster_entry))
     {
+      const size_t mask_size
+          = sizeof(float) * (size_t)source_piece->roi_out.width * source_piece->roi_out.height;
+      raster_mask = dt_pixelpipe_cache_alloc_align_float_cache(
+          (size_t)source_piece->roi_out.width * source_piece->roi_out.height, pipe->type);
+      if(IS_NULL_PTR(raster_mask))
+      {
+        dt_dev_pixelpipe_cache_ref_count_entry(
+            darktable.pixelpipe_cache, FALSE, raster_entry);
+        if(!IS_NULL_PTR(error)) *error = 1;
+        dt_free(clean_source_name);
+        dt_free(source_name);
+        dt_free(clean_target_name);
+        dt_free(target_name);
+        return NULL;
+      }
+
+      // The cache owns the canonical mask. Copy it under a read lock so the
+      // caller can freely distort and release its private working buffer.
+      dt_dev_pixelpipe_cache_rdlock_entry(
+          darktable.pixelpipe_cache, TRUE, raster_entry);
+      memcpy(raster_mask, cache_data, mask_size);
+      dt_dev_pixelpipe_cache_rdlock_entry(
+          darktable.pixelpipe_cache, FALSE, raster_entry);
+      dt_dev_pixelpipe_cache_ref_count_entry(
+          darktable.pixelpipe_cache, FALSE, raster_entry);
+
       dt_print(DT_DEBUG_MASKS,
-               "[raster masks] found in %s mask id %i from %s for module %s in pipe %s with hash %" PRIu64 "\n",
-               "internal", raster_mask_id, source_name, target_name, type, raster_hash);
-      dt_dev_pixelpipe_unset_reentry(pipe, raster_hash);
+               "[raster masks] found cached mask id %i from %s for module %s"
+               " in pipe %s with hash %" PRIu64 "\n",
+               raster_mask_id, source_name, target_name, type, raster_hash);
+      dt_dev_pixelpipe_unset_reentry(pipe, provider_hash);
     }
     else
     {
+      if(!IS_NULL_PTR(raster_entry))
+        dt_dev_pixelpipe_cache_ref_count_entry(
+            darktable.pixelpipe_cache, FALSE, raster_entry);
+
+      dt_print(DT_DEBUG_DEV,
+               "[raster masks] missing source=%s instance=%d target=%s instance=%d"
+               " requested_id=%d cache_hash=%" PRIu64 " source_enabled=%d pipe=%s\n",
+               source_piece->module->op, source_piece->module->multi_priority,
+               !IS_NULL_PTR(target_module) ? target_module->op : "export",
+               !IS_NULL_PTR(target_module) ? target_module->multi_priority : -1,
+               raster_mask_id, raster_hash, source_piece->enabled,
+               type);
+
       dt_print(DT_DEBUG_MASKS,
-              "[raster masks] mask id %i from %s for module %s could not be found in pipe %s. Pipe re-entry will be attempted.\n",
+              "[raster masks] mask id %i from %s for module %s could not be found"
+              " in the global cache for pipe %s.\n",
               raster_mask_id, source_name, target_name, type);
 
-      if(dt_dev_pixelpipe_set_reentry(pipe, raster_hash))
-        pipe->flush_cache = TRUE;
-
-      if(!IS_NULL_PTR(error)) *error = 1;
+      // A cache miss can still happen after LRU eviction. Cached provider
+      // pixels cannot reconstruct the side-band mask, so interactive pipes get
+      // one targeted provider retry; export callers pass no error pointer and
+      // simply report the missing mask.
+      if(!IS_NULL_PTR(error))
+      {
+        if(dt_dev_pixelpipe_set_reentry(pipe, provider_hash))
+          pipe->flush_cache = TRUE;
+        *error = 1;
+      }
 
       dt_free(clean_source_name);
       dt_free(source_name);
@@ -171,7 +233,8 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
           if(IS_NULL_PTR(transformed_mask))
           {
             dt_print(DT_DEBUG_MASKS, "[raster masks] could not allocate memory for transformed mask\n");
-            if(error) *error = 1;
+            if(!IS_NULL_PTR(error)) *error = 1;
+            dt_pixelpipe_cache_free_align(raster_mask);
             dt_free(clean_source_name);
             dt_free(source_name);
             dt_free(clean_target_name);
@@ -181,8 +244,7 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
 
           module->module->distort_mask(module->module, pipe, module, raster_mask, transformed_mask,
                                        &module->roi_in, &module->roi_out);
-          if(*free_mask) dt_pixelpipe_cache_free_align(raster_mask);
-          *free_mask = TRUE;
+          dt_pixelpipe_cache_free_align(raster_mask);
           raster_mask = transformed_mask;
           dt_print(DT_DEBUG_MASKS, "[raster masks] doing transform\n");
         }

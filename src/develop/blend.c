@@ -511,12 +511,11 @@ static void _develop_blend_init_raster_mask(const dt_develop_blend_params_t *con
                                             const size_t oheight,
                                             int *const raster_error)
 {
-  gboolean free_mask = FALSE; // if no transformations were applied we get the cached original back
   int local_raster_error = 0;
   const dt_iop_module_t *raster_source = _develop_blend_get_raster_source_module(params, self);
   float *raster_mask = raster_source
       ? dt_dev_get_raster_mask(pipe, raster_source, params->raster_mask_id,
-                               self, &free_mask, &local_raster_error)
+                               self, &local_raster_error)
       : NULL;
 
   if(!IS_NULL_PTR(raster_mask))
@@ -532,7 +531,7 @@ static void _develop_blend_init_raster_mask(const dt_develop_blend_params_t *con
       dt_iop_image_scaled_copy(mask, raster_mask, 1.0f, owidth, oheight, 1);
     }
 
-    if(free_mask) dt_pixelpipe_cache_free_align(raster_mask);
+    dt_pixelpipe_cache_free_align(raster_mask);
   }
   else
   {
@@ -884,19 +883,54 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *p
   }
 
   // check if we should store the mask for export or use in subsequent modules
-  // TODO: should we skip raster masks?
   if(pipe->store_all_raster_masks || dt_iop_is_raster_mask_used(self, 0))
   {
-    // The hash table does not survive to a pipeline restart...
-    dt_pixelpipe_raster_replace(piece->raster_masks, _mask);
-    dt_print(DT_DEBUG_MASKS, "[raster masks] replacing raster mask id 0 for module %s (%s) for pipe %s with hash %" PRIu64 "\n", piece->module->op,
-             piece->module->multi_name, dt_pipe_type_to_str(pipe->type), piece->global_mask_hash);
+    const uint64_t mask_hash = dt_dev_pixelpipe_raster_mask_hash(piece, 0);
+    dt_pixel_cache_entry_t *mask_entry = NULL;
+    void *cache_data = NULL;
+    const int created = dt_dev_pixelpipe_cache_get(
+        darktable.pixelpipe_cache, mask_hash, sizeof(float) * buffsize,
+        "raster mask", pipe->type, TRUE, &cache_data, &mask_entry);
+
+    if(IS_NULL_PTR(cache_data) || IS_NULL_PTR(mask_entry))
+    {
+      if(created && !IS_NULL_PTR(mask_entry))
+        dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, FALSE, mask_entry);
+      if(!IS_NULL_PTR(mask_entry))
+      {
+        dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, mask_entry);
+        if(created)
+          dt_dev_pixelpipe_cache_remove(darktable.pixelpipe_cache, TRUE, mask_entry);
+      }
+      dt_pixelpipe_cache_free_align(_mask);
+      return 1;
+    }
+
+    // Cache entries are immutable for a given provider state. Only the thread
+    // which created this dedicated key writes the mask; exact hits reuse it.
+    if(created)
+    {
+      memcpy(cache_data, _mask, sizeof(float) * buffsize);
+      dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, FALSE, mask_entry);
+    }
+    // Transfer cache_get()'s reference to the pipe. It keeps this side-band
+    // output alive until the next graph state is prepared or the pipe closes.
+    g_array_append_val(pipe->raster_mask_hashes, mask_hash);
+    dt_pixelpipe_cache_free_align(_mask);
+
+    dt_print(DT_DEBUG_MASKS,
+             "[raster masks] %s mask id 0 for module %s (%s) for pipe %s"
+             " with cache hash %" PRIu64 "\n",
+             created ? "published" : "reused cached",
+             piece->module->op, piece->module->multi_name,
+             dt_pipe_type_to_str(pipe->type), mask_hash);
   }
   else
   {
-    dt_print(DT_DEBUG_MASKS, "[raster masks] destroying raster mask id 0 for module %s (%s) for pipe %s\n", piece->module->op,
-             piece->module->multi_name, dt_pipe_type_to_str(pipe->type));
-    dt_pixelpipe_raster_remove(piece->raster_masks);
+    dt_print(DT_DEBUG_MASKS,
+             "[raster masks] discarding unpublished mask id 0 for module %s (%s) for pipe %s\n",
+             piece->module->op, piece->module->multi_name,
+             dt_pipe_type_to_str(pipe->type));
     dt_pixelpipe_cache_free_align(_mask);
   }
   // raster error is the only one we catch
@@ -1449,12 +1483,8 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_t
 
 
   // check if we should store the mask for export or use in subsequent modules
-  // TODO: should we skip raster masks?
   if(pipe->store_all_raster_masks || dt_iop_is_raster_mask_used(self, 0))
   {
-    dt_print(DT_DEBUG_MASKS, "[raster masks] replacing raster mask id 0 in module '%s (%s)' for pipe %s with hash %" PRIu64 "\n", piece->module->op,
-             piece->module->multi_name, dt_pipe_type_to_str(pipe->type), piece->global_mask_hash);
-
     //  get back final mask from the device to store it for later use
     if(!raster_only)
     {
@@ -1462,14 +1492,52 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_t
       if(err != CL_SUCCESS) goto error;
     }
 
-    // The hash table does not survive to a pipeline restart...
-    dt_pixelpipe_raster_replace(piece->raster_masks, _mask);
+    const uint64_t mask_hash = dt_dev_pixelpipe_raster_mask_hash(piece, 0);
+    dt_pixel_cache_entry_t *mask_entry = NULL;
+    void *cache_data = NULL;
+    const int created = dt_dev_pixelpipe_cache_get(
+        darktable.pixelpipe_cache, mask_hash, sizeof(float) * buffsize,
+        "raster mask", pipe->type, TRUE, &cache_data, &mask_entry);
+
+    if(IS_NULL_PTR(cache_data) || IS_NULL_PTR(mask_entry))
+    {
+      if(created && !IS_NULL_PTR(mask_entry))
+        dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, FALSE, mask_entry);
+      if(!IS_NULL_PTR(mask_entry))
+      {
+        dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, mask_entry);
+        if(created)
+          dt_dev_pixelpipe_cache_remove(darktable.pixelpipe_cache, TRUE, mask_entry);
+      }
+      goto error;
+    }
+
+    // The OpenCL mask has been materialized into `_mask` above. Publish that
+    // host payload once so CPU and GPU consumers share the same cache entry.
+    if(created)
+    {
+      memcpy(cache_data, _mask, sizeof(float) * buffsize);
+      dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, FALSE, mask_entry);
+    }
+    // Transfer cache_get()'s reference to the pipe. It keeps this side-band
+    // output alive until the next graph state is prepared or the pipe closes.
+    g_array_append_val(pipe->raster_mask_hashes, mask_hash);
+    dt_pixelpipe_cache_free_align(_mask);
+    _mask = NULL;
+
+    dt_print(DT_DEBUG_MASKS,
+             "[raster masks] %s mask id 0 for module %s (%s) for pipe %s"
+             " with cache hash %" PRIu64 "\n",
+             created ? "published" : "reused cached",
+             piece->module->op, piece->module->multi_name,
+             dt_pipe_type_to_str(pipe->type), mask_hash);
   }
   else
   {
-    dt_print(DT_DEBUG_MASKS, "[raster masks] destroying raster mask id 0 in module '%s (%s)' for pipe %s\n", piece->module->op,
-             piece->module->multi_name, dt_pipe_type_to_str(pipe->type));
-    dt_pixelpipe_raster_remove(piece->raster_masks);
+    dt_print(DT_DEBUG_MASKS,
+             "[raster masks] discarding unpublished mask id 0 for module %s (%s) for pipe %s\n",
+             piece->module->op, piece->module->multi_name,
+             dt_pipe_type_to_str(pipe->type));
     dt_pixelpipe_cache_free_align(_mask);
   }
 

@@ -3947,7 +3947,13 @@ static void _raster_value_changed_callback(GtkWidget *widget, struct dt_iop_modu
 
   if(entry->module)
   {
-    g_hash_table_add(entry->module->raster_mask.source.users, module);
+    // The value is the provider-local mask id. dt_iop_is_raster_mask_used()
+    // reads it to decide which side-band mask buffers the pixelpipe must
+    // publish. g_hash_table_add() stores the consumer pointer as both key and
+    // value, making an existing mask visible in the GUI but impossible to
+    // retrieve reliably from the pipeline.
+    g_hash_table_insert(entry->module->raster_mask.source.users, module,
+                        GINT_TO_POINTER(entry->id));
 
     // update blend_params!
     memcpy(module->blend_params->raster_mask_source, entry->module->op, sizeof(module->blend_params->raster_mask_source));

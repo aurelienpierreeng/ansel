@@ -2274,6 +2274,35 @@ void dt_dev_pixelpipe_cache_flush(dt_dev_pixelpipe_cache_t *cache, const int id)
   dt_pthread_mutex_unlock(&cache->lock);
 }
 
+int dt_dev_pixelpipe_cache_invalidate_hashes(dt_dev_pixelpipe_cache_t *cache,
+                                             const uint64_t *hashes,
+                                             const size_t count)
+{
+  int retained = 0;
+  dt_pthread_mutex_lock(&cache->lock);
+
+  // We are invalidating the cumulative outputs from one pipeline stage onward.
+  // Look them up under the same cache lock used for removal so a shared preview
+  // pipe cannot replace an entry between lookup and invalidation.
+  for(size_t k = 0; k < count; k++)
+  {
+    if(hashes[k] == DT_PIXELPIPE_CACHE_HASH_INVALID) continue;
+
+    dt_pixel_cache_entry_t *entry
+        = _non_threadsafe_cache_get_entry(cache, cache->entries, hashes[k]);
+    if(IS_NULL_PTR(entry)) continue;
+
+    // A displayed backbuffer or an in-flight consumer may still own this
+    // shared state. Leave it valid; cache bypass on the retry still walks
+    // through downstream stages after the provider has been regenerated.
+    if(_non_thread_safe_cache_remove(cache, FALSE, entry, cache->entries))
+      retained++;
+  }
+
+  dt_pthread_mutex_unlock(&cache->lock);
+  return retained;
+}
+
 
 static gboolean _for_each_remove_old(gpointer key, gpointer value, gpointer user_data)
 {

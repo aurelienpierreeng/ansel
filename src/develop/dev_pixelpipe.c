@@ -1521,13 +1521,14 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe)
       = (dt_dev_pixelpipe_change_t)dt_atomic_exch_int((dt_atomic_int *)&pipe->changed, DT_DEV_PIPE_UNCHANGED);
 
   gchar *type = _get_debug_pipe_name(pipe, pipe->dev);
-  char *status_str = g_strdup_printf("%s%s%s%s%s%s",
+  char *status_str = g_strdup_printf("%s%s%s%s%s%s%s",
                                   (status & DT_DEV_PIPE_UNCHANGED) ? "UNCHANGED " : "",
                                   (status & DT_DEV_PIPE_REMOVE) ? "REMOVE " : "",
                                   (status & DT_DEV_PIPE_TOP_CHANGED) ? "TOP_CHANGED " : "",
                                   (status & DT_DEV_PIPE_SYNCH) ? "SYNCH " : "",
                                   (status & DT_DEV_PIPE_ZOOMED) ? "ZOOMED " : "",
-                                  (status & DT_DEV_PIPE_CACHE_REQUEST) ? "CACHE_REQUEST " : "");
+                                  (status & DT_DEV_PIPE_CACHE_REQUEST) ? "CACHE_REQUEST " : "",
+                                  (status & DT_DEV_PIPE_REENTRY) ? "REENTRY " : "");
 
   dt_print(DT_DEBUG_DEV, "[dt_dev_pixelpipe_change] pipeline state changing for pipe %s, flag %s\n",
      type, status_str);
@@ -1582,7 +1583,7 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe)
       dt_dev_pixelpipe_synch_top(pipe);
     }
   }
-  else // DT_DEV_PIPE_ZOOMED DT_DEV_PIPE_CACHE_REQUEST
+  else // DT_DEV_PIPE_ZOOMED DT_DEV_PIPE_CACHE_REQUEST DT_DEV_PIPE_REENTRY
   {
     // Finalscale will need to self-enable/disable depending on zoom level
     dt_dev_pixelpipe_sync_no_history(pipe);

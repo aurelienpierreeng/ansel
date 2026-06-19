@@ -570,6 +570,25 @@ gboolean dt_dev_pixelpipe_cache_peek(dt_dev_pixelpipe_cache_t *cache, const uint
 void dt_dev_pixelpipe_cache_flush(dt_dev_pixelpipe_cache_t *cache, const int id);
 
 /**
+ * @brief Invalidate cache lines matching an explicit list of hashes.
+ *
+ * @details Entries which are not in use are removed immediately. Entries still
+ * referenced or locked are left untouched because they may be published
+ * backbuffers owned by another pipeline.
+ *
+ * This targets shared cache states independently of the pipeline which created
+ * them, while preserving every cache line not named by `hashes`.
+ *
+ * @param cache Pixelpipe cache to update.
+ * @param hashes Cache keys to invalidate.
+ * @param count Number of keys in `hashes`.
+ * @return int Number of matching entries which could not be removed.
+ */
+int dt_dev_pixelpipe_cache_invalidate_hashes(dt_dev_pixelpipe_cache_t *cache,
+                                             const uint64_t *hashes,
+                                             const size_t count);
+
+/**
  * @brief Release cached OpenCL buffers for a single device.
  *
  * @details
