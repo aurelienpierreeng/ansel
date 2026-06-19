@@ -1553,6 +1553,49 @@ static void display_borders_callback(GtkWidget *slider, gpointer user_data)
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DARKROOM_UI_CHANGED);
 }
 
+/**
+ * @brief Persist the global mask-preview appearance and resynchronize every node using it.
+ *
+ * The historical Color Balance key namespace is intentionally retained so existing
+ * checkerboard preferences survive moving these controls into the darkroom toolbox.
+ */
+static void display_mask_checker_1_callback(GtkColorButton *widget, gpointer user_data)
+{
+  dt_develop_t *d = (dt_develop_t *)user_data;
+  GdkRGBA color;
+  gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(widget), &color);
+  dt_conf_set_float("plugins/darkroom/colorbalancergb/checker1/red", color.red);
+  dt_conf_set_float("plugins/darkroom/colorbalancergb/checker1/green", color.green);
+  dt_conf_set_float("plugins/darkroom/colorbalancergb/checker1/blue", color.blue);
+  dt_dev_pixelpipe_resync_history_main(d);
+}
+
+static void display_mask_checker_2_callback(GtkColorButton *widget, gpointer user_data)
+{
+  dt_develop_t *d = (dt_develop_t *)user_data;
+  GdkRGBA color;
+  gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(widget), &color);
+  dt_conf_set_float("plugins/darkroom/colorbalancergb/checker2/red", color.red);
+  dt_conf_set_float("plugins/darkroom/colorbalancergb/checker2/green", color.green);
+  dt_conf_set_float("plugins/darkroom/colorbalancergb/checker2/blue", color.blue);
+  dt_dev_pixelpipe_resync_history_main(d);
+}
+
+static void display_mask_checker_size_callback(GtkWidget *slider, gpointer user_data)
+{
+  dt_develop_t *d = (dt_develop_t *)user_data;
+  dt_conf_set_int("plugins/darkroom/colorbalancergb/checker/size", (int)dt_bauhaus_slider_get(slider));
+  dt_dev_pixelpipe_resync_history_main(d);
+}
+
+static void display_mask_black_and_white_callback(GtkToggleButton *toggle, gpointer user_data)
+{
+  dt_develop_t *d = (dt_develop_t *)user_data;
+  dt_conf_set_bool("plugins/darkroom/colorbalancergb/mask_preview/greyscaled",
+                   gtk_toggle_button_get_active(toggle));
+  dt_dev_pixelpipe_resync_history_main(d);
+}
+
 static void _darkroom_change_rendering_size(GtkWidget *combobox, gpointer user_data)
 {
   dt_develop_t *d = (dt_develop_t *)user_data;
@@ -2090,6 +2133,7 @@ void gui_init(dt_view_t *self)
                                   _("Shows the options popover"));
 
     GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+    gtk_widget_set_margin_bottom(vbox, DT_PIXEL_APPLY_DPI(DT_GUI_BOX_SPACING));
     gtk_container_add(GTK_CONTAINER(dev->display.floating_window), vbox);
 
     /** let's fill the encapsulating widgets */
@@ -2121,6 +2165,57 @@ void gui_init(dt_view_t *self)
                                 N_("scaled (default)")
                               );
     gtk_box_pack_start(GTK_BOX(vbox), GTK_WIDGET(rendering), TRUE, TRUE, 0);
+
+    gtk_box_pack_start(GTK_BOX(vbox), dt_ui_section_label_new(_("Mask preview settings")), FALSE, FALSE, 0);
+
+    GtkWidget *checker_1_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
+    gtk_box_pack_start(GTK_BOX(checker_1_row), dt_ui_label_new(_("Checkerboard color 1")), TRUE, TRUE, 0);
+    GtkWidget *checker_1 = gtk_color_button_new();
+    GdkRGBA checker_color = {
+      .red = dt_conf_get_float("plugins/darkroom/colorbalancergb/checker1/red"),
+      .green = dt_conf_get_float("plugins/darkroom/colorbalancergb/checker1/green"),
+      .blue = dt_conf_get_float("plugins/darkroom/colorbalancergb/checker1/blue"),
+      .alpha = 1.0
+    };
+    gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(checker_1), &checker_color);
+    gtk_color_chooser_set_use_alpha(GTK_COLOR_CHOOSER(checker_1), FALSE);
+    gtk_color_button_set_title(GTK_COLOR_BUTTON(checker_1),
+                               _("Select color of the checkerboard from a swatch"));
+    g_signal_connect(G_OBJECT(checker_1), "color-set", G_CALLBACK(display_mask_checker_1_callback), dev);
+    gtk_box_pack_start(GTK_BOX(checker_1_row), checker_1, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(vbox), checker_1_row, FALSE, FALSE, 0);
+
+    GtkWidget *checker_2_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
+    gtk_box_pack_start(GTK_BOX(checker_2_row), dt_ui_label_new(_("Checkerboard color 2")), TRUE, TRUE, 0);
+    GtkWidget *checker_2 = gtk_color_button_new();
+    checker_color.red = dt_conf_get_float("plugins/darkroom/colorbalancergb/checker2/red");
+    checker_color.green = dt_conf_get_float("plugins/darkroom/colorbalancergb/checker2/green");
+    checker_color.blue = dt_conf_get_float("plugins/darkroom/colorbalancergb/checker2/blue");
+    gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(checker_2), &checker_color);
+    gtk_color_chooser_set_use_alpha(GTK_COLOR_CHOOSER(checker_2), FALSE);
+    gtk_color_button_set_title(GTK_COLOR_BUTTON(checker_2),
+                               _("Select color of the checkerboard from a swatch"));
+    g_signal_connect(G_OBJECT(checker_2), "color-set", G_CALLBACK(display_mask_checker_2_callback), dev);
+    gtk_box_pack_start(GTK_BOX(checker_2_row), checker_2, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(vbox), checker_2_row, FALSE, FALSE, 0);
+
+    GtkWidget *checker_size
+        = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(NULL), 2., 32., 1., 8., 0);
+    dt_bauhaus_slider_set(checker_size,
+                          dt_conf_get_int("plugins/darkroom/colorbalancergb/checker/size"));
+    dt_bauhaus_slider_set_format(checker_size, " px");
+    dt_bauhaus_widget_set_label(checker_size, _("Checkerboard size"));
+    g_signal_connect(G_OBJECT(checker_size), "value-changed",
+                     G_CALLBACK(display_mask_checker_size_callback), dev);
+    gtk_box_pack_start(GTK_BOX(vbox), checker_size, TRUE, TRUE, 0);
+
+    GtkWidget *black_and_white = gtk_check_button_new_with_label(_("Show a greyscaled mask image"));
+    gtk_toggle_button_set_active(
+        GTK_TOGGLE_BUTTON(black_and_white),
+        dt_conf_get_bool("plugins/darkroom/colorbalancergb/mask_preview/greyscaled"));
+    g_signal_connect(G_OBJECT(black_and_white), "toggled",
+                     G_CALLBACK(display_mask_black_and_white_callback), dev);
+    gtk_box_pack_start(GTK_BOX(vbox), black_and_white, FALSE, FALSE, 0);
   }
 
   _darkroom_ioporder_button = dtgtk_button_new(dtgtk_cairo_paint_flowchart, 0, NULL);

@@ -646,7 +646,13 @@ colorbalancergb (read_only image2d_t in, write_only image2d_t out,
     float opacity = op[mask_type];
     const float opacity_comp = 1.0f - opacity;
 
-    RGB = opacity_comp * color + opacity * fmax(RGB, 0.f);
+    float4 image = fmax(RGB, 0.f);
+    if(checker_color_1.w > 0.5f)
+    {
+      const float gray = dot(image.xyz, (float3)(0.3f, 0.59f, 0.11f));
+      image.xyz = gray;
+    }
+    RGB = opacity_comp * color + opacity * image;
     RGB.w = 1.0f; // alpha is opaque, we need to preview it
   }
   else

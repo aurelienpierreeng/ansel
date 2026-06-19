@@ -1481,6 +1481,54 @@
     <shortdescription>background brightness to show pictures against</shortdescription>
   </dtconfig>
   <dtconfig>
+    <name>plugins/darkroom/colorbalancergb/checker1/red</name>
+    <type>float</type>
+    <default>1.0</default>
+    <shortdescription>red component of the first mask preview checkerboard color</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/darkroom/colorbalancergb/checker1/green</name>
+    <type>float</type>
+    <default>1.0</default>
+    <shortdescription>green component of the first mask preview checkerboard color</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/darkroom/colorbalancergb/checker1/blue</name>
+    <type>float</type>
+    <default>1.0</default>
+    <shortdescription>blue component of the first mask preview checkerboard color</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/darkroom/colorbalancergb/checker2/red</name>
+    <type>float</type>
+    <default>0.18</default>
+    <shortdescription>red component of the second mask preview checkerboard color</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/darkroom/colorbalancergb/checker2/green</name>
+    <type>float</type>
+    <default>0.18</default>
+    <shortdescription>green component of the second mask preview checkerboard color</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/darkroom/colorbalancergb/checker2/blue</name>
+    <type>float</type>
+    <default>0.18</default>
+    <shortdescription>blue component of the second mask preview checkerboard color</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/darkroom/colorbalancergb/checker/size</name>
+    <type min="2" max="32">int</type>
+    <default>8</default>
+    <shortdescription>mask preview checkerboard size</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/darkroom/colorbalancergb/mask_preview/greyscaled</name>
+    <type>bool</type>
+    <default>false</default>
+    <shortdescription>show the image in black and white under mask previews</shortdescription>
+  </dtconfig>
+  <dtconfig>
     <name>ui_last/expander_metadata</name>
     <type>int</type>
     <default>0</default>

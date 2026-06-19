@@ -149,7 +149,6 @@ typedef struct dt_iop_colorbalancergb_gui_data_t
   GtkWidget *hue_angle;
   GtkDrawingArea *area;
   GtkNotebook *notebook;
-  GtkWidget *checker_color_1_picker, *checker_color_2_picker, *checker_size;
   gboolean mask_display;
   dt_iop_colorbalancergb_mask_data_t mask_type;
 } dt_iop_colorbalancergb_gui_data_t;
@@ -172,6 +171,7 @@ typedef struct dt_iop_colorbalancergb_data_t
   float checker_color_1[4], checker_color_2[4];
   dt_iop_colorbalancrgb_saturation_t saturation_formula;
   size_t checker_size;
+  gboolean mask_preview_black_and_white;
   gboolean lut_inited;
   struct dt_iop_order_iccprofile_info_t *work_profile;
 
@@ -649,9 +649,6 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const dt_aligned_pixel_simd_t highlights_v = dt_load_simd_aligned(highlights);
   const dt_aligned_pixel_simd_t shadows_v = dt_load_simd_aligned(shadows);
   const dt_aligned_pixel_simd_t midtones_v = dt_load_simd_aligned(midtones);
-  const dt_aligned_pixel_simd_t checker_color_1_v = dt_load_simd(d->checker_color_1);
-  const dt_aligned_pixel_simd_t checker_color_2_v = dt_load_simd(d->checker_color_2);
-
   const dt_aligned_pixel_simd_t jz_ai0 = dt_colormatrix_row_to_simd(AI_transposed, 0);
   const dt_aligned_pixel_simd_t jz_ai1 = dt_colormatrix_row_to_simd(AI_transposed, 1);
   const dt_aligned_pixel_simd_t jz_ai2 = dt_colormatrix_row_to_simd(AI_transposed, 2);
@@ -660,8 +657,10 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
       = (pipe->type == DT_DEV_PIXELPIPE_FULL && self->dev->gui_attached
          && g && g->mask_display);
 
-  // pixel size of the checker background
-  const size_t checker_1 = (mask_display) ? DT_PIXEL_APPLY_DPI(d->checker_size) : 0;
+  const dt_aligned_pixel_simd_t checker_color_1_v = dt_load_simd(d->checker_color_1);
+  const dt_aligned_pixel_simd_t checker_color_2_v = dt_load_simd(d->checker_color_2);
+  const size_t checker_1
+      = (mask_display) ? MAX((size_t)DT_PIXEL_APPLY_DPI(d->checker_size), 2) : 0;
   const size_t checker_2 = 2 * checker_1;
   const size_t npixels = (size_t)roi_out->width * roi_out->height;
   const size_t out_width = roi_out->width;
@@ -904,7 +903,13 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
       float opacity = opacities[g->mask_type];
       const float opacity_comp = 1.0f - opacity;
 
-      pix_out_v = opacity_comp * color_v + opacity * dt_simd_max_zero(pix_out_v);
+      dt_aligned_pixel_simd_t image_v = dt_simd_max_zero(pix_out_v);
+      if(d->mask_preview_black_and_white)
+      {
+        const float gray = 0.3f * image_v[0] + 0.59f * image_v[1] + 0.11f * image_v[2];
+        image_v[0] = image_v[1] = image_v[2] = gray;
+      }
+      pix_out_v = opacity_comp * color_v + opacity * image_v;
       pix_out_v[3] = 1.0f;
     }
     else
@@ -1000,11 +1005,11 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   // Send gamut LUT to GPU
   gamut_LUT = dt_opencl_copy_host_to_device(devid, d->gamut_LUT, LUT_ELEM, 1, sizeof(float));
 
-  // Size of the checker
   const gint mask_display
       = (pipe->type == DT_DEV_PIXELPIPE_FULL && self->dev->gui_attached
          && g && g->mask_display);
-  const int checker_1 = (mask_display) ? DT_PIXEL_APPLY_DPI(d->checker_size) : 0;
+  const int checker_1
+      = (mask_display) ? MAX(DT_PIXEL_APPLY_DPI(d->checker_size), 2) : 0;
   const int checker_2 = 2 * checker_1;
   const int mask_type = (mask_display) ? g->mask_type : 0;
 
@@ -1106,17 +1111,21 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   dt_iop_colorbalancergb_data_t *d = (dt_iop_colorbalancergb_data_t *)(piece->data);
   dt_iop_colorbalancergb_params_t *p = (dt_iop_colorbalancergb_params_t *)p1;
 
+  // Synchronize the global mask-preview appearance into this node so normal processing never reads GUI config.
   d->checker_color_1[0] = CLAMP(dt_conf_get_float("plugins/darkroom/colorbalancergb/checker1/red"), 0.f, 1.f);
   d->checker_color_1[1] = CLAMP(dt_conf_get_float("plugins/darkroom/colorbalancergb/checker1/green"), 0.f, 1.f);
   d->checker_color_1[2] = CLAMP(dt_conf_get_float("plugins/darkroom/colorbalancergb/checker1/blue"), 0.f, 1.f);
-  d->checker_color_1[3] = 1.f;
 
   d->checker_color_2[0] = CLAMP(dt_conf_get_float("plugins/darkroom/colorbalancergb/checker2/red"), 0.f, 1.f);
   d->checker_color_2[1] = CLAMP(dt_conf_get_float("plugins/darkroom/colorbalancergb/checker2/green"), 0.f, 1.f);
   d->checker_color_2[2] = CLAMP(dt_conf_get_float("plugins/darkroom/colorbalancergb/checker2/blue"), 0.f, 1.f);
   d->checker_color_2[3] = 1.f;
-
   d->checker_size = MAX(dt_conf_get_int("plugins/darkroom/colorbalancergb/checker/size"), 2);
+  d->mask_preview_black_and_white
+      = dt_conf_get_bool("plugins/darkroom/colorbalancergb/mask_preview/greyscaled");
+  // The checker alpha is unused by the preview blend, so keep the OpenCL kernel signature stable
+  // and transport the global grayscale option through that existing argument.
+  d->checker_color_1[3] = d->mask_preview_black_and_white;
 
   d->vibrance = p->vibrance;
   d->contrast = 1.0f + p->contrast; // that limits the user param range to [-1, 1], but it seems enough
@@ -1674,41 +1683,6 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
 }
 
 
-static void checker_1_picker_callback(GtkColorButton *widget, dt_iop_module_t *self)
-{
-  if(darktable.gui->reset) return;
-
-  GdkRGBA color;
-  gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(widget), &color);
-  dt_conf_set_float("plugins/darkroom/colorbalancergb/checker1/red", color.red);
-  dt_conf_set_float("plugins/darkroom/colorbalancergb/checker1/green", color.green);
-  dt_conf_set_float("plugins/darkroom/colorbalancergb/checker1/blue", color.blue);
-  dt_dev_pixelpipe_update_history_main(self->dev);
-}
-
-
-static void checker_2_picker_callback(GtkColorButton *widget, dt_iop_module_t *self)
-{
-  if(darktable.gui->reset) return;
-
-  GdkRGBA color;
-  gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(widget), &color);
-  dt_conf_set_float("plugins/darkroom/colorbalancergb/checker2/red", color.red);
-  dt_conf_set_float("plugins/darkroom/colorbalancergb/checker2/green", color.green);
-  dt_conf_set_float("plugins/darkroom/colorbalancergb/checker2/blue", color.blue);
-  dt_dev_pixelpipe_update_history_main(self->dev);
-}
-
-
-static void checker_size_callback(GtkWidget *widget, dt_iop_module_t *self)
-{
-  if(darktable.gui->reset) return;
-  const size_t size = dt_bauhaus_slider_get(widget);
-  dt_conf_set_int("plugins/darkroom/colorbalancergb/checker/size", size);
-  dt_dev_pixelpipe_update_history_main(self->dev);
-}
-
-
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
   dt_iop_colorbalancergb_gui_data_t *g = (dt_iop_colorbalancergb_gui_data_t *)self->gui_data;
@@ -1790,23 +1764,6 @@ void gui_update(dt_iop_module_t *self)
   dt_bauhaus_widget_set_quad_active(GTK_WIDGET(g->shadows_weight), FALSE);
   dt_bauhaus_widget_set_quad_active(GTK_WIDGET(g->mask_grey_fulcrum), FALSE);
   dt_bauhaus_widget_set_quad_active(GTK_WIDGET(g->highlights_weight), FALSE);
-
-  // Checkerboard mask preview preferences
-  GdkRGBA color;
-  color.alpha = 1.0f;
-  color.red = dt_conf_get_float("plugins/darkroom/colorbalancergb/checker1/red");
-  color.green = dt_conf_get_float("plugins/darkroom/colorbalancergb/checker1/green");
-  color.blue = dt_conf_get_float("plugins/darkroom/colorbalancergb/checker1/blue");
-
-  gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(g->checker_color_1_picker), &color);
-
-  color.red = dt_conf_get_float("plugins/darkroom/colorbalancergb/checker2/red");
-  color.green = dt_conf_get_float("plugins/darkroom/colorbalancergb/checker2/green");
-  color.blue = dt_conf_get_float("plugins/darkroom/colorbalancergb/checker2/blue");
-
-  gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(g->checker_color_2_picker), &color);
-
-  dt_bauhaus_slider_set(g->checker_size, dt_conf_get_int("plugins/darkroom/colorbalancergb/checker/size"));
 }
 
 
@@ -2052,32 +2009,6 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_slider_set_format(g->grey_fulcrum, "%");
   gtk_widget_set_tooltip_text(g->grey_fulcrum, _("peak gray luminance value used to normalize the power function"));
 
-  gtk_box_pack_start(GTK_BOX(self->widget), dt_ui_section_label_new(_("mask preview settings")), FALSE, FALSE, 0);
-
-  GtkWidget *row1 = GTK_WIDGET(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING));
-  gtk_box_pack_start(GTK_BOX(row1), dt_ui_label_new(_("checkerboard color 1")), TRUE, TRUE, 0);
-  g->checker_color_1_picker = gtk_color_button_new();
-  gtk_color_chooser_set_use_alpha(GTK_COLOR_CHOOSER(g->checker_color_1_picker), FALSE);
-  gtk_color_button_set_title(GTK_COLOR_BUTTON(g->checker_color_1_picker), _("select color of the checkerboard from a swatch"));
-  gtk_box_pack_start(GTK_BOX(row1), GTK_WIDGET(g->checker_color_1_picker), FALSE, FALSE, 0);
-  g_signal_connect(G_OBJECT(g->checker_color_1_picker), "color-set", G_CALLBACK(checker_1_picker_callback), self);
-  gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(row1), FALSE, FALSE, 0);
-
-  GtkWidget *row2 = GTK_WIDGET(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING));
-  gtk_box_pack_start(GTK_BOX(row2), dt_ui_label_new(_("checkerboard color 2")), TRUE, TRUE, 0);
-  g->checker_color_2_picker = gtk_color_button_new();
-  gtk_color_chooser_set_use_alpha(GTK_COLOR_CHOOSER(g->checker_color_2_picker), FALSE);
-  gtk_color_button_set_title(GTK_COLOR_BUTTON(g->checker_color_2_picker), _("select color of the checkerboard from a swatch"));
-  gtk_box_pack_start(GTK_BOX(row2), GTK_WIDGET(g->checker_color_2_picker), FALSE, FALSE, 0);
-  g_signal_connect(G_OBJECT(g->checker_color_2_picker), "color-set", G_CALLBACK(checker_2_picker_callback), self);
-  gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(row2), FALSE, FALSE, 0);
-
-  g->checker_size = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 2., 32., 0, 8., 0);
-  dt_bauhaus_slider_set_format(g->checker_size, " px");
-  dt_bauhaus_widget_set_label(g->checker_size, _("checkerboard size"));
-  g_signal_connect(G_OBJECT(g->checker_size), "value-changed", G_CALLBACK(checker_size_callback), self);
-  gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(g->checker_size), FALSE, FALSE, 0);
-
   dt_bauhaus_widget_set_label(g->shadows_H, N_("hue"));
   dt_bauhaus_widget_set_label(g->midtones_H, N_("hue"));
   dt_bauhaus_widget_set_label(g->highlights_H, N_("hue"));
@@ -2103,24 +2034,6 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_widget_set_label(g->brilliance_highlights, N_("highlights"));
   dt_bauhaus_widget_set_label(g->brilliance_midtones, N_("mid-tones"));
   dt_bauhaus_widget_set_label(g->brilliance_shadows, N_("shadows"));
-
-  // Init the conf keys if they don't exist
-  if(!dt_conf_key_exists("plugins/darkroom/colorbalancergb/checker1/red"))
-    dt_conf_set_float("plugins/darkroom/colorbalancergb/checker1/red", 1.0f);
-  if(!dt_conf_key_exists("plugins/darkroom/colorbalancergb/checker1/green"))
-    dt_conf_set_float("plugins/darkroom/colorbalancergb/checker1/green", 1.0f);
-  if(!dt_conf_key_exists("plugins/darkroom/colorbalancergb/checker1/blue"))
-    dt_conf_set_float("plugins/darkroom/colorbalancergb/checker1/blue", 1.0f);
-
-  if(!dt_conf_key_exists("plugins/darkroom/colorbalancergb/checker2/red"))
-    dt_conf_set_float("plugins/darkroom/colorbalancergb/checker2/red", 0.18f);
-  if(!dt_conf_key_exists("plugins/darkroom/colorbalancergb/checker2/green"))
-    dt_conf_set_float("plugins/darkroom/colorbalancergb/checker2/green", 0.18f);
-  if(!dt_conf_key_exists("plugins/darkroom/colorbalancergb/checker2/blue"))
-    dt_conf_set_float("plugins/darkroom/colorbalancergb/checker2/blue", 0.18f);
-
-  if(!dt_conf_key_exists("plugins/darkroom/colorbalancergb/checker/size"))
-    dt_conf_set_int("plugins/darkroom/colorbalancergb/checker/size", 8);
 
   // paint backgrounds
   for(int i = 0; i < DT_BAUHAUS_SLIDER_MAX_STOPS; i++)
