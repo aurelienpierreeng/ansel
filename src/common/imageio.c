@@ -1240,8 +1240,6 @@ dt_imageio_retval_t dt_imageio_open(dt_image_t *img,               // non-const 
   if(!g_file_test(filename, G_FILE_TEST_IS_REGULAR))
     return !DT_IMAGEIO_OK;
 
-  const int32_t was_bw = dt_image_monochrome_flags(img);
-
   dt_imageio_retval_t ret = DT_IMAGEIO_FILE_CORRUPTED;
   img->loader = LOADER_UNKNOWN;
 
