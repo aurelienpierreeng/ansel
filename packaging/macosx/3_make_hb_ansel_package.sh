@@ -327,9 +327,6 @@ cp -L "$homebrewHome"/share/themes/Mac/gtk-3.0/gtk-keys.css "$dtResourcesDir"/sh
 # Add fonts
 cp fonts/*  "$dtResourcesDir"/fonts/
 
-# Patch ansel.css - Solving font issue with Roboto condensed
-patch "$dtResourcesDir"/share/ansel/themes/ansel.css ansel.css.patch
-
 # Create Icon file
 if [ -d "$buildDir"/Icons.iconset ]; then
     rm -R "$buildDir/Icons.iconset"
