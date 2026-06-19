@@ -172,16 +172,13 @@ typedef struct dt_iop_colorbalancergb_data_t
   dt_iop_colorbalancrgb_saturation_t saturation_formula;
   size_t checker_size;
   gboolean mask_preview_black_and_white;
+  gboolean mask_display;
+  dt_iop_colorbalancergb_mask_data_t mask_type;
   gboolean lut_inited;
-  struct dt_iop_order_iccprofile_info_t *work_profile;
 
-  // Note: the pixelpipe cache hashes the membuffer of dt_iop_colorbalancergb_data_t to track
-  // the consistency of cachelines, because some modules like colorout that don't record user params.
-  // Problem here is that this membuffer contains the 2 following pointers aka memory addresses.
-  // These will change everytime we rebuild the pipeline even though the module hasen't changed its state.
-  // The cacheline will then change hash, as they should.
-  // To solve that, we keep the pointers at the end of the struct. Then we reduce the size
-  // of the membuffer to hash by 2 × sizeof(size_t) to keep the constant part.
+  // Keep runtime pointers after the hashed data prefix. Their addresses change when
+  // rebuilding a pipeline and do not describe the rendered pixel contents.
+  struct dt_iop_order_iccprofile_info_t *work_profile;
   float *gamut_LUT;
   float *chroma_LUT;
 } dt_iop_colorbalancergb_data_t;
@@ -582,7 +579,6 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 {
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_colorbalancergb_data_t *d = (dt_iop_colorbalancergb_data_t *)piece->data;
-  dt_iop_colorbalancergb_gui_data_t *g = (dt_iop_colorbalancergb_gui_data_t *)self->gui_data;
   const struct dt_iop_order_iccprofile_info_t *const work_profile
       = dt_ioppr_get_pipe_current_profile_info(self, pipe);
   if(IS_NULL_PTR(work_profile)) return 0; // no point
@@ -653,9 +649,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const dt_aligned_pixel_simd_t jz_ai1 = dt_colormatrix_row_to_simd(AI_transposed, 1);
   const dt_aligned_pixel_simd_t jz_ai2 = dt_colormatrix_row_to_simd(AI_transposed, 2);
 
-  const gint mask_display
-      = (pipe->type == DT_DEV_PIXELPIPE_FULL && self->dev->gui_attached
-         && g && g->mask_display);
+  const gboolean mask_display = d->mask_display;
 
   const dt_aligned_pixel_simd_t checker_color_1_v = dt_load_simd(d->checker_color_1);
   const dt_aligned_pixel_simd_t checker_color_2_v = dt_load_simd(d->checker_color_2);
@@ -900,7 +894,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
         else color_v = checker_color_2_v;
       }
 
-      float opacity = opacities[g->mask_type];
+      const float opacity = opacities[d->mask_type];
       const float opacity_comp = 1.0f - opacity;
 
       dt_aligned_pixel_simd_t image_v = dt_simd_max_zero(pix_out_v);
@@ -931,7 +925,6 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_colorbalancergb_data_t *const d = (dt_iop_colorbalancergb_data_t *)piece->data;
   dt_iop_colorbalancergb_global_data_t *const gd = (dt_iop_colorbalancergb_global_data_t *)self->global_data;
-  dt_iop_colorbalancergb_gui_data_t *g = (dt_iop_colorbalancergb_gui_data_t *)self->gui_data;
 
   cl_int err = -999;
 
@@ -1005,13 +998,11 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   // Send gamut LUT to GPU
   gamut_LUT = dt_opencl_copy_host_to_device(devid, d->gamut_LUT, LUT_ELEM, 1, sizeof(float));
 
-  const gint mask_display
-      = (pipe->type == DT_DEV_PIXELPIPE_FULL && self->dev->gui_attached
-         && g && g->mask_display);
+  const int mask_display = d->mask_display;
   const int checker_1
       = (mask_display) ? MAX(DT_PIXEL_APPLY_DPI(d->checker_size), 2) : 0;
   const int checker_2 = 2 * checker_1;
-  const int mask_type = (mask_display) ? g->mask_type : 0;
+  const int mask_type = d->mask_type;
 
   const float L_white = Y_to_dt_UCS_L_star(d->white_fulcrum);
   const cl_float2 hue_rotation_row_0 = {{ cosf(d->hue_angle), -sinf(d->hue_angle) }};
@@ -1110,6 +1101,8 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
 {
   dt_iop_colorbalancergb_data_t *d = (dt_iop_colorbalancergb_data_t *)(piece->data);
   dt_iop_colorbalancergb_params_t *p = (dt_iop_colorbalancergb_params_t *)p1;
+  const dt_iop_colorbalancergb_gui_data_t *gui
+      = (const dt_iop_colorbalancergb_gui_data_t *)self->gui_data;
 
   // Synchronize the global mask-preview appearance into this node so normal processing never reads GUI config.
   d->checker_color_1[0] = CLAMP(dt_conf_get_float("plugins/darkroom/colorbalancergb/checker1/red"), 0.f, 1.f);
@@ -1126,6 +1119,11 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   // The checker alpha is unused by the preview blend, so keep the OpenCL kernel signature stable
   // and transport the global grayscale option through that existing argument.
   d->checker_color_1[3] = d->mask_preview_black_and_white;
+  d->mask_display = pipe->type == DT_DEV_PIXELPIPE_FULL
+                    && self->dev->gui_attached
+                    && !IS_NULL_PTR(gui)
+                    && gui->mask_display;
+  d->mask_type = d->mask_display ? gui->mask_type : MASK_NONE;
 
   d->vibrance = p->vibrance;
   d->contrast = 1.0f + p->contrast; // that limits the user param range to [-1, 1], but it seems enough
@@ -1346,12 +1344,17 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   }
 }
 
+gboolean runtime_data_hash(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
+                           const dt_dev_pixelpipe_iop_t *piece)
+{
+  return TRUE;
+}
+
 void init_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
   piece->data = dt_calloc_align(sizeof(dt_iop_colorbalancergb_data_t));
-  // The last elements of dt_iop_colorbalancergb_data_t are non-constant pointers
-  // See the complete explanation in dt_iop_colorbalancergb_data_t struct definition.
-  piece->data_size = sizeof(dt_iop_colorbalancergb_data_t);
+  // Hash the complete immutable rendering state, stopping before runtime pointers.
+  piece->data_size = G_STRUCT_OFFSET(dt_iop_colorbalancergb_data_t, work_profile);
   dt_iop_colorbalancergb_data_t *d = (dt_iop_colorbalancergb_data_t *)(piece->data);
   d->gamut_LUT = dt_alloc_align_float(LUT_ELEM);
 }
@@ -1527,7 +1530,7 @@ static void mask_callback(GtkWidget *togglebutton, dt_iop_module_t *self)
   dt_bauhaus_widget_set_quad_active(GTK_WIDGET(g->highlights_weight), g->mask_type == MASK_HIGHLIGHTS);
 
   dt_iop_set_cache_bypass(self, g->mask_display);
-  dt_dev_pixelpipe_update_history_main(self->dev);
+  dt_dev_pixelpipe_resync_history_main(self->dev);
 }
 
 
