@@ -493,6 +493,53 @@ static void dt_dev_resync_mipmap_cache(dt_develop_t *dev, dt_dev_pixelpipe_t *pi
   }
 }
 
+gboolean _resync_pipe_with_history(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, dt_iop_roi_t *roi, gboolean *needs_update)
+{
+  // When in realtime mode, preview pipe gets paused at the benefit of main pipeline.
+  // This is a transient state.
+  if(pipe->pause) return FALSE;
+
+  // We recompute if history hash changed or ROI has changed.
+  // If we know history changed, ensure at least the last step is resynced.
+  const uint64_t pipe_hash = dt_dev_pixelpipe_get_history_hash(pipe);
+  const uint64_t dev_hash = dt_dev_get_history_hash(dev);
+  if(pipe_hash != dev_hash)
+  {
+    dt_dev_pixelpipe_or_changed(pipe, DT_DEV_PIPE_TOP_CHANGED);
+    dt_print(DT_DEBUG_PIPE | DT_DEBUG_DEV, "dev history hash = %" PRIu64 ", pipe history hash %" PRIu64 "\n", dev_hash, pipe_hash);
+  }
+
+  *needs_update = (dt_dev_pixelpipe_get_changed(pipe) != DT_DEV_PIPE_UNCHANGED);
+  if(!*needs_update) return FALSE;
+
+  dt_pthread_mutex_lock(&pipe->busy_mutex);
+  pipe->processing = 1;
+
+  // Commit history to pipeline
+  gboolean pipe_resynced = FALSE;
+  while(dt_dev_pixelpipe_get_changed(pipe) != DT_DEV_PIPE_UNCHANGED)
+  {
+    dt_dev_pixelpipe_change(pipe);
+    pipe_resynced = TRUE;
+  }
+
+  // Plan the ROI for this run and finalize the cumulative global hash now, while the pipe is
+  // settled and not yet publishing pixels. dt_dev_pixelpipe_process() recomputes both at its
+  // entry (it is also called directly by export/snapshot pipes), but computing them here is
+  // what lets the HISTORY_RESYNC signal below advertise a hash that is already final.
+  int x = 0, y = 0, wd = 0, ht = 0;
+  float scale = 1.f;
+  _update_darkroom_roi(dev, pipe, &x, &y, &wd, &ht, &scale);
+  *roi = (dt_iop_roi_t){ x, y, wd, ht, scale };
+  dt_dev_pixelpipe_get_roi_in(pipe, *roi);
+  dt_pixelpipe_get_global_hash(pipe);
+
+  pipe->processing = 0;
+  dt_pthread_mutex_unlock(&pipe->busy_mutex);
+
+  return pipe_resynced;
+}
+
 
 /**
  * @brief Run darkroom preview and main pipelines from one background loop.
@@ -522,65 +569,32 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
     }
 
     // This is cheap to run, keep it in sync always.
-    dt_dev_pixelpipe_set_input(dev->pipe, dev->image_storage.id, dev->roi.raw_width, dev->roi.raw_height,
-                               1.0f, DT_MIPMAP_FULL);
-    dt_dev_pixelpipe_set_input(dev->preview_pipe, dev->image_storage.id, dev->roi.raw_width, dev->roi.raw_height,
+    for(size_t i = 0; i < G_N_ELEMENTS(pipes); i++)
+      dt_dev_pixelpipe_set_input(pipes[i], dev->image_storage.id, dev->roi.raw_width, dev->roi.raw_height,
                                1.0f, DT_MIPMAP_FULL);
 
     gboolean pipe_needs_update[G_N_ELEMENTS(pipes)] = { FALSE };
     dt_iop_roi_t pipe_roi[G_N_ELEMENTS(pipes)] = { { 0 } };
     gboolean history_resynced = FALSE;
 
-    // First resynchronize all dirty pipelines from history, plan their ROI and finalize their
+    // First, resynchronize all dirty pipelines from history, plan their ROI and finalize their
     // cumulative global hash, so GUI listeners can resolve stable piece->global_hash values
-    // before any cacheline starts publishing pixels. This is the contract advertised by the
-    // HISTORY_RESYNC signal raised at the end of this stage: it must only fire once every
-    // piece->global_hash is final. Otherwise GUI consumers (navigation, scopes, pickers) latch a
-    // stale/provisional hash here and never match the cacheline the worker publishes below.
+    // before any cacheline starts publishing pixels.
     for(size_t i = 0; i < G_N_ELEMENTS(pipes); i++)
-    {
-      dt_dev_pixelpipe_t *pipe = pipes[i];
+      history_resynced |= _resync_pipe_with_history(dev, pipes[i], &pipe_roi[i], &pipe_needs_update[i]);
 
-      // We recompute if history hash changed or ROI has changed.
-      // If we know history changed, ensure at least the last step is resynced.
-      const uint64_t pipe_hash = dt_dev_pixelpipe_get_history_hash(pipe);
-      const uint64_t dev_hash = dt_dev_get_history_hash(dev);
-      if(pipe_hash != dev_hash)
-      {
-        dt_dev_pixelpipe_or_changed(pipe, DT_DEV_PIPE_TOP_CHANGED);
-        dt_print(DT_DEBUG_PIPE | DT_DEBUG_DEV, "dev history hash = %" PRIu64 ", pipe history hash %" PRIu64 "\n", dev_hash, pipe_hash);
-      }
+    // NOTE: at this point, we fully know the state of __all__ our GUI pipelines :
+    // - global image input and output size,
+    // - per-module input and output size,
+    // - per-module input and output format (channels, bit depth, mosaiced/raster, CFA pattern)
+    // - pipeline nodes (modules) params are up-to-to date with history,
+    // - global_hash of each module is and stable until next history resync,
+    // - modules whose expected input format is incompatible with previous module output format
+    //   will have been disabled from pipeline, but not from history, aka we know our pipelines
+    //   can run start to end.
 
-      pipe_needs_update[i] = (dt_dev_pixelpipe_get_changed(pipe) != DT_DEV_PIPE_UNCHANGED) && !pipe->pause;
-      if(!pipe_needs_update[i]) continue;
-
-      dt_pthread_mutex_lock(&pipe->busy_mutex);
-      pipe->processing = 1;
-
-      gboolean pipe_resynced = FALSE;
-      while(dt_dev_pixelpipe_get_changed(pipe) != DT_DEV_PIPE_UNCHANGED)
-      {
-        dt_dev_pixelpipe_change(pipe);
-        pipe_resynced = TRUE;
-      }
-
-      // Plan the ROI for this run and finalize the cumulative global hash now, while the pipe is
-      // settled and not yet publishing pixels. dt_dev_pixelpipe_process() recomputes both at its
-      // entry (it is also called directly by export/snapshot pipes), but computing them here is
-      // what lets the HISTORY_RESYNC signal below advertise a hash that is already final.
-      int x = 0, y = 0, wd = 0, ht = 0;
-      float scale = 1.f;
-      _update_darkroom_roi(dev, pipe, &x, &y, &wd, &ht, &scale);
-      pipe_roi[i] = (dt_iop_roi_t){ x, y, wd, ht, scale };
-      dt_dev_pixelpipe_get_roi_in(pipe, pipe_roi[i]);
-      dt_pixelpipe_get_global_hash(pipe);
-
-      pipe->processing = 0;
-      dt_pthread_mutex_unlock(&pipe->busy_mutex);
-
-      history_resynced = history_resynced || pipe_resynced;
-    }
-
+    // GUI widgets that need an image buffer will connect to this signal to grab
+    // the global_hash of the module they are waiting for, even though it's still not ready.
     if(history_resynced)
       DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_HISTORY_RESYNC);
 
