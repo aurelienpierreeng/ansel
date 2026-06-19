@@ -469,6 +469,23 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   int mode = DT_IOP_GAMMA_KERNEL_COPY;
   int channel = DT_IOP_GAMMA_FALSE_COLOR_MONO;
   float alpha = (mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK) ? 1.0f : 0.0f;
+  const dt_aligned_pixel_t checker_color_1 = {
+    CLAMP(dt_conf_get_float("plugins/darkroom/colorbalancergb/checker1/red"), 0.0f, 1.0f),
+    CLAMP(dt_conf_get_float("plugins/darkroom/colorbalancergb/checker1/green"), 0.0f, 1.0f),
+    CLAMP(dt_conf_get_float("plugins/darkroom/colorbalancergb/checker1/blue"), 0.0f, 1.0f),
+    0.0f
+  };
+  const dt_aligned_pixel_t checker_color_2 = {
+    CLAMP(dt_conf_get_float("plugins/darkroom/colorbalancergb/checker2/red"), 0.0f, 1.0f),
+    CLAMP(dt_conf_get_float("plugins/darkroom/colorbalancergb/checker2/green"), 0.0f, 1.0f),
+    CLAMP(dt_conf_get_float("plugins/darkroom/colorbalancergb/checker2/blue"), 0.0f, 1.0f),
+    0.0f
+  };
+  const int checker_1
+      = MAX(DT_PIXEL_APPLY_DPI(dt_conf_get_int("plugins/darkroom/colorbalancergb/checker/size")), 2);
+  const int checker_2 = 2 * checker_1;
+  const int black_and_white
+      = dt_conf_get_bool("plugins/darkroom/colorbalancergb/mask_preview/greyscaled");
 
   if((mask_display & DT_DEV_PIXELPIPE_DISPLAY_CHANNEL)
      && (mask_display & DT_DEV_PIXELPIPE_DISPLAY_ANY))
@@ -495,6 +512,11 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   dt_opencl_set_kernel_arg(devid, gd->kernel_gamma_pack, 4, sizeof(int), (void *)&mode);
   dt_opencl_set_kernel_arg(devid, gd->kernel_gamma_pack, 5, sizeof(int), (void *)&channel);
   dt_opencl_set_kernel_arg(devid, gd->kernel_gamma_pack, 6, sizeof(float), (void *)&alpha);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_gamma_pack, 7, sizeof(checker_color_1), (void *)&checker_color_1);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_gamma_pack, 8, sizeof(checker_color_2), (void *)&checker_color_2);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_gamma_pack, 9, sizeof(int), (void *)&checker_1);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_gamma_pack, 10, sizeof(int), (void *)&checker_2);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_gamma_pack, 11, sizeof(int), (void *)&black_and_white);
 
   err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_gamma_pack, sizes);
   if(err == CL_SUCCESS) return TRUE;

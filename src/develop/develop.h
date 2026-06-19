@@ -164,6 +164,17 @@ typedef struct dt_develop_t
   int exit; // set to 1 to close background darkroom pipeline threads
   struct dt_iop_module_t *gui_module; // this module claims gui expose/event callbacks.
 
+  /**
+   * @brief Revision of the global mask-preview appearance.
+   *
+   * @details
+   * Toolbar settings are not module parameters and therefore do not alter the
+   * history hash. The main pipe hashes this revision at the module currently
+   * requesting a mask preview so that this module and its successors are
+   * recomputed when the preview colors, checker size or greyscale mode change.
+   */
+  dt_atomic_int mask_preview_settings_revision;
+
   // The roi structure is used in darkroom GUI only.
   // It defines the output size of the image backbuffer fitting
   // into the darkroom center widget. This is critically used for all

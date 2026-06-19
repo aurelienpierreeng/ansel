@@ -1358,6 +1358,17 @@ void dt_pixelpipe_get_global_hash(dt_dev_pixelpipe_t *pipe)
     if(pipe->type == DT_DEV_PIXELPIPE_FULL)
     {
       local_hash = dt_hash(local_hash, (const char *)&piece->module->request_mask_display, sizeof(int));
+
+      /* Mask-preview appearance is global GUI state, not module history. Hash
+       * its revision at the module producing the active preview so upstream
+       * cache entries remain reusable while this module and gamma are rerun. */
+      if(pipe->dev->gui_attached
+         && piece->module == pipe->dev->gui_module
+         && piece->module->request_mask_display != DT_DEV_PIXELPIPE_DISPLAY_NONE)
+      {
+        const int revision = dt_atomic_get_int(&pipe->dev->mask_preview_settings_revision);
+        local_hash = dt_hash(local_hash, (const char *)&revision, sizeof(revision));
+      }
     }
     else 
     {

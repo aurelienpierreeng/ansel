@@ -3212,13 +3212,15 @@ static inline uint4 _quantized_BGRX(const float3 rgb)
   return (uint4)((uint)b, (uint)g, (uint)r, 0u);
 }
 
-static inline uint4 _write_pixel_BGRX(const float3 linear_rgb, const float alpha)
+/**
+ * Blend a mask-preview pixel with the selected checker color in linear RGB,
+ * then apply display encoding exactly once.
+ */
+static inline uint4 _write_pixel_BGRX(const float3 linear_rgb, const float3 checker_color, const float alpha)
 {
-  const float3 srgb = (float3)(_gamma_oetf(linear_rgb.x), _gamma_oetf(linear_rgb.y), _gamma_oetf(linear_rgb.z));
-  const float3 blended = (float3)(srgb.x * (1.0f - alpha) + alpha,
-                                  srgb.y * (1.0f - alpha) + alpha,
-                                  srgb.z * (1.0f - alpha));
-  return _quantized_BGRX(blended);
+  const float3 blended = linear_rgb * (1.0f - alpha) + checker_color * alpha;
+  const float3 srgb = (float3)(_gamma_oetf(blended.x), _gamma_oetf(blended.y), _gamma_oetf(blended.z));
+  return _quantized_BGRX(srgb);
 }
 
 static inline float3 _false_color_pixel(const float value, const int channel)
@@ -3274,13 +3276,17 @@ static inline float3 _false_color_pixel(const float value, const int channel)
 
 kernel void
 gamma_pack(read_only image2d_t in, write_only image2d_t out, const int width, const int height, const int mode,
-           const int channel, const float alpha)
+           const int channel, const float alpha, const float4 checker_color_1, const float4 checker_color_2,
+           const int checker_1, const int checker_2, const int black_and_white)
 {
   const int x = get_global_id(0);
   const int y = get_global_id(1);
   if(x >= width || y >= height) return;
 
   const float4 p = read_imagef(in, sampleri, (int2)(x, y));
+  const int first_x = x % checker_1 < x % checker_2;
+  const int first_y = y % checker_1 < y % checker_2;
+  const float3 checker_color = first_x == first_y ? checker_color_2.xyz : checker_color_1.xyz;
   uint4 out_pixel;
 
   if(mode == DT_IOP_GAMMA_KERNEL_COPY)
@@ -3289,18 +3295,23 @@ gamma_pack(read_only image2d_t in, write_only image2d_t out, const int width, co
   }
   else if(mode == DT_IOP_GAMMA_KERNEL_MASK)
   {
-    const float gray = 0.3f * p.x + 0.59f * p.y + 0.11f * p.z;
+    float3 image = p.xyz;
+    if(black_and_white)
+    {
+      const float gray = dot(image, (float3)(0.3f, 0.59f, 0.11f));
+      image = gray;
+    }
     const float hide = 1.0f - clamp(p.w, 0.0f, 1.0f);
-    out_pixel = _write_pixel_BGRX((float3)(gray, gray, gray), hide);
+    out_pixel = _write_pixel_BGRX(image, checker_color, hide);
   }
   else if(mode == DT_IOP_GAMMA_KERNEL_CHANNEL_MONO)
   {
     const float g = p.y;
-    out_pixel = _write_pixel_BGRX((float3)(g, g, g), p.w * alpha);
+    out_pixel = _write_pixel_BGRX((float3)(g, g, g), checker_color, p.w * alpha);
   }
   else // DT_IOP_GAMMA_KERNEL_CHANNEL_FALSE_COLOR
   {
-    out_pixel = _write_pixel_BGRX(_false_color_pixel(p.y, channel), p.w * alpha);
+    out_pixel = _write_pixel_BGRX(_false_color_pixel(p.y, channel), checker_color, p.w * alpha);
   }
 
   write_imageui(out, (int2)(x, y), out_pixel);

@@ -1567,6 +1567,7 @@ static void display_mask_checker_1_callback(GtkColorButton *widget, gpointer use
   dt_conf_set_float("plugins/darkroom/colorbalancergb/checker1/red", color.red);
   dt_conf_set_float("plugins/darkroom/colorbalancergb/checker1/green", color.green);
   dt_conf_set_float("plugins/darkroom/colorbalancergb/checker1/blue", color.blue);
+  dt_atomic_add_int(&d->mask_preview_settings_revision, 1);
   dt_dev_pixelpipe_resync_history_main(d);
 }
 
@@ -1578,6 +1579,7 @@ static void display_mask_checker_2_callback(GtkColorButton *widget, gpointer use
   dt_conf_set_float("plugins/darkroom/colorbalancergb/checker2/red", color.red);
   dt_conf_set_float("plugins/darkroom/colorbalancergb/checker2/green", color.green);
   dt_conf_set_float("plugins/darkroom/colorbalancergb/checker2/blue", color.blue);
+  dt_atomic_add_int(&d->mask_preview_settings_revision, 1);
   dt_dev_pixelpipe_resync_history_main(d);
 }
 
@@ -1585,6 +1587,7 @@ static void display_mask_checker_size_callback(GtkWidget *slider, gpointer user_
 {
   dt_develop_t *d = (dt_develop_t *)user_data;
   dt_conf_set_int("plugins/darkroom/colorbalancergb/checker/size", (int)dt_bauhaus_slider_get(slider));
+  dt_atomic_add_int(&d->mask_preview_settings_revision, 1);
   dt_dev_pixelpipe_resync_history_main(d);
 }
 
@@ -1593,6 +1596,7 @@ static void display_mask_black_and_white_callback(GtkToggleButton *toggle, gpoin
   dt_develop_t *d = (dt_develop_t *)user_data;
   dt_conf_set_bool("plugins/darkroom/colorbalancergb/mask_preview/greyscaled",
                    gtk_toggle_button_get_active(toggle));
+  dt_atomic_add_int(&d->mask_preview_settings_revision, 1);
   dt_dev_pixelpipe_resync_history_main(d);
 }
 
