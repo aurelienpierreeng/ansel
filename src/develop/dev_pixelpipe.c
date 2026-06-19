@@ -332,6 +332,12 @@ static void _seal_opencl_cache_policy(dt_dev_pixelpipe_t *pipe)
 {
   if(IS_NULL_PTR(pipe) || IS_NULL_PTR(pipe->nodes)) return;
 
+  // The scopes/global histogram are not refreshed while a realtime stroke is in progress (the preview
+  // pipe is paused), so do not force any module to publish a host copy of its output just to feed them.
+  // This drops the per-frame RAM copy of `colorout` (and the histogram input/module caches) during
+  // realtime drawing, where it is pure overhead.
+  const gboolean realtime = dt_dev_pixelpipe_get_realtime(pipe);
+
   gboolean current_output_must_cache_host = TRUE;
 
   for(GList *pieces = g_list_last(pipe->nodes); pieces; pieces = g_list_previous(pieces))
@@ -354,10 +360,13 @@ static void _seal_opencl_cache_policy(dt_dev_pixelpipe_t *pipe)
     dt_free(string);
 
     const gboolean color_picker_on = dt_iop_color_picker_force_cache(pipe, module);
-    const gboolean global_hist_output_on = _module_requires_global_histogram_output_cache(pipe, module);
-    const gboolean global_hist_input_on = _module_requires_global_histogram_input_cache(pipe, module);
+    const gboolean global_hist_output_on
+        = !realtime && _module_requires_global_histogram_output_cache(pipe, module);
+    const gboolean global_hist_input_on
+        = !realtime && _module_requires_global_histogram_input_cache(pipe, module);
     const gboolean module_hist_on
-        = (pipe->type == DT_DEV_PIXELPIPE_PREVIEW
+        = !realtime
+          && (pipe->type == DT_DEV_PIXELPIPE_PREVIEW
            && pipe->gui_observable_source
            && (pipe->dev->gui_attached || !(piece->request_histogram & DT_REQUEST_ONLY_IN_GUI))
            && (piece->request_histogram & DT_REQUEST_ON));
