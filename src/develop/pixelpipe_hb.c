@@ -1434,7 +1434,7 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_iop_roi_t roi)
     const int retained = dt_dev_pixelpipe_cache_invalidate_hashes(
         darktable.pixelpipe_cache, invalidated_hashes, invalidated_count);
     dt_print(DT_DEBUG_DEV,
-             "[raster masks] invalidated %zu cache states at retry from provider=%" PRIu64
+             "[raster masks] invalidated %" PRIu64 " cache states at retry from provider=%" PRIu64
              " retained=%d pipe=%s\n",
              invalidated_count, pipe->reentry_hash, retained,
              dt_pixelpipe_get_pipe_name(pipe->type));
