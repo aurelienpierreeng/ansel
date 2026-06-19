@@ -10,8 +10,9 @@ buffer is not available yet. It complements:
   and the difference between `piece->buf_*` and `piece->roi_*`.
 
 The code lives in `src/develop/pixelpipe_cache.c` (the cache itself), `src/develop/dev_pixelpipe.c`
-(the GUI fetch wrapper and the cache-wait manager) and `src/develop/pixelpipe_hb.c` (the recompute
-that publishes cachelines).
+(the GUI fetch wrapper and the cache-wait manager), `src/develop/pixelpipe_hb.c` (the recompute
+that publishes image cachelines), and `src/develop/pixelpipe_raster_masks.c` (raster-mask
+side-band retrieval).
 
 ## 1. What the pipeline cache holds
 
@@ -31,6 +32,38 @@ Two consequences matter for everything below:
 - **A piece's *input* is the previous enabled piece's *output*.** To read the buffer feeding a
   module, fetch the output of `dt_dev_pixelpipe_get_prev_enabled_piece(pipe, piece)`, not the
   module's own cacheline.
+
+### Raster masks are dedicated side-band cachelines
+
+A module may also publish raster masks for downstream modules or multi-page export. These masks
+are not stored in `dt_dev_pixelpipe_iop_t` and are not embedded in the module's RGBA output
+cacheline. They are independent single-channel float cachelines in the same global pipeline cache.
+
+`dt_dev_pixelpipe_raster_mask_hash(piece, mask_id)` derives their key from:
+
+1. the provider's `piece->global_mask_hash`, which already covers its upstream image state,
+   blend parameters and ROI;
+2. a raster-mask namespace tag, preventing aliasing with image outputs;
+3. the provider-local mask identifier.
+
+CPU and OpenCL blend paths publish the final provider mask under this key. A consumer calls
+`dt_dev_get_raster_mask()`, which retains and read-locks the canonical cacheline, copies it into a
+caller-owned working buffer, then applies the `distort_mask()` callbacks of enabled modules between
+the provider and the consumer. The canonical cached mask remains immutable.
+
+The pipeline keeps references to the raster-mask hashes required by its current graph in
+`dt_dev_pixelpipe_t.raster_mask_hashes`. On a new render it first retains the new set, then releases
+the previous set. This ordering prevents an unchanged mask from becoming briefly evictable between
+provider publication and downstream consumption or export.
+
+An image cache hit can therefore reuse its associated raster mask without recomputing the provider
+or the modules before it. If the side-band mask was nevertheless evicted while the provider image
+survived, an interactive consumer requests one bounded `DT_DEV_PIPE_REENTRY` pass. Immediately
+before that retry, the pipe invalidates image cachelines from the provider through the end of the
+graph, keeps upstream cachelines, and reruns without rebuilding synchronized nodes. A second miss
+stops instead of scheduling a loop. Export enumerates the provider's declared mask IDs and fetches
+the same dedicated cachelines; if one is unavailable, the format backend handles it as a missing
+export mask instead of starting an interactive retry.
 
 ### Locking model recap
 
@@ -68,6 +101,10 @@ missed because the input cacheline was not retained, and never recovered.
 
 `dt_dev_pixelpipe_cache_peek_gui()` is the race-free GUI counterpart and the subject of the rest of
 this document.
+
+Backend code that must keep a cacheline past the lookup uses
+`dt_dev_pixelpipe_cache_ref_entry_by_hash()`. Raster-mask retrieval follows this contract: retain
+under the cache mutex, read-lock while copying, then release the temporary reference.
 
 ## 3. Requesting a partial recompute
 
