@@ -331,8 +331,11 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   const int width = roi_in->width;
   const int height = roi_in->height;
 
-  const gboolean fullpipe = !dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out);
-  const gboolean visualizing = (!IS_NULL_PTR(g)) ? g->show_visualize && fullpipe : FALSE;
+  /* This transient preview belongs to the central darkroom view. Do not infer
+   * its owner from ROI geometry: at zoom-to-fit the main and navigation pipes
+   * can produce identical dimensions while both still need distinct outputs. */
+  const gboolean visualizing = !IS_NULL_PTR(g) && g->show_visualize
+                               && self->dev->gui_attached && pipe == self->dev->pipe;
 
   cl_int err = DT_OPENCL_DEFAULT_ERROR;
   cl_mem dev_xtrans = NULL;
@@ -363,7 +366,11 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_highlights_false_color, sizes);
     if(err != CL_SUCCESS) goto error;
 
+    /* The clipping preview is the final output of this module. Blending would
+     * interpret PASSTHRU as a channel-display request and replace RAW output
+     * with zeroes before the downstream demosaic stage can display it. */
     ((dt_dev_pixelpipe_t *)pipe)->mask_display = DT_DEV_PIXELPIPE_DISPLAY_PASSTHRU;
+    ((dt_dev_pixelpipe_t *)pipe)->bypass_blendif = 1;
     dt_opencl_release_mem_object(dev_clips);
     return TRUE;
   }
@@ -2696,13 +2703,20 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   dt_iop_highlights_data_t *data = (dt_iop_highlights_data_t *)piece->data;
   dt_iop_highlights_gui_data_t *g = (dt_iop_highlights_gui_data_t *)self->gui_data;
 
-  const gboolean fullpipe = !dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out);
-  const gboolean visualizing = (!IS_NULL_PTR(g)) ? g->show_visualize && fullpipe : FALSE;
+  /* This transient preview belongs to the central darkroom view. Do not infer
+   * its owner from ROI geometry: at zoom-to-fit the main and navigation pipes
+   * can produce identical dimensions while both still need distinct outputs. */
+  const gboolean visualizing = !IS_NULL_PTR(g) && g->show_visualize
+                               && self->dev->gui_attached && pipe == self->dev->pipe;
 
   if(visualizing)
   {
     process_visualize(piece, ivoid, ovoid, roi_in, roi_out, filters, data);
+    /* The clipping preview is the final output of this module. Blending would
+     * interpret PASSTHRU as a channel-display request and replace RAW output
+     * with zeroes before the downstream demosaic stage can display it. */
     ((dt_dev_pixelpipe_t *)pipe)->mask_display = DT_DEV_PIXELPIPE_DISPLAY_PASSTHRU;
+    ((dt_dev_pixelpipe_t *)pipe)->bypass_blendif = 1;
     return 0;
   }
 
