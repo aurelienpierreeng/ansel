@@ -603,8 +603,10 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
     // Second, compute pipelines.
     // Always service preview first, then the main pipe, so the main pipe can reuse the cache state
     // just published by preview instead of trying to race it from another thread.
-    for(size_t i = 0; i < G_N_ELEMENTS(pipes) && pipe_needs_update[i] && dt_control_running() && !dev->exit; i++)
+    for(size_t i = 0; i < G_N_ELEMENTS(pipes) && dt_control_running() && !dev->exit; i++)
     {
+      if(!pipe_needs_update[i]) continue;
+
       dt_dev_pixelpipe_t *pipe = pipes[i];
       const dt_iop_roi_t roi = pipe_roi[i];
 
