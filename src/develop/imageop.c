@@ -563,19 +563,18 @@ void dt_iop_init_pipe(struct dt_iop_module_t *module, struct dt_dev_pixelpipe_t 
 /**
  * @brief Release module-owned resources for one pixelpipe node.
  *
- * @details The normal contract is to call the instance callback copied from the
- * module shared object. If that instance callback is invalid, the only safe
- * fallback is a shared-object descriptor still present in `darktable.iop`; stale
- * module instances can remain referenced by already-built pixelpipes after GUI
- * removal, so the descriptor must be validated before dereferencing it.
+ * @details The instance callback is an immutable copy of the callback stored in
+ * the loaded shared-object descriptor. Pixelpipes can retain removed module
+ * instances until their next topology rebuild, so validate both the descriptor
+ * lifetime and that callback identity before calling through the instance.
+ * A mismatch means the instance storage is no longer trustworthy; calling the
+ * descriptor callback with that same instance would only move the use-after-free
+ * into the module cleanup code.
  */
 void dt_iop_cleanup_pipe(struct dt_iop_module_t *module, struct dt_dev_pixelpipe_t *pipe,
                         struct dt_dev_pixelpipe_iop_t *piece)
 {
   if(IS_NULL_PTR(piece)) return;
-
-  void (*cleanup_pipe)(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_t *pipe,
-                       struct dt_dev_pixelpipe_iop_t *piece) = NULL;
 
   if(IS_NULL_PTR(module))
   {
@@ -590,54 +589,31 @@ void dt_iop_cleanup_pipe(struct dt_iop_module_t *module, struct dt_dev_pixelpipe
   }
   else
   {
-    cleanup_pipe = module->cleanup_pipe;
+    dt_iop_module_so_t *module_so = module->so;
+    gboolean module_so_loaded = FALSE;
 
-    if(IS_NULL_PTR(cleanup_pipe) || (gsize)cleanup_pipe <= 0x1000)
+    /* Search the process-owned descriptor list by address before reading the
+     * candidate. A removed instance may outlive its GUI, but its descriptor
+     * must remain one of the objects loaded at startup. */
+    for(GList *iop = g_list_first(darktable.iop); iop; iop = g_list_next(iop))
     {
-      dt_iop_module_so_t *module_so = module->so;
-      if(IS_NULL_PTR(module_so))
+      if(iop->data == module_so)
       {
-        dt_print(DT_DEBUG_ALWAYS,
-                 "[dt_iop_cleanup_pipe] missing shared-object descriptor for `%s`, skipping module pipe cleanup\n",
-                 module->op);
-        cleanup_pipe = NULL;
-      }
-      else
-      {
-        gboolean module_so_loaded = FALSE;
-
-        /* Deleted module instances can stay referenced by already-built pixelpipes.
-         * Loop over the loaded shared-object descriptors before reading
-         * module_so->cleanup_pipe, otherwise a stale module->so pointer can make the
-         * crash handler report this cleanup path instead of the real invalid module
-         * state. */
-        for(GList *iop = g_list_first(darktable.iop); iop; iop = g_list_next(iop))
-        {
-          if(iop->data == module_so)
-          {
-            module_so_loaded = TRUE;
-            break;
-          }
-        }
-
-        if(module_so_loaded && !IS_NULL_PTR(module_so->cleanup_pipe) && (gsize)module_so->cleanup_pipe > 0x1000)
-        {
-          dt_print(DT_DEBUG_ALWAYS,
-                   "[dt_iop_cleanup_pipe] invalid module cleanup callback for `%s`, using shared-object fallback\n",
-                   module->op);
-          cleanup_pipe = module_so->cleanup_pipe;
-        }
-        else
-        {
-          dt_print(DT_DEBUG_ALWAYS,
-                   "[dt_iop_cleanup_pipe] invalid cleanup callback for `%s`, skipping module pipe cleanup\n",
-                   module->op);
-          cleanup_pipe = NULL;
-        }
+        module_so_loaded = TRUE;
+        break;
       }
     }
 
-    if(!IS_NULL_PTR(cleanup_pipe)) cleanup_pipe(module, pipe, piece);
+    if(!module_so_loaded)
+      dt_print(DT_DEBUG_ALWAYS,
+               "[dt_iop_cleanup_pipe] invalid shared-object descriptor %p, skipping module pipe cleanup\n",
+               (void *)module_so);
+    else if(module->cleanup_pipe != module_so->cleanup_pipe)
+      dt_print(DT_DEBUG_ALWAYS,
+               "[dt_iop_cleanup_pipe] stale cleanup callback for `%s`, skipping module pipe cleanup\n",
+               module_so->op);
+    else
+      module_so->cleanup_pipe(module, pipe, piece);
   }
 
   if(!IS_NULL_PTR(piece->blendop_data))
