@@ -640,6 +640,12 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
       // This allows partial pipeline runs, e.g. for histograms and color-pickers.
       const dt_dev_pixelpipe_cache_request_t cache_request = dt_dev_pixelpipe_get_cache_request(pipe);
 
+      // At zoom == fit, both preview and main pipelines have the same size,
+      // so the first one that runs will prevent the next from running 
+      // (backbuf fetched directly from pipeline cache).
+      // Therefore we can't rely solely on pipeline type to raise completion signals.
+      const gboolean has_preview_size = dt_dev_pixelpipe_has_preview_output(dev, pipe, &roi);
+
       // Connect GUI feedback for "pipe busy"
       dt_control_log_busy_enter();
       dt_control_toast_busy_enter();
@@ -738,16 +744,16 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
           DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_UI_PIPE_FINISHED);
           dt_control_queue_redraw_center();
         }
-        if(pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
+        if(pipe->type == DT_DEV_PIXELPIPE_PREVIEW || has_preview_size)
         {
-          // Use the full-frame (uncropped) preview backbuffer to init the mipmap cache without extra computations
-          // Note: this will resample non-linear uint8 at the end of the pipeline, so it is low-quality resampling.
-          if(!dt_dev_pixelpipe_get_realtime(pipe))
-            dt_dev_resync_mipmap_cache(dev, pipe, roi);
-
           DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED);
           dt_control_queue_redraw();
         }
+
+        // Use the full-frame (uncropped) preview backbuffer to init the mipmap cache without extra computations
+        // Note: this will resample non-linear uint8 at the end of the pipeline, so it is low-quality resampling.
+        if(!dt_dev_pixelpipe_get_realtime(pipe) && has_preview_size)
+          dt_dev_resync_mipmap_cache(dev, pipe, roi);
       }
 
       // Allow some breathing room to the OS and GPU
