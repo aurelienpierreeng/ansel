@@ -713,8 +713,14 @@ gboolean dt_dev_pixelpipe_cache_peek_gui(dt_dev_pixelpipe_t *pipe, const dt_dev_
 
   void *buffer = NULL;
   dt_pixel_cache_entry_t *entry = NULL;
+  // GUI consumers run on the CPU and never own the OpenCL device lock, so we pass preferred_devid = -1:
+  // dt_dev_pixelpipe_cache_peek() then returns host-resident cachelines directly but refuses to
+  // materialize device-only ones from the GPU (which would enqueue hidden GPU work from the GUI thread,
+  // racing whichever pipeline thread currently owns the device — the clReleaseEvent crash). A device-only
+  // entry is reported as a miss, so the request below waits for the pipeline to publish a host copy
+  // (modules whose output the GUI samples, e.g. initialscale, already cache to RAM).
   if(display_hash != DT_PIXELPIPE_CACHE_HASH_INVALID
-     && dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, display_hash, &buffer, &entry, pipe->devid, NULL)
+     && dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, display_hash, &buffer, &entry, -1, NULL)
      &&  !IS_NULL_PTR(buffer) && !IS_NULL_PTR(entry))
   {
     // These counters are only diagnostic; cache consumers should not wait for

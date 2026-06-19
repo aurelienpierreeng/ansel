@@ -479,10 +479,13 @@ static void dt_dev_resync_mipmap_cache(dt_develop_t *dev, dt_dev_pixelpipe_t *pi
   // Get the mip size that is at most as big as our pipeline backbuf
   dt_mipmap_size_t mip = dt_mipmap_cache_get_fitting_size(cache, pipe->backbuf.width, pipe->backbuf.height, imgid);
   
-  // Flush backup to mipmap_cache
+  // Flush backup to mipmap_cache. This runs after dt_dev_pixelpipe_process() released the OpenCL device
+  // lock, so we must NOT pass pipe->devid (now stale/unlocked): a device-only payload would otherwise be
+  // materialized from the GPU without owning it. The final display backbuffer is always host-resident,
+  // so preferred_devid = -1 returns it directly; anything else is simply skipped.
   uint8_t *data = NULL;
   dt_pixel_cache_entry_t *entry = NULL;
-  if(dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, dt_dev_pixelpipe_get_hash(pipe), (void **)&data, &entry, pipe->devid, NULL))
+  if(dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, dt_dev_pixelpipe_get_hash(pipe), (void **)&data, &entry, -1, NULL))
   {
     dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, entry);
     dt_mipmap_cache_swap_at_size(cache, imgid, mip, data, pipe->backbuf.width, pipe->backbuf.height, darktable.color_profiles->display_type);
