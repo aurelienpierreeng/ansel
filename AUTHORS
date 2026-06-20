@@ -22,7 +22,9 @@ Stephan Hoek
 EdgarLux
 Luca Zulberti
 Matt Maguire
+ax006ho
 Nicolas Auffray
+Prof. Dr. Jobst Hoffmann
 bajdero
 mmardegan
 Guillaume Stutin
@@ -62,6 +64,7 @@ luzpaz
 solarer
 Luca Zulberti
 Philipp Lutz
+ax006ho
 Alban Gruin
 Apfelkraut
 EdgarLux
@@ -70,238 +73,104 @@ quovadit
 
 * Sub-module rawspeed contributors (at least 1 commit):
 Roman Lebedev
-Klaus Post
 Miloš Komarčević
-Pedro Côrte-Real
-Axel Waggershauser
-Stefan Schöfegger
-Pascal de Bruijn
 Jordan Neumeyer
-Anders Brander
-Robert Bridge
-Stefan Löffler
 Pascal Obry
-Stefan Hoffmeister
-parafin
-Dan Torop
 Georg Lukas
 Kolton Yager
 Thomas Baumann
 Victor Forsiuk
 Aurélien PIERRE
-Daniel Vogelbacher
-Hanno Schwalm
-Matthieu Volat
 Philipp Lutz
-Tobias Ellinghaus
-luz.paz
-Hubert Kowalski
+Daniel Vogelbacher
 Louie Lu
-Virgile Bello
-bobobo1618
-johannes hanika
-Bill Ferguson
 Howard Liberty
-Marko Toplak
-Martijn Courteaux
-Matt Maguire
-Nathaniel Watson
-Robert Bieber
 Steven Le Rouzic
 Yattaro
-al
-luz paz
 maruncz
 -cr
 Alex Tutubalin
-Andreas Schneider
 Andreas Stiller
 Artemis Tosini
-Bastian Bechtold
-Benjamin Erb
 David Korczynski
-David-Tillmann Schaefer
-Elizeu Santos
-Frank Loemker
 Georg Niedrist
 Hon1nbo
 Jan Šmucr
 Jonas Schäfer
 Jorge Nerín
-Josef Raschen
-Julien Nabet
 LibRaw LLC
-Marcel Bollmann
-Marco Caimi
 Marco Ristuccia
-Martin Straeten
+Marko Toplak
 Massimo Paladin
-Matthias Gehre
 Michael Allman
-Michal Čihař
 Milos Komarcevic
 Omari Stephens
-Peter Budai
 PeterWem
-Philipp Normann
-Ryan Gillette
-Shita Yuuma
 Simon Raffeiner
 Sprite
-Tino H. Seifert
-Uwe Müssel
-Vasily Khoruzhick
-Zanhard
-aferrero2707
-chrunchyjesus
-dllu
-frantic1048
-helloqiu
-jas01
-junkyardsparkle
-ponkotuy
+luz paz
 squid-f
 ubergeek801
 Šarūnas Burdulis
 
 * Sub-module OpenCL contributors (at least 1 commit):
 Ben Ashbaugh
-James Price
 Kévin Petit
-Lee Howes
-Jakub Szuppe
 Brice Videau
-bashbaug
-Bartosz Sochacki
 Ewan Crawford
-Rob Elliott
-=
-Kevin Petit
 Nagy-Egri Máté Ferenc
-affie
-Richard Ruigrok
-Jeremy Kemp
-Kedar Patil
-neheb
-patilkedar
-Alexei Bourd
-Rosen Penev
-robquill
-takanokage
 John Plate
-Jon Leech
 Lőrinc Serfőző
-Martin Kelly
 Sreelakshmi Haridas Maruthur
-Umair Ahmed
-abestephens
 arm-wk
-Alastair Murray
-Alex Bourd
 Beatriz Navidad Vilches
-Einar Hov
 Feng Zou
 Gustavo Alvarez
+Jon Leech
 Jose Lopez
 Jörg Thalheim
 Karol Herbst
-Khronos Group Webmaster
 Michal Babej
-Mikhail Lychkov
 Milkey Mouse
 Nikhil Joshi
-Nuno Fachada
 Philip Turner
-Pierre Moreau
 Sergei Barannikov
-Sreelakshmi Haridas
-Timmy Liu
-XZiar
 Zibai Wang
 aharon-abramson
-fodinabor
 joshqti
-oddhack
-pkubaj
 sherry-yuan
 y-novikov
 
 * Sub-module whereami contributors (at least 1 commit):
 Gregory Pakosz
-Jan Beich
 Ian Burgan
-Jean-Michaël Celerier
 Sergey Agievich
-Thomas Willems
 
 * Sub-module LibRaw contributors (at least 1 commit):
 Alex Tutubalin
-Iliah Borg
-lexa
 LibRaw LLC
-Alex Tutubalin, LibRaw LLC
-Jamie Pinheiro
-jabbervorx
-Joan Karadimov
-Miloš Komarčević
-Tim Harder
-Dirk Lemstra
 Egor Egorov
-Gilles Caulier
-Luca Falavigna
 Mark Reid
-maslbl4
+Miloš Komarčević
 Aleks L
-Andreas K. Huettel (dilfridge)
-Daniel Kaneider
-Mario Emmenlauer
-Nuno Cruces
-Philip Ries
+Dirk Lemstra
 Rainer Schielke
-Vincent Torri
-corec
 龙俊良
 Alex
-Alex Gaynor
-Alex Tutubalin @Mac
-Arkady Shapkin
-Artur
-Bernd Kuhls
 Daniel Martinez
-Daniel Rosser
-Dave Stevenson
-David C. Partridge
 Fabien Castan
-Fabrice Fontaine
-Haishan Zhong
-Heiko Becker
-John Hein
-Kevin Wojniak
 LAK132
-Pablo Sichert
-Paolo Barbolini
 Paul Oliver
 Petr Minář
 Pino Toscano
-Přemysl Eric Janouch
-Rafael Sadowski
 Sam James
-Sam Whited
 TOMIKAWA Sotaro
-Thomas Petazzoni
-Tomi Aarnio
-Tracy Wadleigh
 Z. Liu
 davidrankin2
-iliah
-kapankov
-kmilos
 luz paz
 psykose
-robert hasson
 sashashura
 ssssota
-vladimirovich
 
 * Sub-module doxygen-awesome-css contributors (at least 1 commit):
 jothepro
@@ -328,5 +197,97 @@ patricklaf
 pinchartl
 
 * Sub-module sentry-native contributors (at least 1 commit):
+Arpad Borsos
+J-P Nurmi
+Mischan Toosarani-Hausberger
+getsentry-bot
+Armin Ronacher
+Bruno Garcia
+JoshuaMoelans
+dependabot[bot]
+Anton Ovchinnikov
+Ivan Dlugos
+Jan Michael Auer
+relaxolotl
+Ivan Tustanivskyi
+Mikhail Paulyshka
+Amir Mujacic
+Markus Hintersteiner
+Stefan Jandl
+Sebastian Zivota
+sentry-release-bot[bot]
+Anonymous Maarten
+Chris Rudd
+pastdue
+Amphaal
+Sentry Bot
+Stephanie Anderson
+Floris Bruynooghe
+Ivan Blinkov
+Karl Heinz Struggl
+Cameron Royal
+Edwin
+Isaac Devine
+Jan Lupčík
+Michał Janiszewski
+MikeRumplerSentry
+Philipp Hofmann
+PlasmaDev
+R. Savchenko
+Tor Arne Vestbø
+Vitalii Koshura
+cnicolaescu
+4diekmann
+Aleks Kamko
+Alex Lorenz
+Anton Filimonov
+Burak Yigit Kaya
+Calvin Buckley
+Carlos Gomes Martinho
+Chad Whitacre
+Copilot
+Cyriuz
+Daniel Griesser
+Dmitrii Korzhimanov
+Dmytro Korchynskyi
+Greg Cotten
+Hanno J. Gödecke
+James Crosswell
+Janohmat
+Javier Blazquez
+Jeffrey Hung
+Joel Winarske
+Kfir Itzhak
+Ladislav
+Luke Street
+Manoel Aranda Neto
+Martin Delille
+Matt Johnson-Pint
+Michi Hoffmann
+Mike Allison
+Mike Detwiler
+Neil Manvar
+Roman Zavarnitsyn
+Roshan Padaki
+Serhii Snitsaruk
+Strive-Sun
+Thomas Guyard
+Uilian Ries
+Vadim Peretokin
+Wojciech Minko
+Yuriy Levchenko
+Zachary Danz
+andrei-mu
+bschatt
+daxpedda
+espkk
+fix-it-felix-sentry[bot]
+jkosberg
+joshuarli
+mjvankampen
+mwl4
+sappho
+xyz1001
+zhaowq32
 
 And all those of you that made previous releases possible

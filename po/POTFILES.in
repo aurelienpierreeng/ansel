@@ -9,7 +9,6 @@ build/src/iop/introspection_bilateral.cc
 build/src/iop/introspection_bloom.c
 build/src/iop/introspection_blurs.c
 build/src/iop/introspection_borders.c
-build/src/iop/introspection_cacorrect.c
 build/src/iop/introspection_cacorrectrgb.c
 build/src/iop/introspection_censorize.c
 build/src/iop/introspection_channelmixer.c
@@ -98,6 +97,7 @@ src/common/colorlabels.c
 src/common/colorspaces.c
 src/common/color_vocabulary.c
 src/common/colorchecker.h
+src/common/colorchecker.c
 src/common/cups_print.c
 src/common/darktable.c
 src/common/darktable.h
@@ -130,6 +130,7 @@ src/common/printing.c
 src/common/printprof.c
 src/common/pwstorage/pwstorage.c
 src/common/ratings.c
+src/common/sentry.c
 src/common/styles.c
 src/common/utility.c
 src/common/variables.c
@@ -147,6 +148,7 @@ src/develop/imageop.c
 src/develop/imageop_gui.c
 src/develop/lightroom.c
 src/develop/pixelpipe_cache.c
+src/develop/pixelpipe_gpu.c
 src/develop/masks/brush.c
 src/develop/masks/circle.c
 src/develop/masks/ellipse.c
@@ -203,7 +205,6 @@ src/iop/demosaic/lmmse.c
 src/iop/demosaic/rcd.c
 src/iop/restorescans.c
 src/libs/textnotes.c
-src/libs/tools/mask_toolbar.c
 src/iop/ashift.c
 src/iop/atrous.c
 src/iop/basecurve.c
@@ -337,5 +338,13 @@ src/iop/drawlayer/layers.c
 src/iop/drawlayer/runtime.c
 src/iop/drawlayer/worker.c
 src/iop/splittoningrgb.c
+src/external/sentry-native/external/breakpad/src/client/linux/minidump_writer/linux_ptrace_dumper_unittest.cc
+src/external/sentry-native/external/breakpad/src/common/dwarf_cfi_to_module.h
+src/external/sentry-native/external/breakpad/src/common/dwarf_cu_to_module_unittest.cc
+src/external/sentry-native/external/breakpad/src/common/linux/libcurl_wrapper.cc
+src/external/sentry-native/external/crashpad/snapshot/linux/process_reader_linux_test.cc
+src/external/sentry-native/external/crashpad/snapshot/test/test_memory_snapshot.cc
+src/external/sentry-native/external/crashpad/third_party/mini_chromium/mini_chromium/build/write_buildflag_header.py
+src/external/sentry-native/external/crashpad/util/net/http_transport.cc
 # files added by intltool-prepare
 packaging/macosx/open.desktop
