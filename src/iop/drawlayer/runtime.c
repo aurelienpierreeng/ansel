@@ -380,9 +380,11 @@ static void _update_realtime_state(dt_drawlayer_runtime_manager_t *state,
         break;
 
       case DT_DRAWLAYER_RUNTIME_EVENT_GUI_RAW_INPUT:
-        realtime_active = priv->gui_focused && inputs && inputs->gui_attached
-                          && (request->raw_input_kind == DT_DRAWLAYER_RUNTIME_RAW_INPUT_STROKE_BEGIN
-                              || request->raw_input_kind == DT_DRAWLAYER_RUNTIME_RAW_INPUT_SAMPLE);
+        // Realtime mode tracks painting_active only (set by _apply_runtime_event on STROKE_BEGIN/END,
+        // which runs just before this). A SAMPLE raw-input also fires on plain hover (cursor tracking)
+        // while NOT painting; forcing realtime on there toggled it on/off against every pipe-finished,
+        // and each flip paid a full resync_history_main (~44ms). Fall through to the base computation so
+        // hover never enters realtime and only an actual stroke does.
         break;
 
       case DT_DRAWLAYER_RUNTIME_EVENT_NONE:
