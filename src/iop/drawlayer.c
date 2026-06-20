@@ -41,6 +41,7 @@
 #include "develop/imageop_math.h"
 #include "develop/noise_generator.h"
 #include "develop/pixelpipe_cache.h"
+#include "common/interpolation.h"
 #include "gui/color_picker_proxy.h"
 #include "gui/gtk.h"
 #include "gui/gui_throttle.h"
@@ -810,7 +811,15 @@ static int _drawlayer_copy_or_resample_layer_roi(const int devid, cl_mem dev_sou
     if(copy_err == CL_SUCCESS) return CL_SUCCESS;
   }
 
-  return dt_iop_clip_and_zoom_cl(devid, dev_layer_rgba, dev_source_rgba, target_roi, source_roi);
+  /* Force bilinear for the layer matte. The premultiplied-alpha brush stroke is
+   * stamped at full canvas resolution, so this resample only ever previews it at
+   * display scale (mostly downscaling). Bilinear is the only kernel here with no
+   * negative lobes: it cannot overshoot, so it never rings/halos at stroke edges
+   * nor pushes alpha out of [0,1] — unlike the user-pref default (Lanczos) or the
+   * Catmull-Rom "bicubic". On minification dt_interpolation_resample widens the
+   * tap support, so bilinear acts as a clean area filter (no aliasing). */
+  const struct dt_interpolation *const itor = dt_interpolation_new(DT_INTERPOLATION_BILINEAR);
+  return dt_interpolation_resample_cl(itor, devid, dev_layer_rgba, target_roi, dev_source_rgba, source_roi);
 }
 
 static gboolean _drawlayer_acquire_layer_image(const int devid, dt_pixel_cache_entry_t *resolved_entry,
@@ -4178,8 +4187,13 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
         };
         goto fallback_pass_through;
       }
-      dt_iop_clip_and_zoom(layerbuf, source.pixels, &source.target_roi, &source.source_roi, roi_out->width,
-                           source.width);
+      /* Bilinear (not the user pref) for the layer matte — see the OpenCL path in
+       * _drawlayer_copy_or_resample_layer_roi: no negative lobes => no overshoot,
+       * so no edge halos / out-of-range premultiplied alpha. */
+      {
+        const struct dt_interpolation *const itor = dt_interpolation_new(DT_INTERPOLATION_BILINEAR);
+        dt_interpolation_resample(itor, layerbuf, &source.target_roi, source.pixels, &source.source_roi);
+      }
       layer_pixels = layerbuf;
     }
 
