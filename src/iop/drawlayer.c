@@ -1735,9 +1735,21 @@ gboolean dt_drawlayer_commit_dabs(dt_iop_module_t *self, const gboolean record_h
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
   dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
   if(IS_NULL_PTR(g) || IS_NULL_PTR(self->dev)) return TRUE;
-  if(record_history && g->manager.painting_active)
+  /* A stroke is still physically in progress (button held down). Never finalize or
+   * reset it here — that would truncate the live path. This must guard BOTH commit
+   * kinds: a quiet flush (record_history == FALSE, scheduled by GUI_SCROLL /
+   * GUI_SYNC_TEMP_BUFFERS while pending stroke work exists) would otherwise run
+   * _wait_worker_idle + finalize + _reset_stroke_session mid-stroke without ever
+   * clearing painting_active, silently cutting the stroke short. The realtime worker
+   * already keeps base_patch updated incrementally, so there is nothing to flush
+   * mid-stroke; defer a history commit to the worker and no-op a quiet flush. The
+   * real commit runs on STROKE_END / focus-loss / image-change, where
+   * _apply_runtime_event() has already cleared painting_active first. */
+  if(g->manager.painting_active)
   {
-    dt_drawlayer_worker_request_commit(g->stroke.worker);
+    if(record_history) dt_drawlayer_worker_request_commit(g->stroke.worker);
+    dt_print(DT_DEBUG_PERF, "[drawlayer] commit_dabs deferred: stroke in progress (record_history=%d)\n",
+             record_history);
     return TRUE;
   }
 
@@ -3735,6 +3747,8 @@ int mouse_moved(dt_iop_module_t *self, double x, double y, double pressure, int 
     {
       /* Queue overflow or enqueue failure aborts the current stroke so GUI and
        * worker stay in sync on stroke boundaries. */
+      dt_print(DT_DEBUG_PERF, "[drawlayer] stroke abort from mouse_moved: dispatch.ok=%d raw_input_ok=%d\n",
+               dispatch.ok, dispatch.raw_input_ok);
       dt_drawlayer_runtime_manager_update(
           &g->manager,
           &(dt_drawlayer_runtime_update_request_t){

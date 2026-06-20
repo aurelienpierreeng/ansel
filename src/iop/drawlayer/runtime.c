@@ -342,6 +342,7 @@ static void _apply_runtime_event(dt_drawlayer_runtime_manager_t *state,
       break;
   }
 
+  const gboolean painting_before = state->painting_active;
   if(request->event == DT_DRAWLAYER_RUNTIME_EVENT_GUI_RAW_INPUT)
   {
     if(request->raw_input_kind == DT_DRAWLAYER_RUNTIME_RAW_INPUT_STROKE_BEGIN)
@@ -355,6 +356,9 @@ static void _apply_runtime_event(dt_drawlayer_runtime_manager_t *state,
   {
     state->painting_active = FALSE;
   }
+  if(painting_before != state->painting_active)
+    dt_print(DT_DEBUG_PERF, "[drawlayer] painting_active %d->%d by event=%d raw_kind=%d\n",
+             painting_before, state->painting_active, request->event, request->raw_input_kind);
 }
 
 static void _update_realtime_state(dt_drawlayer_runtime_manager_t *state,
