@@ -1674,7 +1674,7 @@
         <option>lanczos3</option>
       </enum>
     </type>
-    <default>lanczos3</default>
+    <default>bicubic</default>
     <shortdescription>pixel interpolator (scaling)</shortdescription>
     <longdescription>pixel interpolator used for scaling (bilinear, bicubic, lanczos2, lanczos3).</longdescription>
   </dtconfig>
