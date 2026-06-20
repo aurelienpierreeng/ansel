@@ -731,7 +731,7 @@ msgstr "B<F1, F2, F3, F4, F5>"
 #: ansel.pod:263 ansel.pod:455
 msgid "Color labels: toggle red, yellow, green, blue and purple"
 msgstr ""
-"Labels de couleurs : basculer en rouge, en jaune, en vert, en bleu et en "
+"Labels de couleur : basculer en rouge, en jaune, en vert, en bleu et en "
 "violet"
 
 #. type: =item
@@ -972,7 +972,7 @@ msgstr "B<Ctrl-f>"
 #. type: textblock
 #: ansel.pod:365 ansel.pod:423 ansel.pod:437
 msgid "Show/hide filmstrip"
-msgstr "Montrer/cacher le bandeau"
+msgstr "Montrer/cacher la pellicule"
 
 #. type: =item
 #: ansel.pod:367
@@ -1110,7 +1110,7 @@ msgstr "Refaire"
 #. type: =head3
 #: ansel.pod:449
 msgid "Filmstrip (when the cursor is on top of the filmstrip)"
-msgstr "Bandeau (quand le curseur est en haut du bandeau)"
+msgstr "Pellicule (quand le curseur est en haut de la pellicule)"
 
 #. type: =head3
 #: ansel.pod:495
