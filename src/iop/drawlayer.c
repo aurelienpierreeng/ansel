@@ -3264,6 +3264,19 @@ void gui_focus(dt_iop_module_t *self, gboolean in)
 }
 
 /** @brief Destroy GUI resources and stop background worker. */
+void quiesce(dt_iop_module_t *self)
+{
+  /* Darkroom is leaving and is about to tear down the pixelpipe nodes and history. The paint worker
+   * runs stroke commits off the GUI thread, and a commit performs a full pipeline history resync
+   * (dt_dev_pixelpipe_update_history_all) that reads/commits every pipe piece. If that runs while
+   * leave() frees the nodes, it faults on freed piece->data. Stop and join the worker now, while the
+   * pipe is still alive, so any in-flight commit completes against valid nodes and no further commit
+   * can start during teardown. */
+  dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
+  if(IS_NULL_PTR(g)) return;
+  dt_drawlayer_worker_stop(self, g->stroke.worker);
+}
+
 void gui_cleanup(dt_iop_module_t *self)
 {
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;

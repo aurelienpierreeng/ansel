@@ -142,6 +142,12 @@ OPTIONAL(void, gui_focus, struct dt_iop_module_t *self, gboolean in);
 /** optional callback invoked before removing a module instance. Return FALSE to cancel the removal. */
 OPTIONAL(gboolean, module_will_remove, struct dt_iop_module_t *self);
 
+/** optional callback invoked on the GUI thread when leaving the darkroom view, BEFORE the pixelpipe
+ * nodes and history are torn down. A module that owns background threads still touching the pipe, dev
+ * or history (e.g. an asynchronous paint/commit worker) must stop/join them here so they cannot run a
+ * resync against freed pipeline nodes during teardown. */
+OPTIONAL(void, quiesce, struct dt_iop_module_t *self);
+
 /** optional event callbacks */
 OPTIONAL(int, mouse_leave, struct dt_iop_module_t *self);
 OPTIONAL(int, mouse_moved, struct dt_iop_module_t *self, double x, double y, double pressure, int which);

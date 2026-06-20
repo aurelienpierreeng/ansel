@@ -2664,6 +2664,16 @@ void leave(dt_view_t *self)
   dev->pipelines_started = FALSE;
   dt_dev_pixelpipe_cache_wait_dump_pending("darkroom-leave-before-cleanup");
 
+  /* Stop module-owned background threads that may still be mutating the pipe, dev or history (e.g.
+   * drawlayer's asynchronous paint/commit worker) BEFORE we tear down pipeline nodes and history
+   * below. Otherwise an in-flight commit resync can run a pipeline synch against pieces this function
+   * is about to free, faulting in whatever module commits next. */
+  for(GList *m = dev->iop; m; m = g_list_next(m))
+  {
+    dt_iop_module_t *mod = (dt_iop_module_t *)m->data;
+    if(mod && mod->quiesce) mod->quiesce(mod);
+  }
+
   _darkroom_pending_focus_module = NULL;
 
   // While we wait for possible pipelines to finish,
