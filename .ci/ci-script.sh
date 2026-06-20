@@ -113,6 +113,7 @@ case "$TARGET" in
       -DBUILD_RS_IDENTIFY=OFF \
       -DUSE_GMIC=OFF \
       -DUSE_LIBSECRET=OFF \
+      -DUSE_SENTRY=OFF \
       $ECO "$SRC_DIR" || (cat "$BUILD_DIR"/CMakeFiles/CMakeOutput.log; cat "$BUILD_DIR"/CMakeFiles/CMakeError.log)
     target_notest
     ;;
@@ -133,6 +134,7 @@ case "$TARGET" in
       -DBUILD_RS_IDENTIFY=OFF \
       -DUSE_GMIC=OFF \
       -DUSE_LIBSECRET=OFF \
+      -DUSE_SENTRY=OFF \
       $ECO "$SRC_DIR" || (cat "$BUILD_DIR"/CMakeFiles/CMakeOutput.log; cat "$BUILD_DIR"/CMakeFiles/CMakeError.log)
     target_notest
     ;;

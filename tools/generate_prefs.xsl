@@ -389,6 +389,19 @@ gboolean restart_required = FALSE;
   <xsl:for-each select="./dtconfiglist/dtconfig[@prefs='storage' and @section='xmp']">
     <xsl:apply-templates select="." mode="tab_block"/>
   </xsl:for-each>
+<xsl:text>
+   {
+      GtkWidget *seclabel = gtk_label_new(_("privacy"));
+      GtkWidget *lbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
+      gtk_box_pack_start(GTK_BOX(lbox), seclabel, FALSE, FALSE, 0);
+      gtk_widget_set_name(lbox, "pref_section");
+      gtk_grid_attach(GTK_GRID(grid), lbox, 0, line++, 2, 1);
+   }
+</xsl:text>
+
+  <xsl:for-each select="./dtconfiglist/dtconfig[@prefs='storage' and @section='privacy']">
+    <xsl:apply-templates select="." mode="tab_block"/>
+  </xsl:for-each>
   <xsl:value-of select="$tab_end" />
 
   <!-- miscellaneous -->

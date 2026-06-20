@@ -118,6 +118,7 @@ FILE(GLOB SOURCE_FILES
   "common/presets.c"
   "common/styles.c"
   "common/selection.c"
+  "common/sentry.c"
   "common/system_signal_handling.c"
   "common/tags.c"
   "common/map_locations.c"
@@ -846,6 +847,11 @@ target_link_libraries(lib_ansel PUBLIC ansel_deps)
 target_link_libraries(lib_ansel PRIVATE lib_ansel_imageio_rawspeed)
 target_link_libraries(lib_ansel PRIVATE lib_ansel_imageio_libraw)
 target_link_libraries(lib_ansel PRIVATE whereami)
+
+if(USE_SENTRY)
+  target_link_libraries(lib_ansel PRIVATE sentry)
+  target_compile_definitions(lib_ansel PRIVATE HAVE_SENTRY=1 SENTRY_DSN="${SENTRY_DSN}")
+endif()
 
 if(WIN32 AND CMAKE_C_COMPILER_ID STREQUAL "Clang")
   # Work around a Windows loader failure (0xC000007B) seen with clang debug PE images.
