@@ -38,12 +38,11 @@ enum dt_interpolation_type
 {
   DT_INTERPOLATION_FIRST = 0,                         /**< Helper for easy iteration on interpolators */
   DT_INTERPOLATION_BILINEAR = DT_INTERPOLATION_FIRST, /**< Bilinear interpolation (aka tent filter) */
-  DT_INTERPOLATION_BICUBIC,                           /**< Bicubic interpolation (with -0.5 parameter) */
-  DT_INTERPOLATION_LANCZOS2,                          /**< Lanczos interpolation (with 2 lobes) */
-  DT_INTERPOLATION_LANCZOS3,                          /**< Lanczos interpolation (with 3 lobes) */
+  DT_INTERPOLATION_BICUBIC,                           /**< Bicubic interpolation (Catmull-Rom, -0.5 parameter) */
+  DT_INTERPOLATION_MITCHELL,                          /**< Mitchell-Netravali cubic (B=C=1/3), near halo-free */
   DT_INTERPOLATION_LAST,                              /**< Helper for easy iteration on interpolators */
-  DT_INTERPOLATION_DEFAULT = DT_INTERPOLATION_BILINEAR,
-  DT_INTERPOLATION_DEFAULT_WARP = DT_INTERPOLATION_BICUBIC,
+  DT_INTERPOLATION_DEFAULT = DT_INTERPOLATION_MITCHELL,
+  DT_INTERPOLATION_DEFAULT_WARP = DT_INTERPOLATION_MITCHELL,
   DT_INTERPOLATION_USERPREF,  /**< can be specified so that user setting is chosen */
   DT_INTERPOLATION_USERPREF_WARP  /**< can be specified so that user setting is chosen */
 };

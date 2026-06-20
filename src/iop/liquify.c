@@ -1543,16 +1543,6 @@ int process(struct dt_iop_module_t *module, const dt_dev_pixelpipe_t *pipe, cons
 
 #ifdef HAVE_OPENCL
 
-// compute lanczos kernel. See: https://en.wikipedia.org/wiki/Lanczos_resampling#Lanczos_kernel
-
-static inline float lanczos(const float a, const float x)
-{
-  if(fabsf(x) >= a) return 0.0f;
-  if(fabsf(x) < FLT_EPSILON) return 1.0f;
-
-  return (a * sinf(DT_M_PI_F * x) * sinf(DT_M_PI_F * x / a)) / (DT_M_PI_F * DT_M_PI_F * x * x);
-}
-
 // compute bicubic kernel. See: https://en.wikipedia.org/wiki/Bicubic_interpolation#Bicubic_convolution_algorithm
 
 static inline float bicubic(const float a, const float x)
@@ -1560,6 +1550,19 @@ static inline float bicubic(const float a, const float x)
   const float absx = fabsf(x);
   if(absx <= 1) return ((a + 2) * absx - (a + 3)) * absx * absx + 1;
   if(absx < 2) return ((a * absx - 5 * a) * absx + 8 * a) * absx - 4 * a;
+  return 0.0f;
+}
+
+// compute Mitchell-Netravali cubic kernel (B=C=1/3): sharp but effectively
+// halo-free, unlike Catmull-Rom bicubic and Lanczos which overshoot at edges.
+
+static inline float mitchell(const float x)
+{
+  const float absx = fabsf(x);
+  const float x2 = absx * absx;
+  const float x3 = x2 * absx;
+  if(absx < 1.0f) return (7.0f / 6.0f) * x3 - 2.0f * x2 + 8.0f / 9.0f;
+  if(absx < 2.0f) return -(7.0f / 18.0f) * x3 + 2.0f * x2 - (10.0f / 3.0f) * absx + 16.0f / 9.0f;
   return 0.0f;
 }
 
@@ -1610,19 +1613,12 @@ static cl_int_t apply_global_distortion_map_cl(struct dt_iop_module_t *module,
         for(int i = 0; i <= kdesc.size * kdesc.resolution; ++i)
           k[i] = bicubic(0.5f, (float) i / kdesc.resolution);
        break;
-     case DT_INTERPOLATION_LANCZOS2:
+     case DT_INTERPOLATION_MITCHELL:
        kdesc.size = 2;
        k = malloc(sizeof(float) * ((size_t)kdesc.size * kdesc.resolution + 1));
        if(k)
         for(int i = 0; i <= kdesc.size * kdesc.resolution; ++i)
-          k[i] = lanczos(2, (float) i / kdesc.resolution);
-       break;
-     case DT_INTERPOLATION_LANCZOS3:
-       kdesc.size = 3;
-       k = malloc(sizeof(float) * ((size_t)kdesc.size * kdesc.resolution + 1));
-       if(k)
-        for(int i = 0; i <= kdesc.size * kdesc.resolution; ++i)
-          k[i] = lanczos(3, (float) i / kdesc.resolution);
+          k[i] = mitchell((float) i / kdesc.resolution);
        break;
      default:
        return FALSE;

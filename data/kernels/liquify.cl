@@ -122,7 +122,7 @@ warp_kernel (read_only image2d_t in,
   int2 sample_pos;
   float4 Sxy = (float4) 0.0f;
 
-  // loop over support region (eg. 6x6 pixels for lanczos3)
+  // loop over support region (eg. 4x4 pixels for bicubic/mitchell)
   for (sample_pos.y = 1 - a; sample_pos.y <= a; ++sample_pos.y)
     for (sample_pos.x = 1 - a; sample_pos.x <= a; ++sample_pos.x)
       Sxy += (read_imagef (in, sampleri, in_pos + convert_float2 (sample_pos))

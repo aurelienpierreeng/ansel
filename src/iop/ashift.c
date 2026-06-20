@@ -550,8 +550,7 @@ typedef struct dt_iop_ashift_global_data_t
 {
   int kernel_ashift_bilinear;
   int kernel_ashift_bicubic;
-  int kernel_ashift_lanczos2;
-  int kernel_ashift_lanczos3;
+  int kernel_ashift_mitchell;
 } dt_iop_ashift_global_data_t;
 
 int legacy_params(dt_iop_module_t *self, const void *const old_params, const int old_version,
@@ -3411,11 +3410,8 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     case DT_INTERPOLATION_BICUBIC:
       ldkernel = gd->kernel_ashift_bicubic;
       break;
-    case DT_INTERPOLATION_LANCZOS2:
-      ldkernel = gd->kernel_ashift_lanczos2;
-      break;
-    case DT_INTERPOLATION_LANCZOS3:
-      ldkernel = gd->kernel_ashift_lanczos3;
+    case DT_INTERPOLATION_MITCHELL:
+      ldkernel = gd->kernel_ashift_mitchell;
       break;
     default:
       goto error;
@@ -5678,8 +5674,7 @@ void init_global(dt_iop_module_so_t *module)
   const int program = 2; // basic.cl, from programs.conf
   gd->kernel_ashift_bilinear = dt_opencl_create_kernel(program, "ashift_bilinear");
   gd->kernel_ashift_bicubic = dt_opencl_create_kernel(program, "ashift_bicubic");
-  gd->kernel_ashift_lanczos2 = dt_opencl_create_kernel(program, "ashift_lanczos2");
-  gd->kernel_ashift_lanczos3 = dt_opencl_create_kernel(program, "ashift_lanczos3");
+  gd->kernel_ashift_mitchell = dt_opencl_create_kernel(program, "ashift_mitchell");
 }
 
 void cleanup_global(dt_iop_module_so_t *module)
@@ -5687,8 +5682,7 @@ void cleanup_global(dt_iop_module_so_t *module)
   dt_iop_ashift_global_data_t *gd = (dt_iop_ashift_global_data_t *)module->data;
   dt_opencl_free_kernel(gd->kernel_ashift_bilinear);
   dt_opencl_free_kernel(gd->kernel_ashift_bicubic);
-  dt_opencl_free_kernel(gd->kernel_ashift_lanczos2);
-  dt_opencl_free_kernel(gd->kernel_ashift_lanczos3);
+  dt_opencl_free_kernel(gd->kernel_ashift_mitchell);
   dt_free(module->data);
 }
 

@@ -170,8 +170,7 @@ typedef struct dt_iop_lensfun_global_data_t
   lfDatabase *db;
   int kernel_lens_distort_bilinear;
   int kernel_lens_distort_bicubic;
-  int kernel_lens_distort_lanczos2;
-  int kernel_lens_distort_lanczos3;
+  int kernel_lens_distort_mitchell;
   int kernel_lens_vignette;
 } dt_iop_lensfun_global_data_t;
 
@@ -736,11 +735,8 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     case DT_INTERPOLATION_BICUBIC:
       ldkernel = gd->kernel_lens_distort_bicubic;
       break;
-    case DT_INTERPOLATION_LANCZOS2:
-      ldkernel = gd->kernel_lens_distort_lanczos2;
-      break;
-    case DT_INTERPOLATION_LANCZOS3:
-      ldkernel = gd->kernel_lens_distort_lanczos3;
+    case DT_INTERPOLATION_MITCHELL:
+      ldkernel = gd->kernel_lens_distort_mitchell;
       break;
     default:
       return FALSE;
@@ -1305,8 +1301,7 @@ void init_global(dt_iop_module_so_t *module)
   module->data = gd;
   gd->kernel_lens_distort_bilinear = dt_opencl_create_kernel(program, "lens_distort_bilinear");
   gd->kernel_lens_distort_bicubic = dt_opencl_create_kernel(program, "lens_distort_bicubic");
-  gd->kernel_lens_distort_lanczos2 = dt_opencl_create_kernel(program, "lens_distort_lanczos2");
-  gd->kernel_lens_distort_lanczos3 = dt_opencl_create_kernel(program, "lens_distort_lanczos3");
+  gd->kernel_lens_distort_mitchell = dt_opencl_create_kernel(program, "lens_distort_mitchell");
   gd->kernel_lens_vignette = dt_opencl_create_kernel(program, "lens_vignette");
 
   lfDatabase *dt_iop_lensfun_db = new lfDatabase;
@@ -1488,8 +1483,7 @@ void cleanup_global(dt_iop_module_so_t *module)
 
   dt_opencl_free_kernel(gd->kernel_lens_distort_bilinear);
   dt_opencl_free_kernel(gd->kernel_lens_distort_bicubic);
-  dt_opencl_free_kernel(gd->kernel_lens_distort_lanczos2);
-  dt_opencl_free_kernel(gd->kernel_lens_distort_lanczos3);
+  dt_opencl_free_kernel(gd->kernel_lens_distort_mitchell);
   dt_opencl_free_kernel(gd->kernel_lens_vignette);
   dt_free(module->data);
 }

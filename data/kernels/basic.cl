@@ -1654,46 +1654,18 @@ interpolation_func_bicubic(float t)
   return r;
 }
 
-#define DT_LANCZOS_EPSILON (1e-9f)
-
-#if 0
+/* Mitchell-Netravali cubic (B=C=1/3): sharp but effectively halo-free,
+ * unlike Catmull-Rom bicubic and Lanczos which overshoot at edges. */
 float
-interpolation_func_lanczos(float width, float t)
+interpolation_func_mitchell(float t)
 {
-  float ta = fabs(t);
-
-  float r = (ta > width) ? 0.0f : ((ta < DT_LANCZOS_EPSILON) ? 1.0f : width*native_sin(M_PI_F*t)*native_sin(M_PI_F*t/width)/(M_PI_F*M_PI_F*t*t));
-
-  return r;
+  t = fabs(t);
+  const float t2 = t * t;
+  const float t3 = t2 * t;
+  return (t >= 2.0f) ? 0.0f
+       : ((t > 1.0f) ? (-(7.0f / 18.0f) * t3 + 2.0f * t2 - (10.0f / 3.0f) * t + 16.0f / 9.0f)
+                     : ((7.0f / 6.0f) * t3 - 2.0f * t2 + 8.0f / 9.0f));
 }
-#else
-float
-sinf_fast(float t)
-{
-  /***** if you change this function, you must also change the copy in src/common/math.h *****/
-  const float a = 4.0f/(M_PI_F*M_PI_F);
-  const float p = 0.225f;
-
-  t = a*t*(M_PI_F - fabs(t));
-
-  return p*(t*fabs(t) - t) + t;
-}
-
-float
-interpolation_func_lanczos(float width, float t)
-{
-  /* Compute a value for sinf(pi.t) in [-pi pi] for which the value will be
-   * correct */
-  int a = (int)t;
-  float r = t - (float)a;
-
-  // Compute the correct sign for sinf(pi.r)
-  union { float f; unsigned int i; } sign;
-  sign.i = ((a&1)<<31) | 0x3f800000;
-
-  return (DT_LANCZOS_EPSILON + width*sign.f*sinf_fast(M_PI_F*r)*sinf_fast(M_PI_F*t/width))/(DT_LANCZOS_EPSILON + M_PI_F*M_PI_F*t*t);
-}
-#endif
 
 
 /* kernel for clip&rotate: bilinear interpolation */
@@ -1800,127 +1772,7 @@ clip_rotate_bicubic(read_only image2d_t in, write_only image2d_t out, const int 
 }
 
 
-/* kernel for clip&rotate: lanczos2 interpolation */
-__kernel void
-clip_rotate_lanczos2(read_only image2d_t in, write_only image2d_t out, const int width, const int height,
-            const int in_width, const int in_height,
-            const int2 roi_in, const float2 roi_out, const float scale_in, const float scale_out,
-            const int flip, const float2 t, const float2 k, const float4 mat,
-            const float4 k_space, const float2 ka, const float4 ma, const float2 mb)
-{
-  const int x = get_global_id(0);
-  const int y = get_global_id(1);
 
-  const int kwidth = 2;
-
-  if(x >= width || y >= height) return;
-
-  float2 pi, po;
-
-  pi.x = roi_out.x + x + 0.5f;
-  pi.y = roi_out.y + y + 0.5f;
-
-  pi.x -= flip ? t.y * scale_out : t.x * scale_out;
-  pi.y -= flip ? t.x * scale_out : t.y * scale_out;
-
-  pi /= scale_out;
-  backtransform(&pi, &po, mat, k);
-  po *= scale_in;
-
-  po.x += t.x * scale_in;
-  po.y += t.y * scale_in;
-
-  if (k_space.z > 0.0f) keystone_backtransform(&po,k_space,ka,ma,mb);
-
-  po.x -= roi_in.x + 0.5f;
-  po.y -= roi_in.y + 0.5f;
-
-  int tx = po.x;
-  int ty = po.y;
-
-  float4 pixel = (float4)0.0f;
-  float weight = 0.0f;
-
-  for(int jj = 1 - kwidth; jj <= kwidth; jj++)
-    for(int ii= 1 - kwidth; ii <= kwidth; ii++)
-  {
-    const int i = tx + ii;
-    const int j = ty + jj;
-
-    float wx = interpolation_func_lanczos(2, (float)i - po.x);
-    float wy = interpolation_func_lanczos(2, (float)j - po.y);
-    float w = wx * wy;
-
-    pixel += read_imagef(in, sampleri, (int2)(i, j)) * w;
-    weight += w;
-  }
-
-  pixel = (tx >= 0 && ty >= 0 && tx < in_width && ty < in_height) ? pixel / weight : (float4)0.0f;
-
-  write_imagef (out, (int2)(x, y), pixel);
-}
-
-
-
-/* kernel for clip&rotate: lanczos3 interpolation */
-__kernel void
-clip_rotate_lanczos3(read_only image2d_t in, write_only image2d_t out, const int width, const int height,
-            const int in_width, const int in_height,
-            const int2 roi_in, const float2 roi_out, const float scale_in, const float scale_out,
-            const int flip, const float2 t, const float2 k, const float4 mat,
-            const float4 k_space, const float2 ka, const float4 ma, const float2 mb)
-{
-  const int x = get_global_id(0);
-  const int y = get_global_id(1);
-
-  const int kwidth = 3;
-
-  if(x >= width || y >= height) return;
-
-  float2 pi, po;
-
-  pi.x = roi_out.x + x + 0.5f;
-  pi.y = roi_out.y + y + 0.5f;
-
-  pi.x -= flip ? t.y * scale_out : t.x * scale_out;
-  pi.y -= flip ? t.x * scale_out : t.y * scale_out;
-
-  pi /= scale_out;
-  backtransform(&pi, &po, mat, k);
-  po *= scale_in;
-
-  po.x += t.x * scale_in;
-  po.y += t.y * scale_in;
-
-  if (k_space.z > 0.0f) keystone_backtransform(&po,k_space,ka,ma,mb);
-
-  po.x -= roi_in.x + 0.5f;
-  po.y -= roi_in.y + 0.5f;
-
-  int tx = (int)po.x;
-  int ty = (int)po.y;
-
-  float4 pixel = (float4)0.0f;
-  float weight = 0.0f;
-
-  for(int jj = 1 - kwidth; jj <= kwidth; jj++)
-    for(int ii= 1 - kwidth; ii <= kwidth; ii++)
-  {
-    const int i = tx + ii;
-    const int j = ty + jj;
-
-    float wx = interpolation_func_lanczos(3, (float)i - po.x);
-    float wy = interpolation_func_lanczos(3, (float)j - po.y);
-    float w = wx * wy;
-
-    pixel += read_imagef(in, sampleri, (int2)(i, j)) * w;
-    weight += w;
-  }
-
-  pixel = (tx >= 0 && ty >= 0 && tx < in_width && ty < in_height) ? pixel / weight : (float4)0.0f;
-
-  write_imagef (out, (int2)(x, y), pixel);
-}
 
 
 /* kernels for the lens plugin: bilinear interpolation */
@@ -2123,9 +1975,9 @@ lens_distort_bicubic (read_only image2d_t in, write_only image2d_t out, const in
 }
 
 
-/* kernels for the lens plugin: lanczos2 interpolation */
+/* kernels for the lens plugin: Mitchell-Netravali interpolation (halo-free cubic) */
 kernel void
-lens_distort_lanczos2 (read_only image2d_t in, write_only image2d_t out, const int width, const int height,
+lens_distort_mitchell (read_only image2d_t in, write_only image2d_t out, const int width, const int height,
                       const int iwidth, const int iheight, const int roi_in_x, const int roi_in_y, global float *pi,
                       const int do_nan_checks, const int monochrome)
 {
@@ -2182,8 +2034,8 @@ lens_distort_lanczos2 (read_only image2d_t in, write_only image2d_t out, const i
     i = (i <= iwidth - 1) ? i : iwidth - 1;
     j = (j <= iheight - 1) ? j : iheight - 1;
 
-    float wx = interpolation_func_lanczos(2, (float)i - rx);
-    float wy = interpolation_func_lanczos(2, (float)j - ry);
+    float wx = interpolation_func_mitchell((float)i - rx);
+    float wy = interpolation_func_mitchell((float)j - ry);
     float w = wx * wy;
 
     sum += read_imagef(in, samplerc, (int2)(i, j)).x * w;
@@ -2214,8 +2066,8 @@ lens_distort_lanczos2 (read_only image2d_t in, write_only image2d_t out, const i
     i = (i <= iwidth - 1) ? i : iwidth - 1;
     j = (j <= iheight - 1) ? j : iheight - 1;
 
-    float wx = interpolation_func_lanczos(2, (float)i - rx);
-    float wy = interpolation_func_lanczos(2, (float)j - ry);
+    float wx = interpolation_func_mitchell((float)i - rx);
+    float wy = interpolation_func_mitchell((float)j - ry);
     float w = wx * wy;
 
     sum2 += read_imagef(in, samplerc, (int2)(i, j)).yw * w;
@@ -2246,146 +2098,8 @@ lens_distort_lanczos2 (read_only image2d_t in, write_only image2d_t out, const i
     i = (i <= iwidth - 1) ? i : iwidth - 1;
     j = (j <= iheight - 1) ? j : iheight - 1;
 
-    float wx = interpolation_func_lanczos(2, (float)i - rx);
-    float wy = interpolation_func_lanczos(2, (float)j - ry);
-    float w = wx * wy;
-
-    sum += read_imagef(in, samplerc, (int2)(i, j)).z * w;
-    weight += w;
-  }
-  pixel.z = sum/weight;
-
-  pixel = all(isfinite(pixel.xyz)) ? pixel : (float4)0.0f;
-  if(monochrome) pixel.x = pixel.z = pixel.y;
-
-  write_imagef (out, (int2)(x, y), pixel);
-}
-
-
-/* kernels for the lens plugin: lanczos3 interpolation */
-kernel void
-lens_distort_lanczos3 (read_only image2d_t in, write_only image2d_t out, const int width, const int height,
-                      const int iwidth, const int iheight, const int roi_in_x, const int roi_in_y, global float *pi,
-                      const int do_nan_checks, const int monochrome)
-{
-  const int x = get_global_id(0);
-  const int y = get_global_id(1);
-
-  const int kwidth = 3;
-
-  if(x >= width || y >= height) return;
-
-  float4 pixel = (float4)0.0f;
-
-  float rx, ry;
-  int tx, ty;
-  float sum, weight;
-  float2 sum2;
-  const int piwidth = 2*3*width;
-  global float *ppi = pi + mad24(y, piwidth, 2*3*x);
-
-  if(do_nan_checks)
-  {
-    bool valid = true;
-
-    for(int i = 0; i < 6; i++) valid = valid && isfinite(ppi[i]);
-
-    if(!valid)
-    {
-      pixel = (float4)0.0f;
-      write_imagef (out, (int2)(x, y), pixel);
-      return;
-    }
-  }
-
-  rx = ppi[0] - (float)roi_in_x;
-  ry = ppi[1] - (float)roi_in_y;
-  rx = (rx >= 0) ? rx : 0;
-  ry = (ry >= 0) ? ry : 0;
-  rx = (rx <= iwidth - 1) ? rx : iwidth - 1;
-  ry = (ry <= iheight - 1) ? ry : iheight - 1;
-
-  tx = rx;
-  ty = ry;
-
-  sum = 0.0f;
-  weight = 0.0f;
-  for(int jj = 1 - kwidth; jj <= kwidth; jj++)
-    for(int ii= 1 - kwidth; ii <= kwidth; ii++)
-  {
-    int i = tx + ii;
-    int j = ty + jj;
-    i = (i >= 0) ? i : 0;
-    j = (j >= 0) ? j : 0;
-    i = (i <= iwidth - 1) ? i : iwidth - 1;
-    j = (j <= iheight - 1) ? j : iheight - 1;
-
-    float wx = interpolation_func_lanczos(3, (float)i - rx);
-    float wy = interpolation_func_lanczos(3, (float)j - ry);
-    float w = wx * wy;
-
-    sum += read_imagef(in, samplerc, (int2)(i, j)).x * w;
-    weight += w;
-  }
-  pixel.x = sum/weight;
-
-
-  rx = ppi[2] - (float)roi_in_x;
-  ry = ppi[3] - (float)roi_in_y;
-  rx = (rx >= 0) ? rx : 0;
-  ry = (ry >= 0) ? ry : 0;
-  rx = (rx <= iwidth - 1) ? rx : iwidth - 1;
-  ry = (ry <= iheight - 1) ? ry : iheight - 1;
-
-  tx = rx;
-  ty = ry;
-
-  sum2 = (float2)0.0f;
-  weight = 0.0f;
-  for(int jj = 1 - kwidth; jj <= kwidth; jj++)
-    for(int ii= 1 - kwidth; ii <= kwidth; ii++)
-  {
-    int i = tx + ii;
-    int j = ty + jj;
-    i = (i >= 0) ? i : 0;
-    j = (j >= 0) ? j : 0;
-    i = (i <= iwidth - 1) ? i : iwidth - 1;
-    j = (j <= iheight - 1) ? j : iheight - 1;
-
-    float wx = interpolation_func_lanczos(3, (float)i - rx);
-    float wy = interpolation_func_lanczos(3, (float)j - ry);
-    float w = wx * wy;
-
-    sum2 += read_imagef(in, samplerc, (int2)(i, j)).yw * w;
-    weight += w;
-  }
-  pixel.yw = sum2/weight;
-
-
-  rx = ppi[4] - (float)roi_in_x;
-  ry = ppi[5] - (float)roi_in_y;
-  rx = (rx >= 0) ? rx : 0;
-  ry = (ry >= 0) ? ry : 0;
-  rx = (rx <= iwidth - 1) ? rx : iwidth - 1;
-  ry = (ry <= iheight - 1) ? ry : iheight - 1;
-
-  tx = rx;
-  ty = ry;
-
-  sum = 0.0f;
-  weight = 0.0f;
-  for(int jj = 1 - kwidth; jj <= kwidth; jj++)
-    for(int ii= 1 - kwidth; ii <= kwidth; ii++)
-  {
-    int i = tx + ii;
-    int j = ty + jj;
-    i = (i >= 0) ? i : 0;
-    j = (j >= 0) ? j : 0;
-    i = (i <= iwidth - 1) ? i : iwidth - 1;
-    j = (j <= iheight - 1) ? j : iheight - 1;
-
-    float wx = interpolation_func_lanczos(3, (float)i - rx);
-    float wy = interpolation_func_lanczos(3, (float)j - ry);
+    float wx = interpolation_func_mitchell((float)i - rx);
+    float wy = interpolation_func_mitchell((float)j - ry);
     float w = wx * wy;
 
     sum += read_imagef(in, samplerc, (int2)(i, j)).z * w;
@@ -2512,9 +2226,9 @@ ashift_bicubic (read_only image2d_t in, write_only image2d_t out, const int widt
 }
 
 
-/* kernel for the ashift module: lanczos2 interpolation */
+/* kernel for the ashift module: Mitchell-Netravali interpolation (halo-free cubic) */
 kernel void
-ashift_lanczos2(read_only image2d_t in, write_only image2d_t out, const int width, const int height,
+ashift_mitchell(read_only image2d_t in, write_only image2d_t out, const int width, const int height,
                 const int iwidth, const int iheight, const int2 roi_in, const int2 roi_out,
                 const float in_scale, const float out_scale, const float2 clip, global float *homograph)
 {
@@ -2563,73 +2277,8 @@ ashift_lanczos2(read_only image2d_t in, write_only image2d_t out, const int widt
     const int i = tx + ii;
     const int j = ty + jj;
 
-    float wx = interpolation_func_lanczos(2, (float)i - rx);
-    float wy = interpolation_func_lanczos(2, (float)j - ry);
-    float w = wx * wy;
-
-    pixel += read_imagef(in, sampleri, (int2)(i, j)) * w;
-    weight += w;
-  }
-
-  pixel = (tx >= 0 && ty >= 0 && tx < iwidth && ty < iheight) ? pixel/weight : (float4)0.0f;
-
-  write_imagef (out, (int2)(x, y), pixel);
-}
-
-
-/* kernels for the ashift module: lanczos3 interpolation */
-kernel void
-ashift_lanczos3(read_only image2d_t in, write_only image2d_t out, const int width, const int height,
-                const int iwidth, const int iheight, const int2 roi_in, const int2 roi_out,
-                const float in_scale, const float out_scale, const float2 clip, global float *homograph)
-{
-  const int x = get_global_id(0);
-  const int y = get_global_id(1);
-
-  const int kwidth = 3;
-
-  if(x >= width || y >= height) return;
-
-  float pin[3], pout[3];
-
-  // convert output pixel coordinates to original image coordinates
-  pout[0] = roi_out.x + x + clip.x;
-  pout[1] = roi_out.y + y + clip.y;
-  pout[0] /= out_scale;
-  pout[1] /= out_scale;
-  pout[2] = 1.0f;
-
-  // apply homograph
-  for(int i = 0; i < 3; i++)
-  {
-    pin[i] = 0.0f;
-    for(int j = 0; j < 3; j++) pin[i] += homograph[3 * i + j] * pout[j];
-  }
-
-  // convert to input pixel coordinates
-  pin[0] /= pin[2];
-  pin[1] /= pin[2];
-  pin[0] *= in_scale;
-  pin[1] *= in_scale;
-  pin[0] -= roi_in.x;
-  pin[1] -= roi_in.y;
-
-  // get output values by interpolation from input image
-  float rx = pin[0];
-  float ry = pin[1];
-  int tx = rx;
-  int ty = ry;
-
-  float4 pixel = (float4)0.0f;
-  float weight = 0.0f;
-  for(int jj = 1 - kwidth; jj <= kwidth; jj++)
-    for(int ii= 1 - kwidth; ii <= kwidth; ii++)
-  {
-    const int i = tx + ii;
-    const int j = ty + jj;
-
-    float wx = interpolation_func_lanczos(3, (float)i - rx);
-    float wy = interpolation_func_lanczos(3, (float)j - ry);
+    float wx = interpolation_func_mitchell((float)i - rx);
+    float wy = interpolation_func_mitchell((float)j - ry);
     float w = wx * wy;
 
     pixel += read_imagef(in, sampleri, (int2)(i, j)) * w;

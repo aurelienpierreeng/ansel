@@ -1657,12 +1657,12 @@
       <enum>
         <option>bilinear</option>
         <option>bicubic</option>
-        <option>lanczos2</option>
+        <option>mitchell</option>
       </enum>
     </type>
-    <default>bicubic</default>
+    <default>mitchell</default>
     <shortdescription>pixel interpolator (warp)</shortdescription>
-    <longdescription>pixel interpolator used in modules for rotation, lens correction, liquify, cropping and final scaling (bilinear, bicubic, lanczos2).</longdescription>
+    <longdescription>pixel interpolator used in modules for rotation, lens correction, liquify, cropping and final scaling. bilinear (soft, no overshoot), bicubic (Catmull-Rom, sharp but rings at edges), mitchell (Mitchell-Netravali, sharp and effectively halo-free).</longdescription>
   </dtconfig>
   <dtconfig prefs="processing" section="general">
     <name>plugins/lighttable/export/pixel_interpolator</name>
@@ -1670,13 +1670,12 @@
       <enum>
         <option>bilinear</option>
         <option>bicubic</option>
-        <option>lanczos2</option>
-        <option>lanczos3</option>
+        <option>mitchell</option>
       </enum>
     </type>
-    <default>bicubic</default>
+    <default>mitchell</default>
     <shortdescription>pixel interpolator (scaling)</shortdescription>
-    <longdescription>pixel interpolator used for scaling (bilinear, bicubic, lanczos2, lanczos3).</longdescription>
+    <longdescription>pixel interpolator used for scaling. bilinear (soft, no overshoot), bicubic (Catmull-Rom, sharp but rings at edges), mitchell (Mitchell-Netravali, sharp and effectively halo-free).</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/lighttable/export/dimensions_type</name>
