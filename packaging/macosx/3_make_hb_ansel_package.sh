@@ -327,8 +327,12 @@ cp -L "$homebrewHome"/share/themes/Mac/gtk-3.0/gtk-keys.css "$dtResourcesDir"/sh
 # Add fonts
 cp fonts/*  "$dtResourcesDir"/fonts/
 
-# Patch ansel.css - Solving font issue with Roboto condensed
-patch "$dtResourcesDir"/share/ansel/themes/ansel.css ansel.css.patch
+# Strip macOS-incompatible CSS declarations from ansel.css.
+# Rather than a brittle line-numbered patch, lines that must be dropped on macOS
+# are tagged inline in data/themes/ansel.css with an "ansel-macos-strip" comment
+# marker. This removes them wherever they end up, regardless of line shifts.
+# (Currently: font-stretch: condensed, which makes Roboto Condensed render badly.)
+sed -i -e '/ansel-macos-strip/d' "$dtResourcesDir"/share/ansel/themes/ansel.css
 
 # Create Icon file
 if [ -d "$buildDir"/Icons.iconset ]; then

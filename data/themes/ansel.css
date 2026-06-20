@@ -273,7 +273,7 @@ treeview *:selected:not(check) {
     "Ubuntu Condensed", "Ubuntu", 
     "IPAPGothic", "Cantarell", sans-serif;
   font-weight: 400;
-  font-stretch: condensed;
+  font-stretch: condensed; /* ansel-macos-strip: Roboto Condensed renders badly on macOS */
   font-size: 1.05em;
 }
 
