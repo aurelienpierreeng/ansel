@@ -1097,7 +1097,7 @@ void gui_init(struct dt_iop_module_t *self)
 
   GtkWidget *label, *box;
 
-  box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   label = dtgtk_reset_label_new(_("border color"), self, &p->color, 3 * sizeof(float));
   gtk_box_pack_start(GTK_BOX(box), label, TRUE, TRUE, 0);
   g->colorpick = gtk_color_button_new_with_rgba(&color);
@@ -1109,7 +1109,7 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(GTK_WIDGET(g->border_picker), _("pick border color from image"));
   gtk_box_pack_start(GTK_BOX(self->widget), box, TRUE, TRUE, 0);
 
-  box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   label = dtgtk_reset_label_new(_("frame line color"), self, &p->color, 3 * sizeof(float));
   gtk_box_pack_start(GTK_BOX(box), label, TRUE, TRUE, 0);
   g->frame_colorpick = gtk_color_button_new_with_rgba(&color);

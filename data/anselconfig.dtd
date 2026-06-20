@@ -3,7 +3,7 @@
 <!ATTLIST dtconfig
 	prefs (views|processing|security|cpugpu|storage|misc) #IMPLIED
         section
-        (darkroom|lighttable|otherviews|session|interface|other|tags|geoloc|slideshow|cpugpu|database|xmp|accel|general|modules|thumbs|views|libraw) #IMPLIED
+        (darkroom|lighttable|otherviews|session|interface|other|tags|geoloc|slideshow|cpugpu|database|xmp|accel|general|modules|thumbs|views|libraw|privacy) #IMPLIED
         dialog (collect|recentcollect|import|tagging) #IMPLIED
         ui (yes|no) #IMPLIED
         restart (true|false) #IMPLIED

@@ -159,36 +159,29 @@ static void _pop_undo(gpointer user_data, const dt_undo_type_t type, dt_undo_dat
 static void _copy_text_sidecar_if_present(const char *src_image_path, const char *dest_image_path);
 static void _move_text_sidecar_if_present(const char *src_image_path, const char *dest_image_path, const gboolean overwrite);
 
-int dt_image_is_ldr(const dt_image_t *img)
-{
-  const char *c = img->filename + strlen(img->filename);
-  while(*c != '.' && c > img->filename) c--;
-  if((img->flags & DT_IMAGE_LDR) || !strcasecmp(c, ".jpg") || !strcasecmp(c, ".png")
-     || !strcasecmp(c, ".ppm"))
-    return 1;
-  else
-    return 0;
-}
-
-int dt_image_is_hdr(const dt_image_t *img)
-{
-  const char *c = img->filename + strlen(img->filename);
-  while(*c != '.' && c > img->filename) c--;
-  if((img->flags & DT_IMAGE_HDR) || !strcasecmp(c, ".exr") || !strcasecmp(c, ".hdr")
-     || !strcasecmp(c, ".pfm"))
-    return 1;
-  else
-    return 0;
-}
-
 // NULL terminated list of supported non-RAW extensions
 //  const char *dt_non_raw_extensions[]
 //    = { ".jpeg", ".jpg",  ".pfm", ".hdr", ".exr", ".pxn", ".tif", ".tiff", ".png",
 //        ".j2c",  ".j2k",  ".jp2", ".jpc", ".gif", ".jpc", ".jp2", ".bmp",  ".dcm",
 //        ".jng",  ".miff", ".mng", ".pbm", ".pnm", ".ppm", ".pgm", NULL };
-int dt_image_is_raw(const dt_image_t *img)
+gboolean dt_image_is_raw(const dt_image_t *img)
 {
-  return (img->flags & DT_IMAGE_RAW);
+  return (img->flags & DT_IMAGE_RAW) != 0;
+}
+
+// LDR / HDR are flag-only predicates now: no filename-extension sniffing. The flags are set by the
+// decoding codec from the real file content (the buffer datatype is not a dynamic-range signal:
+// every raster decodes into a TYPE_FLOAT working buffer regardless of LDR/HDR), so these report what
+// was really loaded, not what the file name suggested. They are kept as a public API so callers
+// don't open-code the bitmask test.
+gboolean dt_image_is_ldr(const dt_image_t *img)
+{
+  return (img->flags & DT_IMAGE_LDR) != 0;
+}
+
+gboolean dt_image_is_hdr(const dt_image_t *img)
+{
+  return (img->flags & DT_IMAGE_HDR) != 0;
 }
 
 gboolean dt_image_is_monochrome(const dt_image_t *img)
@@ -225,7 +218,6 @@ static void _image_set_monochrome_flag(const int32_t imgid, gboolean monochrome,
     {
       const int mask = dt_image_monochrome_flags(img);
       dt_image_cache_write_release(darktable.image_cache, img, DT_IMAGE_CACHE_RELAXED);
-      dt_imageio_update_monochrome_workflow_tag(imgid, mask);
 
       if(undo_on)
       {
@@ -264,19 +256,19 @@ static gboolean _image_matrix_has_data(const float *matrix, const int count)
 
 gboolean dt_image_is_matrix_correction_supported(const dt_image_t *img)
 {
+  // Whether a camera input matrix (and the white balance / color calibration it feeds) applies
+  // depends only on the colorimetry axis, never on the mosaic axis: an already-demosaiced raw
+  // (sRAW / linear DNG, e.g. DxO PureRAW) still carries raw colorimetry and an embedded matrix
+  // and must get matrix correction. A previous `S_RAW && dsc.filters == 0 -> FALSE` short-circuit
+  // wrongly excluded exactly those files, leaving white balance and color calibration disabled
+  // (green renders, issue #729).
   if(!(img->flags & (DT_IMAGE_RAW | DT_IMAGE_S_RAW))) return FALSE;
   if(img->flags & DT_IMAGE_MONOCHROME) return FALSE;
-  if((img->flags & DT_IMAGE_S_RAW) && img->dsc.filters == 0) return FALSE;
 
   const gboolean has_d65 = _image_matrix_has_data(img->d65_color_matrix, 9);
   const gboolean has_adobe = _image_matrix_has_data(&img->adobe_XYZ_to_CAM[0][0], 9);
 
   return (has_d65 || has_adobe) ? TRUE : FALSE;
-}
-
-gboolean dt_image_is_rawprepare_supported(const dt_image_t *img)
-{
-  return (img->flags & (DT_IMAGE_RAW | DT_IMAGE_S_RAW)) ? TRUE : FALSE;
 }
 
 gboolean dt_image_use_monochrome_workflow(const dt_image_t *img)
@@ -288,6 +280,134 @@ gboolean dt_image_use_monochrome_workflow(const dt_image_t *img)
 int dt_image_monochrome_flags(const dt_image_t *img)
 {
   return (img->flags & (DT_IMAGE_MONOCHROME | DT_IMAGE_MONOCHROME_PREVIEW | DT_IMAGE_MONOCHROME_BAYER));
+}
+
+/* ------------------------------------------------------------------------------------------
+ * Canonical image-type API. See image.h and src/doc/image-type-detection.md.
+ * Each predicate tests exactly one independent flag fact; no filename sniffing here.
+ * ------------------------------------------------------------------------------------------ */
+
+gboolean dt_image_pipe_class_is_provisional(const dt_image_t *img)
+{
+  return (img->flags & DT_IMAGE_BUFFER_RESOLVED) == 0;
+}
+
+gboolean dt_image_is_sraw(const dt_image_t *img)
+{
+  return (img->flags & DT_IMAGE_S_RAW) != 0;
+}
+
+gboolean dt_image_is_mosaiced(const dt_image_t *img)
+{
+  return (img->flags & DT_IMAGE_MOSAIC) != 0;
+}
+
+gboolean dt_image_needs_rawprepare(const dt_image_t *img)
+{
+  // both mosaiced raw and already-demosaiced sRAW/linear-DNG carry raw colorimetry
+  return (img->flags & (DT_IMAGE_RAW | DT_IMAGE_S_RAW)) != 0;
+}
+
+dt_image_pipe_class_t dt_image_pipe_class(const dt_image_t *img)
+{
+  const gboolean resolved = (img->flags & DT_IMAGE_BUFFER_RESOLVED) != 0;
+  const gboolean raw_colorimetry = (img->flags & (DT_IMAGE_RAW | DT_IMAGE_S_RAW)) != 0;
+
+  // Raw colorimetry takes precedence over the LDR/HDR bit-depth flags: a float mosaiced raw
+  // is flagged both RAW and HDR but must still be treated as a mosaiced raw, never as RGB HDR.
+  if(raw_colorimetry)
+  {
+    // Once decoded, the mosaic bit is authoritative and tells a mosaiced raw apart from an
+    // already-demosaiced raw (sRAW / linear DNG).
+    if(resolved)
+      return (img->flags & DT_IMAGE_MOSAIC) ? DT_IMAGE_PIPE_MOSAIC_RAW : DT_IMAGE_PIPE_LINEAR_RAW;
+
+    // Provisional (not decoded yet, or a database predating DT_IMAGE_BUFFER_RESOLVED):
+    // DT_IMAGE_S_RAW is only ever set by a codec on a real decode (the extension detector
+    // never sets it), so it reliably means an already-demosaiced raw even without the resolved
+    // bit. Otherwise assume the common case of a mosaiced sensor raw; dt_image_buffer_resolve_flags()
+    // corrects the guess on first decode.
+    if((img->flags & DT_IMAGE_S_RAW) && !(img->flags & DT_IMAGE_RAW))
+      return DT_IMAGE_PIPE_LINEAR_RAW;
+    return DT_IMAGE_PIPE_MOSAIC_RAW;
+  }
+
+  if(dt_image_is_ldr(img)) return DT_IMAGE_PIPE_RGB_LDR;
+  if(dt_image_is_hdr(img)) return DT_IMAGE_PIPE_RGB_HDR;
+
+  return DT_IMAGE_PIPE_UNKNOWN;
+}
+
+gboolean dt_image_needs_demosaic(const dt_image_t *img)
+{
+  return dt_image_pipe_class(img) == DT_IMAGE_PIPE_MOSAIC_RAW;
+}
+
+const char *dt_image_pipe_class_name(const dt_image_pipe_class_t klass)
+{
+  switch(klass)
+  {
+    case DT_IMAGE_PIPE_MOSAIC_RAW: return "mosaic-raw";
+    case DT_IMAGE_PIPE_LINEAR_RAW: return "linear-raw";
+    case DT_IMAGE_PIPE_RGB_LDR:    return "rgb-ldr";
+    case DT_IMAGE_PIPE_RGB_HDR:    return "rgb-hdr";
+    case DT_IMAGE_PIPE_UNKNOWN:
+    default:                       return "unknown";
+  }
+}
+
+void dt_image_buffer_resolve_flags(dt_image_t *img)
+{
+  if(IS_NULL_PTR(img)) return;
+
+  // The decoded buffer descriptor is the authoritative source for the mosaic axis.
+  if(img->dsc.filters != 0u)
+    img->flags |= DT_IMAGE_MOSAIC;
+  else
+    img->flags &= ~DT_IMAGE_MOSAIC;
+
+  // The LDR/HDR axis is NOT derivable from the buffer datatype: every raster codec decodes into a
+  // TYPE_FLOAT working buffer in RAM regardless of the file's real dynamic range (sRGB JPEG/PNG/WebP
+  // all land as float just like Radiance/PFM/EXR). The decoding codec is the authoritative source
+  // and has already set DT_IMAGE_LDR / DT_IMAGE_HDR from the actual file content, so we must not
+  // override it here from the datatype — doing so re-flagged every display-referred raster as HDR.
+  //
+  // The only normalization we still own is the raw-sensor case: mosaiced / sRAW integer data is
+  // scene-linear sensor data, neither display LDR nor HDR. A float raw (e.g. HDRMerge, legacy float
+  // DNG) is left flagged HDR exactly as the raw codec set it.
+  if(dt_image_needs_rawprepare(img) && img->dsc.datatype != TYPE_FLOAT)
+    img->flags &= ~(DT_IMAGE_LDR | DT_IMAGE_HDR);
+
+  img->flags |= DT_IMAGE_BUFFER_RESOLVED;
+}
+
+void dt_image_set_provisional_dsc(dt_image_t *img)
+{
+  if(IS_NULL_PTR(img)) return;
+  // Never clobber a descriptor that a codec has already produced.
+  if(img->flags & DT_IMAGE_BUFFER_RESOLVED) return;
+
+  switch(dt_image_pipe_class(img))
+  {
+    case DT_IMAGE_PIPE_RGB_LDR:
+      img->dsc.channels = 4; img->dsc.datatype = TYPE_UINT8; img->dsc.filters = 0u; img->dsc.cst = IOP_CS_RGB;
+      break;
+    case DT_IMAGE_PIPE_RGB_HDR:
+      img->dsc.channels = 4; img->dsc.datatype = TYPE_FLOAT; img->dsc.filters = 0u; img->dsc.cst = IOP_CS_RGB;
+      break;
+    case DT_IMAGE_PIPE_MOSAIC_RAW:
+      // filters is unknown until decode; leave 0 as a placeholder (the class is carried by
+      // flags, not by this provisional filters value).
+      img->dsc.channels = 1; img->dsc.datatype = TYPE_UINT16; img->dsc.filters = 0u; img->dsc.cst = IOP_CS_RAW;
+      break;
+    case DT_IMAGE_PIPE_LINEAR_RAW:
+      img->dsc.channels = 4; img->dsc.datatype = TYPE_FLOAT; img->dsc.filters = 0u; img->dsc.cst = IOP_CS_RAW;
+      break;
+    case DT_IMAGE_PIPE_UNKNOWN:
+    default:
+      return; // nothing reliable to seed
+  }
+  dt_iop_buffer_dsc_update_bpp(&img->dsc);
 }
 
 static const char *_image_buf_type_to_string(const dt_iop_buffer_type_t type)
@@ -394,6 +514,12 @@ void dt_image_print_debug_info(const dt_image_t *img, const char *context)
            ctx, img->raw_black_level, img->raw_black_level_separate[0], img->raw_black_level_separate[1],
            img->raw_black_level_separate[2], img->raw_black_level_separate[3], img->raw_white_point,
            dsc->rawprepare.raw_black_level, dsc->rawprepare.raw_white_point);
+  dt_print(DT_DEBUG_IMAGEIO,
+           "[image debug] %s class=%s state=%s needs_rawprepare=%d needs_demosaic=%d is_mosaiced=%d is_sraw=%d has_matrix=%d\n",
+           ctx, dt_image_pipe_class_name(dt_image_pipe_class(img)),
+           dt_image_pipe_class_is_provisional(img) ? "provisional" : "resolved",
+           dt_image_needs_rawprepare(img), dt_image_needs_demosaic(img), dt_image_is_mosaiced(img),
+           dt_image_is_sraw(img), dt_image_is_matrix_correction_supported(img));
 }
 
 const char *dt_image_film_roll_name(const char *path)
@@ -893,6 +1019,33 @@ void dt_image_set_images_locations(const GList *imgs, const GArray *gloc, const 
   }
 }
 
+void dt_image_history_changed(const int32_t imgid, const gboolean refresh_filmstrip)
+{
+  if(imgid <= 0) return;
+
+  // Reload the cached image metadata from the DB. The caller has already persisted the new
+  // history there; this refreshes history_items (the count of history entries) in the shared
+  // image cache. history_items is the "altered" flag that the thumbnail regeneration uses to
+  // pick raw processing over the (unedited) embedded JPEG, so a stale count makes edits and
+  // rotations appear to have no effect on the thumbnail (issues #647, #861).
+  dt_image_t *image = dt_image_cache_get_reload(darktable.image_cache, imgid, 'w');
+  if(image)
+    dt_image_cache_write_release(darktable.image_cache, image, DT_IMAGE_CACHE_RELAXED);
+
+  // Drop the stale rendered thumbnail. The mipmap cache regenerates purely on explicit removal,
+  // never by comparing history hashes, so this is mandatory after any development change.
+  dt_mipmap_cache_remove(darktable.mipmap_cache, imgid, TRUE);
+
+  if(!darktable.gui) return;
+
+  dt_thumbtable_refresh_thumbnail(darktable.gui->ui->thumbtable_lighttable, imgid, TRUE);
+
+  // The filmstrip is best-effort: refreshing it spawns an export thread that competes with the
+  // realtime darkroom main preview. Darkroom write paths pass FALSE; lighttable ops pass TRUE.
+  if(refresh_filmstrip)
+    dt_thumbtable_refresh_thumbnail(darktable.gui->ui->thumbtable_filmstrip, imgid, TRUE);
+}
+
 void dt_image_set_flip(const int32_t imgid, const dt_image_orientation_t orientation)
 {
   // push new orientation to sql via additional history entry:
@@ -901,16 +1054,12 @@ void dt_image_set_flip(const int32_t imgid, const dt_image_orientation_t orienta
   dt_history_db_write_history_item(imgid, num, "flip", &orientation, sizeof(int32_t), iop_flip_MODVER, 1,
                                    NULL, 0, 0, 0, "");
   dt_history_set_end(imgid, num + 1);
-
-  dt_image_t *image = dt_image_cache_get(darktable.image_cache, imgid, 'w');
-  if(image)
-  {
-    image->history_hash = UINT64_MAX;
-    dt_image_cache_write_release(darktable.image_cache, image, DT_IMAGE_CACHE_RELAXED);
-  }
-
-  dt_mipmap_cache_remove(darktable.mipmap_cache, imgid, TRUE);
   dt_control_save_xmp(imgid);
+
+  // Refresh the cached metadata and thumbnail. Without this the stale history_items keeps the
+  // image flagged unedited, so the rotated raw keeps showing its (unrotated) embedded JPEG and
+  // the rotation appears to do nothing unless "never use embedded JPEG" is forced (issue #647).
+  dt_image_history_changed(imgid, TRUE);
 }
 
 dt_image_orientation_t dt_image_get_orientation(const int32_t imgid)
@@ -994,16 +1143,14 @@ void dt_image_flip(const int32_t imgid, const int32_t cw)
   orientation ^= ORIENTATION_SWAP_XY;
 
   if(cw == 2) orientation = ORIENTATION_NULL;
+
+  // dt_image_set_flip() writes the new orientation history entry and notifies the caches/GUI
+  // (mipmap invalidation + thumbnail refresh) via dt_image_history_changed().
   dt_image_set_flip(imgid, orientation);
 
   dt_history_snapshot_undo_create(hist->imgid, &hist->after, &hist->after_history_end);
   dt_undo_record(darktable.undo, NULL, DT_UNDO_LT_HISTORY, (dt_undo_data_t)hist,
                  dt_history_snapshot_undo_pop, dt_history_snapshot_undo_lt_history_data_free);
-
-  dt_mipmap_cache_remove(darktable.mipmap_cache, imgid, TRUE);
-
-  // signal that the mipmap need to be updated
-  dt_thumbtable_refresh_thumbnail(darktable.gui->ui->thumbtable_lighttable, imgid, TRUE);
 }
 
 
@@ -2267,7 +2414,7 @@ int32_t dt_image_copy_rename(const int32_t imgid, const int32_t filmid, const gc
         sqlite3_step(stmt);
         sqlite3_finalize(stmt);
 
-        dt_history_copy_and_paste_on_image(imgid, newid, NULL, TRUE, DT_HISTORY_MERGE_REPLACE);
+        dt_history_copy_and_paste_on_image(imgid, newid, NULL, TRUE, DT_HISTORY_MERGE_REPLACE, FALSE, NULL);
 
         dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF,
                                    NULL);

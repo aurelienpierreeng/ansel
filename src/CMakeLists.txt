@@ -118,6 +118,7 @@ FILE(GLOB SOURCE_FILES
   "common/presets.c"
   "common/styles.c"
   "common/selection.c"
+  "common/sentry.c"
   "common/system_signal_handling.c"
   "common/tags.c"
   "common/map_locations.c"
@@ -166,6 +167,7 @@ FILE(GLOB SOURCE_FILES
   "develop/blends/blendif_rgb_hsl.c"
   "develop/blends/blendif_rgb_jzczhz.c"
   "develop/tiling.c"
+  "common/colorchecker.c"
   "common/dwt.c"
   "common/heal.c"
   "common/iop-autoset.c"
@@ -846,6 +848,11 @@ target_link_libraries(lib_ansel PRIVATE lib_ansel_imageio_rawspeed)
 target_link_libraries(lib_ansel PRIVATE lib_ansel_imageio_libraw)
 target_link_libraries(lib_ansel PRIVATE whereami)
 
+if(USE_SENTRY)
+  target_link_libraries(lib_ansel PRIVATE sentry)
+  target_compile_definitions(lib_ansel PRIVATE HAVE_SENTRY=1 SENTRY_DSN="${SENTRY_DSN}")
+endif()
+
 if(WIN32 AND CMAKE_C_COMPILER_ID STREQUAL "Clang")
   # Work around a Windows loader failure (0xC000007B) seen with clang debug PE images.
   # Stripping debug sections from libansel.dll keeps runtime behavior intact.
@@ -923,9 +930,9 @@ if(BUILD_CMSTEST)
 endif(BUILD_CMSTEST)
 
 # have some test programs for unit testing, ...
-if(BUILD_TESTING)
+if(BUILD_TESTING AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/CMakeLists.txt")
   add_subdirectory(tests)
-endif(BUILD_TESTING)
+endif()
 
 add_library(help_menu "gui/actions/help.c")
 add_dependencies(help_menu generate_authors_h)

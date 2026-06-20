@@ -359,7 +359,9 @@ static void _ensure_page_widgets(dt_lib_module_t *self)
   for(int i = 0; i < MOD_TAB_LAST; i++)
   {
     if(!IS_NULL_PTR(d->pages[i])) continue;
-    _modulegroups_track_widget(&d->pages[i], gtk_box_new(GTK_ORIENTATION_VERTICAL, 0));
+    GtkWidget *container = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+    dt_gui_add_class(container, "module-groups-container");
+    _modulegroups_track_widget(&d->pages[i], container);
     gtk_widget_show(d->pages[i]);
     gtk_drag_dest_set(d->pages[i], 0, _modulegroups_target_list, _modulegroups_n_targets, GDK_ACTION_COPY);
     g_signal_connect(d->pages[i], "drag-data-received", G_CALLBACK(_modulegroups_drag_data_received), self);
@@ -391,7 +393,9 @@ static void _ensure_page_widgets(dt_lib_module_t *self)
     }
     if(IS_NULL_PTR(d->containers[i]))
     {
-      _modulegroups_track_widget(&d->containers[i], gtk_box_new(GTK_ORIENTATION_VERTICAL, 0));
+      GtkWidget *container = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+      dt_gui_add_class(container, "module-groups-container");
+      _modulegroups_track_widget(&d->containers[i], container);
       gtk_box_pack_start(GTK_BOX(d->pages[MOD_TAB_BASIC]), d->containers[i], FALSE, FALSE, 0);
       gtk_widget_show(d->containers[i]);
     }
@@ -407,9 +411,13 @@ static dt_modulesgroups_tabs_t _get_current_tab(dt_lib_module_t *self)
 {
   dt_lib_modulegroups_t *d = (dt_lib_modulegroups_t *)self->data;
   if(!IS_NULL_PTR(d) && GTK_IS_NOTEBOOK(d->notebook))
-    return gtk_notebook_get_current_page(GTK_NOTEBOOK(d->notebook));
+  {
+    const gint page = gtk_notebook_get_current_page(GTK_NOTEBOOK(d->notebook));
+    if(page >= 0 && page < MOD_TAB_LAST) return (dt_modulesgroups_tabs_t)page;
+  }
 
-  return MOD_TAB_ACTIVE;
+  // Fall back to persisted state when notebook page is temporarily unavailable.
+  return _modulegroups_cycle_tabs(dt_conf_get_int("plugins/darkroom/moduletab"));
 }
 
 static void _set_current_tab(dt_lib_module_t *self, dt_modulesgroups_tabs_t tab)
@@ -850,9 +858,29 @@ static gboolean _focus_next_module(GtkAccelGroup *accel_group, GObject *accelera
 
 static gboolean _is_valid_widget(GtkWidget *widget)
 {
+  if(IS_NULL_PTR(widget))
+  {
+    dt_print(DT_DEBUG_SHORTCUTS, "[modulegroups] _is_valid_widget skip: widget=NULL\n");
+    return FALSE;
+  }
+
   // The parent will always be a GtkBox
   GtkWidget *parent = gtk_widget_get_parent(widget);
+  if(IS_NULL_PTR(parent))
+  {
+    dt_print(DT_DEBUG_SHORTCUTS, "[modulegroups] _is_valid_widget skip: parent=NULL widget=%s\n",
+             gtk_widget_get_name(widget));
+    return FALSE;
+  }
+
   GtkWidget *grandparent = gtk_widget_get_parent(parent);
+  if(IS_NULL_PTR(grandparent))
+  {
+    dt_print(DT_DEBUG_SHORTCUTS, "[modulegroups] _is_valid_widget skip: grandparent=NULL widget=%s parent=%s\n",
+             gtk_widget_get_name(widget), gtk_widget_get_name(parent));
+    return FALSE;
+  }
+
   GType type = G_OBJECT_TYPE(grandparent);
 
   gboolean visible_parent = TRUE;
@@ -978,12 +1006,13 @@ void gui_init(dt_lib_module_t *self)
   d->visible_expanders = NULL;
   d->visible_expanders_tab = MOD_TAB_LAST;
 
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   dt_gui_add_help_link(self->widget, dt_get_help_url(self->plugin_name));
   gtk_widget_set_name(self->widget, "modules-tabs");
 
   /* Tabs */
   d->notebook = GTK_WIDGET(gtk_notebook_new());
+  dt_gui_add_class(d->notebook, "empty");
   char *labels[] = { _("Pipeline"), _("Basic"), _("Repair"), _("Sharpness"), _("Effects"), _("Technics"), _("All") };
   char *tooltips[]
       = { _("List all modules currently enabled in the reverse order of application in the pipeline."),
@@ -1003,7 +1032,7 @@ void gui_init(dt_lib_module_t *self)
     gtk_widget_set_hexpand(label, TRUE);
     gtk_label_set_justify(GTK_LABEL(label), GTK_JUSTIFY_CENTER);
 
-    GtkWidget *page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    GtkWidget *page = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
     gtk_notebook_append_page(GTK_NOTEBOOK(d->notebook), page, label);
     gtk_container_child_set(GTK_CONTAINER(d->notebook), page, "tab-expand", TRUE, "tab-fill", TRUE, NULL);
     gtk_widget_show(page);
@@ -1225,11 +1254,33 @@ static void _lib_modulegroups_signal_set(gpointer instance, gpointer module, gpo
   if(IS_NULL_PTR(iop_module)) return;
 
   const dt_modulesgroups_tabs_t current_tab = _get_current_tab(self);
+  const gboolean prefer_active_once
+      = !IS_NULL_PTR(iop_module->expander)
+        && GPOINTER_TO_INT(g_object_get_data(G_OBJECT(iop_module->expander),
+                                             "dt-modulegroups-prefer-active-once"));
+  const gboolean allow_switch_from_active
+      = !IS_NULL_PTR(iop_module->expander)
+        && GPOINTER_TO_INT(g_object_get_data(G_OBJECT(iop_module->expander),
+                                             "dt-modulegroups-switch-from-active-once"));
+  const gboolean module_in_active_tab = _is_module_in_tab(iop_module, MOD_TAB_ACTIVE);
+  if(!IS_NULL_PTR(iop_module->expander))
+  {
+    g_object_set_data(G_OBJECT(iop_module->expander), "dt-modulegroups-prefer-active-once", NULL);
+    g_object_set_data(G_OBJECT(iop_module->expander), "dt-modulegroups-switch-from-active-once", NULL);
+  }
 
+  // Direct actions (enable/toggle) should prioritize Pipeline for the focused module.
+  if(prefer_active_once && module_in_active_tab && current_tab != MOD_TAB_ACTIVE)
+    _set_current_tab(self, MOD_TAB_ACTIVE);
+  // Focus-only requests from accel search: stay in Pipeline when the module is
+  // already there, otherwise jump to the module group tab.
+  else if(allow_switch_from_active && module_in_active_tab && current_tab != MOD_TAB_ACTIVE)
+    _set_current_tab(self, MOD_TAB_ACTIVE);
   // If module not in current tab: switch tab
   // Keep users on the Pipeline tab when they duplicate/create modules from it.
   // Pipeline is an activity-centered view and should not auto-jump to category tabs.
-  if(current_tab != MOD_TAB_ACTIVE && !_is_module_in_tab(iop_module, current_tab))
+  else if((current_tab != MOD_TAB_ACTIVE || allow_switch_from_active)
+     && !_is_module_in_tab(iop_module, current_tab))
     _set_current_tab_from_module_group(self, iop_module->default_group());
 
   // If module in current tab but not visible: refresh tab

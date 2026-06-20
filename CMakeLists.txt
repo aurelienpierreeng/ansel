@@ -672,6 +672,7 @@ if(BUILD_TESTING)
   include(AddCMockaTest)
   include(AddCMockaMockTest)
   include_directories(${CMOCKA_INCLUDE_DIR} include)
+  add_subdirectory(tests)
 endif(BUILD_TESTING)
 
 # ---- Windows ----

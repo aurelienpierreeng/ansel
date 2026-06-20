@@ -80,8 +80,20 @@ const char *dt_pixelpipe_name(dt_dev_pixelpipe_type_t pipe);
 
 #include "develop/pixelpipe_hb.h"
 
-GHashTable *dt_pixelpipe_raster_alloc();
-void dt_pixelpipe_raster_cleanup(GHashTable *raster_masks);
+/**
+ * @brief Build the shared cache key for one raster mask published by a module.
+ *
+ * @details Raster masks are side-band outputs of the provider blend stage.
+ * Their identity therefore starts from `piece->global_mask_hash`, which already
+ * includes the provider input, blend parameters and ROI, then adds a dedicated
+ * namespace and the provider-local mask id.
+ *
+ * @param piece Provider pipeline node.
+ * @param raster_mask_id Provider-local mask id.
+ * @return uint64_t Shared cache key, or `DT_PIXELPIPE_CACHE_HASH_INVALID`.
+ */
+uint64_t dt_dev_pixelpipe_raster_mask_hash(const struct dt_dev_pixelpipe_iop_t *piece,
+                                           const int raster_mask_id);
 
 /**
  * @brief Build the shared cache key used by the hidden detailmask module.
@@ -102,33 +114,6 @@ uint64_t dt_dev_pixelpipe_rawdetail_mask_hash(const struct dt_dev_pixelpipe_iop_
  * the pipeline.
  */
 void dt_dev_clear_rawdetail_mask(struct dt_dev_pixelpipe_t *pipe);
-
-/**
- * @brief Replace a raster mask in the raster masks hashtable of the pixelpipe.
- * 
- * @param raster_masks the raster masks hashtable of the pixelpipe
- * @param mask the pointer to the mask
- * @return gboolean TRUE if the key did not exist and was added, FALSE if it existed and was replaced.
- */
-gboolean dt_pixelpipe_raster_replace(GHashTable *raster_masks, float *mask);
-
-/**
- * @brief Remove the raster mask with id 0 from the raster masks hashtable of the pixelpipe.
- * 
- * @param raster_masks the raster masks hashtable of the pixelpipe
- * @return gboolean TRUE if the key existed and was removed, FALSE if it did not exist and nothing changed.
- */
-gboolean dt_pixelpipe_raster_remove(GHashTable *raster_masks);
-
-/**
- * @brief Get the raster mask with given id from the raster masks hashtable of the pixelpipe.
- * 
- * @param raster_masks the raster masks hashtable of the pixelpipe
- * @param raster_mask_id the raster mask id
- * @return float* the pointer to the raster mask, or NULL if not found
- */
-float *dt_pixelpipe_raster_get(GHashTable *raster_masks, const int raster_mask_id);
-
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

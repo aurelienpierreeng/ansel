@@ -625,7 +625,7 @@ static inline void dt_draw_node(cairo_t *cr, const gboolean square, const gboole
 
   if(darktable.unmuted & DT_DEBUG_MASKS)
   {
-    const float debug_radius = DT_GUI_MOUSE_EFFECT_RADIUS_SCALED;
+    const float debug_radius = DT_GUI_MOUSE_EFFECT_RADIUS;
     cairo_arc(cr, x, y, debug_radius, 0.0, 2.0 * M_PI);
     cairo_set_line_width(cr, line_width);
     cairo_set_source_rgba(cr, 0.0, 1.0, 0.0, 1.0);

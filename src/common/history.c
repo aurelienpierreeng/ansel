@@ -171,6 +171,7 @@ void dt_history_delete_on_image_ext(int32_t imgid, gboolean undo)
 
   // signal that the mipmap need to be updated
   dt_thumbtable_refresh_thumbnail(darktable.gui->ui->thumbtable_lighttable, imgid, TRUE);
+  dt_thumbtable_refresh_thumbnail(darktable.gui->ui->thumbtable_filmstrip, imgid, TRUE);
 
   if(undo)
   {

@@ -293,13 +293,29 @@ int dt_dev_history_item_from_source_history_item(dt_develop_t *dev_dest, dt_deve
                                                  const dt_dev_history_item_t *hist_src, dt_iop_module_t *mod_dest,
                                                  dt_dev_history_item_t **out_hist)
 {
-  if(IS_NULL_PTR(hist_src) || IS_NULL_PTR(hist_src->module) || IS_NULL_PTR(mod_dest) || IS_NULL_PTR(out_hist)) return 1;
+  if(IS_NULL_PTR(hist_src) || IS_NULL_PTR(hist_src->module) || IS_NULL_PTR(mod_dest) || IS_NULL_PTR(out_hist))
+  {
+    dt_print(DT_DEBUG_HISTORY | DT_DEBUG_VERBOSE,
+             "[dt_dev_history_item_from_source_history_item] invalid input: hist=%s hist_module=%s dest=%s out=%s\n",
+             hist_src ? "yes" : "no", hist_src && hist_src->module ? "yes" : "no",
+             mod_dest ? "yes" : "no", out_hist ? "yes" : "no");
+    return 1;
+  }
 
   dt_dev_history_item_t *hist = (dt_dev_history_item_t *)calloc(1, sizeof(dt_dev_history_item_t));
-  if(IS_NULL_PTR(hist)) return 1;
+  if(IS_NULL_PTR(hist))
+  {
+    dt_print(DT_DEBUG_HISTORY | DT_DEBUG_VERBOSE,
+             "[dt_dev_history_item_from_source_history_item] allocation failed: src=%s multi='%s'\n",
+             hist_src->module->op, hist_src->module->multi_name);
+    return 1;
+  }
 
   if(dt_masks_copy_used_forms_for_module(dev_dest, dev_src, hist_src->module))
   {
+    dt_print(DT_DEBUG_HISTORY | DT_DEBUG_VERBOSE,
+             "[dt_dev_history_item_from_source_history_item] mask copy failed: src=%s multi='%s'\n",
+             hist_src->module->op, hist_src->module->multi_name);
     dt_dev_free_history_item(hist);
     return 1;
   }
@@ -309,6 +325,11 @@ int dt_dev_history_item_from_source_history_item(dt_develop_t *dev_dest, dt_deve
     forms_snapshot = dt_masks_snapshot_current_forms(dev_dest, FALSE);
     if(IS_NULL_PTR(forms_snapshot))
     {
+      dt_print(DT_DEBUG_HISTORY | DT_DEBUG_VERBOSE,
+               "[dt_dev_history_item_from_source_history_item] no destination mask forms to snapshot: "
+               "src=%s multi='%s'\n",
+               hist_src->module->op, hist_src->module->multi_name);
+
       dt_dev_free_history_item(hist);
       return 1;
     }
@@ -317,6 +338,11 @@ int dt_dev_history_item_from_source_history_item(dt_develop_t *dev_dest, dt_deve
   if(!dt_dev_history_item_update_from_params(dev_dest, hist, mod_dest, hist_src->enabled, hist_src->params,
                                              hist_src->module->params_size, hist_src->blend_params, forms_snapshot))
   {
+    dt_print(DT_DEBUG_HISTORY | DT_DEBUG_VERBOSE,
+             "[dt_dev_history_item_from_source_history_item] params update failed: src=%s multi='%s' "
+             "dest=%s multi='%s' src_params=%d dest_params=%d\n",
+             hist_src->module->op, hist_src->module->multi_name, mod_dest->op, mod_dest->multi_name,
+             hist_src->module->params_size, mod_dest->params_size);
     dt_dev_free_history_item(hist);
     return 1;
   }
@@ -327,16 +353,40 @@ int dt_dev_history_item_from_source_history_item(dt_develop_t *dev_dest, dt_deve
 
 int dt_dev_merge_history_into_image(dt_develop_t *dev_src, int32_t dest_imgid, const GList *mod_list,
                                     gboolean merge_iop_order, const dt_history_merge_strategy_t mode,
-                                    const gboolean paste_instances)
+                                    const gboolean paste_instances, const char *source_label,
+                                    dt_hm_batch_state_t *batch)
 {
   if(dest_imgid <= 0) return 1;
   if(IS_NULL_PTR(mod_list)) return 0;
 
   dt_develop_t dev_dest = { 0 };
   dt_dev_init(&dev_dest, FALSE);
-  dt_dev_reload_history_items(&dev_dest, dest_imgid);
+  const gboolean first_run = dt_dev_reload_history_items(&dev_dest, dest_imgid);
 
-  const int ret_val = dt_history_merge(&dev_dest, dev_src, dest_imgid, mod_list, merge_iop_order, mode, paste_instances);
+  if(first_run)
+  {
+    /* Match the persistent state produced by opening the destination in darkroom
+     * after a history deletion: the first-run defaults, auto-presets, image
+     * flags and resulting module order must exist before paste/style merging.
+     */
+    dt_image_t *image = dt_image_cache_get(darktable.image_cache, dest_imgid, 'w');
+    if(!IS_NULL_PTR(image))
+    {
+      *image = dev_dest.image_storage;
+      dt_image_cache_write_release(darktable.image_cache, image, DT_IMAGE_CACHE_SAFE);
+    }
+
+    dt_dev_write_history_ext(&dev_dest, dest_imgid);
+  }
+
+  /* If the destination history was just recreated from an empty stack, keep the
+   * image-format default order we would get by opening the image in darkroom.
+   * Source ordering constraints would otherwise let a pasted JPEG/style order
+   * turn a freshly reset RAW destination into a non-RAW pipeline.
+   */
+  const gboolean use_source_iop_order = merge_iop_order && !first_run;
+  const int ret_val = dt_history_merge(&dev_dest, dev_src, dest_imgid, mod_list, use_source_iop_order, mode,
+                                       paste_instances, source_label, batch);
 
   if(ret_val == 0)
   {
@@ -970,16 +1020,17 @@ void dt_dev_history_free_history(dt_develop_t *dev)
   dev->history = NULL;
 }
 
-void dt_dev_reload_history_items(dt_develop_t *dev, const int32_t imgid)
+gboolean dt_dev_reload_history_items(dt_develop_t *dev, const int32_t imgid)
 {
   // Recreate the whole history from scratch.
   // Backend only: GUI updates and pixelpipe rebuilds need to be triggered by callers.
   if(darktable.gui && dev->gui_attached) ++darktable.gui->reset;
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
-  dt_dev_read_history_ext(dev, imgid);
+  const gboolean first_run = dt_dev_read_history_ext(dev, imgid);
   dt_dev_pop_history_items_ext(dev);
   dt_pthread_rwlock_unlock(&dev->history_mutex);
   if(darktable.gui && dev->gui_attached) --darktable.gui->reset;
+  return first_run;
 }
 
 
@@ -1107,9 +1158,9 @@ void dt_dev_history_gui_update(dt_develop_t *dev)
 {
   if(!dev->gui_attached) return;
 
-  // Ensure the set of module instances shown in the right panel matches the current history:
-  // hide/remove instances that are no longer referenced by any history item.
-  // Note: this may also reorder modules in the GUI if needed.
+  // Match the live module instances to the reloaded history before touching GTK.
+  // This loop may remove obsolete instances or expose instances newly created
+  // while reading a style/history from the database.
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
   dt_dev_history_refresh_nodes_ext(dev, &dev->iop, dev->history);
   dt_pthread_rwlock_unlock(&dev->history_mutex);
@@ -1119,6 +1170,18 @@ void dt_dev_history_gui_update(dt_develop_t *dev)
   for(GList *module = g_list_first(dev->iop); module; module = g_list_next(module))
   {
     dt_iop_module_t *mod = (dt_iop_module_t *)(module->data);
+
+    // History reload is backend-only and creates new multi-instances without
+    // GTK state. Attach every missing GUI here, after releasing history_mutex,
+    // so styles and global history actions expose their complete module set.
+    if(!dt_iop_is_hidden(mod) && IS_NULL_PTR(mod->expander))
+    {
+      if(IS_NULL_PTR(mod->widget)) dt_iop_gui_init(mod);
+      dt_iop_gui_set_expander(mod);
+    }
+
+    // Parameters, enabled state, headers and blending controls may all have
+    // changed, therefore refresh every module rather than only history entries.
     dt_iop_gui_update(mod);
   }
 
@@ -1175,13 +1238,11 @@ void dt_dev_history_notify_change(dt_develop_t *dev, const int32_t imgid)
                      imgid, states);
   }
 
-  // Remove all old images
-  dt_mipmap_cache_remove(darktable.mipmap_cache, imgid, TRUE);
-
-  // Don't refresh the thumbnail if we are in darkroom
-  // Spawning another export thread will likely slow-down the current one.
-  if(darktable.gui)
-    dt_thumbtable_refresh_thumbnail(darktable.gui->ui->thumbtable_lighttable, imgid, TRUE);
+  // Reload metadata, drop the stale mipmap and refresh the lighttable thumbnail.
+  // refresh_filmstrip = FALSE: in darkroom the filmstrip is best-effort, spawning another export
+  // thread would slow down the current one and we want resources allocated to the realtime main
+  // preview, not diverted to cosmetic GUI refreshes.
+  dt_image_history_changed(imgid, FALSE);
 }
 
 
@@ -1306,7 +1367,7 @@ static gboolean _dev_auto_apply_presets(dt_develop_t *dev, int32_t imgid)
   const char *workflow_preset = has_matrix ? _("scene-referred default") : "\t\n";
 
   int iformat = 0;
-  if(dt_image_is_rawprepare_supported(image))
+  if(dt_image_needs_rawprepare(image))
     iformat |= FOR_RAW;
   else
     iformat |= FOR_LDR;
@@ -1343,8 +1404,13 @@ static gboolean _dev_auto_apply_presets(dt_develop_t *dev, int32_t imgid)
     }
     else
     {
-      // we have no auto-apply order, so apply iop order, depending of the workflow
-      GList *iop_list = dt_ioppr_get_iop_order_list_version(DT_IOP_ORDER_ANSEL_RAW);
+      // No auto-applied order exists for this image. Persist the built-in order
+      // matching the input class; the non-RAW order is named ANSEL_JPG but also
+      // covers rendered formats such as TIFF/PNG/HDR.
+      const dt_iop_order_t default_order = dt_image_needs_rawprepare(image)
+                                             ? DT_IOP_ORDER_ANSEL_RAW
+                                             : DT_IOP_ORDER_ANSEL_JPG;
+      GList *iop_list = dt_ioppr_get_iop_order_list_version(default_order);
       dt_ioppr_write_iop_order_list(iop_list, imgid);
       g_list_free_full(iop_list, dt_free_gpointer);
       iop_list = NULL;
@@ -1764,6 +1830,17 @@ static void _process_history_db_entry(dt_develop_t *dev, const int32_t imgid, co
   // Copy blending params if valid, else try to convert legacy params
   _sync_blendop_params(hist, blendop_params, bl_length, blendop_version, legacy_params);
 
+  if(presets && !IS_NULL_PTR(hist->blend_params) && !IS_NULL_PTR(hist->module)
+     && !IS_NULL_PTR(hist->module->default_blendop_params))
+  {
+    dt_develop_blend_params_t preset_blend = *hist->blend_params;
+    dt_develop_blend_params_t default_blend = *hist->module->default_blendop_params;
+    preset_blend.mask_mode &= ~DEVELOP_MASK_ENABLED;
+    default_blend.mask_mode &= ~DEVELOP_MASK_ENABLED;
+    if(memcmp(&preset_blend, &default_blend, sizeof(dt_develop_blend_params_t)) == 0)
+      hist->blend_params->mask_mode &= ~DEVELOP_MASK_ENABLED;
+  }
+
   dev->history = g_list_append(dev->history, hist);
 
   dt_print(DT_DEBUG_HISTORY, "[history entry] read %s at pipe position %i (enabled %i) from %s %s\n", hist->op_name,
@@ -2015,8 +2092,10 @@ static gboolean _compress_disabled_with_history(dt_iop_module_t *module)
  */
 static void _dt_dev_history_compress_internal(dt_develop_t *dev, const gboolean write_history)
 {
-  const int32_t imgid = dev->image_storage.id;
-
+  // Rebuild the history list under lock, but run expensive cross-subsystem
+  // operations (history->modules sync, optional DB write) after releasing it.
+  // This keeps history_mutex hold time short and avoids lock-order contention
+  // with GUI/pipeline users touching masks/pixelpipe.
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
 
   // Cleanup old history
@@ -2041,10 +2120,20 @@ static void _dt_dev_history_compress_internal(dt_develop_t *dev, const gboolean 
   _dev_history_add_filtered(dev, _compress_disabled_with_history);
 
   dt_dev_set_history_end_ext(dev, g_list_length(dev->history));
-  dt_dev_pop_history_items_ext(dev);
-  if(write_history) dt_dev_write_history_ext(dev, imgid);
-
   dt_pthread_rwlock_unlock(&dev->history_mutex);
+
+  if(darktable.gui && dev->gui_attached) ++darktable.gui->reset;
+  dt_pthread_rwlock_wrlock(&dev->history_mutex);
+  dt_dev_pop_history_items_ext(dev);
+  dt_pthread_rwlock_unlock(&dev->history_mutex);
+  if(dev->gui_attached) dt_dev_get_thumbnail_size(dev);
+  if(darktable.gui && dev->gui_attached) --darktable.gui->reset;
+  if(write_history)
+  {
+    dt_pthread_rwlock_rdlock(&dev->history_mutex);
+    dt_dev_write_history_ext(dev, dev->image_storage.id);
+    dt_pthread_rwlock_unlock(&dev->history_mutex);
+  }
 }
 
 void dt_dev_history_compress_ext(dt_develop_t *dev, gboolean write_history)
@@ -2059,6 +2148,8 @@ void dt_dev_history_compress(dt_develop_t *dev)
 
 void dt_dev_history_truncate(dt_develop_t *dev, const int32_t imgid)
 {
+  dt_pthread_rwlock_wrlock(&dev->history_mutex);
+
   // Remove tail entries (num >= end).
   // history_end is a cursor expressed in "number of applied items" terms:
   // - keep items [0..history_end-1]
@@ -2072,9 +2163,18 @@ void dt_dev_history_truncate(dt_develop_t *dev, const int32_t imgid)
     link = next;
   }
 
+  dt_pthread_rwlock_unlock(&dev->history_mutex);
+
   // Re-apply history and resync iop order from the truncated stack.
+  if(darktable.gui && dev->gui_attached) ++darktable.gui->reset;
+  dt_pthread_rwlock_wrlock(&dev->history_mutex);
   dt_dev_pop_history_items_ext(dev);
+  dt_pthread_rwlock_unlock(&dev->history_mutex);
+  if(dev->gui_attached) dt_dev_get_thumbnail_size(dev);
+  if(darktable.gui && dev->gui_attached) --darktable.gui->reset;
+  dt_pthread_rwlock_rdlock(&dev->history_mutex);
   dt_dev_write_history_ext(dev, imgid);
+  dt_pthread_rwlock_unlock(&dev->history_mutex);
 }
 
 void dt_dev_history_compress_or_truncate(dt_develop_t *dev)
@@ -2309,13 +2409,6 @@ static int _create_deleted_modules(GList **_iop_list, GList *history_list)
       }
       module->instance = base_module->instance;
 
-      if(!dt_iop_is_hidden(module))
-      {
-        ++darktable.gui->reset;
-        module->gui_init(module);
-        --darktable.gui->reset;
-      }
-
       // adjust the multi_name of the new module
       g_strlcpy(module->multi_name, hitem->multi_name, sizeof(module->multi_name));
       dt_iop_update_multi_priority(module, hitem->multi_priority);
@@ -2377,4 +2470,117 @@ int dt_dev_history_refresh_nodes_ext(dt_develop_t *dev, GList **iop, GList *hist
   if(pipe_remove) dt_dev_signal_modules_moved(dev);
 
   return pipe_remove;
+}
+
+
+/* ---------------------------------------------------------------------------------------------------
+ * Out-of-history transient param channel (see dev_history.h).
+ *
+ * Thread-safety: the slot is guarded by `dev->transient_params_mutex`. Writers (GUI/worker thread)
+ * `_set`/`_clear`; the pipeline reader (`_get`) copies out under the same lock and never dereferences
+ * the publishing module. The published payload is a plain byte copy of the module params struct, so the
+ * pipeline never touches GUI-owned `module->params`.
+ * ------------------------------------------------------------------------------------------------- */
+
+void dt_dev_transient_params_set(dt_iop_module_t *module, const void *params, const size_t params_size,
+                                 const void *blend_params, const size_t blend_size)
+{
+  if(IS_NULL_PTR(module) || IS_NULL_PTR(module->dev) || IS_NULL_PTR(params) || params_size == 0) return;
+  dt_develop_t *dev = module->dev;
+
+  dt_pthread_mutex_lock(&dev->transient_params_mutex);
+
+  if(dev->transient_params.params_size != (int32_t)params_size)
+  {
+    dt_free(dev->transient_params.params);
+    dev->transient_params.params = g_malloc0(params_size);
+    dev->transient_params.params_size = (int32_t)params_size;
+  }
+  if(!IS_NULL_PTR(dev->transient_params.params))
+    memcpy(dev->transient_params.params, params, params_size);
+
+  if(!IS_NULL_PTR(blend_params) && blend_size > 0)
+  {
+    if(dev->transient_params.blend_size != (int32_t)blend_size)
+    {
+      dt_free(dev->transient_params.blend_params);
+      dev->transient_params.blend_params = g_malloc0(blend_size);
+      dev->transient_params.blend_size = (int32_t)blend_size;
+    }
+    if(!IS_NULL_PTR(dev->transient_params.blend_params))
+      memcpy(dev->transient_params.blend_params, blend_params, blend_size);
+  }
+  else
+  {
+    dt_free(dev->transient_params.blend_params);
+    dev->transient_params.blend_size = 0;
+  }
+
+  dev->transient_params.module = module;
+  dev->transient_params.serial++;
+
+  dt_pthread_mutex_unlock(&dev->transient_params_mutex);
+
+  /* Intentionally does NOT trigger a pipe recompute. The caller flags the pipe the way that fits its
+   * use case: a realtime module (drawlayer) raises DT_DEV_PIPE_TOP_CHANGED on the main pipe for a fast
+   * focused-piece resync, while a geometry-changing edit (crop/ashift) drives a full
+   * dt_dev_pixelpipe_resync_history_all() so every pipe (main, preview, virtual) replans ROI/formats.
+   * Auto-triggering here too would route those edits through the partial focused-piece resync as well
+   * and race the full one (garbled geometry on warm re-edits). */
+}
+
+void dt_dev_transient_params_clear(dt_iop_module_t *module)
+{
+  if(IS_NULL_PTR(module) || IS_NULL_PTR(module->dev)) return;
+  dt_develop_t *dev = module->dev;
+
+  dt_pthread_mutex_lock(&dev->transient_params_mutex);
+  if(dev->transient_params.module == module)
+  {
+    dt_free(dev->transient_params.params);
+    dev->transient_params.params_size = 0;
+    dt_free(dev->transient_params.blend_params);
+    dev->transient_params.blend_size = 0;
+    dev->transient_params.module = NULL;
+    dev->transient_params.serial++;
+  }
+  dt_pthread_mutex_unlock(&dev->transient_params_mutex);
+
+  /* As with _set, the caller is responsible for re-triggering the pipe (resync / history commit) so it
+   * re-commits the focused module's piece from history instead of the dropped transient snapshot. */
+}
+
+gboolean dt_dev_transient_params_get(dt_develop_t *dev, const dt_iop_module_t *module,
+                                     void *out_params, const size_t out_params_size,
+                                     void *out_blend, const size_t out_blend_size, gboolean *out_has_blend)
+{
+  if(!IS_NULL_PTR(out_has_blend)) *out_has_blend = FALSE;
+  if(IS_NULL_PTR(dev) || IS_NULL_PTR(module) || IS_NULL_PTR(out_params) || out_params_size == 0) return FALSE;
+
+  gboolean ok = FALSE;
+  dt_pthread_mutex_lock(&dev->transient_params_mutex);
+  if(dev->transient_params.module == module && !IS_NULL_PTR(dev->transient_params.params)
+     && dev->transient_params.params_size == (int32_t)out_params_size)
+  {
+    memcpy(out_params, dev->transient_params.params, out_params_size);
+    ok = TRUE;
+
+    if(!IS_NULL_PTR(out_blend) && out_blend_size > 0 && !IS_NULL_PTR(dev->transient_params.blend_params)
+       && dev->transient_params.blend_size == (int32_t)out_blend_size)
+    {
+      memcpy(out_blend, dev->transient_params.blend_params, out_blend_size);
+      if(!IS_NULL_PTR(out_has_blend)) *out_has_blend = TRUE;
+    }
+  }
+  dt_pthread_mutex_unlock(&dev->transient_params_mutex);
+  return ok;
+}
+
+gboolean dt_dev_transient_params_active(dt_develop_t *dev, const dt_iop_module_t *module)
+{
+  if(IS_NULL_PTR(dev) || IS_NULL_PTR(module)) return FALSE;
+  dt_pthread_mutex_lock(&dev->transient_params_mutex);
+  const gboolean active = (dev->transient_params.module == module);
+  dt_pthread_mutex_unlock(&dev->transient_params_mutex);
+  return active;
 }

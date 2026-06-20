@@ -1,8 +1,72 @@
 * developers:
+Aurélien PIERRE
+Guillaume Stutin
+Pascal Obry
+Aldric Renaudin
+parafin
+Roman Lebedev
 
 * translators:
+Pascal Obry
+Jeronimo Pellegrini
+Victor Forsiuk
+Aurélien PIERRE
+Ryo Shinozaki
+Martin Straeten
+Guillaume Marty
+Alynx Zhou
+Serkan ÖNDER
+Maurizio Paglia
+Petr Stasiak
+Stephan Hoek
+EdgarLux
+Luca Zulberti
+Matt Maguire
+Nicolas Auffray
+bajdero
+mmardegan
+Guillaume Stutin
+Hubert Figuière
+Jan Friedrich
+Matjaž Jeran
+MatteoVita
+cotacot
+大眼仔旭
+篠崎亮　Ryo Shinozaki
 
 * contributors (at least 4 commits):
+Hanno Schwalm
+Philippe Weyland
+Diederik Ter Rahe
+Alynx Zhou
+Victor Forsiuk
+Nicolas Auffray
+Miloš Komarčević
+Jeronimo Pellegrini
+Chris Elston
+Sakari Kapanen
+Dan Torop
+Ryo Shinozaki
+HansBull
+Guillaume Marty
+Martin Straeten
+Maurizio Paglia
+lologor
+Ralf Brown
+Serkan ÖNDER
+starapo7348
+Miguel Moquillon
+Petr Stasiak
+Stephan Hoek
+luzpaz
+solarer
+Luca Zulberti
+Philipp Lutz
+Alban Gruin
+Apfelkraut
+EdgarLux
+Ricky Moon
+quovadit
 
 * Sub-module rawspeed contributors (at least 1 commit):
 Roman Lebedev
@@ -262,5 +326,7 @@ Volker Enderlein
 William Roy
 patricklaf
 pinchartl
+
+* Sub-module sentry-native contributors (at least 1 commit):
 
 And all those of you that made previous releases possible

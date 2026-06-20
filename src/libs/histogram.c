@@ -84,8 +84,18 @@
 #endif
 
 #define HISTOGRAM_BINS 256
-#define TONES 128
-#define GAMMA 1.f / 1.5f
+#define GAMMA 1.f / 2.f
+#define DT_LIB_HISTOGRAM_SCOPE_MIN_VALUE (1.f / 256.f)
+#define DT_LIB_HISTOGRAM_SCOPE_ENABLE_SMOOTHING 1
+#define DT_LIB_HISTOGRAM_SCOPE_SMOOTH_SPATIAL_PASSES 1
+#define DT_LIB_HISTOGRAM_SCOPE_SMOOTH_TONE_PASSES 4
+#define DT_LIB_HISTOGRAM_SCOPE_SMOOTH_FORCE (256 * 0.33)
+#define DT_LIB_HISTOGRAM_SCOPE_RESTRICTED_LABEL_OPERATOR CAIRO_OPERATOR_ADD
+#define DT_LIB_HISTOGRAM_SCOPE_DEFAULT_HEIGHT 250
+#define DT_LIB_HISTOGRAM_SCOPE_MIN_HEIGHT 120
+#define DT_LIB_HISTOGRAM_SCOPE_MAX_HEIGHT 500
+#define DT_LIB_HISTOGRAM_SCOPE_HANDLE_HEIGHT 8
+#define DT_LIB_HISTOGRAM_SCOPE_HEIGHT_CONF "plugin/darkroom/histogram/scope_height"
 
 DT_MODULE(1)
 
@@ -129,12 +139,14 @@ const gchar *dt_lib_colorpicker_statistic_names[]
 
 typedef struct dt_lib_histogram_t
 {
+  struct dt_lib_module_t *module;
   GtkWidget *scope_draw;               // GtkDrawingArea -- scope, scale, and draggable overlays
-  GtkWidget *stage;                    // Module at which stage we sample histogram
-  GtkWidget *display;                  // Kind of display
+  GtkWidget *scope_resize_handle;      // GtkDrawingArea -- vertical resize grip kept outside the rendered scope
   dt_backbuf_t *backbuf;               // reference to the dev backbuf currently in use
-  const char *op;
+  const char *op;                      // pipeline stage ("initialscale" | "colorout" | "gamma")
+  dt_lib_histogram_scope_type_t scope; // which scope/display type is active
   float zoom; // zoom level for the vectorscope
+  int scope_height;
 
   dt_lib_histogram_cache_t cache;
   cairo_surface_t *cst;
@@ -147,8 +159,14 @@ typedef struct dt_lib_histogram_t
   GtkWidget *samples_container;
   GtkWidget *add_sample_button;
   GtkWidget *display_samples_check_box;
+  GtkWidget *restrict_button;
   GArray *pending_hashes;
   guint refresh_idle_source;
+  dt_dev_pixelpipe_cache_wait_t scope_wait;
+  dt_dev_pixelpipe_cache_wait_t picker_wait;
+  dt_dev_pixelpipe_cache_wait_t module_wait;
+
+  dt_gui_collapsible_section_t cs;
 
 } dt_lib_histogram_t;
 
@@ -169,6 +187,14 @@ typedef struct dt_histogram_preview_refresh_state_t
 static dt_histogram_preview_refresh_state_t _preview_refresh_state
     = { DT_PIXELPIPE_CACHE_HASH_INVALID, DT_PIXELPIPE_CACHE_HASH_INVALID,
         DT_PIXELPIPE_CACHE_HASH_INVALID, NULL };
+static void _schedule_histogram_refresh(dt_lib_module_t *self);
+
+static void _histogram_restart_cache_wait(gpointer user_data)
+{
+  dt_lib_module_t *self = (dt_lib_module_t *)user_data;
+  if(IS_NULL_PTR(self)) return;
+  _schedule_histogram_refresh(self);
+}
 
 static void _clear_pending_preview_histograms(void)
 {
@@ -290,7 +316,7 @@ static gboolean _refresh_global_histogram_backbuf_for_hash(dt_develop_t *dev, co
 static gboolean _refresh_preview_module_histogram_for_hash(dt_develop_t *dev, dt_iop_module_t *module,
                                                            const uint64_t expected_hash)
 {
-  if(IS_NULL_PTR(dev) || IS_NULL_PTR(dev->preview_pipe) || !module) return FALSE;
+  if(IS_NULL_PTR(dev) || IS_NULL_PTR(dev->preview_pipe) || IS_NULL_PTR(module)) return FALSE;
 
   const dt_dev_pixelpipe_iop_t *const piece = dt_dev_pixelpipe_get_module_piece(dev->preview_pipe, module);
   if(IS_NULL_PTR(piece) || !(piece->request_histogram & DT_REQUEST_ON)) return FALSE;
@@ -304,7 +330,13 @@ static gboolean _refresh_preview_module_histogram_for_hash(dt_develop_t *dev, dt
 
   void *input = NULL;
   dt_pixel_cache_entry_t *input_entry = NULL;
-  if(!dt_dev_pixelpipe_cache_peek_gui(dev->preview_pipe, previous_piece, &input, &input_entry, NULL, NULL, NULL))
+  dt_lib_module_t *const histogram_module = darktable.develop->color_picker.histogram_module;
+  dt_lib_histogram_t *const d = !IS_NULL_PTR(histogram_module) ? histogram_module->data : NULL;
+  if(!IS_NULL_PTR(d))
+    dt_dev_pixelpipe_cache_wait_set_owner(&d->module_wait, "histogram-module-refresh", module);
+  if(!dt_dev_pixelpipe_cache_peek_gui(dev->preview_pipe, previous_piece, &input, &input_entry,
+                                      !IS_NULL_PTR(d) ? &d->module_wait : NULL,
+                                      _histogram_restart_cache_wait, histogram_module))
     return FALSE;
 
   dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, input_entry);
@@ -353,7 +385,9 @@ static void _refresh_preview_histograms(dt_develop_t *dev)
 {
   if(IS_NULL_PTR(dev) || !dev->gui_attached || IS_NULL_PTR(dev->preview_pipe)) return;
   if(!dev->preview_pipe->gui_observable_source) return;
-  dt_pthread_mutex_lock(&dev->preview_pipe->busy_mutex);
+  /* Do not grab preview_pipe->busy_mutex from GUI thread: it may be held by
+   * the pipeline worker for long recomputations and would freeze the UI.
+   * We rely on non-blocking cache probes and the cache-wait manager instead. */
 
   const char *ops[] = { "initialscale", "colorout", "gamma" };
   uint64_t *pending_hashes[] = {
@@ -410,7 +444,8 @@ static void _refresh_preview_histograms(dt_develop_t *dev)
 
     const dt_dev_pixelpipe_iop_t *const previous_piece
         = dt_dev_pixelpipe_get_prev_enabled_piece(dev->preview_pipe, piece);
-    if(previous_piece && !_refresh_preview_module_histogram_for_hash(dev, piece->module, previous_piece->global_hash))
+    if(!IS_NULL_PTR(previous_piece)
+       && !_refresh_preview_module_histogram_for_hash(dev, piece->module, previous_piece->global_hash))
     {
       gboolean found = FALSE;
       for(GList *l = _preview_refresh_state.module_histograms; l; l = g_list_next(l))
@@ -462,7 +497,6 @@ static void _refresh_preview_histograms(dt_develop_t *dev)
     l = next;
   }
   g_hash_table_destroy(seen_modules);
-  dt_pthread_mutex_unlock(&dev->preview_pipe->busy_mutex);
 }
 
 static void _preview_history_resync_callback(gpointer instance, gpointer user_data)
@@ -479,8 +513,6 @@ static void _preview_cacheline_ready_callback(gpointer instance, const guint64 h
 
   dt_develop_t *const dev = darktable.develop;
   if(IS_NULL_PTR(dev) || !dev->gui_attached || IS_NULL_PTR(dev->preview_pipe)) return;
-  dt_pthread_mutex_lock(&dev->preview_pipe->busy_mutex);
-
   if(_preview_refresh_state.initialscale_hash == hash)
   {
     _refresh_global_histogram_backbuf_for_hash(dev, "initialscale", hash);
@@ -511,7 +543,6 @@ static void _preview_cacheline_ready_callback(gpointer instance, const guint64 h
     }
     l = next;
   }
-  dt_pthread_mutex_unlock(&dev->preview_pipe->busy_mutex);
 }
 
 const char *name(struct dt_lib_module_t *self)
@@ -677,27 +708,19 @@ static uint64_t _get_live_histogram_hash(const char *op)
   dt_develop_t *const dev = darktable.develop;
   dt_dev_pixelpipe_t *const pipe = dev ? dev->preview_pipe : NULL;
   if(IS_NULL_PTR(dev) || IS_NULL_PTR(pipe) || IS_NULL_PTR(op)) return DT_PIXELPIPE_CACHE_HASH_INVALID;
-  dt_pthread_mutex_lock(&pipe->busy_mutex);
-
+  /* Avoid taking `pipe->busy_mutex` on the GUI thread: read the live module
+   * hashes without the mutex and rely on the cache peek manager to handle
+   * synchronization and retries for missing cachelines. */
   dt_iop_module_t *const module = dt_iop_get_module_by_op_priority(dev->iop, op, 0);
-  if(IS_NULL_PTR(module))
-  {
-    dt_pthread_mutex_unlock(&pipe->busy_mutex);
-    return DT_PIXELPIPE_CACHE_HASH_INVALID;
-  }
+  if(IS_NULL_PTR(module)) return DT_PIXELPIPE_CACHE_HASH_INVALID;
 
   const dt_dev_pixelpipe_iop_t *piece = dt_dev_pixelpipe_get_module_piece(pipe, module);
-  if(IS_NULL_PTR(piece))
-  {
-    dt_pthread_mutex_unlock(&pipe->busy_mutex);
-    return DT_PIXELPIPE_CACHE_HASH_INVALID;
-  }
+  if(IS_NULL_PTR(piece)) return DT_PIXELPIPE_CACHE_HASH_INVALID;
 
   if(!strcmp(op, "gamma"))
     piece = dt_dev_pixelpipe_get_prev_enabled_piece(pipe, piece);
 
   const uint64_t hash = piece ? piece->global_hash : DT_PIXELPIPE_CACHE_HASH_INVALID;
-  dt_pthread_mutex_unlock(&pipe->busy_mutex);
   return hash;
 }
 
@@ -788,11 +811,9 @@ static inline void _bin_pixels_histogram_in_roi(const float *const restrict imag
   // Process
 #ifdef _OPENMP
 #ifndef _WIN32
-#pragma omp parallel for default(firstprivate) \
-        reduction(+: bins[0: HISTOGRAM_BINS * 4])  collapse(3)
+__OMP_PARALLEL_FOR__(reduction(+: bins[0: HISTOGRAM_BINS * 4])  collapse(3))
 #else
-#pragma omp parallel for default(firstprivate) \
-        shared(bins)  collapse(3)
+__OMP_PARALLEL_FOR__(shared(bins)  collapse(3))
 #endif
 #endif
   for(size_t i = min_y; i < max_y; i++)
@@ -835,20 +856,33 @@ static inline void _bin_pickers_histogram(const float *const restrict image,
 
 static const dt_dev_pixelpipe_iop_t *_get_backbuf_source_piece(const dt_backbuf_t *backbuf, const char *op);
 
+static gboolean _is_restricted(dt_lib_histogram_t *d)
+{
+  if(IS_NULL_PTR(d)) return FALSE;
+  const gboolean restrict_active = !IS_NULL_PTR(d->restrict_button)
+      && gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d->restrict_button));
+  const gboolean picker_active = !IS_NULL_PTR(d->picker_button)
+      && gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d->picker_button));
+  return restrict_active && picker_active;
+}
+
 static void _process_histogram(dt_backbuf_t *backbuf, const char *op, cairo_t *cr, const int width,
-                               const int height)
+                               const int height, dt_lib_histogram_t *d)
 {
   // Histogram backbuffers already own their keepalive ref in the pipeline state. Drawing only borrows them.
   struct dt_pixel_cache_entry_t *entry = NULL;
   void *data = NULL;
-  dt_pthread_mutex_lock(&darktable.develop->preview_pipe->busy_mutex);
   const dt_dev_pixelpipe_iop_t *const piece = _get_backbuf_source_piece(backbuf, op);
-  if(IS_NULL_PTR(piece) || !dt_dev_pixelpipe_cache_peek_gui(darktable.develop->preview_pipe, piece, &data, &entry, NULL, NULL, NULL))
+  if(IS_NULL_PTR(piece)) return;
+  if(!IS_NULL_PTR(d))
+    dt_dev_pixelpipe_cache_wait_set_owner(&d->scope_wait, "histogram-scope", d->module);
+  if(!dt_dev_pixelpipe_cache_peek_gui(darktable.develop->preview_pipe, piece, &data, &entry,
+                                      !IS_NULL_PTR(d) ? &d->scope_wait : NULL,
+                                      _histogram_restart_cache_wait,
+                                      !IS_NULL_PTR(d) ? d->module : NULL))
   {
-    dt_pthread_mutex_unlock(&darktable.develop->preview_pipe->busy_mutex);
     return;
   }
-  dt_pthread_mutex_unlock(&darktable.develop->preview_pipe->busy_mutex);
 
   dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, entry);
 
@@ -859,7 +893,8 @@ static void _process_histogram(dt_backbuf_t *backbuf, const char *op, cairo_t *c
     return;
   }
 
-  if(dt_conf_get_bool("ui_last/colorpicker_restrict_histogram"))
+  const gboolean restrict_mode = _is_restricted(d);
+  if(restrict_mode)
   {
     // Bin only areas within color pickers
     GSList *samples = darktable.develop->color_picker.samples;
@@ -920,27 +955,84 @@ static void _process_histogram(dt_backbuf_t *backbuf, const char *op, cairo_t *c
 static inline void _bin_pixels_waveform_in_roi(const float *const restrict image, uint32_t *const restrict bins,
                                                const size_t min_x, const size_t max_x,
                                                const size_t min_y, const size_t max_y,
-                                               const size_t width,
-                                               const size_t binning_size,
+                                               const size_t source_width, const size_t source_height,
+                                               const size_t tone_bins, const size_t raster_extent,
                                                const gboolean vertical)
 {
-  // Process
-  __OMP_PARALLEL_FOR__(shared(bins)  collapse(3))
-  for(size_t i = min_y; i < max_y; i++)
-    for(size_t j = min_x; j < max_x; j++)
-      for(size_t c = 0; c < 3; c++)
+  if(vertical)
+  {
+    /* In vertical waveform/parade, pixel value is drawn along the widget width and source image
+     * position along the widget height. We therefore loop on final raster rows and collect the
+     * source rows that map there, so both axes have the same detail as the drawn surface. */
+    __OMP_PARALLEL_FOR__(shared(bins))
+    for(size_t raster_y = 0; raster_y < raster_extent; raster_y++)
+    {
+      const double source_y0d = (double)raster_y * (double)source_height / (double)raster_extent;
+      const double source_y1d = (double)(raster_y + 1) * (double)source_height / (double)raster_extent;
+      const size_t source_y0 = MAX(min_y, (size_t)floor(source_y0d));
+      const size_t source_y1 = MIN(max_y, (size_t)ceil(source_y1d));
+      if(source_y0 >= source_y1) continue;
+
+      for(size_t i = source_y0; i < source_y1; i++)
       {
-        const float value = image[(i * width + j) * 4 + c];
-        const size_t index = (uint8_t)CLAMP(roundf(value * (TONES - 1)), 0, TONES - 1);
-        if(vertical)
-          bins[((i * (TONES)) + index) * 4 + c]++;
-        else
-          bins[(((TONES - 1) - index) * width + j) * 4 + c]++;
+        const double overlap = MIN((double)(i + 1), source_y1d) - MAX((double)i, source_y0d);
+        const uint32_t weight = MAX(1u, (uint32_t)round(overlap * 256.));
+        __OMP_PARALLEL_FOR__(shared(bins) collapse(2))
+        for(size_t j = min_x; j < max_x; j++)
+          for(size_t c = 0; c < 3; c++)
+          {
+            const float value = image[(i * source_width + j) * 4 + c];
+            const float tone_position = CLAMPF(value, 0.f, 1.f) * (float)(tone_bins - 1);
+            const size_t tone0 = (size_t)floorf(tone_position);
+            const size_t tone1 = MIN(tone0 + 1, tone_bins - 1);
+            const float tone_mix = tone_position - (float)tone0;
+            const uint32_t weight1 = (uint32_t)roundf((float)weight * tone_mix);
+            const uint32_t weight0 = weight - weight1;
+            bins[(raster_y * tone_bins + tone0) * 4 + c] += weight0;
+            bins[(raster_y * tone_bins + tone1) * 4 + c] += weight1;
+          }
       }
+    }
+  }
+  else
+  {
+    /* In horizontal waveform/parade, pixel value is drawn along the widget height and source image
+     * position along the widget width. Each final raster column owns disjoint bins, avoiding races. */
+    __OMP_PARALLEL_FOR__(shared(bins))
+    for(size_t raster_x = 0; raster_x < raster_extent; raster_x++)
+    {
+      const double source_x0d = (double)raster_x * (double)source_width / (double)raster_extent;
+      const double source_x1d = (double)(raster_x + 1) * (double)source_width / (double)raster_extent;
+      const size_t source_x0 = MAX(min_x, (size_t)floor(source_x0d));
+      const size_t source_x1 = MIN(max_x, (size_t)ceil(source_x1d));
+      if(source_x0 >= source_x1) continue;
+
+      for(size_t j = source_x0; j < source_x1; j++)
+      {
+        const double overlap = MIN((double)(j + 1), source_x1d) - MAX((double)j, source_x0d);
+        const uint32_t weight = MAX(1u, (uint32_t)round(overlap * 256.));
+        __OMP_PARALLEL_FOR__(shared(bins) collapse(2))
+        for(size_t i = min_y; i < max_y; i++)
+          for(size_t c = 0; c < 3; c++)
+          {
+            const float value = image[(i * source_width + j) * 4 + c];
+            const float tone_position = CLAMPF(value, 0.f, 1.f) * (float)(tone_bins - 1);
+            const size_t tone0 = (size_t)floorf(tone_position);
+            const size_t tone1 = MIN(tone0 + 1, tone_bins - 1);
+            const float tone_mix = tone_position - (float)tone0;
+            const uint32_t weight1 = (uint32_t)roundf((float)weight * tone_mix);
+            const uint32_t weight0 = weight - weight1;
+            bins[((tone_bins - 1 - tone0) * raster_extent + raster_x) * 4 + c] += weight0;
+            bins[((tone_bins - 1 - tone1) * raster_extent + raster_x) * 4 + c] += weight1;
+          }
+      }
+    }
+  }
 }
 
 static inline void _bin_pickers_waveforms(const float *const restrict image, uint32_t *const restrict bins,
-                                          const size_t width, const size_t height, const size_t binning_size,
+                                          const size_t width, const size_t height,
+                                          const size_t tone_bins, const size_t raster_extent,
                                           const gboolean vertical, dt_colorpicker_sample_t *sample)
 {
   if(sample->size == DT_LIB_COLORPICKER_SIZE_BOX)
@@ -953,7 +1045,8 @@ static inline void _bin_pickers_waveforms(const float *const restrict image, uin
       CLAMP((size_t)roundf(image_box[2] * width), 0, width),
       CLAMP((size_t)roundf(image_box[3] * height), 0, height)
     };
-    _bin_pixels_waveform_in_roi(image, bins, box[0], box[2], box[1], box[3], width, binning_size, vertical);
+    _bin_pixels_waveform_in_roi(image, bins, box[0], box[2], box[1], box[3],
+                                width, height, tone_bins, raster_extent, vertical);
   }
   else
   {
@@ -961,38 +1054,41 @@ static inline void _bin_pickers_waveforms(const float *const restrict image, uin
     _sample_raw_point_to_image_norm(sample, image_point);
     const size_t x = CLAMP((size_t)roundf(image_point[0] * width), 0, width - 1);
     const size_t y = CLAMP((size_t)roundf(image_point[1] * height), 0, height - 1);
-    _bin_pixels_waveform_in_roi(image, bins, x, x + 1, y, y + 1, width, binning_size, vertical);
+    _bin_pixels_waveform_in_roi(image, bins, x, x + 1, y, y + 1,
+                                width, height, tone_bins, raster_extent, vertical);
   }
 }
 
 
 static inline void _bin_pixels_waveform(const float *const restrict image, uint32_t *const restrict bins,
                                         const size_t width, const size_t height, const size_t binning_size,
-                                        const gboolean vertical)
+                                        const size_t tone_bins, const size_t raster_extent,
+                                        const gboolean vertical, const gboolean restricted)
 {
   // Init
   __OMP_FOR_SIMD__(aligned(bins: 64) )
   for(size_t k = 0; k < binning_size; k++) bins[k] = 0;
 
-  if(dt_conf_get_bool("ui_last/colorpicker_restrict_histogram"))
+  if(restricted)
   {
     // Bin only areas within color pickers
     GSList *samples = darktable.develop->color_picker.samples;
     while(samples)
     {
       dt_colorpicker_sample_t *sample = samples->data;
-      _bin_pickers_waveforms(image, bins, width, height, binning_size, vertical, sample);
+      _bin_pickers_waveforms(image, bins, width, height, tone_bins, raster_extent, vertical, sample);
       samples = g_slist_next(samples);
     }
 
     if(darktable.develop->color_picker.picker)
-      _bin_pickers_waveforms(image, bins, width, height, binning_size, vertical,
+      _bin_pickers_waveforms(image, bins, width, height, tone_bins, raster_extent, vertical,
                              darktable.develop->color_picker.primary_sample);
   }
   else
   {
     // Bin the whole image
-    _bin_pixels_waveform_in_roi(image, bins, 0, width, 0, height, width, binning_size, vertical);
+    _bin_pixels_waveform_in_roi(image, bins, 0, width, 0, height,
+                                width, height, tone_bins, raster_extent, vertical);
   }
 }
 
@@ -1012,33 +1108,16 @@ static void _create_waveform_image(const uint32_t *const restrict bins, uint8_t 
   }
 }
 
-static void _mask_waveform(const uint8_t *const restrict image, uint8_t *const restrict masked, const size_t width, const size_t height, const size_t channel)
-{
-  // Channel masking, aka extract the desired channel out of the RGBa image
-  uint8_t mask[4] = { 0, 0, 0, 0 };
-  mask[channel] = 1;
-
-  __OMP_PARALLEL_FOR__(collapse(2))
-  for(size_t i = 0; i < height; i++)
-    for(size_t j = 0; j < width; j++)
-    {
-      const size_t index = (i * width + j) * 4;
-      const uint8_t *const restrict pixel_in = image + index;
-      uint8_t *const restrict pixel_out = masked + index;
-
-      __OMP_SIMD__(aligned(mask, pixel_in, pixel_out: 16))
-      for(size_t c = 0; c < 4; c++) pixel_out[c] = pixel_in[c] * mask[c];
-    }
-}
-
-static void _paint_waveform(cairo_t *cr, uint8_t *const restrict image, const int width, const int height, const size_t img_width, const size_t img_height, const gboolean vertical)
+static void _paint_waveform(cairo_t *cr, uint8_t *const restrict image, const int width, const int height,
+                            const size_t img_width, const size_t img_height, const size_t tone_bins,
+                            const gboolean vertical)
 {
   const size_t stride = cairo_format_stride_for_width(CAIRO_FORMAT_ARGB32, img_width);
   cairo_surface_t *background = cairo_image_surface_create_for_data(image, CAIRO_FORMAT_ARGB32, img_width, img_height, stride);
-  const double scale_w = (vertical) ? (double)width / (double)TONES
+  const double scale_w = (vertical) ? (double)width / (double)tone_bins
                                     : (double)width / (double)img_width;
   const double scale_h = (vertical) ? (double)height / (double)img_height
-                                    : (double)height / (double)TONES;
+                                    : (double)height / (double)tone_bins;
   cairo_scale(cr, scale_w, scale_h);
   cairo_set_operator(cr, CAIRO_OPERATOR_ADD);
   cairo_set_source_surface(cr, background, 0., 0.);
@@ -1047,99 +1126,372 @@ static void _paint_waveform(cairo_t *cr, uint8_t *const restrict image, const in
   cairo_surface_destroy(background);
 }
 
-static void _paint_parade(cairo_t *cr, uint8_t *const restrict image, const int width, const int height, const size_t img_width, const size_t img_height, const gboolean vertical)
-{
-  const size_t stride = cairo_format_stride_for_width(CAIRO_FORMAT_ARGB32, img_width);
-  const double scale_w = (vertical) ? (double)width / (double)TONES
-                                    : (double)width / (double)img_width / 3.;
-  const double scale_h = (vertical) ? (double)height / (double)img_height / 3.
-                                    : (double)height / (double)TONES;
-  cairo_set_operator(cr, CAIRO_OPERATOR_ADD);
-  cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_BEST);
-  cairo_scale(cr, scale_w, scale_h);
-
-  // The parade is basically a waveform where channels are shown
-  // next to each other instead of on top of each other.
-  // We need to isolate each channel, then paint it at a third of the nominal image width/height.
-  for(int c = 0; c < 3; c++)
-  {
-    uint8_t *const restrict channel = dt_pixelpipe_cache_alloc_align_cache(
-        img_width * img_height * 4 * sizeof(uint8_t),
-        0);
-    if(channel)
-    {
-      _mask_waveform(image, channel, img_width, img_height, c);
-      cairo_surface_t *background = cairo_image_surface_create_for_data(channel, CAIRO_FORMAT_ARGB32, img_width, img_height, stride);
-      const double x = (vertical) ? 0. : (double)c * img_width;
-      const double y = (vertical) ? (double)c * img_height : 0.;
-      cairo_set_source_surface(cr, background, x, y);
-      cairo_paint(cr);
-      cairo_surface_destroy(background);
-      dt_pixelpipe_cache_free_align(channel);
-    }
-  }
-}
-
 
 static void _process_waveform(dt_backbuf_t *backbuf, const char *op, cairo_t *cr, const int width,
-                              const int height, const gboolean vertical, const gboolean parade)
+                              const int height, const gboolean vertical, const gboolean parade,
+                              dt_lib_histogram_t *d)
 {
   struct dt_pixel_cache_entry_t *entry = NULL;
   void *data = NULL;
-  dt_pthread_mutex_lock(&darktable.develop->preview_pipe->busy_mutex);
   const dt_dev_pixelpipe_iop_t *const piece = _get_backbuf_source_piece(backbuf, op);
-  if(IS_NULL_PTR(piece) || !dt_dev_pixelpipe_cache_peek_gui(darktable.develop->preview_pipe, piece, &data, &entry, NULL, NULL, NULL))
+  if(IS_NULL_PTR(piece)) return;
+  if(!IS_NULL_PTR(d))
+    dt_dev_pixelpipe_cache_wait_set_owner(&d->scope_wait, "histogram-scope", d->module);
+  if(!dt_dev_pixelpipe_cache_peek_gui(darktable.develop->preview_pipe, piece, &data, &entry,
+                                      !IS_NULL_PTR(d) ? &d->scope_wait : NULL,
+                                      _histogram_restart_cache_wait,
+                                      !IS_NULL_PTR(d) ? d->module : NULL))
   {
-    dt_pthread_mutex_unlock(&darktable.develop->preview_pipe->busy_mutex);
     return;
   }
-  dt_pthread_mutex_unlock(&darktable.develop->preview_pipe->busy_mutex);
 
   dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, entry);
 
-  const size_t binning_size = (vertical) ? 4 * TONES * backbuf->height : 4 * TONES * backbuf->width;
+  /* The value axis must match the final drawing axis: widget height for horizontal scopes and
+   * widget width for vertical scopes. Keeping it fixed forces Cairo to stretch sparse
+   * value rows/columns, which shows as hatching when the scope is resized. */
+  const size_t tone_bins = MAX(2, (vertical) ? width : height);
+  /* The source-position axis must also match the final raster size. Otherwise Cairo stretches the
+   * preview-pipe dimensions to the scope allocation, which can leave visible regular stripes. */
+  const size_t raster_extent = MAX(2, (vertical)
+      ? (parade ? (height + 2) / 3 : height)
+      : (parade ? (width + 2) / 3 : width));
+  const size_t binning_size = 4 * tone_bins * raster_extent;
+  const size_t img_width = (parade) ? width : ((vertical) ? tone_bins : raster_extent);
+  const size_t img_height = (parade) ? height : ((vertical) ? raster_extent : tone_bins);
+  const size_t image_size = 4 * img_width * img_height;
+  const size_t source_axis = (vertical) ? backbuf->height : backbuf->width;
+  float source_min = INFINITY;
+  float source_max = -INFINITY;
+  size_t source_clipped = 0;
+  size_t source_nan = 0;
+  const size_t source_step = MAX((size_t)1, (backbuf->width * backbuf->height) / 4096);
+  for(size_t pixel = 0; pixel < backbuf->width * backbuf->height; pixel += source_step)
+    for(size_t c = 0; c < 3; c++)
+    {
+      const float value = ((const float *)data)[pixel * 4 + c];
+      if(isnan(value))
+        source_nan++;
+      else
+      {
+        source_min = fminf(source_min, value);
+        source_max = fmaxf(source_max, value);
+        source_clipped += (value < 0.f || value > 1.f);
+      }
+    }
+  uint32_t *smooth_bins = NULL;
+
+  if(darktable.unmuted & DT_DEBUG_VERBOSE)
+    dt_print(DT_DEBUG_DEV,
+            "[histogram/scope] waveform setup op=%s parade=%d vertical=%d widget=%dx%d backbuf=%" G_GSIZE_FORMAT "x%" G_GSIZE_FORMAT " "
+            "tone_bins=%" G_GSIZE_FORMAT " raster_extent=%" G_GSIZE_FORMAT " source_axis=%" G_GSIZE_FORMAT
+            " source_per_raster=%.4f binning_size=%" G_GSIZE_FORMAT " "
+            "source_value=%0.6f..%0.6f clipped=%" G_GSIZE_FORMAT " nan=%" G_GSIZE_FORMAT " sample_step=%" G_GSIZE_FORMAT "\n",
+            op, parade, vertical, width, height, backbuf->width, backbuf->height,
+            tone_bins, raster_extent, source_axis, (double)source_axis / (double)raster_extent,
+            binning_size, source_min, source_max, source_clipped, source_nan, source_step);
   uint32_t *const restrict bins = dt_pixelpipe_cache_alloc_align_cache(
       binning_size * sizeof(uint32_t),
       0);
   uint8_t *const restrict image = dt_pixelpipe_cache_alloc_align_cache(
-      binning_size * sizeof(uint8_t),
+      image_size * sizeof(uint8_t),
       0);
-  if(IS_NULL_PTR(image) || IS_NULL_PTR(bins)) goto error;
+  if(IS_NULL_PTR(image) || IS_NULL_PTR(bins))
+  {
+    if(darktable.unmuted & DT_DEBUG_VERBOSE)
+      dt_print(DT_DEBUG_DEV,
+              "[histogram/scope] waveform allocation failed bins=%p image=%p binning_size=%" G_GSIZE_FORMAT
+              " image_size=%" G_GSIZE_FORMAT "\n",
+              (void *)bins, (void *)image, binning_size, image_size);
+    goto error;
+  }
 
   // 1. Pixel binning along columns/rows, aka compute a column/row-wise histogram
-  _bin_pixels_waveform(data, bins, backbuf->width, backbuf->height, binning_size, vertical);
+  _bin_pixels_waveform(data, bins, backbuf->width, backbuf->height, binning_size,
+                       tone_bins, raster_extent, vertical, _is_restricted(d));
+
+  const uint32_t *render_bins = bins;
+  int smoothing_passes = 0;
+#if DT_LIB_HISTOGRAM_SCOPE_ENABLE_SMOOTHING \
+    && (DT_LIB_HISTOGRAM_SCOPE_SMOOTH_SPATIAL_PASSES > 0 \
+        || DT_LIB_HISTOGRAM_SCOPE_SMOOTH_TONE_PASSES > 0)
+  smooth_bins = dt_pixelpipe_cache_alloc_align_cache(binning_size * sizeof(uint32_t), 0);
+  const uint32_t smoothing_force = CLAMP(DT_LIB_HISTOGRAM_SCOPE_SMOOTH_FORCE, 0, 256);
+  if(!IS_NULL_PTR(smooth_bins) && smoothing_force > 0)
+  {
+    /* The waveform/parade is a spatially-indexed histogram. Even after fractional resampling,
+     * isolated source-column content can create one-pixel density modulation that reads as stries.
+     * The passes below are explicit at call site because the source/destination ownership matters:
+     * bins and smooth_bins alternate roles, and render_bins always records the last valid raster. */
+    const uint32_t original_force = 256u - smoothing_force;
+
+    for(int pass = 0; pass < DT_LIB_HISTOGRAM_SCOPE_SMOOTH_SPATIAL_PASSES; pass++)
+    {
+      const uint32_t *const source_bins = render_bins;
+      uint32_t *const target_bins = (source_bins == bins) ? smooth_bins : bins;
+
+      if(vertical)
+      {
+        for(size_t axis = 0; axis < raster_extent; axis++)
+        {
+          const size_t axis_m2 = (axis > 1) ? axis - 2 : 0;
+          const size_t axis_m1 = (axis > 0) ? axis - 1 : 0;
+          const size_t axis_p1 = MIN(axis + 1, raster_extent - 1);
+          const size_t axis_p2 = MIN(axis + 2, raster_extent - 1);
+          for(size_t tone = 0; tone < tone_bins; tone++)
+            for(size_t c = 0; c < 4; c++)
+            {
+              const size_t index = (axis * tone_bins + tone) * 4 + c;
+              const uint64_t smoothed = source_bins[(axis_m2 * tone_bins + tone) * 4 + c]
+                                      + 4u * source_bins[(axis_m1 * tone_bins + tone) * 4 + c]
+                                      + 6u * source_bins[index]
+                                      + 4u * source_bins[(axis_p1 * tone_bins + tone) * 4 + c]
+                                      + source_bins[(axis_p2 * tone_bins + tone) * 4 + c];
+              const uint64_t blended = original_force * source_bins[index]
+                                     + smoothing_force * ((smoothed + 8u) / 16u);
+              target_bins[index] = (uint32_t)((blended + 128u) / 256u);
+            }
+        }
+      }
+      else
+      {
+        for(size_t tone = 0; tone < tone_bins; tone++)
+          for(size_t axis = 0; axis < raster_extent; axis++)
+          {
+            const size_t axis_m2 = (axis > 1) ? axis - 2 : 0;
+            const size_t axis_m1 = (axis > 0) ? axis - 1 : 0;
+            const size_t axis_p1 = MIN(axis + 1, raster_extent - 1);
+            const size_t axis_p2 = MIN(axis + 2, raster_extent - 1);
+            for(size_t c = 0; c < 4; c++)
+            {
+              const size_t index = (tone * raster_extent + axis) * 4 + c;
+              const uint64_t smoothed = source_bins[(tone * raster_extent + axis_m2) * 4 + c]
+                                      + 4u * source_bins[(tone * raster_extent + axis_m1) * 4 + c]
+                                      + 6u * source_bins[index]
+                                      + 4u * source_bins[(tone * raster_extent + axis_p1) * 4 + c]
+                                      + source_bins[(tone * raster_extent + axis_p2) * 4 + c];
+              const uint64_t blended = original_force * source_bins[index]
+                                     + smoothing_force * ((smoothed + 8u) / 16u);
+              target_bins[index] = (uint32_t)((blended + 128u) / 256u);
+            }
+          }
+      }
+
+      render_bins = target_bins;
+      smoothing_passes++;
+    }
+
+    for(int pass = 0; pass < DT_LIB_HISTOGRAM_SCOPE_SMOOTH_TONE_PASSES; pass++)
+    {
+      const uint32_t *const source_bins = render_bins;
+      uint32_t *const target_bins = (source_bins == bins) ? smooth_bins : bins;
+
+      if(vertical)
+      {
+        for(size_t axis = 0; axis < raster_extent; axis++)
+          for(size_t tone = 0; tone < tone_bins; tone++)
+          {
+            const size_t tone_m1 = (tone > 0) ? tone - 1 : 0;
+            const size_t tone_p1 = MIN(tone + 1, tone_bins - 1);
+            for(size_t c = 0; c < 4; c++)
+            {
+              const size_t index = (axis * tone_bins + tone) * 4 + c;
+              const uint64_t smoothed = source_bins[(axis * tone_bins + tone_m1) * 4 + c]
+                                      + 2u * source_bins[index]
+                                      + source_bins[(axis * tone_bins + tone_p1) * 4 + c];
+              const uint64_t blended = original_force * source_bins[index]
+                                     + smoothing_force * ((smoothed + 2u) / 4u);
+              target_bins[index] = (uint32_t)((blended + 128u) / 256u);
+            }
+          }
+      }
+      else
+      {
+        for(size_t tone = 0; tone < tone_bins; tone++)
+        {
+          const size_t tone_m1 = (tone > 0) ? tone - 1 : 0;
+          const size_t tone_p1 = MIN(tone + 1, tone_bins - 1);
+          for(size_t axis = 0; axis < raster_extent; axis++)
+            for(size_t c = 0; c < 4; c++)
+            {
+              const size_t index = (tone * raster_extent + axis) * 4 + c;
+              const uint64_t smoothed = source_bins[(tone_m1 * raster_extent + axis) * 4 + c]
+                                      + 2u * source_bins[index]
+                                      + source_bins[(tone_p1 * raster_extent + axis) * 4 + c];
+              const uint64_t blended = original_force * source_bins[index]
+                                     + smoothing_force * ((smoothed + 2u) / 4u);
+              target_bins[index] = (uint32_t)((blended + 128u) / 256u);
+            }
+        }
+      }
+
+      render_bins = target_bins;
+      smoothing_passes++;
+    }
+  }
+#endif
 
   // 2. Paint image.
   // In a 1D histogram, pixel frequencies are shown as height (y axis) for each RGB quantum (x axis).
   // Here, we do a sort of 2D histogram : pixel frequencies are shown as opacity ("z" axis),
   // for each image column (x axis), for each RGB quantum (y axis)
-  const size_t img_width = (vertical) ? TONES : backbuf->width;
-  const size_t img_height = (vertical) ? backbuf->height : TONES;
-  const uint32_t overall_max_hist = _find_max_histogram(bins, binning_size);
-  _create_waveform_image(bins, image, overall_max_hist, img_width, img_height);
+  const uint32_t overall_max_hist = _find_max_histogram(render_bins, binning_size);
+  size_t empty_axis = 0;
+  uint64_t min_axis = UINT64_MAX;
+  uint64_t max_axis = 0;
+  uint32_t min_axis_peak = UINT32_MAX;
+  uint32_t max_axis_peak = 0;
+  for(size_t axis = 0; axis < raster_extent; axis++)
+  {
+    uint64_t axis_total = 0;
+    uint32_t axis_peak = 0;
+    for(size_t tone = 0; tone < tone_bins; tone++)
+    {
+      const size_t pixel = (vertical) ? axis * tone_bins + tone : tone * raster_extent + axis;
+      for(size_t c = 0; c < 3; c++)
+      {
+        const uint32_t value = render_bins[pixel * 4 + c];
+        axis_total += value;
+        axis_peak = MAX(axis_peak, value);
+      }
+    }
+
+    if(axis_total == 0) empty_axis++;
+    min_axis = MIN(min_axis, axis_total);
+    max_axis = MAX(max_axis, axis_total);
+    min_axis_peak = MIN(min_axis_peak, axis_peak);
+    max_axis_peak = MAX(max_axis_peak, axis_peak);
+  }
+  const size_t stride = cairo_format_stride_for_width(CAIRO_FORMAT_ARGB32, img_width);
+  dt_print(DT_DEBUG_DEV,
+           "[histogram/scope] waveform raster op=%s parade=%d vertical=%d image=%" G_GSIZE_FORMAT "x%" G_GSIZE_FORMAT
+           " stride=%" G_GSIZE_FORMAT " overall_max=%u empty_axis=%" G_GSIZE_FORMAT " axis_total=%" PRIu64 "..%" PRIu64
+           " axis_peak=%u..%u smooth=%d scale=%0.4fx%0.4f\n",
+           op, parade, vertical, img_width, img_height, stride, overall_max_hist,
+           empty_axis, min_axis, max_axis, min_axis_peak, max_axis_peak, smoothing_passes,
+           (double)width / (double)img_width, (double)height / (double)img_height);
 
   // 3. Send everything to GUI buffer.
   if(overall_max_hist > 0)
   {
+    if(parade)
+    {
+      /* Build the parade directly in the final widget raster. This keeps channel thirds on integer
+       * device pixels and removes all Cairo source-offset/scaling interactions from the diagnostic
+       * path: if stries remain, they are in the histogram bins, not in channel painting. */
+      for(size_t k = 0; k < image_size; k++) image[k] = 0;
+
+      for(size_t c = 0; c < 3; c++)
+      {
+        const size_t x0 = vertical ? 0 : c * width / 3;
+        const size_t x1 = vertical ? width : (c + 1) * width / 3;
+        const size_t y0 = vertical ? c * height / 3 : 0;
+        const size_t y1 = vertical ? (c + 1) * height / 3 : height;
+        const size_t channel_width = x1 - x0;
+        const size_t channel_height = y1 - y0;
+        if(channel_width == 0 || channel_height == 0) continue;
+
+        for(size_t y = y0; y < y1; y++)
+          for(size_t x = x0; x < x1; x++)
+          {
+            const size_t axis = vertical
+                ? (y - y0) * raster_extent / channel_height
+                : (x - x0) * raster_extent / channel_width;
+            const size_t tone = vertical ? x : y;
+            const size_t bin_index = vertical ? (axis * tone_bins + tone) * 4 + c
+                                                : (tone * raster_extent + axis) * 4 + c;
+            const uint8_t value = (uint8_t)CLAMP(roundf(powf((float)render_bins[bin_index] / (float)overall_max_hist, GAMMA) * 255.f), 0, 255);
+            const size_t image_index = (y * img_width + x) * 4;
+            image[image_index + 2 - c] = value;
+            image[image_index + 3] = 255;
+          }
+      }
+    }
+    else
+      _create_waveform_image(render_bins, image, overall_max_hist, img_width, img_height);
+
     cairo_save(cr);
 
     // Paint background - Color not exposed to user theme because this is tricky
-    cairo_rectangle(cr, 0, 0, width, height);
     cairo_set_source_rgb(cr, 0.3, 0.3, 0.3);
-    cairo_fill(cr);
+    cairo_paint(cr);
+
+    /**
+     * @userdoc
+     * @id: Scope grid
+     * @page: views/toolboxes/scopes.md
+     * @type: feature
+     * @section: Guide lines
+     * @screenshot: ${5|required,optional}
+     * @controls:
+     *
+     * Raw image: The tone axis guides shows bit-stops levels.
+     * Padade: The spatial axis guides has been removed.
+     */
 
     cairo_set_source_rgb(cr, 0.21, 0.21, 0.21);
-    dt_draw_grid(cr, 4, 0, 0, width, height);
-
-    if(parade)
-      _paint_parade(cr, image, width, height, img_width, img_height, vertical);
+    const gboolean raw_stage = (!strcmp(op, "initialscale") || !strcmp(op, "demosaic"));
+    if(raw_stage)
+    {
+      /* The regular 4x4 grid has a tonal guide at 0.75, which is not an integer raw bit stop.
+       * In raw mode, non-parade scopes keep only the global spatial guides here; the tone guides
+       * are drawn below from powers of two. Parade intentionally has no spatial guides. */
+      for(int k = 1; !parade && k < 4; k++)
+      {
+        if(vertical)
+          dt_draw_line(cr, 0, (double)k * (double)height / 4.0, width, (double)k * (double)height / 4.0);
+        else
+          dt_draw_line(cr, (double)k * (double)width / 4.0, 0, (double)k * (double)width / 4.0, height);
+        cairo_stroke(cr);
+      }
+    }
+    else if(parade)
+    {
+      /* Parade already splits the spatial axis into RGB strips. Keep only the regular tone-axis
+       * guides here so the grid does not add misleading source-position lines inside each strip. */
+      for(int k = 1; k < 4; k++)
+      {
+        if(vertical)
+          dt_draw_line(cr, (double)k * (double)width / 4.0, 0, (double)k * (double)width / 4.0, height);
+        else
+          dt_draw_line(cr, 0, (double)k * (double)height / 4.0, width, (double)k * (double)height / 4.0);
+        cairo_stroke(cr);
+      }
+    }
     else
-      _paint_waveform(cr, image, width, height, img_width, img_height, vertical);
+      dt_draw_grid(cr, 4, 0, 0, width, height);
+
+    if(raw_stage)
+    {
+      /* Raw data is linear, so integer bit stops are powers of two in normalized tone space.
+       * Drawing those stops on the tone axis makes exposure clipping and low-bit detail readable
+       * without depending on the current scope height. */
+      for(int stop = 0; stop <= 8; stop++)
+      {
+        const double value = 1.0 / (double)(1u << stop);
+        if(value < (double)DT_LIB_HISTOGRAM_SCOPE_MIN_VALUE) break;
+
+        if(vertical)
+        {
+          const double x = value * (double)width;
+          dt_draw_line(cr, x, 0, x, height);
+        }
+        else
+        {
+          const double y = (1.0 - value) * (double)height;
+          dt_draw_line(cr, 0, y, width, y);
+        }
+        cairo_stroke(cr);
+      }
+    }
+
+    _paint_waveform(cr, image, width, height, img_width, img_height, tone_bins, vertical);
 
     cairo_restore(cr);
   }
 
 error:;
+  dt_pixelpipe_cache_free_align(smooth_bins);
   dt_pixelpipe_cache_free_align(bins);
   dt_pixelpipe_cache_free_align(image);
   dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, entry);
@@ -1260,7 +1612,7 @@ static void _bin_vectorscope(const float *const restrict image, uint32_t *const 
   __OMP_FOR_SIMD__(aligned(vectorscope: 64) )
   for(size_t k = 0; k < HISTOGRAM_BINS * HISTOGRAM_BINS; k++) vectorscope[k] = 0;
 
-  if(dt_conf_get_bool("ui_last/colorpicker_restrict_histogram"))
+  if(_is_restricted(d))
   {
     // Bin only areas within color pickers
     GSList *samples = darktable.develop->color_picker.samples;
@@ -1287,18 +1639,18 @@ static void _process_vectorscope(dt_backbuf_t *backbuf, const char *op, cairo_t 
                                  const int height, const float zoom, dt_lib_histogram_t *d)
 {
   dt_iop_order_iccprofile_info_t *profile = darktable.develop->preview_pipe->output_profile_info;
-  if(IS_NULL_PTR(profile)) return;
+  if(IS_NULL_PTR(profile) || IS_NULL_PTR(d)) return;
 
   struct dt_pixel_cache_entry_t *entry = NULL;
   void *data = NULL;
-  dt_pthread_mutex_lock(&darktable.develop->preview_pipe->busy_mutex);
   const dt_dev_pixelpipe_iop_t *const piece = _get_backbuf_source_piece(backbuf, op);
-  if(IS_NULL_PTR(piece) || !dt_dev_pixelpipe_cache_peek_gui(darktable.develop->preview_pipe, piece, &data, &entry, NULL, NULL, NULL))
+  if(IS_NULL_PTR(piece)) return;
+  dt_dev_pixelpipe_cache_wait_set_owner(&d->scope_wait, "histogram-scope", d->module);
+  if(!dt_dev_pixelpipe_cache_peek_gui(darktable.develop->preview_pipe, piece, &data, &entry, &d->scope_wait,
+                                      _histogram_restart_cache_wait, d->module))
   {
-    dt_pthread_mutex_unlock(&darktable.develop->preview_pipe->busy_mutex);
     return;
   }
-  dt_pthread_mutex_unlock(&darktable.develop->preview_pipe->busy_mutex);
 
   dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, entry);
 
@@ -1320,8 +1672,9 @@ static void _process_vectorscope(dt_backbuf_t *backbuf, const char *op, cairo_t 
   {
     const size_t stride = cairo_format_stride_for_width(CAIRO_FORMAT_ARGB32, HISTOGRAM_BINS);
     cairo_surface_t *background = cairo_image_surface_create_for_data(image, CAIRO_FORMAT_ARGB32, HISTOGRAM_BINS, HISTOGRAM_BINS, stride);
-    cairo_translate(cr, (double)(width - height) / 2., 0.);
-    cairo_scale(cr, (double)height / HISTOGRAM_BINS, (double)height / HISTOGRAM_BINS);
+    const int side = MIN(width, height);
+    cairo_translate(cr, (double)(width - side) / 2., (double)(height - side) / 2.);
+    cairo_scale(cr, (double)side / HISTOGRAM_BINS, (double)side / HISTOGRAM_BINS);
 
     const double radius = (float)(HISTOGRAM_BINS - 1) / 2 - DT_PIXEL_APPLY_DPI(1.);
     const double x_center = (float)(HISTOGRAM_BINS - 1) / 2;
@@ -1465,7 +1818,7 @@ error:;
 gboolean _needs_recompute(dt_lib_histogram_t *d, const int width, const int height)
 {
   // Check if cache is up-to-date
-  dt_lib_histogram_scope_type_t view = dt_bauhaus_combobox_get(d->display);
+  dt_lib_histogram_scope_type_t view = d->scope;
   gboolean hash_match = (d->cache.hash == dt_dev_backbuf_get_hash(d->backbuf));
   gboolean size_match = (d->cache.width == width && d->cache.height == height);
   gboolean zoom_match = (d->cache.zoom == d->zoom);
@@ -1495,6 +1848,61 @@ void _get_allocation_size(dt_lib_histogram_t *d, int *width, int *height)
   *height = allocation.height;
 }
 
+/**
+ * @userdoc
+ * @id: restricted-scope
+ * @page: views/toolboxes/scopes.md
+ * @type: feature
+ * @section: Color picker
+ * @screenshot: optional
+ * @controls: color picker, Restrict scope to selection
+ *
+ * When the color picker is enabled and "Restrict scope to selection" is checked,
+ * the scope is computed only from the active picker area and live samples instead
+ * of the whole image. A "Restricted" label is shown on the scope while this mode
+ * is active.
+ */
+
+/**
+ * @brief Draw the restricted-scope label over the current Cairo surface.
+ *
+ * The scope content is rendered first because the label describes the final
+ * visible state. The theme owns the text color through graph_scope_restricted,
+ * while the module keeps the Cairo operator explicit because it controls how
+ * the label is composited with the already-rendered graph pixels.
+ */
+static void _process_restricted_text(dt_lib_histogram_t *d, cairo_t *cr, const int height)
+{
+  if(_is_restricted(d))
+  {
+    cairo_save(cr);
+    cairo_set_operator(cr, DT_LIB_HISTOGRAM_SCOPE_RESTRICTED_LABEL_OPERATOR);
+
+    PangoLayout *layout = pango_cairo_create_layout(cr);
+    PangoFontDescription *desc = pango_font_description_copy_static(darktable.bauhaus->pango_font_desc);
+    pango_font_description_set_absolute_size(desc, DT_PIXEL_APPLY_DPI(12.) * PANGO_SCALE);
+    pango_layout_set_font_description(layout, desc);
+    pango_layout_set_text(layout, _("Restricted"), -1);
+
+    PangoRectangle ink;
+    PangoRectangle logical;
+    pango_layout_get_pixel_extents(layout, &ink, &logical);
+
+    const double padding = DT_PIXEL_APPLY_DPI(2.);
+    const double text_padding = DT_PIXEL_APPLY_DPI(1.5);
+    const double label_x = padding;
+    const double label_y = MAX(padding, height - logical.height - 2. * text_padding - padding);
+
+    set_color(cr, darktable.bauhaus->graph_scope_restricted);
+    cairo_move_to(cr, label_x + text_padding - ink.x, label_y + text_padding);
+    pango_cairo_show_layout(cr, layout);
+
+    pango_font_description_free(desc);
+    g_object_unref(layout);
+    cairo_restore(cr);
+  }
+}
+
 gboolean _redraw_surface(dt_lib_histogram_t *d)
 {
   if(IS_NULL_PTR(d->cst)) return 1;
@@ -1510,7 +1918,7 @@ gboolean _redraw_surface(dt_lib_histogram_t *d)
   d->cache.width = width;
   d->cache.height = height;
   d->cache.zoom = d->zoom;
-  d->cache.view = dt_bauhaus_combobox_get(d->display);
+  d->cache.view = d->scope;
 
   cairo_t *cr = cairo_create(d->cst);
 
@@ -1519,31 +1927,31 @@ gboolean _redraw_surface(dt_lib_histogram_t *d)
   cairo_set_line_width(cr, 1.); // we want exactly 1 px no matter the resolution
 
   // Paint content
-  switch(dt_bauhaus_combobox_get(d->display))
+  switch(d->scope)
   {
     case DT_LIB_HISTOGRAM_SCOPE_HISTOGRAM:
     {
-      _process_histogram(d->backbuf, d->op, cr, width, height);
+      _process_histogram(d->backbuf, d->op, cr, width, height, d);
       break;
     }
     case DT_LIB_HISTOGRAM_SCOPE_WAVEFORM_HORIZONTAL:
     {
-      _process_waveform(d->backbuf, d->op, cr, width, height, FALSE, FALSE);
+      _process_waveform(d->backbuf, d->op, cr, width, height, FALSE, FALSE, d);
       break;
     }
     case DT_LIB_HISTOGRAM_SCOPE_WAVEFORM_VERTICAL:
     {
-      _process_waveform(d->backbuf, d->op, cr, width, height, TRUE, FALSE);
+      _process_waveform(d->backbuf, d->op, cr, width, height, TRUE, FALSE, d);
       break;
     }
     case DT_LIB_HISTOGRAM_SCOPE_PARADE_HORIZONTAL:
     {
-      _process_waveform(d->backbuf, d->op, cr, width, height, FALSE, TRUE);
+      _process_waveform(d->backbuf, d->op, cr, width, height, FALSE, TRUE, d);
       break;
     }
     case DT_LIB_HISTOGRAM_SCOPE_PARADE_VERTICAL:
     {
-      _process_waveform(d->backbuf, d->op, cr, width, height, TRUE, TRUE);
+      _process_waveform(d->backbuf, d->op, cr, width, height, TRUE, TRUE, d);
       break;
     }
     case DT_LIB_HISTOGRAM_SCOPE_VECTORSCOPE:
@@ -1554,6 +1962,8 @@ gboolean _redraw_surface(dt_lib_histogram_t *d)
     default:
       break;
   }
+
+  _process_restricted_text(d, cr, height);
 
   cairo_destroy(cr);
   dt_show_times_f(&start, "[histogram]", "redraw");
@@ -1634,21 +2044,13 @@ static gboolean _resolve_backbuf_sampling_source(const char *const op, const dt_
   dt_develop_t *const dev = darktable.develop;
   dt_dev_pixelpipe_t *const pipe = dev ? dev->preview_pipe : NULL;
   if(IS_NULL_PTR(dev) || IS_NULL_PTR(pipe) || IS_NULL_PTR(op) || IS_NULL_PTR(backbuf) || IS_NULL_PTR(roi) || IS_NULL_PTR(dsc) || !iop_order || IS_NULL_PTR(direction)) return FALSE;
-  dt_pthread_mutex_lock(&pipe->busy_mutex);
-
+  /* Avoid taking `pipe->busy_mutex` on the GUI thread: read live module state
+   * without blocking and let the cache peek manager handle synchronization. */
   dt_iop_module_t *const module = dt_iop_get_module_by_op_priority(dev->iop, op, 0);
-  if(IS_NULL_PTR(module))
-  {
-    dt_pthread_mutex_unlock(&pipe->busy_mutex);
-    return FALSE;
-  }
+  if(IS_NULL_PTR(module)) return FALSE;
 
   const dt_dev_pixelpipe_iop_t *const piece = dt_dev_pixelpipe_get_module_piece(pipe, module);
-  if(IS_NULL_PTR(piece))
-  {
-    dt_pthread_mutex_unlock(&pipe->busy_mutex);
-    return FALSE;
-  }
+  if(IS_NULL_PTR(piece)) return FALSE;
 
   uint64_t hash = piece->global_hash;
   *roi = piece->roi_out;
@@ -1659,11 +2061,7 @@ static gboolean _resolve_backbuf_sampling_source(const char *const op, const dt_
   if(!strcmp(op, "gamma"))
   {
     const dt_dev_pixelpipe_iop_t *const previous_piece = dt_dev_pixelpipe_get_prev_enabled_piece(pipe, piece);
-    if(IS_NULL_PTR(previous_piece))
-    {
-      dt_pthread_mutex_unlock(&pipe->busy_mutex);
-      return FALSE;
-    }
+    if(IS_NULL_PTR(previous_piece)) return FALSE;
 
     hash = previous_piece->global_hash;
     *roi = previous_piece->roi_out;
@@ -1672,7 +2070,6 @@ static gboolean _resolve_backbuf_sampling_source(const char *const op, const dt_
   }
 
   const gboolean valid = hash == dt_dev_backbuf_get_hash(backbuf);
-  dt_pthread_mutex_unlock(&pipe->busy_mutex);
   return valid;
 }
 
@@ -1682,15 +2079,14 @@ static void _pixelpipe_pick_from_image(const dt_backbuf_t *const backbuf,
 {
   struct dt_pixel_cache_entry_t *entry = NULL;
   void *data = NULL;
-  dt_pthread_mutex_lock(&darktable.develop->preview_pipe->busy_mutex);
   const dt_dev_pixelpipe_iop_t *const source_piece = _get_backbuf_source_piece(backbuf, op);
-  if(IS_NULL_PTR(source_piece)
-     || !dt_dev_pixelpipe_cache_peek_gui(darktable.develop->preview_pipe, source_piece, &data, &entry, NULL, NULL, NULL))
+  if(IS_NULL_PTR(source_piece)) return;
+  dt_dev_pixelpipe_cache_wait_set_owner(&d->picker_wait, "histogram-picker", d->module);
+  if(!dt_dev_pixelpipe_cache_peek_gui(darktable.develop->preview_pipe, source_piece, &data, &entry,
+                                      &d->picker_wait, _histogram_restart_cache_wait, d->module))
   {
-    dt_pthread_mutex_unlock(&darktable.develop->preview_pipe->busy_mutex);
     return;
   }
-  dt_pthread_mutex_unlock(&darktable.develop->preview_pipe->busy_mutex);
 
   dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, entry);
 
@@ -1844,6 +2240,12 @@ static gboolean _refresh_global_picker(dt_lib_module_t *self)
 
   if(!_is_backbuf_ready(d)) return FALSE;
 
+  /* In restricted mode the scope bins only picker rectangles/points. Moving the
+   * global picker does not change the preview cache hash, so invalidate the
+   * Cairo scope cache explicitly before recomputing from the same backbuffer. */
+  if(dt_conf_get_bool("ui_last/colorpicker_restrict_histogram"))
+    _reset_cache(d);
+
   _update_everything(self);
   return TRUE;
 }
@@ -1884,6 +2286,9 @@ void view_leave(struct dt_lib_module_t *self, struct dt_view_t *old_view, struct
 {
   dt_lib_histogram_t *d = self->data;
   _reset_cache(d);
+  dt_dev_pixelpipe_cache_wait_cleanup(&d->scope_wait, "histogram-view-leave-scope");
+  dt_dev_pixelpipe_cache_wait_cleanup(&d->picker_wait, "histogram-view-leave-picker");
+  dt_dev_pixelpipe_cache_wait_cleanup(&d->module_wait, "histogram-view-leave-module");
 
   _clear_pending_preview_histograms();
   _clear_pending_hashes(d);
@@ -1900,26 +2305,28 @@ void view_leave(struct dt_lib_module_t *self, struct dt_view_t *old_view, struct
 }
 
 
-void _stage_callback(GtkWidget *widget, dt_lib_module_t *self)
+static void _set_stage(dt_lib_module_t *self, int value)
 {
   dt_lib_histogram_t *d = (dt_lib_histogram_t *)self->data;
-  const int value = dt_bauhaus_combobox_get(widget);
   _backbuf_int_to_op(value, d);
   dt_conf_set_string("plugin/darkroom/histogram/op", d->op);
 
-  // Disable vectorscope for RAW stage
-  dt_bauhaus_combobox_entry_set_sensitive(d->display, DT_LIB_HISTOGRAM_SCOPE_VECTORSCOPE,
-                                          strcmp(d->op, "initialscale"));
+  // Vectorscope is meaningless for raw Bayer data
+  if(!strcmp(d->op, "initialscale") && d->scope == DT_LIB_HISTOGRAM_SCOPE_VECTORSCOPE)
+  {
+    d->scope = DT_LIB_HISTOGRAM_SCOPE_HISTOGRAM;
+    dt_conf_set_int("plugin/darkroom/histogram/display", d->scope);
+  }
 
   _refresh_preview_histograms(darktable.develop);
   _sync_pending_histogram_hashes(self);
 }
 
-
-void _display_callback(GtkWidget *widget, dt_lib_module_t *self)
+static void _set_scope(dt_lib_module_t *self, dt_lib_histogram_scope_type_t scope)
 {
   dt_lib_histogram_t *d = (dt_lib_histogram_t *)self->data;
-  dt_conf_set_int("plugin/darkroom/histogram/display", dt_bauhaus_combobox_get(d->display));
+  d->scope = scope;
+  dt_conf_set_int("plugin/darkroom/histogram/display", d->scope);
   if(_trigger_recompute(d)) _redraw_scopes(d);
 }
 
@@ -1933,7 +2340,7 @@ static void _resize_callback(GtkWidget *widget, GdkRectangle *allocation, dt_lib
 
 static gboolean _area_scrolled_callback(GtkWidget *widget, GdkEventScroll *event, dt_lib_histogram_t *d)
 {
-  if(dt_bauhaus_combobox_get(d->display) != DT_LIB_HISTOGRAM_SCOPE_VECTORSCOPE) return FALSE;
+  if(d->scope != DT_LIB_HISTOGRAM_SCOPE_VECTORSCOPE) return FALSE;
 
   int delta_y = 0;
   if(!dt_gui_get_scroll_unit_deltas(event, NULL, &delta_y)) return TRUE;
@@ -1953,6 +2360,38 @@ static gboolean _area_scrolled_callback(GtkWidget *widget, GdkEventScroll *event
   return TRUE;
 }
 
+static int _scope_resize_handle_get_size(gpointer user_data)
+{
+  dt_lib_histogram_t *d = (dt_lib_histogram_t *)user_data;
+  return gtk_widget_get_allocated_height(d->scope_draw);
+}
+
+/**
+ * @brief Apply one vertical size request from the generic Bauhaus resize handle.
+ *
+ * @details The Bauhaus widget owns pointer tracking and sends requested heights here. The histogram
+ * owns the scope widget, the window-relative clamp, and persistence, so these side effects remain
+ * explicit in the module that owns the resized surface.
+ */
+static int _scope_resize_handle_resize(int requested_size, gboolean finished, gpointer user_data)
+{
+  dt_lib_histogram_t *d = (dt_lib_histogram_t *)user_data;
+  int window_height;
+  gtk_window_get_size(GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)), NULL, &window_height);
+
+  const int min_height = DT_PIXEL_APPLY_DPI(DT_LIB_HISTOGRAM_SCOPE_MIN_HEIGHT);
+  const int max_height = MAX(min_height, MIN(DT_PIXEL_APPLY_DPI(DT_LIB_HISTOGRAM_SCOPE_MAX_HEIGHT),
+                                            window_height * 3 / 4));
+  d->scope_height = CLAMP(requested_size, min_height, max_height);
+
+  gtk_widget_set_size_request(d->scope_draw, -1, d->scope_height);
+  gtk_widget_queue_resize(d->scope_draw);
+  if(finished)
+    dt_conf_set_int(DT_LIB_HISTOGRAM_SCOPE_HEIGHT_CONF, d->scope_height);
+
+  return d->scope_height;
+}
+
 void _set_params(dt_lib_histogram_t *d)
 {
   d->op = dt_conf_get_string_const("plugin/darkroom/histogram/op");
@@ -1964,15 +2403,12 @@ void _set_params(dt_lib_histogram_t *d)
   d->backbuf = _get_histogram_backbuf(darktable.develop, d->op);
   d->zoom = fminf(fmaxf(dt_conf_get_float("plugin/darkroom/histogram/zoom"), 32.f), 252.f);
 
-  // Disable RAW stage for non-RAW images
-  dt_bauhaus_combobox_entry_set_sensitive(d->stage, 0, dt_image_is_raw(&darktable.develop->image_storage));
+  d->scope = (dt_lib_histogram_scope_type_t)CLAMP(
+      dt_conf_get_int("plugin/darkroom/histogram/display"), 0, DT_LIB_HISTOGRAM_SCOPE_N - 1);
 
-  // Disable vectorscope if RAW stage is selected
-  dt_bauhaus_combobox_entry_set_sensitive(d->display, DT_LIB_HISTOGRAM_SCOPE_VECTORSCOPE,
-                                          strcmp(d->op, "initialscale"));
-
-  dt_bauhaus_combobox_set(d->display, dt_conf_get_int("plugin/darkroom/histogram/display"));
-  dt_bauhaus_combobox_set(d->stage, _backbuf_op_to_int(d));
+  // Vectorscope is not valid on raw Bayer data; fall back to histogram
+  if(!strcmp(d->op, "initialscale") && d->scope == DT_LIB_HISTOGRAM_SCOPE_VECTORSCOPE)
+    d->scope = DT_LIB_HISTOGRAM_SCOPE_HISTOGRAM;
 }
 
 
@@ -2065,7 +2501,19 @@ static void _update_picker_output(dt_lib_module_t *self)
 
 static void _picker_button_toggled(GtkToggleButton *button, dt_lib_histogram_t *d)
 {
-  gtk_widget_set_sensitive(GTK_WIDGET(d->add_sample_button), gtk_toggle_button_get_active(button));
+  const gboolean picker_active = gtk_toggle_button_get_active(button);
+  gtk_widget_set_sensitive(GTK_WIDGET(d->add_sample_button), picker_active);
+
+  const gboolean restrict_active = !IS_NULL_PTR(d->restrict_button)
+      && gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d->restrict_button));
+  if(!picker_active && restrict_active)
+  {
+    /* Restrict mode changes the rendered bins from picker geometry to full-image
+     * bins when the live picker is disabled. The preview backbuffer hash does not
+     * change, so make the scope cache dirty from the UI state transition itself. */
+    _reset_cache(d);
+    if(_trigger_recompute(d)) _redraw_scopes(d);
+  }
 }
 
 /* set sample area proxy impl */
@@ -2073,12 +2521,18 @@ static void _picker_button_toggled(GtkToggleButton *button, dt_lib_histogram_t *
 static void _set_sample_box_area(dt_lib_module_t *self, const dt_boundingbox_t box)
 {
   dt_lib_colorpicker_set_box_area(darktable.lib, box);
+  dt_lib_histogram_t *d = self->data;
+  if(dt_conf_get_bool("ui_last/colorpicker_restrict_histogram"))
+    _reset_cache(d);
   _update_everything(self);
 }
 
 static void _set_sample_point(dt_lib_module_t *self, const float pos[2])
 {
   dt_lib_colorpicker_set_point(darktable.lib, pos);
+  dt_lib_histogram_t *d = self->data;
+  if(dt_conf_get_bool("ui_last/colorpicker_restrict_histogram"))
+    _reset_cache(d);
   _update_everything(self);
 }
 
@@ -2199,8 +2653,15 @@ static void _remove_sample(dt_colorpicker_sample_t *sample)
 
 static void _remove_sample_cb(GtkButton *widget, dt_colorpicker_sample_t *sample)
 {
+  dt_lib_module_t *self = darktable.develop->color_picker.histogram_module;
+  dt_lib_histogram_t *d = self ? self->data : NULL;
+  if(dt_conf_get_bool("ui_last/colorpicker_restrict_histogram") && !IS_NULL_PTR(d))
+    _reset_cache(d);
+
   _remove_sample(sample);
   dt_control_queue_redraw_center();
+  if(!IS_NULL_PTR(self))
+    _update_everything(self);
 }
 
 static gboolean _live_sample_button(GtkWidget *widget, GdkEventButton *event, dt_colorpicker_sample_t *sample)
@@ -2258,7 +2719,7 @@ static void _add_sample(GtkButton *widget, dt_lib_module_t *self)
   g_signal_connect(G_OBJECT(sample->container), "enter-notify-event", G_CALLBACK(_sample_enter_callback), sample);
   g_signal_connect(G_OBJECT(sample->container), "leave-notify-event", G_CALLBACK(_sample_leave_callback), sample);
 
-  GtkWidget *container = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *container = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_container_add(GTK_CONTAINER(sample->container), container);
 
   sample->color_patch = gtk_drawing_area_new();
@@ -2269,7 +2730,7 @@ static void _add_sample(GtkButton *widget, dt_lib_module_t *self)
   g_signal_connect(G_OBJECT(sample->color_patch), "button-press-event", G_CALLBACK(_live_sample_button), sample);
   g_signal_connect(G_OBJECT(sample->color_patch), "draw", G_CALLBACK(_sample_draw_callback), sample);
 
-  GtkWidget *color_patch_wrapper = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *color_patch_wrapper = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_widget_set_name(color_patch_wrapper, "live-sample");
   gtk_box_pack_start(GTK_BOX(color_patch_wrapper), sample->color_patch, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(container), color_patch_wrapper, TRUE, TRUE, 0);
@@ -2297,6 +2758,8 @@ static void _add_sample(GtkButton *widget, dt_lib_module_t *self)
   darktable.develop->color_picker.selected_sample = NULL;
 
   // Updating the display
+  if(dt_conf_get_bool("ui_last/colorpicker_restrict_histogram"))
+    _reset_cache(d);
   _update_everything(self);
 }
 
@@ -2310,8 +2773,20 @@ static void _display_samples_changed(GtkToggleButton *button, dt_lib_module_t *s
 
 static void _restrict_histogram_changed(GtkToggleButton *button, dt_lib_module_t *self)
 {
-  dt_conf_set_bool("ui_last/colorpicker_restrict_histogram", gtk_toggle_button_get_active(button));
-  darktable.develop->color_picker.restrict_histogram = gtk_toggle_button_get_active(button);
+  dt_lib_histogram_t *d = self->data;
+  const gboolean restrict_active = gtk_toggle_button_get_active(button);
+  const gboolean picker_active = !IS_NULL_PTR(d->picker_button)
+      && gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d->picker_button));
+  dt_conf_set_bool("ui_last/colorpicker_restrict_histogram", restrict_active);
+  darktable.develop->color_picker.restrict_histogram = restrict_active;
+
+  if(picker_active)
+  {
+    /* Restrict toggling changes the scope bins between full-image and picker
+     * geometry while the preview backbuffer hash stays identical. Make the
+     * cached Cairo surface dirty so _update_everything() renders the new mode. */
+    _reset_cache(d);
+  }
   _update_everything(self);
 }
 
@@ -2356,47 +2831,125 @@ void gui_reset(dt_lib_module_t *self)
   dt_dev_pixelpipe_update_history_preview(darktable.develop);
 }
 
+static void _pref_stage_toggled(GtkCheckMenuItem *item, gpointer user_data)
+{
+  if(!gtk_check_menu_item_get_active(item)) return;
+  dt_lib_module_t *self = (dt_lib_module_t *)g_object_get_data(G_OBJECT(item), "self");
+  _set_stage(self, GPOINTER_TO_INT(user_data));
+}
+
+static void _pref_display_toggled(GtkCheckMenuItem *item, gpointer user_data)
+{
+  if(!gtk_check_menu_item_get_active(item)) return;
+  dt_lib_module_t *self = (dt_lib_module_t *)g_object_get_data(G_OBJECT(item), "self");
+  _set_scope(self, (dt_lib_histogram_scope_type_t)GPOINTER_TO_INT(user_data));
+}
+
+void set_preferences(void *menu, dt_lib_module_t *self)
+{
+  dt_lib_histogram_t *d = (dt_lib_histogram_t *)self->data;
+
+  // "Show data from" submenu
+  GtkWidget *mi_stage = gtk_menu_item_new_with_label(_("Show data from"));
+  GtkWidget *submenu_stage = gtk_menu_new();
+  gtk_menu_item_set_submenu(GTK_MENU_ITEM(mi_stage), submenu_stage);
+
+  const char *stage_labels[] = { N_("Raw image"), N_("Output color profile"), N_("Final display"), NULL };
+  const int current_stage = _backbuf_op_to_int(d);
+  GSList *stage_group = NULL;
+  for(int i = 0; stage_labels[i]; i++)
+  {
+    GtkWidget *item = gtk_radio_menu_item_new_with_label(stage_group, _(stage_labels[i]));
+    stage_group = gtk_radio_menu_item_get_group(GTK_RADIO_MENU_ITEM(item));
+    if(i == current_stage) gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item), TRUE);
+    g_object_set_data(G_OBJECT(item), "self", self);
+    g_signal_connect(G_OBJECT(item), "toggled", G_CALLBACK(_pref_stage_toggled), GINT_TO_POINTER(i));
+    gtk_menu_shell_append(GTK_MENU_SHELL(submenu_stage), item);
+  }
+  gtk_widget_show_all(mi_stage);
+  gtk_menu_shell_append(GTK_MENU_SHELL(menu), mi_stage);
+
+  // "Display" submenu
+  GtkWidget *mi_display = gtk_menu_item_new_with_label(_("Display"));
+  GtkWidget *submenu_display = gtk_menu_new();
+  gtk_menu_item_set_submenu(GTK_MENU_ITEM(mi_display), submenu_display);
+
+  const char *display_labels[] = {
+    N_("Histogram"), N_("Waveform (horizontal)"), N_("Waveform (vertical)"),
+    N_("Parade (horizontal)"), N_("Parade (vertical)"), N_("Vectorscope"), NULL
+  };
+  const gboolean vectorscope_ok = strcmp(d->op, "initialscale");
+  GSList *display_group = NULL;
+  for(int i = 0; display_labels[i]; i++)
+  {
+    GtkWidget *item = gtk_radio_menu_item_new_with_label(display_group, _(display_labels[i]));
+    display_group = gtk_radio_menu_item_get_group(GTK_RADIO_MENU_ITEM(item));
+    if((dt_lib_histogram_scope_type_t)i == d->scope)
+      gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item), TRUE);
+    if(i == DT_LIB_HISTOGRAM_SCOPE_VECTORSCOPE)
+      gtk_widget_set_sensitive(item, vectorscope_ok);
+    g_object_set_data(G_OBJECT(item), "self", self);
+    g_signal_connect(G_OBJECT(item), "toggled", G_CALLBACK(_pref_display_toggled), GINT_TO_POINTER(i));
+    gtk_menu_shell_append(GTK_MENU_SHELL(submenu_display), item);
+  }
+  gtk_widget_show_all(mi_display);
+  gtk_menu_shell_append(GTK_MENU_SHELL(menu), mi_display);
+}
+
 void gui_init(dt_lib_module_t *self)
 {
   /* initialize ui widgets */
   dt_lib_histogram_t *d = (dt_lib_histogram_t *)dt_pixelpipe_cache_alloc_align_cache(sizeof(dt_lib_histogram_t), 0);
   if(d) memset(d, 0, sizeof(dt_lib_histogram_t));
   self->data = (void *)d;
+  d->module = self;
   d->cst = NULL;
   d->pending_hashes = g_array_new(FALSE, FALSE, sizeof(uint64_t));
   d->refresh_idle_source = 0;
 
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-  d->scope_draw = dtgtk_drawing_area_new_with_aspect_ratio(1.);
+  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  d->scope_draw = gtk_drawing_area_new();
   gtk_widget_add_events(GTK_WIDGET(d->scope_draw), darktable.gui->scroll_mask);
-  gtk_widget_set_size_request(d->scope_draw, -1, DT_PIXEL_APPLY_DPI(250));
+  d->scope_height = dt_conf_key_exists(DT_LIB_HISTOGRAM_SCOPE_HEIGHT_CONF)
+      ? dt_conf_get_int(DT_LIB_HISTOGRAM_SCOPE_HEIGHT_CONF)
+      : DT_PIXEL_APPLY_DPI(DT_LIB_HISTOGRAM_SCOPE_DEFAULT_HEIGHT);
+  d->scope_height = CLAMP(d->scope_height,
+                          DT_PIXEL_APPLY_DPI(DT_LIB_HISTOGRAM_SCOPE_MIN_HEIGHT),
+                          DT_PIXEL_APPLY_DPI(DT_LIB_HISTOGRAM_SCOPE_MAX_HEIGHT));
+  gtk_widget_set_size_request(d->scope_draw, -1, d->scope_height);
   g_signal_connect(G_OBJECT(d->scope_draw), "draw", G_CALLBACK(_draw_callback), d);
   g_signal_connect(G_OBJECT(d->scope_draw), "scroll-event", G_CALLBACK(_area_scrolled_callback), d);
   g_signal_connect(G_OBJECT(d->scope_draw), "size-allocate", G_CALLBACK(_resize_callback), d);
-  gtk_box_pack_start(GTK_BOX(self->widget), d->scope_draw, TRUE, TRUE, 0);
 
-  d->stage = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
-  dt_bauhaus_widget_set_label(d->stage, _("Show data from"));
-  dt_bauhaus_combobox_add(d->stage, _("Raw image"));
-  dt_bauhaus_combobox_add(d->stage, _("Output color profile"));
-  dt_bauhaus_combobox_add(d->stage, _("Final display"));
-  g_signal_connect(G_OBJECT(d->stage), "value-changed", G_CALLBACK(_stage_callback), self);
-  gtk_box_pack_start(GTK_BOX(self->widget), d->stage, FALSE, FALSE, 0);
+  // The grip floats on the scope's bottom edge (overlay) so it takes no layout space and leaves no
+  // margin-like gap; invisible until hovered.
+  GtkWidget *scope_overlay = gtk_overlay_new();
+  gtk_container_add(GTK_CONTAINER(scope_overlay), d->scope_draw);
+  gtk_box_pack_start(GTK_BOX(self->widget), scope_overlay, FALSE, FALSE, 0);
 
-  d->display = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
-  dt_bauhaus_widget_set_label(d->display, _("Display"));
-  dt_bauhaus_combobox_add(d->display, _("Histogram"));
-  dt_bauhaus_combobox_add(d->display, _("Waveform (horizontal)"));
-  dt_bauhaus_combobox_add(d->display, _("Waveform (vertical)"));
-  dt_bauhaus_combobox_add(d->display, _("Parade (horizontal)"));
-  dt_bauhaus_combobox_add(d->display, _("Parade (vertical)"));
-  dt_bauhaus_combobox_add(d->display, _("Vectorscope"));
-  g_signal_connect(G_OBJECT(d->display), "value-changed", G_CALLBACK(_display_callback), self);
-  gtk_box_pack_start(GTK_BOX(self->widget), d->display, FALSE, FALSE, 0);
+  /**
+   * @userdoc
+   * @id: scope-resize
+   * @page: section/page.md
+   * @type: feature
+   * @section: Scope
+   * @screenshot: ${5|required,optional}
+   * @controls: control1, control2
+   *
+   * Handle to resize the scope vertically. Drag the handle up or down to adjust the height of the scope display.
+   */
 
-  // Adding the live samples section
-  GtkWidget *label = dt_ui_section_label_new(_("Color picker"));
-  gtk_box_pack_start(GTK_BOX(self->widget), label, TRUE, TRUE, 0);
+  d->scope_resize_handle = dt_bauhaus_resize_handle_new(GTK_ORIENTATION_VERTICAL, FALSE,
+                                                        _("Drag to resize the scope vertically"),
+                                                        _scope_resize_handle_get_size,
+                                                        _scope_resize_handle_resize, d);
+  gtk_overlay_add_overlay(GTK_OVERLAY(scope_overlay), d->scope_resize_handle);
+
+  dt_gui_new_collapsible_section
+      (&d->cs,
+      "plugins/darkroom/colorpicker/show",
+      _("Color picker"),
+      GTK_BOX(self->widget), GTK_PACK_END);
 
   // The develop module owns the picker state because both the preview pipe and the GUI need to
   // observe it. Histogram only binds its widgets to that shared state.
@@ -2419,11 +2972,12 @@ void gui_init(dt_lib_module_t *self)
       d->statistic = i;
 
   // The color patch
-  GtkWidget *color_patch_wrapper = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *color_patch_wrapper = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_widget_set_name(GTK_WIDGET(color_patch_wrapper), "color-picker-area");
 
   // The picker button, mode and statistic combo boxes
-  GtkWidget *picker_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *picker_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
+  gtk_box_pack_start(GTK_BOX(d->cs.container), picker_row, TRUE, TRUE, 0);
 
   d->statistic_selector = dt_bauhaus_combobox_new_full(
       darktable.bauhaus, NULL, NULL, _("select which statistic to show"), d->statistic,
@@ -2446,8 +3000,6 @@ void gui_init(dt_lib_module_t *self)
   gtk_widget_set_name(GTK_WIDGET(d->picker_button), "color-picker-button");
   g_signal_connect(G_OBJECT(d->picker_button), "toggled", G_CALLBACK(_picker_button_toggled), d);
 
-  gtk_box_pack_start(GTK_BOX(self->widget), picker_row, TRUE, TRUE, 0);
-
   // The small sample, label and add button
   GtkWidget *sample_row_events = gtk_event_box_new();
   gtk_widget_add_events(sample_row_events, GDK_ENTER_NOTIFY_MASK | GDK_LEAVE_NOTIFY_MASK);
@@ -2455,21 +3007,21 @@ void gui_init(dt_lib_module_t *self)
                    darktable.develop->color_picker.primary_sample);
   g_signal_connect(G_OBJECT(sample_row_events), "leave-notify-event", G_CALLBACK(_sample_leave_callback),
                    darktable.develop->color_picker.primary_sample);
-  gtk_box_pack_start(GTK_BOX(self->widget), sample_row_events, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(d->cs.container), sample_row_events, TRUE, TRUE, 0);
 
-  GtkWidget *sample_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *sample_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_container_add(GTK_CONTAINER(sample_row_events), sample_row);
 
   darktable.develop->color_picker.primary_sample->color_patch = gtk_drawing_area_new();
   g_signal_connect(G_OBJECT(darktable.develop->color_picker.primary_sample->color_patch), "draw",
                    G_CALLBACK(_sample_draw_callback), darktable.develop->color_picker.primary_sample);
 
-  color_patch_wrapper = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  color_patch_wrapper = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_widget_set_name(color_patch_wrapper, "live-sample");
   gtk_box_pack_start(GTK_BOX(color_patch_wrapper), darktable.develop->color_picker.primary_sample->color_patch, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(sample_row), color_patch_wrapper, TRUE, TRUE, 0);
 
-  label = darktable.develop->color_picker.primary_sample->output_label = gtk_label_new("");
+  GtkWidget *label = darktable.develop->color_picker.primary_sample->output_label = gtk_label_new("");
   gtk_label_set_justify(GTK_LABEL(label), GTK_JUSTIFY_CENTER);
   gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_START);
   gtk_label_set_selectable(GTK_LABEL(label), TRUE);
@@ -2488,11 +3040,12 @@ void gui_init(dt_lib_module_t *self)
 
   // Adding the live samples section
   label = dt_ui_section_label_new(_("Live samples"));
-  gtk_box_pack_start(GTK_BOX(self->widget), label, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(d->cs.container), label, TRUE, TRUE, 0);
 
-  d->samples_container = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-  gtk_box_pack_start(GTK_BOX(self->widget),
-                     dt_ui_scroll_wrap(d->samples_container, 1, "plugins/darkroom/colorpicker/windowheight"), TRUE, TRUE, 0);
+  d->samples_container = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  gtk_box_pack_start(GTK_BOX(d->cs.container),
+                     dt_ui_scroll_wrap(d->samples_container, 1, "plugins/darkroom/colorpicker/windowheight",
+                                       DT_UI_RESIZE_DYNAMIC), TRUE, TRUE, 0);
 
   d->display_samples_check_box = gtk_check_button_new_with_label(_("Display samples on image"));
   gtk_label_set_ellipsize(GTK_LABEL(gtk_bin_get_child(GTK_BIN(d->display_samples_check_box))),
@@ -2501,14 +3054,14 @@ void gui_init(dt_lib_module_t *self)
                                dt_conf_get_bool("ui_last/colorpicker_display_samples"));
   g_signal_connect(G_OBJECT(d->display_samples_check_box), "toggled",
                    G_CALLBACK(_display_samples_changed), self);
-  gtk_box_pack_start(GTK_BOX(self->widget), d->display_samples_check_box, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(d->cs.container), d->display_samples_check_box, TRUE, TRUE, 0);
 
-  GtkWidget *restrict_button = gtk_check_button_new_with_label(_("Restrict scope to selection"));
-  gtk_label_set_ellipsize(GTK_LABEL(gtk_bin_get_child(GTK_BIN(restrict_button))), PANGO_ELLIPSIZE_MIDDLE);
+  d->restrict_button = gtk_check_button_new_with_label(_("Restrict scope to selection"));
+  gtk_label_set_ellipsize(GTK_LABEL(gtk_bin_get_child(GTK_BIN(d->restrict_button))), PANGO_ELLIPSIZE_MIDDLE);
   gboolean restrict_histogram = dt_conf_get_bool("ui_last/colorpicker_restrict_histogram");
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(restrict_button), restrict_histogram);
-  g_signal_connect(G_OBJECT(restrict_button), "toggled", G_CALLBACK(_restrict_histogram_changed), self);
-  gtk_box_pack_start(GTK_BOX(self->widget), restrict_button, TRUE, TRUE, 0);
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->restrict_button), restrict_histogram);
+  g_signal_connect(G_OBJECT(d->restrict_button), "toggled", G_CALLBACK(_restrict_histogram_changed), self);
+  gtk_box_pack_start(GTK_BOX(d->cs.container), d->restrict_button, TRUE, TRUE, 0);
 
   _reset_cache(d);
   _set_params(d);
@@ -2518,6 +3071,9 @@ void gui_cleanup(dt_lib_module_t *self)
 {
   if(IS_NULL_PTR(self->data)) return;
   dt_lib_histogram_t *d = self->data;
+  dt_dev_pixelpipe_cache_wait_cleanup(&d->scope_wait, "histogram-gui-cleanup-scope");
+  dt_dev_pixelpipe_cache_wait_cleanup(&d->picker_wait, "histogram-gui-cleanup-picker");
+  dt_dev_pixelpipe_cache_wait_cleanup(&d->module_wait, "histogram-gui-cleanup-module");
   _clear_pending_preview_histograms();
   _clear_pending_hashes(d);
   if(d->refresh_idle_source != 0)

@@ -270,6 +270,7 @@ static void _active_modules_popup(GtkWidget *widget, dt_thumbnail_t *thumb)
   gtk_container_set_border_width(GTK_CONTAINER(scrolled), 4);
 
   GtkWidget *view = gtk_text_view_new();
+  dt_gui_textview_set_padding(GTK_TEXT_VIEW(view));
   gtk_text_view_set_editable(GTK_TEXT_VIEW(view), FALSE);
   gtk_text_view_set_cursor_visible(GTK_TEXT_VIEW(view), FALSE);
   gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(view), GTK_WRAP_WORD_CHAR);
@@ -529,39 +530,37 @@ int32_t _get_image_buffer(dt_job_t *job)
     dt_pixelpipe_cache_free_align(full_res_thumb);
   }
 
-  // The job was cancelled on the queue. Good chances of having thumb destroyed anytime soon.
-  if(IS_NULL_PTR(thumb->job) || thumb->job != job 
-     || dt_control_job_get_state(job) == DT_JOB_STATE_CANCELLED 
-     || dt_atomic_get_int(&thumb->destroying))
-  {
-    cairo_surface_destroy(surface);
-    return 1;
-  }
+  // Commit the rendered surface only if the thumb is still live and expects this specific render.
+  // All validity checks and the surface write happen inside a single locked section to eliminate
+  // TOCTOU races with dt_thumbnail_destroy (which nulls widget pointers under the same lock)
+  // and dt_thumbnail_image_refresh_real (which clears thumb->job under the same lock to cancel
+  // stale renders from before a size change or data invalidation).
+  double sx = 1.0, sy = 1.0;
+  cairo_surface_get_device_scale(surface, &sx, &sy);
 
-  // Write temporary surface into actual image surface if we still have a widget to paint on
-  if(thumb && thumb->widget && thumb->w_main)
+  dt_pthread_mutex_lock(&thumb->lock);
+  const gboolean still_valid = (thumb->job == job           // not cancelled by refresh or destroy
+                                && !dt_atomic_get_int(&thumb->destroying)
+                                && thumb->w_image != NULL);
+  if(still_valid)
   {
-    double sx = 1.0, sy = 1.0;
-    cairo_surface_get_device_scale(surface, &sx, &sy);
-
-    dt_pthread_mutex_lock(&thumb->lock);
     _free_image_surface(thumb);
     thumb->img_width = roundf(img_width / sx);
     thumb->img_height = roundf(img_height / sy);
     thumb->zoomx = zoomx / sx;
     thumb->zoomy = zoomy / sy;
     thumb->img_surf = surface;
-    dt_pthread_mutex_unlock(&thumb->lock);
-
-    _finish_buffer_thread(thumb, TRUE);
+    surface = NULL;  // ownership transferred to thumb
   }
-  else 
+  dt_pthread_mutex_unlock(&thumb->lock);
+
+  if(surface)
   {
-    // Lost thumbnail to paint on
     cairo_surface_destroy(surface);
     return 1;
   }
 
+  _finish_buffer_thread(thumb, TRUE);
   return 0;
 }
 
@@ -1140,7 +1139,7 @@ GtkWidget *dt_thumbnail_create_widget(dt_thumbnail_t *thumb)
   gtk_container_add(GTK_CONTAINER(thumb->widget), thumb->w_main);
   gtk_widget_show(thumb->w_main);
 
-  thumb->w_background = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  thumb->w_background = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   dt_gui_add_class(thumb->w_background, "thumb-background");
   gtk_widget_set_valign(thumb->w_background, GTK_ALIGN_FILL);
   gtk_widget_set_halign(thumb->w_background, GTK_ALIGN_FILL);
@@ -1176,7 +1175,7 @@ GtkWidget *dt_thumbnail_create_widget(dt_thumbnail_t *thumb)
   gtk_widget_show(thumb->w_bottom_eb);
   gtk_overlay_add_overlay(GTK_OVERLAY(thumb->w_main), thumb->w_bottom_eb);
 
-  GtkWidget *bottom_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *bottom_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   dt_gui_add_class(bottom_box, "thumb-bottom");
   gtk_container_add(GTK_CONTAINER(thumb->w_bottom_eb), bottom_box);
   gtk_widget_show(bottom_box);
@@ -1190,7 +1189,7 @@ GtkWidget *dt_thumbnail_create_widget(dt_thumbnail_t *thumb)
   g_signal_connect(G_OBJECT(thumb->w_reject), "button-release-event", G_CALLBACK(_event_rating_release), thumb);
   gtk_box_pack_start(GTK_BOX(bottom_box), thumb->w_reject, FALSE, FALSE, 0);
 
-  GtkWidget *stars_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *stars_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(bottom_box), stars_box, TRUE, TRUE, 0);
   gtk_widget_set_valign(stars_box, GTK_ALIGN_CENTER);
   gtk_widget_set_halign(stars_box, GTK_ALIGN_CENTER);
@@ -1226,7 +1225,7 @@ GtkWidget *dt_thumbnail_create_widget(dt_thumbnail_t *thumb)
   gtk_widget_show(thumb->w_top_eb);
   gtk_overlay_add_overlay(GTK_OVERLAY(thumb->w_main), thumb->w_top_eb);
 
-  GtkWidget *top_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *top_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   dt_gui_add_class(top_box, "thumb-top");
   gtk_container_add(GTK_CONTAINER(thumb->w_top_eb), top_box);
   gtk_widget_show(top_box);
@@ -1277,11 +1276,11 @@ GtkWidget *dt_thumbnail_create_widget(dt_thumbnail_t *thumb)
   gtk_widget_set_valign(thumb->w_alternative, GTK_ALIGN_FILL);
   gtk_widget_hide(thumb->w_alternative);
 
-  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_container_add(GTK_CONTAINER(thumb->w_alternative), box);
   dt_gui_add_class(box, "thumb-alternative");
 
-  GtkWidget *bbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  GtkWidget *bbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_widget_set_valign(bbox, GTK_ALIGN_START);
   gtk_box_pack_start(GTK_BOX(box), bbox, TRUE, TRUE, 0);
   thumb->w_filename = gtk_label_new("");
@@ -1293,7 +1292,7 @@ GtkWidget *dt_thumbnail_create_widget(dt_thumbnail_t *thumb)
   gtk_label_set_ellipsize(GTK_LABEL(thumb->w_folder), PANGO_ELLIPSIZE_MIDDLE);
   gtk_box_pack_start(GTK_BOX(bbox), thumb->w_folder, FALSE, FALSE, 0);
 
-  bbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  bbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_widget_set_valign(bbox, GTK_ALIGN_CENTER);
   gtk_box_pack_start(GTK_BOX(box), bbox, TRUE, TRUE, 0);
   thumb->w_exposure = gtk_label_new("");
@@ -1301,7 +1300,7 @@ GtkWidget *dt_thumbnail_create_widget(dt_thumbnail_t *thumb)
   thumb->w_exposure_bias = gtk_label_new("");
   gtk_box_pack_start(GTK_BOX(bbox), thumb->w_exposure_bias, FALSE, FALSE, 0);
 
-  bbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  bbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_widget_set_valign(bbox, GTK_ALIGN_END);
   gtk_box_pack_start(GTK_BOX(box), bbox, TRUE, TRUE, 0);
   thumb->w_camera = gtk_label_new("");
@@ -1498,7 +1497,9 @@ static int _thumb_resize_overlays(dt_thumbnail_t *thumb, int width, int height)
   // inner margins are defined in css (margin_* values)
 
   // retrieves the size of the main icons in the top panel, thumbtable overlays shall not exceed that
-  const float r1 = fminf(DT_PIXEL_APPLY_DPI(20) / 2., (float)width / (2.5 * (4 + MAX_STARS)));
+  const int n_widgets = 4 + MAX_STARS;
+  const float r1 = fminf(1.25 * DT_GUI_EM_SIZE / 2., 
+                         (float)(width - (n_widgets - 1) * DT_GUI_BOX_SPACING) / (2. * n_widgets));
   int icon_size = roundf(2 * r1);
 
   // reject icon
@@ -1638,7 +1639,15 @@ void dt_thumbnail_set_drop(dt_thumbnail_t *thumb, gboolean accept_drop)
 int dt_thumbnail_image_refresh_real(dt_thumbnail_t *thumb)
 {
   thumb_return_if_fails(thumb, G_SOURCE_REMOVE);
+
+  dt_pthread_mutex_lock(&thumb->lock);
+  // Cancel any in-flight render job. It was started for the old state (stale size or data).
+  // The job checks thumb->job == job under the same lock before committing; clearing it here
+  // makes that check fail so the old result is discarded and a fresh job can be queued.
+  thumb->job = NULL;
   thumb->image_inited = FALSE;
+  dt_pthread_mutex_unlock(&thumb->lock);
+
   // Queue redraw on the drawing area itself: it's the widget that requests/regenerates the cairo surface.
   // Queueing only the parent overlay may not invalidate the drawing area's window, leaving stale (too small)
   // cached surfaces until some pointer event happens.

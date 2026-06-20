@@ -1581,9 +1581,6 @@ static bool _exif_decode_exif_data(dt_image_t *img, Exiv2::ExifData &exifData)
       }
     }
 
-    int is_monochrome = FALSE;
-    int is_hdr = dt_image_is_hdr(img);
-
     // Finding out about DNG hdr and monochrome images can be done here while reading exif data.
     if(FIND_EXIF_TAG("Exif.Image.DNGVersion"))
     {
@@ -1612,27 +1609,25 @@ static bool _exif_decode_exif_data(dt_image_t *img, Exiv2::ExifData &exifData)
       else if(FIND_EXIF_TAG("Exif.Image.PhotometricInterpretation"))
         phi = pos->toLong();
 
-      if((format == 3) && (bps >= 16) && ((phi == 32803) || (phi == 34892))) is_hdr = TRUE;
+      if((format == 3) && (bps >= 16) && ((phi == 32803) || (phi == 34892))) 
+        img->flags |= DT_IMAGE_HDR;
 
-      if((spp == 1) && (phi == 34892)) is_monochrome = TRUE;
+      if((spp == 1) && (phi == 34892)) 
+        img->flags |= DT_IMAGE_MONOCHROME;
     }
-
-    if(is_hdr)
-      dt_imageio_set_hdr_tag(img);
-
-    if(is_monochrome)
-    {
-      img->flags |= DT_IMAGE_MONOCHROME;
-      dt_imageio_update_monochrome_workflow_tag(img->id, DT_IMAGE_MONOCHROME);
-    }
-    // some files have the colorspace explicitly set. try to read that.
-    // is_ldr -> none
+    
+    // some files have the display colorspace explicitly set. try to read that. The Exif.Photo.ColorSpace
+    // tag only exists in display-referred integer images, so gate on "not raw and not HDR-float"
+    // rather than on DT_IMAGE_LDR: at this point the dynamic range of an ambiguous container (TIFF,
+    // AVIF, HEIF) is not yet known (the extension can't tell, the buffer is not decoded), so the LDR
+    // flag may legitimately be unset here even for an integer image.
+    // tag absent -> leave colorspace as none
     // 0x01   -> sRGB
     // 0x02   -> AdobeRGB
     // 0xffff -> Uncalibrated
     //          + Exif.Iop.InteroperabilityIndex of 'R03' -> AdobeRGB
     //          + Exif.Iop.InteroperabilityIndex of 'R98' -> sRGB
-    if(dt_image_is_ldr(img) && FIND_EXIF_TAG("Exif.Photo.ColorSpace"))
+    if(!dt_image_is_raw(img) && FIND_EXIF_TAG("Exif.Photo.ColorSpace"))
     {
       int colorspace = pos->toLong();
       if(colorspace == 0x01)
@@ -1757,6 +1752,17 @@ int dt_exif_get_thumbnail(const char *path, uint8_t **buffer, size_t *size, char
  */
 int dt_exif_read(dt_image_t *img, const char *path)
 {
+  // Seed the provisional image-type flag (LDR / HDR / RAW, from the file extension) before we probe
+  // dt_image_is_ldr() / dt_image_is_hdr() while decoding the EXIF below. This function can run on a
+  // freshly dt_image_init()'d object (import preview, path-pattern expansion) long before the buffer
+  // is decoded and dt_image_buffer_resolve_flags() sets the authoritative datatype-derived flags.
+  // Only seed when nothing is classified yet, so a DB-loaded / already-resolved image is untouched.
+  if(!(img->flags & (DT_IMAGE_LDR | DT_IMAGE_HDR | DT_IMAGE_RAW | DT_IMAGE_S_RAW)))
+  {
+    const char *ext = g_strrstr(path, ".");
+    if(ext) img->flags |= dt_imageio_get_type_from_extension(ext + 1);
+  }
+
   // at least set datetime taken to something useful in case there is no exif data in this file (pfm, png,
   // ...)
   struct stat statbuf;
@@ -3857,16 +3863,22 @@ static void _exif_xmp_read_data(Exiv2::XmpData &xmpData, const int32_t imgid, co
     gts = sqlite3_column_int64(stmt, 7);
   }
 
-  // get iop-order list
-  const dt_iop_order_t iop_order_version = dt_ioppr_get_iop_order_version(imgid);
-  GList *iop_list = dt_ioppr_get_iop_order_list(imgid, TRUE);
-
-  if(iop_order_version == DT_IOP_ORDER_CUSTOM || dt_ioppr_has_multiple_instances(iop_list))
+  // The pipe order only matters when history entries are exported. After
+  // deleting history, avoid rebuilding a default order just to write an empty
+  // sidecar: the default will be selected again when the image is opened.
+  dt_iop_order_t iop_order_version = DT_IOP_ORDER_ANSEL_RAW;
+  if(history_end > 0)
   {
-    iop_order_list = dt_ioppr_serialize_text_iop_order_list(iop_list);
+    iop_order_version = dt_ioppr_get_iop_order_version(imgid);
+    GList *iop_list = dt_ioppr_get_iop_order_list(imgid, TRUE);
+
+    if(iop_order_version == DT_IOP_ORDER_CUSTOM || dt_ioppr_has_multiple_instances(iop_list))
+    {
+      iop_order_list = dt_ioppr_serialize_text_iop_order_list(iop_list);
+    }
+    g_list_free_full(iop_list, dt_free_gpointer);
+    iop_list = NULL;
   }
-  g_list_free_full(iop_list, dt_free_gpointer);
-  iop_list = NULL;
 
   // Store datetime_taken as DateTimeOriginal to take into account the user's selected date/time
   gchar exif_datetime[DT_DATETIME_LENGTH];
@@ -3938,9 +3950,11 @@ static void _exif_xmp_read_data(Exiv2::XmpData &xmpData, const int32_t imgid, co
     xmpData["Xmp.darktable.auto_presets_applied"] = 0;
   dt_set_xmp_dt_history(xmpData, imgid, history_end);
 
-  // we need to read the iop-order list
-  xmpData["Xmp.darktable.iop_order_version"] = iop_order_version;
-  if(iop_order_list) xmpData["Xmp.darktable.iop_order_list"] = iop_order_list;
+  if(history_end > 0)
+  {
+    xmpData["Xmp.darktable.iop_order_version"] = iop_order_version;
+    if(iop_order_list) xmpData["Xmp.darktable.iop_order_list"] = iop_order_list;
+  }
 
   _exif_xmp_append_history_hash(xmpData, imgid, image);
 
@@ -3981,16 +3995,22 @@ static void _exif_xmp_read_data_export(Exiv2::XmpData &xmpData, const int32_t im
     gts = sqlite3_column_int64(stmt, 7);
   }
 
-  // get iop-order list
-  const dt_iop_order_t iop_order_version = dt_ioppr_get_iop_order_version(imgid);
-  GList *iop_list = dt_ioppr_get_iop_order_list(imgid, TRUE);
-
-  if(iop_order_version == DT_IOP_ORDER_CUSTOM || dt_ioppr_has_multiple_instances(iop_list))
+  // The pipe order only matters when history entries are exported. After
+  // deleting history, avoid rebuilding a default order just to write an empty
+  // sidecar: the default will be selected again when the image is opened.
+  dt_iop_order_t iop_order_version = DT_IOP_ORDER_ANSEL_RAW;
+  if(history_end > 0)
   {
-    iop_order_list = dt_ioppr_serialize_text_iop_order_list(iop_list);
+    iop_order_version = dt_ioppr_get_iop_order_version(imgid);
+    GList *iop_list = dt_ioppr_get_iop_order_list(imgid, TRUE);
+
+    if(iop_order_version == DT_IOP_ORDER_CUSTOM || dt_ioppr_has_multiple_instances(iop_list))
+    {
+      iop_order_list = dt_ioppr_serialize_text_iop_order_list(iop_list);
+    }
+    g_list_free_full(iop_list, dt_free_gpointer);
+    iop_list = NULL;
   }
-  g_list_free_full(iop_list, dt_free_gpointer);
-  iop_list = NULL;
 
   if(metadata->flags & DT_META_METADATA)
   {
@@ -4075,9 +4095,11 @@ static void _exif_xmp_read_data_export(Exiv2::XmpData &xmpData, const int32_t im
       xmpData["Xmp.darktable.auto_presets_applied"] = 0;
     dt_set_xmp_dt_history(xmpData, imgid, history_end);
 
-    // we need to read the iop-order list
-    xmpData["Xmp.darktable.iop_order_version"] = iop_order_version;
-    if(iop_order_list) xmpData["Xmp.darktable.iop_order_list"] = iop_order_list;
+    if(history_end > 0)
+    {
+      xmpData["Xmp.darktable.iop_order_version"] = iop_order_version;
+      if(iop_order_list) xmpData["Xmp.darktable.iop_order_list"] = iop_order_list;
+    }
     _exif_xmp_append_history_hash(xmpData, imgid, NULL);
   }
 

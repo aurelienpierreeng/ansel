@@ -147,10 +147,17 @@ static gboolean _masks_shape_button_pressed(GtkWidget *button, GdkEventButton *e
 
   if(dt_masks_creation_mode_enter(module, type))
   {
-    if(data->config.started) data->config.started(button, module, type, data->config.user_data);
+    if(data->config.started)
+    {
+      data->config.started(button, module, type, data->config.user_data);
+      // Force focus back to the drawing area after creation mode enabling
+      gtk_widget_grab_focus(dt_ui_center(darktable.gui->ui));
+    }
   }
   else
+  {
     dt_masks_shape_buttons_deactivate_all(NULL);
+  }
 
   dt_control_queue_redraw_center();
   return TRUE;
@@ -178,9 +185,9 @@ GtkWidget *dt_masks_shape_buttons_create(const dt_masks_shape_buttons_config_t *
   if(IS_NULL_PTR(data)) return NULL;
 
   data->config = *config;
-  data->box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  data->box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_widget_set_halign(data->box, GTK_ALIGN_END);
-  gtk_widget_set_valign(data->box, GTK_ALIGN_START);
+  gtk_widget_set_valign(data->box, GTK_ALIGN_CENTER);
 
   const char *action_section = config->action_section ? config->action_section : N_("shapes");
   const size_t button_defs_count = sizeof(_masks_shape_button_defs) / sizeof(_masks_shape_button_defs[0]);
@@ -196,13 +203,17 @@ GtkWidget *dt_masks_shape_buttons_create(const dt_masks_shape_buttons_config_t *
     {
       const gboolean register_button = (config->register_flags & def->flag);
       if(register_button)
+      {
         button = dt_iop_togglebutton_new(config->owner_module, action_section, def->label, def->ctrl_label,
                                          G_CALLBACK(_masks_shape_button_pressed), config->local,
                                          0, 0, def->paint, data->box);
+      }
       else
+      {
         button = dt_iop_togglebutton_new_no_register(config->owner_module, action_section, def->label, def->ctrl_label,
                                                      G_CALLBACK(_masks_shape_button_pressed), config->local,
                                                      0, 0, def->paint, data->box);
+      }
     }
     else
     {
@@ -213,7 +224,7 @@ GtkWidget *dt_masks_shape_buttons_create(const dt_masks_shape_buttons_config_t *
       g_signal_connect(G_OBJECT(button), "button-press-event", G_CALLBACK(_masks_shape_button_pressed), NULL);
     }
 
-    gtk_widget_set_valign(button, GTK_ALIGN_START);
+    gtk_widget_set_can_focus(button, FALSE);
     g_object_set_data(G_OBJECT(button), "dt-masks-shape-buttons-data", data);
 
     data->buttons[def->index] = button;
@@ -240,6 +251,23 @@ typedef struct dt_masks_gui_interaction_slider_t
   GtkWidget *slider;
 } dt_masks_gui_interaction_slider_t;
 
+// Push the new value to history (so the pipeline re-renders) and refresh the mask
+// treeviews (opacity text, etc.).
+//
+// This is called from the slider "value-changed" handler. The bauhaus slider already
+// throttles that emission through dt_gui_throttle_queue() while dragging, so the commit
+// is debounced at the slider-value level: transient values do not flood the pipeline with
+// renders, yet the image updates without waiting for the context menu to be closed.
+static void _masks_gui_interaction_commit(dt_masks_gui_interaction_slider_t *data)
+{
+  if(IS_NULL_PTR(data) || IS_NULL_PTR(data->form_group)) return;
+
+  dt_dev_add_history_item(darktable.develop, data->module, TRUE, TRUE);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED,
+                                data->form_group->formid, data->form_group->parentid,
+                                DT_MASKS_EVENT_UPDATE);
+}
+
 static void _masks_gui_interaction_apply_value(dt_masks_gui_interaction_slider_t *data, float value)
 {
   if(IS_NULL_PTR(data) || IS_NULL_PTR(data->form_group)) return;
@@ -249,6 +277,7 @@ static void _masks_gui_interaction_apply_value(dt_masks_gui_interaction_slider_t
     dt_masks_form_set_interaction_value(data->form_group, data->interaction, value,
                                         data->increment, 1, data->gui, data->module);
     data->last_value = value;
+    _masks_gui_interaction_commit(data);
     return;
   }
 
@@ -260,6 +289,7 @@ static void _masks_gui_interaction_apply_value(dt_masks_gui_interaction_slider_t
   dt_masks_form_set_interaction_value(data->form_group, data->interaction, scale,
                                       DT_MASKS_INCREMENT_SCALE, 1.f, data->gui, data->module);
   data->last_value = value;
+  _masks_gui_interaction_commit(data);
 }
 
 static void _masks_gui_menu_item_block_activate(GtkWidget *widget, gpointer user_data)
@@ -357,7 +387,7 @@ static GtkWidget *_masks_gui_add_interaction_slider(GtkWidget *menu, const char 
                                                     dt_masks_form_gui_t *gui, dt_iop_module_t *module)
 {
   GtkWidget *menu_item = gtk_menu_item_new();
-  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
 
   gtk_widget_set_can_focus(menu_item, FALSE);
   g_signal_connect(G_OBJECT(menu_item), "activate",
@@ -378,7 +408,6 @@ static GtkWidget *_masks_gui_add_interaction_slider(GtkWidget *menu, const char 
   gtk_widget_set_valign(slider, GTK_ALIGN_CENTER);
   gtk_widget_set_size_request(slider, DT_PIXEL_APPLY_DPI(220), DT_PIXEL_APPLY_DPI(28));
   gtk_widget_set_can_focus(slider, TRUE);
-  gtk_widget_set_size_request(menu_item, -1, DT_PIXEL_APPLY_DPI(48));
 
   dt_masks_gui_interaction_slider_t *data = g_malloc0(sizeof(dt_masks_gui_interaction_slider_t));
   data->form_group = form_group;

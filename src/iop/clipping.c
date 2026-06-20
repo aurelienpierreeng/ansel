@@ -2247,6 +2247,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   dt_develop_t *dev = self->dev;
   dt_iop_clipping_gui_data_t *g = (dt_iop_clipping_gui_data_t *)self->gui_data;
   dt_iop_clipping_params_t *p = (dt_iop_clipping_params_t *)self->params;
+  if(IS_NULL_PTR(g) || IS_NULL_PTR(p)) return;
 
   // we don't do anything if the image is not ready
   if(!g->preview_ready) return;

@@ -45,6 +45,7 @@
 
 #ifdef HAVE_CONFIG_H
 #include "common/darktable.h"
+#include "gui/gdkkeys.h"
 #include "config.h"
 #endif
 #include "bauhaus/bauhaus.h"
@@ -1542,16 +1543,6 @@ int process(struct dt_iop_module_t *module, const dt_dev_pixelpipe_t *pipe, cons
 
 #ifdef HAVE_OPENCL
 
-// compute lanczos kernel. See: https://en.wikipedia.org/wiki/Lanczos_resampling#Lanczos_kernel
-
-static inline float lanczos(const float a, const float x)
-{
-  if(fabsf(x) >= a) return 0.0f;
-  if(fabsf(x) < FLT_EPSILON) return 1.0f;
-
-  return (a * sinf(DT_M_PI_F * x) * sinf(DT_M_PI_F * x / a)) / (DT_M_PI_F * DT_M_PI_F * x * x);
-}
-
 // compute bicubic kernel. See: https://en.wikipedia.org/wiki/Bicubic_interpolation#Bicubic_convolution_algorithm
 
 static inline float bicubic(const float a, const float x)
@@ -1559,6 +1550,19 @@ static inline float bicubic(const float a, const float x)
   const float absx = fabsf(x);
   if(absx <= 1) return ((a + 2) * absx - (a + 3)) * absx * absx + 1;
   if(absx < 2) return ((a * absx - 5 * a) * absx + 8 * a) * absx - 4 * a;
+  return 0.0f;
+}
+
+// compute Mitchell-Netravali cubic kernel (B=C=1/3): sharp but effectively
+// halo-free, unlike Catmull-Rom bicubic and Lanczos which overshoot at edges.
+
+static inline float mitchell(const float x)
+{
+  const float absx = fabsf(x);
+  const float x2 = absx * absx;
+  const float x3 = x2 * absx;
+  if(absx < 1.0f) return (7.0f / 6.0f) * x3 - 2.0f * x2 + 8.0f / 9.0f;
+  if(absx < 2.0f) return -(7.0f / 18.0f) * x3 + 2.0f * x2 - (10.0f / 3.0f) * absx + 16.0f / 9.0f;
   return 0.0f;
 }
 
@@ -1609,19 +1613,12 @@ static cl_int_t apply_global_distortion_map_cl(struct dt_iop_module_t *module,
         for(int i = 0; i <= kdesc.size * kdesc.resolution; ++i)
           k[i] = bicubic(0.5f, (float) i / kdesc.resolution);
        break;
-     case DT_INTERPOLATION_LANCZOS2:
+     case DT_INTERPOLATION_MITCHELL:
        kdesc.size = 2;
        k = malloc(sizeof(float) * ((size_t)kdesc.size * kdesc.resolution + 1));
        if(k)
         for(int i = 0; i <= kdesc.size * kdesc.resolution; ++i)
-          k[i] = lanczos(2, (float) i / kdesc.resolution);
-       break;
-     case DT_INTERPOLATION_LANCZOS3:
-       kdesc.size = 3;
-       k = malloc(sizeof(float) * ((size_t)kdesc.size * kdesc.resolution + 1));
-       if(k)
-        for(int i = 0; i <= kdesc.size * kdesc.resolution; ++i)
-          k[i] = lanczos(3, (float) i / kdesc.resolution);
+          k[i] = mitchell((float) i / kdesc.resolution);
        break;
      default:
        return FALSE;
@@ -2460,7 +2457,7 @@ static dt_liquify_hit_t _hit_paths(dt_iop_module_t *module,
     }
   }
 
-  if(distance < DT_GUI_MOUSE_EFFECT_RADIUS_SCALED * 0.5)
+  if(distance < DT_GUI_MOUSE_EFFECT_RADIUS * 0.5)
     return hit;
   else
     return NOWHERE;
@@ -3658,6 +3655,7 @@ int key_pressed(struct dt_iop_module_t *self, GdkEventKey *event)
 
   dt_iop_liquify_gui_data_t *g = (dt_iop_liquify_gui_data_t *)self->gui_data;
   if(IS_NULL_PTR(g)) return 0;
+  guint key = dt_keys_mainpad_alternatives(event->keyval);
 
 
   const gboolean creating = gtk_toggle_button_get_active(g->btn_point_tool)
@@ -3666,7 +3664,7 @@ int key_pressed(struct dt_iop_module_t *self, GdkEventKey *event)
                               || (g->status & (DT_LIQUIFY_STATUS_NEW | DT_LIQUIFY_STATUS_PREVIEW));
 
   // Delete last created node while creating a shape.
-  if(event->keyval == GDK_KEY_BackSpace)
+  if(key == GDK_KEY_BackSpace)
   {
     if(!creating)
       return 0;
@@ -3731,7 +3729,7 @@ int key_pressed(struct dt_iop_module_t *self, GdkEventKey *event)
   }
 
   // Delete selected node outside creation mode.
-  if(event->keyval == GDK_KEY_Delete || event->keyval == GDK_KEY_KP_Delete)
+  if(key == GDK_KEY_Delete)
   {
     if(creating)
       return 0;
@@ -3784,9 +3782,7 @@ int key_pressed(struct dt_iop_module_t *self, GdkEventKey *event)
   }
 
   // Quit current creation or edition on Escape or Enter key
-  if(event->keyval == GDK_KEY_Escape
-     || event->keyval == GDK_KEY_KP_Enter
-     || event->keyval == GDK_KEY_Return)
+  if(key == GDK_KEY_Escape || key == GDK_KEY_Return)
   {
 
     if(!creating)
@@ -3912,31 +3908,31 @@ void gui_init(dt_iop_module_t *self)
   g->last_hit = NOWHERE;
   g->node_index = 0;
 
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
-  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_widget_set_tooltip_text(hbox, _("use a tool to add warps.\nright-click to remove a warp."));
   gtk_box_pack_start(GTK_BOX(self->widget), hbox, TRUE, TRUE, 0);
 
 
-  GtkWidget *lbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+  GtkWidget *lbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(hbox), lbox, FALSE, TRUE, 0);
 
-  GtkWidget *labelbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *labelbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   GtkWidget *label = dt_ui_label_new(_("Warps: "));
   gtk_box_pack_start(GTK_BOX(labelbox), label, FALSE, TRUE, 0);
   g->label_warp = GTK_LABEL(dt_ui_label_new("-"));
   gtk_box_pack_start(GTK_BOX(labelbox), GTK_WIDGET(g->label_warp), FALSE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(lbox), labelbox, FALSE, TRUE, 0);
 
-  GtkWidget *labelbox2 = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *labelbox2 = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   GtkWidget *label2 = dt_ui_label_new(_("Nodes: "));
   gtk_box_pack_start(GTK_BOX(labelbox2), label2, FALSE, TRUE, 0);
   g->label_node = GTK_LABEL(dt_ui_label_new("-"));
   gtk_box_pack_start(GTK_BOX(labelbox2), GTK_WIDGET(g->label_node), FALSE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(lbox), labelbox2, FALSE, TRUE, 0);
 
-  hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(self->widget), hbox, TRUE, TRUE, 0);
 
   g->btn_node_tool = GTK_TOGGLE_BUTTON(dt_iop_togglebutton_new(self, NULL, N_("edit, add and delete nodes"), NULL,

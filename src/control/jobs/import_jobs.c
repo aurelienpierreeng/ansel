@@ -24,6 +24,7 @@
 #include "control/control.h"
 #include "common/image.h"
 #include "control/jobs/control_jobs.h"
+#include "gui/gtk.h"
 
 #ifndef _WIN32
 #include <glob.h>
@@ -410,12 +411,16 @@ static int32_t _control_import_job_run(dt_job_t *job)
 
     if(imgid > UNKNOWN_IMAGE)
     {
-      // On first image, we change the current filmroll in collection.
-      // On the next, we simply update the collection.
+      // On the first image, try to switch the current filmroll to the imported image's folder.
+      // dt_collection_load_filmroll() silently declines to do anything (no collection refresh)
+      // when it cannot switch folders, e.g. the collect module is not on the "Folders" tab. In
+      // that case a single imported image would never show up until the user reloads the
+      // collection by hand (issue #860). So always run a collection update afterwards: it
+      // re-runs the current query and makes newly-imported matching images appear.
       if(index == 0)
         dt_collection_load_filmroll(darktable.collection, imgid, FALSE);
-      else
-        dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_NEW_QUERY, DT_COLLECTION_PROP_UNDEF, NULL);
+
+      dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_NEW_QUERY, DT_COLLECTION_PROP_UNDEF, NULL);
 
       index++;
     }
@@ -514,9 +519,10 @@ static int _discarded_files_popup(dt_control_image_enumerator_t *params)
   g_object_unref(store);
 
   // Pack widgets to an unified box
-  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(box), label, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(box), scrolled_window, TRUE, TRUE, 0);
+  dt_gui_add_class(scrolled_window, "dt_recessed_scroll");
   gtk_container_add(GTK_CONTAINER(scrolled_window), view);
 
   // Pack the box to the dialog internal container

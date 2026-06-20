@@ -224,7 +224,7 @@ int main(int argc, char* argv[])
   int argc_override = sizeof(argv_override) / sizeof(*argv_override) - 1;
 
   // init dt without gui and without data.db:
-  if(dt_init(argc_override, argv_override, FALSE, FALSE, NULL)) exit(1);
+  if(dt_init(argc_override, argv_override, FALSE, FALSE)) exit(1);
 
   int n_tests_overall = 0, n_failed_overall = 0, n_test_functions = 0, n_test_functions_failed = 0;
 

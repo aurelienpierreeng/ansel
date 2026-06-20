@@ -28,14 +28,120 @@
 #include "control/control.h"
 #include "control/signal.h"
 #include <stdint.h>
+#include <stdlib.h>
 
 // Keep a preview-like virtual pipe in sync with history without running pixels.
 static void _sync_virtual_pipe(dt_develop_t *dev, dt_dev_pixelpipe_change_t flag);
 static void _sync_pipe_nodes_from_history_from_node(dt_dev_pixelpipe_t *pipe,
                                                     const uint32_t history_end, GList *start_node,
                                                     const char *debug_label);
+// dt_dev_pixelpipe_propagate_formats() is the authoritative forward buffer-format pass; it is
+// declared in dev_pixelpipe.h. It must run before any dt_pixelpipe_get_global_hash() because the
+// auto-disable it performs feeds the cumulative global hash (see its definition).
 static void _dt_dev_pixelpipe_cache_wait_ready_callback(gpointer instance, const guint64 hash,
-                                                        dt_dev_pixelpipe_cache_wait_t *wait);
+                                                        gpointer user_data);
+
+typedef struct dt_dev_pixelpipe_cache_wait_record_t
+{
+  dt_dev_pixelpipe_cache_wait_t *wait;
+  uint64_t request_id;
+  int64_t queued_at_us;
+} dt_dev_pixelpipe_cache_wait_record_t;
+
+typedef struct dt_dev_pixelpipe_cache_wait_manager_t
+{
+  dt_pthread_mutex_t lock;
+  GList *pending;
+  gboolean connected;
+  gboolean wait_cursor_active;
+  uint64_t next_request_id;
+  uint64_t queued_requests;
+  uint64_t served_requests;
+  uint64_t cancelled_requests;
+  uint64_t immediate_hits;
+  uint64_t misses;
+} dt_dev_pixelpipe_cache_wait_manager_t;
+
+static dt_dev_pixelpipe_cache_wait_manager_t _cache_wait_manager
+    = { .lock = { PTHREAD_MUTEX_INITIALIZER }, .pending = NULL, .connected = FALSE,
+        .wait_cursor_active = FALSE,
+        .next_request_id = 1, .queued_requests = 0, .served_requests = 0,
+        .cancelled_requests = 0, .immediate_hits = 0, .misses = 0 };
+
+static gboolean _cache_wait_cursor_progress(gpointer user_data)
+{
+  if(IS_NULL_PTR(darktable.control) || IS_NULL_PTR(darktable.gui) || IS_NULL_PTR(darktable.gui->ui))
+    return G_SOURCE_REMOVE;
+
+  dt_control_change_cursor_by_name_and_flush("progress");
+  return G_SOURCE_REMOVE;
+}
+
+static gboolean _cache_wait_cursor_restore(gpointer user_data)
+{
+  if(IS_NULL_PTR(darktable.control) || IS_NULL_PTR(darktable.gui) || IS_NULL_PTR(darktable.gui->ui))
+    return G_SOURCE_REMOVE;
+
+  dt_control_commit_cursor();
+  dt_control_queue_redraw_center();
+  return G_SOURCE_REMOVE;
+}
+
+static dt_dev_pixelpipe_cache_wait_record_t *_cache_wait_manager_remove_wait_locked(dt_dev_pixelpipe_cache_wait_t *wait)
+{
+  for(GList *iter = _cache_wait_manager.pending; iter; iter = g_list_next(iter))
+  {
+    dt_dev_pixelpipe_cache_wait_record_t *record = iter->data;
+    if(!IS_NULL_PTR(record) && record->wait == wait)
+    {
+      _cache_wait_manager.pending = g_list_delete_link(_cache_wait_manager.pending, iter);
+      return record;
+    }
+  }
+
+  return NULL;
+}
+
+void dt_dev_pixelpipe_cache_wait_dump_pending(const char *reason)
+{
+  const char *context = !IS_NULL_PTR(reason) ? reason : "unspecified";
+  const int64_t now_us = g_get_monotonic_time();
+
+  // This is a diagnostic snapshot only. Skip it rather than stalling GUI teardown
+  // behind a cache-ready callback that is already updating the same wait list.
+  if(dt_pthread_mutex_trylock(&_cache_wait_manager.lock))
+  {
+    dt_print(DT_DEBUG_PIPECACHE, "[cache-wait] dump reason=%s skipped=lock-busy\n", context);
+    return;
+  }
+
+  const guint pending_count = g_list_length(_cache_wait_manager.pending);
+  dt_print(DT_DEBUG_PIPECACHE,
+           "[cache-wait] dump reason=%s pending=%u queued=%" PRIu64 " served=%" PRIu64
+           " cancelled=%" PRIu64 " immediate=%" PRIu64 " misses=%" PRIu64 "\n",
+           context, pending_count, _cache_wait_manager.queued_requests,
+           _cache_wait_manager.served_requests, _cache_wait_manager.cancelled_requests,
+           _cache_wait_manager.immediate_hits, _cache_wait_manager.misses);
+
+  for(GList *iter = _cache_wait_manager.pending; iter; iter = g_list_next(iter))
+  {
+    dt_dev_pixelpipe_cache_wait_record_t *record = iter->data;
+    dt_dev_pixelpipe_cache_wait_t *wait = !IS_NULL_PTR(record) ? record->wait : NULL;
+    if(IS_NULL_PTR(wait) || IS_NULL_PTR(record)) continue;
+
+    const int64_t age_ms = MAX((now_us - record->queued_at_us) / 1000, 0);
+    dt_print(DT_DEBUG_PIPECACHE,
+             "[cache-wait] pending id=%" PRIu64 " owner=%s hash=%" PRIu64
+             " target=%s connected=%d age_ms=%" PRId64 "\n",
+             wait->request_id,
+             !IS_NULL_PTR(wait->owner_tag) ? wait->owner_tag : "(unknown)",
+             wait->hash,
+             !IS_NULL_PTR(wait->module) ? wait->module->op : "backbuf",
+             wait->connected,
+             age_ms);
+  }
+  dt_pthread_mutex_unlock(&_cache_wait_manager.lock);
+}
 
 static gboolean _module_requires_global_histogram_output_cache(const dt_dev_pixelpipe_t *pipe,
                                                                const dt_iop_module_t *module)
@@ -64,7 +170,7 @@ static gchar *_get_debug_pipe_name(const dt_dev_pixelpipe_t *pipe, const dt_deve
   if(!IS_NULL_PTR(dev) && !IS_NULL_PTR(pipe) && dev->virtual_pipe == pipe)
     return g_strdup("virtual-preview");
 
-  return g_strdup(dt_pixelpipe_get_pipe_name(pipe ? pipe->type : DT_DEV_PIXELPIPE_NONE));
+  return g_strdup(dt_pixelpipe_get_pipe_name(!IS_NULL_PTR(pipe) ? pipe->type : DT_DEV_PIXELPIPE_NONE));
 }
 
 static GList *_find_detailmask_node(dt_dev_pixelpipe_t *pipe)
@@ -72,7 +178,7 @@ static GList *_find_detailmask_node(dt_dev_pixelpipe_t *pipe)
   for(GList *nodes = g_list_first(pipe->nodes); nodes; nodes = g_list_next(nodes))
   {
     dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)nodes->data;
-    if(piece && !strcmp(piece->module->op, "detailmask")) return nodes;
+    if(!IS_NULL_PTR(piece) && !strcmp(piece->module->op, "detailmask")) return nodes;
   }
 
   return NULL;
@@ -96,7 +202,7 @@ static void _refresh_pipe_detail_mask_state(dt_dev_pixelpipe_t *pipe)
     }
   }
 
-  if(detailmask_piece)
+  if(!IS_NULL_PTR(detailmask_piece))
   {
     const gboolean enabled = (pipe->want_detail_mask == DT_DEV_DETAIL_MASK_ENABLED)
                              && (detailmask_piece->dsc_in.channels == 4)
@@ -104,7 +210,7 @@ static void _refresh_pipe_detail_mask_state(dt_dev_pixelpipe_t *pipe)
                              && (detailmask_piece->dsc_in.cst == IOP_CS_RGB);
     detailmask_piece->enabled = enabled;
     detailmask_piece->process_tiling_ready = !enabled;
-    if(detailmask_piece->data) *((int *)detailmask_piece->data) = enabled ? 1 : 0;
+    if(!IS_NULL_PTR(detailmask_piece->data)) *((int *)detailmask_piece->data) = enabled ? 1 : 0;
   }
 }
 
@@ -116,46 +222,78 @@ static void _change_pipe(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_change_t fla
 }
 
 /**
- * @brief Update the current top history entry in place for realtime pipes.
+ * @brief Re-commit the focused module's piece in place from transient (or realtime) params.
  *
  * @details
- * Realtime editing keeps appending new top history items for the currently
- * focused module while the pipe is already instantiated. In that situation we
- * can refresh just that module piece from the newest top history item and
- * advance the pipe history fence without replaying the generic `synch_top()`
- * walk through the whole tail of the stack.
+ * Interactive editing (drawlayer realtime stroke, ashift/crop edit mode) keeps changing the focused
+ * module's params while the pipe is already instantiated. Rather than replaying the generic
+ * `synch_top()` walk, we refresh just that one piece and recompute the cumulative global hash, which
+ * naturally re-keys the focused piece and every downstream piece in the pixelpipe cache.
  *
- * This helper only replaces the history-tail replay. The rest of
- * `dt_dev_pixelpipe_change()` still needs to run afterwards so cache policy and
- * ROI contracts remain sealed for the next processing pass.
+ * The params come from the thread-safe **transient** channel when the focused module has published one
+ * (`dt_dev_transient_params_*`), otherwise from the module's history snapshot. We never read the
+ * GUI-owned `module->params` from this (pipeline) thread. The module's enable/blend state is taken from
+ * its history item, since transient edits change params only.
+ *
+ * This helper only replaces the history-tail replay. The rest of `dt_dev_pixelpipe_change()` still runs
+ * afterwards so cache policy and ROI contracts remain sealed for the next processing pass.
  */
-static gboolean _sync_realtime_top_history_in_place(dt_dev_pixelpipe_t *pipe)
+static gboolean _sync_focused_in_place(dt_dev_pixelpipe_t *pipe)
 {
-  if(!dt_dev_pixelpipe_get_realtime(pipe))
-    return FALSE;
+  if(IS_NULL_PTR(pipe) || IS_NULL_PTR(pipe->dev) || IS_NULL_PTR(pipe->dev->gui_module)) return FALSE;
+  dt_develop_t *dev = pipe->dev;
+  dt_iop_module_t *focus = dev->gui_module;
 
-  const uint32_t history_end = dt_dev_get_history_end_ext(pipe->dev);
-  if(history_end == 0 || IS_NULL_PTR(pipe->dev->gui_module)) return FALSE;
+  const gboolean transient = dt_dev_transient_params_active(dev, focus);
+  const gboolean realtime = dt_dev_pixelpipe_get_realtime(pipe);
+  if(!transient && !realtime) return FALSE;
 
-  GList *last_item = g_list_nth(pipe->dev->history, history_end - 1);
-  if(IS_NULL_PTR(last_item)) return FALSE;
+  const uint32_t history_end = dt_dev_get_history_end_ext(dev);
+  if(history_end == 0) return FALSE;
 
-  dt_dev_history_item_t *hist = (dt_dev_history_item_t *)last_item->data;
-  if(!hist || !hist->module || hist->module != pipe->dev->gui_module) return FALSE;
+  // Enable/blend state comes from the focused module's history item (transient edits are params-only).
+  dt_dev_history_item_t *hist = dt_dev_history_get_last_item_by_module(dev->history, focus, history_end);
+  if(IS_NULL_PTR(hist) || IS_NULL_PTR(hist->module) || IS_NULL_PTR(hist->params)) return FALSE;
 
-  dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)dt_dev_pixelpipe_get_module_piece(pipe, hist->module);
+  dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)dt_dev_pixelpipe_get_module_piece(pipe, focus);
   if(IS_NULL_PTR(piece)) return FALSE;
+
+  // Resolve params: thread-safe transient snapshot when published, else the history snapshot. A copy is
+  // taken so the slot lock is not held across commit_params(); never the live GUI module->params.
+  dt_iop_params_t *params = hist->params;
+  void *tbuf = NULL;
+  if(transient && focus->params_size > 0)
+  {
+    tbuf = g_malloc0(focus->params_size);
+    if(!IS_NULL_PTR(tbuf)
+       && dt_dev_transient_params_get(dev, focus, tbuf, (size_t)focus->params_size, NULL, 0, NULL))
+      params = (dt_iop_params_t *)tbuf;
+    else
+      dt_free(tbuf);
+  }
 
   const gboolean previous_want_detail_mask = (pipe->want_detail_mask != DT_DEV_DETAIL_MASK_NONE);
   piece->enabled = hist->enabled;
-  piece->detail_mask = hist->blend_params && hist->blend_params->details != 0.0f;
-  dt_iop_commit_params(hist->module, hist->params, hist->blend_params, pipe, piece);
+  piece->detail_mask = !IS_NULL_PTR(hist->blend_params) && hist->blend_params->details != 0.0f;
+  dt_iop_commit_params(focus, params, hist->blend_params, pipe, piece);
+  dt_free(tbuf);
   _refresh_pipe_detail_mask_state(pipe);
   if(previous_want_detail_mask != (pipe->want_detail_mask != DT_DEV_DETAIL_MASK_NONE)) return FALSE;
+
+  // The global hash is cumulative and skips disabled nodes, so the format contract (which may
+  // disable a node on an incompatible input) must be settled first.
+  dt_dev_pixelpipe_propagate_formats(pipe);
   dt_pixelpipe_get_global_hash(pipe);
 
-  pipe->last_history_hash = hist->hash;
-  pipe->last_history_item = hist;
+  // Only advance the synch_top fence when the focused module is the newest history item (the realtime
+  // drawlayer case, where each heartbeat appended a top item). For a transient edit of a non-top module
+  // no history item changed, so the fence must stay where the last real history sync left it.
+  GList *last_item = g_list_nth(dev->history, history_end - 1);
+  if(last_item && (dt_dev_history_item_t *)last_item->data == hist)
+  {
+    pipe->last_history_hash = hist->hash;
+    pipe->last_history_item = hist;
+  }
   return TRUE;
 }
 
@@ -192,14 +330,20 @@ static gboolean _sync_realtime_top_history_in_place(dt_dev_pixelpipe_t *pipe)
  */
 static void _seal_opencl_cache_policy(dt_dev_pixelpipe_t *pipe)
 {
-  if(IS_NULL_PTR(pipe) || !pipe->nodes) return;
+  if(IS_NULL_PTR(pipe) || IS_NULL_PTR(pipe->nodes)) return;
+
+  // The scopes/global histogram are not refreshed while a realtime stroke is in progress (the preview
+  // pipe is paused), so do not force any module to publish a host copy of its output just to feed them.
+  // This drops the per-frame RAM copy of `colorout` (and the histogram input/module caches) during
+  // realtime drawing, where it is pure overhead.
+  const gboolean realtime = dt_dev_pixelpipe_get_realtime(pipe);
 
   gboolean current_output_must_cache_host = TRUE;
 
   for(GList *pieces = g_list_last(pipe->nodes); pieces; pieces = g_list_previous(pieces))
   {
     dt_dev_pixelpipe_iop_t *piece = pieces->data;
-    dt_iop_module_t *module = piece ? piece->module : NULL;
+    dt_iop_module_t *module = !IS_NULL_PTR(piece) ? piece->module : NULL;
     if(IS_NULL_PTR(piece) || IS_NULL_PTR(module) || !piece->enabled) continue;
 
     gboolean supports_opencl = FALSE;
@@ -216,10 +360,13 @@ static void _seal_opencl_cache_policy(dt_dev_pixelpipe_t *pipe)
     dt_free(string);
 
     const gboolean color_picker_on = dt_iop_color_picker_force_cache(pipe, module);
-    const gboolean global_hist_output_on = _module_requires_global_histogram_output_cache(pipe, module);
-    const gboolean global_hist_input_on = _module_requires_global_histogram_input_cache(pipe, module);
+    const gboolean global_hist_output_on
+        = !realtime && _module_requires_global_histogram_output_cache(pipe, module);
+    const gboolean global_hist_input_on
+        = !realtime && _module_requires_global_histogram_input_cache(pipe, module);
     const gboolean module_hist_on
-        = (pipe->type == DT_DEV_PIXELPIPE_PREVIEW
+        = !realtime
+          && (pipe->type == DT_DEV_PIXELPIPE_PREVIEW
            && pipe->gui_observable_source
            && (pipe->dev->gui_attached || !(piece->request_histogram & DT_REQUEST_ONLY_IN_GUI))
            && (piece->request_histogram & DT_REQUEST_ON));
@@ -543,152 +690,334 @@ gboolean dt_dev_pixelpipe_cache_peek_gui(dt_dev_pixelpipe_t *pipe, const dt_dev_
                                          dt_dev_pixelpipe_cache_ready_callback_t restart,
                                          gpointer restart_data)
 {
-  if(data) *data = NULL;
-  if(cache_entry) *cache_entry = NULL;
+  if(!IS_NULL_PTR(data)) *data = NULL;
+  if(!IS_NULL_PTR(cache_entry)) *cache_entry = NULL;
   if(IS_NULL_PTR(pipe)) return FALSE;
 
-  // Module-output cache requests are not satisfiable while the current pipe run
-  // intentionally bypasses cache retention. Re-queueing them from GUI redraws
-  // would keep transient edit modes in a self-feeding recompute loop.
-  if(piece
-     && (dt_dev_pixelpipe_get_realtime(pipe) || pipe->bypass_cache || pipe->no_cache
-         || piece->bypass_cache))
+  // Module-output cache requests are not satisfiable when the target piece
+  // itself bypasses cache retention. Re-queueing those from GUI redraws would
+  // keep transient edit modes in a self-feeding recompute loop.
+  // Upstream targets (for example color-picker input sampling) stay allowed even if a
+  // downstream piece enabled bypass mode.
+  if(!IS_NULL_PTR(piece)
+     && (dt_dev_pixelpipe_get_realtime(pipe) || pipe->no_cache || piece->bypass_cache))
     return FALSE;
 
-  const uint64_t hash = piece ? piece->global_hash : dt_dev_pixelpipe_get_hash(pipe);
+  const uint64_t hash = !IS_NULL_PTR(piece) ? piece->global_hash : dt_dev_pixelpipe_get_hash(pipe);
+
+  // For the final backbuffer (piece == NULL), GUI consumers display the last *published* frame,
+  // identified by pipe->backbuf.hash. The pipeline plans the next frame ahead of publishing it, so
+  // pipe->hash (the planned final hash) runs ahead of the backbuffer while a recompute is in flight.
+  // This is the normal steady state of realtime drawing: every heartbeat plans a new frame. Peeking
+  // the planned hash would then miss the perfectly valid published frame, the darkroom main-surface
+  // lock would fail, and the view would drop to the paused preview pipe (which lacks the in-progress
+  // stroke) — the flicker between "drawing applied" and "original". So look up the published backbuf
+  // hash for display, and keep the planned hash only to drive recompute on a genuine miss below.
+  uint64_t display_hash = hash;
+  if(IS_NULL_PTR(piece))
+  {
+    const uint64_t backbuf_hash = dt_dev_backbuf_get_hash(&pipe->backbuf);
+    if(backbuf_hash != DT_PIXELPIPE_CACHE_HASH_INVALID) display_hash = backbuf_hash;
+  }
+
   void *buffer = NULL;
   dt_pixel_cache_entry_t *entry = NULL;
-  if(hash != DT_PIXELPIPE_CACHE_HASH_INVALID
-     && dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, hash, &buffer, &entry, pipe->devid, NULL)
-     && buffer && entry)
+  // GUI consumers run on the CPU and never own the OpenCL device lock, so we pass preferred_devid = -1:
+  // dt_dev_pixelpipe_cache_peek() then returns host-resident cachelines directly but refuses to
+  // materialize device-only ones from the GPU (which would enqueue hidden GPU work from the GUI thread,
+  // racing whichever pipeline thread currently owns the device — the clReleaseEvent crash). A device-only
+  // entry is reported as a miss, so the request below waits for the pipeline to publish a host copy
+  // (modules whose output the GUI samples, e.g. initialscale, already cache to RAM).
+  if(display_hash != DT_PIXELPIPE_CACHE_HASH_INVALID
+     && dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, display_hash, &buffer, &entry, -1, NULL)
+     &&  !IS_NULL_PTR(buffer) && !IS_NULL_PTR(entry))
   {
-    dt_dev_pixelpipe_cache_wait_cleanup(wait);
+    // These counters are only diagnostic; cache consumers should not wait for
+    // queue lifecycle updates before reopening an already available cacheline.
+    if(!dt_pthread_mutex_trylock(&_cache_wait_manager.lock))
+    {
+      _cache_wait_manager.immediate_hits++;
+      dt_pthread_mutex_unlock(&_cache_wait_manager.lock);
+    }
+    dt_dev_pixelpipe_cache_wait_cleanup(wait, "peek-gui-immediate-hit");
     if(!IS_NULL_PTR(data)) *data = buffer;
-    if(cache_entry) *cache_entry = entry;
+    if(!IS_NULL_PTR(cache_entry)) *cache_entry = entry;
     return TRUE;
   }
 
-  if(!IS_NULL_PTR(wait) && restart && hash != DT_PIXELPIPE_CACHE_HASH_INVALID)
+  // A missed GUI peek already requests cache publication below. The miss counter
+  // is diagnostic, so it must not block redraw/picker paths under contention.
+  if(!dt_pthread_mutex_trylock(&_cache_wait_manager.lock))
+  {
+    _cache_wait_manager.misses++;
+    dt_pthread_mutex_unlock(&_cache_wait_manager.lock);
+  }
+
+  gboolean request_cacheline = TRUE;
+  if(!IS_NULL_PTR(wait) && !IS_NULL_PTR(restart) && hash != DT_PIXELPIPE_CACHE_HASH_INVALID)
   {
     const gboolean changed_target = !wait->connected
                                     || wait->pipe != pipe
-                                    || wait->module != (piece ? piece->module : NULL)
+                                    || wait->module != (!IS_NULL_PTR(piece) ? piece->module : NULL)
                                     || wait->hash != hash
                                     || wait->restart != restart;
     if(changed_target)
     {
-      dt_dev_pixelpipe_cache_wait_cleanup(wait);
+      gboolean activate_wait_cursor = FALSE;
+      dt_dev_pixelpipe_cache_wait_cleanup(wait, "peek-gui-target-changed");
       wait->pipe = pipe;
-      wait->module = piece ? piece->module : NULL;
+      wait->module = !IS_NULL_PTR(piece) ? piece->module : NULL;
       wait->hash = hash;
       wait->restart = restart;
       wait->user_data = restart_data;
+      if(IS_NULL_PTR(wait->owner_tag))
+        wait->owner_tag = !IS_NULL_PTR(piece) && !IS_NULL_PTR(piece->module) ? piece->module->op : "gui-backbuf";
+      if(IS_NULL_PTR(wait->owner_object))
+        wait->owner_object = restart_data;
       wait->connected = TRUE;
-      DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_CACHELINE_READY,
-                                      G_CALLBACK(_dt_dev_pixelpipe_cache_wait_ready_callback), wait);
+
+      dt_pthread_mutex_lock(&_cache_wait_manager.lock);
+      wait->request_id = _cache_wait_manager.next_request_id++;
+      _cache_wait_manager.queued_requests++;
+      dt_dev_pixelpipe_cache_wait_record_t *record = calloc(1, sizeof(*record));
+      record->wait = wait;
+      record->request_id = wait->request_id;
+      record->queued_at_us = g_get_monotonic_time();
+      _cache_wait_manager.pending = g_list_prepend(_cache_wait_manager.pending, record);
+      if(!_cache_wait_manager.connected)
+      {
+        DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_CACHELINE_READY,
+                                        G_CALLBACK(_dt_dev_pixelpipe_cache_wait_ready_callback), NULL);
+        _cache_wait_manager.connected = TRUE;
+      }
+      if(!_cache_wait_manager.wait_cursor_active)
+      {
+        _cache_wait_manager.wait_cursor_active = TRUE;
+        activate_wait_cursor = TRUE;
+      }
+      dt_pthread_mutex_unlock(&_cache_wait_manager.lock);
+      if(activate_wait_cursor)
+        g_main_context_invoke(NULL, _cache_wait_cursor_progress, NULL);
+
+      dt_print(DT_DEBUG_PIPECACHE,
+               "[cache-wait] queued id=%" PRIu64 " owner=%s hash=%" PRIu64 " target=%s\n",
+               wait->request_id,
+               !IS_NULL_PTR(wait->owner_tag) ? wait->owner_tag : "(unknown)",
+               wait->hash,
+               !IS_NULL_PTR(wait->module) ? wait->module->op : "backbuf");
+    }
+    else
+    {
+      /* The GUI already waits for this exact cacheline. Re-emitting CACHE_REQUEST from
+       * each expose keeps retrying an unsatisfied target forever when the pipeline cannot
+       * publish it, for example after an OpenCL memory pre-check failure on very large images. */
+      request_cacheline = FALSE;
     }
   }
 
-  dt_dev_pixelpipe_set_cache_request(pipe,
-                                     piece ? DT_DEV_PIXELPIPE_CACHE_REQUEST_MODULE
-                                           : DT_DEV_PIXELPIPE_CACHE_REQUEST_BACKBUF,
-                                     piece ? piece->module : NULL);
-  dt_dev_pixelpipe_or_changed(pipe, DT_DEV_PIPE_CACHE_REQUEST);
+  if(request_cacheline)
+  {
+    dt_dev_pixelpipe_set_cache_request(pipe,
+                                       !IS_NULL_PTR(piece) ? DT_DEV_PIXELPIPE_CACHE_REQUEST_MODULE
+                                                           : DT_DEV_PIXELPIPE_CACHE_REQUEST_BACKBUF,
+                                       !IS_NULL_PTR(piece) ? piece->module : NULL);
+    dt_dev_pixelpipe_or_changed(pipe, DT_DEV_PIPE_CACHE_REQUEST);
 
-  dt_print(DT_DEBUG_DEV, "[pixelpipe/gui] request host cache pipe=%s target=%s hash=%" PRIu64 "\n",
-           dt_pixelpipe_get_pipe_name(pipe->type),
-           piece && piece->module ? piece->module->op : "backbuf", hash);
+    dt_print(DT_DEBUG_DEV, "[pixelpipe/gui] request host cache pipe=%s target=%s hash=%" PRIu64 "\n",
+             dt_pixelpipe_get_pipe_name(pipe->type),
+             !IS_NULL_PTR(piece) && !IS_NULL_PTR(piece->module) ? piece->module->op : "backbuf", hash);
+  }
 
   return FALSE;
 }
 
+/**
+ * @brief Serve queued GUI cache waiters matching one published cacheline hash.
+ *
+ * `DT_SIGNAL_CACHELINE_READY` may wake several GUI consumers at once (pickers,
+ * histograms, darkroom surfaces, autoset). We therefore:
+ * 1. iterate the pending wait list under the manager lock,
+ * 2. extract only waiters whose requested hash matches @p hash,
+ * 3. disconnect the global signal and clear the busy cursor when the queue
+ *    becomes empty,
+ * 4. release the lock before running restart callbacks.
+ *
+ * Keeping callbacks out of the critical section is intentional: restart
+ * handlers can queue redraws or request new cachelines, so running them under
+ * lock would serialize unrelated GUI wakeups and risks re-entrant lock
+ * contention.
+ */
 static void _dt_dev_pixelpipe_cache_wait_ready_callback(gpointer instance, const guint64 hash,
-                                                        dt_dev_pixelpipe_cache_wait_t *wait)
+                                                        gpointer user_data)
 {
-  (void)instance;
-  if(IS_NULL_PTR(wait) || !wait->connected || wait->hash != hash) return;
+  GList *to_restart = NULL;
+  gboolean restore_wait_cursor = FALSE;
 
-  dt_dev_pixelpipe_cache_ready_callback_t restart = wait->restart;
-  gpointer user_data = wait->user_data;
-  dt_dev_pixelpipe_cache_wait_cleanup(wait);
-  if(restart) restart(user_data);
+  dt_pthread_mutex_lock(&_cache_wait_manager.lock);
+  for(GList *iter = _cache_wait_manager.pending; iter; )
+  {
+    GList *next = g_list_next(iter);
+    dt_dev_pixelpipe_cache_wait_record_t *record = iter->data;
+    dt_dev_pixelpipe_cache_wait_t *wait = !IS_NULL_PTR(record) ? record->wait : NULL;
+    if(!IS_NULL_PTR(wait) && wait->connected && wait->hash == hash)
+    {
+      _cache_wait_manager.pending = g_list_delete_link(_cache_wait_manager.pending, iter);
+      _cache_wait_manager.served_requests++;
+      wait->connected = FALSE;
+      to_restart = g_list_prepend(to_restart, wait);
+      dt_free(record);
+    }
+    iter = next;
+  }
+
+  if(IS_NULL_PTR(_cache_wait_manager.pending) && _cache_wait_manager.connected)
+  {
+    DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals,
+                                       G_CALLBACK(_dt_dev_pixelpipe_cache_wait_ready_callback), NULL);
+    _cache_wait_manager.connected = FALSE;
+  }
+  if(IS_NULL_PTR(_cache_wait_manager.pending) && _cache_wait_manager.wait_cursor_active)
+  {
+    _cache_wait_manager.wait_cursor_active = FALSE;
+    restore_wait_cursor = TRUE;
+  }
+  dt_pthread_mutex_unlock(&_cache_wait_manager.lock);
+  if(restore_wait_cursor)
+    g_main_context_invoke(NULL, _cache_wait_cursor_restore, NULL);
+
+  for(GList *iter = to_restart; iter; iter = g_list_next(iter))
+  {
+    dt_dev_pixelpipe_cache_wait_t *wait = iter->data;
+    const dt_dev_pixelpipe_cache_ready_callback_t restart = wait->restart;
+    gpointer restart_data = wait->user_data;
+
+    dt_print(DT_DEBUG_PIPECACHE,
+             "[cache-wait] served id=%" PRIu64 " owner=%s hash=%" PRIu64 " target=%s\n",
+             wait->request_id,
+             !IS_NULL_PTR(wait->owner_tag) ? wait->owner_tag : "(unknown)",
+             hash,
+             !IS_NULL_PTR(wait->module) ? wait->module->op : "backbuf");
+
+    wait->pipe = NULL;
+    wait->module = NULL;
+    wait->hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+    wait->restart = NULL;
+    wait->user_data = NULL;
+    wait->request_id = 0;
+
+    if(!IS_NULL_PTR(restart)) restart(restart_data);
+  }
+  g_list_free(to_restart);
 }
 
-void dt_dev_pixelpipe_cache_wait_cleanup(dt_dev_pixelpipe_cache_wait_t *wait)
+void dt_dev_pixelpipe_cache_wait_cleanup(dt_dev_pixelpipe_cache_wait_t *wait, const char *reason)
 {
   if(IS_NULL_PTR(wait) || !wait->connected) return;
+  gboolean restore_wait_cursor = FALSE;
+  int64_t queued_at_us = 0;
+  const uint64_t request_id = wait->request_id;
+  const uint64_t hash = wait->hash;
+  const char *owner_tag = wait->owner_tag;
+  const dt_iop_module_t *module = wait->module;
+  const char *cancel_reason = !IS_NULL_PTR(reason) ? reason : "unspecified";
 
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals,
-                                     G_CALLBACK(_dt_dev_pixelpipe_cache_wait_ready_callback), wait);
+  dt_pthread_mutex_lock(&_cache_wait_manager.lock);
+  dt_dev_pixelpipe_cache_wait_record_t *record = _cache_wait_manager_remove_wait_locked(wait);
+  if(!IS_NULL_PTR(record))
+  {
+    queued_at_us = record->queued_at_us;
+    dt_free(record);
+  }
+  _cache_wait_manager.cancelled_requests++;
+  if(IS_NULL_PTR(_cache_wait_manager.pending) && _cache_wait_manager.connected)
+  {
+    DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals,
+                                       G_CALLBACK(_dt_dev_pixelpipe_cache_wait_ready_callback), NULL);
+    _cache_wait_manager.connected = FALSE;
+  }
+  if(IS_NULL_PTR(_cache_wait_manager.pending) && _cache_wait_manager.wait_cursor_active)
+  {
+    _cache_wait_manager.wait_cursor_active = FALSE;
+    restore_wait_cursor = TRUE;
+  }
+  dt_pthread_mutex_unlock(&_cache_wait_manager.lock);
+  if(restore_wait_cursor)
+    g_main_context_invoke(NULL, _cache_wait_cursor_restore, NULL);
+
+  const int64_t age_ms = queued_at_us > 0 ? MAX((g_get_monotonic_time() - queued_at_us) / 1000, 0) : -1;
+  dt_print(DT_DEBUG_PIPECACHE,
+           "[cache-wait] cancelled id=%" PRIu64 " owner=%s hash=%" PRIu64
+           " target=%s age_ms=%" PRId64 " reason=%s\n",
+           request_id,
+           !IS_NULL_PTR(owner_tag) ? owner_tag : "(unknown)",
+           hash,
+           !IS_NULL_PTR(module) ? module->op : "backbuf",
+           age_ms,
+           cancel_reason);
+
   wait->pipe = NULL;
   wait->module = NULL;
   wait->hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
   wait->restart = NULL;
   wait->user_data = NULL;
+  wait->request_id = 0;
   wait->connected = FALSE;
 }
 
-static gboolean _prepare_piece_input_contract(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
-                                              dt_iop_buffer_dsc_t *upstream_dsc)
+void dt_dev_pixelpipe_cache_wait_set_owner(dt_dev_pixelpipe_cache_wait_t *wait,
+                                           const char *owner_tag,
+                                           gpointer owner_object)
 {
-  const dt_iop_buffer_dsc_t actual_input_dsc = *upstream_dsc;
+  if(IS_NULL_PTR(wait)) return;
+  wait->owner_tag = owner_tag;
+  wait->owner_object = owner_object;
+}
 
-  piece->dsc_in = actual_input_dsc;
-  piece->dsc_out = actual_input_dsc;
+/* Establish the *input* side of a piece's buffer contract from the upstream descriptor by
+ * asking the module's input_format(). This does NOT decide compatibility or finalize the
+ * output: the single authoritative pass dt_dev_pixelpipe_propagate_formats() owns the mismatch/auto-disable
+ * decision so it is taken once, on the fully-committed and consistently-threaded chain, never
+ * on the stale partial state a synch_top / realtime edit can leave behind (issue #733).
+ *
+ * It is split out from that pass because commit_params() of a few modules (exposure, highlights,
+ * invert, temperature) reads piece->dsc_in (filters, processed_maximum), so the commit loop must
+ * set dsc_in before committing. */
+// Short colorspace name for the [dsc] format-propagation debug log (-d pipe). Knowing the cst of
+// each node's input/output is essential to spot when the pixelpipe's automatic RGB<->Lab conversion
+// should fire: a Lab-domain module whose dsc_in.cst is not "lab" will silently consume RGB.
+static const char *_dsc_cst_name(const int cst)
+{
+  switch(cst)
+  {
+    case IOP_CS_RAW:         return "raw";
+    case IOP_CS_LAB:         return "lab";
+    case IOP_CS_RGB:         return "rgb";
+    case IOP_CS_RGB_DISPLAY: return "display-rgb";
+    case IOP_CS_LCH:         return "lch";
+    case IOP_CS_HSL:         return "hsl";
+    case IOP_CS_JZCZHZ:      return "jzczhz";
+    case IOP_CS_NONE:        return "none";
+    default:                 return "?";
+  }
+}
+
+static void _prepare_piece_input_contract(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
+                                          const dt_iop_buffer_dsc_t *upstream_dsc)
+{
+  piece->dsc_in = *upstream_dsc;
+  piece->dsc_out = *upstream_dsc;
   dt_iop_buffer_dsc_update_bpp(&piece->dsc_in);
   dt_iop_buffer_dsc_update_bpp(&piece->dsc_out);
 
   /* Disabled modules are strict pass-through stages. Their advertised contracts must
    * not rewrite the upstream descriptor, otherwise a disabled RGB-only module can make
    * downstream RAW stages such as demosaic believe the stream was already converted. */
-  if(!piece->enabled) return TRUE;
+  if(!piece->enabled) return;
 
   piece->module->input_format(piece->module, pipe, piece, &piece->dsc_in);
   dt_iop_buffer_dsc_update_bpp(&piece->dsc_in);
   piece->dsc_out = piece->dsc_in;
   dt_iop_buffer_dsc_update_bpp(&piece->dsc_out);
-
-  if(piece->enabled && (darktable.unmuted & DT_DEBUG_PIPE))
-  {
-    gchar *pipe_name = _get_debug_pipe_name(pipe, NULL);
-    dt_print(DT_DEBUG_PIPE,
-              "[dsc-in] pipe=%s module=%s"
-              " in=(channels=%i bpp=%" G_GSIZE_FORMAT " filters=%u)"
-              " \n",
-              pipe_name, piece->module->op, 
-              piece->dsc_in.channels, piece->dsc_in.bpp, piece->dsc_in.filters);
-    dt_free(pipe_name);
-  }
-
-  const gboolean input_mismatch
-      = piece->enabled
-        && (piece->dsc_in.bpp != actual_input_dsc.bpp
-            || piece->dsc_in.channels != actual_input_dsc.channels
-            || piece->dsc_in.filters != actual_input_dsc.filters);
-  if(input_mismatch)
-  {
-    dt_control_log(_("disabled module `%s`: unexpected input buffer format"),
-                   piece->module->name());
-    fprintf(stdout,
-             "[pixelpipe] disabling module %s because input format expects %" G_GSIZE_FORMAT " B/px, %u channels, filters %u but upstream publishes %" G_GSIZE_FORMAT " B/px, %u channels, filters %u\n",
-             piece->module->op, piece->dsc_in.bpp, piece->dsc_in.channels, piece->dsc_in.filters,
-             actual_input_dsc.bpp, actual_input_dsc.channels, actual_input_dsc.filters);
-  }
-
-  if(input_mismatch)
-  {
-    piece->enabled = FALSE;
-    piece->hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
-    piece->blendop_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
-    piece->global_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
-    piece->global_mask_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
-    piece->dsc_in = actual_input_dsc;
-    piece->dsc_out = actual_input_dsc;
-    dt_iop_buffer_dsc_update_bpp(&piece->dsc_in);
-    dt_iop_buffer_dsc_update_bpp(&piece->dsc_out);
-  }
-
-  return !input_mismatch;
 }
 
 static void _commit_piece_contract(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
@@ -696,26 +1025,20 @@ static void _commit_piece_contract(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_io
                                    dt_iop_buffer_dsc_t *upstream_dsc)
 {
   const dt_iop_buffer_dsc_t actual_input_dsc = *upstream_dsc;
-  if(!_prepare_piece_input_contract(pipe, piece, upstream_dsc)) return;
 
+  // Set dsc_in before committing (commit_params() of some modules reads it). Compatibility and
+  // the final output descriptor are settled later by dt_dev_pixelpipe_propagate_formats(), so this loop
+  // never auto-disables a module on a possibly-stale upstream descriptor.
+  _prepare_piece_input_contract(pipe, piece, upstream_dsc);
+
+  // This should run even if the module is disabled because
+  // some modules with no history self-enable based on runtime context
   dt_iop_commit_params(piece->module, params, blend_params, pipe, piece);
 
   if(piece->enabled)
   {
     piece->module->output_format(piece->module, pipe, piece, &piece->dsc_out);
     dt_iop_buffer_dsc_update_bpp(&piece->dsc_out);
-
-    if(piece->enabled && (darktable.unmuted & DT_DEBUG_PIPE))
-    {
-      gchar *pipe_name = _get_debug_pipe_name(pipe, NULL);
-      dt_print(DT_DEBUG_PIPE,
-                "[dsc-out] pipe=%s module=%s"
-                " out=(channels=%i bpp=%" G_GSIZE_FORMAT " filters=%u)"
-                " \n",
-                pipe_name, piece->module->op, 
-                piece->dsc_out.channels, piece->dsc_out.bpp, piece->dsc_out.filters);
-      dt_free(pipe_name);
-    }
   }
   else
   {
@@ -726,6 +1049,124 @@ static void _commit_piece_contract(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_io
   }
 
   *upstream_dsc = piece->dsc_out;
+}
+
+/* Direction-independent forward format pass.
+ *
+ * The buffer-format contract (channels / datatype / colorspace / CFA presence flowing from one
+ * module to the next) is conceptually independent of ROI planning, which runs in both
+ * directions (end->start for a target size, start->end for the native size). Deriving the
+ * contract inside the history-sync commit loop made it sensitive to partial syncs
+ * (synch_top / realtime top edits): a downstream module could read a stale upstream descriptor
+ * and get wrongly disabled for an "unexpected input buffer format" (issue #733). Worse, the
+ * auto-disable is one-way, so a later pass could not undo a false positive.
+ *
+ * This single forward pass re-threads the whole chain from the input image descriptor after
+ * params have been committed, and is the *only* place that disables a module for a genuinely
+ * incompatible input. Disabling here is safe because the chain is consistent and fully threaded
+ * from pipe->dev->image_storage.dsc. Only the first stage (basebuffer) reads the input image
+ * type; every later node derives its contract solely from its upstream piece. The lone
+ * ROI-dependent refinement, rawprepare's CFA phase shift, is finalized later in modify_roi_*().
+ *
+ * It is deliberately NON-destructive for compatible enabled modules: it verifies the input
+ * contract and re-threads dsc_in, but keeps the dsc_out that commit_params() produced. dsc_out
+ * carries runtime fields (processed_maximum, rawprepare black/white, temperature coeffs, CFA
+ * phase) that input/output_format cannot reconstruct, so recomputing them here would wipe the
+ * tonal scaling and render images black/white. */
+void dt_dev_pixelpipe_propagate_formats(dt_dev_pixelpipe_t *pipe)
+{
+  if(IS_NULL_PTR(pipe)) return;
+
+  dt_iop_buffer_dsc_t upstream_dsc = pipe->dev->image_storage.dsc;
+  gchar *pipe_name = (darktable.unmuted & DT_DEBUG_PIPE) ? _get_debug_pipe_name(pipe, NULL) : NULL;
+
+  for(GList *nodes = g_list_first(pipe->nodes); nodes; nodes = g_list_next(nodes))
+  {
+    dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)nodes->data;
+    if(IS_NULL_PTR(piece) || IS_NULL_PTR(piece->module)) continue;
+
+    const dt_iop_buffer_dsc_t actual_input_dsc = upstream_dsc;
+
+    if(!piece->enabled)
+    {
+      // Disabled modules are strict pass-through stages.
+      piece->dsc_in = actual_input_dsc;
+      piece->dsc_out = actual_input_dsc;
+      dt_iop_buffer_dsc_update_bpp(&piece->dsc_in);
+      dt_iop_buffer_dsc_update_bpp(&piece->dsc_out);
+    }
+    else
+    {
+      // Ask the module what input it expects, into a scratch descriptor. We must NOT recompute
+      // piece->dsc_out from input/output_format here: commit_params() already produced dsc_out
+      // with runtime fields that those methods cannot reconstruct (processed_maximum, rawprepare
+      // black/white, temperature coeffs, CFA phase). Recomputing would reset processed_maximum to
+      // the input image's value and blow up downstream tone handling (black/white renders).
+      dt_iop_buffer_dsc_t declared_in = actual_input_dsc;
+      dt_iop_buffer_dsc_update_bpp(&declared_in);
+      piece->module->input_format(piece->module, pipe, piece, &declared_in);
+      dt_iop_buffer_dsc_update_bpp(&declared_in);
+
+      // A module whose declared input does not match what the previous stage actually publishes
+      // cannot run: disable it (in the pipe only; history is untouched) and turn it into a
+      // pass-through so the contract keeps flowing to the next stage.
+      const gboolean input_mismatch
+          = (declared_in.bpp != actual_input_dsc.bpp
+             || declared_in.channels != actual_input_dsc.channels
+             || declared_in.filters != actual_input_dsc.filters);
+
+      if(input_mismatch)
+      {
+        dt_control_log(_("disabled module `%s`: unexpected input buffer format"),
+                       piece->module->name());
+        dt_print(DT_DEBUG_PIPE,
+                 "[pixelpipe] disabling module %s because input format expects %" G_GSIZE_FORMAT
+                 " B/px, %u channels, filters %u but upstream publishes %" G_GSIZE_FORMAT
+                 " B/px, %u channels, filters %u\n",
+                 piece->module->op, declared_in.bpp, declared_in.channels, declared_in.filters,
+                 actual_input_dsc.bpp, actual_input_dsc.channels, actual_input_dsc.filters);
+
+        piece->enabled = FALSE;
+        piece->hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+        piece->blendop_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+        piece->global_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+        piece->global_mask_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+        piece->dsc_in = actual_input_dsc;
+        piece->dsc_out = actual_input_dsc;
+        dt_iop_buffer_dsc_update_bpp(&piece->dsc_in);
+        dt_iop_buffer_dsc_update_bpp(&piece->dsc_out);
+      }
+      else
+      {
+        // Input is compatible: publish the module's DECLARED input descriptor. `declared_in` was
+        // seeded from the upstream descriptor and then run through input_format(), so it already
+        // carries the upstream runtime fields (processed_maximum, rawprepare, temperature, CFA
+        // phase) AND the colorspace/channel layout the module actually consumes.
+        //
+        // Critically, we must NOT fall back to `actual_input_dsc` here: that would reset dsc_in.cst
+        // to the upstream colorspace and make it equal to the buffer's cst, so the pixelpipe's
+        // automatic colorspace conversion (pixelpipe_cpu.c / pixelpipe_gpu.c) would believe no
+        // conversion is needed. Lab-domain modules (old color balance, color checker, atrous, ...)
+        // inserted after an RGB stage would then receive RGB data interpreted as Lab and render
+        // garbled/solid colors. The full-resync path keeps dsc_in from input_format() for the same
+        // reason; this incremental (synch_top) path must match it.
+        piece->dsc_in = declared_in;
+        dt_iop_buffer_dsc_update_bpp(&piece->dsc_in);
+      }
+    }
+
+    if(pipe_name)
+      dt_print(DT_DEBUG_PIPE,
+               "[dsc] pipe=%s module=%s enabled=%d in=(cst=%s ch=%i bpp=%" G_GSIZE_FORMAT
+               " filters=%u) out=(cst=%s ch=%i bpp=%" G_GSIZE_FORMAT " filters=%u)\n",
+               pipe_name, piece->module->op, piece->enabled,
+               _dsc_cst_name(piece->dsc_in.cst), piece->dsc_in.channels, piece->dsc_in.bpp, piece->dsc_in.filters,
+               _dsc_cst_name(piece->dsc_out.cst), piece->dsc_out.channels, piece->dsc_out.bpp, piece->dsc_out.filters);
+
+    upstream_dsc = piece->dsc_out;
+  }
+
+  dt_free(pipe_name);
 }
 
 static void _sync_pipe_nodes_from_history(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, const uint32_t history_end,
@@ -917,6 +1358,17 @@ void dt_pixelpipe_get_global_hash(dt_dev_pixelpipe_t *pipe)
     if(pipe->type == DT_DEV_PIXELPIPE_FULL)
     {
       local_hash = dt_hash(local_hash, (const char *)&piece->module->request_mask_display, sizeof(int));
+
+      /* Mask-preview appearance is global GUI state, not module history. Hash
+       * its revision at the module producing the active preview so upstream
+       * cache entries remain reusable while this module and gamma are rerun. */
+      if(pipe->dev->gui_attached
+         && piece->module == pipe->dev->gui_module
+         && piece->module->request_mask_display != DT_DEV_PIXELPIPE_DISPLAY_NONE)
+      {
+        const int revision = dt_atomic_get_int(&pipe->dev->mask_preview_settings_revision);
+        local_hash = dt_hash(local_hash, (const char *)&revision, sizeof(revision));
+      }
     }
     else 
     {
@@ -1089,13 +1541,14 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe)
       = (dt_dev_pixelpipe_change_t)dt_atomic_exch_int((dt_atomic_int *)&pipe->changed, DT_DEV_PIPE_UNCHANGED);
 
   gchar *type = _get_debug_pipe_name(pipe, pipe->dev);
-  char *status_str = g_strdup_printf("%s%s%s%s%s%s",
+  char *status_str = g_strdup_printf("%s%s%s%s%s%s%s",
                                   (status & DT_DEV_PIPE_UNCHANGED) ? "UNCHANGED " : "",
                                   (status & DT_DEV_PIPE_REMOVE) ? "REMOVE " : "",
                                   (status & DT_DEV_PIPE_TOP_CHANGED) ? "TOP_CHANGED " : "",
                                   (status & DT_DEV_PIPE_SYNCH) ? "SYNCH " : "",
                                   (status & DT_DEV_PIPE_ZOOMED) ? "ZOOMED " : "",
-                                  (status & DT_DEV_PIPE_CACHE_REQUEST) ? "CACHE_REQUEST " : "");
+                                  (status & DT_DEV_PIPE_CACHE_REQUEST) ? "CACHE_REQUEST " : "",
+                                  (status & DT_DEV_PIPE_REENTRY) ? "REENTRY " : "");
 
   dt_print(DT_DEBUG_DEV, "[dt_dev_pixelpipe_change] pipeline state changing for pipe %s, flag %s\n",
      type, status_str);
@@ -1117,6 +1570,11 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe)
 
   dt_pthread_rwlock_rdlock(&pipe->dev->history_mutex);
 
+  // The realtime in-place path settles the format contract and the global hash itself (it must,
+  // since that hash is cumulative over enabled nodes); the other paths defer it to the
+  // unconditional pass below.
+  gboolean formats_propagated = FALSE;
+
   // case DT_DEV_PIPE_UNCHANGED: case DT_DEV_PIPE_ZOOMED:
   if(status & DT_DEV_PIPE_REMOVE)
   {
@@ -1134,20 +1592,32 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe)
   }
   else if(status & DT_DEV_PIPE_TOP_CHANGED)
   {
-    // only top history item(s) changed
-    if(!_sync_realtime_top_history_in_place(pipe))
+    // only top history item(s) changed, or a focused module published transient/realtime params
+    if(_sync_focused_in_place(pipe))
+    {
+      formats_propagated = TRUE;
+    }
+    else
     {
       dt_dev_pixelpipe_sync_no_history(pipe);
       dt_dev_pixelpipe_synch_top(pipe);
     }
   }
-  else // DT_DEV_PIPE_ZOOMED DT_DEV_PIPE_CACHE_REQUEST
+  else // DT_DEV_PIPE_ZOOMED DT_DEV_PIPE_CACHE_REQUEST DT_DEV_PIPE_REENTRY
   {
     // Finalscale will need to self-enable/disable depending on zoom level
     dt_dev_pixelpipe_sync_no_history(pipe);
   }
   dt_dev_pixelpipe_set_history_hash(pipe, dt_dev_get_history_hash(pipe->dev));
   dt_pthread_rwlock_unlock(&pipe->dev->history_mutex);
+
+  // Re-establish the buffer-format contract of the whole chain once, after whichever sync path
+  // (full, top-only or realtime-in-place) committed params. This is the single authoritative,
+  // direction-independent place where per-node dsc_in/dsc_out are settled and incompatible
+  // modules are disabled (issue #733), so the OpenCL cache policy and ROI planning below see a
+  // consistent contract. The realtime path already did this before computing its global hash.
+  if(!formats_propagated)
+    dt_dev_pixelpipe_propagate_formats(pipe);
 
   _seal_opencl_cache_policy(pipe);
   

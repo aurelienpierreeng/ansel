@@ -281,9 +281,14 @@ glib-compile-schemas "$dtResourcesDir"/share/glib-2.0/schemas/
 
 # Define gtk-query-immodules-3.0
 immodulesCacheFile="$dtResourcesDir"/lib/gtk-3.0/3.0.0/immodules.cache
-hbGtk3Path=$(brew info gtk+3|grep "/`pkg-config --modversion gtk+-3.0`"|cut -f1 -d' ')
+hbGtk3Path=$(pkg-config --variable=prefix gtk+-3.0 2>/dev/null || brew --prefix gtk+3 2>/dev/null)
+hbGtk3ResolvedPath=$(realpath "$hbGtk3Path" 2>/dev/null || true)
 sed -i -e "s#$hbGtk3Path/lib/gtk-3.0/3.0.0/immodules#@executable_path/../Resources/lib/gtk-3.0/3.0.0/immodules#g" "$immodulesCacheFile"
 sed -i -e "s#$hbGtk3Path/share/locale#@executable_path/../Resources/share/locale#g" "$immodulesCacheFile"
+if [[ -n "$hbGtk3ResolvedPath" && "$hbGtk3ResolvedPath" != "$hbGtk3Path" ]]; then
+    sed -i -e "s#$hbGtk3ResolvedPath/lib/gtk-3.0/3.0.0/immodules#@executable_path/../Resources/lib/gtk-3.0/3.0.0/immodules#g" "$immodulesCacheFile"
+    sed -i -e "s#$hbGtk3ResolvedPath/share/locale#@executable_path/../Resources/share/locale#g" "$immodulesCacheFile"
+fi
 # Rename and move it to the right place
 mv "$immodulesCacheFile" "$dtResourcesDir"/etc/gtk-3.0/gtk.immodules
 
@@ -322,8 +327,12 @@ cp -L "$homebrewHome"/share/themes/Mac/gtk-3.0/gtk-keys.css "$dtResourcesDir"/sh
 # Add fonts
 cp fonts/*  "$dtResourcesDir"/fonts/
 
-# Patch ansel.css - Solving font issue with Roboto condensed
-patch "$dtResourcesDir"/share/ansel/themes/ansel.css ansel.css.patch
+# Strip macOS-incompatible CSS declarations from ansel.css.
+# Rather than a brittle line-numbered patch, lines that must be dropped on macOS
+# are tagged inline in data/themes/ansel.css with an "ansel-macos-strip" comment
+# marker. This removes them wherever they end up, regardless of line shifts.
+# (Currently: font-stretch: condensed, which makes Roboto Condensed render badly.)
+sed -i -e '/ansel-macos-strip/d' "$dtResourcesDir"/share/ansel/themes/ansel.css
 
 # Create Icon file
 if [ -d "$buildDir"/Icons.iconset ]; then

@@ -1687,7 +1687,9 @@ static GList *load_profile_from_dir(const char *subdir)
         {
           dt_colorspaces_color_profile_t *prof = (dt_colorspaces_color_profile_t *)calloc(1, sizeof(dt_colorspaces_color_profile_t));
           dt_colorspaces_get_profile_name(tmpprof, lang, lang + 3, prof->name, sizeof(prof->name));
-
+          if(prof->name[0] == '\0')
+            g_strlcpy(prof->name, _("(unknown name)"), sizeof(prof->name));
+            
           g_strlcpy(prof->filename, filename, sizeof(prof->filename));
           prof->type = DT_COLORSPACE_FILE;
           prof->profile = tmpprof;

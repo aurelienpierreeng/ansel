@@ -471,6 +471,30 @@ int dt_dev_pixelpipe_cache_prepare_cl_input(struct dt_dev_pixelpipe_t *pipe,
 struct dt_pixel_cache_entry_t *dt_dev_pixelpipe_cache_ref_entry_for_host_ptr(dt_dev_pixelpipe_cache_t *cache,
                                                                               void *host_ptr);
 
+/**
+ * @brief Resolve and retain an existing cache entry by hash.
+ *
+ * @details
+ * This is the race-free counterpart to `dt_dev_pixelpipe_cache_peek()` for GUI
+ * code that needs to keep a cacheline past the lookup call. The cache lock is
+ * held while the entry is found and its refcount is incremented, so normal cache
+ * eviction cannot destroy the returned entry before the caller takes its own
+ * read lock.
+ *
+ * The function never creates or allocates a cache entry. Release a successful
+ * result with `dt_dev_pixelpipe_cache_ref_count_entry(cache, FALSE, entry)`.
+ *
+ * @param cache Pixelpipe cache.
+ * @param hash Cacheline hash to resolve.
+ * @param data Returned current host buffer pointer, if requested.
+ * @param entry Returned retained cache entry, if requested.
+ * @return TRUE when an existing non-auto-destroy entry was retained.
+ */
+gboolean dt_dev_pixelpipe_cache_ref_entry_by_hash(dt_dev_pixelpipe_cache_t *cache,
+                                                  const uint64_t hash,
+                                                  void **data,
+                                                  struct dt_pixel_cache_entry_t **entry);
+
 /** Peek the host data pointer of a cache entry without allocating. */
 void *dt_pixel_cache_entry_get_data(struct dt_pixel_cache_entry_t *entry);
 
@@ -546,14 +570,48 @@ gboolean dt_dev_pixelpipe_cache_peek(dt_dev_pixelpipe_cache_t *cache, const uint
 void dt_dev_pixelpipe_cache_flush(dt_dev_pixelpipe_cache_t *cache, const int id);
 
 /**
- * @brief Release cached OpenCL buffers for a device (-1 for all).
+ * @brief Invalidate cache lines matching an explicit list of hashes.
+ *
+ * @details Entries which are not in use are removed immediately. Entries still
+ * referenced or locked are left untouched because they may be published
+ * backbuffers owned by another pipeline.
+ *
+ * This targets shared cache states independently of the pipeline which created
+ * them, while preserving every cache line not named by `hashes`.
+ *
+ * @param cache Pixelpipe cache to update.
+ * @param hashes Cache keys to invalidate.
+ * @param count Number of keys in `hashes`.
+ * @return int Number of matching entries which could not be removed.
+ */
+int dt_dev_pixelpipe_cache_invalidate_hashes(dt_dev_pixelpipe_cache_t *cache,
+                                             const uint64_t *hashes,
+                                             const size_t count);
+
+/**
+ * @brief Release cached OpenCL buffers for a single device.
  *
  * @details
  * This is intentionally a lightweight VRAM-pressure/retry helper: it drops cached
  * `cl_mem` objects without taking per-entry write locks. Realtime paths rely on it
  * to free scratch OpenCL buffers without stalling in-flight renders.
+ *
+ * @param devid Device to flush, or a negative value for a no-op (e.g. a pipe that
+ *              never used OpenCL). The caller must already hold
+ *              `darktable.opencl->dev[devid].lock` -- this is the case for the
+ *              pixelpipe currently running on that device. Callers that don't hold
+ *              it (e.g. cleaning up a pipe after it finished) must use
+ *              dt_dev_pixelpipe_cache_flush_clmem_for_pipe() instead.
  */
 void dt_dev_pixelpipe_cache_flush_clmem(dt_dev_pixelpipe_cache_t *cache, const int devid);
+
+/**
+ * @brief Like dt_dev_pixelpipe_cache_flush_clmem(), for callers that do not hold
+ * `darktable.opencl->dev[devid].lock` (e.g. a pipe's own cleanup after
+ * dt_dev_pixelpipe_process() already released it). Takes the lock itself, then
+ * delegates. No-op if devid < 0 or OpenCL isn't available.
+ */
+void dt_dev_pixelpipe_cache_flush_clmem_for_pipe(dt_dev_pixelpipe_cache_t *cache, const int devid);
 
 
 /**

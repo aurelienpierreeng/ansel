@@ -114,7 +114,7 @@ static dt_pixel_cache_entry_t *dt_pixel_cache_new_entry(const uint64_t hash, con
                                                         const char *name, const int id,
                                                         dt_dev_pixelpipe_cache_t *cache, gboolean alloc,
                                                         GHashTable *table);
-static void _cache_entry_clmem_flush_device(dt_pixel_cache_entry_t *entry, const int devid);
+static gboolean _cache_entry_clmem_flush_device(dt_pixel_cache_entry_t *entry, const int devid);
 static gboolean _cache_entry_materialize_host_data_locked(dt_pixel_cache_entry_t *entry, int preferred_devid,
                                                           gboolean prefer_device_payload);
 static int dt_dev_pixelpipe_cache_flush_old(dt_dev_pixelpipe_cache_t *cache);
@@ -218,6 +218,33 @@ static void _pixelpipe_cache_finalize_entry(dt_pixel_cache_entry_t *cache_entry,
   _pixel_cache_message(cache_entry, message, FALSE);
 }
 
+gboolean dt_dev_pixelpipe_cache_ref_entry_by_hash(dt_dev_pixelpipe_cache_t *cache,
+                                                  const uint64_t hash,
+                                                  void **data,
+                                                  dt_pixel_cache_entry_t **entry)
+{
+  if(!IS_NULL_PTR(data)) *data = NULL;
+  if(!IS_NULL_PTR(entry)) *entry = NULL;
+  if(IS_NULL_PTR(cache) || hash == DT_PIXELPIPE_CACHE_HASH_INVALID) return FALSE;
+
+  dt_pthread_mutex_lock(&cache->lock);
+  cache->queries++;
+
+  dt_pixel_cache_entry_t *cache_entry = _non_threadsafe_cache_get_entry(cache, cache->entries, hash);
+  if(!IS_NULL_PTR(cache_entry) && !cache_entry->auto_destroy)
+  {
+    cache->hits++;
+    cache_entry->hits++;
+    _non_thread_safe_cache_ref_count_entry(cache, TRUE, cache_entry);
+    _pixelpipe_cache_finalize_entry(cache_entry, data, "ref-by-hash");
+    if(!IS_NULL_PTR(entry)) *entry = cache_entry;
+  }
+
+  const gboolean found = !IS_NULL_PTR(cache_entry) && !cache_entry->auto_destroy;
+  dt_pthread_mutex_unlock(&cache->lock);
+  return found;
+}
+
 
 // remove the cache entry with the given hash and update the cache memory usage
 // WARNING: not internally thread-safe, protect its calls with mutex lock
@@ -233,7 +260,11 @@ int _non_thread_safe_cache_remove(dt_dev_pixelpipe_cache_t *cache, const gboolea
     if(!locked) dt_pthread_rwlock_unlock(&cache_entry->lock);
     gboolean used = dt_atomic_get_int(&cache_entry->refcount) > 0;
 
-    if((!used || force) && !locked)
+    /* Force-removal may bypass caller lifecycle checks but must never destroy
+     * an entry that still has active readers/writers. Active users can still
+     * access cl_mem_list after this call (for example borrowed GPU payloads),
+     * so removing a referenced entry here would create dangling pointers. */
+    if(!used && (!locked || force))
     {
       // Note: the free callback takes care of flushing OpenCL buffers too
       g_hash_table_remove(table, &cache_entry->hash);
@@ -443,7 +474,26 @@ static gboolean _cache_entry_clmem_flush_host_pinned_locked(dt_pixel_cache_entry
 
 void dt_dev_pixelpipe_cache_flush_clmem(dt_dev_pixelpipe_cache_t *cache, const int devid)
 {
-  if(devid >= 0) dt_opencl_events_wait_for(devid);
+  // devid < 0 means the calling pipe never used OpenCL: it owns no device-side
+  // payload in the cache, so there is nothing of its own to release here.
+  //
+  // This used to also support devid == -1 as "drop cl_mem from every device,
+  // regardless of who else is using it", called from per-pipe cleanup. That ran
+  // without holding any dev[].lock, so it could race the eventlist/cl_mem
+  // bookkeeping of whichever OTHER pixelpipe was concurrently running on that
+  // device, corrupting it and crashing inside clGetEventInfo/clWaitForEvents
+  // (see #859 and #864). A global, all-devices teardown is never needed during
+  // normal operation: dt_cleanup() already finishes every device and
+  // dt_dev_pixelpipe_cache_cleanup() unconditionally releases all remaining
+  // cl_mem objects at application exit, when nothing else is running.
+  if(devid < 0) return;
+
+  // NOTE: the caller must hold darktable.opencl->dev[devid].lock -- either
+  // because it IS the pixelpipe currently running on that device (the lock
+  // dt_opencl_lock_device() handed it for the duration of its run), or because
+  // it explicitly took that lock to safely flush this device's cache entries
+  // after its own run finished (see dt_dev_pixelpipe_cache_flush_clmem_for_pipe()).
+  dt_opencl_events_wait_for(devid);
 
   dt_pthread_mutex_lock(&cache->lock);
   GHashTableIter iter;
@@ -452,18 +502,65 @@ void dt_dev_pixelpipe_cache_flush_clmem(dt_dev_pixelpipe_cache_t *cache, const i
   while(g_hash_table_iter_next(&iter, &key, &value))
   {
     dt_pixel_cache_entry_t *entry = (dt_pixel_cache_entry_t *)value;
-    /* Realtime display paths use cached cl_mem as scratch storage. Flushing VRAM
-     * must stay lightweight and must not wait on per-entry writer locks, otherwise
-     * allocation fallback can deadlock against in-flight GPU renders that already
-     * hold cache entry locks. */
+
+    /* Only idle cachelines may have their vRAM reclaimed. An entry that is referenced or
+     * write-locked is somebody's live (or about-to-be-consumed) buffer: the recursion reserves
+     * an entry-level ref for the next consumer before that consumer borrows the cl_mem payload,
+     * so a payload can be unborrowed (per-payload refs == 0) yet still belong to an in-flight
+     * pipe. Honoring the same protection the LRU/removal paths use (refcount + non-blocking
+     * write-lock probe) keeps us from yanking the sole vRAM copy of another pipe's input out
+     * from under it -- which left a husk and produced skull thumbnails (issue #817). The
+     * trywrlock never waits, so this stays lightweight and cannot deadlock against renders that
+     * already hold entry locks. */
+    const gboolean used = dt_atomic_get_int(&entry->refcount) > 0;
+    gboolean locked = dt_pthread_rwlock_trywrlock(&entry->lock);
+    if(!locked) dt_pthread_rwlock_unlock(&entry->lock);
+    if(used || locked)
+    {
+      if(darktable.unmuted & DT_DEBUG_VERBOSE)
+        dt_print(DT_DEBUG_OPENCL,
+          "[dt_dev_pixelpipe_cache_flush_clmem] entry %" PRIu64 " is in use (refcount=%i locked=%i), "
+          "keeping its vRAM\n", entry->hash, dt_atomic_get_int(&entry->refcount), locked);
+      continue;
+    }
+
     if(darktable.unmuted & DT_DEBUG_VERBOSE)
-      dt_print(DT_DEBUG_OPENCL, 
-        "[dt_dev_pixelpipe_cache_flush_clmem] trying to flush vRAM for entry %" PRIu64 "...\n",
-        entry->hash);
-    _cache_entry_clmem_flush_device(entry, devid);
+      dt_print(DT_DEBUG_OPENCL,
+        "[dt_dev_pixelpipe_cache_flush_clmem] trying to flush vRAM for entry %" PRIu64 " on device %d...\n",
+        entry->hash, devid);
+
+    /* If reclaiming this device's vRAM leaves the entry with no buffer at all, delete it now
+     * instead of letting a payload-less husk persist as a cache hit. We hold cache->lock for the
+     * whole iteration, and lookups bump the consumer ref under that same lock, so no consumer can
+     * be mid-acquisition of this (refcount == 0) entry. iter_remove runs _free_cache_entry, which
+     * releases any remaining resources. */
+    if(_cache_entry_clmem_flush_device(entry, devid))
+      g_hash_table_iter_remove(&iter);
   }
   dt_pthread_mutex_unlock(&cache->lock);
 }
+
+#ifdef HAVE_OPENCL
+void dt_dev_pixelpipe_cache_flush_clmem_for_pipe(dt_dev_pixelpipe_cache_t *cache, const int devid)
+{
+  // Like dt_dev_pixelpipe_cache_flush_clmem(), but for callers that do NOT
+  // currently hold darktable.opencl->dev[devid].lock -- typically a pipe's own
+  // cleanup, running after dt_dev_pixelpipe_process() already released that
+  // lock. Taking it here ensures we can't race the eventlist/cl_mem bookkeeping
+  // of whichever OTHER pixelpipe is now running on that device.
+  if(devid < 0 || IS_NULL_PTR(darktable.opencl) || !darktable.opencl->inited) return;
+
+  dt_pthread_mutex_lock(&darktable.opencl->dev[devid].lock);
+  dt_dev_pixelpipe_cache_flush_clmem(cache, devid);
+  dt_pthread_mutex_unlock(&darktable.opencl->dev[devid].lock);
+}
+#else
+void dt_dev_pixelpipe_cache_flush_clmem_for_pipe(dt_dev_pixelpipe_cache_t *cache, const int devid)
+{
+  (void)cache;
+  (void)devid;
+}
+#endif
 
 typedef struct _cache_lru_t
 {
@@ -1424,10 +1521,15 @@ static inline void _log_arena_allocation_failure(dt_dev_pixelpipe_cache_t *cache
 
 // keep: OpenCL buffer to NOT release
 #ifdef HAVE_OPENCL
-static void _cache_entry_clmem_flush_device(dt_pixel_cache_entry_t *entry, const int devid)
+// Release this device's vRAM payloads for one entry. The caller has already established that
+// the entry is idle (refcount == 0, not write-locked), so the device buffers are nobody's live
+// input and reclaiming them honors the flush's purpose: free vRAM for later allocations.
+// Returns TRUE if the entry holds no buffer at all afterwards (no host RAM, no vRAM on any
+// device) and should therefore be evicted entirely instead of lingering as a husk.
+static gboolean _cache_entry_clmem_flush_device(dt_pixel_cache_entry_t *entry, const int devid)
 {
-  // devid = -1 is code for flush all regardless of device
-  // it runs at pipeline cleanup
+  // devid is always >= 0 here: dt_dev_pixelpipe_cache_flush_clmem() early-returns
+  // otherwise. Only cachelines living on this specific device are candidates.
   dt_pthread_mutex_lock(&entry->cl_mem_lock);
 
   for(GList *l = g_list_first(entry->cl_mem_list); l;)
@@ -1444,14 +1546,14 @@ static void _cache_entry_clmem_flush_device(dt_pixel_cache_entry_t *entry, const
     }
 
     gboolean referenced = c->refs > 0;
-    gboolean not_ours = (dt_opencl_get_mem_context_id(c->mem) != devid) && devid > -1;
+    gboolean not_ours = dt_opencl_get_mem_context_id(c->mem) != devid;
 
     if(referenced || not_ours)
     {
       // Don't flush cachelines that don't belong to the current OpenCL device,
-      // or might still be used (references > 0), or have no RAM cache but only vRAM.
+      // or are still borrowed by an in-flight GPU module (per-payload refs > 0).
       if(darktable.unmuted & DT_DEBUG_VERBOSE)
-        dt_print(DT_DEBUG_OPENCL, 
+        dt_print(DT_DEBUG_OPENCL,
           "[dt_dev_pixelpipe_cache_flush_clmem] for entry %" PRIu64 ": couldn't flush %p "
           "(referenced=%i not ours=%i)\n",
           entry->hash, c->mem, referenced, not_ours);
@@ -1464,12 +1566,18 @@ static void _cache_entry_clmem_flush_device(dt_pixel_cache_entry_t *entry, const
     dt_free(c);
     l = next;
   }
+
+  // A cacheline that now carries neither a host buffer nor any vRAM is a husk: the cache would
+  // still hand it out as a hit, making a later consumer abort with "has no RAM nor vRAM input"
+  // (issue #817 skull thumbnails). Signal the caller to delete it entirely.
+  const gboolean empty = IS_NULL_PTR(entry->data) && IS_NULL_PTR(entry->cl_mem_list);
   dt_pthread_mutex_unlock(&entry->cl_mem_lock);
+  return empty;
 }
-#else 
-static void _cache_entry_clmem_flush_device(dt_pixel_cache_entry_t *entry, const int devid)
+#else
+static gboolean _cache_entry_clmem_flush_device(dt_pixel_cache_entry_t *entry, const int devid)
 {
-  return;
+  return FALSE;
 }
 #endif
 
@@ -2137,7 +2245,9 @@ gboolean dt_dev_pixelpipe_cache_peek(dt_dev_pixelpipe_cache_t *cache, const uint
   dt_print(DT_DEBUG_PIPECACHE,
            "[pixelpipe] cache entry %" PRIu64 " has no authoritative RAM nor vRAM payload and will be removed\n",
            hash);
-  dt_dev_pixelpipe_cache_remove(cache, TRUE, cache_entry);
+  // If the entry removal fails, flag it for auto-destroy.
+  if(dt_dev_pixelpipe_cache_remove(cache, TRUE, cache_entry))
+    dt_dev_pixelpipe_cache_flag_auto_destroy(cache, cache_entry);
   if(data) *data = NULL;
   return FALSE;
 }
@@ -2162,6 +2272,35 @@ void dt_dev_pixelpipe_cache_flush(dt_dev_pixelpipe_cache_t *cache, const int id)
   dt_pthread_mutex_lock(&cache->lock);
   g_hash_table_foreach_remove(cache->entries, _for_each_remove, GINT_TO_POINTER(id));
   dt_pthread_mutex_unlock(&cache->lock);
+}
+
+int dt_dev_pixelpipe_cache_invalidate_hashes(dt_dev_pixelpipe_cache_t *cache,
+                                             const uint64_t *hashes,
+                                             const size_t count)
+{
+  int retained = 0;
+  dt_pthread_mutex_lock(&cache->lock);
+
+  // We are invalidating the cumulative outputs from one pipeline stage onward.
+  // Look them up under the same cache lock used for removal so a shared preview
+  // pipe cannot replace an entry between lookup and invalidation.
+  for(size_t k = 0; k < count; k++)
+  {
+    if(hashes[k] == DT_PIXELPIPE_CACHE_HASH_INVALID) continue;
+
+    dt_pixel_cache_entry_t *entry
+        = _non_threadsafe_cache_get_entry(cache, cache->entries, hashes[k]);
+    if(IS_NULL_PTR(entry)) continue;
+
+    // A displayed backbuffer or an in-flight consumer may still own this
+    // shared state. Leave it valid; cache bypass on the retry still walks
+    // through downstream stages after the provider has been regenerated.
+    if(_non_thread_safe_cache_remove(cache, FALSE, entry, cache->entries))
+      retained++;
+  }
+
+  dt_pthread_mutex_unlock(&cache->lock);
+  return retained;
 }
 
 

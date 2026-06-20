@@ -342,6 +342,7 @@ static void _apply_runtime_event(dt_drawlayer_runtime_manager_t *state,
       break;
   }
 
+  const gboolean painting_before = state->painting_active;
   if(request->event == DT_DRAWLAYER_RUNTIME_EVENT_GUI_RAW_INPUT)
   {
     if(request->raw_input_kind == DT_DRAWLAYER_RUNTIME_RAW_INPUT_STROKE_BEGIN)
@@ -355,6 +356,9 @@ static void _apply_runtime_event(dt_drawlayer_runtime_manager_t *state,
   {
     state->painting_active = FALSE;
   }
+  if(painting_before != state->painting_active)
+    dt_print(DT_DEBUG_PERF, "[drawlayer] painting_active %d->%d by event=%d raw_kind=%d\n",
+             painting_before, state->painting_active, request->event, request->raw_input_kind);
 }
 
 static void _update_realtime_state(dt_drawlayer_runtime_manager_t *state,
@@ -380,9 +384,11 @@ static void _update_realtime_state(dt_drawlayer_runtime_manager_t *state,
         break;
 
       case DT_DRAWLAYER_RUNTIME_EVENT_GUI_RAW_INPUT:
-        realtime_active = priv->gui_focused && inputs && inputs->gui_attached
-                          && (request->raw_input_kind == DT_DRAWLAYER_RUNTIME_RAW_INPUT_STROKE_BEGIN
-                              || request->raw_input_kind == DT_DRAWLAYER_RUNTIME_RAW_INPUT_SAMPLE);
+        // Realtime mode tracks painting_active only (set by _apply_runtime_event on STROKE_BEGIN/END,
+        // which runs just before this). A SAMPLE raw-input also fires on plain hover (cursor tracking)
+        // while NOT painting; forcing realtime on there toggled it on/off against every pipe-finished,
+        // and each flip paid a full resync_history_main (~44ms). Fall through to the base computation so
+        // hover never enters realtime and only an actual stroke does.
         break;
 
       case DT_DRAWLAYER_RUNTIME_EVENT_NONE:
@@ -946,6 +952,10 @@ void dt_drawlayer_process_state_invalidate(dt_drawlayer_process_state_t *state)
 {
   if(IS_NULL_PTR(state)) return;
   dt_drawlayer_cache_patch_clear(&state->stroke_mask, "drawlayer stroke mask");
+  /* Any state invalidation may relocate/free the output buffer this tracked, so
+   * the realtime partial-composite fast path can no longer trust it. */
+  state->last_composite_valid = FALSE;
+  state->last_composite_dev_out = NULL;
 }
 
 static void _release_runtime_source(dt_drawlayer_runtime_manager_t *state,

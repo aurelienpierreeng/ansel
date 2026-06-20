@@ -9,8 +9,8 @@
 {
   GtkWidget *widget, *label, *labelev, *viewport, *box;
   GtkWidget *grid = gtk_grid_new();
-  gtk_grid_set_row_spacing(GTK_GRID(grid), DT_PIXEL_APPLY_DPI(3));
-  gtk_grid_set_column_spacing(GTK_GRID(grid), DT_PIXEL_APPLY_DPI(5));
+  gtk_grid_set_row_spacing(GTK_GRID(grid), DT_GUI_BOX_SPACING);
+  gtk_grid_set_column_spacing(GTK_GRID(grid), DT_GUI_BOX_SPACING);
   gtk_widget_set_valign(grid, GTK_ALIGN_START);
   int line = 0;
   char tooltip[1024];
@@ -31,8 +31,8 @@
 {
   GtkWidget *widget, *label, *labelev, *viewport, *box;
   GtkWidget *grid = gtk_grid_new();
-  gtk_grid_set_row_spacing(GTK_GRID(grid), DT_PIXEL_APPLY_DPI(3));
-  gtk_grid_set_column_spacing(GTK_GRID(grid), DT_PIXEL_APPLY_DPI(5));
+  gtk_grid_set_row_spacing(GTK_GRID(grid), DT_GUI_BOX_SPACING);
+  gtk_grid_set_column_spacing(GTK_GRID(grid), DT_GUI_BOX_SPACING);
   gtk_widget_set_valign(grid, GTK_ALIGN_START);
   int line = 0;
   char tooltip[1024];
@@ -194,7 +194,7 @@ gboolean restart_required = FALSE;
   <xsl:text>
   {
     GtkWidget *seclabel = gtk_label_new(_("Lighttable"));
-    GtkWidget *lbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    GtkWidget *lbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
     gtk_box_pack_start(GTK_BOX(lbox), seclabel, FALSE, FALSE, 0);
     gtk_widget_set_name(lbox, "pref_section");
     gtk_grid_attach(GTK_GRID(grid), lbox, 0, line++, 2, 1);
@@ -208,7 +208,7 @@ gboolean restart_required = FALSE;
   <xsl:text>
   {
     GtkWidget *seclabel = gtk_label_new(_("Darkroom"));
-    GtkWidget *lbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    GtkWidget *lbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
     gtk_box_pack_start(GTK_BOX(lbox), seclabel, FALSE, FALSE, 0);
     gtk_widget_set_name(lbox, "pref_section");
     gtk_grid_attach(GTK_GRID(grid), lbox, 0, line++, 2, 1);
@@ -222,7 +222,7 @@ gboolean restart_required = FALSE;
   <xsl:text>
   {
     GtkWidget *seclabel = gtk_label_new(_("Other views"));
-    GtkWidget *lbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    GtkWidget *lbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
     gtk_box_pack_start(GTK_BOX(lbox), seclabel, FALSE, FALSE, 0);
     gtk_widget_set_name(lbox, "pref_section");
     gtk_grid_attach(GTK_GRID(grid), lbox, 0, line++, 2, 1);
@@ -236,7 +236,7 @@ gboolean restart_required = FALSE;
   <xsl:text>
   {
     GtkWidget *seclabel = gtk_label_new(_("Map"));
-    GtkWidget *lbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    GtkWidget *lbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
     gtk_box_pack_start(GTK_BOX(lbox), seclabel, FALSE, FALSE, 0);
     gtk_widget_set_name(lbox, "pref_section");
     gtk_grid_attach(GTK_GRID(grid), lbox, 0, line++, 2, 1);
@@ -251,7 +251,7 @@ gboolean restart_required = FALSE;
   <xsl:text>
   {
     GtkWidget *seclabel = gtk_label_new(_("Slideshow"));
-    GtkWidget *lbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    GtkWidget *lbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
     gtk_box_pack_start(GTK_BOX(lbox), seclabel, FALSE, FALSE, 0);
     gtk_widget_set_name(lbox, "pref_section");
     gtk_grid_attach(GTK_GRID(grid), lbox, 0, line++, 2, 1);
@@ -272,7 +272,7 @@ gboolean restart_required = FALSE;
   <xsl:text>
     {
       GtkWidget *seclabel = gtk_label_new(_("image processing"));
-      GtkWidget *lbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+      GtkWidget *lbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
       gtk_box_pack_start(GTK_BOX(lbox), seclabel, FALSE, FALSE, 0);
       gtk_widget_set_name(lbox, "pref_section");
       gtk_grid_attach(GTK_GRID(grid), lbox, 0, line++, 2, 1);
@@ -288,7 +288,7 @@ gboolean restart_required = FALSE;
   <xsl:text>
     {
       GtkWidget *seclabel = gtk_label_new(_("cpu / gpu / memory"));
-      GtkWidget *lbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+      GtkWidget *lbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
       gtk_box_pack_start(GTK_BOX(lbox), seclabel, FALSE, FALSE, 0);
       gtk_widget_set_name(lbox, "pref_section");
       gtk_grid_attach(GTK_GRID(grid), lbox, 0, line++, 2, 1);
@@ -305,14 +305,14 @@ gboolean restart_required = FALSE;
 
   <xsl:text>
     {
-      GtkWidget *lbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+      GtkWidget *lbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
       gtk_box_pack_start(GTK_BOX(lbox), gtk_label_new(_("libraw")), FALSE, FALSE, 0);
       gtk_widget_set_name(lbox, "pref_section");
       gtk_grid_attach(GTK_GRID(grid), lbox, 0, line++, 2, 1);
 
       GtkWidget *warning_label = gtk_label_new(NULL);
       gtk_label_set_markup(GTK_LABEL(warning_label), _("This feature is experimental. Please read : https://ansel.photos/en/doc/preferences-settings/processing/#libraw"));
-      lbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+      lbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
       gtk_box_pack_start(GTK_BOX(lbox), warning_label, FALSE, FALSE, 0);
       gtk_grid_attach(GTK_GRID(grid), lbox, 0, line++, 4, 1);
     }
@@ -332,7 +332,7 @@ gboolean restart_required = FALSE;
   <xsl:text>
     {
       GtkWidget *seclabel = gtk_label_new(_("general"));
-      GtkWidget *lbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+      GtkWidget *lbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
       gtk_box_pack_start(GTK_BOX(lbox), seclabel, FALSE, FALSE, 0);
       gtk_widget_set_name(lbox, "pref_section");
       gtk_grid_attach(GTK_GRID(grid), lbox, 0, line++, 2, 1);
@@ -347,7 +347,7 @@ gboolean restart_required = FALSE;
   <xsl:text>
    {
       GtkWidget *seclabel = gtk_label_new(_("other"));
-      GtkWidget *lbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+      GtkWidget *lbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
       gtk_box_pack_start(GTK_BOX(lbox), seclabel, FALSE, FALSE, 0);
       gtk_widget_set_name(lbox, "pref_section");
       gtk_grid_attach(GTK_GRID(grid), lbox, 0, line++, 2, 1);
@@ -366,7 +366,7 @@ gboolean restart_required = FALSE;
 <xsl:text>
    {
       GtkWidget *seclabel = gtk_label_new(_("database"));
-      GtkWidget *lbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+      GtkWidget *lbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
       gtk_box_pack_start(GTK_BOX(lbox), seclabel, FALSE, FALSE, 0);
       gtk_widget_set_name(lbox, "pref_section");
       gtk_grid_attach(GTK_GRID(grid), lbox, 0, line++, 2, 1);
@@ -379,7 +379,7 @@ gboolean restart_required = FALSE;
 <xsl:text>
    {
       GtkWidget *seclabel = gtk_label_new(_("xmp"));
-      GtkWidget *lbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+      GtkWidget *lbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
       gtk_box_pack_start(GTK_BOX(lbox), seclabel, FALSE, FALSE, 0);
       gtk_widget_set_name(lbox, "pref_section");
       gtk_grid_attach(GTK_GRID(grid), lbox, 0, line++, 2, 1);
@@ -387,6 +387,19 @@ gboolean restart_required = FALSE;
 </xsl:text>
 
   <xsl:for-each select="./dtconfiglist/dtconfig[@prefs='storage' and @section='xmp']">
+    <xsl:apply-templates select="." mode="tab_block"/>
+  </xsl:for-each>
+<xsl:text>
+   {
+      GtkWidget *seclabel = gtk_label_new(_("privacy"));
+      GtkWidget *lbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
+      gtk_box_pack_start(GTK_BOX(lbox), seclabel, FALSE, FALSE, 0);
+      gtk_widget_set_name(lbox, "pref_section");
+      gtk_grid_attach(GTK_GRID(grid), lbox, 0, line++, 2, 1);
+   }
+</xsl:text>
+
+  <xsl:for-each select="./dtconfiglist/dtconfig[@prefs='storage' and @section='privacy']">
     <xsl:apply-templates select="." mode="tab_block"/>
   </xsl:for-each>
   <xsl:value-of select="$tab_end" />
@@ -397,7 +410,7 @@ gboolean restart_required = FALSE;
 <xsl:text>
    {
       GtkWidget *seclabel = gtk_label_new(_("interface"));
-      GtkWidget *lbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+      GtkWidget *lbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
       gtk_box_pack_start(GTK_BOX(lbox), seclabel, FALSE, FALSE, 0);
       gtk_widget_set_name(lbox, "pref_section");
       gtk_grid_attach(GTK_GRID(grid), lbox, 0, line++, 2, 1);
@@ -410,7 +423,7 @@ gboolean restart_required = FALSE;
 <xsl:text>
    {
       GtkWidget *seclabel = gtk_label_new(_("tags"));
-      GtkWidget *lbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+      GtkWidget *lbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
       gtk_box_pack_start(GTK_BOX(lbox), seclabel, FALSE, FALSE, 0);
       gtk_widget_set_name(lbox, "pref_section");
       gtk_grid_attach(GTK_GRID(grid), lbox, 0, line++, 2, 1);
@@ -630,7 +643,7 @@ gboolean restart_required = FALSE;
   <xsl:template match="dtconfig[type='longstring']" mode="tab">
   <xsl:text>    GtkTextBuffer *buffer = gtk_text_buffer_new(NULL);
     widget = gtk_text_view_new_with_buffer(buffer);
-    box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
     gtk_box_pack_start(GTK_BOX(box), widget, TRUE, TRUE, 0);
     gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(widget), GTK_WRAP_WORD);
     gtk_text_view_set_accepts_tab(GTK_TEXT_VIEW(widget), FALSE);
@@ -647,7 +660,7 @@ gboolean restart_required = FALSE;
   </xsl:template>
   <xsl:template match="dtconfig[type='string']" mode="tab">
     <xsl:text>    widget = gtk_entry_new();
-    box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
     gtk_box_pack_start(GTK_BOX(box), widget, TRUE, TRUE, 0);
     gtk_widget_set_halign(widget, GTK_ALIGN_FILL);
     gtk_widget_set_hexpand(widget, TRUE);
@@ -665,7 +678,7 @@ gboolean restart_required = FALSE;
 
   <xsl:template match="dtconfig[type='dir']" mode="tab">
     <xsl:text>    widget = gtk_file_chooser_button_new(_("select directory"), GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER);
-    box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
     gtk_box_pack_start(GTK_BOX(box), widget, TRUE, TRUE, 0);
     gtk_file_chooser_button_set_width_chars(GTK_FILE_CHOOSER_BUTTON(widget), 20);
     gtk_widget_set_halign(widget, GTK_ALIGN_FILL);
@@ -692,7 +705,7 @@ gboolean restart_required = FALSE;
     tmp = min * (double)factor; min = tmp;
     tmp = max * (double)factor; max = tmp;
     widget = gtk_spin_button_new_with_range(min, max, 1);
-    box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
     gtk_box_pack_start(GTK_BOX(box), widget, FALSE, FALSE, 0);
     gtk_widget_set_hexpand(widget, FALSE);
     gtk_spin_button_set_digits(GTK_SPIN_BUTTON(widget), 0);
@@ -712,7 +725,7 @@ gboolean restart_required = FALSE;
     <xsl:text>  </xsl:text><xsl:apply-templates select="type" mode="factor"/>
     <xsl:text>    min *= factor; max *= factor;
     widget = gtk_spin_button_new_with_range(min, max, 1);
-    box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
     gtk_box_pack_start(GTK_BOX(box), widget, FALSE, FALSE, 0);
     gtk_widget_set_hexpand(widget, FALSE);
     gtk_spin_button_set_digits(GTK_SPIN_BUTTON(widget), 0);
@@ -734,7 +747,7 @@ gboolean restart_required = FALSE;
     <xsl:text>  </xsl:text><xsl:apply-templates select="type" mode="factor"/>
     <xsl:text>    min *= factor; max *= factor;
     widget = gtk_spin_button_new_with_range(min, max, 0.001f);
-    box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
     gtk_box_pack_start(GTK_BOX(box), widget, FALSE, FALSE, 0);
     gtk_widget_set_hexpand(widget, FALSE);
     gtk_spin_button_set_digits(GTK_SPIN_BUTTON(widget), 5);
@@ -750,7 +763,7 @@ gboolean restart_required = FALSE;
 
     <xsl:template match="dtconfig[type='bool']" mode="tab">
     <xsl:text>    widget = gtk_check_button_new();
-    box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
     gtk_box_pack_start(GTK_BOX(box), widget, FALSE, FALSE, 0);
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widget), dt_conf_get_bool("</xsl:text><xsl:value-of select="name"/><xsl:text>"));
     </xsl:text>
@@ -795,7 +808,7 @@ gboolean restart_required = FALSE;
     gtk_cell_layout_pack_start(GTK_CELL_LAYOUT(widget), renderer, TRUE);
     gtk_cell_layout_set_attributes(GTK_CELL_LAYOUT(widget), renderer, "text", 1, NULL);
     gtk_combo_box_set_active(GTK_COMBO_BOX(widget), pos);
-    box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
     gtk_box_pack_start(GTK_BOX(box), widget, FALSE, FALSE, 0);
     </xsl:text>
     <xsl:text> g_signal_connect(G_OBJECT(widget), "changed", G_CALLBACK(preferences_changed_callback_</xsl:text><xsl:value-of select="generate-id(.)"/><xsl:text>), labdef);</xsl:text>

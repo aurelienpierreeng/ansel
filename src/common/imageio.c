@@ -116,16 +116,27 @@
 #include <string.h>
 #include <strings.h>
 
-// note `dng` is not included anywhere as it can be anything. For this images we'll need to open it for "real"
+// These lists drive *type inference from the file extension only* (dt_imageio_get_type_from_extension).
+// They are deliberately conservative: the extension is only allowed to commit a dynamic-range flag
+// when the container's sample format is fixed. A raw extension always means sensor data; an
+// integer-only container is always LDR; a float-only container is always HDR.
+//
+// Containers that can hold EITHER integer or float / high-bit-depth data — TIFF, AVIF, HEIF/HEIC,
+// and `dng` — are NOT listed here on purpose: their dynamic range cannot be known before decoding,
+// so they stay UNKNOWN until dt_image_buffer_resolve_flags() classifies them from the decoded
+// buffer datatype (TYPE_FLOAT -> HDR, integer non-raw -> LDR). Decoder *routing* for those formats
+// lives in the separate raster_formats[] / hdr_formats[] lists below, which is a different concern.
 static const gchar *_supported_raw[]
     = { "3fr", "ari", "arw", "bay", "cr2", "cr3", "crw", "dc2", "dcr", "erf", "fff",
         "ia",  "iiq", "k25", "kc2", "kdc", "mdc", "mef", "mos", "mrw", "nef", "nrw",
         "orf", "pef", "raf", "raw", "rw2", "rwl", "sr2", "srf", "srw", "sti", "x3f", NULL };
+// integer-only raster containers — unambiguously low dynamic range:
 static const gchar *_supported_ldr[]
-    = { "bmp",  "bmq", "cap", "cine", "cs1", "dcm", "gif", "gpr", "j2c", "j2k", "jng", "jp2", "jpc", "jpeg", "jpg",
-        "miff", "mng", "ori", "pbm",  "pfm", "pgm", "png", "pnm", "ppm", "pxn", "qtk", "rdc", "tif", "tiff", "webp",
-        NULL };
-static const gchar *_supported_hdr[] = { "avif", "exr", "hdr", "heic", "heif", "hif", "pfm", NULL };
+    = { "bmp",  "bmq", "cap", "cine", "cs1", "dcm", "gif", "gpr", "j2c", "j2k", "jng", "jp2", "jpc",
+        "jpeg", "jpg", "miff", "mng", "ori", "pbm", "pgm", "png", "pnm", "ppm", "pxn", "qtk", "rdc",
+        "webp", NULL };
+// float-only raster containers — unambiguously high dynamic range:
+static const gchar *_supported_hdr[] = { "exr", "hdr", "pfm", NULL };
 
 /**
  * @brief Map Exiv2 preview MIME types to decoder format identifiers.
@@ -162,7 +173,10 @@ static const char *_preview_format_from_mime_type(const char *mime_type)
 }
 #endif
 
-// get the type of image from its extension
+// Best-effort image-type hint from the file extension. Returns DT_IMAGE_RAW / DT_IMAGE_LDR /
+// DT_IMAGE_HDR for the unambiguous extensions, or 0 ("unknown") for containers whose dynamic range
+// only the decoder can settle (TIFF, AVIF, HEIF/HEIC, DNG). Callers must treat 0 as "decode it";
+// dt_image_buffer_resolve_flags() sets the authoritative LDR/HDR/MOSAIC flags once decoded.
 dt_image_flags_t dt_imageio_get_type_from_extension(const char *extension)
 {
   const char *ext = g_str_has_prefix(extension, ".") ? extension + 1 : extension;
@@ -1023,6 +1037,11 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
   // Useful for partial exports, for technical purposes (HDR merge)
   _filter_pipeline(filter, &pipe);
 
+  // This export path drives the pipe directly instead of through dt_dev_pixelpipe_change(), so
+  // establish the buffer-format contract (and disable incompatible nodes) explicitly, after the
+  // optional filtering changed the node set and before ROI planning / global hashing.
+  dt_dev_pixelpipe_propagate_formats(&pipe);
+
   // Get theoritical final size of image, taking distortions and croppings AND borders into account,
   // considering full-size original input. Meaning we can enlarge or reduce the original image,
   // even taking full-res input.
@@ -1209,33 +1228,6 @@ dt_imageio_retval_t dt_imageio_open_exotic(dt_image_t *img, const char *filename
   return ret;
 }
 
-void dt_imageio_update_monochrome_workflow_tag(int32_t id, int mask)
-{
-  if(mask & (DT_IMAGE_MONOCHROME | DT_IMAGE_MONOCHROME_PREVIEW | DT_IMAGE_MONOCHROME_BAYER))
-  {
-    guint tagid = 0;
-    char tagname[64];
-    snprintf(tagname, sizeof(tagname), "darktable|mode|monochrome");
-    dt_tag_new(tagname, &tagid);
-    dt_tag_attach(tagid, id, FALSE, FALSE);
-  }
-  else
-    dt_tag_detach_by_string("darktable|mode|monochrome", id, FALSE, FALSE);
-
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_TAG_CHANGED);
-}
-
-void dt_imageio_set_hdr_tag(dt_image_t *img)
-{
-  guint tagid = 0;
-  char tagname[64];
-  snprintf(tagname, sizeof(tagname), "darktable|mode|hdr");
-  dt_tag_new(tagname, &tagid);
-  dt_tag_attach(tagid, img->id, FALSE, FALSE);
-  img->flags |= DT_IMAGE_HDR;
-  img->flags &= ~DT_IMAGE_LDR;
-}
-
 // =================================================
 //   combined reading
 // =================================================
@@ -1247,9 +1239,6 @@ dt_imageio_retval_t dt_imageio_open(dt_image_t *img,               // non-const 
   /* first of all, check if file exists, don't bother to test loading if not exists */
   if(!g_file_test(filename, G_FILE_TEST_IS_REGULAR))
     return !DT_IMAGEIO_OK;
-
-  const int32_t was_hdr = (img->flags & DT_IMAGE_HDR);
-  const int32_t was_bw = dt_image_monochrome_flags(img);
 
   dt_imageio_retval_t ret = DT_IMAGEIO_FILE_CORRUPTED;
   img->loader = LOADER_UNKNOWN;
@@ -1309,14 +1298,13 @@ dt_imageio_retval_t dt_imageio_open(dt_image_t *img,               // non-const 
     return ret;
   }
 
-  if((ret == DT_IMAGEIO_OK) && !was_hdr && (img->flags & DT_IMAGE_HDR))
-    dt_imageio_set_hdr_tag(img);
-
-  if((ret == DT_IMAGEIO_OK) && (was_bw != dt_image_monochrome_flags(img)))
-    dt_imageio_update_monochrome_workflow_tag(img->id, dt_image_monochrome_flags(img));
-
   img->p_width = img->width - img->crop_x - img->crop_width;
   img->p_height = img->height - img->crop_y - img->crop_height;
+
+  // The codec has now populated img->dsc: finalize the buffer-derived type flags
+  // (DT_IMAGE_MOSAIC + DT_IMAGE_BUFFER_RESOLVED). This is the single point where the
+  // decoded descriptor is mapped to the persisted classification.
+  dt_image_buffer_resolve_flags(img);
 
   return ret;
 }

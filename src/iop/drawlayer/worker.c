@@ -311,14 +311,14 @@ static void _publish_backend_progress(drawlayer_paint_backend_ctx_t *ctx, gboole
   dt_drawlayer_touch_stroke_commit_hash(params, sample_count, g->stroke.last_dab_valid, g->stroke.last_dab_x,
                                         g->stroke.last_dab_y, ctx->worker->live_publish_serial);
 
-  dt_pthread_rwlock_wrlock(&dev->history_mutex);
-  dt_dev_add_history_item_ext(dev, self, FALSE, FALSE);
-  dt_dev_set_history_hash(dev, dt_dev_history_compute_hash(dev));
-  dt_pthread_rwlock_unlock(&dev->history_mutex);
-
-  /* Heartbeat publish only updates drawlayer history ownership here. Realtime
-   * full-pipe bypassing of history resynchronization is handled inside the
-   * pipeline code itself, where pipe pieces may be updated legally. */
+  /* Realtime heartbeats publish the live params through the thread-safe transient channel instead of
+   * writing permanent history. This re-renders the in-progress stroke (the bumped stroke_commit_hash
+   * re-keys the drawlayer piece's global_hash) without churning the undo stack or the database. The
+   * permanent history is written once, at the real commit (`dt_drawlayer_commit_dabs`), which also
+   * clears the transient slot. drawlayer does not change geometry, so a fast main-pipe top-only resync
+   * (`_sync_focused_in_place`) is enough — flag it explicitly since _set no longer auto-triggers. */
+  dt_dev_transient_params_set(self, params, self->params_size, NULL, 0);
+  dt_dev_pixelpipe_or_changed(dev->pipe, DT_DEV_PIPE_TOP_CHANGED);
   dt_control_queue_redraw_center();
 }
 

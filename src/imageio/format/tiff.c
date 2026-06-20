@@ -123,7 +123,11 @@ int write_image(dt_imageio_module_data_t *d_tmp, const char *filename, const voi
   if(export_masks && pipe)
   {
     for(GList *iter = pipe->nodes; iter; iter = g_list_next(iter))
-      n_pages += g_hash_table_size(((dt_dev_pixelpipe_iop_t *)iter->data)->raster_masks);
+    {
+      const dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)iter->data;
+      if(piece->enabled)
+        n_pages += g_hash_table_size(piece->module->raster_mask.source.masks);
+    }
   }
 
   // Create little endian tiff image
@@ -384,11 +388,14 @@ int write_image(dt_imageio_module_data_t *d_tmp, const char *filename, const voi
       GHashTableIter rm_iter;
       gpointer key, value;
 
-      g_hash_table_iter_init(&rm_iter, piece->raster_masks);
+      // The global cache remains authoritative even when the provider image was
+      // an exact hit and this pipeline node did not run locally.
+      g_hash_table_iter_init(&rm_iter, piece->module->raster_mask.source.masks);
       while(g_hash_table_iter_next(&rm_iter, &key, &value))
       {
         if(free_mask) dt_pixelpipe_cache_free_align(raster_mask);
-        raster_mask = dt_dev_get_raster_mask(pipe, piece->module, GPOINTER_TO_INT(key), NULL, &free_mask, NULL);
+        raster_mask = dt_dev_get_raster_mask(pipe, piece->module, GPOINTER_TO_INT(key), NULL, NULL);
+        free_mask = !IS_NULL_PTR(raster_mask);
 
 
         size_t w = d->global.width, h = d->global.height;
@@ -813,7 +820,7 @@ void gui_init(dt_imageio_module_format_t *self)
   if(dt_conf_key_exists("plugins/imageio/format/tiff/compresslevel"))
     compresslevel = dt_conf_get_int("plugins/imageio/format/tiff/compresslevel");
 
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   // Bit depth combo box
   gui->bpp = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));

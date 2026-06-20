@@ -71,6 +71,8 @@
 #include "common/imageio_module.h"
 #include "control/conf.h"
 #include "imageio/format/imageio_format_api.h"
+#include "gui/gtk.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -648,7 +650,7 @@ void gui_init(dt_imageio_module_format_t *self)
 {
   dt_imageio_j2k_gui_t *gui = (dt_imageio_j2k_gui_t *)malloc(sizeof(dt_imageio_j2k_gui_t));
   self->gui_data = (void *)gui;
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   const int format_last = dt_conf_get_int("plugins/imageio/format/j2k/format");
   const int preset_last = dt_conf_get_int("plugins/imageio/format/j2k/preset");

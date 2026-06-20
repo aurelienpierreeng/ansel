@@ -43,6 +43,7 @@
 #include "dtgtk/button.h"
 #include "dtgtk/gradientslider.h"
 #include "gui/color_picker_proxy.h"
+#include "gui/gtk.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -112,10 +113,10 @@ typedef enum dt_develop_mask_mode_t
 {
   DEVELOP_MASK_DISABLED = 0,                                                         // off
   DEVELOP_MASK_ENABLED = 1,                                                          // uniformly
-  DEVELOP_MASK_MASK = 1 << 1,                                                        // drawn mask
-  DEVELOP_MASK_CONDITIONAL = 1 << 2,                                                 // parametric mask
+  DEVELOP_MASK_SHAPE = 1 << 1,                                                       // drawn mask
+  DEVELOP_MASK_PARAMETRIC = 1 << 2,                                                  // parametric mask
   DEVELOP_MASK_RASTER = 1 << 3,                                                      // raster mask
-  DEVELOP_MASK_MASK_CONDITIONAL = (DEVELOP_MASK_MASK | DEVELOP_MASK_CONDITIONAL)     // drawn & parametric
+  DEVELOP_MASK_SHAPE_PARAMETRIC = (DEVELOP_MASK_SHAPE | DEVELOP_MASK_PARAMETRIC)     // drawn & parametric
 } dt_develop_mask_mode_t;
 
 typedef enum dt_develop_mask_combine_mode_t
@@ -318,17 +319,16 @@ typedef struct dt_iop_gui_blend_data_t
   dt_develop_blend_colorspace_t csp;
   dt_iop_module_t *module;
 
-  GtkWidget *blending_body_box;
+  GtkWidget *blending_box;
   GtkWidget *blending_notebook;
   GtkWidget *top_enable;
   GtkWidget *masks_enable;
   GtkWidget *raster_enable;
   GtkWidget *blendif_enable;
-  GtkWidget *top_content;
   GtkWidget *masks_content;
   GtkWidget *raster_content;
   GtkWidget *blendif_content;
-  GtkWidget *bottom_content;
+  GtkWidget *contours_content;
   GtkBox *blendif_box;
   GtkBox *masks_box;
   GtkBox *raster_box;
@@ -337,7 +337,6 @@ typedef struct dt_iop_gui_blend_data_t
   GtkWidget *colorpicker_set_values;
   dt_iop_gui_blendif_filter_t filter[2];
   GtkWidget *showmask;
-  GtkWidget *suppress;
   GtkWidget *masks_combine_combo;
   GtkWidget *blend_modes_combo;
   GtkWidget *blend_modes_blend_order;
@@ -377,6 +376,8 @@ typedef struct dt_iop_gui_blend_data_t
   GtkWidget *masks_group_treeview;
   GtkTreeStore *group_shapes_store;
   GtkTreeViewColumn *group_shapes_col;
+  GtkTreeViewColumn *group_unlink_col;
+  GtkTreeViewColumn *group_delete_col;
   GtkListStore *all_shapes_store;
   GtkWidget *group_shapes_sw;
   GtkTreeViewColumn *all_shapes_col;
@@ -389,10 +390,15 @@ typedef struct dt_iop_gui_blend_data_t
   GdkPixbuf *masks_ic_exclusion;
   GtkWidget *all_shapes_buttons;
   GtkWidget *lists_box;
+  dt_gui_collapsible_section_t masks_cs;
 
 
   GtkWidget *raster_combo;
   GtkWidget *raster_polarity;
+
+  gboolean picker_set_values_box_valid;
+  dt_boundingbox_t picker_set_values_box;
+  gboolean picker_set_values_manual_boost_lock;
 
   int control_button_pressed;
   dt_pthread_mutex_t lock;
@@ -446,6 +452,34 @@ int dt_develop_blend_legacy_params_from_so(dt_iop_module_so_t *module_so, const 
 void dt_develop_blendif_process_parameters(float *const parameters, const dt_develop_blend_params_t *const params);
 
 /**
+ * Return effective mask usage for current blending parameters.
+ *
+ * This inspects mask mode bits and payload state to decide whether raster,
+ * drawn and/or parametric masks are actually contributing, so callers can
+ * skip mask computation branches when modes are enabled but still at default.
+ *
+ * State rules:
+ * - top_enabled: set by params->mask_mode & DEVELOP_MASK_ENABLED.
+ * 
+ * - raster_used: requires params->mask_mode & DEVELOP_MASK_RASTER
+ *   and module->raster_mask.sink.source set.
+ * 
+ * - drawn_used: requires params->mask_mode & DEVELOP_MASK_MASK and a valid
+ *   group form from params->mask_id containing at least one shape.
+ * 
+ * - parametric_used: requires params->mask_mode & DEVELOP_MASK_CONDITIONAL and
+ *   at least one active blendif channel (channel bit set in params->blendif,
+ *   channel allowed by blend colorspace mask, and channel thresholds different
+ *   from defaults [0, 0, 1, 1] in params->blendif_parameters).
+ */
+void dt_develop_blend_get_mask_usage(const dt_iop_module_t *module,
+                                     const dt_develop_blend_params_t *params,
+                                     gboolean *top_enabled,
+                                     gboolean *raster_used,
+                                     gboolean *drawn_used,
+                                     gboolean *parametric_used);
+
+/**
  * Set up a profile adapted to the blending.
  *
  * darktable built-in color profiles are chroma-adjusted such that they define a [D65 RGB -> D50 XYZ] transform,
@@ -495,9 +529,9 @@ void dt_develop_blendif_rgb_jzczhz_blend(const struct dt_dev_pixelpipe_t *pipe,
 
 
 /** gui related stuff */
-void dt_iop_gui_init_blendif(GtkBox *blendw, dt_iop_module_t *module);
+void dt_iop_gui_init_blendif(GtkBox *blendw, dt_iop_module_t *module, GtkWidget *header);
 void dt_iop_gui_init_blending(dt_iop_module_t *module);
-void dt_iop_gui_init_blending_body(GtkBox *blendw, dt_iop_module_t *module);
+void dt_iop_gui_init_blending_body(GtkWidget *container, dt_iop_module_t *module);
 void dt_iop_gui_update_blending(dt_iop_module_t *module);
 void dt_iop_gui_update_blendif(dt_iop_module_t *module);
 void dt_iop_gui_cleanup_blending_body(dt_iop_module_t *module);

@@ -74,7 +74,7 @@ SUDO=""
 
 PRINT_HELP=0
 
-FEATURES="CMARK COLORD GRAPHICSMAGICK IMAGEMAGICK KWALLET LIBSECRET MAP MAC_INTEGRATION NLS OPENCL OPENEXR OPENMP WEBP"
+FEATURES="CMARK COLORD GRAPHICSMAGICK IMAGEMAGICK KWALLET LIBSECRET MAP MAC_INTEGRATION NLS OPENCL OPENEXR OPENMP SENTRY WEBP"
 
 # prepare a lowercase version with a space before and after
 # it's very important for parse_feature, has no impact in for loop expansions
@@ -564,23 +564,17 @@ eval "$cmd_install"
 if [ $DO_INSTALL ] ; then
 	if [ -f "$INSTALL_PREFIX/bin/ansel" ]; then
 		[ ! -d "/usr/local/bin/" ] && $SUDO mkdir -p /usr/local/bin/
-		[ -f "/usr/local/bin/ansel" ] && $SUDO rm /usr/local/bin/ansel
-
-		$SUDO ln -s "$INSTALL_PREFIX"/bin/ansel /usr/local/bin/ansel
+		$SUDO ln -sfn "$INSTALL_PREFIX"/bin/ansel /usr/local/bin/ansel
 	fi
 
 	if [ -f "$INSTALL_PREFIX/bin/ansel-cli" ]; then
 		[ ! -d "/usr/local/bin/" ] && $SUDO mkdir -p /usr/local/bin/
-		[ -f "/usr/local/bin/ansel-cli" ] && $SUDO rm /usr/local/bin/ansel-cli
-
-		$SUDO ln -s "$INSTALL_PREFIX"/bin/ansel-cli /usr/local/bin/ansel-cli
+		$SUDO ln -sfn "$INSTALL_PREFIX"/bin/ansel-cli /usr/local/bin/ansel-cli
 	fi
 
 	if [ -f "$INSTALL_PREFIX/share/applications/photos.ansel.ansel.desktop" ]; then
 		[ ! -d "/usr/share/applications/" ] && $SUDO mkdir -p /usr/share/applications/
-		[ -f "/usr/share/applications/ansel.desktop" ] && $SUDO rm /usr/share/applications/ansel.desktop
-
-		$SUDO ln -s "$INSTALL_PREFIX"/share/applications/photos.ansel.ansel.desktop /usr/share/applications/ansel.desktop
+		$SUDO ln -sfn "$INSTALL_PREFIX"/share/applications/photos.ansel.ansel.desktop /usr/share/applications/ansel.desktop
 	fi
 fi
 # update Lensfun

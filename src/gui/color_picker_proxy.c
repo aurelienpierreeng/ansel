@@ -159,6 +159,8 @@ typedef enum dt_color_picker_resample_status_t
 } dt_color_picker_resample_status_t;
 
 static void _refresh_active_picker(dt_develop_t *dev);
+static void _track_active_picker_hashes(dt_develop_t *dev);
+static void _restart_picker_cache_wait(gpointer user_data);
 
 static inline void _picker_raw_point_to_image_norm(const dt_develop_t *dev, const float raw_point[2],
                                                    float image_point[2])
@@ -426,7 +428,9 @@ static dt_color_picker_resample_status_t _sample_picker_from_cache(dt_develop_t 
 
   void *input = NULL;
   dt_pixel_cache_entry_t *input_entry = NULL;
-  if(!dt_dev_pixelpipe_cache_peek_gui(pipe, previous_piece, &input, &input_entry, NULL, NULL, NULL))
+  dt_dev_pixelpipe_cache_wait_set_owner(&dev->color_picker.input_wait, "color-picker-input", dev->color_picker.module);
+  if(!dt_dev_pixelpipe_cache_peek_gui(pipe, previous_piece, &input, &input_entry,
+                                      &dev->color_picker.input_wait, _restart_picker_cache_wait, dev))
   {
     dev->color_picker.wait_input_hash = previous_piece->global_hash;
     dt_print(DT_DEBUG_DEV, "[picker] input cache miss module=%s prev_hash=%" PRIu64 "\n",
@@ -436,7 +440,12 @@ static dt_color_picker_resample_status_t _sample_picker_from_cache(dt_develop_t 
 
   void *output = NULL;
   dt_pixel_cache_entry_t *output_entry = NULL;
-  const gboolean have_output = dt_dev_pixelpipe_cache_peek_gui(pipe, piece, &output, &output_entry, NULL, NULL, NULL);
+  dt_dev_pixelpipe_cache_wait_set_owner(&dev->color_picker.output_wait, "color-picker-output", dev->color_picker.module);
+  const gboolean have_output = dt_dev_pixelpipe_cache_peek_gui(pipe, piece, &output, &output_entry,
+                                                               &dev->color_picker.output_wait,
+                                                               _restart_picker_cache_wait, dev);
+  const gboolean output_cache_blocked_by_policy
+      = piece->bypass_cache || pipe->bypass_cache || pipe->no_cache || dt_dev_pixelpipe_get_realtime(pipe);
   if(!have_output)
   {
     /* Module GUIs such as color equalizer only consume the module-input sample. A missing output
@@ -444,9 +453,12 @@ static dt_color_picker_resample_status_t _sample_picker_from_cache(dt_develop_t 
        cache entry feeds an endless recompute/retry loop. Keep output statistics explicitly invalid
        so output-dependent consumers can detect the missing sample, but still publish the ready
        input sample. */
-    dt_print(DT_DEBUG_DEV, "[picker] output cache miss module=%s hash=%" PRIu64 "\n",
-             piece->module->op, piece->global_hash);
-    dev->color_picker.wait_output_hash = piece->global_hash;
+    dt_print(DT_DEBUG_DEV, "[picker] output cache miss module=%s hash=%" PRIu64 " blocked=%d\n",
+             piece->module->op, piece->global_hash, output_cache_blocked_by_policy);
+    if(!output_cache_blocked_by_policy)
+      dev->color_picker.wait_output_hash = piece->global_hash;
+    else
+      dev->color_picker.wait_output_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
 
     for(int k = 0; k < 4; k++)
     {
@@ -486,6 +498,20 @@ static dt_color_picker_resample_status_t _sample_picker_from_cache(dt_develop_t 
                                   piece->module->picked_output_color, piece->module->picked_output_color_min,
                                   piece->module->picked_output_color_max, PIXELPIPE_PICKER_OUTPUT)
           : FALSE;
+
+  if(!have_output && sampled_input)
+  {
+    // Keep GUI picker feedback alive whenever module output is temporarily
+    // unavailable: mirror input sample statistics to output slots. If output
+    // cache becomes available later, subsequent refreshes overwrite these with
+    // true output samples.
+    for(int k = 0; k < 4; k++)
+    {
+      piece->module->picked_output_color[k] = piece->module->picked_color[k];
+      piece->module->picked_output_color_min[k] = piece->module->picked_color_min[k];
+      piece->module->picked_output_color_max[k] = piece->module->picked_color_max[k];
+    }
+  }
 
   if(have_output)
   {
@@ -541,6 +567,12 @@ static void _queue_refresh_active_picker(dt_develop_t *dev)
   dev->color_picker.refresh_idle_source = g_idle_add(_refresh_active_picker_idle, dev);
 }
 
+static void _restart_picker_cache_wait(gpointer user_data)
+{
+  dt_develop_t *const dev = (dt_develop_t *)user_data;
+  _queue_refresh_active_picker(dev);
+}
+
 static void _refresh_active_picker(dt_develop_t *dev)
 {
   if(IS_NULL_PTR(dev) || IS_NULL_PTR(dev->color_picker.picker) || !dev->color_picker.enabled) return;
@@ -557,7 +589,13 @@ static void _refresh_active_picker(dt_develop_t *dev)
   /* A picker update is satisfied either from the current preview cache or from the next completed
      preview run. If preview is already processing, re-dirtying it here only feeds TOP_CHANGED
      loops and prevents the current run from ever publishing the cacheline we are waiting for. */
-  if(dev->preview_pipe && dev->preview_pipe->processing) return;
+  if(!IS_NULL_PTR(dev->preview_pipe) && dev->preview_pipe->processing)
+  {
+    // Make sure CACHELINE_READY can wake us as soon as this in-flight run
+    // publishes input/output cachelines for the active picker.
+    _track_active_picker_hashes(dev);
+    return;
+  }
 
   if(IS_NULL_PTR(dev->color_picker.module))
   {
@@ -618,6 +656,8 @@ void dt_iop_color_picker_reset(dt_iop_module_t *module, gboolean keep)
   {
     if(!keep)
     {
+      dt_dev_pixelpipe_cache_wait_cleanup(&dev->color_picker.input_wait, "picker-reset-input");
+      dt_dev_pixelpipe_cache_wait_cleanup(&dev->color_picker.output_wait, "picker-reset-output");
       _color_picker_reset(picker);
       dev->color_picker.picker = NULL;
       dev->color_picker.widget = NULL;
@@ -727,6 +767,8 @@ static gboolean _color_picker_callback_button_press(GtkWidget *button, GdkEventB
   }
   else
   {
+    dt_dev_pixelpipe_cache_wait_cleanup(&dev->color_picker.input_wait, "picker-deactivate-input");
+    dt_dev_pixelpipe_cache_wait_cleanup(&dev->color_picker.output_wait, "picker-deactivate-output");
     dev->color_picker.picker = NULL;
     dev->color_picker.widget = NULL;
     dev->color_picker.module = NULL;
@@ -743,10 +785,10 @@ static gboolean _color_picker_callback_button_press(GtkWidget *button, GdkEventB
              module ? module->op : "global", (void *)self, (void *)self->colorpick);
   }
 
+  // Draw picker geometry immediately; data sampling update can complete later.
+  dt_control_queue_redraw_center();
   if(dev->color_picker.enabled)
     dt_iop_color_picker_request_update();
-  else
-    dt_control_queue_redraw_center();
 
   return TRUE;
 }
@@ -880,7 +922,6 @@ static GtkWidget *_color_picker_new(dt_iop_module_t *module, dt_iop_color_picker
   if(IS_NULL_PTR(w) || GTK_IS_BOX(w))
   {
     GtkWidget *button = dtgtk_togglebutton_new(dtgtk_cairo_paint_colorpicker, 0, NULL);
-    dt_gui_add_class(button, "dt_transparent_background");
     _init_picker(color_picker, module, kind, button);
     if(init_cst)
       color_picker->picker_cst = cst;

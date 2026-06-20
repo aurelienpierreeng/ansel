@@ -1433,6 +1433,39 @@ uint32_t dt_tag_get_with_usage(GList **result)
   return count;
 }
 
+uint32_t dt_tag_get_collection_tags(GList **result)
+{
+  sqlite3_stmt *stmt;
+
+  /* Tags attached to at least one image of the current collection */
+  // clang-format off
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                              "SELECT DISTINCT T.name, T.id"
+                              "  FROM data.tags T"
+                              "  JOIN main.tagged_images TI ON TI.tagid = T.id"
+                              "  WHERE TI.imgid IN (SELECT imgid FROM memory.collected_images)"
+                              "    AND T.id NOT IN memory.darktable_tags"
+                              "  ORDER BY T.name",
+                              -1, &stmt, NULL);
+  // clang-format on
+
+  uint32_t count = 0;
+  while(sqlite3_step(stmt) == SQLITE_ROW)
+  {
+    dt_tag_t *t = g_malloc0(sizeof(dt_tag_t));
+    t->tag = g_strdup((char *)sqlite3_column_text(stmt, 0));
+    t->leave = g_strrstr(t->tag, "|");
+    t->leave = t->leave ? t->leave + 1 : t->tag;
+    t->id = sqlite3_column_int(stmt, 1);
+    *result = g_list_append(*result, t);
+    count++;
+  }
+
+  sqlite3_finalize(stmt);
+
+  return count;
+}
+
 static gchar *dt_cleanup_synonyms(gchar *synonyms_entry)
 {
   gchar *synonyms = NULL;

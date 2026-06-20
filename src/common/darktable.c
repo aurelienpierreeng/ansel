@@ -97,6 +97,7 @@
 #include "common/history.h"
 #include "common/pwstorage/pwstorage.h"
 #include "common/selection.h"
+#include "common/sentry.h"
 #include "common/system_signal_handling.h"
 #include "bauhaus/bauhaus.h"
 #include "gui/presets.h"
@@ -127,6 +128,7 @@
 #include "control/jobs/film_jobs.h"
 #include "control/signal.h"
 #include "develop/blend.h"
+#include "develop/dev_pixelpipe.h"
 #include "develop/imageop.h"
 
 #include "gui/gtk.h"
@@ -1278,6 +1280,12 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   }
 
   dt_gui_splash_close();
+
+  // Initialize crash reporting last, after the final dt_set_signal_handlers() so
+  // sentry's handler sits on top and chains down into our gdb/drmingw fallback.
+  // On first launch this prompts the user for consent (GUI only).
+  dt_sentry_init(init_gui);
+
   dt_print(DT_DEBUG_CONTROL, "[init] startup took %f seconds\n", dt_get_wtime() - start_wtime);
 
   return 0;
@@ -1294,6 +1302,11 @@ static void _dt_drain_main_context(const int max_iters)
 void dt_cleanup()
 {
   const int init_gui = (!IS_NULL_PTR(darktable.gui));
+
+  // Flush crash reporting and mark this session as a clean exit. Done early so
+  // events are sent while the rest of the app is still up; the clean-session
+  // counter it writes is persisted later by dt_conf_cleanup().
+  dt_sentry_shutdown();
 
   // Restore selection if exiting on culling mode to be sure it's saved in DB
   if(darktable.gui && darktable.gui->culling_mode)
@@ -1345,6 +1358,7 @@ void dt_cleanup()
     dt_free(darktable.lib);
   }
 
+  dt_dev_pixelpipe_cache_wait_dump_pending("app-cleanup-before-view-manager");
   dt_view_manager_cleanup(darktable.view_manager);
   dt_free(darktable.view_manager);
 
@@ -1364,8 +1378,6 @@ void dt_cleanup()
     GtkWidget *main_window = dt_ui_main_window(darktable.gui->ui);
     if(GTK_IS_WIDGET(main_window))
       gtk_widget_destroy(main_window);
-
-    _dt_drain_main_context(256);
 
     dt_gui_gtk_t *gui = darktable.gui;
     darktable.gui = NULL;

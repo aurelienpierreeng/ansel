@@ -203,11 +203,13 @@ int dt_dev_history_item_from_source_history_item(struct dt_develop_t *dev_dest, 
  * @param merge_iop_order Whether to merge pipeline order (TRUE) or preserve destination (FALSE).
  * @param mode Merge strategy for history entries.
  * @param paste_instances Whether to paste module instances.
+ * @param source_label Optional source label for the merge report header.
  * @return 0 on success, non-zero on failure.
  */
 int dt_dev_merge_history_into_image(struct dt_develop_t *dev_src, int32_t dest_imgid, const GList *mod_list,
                                     gboolean merge_iop_order, const dt_history_merge_strategy_t mode,
-                                    const gboolean paste_instances);
+                                    const gboolean paste_instances, const char *source_label,
+                                    dt_hm_batch_state_t *batch);
 /**
  * @brief Replace an image history with the content of @p dev_src.
  *
@@ -380,8 +382,9 @@ void dt_dev_pop_history_items(struct dt_develop_t *dev);
  *
  * @param dev Develop context.
  * @param imgid Image id.
+ * @return TRUE if this reload initialized a first-run history.
  */
-void dt_dev_reload_history_items(struct dt_develop_t *dev, const int32_t imgid);
+gboolean dt_dev_reload_history_items(struct dt_develop_t *dev, const int32_t imgid);
 
 
 /**
@@ -524,6 +527,56 @@ int dt_dev_history_refresh_nodes_ext(struct dt_develop_t *dev, GList **iop, GLis
 
 /** truncate history stack */
 void dt_dev_history_truncate(struct dt_develop_t *dev, const int32_t imgid);
+
+/**
+ * @brief Out-of-history transient param channel.
+ *
+ * @details
+ * Lets a focused module (drawlayer realtime stroke, ashift/crop edit mode) push a thread-safe snapshot
+ * of its in-progress parameters to the pipeline for rendering, WITHOUT writing permanent history.
+ * `module->params` belongs to the GUI thread and must never be read from the pipeline; instead the
+ * module copies its transient params into this dev-owned slot under a mutex. The pipeline reads them
+ * (also under the mutex) and commits them through the normal `commit_params()` path, so the transient
+ * state reaches the cache through the usual `piece->global_hash` mechanism. Only one module — the
+ * focused `gui_module` — is active at a time. History is touched only at the real commit, so undo/redo
+ * is not polluted and the database is not written per frame.
+ */
+
+/**
+ * @brief Publish (copy) `module`'s transient params for the pipeline.
+ *
+ * @details GUI/worker thread only. Replaces any previously published slot. `blend_params` may be NULL
+ * to keep using the history blend params. Does NOT trigger a recompute: the caller flags the pipe the
+ * way that fits its case — a realtime module raises `DT_DEV_PIPE_TOP_CHANGED` on the main pipe for a
+ * fast focused-piece resync, while a geometry-changing edit (crop/ashift) calls
+ * `dt_dev_pixelpipe_resync_history_all()` so every pipe replans ROI/formats.
+ */
+void dt_dev_transient_params_set(struct dt_iop_module_t *module, const void *params, size_t params_size,
+                                 const void *blend_params, size_t blend_size);
+
+/**
+ * @brief Drop the transient slot if it belongs to `module`.
+ *
+ * @details GUI/worker thread only. Call on commit/cancel/edit-exit/focus-loss. Does NOT trigger a
+ * recompute (see `_set`); the caller re-triggers the pipe so it renders the committed history state.
+ */
+void dt_dev_transient_params_clear(struct dt_iop_module_t *module);
+
+/**
+ * @brief Copy the active transient params for `module` into caller buffers (pipeline thread).
+ *
+ * @details Returns FALSE (and leaves buffers untouched) when no transient slot is active for `module`
+ * or the buffer sizes do not match the published snapshot. When it returns TRUE, `out_params` holds a
+ * private copy safe to pass to `commit_params()`. `out_blend`/`out_blend_size` may be NULL/0 if the
+ * caller does not want the transient blend; `*out_has_blend` (optional) reports whether a transient
+ * blend snapshot was present and copied.
+ */
+gboolean dt_dev_transient_params_get(struct dt_develop_t *dev, const struct dt_iop_module_t *module,
+                                     void *out_params, size_t out_params_size,
+                                     void *out_blend, size_t out_blend_size, gboolean *out_has_blend);
+
+/** @brief Whether a transient slot is currently active for `module` (cheap, locked read). */
+gboolean dt_dev_transient_params_active(struct dt_develop_t *dev, const struct dt_iop_module_t *module);
 
 #ifdef __cplusplus
 }

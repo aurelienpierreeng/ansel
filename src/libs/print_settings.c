@@ -2109,7 +2109,7 @@ void gui_init(dt_lib_module_t *self)
 {
   dt_lib_print_settings_t *d = (dt_lib_print_settings_t*)malloc(sizeof(dt_lib_print_settings_t));
   self->data = d;
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   dt_gui_add_help_link(self->widget, dt_get_help_url("print_overview"));
 
   char datadir[PATH_MAX] = { 0 };
@@ -2332,7 +2332,7 @@ void gui_init(dt_lib_module_t *self)
 
   //// image dimensions, create them now as we need them
 
-  GtkWidget *hboxdim = gtk_box_new(GTK_ORIENTATION_HORIZONTAL,0);
+  GtkWidget *hboxdim = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   label = gtk_label_new(_("image width/height"));
   gtk_box_pack_start(GTK_BOX(hboxdim), GTK_WIDGET(label), TRUE, TRUE, DT_PIXEL_APPLY_DPI(3));
   d->width = gtk_label_new(_("width"));
@@ -2344,7 +2344,7 @@ void gui_init(dt_lib_module_t *self)
 
   //// image information (downscale/upscale)
 
-  GtkWidget *hboxinfo = gtk_box_new(GTK_ORIENTATION_HORIZONTAL,0);
+  GtkWidget *hboxinfo = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   label = gtk_label_new(_("scale factor"));
   gtk_box_pack_start(GTK_BOX(hboxinfo), GTK_WIDGET(label), TRUE, TRUE, DT_PIXEL_APPLY_DPI(3));
   d->info = gtk_label_new("1.0");
@@ -2358,8 +2358,8 @@ void gui_init(dt_lib_module_t *self)
   //// borders
 
   GtkGrid *bds = GTK_GRID(gtk_grid_new());
-  gtk_grid_set_row_spacing(bds, DT_PIXEL_APPLY_DPI(3));
-  gtk_grid_set_column_spacing(bds, DT_PIXEL_APPLY_DPI(3));
+  gtk_grid_set_row_spacing(bds, DT_GUI_BOX_SPACING);
+  gtk_grid_set_column_spacing(bds, DT_GUI_BOX_SPACING);
 
   d->lock_activated = FALSE;
 
@@ -2410,8 +2410,8 @@ void gui_init(dt_lib_module_t *self)
 
   // grid & snap grid
   {
-    GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-    GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+    GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
 
     d->grid = gtk_check_button_new_with_label(_("display grid"));
     // d->grid_size = gtk_spin_button_new_with_range(0, 100, 0.1);
@@ -2454,8 +2454,8 @@ void gui_init(dt_lib_module_t *self)
 
   // Auto-fit: Create the 3x3 gtk table toggle button table...
   GtkGrid *bat = GTK_GRID(gtk_grid_new());
-  gtk_grid_set_row_spacing(bat, DT_PIXEL_APPLY_DPI(3));
-  gtk_grid_set_column_spacing(bat, DT_PIXEL_APPLY_DPI(3));
+  gtk_grid_set_row_spacing(bat, DT_GUI_BOX_SPACING);
+  gtk_grid_set_column_spacing(bat, DT_GUI_BOX_SPACING);
   for(int i=0; i<9; i++)
   {
     d->dtba[i]
@@ -2464,20 +2464,20 @@ void gui_init(dt_lib_module_t *self)
     g_signal_connect (G_OBJECT (d->dtba[i]), "toggled",G_CALLBACK (_alignment_callback), self);
   }
 
-  GtkWidget *hbox22 = gtk_box_new(GTK_ORIENTATION_HORIZONTAL,0);
+  GtkWidget *hbox22 = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   GtkWidget *label4 = gtk_label_new(_("alignment"));
   gtk_box_pack_start(GTK_BOX(hbox22),GTK_WIDGET(label4),TRUE,TRUE,0);
   gtk_box_pack_start(GTK_BOX(hbox22), GTK_WIDGET(bat), TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(hbox22), TRUE, TRUE, 0);
 
   // Manual fit
-  GtkWidget *hfitbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  GtkWidget *hfitbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
-  GtkWidget *mfitbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *mfitbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
 
   GtkGrid *fitbut = GTK_GRID(gtk_grid_new());
-  gtk_grid_set_row_spacing(fitbut, DT_PIXEL_APPLY_DPI(3));
-  gtk_grid_set_column_spacing(fitbut, DT_PIXEL_APPLY_DPI(3));
+  gtk_grid_set_row_spacing(fitbut, DT_GUI_BOX_SPACING);
+  gtk_grid_set_column_spacing(fitbut, DT_GUI_BOX_SPACING);
   gtk_grid_set_column_homogeneous(fitbut, TRUE);
   gtk_grid_set_row_homogeneous(fitbut, TRUE);
 
@@ -2504,7 +2504,7 @@ void gui_init(dt_lib_module_t *self)
   GtkWidget *box;
   // FIXME: add labels to x/y/width/height as otherwise are obscure -- and there is the horizontal space to do this
 
-  box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL,0);
+  box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   // d->b_x = gtk_spin_button_new_with_range(0, 1000, 1);
   gtk_widget_set_tooltip_text(d->b_x, _("image area x origin (in current unit)"));
   gtk_entry_set_width_chars(GTK_ENTRY(d->b_x), 5);
@@ -2519,7 +2519,7 @@ void gui_init(dt_lib_module_t *self)
   gtk_box_pack_start(GTK_BOX(hfitbox), GTK_WIDGET(box), TRUE, TRUE, 0);
 
   // width x height
-  box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL,0);
+  box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   // d->b_width = gtk_spin_button_new_with_range(0, 1000, 1);
   gtk_widget_set_tooltip_text(d->b_width, _("image area width (in current unit)"));
   gtk_entry_set_width_chars(GTK_ENTRY(d->b_width), 5);

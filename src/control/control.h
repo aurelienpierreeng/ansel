@@ -116,7 +116,19 @@ void dt_control_change_cursor_EXT(dt_cursor_t cursor, const char *file, int line
 #define dt_control_change_cursor(cursor) \
   dt_control_change_cursor_EXT((cursor), __FILE__, __LINE__)
 
+/** \brief Apply a GTK named cursor immediately without replacing the queued cursor state.
+ *
+ * This is used for temporary cursors such as "progress" while synchronous UI-thread
+ * operations are running.
+ */
 void dt_control_change_cursor_by_name(const char *curs_str);
+
+/** \brief Apply a GTK named cursor immediately and flush display updates.
+ *
+ * This helper is intended for synchronous UI-thread work that blocks right after
+ * setting the cursor, ensuring the new shape is visible before computation starts.
+ */
+void dt_control_change_cursor_by_name_and_flush(const char *curs_str);
 
 // set darktable.control->cursor.shape to the desired cursor shape
 void dt_control_queue_cursor_EXT(dt_cursor_t cursor, const char *file, int line);
@@ -124,6 +136,7 @@ void dt_control_queue_cursor_EXT(dt_cursor_t cursor, const char *file, int line)
   dt_control_queue_cursor_EXT((cursor), __FILE__, __LINE__)
 
 void dt_control_queue_cursor_by_name(const char *curs_str);
+
 // commit the currently set cursor shape from darktable.control->cursor.shape
 void dt_control_commit_cursor();
 /** \brief Set whether the cursor should be visible or not.

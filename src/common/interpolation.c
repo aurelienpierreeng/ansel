@@ -228,106 +228,58 @@ static float _maketaps_bicubic(float *taps,
 }
 
 /* --------------------------------------------------------------------------
- * Lanczos interpolation
+ * Mitchell-Netravali interpolation (B = C = 1/3)
+ *
+ * A separable cubic from the Mitchell-Netravali (B,C) family (SIGGRAPH 1988).
+ * B = C = 1/3 is the classic general-purpose reconstruction filter: it trades a
+ * hair of sharpness for drastically reduced ringing versus interpolating cubics
+ * (Catmull-Rom) and windowed-sinc (Lanczos). Its negative excursion is tiny
+ * (~3% vs Lanczos3's much larger overshoot), so it is effectively halo-free on
+ * photographic content and never blows alpha/colour far out of range at edges.
+ *
+ * Piecewise weights (already divided by 6), support [-2, 2]:
+ *   |t| < 1 : (7/6)|t|^3 - 2|t|^2 + 8/9
+ *   1<=|t|<2: -(7/18)|t|^3 + 2|t|^2 - (10/3)|t| + 16/9
+ * It is a partition of unity (taps sum to 1 on the integer grid), so the
+ * upsampling norm is 1 by construction like bilinear/bicubic; the downsampling
+ * path renormalizes from the summed taps separately.
  * ------------------------------------------------------------------------*/
 
-#define DT_LANCZOS_EPSILON (1e-9f)
-
-#if 0
-// Reference version left here for ... documentation
-static inline float
-lanczos(const float width, const float t)
-{
-  float r;
-
-  if(t<-width || t>width)
-  {
-    r = 0.f;
-  }
-  else if(t>-DT_LANCZOS_EPSILON && t<DT_LANCZOS_EPSILON)
-  {
-    r = 1.f;
-  }
-  else
-  {
-    r = width*sinf(M_PI*t)*sinf(M_PI*t/width)/(M_PI*M_PI*t*t);
-  }
-  return r;
-}
-#endif
-
-/* Fast lanczos version, no calls to math.h functions, too accurate, too slow
- *
- * Based on a forum entry at
- * http://devmaster.net/forums/topic/4648-fast-and-accurate-sinecosine/
- *
- * Apart the fast sine function approximation, the only trick is to compute:
- * sin(pi.t) = sin(a.pi + r.pi) where t = a + r = trunc(t) + r
- *           = sin(a.pi).cos(r.pi) + sin(r.pi).cos(a.pi)
- *           =         0*cos(r.pi) + sin(r.pi).cos(a.pi)
- *           = sign.sin(r.pi) where sign =  1 if the a is even
- *                                       = -1 if the a is odd
- *
- * Of course we know that lanczos func will only be called for
- * the range -width < t < width so we can additionally avoid the
- * range check.  */
-
-static float _maketaps_lanczos(float *taps,
-                               const size_t num_taps,
-                               const float width,
-                               const float first_tap,
-                               const float interval)
+static float _maketaps_mitchell(float *taps,
+                                const size_t num_taps,
+                                const float  width,
+                                const float first_tap,
+                                const float interval)
 {
   static const dt_aligned_pixel_simd_t bootstrap = { 0.0f, 1.0f, 2.0f, 3.0f };
+  const dt_aligned_pixel_simd_t c7_6 = dt_simd_set1(7.0f / 6.0f);
+  const dt_aligned_pixel_simd_t c2 = dt_simd_set1(2.0f);
+  const dt_aligned_pixel_simd_t c8_9 = dt_simd_set1(8.0f / 9.0f);
+  const dt_aligned_pixel_simd_t c7_18 = dt_simd_set1(7.0f / 18.0f);
+  const dt_aligned_pixel_simd_t c10_3 = dt_simd_set1(10.0f / 3.0f);
+  const dt_aligned_pixel_simd_t c16_9 = dt_simd_set1(16.0f / 9.0f);
   const dt_aligned_pixel_simd_t interval_v = dt_simd_set1(interval);
   const dt_aligned_pixel_simd_t iter = dt_simd_set1(4.0f * interval);
   dt_aligned_pixel_simd_t vt = dt_simd_set1(first_tap) + bootstrap * interval_v;
-  const dt_aligned_pixel_simd_t vw = dt_simd_set1(width);
 
   const int runs = (num_taps + 3) / 4;
 
   for(size_t i = 0; i < runs; i++)
   {
-    const dt_aligned_pixel_simd_t eps = dt_simd_set1(DT_LANCZOS_EPSILON);
-    const dt_aligned_pixel_simd_t pi = dt_simd_set1(M_PI_F);
-    const dt_aligned_pixel_simd_t pi2 = dt_simd_set1(M_PI_F * M_PI_F);
-    dt_aligned_pixel_simd_t r = dt_simd_set1(0.0f);
-    dt_aligned_pixel_simd_t sign = dt_simd_set1(1.0f);
+    const dt_aligned_pixel_simd_t a = dt_simd_abs(vt);
+    const dt_aligned_pixel_simd_t a2 = a * a;
+    const dt_aligned_pixel_simd_t a3 = a2 * a;
+    // inner lobe (|t| < 1) and outer lobe (1 <= |t| < 2)
+    const dt_aligned_pixel_simd_t r01 = c7_6 * a3 - c2 * a2 + c8_9;
+    const dt_aligned_pixel_simd_t r12 = c2 * a2 - c7_18 * a3 - c10_3 * a + c16_9;
+    dt_aligned_pixel_simd_t taps4 = r12;
     for_four_channels(c)
-    {
-      int a = (int)vt[c];
-      r[c] = vt[c] - (float)a;
-      sign[c] = (a & 1) ? -1.0f : 1.0f;
-    }
-    const dt_aligned_pixel_simd_t sine_arg1_v = pi * r;
-    const dt_aligned_pixel_simd_t sine_arg2_v = pi * vt / vw;
-    dt_aligned_pixel_t sine_arg1;
-    dt_aligned_pixel_t sine_arg2;
-    dt_aligned_pixel_t sine1;
-    dt_aligned_pixel_t sine2;
-    dt_store_simd_aligned(sine_arg1, sine_arg1_v);
-    dt_store_simd_aligned(sine_arg2, sine_arg2_v);
-    dt_vector_sin(sine_arg1, sine1);
-    dt_vector_sin(sine_arg2, sine2);
-    const dt_aligned_pixel_simd_t sine1_v = dt_load_simd_aligned(sine1);
-    const dt_aligned_pixel_simd_t sine2_v = dt_load_simd_aligned(sine2);
-    const dt_aligned_pixel_simd_t num = (vw * sign * sine1_v * sine2_v) + eps;
-    const dt_aligned_pixel_simd_t denom = (pi2 * vt * vt) + eps;
-    dt_store_simd_aligned(taps + 4 * i, num / denom);
+      taps4[c] = (a[c] <= 1.0f) ? r01[c] : r12[c];
+    dt_store_simd_aligned(taps + 4 * i, taps4);
     vt += iter;
   }
-  // we need to compute the norm, even though it is very close to 1.0
-  // and causes an increase of maxDE on the integration tests only
-  // from 1.1 to 1.7, because not doing so generates visible moire
-  // banding in smooth gradients.  Unfortunately, this costs an extra
-  // 15-20% runtime....
-  float norm = 0.0f;
-  for(size_t i = 0; i < num_taps; i++)
-    norm += taps[i];
-  return norm;
+  return 1.0f; // kernel norm is 1.0f by construction (partition of unity)
 }
-
-#undef DT_LANCZOS_EPSILON
 
 /* --------------------------------------------------------------------------
  * All our known interpolators
@@ -349,15 +301,10 @@ static const struct dt_interpolation dt_interpolator[] = {
    .width = 2,
    .maketaps = &_maketaps_bicubic,
   },
-  {.id = DT_INTERPOLATION_LANCZOS2,
-   .name = "lanczos2",
+  {.id = DT_INTERPOLATION_MITCHELL,
+   .name = "mitchell",
    .width = 2,
-   .maketaps = &_maketaps_lanczos,
-  },
-  {.id = DT_INTERPOLATION_LANCZOS3,
-   .name = "lanczos3",
-   .width = 3,
-   .maketaps = &_maketaps_lanczos,
+   .maketaps = &_maketaps_mitchell,
   },
 };
 

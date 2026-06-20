@@ -59,6 +59,7 @@
 
 #ifdef HAVE_CONFIG_H
 #include "common/darktable.h"
+#include "gui/gdkkeys.h"
 #include "config.h"
 #endif
 
@@ -73,6 +74,7 @@
 #include "dtgtk/drawingarea.h"
 
 #include "gui/color_picker_proxy.h"
+#include "gui/gtk.h"
 #include "gui/draw.h"
 #include "gui/presets.h"
 #include "libs/colorpicker.h"
@@ -1705,18 +1707,7 @@ static gboolean _area_scrolled_callback(GtkWidget *widget, GdkEventScroll *event
 
   int delta_y;
 
-  if(dt_gui_get_scroll_unit_deltas(event, NULL, &delta_y))
-  {
-    if(dt_modifier_is(event->state, GDK_CONTROL_MASK))
-    {
-      //adjust aspect
-      const int aspect = dt_conf_get_int("plugins/darkroom/colorzones/aspect_percent");
-      dt_conf_set_int("plugins/darkroom/colorzones/aspect_percent", aspect + delta_y);
-      dtgtk_drawing_area_set_aspect_ratio(widget, aspect / 100.0);
-
-      return TRUE;
-    }
-  }
+  // (the graph height is now adjusted with the drag grip on its bottom edge, not Ctrl+Scroll)
 
   if(c->selected < 0 && !c->edit_by_area) return TRUE;
 
@@ -2040,24 +2031,25 @@ static gboolean _area_key_press_callback(GtkWidget *widget, GdkEventKey *event, 
 
   if(c->selected < 0) return FALSE;
 
+  guint key = dt_keys_mainpad_alternatives(event->keyval);
   int handled = 0;
   float dx = 0.0f, dy = 0.0f;
-  if(event->keyval == GDK_KEY_Up || event->keyval == GDK_KEY_KP_Up)
+  if(key == GDK_KEY_Up)
   {
     handled = 1;
     dy = DT_IOP_COLORZONES_DEFAULT_STEP;
   }
-  else if(event->keyval == GDK_KEY_Down || event->keyval == GDK_KEY_KP_Down)
+  else if(key == GDK_KEY_Down)
   {
     handled = 1;
     dy = -DT_IOP_COLORZONES_DEFAULT_STEP;
   }
-  else if(event->keyval == GDK_KEY_Right || event->keyval == GDK_KEY_KP_Right)
+  else if(key == GDK_KEY_Right)
   {
     handled = 1;
     dx = DT_IOP_COLORZONES_DEFAULT_STEP;
   }
-  else if(event->keyval == GDK_KEY_Left || event->keyval == GDK_KEY_KP_Left)
+  else if(key == GDK_KEY_Left)
   {
     handled = 1;
     dx = -DT_IOP_COLORZONES_DEFAULT_STEP;
@@ -2289,11 +2281,11 @@ void gui_init(struct dt_iop_module_t *self)
   c->display_mask = FALSE;
   self->timeout_handle = 0;
 
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   // tabs
-  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-  GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
+  GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(vbox), hbox, FALSE, FALSE, 0);
 
   c->channel_tabs = dt_ui_notebook_new();
@@ -2314,7 +2306,7 @@ void gui_init(struct dt_iop_module_t *self)
   c->colorpicker_set_values = dt_color_picker_new_with_cst(self, DT_COLOR_PICKER_AREA, hbox, IOP_CS_LCH);
   dtgtk_togglebutton_set_paint(DTGTK_TOGGLEBUTTON(c->colorpicker_set_values),
                                dtgtk_cairo_paint_colorpicker, CPF_ALTER, NULL);
-  dt_gui_add_class(c->colorpicker_set_values, "dt_transparent_background");
+
   gtk_widget_set_size_request(c->colorpicker_set_values, DT_PIXEL_APPLY_DPI(14), DT_PIXEL_APPLY_DPI(14));
   gtk_widget_set_tooltip_text(c->colorpicker_set_values, _("create a curve based on an area from the image\n"
                                                            "drag to create a flat curve\n"
@@ -2322,19 +2314,22 @@ void gui_init(struct dt_iop_module_t *self)
                                                            "shift+drag to create a negative curve"));
 
   // the nice graph
-  const float aspect = dt_conf_get_int("plugins/darkroom/colorzones/aspect_percent") / 100.0;
-  c->area = GTK_DRAWING_AREA(dtgtk_drawing_area_new_with_aspect_ratio(aspect));
+  c->area = GTK_DRAWING_AREA(gtk_drawing_area_new());
+  gtk_widget_set_hexpand(GTK_WIDGET(c->area), TRUE);
 
-  gtk_box_pack_start(GTK_BOX(vbox), GTK_WIDGET(c->area), TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(vbox),
+                     dt_ui_resizable_drawing_area(GTK_WIDGET(c->area),
+                                                  "plugins/darkroom/colorzones/graphheight", 280, 100),
+                     FALSE, FALSE, 0);
 
-  GtkWidget *dabox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  GtkWidget *dabox = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_widget_set_name(GTK_WIDGET(dabox), "iop-bottom-bar");
   c->bottom_area = gtk_drawing_area_new();
   gtk_box_pack_start(GTK_BOX(dabox), GTK_WIDGET(c->bottom_area), TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(vbox), GTK_WIDGET(dabox), TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(vbox), TRUE, TRUE, 0);
 
-  GtkWidget *hbox_select_by = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *hbox_select_by = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
 
   // edit by area
   gchar *label = N_("edit by area");
@@ -2347,7 +2342,7 @@ void gui_init(struct dt_iop_module_t *self)
 
   // display selection
   c->bt_showmask = dtgtk_togglebutton_new(dtgtk_cairo_paint_showmask, 0, NULL);
-  dt_gui_add_class(c->bt_showmask, "dt_transparent_background");
+
   gtk_widget_set_tooltip_text(c->bt_showmask, _("display selection"));
   g_signal_connect(G_OBJECT(c->bt_showmask), "toggled", G_CALLBACK(_display_mask_callback), self);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(c->bt_showmask), FALSE);

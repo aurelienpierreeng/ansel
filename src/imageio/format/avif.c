@@ -722,7 +722,7 @@ void gui_init(dt_imageio_module_format_t *self)
 
   self->gui_data = (void *)gui;
 
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   /*
    * Bit depth combo box

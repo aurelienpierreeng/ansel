@@ -354,6 +354,14 @@ void output_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixel
   _update_output_cfa_descriptor(pipe, piece, &piece->roi_in, &piece->dsc_out);
 }
 
+
+void input_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
+                   dt_iop_buffer_dsc_t *dsc)
+{
+  memcpy(dsc, &pipe->dev->image_storage.dsc, sizeof(dt_iop_buffer_dsc_t));
+}
+
+
 static inline __attribute__((always_inline)) int BL(const dt_iop_roi_t *const roi_out,
                                                     const int row, const int col, 
                                                     const int32_t x, const int32_t y)
@@ -695,7 +703,7 @@ error:
 static int image_is_normalized(const dt_image_t *const image)
 {
   // if raw with floating-point data, if not special magic whitelevel, then it needs normalization
-  if((image->flags & DT_IMAGE_HDR) == DT_IMAGE_HDR)
+  if(dt_image_is_hdr(image))
   {
     union {
         float f;
@@ -805,7 +813,7 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelp
   else
   {
     const float normalizer
-        = ((pipe->dev->image_storage.flags & DT_IMAGE_HDR) == DT_IMAGE_HDR) ? 1.0f : (float)UINT16_MAX;
+        = dt_image_is_hdr(&pipe->dev->image_storage) ? 1.0f : (float)UINT16_MAX;
     const float white = (float)p->raw_white_point / normalizer;
     float black = 0;
     for(int i = 0; i < 4; i++)
@@ -840,14 +848,16 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelp
   if(image_set_rawcrops(pipe->dev->image_storage.id, d->x + d->width, d->y + d->height))
     DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_METADATA_UPDATE);
 
-  if(!(dt_image_is_rawprepare_supported(&pipe->dev->image_storage))
-     || image_is_normalized(&pipe->dev->image_storage))
-    piece->enabled = 0;
+  // Image-type gating (needs_rawprepare && !normalized) is handled at history level by
+  // enable()/force_enable()/reload_defaults(); it is no longer duplicated here.
 
-  // OpenCL path only for RAW, single-channel, CFA images.
+  // OpenCL path only for RAW, single-channel, CFA images (runtime/format decision).
   const gboolean cl_ok = (img->dsc.cst == IOP_CS_RAW && img->dsc.channels == 1 && img->dsc.filters);
   if(!cl_ok) piece->process_cl_ready = FALSE;
 
+  dt_iop_fmt_log(self, "commit: class=%s needs_rawprepare=%d normalized=%d cl_ok=%d -> enabled=%d",
+                 dt_image_pipe_class_name(dt_image_pipe_class(img)),
+                 dt_image_needs_rawprepare(img), image_is_normalized(img), cl_ok, piece->enabled);
 }
 
 void init_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
@@ -865,13 +875,22 @@ void cleanup_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelp
 
 static gboolean enable(const dt_image_t *image)
 {
-  return dt_image_is_rawprepare_supported(image) 
+  // rawprepare (black/white normalization) applies to any raw colorimetry: mosaiced raw and
+  // already-demosaiced sRAW / linear DNG alike, unless the buffer is already normalized.
+  return dt_image_needs_rawprepare(image)
           && !image_is_normalized(image);
 }
 
 gboolean force_enable(struct dt_iop_module_t *self, const gboolean current_state)
 {
-  return enable(&self->dev->image_storage) && current_state;
+  // History sanitization: rawprepare must be off for non-raw or already-normalized buffers,
+  // decided here from image metadata using the same enable() rule as reload_defaults().
+  const gboolean active = enable(&self->dev->image_storage);
+  const gboolean state = active && current_state;
+  dt_iop_fmt_log(self, "force_enable: class=%s supported=%d current=%d -> %d",
+                 dt_image_pipe_class_name(dt_image_pipe_class(&self->dev->image_storage)),
+                 active, current_state, state);
+  return state;
 }
 
 void reload_defaults(dt_iop_module_t *self)
@@ -976,7 +995,7 @@ void gui_init(dt_iop_module_t *self)
 {
   dt_iop_rawprepare_gui_data_t *g = IOP_GUI_ALLOC(rawprepare);
 
-  GtkWidget *box_raw = self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+  GtkWidget *box_raw = self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   for(int i = 0; i < 4; i++)
   {

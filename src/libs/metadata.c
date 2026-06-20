@@ -48,6 +48,7 @@
 #include "common/collection.h"
 #include "common/selection.h"
 #include "common/darktable.h"
+#include "gui/gdkkeys.h"
 #include "common/debug.h"
 #include "control/conf.h"
 #include "control/control.h"
@@ -78,9 +79,7 @@ typedef enum dt_metadata_pref_cols_t
 typedef struct dt_lib_metadata_t
 {
   GtkTextView *textview[DT_METADATA_NUMBER];
-  GtkWidget *swindow[DT_METADATA_NUMBER];
   GList *metadata_list[DT_METADATA_NUMBER];
-  char *setting_name[DT_METADATA_NUMBER];
   gboolean editing;
   GtkWidget *apply_button;
   GList *last_act_on;
@@ -334,12 +333,13 @@ static gboolean _key_pressed(GtkWidget *textview, GdkEventKey *event, dt_lib_mod
 {
   dt_lib_metadata_t *d = (dt_lib_metadata_t *)self->data;
 
+  guint key = dt_keys_mainpad_alternatives(event->keyval);
+
   if(dt_modifier_is(event->state, GDK_CONTROL_MASK))
   {
-    switch(event->keyval)
+    switch(key)
     {
       case GDK_KEY_Return:
-      case GDK_KEY_KP_Enter:
         // insert new line
         event->state &= ~GDK_CONTROL_MASK;  //TODO: on Mac, remap Ctrl to Cmd key
         d->editing = TRUE;
@@ -350,16 +350,14 @@ static gboolean _key_pressed(GtkWidget *textview, GdkEventKey *event, dt_lib_mod
   }
   else
   {
-    switch(event->keyval)
+    switch(key)
     {
       case GDK_KEY_Return:
-      case GDK_KEY_KP_Enter:
         _write_metadata(GTK_TEXT_VIEW(textview), self);
         _text_set_all_selected(GTK_TEXT_VIEW(textview), FALSE);
         return TRUE;
         break;
       case GDK_KEY_Tab:
-      case GDK_KEY_KP_Tab:
       case GDK_KEY_ISO_Left_Tab:
         _write_metadata(GTK_TEXT_VIEW(textview), self);
         break;
@@ -524,6 +522,7 @@ void _menuitem_preferences(GtkMenuItem *menuitem, dt_lib_module_t *self)
   GtkWidget *w = gtk_scrolled_window_new(NULL, NULL);
   gtk_widget_set_size_request(w, -1, DT_PIXEL_APPLY_DPI(100));
   gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(w), GTK_POLICY_NEVER, GTK_POLICY_NEVER);
+  dt_gui_add_class(w, "dt_recessed_scroll");
   gtk_box_pack_start(GTK_BOX(area), w, TRUE, TRUE, 0);
 
   GtkListStore *store = gtk_list_store_new(DT_METADATA_PREF_NUM_COLS,
@@ -692,7 +691,7 @@ static gboolean _metadata_reset(GtkWidget *label, GdkEventButton *event, GtkWidg
 
     GdkEventKey e = {0};
     e.type = GDK_KEY_PRESS;
-    e.keyval = GDK_KEY_KP_Enter;
+    e.keyval = GDK_KEY_Return;
     e.send_event = TRUE;
     e.window = gtk_text_view_get_window(GTK_TEXT_VIEW(widget), GTK_TEXT_WINDOW_TEXT);
     gboolean ret_val;
@@ -710,10 +709,8 @@ void gui_init(dt_lib_module_t *self)
 
   GtkGrid *grid = GTK_GRID(gtk_grid_new());
   self->widget = GTK_WIDGET(grid);
-  gtk_grid_set_row_spacing(grid, DT_PIXEL_APPLY_DPI(5));
-
-  gtk_grid_set_row_spacing(grid, DT_PIXEL_APPLY_DPI(5));
-  gtk_grid_set_column_spacing(grid, DT_PIXEL_APPLY_DPI(10));
+  gtk_grid_set_row_spacing(grid, DT_GUI_BOX_SPACING);
+  gtk_grid_set_column_spacing(grid, DT_GUI_BOX_SPACING);
 
   for(int i = 0; i < DT_METADATA_NUMBER; i++)
   {
@@ -733,6 +730,8 @@ void gui_init(dt_lib_module_t *self)
 
     GtkWidget *textview = gtk_text_view_new();
     dt_accels_disconnect_on_text_input(textview);
+    dt_gui_textview_set_padding(GTK_TEXT_VIEW(textview));
+
     GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(textview));
     g_object_set_data(G_OBJECT(buffer), "buffer_tv", GINT_TO_POINTER(textview));
     g_object_set_data(G_OBJECT(textview), "tv_index", GINT_TO_POINTER(i));
@@ -740,21 +739,11 @@ void gui_init(dt_lib_module_t *self)
     gtk_text_buffer_create_tag(gtk_text_view_get_buffer(GTK_TEXT_VIEW(textview)),
                                 "italic", "style", PANGO_STYLE_ITALIC, NULL);
 
-    const char *name = (char *)dt_metadata_get_name_by_display_order(i);
-    d->setting_name[i] = g_strdup_printf("plugins/lighttable/metadata/%s_text_height", name);
-
-    GtkWidget *swindow = gtk_scrolled_window_new(NULL, NULL);
-    gtk_container_add(GTK_CONTAINER(swindow), textview);
-
-    gtk_grid_attach(grid, swindow, 1, i, 1, 1);
-    gtk_widget_set_hexpand(swindow, TRUE);
-    d->swindow[i] = swindow;
-    
-    dt_gui_widget_init_auto_height(GTK_WIDGET(textview), 1, 3);
-
+    gtk_grid_attach(grid, textview, 1, i, 1, 1);
     gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(textview), GTK_WRAP_WORD_CHAR);
     gtk_text_view_set_accepts_tab(GTK_TEXT_VIEW(textview), FALSE);
     gtk_widget_add_events(textview, GDK_FOCUS_CHANGE_MASK);
+
     g_signal_connect(textview, "key-press-event", G_CALLBACK(_key_pressed), self);
     g_signal_connect(textview, "focus", G_CALLBACK(_textview_focus), self);
     g_signal_connect(textview, "populate-popup", G_CALLBACK(_populate_popup_multi), self);
@@ -762,6 +751,7 @@ void gui_init(dt_lib_module_t *self)
     g_signal_connect(textview, "focus-out-event", G_CALLBACK(_lost_focus), self);
     g_signal_connect(labelev, "button-press-event", G_CALLBACK(_metadata_reset), textview);
     g_signal_connect(buffer, "changed", G_CALLBACK(_textbuffer_changed), self);
+
     d->textview[i] = GTK_TEXT_VIEW(textview);
     gtk_widget_set_hexpand(textview, TRUE);
     gtk_widget_set_vexpand(textview, TRUE);
@@ -798,7 +788,6 @@ void gui_cleanup(dt_lib_module_t *self)
     g_signal_handlers_block_by_func(d->textview[i], _lost_focus, self);
     g_list_free_full(d->metadata_list[i], dt_free_gpointer);
     d->metadata_list[i] = NULL;
-    dt_free(d->setting_name[i]);
   }
   if(_metadata_update_stmt)
   {

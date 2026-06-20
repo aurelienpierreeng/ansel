@@ -64,13 +64,32 @@ ALL_DEVELOPERS=("Aldric Renaudin"
                 "Aurélien PIERRE"
                 "Guillaume Stutin")
 
+# Echo a revision range that is actually computable in the current
+# (possibly shallow) repository. When BASE..HEAD cannot be resolved -- e.g.
+# CI checks out with a limited fetch-depth and the base commit or the history
+# between base and head was never fetched -- degrade to the history reachable
+# from HEAD instead of letting git emit a fatal "Invalid revision range".
+function usable_range()
+{
+    local base="$1"
+    local head="$2"
+
+    if [ -n "$base" ] \
+        && git rev-parse --verify --quiet "$base^{commit}" >/dev/null 2>&1 \
+        && git rev-list "$base..$head" >/dev/null 2>&1; then
+        echo "$base..$head"
+    else
+        echo "$head"
+    fi
+}
+
 function shortlog()
 {
     local RANGE="$1"
     local MIN=$2
     local PATHS="$3"
 
-    git shortlog -ns $RANGE -- $PATHS |
+    git shortlog -ns $RANGE -- $PATHS 2>/dev/null |
         while read num auth; do
             if [ $num -ge $MIN ]; then
                 echo $auth;
@@ -83,25 +102,19 @@ function forsubmodule()
     local SUBPATH=$1
     local MIN=$2
 
-    local SHEAD=$(git log --patch -1 $HEAD -- $SUBPATH | grep "Subproject commit" | tail -1 | cut -d' ' -f3)
+    local SHEAD=$(git log --patch -1 $HEAD -- $SUBPATH 2>/dev/null | grep "Subproject commit" | tail -1 | cut -d' ' -f3)
 
-    SRANGE=""
-
-    if [ -z $BASE ]; then
-        SRANGE=$SHEAD
-    else
-        local SBASE=$(git log --patch -1 $BASE -- $SUBPATH | grep "Subproject commit" | tail -1 | cut -d' ' -f3)
-
-        if [[ -z $SBASE ]]; then
-            SRANGE="$SHEAD"
-        else
-            SRANGE="$SBASE..$SHEAD"
-        fi
+    local SBASE=""
+    if [ -n "$BASE" ]; then
+        SBASE=$(git log --patch -1 $BASE -- $SUBPATH 2>/dev/null | grep "Subproject commit" | tail -1 | cut -d' ' -f3)
     fi
 
     (
         cd $SUBPATH
-        shortlog "$SRANGE" $MIN
+        # Resolve the range inside the submodule: with shallow submodule
+        # checkouts SBASE (or the SBASE..SHEAD history) may be absent, in
+        # which case usable_range falls back to SHEAD's reachable history.
+        shortlog "$(usable_range "$SBASE" "$SHEAD")" $MIN
     )
 }
 
@@ -118,11 +131,7 @@ function isdeveloper()
     return 0
 }
 
-RANGE=$HEAD
-
-if [ ! -z $BASE ]; then
-    RANGE=$BASE..$HEAD
-fi
+RANGE=$(usable_range "$BASE" "$HEAD")
 
 echo "* developers:"
 shortlog $RANGE $SHORTLOG_THRESHOLD |

@@ -39,6 +39,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "common/darktable.h"
+#include "gui/gdkkeys.h"
 #include "bauhaus/bauhaus.h"
 #include "common/debug.h"
 #include "common/imagebuf.h"
@@ -1909,9 +1910,12 @@ static int _polygon_events_key_pressed(struct dt_iop_module_t *module, GdkEventK
 {
   if(IS_NULL_PTR(mask_gui) || IS_NULL_PTR(mask_form)) return 0;
 
+  guint key = dt_keys_mainpad_alternatives(event->keyval);
+
+
   if(mask_gui->creation)
   {
-    switch(event->keyval)
+    switch(key)
     {
       case GDK_KEY_BackSpace:
       {
@@ -1937,7 +1941,6 @@ static int _polygon_events_key_pressed(struct dt_iop_module_t *module, GdkEventK
         dt_dev_pixelpipe_update_history_preview(darktable.develop);
         return 1;
       }
-      case GDK_KEY_KP_Enter:
       case GDK_KEY_Return:
         return _polygon_creation_closing_form(mask_form, mask_gui);
     }
@@ -1972,7 +1975,7 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, double x,
     if(mask_gui->creation && !g_list_shorter_than(mask_form->points, 4))
     {
       // check if we are near the first point to close the polygon on creation
-      const float dist_curs = DT_GUI_MOUSE_EFFECT_RADIUS_SCALED;
+      const float dist_curs = DT_GUI_MOUSE_EFFECT_RADIUS;
       const float dx = mask_gui->pos[0] - gui_points->points[2];
       const float dy = mask_gui->pos[1] - gui_points->points[3];
       const float dist2 = dx * dx + dy * dy;

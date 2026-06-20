@@ -422,7 +422,11 @@ void dt_styles_update(const char *name, const char *newname, const char *newdesc
 
   _dt_style_update_iop_order(name, id, imgid, copy_iop_order, update_iop_order);
 
-  _dt_style_cleanup_multi_instance(id);
+  if(!copy_iop_order && !update_iop_order)
+  {
+    // Without a stored module order, style items are self-contained and can use compact priorities.
+    _dt_style_cleanup_multi_instance(id);
+  }
 
   /* backup style to disk */
   dt_styles_save_to_file(newname, NULL, TRUE);
@@ -497,7 +501,11 @@ void dt_styles_create_from_style(const char *name, const char *newname, const ch
 
     _dt_style_update_iop_order(name, id, imgid, copy_iop_order, update_iop_order);
 
-    _dt_style_cleanup_multi_instance(id);
+    if(!copy_iop_order && !update_iop_order)
+    {
+      // Without a stored module order, style items are self-contained and can use compact priorities.
+      _dt_style_cleanup_multi_instance(id);
+    }
 
     /* backup style to disk */
     dt_styles_save_to_file(newname, NULL, FALSE);
@@ -572,7 +580,11 @@ gboolean dt_styles_create_from_image(const char *name, const char *description,
     sqlite3_step(stmt);
     sqlite3_finalize(stmt);
 
-    _dt_style_cleanup_multi_instance(id);
+    if(!copy_iop_order)
+    {
+      // A style without module order cannot use sparse image priorities, so compact them locally.
+      _dt_style_cleanup_multi_instance(id);
+    }
 
     /* backup style to disk */
     dt_styles_save_to_file(name, NULL, FALSE);
@@ -812,11 +824,13 @@ static void _dt_styles_tmp_module_free(dt_iop_module_t *module)
   dt_free(module);
 }
 
-static int _styles_init_source_dev(dt_develop_t *dev_src, const char *name, const int32_t imgid)
+static int _styles_init_source_dev(dt_develop_t *dev_src, const char *name, const int32_t imgid,
+                                   gboolean *has_iop_list)
 {
   dt_dev_init(dev_src, FALSE);
   if(dt_dev_ensure_image_storage(dev_src, imgid)) return 1;
 
+  *has_iop_list = FALSE;
   dt_ioppr_set_default_iop_order(dev_src, imgid);
   dt_dev_init_default_history(dev_src, imgid, FALSE);
 
@@ -826,7 +840,7 @@ static int _styles_init_source_dev(dt_develop_t *dev_src, const char *name, cons
   {
     g_list_free_full(dev_src->iop_order_list, dt_free_gpointer);
     dev_src->iop_order_list = iop_list;
-    dt_ioppr_resync_pipeline(dev_src, 0, NULL, FALSE);
+    *has_iop_list = TRUE;
   }
 
   return 0;
@@ -855,9 +869,10 @@ static GList *_styles_collect_applied_items(dt_develop_t *dev_src, GList *si_lis
   return applied_items;
 }
 
-static void _styles_sync_pipeline_from_items(dt_develop_t *dev_src, GList *applied_items)
+static void _styles_sync_pipeline_from_items(dt_develop_t *dev_src, GList *applied_items,
+                                             const gboolean has_iop_list)
 {
-  dt_ioppr_update_for_style_items(dev_src, applied_items, FALSE);
+  if(!has_iop_list) dt_ioppr_update_for_style_items(dev_src, applied_items, FALSE);
 
   for(GList *l = applied_items; l; l = g_list_next(l))
   {
@@ -865,8 +880,11 @@ static void _styles_sync_pipeline_from_items(dt_develop_t *dev_src, GList *appli
     const char *multi_name = _dt_styles_normalize_multi_name(style_item->multi_name);
     dt_iop_module_t *module
         = dt_dev_get_module_instance(dev_src, style_item->operation, multi_name, style_item->multi_priority);
-    if(module)
+    if(!IS_NULL_PTR(module))
     {
+      if(has_iop_list)
+        style_item->iop_order = dt_ioppr_get_iop_order(dev_src->iop_order_list, style_item->operation,
+                                                       style_item->multi_priority);
       module->multi_priority = style_item->multi_priority;
       module->iop_order = style_item->iop_order;
     }
@@ -910,9 +928,17 @@ static int _styles_prepare_source_dev(dt_develop_t *dev_src, const char *name, c
                                       const int32_t imgid, GList **out_si_list, GHashTable **out_style_ids,
                                       GList **out_mod_list)
 {
-  if(_styles_init_source_dev(dev_src, name, imgid)) return 1;
+  gboolean has_iop_list = FALSE;
+  if(_styles_init_source_dev(dev_src, name, imgid, &has_iop_list)) return 1;
 
   GList *si_list = _dt_styles_get_apply_items(style_id);
+  if(!has_iop_list)
+  {
+    // Without a stored iop_list, add order entries before creating the style modules;
+    // otherwise update_for_style_items() sees the new modules as already present.
+    dt_ioppr_update_for_style_items(dev_src, si_list, FALSE);
+  }
+
   GHashTable *style_ids = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, NULL);
   GList *applied_items = _styles_collect_applied_items(dev_src, si_list, style_ids);
 
@@ -924,7 +950,7 @@ static int _styles_prepare_source_dev(dt_develop_t *dev_src, const char *name, c
     return 1;
   }
 
-  _styles_sync_pipeline_from_items(dev_src, applied_items);
+  _styles_sync_pipeline_from_items(dev_src, applied_items, has_iop_list);
   if(_styles_rebuild_history_from_items(dev_src, applied_items))
   {
     g_list_free(applied_items);
@@ -955,7 +981,7 @@ static int _styles_prepare_source_dev(dt_develop_t *dev_src, const char *name, c
 }
 
 int dt_styles_apply_to_image_merge(const char *name, const int style_id, const int32_t newimgid,
-                                   const dt_history_merge_strategy_t mode)
+                                   const dt_history_merge_strategy_t mode, dt_hm_batch_state_t *batch)
 {
   int ret_val = 1;
 
@@ -981,8 +1007,8 @@ int dt_styles_apply_to_image_merge(const char *name, const int style_id, const i
   else
   {
     ret_val = dt_dev_merge_history_into_image(&dev_src, newimgid, mod_list,
-                                              dt_conf_get_bool("history/copy_iop_order"), mode,
-                                              dt_conf_get_bool("history/paste_instances"));
+                                              dt_conf_get_bool("history/style/copy_iop_order"), mode,
+                                              dt_conf_get_bool("history/paste_instances"), name, batch);
   }
 
   g_list_free(mod_list);

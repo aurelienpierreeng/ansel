@@ -45,6 +45,7 @@
 #include <string.h>
 
 #include "common/colorspaces_inline_conversions.h"
+#include "common/opencl.h"
 #include "control/control.h"
 #include "develop/develop.h"
 
@@ -65,6 +66,35 @@ typedef struct dt_iop_gamma_params_t
 {
   float gamma, linear;
 } dt_iop_gamma_params_t;
+
+#ifdef HAVE_OPENCL
+typedef struct dt_iop_gamma_global_data_t
+{
+  int kernel_gamma_pack;
+} dt_iop_gamma_global_data_t;
+
+typedef enum dt_iop_gamma_kernel_mode_t
+{
+  DT_IOP_GAMMA_KERNEL_COPY = 0,
+  DT_IOP_GAMMA_KERNEL_MASK = 1,
+  DT_IOP_GAMMA_KERNEL_CHANNEL_MONO = 2,
+  DT_IOP_GAMMA_KERNEL_CHANNEL_FALSE_COLOR = 3
+} dt_iop_gamma_kernel_mode_t;
+
+typedef enum dt_iop_gamma_false_color_t
+{
+  DT_IOP_GAMMA_FALSE_COLOR_MONO = 0,
+  DT_IOP_GAMMA_FALSE_COLOR_A = 1,
+  DT_IOP_GAMMA_FALSE_COLOR_B = 2,
+  DT_IOP_GAMMA_FALSE_COLOR_R = 3,
+  DT_IOP_GAMMA_FALSE_COLOR_G = 4,
+  DT_IOP_GAMMA_FALSE_COLOR_B_CH = 5,
+  DT_IOP_GAMMA_FALSE_COLOR_C = 6,
+  DT_IOP_GAMMA_FALSE_COLOR_LCH_H = 7,
+  DT_IOP_GAMMA_FALSE_COLOR_HSL_H = 8,
+  DT_IOP_GAMMA_FALSE_COLOR_JZ_HZ = 9
+} dt_iop_gamma_false_color_t;
+#endif
 
 const char *name()
 {
@@ -103,21 +133,49 @@ void output_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixel
 }
 
 
-__OMP_DECLARE_SIMD__(aligned(in, out, mask_color: 16) uniform(mask_color, alpha))
-static inline void _write_pixel(const float *const restrict in, uint8_t *const restrict out,
-                                const float *const restrict mask_color, const float alpha)
+/**
+ * @brief Shared appearance of mask previews rendered by the display encoding module.
+ *
+ * The checker colors remain in linear RGB until they are blended with the image so
+ * this path matches module-authored previews that continue through display encoding.
+ */
+typedef struct dt_iop_gamma_mask_preview_t
 {
-  // takes a linear RGB pixel as input
-  dt_aligned_pixel_t pixel;
+  dt_aligned_pixel_t checker_color_1;
+  dt_aligned_pixel_t checker_color_2;
+  size_t checker_1;
+  size_t checker_2;
+  size_t width;
+  gboolean black_and_white;
+} dt_iop_gamma_mask_preview_t;
 
-  // linear sRGB (REC 709) -> gamma corrected sRGB
+/**
+ * @brief Blend one linear RGB pixel with its mask checker and encode it for display.
+ */
+__OMP_DECLARE_SIMD__(uniform(preview))
+static inline void _write_pixel(const float *const restrict in, uint8_t *const restrict out,
+                                const dt_iop_gamma_mask_preview_t *const preview,
+                                const size_t pixel_index, const float alpha)
+{
+  // Blend the image with the checker in linear RGB, then encode the result once.
+  const size_t y = pixel_index / preview->width;
+  const size_t x = pixel_index - y * preview->width;
+  const gboolean first_x = x % preview->checker_1 < x % preview->checker_2;
+  const gboolean first_y = y % preview->checker_1 < y % preview->checker_2;
+  const float *const checker_color
+      = first_x == first_y ? preview->checker_color_2 : preview->checker_color_1;
+  dt_aligned_pixel_t pixel;
   for(size_t c = 0; c < 3; c++)
-    pixel[c] = in[c] <= 0.0031308f ? 12.92f * in[c] : (1.0f + 0.055f) * powf(in[c], 1.0f / 2.4f) - 0.055f;
+  {
+    const float value = in[c] * (1.0f - alpha) + checker_color[c] * alpha;
+    pixel[c] = value <= 0.0031308f ? 12.92f * value
+                                  : (1.0f + 0.055f) * powf(value, 1.0f / 2.4f) - 0.055f;
+  }
 
   // the output of this module is BGR(A) instead of RGBA; can't use for_each_channel here due to the index swap
   for(size_t c = 0; c < 3; c++)
   {
-    const float value = roundf(255.0f * (pixel[c] * (1.0f - alpha) + mask_color[c] * alpha));
+    const float value = roundf(255.0f * pixel[c]);
     out[2 - c] = (uint8_t)(fminf(fmaxf(value, 0.0f), 255.0f));
   }
 }
@@ -139,27 +197,27 @@ static inline void _XYZ_to_REC_709_normalized(const float *const restrict XYZ, f
 }
 __DT_CLONE_TARGETS__
 static void _channel_display_monochrome(const float *const restrict in, uint8_t *const restrict out,
-                                        const size_t buffsize, const float alpha)
+                                        const size_t buffsize, const float alpha,
+                                        const dt_iop_gamma_mask_preview_t *const preview)
 {
-  const dt_aligned_pixel_t mask_color = { 1.0f, 1.0f, 0.0f }; // yellow; "unused" element enables vectorization
-  __OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64) aligned(mask_color: 16))
+  // Render each selected channel value as a neutral image over the shared mask checkerboard.
+  __OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64))
   for(size_t j = 0; j < buffsize; j += 4)
   {
     dt_aligned_pixel_t pixel = { in[j + 1], in[j + 1], in[j + 1], in[j + 1] };
-    _write_pixel(pixel, out + j, mask_color, in[j + 3] * alpha);
+    _write_pixel(pixel, out + j, preview, j / 4, in[j + 3] * alpha);
   }
 }
 __DT_CLONE_TARGETS__
 static void _channel_display_false_color(const float *const restrict in, uint8_t *const restrict out,
                                          const size_t buffsize, const float alpha,
-                                         dt_dev_pixelpipe_display_mask_t channel)
+                                         dt_dev_pixelpipe_display_mask_t channel,
+                                         const dt_iop_gamma_mask_preview_t *const preview)
 {
-  const dt_aligned_pixel_t mask_color = { 1.0f, 1.0f, 0.0f }; // yellow, "unused" element aids vectorization
-
   switch(channel & DT_DEV_PIXELPIPE_DISPLAY_ANY & ~DT_DEV_PIXELPIPE_DISPLAY_OUTPUT)
   {
     case DT_DEV_PIXELPIPE_DISPLAY_a:
-      __OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64) aligned(mask_color: 16))
+      __OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64))
       for(size_t j = 0; j < buffsize; j += 4)
       {
         dt_aligned_pixel_t xyz;
@@ -169,11 +227,11 @@ static void _channel_display_false_color(const float *const restrict in, uint8_t
         const dt_aligned_pixel_t lab = { 79.0f - value * (11.0f / 56.0f), value, 0.0f, 0.0f };
         dt_Lab_to_XYZ(lab, xyz);
         _XYZ_to_REC_709_normalized(xyz, pixel, 0.75f);
-        _write_pixel(pixel, out + j, mask_color, in[j + 3] * alpha);
+        _write_pixel(pixel, out + j, preview, j / 4, in[j + 3] * alpha);
       }
       break;
     case DT_DEV_PIXELPIPE_DISPLAY_b:
-      __OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64) aligned(mask_color: 16))
+      __OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64))
       for(size_t j = 0; j < buffsize; j += 4)
       {
         dt_aligned_pixel_t xyz, pixel;
@@ -182,45 +240,45 @@ static void _channel_display_false_color(const float *const restrict in, uint8_t
         const dt_aligned_pixel_t lab = { 60.0f + value * (2.0f / 65.0f), 0.0f, value, 0.0f };
         dt_Lab_to_XYZ(lab, xyz);
         _XYZ_to_REC_709_normalized(xyz, pixel, 0.75f);
-        _write_pixel(pixel, out + j, mask_color, in[j + 3] * alpha);
+        _write_pixel(pixel, out + j, preview, j / 4, in[j + 3] * alpha);
       }
       break;
     case DT_DEV_PIXELPIPE_DISPLAY_R:
-      __OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64) aligned(mask_color: 16))
+      __OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64))
       for(size_t j = 0; j < buffsize; j += 4)
       {
         const dt_aligned_pixel_t pixel = { in[j + 1], 0.0f, 0.0f, 0.0f };
-        _write_pixel(pixel, out + j, mask_color, in[j + 3] * alpha);
+        _write_pixel(pixel, out + j, preview, j / 4, in[j + 3] * alpha);
       }
       break;
     case DT_DEV_PIXELPIPE_DISPLAY_G:
-      __OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64) aligned(mask_color: 16))
+      __OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64))
       for(size_t j = 0; j < buffsize; j += 4)
       {
         const dt_aligned_pixel_t pixel = { 0.0f, in[j + 1], 0.0f, 0.0f };
-        _write_pixel(pixel, out + j, mask_color, in[j + 3] * alpha);
+        _write_pixel(pixel, out + j, preview, j / 4, in[j + 3] * alpha);
       }
       break;
     case DT_DEV_PIXELPIPE_DISPLAY_B:
-      __OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64) aligned(mask_color: 16))
+      __OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64))
       for(size_t j = 0; j < buffsize; j += 4)
       {
         const dt_aligned_pixel_t pixel = { 0.0f, 0.0f, in[j + 1], 0.0f };
-        _write_pixel(pixel, out + j, mask_color, in[j + 3] * alpha);
+        _write_pixel(pixel, out + j, preview, j / 4, in[j + 3] * alpha);
       }
       break;
     case DT_DEV_PIXELPIPE_DISPLAY_LCH_C:
     case DT_DEV_PIXELPIPE_DISPLAY_HSL_S:
     case DT_DEV_PIXELPIPE_DISPLAY_JzCzhz_Cz:
-      __OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64) aligned(mask_color: 16))
+      __OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64))
       for(size_t j = 0; j < buffsize; j += 4)
       {
         const dt_aligned_pixel_t pixel = { 0.5f, 0.5f * (1.0f - in[j + 1]), 0.5f, 0.0f };
-        _write_pixel(pixel, out + j, mask_color, in[j + 3] * alpha);
+        _write_pixel(pixel, out + j, preview, j / 4, in[j + 3] * alpha);
       }
       break;
     case DT_DEV_PIXELPIPE_DISPLAY_LCH_h:
-      __OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64) aligned(mask_color: 16))
+      __OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64))
       for(size_t j = 0; j < buffsize; j += 4)
       {
         dt_aligned_pixel_t lch = { 65.0f, 37.0f, in[j + 1], 0.0f };
@@ -229,7 +287,7 @@ static void _channel_display_false_color(const float *const restrict in, uint8_t
         lab[3] = 0.0f;
         dt_Lab_to_XYZ(lab, xyz);
         _XYZ_to_REC_709_normalized(xyz, pixel, 0.75f);
-        _write_pixel(pixel, out + j, mask_color, in[j + 3] * alpha);
+        _write_pixel(pixel, out + j, preview, j / 4, in[j + 3] * alpha);
       }
       break;
     case DT_DEV_PIXELPIPE_DISPLAY_HSL_H:
@@ -240,7 +298,7 @@ static void _channel_display_false_color(const float *const restrict in, uint8_t
         dt_aligned_pixel_t pixel;
         dt_HSL_2_RGB(hsl, pixel);
         _normalize_color(pixel, 0.75f);
-        _write_pixel(pixel, out + j, mask_color, in[j + 3] * alpha);
+        _write_pixel(pixel, out + j, preview, j / 4, in[j + 3] * alpha);
       }
       break;
     case DT_DEV_PIXELPIPE_DISPLAY_JzCzhz_hz:
@@ -255,7 +313,7 @@ static void _channel_display_false_color(const float *const restrict in, uint8_t
         dt_JzAzBz_2_XYZ(JzAzBz, XYZ_D65);
         dt_XYZ_to_Rec709_D65(XYZ_D65, pixel);
         _normalize_color(pixel, 0.75f);
-        _write_pixel(pixel, out + j, mask_color, in[j + 3] * alpha);
+        _write_pixel(pixel, out + j, preview, j / 4, in[j + 3] * alpha);
       }
       break;
     case DT_DEV_PIXELPIPE_DISPLAY_L:
@@ -263,23 +321,27 @@ static void _channel_display_false_color(const float *const restrict in, uint8_t
     case DT_DEV_PIXELPIPE_DISPLAY_HSL_l:
     case DT_DEV_PIXELPIPE_DISPLAY_JzCzhz_Jz:
     default:
-      _channel_display_monochrome(in, out, buffsize, alpha);
+      _channel_display_monochrome(in, out, buffsize, alpha, preview);
       break;
   }
 }
 __DT_CLONE_TARGETS__
 static void _mask_display(const float *const restrict in, uint8_t *const restrict out, const size_t buffsize,
-                          const float alpha)
+                          const float alpha, const dt_iop_gamma_mask_preview_t *const preview)
 {
-  const dt_aligned_pixel_t mask_color = { 1.0f, 1.0f, 0.0f, 0.0f };
-    __OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64) aligned(mask_color: 16))
-    for(size_t j = 0; j < buffsize; j+= 4)
+  // Loop over the displayed mask and preserve the image colors unless the global monochrome option is enabled.
+  __OMP_PARALLEL_FOR_SIMD__(aligned(in, out: 64))
+  for(size_t j = 0; j < buffsize; j += 4)
+  {
+    dt_aligned_pixel_t pixel = { in[j], in[j + 1], in[j + 2], 0.0f };
+    if(preview->black_and_white)
     {
       const float gray = 0.3f * in[j + 0] + 0.59f * in[j + 1] + 0.11f * in[j + 2];
-      const dt_aligned_pixel_t pixel = { gray, gray, gray, gray };
-      const float hide = 1.0f - fminf(fmaxf(in[j + 3] * alpha, 0.0f), 1.0f);
-      _write_pixel(pixel, out + j, mask_color, hide);
+      pixel[0] = pixel[1] = pixel[2] = gray;
     }
+    const float hide = 1.0f - fminf(fmaxf(in[j + 3] * alpha, 0.0f), 1.0f);
+    _write_pixel(pixel, out + j, preview, j / 4, hide);
+  }
 }
 __DT_CLONE_TARGETS__
 static void _copy_output(const float *const restrict in, uint8_t *const restrict out, const size_t buffsize)
@@ -300,34 +362,186 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 {
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
   const dt_dev_pixelpipe_display_mask_t mask_display = pipe->mask_display;
-  const gboolean fcolor = dt_conf_is_equal("channel_display", "false color");
-
   const size_t buffsize = (size_t)roi_out->width * roi_out->height * 4;
+
+  if(!(mask_display & (DT_DEV_PIXELPIPE_DISPLAY_MASK | DT_DEV_PIXELPIPE_DISPLAY_CHANNEL)))
+  {
+    _copy_output((const float *const restrict)i, (uint8_t *const restrict)o, buffsize);
+    return 0;
+  }
+
   const float alpha = (mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK) ? 1.0f : 0.0f;
+  const size_t checker_1
+      = MAX((size_t)DT_PIXEL_APPLY_DPI(dt_conf_get_int("plugins/darkroom/colorbalancergb/checker/size")), 2);
+  const dt_iop_gamma_mask_preview_t preview = {
+    .checker_color_1 = {
+      CLAMP(dt_conf_get_float("plugins/darkroom/colorbalancergb/checker1/red"), 0.0f, 1.0f),
+      CLAMP(dt_conf_get_float("plugins/darkroom/colorbalancergb/checker1/green"), 0.0f, 1.0f),
+      CLAMP(dt_conf_get_float("plugins/darkroom/colorbalancergb/checker1/blue"), 0.0f, 1.0f),
+      0.0f
+    },
+    .checker_color_2 = {
+      CLAMP(dt_conf_get_float("plugins/darkroom/colorbalancergb/checker2/red"), 0.0f, 1.0f),
+      CLAMP(dt_conf_get_float("plugins/darkroom/colorbalancergb/checker2/green"), 0.0f, 1.0f),
+      CLAMP(dt_conf_get_float("plugins/darkroom/colorbalancergb/checker2/blue"), 0.0f, 1.0f),
+      0.0f
+    },
+    .checker_1 = checker_1,
+    .checker_2 = 2 * checker_1,
+    .width = roi_out->width,
+    .black_and_white
+        = dt_conf_get_bool("plugins/darkroom/colorbalancergb/mask_preview/greyscaled")
+  };
 
   if((mask_display & DT_DEV_PIXELPIPE_DISPLAY_CHANNEL) && (mask_display & DT_DEV_PIXELPIPE_DISPLAY_ANY))
   {
-    if(fcolor)
+    if(dt_conf_is_equal("channel_display", "false color"))
     {
       _channel_display_false_color((const float *const restrict)i, (uint8_t *const restrict)o, buffsize, alpha,
-                                   mask_display);
+                                   mask_display, &preview);
     }
     else
     {
-      _channel_display_monochrome((const float *const restrict)i, (uint8_t *const restrict)o, buffsize, alpha);
+      _channel_display_monochrome((const float *const restrict)i, (uint8_t *const restrict)o, buffsize, alpha,
+                                  &preview);
+    }
+    return 0;
+  }
+
+  if(mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
+  {
+    _mask_display((const float *const restrict)i, (uint8_t *const restrict)o, buffsize, 1.0f, &preview);
+    return 0;
+  }
+
+  _copy_output((const float *const restrict)i, (uint8_t *const restrict)o, buffsize);
+  return 0;
+}
+
+#ifdef HAVE_OPENCL
+static int _false_color_channel_to_kernel_code(const dt_dev_pixelpipe_display_mask_t mask_display)
+{
+  switch(mask_display & DT_DEV_PIXELPIPE_DISPLAY_ANY & ~DT_DEV_PIXELPIPE_DISPLAY_OUTPUT)
+  {
+    case DT_DEV_PIXELPIPE_DISPLAY_a:
+      return DT_IOP_GAMMA_FALSE_COLOR_A;
+    case DT_DEV_PIXELPIPE_DISPLAY_b:
+      return DT_IOP_GAMMA_FALSE_COLOR_B;
+    case DT_DEV_PIXELPIPE_DISPLAY_R:
+      return DT_IOP_GAMMA_FALSE_COLOR_R;
+    case DT_DEV_PIXELPIPE_DISPLAY_G:
+      return DT_IOP_GAMMA_FALSE_COLOR_G;
+    case DT_DEV_PIXELPIPE_DISPLAY_B:
+      return DT_IOP_GAMMA_FALSE_COLOR_B_CH;
+    case DT_DEV_PIXELPIPE_DISPLAY_LCH_C:
+    case DT_DEV_PIXELPIPE_DISPLAY_HSL_S:
+    case DT_DEV_PIXELPIPE_DISPLAY_JzCzhz_Cz:
+      return DT_IOP_GAMMA_FALSE_COLOR_C;
+    case DT_DEV_PIXELPIPE_DISPLAY_LCH_h:
+      return DT_IOP_GAMMA_FALSE_COLOR_LCH_H;
+    case DT_DEV_PIXELPIPE_DISPLAY_HSL_H:
+      return DT_IOP_GAMMA_FALSE_COLOR_HSL_H;
+    case DT_DEV_PIXELPIPE_DISPLAY_JzCzhz_hz:
+      return DT_IOP_GAMMA_FALSE_COLOR_JZ_HZ;
+    case DT_DEV_PIXELPIPE_DISPLAY_L:
+    case DT_DEV_PIXELPIPE_DISPLAY_GRAY:
+    case DT_DEV_PIXELPIPE_DISPLAY_HSL_l:
+    case DT_DEV_PIXELPIPE_DISPLAY_JzCzhz_Jz:
+    default:
+      return DT_IOP_GAMMA_FALSE_COLOR_MONO;
+  }
+}
+
+int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
+{
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
+  dt_iop_gamma_global_data_t *gd = (dt_iop_gamma_global_data_t *)self->global_data;
+  const int devid = pipe->devid;
+  cl_int err = CL_SUCCESS;
+
+  const int width = roi_out->width;
+  const int height = roi_out->height;
+
+  size_t sizes[] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
+
+  const dt_dev_pixelpipe_display_mask_t mask_display = pipe->mask_display;
+  const gboolean fcolor = dt_conf_is_equal("channel_display", "false color");
+  int mode = DT_IOP_GAMMA_KERNEL_COPY;
+  int channel = DT_IOP_GAMMA_FALSE_COLOR_MONO;
+  float alpha = (mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK) ? 1.0f : 0.0f;
+  const dt_aligned_pixel_t checker_color_1 = {
+    CLAMP(dt_conf_get_float("plugins/darkroom/colorbalancergb/checker1/red"), 0.0f, 1.0f),
+    CLAMP(dt_conf_get_float("plugins/darkroom/colorbalancergb/checker1/green"), 0.0f, 1.0f),
+    CLAMP(dt_conf_get_float("plugins/darkroom/colorbalancergb/checker1/blue"), 0.0f, 1.0f),
+    0.0f
+  };
+  const dt_aligned_pixel_t checker_color_2 = {
+    CLAMP(dt_conf_get_float("plugins/darkroom/colorbalancergb/checker2/red"), 0.0f, 1.0f),
+    CLAMP(dt_conf_get_float("plugins/darkroom/colorbalancergb/checker2/green"), 0.0f, 1.0f),
+    CLAMP(dt_conf_get_float("plugins/darkroom/colorbalancergb/checker2/blue"), 0.0f, 1.0f),
+    0.0f
+  };
+  const int checker_1
+      = MAX(DT_PIXEL_APPLY_DPI(dt_conf_get_int("plugins/darkroom/colorbalancergb/checker/size")), 2);
+  const int checker_2 = 2 * checker_1;
+  const int black_and_white
+      = dt_conf_get_bool("plugins/darkroom/colorbalancergb/mask_preview/greyscaled");
+
+  if((mask_display & DT_DEV_PIXELPIPE_DISPLAY_CHANNEL)
+     && (mask_display & DT_DEV_PIXELPIPE_DISPLAY_ANY))
+  {
+    if(fcolor)
+    {
+      mode = DT_IOP_GAMMA_KERNEL_CHANNEL_FALSE_COLOR;
+      channel = _false_color_channel_to_kernel_code(mask_display);
+    }
+    else
+    {
+      mode = DT_IOP_GAMMA_KERNEL_CHANNEL_MONO;
     }
   }
   else if(mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
   {
-    _mask_display((const float *const restrict)i, (uint8_t *const restrict)o, buffsize, 1.0f);
+    mode = DT_IOP_GAMMA_KERNEL_MASK;
+    alpha = 1.0f;
   }
-  else
-  {
-    _copy_output((const float *const restrict)i, (uint8_t *const restrict)o, buffsize);
-  }
+  dt_opencl_set_kernel_arg(devid, gd->kernel_gamma_pack, 0, sizeof(cl_mem), (void *)&dev_in);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_gamma_pack, 1, sizeof(cl_mem), (void *)&dev_out);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_gamma_pack, 2, sizeof(int), (void *)&width);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_gamma_pack, 3, sizeof(int), (void *)&height);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_gamma_pack, 4, sizeof(int), (void *)&mode);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_gamma_pack, 5, sizeof(int), (void *)&channel);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_gamma_pack, 6, sizeof(float), (void *)&alpha);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_gamma_pack, 7, sizeof(checker_color_1), (void *)&checker_color_1);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_gamma_pack, 8, sizeof(checker_color_2), (void *)&checker_color_2);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_gamma_pack, 9, sizeof(int), (void *)&checker_1);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_gamma_pack, 10, sizeof(int), (void *)&checker_2);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_gamma_pack, 11, sizeof(int), (void *)&black_and_white);
 
-  return 0;
+  err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_gamma_pack, sizes);
+  if(err == CL_SUCCESS) return TRUE;
+
+  dt_print(DT_DEBUG_OPENCL, "[opencl_gamma] couldn't enqueue kernel! %d\n", err);
+  return FALSE;
 }
+
+void init_global(dt_iop_module_so_t *module)
+{
+  const int program = 2; // basic.cl, from programs.conf
+  dt_iop_gamma_global_data_t *gd = (dt_iop_gamma_global_data_t *)calloc(1, sizeof(dt_iop_gamma_global_data_t));
+  if(!gd) return;
+  module->data = gd;
+  gd->kernel_gamma_pack = dt_opencl_create_kernel(program, "gamma_pack");
+}
+
+void cleanup_global(dt_iop_module_so_t *module)
+{
+  dt_iop_gamma_global_data_t *gd = (dt_iop_gamma_global_data_t *)module->data;
+  dt_opencl_free_kernel(gd->kernel_gamma_pack);
+  dt_free(module->data);
+}
+#endif
+
 void init(dt_iop_module_t *module)
 {
   // module->data = malloc(sizeof(dt_iop_gamma_data_t));

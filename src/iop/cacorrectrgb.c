@@ -770,7 +770,7 @@ void reload_defaults(dt_iop_module_t *module)
 void gui_init(dt_iop_module_t *self)
 {
   dt_iop_cacorrectrgb_gui_data_t *g = IOP_GUI_ALLOC(cacorrectrgb);
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   g->guide_channel = dt_bauhaus_combobox_from_params(self, "guide_channel");
   gtk_widget_set_tooltip_text(g->guide_channel, _("channel used as a reference to\n"
                                            "correct the other channels.\n"

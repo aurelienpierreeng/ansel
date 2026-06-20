@@ -353,7 +353,7 @@ typedef struct dt_iop_filmicrgb_global_data_t
 
 const char *name()
 {
-  return _("fil_mic rgb");
+  return _("fil_mic");
 }
 
 const char *aliases()
@@ -3149,7 +3149,7 @@ static void show_mask_callback(GtkToggleButton *button, GdkEventButton *event, g
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(self->off), TRUE);
   dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)self->gui_data;
 
-    // if blend module is displaying mask do not display it here
+  // if blend module is displaying mask do not display it here
   if(self->request_mask_display != DT_DEV_PIXELPIPE_DISPLAY_NONE)
     self->request_mask_display = DT_DEV_PIXELPIPE_DISPLAY_NONE;
 
@@ -3158,7 +3158,7 @@ static void show_mask_callback(GtkToggleButton *button, GdkEventButton *event, g
   if(g->show_mask)
     self->request_mask_display = DT_DEV_PIXELPIPE_DISPLAY_PASSTHRU;
 
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->show_highlight_mask), !g->show_mask);
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->show_highlight_mask), g->show_mask);
   dt_iop_set_cache_bypass(self, g->show_mask);
   dt_dev_pixelpipe_update_history_main(self->dev);
 }
@@ -3582,7 +3582,11 @@ void reload_defaults(dt_iop_module_t *module)
   d->white_point_source = module->so->get_f("white_point_source")->Float.Default;
   d->output_power = module->so->get_f("output_power")->Float.Default;
 
-  if(dt_image_is_raw(&module->dev->image_storage))
+  // Scene-referred dynamic-range defaults apply to any raw-colorimetry image (mosaiced raw
+  // OR already-demosaiced sraw/linear DNG), so gate on needs_rawprepare rather than the
+  // mosaic-centric DT_IMAGE_RAW flag, otherwise an sraw/linear DNG silently gets the
+  // display-referred defaults.
+  if(dt_image_needs_rawprepare(&module->dev->image_storage))
   {
     // For scene-referred workflow, auto-enable and adjust based on exposure
     // TODO: fetch actual exposure in module, don't assume 1.
@@ -3598,6 +3602,10 @@ void reload_defaults(dt_iop_module_t *module)
 
     module->workflow_enabled = TRUE;
   }
+  dt_iop_fmt_log(module, "reload_defaults: class=%s needs_rawprepare=%d -> workflow_enabled=%d white=%.3f black=%.3f",
+                 dt_image_pipe_class_name(dt_image_pipe_class(&module->dev->image_storage)),
+                 dt_image_needs_rawprepare(&module->dev->image_storage), module->workflow_enabled,
+                 d->white_point_source, d->black_point_source);
 }
 
 
@@ -3739,7 +3747,7 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
   PangoLayout *layout = pango_cairo_create_layout(cr);
 
   pango_layout_set_font_description(layout, desc);
-  pango_cairo_context_set_resolution(pango_layout_get_context(layout), darktable.gui->dpi);
+  dt_gui_set_pango_resolution(layout);
   g->context = gtk_widget_get_style_context(widget);
 
   char text[256];
@@ -4757,18 +4765,7 @@ static gboolean area_motion_notify(GtkWidget *widget, GdkEventMotion *event, gpo
 
 static gboolean area_scroll_callback(GtkWidget *widget, GdkEventScroll *event, gpointer user_data)
 {
-  if(dt_modifier_is(event->state, GDK_CONTROL_MASK))
-  {
-    int delta_y;
-    if(dt_gui_get_scroll_unit_deltas(event, NULL, &delta_y))
-    {
-      //adjust aspect
-      const int aspect = dt_conf_get_int("plugins/darkroom/filmicrgb/aspect_percent");
-      dt_conf_set_int("plugins/darkroom/filmicrgb/aspect_percent", aspect + delta_y);
-      dtgtk_drawing_area_set_aspect_ratio(widget, aspect / 100.0);
-    }
-    return TRUE; // Ensure that scrolling cannot move side panel when no delta
-  }
+  // let scroll events fall through (e.g. to scroll the panel); the height is set via the grip
   return FALSE;
 }
 
@@ -4782,9 +4779,9 @@ void gui_init(dt_iop_module_t *self)
   g->gui_hover = FALSE;
   g->gui_sizes_inited = FALSE;
 
-  // don't make the area square to safe some vertical space -- it's not interactive anyway
-  const float aspect = dt_conf_get_int("plugins/darkroom/filmicrgb/aspect_percent") / 100.0;
-  g->area = GTK_DRAWING_AREA(dtgtk_drawing_area_new_with_aspect_ratio(aspect));
+  // the graph is not interactive; give it a modest default height, user-resizable via its grip
+  g->area = GTK_DRAWING_AREA(gtk_drawing_area_new());
+  gtk_widget_set_hexpand(GTK_WIDGET(g->area), TRUE);
   g_object_set_data(G_OBJECT(g->area), "iop-instance", self);
 
   gtk_widget_set_can_focus(GTK_WIDGET(g->area), TRUE);
@@ -4840,7 +4837,7 @@ void gui_init(dt_iop_module_t *self)
                                                     "useful to give a safety margin to extreme luminances."));
 
   // Auto tune slider
-  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(hbox), dt_ui_label_new(_("auto tune levels")), TRUE, TRUE, 0);
   g->auto_button = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, NULL);
   gtk_box_pack_start(GTK_BOX(hbox), g->auto_button, FALSE, FALSE, 0);
@@ -4886,13 +4883,13 @@ void gui_init(dt_iop_module_t *self)
                                 "increase to make the transition softer and blurrier."));
 
   // Highlight Reconstruction Mask
-  hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(hbox), dt_ui_label_new(_("display highlight reconstruction mask")), TRUE, TRUE, 0);
   g->show_highlight_mask = dt_iop_togglebutton_new(self, NULL, N_("display highlight reconstruction mask"), NULL, G_CALLBACK(show_mask_callback),
                                            FALSE, 0, 0, dtgtk_cairo_paint_showmask, hbox);
   dtgtk_togglebutton_set_paint(DTGTK_TOGGLEBUTTON(g->show_highlight_mask), dtgtk_cairo_paint_showmask, 0, NULL);
   dt_gui_add_class(g->show_highlight_mask, "dt_bauhaus_alignment");
-  dt_gui_add_class(g->show_highlight_mask, "dt_transparent_background");
+
   gtk_box_pack_start(GTK_BOX(self->widget), hbox, FALSE, FALSE, 0);
 
   label = dt_ui_section_label_new(_("balance"));
@@ -5062,9 +5059,12 @@ void gui_init(dt_iop_module_t *self)
                                                        "this should be 100%\nexcept if you want a faded look"));
 
   // start building top level widget
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
-  gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(g->area), TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(self->widget),
+                     dt_ui_resizable_drawing_area(GTK_WIDGET(g->area),
+                                                  "plugins/darkroom/filmicrgb/graphheight", 230, 100),
+                     FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(g->notebook), FALSE, FALSE, 0);
 }
 

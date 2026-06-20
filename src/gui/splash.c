@@ -542,13 +542,13 @@ void dt_gui_splash_init(void)
   gtk_container_add(GTK_CONTAINER(overlay), splash->drawing);
   g_signal_connect(G_OBJECT(splash->drawing), "draw", G_CALLBACK(_splash_draw), NULL);
 
-  GtkWidget *info_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  GtkWidget *info_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_widget_set_name(info_box, "splash-info");
   gtk_widget_set_halign(info_box, GTK_ALIGN_START);
   gtk_widget_set_valign(info_box, GTK_ALIGN_END);
   gtk_overlay_add_overlay(GTK_OVERLAY(overlay), info_box);
 
-  GtkWidget *header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_widget_set_name(header, "splash-header");
   gtk_box_pack_start(GTK_BOX(info_box), header, FALSE, FALSE, 0);
 
@@ -564,7 +564,7 @@ void dt_gui_splash_init(void)
     gtk_box_pack_start(GTK_BOX(header), splash->logo, FALSE, FALSE, 0);
   }
 
-  GtkWidget *title_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  GtkWidget *title_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_widget_set_name(title_box, "splash-title-box");
   gtk_box_pack_start(GTK_BOX(header), title_box, FALSE, FALSE, 0);
 
@@ -582,7 +582,7 @@ void dt_gui_splash_init(void)
   dt_free(authors_line);
   gtk_box_pack_start(GTK_BOX(title_box), authors_fixed, FALSE, FALSE, 0);
 
-  GtkWidget *ticker_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *ticker_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_widget_set_name(ticker_box, "splash-ticker");
   gtk_widget_set_halign(ticker_box, GTK_ALIGN_FILL);
   gtk_widget_set_valign(ticker_box, GTK_ALIGN_END);

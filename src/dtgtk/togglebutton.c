@@ -124,15 +124,17 @@ static gboolean _togglebutton_draw(GtkWidget *widget, cairo_t *cr)
     cwidth -= border.left + border.right + padding.left + padding.right;
     cheight -= border.top + border.bottom + padding.top + padding.bottom;
 
-    /* we have to leave some breathing room to the cairo icon paint function to possibly    */
-    /* draw slightly outside the bounding box, for optical alignment and balancing of icons */
-    /* we do this by putting a drawing area widget inside the button and using the CSS      */
-    /* margin property in px of the drawing area as extra room in percent (DPI safe)        */
-    /* we do this because Gtk+ does not support CSS size in percent                         */
-    /* this extra margin can be also (slightly) negative                                    */
-    GtkStyleContext *ccontext = gtk_widget_get_style_context(DTGTK_TOGGLEBUTTON(widget)->canvas);
-    GtkBorder cmargin;
-    gtk_style_context_get_margin(ccontext, state, &cmargin);
+    /* The icon margin is read from our drawing-area child only while GTK still owns it.
+       gtk_button_set_label() can replace the child with a label, which destroys the
+       canvas and leaves our stored pointer stale. In that case, we keep drawing the
+       icon with no extra margin instead of dereferencing an invalid child pointer. */
+    GtkBorder cmargin = { 0 };
+    GtkWidget *canvas = gtk_bin_get_child(GTK_BIN(widget));
+    if(!IS_NULL_PTR(canvas) && canvas == DTGTK_TOGGLEBUTTON(widget)->canvas)
+    {
+      GtkStyleContext *ccontext = gtk_widget_get_style_context(canvas);
+      gtk_style_context_get_margin(ccontext, state, &cmargin);
+    }
 
     startx += round(cmargin.left * cwidth / 100.0f);
     starty += round(cmargin.top * cheight / 100.0f);
@@ -159,7 +161,10 @@ GtkWidget *dtgtk_togglebutton_new(DTGTKCairoPaintIconFunc paint, gint paintflags
   button->canvas = gtk_drawing_area_new();
   gtk_container_add(GTK_CONTAINER(button), button->canvas);
   dt_gui_add_class(GTK_WIDGET(button), "dt_module_btn");
-  gtk_widget_set_name(GTK_WIDGET(button->canvas), "button-canvas");
+  gtk_widget_set_valign(GTK_WIDGET(button), GTK_ALIGN_CENTER);
+  gtk_widget_set_halign(GTK_WIDGET(button), GTK_ALIGN_CENTER);
+  gtk_widget_set_vexpand(GTK_WIDGET(button), FALSE);
+  gtk_widget_set_hexpand(GTK_WIDGET(button), FALSE);
   return (GtkWidget *)button;
 }
 

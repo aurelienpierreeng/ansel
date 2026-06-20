@@ -66,6 +66,7 @@
 */
 #ifdef HAVE_CONFIG_H
 #include "common/darktable.h"
+#include "gui/gdkkeys.h"
 #include "config.h"
 #endif
 #include <assert.h>
@@ -1038,24 +1039,25 @@ static gboolean dt_iop_tonecurve_key_press(GtkWidget *widget, GdkEventKey *event
 
   if(c->selected < 0) return FALSE;
 
+  guint key = dt_keys_mainpad_alternatives(event->keyval);
   int handled = 0;
   float dx = 0.0f, dy = 0.0f;
-  if(event->keyval == GDK_KEY_Up || event->keyval == GDK_KEY_KP_Up)
+  if(key == GDK_KEY_Up)
   {
     handled = 1;
     dy = TONECURVE_DEFAULT_STEP;
   }
-  else if(event->keyval == GDK_KEY_Down || event->keyval == GDK_KEY_KP_Down)
+  else if(key == GDK_KEY_Down)
   {
     handled = 1;
     dy = -TONECURVE_DEFAULT_STEP;
   }
-  else if(event->keyval == GDK_KEY_Right || event->keyval == GDK_KEY_KP_Right)
+  else if(key == GDK_KEY_Right)
   {
     handled = 1;
     dx = TONECURVE_DEFAULT_STEP;
   }
-  else if(event->keyval == GDK_KEY_Left || event->keyval == GDK_KEY_KP_Left)
+  else if(key == GDK_KEY_Left)
   {
     handled = 1;
     dx = -TONECURVE_DEFAULT_STEP;
@@ -1094,7 +1096,7 @@ void gui_init(struct dt_iop_module_t *self)
                                                  "not displayed. chroma values (a and b) of each pixel are "
                                                  "then adjusted based on L curve data. auto XYZ is similar "
                                                  "but applies the saturation changes in XYZ space."));
-  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
 
   c->channel_tabs = dt_ui_notebook_new();
   dt_ui_notebook_page(c->channel_tabs, N_("L"), _("tonecurve for L channel"));
@@ -1109,9 +1111,13 @@ void gui_init(struct dt_iop_module_t *self)
 
   gtk_box_pack_start(GTK_BOX(self->widget), hbox, FALSE, FALSE, 0);
 
-  c->area = GTK_DRAWING_AREA(dtgtk_drawing_area_new_with_aspect_ratio(1.0));
+  c->area = GTK_DRAWING_AREA(gtk_drawing_area_new());
+  gtk_widget_set_hexpand(GTK_WIDGET(c->area), TRUE);
   g_object_set_data(G_OBJECT(c->area), "iop-instance", self);
-  gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(c->area), TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(self->widget),
+                     dt_ui_resizable_drawing_area(GTK_WIDGET(c->area),
+                                                  "plugins/darkroom/tonecurve/graphheight", 280, 100),
+                     FALSE, FALSE, 0);
 
   // FIXME: that tooltip goes in the way of the numbers when you hover a node to get a reading
   //gtk_widget_set_tooltip_text(GTK_WIDGET(c->area), _("double click to reset curve"));

@@ -201,6 +201,7 @@ int dt_gui_hist_dialog_new(dt_history_copy_item_t *d, int32_t imgid, gboolean is
   GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
   gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
   gtk_scrolled_window_set_min_content_height(GTK_SCROLLED_WINDOW(scroll), DT_PIXEL_APPLY_DPI(450));
+  dt_gui_add_class(scroll, "dt_recessed_scroll");
 
   /* create the list of items */
   d->items = GTK_TREE_VIEW(gtk_tree_view_new());
@@ -256,14 +257,16 @@ int dt_gui_hist_dialog_new(dt_history_copy_item_t *d, int32_t imgid, gboolean is
       if(!(flags & IOP_FLAGS_HIDDEN))
       {
         const gboolean is_safe = !dt_history_module_skip_copy(flags);
+        gchar *clean_name = delete_underscore(item->name);
 
         gtk_list_store_append(GTK_LIST_STORE(liststore), &iter);
         gtk_list_store_set(GTK_LIST_STORE(liststore), &iter,
                            DT_HIST_ITEMS_COL_ENABLED, iscopy ? is_safe : _gui_is_set(d->selops, item->num),
                            DT_HIST_ITEMS_COL_ISACTIVE, (gboolean)item->enabled ? is_active_pb : is_inactive_pb,
-                           DT_HIST_ITEMS_COL_NAME, item->name,
+                           DT_HIST_ITEMS_COL_NAME, clean_name,
                            DT_HIST_ITEMS_COL_NUM, (gint)item->num,
                            -1);
+        dt_free(clean_name);
       }
     }
     g_list_free_full(items, dt_history_item_free);

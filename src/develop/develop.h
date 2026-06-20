@@ -164,6 +164,17 @@ typedef struct dt_develop_t
   int exit; // set to 1 to close background darkroom pipeline threads
   struct dt_iop_module_t *gui_module; // this module claims gui expose/event callbacks.
 
+  /**
+   * @brief Revision of the global mask-preview appearance.
+   *
+   * @details
+   * Toolbar settings are not module parameters and therefore do not alter the
+   * history hash. The main pipe hashes this revision at the module currently
+   * requesting a mask preview so that this module and its successors are
+   * recomputed when the preview colors, checker size or greyscale mode change.
+   */
+  dt_atomic_int mask_preview_settings_revision;
+
   // The roi structure is used in darkroom GUI only.
   // It defines the output size of the image backbuffer fitting
   // into the darkroom center widget. This is critically used for all
@@ -281,6 +292,24 @@ typedef struct dt_develop_t
   int undo_history_before_end;
   GList *undo_history_before_iop_order_list;
 
+  // Out-of-history transient param channel. Lets the focused module (e.g. drawlayer realtime stroke,
+  // ashift/crop edit mode) push a thread-safe snapshot of its in-progress params to the pipeline for
+  // rendering, WITHOUT writing permanent history (so undo is not polluted and the database is not
+  // touched per frame). The pipe reads these from its own thread under the mutex and feeds them to
+  // commit_params(), so the transient state reaches the cache through the normal piece->global_hash
+  // mechanism. Only one module (the focused gui_module) is ever active. See dev_transient API in
+  // dev_history.{c,h}.
+  struct
+  {
+    struct dt_iop_module_t *module; // owning module, NULL when inactive
+    void *params;                   // malloc'd copy of the module's transient params
+    int32_t params_size;
+    void *blend_params;             // malloc'd copy of transient blend params, or NULL
+    int32_t blend_size;
+    uint64_t serial;                // bumped on every publish, for change detection
+  } transient_params;
+  dt_pthread_mutex_t transient_params_mutex;
+
   // profiles info
   GList *allprofile_info;
 
@@ -372,6 +401,8 @@ typedef struct dt_develop_t
     uint64_t piece_hash;
     uint64_t wait_input_hash;
     uint64_t wait_output_hash;
+    dt_dev_pixelpipe_cache_wait_t input_wait;
+    dt_dev_pixelpipe_cache_wait_t output_wait;
 
     struct dt_iop_module_t *pending_module;
     struct dt_dev_pixelpipe_t *pending_pipe;

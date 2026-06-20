@@ -663,6 +663,20 @@ error:
 }
 #endif
 
+gboolean force_enable(struct dt_iop_module_t *self, const gboolean current_state)
+{
+  // History sanitization: white balance has nothing to balance on a true monochrome sensor, so a
+  // WB entry pasted onto a monochrome image is forced off here, at history-read time. For every
+  // other image (including non-raw, where manual WB is allowed) the user's state is preserved.
+  // This mirrors reload_defaults(), which hides the on/off button for monochrome images.
+  const gboolean mono = dt_image_is_monochrome(&self->dev->image_storage);
+  const gboolean state = current_state && !mono;
+  dt_iop_fmt_log(self, "force_enable: class=%s mono=%d current=%d -> %d",
+                 dt_image_pipe_class_name(dt_image_pipe_class(&self->dev->image_storage)),
+                 mono, current_state, state);
+  return state;
+}
+
 void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_t *pipe,
                    dt_dev_pixelpipe_iop_t *piece)
 {
@@ -670,16 +684,18 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   dt_iop_temperature_data_t *d = (dt_iop_temperature_data_t *)piece->data;
   dt_iop_temperature_gui_data_t *g = (dt_iop_temperature_gui_data_t *)self->gui_data;
 
-  if(self->hide_enable_button)
-  {
-    piece->enabled = 0;
-    return;
-  }
-
   d->coeffs[0] = p->red;
   d->coeffs[1] = p->green;
   d->coeffs[2] = p->blue;
-  d->coeffs[3] = p->g2;
+  // Legacy-history / non-4-colour safety net: older edits may have stored g2 = NaN (the historical
+  // "usually NAN for RGB" second-green value, see find_coeffs). A NaN/0 multiplier would poison
+  // half the green CFA sites, so fall back to the first green when g2 isn't a usable number.
+  const gboolean g2_usable = isnormal(p->g2) || (self->dev->image_storage.flags & DT_IMAGE_4BAYER);
+  d->coeffs[3] = g2_usable ? p->g2 : p->green;
+  dt_iop_fmt_log(self, "commit: class=%s matrix_supported=%d coeffs=[%.4f %.4f %.4f %.4f] g2_in=%.4f g2_usable=%d -> enabled=%d",
+                 dt_image_pipe_class_name(dt_image_pipe_class(&self->dev->image_storage)),
+                 dt_image_is_matrix_correction_supported(&self->dev->image_storage),
+                 d->coeffs[0], d->coeffs[1], d->coeffs[2], d->coeffs[3], p->g2, g2_usable, piece->enabled);
   for(int k = 0; k < 4; k++) self->dev->proxy.wb_coeffs[k] = d->coeffs[k];
   piece->dsc_out.temperature.enabled = 1;
   for(int k = 0; k < 4; k++)
@@ -1051,9 +1067,11 @@ static void prepare_matrices(dt_iop_module_t *module)
                                     { 0.0556434, -0.2040259, 1.0572252 },
                                     { 0, 0, 0 } };
 
-  if(!dt_image_is_raw(&module->dev->image_storage))
+  if(!dt_image_needs_rawprepare(&module->dev->image_storage))
   {
-    // let's just assume for now(TM) that if it is not raw, it is sRGB
+    // let's just assume for now(TM) that if it has no raw colorimetry, it is sRGB.
+    // Gate on the colorimetry axis (raw or sRAW), not on the mosaic-only "raw" flag, otherwise
+    // an already-demosaiced raw (sRAW / linear DNG) would skip its camera matrix here (issue #729).
     memcpy(g->XYZ_to_CAM, XYZ_to_RGB, sizeof(g->XYZ_to_CAM));
     memcpy(g->CAM_to_XYZ, RGB_to_XYZ, sizeof(g->CAM_to_XYZ));
     return;
@@ -1084,6 +1102,12 @@ static void find_coeffs(dt_iop_module_t *module, double coeffs[4])
   if(ok)
   {
     for(int k = 0; k < 4; k++) coeffs[k] = img->wb_coeffs[k];
+    // wb_coeffs[3] is the SECOND green multiplier. For non-4-colour sensors (standard RGGB Bayer,
+    // X-Trans) both green sites physically share the first green's multiplier, and many decoders
+    // legitimately leave wb_coeffs[3] as NaN or 0 (see the "usually NAN for RGB" note above, and
+    // the rawspeed DngDecoder which only fills 3 planes). Mirror coeffs[1] when the fourth value
+    // is not a usable number, so we never propagate NaN into the G2 sites of the CFA.
+    if(!(img->flags & DT_IMAGE_4BAYER) && !isnormal(coeffs[3])) coeffs[3] = coeffs[1];
     return;
   }
 
@@ -1173,6 +1197,10 @@ void reload_defaults(dt_iop_module_t *module)
       }
     }
   }
+
+  dt_iop_fmt_log(module, "reload_defaults: class=%s matrix_supported=%d mono=%d modern=%d -> default_enabled=%d coeffs=[%.4f %.4f %.4f %.4f]",
+                 dt_image_pipe_class_name(dt_image_pipe_class(&module->dev->image_storage)),
+                 is_raw, monochrome, is_modern, module->default_enabled, d->red, d->green, d->blue, d->g2);
 
   // remember daylight wb used for temperature/tint conversion,
   // assuming it corresponds to CIE daylight (D65)
@@ -1469,7 +1497,7 @@ void gui_init(struct dt_iop_module_t *self)
   const int feedback = TRUE;
   g->button_bar_visible = TRUE;
 
-  GtkBox *box_enabled = GTK_BOX(gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE));
+  GtkBox *box_enabled = GTK_BOX(gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING));
 
   g->btn_asshot = dt_iop_togglebutton_new(self, N_("settings"), N_("as shot"), NULL,
                                           G_CALLBACK(btn_toggled), FALSE, 0, 0,
@@ -1482,7 +1510,7 @@ void gui_init(struct dt_iop_module_t *self)
   // actual kind of data we are using in the GUI (it is part of the pipeline).
   g->colorpicker = dt_color_picker_new_with_cst(self, DT_COLOR_PICKER_AREA, NULL, IOP_CS_NONE);
   dtgtk_togglebutton_set_paint(DTGTK_TOGGLEBUTTON(g->colorpicker), dtgtk_cairo_paint_colorpicker, 0, NULL);
-  dt_gui_add_class(g->colorpicker, "dt_transparent_background");
+
   gtk_widget_set_tooltip_text(g->colorpicker, _("set white balance to detected from area"));
 
   g->btn_user = dt_iop_togglebutton_new(self, N_("settings"), N_("user modified"), NULL,
@@ -1496,7 +1524,7 @@ void gui_init(struct dt_iop_module_t *self)
                                        dtgtk_cairo_paint_bulb, NULL);
   gtk_widget_set_tooltip_text(g->btn_d65, _("set white balance to camera reference point\nin most cases it should be D65"));
 
-  g->buttonbar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0); // put buttons at top. fill later.
+  g->buttonbar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING); // put buttons at top. fill later.
   dt_gui_add_class(g->buttonbar, "dt_iop_toggle");
   gtk_box_pack_end(GTK_BOX(g->buttonbar), g->btn_d65, TRUE, TRUE, 0);
   gtk_box_pack_end(GTK_BOX(g->buttonbar), g->btn_user, TRUE, TRUE, 0);

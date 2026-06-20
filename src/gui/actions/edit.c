@@ -25,6 +25,7 @@
 #include "common/image_cache.h"
 #include "common/history.h"
 #include "common/history_merge.h"
+#include "common/history_merge_gui.h"
 #include "develop/dev_history.h"
 #include "develop/develop.h"
 #include "control/control.h"
@@ -120,7 +121,7 @@ static gboolean compress_history_callback(GtkAccelGroup *group, GObject *acceler
     dt_dev_undo_start_record(dev);
     dt_history_compress_on_image(dev->image_storage.id);
     dt_dev_undo_end_record(dev);
-    dt_menu_apply_dev_history_update(dev, TRUE);
+    dt_menu_apply_dev_history_update(dev);
 
     // Avoid running a headless compression for the current darkroom image: the history module
     // (src/libs/history.c) compresses directly from the loaded pipeline.
@@ -154,7 +155,7 @@ static gboolean delete_history_callback(GtkAccelGroup *group, GObject *accelerat
   if(is_darkroom_image_in_list)
   {
     dt_dev_undo_end_record(darktable.develop);
-    dt_menu_apply_dev_history_update(darktable.develop, TRUE);
+    dt_menu_apply_dev_history_update(darktable.develop);
   }
 
   dt_control_queue_redraw_center();
@@ -230,6 +231,16 @@ static gboolean paste_all_callback(GtkAccelGroup *group, GObject *acceleratable,
     return FALSE;
   }
 
+  if(dt_conf_get_bool("history/paste/ask"))
+  {
+    if(!dt_gui_merge_options_dialog(_("Paste history — merge settings"),
+                                    "history/paste/mode",
+                                    "history/paste/copy_iop_order",
+                                    "history/paste/ask",
+                                    TRUE))
+      return FALSE;
+  }
+
   GList *imgs = dt_selection_get_list(darktable.selection);
 
   // We don't allow pasting on darkroom image
@@ -249,6 +260,16 @@ static gboolean paste_parts_callback(GtkAccelGroup *group, GObject *acceleratabl
   {
     dt_control_log(_("Paste needs selected images to work"));
     return FALSE;
+  }
+
+  if(dt_conf_get_bool("history/paste/ask"))
+  {
+    if(!dt_gui_merge_options_dialog(_("Paste history (parts) — merge settings"),
+                                    "history/paste/mode",
+                                    "history/paste/copy_iop_order",
+                                    "history/paste/ask",
+                                    TRUE))
+      return FALSE;
   }
 
   GList *imgs = dt_selection_get_list(darktable.selection);
@@ -349,7 +370,7 @@ static gboolean load_xmp_callback(GtkAccelGroup *group, GObject *acceleratable, 
   }
 
   if(dt_menu_is_image_in_dev(imgs))
-    dt_menu_apply_dev_history_update(darktable.develop, TRUE);
+    dt_menu_apply_dev_history_update(darktable.develop);
 
   g_object_unref(filechooser);
   g_list_free(imgs);
@@ -411,58 +432,58 @@ static gboolean shortcuts_callback(GtkAccelGroup *group, GObject *acceleratable,
 
 static gboolean history_append_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
-  dt_conf_set_int("history/mode", DT_HISTORY_MERGE_APPEND);
+  dt_conf_set_int("history/paste/mode", DT_HISTORY_MERGE_APPEND);
   return TRUE;
 }
 
 static gboolean history_append_checked_callback(GtkWidget *widget)
 {
-  return dt_conf_get_int("history/mode") == DT_HISTORY_MERGE_APPEND;
+  return dt_conf_get_int("history/paste/mode") == DT_HISTORY_MERGE_APPEND;
 }
 
 static gboolean history_prepend_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
-  dt_conf_set_int("history/mode", DT_HISTORY_MERGE_PREPEND);
+  dt_conf_set_int("history/paste/mode", DT_HISTORY_MERGE_PREPEND);
   return TRUE;
 }
 
 static gboolean history_prepend_checked_callback(GtkWidget *widget)
 {
-  return dt_conf_get_int("history/mode") == DT_HISTORY_MERGE_PREPEND;
+  return dt_conf_get_int("history/paste/mode") == DT_HISTORY_MERGE_PREPEND;
 }
 
 static gboolean history_replace_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval,
                                         GdkModifierType mods, gpointer user_data)
 {
-  dt_conf_set_int("history/mode", DT_HISTORY_MERGE_REPLACE);
+  dt_conf_set_int("history/paste/mode", DT_HISTORY_MERGE_REPLACE);
   return TRUE;
 }
 
 static gboolean history_replace_checked_callback(GtkWidget *widget)
 {
-  return dt_conf_get_int("history/mode") == DT_HISTORY_MERGE_REPLACE;
-}
-/*
-static gboolean paste_instances_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
-{
-  dt_conf_set_bool("history/paste_instances", !dt_conf_get_bool("history/paste_instances"));
-  return TRUE;
+  return dt_conf_get_int("history/paste/mode") == DT_HISTORY_MERGE_REPLACE;
 }
 
-static gboolean paste_instances_checked_callback(GtkWidget *widget)
-{
-  return dt_conf_get_bool("history/paste_instances");
-}
-*/
 static gboolean copy_iop_order_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
-  dt_conf_set_bool("history/copy_iop_order", !dt_conf_get_bool("history/copy_iop_order"));
+  dt_conf_set_bool("history/paste/copy_iop_order", !dt_conf_get_bool("history/paste/copy_iop_order"));
   return TRUE;
 }
 
 static gboolean copy_iop_order_checked_callback(GtkWidget *widget)
 {
-  return dt_conf_get_bool("history/copy_iop_order");
+  return dt_conf_get_bool("history/paste/copy_iop_order");
+}
+
+static gboolean paste_ask_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
+{
+  dt_conf_set_bool("history/paste/ask", !dt_conf_get_bool("history/paste/ask"));
+  return TRUE;
+}
+
+static gboolean paste_ask_checked_callback(GtkWidget *widget)
+{
+  return dt_conf_get_bool("history/paste/ask");
 }
 
 void append_edit(GtkWidget **menus, GList **lists, const dt_menus_t index)
@@ -492,22 +513,30 @@ void append_edit(GtkWidget **menus, GList **lists, const dt_menus_t index)
 
   add_sub_sub_menu_entry(menus, parent, lists, _("Prepend"), index, NULL,
                          history_prepend_callback, history_prepend_checked_callback, NULL, NULL, 0, 0);
+  gtk_widget_set_tooltip_text(get_last_widget(lists),
+                              _("Paste copied history BEFORE the current history.\n"
+                                "CURRENT EDITS are applied afterwards and win conflicts."));
 
   add_sub_sub_menu_entry(menus, parent, lists, _("Append"), index, NULL,
                          history_append_callback, history_append_checked_callback, NULL, NULL, 0, 0);
+  gtk_widget_set_tooltip_text(get_last_widget(lists),
+                              _("Paste copied history AFTER the current history.\n"
+                                "COPIED EDITS are applied afterwards and win conflicts."));
 
   add_sub_sub_menu_entry(menus, parent, lists, _("Replace"), index, NULL,
                          history_replace_callback, history_replace_checked_callback, NULL, NULL, 0, 0);
+  gtk_widget_set_tooltip_text(get_last_widget(lists),
+                              _("Discard the current history and replace it entirely with the copied history."));
 
   add_top_submenu_entry(menus, lists, _("Nodes pasting mode"), index);
   parent = get_last_widget(lists);
 
   add_sub_sub_menu_entry(menus, parent, lists, _("Copy module order"), index, NULL,
                          copy_iop_order_callback, copy_iop_order_checked_callback, NULL, NULL, 0, 0);
-  /*
-  add_sub_sub_menu_entry(menus, parent, lists, _("Paste modules as new instances"), index, NULL,
-                         paste_instances_callback, paste_instances_checked_callback, NULL, NULL, 0, 0);
-  */
+
+  add_sub_menu_entry(menus, lists, _("Ask merge settings before paste"), index, NULL,
+                     paste_ask_callback, paste_ask_checked_callback, NULL, NULL, 0, 0);
+
   add_menu_separator(menus[index]);
 
   add_sub_menu_entry(menus, lists, _("Load history from XMP..."), index, NULL,

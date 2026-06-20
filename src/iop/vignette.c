@@ -275,7 +275,7 @@ static int get_grab(dt_iop_module_t *self, float pointerx, float pointery, float
                     float zoom_scale)
 {
   // trick to convert the radius from image norm to preview abs
-  float radius[2] = { DT_GUI_MOUSE_EFFECT_RADIUS_SCALED, 0 };
+  float radius[2] = { DT_GUI_MOUSE_EFFECT_RADIUS, 0 };
   dt_dev_coordinates_image_abs_to_image_norm(self->dev, radius, 1);
   dt_dev_coordinates_image_norm_to_preview_abs(self->dev, radius, 1); 
   const float radius_sq = radius[0] * radius[0];
@@ -368,8 +368,9 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
                      int32_t pointerx, int32_t pointery)
 {
   dt_develop_t *dev = self->dev;
-  //   dt_iop_vignette_gui_data_t *g = (dt_iop_vignette_gui_data_t *)self->gui_data;
+  dt_iop_vignette_gui_data_t *g = (dt_iop_vignette_gui_data_t *)self->gui_data;
   dt_iop_vignette_params_t *p = (dt_iop_vignette_params_t *)self->params;
+  if(IS_NULL_PTR(g) || IS_NULL_PTR(p)) return;
 
   const float wd = dev->roi.preview_width;
   const float ht = dev->roi.preview_height;
@@ -457,6 +458,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   const dt_develop_t *dev = (const dt_develop_t *)self->dev;
   dt_iop_vignette_gui_data_t *g = (dt_iop_vignette_gui_data_t *)self->gui_data;
   dt_iop_vignette_params_t *p = (dt_iop_vignette_params_t *)self->params;
+  if(IS_NULL_PTR(g) || IS_NULL_PTR(p)) return 0;
   const float wd = dev->roi.preview_width;
   const float ht = dev->roi.preview_height;
   float bigger_side, smaller_side;
@@ -940,6 +942,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
   dt_iop_vignette_gui_data_t *g = (dt_iop_vignette_gui_data_t *)self->gui_data;
   dt_iop_vignette_params_t *p = (dt_iop_vignette_params_t *)self->params;
+  if(IS_NULL_PTR(g) || IS_NULL_PTR(p)) return;
 
   gtk_widget_set_sensitive(GTK_WIDGET(g->whratio), !p->autoratio);
 }
@@ -997,6 +1000,7 @@ void gui_update(struct dt_iop_module_t *self)
 {
   dt_iop_vignette_gui_data_t *g = (dt_iop_vignette_gui_data_t *)self->gui_data;
   dt_iop_vignette_params_t *p = (dt_iop_vignette_params_t *)self->params;
+  if(IS_NULL_PTR(g) || IS_NULL_PTR(p)) return;
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->autoratio), p->autoratio);
   gtk_widget_set_sensitive(GTK_WIDGET(g->whratio), !p->autoratio);
 }

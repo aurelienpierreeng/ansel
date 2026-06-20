@@ -223,7 +223,7 @@ static void _grid_subdiv_changed(GtkWidget *w, void *data)
 
 static GtkWidget *_guides_gui_grid(dt_iop_module_t *self, void *user_data)
 {
-  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   GtkWidget *grid_horizontal = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(NULL), 0, 12, 1, 3, 0);
   dt_bauhaus_slider_set_hard_max(grid_horizontal, 36);
@@ -707,7 +707,7 @@ GtkWidget *dt_guides_popover(dt_view_t *self, GtkWidget *button)
   // create a new struct for all the widgets
   _guides_settings_t *gw = (_guides_settings_t *)g_malloc0(sizeof(_guides_settings_t));
   g_object_set_data_full(G_OBJECT(pop), "guides-settings", gw, g_free);
-  GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   // title
   GtkWidget *lb = gtk_label_new(_("global guide overlay settings"));

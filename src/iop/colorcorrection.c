@@ -44,6 +44,7 @@
 */
 #ifdef HAVE_CONFIG_H
 #include "common/darktable.h"
+#include "gui/gdkkeys.h"
 #include "config.h"
 #endif
 #include "bauhaus/bauhaus.h"
@@ -281,7 +282,7 @@ void gui_init(struct dt_iop_module_t *self)
 
   g->selected = 0;
 
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   g->area = GTK_DRAWING_AREA(dtgtk_drawing_area_new_with_aspect_ratio(1.0));
   g_object_set_data(G_OBJECT(g->area), "iop-instance", self);
@@ -505,25 +506,26 @@ static gboolean dt_iop_colorcorrection_key_press(GtkWidget *widget, GdkEventKey 
   dt_iop_colorcorrection_gui_data_t *g = (dt_iop_colorcorrection_gui_data_t *)self->gui_data;
   dt_iop_colorcorrection_params_t *p = (dt_iop_colorcorrection_params_t *)self->params;
   if(g->selected < 1) return FALSE;
+  guint key = dt_keys_mainpad_alternatives(event->keyval);
 
   int handled = 0;
   float dx = 0.0f, dy = 0.0f;
-  if(event->keyval == GDK_KEY_Up || event->keyval == GDK_KEY_KP_Up)
+  if(key == GDK_KEY_Up)
   {
     handled = 1;
     dy = COLORCORRECTION_DEFAULT_STEP;
   }
-  else if(event->keyval == GDK_KEY_Down || event->keyval == GDK_KEY_KP_Down)
+  else if(key == GDK_KEY_Down)
   {
     handled = 1;
     dy = -COLORCORRECTION_DEFAULT_STEP;
   }
-  else if(event->keyval == GDK_KEY_Right || event->keyval == GDK_KEY_KP_Right)
+  else if(key == GDK_KEY_Right)
   {
     handled = 1;
     dx = COLORCORRECTION_DEFAULT_STEP;
   }
-  else if(event->keyval == GDK_KEY_Left || event->keyval == GDK_KEY_KP_Left)
+  else if(key == GDK_KEY_Left)
   {
     handled = 1;
     dx = -COLORCORRECTION_DEFAULT_STEP;

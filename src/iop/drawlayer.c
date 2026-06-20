@@ -41,6 +41,7 @@
 #include "develop/imageop_math.h"
 #include "develop/noise_generator.h"
 #include "develop/pixelpipe_cache.h"
+#include "common/interpolation.h"
 #include "gui/color_picker_proxy.h"
 #include "gui/gtk.h"
 #include "gui/gui_throttle.h"
@@ -810,7 +811,15 @@ static int _drawlayer_copy_or_resample_layer_roi(const int devid, cl_mem dev_sou
     if(copy_err == CL_SUCCESS) return CL_SUCCESS;
   }
 
-  return dt_iop_clip_and_zoom_cl(devid, dev_layer_rgba, dev_source_rgba, target_roi, source_roi);
+  /* Force bilinear for the layer matte. The premultiplied-alpha brush stroke is
+   * stamped at full canvas resolution, so this resample only ever previews it at
+   * display scale (mostly downscaling). Bilinear is the only kernel here with no
+   * negative lobes: it cannot overshoot, so it never rings/halos at stroke edges
+   * nor pushes alpha out of [0,1] — unlike the user-pref default (Lanczos) or the
+   * Catmull-Rom "bicubic". On minification dt_interpolation_resample widens the
+   * tap support, so bilinear acts as a clean area filter (no aliasing). */
+  const struct dt_interpolation *const itor = dt_interpolation_new(DT_INTERPOLATION_BILINEAR);
+  return dt_interpolation_resample_cl(itor, devid, dev_layer_rgba, target_roi, dev_source_rgba, source_roi);
 }
 
 static gboolean _drawlayer_acquire_layer_image(const int devid, dt_pixel_cache_entry_t *resolved_entry,
@@ -872,6 +881,55 @@ static int _drawlayer_run_premult_over_kernel(const int devid, const int kernel_
   return dt_opencl_enqueue_kernel_2d(devid, kernel_premult_over, sizes);
 }
 
+/* Influence radius (in target/display pixels) of a changed source pixel through
+ * the resampling interpolation. interpolation.c maps a target output pixel to a
+ * source window whose half-width is ~support/scale source pixels; transformed
+ * back to target space that footprint is ~support pixels regardless of scale, so
+ * a fixed, generous target-space margin keeps partial-resample edges seamless. */
+#define DRAWLAYER_RESAMPLE_DAMAGE_MARGIN 8
+
+/* Map a layer-space (source) damage rectangle to the output (target) display
+ * window it affects, padded by the interpolation support so resampled edges stay
+ * seamless. Returns TRUE and fills *out (nw inclusive / se exclusive, clamped to
+ * the target ROI, in target-local coordinates) only when the mapped window is a
+ * strict sub-rect of the target worth a partial composite. */
+static gboolean _drawlayer_map_source_damage_to_target(const dt_drawlayer_damaged_rect_t *src_damage,
+                                                       const dt_iop_roi_t *const target_roi,
+                                                       const dt_iop_roi_t *const source_roi,
+                                                       dt_drawlayer_damaged_rect_t *out)
+{
+  if(IS_NULL_PTR(src_damage) || !src_damage->valid || IS_NULL_PTR(target_roi) || IS_NULL_PTR(source_roi)
+     || IS_NULL_PTR(out))
+    return FALSE;
+  if(target_roi->width <= 0 || target_roi->height <= 0 || target_roi->scale <= 0.0f) return FALSE;
+
+  const double scale = target_roi->scale;
+  const int margin = DRAWLAYER_RESAMPLE_DAMAGE_MARGIN;
+  /* out = (source + source_roi.x) * scale - target_roi.x  (inverse of the
+   * interpolation source mapping source = (target_roi.x + out)/scale - source_roi.x). */
+  const double sx0 = (double)src_damage->nw[0] + source_roi->x;
+  const double sy0 = (double)src_damage->nw[1] + source_roi->y;
+  const double sx1 = (double)src_damage->se[0] + source_roi->x;
+  const double sy1 = (double)src_damage->se[1] + source_roi->y;
+
+  int tx0 = (int)floor(sx0 * scale - target_roi->x) - margin;
+  int ty0 = (int)floor(sy0 * scale - target_roi->y) - margin;
+  int tx1 = (int)ceil(sx1 * scale - target_roi->x) + margin;
+  int ty1 = (int)ceil(sy1 * scale - target_roi->y) + margin;
+
+  tx0 = CLAMP(tx0, 0, target_roi->width);
+  ty0 = CLAMP(ty0, 0, target_roi->height);
+  tx1 = CLAMP(tx1, 0, target_roi->width);
+  ty1 = CLAMP(ty1, 0, target_roi->height);
+
+  if(tx1 <= tx0 || ty1 <= ty0) return FALSE;
+  /* Whole-frame damage is not worth the partial path's bookkeeping. */
+  if(tx0 == 0 && ty0 == 0 && tx1 == target_roi->width && ty1 == target_roi->height) return FALSE;
+
+  *out = (dt_drawlayer_damaged_rect_t){ .valid = TRUE, .nw = { tx0, ty0 }, .se = { tx1, ty1 } };
+  return TRUE;
+}
+
 static int _blend_layer_over_input_cl(const int devid, const int kernel_premult_over, cl_mem dev_out,
                                       cl_mem dev_in, drawlayer_process_scratch_t *scratch,
                                       const float *layer_pixels, dt_pixel_cache_entry_t *source_entry,
@@ -880,7 +938,7 @@ static int _blend_layer_over_input_cl(const int devid, const int kernel_premult_
                                       const dt_iop_roi_t *const target_roi, const dt_iop_roi_t *const source_roi,
                                       const gboolean direct_copy, const gboolean use_preview_bg,
                                       const float preview_bg, const gboolean realtime_reuse,
-                                      const gboolean force_device_copy)
+                                      const gboolean force_device_copy, const gboolean allow_partial)
 {
   if(devid < 0 || IS_NULL_PTR(dev_out) || IS_NULL_PTR(dev_in) || IS_NULL_PTR(scratch) || (IS_NULL_PTR(layer_pixels) && !source_mem_override) || source_w <= 0
      || source_h <= 0 || !target_roi || target_roi->width <= 0 || target_roi->height <= 0)
@@ -896,8 +954,22 @@ static int _blend_layer_over_input_cl(const int devid, const int kernel_premult_
     resolved_entry_ref = (!IS_NULL_PTR(resolved_entry));
   }
 
+  /* Realtime partial composite: when the caller validated that dev_out still
+   * holds this node's previous full composite (same buffer, hash and geometry)
+   * and only the painted sub-rect of the layer changed, refresh just that window
+   * instead of re-resampling the whole display. The source-damage rectangle must
+   * be snapshotted here because _drawlayer_acquire_source_image() consumes (and
+   * resets) process->cache_dirty_rect while uploading the dirty source region. */
+  dt_drawlayer_damaged_rect_t target_damage = { 0 };
+  const gboolean partial = allow_partial && !use_preview_bg && !direct_copy && !source_mem_override && process
+                           && _drawlayer_map_source_damage_to_target(&process->cache_dirty_rect, target_roi,
+                                                                     source_roi, &target_damage);
+
   drawlayer_cl_image_handle_t source = { 0 };
   drawlayer_cl_image_handle_t layer = { 0 };
+  cl_mem dev_layer_partial = NULL;
+  cl_mem dev_bg_partial = NULL;
+  cl_mem dev_out_partial = NULL;
   cl_mem dev_background = NULL;
   int err = CL_SUCCESS;
   int result = FALSE;
@@ -906,6 +978,70 @@ static int _blend_layer_over_input_cl(const int devid, const int kernel_premult_
   else if(!_drawlayer_acquire_source_image(devid, layer_pixels, resolved_entry, force_device_copy, realtime_reuse,
                                            source_w, source_h, process, &source))
     goto cleanup;
+
+  if(partial)
+  {
+    const int dw = target_damage.se[0] - target_damage.nw[0];
+    const int dh = target_damage.se[1] - target_damage.nw[1];
+    size_t win_origin[3] = { (size_t)target_damage.nw[0], (size_t)target_damage.nw[1], 0 };
+    size_t zero_origin[3] = { 0, 0, 0 };
+    size_t win_region[3] = { (size_t)dw, (size_t)dh, 1 };
+
+    /* All three windows are damage-sized device scratch buffers. We keep the
+     * unmodified full-frame `blendop_premult_over` kernel (local 0,0 coords) and
+     * stage the sub-window through copies so the GPU kernel ABI never changes:
+     *   layer_partial = resample(source, damaged display window)
+     *   bg_partial    = dev_in[window]                       (background slice)
+     *   out_partial   = over(layer_partial, bg_partial)      (full-window kernel)
+     *   dev_out[window] = out_partial                        (refresh in place)
+     * The rest of dev_out keeps the previous full composite. */
+    dev_layer_partial = dt_opencl_alloc_device(devid, dw, dh, 4 * sizeof(float));
+    dev_bg_partial = dt_opencl_alloc_device(devid, dw, dh, 4 * sizeof(float));
+    dev_out_partial = dt_opencl_alloc_device(devid, dw, dh, 4 * sizeof(float));
+    if(IS_NULL_PTR(dev_layer_partial) || IS_NULL_PTR(dev_bg_partial) || IS_NULL_PTR(dev_out_partial))
+    {
+      err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
+      goto cleanup;
+    }
+    /* Resample only the damaged display window from the full-res source. The
+     * sub-window's global target origin maps back to the correct source region
+     * through the unchanged interpolation source mapping. */
+    const dt_iop_roi_t sub_target_roi = {
+      .x = target_roi->x + target_damage.nw[0],
+      .y = target_roi->y + target_damage.nw[1],
+      .width = dw,
+      .height = dh,
+      .scale = target_roi->scale,
+    };
+    err = _drawlayer_copy_or_resample_layer_roi(devid, source.mem, dev_layer_partial, source_w, source_h,
+                                                &sub_target_roi, source_roi);
+    if(err != CL_SUCCESS) goto cleanup;
+
+    err = dt_opencl_enqueue_copy_image(devid, dev_in, dev_bg_partial, win_origin, zero_origin, win_region);
+    if(err != CL_SUCCESS) goto cleanup;
+
+    err = _drawlayer_run_premult_over_kernel(devid, kernel_premult_over, dev_bg_partial, dev_layer_partial,
+                                             dev_out_partial, dw, dh, 0, 0);
+    if(err != CL_SUCCESS) goto cleanup;
+
+    err = dt_opencl_enqueue_copy_image(devid, dev_out_partial, dev_out, zero_origin, win_origin, win_region);
+    if(err != CL_SUCCESS) goto cleanup;
+
+    if(darktable.unmuted & DT_DEBUG_VERBOSE)
+      dt_print(DT_DEBUG_PERF, "[drawlayer] partial composite window=%dx%d at (%d,%d) of %dx%d\n", dw, dh,
+               target_damage.nw[0], target_damage.nw[1], target_roi->width, target_roi->height);
+
+    if(source.is_pinned)
+    {
+      if(!dt_opencl_finish(devid))
+      {
+        err = -1;
+        goto cleanup;
+      }
+    }
+    result = TRUE;
+    goto cleanup;
+  }
 
   if(!_drawlayer_acquire_layer_image(devid, resolved_entry, realtime_reuse, direct_copy, source.mem, source_w,
                                      source_h, target_roi, source_roi, &layer, &err))
@@ -955,6 +1091,9 @@ static int _blend_layer_over_input_cl(const int devid, const int kernel_premult_
   result = TRUE;
 
 cleanup:
+  if(dev_layer_partial) dt_opencl_release_mem_object(dev_layer_partial);
+  if(dev_bg_partial) dt_opencl_release_mem_object(dev_bg_partial);
+  if(dev_out_partial) dt_opencl_release_mem_object(dev_out_partial);
   if(use_preview_bg)
     dt_dev_pixelpipe_cache_put_pinned_image(darktable.pixelpipe_cache, scratch->cl_background_rgba, NULL,
                                             (void **)&dev_background);
@@ -1078,7 +1217,7 @@ static drawlayer_wait_dialog_t _show_drawlayer_wait_dialog(const char *title, co
   gtk_window_set_position(GTK_WINDOW(dialog), GTK_WIN_POS_CENTER_ON_PARENT);
 
   GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
-  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_PIXEL_APPLY_DPI(12));
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   GtkWidget *spinner = gtk_spinner_new();
   GtkWidget *label = gtk_label_new(message);
   gtk_label_set_xalign(GTK_LABEL(label), 0.0f);
@@ -1169,7 +1308,7 @@ static gboolean _prompt_layer_name_dialog(const char *title, const char *message
       GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL, _("Cancel"), GTK_RESPONSE_CANCEL,
       _("Confirm"), GTK_RESPONSE_ACCEPT, NULL);
   GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
-  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_PIXEL_APPLY_DPI(8));
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   GtkWidget *entry = gtk_entry_new();
   if(!IS_NULL_PTR(message) && message[0] != '\0')
   {
@@ -1605,9 +1744,21 @@ gboolean dt_drawlayer_commit_dabs(dt_iop_module_t *self, const gboolean record_h
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
   dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
   if(IS_NULL_PTR(g) || IS_NULL_PTR(self->dev)) return TRUE;
-  if(record_history && g->manager.painting_active)
+  /* A stroke is still physically in progress (button held down). Never finalize or
+   * reset it here — that would truncate the live path. This must guard BOTH commit
+   * kinds: a quiet flush (record_history == FALSE, scheduled by GUI_SCROLL /
+   * GUI_SYNC_TEMP_BUFFERS while pending stroke work exists) would otherwise run
+   * _wait_worker_idle + finalize + _reset_stroke_session mid-stroke without ever
+   * clearing painting_active, silently cutting the stroke short. The realtime worker
+   * already keeps base_patch updated incrementally, so there is nothing to flush
+   * mid-stroke; defer a history commit to the worker and no-op a quiet flush. The
+   * real commit runs on STROKE_END / focus-loss / image-change, where
+   * _apply_runtime_event() has already cleared painting_active first. */
+  if(g->manager.painting_active)
   {
-    dt_drawlayer_worker_request_commit(g->stroke.worker);
+    if(record_history) dt_drawlayer_worker_request_commit(g->stroke.worker);
+    dt_print(DT_DEBUG_PERF, "[drawlayer] commit_dabs deferred: stroke in progress (record_history=%d)\n",
+             record_history);
     return TRUE;
   }
 
@@ -2755,10 +2906,10 @@ void gui_init(dt_iop_module_t *self)
     g->session.last_view_scale = self->dev->roi.scaling;
   }
 
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_IOP_MODULE_CONTROL_SPACING);
+  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   if(self->reset_button) gtk_widget_hide(self->reset_button);
 
-  GtkWidget *history_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_IOP_MODULE_CONTROL_SPACING);
+  GtkWidget *history_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   g->controls.save_layer = gtk_button_new_with_label(_("save sidecar"));
   gtk_box_pack_start(GTK_BOX(history_box), g->controls.save_layer, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(self->widget), history_box, FALSE, FALSE, 0);
@@ -2768,9 +2919,9 @@ void gui_init(dt_iop_module_t *self)
   gtk_widget_set_hexpand(notebook, TRUE);
   gtk_box_pack_start(GTK_BOX(self->widget), notebook, FALSE, FALSE, 0);
 
-  GtkWidget *brush_tab = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_IOP_MODULE_CONTROL_SPACING);
-  GtkWidget *layer_tab = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_IOP_MODULE_CONTROL_SPACING);
-  GtkWidget *input_tab = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_IOP_MODULE_CONTROL_SPACING);
+  GtkWidget *brush_tab = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  GtkWidget *layer_tab = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  GtkWidget *input_tab = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   g->controls.brush_tab = brush_tab;
   g->controls.layer_tab = layer_tab;
   g->controls.input_tab = input_tab;
@@ -2785,7 +2936,7 @@ void gui_init(dt_iop_module_t *self)
   GtkWidget *preview_title = gtk_label_new(_("Background"));
   g->controls.preview_title = preview_title;
   gtk_widget_set_halign(preview_title, GTK_ALIGN_START);
-  GtkWidget *preview_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_IOP_MODULE_CONTROL_SPACING);
+  GtkWidget *preview_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   g->controls.preview_box = preview_box;
   GSList *preview_group = NULL;
   g->controls.preview_bg_image = gtk_radio_button_new_with_label(preview_group, _("image"));
@@ -2818,13 +2969,13 @@ void gui_init(dt_iop_module_t *self)
   gtk_widget_set_size_request(g->controls.color, -1, DT_DRAWLAYER_COLOR_PICKER_HEIGHT);
   gtk_widget_add_events(g->controls.color, GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK | GDK_POINTER_MOTION_MASK);
   gtk_box_pack_start(GTK_BOX(brush_tab), g->controls.color, TRUE, TRUE, 0);
-  g->controls.color_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_PIXEL_APPLY_DPI(16));
+  g->controls.color_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   g->controls.color_swatch = gtk_drawing_area_new();
   gtk_widget_set_size_request(g->controls.color_swatch, -1, DT_PIXEL_APPLY_DPI(DT_DRAWLAYER_COLOR_HISTORY_HEIGHT));
   gtk_widget_add_events(g->controls.color_swatch, GDK_BUTTON_PRESS_MASK);
   gtk_box_pack_start(GTK_BOX(g->controls.color_row), g->controls.color_swatch, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(brush_tab), g->controls.color_row, TRUE, TRUE, 0);
-  GtkWidget *picker_controls = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_PIXEL_APPLY_DPI(6));
+  GtkWidget *picker_controls = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   g->controls.image_colorpicker = dt_color_picker_new_with_cst(self, DT_COLOR_PICKER_POINT_AREA, NULL, IOP_CS_NONE);
   g->controls.image_colorpicker_source = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
   dt_bauhaus_combobox_add(g->controls.image_colorpicker_source, _("input"));
@@ -2909,7 +3060,7 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_slider_set_format(g->controls.sprinkle_coarseness, "%");
   gtk_box_pack_start(GTK_BOX(brush_tab), g->controls.sprinkle_coarseness, TRUE, TRUE, 0);
 
-  GtkWidget *layer_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_IOP_MODULE_CONTROL_SPACING);
+  GtkWidget *layer_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   GtkWidget *layer_status = gtk_label_new("");
   g->controls.layer_status = layer_status;
   gtk_widget_set_halign(layer_status, GTK_ALIGN_START);
@@ -2918,9 +3069,9 @@ void gui_init(dt_iop_module_t *self)
   GtkWidget *layer_fill_title = gtk_label_new(_("Fill"));
   g->controls.layer_fill_title = layer_fill_title;
   gtk_widget_set_halign(layer_fill_title, GTK_ALIGN_START);
-  GtkWidget *layer_action_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_IOP_MODULE_CONTROL_SPACING);
+  GtkWidget *layer_action_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   g->controls.layer_action_row = layer_action_row;
-  GtkWidget *layer_fill_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_IOP_MODULE_CONTROL_SPACING);
+  GtkWidget *layer_fill_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   g->controls.layer_fill_row = layer_fill_row;
   g->controls.layer_select = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
   dt_bauhaus_widget_set_label(g->controls.layer_select, _("Source layer"));
@@ -2950,8 +3101,8 @@ void gui_init(dt_iop_module_t *self)
   GtkWidget *mapping_title = gtk_label_new(_("tablet mapping"));
   gtk_widget_set_halign(mapping_title, GTK_ALIGN_START);
   GtkWidget *grid = gtk_grid_new();
-  gtk_grid_set_row_spacing(GTK_GRID(grid), 2);
-  gtk_grid_set_column_spacing(GTK_GRID(grid), 6);
+  gtk_grid_set_row_spacing(GTK_GRID(grid), DT_GUI_BOX_SPACING);
+  gtk_grid_set_column_spacing(GTK_GRID(grid), DT_GUI_BOX_SPACING);
 
   const char *labels[4] = { _("size"), _("opacity"), _("flow"), _("hardness") };
   const char *rows[3] = { _("pressure"), _("tilt"), _("acceleration") };
@@ -3264,6 +3415,19 @@ void gui_focus(dt_iop_module_t *self, gboolean in)
 }
 
 /** @brief Destroy GUI resources and stop background worker. */
+void quiesce(dt_iop_module_t *self)
+{
+  /* Darkroom is leaving and is about to tear down the pixelpipe nodes and history. The paint worker
+   * runs stroke commits off the GUI thread, and a commit performs a full pipeline history resync
+   * (dt_dev_pixelpipe_update_history_all) that reads/commits every pipe piece. If that runs while
+   * leave() frees the nodes, it faults on freed piece->data. Stop and join the worker now, while the
+   * pipe is still alive, so any in-flight commit completes against valid nodes and no further commit
+   * can start during teardown. */
+  dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
+  if(IS_NULL_PTR(g)) return;
+  dt_drawlayer_worker_stop(self, g->stroke.worker);
+}
+
 void gui_cleanup(dt_iop_module_t *self)
 {
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
@@ -3592,6 +3756,8 @@ int mouse_moved(dt_iop_module_t *self, double x, double y, double pressure, int 
     {
       /* Queue overflow or enqueue failure aborts the current stroke so GUI and
        * worker stay in sync on stroke boundaries. */
+      dt_print(DT_DEBUG_PERF, "[drawlayer] stroke abort from mouse_moved: dispatch.ok=%d raw_input_ok=%d\n",
+               dispatch.ok, dispatch.raw_input_ok);
       dt_drawlayer_runtime_manager_update(
           &g->manager,
           &(dt_drawlayer_runtime_update_request_t){
@@ -3869,11 +4035,48 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     if(fallback)
       goto process_cl_fallback;
 
+    /* The realtime output cacheline is reused in place while only the layer host
+     * pixels change, so when the same device buffer comes back for the same layer
+     * and geometry it still holds the previous full composite and only the painted
+     * sub-rect needs refreshing. The node's global_hash is NOT stable across a
+     * stroke (the heartbeat bumps stroke_commit_hash every frame), so we key on
+     * the stable base-patch layer identity instead. Validate here; the blend
+     * records the new state on success. */
+    dt_drawlayer_process_state_t *const pstate = runtime_request.process_state;
+    const uint64_t layer_hash = pstate ? pstate->base_patch.cache_hash : 0;
+    const gboolean g_valid = pstate && pstate->last_composite_valid;
+    const gboolean g_devout = pstate && pstate->last_composite_dev_out == (void *)dev_out;
+    const gboolean g_hash = pstate && layer_hash != 0 && pstate->last_composite_layer_hash == layer_hash;
+    const gboolean g_roi = pstate && !memcmp(&pstate->last_composite_target_roi, &target_roi, sizeof(dt_iop_roi_t));
+    const gboolean allow_partial = realtime && g_valid && g_devout && g_hash && g_roi;
+    if(realtime && pstate && !allow_partial && (darktable.unmuted & DT_DEBUG_VERBOSE))
+      dt_print(DT_DEBUG_PERF,
+               "[drawlayer] partial gate declined: valid=%d devout=%d hash=%d roi=%d\n",
+               g_valid, g_devout, g_hash, g_roi);
+
     gboolean ok = _blend_layer_over_input_cl(
         pipe->devid, global->kernel_premult_over, dev_out, dev_in, scratch, source_pixels, source_entry, NULL,
         source_width, source_height, runtime_request.process_state, &target_roi, &source_roi, direct_copy,
         preview_bg.enabled, preview_bg.value,
-        reuse_device_buffers, FALSE);
+        reuse_device_buffers, FALSE, allow_partial);
+
+    if(pstate)
+    {
+      if(ok && realtime && !preview_bg.enabled && layer_hash != 0)
+      {
+        /* dev_out now holds a valid full composite for this layer/geometry,
+         * whether produced by the full or the partial path. */
+        pstate->last_composite_dev_out = (void *)dev_out;
+        pstate->last_composite_layer_hash = layer_hash;
+        pstate->last_composite_target_roi = target_roi;
+        pstate->last_composite_valid = TRUE;
+      }
+      else
+      {
+        pstate->last_composite_valid = FALSE;
+        pstate->last_composite_dev_out = NULL;
+      }
+    }
 
     process_post.release = (dt_drawlayer_runtime_release_t){
       .process = runtime_request.process_state,
@@ -3984,8 +4187,13 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
         };
         goto fallback_pass_through;
       }
-      dt_iop_clip_and_zoom(layerbuf, source.pixels, &source.target_roi, &source.source_roi, roi_out->width,
-                           source.width);
+      /* Bilinear (not the user pref) for the layer matte — see the OpenCL path in
+       * _drawlayer_copy_or_resample_layer_roi: no negative lobes => no overshoot,
+       * so no edge halos / out-of-range premultiplied alpha. */
+      {
+        const struct dt_interpolation *const itor = dt_interpolation_new(DT_INTERPOLATION_BILINEAR);
+        dt_interpolation_resample(itor, layerbuf, &source.target_roi, source.pixels, &source.source_roi);
+      }
       layer_pixels = layerbuf;
     }
 

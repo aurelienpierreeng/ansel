@@ -105,3 +105,36 @@ set(BUILD_TESTING "${BUILD_TESTING_SAVE}" CACHE BOOL "" FORCE)
 # Restore parent C flags
 set(CMAKE_C_FLAGS "${_PARENT_C_FLAGS}")
 set(CMAKE_CXX_FLAGS "${_PARENT_CXX_FLAGS}")
+
+#
+# sentry-native (crash reporting). Built with the in-process backend so that no
+# extra handler executable needs to be shipped, and statically so it links
+# straight into lib_ansel. The HTTP transport reuses the libcurl dependency that
+# Ansel already requires on Linux/macOS (WinHTTP is used on Windows).
+#
+if(USE_SENTRY)
+  set(SENTRY_PATH "${CMAKE_CURRENT_SOURCE_DIR}/sentry-native")
+
+  if(NOT(EXISTS "${SENTRY_PATH}" AND IS_DIRECTORY "${SENTRY_PATH}" AND EXISTS "${SENTRY_PATH}/CMakeLists.txt"))
+    message(FATAL_ERROR "sentry-native submodule not found. You probably want to run:\n$ git submodule update --init src/external/sentry-native\nOr configure with -DUSE_SENTRY=OFF.")
+  endif()
+
+  set(_SENTRY_C_FLAGS_SAVE "${CMAKE_C_FLAGS}")
+  set(_SENTRY_CXX_FLAGS_SAVE "${CMAKE_CXX_FLAGS}")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -w")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w")
+
+  set(_SENTRY_SHARED_SAVE "${BUILD_SHARED_LIBS}")
+
+  set(SENTRY_BACKEND inproc CACHE STRING "" FORCE)
+  set(SENTRY_BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+  set(SENTRY_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+  set(SENTRY_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+  set(BUILD_SHARED_LIBS OFF)
+
+  add_subdirectory(sentry-native)
+
+  set(BUILD_SHARED_LIBS "${_SENTRY_SHARED_SAVE}")
+  set(CMAKE_C_FLAGS "${_SENTRY_C_FLAGS_SAVE}")
+  set(CMAKE_CXX_FLAGS "${_SENTRY_CXX_FLAGS_SAVE}")
+endif()

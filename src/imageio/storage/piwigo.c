@@ -795,7 +795,7 @@ void gui_init(dt_imageio_module_storage_t *self)
   ui->accounts = NULL;
   ui->api = NULL;
 
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   _piwigo_load_account(ui);
 
@@ -822,7 +822,7 @@ void gui_init(dt_imageio_module_storage_t *self)
   gtk_box_pack_start(GTK_BOX(self->widget), ui->account_list, FALSE, FALSE, 0);
 
   // server
-  hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   ui->server_entry = GTK_ENTRY(gtk_entry_new());
   dt_accels_disconnect_on_text_input(GTK_WIDGET(ui->server_entry));
   gtk_widget_set_tooltip_text(GTK_WIDGET(ui->server_entry),
@@ -837,7 +837,7 @@ void gui_init(dt_imageio_module_storage_t *self)
   dt_free(server);
 
   // login
-  hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   ui->user_entry = GTK_ENTRY(gtk_entry_new());
   dt_accels_disconnect_on_text_input(GTK_WIDGET(ui->user_entry));
   gtk_widget_set_hexpand(GTK_WIDGET(ui->user_entry), TRUE);
@@ -849,7 +849,7 @@ void gui_init(dt_imageio_module_storage_t *self)
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(hbox), TRUE, TRUE, 0);
 
   // password
-  hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   ui->pwd_entry = GTK_ENTRY(gtk_entry_new());
   dt_accels_disconnect_on_text_input(GTK_WIDGET(ui->pwd_entry));
   gtk_entry_set_visibility(GTK_ENTRY(ui->pwd_entry), FALSE);
@@ -888,7 +888,7 @@ void gui_init(dt_imageio_module_storage_t *self)
   gtk_box_pack_start(GTK_BOX(self->widget), ui->permission_list, FALSE, FALSE, 0);
 
   // album list
-  hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
 
   ui->album_list = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL)); // Available albums
   dt_bauhaus_widget_set_label(ui->album_list, N_("album"));
@@ -904,11 +904,11 @@ void gui_init(dt_imageio_module_storage_t *self)
   gtk_box_pack_start(GTK_BOX(self->widget), hbox, FALSE, FALSE, 0);
 
   // new album
-  ui->create_box = GTK_BOX(gtk_box_new(GTK_ORIENTATION_VERTICAL, 0));
+  ui->create_box = GTK_BOX(gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING));
   gtk_widget_set_no_show_all(GTK_WIDGET(ui->create_box), TRUE);
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(ui->create_box), FALSE, FALSE, 0);
 
-  hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
 
   label = gtk_label_new(_("title"));
   g_object_set(G_OBJECT(label), "xalign", 0.0, (gchar *)0);

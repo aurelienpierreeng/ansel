@@ -36,9 +36,15 @@ typedef struct dt_preview_window_t
   int height;
 } dt_preview_window_t;
 
+void _preview_redraw(gpointer instance, dt_preview_window_t *preview);
+
 static void _preview_window_destroy(GtkWidget *dialog, gpointer user_data)
 {
   dt_preview_window_t *preview = (dt_preview_window_t *)user_data;
+  // Disconnect from DARKROOM_UI_CHANGED before freeing: otherwise the handler keeps
+  // firing with a dangling `preview` pointer and crashes on the next UI change
+  // (e.g. moving the border-size slider).
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_preview_redraw), preview);
   dt_view_image_surface_fetcher_cleanup(&preview->fetcher);
   dt_free(preview);
 }

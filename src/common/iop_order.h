@@ -182,7 +182,7 @@ const char *dt_iop_order_string(const dt_iop_order_t order);
  * @brief Fetch the IOP order version stored for an image.
  *
  * If the image has no stored order, this falls back to the default
- * (currently DT_IOP_ORDER_ANSEL_RAW).
+ * matching the image format, or DT_IOP_ORDER_ANSEL_RAW for UNKNOWN_IMAGE.
  *
  * @param imgid Image id.
  * @return Stored order version or the default built-in order.
@@ -211,11 +211,12 @@ gboolean dt_ioppr_has_iop_order_list(int32_t imgid);
 /**
  * @brief Load the order list for an image from the DB.
  *
- * If no list is found, returns NULL.
+ * If no list is found, returns the built-in default matching the image format,
+ * or DT_IOP_ORDER_ANSEL_RAW for UNKNOWN_IMAGE.
  *
  * @param imgid Image id.
  * @param sorted If TRUE, entries are sorted by iop_order; otherwise the stored order is kept.
- * @return A newly-allocated list of @ref dt_iop_order_entry_t or NULL.
+ * @return A newly-allocated list of @ref dt_iop_order_entry_t.
  */
 GList *dt_ioppr_get_iop_order_list(int32_t imgid, gboolean sorted);
 /**
@@ -353,7 +354,10 @@ void dt_ioppr_update_for_modules(struct dt_develop_t *dev, GList *modules, gbool
 /**
  * @brief Set dev->iop_order_list to the default order for a given image.
  *
- * Uses the image type/workflow to pick an appropriate built-in list.
+ * Uses the stored image order when present. If the image has no stored order,
+ * uses dev->image_storage to pick the RAW or non-RAW built-in list so darkroom
+ * first-run history reloads and offscreen paste/style reloads use the same
+ * image state as the modules.
  *
  * @param dev Develop context.
  * @param imgid Image id.

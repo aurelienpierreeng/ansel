@@ -774,6 +774,7 @@ void dt_control_crawler_show_image_list(GList *images)
   g_object_set(renderer_date, "xalign", 1., NULL);
   gtk_tree_view_append_column(GTK_TREE_VIEW(tree), column);
 
+  dt_gui_add_class(scroll, "dt_recessed_scroll");
   gtk_container_add(GTK_CONTAINER(scroll), tree);
   gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll),
                                  GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
@@ -792,10 +793,10 @@ void dt_control_crawler_show_image_list(GList *images)
   gtk_window_set_transient_for(GTK_WINDOW(dialog), GTK_WINDOW(win));
   GtkWidget *content_area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
 
-  GtkWidget *content_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  GtkWidget *content_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_container_add(GTK_CONTAINER(content_area), content_box);
 
-  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(content_box), box, FALSE, FALSE, 0);
   GtkWidget *select_all = gtk_button_new_with_label(_("select all"));
   GtkWidget *select_none = gtk_button_new_with_label(_("select none"));
@@ -809,7 +810,7 @@ void dt_control_crawler_show_image_list(GList *images)
 
   gtk_box_pack_start(GTK_BOX(content_box), scroll, TRUE, TRUE, 0);
 
-  box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(content_box), box, FALSE, FALSE, 1);
   GtkWidget *label = gtk_label_new_with_mnemonic(_("on the selection:"));
   GtkWidget *reload_button = gtk_button_new_with_label(_("keep the XMP edit"));
@@ -834,6 +835,7 @@ void dt_control_crawler_show_image_list(GList *images)
   scroll = gtk_scrolled_window_new(NULL, NULL);
   gui->log = gtk_tree_view_new();
   gtk_box_pack_start(GTK_BOX(content_box), scroll, TRUE, TRUE, 0);
+  dt_gui_add_class(scroll, "dt_recessed_scroll");
   gtk_container_add(GTK_CONTAINER(scroll), gui->log);
   gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll),
                                  GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);

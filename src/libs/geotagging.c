@@ -39,6 +39,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "common/darktable.h"
+#include "gui/gdkkeys.h"
 #include "common/debug.h"
 #include "common/file_location.h"
 #include "common/image_cache.h"
@@ -848,7 +849,7 @@ static void _preview_gpx_file(GtkWidget *widget, dt_lib_module_t *self)
   gtk_box_pack_start(GTK_BOX(area), w, TRUE, TRUE, 0);
 
   GtkWidget *grid = gtk_grid_new();
-  gtk_grid_set_column_spacing(GTK_GRID(grid), DT_PIXEL_APPLY_DPI(10));
+  gtk_grid_set_column_spacing(GTK_GRID(grid), DT_GUI_BOX_SPACING);
   int line = 0;
 
   GList *trkseg = dt_gpx_get_trkseg(gpx);
@@ -1511,12 +1512,12 @@ static GtkWidget *_gui_init_datetime(dt_lib_datetime_t *dt, const int type, dt_l
 {
   GtkWidget *flow = gtk_flow_box_new();
   gtk_flow_box_set_max_children_per_line(GTK_FLOW_BOX(flow), 2);
-  gtk_flow_box_set_column_spacing(GTK_FLOW_BOX(flow), 3);
+  gtk_flow_box_set_column_spacing(GTK_FLOW_BOX(flow), DT_GUI_BOX_SPACING);
 
   GtkBox *box = NULL;
   for(int i = 0; i < DT_GEOTAG_PARTS_NB; i++)
   {
-    if(IS_NULL_PTR(box)) box = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0));
+    if(IS_NULL_PTR(box)) box = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING));
 
     if(i == 0 && type == 2)
     {
@@ -1564,7 +1565,9 @@ static GtkWidget *_gui_init_datetime(dt_lib_datetime_t *dt, const int type, dt_l
 static gboolean _datetime_key_pressed(GtkWidget *entry, GdkEventKey *event, dt_lib_module_t *self)
 {
   dt_lib_geotagging_t *d = (dt_lib_geotagging_t *)self->data;
-  switch(event->keyval)
+  guint key = dt_keys_mainpad_alternatives(event->keyval);
+
+  switch(key)
   {
     case GDK_KEY_Escape:
     {
@@ -1580,42 +1583,27 @@ static gboolean _datetime_key_pressed(GtkWidget *entry, GdkEventKey *event, dt_l
     }
     // allow  0 .. 9, left/right/home/end movement using arrow keys and del/backspace
     case GDK_KEY_0:
-    case GDK_KEY_KP_0:
     case GDK_KEY_1:
-    case GDK_KEY_KP_1:
     case GDK_KEY_2:
-    case GDK_KEY_KP_2:
     case GDK_KEY_3:
-    case GDK_KEY_KP_3:
     case GDK_KEY_4:
-    case GDK_KEY_KP_4:
     case GDK_KEY_5:
-    case GDK_KEY_KP_5:
     case GDK_KEY_6:
-    case GDK_KEY_KP_6:
     case GDK_KEY_7:
-    case GDK_KEY_KP_7:
     case GDK_KEY_8:
-    case GDK_KEY_KP_8:
     case GDK_KEY_9:
-    case GDK_KEY_KP_9:
     case GDK_KEY_Delete:
-    case GDK_KEY_KP_Delete:
     case GDK_KEY_BackSpace:
     case GDK_KEY_Left:
     case GDK_KEY_Right:
     case GDK_KEY_Home:
-    case GDK_KEY_KP_Home:
     case GDK_KEY_End:
-    case GDK_KEY_KP_End:
       d->editing = TRUE;
       return FALSE;
 
     case GDK_KEY_Tab:
-    case GDK_KEY_KP_Tab:
     case GDK_KEY_ISO_Left_Tab:
     case GDK_KEY_Return:
-    case GDK_KEY_KP_Enter:
       d->editing = FALSE;
       g_signal_emit_by_name(d->dt.widget[0], "changed");
       return FALSE;
@@ -1652,10 +1640,11 @@ static void _timezone_save(dt_lib_module_t *self)
 
 static gboolean _timezone_key_pressed(GtkWidget *entry, GdkEventKey *event, dt_lib_module_t *self)
 {
-  switch(event->keyval)
+  guint key = dt_keys_mainpad_alternatives(event->keyval);
+
+  switch(key)
   {
     case GDK_KEY_Return:
-    case GDK_KEY_KP_Enter:
     case GDK_KEY_Tab:
       _timezone_save(self);
       return TRUE;
@@ -1761,10 +1750,10 @@ void gui_init(dt_lib_module_t *self)
   dt_lib_geotagging_t *d = (dt_lib_geotagging_t *)g_malloc0(sizeof(dt_lib_geotagging_t));
   self->data = (void *)d;
   d->timezones = _lib_geotagging_get_timezones();
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   GtkGrid *grid = GTK_GRID(gtk_grid_new());
-  gtk_grid_set_column_spacing(grid, DT_PIXEL_APPLY_DPI(5));
+  gtk_grid_set_column_spacing(grid, DT_GUI_BOX_SPACING);
   int line = 0;
 
   GtkWidget *label = dt_ui_label_new(_("date/time"));
@@ -1814,7 +1803,7 @@ void gui_init(dt_lib_module_t *self)
   gtk_widget_set_tooltip_text(d->timezone, _("start typing to show a list of permitted values and select your timezone.\npress enter to confirm, so that the asterisk * disappears"));
   d->timezone_changed = dt_ui_label_new("");
 
-  GtkWidget *timezone_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *timezone_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(timezone_box), d->timezone, TRUE, TRUE, 0);
   gtk_box_pack_end(GTK_BOX(timezone_box), d->timezone_changed, FALSE, FALSE, 0);
 
@@ -1861,10 +1850,10 @@ void gui_init(dt_lib_module_t *self)
   if(dt_conf_get_bool("/views/map/enable"))
   {
     grid = GTK_GRID(gtk_grid_new());
-    gtk_grid_set_column_spacing(grid, DT_PIXEL_APPLY_DPI(5));
+    gtk_grid_set_column_spacing(grid, DT_GUI_BOX_SPACING);
     line = 0;
 
-    d->map.gpx_section = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    d->map.gpx_section = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
     gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(d->map.gpx_section), TRUE, TRUE, 0);
 
     label = dt_ui_section_label_new(_("GPX file"));
@@ -1873,7 +1862,6 @@ void gui_init(dt_lib_module_t *self)
     d->map.gpx_button = dtgtk_button_new(dtgtk_cairo_paint_directory, CPF_NONE, NULL);
     gtk_widget_set_hexpand(d->map.gpx_button, FALSE);
     gtk_widget_set_halign(d->map.gpx_button, GTK_ALIGN_START);
-    gtk_widget_set_name(d->map.gpx_button, "non-flat");
     gtk_widget_set_tooltip_text(d->map.gpx_button, _("select a GPX track file..."));
     gtk_grid_attach(grid, d->map.gpx_button, 0, line, 1, 1);
     g_signal_connect(G_OBJECT(d->map.gpx_button), "clicked", G_CALLBACK(_choose_gpx_callback), self);
@@ -1921,13 +1909,13 @@ void gui_init(dt_lib_module_t *self)
 
     // avoid ugly console pixman messages due to headers
     gtk_tree_view_set_headers_visible(GTK_TREE_VIEW(d->map.gpx_view), FALSE);
-    GtkWidget *w = dt_ui_scroll_wrap(GTK_WIDGET(d->map.gpx_view), 100, "plugins/lighttable/geotagging/heighttracklist");
-    gtk_widget_set_size_request(w, -1, 100);
+    GtkWidget *w = dt_ui_scroll_wrap(GTK_WIDGET(d->map.gpx_view), 100,
+                                     "plugins/lighttable/geotagging/heighttracklist", DT_UI_RESIZE_DYNAMIC);
     gtk_tree_view_set_headers_visible(GTK_TREE_VIEW(d->map.gpx_view), TRUE);
     gtk_box_pack_start(GTK_BOX(d->map.gpx_section), w, TRUE, TRUE, 0);
 
     grid = GTK_GRID(gtk_grid_new());
-    gtk_grid_set_column_spacing(grid, DT_PIXEL_APPLY_DPI(5));
+    gtk_grid_set_column_spacing(grid, DT_GUI_BOX_SPACING);
     line = 0;
 
     d->map.preview_button = gtk_check_button_new_with_label(_("preview images"));

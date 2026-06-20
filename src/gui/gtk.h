@@ -66,15 +66,48 @@
 extern "C" {
 #endif
 
-#define DT_GUI_IOP_MODULE_CONTROL_SPACING 0
-#define DT_GUI_MOUSE_EFFECT_RADIUS darktable.gui->mouse.effect_radius
-#define DT_GUI_MOUSE_EFFECT_RADIUS_SCALED darktable.gui->mouse.effect_radius_scaled
+// Mouse hit-test radius in darkroom image space, clamped for usable overlay selection.
+#define DT_GUI_MOUSE_EFFECT_RADIUS darktable.gui->mouse.effect_radius_clamped
 
-/* helper macro that applies the DPI transformation to fixed pixel values. input should be defaulting to 96
- * DPI */
-#define DT_PIXEL_APPLY_DPI(value) ((value) * darktable.gui->dpi_factor)
-#define DT_PIXEL_APPLY_DPI_DPP(value) ((value) * darktable.gui->dpi_factor * darktable.gui->ppd)
+/* Pixel scaling - two intents, chosen by the *destination sink* (not by platform).
+ * See doc/gui.md "Pixel scaling" for the full rationale.
+ *
+ * DT_UI_SCALE_UI: logical-px GUI sinks (gtk_widget_set_size_request, window default
+ *   size, anything fed to a GTK widget geometry setter). GTK already multiplies these
+ *   by the integer scale-factor (ppd) at render time, so we must NOT pre-apply ppd here;
+ *   we only add the font/UI zoom carried by dpi_factor (the X11 Xft.dpi path).
+ *
+ * DT_UI_SCALE_DEVICE: raw device-pixel buffers (cairo image surfaces, pixbuf-at-size,
+ *   mouse hit-test radii). The toolkit does not auto-scale these, so we carry both the
+ *   UI zoom (dpi_factor) and the integer scale-factor (ppd) ourselves.
+ *
+ * Input values are device-independent pixels at the 96 DPI baseline. */
+#define DT_UI_SCALE_UI(value) ((value) * darktable.gui->dpi_factor)
+#define DT_UI_SCALE_DEVICE(value) ((value) * darktable.gui->dpi_factor * darktable.gui->ppd)
 
+/* Deprecated spellings kept so the existing call sites keep compiling. Prefer the
+ * intent-named macros above in new code. */
+#define DT_PIXEL_APPLY_DPI(value) DT_UI_SCALE_UI(value)
+#define DT_PIXEL_APPLY_DPI_DPP(value) DT_UI_SCALE_DEVICE(value)
+
+/* Spacing between children widgets within Gtk boxes/grids/flowboxes cannot be set from
+ * CSS (margins/paddings on the children would recess the ones sitting on the container
+ * edges relative to the inner ones). GTK exposes a "spacing" property for this, but only
+ * from code - so it is centralized here, in ONE place, for the whole app.
+ *
+ * It is expressed as a fraction of 1em (the resolved root font size, cached in
+ * darktable.gui->em by dt_gui_update_em()), so the inner gutters scale with the user's
+ * font size exactly like the em-based margins/paddings in ansel.css. 0.625em == 10px at
+ * the 16px reference font. Because the font's point->px conversion already folds in the
+ * screen DPI, this needs NO DT_PIXEL_APPLY_DPI on top.
+ *
+ * Falls back to the 10px reference before the GUI exists or before gui->em has
+ * been resolved. Standalone dialogs may run after gtk_init() but before the
+ * main Ansel GUI allocation when startup needs user input. */
+#define DT_GUI_EM_SIZE ((gint)((!IS_NULL_PTR(darktable.gui) && darktable.gui->em > 0.0) ? darktable.gui->em : 16.0))
+#define DT_GUI_BOX_SPACING_EM 0.625
+#define DT_GUI_BOX_SPACING                                                                                     \
+  ((gint)(DT_GUI_EM_SIZE * DT_GUI_BOX_SPACING_EM + 0.5))
 
 enum
 {
@@ -87,10 +120,6 @@ typedef struct dt_gui_widgets_t
   /* left panel */
   GtkGrid *panel_left; // panel grid 3 rows, top,center,bottom and file on center
   GtkGrid *panel_right;
-
-  /* resize of left/right panels */
-  gboolean panel_handle_dragging;
-  int panel_handle_x, panel_handle_y;
 } dt_gui_widgets_t;
 
 typedef enum dt_gui_color_t
@@ -170,12 +199,17 @@ typedef struct dt_gui_gtk_t
 
   double dpi, dpi_factor, ppd;
 
+  // Resolved root font size (1em) in device-independent px, read from the active
+  // theme/font by dt_gui_update_em(). Drives DT_GUI_BOX_SPACING so inner gutters
+  // track the font size like em-based CSS margins. 0.0 until first resolved.
+  double em;
+
 
   struct {
-    // distance to the cursor in device pixels (screen space)
+    // Raw mouse hit-test radius in display pixels
     float effect_radius;
-    // distance to the cursor in absolute output-image pixels
-    float effect_radius_scaled;
+    // Mouse hit-test radius coordinates, clamped for usable overlay selection.
+    float effect_radius_clamped;
     gboolean is_dragging;
   } mouse;
 
@@ -219,10 +253,23 @@ typedef struct _gui_collapsible_section_t
   GtkWidget *label;     // The section label
 } dt_gui_collapsible_section_t;
 
+typedef enum dt_ui_resize_mode_t
+{
+  // Auto-fit: the area shrinks to its content (up to the user/max height). Best for widgets
+  // updated rarely; their height following content is helpful, not disruptive.
+  DT_UI_RESIZE_DYNAMIC = 0,
+  // Fixed: the area keeps the user-set (or default) height regardless of content, so it never
+  // shifts the surrounding layout when its content changes. Best for widgets that refresh on
+  // hover/selection (tags, notes, metadata) and the collection/library list.
+  DT_UI_RESIZE_STATIC
+} dt_ui_resize_mode_t;
+
 typedef struct dt_gui_widget_auto_height_t
 {
-  int min_rows;
-  int max_rows;
+  char *config_str;   // conf key persisting the user-chosen height (px); owned
+  int min_size;       // minimum height floor in device pixels
+  int last_height;    // last applied bare (pre-padding) height, shared with the drag handle
+  dt_ui_resize_mode_t mode;
   GtkTreeModel *model;
   GtkTextBuffer *buffer;
   gulong model_row_inserted;
@@ -444,26 +491,72 @@ void dt_gui_load_theme(const char *theme);
 // reload GUI scalings
 void dt_configure_ppd_dpi(dt_gui_gtk_t *gui);
 
+// Recompute the cached 1em size (darktable.gui->em) from the main window's resolved
+// font. Call after the theme/font or the screen DPI changes. Also re-applies the standard
+// inter-child spacing (DT_GUI_BOX_SPACING) to existing containers so the change is live.
+void dt_gui_update_em(void);
+
+// Set a PangoLayout's resolution to the screen DPI for crisp cairo-drawn text. Use this
+// instead of hand-writing pango_cairo_context_set_resolution(..., darktable.gui->dpi).
+void dt_gui_set_pango_resolution(PangoLayout *layout);
+
+// Apply the system's text-rendering options (anti-aliasing, hinting, subpixel order,
+// hint-metrics/kerning) to a Cairo context, sourced from @p widget's Pango context (the same
+// settings native GTK widgets use). Call on any off-screen/scratch Cairo surface before drawing
+// text so it matches the rest of the UI instead of Cairo's defaults. @p widget may be NULL (falls
+// back to the main window, then the screen). Pair with dt_gui_set_pango_resolution() for the DPI.
+void dt_gui_cairo_set_font_options(cairo_t *cr, GtkWidget *widget);
+
 // return modifier keys currently pressed, independent of any key event
 GdkModifierType dt_key_modifier_state();
 
 
 /**
- * @brief Set the automatic height for a widget based on the number of rows or lines it contains.
- * 
- * Compatible with GtkTreeView and GtkTextView.
- * 
- * If the widget is already wrapped in a `GtkBox`, this function creates a `GtkScrolledWindow` to contain the widget to scroll.
- * The widget is then wrapped into a `GtkScrolledWindow` while preserving box packing options.
- * If the widget is already inside a `GtkScrolledWindow`, its policy is set to
- * horizontal=never and vertical=automatic.
- * 
- * @param widget The GtkWidget. It have to be already packed into a `GtkBox`, or already wrapped in a `GtkScrolledWindow`.
- * @param min_rows The minimum number of rows to display.
- * @param max_rows The maximum number of rows to display.
+ * @brief Wrap a scrollable widget in a recessed, vertically resizable scrolled window with a drag handle.
+ *
+ * Compatible with GtkTreeView, GtkTextView and any other content widget. A drag grip floats on the
+ * scrolled window's bottom edge (invisible until hovered); the chosen height is persisted under
+ * @p config_str. Returns the wrapper overlay, not the scrolled window.
+ *
+ * @param w content widget.
+ * @param min_size minimum height floor, in device-independent pixels (rescaled by DT_PIXEL_APPLY_DPI).
+ *                 In DT_UI_RESIZE_STATIC mode it also serves as the default height before the user drags.
+ * @param config_str conf key persisting the user-chosen height (copied internally).
+ * @param mode DT_UI_RESIZE_DYNAMIC to auto-fit content, or DT_UI_RESIZE_STATIC to keep a fixed height
+ *             regardless of content (avoids layout shifts for hover-/selection-driven widgets).
  */
-void dt_gui_widget_init_auto_height(GtkWidget *widget , int min_rows, int max_rows);
-GtkWidget *dt_ui_scroll_wrap(GtkWidget *w, gint min_size, char *config_str);
+GtkWidget *dt_ui_scroll_wrap(GtkWidget *w, gint min_size, char *config_str, dt_ui_resize_mode_t mode);
+
+/**
+ * @brief Return the inner GtkScrolledWindow of a dt_ui_scroll_wrap() wrapper, or NULL.
+ */
+GtkWidget *dt_ui_scroll_wrap_get_scrolled_window(GtkWidget *wrapper);
+
+/**
+ * @brief Make a self-drawing widget (typically a GtkDrawingArea graph or scope) vertically resizable.
+ *
+ * The widget is given a fixed height-request (persisted under @p config_str) and a drag grip floating
+ * on its bottom edge — the same grip used by panels, scroll wrappers and the histogram scope. The
+ * content is not scrolled: it keeps drawing to its live allocation, only the height-request changes.
+ * Returns a wrapper overlay to pack in place of @p area.
+ *
+ * @param area the drawing widget (its callbacks/refs stay valid; pack the returned overlay instead).
+ * @param config_str conf key persisting the user-chosen height (copied internally).
+ * @param default_height default height in device-independent px (rescaled by DT_PIXEL_APPLY_DPI).
+ * @param min_height minimum height floor in device-independent px.
+ */
+GtkWidget *dt_ui_resizable_drawing_area(GtkWidget *area, char *config_str, int default_height, int min_height);
+
+/**
+ * @brief Apply the standard recessed-input text padding to a GtkTextView.
+ *
+ * CSS padding on the textview "text" node is parsed but ignored for layout
+ * in GTK3, so the 2px/4px inset matching `entry`/`treeview` (see
+ * data/themes/.css) has to be set on the widget itself.
+ *
+ * @param textview The GtkTextView to update.
+ */
+void dt_gui_textview_set_padding(GtkTextView *textview);
 // check whether the given container has any user-added children
 gboolean dt_gui_container_has_children(GtkContainer *container);
 // return a count of the user-added children in the given container

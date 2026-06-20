@@ -1153,12 +1153,6 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   gui->styles_popup.window = NULL;
   gui->styles_popup.module = NULL;
 
-  // load the style / theme
-  GtkSettings *settings = gtk_settings_get_default();
-  g_object_set(G_OBJECT(settings), "gtk-application-prefer-dark-theme", TRUE, (gchar *)0);
-  g_object_set(G_OBJECT(settings), "gtk-theme-name", "Adwaita", (gchar *)0);
-  g_object_unref(settings);
-
   // smooth scrolling must be enabled to handle trackpad/touch events
   gui->scroll_mask = GDK_SCROLL_MASK | GDK_SMOOTH_SCROLL_MASK;
 
@@ -1288,6 +1282,7 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   // finally set the cursor to be the default.
   // for some reason this is needed on some systems to pick up the correctly themed cursor
   dt_control_change_cursor(GDK_LEFT_PTR);
+  gui->mouse.effect_radius = DT_UI_SCALE_DEVICE(15.0f);
 
   return 0;
 }
@@ -1384,6 +1379,128 @@ void dt_configure_ppd_dpi(dt_gui_gtk_t *gui)
   }
   gui->dpi_factor
       = gui->dpi / 96; // according to man xrandr and the docs of gdk_screen_set_resolution 96 is the default
+
+  // em depends on the screen DPI (point -> px), so refresh it here too.
+  dt_gui_update_em();
+}
+
+// Last DT_GUI_BOX_SPACING value actually applied to containers. Used to retarget exactly
+// the containers that carry the standard spacing when em changes, leaving deliberate 0-spacing
+// and custom-spacing containers untouched. Seeded with the pre-em reference (10px).
+static gint _last_box_spacing = 10;
+
+typedef struct _spacing_ctx_t { gint old_s, new_s; } _spacing_ctx_t;
+
+// Recursively retarget GtkBox/GtkGrid/GtkFlowBox children whose spacing still equals the
+// previously-applied standard spacing. Setting spacing inside gtk_container_foreach() doesn't
+// mutate the child list, so the walk is safe.
+static void _refresh_container_spacing(GtkWidget *w, gpointer user_data)
+{
+  const _spacing_ctx_t *c = (const _spacing_ctx_t *)user_data;
+
+  if(GTK_IS_BOX(w))
+  {
+    if(gtk_box_get_spacing(GTK_BOX(w)) == c->old_s) gtk_box_set_spacing(GTK_BOX(w), c->new_s);
+  }
+  else if(GTK_IS_FLOW_BOX(w))
+  {
+    if((gint)gtk_flow_box_get_row_spacing(GTK_FLOW_BOX(w)) == c->old_s)
+      gtk_flow_box_set_row_spacing(GTK_FLOW_BOX(w), c->new_s);
+    if((gint)gtk_flow_box_get_column_spacing(GTK_FLOW_BOX(w)) == c->old_s)
+      gtk_flow_box_set_column_spacing(GTK_FLOW_BOX(w), c->new_s);
+  }
+  else if(GTK_IS_GRID(w))
+  {
+    if((gint)gtk_grid_get_row_spacing(GTK_GRID(w)) == c->old_s)
+      gtk_grid_set_row_spacing(GTK_GRID(w), c->new_s);
+    if((gint)gtk_grid_get_column_spacing(GTK_GRID(w)) == c->old_s)
+      gtk_grid_set_column_spacing(GTK_GRID(w), c->new_s);
+  }
+
+  if(GTK_IS_CONTAINER(w))
+    gtk_container_foreach(GTK_CONTAINER(w), _refresh_container_spacing, user_data);
+}
+
+// Propagate a new DT_GUI_BOX_SPACING to already-built containers across every toplevel, so a
+// runtime font/DPI change updates the inner gutters live (gtk_*_set_spacing bakes the value into
+// the widget at creation time, so reloading the CSS alone is not enough).
+static void _refresh_all_container_spacing(void)
+{
+  const gint new_s = DT_GUI_BOX_SPACING;
+  if(new_s == _last_box_spacing) return;
+
+  _spacing_ctx_t c = { _last_box_spacing, new_s };
+  GList *toplevels = gtk_window_list_toplevels(); // list owned by us, elements not reffed
+  for(GList *l = toplevels; l; l = l->next)
+    _refresh_container_spacing(GTK_WIDGET(l->data), &c);
+  g_list_free(toplevels);
+
+  _last_box_spacing = new_s;
+}
+
+void dt_gui_update_em(void)
+{
+  dt_gui_gtk_t *gui = darktable.gui;
+  if(!gui || !gui->ui || !gui->ui->main_window) return;
+
+  GtkStyleContext *ctx = gtk_widget_get_style_context(gui->ui->main_window);
+  PangoFontDescription *desc = NULL;
+  gtk_style_context_get(ctx, gtk_style_context_get_state(ctx), GTK_STYLE_PROPERTY_FONT, &desc, NULL);
+  if(!desc) return;
+
+  const gint size = pango_font_description_get_size(desc);
+  if(size > 0)
+  {
+    if(pango_font_description_get_size_is_absolute(desc))
+      // already device-independent px
+      gui->em = (double)size / PANGO_SCALE;
+    else
+      // points -> px at the screen DPI, matching how GTK renders point-sized fonts
+      gui->em = (double)size / PANGO_SCALE * gui->dpi / 72.0;
+  }
+  pango_font_description_free(desc);
+
+  // The new em may change DT_GUI_BOX_SPACING; push it to existing containers so the change is live.
+  _refresh_all_container_spacing();
+}
+
+void dt_gui_set_pango_resolution(PangoLayout *layout)
+{
+  if(IS_NULL_PTR(layout) || !darktable.gui) return;
+  // Cairo-drawn text is laid out in points; the screen DPI converts those to device-independent px,
+  // matching how GTK renders the rest of the UI. Centralized here so call sites never hand-write the DPI.
+  pango_cairo_context_set_resolution(pango_layout_get_context(layout), darktable.gui->dpi);
+}
+
+void dt_gui_cairo_set_font_options(cairo_t *cr, GtkWidget *widget)
+{
+  if(IS_NULL_PTR(cr)) return;
+
+  // Source GTK's resolved text-rendering options (anti-aliasing, hinting, subpixel order,
+  // hint-metrics/kerning), which GTK populates from GtkSettings/Xft/fontconfig. The widget's
+  // Pango context is the same source native widgets use; fall back to the main window, then to the
+  // screen defaults, so an off-screen/scratch Cairo surface never silently reverts to Cairo's
+  // AA-on defaults (which would make our cairo-drawn text look unlike the rest of the UI).
+  const cairo_font_options_t *fo = NULL;
+
+  if(widget)
+  {
+    PangoContext *pc = gtk_widget_get_pango_context(widget);
+    if(pc) fo = pango_cairo_context_get_font_options(pc);
+  }
+  if(!fo && darktable.gui && darktable.gui->ui && darktable.gui->ui->main_window)
+  {
+    PangoContext *pc = gtk_widget_get_pango_context(darktable.gui->ui->main_window);
+    if(pc) fo = pango_cairo_context_get_font_options(pc);
+  }
+  if(!fo)
+  {
+    GdkScreen *screen = gdk_screen_get_default();
+    if(screen) fo = gdk_screen_get_font_options(screen);
+  }
+
+  // cairo_set_font_options() copies internally, so the const pointer's lifetime is not a concern.
+  if(fo) cairo_set_font_options(cr, fo);
 }
 
 static gboolean _focus_in_out_event(GtkWidget *widget, GdkEvent *event, gpointer user_data)
@@ -1539,7 +1656,7 @@ static void _init_widgets(dt_gui_gtk_t *gui)
   container = gui->ui->main_window;
 
   // Adding the outermost vbox
-  widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_container_add(GTK_CONTAINER(container), widget);
   gtk_widget_show(widget);
 
@@ -1750,35 +1867,34 @@ gboolean dt_gui_show_standalone_yes_no_dialog(const char *title, const char *mar
   gtk_window_set_title(GTK_WINDOW(window), title);
   g_signal_connect(window, "destroy", G_CALLBACK(_gtk_main_quit_safe), NULL);
 
-  if(darktable.gui)
+  gtk_window_set_position(GTK_WINDOW(window), GTK_WIN_POS_CENTER);
+
+  if(!IS_NULL_PTR(darktable.gui) && !IS_NULL_PTR(darktable.gui->ui)
+     && !IS_NULL_PTR(darktable.gui->ui->main_window))
   {
-    GtkWindow *win = GTK_WINDOW(dt_ui_main_window(darktable.gui->ui));
-    gtk_window_set_transient_for(GTK_WINDOW(window), win);
-    gtk_window_set_modal(GTK_WINDOW(window), TRUE);
-    if(gtk_widget_get_visible(GTK_WIDGET(win)))
+    GtkWidget *main_window = dt_ui_main_window(darktable.gui->ui);
+    if(GTK_IS_WINDOW(main_window))
     {
-      gtk_window_set_position(GTK_WINDOW(window), GTK_WIN_POS_CENTER_ON_PARENT);
+      GtkWindow *win = GTK_WINDOW(main_window);
+      gtk_window_set_transient_for(GTK_WINDOW(window), win);
+      gtk_window_set_modal(GTK_WINDOW(window), TRUE);
+      if(gtk_widget_get_visible(GTK_WIDGET(win)))
+      {
+        gtk_window_set_position(GTK_WINDOW(window), GTK_WIN_POS_CENTER_ON_PARENT);
+      }
     }
-    else
-    {
-      gtk_window_set_position(GTK_WINDOW(window), GTK_WIN_POS_CENTER);
-    }
-  }
-  else
-  {
-    gtk_window_set_position(GTK_WINDOW(window), GTK_WIN_POS_CENTER);
   }
 
-  GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, padding);
+  GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_container_add(GTK_CONTAINER(window), vbox);
 
-  GtkWidget *mhbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, padding);
+  GtkWidget *mhbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(vbox), mhbox, TRUE, TRUE, padding);
 
   if(padding)
   {
     gtk_box_pack_start(GTK_BOX(mhbox),
-                       gtk_box_new(GTK_ORIENTATION_VERTICAL, padding), TRUE, TRUE, padding);
+                       gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING), TRUE, TRUE, padding);
   }
 
   GtkWidget *label = gtk_label_new(NULL);
@@ -1788,10 +1904,10 @@ gboolean dt_gui_show_standalone_yes_no_dialog(const char *title, const char *mar
   if(padding)
   {
     gtk_box_pack_start(GTK_BOX(mhbox),
-                       gtk_box_new(GTK_ORIENTATION_VERTICAL, padding), TRUE, TRUE, padding);
+                       gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING), TRUE, TRUE, padding);
   }
 
-  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(vbox), hbox, TRUE, TRUE, 0);
 
   result_t result = {.result = RESULT_NONE, .window = window};
@@ -1832,25 +1948,24 @@ char *dt_gui_show_standalone_string_dialog(const char *title, const char *markup
   gtk_window_set_title(GTK_WINDOW(window), title);
   g_signal_connect(window, "destroy", G_CALLBACK(_gtk_main_quit_safe), NULL);
 
-  if(darktable.gui)
+  gtk_window_set_position(GTK_WINDOW(window), GTK_WIN_POS_MOUSE);
+
+  if(!IS_NULL_PTR(darktable.gui) && !IS_NULL_PTR(darktable.gui->ui)
+     && !IS_NULL_PTR(darktable.gui->ui->main_window))
   {
-    GtkWindow *win = GTK_WINDOW(dt_ui_main_window(darktable.gui->ui));
-    gtk_window_set_transient_for(GTK_WINDOW(window), win);
-    if(gtk_widget_get_visible(GTK_WIDGET(win)))
+    GtkWidget *main_window = dt_ui_main_window(darktable.gui->ui);
+    if(GTK_IS_WINDOW(main_window))
     {
-      gtk_window_set_position(GTK_WINDOW(window), GTK_WIN_POS_CENTER_ON_PARENT);
+      GtkWindow *win = GTK_WINDOW(main_window);
+      gtk_window_set_transient_for(GTK_WINDOW(window), win);
+      if(gtk_widget_get_visible(GTK_WIDGET(win)))
+      {
+        gtk_window_set_position(GTK_WINDOW(window), GTK_WIN_POS_CENTER_ON_PARENT);
+      }
     }
-    else
-    {
-      gtk_window_set_position(GTK_WINDOW(window), GTK_WIN_POS_MOUSE);
-    }
-  }
-  else
-  {
-    gtk_window_set_position(GTK_WINDOW(window), GTK_WIN_POS_MOUSE);
   }
 
-  GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+  GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_widget_set_margin_start(vbox, 10);
   gtk_widget_set_margin_end(vbox, 10);
   gtk_widget_set_margin_top(vbox, 7);
@@ -1869,7 +1984,7 @@ char *dt_gui_show_standalone_string_dialog(const char *title, const char *markup
     gtk_entry_set_placeholder_text(GTK_ENTRY(entry), placeholder);
   gtk_box_pack_start(GTK_BOX(vbox), entry, TRUE, TRUE, 0);
 
-  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_widget_set_margin_top(hbox, 10);
   gtk_box_pack_start(GTK_BOX(vbox), hbox, TRUE, TRUE, 0);
 
@@ -2062,6 +2177,10 @@ void dt_gui_load_theme(const char *theme)
       c[i] = init[i].default_col;
     }
   }
+
+  // The active theme/font may change the root font size, so refresh the cached em
+  // that drives DT_GUI_BOX_SPACING.
+  dt_gui_update_em();
 }
 
 GdkModifierType dt_key_modifier_state()
@@ -2143,7 +2262,7 @@ GtkWidget *dt_ui_notebook_page(GtkNotebook *notebook, const char *text, const ch
   dt_capitalize_label(text_cpy);
   GtkWidget *label = gtk_label_new(text_cpy);
   dt_free(text_cpy);
-  GtkWidget *page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  GtkWidget *page = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   if(strlen(text) > 2)
     gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_END);
   gtk_widget_set_tooltip_text(label, tooltip ? tooltip : _(text));
@@ -2200,94 +2319,6 @@ static gint _get_container_row_heigth(GtkWidget *w)
   return height;
 }
 
-static gboolean _scroll_wrap_resize(GtkWidget *w, void *cr, const char *config_str)
-{
-  GtkWidget *sw = gtk_widget_get_parent(w);
-  if(GTK_IS_VIEWPORT(sw)) sw = gtk_widget_get_parent(sw);
-
-  const gint increment = _get_container_row_heigth(w);
-
-  gint height = dt_conf_get_int(config_str);
-
-  // Max height is 75% of window height
-  GtkWidget *container = dt_ui_main_window(darktable.gui->ui);
-  const gint max_height = (container) ? gtk_widget_get_allocated_height(container) * 3 / 4 : DT_PIXEL_APPLY_DPI(1000);
-
-  height = (height < 1) ? 1 : (height > max_height) ? max_height : height;
-
-  dt_conf_set_int(config_str, height);
-
-  gint content_height;
-  gtk_widget_get_preferred_height(w, NULL, &content_height);
-
-  const gint min_height = - gtk_scrolled_window_get_min_content_height(GTK_SCROLLED_WINDOW(sw));
-
-  if(content_height < min_height) content_height = min_height;
-
-  if(height > content_height) height = content_height;
-
-  height += increment - 1;
-  height -= height % increment;
-
-  GtkBorder padding;
-  gtk_style_context_get_padding(gtk_widget_get_style_context(sw),
-                                gtk_widget_get_state_flags(sw),
-                                &padding);
-
-  gint old_height = 0;
-  gtk_widget_get_size_request(sw, NULL, &old_height);
-  const gint new_height = height + padding.top + padding.bottom + (GTK_IS_TEXT_VIEW(w) ? 2 : 0);
-  if(new_height != old_height)
-  {
-    gtk_widget_set_size_request(sw, -1, new_height);
-
-    GtkAdjustment *adj = gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(sw));
-    gint value = gtk_adjustment_get_value(adj);
-    value -= value % increment;
-    gtk_adjustment_set_value(adj, value);
-  }
-  return FALSE;
-}
-
-static gboolean _scroll_wrap_scroll(GtkScrolledWindow *sw, GdkEventScroll *event, const char *config_str)
-{
-  GtkWidget *w = gtk_bin_get_child(GTK_BIN(sw));
-  if(GTK_IS_VIEWPORT(w)) w = gtk_bin_get_child(GTK_BIN(w));
-
-  const gint increment = _get_container_row_heigth(w);
-
-  int delta_y = 0;
-
-  dt_gui_get_scroll_unit_deltas(event, NULL, &delta_y);
-
-  if(dt_modifier_is(event->state, GDK_CONTROL_MASK))
-  {
-    const gint new_size = dt_conf_get_int(config_str) + increment*delta_y;
-
-    dt_toast_log("%d", 1 + new_size / increment);
-
-    dt_conf_set_int(config_str, new_size);
-
-    _scroll_wrap_resize(w, NULL, config_str);
-
-    return TRUE;
-  }
-
-  return FALSE;
-}
-
-GtkWidget *dt_ui_scroll_wrap(GtkWidget *w, gint min_size, char *config_str)
-{
-  GtkWidget *sw = gtk_scrolled_window_new(NULL, NULL);
-  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(sw), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
-  gtk_scrolled_window_set_min_content_height(GTK_SCROLLED_WINDOW(sw), - DT_PIXEL_APPLY_DPI(min_size));
-  g_signal_connect(G_OBJECT(sw), "scroll-event", G_CALLBACK(_scroll_wrap_scroll), config_str);
-  g_signal_connect(G_OBJECT(w), "draw", G_CALLBACK(_scroll_wrap_resize), config_str);
-  gtk_container_add(GTK_CONTAINER(sw), w);
-
-  return GTK_WIDGET(sw);
-}
-
 static const char *const DT_GUI_WIDGET_AUTO_HEIGHT_KEY = "dt-gui-widget-auto-height";
 
 // find the scrolled window parent of a treeview, if any
@@ -2303,45 +2334,6 @@ static GtkWidget *_search_parent_scrolled_window(GtkWidget *w)
   }
 
   return GTK_IS_SCROLLED_WINDOW(parent) ? parent : NULL;
-}
-
-static void _widget_auto_ensure_scrolled_window(GtkWidget *w)
-{
-  GtkWidget *scrolled_window = _search_parent_scrolled_window(w);
-  if(GTK_IS_SCROLLED_WINDOW(scrolled_window))
-  {
-    // The parent is already a scrolled window, just make sure it has the right policy
-    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled_window), GTK_POLICY_NEVER,
-                                   GTK_POLICY_AUTOMATIC);
-    return;
-  }
-  GtkWidget *parent = gtk_widget_get_parent(w);
-  if(!GTK_IS_BOX(parent)) return;
-  gboolean expand = TRUE;
-  gboolean fill = TRUE;
-  guint padding = 0;
-  GtkPackType pack_type = GTK_PACK_START;
-  gtk_box_query_child_packing(GTK_BOX(parent), w, &expand, &fill, &padding, &pack_type);
-
-  GList *children = gtk_container_get_children(GTK_CONTAINER(parent));
-  const gint position = g_list_index(children, w);
-  g_list_free(children);
-  children = NULL;
-
-  GtkWidget *sw = gtk_scrolled_window_new(NULL, NULL);
-  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(sw), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
-
-  g_object_ref(w);
-  gtk_container_remove(GTK_CONTAINER(parent), w);
-  gtk_container_add(GTK_CONTAINER(sw), w);
-  g_object_unref(w);
-
-  if(pack_type == GTK_PACK_END)
-    gtk_box_pack_end(GTK_BOX(parent), sw, expand, fill, padding);
-  else
-    gtk_box_pack_start(GTK_BOX(parent), sw, expand, fill, padding);
-
-  if(position >= 0) gtk_box_reorder_child(GTK_BOX(parent), sw, position);
 }
 
 // Counts only visible items (those whose parents are expanded)
@@ -2389,46 +2381,6 @@ static int _textview_count_visible_rows(GtkWidget *textview)
   return MAX(0, gtk_text_buffer_get_line_count(buffer));
 }
 
-static void dt_gui_widget_update_list_height(GtkWidget *widget, int rows, int min_rows, int max_rows)
-{
-  // The parent have to be a scrolled window
-  GtkWidget *scrolled_window = _search_parent_scrolled_window(widget);
-  if(!GTK_IS_SCROLLED_WINDOW(scrolled_window)) return;
-
-  const int safe_rows = MAX(0, rows);
-  const int safe_min_rows = MAX(1, min_rows);
-  const int safe_max_rows = MAX(safe_min_rows, max_rows);
-  const int requested_rows = CLAMP(safe_rows, safe_min_rows, safe_max_rows);
-
-  // Calculate row height based on actual cell sizes or line size
-  float row_height = darktable.bauhaus->line_height;
-  if(GTK_IS_TREE_VIEW(widget))
-  {
-    gint cell_height = 0;
-    const gint num_columns = gtk_tree_view_get_n_columns(GTK_TREE_VIEW(widget));
-    for(int c = 0; c < num_columns; c++)
-    {
-      gint h = 0;
-      gtk_tree_view_column_cell_get_size(gtk_tree_view_get_column(GTK_TREE_VIEW(widget), c),
-                                        NULL, NULL, NULL, NULL, &h);
-      if(h > cell_height) cell_height = h;
-    }
-    GValue separation = { G_TYPE_INT };
-    gtk_widget_style_get_property(widget, "vertical-separator", &separation);
-    
-    if(cell_height > 0) row_height = cell_height + g_value_get_int(&separation);
-  }
-
-  GtkBorder padding;
-  gtk_style_context_get_padding(gtk_widget_get_style_context(widget),
-                                gtk_widget_get_state_flags(widget), &padding);
-  const int padding_top = MAX(DT_PIXEL_APPLY_DPI(2), padding.top);
-  const int padding_bottom = MAX(DT_PIXEL_APPLY_DPI(2), padding.bottom);
-  const gint height = requested_rows * row_height + padding_top + padding_bottom + DT_PIXEL_APPLY_DPI(1);
-
-  gtk_widget_set_size_request(scrolled_window, -1, height);
-}
-
 static void _widget_auto_disconnect_model(dt_gui_widget_auto_height_t *state, GtkWidget *treeview)
 {
   if(IS_NULL_PTR(state)) return;
@@ -2473,21 +2425,128 @@ static void _widget_auto_disconnect_buffer(dt_gui_widget_auto_height_t *state)
   state->buffer_changed = 0;
 }
 
-static void _widget_auto_update(GtkWidget *widget)
+/**
+ * @brief Window-height ceiling shared by the auto-size rule and the drag handle.
+ *
+ * @details The full main-window height: a resizable area may grow as tall as the window (the
+ * parent panel scrolls to reach it). Content shorter than this still shrinks to fit, so this only
+ * bounds how far the user can drag.
+ */
+static gint _resizable_scroll_max_height(void)
 {
-  const dt_gui_widget_auto_height_t *state = g_object_get_data(G_OBJECT(widget), DT_GUI_WIDGET_AUTO_HEIGHT_KEY);
+  GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
+  return win ? gtk_widget_get_allocated_height(win) : DT_PIXEL_APPLY_DPI(1000);
+}
+
+/**
+ * @brief The single sizing rule for every dt_ui_scroll_wrap area.
+ *
+ * @details Height = clamp(min(content, cap), min_size, 75% window), where the cap is the user's
+ * persisted height when set, otherwise the window ceiling so the area auto-grows to its content.
+ * This makes small content shrink to fit, lets nested lists grow and have their parent panel scroll
+ * until the user drags the handle to cap them, and snaps lists/textviews to whole rows to avoid
+ * clipped half-rows. The computed bare (pre-padding) height is cached for the drag handle.
+ */
+static void _resizable_scroll_apply(GtkWidget *w)
+{
+  dt_gui_widget_auto_height_t *state = g_object_get_data(G_OBJECT(w), DT_GUI_WIDGET_AUTO_HEIGHT_KEY);
   if(IS_NULL_PTR(state)) return;
 
-  int rows = 0;
-  if(GTK_IS_TREE_VIEW(widget))
+  GtkWidget *sw = _search_parent_scrolled_window(w);
+  if(!GTK_IS_SCROLLED_WINDOW(sw)) return;
+
+  const gint max_height = _resizable_scroll_max_height();
+  const gint min_size = MAX(1, state->min_size);
+  const gboolean has_conf = state->config_str && dt_conf_key_exists(state->config_str);
+
+  gint height;
+  gint increment = 0;
+
+  if(state->mode == DT_UI_RESIZE_STATIC)
   {
-    GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(widget));
-    rows = _treeview_count_visible_rows(GTK_TREE_VIEW(widget), model, NULL);
+    // Fixed height: the user's persisted size, or min_size as the default. Independent of content,
+    // so a content refresh (e.g. on hovering another thumbnail) never shifts the layout.
+    height = CLAMP(has_conf ? dt_conf_get_int(state->config_str) : min_size, min_size, max_height);
   }
-  else if(GTK_IS_TEXT_VIEW(widget))
-    rows = _textview_count_visible_rows(widget);
-    
-  dt_gui_widget_update_list_height(widget, rows, state->min_rows, state->max_rows);
+  else
+  {
+    // Dynamic: fit to content, capped by the user's persisted height (or the window ceiling).
+    const gboolean row_based = GTK_IS_TREE_VIEW(w) || GTK_IS_TEXT_VIEW(w);
+    increment = row_based ? _get_container_row_heigth(w) : 0;
+
+    gint content = 0;
+    if(GTK_IS_TREE_VIEW(w))
+    {
+      const int rows = _treeview_count_visible_rows(GTK_TREE_VIEW(w), gtk_tree_view_get_model(GTK_TREE_VIEW(w)), NULL);
+      content = MAX(1, rows) * increment;
+    }
+    else if(GTK_IS_TEXT_VIEW(w))
+    {
+      const int rows = _textview_count_visible_rows(w);
+      content = MAX(1, rows) * increment;
+    }
+    else
+    {
+      gtk_widget_get_preferred_height(w, NULL, &content);
+    }
+
+    const gint cap = has_conf ? CLAMP(dt_conf_get_int(state->config_str), min_size, max_height) : max_height;
+    height = CLAMP(MIN(content, cap), min_size, max_height);
+
+    // snap to whole rows for lists/textviews to avoid clipped half-rows
+    if(increment > 0)
+    {
+      height += increment - 1;
+      height -= height % increment;
+    }
+  }
+  state->last_height = height;
+
+  GtkBorder padding;
+  gtk_style_context_get_padding(gtk_widget_get_style_context(sw),
+                                gtk_widget_get_state_flags(sw), &padding);
+
+  gint old_height = 0;
+  gtk_widget_get_size_request(sw, NULL, &old_height);
+  const gint new_height = height + padding.top + padding.bottom + (GTK_IS_TEXT_VIEW(w) ? 2 : 0);
+  if(new_height != old_height)
+    gtk_widget_set_size_request(sw, -1, new_height);
+}
+
+static void _widget_auto_update(GtkWidget *widget)
+{
+  _resizable_scroll_apply(widget);
+}
+
+static gboolean _resizable_scroll_draw(GtkWidget *w, cairo_t *cr, gpointer user_data)
+{
+  _resizable_scroll_apply(w);
+  return FALSE;
+}
+
+static void _resizable_scroll_realize(GtkWidget *w, gpointer user_data)
+{
+  _resizable_scroll_apply(w);
+}
+
+// Drag handle accessors: bare (pre-padding) target height, kept consistent with the sizing rule.
+static int _resizable_scroll_handle_get_size(gpointer user_data)
+{
+  GtkWidget *w = GTK_WIDGET(user_data);
+  const dt_gui_widget_auto_height_t *state = g_object_get_data(G_OBJECT(w), DT_GUI_WIDGET_AUTO_HEIGHT_KEY);
+  return state ? state->last_height : 0;
+}
+
+static int _resizable_scroll_handle_resize(int requested_size, gboolean finished, gpointer user_data)
+{
+  GtkWidget *w = GTK_WIDGET(user_data);
+  dt_gui_widget_auto_height_t *state = g_object_get_data(G_OBJECT(w), DT_GUI_WIDGET_AUTO_HEIGHT_KEY);
+  if(IS_NULL_PTR(state) || IS_NULL_PTR(state->config_str)) return requested_size;
+
+  const gint value = CLAMP(requested_size, MAX(1, state->min_size), _resizable_scroll_max_height());
+  dt_conf_set_int(state->config_str, value);
+  _resizable_scroll_apply(w);
+  return state->last_height;
 }
 
 static void _widget_auto_model_row_inserted(GtkTreeModel *model, GtkTreePath *path, GtkTreeIter *iter,
@@ -2621,40 +2680,183 @@ static void _widget_auto_height_free(gpointer data)
   if(IS_NULL_PTR(state)) return;
   _widget_auto_disconnect_model(state, NULL);
   _widget_auto_disconnect_buffer(state);
+  g_free(state->config_str);
   dt_free(state);
 }
 
-void dt_gui_widget_init_auto_height(GtkWidget *w, const int min_rows, const int max_rows)
+void dt_gui_textview_set_padding(GtkTextView *textview)
 {
-  if(!GTK_IS_TREE_VIEW(w) && !GTK_IS_TEXT_VIEW(w)) return;
+  if(!GTK_IS_TEXT_VIEW(textview)) return;
 
-  _widget_auto_ensure_scrolled_window(w);
+  gtk_text_view_set_left_margin(textview, DT_PIXEL_APPLY_DPI(4));
+  gtk_text_view_set_right_margin(textview, DT_PIXEL_APPLY_DPI(4));
+  gtk_text_view_set_top_margin(textview, DT_PIXEL_APPLY_DPI(2));
+  gtk_text_view_set_bottom_margin(textview, DT_PIXEL_APPLY_DPI(2));
+}
 
-  dt_gui_widget_auto_height_t *state = g_object_get_data(G_OBJECT(w), DT_GUI_WIDGET_AUTO_HEIGHT_KEY);
-  if(IS_NULL_PTR(state))
+/**
+ * @brief Wrap a scrollable content widget in a recessed, vertically resizable scrolled window.
+ *
+ * @details Returns an overlay wrapping the scrolled window, with a themed drag grip floating on its
+ * bottom edge (the same grip primitive used by panels and the histogram scope). The grip takes no
+ * layout space and is invisible until hovered. Sizing follows @p mode: DT_UI_RESIZE_DYNAMIC auto-fits
+ * the content up to the user height, DT_UI_RESIZE_STATIC keeps a fixed height (see _resizable_scroll_apply).
+ *
+ * The returned widget is the wrapper overlay, not the scrolled window; callers needing the inner
+ * scrolled window (e.g. to tweak its scroll policy) must use dt_ui_scroll_wrap_get_scrolled_window().
+ *
+ * @param w content widget (treeview, textview or any container)
+ * @param min_size minimum height floor in device pixels (also the static default before the user drags)
+ * @param config_str conf key persisting the user-chosen height (copied internally)
+ * @param mode DT_UI_RESIZE_DYNAMIC (auto-fit) or DT_UI_RESIZE_STATIC (fixed height)
+ */
+GtkWidget *dt_ui_scroll_wrap(GtkWidget *w, gint min_size, char *config_str, dt_ui_resize_mode_t mode)
+{
+  GtkWidget *sw = gtk_scrolled_window_new(NULL, NULL);
+  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(sw), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+  if(GTK_IS_TREE_VIEW(w)) dt_gui_add_class(sw, "dt_recessed_scroll");
+  gtk_container_add(GTK_CONTAINER(sw), w);
+
+  // Per-widget sizing state, freed with w.
+  dt_gui_widget_auto_height_t *state = calloc(1, sizeof(*state));
+  state->config_str = g_strdup(config_str);
+  state->min_size = MAX(1, DT_PIXEL_APPLY_DPI(min_size));
+  state->mode = mode;
+  g_object_set_data_full(G_OBJECT(w), DT_GUI_WIDGET_AUTO_HEIGHT_KEY, state, _widget_auto_height_free);
+
+  if(mode == DT_UI_RESIZE_DYNAMIC)
   {
-    state = calloc(1, sizeof(*state));
-    g_object_set_data_full(G_OBJECT(w), DT_GUI_WIDGET_AUTO_HEIGHT_KEY, state,
-                           _widget_auto_height_free);
-
+    // Sizing triggers. Lists/textviews recompute from their model/buffer change signals (cheap and
+    // exact) plus a one-shot on realize, when row heights become accurate -- we deliberately avoid a
+    // per-draw recount, which would re-walk a large model on every redraw. Generic content has no
+    // such signals, so it recomputes on draw using its (GTK-cached) preferred height.
     if(GTK_IS_TREE_VIEW(w))
     {
-      // Watch for model changes to reconnect tree model signals automatically.
       g_signal_connect(w, "notify::model", G_CALLBACK(_widget_auto_on_model_changed), NULL);
+      g_signal_connect(w, "realize", G_CALLBACK(_resizable_scroll_realize), NULL);
     }
     else if(GTK_IS_TEXT_VIEW(w))
     {
-      // Watch for buffer replacement to reconnect text buffer signals automatically.
       g_signal_connect(w, "notify::buffer", G_CALLBACK(_widget_auto_on_buffer_changed), NULL);
+      g_signal_connect(w, "realize", G_CALLBACK(_resizable_scroll_realize), NULL);
+    }
+    else
+    {
+      g_signal_connect(G_OBJECT(w), "draw", G_CALLBACK(_resizable_scroll_draw), NULL);
+    }
+    _widget_auto_connect_model(w);
+    _widget_auto_connect_buffer(w);
+  }
+  else
+  {
+    // Static: height is content-independent, so we only size once after realization (and on drag).
+    g_signal_connect(w, "realize", G_CALLBACK(_resizable_scroll_realize), NULL);
+  }
+
+  // Drag grip floating on the scrolled window's bottom edge (overlay): it takes no layout space,
+  // so the wrapper leaves no margin-like gap and stays aligned with neighbouring widgets. The grip
+  // is centered on the bottom border via CSS and is invisible until hovered.
+  GtkWidget *handle = dt_bauhaus_resize_handle_new(GTK_ORIENTATION_VERTICAL, FALSE,
+                                                   _("Drag to resize"),
+                                                   _resizable_scroll_handle_get_size,
+                                                   _resizable_scroll_handle_resize, w);
+
+  GtkWidget *over = gtk_overlay_new();
+  gtk_container_add(GTK_CONTAINER(over), sw);
+  gtk_overlay_add_overlay(GTK_OVERLAY(over), handle);
+
+  _widget_auto_update(w);
+  return over;
+}
+
+/**
+ * @brief Return the inner scrolled window of a dt_ui_scroll_wrap() wrapper, or NULL.
+ */
+GtkWidget *dt_ui_scroll_wrap_get_scrolled_window(GtkWidget *wrapper)
+{
+  if(!GTK_IS_CONTAINER(wrapper)) return NULL;
+  GList *children = gtk_container_get_children(GTK_CONTAINER(wrapper));
+  GtkWidget *sw = NULL;
+  for(GList *l = children; l; l = g_list_next(l))
+  {
+    if(GTK_IS_SCROLLED_WINDOW(l->data))
+    {
+      sw = GTK_WIDGET(l->data);
+      break;
     }
   }
-  
-  state->min_rows = MAX(1, min_rows);
-  state->max_rows = MAX(state->min_rows, max_rows);
+  g_list_free(children);
+  return sw;
+}
 
-  _widget_auto_connect_model(w);
-  _widget_auto_connect_buffer(w);
-  _widget_auto_update(w);
+// ---- Resizable drawing area (the histogram-scope paradigm, made reusable) -------------------
+// A fixed-pixel-height GtkDrawingArea (or any widget sized by height-request) made vertically
+// resizable by the shared grip primitive, with the height persisted to config. Unlike the
+// scroll-wrap helper above, the content draws itself and is not scrolled; we only manage its
+// height-request, so the drawing code keeps reading the live allocation as usual.
+
+static const char *const DT_UI_RESIZABLE_AREA_KEY = "dt-ui-resizable-area";
+
+typedef struct dt_ui_resizable_area_t
+{
+  char *config_str;   // conf key persisting the user-chosen height (px); owned
+  int min_height;     // minimum height floor, device pixels
+  int last_height;    // last applied height, shared with the drag handle
+} dt_ui_resizable_area_t;
+
+static void _resizable_area_free(gpointer data)
+{
+  dt_ui_resizable_area_t *state = (dt_ui_resizable_area_t *)data;
+  if(IS_NULL_PTR(state)) return;
+  g_free(state->config_str);
+  dt_free(state);
+}
+
+static int _resizable_area_get_size(gpointer user_data)
+{
+  GtkWidget *area = GTK_WIDGET(user_data);
+  const dt_ui_resizable_area_t *state = g_object_get_data(G_OBJECT(area), DT_UI_RESIZABLE_AREA_KEY);
+  if(state) return state->last_height;
+  return gtk_widget_get_allocated_height(area);
+}
+
+static int _resizable_area_resize(int requested_size, gboolean finished, gpointer user_data)
+{
+  GtkWidget *area = GTK_WIDGET(user_data);
+  dt_ui_resizable_area_t *state = g_object_get_data(G_OBJECT(area), DT_UI_RESIZABLE_AREA_KEY);
+  if(IS_NULL_PTR(state)) return requested_size;
+
+  const int height = CLAMP(requested_size, MAX(1, state->min_height), _resizable_scroll_max_height());
+  state->last_height = height;
+  gtk_widget_set_size_request(area, -1, height);
+  if(finished && state->config_str) dt_conf_set_int(state->config_str, height);
+  return height;
+}
+
+GtkWidget *dt_ui_resizable_drawing_area(GtkWidget *area, char *config_str, int default_height, int min_height)
+{
+  dt_ui_resizable_area_t *state = calloc(1, sizeof(*state));
+  state->config_str = g_strdup(config_str);
+  state->min_height = MAX(1, DT_PIXEL_APPLY_DPI(min_height));
+
+  int height = (config_str && dt_conf_key_exists(config_str)) ? dt_conf_get_int(config_str)
+                                                              : DT_PIXEL_APPLY_DPI(default_height);
+  height = CLAMP(height, state->min_height, _resizable_scroll_max_height());
+  state->last_height = height;
+  g_object_set_data_full(G_OBJECT(area), DT_UI_RESIZABLE_AREA_KEY, state, _resizable_area_free);
+  gtk_widget_set_size_request(area, -1, height);
+
+  // Drag grip floating on the area's bottom edge (an overlay, not a packed sibling), so it takes
+  // no layout space -- the area stays flush with neighbouring widgets, no margin-like gap. It sits
+  // over the graph's bottom inset/axis margin (graphs reserve one), invisible until hovered.
+  GtkWidget *handle = dt_bauhaus_resize_handle_new(GTK_ORIENTATION_VERTICAL, FALSE,
+                                                   _("Drag to resize"),
+                                                   _resizable_area_get_size, _resizable_area_resize, area);
+
+  GtkWidget *over = gtk_overlay_new();
+  gtk_container_add(GTK_CONTAINER(over), area);
+  gtk_overlay_add_overlay(GTK_OVERLAY(over), handle);
+  return over;
 }
 
 gboolean dt_gui_container_has_children(GtkContainer *container)
@@ -2841,6 +3043,17 @@ static void _collapsible_set_states(dt_gui_collapsible_section_t *cs, gboolean a
   }
 }
 
+static void _collapsible_container_show(GtkWidget *widget, gpointer user_data)
+{
+  /* Called whenever the container receives a "show" event, including from gtk_widget_show_all().
+   * If the toggle is not active the section should remain collapsed, so we re-hide the container
+   * immediately. By the time this fires, show_all has already recursed into the children and
+   * set their visible flags, so a later expand will find all children ready to display. */
+  dt_gui_collapsible_section_t *cs = (dt_gui_collapsible_section_t *)user_data;
+  if(!gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(cs->toggle)))
+    gtk_widget_hide(widget);
+}
+
 static void _coeffs_button_changed(GtkDarktableToggleButton *widget, gpointer user_data)
 {
   dt_gui_collapsible_section_t *cs = (dt_gui_collapsible_section_t *)user_data;
@@ -2896,7 +3109,7 @@ void dt_gui_new_collapsible_section(dt_gui_collapsible_section_t *cs,
   cs->parent = parent;
 
   // collapsible section header
-  GtkWidget *destdisp_head = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_BAUHAUS_SPACE);
+  GtkWidget *destdisp_head = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   GtkWidget *header_evb = gtk_event_box_new();
   cs->label = dt_ui_section_label_new(label);
   dt_gui_add_class(destdisp_head, "dt_section_expander");
@@ -2907,12 +3120,17 @@ void dt_gui_new_collapsible_section(dt_gui_collapsible_section_t *cs,
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(cs->toggle), expanded);
   dt_gui_add_class(cs->toggle, "dt_ignore_fg_state");
 
-  cs->container = GTK_BOX(gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE));
+  cs->container = GTK_BOX(gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING));
   gtk_widget_set_name(GTK_WIDGET(cs->container), "collapsible");
   gtk_box_pack_start(GTK_BOX(destdisp_head), header_evb, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(destdisp_head), cs->toggle, FALSE, FALSE, 0);
 
   cs->expander = dtgtk_expander_new(destdisp_head, GTK_WIDGET(cs->container));
+  /* gtk_widget_show_all() on the parent (called by lib modules after gui_init) recurses into
+   * the container and would override the collapsed state set by dtgtk_expander_set_expanded.
+   * Connect to "show" so we can re-apply the correct visibility right after show_all touches it. */
+  g_signal_connect(G_OBJECT(cs->container), "show",
+                   G_CALLBACK(_collapsible_container_show), (gpointer)cs);
   // Pack at the requested side so callers control ordering at insertion time.
   if(pack == GTK_PACK_START)
     gtk_box_pack_start(GTK_BOX(cs->parent), cs->expander, FALSE, FALSE, 0);
@@ -2946,7 +3164,7 @@ void dt_capitalize_label(gchar *text)
 GtkBox * attach_popover(GtkWidget *widget, const char *icon, GtkWidget *content)
 {
   // Create the wrapping box and add the original widget to it
-  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(box), widget, FALSE, FALSE, 0);
 
   // Create the info icon button that will trigger the popover
@@ -2959,7 +3177,7 @@ GtkBox * attach_popover(GtkWidget *widget, const char *icon, GtkWidget *content)
   gtk_box_pack_start(GTK_BOX(box), button, FALSE, FALSE, 0);
 
   // Create the content of the popover
-  GtkWidget *popover_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  GtkWidget *popover_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(popover_box), content, FALSE, FALSE, 0);
 
   // Wrap the content into a popover and attach it to the button

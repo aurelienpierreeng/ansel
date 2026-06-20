@@ -429,12 +429,14 @@ int dt_dev_pixelpipe_init_cached(dt_dev_pixelpipe_t *pipe)
 
   // Set only the stuff that doesn't take 0 as default
   pipe->devid = -1;
+  pipe->last_devid = -1;
   dt_dev_pixelpipe_set_changed(pipe, DT_DEV_PIPE_UNCHANGED);
   dt_dev_pixelpipe_set_hash(pipe, DT_PIXELPIPE_CACHE_HASH_INVALID);
   dt_dev_pixelpipe_set_history_hash(pipe, DT_PIXELPIPE_CACHE_HASH_INVALID);
   dt_dev_set_backbuf(&pipe->backbuf, 0, 0, 0, -1, -1);
   pipe->last_history_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
   pipe->rawdetail_mask_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+  pipe->raster_mask_hashes = g_array_new(FALSE, FALSE, sizeof(uint64_t));
 
   pipe->output_imgid = UNKNOWN_IMAGE;
   pipe->iscale = 1.0f;
@@ -485,10 +487,11 @@ void dt_dev_pixelpipe_set_icc(dt_dev_pixelpipe_t *pipe, dt_colorspaces_color_pro
 
 void dt_dev_pixelpipe_cleanup(dt_dev_pixelpipe_t *pipe)
 {
-  /* Device-side cache payloads are only an acceleration layer. Once darkroom
-   * leaves and all pipe workers are quiescent, drop all cached cl_mem objects
-   * so a later reopen can only exact-hit host-authoritative cachelines. */
-  dt_dev_pixelpipe_cache_flush_clmem(darktable.pixelpipe_cache, -1);
+  /* Device-side cache payloads are only an acceleration layer. Drop the cl_mem
+   * objects this pipe produced on the device it last ran on -- but only that
+   * device, so we never touch cache entries another, still-running pipe holds
+   * on a different (or the same) OpenCL device. */
+  dt_dev_pixelpipe_cache_flush_clmem_for_pipe(darktable.pixelpipe_cache, pipe->last_devid);
 
   // blocks while busy and sets shutdown bit:
   dt_dev_pixelpipe_cleanup_nodes(pipe);
@@ -520,6 +523,17 @@ void dt_dev_pixelpipe_cleanup(dt_dev_pixelpipe_t *pipe)
   pipe->output_imgid = UNKNOWN_IMAGE;
 
   dt_dev_clear_rawdetail_mask(pipe);
+
+  // Every hash in this array corresponds to one cache reference acquired
+  // either while reopening current provider masks or while publishing a new
+  // one. Release the exact same number of references before destroying it.
+  for(guint k = 0; k < pipe->raster_mask_hashes->len; k++)
+  {
+    const uint64_t hash = g_array_index(pipe->raster_mask_hashes, uint64_t, k);
+    dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, hash);
+  }
+  g_array_free(pipe->raster_mask_hashes, TRUE);
+  pipe->raster_mask_hashes = NULL;
 
   if(pipe->forms)
   {
@@ -577,7 +591,6 @@ void dt_dev_pixelpipe_cleanup_nodes(dt_dev_pixelpipe_t *pipe)
     if(IS_NULL_PTR(piece)) continue;
     // printf("cleanup module `%s'\n", piece->module->name());
     if(piece->module) dt_iop_cleanup_pipe(piece->module, pipe, piece);
-    dt_pixelpipe_raster_cleanup(piece->raster_masks);
     dt_free(piece);
   }
   g_list_free(pipe->nodes);
@@ -613,7 +626,6 @@ void dt_dev_pixelpipe_create_nodes(dt_dev_pixelpipe_t *pipe)
     piece->global_mask_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
     _reset_piece_cache_entry(piece);
     piece->cache_output_on_ram = TRUE;
-    piece->raster_masks = dt_pixelpipe_raster_alloc();
 
     // dsc_mask is static, single channel float image
     piece->dsc_mask.channels = 1;
@@ -918,7 +930,15 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe,
   dt_pixelpipe_flow_t pixelpipe_flow = (PIXELPIPE_FLOW_NONE | PIXELPIPE_FLOW_HISTOGRAM_NONE);
 
   gchar *name = g_strdup_printf("module %s (%s) for pipe %s", module->op, module->multi_name, type);
-  gboolean cache_ram_output = piece->cache_output_on_ram && !_bypass_cache(pipe, piece);
+  // Cache bypass makes intermediate module outputs disposable, but the final output is the
+  // backbuffer consumed by Cairo. It must keep a host payload even when an edit mode (crop,
+  // clipping, ashift...) bypasses the downstream cache. Otherwise the GUI requests that host
+  // cacheline after every GPU render, while each cache-request pass publishes another device-only
+  // backbuffer and feeds an infinite preview recompute loop.
+  const gboolean keep_final_output = (hash == dt_dev_pixelpipe_get_hash(pipe));
+  gboolean cache_ram_output
+      = piece->cache_output_on_ram && (!_bypass_cache(pipe, piece) || keep_final_output);
+
   /* `piece->cache_entry` is only valid as a writable-reuse hint for transient outputs that will
    * be fully overwritten later. As soon as we keep the current output as a published cacheline in
    * RAM, rekey reuse must stop for that piece so later runs cannot overwrite a long-term state in
@@ -1090,7 +1110,6 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe,
   // to survive long enough for dt_dev_pixelpipe_process() to promote it to the backbuffer,
   // otherwise thumbnail/export callers only see a missing exact-hit and fall back to invalid
   // placeholder pixels.
-  const gboolean keep_final_output = (hash == dt_dev_pixelpipe_get_hash(pipe));
   if(_bypass_cache(pipe, piece) && !keep_final_output)
     dt_dev_pixelpipe_cache_flag_auto_destroy(darktable.pixelpipe_cache, output_entry);
 
@@ -1283,6 +1302,45 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_iop_roi_t roi)
   dt_pixelpipe_get_global_hash(pipe);
   const guint pos = g_list_length(pipe->dev->iop);
 
+  const guint previous_raster_refs = pipe->raster_mask_hashes->len;
+
+  /**
+   * We loop over enabled providers and the mask ids they advertise, looking for
+   * dedicated cachelines required by this graph. Acquire the new references
+   * before releasing the previous set so an unchanged mask never becomes
+   * briefly evictable between consecutive renders.
+   */
+  for(GList *node = g_list_first(pipe->nodes); node; node = g_list_next(node))
+  {
+    const dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)node->data;
+    if(!piece->enabled) continue;
+
+    GHashTableIter mask_iter;
+    gpointer mask_key = NULL;
+    gpointer mask_name = NULL;
+    g_hash_table_iter_init(&mask_iter, piece->module->raster_mask.source.masks);
+    while(g_hash_table_iter_next(&mask_iter, &mask_key, &mask_name))
+    {
+      const int mask_id = GPOINTER_TO_INT(mask_key);
+      if(!pipe->store_all_raster_masks
+         && !dt_iop_is_raster_mask_used(piece->module, mask_id))
+        continue;
+
+      const uint64_t mask_hash = dt_dev_pixelpipe_raster_mask_hash(piece, mask_id);
+      if(dt_dev_pixelpipe_cache_ref_entry_by_hash(
+             darktable.pixelpipe_cache, mask_hash, NULL, NULL))
+        g_array_append_val(pipe->raster_mask_hashes, mask_hash);
+    }
+  }
+
+  for(guint k = 0; k < previous_raster_refs; k++)
+  {
+    const uint64_t hash = g_array_index(pipe->raster_mask_hashes, uint64_t, k);
+    dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, hash);
+  }
+  if(previous_raster_refs > 0)
+    g_array_remove_range(pipe->raster_mask_hashes, 0, previous_raster_refs);
+
   dt_dev_pixelpipe_cache_request_t cache_request = dt_dev_pixelpipe_get_cache_request(pipe);
   const dt_iop_module_t *const requested_module = dt_dev_pixelpipe_get_cache_request_module(pipe);
   dt_dev_pixelpipe_reset_cache_request(pipe);
@@ -1345,11 +1403,53 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_iop_roi_t roi)
   // so the RAM usage can go out of control here.
   dt_pthread_mutex_lock(&darktable.pipeline_threadsafe);
 
+  if(dt_dev_pixelpipe_has_reentry(pipe))
+  {
+    const guint node_count = g_list_length(pipe->nodes);
+    uint64_t *invalidated_hashes = g_new(uint64_t, node_count);
+    size_t invalidated_count = 0;
+    gboolean reached_provider = FALSE;
+
+    /**
+     * Invalidate immediately before the raster reconstruction pass, while no
+     * other pixelpipe can republish one of these shared hashes. Invalidating
+     * when the first pass failed is too early: the preview pipe may run before
+     * this retry and recreate the provider image while the dedicated mask
+     * cacheline remains absent.
+     *
+     * We are looking for the provider output captured in reentry_hash, then
+     * collect every enabled cumulative output after it. This forces recursion
+     * through the provider while preserving all upstream cache lines.
+     */
+    for(GList *node = g_list_first(pipe->nodes); node; node = g_list_next(node))
+    {
+      dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)node->data;
+      if(!piece->enabled) continue;
+
+      reached_provider |= (piece->global_hash == pipe->reentry_hash);
+      if(reached_provider)
+        invalidated_hashes[invalidated_count++] = piece->global_hash;
+    }
+
+    const int retained = dt_dev_pixelpipe_cache_invalidate_hashes(
+        darktable.pixelpipe_cache, invalidated_hashes, invalidated_count);
+    dt_print(DT_DEBUG_DEV,
+             "[raster masks] invalidated %" PRIu64 " cache states at retry from provider=%" PRIu64
+             " retained=%d pipe=%s\n",
+             invalidated_count, pipe->reentry_hash, retained,
+             dt_pixelpipe_get_pipe_name(pipe->type));
+    dt_free(invalidated_hashes);
+  }
+
   pipe->opencl_enabled = dt_opencl_update_settings(); // update enabled flag and profile from preferences
   pipe->devid = (pipe->opencl_enabled) ? dt_opencl_lock_device(pipe->type)
                                        : -1; // try to get/lock opencl resource
 
-  if(pipe->devid > -1) dt_opencl_events_reset(pipe->devid);
+  if(pipe->devid > -1)
+  {
+    dt_opencl_events_reset(pipe->devid);
+    pipe->last_devid = pipe->devid;
+  }
   dt_print(DT_DEBUG_OPENCL, "[pixelpipe_process] [%s] using device %d\n", dt_pixelpipe_get_pipe_name(pipe->type),
            pipe->devid);
 

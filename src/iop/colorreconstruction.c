@@ -1110,7 +1110,7 @@ void gui_init(struct dt_iop_module_t *self)
   g->can = NULL;
   g->hash = 0;
 
-  GtkWidget *box_enabled = self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+  GtkWidget *box_enabled = self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   g->threshold = dt_bauhaus_slider_from_params(self, N_("threshold"));
   g->spatial = dt_bauhaus_slider_from_params(self, N_("spatial"));

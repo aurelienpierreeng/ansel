@@ -1277,8 +1277,8 @@ dt_lut_viewer_t *dt_lut_viewer_new(dt_gui_module_t *module)
   dt_lut_viewer_t *viewer = calloc(1, sizeof(*viewer));
   if(IS_NULL_PTR(viewer)) return NULL;
 
-  viewer->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
-  viewer->controls = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+  viewer->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  viewer->controls = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   viewer->area = GTK_DRAWING_AREA(dtgtk_drawing_area_new_with_aspect_ratio(1.f));
   gtk_widget_set_size_request(GTK_WIDGET(viewer->area), -1, DT_PIXEL_APPLY_DPI(180));
   gtk_widget_add_events(GTK_WIDGET(viewer->area),

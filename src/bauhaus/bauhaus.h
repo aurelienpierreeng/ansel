@@ -22,7 +22,7 @@
     Copyright (C) 2021 Philippe Weyland.
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2025 Alynx Zhou.
-    Copyright (C) 2025 Guillaume Stutin.
+    Copyright (C) 2025-2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -70,11 +70,14 @@ extern GType DT_BAUHAUS_WIDGET_TYPE;
 #define DT_BAUHAUS_SLIDER_VALUE_CHANGED_DELAY_MIN 25
 #define DT_BAUHAUS_SLIDER_MAX_STOPS 20
 #define DT_BAUHAUS_COMBO_MAX_TEXT 180
+#define DT_BAUHAUS_COMBO_SEPARATOR_DEFAULT_HEIGHT_FACTOR 0.6f
 
-// INNER_PADDING is the horizontal space between slider and quad
-// and vertical space between labels and slider baseline
-#define INNER_PADDING DT_PIXEL_APPLY_DPI(4)
-#define INTERNAL_PADDING 2. * INNER_PADDING
+// INTERNAL_PADDING is the horizontal space between slider and quad
+#define INTERNAL_PADDING DT_GUI_BOX_SPACING
+
+// INNER_PADDING is the vertical space between labels and slider baseline
+#define INNER_PADDING 2.
+
 
 typedef struct dt_bauhaus_t dt_bauhaus_t;
 
@@ -126,8 +129,11 @@ typedef enum dt_bauhaus_combobox_alignment_t
 typedef struct dt_bauhaus_combobox_entry_t
 {
   char *label;
+  char *tooltip;
   dt_bauhaus_combobox_alignment_t alignment;
   gboolean sensitive;
+  gboolean is_separator;
+  float row_height_factor;
   gpointer data;
   void (*free_func)(gpointer); // callback to free data elements
 } dt_bauhaus_combobox_entry_t;
@@ -159,6 +165,8 @@ typedef struct dt_bauhaus_widget_t DtBauhausWidget;
 typedef struct dt_bauhaus_widget_class_t DtBauhausWidgetClass;
 
 typedef void (*dt_bauhaus_quad_paint_f)(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
+typedef int (*dt_bauhaus_resize_handle_get_size_f)(gpointer user_data);
+typedef int (*dt_bauhaus_resize_handle_resize_f)(int requested_size, gboolean finished, gpointer user_data);
 
 // our new widget and its private members, inheriting from drawing area:
 typedef struct dt_bauhaus_widget_t
@@ -270,7 +278,8 @@ struct dt_bauhaus_t
       color_value, color_value_insensitive, color_value_text, color_value_text_insensitive;
 
   // colors for graphs
-  GdkRGBA graph_bg, graph_exterior, graph_border, graph_fg, graph_grid, graph_fg_active, graph_overlay, inset_histogram;
+  GdkRGBA graph_bg, graph_exterior, graph_border, graph_fg, graph_grid, graph_fg_active, graph_overlay,
+      graph_scope_restricted, inset_histogram;
   GdkRGBA graph_colors[3];               // primaries
   GdkRGBA colorlabels[DT_COLORLABELS_LAST];
 
@@ -307,6 +316,28 @@ void dt_bauhaus_widget_set_field(GtkWidget *w, gpointer field, dt_introspection_
 
 void dt_bauhaus_hide_popup(dt_bauhaus_t *bh);
 void dt_bauhaus_show_popup(GtkWidget *w);
+
+/**
+ * @brief Create a themed handle widget driving one-dimensional resize gestures.
+ *
+ * @details The handle owns the GTK event bookkeeping: hover state, cursor, grab lifetime,
+ * drawing and drag delta computation. The caller owns the resized target and keeps that
+ * ownership visible through @p get_size and @p resize. During pointer motion @p resize receives
+ * `finished == FALSE`; on button release it receives `finished == TRUE` so callers can persist
+ * the final size without writing settings at every motion sample.
+ *
+ * @param invert When FALSE the target grows as the pointer moves in the positive axis direction
+ * (down for vertical, right for horizontal) — the natural case for a handle sitting below/at the
+ * right of its target. Set TRUE when the target grows in the opposite direction, e.g. a right
+ * panel that grows as it is dragged left, or a bottom panel that grows as it is dragged up.
+ *
+ * The grip is meant to be added as an overlay child on the resized widget. It pins itself to the
+ * correct edge (from @p orientation and @p invert) and tags itself with an edge CSS class
+ * (.resize-handle-{top,bottom,left,right}); its thickness and centering live in the stylesheet.
+ */
+GtkWidget *dt_bauhaus_resize_handle_new(GtkOrientation orientation, gboolean invert, const char *tooltip,
+                                        dt_bauhaus_resize_handle_get_size_f get_size,
+                                        dt_bauhaus_resize_handle_resize_f resize, gpointer user_data);
 
 // slider:
 GtkWidget *dt_bauhaus_slider_new(dt_bauhaus_t *bh, dt_gui_module_t *self);
@@ -364,10 +395,20 @@ GtkWidget *dt_bauhaus_combobox_new_full(dt_bauhaus_t *bh, dt_gui_module_t *self,
   widget = dt_bauhaus_combobox_new_full(bauhaus, action, label, tip, pos, callback, data, texts);            \
 }
 
+// Build a combobox from a <dtconfig> entry of anselconfig.xml.in whose <type> is <enum>.
+// Entries are pre-filled from the <enum><option> list (translated for display), the widget
+// is pre-selected from the current dt_conf value, and any later user selection is written
+// back to that same config key. Returns NULL if `confkey` is not a known enum config entry.
+GtkWidget *dt_bauhaus_combobox_from_conf(dt_bauhaus_t *bh, dt_gui_module_t *self, const char *confkey);
+
 void dt_bauhaus_combobox_add(GtkWidget *widget, const char *text);
+void dt_bauhaus_combobox_add_with_tooltip(GtkWidget *widget, const char *text, const char *tooltip);
 void dt_bauhaus_combobox_add_aligned(GtkWidget *widget, const char *text, dt_bauhaus_combobox_alignment_t align);
 void dt_bauhaus_combobox_add_full(GtkWidget *widget, const char *text, dt_bauhaus_combobox_alignment_t align,
                                   gpointer data, void (*free_func)(void *data), gboolean sensitive);
+// Separators are visual-only rows and don't count in public combobox indexes.
+void dt_bauhaus_combobox_add_separator(GtkWidget *widget);
+void dt_bauhaus_combobox_add_separator_with_height(GtkWidget *widget, float row_height_factor);
 void dt_bauhaus_combobox_set(GtkWidget *w, int pos);
 gboolean dt_bauhaus_combobox_set_from_text(GtkWidget *w, const char *text);
 gboolean dt_bauhaus_combobox_set_from_value(GtkWidget *w, int value);
@@ -375,6 +416,9 @@ void dt_bauhaus_combobox_remove_at(GtkWidget *widget, int pos);
 void dt_bauhaus_combobox_insert(GtkWidget *widget, const char *text,int pos);
 void dt_bauhaus_combobox_insert_full(GtkWidget *widget, const char *text, dt_bauhaus_combobox_alignment_t align,
                                      gpointer data, void (*free_func)(void *data), int pos);
+// Insert before public index pos, or at the end when pos == dt_bauhaus_combobox_length().
+void dt_bauhaus_combobox_insert_separator(GtkWidget *widget, int pos);
+void dt_bauhaus_combobox_insert_separator_with_height(GtkWidget *widget, int pos, float row_height_factor);
 int dt_bauhaus_combobox_length(GtkWidget *widget);
 void dt_bauhaus_combobox_set_editable(GtkWidget *w, int editable);
 void dt_bauhaus_combobox_set_selected_text_align(GtkWidget *widget, const dt_bauhaus_combobox_alignment_t text_align);

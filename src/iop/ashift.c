@@ -308,8 +308,7 @@ typedef enum dt_iop_ashift_jobcode_t
   ASHIFT_JOBCODE_GET_STRUCTURE = 1,
   ASHIFT_JOBCODE_FIT = 2,
   ASHIFT_JOBCODE_GET_STRUCTURE_LINES = 3,
-  ASHIFT_JOBCODE_GET_STRUCTURE_QUAD = 4,
-  ASHIFT_JOBCODE_DO_CROP = 5
+  ASHIFT_JOBCODE_GET_STRUCTURE_QUAD = 4
 } dt_iop_ashift_jobcode_t;
 
 typedef struct dt_iop_ashift_params1_t
@@ -516,7 +515,6 @@ typedef struct dt_iop_ashift_gui_data_t
   float crop_cy;
   dt_iop_ashift_jobcode_t jobcode;
   int jobparams;
-  uint64_t pending_preview_input_hash;
 
   dt_iop_ashift_method_t current_structure_method;
   int draw_near_point;
@@ -552,8 +550,7 @@ typedef struct dt_iop_ashift_global_data_t
 {
   int kernel_ashift_bilinear;
   int kernel_ashift_bicubic;
-  int kernel_ashift_lanczos2;
-  int kernel_ashift_lanczos3;
+  int kernel_ashift_mitchell;
 } dt_iop_ashift_global_data_t;
 
 int legacy_params(dt_iop_module_t *self, const void *const old_params, const int old_version,
@@ -736,13 +733,20 @@ static void print_roi(const dt_iop_roi_t *roi, const char *label)
 }
 #endif
 
-static void _clear_shadow_crop_box(dt_iop_ashift_gui_data_t *g)
+/**
+ * @brief Reset the active crop rectangle to the complete transformed image.
+ *
+ * The caller passes either the persistent module parameters or the private edit-mode copy. Writing
+ * through that explicit pointer keeps the normal and edit paths consistent.
+ *
+ * @param p Parameter set whose crop margins must be reset.
+ */
+static void _clear_crop_box(dt_iop_ashift_params_t *p)
 {
-  // reset the crop to the full image
-  g->new_params.cl = 0.0f;
-  g->new_params.cr = 1.0f;
-  g->new_params.ct = 0.0f;
-  g->new_params.cb = 1.0f;
+  p->cl = 0.0f;
+  p->cr = 1.0f;
+  p->ct = 0.0f;
+  p->cb = 1.0f;
 }
 
 #define MAT3SWAP(a, b) { float (*tmp)[3] = (a); (a) = (b); (b) = tmp; }
@@ -1169,13 +1173,17 @@ void modify_roi_in(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t
                    struct dt_dev_pixelpipe_iop_t *piece,
                    const dt_iop_roi_t *const roi_out, dt_iop_roi_t *roi_in)
 {
-  (void)pipe;
   dt_iop_ashift_data_t *data = (dt_iop_ashift_data_t *)piece->data;
   *roi_in = *roi_out;
 
   // nothing more to be done if parameters are set to neutral values
   if(isneutral(data)) return;
 
+  // NB: while editing, commit_params() neutralizes the crop (cl/cr/ct/cb), so the back-transform
+  // below maps the full uncropped output back to the full input (cx=cy=0). process() then captures
+  // the whole image into g->buf — exactly what structure detection and the crop frame need — with no
+  // edit-specific special-casing in this function.
+  (void)pipe;
   float ihomograph[3][3];
   homography((float *)ihomograph, data->rotation, data->lensshift_v, data->lensshift_h, data->shear, data->f_length_kb,
              data->orthocorr, data->aspect, piece->buf_in.width, piece->buf_in.height, ASHIFT_HOMOGRAPH_INVERTED);
@@ -1631,10 +1639,16 @@ static int _get_structure(dt_iop_module_t *module, dt_iop_ashift_enhance_t enhan
   float vertical_weight;
   float horizontal_weight;
 
-  // get new structural data
+  // get new structural data. The trailing flag tells line_detect() the image originates from a
+  // raw sensor (different edge/contrast expectations than a display-referred JPEG); this holds
+  // for any raw colorimetry, mosaiced or already-demosaiced sraw/linear DNG, hence needs_rawprepare.
+  const gboolean raw_origin = dt_image_needs_rawprepare(&module->dev->image_storage);
+  dt_iop_fmt_log(module, "structure: class=%s raw_origin=%d enhance=%d",
+                 dt_image_pipe_class_name(dt_image_pipe_class(&module->dev->image_storage)),
+                 raw_origin, enhance);
   if(!line_detect(buffer, width, height, x_off, y_off, scale, &lines, &lines_count,
                   &vertical_count, &horizontal_count, &vertical_weight, &horizontal_weight,
-                  enhance, dt_image_is_raw(&module->dev->image_storage)))
+                  enhance, raw_origin))
     goto error;
 
   // save new structural data
@@ -2494,40 +2508,6 @@ static double crop_fitness(double *params, void *data)
   return -A;
 }
 
-/**
- * @brief Return the crop rectangle diagonal angle matching the final displayed aspect.
- *
- * Auto-crop is solved in ashift input coordinates, before the orientation module rotates the
- * image for portrait display. The crop rectangle itself still lives in ashift coordinates, but
- * its aspect ratio needs to match what the user finally sees on screen. When the final display is
- * rotated by 90 degrees, that means swapping width and height before building the diagonal angle
- * used by the crop fit.
- *
- * @param self Current ashift module.
- * @param g GUI state used to reuse the current pipeline flip diagnosis when available.
- * @param width Ashift input width.
- * @param height Ashift input height.
- *
- * @return Diagonal angle in radians for the crop rectangle.
- */
-static float _get_crop_aspect_angle(dt_iop_module_t *self, const dt_iop_ashift_gui_data_t *g,
-                                    const int width, const int height)
-{
-  int isflipped = 0;
-
-  if(!IS_NULL_PTR(g) && g->isflipped != -1)
-  {
-    isflipped = g->isflipped;
-  }
-  else if(self->dev)
-  {
-    const dt_image_orientation_t orientation = dt_image_get_orientation(self->dev->image_storage.id);
-    isflipped = (orientation & ORIENTATION_SWAP_XY) ? 1 : 0;
-  }
-
-  return isflipped ? atan2f((float)width, (float)height) : atan2f((float)height, (float)width);
-}
-
 // strategy: for a given center of the crop area and a specific aspect angle
 // we calculate the largest crop area that still lies within the output image;
 // now we allow a Nelder-Mead simplex to search for the center coordinates
@@ -2536,23 +2516,50 @@ static void do_crop(dt_iop_module_t *self, dt_iop_ashift_params_t *p)
 {
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
 
-  // if sizes are not ready (module disabled), just ignore this
-  if(g->buf_width == 0 || g->buf_height == 0) return;
+  // Resetting the crop does not depend on pipeline geometry. Do it before looking up buf_in so
+  // "off" also works during initialization or after a cache-only preview pass.
+  if(p->cropmode == ASHIFT_CROP_OFF)
+  {
+    _clear_crop_box(p);
+    g->grid_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+    if(g->editing)
+    {
+      dt_dev_pixelpipe_sync_virtual(self->dev, DT_DEV_PIPE_SYNCH);
+      dt_dev_get_thumbnail_size(self->dev);
+      dt_dev_pixelpipe_resync_history_all(self->dev);
+    }
+    return;
+  }
+
+  // Auto-crop is a purely geometric fit: it only needs ashift's *full* (uncropped) input size, not
+  // pixel data. Read it from the virtual-pipe piece, which is synchronized on the GUI thread and
+  // remains available when the preview worker exact-hits downstream cache entries without running
+  // ashift's process() to populate g->buf. ashift's roi_in is crop-dependent, while buf_in is the
+  // stable full input geometry required by the fit.
+  int crop_width = 0, crop_height = 0;
+  const dt_dev_pixelpipe_iop_t *crop_piece = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);
+  if(!IS_NULL_PTR(crop_piece) && crop_piece->buf_in.width > 0 && crop_piece->buf_in.height > 0)
+  {
+    crop_width = crop_piece->buf_in.width;
+    crop_height = crop_piece->buf_in.height;
+  }
+  else
+  {
+    // Fall back to the captured buffer size if the preview geometry is not ready yet.
+    crop_width = g->buf_width;
+    crop_height = g->buf_height;
+  }
+
+  // if sizes are not ready (module disabled / preview not computed yet), just ignore this
+  if(crop_width == 0 || crop_height == 0) return;
 
   // skip if fitting is still running
   if(g->fitting) return;
 
-  // reset fit margins if auto-cropping is off
-  if(p->cropmode == ASHIFT_CROP_OFF)
-  {
-    _clear_shadow_crop_box(g);
-    if(g->editing)
-      dt_dev_pixelpipe_resync_history_all(self->dev);
-    else
-      dt_dev_pixelpipe_update_history_all(self->dev);
-    dt_dev_get_thumbnail_size(self->dev);
-    return;
-  }
+  // Changing the crop changes the output geometry and thus where the control-line overlay lands.
+  // Drop the overlay's cached screen coordinates so gui_post_expose() recomputes them against the
+  // virtual-pipe geometry that the resync below makes current (#710 overlay lag).
+  g->grid_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
 
   g->fitting = 1;
 
@@ -2570,14 +2577,17 @@ static void do_crop(dt_iop_module_t *self, dt_iop_ashift_params_t *p)
 
   // prepare structure of constant parameters
   dt_iop_ashift_cropfit_params_t cropfit;
-  cropfit.width = g->buf_width;
-  cropfit.height = g->buf_height;
+  cropfit.width = crop_width;
+  cropfit.height = crop_height;
   homography((float *)cropfit.homograph, rotation, lensshift_v, lensshift_h, shear, f_length_kb,
              orthocorr, aspect, cropfit.width, cropfit.height, ASHIFT_HOMOGRAPH_FORWARD);
 
   const float wd = cropfit.width;
   const float ht = cropfit.height;
-  const float crop_alpha = _get_crop_aspect_angle(self, g, cropfit.width, cropfit.height);
+  // The crop rectangle is solved in ashift coordinates. A later orientation swap rotates both the
+  // rectangle and the image, preserving their relative aspect; swapping width/height here too
+  // would therefore invert "original format" on portrait images.
+  const float crop_alpha = atan2f(ht, wd);
 
   // the four vertices of the image in input image coordinates
   const float Vc[4][3] = { { 0.0f, 0.0f, 1.0f },
@@ -2679,16 +2689,17 @@ static void do_crop(dt_iop_module_t *self, dt_iop_ashift_params_t *p)
 #endif
 
   if(g->editing)
+  {
+    dt_dev_pixelpipe_sync_virtual(self->dev, DT_DEV_PIPE_SYNCH);
+    dt_dev_get_thumbnail_size(self->dev);
     dt_dev_pixelpipe_resync_history_all(self->dev);
-  else
-    dt_dev_pixelpipe_update_history_all(self->dev);
-  dt_dev_get_thumbnail_size(self->dev);
+  }
   return;
 
 failed:
   // in case of failure: reset clipping margins, set "automatic cropping" parameter
   // to "off" state, and display warning message
-  _clear_shadow_crop_box(g);
+  _clear_crop_box(p);
   p->cropmode = ASHIFT_CROP_OFF;
   ++darktable.gui->reset;
   dt_bauhaus_combobox_set(g->cropmode, p->cropmode);
@@ -2697,10 +2708,11 @@ failed:
   dt_control_log(_("automatic cropping failed"));
 
   if(g->editing)
+  {
+    dt_dev_pixelpipe_sync_virtual(self->dev, DT_DEV_PIPE_SYNCH);
+    dt_dev_get_thumbnail_size(self->dev);
     dt_dev_pixelpipe_resync_history_all(self->dev);
-  else
-    dt_dev_pixelpipe_update_history_all(self->dev);
-  dt_dev_get_thumbnail_size(self->dev);
+  }
   return;
 }
 
@@ -2918,107 +2930,6 @@ static int _do_clean_structure(dt_iop_module_t *module, dt_iop_ashift_params_t *
   return TRUE;
 }
 
-/**
- * @brief Rebuild the GUI-side fitting buffer from the authoritative preview cacheline.
- *
- * The ashift GUI keeps a private float buffer used by structure detection and fit. That buffer is
- * not owned by the pixelpipe cache and may disappear on darkroom teardown while the preview pipe
- * still exact-hits cached hashes on re-entry. In that case, the correct recovery is to reopen the
- * cached upstream preview input of the ashift piece and copy it back into @p g->buf.
- *
- * This helper performs only that buffer resynchronization. Callers keep ownership of the fallback
- * policy when the cacheline is unavailable, so the control flow that removes cache suffixes,
- * requeues jobs, and resyncs preview remains explicit at the call site.
- *
- * @param self Current ashift module.
- * @param[out] preview_piece_out Matching ashift piece on the preview pipe, used by callers when
- * the cache restore fails and they need to invalidate the preview suffix explicitly.
- *
- * @return TRUE when @p g->buf has been repopulated from cache, FALSE otherwise.
- */
-static gboolean _sync_private_buffer_from_preview_cache(dt_iop_module_t *self,
-                                                        dt_dev_pixelpipe_iop_t **preview_piece_out)
-{
-  dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
-  dt_dev_pixelpipe_iop_t *preview_piece = dt_dev_distort_get_iop_pipe(self->dev->preview_pipe, self);
-  if(preview_piece_out) *preview_piece_out = preview_piece;
-
-  if(IS_NULL_PTR(preview_piece) || !preview_piece->enabled || preview_piece->roi_in.width <= 0 || preview_piece->roi_in.height <= 0)
-    return FALSE;
-
-  const dt_dev_pixelpipe_iop_t *previous_piece = NULL;
-  for(GList *node = g_list_first(self->dev->preview_pipe->nodes); node; node = g_list_next(node))
-  {
-    const dt_dev_pixelpipe_iop_t *current = (dt_dev_pixelpipe_iop_t *)node->data;
-    if(current == preview_piece) break;
-    if(current->enabled) previous_piece = current;
-  }
-
-  const uint64_t upstream_hash
-      = dt_dev_pixelpipe_node_hash(self->dev->preview_pipe, previous_piece, preview_piece->roi_in, 0);
-  void *preview_buf = NULL;
-  dt_pixel_cache_entry_t *preview_entry = NULL;
-  if(!dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, upstream_hash, &preview_buf, &preview_entry,
-                                  self->dev->preview_pipe->devid, NULL)
-     || !preview_buf || !preview_entry)
-    return FALSE;
-
-  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, preview_entry);
-
-  const int width = preview_piece->roi_in.width;
-  const int height = preview_piece->roi_in.height;
-  const int ch = preview_piece->dsc_in.channels;
-  const float scale_x = (preview_piece->buf_in.width > 0)
-                            ? (float)width / (float)preview_piece->buf_in.width
-                            : 1.0f;
-  const float scale_y = (preview_piece->buf_in.height > 0)
-                            ? (float)height / (float)preview_piece->buf_in.height
-                            : 1.0f;
-  // The line detector needs the actual preview-buffer decimation factor to map
-  // detected segments back to the module input. Derive it from buffer sizes so
-  // it stays correct even if ROI bookkeeping changes around the GUI boundary.
-  const float buffer_scale = 0.5f * (scale_x + scale_y);
-  dt_iop_gui_enter_critical_section(self);
-  if(IS_NULL_PTR(g->buf) || (size_t)g->buf_width * g->buf_height < (size_t)width * height)
-  {
-    dt_free(g->buf);
-    g->buf = malloc(sizeof(float) * 4 * (size_t)width * height);
-  }
-  if(g->buf)
-  {
-    dt_iop_image_copy_by_size(g->buf, preview_buf, width, height, ch);
-    g->buf_width = width;
-    g->buf_height = height;
-    g->buf_x_off = preview_piece->roi_in.x;
-    g->buf_y_off = preview_piece->roi_in.y;
-    g->buf_scale = buffer_scale;
-    g->buf_hash = upstream_hash;
-  }
-  dt_iop_gui_leave_critical_section(self);
-
-  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
-  return !IS_NULL_PTR(g->buf);
-}
-
-static uint64_t _current_preview_input_hash(dt_iop_module_t *self)
-{
-  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(self->dev->preview_pipe)) return DT_PIXELPIPE_CACHE_HASH_INVALID;
-
-  dt_dev_pixelpipe_iop_t *preview_piece = dt_dev_distort_get_iop_pipe(self->dev->preview_pipe, self);
-  if(IS_NULL_PTR(preview_piece) || !preview_piece->enabled || preview_piece->roi_in.width <= 0 || preview_piece->roi_in.height <= 0)
-    return DT_PIXELPIPE_CACHE_HASH_INVALID;
-
-  const dt_dev_pixelpipe_iop_t *previous_piece = NULL;
-  for(GList *node = g_list_first(self->dev->preview_pipe->nodes); node; node = g_list_next(node))
-  {
-    const dt_dev_pixelpipe_iop_t *current = (dt_dev_pixelpipe_iop_t *)node->data;
-    if(current == preview_piece) break;
-    if(current->enabled) previous_piece = current;
-  }
-
-  return dt_dev_pixelpipe_node_hash(self->dev->preview_pipe, previous_piece, preview_piece->roi_in, 0);
-}
-
 // helper function to start analysis for structural data and report about errors
 static int _do_get_structure_auto(dt_iop_module_t *self, dt_iop_ashift_params_t *p,
                                   dt_iop_ashift_enhance_t enhance)
@@ -3035,35 +2946,15 @@ static int _do_get_structure_auto(dt_iop_module_t *self, dt_iop_ashift_params_t 
 
   if(IS_NULL_PTR(b))
   {
-    dt_dev_pixelpipe_iop_t *preview_piece = dt_dev_distort_get_iop_pipe(self->dev->preview_pipe, self);
-    if(_sync_private_buffer_from_preview_cache(self, &preview_piece)) b = g->buf;
-
-    if(IS_NULL_PTR(b))
-    {
-      dt_control_log(_("Data pending - Please repeat"));
-      // If preview is already valid here, the GUI state was lost while the pipe can still exact-hit
-      // downstream cachelines. Remove the preview chain from ashift onward so the worker recomputes
-      // exactly that suffix. On a cold first run, just queue the job and let preview build normally.
-      if(dt_dev_pixelpipe_is_backbufer_valid(self->dev->preview_pipe) && preview_piece)
-      {
-        gboolean remove_from_ashift = FALSE;
-        for(GList *node = g_list_first(self->dev->preview_pipe->nodes); node; node = g_list_next(node))
-        {
-          dt_dev_pixelpipe_iop_t *current = (dt_dev_pixelpipe_iop_t *)node->data;
-          remove_from_ashift |= (current == preview_piece);
-          if(!remove_from_ashift) continue;
-          if(current->global_hash == DT_PIXELPIPE_CACHE_HASH_INVALID) continue;
-
-          dt_pixel_cache_entry_t *entry
-              = dt_dev_pixelpipe_cache_get_entry(darktable.pixelpipe_cache, current->global_hash);
-          if(entry) dt_dev_pixelpipe_cache_remove(darktable.pixelpipe_cache, TRUE, entry);
-        }
-      }
-      g->jobcode = ASHIFT_JOBCODE_GET_STRUCTURE;
-      g->jobparams = enhance;
-      dt_dev_pixelpipe_resync_history_preview(self->dev);
-      goto error;
-    }
+    // The preview input buffer is captured by process() on every preview render (process() always
+    // runs while editing, because the module is in cache-bypass mode). It is simply not ready yet,
+    // e.g. the click landed before the first edit-mode render completed. Queue the job and let the
+    // in-flight render publish g->buf; _event_process_after_preview_callback() resumes us. We do not
+    // poke the cache from here: a module cache-request only renders the pipe up to the previous
+    // module and never runs ashift's process(), so it could never capture g->buf and would spin (#710).
+    g->jobcode = ASHIFT_JOBCODE_GET_STRUCTURE;
+    g->jobparams = enhance;
+    goto error;
   }
 
   if(!_get_structure(self, enhance))
@@ -3104,42 +2995,11 @@ static void _do_get_structure_lines(dt_iop_module_t *self)
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
   dt_iop_ashift_params_t *p = _get_ashift_params(self);
 
-  // we verify that we have a valid buffer
-  dt_iop_gui_enter_critical_section(self);
-  float *b = g->buf;
-  dt_iop_gui_leave_critical_section(self);
-
-  if(IS_NULL_PTR(b))
-  {
-    dt_dev_pixelpipe_iop_t *preview_piece = dt_dev_distort_get_iop_pipe(darktable.develop->preview_pipe, self);
-    if(_sync_private_buffer_from_preview_cache(self, &preview_piece)) b = g->buf;
-
-    if(IS_NULL_PTR(b))
-    {
-      dt_control_log(_("Data pending - Please repeat"));
-      if(dt_dev_pixelpipe_is_backbufer_valid(darktable.develop->preview_pipe) && preview_piece)
-      {
-        gboolean remove_from_ashift = FALSE;
-        for(GList *node = g_list_first(darktable.develop->preview_pipe->nodes); node; node = g_list_next(node))
-        {
-          dt_dev_pixelpipe_iop_t *current = (dt_dev_pixelpipe_iop_t *)node->data;
-          remove_from_ashift |= (current == preview_piece);
-          if(!remove_from_ashift) continue;
-          if(current->global_hash == DT_PIXELPIPE_CACHE_HASH_INVALID) continue;
-
-          dt_pixel_cache_entry_t *entry
-              = dt_dev_pixelpipe_cache_get_entry(darktable.pixelpipe_cache, current->global_hash);
-          if(entry) dt_dev_pixelpipe_cache_remove(darktable.pixelpipe_cache, TRUE, entry);
-        }
-      }
-      g->jobcode = ASHIFT_JOBCODE_GET_STRUCTURE_LINES;
-      g->jobparams = 0;
-      dt_dev_pixelpipe_resync_history_preview(darktable.develop);
-      return;
-    }
-  }
-
-  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(darktable.develop->virtual_pipe, self);
+  // Manual line drawing only needs the module input geometry, never the pixel buffer (unlike
+  // auto-detection). Tying it to g->buf used to block all manual input whenever the preview buffer
+  // was momentarily unavailable, e.g. when the module already had parameters set (#710).
+  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);
+  if(IS_NULL_PTR(piece) || piece->iwidth <= 0 || piece->iheight <= 0) return;
 
   _do_clean_structure(self, p, TRUE);
 
@@ -3162,42 +3022,10 @@ static void _do_get_structure_quad(dt_iop_module_t *self)
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
   dt_iop_ashift_params_t *p = _get_ashift_params(self);
 
-  // we verify that we have a valid buffer
-  dt_iop_gui_enter_critical_section(self);
-  float *b = g->buf;
-  dt_iop_gui_leave_critical_section(self);
-
-  if(IS_NULL_PTR(b))
-  {
-    dt_dev_pixelpipe_iop_t *preview_piece = dt_dev_distort_get_iop_pipe(darktable.develop->preview_pipe, self);
-    if(_sync_private_buffer_from_preview_cache(self, &preview_piece)) b = g->buf;
-
-    if(IS_NULL_PTR(b))
-    {
-      dt_control_log(_("Data pending - Please repeat"));
-      if(dt_dev_pixelpipe_is_backbufer_valid(darktable.develop->preview_pipe) && preview_piece)
-      {
-        gboolean remove_from_ashift = FALSE;
-        for(GList *node = g_list_first(darktable.develop->preview_pipe->nodes); node; node = g_list_next(node))
-        {
-          dt_dev_pixelpipe_iop_t *current = (dt_dev_pixelpipe_iop_t *)node->data;
-          remove_from_ashift |= (current == preview_piece);
-          if(!remove_from_ashift) continue;
-          if(current->global_hash == DT_PIXELPIPE_CACHE_HASH_INVALID) continue;
-
-          dt_pixel_cache_entry_t *entry
-              = dt_dev_pixelpipe_cache_get_entry(darktable.pixelpipe_cache, current->global_hash);
-          if(entry) dt_dev_pixelpipe_cache_remove(darktable.pixelpipe_cache, TRUE, entry);
-        }
-      }
-      g->jobcode = ASHIFT_JOBCODE_GET_STRUCTURE_QUAD;
-      g->jobparams = 0;
-      dt_dev_pixelpipe_resync_history_preview(self->dev);
-      return;
-    }
-  }
-
+  // The manual perspective rectangle only needs the module input geometry, never the pixel buffer
+  // (unlike auto-detection), so it must not wait for the preview input buffer (#710).
   dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);
+  if(IS_NULL_PTR(piece) || piece->iwidth <= 0 || piece->iheight <= 0) return;
 
   _do_clean_structure(self, p, TRUE);
 
@@ -3582,11 +3410,8 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     case DT_INTERPOLATION_BICUBIC:
       ldkernel = gd->kernel_ashift_bicubic;
       break;
-    case DT_INTERPOLATION_LANCZOS2:
-      ldkernel = gd->kernel_ashift_lanczos2;
-      break;
-    case DT_INTERPOLATION_LANCZOS3:
-      ldkernel = gd->kernel_ashift_lanczos3;
+    case DT_INTERPOLATION_MITCHELL:
+      ldkernel = gd->kernel_ashift_mitchell;
       break;
     default:
       goto error;
@@ -3939,6 +3764,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   dt_develop_t *dev = self->dev;
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
   dt_iop_ashift_params_t *p = _get_ashift_params(self);
+  if(IS_NULL_PTR(g) || IS_NULL_PTR(p)) return;
 
   // the usual rescaling stuff
   const float wd = dev->roi.preview_width;
@@ -4184,6 +4010,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
 
   // points data are missing or outdated, or distortion has changed?
   if(IS_NULL_PTR(g->points) || IS_NULL_PTR(g->points_idx) || hash != g->grid_hash
+     || g->points_lines_count != g->lines_count
      || (g->lines_version > g->points_version
          && g->lines_hash != lines_hash))
   {
@@ -4386,6 +4213,7 @@ static void _draw_recompute_line_length(dt_iop_ashift_line_t *line)
 int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressure, int which)
 {
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
+  if(IS_NULL_PTR(g)) return FALSE;
 
   if(g->straightening)
   {
@@ -4407,9 +4235,25 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   // if visibility of lines is switched off or no lines available, we have nothing to do
   if(IS_NULL_PTR(g->lines)) return FALSE;
 
+  /* Selection uses transformed display point descriptors, but writes the state
+   * back into g->lines[n]. Display points can be stale until the next expose
+   * after editing or deleting lines, so every loop below is capped to live
+   * line storage. */
+  const int selectable_lines_count = (!IS_NULL_PTR(g->points) && !IS_NULL_PTR(g->points_idx))
+                                     ? MIN(g->points_lines_count, g->lines_count)
+                                     : 0;
+
   // if we are moving a drawn line extrema, we do the change here
   if(g->draw_point_move)
   {
+    const int line = g->draw_near_point / 2;
+    if(g->draw_near_point < 0 || line >= g->lines_count)
+    {
+      g->draw_point_move = FALSE;
+      g->draw_near_point = -1;
+      return FALSE;
+    }
+
     const float pd_w = darktable.develop->roi.processed_width;
     const float pd_h = darktable.develop->roi.processed_height;
     float pts[2] = { pzx * pd_w, pzy * pd_h };
@@ -4419,22 +4263,21 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
       // first we move the point
       if(g->draw_near_point >= 0)
       {
-        const int l = g->draw_near_point / 2;
         if(g->draw_near_point % 2 == 0)
         {
-          g->lines[l].p1[0] = pts[0];
-          g->lines[l].p1[1] = pts[1];
+          g->lines[line].p1[0] = pts[0];
+          g->lines[line].p1[1] = pts[1];
         }
         else
         {
-          g->lines[l].p2[0] = pts[0];
-          g->lines[l].p2[1] = pts[1];
+          g->lines[line].p2[0] = pts[0];
+          g->lines[line].p2[1] = pts[1];
         }
-        _draw_recompute_line_length(&g->lines[l]);
+        _draw_recompute_line_length(&g->lines[line]);
       }
 
       // for the rectangle method, we need to move the horizontal line too
-      if(g->current_structure_method == ASHIFT_METHOD_QUAD)
+      if(g->current_structure_method == ASHIFT_METHOD_QUAD && g->lines_count >= 4)
       {
         if(g->draw_near_point == 0)
         {
@@ -4471,6 +4314,12 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   // case where we move a drawn line
   if(g->draw_line_move >= 0)
   {
+    if(g->draw_line_move >= g->lines_count)
+    {
+      g->draw_line_move = -1;
+      return FALSE;
+    }
+
     const float pd_w = self->dev->roi.processed_width;
     const float pd_h = self->dev->roi.processed_height;
     float pts[2] = { pzx * pd_w, pzy * pd_h };
@@ -4497,7 +4346,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
       _draw_recompute_line_length(&g->lines[n]);
 
       // for the rectangle method, we need to move the adjacent lines too
-      if(g->current_structure_method == ASHIFT_METHOD_QUAD)
+      if(g->current_structure_method == ASHIFT_METHOD_QUAD && g->lines_count >= 4)
       {
         if(n == 0)
         {
@@ -4556,10 +4405,10 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   // the rectangular selection
   if(g->isbounding != ASHIFT_BOUNDING_OFF)
   {
-    if(wd >= 1.0 && ht >= 1.0)
+    if(wd >= 1.0 && ht >= 1.0 && selectable_lines_count > 0)
     {
       // mark lines inside the rectangle
-      _get_bounded_inside(g->points, g->points_idx, g->points_lines_count, pzx * wd, pzy * ht, g->lastx * wd,
+      _get_bounded_inside(g->points, g->points_idx, selectable_lines_count, pzx * wd, pzy * ht, g->lastx * wd,
                           g->lasty * ht, g->isbounding);
     }
 
@@ -4568,14 +4417,16 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   }
 
   // gather information about "near"-ness in g->points_idx
-  _get_near(
-      g->points, g->points_idx, g->points_lines_count, pzx * wd, pzy * ht, g->near_delta,
-      !(g->current_structure_method == ASHIFT_METHOD_LINES || g->current_structure_method == ASHIFT_METHOD_QUAD));
+  if(selectable_lines_count > 0)
+    _get_near(
+        g->points, g->points_idx, selectable_lines_count, pzx * wd, pzy * ht, g->near_delta,
+        !(g->current_structure_method == ASHIFT_METHOD_LINES || g->current_structure_method == ASHIFT_METHOD_QUAD));
 
   // if we are in sweeping mode iterate over lines as we move the pointer and change "selected" state.
   if(g->isdeselecting || g->isselecting)
   {
-    for(int n = 0; g->selecting_lines_version == g->lines_version && n < g->points_lines_count; n++)
+    // Loop over displayed lines close to the pointer and update the matching live line flags.
+    for(int n = 0; g->selecting_lines_version == g->lines_version && n < selectable_lines_count; n++)
     {
       if(g->points_idx[n].near == 0)
         continue;
@@ -4610,6 +4461,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
                    uint32_t state)
 {
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
+  if(IS_NULL_PTR(g)) return FALSE;
   gboolean handled = FALSE;
 
   // avoid unexpected back to lt mode:
@@ -4642,6 +4494,9 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
       || g->current_structure_method == ASHIFT_METHOD_LINES)
      && g->draw_near_point >= 0)
   {
+    const int line = g->draw_near_point / 2;
+    if(IS_NULL_PTR(g->lines) || line >= g->lines_count) return FALSE;
+
     g->draw_point_move = TRUE;
     g->lastx = x;
     g->lasty = y;
@@ -4656,6 +4511,8 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
   // in a rectangle area)
   if(dt_modifier_is(state, GDK_SHIFT_MASK))
   {
+    if(IS_NULL_PTR(g->lines) || IS_NULL_PTR(g->points) || IS_NULL_PTR(g->points_idx)) return FALSE;
+
     g->lastx = pzx;
     g->lasty = pzy;
 
@@ -4668,8 +4525,18 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
   const float min_scale = dt_dev_get_zoom_scale(self->dev,  0);
   const float cur_scale = dt_dev_get_zoom_scale(self->dev,  0);
 
+  /* Selection uses transformed display point descriptors, but writes the state
+   * back into g->lines[n]. Display points can be stale until the next expose
+   * after editing or deleting lines, so every loop below is capped to live
+   * line storage. */
+  const int selectable_lines_count = (!IS_NULL_PTR(g->lines)
+                                     && !IS_NULL_PTR(g->points)
+                                     && !IS_NULL_PTR(g->points_idx))
+                                     ? MIN(g->points_lines_count, g->lines_count)
+                                     : 0;
+
   // if we are zoomed out (no panning possible) and we have lines to display we take control
-  const int take_control = (cur_scale == min_scale) && (g->points_lines_count > 0);
+  const int take_control = (cur_scale == min_scale) && (selectable_lines_count > 0);
 
   if(g->current_structure_method == ASHIFT_METHOD_QUAD || g->current_structure_method == ASHIFT_METHOD_LINES)
     g->near_delta = dt_conf_get_float("plugins/darkroom/ashift/near_delta_draw");
@@ -4677,16 +4544,17 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
     g->near_delta = dt_conf_get_float("plugins/darkroom/ashift/near_delta");
 
   // gather information about "near"-ness in g->points_idx
-  _get_near(g->points, g->points_idx, g->points_lines_count,
-            pzx * wd, pzy * ht, g->near_delta,
-            !(g->current_structure_method == ASHIFT_METHOD_QUAD
-              || g->current_structure_method == ASHIFT_METHOD_LINES));
+  if(selectable_lines_count > 0)
+    _get_near(g->points, g->points_idx, selectable_lines_count,
+              pzx * wd, pzy * ht, g->near_delta,
+              !(g->current_structure_method == ASHIFT_METHOD_QUAD
+                || g->current_structure_method == ASHIFT_METHOD_LINES));
 
   if((g->current_structure_method == ASHIFT_METHOD_LINES && which == 1)
      || g->current_structure_method == ASHIFT_METHOD_QUAD)
   {
     // we search the selected line and mark it as the moved line
-    for(int n = 0; n < g->points_lines_count; n++)
+    for(int n = 0; n < selectable_lines_count; n++)
     {
       if(g->points_idx[n].near)
       {
@@ -4708,7 +4576,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
   {
     // iterate over all lines close to the pointer and change "selected" state.
     // left-click selects and right-click deselects the line
-    for(int n = 0; g->selecting_lines_version == g->lines_version && n < g->points_lines_count; n++)
+    for(int n = 0; g->selecting_lines_version == g->lines_version && n < selectable_lines_count; n++)
     {
       if(g->points_idx[n].near == 0) continue;
 
@@ -4731,7 +4599,25 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
           }
 
           const int count = g->lines_count - 1;
-          dt_iop_ashift_line_t *lines = (dt_iop_ashift_line_t *)malloc(sizeof(dt_iop_ashift_line_t) * count);
+          dt_iop_ashift_line_t *lines = NULL;
+          if(count > 0)
+          {
+            lines = (dt_iop_ashift_line_t *)malloc(sizeof(dt_iop_ashift_line_t) * count);
+            if(IS_NULL_PTR(lines))
+            {
+              if(g->lines[n].type == ASHIFT_LINE_HORIZONTAL_SELECTED)
+              {
+                g->horizontal_count++;
+                g->horizontal_weight += 1.0f;
+              }
+              else
+              {
+                g->vertical_count++;
+                g->vertical_weight += 1.0f;
+              }
+              break;
+            }
+          }
           int pos = 0;
           for(int i = 0; i < g->lines_count; i++)
           {
@@ -4747,6 +4633,8 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
           }
           g->lines = lines;
           g->lines_count = count;
+          handled = TRUE;
+          break;
         }
 
         handled = TRUE;
@@ -4825,6 +4713,7 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
 {
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
   dt_iop_ashift_params_t *p = _get_ashift_params(self);
+  if(IS_NULL_PTR(g)) return FALSE;
   const float wd = self->dev->roi.preview_width;
   const float ht = self->dev->roi.preview_height;
 
@@ -4873,10 +4762,7 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
     dt_bauhaus_slider_set(g->rotation, p->rotation);
     --darktable.gui->reset;
 
-    if(g->buf_height > 0 && g->buf_width > 0)
-      do_crop(self, p);
-    else
-      g->jobcode = ASHIFT_JOBCODE_DO_CROP;
+    do_crop(self, p);
 
     dt_dev_add_history_item(self->dev, self, FALSE, TRUE);
     return TRUE;
@@ -4894,6 +4780,13 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
   // release a drawn corner
   if(g->draw_point_move)
   {
+    if(IS_NULL_PTR(g->lines))
+    {
+      g->draw_point_move = FALSE;
+      g->draw_near_point = -1;
+      return FALSE;
+    }
+
     // we determine the vertical/horizontal line type (that may have changed)
     // we also save the lines in params
     // points move are done directly in mouse_move routine
@@ -4943,12 +4836,19 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
 
     if(wd >= 1.0 && ht >= 1.0)
     {
+      const int selectable_lines_count = (!IS_NULL_PTR(g->lines)
+                                         && !IS_NULL_PTR(g->points)
+                                         && !IS_NULL_PTR(g->points_idx))
+                                         ? MIN(g->points_lines_count, g->lines_count)
+                                         : 0;
+
       // mark lines inside the rectangle
-      _get_bounded_inside(g->points, g->points_idx, g->points_lines_count, pzx * wd, pzy * ht, g->lastx * wd,
-                          g->lasty * ht, g->isbounding);
+      if(selectable_lines_count > 0)
+        _get_bounded_inside(g->points, g->points_idx, selectable_lines_count, pzx * wd, pzy * ht, g->lastx * wd,
+                            g->lasty * ht, g->isbounding);
 
       // select or deselect lines within the rectangle according to isbounding state
-      for(int n = 0; g->selecting_lines_version == g->lines_version && n < g->points_lines_count; n++)
+      for(int n = 0; g->selecting_lines_version == g->lines_version && n < selectable_lines_count; n++)
       {
         if(g->points_idx[n].bounded == 0) continue;
 
@@ -4995,6 +4895,7 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
 int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t state)
 {
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
+  if(IS_NULL_PTR(g)) return FALSE;
 
   // do nothing if visibility of lines is switched off or no lines available
   if(IS_NULL_PTR(g->lines)) return FALSE;
@@ -5028,10 +4929,14 @@ int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t 
       return TRUE;
 
     // gather information about "near"-ness in g->points_idx
-    _get_near(g->points, g->points_idx, g->points_lines_count, pzx * wd, pzy * ht, g->near_delta, TRUE);
+    const int selectable_lines_count = (!IS_NULL_PTR(g->points) && !IS_NULL_PTR(g->points_idx))
+                                       ? MIN(g->points_lines_count, g->lines_count)
+                                       : 0;
+    if(selectable_lines_count > 0)
+      _get_near(g->points, g->points_idx, selectable_lines_count, pzx * wd, pzy * ht, g->near_delta, TRUE);
 
     // iterate over all lines close to the pointer and change "selected" state.
-    for(int n = 0; g->selecting_lines_version == g->lines_version && n < g->points_lines_count; n++)
+    for(int n = 0; g->selecting_lines_version == g->lines_version && n < selectable_lines_count; n++)
     {
       if(g->points_idx[n].near == 0)
         continue;
@@ -5108,16 +5013,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 
   _make_controls_sensitive(self, g->editing);
 
-  if(g->buf_height > 0 && g->buf_width > 0)
-    do_crop(self, p);
-  else
-  {
-    g->jobcode = ASHIFT_JOBCODE_DO_CROP;
-    if(g->editing)
-      dt_dev_pixelpipe_resync_history_all(self->dev);
-    else
-      dt_dev_pixelpipe_update_history_all(self->dev);
-  }
+  do_crop(self, p);
 }
 
 void gui_reset(struct dt_iop_module_t *self)
@@ -5126,13 +5022,13 @@ void gui_reset(struct dt_iop_module_t *self)
   g->editing = FALSE;
   g->jobcode = ASHIFT_JOBCODE_NONE;
   g->jobparams = 0;
-  g->pending_preview_input_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
   dt_iop_set_cache_bypass(self, FALSE);
 
   dt_iop_ashift_params_t *p = (dt_iop_ashift_params_t *)self->params;
   memcpy(p, self->default_params, sizeof(dt_iop_ashift_params_t));
   memcpy(&g->previous_params, p, sizeof(dt_iop_ashift_params_t));
   memcpy(&g->new_params, p, sizeof(dt_iop_ashift_params_t));
+  dt_bauhaus_combobox_set(g->cropmode, p->cropmode);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->edit_button), FALSE);
   gtk_button_set_label(GTK_BUTTON(g->edit_button), _("Edit"));
   gtk_widget_set_sensitive(g->commit_button, FALSE);
@@ -5162,7 +5058,6 @@ static void cropmode_callback(GtkWidget *widget, gpointer user_data)
   dt_conf_set_int("plugins/darkroom/ashift/autocrop_value", crop_mode);
 
   p->cropmode = crop_mode;
-  g->jobcode = ASHIFT_JOBCODE_DO_CROP;
   do_crop(self, p);
 
   if(g->editing)
@@ -5171,7 +5066,8 @@ static void cropmode_callback(GtkWidget *widget, gpointer user_data)
   }
   else
   {
-    // Update params directly
+    // Commit the crop mode and the margins computed above together. Scheduling the pipe from
+    // do_crop() before this history item existed made the non-edit path synchronize stale margins.
     dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   }
 }
@@ -5459,16 +5355,23 @@ static void _enter_edit_mode(GtkToggleButton* button, struct dt_iop_module_t *se
     // Commit the params backup
     gui_changed(self, NULL, NULL);
 
+    ++darktable.gui->reset;
+    dt_bauhaus_combobox_set(g->cropmode, p->cropmode);
+    --darktable.gui->reset;
+
     // Update GUI
     gtk_button_set_label(GTK_BUTTON(button), _("Edit"));
     gtk_widget_set_sensitive(g->commit_button, FALSE);
   }
 
-  // It sucks that we need to invalidate the preview too but we need its final dimension.
-  dt_dev_pixelpipe_resync_history_all(self->dev);
+  // Entering or leaving edit mode changes ashift's runtime crop contract. Settle that contract on
+  // the virtual pipe first, then publish the resulting full-image dimensions before waking either
+  // pixel worker. Resyncing first and queuing separate ZOOMED updates afterwards let a worker start
+  // with the previous ROI, get killed by the next update, and repeatedly feed slightly different
+  // preview dimensions back into the GUI geometry.
+  dt_dev_pixelpipe_sync_virtual(self->dev, DT_DEV_PIPE_SYNCH);
   dt_dev_get_thumbnail_size(self->dev);
-  dt_dev_pixelpipe_update_zoom_main(self->dev);
-  dt_dev_pixelpipe_update_zoom_preview(self->dev);
+  dt_dev_pixelpipe_resync_history_all(self->dev);
 }
 
 static void _event_commit_clicked(GtkButton *button, dt_iop_module_t *self)
@@ -5515,10 +5418,6 @@ static void _run_pending_preview_job(dt_iop_module_t *self)
 
   switch(jobcode)
   {
-    case ASHIFT_JOBCODE_DO_CROP:
-      do_crop(self, p);
-      break;
-
     case ASHIFT_JOBCODE_GET_STRUCTURE_QUAD:
       _do_get_structure_quad(self);
       break;
@@ -5541,38 +5440,19 @@ static void _run_pending_preview_job(dt_iop_module_t *self)
   }
 }
 
-static void _event_history_resync_callback(gpointer instance, gpointer user_data)
+// Run any pending GUI job once the preview pipe has finished a render. By this point process() has
+// captured g->buf (it always runs while editing because the module is in cache-bypass mode), so the
+// pixel-reading jobs (auto-detection, fit) find their buffer; the geometry-only jobs (manual
+// line/quad, auto-crop) never needed it. Driving jobs from PREVIEW_PIPE_FINISHED — rather than from
+// a cache request that only renders up to the previous module — is what avoids the buffer never
+// being captured and the pipe spinning forever (#710).
+static void _event_process_after_preview_callback(gpointer instance, gpointer user_data)
 {
   (void)instance;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
   if(IS_NULL_PTR(g) || g->jobcode == ASHIFT_JOBCODE_NONE || darktable.gui->reset) return;
 
-  const uint64_t preview_input_hash = _current_preview_input_hash(self);
-  if(preview_input_hash == DT_PIXELPIPE_CACHE_HASH_INVALID) return;
-
-  if((IS_NULL_PTR(g->buf) || g->buf_hash != preview_input_hash)
-     && !_sync_private_buffer_from_preview_cache(self, NULL))
-  {
-    g->pending_preview_input_hash = preview_input_hash;
-    return;
-  }
-
-  g->pending_preview_input_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
-  _run_pending_preview_job(self);
-  dt_control_queue_redraw_center();
-}
-
-static void _event_cacheline_ready_callback(gpointer instance, const guint64 hash, gpointer user_data)
-{
-  (void)instance;
-  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
-  if(IS_NULL_PTR(g) || g->pending_preview_input_hash != hash || darktable.gui->reset) return;
-
-  if(!_sync_private_buffer_from_preview_cache(self, NULL)) return;
-
-  g->pending_preview_input_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
   _run_pending_preview_job(self);
   dt_control_queue_redraw_center();
 }
@@ -5597,24 +5477,26 @@ static void _event_process_after_ui_callback(gpointer instance, gpointer user_da
   if(!g->editing && p->cropmode == ASHIFT_CROP_OFF) return;
 
   dt_dev_get_thumbnail_size(self->dev);
+
+  // Force the control-line overlay to recompute its screen coordinates on the next expose. Its
+  // cache is keyed on the preview-pipe hash, which is published asynchronously by the worker, so on
+  // crop-mode/rotation changes the cached points would otherwise lag a frame behind the freshly
+  // rendered geometry (the overlay "not adjusting" to the new crop). The thumbnail/virtual-pipe
+  // geometry refreshed just above is authoritative here, so invalidating the cache now makes the
+  // overlay follow it reliably.
+  g->grid_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+
   dt_control_queue_redraw_center();
 }
 
 void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_t *pipe,
                    dt_dev_pixelpipe_iop_t *piece)
 {
-  dt_iop_ashift_params_t *p;
   dt_iop_ashift_data_t *d = (dt_iop_ashift_data_t *)piece->data;
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
 
-  if(!IS_NULL_PTR(g) && g->editing)
-  {
-    p = (dt_iop_ashift_params_t *)&g->new_params;
-  }
-  else
-  {
-    p = (dt_iop_ashift_params_t *)p1;
-  }
+  const gboolean editing = !IS_NULL_PTR(g) && g->editing;
+  dt_iop_ashift_params_t *p = editing ? &g->new_params : (dt_iop_ashift_params_t *)p1;
 
   d->rotation = p->rotation;
   d->lensshift_v = p->lensshift_v;
@@ -5623,10 +5505,27 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   d->f_length_kb = (p->mode == ASHIFT_MODE_GENERIC) ? DEFAULT_F_LENGTH : p->f_length * p->crop_factor;
   d->orthocorr = (p->mode == ASHIFT_MODE_GENERIC) ? 0.0f : p->orthocorr;
   d->aspect = (p->mode == ASHIFT_MODE_GENERIC) ? 1.0f : p->aspect;
-  d->cl = p->cl;
-  d->cr = p->cr;
-  d->ct = p->ct;
-  d->cb = p->cb;
+
+  if(editing)
+  {
+    // In editing mode we need to see the full uncropped image to set up the crop frame and run
+    // structure detection on the whole image. Same approach as the crop module's commit_params():
+    // neutralize the crop here so the pipe renders the full transformed image (the darkroom view
+    // already expects the uncropped output while a cache-bypass module is focused). modify_roi_in()
+    // then naturally requests the full input, so process() captures the whole image into g->buf. The
+    // real crop is reapplied from params as soon as edit mode is committed/cancelled. (#710)
+    d->cl = 0.0f;
+    d->cr = 1.0f;
+    d->ct = 0.0f;
+    d->cb = 1.0f;
+  }
+  else
+  {
+    d->cl = p->cl;
+    d->cr = p->cr;
+    d->ct = p->ct;
+    d->cb = p->cb;
+  }
 }
 
 gboolean runtime_data_hash(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
@@ -5657,6 +5556,7 @@ void gui_update(struct dt_iop_module_t *self)
   dt_iop_ashift_params_t *p = _get_ashift_params(self);
 
   gtk_widget_set_visible(g->specifics, p->mode == ASHIFT_MODE_SPECIFIC);
+  dt_bauhaus_combobox_set(g->cropmode, p->cropmode);
   _make_controls_sensitive(self, FALSE);
 
   dt_gui_update_collapsible_section(&g->cs);
@@ -5709,6 +5609,8 @@ void reload_defaults(dt_iop_module_t *module)
 
     dt_bauhaus_slider_set_default(g->f_length, f_length);
     dt_bauhaus_slider_set_default(g->crop_factor, crop_factor);
+    dt_bauhaus_combobox_set_default(g->cropmode,
+                                    ((dt_iop_ashift_params_t *)module->default_params)->cropmode);
 
     dt_iop_gui_enter_critical_section(module);
     dt_free(g->buf);
@@ -5748,7 +5650,6 @@ void reload_defaults(dt_iop_module_t *module)
 
     g->jobcode = ASHIFT_JOBCODE_NONE;
     g->jobparams = 0;
-    g->pending_preview_input_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
     g->lastx = g->lasty = -1.0f;
     g->crop_cx = g->crop_cy = 1.0f;
 
@@ -5773,8 +5674,7 @@ void init_global(dt_iop_module_so_t *module)
   const int program = 2; // basic.cl, from programs.conf
   gd->kernel_ashift_bilinear = dt_opencl_create_kernel(program, "ashift_bilinear");
   gd->kernel_ashift_bicubic = dt_opencl_create_kernel(program, "ashift_bicubic");
-  gd->kernel_ashift_lanczos2 = dt_opencl_create_kernel(program, "ashift_lanczos2");
-  gd->kernel_ashift_lanczos3 = dt_opencl_create_kernel(program, "ashift_lanczos3");
+  gd->kernel_ashift_mitchell = dt_opencl_create_kernel(program, "ashift_mitchell");
 }
 
 void cleanup_global(dt_iop_module_so_t *module)
@@ -5782,8 +5682,7 @@ void cleanup_global(dt_iop_module_so_t *module)
   dt_iop_ashift_global_data_t *gd = (dt_iop_ashift_global_data_t *)module->data;
   dt_opencl_free_kernel(gd->kernel_ashift_bilinear);
   dt_opencl_free_kernel(gd->kernel_ashift_bicubic);
-  dt_opencl_free_kernel(gd->kernel_ashift_lanczos2);
-  dt_opencl_free_kernel(gd->kernel_ashift_lanczos3);
+  dt_opencl_free_kernel(gd->kernel_ashift_mitchell);
   dt_free(module->data);
 }
 
@@ -5855,7 +5754,6 @@ void gui_init(struct dt_iop_module_t *self)
 
   g->jobcode = ASHIFT_JOBCODE_NONE;
   g->jobparams = 0;
-  g->pending_preview_input_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
   g->lastx = g->lasty = -1.0f;
   g->crop_cx = g->crop_cy = 1.0f;
   memcpy(&g->previous_params, self->params, sizeof(dt_iop_ashift_params_t));
@@ -5864,9 +5762,9 @@ void gui_init(struct dt_iop_module_t *self)
   g->draw_near_point = -1;
   g->draw_line_move = -1;
 
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
-  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
 
   g->edit_button = gtk_toggle_button_new_with_label(_("Edit"));
   g_signal_connect(GTK_TOGGLE_BUTTON(g->edit_button), "toggled", G_CALLBACK(_enter_edit_mode), self);
@@ -5904,7 +5802,7 @@ void gui_init(struct dt_iop_module_t *self)
   dt_bauhaus_slider_set_soft_range(g->shear, -SHEAR_RANGE, SHEAR_RANGE);
 
   g->mode = dt_bauhaus_combobox_from_params(self, "mode");
-  self->widget = g->specifics = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+  self->widget = g->specifics = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   g->f_length = dt_bauhaus_slider_from_params(self, "f_length");
   dt_bauhaus_slider_set_soft_range(g->f_length, 10.0f, 1000.0f);
@@ -5929,8 +5827,8 @@ void gui_init(struct dt_iop_module_t *self)
   self->widget = main_box;
 
   GtkGrid *auto_grid = GTK_GRID(gtk_grid_new());
-  gtk_grid_set_row_spacing(auto_grid, 2 * DT_BAUHAUS_SPACE);
-  gtk_grid_set_column_spacing(auto_grid, DT_PIXEL_APPLY_DPI(10));
+  gtk_grid_set_row_spacing(auto_grid, DT_GUI_BOX_SPACING);
+  gtk_grid_set_column_spacing(auto_grid, DT_GUI_BOX_SPACING);
 
   gtk_grid_attach(auto_grid, dt_ui_label_new(_("Mark reference lines")), 0, 0, 1, 1);
 
@@ -5975,8 +5873,14 @@ void gui_init(struct dt_iop_module_t *self)
                                      (GtkCallback)fitting_option_changed, self, option_labels);
   gtk_box_pack_start(GTK_BOX(self->widget), g->fitting_option, TRUE, TRUE, 0);
 
-  g->cropmode = dt_bauhaus_combobox_from_params(self, "cropmode");
-  g_signal_connect(G_OBJECT(g->cropmode), "value-changed", G_CALLBACK(cropmode_callback), self);
+  const gchar *crop_labels[] = { _("off"), _("largest area"), _("original format"), NULL };
+  g->cropmode
+      = dt_bauhaus_combobox_new_full(darktable.bauhaus, DT_GUI_MODULE(self), _("automatic cropping"), NULL,
+                                     ((dt_iop_ashift_params_t *)self->params)->cropmode,
+                                     (GtkCallback)cropmode_callback, self, crop_labels);
+  dt_bauhaus_combobox_set_default(g->cropmode,
+                                  ((dt_iop_ashift_params_t *)self->default_params)->cropmode);
+  gtk_box_pack_start(GTK_BOX(self->widget), g->cropmode, FALSE, FALSE, 0);
 
   self->widget = main_box;
 
@@ -6028,19 +5932,17 @@ void gui_init(struct dt_iop_module_t *self)
                    (gpointer)self);
   g_signal_connect(G_OBJECT(self->widget), "draw", G_CALLBACK(_event_draw), self);
 
-  /* pending structure jobs now wake up from targeted preview-cache publication */
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_HISTORY_RESYNC,
-                                  G_CALLBACK(_event_history_resync_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_CACHELINE_READY,
-                                  G_CALLBACK(_event_cacheline_ready_callback), self);
+  /* Pending GUI jobs run once the preview pipe published a fresh render: by then process() has
+     captured g->buf. The UI-pipe-finished hook only refreshes the overlay geometry. */
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED,
+                                  G_CALLBACK(_event_process_after_preview_callback), self);
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_UI_PIPE_FINISHED,
                                   G_CALLBACK(_event_process_after_ui_callback), self);
 }
 
 void gui_cleanup(struct dt_iop_module_t *self)
 {
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_event_history_resync_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_event_cacheline_ready_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_event_process_after_preview_callback), self);
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_event_process_after_ui_callback), self);
   dt_iop_set_cache_bypass(self, FALSE);
 

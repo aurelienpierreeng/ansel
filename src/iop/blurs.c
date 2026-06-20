@@ -779,7 +779,7 @@ void gui_init(dt_iop_module_t *self)
 {
   dt_iop_blurs_gui_data_t *g = IOP_GUI_ALLOC(blurs);
 
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   // Image buffer to store the kernel look
   // Don't recompute it in the drawing function, only when a param is changed

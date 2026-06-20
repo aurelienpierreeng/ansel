@@ -33,6 +33,7 @@
 #define DT_NOISE_PROFILE_VERSION 0
 
 const dt_noiseprofile_t dt_noiseprofile_generic = {N_("generic poissonian"), "", "", 0, {0.0001f, 0.0001f, 0.0001}, {0.0f, 0.0f, 0.0f}};
+static GMutex _noiseprofiles_parser_mutex;
 
 static gboolean dt_noiseprofile_verify(JsonParser *parser);
 
@@ -234,14 +235,24 @@ GList *dt_noiseprofile_get_matching(const dt_image_t *cimg)
   JsonParser *parser = darktable.noiseprofile_parser;
   JsonReader *reader = NULL;
   GList *result = NULL;
+  gboolean parser_locked = FALSE;
 
+  if(IS_NULL_PTR(cimg)) goto end;
+  if(cimg->camera_maker[0] == '\0' || cimg->camera_model[0] == '\0') goto end;
   if(IS_NULL_PTR(parser)) goto end;
 
+  // Json-glib parser/tree access is shared process-wide and not re-entrant.
+  // Serialize lookup while creating and walking readers from the global parser.
+  g_mutex_lock(&_noiseprofiles_parser_mutex);
+  parser_locked = TRUE;
+
   JsonNode *root = json_parser_get_root(parser);
+  if(IS_NULL_PTR(root)) goto end;
 
   reader = json_reader_new(root);
+  if(IS_NULL_PTR(reader)) goto end;
 
-  json_reader_read_member(reader, "noiseprofiles");
+  if(!json_reader_read_member(reader, "noiseprofiles")) goto end;
 
   // go through all makers
   const int n_makers = json_reader_count_elements(reader);
@@ -356,8 +367,9 @@ GList *dt_noiseprofile_get_matching(const dt_image_t *cimg)
   json_reader_end_member(reader);
 
 end:
-  if(reader) g_object_unref(reader);
-  if(result) result = g_list_sort(result, _sort_by_iso);
+  if(!IS_NULL_PTR(reader)) g_object_unref(reader);
+  if(parser_locked) g_mutex_unlock(&_noiseprofiles_parser_mutex);
+  if(!IS_NULL_PTR(result)) result = g_list_sort(result, _sort_by_iso);
   return result;
 }
 

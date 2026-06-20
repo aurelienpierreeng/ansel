@@ -15,3 +15,6 @@
 [submodule "doc/doxygen-awesome-css"]
 	path = doc/doxygen-awesome-css
 	url = https://github.com/jothepro/doxygen-awesome-css.git
+[submodule "src/external/sentry-native"]
+	path = src/external/sentry-native
+	url = https://github.com/getsentry/sentry-native.git

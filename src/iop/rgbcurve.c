@@ -52,6 +52,8 @@
 #include "develop/imageop_gui.h"
 #include "dtgtk/drawingarea.h"
 #include "gui/color_picker_proxy.h"
+#include "gui/gtk.h"
+#include "gui/gdkkeys.h"
 #include "gui/presets.h"
 #include "gui/draw.h"
 #include "control/control.h"
@@ -139,7 +141,7 @@ typedef float (*_coeffs_table_ptr)[3];
 
 const char *name()
 {
-  return _("rgb curve");
+  return _("curve");
 }
 
 int default_group()
@@ -642,24 +644,25 @@ static gboolean _area_key_press_callback(GtkWidget *widget, GdkEventKey *event, 
 
   if(g->selected < 0) return FALSE;
 
+  guint key = dt_keys_mainpad_alternatives(event->keyval);
   int handled = 0;
   float dx = 0.0f, dy = 0.0f;
-  if(event->keyval == GDK_KEY_Up || event->keyval == GDK_KEY_KP_Up)
+  if(key == GDK_KEY_Up)
   {
     handled = 1;
     dy = RGBCURVE_DEFAULT_STEP;
   }
-  else if(event->keyval == GDK_KEY_Down || event->keyval == GDK_KEY_KP_Down)
+  else if(key == GDK_KEY_Down)
   {
     handled = 1;
     dy = -RGBCURVE_DEFAULT_STEP;
   }
-  else if(event->keyval == GDK_KEY_Right || event->keyval == GDK_KEY_KP_Right)
+  else if(key == GDK_KEY_Right)
   {
     handled = 1;
     dx = RGBCURVE_DEFAULT_STEP;
   }
-  else if(event->keyval == GDK_KEY_Left || event->keyval == GDK_KEY_KP_Left)
+  else if(key == GDK_KEY_Left)
   {
     handled = 1;
     dx = -RGBCURVE_DEFAULT_STEP;
@@ -1292,7 +1295,7 @@ void gui_init(struct dt_iop_module_t *self)
   g->autoscale = dt_bauhaus_combobox_from_params(self, "curve_autoscale");
   gtk_widget_set_tooltip_text(g->autoscale, _("choose between linked and independent channels."));
 
-  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
 
   g->channel_tabs = GTK_NOTEBOOK(gtk_notebook_new());
   dt_ui_notebook_page(g->channel_tabs, N_("R"), _("curve nodes for r channel"));
@@ -1308,20 +1311,24 @@ void gui_init(struct dt_iop_module_t *self)
   g->colorpicker_set_values = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, hbox);
   dtgtk_togglebutton_set_paint(DTGTK_TOGGLEBUTTON(g->colorpicker_set_values),
                                dtgtk_cairo_paint_colorpicker, CPF_ALTER, NULL);
-  dt_gui_add_class(g->colorpicker_set_values, "dt_transparent_background");
+
   gtk_widget_set_size_request(g->colorpicker_set_values, DT_PIXEL_APPLY_DPI(14), DT_PIXEL_APPLY_DPI(14));
   gtk_widget_set_tooltip_text(g->colorpicker_set_values, _("create a curve based on an area from the image\n"
                                                            "drag to create a flat curve\n"
                                                            "ctrl+drag to create a positive curve\n"
                                                            "shift+drag to create a negative curve"));
 
-  GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(self->widget), vbox, FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(vbox), GTK_WIDGET(hbox), TRUE, TRUE, 0);
 
-  g->area = GTK_DRAWING_AREA(dtgtk_drawing_area_new_with_aspect_ratio(1.0));
+  g->area = GTK_DRAWING_AREA(gtk_drawing_area_new());
+  gtk_widget_set_hexpand(GTK_WIDGET(g->area), TRUE);
   g_object_set_data(G_OBJECT(g->area), "iop-instance", self);
-  gtk_box_pack_start(GTK_BOX(vbox), GTK_WIDGET(g->area), TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(vbox),
+                     dt_ui_resizable_drawing_area(GTK_WIDGET(g->area),
+                                                  "plugins/darkroom/rgbcurve/graphheight", 280, 100),
+                     FALSE, FALSE, 0);
 
   // FIXME: that tooltip goes in the way of the numbers when you hover a node to get a reading
   // gtk_widget_set_tooltip_text(GTK_WIDGET(g->area), _("double click to reset curve"));

@@ -650,6 +650,22 @@ error:
 
   dt_dev_pixelpipe_cache_release_cl_buffer(&cl_mem_output, output_entry, NULL, FALSE);
 
+  if(module->flags() & IOP_FLAGS_TAKE_NO_INPUT)
+  {
+    /* Root modules build their own input from external storage. If the OpenCL pre-check
+     * rejects the required allocation, CPU fallback must keep the same no-input contract
+     * instead of looking for an upstream cacheline that cannot exist. */
+    const size_t required_mib
+        = ((size_t)precheck_width * precheck_height * MAX(piece->dsc_in.bpp, piece->dsc_out.bpp))
+          / (1024 * 1024);
+    const size_t max_alloc_mib = (size_t)dt_opencl_get_device_memalloc(pipe->devid) / (1024 * 1024);
+    dt_control_log(_("OpenCL failed for module `%s`: image buffer needs %" G_GSIZE_FORMAT
+                     " MiB but device limit is %" G_GSIZE_FORMAT " MiB; falling back to CPU"),
+                   module->name(), required_mib, max_alloc_mib);
+    return pixelpipe_process_on_CPU(pipe, piece, previous_piece, tiling, pixelpipe_flow,
+                                    cache_output, cpu_input_entry, output_entry);
+  }
+
   if(!IS_NULL_PTR(input))
   {
     dt_print(DT_DEBUG_OPENCL,

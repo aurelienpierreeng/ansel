@@ -305,16 +305,137 @@ gboolean dt_opencl_read_device_config(const int devid)
   return !safety_ok;
 }
 
+int dt_opencl_get_detected_device_count(void)
+{
+  dt_opencl_t *cl = darktable.opencl;
+  if(IS_NULL_PTR(cl)) return 0;
+
+  return cl->num_detected_devs;
+}
+
+const dt_opencl_detected_device_t *dt_opencl_get_detected_device(const int detected)
+{
+  dt_opencl_t *cl = darktable.opencl;
+  if(IS_NULL_PTR(cl) || detected < 0 || detected >= cl->num_detected_devs) return NULL;
+
+  return cl->detected_devs + detected;
+}
+
+gboolean dt_opencl_detected_device_enabled(const int detected)
+{
+  const dt_opencl_detected_device_t *device = dt_opencl_get_detected_device(detected);
+  if(IS_NULL_PTR(device)) return FALSE;
+
+  gchar key[256] = { 0 };
+  g_snprintf(key, sizeof(key), "%s/%d/%s/disabled", DT_CLDEVICE_HEAD, device->config_id,
+             !IS_NULL_PTR(device->cname) ? device->cname : "");
+  const gboolean disabled = dt_conf_key_not_empty(key) ? dt_conf_get_int(key) : (device->disabled & 1);
+
+  return !disabled;
+}
+
+int dt_opencl_set_detected_device_enabled(const int detected, const gboolean enabled)
+{
+  const dt_opencl_detected_device_t *device = dt_opencl_get_detected_device(detected);
+  if(IS_NULL_PTR(device)) return -1;
+
+  gchar key[256] = { 0 };
+  g_snprintf(key, sizeof(key), "%s/%d/%s/disabled", DT_CLDEVICE_HEAD, device->config_id,
+             !IS_NULL_PTR(device->cname) ? device->cname : "");
+  dt_conf_set_int(key, enabled ? 0 : 1);
+
+  dt_opencl_t *cl = darktable.opencl;
+  cl->detected_devs[detected].disabled = enabled ? 0 : 1;
+
+  gboolean opencl_enabled = enabled;
+  if(!opencl_enabled)
+  {
+    // The global OpenCL preference is derived from all detected GPUs. We are looking
+    // for any GPU still enabled before turning OpenCL off globally.
+    for(int dev = 0; dev < cl->num_detected_devs; dev++)
+    {
+      if(dt_opencl_detected_device_enabled(dev))
+      {
+        opencl_enabled = TRUE;
+        break;
+      }
+    }
+  }
+
+  dt_conf_set_bool("opencl", opencl_enabled);
+  return 0;
+}
+
+gboolean dt_opencl_detected_device_pinned_memory(const int detected)
+{
+  const dt_opencl_detected_device_t *device = dt_opencl_get_detected_device(detected);
+  if(IS_NULL_PTR(device)) return FALSE;
+
+  gchar key[256] = { 0 };
+  g_snprintf(key, sizeof(key), "%s/%d/%s/pinned_memory", DT_CLDEVICE_HEAD, device->config_id,
+             !IS_NULL_PTR(device->cname) ? device->cname : "");
+  const int pinned_memory = dt_conf_key_not_empty(key) ? dt_conf_get_int(key) : device->pinned_memory;
+
+  return pinned_memory & DT_OPENCL_PINNING_ON;
+}
+
+int dt_opencl_set_detected_device_pinned_memory(const int detected, const gboolean enabled)
+{
+  const dt_opencl_detected_device_t *device = dt_opencl_get_detected_device(detected);
+  if(IS_NULL_PTR(device)) return -1;
+
+  gchar key[256] = { 0 };
+  const int pinned_memory = enabled ? DT_OPENCL_PINNING_ON : DT_OPENCL_PINNING_OFF;
+  g_snprintf(key, sizeof(key), "%s/%d/%s/pinned_memory", DT_CLDEVICE_HEAD, device->config_id,
+             !IS_NULL_PTR(device->cname) ? device->cname : "");
+  dt_conf_set_int(key, pinned_memory);
+
+  dt_opencl_t *cl = darktable.opencl;
+  cl->detected_devs[detected].pinned_memory = pinned_memory;
+  return 0;
+}
+
+size_t dt_opencl_detected_device_headroom(const int detected)
+{
+  const dt_opencl_detected_device_t *device = dt_opencl_get_detected_device(detected);
+  if(IS_NULL_PTR(device)) return 0;
+
+  gchar key[256] = { 0 };
+  g_snprintf(key, sizeof(key), "%s/%d/%s/id%d/forced_headroom", DT_CLDEVICE_HEAD, device->config_id,
+             !IS_NULL_PTR(device->cname) ? device->cname : "", device->config_id);
+
+  return dt_conf_key_not_empty(key) ? (size_t)dt_conf_get_int(key) : device->forced_headroom;
+}
+
+int dt_opencl_set_detected_device_headroom(const int detected, const size_t headroom)
+{
+  const dt_opencl_detected_device_t *device = dt_opencl_get_detected_device(detected);
+  if(IS_NULL_PTR(device)) return -1;
+
+  gchar key[256] = { 0 };
+  g_snprintf(key, sizeof(key), "%s/%d/%s/id%d/forced_headroom", DT_CLDEVICE_HEAD, device->config_id,
+             !IS_NULL_PTR(device->cname) ? device->cname : "", device->config_id);
+  const int clamped_headroom = (int)MIN(headroom, (size_t)G_MAXINT);
+  dt_conf_set_int(key, clamped_headroom);
+
+  dt_opencl_t *cl = darktable.opencl;
+  cl->detected_devs[detected].forced_headroom = clamped_headroom;
+  return 0;
+}
+
 // returns 0 if all ok or an error if we failed to init this device
 static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *devices, const int k)
 {
   int res;
   cl_int err;
+  gboolean lock_initialized = FALSE;
 
   memset(cl->dev[dev].program, 0x0, sizeof(cl_program) * DT_OPENCL_MAX_PROGRAMS);
   memset(cl->dev[dev].program_used, 0x0, sizeof(int) * DT_OPENCL_MAX_PROGRAMS);
   memset(cl->dev[dev].kernel, 0x0, sizeof(cl_kernel) * DT_OPENCL_MAX_KERNELS);
   memset(cl->dev[dev].kernel_used, 0x0, sizeof(int) * DT_OPENCL_MAX_KERNELS);
+  cl->dev[dev].context = NULL;
+  cl->dev[dev].cmd_queue = NULL;
   cl->dev[dev].eventlist = NULL;
   cl->dev[dev].eventtags = NULL;
   cl->dev[dev].numevents = 0;
@@ -594,6 +715,25 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
   dt_print_nts(DT_DEBUG_OPENCL, "   CHECK EVENT HANDLES:      %i\n", cl->dev[dev].event_handles);
   dt_print_nts(DT_DEBUG_OPENCL, "   DEFAULT DEVICE:           %s\n", (type & CL_DEVICE_TYPE_DEFAULT) ? "YES" : "NO");
 
+  if(type & CL_DEVICE_TYPE_GPU)
+  {
+    dt_opencl_detected_device_t *detected_devs
+        = g_realloc(cl->detected_devs, sizeof(*cl->detected_devs) * (cl->num_detected_devs + 1));
+    if(!IS_NULL_PTR(detected_devs))
+    {
+      cl->detected_devs = detected_devs;
+      dt_opencl_detected_device_t *detected = cl->detected_devs + cl->num_detected_devs;
+      detected->config_id = dev;
+      detected->name = g_strdup(cl->dev[dev].name);
+      detected->cname = g_strdup(cl->dev[dev].cname);
+      detected->cltype = cl->dev[dev].cltype;
+      detected->disabled = cl->dev[dev].disabled & 1;
+      detected->pinned_memory = cl->dev[dev].pinned_memory;
+      detected->forced_headroom = cl->dev[dev].forced_headroom;
+      cl->num_detected_devs++;
+    }
+  }
+
   if(cl->dev[dev].disabled)
   {
     dt_print_nts(DT_DEBUG_OPENCL, "   *** marked as disabled ***\n");
@@ -603,6 +743,7 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
   dt_print_nts(DT_DEBUG_OPENCL, "   *** Device enabled ***\n");
 
   dt_pthread_mutex_init(&cl->dev[dev].lock, NULL);
+  lock_initialized = TRUE;
 
   cl->dev[dev].context = (cl->dlocl->symbols->dt_clCreateContext)(0, 1, &devid, NULL, NULL, &err);
   if(err != CL_SUCCESS)
@@ -809,6 +950,28 @@ end:
   // we always write the device config to keep track of disabled devices
   dt_opencl_write_device_config(dev);
 
+  if(res != 0)
+  {
+    if(lock_initialized)
+    {
+      for(int n = 0; n < DT_OPENCL_MAX_KERNELS; n++)
+        if(cl->dev[dev].kernel_used[n]) (cl->dlocl->symbols->dt_clReleaseKernel)(cl->dev[dev].kernel[n]);
+      for(int n = 0; n < DT_OPENCL_MAX_PROGRAMS; n++)
+        if(cl->dev[dev].program_used[n]) (cl->dlocl->symbols->dt_clReleaseProgram)(cl->dev[dev].program[n]);
+      if(!IS_NULL_PTR(cl->dev[dev].cmd_queue))
+        (cl->dlocl->symbols->dt_clReleaseCommandQueue)(cl->dev[dev].cmd_queue);
+      if(!IS_NULL_PTR(cl->dev[dev].context))
+        (cl->dlocl->symbols->dt_clReleaseContext)(cl->dev[dev].context);
+      dt_pthread_mutex_destroy(&cl->dev[dev].lock);
+    }
+
+    dt_free(cl->dev[dev].vendor);
+    dt_free(cl->dev[dev].name);
+    dt_free(cl->dev[dev].cname);
+    dt_free(cl->dev[dev].options);
+    dt_free(cl->dev[dev].options_md5);
+  }
+
   dt_free(infostr);
   dt_free(cname);
   dt_free(vendor);
@@ -853,6 +1016,8 @@ void dt_opencl_init(dt_opencl_t *cl, const gboolean exclude_opencl, const gboole
   cl->dev_priority_preview = 0;
   cl->dev_priority_export = 0;
   cl->dev_priority_thumbnail = 0;
+  cl->num_detected_devs = 0;
+  cl->detected_devs = NULL;
 
   if(exclude_opencl) return;
 
@@ -1074,8 +1239,10 @@ void dt_opencl_cleanup_device(dt_opencl_t *cl, int i)
     if(cl->dev[i].kernel_used[k]) (cl->dlocl->symbols->dt_clReleaseKernel)(cl->dev[i].kernel[k]);
   for(int k = 0; k < DT_OPENCL_MAX_PROGRAMS; k++)
     if(cl->dev[i].program_used[k]) (cl->dlocl->symbols->dt_clReleaseProgram)(cl->dev[i].program[k]);
-  (cl->dlocl->symbols->dt_clReleaseCommandQueue)(cl->dev[i].cmd_queue);
-  (cl->dlocl->symbols->dt_clReleaseContext)(cl->dev[i].context);
+  if(!IS_NULL_PTR(cl->dev[i].cmd_queue))
+    (cl->dlocl->symbols->dt_clReleaseCommandQueue)(cl->dev[i].cmd_queue);
+  if(!IS_NULL_PTR(cl->dev[i].context))
+    (cl->dlocl->symbols->dt_clReleaseContext)(cl->dev[i].context);
 
   if(cl->print_statistics && (darktable.unmuted & DT_DEBUG_MEMORY))
   {
@@ -1143,6 +1310,13 @@ void dt_opencl_cleanup(dt_opencl_t *cl)
     dt_free(cl->dlocl->library);
     dt_free(cl->dlocl);
   }
+
+  for(int i = 0; i < cl->num_detected_devs; i++)
+  {
+    dt_free(cl->detected_devs[i].name);
+    dt_free(cl->detected_devs[i].cname);
+  }
+  dt_free(cl->detected_devs);
 
   dt_free(cl->dev);
   dt_pthread_mutex_destroy(&cl->lock);
@@ -2475,8 +2649,9 @@ void dt_opencl_check_tuning(const int devid)
   dt_opencl_t *cl = darktable.opencl;
   if(!cl->inited || devid < 0) return;
 
-  // Take the max of the device-specific and global param
-  size_t headroom = MAX(dt_conf_get_int64("memory_opencl_headroom"), cl->dev[devid].forced_headroom);
+  // Apply the headroom read from this device configuration. Older configs without
+  // a per-device key are migrated from the global default during device init.
+  size_t headroom = cl->dev[devid].forced_headroom;
 
   cl->dev[devid].used_available = MAX(0ul, cl->dev[devid].max_global_mem - headroom * 1024 * 1024);
 

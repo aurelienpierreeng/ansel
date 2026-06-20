@@ -331,8 +331,11 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   const int width = roi_in->width;
   const int height = roi_in->height;
 
-  const gboolean fullpipe = !dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out);
-  const gboolean visualizing = (!IS_NULL_PTR(g)) ? g->show_visualize && fullpipe : FALSE;
+  /* This transient preview belongs to the central darkroom view. Do not infer
+   * its owner from ROI geometry: at zoom-to-fit the main and navigation pipes
+   * can produce identical dimensions while both still need distinct outputs. */
+  const gboolean visualizing = !IS_NULL_PTR(g) && g->show_visualize
+                               && self->dev->gui_attached && pipe == self->dev->pipe;
 
   cl_int err = DT_OPENCL_DEFAULT_ERROR;
   cl_mem dev_xtrans = NULL;
@@ -363,7 +366,11 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_highlights_false_color, sizes);
     if(err != CL_SUCCESS) goto error;
 
+    /* The clipping preview is the final output of this module. Blending would
+     * interpret PASSTHRU as a channel-display request and replace RAW output
+     * with zeroes before the downstream demosaic stage can display it. */
     ((dt_dev_pixelpipe_t *)pipe)->mask_display = DT_DEV_PIXELPIPE_DISPLAY_PASSTHRU;
+    ((dt_dev_pixelpipe_t *)pipe)->bypass_blendif = 1;
     dt_opencl_release_mem_object(dev_clips);
     return TRUE;
   }
@@ -2696,13 +2703,20 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   dt_iop_highlights_data_t *data = (dt_iop_highlights_data_t *)piece->data;
   dt_iop_highlights_gui_data_t *g = (dt_iop_highlights_gui_data_t *)self->gui_data;
 
-  const gboolean fullpipe = !dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out);
-  const gboolean visualizing = (!IS_NULL_PTR(g)) ? g->show_visualize && fullpipe : FALSE;
+  /* This transient preview belongs to the central darkroom view. Do not infer
+   * its owner from ROI geometry: at zoom-to-fit the main and navigation pipes
+   * can produce identical dimensions while both still need distinct outputs. */
+  const gboolean visualizing = !IS_NULL_PTR(g) && g->show_visualize
+                               && self->dev->gui_attached && pipe == self->dev->pipe;
 
   if(visualizing)
   {
     process_visualize(piece, ivoid, ovoid, roi_in, roi_out, filters, data);
+    /* The clipping preview is the final output of this module. Blending would
+     * interpret PASSTHRU as a channel-display request and replace RAW output
+     * with zeroes before the downstream demosaic stage can display it. */
     ((dt_dev_pixelpipe_t *)pipe)->mask_display = DT_DEV_PIXELPIPE_DISPLAY_PASSTHRU;
+    ((dt_dev_pixelpipe_t *)pipe)->bypass_blendif = 1;
     return 0;
   }
 
@@ -2797,9 +2811,14 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
 
   memcpy(d, p, sizeof(*p));
 
-  // No code path for monochrome or JPEG/TIFF
-  if(dt_image_is_monochrome(&self->dev->image_storage) || !dt_image_is_raw(&self->dev->image_storage))
-    piece->enabled = FALSE;
+  // Image-type gating (raw colorimetry, not monochrome) is handled at history level by
+  // enable()/force_enable()/reload_defaults(); nothing type-related is decided here. process()
+  // still has a dedicated !filters branch so already-demosaiced raw (sRAW / linear DNG) is
+  // processed correctly when the module is enabled.
+  const dt_image_t *const img = &self->dev->image_storage;
+  dt_iop_fmt_log(self, "commit: class=%s filters=%u mode=%d -> enabled=%d",
+                 dt_image_pipe_class_name(dt_image_pipe_class(img)), piece->dsc_in.filters,
+                 d->mode, piece->enabled);
 
   // no OpenCL for DT_IOP_HIGHLIGHTS_INPAINT
   piece->process_cl_ready = (d->mode == DT_IOP_HIGHLIGHTS_INPAINT) ? 0 : 1;
@@ -2826,16 +2845,22 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
 
 static gboolean enable(dt_image_t *image)
 {
-  return dt_image_is_raw(image) && !dt_image_is_monochrome(image);
+  // raw colorimetry (raw or sraw/linear-DNG), but not real monochrome. Must match the
+  // commit_params() gate above.
+  return dt_image_needs_rawprepare(image) && !dt_image_is_monochrome(image);
 }
 
 gboolean force_enable(struct dt_iop_module_t *self, const gboolean current_state)
 {
-  // No codepath for non-raw images
-  if(current_state && dt_image_is_monochrome(&self->dev->image_storage))
-    return FALSE;
-  else
-    return current_state;
+  // History sanitization: clamp against the SAME support rule as enable()/reload_defaults()
+  // (raw colorimetry, not monochrome). The previous version only handled the monochrome case and
+  // let a highlights entry pasted onto a non-raw image survive until commit_params() patched it.
+  const gboolean active = enable(&self->dev->image_storage);
+  const gboolean state = current_state && active;
+  dt_iop_fmt_log(self, "force_enable: class=%s supported=%d current=%d -> %d",
+                 dt_image_pipe_class_name(dt_image_pipe_class(&self->dev->image_storage)),
+                 active, current_state, state);
+  return state;
 }
 
 void init_global(dt_iop_module_so_t *module)
@@ -2932,7 +2957,7 @@ void gui_update(struct dt_iop_module_t *self)
   dt_iop_highlights_gui_data_t *g = (dt_iop_highlights_gui_data_t *)self->gui_data;
   const gboolean monochrome = dt_image_is_monochrome(&self->dev->image_storage);
   // enable this per default if raw or sraw if not real monochrome
-  self->default_enabled = dt_image_is_rawprepare_supported(&self->dev->image_storage) && !monochrome;
+  self->default_enabled = dt_image_needs_rawprepare(&self->dev->image_storage) && !monochrome;
 
   // Neuter the on/off button only if not already enabled.
   // It can be enabled by history copy & paste from a RAW image.
@@ -2953,6 +2978,9 @@ void reload_defaults(dt_iop_module_t *module)
   // enable this per default if raw or sraw if not real monochrome
   module->default_enabled = enable(&module->dev->image_storage);
   module->hide_enable_button = !enable(&module->dev->image_storage);
+  dt_iop_fmt_log(module, "reload_defaults: class=%s default_enabled=%d",
+                 dt_image_pipe_class_name(dt_image_pipe_class(&module->dev->image_storage)),
+                 module->default_enabled);
   if(module->widget)
     gtk_stack_set_visible_child_name(GTK_STACK(module->widget), module->default_enabled ? "default" : "monochrome");
 
@@ -2998,7 +3026,7 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
 void gui_init(struct dt_iop_module_t *self)
 {
   dt_iop_highlights_gui_data_t *g = IOP_GUI_ALLOC(highlights);
-  GtkWidget *box_raw = self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+  GtkWidget *box_raw = self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   g->mode = dt_bauhaus_combobox_from_params(self, "mode");
   gtk_widget_set_tooltip_text(g->mode, _("highlight reconstruction method"));

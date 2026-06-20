@@ -419,19 +419,19 @@ static void _metadata_get_flags(const dt_image_t *const img, char *const text, c
   else
     value[2] = FALSE_FIELD;
 
-  if(img->flags & DT_IMAGE_LDR)
+  if(dt_image_is_ldr(img))
   {
     value[3] = 'l';
     tooltip_parts[next_tooltip_part++] = _(flag_descriptions[2]);
   }
 
-  if(img->flags & DT_IMAGE_RAW)
+  if(dt_image_is_raw(img))
   {
     value[4] = 'r';
     tooltip_parts[next_tooltip_part++] = _(flag_descriptions[3]);
   }
 
-  if(img->flags & DT_IMAGE_HDR)
+  if(dt_image_is_hdr(img))
   {
     value[5] = 'h';
     tooltip_parts[next_tooltip_part++] = _(flag_descriptions[4]);
@@ -520,7 +520,8 @@ static void _concatenate_multiple_images(gboolean skip[md_size], int count)
   sqlite3_stmt *stmt = NULL;
   // clang-format off
   gchar *query = g_strdup_printf("SELECT COUNT(DISTINCT film_id), "
-                                        "2, " //id always different
+                                        "COUNT(DISTINCT film_id), "
+                                        "2, " // imgid always different
                                         "COUNT(DISTINCT group_id), "
                                         "COUNT(DISTINCT filename), "
                                         "COUNT(DISTINCT version), "
@@ -552,12 +553,13 @@ static void _concatenate_multiple_images(gboolean skip[md_size], int count)
                                         "(SELECT COUNT(DISTINCT IFNULL(value,'')) FROM images LEFT JOIN meta_data ON meta_data.id = images.id AND key = 4 WHERE images.id in (%s)), " //rights
                                         "(SELECT COUNT(DISTINCT IFNULL(value,'')) FROM images LEFT JOIN meta_data ON meta_data.id = images.id AND key = 5 WHERE images.id in (%s)), " //notes
                                         "(SELECT COUNT(DISTINCT IFNULL(value,'')) FROM images LEFT JOIN meta_data ON meta_data.id = images.id AND key = 6 WHERE images.id in (%s)), " //version name
+                                        "(SELECT COUNT(DISTINCT IFNULL(value,'')) FROM images LEFT JOIN meta_data ON meta_data.id = images.id AND key = 7 WHERE images.id in (%s)), " //image id
                                         "COUNT(DISTINCT IFNULL(latitude, '')), "
                                         "COUNT(DISTINCT IFNULL(longitude, '')), "
                                         "COUNT(DISTINCT IFNULL(altitude, '')) "
                                         "FROM main.images "
                                         "WHERE id IN (%s)",
-                                  images, images, images, images, images, images, images, images);
+                                  images, images, images, images, images, images, images, images, images);
   // clang-format on
 
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query, -1, &stmt, NULL);
@@ -575,8 +577,11 @@ static void _concatenate_multiple_images(gboolean skip[md_size], int count)
   dt_free(query);
 
   if(sqlite3_step(stmt) == SQLITE_ROW)
-    for(int32_t md = 0; md < md_tag_names; md++)
+  {
+    const int col_count = sqlite3_column_count(stmt);
+    for(int32_t md = 0; md < md_tag_names && md < col_count; md++)
       skip[md] = (sqlite3_column_int(stmt, md) > 1);
+  }
 
   sqlite3_finalize(stmt);
 
@@ -1188,6 +1193,7 @@ void _menuitem_preferences(GtkMenuItem *menuitem, dt_lib_module_t *self)
   gtk_widget_set_size_request(w, -1, DT_PIXEL_APPLY_DPI(600));
   gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(w), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
   gtk_scrolled_window_set_overlay_scrolling(GTK_SCROLLED_WINDOW(w), FALSE);
+  dt_gui_add_class(w, "dt_recessed_scroll");
   gtk_box_pack_start(GTK_BOX(area), w, TRUE, TRUE, 0);
 
   GtkListStore *store = gtk_list_store_new(DT_METADATA_PREF_NUM_COLS,
@@ -1339,9 +1345,11 @@ void gui_init(dt_lib_module_t *self)
 
   GtkWidget *child_grid_window = gtk_grid_new();
   d->grid = child_grid_window;
-  gtk_grid_set_column_spacing(GTK_GRID(child_grid_window), DT_PIXEL_APPLY_DPI(5));
+  gtk_grid_set_column_spacing(GTK_GRID(child_grid_window), DT_GUI_BOX_SPACING);
 
-  self->widget = dt_ui_scroll_wrap(child_grid_window, 200, "plugins/lighttable/metadata_view/windowheight");
+  // Static: the metadata grid refreshes for the hovered/selected image, so keep a fixed height.
+  self->widget = dt_ui_scroll_wrap(child_grid_window, 200, "plugins/lighttable/metadata_view/windowheight",
+                                   DT_UI_RESIZE_STATIC);
 
   gtk_widget_show_all(d->grid);
   gtk_widget_set_no_show_all(d->grid, TRUE);

@@ -452,6 +452,10 @@ void dt_drawlayer_set_pipeline_realtime_mode(dt_iop_module_t *self, const gboole
   if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(self->dev->pipe)) return;
   const gboolean was_realtime = dt_dev_pixelpipe_get_realtime(self->dev->pipe);
   dt_dev_pixelpipe_set_realtime(self->dev->pipe, state);
+  // Leaving realtime mode (commit / abort / focus-loss) drops the transient stroke params so the pipe
+  // renders the committed history state again. Entering does nothing here; heartbeats publish per dab.
+  if(!state)
+    dt_dev_transient_params_clear(self);
   if(was_realtime != state)
     dt_dev_pixelpipe_resync_history_main(self->dev);
   if(IS_NULL_PTR(self->dev->preview_pipe)) return;

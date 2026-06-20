@@ -156,10 +156,60 @@ typedef struct dt_dev_pixelpipe_cache_wait_t
   uint64_t hash;
   dt_dev_pixelpipe_cache_ready_callback_t restart;
   gpointer user_data;
+  const char *owner_tag;
+  gpointer owner_object;
+  uint64_t request_id;
   gboolean connected;
 } dt_dev_pixelpipe_cache_wait_t;
 
-void dt_dev_pixelpipe_cache_wait_cleanup(dt_dev_pixelpipe_cache_wait_t *wait);
+/**
+ * @brief Cancel one pending GUI cache wait request and clear its runtime state.
+ *
+ * @details
+ * This removes @p wait from the shared pending queue (if connected), emits a
+ * lifecycle debug log and resets the wait object to an inert state.
+ * Callers should pass a short static @p reason string to make cancellations
+ * traceable in logs.
+ *
+ * @param wait Caller-owned wait object.
+ * @param reason Short static cancellation context label for debug traces.
+ */
+void dt_dev_pixelpipe_cache_wait_cleanup(dt_dev_pixelpipe_cache_wait_t *wait, const char *reason);
+
+/**
+ * @brief Dump pending GUI cache wait requests for lifecycle debugging.
+ *
+ * @details
+ * This reports the current queue of not-yet-served cache wait requests, with
+ * ownership tags, request ids and target hashes. Callers should use it right
+ * before teardown phases (view leave / app shutdown) to identify abandoned
+ * waits that never received a cacheline-ready event.
+ *
+ * @param reason Short caller-provided context label for the log entry.
+ */
+void dt_dev_pixelpipe_cache_wait_dump_pending(const char *reason);
+
+/**
+ * @brief Attach debug ownership metadata to one cache wait request.
+ *
+ * The cache wait manager tracks heterogeneous GUI consumers (pickers,
+ * histograms, autoset, darkroom surfaces) in a shared pending queue.
+ * This setter lets each caller stamp the wait object with:
+ * - a stable textual tag ( @p owner_tag) used in logs,
+ * - the originating runtime object pointer ( @p owner_object) used to
+ *   correlate repeated requests from the same caller.
+ *
+ * Ownership metadata does not affect scheduling or locking decisions.
+ * It only improves traceability when diagnosing missed/served requests
+ * and UI/pipeline desynchronization.
+ *
+ * @param wait Caller-owned wait object to annotate.
+ * @param owner_tag Short static owner label for debug traces.
+ * @param owner_object Caller instance pointer associated with the request.
+ */
+void dt_dev_pixelpipe_cache_wait_set_owner(dt_dev_pixelpipe_cache_wait_t *wait,
+                                           const char *owner_tag,
+                                           gpointer owner_object);
 
 /**
  * @brief Reopen one GUI-visible host cacheline, or queue the minimal pipe recompute needed to publish it.
@@ -195,6 +245,15 @@ gboolean dt_dev_pixelpipe_cache_peek_gui(dt_dev_pixelpipe_t *pipe,
                                          dt_dev_pixelpipe_cache_wait_t *wait,
                                          dt_dev_pixelpipe_cache_ready_callback_t restart,
                                          gpointer restart_data);
+
+// Direction-independent forward pass that (re)establishes the per-node buffer-format contract
+// (dsc_in/dsc_out) for the whole chain from the input image descriptor, and is the single place
+// that disables a node whose input is incompatible with what the previous stage publishes.
+// MUST run after history/params have been committed (synch_all / synch_top / realtime) and
+// BEFORE dt_pixelpipe_get_global_hash(), because that hash is cumulative over enabled nodes.
+// dt_dev_pixelpipe_change() calls it automatically; callers that drive a pipe directly
+// (export, snapshots) must call it themselves after dt_dev_pixelpipe_synch_all().
+void dt_dev_pixelpipe_propagate_formats(struct dt_dev_pixelpipe_t *pipe);
 
 // Compute the sequential hash over the pipeline for each module.
 // Need to run after dt_dev_pixelpipe_get_roi_in() has updated processed ROI in/out

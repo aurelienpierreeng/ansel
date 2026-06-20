@@ -23,8 +23,17 @@
 #include "develop/dev_pixelpipe.h"
 #include "develop/imageop.h"
 #include "control/conf.h"
+#include "control/control.h"
 
 #include <glib.h>
+
+static void _dt_iop_autoset_restart_cache_wait(gpointer user_data)
+{
+  dt_autoset_manager_t *manager = (dt_autoset_manager_t *)user_data;
+  if(IS_NULL_PTR(manager) || IS_NULL_PTR(manager->dev)) return;
+
+  dt_iop_autoset_advance(manager->dev, manager);
+}
 
 gchar *dt_iop_autoset_get_conf_key(const dt_iop_module_t *module)
 {
@@ -54,6 +63,19 @@ void dt_iop_autoset_module_set_enabled(const dt_iop_module_t *module, const gboo
 
 void dt_iop_autoset_build_list(struct dt_develop_t *dev, dt_autoset_manager_t *manager)
 {
+  if(IS_NULL_PTR(manager->input_wait))
+    manager->input_wait = g_malloc0(sizeof(dt_dev_pixelpipe_cache_wait_t));
+  dt_dev_pixelpipe_cache_wait_t *input_wait = (dt_dev_pixelpipe_cache_wait_t *)manager->input_wait;
+  manager->dev = dev;
+  if(!IS_NULL_PTR(input_wait))
+    dt_dev_pixelpipe_cache_wait_cleanup(input_wait, "autoset-build-list-reset");
+
+  if(manager->progress_cursor_active)
+  {
+    dt_control_log_busy_leave();
+    manager->progress_cursor_active = FALSE;
+  }
+
   g_list_free(manager->iop_to_set);
   manager->iop_to_set = NULL;
   dev->preview_pipe->autoset = TRUE;
@@ -74,18 +96,44 @@ void dt_iop_autoset_build_list(struct dt_develop_t *dev, dt_autoset_manager_t *m
 
 int dt_iop_autoset_advance(struct dt_develop_t *dev, dt_autoset_manager_t *manager)
 {
+  if(IS_NULL_PTR(manager->input_wait))
+    manager->input_wait = g_malloc0(sizeof(dt_dev_pixelpipe_cache_wait_t));
+  dt_dev_pixelpipe_cache_wait_t *input_wait = (dt_dev_pixelpipe_cache_wait_t *)manager->input_wait;
+
   GList *mod = g_list_first(manager->iop_to_set);
   dt_dev_pixelpipe_t *pipe = dev->preview_pipe;
   if(IS_NULL_PTR(mod)) 
   {
+    if(!IS_NULL_PTR(input_wait))
+      dt_dev_pixelpipe_cache_wait_cleanup(input_wait, "autoset-finished");
     pipe->autoset = FALSE;
+    if(manager->progress_cursor_active)
+    {
+      dt_control_log_busy_leave();
+      manager->progress_cursor_active = FALSE;
+    }
     return 1;
+  }
+
+  // Enter busy cursor exactly when the first autoset operation starts.
+  if(!manager->progress_cursor_active)
+  {
+    dt_control_log_busy_enter();
+    dt_control_change_cursor_by_name_and_flush("progress");
+    manager->progress_cursor_active = TRUE;
   }
 
   dt_iop_module_t *module = (dt_iop_module_t *)mod->data;
   if(IS_NULL_PTR(module))
   {
+    if(!IS_NULL_PTR(input_wait))
+      dt_dev_pixelpipe_cache_wait_cleanup(input_wait, "autoset-module-missing");
     pipe->autoset = FALSE;
+    if(manager->progress_cursor_active)
+    {
+      dt_control_log_busy_leave();
+      manager->progress_cursor_active = FALSE;
+    }
     return 1;
   }
 
@@ -104,7 +152,11 @@ int dt_iop_autoset_advance(struct dt_develop_t *dev, dt_autoset_manager_t *manag
   // else the following function requests a partial pipe recompute
   dt_pixel_cache_entry_t *entry = NULL;
   void *input = NULL;
-  if(!dt_dev_pixelpipe_cache_peek_gui(pipe, input_piece, &input, &entry, NULL, NULL, NULL))
+  if(IS_NULL_PTR(input_wait))
+    return 1;
+  dt_dev_pixelpipe_cache_wait_set_owner(input_wait, "autoset-input", manager);
+  if(!dt_dev_pixelpipe_cache_peek_gui(pipe, input_piece, &input, &entry,
+                                      input_wait, _dt_iop_autoset_restart_cache_wait, manager))
     return 1;
 
   fprintf(stdout, "processing %s\n", module->op);
@@ -126,5 +178,16 @@ int dt_iop_autoset_advance(struct dt_develop_t *dev, dt_autoset_manager_t *manag
   dt_iop_gui_update(module);
 
   manager->iop_to_set = g_list_delete_link(manager->iop_to_set, mod);
+  if(IS_NULL_PTR(manager->iop_to_set))
+  {
+    if(!IS_NULL_PTR(input_wait))
+      dt_dev_pixelpipe_cache_wait_cleanup(input_wait, "autoset-list-empty");
+    pipe->autoset = FALSE;
+    if(manager->progress_cursor_active)
+    {
+      dt_control_log_busy_leave();
+      manager->progress_cursor_active = FALSE;
+    }
+  }
   return 0;
 }

@@ -573,7 +573,7 @@ static void _presets_show_edit_dialog(dt_gui_presets_edit_dialog_t *g, gboolean 
   dt_osx_disallow_fullscreen(dialog);
 #endif
   GtkContainer *content_area = GTK_CONTAINER(gtk_dialog_get_content_area(GTK_DIALOG(dialog)));
-  GtkBox *box = GTK_BOX(gtk_box_new(GTK_ORIENTATION_VERTICAL, 0));
+  GtkBox *box = GTK_BOX(gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING));
   gtk_container_add(content_area, GTK_WIDGET(box));
 
   g->name = GTK_ENTRY(gtk_entry_new());
@@ -615,8 +615,8 @@ static void _presets_show_edit_dialog(dt_gui_presets_edit_dialog_t *g, gboolean 
 
   int line = 0;
   g->details = gtk_grid_new();
-  gtk_grid_set_row_spacing(GTK_GRID(g->details), DT_PIXEL_APPLY_DPI(5));
-  gtk_grid_set_column_spacing(GTK_GRID(g->details), DT_PIXEL_APPLY_DPI(10));
+  gtk_grid_set_row_spacing(GTK_GRID(g->details), DT_GUI_BOX_SPACING);
+  gtk_grid_set_column_spacing(GTK_GRID(g->details), DT_GUI_BOX_SPACING);
   gtk_box_pack_start(box, GTK_WIDGET(g->details), TRUE, TRUE, 0);
 
   GtkWidget *label = NULL;
@@ -1041,7 +1041,7 @@ gboolean dt_gui_presets_autoapply_for_module(dt_iop_module_t *module)
   sqlite3_stmt *stmt;
   const char *workflow_preset = (has_matrix) ? _("scene-referred default") : "\t\n";
   int iformat = 0;
-  if(dt_image_is_rawprepare_supported(image)) iformat |= FOR_RAW;
+  if(dt_image_needs_rawprepare(image)) iformat |= FOR_RAW;
   else iformat |= FOR_LDR;
   if(dt_image_is_hdr(image)) iformat |= FOR_HDR;
 
@@ -1137,7 +1137,7 @@ static void _gui_presets_popup_menu_show_internal(dt_dev_operation_t op, int32_t
   {
     // only matching if filter is on:
     int iformat = 0;
-    if(dt_image_is_rawprepare_supported(image))
+    if(dt_image_needs_rawprepare(image))
       iformat |= FOR_RAW;
     else
       iformat |= FOR_LDR;
@@ -1246,7 +1246,7 @@ static void _gui_presets_popup_menu_show_internal(dt_dev_operation_t op, int32_t
     else
       label = g_strdup(name);
     mi = gtk_menu_item_new_with_label(label);
-    dt_gui_add_class(mi, "dt_transparent_background");
+
     dt_free(label);
 
     if(module

@@ -337,6 +337,18 @@ dt_imageio_retval_t dt_imageio_open_rawspeed(dt_image_t *img,
       if(img->raw_white_point == 1)
         for(int k = 0; k < 4; k++) img->dsc.processed_maximum[k] = 1.0f;
     }
+    else
+    {
+      // Integer raw (the common case, incl. 8/16-bit Linear Raw / sRAW from film scanners): this
+      // is NOT high dynamic range. rawspeed is the only authority on the *source* datatype here,
+      // because an sRAW is always re-stored as a TYPE_FLOAT buffer in RAM (see the sraw loader),
+      // which makes dt_image_buffer_resolve_flags() unable to tell an integer sRAW from a float
+      // one. We must therefore clear any stale DT_IMAGE_HDR (e.g. a corrupted bit persisted in the
+      // DB) explicitly, otherwise rawprepare picks the HDR normalizer (1.0 instead of the white
+      // level) and divides the already-normalized data to near-zero -> black image (issue: VueScan
+      // 8-bit Linear Raw DNGs with WhiteLevel=65535).
+      img->flags &= ~DT_IMAGE_HDR;
+    }
 
     img->dsc.filters = 0u;
 

@@ -41,6 +41,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "common/darktable.h"
+#include "gui/gdkkeys.h"
 #include "develop/masks.h"
 #include "develop/develop.h"
 #include "bauhaus/bauhaus.h"
@@ -105,7 +106,7 @@ int dt_masks_find_closest_handle_common(dt_masks_form_t *mask_form,
   if(IS_NULL_PTR(gui_points)) return 0;
 
   // Handle detection in backbuffer space.
-  const float cursor_radius = DT_GUI_MOUSE_EFFECT_RADIUS_SCALED;
+  const float cursor_radius = DT_GUI_MOUSE_EFFECT_RADIUS;
   const float cursor_radius2 = cursor_radius * cursor_radius;
   const float cursor_x = mask_gui->pos[0];
   const float cursor_y = mask_gui->pos[1];
@@ -541,7 +542,7 @@ static gboolean _dt_masks_events_group_update_selection(dt_masks_form_t *group_f
   if(IS_NULL_PTR(group_form) || IS_NULL_PTR(mask_gui)) return FALSE;
 
   dt_develop_t *const dev = darktable.develop;
-  const float radius = DT_GUI_MOUSE_EFFECT_RADIUS_SCALED;
+  const float radius = DT_GUI_MOUSE_EFFECT_RADIUS;
   const float cursor_x = mask_gui->pos[0];
   const float cursor_y = mask_gui->pos[1];
   const int prev_group_selected = mask_gui->group_selected;
@@ -663,7 +664,7 @@ static gboolean _dt_masks_events_cursor_over_form(const dt_masks_form_t *dispatc
   int near = -1;
   int inside_source = 0;
   float dist = FLT_MAX;
-  dispatch_form->functions->get_distance(mask_gui->pos[0], mask_gui->pos[1], DT_GUI_MOUSE_EFFECT_RADIUS_SCALED,
+  dispatch_form->functions->get_distance(mask_gui->pos[0], mask_gui->pos[1], DT_GUI_MOUSE_EFFECT_RADIUS,
                                          mask_gui, form_index,
                                          g_list_length(dispatch_form->points), &inside, &inside_border, &near,
                                          &inside_source, &dist);
@@ -677,7 +678,7 @@ static gboolean _dt_masks_events_group_blocks_motion(dt_masks_form_gui_t *mask_g
 {
   if(IS_NULL_PTR(mask_gui)) return FALSE;
 
-  const float radius = DT_GUI_MOUSE_EFFECT_RADIUS_SCALED;
+  const float radius = DT_GUI_MOUSE_EFFECT_RADIUS;
   if(mask_gui->scrollx == 0.0f || mask_gui->scrolly == 0.0f) return FALSE;
 
   if((mask_gui->scrollx - mask_gui->pos[0] < radius && mask_gui->scrollx - mask_gui->pos[0] > -radius)
@@ -2577,7 +2578,8 @@ int dt_masks_events_key_pressed(struct dt_iop_module_t *module, GdkEventKey *eve
   
   if(!return_value)
   {
-    switch(event->keyval)
+    guint key = dt_keys_mainpad_alternatives(event->keyval);
+    switch(key)
     {
       case GDK_KEY_Escape:
       {
@@ -2585,7 +2587,6 @@ int dt_masks_events_key_pressed(struct dt_iop_module_t *module, GdkEventKey *eve
         break;
       }
       case GDK_KEY_Delete:
-      case GDK_KEY_KP_Delete:
       {
         if(mask_gui->group_selected >= 0)
         {
@@ -4013,7 +4014,7 @@ void dt_masks_cleanup_unused_from_list(GList *history_list)
       history_node = g_list_previous(history_node))
   {
     dt_dev_history_item_t *history_item = (dt_dev_history_item_t *)history_node->data;
-    if(history_item->forms && strcmp(history_item->op_name, "mask_manager") == 0)
+    if(!IS_NULL_PTR(history_item->forms)) //&& strcmp(history_item->op_name, "mask_manager") == 0)
     {
       _masks_cleanup_unused(&history_item->forms, history_list, history_end);
       history_end = history_count - 1;

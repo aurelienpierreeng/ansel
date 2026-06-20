@@ -586,7 +586,7 @@ static inline float dt_masks_get_form_size_from_nodes(const GList *points)
 
 static inline gboolean dt_masks_gui_should_hit_test(dt_masks_form_gui_t *gui)
 {
-  const float hit_thresh = DT_GUI_MOUSE_EFFECT_RADIUS_SCALED * 0.5f;
+  const float hit_thresh = DT_GUI_MOUSE_EFFECT_RADIUS * 0.5f;
   const float dx = gui->pos[0] - gui->last_hit_test_pos[0];
   const float dy = gui->pos[1] - gui->last_hit_test_pos[1];
   if(gui->last_hit_test_pos[0] < 0.0f || (dx * dx + dy * dy) > (hit_thresh * hit_thresh))

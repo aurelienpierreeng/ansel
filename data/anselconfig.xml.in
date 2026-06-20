@@ -289,11 +289,12 @@
     <shortdescription>store xmp tags in compressed format</shortdescription>
     <longdescription>entries in xmp tags can get rather large and may exceed the available space to store the history stack in output files. this option allows xmp tags to be compressed and save space.</longdescription>
   </dtconfig>
-  <dtconfig>
-    <name>history/mode</name>
-    <type>int</type>
-    <default>0</default>
-    <shortdescription>on history pasting or style application, whether the pasted history is added after or before the original history</shortdescription>
+  <dtconfig prefs="storage" section="privacy">
+    <name>sentry/enabled</name>
+    <type>bool</type>
+    <default>false</default>
+    <shortdescription>Send anonymous crash reports</shortdescription>
+    <longdescription>When Ansel crashes, automatically upload the backtrace, your operating system and hardware specs (CPU, RAM, GPU), the Ansel version and crash-free session statistics to the developers (via sentry.io) so the bug can be fixed. No images, file names or personal data are sent. Default off; you are asked once on first launch.</longdescription>
   </dtconfig>
   <dtconfig>
     <name>history/paste_instances</name>
@@ -302,10 +303,40 @@
     <shortdescription>Paste history creating new module instances instead of merging with old.</shortdescription>
   </dtconfig>
   <dtconfig>
-    <name>history/copy_iop_order</name>
+    <name>history/paste/mode</name>
+    <type>int</type>
+    <default>0</default>
+    <shortdescription>Default merge position when pasting history: 0=prepend (below), 1=append (above), 2=replace.</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>history/paste/copy_iop_order</name>
     <type>bool</type>
     <default>true</default>
-    <shortdescription>Paste modules order along with history.</shortdescription>
+    <shortdescription>Copy the source pipeline order when pasting history.</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>history/paste/ask</name>
+    <type>bool</type>
+    <default>true</default>
+    <shortdescription>Show merge settings dialog before each history paste operation.</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>history/style/mode</name>
+    <type>int</type>
+    <default>0</default>
+    <shortdescription>Default merge position when applying a style: 0=prepend (below), 1=append (above), 2=replace.</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>history/style/copy_iop_order</name>
+    <type>bool</type>
+    <default>true</default>
+    <shortdescription>Copy the style's pipeline order when applying a style (only if the style has one saved).</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>history/style/ask</name>
+    <type>bool</type>
+    <default>true</default>
+    <shortdescription>Show merge settings dialog before each style application.</shortdescription>
   </dtconfig>
   <dtconfig prefs="misc" section="tags">
     <name>omit_tag_hierarchy</name>
@@ -321,14 +352,14 @@
     <shortdescription>do not set the 'uncategorized' entry for tags</shortdescription>
     <longdescription>do not set the 'uncategorized' entry for tags which do not have children</longdescription>
   </dtconfig>
-  <dtconfig prefs="processing" section="cpugpu" capability="opencl">
+  <dtconfig>
     <name>opencl</name>
     <type>bool</type>
     <default>${DEFCONFIG_OPENCL}</default>
     <shortdescription>activate OpenCL support</shortdescription>
     <longdescription>if found, use OpenCL runtime on your system for improved processing speed. can be switched on and off at any time.</longdescription>
   </dtconfig>
-  <dtconfig prefs="processing" section="cpugpu" capability="opencl">
+  <dtconfig>
     <name>memory_opencl_headroom</name>
     <type>int</type>
     <default>200</default>
@@ -803,7 +834,7 @@
     <shortdescription>Use the embedded JPG instead of rendering thumbnails from RAW.</shortdescription>
     <longdescription/>
   </dtconfig>
-  <dtconfig prefs="views" section="darkroom">
+  <dtconfig>
     <name>pressure_sensitivity</name>
     <type>
       <enum>
@@ -816,10 +847,10 @@
       </enum>
     </type>
     <default>off</default>
-    <shortdescription>pen pressure control for brush masks</shortdescription>
+    <shortdescription>Pen pressure mapping</shortdescription>
     <longdescription>off - pressure reading ignored, hardness/opacity/brush size - pressure reading controls specified attribute, absolute/relative - pressure reading is taken directly as attribute value or multiplied with pre-defined setting.</longdescription>
   </dtconfig>
-  <dtconfig prefs="views" section="darkroom">
+  <dtconfig>
     <name>brush_smoothing</name>
     <type>
       <enum>
@@ -829,7 +860,7 @@
       </enum>
     </type>
     <default>medium</default>
-    <shortdescription>smoothing of brush strokes</shortdescription>
+    <shortdescription>Brush strokes smoothing</shortdescription>
     <longdescription>sets level for smoothing of brush strokes. stronger smoothing leads to less nodes and easier editing but with lower control of accuracy.</longdescription>
   </dtconfig>
   <dtconfig prefs="views" section="darkroom">
@@ -1457,6 +1488,54 @@
     <shortdescription>background brightness to show pictures against</shortdescription>
   </dtconfig>
   <dtconfig>
+    <name>plugins/darkroom/colorbalancergb/checker1/red</name>
+    <type>float</type>
+    <default>1.0</default>
+    <shortdescription>red component of the first mask preview checkerboard color</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/darkroom/colorbalancergb/checker1/green</name>
+    <type>float</type>
+    <default>1.0</default>
+    <shortdescription>green component of the first mask preview checkerboard color</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/darkroom/colorbalancergb/checker1/blue</name>
+    <type>float</type>
+    <default>1.0</default>
+    <shortdescription>blue component of the first mask preview checkerboard color</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/darkroom/colorbalancergb/checker2/red</name>
+    <type>float</type>
+    <default>0.18</default>
+    <shortdescription>red component of the second mask preview checkerboard color</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/darkroom/colorbalancergb/checker2/green</name>
+    <type>float</type>
+    <default>0.18</default>
+    <shortdescription>green component of the second mask preview checkerboard color</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/darkroom/colorbalancergb/checker2/blue</name>
+    <type>float</type>
+    <default>0.18</default>
+    <shortdescription>blue component of the second mask preview checkerboard color</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/darkroom/colorbalancergb/checker/size</name>
+    <type min="2" max="32">int</type>
+    <default>8</default>
+    <shortdescription>mask preview checkerboard size</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/darkroom/colorbalancergb/mask_preview/greyscaled</name>
+    <type>bool</type>
+    <default>false</default>
+    <shortdescription>show the image in black and white under mask previews</shortdescription>
+  </dtconfig>
+  <dtconfig>
     <name>ui_last/expander_metadata</name>
     <type>int</type>
     <default>0</default>
@@ -1585,12 +1664,12 @@
       <enum>
         <option>bilinear</option>
         <option>bicubic</option>
-        <option>lanczos2</option>
+        <option>mitchell</option>
       </enum>
     </type>
-    <default>bicubic</default>
+    <default>mitchell</default>
     <shortdescription>pixel interpolator (warp)</shortdescription>
-    <longdescription>pixel interpolator used in modules for rotation, lens correction, liquify, cropping and final scaling (bilinear, bicubic, lanczos2).</longdescription>
+    <longdescription>pixel interpolator used in modules for rotation, lens correction, liquify, cropping and final scaling. bilinear (soft, no overshoot), bicubic (Catmull-Rom, sharp but rings at edges), mitchell (Mitchell-Netravali, sharp and effectively halo-free).</longdescription>
   </dtconfig>
   <dtconfig prefs="processing" section="general">
     <name>plugins/lighttable/export/pixel_interpolator</name>
@@ -1598,13 +1677,12 @@
       <enum>
         <option>bilinear</option>
         <option>bicubic</option>
-        <option>lanczos2</option>
-        <option>lanczos3</option>
+        <option>mitchell</option>
       </enum>
     </type>
-    <default>lanczos3</default>
+    <default>mitchell</default>
     <shortdescription>pixel interpolator (scaling)</shortdescription>
-    <longdescription>pixel interpolator used for scaling (bilinear, bicubic, lanczos2, lanczos3).</longdescription>
+    <longdescription>pixel interpolator used for scaling. bilinear (soft, no overshoot), bicubic (Catmull-Rom, sharp but rings at edges), mitchell (Mitchell-Netravali, sharp and effectively halo-free).</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/lighttable/export/dimensions_type</name>
@@ -2044,6 +2122,13 @@
     <type>float</type>
     <default>220.0</default>
     <shortdescription>Zoom level in vectorscope</shortdescription>
+    <longdescription />
+  </dtconfig>
+  <dtconfig>
+    <name>plugin/darkroom/histogram/scope_height</name>
+    <type min="120" max="3000">int</type>
+    <default>250</default>
+    <shortdescription>Height of the scope display</shortdescription>
     <longdescription />
   </dtconfig>
   <dtconfig>

@@ -266,8 +266,6 @@ typedef struct dt_iop_module_t
   dt_dev_request_flags_t request_histogram;
   /** set to 1 if you want the mask to be transferred into alpha channel during next eval. gui mode only. */
   int request_mask_display;
-  /** set to 1 if you want the blendif mask to be suppressed in the module in focus. gui mode only. */
-  int32_t suppress_mask;
   /** set to 1 if the pipeline cache needs to be bypassed for downstream modules starting from this module*/
   gboolean bypass_cache;
   /** place to store the picked color of module input. */
@@ -439,6 +437,21 @@ void dt_iop_gui_update_expanded(dt_iop_module_t *module);
 dt_iop_module_t *dt_iop_gui_duplicate(dt_iop_module_t *base, gboolean copy_params);
 
 void dt_iop_gui_update_header(dt_iop_module_t *module);
+
+/**
+ * @brief Debug helper to trace a module's input-format-driven decisions on the `-d pipe`
+ * channel (DT_DEBUG_PIPE). Use it at every spot where a module branches on the image or
+ * buffer type — self enable/disable, code-path selection, descriptor choice — so the
+ * heuristics are readable from logs instead of having to be reverse-engineered from pixel
+ * outputs. The first argument is the module (dt_iop_module_t* or dt_iop_module_so_t*, both
+ * expose `op`); the rest is a printf format and its arguments. A trailing newline is added.
+ *
+ * Example:
+ *   dt_iop_fmt_log(self, "enable=%d needs_demosaic=%d filters=%u",
+ *                  enabled, dt_image_needs_demosaic(img), img->dsc.filters);
+ */
+#define dt_iop_fmt_log(module, fmt, ...) \
+  dt_print(DT_DEBUG_PIPE, "[iop-fmt] %-14s " fmt "\n", (module)->op, ##__VA_ARGS__)
 
 /** commits params and updates piece hash. */
 void dt_iop_commit_params(dt_iop_module_t *module, dt_iop_params_t *params,

@@ -106,7 +106,7 @@ void dt_styles_apply_style_item(dt_develop_t *dev, dt_style_item_t *style_item);
 void dt_styles_apply_to_image(const char *name, const gboolean duplicate, const int32_t imgid);
 /** internal helper used by history actions */
 int dt_styles_apply_to_image_merge(const char *name, const int style_id, const int32_t newimgid,
-                                   const dt_history_merge_strategy_t mode);
+                                   const dt_history_merge_strategy_t mode, dt_hm_batch_state_t *batch);
 
 /** delete a style by name */
 void dt_styles_delete_by_name_adv(const char *name, const gboolean raise);

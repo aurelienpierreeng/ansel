@@ -525,7 +525,7 @@ static gboolean _rating_clicked(GtkWidget *w, GdkEventButton *e, dt_lib_module_t
 
 static void _select_all_callback(GtkWidget *widget, dt_lib_module_t *self)
 {
-  dt_collection_set_filter_flags(darktable.collection, ~COLLECTION_FILTER_NONE);
+  dt_collection_set_filter_flags(darktable.collection, COLLECTION_FILTER_ALL);
   _update_rating_filter(self);
   _update_colors_filter(self);
   _update_altered_filters(self);
@@ -549,6 +549,18 @@ static gboolean _show_popover_menu(dt_lib_module_t *self, GtkWidget *w)
   return TRUE;
 }
 
+static void _insert_section_sep(dt_lib_module_t *self)
+{
+  GtkWidget *spacer = gtk_separator_new(GTK_ORIENTATION_VERTICAL);
+  gtk_box_pack_start(GTK_BOX(self->widget), spacer, FALSE, FALSE, 0);
+}
+
+static void _insert_subsection_sep(dt_lib_module_t *self)
+{
+  GtkWidget *spacer = gtk_separator_new(GTK_ORIENTATION_VERTICAL);
+  dt_gui_add_class(spacer, "subsection");
+  gtk_box_pack_start(GTK_BOX(self->widget), spacer, FALSE, FALSE, 0);
+}
 
 void gui_init(dt_lib_module_t *self)
 {
@@ -556,7 +568,7 @@ void gui_init(dt_lib_module_t *self)
   dt_lib_tool_filter_t *d = (dt_lib_tool_filter_t *)g_malloc0(sizeof(dt_lib_tool_filter_t));
   self->data = (void *)d;
 
-  self->widget = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  self->widget = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   _widget_align_left(self->widget);
   dt_gui_add_class(self->widget, "quick_filter_box");
 
@@ -576,14 +588,12 @@ void gui_init(dt_lib_module_t *self)
                                 FALSE);
   dt_free(path);
 
-  // dumb empty flexible spacer at the end
-  GtkWidget *spacer = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
-  gtk_box_pack_start(GTK_BOX(self->widget), spacer, FALSE, FALSE, 0);
+  _insert_section_sep(self);
 
   label = gtk_label_new(_("Include"));
   gtk_box_pack_start(GTK_BOX(self->widget), label, FALSE, FALSE, 0);
 
-  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(hbox), FALSE, FALSE, 0);
   gtk_widget_set_name(hbox, "quick-filter-ratings");
 
@@ -606,6 +616,13 @@ void gui_init(dt_lib_module_t *self)
     dt_gui_add_class(d->stars[k], "star");
     gtk_box_pack_start(GTK_BOX(hbox), GTK_WIDGET(d->stars[k]), FALSE, FALSE, 0);
     g_signal_connect(G_OBJECT(d->stars[k]), "button-press-event", G_CALLBACK(_rating_clicked), self);
+
+    if(k == 1)
+    {
+      GtkWidget *spacer = gtk_separator_new(GTK_ORIENTATION_VERTICAL);
+      dt_gui_add_class(spacer, "subsection");
+      gtk_box_pack_start(GTK_BOX(hbox), spacer, FALSE, FALSE, 0);
+    }
   }
   _update_rating_filter(self);
 
@@ -617,8 +634,10 @@ void gui_init(dt_lib_module_t *self)
   gtk_widget_set_tooltip_text(d->stars[5], _("Toggle filtering in/out images rated 4 stars"));
   gtk_widget_set_tooltip_text(d->stars[6], _("Toggle filtering in/out images rated 5 stars"));
 
+  _insert_subsection_sep(self);
+
   // colorlabels filter
-  hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(hbox), FALSE, FALSE, 0);
   gtk_widget_set_name(hbox, "quickfilters-colors");
 
@@ -640,8 +659,10 @@ void gui_init(dt_lib_module_t *self)
   gtk_widget_set_tooltip_text(d->colors[4], _("Toggle filtering in/out images with blue label"));
   gtk_widget_set_tooltip_text(d->colors[5], _("Toggle filtering in/out images with purple label"));
 
+  _insert_subsection_sep(self);
+
   // changed filter
-  hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(hbox), FALSE, FALSE, 0);
   gtk_widget_set_name(hbox, "quickfilters-altered");
 
@@ -655,8 +676,9 @@ void gui_init(dt_lib_module_t *self)
   g_signal_connect(G_OBJECT(d->altered), "button-press-event", G_CALLBACK(_altered_clicked), self);
   gtk_widget_set_tooltip_text(d->altered, _("Toggle filtering in/out edited images"));
 
-
   _update_altered_filters(self);
+
+  _insert_subsection_sep(self);
 
   // Culling mode
   d->culling = gtk_toggle_button_new_with_label(_("Restrict to selection"));
@@ -671,9 +693,7 @@ void gui_init(dt_lib_module_t *self)
                                 FALSE);
   dt_free(path);
 
-  // dumb empty flexible spacer at the end
-  spacer = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
-  gtk_box_pack_start(GTK_BOX(self->widget), spacer, FALSE, FALSE, 0);
+  _insert_section_sep(self);
 
   label = gtk_label_new(_("Sort by"));
   gtk_box_pack_start(GTK_BOX(self->widget), label, FALSE, FALSE, 0);
@@ -705,9 +725,7 @@ void gui_init(dt_lib_module_t *self)
   g_signal_connect(G_OBJECT(d->reverse), "toggled", G_CALLBACK(_lib_filter_reverse_button_changed),
                    (gpointer)self);
 
-  // dumb empty flexible spacer at the end
-  spacer = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
-  gtk_box_pack_start(GTK_BOX(self->widget), spacer, FALSE, FALSE, 0);
+  _insert_section_sep(self);
 
   // text filter
   d->text = gtk_search_entry_new();
@@ -739,9 +757,7 @@ void gui_init(dt_lib_module_t *self)
   dt_accels_new_lighttable_action(_focus_search_action, self, N_("Lighttable/Actions"), N_("Search a picture"),
                                   GDK_KEY_f, GDK_CONTROL_MASK, _("Focuses the control"));
 
-  // dumb empty flexible spacer at the end
-  spacer = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
-  gtk_box_pack_start(GTK_BOX(self->widget), spacer, FALSE, FALSE, 0);
+  _insert_section_sep(self);
 
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_IMAGES_ORDER_CHANGE,
                             G_CALLBACK(_lib_filter_images_order_change), self);

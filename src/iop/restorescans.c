@@ -249,7 +249,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
 void gui_init(dt_iop_module_t *self)
 {
   dt_iop_restorescans_gui_data_t *g = IOP_GUI_ALLOC(restorescans);
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   g->C_c = dt_bauhaus_slider_from_params(self, "C_c");
   g->C_m = dt_bauhaus_slider_from_params(self, "C_m");

@@ -439,6 +439,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   dt_develop_t *dev = self->dev;
   dt_iop_graduatednd_gui_data_t *g = (dt_iop_graduatednd_gui_data_t *)self->gui_data;
   dt_iop_graduatednd_params_t *p = (dt_iop_graduatednd_params_t *)self->params;
+  if(IS_NULL_PTR(g) || IS_NULL_PTR(p)) return;
 
   const float zoom_scale = dev->roi.scaling;
   dt_dev_rescale_roi(dev, cr, width, height);
@@ -519,7 +520,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   else
   {
     g->selected = 0;
-    float ext[2] = { DT_GUI_MOUSE_EFFECT_RADIUS_SCALED, 0 };
+    float ext[2] = { DT_GUI_MOUSE_EFFECT_RADIUS, 0 };
     dt_dev_coordinates_image_abs_to_image_norm(self->dev, ext, 1);
 
     const float ext2 = ext[0] * ext[0];

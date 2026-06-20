@@ -170,8 +170,7 @@ typedef struct dt_iop_lensfun_global_data_t
   lfDatabase *db;
   int kernel_lens_distort_bilinear;
   int kernel_lens_distort_bicubic;
-  int kernel_lens_distort_lanczos2;
-  int kernel_lens_distort_lanczos3;
+  int kernel_lens_distort_mitchell;
   int kernel_lens_vignette;
 } dt_iop_lensfun_global_data_t;
 
@@ -736,11 +735,8 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     case DT_INTERPOLATION_BICUBIC:
       ldkernel = gd->kernel_lens_distort_bicubic;
       break;
-    case DT_INTERPOLATION_LANCZOS2:
-      ldkernel = gd->kernel_lens_distort_lanczos2;
-      break;
-    case DT_INTERPOLATION_LANCZOS3:
-      ldkernel = gd->kernel_lens_distort_lanczos3;
+    case DT_INTERPOLATION_MITCHELL:
+      ldkernel = gd->kernel_lens_distort_mitchell;
       break;
     default:
       return FALSE;
@@ -1305,8 +1301,7 @@ void init_global(dt_iop_module_so_t *module)
   module->data = gd;
   gd->kernel_lens_distort_bilinear = dt_opencl_create_kernel(program, "lens_distort_bilinear");
   gd->kernel_lens_distort_bicubic = dt_opencl_create_kernel(program, "lens_distort_bicubic");
-  gd->kernel_lens_distort_lanczos2 = dt_opencl_create_kernel(program, "lens_distort_lanczos2");
-  gd->kernel_lens_distort_lanczos3 = dt_opencl_create_kernel(program, "lens_distort_lanczos3");
+  gd->kernel_lens_distort_mitchell = dt_opencl_create_kernel(program, "lens_distort_mitchell");
   gd->kernel_lens_vignette = dt_opencl_create_kernel(program, "lens_vignette");
 
   lfDatabase *dt_iop_lensfun_db = new lfDatabase;
@@ -1488,8 +1483,7 @@ void cleanup_global(dt_iop_module_so_t *module)
 
   dt_opencl_free_kernel(gd->kernel_lens_distort_bilinear);
   dt_opencl_free_kernel(gd->kernel_lens_distort_bicubic);
-  dt_opencl_free_kernel(gd->kernel_lens_distort_lanczos2);
-  dt_opencl_free_kernel(gd->kernel_lens_distort_lanczos3);
+  dt_opencl_free_kernel(gd->kernel_lens_distort_mitchell);
   dt_opencl_free_kernel(gd->kernel_lens_vignette);
   dt_free(module->data);
 }
@@ -2336,11 +2330,11 @@ void gui_init(struct dt_iop_module_t *self)
   modifier->modflag = LENSFUN_MODFLAG_VIGN;
   modifier->pos = ++pos;
 
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
     gtk_widget_set_name(self->widget, "lens-module");
 
   // camera selector
-  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   g->camera_model = dt_iop_button_new(self, N_("camera model"),
                                       G_CALLBACK(camera_menusearch_clicked), FALSE, 0, (GdkModifierType)0,
                                       NULL, 0, hbox);
@@ -2352,7 +2346,7 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(self->widget), hbox, TRUE, TRUE, 0);
 
   // lens selector
-  hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   g->lens_model = dt_iop_button_new(self, N_("lens model"),
                                     G_CALLBACK(lens_menusearch_clicked), FALSE, 0, (GdkModifierType)0,
                                     NULL, 0, hbox);
@@ -2364,7 +2358,7 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(self->widget), hbox, TRUE, TRUE, 0);
 
   // lens properties
-  g->lens_param_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  g->lens_param_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(self->widget), g->lens_param_box, TRUE, TRUE, 0);
 
 #if 0
@@ -2443,7 +2437,7 @@ void gui_init(struct dt_iop_module_t *self)
 
   // message box to inform user what corrections have been done. this is useful as depending on lensfuns
   // profile only some of the lens flaws can be corrected
-  GtkBox *hbox1 = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0));
+  GtkBox *hbox1 = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING));
   GtkWidget *label = gtk_label_new(_("corrections done: "));
   gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_MIDDLE);
   gtk_widget_set_tooltip_text(label, _("which corrections have actually been done"));
