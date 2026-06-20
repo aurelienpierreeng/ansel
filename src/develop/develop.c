@@ -648,6 +648,16 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
       // Therefore we can't rely solely on pipeline type to raise completion signals.
       const gboolean has_preview_size = dt_dev_pixelpipe_has_preview_output(dev, pipe, &roi);
 
+      /**
+       * Snapshot the GUI request before processing because it may be cleared
+       * while this pipe is running although the resulting backbuffer still
+       * contains the requested mask preview.
+       */
+      const gboolean requested_mask_preview
+          = pipe == dev->pipe
+            && !IS_NULL_PTR(dev->gui_module)
+            && dev->gui_module->request_mask_display != DT_DEV_PIXELPIPE_DISPLAY_NONE;
+
       // Connect GUI feedback for "pipe busy"
       dt_control_log_busy_enter();
       dt_control_toast_busy_enter();
@@ -752,9 +762,20 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
           dt_control_queue_redraw();
         }
 
-        // Use the full-frame (uncropped) preview backbuffer to init the mipmap cache without extra computations
-        // Note: this will resample non-linear uint8 at the end of the pipeline, so it is low-quality resampling.
-        if(!dt_dev_pixelpipe_get_realtime(pipe) && has_preview_size)
+        /**
+         * Use the full-frame preview backbuffer to initialize the mipmap
+         * cache without extra computations. Thumbnails consume that cache,
+         * so never publish a transient mask display there. Check both the
+         * request snapshot and the runtime display mode because modules may
+         * produce their mask through either mechanism.
+         *
+         * This resamples non-linear uint8 at the end of the pipeline and is
+         * therefore a low-quality resampling path.
+         */
+        if(!dt_dev_pixelpipe_get_realtime(pipe)
+           && has_preview_size
+           && !requested_mask_preview
+           && pipe->mask_display == DT_DEV_PIXELPIPE_DISPLAY_NONE)
           dt_dev_resync_mipmap_cache(dev, pipe, roi);
       }
 
