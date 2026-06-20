@@ -872,6 +872,55 @@ static int _drawlayer_run_premult_over_kernel(const int devid, const int kernel_
   return dt_opencl_enqueue_kernel_2d(devid, kernel_premult_over, sizes);
 }
 
+/* Influence radius (in target/display pixels) of a changed source pixel through
+ * the resampling interpolation. interpolation.c maps a target output pixel to a
+ * source window whose half-width is ~support/scale source pixels; transformed
+ * back to target space that footprint is ~support pixels regardless of scale, so
+ * a fixed, generous target-space margin keeps partial-resample edges seamless. */
+#define DRAWLAYER_RESAMPLE_DAMAGE_MARGIN 8
+
+/* Map a layer-space (source) damage rectangle to the output (target) display
+ * window it affects, padded by the interpolation support so resampled edges stay
+ * seamless. Returns TRUE and fills *out (nw inclusive / se exclusive, clamped to
+ * the target ROI, in target-local coordinates) only when the mapped window is a
+ * strict sub-rect of the target worth a partial composite. */
+static gboolean _drawlayer_map_source_damage_to_target(const dt_drawlayer_damaged_rect_t *src_damage,
+                                                       const dt_iop_roi_t *const target_roi,
+                                                       const dt_iop_roi_t *const source_roi,
+                                                       dt_drawlayer_damaged_rect_t *out)
+{
+  if(IS_NULL_PTR(src_damage) || !src_damage->valid || IS_NULL_PTR(target_roi) || IS_NULL_PTR(source_roi)
+     || IS_NULL_PTR(out))
+    return FALSE;
+  if(target_roi->width <= 0 || target_roi->height <= 0 || target_roi->scale <= 0.0f) return FALSE;
+
+  const double scale = target_roi->scale;
+  const int margin = DRAWLAYER_RESAMPLE_DAMAGE_MARGIN;
+  /* out = (source + source_roi.x) * scale - target_roi.x  (inverse of the
+   * interpolation source mapping source = (target_roi.x + out)/scale - source_roi.x). */
+  const double sx0 = (double)src_damage->nw[0] + source_roi->x;
+  const double sy0 = (double)src_damage->nw[1] + source_roi->y;
+  const double sx1 = (double)src_damage->se[0] + source_roi->x;
+  const double sy1 = (double)src_damage->se[1] + source_roi->y;
+
+  int tx0 = (int)floor(sx0 * scale - target_roi->x) - margin;
+  int ty0 = (int)floor(sy0 * scale - target_roi->y) - margin;
+  int tx1 = (int)ceil(sx1 * scale - target_roi->x) + margin;
+  int ty1 = (int)ceil(sy1 * scale - target_roi->y) + margin;
+
+  tx0 = CLAMP(tx0, 0, target_roi->width);
+  ty0 = CLAMP(ty0, 0, target_roi->height);
+  tx1 = CLAMP(tx1, 0, target_roi->width);
+  ty1 = CLAMP(ty1, 0, target_roi->height);
+
+  if(tx1 <= tx0 || ty1 <= ty0) return FALSE;
+  /* Whole-frame damage is not worth the partial path's bookkeeping. */
+  if(tx0 == 0 && ty0 == 0 && tx1 == target_roi->width && ty1 == target_roi->height) return FALSE;
+
+  *out = (dt_drawlayer_damaged_rect_t){ .valid = TRUE, .nw = { tx0, ty0 }, .se = { tx1, ty1 } };
+  return TRUE;
+}
+
 static int _blend_layer_over_input_cl(const int devid, const int kernel_premult_over, cl_mem dev_out,
                                       cl_mem dev_in, drawlayer_process_scratch_t *scratch,
                                       const float *layer_pixels, dt_pixel_cache_entry_t *source_entry,
@@ -880,7 +929,7 @@ static int _blend_layer_over_input_cl(const int devid, const int kernel_premult_
                                       const dt_iop_roi_t *const target_roi, const dt_iop_roi_t *const source_roi,
                                       const gboolean direct_copy, const gboolean use_preview_bg,
                                       const float preview_bg, const gboolean realtime_reuse,
-                                      const gboolean force_device_copy)
+                                      const gboolean force_device_copy, const gboolean allow_partial)
 {
   if(devid < 0 || IS_NULL_PTR(dev_out) || IS_NULL_PTR(dev_in) || IS_NULL_PTR(scratch) || (IS_NULL_PTR(layer_pixels) && !source_mem_override) || source_w <= 0
      || source_h <= 0 || !target_roi || target_roi->width <= 0 || target_roi->height <= 0)
@@ -896,8 +945,22 @@ static int _blend_layer_over_input_cl(const int devid, const int kernel_premult_
     resolved_entry_ref = (!IS_NULL_PTR(resolved_entry));
   }
 
+  /* Realtime partial composite: when the caller validated that dev_out still
+   * holds this node's previous full composite (same buffer, hash and geometry)
+   * and only the painted sub-rect of the layer changed, refresh just that window
+   * instead of re-resampling the whole display. The source-damage rectangle must
+   * be snapshotted here because _drawlayer_acquire_source_image() consumes (and
+   * resets) process->cache_dirty_rect while uploading the dirty source region. */
+  dt_drawlayer_damaged_rect_t target_damage = { 0 };
+  const gboolean partial = allow_partial && !use_preview_bg && !direct_copy && !source_mem_override && process
+                           && _drawlayer_map_source_damage_to_target(&process->cache_dirty_rect, target_roi,
+                                                                     source_roi, &target_damage);
+
   drawlayer_cl_image_handle_t source = { 0 };
   drawlayer_cl_image_handle_t layer = { 0 };
+  cl_mem dev_layer_partial = NULL;
+  cl_mem dev_bg_partial = NULL;
+  cl_mem dev_out_partial = NULL;
   cl_mem dev_background = NULL;
   int err = CL_SUCCESS;
   int result = FALSE;
@@ -906,6 +969,70 @@ static int _blend_layer_over_input_cl(const int devid, const int kernel_premult_
   else if(!_drawlayer_acquire_source_image(devid, layer_pixels, resolved_entry, force_device_copy, realtime_reuse,
                                            source_w, source_h, process, &source))
     goto cleanup;
+
+  if(partial)
+  {
+    const int dw = target_damage.se[0] - target_damage.nw[0];
+    const int dh = target_damage.se[1] - target_damage.nw[1];
+    size_t win_origin[3] = { (size_t)target_damage.nw[0], (size_t)target_damage.nw[1], 0 };
+    size_t zero_origin[3] = { 0, 0, 0 };
+    size_t win_region[3] = { (size_t)dw, (size_t)dh, 1 };
+
+    /* All three windows are damage-sized device scratch buffers. We keep the
+     * unmodified full-frame `blendop_premult_over` kernel (local 0,0 coords) and
+     * stage the sub-window through copies so the GPU kernel ABI never changes:
+     *   layer_partial = resample(source, damaged display window)
+     *   bg_partial    = dev_in[window]                       (background slice)
+     *   out_partial   = over(layer_partial, bg_partial)      (full-window kernel)
+     *   dev_out[window] = out_partial                        (refresh in place)
+     * The rest of dev_out keeps the previous full composite. */
+    dev_layer_partial = dt_opencl_alloc_device(devid, dw, dh, 4 * sizeof(float));
+    dev_bg_partial = dt_opencl_alloc_device(devid, dw, dh, 4 * sizeof(float));
+    dev_out_partial = dt_opencl_alloc_device(devid, dw, dh, 4 * sizeof(float));
+    if(IS_NULL_PTR(dev_layer_partial) || IS_NULL_PTR(dev_bg_partial) || IS_NULL_PTR(dev_out_partial))
+    {
+      err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
+      goto cleanup;
+    }
+    /* Resample only the damaged display window from the full-res source. The
+     * sub-window's global target origin maps back to the correct source region
+     * through the unchanged interpolation source mapping. */
+    const dt_iop_roi_t sub_target_roi = {
+      .x = target_roi->x + target_damage.nw[0],
+      .y = target_roi->y + target_damage.nw[1],
+      .width = dw,
+      .height = dh,
+      .scale = target_roi->scale,
+    };
+    err = _drawlayer_copy_or_resample_layer_roi(devid, source.mem, dev_layer_partial, source_w, source_h,
+                                                &sub_target_roi, source_roi);
+    if(err != CL_SUCCESS) goto cleanup;
+
+    err = dt_opencl_enqueue_copy_image(devid, dev_in, dev_bg_partial, win_origin, zero_origin, win_region);
+    if(err != CL_SUCCESS) goto cleanup;
+
+    err = _drawlayer_run_premult_over_kernel(devid, kernel_premult_over, dev_bg_partial, dev_layer_partial,
+                                             dev_out_partial, dw, dh, 0, 0);
+    if(err != CL_SUCCESS) goto cleanup;
+
+    err = dt_opencl_enqueue_copy_image(devid, dev_out_partial, dev_out, zero_origin, win_origin, win_region);
+    if(err != CL_SUCCESS) goto cleanup;
+
+    if(darktable.unmuted & DT_DEBUG_VERBOSE)
+      dt_print(DT_DEBUG_PERF, "[drawlayer] partial composite window=%dx%d at (%d,%d) of %dx%d\n", dw, dh,
+               target_damage.nw[0], target_damage.nw[1], target_roi->width, target_roi->height);
+
+    if(source.is_pinned)
+    {
+      if(!dt_opencl_finish(devid))
+      {
+        err = -1;
+        goto cleanup;
+      }
+    }
+    result = TRUE;
+    goto cleanup;
+  }
 
   if(!_drawlayer_acquire_layer_image(devid, resolved_entry, realtime_reuse, direct_copy, source.mem, source_w,
                                      source_h, target_roi, source_roi, &layer, &err))
@@ -955,6 +1082,9 @@ static int _blend_layer_over_input_cl(const int devid, const int kernel_premult_
   result = TRUE;
 
 cleanup:
+  if(dev_layer_partial) dt_opencl_release_mem_object(dev_layer_partial);
+  if(dev_bg_partial) dt_opencl_release_mem_object(dev_bg_partial);
+  if(dev_out_partial) dt_opencl_release_mem_object(dev_out_partial);
   if(use_preview_bg)
     dt_dev_pixelpipe_cache_put_pinned_image(darktable.pixelpipe_cache, scratch->cl_background_rgba, NULL,
                                             (void **)&dev_background);
@@ -3882,11 +4012,48 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     if(fallback)
       goto process_cl_fallback;
 
+    /* The realtime output cacheline is reused in place while only the layer host
+     * pixels change, so when the same device buffer comes back for the same layer
+     * and geometry it still holds the previous full composite and only the painted
+     * sub-rect needs refreshing. The node's global_hash is NOT stable across a
+     * stroke (the heartbeat bumps stroke_commit_hash every frame), so we key on
+     * the stable base-patch layer identity instead. Validate here; the blend
+     * records the new state on success. */
+    dt_drawlayer_process_state_t *const pstate = runtime_request.process_state;
+    const uint64_t layer_hash = pstate ? pstate->base_patch.cache_hash : 0;
+    const gboolean g_valid = pstate && pstate->last_composite_valid;
+    const gboolean g_devout = pstate && pstate->last_composite_dev_out == (void *)dev_out;
+    const gboolean g_hash = pstate && layer_hash != 0 && pstate->last_composite_layer_hash == layer_hash;
+    const gboolean g_roi = pstate && !memcmp(&pstate->last_composite_target_roi, &target_roi, sizeof(dt_iop_roi_t));
+    const gboolean allow_partial = realtime && g_valid && g_devout && g_hash && g_roi;
+    if(realtime && pstate && !allow_partial && (darktable.unmuted & DT_DEBUG_VERBOSE))
+      dt_print(DT_DEBUG_PERF,
+               "[drawlayer] partial gate declined: valid=%d devout=%d hash=%d roi=%d\n",
+               g_valid, g_devout, g_hash, g_roi);
+
     gboolean ok = _blend_layer_over_input_cl(
         pipe->devid, global->kernel_premult_over, dev_out, dev_in, scratch, source_pixels, source_entry, NULL,
         source_width, source_height, runtime_request.process_state, &target_roi, &source_roi, direct_copy,
         preview_bg.enabled, preview_bg.value,
-        reuse_device_buffers, FALSE);
+        reuse_device_buffers, FALSE, allow_partial);
+
+    if(pstate)
+    {
+      if(ok && realtime && !preview_bg.enabled && layer_hash != 0)
+      {
+        /* dev_out now holds a valid full composite for this layer/geometry,
+         * whether produced by the full or the partial path. */
+        pstate->last_composite_dev_out = (void *)dev_out;
+        pstate->last_composite_layer_hash = layer_hash;
+        pstate->last_composite_target_roi = target_roi;
+        pstate->last_composite_valid = TRUE;
+      }
+      else
+      {
+        pstate->last_composite_valid = FALSE;
+        pstate->last_composite_dev_out = NULL;
+      }
+    }
 
     process_post.release = (dt_drawlayer_runtime_release_t){
       .process = runtime_request.process_state,

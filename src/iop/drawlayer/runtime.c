@@ -948,6 +948,10 @@ void dt_drawlayer_process_state_invalidate(dt_drawlayer_process_state_t *state)
 {
   if(IS_NULL_PTR(state)) return;
   dt_drawlayer_cache_patch_clear(&state->stroke_mask, "drawlayer stroke mask");
+  /* Any state invalidation may relocate/free the output buffer this tracked, so
+   * the realtime partial-composite fast path can no longer trust it. */
+  state->last_composite_valid = FALSE;
+  state->last_composite_dev_out = NULL;
 }
 
 static void _release_runtime_source(dt_drawlayer_runtime_manager_t *state,

@@ -50,6 +50,23 @@ typedef struct dt_drawlayer_process_state_t
   int cache_layer_order;
   gboolean base_patch_loaded_ref;
   uint32_t base_patch_stroke_refs;
+
+  /* Realtime partial-composite tracking (OpenCL display path).
+   *
+   * The drawlayer output cacheline is reused in place during a realtime stroke,
+   * so `last_composite_dev_out` keeps holding the previous frame's full
+   * composite. The node's global_hash is NOT stable across the stroke (the
+   * heartbeat bumps stroke_commit_hash every frame to force a re-render), so the
+   * identity gate keys on the stable base-patch layer hash
+   * (`_drawlayer_params_cache_hash`, which excludes the volatile stroke hash)
+   * plus the output buffer pointer and display geometry. When all match, only the
+   * painted sub-rect needs to be re-resampled and re-blended; the rest of the
+   * buffer is already correct. These fields record what the last full composite
+   * produced so the next frame can validate that fast path. */
+  void *last_composite_dev_out;
+  uint64_t last_composite_layer_hash;
+  dt_iop_roi_t last_composite_target_roi;
+  gboolean last_composite_valid;
 } dt_drawlayer_process_state_t;
 
 typedef struct dt_drawlayer_stroke_state_t
