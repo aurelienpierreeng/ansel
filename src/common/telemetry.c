@@ -283,7 +283,12 @@ static JsonObject *_telemetry_system_properties(void)
   json_object_set_string_member(p, "$ip", "0.0.0.0");
 
   json_object_set_string_member(p, "app_version", darktable_package_version);
+  // Full commit SHA: consistent release id across shallow/full clones (see sentry.c).
+  json_object_set_string_member(p, "commit", darktable_commit_hash);
   json_object_set_string_member(p, "build_type", DT_BUILD_TYPE);
+  // "nightly" for official builds, "self-build" otherwise - lets analytics exclude
+  // local/development builds from population stats.
+  json_object_set_string_member(p, "build_channel", DT_BUILD_CHANNEL);
 
   gchar *os = g_get_os_info(G_OS_INFO_KEY_PRETTY_NAME);
   if(os)

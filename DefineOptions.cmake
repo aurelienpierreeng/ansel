@@ -34,6 +34,10 @@ option(USE_TELEMETRY "Enable opt-in PostHog usage analytics." ON)
 option(FORCE_COLORED_OUTPUT "Always produce ANSI-colored output (GNU/Clang only)." ON)
 set(SENTRY_DSN "https://2909ae9ae26fdf4eabf25fbf56fa3f9b@o4511598642200576.ingest.de.sentry.io/4511598693253200" CACHE STRING "Sentry.io DSN used for crash reporting. Set empty to disable uploads.")
 set(POSTHOG_HOST "https://eu.i.posthog.com" CACHE STRING "PostHog ingestion host (EU region by default).")
+# Distribution channel baked into the binary (DT_BUILD_CHANNEL). Official CI builds
+# pass -DBUILD_CHANNEL=nightly; everything else stays "self-build". Lets crash
+# reports and analytics tell official binaries apart from local/dev builds.
+set(BUILD_CHANNEL "self-build" CACHE STRING "Build distribution channel: 'nightly' for official builds, 'self-build' otherwise.")
 
 if(USE_OPENCL)
   option(TESTBUILD_OPENCL_PROGRAMS "Test-compile opencl programs (needs llvm and clang 3.9+)." ON)

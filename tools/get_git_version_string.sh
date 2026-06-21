@@ -27,7 +27,7 @@
 #   
 #   
 #   
-VERSION="$(git describe --tags)"
+VERSION="$(git describe --tags 2>/dev/null)"
 
 if [ $? -eq 0 ] ;
 then
@@ -39,6 +39,8 @@ fi
 # try to get version string will fail
 
 # in that case let's at least return the commit hash
+# (the consistent cross-build identifier used for Sentry/PostHog is the full SHA,
+#  baked separately as darktable_commit_hash - see tools/create_version_c.sh)
 
 VERSION="$(git describe --always)"
 if [ $? -eq 0 ] ;

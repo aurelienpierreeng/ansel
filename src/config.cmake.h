@@ -44,8 +44,16 @@
 extern const char darktable_package_version[];
 extern const char darktable_package_string[];
 extern const char darktable_last_commit_year[];
+// Full 40-char commit SHA, consistent across shallow and full clones. Used as the
+// Sentry/PostHog release id (the version string's abbreviated hash/commit count is
+// not reliable across clone types). See tools/create_version_c.sh.
+extern const char darktable_commit_hash[];
 
 #define DT_BUILD_TYPE "@CMAKE_BUILD_TYPE@"
+// Distribution channel: "nightly" for official CI-built binaries, "self-build" for
+// anything compiled locally (possibly a development build). Used to separate
+// official from local builds in crash reports and usage analytics.
+#define DT_BUILD_CHANNEL "@BUILD_CHANNEL@"
 #define DT_BUILD_CPU_MODE "@DT_BUILD_CPU_MODE@"
 #define DT_BUILD_C_COMPILER "@CMAKE_C_COMPILER_ID@ @CMAKE_C_COMPILER_VERSION@"
 #define DT_BUILD_CXX_COMPILER "@CMAKE_CXX_COMPILER_ID@ @CMAKE_CXX_COMPILER_VERSION@"

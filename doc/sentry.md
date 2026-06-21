@@ -113,9 +113,9 @@ After init we attach environment context (never any user content):
   names.
 - **display** context (GUI only): `dpi`, `dpi_factor`, `ppd`, the main window size and the primary
   monitor resolution + scale factor.
-- **tags** (searchable/filterable in the dashboard): `opencl`, `opencl_device`, and on Linux/BSD
-  `display_server` (x11/wayland), `desktop_environment` (GNOME/KDE/…), `gdk_backend` (what GTK
-  actually renders on).
+- **tags** (searchable/filterable in the dashboard): `opencl`, `opencl_device`, `build_channel`
+  (see [Release & build channel](#release-and-build-channel)), and on Linux/BSD `display_server`
+  (x11/wayland), `desktop_environment` (GNOME/KDE/…), `gdk_backend` (what GTK actually renders on).
 - **module_usage** context: per-session counts of how often each module was used — views entered,
   iop modules enabled, lib panels opened — keyed `view/<name>`, `iop/<op>`, `lib/<plugin_name>`. It
   shows which modules were exercised in the session that crashed. Counts are recorded via
@@ -129,6 +129,30 @@ After init we attach environment context (never any user content):
   `dt_sentry_set_processed_image()` at the start of `dt_dev_pixelpipe_process()` — the single choke
   point both darkroom and export pipelines share — and deduplicated so darkroom's constant
   reprocessing of the same image does not churn.
+
+### Release & build channel {#release-and-build-channel}
+
+Every event carries a **release** and an **environment**, which drive grouping and crash-free metrics:
+
+- **Release** = `ansel@<commit-sha>`, the **full 40-char git commit SHA** (`darktable_commit_hash`).
+  This is deliberately *not* the human version string: that string is `git describe`-derived and
+  differs across clone types — a shallow/tag-less self-build can't know the tag or commit count, and
+  even the abbreviated hash length varies — so using it would scatter one commit across several
+  "releases". The full SHA, from `git rev-parse HEAD`, is identical on every clone (shallow or full),
+  so all builds of a given commit collapse into exactly one release. It is baked by
+  `tools/create_version_c.sh` alongside `darktable_package_version`. The human version
+  (`0.0.0+3848~gf82a9a82e1`, or just an abbreviated hash on a shallow clone) is still attached as the
+  `version` tag for readability, and is what still drives **package names** (`PROJECT_VERSION` /
+  `CPACK_PACKAGE_VERSION` via `tools/get_git_version_string.sh`).
+- **Environment** = `DT_BUILD_CHANNEL`: **`nightly`** for official CI builds, **`self-build`** for
+  anything compiled locally (possibly a development build). This is the dimension to filter on so
+  self-builds/dev noise doesn't pollute the stats for the binaries you actually ship. It is set from
+  the `BUILD_CHANNEL` CMake cache var (`DefineOptions.cmake`, default `self-build`); the three nightly
+  workflows pass `-DBUILD_CHANNEL=nightly` (Linux via `.ci/ci-script-appimage.sh`, macOS/Windows via
+  the matrix `eco`). The same value is also attached as the `build_channel` tag.
+
+The compiler/optimization build type (`Release`/`RelWithDebInfo`/`Debug`) is kept separately as the
+`build_type` extra — it is orthogonal to the channel.
 
 ### Sessions and session length
 
@@ -321,7 +345,10 @@ independently of this script.
 | Path | Role |
 |---|---|
 | `src/external/sentry-native` | the `sentry-native` client (git submodule) |
-| `DefineOptions.cmake` | `USE_SENTRY`, `SENTRY_DSN` |
+| `DefineOptions.cmake` | `USE_SENTRY`, `SENTRY_DSN`, `BUILD_CHANNEL` |
+| `src/config.cmake.h` | bakes `DT_BUILD_CHANNEL`/`DT_BUILD_TYPE`; declares `darktable_commit_hash` |
+| `tools/create_version_c.sh` | bakes `darktable_commit_hash` (full SHA, the Sentry/PostHog release) |
+| `tools/get_git_version_string.sh` | human version string / package name (`describe`-based) |
 | `src/external/CMakeLists.txt` | builds the submodule (inproc, static) |
 | `src/CMakeLists.txt` | links `sentry`, defines `HAVE_SENTRY` / `SENTRY_DSN` |
 | `src/common/sentry.c` / `.h` | init/shutdown, context, sessions, `on_crash` gdb attach |

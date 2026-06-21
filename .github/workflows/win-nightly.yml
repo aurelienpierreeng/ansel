@@ -49,7 +49,7 @@ jobs:
           - RelWithDebInfo
         compiler:
           - { compiler: LLVM20, CC: clang, CXX: clang++, GCC_VER: "", LLVM_VER: "20" }
-        eco: [-DBINARY_PACKAGE_BUILD=ON -DUSE_XMLLINT=OFF]
+        eco: [-DBINARY_PACKAGE_BUILD=ON -DBUILD_CHANNEL=nightly -DUSE_XMLLINT=OFF]
         target:
           - skiptest
         generator:

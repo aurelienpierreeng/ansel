@@ -381,6 +381,14 @@ static void _sentry_set_context(void)
   sentry_set_extra("build_type", sentry_value_new_string(DT_BUILD_TYPE));
   sentry_set_tag("opencl", cl_enabled ? "yes" : "no");
 
+  // Distribution channel as a searchable tag (also set as the Sentry environment in
+  // dt_sentry_init), so official nightly builds can be told apart from self-builds.
+  sentry_set_tag("build_channel", DT_BUILD_CHANNEL);
+
+  // Human-readable version string (the release itself is the commit SHA). May be a
+  // full "0.0.0+3848~ghash" or, on a shallow clone, just the abbreviated hash.
+  sentry_set_tag("version", darktable_package_version);
+
   // Surface how many crash-free sessions preceded this one (local mirror of the
   // server-side release-health metric, useful directly on the event).
   sentry_set_extra("clean_sessions_local",
@@ -418,11 +426,19 @@ void dt_sentry_init(const gboolean have_gui)
   sentry_options_set_database_path(options, db_path);
   g_free(db_path);
 
-  char *release = g_strdup_printf("ansel@%s", darktable_package_version);
+  // Release is keyed on the full commit SHA: it is the only build identifier that
+  // is identical across shallow and full clones, so events from official builds and
+  // self-builds of the same commit group into one release (the version string's
+  // abbreviated hash / commit count is not consistent across clone types). The
+  // human-readable version is attached as a tag in _sentry_set_context().
+  char *release = g_strdup_printf("ansel@%s", darktable_commit_hash);
   sentry_options_set_release(options, release);
   g_free(release);
 
-  sentry_options_set_environment(options, DT_BUILD_TYPE);
+  // Environment separates official nightly builds from local/self-builds in the
+  // dashboard and release-health metrics. The compiler/optimization build type is
+  // kept separately as the "build_type" extra.
+  sentry_options_set_environment(options, DT_BUILD_CHANNEL);
   sentry_options_set_debug(options, (darktable.unmuted & DT_DEBUG_CONTROL) ? 1 : 0);
 
   // Stamp non-crash events with the session length...
