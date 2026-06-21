@@ -2165,7 +2165,11 @@ static void _shortcut_search_save_recent_entry(const char *query, const dt_short
 
 typedef struct dt_accels_dispatch_state_t
 {
-  dt_shortcut_t *shortcut;
+  // Identify the shortcut by path + owning table rather than by raw pointer:
+  // dispatch is deferred (idle/timeout) and the dt_shortcut_t may be freed and
+  // rebuilt in between (view/module switches), so we re-resolve it when we fire.
+  gchar *path;          // owned copy of the selected shortcut's path
+  dt_accels_t *accels;  // table to re-resolve the shortcut from
   GtkWindow *main_window;
   guint retries;
 } dt_accels_dispatch_state_t;
@@ -2485,17 +2489,27 @@ static gboolean _call_shortcut_cclosure(dt_shortcut_t *shortcut, GtkWindow *main
 
 static void _dispatch_selected_shortcut(dt_accels_dispatch_state_t *state)
 {
-  if(IS_NULL_PTR(state->shortcut))
+  // Re-resolve the shortcut from the live hashtable by path. The dispatch was
+  // deferred, and between selection and now the shortcut may have been rebuilt or
+  // freed (e.g. switching darkroom modules/views rebuilds the accel table). Using
+  // a stored raw pointer here caused a use-after-free crash (reading a freed
+  // GClosure while walking shortcut->closure).
+  dt_shortcut_t *shortcut = NULL;
+  if(!IS_NULL_PTR(state->accels) && !IS_NULL_PTR(state->accels->acceleratables) && !IS_NULL_PTR(state->path))
+    shortcut = (dt_shortcut_t *)g_hash_table_lookup(state->accels->acceleratables, state->path);
+
+  if(IS_NULL_PTR(shortcut))
   {
-    dt_print(DT_DEBUG_SHORTCUTS, "[accel_search] dispatch skipped: shortcut=NULL\n");
+    dt_print(DT_DEBUG_SHORTCUTS, "[accel_search] dispatch skipped: shortcut '%s' no longer exists\n",
+             !IS_NULL_PTR(state->path) ? state->path : "<null>");
     return;
   }
 
   PayloadClosure *payload = NULL;
   PayloadClosure *payload_in_main_window = NULL;
-  if(!IS_NULL_PTR(state->shortcut->closure))
+  if(!IS_NULL_PTR(shortcut->closure))
   {
-    for(GList *item = g_list_last(state->shortcut->closure); item; item = g_list_previous(item))
+    for(GList *item = g_list_last(shortcut->closure); item; item = g_list_previous(item))
     {
       PayloadClosure *candidate = (PayloadClosure *)item->data;
       if(IS_NULL_PTR(candidate) || IS_NULL_PTR(candidate->base)) continue;
@@ -2515,13 +2529,13 @@ static void _dispatch_selected_shortcut(dt_accels_dispatch_state_t *state)
     }
   }
   if(IS_NULL_PTR(payload)) payload = payload_in_main_window;
-  if(IS_NULL_PTR(payload)) payload = dt_shortcut_get_payload_closure(state->shortcut);
+  if(IS_NULL_PTR(payload)) payload = dt_shortcut_get_payload_closure(shortcut);
 
   GtkWidget *target_widget = NULL;
   if(!IS_NULL_PTR(payload) && !IS_NULL_PTR(payload->base) && GTK_IS_WIDGET(payload->base->data))
     target_widget = GTK_WIDGET(payload->base->data);
-  else if(!IS_NULL_PTR(state->shortcut->widget))
-    target_widget = state->shortcut->widget;
+  else if(!IS_NULL_PTR(shortcut->widget))
+    target_widget = shortcut->widget;
 
   // Keep module/control focus actions in their UI context.
   // Refocusing center here would move focus to the main view (thumbtable/center)
@@ -2529,32 +2543,45 @@ static void _dispatch_selected_shortcut(dt_accels_dispatch_state_t *state)
   if(IS_NULL_PTR(target_widget))
     dt_gui_refocus_center();
 
-  GClosure *closure = !IS_NULL_PTR(payload) ? payload->base : dt_shortcut_get_closure(state->shortcut);
+  // The action we are about to invoke can destroy modules and free this very
+  // shortcut and/or its target widget. Capture everything we still need afterwards
+  // BEFORE invoking: a stable path (state->path is owned by the dispatch state and
+  // outlives this call) and description for logging, plus weak pointers so a
+  // destroyed widget reads back as NULL. After the invoke `shortcut` must be
+  // treated as potentially dangling and never dereferenced again.
+  const char *path = !IS_NULL_PTR(state->path) ? state->path : "<null>";
+  gchar *desc = g_strdup(!IS_NULL_PTR(shortcut->description) ? shortcut->description : "<null>");
+  GtkWidget *shortcut_widget = shortcut->widget;
+  if(!IS_NULL_PTR(target_widget))
+    g_object_add_weak_pointer(G_OBJECT(target_widget), (gpointer *)&target_widget);
+  if(!IS_NULL_PTR(shortcut_widget))
+    g_object_add_weak_pointer(G_OBJECT(shortcut_widget), (gpointer *)&shortcut_widget);
+
+  GClosure *closure = !IS_NULL_PTR(payload) ? payload->base : dt_shortcut_get_closure(shortcut);
   if(!IS_NULL_PTR(closure))
   {
-    const gboolean handled = _call_shortcut_cclosure(state->shortcut, state->main_window, closure);
+    const gboolean handled = _call_shortcut_cclosure(shortcut, state->main_window, closure);
     dt_print(DT_DEBUG_SHORTCUTS,
              "[accel_search] dispatch closure target='%s' description='%s' handled=%d\n",
-             !IS_NULL_PTR(state->shortcut->path) ? state->shortcut->path : "<null>",
-             !IS_NULL_PTR(state->shortcut->description) ? state->shortcut->description : "<null>",
-             handled);
+             path, desc, handled);
   }
-  else if(!IS_NULL_PTR(state->shortcut->widget))
+  else if(!IS_NULL_PTR(shortcut_widget))
   {
-    const gboolean activated = gtk_widget_activate(state->shortcut->widget);
+    const gboolean activated = gtk_widget_activate(shortcut_widget);
     dt_print(DT_DEBUG_SHORTCUTS,
              "[accel_search] dispatch widget target='%s' description='%s' activated=%d widget=%s\n",
-             !IS_NULL_PTR(state->shortcut->path) ? state->shortcut->path : "<null>",
-             !IS_NULL_PTR(state->shortcut->description) ? state->shortcut->description : "<null>",
-             activated, gtk_widget_get_name(state->shortcut->widget));
+             path, desc, activated,
+             !IS_NULL_PTR(shortcut_widget) ? gtk_widget_get_name(shortcut_widget) : "<destroyed>");
   }
   else
   {
     dt_print(DT_DEBUG_SHORTCUTS,
              "[accel_search] dispatch failed: no callable target for '%s' description='%s'\n",
-             !IS_NULL_PTR(state->shortcut->path) ? state->shortcut->path : "<null>",
-             !IS_NULL_PTR(state->shortcut->description) ? state->shortcut->description : "<null>");
+             path, desc);
   }
+
+  // From here on, do not dereference `shortcut`: it may have been freed by the
+  // action above. target_widget / shortcut_widget are NULL if they were destroyed.
 
   GtkWidget *focused_widget = NULL;
   if(!IS_NULL_PTR(state->main_window))
@@ -2583,7 +2610,7 @@ static void _dispatch_selected_shortcut(dt_accels_dispatch_state_t *state)
   dt_print(DT_DEBUG_SHORTCUTS,
            "[accel_search] focus check (pre-idle) target='%s' target_widget=%s(%p) gtk_focus=%s(%p)"
            " scroll_focus=%s(%p) target_focused_gtk=%d target_focused_scroll=%d target_focused=%d\n",
-           !IS_NULL_PTR(state->shortcut->path) ? state->shortcut->path : "<null>",
+           path,
            !IS_NULL_PTR(target_widget) ? gtk_widget_get_name(target_widget) : "<null>",
            (void *)target_widget,
            !IS_NULL_PTR(focused_widget) ? gtk_widget_get_name(focused_widget) : "<null>",
@@ -2598,22 +2625,31 @@ static void _dispatch_selected_shortcut(dt_accels_dispatch_state_t *state)
      && !g_strcmp0(G_OBJECT_TYPE_NAME(target_widget), "DtBauhausWidget"))
   {
     dt_accels_dispatch_state_t *retry = g_malloc0(sizeof(*retry));
-    retry->shortcut = state->shortcut;
+    retry->path = g_strdup(path);
+    retry->accels = state->accels;
     retry->main_window = state->main_window;
     retry->retries = state->retries + 1;
     dt_print(DT_DEBUG_SHORTCUTS,
              "[accel_search] dispatch retry scheduled target='%s' retry=%u\n",
-             !IS_NULL_PTR(state->shortcut->path) ? state->shortcut->path : "<null>",
-             retry->retries);
+             path, retry->retries);
     g_timeout_add_full(G_PRIORITY_DEFAULT, DT_ACCEL_SEARCH_DISPATCH_RETRY_DELAY_MS,
                        _dispatch_selected_shortcut_idle, retry, NULL);
   }
+
+  // Release the weak pointers (no-op if the widget was already destroyed and the
+  // pointer NULLed) and the captured description.
+  if(!IS_NULL_PTR(target_widget))
+    g_object_remove_weak_pointer(G_OBJECT(target_widget), (gpointer *)&target_widget);
+  if(!IS_NULL_PTR(shortcut_widget))
+    g_object_remove_weak_pointer(G_OBJECT(shortcut_widget), (gpointer *)&shortcut_widget);
+  g_free(desc);
 }
 
 static gboolean _dispatch_selected_shortcut_idle(gpointer data)
 {
   dt_accels_dispatch_state_t *state = (dt_accels_dispatch_state_t *)data;
   _dispatch_selected_shortcut(state);
+  g_free(state->path);
   dt_free(state);
   return G_SOURCE_REMOVE;
 }
@@ -3156,7 +3192,10 @@ void dt_accels_search(dt_accels_t *accels, GtkWindow *main_window, GtkWidget *an
   if(state.response == GTK_RESPONSE_ACCEPT && !IS_NULL_PTR(state.selected))
   {
     dt_accels_dispatch_state_t *dispatch = g_malloc0(sizeof(*dispatch));
-    dispatch->shortcut = state.selected;
+    dispatch->path = g_strdup(state.selected->path);
+    dispatch->accels = !IS_NULL_PTR(state.selected->accels)
+                       ? state.selected->accels
+                       : (!IS_NULL_PTR(darktable.gui) ? darktable.gui->accels : NULL);
     dispatch->main_window = main_window;
     g_idle_add(_dispatch_selected_shortcut_idle, dispatch);
   }
