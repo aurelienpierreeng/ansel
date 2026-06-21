@@ -168,6 +168,31 @@ int dt_iop_autoset_advance(struct dt_develop_t *dev, dt_autoset_manager_t *manag
   dt_iop_gui_enter_critical_section(module);
 
   dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, entry);
+
+  // Re-validate that the pipeline piece is still valid: the pipeline may have
+  // been destroyed and reconstructed concurrently, making piece a dangling pointer.
+  const dt_dev_pixelpipe_iop_t *const piece_check = dt_dev_pixelpipe_get_module_piece(pipe, module);
+  if(IS_NULL_PTR(piece_check) || piece_check != piece)
+  {
+    // Pipeline was rebuilt — piece is stale. Abort safely.
+    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, entry);
+    dt_iop_gui_leave_critical_section(module);
+    // Skip this module and continue with the next one
+    manager->iop_to_set = g_list_delete_link(manager->iop_to_set, mod);
+    if(IS_NULL_PTR(manager->iop_to_set))
+    {
+      if(!IS_NULL_PTR(input_wait))
+        dt_dev_pixelpipe_cache_wait_cleanup(input_wait, "autoset-skip-stale-done");
+      pipe->autoset = FALSE;
+      if(manager->progress_cursor_active)
+      {
+        dt_control_log_busy_leave();
+        manager->progress_cursor_active = FALSE;
+      }
+    }
+    return 0;
+  }
+
   module->autoset(module, pipe, piece, input);
   dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, entry);
 
