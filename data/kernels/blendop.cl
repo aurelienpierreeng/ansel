@@ -1519,12 +1519,12 @@ blendop_display_channel(__read_only image2d_t in_a, __read_only image2d_t in_b, 
       break;
     case DT_DEV_PIXELPIPE_DISPLAY_JzCzhz_hz:
       JzCzhz = rgb_to_JzCzhz(a, profile_info, profile_lut, use_profile);
-      c = clamp(JzCzhz.z / exp2(boost_factors[DEVELOP_BLENDIF_hz_in]), 0.0f, 1.0f);
+      c = clamp(JzCzhz.z, 0.0f, 1.0f); // no boost for hues
       is_lab = 0;
       break;
     case (DT_DEV_PIXELPIPE_DISPLAY_JzCzhz_hz | DT_DEV_PIXELPIPE_DISPLAY_OUTPUT):
       JzCzhz = rgb_to_JzCzhz(b, profile_info, profile_lut, use_profile);
-      c = clamp(JzCzhz.z / exp2(boost_factors[DEVELOP_BLENDIF_hz_out]), 0.0f, 1.0f);
+      c = clamp(JzCzhz.z, 0.0f, 1.0f); // no boost for hues
       is_lab = 0;
       break;
     default:

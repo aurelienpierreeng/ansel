@@ -2828,18 +2828,25 @@ static inline float3 _gamma_normalize_color(const float3 pixel, const float norm
   return pixel * factor;
 }
 
+/**
+ * Convert XYZ to Rec.709 by evaluating each output component directly.
+ *
+ * Keep these coefficients in conventional row order. The equivalent CPU
+ * matrices are stored transposed because their SIMD helper accumulates one
+ * input component at a time.
+ */
 static inline float3 _XYZ_to_Rec709_D50_cl(const float4 XYZ)
 {
-  return (float3)(3.1338561f * XYZ.x - 0.9787684f * XYZ.y + 0.0719453f * XYZ.z,
-                  -1.6168667f * XYZ.x + 1.9161415f * XYZ.y - 0.2289914f * XYZ.z,
-                  -0.4906146f * XYZ.x + 0.0334540f * XYZ.y + 1.4052427f * XYZ.z);
+  return (float3)(3.1338561f * XYZ.x - 1.6168667f * XYZ.y - 0.4906146f * XYZ.z,
+                  -0.9787684f * XYZ.x + 1.9161415f * XYZ.y + 0.0334540f * XYZ.z,
+                  0.0719453f * XYZ.x - 0.2289914f * XYZ.y + 1.4052427f * XYZ.z);
 }
 
 static inline float3 _XYZ_to_Rec709_D65_cl(const float4 XYZ)
 {
-  return (float3)(3.2404542f * XYZ.x - 0.9692660f * XYZ.y + 0.0556434f * XYZ.z,
-                  -1.5371385f * XYZ.x + 1.8760108f * XYZ.y - 0.2040259f * XYZ.z,
-                  -0.4985314f * XYZ.x + 0.0415560f * XYZ.y + 1.0572252f * XYZ.z);
+  return (float3)(3.2404542f * XYZ.x - 1.5371385f * XYZ.y - 0.4985314f * XYZ.z,
+                  -0.9692660f * XYZ.x + 1.8760108f * XYZ.y + 0.0415560f * XYZ.z,
+                  0.0556434f * XYZ.x - 0.2040259f * XYZ.y + 1.0572252f * XYZ.z);
 }
 
 static inline float4 _JzCzhz_to_JzAzBz_cl(const float4 JzCzhz)
