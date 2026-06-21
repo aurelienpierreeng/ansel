@@ -54,6 +54,7 @@
 */
 #include "common/darktable.h"
 #include "common/sentry.h"
+#include "common/telemetry.h"
 #include "gui/gdkkeys.h"
 #include "libs/lib.h"
 #include "common/debug.h"
@@ -1071,8 +1072,12 @@ void dt_lib_gui_set_expanded(dt_lib_module_t *module, gboolean expanded)
 
   dtgtk_expander_set_expanded(DTGTK_EXPANDER(module->expander), expanded);
 
-  /* record lib panel usage for crash reports */
-  if(expanded) dt_sentry_record_module_usage("lib", module->plugin_name);
+  /* record lib panel usage for crash reports and usage analytics */
+  if(expanded)
+  {
+    dt_sentry_record_module_usage("lib", module->plugin_name);
+    dt_telemetry_record_module_usage("lib", module->plugin_name);
+  }
 
   /* show / hide plugin widget */
   if(expanded)

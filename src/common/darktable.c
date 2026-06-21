@@ -97,7 +97,9 @@
 #include "common/history.h"
 #include "common/pwstorage/pwstorage.h"
 #include "common/selection.h"
+#include "common/privacy_consent.h"
 #include "common/sentry.h"
+#include "common/telemetry.h"
 #include "common/system_signal_handling.h"
 #include "bauhaus/bauhaus.h"
 #include "gui/presets.h"
@@ -1281,10 +1283,17 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
 
   dt_gui_splash_close();
 
+  // On first launch, ask once for consent to the opt-in data flows (crash reports
+  // and usage analytics) in a single dialog, before initializing either module so
+  // their enabled flags are set when they read them.
+  dt_privacy_ask_consent(init_gui);
+
   // Initialize crash reporting last, after the final dt_set_signal_handlers() so
   // sentry's handler sits on top and chains down into our gdb/drmingw fallback.
-  // On first launch this prompts the user for consent (GUI only).
   dt_sentry_init(init_gui);
+
+  // Opt-in usage analytics (PostHog) - separate toggle from crash reporting.
+  dt_telemetry_init(init_gui);
 
   dt_print(DT_DEBUG_CONTROL, "[init] startup took %f seconds\n", dt_get_wtime() - start_wtime);
 
@@ -1307,6 +1316,9 @@ void dt_cleanup()
   // events are sent while the rest of the app is still up; the clean-session
   // counter it writes is persisted later by dt_conf_cleanup().
   dt_sentry_shutdown();
+
+  // Flush and stop usage analytics.
+  dt_telemetry_shutdown();
 
   // Restore selection if exiting on culling mode to be sure it's saved in DB
   if(darktable.gui && darktable.gui->culling_mode)

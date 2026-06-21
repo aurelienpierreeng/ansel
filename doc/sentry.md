@@ -1,4 +1,4 @@
-# Crash reporting and telemetry with Sentry
+# Crash reporting with Sentry {#sentry}
 
 [TOC]
 
@@ -19,6 +19,13 @@ Ansel uses Sentry for exactly two things:
 
 It is **opt-in**: nothing is sent unless the user agrees on first launch, and it can be turned off
 at any time. No images, file names, or personal data are ever sent.
+
+> **Note** — Sentry is only one of Ansel's two optional data flows. Anonymous *usage analytics*
+> (which features are used, on which platforms) go to a separate service, PostHog; see
+> [Usage analytics (telemetry)](@ref telemetry). The two share a single first-launch consent dialog
+> (one checkbox each) but are otherwise independent and separately toggleable. The user-facing
+> explanation of everything collected lives in the
+> [Data privacy](https://ansel.photos/en/data-privacy/) page of the user manual.
 
 Project dashboard: <https://aurelienpierreeng.sentry.io/projects/ansel/>
 Crash-free monitor: <https://aurelienpierreeng.sentry.io/monitors/1388118/?project=4511598693253200&statsPeriod=24h>
@@ -64,22 +71,27 @@ All of this lives in `src/common/sentry.c` / `sentry.h`. The public API is three
 
 | Function | When | What it does |
 |---|---|---|
-| `dt_sentry_init(have_gui)` | end of `dt_init()` | consent gate, then `sentry_init()` |
+| `dt_sentry_init(have_gui)` | end of `dt_init()` | honors `sentry/enabled`, then `sentry_init()` |
 | `dt_sentry_shutdown()` | start of `dt_cleanup()` | records the clean session, flushes, `sentry_close()` |
 | `dt_sentry_backtrace_captured()` | from the signal handler | tells the local gdb fallback to stand down |
 
 ### Consent (opt-in)
 
-On the **very first launch** with a GUI, a dialog asks the user whether to enable crash reporting,
-explaining what is collected. The answer is stored and never asked again. The toggle also lives in
-**Preferences ▸ Storage ▸ Privacy** ("Send anonymous crash reports").
+Consent is gathered **once**, by a single dialog shared with usage analytics, implemented in
+`src/common/privacy_consent.c` (`dt_privacy_ask_consent()`). On the **very first launch** with a GUI
+it shows one checkbox per built-in data flow ("Send crash reports" and "Share anonymous usage
+statistics") plus a link to the user-facing
+[Data privacy](https://ansel.photos/en/data-privacy/) page, then writes the per-feature toggles.
+`dt_sentry_init()` itself no longer prompts — it only reads `sentry/enabled`. The toggle also lives
+in **Preferences ▸ Storage ▸ Privacy** ("Send anonymous crash reports").
 
 Two configuration keys are involved:
 
 - `sentry/enabled` — the user-facing boolean. It is a *confgen* key, so it appears in Preferences.
-- `sentry/consent_asked` — a sentinel that records whether the user has answered yet. It is
-  **deliberately not** a confgen key: because confgen defaults are always "present",
-  `dt_conf_key_exists()` could not otherwise distinguish "never asked" from "defaulted to off".
+- `privacy/consent_asked` — a single sentinel (shared with analytics) that records whether the user
+  has answered the consent dialog yet. It is **deliberately not** a confgen key: because confgen
+  defaults are always "present", `dt_conf_key_exists()` could not otherwise distinguish "never asked"
+  from "defaulted to off". Once it exists, the dialog is never shown again.
 
 Sentry is initialised only if `sentry/enabled` is true. In non-GUI tools (CLI) the consent dialog
 cannot be shown, so Sentry initialises only if the user already opted in during a GUI session.
@@ -260,7 +272,8 @@ means a captured crash that has not been uploaded yet (it will be, on the next l
 | `DefineOptions.cmake` | `USE_SENTRY`, `SENTRY_DSN` |
 | `src/external/CMakeLists.txt` | builds the submodule (inproc, static) |
 | `src/CMakeLists.txt` | links `sentry`, defines `HAVE_SENTRY` / `SENTRY_DSN` |
-| `src/common/sentry.c` / `.h` | init/shutdown, consent, context, sessions, `on_crash` gdb attach |
+| `src/common/sentry.c` / `.h` | init/shutdown, context, sessions, `on_crash` gdb attach |
+| `src/common/privacy_consent.c` / `.h` | the shared first-launch consent dialog (crash + analytics) |
 | `src/common/system_signal_handling.c` | local gdb fallback; defers to Sentry when it captured |
 | `src/common/darktable.c` | calls `dt_sentry_init()` / `dt_sentry_shutdown()` |
 | `data/anselconfig.xml.in` / `.dtd`, `tools/generate_prefs.xsl` | the `sentry/enabled` preference |

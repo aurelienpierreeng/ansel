@@ -75,6 +75,7 @@
 #include "common/collection.h"
 #include "common/darktable.h"
 #include "common/sentry.h"
+#include "common/telemetry.h"
 #include "common/debug.h"
 #include "common/image_cache.h"
 #include "common/mipmap_cache.h"
@@ -417,8 +418,9 @@ int dt_view_manager_switch_by_view(dt_view_manager_t *vm, const dt_view_t *nv)
       as e.g. modulegroups requires the dr stuff to be inited. */
   if(new_view->enter) new_view->enter(new_view);
 
-  /* record view usage for crash reports */
+  /* record view usage for crash reports and usage analytics */
   dt_sentry_record_module_usage("view", new_view->module_name);
+  dt_telemetry_record_module_usage("view", new_view->module_name);
 
   /* raise view changed signal */
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_VIEWMANAGER_VIEW_CHANGED, old_view, new_view);

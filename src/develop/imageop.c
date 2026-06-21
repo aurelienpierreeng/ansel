@@ -65,6 +65,7 @@
 
 #include "common/darktable.h"
 #include "common/sentry.h"
+#include "common/telemetry.h"
 #include "develop/imageop.h"
 #include "bauhaus/bauhaus.h"
 #include "common/collection.h"
@@ -1084,6 +1085,7 @@ static void _gui_off_callback(GtkToggleButton *togglebutton, gpointer user_data)
     {
       module->enabled = 1;
       dt_sentry_record_module_usage("iop", module->op);
+      dt_telemetry_record_module_usage("iop", module->op);
       dt_dev_add_history_item(module->dev, module, FALSE, TRUE);
     }
     else

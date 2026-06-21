@@ -118,7 +118,9 @@ FILE(GLOB SOURCE_FILES
   "common/presets.c"
   "common/styles.c"
   "common/selection.c"
+  "common/privacy_consent.c"
   "common/sentry.c"
+  "common/telemetry.c"
   "common/system_signal_handling.c"
   "common/tags.c"
   "common/map_locations.c"
@@ -851,6 +853,12 @@ target_link_libraries(lib_ansel PRIVATE whereami)
 if(USE_SENTRY)
   target_link_libraries(lib_ansel PRIVATE sentry)
   target_compile_definitions(lib_ansel PRIVATE HAVE_SENTRY=1 SENTRY_DSN="${SENTRY_DSN}")
+endif()
+
+if(USE_TELEMETRY)
+  # json-glib and libcurl are already part of ansel_deps (linked above).
+  target_compile_definitions(lib_ansel PRIVATE
+    HAVE_TELEMETRY=1 POSTHOG_HOST="${POSTHOG_HOST}")
 endif()
 
 if(WIN32 AND CMAKE_C_COMPILER_ID STREQUAL "Clang")

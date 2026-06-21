@@ -271,38 +271,6 @@ void dt_sentry_set_processed_image(const struct dt_image_t *img, const char *pip
   sentry_set_context("processed_image", o);
 }
 
-// Ask the user, once, whether they agree to send anonymous crash reports.
-// Returns TRUE if they opted in. Records the decision so we never ask again.
-static gboolean _sentry_ask_consent(void)
-{
-  GtkWidget *parent = (darktable.gui && darktable.gui->ui) ? dt_ui_main_window(darktable.gui->ui) : NULL;
-
-  GtkWidget *dialog = gtk_message_dialog_new(
-      GTK_WINDOW(parent), GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_QUESTION,
-      GTK_BUTTONS_NONE, "%s", _("Help us make Ansel more stable?"));
-
-  gtk_message_dialog_format_secondary_markup(
-      GTK_MESSAGE_DIALOG(dialog), "%s",
-      _("Ansel can automatically report crashes to its developers so they can be fixed.\n\n"
-        "If you agree, we send:\n"
-        "  • the crash backtrace (where the program failed) when Ansel crashes,\n"
-        "  • your operating system, and hardware specs (CPU, RAM, GPU),\n"
-        "  • the Ansel version, and crash-free session statistics.\n\n"
-        "We never send your images, file names, or any personal data.\n\n"
-        "Data is collected by sentry.io and stored in Europe. You can review their policy at https://sentry.io/privacy/.\n\n"
-        "This is entirely optional and you can change your choice at any time in\n"
-        "<i>Preferences ▸ Storage ▸ Privacy</i>."));
-
-  gtk_dialog_add_button(GTK_DIALOG(dialog), _("No, thanks"), GTK_RESPONSE_NO);
-  gtk_dialog_add_button(GTK_DIALOG(dialog), _("Yes, send crash reports"), GTK_RESPONSE_YES);
-  gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_YES);
-
-  const gint response = gtk_dialog_run(GTK_DIALOG(dialog));
-  gtk_widget_destroy(dialog);
-
-  return (response == GTK_RESPONSE_YES);
-}
-
 // Attach OS / hardware context so reports are actionable. No images, files or
 // personal data: only the runtime environment.
 static void _sentry_set_context(void)
@@ -426,18 +394,8 @@ static void _sentry_set_context(void)
 
 void dt_sentry_init(const gboolean have_gui)
 {
-  // First-run consent. "sentry/consent_asked" is not a confgen key, so its
-  // presence means the user has actually made a choice before.
-  if(!dt_conf_key_exists(DT_SENTRY_ASKED_KEY))
-  {
-    if(!have_gui)
-      return; // can't ask without a GUI; stay disabled until the user is prompted
-
-    const gboolean agreed = _sentry_ask_consent();
-    dt_conf_set_bool(DT_SENTRY_ENABLED_KEY, agreed);
-    dt_conf_set_bool(DT_SENTRY_ASKED_KEY, TRUE);
-  }
-
+  // Consent is gathered once at startup by dt_privacy_ask_consent() (a single
+  // dialog shared with usage analytics). Here we only honor the resulting toggle.
   if(!dt_conf_get_bool(DT_SENTRY_ENABLED_KEY))
     return;
 

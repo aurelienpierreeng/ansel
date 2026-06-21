@@ -66,6 +66,7 @@
 #include "develop/format.h"
 #include "develop/imageop_math.h"
 #include "common/sentry.h"
+#include "common/telemetry.h"
 #include "develop/pixelpipe.h"
 #include "develop/pixelpipe_cache.h"
 #include "develop/pixelpipe_cpu.h"
@@ -1295,6 +1296,7 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_iop_roi_t roi)
       default: break;
     }
     dt_sentry_set_processed_image(&pipe->dev->image_storage, pl);
+    dt_telemetry_record_file_type(&pipe->dev->image_storage, pl);
   }
 
   if(darktable.unmuted & DT_DEBUG_MEMORY)
