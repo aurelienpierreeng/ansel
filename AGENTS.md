@@ -84,6 +84,18 @@ After non-trivial code changes, run the narrowest relevant build or test target 
 - SQL queries should be hidden behind C APIs to be reused in the C code, don't put SQL code into GUI code, or modules.
 - The code should be modular: features are split into self-enclosed modules that communicate with the core through interfaces. They should be unaware of other modules and unaware of the core, they should care about a minimal number of inputs and states to produce their output. The core is orchestrating communication between modules. Modules should not communicate with each other.
 
+## Cross-platform printf format specifiers
+
+We build on Linux, macOS and Windows, where `size_t`, `uint64_t` and friends have different underlying types (e.g. `size_t` is `unsigned long` on 64-bit macOS but `unsigned long long` on Windows). A hardcoded length modifier that compiles on Linux will break the macOS/Windows CI with `-Werror,-Wformat`. Always match the format to the argument's exact type, using portable macros instead of guessing `%lu`/`%llu`/`%zu`:
+
+- `size_t` / `gsize` → `"%" G_GSIZE_FORMAT`
+- `ssize_t` / `gssize` → `"%" G_GSSIZE_FORMAT`
+- `uint64_t` → `"%" PRIu64`; `int64_t` → `"%" PRId64` (from `<inttypes.h>`)
+- `uint32_t`/`int32_t` → `"%" PRIu32`/`"%" PRId32`
+- `goffset` → `"%" G_GOFFSET_FORMAT`
+
+Do not paper over a warning by casting the argument to whatever type the existing specifier expects; fix the specifier to match the real type. Never use bare `%zu`/`%llu` for portable code — MSVC runtimes do not reliably support them.
+
 ## Performance and optimization
 
 - When optimizing code for performance, build the optimized assembly code, for example with `gcc -O3 -g -S -fverbose-asm file.c`, and analyze the assembly structure. Generic optimizations for package builds and local native optimizations should both be evaluated.
