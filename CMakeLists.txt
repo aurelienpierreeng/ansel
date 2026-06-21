@@ -117,11 +117,14 @@ set(REL_BIN_TO_DATADIR   "${REL_BIN_TO_SHAREDIR}/ansel")
 
 # https://medium.com/@alasher/colored-c-compiler-output-with-ninja-clang-gcc-10bfe7f2b949
 if(FORCE_COLORED_OUTPUT)
-  if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
-    add_compile_options(-fdiagnostics-color=always)
-  elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
-    add_compile_options(-fcolor-diagnostics)
-  endif()
+  # Vendored dependencies may enable ASM with a compiler different from the
+  # C/C++ compiler. Keep these compiler-specific flags off ASM command lines.
+  add_compile_options(
+    "$<$<COMPILE_LANG_AND_ID:C,GNU>:-fdiagnostics-color=always>"
+    "$<$<COMPILE_LANG_AND_ID:CXX,GNU>:-fdiagnostics-color=always>"
+    "$<$<COMPILE_LANG_AND_ID:C,Clang>:-fcolor-diagnostics>"
+    "$<$<COMPILE_LANG_AND_ID:CXX,Clang>:-fcolor-diagnostics>"
+  )
 endif()
 
 # Unify the RPATH origin.
