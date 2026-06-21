@@ -110,6 +110,13 @@ After init we attach environment context (never any user content):
   `dt_sentry_record_module_usage()` from the GUI thread and mirrored into the scope on each change,
   so the crash handler never reads the live table. This is crash *context* only — Ansel does not do
   all-session feature analytics (Sentry is not an analytics product).
+- **processed_image** context: what image was on the pipeline when it crashed — the file
+  **extension** (never the name or path), whether it is `raw`/`ldr`/`hdr`/`monochrome`,
+  `needs_demosaic` (the buffer still carries a CFA mosaic), the dimensions, and the `pipeline`
+  (`darkroom`, `darkroom-preview`, `export`, `thumbnail`). Set via
+  `dt_sentry_set_processed_image()` at the start of `dt_dev_pixelpipe_process()` — the single choke
+  point both darkroom and export pipelines share — and deduplicated so darkroom's constant
+  reprocessing of the same image does not churn.
 
 ### Sessions and session length
 

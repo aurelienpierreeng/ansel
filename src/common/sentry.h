@@ -24,6 +24,8 @@
 extern "C" {
 #endif
 
+struct dt_image_t;
+
 /** Initialize sentry.io crash reporting.
  *
  * On the very first launch (no consent decision recorded yet) and when a GUI is
@@ -59,6 +61,19 @@ gboolean dt_sentry_backtrace_captured(void);
  * Must be called from the GUI thread. No-op without sentry, or before init /
  * when the user has not opted in. */
 void dt_sentry_record_module_usage(const char *category, const char *name);
+
+/** Record the image currently being processed, so crash reports show what was
+ * on the pipeline at the time. Only the file extension and image type flags are
+ * recorded (no file name or path). Attached as the "processed_image" context.
+ *
+ * Cheap to call on every pipeline run: it is a no-op unless the image or
+ * pipeline actually changed. Safe to call from any pipeline thread.
+ *
+ * @param img      the image on the pipeline (its extension + type flags are read).
+ * @param pipeline short label of the pipeline, e.g. "darkroom"/"export".
+ *
+ * No-op without sentry, or before init / when the user has not opted in. */
+void dt_sentry_set_processed_image(const struct dt_image_t *img, const char *pipeline);
 
 #ifdef __cplusplus
 }

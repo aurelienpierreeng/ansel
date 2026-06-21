@@ -65,6 +65,7 @@
 #include "develop/dev_pixelpipe.h"
 #include "develop/format.h"
 #include "develop/imageop_math.h"
+#include "common/sentry.h"
 #include "develop/pixelpipe.h"
 #include "develop/pixelpipe_cache.h"
 #include "develop/pixelpipe_cpu.h"
@@ -1280,6 +1281,21 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_iop_roi_t roi)
    * Reset it before any cache probe so callers never reuse a stale device id from a
    * previous pipeline pass. */
   pipe->devid = -1;
+
+  /* Record what image / pipeline is being processed, for crash reports. */
+  if(pipe->dev)
+  {
+    const char *pl = "other";
+    switch(pipe->type)
+    {
+      case DT_DEV_PIXELPIPE_FULL:      pl = "darkroom";         break;
+      case DT_DEV_PIXELPIPE_PREVIEW:   pl = "darkroom-preview"; break;
+      case DT_DEV_PIXELPIPE_EXPORT:    pl = "export";           break;
+      case DT_DEV_PIXELPIPE_THUMBNAIL: pl = "thumbnail";        break;
+      default: break;
+    }
+    dt_sentry_set_processed_image(&pipe->dev->image_storage, pl);
+  }
 
   if(darktable.unmuted & DT_DEBUG_MEMORY)
   {

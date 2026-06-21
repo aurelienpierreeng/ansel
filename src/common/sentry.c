@@ -26,6 +26,7 @@
 #ifdef HAVE_SENTRY
 
 #include "common/file_location.h"
+#include "common/image.h"
 #include "common/opencl.h"
 #include "control/conf.h"
 #include "gui/gtk.h"
@@ -33,6 +34,7 @@
 #include <sentry.h>
 
 #include <signal.h> // for sig_atomic_t
+#include <string.h> // for strrchr, strcmp
 
 #if defined(__linux__)
 #include <fcntl.h>      // for open flags
@@ -64,6 +66,12 @@ static volatile sig_atomic_t _sentry_backtrace_captured = 0;
 // the GUI thread; mirrored into the sentry scope on each change so the crash
 // handler never has to read this table (which would be unsafe in a signal context).
 static GHashTable *_module_usage = NULL;
+
+// Dedup state for the currently-processed image. Pipelines run on worker threads
+// (darkroom full/preview, export), so this is guarded by a mutex.
+static GMutex _processed_image_lock;
+static int32_t _processed_imgid = -1;
+static char _processed_pipeline[32] = { 0 };
 
 // Length of the running session, in seconds. darktable.start_wtime is stamped at
 // the very start of dt_init().
@@ -226,6 +234,41 @@ void dt_sentry_record_module_usage(const char *category, const char *name)
   while(g_hash_table_iter_next(&iter, &k, &v))
     sentry_value_set_by_key(obj, (const char *)k, sentry_value_new_int32(GPOINTER_TO_INT(v)));
   sentry_set_context("module_usage", obj);
+}
+
+void dt_sentry_set_processed_image(const struct dt_image_t *img, const char *pipeline)
+{
+  if(!_sentry_inited || !img) return;
+  const char *pl = pipeline ? pipeline : "";
+
+  // Skip the (frequent) case where the same image keeps being reprocessed by the
+  // same pipeline; only push a new context when something actually changed.
+  g_mutex_lock(&_processed_image_lock);
+  if(img->id == _processed_imgid && !strcmp(pl, _processed_pipeline))
+  {
+    g_mutex_unlock(&_processed_image_lock);
+    return;
+  }
+  _processed_imgid = img->id;
+  g_strlcpy(_processed_pipeline, pl, sizeof(_processed_pipeline));
+  g_mutex_unlock(&_processed_image_lock);
+
+  // Extension and type flags only - never the file name or path.
+  const char *dot = strrchr(img->filename, '.');
+
+  sentry_value_t o = sentry_value_new_object();
+  sentry_value_set_by_key(o, "extension", sentry_value_new_string(dot ? dot + 1 : ""));
+  sentry_value_set_by_key(o, "pipeline", sentry_value_new_string(pl));
+  sentry_value_set_by_key(o, "raw", sentry_value_new_bool(dt_image_is_raw(img)));
+  sentry_value_set_by_key(o, "ldr", sentry_value_new_bool(dt_image_is_ldr(img)));
+  sentry_value_set_by_key(o, "hdr", sentry_value_new_bool(dt_image_is_hdr(img)));
+  sentry_value_set_by_key(o, "monochrome", sentry_value_new_bool(dt_image_is_monochrome(img)));
+  // dsc.filters != 0 means the buffer still carries a CFA mosaic, i.e. it has not
+  // been demosaiced yet.
+  sentry_value_set_by_key(o, "needs_demosaic", sentry_value_new_bool(img->dsc.filters != 0));
+  sentry_value_set_by_key(o, "width", sentry_value_new_int32(img->width));
+  sentry_value_set_by_key(o, "height", sentry_value_new_int32(img->height));
+  sentry_set_context("processed_image", o);
 }
 
 // Ask the user, once, whether they agree to send anonymous crash reports.
@@ -486,6 +529,10 @@ gboolean dt_sentry_backtrace_captured(void)
 }
 
 void dt_sentry_record_module_usage(const char *category, const char *name)
+{
+}
+
+void dt_sentry_set_processed_image(const struct dt_image_t *img, const char *pipeline)
 {
 }
 
