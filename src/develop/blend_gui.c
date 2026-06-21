@@ -297,6 +297,7 @@ enum _channel_indexes
 };
 
 static void _blendop_blendif_update_tab(dt_iop_module_t *module, const int tab);
+static void _blendop_blendif_sync_channel_display_buttons(dt_iop_module_t *module);
 
 static inline dt_iop_colorspace_type_t _blendif_colorpicker_cst(dt_iop_gui_blend_data_t *data)
 {
@@ -800,6 +801,32 @@ static void _blendop_blendif_disp_alternative_reset(GtkWidget *widget, dt_iop_mo
   (void) _blendop_blendif_disp_alternative_worker(widget, module, 0, NULL, "");
 }
 
+/**
+ * @brief Toggle the alternative scale of one parametric-mask slider.
+ *
+ * Input and output sliders keep independent scale states for every channel
+ * tab. Most channels use a logarithmic scale; signed opponent channels use the
+ * existing centered magnifier because a logarithm is not defined across zero.
+ */
+static void _blendop_blendif_log_scale_toggled(GtkToggleButton *button, dt_iop_module_t *module)
+{
+  if(darktable.gui->reset) return;
+
+  dt_iop_gui_blend_data_t *data = !IS_NULL_PTR(module) ? module->blend_data : NULL;
+  if(IS_NULL_PTR(data) || IS_NULL_PTR(data->channel)) return;
+
+  const int in_out = GTK_WIDGET(button) == data->filter[1].log_scale ? 1 : 0;
+  const dt_iop_gui_blendif_channel_t *channel = &data->channel[data->tab];
+  if(IS_NULL_PTR(channel->altdisplay)) return;
+
+  const gboolean active = gtk_toggle_button_get_active(button);
+  gtk_button_set_label(GTK_BUTTON(button), active ? _("Linear scale") : _("Log scale"));
+
+  const int requested_mode = active ? 1 : 0;
+  data->altmode[data->tab][in_out]
+      = channel->altdisplay(GTK_WIDGET(data->filter[in_out].slider), module, requested_mode);
+}
+
 
 static dt_iop_colorspace_type_t _blendop_blendif_get_picker_colorspace(dt_iop_gui_blend_data_t *bd)
 {
@@ -975,10 +1002,18 @@ static void _blendop_blendif_update_tab(dt_iop_module_t *module, const int tab)
     if(channel->altdisplay)
     {
       data->altmode[tab][in_out] = channel->altdisplay(GTK_WIDGET(sl->slider), module, data->altmode[tab][in_out]);
+      gtk_widget_set_sensitive(sl->log_scale, TRUE);
+      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(sl->log_scale), data->altmode[tab][in_out] == 1);
+      gtk_button_set_label(GTK_BUTTON(sl->log_scale),
+                           data->altmode[tab][in_out] == 1 ? _("Linear scale") : _("Log scale"));
     }
     else
     {
       _blendop_blendif_disp_alternative_reset(GTK_WIDGET(sl->slider), module);
+      data->altmode[tab][in_out] = 0;
+      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(sl->log_scale), FALSE);
+      gtk_button_set_label(GTK_BUTTON(sl->log_scale), _("Log scale"));
+      gtk_widget_set_sensitive(sl->log_scale, FALSE);
     }
   }
 
@@ -1026,6 +1061,24 @@ static void _blendop_blendif_update_tab(dt_iop_module_t *module, const int tab)
     }
   }
 
+  if(module->request_mask_display & DT_DEV_PIXELPIPE_DISPLAY_CHANNEL)
+  {
+    const gboolean output
+        = (module->request_mask_display & DT_DEV_PIXELPIPE_DISPLAY_OUTPUT) != 0;
+    dt_dev_pixelpipe_display_mask_t new_request_mask_display
+        = module->request_mask_display & ~DT_DEV_PIXELPIPE_DISPLAY_ANY;
+    new_request_mask_display |= channel->display_channel;
+    if(output) new_request_mask_display |= DT_DEV_PIXELPIPE_DISPLAY_OUTPUT;
+
+    if(new_request_mask_display != module->request_mask_display)
+    {
+      module->request_mask_display = new_request_mask_display;
+      dt_iop_set_cache_bypass(module, TRUE);
+      dt_dev_pixelpipe_update_history_main(module->dev);
+    }
+  }
+
+  _blendop_blendif_sync_channel_display_buttons(module);
   --darktable.gui->reset;
 }
 
@@ -1147,7 +1200,9 @@ static gboolean _blendop_blendif_showmask_clicked(GtkToggleButton *button, GdkEv
   {
     const int has_mask_display = module->request_mask_display & (DT_DEV_PIXELPIPE_DISPLAY_MASK | DT_DEV_PIXELPIPE_DISPLAY_CHANNEL);
 
-    module->request_mask_display &= ~(DT_DEV_PIXELPIPE_DISPLAY_MASK | DT_DEV_PIXELPIPE_DISPLAY_CHANNEL | DT_DEV_PIXELPIPE_DISPLAY_ANY);
+    module->request_mask_display
+        &= ~(DT_DEV_PIXELPIPE_DISPLAY_MASK | DT_DEV_PIXELPIPE_DISPLAY_CHANNEL
+             | DT_DEV_PIXELPIPE_DISPLAY_ANY | DT_DEV_PIXELPIPE_DISPLAY_STICKY);
 
     if(dt_modifier_is(event->state, GDK_CONTROL_MASK | GDK_SHIFT_MASK))
       module->request_mask_display |= (DT_DEV_PIXELPIPE_DISPLAY_MASK | DT_DEV_PIXELPIPE_DISPLAY_CHANNEL);
@@ -1172,6 +1227,7 @@ static gboolean _blendop_blendif_showmask_clicked(GtkToggleButton *button, GdkEv
     --darktable.gui->reset;
 
     dt_iop_set_cache_bypass(module, module->request_mask_display != DT_DEV_PIXELPIPE_DISPLAY_NONE);
+    _blendop_blendif_sync_channel_display_buttons(module);
     dt_iop_request_focus(module);
 
     // We don't want to re-read the history here
@@ -3040,6 +3096,7 @@ static void _blendop_blendif_channel_mask_view(GtkWidget *widget, dt_iop_module_
   {
     module->request_mask_display = new_request_mask_display;
     dt_iop_set_cache_bypass(module, module->request_mask_display != DT_DEV_PIXELPIPE_DISPLAY_NONE);
+    _blendop_blendif_sync_channel_display_buttons(module);
     dt_dev_pixelpipe_update_history_main(module->dev);
   }
 }
@@ -3101,8 +3158,90 @@ static void _blendop_blendif_channel_mask_view_toggle(GtkWidget *widget, dt_iop_
   {
     module->request_mask_display = new_request_mask_display;
     dt_iop_set_cache_bypass(module, module->request_mask_display != DT_DEV_PIXELPIPE_DISPLAY_NONE);
+    _blendop_blendif_sync_channel_display_buttons(module);
     dt_dev_pixelpipe_update_history_main(module->dev);
   }
+}
+
+/**
+ * @brief Synchronize input/output channel toggles from the active preview request.
+ *
+ * Channel selection is encoded in `module->request_mask_display`: CHANNEL
+ * enables channel rendering and OUTPUT selects the unblended module output.
+ * The GUI reset guard prevents programmatic synchronization from invalidating
+ * the pipeline through the user-facing toggle callbacks.
+ */
+static void _blendop_blendif_sync_channel_display_buttons(dt_iop_module_t *module)
+{
+  dt_iop_gui_blend_data_t *data = !IS_NULL_PTR(module) ? module->blend_data : NULL;
+  if(IS_NULL_PTR(data)) return;
+
+  const gboolean channel_active
+      = (module->request_mask_display & DT_DEV_PIXELPIPE_DISPLAY_CHANNEL) != 0;
+  const gboolean output_active
+      = channel_active && (module->request_mask_display & DT_DEV_PIXELPIPE_DISPLAY_OUTPUT) != 0;
+
+  ++darktable.gui->reset;
+  if(GTK_IS_TOGGLE_BUTTON(data->filter[0].channel_display))
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(data->filter[0].channel_display),
+                                 channel_active && !output_active);
+  if(GTK_IS_TOGGLE_BUTTON(data->filter[1].channel_display))
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(data->filter[1].channel_display),
+                                 output_active);
+  --darktable.gui->reset;
+}
+
+/**
+ * @brief Persistently display the current parametric input or output channel.
+ *
+ * Each button belongs to its source slider. Activating one deactivates the
+ * other, selects the current channel tab, and preserves any independently
+ * requested mask preview. STICKY keeps the explicit button choice active when
+ * the pointer leaves the slider.
+ */
+static void _blendop_blendif_channel_display_toggled(GtkToggleButton *button, dt_iop_module_t *module)
+{
+  if(darktable.gui->reset) return;
+
+  dt_iop_gui_blend_data_t *data = !IS_NULL_PTR(module) ? module->blend_data : NULL;
+  if(IS_NULL_PTR(data) || IS_NULL_PTR(data->channel)) return;
+
+  const int in_out = GTK_WIDGET(button) == data->filter[1].channel_display ? 1 : 0;
+  const gboolean active = gtk_toggle_button_get_active(button);
+  GtkWidget *const other_button = data->filter[!in_out].channel_display;
+
+  ++darktable.gui->reset;
+  if(active && GTK_IS_TOGGLE_BUTTON(other_button))
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(other_button), FALSE);
+  --darktable.gui->reset;
+
+  dt_dev_pixelpipe_display_mask_t new_request_mask_display
+      = module->request_mask_display
+        & ~(DT_DEV_PIXELPIPE_DISPLAY_CHANNEL | DT_DEV_PIXELPIPE_DISPLAY_OUTPUT
+            | DT_DEV_PIXELPIPE_DISPLAY_ANY | DT_DEV_PIXELPIPE_DISPLAY_STICKY);
+
+  if(active)
+  {
+    new_request_mask_display |= DT_DEV_PIXELPIPE_DISPLAY_CHANNEL
+                                | DT_DEV_PIXELPIPE_DISPLAY_STICKY
+                                | data->channel[data->tab].display_channel;
+    if(in_out) new_request_mask_display |= DT_DEV_PIXELPIPE_DISPLAY_OUTPUT;
+  }
+
+  dt_pthread_mutex_lock(&data->lock);
+  if(active)
+    data->save_for_leave |= DT_DEV_PIXELPIPE_DISPLAY_STICKY;
+  else
+    data->save_for_leave &= ~DT_DEV_PIXELPIPE_DISPLAY_STICKY;
+  dt_pthread_mutex_unlock(&data->lock);
+
+  if(new_request_mask_display == module->request_mask_display) return;
+
+  module->request_mask_display = new_request_mask_display;
+  dt_iop_set_cache_bypass(module, module->request_mask_display != DT_DEV_PIXELPIPE_DISPLAY_NONE);
+
+  dt_iop_request_focus(module);
+  dt_dev_pixelpipe_update_history_main(module->dev);
 }
 
 
@@ -3162,7 +3301,12 @@ static gboolean _blendop_blendif_enter(GtkWidget *widget, GdkEventCrossing *even
   }
   dt_pthread_mutex_unlock(&data->lock);
 
-  _blendop_blendif_channel_mask_view(widget, module, mode);
+  /* A plain hover only gives keyboard focus to the slider. Reapplying an
+   * already-active CHANNEL request here would derive INPUT/OUTPUT again from
+   * the hovered widget and switch the persistent channel toggle without a
+   * click. Only modifier-assisted hover is allowed to change the preview. */
+  if(mode != DT_DEV_PIXELPIPE_DISPLAY_NONE)
+    _blendop_blendif_channel_mask_view(widget, module, mode);
 
   gtk_widget_grab_focus(widget);
   return FALSE;
@@ -3207,7 +3351,10 @@ static gboolean _blendop_blendif_leave_delayed(gpointer data)
   dt_pthread_mutex_unlock(&bd->lock);
 
   if(reprocess)
+  {
+    _blendop_blendif_sync_channel_display_buttons(module);
     dt_dev_pixelpipe_update_history_main(module->dev);
+  }
   // return FALSE and thereby terminate the handler
   return FALSE;
 }
@@ -3234,28 +3381,10 @@ static gboolean _blendop_blendif_key_press(GtkWidget *widget, GdkEventKey *event
 {
   if(darktable.gui->reset) return FALSE;
 
-  dt_iop_gui_blend_data_t *data = module->blend_data;
   gboolean handled = FALSE;
-
-  const int tab = data->tab;
-  const int in_out = (widget == GTK_WIDGET(data->filter[1].slider)) ? 1 : 0;
 
   switch(event->keyval)
   {
-    case GDK_KEY_a:
-    case GDK_KEY_A:
-      if(data->channel[tab].altdisplay)
-        data->altmode[tab][in_out] = (data->channel[tab].altdisplay)(widget, module, data->altmode[tab][in_out] + 1);
-      handled = TRUE;
-      break;
-    case GDK_KEY_c:
-      _blendop_blendif_channel_mask_view_toggle(widget, module, DT_DEV_PIXELPIPE_DISPLAY_CHANNEL);
-      handled = TRUE;
-      break;
-    case GDK_KEY_C:
-      _blendop_blendif_channel_mask_view_toggle(widget, module, DT_DEV_PIXELPIPE_DISPLAY_CHANNEL | DT_DEV_PIXELPIPE_DISPLAY_STICKY);
-      handled = TRUE;
-      break;
     case GDK_KEY_m:
     case GDK_KEY_M:
       _blendop_blendif_channel_mask_view_toggle(widget, module, DT_DEV_PIXELPIPE_DISPLAY_MASK);
@@ -3522,7 +3651,8 @@ void dt_iop_gui_init_blendif(GtkBox *blendw, dt_iop_module_t *module, GtkWidget 
         gtk_overlay_add_overlay(GTK_OVERLAY(overlay), GTK_WIDGET(sl->label[k]));
       }
 
-      gtk_widget_set_tooltip_text(GTK_WIDGET(sl->slider), _("double-click to reset.\npress 'a' to toggle available slider modes.\npress 'c' to toggle view of channel data.\npress 'm' to toggle mask view."));
+      gtk_widget_set_tooltip_text(GTK_WIDGET(sl->slider),
+                                  _("double-click to reset.\npress 'm' to toggle mask view."));
       gtk_widget_set_tooltip_text(GTK_WIDGET(sl->head), _(slider_tooltip[in_out]));
 
       g_signal_connect(G_OBJECT(sl->slider), "value-changed", G_CALLBACK(_blendop_blendif_sliders_callback), bd);
@@ -3537,6 +3667,28 @@ void dt_iop_gui_init_blendif(GtkBox *blendw, dt_iop_module_t *module, GtkWidget 
       sl->box = GTK_BOX(gtk_box_new(GTK_ORIENTATION_VERTICAL, 0));
       gtk_box_pack_start(GTK_BOX(sl->box), GTK_WIDGET(label_box), FALSE, FALSE, 0);
       gtk_box_pack_start(GTK_BOX(sl->box), GTK_WIDGET(slider_box), FALSE, FALSE, 0);
+
+      GtkWidget *display_controls = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
+
+      sl->log_scale = gtk_toggle_button_new_with_label(_("Log scale"));
+      gtk_widget_set_tooltip_text(
+          sl->log_scale,
+          _("toggle the alternative logarithmic or magnified scale for this channel"));
+      g_signal_connect(G_OBJECT(sl->log_scale), "toggled",
+                       G_CALLBACK(_blendop_blendif_log_scale_toggled), module);
+      gtk_box_pack_start(GTK_BOX(display_controls), sl->log_scale, FALSE, FALSE, 0);
+
+      sl->channel_display = dtgtk_togglebutton_new(dtgtk_cairo_paint_eye_toggle, 0, NULL);
+      gtk_widget_set_tooltip_text(
+          sl->channel_display,
+          in_out ? _("display the current channel from the unblended module output")
+                 : _("display the current channel from the module input"));
+      g_signal_connect(G_OBJECT(sl->channel_display), "toggled",
+                       G_CALLBACK(_blendop_blendif_channel_display_toggled), module);
+      gtk_box_pack_start(GTK_BOX(display_controls), sl->channel_display, FALSE, FALSE, 0);
+
+      gtk_box_pack_start(GTK_BOX(sl->box), display_controls, FALSE, FALSE, 0);
+
       gtk_box_pack_start(GTK_BOX(bd->blendif_box), GTK_WIDGET(sl->box), FALSE, FALSE, 0);
     }
 
@@ -4375,6 +4527,18 @@ void dt_iop_gui_update_blending(dt_iop_module_t *module)
   _blendop_sync_toggle_state(bd->raster_enable, bd->raster_inited, raster_enabled, bd->raster_content);
   _blendop_sync_toggle_state(bd->blendif_enable, bd->blendif_inited, blendif_enabled, bd->blendif_content);
 
+  if(bd->blendif_inited && !IS_NULL_PTR(bd->channel))
+  {
+    /* The parametric page may have made the whole content insensitive before
+     * `_blendop_blendif_update_tab()` restored the channel-local state.
+     * Reapply the final contract after the page toggle is synchronized:
+     * boost factor is editable only for an enabled parametric mask and a
+     * channel whose descriptor explicitly supports boosting. */
+    gtk_widget_set_sensitive(
+        bd->channel_boost_factor_slider,
+        blendif_enabled && bd->channel[bd->tab].boost_factor_enabled);
+  }
+
   if(bd->blendif_inited && blendif_enabled)
   {
     gtk_widget_hide(GTK_WIDGET(bd->masks_invert_combo));
@@ -4449,6 +4613,8 @@ void dt_iop_gui_update_blending(dt_iop_module_t *module)
     dt_iop_color_picker_reset(module, FALSE);
   }
 
+  _blendop_blendif_sync_channel_display_buttons(module);
+
   // Re-evaluate header state after notebook toggle synchronization.
   dt_iop_add_remove_mask_indicator(module);
 
@@ -4488,6 +4654,7 @@ void dt_iop_gui_blending_lose_focus(dt_iop_module_t *module)
       _blendop_toggle_button_set_active(bd->showmask, FALSE);
     module->request_mask_display = DT_DEV_PIXELPIPE_DISPLAY_NONE;
     dt_iop_set_cache_bypass(module, FALSE);
+    _blendop_blendif_sync_channel_display_buttons(module);
 
     // (re)set the header mask indicator too
     if(bd->masks_support && bd->masks_edit)

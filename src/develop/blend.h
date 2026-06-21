@@ -290,6 +290,8 @@ typedef struct dt_iop_gui_blendif_filter_t
   GtkLabel *label[4];
   GtkLabel *picker_label;
   GtkWidget *polarity;
+  GtkWidget *channel_display;
+  GtkWidget *log_scale;
   GtkBox *box;
 } dt_iop_gui_blendif_filter_t;
 
