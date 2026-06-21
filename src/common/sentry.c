@@ -158,6 +158,76 @@ static void _sentry_set_context(void)
   }
   sentry_set_context("device", device);
 
+#if !defined(_WIN32) && !defined(__APPLE__)
+  // Linux/BSD: display server (X11 vs Wayland) and desktop environment, as
+  // searchable tags. Useful since many GUI bugs are backend/DE specific.
+  const char *session_type = g_getenv("XDG_SESSION_TYPE");
+  if(!session_type || !*session_type)
+  {
+    // Fall back to the well-known display sockets if the session type is unset.
+    if(g_getenv("WAYLAND_DISPLAY"))
+      session_type = "wayland";
+    else if(g_getenv("DISPLAY"))
+      session_type = "x11";
+  }
+  if(session_type && *session_type) sentry_set_tag("display_server", session_type);
+
+  const char *desktop = g_getenv("XDG_CURRENT_DESKTOP");
+  if(!desktop || !*desktop) desktop = g_getenv("DESKTOP_SESSION");
+  if(desktop && *desktop) sentry_set_tag("desktop_environment", desktop);
+
+  // What GTK actually renders on (may differ from the session, e.g. an X11 app
+  // under XWayland). The GObject type name ("GdkWaylandDisplay" / "GdkX11Display")
+  // gives this without pulling in the gdkwayland/gdkx backend headers.
+  GdkDisplay *display = gdk_display_get_default();
+  if(display) sentry_set_tag("gdk_backend", G_OBJECT_TYPE_NAME(display));
+#endif
+
+  // Display scaling and main window geometry (GUI sessions only). DPI/PPD come
+  // from the GUI, already computed during dt_gui_gtk_init(). The window size is
+  // read from conf, which holds the restored/last geometry and is kept up to date
+  // live on every resize - more reliable than the not-yet-mapped window here.
+  if(darktable.gui)
+  {
+    sentry_value_t scr = sentry_value_new_object();
+    sentry_value_set_by_key(scr, "dpi", sentry_value_new_double(darktable.gui->dpi));
+    sentry_value_set_by_key(scr, "dpi_factor", sentry_value_new_double(darktable.gui->dpi_factor));
+    sentry_value_set_by_key(scr, "ppd", sentry_value_new_double(darktable.gui->ppd));
+
+    const int win_w = dt_conf_get_int("ui_last/window_width");
+    const int win_h = dt_conf_get_int("ui_last/window_height");
+    if(win_w > 0 && win_h > 0)
+    {
+      sentry_value_set_by_key(scr, "window_width", sentry_value_new_int32(win_w));
+      sentry_value_set_by_key(scr, "window_height", sentry_value_new_int32(win_h));
+
+      // Searchable tag so issues can be filtered/grouped by window size.
+      char wbuf[32];
+      snprintf(wbuf, sizeof(wbuf), "%dx%d", win_w, win_h);
+      sentry_set_tag("window_size", wbuf);
+    }
+
+    // Monitor resolution (logical pixels) of the primary monitor.
+    GdkDisplay *gdkdisp = gdk_display_get_default();
+    GdkMonitor *mon = gdkdisp ? gdk_display_get_primary_monitor(gdkdisp) : NULL;
+    if(!mon && gdkdisp && gdk_display_get_n_monitors(gdkdisp) > 0)
+      mon = gdk_display_get_monitor(gdkdisp, 0);
+    if(mon)
+    {
+      GdkRectangle geo;
+      gdk_monitor_get_geometry(mon, &geo);
+      sentry_value_set_by_key(scr, "screen_width", sentry_value_new_int32(geo.width));
+      sentry_value_set_by_key(scr, "screen_height", sentry_value_new_int32(geo.height));
+      sentry_value_set_by_key(scr, "monitor_scale_factor",
+                              sentry_value_new_int32(gdk_monitor_get_scale_factor(mon)));
+
+      char sbuf[32];
+      snprintf(sbuf, sizeof(sbuf), "%dx%d", geo.width, geo.height);
+      sentry_set_tag("screen_size", sbuf);
+    }
+    sentry_set_context("display", scr);
+  }
+
   // Build / runtime info as searchable extras
   sentry_set_extra("build_type", sentry_value_new_string(DT_BUILD_TYPE));
   sentry_set_tag("opencl", cl_enabled ? "yes" : "no");
