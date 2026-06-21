@@ -299,9 +299,12 @@ static JsonObject *_telemetry_system_properties(void)
 
   const gboolean cl = dt_opencl_is_enabled();
   json_object_set_boolean_member(p, "opencl", cl);
+#ifdef HAVE_OPENCL
+  // Device enumeration fields (num_devs/dev) only exist in HAVE_OPENCL builds.
   if(darktable.opencl && darktable.opencl->inited && darktable.opencl->num_devs > 0 && darktable.opencl->dev
      && darktable.opencl->dev[0].name)
     json_object_set_string_member(p, "gpu", darktable.opencl->dev[0].name);
+#endif
 
 #if !defined(_WIN32) && !defined(__APPLE__)
   const char *session_type = g_getenv("XDG_SESSION_TYPE");
