@@ -303,7 +303,10 @@ void _hm_show_toposort_cycle_popup(GList *cycle_nodes, GHashTable *id_ht)
 
   GString *text = g_string_new(NULL);
   gchar *prefix = g_markup_escape_text(
-      _("Module ordering constraints contain a cycle and cannot be satisfied.\n\nCycle:\n\n"), -1);
+      _("Module ordering constraints contain a cycle and cannot be satisfied."
+        "Merging pipeline is aborted, we default to source image pipeline order.\n\n"
+        "The next step will allow you to review and edit modules ordering manually."
+        "\n\nCycle:\n\n"), -1);
   g_string_append(text, prefix);
   dt_free(prefix);
   g_string_append(text, cycle->str);
