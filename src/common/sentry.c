@@ -32,6 +32,15 @@
 
 #include <sentry.h>
 
+#include <signal.h> // for sig_atomic_t
+
+#if defined(__linux__)
+#include <fcntl.h>      // for open flags
+#include <sys/prctl.h>  // for PR_SET_PTRACER
+#include <sys/wait.h>   // for waitpid
+#include <unistd.h>     // for fork, getpid
+#endif
+
 #ifndef SENTRY_DSN
 #define SENTRY_DSN ""
 #endif
@@ -47,6 +56,10 @@
 
 static gboolean _sentry_inited = FALSE;
 
+// Set once sentry's on_crash hook has captured a gdb backtrace, so the local
+// signal handler can skip running gdb a second time for the same crash.
+static volatile sig_atomic_t _sentry_backtrace_captured = 0;
+
 // Length of the running session, in seconds. darktable.start_wtime is stamped at
 // the very start of dt_init().
 static double _sentry_session_seconds(void)
@@ -55,10 +68,9 @@ static double _sentry_session_seconds(void)
   return (dur > 0.0) ? dur : 0.0;
 }
 
-// Stamp every outgoing event with the current session length. For inproc crashes
-// this runs inside the crashing process (before the event is serialized to disk),
-// so the crash event carries the exact time-to-crash. Also covers non-crash events.
-static sentry_value_t _sentry_before_send(sentry_value_t event, void *hint, void *user_data)
+// Stamp the event with the current session length, in seconds. For crashes this
+// runs inside the crashing process, so the value is the exact time-to-crash.
+static void _sentry_stamp_session_length(sentry_value_t event)
 {
   const double dur = _sentry_session_seconds();
 
@@ -89,8 +101,102 @@ static sentry_value_t _sentry_before_send(sentry_value_t event, void *hint, void
   {
     sentry_value_set_by_key(tags, "session_seconds", sentry_value_new_string(buf));
   }
+}
+
+// before_send handles NON-crash events (on_crash takes over for crashes). Stamp
+// the session length so every event carries it.
+static sentry_value_t _sentry_before_send(sentry_value_t event, void *hint, void *user_data)
+{
+  _sentry_stamp_session_length(event);
+  return event;
+}
+
+#if defined(__linux__)
+// Run gdb against the crashing process and capture its backtrace into a freshly
+// allocated buffer (NUL-terminated; *len excludes the terminator). Returns NULL
+// on failure. This mirrors the local gdb fallback in system_signal_handling.c but
+// returns the text so it can be attached to the Sentry crash report.
+static char *_sentry_capture_gdb_backtrace(gsize *len)
+{
+  gchar *name = NULL;
+  const int fd = g_file_open_tmp("ansel_sentry_bt_XXXXXX.txt", &name, NULL);
+  if(fd == -1) return NULL;
+  close(fd);
+
+  gchar *pid_arg = g_strdup_printf("%d", (int)getpid());
+  gchar *exe_arg = g_strdup_printf("/proc/%s/exe", pid_arg);
+  gchar *log_file_arg = g_strdup_printf("set logging file %s", name);
+
+  char *contents = NULL;
+  const pid_t pid = fork();
+  if(pid == 0)
+  {
+    // child: gdb attaches to the parent and dumps all threads' backtraces
+    execlp("gdb", "gdb", exe_arg, pid_arg, "-batch",
+           "-ex", "set pagination off",
+           "-ex", "set confirm off",
+           "-ex", log_file_arg,
+           "-ex", "set logging overwrite on",
+           "-ex", "set logging redirect on",
+           "-ex", "set logging enabled on",
+           "-ex", "thread apply all bt full",
+           NULL);
+    _exit(127); // execlp only returns on failure
+  }
+  else if(pid > 0)
+  {
+    prctl(PR_SET_PTRACER, pid, 0, 0, 0); // let the child ptrace us (Yama)
+    waitpid(pid, NULL, 0);
+
+    gsize n = 0;
+    if(g_file_get_contents(name, &contents, &n, NULL))
+    {
+      if(len) *len = n;
+    }
+    else
+    {
+      contents = NULL;
+    }
+  }
+
+  g_unlink(name);
+  g_free(name);
+  g_free(pid_arg);
+  g_free(exe_arg);
+  g_free(log_file_arg);
+  return contents;
+}
+#endif // __linux__
+
+// on_crash replaces before_send for crash events (inproc). It runs before the
+// crash event/attachments are serialized, so this is where we both stamp the
+// session length and attach a full gdb backtrace to the report.
+static sentry_value_t _sentry_on_crash(const sentry_ucontext_t *uctx, sentry_value_t event, void *user_data)
+{
+  _sentry_stamp_session_length(event);
+
+#if defined(__linux__)
+  gsize bt_len = 0;
+  char *bt = _sentry_capture_gdb_backtrace(&bt_len);
+  if(bt && bt_len > 0)
+  {
+    // Registered on the scope, this is picked up when the crash envelope is
+    // assembled (right after this hook returns). sentry copies the bytes.
+    sentry_attach_bytes(bt, bt_len, "gdb-backtrace.txt");
+
+    // Tell the local signal handler (which runs next in the chain) not to run
+    // gdb again for this same crash.
+    _sentry_backtrace_captured = 1;
+  }
+  g_free(bt);
+#endif
 
   return event;
+}
+
+gboolean dt_sentry_backtrace_captured(void)
+{
+  return _sentry_backtrace_captured != 0;
 }
 
 // Ask the user, once, whether they agree to send anonymous crash reports.
@@ -286,9 +392,11 @@ void dt_sentry_init(const gboolean have_gui)
   sentry_options_set_environment(options, DT_BUILD_TYPE);
   sentry_options_set_debug(options, (darktable.unmuted & DT_DEBUG_CONTROL) ? 1 : 0);
 
-  // Stamp every event - including crash events, computed at crash time - with the
-  // session length.
+  // Stamp non-crash events with the session length...
   sentry_options_set_before_send(options, _sentry_before_send, NULL);
+  // ...and for crashes, stamp the session length and attach a full gdb backtrace
+  // (on_crash replaces before_send for crash events).
+  sentry_options_set_on_crash(options, _sentry_on_crash, NULL);
 
   // Release health: starts a session now, ended healthy on dt_sentry_shutdown()
   // or marked crashed by the in-process handler. This is what produces the
@@ -335,6 +443,11 @@ void dt_sentry_init(const gboolean have_gui)
 
 void dt_sentry_shutdown(void)
 {
+}
+
+gboolean dt_sentry_backtrace_captured(void)
+{
+  return FALSE;
 }
 
 #endif // HAVE_SENTRY

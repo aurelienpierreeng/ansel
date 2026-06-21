@@ -27,6 +27,7 @@
 #endif
 
 #include "common/darktable.h"     // for darktable, darktable_t
+#include "common/sentry.h"        // for dt_sentry_backtrace_captured
 #include "common/system_signal_handling.h"
 #include <errno.h>       // for errno
 #include <fcntl.h>       // for O_APPEND, O_CREAT, O_WRONLY, open
@@ -90,6 +91,15 @@ static int dprintf(int fd, const char *fmt, ...) __attribute__((format(printf, 2
 #if !defined(__APPLE__) && !defined(_WIN32)
 static void _dt_sigsegv_handler(int param)
 {
+  // Sentry's crash handler runs first and chains here. If it already produced a
+  // gdb backtrace (attached to the crash report), don't run gdb a second time;
+  // just pass the signal on to the original handler.
+  if(dt_sentry_backtrace_captured())
+  {
+    _dt_sigsegv_old_handler(param);
+    return;
+  }
+
   pid_t pid;
   gchar *name_used;
   int fout;

@@ -43,6 +43,11 @@ void dt_sentry_init(const gboolean have_gui);
  * initialized. */
 void dt_sentry_shutdown(void);
 
+/** Whether sentry's crash handler has already captured a gdb backtrace for the
+ * current crash. The local signal handler uses this to avoid running gdb twice.
+ * Returns FALSE when built without sentry support. */
+gboolean dt_sentry_backtrace_captured(void);
+
 #ifdef __cplusplus
 }
 #endif
