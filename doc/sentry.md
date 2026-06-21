@@ -292,6 +292,18 @@ to match the project's EU data residency (override with `SENTRY_HOST`).
 4. After releasing the fix, mark the issue **Resolved** in Sentry (optionally "resolved in the next
    release" so a regression reopens it).
 
+**Triage from CI.** `.github/workflows/sentry-triage.yml` is a manual (`workflow_dispatch`) wrapper:
+from the Actions tab, "Run workflow", paste an issue id/URL. It runs the fetch script, attaches the
+backtrace bundle as an artifact, prints the summary to the run's step summary, and **opens a GitHub
+issue once** (deduplicated by a `sentry-issue:<id>` marker) so the crash lands in the tracker. It only
+fetches and surfaces — it does **not** change code or open a PR.
+
+It needs a repository secret **`SENTRY_READ_TOKEN`**: a Sentry *User Auth Token* with
+`event:read` + `project:read` + `org:read`. This is **separate** from the `SENTRY_AUTH_TOKEN` used by
+the nightly workflows for [symbol upload](#symbolication) — that one is an organization token with
+release/write scopes and returns HTTP 403 on issue reads. (A single User Auth Token carrying both sets
+of scopes could serve both, but keeping them separate scopes each minimally.)
+
 For a more hands-off setup, Sentry's own **Seer** (AI root-cause / autofix) and the **GitHub
 integration** can suggest fixes and open PRs directly from an issue; and an issue alert can
 auto-create a GitHub issue. Those run server-side and are configured in the Sentry project settings,
@@ -319,4 +331,5 @@ independently of this script.
 | `data/anselconfig.xml.in` / `.dtd`, `tools/generate_prefs.xsl` | the `sentry/enabled` preference |
 | `tools/sentry-upload-symbols.sh` | debug-file (symbol) upload |
 | `tools/sentry-fetch-issue.sh` | pull an issue's backtrace + attachments locally to fix it |
+| `.github/workflows/sentry-triage.yml` | manual CI triage: fetch backtrace, artifact, auto-open a GitHub issue |
 | `.github/workflows/{lin,mac,win}-nightly.yml` | call the upload script with the CI secret |

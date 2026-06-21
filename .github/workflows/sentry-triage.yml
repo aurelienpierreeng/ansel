@@ -1,0 +1,114 @@
+#   This file is part of the Ansel project.
+#   Copyright (C) 2026 Aurélien PIERRE.
+#
+#   Ansel is free software: you can redistribute it and/or modify
+#   it under the terms of the GNU General Public License as published by
+#   the Free Software Foundation, either version 3 of the License, or
+#   (at your option) any later version.
+#
+#   Ansel is distributed in the hope that it will be useful,
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#   GNU General Public License for more details.
+#
+#   You should have received a copy of the GNU General Public License
+#   along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
+
+# Manually triage a Sentry crash: fetch its backtrace + crash context with
+# tools/sentry-fetch-issue.sh, attach them as an artifact, and open (once) a
+# GitHub issue carrying the backtrace so it lands in the tracker.
+#
+# Requires a repository secret SENTRY_READ_TOKEN: a Sentry *User Auth Token* with
+# the scopes event:read + project:read + org:read (the org token used for symbol
+# upload in the nightly workflows cannot read issues and returns HTTP 403).
+
+name: Sentry crash triage
+
+on:
+  workflow_dispatch:
+    inputs:
+      issue:
+        description: "Sentry issue id or URL (e.g. 129371422)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Parse issue id
+        id: parse
+        run: |
+          id="$(printf '%s' '${{ inputs.issue }}' | grep -oE '[0-9]{5,}' | head -n1)"
+          [ -n "$id" ] || { echo "could not parse an issue id from input"; exit 1; }
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch backtrace from Sentry
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_READ_TOKEN }}
+        run: |
+          if [ -z "${SENTRY_AUTH_TOKEN}" ]; then
+            echo "::error::SENTRY_READ_TOKEN secret is not set (needs a User Auth Token with event:read/project:read/org:read)"
+            exit 1
+          fi
+          tools/sentry-fetch-issue.sh "${{ steps.parse.outputs.id }}" "sentry-issue-${{ steps.parse.outputs.id }}" \
+            > /dev/null
+          echo "## Sentry issue ${{ steps.parse.outputs.id }}" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat "sentry-issue-${{ steps.parse.outputs.id }}/summary.txt" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload triage bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: sentry-issue-${{ steps.parse.outputs.id }}
+          path: sentry-issue-${{ steps.parse.outputs.id }}/
+          if-no-files-found: error
+
+      - name: Open GitHub issue (deduplicated)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ID: ${{ steps.parse.outputs.id }}
+        run: |
+          set -euo pipefail
+          dir="sentry-issue-${ID}"
+          marker="sentry-issue:${ID}"
+          sentry_url="https://aurelienpierreeng.sentry.io/issues/${ID}/"
+          title="Crash: $(jq -r '.title // "unknown"' "${dir}/issue.json") (Sentry #${ID})"
+
+          # Skip if an issue carrying this marker already exists (any state).
+          existing="$(gh issue list --state all --search "${marker} in:body" \
+                       --json number --jq '.[0].number // empty' || true)"
+          if [ -n "${existing}" ]; then
+            echo "Issue #${existing} already tracks Sentry ${ID}; not creating a duplicate."
+            echo "Existing issue: #${existing}" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          {
+            echo "Automated triage of Sentry crash [#${ID}](${sentry_url})."
+            echo
+            echo "<!-- ${marker} -->"
+            echo
+            echo '```'
+            cat "${dir}/summary.txt"
+            echo '```'
+            echo
+            echo "_Full event JSON and any attachments are in the workflow run's \`${dir}\` artifact._"
+          } > issue-body.md
+
+          url="$(gh issue create --title "${title}" --body-file issue-body.md \
+                   --label crash --label sentry 2>/dev/null \
+                 || gh issue create --title "${title}" --body-file issue-body.md)"
+          echo "Created ${url}"
+          echo "Created issue: ${url}" >> "$GITHUB_STEP_SUMMARY"
