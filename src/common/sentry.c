@@ -60,6 +60,11 @@ static gboolean _sentry_inited = FALSE;
 // signal handler can skip running gdb a second time for the same crash.
 static volatile sig_atomic_t _sentry_backtrace_captured = 0;
 
+// Per-session module usage counts ("category/name" -> count). Mutated only from
+// the GUI thread; mirrored into the sentry scope on each change so the crash
+// handler never has to read this table (which would be unsafe in a signal context).
+static GHashTable *_module_usage = NULL;
+
 // Length of the running session, in seconds. darktable.start_wtime is stamped at
 // the very start of dt_init().
 static double _sentry_session_seconds(void)
@@ -197,6 +202,30 @@ static sentry_value_t _sentry_on_crash(const sentry_ucontext_t *uctx, sentry_val
 gboolean dt_sentry_backtrace_captured(void)
 {
   return _sentry_backtrace_captured != 0;
+}
+
+void dt_sentry_record_module_usage(const char *category, const char *name)
+{
+  if(!_sentry_inited || !category || !name || !*name) return;
+
+  if(!_module_usage)
+    _module_usage = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+
+  // g_hash_table_insert frees the duplicate key when the entry already exists,
+  // so the table keeps a single owned copy of each key.
+  char *key = g_strdup_printf("%s/%s", category, name);
+  const int count = GPOINTER_TO_INT(g_hash_table_lookup(_module_usage, key)) + 1;
+  g_hash_table_insert(_module_usage, key, GINT_TO_POINTER(count));
+
+  // Push the whole map into the scope as the "module_usage" context. Cheap at
+  // human interaction rates, and keeps the crash path free of table iteration.
+  sentry_value_t obj = sentry_value_new_object();
+  GHashTableIter iter;
+  gpointer k, v;
+  g_hash_table_iter_init(&iter, _module_usage);
+  while(g_hash_table_iter_next(&iter, &k, &v))
+    sentry_value_set_by_key(obj, (const char *)k, sentry_value_new_int32(GPOINTER_TO_INT(v)));
+  sentry_set_context("module_usage", obj);
 }
 
 // Ask the user, once, whether they agree to send anonymous crash reports.
@@ -433,6 +462,12 @@ void dt_sentry_shutdown(void)
 
   sentry_close();
   _sentry_inited = FALSE;
+
+  if(_module_usage)
+  {
+    g_hash_table_destroy(_module_usage);
+    _module_usage = NULL;
+  }
 }
 
 #else // !HAVE_SENTRY
@@ -448,6 +483,10 @@ void dt_sentry_shutdown(void)
 gboolean dt_sentry_backtrace_captured(void)
 {
   return FALSE;
+}
+
+void dt_sentry_record_module_usage(const char *category, const char *name)
+{
 }
 
 #endif // HAVE_SENTRY

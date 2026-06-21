@@ -48,6 +48,18 @@ void dt_sentry_shutdown(void);
  * Returns FALSE when built without sentry support. */
 gboolean dt_sentry_backtrace_captured(void);
 
+/** Record that a module was used during this session, e.g. a view was entered,
+ * an iop module was enabled, or a lib panel was opened. Per-module counts are
+ * attached to crash reports as the "module_usage" context, so a crash shows
+ * which modules were exercised beforehand.
+ *
+ * @param category short kind, e.g. "view", "iop", "lib".
+ * @param name     module identifier (view module_name, iop op, lib plugin_name).
+ *
+ * Must be called from the GUI thread. No-op without sentry, or before init /
+ * when the user has not opted in. */
+void dt_sentry_record_module_usage(const char *category, const char *name);
+
 #ifdef __cplusplus
 }
 #endif

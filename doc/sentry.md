@@ -104,6 +104,12 @@ After init we attach environment context (never any user content):
 - **tags** (searchable/filterable in the dashboard): `opencl`, `opencl_device`, and on Linux/BSD
   `display_server` (x11/wayland), `desktop_environment` (GNOME/KDE/…), `gdk_backend` (what GTK
   actually renders on).
+- **module_usage** context: per-session counts of how often each module was used — views entered,
+  iop modules enabled, lib panels opened — keyed `view/<name>`, `iop/<op>`, `lib/<plugin_name>`. It
+  shows which modules were exercised in the session that crashed. Counts are recorded via
+  `dt_sentry_record_module_usage()` from the GUI thread and mirrored into the scope on each change,
+  so the crash handler never reads the live table. This is crash *context* only — Ansel does not do
+  all-session feature analytics (Sentry is not an analytics product).
 
 ### Sessions and session length
 
