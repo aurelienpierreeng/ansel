@@ -257,6 +257,46 @@ Tip: run with `-d control` to see `[sentry] crash reporting initialized` and con
 active. The local crash database is at `~/.cache/ansel/sentry-native/`; a pending `*.envelope` there
 means a captured crash that has not been uploaded yet (it will be, on the next launch).
 
+## Fetching and fixing an issue
+
+To turn a Sentry issue into a fix without clicking through the web UI, use
+`tools/sentry-fetch-issue.sh`. It pulls an issue's **latest event** (stack trace, tags, device /
+display / `module_usage` / `processed_image` contexts) and downloads its **attachments** — including
+the `gdb-backtrace.txt` Ansel attaches on Linux crashes — into a folder, and prints a readable
+summary on stdout:
+
+```sh
+tools/sentry-fetch-issue.sh 129371422
+# or paste the whole URL:
+tools/sentry-fetch-issue.sh https://aurelienpierreeng.sentry.io/issues/129371422/
+```
+
+Output (default `sentry-issue-<id>/`): `summary.txt` (read first), `event.json` (full event),
+`issue.json` (metadata), and any attachments (`gdb-backtrace.txt`, …).
+
+**Auth/scopes.** This reads issue data, so it needs a token with `event:read`, `project:read` and
+`org:read` — the organization token used for [symbol upload](#symbolication)
+(`project:releases`/`project:write`) is **not** sufficient and returns HTTP 403. Create a **User Auth
+Token** with those scopes (it can also carry the release/write scopes, so one token serves both
+scripts) at <https://aurelienpierreeng.sentry.io/settings/account/api/auth-tokens/> and put it in
+`.sentry-auth` (git-ignored) or `SENTRY_AUTH_TOKEN`. The region host defaults to `https://de.sentry.io`
+to match the project's EU data residency (override with `SENTRY_HOST`).
+
+**The "fix it" loop.** Pair the fetch with an AI coding assistant (e.g. Claude Code) for a tight loop:
+
+1. `tools/sentry-fetch-issue.sh <id>` to pull the backtrace and crash context locally.
+2. Ask the assistant to read `sentry-issue-<id>/summary.txt` and `gdb-backtrace.txt`, locate the
+   faulting frame in the tree, and propose a fix on a branch.
+3. The `processed_image` / `module_usage` context usually points at the reproduction (which pipeline,
+   which file type, which modules were active).
+4. After releasing the fix, mark the issue **Resolved** in Sentry (optionally "resolved in the next
+   release" so a regression reopens it).
+
+For a more hands-off setup, Sentry's own **Seer** (AI root-cause / autofix) and the **GitHub
+integration** can suggest fixes and open PRs directly from an issue; and an issue alert can
+auto-create a GitHub issue. Those run server-side and are configured in the Sentry project settings,
+independently of this script.
+
 ## How to disable it
 
 - **For a build/distribution**: configure with `-DUSE_SENTRY=OFF` (no Sentry code at all), or
@@ -278,4 +318,5 @@ means a captured crash that has not been uploaded yet (it will be, on the next l
 | `src/common/darktable.c` | calls `dt_sentry_init()` / `dt_sentry_shutdown()` |
 | `data/anselconfig.xml.in` / `.dtd`, `tools/generate_prefs.xsl` | the `sentry/enabled` preference |
 | `tools/sentry-upload-symbols.sh` | debug-file (symbol) upload |
+| `tools/sentry-fetch-issue.sh` | pull an issue's backtrace + attachments locally to fix it |
 | `.github/workflows/{lin,mac,win}-nightly.yml` | call the upload script with the CI secret |
