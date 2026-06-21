@@ -35,6 +35,49 @@ static void _dt_iop_autoset_restart_cache_wait(gpointer user_data)
   dt_iop_autoset_advance(manager->dev, manager);
 }
 
+// Leave the busy cursor/progress state, exactly once.
+static void _dt_iop_autoset_progress_leave(dt_autoset_manager_t *manager)
+{
+  if(!IS_NULL_PTR(manager) && manager->progress_cursor_active)
+  {
+    dt_control_log_busy_leave();
+    manager->progress_cursor_active = FALSE;
+  }
+}
+
+// Tear down an autoset run: drop any pending cache-wait, clear the pipe flag
+// and release the busy cursor. Called whenever the queue can no longer be
+// processed (exhausted, or every remaining module went stale).
+static void _dt_iop_autoset_finish(dt_dev_pixelpipe_t *pipe, dt_autoset_manager_t *manager,
+                                   dt_dev_pixelpipe_cache_wait_t *input_wait, const char *reason)
+{
+  if(!IS_NULL_PTR(input_wait))
+    dt_dev_pixelpipe_cache_wait_cleanup(input_wait, reason);
+  if(!IS_NULL_PTR(pipe))
+    pipe->autoset = FALSE;
+  _dt_iop_autoset_progress_leave(manager);
+}
+
+// Pop the next still-valid module off the queue, discarding stale entries.
+// The pipeline can be torn down and rebuilt between two advance() calls, so a
+// queued module pointer may dangle, get reused for a different module, or lose
+// its autoset callback. Re-validate against the live module list before use.
+static dt_iop_module_t *_dt_iop_autoset_peek_next(struct dt_develop_t *dev, dt_autoset_manager_t *manager)
+{
+  GList *mod = g_list_first(manager->iop_to_set);
+  while(mod)
+  {
+    dt_iop_module_t *module = (dt_iop_module_t *)mod->data;
+    if(!IS_NULL_PTR(module) && g_list_find(dev->iop, module) && !IS_NULL_PTR(module->autoset))
+      return module;
+
+    // Stale entry: drop it and look at the next one.
+    manager->iop_to_set = g_list_delete_link(manager->iop_to_set, mod);
+    mod = g_list_first(manager->iop_to_set);
+  }
+  return NULL;
+}
+
 gchar *dt_iop_autoset_get_conf_key(const dt_iop_module_t *module)
 {
   if(IS_NULL_PTR(module)) return NULL;
@@ -63,55 +106,44 @@ void dt_iop_autoset_module_set_enabled(const dt_iop_module_t *module, const gboo
 
 void dt_iop_autoset_build_list(struct dt_develop_t *dev, dt_autoset_manager_t *manager)
 {
+  if(IS_NULL_PTR(dev) || IS_NULL_PTR(manager)) return;
+
   if(IS_NULL_PTR(manager->input_wait))
     manager->input_wait = g_malloc0(sizeof(dt_dev_pixelpipe_cache_wait_t));
-  dt_dev_pixelpipe_cache_wait_t *input_wait = (dt_dev_pixelpipe_cache_wait_t *)manager->input_wait;
-  manager->dev = dev;
-  if(!IS_NULL_PTR(input_wait))
-    dt_dev_pixelpipe_cache_wait_cleanup(input_wait, "autoset-build-list-reset");
+  dt_dev_pixelpipe_cache_wait_cleanup((dt_dev_pixelpipe_cache_wait_t *)manager->input_wait,
+                                      "autoset-build-list-reset");
 
-  if(manager->progress_cursor_active)
-  {
-    dt_control_log_busy_leave();
-    manager->progress_cursor_active = FALSE;
-  }
+  manager->dev = dev;
+  _dt_iop_autoset_progress_leave(manager);
 
   g_list_free(manager->iop_to_set);
   manager->iop_to_set = NULL;
   dev->preview_pipe->autoset = TRUE;
   for(GList *mod = g_list_first(dev->iop); mod; mod = g_list_next(mod))
   {
-    dt_iop_module_t * module = (dt_iop_module_t *)mod->data;
+    dt_iop_module_t *module = (dt_iop_module_t *)mod->data;
     if(module->enabled && !IS_NULL_PTR(module->autoset) && dt_iop_autoset_module_is_enabled(module))
-    {
       manager->iop_to_set = g_list_append(manager->iop_to_set, module);
-      fprintf(stdout, "adding %s\n", module->op);
-    }
   }
 
-  // Start immediately in case we already have the output in cache
+  // Start immediately in case we already have the output in cache. If the
+  // cacheline was not found, the request was sent to the pipeline, so retry later.
   dt_iop_autoset_advance(dev, manager);
-  // If the cacheline was not found, request was sent to pipeline so just retry later.
 }
 
 int dt_iop_autoset_advance(struct dt_develop_t *dev, dt_autoset_manager_t *manager)
 {
+  if(IS_NULL_PTR(dev) || IS_NULL_PTR(manager)) return 1;
+
   if(IS_NULL_PTR(manager->input_wait))
     manager->input_wait = g_malloc0(sizeof(dt_dev_pixelpipe_cache_wait_t));
   dt_dev_pixelpipe_cache_wait_t *input_wait = (dt_dev_pixelpipe_cache_wait_t *)manager->input_wait;
-
-  GList *mod = g_list_first(manager->iop_to_set);
   dt_dev_pixelpipe_t *pipe = dev->preview_pipe;
-  if(IS_NULL_PTR(mod)) 
+
+  dt_iop_module_t *module = _dt_iop_autoset_peek_next(dev, manager);
+  if(IS_NULL_PTR(module))
   {
-    if(!IS_NULL_PTR(input_wait))
-      dt_dev_pixelpipe_cache_wait_cleanup(input_wait, "autoset-finished");
-    pipe->autoset = FALSE;
-    if(manager->progress_cursor_active)
-    {
-      dt_control_log_busy_leave();
-      manager->progress_cursor_active = FALSE;
-    }
+    _dt_iop_autoset_finish(pipe, manager, input_wait, "autoset-finished");
     return 1;
   }
 
@@ -123,71 +155,39 @@ int dt_iop_autoset_advance(struct dt_develop_t *dev, dt_autoset_manager_t *manag
     manager->progress_cursor_active = TRUE;
   }
 
-  dt_iop_module_t *module = (dt_iop_module_t *)mod->data;
-  if(IS_NULL_PTR(module))
-  {
-    if(!IS_NULL_PTR(input_wait))
-      dt_dev_pixelpipe_cache_wait_cleanup(input_wait, "autoset-module-missing");
-    pipe->autoset = FALSE;
-    if(manager->progress_cursor_active)
-    {
-      dt_control_log_busy_leave();
-      manager->progress_cursor_active = FALSE;
-    }
-    return 1;
-  }
-
-  fprintf(stdout, "trying to fetch cache from %s\n", module->op);
-
-  // Note: module pieces (aka pipeline nodes) are not stable in time:
-  // pipeline can be completely destroyed and reconstructed. So we can't store 
-  // direct references, we need to grab the current piece attached to module
-  // in the current pipeline.
+  // Module pieces (pipeline nodes) are not stable in time: the pipeline can be
+  // destroyed and reconstructed, so grab the piece currently attached to the
+  // module rather than caching a reference.
   const dt_dev_pixelpipe_iop_t *const piece = dt_dev_pixelpipe_get_module_piece(pipe, module);
   if(IS_NULL_PTR(piece)) return 1;
   const dt_dev_pixelpipe_iop_t *const input_piece = dt_dev_pixelpipe_get_prev_enabled_piece(pipe, piece);
   if(IS_NULL_PTR(input_piece)) return 1;
 
-  // Get the corresponding pipeline cache entry immediately if possible,
-  // else the following function requests a partial pipe recompute
+  // Get the corresponding pipeline cache entry immediately if possible, else the
+  // following function requests a partial pipe recompute and we retry later.
   dt_pixel_cache_entry_t *entry = NULL;
   void *input = NULL;
-  if(IS_NULL_PTR(input_wait))
-    return 1;
   dt_dev_pixelpipe_cache_wait_set_owner(input_wait, "autoset-input", manager);
   if(!dt_dev_pixelpipe_cache_peek_gui(pipe, input_piece, &input, &entry,
                                       input_wait, _dt_iop_autoset_restart_cache_wait, manager))
     return 1;
 
-  fprintf(stdout, "processing %s\n", module->op);
-
-  // module->autoset will manipulate the internal parameters of the module
-  // outside of the normal control flow (GUI).
-  // We need to protect any concurrent params writing from the GUI
-  // and write history while we still have the lock.
+  // module->autoset manipulates the module's internal parameters outside of the
+  // normal (GUI) control flow. Protect concurrent params writes from the GUI and
+  // write history while we still hold the lock.
   dt_iop_gui_enter_critical_section(module);
-
   dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, entry);
   module->autoset(module, pipe, piece, input);
   dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, entry);
-
   dt_dev_add_history_item(dev, module, FALSE, FALSE);
   dt_iop_gui_leave_critical_section(module);
 
-  // Params have changed, update the module GUI to reflect it.
+  // Params have changed: refresh the module GUI to reflect it.
   dt_iop_gui_update(module);
 
-  manager->iop_to_set = g_list_delete_link(manager->iop_to_set, mod);
+  manager->iop_to_set = g_list_remove(manager->iop_to_set, module);
   if(IS_NULL_PTR(manager->iop_to_set))
-  {
-    if(!IS_NULL_PTR(input_wait))
-      dt_dev_pixelpipe_cache_wait_cleanup(input_wait, "autoset-list-empty");
-    pipe->autoset = FALSE;
-    if(manager->progress_cursor_active)
-    {
-      dt_control_log_busy_leave();
-      manager->progress_cursor_active = FALSE;
-    }
-  }
+    _dt_iop_autoset_finish(pipe, manager, input_wait, "autoset-list-empty");
+
   return 0;
 }
