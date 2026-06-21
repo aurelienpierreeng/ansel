@@ -188,11 +188,30 @@ static dt_histogram_preview_refresh_state_t _preview_refresh_state
     = { DT_PIXELPIPE_CACHE_HASH_INVALID, DT_PIXELPIPE_CACHE_HASH_INVALID,
         DT_PIXELPIPE_CACHE_HASH_INVALID, NULL };
 static void _schedule_histogram_refresh(dt_lib_module_t *self);
+static void _reset_cache(dt_lib_histogram_t *d);
 
 static void _histogram_restart_cache_wait(gpointer user_data)
 {
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
   if(IS_NULL_PTR(self)) return;
+  _schedule_histogram_refresh(self);
+}
+
+/**
+ * @brief Retry a scope render after its source cacheline has been published.
+ *
+ * The first render attempt stores the current backbuffer hash in the Cairo cache
+ * before the non-blocking GUI cache probe can report a miss. Invalidate that
+ * rendered-state cache here so the wait-manager wake-up retries pixel binning
+ * instead of treating the incomplete surface as current.
+ */
+static void _histogram_restart_scope_cache_wait(gpointer user_data)
+{
+  dt_lib_module_t *self = (dt_lib_module_t *)user_data;
+  dt_lib_histogram_t *d = !IS_NULL_PTR(self) ? self->data : NULL;
+  if(IS_NULL_PTR(d)) return;
+
+  _reset_cache(d);
   _schedule_histogram_refresh(self);
 }
 
@@ -656,7 +675,7 @@ void _scope_pixel_to_display_rgb(const dt_aligned_pixel_t rgb_in, dt_aligned_pix
   }
 }
 
-void _reset_cache(dt_lib_histogram_t *d)
+static void _reset_cache(dt_lib_histogram_t *d)
 {
   d->cache.view = DT_LIB_HISTOGRAM_SCOPE_N;
   d->cache.width = -1;
@@ -766,12 +785,26 @@ static void _sync_pending_histogram_hashes(dt_lib_module_t *self)
 }
 
 
+static const dt_dev_pixelpipe_iop_t *_get_backbuf_source_piece(const dt_backbuf_t *backbuf, const char *op);
+
+/**
+ * @brief Check that the selected histogram backbuffer belongs to the current preview graph.
+ *
+ * Global histogram stages are independent published cachelines. Their
+ * `CACHELINE_READY` signal is raised while the preview pipeline is still
+ * processing, before its final backbuffer becomes valid. Requiring that final
+ * backbuffer here would discard the only refresh scheduled for the newly
+ * published histogram stage after a module parameter change.
+ *
+ * Matching the stage hash against the current piece is sufficient: the
+ * histogram backbuffer owns its cache reference, and the piece hash proves
+ * that its pixels and geometry belong to the synchronized preview graph.
+ */
 static gboolean _is_backbuf_ready(dt_lib_histogram_t *d)
 {
   if(IS_NULL_PTR(d) || IS_NULL_PTR(d->backbuf)) return FALSE;
 
-  return (dt_dev_pixelpipe_is_backbufer_valid(darktable.develop->preview_pipe)) &&
-         (dt_dev_backbuf_get_hash(d->backbuf) != (uint64_t)-1);
+  return !IS_NULL_PTR(_get_backbuf_source_piece(d->backbuf, d->op));
 }
 
 static void _redraw_scopes(dt_lib_histogram_t *d)
@@ -854,8 +887,6 @@ static inline void _bin_pickers_histogram(const float *const restrict image,
   }
 }
 
-static const dt_dev_pixelpipe_iop_t *_get_backbuf_source_piece(const dt_backbuf_t *backbuf, const char *op);
-
 static gboolean _is_restricted(dt_lib_histogram_t *d)
 {
   if(IS_NULL_PTR(d)) return FALSE;
@@ -878,7 +909,7 @@ static void _process_histogram(dt_backbuf_t *backbuf, const char *op, cairo_t *c
     dt_dev_pixelpipe_cache_wait_set_owner(&d->scope_wait, "histogram-scope", d->module);
   if(!dt_dev_pixelpipe_cache_peek_gui(darktable.develop->preview_pipe, piece, &data, &entry,
                                       !IS_NULL_PTR(d) ? &d->scope_wait : NULL,
-                                      _histogram_restart_cache_wait,
+                                      _histogram_restart_scope_cache_wait,
                                       !IS_NULL_PTR(d) ? d->module : NULL))
   {
     return;
@@ -1139,7 +1170,7 @@ static void _process_waveform(dt_backbuf_t *backbuf, const char *op, cairo_t *cr
     dt_dev_pixelpipe_cache_wait_set_owner(&d->scope_wait, "histogram-scope", d->module);
   if(!dt_dev_pixelpipe_cache_peek_gui(darktable.develop->preview_pipe, piece, &data, &entry,
                                       !IS_NULL_PTR(d) ? &d->scope_wait : NULL,
-                                      _histogram_restart_cache_wait,
+                                      _histogram_restart_scope_cache_wait,
                                       !IS_NULL_PTR(d) ? d->module : NULL))
   {
     return;
@@ -1647,7 +1678,7 @@ static void _process_vectorscope(dt_backbuf_t *backbuf, const char *op, cairo_t 
   if(IS_NULL_PTR(piece)) return;
   dt_dev_pixelpipe_cache_wait_set_owner(&d->scope_wait, "histogram-scope", d->module);
   if(!dt_dev_pixelpipe_cache_peek_gui(darktable.develop->preview_pipe, piece, &data, &entry, &d->scope_wait,
-                                      _histogram_restart_cache_wait, d->module))
+                                      _histogram_restart_scope_cache_wait, d->module))
   {
     return;
   }
@@ -2506,11 +2537,11 @@ static void _picker_button_toggled(GtkToggleButton *button, dt_lib_histogram_t *
 
   const gboolean restrict_active = !IS_NULL_PTR(d->restrict_button)
       && gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d->restrict_button));
-  if(!picker_active && restrict_active)
+  if(restrict_active)
   {
-    /* Restrict mode changes the rendered bins from picker geometry to full-image
-     * bins when the live picker is disabled. The preview backbuffer hash does not
-     * change, so make the scope cache dirty from the UI state transition itself. */
+    /* The picker state is part of restricted-scope rendering but not of the
+     * preview backbuffer hash. Invalidate on both activation and deactivation
+     * so the same cached pixels are rebinned for the newly selected scope. */
     _reset_cache(d);
     if(_trigger_recompute(d)) _redraw_scopes(d);
   }
