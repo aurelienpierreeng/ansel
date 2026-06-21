@@ -100,6 +100,12 @@ jobs:
           cmake -E make_directory "${BUILD_DIR}"
           cmake -E make_directory "${INSTALL_PREFIX}"
           $(cygpath ${SRC_DIR})/.ci/ci-script.sh
+      - name: Upload debug symbols to Sentry
+        if: ${{ success() }}
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+        run: |
+          $(cygpath ${SRC_DIR})/tools/sentry-upload-symbols.sh "$(cygpath ${BUILD_DIR})"
       - name: Check if it runs
         run: |
           $(cygpath ${INSTALL_PREFIX})/bin/ansel.exe --version || true

@@ -94,6 +94,32 @@ jobs:
         run: |
           cd src
           bash .ci/ci-script-appimage.sh
+      - name: Install bundled-library debug symbols (glib2, gtk3)
+        if: ${{ success() }}
+        run: |
+          # We bundle glib2/gtk3 into the AppImage (copied from the runner's
+          # /usr/lib), so their build-ids are stable for this nightly. Pull the
+          # matching Ubuntu dbgsym packages so Sentry can symbolicate frames in
+          # them. libc is NOT bundled (host-provided), so it is left out.
+          codename="$(lsb_release -cs)"
+          {
+            echo "deb http://ddebs.ubuntu.com ${codename} main restricted universe multiverse"
+            echo "deb http://ddebs.ubuntu.com ${codename}-updates main restricted universe multiverse"
+          } | sudo tee /etc/apt/sources.list.d/ddebs.list >/dev/null
+          sudo apt-get install -y ubuntu-dbgsym-keyring \
+            || sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys F2EDC64DC5AEE1F6B9C621F0C8CAB6595FDFF622 \
+            || true
+          sudo apt-get update || true
+          sudo apt-get install -y libglib2.0-0-dbgsym libgtk-3-0-dbgsym || true
+      - name: Upload debug symbols to Sentry
+        if: ${{ success() }}
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+        run: |
+          # Scan the build tree (Ansel's own binaries) plus /usr/lib/debug, where
+          # the dbgsym packages above place the bundled libs' debug info. Matching
+          # is by build-id, so only the bundled glib2/gtk3 actually resolve.
+          bash "${SRC_DIR}/tools/sentry-upload-symbols.sh" "${SRC_DIR}/build" /usr/lib/debug
       - name: Package upload
         if: ${{ success() }}
         uses: actions/upload-artifact@v6

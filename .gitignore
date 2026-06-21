@@ -32,3 +32,5 @@ linuxdeploy-plugin-gtk.sh
 src/tests/integration/*/*
 tools/detect-unused-functions.py
 function_declarations.txt
+# Local Sentry auth token used by tools/sentry-upload-symbols.sh - never commit
+.sentry-auth

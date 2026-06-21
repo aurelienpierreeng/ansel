@@ -103,6 +103,12 @@ jobs:
           cmake -E make_directory "${INSTALL_PREFIX}";
           cd ${SRC_DIR}
           .ci/ci-script-mac.sh;
+      - name: Upload debug symbols to Sentry
+        if: ${{ success() }}
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+        run: |
+          bash "${SRC_DIR}/tools/sentry-upload-symbols.sh" "${BUILD_DIR}"
       - name: Check if it runs
         run: |
           ${INSTALL_PREFIX}/bin/ansel --version || true

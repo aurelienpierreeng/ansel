@@ -724,4 +724,9 @@ configure_file(
 add_custom_target(uninstall
                   COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake)
 
+# NOTE: Sentry debug-information (symbol) upload is intentionally NOT wired into
+# the build. It is handled out-of-band by tools/sentry-upload-symbols.sh, invoked
+# only by the nightly release workflows (and manually for local testing), so that
+# building - via build.sh, the regular CI, or plain cmake - never uploads symbols.
+
 feature_summary(WHAT ALL)
