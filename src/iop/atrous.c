@@ -737,9 +737,12 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *params, dt_dev
       _apply_mix(self, ch, k, p->mix, p->x[ch][k], p->y[ch][k], &x, &y);
       dt_draw_curve_set_point(d->curve[ch], k, x, y);
     }
-  int l = 0;
-  for(int k = (int)MIN(pipe->iwidth, pipe->iheight); k; k >>= 1) l++;
-  d->octaves = MIN(BANDS, l);
+  if(pipe)
+  {
+    int l = 0;
+    for(int k = (int)MIN(pipe->iwidth, pipe->iheight); k; k >>= 1) l++;
+    d->octaves = MIN(BANDS, l);
+  }
 
   piece->cache_output_on_ram = TRUE;
 }
@@ -756,9 +759,16 @@ void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pi
     for(int k = 0; k < BANDS; k++)
       (void)dt_draw_curve_add_point(d->curve[ch], default_params->x[ch][k], default_params->y[ch][k]);
   }
-  int l = 0;
-  for(int k = (int)MIN(pipe->iwidth, pipe->iheight); k; k >>= 1) l++;
-  d->octaves = MIN(BANDS, l);
+  if(pipe)
+  {
+    int l = 0;
+    for(int k = (int)MIN(pipe->iwidth, pipe->iheight); k; k >>= 1) l++;
+    d->octaves = MIN(BANDS, l);
+  }
+  else
+  {
+    d->octaves = BANDS;
+  }
 }
 
 void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
