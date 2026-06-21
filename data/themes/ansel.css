@@ -207,7 +207,24 @@
   ======================================*/
 
 /* Base Document Reset */
-* {
+scrolledwindow,
+treeview,
+button, 
+label, 
+entry, 
+textview,
+text,
+header,
+tabs,
+tab,
+menubar,
+menu,
+menuitem, 
+stack,
+list,
+row,
+#pathbarbox,
+spinbutton {
   background-color: transparent;
 }
 
@@ -234,6 +251,20 @@ window,
 dialog,
 messagedialog {
   background-color: @bg_color;
+}
+
+/* Client-side decorations (Wayland): GTK draws the modal/dialog title bar
+ * itself as a headerbar/.titlebar node inside the window, so it needs its own
+ * fill -- background-color doesn't inherit from the window box, and on X11 the
+ * WM draws the title bar (no GTK node) so this only shows up under Wayland. */
+headerbar,
+.titlebar,
+window.csd headerbar,
+window.csd .titlebar,
+window.csd headerbar:backdrop,
+window.csd .titlebar:backdrop {
+  background-color: @toolbar_color;
+  background-image: none;
 }
 
 /* Base Typographic Defaults & Background Reset for GTK nodes */
@@ -850,6 +881,46 @@ filechooser .sidebar-label {
 
 menuitem>arrow {
   padding-right: 0.42em;
+}
+
+/**
+ * Date-picker calendar (import dialog "Project date" popover, see
+ * attach_popover() in gui/gtk.c). GtkCalendar paints its own opaque default
+ * background, which would otherwise cover the popover's @toolbar_color fill -
+ * make it transparent so the popover surface shows through, and give the day
+ * cells a proper text color + selection / today affordance.
+ *
+ * NOTE: GtkCalendar (GTK 3.24) is fully custom-drawn from a single "calendar"
+ * CSS node. It only ever applies :selected to the picked day and PRELIGHT to
+ * the month-navigation arrows - it does NOT track a hover/prelight state for
+ * individual day cells, so there is no per-day :hover to style here. A
+ * `calendar:hover` rule would only match the whole widget (which GtkCalendar
+ * also never flags), so it is intentionally omitted: day-cell hover feedback
+ * is not achievable in CSS for this widget without subclassing it in code.
+ * The nav arrows are real "calendar.button" nodes and do get prelight, so
+ * they pick up the global *:hover affordance.
+ */
+calendar {
+  background-color: transparent;
+  color: @fg_color;
+  padding: 2px;
+}
+
+calendar.header,
+calendar.button,
+calendar.button:disabled {
+  background-color: transparent;
+  color: @fg_color;
+}
+
+calendar:selected {
+  background-color: @field_selected_bg;
+  color: @field_selected_fg;
+  border-radius: 4px;
+}
+
+calendar.highlight {
+  color: @bauhaus_value_text;
 }
 
 popover spinbutton {
@@ -1563,6 +1634,30 @@ treeview *:selected:not(check) {
   color: @disabled_fg_color;
 }
 
+/* Global hover affordance: guarantee that every widget reacts to the pointer,
+ * native GTK ones (filechooser, treeviews, calendar...) and our custom bauhaus
+ * widgets alike. The baseline response is text-only - brighter color and a
+ * semi-bold weight - so no widget feels dead on hover. Background colors are
+ * deliberately left to the context-specific rules below/elsewhere, since the
+ * right hover fill depends on the surface the widget sits on. The universal
+ * selector keeps specificity at zero, so any explicit hover rule still wins
+ * over this (including the background + matching text color pairs below). */
+*:hover {
+  color: shade(@fg_color, 1.2);
+  font-weight: 500;
+}
+
+/* GTK :hover only flags the exact node under the pointer; in composite widgets
+ * (menuitem, checkbutton, button, row...) the visible text lives in a child
+ * GtkLabel that never gets :hover itself, so the weight above would miss it.
+ * Re-apply the semi-bold weight to those nested labels too. Color is left to
+ * inherit from the hovered ancestor (set by *:hover or the context rules
+ * below), so a label sitting on a light hover fill keeps its readable dark
+ * text instead of being forced near-white. */
+*:hover label {
+  font-weight: 500;
+}
+
 /* Hover Adjustments */
 .dt_transparent_background:hover,
 row:hover,
@@ -1574,6 +1669,7 @@ button:hover,
 slider:hover {
   background-color: @button_hover_bg;
   color: @button_hover_fg;
+  font-weight: 500;
 }
 
 .dt_bauhaus:hover,
