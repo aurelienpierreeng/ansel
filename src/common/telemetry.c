@@ -255,6 +255,15 @@ static JsonObject *_telemetry_session_end_properties(void)
   const double dur = dt_get_wtime() - darktable.start_wtime;
   json_object_set_double_member(p, "session_seconds", (dur > 0.0) ? dur : 0.0);
 
+  // Stamp the release on session_end too (not only session_start), so average
+  // session length can be grouped by release and cross-checked against Sentry,
+  // keyed on the same full commit SHA.
+  json_object_set_string_member(p, "commit", darktable_commit_hash);
+  json_object_set_string_member(p, "app_version", darktable_package_version);
+  json_object_set_string_member(p, "build_channel", DT_BUILD_CHANNEL);
+  // Same per-run id as the Sentry session_id tag, to correlate without double count.
+  json_object_set_string_member(p, "session_id", dt_session_id());
+
   g_mutex_lock(&_stats_lock);
   // Flat numeric properties so they show up and can be aggregated in PostHog:
   //   mod_view_<name>, mod_lib_<plugin>, mod_iop_<op>, ext_<extension>.
@@ -285,6 +294,8 @@ static JsonObject *_telemetry_system_properties(void)
   json_object_set_string_member(p, "app_version", darktable_package_version);
   // Full commit SHA: consistent release id across shallow/full clones (see sentry.c).
   json_object_set_string_member(p, "commit", darktable_commit_hash);
+  // Same per-run id as the Sentry session_id tag, to correlate without double count.
+  json_object_set_string_member(p, "session_id", dt_session_id());
   json_object_set_string_member(p, "build_type", DT_BUILD_TYPE);
   // "nightly" for official builds, "self-build" otherwise - lets analytics exclude
   // local/development builds from population stats.
@@ -349,15 +360,9 @@ void dt_telemetry_init(const gboolean have_gui)
     return;
   }
 
-  // Anonymous, stable-per-installation id.
-  gchar *id = dt_conf_get_string(DT_TELEMETRY_INSTALL_ID_KEY);
-  if(!id || !*id)
-  {
-    g_free(id);
-    id = g_uuid_string_random();
-    dt_conf_set_string(DT_TELEMETRY_INSTALL_ID_KEY, id);
-  }
-  _distinct_id = id; // kept; freed at shutdown
+  // Anonymous, stable-per-installation id, shared with Sentry (dt_install_id) so
+  // the same user de-duplicates across both systems.
+  _distinct_id = g_strdup(dt_install_id()); // kept; freed at shutdown
 
   _queue = g_async_queue_new();
   _worker = g_thread_new("telemetry", _telemetry_worker, NULL);

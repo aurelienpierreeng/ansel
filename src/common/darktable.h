@@ -163,6 +163,18 @@ static inline int dt_version()
 // returns the darktable version as <major>.<minor>
 char *dt_version_major_minor();
 
+/** Stable, anonymous identifier for the current process/run (a random UUID
+ * generated once). Sent to both crash reporting (Sentry) and usage analytics
+ * (PostHog) so the same session can be correlated across the two without being
+ * double-counted. Not tied to the user or machine. */
+const char *dt_session_id(void);
+
+/** Stable, anonymous per-installation identifier (a random UUID persisted in
+ * conf). Used as the Sentry user id and the PostHog distinct_id so the same
+ * installation/user can be de-duplicated across both systems. Not tied to the
+ * machine or any account. */
+const char *dt_install_id(void);
+
 #undef STR_HELPER
 #define STR_HELPER(x) #x
 

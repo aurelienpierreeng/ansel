@@ -72,6 +72,9 @@ static GHashTable *_module_usage = NULL;
 static GMutex _processed_image_lock;
 static int32_t _processed_imgid = -1;
 static char _processed_pipeline[32] = { 0 };
+// Count of distinct image+pipeline runs this session, stamped on crash events so
+// the website can report "images processed before a crash".
+static volatile int _processed_image_count = 0;
 
 // Length of the running session, in seconds. darktable.start_wtime is stamped at
 // the very start of dt_init().
@@ -87,33 +90,30 @@ static void _sentry_stamp_session_length(sentry_value_t event)
 {
   const double dur = _sentry_session_seconds();
 
-  // Numeric value under "extra" for inspection.
+  // Numeric values under "extra" for inspection.
   sentry_value_t extra = sentry_value_get_by_key(event, "extra");
   if(sentry_value_is_null(extra))
   {
     extra = sentry_value_new_object();
-    sentry_value_set_by_key(extra, "session_seconds", sentry_value_new_double(dur));
     sentry_value_set_by_key(event, "extra", extra);
   }
-  else
-  {
-    sentry_value_set_by_key(extra, "session_seconds", sentry_value_new_double(dur));
-  }
+  sentry_value_set_by_key(extra, "session_seconds", sentry_value_new_double(dur));
+  sentry_value_set_by_key(extra, "images_processed", sentry_value_new_int32(_processed_image_count));
 
-  // String tag so events are searchable/groupable by session length.
+  // String tags so events are searchable/groupable by session length and by how
+  // many images had been processed when the crash happened.
   char buf[32];
   snprintf(buf, sizeof(buf), "%.0f", dur);
+  char ibuf[32];
+  snprintf(ibuf, sizeof(ibuf), "%d", _processed_image_count);
   sentry_value_t tags = sentry_value_get_by_key(event, "tags");
   if(sentry_value_is_null(tags))
   {
     tags = sentry_value_new_object();
-    sentry_value_set_by_key(tags, "session_seconds", sentry_value_new_string(buf));
     sentry_value_set_by_key(event, "tags", tags);
   }
-  else
-  {
-    sentry_value_set_by_key(tags, "session_seconds", sentry_value_new_string(buf));
-  }
+  sentry_value_set_by_key(tags, "session_seconds", sentry_value_new_string(buf));
+  sentry_value_set_by_key(tags, "images_processed", sentry_value_new_string(ibuf));
 }
 
 // before_send handles NON-crash events (on_crash takes over for crashes). Stamp
@@ -251,6 +251,7 @@ void dt_sentry_set_processed_image(const struct dt_image_t *img, const char *pip
   }
   _processed_imgid = img->id;
   g_strlcpy(_processed_pipeline, pl, sizeof(_processed_pipeline));
+  _processed_image_count++;
   g_mutex_unlock(&_processed_image_lock);
 
   // Extension and type flags only - never the file name or path.
@@ -384,6 +385,16 @@ static void _sentry_set_context(void)
   // Distribution channel as a searchable tag (also set as the Sentry environment in
   // dt_sentry_init), so official nightly builds can be told apart from self-builds.
   sentry_set_tag("build_channel", DT_BUILD_CHANNEL);
+
+  // Stable per-run id, shared with usage analytics (PostHog) so the same session
+  // can be correlated across both systems without double-counting.
+  sentry_set_tag("session_id", dt_session_id());
+
+  // Use the same anonymous per-installation id as PostHog's distinct_id, so the
+  // "users" counted by Sentry de-duplicate against usage analytics.
+  sentry_value_t user = sentry_value_new_object();
+  sentry_value_set_by_key(user, "id", sentry_value_new_string(dt_install_id()));
+  sentry_set_user(user);
 
   // Human-readable version string (the release itself is the commit SHA). May be a
   // full "0.0.0+3848~ghash" or, on a shallow clone, just the abbreviated hash.

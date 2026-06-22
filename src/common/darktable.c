@@ -309,6 +309,42 @@ char *dt_version_major_minor()
   return g_strdup(start);
 }
 
+const char *dt_session_id(void)
+{
+  // Random per-run UUID, generated once and shared by crash reporting and usage
+  // analytics so a single session can be correlated across Sentry and PostHog.
+  static gchar *id = NULL;
+  static gsize init = 0;
+  if(g_once_init_enter(&init))
+  {
+    id = g_uuid_string_random();
+    g_once_init_leave(&init, 1);
+  }
+  return id;
+}
+
+const char *dt_install_id(void)
+{
+  // Anonymous, stable per-installation UUID, persisted in conf and shared by crash
+  // reporting (Sentry user id) and usage analytics (PostHog distinct_id) so the
+  // same user can be de-duplicated across both systems. Created lazily on first use.
+  static gchar *id = NULL;
+  static gsize init = 0;
+  if(g_once_init_enter(&init))
+  {
+    gchar *stored = dt_conf_get_string("telemetry/install_id");
+    if(!stored || !*stored)
+    {
+      g_free(stored);
+      stored = g_uuid_string_random();
+      dt_conf_set_string("telemetry/install_id", stored);
+    }
+    id = stored;
+    g_once_init_leave(&init, 1);
+  }
+  return id;
+}
+
 gboolean dt_supported_image(const gchar *filename)
 {
   gboolean supported = FALSE;
