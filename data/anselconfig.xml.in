@@ -272,9 +272,9 @@
         <option>TRUE</option>
       </enum>
     </type>
-    <default>FALSE</default>
+    <default>TRUE</default>
     <shortdescription>write sidecar file for each image</shortdescription>
-    <longdescription>the sidecar files hold information about all your development steps to allow flawless re-importing of image files.\n\ndepending on the selected mode sidecar files will be written:\n - never\n - on import: immediately after importing the image\n - after edit: after any user change on the image</longdescription>
+    <longdescription>the sidecar files hold information about all your development steps to allow flawless re-importing of image files.\n\nwhen enabled, a sidecar file is written after importing or modifying an image. when disabled, no sidecar file is written.</longdescription>
   </dtconfig>
   <dtconfig prefs="storage" section="xmp">
     <name>compress_xmp_tags</name>
@@ -812,6 +812,69 @@
     <default/>
     <shortdescription>Project date</shortdescription>
     <longdescription>type a date in the form: YYYY:MM:DD[ hh:mm:ss[.sss]] if you want to override the current date/time used when expanding variables:\n$(YEAR), $(MONTH), $(DAY), $(HOUR), $(MINUTE), $(SECONDS), $(MSEC).\nlet the field empty otherwise</longdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>folder_survey/folder</name>
+    <type>string</type>
+    <default/>
+    <shortdescription>folder surveyed for new images</shortdescription>
+    <longdescription>the folder and its subfolders are compared with the persisted file list on every scan</longdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>folder_survey/interval</name>
+    <type min="1" max="3600">int</type>
+    <default>10</default>
+    <shortdescription>folder survey frequency in seconds</shortdescription>
+    <longdescription>delay between two scans of the configured ingest folder</longdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>folder_survey/copy</name>
+    <type>bool</type>
+    <default>false</default>
+    <shortdescription>copy surveyed images before importing</shortdescription>
+    <longdescription>copy new images to the configured project directory instead of adding them to the library at their source location</longdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>folder_survey/delete_source</name>
+    <type>bool</type>
+    <default>false</default>
+    <shortdescription>delete surveyed originals after verified copy</shortdescription>
+    <longdescription>delete each source image only after the destination has been imported and its complete byte stream matches the original</longdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>folder_survey/datetime</name>
+    <type>string</type>
+    <default/>
+    <shortdescription>project date for surveyed imports</shortdescription>
+    <longdescription>date used by import naming variables; when empty, the date of the scan is used</longdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>folder_survey/jobcode</name>
+    <type>string</type>
+    <default>no_name</default>
+    <shortdescription>jobcode for surveyed imports</shortdescription>
+    <longdescription>project name expanded as $(JOBCODE) in folder survey import patterns</longdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>folder_survey/base_directory_pattern</name>
+    <type>string</type>
+    <default/>
+    <shortdescription>base directory for surveyed imports</shortdescription>
+    <longdescription>base destination used when surveyed images are copied before import</longdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>folder_survey/sub_directory_pattern</name>
+    <type>string</type>
+    <default>$(YEAR)-$(MONTH)-$(DAY)-$(JOBCODE)</default>
+    <shortdescription>project directory pattern for surveyed imports</shortdescription>
+    <longdescription>subdirectory naming pattern used when surveyed images are copied before import</longdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>folder_survey/filename_pattern</name>
+    <type>string</type>
+    <default>$(JOBCODE)-$(FILE.NAME)-$(SEQUENCE).$(FILE.EXTENSION)</default>
+    <shortdescription>file naming pattern for surveyed imports</shortdescription>
+    <longdescription>file naming pattern used when surveyed images are copied before import</longdescription>
   </dtconfig>
   <dtconfig ui="yes">
     <name>ui_last/import_keep_open</name>
