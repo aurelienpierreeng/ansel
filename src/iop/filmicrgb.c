@@ -4797,6 +4797,10 @@ void gui_init(dt_iop_module_t *self)
   // Init GTK notebook
   g->notebook = dt_ui_notebook_new();
 
+  // Suppress GUI callbacks during widget construction to prevent
+  // gui_changed() from accessing not-yet-initialized widgets.
+  ++darktable.gui->reset;
+
   // Page SCENE
   self->widget = dt_ui_notebook_page(g->notebook, N_("scene"), NULL);
 
@@ -5058,6 +5062,9 @@ void gui_init(dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(g->white_point_target, _("luminance of output pure white, "
                                                        "this should be 100%\nexcept if you want a faded look"));
 
+  // Re-enable GUI callbacks now that all widgets are initialized.
+  --darktable.gui->reset;
+
   // start building top level widget
   self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
@@ -5070,6 +5077,8 @@ void gui_init(dt_iop_module_t *self)
 
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
+  if(darktable.gui->reset) return;
+
   dt_iop_filmicrgb_params_t *p = (dt_iop_filmicrgb_params_t *)self->params;
   dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)self->gui_data;
 
