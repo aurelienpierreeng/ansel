@@ -821,6 +821,7 @@ static void show_pango_text(struct dt_bauhaus_widget_t *w,
 }
 
 static void dt_bauhaus_slider_set_normalized(struct dt_bauhaus_widget_t *w, float pos, gboolean raise, gboolean timeout);
+static void _dt_bauhaus_slider_set_with_raise(GtkWidget *widget, float pos, gboolean raise);
 
 static double get_slider_line_offset(const double pos, const double scale, const double x, double y, const double line_height)
 {
@@ -1611,7 +1612,8 @@ void dt_bauhaus_slider_set_soft_min(GtkWidget* widget, float val)
   dt_bauhaus_slider_data_t *d = &w->data.slider;
   float oldval = dt_bauhaus_slider_get(widget);
   d->min = d->soft_min = CLAMP(val, d->hard_min, d->hard_max);
-  dt_bauhaus_slider_set(widget, oldval);
+  // a bound change is not a user edit: re-apply the value without raising
+  _dt_bauhaus_slider_set_with_raise(widget, oldval, FALSE);
 }
 
 float dt_bauhaus_slider_get_soft_min(GtkWidget* widget)
@@ -1627,7 +1629,8 @@ void dt_bauhaus_slider_set_soft_max(GtkWidget* widget, float val)
   dt_bauhaus_slider_data_t *d = &w->data.slider;
   float oldval = dt_bauhaus_slider_get(widget);
   d->max = d->soft_max = CLAMP(val, d->hard_min, d->hard_max);
-  dt_bauhaus_slider_set(widget, oldval);
+  // a bound change is not a user edit: re-apply the value without raising
+  _dt_bauhaus_slider_set_with_raise(widget, oldval, FALSE);
 }
 
 float dt_bauhaus_slider_get_soft_max(GtkWidget* widget)
@@ -3503,9 +3506,15 @@ char *dt_bauhaus_slider_get_text(GtkWidget *w, float val)
     return g_strdup_printf( "%.*f%s", d->digits, val * d->factor + d->offset, d->format);
 }
 
-void dt_bauhaus_slider_set(GtkWidget *widget, float pos)
+static void _dt_bauhaus_slider_set_with_raise(GtkWidget *widget, float pos, gboolean raise)
 {
-  // this is the public interface function, translate by bounds and call set_normalized
+  // translate by bounds and call set_normalized.
+  // raise == FALSE re-applies the value (re-clamped to the current bounds) and
+  // redraws without committing to history or emitting "value-changed". This is
+  // what bound changes (soft min/max) need: re-clamping the current value to a
+  // new display range is not a user edit, and emitting would re-enter the
+  // module's gui_changed handler -- which during gui_init runs before all
+  // widgets exist (NULL deref), and at runtime would spuriously commit.
   struct dt_bauhaus_widget_t *w = DT_BAUHAUS_WIDGET(widget);
   dt_bauhaus_slider_data_t *d = &w->data.slider;
   const float rpos = CLAMP(pos, d->hard_min, d->hard_max);
@@ -3522,7 +3531,13 @@ void dt_bauhaus_slider_set(GtkWidget *widget, float pos)
   else
     d->max = rpos;
 
-  dt_bauhaus_slider_set_normalized(w, (rpos - d->min) / (d->max - d->min), TRUE, FALSE);
+  dt_bauhaus_slider_set_normalized(w, (rpos - d->min) / (d->max - d->min), raise, FALSE);
+}
+
+void dt_bauhaus_slider_set(GtkWidget *widget, float pos)
+{
+  // this is the public interface function, it commits the value and emits "value-changed"
+  _dt_bauhaus_slider_set_with_raise(widget, pos, TRUE);
 }
 
 void dt_bauhaus_slider_set_val(GtkWidget *widget, float val)
