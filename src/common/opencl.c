@@ -2904,10 +2904,15 @@ void dt_opencl_events_reset(const int devid)
 
   if(IS_NULL_PTR(*eventlist) || *numevents == 0) return; // nothing to do
 
-  // release all remaining events in eventlist, not to waste resources
+  static const cl_event zeroevent[1]; // implicitly initialized to zero
+
+  // release all remaining events in eventlist, not to waste resources.
+  // Skip NULL handles left behind by failed enqueues: releasing them is
+  // pointless and crashes some drivers.
   for(int k = *eventsconsolidated; k < *numevents; k++)
   {
-    (cl->dlocl->symbols->dt_clReleaseEvent)((*eventlist)[k]);
+    if(memcmp((*eventlist) + k, zeroevent, sizeof(cl_event)))
+      (cl->dlocl->symbols->dt_clReleaseEvent)((*eventlist)[k]);
   }
 
   memset(*eventtags, 0, sizeof(dt_opencl_eventtag_t) * *maxevents);
@@ -2980,6 +2985,8 @@ cl_int dt_opencl_events_flush(const int devid, const int reset)
 
   cl_int *summary = &(cl->dev[devid].summary);
 
+  static const cl_event zeroevent[1]; // implicitly initialized to zero
+
   if(IS_NULL_PTR(*eventlist) || *numevents == 0) return CL_COMPLETE; // nothing to do, no news is good news
 
   // Wait for command queue to terminate (side effect: might adjust *numevents)
@@ -2988,6 +2995,18 @@ cl_int dt_opencl_events_flush(const int devid, const int reset)
   // now check return status and profiling data of all newly terminated events
   for(int k = *eventsconsolidated; k < *numevents; k++)
   {
+    // A reserved slot can still hold a NULL handle when the matching enqueue
+    // failed: OpenCL does not create the event in that case, but get_slot had
+    // already counted the slot. Passing such a NULL handle to the driver
+    // crashes some implementations (e.g. NVIDIA on Windows), so treat it as a
+    // lost event and skip it.
+    if(!memcmp((*eventlist) + k, zeroevent, sizeof(cl_event)))
+    {
+      (*lostevents)++;
+      (*eventsconsolidated)++;
+      continue;
+    }
+
     cl_int err;
     char *tag = (*eventtags)[k].tag;
     cl_int *retval = &((*eventtags)[k].retval);
