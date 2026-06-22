@@ -3658,13 +3658,19 @@ void gui_init(dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(self->widget), g->box_wavelets, TRUE, TRUE, 0);
 
   g->overshooting = dt_bauhaus_slider_from_params(self, "overshooting");
-  dt_bauhaus_slider_set_soft_max(g->overshooting, 4.0f);
   g->strength = dt_bauhaus_slider_from_params(self, N_("strength"));
   dt_bauhaus_slider_set_soft_max(g->strength, 4.0f);
   dt_bauhaus_slider_set_digits(g->strength, 3);
   g->shadows = dt_bauhaus_slider_from_params(self, "shadows");
   g->bias = dt_bauhaus_slider_from_params(self, "bias");
   dt_bauhaus_slider_set_soft_range(g->bias, -10.0f, 10.0f);
+
+  // Set the overshooting soft range only once the sliders that its
+  // value-changed handler (gui_changed) touches exist: changing a slider's
+  // soft bound re-applies the value and emits "value-changed", which calls
+  // gui_changed(overshooting) -> dt_bauhaus_slider_set(g->shadows / g->bias).
+  // Those are created just above, so doing this earlier dereferenced NULL.
+  dt_bauhaus_slider_set_soft_max(g->overshooting, 4.0f);
 
   gtk_box_pack_start(GTK_BOX(self->widget), g->box_variance, TRUE, TRUE, 0);
 
