@@ -2904,10 +2904,15 @@ void dt_opencl_events_reset(const int devid)
 
   if(IS_NULL_PTR(*eventlist) || *numevents == 0) return; // nothing to do
 
-  // release all remaining events in eventlist, not to waste resources
+  static const cl_event zeroevent[1]; // implicitly initialized to zero
+
+  // release all remaining events in eventlist, not to waste resources.
+  // Skip NULL handles left behind by failed enqueues: releasing them is
+  // pointless and crashes some drivers.
   for(int k = *eventsconsolidated; k < *numevents; k++)
   {
-    (cl->dlocl->symbols->dt_clReleaseEvent)((*eventlist)[k]);
+    if(memcmp((*eventlist) + k, zeroevent, sizeof(cl_event)))
+      (cl->dlocl->symbols->dt_clReleaseEvent)((*eventlist)[k]);
   }
 
   memset(*eventtags, 0, sizeof(dt_opencl_eventtag_t) * *maxevents);
@@ -2948,14 +2953,27 @@ void dt_opencl_events_wait_for(const int devid)
 
   assert(*numevents > *eventsconsolidated);
 
-  // now wait for all remaining events to terminate
+  // Wait for all remaining events to terminate, skipping NULL handles. A reserved
+  // slot can hold a NULL handle when its enqueue failed (the event is never
+  // created, but get_slot had already counted the slot). Passing NULL to
+  // clWaitForEvents crashes some drivers and, on those that merely return an
+  // error, would abort a batched wait and leave the valid events that follow
+  // un-waited-for before flush checks/releases them. We wait on each handle
+  // individually rather than gathering them into a temporary array: a heap
+  // allocation could fail under the very memory pressure that creates these NULL
+  // slots, and returning early on that failure would skip the wait entirely.
   // Risk: might never return in case of OpenCL blocks or endless loops
   // TODO: run clWaitForEvents in separate thread and implement watchdog timer
-  cl_int err = (cl->dlocl->symbols->dt_clWaitForEvents)(*numevents - *eventsconsolidated,
-                                           (*eventlist) + *eventsconsolidated);
-  if((err != CL_SUCCESS) && (err != CL_INVALID_VALUE))
-    dt_vprint(DT_DEBUG_OPENCL, "[dt_opencl_events_wait_for] reported %i for device %i\n",
-       err, devid);
+  for(int k = *eventsconsolidated; k < *numevents; k++)
+  {
+    if(!memcmp((*eventlist) + k, zeroevent, sizeof(cl_event)))
+      continue; // NULL handle from a failed enqueue
+
+    cl_int err = (cl->dlocl->symbols->dt_clWaitForEvents)(1, &((*eventlist)[k]));
+    if((err != CL_SUCCESS) && (err != CL_INVALID_VALUE))
+      dt_vprint(DT_DEBUG_OPENCL, "[dt_opencl_events_wait_for] reported %i for device %i\n",
+         err, devid);
+  }
 }
 
 
@@ -2980,6 +2998,8 @@ cl_int dt_opencl_events_flush(const int devid, const int reset)
 
   cl_int *summary = &(cl->dev[devid].summary);
 
+  static const cl_event zeroevent[1]; // implicitly initialized to zero
+
   if(IS_NULL_PTR(*eventlist) || *numevents == 0) return CL_COMPLETE; // nothing to do, no news is good news
 
   // Wait for command queue to terminate (side effect: might adjust *numevents)
@@ -2988,6 +3008,18 @@ cl_int dt_opencl_events_flush(const int devid, const int reset)
   // now check return status and profiling data of all newly terminated events
   for(int k = *eventsconsolidated; k < *numevents; k++)
   {
+    // A reserved slot can still hold a NULL handle when the matching enqueue
+    // failed: OpenCL does not create the event in that case, but get_slot had
+    // already counted the slot. Passing such a NULL handle to the driver
+    // crashes some implementations (e.g. NVIDIA on Windows), so treat it as a
+    // lost event and skip it.
+    if(!memcmp((*eventlist) + k, zeroevent, sizeof(cl_event)))
+    {
+      (*lostevents)++;
+      (*eventsconsolidated)++;
+      continue;
+    }
+
     cl_int err;
     char *tag = (*eventtags)[k].tag;
     cl_int *retval = &((*eventtags)[k].retval);
