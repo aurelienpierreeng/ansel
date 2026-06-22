@@ -200,6 +200,12 @@ static int _times_handlers_were_set = 0;
 
 static LONG WINAPI dt_toplevel_exception_handler(PEXCEPTION_POINTERS pExceptionInfo)
 {
+  // Sentry's crash handler runs first and chains here. If it already captured a
+  // (locally symbolicated) backtrace attached to the crash report, don't write
+  // a second one nor pop the dialog; just pass the exception on.
+  if(dt_sentry_backtrace_captured())
+    return _dt_exceptionfilter_old_handler(pExceptionInfo);
+
   gchar *name_used;
   int fout;
   BOOL ok;

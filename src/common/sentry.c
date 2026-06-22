@@ -43,6 +43,14 @@
 #include <unistd.h>     // for fork, getpid
 #endif
 
+#if defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN // limit windows.h macro pollution next to GLib/GTK
+#endif
+#include <windows.h>
+#include <dbghelp.h>    // for Sym*, locally symbolicated backtrace
+#endif
+
 #ifndef SENTRY_DSN
 #define SENTRY_DSN ""
 #endif
@@ -181,6 +189,91 @@ static char *_sentry_capture_gdb_backtrace(gsize *len)
 }
 #endif // __linux__
 
+#if defined(_WIN32)
+// Resolve the short module name owning a given address (e.g. "libansel.dll").
+static void _sentry_module_name(DWORD64 addr, char *out, size_t out_len)
+{
+  g_strlcpy(out, "?", out_len);
+  HMODULE mod = NULL;
+  if(GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS
+                            | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                        (LPCSTR)(uintptr_t)addr, &mod)
+     && mod)
+  {
+    char path[MAX_PATH];
+    if(GetModuleFileNameA(mod, path, sizeof(path)))
+    {
+      const char *base = strrchr(path, '\\');
+      g_strlcpy(out, base ? base + 1 : path, out_len);
+    }
+  }
+}
+
+// Capture the crashing thread's backtrace and symbolicate it locally with
+// DbgHelp. Mirrors the Linux gdb capture: returns a NUL-terminated buffer
+// (*len excludes the terminator) to attach to the crash report, or NULL on
+// failure. Local symbolication is the whole point on Windows: self-builds carry
+// matching .pdb files on the user's disk but never upload them to Sentry, so
+// without this their crashes arrive as bare addresses (see #129664611).
+static char *_sentry_capture_windows_backtrace(const sentry_ucontext_t *uctx, gsize *len)
+{
+  if(IS_NULL_PTR(uctx)) return NULL;
+
+  void *frames[128];
+  const size_t n = sentry_unwind_stack_from_ucontext(uctx, frames, 128);
+  if(n == 0) return NULL;
+
+  const HANDLE proc = GetCurrentProcess();
+  SymSetOptions(SYMOPT_DEFERRED_LOADS | SYMOPT_LOAD_LINES | SYMOPT_UNDNAME);
+  // May fail with ERROR_INVALID_PARAMETER if sentry already initialized the
+  // symbol handler for this process; symbols stay usable either way.
+  SymInitialize(proc, NULL, TRUE);
+
+  GString *out = g_string_new(NULL);
+  g_string_append_printf(out, "this is %s reporting a crash (local DbgHelp backtrace, crashing thread):\n\n",
+                         darktable_package_string);
+
+  // SYMBOL_INFO with room for the (undecorated) symbol name right after it.
+  char symbuf[sizeof(SYMBOL_INFO) + 512];
+  SYMBOL_INFO *sym = (SYMBOL_INFO *)symbuf;
+  memset(symbuf, 0, sizeof(symbuf));
+  sym->SizeOfStruct = sizeof(SYMBOL_INFO);
+  sym->MaxNameLen = 512;
+
+  for(size_t i = 0; i < n; i++)
+  {
+    const DWORD64 addr = (DWORD64)(uintptr_t)frames[i];
+
+    char modname[MAX_PATH];
+    _sentry_module_name(addr, modname, sizeof(modname));
+
+    const unsigned long long fno = (unsigned long long)i;
+    DWORD64 disp = 0;
+    if(SymFromAddr(proc, addr, &disp, sym))
+    {
+      DWORD line_disp = 0;
+      IMAGEHLP_LINE64 line;
+      memset(&line, 0, sizeof(line));
+      line.SizeOfStruct = sizeof(IMAGEHLP_LINE64);
+      if(SymGetLineFromAddr64(proc, addr, &line_disp, &line))
+        g_string_append_printf(out, "#%-2llu 0x%016llx  %s+0x%llx  (%s:%lu)  [%s]\n", fno,
+                               (unsigned long long)addr, sym->Name, (unsigned long long)disp,
+                               line.FileName, (unsigned long)line.LineNumber, modname);
+      else
+        g_string_append_printf(out, "#%-2llu 0x%016llx  %s+0x%llx  [%s]\n", fno, (unsigned long long)addr,
+                               sym->Name, (unsigned long long)disp, modname);
+    }
+    else
+    {
+      g_string_append_printf(out, "#%-2llu 0x%016llx  ?  [%s]\n", fno, (unsigned long long)addr, modname);
+    }
+  }
+
+  if(len) *len = out->len;
+  return g_string_free(out, FALSE);
+}
+#endif // _WIN32
+
 // on_crash replaces before_send for crash events (inproc). It runs before the
 // crash event/attachments are serialized, so this is where we both stamp the
 // session length and attach a full gdb backtrace to the report.
@@ -199,6 +292,17 @@ static sentry_value_t _sentry_on_crash(const sentry_ucontext_t *uctx, sentry_val
 
     // Tell the local signal handler (which runs next in the chain) not to run
     // gdb again for this same crash.
+    _sentry_backtrace_captured = 1;
+  }
+  g_free(bt);
+#elif defined(_WIN32)
+  gsize bt_len = 0;
+  char *bt = _sentry_capture_windows_backtrace(uctx, &bt_len);
+  if(bt && bt_len > 0)
+  {
+    sentry_attach_bytes(bt, bt_len, "windows-backtrace.txt");
+    // Tell the local exception filter (which runs next in the chain) not to
+    // pop its own backtrace dialog for this same crash.
     _sentry_backtrace_captured = 1;
   }
   g_free(bt);
