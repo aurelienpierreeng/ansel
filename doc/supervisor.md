@@ -165,9 +165,10 @@ Domain specifics:
   `module->get_introspection()`). Keyed by the parameter hash. `delete` flips
   `alive`.
 - **node** — `module`, `iop_order`. Topology object, keyed by the synthetic node
-  key. `create` at `create_nodes` (no params yet); `update` at history
-  synchronization (`dt_dev_pixelpipe_change()` → the sync loops), where the
-  committed `piece->hash` binds the node to its history item, so the `update`
+  key. `create` at `create_nodes` (no params yet) — also carries a `predecessor`
+  edge to the node before it in the pipeline (iop_order order); `update` at
+  history synchronization (`dt_dev_pixelpipe_change()` → the sync loops), where
+  the committed `piece->hash` binds the node to its history item, so the `update`
   carries a resolved `params` link; `delete` at `cleanup_nodes`.
 - **cacheline** — `create` at output publish with full linkage (`device`, `roi`,
   resolved `params`/`input`/`node`); `read` on **every** cache hit (resolved

@@ -57,6 +57,7 @@ typedef struct dt_sv_entry_t
   uint64_t node_hash;    // cacheline      -> producing topology node
   uint64_t history_hash; // backbuf        -> history-stack state
   uint64_t image_hash;   // mipmap         -> image cache object
+  uint64_t pred_hash;    // node           -> predecessor node in the pipeline
 
   // descriptive metadata (copied in)
   char op_name[32];
@@ -241,6 +242,7 @@ static dt_sv_entry_t *_entry_get_locked(const uint64_t hash, gboolean *created)
   e->node_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
   e->history_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
   e->image_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+  e->pred_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
   e->devid = -1;
 
   uint64_t *key = (uint64_t *)g_malloc(sizeof(uint64_t));
@@ -350,7 +352,8 @@ static dt_sv_logged_event_t *_extract_event(JsonObject *root, const gchar *json_
   e->links = g_array_new(FALSE, FALSE, sizeof(dt_sv_link_t));
 
   // nested-object edges carry the linked object id in their "hash" member
-  static const char *obj_edges[] = { "params", "input", "node", "consumes", "mipmap", "image", NULL };
+  static const char *obj_edges[]
+      = { "params", "input", "node", "consumes", "mipmap", "image", "predecessor", NULL };
   for(int i = 0; obj_edges[i]; i++)
   {
     if(!json_object_has_member(root, obj_edges[i])) continue;
@@ -611,8 +614,8 @@ void dt_supervisor_history(const dt_sv_op_t op, const uint64_t param_hash, const
 }
 
 void dt_supervisor_node(const dt_sv_op_t op, const uint64_t node_hash, const uint64_t param_hash,
-                        const char *op_name, const int multi_priority, const int iop_order,
-                        const int pipe_type, const int32_t imgid)
+                        const uint64_t predecessor_hash, const char *op_name, const int multi_priority,
+                        const int iop_order, const int pipe_type, const int32_t imgid)
 {
   if(!dt_supervisor_active() || !_sv.inited) return;
 
@@ -627,6 +630,8 @@ void dt_supervisor_node(const dt_sv_op_t op, const uint64_t node_hash, const uin
   e->imgid = imgid;
   // Bind the node to its history item once synchronized (param_hash set).
   if(_hash_is_set(param_hash)) e->param_hash = param_hash;
+  // Reference the predecessor node in the pipeline (set at topology creation).
+  if(_hash_is_set(predecessor_hash)) e->pred_hash = predecessor_hash;
   const gboolean resurrected = _touch_alive_locked(e, created, op);
 
   JsonObject *root = _envelope(op, "node", node_hash, pipe_type, imgid, e->alive, resurrected);
@@ -636,6 +641,8 @@ void dt_supervisor_node(const dt_sv_op_t op, const uint64_t node_hash, const uin
   json_object_set_int_member(root, "iop_order", iop_order);
   JsonObject *params = _resolve_locked(e->param_hash);
   if(params) json_object_set_object_member(root, "params", params);
+  JsonObject *pred = _resolve_locked(e->pred_hash);
+  if(pred) json_object_set_object_member(root, "predecessor", pred);
   dt_pthread_mutex_unlock(&_sv.lock);
 
   _emit_line(root);

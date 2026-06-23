@@ -180,8 +180,9 @@ void dt_supervisor_history(dt_sv_op_t op, uint64_t param_hash, const char *op_na
  * - DELETE when the nodes are torn down.
  * Not emitted from the processing recursion.
  */
-void dt_supervisor_node(dt_sv_op_t op, uint64_t node_hash, uint64_t param_hash, const char *op_name,
-                        int multi_priority, int iop_order, int pipe_type, int32_t imgid);
+void dt_supervisor_node(dt_sv_op_t op, uint64_t node_hash, uint64_t param_hash,
+                        uint64_t predecessor_hash, const char *op_name, int multi_priority,
+                        int iop_order, int pipe_type, int32_t imgid);
 
 /**
  * Cacheline output created at runtime publish — keyed by the produced output

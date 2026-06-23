@@ -1221,8 +1221,8 @@ static void _sync_pipe_nodes_from_history(dt_dev_pixelpipe_t *pipe, dt_develop_t
     if(dt_supervisor_active() && found_history)
       dt_supervisor_node(DT_SV_UPDATE,
                          dt_supervisor_node_key(pipe->type, piece->module->op, piece->module->multi_priority),
-                         history_param_hash, piece->module->op, piece->module->multi_priority,
-                         piece->module->iop_order, pipe->type, pipe->imgid);
+                         history_param_hash, DT_PIXELPIPE_CACHE_HASH_INVALID, piece->module->op,
+                         piece->module->multi_priority, piece->module->iop_order, pipe->type, pipe->imgid);
 
     if(!found_history)
       dt_print(DT_DEBUG_PARAMS, "[pixelpipe] info: committed default params for %s (%s) in pipe %s\n",
@@ -1300,8 +1300,8 @@ static void _sync_pipe_nodes_from_history_from_node(dt_dev_pixelpipe_t *pipe,
     if(dt_supervisor_active() && found_history)
       dt_supervisor_node(DT_SV_UPDATE,
                          dt_supervisor_node_key(pipe->type, piece->module->op, piece->module->multi_priority),
-                         history_param_hash, piece->module->op, piece->module->multi_priority,
-                         piece->module->iop_order, pipe->type, pipe->imgid);
+                         history_param_hash, DT_PIXELPIPE_CACHE_HASH_INVALID, piece->module->op,
+                         piece->module->multi_priority, piece->module->iop_order, pipe->type, pipe->imgid);
 
     if(!found_history)
       dt_print(DT_DEBUG_PARAMS, "[pixelpipe] info: committed default params for %s (%s) in pipe %s\n",

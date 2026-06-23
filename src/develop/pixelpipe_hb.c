@@ -596,8 +596,9 @@ void dt_dev_pixelpipe_cleanup_nodes(dt_dev_pixelpipe_t *pipe)
     if(dt_supervisor_active() && piece->module)
       dt_supervisor_node(DT_SV_DELETE,
                          dt_supervisor_node_key(pipe->type, piece->module->op, piece->module->multi_priority),
-                         DT_PIXELPIPE_CACHE_HASH_INVALID, piece->module->op, piece->module->multi_priority,
-                         piece->module->iop_order, pipe->type, pipe->imgid);
+                         DT_PIXELPIPE_CACHE_HASH_INVALID, DT_PIXELPIPE_CACHE_HASH_INVALID,
+                         piece->module->op, piece->module->multi_priority, piece->module->iop_order,
+                         pipe->type, pipe->imgid);
     if(piece->module) dt_iop_cleanup_pipe(piece->module, pipe, piece);
     dt_free(piece);
   }
@@ -616,7 +617,8 @@ void dt_dev_pixelpipe_create_nodes(dt_dev_pixelpipe_t *pipe)
   g_assert(IS_NULL_PTR(pipe->iop_order_list));
   pipe->iop_order_list = dt_ioppr_iop_order_copy_deep(pipe->dev->iop_order_list);
 
-  // for all modules in dev:
+  // for all modules in dev (iterated in iop_order, so each is the predecessor of the next):
+  dt_iop_module_t *prev_module = NULL;
   for(GList *modules = g_list_first(pipe->dev->iop); modules; modules = g_list_next(modules))
   {
     dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
@@ -647,10 +649,16 @@ void dt_dev_pixelpipe_create_nodes(dt_dev_pixelpipe_t *pipe)
     // Topology node: created once here, immutable until the nodes are torn down.
     // param_hash is bound later, at history synchronization (dt_supervisor_node UPDATE).
     if(dt_supervisor_active())
+    {
+      const uint64_t pred = prev_module
+          ? dt_supervisor_node_key(pipe->type, prev_module->op, prev_module->multi_priority)
+          : DT_PIXELPIPE_CACHE_HASH_INVALID;
       dt_supervisor_node(DT_SV_CREATE,
                          dt_supervisor_node_key(pipe->type, module->op, module->multi_priority),
-                         DT_PIXELPIPE_CACHE_HASH_INVALID, module->op, module->multi_priority,
+                         DT_PIXELPIPE_CACHE_HASH_INVALID, pred, module->op, module->multi_priority,
                          module->iop_order, pipe->type, pipe->imgid);
+    }
+    prev_module = module;
   }
 }
 
