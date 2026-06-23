@@ -324,7 +324,7 @@ static int apply_style_to_image(const char *scenario, const char *style_name, co
   dt_conf_set_bool("history/copy_iop_order", FALSE);
   dt_conf_set_bool("history/paste_instances", TRUE);
 
-  return dt_styles_apply_to_image_merge(style_name, style_id, imgid, DT_HISTORY_MERGE_APPEND)
+  return dt_styles_apply_to_image_merge(style_name, style_id, imgid, DT_HISTORY_MERGE_APPEND, NULL)
              ? test_fail(scenario, "style application failed", failure_reason)
              : 0;
 }
