@@ -520,13 +520,27 @@ static gboolean _hex_contains(const uint64_t h, const char *needle)
   return m;
 }
 
-// An event matches when its own hash or any of its linked hashes contain needle.
-static gboolean _event_matches(const dt_sv_logged_event_t *ev, const char *needle)
+// An event matches when:
+//  - its own hash or any linked hash contains `hash_needle` (hex, 0x stripped), or
+//  - its full record (JSON: module/op/domain/widget/filename/parameters/…)
+//    contains `text_needle` as a case-insensitive substring.
+static gboolean _event_matches(const dt_sv_logged_event_t *ev, const char *hash_needle,
+                               const char *text_needle)
 {
-  if(_hex_contains(ev->hash, needle)) return TRUE;
-  if(ev->links)
-    for(guint i = 0; i < ev->links->len; i++)
-      if(_hex_contains(g_array_index(ev->links, dt_sv_link_t, i).hash, needle)) return TRUE;
+  if(*hash_needle)
+  {
+    if(_hex_contains(ev->hash, hash_needle)) return TRUE;
+    if(ev->links)
+      for(guint i = 0; i < ev->links->len; i++)
+        if(_hex_contains(g_array_index(ev->links, dt_sv_link_t, i).hash, hash_needle)) return TRUE;
+  }
+  if(*text_needle && ev->json)
+  {
+    gchar *jl = g_ascii_strdown(ev->json, -1);
+    const gboolean m = strstr(jl, text_needle) != NULL;
+    g_free(jl);
+    if(m) return TRUE;
+  }
   return FALSE;
 }
 
@@ -540,23 +554,28 @@ static void _run_search(const char *query)
     return;
   }
 
-  gchar *needle = g_ascii_strdown(query, -1);
-  const char *n = g_str_has_prefix(needle, "0x") ? needle + 2 : needle;
+  // text_needle matches any field of the record; hash_needle (0x stripped) matches hashes.
+  gchar *text_needle = g_ascii_strdown(query, -1);
+  const char *hash_needle = g_str_has_prefix(text_needle, "0x") ? text_needle + 2 : text_needle;
 
   GPtrArray *evs = dt_supervisor_events_snapshot();
   for(guint i = 0; i < evs->len; i++)
   {
     const dt_sv_logged_event_t *ev = g_ptr_array_index(evs, i);
-    if(*n && _event_matches(ev, n)) gtk_container_add(GTK_CONTAINER(_g.search_list), _event_widget(ev));
+    if(_event_matches(ev, hash_needle, text_needle))
+      gtk_container_add(GTK_CONTAINER(_g.search_list), _event_widget(ev));
   }
   dt_supervisor_events_free(evs);
-  g_free(needle);
+  g_free(text_needle);
   gtk_widget_show_all(_g.search_list);
 }
 
 static void _on_search_changed(GtkSearchEntry *e, gpointer u)
 {
-  _run_search(gtk_entry_get_text(GTK_ENTRY(e)));
+  const char *txt = gtk_entry_get_text(GTK_ENTRY(e));
+  // Typing a query jumps to the Search page automatically.
+  if(txt && *txt) gtk_notebook_set_current_page(GTK_NOTEBOOK(_g.notebook), _g.page_search);
+  _run_search(txt);
 }
 
 static gboolean _scroll_bottom_idle(gpointer u)
@@ -698,7 +717,7 @@ void dt_gui_supervisor_window_show(void)
 
   // global search entry: query all events by hash (own or linked)
   _g.search_entry = gtk_search_entry_new();
-  gtk_entry_set_placeholder_text(GTK_ENTRY(_g.search_entry), _("search hash…"));
+  gtk_entry_set_placeholder_text(GTK_ENTRY(_g.search_entry), _("search hash or text…"));
   gtk_widget_set_size_request(_g.search_entry, 220, -1);
   g_signal_connect(_g.search_entry, "search-changed", G_CALLBACK(_on_search_changed), NULL);
   gtk_box_pack_end(GTK_BOX(bar), _g.search_entry, FALSE, FALSE, 0);

@@ -104,11 +104,12 @@ darkroom to see history/node/cacheline/backbuf/widget events stream in).
   Refreshed when shown and throttled (~1 s) while visible.
   Introspection comes from `dt_dev_pixelpipe_cache_get_{usage,entries_stats}()`
   and `dt_mipmap_cache_get_{usage,entries_stats}()`.
-- **Search** — query all events touching a particular hash. Type into the global
-  search entry (a bare hash, with or without `0x`, or any substring of the hex);
-  results are the events whose own hash *or any linked hash* matches. It updates
-  on input / Refresh (not on a timer, so expanded rows are not collapsed under
-  you).
+- **Search** — query events by hash *or* free text. Type into the global search
+  entry (which auto-switches to the Search page): a hash (with or without `0x`, or
+  any substring of the hex) matches the events whose own hash or any linked hash
+  contains it; any other text is matched case-insensitively against the whole
+  record (module/op/domain/widget/filename/parameters/…). It updates on input /
+  Refresh (not on a timer, so expanded rows are not collapsed under you).
 - **Every hash is a link.** The hash sits in a label separate from the expander
   toggle, so clicking it activates the link (rather than collapsing the row): it
   switches to the timeline and jumps to the *declaration* (the `create` event) of
