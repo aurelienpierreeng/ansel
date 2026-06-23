@@ -36,20 +36,41 @@
 static struct
 {
   GtkWidget *window;
-  GtkWidget *stack;
+  GtkWidget *notebook;
   GtkWidget *timeline_list;
   GtkWidget *timeline_scroll;
   GtkWidget *grouped_list;
+  GtkWidget *mem_box;     // vbox holding the memory view content
+  GtkWidget *search_entry; // global search entry (in the toolbar)
+  GtkWidget *search_list;  // search results page
   GtkWidget *count_label;
   GtkWidget *groupby;     // GtkComboBoxText: domain / thread / op
-  GtkWidget *mem_box;     // vbox holding the memory view content
   GHashTable *decl_map;   // hex string -> GtkListBoxRow* (the create/declaration row)
+  GHashTable *group_map;  // group key -> _group_t* (incremental grouped buckets)
   uint64_t last_seq;      // highest captured seq already displayed in the timeline
+  uint64_t grouped_last_seq; // highest seq already folded into the grouped view
   guint timer_id;
   guint tick;             // poll tick counter (for throttling the memory view)
-  gboolean grouped_dirty; // grouped view needs a rebuild when next shown
-  gboolean follow_tail;   // auto-scroll requested by the last append
+  int page_timeline, page_grouped, page_memory, page_search; // notebook page indices
 } _g = { 0 };
+
+// One grouped bucket: its detail body (where event rows are appended) and the
+// header label (whose count we keep in sync).
+typedef struct _group_t
+{
+  GtkWidget *body;
+  GtkWidget *header;
+  int count;
+  gchar *key;
+} _group_t;
+
+static void _group_free(gpointer p)
+{
+  _group_t *g = (_group_t *)p;
+  if(!g) return;
+  g_free(g->key);
+  g_free(g); // widgets are owned by the list box
+}
 
 static gchar *_hashhex(const uint64_t h)
 {
@@ -83,6 +104,8 @@ static gchar *_pretty_json(const char *compact)
   return out ? out : g_strdup(compact);
 }
 
+static void _run_search(const char *query);
+
 // Clicking a hash jumps to the declaration (create event) of that object.
 static gboolean _on_link(GtkLabel *label, gchar *uri, gpointer user_data)
 {
@@ -90,13 +113,49 @@ static gboolean _on_link(GtkLabel *label, gchar *uri, gpointer user_data)
   GtkWidget *row = (GtkWidget *)g_hash_table_lookup(_g.decl_map, uri);
   if(row)
   {
-    gtk_stack_set_visible_child_name(GTK_STACK(_g.stack), "timeline");
+    gtk_notebook_set_current_page(GTK_NOTEBOOK(_g.notebook), _g.page_timeline);
     GtkWidget *toggle = (GtkWidget *)g_object_get_data(G_OBJECT(row), "toggle");
     if(toggle) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toggle), TRUE); // expand
     gtk_list_box_select_row(GTK_LIST_BOX(_g.timeline_list), GTK_LIST_BOX_ROW(row));
     gtk_widget_grab_focus(row); // scrolls the row into view
   }
   return TRUE; // handled: do not try to open as an URL
+}
+
+static void _on_search_this_hash(GtkMenuItem *item, gpointer u)
+{
+  const char *uri = (const char *)g_object_get_data(G_OBJECT(item), "uri");
+  if(uri && _g.search_entry)
+  {
+    gtk_entry_set_text(GTK_ENTRY(_g.search_entry), uri); // triggers search-changed → _run_search
+    gtk_notebook_set_current_page(GTK_NOTEBOOK(_g.notebook), _g.page_search);
+  }
+}
+
+// Right-click over a hash link offers to search for that hash.
+static gboolean _on_label_button(GtkWidget *label, GdkEventButton *e, gpointer u)
+{
+  if(e->type != GDK_BUTTON_PRESS || e->button != GDK_BUTTON_SECONDARY) return FALSE;
+  const char *uri = gtk_label_get_current_uri(GTK_LABEL(label)); // link under the pointer
+  if(!uri || !*uri) return FALSE;
+
+  GtkWidget *menu = gtk_menu_new();
+  GtkWidget *mi = gtk_menu_item_new_with_label(_("Search for this hash"));
+  g_object_set_data_full(G_OBJECT(mi), "uri", g_strdup(uri), g_free);
+  g_signal_connect(mi, "activate", G_CALLBACK(_on_search_this_hash), NULL);
+  gtk_menu_shell_append(GTK_MENU_SHELL(menu), mi);
+  gtk_widget_show_all(menu);
+  gtk_menu_popup_at_pointer(GTK_MENU(menu), (GdkEvent *)e);
+  return TRUE;
+}
+
+// Wire a hash-bearing label: left-click navigates, right-click offers search.
+static void _wire_hash_label(GtkWidget *label)
+{
+  gtk_label_set_track_visited_links(GTK_LABEL(label), FALSE);
+  g_signal_connect(label, "activate-link", G_CALLBACK(_on_link), NULL);
+  gtk_widget_add_events(label, GDK_BUTTON_PRESS_MASK);
+  g_signal_connect(label, "button-press-event", G_CALLBACK(_on_label_button), NULL);
 }
 
 static GtkWidget *_event_body_from(const char *json, GArray *links);
@@ -143,8 +202,7 @@ static GtkWidget *_collapsible(const char *header_markup, GtkWidget *body, const
   GtkWidget *header = gtk_label_new(NULL);
   gtk_label_set_markup(GTK_LABEL(header), header_markup);
   gtk_label_set_xalign(GTK_LABEL(header), 0.0);
-  gtk_label_set_track_visited_links(GTK_LABEL(header), FALSE);
-  g_signal_connect(header, "activate-link", G_CALLBACK(_on_link), NULL);
+  _wire_hash_label(header);
 
   GtkWidget *revealer = gtk_revealer_new();
   gtk_revealer_set_reveal_child(GTK_REVEALER(revealer), expanded);
@@ -161,6 +219,7 @@ static GtkWidget *_collapsible(const char *header_markup, GtkWidget *body, const
   gtk_box_pack_start(GTK_BOX(vbox), revealer, FALSE, FALSE, 0);
 
   g_object_set_data(G_OBJECT(vbox), "toggle", toggle);
+  g_object_set_data(G_OBJECT(vbox), "header", header); // so callers can update the label
   return vbox;
 }
 
@@ -202,8 +261,7 @@ static GtkWidget *_event_body_from(const char *json, GArray *links)
     GtkWidget *lw = gtk_label_new(NULL);
     gtk_label_set_markup(GTK_LABEL(lw), ls->str);
     gtk_label_set_xalign(GTK_LABEL(lw), 0.0);
-    gtk_label_set_track_visited_links(GTK_LABEL(lw), FALSE);
-    g_signal_connect(lw, "activate-link", G_CALLBACK(_on_link), NULL);
+    _wire_hash_label(lw);
     gtk_box_pack_start(GTK_BOX(detail), lw, FALSE, FALSE, 0);
     g_string_free(ls, TRUE);
   }
@@ -297,53 +355,62 @@ static const char *_group_key(const dt_sv_logged_event_t *ev, const char *by)
   return ev->domain;
 }
 
+static void _group_set_header(_group_t *g)
+{
+  gchar *e = g_markup_escape_text(g->key && *g->key ? g->key : "(none)", -1);
+  gchar *hm = g_strdup_printf("<b>%s</b>  <span size=\"small\">(%d)</span>", e, g->count);
+  gtk_label_set_markup(GTK_LABEL(g->header), hm);
+  g_free(e);
+  g_free(hm);
+}
+
+// Append one event into its grouped bucket (creating the bucket if needed),
+// preserving existing groups/rows and their expansion state.
+static void _grouped_append(const dt_sv_logged_event_t *ev, const char *by)
+{
+  const char *k = _group_key(ev, by);
+  _group_t *g = (_group_t *)g_hash_table_lookup(_g.group_map, k);
+  if(!g)
+  {
+    g = g_new0(_group_t, 1);
+    g->key = g_strdup(k);
+    g->body = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_set_margin_start(g->body, 12);
+    GtkWidget *coll = _collapsible("", g->body, FALSE);
+    g->header = (GtkWidget *)g_object_get_data(G_OBJECT(coll), "header");
+    gtk_container_add(GTK_CONTAINER(_g.grouped_list), coll);
+    gtk_widget_show_all(coll);
+    g_hash_table_insert(_g.group_map, g_strdup(k), g);
+  }
+  GtkWidget *row = _event_widget(ev);
+  gtk_box_pack_start(GTK_BOX(g->body), row, FALSE, FALSE, 0);
+  gtk_widget_show_all(row);
+  g->count++;
+  _group_set_header(g);
+}
+
+// Fold all events newer than the grouped cursor into the buckets (live append).
+static void _grouped_catch_up(void)
+{
+  uint64_t newlast = _g.grouped_last_seq;
+  GPtrArray *evs = dt_supervisor_events_snapshot_since(_g.grouped_last_seq, &newlast);
+  if(evs->len)
+  {
+    gchar *by = gtk_combo_box_text_get_active_text(GTK_COMBO_BOX_TEXT(_g.groupby));
+    for(guint i = 0; i < evs->len; i++) _grouped_append(g_ptr_array_index(evs, i), by ? by : "domain");
+    g_free(by);
+    _g.grouped_last_seq = newlast;
+  }
+  dt_supervisor_events_free(evs);
+}
+
+// Full rebuild (group-by change / Clear): wipe buckets and re-fold everything.
 static void _rebuild_grouped_now(void)
 {
   _clear_list(_g.grouped_list);
-
-  GPtrArray *events = dt_supervisor_events_snapshot();
-  gchar *by = gtk_combo_box_text_get_active_text(GTK_COMBO_BOX_TEXT(_g.groupby));
-  const char *byk = by ? by : "domain";
-
-  GHashTable *bodies = g_hash_table_new(g_str_hash, g_str_equal); // key -> body vbox
-  GHashTable *counts = g_hash_table_new(g_str_hash, g_str_equal); // key -> count (as int)
-  GPtrArray *order = g_ptr_array_new();
-
-  for(guint i = 0; i < events->len; i++)
-  {
-    const dt_sv_logged_event_t *ev = g_ptr_array_index(events, i);
-    const char *k = _group_key(ev, byk);
-    GtkWidget *body = g_hash_table_lookup(bodies, k);
-    if(!body)
-    {
-      body = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-      gtk_widget_set_margin_start(body, 12);
-      g_hash_table_insert(bodies, (gpointer)k, body);
-      g_ptr_array_add(order, (gpointer)k);
-    }
-    gtk_box_pack_start(GTK_BOX(body), _event_widget(ev), FALSE, FALSE, 0);
-    g_hash_table_insert(counts, (gpointer)k,
-                        GINT_TO_POINTER(GPOINTER_TO_INT(g_hash_table_lookup(counts, k)) + 1));
-  }
-
-  for(guint i = 0; i < order->len; i++)
-  {
-    const char *k = g_ptr_array_index(order, i);
-    GtkWidget *body = g_hash_table_lookup(bodies, k);
-    const int n = GPOINTER_TO_INT(g_hash_table_lookup(counts, k));
-    gchar *e = g_markup_escape_text(k && *k ? k : "(none)", -1);
-    gchar *hm = g_strdup_printf("<b>%s</b>  <span size=\"small\">(%d)</span>", e, n);
-    gtk_container_add(GTK_CONTAINER(_g.grouped_list), _collapsible(hm, body, FALSE));
-    g_free(e);
-    g_free(hm);
-  }
-
-  g_free(by);
-  g_ptr_array_free(order, TRUE);
-  g_hash_table_destroy(bodies);
-  g_hash_table_destroy(counts);
-  dt_supervisor_events_free(events);
-  gtk_widget_show_all(_g.grouped_list);
+  g_hash_table_remove_all(_g.group_map);
+  _g.grouped_last_seq = 0;
+  _grouped_catch_up();
 }
 
 // ---- Memory view -------------------------------------------------------------
@@ -374,9 +441,8 @@ static void _add_mem_item(GtkWidget *box, const char *markup)
   GtkWidget *lbl = gtk_label_new(NULL);
   gtk_label_set_markup(GTK_LABEL(lbl), markup);
   gtk_label_set_xalign(GTK_LABEL(lbl), 0.0);
-  gtk_label_set_track_visited_links(GTK_LABEL(lbl), FALSE);
   gtk_widget_set_margin_start(lbl, 12);
-  g_signal_connect(lbl, "activate-link", G_CALLBACK(_on_link), NULL);
+  _wire_hash_label(lbl);
   gtk_box_pack_start(GTK_BOX(box), lbl, FALSE, FALSE, 0);
 }
 
@@ -441,6 +507,58 @@ static void _rebuild_memory(void)
   gtk_widget_show_all(_g.mem_box);
 }
 
+// ---- Search ------------------------------------------------------------------
+
+// TRUE if the hash's hex (lowercased, with 0x) contains the needle.
+static gboolean _hex_contains(const uint64_t h, const char *needle)
+{
+  gchar *hx = _hashhex(h);
+  gchar *lh = g_ascii_strdown(hx, -1);
+  const gboolean m = strstr(lh, needle) != NULL;
+  g_free(hx);
+  g_free(lh);
+  return m;
+}
+
+// An event matches when its own hash or any of its linked hashes contain needle.
+static gboolean _event_matches(const dt_sv_logged_event_t *ev, const char *needle)
+{
+  if(_hex_contains(ev->hash, needle)) return TRUE;
+  if(ev->links)
+    for(guint i = 0; i < ev->links->len; i++)
+      if(_hex_contains(g_array_index(ev->links, dt_sv_link_t, i).hash, needle)) return TRUE;
+  return FALSE;
+}
+
+static void _run_search(const char *query)
+{
+  if(!_g.search_list) return;
+  _clear_list(_g.search_list);
+  if(!query || !*query)
+  {
+    gtk_widget_show_all(_g.search_list);
+    return;
+  }
+
+  gchar *needle = g_ascii_strdown(query, -1);
+  const char *n = g_str_has_prefix(needle, "0x") ? needle + 2 : needle;
+
+  GPtrArray *evs = dt_supervisor_events_snapshot();
+  for(guint i = 0; i < evs->len; i++)
+  {
+    const dt_sv_logged_event_t *ev = g_ptr_array_index(evs, i);
+    if(*n && _event_matches(ev, n)) gtk_container_add(GTK_CONTAINER(_g.search_list), _event_widget(ev));
+  }
+  dt_supervisor_events_free(evs);
+  g_free(needle);
+  gtk_widget_show_all(_g.search_list);
+}
+
+static void _on_search_changed(GtkSearchEntry *e, gpointer u)
+{
+  _run_search(gtk_entry_get_text(GTK_ENTRY(e)));
+}
+
 static gboolean _scroll_bottom_idle(gpointer u)
 {
   if(!_g.timeline_scroll) return G_SOURCE_REMOVE;
@@ -453,12 +571,15 @@ static gboolean _poll(gpointer u)
 {
   if(!_g.window) return G_SOURCE_REMOVE;
 
-  // The memory view reflects live cache state (changes even without new events),
-  // so refresh it on a throttled cadence whenever its page is visible.
   _g.tick++;
-  if((_g.tick % MEMORY_REFRESH_TICKS) == 0
-     && !g_strcmp0(gtk_stack_get_visible_child_name(GTK_STACK(_g.stack)), "memory"))
-    _rebuild_memory();
+  const int page = gtk_notebook_get_current_page(GTK_NOTEBOOK(_g.notebook));
+  // The grouped view appends new events live (incrementally, preserving folds)
+  // while it is the visible page.
+  if(page == _g.page_grouped) _grouped_catch_up();
+  // The memory view reflects live cache state; refresh it on a throttled cadence.
+  // The search view is intentionally NOT auto-refreshed here: rebuilding it would
+  // collapse any rows the user expanded. It updates on input / Refresh instead.
+  if((_g.tick % MEMORY_REFRESH_TICKS) == 0 && page == _g.page_memory) _rebuild_memory();
 
   uint64_t newlast = _g.last_seq;
   GPtrArray *evs = dt_supervisor_events_snapshot_since(_g.last_seq, &newlast);
@@ -473,10 +594,6 @@ static gboolean _poll(gpointer u)
     _g.last_seq = newlast;
     _timeline_trim();
     _update_count();
-    // The timeline updates live; the grouped view is rebuilt on demand (Refresh,
-    // group-by change, or when its page is shown) to avoid rebuilding thousands
-    // of widgets every tick during heavy streaming.
-    _g.grouped_dirty = TRUE;
     if(at_bottom) g_idle_add(_scroll_bottom_idle, NULL);
   }
   dt_supervisor_events_free(evs);
@@ -490,8 +607,8 @@ static void _full_reload(void)
   _g.last_seq = 0;
   _poll(NULL); // appends everything since the start
   _rebuild_grouped_now();
-  _g.grouped_dirty = FALSE;
   _rebuild_memory();
+  _run_search(gtk_entry_get_text(GTK_ENTRY(_g.search_entry)));
 }
 
 static void _on_refresh(GtkButton *b, gpointer u) { _full_reload(); }
@@ -504,8 +621,7 @@ static void _on_clear(GtkButton *b, gpointer u)
 
 static void _on_groupby_changed(GtkComboBox *c, gpointer u)
 {
-  _rebuild_grouped_now();
-  _g.grouped_dirty = FALSE;
+  _rebuild_grouped_now(); // regroup everything under the new key
 }
 
 static void _on_record_toggled(GtkToggleButton *t, gpointer u)
@@ -513,16 +629,14 @@ static void _on_record_toggled(GtkToggleButton *t, gpointer u)
   dt_supervisor_set_recording(gtk_toggle_button_get_active(t));
 }
 
-static void _on_page_changed(GObject *o, GParamSpec *p, gpointer u)
+static void _on_page_changed(GtkNotebook *nb, GtkWidget *page, guint page_num, gpointer u)
 {
-  const char *vis = gtk_stack_get_visible_child_name(GTK_STACK(_g.stack));
-  if(_g.grouped_dirty && !g_strcmp0(vis, "grouped"))
-  {
-    _rebuild_grouped_now();
-    _g.grouped_dirty = FALSE;
-  }
-  else if(!g_strcmp0(vis, "memory"))
+  if((int)page_num == _g.page_grouped)
+    _grouped_catch_up(); // fold in whatever arrived while the page was hidden
+  else if((int)page_num == _g.page_memory)
     _rebuild_memory();
+  else if((int)page_num == _g.page_search)
+    _run_search(gtk_entry_get_text(GTK_ENTRY(_g.search_entry)));
 }
 
 static void _on_destroy(GtkWidget *w, gpointer u)
@@ -530,6 +644,7 @@ static void _on_destroy(GtkWidget *w, gpointer u)
   if(_g.timer_id) g_source_remove(_g.timer_id);
   dt_supervisor_set_recording(FALSE); // stop capturing once the viewer is gone
   if(_g.decl_map) g_hash_table_destroy(_g.decl_map);
+  if(_g.group_map) g_hash_table_destroy(_g.group_map);
   memset(&_g, 0, sizeof(_g));
 }
 
@@ -542,6 +657,7 @@ void dt_gui_supervisor_window_show(void)
   }
 
   _g.decl_map = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+  _g.group_map = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, _group_free);
 
   _g.window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
   gtk_window_set_title(GTK_WINDOW(_g.window), _("Event supervisor"));
@@ -580,34 +696,52 @@ void dt_gui_supervisor_window_show(void)
   g_signal_connect(_g.groupby, "changed", G_CALLBACK(_on_groupby_changed), NULL);
   gtk_box_pack_start(GTK_BOX(bar), _g.groupby, FALSE, FALSE, 0);
 
+  // global search entry: query all events by hash (own or linked)
+  _g.search_entry = gtk_search_entry_new();
+  gtk_entry_set_placeholder_text(GTK_ENTRY(_g.search_entry), _("search hash…"));
+  gtk_widget_set_size_request(_g.search_entry, 220, -1);
+  g_signal_connect(_g.search_entry, "search-changed", G_CALLBACK(_on_search_changed), NULL);
+  gtk_box_pack_end(GTK_BOX(bar), _g.search_entry, FALSE, FALSE, 0);
+
   _g.count_label = gtk_label_new("");
   gtk_box_pack_end(GTK_BOX(bar), _g.count_label, FALSE, FALSE, 0);
 
-  // stack switcher + stack
-  GtkWidget *switcher = gtk_stack_switcher_new();
-  gtk_box_pack_start(GTK_BOX(vbox), switcher, FALSE, FALSE, 0);
-  _g.stack = gtk_stack_new();
-  gtk_stack_switcher_set_stack(GTK_STACK_SWITCHER(switcher), GTK_STACK(_g.stack));
-  g_signal_connect(_g.stack, "notify::visible-child", G_CALLBACK(_on_page_changed), NULL);
-  gtk_box_pack_start(GTK_BOX(vbox), _g.stack, TRUE, TRUE, 0);
+  // notebook with the four pages, tabs spread across the full width
+  _g.notebook = gtk_notebook_new();
+  g_signal_connect(_g.notebook, "switch-page", G_CALLBACK(_on_page_changed), NULL);
+  gtk_box_pack_start(GTK_BOX(vbox), _g.notebook, TRUE, TRUE, 0);
 
   _g.timeline_list = gtk_list_box_new();
   gtk_list_box_set_selection_mode(GTK_LIST_BOX(_g.timeline_list), GTK_SELECTION_SINGLE);
   _g.timeline_scroll = gtk_scrolled_window_new(NULL, NULL);
   gtk_container_add(GTK_CONTAINER(_g.timeline_scroll), _g.timeline_list);
-  gtk_stack_add_titled(GTK_STACK(_g.stack), _g.timeline_scroll, "timeline", _("Timeline"));
+  _g.page_timeline = gtk_notebook_append_page(GTK_NOTEBOOK(_g.notebook), _g.timeline_scroll,
+                                              gtk_label_new(_("Timeline")));
 
   _g.grouped_list = gtk_list_box_new();
   gtk_list_box_set_selection_mode(GTK_LIST_BOX(_g.grouped_list), GTK_SELECTION_NONE);
   GtkWidget *sw2 = gtk_scrolled_window_new(NULL, NULL);
   gtk_container_add(GTK_CONTAINER(sw2), _g.grouped_list);
-  gtk_stack_add_titled(GTK_STACK(_g.stack), sw2, "grouped", _("Grouped"));
+  _g.page_grouped = gtk_notebook_append_page(GTK_NOTEBOOK(_g.notebook), sw2, gtk_label_new(_("Grouped")));
 
   _g.mem_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
   gtk_container_set_border_width(GTK_CONTAINER(_g.mem_box), 6);
   GtkWidget *sw3 = gtk_scrolled_window_new(NULL, NULL);
   gtk_container_add(GTK_CONTAINER(sw3), _g.mem_box);
-  gtk_stack_add_titled(GTK_STACK(_g.stack), sw3, "memory", _("Memory"));
+  _g.page_memory = gtk_notebook_append_page(GTK_NOTEBOOK(_g.notebook), sw3, gtk_label_new(_("Memory")));
+
+  _g.search_list = gtk_list_box_new();
+  gtk_list_box_set_selection_mode(GTK_LIST_BOX(_g.search_list), GTK_SELECTION_NONE);
+  GtkWidget *sw4 = gtk_scrolled_window_new(NULL, NULL);
+  gtk_container_add(GTK_CONTAINER(sw4), _g.search_list);
+  _g.page_search = gtk_notebook_append_page(GTK_NOTEBOOK(_g.notebook), sw4, gtk_label_new(_("Search")));
+
+  // make each tab expand to fill the notebook width
+  GList *pages = gtk_container_get_children(GTK_CONTAINER(_g.notebook));
+  for(GList *l = pages; l; l = l->next)
+    gtk_container_child_set(GTK_CONTAINER(_g.notebook), GTK_WIDGET(l->data), "tab-expand", TRUE,
+                            "tab-fill", TRUE, NULL);
+  g_list_free(pages);
 
   gtk_widget_show_all(_g.window);
   _full_reload();

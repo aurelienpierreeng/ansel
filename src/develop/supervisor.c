@@ -18,6 +18,8 @@
 
 #include "develop/supervisor.h"
 #include "common/image.h"            // dt_image_t
+#include "common/introspection.h"    // dt_introspection_field_t
+#include "develop/imageop.h"         // dt_iop_module_t (introspection accessors)
 #include "develop/pixelpipe_cache.h" // DT_PIXELPIPE_CACHE_HASH_INVALID
 #include "develop/pixelpipe_hb.h"    // dt_pixelpipe_get_pipe_name
 
@@ -334,7 +336,7 @@ static dt_sv_logged_event_t *_extract_event(JsonObject *root, const gchar *json_
   e->links = g_array_new(FALSE, FALSE, sizeof(dt_sv_link_t));
 
   // nested-object edges carry the linked object id in their "hash" member
-  static const char *obj_edges[] = { "params", "input", "node", "consumes", NULL };
+  static const char *obj_edges[] = { "params", "input", "node", "consumes", "mipmap", NULL };
   for(int i = 0; obj_edges[i]; i++)
   {
     if(!json_object_has_member(root, obj_edges[i])) continue;
@@ -401,6 +403,142 @@ static void _emit_line(JsonObject *root)
   json_node_free(node);
 }
 
+// Recursively render one introspection field's value as "path = value" strings
+// into `out`. Mirrors the offset handling of libs/history.c's tooltip walker but
+// dumps absolute values (not diffs).
+static void _introspect_dump(dt_introspection_field_t *field, const char *prefix, gpointer params,
+                             JsonArray *out)
+{
+  if(!field) return;
+  void *p = (uint8_t *)params + field->header.offset;
+  const char *name = prefix ? prefix : "";
+
+  switch(field->header.type)
+  {
+    case DT_INTROSPECTION_TYPE_STRUCT:
+    case DT_INTROSPECTION_TYPE_UNION:
+      for(int i = 0; i < (int)field->Struct.entries; i++)
+      {
+        dt_introspection_field_t *e = field->Struct.fields[i];
+        const char *nm = (e->header.description && *e->header.description) ? e->header.description
+                                                                          : e->header.field_name;
+        gchar *pre = prefix ? g_strdup_printf("%s.%s", prefix, nm) : g_strdup(nm);
+        _introspect_dump(e, pre, params, out); // struct fields share the params base
+        g_free(pre);
+      }
+      break;
+    case DT_INTROSPECTION_TYPE_ARRAY:
+      if(field->Array.type == DT_INTROSPECTION_TYPE_CHAR)
+      {
+        char *s = (char *)p;
+        if(g_utf8_validate(s, -1, NULL))
+        {
+          gchar *t = g_strdup_printf("%s = \"%s\"", name, s);
+          json_array_add_string_element(out, t);
+          g_free(t);
+        }
+      }
+      else
+      {
+        for(int i = 0, off = 0; i < (int)field->Array.count && i < 8;
+            i++, off += field->Array.field->header.size)
+        {
+          gchar *pre = g_strdup_printf("%s[%d]", name, i);
+          _introspect_dump(field->Array.field, pre, (uint8_t *)params + off, out);
+          g_free(pre);
+        }
+      }
+      break;
+    case DT_INTROSPECTION_TYPE_FLOAT:
+    {
+      gchar *t = g_strdup_printf("%s = %.4f", name, *(float *)p);
+      json_array_add_string_element(out, t);
+      g_free(t);
+      break;
+    }
+    case DT_INTROSPECTION_TYPE_DOUBLE:
+    {
+      gchar *t = g_strdup_printf("%s = %.4f", name, *(double *)p);
+      json_array_add_string_element(out, t);
+      g_free(t);
+      break;
+    }
+    case DT_INTROSPECTION_TYPE_INT:
+    case DT_INTROSPECTION_TYPE_SHORT:
+    {
+      const int val = field->header.type == DT_INTROSPECTION_TYPE_SHORT ? *(short *)p : *(int *)p;
+      gchar *t = g_strdup_printf("%s = %d", name, val);
+      json_array_add_string_element(out, t);
+      g_free(t);
+      break;
+    }
+    case DT_INTROSPECTION_TYPE_UINT:
+    case DT_INTROSPECTION_TYPE_USHORT:
+    {
+      const unsigned val = field->header.type == DT_INTROSPECTION_TYPE_USHORT ? *(unsigned short *)p
+                                                                              : *(unsigned int *)p;
+      gchar *t = g_strdup_printf("%s = %u", name, val);
+      json_array_add_string_element(out, t);
+      g_free(t);
+      break;
+    }
+    case DT_INTROSPECTION_TYPE_INT8:
+    {
+      gchar *t = g_strdup_printf("%s = %d", name, (int)*(int8_t *)p);
+      json_array_add_string_element(out, t);
+      g_free(t);
+      break;
+    }
+    case DT_INTROSPECTION_TYPE_UINT8:
+    {
+      gchar *t = g_strdup_printf("%s = %u", name, (unsigned)*(uint8_t *)p);
+      json_array_add_string_element(out, t);
+      g_free(t);
+      break;
+    }
+    case DT_INTROSPECTION_TYPE_BOOL:
+    {
+      gchar *t = g_strdup_printf("%s = %s", name, *(gboolean *)p ? "on" : "off");
+      json_array_add_string_element(out, t);
+      g_free(t);
+      break;
+    }
+    case DT_INTROSPECTION_TYPE_ENUM:
+    {
+      const int val = *(int *)p;
+      const char *str = "?";
+      for(dt_introspection_type_enum_tuple_t *i = field->Enum.values; i && i->name; i++)
+        if(i->value == val)
+        {
+          str = (i->description && *i->description) ? i->description : i->name;
+          break;
+        }
+      gchar *t = g_strdup_printf("%s = %s", name, str);
+      json_array_add_string_element(out, t);
+      g_free(t);
+      break;
+    }
+    default:
+      break; // OPAQUE / LONG / FLOATCOMPLEX etc. are not rendered
+  }
+}
+
+// Build a "parameters" JSON array (human-legible) from a module's introspection.
+static JsonArray *_params_json(const dt_iop_module_t *module, const void *params)
+{
+  if(!module || !params || !module->have_introspection || !module->get_introspection) return NULL;
+  dt_introspection_t *intro = module->get_introspection();
+  if(!intro || !intro->field) return NULL;
+  JsonArray *out = json_array_new();
+  _introspect_dump(intro->field, NULL, (gpointer)params, out);
+  if(json_array_get_length(out) == 0)
+  {
+    json_array_unref(out);
+    return NULL;
+  }
+  return out;
+}
+
 // Common envelope shared by every event. `resurrected` adds the reuse-after-
 // delete marker. Pass pipe_type < 0 to omit the pipe field.
 static JsonObject *_envelope(const dt_sv_op_t op, const char *domain, const uint64_t hash,
@@ -423,9 +561,13 @@ static JsonObject *_envelope(const dt_sv_op_t op, const char *domain, const uint
 
 void dt_supervisor_history(const dt_sv_op_t op, const uint64_t param_hash, const char *op_name,
                            const int multi_priority, const char *multi_name, const int iop_order,
-                           const int history_index, const int32_t imgid, const gboolean enabled)
+                           const int history_index, const int32_t imgid, const gboolean enabled,
+                           const dt_iop_module_t *module, const void *params)
 {
   if(!dt_supervisor_active() || !_sv.inited) return;
+
+  // Render the parameters outside the lock (introspection only reads the module).
+  JsonArray *parameters = _params_json(module, params);
 
   dt_pthread_mutex_lock(&_sv.lock);
   gboolean created;
@@ -442,12 +584,13 @@ void dt_supervisor_history(const dt_sv_op_t op, const uint64_t param_hash, const
 
   // history is not tied to a pipeline: pass -1 so the envelope omits the pipe field
   JsonObject *root = _envelope(op, "history", param_hash, -1, imgid, e->alive, resurrected);
-  char module[128];
-  _module_label(e, module, sizeof(module));
-  json_object_set_string_member(root, "module", module);
+  char module_label[128];
+  _module_label(e, module_label, sizeof(module_label));
+  json_object_set_string_member(root, "module", module_label);
   json_object_set_int_member(root, "iop_order", iop_order);
   json_object_set_int_member(root, "history_index", history_index);
   json_object_set_boolean_member(root, "enabled", enabled);
+  if(parameters) json_object_set_array_member(root, "parameters", parameters);
   dt_pthread_mutex_unlock(&_sv.lock);
 
   _emit_line(root);
@@ -745,6 +888,20 @@ void dt_supervisor_thumbnail(const dt_sv_op_t op, const int32_t imgid, const int
   json_array_add_int_element(size, width);
   json_array_add_int_element(size, height);
   json_object_set_array_member(root, "size", size);
+
+  // Reference the mipmap object this thumbnail displays (by imgid + mip), so the
+  // displayed mipmap hash is visible and clickable.
+  const uint64_t mk = _mipmap_key(imgid, mip);
+  JsonObject *mm = json_object_new();
+  _set_hash_member(mm, "hash", mk);
+  json_object_set_int_member(mm, "mip", mip);
+  const dt_sv_entry_t *me = (const dt_sv_entry_t *)g_hash_table_lookup(_sv.entries, &mk);
+  if(me)
+  {
+    json_object_set_boolean_member(mm, "alive", me->alive);
+    if(me->img_filename[0]) json_object_set_string_member(mm, "filename", me->img_filename);
+  }
+  json_object_set_object_member(root, "mipmap", mm);
   dt_pthread_mutex_unlock(&_sv.lock);
 
   _emit_line(root);

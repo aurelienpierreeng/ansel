@@ -24,6 +24,7 @@
 #include "common/darktable.h"
 
 struct dt_image_t;
+struct dt_iop_module_t;
 
 #ifdef __cplusplus
 extern "C" {
@@ -159,9 +160,12 @@ uint64_t dt_supervisor_mipmap_key(int32_t imgid, int mip);
  * param hash), the join target nodes/cachelines resolve their `params` edge to.
  * DELETE flips `alive` to FALSE without dropping the entry.
  */
+// `module`/`params` are optional: when the module exposes introspection, the
+// parameters are rendered human-legibly under "parameters" (pass NULL/NULL to skip).
 void dt_supervisor_history(dt_sv_op_t op, uint64_t param_hash, const char *op_name,
                            int multi_priority, const char *multi_name, int iop_order,
-                           int history_index, int32_t imgid, gboolean enabled);
+                           int history_index, int32_t imgid, gboolean enabled,
+                           const struct dt_iop_module_t *module, const void *params);
 
 /**
  * Pipeline topology node event — keyed by dt_supervisor_node_key().

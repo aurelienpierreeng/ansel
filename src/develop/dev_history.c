@@ -783,7 +783,8 @@ static void _remove_history_leaks(dt_develop_t *dev)
       if(dt_supervisor_active())
         dt_supervisor_history(DT_SV_DELETE, hist->hash, hist->module->op, hist->module->multi_priority,
                               hist->module->multi_name, hist->module->iop_order,
-                              g_list_index(dev->history, hist), dev->image_storage.id, hist->enabled);
+                              g_list_index(dev->history, hist), dev->image_storage.id, hist->enabled,
+                              hist->module, hist->params);
       dt_dev_free_history_item(hist);
       dev->history = g_list_delete_link(dev->history, link);
     }
@@ -904,7 +905,7 @@ gboolean dt_dev_add_history_item_ext(dt_develop_t *dev, struct dt_iop_module_t *
     if(is_new_item)
       dt_supervisor_history(DT_SV_CREATE, hist->hash, module->op, module->multi_priority,
                             module->multi_name, module->iop_order, hist->num, dev->image_storage.id,
-                            hist->enabled);
+                            hist->enabled, module, hist->params);
     else if(old_param_hash != hist->hash)
     {
       // in-place overwrite changed the hash: delete old key, add new key, then
@@ -912,12 +913,12 @@ gboolean dt_dev_add_history_item_ext(dt_develop_t *dev, struct dt_iop_module_t *
       dt_supervisor_rekey(old_param_hash, hist->hash);
       dt_supervisor_history(DT_SV_UPDATE, hist->hash, module->op, module->multi_priority,
                             module->multi_name, module->iop_order, hist->num, dev->image_storage.id,
-                            hist->enabled);
+                            hist->enabled, module, hist->params);
     }
     else
       dt_supervisor_history(DT_SV_UPDATE, hist->hash, module->op, module->multi_priority,
                             module->multi_name, module->iop_order, hist->num, dev->image_storage.id,
-                            hist->enabled);
+                            hist->enabled, module, hist->params);
   }
 
   return add_new_pipe_node;
@@ -1053,7 +1054,7 @@ void dt_dev_history_free_history(dt_develop_t *dev)
       if(h && h->module)
         dt_supervisor_history(DT_SV_DELETE, h->hash, h->module->op, h->module->multi_priority,
                               h->module->multi_name, h->module->iop_order, h->num,
-                              dev->image_storage.id, h->enabled);
+                              dev->image_storage.id, h->enabled, h->module, h->params);
     }
   g_list_free_full(g_steal_pointer(&dev->history), dt_dev_free_history_item);
   dev->history = NULL;
@@ -1984,7 +1985,7 @@ gboolean dt_dev_read_history_ext(dt_develop_t *dev, const int32_t imgid)
     if(dt_supervisor_active())
       dt_supervisor_history(DT_SV_CREATE, hist->hash, module->op, module->multi_priority,
                             module->multi_name, module->iop_order, g_list_index(dev->history, hist),
-                            imgid, hist->enabled);
+                            imgid, hist->enabled, module, hist->params);
 
     dt_print(DT_DEBUG_HISTORY, "[history] successfully loaded module %s history (enabled: %i)\n", hist->module->op, hist->enabled);
   }
@@ -2208,7 +2209,7 @@ void dt_dev_history_truncate(dt_develop_t *dev, const int32_t imgid)
     if(dt_supervisor_active() && h && h->module)
       dt_supervisor_history(DT_SV_DELETE, h->hash, h->module->op, h->module->multi_priority,
                             h->module->multi_name, h->module->iop_order, h->num,
-                            dev->image_storage.id, h->enabled);
+                            dev->image_storage.id, h->enabled, h->module, h->params);
     dt_dev_free_history_item(link->data);
     dev->history = g_list_delete_link(dev->history, link);
     link = next;

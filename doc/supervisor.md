@@ -73,7 +73,9 @@ lines are already linked; `jq` is for filtering/shaping, not joining.
 ## GUI: the event supervisor window
 
 *Help → Event supervisor…* opens a browsable view of the in-memory event log
-(`src/gui/actions/supervisor_window.c`). It does not need the `-d supervisor`
+(`src/gui/actions/supervisor_window.c`), laid out as a `GtkNotebook` (Timeline /
+Grouped / Memory / Search) with a global toolbar (Record, Refresh, Clear, Group
+by, event count, and a **search entry**). It does not need the `-d supervisor`
 flag: a **Record** check button toggles runtime capture
 (`dt_supervisor_set_recording`). Capture is **on while the window is open** and
 stops when it closes — so events are recorded live from when you open it (do the
@@ -88,8 +90,9 @@ darkroom to see history/node/cacheline/backbuf/widget events stream in).
   keeps the most recent rows (older ones are trimmed; the full log stays in the
   supervisor).
 - **Grouped** — the same rows bucketed and **collapsible** by group, keyed by a
-  selectable field (*domain / thread / op*). Rebuilt on demand (Refresh, group-by
-  change, or when its page is shown) rather than every tick.
+  selectable field (*domain / thread / op*). **Live**: new events are appended
+  into their bucket incrementally (preserving folds), like the timeline. A full
+  rebuild happens only on a group-by change or Clear.
 - **Memory** — live state of the two RAM caches, queried directly (not from the
   event log): for the **pipeline cache** and the **mipmap cache**, a usage bar
   (*current / max MiB*, max being the user-specified budget) and the stored items
@@ -101,11 +104,18 @@ darkroom to see history/node/cacheline/backbuf/widget events stream in).
   Refreshed when shown and throttled (~1 s) while visible.
   Introspection comes from `dt_dev_pixelpipe_cache_get_{usage,entries_stats}()`
   and `dt_mipmap_cache_get_{usage,entries_stats}()`.
+- **Search** — query all events touching a particular hash. Type into the global
+  search entry (a bare hash, with or without `0x`, or any substring of the hex);
+  results are the events whose own hash *or any linked hash* matches. It updates
+  on input / Refresh (not on a timer, so expanded rows are not collapsed under
+  you).
 - **Every hash is a link.** The hash sits in a label separate from the expander
   toggle, so clicking it activates the link (rather than collapsing the row): it
   switches to the timeline and jumps to the *declaration* (the `create` event) of
   that object, expanding and selecting its row — so you can walk
-  `widget → backbuf → cacheline → params → history` by clicking.
+  `widget → backbuf → cacheline → params → history` by clicking. **Right-clicking**
+  a hash offers *Search for this hash*, which fills the search entry and switches
+  to the Search page.
 
 **Refresh** reloads from a fresh snapshot, **Clear** empties the log. The window
 reads through `dt_supervisor_events_snapshot{,_since}()` (deep-copied,
@@ -142,8 +152,11 @@ Common envelope:
 
 Domain specifics:
 
-- **history** — `module`, `iop_order`, `history_index`, `enabled`. Keyed by the
-  parameter hash. `delete` flips `alive`.
+- **history** — `module`, `iop_order`, `history_index`, `enabled`, and (when the
+  module exposes introspection) the human-legible module parameters under
+  `parameters` (rendered the same way `libs/history.c` does its tooltips, via
+  `module->get_introspection()`). Keyed by the parameter hash. `delete` flips
+  `alive`.
 - **node** — `module`, `iop_order`. Topology object, keyed by the synthetic node
   key. `create` at `create_nodes` (no params yet); `update` at history
   synchronization (`dt_dev_pixelpipe_change()` → the sync loops), where the
@@ -161,7 +174,9 @@ Domain specifics:
 - **widget** — `widget` tag, resolved `consumes`/`params`. The consumed hash is
   `hash`. Emitted on surface rebind, not every expose.
 - **thumbnail** — `mip`, `size`, `success`; keyed by a synthetic `(imgid, mip)`
-  key. `read` when generation starts, `update` with the result. The pipeline
+  key. `read` when generation starts, `update` with the result. It also carries a
+  `mipmap` edge (the `dt_supervisor_mipmap_key(imgid, mip)` of the buffer it
+  displays), so the displayed mipmap hash is visible and clickable. The pipeline
   render behind a thumbnail miss surfaces through the generic node/cacheline/
   backbuf events of the thumbnail pipe.
 - **mipmap** — a mipmap *cache object*, keyed by a distinct synthetic
