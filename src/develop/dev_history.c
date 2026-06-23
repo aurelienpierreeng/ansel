@@ -379,13 +379,10 @@ int dt_dev_merge_history_into_image(dt_develop_t *dev_src, int32_t dest_imgid, c
     dt_dev_write_history_ext(&dev_dest, dest_imgid);
   }
 
-  /* If the destination history was just recreated from an empty stack, keep the
-   * image-format default order we would get by opening the image in darkroom.
-   * Source ordering constraints would otherwise let a pasted JPEG/style order
-   * turn a freshly reset RAW destination into a non-RAW pipeline.
-   */
-  const gboolean use_source_iop_order = merge_iop_order && !first_run;
-  const int ret_val = dt_history_merge(&dev_dest, dev_src, dest_imgid, mod_list, use_source_iop_order, mode,
+  /* Honor the high-level "use source pipeline order" choice on every image, including freshly recreated
+   * destinations. The topological solve still falls back to destination order when source constraints are
+   * unsatisfiable, so this stays safe while making the batch decision apply uniformly. */
+  const int ret_val = dt_history_merge(&dev_dest, dev_src, dest_imgid, mod_list, merge_iop_order, mode,
                                        paste_instances, source_label, batch);
 
   if(ret_val == 0)

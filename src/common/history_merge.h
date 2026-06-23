@@ -46,7 +46,16 @@ extern "C"
   typedef struct dt_hm_batch_state_t
   {
     dt_hm_batch_decision_t decision;
+    // Resolved destination module order (list of owned "op|multi_name" strings) captured from the first
+    // accepted image of a batch. When non-NULL, later images replay this order instead of re-solving it,
+    // so a single high-level decision (and any manual reorder done in the report) applies to the whole batch.
+    GList *order_ids;
   } dt_hm_batch_state_t;
+
+  /**
+   * @brief Release resources held by a batch state (the cached order). Safe to call on a zeroed state.
+   */
+  void dt_hm_batch_state_cleanup(dt_hm_batch_state_t *batch);
 
   /**
    * @brief Merge a list of modules into a destination image, solving pipeline topologies

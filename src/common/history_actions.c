@@ -269,7 +269,9 @@ gboolean dt_history_paste_on_list(const GList *list)
 {
   if(darktable.view_manager->copy_paste.copied_imageid <= 0) return FALSE;
   _paste_action_ctx_t ctx = { 0 };
-  return _history_action_on_list(list, _history_paste_apply, &ctx);
+  const gboolean changed = _history_action_on_list(list, _history_paste_apply, &ctx);
+  dt_hm_batch_state_cleanup(&ctx.batch);
+  return changed;
 }
 
 gboolean dt_history_paste_parts_prepare(void)
@@ -316,7 +318,9 @@ gboolean dt_history_paste_parts_on_list(const GList *list)
   if(IS_NULL_PTR(darktable.view_manager->copy_paste.selops))
     return FALSE;
   _paste_action_ctx_t ctx = { 0 };
-  return _history_action_on_list(list, _history_paste_parts_apply, &ctx);
+  const gboolean changed = _history_action_on_list(list, _history_paste_parts_apply, &ctx);
+  dt_hm_batch_state_cleanup(&ctx.batch);
+  return changed;
 }
 
 static gboolean _history_compress_apply(const int32_t imgid, void *user_data)
@@ -499,7 +503,9 @@ gboolean dt_history_style_on_image(const int32_t imgid, const char *name, const 
   };
   if(params.style_id == 0) return FALSE;
 
-  return _history_style_apply(imgid, &params);
+  const gboolean changed = _history_style_apply(imgid, &params);
+  dt_hm_batch_state_cleanup(&params.batch);
+  return changed;
 }
 
 gboolean dt_history_style_on_list(const GList *list, const char *name, const gboolean duplicate)
@@ -515,5 +521,7 @@ gboolean dt_history_style_on_list(const GList *list, const char *name, const gbo
   };
   if(params.style_id == 0) return FALSE;
 
-  return _history_action_on_list(list, _history_style_apply, &params);
+  const gboolean changed = _history_action_on_list(list, _history_style_apply, &params);
+  dt_hm_batch_state_cleanup(&params.batch);
+  return changed;
 }
