@@ -505,11 +505,15 @@ void dt_mipmap_cache_allocate_dynamic(void *data, dt_cache_entry_t *entry)
 
   if(IS_NULL_PTR(dsc)) return;
 
-  // Register the mipmap object with the supervisor; its properties are its image.
+  // Register the mipmap object, and the image cache object it links to. The image
+  // is usually already cached (so its allocate callback never fired), hence we
+  // register it here from the live dt_image_t; dt_supervisor_image() promotes the
+  // first sighting to a `create` so the link resolves.
   if(dt_supervisor_active())
   {
     const dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
-    dt_supervisor_mipmap(DT_SV_CREATE, imgid, mip, img);
+    if(img) dt_supervisor_image(DT_SV_UPDATE, imgid, img);
+    dt_supervisor_mipmap(DT_SV_CREATE, imgid, mip);
     if(img) dt_image_cache_read_release(darktable.image_cache, img);
   }
 
@@ -632,7 +636,7 @@ void dt_mipmap_cache_deallocate_dynamic(void *data, dt_cache_entry_t *entry)
   const dt_mipmap_size_t mip = get_size(entry->key);
 
   if(dt_supervisor_active())
-    dt_supervisor_mipmap(DT_SV_DELETE, get_imgid(entry->key), (int)mip, NULL);
+    dt_supervisor_mipmap(DT_SV_DELETE, get_imgid(entry->key), (int)mip);
   if(mip < DT_MIPMAP_F)
   {
     const int32_t imgid = get_imgid(entry->key);

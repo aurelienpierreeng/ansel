@@ -101,7 +101,9 @@ darkroom to see history/node/cacheline/backbuf/widget events stream in).
   and it is enabled, the pipeline cache also shows a second **vRAM** bar (device
   buffers attached to cachelines, summed via `dt_opencl_get_mem_object_size()`,
   over the total device memory), and each pipeline item that holds GPU buffers
-  notes `+N MiB vRAM (k buf)`. Each item is a link:
+  notes `+N MiB vRAM (k buf)` in a right-aligned column. A third **image cache**
+  section lists the cached `dt_image_t` objects (`image #id` + filename), each
+  linking to its `image` event. Each item is a link:
   clicking jumps to that object's event in the timeline (a pipeline item to its
   cacheline `create`, a mipmap item to its `mipmap` object event — whose detail
   shows the `dt_image_t` properties — via the synthetic `(imgid, mip)` key).
@@ -196,10 +198,13 @@ Domain specifics:
   backbuf events of the thumbnail pipe.
 - **mipmap** — a mipmap *cache object*, keyed by a distinct synthetic
   `(imgid, mip)` key. `create` when the buffer is allocated/loaded, `delete` on
-  eviction. Its properties are its `dt_image_t`: the `create` event carries a
-  curated subset under `properties` (filename, folder, dimensions, processed
-  size, flags/rating, orientation, loader, camera, lens, datetime, exposure
-  triplet, ids). This is the object the **Memory** view's mipmap items link to.
+  eviction. It does **not** duplicate the `dt_image_t`; instead it carries an
+  `image` edge linking to the image cache object (below), which holds those
+  properties. This is the object the **Memory** view's mipmap items link to.
+- **image** — an image *cache object* (the canonical `dt_image_t` for an imgid),
+  keyed by a distinct synthetic `imgid` key. `create` when loaded from the
+  database, `delete` on eviction; same `properties` subset as `mipmap`. The
+  Memory view's image-cache items link to it.
 
 ### Example: a node computed its output
 
@@ -259,6 +264,7 @@ jq -c 'select(.domain=="widget") | {ts,widget,frame:.hash,
 | widget | read | surface rebind in `_lock_pipe_surface()` (`views/darkroom.c`) |
 | thumbnail | read/update | inside `_view_image_get_surface_internal()` (`views/view.c`), where the real mip level is known |
 | mipmap | create/delete | `dt_mipmap_cache_allocate_dynamic()` / `dt_mipmap_cache_deallocate_dynamic()` (`common/mipmap_cache.c`); create fetches the `dt_image_t` for its properties |
+| image | create/delete | `dt_image_cache_allocate()` / `dt_image_cache_deallocate()` (`common/image_cache.c`) |
 
 ## Limits / TODO
 

@@ -155,6 +155,10 @@ uint64_t dt_supervisor_thumbnail_key(int32_t imgid, int mip);
 // cache item to the mipmap object's properties.
 uint64_t dt_supervisor_mipmap_key(int32_t imgid, int mip);
 
+// Key under which image cache objects (the canonical dt_image_t for an imgid)
+// are registered. Distinct from the mipmap key.
+uint64_t dt_supervisor_image_key(int32_t imgid);
+
 /**
  * History item event — keyed by its parameter hash (== module hash == node
  * param hash), the join target nodes/cachelines resolve their `params` edge to.
@@ -234,11 +238,17 @@ void dt_supervisor_thumbnail(dt_sv_op_t op, int32_t imgid, int width, int height
 
 /**
  * Mipmap cache object event — keyed by dt_supervisor_mipmap_key(). `create` when
- * the mipmap buffer is allocated/loaded, `delete` on eviction. The object's
- * properties are its `dt_image_t` (a curated subset is emitted under
- * "properties"); pass NULL when no image is available (e.g. on delete).
+ * the mipmap buffer is allocated/loaded, `delete` on eviction. It links to the
+ * image cache object (an `image` edge) rather than duplicating the `dt_image_t`.
  */
-void dt_supervisor_mipmap(dt_sv_op_t op, int32_t imgid, int mip, const struct dt_image_t *img);
+void dt_supervisor_mipmap(dt_sv_op_t op, int32_t imgid, int mip);
+
+/**
+ * Image cache object event — the canonical dt_image_t for an imgid, keyed by
+ * dt_supervisor_image_key(). `create` when the entry is loaded from the
+ * database, `delete` on eviction. Its properties are its `dt_image_t`.
+ */
+void dt_supervisor_image(dt_sv_op_t op, int32_t imgid, const struct dt_image_t *img);
 
 /**
  * Programmatic human-readable rendering of any tracked object, by hash.

@@ -53,6 +53,7 @@
 #include "control/jobs.h"
 #include "control/signal.h"
 #include "develop/develop.h"
+#include "develop/supervisor.h"
 
 #include <sqlite3.h>
 #include <inttypes.h>
@@ -321,7 +322,7 @@ void dt_image_from_stmt(dt_image_t *img, sqlite3_stmt *stmt)
   dt_image_refresh_makermodel(img);
 }
 
-static void _image_cache_reload_from_db(dt_image_t *img, const uint32_t imgid)
+static void _image_cache_reload_from_db(dt_image_t *img, const uint32_t imgid, const dt_sv_op_t sv_op)
 {
   _image_cache_stmt_mutex_ensure();
   dt_pthread_mutex_lock(&_image_cache_stmt_mutex);
@@ -354,6 +355,10 @@ static void _image_cache_reload_from_db(dt_image_t *img, const uint32_t imgid)
   }
 
   dt_pthread_mutex_unlock(&_image_cache_stmt_mutex);
+
+  // The image's dt_image_t was just (re)loaded from the database: `create` on
+  // first allocation, `update` on a reload (get_reload / IMAGE_INFO_CHANGED).
+  if(dt_supervisor_active()) dt_supervisor_image(sv_op, (int32_t)imgid, img);
 }
 
 void dt_image_cache_allocate(void *data, dt_cache_entry_t *entry)
@@ -363,7 +368,7 @@ void dt_image_cache_allocate(void *data, dt_cache_entry_t *entry)
   dt_image_t *img = (dt_image_t *)g_malloc(sizeof(dt_image_t));
   entry->data = img;
   dt_image_init(img);
-  _image_cache_reload_from_db(img, entry->key);
+  _image_cache_reload_from_db(img, entry->key, DT_SV_CREATE); // emits the create event
 
   img->cache_entry = entry; // init backref
 }
@@ -371,6 +376,9 @@ void dt_image_cache_allocate(void *data, dt_cache_entry_t *entry)
 void dt_image_cache_deallocate(void *data, dt_cache_entry_t *entry)
 {
   dt_image_t *img = (dt_image_t *)entry->data;
+
+  if(dt_supervisor_active()) dt_supervisor_image(DT_SV_DELETE, (int32_t)entry->key, NULL);
+
   dt_free(img->profile);
   g_list_free_full(img->dng_gain_maps, dt_free_gpointer);
   img->dng_gain_maps = NULL;
@@ -423,6 +431,41 @@ void dt_image_cache_print(dt_image_cache_t *cache)
          (float)cache->cache.cost / (float)cache->cache.cost_quota);
 }
 
+void dt_image_cache_get_usage(dt_image_cache_t *cache, size_t *current, size_t *max)
+{
+  if(current) *current = 0;
+  if(max) *max = 0;
+  if(IS_NULL_PTR(cache)) return;
+  dt_pthread_mutex_lock(&cache->cache.lock);
+  if(current) *current = cache->cache.cost;
+  if(max) *max = cache->cache.cost_quota;
+  dt_pthread_mutex_unlock(&cache->cache.lock);
+}
+
+GArray *dt_image_cache_get_entries_stats(dt_image_cache_t *cache)
+{
+  GArray *out = g_array_new(FALSE, FALSE, sizeof(dt_image_cache_stats_entry_t));
+  if(IS_NULL_PTR(cache)) return out;
+
+  dt_pthread_mutex_lock(&cache->cache.lock);
+  GHashTableIter it;
+  gpointer key, value;
+  g_hash_table_iter_init(&it, cache->cache.hashtable);
+  while(g_hash_table_iter_next(&it, &key, &value))
+  {
+    const dt_cache_entry_t *ce = (const dt_cache_entry_t *)value;
+    if(IS_NULL_PTR(ce)) continue;
+    dt_image_cache_stats_entry_t s = { 0 };
+    s.imgid = (int32_t)ce->key;
+    s.size = ce->cost ? ce->cost : ce->data_size;
+    const dt_image_t *img = (const dt_image_t *)ce->data;
+    if(img && img->filename[0]) g_strlcpy(s.filename, img->filename, sizeof(s.filename));
+    g_array_append_val(out, s);
+  }
+  dt_pthread_mutex_unlock(&cache->cache.lock);
+  return out;
+}
+
 dt_image_t *dt_image_cache_get(dt_image_cache_t *cache, const int32_t imgid, char mode)
 {
   if(imgid <= 0) return NULL;
@@ -463,7 +506,7 @@ dt_image_t *dt_image_cache_get_reload(dt_image_cache_t *cache, const int32_t img
   dt_cache_entry_t *entry = dt_cache_get(&cache->cache, (uint32_t)imgid, 'w');
   ASAN_UNPOISON_MEMORY_REGION(entry->data, sizeof(dt_image_t));
   dt_image_t *img = (dt_image_t *)entry->data;
-  _image_cache_reload_from_db(img, (uint32_t)imgid);
+  _image_cache_reload_from_db(img, (uint32_t)imgid, DT_SV_UPDATE);
 
   img->cache_entry = entry;
 

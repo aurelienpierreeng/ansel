@@ -59,6 +59,21 @@ void dt_image_cache_init(dt_image_cache_t *cache);
 void dt_image_cache_cleanup(dt_image_cache_t *cache);
 void dt_image_cache_print(dt_image_cache_t *cache);
 
+// One cached image (dt_image_t), for the GUI memory view.
+typedef struct dt_image_cache_stats_entry_t
+{
+  int32_t imgid;
+  size_t size;        // bytes
+  char filename[128];
+} dt_image_cache_stats_entry_t;
+
+// Current/max bytes used by the image cache.
+void dt_image_cache_get_usage(dt_image_cache_t *cache, size_t *current, size_t *max);
+
+// Snapshot of all cached images (newly-allocated GArray of
+// dt_image_cache_stats_entry_t; free with g_array_free()).
+GArray *dt_image_cache_get_entries_stats(dt_image_cache_t *cache);
+
 // blocks until it gets the image struct with this id for reading.
 // also does the sql query if the image is not in cache atm.
 // if id < 0, a newly wiped image struct shall be returned (for import).

@@ -38,6 +38,7 @@ typedef enum dt_sv_facet_t
   DT_SV_F_WIDGET = 1 << 4,
   DT_SV_F_THUMB = 1 << 5,
   DT_SV_F_MIPMAP = 1 << 6,
+  DT_SV_F_IMAGE = 1 << 7,
 } dt_sv_facet_t;
 
 // One registry entry, identified by a single hash. All fields are value-copied;
@@ -55,6 +56,7 @@ typedef struct dt_sv_entry_t
   uint64_t input_hash;   // cacheline      -> the input cacheline it consumes
   uint64_t node_hash;    // cacheline      -> producing topology node
   uint64_t history_hash; // backbuf        -> history-stack state
+  uint64_t image_hash;   // mipmap         -> image cache object
 
   // descriptive metadata (copied in)
   char op_name[32];
@@ -164,6 +166,16 @@ uint64_t dt_supervisor_mipmap_key(const int32_t imgid, const int mip)
   return _mipmap_key(imgid, mip);
 }
 
+static uint64_t _image_key(const int32_t imgid)
+{
+  return _fnv1a("image", imgid, 0);
+}
+
+uint64_t dt_supervisor_image_key(const int32_t imgid)
+{
+  return _image_key(imgid);
+}
+
 // devid < 0 is the CPU path; otherwise an OpenCL device slot.
 static void _device_string(const int devid, char *out, const size_t out_size)
 {
@@ -228,6 +240,7 @@ static dt_sv_entry_t *_entry_get_locked(const uint64_t hash, gboolean *created)
   e->param_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
   e->node_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
   e->history_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+  e->image_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
   e->devid = -1;
 
   uint64_t *key = (uint64_t *)g_malloc(sizeof(uint64_t));
@@ -256,6 +269,7 @@ static gboolean _touch_alive_locked(dt_sv_entry_t *e, const gboolean created, co
 static const char *_primary_domain(const dt_sv_entry_t *e)
 {
   if(!e) return "unknown";
+  if(e->facets & DT_SV_F_IMAGE)   return "image";
   if(e->facets & DT_SV_F_MIPMAP)  return "mipmap";
   if(e->facets & DT_SV_F_THUMB)   return "thumbnail";
   if(e->facets & DT_SV_F_BACKBUF) return "backbuf";
@@ -336,7 +350,7 @@ static dt_sv_logged_event_t *_extract_event(JsonObject *root, const gchar *json_
   e->links = g_array_new(FALSE, FALSE, sizeof(dt_sv_link_t));
 
   // nested-object edges carry the linked object id in their "hash" member
-  static const char *obj_edges[] = { "params", "input", "node", "consumes", "mipmap", NULL };
+  static const char *obj_edges[] = { "params", "input", "node", "consumes", "mipmap", "image", NULL };
   for(int i = 0; obj_edges[i]; i++)
   {
     if(!json_object_has_member(root, obj_edges[i])) continue;
@@ -949,22 +963,55 @@ static JsonObject *_image_properties_json(const dt_image_t *img)
   return o;
 }
 
-void dt_supervisor_mipmap(const dt_sv_op_t op, const int32_t imgid, const int mip, const dt_image_t *img)
+void dt_supervisor_mipmap(const dt_sv_op_t op, const int32_t imgid, const int mip)
 {
   if(!dt_supervisor_active() || !_sv.inited) return;
 
   const uint64_t key = _mipmap_key(imgid, mip);
+  const uint64_t image_key = _image_key(imgid);
   dt_pthread_mutex_lock(&_sv.lock);
   gboolean created;
   dt_sv_entry_t *e = _entry_get_locked(key, &created);
   e->facets |= DT_SV_F_MIPMAP;
   e->imgid = imgid;
   e->mip = mip;
-  if(img && img->filename[0]) g_strlcpy(e->img_filename, img->filename, sizeof(e->img_filename));
+  e->image_hash = image_key;
   const gboolean resurrected = _touch_alive_locked(e, created, op);
 
   JsonObject *root = _envelope(op, "mipmap", key, -1, imgid, e->alive, resurrected);
   json_object_set_int_member(root, "mip", mip);
+  // Link to the image cache object instead of duplicating its dt_image_t values.
+  JsonObject *im = _resolve_locked(image_key);
+  if(!im)
+  {
+    im = json_object_new();
+    _set_hash_member(im, "hash", image_key);
+  }
+  json_object_set_object_member(root, "image", im);
+  dt_pthread_mutex_unlock(&_sv.lock);
+
+  _emit_line(root);
+}
+
+void dt_supervisor_image(const dt_sv_op_t op, const int32_t imgid, const dt_image_t *img)
+{
+  if(!dt_supervisor_active() || !_sv.inited) return;
+
+  const uint64_t key = _image_key(imgid);
+  dt_pthread_mutex_lock(&_sv.lock);
+  gboolean created;
+  dt_sv_entry_t *e = _entry_get_locked(key, &created);
+  e->facets |= DT_SV_F_IMAGE;
+  e->imgid = imgid;
+  if(img && img->filename[0]) g_strlcpy(e->img_filename, img->filename, sizeof(e->img_filename));
+  // The image cache `allocate` callback (the natural create point) only fires on
+  // a miss, but images are usually already cached when a consumer (e.g. a mipmap)
+  // first references them. So the first time we see an image, treat it as a
+  // create regardless of the caller's intent, so it exists for navigation.
+  const dt_sv_op_t eff_op = created ? DT_SV_CREATE : op;
+  const gboolean resurrected = _touch_alive_locked(e, created, eff_op);
+
+  JsonObject *root = _envelope(eff_op, "image", key, -1, imgid, e->alive, resurrected);
   if(e->img_filename[0]) json_object_set_string_member(root, "filename", e->img_filename);
   if(img) json_object_set_object_member(root, "properties", _image_properties_json(img));
   dt_pthread_mutex_unlock(&_sv.lock);
@@ -1006,7 +1053,12 @@ gchar *dt_supervisor_describe(const uint64_t hash)
   char dev[32];
   _device_string(e->devid, dev, sizeof(dev));
 
-  if(e->facets & DT_SV_F_MIPMAP)
+  if(e->facets & DT_SV_F_IMAGE)
+  {
+    g_string_append_printf(s, "image #%d", e->imgid);
+    if(e->img_filename[0]) g_string_append_printf(s, " (%s)", e->img_filename);
+  }
+  else if(e->facets & DT_SV_F_MIPMAP)
   {
     g_string_append_printf(s, "mipmap image #%d mip %d", e->imgid, e->mip);
     if(e->img_filename[0]) g_string_append_printf(s, " (%s)", e->img_filename);

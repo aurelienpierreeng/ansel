@@ -18,6 +18,7 @@
 
 #include "gui/actions/supervisor_window.h"
 #include "common/darktable.h"
+#include "common/image_cache.h"
 #include "common/mipmap_cache.h"
 #include "common/opencl.h"
 #include "develop/pixelpipe_cache.h"
@@ -86,6 +87,8 @@ static const char *_domain_color(const char *d)
   if(!g_strcmp0(d, "backbuf"))   return "#ff9a9a";
   if(!g_strcmp0(d, "widget"))    return "#d0a8ff";
   if(!g_strcmp0(d, "thumbnail")) return "#bcbcbc";
+  if(!g_strcmp0(d, "mipmap"))    return "#b0c4de";
+  if(!g_strcmp0(d, "image"))     return "#e8c8a0";
   return "#dddddd";
 }
 
@@ -476,6 +479,12 @@ static gint _cmp_mip_size(gconstpointer a, gconstpointer b)
   return (y->size > x->size) - (y->size < x->size); // descending
 }
 
+static gint _cmp_image_imgid(gconstpointer a, gconstpointer b)
+{
+  const dt_image_cache_stats_entry_t *x = a, *y = b;
+  return x->imgid - y->imgid; // ascending (entries are all the same size)
+}
+
 static void _rebuild_memory(void)
 {
   if(!_g.mem_box) return;
@@ -537,6 +546,26 @@ static void _rebuild_memory(void)
     g_free(m);
   }
   g_array_free(me, TRUE);
+
+  // Image cache
+  dt_image_cache_get_usage(darktable.image_cache, &cur, &max);
+  GArray *ie = dt_image_cache_get_entries_stats(darktable.image_cache);
+  gchar *ititle = g_strdup_printf(_("Image cache — %u items"), ie->len);
+  _add_usage_bar(_g.mem_box, ititle, cur, max);
+  g_free(ititle);
+  g_array_sort(ie, _cmp_image_imgid);
+  for(guint i = 0; i < ie->len && i < MEMORY_MAX_ROWS; i++)
+  {
+    const dt_image_cache_stats_entry_t *e = &g_array_index(ie, dt_image_cache_stats_entry_t, i);
+    gchar *hx = _hashhex(dt_supervisor_image_key(e->imgid));
+    gchar *fn = g_markup_escape_text(e->filename[0] ? e->filename : "-", -1);
+    gchar *m = g_strdup_printf("<a href=\"%s\">image #%d</a>  <i>%s</i>", hx, e->imgid, fn);
+    _add_mem_item(_g.mem_box, m, NULL);
+    g_free(hx);
+    g_free(fn);
+    g_free(m);
+  }
+  g_array_free(ie, TRUE);
 
   gtk_widget_show_all(_g.mem_box);
 }
