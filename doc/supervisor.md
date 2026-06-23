@@ -90,6 +90,16 @@ darkroom to see history/node/cacheline/backbuf/widget events stream in).
 - **Grouped** — the same rows bucketed and **collapsible** by group, keyed by a
   selectable field (*domain / thread / op*). Rebuilt on demand (Refresh, group-by
   change, or when its page is shown) rather than every tick.
+- **Memory** — live state of the two RAM caches, queried directly (not from the
+  event log): for the **pipeline cache** and the **mipmap cache**, a usage bar
+  (*current / max MiB*, max being the user-specified budget) and the stored items
+  sorted by size. Pipeline items show their cacheline `hash`, size, refcount and
+  hits; mipmap items show `image #id · mip N` and size. Each item is a link:
+  clicking jumps to that object's event in the timeline (a pipeline item to its
+  cacheline `create`, a mipmap item to its `thumbnail` event via the synthetic
+  `(imgid, mip)` key). Refreshed when shown and throttled (~1 s) while visible.
+  Introspection comes from `dt_dev_pixelpipe_cache_get_{usage,entries_stats}()`
+  and `dt_mipmap_cache_get_{usage,entries_stats}()`.
 - **Every hash is a link.** The hash sits in a label separate from the expander
   toggle, so clicking it activates the link (rather than collapsing the row): it
   switches to the timeline and jumps to the *declaration* (the `create` event) of

@@ -142,6 +142,11 @@ static uint64_t _thumb_key(const int32_t imgid, const int mip)
   return _fnv1a("thumbnail", imgid, mip);
 }
 
+uint64_t dt_supervisor_thumbnail_key(const int32_t imgid, const int mip)
+{
+  return _thumb_key(imgid, mip);
+}
+
 // devid < 0 is the CPU path; otherwise an OpenCL device slot.
 static void _device_string(const int devid, char *out, const size_t out_size)
 {

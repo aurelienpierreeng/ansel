@@ -143,6 +143,10 @@ void dt_supervisor_events_clear(void);
  */
 uint64_t dt_supervisor_node_key(int pipe_type, const char *op_name, int multi_priority);
 
+// Key under which thumbnail events for (imgid, mip) are registered. Lets the GUI
+// memory view navigate from a mipmap cache item to its thumbnail event.
+uint64_t dt_supervisor_thumbnail_key(int32_t imgid, int mip);
+
 /**
  * History item event — keyed by its parameter hash (== module hash == node
  * param hash), the join target nodes/cachelines resolve their `params` edge to.

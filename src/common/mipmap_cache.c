@@ -819,6 +819,53 @@ void dt_mipmap_cache_print(dt_mipmap_cache_t *cache)
   dt_print(DT_DEBUG_CACHE, "\n\n");
 }
 
+// Collect one sub-cache's live entries (imgid + mip + real bytes) under its lock.
+static void _mipmap_subcache_collect(dt_cache_t *c, GArray *out)
+{
+  dt_pthread_mutex_lock(&c->lock);
+  GHashTableIter it;
+  gpointer key, value;
+  g_hash_table_iter_init(&it, c->hashtable);
+  while(g_hash_table_iter_next(&it, &key, &value))
+  {
+    const dt_cache_entry_t *e = (const dt_cache_entry_t *)value;
+    if(!e) continue;
+    dt_mipmap_cache_stats_entry_t s = { 0 };
+    s.imgid = get_imgid(e->key);
+    s.mip = (int)get_size(e->key);
+    s.size = e->data_size; // real allocation (cost is byte-based for thumbs, slot-based for f/full)
+    g_array_append_val(out, s);
+  }
+  dt_pthread_mutex_unlock(&c->lock);
+}
+
+void dt_mipmap_cache_get_usage(dt_mipmap_cache_t *cache, size_t *current, size_t *max)
+{
+  if(current) *current = 0;
+  if(max) *max = 0;
+  if(IS_NULL_PTR(cache)) return;
+
+  // Real bytes currently held = sum of entry allocations across sub-caches.
+  GArray *entries = dt_mipmap_cache_get_entries_stats(cache);
+  size_t used = 0;
+  for(guint i = 0; i < entries->len; i++)
+    used += g_array_index(entries, dt_mipmap_cache_stats_entry_t, i).size;
+  g_array_free(entries, TRUE);
+
+  if(current) *current = used;
+  if(max) *max = darktable.dtresources.mipmap_memory; // user-specified mipmap RAM budget
+}
+
+GArray *dt_mipmap_cache_get_entries_stats(dt_mipmap_cache_t *cache)
+{
+  GArray *out = g_array_new(FALSE, FALSE, sizeof(dt_mipmap_cache_stats_entry_t));
+  if(IS_NULL_PTR(cache)) return out;
+  _mipmap_subcache_collect(&cache->mip_thumbs.cache, out);
+  _mipmap_subcache_collect(&cache->mip_f.cache, out);
+  _mipmap_subcache_collect(&cache->mip_full.cache, out);
+  return out;
+}
+
 static dt_mipmap_cache_one_t *_get_cache(dt_mipmap_cache_t *cache, const dt_mipmap_size_t mip)
 {
   switch(mip)

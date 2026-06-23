@@ -18,6 +18,8 @@
 
 #include "gui/actions/supervisor_window.h"
 #include "common/darktable.h"
+#include "common/mipmap_cache.h"
+#include "develop/pixelpipe_cache.h"
 #include "develop/supervisor.h"
 #include "gui/gtk.h"
 
@@ -28,6 +30,8 @@
 // log lives in the supervisor; this only bounds GTK widget pressure.
 #define TIMELINE_MAX_ROWS 4000
 #define POLL_INTERVAL_MS 300
+#define MEMORY_MAX_ROWS 500   // cap items shown per cache in the memory view
+#define MEMORY_REFRESH_TICKS 4 // refresh the memory view every Nth poll tick when visible
 
 static struct
 {
@@ -38,9 +42,11 @@ static struct
   GtkWidget *grouped_list;
   GtkWidget *count_label;
   GtkWidget *groupby;     // GtkComboBoxText: domain / thread / op
+  GtkWidget *mem_box;     // vbox holding the memory view content
   GHashTable *decl_map;   // hex string -> GtkListBoxRow* (the create/declaration row)
   uint64_t last_seq;      // highest captured seq already displayed in the timeline
   guint timer_id;
+  guint tick;             // poll tick counter (for throttling the memory view)
   gboolean grouped_dirty; // grouped view needs a rebuild when next shown
   gboolean follow_tail;   // auto-scroll requested by the last append
 } _g = { 0 };
@@ -340,6 +346,101 @@ static void _rebuild_grouped_now(void)
   gtk_widget_show_all(_g.grouped_list);
 }
 
+// ---- Memory view -------------------------------------------------------------
+
+static void _add_usage_bar(GtkWidget *box, const char *title, const size_t cur, const size_t max)
+{
+  GtkWidget *hdr = gtk_label_new(NULL);
+  gchar *t = g_markup_printf_escaped("<b>%s</b>", title);
+  gtk_label_set_markup(GTK_LABEL(hdr), t);
+  gtk_label_set_xalign(GTK_LABEL(hdr), 0.0);
+  gtk_widget_set_margin_top(hdr, 8);
+  g_free(t);
+  gtk_box_pack_start(GTK_BOX(box), hdr, FALSE, FALSE, 0);
+
+  const double frac = max ? CLAMP((double)cur / (double)max, 0.0, 1.0) : 0.0;
+  GtkWidget *bar = gtk_progress_bar_new();
+  gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(bar), frac);
+  gtk_progress_bar_set_show_text(GTK_PROGRESS_BAR(bar), TRUE);
+  gchar *txt = g_strdup_printf("%.1f / %.1f MiB  (%.0f%%)", cur / 1048576.0, max / 1048576.0, frac * 100.0);
+  gtk_progress_bar_set_text(GTK_PROGRESS_BAR(bar), txt);
+  g_free(txt);
+  gtk_box_pack_start(GTK_BOX(box), bar, FALSE, FALSE, 0);
+}
+
+// A single clickable memory item (markup carries the navigation link).
+static void _add_mem_item(GtkWidget *box, const char *markup)
+{
+  GtkWidget *lbl = gtk_label_new(NULL);
+  gtk_label_set_markup(GTK_LABEL(lbl), markup);
+  gtk_label_set_xalign(GTK_LABEL(lbl), 0.0);
+  gtk_label_set_track_visited_links(GTK_LABEL(lbl), FALSE);
+  gtk_widget_set_margin_start(lbl, 12);
+  g_signal_connect(lbl, "activate-link", G_CALLBACK(_on_link), NULL);
+  gtk_box_pack_start(GTK_BOX(box), lbl, FALSE, FALSE, 0);
+}
+
+static gint _cmp_pixel_size(gconstpointer a, gconstpointer b)
+{
+  const dt_pixel_cache_stats_entry_t *x = a, *y = b;
+  return (y->size > x->size) - (y->size < x->size); // descending
+}
+
+static gint _cmp_mip_size(gconstpointer a, gconstpointer b)
+{
+  const dt_mipmap_cache_stats_entry_t *x = a, *y = b;
+  return (y->size > x->size) - (y->size < x->size); // descending
+}
+
+static void _rebuild_memory(void)
+{
+  if(!_g.mem_box) return;
+  _clear_list(_g.mem_box);
+
+  // Pipeline cache
+  size_t cur = 0, max = 0;
+  dt_dev_pixelpipe_cache_get_usage(darktable.pixelpipe_cache, &cur, &max);
+  GArray *pe = dt_dev_pixelpipe_cache_get_entries_stats(darktable.pixelpipe_cache);
+  gchar *ptitle = g_strdup_printf(_("Pipeline cache — %u items"), pe->len);
+  _add_usage_bar(_g.mem_box, ptitle, cur, max);
+  g_free(ptitle);
+  g_array_sort(pe, _cmp_pixel_size);
+  for(guint i = 0; i < pe->len && i < MEMORY_MAX_ROWS; i++)
+  {
+    const dt_pixel_cache_stats_entry_t *e = &g_array_index(pe, dt_pixel_cache_stats_entry_t, i);
+    gchar *hx = _hashhex(e->hash);
+    gchar *name = g_markup_escape_text(e->name[0] ? e->name : "-", -1);
+    gchar *m = g_strdup_printf("<a href=\"%s\"><tt>%s</tt></a>  %.2f MiB  refs=%d hits=%d  <i>%s</i>", hx, hx,
+                               e->size / 1048576.0, e->refcount, e->hits, name);
+    _add_mem_item(_g.mem_box, m);
+    g_free(hx);
+    g_free(name);
+    g_free(m);
+  }
+  g_array_free(pe, TRUE);
+
+  // Mipmap cache
+  dt_mipmap_cache_get_usage(darktable.mipmap_cache, &cur, &max);
+  GArray *me = dt_mipmap_cache_get_entries_stats(darktable.mipmap_cache);
+  gchar *mtitle = g_strdup_printf(_("Mipmap cache — %u items"), me->len);
+  _add_usage_bar(_g.mem_box, mtitle, cur, max);
+  g_free(mtitle);
+  g_array_sort(me, _cmp_mip_size);
+  for(guint i = 0; i < me->len && i < MEMORY_MAX_ROWS; i++)
+  {
+    const dt_mipmap_cache_stats_entry_t *e = &g_array_index(me, dt_mipmap_cache_stats_entry_t, i);
+    gchar *hx = _hashhex(dt_supervisor_thumbnail_key(e->imgid, e->mip));
+    gchar *m = g_strdup_printf("<a href=\"%s\">image #%d · mip %d</a>  %.2f MiB", hx, e->imgid, e->mip,
+                               e->size / 1048576.0);
+    _add_mem_item(_g.mem_box, m);
+    g_free(hx);
+    g_free(m);
+  }
+  g_array_free(me, TRUE);
+
+  gtk_widget_show_all(_g.mem_box);
+}
+
 static gboolean _scroll_bottom_idle(gpointer u)
 {
   if(!_g.timeline_scroll) return G_SOURCE_REMOVE;
@@ -351,6 +452,13 @@ static gboolean _scroll_bottom_idle(gpointer u)
 static gboolean _poll(gpointer u)
 {
   if(!_g.window) return G_SOURCE_REMOVE;
+
+  // The memory view reflects live cache state (changes even without new events),
+  // so refresh it on a throttled cadence whenever its page is visible.
+  _g.tick++;
+  if((_g.tick % MEMORY_REFRESH_TICKS) == 0
+     && !g_strcmp0(gtk_stack_get_visible_child_name(GTK_STACK(_g.stack)), "memory"))
+    _rebuild_memory();
 
   uint64_t newlast = _g.last_seq;
   GPtrArray *evs = dt_supervisor_events_snapshot_since(_g.last_seq, &newlast);
@@ -383,6 +491,7 @@ static void _full_reload(void)
   _poll(NULL); // appends everything since the start
   _rebuild_grouped_now();
   _g.grouped_dirty = FALSE;
+  _rebuild_memory();
 }
 
 static void _on_refresh(GtkButton *b, gpointer u) { _full_reload(); }
@@ -406,11 +515,14 @@ static void _on_record_toggled(GtkToggleButton *t, gpointer u)
 
 static void _on_page_changed(GObject *o, GParamSpec *p, gpointer u)
 {
-  if(_g.grouped_dirty && !g_strcmp0(gtk_stack_get_visible_child_name(GTK_STACK(_g.stack)), "grouped"))
+  const char *vis = gtk_stack_get_visible_child_name(GTK_STACK(_g.stack));
+  if(_g.grouped_dirty && !g_strcmp0(vis, "grouped"))
   {
     _rebuild_grouped_now();
     _g.grouped_dirty = FALSE;
   }
+  else if(!g_strcmp0(vis, "memory"))
+    _rebuild_memory();
 }
 
 static void _on_destroy(GtkWidget *w, gpointer u)
@@ -490,6 +602,12 @@ void dt_gui_supervisor_window_show(void)
   GtkWidget *sw2 = gtk_scrolled_window_new(NULL, NULL);
   gtk_container_add(GTK_CONTAINER(sw2), _g.grouped_list);
   gtk_stack_add_titled(GTK_STACK(_g.stack), sw2, "grouped", _("Grouped"));
+
+  _g.mem_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
+  gtk_container_set_border_width(GTK_CONTAINER(_g.mem_box), 6);
+  GtkWidget *sw3 = gtk_scrolled_window_new(NULL, NULL);
+  gtk_container_add(GTK_CONTAINER(sw3), _g.mem_box);
+  gtk_stack_add_titled(GTK_STACK(_g.stack), sw3, "memory", _("Memory"));
 
   gtk_widget_show_all(_g.window);
   _full_reload();

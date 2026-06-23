@@ -2591,8 +2591,44 @@ void dt_dev_pixelpipe_cache_print(dt_dev_pixelpipe_cache_t *cache)
 
   dt_print(DT_DEBUG_PIPECACHE, "[pixelpipe] cache hit rate so far: %.3f%% - size: %" G_GSIZE_FORMAT " MiB over %" G_GSIZE_FORMAT " MiB - %i items\n", 
     100. * (cache->hits) / (float)cache->queries, cache->current_memory / (1024 * 1024), 
-    cache->max_memory / (1024 * 1024), 
+    cache->max_memory / (1024 * 1024),
     g_hash_table_size(cache->entries));
+}
+
+void dt_dev_pixelpipe_cache_get_usage(dt_dev_pixelpipe_cache_t *cache, size_t *current, size_t *max)
+{
+  if(current) *current = 0;
+  if(max) *max = 0;
+  if(IS_NULL_PTR(cache)) return;
+  dt_pthread_mutex_lock(&cache->lock);
+  if(current) *current = cache->current_memory;
+  if(max) *max = cache->max_memory;
+  dt_pthread_mutex_unlock(&cache->lock);
+}
+
+GArray *dt_dev_pixelpipe_cache_get_entries_stats(dt_dev_pixelpipe_cache_t *cache)
+{
+  GArray *out = g_array_new(FALSE, FALSE, sizeof(dt_pixel_cache_stats_entry_t));
+  if(IS_NULL_PTR(cache)) return out;
+
+  dt_pthread_mutex_lock(&cache->lock);
+  GHashTableIter it;
+  gpointer key, value;
+  g_hash_table_iter_init(&it, cache->entries);
+  while(g_hash_table_iter_next(&it, &key, &value))
+  {
+    const dt_pixel_cache_entry_t *e = (const dt_pixel_cache_entry_t *)value;
+    if(IS_NULL_PTR(e)) continue;
+    dt_pixel_cache_stats_entry_t s = { 0 };
+    s.hash = e->hash;
+    s.size = e->size;
+    s.refcount = dt_atomic_get_int((dt_atomic_int *)&e->refcount);
+    s.hits = e->hits;
+    if(e->name) g_strlcpy(s.name, e->name, sizeof(s.name));
+    g_array_append_val(out, s);
+  }
+  dt_pthread_mutex_unlock(&cache->lock);
+  return out;
 }
 
 // clang-format off
