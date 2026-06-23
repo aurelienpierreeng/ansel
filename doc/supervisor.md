@@ -96,8 +96,9 @@ darkroom to see history/node/cacheline/backbuf/widget events stream in).
   sorted by size. Pipeline items show their cacheline `hash`, size, refcount and
   hits; mipmap items show `image #id · mip N` and size. Each item is a link:
   clicking jumps to that object's event in the timeline (a pipeline item to its
-  cacheline `create`, a mipmap item to its `thumbnail` event via the synthetic
-  `(imgid, mip)` key). Refreshed when shown and throttled (~1 s) while visible.
+  cacheline `create`, a mipmap item to its `mipmap` object event — whose detail
+  shows the `dt_image_t` properties — via the synthetic `(imgid, mip)` key).
+  Refreshed when shown and throttled (~1 s) while visible.
   Introspection comes from `dt_dev_pixelpipe_cache_get_{usage,entries_stats}()`
   and `dt_mipmap_cache_get_{usage,entries_stats}()`.
 - **Every hash is a link.** The hash sits in a label separate from the expander
@@ -163,6 +164,12 @@ Domain specifics:
   key. `read` when generation starts, `update` with the result. The pipeline
   render behind a thumbnail miss surfaces through the generic node/cacheline/
   backbuf events of the thumbnail pipe.
+- **mipmap** — a mipmap *cache object*, keyed by a distinct synthetic
+  `(imgid, mip)` key. `create` when the buffer is allocated/loaded, `delete` on
+  eviction. Its properties are its `dt_image_t`: the `create` event carries a
+  curated subset under `properties` (filename, folder, dimensions, processed
+  size, flags/rating, orientation, loader, camera, lens, datetime, exposure
+  triplet, ids). This is the object the **Memory** view's mipmap items link to.
 
 ### Example: a node computed its output
 
@@ -221,6 +228,7 @@ jq -c 'select(.domain=="widget") | {ts,widget,frame:.hash,
 | backbuf | update | after `dt_dev_set_backbuf()` (`pixelpipe_hb.c`) |
 | widget | read | surface rebind in `_lock_pipe_surface()` (`views/darkroom.c`) |
 | thumbnail | read/update | inside `_view_image_get_surface_internal()` (`views/view.c`), where the real mip level is known |
+| mipmap | create/delete | `dt_mipmap_cache_allocate_dynamic()` / `dt_mipmap_cache_deallocate_dynamic()` (`common/mipmap_cache.c`); create fetches the `dt_image_t` for its properties |
 
 ## Limits / TODO
 

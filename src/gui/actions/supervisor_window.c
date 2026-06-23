@@ -429,7 +429,7 @@ static void _rebuild_memory(void)
   for(guint i = 0; i < me->len && i < MEMORY_MAX_ROWS; i++)
   {
     const dt_mipmap_cache_stats_entry_t *e = &g_array_index(me, dt_mipmap_cache_stats_entry_t, i);
-    gchar *hx = _hashhex(dt_supervisor_thumbnail_key(e->imgid, e->mip));
+    gchar *hx = _hashhex(dt_supervisor_mipmap_key(e->imgid, e->mip));
     gchar *m = g_strdup_printf("<a href=\"%s\">image #%d · mip %d</a>  %.2f MiB", hx, e->imgid, e->mip,
                                e->size / 1048576.0);
     _add_mem_item(_g.mem_box, m);

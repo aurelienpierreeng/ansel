@@ -17,6 +17,7 @@
 */
 
 #include "develop/supervisor.h"
+#include "common/image.h"            // dt_image_t
 #include "develop/pixelpipe_cache.h" // DT_PIXELPIPE_CACHE_HASH_INVALID
 #include "develop/pixelpipe_hb.h"    // dt_pixelpipe_get_pipe_name
 
@@ -34,6 +35,7 @@ typedef enum dt_sv_facet_t
   DT_SV_F_BACKBUF = 1 << 3,
   DT_SV_F_WIDGET = 1 << 4,
   DT_SV_F_THUMB = 1 << 5,
+  DT_SV_F_MIPMAP = 1 << 6,
 } dt_sv_facet_t;
 
 // One registry entry, identified by a single hash. All fields are value-copied;
@@ -78,6 +80,9 @@ typedef struct dt_sv_entry_t
   // thumbnail facet
   int mip;
   gboolean thumb_success;
+
+  // mipmap facet
+  char img_filename[128];
 } dt_sv_entry_t;
 
 // Cap on the retained GUI event log. ~200 B/event keeps this a few MB.
@@ -145,6 +150,16 @@ static uint64_t _thumb_key(const int32_t imgid, const int mip)
 uint64_t dt_supervisor_thumbnail_key(const int32_t imgid, const int mip)
 {
   return _thumb_key(imgid, mip);
+}
+
+static uint64_t _mipmap_key(const int32_t imgid, const int mip)
+{
+  return _fnv1a("mipmap", imgid, mip);
+}
+
+uint64_t dt_supervisor_mipmap_key(const int32_t imgid, const int mip)
+{
+  return _mipmap_key(imgid, mip);
 }
 
 // devid < 0 is the CPU path; otherwise an OpenCL device slot.
@@ -239,6 +254,7 @@ static gboolean _touch_alive_locked(dt_sv_entry_t *e, const gboolean created, co
 static const char *_primary_domain(const dt_sv_entry_t *e)
 {
   if(!e) return "unknown";
+  if(e->facets & DT_SV_F_MIPMAP)  return "mipmap";
   if(e->facets & DT_SV_F_THUMB)   return "thumbnail";
   if(e->facets & DT_SV_F_BACKBUF) return "backbuf";
   if(e->facets & DT_SV_F_CACHE)   return "cacheline";
@@ -734,6 +750,66 @@ void dt_supervisor_thumbnail(const dt_sv_op_t op, const int32_t imgid, const int
   _emit_line(root);
 }
 
+// A curated subset of dt_image_t: the mipmap object's "properties".
+static JsonObject *_image_properties_json(const dt_image_t *img)
+{
+  JsonObject *o = json_object_new();
+  json_object_set_int_member(o, "id", img->id);
+  json_object_set_string_member(o, "filename", img->filename);
+  json_object_set_string_member(o, "folder", img->folder);
+  json_object_set_int_member(o, "film_id", img->film_id);
+  json_object_set_int_member(o, "group_id", img->group_id);
+  json_object_set_int_member(o, "version", img->version);
+
+  JsonArray *dim = json_array_new();
+  json_array_add_int_element(dim, img->width);
+  json_array_add_int_element(dim, img->height);
+  json_object_set_array_member(o, "dimensions", dim);
+  JsonArray *pdim = json_array_new();
+  json_array_add_int_element(pdim, img->p_width);
+  json_array_add_int_element(pdim, img->p_height);
+  json_object_set_array_member(o, "processed", pdim);
+
+  char flags[16];
+  g_snprintf(flags, sizeof(flags), "0x%08x", (unsigned)img->flags);
+  json_object_set_string_member(o, "flags", flags);
+  json_object_set_int_member(o, "rating", img->flags & 0x7);
+  json_object_set_int_member(o, "orientation", (int)img->orientation);
+  json_object_set_int_member(o, "loader", (int)img->loader);
+
+  json_object_set_string_member(o, "camera", img->camera_makermodel);
+  json_object_set_string_member(o, "lens", img->exif_lens);
+  json_object_set_string_member(o, "datetime", img->datetime);
+  json_object_set_double_member(o, "iso", img->exif_iso);
+  json_object_set_double_member(o, "aperture", img->exif_aperture);
+  json_object_set_double_member(o, "exposure", img->exif_exposure);
+  json_object_set_double_member(o, "focal_length", img->exif_focal_length);
+  return o;
+}
+
+void dt_supervisor_mipmap(const dt_sv_op_t op, const int32_t imgid, const int mip, const dt_image_t *img)
+{
+  if(!dt_supervisor_active() || !_sv.inited) return;
+
+  const uint64_t key = _mipmap_key(imgid, mip);
+  dt_pthread_mutex_lock(&_sv.lock);
+  gboolean created;
+  dt_sv_entry_t *e = _entry_get_locked(key, &created);
+  e->facets |= DT_SV_F_MIPMAP;
+  e->imgid = imgid;
+  e->mip = mip;
+  if(img && img->filename[0]) g_strlcpy(e->img_filename, img->filename, sizeof(e->img_filename));
+  const gboolean resurrected = _touch_alive_locked(e, created, op);
+
+  JsonObject *root = _envelope(op, "mipmap", key, -1, imgid, e->alive, resurrected);
+  json_object_set_int_member(root, "mip", mip);
+  if(e->img_filename[0]) json_object_set_string_member(root, "filename", e->img_filename);
+  if(img) json_object_set_object_member(root, "properties", _image_properties_json(img));
+  dt_pthread_mutex_unlock(&_sv.lock);
+
+  _emit_line(root);
+}
+
 // Append " 0xHASH (module)" for a resolved edge, marking dead entries.
 static void _describe_edge(GString *s, const char *prefix, const uint64_t hash)
 {
@@ -768,7 +844,12 @@ gchar *dt_supervisor_describe(const uint64_t hash)
   char dev[32];
   _device_string(e->devid, dev, sizeof(dev));
 
-  if(e->facets & DT_SV_F_THUMB)
+  if(e->facets & DT_SV_F_MIPMAP)
+  {
+    g_string_append_printf(s, "mipmap image #%d mip %d", e->imgid, e->mip);
+    if(e->img_filename[0]) g_string_append_printf(s, " (%s)", e->img_filename);
+  }
+  else if(e->facets & DT_SV_F_THUMB)
   {
     g_string_append_printf(s, "thumbnail for image #%d (%dx%d, mip %d) %s", e->imgid, e->roi_w,
                            e->roi_h, e->mip, e->thumb_success ? "ready" : "pending");

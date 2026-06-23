@@ -53,6 +53,7 @@
 #include "common/file_location.h"
 #include "common/grealpath.h"
 #include "common/image_cache.h"
+#include "develop/supervisor.h"
 #include "common/history.h"
 #include "common/imageio.h"
 #include "common/imageio_jpeg.h"
@@ -504,6 +505,14 @@ void dt_mipmap_cache_allocate_dynamic(void *data, dt_cache_entry_t *entry)
 
   if(IS_NULL_PTR(dsc)) return;
 
+  // Register the mipmap object with the supervisor; its properties are its image.
+  if(dt_supervisor_active())
+  {
+    const dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+    dt_supervisor_mipmap(DT_SV_CREATE, imgid, mip, img);
+    if(img) dt_image_cache_read_release(darktable.image_cache, img);
+  }
+
   gboolean write_to_disk;
   _write_mipmap_to_disk(imgid, NULL, NULL, NULL, NULL, NULL, &write_to_disk);
 
@@ -621,6 +630,9 @@ void dt_mipmap_cache_deallocate_dynamic(void *data, dt_cache_entry_t *entry)
 {
   dt_mipmap_cache_t *cache = (dt_mipmap_cache_t *)data;
   const dt_mipmap_size_t mip = get_size(entry->key);
+
+  if(dt_supervisor_active())
+    dt_supervisor_mipmap(DT_SV_DELETE, get_imgid(entry->key), (int)mip, NULL);
   if(mip < DT_MIPMAP_F)
   {
     const int32_t imgid = get_imgid(entry->key);

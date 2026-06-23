@@ -23,6 +23,8 @@
 
 #include "common/darktable.h"
 
+struct dt_image_t;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -147,6 +149,11 @@ uint64_t dt_supervisor_node_key(int pipe_type, const char *op_name, int multi_pr
 // memory view navigate from a mipmap cache item to its thumbnail event.
 uint64_t dt_supervisor_thumbnail_key(int32_t imgid, int mip);
 
+// Key under which mipmap cache objects (imgid, mip) are registered. Distinct
+// from the thumbnail key; used by the GUI memory view to navigate from a mipmap
+// cache item to the mipmap object's properties.
+uint64_t dt_supervisor_mipmap_key(int32_t imgid, int mip);
+
 /**
  * History item event — keyed by its parameter hash (== module hash == node
  * param hash), the join target nodes/cachelines resolve their `params` edge to.
@@ -220,6 +227,14 @@ void dt_supervisor_widget(dt_sv_op_t op, const char *widget_tag, uint64_t consum
  */
 void dt_supervisor_thumbnail(dt_sv_op_t op, int32_t imgid, int width, int height, int mip,
                              gboolean success);
+
+/**
+ * Mipmap cache object event — keyed by dt_supervisor_mipmap_key(). `create` when
+ * the mipmap buffer is allocated/loaded, `delete` on eviction. The object's
+ * properties are its `dt_image_t` (a curated subset is emitted under
+ * "properties"); pass NULL when no image is available (e.g. on delete).
+ */
+void dt_supervisor_mipmap(dt_sv_op_t op, int32_t imgid, int mip, const struct dt_image_t *img);
 
 /**
  * Programmatic human-readable rendering of any tracked object, by hash.
