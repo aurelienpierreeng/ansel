@@ -176,6 +176,9 @@ static gboolean _on_label_button(GtkWidget *label, GdkEventButton *e, gpointer u
 {
   if(e->type != GDK_BUTTON_PRESS || e->button != GDK_BUTTON_SECONDARY) return FALSE;
   const char *uri = gtk_label_get_current_uri(GTK_LABEL(label)); // link under the pointer
+  // Inside a list box (timeline/grouped/search) the pointer-tracking that sets
+  // the "current link" is unreliable, so fall back to the label's single own hash.
+  if(!uri || !*uri) uri = (const char *)g_object_get_data(G_OBJECT(label), "own-hash");
   if(!uri || !*uri) return FALSE;
 
   GtkWidget *menu = gtk_menu_new();
@@ -341,6 +344,11 @@ static GtkWidget *_event_widget(const dt_sv_logged_event_t *ev)
     g_array_append_vals(copy, ev->links->data, ev->links->len);
     g_object_set_data_full(G_OBJECT(toggle), "lazy_links", copy, _links_free);
   }
+
+  // The header carries exactly one hash (the event's own): stash it so right-click
+  // search works even when the list box defeats the label's link tracking.
+  GtkWidget *header = (GtkWidget *)g_object_get_data(G_OBJECT(w), "header");
+  if(header) g_object_set_data_full(G_OBJECT(header), "own-hash", _hashhex(ev->hash), g_free);
   return w;
 }
 
