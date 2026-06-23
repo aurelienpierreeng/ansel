@@ -84,14 +84,20 @@ void dt_dev_pixelpipe_cache_cleanup(dt_dev_pixelpipe_cache_t *cache);
 typedef struct dt_pixel_cache_stats_entry_t
 {
   uint64_t hash;
-  size_t size;
+  size_t size;       // host (RAM) bytes
   int refcount;
   int hits;
+  int cl_count;      // number of OpenCL device buffers attached to this entry
+  size_t cl_bytes;   // their total vRAM bytes (0 without OpenCL)
   char name[64];
 } dt_pixel_cache_stats_entry_t;
 
-// Current/max bytes used by the pipeline cache.
+// Current/max bytes used by the pipeline cache (host RAM).
 void dt_dev_pixelpipe_cache_get_usage(dt_dev_pixelpipe_cache_t *cache, size_t *current, size_t *max);
+
+// Total device memory across enabled OpenCL devices (0 if OpenCL is off/absent),
+// for the vRAM usage bar's denominator.
+size_t dt_dev_pixelpipe_cache_get_vram_total(void);
 
 // Snapshot of all live entries (newly-allocated GArray of
 // dt_pixel_cache_stats_entry_t; free with g_array_free()).

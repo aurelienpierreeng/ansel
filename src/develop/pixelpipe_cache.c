@@ -2617,7 +2617,7 @@ GArray *dt_dev_pixelpipe_cache_get_entries_stats(dt_dev_pixelpipe_cache_t *cache
   g_hash_table_iter_init(&it, cache->entries);
   while(g_hash_table_iter_next(&it, &key, &value))
   {
-    const dt_pixel_cache_entry_t *e = (const dt_pixel_cache_entry_t *)value;
+    dt_pixel_cache_entry_t *e = (dt_pixel_cache_entry_t *)value;
     if(IS_NULL_PTR(e)) continue;
     dt_pixel_cache_stats_entry_t s = { 0 };
     s.hash = e->hash;
@@ -2625,10 +2625,40 @@ GArray *dt_dev_pixelpipe_cache_get_entries_stats(dt_dev_pixelpipe_cache_t *cache
     s.refcount = dt_atomic_get_int((dt_atomic_int *)&e->refcount);
     s.hits = e->hits;
     if(e->name) g_strlcpy(s.name, e->name, sizeof(s.name));
+
+#ifdef HAVE_OPENCL
+    // Account the OpenCL device buffers attached to this entry. trylock avoids
+    // both deadlock and racing the list against concurrent clmem mutation.
+    if(dt_pthread_mutex_trylock(&e->cl_mem_lock) == 0)
+    {
+      for(GList *l = e->cl_mem_list; l; l = g_list_next(l))
+      {
+        const dt_cache_clmem_t *c = (const dt_cache_clmem_t *)l->data;
+        if(IS_NULL_PTR(c) || IS_NULL_PTR(c->mem)) continue;
+        s.cl_count++;
+        s.cl_bytes += dt_opencl_get_mem_object_size((cl_mem)c->mem);
+      }
+      dt_pthread_mutex_unlock(&e->cl_mem_lock);
+    }
+#endif
+
     g_array_append_val(out, s);
   }
   dt_pthread_mutex_unlock(&cache->lock);
   return out;
+}
+
+size_t dt_dev_pixelpipe_cache_get_vram_total(void)
+{
+#ifdef HAVE_OPENCL
+  if(!dt_opencl_is_enabled() || IS_NULL_PTR(darktable.opencl)) return 0;
+  size_t total = 0;
+  for(int i = 0; i < darktable.opencl->num_devs; i++)
+    total += (size_t)darktable.opencl->dev[i].max_global_mem;
+  return total;
+#else
+  return 0;
+#endif
 }
 
 // clang-format off

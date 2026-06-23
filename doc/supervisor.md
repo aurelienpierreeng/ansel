@@ -97,7 +97,11 @@ darkroom to see history/node/cacheline/backbuf/widget events stream in).
   event log): for the **pipeline cache** and the **mipmap cache**, a usage bar
   (*current / max MiB*, max being the user-specified budget) and the stored items
   sorted by size. Pipeline items show their cacheline `hash`, size, refcount and
-  hits; mipmap items show `image #id · mip N` and size. Each item is a link:
+  hits; mipmap items show `image #id · mip N` and size. When the build has OpenCL
+  and it is enabled, the pipeline cache also shows a second **vRAM** bar (device
+  buffers attached to cachelines, summed via `dt_opencl_get_mem_object_size()`,
+  over the total device memory), and each pipeline item that holds GPU buffers
+  notes `+N MiB vRAM (k buf)`. Each item is a link:
   clicking jumps to that object's event in the timeline (a pipeline item to its
   cacheline `create`, a mipmap item to its `mipmap` object event — whose detail
   shows the `dt_image_t` properties — via the synthetic `(imgid, mip)` key).

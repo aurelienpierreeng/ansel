@@ -19,6 +19,7 @@
 #include "gui/actions/supervisor_window.h"
 #include "common/darktable.h"
 #include "common/mipmap_cache.h"
+#include "common/opencl.h"
 #include "develop/pixelpipe_cache.h"
 #include "develop/supervisor.h"
 #include "gui/gtk.h"
@@ -435,15 +436,32 @@ static void _add_usage_bar(GtkWidget *box, const char *title, const size_t cur, 
   gtk_box_pack_start(GTK_BOX(box), bar, FALSE, FALSE, 0);
 }
 
-// A single clickable memory item (markup carries the navigation link).
-static void _add_mem_item(GtkWidget *box, const char *markup)
+// A clickable memory item (markup carries the navigation link). When `trailing`
+// is non-NULL it is packed at the right edge as a separate label, so the trailing
+// column (e.g. vRAM) lines up vertically across rows.
+static void _add_mem_item(GtkWidget *box, const char *markup, const char *trailing)
 {
   GtkWidget *lbl = gtk_label_new(NULL);
   gtk_label_set_markup(GTK_LABEL(lbl), markup);
   gtk_label_set_xalign(GTK_LABEL(lbl), 0.0);
-  gtk_widget_set_margin_start(lbl, 12);
   _wire_hash_label(lbl);
-  gtk_box_pack_start(GTK_BOX(box), lbl, FALSE, FALSE, 0);
+
+  if(trailing && *trailing)
+  {
+    GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    gtk_widget_set_margin_start(row, 12);
+    gtk_box_pack_start(GTK_BOX(row), lbl, TRUE, TRUE, 0); // expands → pushes trailing to the right
+    GtkWidget *tl = gtk_label_new(NULL);
+    gtk_label_set_markup(GTK_LABEL(tl), trailing);
+    gtk_label_set_xalign(GTK_LABEL(tl), 1.0);
+    gtk_box_pack_end(GTK_BOX(row), tl, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(box), row, FALSE, FALSE, 0);
+  }
+  else
+  {
+    gtk_widget_set_margin_start(lbl, 12);
+    gtk_box_pack_start(GTK_BOX(box), lbl, FALSE, FALSE, 0);
+  }
 }
 
 static gint _cmp_pixel_size(gconstpointer a, gconstpointer b)
@@ -467,20 +485,36 @@ static void _rebuild_memory(void)
   size_t cur = 0, max = 0;
   dt_dev_pixelpipe_cache_get_usage(darktable.pixelpipe_cache, &cur, &max);
   GArray *pe = dt_dev_pixelpipe_cache_get_entries_stats(darktable.pixelpipe_cache);
-  gchar *ptitle = g_strdup_printf(_("Pipeline cache — %u items"), pe->len);
+
+  const gboolean gpu = dt_opencl_is_enabled();
+  size_t vram_used = 0;
+  for(guint i = 0; i < pe->len; i++) vram_used += g_array_index(pe, dt_pixel_cache_stats_entry_t, i).cl_bytes;
+
+  gchar *ptitle = g_strdup_printf(gpu ? _("Pipeline cache (RAM) — %u items") : _("Pipeline cache — %u items"),
+                                  pe->len);
   _add_usage_bar(_g.mem_box, ptitle, cur, max);
   g_free(ptitle);
+  if(gpu)
+    _add_usage_bar(_g.mem_box, _("Pipeline cache (vRAM)"), vram_used,
+                   dt_dev_pixelpipe_cache_get_vram_total());
+
   g_array_sort(pe, _cmp_pixel_size);
   for(guint i = 0; i < pe->len && i < MEMORY_MAX_ROWS; i++)
   {
     const dt_pixel_cache_stats_entry_t *e = &g_array_index(pe, dt_pixel_cache_stats_entry_t, i);
     gchar *hx = _hashhex(e->hash);
     gchar *name = g_markup_escape_text(e->name[0] ? e->name : "-", -1);
+    // fixed-width monospace trailing column so the vRAM figures line up vertically
+    gchar *vram = (gpu && e->cl_count > 0)
+                      ? g_strdup_printf("<tt>+%8.2f MiB vRAM (%2d buf)</tt>", e->cl_bytes / 1048576.0,
+                                        e->cl_count)
+                      : NULL;
     gchar *m = g_strdup_printf("<a href=\"%s\"><tt>%s</tt></a>  %.2f MiB  refs=%d hits=%d  <i>%s</i>", hx, hx,
                                e->size / 1048576.0, e->refcount, e->hits, name);
-    _add_mem_item(_g.mem_box, m);
+    _add_mem_item(_g.mem_box, m, vram);
     g_free(hx);
     g_free(name);
+    g_free(vram);
     g_free(m);
   }
   g_array_free(pe, TRUE);
@@ -498,7 +532,7 @@ static void _rebuild_memory(void)
     gchar *hx = _hashhex(dt_supervisor_mipmap_key(e->imgid, e->mip));
     gchar *m = g_strdup_printf("<a href=\"%s\">image #%d · mip %d</a>  %.2f MiB", hx, e->imgid, e->mip,
                                e->size / 1048576.0);
-    _add_mem_item(_g.mem_box, m);
+    _add_mem_item(_g.mem_box, m, NULL);
     g_free(hx);
     g_free(m);
   }
