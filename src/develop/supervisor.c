@@ -641,7 +641,12 @@ void dt_supervisor_cacheline_create(const uint64_t hash, const uint64_t node_has
   dt_sv_entry_t *e = _entry_get_locked(hash, &created);
   e->facets |= DT_SV_F_CACHE;
   e->node_hash = node_hash;
-  e->param_hash = param_hash;
+  // Prefer the producing node's history binding (set at synchronization) over the
+  // passed piece->hash: the latter folds in runtime_data_hash() for some modules
+  // and then no longer matches the history entry key. Fall back when the node is
+  // not bound yet (e.g. default-param node, or recording started mid-session).
+  const dt_sv_entry_t *node_e = (const dt_sv_entry_t *)g_hash_table_lookup(_sv.entries, &node_hash);
+  e->param_hash = (node_e && _hash_is_set(node_e->param_hash)) ? node_e->param_hash : param_hash;
   e->input_hash = input_hash;
   if(op_name) g_strlcpy(e->op_name, op_name, sizeof(e->op_name));
   e->multi_priority = multi_priority;
@@ -672,7 +677,7 @@ void dt_supervisor_cacheline_create(const uint64_t hash, const uint64_t node_has
   json_array_add_int_element(roi, roi_h);
   json_object_set_array_member(root, "roi", roi);
 
-  JsonObject *params = _resolve_locked(param_hash);
+  JsonObject *params = _resolve_locked(e->param_hash); // node-bound history key
   if(params) json_object_set_object_member(root, "params", params);
   JsonObject *in = _resolve_locked(input_hash);
   if(in) json_object_set_object_member(root, "input", in);

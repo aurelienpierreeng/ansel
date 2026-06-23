@@ -169,6 +169,16 @@ Domain specifics:
   A cacheline is thus tied to its history item *through the node that produced
   it*: `cacheline → node → params (history)`, plus the direct `cacheline → params`
   edge — all clickable in the GUI from the cacheline event.
+
+  > **Why the link goes through the node.** A piece's `param_hash` is `piece->hash`,
+  > which equals `module->hash` (the history entry key) *only* for modules that do
+  > not opt into `runtime_data_hash()`. Modules that do (e.g. colorbalancergb,
+  > ashift, crop, drawlayer) fold their committed `piece->data` into `piece->hash`,
+  > so it no longer matches any history entry. The node is therefore bound at
+  > synchronization to the matched history item's own hash (`hist->hash`), and the
+  > cacheline resolves its `params` edge from the node's binding rather than from
+  > `piece->hash` — so cachelines of `runtime_data_hash()` modules are tied to
+  > history too, not just the simple ones.
 - **backbuf** — `device`, `history_hash`, `size` `[w,h,bpp]`, resolved `module`/
   `params`; merges into the cacheline entry sharing its hash.
 - **widget** — `widget` tag, resolved `consumes`/`params`. The consumed hash is
