@@ -362,7 +362,7 @@ static dt_sv_logged_event_t *_extract_event(JsonObject *root, const gchar *json_
     g_strlcpy(e->mnemonic, json_object_get_string_member(root, "widget"), sizeof(e->mnemonic));
   else if(!g_strcmp0(d, "backbuf") && json_object_has_member(root, "pipe"))
     g_strlcpy(e->mnemonic, json_object_get_string_member(root, "pipe"), sizeof(e->mnemonic));
-  else if(!g_strcmp0(d, "image") && json_object_has_member(root, "filename"))
+  else if((!g_strcmp0(d, "image") || !g_strcmp0(d, "mipmap")) && json_object_has_member(root, "filename"))
     g_strlcpy(e->mnemonic, json_object_get_string_member(root, "filename"), sizeof(e->mnemonic));
   else if((!g_strcmp0(d, "mipmap") || !g_strcmp0(d, "image") || !g_strcmp0(d, "thumbnail"))
           && json_object_has_member(root, "imgid"))
@@ -625,6 +625,14 @@ void dt_supervisor_history(const dt_sv_op_t op, const uint64_t param_hash, const
   json_object_set_int_member(root, "history_index", history_index);
   json_object_set_boolean_member(root, "enabled", enabled);
   if(parameters) json_object_set_array_member(root, "parameters", parameters);
+  // Hold the image filename (borrowed from the registered image object).
+  if(imgid > 0)
+  {
+    const uint64_t image_key = _image_key(imgid);
+    const dt_sv_entry_t *image_e = (const dt_sv_entry_t *)g_hash_table_lookup(_sv.entries, &image_key);
+    if(image_e && image_e->img_filename[0])
+      json_object_set_string_member(root, "filename", image_e->img_filename);
+  }
   dt_pthread_mutex_unlock(&_sv.lock);
 
   _emit_line(root);
@@ -1005,6 +1013,10 @@ void dt_supervisor_mipmap(const dt_sv_op_t op, const int32_t imgid, const int mi
   JsonObject *root = _envelope(op, "mipmap", key, -1, imgid, e->alive, resurrected);
   json_object_set_int_member(root, "mip", mip);
   // Link to the image cache object instead of duplicating its dt_image_t values.
+  // Borrow only the filename (for the row mnemonic) from the linked image entry.
+  const dt_sv_entry_t *image_e = (const dt_sv_entry_t *)g_hash_table_lookup(_sv.entries, &image_key);
+  if(image_e && image_e->img_filename[0])
+    json_object_set_string_member(root, "filename", image_e->img_filename);
   JsonObject *im = _resolve_locked(image_key);
   if(!im)
   {
