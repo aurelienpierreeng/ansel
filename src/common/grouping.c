@@ -63,6 +63,7 @@ int dt_grouping_remove_from_group(const int32_t image_id)
   GList *imgs = NULL;
 
   const dt_image_t *img = dt_image_cache_get(darktable.image_cache, image_id, 'r');
+  if(!img) return -1;
   const int img_group_id = img->group_id;
   dt_image_cache_read_release(darktable.image_cache, img);
   if(img_group_id == image_id)
