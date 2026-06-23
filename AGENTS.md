@@ -83,6 +83,10 @@ After non-trivial code changes, run the narrowest relevant build or test target 
 - Never reference unused function input arguments as `(void)arg` inside functions. That only creates noise. API functions may have unused arguments, that's life.
 - SQL queries should be hidden behind C APIs to be reused in the C code, don't put SQL code into GUI code, or modules.
 - The code should be modular: features are split into self-enclosed modules that communicate with the core through interfaces. They should be unaware of other modules and unaware of the core, they should care about a minimal number of inputs and states to produce their output. The core is orchestrating communication between modules. Modules should not communicate with each other.
+- Always use IS_NULL_PTR() and !IS_NULL_PTR() to test for null pointers.
+- Always use dt_free() and dt_free_align() to free pointers.
+- Don't create helper function if they are used at only one place in the code.
+- Don't use %zu in formated text, but %" PRIu64 "
 
 ## Cross-platform printf format specifiers
 
