@@ -51,6 +51,7 @@ static struct
   GHashTable *group_map;  // group key -> _group_t* (incremental grouped buckets)
   uint64_t last_seq;      // highest captured seq already displayed in the timeline
   uint64_t grouped_last_seq; // highest seq already folded into the grouped view
+  gchar *scroll_target;   // hash of a timeline row to scroll into view (deferred)
   guint timer_id;
   guint tick;             // poll tick counter (for throttling the memory view)
   int page_timeline, page_grouped, page_memory, page_search; // notebook page indices
@@ -110,6 +111,35 @@ static gchar *_pretty_json(const char *compact)
 
 static void _run_search(const char *query);
 
+// Scroll a timeline row (centred) into the visible area of its scrolled window.
+static void _scroll_row_into_view(GtkWidget *row)
+{
+  if(!row || !_g.timeline_scroll) return;
+  GtkAdjustment *vadj = gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(_g.timeline_scroll));
+  if(!vadj) return;
+  gint y = 0;
+  if(!gtk_widget_translate_coordinates(row, _g.timeline_list, 0, 0, NULL, &y)) return;
+  GtkAllocation alloc;
+  gtk_widget_get_allocation(row, &alloc);
+  const double page = gtk_adjustment_get_page_size(vadj);
+  const double upper = gtk_adjustment_get_upper(vadj);
+  double target = (double)y + alloc.height / 2.0 - page / 2.0; // centre the row
+  target = CLAMP(target, 0.0, MAX(0.0, upper - page));
+  gtk_adjustment_set_value(vadj, target);
+}
+
+// Deferred so the scroll runs after the page switch / row expansion are laid out.
+static gboolean _scroll_target_idle(gpointer u)
+{
+  if(_g.window && _g.scroll_target)
+  {
+    GtkWidget *row = (GtkWidget *)g_hash_table_lookup(_g.decl_map, _g.scroll_target);
+    if(row) _scroll_row_into_view(row);
+  }
+  g_clear_pointer(&_g.scroll_target, g_free);
+  return G_SOURCE_REMOVE;
+}
+
 // Clicking a hash jumps to the declaration (create event) of that object.
 static gboolean _on_link(GtkLabel *label, gchar *uri, gpointer user_data)
 {
@@ -121,7 +151,12 @@ static gboolean _on_link(GtkLabel *label, gchar *uri, gpointer user_data)
     GtkWidget *toggle = (GtkWidget *)g_object_get_data(G_OBJECT(row), "toggle");
     if(toggle) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toggle), TRUE); // expand
     gtk_list_box_select_row(GTK_LIST_BOX(_g.timeline_list), GTK_LIST_BOX_ROW(row));
-    gtk_widget_grab_focus(row); // scrolls the row into view
+    gtk_widget_grab_focus(row);
+    // Defer the explicit scroll: the page just switched and the row may not be
+    // laid out yet, so translate_coordinates would be stale right now.
+    g_free(_g.scroll_target);
+    _g.scroll_target = g_strdup(uri);
+    g_idle_add(_scroll_target_idle, NULL);
   }
   return TRUE; // handled: do not try to open as an URL
 }
@@ -729,6 +764,7 @@ static void _on_destroy(GtkWidget *w, gpointer u)
   dt_supervisor_set_recording(FALSE); // stop capturing once the viewer is gone
   if(_g.decl_map) g_hash_table_destroy(_g.decl_map);
   if(_g.group_map) g_hash_table_destroy(_g.group_map);
+  g_free(_g.scroll_target);
   memset(&_g, 0, sizeof(_g));
 }
 
