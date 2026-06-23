@@ -80,12 +80,28 @@ typedef struct dt_sv_entry_t
   gboolean thumb_success;
 } dt_sv_entry_t;
 
+// Cap on the retained GUI event log. ~200 B/event keeps this a few MB.
+#define DT_SV_LOG_MAX 20000
+
+gint dt_supervisor_recording = 0;
+
 static struct
 {
   GHashTable *entries; // uint64_t hash -> dt_sv_entry_t*
+  GQueue *log;         // of dt_sv_logged_event_t*, oldest at head
+  uint64_t next_seq;   // monotonic capture sequence
   dt_pthread_mutex_t lock;
   gboolean inited;
 } _sv = { 0 };
+
+static void _logged_event_free(gpointer p)
+{
+  dt_sv_logged_event_t *e = (dt_sv_logged_event_t *)p;
+  if(!e) return;
+  if(e->links) g_array_free(e->links, TRUE);
+  g_free(e->json);
+  g_free(e);
+}
 
 static inline gboolean _hash_is_set(const uint64_t h)
 {
@@ -144,6 +160,7 @@ void dt_supervisor_init(void)
 {
   if(_sv.inited) return;
   _sv.entries = g_hash_table_new_full(g_int64_hash, g_int64_equal, g_free, g_free);
+  _sv.log = g_queue_new();
   dt_pthread_mutex_init(&_sv.lock, NULL);
   _sv.inited = TRUE;
 }
@@ -154,9 +171,25 @@ void dt_supervisor_cleanup(void)
   dt_pthread_mutex_lock(&_sv.lock);
   g_hash_table_destroy(_sv.entries);
   _sv.entries = NULL;
+  g_queue_free_full(_sv.log, _logged_event_free);
+  _sv.log = NULL;
   dt_pthread_mutex_unlock(&_sv.lock);
   dt_pthread_mutex_destroy(&_sv.lock);
   _sv.inited = FALSE;
+}
+
+void dt_supervisor_set_recording(const gboolean on)
+{
+  g_atomic_int_set(&dt_supervisor_recording, on ? 1 : 0);
+}
+
+void dt_supervisor_events_clear(void)
+{
+  if(!_sv.inited) return;
+  dt_pthread_mutex_lock(&_sv.lock);
+  g_queue_free_full(_sv.log, _logged_event_free);
+  _sv.log = g_queue_new();
+  dt_pthread_mutex_unlock(&_sv.lock);
 }
 
 // Must be called with _sv.lock held. Returns the entry for `hash`, creating an
@@ -257,7 +290,72 @@ static JsonObject *_resolve_locked(const uint64_t hash)
   return o;
 }
 
-// Serialize `root` as one compact NDJSON line to stderr. Takes ownership of root.
+static uint64_t _parse_hash(const char *s)
+{
+  if(!s) return 0;
+  return (uint64_t)g_ascii_strtoull(s, NULL, 0); // 0 base auto-detects the 0x prefix
+}
+
+// Build a retained event from the JSON root, extracting the navigable edges.
+static dt_sv_logged_event_t *_extract_event(JsonObject *root, const gchar *json_str)
+{
+  dt_sv_logged_event_t *e = g_new0(dt_sv_logged_event_t, 1);
+  if(json_object_has_member(root, "ts")) e->ts = json_object_get_double_member(root, "ts");
+  if(json_object_has_member(root, "thread"))
+    g_strlcpy(e->thread, json_object_get_string_member(root, "thread"), sizeof(e->thread));
+  if(json_object_has_member(root, "op"))
+    g_strlcpy(e->op, json_object_get_string_member(root, "op"), sizeof(e->op));
+  if(json_object_has_member(root, "domain"))
+    g_strlcpy(e->domain, json_object_get_string_member(root, "domain"), sizeof(e->domain));
+  if(json_object_has_member(root, "hash"))
+    e->hash = _parse_hash(json_object_get_string_member(root, "hash"));
+  e->json = g_strdup(json_str);
+  e->links = g_array_new(FALSE, FALSE, sizeof(dt_sv_link_t));
+
+  // nested-object edges carry the linked object id in their "hash" member
+  static const char *obj_edges[] = { "params", "input", "node", "consumes", NULL };
+  for(int i = 0; obj_edges[i]; i++)
+  {
+    if(!json_object_has_member(root, obj_edges[i])) continue;
+    JsonObject *o = json_object_get_object_member(root, obj_edges[i]);
+    if(o && json_object_has_member(o, "hash"))
+    {
+      dt_sv_link_t lk = { 0 };
+      g_strlcpy(lk.label, obj_edges[i], sizeof(lk.label));
+      lk.hash = _parse_hash(json_object_get_string_member(o, "hash"));
+      g_array_append_val(e->links, lk);
+    }
+  }
+  // the rekey chain links are plain hash strings
+  static const char *str_edges[] = { "rekeyed_from", "rekeyed_to", NULL };
+  for(int i = 0; str_edges[i]; i++)
+  {
+    if(!json_object_has_member(root, str_edges[i])) continue;
+    dt_sv_link_t lk = { 0 };
+    g_strlcpy(lk.label, str_edges[i], sizeof(lk.label));
+    lk.hash = _parse_hash(json_object_get_string_member(root, str_edges[i]));
+    g_array_append_val(e->links, lk);
+  }
+  return e;
+}
+
+static void _log_push(dt_sv_logged_event_t *e)
+{
+  dt_pthread_mutex_lock(&_sv.lock);
+  if(_sv.log)
+  {
+    e->seq = ++_sv.next_seq;
+    g_queue_push_tail(_sv.log, e);
+    while(g_queue_get_length(_sv.log) > DT_SV_LOG_MAX)
+      _logged_event_free(g_queue_pop_head(_sv.log));
+  }
+  else
+    _logged_event_free(e);
+  dt_pthread_mutex_unlock(&_sv.lock);
+}
+
+// Serialize `root` as one compact NDJSON line. Takes ownership of root. Dumps to
+// stderr when `-d supervisor` is set, and captures to the GUI log when recording.
 static void _emit_line(JsonObject *root)
 {
   JsonNode *node = json_node_new(JSON_NODE_OBJECT);
@@ -268,8 +366,14 @@ static void _emit_line(JsonObject *root)
 
   gsize len = 0;
   gchar *str = json_generator_to_data(gen, &len);
-  fprintf(stderr, "%s\n", str);
-  fflush(stderr);
+
+  if(darktable.unmuted & DT_DEBUG_SUPERVISOR)
+  {
+    fprintf(stderr, "%s\n", str);
+    fflush(stderr);
+  }
+  if(g_atomic_int_get(&dt_supervisor_recording))
+    _log_push(_extract_event(root, str));
 
   g_free(str);
   g_object_unref(gen);
@@ -686,4 +790,69 @@ gchar *dt_supervisor_describe(const uint64_t hash)
   dt_pthread_mutex_unlock(&_sv.lock);
 
   return g_string_free(s, FALSE);
+}
+
+static dt_sv_logged_event_t *_event_copy(const dt_sv_logged_event_t *src)
+{
+  dt_sv_logged_event_t *c = g_new0(dt_sv_logged_event_t, 1);
+  *c = *src; // copies scalars and the fixed char arrays
+  c->json = g_strdup(src->json);
+  c->links = g_array_new(FALSE, FALSE, sizeof(dt_sv_link_t));
+  if(src->links && src->links->len)
+    g_array_append_vals(c->links, src->links->data, src->links->len);
+  return c;
+}
+
+GPtrArray *dt_supervisor_events_snapshot(void)
+{
+  GPtrArray *out = g_ptr_array_new_with_free_func(_logged_event_free);
+  if(!_sv.inited) return out;
+
+  dt_pthread_mutex_lock(&_sv.lock);
+  for(GList *l = _sv.log ? _sv.log->head : NULL; l; l = l->next)
+    g_ptr_array_add(out, _event_copy((const dt_sv_logged_event_t *)l->data));
+  dt_pthread_mutex_unlock(&_sv.lock);
+  return out;
+}
+
+GPtrArray *dt_supervisor_events_snapshot_since(const uint64_t after_seq, uint64_t *out_last_seq)
+{
+  GPtrArray *out = g_ptr_array_new_with_free_func(_logged_event_free);
+  if(out_last_seq) *out_last_seq = after_seq;
+  if(!_sv.inited) return out;
+
+  dt_pthread_mutex_lock(&_sv.lock);
+  // New events are at the tail; walk back until we reach a seq we already have.
+  for(GList *l = _sv.log ? _sv.log->tail : NULL; l; l = l->prev)
+  {
+    const dt_sv_logged_event_t *ev = (const dt_sv_logged_event_t *)l->data;
+    if(ev->seq <= after_seq) break;
+    g_ptr_array_add(out, _event_copy(ev));
+  }
+  dt_pthread_mutex_unlock(&_sv.lock);
+
+  // collected newest-first: reverse to oldest-first
+  for(guint i = 0, j = out->len ? out->len - 1 : 0; i < j; i++, j--)
+  {
+    gpointer t = out->pdata[i];
+    out->pdata[i] = out->pdata[j];
+    out->pdata[j] = t;
+  }
+  if(out_last_seq && out->len)
+    *out_last_seq = ((const dt_sv_logged_event_t *)g_ptr_array_index(out, out->len - 1))->seq;
+  return out;
+}
+
+guint dt_supervisor_events_count(void)
+{
+  if(!_sv.inited) return 0;
+  dt_pthread_mutex_lock(&_sv.lock);
+  const guint n = _sv.log ? g_queue_get_length(_sv.log) : 0;
+  dt_pthread_mutex_unlock(&_sv.lock);
+  return n;
+}
+
+void dt_supervisor_events_free(GPtrArray *events)
+{
+  if(events) g_ptr_array_free(events, TRUE);
 }

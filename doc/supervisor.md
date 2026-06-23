@@ -70,6 +70,36 @@ ansel -d supervisor 2> events.ndjson
 One compact JSON object per line on **stderr**. The join is done in-app, so the
 lines are already linked; `jq` is for filtering/shaping, not joining.
 
+## GUI: the event supervisor window
+
+*Help → Event supervisor…* opens a browsable view of the in-memory event log
+(`src/gui/actions/supervisor_window.c`). It does not need the `-d supervisor`
+flag: a **Record** check button toggles runtime capture
+(`dt_supervisor_set_recording`). Capture is **on while the window is open** and
+stops when it closes — so events are recorded live from when you open it (do the
+actions you want to trace with the window open; e.g. open it, then edit in
+darkroom to see history/node/cacheline/backbuf/widget events stream in).
+
+- **Timeline** — events in chronological order, **live-updating** (polled every
+  300 ms; auto-scrolls to the tail when you are already at the bottom). One
+  collapsible row each: the collapsed line shows the common fields (ts, op,
+  colored domain, own hash, thread); expanding reveals the linked-object hashes
+  and the full pretty-printed record (built lazily on first expand). The timeline
+  keeps the most recent rows (older ones are trimmed; the full log stays in the
+  supervisor).
+- **Grouped** — the same rows bucketed and **collapsible** by group, keyed by a
+  selectable field (*domain / thread / op*). Rebuilt on demand (Refresh, group-by
+  change, or when its page is shown) rather than every tick.
+- **Every hash is a link.** The hash sits in a label separate from the expander
+  toggle, so clicking it activates the link (rather than collapsing the row): it
+  switches to the timeline and jumps to the *declaration* (the `create` event) of
+  that object, expanding and selecting its row — so you can walk
+  `widget → backbuf → cacheline → params → history` by clicking.
+
+**Refresh** reloads from a fresh snapshot, **Clear** empties the log. The window
+reads through `dt_supervisor_events_snapshot{,_since}()` (deep-copied,
+thread-safe).
+
 ## Programmatic interface
 
 Beyond the NDJSON stream, any tracked object can be rendered to a human sentence

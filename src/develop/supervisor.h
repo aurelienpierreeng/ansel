@@ -79,12 +79,61 @@ typedef enum dt_sv_op_t
 void dt_supervisor_init(void);
 void dt_supervisor_cleanup(void);
 
-// Fast gate. TRUE only when `-d supervisor` is enabled. Guard call sites with
-// this so the per-event metadata gathering is skipped entirely when off.
+// Runtime capture flag, set by the GUI (the supervisor window). The supervisor
+// captures events whenever this is set OR `-d supervisor` is active. Read via
+// the inline gate below; set via dt_supervisor_set_recording().
+extern gint dt_supervisor_recording;
+
+// Fast gate. TRUE when `-d supervisor` is enabled OR the GUI is recording. Guard
+// call sites with this so the per-event metadata gathering is skipped when off.
 static inline gboolean dt_supervisor_active(void)
 {
-  return (darktable.unmuted & DT_DEBUG_SUPERVISOR) != 0;
+  return (darktable.unmuted & DT_DEBUG_SUPERVISOR) || g_atomic_int_get(&dt_supervisor_recording);
 }
+
+/**
+ * One retained event, as exposed to the GUI by dt_supervisor_events_snapshot().
+ * `links` holds the resolved edge hashes (params/input/node/consumes/rekey) so
+ * the GUI can make every id clickable and navigate to its declaration.
+ */
+typedef struct dt_sv_link_t
+{
+  char label[16]; // edge name, e.g. "params", "input", "node", "rekeyed_to"
+  uint64_t hash;
+} dt_sv_link_t;
+
+typedef struct dt_sv_logged_event_t
+{
+  uint64_t seq;   // monotonic capture sequence, for incremental GUI updates
+  double ts;
+  char thread[24];
+  char op[12];
+  char domain[16];
+  uint64_t hash;  // the event's own object hash
+  GArray *links;  // of dt_sv_link_t
+  gchar *json;    // the full NDJSON record (compact), for the detail view
+} dt_sv_logged_event_t;
+
+// Toggle runtime capture into the in-memory log (the stderr NDJSON dump stays
+// governed by `-d supervisor`).
+void dt_supervisor_set_recording(gboolean on);
+
+// GUI thread: deep-copy snapshot of the retained log, oldest-first. Free with
+// dt_supervisor_events_free(). Empty (not NULL) when nothing was captured.
+GPtrArray *dt_supervisor_events_snapshot(void);
+
+// Incremental snapshot: only events captured after `after_seq` (oldest-first).
+// `out_last_seq` receives the highest seq returned (or `after_seq` if none), so
+// a poller can advance its cursor. Free with dt_supervisor_events_free().
+GPtrArray *dt_supervisor_events_snapshot_since(uint64_t after_seq, uint64_t *out_last_seq);
+
+// Number of events currently retained.
+guint dt_supervisor_events_count(void);
+
+void dt_supervisor_events_free(GPtrArray *events);
+
+// Drop all retained events.
+void dt_supervisor_events_clear(void);
 
 /**
  * Stable identity of a pipeline topology node: a function of the pipe type and
