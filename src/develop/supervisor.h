@@ -112,6 +112,7 @@ typedef struct dt_sv_logged_event_t
   char thread[24];
   char op[12];
   char domain[16];
+  char mnemonic[64]; // human label for the row (module, imgid, widget, pipe, …)
   uint64_t hash;  // the event's own object hash
   GArray *links;  // of dt_sv_link_t
   gchar *json;    // the full NDJSON record (compact), for the detail view

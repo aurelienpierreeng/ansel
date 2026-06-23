@@ -351,6 +351,23 @@ static dt_sv_logged_event_t *_extract_event(JsonObject *root, const gchar *json_
   e->json = g_strdup(json_str);
   e->links = g_array_new(FALSE, FALSE, sizeof(dt_sv_link_t));
 
+  // A short human mnemonic for the GUI row, picked per domain:
+  //  - cacheline/node/history: module ("op/instance");  - widget: widget tag;
+  //  - backbuf: pipe;  - mipmap/image/thumbnail: image id.
+  const char *d = e->domain;
+  if((!g_strcmp0(d, "cacheline") || !g_strcmp0(d, "node") || !g_strcmp0(d, "history"))
+     && json_object_has_member(root, "module"))
+    g_strlcpy(e->mnemonic, json_object_get_string_member(root, "module"), sizeof(e->mnemonic));
+  else if(!g_strcmp0(d, "widget") && json_object_has_member(root, "widget"))
+    g_strlcpy(e->mnemonic, json_object_get_string_member(root, "widget"), sizeof(e->mnemonic));
+  else if(!g_strcmp0(d, "backbuf") && json_object_has_member(root, "pipe"))
+    g_strlcpy(e->mnemonic, json_object_get_string_member(root, "pipe"), sizeof(e->mnemonic));
+  else if(!g_strcmp0(d, "image") && json_object_has_member(root, "filename"))
+    g_strlcpy(e->mnemonic, json_object_get_string_member(root, "filename"), sizeof(e->mnemonic));
+  else if((!g_strcmp0(d, "mipmap") || !g_strcmp0(d, "image") || !g_strcmp0(d, "thumbnail"))
+          && json_object_has_member(root, "imgid"))
+    g_snprintf(e->mnemonic, sizeof(e->mnemonic), "#%d", (int)json_object_get_int_member(root, "imgid"));
+
   // nested-object edges carry the linked object id in their "hash" member
   static const char *obj_edges[]
       = { "params", "input", "node", "consumes", "mipmap", "image", "predecessor", NULL };

@@ -233,14 +233,16 @@ static gchar *_header_markup(const dt_sv_logged_event_t *ev)
   gchar *e_op = g_markup_escape_text(ev->op, -1);
   gchar *e_dom = g_markup_escape_text(ev->domain, -1);
   gchar *e_thr = g_markup_escape_text(ev->thread, -1);
+  gchar *e_mn = g_markup_escape_text(ev->mnemonic[0] ? ev->mnemonic : "-", -1);
   gchar *out = g_strdup_printf(
-      "<tt>%9.3f</tt>  <b>%-7s</b>  <span foreground=\"%s\">%-10s</span>  "
+      "<tt>%9.3f</tt>  <b>%-7s</b>  <span foreground=\"%s\">%-10s</span>  <b>%-16s</b>  "
       "<a href=\"%s\"><tt>%s</tt></a>  <span size=\"small\"><i>%s</i></span>",
-      ev->ts, e_op, _domain_color(ev->domain), e_dom, hx, hx, e_thr);
+      ev->ts, e_op, _domain_color(ev->domain), e_dom, e_mn, hx, hx, e_thr);
   g_free(hx);
   g_free(e_op);
   g_free(e_dom);
   g_free(e_thr);
+  g_free(e_mn);
   return out;
 }
 

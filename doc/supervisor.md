@@ -85,7 +85,9 @@ darkroom to see history/node/cacheline/backbuf/widget events stream in).
 - **Timeline** — events in chronological order, **live-updating** (polled every
   300 ms; auto-scrolls to the tail when you are already at the bottom). One
   collapsible row each: the collapsed line shows the common fields (ts, op,
-  colored domain, own hash, thread); expanding reveals the linked-object hashes
+  colored domain, a per-domain **mnemonic** — module/instance for
+  cacheline/node/history, image id for mipmap/image/thumbnail, widget tag for
+  widget, pipe for backbuf — own hash, thread); expanding reveals the linked-object hashes
   and the full pretty-printed record (built lazily on first expand). The timeline
   keeps the most recent rows (older ones are trimmed; the full log stays in the
   supervisor).
