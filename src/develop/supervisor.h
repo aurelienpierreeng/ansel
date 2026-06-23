@@ -153,12 +153,15 @@ void dt_supervisor_history(dt_sv_op_t op, uint64_t param_hash, const char *op_na
                            int history_index, int32_t imgid, gboolean enabled);
 
 /**
- * Pipeline topology node event — keyed by dt_supervisor_node_key(). CREATE is
- * emitted once when the pipe builds its nodes; DELETE when the nodes are torn
- * down (topology change). Nodes are immutable in between, so this is NOT emitted
- * from the processing recursion.
+ * Pipeline topology node event — keyed by dt_supervisor_node_key().
+ * - CREATE when the pipe builds its nodes (topology), with param_hash INVALID;
+ * - UPDATE when the node is synchronized with a history entry in
+ *   dt_dev_pixelpipe_change(): `param_hash` is the committed piece->hash, which
+ *   ties the node (and the cachelines it produces) to its history item;
+ * - DELETE when the nodes are torn down.
+ * Not emitted from the processing recursion.
  */
-void dt_supervisor_node(dt_sv_op_t op, uint64_t node_hash, const char *op_name,
+void dt_supervisor_node(dt_sv_op_t op, uint64_t node_hash, uint64_t param_hash, const char *op_name,
                         int multi_priority, int iop_order, int pipe_type, int32_t imgid);
 
 /**

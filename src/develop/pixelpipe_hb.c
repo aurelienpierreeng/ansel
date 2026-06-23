@@ -596,8 +596,8 @@ void dt_dev_pixelpipe_cleanup_nodes(dt_dev_pixelpipe_t *pipe)
     if(dt_supervisor_active() && piece->module)
       dt_supervisor_node(DT_SV_DELETE,
                          dt_supervisor_node_key(pipe->type, piece->module->op, piece->module->multi_priority),
-                         piece->module->op, piece->module->multi_priority, piece->module->iop_order,
-                         pipe->type, pipe->imgid);
+                         DT_PIXELPIPE_CACHE_HASH_INVALID, piece->module->op, piece->module->multi_priority,
+                         piece->module->iop_order, pipe->type, pipe->imgid);
     if(piece->module) dt_iop_cleanup_pipe(piece->module, pipe, piece);
     dt_free(piece);
   }
@@ -645,11 +645,12 @@ void dt_dev_pixelpipe_create_nodes(dt_dev_pixelpipe_t *pipe)
     pipe->nodes = g_list_append(pipe->nodes, piece);
 
     // Topology node: created once here, immutable until the nodes are torn down.
+    // param_hash is bound later, at history synchronization (dt_supervisor_node UPDATE).
     if(dt_supervisor_active())
       dt_supervisor_node(DT_SV_CREATE,
                          dt_supervisor_node_key(pipe->type, module->op, module->multi_priority),
-                         module->op, module->multi_priority, module->iop_order, pipe->type,
-                         pipe->imgid);
+                         DT_PIXELPIPE_CACHE_HASH_INVALID, module->op, module->multi_priority,
+                         module->iop_order, pipe->type, pipe->imgid);
   }
 }
 

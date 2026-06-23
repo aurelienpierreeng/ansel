@@ -23,6 +23,7 @@
 #include "develop/imageop.h"
 #include "develop/pixelpipe.h"
 #include "develop/pixelpipe_cache.h"
+#include "develop/supervisor.h"
 #include "develop/blend.h"
 #include "gui/color_picker_proxy.h"
 #include "control/control.h"
@@ -1211,6 +1212,14 @@ static void _sync_pipe_nodes_from_history(dt_dev_pixelpipe_t *pipe, dt_develop_t
       piece->enabled = (pipe->want_detail_mask == DT_DEV_DETAIL_MASK_ENABLED);
     _commit_piece_contract(pipe, piece, params, blend_params, &upstream_dsc);
 
+    // Tie this node to the history item it was just synchronized with, so the
+    // cachelines it produces resolve to that history state through the node.
+    if(dt_supervisor_active() && found_history)
+      dt_supervisor_node(DT_SV_UPDATE,
+                         dt_supervisor_node_key(pipe->type, piece->module->op, piece->module->multi_priority),
+                         piece->hash, piece->module->op, piece->module->multi_priority,
+                         piece->module->iop_order, pipe->type, pipe->imgid);
+
     if(!found_history)
       dt_print(DT_DEBUG_PARAMS, "[pixelpipe] info: committed default params for %s (%s) in pipe %s\n",
                piece->module->op, piece->module->multi_name, debug_label);
@@ -1277,6 +1286,14 @@ static void _sync_pipe_nodes_from_history_from_node(dt_dev_pixelpipe_t *pipe,
     if(!strcmp(piece->module->op, "detailmask"))
       piece->enabled = (pipe->want_detail_mask == DT_DEV_DETAIL_MASK_ENABLED);
     _commit_piece_contract(pipe, piece, params, blend_params, &upstream_dsc);
+
+    // Tie this node to the history item it was just synchronized with, so the
+    // cachelines it produces resolve to that history state through the node.
+    if(dt_supervisor_active() && found_history)
+      dt_supervisor_node(DT_SV_UPDATE,
+                         dt_supervisor_node_key(pipe->type, piece->module->op, piece->module->multi_priority),
+                         piece->hash, piece->module->op, piece->module->multi_priority,
+                         piece->module->iop_order, pipe->type, pipe->imgid);
 
     if(!found_history)
       dt_print(DT_DEBUG_PARAMS, "[pixelpipe] info: committed default params for %s (%s) in pipe %s\n",

@@ -1979,6 +1979,13 @@ gboolean dt_dev_read_history_ext(dt_develop_t *dev, const int32_t imgid)
     _history_to_module(hist, module);
     hist->hash = hist->module->hash;
 
+    // Register the freshly-read history item now (its hash is final), so the
+    // node<->history resynchronization can resolve `params` to a real entry.
+    if(dt_supervisor_active())
+      dt_supervisor_history(DT_SV_CREATE, hist->hash, module->op, module->multi_priority,
+                            module->multi_name, module->iop_order, g_list_index(dev->history, hist),
+                            imgid, hist->enabled);
+
     dt_print(DT_DEBUG_HISTORY, "[history] successfully loaded module %s history (enabled: %i)\n", hist->module->op, hist->enabled);
   }
 

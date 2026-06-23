@@ -432,9 +432,9 @@ void dt_supervisor_history(const dt_sv_op_t op, const uint64_t param_hash, const
   _emit_line(root);
 }
 
-void dt_supervisor_node(const dt_sv_op_t op, const uint64_t node_hash, const char *op_name,
-                        const int multi_priority, const int iop_order, const int pipe_type,
-                        const int32_t imgid)
+void dt_supervisor_node(const dt_sv_op_t op, const uint64_t node_hash, const uint64_t param_hash,
+                        const char *op_name, const int multi_priority, const int iop_order,
+                        const int pipe_type, const int32_t imgid)
 {
   if(!dt_supervisor_active() || !_sv.inited) return;
 
@@ -447,6 +447,8 @@ void dt_supervisor_node(const dt_sv_op_t op, const uint64_t node_hash, const cha
   e->iop_order = iop_order;
   e->pipe_type = pipe_type;
   e->imgid = imgid;
+  // Bind the node to its history item once synchronized (param_hash set).
+  if(_hash_is_set(param_hash)) e->param_hash = param_hash;
   const gboolean resurrected = _touch_alive_locked(e, created, op);
 
   JsonObject *root = _envelope(op, "node", node_hash, pipe_type, imgid, e->alive, resurrected);
@@ -454,6 +456,8 @@ void dt_supervisor_node(const dt_sv_op_t op, const uint64_t node_hash, const cha
   _module_label(e, module, sizeof(module));
   json_object_set_string_member(root, "module", module);
   json_object_set_int_member(root, "iop_order", iop_order);
+  JsonObject *params = _resolve_locked(e->param_hash);
+  if(params) json_object_set_object_member(root, "params", params);
   dt_pthread_mutex_unlock(&_sv.lock);
 
   _emit_line(root);
@@ -532,8 +536,13 @@ void dt_supervisor_cacheline_read(const uint64_t hash, const size_t size)
   char module[128];
   _module_label(e, module, sizeof(module));
   if(strcmp(module, "?") != 0) json_object_set_string_member(root, "module", module);
+  // Expose the full linkage so every related hash is clickable from a read too.
   JsonObject *params = _resolve_locked(e->param_hash);
   if(params) json_object_set_object_member(root, "params", params);
+  JsonObject *node = _resolve_locked(e->node_hash);
+  if(node) json_object_set_object_member(root, "node", node);
+  JsonObject *in = _resolve_locked(e->input_hash);
+  if(in) json_object_set_object_member(root, "input", in);
   dt_pthread_mutex_unlock(&_sv.lock);
 
   _emit_line(root);
@@ -561,6 +570,10 @@ void dt_supervisor_cacheline_delete(const uint64_t hash, const size_t size, cons
   char module[128];
   _module_label(e, module, sizeof(module));
   if(strcmp(module, "?") != 0) json_object_set_string_member(root, "module", module);
+  JsonObject *params = _resolve_locked(e->param_hash);
+  if(params) json_object_set_object_member(root, "params", params);
+  JsonObject *node = _resolve_locked(e->node_hash);
+  if(node) json_object_set_object_member(root, "node", node);
   dt_pthread_mutex_unlock(&_sv.lock);
 
   _emit_line(root);

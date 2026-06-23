@@ -133,11 +133,18 @@ Domain specifics:
 
 - **history** — `module`, `iop_order`, `history_index`, `enabled`. Keyed by the
   parameter hash. `delete` flips `alive`.
-- **node** — `module`, `iop_order`. Topology event, keyed by the synthetic node
-  key. `create` at `create_nodes`, `delete` at `cleanup_nodes`.
+- **node** — `module`, `iop_order`. Topology object, keyed by the synthetic node
+  key. `create` at `create_nodes` (no params yet); `update` at history
+  synchronization (`dt_dev_pixelpipe_change()` → the sync loops), where the
+  committed `piece->hash` binds the node to its history item, so the `update`
+  carries a resolved `params` link; `delete` at `cleanup_nodes`.
 - **cacheline** — `create` at output publish with full linkage (`device`, `roi`,
-  resolved `params`/`input`/`node`); `read` on **every** cache hit (hash + size,
-  resolved from memory); `delete` on eviction (flips `alive`).
+  resolved `params`/`input`/`node`); `read` on **every** cache hit (resolved
+  `params`/`node`/`input` from memory, so every related hash is clickable from a
+  read too); `delete` on eviction (resolved `params`/`node`, flips `alive`).
+  A cacheline is thus tied to its history item *through the node that produced
+  it*: `cacheline → node → params (history)`, plus the direct `cacheline → params`
+  edge — all clickable in the GUI from the cacheline event.
 - **backbuf** — `device`, `history_hash`, `size` `[w,h,bpp]`, resolved `module`/
   `params`; merges into the cacheline entry sharing its hash.
 - **widget** — `widget` tag, resolved `consumes`/`params`. The consumed hash is
@@ -192,10 +199,12 @@ jq -c 'select(.domain=="widget") | {ts,widget,frame:.hash,
 
 | domain | op | site |
 | --- | --- | --- |
+| history | create | `dt_dev_read_history_ext()` finalize loop (each item registered at read time, so resync can map nodes to it) |
 | history | create/update | `dt_dev_add_history_item_ext()` (`dev_history.c`); in-place hash change → rekey |
 | history | delete | canonical removals: `dt_dev_history_free_history()` (clear/compress), `dt_dev_history_truncate()` loop, and the leak-removal path — undo-snapshot copies are deliberately not hooked |
 | rekey | delete+create | `dt_dev_pixelpipe_cache_rekey()` and `_cache_try_rekey_reuse_locked()` (`pixelpipe_cache.c`); history in-place overwrite (`dev_history.c`) |
 | node | create/delete | `dt_dev_pixelpipe_create_nodes()` / `dt_dev_pixelpipe_cleanup_nodes()` (`pixelpipe_hb.c`) |
+| node | update (history bind) | `_sync_pipe_nodes_from_history{,_from_node}()` after `_commit_piece_contract()` (`dev_pixelpipe.c`) |
 | cacheline | create | output publish in `dt_dev_pixelpipe_process_rec()` (`pixelpipe_hb.c`) |
 | cacheline | read | the three cache-hit chokepoints in `pixelpipe_cache.c` |
 | cacheline | delete | `_free_cache_entry()` (`pixelpipe_cache.c`) |
