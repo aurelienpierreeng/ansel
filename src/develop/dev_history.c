@@ -70,6 +70,7 @@
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/masks.h"
+#include "develop/supervisor.h"
 
 #include "gui/presets.h"
 
@@ -779,6 +780,10 @@ static void _remove_history_leaks(dt_develop_t *dev)
         || earlier_entry)
     {
       dt_print(DT_DEBUG_HISTORY, "[dt_dev_add_history_item_ext] removing obsoleted history item: %s at %i\n", hist->module->op, g_list_index(dev->history, hist));
+      if(dt_supervisor_active())
+        dt_supervisor_history(DT_SV_DELETE, hist->hash, hist->module->op, hist->module->multi_priority,
+                              hist->module->multi_name, hist->module->iop_order,
+                              g_list_index(dev->history, hist), dev->image_storage.id, hist->enabled);
       dt_dev_free_history_item(hist);
       dev->history = g_list_delete_link(dev->history, link);
     }
@@ -840,7 +845,8 @@ gboolean dt_dev_add_history_item_ext(dt_develop_t *dev, struct dt_iop_module_t *
   }
 
   dt_dev_history_item_t *hist;
-  if(force_new_item || !new_is_old)
+  const gboolean is_new_item = force_new_item || !new_is_old;
+  if(is_new_item)
   {
     // Create a new history entry
     hist = (dt_dev_history_item_t *)calloc(1, sizeof(dt_dev_history_item_t));
@@ -874,6 +880,10 @@ gboolean dt_dev_add_history_item_ext(dt_develop_t *dev, struct dt_iop_module_t *
   }
   // else forms_snapshot stays NULL
 
+  // Capture the previous parameter hash: an in-place reuse rewrites it below,
+  // which the supervisor must see as a rekey (delete old hash + add new hash).
+  const uint64_t old_param_hash = hist->hash;
+
   // Fill history item and recompute hash (also applies params/blend_params to module to keep hash consistent).
   dt_dev_history_item_update_from_params(dev, hist, module, module->enabled, module->params, module->params_size,
                                          module->blend_params, forms_snapshot);
@@ -888,6 +898,27 @@ gboolean dt_dev_add_history_item_ext(dt_develop_t *dev, struct dt_iop_module_t *
   // keeping in mind that history_end = 0 is the raw image, aka not a dev->history GList entry.
   // So dev->history_end = index of last history entry + 1 = length of history
   dt_dev_set_history_end_ext(dev, g_list_length(dev->history));
+
+  if(dt_supervisor_active())
+  {
+    if(is_new_item)
+      dt_supervisor_history(DT_SV_CREATE, hist->hash, module->op, module->multi_priority,
+                            module->multi_name, module->iop_order, hist->num, dev->image_storage.id,
+                            hist->enabled);
+    else if(old_param_hash != hist->hash)
+    {
+      // in-place overwrite changed the hash: delete old key, add new key, then
+      // refresh the new entry's current state (enabled/index may have changed).
+      dt_supervisor_rekey(old_param_hash, hist->hash);
+      dt_supervisor_history(DT_SV_UPDATE, hist->hash, module->op, module->multi_priority,
+                            module->multi_name, module->iop_order, hist->num, dev->image_storage.id,
+                            hist->enabled);
+    }
+    else
+      dt_supervisor_history(DT_SV_UPDATE, hist->hash, module->op, module->multi_priority,
+                            module->multi_name, module->iop_order, hist->num, dev->image_storage.id,
+                            hist->enabled);
+  }
 
   return add_new_pipe_node;
 }
@@ -1013,6 +1044,17 @@ void dt_dev_free_history_item(gpointer data)
 void dt_dev_history_free_history(dt_develop_t *dev)
 {
   if(IS_NULL_PTR(dev->history)) return;
+  // Canonical history is being cleared (image unload, compress rebuild, ...):
+  // mark every item deleted in the supervisor before freeing the structs.
+  if(dt_supervisor_active())
+    for(GList *l = dev->history; l; l = g_list_next(l))
+    {
+      const dt_dev_history_item_t *h = (const dt_dev_history_item_t *)l->data;
+      if(h && h->module)
+        dt_supervisor_history(DT_SV_DELETE, h->hash, h->module->op, h->module->multi_priority,
+                              h->module->multi_name, h->module->iop_order, h->num,
+                              dev->image_storage.id, h->enabled);
+    }
   g_list_free_full(g_steal_pointer(&dev->history), dt_dev_free_history_item);
   dev->history = NULL;
 }
@@ -2155,6 +2197,11 @@ void dt_dev_history_truncate(dt_develop_t *dev, const int32_t imgid)
   while(link)
   {
     GList *next = g_list_next(link);
+    const dt_dev_history_item_t *h = (const dt_dev_history_item_t *)link->data;
+    if(dt_supervisor_active() && h && h->module)
+      dt_supervisor_history(DT_SV_DELETE, h->hash, h->module->op, h->module->multi_priority,
+                            h->module->multi_name, h->module->iop_order, h->num,
+                            dev->image_storage.id, h->enabled);
     dt_dev_free_history_item(link->data);
     dev->history = g_list_delete_link(dev->history, link);
     link = next;

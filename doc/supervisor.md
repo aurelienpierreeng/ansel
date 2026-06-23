@@ -1,0 +1,184 @@
+# Event supervisor — linked NDJSON tracing of async state
+
+Ansel's GUI, history and pixelpipe live in separate threads and identify their
+objects by content-addressed hashes (see `reorganisation.md` and
+`pipeline-cache.md`). Reconstructing *which cacheline a widget painted from*, or
+*which history state a pipeline node committed*, from ordinary logs is nearly
+impossible. The **supervisor** solves this by linking those objects through the
+hashes they already carry, and emitting one line of NDJSON per CRUD event with
+the links already resolved.
+
+Code: `src/develop/supervisor.{c,h}`. Enabled with `-d supervisor`; off by
+default and effectively free when off (one predicted-false branch per site).
+
+## The model
+
+### Two hash families do the linking
+
+- **Parameter identity** (`history_item.hash` == `module.hash` == `piece.hash`) —
+  the `module → history item` spine and a cacheline's `params` edge.
+- **Output identity** (`piece.global_hash` == `cache_entry.hash` ==
+  `backbuf.hash`) — the cache key; a cacheline, the backbuffer that promotes it
+  and the widget that paints it all share this hash.
+
+### Pipeline nodes are topology, not runtime
+
+A pipeline node is a *topology* object: created once when the pipe builds its
+nodes and immutable until the topology changes. It is therefore keyed by a
+**stable synthetic key** — `dt_supervisor_node_key(pipe_type, op, multi_priority)`
+— and emitted only at `create_nodes` (CREATE) and `cleanup_nodes` (DELETE),
+**never** from the processing recursion. The per-run object is the *cacheline*
+(the node's output for a given parameter/ROI state), which is created at runtime
+publish and carries the edge back to its producing node.
+
+### Registry as memory: entries never die, they go `alive: false`
+
+Every object registers itself by its hash; entries **live until the session
+ends and are never removed**. A delete event flips an `alive` flag to `false`
+instead of dropping the entry. This makes the registry a memory:
+
+- a CREATE or READ landing on a hash whose entry is `alive: false` is a
+  **reuse-after-delete**, tagged `"resurrected": true` in the record;
+- `describe()` and edge resolutions mark dead references `[deleted]`, so a node
+  consuming an evicted input is visible even after the fact.
+
+This is the main tool for hunting use-after-free / use-after-evict bugs.
+
+### Rekeying is delete-old + add-new
+
+Two objects mutate their identity in place: a **pipeline cacheline** rekeyed for
+writable reuse, and a **history item** overwritten so its parameter hash changes
+(e.g. dragging a slider reuses the top history entry). The supervisor models
+both as `dt_supervisor_rekey(old, new)`: the old entry goes `alive: false` with a
+`"rekeyed_to"` link (a `delete` record), and a new entry inherits the old
+metadata and is created with a `"rekeyed_from"` link (a `create` record). The two
+hashes are therefore explicitly chained instead of one silently mutating.
+
+### Thread safety
+
+One supervisor mutex guards the registry. Emitters value-copy their arguments;
+the registry never dereferences a live foreign object and resolves at most two
+edge hops. The mutex is a leaf — at the cache read chokepoints it is taken under
+the pixelpipe-cache lock, and that ordering is never inverted.
+
+## Running it
+
+```sh
+ansel -d supervisor 2> events.ndjson
+```
+
+One compact JSON object per line on **stderr**. The join is done in-app, so the
+lines are already linked; `jq` is for filtering/shaping, not joining.
+
+## Programmatic interface
+
+Beyond the NDJSON stream, any tracked object can be rendered to a human sentence
+in-process:
+
+```c
+gchar *s = dt_supervisor_describe(hash);   // caller g_free()s; NULL if unknown/off
+// e.g. "cacheline 0x71c4… (exposure/0, preview, 1920x1280, cpu)
+//       computed from input 0x55ab… (colorin/0); params 0x9f3a… (exposure/0)"
+```
+
+This is the same narrative the NDJSON encodes, available for a future tracker
+widget, an assertion message, or ad-hoc logging.
+
+## Event schema
+
+Common envelope:
+
+| field | meaning |
+| --- | --- |
+| `ts` | seconds since app start (same clock as `dt_print`) |
+| `thread` | calling thread tag |
+| `op` | `create` \| `update` \| `read` \| `delete` |
+| `domain` | `history` \| `node` \| `cacheline` \| `backbuf` \| `widget` \| `thumbnail` |
+| `hash` | this object's own hash (`0x…`) |
+| `alive` | whether the represented object still exists |
+| `resurrected` | present (`true`) only on a reuse-after-delete |
+| `pipe` / `imgid` | when applicable |
+
+Domain specifics:
+
+- **history** — `module`, `iop_order`, `history_index`, `enabled`. Keyed by the
+  parameter hash. `delete` flips `alive`.
+- **node** — `module`, `iop_order`. Topology event, keyed by the synthetic node
+  key. `create` at `create_nodes`, `delete` at `cleanup_nodes`.
+- **cacheline** — `create` at output publish with full linkage (`device`, `roi`,
+  resolved `params`/`input`/`node`); `read` on **every** cache hit (hash + size,
+  resolved from memory); `delete` on eviction (flips `alive`).
+- **backbuf** — `device`, `history_hash`, `size` `[w,h,bpp]`, resolved `module`/
+  `params`; merges into the cacheline entry sharing its hash.
+- **widget** — `widget` tag, resolved `consumes`/`params`. The consumed hash is
+  `hash`. Emitted on surface rebind, not every expose.
+- **thumbnail** — `mip`, `size`, `success`; keyed by a synthetic `(imgid, mip)`
+  key. `read` when generation starts, `update` with the result. The pipeline
+  render behind a thumbnail miss surfaces through the generic node/cacheline/
+  backbuf events of the thumbnail pipe.
+
+### Example: a node computed its output
+
+```json
+{"ts":12.4,"thread":"thread-0x7f…","op":"create","domain":"cacheline",
+ "pipe":"preview","imgid":42,"hash":"0x71c4…","alive":true,
+ "module":"exposure/0","iop_order":14,"size":9830400,"device":"cpu","roi":[1920,1280],
+ "params":{"hash":"0x9f3a…","module":"exposure/0","history_index":7,"enabled":true,"alive":true},
+ "input":{"hash":"0x55ab…","module":"colorin/0","iop_order":12,"alive":true},
+ "node":{"hash":"0x3e10…","module":"exposure/0","iop_order":14,"alive":true}}
+```
+
+### Example: reuse after delete
+
+```json
+{"ts":13.0,"op":"read","domain":"cacheline","hash":"0x55ab…","alive":true,
+ "resurrected":true,"module":"colorin/0","size":9830400}
+```
+Something read `0x55ab…` after it had been evicted — exactly the pattern behind
+"data pending" / stale-buffer bugs.
+
+## jq recipes
+
+Every reuse-after-delete in the session:
+
+```sh
+jq -c 'select(.resurrected==true)' events.ndjson
+```
+
+Lifecycle of one cacheline (create → reads → delete):
+
+```sh
+jq -c 'select(.hash=="0x71c4…") | {ts,op,alive}' events.ndjson
+```
+
+Which history state each painted frame came from:
+
+```sh
+jq -c 'select(.domain=="widget") | {ts,widget,frame:.hash,
+       state:.params.history_index}' events.ndjson
+```
+
+## Instrumented sites
+
+| domain | op | site |
+| --- | --- | --- |
+| history | create/update | `dt_dev_add_history_item_ext()` (`dev_history.c`); in-place hash change → rekey |
+| history | delete | canonical removals: `dt_dev_history_free_history()` (clear/compress), `dt_dev_history_truncate()` loop, and the leak-removal path — undo-snapshot copies are deliberately not hooked |
+| rekey | delete+create | `dt_dev_pixelpipe_cache_rekey()` and `_cache_try_rekey_reuse_locked()` (`pixelpipe_cache.c`); history in-place overwrite (`dev_history.c`) |
+| node | create/delete | `dt_dev_pixelpipe_create_nodes()` / `dt_dev_pixelpipe_cleanup_nodes()` (`pixelpipe_hb.c`) |
+| cacheline | create | output publish in `dt_dev_pixelpipe_process_rec()` (`pixelpipe_hb.c`) |
+| cacheline | read | the three cache-hit chokepoints in `pixelpipe_cache.c` |
+| cacheline | delete | `_free_cache_entry()` (`pixelpipe_cache.c`) |
+| backbuf | update | after `dt_dev_set_backbuf()` (`pixelpipe_hb.c`) |
+| widget | read | surface rebind in `_lock_pipe_surface()` (`views/darkroom.c`) |
+| thumbnail | read/update | inside `_view_image_get_surface_internal()` (`views/view.c`), where the real mip level is known |
+
+## Limits / TODO
+
+- The registry grows for the whole session by design (it is the memory). On very
+  long sessions an LRU cap that preserves `alive: false` tombstones would bound
+  it.
+- Cache **read** events are high frequency (every module input acquisition). They
+  are the price of "track all hits"; filter with `jq 'select(.op!="read")'` for a
+  topology-level view.
+- The supervisor only *links* state; it never changes behaviour.

@@ -468,7 +468,11 @@ int32_t _get_image_buffer(dt_job_t *job)
   // Get the actual image content. This typically triggers a rendering pipeline,
   // and can possibly take a long time.
   cairo_surface_t *surface = NULL;
+
+  // Thumbnail generation (mipmap fetch + pipeline render) is instrumented inside
+  // dt_view_image_get_surface(), where the real mip level is known.
   dt_view_surface_value_t res = dt_view_image_get_surface(imgid, img_w, img_h, &surface, zoom);
+
   if(surface && res == DT_VIEW_SURFACE_OK)
   {
     // The image is immediately available

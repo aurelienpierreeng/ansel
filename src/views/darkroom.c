@@ -104,6 +104,7 @@
 #include "develop/dev_pixelpipe.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
+#include "develop/supervisor.h"
 #include "develop/masks.h"
 #include "dtgtk/button.h"
 #include "dtgtk/thumbtable.h"
@@ -713,6 +714,12 @@ static gboolean _lock_pipe_surface(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, 
     _release_locked_surface(locked);
     return FALSE;
   }
+
+  // The widget is about to (re)bind its surface to this backbuffer cacheline.
+  // Emitted off the fast-path, so it fires when the displayed buffer changes,
+  // not on every identical expose.
+  if(dt_supervisor_active())
+    dt_supervisor_widget(DT_SV_READ, wait_owner, hash, pipe->type, pipe->imgid);
 
   if(!IS_NULL_PTR(locked->surface) && locked->data == data && locked->width == width && locked->height == height)
   {

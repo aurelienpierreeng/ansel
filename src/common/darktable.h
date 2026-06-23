@@ -757,6 +757,12 @@ typedef enum dt_debug_thread_t
   DT_DEBUG_NOCACHE_REUSE  = 1 << 30,
 } dt_debug_thread_t;
 
+// Uses the top (sign) bit of the int32_t `unmuted` mask. Defined as a macro
+// because 1 << 31 is not representable as an `int` enumerator. Enables the
+// high-level event supervisor (NDJSON tracing of history/pipeline/cache state).
+// See develop/supervisor.h.
+#define DT_DEBUG_SUPERVISOR ((int32_t)(1u << 31))
+
 typedef struct dt_sys_resources_t
 {
   size_t total_memory;     // All RAM on system

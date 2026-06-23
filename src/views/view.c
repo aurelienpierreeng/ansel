@@ -86,6 +86,7 @@
 #include "control/conf.h"
 #include "control/control.h"
 #include "develop/develop.h"
+#include "develop/supervisor.h"
 #include "dtgtk/button.h"
 #include "dtgtk/expander.h"
 #include "dtgtk/thumbtable.h"
@@ -1067,8 +1068,19 @@ static dt_view_surface_value_t _view_image_get_surface_internal(int32_t imgid, i
       mip = dt_mipmap_cache_get_matching_size(cache, full_width, full_height, imgid);
   }
 
+  // Thumbnail generation: mipmap fetch (and, on a miss, the pipeline render
+  // behind it, which surfaces through the generic thumbnail-pipe events). mip is
+  // now resolved, so the request and its result share the real (imgid, mip) key.
+  if(dt_supervisor_active())
+    dt_supervisor_thumbnail(DT_SV_READ, imgid, width, height, mip, FALSE);
+
   // Can't have float32 types here
-  if(mip >= DT_MIPMAP_F) return DT_VIEW_SURFACE_KO;
+  if(mip >= DT_MIPMAP_F)
+  {
+    if(dt_supervisor_active())
+      dt_supervisor_thumbnail(DT_SV_UPDATE, imgid, width, height, mip, FALSE);
+    return DT_VIEW_SURFACE_KO;
+  }
 
   // if needed, we load the mimap buffer
   dt_mipmap_buffer_t buf;
@@ -1080,6 +1092,8 @@ static dt_view_surface_value_t _view_image_get_surface_internal(int32_t imgid, i
   if(IS_NULL_PTR(buf.buf))
   {
     dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
+    if(dt_supervisor_active())
+      dt_supervisor_thumbnail(DT_SV_UPDATE, imgid, width, height, mip, FALSE);
     return DT_VIEW_SURFACE_KO;
   }
 
@@ -1209,6 +1223,8 @@ static dt_view_surface_value_t _view_image_get_surface_internal(int32_t imgid, i
   }
 
   // we consider skull as ok as the image hasn't to be reload
+  if(dt_supervisor_active())
+    dt_supervisor_thumbnail(DT_SV_UPDATE, imgid, width, height, mip, ret == DT_VIEW_SURFACE_OK);
   return ret;
 }
 

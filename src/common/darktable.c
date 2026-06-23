@@ -132,6 +132,7 @@
 #include "develop/blend.h"
 #include "develop/dev_pixelpipe.h"
 #include "develop/imageop.h"
+#include "develop/supervisor.h"
 
 #include "gui/gtk.h"
 #include "gui/gui_throttle.h"
@@ -731,6 +732,8 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
           darktable.unmuted |= DT_DEBUG_HISTORY;
         else if(!strcmp(argv[k + 1], "import"))
           darktable.unmuted |= DT_DEBUG_IMPORT;
+        else if(!strcmp(argv[k + 1], "supervisor"))
+          darktable.unmuted |= DT_DEBUG_SUPERVISOR; // high-level event supervisor (NDJSON)
         else
           return usage(argv[0]);
         k++;
@@ -1208,6 +1211,9 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
     return 1;
   }
 
+  // High-level event supervisor registry (active only under -d supervisor).
+  dt_supervisor_init();
+
   darktable.points = (dt_points_t *)calloc(1, sizeof(dt_points_t));
   dt_points_init(darktable.points, darktable.num_openmp_threads);
 
@@ -1472,6 +1478,7 @@ void dt_cleanup()
 #endif
 
   dt_dev_pixelpipe_cache_cleanup(darktable.pixelpipe_cache);
+  dt_supervisor_cleanup();
 
   dt_opencl_cleanup(darktable.opencl);
   dt_free(darktable.opencl);
