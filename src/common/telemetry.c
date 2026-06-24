@@ -33,6 +33,10 @@
 #include <curl/curl.h>
 #include <string.h>
 
+#ifdef __APPLE__
+#include <sys/sysctl.h>
+#endif
+
 #define POSTHOG_API_KEY "phc_uLtshRLGnot4cMieYFebh4gxkszztKLcfHgEYSZF3Cu6"
 
 #ifndef POSTHOG_HOST
@@ -302,6 +306,19 @@ static JsonObject *_telemetry_system_properties(void)
   json_object_set_string_member(p, "build_channel", DT_BUILD_CHANNEL);
 
   gchar *os = g_get_os_info(G_OS_INFO_KEY_PRETTY_NAME);
+#ifdef __APPLE__
+  // macOS has no /etc/os-release, so g_get_os_info() returns NULL there. Build a
+  // pretty name from the product version (e.g. "macOS 15.1") via sysctl.
+  if(!os)
+  {
+    char ver[256] = { 0 };
+    size_t len = sizeof(ver);
+    if(sysctlbyname("kern.osproductversion", ver, &len, NULL, 0) == 0 && ver[0])
+      os = g_strdup_printf("macOS %s", ver);
+    else
+      os = g_strdup("macOS");
+  }
+#endif
   if(os)
   {
     json_object_set_string_member(p, "os", os);
