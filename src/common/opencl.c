@@ -2953,34 +2953,27 @@ void dt_opencl_events_wait_for(const int devid)
 
   assert(*numevents > *eventsconsolidated);
 
-  // Gather only the non-NULL handles before waiting. A reserved slot can hold a
-  // NULL handle when its enqueue failed (the event is not created, but get_slot
-  // had already counted the slot). Passing NULL to clWaitForEvents crashes some
-  // drivers, and on those that merely return an error it would abort the whole
-  // wait and leave the valid events that follow un-waited-for.
-  const int pending = *numevents - *eventsconsolidated;
-  cl_event *valid = malloc(sizeof(cl_event) * pending);
-  if(IS_NULL_PTR(valid)) return;
-
-  int nvalid = 0;
+  // Wait for all remaining events to terminate, skipping NULL handles. A reserved
+  // slot can hold a NULL handle when its enqueue failed (the event is never
+  // created, but get_slot had already counted the slot). Passing NULL to
+  // clWaitForEvents crashes some drivers and, on those that merely return an
+  // error, would abort a batched wait and leave the valid events that follow
+  // un-waited-for before flush checks/releases them. We wait on each handle
+  // individually rather than gathering them into a temporary array: a heap
+  // allocation could fail under the very memory pressure that creates these NULL
+  // slots, and returning early on that failure would skip the wait entirely.
+  // Risk: might never return in case of OpenCL blocks or endless loops
+  // TODO: run clWaitForEvents in separate thread and implement watchdog timer
   for(int k = *eventsconsolidated; k < *numevents; k++)
   {
-    if(memcmp((*eventlist) + k, zeroevent, sizeof(cl_event)))
-      valid[nvalid++] = (*eventlist)[k];
-  }
+    if(!memcmp((*eventlist) + k, zeroevent, sizeof(cl_event)))
+      continue; // NULL handle from a failed enqueue
 
-  if(nvalid > 0)
-  {
-    // now wait for all remaining events to terminate
-    // Risk: might never return in case of OpenCL blocks or endless loops
-    // TODO: run clWaitForEvents in separate thread and implement watchdog timer
-    cl_int err = (cl->dlocl->symbols->dt_clWaitForEvents)(nvalid, valid);
+    cl_int err = (cl->dlocl->symbols->dt_clWaitForEvents)(1, &((*eventlist)[k]));
     if((err != CL_SUCCESS) && (err != CL_INVALID_VALUE))
       dt_vprint(DT_DEBUG_OPENCL, "[dt_opencl_events_wait_for] reported %i for device %i\n",
          err, devid);
   }
-
-  free(valid);
 }
 
 
