@@ -1789,13 +1789,30 @@ static dt_pixel_cache_entry_t *dt_pixel_cache_new_entry(const uint64_t hash, con
 
 static void _free_cache_entry(dt_pixel_cache_entry_t *cache_entry)
 {
+  if(IS_NULL_PTR(cache_entry)) return;
+
   _pixel_cache_message(cache_entry, "freed", FALSE);
 
   if(dt_supervisor_active())
     dt_supervisor_cacheline_delete(cache_entry->hash, cache_entry->size, cache_entry->id,
                                    cache_entry->name);
 
-  if(cache_entry->data)
+  /* Every live entry belongs to the one and only global pixelpipe cache, so its back-reference
+   * must match it. If it doesn't, the entry struct has been corrupted (we have seen a single
+   * flipped bit in the pointer from faulty RAM) or is stale: reaching cache->arena or
+   * cache->current_memory through it would dereference a wild pointer and turn an innocuous
+   * teardown into a SIGSEGV. Skip the arena free and the accounting in that case -- the arena is
+   * unmapped wholesale right after, so nothing actually leaks. */
+  dt_dev_pixelpipe_cache_t *cache = cache_entry->cache;
+  if(cache != darktable.pixelpipe_cache)
+  {
+    fprintf(stderr, "[pixelpipe] cache entry %p has a corrupted back-reference (%p, expected %p); "
+                    "skipping arena free to avoid a crash\n",
+            (void *)cache_entry, (void *)cache, (void *)darktable.pixelpipe_cache);
+    cache = NULL;
+  }
+
+  if(cache_entry->data && cache)
   {
 #ifdef HAVE_OPENCL
     dt_pthread_mutex_lock(&cache_entry->cl_mem_lock);
@@ -1814,7 +1831,7 @@ static void _free_cache_entry(dt_pixel_cache_entry_t *cache_entry)
 #endif
 
     dt_dev_pixelpipe_cache_flush_entry_clmem(cache_entry);
-    dt_cache_arena_free(&cache_entry->cache->arena, cache_entry->data, cache_entry->size);
+    dt_cache_arena_free(&cache->arena, cache_entry->data, cache_entry->size);
   }
   else
   {
@@ -1822,7 +1839,7 @@ static void _free_cache_entry(dt_pixel_cache_entry_t *cache_entry)
   }
 
   cache_entry->data = NULL;
-  cache_entry->cache->current_memory -= cache_entry->size;
+  if(cache) cache->current_memory -= cache_entry->size;
   dt_pthread_rwlock_destroy(&cache_entry->lock);
   dt_pthread_mutex_destroy(&cache_entry->cl_mem_lock);
   dt_free(cache_entry->name);
