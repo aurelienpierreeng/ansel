@@ -86,7 +86,6 @@
 #include <zlib.h>
 
 #include <array>
-#include <cassert>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
@@ -838,7 +837,7 @@ void dt_exif_img_check_additional_tags(dt_image_t *img, const char *filename)
   try
   {
     std::unique_ptr<Exiv2::Image> image(Exiv2::ImageFactory::open(WIDEN(filename)));
-    assert(image.get() != 0);
+    if(!image.get()) return;
     read_metadata_threadsafe(image);
     Exiv2::ExifData &exifData = image->exifData();
     if(!exifData.empty())
@@ -1704,7 +1703,7 @@ int dt_exif_get_thumbnail(const char *path, uint8_t **buffer, size_t *size, char
   try
   {
     std::unique_ptr<Exiv2::Image> image(Exiv2::ImageFactory::open(WIDEN(path)));
-    assert(image.get() != 0);
+    if(!image.get()) return 1;
     read_metadata_threadsafe(image);
 
     // Get a list of preview images available in the image. The list is sorted
@@ -1775,7 +1774,7 @@ int dt_exif_read(dt_image_t *img, const char *path)
   try
   {
     std::unique_ptr<Exiv2::Image> image(Exiv2::ImageFactory::open(WIDEN(path)));
-    assert(image.get() != 0);
+    if(!image.get()) return 1;
     read_metadata_threadsafe(image);
     bool res = true;
 
@@ -1823,7 +1822,7 @@ int dt_exif_write_blob(uint8_t *blob, uint32_t size, const char *path, const int
     Lock lock;
 
     std::unique_ptr<Exiv2::Image> image(Exiv2::ImageFactory::open(WIDEN(path)));
-    assert(image.get() != 0);
+    if(!image.get()) return 1;
     read_metadata_threadsafe(image);
     Exiv2::ExifData &imgExifData = image->exifData();
     Exiv2::ExifData blobExifData;
@@ -1899,7 +1898,7 @@ int dt_exif_read_blob(uint8_t **buf, const char *path, const int32_t imgid, cons
   try
   {
     std::unique_ptr<Exiv2::Image> image(Exiv2::ImageFactory::open(WIDEN(path)));
-    assert(image.get() != 0);
+    if(!image.get()) return 1;
     read_metadata_threadsafe(image);
     Exiv2::ExifData &exifData = image->exifData();
 
@@ -3116,7 +3115,7 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
   {
     // read xmp sidecar
     std::unique_ptr<Exiv2::Image> image(Exiv2::ImageFactory::open(WIDEN(filename)));
-    assert(image.get() != 0);
+    if(!image.get()) return 1;
     read_metadata_threadsafe(image);
     Exiv2::XmpData &xmpData = image->xmpData();
 
