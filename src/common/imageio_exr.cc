@@ -163,17 +163,25 @@ dt_imageio_retval_t dt_imageio_open_exr(dt_image_t *img, const char *filename, d
   frameBuffer.insert("B", Imf::Slice(Imf::FLOAT, (char *)(buf + 2), xstride, ystride, 1, 1, 0.0));
   frameBuffer.insert("A", Imf::Slice(Imf::FLOAT, (char *)(buf + 3), xstride, ystride, 1, 1, 0.0));
 
-  if(isTiled)
+  try
   {
-    fileTiled->setFrameBuffer(frameBuffer);
-    fileTiled->readTiles(0, fileTiled->numXTiles() - 1, 0, fileTiled->numYTiles() - 1);
+    if(isTiled)
+    {
+      fileTiled->setFrameBuffer(frameBuffer);
+      fileTiled->readTiles(0, fileTiled->numXTiles() - 1, 0, fileTiled->numYTiles() - 1);
+    }
+    else
+    {
+      /* read pixels from dataWindow */
+      dw = header.dataWindow();
+      file->setFrameBuffer(frameBuffer);
+      file->readPixels(dw.min.y, dw.max.y);
+    }
   }
-  else
+  catch(const std::exception &e)
   {
-    /* read pixels from dataWindow */
-    dw = header.dataWindow();
-    file->setFrameBuffer(frameBuffer);
-    file->readPixels(dw.min.y, dw.max.y);
+    fprintf(stderr, "[exr_read] error reading pixels from `%s': %s\n", filename, e.what());
+    return DT_IMAGEIO_FILE_CORRUPTED;
   }
 
   /* try to get the chromaticities and whitepoint. this will add the default linear rec709 profile when nothing
