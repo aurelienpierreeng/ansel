@@ -370,7 +370,14 @@ int local_laplacian_internal(
   const int max_supp = 1<<last_level;
   int w, h;
   int err = 0;
+  // All pyramid buffer arrays must be declared and zero-initialized up here, before any
+  // `goto error`. The error path frees padded[]/output[]/buf[][]; if output/buf were declared
+  // further down (past an early `goto error` from a failed padded[] allocation), the goto would
+  // skip their `= {0}` initializers, leaving indeterminate pointers that the cleanup then frees
+  // -> SIGSEGV under memory pressure when an allocation fails (Sentry #129715026).
   float *padded[max_levels] = {0};
+  float *output[max_levels] = {0};
+  float *buf[num_gamma][max_levels] = {{0}};
   if(b && b->mode == 2)
     padded[0] = ll_pad_input(input, wd, ht, max_supp, &w, &h, b);
   else
@@ -392,8 +399,7 @@ int local_laplacian_internal(
     }
   }
 
-  // allocate pyramid pointers for output
-  float *output[max_levels] = {0};
+  // allocate pyramid pointers for output (declared at the top of the function)
   for(int l=0;l<=last_level;l++)
   {
     output[l] = dt_pixelpipe_cache_alloc_align_float_cache((size_t)dl(w,l) * dl(h,l), 0);
@@ -414,8 +420,7 @@ int local_laplacian_internal(
   for(int k=0;k<num_gamma;k++) gamma[k] = (k+.5f)/(float)num_gamma;
   // for(int k=0;k<num_gamma;k++) gamma[k] = k/(num_gamma-1.0f);
 
-  // allocate memory for intermediate laplacian pyramids
-  float *buf[num_gamma][max_levels] = {{0}};
+  // allocate memory for intermediate laplacian pyramids (declared at the top of the function)
   for(int k=0;k<num_gamma;k++) for(int l=0;l<=last_level;l++)
   {
     buf[k][l] = dt_pixelpipe_cache_alloc_align_float_cache((size_t)dl(w,l)*dl(h,l), 0);
