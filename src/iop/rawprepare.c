@@ -788,6 +788,16 @@ gboolean check_gain_maps(dt_iop_module_t *self, dt_dng_gain_map_t **gainmaps_out
   return TRUE;
 }
 
+// Free the pipe-owned deep copies of the GainMaps held in piece->data (see commit_params).
+static void _free_owned_gainmaps(dt_iop_rawprepare_data_t *d)
+{
+  for(int i = 0; i < 4; i++)
+  {
+    g_free(d->gainmaps[i]);
+    d->gainmaps[i] = NULL;
+  }
+}
+
 void commit_params(dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelpipe_t *pipe,
                    dt_dev_pixelpipe_iop_t *piece)
 {
@@ -840,10 +850,37 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelp
   piece->dsc_out.rawprepare.raw_white_point = d->rawprepare.raw_white_point;
   for(int k = 0; k < 4; k++) piece->dsc_out.processed_maximum[k] = 1.0f;
 
+  // check_gain_maps() returns pointers into image_storage.dng_gain_maps, which is a shallow copy
+  // borrowed from the image cache (see _dt_dev_refresh_image_storage): the cache lock is dropped
+  // immediately, so that list can be freed/rebuilt (e.g. eviction under thumbnail-generation
+  // pressure) before process() dereferences it -> use-after-free crash (Sentry #129880848).
+  // Keep a private, pipe-owned deep copy that lives for the lifetime of the pixelpipe piece.
+  _free_owned_gainmaps(d);
+  d->apply_gainmaps = FALSE;
   if(p->flat_field == FLAT_FIELD_EMBEDDED)
-    d->apply_gainmaps = check_gain_maps(self, d->gainmaps);
-  else
-    d->apply_gainmaps = FALSE;
+  {
+    dt_dng_gain_map_t *src[4] = { 0 };
+    if(check_gain_maps(self, src))
+    {
+      gboolean copied = TRUE;
+      for(int i = 0; i < 4; i++)
+      {
+        // map_planes == 1 is enforced by check_gain_maps(), so the gain payload is
+        // map_points_h * map_points_v floats -- exactly what process() indexes.
+        const size_t sz = sizeof(dt_dng_gain_map_t)
+                          + (size_t)src[i]->map_points_h * src[i]->map_points_v * sizeof(float);
+        d->gainmaps[i] = g_malloc(sz);
+        if(d->gainmaps[i])
+          memcpy(d->gainmaps[i], src[i], sz);
+        else
+          copied = FALSE;
+      }
+      if(copied)
+        d->apply_gainmaps = TRUE;
+      else
+        _free_owned_gainmaps(d); // partial copy (OOM): drop everything, don't apply
+    }
+  }
 
   if(image_set_rawcrops(pipe->dev->image_storage.id, d->x + d->width, d->y + d->height))
     DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_METADATA_UPDATE);
@@ -868,6 +905,8 @@ void init_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe
 
 void cleanup_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
+  dt_iop_rawprepare_data_t *d = (dt_iop_rawprepare_data_t *)piece->data;
+  if(d) _free_owned_gainmaps(d);
   dt_free_align(piece->data);
   piece->data = NULL;
 }
