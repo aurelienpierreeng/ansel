@@ -557,11 +557,8 @@ void reload_defaults(dt_iop_module_t *module)
                  dt_image_pipe_class_name(dt_image_pipe_class(img)), dt_image_needs_demosaic(img),
                  module->hide_enable_button);
 
-  if(module->widget)
-  {
-    gtk_stack_set_visible_child_name(GTK_STACK(module->widget), module->hide_enable_button ? "non_raw" : "raw");
-  }
-
+  // Stack visibility (raw vs non_raw) is applied from hide_enable_button in gui_update(), on the GUI
+  // thread when the widget exists; reload_defaults() stays params-only.
   module->default_enabled = 0;
 }
 
@@ -626,6 +623,8 @@ void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev
 void gui_update(dt_iop_module_t *self)
 {
   dt_gui_throttle_cancel(self);
+  // raw vs non_raw page, from the per-image support flag computed by reload_defaults()
+  gtk_stack_set_visible_child_name(GTK_STACK(self->widget), self->hide_enable_button ? "non_raw" : "raw");
   gtk_widget_queue_draw(self->widget);
 }
 

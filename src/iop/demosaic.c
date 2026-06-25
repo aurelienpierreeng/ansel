@@ -2243,8 +2243,8 @@ void reload_defaults(dt_iop_module_t *module)
                  module->dev->image_storage.dsc.filters,
                  dt_image_is_monochrome(&module->dev->image_storage),
                  d->demosaicing_method, module->default_enabled);
-  if(module->widget)
-    gtk_stack_set_visible_child_name(GTK_STACK(module->widget), module->default_enabled ? "raw" : "non_raw");
+  // Stack visibility (raw vs non_raw) is set from default_enabled in gui_update() (which already
+  // does exactly this), so reload_defaults() stays params-only.
 }
 
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)

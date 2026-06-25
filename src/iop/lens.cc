@@ -1464,15 +1464,8 @@ void reload_defaults(dt_iop_module_t *module)
     }
   }
 
-  // if we have a gui -> reset corrections_done message
-  dt_iop_lensfun_gui_data_t *g = (dt_iop_lensfun_gui_data_t *)module->gui_data;
-  if(g)
-  {
-    dt_iop_gui_enter_critical_section(module);
-    g->corrections_done = -1;
-    dt_iop_gui_leave_critical_section(module);
-    gtk_label_set_text(g->message, "");
-  }
+  // The corrections-done message reset lives in gui_update() now (GUI thread, live widget);
+  // reload_defaults() stays params-only and never touches gui_data.
 }
 
 void cleanup_global(dt_iop_module_so_t *module)
@@ -2523,6 +2516,13 @@ void gui_update(struct dt_iop_module_t *self)
     lens_set(self, NULL);
     dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
   }
+
+  // reset the corrections-done message for the new image (moved here from reload_defaults so it
+  // only touches the widget on the GUI thread, when it exists)
+  dt_iop_gui_enter_critical_section(self);
+  g->corrections_done = -1;
+  dt_iop_gui_leave_critical_section(self);
+  gtk_label_set_text(g->message, "");
 
   gui_changed(self, NULL, NULL);
 }

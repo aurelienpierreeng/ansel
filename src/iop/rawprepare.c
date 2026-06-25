@@ -957,9 +957,8 @@ void reload_defaults(dt_iop_module_t *self)
   self->default_enabled = enable(image);
 
   dt_image_print_debug_info(image, "rawprepare.reload_defaults");
-
-  if(self->widget)
-    gtk_stack_set_visible_child_name(GTK_STACK(self->widget), self->default_enabled ? "raw" : "non_raw");
+  // Stack visibility (raw vs non_raw) is applied from default_enabled in gui_update(), on the GUI
+  // thread when the widget exists; reload_defaults() stays params-only.
 }
 
 void init_global(dt_iop_module_so_t *self)
@@ -1007,6 +1006,9 @@ void gui_update(dt_iop_module_t *self)
 
   gtk_widget_set_visible(g->flat_field, check_gain_maps(self, NULL));
   dt_bauhaus_combobox_set(g->flat_field, p->flat_field);
+
+  // raw vs non_raw page, from the per-image default computed by reload_defaults()
+  gtk_stack_set_visible_child_name(GTK_STACK(self->widget), self->default_enabled ? "raw" : "non_raw");
 }
 
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
