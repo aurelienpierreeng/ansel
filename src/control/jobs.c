@@ -670,16 +670,35 @@ void dt_control_jobs_init(dt_control_t *control)
   }
 }
 
-void dt_control_jobs_cleanup(dt_control_t *control)
+void dt_control_jobs_drain(dt_control_t *control)
 {
-  // Cancel all non-user-export jobs remaining
+  // Detach every queued job under the lock, then dispose them outside it. Disposing a job runs
+  // its callbacks (state_changed_cb via DT_JOB_STATE_DISPOSED, then params_destroy), which for
+  // module jobs point into a plug-in .so -- so these callbacks must NOT be invoked while holding
+  // queue_mutex (re-entrancy), and the whole drain must happen before those .so files are
+  // unloaded. Workers are already joined when this runs, so detaching the lists is race-free.
+  GList *doomed = NULL;
+  dt_pthread_mutex_lock(&control->queue_mutex);
   for(int i = 0; i < DT_JOB_QUEUE_MAX; i++)
   {
-    if(control->queues[i] == NULL) continue;
-    if(control->export_scheduled && i == DT_JOB_QUEUE_USER_EXPORT) continue;
-    _dt_job_t *job = (_dt_job_t *)control->queues[i]->data;
-    dt_control_job_cancel(job);
+    doomed = g_list_concat(doomed, control->queues[i]);
+    control->queues[i] = NULL;
+    control->queue_length[i] = 0;
   }
+  control->export_scheduled = FALSE;
+  dt_pthread_mutex_unlock(&control->queue_mutex);
+
+  for(GList *l = doomed; l; l = g_list_next(l))
+    dt_control_job_dispose((_dt_job_t *)l->data);
+  g_list_free(doomed);
+}
+
+void dt_control_jobs_cleanup(dt_control_t *control)
+{
+  // Normally the queues were already drained by dt_control_shutdown() (while plug-in .so files
+  // were still mapped). Drain again as a safety net for any path that skips shutdown (e.g. the
+  // headless export run); it is a no-op when the queues are already empty.
+  dt_control_jobs_drain(control);
 
   dt_free(control->job);
   dt_free(control->thread);

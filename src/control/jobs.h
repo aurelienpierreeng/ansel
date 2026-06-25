@@ -91,6 +91,12 @@ double dt_control_job_get_progress(dt_job_t *job);
 
 struct dt_control_t;
 void dt_control_jobs_init(struct dt_control_t *control);
+// Cancel/dispose every still-queued job and empty the queues. MUST run while the modules that
+// own job callbacks (state_changed_cb, params_destroy) are still loaded -- call it from
+// dt_control_shutdown(), after the worker threads are joined but before dt_lib_cleanup() unloads
+// the plug-in .so files. Otherwise a leftover job disposed at the very end (dt_control_jobs_cleanup)
+// fires a callback into an unmapped library -> SIGSEGV.
+void dt_control_jobs_drain(struct dt_control_t *control);
 void dt_control_jobs_cleanup(struct dt_control_t *control);
 
 int dt_control_add_job(struct dt_control_t *control, dt_job_queue_t queue_id, dt_job_t *job);
