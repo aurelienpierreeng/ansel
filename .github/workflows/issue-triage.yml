@@ -60,12 +60,13 @@ jobs:
           GH_MODELS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_BODY: ${{ github.event.issue.body }}
+          ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
         run: |
           set -euo pipefail
 
           system="You triage GitHub issues for Ansel, an open-source photo editor.
           Ansel's issue tracker accepts ONLY bug reports: crashes, data corruption,
-          or behaviour that contradicts the user documentation (https://ansel.photos).
+          or behaviour that contradicts the user documentation (https://ansel.photos/en/doc).
           It is NOT for questions, support, success stories, or feature requests —
           those belong in GitHub Discussions.
 
@@ -74,13 +75,17 @@ jobs:
             documented behaviour. Set confidence 'high' only when it is clearly a real,
             actionable bug (has a description of wrong behaviour, ideally steps or
             environment). Set confidence 'low' when it might be a bug but is vague,
-            unclear, or missing the information needed to act.
+            unclear, or missing the information needed to act. If the issue
+            originates from sentry.io bot, it is automatically a bug linked
+            to a crash automatically recorded.
           - support: a usage question, request for help, or a story/show-and-tell.
           - feature_request: a request for a new feature or enhancement.
           - spam: spam, off-topic, or empty/nonsense content.
           Reply ONLY with the structured object."
 
           user="Title: ${ISSUE_TITLE}
+
+          Author: ${ISSUE_AUTHOR}
 
           Body:
           ${ISSUE_BODY}"
