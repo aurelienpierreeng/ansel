@@ -741,6 +741,15 @@ void gui_update(dt_iop_module_t *self)
 {
   dt_iop_cacorrectrgb_gui_data_t *g = (dt_iop_cacorrectrgb_gui_data_t *)self->gui_data;
   dt_iop_cacorrectrgb_params_t *p = (dt_iop_cacorrectrgb_params_t *)self->params;
+  const dt_iop_cacorrectrgb_params_t *d = (const dt_iop_cacorrectrgb_params_t *)self->default_params;
+
+  // Widget defaults / soft ranges, formerly set in reload_defaults(). They belong here on the GUI
+  // thread (widgets known to exist); reload_defaults() also runs on export/thumbnail devs with no gui.
+  dt_bauhaus_combobox_set_default(g->guide_channel, d->guide_channel);
+  dt_bauhaus_slider_set_default(g->radius, d->radius);
+  dt_bauhaus_slider_set_soft_range(g->radius, 1.0, 20.0);
+  dt_bauhaus_slider_set_default(g->strength, d->strength);
+  dt_bauhaus_combobox_set_default(g->mode, d->mode);
 
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->refine_manifolds), p->refine_manifolds);
 }
@@ -755,16 +764,7 @@ void reload_defaults(dt_iop_module_t *module)
   d->mode = DT_CACORRECT_MODE_STANDARD;
   d->refine_manifolds = FALSE;
 
-  dt_iop_cacorrectrgb_gui_data_t *g = (dt_iop_cacorrectrgb_gui_data_t *)module->gui_data;
-  if(!IS_NULL_PTR(g))
-  {
-    dt_bauhaus_combobox_set_default(g->guide_channel, d->guide_channel);
-    dt_bauhaus_slider_set_default(g->radius, d->radius);
-    dt_bauhaus_slider_set_soft_range(g->radius, 1.0, 20.0);
-    dt_bauhaus_slider_set_default(g->strength, d->strength);
-    dt_bauhaus_combobox_set_default(g->mode, d->mode);
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->refine_manifolds), d->refine_manifolds);
-  }
+  // No widget access here: bauhaus defaults/ranges live in gui_update() (see above).
 }
 
 void gui_init(dt_iop_module_t *self)
