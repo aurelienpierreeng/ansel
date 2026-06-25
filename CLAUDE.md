@@ -247,3 +247,29 @@ backtrace locally (writes `summary.txt`, `event.json`, attachments). The region 
 `https://de.sentry.io` (EU data residency) — `sentry.io`/`us.sentry.io` give 403/401.
 Reading issues needs a **User Auth Token** (not the org token used for symbol upload).
 See `doc/sentry.md` for setup details.
+
+---
+
+## General engineering
+
+Ansel carries the burden of Darktable legacy, which made it a principle to entangle all
+application layers (GUI, pipeline, history, database) and imported the whole software
+into the whole software through `#include "common/darktable.h"`. This voids the modularity
+principle, creates many bugs, data races, and makes any maintenance tedious and prone to 
+edge effects, since the app is heavily asynchronous and parallel.
+
+The Ansel codebase should move toward more enclosed modularity, making data structure private
+to each translation unit and exposing only API to the outside (getters/setters/init/cleanup). 
+Direct value changes on data not owned by the current TU are forbidden. The dependency graph 
+should be simplified and only a minimal set of `#include` should be kept per TU. In particular,
+`src/common/darktable.h` should inherit from lower-level modules, but lower-level modules
+should not inherit it, so it should stop being the glue of all common helpers throughout
+the software.
+
+CRUD operations should have one central entry point for the whole software and run only
+once, for as long as user didn't send new input, so the data lifecycle is legible and
+cacheable.
+
+Since every data flow in the software is a pipeline, issues should be tracked to their root
+cause by climbing the call tree up until the source is found, instead of being fixed where
+they are visible.
