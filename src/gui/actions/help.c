@@ -18,6 +18,7 @@
 */
 #include "common/darktable.h"
 #include "gui/actions/menu.h"
+#include "gui/actions/supervisor_window.h"
 #include "common/l10n.h"
 #include "control/control.h"
 
@@ -217,6 +218,12 @@ static gboolean search_accels_callback(GtkAccelGroup *group, GObject *accelerata
   return TRUE;
 }
 
+static gboolean supervisor_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
+{
+  dt_gui_supervisor_window_show();
+  return TRUE;
+}
+
 void append_help(GtkWidget **menus, GList **lists, const dt_menus_t index)
 {
   add_sub_menu_entry(menus, lists, _("Online documentation"), index, NULL, open_doc_callback, NULL, NULL, NULL, 0, 0);
@@ -227,6 +234,8 @@ void append_help(GtkWidget **menus, GList **lists, const dt_menus_t index)
   add_sub_menu_entry(menus, lists, _("Open contextual help"), index, NULL, contextual_help_callback, NULL, NULL, NULL, 0, 0);
   add_sub_menu_entry(menus, lists, _("Search actions..."), index, NULL, search_accels_callback, NULL, NULL,
                      NULL, GDK_KEY_p, GDK_CONTROL_MASK);
+  add_menu_separator(menus[index]);
+  add_sub_menu_entry(menus, lists, _("Event supervisor..."), index, NULL, supervisor_callback, NULL, NULL, NULL, 0, 0);
   add_menu_separator(menus[index]);
   add_sub_menu_entry(menus, lists, _("About"), index, NULL, show_about_dialog, NULL, NULL, NULL, 0, 0);
 }

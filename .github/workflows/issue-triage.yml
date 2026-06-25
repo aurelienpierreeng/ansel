@@ -1,0 +1,291 @@
+#   This file is part of the Ansel project.
+#   Copyright (C) 2026 Aurélien PIERRE.
+#
+#   Ansel is free software: you can redistribute it and/or modify
+#   it under the terms of the GNU General Public License as published by
+#   the Free Software Foundation, either version 3 of the License, or
+#   (at your option) any later version.
+#
+#   Ansel is distributed in the hope that it will be useful,
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#   GNU General Public License for more details.
+#
+#   You should have received a copy of the GNU General Public License
+#   along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
+
+# Triage every newly opened issue with a confidence-gated LLM classifier.
+#
+#   bug + high confidence -> set the "Bug" issue type, attach the next milestone
+#                            (lowest open version number), add to the project board.
+#   bug + low confidence  -> label "unclear" + comment asking for a reproducer;
+#                            left untyped for a human.
+#   support / question    -> label "question" + comment pointing to Discussions.
+#   feature_request       -> label "enhancement" + comment asking to open a
+#                            Discussion (which the team later converts to a
+#                            "Feature" issue once consensus is reached).
+#   spam / off-topic       -> label "invalid".
+#
+# The classifier uses GitHub Models (the built-in `models: read` inference,
+# billed to nobody — free within per-repo rate limits), so it needs no API key
+# and no external account. The project-board step is best-effort and needs
+# secret PROJECT_PAT (a token with `project` scope — the default GITHUB_TOKEN
+# cannot write to user/org Projects v2) plus the PROJECT_NUMBER repository
+# variable. Set repository variable CLOSE_NONBUGS=true to auto-close
+# support/feature/spam issues instead of leaving them open.
+
+name: Issue triage
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: read
+  issues: write
+  models: read
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Classify the issue
+        id: classify
+        env:
+          # GitHub Models authenticates with the workflow's own GITHUB_TOKEN
+          # (granted `models: read` above) — no external key, no billing.
+          GH_MODELS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+        run: |
+          set -euo pipefail
+
+          system="You triage GitHub issues for Ansel, an open-source photo editor.
+          Ansel's issue tracker accepts ONLY bug reports: crashes, data corruption,
+          or behaviour that contradicts the user documentation (https://ansel.photos).
+          It is NOT for questions, support, success stories, or feature requests —
+          those belong in GitHub Discussions.
+
+          Classify the issue into exactly one category:
+          - bug: a crash, data loss/corruption, or behaviour that clearly contradicts
+            documented behaviour. Set confidence 'high' only when it is clearly a real,
+            actionable bug (has a description of wrong behaviour, ideally steps or
+            environment). Set confidence 'low' when it might be a bug but is vague,
+            unclear, or missing the information needed to act.
+          - support: a usage question, request for help, or a story/show-and-tell.
+          - feature_request: a request for a new feature or enhancement.
+          - spam: spam, off-topic, or empty/nonsense content.
+          Reply ONLY with the structured object."
+
+          user="Title: ${ISSUE_TITLE}
+
+          Body:
+          ${ISSUE_BODY}"
+
+          req=$(jq -n --arg sys "$system" --arg user "$user" '{
+            model: "openai/gpt-4o-mini",
+            messages: [
+              { role: "system", content: $sys },
+              { role: "user", content: $user }
+            ],
+            response_format: {
+              type: "json_schema",
+              json_schema: {
+                name: "triage",
+                strict: true,
+                schema: {
+                  type: "object",
+                  properties: {
+                    category:   { type: "string", enum: ["bug", "support", "feature_request", "spam"] },
+                    confidence: { type: "string", enum: ["high", "low"] },
+                    reason:     { type: "string" }
+                  },
+                  required: ["category", "confidence", "reason"],
+                  additionalProperties: false
+                }
+              }
+            }
+          }')
+
+          resp=$(curl -sS https://models.github.ai/inference/chat/completions \
+            -H "Authorization: Bearer ${GH_MODELS_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "$req")
+
+          stop=$(printf '%s' "$resp" | jq -r '.choices[0].finish_reason // "error"')
+          text=$(printf '%s' "$resp" | jq -r '.choices[0].message.content // empty')
+
+          category=""
+          confidence=""
+          reason=""
+          if [ "$stop" != "content_filter" ] && [ -n "$text" ]; then
+            category=$(printf '%s' "$text"   | jq -r '.category // empty'   2>/dev/null || true)
+            confidence=$(printf '%s' "$text" | jq -r '.confidence // empty' 2>/dev/null || true)
+            reason=$(printf '%s' "$text"     | jq -r '.reason // empty'     2>/dev/null || true)
+          fi
+
+          # If the model refused or returned something unparseable, fall back to
+          # the human-review path rather than guessing.
+          if [ -z "$category" ]; then
+            echo "::warning::classifier returned no usable result (finish_reason=$stop); routing to human review"
+            category="bug"
+            confidence="low"
+            reason="Automatic classification was inconclusive; needs a human look."
+          fi
+
+          echo "category=$category"     >> "$GITHUB_OUTPUT"
+          echo "confidence=$confidence" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Triage: \`$category\` (confidence: \`$confidence\`)"
+            echo "$reason"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Act on the classification
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          ISSUE: ${{ github.event.issue.number }}
+          ISSUE_NODE: ${{ github.event.issue.node_id }}
+          OWNER: ${{ github.repository_owner }}
+          CATEGORY: ${{ steps.classify.outputs.category }}
+          CONFIDENCE: ${{ steps.classify.outputs.confidence }}
+          CLOSE_NONBUGS: ${{ vars.CLOSE_NONBUGS }}
+        run: |
+          set -euo pipefail
+          repo_name="${REPO#*/}"
+
+          # The next milestone is the lowest open version number (e.g. 0.1 before 1.0).
+          next_milestone() {
+            gh api "repos/${REPO}/milestones?state=open&per_page=100" \
+              --jq '.[].title' | sort -V | head -n1
+          }
+
+          case "$CATEGORY" in
+            bug)
+              if [ "$CONFIDENCE" = "high" ]; then
+                # Set the native "Bug" issue type via GraphQL.
+                bug_type_id=$(gh api graphql -f query='
+                  query($owner:String!,$name:String!){
+                    repository(owner:$owner,name:$name){
+                      issueTypes(first:20){ nodes{ id name } }
+                    }
+                  }' -f owner="$OWNER" -f name="$repo_name" \
+                  --jq '.data.repository.issueTypes.nodes[] | select(.name=="Bug") | .id')
+
+                if [ -n "$bug_type_id" ]; then
+                  gh api graphql -f query='
+                    mutation($issue:ID!,$type:ID!){
+                      updateIssueIssueType(input:{issueId:$issue,issueTypeId:$type}){
+                        issue{ number }
+                      }
+                    }' -f issue="$ISSUE_NODE" -f type="$bug_type_id" >/dev/null
+                  echo "Set issue type Bug."
+                fi
+
+                ms="$(next_milestone || true)"
+                if [ -n "$ms" ]; then
+                  gh issue edit "$ISSUE" --repo "$REPO" --milestone "$ms"
+                  echo "Attached milestone: $ms"
+                else
+                  echo "::warning::no open milestone found; skipped milestone assignment"
+                fi
+              else
+                gh issue edit "$ISSUE" --repo "$REPO" --add-label "unclear" || true
+                gh issue comment "$ISSUE" --repo "$REPO" --body \
+          "Thanks for the report. This looks like it might be a bug, but we need a bit more to act on it. Could you add: clear steps to reproduce, what you expected vs. what happened, and your OS/Ansel version? See our triage guide: https://ansel.photos/en/contribute/triaging/#defining-good-issues"
+              fi
+              ;;
+
+            support)
+              gh issue edit "$ISSUE" --repo "$REPO" --add-label "question" || true
+              gh issue comment "$ISSUE" --repo "$REPO" --body \
+          "Thanks for reaching out! The issue tracker is reserved for bug reports. Questions, usage help, and discussion belong in [Discussions](https://github.com/${REPO}/discussions) — please continue there."
+              if [ "${CLOSE_NONBUGS:-}" = "true" ]; then
+                gh issue close "$ISSUE" --repo "$REPO" --reason "not planned"
+              fi
+              ;;
+
+            feature_request)
+              gh issue edit "$ISSUE" --repo "$REPO" --add-label "enhancement" || true
+              gh issue comment "$ISSUE" --repo "$REPO" --body \
+          "Thanks for the idea! Feature requests start as [Discussions](https://github.com/${REPO}/discussions) so the community can refine them. Once there's consensus on what to build, we convert the discussion into a \`Feature\` issue. Please open a Discussion for this."
+              if [ "${CLOSE_NONBUGS:-}" = "true" ]; then
+                gh issue close "$ISSUE" --repo "$REPO" --reason "not planned"
+              fi
+              ;;
+
+            spam)
+              gh issue edit "$ISSUE" --repo "$REPO" --add-label "invalid" || true
+              if [ "${CLOSE_NONBUGS:-}" = "true" ]; then
+                gh issue close "$ISSUE" --repo "$REPO" --reason "not planned"
+              fi
+              ;;
+          esac
+
+      - name: Add high-confidence bugs to the project board (Todo)
+        # Best-effort: never fail triage because of board wiring. Requires a PAT
+        # with `project` scope and the PROJECT_NUMBER repository variable.
+        if: steps.classify.outputs.category == 'bug' && steps.classify.outputs.confidence == 'high'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.PROJECT_PAT }}
+          OWNER: ${{ github.repository_owner }}
+          ISSUE_NODE: ${{ github.event.issue.node_id }}
+          PROJECT_NUMBER: ${{ vars.PROJECT_NUMBER }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_TOKEN:-}" ] || [ -z "${PROJECT_NUMBER:-}" ]; then
+            echo "PROJECT_PAT secret or PROJECT_NUMBER variable not set; skipping board step."
+            exit 0
+          fi
+
+          # Resolve the project, its Status field and the "Todo" option.
+          read -r project_id status_field_id todo_option_id < <(
+            gh api graphql -f query='
+              query($owner:String!,$number:Int!){
+                user(login:$owner){
+                  projectV2(number:$number){
+                    id
+                    field(name:"Status"){
+                      ... on ProjectV2SingleSelectField {
+                        id
+                        options{ id name }
+                      }
+                    }
+                  }
+                }
+              }' -F owner="$OWNER" -F number="$PROJECT_NUMBER" \
+            --jq '.data.user.projectV2 as $p
+                  | [ $p.id,
+                      $p.field.id,
+                      ($p.field.options[] | select(.name=="Todo") | .id) ]
+                  | @tsv'
+          )
+
+          if [ -z "${project_id:-}" ]; then
+            echo "Could not resolve project $PROJECT_NUMBER for $OWNER; skipping."
+            exit 0
+          fi
+
+          item_id=$(gh api graphql -f query='
+            mutation($project:ID!,$content:ID!){
+              addProjectV2ItemById(input:{projectId:$project,contentId:$content}){
+                item{ id }
+              }
+            }' -f project="$project_id" -f content="$ISSUE_NODE" \
+            --jq '.data.addProjectV2ItemById.item.id')
+
+          if [ -n "${status_field_id:-}" ] && [ -n "${todo_option_id:-}" ] && [ -n "${item_id:-}" ]; then
+            gh api graphql -f query='
+              mutation($project:ID!,$item:ID!,$field:ID!,$opt:String!){
+                updateProjectV2ItemFieldValue(input:{
+                  projectId:$project, itemId:$item, fieldId:$field,
+                  value:{ singleSelectOptionId:$opt }
+                }){ projectV2Item{ id } }
+              }' -f project="$project_id" -f item="$item_id" \
+                 -f field="$status_field_id" -f opt="$todo_option_id" >/dev/null
+            echo "Added issue to board with status Todo."
+          fi

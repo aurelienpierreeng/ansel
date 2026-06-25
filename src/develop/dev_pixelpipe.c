@@ -23,6 +23,7 @@
 #include "develop/imageop.h"
 #include "develop/pixelpipe.h"
 #include "develop/pixelpipe_cache.h"
+#include "develop/supervisor.h"
 #include "develop/blend.h"
 #include "gui/color_picker_proxy.h"
 #include "control/control.h"
@@ -1189,6 +1190,7 @@ static void _sync_pipe_nodes_from_history(dt_dev_pixelpipe_t *pipe, dt_develop_t
 
     dt_iop_params_t *params = piece->module->default_params;
     dt_develop_blend_params_t *blend_params = piece->module->default_blendop_params;
+    uint64_t history_param_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
     gboolean found_history = FALSE;
 
     for(GList *history = g_list_nth(dev->history, history_end - 1);
@@ -1201,6 +1203,7 @@ static void _sync_pipe_nodes_from_history(dt_dev_pixelpipe_t *pipe, dt_develop_t
         piece->enabled = hist->enabled;
         params = hist->params;
         blend_params = hist->blend_params;
+        history_param_hash = hist->hash; // the history entry key (module->hash)
         found_history = TRUE;
         break;
       }
@@ -1210,6 +1213,16 @@ static void _sync_pipe_nodes_from_history(dt_dev_pixelpipe_t *pipe, dt_develop_t
     if(!strcmp(piece->module->op, "detailmask"))
       piece->enabled = (pipe->want_detail_mask == DT_DEV_DETAIL_MASK_ENABLED);
     _commit_piece_contract(pipe, piece, params, blend_params, &upstream_dsc);
+
+    // Tie this node to the history item it was just synchronized with, so the
+    // cachelines it produces resolve to that history state through the node.
+    // Use the history entry key (module->hash), NOT piece->hash: the latter folds
+    // in runtime_data_hash() for some modules and then no longer matches history.
+    if(dt_supervisor_active() && found_history)
+      dt_supervisor_node(DT_SV_UPDATE,
+                         dt_supervisor_node_key(pipe->type, piece->module->op, piece->module->multi_priority),
+                         history_param_hash, DT_PIXELPIPE_CACHE_HASH_INVALID, piece->module->op,
+                         piece->module->multi_priority, piece->module->iop_order, pipe->type, pipe->imgid);
 
     if(!found_history)
       dt_print(DT_DEBUG_PARAMS, "[pixelpipe] info: committed default params for %s (%s) in pipe %s\n",
@@ -1256,6 +1269,7 @@ static void _sync_pipe_nodes_from_history_from_node(dt_dev_pixelpipe_t *pipe,
 
     dt_iop_params_t *params = piece->module->default_params;
     dt_develop_blend_params_t *blend_params = piece->module->default_blendop_params;
+    uint64_t history_param_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
     gboolean found_history = FALSE;
 
     for(GList *history = g_list_nth(pipe->dev->history, history_end - 1);
@@ -1268,6 +1282,7 @@ static void _sync_pipe_nodes_from_history_from_node(dt_dev_pixelpipe_t *pipe,
         piece->enabled = hist->enabled;
         params = hist->params;
         blend_params = hist->blend_params;
+        history_param_hash = hist->hash; // the history entry key (module->hash)
         found_history = TRUE;
         break;
       }
@@ -1277,6 +1292,16 @@ static void _sync_pipe_nodes_from_history_from_node(dt_dev_pixelpipe_t *pipe,
     if(!strcmp(piece->module->op, "detailmask"))
       piece->enabled = (pipe->want_detail_mask == DT_DEV_DETAIL_MASK_ENABLED);
     _commit_piece_contract(pipe, piece, params, blend_params, &upstream_dsc);
+
+    // Tie this node to the history item it was just synchronized with, so the
+    // cachelines it produces resolve to that history state through the node.
+    // Use the history entry key (module->hash), NOT piece->hash: the latter folds
+    // in runtime_data_hash() for some modules and then no longer matches history.
+    if(dt_supervisor_active() && found_history)
+      dt_supervisor_node(DT_SV_UPDATE,
+                         dt_supervisor_node_key(pipe->type, piece->module->op, piece->module->multi_priority),
+                         history_param_hash, DT_PIXELPIPE_CACHE_HASH_INVALID, piece->module->op,
+                         piece->module->multi_priority, piece->module->iop_order, pipe->type, pipe->imgid);
 
     if(!found_history)
       dt_print(DT_DEBUG_PARAMS, "[pixelpipe] info: committed default params for %s (%s) in pipe %s\n",

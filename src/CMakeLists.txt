@@ -162,6 +162,7 @@ FILE(GLOB SOURCE_FILES
   "develop/pixelpipe_cache.c"
   "develop/pixelpipe_cpu.c"
   "develop/pixelpipe_gpu.c"
+  "develop/supervisor.c"
   "develop/blend.c"
   "develop/blend_gui.c"
   "develop/blends/blendif_lab.c"
@@ -624,6 +625,7 @@ if(WIN32)
   target_link_libraries(ansel_deps INTERFACE
     psapi      # GetProcessMemoryInfo()
     exchndl    # exception handling / backtrace
+    dbghelp    # Sym*: locally symbolicated crash backtrace for Sentry
   )
 endif()
 

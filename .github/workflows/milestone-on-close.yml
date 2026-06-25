@@ -1,0 +1,72 @@
+#   This file is part of the Ansel project.
+#   Copyright (C) 2026 Aurélien PIERRE.
+#
+#   Ansel is free software: you can redistribute it and/or modify
+#   it under the terms of the GNU General Public License as published by
+#   the Free Software Foundation, either version 3 of the License, or
+#   (at your option) any later version.
+#
+#   Ansel is distributed in the hope that it will be useful,
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#   GNU General Public License for more details.
+#
+#   You should have received a copy of the GNU General Public License
+#   along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
+
+# When a bug is closed as *completed* (i.e. actually fixed), make sure it is
+# attached to the next milestone — the lowest open version number — so the
+# release notes capture it. Pure rules, no inference, no external service.
+#
+# Skipped when the issue was closed as "not planned" (GitHub's not_planned
+# state reason) or carries a "duplicate" / "won't fix" label, and when it
+# already has a milestone.
+
+name: Milestone on close
+
+on:
+  issues:
+    types: [closed]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  attach-milestone:
+    runs-on: ubuntu-latest
+    # Only completed closes; "not planned" closes carry state_reason == not_planned.
+    if: github.event.issue.state_reason == 'completed'
+    steps:
+      - name: Attach next milestone
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          ISSUE: ${{ github.event.issue.number }}
+          HAS_MILESTONE: ${{ github.event.issue.milestone != null }}
+          LABELS: ${{ toJson(github.event.issue.labels.*.name) }}
+        run: |
+          set -euo pipefail
+
+          # Don't touch issues closed as duplicates or explicitly won't-fix.
+          if printf '%s' "$LABELS" | jq -e 'any(. == "duplicate" or . == "won'\''t fix")' >/dev/null; then
+            echo "Issue is labelled duplicate/won't fix; leaving milestone alone."
+            exit 0
+          fi
+
+          if [ "$HAS_MILESTONE" = "true" ]; then
+            echo "Issue already has a milestone; nothing to do."
+            exit 0
+          fi
+
+          # Next milestone = lowest open version number (e.g. 0.1 before 1.0).
+          ms=$(gh api "repos/${REPO}/milestones?state=open&per_page=100" \
+                 --jq '.[].title' | sort -V | head -n1)
+
+          if [ -z "$ms" ]; then
+            echo "::warning::no open milestone found; nothing to attach"
+            exit 0
+          fi
+
+          gh issue edit "$ISSUE" --repo "$REPO" --milestone "$ms"
+          echo "Attached milestone '$ms' to closed issue #${ISSUE}."

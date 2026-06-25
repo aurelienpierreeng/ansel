@@ -69,6 +69,7 @@
 #include "common/telemetry.h"
 #include "develop/pixelpipe.h"
 #include "develop/pixelpipe_cache.h"
+#include "develop/supervisor.h"
 #include "develop/pixelpipe_cpu.h"
 #include "develop/pixelpipe_gpu.h"
 #include "develop/pixelpipe_process.h"
@@ -592,6 +593,12 @@ void dt_dev_pixelpipe_cleanup_nodes(dt_dev_pixelpipe_t *pipe)
     dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)nodes->data;
     if(IS_NULL_PTR(piece)) continue;
     // printf("cleanup module `%s'\n", piece->module->name());
+    if(dt_supervisor_active() && piece->module)
+      dt_supervisor_node(DT_SV_DELETE,
+                         dt_supervisor_node_key(pipe->type, piece->module->op, piece->module->multi_priority),
+                         DT_PIXELPIPE_CACHE_HASH_INVALID, DT_PIXELPIPE_CACHE_HASH_INVALID,
+                         piece->module->op, piece->module->multi_priority, piece->module->iop_order,
+                         pipe->type, pipe->imgid);
     if(piece->module) dt_iop_cleanup_pipe(piece->module, pipe, piece);
     dt_free(piece);
   }
@@ -610,7 +617,8 @@ void dt_dev_pixelpipe_create_nodes(dt_dev_pixelpipe_t *pipe)
   g_assert(IS_NULL_PTR(pipe->iop_order_list));
   pipe->iop_order_list = dt_ioppr_iop_order_copy_deep(pipe->dev->iop_order_list);
 
-  // for all modules in dev:
+  // for all modules in dev (iterated in iop_order, so each is the predecessor of the next):
+  dt_iop_module_t *prev_module = NULL;
   for(GList *modules = g_list_first(pipe->dev->iop); modules; modules = g_list_next(modules))
   {
     dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
@@ -635,8 +643,22 @@ void dt_dev_pixelpipe_create_nodes(dt_dev_pixelpipe_t *pipe)
     dt_iop_buffer_dsc_update_bpp(&piece->dsc_mask);
 
     dt_iop_init_pipe(piece->module, pipe, piece);
-    
+
     pipe->nodes = g_list_append(pipe->nodes, piece);
+
+    // Topology node: created once here, immutable until the nodes are torn down.
+    // param_hash is bound later, at history synchronization (dt_supervisor_node UPDATE).
+    if(dt_supervisor_active())
+    {
+      const uint64_t pred = prev_module
+          ? dt_supervisor_node_key(pipe->type, prev_module->op, prev_module->multi_priority)
+          : DT_PIXELPIPE_CACHE_HASH_INVALID;
+      dt_supervisor_node(DT_SV_CREATE,
+                         dt_supervisor_node_key(pipe->type, module->op, module->multi_priority),
+                         DT_PIXELPIPE_CACHE_HASH_INVALID, pred, module->op, module->multi_priority,
+                         module->iop_order, pipe->type, pipe->imgid);
+    }
+    prev_module = module;
   }
 }
 
@@ -1127,6 +1149,13 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe,
   // From here on we only publish/inspect the finished output. Keep the writable lock strictly
   // around cacheline allocation and backend processing, then release it at one visible point
   // before the generic tail cleanup shared by darkroom and headless paths.
+  if(dt_supervisor_active() && !IS_NULL_PTR(output_entry))
+    dt_supervisor_cacheline_create(hash,
+                                   dt_supervisor_node_key(pipe->type, module->op, module->multi_priority),
+                                   piece->hash, input_hash, module->op, module->multi_priority,
+                                   module->iop_order, pipe->type, pipe->imgid, piece->roi_out.width,
+                                   piece->roi_out.height, pipe->devid,
+                                   dt_pixel_cache_entry_get_size(output_entry), NULL);
   dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, FALSE, output_entry);
   
   KILL_SWITCH_AND_FLUSH_CACHE;
@@ -1255,6 +1284,11 @@ static void _update_backbuf_cache_reference(dt_dev_pixelpipe_t *pipe, dt_iop_roi
   // must stay synchronized independently from key changes.
   dt_dev_set_backbuf(&pipe->backbuf, roi.width, roi.height, bpp, entry_hash,
                      dt_dev_pixelpipe_get_history_hash(pipe));
+
+  if(dt_supervisor_active())
+    dt_supervisor_backbuf(DT_SV_UPDATE, entry_hash, dt_dev_pixelpipe_get_history_hash(pipe),
+                          roi.width, roi.height, bpp, pipe->type,
+                          pipe->devid >= 0 ? pipe->devid : pipe->last_devid);
 }
 
 static GList *_get_requested_piece_node(const dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *module, int *pos)

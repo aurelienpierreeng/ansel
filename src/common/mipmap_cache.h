@@ -115,6 +115,21 @@ void dt_mipmap_cache_init(dt_mipmap_cache_t *cache);
 void dt_mipmap_cache_cleanup(dt_mipmap_cache_t *cache);
 void dt_mipmap_cache_print(dt_mipmap_cache_t *cache);
 
+// One cached mipmap buffer, for the GUI memory view.
+typedef struct dt_mipmap_cache_stats_entry_t
+{
+  int32_t imgid;
+  int mip;       // dt_mipmap_size_t
+  size_t size;   // bytes
+} dt_mipmap_cache_stats_entry_t;
+
+// Current/max bytes used across all mipmap sub-caches.
+void dt_mipmap_cache_get_usage(dt_mipmap_cache_t *cache, size_t *current, size_t *max);
+
+// Snapshot of all cached buffers (newly-allocated GArray of
+// dt_mipmap_cache_stats_entry_t; free with g_array_free()).
+GArray *dt_mipmap_cache_get_entries_stats(dt_mipmap_cache_t *cache);
+
 // get a buffer and lock according to mode ('r' or 'w').
 // see dt_mipmap_get_flags_t for explanation of the exact
 // behaviour. pass 0 as flags for the default (best effort)

@@ -591,12 +591,13 @@ void dt_image_film_roll(const dt_image_t *img, char *pathname, size_t pathname_l
 
 gboolean dt_image_get_xmp_mode()
 {
-  // Set to FALSE by default so it doesn't create issue with upstream Darktable
-  // for people who are not aware.
-  gboolean res = FALSE;
+  // Write sidecars when the setting is absent, consistently with the default exposed in the preferences.
+  gboolean res = TRUE;
   const char *config = dt_conf_get_string_const("write_sidecar_files");
-  if(config)
+  if(!IS_NULL_PTR(config))
   {
+    res = FALSE;
+
     // Darktable > 3.6
     if(!strcmp(config, "after edit") || !strcmp(config, "on import") || !strcmp(config, "always")) res = TRUE;
 

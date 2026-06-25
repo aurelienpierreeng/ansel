@@ -90,6 +90,7 @@
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include <glib.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -1555,6 +1556,117 @@ static void _hm_truncate_dest_redo_tail(dt_develop_t *dev_dest)
   }
 }
 
+void dt_hm_batch_state_cleanup(dt_hm_batch_state_t *batch)
+{
+  if(IS_NULL_PTR(batch)) return;
+  if(batch->order_ids)
+  {
+    g_list_free_full(batch->order_ids, dt_free_gpointer);
+    batch->order_ids = NULL;
+  }
+}
+
+static dt_iop_module_t *_hm_dest_module_from_id(dt_develop_t *dev, const char *id)
+{
+  /* Resolve a node id ("op|multi_name") to a destination module instance.
+   * Mirrors the GUI report resolver so cached-order replay matches what the user saw. */
+  char op[sizeof(((dt_dev_history_item_t *)0)->op_name)];
+  char name[sizeof(((dt_dev_history_item_t *)0)->multi_name)];
+  _hm_id_to_op_name(id, op, name);
+
+  dt_iop_module_t *mod = dt_iop_get_module_by_instance_name(dev->iop, op, name);
+  if(IS_NULL_PTR(mod) && name[0] == '\0') mod = dt_iop_get_module_by_op_priority(dev->iop, op, 0);
+  if(IS_NULL_PTR(mod) && name[0] == '\0') mod = dt_iop_get_module_by_op_priority(dev->iop, op, -1);
+  return mod;
+}
+
+static GList *_hm_capture_order_ids(dt_develop_t *dev_dest)
+{
+  /* Snapshot the current destination pipeline order as a list of owned node ids.
+   * dev_dest->iop is already sorted in pipeline order after the solve / report reorder. */
+  GList *ids = NULL;
+  for(GList *l = g_list_first(dev_dest->iop); l; l = g_list_next(l))
+  {
+    const dt_iop_module_t *mod = (const dt_iop_module_t *)l->data;
+    if(IS_NULL_PTR(mod) || mod->iop_order == INT_MAX) continue;
+    ids = g_list_append(ids, _hm_make_node_id(mod->op, mod->multi_name));
+  }
+  return ids;
+}
+
+static gboolean _hm_cached_order_applicable(dt_develop_t *dev_dest, GList *order_ids)
+{
+  /* Decide whether a cached representative order can be replayed verbatim on this image.
+   *
+   * We require an exact match between the ordering-relevant module set of this image (after the solve has
+   * created the pasted instances) and the cached set. If this image has extra modules, or is missing some
+   * that the representative had, the topology differs and replaying would silently produce a questionable
+   * order. In that case the caller falls back to the interactive merge report for manual control. */
+  GHashTable *cached = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, NULL);
+  for(GList *l = g_list_first(order_ids); l; l = g_list_next(l))
+    g_hash_table_add(cached, g_strdup((const char *)l->data));
+
+  gboolean applicable = TRUE;
+  GHashTable *present = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, NULL);
+  for(GList *l = g_list_first(dev_dest->iop); l; l = g_list_next(l))
+  {
+    const dt_iop_module_t *mod = (const dt_iop_module_t *)l->data;
+    if(IS_NULL_PTR(mod) || mod->iop_order == INT_MAX) continue;
+    char *id = _hm_make_node_id(mod->op, mod->multi_name);
+    g_hash_table_add(present, id);
+    if(!g_hash_table_contains(cached, id)) applicable = FALSE; // extra module not seen on the representative
+  }
+  if(applicable)
+  {
+    // Every module the representative ordered must also exist here.
+    for(GList *l = g_list_first(order_ids); l; l = g_list_next(l))
+      if(!g_hash_table_contains(present, (const char *)l->data))
+      {
+        applicable = FALSE;
+        break;
+      }
+  }
+
+  g_hash_table_destroy(cached);
+  g_hash_table_destroy(present);
+  return applicable;
+}
+
+static void _hm_apply_cached_order(dt_develop_t *dev_dest, GList *order_ids)
+{
+  /* Reorder the destination pipeline to match a previously cached order.
+   *
+   * Modules listed in `order_ids` are placed in that order; any destination module not present in the
+   * cache (e.g. an extra module in this image) keeps its current relative position at the tail. This is
+   * robust to heterogeneous batches while still replaying the first image's resolved order exactly. */
+  GHashTable *placed = g_hash_table_new(g_direct_hash, g_direct_equal);
+  GList *ordered = NULL;
+
+  for(GList *l = g_list_first(order_ids); l; l = g_list_next(l))
+  {
+    dt_iop_module_t *mod = _hm_dest_module_from_id(dev_dest, (const char *)l->data);
+    if(mod && !g_hash_table_contains(placed, mod))
+    {
+      ordered = g_list_append(ordered, mod);
+      g_hash_table_add(placed, mod);
+    }
+  }
+
+  for(GList *l = g_list_first(dev_dest->iop); l; l = g_list_next(l))
+  {
+    dt_iop_module_t *mod = (dt_iop_module_t *)l->data;
+    if(mod && !g_hash_table_contains(placed, mod))
+    {
+      ordered = g_list_append(ordered, mod);
+      g_hash_table_add(placed, mod);
+    }
+  }
+
+  if(ordered) dt_ioppr_rebuild_iop_order_from_modules(dev_dest, ordered);
+  g_list_free(ordered);
+  g_hash_table_destroy(placed);
+}
+
 int dt_history_merge(dt_develop_t *dev_dest, dt_develop_t *dev_src, const int32_t dest_imgid,
                      const GList *mod_list, const gboolean merge_iop_order,
                      const dt_history_merge_strategy_t strategy, const gboolean force_new_modules,
@@ -1637,6 +1749,9 @@ int dt_history_merge(dt_develop_t *dev_dest, dt_develop_t *dev_src, const int32_
   // Always run a topological solve so we can insert missing source instances into the destination pipeline.
   // The difference between merge_iop_order modes is which source edges we import (see
   // `_hm_topo_build_constraint_ids()`).
+  // The solve always runs (it is the only way to create missing instances and copy their contents), but in
+  // batch mode the *ordering* it produces is overridden below by the order resolved on the first accepted
+  // image, so a single high-level decision applies uniformly to every image in the batch.
   if(_hm_try_merge_iop_order_topologically(dev_dest, dev_src, mod_list, merge_iop_order))
   {
     // If it failed with source IOP order, retry with destination order
@@ -1653,6 +1768,23 @@ int dt_history_merge(dt_develop_t *dev_dest, dt_develop_t *dev_src, const int32_
         goto cleanup;
       }
     }
+  }
+
+  // Batch replay: if a previous image of this batch already settled an order, reuse it verbatim (including
+  // any manual reorder the user did in the report) instead of the order the solve just derived. As a safety
+  // net, we only replay when that order maps cleanly onto this image; otherwise we leave the freshly solved
+  // order and force the interactive report below so the user can review and reorder manually.
+  gboolean use_cached_order = FALSE;
+  if(IS_NULL_PTR(batch) || IS_NULL_PTR(batch->order_ids))
+  {
+    use_cached_order = _hm_cached_order_applicable(dev_dest, batch->order_ids);
+    if(use_cached_order)
+      _hm_apply_cached_order(dev_dest, batch->order_ids);
+    else
+      dt_print(DT_DEBUG_HISTORY,
+               "[dt_history_merge] imgid=%d cached batch order not applicable (topology mismatch); "
+               "showing merge report for manual control\n",
+               dest_imgid);
   }
 
   // Sanitize and flatten module order
@@ -1707,13 +1839,24 @@ int dt_history_merge(dt_develop_t *dev_dest, dt_develop_t *dev_src, const int32_
   dt_print(DT_DEBUG_HISTORY, "[dt_history_merge] merged history: end=%d len=%d\n",
            dt_dev_get_history_end_ext(dev_dest), g_list_length(dev_dest->history));
 
-  if(batch && batch->decision != DT_HM_BATCH_UNDECIDED)
+  // Stay silent only when the batch already settled a decision AND we can honor it without guessing:
+  // a revert is always safe to repeat, but a silent accept requires the cached order to have applied
+  // cleanly to this image. Otherwise we re-open the report so the user keeps control.
+  const gboolean silent = batch
+                          && (batch->decision == DT_HM_BATCH_REVERT
+                              || (batch->decision == DT_HM_BATCH_ACCEPT && use_cached_order));
+  if(silent)
     revert = (batch->decision == DT_HM_BATCH_REVERT);
   else
     revert = _hm_show_merge_report_popup(dev_dest, dev_src, merge_iop_order, used_source_order, strategy,
                                          src_last_by_id, dst_last_before_by_id, backup.orig_labels,
                                          backup.orig_styles, backup.orig_ids, mod_list_ids, source_label,
                                          batch);
+
+  // Capture the resolved order once, from the first image where the user opted into a silent "accept" for
+  // the whole batch. Subsequent images replay it via `_hm_apply_cached_order()` above.
+  if(batch && !revert && batch->decision == DT_HM_BATCH_ACCEPT && IS_NULL_PTR(batch->order_ids))
+    batch->order_ids = _hm_capture_order_ids(dev_dest);
 
   if(revert)
   {
