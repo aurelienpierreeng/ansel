@@ -798,6 +798,35 @@ static void _free_owned_gainmaps(dt_iop_rawprepare_data_t *d)
   }
 }
 
+// Build pipe-owned deep copies of the image's GainMaps into d->gainmaps[]. The pointers from
+// check_gain_maps() borrow image_storage.dng_gain_maps, which is a shallow copy of cache-owned
+// memory with the cache lock already dropped (see _dt_dev_refresh_image_storage): it can be
+// freed/rebuilt (e.g. eviction under thumbnail-generation pressure) before process() reads it
+// -> use-after-free (Sentry #129880848). Owning a private copy decouples us from the cache.
+// Caller must have freed/NULLed d->gainmaps[] first. Returns TRUE only if all four were copied.
+static gboolean _own_gainmaps(dt_iop_module_t *self, dt_iop_rawprepare_data_t *d)
+{
+  dt_dng_gain_map_t *src[4] = { 0 };
+  if(!check_gain_maps(self, src))
+    return FALSE;
+
+  for(int i = 0; i < 4; i++)
+  {
+    // map_planes == 1 is enforced by check_gain_maps(), so the gain payload is
+    // map_points_h * map_points_v floats -- exactly what process() indexes.
+    const size_t sz = sizeof(dt_dng_gain_map_t)
+                      + (size_t)src[i]->map_points_h * src[i]->map_points_v * sizeof(float);
+    d->gainmaps[i] = g_malloc(sz);
+    if(IS_NULL_PTR(d->gainmaps[i]))
+    {
+      _free_owned_gainmaps(d); // partial copy (OOM): drop everything, don't apply
+      return FALSE;
+    }
+    memcpy(d->gainmaps[i], src[i], sz);
+  }
+  return TRUE;
+}
+
 void commit_params(dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelpipe_t *pipe,
                    dt_dev_pixelpipe_iop_t *piece)
 {
@@ -850,37 +879,10 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelp
   piece->dsc_out.rawprepare.raw_white_point = d->rawprepare.raw_white_point;
   for(int k = 0; k < 4; k++) piece->dsc_out.processed_maximum[k] = 1.0f;
 
-  // check_gain_maps() returns pointers into image_storage.dng_gain_maps, which is a shallow copy
-  // borrowed from the image cache (see _dt_dev_refresh_image_storage): the cache lock is dropped
-  // immediately, so that list can be freed/rebuilt (e.g. eviction under thumbnail-generation
-  // pressure) before process() dereferences it -> use-after-free crash (Sentry #129880848).
-  // Keep a private, pipe-owned deep copy that lives for the lifetime of the pixelpipe piece.
+  // Refresh our private, pipe-owned copy of the GainMaps (see _own_gainmaps() for why we must own
+  // them rather than borrow image_storage.dng_gain_maps). Free the previous copy in all cases.
   _free_owned_gainmaps(d);
-  d->apply_gainmaps = FALSE;
-  if(p->flat_field == FLAT_FIELD_EMBEDDED)
-  {
-    dt_dng_gain_map_t *src[4] = { 0 };
-    if(check_gain_maps(self, src))
-    {
-      gboolean copied = TRUE;
-      for(int i = 0; i < 4; i++)
-      {
-        // map_planes == 1 is enforced by check_gain_maps(), so the gain payload is
-        // map_points_h * map_points_v floats -- exactly what process() indexes.
-        const size_t sz = sizeof(dt_dng_gain_map_t)
-                          + (size_t)src[i]->map_points_h * src[i]->map_points_v * sizeof(float);
-        d->gainmaps[i] = g_malloc(sz);
-        if(d->gainmaps[i])
-          memcpy(d->gainmaps[i], src[i], sz);
-        else
-          copied = FALSE;
-      }
-      if(copied)
-        d->apply_gainmaps = TRUE;
-      else
-        _free_owned_gainmaps(d); // partial copy (OOM): drop everything, don't apply
-    }
-  }
+  d->apply_gainmaps = (p->flat_field == FLAT_FIELD_EMBEDDED) && _own_gainmaps(self, d);
 
   if(image_set_rawcrops(pipe->dev->image_storage.id, d->x + d->width, d->y + d->height))
     DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_METADATA_UPDATE);
