@@ -1228,7 +1228,27 @@ void dt_iop_gui_set_enable_button(dt_iop_module_t *module)
 
 void dt_iop_gui_init(dt_iop_module_t *module)
 {
-  ++darktable.gui->reset;
+  // Suppress widget value-changed callbacks while we build the module GUI.
+  //
+  // A bare ++reset is not robust: darktable.gui->reset is a global suppression
+  // depth bumped with raw ++/-- in ~250 places, and an unbalanced bracket
+  // elsewhere (e.g. an early return, or a guard whose condition changed between
+  // the ++ and the --) can leave it *negative*. If it is -1 on entry, ++ yields
+  // 0 here and callbacks are NOT suppressed: a slider set in gui_init (e.g. a
+  // soft-range change) emits "value-changed", which re-enters the module's
+  // gui_changed handler before the rest of its widgets exist, and
+  // dt_bauhaus_slider_set(NULL) segfaults (Sentry #129494618, #129578628).
+  //
+  // Force a guaranteed-positive depth for the duration regardless of any prior
+  // imbalance, and on exit restore the previous value floored at 0 -- so a
+  // negative drift is healed here instead of silently persisting. A negative
+  // count is always a bug, so surface it in debug builds to help locate the leak.
+  const int reset_backup = darktable.gui->reset;
+  if(reset_backup < 0)
+    fprintf(stderr, "[dt_iop_gui_init] darktable.gui->reset drifted to %d before '%s' "
+                    "(unbalanced reset bracket somewhere); healing to 0.\n",
+            reset_backup, module->op);
+  darktable.gui->reset = MAX(reset_backup, 0) + 1;
 
   // Add the accelerators
   if(!dt_iop_is_hidden(module) && !(module->flags() & IOP_FLAGS_DEPRECATED))
@@ -1262,7 +1282,8 @@ void dt_iop_gui_init(dt_iop_module_t *module)
                                     G_CALLBACK(_iop_color_picker_data_ready_callback), module);
   }
 
-  --darktable.gui->reset;
+  // restore the previous depth, floored at 0 so a pre-existing negative drift is healed here
+  darktable.gui->reset = MAX(reset_backup, 0);
 }
 
 void dt_iop_reload_defaults(dt_iop_module_t *module)
