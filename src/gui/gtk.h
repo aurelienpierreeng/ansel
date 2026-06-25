@@ -169,7 +169,11 @@ typedef struct dt_gui_gtk_t
   GtkMenu *presets_popup_menu;
   char *last_preset;
 
-  int32_t reset;
+  // Widget-callback suppression depth. PRIVATE: never touch directly -- go through
+  // dt_gui_freeze_begin()/end() / dt_gui_widget_freeze() / dt_gui_widgets_suppressed()
+  // (declared in common/darktable.h). Those manage it centrally: GUI-thread-only, clamped
+  // at >= 0, and unbalanced ends are logged instead of silently drifting the counter.
+  int32_t _widget_suppress_depth;
   GdkRGBA colors[DT_GUI_COLOR_LAST];
 
   int32_t center_tooltip; // 0 = no tooltip, 1 = new tooltip, 2 = old tooltip

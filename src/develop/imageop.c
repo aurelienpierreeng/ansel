@@ -663,7 +663,7 @@ static void _gui_delete_callback(GtkButton *button, dt_iop_module_t *module)
   // module->gui_data pointer during teardown-triggered redraws.
   if(dev->gui_module == module) dt_iop_request_focus(NULL);
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
 
   // we remove the plugin effectively
   if(!dt_iop_is_hidden(module))
@@ -728,7 +728,7 @@ static void _gui_delete_callback(GtkButton *button, dt_iop_module_t *module)
   dt_dev_pixelpipe_rebuild_all(dev);
   dt_control_queue_redraw_center();
 
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 }
 
 gboolean dt_iop_gui_module_is_visible(dt_iop_module_t *module)
@@ -799,9 +799,9 @@ dt_iop_module_t *dt_iop_gui_duplicate(dt_iop_module_t *base, gboolean copy_param
   dt_dev_add_history_item(base->dev, base, FALSE, FALSE);
 
   // first we create the new module
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   dt_iop_module_t *module = dt_dev_module_duplicate(base->dev, base);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
   if(IS_NULL_PTR(module)) return NULL;
 
   // we set the gui part of it
@@ -1070,7 +1070,7 @@ static void _gui_off_callback(GtkToggleButton *togglebutton, gpointer user_data)
 {
   dt_iop_module_t *module = (dt_iop_module_t *)user_data;
 
-  if(!darktable.gui->reset)
+  if(!dt_gui_widgets_suppressed())
   {
     /**
      * Modules may keep a delayed history commit queued while the user edits a
@@ -1228,27 +1228,12 @@ void dt_iop_gui_set_enable_button(dt_iop_module_t *module)
 
 void dt_iop_gui_init(dt_iop_module_t *module)
 {
-  // Suppress widget value-changed callbacks while we build the module GUI.
-  //
-  // A bare ++reset is not robust: darktable.gui->reset is a global suppression
-  // depth bumped with raw ++/-- in ~250 places, and an unbalanced bracket
-  // elsewhere (e.g. an early return, or a guard whose condition changed between
-  // the ++ and the --) can leave it *negative*. If it is -1 on entry, ++ yields
-  // 0 here and callbacks are NOT suppressed: a slider set in gui_init (e.g. a
-  // soft-range change) emits "value-changed", which re-enters the module's
-  // gui_changed handler before the rest of its widgets exist, and
-  // dt_bauhaus_slider_set(NULL) segfaults (Sentry #129494618, #129578628).
-  //
-  // Force a guaranteed-positive depth for the duration regardless of any prior
-  // imbalance, and on exit restore the previous value floored at 0 -- so a
-  // negative drift is healed here instead of silently persisting. A negative
-  // count is always a bug, so surface it in debug builds to help locate the leak.
-  const int reset_backup = darktable.gui->reset;
-  if(reset_backup < 0)
-    fprintf(stderr, "[dt_iop_gui_init] darktable.gui->reset drifted to %d before '%s' "
-                    "(unbalanced reset bracket somewhere); healing to 0.\n",
-            reset_backup, module->op);
-  darktable.gui->reset = MAX(reset_backup, 0) + 1;
+  // Suppress widget value-changed callbacks for the whole GUI build. Setting a slider's soft
+  // range (etc.) in gui_init emits "value-changed", which would re-enter the module's
+  // gui_changed handler before its sibling widgets exist and crash on dt_bauhaus_*(NULL)
+  // (Sentry #129494618, #129578628). The scope guard releases the freeze automatically on every
+  // exit path, and the central depth is GUI-thread-only and self-healing, so it cannot drift.
+  dt_gui_widget_freeze();
 
   // Add the accelerators
   if(!dt_iop_is_hidden(module) && !(module->flags() & IOP_FLAGS_DEPRECATED))
@@ -1281,32 +1266,37 @@ void dt_iop_gui_init(dt_iop_module_t *module)
     DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_CONTROL_PICKERDATA_READY,
                                     G_CALLBACK(_iop_color_picker_data_ready_callback), module);
   }
-
-  // restore the previous depth, floored at 0 so a pre-existing negative drift is healed here
-  darktable.gui->reset = MAX(reset_backup, 0);
+  // the freeze ends here as the scope guard goes out of scope
 }
 
 void dt_iop_reload_defaults(dt_iop_module_t *module)
 {
-  if(darktable.gui) ++darktable.gui->reset;
-  if(module->reload_defaults)
+  // Suppress GUI callbacks while a module's reload_defaults() rewrites widget defaults. This is
+  // a no-op off the GUI thread (worker-thread thumbnail/export devs have no widgets, so they
+  // must never touch -- and race/drift -- the shared depth); the central API enforces that.
+  // The previous root cause of NULL-bauhaus-widget crashes was exactly this counter drifting
+  // (Sentry #129494618, #129578628, #129908540). Scope the freeze to the params work so the
+  // header update below still runs unsuppressed, exactly as before.
   {
-    // report if reload_defaults was called unnecessarily => this should be considered a bug
-    // the whole point of reload_defaults is to update defaults _based on current image_
-    // any required initialisation should go in init (and not be performed repeatedly here)
-    if(module->dev)
-    {
-      module->reload_defaults(module);
-      dt_print(DT_DEBUG_PARAMS, "[params] defaults reloaded for %s\n", module->op);
-    }
-    else
-    {
-      fprintf(stderr, "reload_defaults should not be called without image.\n");
-    }
-  }
-  dt_iop_load_default_params(module);
+    dt_gui_widget_freeze();
 
-  if(darktable.gui) --darktable.gui->reset;
+    if(module->reload_defaults)
+    {
+      // report if reload_defaults was called unnecessarily => this should be considered a bug
+      // the whole point of reload_defaults is to update defaults _based on current image_
+      // any required initialisation should go in init (and not be performed repeatedly here)
+      if(module->dev)
+      {
+        module->reload_defaults(module);
+        dt_print(DT_DEBUG_PARAMS, "[params] defaults reloaded for %s\n", module->op);
+      }
+      else
+      {
+        fprintf(stderr, "reload_defaults should not be called without image.\n");
+      }
+    }
+    dt_iop_load_default_params(module);
+  }
 
   if(module->header) dt_iop_gui_update_header(module);
 }
@@ -2111,7 +2101,7 @@ void dt_iop_gui_cleanup_module(dt_iop_module_t *module)
 
 void dt_iop_gui_update(dt_iop_module_t *module)
 {
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   if(!dt_iop_is_hidden(module))
   {
     if(module->gui_data)
@@ -2126,14 +2116,14 @@ void dt_iop_gui_update(dt_iop_module_t *module)
     }
     dt_iop_gui_update_header(module);
   }
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 }
 
 void dt_iop_gui_reset(dt_iop_module_t *module)
 {
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   if(module->gui_reset && !dt_iop_is_hidden(module)) module->gui_reset(module);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 }
 
 static void _gui_reset_callback(GtkButton *button, GdkEventButton *event, dt_iop_module_t *module)
@@ -2191,7 +2181,7 @@ void dt_iop_request_focus(dt_iop_module_t *module)
 {
   dt_iop_module_t *out_focus_module = darktable.develop->gui_module;
 
-  if(darktable.gui->reset || (out_focus_module == module)) return;
+  if(dt_gui_widgets_suppressed() || (out_focus_module == module)) return;
 
   darktable.develop->gui_module = module;
   if(!IS_NULL_PTR(module))
@@ -2529,7 +2519,7 @@ static gboolean _iop_plugin_header_button_release(GtkWidget *w, GdkEventButton *
 
 static void _display_mask_indicator_callback(GtkToggleButton *bt, dt_iop_module_t *module)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
 
   const gboolean is_active = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(bt));
   const dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
@@ -2547,12 +2537,12 @@ static void _display_mask_indicator_callback(GtkToggleButton *bt, dt_iop_module_
   if(bd->showmask)
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->showmask), is_active);
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   if(GTK_IS_TOGGLE_BUTTON(bd->filter[0].channel_display))
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->filter[0].channel_display), FALSE);
   if(GTK_IS_TOGGLE_BUTTON(bd->filter[1].channel_display))
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->filter[1].channel_display), FALSE);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 
   dt_iop_request_focus(module);
   dt_dev_pixelpipe_update_history_main(module->dev);

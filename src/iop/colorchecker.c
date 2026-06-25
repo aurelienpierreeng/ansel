@@ -938,10 +938,10 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
   if(best_patch != g->drawn_patch)
   {
     g->patch = g->drawn_patch = best_patch;
-    ++darktable.gui->reset;
+    dt_gui_freeze_begin();
     dt_bauhaus_combobox_set(g->combobox_patch, g->drawn_patch);
     _colorchecker_update_sliders(self);
-    --darktable.gui->reset;
+    dt_gui_freeze_end();
     gtk_widget_queue_draw(g->area);
   }
 }
@@ -971,9 +971,9 @@ static void target_a_callback(GtkWidget *slider, gpointer user_data)
     const float Cout = sqrtf(
         p->target_a[g->patch]*p->target_a[g->patch]+
         p->target_b[g->patch]*p->target_b[g->patch]);
-    ++darktable.gui->reset; // avoid history item
+    dt_gui_freeze_begin(); // avoid history item
     dt_bauhaus_slider_set(g->scale_C, Cout);
-    --darktable.gui->reset;
+    dt_gui_freeze_end();
   }
   else
   {
@@ -984,9 +984,9 @@ static void target_a_callback(GtkWidget *slider, gpointer user_data)
     const float Cout = sqrtf(
         p->target_a[g->patch]*p->target_a[g->patch]+
         p->target_b[g->patch]*p->target_b[g->patch]);
-    ++darktable.gui->reset; // avoid history item
+    dt_gui_freeze_begin(); // avoid history item
     dt_bauhaus_slider_set(g->scale_C, Cout-Cin);
-    --darktable.gui->reset;
+    dt_gui_freeze_end();
   }
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
@@ -1003,9 +1003,9 @@ static void target_b_callback(GtkWidget *slider, gpointer user_data)
     const float Cout = sqrtf(
         p->target_a[g->patch]*p->target_a[g->patch]+
         p->target_b[g->patch]*p->target_b[g->patch]);
-    ++darktable.gui->reset; // avoid history item
+    dt_gui_freeze_begin(); // avoid history item
     dt_bauhaus_slider_set(g->scale_C, Cout);
-    --darktable.gui->reset;
+    dt_gui_freeze_end();
   }
   else
   {
@@ -1016,9 +1016,9 @@ static void target_b_callback(GtkWidget *slider, gpointer user_data)
     const float Cout = sqrtf(
         p->target_a[g->patch]*p->target_a[g->patch]+
         p->target_b[g->patch]*p->target_b[g->patch]);
-    ++darktable.gui->reset; // avoid history item
+    dt_gui_freeze_begin(); // avoid history item
     dt_bauhaus_slider_set(g->scale_C, Cout-Cin);
-    --darktable.gui->reset;
+    dt_gui_freeze_end();
   }
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
@@ -1041,20 +1041,20 @@ static void target_C_callback(GtkWidget *slider, gpointer user_data)
     const float Cnew = CLAMP(dt_bauhaus_slider_get(slider), 0.01, 128.0);
     p->target_a[g->patch] = CLAMP(p->target_a[g->patch]*Cnew/Cout, -128.0, 128.0);
     p->target_b[g->patch] = CLAMP(p->target_b[g->patch]*Cnew/Cout, -128.0, 128.0);
-    ++darktable.gui->reset; // avoid history item
+    dt_gui_freeze_begin(); // avoid history item
     dt_bauhaus_slider_set(g->scale_a, p->target_a[g->patch]);
     dt_bauhaus_slider_set(g->scale_b, p->target_b[g->patch]);
-    --darktable.gui->reset;
+    dt_gui_freeze_end();
   }
   else
   {
     const float Cnew = CLAMP(Cin + dt_bauhaus_slider_get(slider), 0.01, 128.0);
     p->target_a[g->patch] = CLAMP(p->target_a[g->patch]*Cnew/Cout, -128.0, 128.0);
     p->target_b[g->patch] = CLAMP(p->target_b[g->patch]*Cnew/Cout, -128.0, 128.0);
-    ++darktable.gui->reset; // avoid history item
+    dt_gui_freeze_begin(); // avoid history item
     dt_bauhaus_slider_set(g->scale_a, p->target_a[g->patch] - p->source_a[g->patch]);
     dt_bauhaus_slider_set(g->scale_b, p->target_b[g->patch] - p->source_b[g->patch]);
-    --darktable.gui->reset;
+    dt_gui_freeze_end();
   }
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
@@ -1064,9 +1064,9 @@ static void target_callback(GtkWidget *combo, gpointer user_data)
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_colorchecker_gui_data_t *g = (dt_iop_colorchecker_gui_data_t *)self->gui_data;
   g->absolute_target = dt_bauhaus_combobox_get(combo);
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   _colorchecker_update_sliders(self);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
   // switch off colour picker, it'll interfere with other changes of the patch:
   dt_iop_color_picker_reset(self, TRUE);
   gtk_widget_queue_draw(g->area);
@@ -1077,9 +1077,9 @@ static void patch_callback(GtkWidget *combo, gpointer user_data)
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_colorchecker_gui_data_t *g = (dt_iop_colorchecker_gui_data_t *)self->gui_data;
   g->drawn_patch = g->patch = dt_bauhaus_combobox_get(combo);
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   _colorchecker_update_sliders(self);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
   // switch off colour picker, it'll interfere with other changes of the patch:
   dt_iop_color_picker_reset(self, TRUE);
   gtk_widget_queue_draw(g->area);
@@ -1226,9 +1226,9 @@ static gboolean checker_button_press(GtkWidget *widget, GdkEventButton *event,
     p->target_a[patch] = p->source_a[patch];
     p->target_b[patch] = p->source_b[patch];
     dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
-    ++darktable.gui->reset;
+    dt_gui_freeze_begin();
     _colorchecker_update_sliders(self);
-    --darktable.gui->reset;
+    dt_gui_freeze_end();
     gtk_widget_queue_draw(g->area);
     return TRUE;
   }
@@ -1244,10 +1244,10 @@ static gboolean checker_button_press(GtkWidget *widget, GdkEventButton *event,
     memmove(p->source_b+patch, p->source_b+patch+1, sizeof(float)*(p->num_patches-1-patch));
     p->num_patches--;
     dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
-    ++darktable.gui->reset;
+    dt_gui_freeze_begin();
     _colorchecker_rebuild_patch_list(self);
     _colorchecker_update_sliders(self);
-    --darktable.gui->reset;
+    dt_gui_freeze_end();
     gtk_widget_queue_draw(g->area);
     return TRUE;
   }
@@ -1282,11 +1282,11 @@ static gboolean checker_button_press(GtkWidget *widget, GdkEventButton *event,
       p->target_b[patch] = p->source_b[patch] = self->picked_color[2];
       dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 
-      ++darktable.gui->reset;
+      dt_gui_freeze_begin();
       _colorchecker_rebuild_patch_list(self);
       dt_bauhaus_combobox_set(g->combobox_patch, patch);
       _colorchecker_update_sliders(self);
-      --darktable.gui->reset;
+      dt_gui_freeze_end();
       g->patch = g->drawn_patch = patch;
       gtk_widget_queue_draw(g->area);
     }

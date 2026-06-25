@@ -325,7 +325,7 @@ static gboolean _add_shape(GtkWidget *widget, dt_iop_module_t *self)
 
 static gboolean _add_shape_callback(GtkWidget *widget, GdkEventButton *e, dt_iop_module_t *self)
 {
-  if(darktable.gui->reset) return FALSE;
+  if(dt_gui_widgets_suppressed()) return FALSE;
 
   const dt_iop_spots_gui_data_t *g = (dt_iop_spots_gui_data_t *) self->gui_data;
 
@@ -340,7 +340,7 @@ static gboolean _add_shape_callback(GtkWidget *widget, GdkEventButton *e, dt_iop
 
 static gboolean _edit_masks(GtkWidget *widget, GdkEventButton *e, dt_iop_module_t *self)
 {
-  if(darktable.gui->reset) return FALSE;
+  if(dt_gui_widgets_suppressed()) return FALSE;
 
   // if we don't have the focus, request for it and quit, gui_focus() do the rest
   if(self->dev->gui_module != self)
@@ -360,7 +360,7 @@ static gboolean _edit_masks(GtkWidget *widget, GdkEventButton *e, dt_iop_module_
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_circle), FALSE);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_ellipse), FALSE);
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
 
   dt_iop_color_picker_reset(self, TRUE);
 
@@ -380,7 +380,7 @@ static gboolean _edit_masks(GtkWidget *widget, GdkEventButton *e, dt_iop_module_
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_edit_masks), FALSE);
   }
 
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 
   dt_control_queue_redraw_center();
 

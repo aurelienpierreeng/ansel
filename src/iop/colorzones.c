@@ -790,9 +790,9 @@ static void _reset_display_selection(dt_iop_module_t *self)
     }
     if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(c->bt_showmask)))
     {
-      ++darktable.gui->reset;
+      dt_gui_freeze_begin();
       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(c->bt_showmask), FALSE);
-      --darktable.gui->reset;
+      dt_gui_freeze_end();
     }
   }
 }
@@ -2064,17 +2064,17 @@ static gboolean _area_key_press_callback(GtkWidget *widget, GdkEventKey *event, 
 static void _channel_tabs_switch_callback(GtkNotebook *notebook, GtkWidget *page, guint page_num,
                                           dt_iop_module_t *self)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_iop_colorzones_gui_data_t *c = (dt_iop_colorzones_gui_data_t *)self->gui_data;
   dt_iop_colorzones_params_t *p = (dt_iop_colorzones_params_t *)self->params;
 
   c->channel = (dt_iop_colorzones_channel_t)page_num;
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
 
   dt_bauhaus_combobox_set(c->interpolator, p->curve_type[c->channel]);
 
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 
   dt_iop_color_picker_reset(self, TRUE);
   if(c->display_mask)
@@ -2099,7 +2099,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 
 static void _interpolator_callback(GtkWidget *widget, dt_iop_module_t *self)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_iop_colorzones_params_t *p = (dt_iop_colorzones_params_t *)self->params;
   dt_iop_colorzones_gui_data_t *g = (dt_iop_colorzones_gui_data_t *)self->gui_data;
 
@@ -2119,7 +2119,7 @@ static void _interpolator_callback(GtkWidget *widget, dt_iop_module_t *self)
 
 static void _edit_by_area_callback(GtkWidget *widget, dt_iop_module_t *self)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_iop_colorzones_gui_data_t *g = (dt_iop_colorzones_gui_data_t *)self->gui_data;
 
   g->edit_by_area = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(widget));
@@ -2129,7 +2129,7 @@ static void _edit_by_area_callback(GtkWidget *widget, dt_iop_module_t *self)
 
 static void _display_mask_callback(GtkToggleButton *togglebutton, dt_iop_module_t *module)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
 
   dt_iop_colorzones_gui_data_t *g = (dt_iop_colorzones_gui_data_t *)module->gui_data;
 
@@ -2138,9 +2138,9 @@ static void _display_mask_callback(GtkToggleButton *togglebutton, dt_iop_module_
   {
     dt_control_log(_("cannot display masks when the blending mask is displayed"));
 
-    ++darktable.gui->reset;
+    dt_gui_freeze_begin();
     gtk_toggle_button_set_active(togglebutton, FALSE);
-    --darktable.gui->reset;
+    dt_gui_freeze_end();
     return;
   }
 

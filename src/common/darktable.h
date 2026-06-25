@@ -871,6 +871,40 @@ void dt_print_nts(dt_debug_thread_t thread, const char *msg, ...) __attribute__(
 /* same as above but requires additional DT_DEBUG_VERBOSE flag to be true */
 void dt_vprint(dt_debug_thread_t thread, const char *msg, ...) __attribute__((format(printf, 2, 3)));
 
+/* ------------------------------------------------------------------------------------------
+ * Widget-callback suppression (replaces the legacy raw `darktable.gui->reset` counter).
+ *
+ * Programmatic widget updates must not re-trigger their own "value-changed" handlers. Bracket
+ * such updates with dt_gui_freeze_begin()/dt_gui_freeze_end() (or the dt_gui_widget_freeze()
+ * scope guard), and open every widget callback with `if(dt_gui_widgets_suppressed()) return;`.
+ *
+ * The depth is managed centrally: it is mutated only on the GUI thread (off-thread begin/end
+ * are no-ops, so worker threads -- e.g. thumbnail/export reload_defaults -- can never race or
+ * drift it), clamped at >= 0, and any unbalanced end is logged with its file:line rather than
+ * silently drifting negative and disabling suppression for the rest of the session.
+ * ------------------------------------------------------------------------------------------ */
+gboolean dt_gui_widgets_suppressed(void);
+void dt_gui_freeze_begin_(const char *file, int line);
+void dt_gui_freeze_end_(const char *file, int line);
+void dt_gui_freeze_reset(void); // hard-reset depth to 0 (GUI init only)
+#define dt_gui_freeze_begin() dt_gui_freeze_begin_(__FILE__, __LINE__)
+#define dt_gui_freeze_end()   dt_gui_freeze_end_(__FILE__, __LINE__)
+
+typedef struct { const char *file; int line; } dt_gui_freeze_token_t;
+static inline void dt_gui_freeze_release_(dt_gui_freeze_token_t *t)
+{
+  dt_gui_freeze_end_(t->file, t->line);
+}
+// Scope guard: begins a freeze that is automatically ended when the enclosing block exits,
+// including via early return/goto/break. Use it for spans that contain an early exit (the
+// raw begin/end pair would leak the depth on such paths).
+#define DT_FREEZE_CAT_(a, b) a##b
+#define DT_FREEZE_CAT(a, b) DT_FREEZE_CAT_(a, b)
+#define dt_gui_widget_freeze()                                                       \
+  dt_gui_freeze_token_t DT_FREEZE_CAT(_dt_freeze_guard_, __LINE__)                    \
+      __attribute__((cleanup(dt_gui_freeze_release_))) = { __FILE__, __LINE__ };      \
+  dt_gui_freeze_begin_(__FILE__, __LINE__)
+
 // Number of workers, on top of reserved workers (1 for main preview, 1 for thumbnail in darkroom)
 // This is currently set to 2, so 4 workers total, without user config.
 // Workers will process a queue of jobs that they share together (except for reserved ones). 

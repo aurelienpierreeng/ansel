@@ -1794,7 +1794,7 @@ static void _overlay_cycle_callback(dt_action_t *action)
 
 static void _toggle_mask_visibility_callback(dt_action_t *action)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
 
   dt_develop_t *dev = dt_action_view(action)->data;
   dt_iop_module_t *mod = dev->gui_module;
@@ -1805,7 +1805,7 @@ static void _toggle_mask_visibility_callback(dt_action_t *action)
   {
     dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)mod->blend_data;
 
-    ++darktable.gui->reset;
+    dt_gui_freeze_begin();
 
     dt_iop_color_picker_reset(mod, TRUE);
 
@@ -1825,7 +1825,7 @@ static void _toggle_mask_visibility_callback(dt_action_t *action)
         gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->masks_shapes[n]), FALSE);
     }
 
-    --darktable.gui->reset;
+    dt_gui_freeze_end();
   }
 }
 

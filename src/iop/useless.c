@@ -468,7 +468,7 @@ void cleanup_global(dt_iop_module_so_t *module)
 static void extra_callback(GtkWidget *w, dt_iop_module_t *self)
 {
   // this is important to avoid cycles!
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
 
   dt_iop_useless_params_t *p = (dt_iop_useless_params_t *)self->params;
   dt_iop_useless_gui_data_t *g = (dt_iop_useless_gui_data_t *)self->gui_data;
@@ -477,9 +477,9 @@ static void extra_callback(GtkWidget *w, dt_iop_module_t *self)
 
   // Setting a widget value will trigger a callback that will update params.
   // If this is not desirable (because it might result in a cycle) then use
-  // ++darktable.gui->reset;
+  // dt_gui_freeze_begin();
   dt_bauhaus_slider_set(g->factor, p->factor + extra);
-  // and reverse with --darktable.gui->reset;
+  // and reverse with dt_gui_freeze_end();
 
   // If any params updated directly, not via a callback, then
   // let core know of the changes

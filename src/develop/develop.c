@@ -1288,7 +1288,7 @@ dt_iop_module_t *dt_dev_module_duplicate(dt_develop_t *dev, dt_iop_module_t *bas
 
 void dt_dev_module_remove(dt_develop_t *dev, dt_iop_module_t *module)
 {
-  // if(darktable.gui->reset) return;
+  // if(dt_gui_widgets_suppressed()) return;
   int del = 0;
 
   if(dev->gui_attached)

@@ -1059,9 +1059,9 @@ static void reset_mix(dt_iop_module_t *self)
   dt_iop_atrous_gui_data_t *c = (dt_iop_atrous_gui_data_t *)self->gui_data;
   dt_iop_atrous_params_t *p = (dt_iop_atrous_params_t *)self->params;
   c->drag_params = *p;
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   dt_bauhaus_slider_set(c->mix, p->mix);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 }
 
 void gui_update(struct dt_iop_module_t *self)
@@ -1563,7 +1563,7 @@ static void tab_switch(GtkNotebook *notebook, GtkWidget *page, guint page_num, g
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_atrous_gui_data_t *c = (dt_iop_atrous_gui_data_t *)self->gui_data;
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   c->channel = c->channel2 = (atrous_channel_t)page_num;
   gtk_widget_queue_draw(self->widget);
 }
@@ -1571,7 +1571,7 @@ static void tab_switch(GtkNotebook *notebook, GtkWidget *page, guint page_num, g
 static void mix_callback(GtkWidget *slider, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_iop_atrous_params_t *p = (dt_iop_atrous_params_t *)self->params;
   p->mix = dt_bauhaus_slider_get(slider);
   gtk_widget_queue_draw(self->widget);

@@ -653,7 +653,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 
 static void acquire_source_button_pressed(GtkButton *button, dt_iop_module_t *self)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_iop_colormapping_params_t *p = (dt_iop_colormapping_params_t *)self->params;
   p->flag |= ACQUIRE;
   p->flag |= GET_SOURCE;
@@ -664,7 +664,7 @@ static void acquire_source_button_pressed(GtkButton *button, dt_iop_module_t *se
 
 static void acquire_target_button_pressed(GtkButton *button, dt_iop_module_t *self)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_iop_colormapping_params_t *p = (dt_iop_colormapping_params_t *)self->params;
   p->flag |= ACQUIRE;
   p->flag |= GET_TARGET;
@@ -777,73 +777,77 @@ static void process_clusters(gpointer instance, gpointer user_data)
   if(IS_NULL_PTR(g) || IS_NULL_PTR(g->buffer)) return;
   if(!(p->flag & ACQUIRE)) return;
 
-  ++darktable.gui->reset;
-
-  dt_iop_gui_enter_critical_section(self);
-  const int width = g->width;
-  const int height = g->height;
-  const int ch = g->ch;
-  float *const restrict buffer = dt_iop_image_alloc(width, height, ch);
-  if(IS_NULL_PTR(buffer))
   {
-    dt_iop_gui_leave_critical_section(self);
-    return;
-  }
-  dt_iop_image_copy_by_size(buffer, g->buffer, width, height, ch);
-  dt_iop_gui_leave_critical_section(self);
+    // Scope guard rather than a begin/end pair: this span has an early return on buffer
+    // allocation failure, which would leak the freeze depth with a raw bracket. The guard
+    // releases the freeze on every exit path, including that return.
+    dt_gui_widget_freeze();
 
-  if(p->flag & GET_SOURCE)
-  {
-    int hist[HISTN];
-
-    // get histogram of L
-    capture_histogram(buffer, width, height, hist);
-
-    // invert histogram
-    invert_histogram(hist, p->source_ihist);
-
-    // get n color clusters
-    kmeans(buffer, width, height, p->n, p->source_mean, p->source_var, p->source_weight);
-
-    p->flag |= HAS_SOURCE;
-    new_source_clusters = 1;
-
-    dt_control_queue_redraw_widget(g->source_area);
-  }
-  else if(p->flag & GET_TARGET)
-  {
-    // get histogram of L
-    capture_histogram(buffer, width, height, p->target_hist);
-
-    // get n color clusters
-    kmeans(buffer, width, height, p->n, p->target_mean, p->target_var, p->target_weight);
-
-    p->flag |= HAS_TARGET;
-
-    dt_control_queue_redraw_widget(g->target_area);
-  }
-
-  dt_free_align(buffer);
-
-  if(new_source_clusters)
-  {
-    memcpy(g->flowback.hist, p->source_ihist, sizeof(float) * HISTN);
-    memcpy(g->flowback.mean, p->source_mean, sizeof(float) * MAXN * 2);
-    memcpy(g->flowback.var, p->source_var, sizeof(float) * MAXN * 2);
-    memcpy(g->flowback.weight, p->source_weight, sizeof(float) * MAXN);
-    g->flowback.n = p->n;
-    g->flowback_set = 1;
-    FILE *f = g_fopen("/tmp/dt_colormapping_loaded", "wb");
-    if(f)
+    dt_iop_gui_enter_critical_section(self);
+    const int width = g->width;
+    const int height = g->height;
+    const int ch = g->ch;
+    float *const restrict buffer = dt_iop_image_alloc(width, height, ch);
+    if(IS_NULL_PTR(buffer))
     {
-      if(fwrite(&g->flowback, sizeof(g->flowback), 1, f) < 1)
-        fprintf(stderr, "[colormapping] could not write flowback file /tmp/dt_colormapping_loaded\n");
-      fclose(f);
+      dt_iop_gui_leave_critical_section(self);
+      return;
     }
-  }
+    dt_iop_image_copy_by_size(buffer, g->buffer, width, height, ch);
+    dt_iop_gui_leave_critical_section(self);
 
-  p->flag &= ~(GET_TARGET | GET_SOURCE | ACQUIRE);
-  --darktable.gui->reset;
+    if(p->flag & GET_SOURCE)
+    {
+      int hist[HISTN];
+
+      // get histogram of L
+      capture_histogram(buffer, width, height, hist);
+
+      // invert histogram
+      invert_histogram(hist, p->source_ihist);
+
+      // get n color clusters
+      kmeans(buffer, width, height, p->n, p->source_mean, p->source_var, p->source_weight);
+
+      p->flag |= HAS_SOURCE;
+      new_source_clusters = 1;
+
+      dt_control_queue_redraw_widget(g->source_area);
+    }
+    else if(p->flag & GET_TARGET)
+    {
+      // get histogram of L
+      capture_histogram(buffer, width, height, p->target_hist);
+
+      // get n color clusters
+      kmeans(buffer, width, height, p->n, p->target_mean, p->target_var, p->target_weight);
+
+      p->flag |= HAS_TARGET;
+
+      dt_control_queue_redraw_widget(g->target_area);
+    }
+
+    dt_free_align(buffer);
+
+    if(new_source_clusters)
+    {
+      memcpy(g->flowback.hist, p->source_ihist, sizeof(float) * HISTN);
+      memcpy(g->flowback.mean, p->source_mean, sizeof(float) * MAXN * 2);
+      memcpy(g->flowback.var, p->source_var, sizeof(float) * MAXN * 2);
+      memcpy(g->flowback.weight, p->source_weight, sizeof(float) * MAXN);
+      g->flowback.n = p->n;
+      g->flowback_set = 1;
+      FILE *f = g_fopen("/tmp/dt_colormapping_loaded", "wb");
+      if(f)
+      {
+        if(fwrite(&g->flowback, sizeof(g->flowback), 1, f) < 1)
+          fprintf(stderr, "[colormapping] could not write flowback file /tmp/dt_colormapping_loaded\n");
+        fclose(f);
+      }
+    }
+
+    p->flag &= ~(GET_TARGET | GET_SOURCE | ACQUIRE);
+  }
 
   if(p->flag & HAS_SOURCE) dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 

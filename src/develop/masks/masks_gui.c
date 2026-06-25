@@ -113,7 +113,7 @@ static gboolean _masks_shape_button_is_current_creation(const dt_masks_shape_but
 
 static gboolean _masks_shape_button_pressed(GtkWidget *button, GdkEventButton *event, gpointer user_data)
 {
-  if(darktable.gui->reset || event->button != GDK_BUTTON_PRIMARY) return TRUE;
+  if(dt_gui_widgets_suppressed() || event->button != GDK_BUTTON_PRIMARY) return TRUE;
 
   dt_masks_shape_buttons_data_t *data =
       (dt_masks_shape_buttons_data_t *)g_object_get_data(G_OBJECT(button), "dt-masks-shape-buttons-data");

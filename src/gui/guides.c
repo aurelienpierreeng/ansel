@@ -615,7 +615,7 @@ static void _settings_update_visibility(_guides_settings_t *gw)
 
 static void _settings_flip_update(_guides_settings_t *gw)
 {
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
 
   // we retrieve the global settings
   dt_guides_t *guide = (dt_guides_t *)g_list_nth_data(darktable.guides, dt_bauhaus_combobox_get(darktable.view_manager->guides));
@@ -626,7 +626,7 @@ static void _settings_flip_update(_guides_settings_t *gw)
     dt_free(key);
   }
 
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 }
 
 static void _settings_guides_changed(GtkWidget *w, _guides_settings_t *gw)

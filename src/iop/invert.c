@@ -200,9 +200,9 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
   dt_iop_invert_params_t *p = self->params;
   for_four_channels(k) p->color[k] = grayrgb[k];
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   gui_update_from_coeffs(self);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
   dt_control_queue_redraw_widget(self->widget);
@@ -210,7 +210,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
 
 static void colorpicker_callback(GtkColorButton *widget, dt_iop_module_t *self)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_iop_invert_gui_data_t *g = (dt_iop_invert_gui_data_t *)self->gui_data;
   dt_iop_invert_params_t *p = (dt_iop_invert_params_t *)self->params;
 

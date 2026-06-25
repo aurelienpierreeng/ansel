@@ -1400,7 +1400,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
   float hue = RAD_TO_DEG(Ych[2]) + 180.f;   // take the opponent color
   hue = (hue > 360.f) ? hue - 360.f : hue;  // normalize in [0 ; 360]°
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   if(picker == g->global_H)
   {
     p->global_H = hue;
@@ -1441,7 +1441,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
   }
   else
     fprintf(stderr, "[colorbalancergb] unknown color picker\n");
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 
   gui_changed(self, picker, NULL);
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
@@ -1500,7 +1500,7 @@ static void paint_chroma_slider(GtkWidget *w, const float hue)
 
 static void mask_callback(GtkWidget *togglebutton, dt_iop_module_t *self)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_iop_request_focus(self);
 
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(self->off), TRUE);
@@ -1691,7 +1691,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
   dt_iop_colorbalancergb_gui_data_t *g = (dt_iop_colorbalancergb_gui_data_t *)self->gui_data;
   dt_iop_colorbalancergb_params_t *p = (dt_iop_colorbalancergb_params_t *)self->params;
 
-   ++darktable.gui->reset;
+   dt_gui_freeze_begin();
 
   if(IS_NULL_PTR(w) || w == g->global_H)
     paint_chroma_slider(g->global_C, p->global_H);
@@ -1708,7 +1708,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
   if(IS_NULL_PTR(w) || w == g->shadows_weight || w == g->highlights_weight || w == g->mask_grey_fulcrum)
     gtk_widget_queue_draw(GTK_WIDGET(g->area));
 
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 
 }
 

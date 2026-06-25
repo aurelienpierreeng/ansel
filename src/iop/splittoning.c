@@ -305,7 +305,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 
 static void colorpick_callback(GtkColorButton *widget, dt_iop_module_t *self)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
 
   dt_iop_splittoning_gui_data_t *g = (dt_iop_splittoning_gui_data_t *)self->gui_data;
 
@@ -377,12 +377,12 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
   *p_hue        = H;
   *p_saturation = S;
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   dt_bauhaus_slider_set(hue, H);
   dt_bauhaus_slider_set(sat, S);
   update_colorpicker_color(colorpicker, H, S);
   update_saturation_slider_end_color(sat, H);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 
   gtk_widget_queue_draw(GTK_WIDGET(g->balance_scale));
 

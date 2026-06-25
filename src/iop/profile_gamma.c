@@ -282,23 +282,23 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
 
 static void apply_auto_grey(dt_iop_module_t *self)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_iop_profilegamma_params_t *p = (dt_iop_profilegamma_params_t *)self->params;
   dt_iop_profilegamma_gui_data_t *g = (dt_iop_profilegamma_gui_data_t *)self->gui_data;
 
   float grey = fmax(fmax(self->picked_color[0], self->picked_color[1]), self->picked_color[2]);
   p->grey_point = 100.f * grey;
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   dt_bauhaus_slider_set(g->grey_point, p->grey_point);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
 static void apply_auto_black(dt_iop_module_t *self)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_iop_profilegamma_params_t *p = (dt_iop_profilegamma_params_t *)self->params;
   dt_iop_profilegamma_gui_data_t *g = (dt_iop_profilegamma_gui_data_t *)self->gui_data;
 
@@ -311,16 +311,16 @@ static void apply_auto_black(dt_iop_module_t *self)
 
   p->shadows_range = EVmin;
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   dt_bauhaus_slider_set(g->shadows_range, p->shadows_range);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
 static void apply_auto_dynamic_range(dt_iop_module_t *self)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_iop_profilegamma_params_t *p = (dt_iop_profilegamma_params_t *)self->params;
   dt_iop_profilegamma_gui_data_t *g = (dt_iop_profilegamma_gui_data_t *)self->gui_data;
 
@@ -336,9 +336,9 @@ static void apply_auto_dynamic_range(dt_iop_module_t *self)
 
   p->dynamic_range = EVmax - EVmin;
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   dt_bauhaus_slider_set(g->dynamic_range, p->dynamic_range);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
@@ -367,11 +367,11 @@ static void apply_autotune(dt_iop_module_t *self)
   p->shadows_range = EVmin;
   p->dynamic_range = EVmax - EVmin;
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   dt_bauhaus_slider_set(g->grey_point, p->grey_point);
   dt_bauhaus_slider_set(g->shadows_range, p->shadows_range);
   dt_bauhaus_slider_set(g->dynamic_range, p->dynamic_range);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
@@ -407,10 +407,10 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
     p->dynamic_range = EVmax - EVmin;
     p->shadows_range = EVmin;
 
-    ++darktable.gui->reset;
+    dt_gui_freeze_begin();
     dt_bauhaus_slider_set(g->dynamic_range, p->dynamic_range);
     dt_bauhaus_slider_set(g->shadows_range, p->shadows_range);
-    --darktable.gui->reset;
+    dt_gui_freeze_end();
   }
 }
 

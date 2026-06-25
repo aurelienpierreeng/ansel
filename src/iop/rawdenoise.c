@@ -931,7 +931,7 @@ static gboolean rawdenoise_scrolled(GtkWidget *widget, GdkEventScroll *event, gp
 static void rawdenoise_tab_switch(GtkNotebook *notebook, GtkWidget *page, guint page_num, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_iop_rawdenoise_gui_data_t *c = (dt_iop_rawdenoise_gui_data_t *)self->gui_data;
   c->channel = (dt_iop_rawdenoise_channel_t)page_num;
   gtk_widget_queue_draw(self->widget);

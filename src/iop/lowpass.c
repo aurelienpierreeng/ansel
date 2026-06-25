@@ -465,7 +465,7 @@ static void
 order_changed (GtkComboBox *combo, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_iop_lowpass_params_t *p = (dt_iop_lowpass_params_t *)self->params;
   p->order = gtk_combo_box_get_active(combo);
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);

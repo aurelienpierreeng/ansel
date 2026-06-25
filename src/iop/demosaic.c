@@ -2305,7 +2305,7 @@ void gui_update(struct dt_iop_module_t *self)
 
 static void _visualize_callback(GtkWidget *quad, gpointer user_data)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_demosaic_gui_data_t *g = (dt_iop_demosaic_gui_data_t *)self->gui_data;
 

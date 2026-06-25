@@ -49,7 +49,7 @@ typedef struct dt_module_param_t
 
 static void _iop_toggle_callback(GtkWidget *togglebutton, dt_module_param_t *data)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
 
   dt_iop_module_t *self = data->module;
   gboolean *field = (gboolean*)(data->param);

@@ -1270,12 +1270,12 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
 
     // prevent bauhaus widgets from sending value-changed signals
     // because some of them expect user interactions.
-    ++darktable.gui->reset;
+    dt_gui_freeze_begin();
 
     // init the gui part of views
     dt_view_manager_gui_init(darktable.view_manager);
 
-    --darktable.gui->reset;
+    dt_gui_freeze_end();
 
     // initialize undo struct
     darktable.undo = dt_undo_init();

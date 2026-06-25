@@ -626,9 +626,9 @@ static inline __attribute__((always_inline)) int sanity_check(dt_iop_module_t *s
       // Repaint the on/off icon
       if(self->off)
       {
-        ++darktable.gui->reset;
+        dt_gui_freeze_begin();
         gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(self->off), self->enabled);
-        --darktable.gui->reset;
+        dt_gui_freeze_end();
       }
     }
     return 0;
@@ -1692,7 +1692,7 @@ void show_guiding_controls(struct dt_iop_module_t *self)
 
 void update_exposure_sliders(dt_iop_toneequalizer_gui_data_t *g, dt_iop_toneequalizer_params_t *p)
 {
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   dt_bauhaus_slider_set(g->noise, p->noise);
   dt_bauhaus_slider_set(g->ultra_deep_blacks, p->ultra_deep_blacks);
   dt_bauhaus_slider_set(g->deep_blacks, p->deep_blacks);
@@ -1702,7 +1702,7 @@ void update_exposure_sliders(dt_iop_toneequalizer_gui_data_t *g, dt_iop_toneequa
   dt_bauhaus_slider_set(g->highlights, p->highlights);
   dt_bauhaus_slider_set(g->whites, p->whites);
   dt_bauhaus_slider_set(g->speculars, p->speculars);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 }
 
 
@@ -1745,7 +1745,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 static void smoothing_callback(GtkWidget *slider, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_iop_toneequalizer_params_t *p = (dt_iop_toneequalizer_params_t *)self->params;
   dt_iop_toneequalizer_gui_data_t *g = (dt_iop_toneequalizer_gui_data_t *)self->gui_data;
 
@@ -1769,7 +1769,7 @@ static void smoothing_callback(GtkWidget *slider, gpointer user_data)
 
 static void show_luminance_mask_callback(GtkWidget *togglebutton, GdkEventButton *event, dt_iop_module_t *self)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_iop_request_focus(self);
 
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(self->off), TRUE);
@@ -2034,7 +2034,7 @@ int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t 
   dt_iop_toneequalizer_params_t *p = (dt_iop_toneequalizer_params_t *)self->params;
 
   if(!sanity_check(self)) return 0;
-  if(darktable.gui->reset) return 1;
+  if(dt_gui_widgets_suppressed()) return 1;
   if(IS_NULL_PTR(g)) return 0;
   if(!self->expanded) return 0;
   if(dt_iop_color_picker_is_visible(dev)) return 0;
@@ -2806,7 +2806,7 @@ static gboolean area_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
 static gboolean area_enter_notify(GtkWidget *widget, GdkEventCrossing *event, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(darktable.gui->reset) return 1;
+  if(dt_gui_widgets_suppressed()) return 1;
   if(!self->enabled) return 0;
 
   dt_iop_toneequalizer_gui_data_t *g = (dt_iop_toneequalizer_gui_data_t *)self->gui_data;
@@ -2824,7 +2824,7 @@ static gboolean area_enter_notify(GtkWidget *widget, GdkEventCrossing *event, gp
 static gboolean area_leave_notify(GtkWidget *widget, GdkEventCrossing *event, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(darktable.gui->reset) return 1;
+  if(dt_gui_widgets_suppressed()) return 1;
   if(!self->enabled) return 0;
 
   dt_iop_toneequalizer_gui_data_t *g = (dt_iop_toneequalizer_gui_data_t *)self->gui_data;
@@ -2851,7 +2851,7 @@ static gboolean area_leave_notify(GtkWidget *widget, GdkEventCrossing *event, gp
 static gboolean area_button_press(GtkWidget *widget, GdkEventButton *event, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(darktable.gui->reset) return 1;
+  if(dt_gui_widgets_suppressed()) return 1;
 
   dt_iop_toneequalizer_gui_data_t *g = (dt_iop_toneequalizer_gui_data_t *)self->gui_data;
 
@@ -2905,7 +2905,7 @@ static gboolean area_button_press(GtkWidget *widget, GdkEventButton *event, gpoi
 static gboolean area_motion_notify(GtkWidget *widget, GdkEventMotion *event, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(darktable.gui->reset) return 1;
+  if(dt_gui_widgets_suppressed()) return 1;
   if(!self->enabled) return 0;
 
   dt_iop_toneequalizer_gui_data_t *g = (dt_iop_toneequalizer_gui_data_t *)self->gui_data;
@@ -2949,7 +2949,7 @@ static gboolean area_motion_notify(GtkWidget *widget, GdkEventMotion *event, gpo
 static gboolean area_button_release(GtkWidget *widget, GdkEventButton *event, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(darktable.gui->reset) return 1;
+  if(dt_gui_widgets_suppressed()) return 1;
   if(!self->enabled) return 0;
 
   dt_iop_toneequalizer_gui_data_t *g = (dt_iop_toneequalizer_gui_data_t *)self->gui_data;
@@ -2977,7 +2977,7 @@ static gboolean area_button_release(GtkWidget *widget, GdkEventButton *event, gp
 static gboolean notebook_button_press(GtkWidget *widget, GdkEventButton *event, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(darktable.gui->reset) return 1;
+  if(dt_gui_widgets_suppressed()) return 1;
 
   // Give focus to module
   dt_iop_request_focus(self);
@@ -3006,9 +3006,9 @@ static void _develop_ui_pipe_started_callback(gpointer instance, gpointer user_d
     g->mask_display = 0;
   }
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->show_luminance_mask), g->mask_display);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 }
 
 
@@ -3316,9 +3316,9 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
     if(isfinite(picked) && picked > 0.0f)
     {
       p->exposure_boost = log2f(CONTRAST_FULCRUM / picked);
-      ++darktable.gui->reset;
+      dt_gui_freeze_begin();
       dt_bauhaus_slider_set(g->exposure_boost, p->exposure_boost);
-      --darktable.gui->reset;
+      dt_gui_freeze_end();
       invalidate_luminance_cache(self);
       dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
       dt_print(DT_DEBUG_DEV,
@@ -3361,9 +3361,9 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
       }
 
       p->contrast_boost = contrast;
-      ++darktable.gui->reset;
+      dt_gui_freeze_begin();
       dt_bauhaus_slider_set(g->contrast_boost, p->contrast_boost);
-      --darktable.gui->reset;
+      dt_gui_freeze_end();
       invalidate_luminance_cache(self);
       dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
       dt_print(DT_DEBUG_DEV,

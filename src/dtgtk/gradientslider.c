@@ -810,7 +810,7 @@ void dtgtk_gradient_slider_multivalue_set_value(GtkDarktableGradientSlider *gsli
 
   gslider->position[pos] = CLAMP(gslider->scale_callback((GtkWidget *)gslider, value, GRADIENT_SLIDER_SET), 0.0, 1.0);
   gslider->selected = gslider->positions == 1 ? 0 : -1;
-  if(!darktable.gui->reset) g_signal_emit_by_name(G_OBJECT(gslider), "value-changed");
+  if(!dt_gui_widgets_suppressed()) g_signal_emit_by_name(G_OBJECT(gslider), "value-changed");
   gtk_widget_queue_draw(GTK_WIDGET(gslider));
 }
 
@@ -821,7 +821,7 @@ void dtgtk_gradient_slider_multivalue_set_values(GtkDarktableGradientSlider *gsl
   for(int k = 0; k < gslider->positions; k++)
     gslider->position[k] = CLAMP(gslider->scale_callback((GtkWidget *)gslider, values[k], GRADIENT_SLIDER_SET), 0.0, 1.0);
   gslider->selected = gslider->positions == 1 ? 0 : -1;
-  if(!darktable.gui->reset) g_signal_emit_by_name(G_OBJECT(gslider), "value-changed");
+  if(!dt_gui_widgets_suppressed()) g_signal_emit_by_name(G_OBJECT(gslider), "value-changed");
   gtk_widget_queue_draw(GTK_WIDGET(gslider));
 }
 

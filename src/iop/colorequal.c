@@ -1632,7 +1632,7 @@ static gboolean _area_button_release_callback(GtkWidget *widget, GdkEventButton 
 static void _channel_tabs_switch_callback(GtkNotebook *notebook, GtkWidget *page, guint page_num,
                                           gpointer user_data)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
 
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
@@ -1643,10 +1643,10 @@ static void _channel_tabs_switch_callback(GtkNotebook *notebook, GtkWidget *page
 
   if(channel < DT_IOP_COLOREQUAL_NUM_CHANNELS)
   {
-    ++darktable.gui->reset;
+    dt_gui_freeze_begin();
     for(int ring = 0; ring < DT_IOP_COLOREQUAL_NUM_RINGS; ring++)
       if(ring != source_ring) gtk_notebook_set_current_page(g->channel_notebook[ring], (int)page_num);
-    --darktable.gui->reset;
+    dt_gui_freeze_end();
 
     for(int ring = 0; ring < DT_IOP_COLOREQUAL_NUM_RINGS; ring++)
       gtk_widget_queue_draw(GTK_WIDGET(g->area[ring][channel]));
@@ -1657,7 +1657,7 @@ static void _channel_tabs_switch_callback(GtkNotebook *notebook, GtkWidget *page
 
 static void _ring_tabs_switch_callback(GtkNotebook *notebook, GtkWidget *page, guint page_num, gpointer user_data)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
 
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
@@ -2114,11 +2114,11 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
     dt_aligned_pixel_t max_Ych = { 0.f };
     _pipe_rgb_to_Ych(self, pipe, (const float *)sampled_module->picked_color_max, max_Ych);
 
-    ++darktable.gui->reset;
+    dt_gui_freeze_begin();
     p->white_level = log2f(max_Ych[0]);
     g->gui_params.white_level = p->white_level;
     dt_bauhaus_slider_set(g->white_level, p->white_level);
-    --darktable.gui->reset;
+    dt_gui_freeze_end();
 
     dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
   }
@@ -2407,11 +2407,11 @@ void gui_init(dt_iop_module_t *self)
   const int current_ring_page = CLAMP(active_ring, 0, DT_IOP_COLOREQUAL_NUM_RINGS);
   const int current_channel_page = CLAMP(active_channel, 0, DT_IOP_COLOREQUAL_NUM_CHANNELS - 1);
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   gtk_notebook_set_current_page(g->ring_notebook, current_ring_page);
   for(int ring = 0; ring < DT_IOP_COLOREQUAL_NUM_RINGS; ring++)
     gtk_notebook_set_current_page(g->channel_notebook[ring], current_channel_page);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 
   for(int ring = 0; ring < DT_IOP_COLOREQUAL_NUM_RINGS; ring++)
     for(int ch = 0; ch < DT_IOP_COLOREQUAL_NUM_CHANNELS; ch++) g->selected[ring][ch] = -1;

@@ -1451,7 +1451,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
 {
   (void)picker;
   (void)piece;
-  if(IS_NULL_PTR(self) || darktable.gui->reset) return;
+  if(IS_NULL_PTR(self) || dt_gui_widgets_suppressed()) return;
   const drawlayer_pick_source_t source = _conf_pick_source();
   const float *picked = (source == DRAWLAYER_PICK_SOURCE_OUTPUT) ? self->picked_output_color : self->picked_color;
   const float *picked_min
@@ -2262,7 +2262,7 @@ static void _widget_changed(GtkWidget *widget, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
-  if(IS_NULL_PTR(g) || (darktable.gui && darktable.gui->reset)) return;
+  if(IS_NULL_PTR(g) || (darktable.gui && dt_gui_widgets_suppressed())) return;
 
   _sync_params_from_gui(self, FALSE);
 
@@ -2320,7 +2320,7 @@ static void _layer_selected(GtkWidget *widget, gpointer user_data)
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
   dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
-  if(IS_NULL_PTR(g) || (darktable.gui && darktable.gui->reset)) return;
+  if(IS_NULL_PTR(g) || (darktable.gui && dt_gui_widgets_suppressed())) return;
 
   const int active = dt_bauhaus_combobox_get(widget);
   if(active < 0) return;
@@ -2574,7 +2574,7 @@ static void _preview_bg_toggled(GtkToggleButton *button, gpointer user_data)
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
   dt_iop_drawlayer_params_t *params = self ? (dt_iop_drawlayer_params_t *)self->params : NULL;
-  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(g) || (darktable.gui && darktable.gui->reset) || !gtk_toggle_button_get_active(button))
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(g) || (darktable.gui && dt_gui_widgets_suppressed()) || !gtk_toggle_button_get_active(button))
     return;
 
   if(GTK_WIDGET(button) == g->controls.preview_bg_white)

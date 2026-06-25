@@ -307,7 +307,7 @@ void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev
 
 static gboolean dt_iop_monochrome_draw(GtkWidget *widget, cairo_t *crf, gpointer user_data)
 {
-  if(darktable.gui->reset) return FALSE;
+  if(dt_gui_widgets_suppressed()) return FALSE;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_monochrome_gui_data_t *g = (dt_iop_monochrome_gui_data_t *)self->gui_data;
   dt_iop_monochrome_params_t *p = (dt_iop_monochrome_params_t *)self->params;

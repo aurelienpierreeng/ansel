@@ -730,9 +730,9 @@ static void _exposure_set_white(struct dt_iop_module_t *self, const float white)
 
   dt_iop_exposure_gui_data_t *g = (dt_iop_exposure_gui_data_t *)self->gui_data;
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   dt_bauhaus_slider_set(g->exposure, p->exposure);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
@@ -749,9 +749,9 @@ static void _exposure_set_black(struct dt_iop_module_t *self, const float black)
   }
 
   dt_iop_exposure_gui_data_t *g = (dt_iop_exposure_gui_data_t *)self->gui_data;
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   dt_bauhaus_slider_set(g->black, p->black);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
@@ -793,11 +793,11 @@ static void _auto_set_exposure(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe)
   dt_Lab_2_LCH(Lab, Lch);
 
   // Write report in GUI
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   gtk_label_set_text(GTK_LABEL(g->Lch_origin),
                      g_strdup_printf(_("L : \t%.1f %%"), Lch[0]));
   gtk_widget_queue_draw(g->origin_spot);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 
   const dt_spot_mode_t mode = dt_bauhaus_combobox_get(g->spot_mode);
 
@@ -823,10 +823,10 @@ static void _auto_set_exposure(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe)
     Lab_out[1] = Lab_out[2] = 0.f; // make it grey
 
     // Return the values in sliders
-    ++darktable.gui->reset;
+    dt_gui_freeze_begin();
     dt_bauhaus_slider_set(g->lightness_spot, Lab_out[0]);
     _paint_hue(self);
-    --darktable.gui->reset;
+    dt_gui_freeze_end();
 
     dt_conf_set_float("darkroom/modules/exposure/lightness", Lab_out[0]);
   }
@@ -862,7 +862,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
 {
   (void)picker;
   (void)piece;
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_print(DT_DEBUG_DEV, "[picker/exposure] apply picker=%p pipe=%p\n", (void *)picker, (void *)pipe);
   _auto_set_exposure(self, pipe);
 }
@@ -916,7 +916,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 
 static gboolean _draw(GtkWidget *widget, cairo_t *cr, dt_iop_module_t *self)
 {
-  if(darktable.gui->reset) return FALSE;
+  if(dt_gui_widgets_suppressed()) return FALSE;
 
   dt_iop_exposure_gui_data_t *g = (dt_iop_exposure_gui_data_t *)self->gui_data;
 
@@ -925,9 +925,9 @@ static gboolean _draw(GtkWidget *widget, cairo_t *cr, dt_iop_module_t *self)
   {
     gchar *str = g_strdup_printf(_("%.2f EV"), g->deflicker_computed_exposure);
 
-    ++darktable.gui->reset;
+    dt_gui_freeze_begin();
     gtk_label_set_text(g->deflicker_used_EC, str);
-    --darktable.gui->reset;
+    dt_gui_freeze_end();
 
     dt_free(str);
   }
@@ -1043,7 +1043,7 @@ static void _paint_hue(dt_iop_module_t *self)
 
 static void _spot_settings_changed_callback(GtkWidget *slider, dt_iop_module_t *self)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
 
   dt_iop_exposure_gui_data_t *g = (dt_iop_exposure_gui_data_t *)self->gui_data;
 
@@ -1054,9 +1054,9 @@ static void _spot_settings_changed_callback(GtkWidget *slider, dt_iop_module_t *
   // Save the color on change
   dt_conf_set_float("darkroom/modules/exposure/lightness", Lch_target[0]);
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   _paint_hue(self);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 
   // Re-run auto compute only for the module that currently owns the active picker.
   const dt_spot_mode_t mode = dt_bauhaus_combobox_get(g->spot_mode);

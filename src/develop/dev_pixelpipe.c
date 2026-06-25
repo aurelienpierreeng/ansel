@@ -462,7 +462,7 @@ void dt_dev_pixelpipe_update_zoom_main_real(dt_develop_t *dev)
 void dt_dev_pixelpipe_reset_all(dt_develop_t *dev)
 {
   dt_dev_pixelpipe_cache_flush(darktable.pixelpipe_cache, -1);
-  if(darktable.gui->reset || IS_NULL_PTR(dev) || !dev->gui_attached) return;
+  if(dt_gui_widgets_suppressed() || IS_NULL_PTR(dev) || !dev->gui_attached) return;
   dt_dev_pixelpipe_rebuild_all(dev);
 }
 

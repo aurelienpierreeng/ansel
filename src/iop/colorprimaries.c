@@ -1146,7 +1146,7 @@ void gui_update(dt_iop_module_t *self)
   const dt_iop_colorprimaries_params_t *p = (const dt_iop_colorprimaries_params_t *)self->params;
   dt_iop_colorprimaries_gui_data_t *g = (dt_iop_colorprimaries_gui_data_t *)self->gui_data;
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   dt_bauhaus_slider_set(g->white_level, p->white_level);
   dt_bauhaus_slider_set(g->gamut_coverage, p->gamut_coverage);
   dt_bauhaus_slider_set(g->sigma_L, p->sigma_L);
@@ -1161,7 +1161,7 @@ void gui_update(dt_iop_module_t *self)
     dt_bauhaus_slider_set(g->node_saturation[node], p->saturation[node]);
     dt_bauhaus_slider_set(g->node_brightness[node], p->brightness[node]);
   }
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 
   gui_changed(self, NULL, NULL);
 }
@@ -1194,10 +1194,10 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
 
   dt_aligned_pixel_t max_Ych = { 0.f };
   _pipe_rgb_to_Ych(self, pipe, (const float *)sampled_module->picked_color_max, max_Ych);
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   p->white_level = log2f(fmaxf(max_Ych[0], 1e-6f));
   dt_bauhaus_slider_set(g->white_level, p->white_level);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }

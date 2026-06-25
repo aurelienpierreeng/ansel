@@ -806,9 +806,9 @@ static void aspect_changed(GtkWidget *combo, dt_iop_module_t *self)
   {
     g_strlcpy(p->aspect_text, text, sizeof(p->aspect_text));
     p->aspect = g->aspect_ratios[which];
-    ++darktable.gui->reset;
+    dt_gui_freeze_begin();
     dt_bauhaus_slider_set(g->aspect_slider,p->aspect);
-    --darktable.gui->reset;
+    dt_gui_freeze_end();
   }
   dt_iop_color_picker_reset(self, TRUE);
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
@@ -828,9 +828,9 @@ static void position_h_changed(GtkWidget *combo, dt_iop_module_t *self)
   {
     g_strlcpy(p->pos_h_text, text, sizeof(p->pos_h_text));
     p->pos_h = g->pos_h_ratios[which];
-    ++darktable.gui->reset;
+    dt_gui_freeze_begin();
     dt_bauhaus_slider_set(g->pos_h_slider,p->pos_h);
-    --darktable.gui->reset;
+    dt_gui_freeze_end();
   }
   dt_iop_color_picker_reset(self, TRUE);
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
@@ -850,9 +850,9 @@ static void position_v_changed(GtkWidget *combo, dt_iop_module_t *self)
   {
     g_strlcpy(p->pos_v_text, text, sizeof(p->pos_v_text));
     p->pos_v = g->pos_v_ratios[which];
-    ++darktable.gui->reset;
+    dt_gui_freeze_begin();
     dt_bauhaus_slider_set(g->pos_v_slider,p->pos_v);
-    --darktable.gui->reset;
+    dt_gui_freeze_end();
   }
   dt_iop_color_picker_reset(self, TRUE);
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
@@ -878,7 +878,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 
 static void colorpick_color_set(GtkColorButton *widget, dt_iop_module_t *self)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_iop_borders_params_t *p = (dt_iop_borders_params_t *)self->params;
 
   // turn off the other color picker so that this tool actually works ...
@@ -896,7 +896,7 @@ static void colorpick_color_set(GtkColorButton *widget, dt_iop_module_t *self)
 
 static void frame_colorpick_color_set(GtkColorButton *widget, dt_iop_module_t *self)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_iop_borders_params_t *p = (dt_iop_borders_params_t *)self->params;
 
   // turn off the other color picker so that this tool actually works ...

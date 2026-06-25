@@ -1019,9 +1019,9 @@ void dt_dev_add_history_item_real(dt_develop_t *dev, dt_iop_module_t *module, gb
 
     // Changing a parameter of a disabled module enables it,
     // so update the GUI toggle state to reflect it.
-    ++darktable.gui->reset; // don't run GUI callbacks when setting GUI state
+    dt_gui_freeze_begin(); // don't run GUI callbacks when setting GUI state
     dt_iop_gui_set_enable_button(module);
-    --darktable.gui->reset;
+    dt_gui_freeze_end();
   }
   
   // Save history straight away. Regular GUI edits are the only place where
@@ -1064,12 +1064,12 @@ gboolean dt_dev_reload_history_items(dt_develop_t *dev, const int32_t imgid)
 {
   // Recreate the whole history from scratch.
   // Backend only: GUI updates and pixelpipe rebuilds need to be triggered by callers.
-  if(darktable.gui && dev->gui_attached) ++darktable.gui->reset;
+  if(darktable.gui && dev->gui_attached) dt_gui_freeze_begin();
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
   const gboolean first_run = dt_dev_read_history_ext(dev, imgid);
   dt_dev_pop_history_items_ext(dev);
   dt_pthread_rwlock_unlock(&dev->history_mutex);
-  if(darktable.gui && dev->gui_attached) --darktable.gui->reset;
+  if(darktable.gui && dev->gui_attached) dt_gui_freeze_end();
   return first_run;
 }
 
@@ -1185,13 +1185,13 @@ void dt_dev_pop_history_items_ext(dt_develop_t *dev)
 
 void dt_dev_pop_history_items(dt_develop_t *dev)
 {
-  if(darktable.gui && dev->gui_attached) ++darktable.gui->reset;
+  if(darktable.gui && dev->gui_attached) dt_gui_freeze_begin();
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
   dt_dev_pop_history_items_ext(dev);
   dt_pthread_rwlock_unlock(&dev->history_mutex);
   // Update darkroom sizes after releasing the history lock to avoid deadlocks.
   if(dev->gui_attached) dt_dev_get_thumbnail_size(dev);
-  if(darktable.gui && dev->gui_attached) --darktable.gui->reset;
+  if(darktable.gui && dev->gui_attached) dt_gui_freeze_end();
 }
 
 void dt_dev_history_gui_update(dt_develop_t *dev)
@@ -1205,7 +1205,7 @@ void dt_dev_history_gui_update(dt_develop_t *dev)
   dt_dev_history_refresh_nodes_ext(dev, &dev->iop, dev->history);
   dt_pthread_rwlock_unlock(&dev->history_mutex);
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
 
   for(GList *module = g_list_first(dev->iop); module; module = g_list_next(module))
   {
@@ -1226,7 +1226,7 @@ void dt_dev_history_gui_update(dt_develop_t *dev)
   }
 
   dt_dev_masks_list_change(dev);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 
   dt_dev_signal_modules_moved(dev);
 }
@@ -2169,12 +2169,12 @@ static void _dt_dev_history_compress_internal(dt_develop_t *dev, const gboolean 
   dt_dev_set_history_end_ext(dev, g_list_length(dev->history));
   dt_pthread_rwlock_unlock(&dev->history_mutex);
 
-  if(darktable.gui && dev->gui_attached) ++darktable.gui->reset;
+  if(darktable.gui && dev->gui_attached) dt_gui_freeze_begin();
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
   dt_dev_pop_history_items_ext(dev);
   dt_pthread_rwlock_unlock(&dev->history_mutex);
   if(dev->gui_attached) dt_dev_get_thumbnail_size(dev);
-  if(darktable.gui && dev->gui_attached) --darktable.gui->reset;
+  if(darktable.gui && dev->gui_attached) dt_gui_freeze_end();
   if(write_history)
   {
     dt_pthread_rwlock_rdlock(&dev->history_mutex);
@@ -2218,12 +2218,12 @@ void dt_dev_history_truncate(dt_develop_t *dev, const int32_t imgid)
   dt_pthread_rwlock_unlock(&dev->history_mutex);
 
   // Re-apply history and resync iop order from the truncated stack.
-  if(darktable.gui && dev->gui_attached) ++darktable.gui->reset;
+  if(darktable.gui && dev->gui_attached) dt_gui_freeze_begin();
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
   dt_dev_pop_history_items_ext(dev);
   dt_pthread_rwlock_unlock(&dev->history_mutex);
   if(dev->gui_attached) dt_dev_get_thumbnail_size(dev);
-  if(darktable.gui && dev->gui_attached) --darktable.gui->reset;
+  if(darktable.gui && dev->gui_attached) dt_gui_freeze_end();
   dt_pthread_rwlock_rdlock(&dev->history_mutex);
   dt_dev_write_history_ext(dev, imgid);
   dt_pthread_rwlock_unlock(&dev->history_mutex);
@@ -2322,7 +2322,7 @@ static int _check_deleted_instances(dt_develop_t *dev, GList **_iop_list, GList 
 
       if(darktable.develop->gui_module == mod) dt_iop_request_focus(NULL);
 
-      ++darktable.gui->reset;
+      dt_gui_freeze_begin();
 
       // we remove the plugin effectively
       if(!dt_iop_is_hidden(mod))
@@ -2343,7 +2343,7 @@ static int _check_deleted_instances(dt_develop_t *dev, GList **_iop_list, GList 
       // don't delete the module, a pipe may still need it
       dev->alliop = g_list_append(dev->alliop, mod);
 
-      --darktable.gui->reset;
+      dt_gui_freeze_end();
 
       // and reset the list
       modules = iop_list;
