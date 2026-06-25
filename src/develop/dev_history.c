@@ -959,6 +959,11 @@ void dt_dev_add_history_item_real(dt_develop_t *dev, dt_iop_module_t *module, gb
   // Run the delayed post-commit actions if implemented
   if(!IS_NULL_PTR(module) && !IS_NULL_PTR(module->post_history_commit)) module->post_history_commit(module);
 
+  // Republish any dev->proxy state this module derives from its params (e.g. temperature's WB
+  // coeffs) on the main thread, before the pipeline recompute below. This covers user edits and
+  // resets; pipelines only read dev->proxy. (Bulk history loads go through pop_history_items_ext.)
+  if(!IS_NULL_PTR(module) && !IS_NULL_PTR(module->commit_proxy)) module->commit_proxy(module);
+
   // Figure out if the current history item includes masks/forms
   GList *last_history = g_list_nth(dev->history, dt_dev_get_history_end_ext(dev) - 1);
   dt_dev_history_item_t *hist = NULL;
@@ -1075,9 +1080,15 @@ gboolean dt_dev_reload_history_items(dt_develop_t *dev, const int32_t imgid)
 
 
 /**
- * @brief Reload defaults for all modules in dev->iop.
+ * @brief Reset every module to its (already-computed) default params before history is overlaid.
  *
- * Some modules depend on defaults to initialize GUI state or internal structures.
+ * reload_defaults() is NOT called here: per-image defaults are computed once, at history init
+ * (dt_dev_init_default_history) and at module instance creation. Re-running it on every pop was the
+ * source of subtle bugs -- it touched GUI state on half-built widgets, and it re-derived
+ * cross-module defaults (e.g. channelmixerrgb's WB-derived illuminant) against a proxy that the
+ * pipeline had populated, so a fresh history no longer matched a manual reset. Here we only apply
+ * the existing default_params (cheap, no recompute), so modules absent from history fall back to
+ * their defaults; modules present in history are overwritten by _history_to_module() right after.
  *
  * @param dev Develop context.
  */
@@ -1086,7 +1097,7 @@ static inline void _dt_dev_modules_reload_defaults(dt_develop_t *dev)
   for(GList *modules = g_list_first(dev->iop); modules; modules = g_list_next(modules))
   {
     dt_iop_module_t *module = (dt_iop_module_t *)(modules->data);
-    dt_iop_reload_defaults(module);
+    dt_iop_load_default_params(module);
 
     if(module->multi_priority == 0)
       module->iop_order = dt_ioppr_get_iop_order(dev->iop_order_list, module->op, module->multi_priority);
@@ -1143,14 +1154,10 @@ void dt_dev_pop_history_items_ext(dt_develop_t *dev)
   // This avoids using incomplete RAW metadata (WB coeffs, matrices) on newly-inited images.
   dt_dev_ensure_image_storage(dev, dev->image_storage.id);
 
-  // Shitty design ahead:
-  // some modules (temperature.c, colorin.c) init their GUI comboboxes
-  // in/from reload_defaults. Though we already loaded them once at
-  // _read_history_ext() when initing history, and history is now sanitized
-  // such that all used module will have at least an entry,
-  // it's not enough and we need to reload defaults here.
-  // But anyway, if user truncated history before mandatory modules,
-  // and we reload it here, it's good to ensure defaults are re-inited.
+  // Reset every module to its default params first; the history overlay below then overwrites the
+  // ones that have entries. Per-image defaults were already computed at history init / instance
+  // creation, so we do NOT recompute them here (no reload_defaults: GUI-unsafe, and it re-derived
+  // cross-module defaults against a pipeline-populated proxy). See _dt_dev_modules_reload_defaults.
   _dt_dev_modules_reload_defaults(dev);
 
   const int history_end = dt_dev_get_history_end_ext(dev);
@@ -1173,6 +1180,17 @@ void dt_dev_pop_history_items_ext(dt_develop_t *dev)
 
   // Nuke dev->forms and replace it with the last hist->forms in history.
   dt_masks_replace_current_forms(dev, forms);
+
+  // History (metadata + presets) is now fully applied to module params. Let modules publish any
+  // dev->proxy state derived from their EFFECTIVE params (e.g. temperature's WB coeffs, consumed by
+  // channelmixerrgb) on this main/history thread, BEFORE the pipeline resync below runs. dev->proxy
+  // is a GUI/main-thread inter-module channel (pipelines must not touch it); this is the single
+  // main-thread publish point for bulk history loads.
+  for(GList *modules = g_list_first(dev->iop); modules; modules = g_list_next(modules))
+  {
+    dt_iop_module_t *module = (dt_iop_module_t *)(modules->data);
+    if(module->commit_proxy) module->commit_proxy(module);
+  }
 
   dt_ioppr_resync_pipeline(dev, 0, "dt_dev_pop_history_items_ext end", TRUE);
 

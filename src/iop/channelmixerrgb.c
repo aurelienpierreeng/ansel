@@ -553,8 +553,14 @@ void init_presets(dt_iop_module_so_t *self)
 }
 
 
+// Core: compute the CAT adaptation ratio between the camera matrix's bogus-D65 and the given white
+// balance multipliers `wb_coeffs`. The coeff SOURCE differs by caller thread, and that is the whole
+// point of splitting this out: the pipeline must read temperature's coeffs from the per-piece buffer
+// descriptor (piece->dsc_in.temperature.coeffs, propagated in pipe order), NEVER from dev->proxy
+// (a GUI/main-thread inter-module channel). The GUI wrapper get_white_balance_coeff() sources proxy.
 __DT_CLONE_TARGETS__
-static int get_white_balance_coeff(struct dt_iop_module_t *self, dt_aligned_pixel_t custom_wb)
+static int _custom_wb_from_coeffs(struct dt_iop_module_t *self, const dt_aligned_pixel_t wb_coeffs,
+                                  dt_aligned_pixel_t custom_wb)
 {
   // Init output with a no-op
   for(size_t k = 0; k < 4; k++) custom_wb[k] = 1.f;
@@ -592,18 +598,26 @@ static int get_white_balance_coeff(struct dt_iop_module_t *self, dt_aligned_pixe
 
   // Second, if the temperature module is not using these, for example because they are wrong
   // and user made a correct preset, find the WB adaptation ratio
-  if(self->dev->proxy.wb_coeffs[0] != 0.f)
+  if(wb_coeffs[0] != 0.f)
   {
     for(size_t k = 0; k < 4; k++)
     {
-      // Guard the second-green ratio: proxy.wb_coeffs[3] may be 0 (non-RGBG sensor), which would
+      // Guard the second-green ratio: wb_coeffs[3] may be 0 (non-RGBG sensor), which would
       // yield inf. Mirror the first-green ratio in that case so custom_wb stays finite.
-      const float denom = self->dev->proxy.wb_coeffs[k];
+      const float denom = wb_coeffs[k];
       custom_wb[k] = (k == 3 && !isnormal(denom)) ? custom_wb[1] : bwb[k] / denom;
     }
   }
 
   return 0;
+}
+
+// GUI-thread wrapper: source temperature's WB from the dev proxy (the GUI inter-module channel).
+// Pipeline code must NOT call this -- use _custom_wb_from_coeffs(self, piece->dsc_in.temperature.coeffs, ...).
+__DT_CLONE_TARGETS__
+static int get_white_balance_coeff(struct dt_iop_module_t *self, dt_aligned_pixel_t custom_wb)
+{
+  return _custom_wb_from_coeffs(self, self->dev->proxy.wb_coeffs, custom_wb);
 }
 
 
@@ -1963,7 +1977,9 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     // So we need to re-run the detection at runtime...
     float x, y;
     dt_aligned_pixel_t custom_wb;
-    get_white_balance_coeff(self, custom_wb);
+    // Pipeline thread: source temperature's WB from the per-piece descriptor propagated in pipe
+    // order (temperature writes piece->dsc_out.temperature.coeffs), NOT from dev->proxy.
+    _custom_wb_from_coeffs(self, piece->dsc_in.temperature.coeffs, custom_wb);
 
     if(find_temperature_from_raw_coeffs(&(self->dev->image_storage), custom_wb, &(x), &(y)))
     {
@@ -2064,7 +2080,9 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     // So we need to re-run the detection at runtime...
     float x, y;
     dt_aligned_pixel_t custom_wb;
-    get_white_balance_coeff(self, custom_wb);
+    // Pipeline thread: source temperature's WB from the per-piece descriptor propagated in pipe
+    // order (temperature writes piece->dsc_out.temperature.coeffs), NOT from dev->proxy.
+    _custom_wb_from_coeffs(self, piece->dsc_in.temperature.coeffs, custom_wb);
 
     if(find_temperature_from_raw_coeffs(&(self->dev->image_storage), custom_wb, &(x), &(y)))
     {
@@ -2993,7 +3011,9 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   float x = p->x;
   float y = p->y;
   dt_aligned_pixel_t custom_wb;
-  get_white_balance_coeff(self, custom_wb);
+  // Pipeline thread: source temperature's WB from the per-piece descriptor propagated in pipe order
+  // (temperature writes piece->dsc_out.temperature.coeffs upstream), NOT from dev->proxy.
+  _custom_wb_from_coeffs(self, piece->dsc_in.temperature.coeffs, custom_wb);
   illuminant_to_xy(p->illuminant, &(self->dev->image_storage), custom_wb, &x, &y, p->temperature, p->illum_fluo, p->illum_led);
 
   // if illuminant is set as camera, x and y are set on-the-fly at commit time, so we need to set adaptation too
@@ -3804,6 +3824,38 @@ void gui_update(struct dt_iop_module_t *self)
   g->spot_RGB[2] = 0.f;
   g->spot_RGB[3] = 0.f;
 
+  // Widget defaults (reset values) and the image-dependent "as shot in camera" illuminant entry,
+  // derived from the per-image defaults that reload_defaults() already computed into default_params.
+  // This lives here, not in reload_defaults(), so it only touches widgets when they exist and on the
+  // GUI thread (reload_defaults also runs on export/thumbnail devs that have no widgets).
+  {
+    const dt_iop_channelmixer_rgb_params_t *d = (const dt_iop_channelmixer_rgb_params_t *)self->default_params;
+    const dt_image_t *img = &self->dev->image_storage;
+    const dt_aligned_pixel_t xyY = { d->x, d->y, 1.f };
+    dt_aligned_pixel_t Lch = { 0 };
+    dt_xyY_to_Lch(xyY, Lch);
+
+    dt_bauhaus_slider_set_default(g->illum_x, Lch[2] / M_PI * 180.f);
+    dt_bauhaus_slider_set_default(g->illum_y, Lch[1]);
+    dt_bauhaus_slider_set_default(g->temperature, d->temperature);
+    dt_bauhaus_combobox_set_default(g->illuminant, d->illuminant);
+    dt_bauhaus_combobox_set_default(g->adaptation, d->adaptation);
+    if(g->delta_E_label_text)
+    {
+      dt_free(g->delta_E_label_text);
+      g->delta_E_label_text = NULL;
+    }
+
+    if(dt_image_is_matrix_correction_supported(img) && !dt_image_is_monochrome(img))
+    {
+      if(dt_bauhaus_combobox_length(g->illuminant) < DT_ILLUMINANT_CAMERA + 1)
+        dt_bauhaus_combobox_add_full(g->illuminant, _("as shot in camera"), DT_BAUHAUS_COMBOBOX_ALIGN_RIGHT,
+                                     GINT_TO_POINTER(DT_ILLUMINANT_CAMERA), NULL, TRUE);
+    }
+    else
+      dt_bauhaus_combobox_remove_at(g->illuminant, DT_ILLUMINANT_CAMERA);
+  }
+
   dt_gui_freeze_end();
 
   gui_changed(self, NULL, NULL);
@@ -3823,6 +3875,22 @@ void init(dt_iop_module_t *module)
 void reload_defaults(dt_iop_module_t *module)
 {
   dt_iop_channelmixer_rgb_params_t *d = (dt_iop_channelmixer_rgb_params_t *)module->default_params;
+
+  // Our per-image defaults (illuminant chromaticity x/y, temperature) are derived from the white
+  // balance temperature publishes into dev->proxy.wb_coeffs (see get_white_balance_coeff()).
+  // temperature publishes the per-image DEFAULT WB from its own reload_defaults() (main thread, no
+  // pipeline involved). For that seed to be visible here, temperature must run before us:
+  // dt_dev_init_default_history() iterates modules in iop order, and temperature's iop_order is far
+  // below ours, so this holds -- but it is a silent data dependency, so assert it. A future
+  // iop-order change that put us first would otherwise regress our defaults on a brand-new history.
+  // (The EFFECTIVE/history WB is published later via temperature's commit_proxy(); our defaults are
+  // intentionally keyed on the metadata-default WB so a fresh init always matches a manual reset.)
+  const dt_iop_module_t *const temp = dt_iop_get_module_from_list(module->dev->iop, "temperature");
+  if(temp && temp->iop_order >= module->iop_order)
+    fprintf(stderr, "[channelmixerrgb] BUG: temperature (iop_order %d) must run before channelmixerrgb "
+                    "(iop_order %d); white-balance-derived defaults will be wrong on a fresh history\n",
+            temp->iop_order, module->iop_order);
+  assert(!temp || temp->iop_order < module->iop_order);
 
   d->normalize_R = TRUE;
   d->normalize_G = TRUE;
@@ -3854,7 +3922,7 @@ void reload_defaults(dt_iop_module_t *module)
 
   module->default_enabled = FALSE;
 
-  dt_aligned_pixel_t custom_wb;
+  dt_aligned_pixel_t custom_wb = { 1.f, 1.f, 1.f, 1.f };
   if(!CAT_already_applied
      && is_modern
      && !get_white_balance_coeff(module, custom_wb)
@@ -3874,34 +3942,10 @@ void reload_defaults(dt_iop_module_t *module)
     d->adaptation = DT_ADAPTATION_RGB;
   }
 
-  dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)module->gui_data;
-  if(g)
-  {
-    const dt_aligned_pixel_t xyY = { d->x, d->y, 1.f };
-    dt_aligned_pixel_t Lch = { 0 };
-    dt_xyY_to_Lch(xyY, Lch);
-
-    dt_bauhaus_slider_set_default(g->illum_x, Lch[2] / M_PI * 180.f);
-    dt_bauhaus_slider_set_default(g->illum_y, Lch[1]);
-    dt_bauhaus_slider_set_default(g->temperature, d->temperature);
-    dt_bauhaus_combobox_set_default(g->illuminant, d->illuminant);
-    dt_bauhaus_combobox_set_default(g->adaptation, d->adaptation);
-    if(g->delta_E_label_text)
-    {
-      dt_free(g->delta_E_label_text);
-    }
-
-    if(dt_image_is_matrix_correction_supported(img) && !dt_image_is_monochrome(img))
-    {
-      if(dt_bauhaus_combobox_length(g->illuminant) < DT_ILLUMINANT_CAMERA + 1)
-        dt_bauhaus_combobox_add_full(g->illuminant, _("as shot in camera"), DT_BAUHAUS_COMBOBOX_ALIGN_RIGHT,
-                                     GINT_TO_POINTER(DT_ILLUMINANT_CAMERA), NULL, TRUE);
-    }
-    else
-      dt_bauhaus_combobox_remove_at(g->illuminant, DT_ILLUMINANT_CAMERA);
-
-    gui_changed(module, NULL, NULL);
-  }
+  // NOTE: widget state (slider/combo defaults, the image-dependent "as shot in camera" illuminant
+  // entry) is intentionally NOT set here. reload_defaults() runs on export/thumbnail devs with no
+  // widgets and off the GUI thread; touching bauhaus here re-entered callbacks against half-built
+  // widgets and crashed. That work now lives in gui_update(), reading these same default_params.
 }
 
 

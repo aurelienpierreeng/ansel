@@ -187,6 +187,13 @@ DEFAULT(gboolean, runtime_data_hash, struct dt_iop_module_t *self, struct dt_dev
 /** called after the image has changed in darkroom */
 OPTIONAL(void, change_image, struct dt_iop_module_t *self);
 
+/** Publish module-derived state into dev->proxy (e.g. temperature's WB coeffs) on the GUI/main
+ *  thread. Called after history is applied to params (dt_dev_pop_history_items_ext) and on every
+ *  GUI history commit (dt_dev_add_history_item_real), i.e. always BEFORE any pipeline runs.
+ *  dev->proxy is a GUI/main-thread inter-module channel; pipelines must never access it (neither
+ *  read nor write) -- the pipeline only needs module params. */
+OPTIONAL(void, commit_proxy, struct dt_iop_module_t *self);
+
 /** this destroys all resources needed by the piece of the pixelpipe. */
 DEFAULT(void, cleanup_pipe, struct dt_iop_module_t *self, struct dt_dev_pixelpipe_t *pipe,
                              struct dt_dev_pixelpipe_iop_t *piece);
