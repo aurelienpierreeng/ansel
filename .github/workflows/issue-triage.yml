@@ -64,6 +64,25 @@ jobs:
         run: |
           set -euo pipefail
 
+          # Sentry bot issues are crash reports by definition — skip the LLM entirely.
+          if echo "${ISSUE_AUTHOR}" | grep -qi "sentry"; then
+            echo "category=bug"     >> "$GITHUB_OUTPUT"
+            echo "confidence=high"  >> "$GITHUB_OUTPUT"
+            echo "## Triage: \`bug\` (confidence: \`high\`)" >> "$GITHUB_STEP_SUMMARY"
+            echo "Sentry bot — automatic crash report." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          # Extract attachment filenames from markdown links that point to GitHub
+          # file hosting (both legacy /files/... and new user-attachments URLs).
+          # The display text is the filename; the URL itself is not useful here.
+          attachments=$(printf '%s' "${ISSUE_BODY}" \
+            | grep -oE '\[[^]]+\]\(https?://github\.com[^)]+\)' \
+            | sed -E 's/\[([^]]+)\]\([^)]+\)/\1/' \
+            | grep -E '\.[a-zA-Z0-9]+$' \
+            | paste -sd ', ' - \
+            || true)
+
           system="You triage GitHub issues for Ansel, an open-source photo editor.
           Ansel's issue tracker accepts ONLY bug reports: crashes, data corruption,
           or behaviour that contradicts the user documentation (https://ansel.photos/en/doc).
@@ -74,10 +93,10 @@ jobs:
           - bug: a crash, data loss/corruption, or behaviour that clearly contradicts
             documented behaviour. Set confidence 'high' only when it is clearly a real,
             actionable bug (has a description of wrong behaviour, ideally steps or
-            environment). Set confidence 'low' when it might be a bug but is vague,
-            unclear, or missing the information needed to act. If the issue
-            originates from sentry.io bot, it is automatically a bug linked
-            to a crash automatically recorded.
+            environment). Attached files such as backtraces (e.g. gdb-backtrace.txt,
+            backtrace.txt, crash.log) are strong evidence of a real, reproducible crash
+            and raise confidence to 'high' on their own. Set confidence 'low' when the
+            report is vague, unclear, or missing the information needed to act.
           - support: a usage question, request for help, or a story/show-and-tell.
           - feature_request: a request for a new feature or enhancement.
           - spam: spam, off-topic, or empty/nonsense content.
@@ -86,6 +105,8 @@ jobs:
           user="Title: ${ISSUE_TITLE}
 
           Author: ${ISSUE_AUTHOR}
+
+          Attachments: ${attachments:-none}
 
           Body:
           ${ISSUE_BODY}"
@@ -199,8 +220,6 @@ jobs:
                 fi
               else
                 gh issue edit "$ISSUE" --repo "$REPO" --add-label "unclear" || true
-                gh issue comment "$ISSUE" --repo "$REPO" --body \
-          "Thanks for the report. This looks like it might be a bug, but we need a bit more to act on it. Could you add: clear steps to reproduce, what you expected vs. what happened, and your OS/Ansel version? See our triage guide: https://ansel.photos/en/contribute/triaging/#defining-good-issues"
               fi
               ;;
 
