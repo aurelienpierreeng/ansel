@@ -231,6 +231,8 @@ static int _lib_snapshots_refresh_pipe_image(dt_lib_module_t *self, dt_lib_snaps
   dt_lib_snapshots_t *d = (dt_lib_snapshots_t *)self->data;
   dt_develop_t *dev = darktable.develop;
   dt_develop_t *snapshot_dev = snap->develop;
+  dt_pixel_cache_entry_t *entry = NULL;
+
   if(IS_NULL_PTR(dev) || !dev->gui_attached)
   {
     SNAP_LOG("[snapshots] refresh failed: darkroom dev unavailable\n");
@@ -310,7 +312,6 @@ static int _lib_snapshots_refresh_pipe_image(dt_lib_module_t *self, dt_lib_snaps
              " backbuf_hist=%" PRIu64 " pipe_hist=%" PRIu64 "\n",
              hash, pipe_hash, backbuf_hist, pipe_hist);
   */
-  dt_pixel_cache_entry_t *entry = NULL;
   void *data = NULL;
   if(hash == DT_PIXELPIPE_CACHE_HASH_INVALID
      || !dt_dev_pixelpipe_cache_ref_entry_by_hash(darktable.pixelpipe_cache, hash, &data, &entry)
