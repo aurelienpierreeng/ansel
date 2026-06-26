@@ -416,10 +416,7 @@ void dt_mipmap_cache_update_buffer_addresses(dt_cache_entry_t *entry, struct dt_
 // with the input image. will allocate img->width*img->height*img->bpp bytes.
 void *dt_mipmap_cache_alloc(dt_mipmap_buffer_t *buf, const dt_image_t *img)
 {
-  assert(buf);
   if(IS_NULL_PTR(buf)) return NULL;
-
-  assert(buf->size == DT_MIPMAP_FULL);
 
   if(buf->size != DT_MIPMAP_FULL)
   {
@@ -428,7 +425,6 @@ void *dt_mipmap_cache_alloc(dt_mipmap_buffer_t *buf, const dt_image_t *img)
   }
 
   dt_cache_entry_t *entry = buf->cache_entry;
-  assert(entry);
 
   if(IS_NULL_PTR(entry))
   {
@@ -500,8 +496,6 @@ void dt_mipmap_cache_allocate_dynamic(void *data, dt_cache_entry_t *entry)
     dt_mipmap_cache_update_buffer_addresses(entry, &dsc, cache->max_width[mip], cache->max_height[mip], buffer_size);
   else
     dt_mipmap_cache_update_buffer_addresses(entry, &dsc, 0, 0, buffer_size);
-
-  assert(entry->data == dsc);
 
   if(IS_NULL_PTR(dsc)) return;
 
