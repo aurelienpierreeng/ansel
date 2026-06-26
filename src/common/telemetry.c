@@ -301,6 +301,8 @@ static JsonObject *_telemetry_system_properties(void)
   // Same per-run id as the Sentry session_id tag, to correlate without double count.
   json_object_set_string_member(p, "session_id", dt_session_id());
   json_object_set_string_member(p, "build_type", DT_BUILD_TYPE);
+  // Full C compiler flags baked in at configure time (includes -DNDEBUG, -O3, -g, etc.)
+  json_object_set_string_member(p, "build_cflags", DT_BUILD_C_FLAGS);
   // "nightly" for official builds, "self-build" otherwise - lets analytics exclude
   // local/development builds from population stats.
   json_object_set_string_member(p, "build_channel", DT_BUILD_CHANNEL);

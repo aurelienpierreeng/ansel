@@ -99,8 +99,11 @@ events directly (e.g. `file_opened` broken down by `raw`, or `module_used` by `n
 give you, since they have a fixed schema):
 
 - `app_version` (human version string), `commit` (full git SHA — the cross-build-consistent
-  release id, mirrors Sentry's release), `build_type`, `build_channel` (`nightly` for official
-  builds, `self-build` otherwise — filter on this to exclude local/dev builds from population stats),
+  release id, mirrors Sentry's release), `build_type` (CMake build type: `Debug`/`Release`/`RelWithDebInfo`),
+  `build_cflags` (full C compiler flags baked at configure time — contains `-DNDEBUG` in Release/RelWithDebInfo,
+  absent in Debug; use this to confirm whether `assert()` was active in a crashing binary),
+  `build_channel` (`nightly` for official builds, `self-build` otherwise — filter on this to exclude
+  local/dev builds from population stats),
 - `os` (pretty name), `cpu_cores`, `ram_gb`,
 - `opencl` (bool) and `gpu` (first OpenCL device name),
 - on Linux/BSD: `display_server` (x11/wayland), `desktop_environment`,

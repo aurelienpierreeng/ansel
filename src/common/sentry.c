@@ -482,8 +482,18 @@ static void _sentry_set_context(void)
     sentry_set_context("display", scr);
   }
 
-  // Build / runtime info as searchable extras
-  sentry_set_extra("build_type", sentry_value_new_string(DT_BUILD_TYPE));
+  // Build info as searchable tags so crash events can be filtered/grouped immediately.
+  // build_type is the CMake build type (Debug/Release/RelWithDebInfo); in Debug asserts
+  // are active, in Release/RelWithDebInfo NDEBUG is defined and assert() is compiled out.
+  sentry_set_tag("build_type", DT_BUILD_TYPE);
+#ifdef NDEBUG
+  sentry_set_tag("asserts", "disabled");
+#else
+  sentry_set_tag("asserts", "enabled");
+#endif
+  // Full C compiler flags baked in at configure time (includes -DNDEBUG, -O3, -g, etc.)
+  // so it is unambiguous which compilation mode produced the crashing binary.
+  sentry_set_extra("build_cflags", sentry_value_new_string(DT_BUILD_C_FLAGS));
   sentry_set_tag("opencl", cl_enabled ? "yes" : "no");
 
   // Distribution channel as a searchable tag (also set as the Sentry environment in
