@@ -4184,7 +4184,7 @@ char *dt_exif_xmp_read_string(const int32_t imgid)
   }
   catch(const std::exception &e)
   {
-    std::cerr << "[xmp_read_blob] caught exiv2 exception '" << e << "'\n";
+    std::cerr << "[xmp_read_blob] caught exiv2 exception '" << e.what() << "'\n";
     return NULL;
   }
 }
@@ -4281,7 +4281,7 @@ int dt_exif_xmp_attach_export(const int32_t imgid, const char *filename, void *m
     }
     catch(const std::exception &e)
     {
-      std::cerr << "[xmp_attach] " << input_filename << ": caught exiv2 exception '" << e << "'\n";
+      std::cerr << "[xmp_attach] " << input_filename << ": caught exiv2 exception '" << e.what() << "'\n";
     }
 
     Exiv2::XmpData &xmpData = img->xmpData();
@@ -4463,7 +4463,7 @@ int dt_exif_xmp_attach_export(const int32_t imgid, const char *filename, void *m
     {
       img->writeMetadata();
     }
-    catch(const std::exception &e)
+    catch(Exiv2::AnyError &e)
     {
 #if EXIV2_TEST_VERSION(0,27,0)
       if(e.code() == Exiv2::ErrorCode::kerTooLargeJpegSegment)
@@ -4481,18 +4481,23 @@ int dt_exif_xmp_attach_export(const int32_t imgid, const char *filename, void *m
         }
         catch(const std::exception &e2)
         {
-          std::cerr << "[dt_exif_xmp_attach_export] without history " << filename << ": caught exiv2 exception '" << e2 << "'\n";
+          std::cerr << "[dt_exif_xmp_attach_export] without history " << filename << ": caught exiv2 exception '" << e2.what() << "'\n";
           return -1;
         }
       }
       else
         throw;
     }
+    catch(const std::exception &e)
+    {
+      std::cerr << "[dt_exif_xmp_attach_export] " << filename << ": caught exception '" << e.what() << "'\n";
+      return -1;
+    }
     return 0;
   }
   catch(const std::exception &e)
   {
-    std::cerr << "[dt_exif_xmp_attach_export] " << filename << ": caught exiv2 exception '" << e << "'\n";
+    std::cerr << "[dt_exif_xmp_attach_export] " << filename << ": caught exiv2 exception '" << e.what() << "'\n";
     return -1;
   }
 }
@@ -4606,7 +4611,7 @@ int dt_exif_xmp_write_with_imgpath(const dt_image_t *image, const char *filename
   }
   catch(const std::exception &e)
   {
-    std::cerr << "[dt_exif_xmp_write] " << filename << ": caught exiv2 exception '" << e << "'\n";
+    std::cerr << "[dt_exif_xmp_write] " << filename << ": caught exiv2 exception '" << e.what() << "'\n";
     return -1;
   }
 }
