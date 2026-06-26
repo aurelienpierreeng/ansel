@@ -313,8 +313,7 @@ static int _lib_snapshots_refresh_pipe_image(dt_lib_module_t *self, dt_lib_snaps
   dt_pixel_cache_entry_t *entry = NULL;
   void *data = NULL;
   if(hash == DT_PIXELPIPE_CACHE_HASH_INVALID
-     || !dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, hash, &data, &entry,
-                                     snapshot_pipe.devid, NULL)
+     || !dt_dev_pixelpipe_cache_ref_entry_by_hash(darktable.pixelpipe_cache, hash, &data, &entry)
      || IS_NULL_PTR(data) || IS_NULL_PTR(entry))
   {
     fail_reason = "cache peek failed";
@@ -363,6 +362,7 @@ static int _lib_snapshots_refresh_pipe_image(dt_lib_module_t *self, dt_lib_snaps
   //         d->snapshot_imgid, d->selected, roi.width, roi.height, bw, bh, hash);
 
 cleanup:
+  if(entry) dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, entry);
   if(status != 0)
     SNAP_LOG("[snapshots] refresh failed: reason=%s snapshot_imgid=%d selected=%u frozen_imgid=%d in=%ux%u "
              "pipe_in=%dx%d pipe_out=%dx%d\n",

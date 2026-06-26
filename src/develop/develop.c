@@ -485,11 +485,17 @@ static void dt_dev_resync_mipmap_cache(dt_develop_t *dev, dt_dev_pixelpipe_t *pi
   // so preferred_devid = -1 returns it directly; anything else is simply skipped.
   uint8_t *data = NULL;
   dt_pixel_cache_entry_t *entry = NULL;
-  if(dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, dt_dev_pixelpipe_get_hash(pipe), (void **)&data, &entry, -1, NULL))
+  if(dt_dev_pixelpipe_cache_ref_entry_by_hash(darktable.pixelpipe_cache, dt_dev_pixelpipe_get_hash(pipe), (void **)&data, &entry)
+     && data)
   {
     dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, entry);
     dt_mipmap_cache_swap_at_size(cache, imgid, mip, data, pipe->backbuf.width, pipe->backbuf.height, darktable.color_profiles->display_type);
     dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, entry);
+  }
+  else if(entry)
+  {
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, entry);
   }
 }
 
