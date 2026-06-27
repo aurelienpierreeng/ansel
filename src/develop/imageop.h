@@ -516,6 +516,8 @@ void dt_iop_update_multi_priority(dt_iop_module_t *module, int new_priority);
 gboolean dt_iop_module_has_raster_mask(const dt_iop_module_t *module);
 /** returns TRUE if module needs masks committed to history */
 gboolean dt_iop_module_needs_mask_history(const dt_iop_module_t *module);
+/** returns TRUE if module needs masks committed to history plus each flag is set accordingly */
+gboolean dt_iop_module_needs_mask_history_ext(const dt_iop_module_t *module, gboolean *raster, gboolean *drawn, gboolean *parametric);
 
 /** iterates over the users hash table and checks if a specific mask is being used */
 gboolean dt_iop_is_raster_mask_used(dt_iop_module_t *module, int id);

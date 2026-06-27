@@ -1655,8 +1655,11 @@ gboolean dt_iop_module_has_raster_mask(const dt_iop_module_t *module)
   return mask_mode_raster || has_raster_sink;
 }
 
-gboolean dt_iop_module_needs_mask_history(const dt_iop_module_t *module)
+gboolean dt_iop_module_needs_mask_history_ext(const dt_iop_module_t *module, gboolean *raster, gboolean *drawn, gboolean *parametric)
 {
+  gboolean raster_used = FALSE;
+  gboolean drawn_used = FALSE;
+  gboolean parametric_used = FALSE;
   if(IS_NULL_PTR(module)) return FALSE;
 
   const gboolean supports_blending
@@ -1666,12 +1669,18 @@ gboolean dt_iop_module_needs_mask_history(const dt_iop_module_t *module)
   if(!supports_blending) return internal_masks;
   if(IS_NULL_PTR(module->blend_params)) return internal_masks;
 
-  gboolean raster_used = FALSE;
-  gboolean drawn_used = FALSE;
-  gboolean parametric_used = FALSE;
   dt_develop_blend_get_mask_usage(module, module->blend_params, NULL, &raster_used, &drawn_used, &parametric_used);
 
+  if(!IS_NULL_PTR(raster)) *raster = raster_used;
+  if(!IS_NULL_PTR(drawn)) *drawn = drawn_used;
+  if(!IS_NULL_PTR(parametric)) *parametric = parametric_used;
+
   return raster_used || drawn_used || parametric_used || internal_masks;
+}
+
+gboolean dt_iop_module_needs_mask_history(const dt_iop_module_t *module)
+{
+  return dt_iop_module_needs_mask_history_ext(module, NULL, NULL, NULL);
 }
 
 // make sure that blend_params are in sync with the iop struct

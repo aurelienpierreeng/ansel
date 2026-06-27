@@ -164,21 +164,21 @@ gboolean dt_dev_history_item_update_from_params(dt_develop_t *dev, dt_dev_histor
                                                const gboolean enabled, const void *params, const int32_t params_size,
                                                const dt_develop_blend_params_t *blend_params, GList *forms)
 {
-  if(!hist || IS_NULL_PTR(module)) return FALSE;
+  if(IS_NULL_PTR(hist) || IS_NULL_PTR(module)) return FALSE;
 
-  if(!hist->params)
+  if(IS_NULL_PTR(hist->params))
   {
     hist->params = g_malloc0(module->params_size);
     if(IS_NULL_PTR(hist->params)) return FALSE;
   }
 
-  if(!hist->blend_params)
+  if(IS_NULL_PTR(hist->blend_params))
   {
     hist->blend_params = g_malloc0(sizeof(dt_develop_blend_params_t));
     if(IS_NULL_PTR(hist->blend_params)) return FALSE;
   }
 
-  if(hist->forms)
+  if(!IS_NULL_PTR(hist->forms))
   {
     g_list_free_full(hist->forms, (void (*)(void *))dt_masks_free_form);
     hist->forms = NULL;
@@ -200,7 +200,7 @@ gboolean dt_dev_history_item_update_from_params(dt_develop_t *dev, dt_dev_histor
   const void *src_params = params ? params : module->params;
   const int32_t src_size = params ? params_size : module->params_size;
   const int32_t sz = MIN(module->params_size, src_size);
-  if(!IS_NULL_PTR(src_params) && hist->params && sz > 0) memcpy(hist->params, src_params, sz);
+  if(!IS_NULL_PTR(src_params) && !IS_NULL_PTR(hist->params) && sz > 0) memcpy(hist->params, src_params, sz);
 
   const dt_develop_blend_params_t *src_blend = blend_params ? blend_params : module->blend_params;
   if(src_blend && hist->blend_params) memcpy(hist->blend_params, src_blend, sizeof(dt_develop_blend_params_t));
@@ -315,24 +315,30 @@ int dt_dev_history_item_from_source_history_item(dt_develop_t *dev_dest, dt_deve
   if(dt_masks_copy_used_forms_for_module(dev_dest, dev_src, hist_src->module))
   {
     dt_print(DT_DEBUG_HISTORY | DT_DEBUG_VERBOSE,
-             "[dt_dev_history_item_from_source_history_item] mask copy failed: src=%s multi='%s'\n",
-             hist_src->module->op, hist_src->module->multi_name);
+            "[dt_dev_history_item_from_source_history_item] Forms copy failed: src=%s multi='%s'\n",
+            hist_src->module->op, hist_src->module->multi_name);
     dt_dev_free_history_item(hist);
     return 1;
   }
-  GList *forms_snapshot = NULL;
-  if(dt_iop_module_needs_mask_history(hist_src->module))
-  {
-    forms_snapshot = dt_masks_snapshot_current_forms(dev_dest, FALSE);
-    if(IS_NULL_PTR(forms_snapshot))
-    {
-      dt_print(DT_DEBUG_HISTORY | DT_DEBUG_VERBOSE,
-               "[dt_dev_history_item_from_source_history_item] no destination mask forms to snapshot: "
-               "src=%s multi='%s'\n",
-               hist_src->module->op, hist_src->module->multi_name);
 
-      dt_dev_free_history_item(hist);
-      return 1;
+  gboolean raster_used = FALSE;
+  gboolean drawn_used = FALSE;
+  gboolean parametric_used = FALSE;
+  GList *forms_snapshot = NULL;
+  if(dt_iop_module_needs_mask_history_ext(hist_src->module, &raster_used, &drawn_used, &parametric_used))
+  {
+    if(drawn_used)
+    {
+      forms_snapshot = dt_masks_snapshot_current_forms(dev_dest, FALSE);
+      if(IS_NULL_PTR(forms_snapshot))
+      {
+        dt_print(DT_DEBUG_HISTORY | DT_DEBUG_VERBOSE,
+                "[dt_dev_history_item_from_source_history_item] %s '%s' uses drawn mask but there is no destination mask forms to snapshot\n",
+                hist_src->module->op, hist_src->module->multi_name);
+
+        dt_dev_free_history_item(hist);
+        return 1;
+      }
     }
   }
 
