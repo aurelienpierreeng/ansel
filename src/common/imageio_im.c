@@ -12,17 +12,17 @@
     Copyright (C) 2020-2021 Pascal Obry.
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2023 Alynx Zhou.
-    
+
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
     (at your option) any later version.
-    
+
     darktable is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
-    
+
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
@@ -34,6 +34,7 @@
 #include "develop/develop.h"
 #include "common/exif.h"
 #include "common/colorspaces.h"
+#include "common/imageio_magick_abort_guard.h"
 #include "control/conf.h"
 
 #include <memory.h>
@@ -78,7 +79,13 @@ dt_imageio_retval_t dt_imageio_open_im(dt_image_t *img, const char *filename, dt
   if(!img->exif_inited) (void)dt_exif_read(img, filename);
 
   image = NewMagickWand();
-  if (IS_NULL_PTR(image)) goto error;
+  if (IS_NULL_PTR(image)) return DT_IMAGEIO_FILE_CORRUPTED;
+
+  // ImageMagick calls assert() -> abort() on some malformed files instead of
+  // reporting through its normal error status. Recover instead of crashing
+  // the whole app; on recovery, `image` is NOT touched again (see
+  // imageio_magick_abort_guard.h) - we leak the wand and bail out directly.
+  DT_MAGICK_ABORT_GUARD("ImageMagick_open", filename, return DT_IMAGEIO_FILE_CORRUPTED);
 
   ret = MagickReadImage(image, filename);
   if (ret != MagickTrue) {
@@ -116,6 +123,7 @@ dt_imageio_retval_t dt_imageio_open_im(dt_image_t *img, const char *filename, dt
 
   if(IS_NULL_PTR(mbuf))
   {
+    DT_MAGICK_ABORT_GUARD_DISARM();
     DestroyMagickWand(image);
     return DT_IMAGEIO_OK;
   }
@@ -149,10 +157,12 @@ dt_imageio_retval_t dt_imageio_open_im(dt_image_t *img, const char *filename, dt
     MagickRelinquishMemory(profile_data);
   }
 
+  DT_MAGICK_ABORT_GUARD_DISARM();
   DestroyMagickWand(image);
   return DT_IMAGEIO_OK;
 
 error:
+  DT_MAGICK_ABORT_GUARD_DISARM();
   DestroyMagickWand(image);
   return err;
 }
