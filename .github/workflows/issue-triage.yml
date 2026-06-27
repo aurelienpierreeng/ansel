@@ -218,8 +218,6 @@ jobs:
                 else
                   echo "::warning::no open milestone found; skipped milestone assignment"
                 fi
-              else
-                gh issue edit "$ISSUE" --repo "$REPO" --add-label "unclear" || true
               fi
               ;;
 
