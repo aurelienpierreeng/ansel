@@ -38,8 +38,21 @@
 #include <inttypes.h>
 #include <magick/api.h>
 #include <memory.h>
+#include <setjmp.h>
+#include <signal.h>
 #include <stdio.h>
 #include <strings.h>
+
+// Jump buffer and handler used to recover from SIGABRT raised by
+// GraphicsMagick internal assertion failures (e.g. __assert_rtn -> abort).
+// Without this guard the whole application is killed.
+static sigjmp_buf _gm_sigabrt_jmp;
+
+static void _gm_sigabrt_handler(int sig)
+{
+  (void)sig;
+  siglongjmp(_gm_sigabrt_jmp, 1);
+}
 
 
 // we only support images with certain filename extensions via GraphicsMagick;
@@ -79,6 +92,27 @@ dt_imageio_retval_t dt_imageio_open_gm(dt_image_t *img, const char *filename, dt
   image_info = CloneImageInfo((ImageInfo *)NULL);
 
   g_strlcpy(image_info->filename, filename, sizeof(image_info->filename));
+
+  // Install a SIGABRT guard so that an assertion failure inside
+  // GraphicsMagick (which calls abort()) does not kill the whole app.
+  struct sigaction sa_new, sa_old;
+  memset(&sa_new, 0, sizeof(sa_new));
+  sa_new.sa_handler = _gm_sigabrt_handler;
+  sigemptyset(&sa_new.sa_mask);
+  sa_new.sa_flags = 0;
+  sigaction(SIGABRT, &sa_new, &sa_old);
+
+  if(sigsetjmp(_gm_sigabrt_jmp, 1) != 0)
+  {
+    // We jumped here from the SIGABRT handler – GraphicsMagick aborted.
+    fprintf(stderr, "[GraphicsMagick_open] caught SIGABRT from library while loading `%s'\n",
+            img->filename);
+    sigaction(SIGABRT, &sa_old, NULL);
+    if(image) DestroyImage(image);
+    if(image_info) DestroyImageInfo(image_info);
+    DestroyExceptionInfo(&exception);
+    return DT_IMAGEIO_FILE_CORRUPTED;
+  }
 
   image = ReadImage(image_info, &exception);
   if(exception.severity != UndefinedException) CatchException(&exception);
@@ -121,6 +155,7 @@ dt_imageio_retval_t dt_imageio_open_gm(dt_image_t *img, const char *filename, dt
     if(image) DestroyImage(image);
     if(image_info) DestroyImageInfo(image_info);
     DestroyExceptionInfo(&exception);
+    sigaction(SIGABRT, &sa_old, NULL);
     return DT_IMAGEIO_OK;
   }
 
@@ -157,12 +192,14 @@ dt_imageio_retval_t dt_imageio_open_gm(dt_image_t *img, const char *filename, dt
   if(image) DestroyImage(image);
   if(image_info) DestroyImageInfo(image_info);
   DestroyExceptionInfo(&exception);
+  sigaction(SIGABRT, &sa_old, NULL);
   return DT_IMAGEIO_OK;
 
 error:
   if(image) DestroyImage(image);
   if(image_info) DestroyImageInfo(image_info);
   DestroyExceptionInfo(&exception);
+  sigaction(SIGABRT, &sa_old, NULL);
   return err;
 }
 #endif

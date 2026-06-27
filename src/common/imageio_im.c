@@ -39,10 +39,22 @@
 #include <memory.h>
 #include <stdio.h>
 #include <inttypes.h>
+#include <setjmp.h>
+#include <signal.h>
 #include <strings.h>
 #include <assert.h>
 
 #include <MagickWand/MagickWand.h>
+
+// Jump buffer and handler used to recover from SIGABRT raised by
+// ImageMagick internal assertion failures (e.g. __assert_rtn -> abort).
+static sigjmp_buf _im_sigabrt_jmp;
+
+static void _im_sigabrt_handler(int sig)
+{
+  (void)sig;
+  siglongjmp(_im_sigabrt_jmp, 1);
+}
 
 
 /* we only support images with certain filename extensions via ImageMagick,
@@ -78,7 +90,26 @@ dt_imageio_retval_t dt_imageio_open_im(dt_image_t *img, const char *filename, dt
   if(!img->exif_inited) (void)dt_exif_read(img, filename);
 
   image = NewMagickWand();
-  if (IS_NULL_PTR(image)) goto error;
+  if (IS_NULL_PTR(image)) return DT_IMAGEIO_FILE_CORRUPTED;
+
+  // Install a SIGABRT guard so that an assertion failure inside
+  // ImageMagick (which calls abort()) does not kill the whole app.
+  struct sigaction sa_new, sa_old;
+  memset(&sa_new, 0, sizeof(sa_new));
+  sa_new.sa_handler = _im_sigabrt_handler;
+  sigemptyset(&sa_new.sa_mask);
+  sa_new.sa_flags = 0;
+  sigaction(SIGABRT, &sa_new, &sa_old);
+
+  if(sigsetjmp(_im_sigabrt_jmp, 1) != 0)
+  {
+    // We jumped here from the SIGABRT handler – ImageMagick aborted.
+    fprintf(stderr, "[ImageMagick_open] caught SIGABRT from library while loading `%s'\n",
+            img->filename);
+    sigaction(SIGABRT, &sa_old, NULL);
+    if(image) DestroyMagickWand(image);
+    return DT_IMAGEIO_FILE_CORRUPTED;
+  }
 
   ret = MagickReadImage(image, filename);
   if (ret != MagickTrue) {
@@ -117,6 +148,7 @@ dt_imageio_retval_t dt_imageio_open_im(dt_image_t *img, const char *filename, dt
   if(IS_NULL_PTR(mbuf))
   {
     DestroyMagickWand(image);
+    sigaction(SIGABRT, &sa_old, NULL);
     return DT_IMAGEIO_OK;
   }
 
@@ -150,10 +182,12 @@ dt_imageio_retval_t dt_imageio_open_im(dt_image_t *img, const char *filename, dt
   }
 
   DestroyMagickWand(image);
+  sigaction(SIGABRT, &sa_old, NULL);
   return DT_IMAGEIO_OK;
 
 error:
   DestroyMagickWand(image);
+  sigaction(SIGABRT, &sa_old, NULL);
   return err;
 }
 #endif
