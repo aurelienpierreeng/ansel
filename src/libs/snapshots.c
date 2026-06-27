@@ -51,6 +51,7 @@
 #include "develop/pixelpipe_cache.h"
 #include "develop/pixelpipe_hb.h"
 
+#include "gui/color_picker_proxy.h"
 #include "gui/gtk.h"
 #include "gui/draw.h"
 #include "libs/lib.h"
@@ -581,7 +582,9 @@ void gui_post_expose(dt_lib_module_t *self, cairo_t *cri, int32_t width, int32_t
 int button_released(struct dt_lib_module_t *self, double x, double y, int which, uint32_t state)
 {
   dt_lib_snapshots_t *d = (dt_lib_snapshots_t *)self->data;
-  if(d->snapshot_image && which == 1)
+  const gboolean visible_picker = dt_iop_color_picker_is_visible(darktable.develop);
+
+  if(!visible_picker && d->snapshot_image && which == 1)
   {
     if(d->dragging)
     {
@@ -604,7 +607,9 @@ int button_pressed(struct dt_lib_module_t *self, double x, double y, double pres
 
   dt_lib_snapshots_t *d = (dt_lib_snapshots_t *)self->data;
 
-  if(d->snapshot_image)
+  const gboolean visible_picker = dt_iop_color_picker_is_visible(darktable.develop);
+  
+  if(!visible_picker && d->snapshot_image)
   {
     if(d->on_going) return 1;
     if(d->vp_width <= 0.0 || d->vp_height <= 0.0) return 0;
@@ -647,7 +652,9 @@ int mouse_moved(dt_lib_module_t *self, double x, double y, double pressure, int 
 {
   dt_lib_snapshots_t *d = (dt_lib_snapshots_t *)self->data;
 
-  if(d->snapshot_image)
+  const gboolean visible_picker = dt_iop_color_picker_is_visible(darktable.develop);
+
+  if(!visible_picker && d->snapshot_image)
   {
     if(d->vp_width <= 0.0 || d->vp_height <= 0.0) return 0;
     const double xp = CLAMP((x - d->vp_x) / d->vp_width, 0.0, 1.0);
