@@ -318,56 +318,51 @@ void modify_roi_out(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_
                     const dt_iop_roi_t *roi_in)
 {
   *roi_out = *roi_in;
-  dt_iop_borders_data_t *d = (dt_iop_borders_data_t *)piece->data;
-
+  const dt_iop_borders_data_t *d = (dt_iop_borders_data_t *)piece->data;
   const float size = fabsf(d->size);
-  if(size == 0) return;
+  if(size == 0.0f || size >= 1.0f) return;
 
   if(d->aspect == DT_IOP_BORDERS_ASPECT_CONSTANT_VALUE)
   {
-    // for a constant border be sure to base the computation on the larger border, failing that the border
-    // will have a difference size depending on the orientation.
-
+    // base computation on the larger border to keep constant size regardless of orientation
     if(roi_in->width > roi_in->height || !d->max_border_size)
     {
-      // this means: relative to width and constant for height as well:
-      roi_out->width = (float)roi_in->width / (1.0f - size);
+      // relative to width, constant for height as well
+      roi_out->width  = (float)roi_in->width / (1.0f - size);
       roi_out->height = roi_in->height + roi_out->width - roi_in->width;
     }
     else
     {
-      // this means: relative to height and constant for width as well:
+      // relative to height, constant for width as well
       roi_out->height = (float)roi_in->height / (1.0f - size);
-      roi_out->width = roi_in->width + roi_out->height - roi_in->height;
+      roi_out->width  = roi_in->width + roi_out->height - roi_in->height;
     }
   }
   else
   {
-    float image_aspect = roi_in->width / (float)(roi_in->height);
+    const float image_aspect = roi_in->width / (float)roi_in->height;
     float aspect = (d->aspect == DT_IOP_BORDERS_ASPECT_IMAGE_VALUE) ? image_aspect : d->aspect;
+    if(aspect <= 0.0f) return;
 
     if(d->aspect_orient == DT_IOP_BORDERS_ASPECT_ORIENTATION_AUTO)
-      aspect = ((image_aspect < 1 && aspect > 1) || (image_aspect > 1 && aspect < 1)) ? 1 / aspect : aspect;
+      aspect = ((image_aspect < 1.0f) != (aspect < 1.0f)) ? 1.0f / aspect : aspect;
     else if(d->aspect_orient == DT_IOP_BORDERS_ASPECT_ORIENTATION_LANDSCAPE)
-      aspect = (aspect < 1) ? 1 / aspect : aspect;
+      aspect = (aspect < 1.0f) ? 1.0f / aspect : aspect;
     else if(d->aspect_orient == DT_IOP_BORDERS_ASPECT_ORIENTATION_PORTRAIT)
-      aspect = (aspect > 1) ? 1 / aspect : aspect;
+      aspect = (aspect > 1.0f) ? 1.0f / aspect : aspect;
 
-    // min width: constant ratio based on size:
-    roi_out->width = (float)roi_in->width / (1.0f - size);
-    // corresponding height: determined by aspect ratio:
+    const float inv_size = 1.0f / (1.0f - size);
+    roi_out->width  = (float)roi_in->width  * inv_size;
     roi_out->height = (float)roi_out->width / aspect;
-    // insane settings used?
-    if(roi_out->height < (float)roi_in->height / (1.0f - size))
+
+    // if height constraint is tighter, use it as the driver axis instead
+    const float min_height = (float)roi_in->height * inv_size;
+    if(roi_out->height < min_height)
     {
-      roi_out->height = (float)roi_in->height / (1.0f - size);
-      roi_out->width = (float)roi_out->height * aspect;
+      roi_out->height = min_height;
+      roi_out->width  = roi_out->height * aspect;
     }
   }
-
-  // sanity check.
-  roi_out->width = CLAMP(roi_out->width, 1, 3 * roi_in->width);
-  roi_out->height = CLAMP(roi_out->height, 1, 3 * roi_in->height);
 }
 
 // 2nd pass: which roi would this operation need as input to fill the given output region?
