@@ -385,9 +385,9 @@ int32_t _import_image(const GList *img, dt_control_import_t *data, const int ind
 
 void _refresh_progress_counter(dt_job_t *job, const int elements, const int index)
 {
-  gchar message[32] = { 0 };
+  gchar message[128] = { 0 };
   double fraction = (double)index / (double)elements;
-  snprintf(message, sizeof(message), ngettext("importing %i/%i image", "importing %i/%i images", index), index, elements);
+  snprintf(message, sizeof(message), ngettext("Importing %i/%i image", "Importing %i/%i images", index), index, elements);
   dt_control_job_set_progress_message(job, message);
   dt_control_job_set_progress(job, fraction);
   g_usleep(100);
