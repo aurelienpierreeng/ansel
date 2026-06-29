@@ -1775,7 +1775,7 @@ int dt_history_merge(dt_develop_t *dev_dest, dt_develop_t *dev_src, const int32_
   // net, we only replay when that order maps cleanly onto this image; otherwise we leave the freshly solved
   // order and force the interactive report below so the user can review and reorder manually.
   gboolean use_cached_order = FALSE;
-  if(IS_NULL_PTR(batch) || IS_NULL_PTR(batch->order_ids))
+  if(!IS_NULL_PTR(batch) && !IS_NULL_PTR(batch->order_ids))
   {
     use_cached_order = _hm_cached_order_applicable(dev_dest, batch->order_ids);
     if(use_cached_order)
