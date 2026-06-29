@@ -94,7 +94,7 @@ static void rcd_ppg_border(float *const out, const float *const in, const int wi
   const int border = margin + 3;
   // write approximatad 3-pixel border region to out
   float sum[8];
-  __OMP_PARALLEL_FOR__(collapse(2))
+  __OMP_PARALLEL_FOR__()
   for(int j = 0; j < height; j++)
   {
     for(int i = 0; i < width; i++)
