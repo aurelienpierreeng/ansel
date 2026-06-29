@@ -148,7 +148,7 @@ typedef struct coords_t
 }coords_t;
 
 #define DARKROOM_EDGE_PAN_INTERVAL_MS 64
-#define DARKROOM_EDGE_PAN_MARGIN_PX DT_PIXEL_APPLY_DPI(100)
+#define DARKROOM_EDGE_PAN_MARGIN_PX DT_PIXEL_APPLY_DPI(50)
 #define DARKROOM_EDGE_PAN_SPEED_PX_PER_S 360.0f
 
 static void _update_softproof_gamut_checking(dt_develop_t *d);
@@ -2654,7 +2654,8 @@ void leave(dt_view_t *self)
   if(!IS_NULL_PTR(_autoset_manager) && !IS_NULL_PTR(_autoset_manager->input_wait))
     dt_dev_pixelpipe_cache_wait_cleanup((dt_dev_pixelpipe_cache_wait_t *)_autoset_manager->input_wait,
                                         "darkroom-leave-autoset");
-  darktable.gui->mouse.is_dragging = FALSE;
+  dt_control_mouse_is_dragging(FALSE);
+  dt_control_mouse_is_painting(FALSE);
   _darkroom_center_pan_drag = FALSE;
   _reset_edge_pan();
   dt_gui_throttle_cancel(dev);
@@ -2815,7 +2816,9 @@ void mouse_leave(dt_view_t *self)
   dt_develop_t *dev = (dt_develop_t *)self->data;
   dt_control_t *ctl = darktable.control;
   dt_gui_gtk_t *gui = darktable.gui;
-  gui->mouse.is_dragging = FALSE;
+  dt_control_mouse_is_dragging(FALSE);
+  dt_control_mouse_is_painting(FALSE);
+
   _darkroom_center_pan_drag = FALSE;
 
   if(gui->pan_edge.timeout_source
@@ -2938,9 +2941,10 @@ static gboolean _darkroom_edge_pan_enable_check(dt_develop_t *dev)
   if(IS_NULL_PTR(gui) || IS_NULL_PTR(dev)) return FALSE;
 
   dt_masks_form_gui_t *form_gui = dev->form_gui;
-  const gboolean creating_shape_mode = !IS_NULL_PTR(form_gui) && form_gui->creation;
+  const gboolean mouse_action = gui->mouse.is_dragging && !gui->mouse.is_painting;
+  const gboolean creating_shape_mode = !IS_NULL_PTR(form_gui) && form_gui->creation && !gui->mouse.is_painting;
 
-  return gui->mouse.is_dragging || creating_shape_mode;
+  return  creating_shape_mode || mouse_action;
 }
 
 /**
@@ -3199,9 +3203,6 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
     handled = TRUE;
   }
 
-  if(handled && ctl->button_down && ctl->button_down_which == 1)
-    gui->mouse.is_dragging = TRUE;
-
   darkroom_edge_pan_test_t edge = { 0 };
   _darkroom_edge_pan_update_state(self, x, y, self->width, self->height, &edge);
 
@@ -3312,7 +3313,9 @@ int button_released(dt_view_t *self, double x, double y, int which, uint32_t sta
   if(which == 1)
   {
     _darkroom_center_pan_drag = FALSE;
-    darktable.gui->mouse.is_dragging = FALSE;
+    dt_control_mouse_is_dragging(FALSE);
+    dt_control_mouse_is_painting(FALSE);
+
     _reset_edge_pan();
   }
 
@@ -3361,7 +3364,9 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
   if(which == 1)
   {
     _darkroom_center_pan_drag = FALSE;
-    darktable.gui->mouse.is_dragging = FALSE;
+    dt_control_mouse_is_dragging(FALSE);
+    dt_control_mouse_is_painting(FALSE);
+
   }
 
   if(dt_iop_color_picker_is_visible(dev))
@@ -3438,7 +3443,7 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
           dt_lib_colorpicker_set_point(darktable.lib, point);
         }
       }
-      darktable.gui->mouse.is_dragging = TRUE;
+      dt_control_mouse_is_dragging(TRUE);
       return 1;
     }
 
@@ -3497,8 +3502,6 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
   if(dt_masks_get_visible_form(dev)
      && dt_masks_events_button_pressed(dev->gui_module, x, y, pressure, which, type, state))
   {
-    if(which == 1)
-      darktable.gui->mouse.is_dragging = TRUE;
     if(!darktable.develop->form_gui->creation)
       dt_gui_throttle_queue(dev, _delayed_history_commit, dev);
     return 1;
@@ -3507,8 +3510,6 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
   if(dev->gui_module && dev->gui_module->enabled && dev->gui_module->button_pressed
      && dev->gui_module->button_pressed(dev->gui_module, x, y, pressure, which, type, state))
   {
-    if(which == 1)
-      darktable.gui->mouse.is_dragging = TRUE;
     return 1;
   }
 

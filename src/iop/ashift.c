@@ -4494,6 +4494,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
       || g->current_structure_method == ASHIFT_METHOD_LINES)
      && g->draw_near_point >= 0)
   {
+    dt_control_mouse_is_dragging(TRUE);
     const int line = g->draw_near_point / 2;
     if(IS_NULL_PTR(g->lines) || line >= g->lines_count) return FALSE;
 
@@ -4512,7 +4513,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
   if(dt_modifier_is(state, GDK_SHIFT_MASK))
   {
     if(IS_NULL_PTR(g->lines) || IS_NULL_PTR(g->points) || IS_NULL_PTR(g->points_idx)) return FALSE;
-
+    dt_control_mouse_is_dragging(TRUE);
     g->lastx = pzx;
     g->lasty = pzy;
 
@@ -4566,6 +4567,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
         g->draw_line_move = n;
         g->draw_pointmove_x = pts[0];
         g->draw_pointmove_y = pts[1];
+        dt_control_mouse_is_dragging(TRUE);
         return TRUE;
       }
     }
@@ -4649,6 +4651,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
 
   if(!handled && g->current_structure_method == ASHIFT_METHOD_LINES && which == 1)
   {
+    dt_control_mouse_is_dragging(TRUE);
     // start to draw a manual line
     g->draw_point_move = TRUE;
     g->lastx = x;

@@ -215,6 +215,7 @@ typedef struct dt_gui_gtk_t
     // Mouse hit-test radius coordinates, clamped for usable overlay selection.
     float effect_radius_clamped;
     gboolean is_dragging;
+    gboolean is_painting;
   } mouse;
 
   int icon_size; // size of top panel icons

@@ -420,6 +420,16 @@ void dt_control_set_cursor_visible_EXT(gboolean visible, const char *file, int l
   darktable.control->cursor.hide = !visible;
 }
 
+void dt_control_mouse_is_dragging(gboolean state)
+{
+  darktable.gui->mouse.is_dragging = state;
+}
+
+void dt_control_mouse_is_painting(gboolean state)
+{
+  darktable.gui->mouse.is_painting = state;
+}
+
 int dt_control_running()
 {
   // FIXME: when shutdown, run_mutex is not inited anymore!

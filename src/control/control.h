@@ -148,6 +148,10 @@ void dt_control_set_cursor_visible_EXT(gboolean visible, const char *file, int l
 #define dt_control_set_cursor_visible(visible) \
   dt_control_set_cursor_visible_EXT((visible), __FILE__, __LINE__)
 
+void dt_control_mouse_is_dragging(gboolean state);
+void dt_control_mouse_is_painting(gboolean state);
+
+
 void dt_control_write_sidecar_files();
 void dt_control_save_xmp(const int32_t imgid);
 void dt_control_save_xmps(const GList *imgids, const gboolean check_history);

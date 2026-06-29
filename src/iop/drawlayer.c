@@ -3853,6 +3853,7 @@ int button_pressed(dt_iop_module_t *self, double x, double y, double pressure, i
     return 0;
   if(!dispatch.raw_input_ok)
     dt_control_log(_("failed to queue live drawing stroke"));
+  dt_control_mouse_is_painting(TRUE);
   dt_control_queue_redraw_center();
   return 1;
 }
