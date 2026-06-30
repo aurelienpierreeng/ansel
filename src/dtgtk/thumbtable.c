@@ -1612,13 +1612,17 @@ static void _thumbtable_drag_set_icon(dt_thumbtable_t *table, GdkDragContext *co
   cairo_surface_t *surface = NULL;
   int hotspot_x = 0;
   int hotspot_y = 0;
+  int width = 0;
+  int height = 0;
 
   dt_pthread_mutex_lock(&thumb->lock);
   if(thumb->img_surf && cairo_surface_get_reference_count(thumb->img_surf) > 0)
   {
     surface = cairo_surface_reference(thumb->img_surf);
-    hotspot_x = thumb->img_width / 2;
-    hotspot_y = thumb->img_height / 2;
+    width = thumb->img_width;
+    height = thumb->img_height;
+    hotspot_x = width / 2;
+    hotspot_y = height / 2;
   }
   dt_pthread_mutex_unlock(&thumb->lock);
 
@@ -1626,6 +1630,12 @@ static void _thumbtable_drag_set_icon(dt_thumbtable_t *table, GdkDragContext *co
 
   GtkWidget *image = gtk_image_new_from_surface(surface);
   cairo_surface_destroy(surface);
+  // thumb->img_width/img_height are already in logical (CSS) pixels, but GtkImage sizes itself
+  // from the surface's raw physical pixel count, ignoring its device scale: on HiDPI screens
+  // (PPD > 1) that makes the drag icon balloon to PPD× the intended size. Pin the widget to the
+  // correct logical size explicitly; the surface still paints crisply since cairo itself honors
+  // the device scale when compositing.
+  gtk_widget_set_size_request(image, width, height);
 
   gtk_widget_show(image);
   gtk_drag_set_icon_widget(context, image, hotspot_x, hotspot_y);
