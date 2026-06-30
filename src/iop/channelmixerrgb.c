@@ -3933,7 +3933,7 @@ void reload_defaults(dt_iop_module_t *module)
       d->illuminant = DT_ILLUMINANT_CAMERA;
 
     check_if_close_to_daylight(d->x, d->y, &(d->temperature), &(d->illuminant), &(d->adaptation));
-    module->workflow_enabled = TRUE;
+    module->workflow_enabled = dt_image_needs_rawprepare(img);
   }
   else
   {

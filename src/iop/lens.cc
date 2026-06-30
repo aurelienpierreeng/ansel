@@ -1459,7 +1459,7 @@ void reload_defaults(dt_iop_module_t *module)
 
       d->crop = cam[0]->CropFactor;
       d->scale = get_autoscale(module, d, cam[0]);
-      module->workflow_enabled = TRUE;
+      module->workflow_enabled = dt_image_needs_rawprepare(img);
       lf_free(cam);
     }
   }
