@@ -1628,6 +1628,15 @@ treeview *:selected:not(check) {
   background-color: alpha(@bauhaus_value, 0.5);
 }
 
+/* Drag-and-drop target row (collect.c folder/tag rows, set via gtk_tree_view_set_drag_dest_row).
+ * GtkTreeView paints the drop-into highlight by calling gtk_render_frame() on the treeview.view
+ * node in the GTK_STATE_FLAG_DROP_ACTIVE state -- it draws a BORDER (not a background), so this
+ * must style the border, overriding the global `treeview { border: none }` reset above. Mirrors
+ * Adwaita's `treeview.view:drop(active)`. */
+treeview.view:drop(active) {
+  border: 2px solid @bauhaus_value;
+}
+
 /* Inactive/Disabled Toggle Overrides */
 .dt_iop_enable_button:disabled,
 .dt_iop_enable_button.dt_iop_enable_forced_off {

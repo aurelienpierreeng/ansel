@@ -207,6 +207,10 @@ typedef struct dt_lib_collect_t
 
   GtkTreeView *view;
   int view_rule;
+  // GTK delivers the button-release that ends a drag-and-drop onto a row as a normal click
+  // too, which row-activated (activate-on-single-click) would otherwise turn into a new/replaced
+  // collection filter rule on top of the tag/folder just dropped on (#905) -- ignore it while set.
+  gboolean suppress_row_activated;
 
   GtkTreeModel *treefilter;
   GtkTreeModel *listfilter;
@@ -263,6 +267,7 @@ static void combo_changed(GtkWidget *combo, dt_lib_collect_rule_t *dr);
 static void collection_updated(gpointer instance, dt_collection_change_t query_change,
                                dt_collection_properties_t changed_property, gpointer imgs, int next,
                                gpointer self);
+static void tag_changed(gpointer instance, gpointer self);
 static void row_activated(GtkTreeView *view, GtkTreePath *path, GdkEventButton *event, dt_lib_collect_t *d);
 static void update_view(dt_lib_collect_rule_t *dr);
 static void _populate_collect_combo(GtkWidget *w);
@@ -2093,8 +2098,19 @@ static gboolean _drop_attach_tag(dt_lib_collect_t *d, const char *tagpath, GList
   if(!tagid) return FALSE;
   dt_tag_attach_images(tagid, imgs, TRUE);
   dt_image_synch_xmp(-1);
+
+  // DAM use case (#905): dragging images onto a tag is a pure metadata write and must NOT
+  // re-filter the current collection -- the dropped images stay put so the user can keep
+  // tagging from the same view. Our own tag_changed() would otherwise re-run the collection
+  // query whenever the active rule collects by tag (turning the view into "all images carrying
+  // this tag", i.e. the `%`/mixed-view bug), so block it for the duration of the broadcast.
+  // Other modules (tagging, metadata) still receive DT_SIGNAL_TAG_CHANGED and refresh.
+  dt_lib_module_t *self = _self();
+  dt_control_signal_block_by_func(darktable.signals, G_CALLBACK(tag_changed), self);
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_TAG_CHANGED);
-  _force_refresh(d);
+  dt_control_signal_unblock_by_func(darktable.signals, G_CALLBACK(tag_changed), self);
+
+  _force_refresh(d); // refresh the tag counts in the treeview, without touching the collection
   return TRUE;
 }
 
@@ -2129,12 +2145,53 @@ static gboolean _do_drop(dt_lib_collect_t *d, GtkTreeView *tree, gint x, gint y,
   return ok;
 }
 
+static gboolean _clear_suppress_row_activated(gpointer d)
+{
+  ((dt_lib_collect_t *)d)->suppress_row_activated = FALSE;
+  return FALSE; // one-shot
+}
+
+// Highlight the row under the pointer as the drop target via GtkTreeView's native drag-dest
+// mechanism: gtk_tree_view_set_drag_dest_row() flags the row with the GTK_STATE_FLAG_DROP_ACTIVE
+// state, which the theme styles through `treeview.view:drop(active)` (see ansel.css). Restricted
+// to folder/tag rows since those are the only valid drop targets (_do_drop).
+static gboolean _view_drag_motion(GtkWidget *widget, GdkDragContext *context, gint x, gint y, guint time,
+                                  dt_lib_collect_t *d)
+{
+  GtkTreeView *tree = GTK_TREE_VIEW(widget);
+  GtkTreePath *path = NULL;
+  if((item_is_folder(d->view_rule) || item_is_tag(d->view_rule))
+     && gtk_tree_view_get_path_at_pos(tree, x, y, &path, NULL, NULL, NULL))
+  {
+    gtk_tree_view_set_drag_dest_row(tree, path, GTK_TREE_VIEW_DROP_INTO_OR_BEFORE);
+    gtk_tree_path_free(path);
+    gdk_drag_status(context, GDK_ACTION_MOVE, time);
+  }
+  else
+  {
+    gtk_tree_view_set_drag_dest_row(tree, NULL, 0);
+    gdk_drag_status(context, 0, time);
+  }
+  return TRUE;
+}
+
+static void _view_drag_leave(GtkWidget *widget, GdkDragContext *context, guint time, dt_lib_collect_t *d)
+{
+  gtk_tree_view_set_drag_dest_row(GTK_TREE_VIEW(widget), NULL, 0);
+}
+
 static void _view_drag_data_received(GtkWidget *widget, GdkDragContext *context, gint x, gint y,
                                      GtkSelectionData *selection_data, guint target_type, guint time,
                                      dt_lib_collect_t *d)
 {
   GtkTreeView *tree = GTK_TREE_VIEW(widget);
   g_signal_stop_emission_by_name(tree, "drag-data-received"); // bypass GtkTreeView's own DnD
+  gtk_tree_view_set_drag_dest_row(tree, NULL, 0); // clear the drop-target highlight
+  // the button-release ending the drag still reaches the treeview as an ordinary click; with
+  // activate-on-single-click that would otherwise add/replace a collection filter rule for the
+  // row the images were just dropped on (#905). Cleared on idle, after that synthetic click.
+  d->suppress_row_activated = TRUE;
+  g_idle_add(_clear_suppress_row_activated, d);
   const gboolean success = (target_type == DND_TARGET_IMGID && !IS_NULL_PTR(selection_data))
                            && _do_drop(d, tree, x, y, selection_data);
   gtk_drag_finish(context, success, FALSE, time);
@@ -2178,6 +2235,8 @@ static gboolean _view_popup_menu(GtkWidget *treeview, dt_lib_collect_t *d)
 
 static void _view_row_activated(GtkTreeView *view, GtkTreePath *path, GtkTreeViewColumn *col, dt_lib_collect_t *d)
 {
+  if(d->suppress_row_activated) return; // synthetic click from a drag-and-drop release (#905)
+
   GdkEvent *ev = gtk_get_current_event(); // carries ctrl/shift state for tag hierarchy clicks
   // only a button event has ->state at the layout row_activated() expects; for key activation
   // (Enter) pass NULL so we fall back to the default (plain-click) behaviour.
@@ -3055,9 +3114,13 @@ void gui_init(dt_lib_module_t *self)
   g_signal_connect(G_OBJECT(view), "row-expanded", G_CALLBACK(_view_row_expanded), d);
 
   // accept images dragged from the lighttable thumbtable: drop on a folder row to move the
-  // files there, on a tag row to attach the tag (handled in _view_drag_data_received)
-  gtk_drag_dest_set(GTK_WIDGET(view), GTK_DEST_DEFAULT_ALL, target_list_internal, n_targets_internal,
+  // files there, on a tag row to attach the tag (handled in _view_drag_data_received). Motion
+  // and highlighting are driven manually (_view_drag_motion/_view_drag_leave) so only the row
+  // under the pointer gets the native drop highlight, not the whole widget.
+  gtk_drag_dest_set(GTK_WIDGET(view), GTK_DEST_DEFAULT_DROP, target_list_internal, n_targets_internal,
                     GDK_ACTION_MOVE);
+  g_signal_connect(G_OBJECT(view), "drag-motion", G_CALLBACK(_view_drag_motion), d);
+  g_signal_connect(G_OBJECT(view), "drag-leave", G_CALLBACK(_view_drag_leave), d);
   g_signal_connect(G_OBJECT(view), "drag-data-received", G_CALLBACK(_view_drag_data_received), d);
 
   GtkTreeViewColumn *col = gtk_tree_view_column_new();
