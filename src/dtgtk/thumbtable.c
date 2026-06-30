@@ -1605,7 +1605,7 @@ static void _thumbtable_drag_set_icon(dt_thumbtable_t *table, GdkDragContext *co
 {
   if(IS_NULL_PTR(table) || !table->drag_list) return;
 
-  const int32_t imgid = GPOINTER_TO_INT(table->drag_list->data);
+  const int32_t imgid = dt_control_get_mouse_over_id();
   dt_thumbnail_t *thumb = _find_thumb_by_imgid(table, imgid);
   if(IS_NULL_PTR(thumb)) return;
 
@@ -1646,11 +1646,16 @@ static void _event_dnd_begin(GtkWidget *widget, GdkDragContext *context, gpointe
   dt_thumbtable_t *table = (dt_thumbtable_t *)user_data;
   const int32_t imgid = dt_control_get_mouse_over_id();
 
-  if(table->mode == DT_THUMBTABLE_MODE_FILMSTRIP && imgid > 0)
+  if(table->mode == DT_THUMBTABLE_MODE_FILMSTRIP && imgid > UNKNOWN_IMAGE)
   {
     /* Views that need drags to commit the hovered image must do it before
      * dt_act_on_get_images() snapshots the payload. */
     DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_VIEWMANAGER_FILMSTRIP_DRAG_BEGIN, imgid);
+  }
+  else if(imgid > UNKNOWN_IMAGE)
+  {
+    // Ensure the image that collects the drag event is properly part of the selection
+    dt_selection_select(darktable.selection, imgid);
   }
 
   table->drag_list = dt_act_on_get_images();
