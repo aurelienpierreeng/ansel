@@ -556,7 +556,15 @@ void dt_ui_init_main_table(GtkWidget *parent, dt_ui_t *ui)
   gtk_widget_set_events(cda, GDK_POINTER_MOTION_MASK | GDK_BUTTON_PRESS_MASK | GDK_KEY_PRESS_MASK
                              | GDK_BUTTON_RELEASE_MASK | GDK_ENTER_NOTIFY_MASK | GDK_LEAVE_NOTIFY_MASK
                              | darktable.gui->scroll_mask);
-  gtk_overlay_add_overlay(GTK_OVERLAY(ocda), cda);
+  // The center canvas is the MAIN child of the overlay (gtk_container_add), NOT an overlay child.
+  // GtkOverlay renders overlay children through their own offscreen GdkWindow; on Wayland that
+  // path goes stale until a pointer event invalidates it, and because the canvas is the heavily,
+  // continuously repainted darkroom surface, that stale offscreen subsurface also starves the
+  // toplevel's frame commits, leaving the chrome (global menu, window top border) blank until
+  // hover (issues #877/#888). The main child draws into the overlay's own window instead. Unlike
+  // the thumbnail grids, a GtkDrawingArea requests ~0px so it does not pin the overlay's minimum
+  // size. The thumbtable, log and toast overlays still float above it.
+  gtk_container_add(GTK_CONTAINER(ocda), cda);
 
   // Add the reserved overlay for the thumbtable in central position
   // Then we insert into container, instead of dynamically adding/removing a new overlay

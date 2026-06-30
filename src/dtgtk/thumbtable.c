@@ -2377,6 +2377,9 @@ void dt_thumbtable_set_parent(dt_thumbtable_t *table, dt_thumbtable_mode_t mode)
 {
   table->mode = mode;
   table->parent_overlay = gtk_overlay_new();
+  // scroll_window is an OVERLAY child (not the main child) on purpose: GtkOverlay's main child
+  // drives the overlay's size request, which would pin the overlay/panel to the grid's minimum
+  // size and break the resize-handle shrink + _parent_overlay_size_allocate reconfigure flow.
   gtk_overlay_add_overlay(GTK_OVERLAY(table->parent_overlay), table->scroll_window);
   g_signal_connect(G_OBJECT(table->parent_overlay), "size-allocate", G_CALLBACK(_parent_overlay_size_allocate), table);
 
