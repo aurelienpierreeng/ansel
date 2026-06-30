@@ -60,6 +60,12 @@
  * opened by the macro).
  */
 
+// This header is included unconditionally by imageio.c (which decides
+// between GM/IM/neither per-build), so self-guard: on a "nofeatures" build
+// with neither library enabled, nothing below must be emitted, or the
+// unused static handler/variables fail a -Werror=unused-function build.
+#if defined(HAVE_GRAPHICSMAGICK) || defined(HAVE_IMAGEMAGICK)
+
 #include "common/system_signal_handling.h"
 
 #include <setjmp.h>
@@ -102,6 +108,8 @@ static void _dt_magick_abort_handler(int sig)
     _dt_magick_abort_armed = 0;                                                                                  \
     signal(SIGABRT, _dt_magick_abort_prev_handler);                                                              \
   } while(0)
+
+#endif // defined(HAVE_GRAPHICSMAGICK) || defined(HAVE_IMAGEMAGICK)
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
