@@ -2377,23 +2377,38 @@ void dt_thumbtable_set_parent(dt_thumbtable_t *table, dt_thumbtable_mode_t mode)
 {
   table->mode = mode;
   table->parent_overlay = gtk_overlay_new();
-  // scroll_window is an OVERLAY child (not the main child) on purpose: GtkOverlay's main child
-  // drives the overlay's size request, which would pin the overlay/panel to the grid's minimum
-  // size and break the resize-handle shrink + _parent_overlay_size_allocate reconfigure flow.
-  gtk_overlay_add_overlay(GTK_OVERLAY(table->parent_overlay), table->scroll_window);
   g_signal_connect(G_OBJECT(table->parent_overlay), "size-allocate", G_CALLBACK(_parent_overlay_size_allocate), table);
 
   if(mode == DT_THUMBTABLE_MODE_FILEMANAGER)
   {
+    // The filemanager grid overlays the center canvas and floats as an OVERLAY child so its size
+    // request stays decoupled from the panel (the outer GtkOverlay drives its allocation). It is
+    // not affected by the Wayland blank-until-hover issue below because it is the focused content
+    // of the lighttable view, not a static sibling of a continuously repainted surface.
+    gtk_overlay_add_overlay(GTK_OVERLAY(table->parent_overlay), table->scroll_window);
     gtk_widget_set_name(table->grid, "thumbtable-filemanager");
     dt_gui_add_help_link(table->grid, dt_get_help_url("lighttable_filemanager"));
     gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(table->scroll_window), GTK_POLICY_NEVER, GTK_POLICY_ALWAYS);
   }
   else if(mode == DT_THUMBTABLE_MODE_FILMSTRIP)
   {
+    // The filmstrip is a static sibling of the heavily, continuously repainted darkroom center.
+    // As an overlay child its own offscreen GdkWindow goes stale/blank on Wayland until a pointer
+    // event invalidates it (thumbnails only appear on hover, issue #877). Make scroll_window the
+    // overlay's MAIN child so it draws into the overlay's own window and stays painted.
+    //
+    // The main child drives the overlay's size request, which would pin the panel height to the
+    // grid and break the resize-handle shrink + _parent_overlay_size_allocate reconfigure flow
+    // (the regression seen when the grid couldn't be downsized). Counter that with the vertical
+    // EXTERNAL policy + min_content_height(1) + propagate_natural_height(FALSE) recipe so the
+    // panel can still be freely shrunk; filmstrip thumb height is derived from the panel's
+    // allocation (see dt_thumbtable_configure), not from the scrolled window's own height request.
+    gtk_container_add(GTK_CONTAINER(table->parent_overlay), table->scroll_window);
     gtk_widget_set_name(table->grid, "thumbtable-filmstrip");
     dt_gui_add_help_link(table->grid, dt_get_help_url("filmstrip"));
-    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(table->scroll_window), GTK_POLICY_ALWAYS, GTK_POLICY_NEVER);
+    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(table->scroll_window), GTK_POLICY_ALWAYS, GTK_POLICY_EXTERNAL);
+    gtk_scrolled_window_set_min_content_height(GTK_SCROLLED_WINDOW(table->scroll_window), 1);
+    gtk_scrolled_window_set_propagate_natural_height(GTK_SCROLLED_WINDOW(table->scroll_window), FALSE);
   }
 }
 

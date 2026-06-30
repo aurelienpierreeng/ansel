@@ -1502,8 +1502,14 @@ static int _thumb_resize_overlays(dt_thumbnail_t *thumb, int width, int height)
 
   // retrieves the size of the main icons in the top panel, thumbtable overlays shall not exceed that
   const int n_widgets = 4 + MAX_STARS;
-  const float r1 = fminf(1.25 * DT_GUI_EM_SIZE / 2., 
-                         (float)(width - (n_widgets - 1) * DT_GUI_BOX_SPACING) / (2. * n_widgets));
+  // The width-based term goes NEGATIVE once the thumbnail is narrower than the icon row can fit
+  // ((n_widgets - 1) * spacing, ~80px at default EM). A negative icon_size feeds -1 into the
+  // widgets' size_request, which GTK reads as "use natural size" -> overlays balloon (huge
+  // extension text) and the bar-height subtraction below collapses the image to a clipped sliver.
+  // Clamp to 0 so the overlays instead degrade gracefully (shrink to nothing) on tiny filmstrip
+  // thumbnails while the image keeps scaling. Above the threshold nothing changes.
+  const float r1 = fmaxf(0.f, fminf(1.25 * DT_GUI_EM_SIZE / 2.,
+                         (float)(width - (n_widgets - 1) * DT_GUI_BOX_SPACING) / (2. * n_widgets)));
   int icon_size = roundf(2 * r1);
 
   // reject icon
@@ -1575,9 +1581,15 @@ void dt_thumbnail_resize(dt_thumbnail_t *thumb, int width, int height)
   if(thumb->over == DT_THUMBNAIL_OVERLAYS_ALWAYS_NORMAL)
   {
     // Persistent overlays shouldn't overlap with image, so resize it.
-    // NOTE: this is why we need to allocate above
-    int margin_bottom = gtk_widget_get_allocated_height(thumb->w_bottom_eb);
-    int margin_top = gtk_widget_get_allocated_height(thumb->w_top_eb);
+    // Use the bars' preferred (natural) height, not their allocated height: the bars were
+    // allocated above (via w_main) with the PREVIOUS icon sizes, and _thumb_resize_overlays()
+    // only just applied the new icon size_requests, so the allocated heights still lag by one
+    // resize step (and are 0 before the first allocation at startup). The natural height reflects
+    // the icon size_requests we just set, with no settled allocation required - this is what made
+    // the filmstrip overlays compute on outdated sizes during a panel drag resize.
+    int margin_bottom = 0, margin_top = 0;
+    gtk_widget_get_preferred_height(thumb->w_bottom_eb, NULL, &margin_bottom);
+    gtk_widget_get_preferred_height(thumb->w_top_eb, NULL, &margin_top);
     height -= 2 * MAX(MAX(margin_top, margin_bottom), icon_size);
     // In case top and bottom bars of overlays have different sizes,
     // we resize symetrically to the largest.
